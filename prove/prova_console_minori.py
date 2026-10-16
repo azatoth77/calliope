@@ -1,26 +1,25 @@
 """
-Le parole dei minori non vanno nel terminale (12/10/2026 sera, decisione 0028 T1).
+Le parole dei minori nel terminale come quelle degli adulti (16/10/2026, decisione 0031, issue
+#104; dal 12/10 sera al 16/10 erano nascoste, decisione 0028 T1).
 
     python prove/prova_console_minori.py
 
-Il registro dei turni non tiene il testo dei minori (calliope/conserva.py), ma la console, che
-sulla DGX finisce nel journal di systemd e resta, stampava «Tu: <frase> (Nicola)», la risposta
-di Calliope (che può ripetere ciò che ha detto il ragazzo), gli argomenti dei tool e le frasi del
-modello trattenute dalle reti («[LLM] risposta uguale alla precedente…», «[TOOL] azione
-dichiarata…»). Ora per un minore (e per una frase nel dubbio tra un adulto e un minore) come per
-un ospite: «Tu: (una frase di un minore)», la risposta «…» frase per frase, i tool con i soli
-nomi degli argomenti, le frasi del modello «…».
+La console sulla DGX finisce nel journal di systemd, che resta: è conservazione anche lei. Dal
+12/10 sera per un minore (e per una frase nel dubbio tra un adulto e un minore) si stampava come
+per un ospite: «Tu: (una frase di un minore)», la risposta «…», i tool con i soli nomi degli
+argomenti. Dal 16/10 chi amministra ha deciso che ciò che dice un minore di casa si conserva come
+per un adulto: nel journal le sue frasi in chiaro; gli ospiti restano nascosti.
 
 - `Ciclo`: `_mostra_richiesta` e `_rispondi` (con un modello finto che ripete la frase) per un
-  minore riconosciuto, per una frase incerta tra un adulto e un minore e, come contrario, per un
-  adulto (le parole restano);
+  minore riconosciuto, per una frase incerta tra un adulto e un minore e per un adulto (le parole
+  si vedono); contrario: un ospite («(una frase di un ospite)», la risposta «…»);
 - `Brain` con un backend finto: una dichiarazione trattenuta, una chiamata con un argomento di
-  testo e il suo risultato, una risposta ripetuta; nessuna parola del minore in tutto l'output;
-  contrario: con un adulto si vedono;
-- `conserva.console_riservata`: ospite, minore, dubbio, adulto;
-- (13/10) in memoria, in `Brain.last_tools`, gli argomenti veri anche per un minore (li leggono
-  il confronto in ombra di stato_dialogo e il ciclo); nel registro dei turni (`Ciclo.
-  _registra_risposta`, `brain.tools_per_registro`) e nel terminale il solo nome.
+  testo e il suo risultato, una risposta ripetuta; con un minore le parole si vedono come con un
+  adulto, gli argomenti veri in memoria e nel registro dei turni; contrario: un ospite;
+- `conserva.console_riservata`: ospite sì; minore, dubbio, adulto no; `minori.parla_minore`
+  (la scelta di forma della frase dopo il tool) sì per minore e dubbio;
+- `brain.tools_per_registro` (13/10): il meccanismo resta (argomenti a parte per il registro dei
+  turni), anche se dal 16/10 nessuna chiamata lo usa.
 Niente audio, modelli né rete: ~1 s.
 """
 import contextlib
@@ -101,24 +100,24 @@ def prova_ciclo():
         return cattura(giro), voce.detto[-1:]
 
     out, detto = turno("Tommaso", f"Calliope, ho {SEGRETO}.")
-    verifica("minore: nessuna parola sua nel terminale", SEGRETO not in out, out[-300:])
-    verifica("minore: «Tu: (una frase di un minore)»",
-             "Tu: (una frase di un minore)" in out, out[:200])
-    verifica("minore: la risposta detta per intero, nel terminale «…»",
-             detto and SEGRETO in detto[0] and "Calliope: " in out and "…" in out, out[-200:])
+    verifica("minore: la frase e la risposta nel terminale (16/10, decisione 0031)",
+             out.count(SEGRETO) >= 2 and "(una frase di un minore)" not in out, out[-300:])
+    verifica("minore: la risposta detta per intero",
+             detto and SEGRETO in detto[0] and "Calliope: " in out, out[-200:])
     out, _ = turno("Carlo", f"Calliope, ho {SEGRETO}.", come="conversazione",
                    incerta=("Carlo", "Tommaso"))
-    verifica("dubbio tra un adulto e un minore: come per il minore",
-             SEGRETO not in out and "(una frase di un minore)" in out, out[-300:])
+    verifica("dubbio tra un adulto e un minore: le parole nel terminale",
+             SEGRETO in out and "(una frase di un minore)" not in out, out[-300:])
     out, _ = turno("Carlo", f"Calliope, ho {SEGRETO}.")
-    verifica("contrario: un adulto → la frase e la risposta nel terminale come prima",
+    verifica("un adulto → la frase e la risposta nel terminale come prima",
              out.count(SEGRETO) >= 2, out[-300:])
     chi.incerta = None
     out, _ = turno(None, f"Calliope, ho {SEGRETO}.", come=None)
-    verifica("ospite: come prima", SEGRETO not in out and "(una frase di un ospite)" in out,
-             out[-300:])
-    # Il registro dei turni (13/10): dalla lista in memoria di Brain, con gli argomenti veri,
-    # quelli di un minore senza valori; la lista in memoria non cambia
+    verifica("contrario: ospite, come prima: «(una frase di un ospite)» e la risposta «…»",
+             SEGRETO not in out and "(una frase di un ospite)" in out, out[-300:])
+    # Il registro dei turni (13/10): dalla lista in memoria di Brain, con gli argomenti veri;
+    # con la chiave ARGOMENTI_REGISTRO quelli per il disco (dal 16/10 nessuno la mette: il
+    # meccanismo resta); la lista in memoria non cambia
     vero = {"nome": "esercizi", "argomenti": {"azione": "piu_difficile"}, "ok": True,
             ARGOMENTI_REGISTRO: {"azione": "…"}}
     adulto = {"nome": "ricorda", "argomenti": {"fatto": SEGRETO}, "ok": True}
@@ -134,7 +133,7 @@ def prova_ciclo():
             pass    # i controlli dopo (uscita, guardiano) vogliono un turno vero: qui non servono
     cattura(registra)
     scritti = c.rec.get("tool") or []
-    verifica("registro dei turni: gli argomenti di un minore senza valori",
+    verifica("registro dei turni: con la chiave, gli argomenti a parte",
              len(scritti) == 2 and scritti[0].get("argomenti") == {"azione": "…"}
              and ARGOMENTI_REGISTRO not in scritti[0], scritti)
     verifica("registro dei turni: le altre chiamate come sono",
@@ -142,7 +141,7 @@ def prova_ciclo():
     verifica("registro dei turni: in memoria gli argomenti veri restano",
              cervello.last_tools[0]["argomenti"] == {"azione": "piu_difficile"})
     cervello.last_tools = [adulto]
-    verifica("contrario: senza un minore la lista stessa, come prima",
+    verifica("senza la chiave la lista stessa, come prima",
              tools_per_registro(cervello.last_tools) is cervello.last_tools)
     minori.avvisi().close()
 
@@ -178,44 +177,48 @@ def brain_per(nome, livello):
 def prova_brain():
     b = brain_per("Tommaso", "familiare")
     out = cattura(lambda: "".join(b.stream_reply(f"Ricorda che ho {SEGRETO}.", "familiare")))
-    verifica("Brain, minore: nessuna parola sua né del modello nel terminale",
-             SEGRETO not in out and "[TOOL] ricorda(" in out, out[-400:])
-    verifica("Brain, minore: gli argomenti con il solo nome", "'fatto': '…'" in out, out[-400:])
-    # 13/10: in memoria (`last_tools`, letto da stato_dialogo e dal ciclo) gli argomenti veri;
-    # nel registro dei turni il solo nome (tools_per_registro)
+    # Dal 16/10 (decisione 0031) come un adulto: le parole, gli argomenti e il risultato
+    verifica("Brain, minore: le parole sue e del modello nel terminale",
+             SEGRETO in out and ("[TOOL] ricorda({'fatto': '" + SEGRETO + "'})") in out
+             and "(riservato)" not in out, out[-400:])
     fatte = [x for x in b.last_tools if x.get("nome") == "ricorda"]
-    verifica("Brain, minore: in memoria gli argomenti veri",
-             bool(fatte) and fatte[0].get("argomenti") == {"fatto": SEGRETO},
-             fatte and fatte[0].get("argomenti"))
-    reg = [x for x in tools_per_registro(b.last_tools) if x.get("nome") == "ricorda"]
-    verifica("Brain, minore: per il registro dei turni il solo nome",
-             bool(reg) and reg[0].get("argomenti") == {"fatto": "…"}
-             and SEGRETO not in json.dumps(reg, ensure_ascii=False), reg)
+    verifica("Brain, minore: in memoria gli argomenti veri, nessun argomento a parte",
+             bool(fatte) and fatte[0].get("argomenti") == {"fatto": SEGRETO}
+             and ARGOMENTI_REGISTRO not in fatte[0], fatte and fatte[0])
+    verifica("Brain, minore: per il registro dei turni gli argomenti veri",
+             tools_per_registro(b.last_tools) is b.last_tools)
     b = brain_per("Carlo", "amministra")
     out = cattura(lambda: "".join(b.stream_reply(f"Ricorda che ho {SEGRETO}.", "amministra")))
-    verifica("contrario: Brain, adulto → si vedono come prima", SEGRETO in out, out[-300:])
+    verifica("Brain, adulto → si vedono come prima", SEGRETO in out, out[-300:])
     fatte = [x for x in b.last_tools if x.get("nome") == "ricorda"]
-    verifica("contrario: Brain, adulto → nessun argomento a parte per il registro",
+    verifica("Brain, adulto → nessun argomento a parte per il registro",
              bool(fatte) and ARGOMENTI_REGISTRO not in fatte[0]
              and fatte[0].get("argomenti") == {"fatto": SEGRETO})
+    b = brain_per(None, "ospite")
+    out = cattura(lambda: "".join(b.stream_reply(f"Ricorda che ho {SEGRETO}.", "ospite")))
+    verifica("contrario: Brain, ospite → niente argomenti né frasi del modello",
+             SEGRETO not in out, out[-400:])
 
 
 def prova_decisione():
     p = MC.Persone()
     sc = MC.ChiParla()
-    casi = [((None, None), "ospite"), (("Tommaso", "voce"), "minore"),
-            (("Carlo", "voce"), None)]
-    for (nome, come), atteso in casi:
+    casi = [((None, None), "ospite", False), (("Tommaso", "voce"), None, True),
+            (("Carlo", "voce"), None, False)]
+    for (nome, come), atteso, minore in casi:
         sc.current_speaker, sc.identified_by, sc.incerta = nome, come, None
         verifica(f"console_riservata {nome or 'ospite'} → {atteso}",
                  conserva.console_riservata(sc, p) == atteso)
+        verifica(f"parla_minore {nome or 'ospite'} → {minore}",
+                 minori.parla_minore(sc, p) is minore)
     sc.current_speaker, sc.identified_by, sc.incerta = "Carlo", "conversazione", ("Carlo",
                                                                                    "Tommaso")
-    verifica("console_riservata: incerta tra Carlo e un minore → minore",
-             conserva.console_riservata(sc, p) == "minore")
+    verifica("incerta tra Carlo e un minore: console in chiaro, parla_minore sì",
+             conserva.console_riservata(sc, p) is None and minori.parla_minore(sc, p))
     sc.incerta, sc.minore_incerto = None, "Tommaso"
-    verifica("console_riservata: minore_incerto → minore",
-             conserva.console_riservata(sc, p) == "minore")
+    verifica("minore_incerto: console in chiaro, parla_minore sì",
+             conserva.console_riservata(sc, p) is None and minori.parla_minore(sc, p))
+    sc.minore_incerto = None
 
 
 if __name__ == "__main__":

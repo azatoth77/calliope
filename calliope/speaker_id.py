@@ -152,6 +152,9 @@ class UserProfile:
     # amministra il sì di partenza, e un suo «no» va ridetto)
     voce_conservata: bool | None = None
     voce_conservata_il: str | None = None
+    # Chi ha deciso per la voce di un minore (16/10, decisione 0031): l'id del tutore che ha detto
+    # sì o no; None quando ha deciso la persona stessa
+    voce_conservata_da: str | None = None
     # Impronte per satellite (15/10, calliope/impronte_satellite.py): chiave («sat:<nome>»,
     # «canale:<tipo>») → Impronta, imparate solo dalle frasi sicure su quel satellite. Accanto
     # all'impronta di partenza, che resta; una nuova registrazione della voce le toglie
@@ -198,6 +201,7 @@ class UserProfile:
             "giovane": bool(self.fascia or self.nascita) and self.young,
             "voce_conservata": self.voce_conservata,
             "voce_conservata_il": self.voce_conservata_il,
+            "voce_conservata_da": self.voce_conservata_da,
             **({"impronte_satellite": _imp_sat.scrivi(self.impronte_satellite)}
                if _imp_sat.scrivi(self.impronte_satellite) else {}),
         }
@@ -220,7 +224,9 @@ class UserProfile:
                    voce_conservata=(d["voce_conservata"] if isinstance(
                        d.get("voce_conservata"), bool) else None),
                    voce_conservata_il=(d["voce_conservata_il"] if isinstance(
-                       d.get("voce_conservata_il"), str) else None))
+                       d.get("voce_conservata_il"), str) else None),
+                   voce_conservata_da=(d["voce_conservata_da"] if isinstance(
+                       d.get("voce_conservata_da"), str) else None))
         # Migrazione del 05/10: «giovane» senza data di nascita = fascia «ragazzi»
         if d.get("giovane") and not prof.nascita and not prof.fascia:
             prof.fascia = "ragazzi"

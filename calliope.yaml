@@ -891,10 +891,10 @@ conversazioni:
   # giorni), così la compressione e la fine di una conversazione non perdono niente e
   # conversazione_cerca ritrova «cosa ti avevo detto stamattina…». Ognuno ritrova solo le
   # sue. Anche la conversazione in corso, a ogni turno: un riavvio non la perde. Dal 12/10
-  # (decisione 0028 T1, calliope/conserva.py) su disco solo quelle degli adulti riconosciuti,
-  # per gli stessi giorni del registro dei turni (prima `conversazioni_giorni`, 30): quelle di
-  # minori e ospiti restano in memoria fino al riavvio (gli ospiti le vede solo chi
-  # amministra, a voce)
+  # (decisione 0028 T1, calliope/conserva.py) su disco solo quelle delle persone di casa
+  # riconosciute (dal 16/10, decisione 0031, anche dei minori), per gli stessi giorni del
+  # registro dei turni (prima `conversazioni_giorni`, 30): quelle degli ospiti restano in
+  # memoria fino al riavvio (le vede solo chi amministra, a voce)
   conversazioni_enabled: true
   # (variabile d'ambiente CALLIOPE_CONVERSAZIONI_DB, che vince su questo file)
   conversazioni_db: conversazioni.db
@@ -953,8 +953,8 @@ conversazioni:
   eventi: ombra
   # Dopo questi giorni gli eventi di una conversazione chiusa si cancellano: resta la forma dei
   # turni nell'archivio (§ 2.3). 0 = mai. Dal 12/10 60 (decisione 0028, T1: si tengono per
-  # misurare, come i turni); solo quelli degli adulti: i registri di minori e ospiti non vanno
-  # mai su disco (calliope/conserva.py)
+  # misurare, come i turni); solo quelli delle persone di casa, minori compresi dal 16/10
+  # (decisione 0031): i registri degli ospiti non vanno mai su disco (calliope/conserva.py)
   eventi_giorni: 60
   # Avviso in `calliope stato` se il registro cresce oltre questi MB al giorno (§ 10, punto 3)
   eventi_avviso_mb: 50.0
@@ -2249,19 +2249,21 @@ segreti:
 
 registro:
   # Registro dei turni (JSONL, un file al giorno): base dell'auto-miglioramento.
-  # CALLIOPE_TURN_LOG="" lo spegne. Le parole restano solo per gli adulti riconosciuti: di
-  # ospiti, minori e voci incerte solo i numeri (12/10, decisione 0028, calliope/conserva.py).
+  # CALLIOPE_TURN_LOG="" lo spegne. Le parole restano per le persone di casa riconosciute,
+  # minori compresi dal 16/10 (decisione 0031): di ospiti e zona grigia solo i numeri (12/10,
+  # decisione 0028, calliope/conserva.py).
   # La cartella è privata (fuori da git, permessi 700 su Linux) e tiene anche la voce
   # (variabile d'ambiente CALLIOPE_TURN_LOG, che vince su questo file)
   turn_log_dir: registro
   # Dopo questi giorni turni, voce e archivio delle conversazioni si cancellano (60 dal 12/10:
   # prima 30)
   turn_log_days: 60
-  # La voce degli adulti riconosciuti sopra soglia, con il loro consenso detto a Calliope (chi
-  # amministra: sì finché non dice no), in turn_log_dir/voce, in μ-law (~16 KB al secondo,
-  # ~15 MB in una giornata piena della DGX). Per banco, regressione e taratura delle soglie;
-  # mai inviata, mai di minori e ospiti. false = mai la voce (le registrazioni che ci sono si
-  # cancellano alla rotazione del giorno dopo)
+  # La voce delle persone di casa riconosciute sopra soglia, con il loro consenso detto a
+  # Calliope (chi amministra: sì finché non dice no; un minore col sì di un tutore, dal 16/10,
+  # decisione 0031), in turn_log_dir/voce, in μ-law (~16 KB al secondo, ~15 MB in una
+  # giornata piena della DGX). Per banco, regressione e taratura delle soglie; mai inviata,
+  # mai degli ospiti. false = mai la voce (le registrazioni che ci sono si cancellano alla
+  # rotazione del giorno dopo)
   conserva_voce: true
   # Tetto della voce conservata, in MB: oltre, si tolgono i giorni più vecchi. 0 = nessun tetto
   conserva_voce_mb: 2000

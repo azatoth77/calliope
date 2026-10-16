@@ -150,8 +150,8 @@ class Servizi:
     eventi: object = None
     cortesia: object = None
     turns: object = None                 # TurnLog
-    # La conservazione dei dati (12/10, calliope/conserva.py, decisione 0028 T1): chi tiene le
-    # parole e la voce; None = nessuna voce salvata e le parole come prima (prove)
+    # La conservazione dei dati (12/10, calliope/conserva.py, decisioni 0028 T1 e 0031): chi
+    # tiene le parole e la voce; None = nessuna voce salvata e le parole come prima (prove)
     conserva: object = None
     attiva_minori: object = None         # () → True se ha registrato i tool dei minori
     # Cambiano a voce (modalità, main.applica_modalita) o da un'installazione
@@ -560,9 +560,10 @@ class Ciclo:
         """Il testo da stampare nel terminale (sulla DGX finisce nel journal di systemd, che
         resta): niente frasi degli ospiti, né risposte con i dati dei tool riservati
         (documenti di casa, rubrica, fatture). Lo stesso criterio del registro dei turni
-        (analisi di sicurezza del 03/10, S9). Dal 12/10 sera nemmeno le frasi dei minori e le
-        risposte a loro, che possono ripetere ciò che hanno detto (decisione 0028 T1, il solo
-        posto che decide è conserva.console_riservata): «(una frase di un minore)» e «…»."""
+        (analisi di sicurezza del 03/10, S9; il solo posto che decide è
+        conserva.console_riservata): «(una frase di un ospite)» e «…». *Storico, 12–16/10 (0028
+        T1): anche le frasi dei minori e le risposte a loro; dal 16/10 (decisione 0031) i minori
+        nel journal come gli adulti.*"""
         chi = conserva_mod.console_riservata(self.speaker_ctx, self.s.registry)
         if chi is not None:
             return f"(una frase di un {chi})" if not risposta else "…"
@@ -1445,11 +1446,11 @@ class Ciclo:
             self.s.turns.write({"inizio": datetime.datetime.now().isoformat(timespec="seconds"),
                                 "esito": "gioco", "gioco": {"partita": item.get("partita"),
                                                             "titolo": item.get("titolo")},
-                                "risposta": None if item.get("minore") else msg,
+                                # Anche nel gioco di un minore (16/10, decisione 0031): fino al
+                                # 16/10 «(frase di un gioco di un minore)»
+                                "risposta": msg,
                                 "regole": [item.get("regola") or "gioco_frase"]})
-            print(f"\n   [GIOCHI] «{item.get('titolo')}»: "
-                  f"{'(frase di un gioco di un minore)' if item.get('minore') else msg}",
-                  flush=True)
+            print(f"\n   [GIOCHI] «{item.get('titolo')}»: {msg}", flush=True)
             self.uscita.di(msg, "annuncio_gioco")
 
     # ── fase 1: scrivere invece di parlare ──

@@ -263,7 +263,7 @@ def sigillato(contenuto: str, riservato: bool, personale: bool,
 
 
 # I campi con le parole di ogni tipo (12/10, calliope/conserva.py): in un turno le cui parole non
-# si conservano (dubbio con un minore, zona grigia, nel registro di un adulto) restano solo in
+# si conservano (zona grigia; dal 12 al 16/10 anche il dubbio con un minore) restano solo in
 # memoria (`_non_su_disco`), come il testo di un minore fermato dal guardiano
 CAMPI_TESTO: dict[str, tuple[str, ...]] = {
     "detto_persona": ("testo", "chi"), "trascrizione_capita": ("prima", "dopo"),

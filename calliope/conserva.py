@@ -1,28 +1,34 @@
 """
-La conservazione dei dati per misurare e migliorare Calliope (12/10/2026, decisione 0028, T1).
+La conservazione dei dati per misurare e migliorare Calliope (12/10/2026, decisione 0028, T1;
+dal 16/10 decisione 0031 per i minori).
 
-Turni, eventi e voce dei **soli adulti riconosciuti** restano per `turn_log_days` (60) giorni,
-in privato nella cartella dei dati (mai nel repository: `registro/` è in .gitignore, sulla DGX
-sta in ~/calliope/registro). Servono al banco della scelta dei tool, ai set di regressione, al
-dizionario delle correzioni e alla taratura delle soglie. Di **minori e ospiti mai**: né testo né
-audio oltre a ciò che serve al turno.
+Turni, eventi e voce delle **persone di casa riconosciute** (adulti e, dal 16/10, minori)
+restano per `turn_log_days` (60) giorni, in privato nella cartella dei dati (mai nel repository:
+`registro/` è in .gitignore, sulla DGX sta in ~/calliope/registro). Servono al banco della scelta
+dei tool, ai set di regressione, al dizionario delle correzioni, alla taratura delle soglie e,
+per i minori, alla rilettura dei tutori. Degli **ospiti mai**: né testo né audio oltre a ciò che
+serve al turno. *Storico, 12–16/10 (0028 T1): anche dei minori mai; superato dalla 0031 («la
+privacy in casa di un minore non esiste»). Le parole dei minori tolte in quei giorni non tornano.*
 
 **Un solo posto decide** chi è conservabile: `decidi(profilo, cosa, modo, dubbi)`, puro.
-- `testo` (turni ed eventi con le parole): un adulto riconosciuto, dalla voce sopra soglia,
-  da una frase breve o per continuità, o da uno schermo personale. La zona grigia
-  (`conversazione`), il proprietario di un satellite incerto con un minore (`proprietario`) e
-  ogni dubbio con un minore (`incerta`, `minore_vicino`) non si salvano: **nel dubbio no**.
+- `testo` (turni ed eventi con le parole): una persona di casa riconosciuta (adulto o minore),
+  dalla voce sopra soglia, da una frase breve o per continuità, da uno schermo personale, o il
+  proprietario di un satellite personale incerto con un minore (`proprietario`). Anche nel
+  dubbio tra un adulto e un minore (`incerta`, `minore_vicino`, `minore_incerto`: dal 16/10) il
+  testo resta, sotto la persona decisa dal ciclo: sono due persone di casa. La zona grigia
+  (`conversazione`) no.
 - `voce` (l'audio della frase): come il testo, ma solo con la voce riconosciuta sopra soglia
   in quella frase (`modo: voce`), senza altre voci vicino al satellite (`compagnia`: l'audio
-  potrebbe avere dentro un'altra persona) e con il **consenso** della persona.
-- `eventi` (il registro degli eventi su disco): i registri delle persone adulte. Quelli dei
-  minori e degli ospiti restano solo in memoria (`registro_su_disco`), e quelli già su disco
-  li cancella la rotazione.
+  potrebbe avere dentro un'altra persona), **senza dubbi con un minore** (l'audio può essere
+  dell'altra persona) e con il **consenso**: della persona, o per un minore dei suoi tutori.
+- `eventi` (il registro degli eventi su disco): i registri delle persone di casa, minori
+  compresi (dal 16/10). Quelli degli ospiti restano solo in memoria (`registro_su_disco`), e
+  quelli già su disco li cancella la rotazione.
 - `conversazioni` (l'archivio delle conversazioni, calliope/conversazioni.py, dal 12/10 sera):
-  come gli eventi, le conversazioni delle persone adulte (`conversazioni_su_disco`); quelle di
-  minori e ospiti stanno nell'archivio della sessione, in memoria. Dentro la conversazione di un
-  adulto, i turni le cui parole non restano (`testo_turno`: zona grigia, dubbio con un minore)
-  non vanno su disco. Stessi `turn_log_days` giorni.
+  come gli eventi, le conversazioni delle persone di casa (`conversazioni_su_disco`); quelle
+  degli ospiti stanno nell'archivio della sessione, in memoria. Dentro la conversazione di una
+  persona, i turni le cui parole non restano (`testo_turno`: zona grigia) non vanno su disco.
+  Stessi `turn_log_days` giorni.
 - `stanza` (il testo della conversazione di stanza su disco, calliope/stanza/tenuta.py, dal
   14/10, decisione 0029 punto 5): solo con `stanza_tenuta` accesa, per `stanza_tenuta_giorni`;
   per tutta la famiglia, **minori compresi** (scelta di chi amministra), solo con la voce
@@ -39,7 +45,11 @@ audio oltre a ciò che serve al turno.
 **Il consenso** è un dato della persona, nel suo profilo (speakers.json, `voce_conservata`):
 None = mai detto, True = «sì» detto una volta a Calliope (tool `dati_conservati`), False =
 revocato (anche a voce; le registrazioni che c'erano si cancellano). Per chi amministra vale la
-sua scelta, e senza una scelta è sì.
+sua scelta, e senza una scelta è sì. **Per un minore** (16/10, decisione 0031) lo danno e lo
+revocano solo i suoi **tutori** (`minori.e_tutore`), a voce, con la persona minore come
+argomento: nel profilo del minore con chi l'ha dato (`voce_conservata_da`, l'id del tutore) e la
+data. Il minore da solo non lo dà né lo revoca; senza il sì di un tutore, niente voce. Il
+consenso dato da un tutore vale finché la persona è minore: da adulta lo ridice lei.
 
 **La voce** si salva in G.711 μ-law (8 bit, 16 kHz, WAV con il formato 7): metà della PCM a 16
 bit, letta da ffmpeg e sox, e codificata con numpy (già una dipendenza di base: principio 4,
@@ -89,10 +99,12 @@ CARTELLA_VOCE = "voce"
 SEGNO_RIPULITO = ".conservazione-1"       # il registro dei turni di prima è già stato ripulito
 COSE = ("testo", "voce", "eventi", "conversazioni", "stanza")
 # Come è stata decisa l'identità della frase (SpeakerContext.identified_by e i modi del ciclo):
-# con questi il testo resta. Fuori: la zona grigia («conversazione»), il proprietario incerto
-# con un minore («proprietario»), nessun modo
-MODI_TESTO = frozenset({"voce", "breve", "continuita", "schermo"})
-# I segni di un dubbio con un minore nel campo `voce` del turno (ciclo._riconosci_voce)
+# con questi il testo resta. Fuori: la zona grigia («conversazione»), nessun modo. Il
+# proprietario incerto con un minore («proprietario») dal 16/10 sì (decisione 0031: due persone
+# di casa, il testo resta; la voce no, perché il modo non è «voce»)
+MODI_TESTO = frozenset({"voce", "breve", "continuita", "schermo", "proprietario"})
+# I segni di un dubbio con un minore nel campo `voce` del turno (ciclo._riconosci_voce): dal
+# 16/10 tolgono solo la voce (l'audio può essere dell'altra persona), non il testo
 DUBBI_MINORE = ("incerta", "minore_vicino", "minore_incerto")
 # Esiti dei turni il cui audio non si tiene: frasi non rivolte a Calliope, la registrazione
 # della voce, niente capito
@@ -128,8 +140,16 @@ def categoria(prof) -> str:
 
 
 def consenso_voce(prof) -> bool:
-    """La persona ha detto sì a tenere la sua voce? Per chi amministra, senza una scelta, sì."""
+    """La persona ha detto sì a tenere la sua voce? Per chi amministra, senza una scelta, sì.
+
+    Per un minore (16/10, decisione 0031) vale solo il sì di un tutore (`voce_conservata_da`);
+    per un adulto solo il suo: il sì dato da un tutore quando era minore non vale più."""
     v = getattr(prof, "voce_conservata", None)
+    da = getattr(prof, "voce_conservata_da", None)
+    if categoria(prof) == "minore":
+        return v is True and bool(da)
+    if v is True and da and da != getattr(prof, "id", None):
+        return False
     if v is None:
         return bool(getattr(prof, "admin", False))
     return bool(v)
@@ -143,7 +163,11 @@ def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None) -> Deci
 
     Un conoscente (categoria «conoscente», 14/10 sera, decisione 0030 aggiornata) segue le
     regole di un adulto: non è un minore (i bambini non si salvano come conoscenti) e la voce
-    vuole il suo consenso (`voce_conservata`, che un conoscente non ha: niente voce)."""
+    vuole il suo consenso (`voce_conservata`, che un conoscente non ha: niente voce).
+
+    Un minore di casa (16/10, decisione 0031) come un adulto: testo, eventi e conversazioni sì;
+    la voce col consenso dei tutori (`consenso_voce`). Nel dubbio tra un adulto e un minore il
+    testo sì, la voce no."""
     if cosa not in COSE:
         raise ValueError(f"cosa sconosciuta: {cosa!r}")
     cat = categoria(prof)
@@ -154,16 +178,17 @@ def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None) -> Deci
         if cat == "ospite":
             return Decisione(False, cat)
         return Decisione(True, cat) if modo == "voce" else Decisione(False, "voce_incerta")
-    if cat in ("ospite", "minore"):
+    if cat == "ospite":
         return Decisione(False, cat)
     if cosa in ("eventi", "conversazioni"):
         return Decisione(True, cat)
     dubbi = set(dubbi or ())
-    if dubbi & set(DUBBI_MINORE):
-        return Decisione(False, "dubbio_minore")
     if cosa == "testo":
         return (Decisione(True, cat) if modo in MODI_TESTO
                 else Decisione(False, "voce_incerta"))
+    if dubbi & set(DUBBI_MINORE):
+        # Solo la voce (16/10, decisione 0031): l'audio può essere dell'altra persona
+        return Decisione(False, "dubbio_minore")
     if cfg is not None and not getattr(cfg, "conserva_voce", True):
         return Decisione(False, "spenta")
     if modo != "voce":
@@ -177,9 +202,10 @@ def decidi(prof, cosa: str, modo: str | None = None, dubbi=(), cfg=None) -> Deci
 
 def console_riservata(speaker_ctx, registry) -> str | None:
     """Le parole di questa frase vanno nel terminale? Sulla DGX la console finisce nel journal di
-    systemd, che resta: è conservazione anche lei. «ospite» (dal 03/10, analisi S9) o «minore»
-    (dal 12/10 sera: un minore riconosciuto, o la frase nel dubbio tra un adulto e un minore,
-    come per il registro dei turni) → niente parole; None → come prima."""
+    systemd, che resta: è conservazione anche lei. «ospite» (dal 03/10, analisi S9) → niente
+    parole; None → le parole. *Storico, 12–16/10: anche «minore» (un minore riconosciuto, o la
+    frase nel dubbio tra un adulto e un minore); dal 16/10 (decisione 0031) le frasi dei minori
+    vanno nel journal come quelle degli adulti. `registry` resta per i chiamanti.*"""
     if speaker_ctx is None:
         return None
     k = getattr(speaker_ctx, "conoscente", None)
@@ -190,12 +216,6 @@ def console_riservata(speaker_ctx, registry) -> str | None:
         return None
     if getattr(speaker_ctx, "current_level", None) == "ospite":
         return "ospite"
-    if any(getattr(speaker_ctx, k, None) for k in DUBBI_MINORE):
-        return "minore"
-    nome = getattr(speaker_ctx, "current_speaker", None)
-    get = getattr(registry, "get", None)
-    if nome and callable(get) and categoria(get(nome)) == "minore":
-        return "minore"
     return None
 
 
@@ -722,7 +742,8 @@ class Conservazione:
         v = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}
         if v.get("conoscente") and v.get("id") and not v.get("nome"):
             # Un conoscente (14/10 sera, decisione 0030 aggiornata): livello ospite, ma per la
-            # conservazione vale come un adulto, se il suo profilo c'è ancora
+            # conservazione vale come un adulto, se il suo profilo c'è ancora. Una fascia d'età
+            # nel turno vuol dire un bambino: mai come conoscente (0030 punto 6)
             if isinstance(rec.get("ascolto"), dict) and rec["ascolto"].get("fascia"):
                 return Decisione(False, "minore")
             prof = self.conoscente(v.get("id"))
@@ -733,8 +754,8 @@ class Conservazione:
             return Decisione(False, "ospite")
         if not v.get("nome"):
             return Decisione(False, "ospite")
-        if isinstance(rec.get("ascolto"), dict) and rec["ascolto"].get("fascia"):
-            return Decisione(False, "minore")
+        # Dal 16/10 (decisione 0031) la fascia d'età nel campo `ascolto` non toglie più le
+        # parole: un minore di casa si conserva come un adulto
         prof = self.profilo(nome=v.get("nome"), persona_id=v.get("id"))
         return decidi(prof, "testo", v.get("modo"), dubbi_del_turno(rec), self.cfg)
 
@@ -759,8 +780,9 @@ class Conservazione:
         return decidi(prof, "voce", v.get("modo"), dubbi_del_turno(rec), self.cfg)
 
     def registro_su_disco(self, chiave: str) -> bool:
-        """Il registro degli eventi di questa chiave va su disco? Le persone adulte sì; minori,
-        ospiti e voci incerte (`ospite:<corsia>`) restano in memoria."""
+        """Il registro degli eventi di questa chiave va su disco? Le persone di casa sì, minori
+        compresi (16/10, decisione 0031); ospiti, voci incerte (`ospite:<corsia>`) e profili
+        tolti restano in memoria."""
         chiave = str(chiave or "")
         if chiave == "casa":
             return True
@@ -769,8 +791,9 @@ class Conservazione:
         return bool(decidi(self.profilo(persona_id=chiave.split(":", 1)[1]), "eventi"))
 
     def conversazioni_su_disco(self, persona_id) -> bool | None:
-        """Le conversazioni di questa persona vanno nell'archivio su disco? Gli adulti sì;
-        minori, ospiti e profili tolti no (restano nell'archivio della sessione). None quando
+        """Le conversazioni di questa persona vanno nell'archivio su disco? Le persone di casa
+        sì, minori compresi (16/10, decisione 0031); ospiti e profili tolti no (restano
+        nell'archivio della sessione). None quando
         non si può dire: nessun profilo letto (speakers.json mancante o illeggibile). Allora
         l'archivio non scrive su disco (nel dubbio no), ma la rotazione non cancella le
         conversazioni delle persone (un file illeggibile per un momento non toglie 60 giorni)."""
@@ -821,11 +844,13 @@ class Conservazione:
         return rel
 
     # ── consenso ──
-    def imposta_consenso(self, prof, valore: bool) -> int:
+    def imposta_consenso(self, prof, valore: bool, da: str | None = None) -> int:
         """Salva la scelta nel profilo; con un no cancella anche la voce che c'era. Restituisce
-        quante registrazioni ha cancellato."""
+        quante registrazioni ha cancellato. `da`: l'id del tutore che decide per un minore
+        (16/10, decisione 0031); None quando decide la persona stessa."""
         prof.voce_conservata = bool(valore)
         prof.voce_conservata_il = datetime.date.today().isoformat()
+        prof.voce_conservata_da = str(da) if da else None
         save = getattr(self.registry, "save", None)
         if callable(save):
             save()
@@ -864,8 +889,9 @@ class Conservazione:
     def ruota(self, oggi: datetime.date | None = None) -> dict:
         """Esercizi e richieste ai tutori oltre `turn_log_days` (12/10 sera). La voce: via i
         giorni oltre `turn_log_days`, le persone senza più il diritto (consenso
-        revocato, profilo tolto, diventata minore… nel dubbio via) e, oltre il tetto di spazio, i
-        giorni più vecchi. Il registro dei turni ha la sua (TurnLog._prune), gli eventi pure
+        revocato, profilo tolto, un minore senza il sì di un tutore, un adulto col sì dato da un
+        tutore quando era minore… nel dubbio via) e, oltre il tetto di spazio, i giorni più
+        vecchi. Il registro dei turni ha la sua (TurnLog._prune), gli eventi pure
         (Disco.ruota)."""
         oggi = oggi or datetime.date.today()
         self._ruotata_il = oggi
@@ -880,7 +906,7 @@ class Conservazione:
             giorni: list[tuple[str, Path]] = []
             for pdir in [x for x in self.voce_dir.iterdir() if x.is_dir()]:
                 prof = self.profilo(persona_id=pdir.name)
-                if prof is None or categoria(prof) == "minore" or not consenso_voce(prof) \
+                if prof is None or not consenso_voce(prof) \
                         or not getattr(self.cfg, "conserva_voce", True):
                     shutil.rmtree(pdir, ignore_errors=True)
                     out["persone"] += 1
@@ -952,9 +978,10 @@ class Conservazione:
 
     # ── il registro dei turni di prima (una volta) ──
     def ripulisci_registro(self, lock=None) -> dict | None:
-        """Le parole dei turni di minori, ospiti e voci incerte scritte prima del 12/10 (il
-        registro dei turni le teneva 30 giorni per tutti tranne gli ospiti): tolte una volta,
-        poi il segno nella cartella."""
+        """Le parole dei turni di ospiti e voci incerte scritte prima del 12/10 (il registro dei
+        turni le teneva 30 giorni per tutti tranne gli ospiti): tolte una volta, poi il segno
+        nella cartella. Decide `testo_turno`: dal 16/10 (decisione 0031) i turni dei minori
+        restano con le parole (fino al 16/10 li toglieva anche loro)."""
         if not self.cartella or not self.cartella.exists():
             return None
         segno = self.cartella / SEGNO_RIPULITO
@@ -963,7 +990,7 @@ class Conservazione:
         out = ripulisci_turni(self.cartella, lambda r: bool(self.testo_turno(r)), lock)
         _scrivi_privato(segno, datetime.datetime.now().isoformat().encode())
         if out["turni"]:
-            self.log(f"   [CONSERVA] registro dei turni ripulito: {out['turni']} turni di minori, "
+            self.log(f"   [CONSERVA] registro dei turni ripulito: {out['turni']} turni di "
                      f"ospiti o voci incerte senza più le parole")
         return out
 
@@ -1168,7 +1195,7 @@ def testo_stato(d: dict | None) -> str | None:
     st = d.get("stanza")
     stanza = (f"; stanza su disco {st['righe']} righe ({st['mb']:.1f} MB, "
               f"{st.get('giorni_tenuta', 60)} giorni, famiglia e minori)" if st else "")
-    return (f"Conservazione ({d['giorni']} giorni, soli adulti): {d['turni_file']} giorni di "
+    return (f"Conservazione ({d['giorni']} giorni, persone di casa):{d['turni_file']} giorni di "
             f"turni; {voce}{conv}{stanza}")
 
 
@@ -1315,11 +1342,11 @@ def main(argv=None) -> int:
         print(testo_stato(d))
         for u in reg.users.values():
             cat = categoria(u)
+            stato_voce = "sì" if consenso_voce(u) else (
+                "no" if u.voce_conservata is False else "non chiesto")
             if cat == "minore":
-                stato_voce = "mai (minore)"
-            else:
-                stato_voce = "sì" if consenso_voce(u) else (
-                    "no" if u.voce_conservata is False else "non chiesto")
+                # Il consenso alla voce di un minore è dei tutori (16/10, decisione 0031)
+                stato_voce += " (lo decidono i tutori)"
             conv = c.conta_conversazioni(u.id)["conversazioni"]
             st = c.conta_stanza(u.id)
             print(f"    {u.name}: {cat}, voce {stato_voce}, registrazioni "
