@@ -672,6 +672,15 @@ def ancorata(cl, name: str, args: dict, t) -> bool:
 _FORMA_DATA = re.compile(r"\s*(?:\d{4}-\d{1,2}-\d{1,2}|\d{1,2}[/.-]\d{1,2}[/.-]\d{4})\s*")
 
 
+# I rinvii valgono come una negazione per la risposta al dato (#98, seconda revisione della PR
+# #117): «Rimandiamo, è nata il 12 ottobre 2015», «Più tardi…», «Lascia, …», «Annulliamo…»
+# non sono una risposta da eseguire. Vincolo di sicurezza (principio 10): toglie solo l'ancora
+_RINVIO = re.compile(
+    r"(?<![a-zà-ù])(?:rimand\w*|rinvi\w*|aspett\w*|più tardi|piu tardi|dopo|lascia\w*|"
+    r"annull\w*|ferm\w*|domani|dopodomani|ci penso|ci pensiamo|vediamo|controll\w*|"
+    r"forse)(?![a-zà-ù])", re.I)
+
+
 def forma_data(valore) -> bool:
     return isinstance(valore, str) and bool(_FORMA_DATA.fullmatch(valore))
 
@@ -721,7 +730,7 @@ def risposta_al_sospeso(name: str, args: dict, t) -> bool:
     il resto della politica per valore (bersagli dal dato, effetto) resta."""
     if not pol._proposta(t, name) or getattr(t, "sospeso_politica", False):
         return False
-    if pol._NO.search(t.testo or ""):
+    if pol._NO.search(t.testo or "") or _RINVIO.search(t.testo or ""):
         return False
     sosp = t.args_sospeso
     chiede = set(getattr(t, "chiede_sospeso", None) or ())
@@ -740,6 +749,13 @@ def risposta_al_sospeso(name: str, args: dict, t) -> bool:
         if _testo(v) in (None, "") or etichetta(
                 v, CONTENUTO, f_data if forma_data(v) else f) != DETTO:
             return False
+        # Una data in cifre deve essere proprio quella detta (giorno, mese, anno), non averne
+        # solo i pezzi: «2015-12-10» dopo «12 ottobre 2015» no (seconda revisione della PR #117)
+        if forma_data(v):
+            from .minori import leggi_data
+            detta = leggi_data(t.testo or "")
+            if detta is None or leggi_data(v) != detta:
+                return False
     return True
 
 

@@ -452,11 +452,15 @@ VERBI = {
     # «fai una foto a questo dispositivo», «scatta una foto» (16/10, issue #98, caso vero della
     # DGX del 15/10 alle 20:23); «foto» da sola no: «la foto di ieri era bella» non chiede niente.
     # Solo gli imperativi (revisione della PR #117): non «fa», «fare» descrittivi («Chi fa le
-    # foto al matrimonio?», «Mio cugino fa foto bellissime», «Tre giorni fa le foto…»)
+    # foto al matrimonio?», «Mio cugino fa foto bellissime», «Tre giorni fa le foto…»). Dalla
+    # seconda revisione l'imperativo apre la frase (o una sua parte, dopo la punteggiatura;
+    # «mi», «ci» davanti): «Quando fai le foto…?» no; «fate», «facci», «scattate» sì; «scatta»
+    # e «scattate» solo con «foto» vicino («Scatta l'allarme se…» no), «scattami» da sé
     "pc_guarda": (r"guard|scherm|ved|legg|controll|webcam|screenshot|fotograf|inquadr|"
-                  r"(?<![a-zà-ù])scatt(?:a|ami|atemi|amene)(?![a-zà-ù])|"
-                  r"(?<![a-zà-ù])(?:fai|fammi|fatemi|fammene)\s+"
-                  r"(?:[a-zà-ù']+\s+){0,2}?foto"),
+                  r"(?:^|[,.;:!?])\s*(?:(?:mi|ci)\s+)?(?:"
+                  r"(?:fai|fammi|fate|fatemi|facci|fateci|fammene)\s+(?:[a-zà-ù']+\s+){0,2}?foto"
+                  r"|scatt(?:a|ate)\s+(?:[a-zà-ù']+\s+){0,2}?foto"
+                  r"|scatt(?:ami|aci|atemi|ateci|amene|acene)(?![a-zà-ù]))"),
     # «eseguilo con 3 e 5», «fammelo vedere», «rilancialo», «provalo con 4»
     "programma_esegui": (r"esegu|lanc|avvi|gir[aio]|fa(?:mm|ll)\w* (?:vedere|girare|partire)|"
                       r"mostr|prov[aio]|rifa|ripet"),

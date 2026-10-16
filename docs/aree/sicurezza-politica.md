@@ -1635,6 +1635,18 @@ errore chiede la sua sfida. Ogni punto ha i suoi contrari in `prova_risposta_sos
 fallivano sul codice di prima (11 errori). Limite: per ora dichiara gli argomenti solo
 `registra_utente`; le altre domande di un dato restano come prima, finché non li dichiarano.
 
+**Seconda revisione della PR #117 (16/10)**, nessun buco nuovo, quattro rifiniture.
+(1) La prova del controllo «solo gli argomenti dichiarati»: «È nata il 12 ottobre 2015, è una
+bambina tranquilla.» con `maggiorenne="tranquilla"` si rifiuta (senza il controllo si eseguiva).
+(2) I **rinvii** valgono come una negazione (`valore._RINVIO`: «rimandiamo», «aspettiamo», «più
+tardi», «lascia», «annulliamo», «domani», «ci penso», «vediamo», «forse»…): con loro niente ancora
+né sfida portata, anche se la data c'è. (3) Una data in cifre deve essere **proprio quella detta**
+(giorno, mese e anno, `minori.leggi_data` sui due lati): «2015-12-10» dopo «12 ottobre 2015» non
+vale. (4) `pc_guarda`: l'imperativo apre la frase o una sua parte («mi», «ci» davanti ammessi), con
+i plurali e i pronomi («Fate una foto», «Scattate una foto», «Facci una foto», «Mi fai una foto?»,
+«Scattami»); «scatta» e «scattate» solo con «foto» vicino; «Quando fai le foto alla gita?» e
+«Scatta l'allarme se entra qualcuno» non lo chiedono. Contrari in `prova_risposta_sospeso.py`.
+
 **Da guardare sulla DGX** (7 giorni, `calliope stato --turni`): 0 `valore_non_ancorata` con
 `azione_in_sospeso` sullo stesso tool; «ESEGUITE con un bersaglio dal dato» = 0; quante
 `valore_risposta_sospeso` e `valore_sfida_sospeso`, e l'attrito sotto la soglia.

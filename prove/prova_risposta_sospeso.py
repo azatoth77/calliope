@@ -228,6 +228,35 @@ def prova_revisione():
     verifica("revisione: «Lascia perdere, ci penso domani.» con maggiorenne=«perdere» → niente "
              "ancora, niente eseguito", not visti and "valore_risposta_sospeso" not in rr
              and "valore_sfida_sospeso" not in rr, f"{visti} {rr}")
+    # Seconda revisione (16/10): solo gli argomenti dichiarati dalla proposta, con Brain vero
+    b, visti, _, sc, _, _ = fino_alla_domanda()
+    frase(b, sc, "È nata il 12 ottobre 2015, è una bambina tranquilla.",
+          chiama("registra_utente", {**CON_DATA, "maggiorenne": "tranquilla"}), testo("Va bene."))
+    rr = regole(b)
+    verifica("revisione 2: «…è una bambina tranquilla.» con maggiorenne=«tranquilla» (non "
+             "dichiarato) → niente ancora, niente eseguito", not visti
+             and "valore_risposta_sospeso" not in rr and "valore_sfida_sospeso" not in rr,
+             f"{visti} {rr}")
+    # I rinvii valgono come una negazione
+    for f in ("Rimandiamo, comunque è nata il 12 ottobre 2015.",
+              "Aspettiamo un attimo: è nata il 12 ottobre 2015.",
+              "Più tardi, è nata il 12 ottobre 2015.", "Lascia, è nata il 12 ottobre 2015.",
+              "Annulliamo, era il 12 ottobre 2015."):
+        b, visti, _, sc, _, _ = fino_alla_domanda()
+        frase(b, sc, f, chiama("registra_utente", CON_DATA), testo("Va bene."))
+        rr = regole(b)
+        verifica(f"revisione 2: rinvio «{f}» → niente ancora né sfida portata", not visti
+                 and "valore_risposta_sospeso" not in rr and "valore_sfida_sospeso" not in rr,
+                 f"{visti} {rr}")
+    # Giorno e mese scambiati
+    b, visti, _, sc, _, _ = fino_alla_domanda()
+    frase(b, sc, "È nata il 12 ottobre 2015.",
+          chiama("registra_utente", {"nome": "Bianca", "nascita": "2015-12-10"}),
+          testo("Va bene."))
+    rr = regole(b)
+    verifica("revisione 2: «2015-12-10» dopo «12 ottobre 2015» (giorno e mese scambiati) → "
+             "niente ancora, niente eseguito", not visti and "valore_risposta_sospeso" not in rr,
+             f"{visti} {rr}")
     # La sfida portata vale per una chiamata sola: il giro di correzione dopo un errore la chiede
     b, visti, _, sc, _, _ = fino_alla_domanda(guasto=True)
     r = frase(b, sc, "È nata il 12 ottobre 2015, il tutore è Dario.",
@@ -289,6 +318,21 @@ def prova_unita():
     verifica("unità: un argomento in più non detto (tutori) → no",
              not r("registra_utente", {**CON_DATA, "tutori": "Carlo"},
                    _t("È nata il 12 ottobre 2015.")))
+    verifica("unità: un argomento non dichiarato detto nella frase (maggiorenne=«tranquilla») "
+             "→ no", not r("registra_utente", {**CON_DATA, "maggiorenne": "tranquilla"},
+                         _t("È nata il 12 ottobre 2015, è una bambina tranquilla.")))
+    verifica("contrario del contrario: senza l'argomento non dichiarato la stessa frase vale",
+             r("registra_utente", CON_DATA,
+               _t("È nata il 12 ottobre 2015, è una bambina tranquilla.")))
+    for f in ("Rimandiamo, è nata il 12 ottobre 2015.", "Più tardi: il 12 ottobre 2015.",
+              "Annulliamo, il 12 ottobre 2015.", "Lascia, il 12 ottobre 2015."):
+        verifica(f"unità: rinvio «{f}» → no", not r("registra_utente", CON_DATA, _t(f)))
+    verifica("unità: la data con giorno e mese scambiati → no",
+             not r("registra_utente", {"nome": "Bianca", "nascita": "2015-12-10"},
+                   _t("È nata il 12 ottobre 2015.")))
+    verifica("unità: la data «12/10/2015» detta come «12 ottobre 2015» → sì",
+             r("registra_utente", {"nome": "Bianca", "nascita": "12/10/2015"},
+               _t("È nata il 12 ottobre 2015.")))
     verifica("unità: la negazione nella frase → no",
              not r("registra_utente", CON_DATA, _t("Non so, forse il 12 ottobre 2015.")))
     verifica("unità: maiuscole e spazi nel valore della domanda contano uguali",
@@ -318,12 +362,15 @@ def prova_unita():
 def prova_pc_guarda():
     cl = pol.classe_di("pc_guarda")
     for f in ("Fai una foto a questo dispositivo", "Scatta una foto al router",
-              "Fammi una foto della lavagna", "Fotografa la scrivania"):
+              "Fammi una foto della lavagna", "Fotografa la scrivania",
+              "Fate una foto al router", "Scattate una foto alla lavagna",
+              "Facci una foto", "Calliope, fai una foto", "Mi fai una foto?", "Scattami"):
         verifica(f"pc_guarda chiesto: «{f}»", pol.chiesto_con_verbi(cl, f, {"cosa": "webcam"}))
     for f in ("La foto di ieri era bella", "È scattato l'allarme stanotte",
               "Non fare foto, per favore", "Ho messo le foto nella cartella",
               "Tre giorni fa le foto della gita erano sul tavolo",
-              "Chi fa le foto al matrimonio?", "Mio cugino fa foto bellissime"):
+              "Chi fa le foto al matrimonio?", "Mio cugino fa foto bellissime",
+              "Quando fai le foto alla gita?", "Scatta l'allarme se entra qualcuno"):
         verifica(f"contrario pc_guarda: «{f}»",
                  not pol.chiesto_con_verbi(cl, f, {"cosa": "webcam"}))
     t = _t("Fai una foto a questo dispositivo", in_sospeso=None, args_sospeso=None)
