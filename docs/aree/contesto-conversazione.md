@@ -2313,6 +2313,11 @@ che crescono (4 708 → 4 920).
   `_trim_tokens` li conta.
 - **In compagnia** (conversazione anonima condivisa) i ricordi sono di chi parla adesso: restano
   nei dati del turno come prima e i pezzi già nella storia escono (`dati_stabili_rifatti`).
+- **Senza la frase della persona** (la passata del modello dopo la frase di sfida, la
+  continuazione `stream_continuation`) i dati fissi si rifanno lo stesso coi dati di quel turno,
+  legati all'ultima frase della persona nella storia (`Brain._dati_ancora`): il ciclo calcola gli
+  avvisi anche nel turno della sfida, e un avviso «sicurezza» tolto perché un minore ha parlato
+  nel frattempo non resta (seconda revisione della PR #107).
 - **Minori e ospiti** (coerente con la decisione 0031, unita il 16/10 con la PR #106): i dati
   fissi valgono per ogni conversazione di una persona di casa, minori compresi (come gli adulti);
   un ospite non ha ricordi né avvisi, quindi niente pezzi. I pezzi e il segno `_dati` restano solo
@@ -2383,8 +2388,14 @@ d'altro. `prova_regressione.py 1` (97 casi, nuove opzioni `--num-ctx` e `--senza
 sono gli stessi due (`chi_garbato`, `schermo`) più `data` dopo: ripetuto 4 volte per modo, con
 `calcola` in più fra i tool, sbaglia 3 volte su 4 prima e 4 su 4 dopo, quindi è un caso già
 instabile, non la posizione dei ricordi. Il banco della scelta dei tool sulle frasi vere (#20)
-non esiste ancora: questi due ne fanno le veci per ora. La forma breve dei ricordi pertinenti
-vicino alla domanda non serve.
+non esiste ancora: questi due ne fanno le veci per ora. Seconda revisione (16/10 sera): con
+**30 turni** prima della domanda (un giro) **9/9 prima e 9/9 dopo**, prima frase 0,83 → 0,57 s;
+una sola differenza di forma, «ricordati che il mio colore preferito è il verde» salvato come
+«il colore preferito di chi parla…» invece che col nome (un campione). Sui ricordi lontani fino a
+30 turni, quindi, nessun peggioramento misurato su questo banco piccolo (9 domande, uno o due
+giri): la forma breve dei ricordi pertinenti vicino alla domanda per ora non si aggiunge, ma
+resta da riguardare col banco #20 sulle frasi vere e con conversazioni più lunghe (oltre i 40
+turni il taglio della storia rimette comunque i ricordi al turno in corso).
 
 **Proposta, non fatta**: le righe trovate dalla ricerca anticipata della stanza come
 pezzi stabili nella storia (fuori dal tetto, come le righe della stanza: una riga trovata una

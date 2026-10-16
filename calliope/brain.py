@@ -3611,25 +3611,35 @@ class Brain:
             ancore = {p.n: p for p in getattr(conv, "dati_fissi", None) or ()}
         return dati_turno.con_fissi(self._con_stanza(msgs, conv), ancore)
 
-    def _dati_fissi_attivi(self, user_text, start: int) -> bool:
-        """I dati che cambiano di rado vanno nella storia in questo turno: acceso, una frase della
-        persona in `start`, una conversazione di una persona sola (in quella anonima condivisa
-        in compagnia i ricordi sono di chi parla adesso: restano nei dati del turno)."""
-        if not getattr(self.cfg, "dati_stabili_in_storia", True) or not user_text:
-            return False
+    def _dati_ancora(self, user_text, start: int) -> int | None:
+        """La frase della persona a cui legare i dati fissi di questa risposta, o None se non
+        vanno nella storia (spento; conversazione anonima condivisa in compagnia, dove i ricordi
+        sono di chi parla adesso e restano nei dati del turno). Con la frase del turno: `start`.
+        Senza (la passata dopo la frase di sfida, la continuazione): l'ultima frase della persona
+        nella storia, perché anche lì i dati del turno valgono e un avviso tolto dal ciclo non deve
+        restare (seconda revisione della PR #107)."""
+        if not getattr(self.cfg, "dati_stabili_in_storia", True):
+            return None
         if getattr(self._c(), "condivisa", False):
-            return False
-        return (start < len(self.history) and isinstance(self.history[start], dict)
-                and self.history[start].get("role") == "user")
+            return None
+        if user_text:
+            ok = (start < len(self.history) and isinstance(self.history[start], dict)
+                  and self.history[start].get("role") == "user")
+            return start if ok else None
+        return next((i for i in range(min(start, len(self.history)) - 1, -1, -1)
+                     if isinstance(self.history[i], dict)
+                     and self.history[i].get("role") == "user"), None)
 
-    def _dati_prepara(self, start: int, blocchi):
+    def _dati_prepara(self, start: int, blocchi, dentro: bool = False):
         """I pezzi dei dati fissi per questa risposta: ([messaggi nuovi da mettere davanti alla
         frase del turno], [loro nomi]), e in `_dati_ancore` quelli dei turni prima. Con `blocchi`
         None (spento, conversazione condivisa, continuazione) niente di nuovo: restano visibili i
         pezzi già nella storia, tranne in una conversazione condivisa o con l'interruttore spento,
-        dove escono tutti (i ricordi di una persona non restano davanti a chi parla dopo)."""
+        dove escono tutti (i ricordi di una persona non restano davanti a chi parla dopo).
+        `dentro`: `start` è una frase già nella storia (passata senza frase nuova): i pezzi nuovi
+        si legano a lei, nella storia, e i messaggi nuovi da mettere davanti sono nessuno."""
         conv = self._c()
-        ancore = {n for m in self.history[:start]
+        ancore = {n for m in self.history[:start + (1 if dentro else 0)]
                   if isinstance(m, dict) and m.get("role") == "user"
                   for n in dati_turno.segni(m.get("_dati"))}
         pezzi = dati_turno.stato(conv)
@@ -3644,13 +3654,16 @@ class Brain:
         esito = dati_turno.prepara(conv, blocchi, ancore)
         nuovi = esito["nuovi"]
         if nuovi:
-            ns = [p.n for p in nuovi]
+            ns = ([n for n in dati_turno.segni(self.history[start].get("_dati"))
+                   if any(p.n == n for p in dati_turno.stato(conv))] if dentro else [])
+            ns += [p.n for p in nuovi]
             self.history[start]["_dati"] = ns[0] if len(ns) == 1 else ns
         if esito["rifatti"]:
             self._rule("dati_stabili_rifatti")
             print(f"   [STORIA] dati fissi rifatti ({', '.join(esito['rifatti'])}): la cache del "
                   f"prefisso si rompe una volta", flush=True)
-        self._dati_ancore = esito["storia"]
+        self._dati_ancore = ({**esito["storia"], **{p.n: p for p in nuovi}} if dentro
+                             else esito["storia"])
         # Tutti quelli davanti al modello, anche i nuovi di questo turno (per la politica)
         self._dati_visibili = list(esito["storia"].values()) + nuovi
         visibili = list(esito["storia"].values()) + nuovi
@@ -3662,6 +3675,8 @@ class Brain:
                 "caratteri": sum(p.caratteri for p in visibili),
                 **({"rifatti": esito["rifatti"]} if esito["rifatti"] else {}),
                 **({"orfani": esito["orfani"]} if esito["orfani"] else {})}
+        if dentro:
+            return [], []
         return [p.messaggio() for p in nuovi], [p.nome for p in nuovi]
 
     def _stanza_pota(self) -> bool:
@@ -4616,19 +4631,26 @@ class Brain:
         # Prima sparivano alla richiesta dopo e, oltre ~512 token, Ollama con Gemma 4 rileggeva
         # tutta la storia
         dati_ora, nomi_ora = [], []
-        fissi = self._dati_fissi_attivi(user_text, start)
+        # Senza la frase della persona (la passata dopo la frase di sfida, la continuazione) i
+        # dati fissi si rifanno lo stesso coi dati di questo turno, legati all'ultima frase della
+        # persona (seconda revisione della PR #107: nel turno della sfida restava l'avviso
+        # «sicurezza» del turno prima, anche se il ciclo l'aveva tolto)
+        ancora = self._dati_ancora(user_text, start)
+        fissi = ancora is not None
         if fissi:
             from .stanza import contesto as stanza_ctx
             riass = ""
-            if user_text and stanza_b is not None and stanza_ctx.in_storia(self.cfg):
+            if stanza_b is not None and stanza_ctx.in_storia(self.cfg):
                 riass = stanza_ctx.riassunto_turno(stanza_b)
-            dati_ora, nomi_ora = self._dati_prepara(start, [
+            avvisi_t = str(avvisi_b) if avvisi_b else ""
+            dati_ora, nomi_ora = self._dati_prepara(ancora, [
                 ("ricordi", ricordi_m[0]["content"] if ricordi_m else "", True, "",
                  lambda nuove: (self._memory_message(note=False, solo=nuove)
                                 or [{"content": ""}])[0]["content"]),
-                ("avvisi", avvisi_m[0]["content"] if avvisi_m else "", False),
+                ("avvisi", avvisi_t, False),
                 ("stanza_riassunto", riass, False,
-                 str(getattr(stanza_b, "riassunto", "") or "") if riass else "")])
+                 str(getattr(stanza_b, "riassunto", "") or "") if riass else "")],
+                dentro=ancora != start)
             memory = blocco("turno", self._turn_context())
         else:
             self._dati_prepara(start, None)

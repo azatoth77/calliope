@@ -244,6 +244,7 @@ def prova_ricordi():
              and out[7]["riavvolti"] <= 450, str([out[6]["riavvolti"], out[7]["riavvolti"]]))
 
     prova_avvisi()
+    prova_sfida()
     prova_riassunto()
 
 
@@ -299,6 +300,58 @@ def prova_avvisi():
         dt.prepara = vero
     verifica("contrario: lasciando il vecchio quando gli avvisi spariscono, il «sicurezza» "
              "resterebbe davanti al modello", conta(b.backend.visti[-1], "«sicurezza»") == 1)
+
+
+def prova_sfida():
+    """Seconda revisione della PR #107: nella passata dopo la frase di sfida (`_reply(None, …)`)
+    i dati fissi si rifanno coi dati del turno della sfida (il ciclo li calcola anche lì): un
+    avviso «sicurezza» tolto dal ciclo, perché un minore ha parlato nel frattempo, non resta."""
+    import time as _t
+    import prova_sfida_esito as se
+    from calliope import conferme as C
+    from calliope.brain import Brain
+    con_sic = AVVISI.replace("ieri alle 17:40", SICUREZZA + "ieri alle 17:40", 1)
+
+    def giro_sfida():
+        b = se._brain([[("text", "Va bene.")], [("text", se.FRASE)]], se._registra([]),
+                      sfida=False)
+        b.cfg.dati_stabili_in_storia = True
+        b.avvisi_turno = con_sic
+        "".join(b.stream_reply("Calliope, che tempo fa domani?", "amministra"))
+        primo = conta(b.backend.visti[-1], "«sicurezza»")
+        sf = C.nuova_sfida(b.cfg, "dario-id", "registra_utente", {"nome": se.NOME})
+        sf.parole, sf.numero = ("girasole", "treno", "limone"), 42
+        sf.scade = _t.monotonic() + 60
+        b.tool_ctx.speaker_ctx.sfida = sf
+        b.avvisi_turno = AVVISI                  # il ciclo: un minore ha parlato da poco
+        "".join(b.stream_reply(se.SFIDA_DETTA, "amministra"))
+        return b, primo
+    b, primo = giro_sfida()
+    v = b.backend.visti[-1]
+    verifica("sfida: la passata dopo la frase di sfida ha gli avvisi del suo turno (il «sicurezza» "
+             "tolto dal ciclo non resta)", primo == 1 and len(b.backend.visti) == 2
+             and "sfida_esito_modello" in b.rules_fired()
+             and conta(v, "«sicurezza»") == 0 and conta(v, "Avvisi consegnati") == 1,
+             f"{primo} {conta(v, '«sicurezza»')} {b.rules_fired()}")
+    vero = Brain._dati_ancora
+    Brain._dati_ancora = lambda self, user_text, start: (vero(self, user_text, start)
+                                                         if user_text else None)
+    try:
+        b, _ = giro_sfida()
+    finally:
+        Brain._dati_ancora = vero
+    verifica("contrario: senza i dati fissi in quella passata (il codice di prima) il «sicurezza» "
+             "del turno prima restava", conta(b.backend.visti[-1], "«sicurezza»") == 1)
+    # La continuazione (stream_continuation): gli stessi dati del turno, niente di nuovo
+    b = brain(cfg_base(dati_stabili_in_storia=True))
+    b.avvisi_turno = AVVISI
+    "".join(b.stream_reply(DOMANDE[0], "amministra"))
+    b.avvisi_turno = AVVISI
+    "".join(b.stream_continuation("amministra", "Passaggi della biblioteca: niente."))
+    v = b.backend.visti[-1]
+    verifica("continuazione: ricordi e avvisi una volta, dove sono entrati, nessun rifacimento",
+             conta(v, "Ricordi salvati") == 1 and conta(v, "Avvisi consegnati") == 1
+             and "dati_stabili_rifatti" not in b.rules_fired())
 
 
 def prova_riassunto():
