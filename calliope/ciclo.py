@@ -40,7 +40,8 @@ from . import impronte_satellite as impronte_mod
 from . import provenienza, riferire, stato_dialogo, storpiature
 from . import allegati as allegati_mod
 from . import frasi
-from .cortesia import Cortesia
+from .cortesia import (Cortesia, senza_voce as cortesia_senza_voce,
+                       voce_frase as cortesia_voce_frase)
 from . import gioco_voce
 from . import gioco_stato
 from . import gioco_giudice
@@ -3436,6 +3437,23 @@ class Ciclo:
             if forma == "grazie":
                 self.rule("cortesia_dopo_domanda")
             forma = None
+        # «Grazie.» sul rumore (16/10, issue #97): meno di cortesia_voce_min_s di voce
+        # (revisione della PR #109: il parlato del VAD, che vale anche con la frase chiusa dal
+        # rilascio del tasto o da Smart Turn; la durata dell'audio solo se manca)
+        voce_s, fonte = cortesia_voce_frase(self.rec.get("ascolto"), t.voiced_s)
+        rumore = cortesia_senza_voce(forma, voce_s, t.scritto is not None, cfg)
+        if rumore:
+            self.rec["cortesia_voce"] = {"forma": forma, "voce_s": round(voce_s, 2),
+                                         "fonte": fonte}
+        if rumore == "attiva":
+            # Come una trascrizione vuota: niente frase pronta, finestra d'ascolto invariata
+            print(f"   [CORTESIA] «{self.in_console(text)}» su {voce_s:.2f} s di voce: "
+                  "rumore, resto in ascolto")
+            self.rec["esito"] = "vuoto"
+            self.rule("cortesia_senza_voce")
+            return _FINE
+        if rumore == "ombra":
+            self.rule("cortesia_senza_voce_ombra")
         if forma in ("grazie", "conferma"):
             prof = s.registry.get(t.speaker_name) if t.speaker_name else None
             frase = s.cortesia.risposta(forma, getattr(prof, "preferred_tone", None), cfg.tono,
