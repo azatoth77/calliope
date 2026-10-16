@@ -3691,12 +3691,19 @@ class Brain:
                 # modello dal risultato, senza rifare la chiamata
                 self._rule("sfida_esito_modello")
                 fatti = list(self.last_tools or [])
+                # L'esito riuscito del tool della sfida resta tra i tool di questa risposta
+                # anche dentro la passata (16/10, #94, caso vero del 15/10: registra_utente
+                # riuscito, il modello diceva «Ho registrato…» e la rete delle azioni
+                # dichiarate, senza il tool in last_tools, lo cambiava in «Non ho salvato
+                # niente»). Solo quello: un altro tool, o uno fallito, non rende vera una
+                # dichiarazione
+                gia = [t for t in fatti if t.get("ok") and t.get("nome") == sfida.tool]
                 detto = []
                 for pezzo in self._reply(None, level, SFIDA_ESITO_MSG.format(tool=sfida.tool),
-                                         None):
+                                         None, gia_fatti=gia):
                     detto.append(pezzo)
                     yield pezzo
-                self.last_tools = fatti + list(self.last_tools or [])
+                self.last_tools = fatti + list(self.last_tools or [])[len(gia):]
                 if "".join(detto).strip():
                     return
                 frase = "Fatto."
@@ -4414,7 +4421,10 @@ class Brain:
                                                   citta_salva="citta_casa_salva" in names)}]
         return system
 
-    def _reply(self, user_text: str, level: str, context: str | None, pending: str | None):
+    def _reply(self, user_text: str, level: str, context: str | None, pending: str | None,
+               gia_fatti: list | None = None):
+        # `gia_fatti` (16/10, #94): i tool già eseguiti dal codice in questa risposta, prima
+        # della passata (la frase di sfida superata): contano come fatti per le reti
         # La risposta di prima, per «fammelo leggere» sullo schermo (tool schermo_mostra)
         if self.tool_ctx is not None and hasattr(self.tool_ctx, "risposta_precedente"):
             last = next((m for m in reversed(self.history) if m.get("role") == "assistant"
@@ -4451,7 +4461,8 @@ class Brain:
             self._turn_text = user_text   # per la politica dei tool (Turno.testo)
             self._accogli_immagini()
             self._accogli_allegati()
-        self.last_tools = []    # cosa è successo in questa risposta (per il registro dei turni)
+        # cosa è successo in questa risposta (per il registro dei turni)
+        self.last_tools = list(gia_fatti or ())
         # Le schede mandate agli schermi in questa risposta (12/10: l'evento scheda_mandata)
         self.last_schede_mandate = []
         self.last_secrets = []  # valori da non scrivere nel registro (codici degli schermi)
@@ -5038,7 +5049,10 @@ class Brain:
                     said = self._last_confirmation() if self.last_tools else ""
                     # Solo punteggiatura («…»): la seconda passata anche senza una conferma
                     # pronta (06/10: dopo conversazione_cerca restava il silenzio)
-                    if not self._acted() and not retried_empty \
+                    # I soli `gia_fatti` non contano (16/10, revisione della PR #105): dopo la
+                    # sfida il risultato senza frase pronta va detto dal modello, e una passata
+                    # vuota tornava «Fatto.», il caso dell'08/10 di sfida_esito_modello
+                    if not self._acted(dopo=len(gia_fatti or ())) and not retried_empty \
                             and self._net("vuoto_seconda_passata"):
                         # Dopo sole letture (data_oggi, ora_attuale, calcola…) la conferma
                         # risponde solo a una parte della domanda: «cerca la data di oggi e
@@ -5713,12 +5727,14 @@ class Brain:
             self._ricorda_esterno(fonte, text)
         self.salva_conversazione()
 
-    def _acted(self) -> bool:
+    def _acted(self, dopo: int = 0) -> bool:
         """In questa risposta un tool d'azione è riuscito. Una dichiarazione d'azione («Ho
         salvato questa informazione.») dopo soli tool falliti o sole letture è falsa (04/10,
         26B: quattro «ricorda» falliti e poi «Ho salvato…»): la rete sulle azioni dichiarate
-        vale anche lì, non solo quando non c'è nessun tool."""
-        return any(t.get("ok") and t.get("azione", True) for t in self.last_tools or ())
+        vale anche lì, non solo quando non c'è nessun tool. `dopo`: salta i primi tool (i
+        `gia_fatti` di _reply, 16/10)."""
+        return any(t.get("ok") and t.get("azione", True)
+                   for t in list(self.last_tools or ())[dopo:])
 
     def _correzione_aperta(self, fatte: int = 0) -> dict | None:
         """L'ultimo tool di questa risposta è fallito con un errore correggibile (argomenti

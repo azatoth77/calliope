@@ -735,6 +735,9 @@ Dal giro vero della DGX dell'08/10 pomeriggio (dettagli e misure in
   riuscito senza frase pronta ma con altro da dire (risultati, dato in busta) lo riferisce il
   modello, con i dati del turno `SFIDA_ESITO_MSG` («è GIÀ stato eseguito… non richiamarlo»;
   regola `sfida_esito_modello`); con la frase pronta del tool resta quella, senza modello.
+  *16/10, issue #94:* fino al 15/10 dentro quella passata il tool eseguito non contava per la
+  rete delle azioni dichiarate, e «Ho registrato…» diventava «Non ho salvato niente»; ora l'esito
+  riuscito del tool della sfida conta come fatto ([voce-e-regole](voce-e-regole.md)).
 - **«ok» in coda** (15:13, «Babine Kuzik, questa è la stessa ok.» ha fatto partire un lavoro:
   il modello ha chiamato `sviluppo_apri` con la proposta e `politica.consenso` ha accettato per
   l'«ok» in fondo, con il lavoro dell'agente di mezzo): la parola di consenso vale solo fra le

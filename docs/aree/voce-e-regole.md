@@ -2253,3 +2253,69 @@ Prova `prove/prova_eventi_guardia.py` (livello 1, ~2 s): la guardia su turni fin
 (sotto la soglia, pochi turni, base piccola, solo ombra, stimati, cartella vuota), il criterio con i
 motivi dichiarati, il giro del ciclo vero in ombra e con `attivo`. Sulla DGX il campo c'è dai turni
 scritti dopo l'aggiornamento: i 200 turni del criterio si contano da lì.
+
+## Dopo la sfida, l'esito vero non diventa «Non ho salvato niente» (16/10, issue #94, ramo `issue-94-sfida-esito`)
+
+**Caso vero** (DGX, 15/10 sera, cucina; nomi di fantasia): chi amministra registra una minore come
+familiare dal telefono, con la stanza accesa; `registra_utente` chiede la frase di sfida (dati della
+stanza), la sfida è giusta e il tool riparte dal codice e **riesce** (`ok: true`, `cosa_fare` «di'
+che adesso deve parlare lei, con un adulto accanto», nessuna frase pronta): ramo
+`sfida_esito_modello` dell'08/10 ([sicurezza-politica](sicurezza-politica.md)). Il modello scrive
+«Ho registrato Ada come familiare. Adesso deve parlare lei…», la rete delle azioni dichiarate la
+trattiene due volte (`spinta_dichiarata`, poi `dichiarata_onesta`) e Calliope dice «Scusa, ho
+capito. Non ho salvato niente.». Frase falsa: il profilo c'era e l'arruolamento era partito al
+buio (frasi corte, circa 2 minuti per 5 frasi).
+
+**Causa**: `Brain._reply` azzera `last_tools` all'inizio di ogni passata; `_sfida_reply` lo
+rimetteva insieme solo dopo il ciclo. Dentro la passata `_acted()` era falso, quindi `hold_claims`
+acceso e ogni «ho registrato…» era «un'azione dichiarata senza tool», anche se il tool era stato
+eseguito proprio in quella risposta. Valeva per ogni tool che arriva al ramo (le registrazioni,
+`sviluppo_collauda`, le azioni E4 con dati di mezzo).
+
+**Correzione** (proposta consigliata dell'issue): `_reply(…, gia_fatti=…)` riceve i tool già
+eseguiti dal codice in questa risposta e li mette in `last_tools` dopo l'azzeramento; `_sfida_reply`
+passa **solo** l'esito riuscito del tool della sfida (un altro tool o uno fallito non entra). Così
+`_acted()` è vero come dopo ogni azione riuscita, `hold_claims` è spento, e il registro dei turni
+resta uguale (il tool una volta, non due). Nessuna regola sul testo nuova (principio 10), nessun
+costo di latenza. Un tool della sfida di sola lettura (`azione: false`) non rende vera una
+dichiarazione d'azione: la rete resta. Gli altri percorsi con lo stesso schema (tool eseguito dal
+codice e poi una passata) cercati sul codice: le ricerche di Brain nella stanza e nell'archivio,
+`esercizi ripeti` e `proposta_rispondi` eseguono il tool **dentro** la passata, dopo l'azzeramento,
+e restano in `last_tools`; la continuazione di `ciclo._ricerca_promessa` (`stream_continuation`)
+non esegue tool (i passaggi della biblioteca arrivano come contesto). L'unico era questo ramo.
+
+**Limite noto**: con l'esito riuscito in `last_tools` la rete è spenta per tutta la passata, come
+dopo ogni azione riuscita; una seconda azione diversa dichiarata nella stessa frase («…e ho acceso la
+luce») non è trattenuta. Il criterio 2 dell'issue la voleva trattenuta: servirebbe un confronto per
+azione (verbo e oggetto contro il tool eseguito, `_matches_action`) che oggi non c'è in nessuna
+risposta, ed è fragile per i verbi che non conosce («ho completato il collaudo»). Da decidere a
+parte se serve.
+
+Prova `prove/prova_sfida_esito.py` (livello 2, legata a `brain.py` e `conferme.py`, ~1 s): il caso
+vero riscritto con un backend finto che risponde «Ho registrato…» dopo `SFIDA_ESITO_MSG` (sul codice
+di prima: «Non ho salvato niente», 2 passate, `spinta_dichiarata` e `dichiarata_onesta`; ora la
+frase detta in una passata e il tool una volta nel registro); contrari: la stessa frase senza nessun
+tool resta fermata (spinta e frase onesta), dopo un tool di lettura resta fermata, il tool della
+sfida fallito dà la frase dell'errore senza il modello. Sulla DGX, 7 giorni: 0 turni con
+`sfida_esito_modello` insieme a `dichiarata_onesta`, `dichiarata_taciuta` o `spinta_dichiarata`.
+
+**Col modello** (`prove/prova_sfida_esito_ollama.py`, portatile, gemma4 e4b, 16/10): sul codice di
+prima 0 su 3 (sempre «Scusa, ho capito. Non ho salvato niente…», `spinta_dichiarata` e
+`dichiarata_onesta`), con la correzione 5 su 5 «Ho registrato Ada come familiare.». In nessuna
+delle 5 però il modello dice che adesso deve parlare lei (il `cosa_fare` del risultato): la frase è
+vera ma l'arruolamento resta al buio. È un problema a parte (la frase pronta della registrazione o
+il `cosa_fare` detto dal codice), da guardare col 26B prima di decidere.
+
+*16/10, dopo la revisione della PR #105.* Con `gia_fatti` in `last_tools` la passata dopo la sfida
+si comporta come quella dopo un tool normale: oltre a `hold_claims` sono spenti anche
+`hold_names`, `hold_non_so`, `hold_rinuncia`, `hold_ripetuta` e `hold_request` (tutti con «nessun
+tool in questa risposta»), coerente col percorso di sempre. Un'eccezione: la risposta vuota. Con i
+soli `gia_fatti` `_acted()` era vero dall'inizio, `vuoto_seconda_passata` non partiva e
+`_sfida_reply` diceva «Fatto.», proprio il caso dell'08/10 per cui era nato `sfida_esito_modello`;
+ora quel test conta solo i tool della passata (`_acted(dopo=len(gia_fatti))`) e la prima passata
+vuota riceve la seconda (caso 1b di `prova_sfida_esito`, che sul codice di prima dava «Fatto.»). Il
+criterio 2 dell'issue (una seconda azione diversa dichiarata nella stessa passata resta trattenuta)
+è stato riconsiderato nella revisione e **accettato come limite**: dopo qualunque azione riuscita la
+rete è spenta per la passata, e un confronto per azione (verbo e oggetto contro il tool eseguito)
+non c'è in nessuna risposta, sarebbe una regola sul testo nuova (principio 10) e fragile coi verbi
+che non conosce; la proposta consigliata dell'issue ha questo stesso effetto.
