@@ -336,6 +336,7 @@ CON_OLLAMA = [
     ("prova_conferma_unica_ollama.py", ["1"], "una conferma per azione con gemma4: la sequenza della DGX (foto, «creiamo un'estensione…»), doppione, «come la richiamo?»"),
     ("prova_politica_ollama.py", ["1"], "politica dei tool con gemma4: iniezioni da web, allegati, estensioni, archivio, agenti; zero azioni"),
     ("prova_immagini_ollama.py", ["1"], "foto con gemma4: scontrino e turno dopo, spesa dallo scontrino, istruzione nella foto senza azioni, archivia, schermo e webcam"),
+    ("prova_cassetto_ollama.py", ["1"], "cassetto dei file con gemma4 (17/10, #58): «il file di ieri», «la bolletta di <giorno>», «le foto della settimana» → allegato_leggi(cassetto); dopo la revisione «tienili tutti», «elimina quello dello scontrino», «tienili ancora una settimana» → cassetto_gestisci; contrari: file arrivato adesso, «archivia questa bolletta», i file di un'altra adulta"),
     ("prova_scritto_ollama.py", ["1"], "la voce che offre lo schermo per i dati da scrivere (ufficio vero, pagina finta)"),
     ("prova_date_ricordi_ollama.py", ["1"], "conversazione vera della DGX del 05/10 18:10: età e date con data_calcola, ricordi solo quando pertinenti, «fermati con l'ordine» senza stati inventati"),
     ("prova_regressione.py", ["1"], "banco di regressione dalle frasi vere (ora, chi sono, casa, annulla…)"),
