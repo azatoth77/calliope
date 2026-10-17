@@ -358,7 +358,10 @@ radici di `verbo_sempre` erano troppo larghe («questa settimana», «ancora», 
   `cassetto_minore_non_persona`); tutto il resto è una persona, risolta tra quelle di casa
   (accenti, «mia figlia Bianca») e altrimenti rifiutata come su main;
 - gli argomenti che lo schema non ha (il 26B, col nome `minore`, inventava `quando="ieri"`,
-  `"ieri": true`, `tipo`, `persona="mia moglie"`, e il tool si fermava con un TypeError) non
+  `"ieri": true`, `tipo`, `persona="mia moglie"`, e nel banco il tool si fermava con un
+  TypeError; *[corretto il 17/10 sera: il TypeError era del banco, il cui involucro dei tool
+  nascondeva la firma; in Calliope il registro risponde `tool_argomenti_non_validi`,
+  correggibile, e il modello richiama il tool]*) non
   fermano il tool: una forma chiusa è parole della richiesta, il resto una persona (regola
   `cassetto_argomento_in_piu`); un nome di un'altra persona di casa o una parentela dentro
   `cassetto`/`quale` («Teodora», «di tua moglie») vale come la persona (regola
@@ -393,6 +396,61 @@ giro. Il criterio «contrari 100 %» della #58 per questo caso non è raggiunto:
 basta (è il cassetto di chi parla, e chi lo legge è il proprietario) o se serve un vincolo sul
 testo della persona (una parentela che attribuisce il file a un altro), che per il principio 10
 va motivato come vincolo di permesso.
+
+**Seconda revisione della PR #143 (17/10 sera).** *[storico: le regole del paragrafo sopra su
+`minore` e sugli argomenti in più, così com'erano, fino a 5daf6bc]* La revisione ha trovato
+altre due strade: un nome di casa dentro il valore si risolveva anche in «la mamma di Bianca»,
+«l'amica di Bianca» (il tutore apriva ed eliminava il file della figlia per un'altra persona) e
+in «la moglie di Dario» detto da Dario (il suo cassetto, con `elimina` il suo file eliminato);
+«sua», «suo», «la sua roba» passavano per forme di quando/cosa. E `**extra` toglieva il giro
+di correzione degli argomenti a ogni chiave: `allegato_leggi(pagina=3)` con una bolletta nella
+conversazione leggeva il file C3 del cassetto, `foglio`, `file`, `conferma`, `cartella`
+davano «I file degli altri non li vedo». Corretto (commit 5daf6bc):
+
+- **`_minore`**: un nome di casa dentro il valore vale solo nella forma «[mia] [parentela]
+  Nome [Cognome]» («mia figlia Bianca», «Bianca Rossi»), mai con «di …» né verso chi parla; i
+  possessivi di seconda e terza persona (tuo, sua, loro, lui, lei…) non sono forme chiuse. Lo
+  `Speakers` finto di `prova_cassetto` e del banco ha `find` (`SpeakerRegistry.find`), come in
+  produzione.
+- **Argomenti in più**: solo l'elenco chiuso di quelli che il 26B ha inventato nel banco
+  (`quando`, `giorno`, `data`, `tipo`, `persona`, `proprietario`, `di_chi`, `mittente`, e
+  `ieri`/`oggi`/`altroieri` con `true`), scritti nella firma; verso il cassetto solo con
+  `cassetto`, o senza `allegato` e senza file nella conversazione. Tutti gli altri tornano al
+  registro come prima: `tool_argomenti_non_validi`, correggibile.
+- **Parentela nella richiesta** (`_chi_e_cosa`): si cerca nel cassetto di chi parla e il file
+  vale solo se le parole lo trovano davvero nel nome o nel testo («la pagella di mio figlio» →
+  `pagella figlio.txt`), senza il ripiego «solo il giorno» di `Cassetto.cerca`; altrimenti «I
+  file degli altri non li vedo». Parentele con plurali e parole comuni (zie, nipoti, genitori,
+  bimbo, bambina, consorte, amica, collega…); un profilo registrato col cognome («Teodora
+  Rossi») si riconosce dal solo nome; la regola `cassetto_persona_nella_richiesta` è
+  controllata nel registro dalla prova.
+- **La domanda prima di eliminare o tenere** (vincolo di sicurezza su un'azione distruttiva,
+  effetto reversibile; scelta prudente finché decide chi amministra): `cassetto_gestisci` con
+  `elimina` o `tieni`, senza nessuna persona nella chiamata, quando la frase nomina un'altra
+  persona di casa o una parentela, chiede «Nel tuo cassetto: vuoi che elimini i tuoi file
+  («ieri»)? Quelli di Teodora non li vedo.»; al «sì» la chiamata parte. Campo nuovo
+  `Classe.chiedi_se` della politica, regola `politica_cassetto_altra_persona` (contata
+  nell'attrito). Contrari: «Elimina il file che ti ho mandato ieri» e «Tienili ancora una
+  settimana, sono di mia moglie» (azione `ancora`) senza domanda.
+- **Forme delle azioni**: `rinnova`, `prolunga`, `conserva`, `salva` solo come verbi (con il
+  pronome, all'infinito, o «salva tutto/il…»): «il rinnovo del contratto», «il prolungamento»,
+  «la conserva», «ha mandato Salva» non chiedono niente; «tienimeli» sì.
+- **In lettura il caso «mia moglie» si accetta** (il cassetto è di chi parla e lo legge il suo
+  proprietario): nel banco è un gruppo `misura`, fuori dal criterio.
+
+Prove a secco: `prova_cassetto.prova_seconda_revisione` (206 controlli in tutto il file, 52
+falliscono sul codice di 3c56440). Il banco ora avvolge i tool con `functools.wraps`: prima
+nascondeva la firma e faceva arrivare alla funzione argomenti che in Calliope il registro
+rimanda indietro.
+
+**Misura** (26B sulla DGX, versione installata 20261017-2019-a04f0a12, `num_ctx` 36864 già
+caricato, servizio senza turni; il codice del ramo in una cartella temporanea, l'installazione
+uguale prima e dopo per sha256): `prova_cassetto_ollama.py 5`: **ritrova 15/15, revisione
+15/15, contrari 15/15**, misura «mia moglie» 0/5 (il modello chiede ogni volta il cassetto di
+chi parla, `cassetto="ieri"` con o senza `quando`/`tipo`, e lo racconta come il file della
+moglie; nessun file di un'altra persona è uscito); nessun errore interno. Prima frase mediana
+1,73 s (65 turni): la GPU era al 96 % per un altro lavoro, contro 0,61 s dei giri di prima.
+Il criterio della #58 per «mia moglie» resta da decidere da chi amministra.
 
 ### Il tutore dai pulsanti della scheda (08/10, dopo l'unione)
 
