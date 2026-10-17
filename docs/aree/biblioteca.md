@@ -674,7 +674,21 @@ sezione erano così.
   decide `_troncato`, uguale in ogni versione di Python. Un tag troncato (nome e attributi in
   ASCII, almeno uno con «=», anche con un valore fra virgolette aperto) o un commento troncato
   si buttano; il resto resta testo («x<y», «Saldi <a partire da 5 euro, il rapporto
-  qualità=prezzo cresce.»).
+  qualità=prezzo cresce.»). *[Seconda revisione della PR #137, 17/10]* `_TAG_TRONCO` ha i
+  gruppi atomici `(?>…)` (Python ≥ 3.11). «a = b» si può leggere in due modi: «a» con valore
+  «b», oppure «a» con valore vuoto seguito dall'attributo «b». Senza gruppi atomici le letture
+  crescevano come 2^n: con 22 attributi «a = b» senza «>» servivano 1,5 s, con 30 minuti, e un
+  RSS di 342 byte fermava la lettura per 5,9 s (col GIL anche la voce). Ora con 100 000
+  attributi bastano 29 ms, e un feed di 600 kB così si legge in 0,03 s.
+- **Un elemento saltato rimasto aperto non cancella il resto** *(seconda revisione, 17/10)*:
+  il testo saltato si tiene da parte. Se a fine lettura un elemento nascosto, `noscript`,
+  `iframe` o `template` è ancora aperto, quel testo torna («<div hidden>Il porto riapre» →
+  «Il porto riapre»). Per `script` e `style` aperti resta buttato. Gli elementi che si chiudono
+  da soli (`p`, `li`, `option`, `td`…) non contano la profondità: il successivo con lo stesso
+  nome chiude quello nascosto («<p hidden>x<p>y</p>» → «y»).
+- **Testo fra «<» e «>» che non è un tag** arriva al modello come parole: `<|im_start|>`
+  diventa «im start», perché `ripulisci_testo` toglie i segni e il trattino basso. È comunque
+  dentro la busta dei dati non fidati, come tutto il sommario.
 - **Un «<» vero arriva al modello con le sue parole.** Nel lettore «temperature <5 gradi e venti
   > 30 km/h» resta intero. Prima di `web.servizio.ripulisci_testo`, che toglie comunque i segni
   «<» e «>», il servizio li fa diventare spazi (`servizio._segni`): così il suo
@@ -719,7 +733,11 @@ sezione erano così.
   - l'immagine `data:` di 60 000 caratteri;
   - i contrari: «<5 gradi», `&lt;p&gt;`, gli elementi saltati e quelli nascosti, entità risolte
     una volta sola, code troncate, «Saldi <a partire…»;
-  - 7 input malevoli a tempo;
+  - gli elementi nascosti rimasti aperti, con i contrari chiusi bene, e `p` e `li` che si
+    chiudono da soli;
+  - 10 input malevoli a tempo, fra cui «a = b» ripetuto 30 e 100 000 volte;
+  - `_TAG_TRONCO` sotto i 50 ms con 30 attributi;
+  - un feed con 40 attributi «a = b» nel titolo e nel sommario;
   - la rete con i contrari, e da `_inserisci` la regola contata, «data_src=» preso dopo la
     pulizia, i segni veri con le loro parole;
   - un `notizie.db` con una voce sporca, una pulita e un contrario, riaperto due volte;

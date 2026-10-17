@@ -215,20 +215,27 @@ _ATOM = "{http://www.w3.org/2005/Atom}"
 # anche il caso peggiore su un input costruito apposta (dato non fidato)
 HTML_MAX = 100_000
 # In coda, ciò che il parser non ha chiuso: un tag troncato (nome e attributi in ASCII, almeno
-# uno con «=», anche con un valore fra virgolette aperto) o un commento troncato si buttano; tutto il resto resta testo
-# («x<y», «Saldi <a partire da 5 euro, qualità=prezzo»). Senza quantificatori annidati che si
-# sovrappongono: ogni attributo comincia dopo uno spazio e il valore non contiene spazi o è
-# fra virgolette
+# uno con «=», anche con un valore fra virgolette aperto) o un commento troncato si buttano;
+# tutto il resto resta testo («x<y», «Saldi <a partire da 5 euro, qualità=prezzo»). Gruppi
+# atomici `(?>…)` (Python ≥ 3.11): «a = b» si legge come «a» con valore «b» oppure «a» con
+# valore vuoto e poi l'attributo «b», e senza gruppi atomici le letture possibili crescono come
+# 2^n (seconda revisione della PR #137: 1,5 s con 22 attributi, minuti con 30)
 _TAG_TRONCO = re.compile(
-    r"^<(?:!--.*|[A-Za-z][\w:.-]*(?:\s+[\w:.-]+(?:\s*=\s*(?:\"[^\"]*\"?|'[^']*'?|"
+    r"^<(?:!--.*|[A-Za-z][\w:.-]*(?>\s+[\w:.-]+(?>\s*=\s*(?:\"[^\"]*\"?|'[^']*'?|"
     r"[^\s\"'<>]*))?)*\s*/?)$", re.S | re.A)
 # Ripiego se il parser solleva un'eccezione: lineare anche con molti «<» senza «>»
 _TAG_RIPIEGO = re.compile(r"<[^<>]*>")
 # Elementi saltati col loro contenuto: non sono testo che si legge
 _SALTATI = frozenset({"script", "style", "noscript", "template", "iframe"})
+# Codice: se resta aperto fino alla fine, il testo saltato resta buttato
+_CODICE = frozenset({"script", "style"})
 # Elementi senza chiusura: un attributo «hidden» su questi non nasconde altro
 _VUOTI = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta",
                     "param", "source", "track", "wbr"})
+# Elementi che si chiudono da soli e non si annidano: un altro dello stesso nome chiude quello
+# nascosto («<p hidden>x<p>y» → «y»), senza contare la profondità
+_AUTOCHIUSI = frozenset({"p", "li", "option", "optgroup", "dt", "dd", "tr", "td", "th", "rp",
+                         "rt", "thead", "tbody", "tfoot", "colgroup", "caption"})
 _DISPLAY_NONE = re.compile(r"display\s*:\s*none", re.I)
 
 
@@ -246,35 +253,56 @@ def _nascosto(attrs) -> bool:
 class _SoloTesto(HTMLParser):
     """Tiene i soli dati di testo, con le entità risolte; salta script, style, noscript,
     template, iframe e gli elementi con «hidden» o «display:none»; ogni tag diventa uno
-    spazio (come faceva la regola di prima: «<b>Ro</b>ma» → «Ro ma»)."""
+    spazio (come faceva la regola di prima: «<b>Ro</b>ma» → «Ro ma»). Il testo saltato si
+    tiene da parte: se l'elemento resta aperto fino alla fine (non era un elemento nascosto
+    ma un tag rotto) torna testo, tranne per script e style (`finito`)."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.pezzi: list[str] = []
+        self.saltati: list[str] = []
         self.salta_tag: str | None = None   # l'elemento saltato che si sta attraversando
         self.salta_prof = 0                 # quanti dello stesso nome aperti dentro
 
+    def _chiudi_salto(self):
+        self.salta_tag, self.salta_prof, self.saltati = None, 0, []
+
     def handle_starttag(self, tag, attrs):
+        if self.salta_tag is not None and tag == self.salta_tag:
+            if tag in _AUTOCHIUSI:
+                self._chiudi_salto()        # «<p hidden>x<p>y»: il secondo chiude il primo
+            else:
+                self.salta_prof += 1
         if self.salta_tag is None:
             if tag in _SALTATI or (tag not in _VUOTI and _nascosto(attrs)):
-                self.salta_tag, self.salta_prof = tag, 1
-        elif tag == self.salta_tag:
-            self.salta_prof += 1
-        self.pezzi.append(" ")
+                self.salta_tag, self.salta_prof, self.saltati = tag, 1, []
+            self.pezzi.append(" ")
+        else:
+            self.saltati.append(" ")
 
     def handle_startendtag(self, tag, attrs):
-        self.pezzi.append(" ")
+        (self.pezzi if self.salta_tag is None else self.saltati).append(" ")
 
     def handle_endtag(self, tag):
         if tag == self.salta_tag:
             self.salta_prof -= 1
-            if self.salta_prof <= 0:
-                self.salta_tag = None
-        self.pezzi.append(" ")
+            if self.salta_prof <= 0 or tag in _AUTOCHIUSI:
+                self._chiudi_salto()
+        (self.pezzi if self.salta_tag is None else self.saltati).append(" ")
 
     def handle_data(self, data):
+        (self.pezzi if self.salta_tag is None else self.saltati).append(data)
+
+    def finito(self) -> bool:
+        """A fine lettura: rimette il testo di un elemento saltato rimasto aperto (non script
+        né style). Vero se la coda non letta va trattata come testo."""
         if self.salta_tag is None:
-            self.pezzi.append(data)
+            return True
+        if self.salta_tag in _CODICE:
+            return False
+        self.pezzi.extend(self.saltati)
+        self._chiudi_salto()
+        return True
 
 
 def _senza_tag(t: str) -> str:
@@ -287,7 +315,7 @@ def _senza_tag(t: str) -> str:
     except Exception:  # noqa: BLE001 — il testo è non fidato: mai un'eccezione al lettore
         return html.unescape(_TAG_RIPIEGO.sub(" ", t))
     resto = p.rawdata
-    if resto and p.salta_tag is None and not _troncato(resto):
+    if p.finito() and resto and not _troncato(resto):
         p.pezzi.append(html.unescape(resto))
     return "".join(p.pezzi)
 

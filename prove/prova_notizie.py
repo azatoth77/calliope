@@ -245,7 +245,25 @@ for testo, atteso in [
          "Testo"),
         ('<div hidden>nascosto <div>anche</div> questo</div><p style="display: none">no</p>Sì',
          "Sì"),
-        ('<img hidden src="https://esempio.invalid/a.jpg">Il porto riapre.', "Il porto riapre.")]:
+        ('<img hidden src="https://esempio.invalid/a.jpg">Il porto riapre.', "Il porto riapre."),
+        # Un elemento nascosto rimasto aperto non fa sparire il resto: il testo torna
+        # (seconda revisione della PR #137); script e style aperti restano buttati
+        ("<div hidden>Il porto riapre domani", "Il porto riapre domani"),
+        ("<noscript>Il porto riapre domani", "Il porto riapre domani"),
+        ("<iframe>Il porto riapre domani", "Il porto riapre domani"),
+        ("<template>Il porto riapre domani", "Il porto riapre domani"),
+        ("Il porto riapre. <script>var x = 1; senza fine", "Il porto riapre."),
+        ("Il porto riapre. <style>p{color:red} senza fine", "Il porto riapre."),
+        # Gli elementi che si chiudono da soli: il successivo dello stesso nome chiude
+        ("<p hidden>nascosto<p>Il porto riapre.</p>dopo", "Il porto riapre. dopo"),
+        ("<li hidden>nascosto<li>Il porto riapre.", "Il porto riapre."),
+        # Contrari: chiusi bene, come prima
+        ("<p hidden>nascosto</p>Il porto riapre.", "Il porto riapre."),
+        ("<div hidden><div>nascosto</div> anche</div>Il porto riapre.", "Il porto riapre."),
+        ("<div hidden><p>nascosto</div>Il porto riapre.", "Il porto riapre."),
+        # «=» con gli spazi intorno: un tag non chiuso così è testo o coda buttata, in fretta
+        ("Il porto riapre. <x a = b c = d !", "Il porto riapre. <x a = b c = d !"),
+        ("Il porto riapre. <x a = b c = d", "Il porto riapre.")]:
     verifica(f"testo semplice: «{testo[:40]}»", lettore.testo_semplice(testo) == atteso,
              repr(lettore.testo_semplice(testo)))
 # Un tag enorme in testa (un'immagine in data: base64 di 60 000 caratteri) non fa perdere il
@@ -262,7 +280,12 @@ for nome, x in [("«<» senza «>»", "<" * 2_000_000), ("«<a » ripetuto", "<a
                 ("«&lt;a » ripetuto", "&lt;a " * 400_000),
                 ("attributi senza fine", "<a" + ' b="c' * 400_000),
                 ("attributi senza «>»", "<a" + " b=c" * 500_000 + " !"),
-                ("«hidden» annidati", "<div hidden>" * 150_000)]:
+                ("«hidden» annidati", "<div hidden>" * 150_000),
+                # Backtracking esponenziale di _TAG_TRONCO senza gruppi atomici (seconda
+                # revisione della PR #137: 1,5 s con 22 attributi, minuti con 30)
+                ("«a = b» × 30", "Il porto riapre. <x" + " a = b" * 30 + " !"),
+                ("«a = b» × 100 000", "Il porto riapre. <x" + " a = b" * 100_000 + " !"),
+                ("«a =» × 50 000", "Il porto riapre. <x" + " a =" * 50_000 + " é")]:
     t0 = time.perf_counter()
     lettore.testo_semplice(x)
     dt_s = time.perf_counter() - t0
@@ -273,6 +296,21 @@ for nome, x in [("«<» senza «>»", "<" * 2_000_000), ("«<a » ripetuto", "<a
         lento.append(f"{nome}: {dt_s:.2f} s, parser {dt_p:.2f} s")
 verifica("tag lungo: input malevoli grandi letti in fretta (< 0,5 s col tetto, < 2 s il parser)",
          not lento, "; ".join(lento))
+t0 = time.perf_counter()
+_TRONCO_30 = lettore._TAG_TRONCO.match("<x" + " a = b" * 30 + " !")
+_dt = time.perf_counter() - t0
+verifica("tag lungo: _TAG_TRONCO con 30 attributi «a = b» senza «>» in meno di 50 ms",
+         _TRONCO_30 is None and _dt < 0.05, f"{_dt * 1000:.1f} ms")
+# Lo stesso nel feed intero, nel titolo e nel sommario: la lettura non si ferma
+_attr = "<img" + " a = b" * 40 + " !"
+t0 = time.perf_counter()
+v = lettore.leggi(rss("Bit Lumen", [(f"<![CDATA[Il porto riapre {_attr}]]>",
+                                     f"<![CDATA[Il porto riapre domani. {_attr}]]>",
+                                     "https://bit.esempio.invalid/9", "")]))
+_dt = time.perf_counter() - t0
+verifica("tag lungo: feed con 40 attributi «a = b» nel titolo e nel sommario letto in fretta",
+         _dt < 0.2 and v[0]["titolo"].startswith("Il porto riapre")
+         and v[0]["sommario"].startswith("Il porto riapre domani."), f"{_dt * 1000:.1f} ms {v}")
 # La rete in pulizia: un sommario che porta ancora attributi HTML col loro valore si scarta
 # (contato); si guarda il sommario già ripulito, come si salva
 for somm, atteso, regole in [
