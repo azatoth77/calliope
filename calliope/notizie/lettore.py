@@ -28,6 +28,7 @@ import socket
 import ssl
 import time
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 from urllib.parse import urljoin
 
 from ..web.pagina import (PaginaNonLetta, PaginaVietata, _Connessione, _ConnessioneTLS,
@@ -204,17 +205,72 @@ def leggi_data(testo: str, fuso: str = "") -> dt.datetime | None:
 # ─────────────────────────── lettura ───────────────────────────
 
 _ENTITA = re.compile(rb"<!\s*ENTITY", re.I)
-_TAG = re.compile(r"<[^>]{0,500}>")
 _NS = {"content": "http://purl.org/rss/1.0/modules/content/",
        "dc": "http://purl.org/dc/elements/1.1/"}
 _ATOM = "{http://www.w3.org/2005/Atom}"
 
+# Caratteri letti di un campo HTML (#133, 17/10): il sommario se ne tiene 600, un tag con un
+# srcset di trenta immagini ne fa ~3 000; il tetto tiene breve anche il caso peggiore del
+# parser su un input costruito apposta (dato non fidato)
+HTML_MAX = 10_000
+# In coda, ciò che il parser non ha chiuso: un tag o un commento troncato si butta (porta
+# solo attributi), il resto («x<y» senza «>») resta testo
+_TAG_TRONCO = re.compile(r"^<(?:!--|[A-Za-z][^<>]*=)")
+# Ripiego se il parser solleva un'eccezione: lineare anche con molti «<» senza «>»
+_TAG_RIPIEGO = re.compile(r"<[^<>]*>")
+
+
+class _SoloTesto(HTMLParser):
+    """Tiene i soli dati di testo, con le entità risolte; salta script e style; ogni tag
+    diventa uno spazio (come faceva la regola di prima: «<b>Ro</b>ma» → «Ro ma»)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.pezzi: list[str] = []
+        self.salta = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ("script", "style"):
+            self.salta += 1
+        self.pezzi.append(" ")
+
+    def handle_startendtag(self, tag, attrs):
+        self.pezzi.append(" ")
+
+    def handle_endtag(self, tag):
+        if tag in ("script", "style") and self.salta:
+            self.salta -= 1
+        self.pezzi.append(" ")
+
+    def handle_data(self, data):
+        if not self.salta:
+            self.pezzi.append(data)
+
+
+def _senza_tag(t: str) -> str:
+    """Un passaggio del parser HTML della libreria standard (#133): toglie i tag di qualunque
+    lunghezza, mentre un «<» che non apre un tag («<5 gradi») resta testo. Non si chiama
+    close(): la coda non chiusa la decide `_TAG_TRONCO`, uguale in ogni versione di Python."""
+    p = _SoloTesto()
+    try:
+        p.feed(t)
+    except Exception:  # noqa: BLE001 — il testo è non fidato: mai un'eccezione al lettore
+        return html.unescape(_TAG_RIPIEGO.sub(" ", t))
+    resto = p.rawdata
+    if resto and not p.salta and not _TAG_TRONCO.match(resto):
+        p.pezzi.append(html.unescape(resto))
+    return "".join(p.pezzi)
+
 
 def testo_semplice(s) -> str:
-    """Senza marcatura HTML e con le entità risolte, spazi normalizzati."""
-    t = _TAG.sub(" ", str(s or ""))
-    t = html.unescape(t)
-    t = _TAG.sub(" ", t)               # l'HTML scritto come &lt;p&gt; nel feed
+    """Senza marcatura HTML e con le entità risolte, spazi normalizzati. Dal 17/10 (#133) con
+    `html.parser` al posto di `<[^>]{0,500}>`, che lasciava intero un `<img srcset=…>` più
+    lungo di 500 caratteri: il sommario diventava il testo del tag."""
+    t = _senza_tag(str(s or "")[:HTML_MAX])
+    if "<" in t:
+        # L'HTML scritto come &lt;p&gt; nel feed: un secondo passaggio, con le «&» già
+        # risolte protette (le entità si risolvono una volta sola, come prima)
+        t = _senza_tag(t.replace("&", "&amp;"))
     return re.sub(r"\s+", " ", t).strip()
 
 

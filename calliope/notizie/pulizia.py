@@ -19,6 +19,10 @@ viene detta, vanno nel registro dei turni.
 - `notizie_non_notizia`: le voci che non sono notizie (episodi di podcast e newsletter dal
   link, «Puntata del…», le strisce): non entrano nell'indice. Un link /video/ di Rainews è una
   notizia vera e resta.
+- `notizie_sommario_html` (17/10, #133): rete di sicurezza dopo il lettore, un sommario che
+  porta ancora attributi HTML (`src=`, `srcset=`, `href=`, `class="…"`) si scarta intero: il
+  modello sa che c'è solo il titolo, invece di leggere indirizzi e codice. Mai una parola
+  sola («la classe di Ada», «href» citato senza «=»).
 """
 from __future__ import annotations
 
@@ -36,10 +40,16 @@ _DRITTE = re.compile(r"[\"“”„]([^\"“”„\n]+)[\"“”„]")
 _TRONCATO = re.compile(r"(?:\.\.\.|…)\s*$")
 _CODA_WP = re.compile(r"\s*(?:The post|L'articolo)\s.{1,300}?\s(?:appeared first on|"
                       r"proviene da)\s.{1,120}$", re.I | re.S)
+_ATTRIBUTI_HTML = re.compile(r"\b(?:src|srcset|href)\s*=|\bclass\s*=\s*[\"']", re.I)
 _NON_NOTIZIA_LINK = re.compile(r"/(?:episodes?|newsletters?|podcasts?)/", re.I)
 _NON_NOTIZIA_TITOLO = re.compile(
     r"^(?:puntata del\b|peanuts\b|oroscopo\b|tg\s?\w*(?:\s\w+){0,3}\s+del\s+\d{1,2}[/.]\d{1,2})",
     re.I)
+
+
+def sommario_html(sommario: str) -> bool:
+    """Il sommario porta ancora attributi HTML (rete di `notizie_sommario_html`)."""
+    return bool(_ATTRIBUTI_HTML.search(sommario or ""))
 
 
 def non_notizia(titolo: str, link: str) -> bool:
@@ -92,8 +102,10 @@ def titolo_per_voce(titolo: str, sommario: str = "") -> tuple[str, list[str]]:
 
 def sommario_per_voce(sommario: str, titolo: str, testata: str) -> tuple[str, list[str]]:
     """(sommario pulito, regole): senza la coda di WordPress, senza la sigla della testata in
-    testa, vuoto se ripete il titolo."""
+    testa, vuoto se ripete il titolo o se porta ancora attributi HTML."""
     s, regole = str(sommario or "").strip(), []
+    if sommario_html(s):
+        return "", ["notizie_sommario_html"]
     n = _CODA_WP.sub("", s).strip()
     if n != s:
         s = n

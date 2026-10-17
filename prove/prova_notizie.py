@@ -9,6 +9,8 @@ niente internet.
    rotto, non un feed; date RFC 822, ISO 8601, in italiano, Sky TG24 con l'ora italiana marcata
    GMT (fuso del feed), ora legale.
 2. Pulizia dei titoli e dei sommari (principio 10): ogni regola con i suoi casi contrari.
+   Dal 17/10 (#133) i tag HTML lunghi (`<img srcset>` oltre 500 caratteri) tolti dal parser,
+   input malevoli a tempo, la rete `notizie_sommario_html`, le voci vecchie ripulite.
 3. Gruppi: la stessa notizia da più testate, testate uguali e fatti lontani non collegati,
    catena fermata dal tetto.
 4. Elenco dei feed: righe valide e no, testate spente e accese per nome, regione di casa.
@@ -34,6 +36,7 @@ import json
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from xml.sax.saxutils import escape as html_esc
 
 from calliope import capacita, provenienza
 from calliope.brain import Brain, WEB_TOLTO, _compatta_storia
@@ -196,6 +199,127 @@ CASI_SOMMARI = [
 for somm, testata, atteso, regole in CASI_SOMMARI:
     s, r = pulizia.sommario_per_voce(somm, "Il porto riapre domani", testata)
     verifica(f"sommario: «{somm[:40]}»", (s, r) == (atteso, regole), f"{s!r} {r}")
+
+# ── 2b. Tag HTML lunghi nel feed (#133, 17/10): un <img srcset=…> oltre i 500 caratteri
+# restava intero e diventava il sommario; ora il parser HTML della libreria standard ──
+IMG = ('<img width="800" height="450" src="https://esempio.invalid/foto/biblioteca.jpg" '
+       'class="attachment-large size-large wp-post-image" alt="" decoding="async" srcset="'
+       + ", ".join(f"https://esempio.invalid/foto/biblioteca-{i * 100}x{i * 56}.jpg {i * 100}w"
+                   for i in range(1, 14))
+       + '" sizes="(max-width: 800px) 100vw, 800px" />')
+PARAGRAFO = "Il comune di Borgo Lieto apre la nuova biblioteca."
+verifica("tag lungo: l'<img> di fantasia supera i 700 caratteri", len(IMG) > 700, str(len(IMG)))
+v = lettore.leggi(rss("Bit Lumen", [("Borgo Lieto, nuova biblioteca",
+                                     f"<![CDATA[{IMG}<p>{PARAGRAFO}</p>]]>",
+                                     "https://bit.esempio.invalid/1", "")]))
+verifica("tag lungo: <img srcset> di 700+ caratteri e un paragrafo (CDATA) → solo il paragrafo",
+         v[0]["sommario"] == PARAGRAFO, repr(v[0]["sommario"][:120]))
+v = lettore.leggi(rss("Bit Lumen", [("Borgo Lieto, nuova biblioteca",
+                                     html_esc(f"{IMG}<p>{PARAGRAFO}</p>"),
+                                     "https://bit.esempio.invalid/1", "")]))
+verifica("tag lungo: lo stesso scritto come &lt;img …&gt; → solo il paragrafo",
+         v[0]["sommario"] == PARAGRAFO, repr(v[0]["sommario"][:120]))
+atom_html = ('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>X</title>'
+             '<entry><title>Voce Atom</title><link href="https://b.esempio.invalid/2"/>'
+             f'<summary type="html">{html_esc(IMG + "<p>" + PARAGRAFO + "</p>")}</summary>'
+             '</entry></feed>').encode()
+v = lettore.leggi(atom_html)
+verifica("tag lungo: Atom con <summary type=\"html\"> → solo il paragrafo",
+         v[0]["sommario"] == PARAGRAFO, repr(v[0]["sommario"][:120]))
+for testo, atteso in [
+        ("temperature <5 gradi e venti > 30 km/h", "temperature <5 gradi e venti > 30 km/h"),
+        ("&lt;p&gt;testo&lt;/p&gt;", "testo"),
+        ("<p>Prima</p><script>var x = '<b>no</b>';</script><style>p{color:red}</style>Dopo",
+         "Prima Dopo"),
+        ("<b>Ro</b>ma", "Ro ma"),
+        ("Rossi &amp; figli, sconto &lt;10 %", "Rossi & figli, sconto <10 %"),
+        ("AT&amp;amp;T resta scritto così", "AT&amp;T resta scritto così"),
+        ("x<y e z senza chiusura", "x<y e z senza chiusura"),
+        ("Il porto riapre. <img src=\"https://esempio.invalid/troncato", "Il porto riapre."),
+        ("Il porto riapre. <!-- commento senza fine", "Il porto riapre.")]:
+    verifica(f"testo semplice: «{testo[:40]}»", lettore.testo_semplice(testo) == atteso,
+             repr(lettore.testo_semplice(testo)))
+# Dato non fidato: niente tempi quadratici su input costruiti apposta (2 MB per campo, più del
+# tetto HTML_MAX; e il parser da solo su 200 000 caratteri, senza tetto)
+lento = []
+for nome, x in [("«<» senza «>»", "<" * 2_000_000), ("«<a » ripetuto", "<a " * 700_000),
+                ("attributo aperto", '<img src="' + "x" * 2_000_000),
+                ("«&lt;a » ripetuto", "&lt;a " * 400_000)]:
+    t0 = time.perf_counter()
+    lettore.testo_semplice(x)
+    dt_s = time.perf_counter() - t0
+    t0 = time.perf_counter()
+    lettore._senza_tag(x[:200_000])
+    dt_p = time.perf_counter() - t0
+    if dt_s > 0.5 or dt_p > 2.0:
+        lento.append(f"{nome}: {dt_s:.2f} s, parser {dt_p:.2f} s")
+verifica("tag lungo: input malevoli grandi letti in fretta (< 0,5 s col tetto, < 2 s il parser)",
+         not lento, "; ".join(lento))
+# La rete in pulizia: un sommario che porta ancora attributi HTML si scarta (contato)
+for somm, atteso, regole in [
+        ('img srcset="https://esempio.invalid/a.jpg 800w" Il porto riapre.', "",
+         ["notizie_sommario_html"]),
+        ('Il porto riapre. a href=https://esempio.invalid/x', "", ["notizie_sommario_html"]),
+        ("div class=\"wp-block\" Il porto riapre.", "", ["notizie_sommario_html"]),
+        ("La classe di Ada vince il premio di scienze.",
+         "La classe di Ada vince il premio di scienze.", []),
+        ("Il corso spiega src e href ai ragazzi di Borgo Lieto.",
+         "Il corso spiega src e href ai ragazzi di Borgo Lieto.", [])]:
+    s, r = pulizia.sommario_per_voce(somm, "Il porto riapre domani", "Bit Lumen")
+    verifica(f"sommario html: «{somm[:40]}»", (s, r) == (atteso, regole), f"{s!r} {r}")
+# Nell'indice: la regola si conta come le altre, la voce resta col solo titolo
+_f_bit = Feed("Bit Lumen", "tecnologia", "https://bit.esempio.invalid/feed.xml")
+_svc_h = Notizie(Config(), [_f_bit], ":memory:", log=lambda *a: None, orologio=lambda: ADESSO)
+_n, _, _conta = _svc_h._inserisci(_f_bit, [
+    {"titolo": "Borgo Lieto, nuova biblioteca", "link": "https://bit.esempio.invalid/1",
+     "sommario": 'img srcset="https://esempio.invalid/a.jpg 800w" class="foto"',
+     "data_grezza": rfc(ADESSO - 600)},
+    {"titolo": "Il porto di Borgoverde riapre", "link": "https://bit.esempio.invalid/2",
+     "sommario": PARAGRAFO, "data_grezza": rfc(ADESSO - 600)}], ADESSO)
+_righe = dict(_svc_h.db.execute("SELECT link, sommario FROM voci").fetchall())
+verifica("sommario html: nell'indice la voce resta col titolo, la regola è contata",
+         _n == 2 and _righe.get("https://bit.esempio.invalid/1") == ""
+         and _righe.get("https://bit.esempio.invalid/2") == PARAGRAFO
+         and _conta.get("notizie_sommario_html") == 1, f"{_n} {_righe} {_conta}")
+_svc_h.close()
+# Le voci già salvate sporche (INSERT OR IGNORE non le riscrive): all'apertura si tolgono e i
+# loro feed si riscaricano per intero (ETag dimenticato); le altre restano
+import tempfile  # noqa: E402
+with tempfile.TemporaryDirectory() as _dir_db:
+    _db = os.path.join(_dir_db, "notizie.db")
+    _log = []
+    _s = Notizie(Config(), [], _db, log=_log.append, orologio=lambda: ADESSO)
+    for i, (feed_url, somm) in enumerate([
+            ("https://bit.esempio.invalid/feed.xml",
+             'img width="800" src="https://esempio.invalid/a.jpg" class="foto" srcset="…"'),
+            ("https://bit.esempio.invalid/feed.xml", PARAGRAFO),
+            ("https://gazzetta.esempio.invalid/feed.xml",
+             "La classe di Ada vince il premio di scienze.")]):
+        _s.db.execute("INSERT INTO voci(feed, testata, tema, titolo, titolo_l, sommario, link, "
+                      "t) VALUES(?,?,?,?,?,?,?,?)",
+                      (feed_url, "Bit Lumen", "tecnologia", f"Titolo {i}", f"titolo {i}", somm,
+                       f"https://bit.esempio.invalid/v{i}", ADESSO - 600))
+    for feed_url in ("https://bit.esempio.invalid/feed.xml",
+                     "https://gazzetta.esempio.invalid/feed.xml"):
+        _s.db.execute("INSERT INTO feed(url, testata, tema, etag, modificato) VALUES(?,?,?,?,?)",
+                      (feed_url, "X", "tecnologia", '"e1"', "Tue, 13 Oct 2026 12:00:00 GMT"))
+    _s.db.commit()
+    _s.close()
+    _s = Notizie(Config(), [], _db, log=_log.append, orologio=lambda: ADESSO)
+    _somm = [r[0] for r in _s.db.execute("SELECT sommario FROM voci ORDER BY id")]
+    _etag = dict(_s.db.execute("SELECT url, etag FROM feed").fetchall())
+    verifica("voci vecchie: il sommario fatto di HTML tolto all'apertura, le altre restano",
+             _somm == [PARAGRAFO, "La classe di Ada vince il premio di scienze."]
+             and len(_s._voci) == 2, str(_somm))
+    verifica("voci vecchie: ETag dimenticato solo per il feed sporco",
+             _etag == {"https://bit.esempio.invalid/feed.xml": "",
+                       "https://gazzetta.esempio.invalid/feed.xml": '"e1"'}, str(_etag))
+    _s.close()
+    _n_log = len(_log)
+    _s = Notizie(Config(), [], _db, log=_log.append, orologio=lambda: ADESSO)
+    verifica("voci vecchie: alla seconda apertura niente da togliere",
+             _n_log == 1 and len(_log) == 1 and "tolte 1 voci" in _log[0], str(_log))
+    _s.close()
 for tit, link, atteso in [
         ("Il caffè del mattino", "https://www.esempio.it/episodes/caffe-13-10", True),
         ("La newsletter di oggi", "https://www.esempio.it/newsletter/oggi", True),

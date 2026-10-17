@@ -217,7 +217,29 @@ class Notizie:
             CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
         """)
         self.db.commit()
+        self._togli_sommari_html()
         self._ricarica()
+
+    def _togli_sommari_html(self):
+        """Le voci salvate prima del 17/10 (#133) con il sommario fatto del testo di un tag
+        HTML: si tolgono e si dimenticano ETag e Last-Modified dei loro feed, così lo scarico
+        dopo le riporta col sommario giusto (`INSERT OR IGNORE` non le riscriverebbe). Senza
+        segni di versione: a ogni apertura, una scansione con LIKE e nessun effetto se il
+        disco è pulito."""
+        with self._lock:
+            righe = self.db.execute(
+                "SELECT id, feed, sommario FROM voci WHERE sommario LIKE '%src%' "
+                "OR sommario LIKE '%href%' OR sommario LIKE '%class%'").fetchall()
+            sporche = [(i, f) for i, f, s in righe if pulizia.sommario_html(s)]
+            if not sporche:
+                return
+            self.db.executemany("DELETE FROM voci WHERE id=?", [(i,) for i, _ in sporche])
+            feeds = sorted({f for _, f in sporche if f})
+            self.db.executemany("UPDATE feed SET etag='', modificato='' WHERE url=?",
+                                [(f,) for f in feeds])
+            self.db.commit()
+        self.log(f"[NOTIZIE] tolte {len(sporche)} voci col sommario fatto di HTML "
+                 f"({len(feeds)} feed da riscaricare per intero)")
 
     # ── stato su disco ──
     def _meta(self, k: str, v=None):
