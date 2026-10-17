@@ -59,6 +59,10 @@ def riga(campo, valore) -> str:
 
 
 SERIE = Config()
+# Dove il valore di serie non è il più stretto, un valore rifiutato vale il più stretto, come su
+# main (revisione della PR #130): «amministratore» non deve aprire ai familiari
+RIPIEGO = {"agenti_livello": "amministra", "agenti_livello_codice": "amministra",
+           "ufficio_livello_fiscale": "amministra", "web_searxng_aggiorna": "manuale"}
 
 # Per ogni campo a modi: (giusto, con maiuscole, altro genere → atteso o None, sbagliati)
 CASI = {
@@ -70,12 +74,13 @@ CASI = {
     "agenti_conferma": ("mai", "Mai", None, ["acceso", "sì", "costoso"]),
     "agenti_arbitro": ("mai", " MAI ", None, ["acceso", "talvolta"]),
     "agenti_sandbox_motore": ("processo", "Docker", None, ["acceso", "sì", "podman"]),
-    "agenti_livello": ("amministra", "Amministra", None, ["acceso", "ospite", "famigliare"]),
+    "agenti_livello": ("amministra", "Amministra", None,
+                       ["acceso", "ospite", "famigliare", "amministratore", "admin"]),
     "agenti_livello_codice": ("familiare", "Familiare", None, ["acceso", "admin"]),
     "ufficio_livello_fiscale": ("familiare", "FAMILIARE", None, ["acceso", "sì", "tutti"]),
     "wake_posizione": ("inizio", "Inizio", None, ["acceso", "sì", "ovunqe"]),
     "wake_mode": ("testo", "Testo", None, ["acceso", "sì", "testuale"]),
-    "web_searxng_aggiorna": ("manuale", "Manuale", None, ["acceso", "sì", "automatica"]),
+    "web_searxng_aggiorna": ("manuale", "Manuale", None, ["acceso", "sì", "automatica", "a mano"]),
     "stt_motore": ("server", "Server", None, ["acceso", "sì", "remoto"]),
     "vad_motore": ("onnx", "ONNX", None, ["acceso", "sì", "onnxruntime"]),
     "immagini_modello": ("no", "No ", None, ["acceso", "vision"]),
@@ -100,7 +105,7 @@ CASI = {
 }
 
 for campo, (giusto, maiusc, genere, sbagliati) in CASI.items():
-    serie = getattr(SERIE, campo)
+    serie = RIPIEGO.get(campo, getattr(SERIE, campo))
     cfg, log = dal_locale(riga(campo, giusto))
     verifica(f"{campo}: «{giusto}» vale, senza avvisi",
              getattr(cfg, campo) == giusto and "non è valido" not in log
@@ -118,7 +123,7 @@ for campo, (giusto, maiusc, genere, sbagliati) in CASI.items():
                  f"{getattr(cfg, campo)!r} {log.strip()[-200:]}")
     for male in sbagliati:
         cfg, log = dal_locale(riga(campo, male))
-        verifica(f"{campo}: «{male}» rifiutato con l'avviso, resta quello di serie {serie!r}",
+        verifica(f"{campo}: «{male}» rifiutato con l'avviso, vale {serie!r}",
                  getattr(cfg, campo) == serie and f"«{campo}: " in log and "non è valido" in log,
                  f"{getattr(cfg, campo)!r} {log.strip()[-200:]}")
 
@@ -137,7 +142,7 @@ verifica("minori: il «no» di YAML è rifiutato, resta «avvisa» (la scelta pr
          cfg.minori_pericolo_silenzio == "avvisa" and "non è valido" in log, log.strip()[-200:])
 
 # Il «no» e il «sì» di YAML (false/true): prima erano un tipo sbagliato
-for campo, atteso in (("eventi", "spento"), ("stanza", "spenta"), ("compagnia_enabled", "spenta"),
+for campo, atteso in (("eventi", "spento"), ("stanza", "spenta"), ("compagnia_rivolta", "spenta"),
                       ("speaker_impronte_satellite", "spento"), ("stanza_lenta_prompt", "no"),
                       ("immagini_modello", "no"), ("agenti_arbitro", "mai"),
                       ("satellite_schermo", "no"), ("stanza_lenta_blocchi", "spento"),
@@ -145,13 +150,24 @@ for campo, atteso in (("eventi", "spento"), ("stanza", "spenta"), ("compagnia_en
     cfg, log = dal_locale(riga(campo, "no"))
     verifica(f"{campo}: il «no» di YAML vale «{atteso}»", getattr(cfg, campo) == atteso
              and "non è" not in log, f"{getattr(cfg, campo)!r} {log.strip()[-160:]}")
+# Il true non accende mai identità, permessi o sicurezza: impronte e «rivolta» restano
+# com'erano (revisione della PR #130), con yes, on e true
 for campo in ("eventi", "system1_dopo_tool", "stanza_guardia", "arbitro_memoria",
-              "agenti_conferma", "wake_mode"):
+              "agenti_conferma", "wake_mode", "speaker_impronte_satellite", "compagnia_rivolta"):
+    for scritto in ("yes", "on", "true"):
+        cfg, log = dal_locale(riga(campo, scritto))
+        verifica(f"contrario: {campo}: il «{scritto}» di YAML (true) è ambiguo, rifiutato",
+                 getattr(cfg, campo) == getattr(SERIE, campo) and "non è valido" in log,
+                 f"{getattr(cfg, campo)!r}")
+# Il false della compagnia non la spegne (su main era un tipo sbagliato: restava «attiva»)
+cfg, log = dal_locale(riga("compagnia_enabled", "no"))
+verifica("contrario: compagnia_enabled: no rifiutato, resta «attiva»",
+         cfg.compagnia_enabled == "attiva" and "non è valido" in log, cfg.compagnia_enabled)
+# I livelli: il true e il false non aprono
+for campo in ("agenti_livello", "agenti_livello_codice", "ufficio_livello_fiscale"):
     cfg, log = dal_locale(riga(campo, "yes"))
-    verifica(f"contrario: {campo}: il «sì» di YAML (true) è ambiguo, rifiutato",
-             getattr(cfg, campo) == getattr(SERIE, campo) and "non è valido" in log,
-             f"{getattr(cfg, campo)!r}")
-for campo, atteso in (("compagnia_enabled", "attiva"), ("speaker_impronte_satellite", "attivo"),
+    verifica(f"contrario: {campo}: true vale «amministra»", getattr(cfg, campo) == "amministra")
+for campo, atteso in (("compagnia_enabled", "attiva"),
                       ("stanza_lenta_ritrascrivi", "si"), ("agenti_arbitro", "sempre")):
     cfg, log = dal_locale(riga(campo, "true"))
     verifica(f"{campo}: true vale «{atteso}» (come nel modulo che lo legge)",

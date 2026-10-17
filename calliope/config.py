@@ -3744,16 +3744,29 @@ def _elenco(valori) -> str:
 
 
 def _modi(campo: str, valori, sinonimi: dict | None = None, falso: str | None = None,
-          vero: str | None = None, rifiuti: dict | None = None):
+          vero: str | None = None, rifiuti: dict | None = None, ripiego: str | None = None):
     """Il validatore di un campo a modi: restituisce il modo normalizzato o ValueError.
     `sinonimi`: altre forme accettate in silenzio (per esempio «sì» per «si»); `falso`/`vero`:
     il modo che vale il false/true di YAML (senza, sono rifiutati: true è ambiguo fra «ombra» e
-    «attivo»); `rifiuti`: un motivo più chiaro per un valore rifiutato. `dove`: il file, per
-    l'avviso sull'altro genere."""
+    «attivo»; mai un `vero` che accende identità, permessi o sicurezza); `rifiuti`: un motivo
+    più chiaro per un valore rifiutato; `ripiego`: dove il valore di serie non è il più stretto
+    (i livelli, l'aggiornamento di SearXNG), un valore rifiutato vale questo, con l'avviso, come
+    valeva già nel modulo che legge il campo: un valore scritto male non apre mai più di prima.
+    `dove`: il file, per gli avvisi."""
     valori = tuple(valori)
     sinonimi, rifiuti = dict(sinonimi or {}), dict(rifiuti or {})
 
     def valida(value, dove: str = ""):
+        try:
+            return _valida(value, dove)
+        except ValueError as e:
+            if ripiego is None:
+                raise
+            _warn(f"«{campo}: {value!r}»" + (f" in {dove}" if dove else "")
+                  + f" non è valido ({e}): uso «{ripiego}», il più prudente")
+            return ripiego
+
+    def _valida(value, dove):
         if value is False and falso is not None:
             return falso
         if value is True and vero is not None:
@@ -3810,13 +3823,15 @@ _MODI_NUOVI = {
     # Il «no» di YAML si rifiuta: resta «avvisa», la scelta prudente
     "minori_pericolo_silenzio": _modi("minori_pericolo_silenzio", ("avvisa", "niente"),
                                       sinonimi={"avviso": "avvisa"}),
+    # Il true di YAML non accende le impronte né il giudizio «rivolta» (identità, ancora da
+    # misurare): rifiutato, resta il valore di prima. Per la compagnia il false non la spegne
+    # (su main era un tipo sbagliato e restava «attiva», la più stretta); il true è «attiva»
     "speaker_impronte_satellite": _modi("speaker_impronte_satellite",
-                                        ("spento", "ombra", "attivo"), falso="spento",
-                                        vero="attivo"),
+                                        ("spento", "ombra", "attivo"), falso="spento"),
     "compagnia_enabled": _modi("compagnia_enabled", ("spenta", "ombra", "attiva"),
-                               falso="spenta", vero="attiva"),
+                               vero="attiva"),
     "compagnia_rivolta": _modi("compagnia_rivolta", ("spenta", "ombra", "attiva"),
-                               falso="spenta", vero="attiva"),
+                               falso="spenta"),
     "stanza_lenta_prompt": _modi("stanza_lenta_prompt", ("auto", "si", "no"), sinonimi=_SI_NO,
                                  falso="no", vero="si"),
     "agenti_conferma": _modi("agenti_conferma", ("costosi", "sempre", "mai")),
@@ -3825,13 +3840,17 @@ _MODI_NUOVI = {
                                       "true": "sempre", "false": "mai"},
                             falso="mai", vero="sempre"),
     "agenti_sandbox_motore": _modi("agenti_sandbox_motore", ("auto", "docker", "processo")),
-    # Un livello sconosciuto valeva già «amministra» (RANK.get(…, 2)): ora con l'avviso
-    "agenti_livello": _modi("agenti_livello", _LIVELLI),
-    "agenti_livello_codice": _modi("agenti_livello_codice", _LIVELLI),
-    "ufficio_livello_fiscale": _modi("ufficio_livello_fiscale", _LIVELLI),
+    # Un livello sconosciuto valeva «amministra» (RANK.get(…, 2) in tools/agenti.py e
+    # ufficio/): rifiutato vale ancora «amministra», con l'avviso, anche per agenti_livello che
+    # di serie è «familiare» («amministratore» deve stringere, non aprire)
+    "agenti_livello": _modi("agenti_livello", _LIVELLI, ripiego="amministra"),
+    "agenti_livello_codice": _modi("agenti_livello_codice", _LIVELLI, ripiego="amministra"),
+    "ufficio_livello_fiscale": _modi("ufficio_livello_fiscale", _LIVELLI, ripiego="amministra"),
     "wake_posizione": _modi("wake_posizione", ("ovunque", "inizio")),
     "wake_mode": _modi("wake_mode", ("modello", "testo")),
-    "web_searxng_aggiorna": _modi("web_searxng_aggiorna", ("automatico", "manuale")),
+    # Sconosciuto → «manuale», il ripiego di web/motore.py: niente aggiornamenti da soli
+    "web_searxng_aggiorna": _modi("web_searxng_aggiorna", ("automatico", "manuale"),
+                                  ripiego="manuale"),
     "stt_motore": _modi("stt_motore", ("locale", "server")),
     "vad_motore": _modi("vad_motore", ("auto", "torch", "onnx")),
     "immagini_modello": _modi("immagini_modello", ("auto", "si", "no"), sinonimi=_SI_NO,

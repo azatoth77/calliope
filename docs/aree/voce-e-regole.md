@@ -2478,18 +2478,22 @@ l'avevano. Il più pericoloso: `minori_pericolo_silenzio` era confrontato con `=
 dice una cosa preoccupante e poi tace.
 
 **Cosa cambia** (`calliope/config.py`):
-- un aiuto solo, `_modi(campo, valori, sinonimi, falso, vero, rifiuti)`, fa tutti i validatori a
-  modi: minuscole e spazi tolti; il «no» di YAML (false) vale il modo spento dove c'è (prima era
-  «tipo sbagliato»); il «sì» (true) è rifiutato dove è ambiguo fra «ombra» e «attivo», e vale
-  quello che diceva già il modulo che legge il campo per `compagnia_enabled`,
-  `compagnia_rivolta`, `speaker_impronte_satellite`, i campi «si/no/auto» e `agenti_arbitro`;
+- un aiuto solo, `_modi(campo, valori, sinonimi, falso, vero, rifiuti, ripiego)`, fa tutti i
+  validatori a modi: minuscole e spazi tolti; il «no» di YAML (false) vale il modo spento dove
+  c'è (prima era «tipo sbagliato»), tranne `compagnia_enabled` (rifiutato, resta «attiva»); il
+  «sì» (true, yes, on) è rifiutato dove è ambiguo fra «ombra» e «attivo», e vale un modo solo
+  dove non accende identità, permessi o sicurezza: `compagnia_enabled` (attiva, il valore di
+  serie), `stanza_lenta_ritrascrivi`, `stanza_lenta_prompt`, `immagini_modello` («si») e
+  `agenti_arbitro` («sempre»);
 - **l'altro genere si accetta** (scelta del 17/10 nei commenti della issue, reversibile):
   «attiva» per un campo al maschile vale «attivo», «spento» per uno al femminile vale «spenta»,
   con l'avviso gentile «ho letto «attivo» (qui i modi sono …)» che nomina il file. «acceso» e
   «accesa» restano rifiutati (non sono modi di nessun campo);
 - tutto il resto (un refuso, «acceso», «sì», un vuoto, una lista) dà l'avviso di sempre «non è
   valido (serve …): tengo …» e resta il valore di prima, cioè quello di serie o quello di
-  `calliope.yaml`. Non ferma l'avvio;
+  `calliope.yaml`. Dove il valore di serie non è il più stretto vale invece il `ripiego`, come
+  nel modulo che legge il campo: i tre livelli «amministra», `web_searxng_aggiorna` «manuale».
+  Un valore scritto male non dà mai una scelta più aperta di prima. Non ferma l'avvio;
 - i validatori a modi girano in `_apply_file` **prima** del controllo del tipo, così il false e
   il true di YAML arrivano a loro;
 - validatori nuovi per i campi senza (34 campi a modi in tutto): `minori_pericolo_silenzio`
@@ -2497,7 +2501,9 @@ dice una cosa preoccupante e poi tace.
   scelta prudente), `speaker_impronte_satellite`, `compagnia_enabled`, `compagnia_rivolta`,
   `stanza_lenta_prompt`, `agenti_conferma`, `agenti_arbitro`, `agenti_sandbox_motore`, e quelli
   trovati nella PR: `agenti_livello`, `agenti_livello_codice`, `ufficio_livello_fiscale` (un
-  livello sconosciuto valeva già «amministra», ora con l'avviso), `wake_posizione`, `wake_mode`,
+  livello sconosciuto valeva «amministra» con `RANK.get(…, 2)`, e vale ancora «amministra», con
+  l'avviso, anche per `agenti_livello` che di serie è «familiare»; «ospite», che su main dava
+  rango 0 al codice e alle fatture, ora vale «amministra»), `wake_posizione`, `wake_mode`,
   `web_searxng_aggiorna`, `stt_motore`, `vad_motore`, `immagini_modello`, `immagini_storia`,
   `audio_modo`, `satellite_schermo` (il «no» di YAML era un tipo sbagliato e la pagina si apriva
   lo stesso);
@@ -2520,7 +2526,15 @@ file locale come sulla DGX; il «no» e il «sì» di YAML; il caso vero e quell
 della DGX; i Cancelli con «Avvisa», «avviso », vuoto (avviso) e «niente» (nessun avviso); il
 controllo che ogni campo testo con due o più valori nel commento abbia un validatore o
 un'eccezione col perché, e che il commento di ogni modo dica i suoi valori. Sul codice di main
-falliscono 122 verifiche su 210.
+falliscono 122 verifiche su 210 (144 su 234 dopo le correzioni).
+
+*Correzioni dopo la revisione della PR #130 (17/10)*: nella prima versione `agenti_livello:
+amministratore` (o `admin`) tornava a «familiare», il valore di serie, mentre su main valeva
+«amministra»: ora c'è il `ripiego`. Il true di YAML accendeva `speaker_impronte_satellite:
+attivo` e `compagnia_rivolta: attiva` (identità, ancora da misurare): ora è rifiutato. Un
+`web_searxng_aggiorna` sconosciuto valeva «automatico» invece del «manuale» di `web/motore.py`. La
+prova ha i contrari (`amministratore`, `admin`, yes/on/true sulle impronte e sulla rivolta,
+`compagnia_enabled: no`, «a mano»): 234 verifiche.
 
 **Da fare sulla DGX** (#84): dopo l'aggiornamento rileggere l'avvio (`journalctl --user -u
 calliope | grep CONFIG`) per vedere se qualche riga del locale era scritta male e valeva un altro
