@@ -637,6 +637,10 @@ più. Il progetto:
 l'isolamento di chi li **esegue**: in Python il test gira nello stesso processo del programma, come
 quelli delle estensioni, e un programma scritto per ingannarlo può falsarne l'esito (revisione della
 PR #141, documento d'area).
+Un altro limite: quando il risultato è uno dei dati (il massimo, il minimo, «trova») il numero
+dell'esempio si toglie e restano le parole, e uno scheletro che stampa solo l'etichetta («Il
+massimo è 0») può passare. Il numero si legge solo dallo stdout, e una parola con il codice
+d'uscita che non conta non basta come risultato controllato (seconda revisione della PR #141).
 
 Alternative scartate: gli esempi per tutti i programmi subito (l'interfaccia su file è un progetto
 a sé); far scrivere i test di accettazione all'agente stesso (è ciò che il flusso a fasi ha

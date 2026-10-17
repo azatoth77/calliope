@@ -3561,9 +3561,34 @@ chi li esegue è isolato dal programma. In Python il test gira nello stesso proc
 Un programma scritto apposta per ingannare può falsare l'esito: risalire i frame fino al segno
 dell'esito di `_avvio.py` e stamparne uno finto, oppure sostituire i metodi di `unittest`. Per
 caso non succede (un `os._exit` senza il segno è rosso). Nascondere il segno a `main()` non basta,
-perché resta raggiungibile dai frame e dal modulo, e lo scambio di `unittest` resterebbe: si
+perché resta raggiungibile dai frame e dagli oggetti vivi (`gc`), e lo scambio di `unittest` resterebbe: si
 lascia così, e lo si dice. Il rimedio vero è eseguire il programma in un processo a sé, che la
 sandbox oggi non permette in Python.
+
+**La seconda revisione della PR #141 (17/10).** Mettere il messaggio dell'eccezione nell'uscita
+aveva aperto un falso verde nuovo: i messaggi di Python hanno numeri che non sono risultati. Con
+il codice d'uscita che non conta (null, il caso comune: è il valore quando il modello omette il
+campo) passavano `int("3.5")` per la somma 10 («… with base 10») e `a, b = sys.argv[1]` per il 2
+atteso («expected 2, got 1»). Lo stesso in JavaScript, già da prima: lo stack di Node ha i numeri
+di riga e «Node.js v24». Ora, nelle due lingue allo stesso modo:
+- il numero si legge **solo dallo stdout**; il messaggio dell'eccezione (Python) e lo stderr
+  (JavaScript) servono solo alle parole di «contiene»;
+- con il codice che non conta, un esempio che controlla un numero vuole una corsa che finisce
+  bene: un'eccezione o un'uscita diversa da 0 lo fanno fallire;
+- conta come «risultato controllato» (sotto il quale il programma resta senza esempi) solo un
+  esempio con un numero, oppure uno con il codice 0. Una parola con il codice che non conta no:
+  `print('Il massimo è'); raise NotImplementedError` la stampa. Il massimo con la sola parola
+  «massimo» e l'esempio d'errore resta quindi senza esempi.
+
+Prove contrarie in `prova_fasi_agente_2` 7e, rosse prima: `int("3.5")`, «expected 2, got 1»,
+l'etichetta del massimo con il raise, lo stack di Node.
+
+**Un limite che resta.** Quando il risultato è uno dei dati (il massimo, il minimo, la mediana di
+un numero dispari di valori, «trova», ordina) il numero dell'esempio si toglie, e restano le
+parole. Uno scheletro che legge i dati e stampa solo l'etichetta («Il massimo è 0», codice 0)
+passa allora gli esempi a codice 0 con la parola «massimo», che è della richiesta e non controlla
+il risultato. Non contare queste parole toglierebbe anche dei casi buoni («pari», «dispari»):
+sarebbe da misurare. Il «fatto» al tetto si fida di questi esempi, e lo si sa.
 
 **Resta**:
 - i numeri dei due banchi sulla DGX;
