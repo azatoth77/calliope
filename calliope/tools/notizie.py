@@ -18,7 +18,12 @@ per ogni casa).
 - **Minori**: solo sport, tecnologia e ragazzi (Focus Junior), con il filtro dei contenuti.
 - Regole del registro dei turni: `notizie_feed`, `notizie_ripiego`, `notizie_seguito`,
   `notizie_sezione`, `notizie_tema_frase`, `minore_notizie`, e i nomi delle pulizie dei titoli
-  delle voci dette (`notizie_titolo_*`, `notizie_sommario_*`).
+  delle voci dette (`notizie_titolo_*`, `notizie_sommario_*`). Dal 16/10 (issue #31), solo per
+  la quota in `calliope stato --turni` (calliope/notizie/misura.py), niente al modello:
+  `notizie_vuote` (una risposta senza fatti: niente sul tema, sezione senza giornali, feed
+  irraggiungibili), `notizie_ripiego_fallito` (serviva il ripiego ma SearXNG è giù o non ha
+  trovato niente), `notizie_ripiego_negato` (serviva il ripiego ma chi parla è un minore o non
+  ha il livello `web_livello`).
 """
 from __future__ import annotations
 
@@ -109,18 +114,24 @@ def _minore(ctx) -> bool:
     return minori.preset(minori.profilo(ctx)) is not None
 
 
+def _ripiego_negato(ctx) -> bool:
+    """Chi parla non può avere il ripiego: un minore, o senza il livello `web_livello`."""
+    if _minore(ctx):
+        return True
+    cfg = getattr(ctx, "cfg", None)
+    sc = getattr(ctx, "speaker_ctx", None)
+    livello = getattr(sc, "current_level", None) or "ospite"
+    serve = str(getattr(cfg, "web_livello", "familiare") or "familiare")
+    return RANK.get(livello, 0) < RANK.get(serve, 1)
+
+
 def _ripiego_possibile(ctx) -> bool:
     """SearXNG c'è e chi parla può usare web_cerca; mai per un minore."""
     web = getattr(ctx, "web", None)
     cfg = getattr(ctx, "cfg", None)
     if web is None or not getattr(web, "pronta", False) or not getattr(cfg, "online", True):
         return False
-    if _minore(ctx):
-        return False
-    sc = getattr(ctx, "speaker_ctx", None)
-    livello = getattr(sc, "current_level", None) or "ospite"
-    serve = str(getattr(cfg, "web_livello", "familiare") or "familiare")
-    return RANK.get(livello, 0) >= RANK.get(serve, 1)
+    return not _ripiego_negato(ctx)
 
 
 def _ripiego(ctx, tema: str) -> dict | None:
@@ -277,6 +288,7 @@ def _notizie(ctx: ToolContext, tema: str = "", fatto=None) -> dict:
     if sezione is not None and sezione not in temi_feed:
         # Una sezione senza giornali in questa casa (la zona senza la città di casa)
         dove = (" (non so in che regione è la casa)" if sezione == "locale" else "")
+        note_rule(ctx, "notizie_vuote")
         return {"ok": True, "trovato": False,
                 "cosa_fare": f"Non ho giornali per «{tema}»{dove}: dillo in breve."}
     svc.prepara(attesa=lambda: _attesa(ctx))
@@ -305,7 +317,14 @@ def _notizie(ctx: ToolContext, tema: str = "", fatto=None) -> dict:
         out = _ripiego(ctx, tema)
         if out is not None:
             return out
+        note_rule(ctx, "notizie_ripiego_fallito")
+    elif poche and getattr(ctx, "web", None) is not None             and getattr(getattr(ctx, "cfg", None), "online", True):
+        # Il ripiego servirebbe: negato a chi parla, o SearXNG giù dall'ultima prova
+        # (solo registro dei turni, la quota di calliope/notizie/misura.py)
+        note_rule(ctx, "notizie_ripiego_negato" if _ripiego_negato(ctx)
+                  else "notizie_ripiego_fallito")
     if not fatti:
+        note_rule(ctx, "notizie_vuote")
         if vecchio_indice and not svc.ultimo_ok:
             frase = "Adesso non riesco a scaricare le notizie: internet non risponde."
             return {"ok": False, "errore": "feed non raggiungibili", "risposta_finale": frase,

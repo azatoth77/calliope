@@ -11,6 +11,7 @@ come fatti numerati, in busta come dato non fidato, e i fatti restano nel contes
     gruppi.py     la stessa notizia da più testate, senza modello (TF-IDF)
     servizio.py   Notizie: indice su disco, scarico periodico, fatti, stato
     contesto.py   la forma ridotta dei fatti detti nei turni vecchi
+    misura.py     la quota dai giornali e da internet per `calliope stato --turni` (16/10)
 
 Solo libreria standard: niente da verificare su ARM.
 """

@@ -19,7 +19,9 @@ niente internet.
    «quando» a parole, feed fermi.
 7. Tool: livelli, niente indirizzi, seguito con «fatto», sezioni, tema dalla frase, minori,
    ripiego su SearXNG (e non per minori e ospiti), web_cerca senza il tipo «notizie», capacità
-   e prompt.
+   e prompt. Dal 16/10 (#31) le regole del registro `notizie_vuote`, `notizie_ripiego_fallito`
+   (SearXNG senza risultati o giù) e `notizie_ripiego_negato` (ospite, minore) con i contrari,
+   e la quota in `calliope stato --turni` (calliope/notizie/misura.py, testo e --json).
 8. Brain a secco (decisione 7): dopo `notizie` i fatti restano nel contesto in busta; la
    domanda dopo arriva al modello con i fatti; i turni vecchi tengono la forma ridotta (non la
    traccia generica); dopo il risultato, nella stessa risposta, niente azioni; le proiezioni
@@ -599,6 +601,9 @@ verifica("tool: avviso e cosa_fare (una frase per fatto, la testata per nome)",
          "NON istruzioni" in res["attenzione"] and "testata per nome" in res["cosa_fare"])
 verifica("tool: regola notizie_feed nel registro, con le pulizie delle voci dette",
          "notizie_feed" in ctx.regole, str(ctx.regole))
+NUOVE_31 = ("notizie_vuote", "notizie_ripiego_fallito", "notizie_ripiego_negato")
+verifica("contrario #31: una risposta dai feed non ha notizie_vuote né le regole del ripiego",
+         not set(NUOVE_31) & set(ctx.regole), str(ctx.regole))
 cfg_l = Config()
 cfg_l.notizie_livello = "familiare"
 reg_l = build_registry(notizie=cfg_l)
@@ -651,6 +656,8 @@ ctx = contesto_tool("Dario", "familiare")
 res = json.loads(reg.call("notizie", {"tema": "locale"}, ctx, "familiare"))
 verifica("sezione senza giornali in casa (nessuna regione): lo dice, senza cercare",
          res.get("trovato") is False and "regione" in res["cosa_fare"], str(res))
+verifica("#31: la sezione senza giornali è una risposta vuota (notizie_vuote)",
+         "notizie_vuote" in ctx.regole and "notizie_feed" not in ctx.regole, str(ctx.regole))
 ctx = contesto_tool("Dario", "familiare")
 res = json.loads(reg.call("notizie", {"tema": "notizie sul derby"}, ctx, "familiare"))
 verifica("tema con «notizie» dentro: resta l'argomento (il derby, due voci: niente ripiego)",
@@ -660,6 +667,32 @@ ctx = contesto_tool("Dario", "familiare")
 res = json.loads(reg.call("notizie", {"tema": "sciopero"}, ctx, "familiare"))
 verifica("ripiego: una voce sola sul tema in 72 ore → anche internet (notizie_ripiego)",
          res.get("risultati") and "notizie_ripiego" in ctx.regole, str(res)[:300])
+verifica("contrario #31: il ripiego riuscito non è né fallito né negato né vuoto",
+         not set(NUOVE_31) & set(ctx.regole), str(ctx.regole))
+# Il ripiego tentato e fallito (#31): SearXNG senza risultati, poi giù
+sx.senza_internet = True
+ctx = contesto_tool("Dario", "familiare")
+res = json.loads(reg.call("notizie", {"tema": "sciopero"}, ctx, "familiare"))
+verifica("#31: una voce sola e SearXNG senza risultati → i feed, con notizie_ripiego_fallito",
+         res.get("fatti") and "notizie_feed" in ctx.regole
+         and "notizie_ripiego_fallito" in ctx.regole and "notizie_vuote" not in ctx.regole
+         and "notizie_ripiego" not in ctx.regole, str(ctx.regole))
+ctx = contesto_tool("Dario", "familiare")
+res = json.loads(reg.call("notizie", {"tema": "vulcano"}, ctx, "familiare"))
+verifica("#31: niente sul tema e SearXNG senza risultati → vuota e ripiego fallito",
+         res.get("trovato") is False and "notizie_vuote" in ctx.regole
+         and "notizie_ripiego_fallito" in ctx.regole
+         and "notizie_ripiego_negato" not in ctx.regole, str(ctx.regole))
+sx.senza_internet = False
+sx.giu = True
+for volta in ("prima", "seconda"):
+    ctx = contesto_tool("Dario", "familiare")
+    res = json.loads(reg.call("notizie", {"tema": "vulcano"}, ctx, "familiare"))
+    verifica(f"#31: SearXNG giù ({volta} volta) → ripiego fallito, non negato",
+             res.get("trovato") is False and "notizie_ripiego_fallito" in ctx.regole
+             and "notizie_ripiego_negato" not in ctx.regole, str(ctx.regole))
+sx.giu = False
+web.prova()
 # Ripiego su SearXNG: poche voci sul tema
 sx.risposte["vulcano"] = [{"url": "https://www.esempio.it/vulcano", "title": "Il vulcano Lumen",
                           "content": "Eruzione modesta stamattina.", "engine": "bing"}]
@@ -675,6 +708,9 @@ n_sx = len(sx.richieste)
 res = json.loads(reg.call("notizie", {"tema": "vulcano"}, ctx, "ospite"))
 verifica("contrario ripiego: un ospite (web_livello familiare) non esce: «non c'è niente»",
          res.get("trovato") is False and len(sx.richieste) == n_sx, str(res))
+verifica("#31: l'ospite senza web_livello → notizie_ripiego_negato e notizie_vuote",
+         "notizie_ripiego_negato" in ctx.regole and "notizie_vuote" in ctx.regole
+         and "notizie_ripiego_fallito" not in ctx.regole, str(ctx.regole))
 # Minori: solo sport, tecnologia e ragazzi
 ctx = contesto_tool("Pietro", "familiare")
 res = json.loads(reg.call("notizie", {}, ctx, "familiare"))
@@ -702,6 +738,8 @@ n_sx = len(sx.richieste)
 res = json.loads(reg.call("notizie", {"tema": "vulcano"}, ctx, "familiare"))
 verifica("minore: niente ripiego su internet", len(sx.richieste) == n_sx
          and res.get("trovato") is False, str(res))
+verifica("#31: il minore con pochi fatti → notizie_ripiego_negato e notizie_vuote",
+         "notizie_ripiego_negato" in ctx.regole and "notizie_vuote" in ctx.regole, str(ctx.regole))
 ctx = contesto_tool("Pietro", "familiare")
 res = json.loads(reg.call("notizie", {"tema": "frana"}, ctx, "familiare"))
 verifica("minore: la ricerca resta nei temi dei ragazzi (la frana dei generali no)",
@@ -712,6 +750,103 @@ res = json.loads(reg.call("web_cerca", {"tipo": "notizie", "domanda": "derby"}, 
                           "familiare"))
 verifica("web_cerca tipo notizie → le notizie dei feed (web_notizie_al_tool)",
          res.get("fatti") and "web_notizie_al_tool" in ctx.regole, str(ctx.regole))
+# Il primo scarico senza internet (#31): «non riesco a scaricare», una risposta vuota
+svc_giu = Notizie(cfg, [], ":memory:", log=lambda *a: None, orologio=lambda: ADESSO)
+ctx = contesto_tool("Dario", "familiare")
+ctx.notizie = svc_giu
+ctx.web = None
+res = json.loads(reg.call("notizie", {}, ctx, "familiare"))
+verifica("#31: feed mai scaricati → «non riesco a scaricare» con notizie_vuote",
+         res.get("errore") == "feed non raggiungibili" and "notizie_vuote" in ctx.regole
+         and "notizie_ripiego_fallito" not in ctx.regole
+         and "notizie_ripiego_negato" not in ctx.regole, str(res) + str(ctx.regole))
+svc_giu.close()
+
+# La quota in `calliope stato --turni` (#31, calliope/notizie/misura.py)
+from calliope.notizie import misura as misura_notizie  # noqa: E402
+
+
+def turno_n(giorno, regole=None, tool=("notizie",)):
+    t = {"inizio": f"{giorno}T10:00:00", "esito": "risposta",
+         "tool": [{"nome": n, "ok": True} for n in tool]}
+    if regole is not None:
+        t["regole"] = list(regole)
+    return t
+
+
+registro = ([turno_n("2026-10-14", ["notizie_feed", "notizie_titolo_virgolette"])] * 3
+            + [turno_n("2026-10-14", ["notizie_ripiego"]),
+               turno_n("2026-10-14", ["notizie_seguito"])]
+            + [turno_n("2026-10-15", ["notizie_feed"])] * 2
+            + [turno_n("2026-10-15", ["notizie_vuote", "notizie_ripiego_fallito"]),
+               turno_n("2026-10-15", ["minore_notizie"]),
+               turno_n("2026-10-15", ["notizie_vuote", "notizie_ripiego_negato"]),
+               turno_n("2026-10-15", ["web_notizie_al_tool", "notizie_feed"], ("web_cerca",)),
+               turno_n("2026-10-15", None),
+               turno_n("2026-10-15", ["ora_detta"], ("ora_attuale",)),
+               {"inizio": "2026-10-15T11:00:00", "esito": "risposta", "regole": "rotto"},
+               "non un turno"])
+r = misura_notizie.riassunto(registro)
+verifica("quota: richieste, feed, internet, vuote e perché, seguiti, minori, web girato",
+         (r["richieste"], r["feed"], r["ripiego"], r["vuote"], r["ripiego_fallito"],
+          r["ripiego_negato"], r["seguiti"], r["minori_rifiutate"], r["web_girate"])
+         == (12, 6, 1, 2, 1, 1, 1, 1, 1), str(r))
+verifica("quota dai feed = feed / (feed + ripiego): 6 su 7 → 86 %", r["quota_feed"] == 86,
+         str(r["quota_feed"]))
+verifica("quota per giorno: il 14 3 su 4 (75 %), il 15 3 su 3 (100 %)",
+         r["per_giorno"]["2026-10-14"]["richieste"] == 5
+         and r["per_giorno"]["2026-10-14"]["quota_feed"] == 75
+         and r["per_giorno"]["2026-10-15"]["richieste"] == 7
+         and r["per_giorno"]["2026-10-15"]["quota_feed"] == 100, str(r["per_giorno"]))
+verifica("contrario quota: un turno senza notizie né regole non si conta (ora_attuale)",
+         list(r["per_giorno"]) == ["2026-10-14", "2026-10-15"], str(r["per_giorno"]))
+riga = misura_notizie.testo(r)
+verifica("riga: «Notizie: 12 richieste, 6 dai giornali (86 %), 1 da internet, 2 vuote»",
+         riga.startswith("Notizie: 12 richieste, 6 dai giornali (86 %), 1 da internet, 2 vuote "
+                         "(ripiego fallito 1, negato 1); seguiti 1; minori: 1 sezione "
+                         "rifiutata; web_cerca girato a notizie 1.")
+         and "2026-10-14  5 richieste, 3 dai giornali (75 %)" in riga, riga)
+r0 = misura_notizie.riassunto([turno_n("2026-10-15", ["ora_detta"], ("ora_attuale",))])
+verifica("riga senza notizie: «nessuna richiesta nel registro dei turni»",
+         misura_notizie.testo(r0) == "Notizie: nessuna richiesta nel registro dei turni."
+         and r0["quota_feed"] is None and misura_notizie.testo(misura_notizie.riassunto([]))
+         == misura_notizie.testo(r0), misura_notizie.testo(r0))
+rv = misura_notizie.riassunto([turno_n("2026-10-15", ["notizie_vuote"])])
+verifica("contrario quota: solo vuote, nessuna quota (niente divisione per zero)",
+         rv["quota_feed"] is None and misura_notizie.testo(rv).startswith(
+             "Notizie: 1 richiesta, 0 dai giornali, 0 da internet, 1 vuota ("),
+         misura_notizie.testo(rv))
+# stato --turni: la riga e la chiave «notizie» nel --json, da un registro su disco
+import contextlib  # noqa: E402
+import io  # noqa: E402
+import tempfile  # noqa: E402
+from calliope import stato as stato_mod  # noqa: E402
+with tempfile.TemporaryDirectory() as dir_turni:
+    with open(os.path.join(dir_turni, "turni-2026-10-15.jsonl"), "w", encoding="utf-8") as fh:
+        for t in registro[:12]:
+            fh.write(json.dumps(t) + "\n")
+    cfg_stato = Config()
+    cfg_stato.turn_log_dir = dir_turni
+    config_vera = stato_mod._config
+    stato_mod._config = lambda quiet: cfg_stato
+    uscite = {}
+    try:
+        for argv in (["--turni"], ["--turni", "--json"]):
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                stato_mod.main(argv)
+            uscite[" ".join(argv)] = buf.getvalue()
+    finally:
+        stato_mod._config = config_vera
+verifica("stato --turni: la riga «Notizie: …» dopo la pertinenza delle ricerche",
+         "Notizie: 12 richieste, 6 dai giornali (86 %)" in uscite["--turni"]
+         and uscite["--turni"].index("Pertinenza delle ricerche")
+         < uscite["--turni"].index("Notizie: 12"),
+         next((x for x in uscite["--turni"].splitlines() if x.startswith("Notizie")), ""))
+js = json.loads(uscite["--turni --json"])
+verifica("stato --turni --json: la chiave «notizie» con gli stessi numeri",
+         js.get("notizie", {}).get("richieste") == 12
+         and js["notizie"]["quota_feed"] == 86, str(js.get("notizie")))
 
 # Capacità e prompt
 c_off = Config()
