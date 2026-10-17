@@ -421,6 +421,8 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    alla web app sul telefono di casa.
 10. **Node/JavaScript** come linguaggio dei programmi in diretta, sullo schema del C#. *Pronta* ·
     dipende da: i limiti dell'immagine (npm senza rete).
+    *[17/10, issue #54: fatto a secco; acceso a mano con `javascript` in `agenti_linguaggi` del
+    locale, non di serie; restano il caso vero sulla DGX e la scelta se accenderlo di serie.]*
 11. **Documenti degli agenti al satellite**: fatto in gran parte dal 07/10 (il risultato va al
     portatile con «Lo apro?»); restano il telefono e più satelliti personali della stessa persona.
     *Quasi*.

@@ -165,6 +165,9 @@ class Isolamento:
     passo: str = ""
     immagine: str | None = None
     docker: list = field(default_factory=list)
+    # Il container di Node dei soli test dei giochi (17/10, #54): «javascript» fuori da
+    # agenti_linguaggi, quindi non un linguaggio dei programmi (linguaggi.programmi)
+    solo_test: bool = False
 
     def dettagli(self) -> dict:
         d = {"motore": self.motore, "descrizione": self.descrizione, "pronto": self.pronto}
@@ -393,8 +396,12 @@ class Sandbox:
         if path.suffix.lower() == ".cs" and path.is_file():
             cartella = path.parent.relative_to(self.root).as_posix()
             return self.esegui_cs(cartella, argomenti, stdin, flusso)
+        if path.suffix.lower() == ".js" and path.is_file():
+            # Un programma JavaScript (17/10, #54), nel container di Node
+            return self.esegui_js(rel, argomenti, stdin, flusso)
         if path.suffix.lower() != ".py" or not path.is_file():
-            raise ErroreSandbox("si eseguono solo file .py (o .cs) della cartella del lavoro")
+            raise ErroreSandbox("si eseguono solo file .py (o .cs, .js) della cartella del "
+                                "lavoro")
         args, stdin = self._argomenti(argomenti, stdin)
         return self._lancia("script", path.relative_to(self.root).as_posix(), args,
                             stdin=stdin, flusso=flusso)
@@ -419,9 +426,10 @@ class Sandbox:
         args, stdin = self._argomenti(argomenti, stdin)
         return self._lancia("csharp", cart, args, stdin=stdin, flusso=flusso, isolamento=iso)
 
-    def esegui_js(self, rel, argomenti=(), stdin: str | None = None) -> dict:
+    def esegui_js(self, rel, argomenti=(), stdin: str | None = None, flusso=None) -> dict:
         """Un file .js della cartella con Node, nel container di Node (12/10 sera, esegui_js
-        dell'agente: provare un pezzo di logica invece di ragionarci a mente). Gli stessi
+        dell'agente: provare un pezzo di logica invece di ragionarci a mente; dal 17/10, #54,
+        anche il programma JavaScript in diretta, con `flusso` e lo stdin). Gli stessi
         limiti dei test JavaScript: niente rete, disco in sola lettura salvo la cartella, tempo
         e memoria; mai sull'host."""
         iso = self.linguaggi.get("javascript")
@@ -433,7 +441,7 @@ class Sandbox:
             raise ErroreSandbox("si eseguono solo file .js della cartella del lavoro")
         args, stdin = self._argomenti(argomenti, stdin)
         return self._lancia("js", path.relative_to(self.root).as_posix(), args, stdin=stdin,
-                            isolamento=iso)
+                            flusso=flusso, isolamento=iso)
 
     def test(self, rel=None, fumo: bool = True) -> dict:
         """I test della cartella: quelli Python (test_*.py) e, dal 05/10, quelli JavaScript
@@ -701,8 +709,12 @@ class Sandbox:
         if csharp:
             return cmd + ["sh", _ESEGUI_CS_C, target, *args]
         if modo == "js":
-            # Un file dell'agente (esegui_js, 12/10 sera): Node e basta, nella cartella
-            return cmd + ["node", f"{_LAVORO_C}/{target}", *args]
+            # Un file dell'agente (esegui_js, 12/10 sera): Node e basta, nella cartella. Dal
+            # 17/10 (#54, programmi JavaScript) con il modello dei permessi di Node 24: file
+            # solo nella cartella del lavoro, niente processi figli né worker (più stretto del
+            # C#, dove resta solo --pids-limit); lo stdin e l'uscita in diretta restano
+            return cmd + ["node", "--permission", f"--allow-fs-read={_LAVORO_C}",
+                          f"--allow-fs-write={_LAVORO_C}", f"{_LAVORO_C}/{target}", *args]
         if node:
             return cmd + ["node", _TEST_JS_C, *args]
         return cmd + ["python", "-I", "-B", "-u", "-X", "utf8", _AVVIO_C, _LAVORO_C, modo, target,
