@@ -609,10 +609,11 @@ def javascript_a_secco(iso, img_py, img_cs):
     s = " ".join(sb._comando_docker("x", "js", "programma.js", ["3", "5"],
                                     isolamento=isos_js["javascript"]))
     attesi = ["--network none", "--read-only", "--cap-drop ALL", "--pids-limit",
-              f"{img_js} timeout -s KILL 10 node /lavoro/programma.js 3 5"]
+              f"{img_js} timeout -s KILL 10 node --permission --allow-fs-read=/lavoro "
+              "--allow-fs-write=/lavoro /lavoro/programma.js 3 5"]
     mancano = [a for a in attesi if a not in s]
-    verifica("JS: stessa rete negata e gli stessi tetti, Node nella sua immagine", not mancano,
-             str(mancano))
+    verifica("JS: stessa rete negata e gli stessi tetti, Node nella sua immagine, con i "
+             "permessi di Node (file solo nella cartella)", not mancano, str(mancano))
     if NODE:
         sb.scrivi("programma.js", JS_DATI)
         pezzi = []
@@ -627,6 +628,22 @@ def javascript_a_secco(iso, img_py, img_cs):
         t = sb.test()
         verifica("JS: esegui_test sui *.test.js del programma", t.get("passano")
                  and t["esito"]["eseguiti"] == 1, str(t.get("uscita"))[-200:])
+        # I permessi di Node (17/10): niente processi figli, file solo nella cartella; un modulo
+        # in una sottocartella si carica e si scrive lì
+        sb.scrivi("lib/m.js", "module.exports = 42;\n")
+        sb.scrivi("attacchi.js",
+                  "const fs = require('node:fs');\n"
+                  "console.log('modulo', require('./lib/m.js'));\n"
+                  "fs.writeFileSync('lib/uscita.txt', 'x'); console.log('scritto nella cartella');\n"
+                  "try { require('node:child_process').execSync('echo x'); "
+                  "console.log('PROCESSO AVVIATO'); } catch (e) { console.log('processo: ' + e.code); }\n"
+                  "try { fs.readFileSync(require('node:path').resolve(process.cwd(), '..', 'x')); "
+                  "console.log('LETTO FUORI'); } catch (e) { console.log('fuori: ' + e.code); }\n")
+        out = sb.esegui("attacchi.js")["uscita"]
+        verifica("JS: processi figli e file fuori dalla cartella negati, la cartella no",
+                 "modulo 42" in out and "scritto nella cartella" in out
+                 and "processo: ERR_ACCESS_DENIED" in out and "fuori: ERR_ACCESS_DENIED" in out
+                 and "AVVIATO" not in out and "LETTO FUORI" not in out, out[-300:])
     else:
         print("SALTATA IN PARTE: Node non c'è su questa macchina, esecuzioni JavaScript")
 
@@ -679,11 +696,14 @@ def javascript_a_secco(iso, img_py, img_cs):
         svc.cfg.agenti_dimostrazione_s = 8.0
     es, frase = esec.avvia(LavoroFinto("JL3", {"index.html": "<p>x</p>\n",
                                                "app.js": "document.title = 'x';\n"}))
-    verifica("JS: una pagina web non si esegue", es is None and "non trovo" in frase, frase)
+    verifica("JS: una pagina web non si esegue, e lo dice", es is None
+             and "pagina web" in frase and "non si esegue" in frase, frase)
     es, frase = Esecuzioni(ServizioFinto(cfg_base(), iso, isos_serie), log=lambda *_: None
                            ).avvia(LavoroFinto("JL4", {"conti.js": JS_CONTI}))
     verifica("JS spento: non parte, e dice che lo accende chi amministra",
-             es is None and "agenti_linguaggi" in frase and "JavaScript" in frase, frase)
+             es is None and "chi amministra" in frase and "JavaScript" in frase
+             # per la voce: niente chiavi della configurazione
+             and "agenti_linguaggi" not in frase, frase)
     es, frase = Esecuzioni(ServizioFinto(cfg_base(), iso, isos_senza), log=lambda *_: None
                            ).avvia(LavoroFinto("JL5", {"conti.js": JS_CONTI}))
     verifica("JS acceso senza immagine: non parte, e dice il passo",
@@ -713,11 +733,58 @@ def javascript_a_secco(iso, img_py, img_cs):
              and "javascript" not in Agente._linguaggi(SbFinta(isos_serie), programmi=True)
              and "javascript" in Agente._linguaggi(SbFinta(isos_js), programmi=True))
 
+    sezione("JavaScript: il prompt vero del lavoro di codice (#54)")
+    # Il prompt mandato davvero all'agente finto, dal ciclo del lavoro: di serie (Node dei soli
+    # test pronto) niente JavaScript; acceso senza immagine il passo per costruirla, anche per il C#
+    p = prompt_del_lavoro(iso, isos_serie, "sandbox-p1")
+    verifica("di serie, col Node dei giochi pronto: nel prompt niente Node, niente scheletro JS",
+             p and "Node 24" not in p and "programma.test.js" not in p
+             and "esegui_csharp, consegna" in p and "costruisci javascript" not in p, p[:100])
+    p = prompt_del_lavoro(iso, isos_senza, "sandbox-p2")
+    verifica("acceso senza immagine: il prompt dice che non si esegue e come prepararlo",
+             p and "Node 24" not in p and "Il JavaScript è previsto ma qui adesso non si esegue"
+             in p and "calliope motore sandbox costruisci javascript" in p, p[:100])
+    os.environ["DOCKER_FINTO_IMMAGINI"] = img_py
+    isos_nessuno = linguaggi.scegli(cfg_js, iso)
+    os.environ["DOCKER_FINTO_IMMAGINI"] = f"{img_py},{img_cs},{img_js}"
+    p = prompt_del_lavoro(iso, isos_nessuno, "sandbox-p3")
+    verifica("C# e JavaScript accesi senza immagini: i due passi",
+             p and "costruisci csharp" in p and "costruisci javascript" in p
+             and "esegui_csharp" not in p, p[:100])
+
     sezione("JavaScript: lavoro di codice con l'agente finto (#54)")
     if NODE:
         dimostrazione_js(iso, isos_js)
     else:
         print("SALTATA IN PARTE: Node non c'è, lavoro JavaScript dell'agente finto")
+
+
+def prompt_del_lavoro(iso, isos, cartella: str) -> str:
+    """Il prompt di sistema che il ciclo del lavoro di codice manda all'agente finto (17/10)."""
+    from calliope.agenti import Lavori, carica
+    from prove.ollama_finto import FakeOllama
+    fake = FakeOllama(modelli=("qwen3.6:35b",)).avvia()
+    fake.copione = [{"tool_calls": [{"name": "consegna", "arguments": {
+        "riassunto": "Qui non si può.", "esito": "impossibile"}}]}]
+    cfg = cfg_base(agenti_url=fake.url, agenti_modello="qwen3.6:35b",
+                   agenti_modelli=str(TMP / "modelli"), llm_native_url="http://127.0.0.1:9",
+                   agenti_sandbox=str(TMP / cartella),
+                   agenti_risultati=str(TMP / (cartella + "-risultati")))
+    svc = Lavori(cfg, carica(cfg), log=lambda *_: None)
+    svc.scegli_isolamento = lambda: (setattr(svc, "isolamento", iso),
+                                     setattr(svc, "isolamenti", isos), iso)[-1]
+    lav = svc.nuovo("codice", "Scrivi un programma in JavaScript che somma due numeri",
+                    "dario-id", "Dario", "amministra")
+    svc.avvia(lav)
+    try:
+        svc.done.get(timeout=30)
+    except queue.Empty:
+        pass
+    sistema = next((m.get("content") or "" for r in fake.richieste
+                    for m in (r.get("messages") or []) if m.get("role") == "system"), "")
+    svc.close()
+    fake.ferma()
+    return sistema
 
 
 def dimostrazione_js(iso, isos):
@@ -742,6 +809,7 @@ def dimostrazione_js(iso, isos):
     cfg = cfg_base(agenti_url=fake.url, agenti_modello="qwen3.6:35b",
                    agenti_modelli=str(TMP / "modelli"), llm_native_url="http://127.0.0.1:9",
                    agenti_sandbox=str(TMP / "sandbox-js"),
+                   agenti_risultati=str(TMP / "risultati-js"),
                    agenti_linguaggi=["python", "csharp", "javascript"])
     svc = Lavori(cfg, carica(cfg), log=lambda *_: None)
     svc.scegli_isolamento = lambda: (setattr(svc, "isolamento", iso),
@@ -939,11 +1007,13 @@ def docker_vero_js(iso):
 
 def docker_vero():
     iso = scegli_isolamento("docker")
-    if not iso.pronto or iso.motore != "docker":
-        # Senza Docker (o senza l'immagine di Python) la prova vera non ha senso: si salta
-        print(f"Docker non pronto: {iso.descrizione}. Prova saltata.")
+    if shutil.which("docker") is None or os.name == "nt":
+        # Senza Docker (o su Windows, niente container) la prova vera si salta; con Docker e
+        # senza l'immagine di Python invece è un errore, come prima del 17/10
+        print(f"Docker non c'è: {iso.descrizione}. Prova saltata.")
         sys.exit(77)
-    docker_vero_js(iso)
+    if iso.pronto and iso.motore == "docker":
+        docker_vero_js(iso)
     cfg = cfg_base()
     isos = linguaggi.scegli(cfg, iso)
     verifica("Docker e le immagini di Python e del C# pronti",

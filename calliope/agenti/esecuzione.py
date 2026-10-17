@@ -175,11 +175,14 @@ class Esecuzioni:
             return linguaggi is None or lg.nome in linguaggi
         files = [f for f in tutti if ammesso(f)]
         if not files or not dest.is_dir():
-            if (dest.is_dir() and not pagina and linguaggi is not None
-                    and "javascript" not in linguaggi
-                    and any(f.lower().endswith(".js") for f in tutti)):
-                return None, ("qui i programmi in JavaScript non si eseguono: li accende chi "
-                              "amministra, con javascript in agenti_linguaggi")
+            js = dest.is_dir() and any(f.lower().endswith(".js") for f in tutti)
+            # Le frasi vanno alla voce: niente chiavi della configurazione (principio 5)
+            if js and pagina:
+                return None, ("è una pagina web: il suo JavaScript gira nel browser, si scrive "
+                              "ma non si esegue qui")
+            if js and linguaggi is not None and "javascript" not in linguaggi:
+                return None, ("qui i programmi in JavaScript non si eseguono: li può accendere "
+                              "chi amministra")
             return None, "non trovo i file del programma"
         scelto = str(r.get("programma") or "").strip().replace("\\", "/")
         if scelto and scelto in files:

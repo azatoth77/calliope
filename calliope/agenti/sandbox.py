@@ -709,8 +709,12 @@ class Sandbox:
         if csharp:
             return cmd + ["sh", _ESEGUI_CS_C, target, *args]
         if modo == "js":
-            # Un file dell'agente (esegui_js, 12/10 sera): Node e basta, nella cartella
-            return cmd + ["node", f"{_LAVORO_C}/{target}", *args]
+            # Un file dell'agente (esegui_js, 12/10 sera): Node e basta, nella cartella. Dal
+            # 17/10 (#54, programmi JavaScript) con il modello dei permessi di Node 24: file
+            # solo nella cartella del lavoro, niente processi figli né worker (più stretto del
+            # C#, dove resta solo --pids-limit); lo stdin e l'uscita in diretta restano
+            return cmd + ["node", "--permission", f"--allow-fs-read={_LAVORO_C}",
+                          f"--allow-fs-write={_LAVORO_C}", f"{_LAVORO_C}/{target}", *args]
         if node:
             return cmd + ["node", _TEST_JS_C, *args]
         return cmd + ["python", "-I", "-B", "-u", "-X", "utf8", _AVVIO_C, _LAVORO_C, modo, target,
