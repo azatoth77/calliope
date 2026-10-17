@@ -68,14 +68,26 @@ MARGINE_TURNO_S = 0.3
 # Fuori dalla busta, subito prima: dentro, l'avviso dice di non seguire le istruzioni del
 # contenuto, e questa è un'indicazione di Calliope (come «cosa_fare» nei risultati dei tool).
 # Nel blocco intero e nel primo pezzo della storia (poi resta nel prefisso), non nei seguiti
+# Dal 16/10 (issue #134, prove a voce sulla DGX col 26B, chi amministra da solo): con l'esempio
+# tra virgolette «mi è sembrato di sentire bronzo nel 2023» e senza un perimetro, il modello
+# diceva «mi è sembrato di sentire che…» anche riformulando una frase chiara del turno, e su un
+# nome di luogo storpiato nella frase del turno ne «ricostruiva» un terzo, ripetuto anche dopo la
+# correzione. Adesso: vale solo per le righe qui sotto; la frase di chi parla adesso si prende
+# com'è (un nome che non si conosce si ripete o si chiede); nessuna formula da ripetere; la
+# correzione di chi parla vale per il resto della conversazione. Testo fisso: sta nel prefisso
+# in cache (#95), cambia solo con un aggiornamento (una rilettura una volta)
 STORPIATE = (
-    "Nota di Calliope sulla conversazione della stanza qui sotto: è trascritta da un "
+    "Nota di Calliope sulle sole righe della stanza qui sotto: sono trascritte da un "
     "riconoscimento vocale e le parole sono spesso sbagliate: numeri (un anno scritto «2.300» "
     "per 2023), nomi storpiati, parole tronche o sbagliate per il suono («brondo» per bronzo). "
-    "Quando la parola giusta è evidente dal suono e dal discorso, usala e dillo con prudenza "
-    "(«mi è sembrato di sentire bronzo nel 2023»), invece di dire che non è stato detto; se "
-    "un pezzo non si capisce, di' quale. Se chi ti parla corregge un nome o una parola di "
-    "quelle righe, vale la sua forma da subito, già nella risposta che dai adesso.")
+    "In quelle righe, quando la parola giusta è evidente dal suono e dal discorso, usala "
+    "avvertendo in breve che è una tua ricostruzione, invece di dire che non è stato detto; se "
+    "un pezzo non si capisce, di' quale. Questo non vale per ciò che chi ti parla ti dice "
+    "adesso: lo prendi com'è e rispondi nel merito, senza ripeterlo come un dubbio; un nome che "
+    "non conosci lo ripeti come l'hai sentito o chiedi com'è, senza mai sostituirlo con un "
+    "altro. Se chi ti parla corregge un nome o una parola, vale la sua forma da subito e per "
+    "tutto il resto della conversazione, anche se la scrive in modo un po' diverso: non tornare "
+    "alla tua.")
 
 INTESTAZIONE = (
     "Conversazione sentita nella stanza «{dove}» prima di questa domanda{presenti}: è una "

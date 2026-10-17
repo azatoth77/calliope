@@ -8,6 +8,11 @@ A. Le righe della stanza sono trascrizione grezza: il blocco, il primo pezzo nel
    pezzi dopo e il prompt di sistema (con stanza_cerca) dicono al modello di ricostruire con
    prudenza le parole evidenti («mi è sembrato di sentire…») invece di dire che non sono state
    dette, e che la correzione di chi parla su un nome vale subito.
+C. Dal 16/10 (issue #134, chi parla da solo): la nota vale per le sole righe della stanza, non
+   per la frase di chi parla adesso (presa com'è; un nome che non si conosce si ripete o si
+   chiede, mai sostituito), senza una formula di risposta da ripetere («mi è sembrato…»), e la
+   correzione vale per il resto della conversazione; la nota resta ferma nel prefisso (una volta,
+   nel primo pezzo, uguale a ogni turno: cache #95), con una voce sola e con due.
 B. La domanda che riprende quella di prima dopo una risposta lunga (rete `domanda_insistita`,
    calliope/ripetizione.py): una frase condizionale nei dati del turno (INSISTE_MSG, regola
    `domanda_insistita`) e, se la risposta è di nuovo uguale, la spinta senza «una cosa nuova»
@@ -77,11 +82,11 @@ def prova_righe():
     b = ctx_mod.costruisci(st, 1, cfg, ora)
     verifica("blocco: le righe sono trascrizione storpiata da ricostruire con prudenza",
              b is not None and ctx_mod.STORPIATE in b.testo
-             and "mi è sembrato di sentire" in b.testo
+             and "è una tua ricostruzione" in b.testo
              and "invece di dire che non è stato detto" in b.testo)
     verifica("blocco: la nota è di Calliope, fuori dalla busta e prima",
              b.testo.startswith(ctx_mod.STORPIATE + "\n[DATO NON FIDATO (fonte: stanza)")
-             and b.testo.count("trascritta da un riconoscimento vocale") == 1)
+             and b.testo.count("trascritte da un riconoscimento vocale") == 1)
     verifica("blocco: la correzione di chi parla vale da subito",
              "vale la sua forma da subito" in b.testo)
     verifica("blocco: le righe restano com'erano, in busta (niente corretto dal codice)",
@@ -101,9 +106,90 @@ def prova_righe():
     con = Config().prompt_for(False, stanza=True)
     senza = Config().prompt_for(False, stanza=False)
     verifica("prompt con stanza_cerca: storpiature e correzione del nome",
-             "parole storpiate" in con and "corregge un nome usa subito il suo" in con)
+             "parole storpiate" in con and "corregge un nome usa il suo da subito" in con)
     verifica("contrario: prompt senza la stanza non ne parla", "storpiate" not in senza)
 
+
+# ──────────────── C. il perimetro della nota: chi parla da solo (16/10, issue #134) ────────────────
+# Caso vero (prove a voce sulla DGX col 26B, chi amministra da solo dal telefono, stanza accesa;
+# qui di fantasia): «Oggi vado in palestra.» → «Mi è sembrato di sentire che oggi vai in
+# palestra…»; «Borgo Lieto» trascritto «Borgolieti» nella frase del turno → un terzo nome
+# «ricostruito», ripetuto anche dopo la correzione. La nota diceva «mi è sembrato di sentire bronzo
+# nel 2023» (una formula) senza dire che valeva per le sole righe della stanza.
+RIGHE_SOLO = ["Devo ricordarmi di passare in farmacia."]
+DOMANDE_SOLO = ["Calliope, oggi vado in palestra.", "Calliope, quanto dista Borgolieti?",
+                "Calliope, no, si dice Borgolieto.", "Calliope, e ci sono negozi a Borgolieto?"]
+
+
+def _virgolettati(testo):
+    """I pezzi tra «» del testo."""
+    return [p.split("»", 1)[0] for p in testo.split("«")[1:]]
+
+
+def prova_perimetro():
+    nota = ctx_mod.STORPIATE
+    verifica("nota: vale per le sole righe della stanza qui sotto",
+             "sole righe della stanza" in nota and "In quelle righe" in nota)
+    verifica("nota: non per la frase di chi parla adesso (presa com'è, senza dubbio)",
+             "non vale per ciò che chi ti parla ti dice adesso" in nota
+             and "lo prendi com'è" in nota)
+    verifica("nota: un nome che non conosci si ripete come sentito o si chiede, mai sostituito",
+             "come l'hai sentito o chiedi com'è" in nota
+             and "senza mai sostituirlo con un altro" in nota)
+    verifica("nota: la correzione vale per tutto il resto della conversazione, non si torna "
+             "alla propria forma", "per tutto il resto della conversazione" in nota
+             and "non tornare alla tua" in nota)
+    verifica("nota: niente formula da ripetere («sembrato», nessuna frase di risposta tra «»)",
+             "sembrat" not in nota.lower()
+             and all(len(v.split()) <= 2 for v in _virgolettati(nota)),
+             str(_virgolettati(nota)))
+    con = Config().prompt_for(False, stanza=True)
+    verifica("prompt con la stanza: solo le righe, non ciò che ti dicono adesso",
+             "in quelle righe, non in ciò che ti dicono adesso" in con)
+    verifica("prompt con la stanza: correzione per il resto della conversazione, senza "
+             "«sembrato»", "per il resto della conversazione" in con and "sembrat" not in con)
+    verifica("contrario: prompt senza la stanza non ne parla",
+             "ti dicono adesso" not in Config().prompt_for(False, stanza=False))
+
+    # La conversazione a una voce (una riga di Carlo nella stanza, quattro turni) e il contrario
+    # con due voci: la nota nel primo pezzo, una volta sola, ferma nel prefisso per tutta la
+    # conversazione (la correzione «per il resto della conversazione» resta davanti al modello)
+    # senza rompere la cache. La nota resta anche con una voce sola: il punto 3 della issue (nota
+    # solo con altre voci) è da fare solo se il banco dice che il perimetro non basta
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import prova_stanza_storia as pss
+    for righe, nomi, cosa in ((RIGHE_SOLO, ("Carlo",), "una voce sola"),
+                              (RIGHE_AUTO, ("Carlo", "Nicola"), "contrario: due voci")):
+        cfg = pss.cfg_base(stanza_contesto_in_storia=True)
+        st = pss.nuova_stanza(cfg)
+        b = pss.brain(cfg, st)
+        t0 = time.time() - 120
+        for i, t in enumerate(righe):
+            pss.riga(st, 1, t, t0 + i * 10, nomi[i % len(nomi)])
+        rotte = []
+        for n, d in enumerate(DOMANDE_SOLO):
+            if n == 2:                       # una riga nuova a metà: un seguito, senza nota
+                pss.riga(st, 1, "Prendo anche il pane.", time.time() - 30, "Carlo")
+            b.stanza_turno = ctx_mod.costruisci(st, 1, cfg, time.time())
+            "".join(b.stream_reply(d, "amministra"))
+            rotte.append(bool((b.last_cache or {}).get("rotta")))
+        v = b.backend.visti
+        con_n = [[i for i, m in enumerate(r) if nota in str(m.get("content"))] for r in v]
+        pos = con_n[0][0] if con_n and con_n[0] else None
+        verifica(f"{cosa}: la nota nel primo pezzo, una volta sola, allo stesso posto in ogni "
+                 "turno", pos is not None and all(c == [pos] for c in con_n), str(con_n))
+        ok = pos is not None and all(
+            [(m["role"], m.get("content")) for m in v[i][:pos + 1]]
+            == [(m["role"], m.get("content")) for m in v[i - 1][:pos + 1]]
+            for i in range(1, len(v)))
+        verifica(f"{cosa}: il prefisso fino alla nota uguale byte per byte da un turno "
+                 "all'altro, cache mai rotta", ok and not any(rotte), str(rotte))
+        seguiti = [m for m in v[-1] if "Altre frasi sentite" in str(m.get("content"))]
+        verifica(f"{cosa}: il seguito senza la nota", len(seguiti) == 1
+                 and nota not in str(seguiti[0].get("content")), str(len(seguiti)))
+        utente = [str(m.get("content")) for m in v[-1] if m["role"] == "user"]
+        verifica(f"{cosa}: le frasi dei turni restano com'erano (niente corretto dal codice)",
+                 all(any(d in u for u in utente) for d in DOMANDE_SOLO), str(utente[-1:]))
 
 # ─────────────────────────── B. la domanda insistita ───────────────────────────
 R = ("Ha menzionato dei risultati relativi ai nazionali GRS 2.300 e alla coppa GRS 2024, ma "
@@ -280,6 +366,7 @@ def prova_config():
 
 
 prova_righe()
+prova_perimetro()
 prova_forma()
 prova_brain()
 prova_config()
