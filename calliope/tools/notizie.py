@@ -125,6 +125,16 @@ def _ripiego_negato(ctx) -> bool:
     return RANK.get(livello, 0) < RANK.get(serve, 1)
 
 
+def _ripiego_configurato(ctx) -> bool:
+    """SearXNG configurato e la casa in rete, anche se ora è giù: solo allora un ripiego che
+    non parte conta come fallito o negato (senza SearXNG non c'è mai stato, #31)."""
+    web = getattr(ctx, "web", None)
+    if web is None or not getattr(getattr(ctx, "cfg", None), "online", True):
+        return False
+    diagnosi = getattr(web, "diagnosi", None)
+    return not (isinstance(diagnosi, dict) and diagnosi.get("codice") == "non_configurato")
+
+
 def _ripiego_possibile(ctx) -> bool:
     """SearXNG c'è e chi parla può usare web_cerca; mai per un minore."""
     web = getattr(ctx, "web", None)
@@ -318,7 +328,7 @@ def _notizie(ctx: ToolContext, tema: str = "", fatto=None) -> dict:
         if out is not None:
             return out
         note_rule(ctx, "notizie_ripiego_fallito")
-    elif poche and getattr(ctx, "web", None) is not None             and getattr(getattr(ctx, "cfg", None), "online", True):
+    elif poche and _ripiego_configurato(ctx):
         # Il ripiego servirebbe: negato a chi parla, o SearXNG giù dall'ultima prova
         # (solo registro dei turni, la quota di calliope/notizie/misura.py)
         note_rule(ctx, "notizie_ripiego_negato" if _ripiego_negato(ctx)

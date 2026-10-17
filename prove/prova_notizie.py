@@ -693,6 +693,22 @@ for volta in ("prima", "seconda"):
              and "notizie_ripiego_negato" not in ctx.regole, str(ctx.regole))
 sx.giu = False
 web.prova()
+# SearXNG non configurato (revisione della PR #128): il ripiego non c'è mai stato, né fallito
+# né negato
+cfg_senza = Config()
+cfg_senza.web_searxng_url = ""
+web_senza = Web(cfg_senza)
+web_senza.prova()
+for nome, livello in (("Dario", "familiare"), ("Bianca", "ospite")):
+    ctx = contesto_tool(nome, livello)
+    ctx.web = web_senza
+    res = json.loads(reg.call("notizie", {"tema": "vulcano"}, ctx, livello))
+    verifica(f"#31: SearXNG non configurato ({livello}) → vuota, niente fallito né negato",
+             res.get("trovato") is False and "notizie_vuote" in ctx.regole
+             and "notizie_ripiego_fallito" not in ctx.regole
+             and "notizie_ripiego_negato" not in ctx.regole,
+             f"{web_senza.diagnosi} {ctx.regole}")
+web_senza.close()
 # Ripiego su SearXNG: poche voci sul tema
 sx.risposte["vulcano"] = [{"url": "https://www.esempio.it/vulcano", "title": "Il vulcano Lumen",
                           "content": "Eruzione modesta stamattina.", "engine": "bing"}]
@@ -802,8 +818,8 @@ verifica("contrario quota: un turno senza notizie né regole non si conta (ora_a
          list(r["per_giorno"]) == ["2026-10-14", "2026-10-15"], str(r["per_giorno"]))
 riga = misura_notizie.testo(r)
 verifica("riga: «Notizie: 12 richieste, 6 dai giornali (86 %), 1 da internet, 2 vuote»",
-         riga.startswith("Notizie: 12 richieste, 6 dai giornali (86 %), 1 da internet, 2 vuote "
-                         "(ripiego fallito 1, negato 1); seguiti 1; minori: 1 sezione "
+         riga.startswith("Notizie: 12 richieste, 6 dai giornali (86 %), 1 da internet, 2 vuote"
+                         "; ripiego fallito 1, negato 1; seguiti 1; minori: 1 sezione "
                          "rifiutata; web_cerca girato a notizie 1.")
          and "2026-10-14  5 richieste, 3 dai giornali (75 %)" in riga, riga)
 r0 = misura_notizie.riassunto([turno_n("2026-10-15", ["ora_detta"], ("ora_attuale",))])
@@ -814,8 +830,18 @@ verifica("riga senza notizie: «nessuna richiesta nel registro dei turni»",
 rv = misura_notizie.riassunto([turno_n("2026-10-15", ["notizie_vuote"])])
 verifica("contrario quota: solo vuote, nessuna quota (niente divisione per zero)",
          rv["quota_feed"] is None and misura_notizie.testo(rv).startswith(
-             "Notizie: 1 richiesta, 0 dai giornali, 0 da internet, 1 vuota ("),
+             "Notizie: 1 richiesta, 0 dai giornali, 0 da internet, 1 vuota; "),
          misura_notizie.testo(rv))
+# Revisione della PR #128: fallito e negato scattano anche con i fatti dei feed, quindi non
+# sono una parte delle vuote
+rf = misura_notizie.riassunto([turno_n("2026-10-15", ["notizie_feed"]),
+                               turno_n("2026-10-15", ["notizie_feed", "notizie_ripiego_fallito"]),
+                               turno_n("2026-10-15", ["notizie_feed", "notizie_ripiego_negato"])])
+verifica("contrario riga: fallito e negato con i fatti dei feed non sono dentro «0 vuote»",
+         misura_notizie.testo(rf).startswith(
+             "Notizie: 3 richieste, 3 dai giornali (100 %), 0 da internet, 0 vuote; ripiego "
+             "fallito 1, negato 1; ") and "vuote (" not in misura_notizie.testo(rf),
+         misura_notizie.testo(rf))
 # stato --turni: la riga e la chiave «notizie» nel --json, da un registro su disco
 import contextlib  # noqa: E402
 import io  # noqa: E402

@@ -84,8 +84,8 @@ def testo(r: dict) -> str:
     righe = [
         f"Notizie: {_n(r['richieste'], 'richiesta', 'richieste')}, {r['feed']} dai giornali"
         f"{_pct(r['quota_feed'])}, {r['ripiego']} da internet, "
-        f"{_n(r['vuote'], 'vuota', 'vuote')} (ripiego fallito {r['ripiego_fallito']}, negato "
-        f"{r['ripiego_negato']}); seguiti {r['seguiti']}; minori: "
+        f"{_n(r['vuote'], 'vuota', 'vuote')}; ripiego fallito {r['ripiego_fallito']}, negato "
+        f"{r['ripiego_negato']}; seguiti {r['seguiti']}; minori: "
         f"{_n(r['minori_rifiutate'], 'sezione rifiutata', 'sezioni rifiutate')}; web_cerca "
         f"girato a notizie {r['web_girate']}."]
     for giorno, g in (r.get("per_giorno") or {}).items():

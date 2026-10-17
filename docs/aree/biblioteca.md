@@ -619,16 +619,18 @@ né quante volte un minore chiede una sezione non sua.
   ripiego e SearXNG non ha trovato niente, o è giù dall'ultima prova: allora `Web.pronta` è falso e
   il ripiego non si tenta nemmeno, ma conta come fallito, non come negato);
   `notizie_ripiego_negato` (serviva il ripiego ma chi parla è un minore o non ha `web_livello`).
-  Una risposta dai feed con l'indice vecchio e SearXNG senza risultati ha `notizie_feed` **e**
-  `notizie_ripiego_fallito`. Correzione dell'analisi della issue: il caso «SearXNG giù» non passa
+  Con SearXNG **non configurato** (`Web.diagnosi` «non_configurato», o senza il servizio web)
+  né fallito né negato: il ripiego non c'è mai stato. Fallito e negato non sono una parte delle
+  vuote: una risposta dai feed con l'indice vecchio e SearXNG senza risultati ha `notizie_feed`
+  **e** `notizie_ripiego_fallito`. Correzione dell'analisi della issue: il caso «SearXNG giù» non passa
   da `_ripiego` (si ferma prima, in `_ripiego_possibile`), quindi andava contato a parte.
 - **`calliope/notizie/misura.py`** (solo libreria standard, come `pertinenza.riassunto`):
   `riassunto(turni)` per giorno e in totale (richieste = turni con una chiamata `notizie` o una
   delle regole), `testo(r)`; **quota dai feed** = feed / (feed + ripiego), nessuna quota senza
   nessuno dei due. Legge solo `regole` e i nomi in `tool`: nessun tema, nessun titolo.
 - **La riga** in `calliope stato --turni` dopo la pertinenza delle ricerche, e la chiave
-  `notizie` nel `--json`: «Notizie: 12 richieste, 6 dai giornali (86 %), 1 da internet, 2 vuote
-  (ripiego fallito 1, negato 1); seguiti 1; minori: 1 sezione rifiutata; web_cerca girato a
+  `notizie` nel `--json`: «Notizie: 12 richieste, 6 dai giornali (86 %), 1 da internet, 2 vuote;
+  ripiego fallito 1, negato 1; seguiti 1; minori: 1 sezione rifiutata; web_cerca girato a
   notizie 1.», poi una riga per giorno; senza notizie «Notizie: nessuna richiesta nel registro
   dei turni.».
 - **Prove** (`prova_notizie`, § 7): le tre regole con i contrari (dai feed e il ripiego riuscito
