@@ -44,8 +44,19 @@ non c'è ancora), legge i requisiti e le parole della persona e compila un JSON 
 - **al collaudo**: i requisiti che si giudicano solo guardando o ascoltando (musica, aspetto,
   «adatto ai bambini»): la revisione li dice «da guardare tu», non fatti né mancanti.
 
-Per i programmi niente esempi (un programma non ha un'interfaccia fissa): la stessa passata cerca
-solo le contraddizioni, e solo nel primo lavoro di uno sviluppo.
+**I programmi** (17/10, issue #10): un programma non ha un'interfaccia fissa, quindi la
+dichiara la passata, prima del codice: linguaggio, nome del file e genere d'interfaccia. Solo per
+un programma **a riga di comando** in Python (o in JavaScript con Node acceso, #54) scrive gli
+esempi `{argomenti, stdin, numero | contiene, codice_uscita}`; il codice li valida come quelli
+delle estensioni (il «calcolo» rifatto, una parola che la richiesta non dice solo nel caso
+d'errore, ogni esempio con argomenti o stdin e un controllo che lo scheletro non passa) e li
+trasforma in `test_accettazione.py` (il programma eseguito con runpy nello stesso processo:
+l'audit hook della sandbox non lascia avviare processi) o in `accettazione.test.js` (Node in un
+processo figlio, con i permessi di esegui_js). Il programma deve chiamarsi come dice
+l'interfaccia: la consegna lo dice all'agente una volta (`controlla_nome`). Restano senza esempi,
+come prima, i programmi su file della persona, il C# (niente esegui_test) e gli altri generi:
+la passata cerca solo le contraddizioni, e solo nel primo lavoro di uno sviluppo. Fuori da uno
+sviluppo un programma nuovo fa la passata per gli esempi, senza domande.
 
 **I giochi** (13/10, dopo la macchina a stati: estensioni/macchina.py, motore_gioco.js): nel primo
 lavoro di uno sviluppo di un gioco nuovo la passata scrive anche gli esempi **in forma chiusa**:
@@ -58,7 +69,9 @@ persona. Un esempio usa sempre almeno un comando del gioco, quindi fallisce su u
 ce l'ha. Le mosse non devono dipendere dal caso (dove sta il premio): lo dice il prompt.
 
 Il client e la passata sono quelli dei requisiti (`requisiti.chiama`: schema chiuso, temperatura
-0, senza ragionamento). Solo libreria standard.
+0, senza ragionamento; dal 17/10 il ragionamento si accende con
+`agenti_accettazione_ragionamento`, spento di serie finché il mini-banco non dice che conviene).
+Solo libreria standard.
 """
 
 from __future__ import annotations
@@ -111,11 +124,29 @@ esempi: da 2 a 6 partite brevi, una per requisito che si controlla giocando. Per
 Ogni esempio usa almeno un comando del gioco nelle mosse e controlla almeno una cosa. Mai controllare ciò che dipende dal caso (cosa c'è dietro una porta, chi vince): controlla le regole (turni, comandi che spariscono, la fine quando le mosse finiscono)."""
 
 
+SISTEMA_PROGRAMMA = """
+programma: come si usa il programma, deciso adesso perché gli esempi lo possano eseguire:
+- linguaggio: python, salvo che la richiesta chieda un altro linguaggio{linguaggi};
+- file: il nome del file da eseguire, minuscole e _ con l'estensione del linguaggio (per esempio «media_voti.py»), mai «test…»;
+- interfaccia: «riga_di_comando» se il programma riceve i valori come argomenti (o righe sullo stdin) e stampa il risultato; «file» se lavora su file o cartelle della persona (foto, documenti, fogli); «altro» per tutto il resto (finestre, rete, programmi che girano a lungo). Gli esempi si scrivono solo per «riga_di_comando».
+esempi (solo per «riga_di_comando»): da 3 a 8 esecuzioni, almeno una per ogni requisito che si controlla con un'esecuzione. Per ognuna: requisito (il numero), argomenti (la lista dei valori, come li direbbe la persona: niente opzioni con il trattino) oppure stdin (il testo da dare al programma, una riga per valore), e cosa deve risultare:
+- numero: un valore che il programma deve stampare, calcolato con cura (se arrotondi metti la tolleranza); se non sei sicuro non usare quell'esempio; scegli dati con un risultato diverso da ognuno di loro (la media di 5, 8 e 9, non di 6, 7 e 8);
+- calcolo: lo stesso numero come conto con soli numeri e + - * / ( ), per esempio «(7 + 8 + 6) / 3»: lo rifà il codice;
+- contiene: una o due parole che l'uscita deve contenere (un nome detto dalla persona, «non»); mai numeri, mai frasi intere;
+- codice_uscita: 0 se finisce bene, 1 se la richiesta dice che con quei dati deve fermarsi con un errore; null se non conta.
+Ogni esempio ha argomenti o stdin e controlla almeno una cosa (numero, contiene o un codice d'uscita diverso da 0). Usa solo valori che la richiesta nomina o numeri; metti anche un caso con un dato sbagliato se la richiesta dice cosa fare."""
+
+INTERFACCE = ("riga_di_comando", "file", "altro")
+LINGUAGGI_PROGRAMMA = ("python", "javascript", "csharp", "altro")
+_SUFFISSI = {"python": ".py", "javascript": ".js"}
+MAX_ARGOMENTI = 10
+
+
 def _nome_ok(x) -> bool:
     return isinstance(x, str) and bool(re.match(r"^[a-z][a-z0-9_]{0,13}$", x))
 
 
-def schema(estensione: bool, gioco: bool = False) -> dict:
+def schema(estensione: bool, gioco: bool = False, programma: bool = False) -> dict:
     prop = {
         "contraddizioni": {"type": "array", "maxItems": MAX_DOMANDE, "items": {
             "type": "object", "properties": {
@@ -174,6 +205,27 @@ def schema(estensione: bool, gioco: bool = False) -> dict:
                         "testo": {"type": "string", "maxLength": 40}}}},
                 "required": ["requisito", "giocatori", "mosse", "atteso"]}}})
         richiesti += ["comandi", "esempi"]
+    elif programma:
+        # 17/10 (#10): l'interfaccia a riga di comando dichiarata prima del codice
+        prop.update({
+            "programma": {"type": "object", "properties": {
+                "linguaggio": {"type": "string", "enum": list(LINGUAGGI_PROGRAMMA)},
+                "file": {"type": "string", "maxLength": 40},
+                "interfaccia": {"type": "string", "enum": list(INTERFACCE)}},
+                "required": ["linguaggio", "file", "interfaccia"]},
+            "esempi": {"type": "array", "maxItems": MAX_ESEMPI, "items": {
+                "type": "object", "properties": {
+                    "requisito": {"type": "integer"},
+                    "argomenti": {"type": "array", "maxItems": MAX_ARGOMENTI,
+                                  "items": {"type": "string", "maxLength": 200}},
+                    "stdin": {"type": "string", "maxLength": 2000},
+                    "numero": {"type": ["number", "null"]},
+                    "tolleranza": {"type": ["number", "null"]},
+                    "calcolo": {"type": "string", "maxLength": 160},
+                    "contiene": {"type": "string", "maxLength": 60},
+                    "codice_uscita": {"type": ["integer", "null"]}},
+                "required": ["requisito", "argomenti"]}}})
+        richiesti += ["programma", "esempi"]
     return {"type": "object", "properties": prop, "required": richiesti}
 
 
@@ -397,8 +449,129 @@ def _riconosciuti(out: dict) -> list[dict]:
     return controlli
 
 
+def _file_programma(p: dict, linguaggi) -> tuple[dict, str]:
+    """({"file", "linguaggio"}, "") dell'interfaccia dichiarata, o ({}, perché niente esempi).
+    Solo un programma a riga di comando in un linguaggio che qui ha i suoi test (Python;
+    JavaScript con Node acceso, 17/10 #54): il C# non ha esegui_test, un programma su file
+    della persona ha un'interfaccia che gli esempi non sanno dire."""
+    if not isinstance(p, dict):
+        return {}, "interfaccia non dichiarata"
+    lg = str(p.get("linguaggio") or "").strip().lower()
+    if p.get("interfaccia") != "riga_di_comando":
+        return {}, ("lavora su file della persona" if p.get("interfaccia") == "file"
+                    else "non è un programma a riga di comando")
+    if lg not in _SUFFISSI:
+        return {}, f"linguaggio senza esempi ({lg or '?'})"
+    if lg not in set(linguaggi or ("python",)):
+        return {}, f"qui il {lg} non si esegue"
+    f = str(p.get("file") or "").strip().lower()
+    stem = f[:-len(_SUFFISSI[lg])] if f.endswith(_SUFFISSI[lg]) else ""
+    if (not _NOME.match(stem) or stem.startswith("test") or stem.endswith(("_test", ".test"))
+            or stem in ("accettazione", "estensione", "calliope_estensione")
+            or (lg == "python" and stem in __import__("sys").stdlib_module_names)):
+        return {}, f"nome del file non valido ({f or '?'})"
+    return {"file": f, "linguaggio": lg}, ""
+
+
+def _parole(testo) -> list[str]:
+    """Le parole di lettere di un testo (senza accenti, almeno tre lettere: non «e», «di»),
+    per i valori fuori dalla richiesta."""
+    return [w for w in _norm(testo).split() if w.isalpha() and len(w) >= 3]
+
+
+def _numeri_detti(testo) -> list[float]:
+    """I numeri di un testo, letti all'italiana e all'inglese (come fa il test)."""
+    out = []
+    for s in re.findall(r"-?\d+(?:[.,]\d+)*", str(testo or "")):
+        for c in {s.replace(",", "."), s.replace(".", "").replace(",", "."), s.replace(",", "")}:
+            try:
+                out.append(float(c))
+            except ValueError:
+                pass
+    return out
+
+
+def _esempi_programma(d: dict, n_requisiti: int, testo: str) -> tuple[list[dict], dict]:
+    """Gli esempi di un programma a riga di comando, validati come quelli delle estensioni:
+    argomenti o stdin (sempre: senza argomenti il programma usa valori d'esempio suoi, che la
+    richiesta non dice), un controllo che lo scheletro non passa (numero, parola, codice
+    d'uscita diverso da 0), il «calcolo» rifatto dal codice; un esempio con una parola che la
+    richiesta non dice vale solo se aspetta un errore (codice d'uscita diverso da 0)."""
+    from ..requisiti import pulito
+    out, chiavi = [], set()
+    tolti = {"fuori": 0, "numero": 0, "contiene": 0, "dati": 0}
+    detto = _radici(testo)
+    for e in d.get("esempi") or ():
+        if not isinstance(e, dict):
+            continue
+        args = e.get("argomenti") if isinstance(e.get("argomenti"), list) else []
+        if len(args) > MAX_ARGOMENTI or not all(_primitivo(a) and a is not None
+                                                and not isinstance(a, bool) for a in args):
+            continue
+        args = [str(a) for a in args]
+        stdin = e.get("stdin") if isinstance(e.get("stdin"), str) else ""
+        if any(len(a) > 200 or "\n" in a or "\x00" in a for a in args) or len(stdin) > 2000 \
+                or "\x00" in stdin:
+            continue
+        if not args and not stdin.strip():
+            continue
+        cod = e.get("codice_uscita")
+        cod = cod if isinstance(cod, int) and not isinstance(cod, bool) and 0 <= cod <= 255 \
+            else None
+        errore = cod is not None and cod != 0
+        if not errore and testo and any(
+                not _dentro((_radice(w),), detto) for v in [*args, stdin] for w in _parole(v)):
+            tolti["fuori"] += 1
+            continue
+        numero = _numero(e.get("numero"))
+        tol = _numero(e.get("tolleranza"))
+        calcolo = _calcola(e.get("calcolo"))
+        if calcolo is not None:
+            if numero is None:
+                numero = calcolo
+            elif abs(numero - calcolo) > max(abs(tol or 0), 0.01, abs(calcolo) * 0.002):
+                tolti["numero"] += 1
+                continue
+        contiene = pulito(e.get("contiene"), 60)
+        if re.search(r"\d", contiene):
+            contiene = ""
+        if contiene and numero is not None:
+            parole = {_radice(w) for v in args for w in _parole(v)}
+            nuovo = _togli(contiene, [], parole)
+            if nuovo != contiene:
+                tolti["contiene"] += 1
+                contiene = nuovo
+        if numero is None and not contiene and not errore:
+            continue
+        # Il risultato uguale a un dato (il massimo di 3 e 9, la media di 7, 8 e 6): il test
+        # toglie dall'uscita i numeri che ripetono i dati (lo scheletro che li stampa non deve
+        # passare), quindi un programma giusto che stampa «9» non passerebbe; e senza toglierli
+        # passerebbe lo scheletro. L'esempio non distingue: si toglie il numero
+        if numero is not None and any(
+                abs(x - numero) <= max(abs(tol or 0), 0.01, abs(numero) * 0.002)
+                for x in _numeri_detti(" ".join([*args, stdin]))):
+            tolti["dati"] += 1
+            numero = None
+            if not contiene and not errore:
+                continue
+        chiave = json.dumps([args, stdin], ensure_ascii=False)
+        if chiave in chiavi:
+            continue
+        chiavi.add(chiave)
+        r = e.get("requisito")
+        out.append({"requisito": r if isinstance(r, int) and not isinstance(r, bool)
+                    and (n_requisiti <= 0 or 1 <= r <= n_requisiti) else 0,
+                    "argomenti": args, "stdin": stdin, "numero": numero,
+                    "tolleranza": abs(tol) if tol is not None else None,
+                    "contiene": contiene, "codice_uscita": cod})
+        if len(out) >= MAX_ESEMPI:
+            break
+    return out, tolti
+
+
 def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
-               gioco: bool = False, testo: str = "") -> dict:
+               gioco: bool = False, testo: str = "", programma: bool = False,
+               linguaggi=("python",)) -> dict:
     """L'analisi validata dal JSON del modello: forme chiuse, testi puliti, tetti. Un esempio
     senza niente da controllare (né numero, né parola, né «trovato»: false) si scarta: non
     fallirebbe sullo scheletro. `testo`: la richiesta (requisiti, specifica, parole della
@@ -433,6 +606,15 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
             x[0] for e in out["esempi"] for k in ("attivi", "non_attivi")
             for x in e["atteso"].get(k, [])}
         out["comandi"] = {k: v for k, v in comandi.items() if k in usati}
+        return out
+    if not estensione and programma:
+        # 17/10 (#10): un programma a riga di comando con l'interfaccia dichiarata
+        prog, perche = _file_programma(d.get("programma"), linguaggi)
+        out["programma"], out["senza_esempi"] = prog, perche
+        if prog:
+            out["esempi"], out["tolti"] = _esempi_programma(d, n_requisiti, testo)
+            if not out["esempi"]:
+                out["programma"], out["senza_esempi"] = {}, "nessun esempio valido"
         return out
     if not estensione:
         return out
@@ -673,6 +855,214 @@ def test_js(an: dict) -> str:
     return TESTA_JS + f"const ESEMPI = {esempi};\n" + CORPO_JS
 
 
+# I programmi a riga di comando (17/10, #10). In Python il programma gira nello stesso processo
+# del test (runpy, con argv, stdin e uscita sostituiti): nella sandbox l'audit hook di _avvio.py
+# non lascia avviare processi, e così il test vale anche con il motore «processo»
+TESTA_PROGRAMMA = '''"""Esempi di accettazione: IN SOLA LETTURA. Li ha scritti dai requisiti un'altra passata,
+prima del codice (calliope/agenti/accettazione.py); alla consegna si eseguono con gli altri test.
+Eseguono il programma con gli argomenti e lo stdin di ogni esempio e leggono quello che stampa.
+Se uno ti sembra sbagliato non cambiarlo: dillo nel riassunto della consegna."""
+import contextlib
+import io
+import json
+import re
+import runpy
+import sys
+import unicodedata
+import unittest
+
+'''
+
+CORPO_PROGRAMMA = '''
+
+def _norm(testo):
+    t = unicodedata.normalize("NFD", str(testo or "").lower())
+    return " ".join("".join(c for c in t if not unicodedata.combining(c)).split())
+
+
+def _numeri(testo, dati=""):
+    """I numeri stampati, letti all'italiana e all'inglese (3,5 / 3.5 / 1.234,5 / 1,234.5),
+    senza quelli che ripetono i dati (una volta per dato): ripetere gli argomenti non è un
+    risultato, e lo scheletro che li stampa non deve passare."""
+    import collections
+    trova = re.compile(r"-?\\d+(?:[.,]\\d+)*")
+    resto = collections.Counter(trova.findall(testo))
+    resto.subtract(collections.Counter(trova.findall(dati)))
+    out = []
+    for s, n in resto.items():
+        if n <= 0:
+            continue
+        for c in {s.replace(",", "."), s.replace(".", "").replace(",", "."), s.replace(",", "")}:
+            try:
+                out.append(float(c))
+            except ValueError:
+                pass
+    return out
+
+
+def _esegui(argomenti, stdin):
+    """(uscita, codice d'uscita, errore) del programma, come se lo si lanciasse."""
+    out = io.StringIO()
+    vecchi = sys.argv, sys.stdin
+    sys.argv, sys.stdin = [PROGRAMMA, *argomenti], io.StringIO(stdin or "")
+    codice, errore = 0, ""
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            runpy.run_path(PROGRAMMA, run_name="__main__")
+    except SystemExit as e:
+        if isinstance(e.code, int):
+            codice = e.code
+        elif e.code is not None:
+            codice = 1
+            out.write(str(e.code) + "\\n")
+    except Exception as e:  # noqa: BLE001 — come Python: il programma si ferma con 1
+        codice, errore = 1, f"{type(e).__name__}: {e}"
+    finally:
+        sys.argv, sys.stdin = vecchi
+    return out.getvalue(), codice, errore
+
+
+def _prova(self, caso):
+    detto = (f"R{caso['requisito']}: {PROGRAMMA} con gli argomenti "
+             f"{json.dumps(caso['argomenti'], ensure_ascii=False)}"
+             + (f" e lo stdin {json.dumps(caso['stdin'], ensure_ascii=False)}" if caso["stdin"]
+                else ""))
+    uscita, codice, errore = _esegui(caso["argomenti"], caso["stdin"])
+    breve = uscita.strip()[-300:]
+    atteso = caso.get("codice_uscita")
+    if atteso is not None and atteso != 0:
+        self.assertNotEqual(codice, 0, f"{detto}: deve fermarsi con un errore (codice d'uscita "
+                            f"diverso da 0), è finito bene; ha stampato «{breve}»")
+    else:
+        self.assertFalse(errore, f"{detto}: il programma si è fermato con {errore}")
+        if atteso == 0:
+            self.assertEqual(codice, 0, f"{detto}: deve finire bene, codice d'uscita {codice}")
+    if caso.get("numero") is not None:
+        n = caso["numero"]
+        tol = max(caso.get("tolleranza") or 0, 0.01, abs(n) * 0.002)
+        dati = " ".join([*caso["argomenti"], caso["stdin"] or ""])
+        self.assertTrue(any(abs(x - n) <= tol for x in _numeri(uscita, dati)),
+                        f"{detto}: deve stampare {n:g} (± {tol:g}); ha stampato «{breve}»")
+    if caso.get("contiene"):
+        frase = _norm(uscita)
+        if _norm(caso["contiene"]) not in frase:
+            for parola in _norm(caso["contiene"]).split():
+                self.assertIn(parola, frase, f"{detto}: l'uscita deve contenere "
+                              f"«{caso['contiene']}»; ha stampato «{breve}»")
+
+
+class Accettazione(unittest.TestCase):
+    def test_programma_c_e(self):
+        import os
+        self.assertTrue(os.path.isfile(PROGRAMMA), f"manca il programma {PROGRAMMA}: gli esempi "
+                        "lo eseguono con questo nome")
+
+
+for _i, _caso in enumerate(ESEMPI, 1):
+    def _t(self, _caso=_caso):
+        _prova(self, _caso)
+    setattr(Accettazione, f"test_r{_caso['requisito']}_{_i}", _t)
+'''
+
+
+def test_programma(an: dict) -> str:
+    """Il file test_accettazione.py di un programma Python a riga di comando (17/10, #10)."""
+    esempi = json.dumps(an.get("esempi") or [], ensure_ascii=False, indent=1)
+    return (TESTA_PROGRAMMA + f"PROGRAMMA = {str((an.get('programma') or {}).get('file'))!r}\n"
+            + f"ESEMPI = json.loads({esempi!r})\n" + CORPO_PROGRAMMA)
+
+
+# In JavaScript il programma si lancia con Node in un processo figlio (spawnSync), con lo stesso
+# modello dei permessi di esegui_js: i test JavaScript girano senza --permission
+CORPO_PROGRAMMA_JS = r"""
+const { spawnSync } = require("node:child_process");
+const fs = require("node:fs");
+const norm = (t) => String(t || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ").trim();
+// I numeri stampati, senza quelli che ripetono i dati (una volta per dato)
+function numeri(t, dati) {
+  const out = [];
+  const resto = String(t).match(/-?\d+(?:[.,]\d+)*/g) || [];
+  for (const d of String(dati).match(/-?\d+(?:[.,]\d+)*/g) || []) {
+    const k = resto.indexOf(d);
+    if (k >= 0) resto.splice(k, 1);
+  }
+  for (const s of resto) {
+    for (const c of new Set([s.replace(/,/g, "."), s.replace(/\./g, "").replace(",", "."), s.replace(/,/g, "")])) {
+      const n = Number(c);
+      if (Number.isFinite(n)) out.push(n);
+    }
+  }
+  return out;
+}
+function esegui(e) {
+  const qui = process.cwd();
+  const r = spawnSync(process.execPath, ["--permission", `--allow-fs-read=${qui}`,
+    `--allow-fs-write=${qui}`, PROGRAMMA, ...e.argomenti],
+    { input: e.stdin || "", encoding: "utf8", timeout: 10000 });
+  return { uscita: (r.stdout || "") + (r.stderr || ""), codice: r.status === null ? 1 : r.status };
+}
+test(`R0 esempio 0: c'è il programma ${PROGRAMMA}`, () => {
+  assert.ok(fs.existsSync(PROGRAMMA), `manca il programma ${PROGRAMMA}: gli esempi lo eseguono con questo nome`);
+});
+ESEMPI.forEach((e, i) => {
+  const detto = `R${e.requisito}: ${PROGRAMMA} con gli argomenti ${JSON.stringify(e.argomenti)}` +
+    (e.stdin ? ` e lo stdin ${JSON.stringify(e.stdin)}` : "");
+  test(`R${e.requisito} esempio ${i + 1}: argomenti ${JSON.stringify(e.argomenti)}`, () => {
+    const { uscita, codice } = esegui(e);
+    const breve = uscita.trim().slice(-300);
+    if (e.codice_uscita !== null && e.codice_uscita !== 0) {
+      assert.notStrictEqual(codice, 0, `${detto}: deve fermarsi con un errore (codice d'uscita diverso da 0), è finito bene; ha stampato «${breve}»`);
+    } else if (e.codice_uscita === 0) {
+      assert.strictEqual(codice, 0, `${detto}: deve finire bene, codice d'uscita ${codice}; ha stampato «${breve}»`);
+    }
+    if (e.numero !== null) {
+      const tol = Math.max(e.tolleranza || 0, 0.01, Math.abs(e.numero) * 0.002);
+      assert.ok(numeri(uscita, [...e.argomenti, e.stdin || ""].join(" ")).some((x) => Math.abs(x - e.numero) <= tol),
+        `${detto}: deve stampare ${e.numero} (± ${tol}); ha stampato «${breve}»`);
+    }
+    if (e.contiene && !norm(uscita).includes(norm(e.contiene))) {
+      for (const p of norm(e.contiene).split(" ")) {
+        assert.ok(norm(uscita).includes(p), `${detto}: l'uscita deve contenere «${e.contiene}»; ha stampato «${breve}»`);
+      }
+    }
+  });
+});
+"""
+
+
+def test_programma_js(an: dict) -> str:
+    """Il file accettazione.test.js di un programma JavaScript (17/10, #10 e #54)."""
+    esempi = json.dumps(an.get("esempi") or [], ensure_ascii=False, indent=1)
+    file = json.dumps(str((an.get("programma") or {}).get("file")))
+    return (TESTA_JS.replace("Giocano la partita vera con la macchina di Calliope (apriGioco).",
+                             "Eseguono il programma con argomenti e stdin di ogni esempio.")
+            + f"const PROGRAMMA = {file};\nconst ESEMPI = {esempi};\n" + CORPO_PROGRAMMA_JS)
+
+
+def file_programma(an: dict) -> tuple[str, str]:
+    """(nome del file degli esempi, testo) di un programma con l'interfaccia dichiarata."""
+    if (an.get("programma") or {}).get("linguaggio") == "javascript":
+        return FILE_GIOCO, test_programma_js(an)
+    return FILE, test_programma(an)
+
+
+def controlla_nome(sandbox, stato: dict) -> str | None:
+    """Il programma con il nome dichiarato dall'analisi (17/10, #10, come il manifesto delle
+    estensioni): l'errore per l'agente, o None."""
+    a = stato or {}
+    f = a.get("programma") if a.get("stato") == "pronta" and a.get("file") else None
+    if not f:
+        return None
+    try:
+        if (sandbox.root / f).is_file():
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    return (f"il programma deve chiamarsi «{f}»: gli esempi di accettazione "
+            f"({a.get('nome_file') or FILE}) lo eseguono con quel nome. Rinominalo (scrivi il file "
+            f"con quel nome) e in consegna metti programma = «{f}».")
+
+
 def comandi_detti(an: dict) -> str:
     """I comandi che la macchina deve avere, per l'agente: «porta (fase turno, da 1 a 6)»."""
     out = []
@@ -720,6 +1110,21 @@ def vincolo(an: dict, file: bool, gioco: bool = False) -> str:
             "passare tutti; non puoi cambiarli: se uno ti sembra sbagliato dillo nel riassunto "
             "della consegna. La macchina nel manifesto deve avere questi comandi, con questi "
             f"nomi, fasi e valori: {comandi_detti(an)}.")
+    elif file and (an.get("programma") or {}).get("file"):
+        # Un programma a riga di comando (17/10, #10): il nome e il modo di usarlo
+        p = an["programma"]
+        nome_file, _ = file_programma(an)
+        stdin = any(e.get("stdin") for e in an.get("esempi") or [])
+        parti.append(
+            f"Gli esempi di accettazione sono in {nome_file}, IN SOLA LETTURA: li ha scritti dai "
+            "requisiti un'altra passata, prima del codice, e alla consegna si eseguono con i tuoi "
+            f"test. Eseguono il programma «{p['file']}» con gli argomenti"
+            + (" (e lo stdin)" if stdin else "") + " di ogni "
+            "esempio e leggono quello che stampa: il programma deve chiamarsi così (in consegna "
+            f"programma = «{p['file']}»), leggere i valori dagli argomenti"
+            + (" o, se un esempio li dà così, dallo stdin" if stdin else "")
+            + ", stampare il risultato e farli passare tutti. Non puoi cambiarli: se uno ti "
+              "sembra sbagliato dillo nel riassunto della consegna.")
     elif file:
         ins = ", ".join(f"{i['nome']} ({i['tipo']})" for i in an.get("input") or [])
         parti.append(
@@ -766,24 +1171,36 @@ def utente(cosa: str, compito: str, requisiti: list[dict], parole: str = "",
 def analizza(svc, compito: str, requisiti: list[dict], parole: str = "",
              estensione: bool = True, gioco: bool = False,
              risposta: tuple[str, str] | None = None,
-             tempo_s: float = 90.0) -> tuple[dict | None, str]:
+             tempo_s: float = 90.0, programma: bool = False, linguaggi=("python",),
+             ragionamento: int = 0, uso: dict | None = None) -> tuple[dict | None, str]:
     """(analisi, "modello") o (None, esito): la passata del progettista dei test. Mai
-    un'eccezione."""
+    un'eccezione. `programma` (17/10, #10): un programma per cui dichiarare l'interfaccia e
+    scrivere gli esempi (non un programma su file della persona: lì solo le contraddizioni);
+    `linguaggi`: quelli dei programmi che qui si eseguono. `ragionamento`: i token di
+    ragionamento della passata (0 = spento, come sempre; Config.agenti_accettazione_ragionamento);
+    `uso`: riceve token e secondi della passata (il mini-banco del ragionamento)."""
     from ..requisiti import chiama
     cosa = ("un gioco sugli schermi di Calliope" if gioco else
             "un'estensione di Calliope (la funzione esegui(dati, calliope) -> dict con «da_dire»)"
             if estensione else "un programma")
     esempi_gioco = gioco and not estensione and bool(requisiti)
+    programma = programma and not estensione and not gioco
+    altri = [lg for lg in (linguaggi or ()) if lg in _SUFFISSI and lg != "python"]
     sistema = SISTEMA.format(cosa=cosa, estensione=SISTEMA_ESEMPI if estensione else
-                             SISTEMA_GIOCO if esempi_gioco else "")
+                             SISTEMA_GIOCO if esempi_gioco else
+                             SISTEMA_PROGRAMMA.format(linguaggi=(
+                                 " tra " + ", ".join(["python", *altri]) if altri else
+                                 " (qui si eseguono solo programmi Python)"))
+                             if programma else "")
     dati, esito = chiama(svc, sistema, utente(cosa, compito, requisiti, parole, risposta),
-                         schema(estensione, esempi_gioco), tempo_s, dalla_voce=False,
-                         num_predict=2000)
+                         schema(estensione, esempi_gioco, programma), tempo_s, dalla_voce=False,
+                         num_predict=2000, ragionamento=ragionamento, uso=uso)
     if dati is None:
         return None, esito
     testo = " ".join([str(compito or ""), str(parole or "")]
                      + [f"{r.get('testo') or ''} {r.get('dettaglio') or ''}" for r in requisiti])
-    return interpreta(dati, len(requisiti), estensione, esempi_gioco, testo), esito
+    return interpreta(dati, len(requisiti), estensione, esempi_gioco, testo, programma,
+                      linguaggi), esito
 
 
 def rossi(uscita: str) -> list[int]:

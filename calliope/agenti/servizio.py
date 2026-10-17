@@ -1251,7 +1251,8 @@ class Lavori:
                     if domanda is not None:
                         self._sospendi(lav, domanda, dest)
                         return
-                    ris = self.agente.codice(lav, sb)
+                    ris = self.agente.codice(lav, sb, controlla=self._controlla_programma(lav))
+                    self._programma_dichiarato(lav, sb, ris)
                 lav.risposta = None
                 if ris.get("esito") == "tappa":
                     self._tappa(lav, ris, dest, sb)
@@ -1311,7 +1312,7 @@ class Lavori:
                 # Gli esempi di accettazione rieseguiti anche qui, sui file del momento (13/10
                 # sera, banco della temperatura L7: senza, l'esito degli esempi restava vuoto e
                 # il banco diceva «rossi» con il codice ormai giusto)
-                if lav.tipo == "estensione":
+                if lav.tipo in ("estensione", "codice"):
                     self._esito_accettazione(lav, self._sandbox, ris)
         except ErroreSandbox as e:
             lav.stato = "errore"
@@ -1404,9 +1405,18 @@ class Lavori:
         from .riproduzione import codice as solo_codice
         nuovo = (not getattr(lav, "correzione", False)
                  and not solo_codice(dict(getattr(lav, "file_iniziali", None) or {})))
-        if not estensione and (sv is None or not nuovo):
+        # Un programma (17/10, #10): in uno sviluppo la passata scrive anche gli esempi a riga
+        # di comando; fuori da uno sviluppo la fa solo con agenti_accettazione_programmi_sempre
+        # (spento di serie: una chiamata in più per ogni programma chiesto a voce), senza
+        # domande. Su un file della persona niente esempi
+        programma = lav.tipo == "codice" and not getattr(lav, "input", None)
+        fuori = programma and bool(getattr(self.cfg, "agenti_accettazione_programmi_sempre",
+                                           False))
+        if not estensione and (not nuovo or (sv is None and not fuori)):
             lav.accettazione = {"stato": "saltata"}
             return None
+        from .ciclo import Agente
+        linguaggi = Agente._linguaggi(sb, programmi=True)
         from ..requisiti import da_fare
         requisiti = [dict(r) for r in da_fare(list(getattr(sv, "requisiti", None) or []))]
         parole = str(getattr(sv, "richiesta", "") or "").strip() or lav.dati_testo()
@@ -1414,12 +1424,16 @@ class Lavori:
         if stato.get("stato") == "domanda":
             risposta = (stato.get("domanda") or "", str(lav.risposta or "").strip())
         chiedere = (nuovo and risposta is None and bool(lav.persona)
+                    and (estensione or sv is not None)
                     and len(lav.domande) < int(getattr(self.cfg, "agenti_domande_max", 3)))
         lav.passo = "rilegge la richiesta prima di cominciare"
         t0 = time.monotonic()
         an, esito = acc.analizza(self, lav.compito, requisiti, parole, estensione, gioco,
                                  risposta, float(getattr(self.cfg, "agenti_accettazione_s",
-                                                         90.0)))
+                                                         90.0)),
+                                 programma=programma, linguaggi=linguaggi,
+                                 ragionamento=int(getattr(
+                                     self.cfg, "agenti_accettazione_ragionamento", 0) or 0))
         secondi = round(time.monotonic() - t0, 1)
         if an is None:
             self.log(f"[AGENTI] {lav.id}: analisi prima del codice non fatta ({esito}, "
@@ -1441,9 +1455,14 @@ class Lavori:
         # 13/10: per un gioco nuovo gli esempi in forma chiusa (comandi, mosse, stato atteso)
         # giocati con la macchina a stati di Calliope (accettazione.test.js)
         nome_file = acc.FILE_GIOCO if gioco else acc.FILE
-        if (estensione or gioco) and an["esempi"]:
+        prog = (an.get("programma") or {}).get("file") if programma else None
+        if prog:
+            # Un programma a riga di comando (17/10, #10): Python o JavaScript
+            nome_file, testo_esempi = acc.file_programma(an)
+        if (estensione or gioco or prog) and an["esempi"]:
             try:
-                sb.scrivi(nome_file, acc.test_js(an) if gioco else acc.test_python(an))
+                sb.scrivi(nome_file, testo_esempi if prog else
+                          acc.test_js(an) if gioco else acc.test_python(an))
                 sb.sola_lettura |= {nome_file}
                 scritto = True
             except Exception as e:  # noqa: BLE001 — senza esempi il lavoro parte comunque
@@ -1464,7 +1483,11 @@ class Lavori:
                             "al_collaudo": an["al_collaudo"],
                             "testi_al_collaudo": testi(an["al_collaudo"]),
                             "scelte": an["scelte"], "domande": 1 if risposta else 0,
-                            "secondi": secondi}
+                            "secondi": secondi,
+                            # Il programma dichiarato, o perché senza esempi (17/10, #10)
+                            **({"programma": prog} if prog and scritto else {}),
+                            **({"senza_esempi": an.get("senza_esempi") or "nessun esempio"}
+                               if programma and not scritto else {})}
         self.log(f"[AGENTI] {lav.id}: analisi prima del codice ({secondi} s): "
                  f"{len(an['esempi'])} esempi di accettazione"
                  + (f", {len(an['riconosciuti'])} valori nominati da riconoscere"
@@ -1475,7 +1498,10 @@ class Lavori:
                      ("contiene", "parole tolte che ripetono i dati"))
                      for n in [(an.get("tolti") or {}).get(k)] if n)
                  + (f", al collaudo i requisiti {an['al_collaudo']}" if an["al_collaudo"]
-                    else "") + (f", {len(an['scelte'])} scelte" if an["scelte"] else ""))
+                    else "") + (f", {len(an['scelte'])} scelte" if an["scelte"] else "")
+                 + (f", programma {prog}" if prog and scritto else
+                    f", niente esempi per il programma: {lav.accettazione['senza_esempi']}"
+                    if programma and not scritto else ""))
         if sv is not None and requisiti and svs is not None:
             try:
                 svs.segna_accettazione(sv, lav.accettazione["testi_al_collaudo"])
@@ -1520,6 +1546,41 @@ class Lavori:
                                       [x for n, x in zip(provati, testi) if n in rossi])
             except Exception as e:  # noqa: BLE001
                 self.log(f"[AGENTI] {lav.id}: requisiti provati non segnati: {e}")
+
+    def _controlla_programma(self, lav: Lavoro):
+        """Il controllo della consegna di un programma con l'interfaccia dichiarata
+        dall'analisi (17/10, #10, come il manifesto delle estensioni): il file con quel nome.
+        Lo dice all'agente **una volta**: un'interfaccia troppo rigida non deve far rifiutare
+        un programma giusto fino al tetto (gli esempi rossi lo diranno comunque). None senza
+        un programma dichiarato: la consegna di sempre."""
+        if not (getattr(lav, "accettazione", None) or {}).get("programma"):
+            return None
+        detto = []
+
+        def controlla(sandbox):
+            from .accettazione import controlla_nome
+            if detto:
+                return None
+            errore = controlla_nome(sandbox, getattr(lav, "accettazione", None))
+            if errore:
+                detto.append(errore)
+                self.log(f"[AGENTI] {lav.id}: consegna senza il programma dichiarato, lo dico "
+                         "all'agente")
+            return errore
+        return controlla
+
+    def _programma_dichiarato(self, lav: Lavoro, sb, ris: dict):
+        """Dopo un lavoro di codice (17/10, #10): il programma da eseguire è quello dichiarato,
+        se l'agente non ne ha indicato un altro, e l'esito degli esempi va nel risultato. Mai
+        un'eccezione."""
+        a = getattr(lav, "accettazione", None) or {}
+        f = a.get("programma")
+        try:
+            if f and not str(ris.get("programma") or "").strip() and (sb.root / f).is_file():
+                ris["programma"] = f
+        except Exception:  # noqa: BLE001
+            pass
+        self._esito_accettazione(lav, sb, ris)
 
     def _file_del_giro(self, lav: Lavoro, riuso=None):
         """Un lavoro della modalità sviluppo che riparte da un giro fermo (12/10, A4 e A5:
@@ -1775,7 +1836,14 @@ class Lavori:
                 n = t.get("eseguiti") or 0
                 ko = (t.get("falliti") or 0) + (t.get("errori") or 0)
                 test = ""
-                if t and r.get("test_passano"):
+                acc = getattr(lav, "accettazione", None) or {}
+                if t and r.get("test_passano") and lav.tipo == "codice" and not (
+                        acc.get("stato") == "pronta" and acc.get("file")):
+                    # Un programma senza esempi (17/10, #10, «consegnalo così» della ricerca):
+                    # i test dell'agente da soli ereditano le sue ipotesi, e lo si dice
+                    test = (f" I test che ha scritto passano, {n} su {n}, ma nessun esempio "
+                            "indipendente li conferma.")
+                elif t and r.get("test_passano"):
                     test = f" I test che ha scritto passano, {n} su {n}."
                 elif t:
                     test = f" Dei test che ha scritto ne passano {max(0, n - ko)} su {max(n, ko)}."

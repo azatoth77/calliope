@@ -1642,6 +1642,16 @@ class Config:
     # false = come prima. Secondi al più per la passata
     agenti_accettazione: bool = True
     agenti_accettazione_s: float = 90.0
+    # Dal 17/10 (#10) anche per i programmi a riga di comando: l'analisi dichiara il file e come
+    # si usa, gli esempi lo eseguono con argomenti e stdin. In uno sviluppo sempre; un programma
+    # chiesto fuori da uno sviluppo fa la passata (senza domande) solo con
+    # agenti_accettazione_programmi_sempre: true, spento finché il banco della temperatura
+    # (caso «media») non dice che la chiamata in più vale. Ragionamento della passata: tanti
+    # token (vLLM: thinking_token_budget); 0 = spento, come dal 13/10. Da accendere solo dopo
+    # il mini-banco (prove/manuali/banco_analisi_ragionamento.py): più domande trovate contro
+    # secondi in più, e oltre agenti_accettazione_s la passata salta
+    agenti_accettazione_programmi_sempre: bool = False
+    agenti_accettazione_ragionamento: int = 0
     # Lavori interrotti da un riavvio di Calliope (06/10, calliope/agenti/ripresa.py): chi li
     # aveva chiesti lo sente al primo silenzio («… Lo rifaccio?») se il lavoro era vivo meno
     # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavoro_stato, per un giorno
@@ -3359,6 +3369,7 @@ SEZIONI: dict[str, list[str]] = {
                "agenti_analisi", "agenti_analisi_s", "agenti_risultato_s",
                "agenti_precedenza_voce", "agenti_ripresa_s", "agenti_arbitro", "agenti_pausa_vllm",
                "agenti_domande_max", "agenti_accettazione", "agenti_accettazione_s",
+               "agenti_accettazione_programmi_sempre", "agenti_accettazione_ragionamento",
                "agenti_attesa_risposta_min", "agenti_file_max_mb", "agenti_file_caratteri",
                "agenti_esempi_max", "agenti_esempio_kb", "agenti_interrotti_annuncio_h",
                "sviluppo_enabled", "sviluppo_sospendi_min", "sviluppo_promemoria",

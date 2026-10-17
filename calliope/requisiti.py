@@ -235,10 +235,14 @@ def _cliente(svc, dalla_voce: bool):
 
 
 def chiama(svc, sistema: str, utente: str, schema: dict, tempo_s: float, attesa=None,
-           frase_attesa: str = "", dalla_voce: bool = True, num_predict: int = 700):
+           frase_attesa: str = "", dalla_voce: bool = True, num_predict: int = 700,
+           ragionamento: int = 0, uso: dict | None = None):
     """(dict, "modello") dal modello dell'agente con l'output strutturato, o (None, esito):
     «tempo», «errore: …», «senza agente». Una passata, senza ragionamento, temperatura 0, entro
-    `tempo_s`; `attesa(frase)` dopo ATTESA_DOPO_S. Mai un'eccezione."""
+    `tempo_s`; `attesa(frase)` dopo ATTESA_DOPO_S. Mai un'eccezione. `ragionamento` (17/10,
+    #10, la passata dell'analisi prima del codice: Config.agenti_accettazione_ragionamento): i
+    token di ragionamento concessi (vLLM: thinking_token_budget), in più a `num_predict`; 0 =
+    spento. `uso`: riceve token generati e del prompt, caratteri di ragionamento e secondi."""
     if svc is None or getattr(svc, "cliente", None) is None or getattr(svc, "imp", None) is None:
         return None, "senza agente"
     try:
@@ -249,10 +253,15 @@ def chiama(svc, sistema: str, utente: str, schema: dict, tempo_s: float, attesa=
     body = {"model": svc.imp.modello,
             "messages": [{"role": "system", "content": sistema},
                          {"role": "user", "content": utente}],
-            "think": False, "format": schema,
-            "options": {"temperature": 0.0, "num_predict": num_predict, "num_ctx": num_ctx},
+            "think": bool(ragionamento and ragionamento > 0), "format": schema,
+            "options": {"temperature": 0.0,
+                        "num_predict": num_predict + max(0, int(ragionamento or 0)),
+                        "num_ctx": num_ctx},
             "keep_alive": getattr(getattr(svc, "cfg", None), "llm_keep_alive", None) or "30m"}
+    if ragionamento and ragionamento > 0:
+        body["thinking_budget"] = int(ragionamento)
     out: dict = {}
+    t0 = time.monotonic()
     tid: list = []
     try:
         cliente = _cliente(svc, dalla_voce)
@@ -285,7 +294,12 @@ def chiama(svc, sistema: str, utente: str, schema: dict, tempo_s: float, attesa=
         return None, "tempo"
     if "errore" in out:
         return None, "errore: " + out["errore"]
-    testo = str((out.get("r") or {}).get("content") or "").strip()
+    r = out.get("r") if isinstance(out.get("r"), dict) else {}
+    if uso is not None:
+        uso.update(eval=int(r.get("eval") or 0), prompt=int(r.get("prompt") or 0),
+                   ragionamento=len(str(r.get("thinking") or "")),
+                   s=round(time.monotonic() - t0, 2))
+    testo = str(r.get("content") or "").strip()
     testo = re.sub(r"^```(?:json)?\s*|\s*```$", "", testo)
     try:
         dati = json.loads(testo)

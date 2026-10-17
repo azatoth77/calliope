@@ -270,12 +270,13 @@ class ClienteFinto:
         return {"content": r if isinstance(r, str) else json.dumps(r, ensure_ascii=False)}
 
 
-def _servizio(risposte, accesa=True, sviluppi=None):
+def _servizio(risposte, accesa=True, sviluppi=None, programmi=False):
     from types import SimpleNamespace
     from calliope.agenti.servizio import Lavori
     from calliope.config import Config
     cfg = Config()
     cfg.agenti_accettazione = accesa
+    cfg.agenti_accettazione_programmi_sempre = programmi
     log = []
     s = SimpleNamespace(cfg=cfg, log=log.append, sviluppi=sviluppi, imp=SimpleNamespace(
         modello="agente-finto"), cliente=ClienteFinto(risposte), arbitro=None)
@@ -525,7 +526,8 @@ def prova_servizio(tmp: Path):
     s, log = _servizio([ANALISI])
     lav = _lavoro("A5", tipo="codice")
     r = s.analisi(lav, G.sandbox(tmp, "srv-5"))
-    verifica("contrario: un programma fuori da uno sviluppo non fa la passata",
+    verifica("contrario: un programma fuori da uno sviluppo non fa la passata (di serie, anche "
+             "dal 17/10: agenti_accettazione_programmi_sempre spento)",
              r is None and lav.accettazione == {"stato": "saltata"} and not s.cliente.corpi)
     s, log = _servizio(["questo non è JSON"])
     sb = G.sandbox(tmp, "srv-6")
@@ -1093,6 +1095,353 @@ test("avanti dopo la porta", async () => {
              and "vale solo nella fase «esito»" in u and "ok avanti dopo la porta" in u, u[-700:])
 
 
+# ═══════════════════ 7. gli esempi per i programmi a riga di comando (17/10, #10) ═══════════════════
+
+RICHIESTA_MEDIA = ("Un programma «media voti»: riceve i voti come argomenti (numeri da 1 a 10, "
+                   "anche con la virgola) e stampa la media con due decimali; con un voto fuori "
+                   "da 1 a 10 dice che il voto non è valido ed esce con un errore.")
+REQ_MEDIA = [{"testo": "stampa la media dei voti con due decimali"},
+             {"testo": "un voto fuori da 1 a 10 non è valido"}]
+ANALISI_PROGRAMMA = {
+    "contraddizioni": [], "scelte": ["senza voti usa 7 e 8 come esempio"], "al_collaudo": [],
+    "programma": {"linguaggio": "python", "file": "media_voti.py",
+                  "interfaccia": "riga_di_comando"},
+    "esempi": [
+        {"requisito": 1, "argomenti": ["5", "8", "9"], "numero": 7.33, "tolleranza": 0.01,
+         "calcolo": "(5 + 8 + 9) / 3"},
+        {"requisito": 1, "argomenti": ["6,5", "8"], "numero": 7.25, "calcolo": "(6.5 + 8) / 2"},
+        {"requisito": 2, "argomenti": ["11", "8"], "contiene": "non valido",
+         "codice_uscita": 1},
+        # contrari, tolti dal codice:
+        {"requisito": 1, "argomenti": [], "numero": 7.5},                 # senza dati
+        {"requisito": 1, "argomenti": ["7", "otto"], "numero": 7.5},      # parola non detta
+        {"requisito": 1, "argomenti": ["7", "8"], "numero": 9, "calcolo": "(7 + 8) / 2"},
+        {"requisito": 1, "argomenti": ["5"]},                              # niente da controllare
+        {"requisito": 1, "argomenti": ["5", "8", "9"], "numero": 7.33},    # doppione
+        {"requisito": 1, "argomenti": ["7", "8", "6"], "numero": 7},       # risultato = un dato
+        {"requisito": 1, "argomenti": ["7", "8"], "numero": 7.5, "contiene": "media 8"}]}
+MEDIA_GIUSTA = '''import sys
+
+
+def main(argv):
+    voti = [float(x.replace(",", ".")) for x in argv] if argv else [7.0, 8.0]
+    for v in voti:
+        if not 1 <= v <= 10:
+            print(f"Il voto {v:g} non è valido: deve essere da 1 a 10.")
+            sys.exit(1)
+    media = sum(voti) / len(voti)
+    print(f"La media di {len(voti)} voti è {media:.2f}".replace(".", ","))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
+'''
+# Il genere di errore che i test dell'agente non vedono: il controllo dei voti dimenticato
+MEDIA_SENZA_CONTROLLO = MEDIA_GIUSTA.replace("        if not 1 <= v <= 10:", "        if False:")
+# Lo scheletro dei programmi (scheletri.PROGRAMMA_PYTHON) con il nome giusto: stampa i dati
+SCHELETRO_PROGRAMMA = '''import sys
+
+
+def main(argv):
+    a, b = (float(x) for x in argv[:2]) if len(argv) >= 2 else (3.0, 5.0)
+    print(f"La somma di {a:g} e {b:g} è {a + b:g}")
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
+'''
+MEDIA_JS = '''"use strict";
+const voti = process.argv.slice(2).map((x) => Number(x.replace(",", ".")));
+for (const v of voti) {
+  if (!(v >= 1 && v <= 10)) { console.log(`Il voto ${v} non è valido.`); process.exit(1); }
+}
+const media = voti.reduce((a, b) => a + b, 0) / voti.length;
+console.log(`La media è ${media.toFixed(2).replace(".", ",")}`);
+'''
+
+
+def prova_programmi_interpreta():
+    sezione("7a. i programmi: l'interfaccia dichiarata e gli esempi in forma chiusa")
+    from calliope.agenti import accettazione as acc
+    testo = RICHIESTA_MEDIA + " " + " ".join(r["testo"] for r in REQ_MEDIA)
+    an = acc.interpreta(ANALISI_PROGRAMMA, 2, False, testo=testo, programma=True)
+    verifica("il programma dichiarato: file e linguaggio", an["programma"] == {
+        "file": "media_voti.py", "linguaggio": "python"}, str(an.get("programma")))
+    verifica("quattro esempi validi: tolti quello senza dati, la parola che la richiesta non "
+             "dice, il conto che non torna, niente da controllare, il doppione, il risultato "
+             "uguale a un dato (non distingue lo scheletro che ristampa i dati)",
+             [e["argomenti"] for e in an["esempi"]] == [["5", "8", "9"], ["6,5", "8"],
+                                                         ["11", "8"], ["7", "8"]]
+             and an["tolti"]["fuori"] == 1 and an["tolti"]["numero"] == 1
+             and an["tolti"]["dati"] == 1,
+             json.dumps(an["esempi"], ensure_ascii=False) + str(an.get("tolti")))
+    verifica("…il numero dal calcolo, l'errore con il codice d'uscita, «contiene» senza i numeri",
+             an["esempi"][1]["numero"] == 7.25 and an["esempi"][2]["codice_uscita"] == 1
+             and an["esempi"][2]["contiene"] == "non valido" and an["esempi"][3]["contiene"] == "",
+             str(an["esempi"]))
+    an_ok = acc.interpreta(dict(ANALISI_PROGRAMMA, esempi=ANALISI_PROGRAMMA["esempi"][:3]), 2,
+                           False, testo=testo, programma=True)
+    contrari = {}
+    for nome, prog, lg in (
+            ("su file", {"interfaccia": "file"}, ("python",)),
+            ("C#", {"linguaggio": "csharp", "file": "media.cs"}, ("python", "csharp")),
+            ("JavaScript senza Node", {"linguaggio": "javascript", "file": "media.js"},
+             ("python",)),
+            ("nome di un test", {"file": "test_media.py"}, ("python",)),
+            ("nome di un modulo", {"file": "random.py"}, ("python",)),
+            ("estensione sbagliata", {"file": "media.js"}, ("python",))):
+        d = dict(ANALISI_PROGRAMMA, programma={**ANALISI_PROGRAMMA["programma"], **prog})
+        a = acc.interpreta(d, 2, False, testo=testo, programma=True, linguaggi=lg)
+        contrari[nome] = (a["programma"], a["esempi"], a["senza_esempi"])
+    verifica("contrari senza esempi (come prima): un programma su file, il C#, il JavaScript "
+             "senza Node, il nome di un test o di un modulo, l'estensione sbagliata",
+             all(p == {} and e == [] and s for p, e, s in contrari.values()),
+             str(contrari))
+    verifica("…con il motivo nel registro", contrari["su file"][2] == "lavora su file della "
+             "persona" and contrari["C#"][2].startswith("linguaggio senza esempi"), str(contrari))
+    js = dict(ANALISI_PROGRAMMA, programma={**ANALISI_PROGRAMMA["programma"],
+                                             "linguaggio": "javascript", "file": "media_voti.js"})
+    aj = acc.interpreta(js, 2, False, testo=testo, programma=True,
+                        linguaggi=("python", "javascript"))
+    verifica("in JavaScript con Node acceso (#54) gli esempi ci sono, nel file .test.js",
+             aj["programma"]["linguaggio"] == "javascript" and len(aj["esempi"]) == 4
+             and acc.file_programma(aj)[0] == acc.FILE_GIOCO, str(aj["programma"]))
+    a0 = acc.interpreta(ANALISI_PROGRAMMA, 2, False, testo=testo)
+    verifica("contrario: senza `programma` (un programma nello sviluppo con un file della "
+             "persona) niente esempi, come prima", a0["esempi"] == [] and "programma" not in a0)
+    sch = acc.schema(False, False, True)["properties"]
+    verifica("lo schema del programma ha l'interfaccia e gli esempi con argomenti e stdin",
+             sch["programma"]["properties"]["interfaccia"]["enum"] == list(acc.INTERFACCE)
+             and "stdin" in sch["esempi"]["items"]["properties"]
+             and "programma" not in acc.schema(False)["properties"])
+    v = acc.vincolo(an_ok, True)
+    verifica("i vincoli dicono il file, il nome in consegna e gli esempi in sola lettura",
+             "«media_voti.py»" in v and "programma = «media_voti.py»" in v
+             and acc.FILE in v and "IN SOLA LETTURA" in v and "stdin" not in v, v)
+
+
+def prova_programmi_test(tmp: Path):
+    sezione("7b. test_accettazione.py di un programma: verde sul giusto, rosso sullo scheletro")
+    from calliope.agenti import accettazione as acc
+    testo = RICHIESTA_MEDIA
+    an = acc.interpreta(dict(ANALISI_PROGRAMMA, esempi=ANALISI_PROGRAMMA["esempi"][:3]), 2,
+                        False, testo=testo, programma=True)
+    nome, contenuto = acc.file_programma(an)
+    esiti = {}
+    for caso, codice, file in (("giusto", MEDIA_GIUSTA, "media_voti.py"),
+                               ("senza_controllo", MEDIA_SENZA_CONTROLLO, "media_voti.py"),
+                               ("scheletro", SCHELETRO_PROGRAMMA, "media_voti.py"),
+                               ("altro_nome", MEDIA_GIUSTA, "media.py")):
+        sb = G.sandbox(tmp, f"prog-{caso}")
+        sb.scrivi(file, codice)
+        sb.scrivi(nome, contenuto)
+        esiti[caso] = sb.test(nome)
+    g, s, k, n = (esiti[x] for x in ("giusto", "senza_controllo", "scheletro", "altro_nome"))
+    verifica("con il programma giusto i tre esempi passano (e il file c'è)", nome == acc.FILE
+             and g["passano"] and g["esito"]["eseguiti"] == 4, str(g["esito"]) + g["uscita"][-500:])
+    verifica("senza il controllo dei voti: rosso solo l'esempio del voto 11, con cosa ha stampato",
+             not s["passano"] and acc.rossi(s["uscita"]) == [2] and s["esito"]["falliti"] == 1
+             and "deve fermarsi con un errore" in s["uscita"], s["uscita"][-600:])
+    verifica("sullo scheletro (stampa i dati) falliscono tutti gli esempi",
+             not k["passano"] and k["esito"]["falliti"] + k["esito"]["errori"] == 3,
+             str(k["esito"]) + k["uscita"][-600:])
+    verifica("con un altro nome falliscono tutti e lo dice", not n["passano"]
+             and n["esito"]["falliti"] + n["esito"]["errori"] == 4
+             and "manca il programma media_voti.py" in n["uscita"], n["uscita"][-400:])
+    # Il risultato uguale a un dato (il massimo di 3 e 9): l'esempio non distingue, si toglie
+    mx = acc.interpreta({"programma": {"linguaggio": "python", "file": "massimo.py",
+                                       "interfaccia": "riga_di_comando"},
+                         "esempi": [{"requisito": 1, "argomenti": ["3", "9"], "numero": 9},
+                                    {"requisito": 1, "argomenti": ["3", "9"], "numero": 9,
+                                     "contiene": "massimo"}]},
+                        1, False, testo="il massimo dei numeri", programma=True)
+    verifica("contrario: il risultato uguale a un dato non si controlla (resta la parola)",
+             mx["esempi"] == [{"requisito": 1, "argomenti": ["3", "9"], "stdin": "",
+                               "numero": None, "tolleranza": None, "contiene": "massimo",
+                               "codice_uscita": None}] and mx["tolti"]["dati"] == 2,
+             str(mx["esempi"]))
+    # JavaScript (17/10, #54): Node in un processo figlio, con i permessi di esegui_js
+    js = dict(ANALISI_PROGRAMMA, programma={**ANALISI_PROGRAMMA["programma"],
+                                             "linguaggio": "javascript", "file": "media_voti.js"},
+              esempi=ANALISI_PROGRAMMA["esempi"][:3])
+    aj = acc.interpreta(js, 2, False, testo=testo, programma=True,
+                        linguaggi=("python", "javascript"))
+    nome_j, cont_j = acc.file_programma(aj)
+    ej = {}
+    for caso, codice in (("giusto", MEDIA_JS), ("senza_controllo", MEDIA_JS.replace(
+            "if (!(v >= 1 && v <= 10))", "if (false)"))):
+        sb = G.sandbox(tmp, f"progjs-{caso}")
+        sb.scrivi("media_voti.js", codice)
+        sb.scrivi(nome_j, cont_j)
+        r = sb.test(nome_j)
+        ej[caso] = (acc.esito_js(r.get("uscita")), r.get("uscita") or "")
+    verifica("in JavaScript: verde sul giusto, rosso solo il voto 11 senza il controllo",
+             ej["giusto"][0] == (True, []) and ej["senza_controllo"][0] == (False, [2]),
+             str({k: (v[0], v[1][-400:]) for k, v in ej.items()}))
+
+
+def prova_programmi_servizio(tmp: Path):
+    sezione("7c. il programma nel servizio: la passata, il nome alla consegna, il tetto, la frase")
+    from calliope.agenti import accettazione as acc
+    s, log = _servizio([ANALISI_PROGRAMMA], programmi=True)
+    sb = G.sandbox(tmp, "psrv-1")
+    lav = _lavoro("P1", tipo="codice")
+    lav.compito = RICHIESTA_MEDIA
+    r = s.analisi(lav, sb)
+    a = lav.accettazione
+    verifica("un programma nuovo fuori da uno sviluppo con agenti_accettazione_programmi_sempre: "
+             "la passata scrive gli esempi in sola lettura e il programma dichiarato", r is None and a.get("stato") == "pronta"
+             and a.get("programma") == "media_voti.py" and a.get("esempi") == 4
+             and (sb.root / acc.FILE).is_file() and acc.FILE in sb.sola_lettura
+             and "programma = «media_voti.py»" in lav.vincoli, str(a) + lav.vincoli[:200])
+    corpo = s.cliente.corpi[0]
+    verifica("…lo schema del programma, il prompt con l'interfaccia, senza ragionamento di "
+             "serie", "programma" in corpo["format"]["properties"]
+             and "riga_di_comando" in corpo["messages"][0]["content"]
+             and corpo["think"] is False and "thinking_budget" not in corpo, str(corpo)[:300])
+    # In uno sviluppo gli esempi ci sono anche di serie (la passata c'era già)
+    from types import SimpleNamespace as NS
+    svs = SviluppiFinti(NS(requisiti=[dict(r) for r in REQ_MEDIA], richiesta=RICHIESTA_MEDIA))
+    svs.segna_accettazione = lambda *a: None
+    s, log = _servizio([ANALISI_PROGRAMMA], sviluppi=svs)
+    sb = G.sandbox(tmp, "psrv-sv")
+    lav = _lavoro("P0", tipo="codice")
+    r = s.analisi(lav, sb)
+    verifica("in uno sviluppo, di serie: gli esempi del programma e i requisiti provati",
+             r is None and lav.accettazione.get("programma") == "media_voti.py"
+             and lav.accettazione.get("requisiti_provati") == [1, 2]
+             and (sb.root / acc.FILE).is_file(), str(lav.accettazione))
+    dubbio = dict(ANALISI_PROGRAMMA, contraddizioni=[{"requisiti": [1], "domanda":
+                                                      "La media con quanti decimali"}])
+    s, log = _servizio([dubbio], programmi=True)
+    lav = _lavoro("P2", tipo="codice")
+    r = s.analisi(lav, G.sandbox(tmp, "psrv-2"))
+    verifica("contrario: fuori da uno sviluppo un programma non fa domande (come prima)",
+             r is None and lav.accettazione.get("stato") == "pronta", str(r))
+    s, log = _servizio([ANALISI_PROGRAMMA], programmi=True)
+    lav = _lavoro("P3", tipo="codice")
+    lav.input = {"percorso": "foto.txt", "dati": b"x"}
+    r = s.analisi(lav, G.sandbox(tmp, "psrv-3"))
+    verifica("contrario: un programma sul file della persona fuori da uno sviluppo non fa la "
+             "passata", r is None and lav.accettazione == {"stato": "saltata"}
+             and not s.cliente.corpi)
+    s, log = _servizio([dict(ANALISI_PROGRAMMA, programma={
+        "linguaggio": "csharp", "file": "media.cs", "interfaccia": "riga_di_comando"})],
+        programmi=True)
+    sb = G.sandbox(tmp, "psrv-4")
+    lav = _lavoro("P4", tipo="codice")
+    s.analisi(lav, sb)
+    verifica("contrario: il C# senza esempi, il motivo nel registro",
+             lav.accettazione.get("file") is False
+             and lav.accettazione.get("senza_esempi", "").startswith("linguaggio senza esempi")
+             and not (sb.root / acc.FILE).exists()
+             and any("niente esempi per il programma" in x for x in log), str(lav.accettazione))
+    s, log = _servizio([ANALISI_PROGRAMMA], programmi=True)
+    s.cfg.agenti_accettazione_ragionamento = 2048
+    s.analisi(_lavoro("P5", tipo="codice"), G.sandbox(tmp, "psrv-5"))
+    c = s.cliente.corpi[0]
+    verifica("con agenti_accettazione_ragionamento il ragionamento acceso, il suo tetto e i token "
+             "in più", c["think"] is True and c["thinking_budget"] == 2048
+             and c["options"]["num_predict"] == 2000 + 2048, str(c)[:200])
+    # Il nome alla consegna, una volta
+    from types import SimpleNamespace
+    from calliope.agenti.servizio import Lavori
+    srv = SimpleNamespace(log=log.append)
+    lav = _lavoro("P6", tipo="codice")
+    lav.accettazione = {"stato": "pronta", "file": True, "nome_file": acc.FILE,
+                        "programma": "media_voti.py"}
+    controlla = Lavori._controlla_programma(srv, lav)
+    sb = G.sandbox(tmp, "psrv-6")
+    sb.scrivi("media.py", MEDIA_GIUSTA)
+    e1, e2 = controlla(sb), controlla(sb)
+    verifica("la consegna senza il programma dichiarato: lo dice all'agente una volta",
+             e1 and "deve chiamarsi «media_voti.py»" in e1 and e2 is None, f"{e1} {e2}")
+    sb.scrivi("media_voti.py", MEDIA_GIUSTA)
+    verifica("…con il nome giusto passa; contrario: senza programma dichiarato niente controllo",
+             Lavori._controlla_programma(srv, lav)(sb) is None
+             and Lavori._controlla_programma(srv, _lavoro("P7", tipo="codice")) is None)
+    # Alla fine: il programma da eseguire e l'esito degli esempi
+    s, log = _servizio([ANALISI_PROGRAMMA], programmi=True)
+    sb = G.sandbox(tmp, "psrv-8")
+    lav = _lavoro("P8", tipo="codice")
+    s.analisi(lav, sb)
+    sb.scrivi("media_voti.py", MEDIA_SENZA_CONTROLLO)
+    s._esito_accettazione = lambda lv, x, rr: Lavori._esito_accettazione(s, lv, x, rr)
+    ris = {"esito": "fatto"}
+    Lavori._programma_dichiarato(s, lav, sb, ris)
+    verifica("alla fine il programma da eseguire è quello dichiarato e l'esito degli esempi è nel "
+             "risultato (rosso il requisito 2)", ris.get("programma") == "media_voti.py"
+             and ris["accettazione"]["passano"] is False and ris["accettazione"]["rossi"] == [2],
+             str(ris))
+    ris = {"esito": "fatto", "programma": "altro.py"}
+    Lavori._programma_dichiarato(s, lav, sb, ris)
+    verifica("contrario: quello indicato dall'agente resta", ris["programma"] == "altro.py")
+
+
+def prova_programmi_tetto(tmp: Path):
+    sezione("7d. al tetto un programma con gli esempi verdi è «fatto»; senza, la frase onesta")
+    from calliope.agenti import accettazione as acc
+    from calliope.agenti.ciclo import Lavoro
+
+    def gira(nome, ultima, esempi=True):
+        cli = G._Copione([[scrivi("media_voti.py", MEDIA_SENZA_CONTROLLO)], [ESEGUI_TEST],
+                          [scrivi("media_voti.py", ultima)]])
+        log = []
+        ag = G.agente(cli, log)
+        ag.max_passi = 3
+        sb = G.sandbox(tmp, nome)
+        lav = Lavoro(nome, "codice", RICHIESTA_MEDIA)
+        if esempi:
+            an = acc.interpreta(dict(ANALISI_PROGRAMMA, esempi=ANALISI_PROGRAMMA["esempi"][:3]),
+                                2, False, testo=RICHIESTA_MEDIA, programma=True)
+            f, t = acc.file_programma(an)
+            sb.scrivi(f, t)
+            sb.sola_lettura |= {f}
+            lav.accettazione = {"stato": "pronta", "file": True, "nome_file": f,
+                                "esempi": len(an["esempi"]), "programma": "media_voti.py"}
+        else:
+            sb.scrivi("test_media.py", "import unittest\n\n\nclass T(unittest.TestCase):\n"
+                      "    def test_ok(self):\n        self.assertTrue(True)\n")
+        try:
+            ris = ag.codice(lav, sb)
+        except Exception as e:  # noqa: BLE001 — Limite
+            ris = {"eccezione": type(e).__name__, "motivo": str(e)}
+        return lav, ris, log
+    lav, ris, log = gira("ptetto-verde", MEDIA_GIUSTA)
+    verifica("il programma giusto all'ultima passata, senza consegna: «fatto» al tetto con gli "
+             "esempi", ris.get("esito") == "fatto" and ris.get("consegna_al_tetto") == "passate"
+             and ris.get("riassunto", "").startswith("Il lavoro è fatto e passa tutti i 3 esempi"),
+             str(ris)[:300])
+    lav, ris, log = gira("ptetto-rosso", MEDIA_SENZA_CONTROLLO)
+    verifica("contrario: con il voto 11 accettato gli esempi sono rossi, «limite»",
+             ris.get("eccezione") == "Limite"
+             and any("esempi di accettazione rossi (requisiti [2])" in x for x in log), str(log[-2:]))
+    lav, ris, log = gira("ptetto-senza", MEDIA_GIUSTA, esempi=False)
+    verifica("contrario: senza esempi mai «fatto» d'ufficio, anche con i test dell'agente verdi",
+             ris.get("eccezione") == "Limite"
+             and any("senza esempi di accettazione" in x for x in log), str(log[-2:]))
+    # La frase a voce di un programma fermato al tetto con i suoi test verdi
+    from types import SimpleNamespace
+    from calliope.agenti.servizio import Lavori
+    s = SimpleNamespace(female=True, in_tappa=Lavori.in_tappa)
+    lv = Lavoro("PF", "codice", "x", titolo="Media voti")
+    lv.stato = "errore"
+    lv.risultato = {"esito": "limite", "motivo": "ho dovuto fermarlo: ha fatto 3 passate",
+                    "test": {"eseguiti": 2, "falliti": 0, "errori": 0}, "test_passano": True}
+    f = Lavori.frase_finale(s, lv)
+    verifica("senza esempi la frase lo dice: i suoi test passano, ma nessun esempio li conferma",
+             "I test che ha scritto passano, 2 su 2, ma nessun esempio indipendente li conferma."
+             in f, f)
+    lv.accettazione = {"stato": "pronta", "file": True}
+    f2 = Lavori.frase_finale(s, lv)
+    lv2 = Lavoro("PG", "estensione", "x", titolo="Media voti")
+    lv2.stato, lv2.risultato = "errore", dict(lv.risultato)
+    f3 = Lavori.frase_finale(s, lv2)
+    verifica("contrari: con gli esempi, o per un'estensione, la frase di prima",
+             "I test che ha scritto passano, 2 su 2." in f2 and "nessun esempio" not in f2
+             and "nessun esempio" not in f3, f"{f2} | {f3}")
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-fasi2-"))
@@ -1111,6 +1460,10 @@ if __name__ == "__main__":
         prova_esempi_contro_richiesta(radice / "banco")
         prova_manifesto_subito(radice / "manifesto")
         prova_macchina_avanti(radice / "avanti")
+        prova_programmi_interpreta()
+        prova_programmi_test(radice / "programmi")
+        prova_programmi_servizio(radice / "programmi-servizio")
+        prova_programmi_tetto(radice / "programmi-tetto")
     finally:
         shutil.rmtree(radice, ignore_errors=True)
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'} "
