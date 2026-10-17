@@ -221,13 +221,16 @@ ripetute dalla wake word in tutto). La caduta rimasta è un'altra: «TLS: 120 ap
 con `InvalidMessage` e la più lenta a 4,8 s, cioè il server che chiude una stretta di mano oltre
 il suo `open_timeout` di 3 s mentre 8 thread aprono insieme nello stesso processo della CPU
 piena; non è un'attesa della prova e non si distingue, dalla prova, dal difetto del 03/10 che
-quel controllo cerca: resta così, da riguardare se torna senza carico. Senza carico la prova dura
+quel controllo cerca: è un problema aperto, [#146](https://github.com/azatoth77/calliope/issues/146). Senza carico la prova dura
 90–95 s contro 103–107 di prima. Contrario (la stessa prova che non aspetta il riaddormentarsi, 3 corsie × 4 giri con lo stesso
 carico): 10 su 12, una caduta sul follow-up («ascolta» arrivato 0,33 s dopo l'inizio della
 frase, attacco perso) e una sul rifiuto per l'Origin con 3 s di tempo massimo (ora 10 s, come i
 rifiuti per il token: sono attese di una risposta).
 
-**Problemi aperti delle prove** (17/10): nessuno noto. *(Storico, 15/10: «le attese fisse di
+**Problemi aperti delle prove** (17/10): «TLS: 120 aperture» di `prova_satellite` cade 1 giro su 60
+sotto carico pieno (3 corsie, 16 processi): il server chiude una stretta di mano oltre il suo
+`open_timeout` di 3 s e dalla prova non si distingue dal difetto del 03/10 che quel controllo cerca
+([#146](https://github.com/azatoth77/calliope/issues/146)). *(Storico, 15/10: «le attese fisse di
 `prova_satellite`», chiuso il 17/10, sopra.)* *(Storico, 14/10:
 «la caduta rara di `prova_agenti` sul tunnel, da leggere con l'`errore` della diagnosi se torna»:
 trovata il 15/10, sopra.)* *(Storico:

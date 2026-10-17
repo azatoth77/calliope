@@ -502,22 +502,46 @@ def parte_attese():
     # Riconnessione (17/10, #5, trovato sotto carico: «il satellite si ricollega attraverso la
     # VPN» oltre 15 s): una sessione che si era collegata e poi cade riparte dalla prima attesa;
     # i tentativi falliti senza collegarsi allungano l'attesa (contrario)
-    r = object.__new__(Satellite)
-    r.cred, r.connessioni, r._fermo = {"token": "t"}, 0, threading.Event()
-    r.log, r._chiudi_sessione = (lambda m: None), (lambda: None)
-    attese, giri = [], iter(["giù", "giù", "giù", "collegata", "collegata", "fine"])
+    # Dalla revisione della PR #145: conta solo una sessione rimasta su almeno
+    # SESSIONE_STABILE_S; accolta e chiusa subito (contrario) le attese crescono, e con 4409
+    # (stesse credenziali su un altro satellite) si aspetta ATTESA_SOSTITUITO_S con una riga
+    from websockets.exceptions import ConnectionClosed
+    from websockets.frames import Close
+    from calliope.satellite import protocollo as P
 
-    def sessione():
-        g = next(giri)
-        if g == "collegata":
-            r.connessioni += 1
-        if g == "fine":
-            r._fermo.set()
-        raise ConnectionError(g)
-    r._sessione, r._attendi = sessione, attese.append
-    r._esegui()
-    ok("riconnessione: dopo una sessione collegata si riparte da 1 s (1, 2, 5 prima)",
+    def riconnessioni(giri_):
+        r = object.__new__(Satellite)
+        r.cred, r.connessioni, r._fermo = {"token": "t"}, 0, threading.Event()
+        r.cred_path = Path("satellite.json")
+        righe_, attese_, giri_ = [], [], iter(giri_)
+        r.log, r._chiudi_sessione = righe_.append, (lambda: None)
+
+        def sessione():
+            g = next(giri_)
+            if g in ("a lungo", "subito"):
+                r.connessioni += 1
+                r._collegato_dal = time.monotonic() - (r.SESSIONE_STABILE_S + 10
+                                                       if g == "a lungo" else 0.5)
+            if g == "fine":
+                r._fermo.set()
+            if g == "sostituito":
+                raise ConnectionClosed(Close(P.CHIUSO_SOSTITUITO, "sostituito"), None)
+            raise ConnectionError(g)
+        r._sessione, r._attendi = sessione, attese_.append
+        r._esegui()
+        return attese_, righe_
+
+    attese, _ = riconnessioni(["giù", "giù", "giù", "a lungo", "a lungo", "fine"])
+    ok("riconnessione: dopo una sessione collegata a lungo si riparte da 1 s (1, 2, 5 prima)",
        attese == [1, 2, 5, 1, 1], str(attese))
+    attese, _ = riconnessioni(["giù", "giù", "subito", "subito", "subito", "fine"])
+    ok("riconnessione: accolta e chiusa subito non azzera, le attese crescono (contrario)",
+       attese == [1, 2, 5, 10, 15], str(attese))
+    attese, righe_r = riconnessioni(["giù", "sostituito", "giù", "fine"])
+    ok("riconnessione: sostituito (4409) aspetta a lungo, con una riga chiara",
+       attese == [1, Satellite.ATTESA_SOSTITUITO_S, 1]
+       and Satellite.ATTESA_SOSTITUITO_S >= 60
+       and any("stesse credenziali" in x for x in righe_r), f"{attese}; {righe_r[-1:]}")
 
     porte = [porta_fuori_effimere() for _ in range(20)]
     ok("porte delle prove: fra 20000 e 31999, sotto le effimere di Windows e di Linux",
@@ -541,6 +565,8 @@ def parte_server(tmp: Path, voce_ok: bool):
     # Senza token, con un token sbagliato, da un browser
     # Tempi massimi di 10 s (17/10, #5): sono attese di una risposta che deve arrivare; con 3 s,
     # sotto carico, la stretta di mano del rifiuto per l'Origin scadeva (1 giro su 12)
+    # Il limite vero resta l'open_timeout di 3 s del server: se lì la stretta di mano scade, il
+    # server chiude e il controllo cade lo stesso; qui il margine copre solo il lato client
     with connect(url + P.PERCORSO_AUDIO, compression=None) as ws:
         ws.send(P.testo(tipo="ciao", versione=P.VERSIONE, token="sbagliato"))
         try:
@@ -573,8 +599,11 @@ def parte_server(tmp: Path, voce_ok: bool):
     # Abbinamento con un satellite vero (microfono e casse finti)
     scena, casse = Scena(), Casse()
     cfg_s = cfg_prova(tmp, satellite_server=url)
+    log_s = []
     sat = Satellite(cfg_s, sorgente=lambda **kw: MicFinto(scena, **kw),
-                    apri_uscita=casse.flusso, log=lambda m: None)
+                    apri_uscita=casse.flusso, log=log_s.append)
+    # Sostituito (4409) il satellite aspetta 60 s prima di riprovare (17/10, #5): qui 0,5 s
+    sat.ATTESA_SOSTITUITO_S = 0.5
     t = threading.Thread(target=sat.esegui, daemon=True)
     t.start()
     ok("il satellite nuovo mostra un codice di 6 cifre",
@@ -596,8 +625,9 @@ def parte_server(tmp: Path, voce_ok: bool):
         ws.send(P.testo(tipo="pronto", eco=None))
         ok("seconda connessione: benvenuto e sostituzione della prima",
            m.get("tipo") == "benvenuto" and aspetta(lambda: srv.attivo is not vecchio, 3))
-    ok("il satellite vero si ricollega dopo essere stato sostituito",
-       aspetta(lambda: sat.connessioni >= 2 and srv.attivo_pronto() is not None, 10))
+    ok("il satellite vero si ricollega dopo essere stato sostituito, e dice perché ha aspettato",
+       aspetta(lambda: sat.connessioni >= 2 and srv.attivo_pronto() is not None, 10)
+       and any("stesse credenziali" in x for x in log_s), " / ".join(log_s[-3:]))
     # Revoca: la connessione si chiude e il satellite torna a chiedere un codice
     srv.CONTROLLO_REVOCA_S = 0.3
     sat.codice = None
@@ -1224,8 +1254,8 @@ def _scenario(cal, sat, scena, casse, stt, frasi, porta_sat, log):
        sat.eco is not None and sat.eco < 0.05, str(sat.eco))
     aspetta(lambda: "In ascolto" in cal.testo() or "svegliarmi" in cal.testo(), 10)
     # Il satellite ascolta da addormentato (prima 0,5 s fissi dopo «In ascolto», 17/10 #5)
-    ok("dopo il saluto il satellite ascolta da addormentato",
-       riaddormentata(sat, casse, "dopo il saluto", dopo=0.0))
+    # Il satellite ascolta da addormentato (riaddormentata scrive da sé l'errore, una volta)
+    riaddormentata(sat, casse, "dopo il saluto", dopo=0.0)
 
     # Da addormentata: una frase senza nome non esce dal satellite. Il segno positivo viene
     # dopo (17/10, #5; prima 1,2 s di attesa): la domanda col nome che segue deve essere la
@@ -1346,7 +1376,7 @@ def _scenario(cal, sat, scena, casse, stt, frasi, porta_sat, log):
     ok("barge-in: il satellite si ferma da solo", fermata)
     t_int = sat.player.interrotta_a or time.monotonic()
     # Il blocco in corso allo scatto è finito (prima 1 s fisso)
-    aspetta(lambda: not sat.player.in_corso, 5)
+    finito = aspetta(lambda: not sat.player.in_corso, 5)
     coda = max(0.0, sat.player.ultima_scrittura - t_int)
     # Fermo entro un blocco = nessun blocco di voce **cominciato** dopo lo scatto (30 ms di
     # margine: il controllo e la scrittura non sono atomici). La fine dell'ultima scrittura
@@ -1355,8 +1385,9 @@ def _scenario(cal, sat, scena, casse, stt, frasi, porta_sat, log):
     with casse._lock:
         dopo = [round((x - t_int) * 1000) for x, _, v in casse.scritture if v and x > t_int + 0.03]
     ok("barge-in: riproduzione ferma entro un blocco da 100 ms (nessun blocco nuovo)",
-       not dopo, f"ultima scrittura finita {coda * 1000:.0f} ms dopo lo scatto"
-       + (f"; blocchi cominciati dopo: {dopo[:5]} ms" if dopo else ""))
+       finito and not dopo, f"ultima scrittura finita {coda * 1000:.0f} ms dopo lo scatto"
+       + (f"; blocchi cominciati dopo: {dopo[:5]} ms" if dopo else "")
+       + ("" if finito else "; la riproduzione non si è fermata entro 5 s"))
     # Il segno positivo (prima 2 s di attesa): «basta» è arrivato al server (fine
     # dell'ascolto col seme del barge-in), il server l'ha preso per un «basta» e ha aperto
     # l'ascolto dopo; tutto ciò che il server ha mandato prima è passato dal riproduttore

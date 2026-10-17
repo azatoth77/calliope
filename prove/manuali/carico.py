@@ -13,7 +13,8 @@ carico sono figli di questo script e finiscono con lui (anche con Ctrl+C).
 
 Stampa ogni giro (verde o caduto, secondi, frasi ripetute perché la wake word non è scattata:
 la riga «nota: N frasi ripetute» di prova_satellite, contata a parte per non confonderla con
-una caduta) e alla fine il riepilogo; l'uscita di ogni giro va in `--uscita` (di serie una
+una caduta) e alla fine il riepilogo; una prova saltata, anche in parte, ferma le corsie
+ed esce con 2 (la misura non vale); l'uscita di ogni giro va in `--uscita` (di serie una
 cartella temporanea), con le righe ERR in testa al file dei caduti.
 
 Le misure del 15/10 (`prova_telefono_audio`, `prova_esercizi_voce`) e del 17/10
@@ -71,13 +72,24 @@ def main(argv=None) -> int:
               for _ in range(a.carico)]
     for _ in range(a.porte):
         threading.Thread(target=porte_che_girano, args=(fine,), daemon=True).start()
-    esiti, lock = [], threading.Lock()
+    esiti, lock, saltati = [], threading.Lock(), []
     nome = Path(a.prova).stem
 
     def corsia(i: int):
         for g in range(a.giri):
+            if saltati:
+                return
             r = lancia(a.prova, [])
-            dur, testo, verde = r["dt"], r["out"], r["esito"] == "ok"
+            dur, testo = r["dt"], r["out"]
+            # Saltata (77) o saltata in parte (voci, modelli o CAM++ assenti nel worktree): il
+            # giro non vale né come verde né come caduta, e le corsie si fermano (17/10)
+            if r["esito"] == "saltata" or "SALTATA IN PARTE" in testo:
+                riga = next((x for x in testo.splitlines() if "SALTATA" in x), r["esito"])
+                with lock:
+                    saltati.append(riga)
+                    print(f"corsia {i} giro {g}: SALTATA, mi fermo — {riga.strip()}", flush=True)
+                return
+            verde = r["esito"] == "ok"
             m = re.search(r"nota: (\d+) frasi ripetute", testo)
             ripetute = int(m.group(1)) if m else 0
             err = [r for r in testo.splitlines() if r.startswith("ERR ")]
@@ -98,8 +110,12 @@ def main(argv=None) -> int:
     finally:
         for c in carico:
             c.kill()
+    if saltati:
+        print(f"\n{nome}: prova saltata ({saltati[0].strip()}): la misura non vale. Mancano file "
+              f"fuori da git nel worktree? (voices/, models/speaker/, wakeword/modelli/)")
+        return 2
     verdi = sum(e[2] for e in esiti)
-    durate = sorted(e[3] for e in esiti)
+    durate = sorted(e[3] for e in esiti) or [0.0]
     print(f"\n{nome}: {verdi}/{len(esiti)} verdi con {a.corsie} corsie, {a.carico} processi di "
           f"carico{f', {a.porte} thread di porte' if a.porte else ''}; durata mediana "
           f"{durate[len(durate) // 2]:.0f} s (massima {durate[-1]:.0f}); frasi ripetute "

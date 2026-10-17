@@ -252,6 +252,12 @@ non avere porte in rete.
   di 1. Nella prova: «il satellite si ricollega attraverso la «VPN»» oltre i 15 s, 2 giri su 3
   con 3 corsie e 16 processi di carico. Ora una sessione che si era collegata (`connessioni`
   cresciuto) riparte dalla prima attesa; i tentativi senza collegamento continuano ad allungarla.
+  Dalla revisione della PR #145: conta solo una sessione rimasta su almeno `SESSIONE_STABILE_S`
+  (30 s, più dell'ultima attesa); una sessione accolta e chiusa subito non azzera, e le attese
+  crescono. Chiuso con 4409 (sostituito: un altro satellite con le stesse credenziali, cartella
+  copiata o due programmi) il satellite lo scrive nel log e aspetta `ATTESA_SOSTITUITO_S` (60 s):
+  con la prima versione della correzione i due si toglievano il posto ogni secondo (40
+  connessioni in 40 s misurate in revisione, 9 con il codice di main).
 - **Ascolti del satellite** (`Satellite.ascolti`, solo diagnostica: istante, id, wake word e fine
   della finestra senza nome di ogni «ascolta», segnati quando l'ascolto parte davvero). Nessun
   effetto sul protocollo. Servono alle prove per sapere quando il satellite si è riaddormentato.

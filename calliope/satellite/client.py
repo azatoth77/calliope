@@ -45,6 +45,15 @@ from ..tts import UscitaLocale, dice_nome
 from . import protocollo as P
 
 ATTESE_RICONNESSIONE = (1, 2, 5, 10, 15)
+# Una sessione conta come «collegata» (e la caduta dopo riparte dalla prima attesa) solo se è
+# rimasta su almeno tanto (17/10, #5, revisione della PR #145): più dell'ultima attesa, così una
+# sessione accolta e chiusa subito (un errore del server dopo il benvenuto) non fa riprovare
+# ogni secondo per sempre, e le attese continuano ad allungarsi
+SESSIONE_STABILE_S = 30.0
+# Chiusa con 4409 (sostituito): un altro satellite usa le stesse credenziali (la cartella copiata
+# su un altro PC, due processi sulla stessa macchina). Riprovare subito vorrebbe dire togliersi
+# il posto a vicenda per sempre (misurato: 40 connessioni in 40 s): si aspetta a lungo
+ATTESA_SOSTITUITO_S = 60.0
 
 
 class ImprontaDiversa(Exception):
@@ -451,7 +460,7 @@ class Satellite:
     def _esegui(self):
         tentativi = 0
         while not self._fermo.is_set():
-            prima = self.connessioni
+            prima, self._collegato_dal = self.connessioni, None
             try:
                 if not self.cred.get("token"):
                     self.abbina()
@@ -474,11 +483,22 @@ class Satellite:
                 continue
             except Exception as e:  # noqa: BLE001 — rete giù, server spento, VPN spenta
                 if not self._fermo.is_set():
-                    if self.connessioni > prima:
-                        # La sessione si era collegata (17/10, #5): una caduta dopo riparte
-                        # dalla prima attesa. Prima valevano i tentativi falliti di prima del
-                        # collegamento: dopo un riavvio lungo del server, la caduta seguente
-                        # aspettava 10–15 s invece di 1
+                    rcvd = getattr(e, "rcvd", None)
+                    if getattr(rcvd, "code", None) == P.CHIUSO_SOSTITUITO:
+                        self.log("[SATELLITE] Un altro satellite si è collegato con le stesse "
+                                 f"credenziali ({self.cred_path.name}, cartella copiata o due "
+                                 f"programmi avviati?) e il server ha tenuto quello: riprovo tra "
+                                 f"{self.ATTESA_SOSTITUITO_S:.0f} s.")
+                        tentativi = 0
+                        self._attendi(self.ATTESA_SOSTITUITO_S)
+                        continue
+                    dal = getattr(self, "_collegato_dal", None)
+                    if (self.connessioni > prima and dal is not None
+                            and time.monotonic() - dal >= self.SESSIONE_STABILE_S):
+                        # La sessione era collegata da un po' (17/10, #5): una caduta dopo
+                        # riparte dalla prima attesa. Prima valevano i tentativi falliti di
+                        # prima del collegamento: dopo un riavvio lungo del server, la caduta
+                        # seguente aspettava 10–15 s invece di 1
                         tentativi = 0
                     attesa = ATTESE_RICONNESSIONE[min(tentativi, len(ATTESE_RICONNESSIONE) - 1)]
                     self.log(f"[SATELLITE] Server non raggiungibile ({_breve(e)}): riprovo tra "
@@ -500,6 +520,9 @@ class Satellite:
                 ws.close(1000, "satellite spento")
             except Exception:  # noqa: BLE001
                 pass
+
+    SESSIONE_STABILE_S = SESSIONE_STABILE_S
+    ATTESA_SOSTITUITO_S = ATTESA_SOSTITUITO_S
 
     def _attendi(self, s: float):
         self._fermo.wait(s)
@@ -577,6 +600,7 @@ class Satellite:
         self.satellite = m.get("satellite") or {}
         self.player.nuova_sessione()
         self.connessioni += 1
+        self._collegato_dal = time.monotonic()
         self.log(f"[SATELLITE] Collegato a {self.cfg.satellite_server} come «"
                  f"{self.satellite.get('nome')}» (stanza {self.satellite.get('stanza')})")
         if m.get("saluto"):
