@@ -3069,12 +3069,14 @@ lavoro.
 
 **Cosa resta della parte 2** (e perché): gli **esempi per i programmi** (un programma non ha
 un'interfaccia fissa: servirebbe dichiararla nell'analisi, nome del file e argomenti, e farla
-rispettare); i **test di accettazione dei giochi** dal progettista (aspettano la macchina a stati
+rispettare; *fatti il 17/10 per i programmi a riga di comando, issue #10: vedi «Gli esempi per i
+programmi» in fondo*); i **test di accettazione dei giochi** dal progettista (aspettano la macchina a stati
 dei giochi, come dice la ricerca alla domanda 5: con `gioco.js` libero i selettori cambiano a ogni
 versione; *fatti il 13/10, ramo `giochi-stati`: vedi sotto*); la passata con il **ragionamento acceso** e il campionamento consigliato (oggi
 temperatura 0 senza ragionamento, come requisiti e confronto: con l'uscita vincolata dallo schema
 il rischio di loop è basso, ma per *trovare buchi* il ragionamento aiuterebbe; da misurare con le
-domande vere); la **revisione che legge la nota dell'agente** su un esempio che gli sembra
+domande vere; *dal 17/10 l'interruttore `agenti_accettazione_ragionamento`, spento, e il mini-banco
+per misurarlo*); la **revisione che legge la nota dell'agente** su un esempio che gli sembra
 sbagliato; il **confronto del compito di gemma con le parole della persona** c'è solo dentro la
 passata (le parole vanno alla passata, che può farne una contraddizione), non come controllo a sé.
 
@@ -3202,7 +3204,8 @@ secco.
 
 **Da proporre, non fatto**: per i programmi (niente esempi) al tetto con i test dell'agente verdi
 si potrebbe dire nell'annuncio «i suoi test passano, ma nessun esempio indipendente li conferma»
-e offrire «consegnalo così» a voce, invece di chiudere d'ufficio. **Da guardare sulla DGX** al
+e offrire «consegnalo così» a voce, invece di chiudere d'ufficio. *[17/10, #10: la frase c'è; il
+«consegnalo così» a voce scartato per scritto, vedi «Gli esempi per i programmi» in fondo.]* **Da guardare sulla DGX** al
 prossimo banco: quanti lavori chiudono con `agente_consegna_al_tetto` e se la loro accettazione
 nascosta è sempre verde (deve esserlo: se no gli esempi sono troppo deboli).
 
@@ -3254,7 +3257,8 @@ chiuso con `agente_consegna_al_tetto`. Lavoro per lavoro, i due problemi:
    l'agente non ha fatto in tempo a consegnare.») e la frase a voce `AL_TETTO_CORREZIONE` («…ma il
    test del problema che mi hai segnalato adesso passa: il lavoro l'ho chiuso io.»). Una
    correzione **con** gli esempi resta com'era (esempi verdi e riproduzione non «uguale»,
-   «nessun_test» o «passa_prima»). Senza esempi né correzione (i programmi) ancora mai.
+   «nessun_test» o «passa_prima»). Senza esempi né correzione (i programmi) ancora mai. *[Dal 17/10 un programma a riga di comando
+ha gli esempi, e al tetto vale come un'estensione.]*
 2. **Gli stessi controlli alla terza passata a vuoto di fila** (L10). Il `Limite` del giro a vuoto
    ha ora il tipo `a_vuoto` e passa per `_consegna_al_tetto` come i tetti; in uno sviluppo (tappe)
    no, come prima. Il riassunto dice «Chiuso da me: l'agente girava a vuoto senza consegnare.»;
@@ -3441,3 +3445,97 @@ esecuzione scaduta in 3,2 s invece di 5,9–10,4. Il limite di priorità del job
 (`JOB_OBJECT_LIMIT_PRIORITY_CLASS`) era stato provato prima e non cambiava niente. Su Linux (DGX,
 Docker) niente cambia. Le altre cause delle cadute di `prova_agenti` (la porta del tunnel finto) in
 [`prove/LEGGIMI.md`](../../prove/LEGGIMI.md).
+
+## Gli esempi per i programmi e il ragionamento dell'analisi (17/10, issue #10, ramo `issue-10-esempi-programmi`)
+
+**Il caso.** Dei passi 3–4 del flusso a fasi (ricerca del 12/10, § 5.1) mancavano tre cose: gli
+esempi di accettazione per i programmi, la passata con il ragionamento e il «consegnalo così».
+L'effetto per chi chiede un programma: al tetto un programma giusto finiva «limite» anche con i
+test dell'agente verdi, perché senza un controllo indipendente non si chiude d'ufficio. Il
+progetto breve è nella ricerca (§ 5.5 e domanda 7). Qui ci sono le cose fatte e le scelte prese
+in attesa dell'approvazione.
+
+**L'interfaccia dichiarata dall'analisi** (`agenti/accettazione.py`). Per un programma la passata
+compila anche `programma: {linguaggio, file, interfaccia}`, con interfaccia «riga_di_comando»,
+«file» o «altro». Solo per la riga di comando scrive gli esempi `{requisito, argomenti, stdin,
+numero, calcolo, contiene, codice_uscita}`. Il codice li valida come quelli delle estensioni:
+- il file: minuscole e `_` con l'estensione del linguaggio. Mai `test…`, `accettazione`,
+  `estensione` o il nome di un modulo di Python (la sandbox lo rifiuterebbe);
+- il linguaggio: Python sempre, **JavaScript solo con Node acceso** tra i linguaggi dei programmi
+  (#54, `agenti_linguaggi`). Il **C#** no, perché non ha `esegui_test`, e il registro lo dice
+  («niente esempi per il programma: linguaggio senza esempi (csharp)»);
+- ogni esempio ha argomenti o stdin: senza, il programma usa valori d'esempio suoi, che la
+  richiesta non dice. Ogni esempio controlla anche una cosa che lo scheletro non passa: un numero
+  stampato, una parola, oppure un codice d'uscita diverso da 0;
+- si tolgono: una parola negli argomenti o nello stdin che la richiesta non dice (salvo l'esempio
+  d'errore), il «calcolo» che non torna con il numero, i doppioni e **il risultato uguale a un
+  dato** (la media di 7, 8 e 6 è 7). Il test toglie dall'uscita i numeri che ripetono i dati,
+  perché lo scheletro dei programmi stampa «La somma di 7 e 8 è 15» e con il 7 passerebbe; ma
+  allora un programma giusto che stampa «7» non passerebbe. Un esempio così non distingue, e il
+  numero si toglie (resta la parola, se c'è). Il prompt chiede dati con un risultato diverso da
+  ognuno.
+
+**Il test lo scrive il codice.** In Python `test_accettazione.py` esegue il programma **nello
+stesso processo**, con `runpy.run_path(…, run_name="__main__")` e con `sys.argv`, `sys.stdin` e
+l'uscita sostituiti, e legge il codice d'uscita (`SystemExit`) e le eccezioni. La issue proponeva
+un sottoprocesso, ma l'audit hook di `_avvio.py` non lascia avviare processi nella sandbox: così il
+test vale anche con il motore «processo». I numeri si leggono all'italiana e all'inglese («7,33»,
+«7.33», «1.234,5»). In JavaScript `accettazione.test.js` lancia Node in un processo figlio
+(`spawnSync`) con gli stessi permessi di `esegui_js`: i test JavaScript girano senza
+`--permission`, il programma sì. Un test in più dice se il file dichiarato manca.
+
+**Nel servizio** (`Lavori._analisi_prima_`, `_controlla_programma`, `_programma_dichiarato`):
+- in uno **sviluppo** la passata c'era già, per le contraddizioni. Ora scrive anche gli esempi del
+  programma, e i requisiti provati vanno alla revisione come per le estensioni;
+- **fuori da uno sviluppo** un programma nuovo fa la passata solo con
+  `agenti_accettazione_programmi_sempre: true` (nuovo, **spento di serie**). È una chiamata in più
+  a vLLM (5–60 s) prima di ogni programma chiesto a voce, e la decisione aspetta il banco. La
+  passata non fa domande, come prima, e mai su un file della persona (`lav.input`: l'interfaccia su
+  file è un progetto a sé);
+- il vincolo per l'agente dice il file, «in consegna programma = …» e che gli esempi sono in sola
+  lettura. La consegna senza quel file lo dice all'agente **una volta**, poi accetta (gli esempi
+  rossi lo diranno): così un'interfaccia troppo rigida non porta al tetto un programma giusto;
+- alla fine il programma da eseguire davanti alla persona è quello dichiarato, se l'agente non ne
+  ha indicato un altro. L'esito degli esempi va nel risultato anche per i lavori di codice, anche
+  al «limite»;
+- al tetto `_consegna_al_tetto` vale com'era: con gli esempi verdi il programma è «fatto» («Il
+  lavoro è fatto e passa tutti i 3 esempi di accettazione e i suoi test. Chiuso al tetto…»).
+
+**«Consegnalo così».** La frase è fatta: un programma fermato al tetto con i suoi test verdi e
+senza esempi dice «I test che ha scritto passano, 2 su 2, ma nessun esempio indipendente li
+conferma.». La proposta a voce di consegnarlo è **scartata per scritto**. Restano senza esempi i
+programmi su file, il C# e quelli fuori da uno sviluppo con l'interruttore spento. Un «sì» che
+chiude come consegnato un programma non controllato rimette il giudizio sui test dell'agente, cioè
+ciò che il flusso a fasi ha tolto; e i file sono già nella cartella dei lavori, da provare o da
+rifare con «rifallo». Da riprendere se il banco mostra spesso programmi giusti fermati al tetto.
+
+**Il ragionamento della passata.** `requisiti.chiama` prende `ragionamento` (i token concessi,
+vLLM `thinking_token_budget`, in più a `num_predict`) e `uso` (token, caratteri di ragionamento,
+secondi). La Config ha `agenti_accettazione_ragionamento: 0`, cioè spento come dal 13/10. Il
+mini-banco `prove/manuali/banco_analisi_ragionamento.py` fa la stessa passata su cinque richieste
+(convertitore, porte, media voti, un gioco con più giocatori che porte, un programma chiaro), N
+volte spento e N acceso. Conta contraddizioni, esempi e tolti, secondi, token e passate saltate.
+**I numeri sono da fare sulla DGX** (vLLM libero, 10–30 minuti); la decisione (acceso o no, e con
+quale budget) viene dopo. A secco il banco controlla sé stesso.
+
+**Il banco della temperatura** ha il caso `media`: «media voti» a riga di comando, con la virgola e
+il voto 11 da rifiutare, e un'accettazione nascosta che cerca da sé il programma. È fuori dai casi
+di serie e accende in memoria `agenti_accettazione_programmi_sempre` per quel caso. Da girare sulla
+DGX con `--casi media --ripetizioni 5`, e una volta con `--accettazione no` per il confronto.
+
+Prove: `prova_fasi_agente_2`, sezione 7. Ci sono l'interfaccia e gli esempi con i contrari; il
+test verde sul programma giusto e rosso sullo scheletro, sul controllo dimenticato e con un altro
+nome, in Python e in JavaScript; il servizio in uno sviluppo e fuori, con e senza l'interruttore,
+il file della persona, il C# e il ragionamento; il nome alla consegna una volta; al tetto «fatto»
+e i contrari; la frase. Senza la modifica le prove nuove falliscono (`interpreta()` senza
+`programma`, la passata saltata, la frase di prima). Poi `banco_temperatura --secco` (accettazione
+rossa alla partenza e verde sul riferimento anche per `media`) e `banco_analisi_ragionamento
+--secco`.
+
+**Resta**:
+- i numeri dei due banchi sulla DGX;
+- l'approvazione del progetto (§ 5.5 della ricerca) e, con i numeri, l'accensione di
+  `agenti_accettazione_programmi_sempre` e la decisione sul ragionamento;
+- gli esempi per i programmi su file della persona (il caso «rinomina le foto»: serve
+  un'interfaccia con una cartella d'esempio);
+- la revisione che legge la nota dell'agente su un esempio che gli sembra sbagliato.

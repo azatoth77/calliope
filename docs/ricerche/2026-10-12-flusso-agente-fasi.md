@@ -598,6 +598,45 @@ Si comporta così:
 - **L'analisi con domande** usa il modello che c'è: con un agente remoto la fa l'agente; senza
   agente non c'è sviluppo, e quindi non c'è analisi.
 
+### 5.5 Gli esempi per i programmi: il progetto breve (17/10, issue #10)
+
+*Aggiunto il 17/10. Il codice è sul ramo `issue-10-esempi-programmi`, con le scelte prudenti
+spente di serie; l'approvazione è la domanda 7.*
+
+Dei passi 3–4 sono fatti, dal 13/10, gli esempi delle estensioni e dei giochi. Un programma non ha
+un'interfaccia fissa come `esegui(dati, calliope)` o i comandi della macchina dei giochi: oggi
+l'interfaccia si indovina alla fine (`Esecuzioni.programma_di`), quando gli esempi non servono
+più. Il progetto:
+
+1. **L'interfaccia la dichiara l'analisi, prima del codice**: linguaggio, nome del file e genere
+   («riga_di_comando», «file», «altro»). Gli esempi si scrivono solo per la riga di comando in
+   Python, e in JavaScript dove Node è acceso per i programmi (#54): `{argomenti, stdin, numero |
+   contiene, codice_uscita}`. Il codice li trasforma in un test in sola lettura che esegue il
+   programma: in Python nello stesso processo (runpy), perché la sandbox non lascia avviare
+   processi; in Node in un processo figlio. Restano fuori, e lo si dice: i programmi su file della
+   persona, il C# (niente `esegui_test`) e gli altri generi.
+2. **Il nome è un vincolo**: il programma si chiama come dice l'interfaccia. La consegna lo dice
+   all'agente una volta, come il manifesto delle estensioni, poi accetta: un'interfaccia troppo
+   rigida non deve far rifiutare un programma giusto fino al tetto.
+3. **Gli esempi non devono essere più forti della richiesta**: valgono le stesse regole delle
+   estensioni (14/10 sera). In più si toglie il numero uguale a un dato, che non distingue un
+   programma giusto dallo scheletro che ristampa gli argomenti.
+4. **Al tetto** un programma con gli esempi verdi si chiude come un'estensione. Senza esempi la
+   frase dice «i suoi test passano, ma nessun esempio indipendente li conferma». Il «consegnalo
+   così» a voce è scartato: rimetterebbe il giudizio sui test dell'agente.
+5. **Dove gira**: in uno sviluppo sempre (la passata c'era già). Fuori da uno sviluppo è una
+   chiamata in più per ogni programma chiesto a voce, quindi solo con
+   `agenti_accettazione_programmi_sempre`, spento finché il banco della temperatura (caso `media`)
+   non dice che vale.
+6. **Il ragionamento** della passata si accende con `agenti_accettazione_ragionamento` (i token,
+   vLLM `thinking_token_budget`), spento finché il mini-banco
+   (`prove/manuali/banco_analisi_ragionamento.py`) non dice che trova più contraddizioni vere senza
+   far saltare la passata oltre `agenti_accettazione_s`.
+
+Alternative scartate: gli esempi per tutti i programmi subito (l'interfaccia su file è un progetto
+a sé); far scrivere i test di accettazione all'agente stesso (è ciò che il flusso a fasi ha
+tolto); accendere il ragionamento senza misura.
+
 ## 6. Domande aperte per chi amministra
 
 1. **Le domande dell'analisi arrivano dopo la proposta, in secondo piano** (1–3 minuti), invece che
@@ -619,3 +658,8 @@ Si comporta così:
 6. **Temperatura dell'agente a 0,6** (scheda di Qwen3.6 per il codice) contro lo 0,4 di oggi:
    provarla sul banco prima di cambiarla? *Proposta:* sì, sul banco del § 5.3, insieme al
    presence_penalty.
+7. **(17/10, issue #10) Gli esempi per i programmi a riga di comando** come al § 5.5, con
+   l'interfaccia dichiarata dall'analisi e il nome controllato una volta alla consegna; fuori da
+   uno sviluppo solo con `agenti_accettazione_programmi_sempre`, e il ragionamento della passata
+   con `agenti_accettazione_ragionamento`, tutti e due spenti fino ai numeri dei banchi sulla DGX?
+   *Proposta:* sì. Il «consegnalo così» a voce resta scartato.
