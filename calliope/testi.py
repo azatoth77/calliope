@@ -42,7 +42,11 @@ class Pezzo(str):
     in più `aperta` (la frase continua nel pezzo dopo: tagliata a un «; ») e `prima` (i pezzi
     della stessa frase già mandati, uniti da uno spazio). Le reti che giudicano una frase alla
     volta (riferire, guardiano, l'annuncio di un tool) giudicano `intera()`: mai meno testo di
-    quando la frase arrivava tutta insieme."""
+    quando la frase arrivava tutta insieme.
+
+    Si salva e si confronta come una stringa (json, sqlite, pickle, «==»); non va scritto con
+    yaml.safe_dump, che non conosce le sottoclassi: prima `str(pezzo)`.
+    """
 
     aperta: bool
     prima: str
@@ -100,7 +104,8 @@ def taglio_voce(buf: str, min_chars: int = 25, pausa_oltre: int = PAUSA_OLTRE,
         fini = [m.end() for m in SENTENCE_END.finditer(buf, 0, limite)]
         for m in _PUNTO_E_VIRGOLA.finditer(buf, inizio, limite):
             base = max((e for e in fini if e <= m.start()), default=0)
-            if limite - base <= pausa_oltre:
+            # La frase senza gli spazi intorno: una di 120 caratteri esatti non si taglia
+            if len(buf[base:limite].strip()) <= pausa_oltre:
                 continue
             da = max([base] + [x.end() for x in _PUNTO_E_VIRGOLA.finditer(buf, base, m.start())])
             clausola = buf[da:m.start()]

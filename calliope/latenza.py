@@ -309,7 +309,9 @@ LUNGA_CAR = 300          # una risposta più lunga, detta in un pezzo solo: la v
 def _nomi_tool(t: dict) -> set[str]:
     """I tool del turno; `notizie` con `fatto` (un seguito: «dimmi di più sulla seconda») a
     parte, «notizie (seguito)»: la frase d'attesa parte anche lì e va misurata da sola (issue
-    #132). Solo nomi e chiavi degli argomenti, nessun valore."""
+    #132). Solo nomi e chiavi degli argomenti, nessun valore. Per ospiti e voci incerte
+    `conserva.togli_testo` toglie gli argomenti dal registro: i loro seguiti restano in
+    «notizie»."""
     nomi = set()
     for x in t.get("tool") if isinstance(t.get("tool"), list) else ():
         if not isinstance(x, dict) or not x.get("nome"):

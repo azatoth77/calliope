@@ -726,6 +726,7 @@ def filtra(brain, frasi, domanda: str, esito: Esito):
     taciute: list[str] = []
     detta_una = False
     fermata_aperta = False      # un pezzo di questa frase è stato fermato: il resto non si dice
+    fonte_aperta = False        # la frase in corso ha già la fonte davanti (un recapito chiesto)
     try:
         for frase in frasi:
             # Una frase lunga arriva a pezzi tagliati a un «; » (17/10, issue #132): si giudica
@@ -748,8 +749,13 @@ def filtra(brain, frasi, domanda: str, esito: Esito):
             esito.ms.append(round((time.perf_counter() - t0) * 1000, 2))
             if g.esito == OK:
                 detta = g.frase
-                if g.frase != intera:
+                if g.frase != intera and prima and fonte_aperta:
+                    # La fonte è già davanti a un pezzo di prima della stessa frase (seconda
+                    # revisione della PR #139): non si ripete a ogni pezzo
+                    detta = frase
+                elif g.frase != intera:
                     esito.fonte_aggiunta += 1
+                    fonte_aperta = True
                     if prima:
                         # La fonte davanti a un pezzo, non alla frase già detta
                         detta = (f"secondo {prov.detta(g.fonte)}, "
@@ -757,13 +763,14 @@ def filtra(brain, frasi, domanda: str, esito: Esito):
                                     else frase))
                 elif prima:
                     detta = frase
+                fonte_aperta = fonte_aperta and aperta
                 if hasattr(frase, "con"):
                     detta = frase.con(detta)
                 esito.detto.append(detta)
                 detta_una = True
                 yield detta
                 continue
-            fermata_aperta = aperta
+            fermata_aperta, fonte_aperta = aperta, False
             esito.fermate.append((g.esito, g.fonte, g.dettaglio))
             # La frase fermata nel journal (accorciata): senza, i casi veri si indovinavano.
             # Mai le parole per un ospite (conserva.console_riservata; dal 12 al 16/10 anche
@@ -804,7 +811,9 @@ def controlla_testo(testo: str, fonte: str, persona_txt: str = "",
     from .tts import split_sentences
     ctx = Contesto(frozenset({fonte}), [(fonte, testo)], domanda, persona_txt)
     out, regole, dette = [], [], set()
-    for s in split_sentences([testo]):
+    # Il testo è già intero: niente taglio al «; » (pausa_oltre 0, revisione della PR #139),
+    # ogni frase si giudica tutta come prima
+    for s in split_sentences([testo], pausa_oltre=0):
         g = giudica(s, ctx, solo_gravi=True)
         if g.esito == OK:
             out.append(s)

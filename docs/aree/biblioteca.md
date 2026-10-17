@@ -821,9 +821,10 @@ meno, e in due casi riprodotti la voce diceva ciò che su main era fermato:
   come su main. Dalla terza clausola in poi la prima è già detta: si toglie dalla clausola prima.
   **Costo**: la prima voce della risposta delle notizie esce a fine della seconda clausola e non
   della prima. A secco, al 52 % della risposta invece del 23 %; su main era al 96 %.
-- **Gli altri filtri che giudicano una frase alla volta** sui pezzi di `split_sentences`, tutti
-  controllati: il **guardiano** (minori e ospiti) giudica `Pezzo.intera`, e con «vietato» lo
-  stream si chiude come prima. **L'annuncio di un tool** (`Ciclo._frase_da_dire`, «Chiamo…») si
+- **Gli altri filtri che giudicano una frase alla volta** sui pezzi di `split_sentences` dello
+  streaming (a questa revisione mancava `controlla_testo`: vedi la seconda, qui sotto): il
+  **guardiano** (minori e ospiti) giudica `Pezzo.intera`, e con «vietato» lo stream si chiude
+  come prima. **L'annuncio di un tool** (`Ciclo._frase_da_dire`, «Chiamo…») si
   giudica sulla frase da capo. Restano sul pezzo solo trasformazioni locali: le parentesi coi
   nomi dei tool, il nome detto a parole, la pulizia e «secondo Wikipedia». `_solo_se_rivolta`
   giudica il turno, non il testo. `ToolNameHold` non usa `taglio_voce`: trattiene fino al punto
@@ -834,4 +835,27 @@ meno, e in due casi riprodotti la voce diceva ciò che su main era fermato:
 - **Misura senza testo**: `per_tool` legge `risposta_car` (un numero, accanto a `frasi_voce`),
   mai la risposta, che per ospiti e voci incerte non resta. `_ricerca_promessa` aggiorna i due
   numeri. I seguiti di `notizie` con `fatto` («dimmi di più sulla seconda») hanno la loro riga,
-  «notizie (seguito)», per decidere se l'annuncio lì è superfluo.
+  «notizie (seguito)», per decidere se l'annuncio lì è superfluo. Limite: per ospiti e voci
+  incerte `conserva.togli_testo` toglie gli argomenti dal registro, e i loro seguiti restano
+  nella riga «notizie».
+
+**Seconda revisione della PR #139 (17/10).**
+- **`riferire.controlla_testo`** (l'annuncio dei lavori dell'agente, i risultati delle
+  estensioni, `tools/agenti.py`, i testi dei giochi): chiamava `split_sentences` col taglio e
+  giudicava i pezzi da soli. Un testo con «…entro stasera; il PIN della carta e la password…»
+  non faceva più scattare `uscita_segreti`. Lì il testo è già intero: `pausa_oltre=0`, frasi
+  giudicate tutte come su main.
+- **Tutte le chiamate fuori dallo streaming**: `controlla_testo` e la storia ridivisa
+  (`Ciclo._storia_come_detta`) ora usano `pausa_oltre=0`. Col taglio restano solo i due
+  streaming del modello, la risposta (`Ciclo._rispondi`) e il seguito della ricerca promessa,
+  più le reti di Brain sullo stream (`ClaimHold`, `FraseTolta`).
+- **Ricerca promessa**: l'annuncio di un tool si giudica sulla frase da capo, come in
+  `_frase_da_dire` («Uso subito internet…; il comando è web_cerca…» si tace dal secondo pezzo).
+  In tutti e due i punti, dopo un pezzo taciuto come annuncio si tace anche il resto della
+  frase, come su main.
+- **Fonte di un recapito chiesto**: si aggiunge una volta per frase, davanti al pezzo col
+  recapito, e non anche ai pezzi dopo.
+- **Spinta di `ClaimHold`**: il pezzo già detto entra nella storia come risposta
+  dell'assistente prima della spinta, così il modello non lo ripete da capo.
+- **Soglia**: si misura la frase senza gli spazi intorno; una frase di 120 caratteri esatti non
+  si taglia.

@@ -2547,6 +2547,11 @@ class Brain:
             named = ""
         held = hold.held.strip()
         self._held_kind = hold.kind if held else None
+        # I pezzi di una frase lunga già detti prima che ClaimHold trattenesse il resto (17/10,
+        # seconda revisione della PR #139): _reply li mette nella storia prima della spinta,
+        # così il modello non li ripete da capo
+        self._detto_prima_del_trattenuto = ("".join(out) if held and not hold_request
+                                            else "")
         if held and calls and hold.kind == "rinuncia":
             # «Non posso…» e poi il tool nella stessa passata: la rinuncia non si dice
             held = ""
@@ -5077,6 +5082,12 @@ class Brain:
                 # altre passate (potrebbero rientrare nel ciclo)
                 self.history.append({"role": "assistant", "content": text})
                 return
+            detto_prima = self.__dict__.get("_detto_prima_del_trattenuto") or ""
+            if held and not calls and detto_prima.strip():
+                # Un pezzo è già detto (il taglio al «;»): è nella storia come detto, e la
+                # spinta sotto rigenera solo il seguito (seconda revisione della PR #139)
+                self.history.append({"role": "assistant", "content": detto_prima.strip()})
+                spoke = True
             if held and self._held_kind == "ripetuta" and not calls:
                 # Uguale alla risposta di prima: non si dice né entra nella storia; la spinta,
                 # una volta (poi la sua risposta si dice, anche uguale)

@@ -4051,6 +4051,28 @@ class Ciclo:
             print(f"   [VOCE] (ombra) frase giudicata non rivolta a me ({g.ms:.0f} ms)",
                   flush=True)
 
+    def _annuncio_taciuto(self, aperta: bool) -> bool:
+        """Un pezzo di prima della stessa frase era l'annuncio di un tool, taciuto: anche questo
+        si tace, fino alla fine della frase, come quando la frase arrivava intera (seconda
+        revisione della PR #139)."""
+        if not self.__dict__.get("_annuncio_aperto"):
+            return False
+        self._annuncio_aperto = aperta
+        return True
+
+    def _nomi_tool_parlati(self, sentence: str, prima: str, aperta: bool) -> str | None:
+        """`Brain.speak_tool_names` sul pezzo, giudicando l'annuncio sulla frase da capo
+        («Uso subito la biblioteca…; il comando è biblioteca_cerca…» è un annuncio anche se il
+        nome arriva nel secondo pezzo). None = annuncio, da tacere col resto della frase."""
+        brain = self.brain
+        parlata = brain.speak_tool_names(sentence)
+        if parlata is not None and prima and brain.speak_tool_names(
+                f"{prima} {sentence}") is None:
+            parlata = None
+        if parlata is None:
+            self._annuncio_aperto = aperta
+        return parlata
+
     def _frase_da_dire(self, t, sentence: str, registra: bool = True) -> str:
         """Una frase del modello pronta per la voce ("" = non si dice). `registra=False`: senza
         le regole nel registro (la stessa resa, rifatta per la storia: `_storia_come_detta`)."""
@@ -4058,15 +4080,14 @@ class Ciclo:
         rule = self.rule if registra else (lambda _nome: None)
         # Un pezzo di una frase lunga tagliata a un «; » (17/10, issue #132): l'annuncio di un
         # tool si giudica sulla frase fino a qui, come quando arrivava intera (PR #139)
-        prima = di_frase(sentence)[1]
+        aperta, prima = di_frase(sentence)
         sentence = brain.strip_tool_mentions(sentence)
+        if Ciclo._annuncio_taciuto(self, aperta):
+            return ""                       # il resto della frase di un annuncio taciuto
         # Prima della pulizia: clean_for_speech toglie «_» e il nome del tool non
         # si riconosceva più («Uso bibliotecacerca» detto ad alta voce, 01/10)
         if brain.mentions_tool(sentence) and cfg.rete("nome_tool_parlato"):
-            parlata = brain.speak_tool_names(sentence)
-            if parlata is not None and prima and brain.speak_tool_names(
-                    f"{prima} {sentence}") is None:
-                parlata = None
+            parlata = Ciclo._nomi_tool_parlati(self, sentence, prima, aperta)
             if parlata is None:
                 print(f"({self.in_console(sentence, risposta=True)!r}: annuncia un tool, non "
                       f"la dico) ", end="", flush=True)
@@ -4551,7 +4572,7 @@ class Ciclo:
 
         def rendi(testo: str) -> str:
             frasi = (self._frase_da_dire(t, f, registra=False)
-                     for f in split_sentences([testo], pausa_oltre=self._pausa_oltre()))
+                     for f in split_sentences([testo], pausa_oltre=0))
             return " ".join(f for f in frasi if f)
         try:
             if allinea(t.said, rendi):
@@ -4702,8 +4723,12 @@ class Ciclo:
             for sentence in split_sentences(brain.stream_continuation(t.level, context=extra),
                                             pausa_oltre=self._pausa_oltre(),
                                             al_taglio=self._taglio_pv):
+                aperta, prima = di_frase(sentence)
                 sentence = brain.strip_tool_mentions(sentence)
-                sentence = brain.speak_tool_names(sentence)
+                if Ciclo._annuncio_taciuto(self, aperta):
+                    continue
+                # L'annuncio di un tool sulla frase da capo, come in _frase_da_dire (PR #139)
+                sentence = Ciclo._nomi_tool_parlati(self, sentence, prima, aperta)
                 if sentence is None:
                     continue
                 sentence = clean_for_speech(sentence)

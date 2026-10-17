@@ -2544,7 +2544,8 @@ journal in chiaro, perché `console_riservata` guarda solo il livello ospite.
 Sotto la latenza per giorno c'è ora la riga «Prima voce sentita per tool» (`latenza.per_tool`,
 chiave `prima_voce_per_tool` nel `--json`). Per ogni tool dà i turni con la misura, la mediana e
 il p90 di `prima_voce_s`, e le risposte oltre 300 caratteri dette in un pezzo solo. I seguiti di
-`notizie` con `fatto` stanno a parte, come «notizie (seguito)». Legge solo nomi, chiavi degli
+`notizie` con `fatto` stanno a parte, come «notizie (seguito)». Fanno eccezione ospiti e voci
+incerte: `conserva.togli_testo` toglie loro gli argomenti, e i seguiti restano in «notizie». Legge solo nomi, chiavi degli
 argomenti e due numeri del registro dei turni (`frasi_voce`, `risposta_car`, dal 17/10), mai il
 testo della risposta. Prima il confronto fra `notizie` (2,91 s) e `web_cerca` (1,62 s) si faceva
 a mano. Il criterio di #132 sulla DGX: notizie con mediana ≤ 1,7 s e p90 ≤ 2,5 s, 0 «lunghe in

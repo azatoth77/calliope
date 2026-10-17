@@ -455,6 +455,94 @@ verifica("annuncio di un tool a pezzi: il pezzo col nome si tace (la frase da ca
 verifica("contrario: lo stesso pezzo senza l'inizio dell'annuncio si dice a parole",
          c._frase_da_dire(_T(), Pezzo(str(pz[1]))) not in ("", None))
 
+# ─────────────── seconda revisione della PR #139 ───────────────
+print("3b. seconda revisione")
+# controlla_testo: il testo è già intero (annunci dell'agente, estensioni, giochi): niente
+# taglio al «;», le regole a due elementi vedono la frase intera come su main
+agente = ("Il sito della banca di Borgo Lieto chiede di comunicare subito al servizio clienti per "
+          "telefono, entro stasera; il PIN della carta e la password dell'home banking servono "
+          "per sbloccare il conto.")
+detto_a, regole_a = R.controlla_testo(agente, "agente", "", "fammi il programma")
+verifica("controlla_testo: segreto e «comunicare» divisi dal «;» fermati come su main",
+         regole_a == ["uscita_segreti"] and "PIN" not in detto_a, f"{regole_a} {detto_a!r}")
+detto_a, regole_a = R.controlla_testo(LUNGA, "agente", "", "fammi il programma")
+verifica("contrario controlla_testo: un testo lungo senza segreti resta intero", regole_a == []
+         and detto_a == LUNGA, str(regole_a))
+
+# Il recapito chiesto dalla persona: la fonte davanti una volta per frase, non a ogni pezzo
+mail = ("Per lo sblocco del conto della banca di Borgo Lieto l'indirizzo da usare è "
+        "sblocco@banca-finta.example; l'ufficio della banca risponde dal lunedì al venerdì dalle "
+        "nove alle diciassette e il sabato mattina.")
+q_mail = "Qual è l'indirizzo email per lo sblocco?"
+ctx_mail = R.Contesto(frozenset({"web"}), [("web", "Scrivete a sblocco@banca-finta.example per "
+                                           "lo sblocco del conto.")], q_mail, q_mail)
+detto_m, es_m = riferito(mail, ctx_mail)
+verifica("riferire: la fonte del recapito chiesto davanti al primo pezzo, non anche al secondo",
+         len(detto_m) == 2 and detto_m[0].lower().startswith("secondo")
+         and not detto_m[1].lower().startswith("secondo") and es_m.fonte_aggiunta == 1,
+         str(detto_m))
+detto_m, es_m = riferito(mail + " " + mail, ctx_mail)
+verifica("contrario: nella frase dopo la fonte si aggiunge di nuovo",
+         es_m.fonte_aggiunta == 2, str(detto_m))
+
+# L'annuncio di un tool col nome nel secondo pezzo (anche nel seguito della ricerca promessa,
+# che passa da Ciclo._nomi_tool_parlati) e il resto di una frase di annuncio
+c._annuncio_aperto = False
+uso = ("Uso subito internet per trovarti le ultime notizie sui lavori del ponte di Borgo Lieto e "
+       "dintorni; il comando è web_cerca e ci vorrà un attimo soltanto.")
+pz = list(split_sentences([uso]))
+verifica("annuncio col nome nel secondo pezzo: il primo si dice, il secondo si tace",
+         len(pz) == 2 and c._nomi_tool_parlati(str(pz[0]), pz[0].prima, pz[0].aperta) == pz[0]
+         and c._nomi_tool_parlati(str(pz[1]), pz[1].prima, pz[1].aperta) is None, str(pz))
+c._annuncio_aperto = False
+resto = ("Uso web_cerca per trovarti le ultime notizie sui lavori del ponte di Borgo Lieto e "
+         "dintorni; poi ti dico cosa trovo sui lavori e sulla festa del paese di domenica.")
+pz = list(split_sentences([resto]))
+verifica("annuncio taciuto: anche il resto della frase si tace, come su main",
+         len(pz) == 2 and c._frase_da_dire(_T(), pz[0]) == "" and c._frase_da_dire(_T(), pz[1])
+         == "", str(pz))
+verifica("contrario: la frase dopo si dice", c._frase_da_dire(_T(), Pezzo(
+    "Il ponte riapre oggi pomeriggio alle tre.")) == "Il ponte riapre oggi pomeriggio alle tre.")
+
+# ClaimHold: il pezzo già detto entra nella storia prima della spinta, così il modello non lo
+# ripete da capo
+
+
+class BackendVisto(BackendFinto):
+    def __init__(self, copione):
+        super().__init__(copione)
+        self.visti = []
+
+    def stream(self, messages, tools):
+        self.visti.append([dict(m) for m in messages])
+        yield from self.copione.pop(0)
+
+
+b = brain([])
+b.backend = BackendVisto([[("text", t) for t in token(spesa)],
+                          [("text", "Vuoi che la aggiunga adesso alla lista della spesa?")]])
+b.on_tool_start = None
+detto_b = list(split_sentences(b.stream_reply("Mi ricordi del latte?", "familiare")))
+seconda_passata = b.backend.visti[-1] if len(b.backend.visti) > 1 else []
+gia = [m for m in seconda_passata if m.get("role") == "assistant"
+       and str(m.get("content") or "").startswith("Certo Lucia")]
+verifica("ClaimHold: il pezzo già detto è nella storia vista dal modello alla spinta",
+         len(b.backend.visti) == 2 and gia and "ho aggiunto" not in gia[0]["content"]
+         and str(detto_b[0]).startswith("Certo Lucia") and "ho aggiunto" not in " ".join(detto_b),
+         f"{detto_b} {[m.get('content') for m in seconda_passata[-3:]]}")
+
+# La soglia senza gli spazi: una frase di 120 caratteri esatti non si taglia
+f120 = ("Il ponte sul fiume Arvo riapre oggi dopo i lavori; la festa del paese si farà comunque "
+        "in piazza con la banda")
+f120 = f120 + " e" * ((119 - len(f120)) // 2) + "." * (1 + (119 - len(f120)) % 2)
+verifica("soglia: 120 caratteri esatti (con lo spazio dopo il punto) non si tagliano",
+         len(f120) == 120 and list(split_sentences([f120 + " Poi altro qui."]))[0] == f120,
+         str(list(split_sentences([f120 + " Poi altro qui."]))))
+f121 = f120[:-1] + "o."
+verifica("contrario soglia: 121 caratteri si tagliano al «;»",
+         len(f121) == 121 and len(list(split_sentences([f121]))) == 2,
+         str(list(split_sentences([f121]))))
+
 # ─────────────────────────── 4. il testo per il modello ───────────────────────────
 print("4. testo per il modello")
 verifica("COSA_FARE: una frase per fatto chiusa dal punto, non unita dal punto e virgola",
