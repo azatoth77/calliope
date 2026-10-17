@@ -966,6 +966,10 @@ class Conservazione:
         # Esercizi e richieste ai tutori (12/10 sera): la stessa tenuta, anche quelli di prima
         # (alla prima rotazione, all'avvio: niente migrazioni)
         out["memoria"] = self._memoria(limite=limite)
+        # L'audio del banco della stanza (17/10, issue #32): la sua rotazione girava solo
+        # salvando, cioè con l'eccezione accesa; scaduta o spenta, i giorni oltre
+        # `turn_log_days` restavano. Ora anche qui, all'avvio e a ogni giorno nuovo
+        out["banco"] = self._ruota_banco(oggi)
         if not self.voce_dir or not self.voce_dir.exists():
             return out
         with self._lock:
@@ -1005,6 +1009,21 @@ class Conservazione:
                     self.log(f"   [CONSERVA] voce oltre {self.mb:.0f} MB: tolti {out['tetto']} "
                              f"giorni dei più vecchi")
         return out
+
+    def _ruota_banco(self, oggi: datetime.date) -> int:
+        """I giorni del banco della stanza oltre `turn_log_days` (stanza/banco.ruota), quale che
+        sia lo stato dell'eccezione. Quanti file audio tolti; un errore non ferma il resto."""
+        try:
+            from .stanza.banco import ruota
+            n = ruota(self.cfg, oggi)
+        except Exception as e:  # noqa: BLE001 — il banco non ferma la rotazione del resto
+            self.log(f"   [CONSERVA] rotazione del banco della stanza non riuscita: "
+                     f"{type(e).__name__}")
+            return 0
+        if n:
+            self.log(f"   [CONSERVA] banco della stanza: tolti {n} segmenti audio oltre "
+                     f"{self.giorni} giorni")
+        return n
 
     # ── esercizi e richieste ai tutori (memoria.db) ──
     def _memoria(self, limite: datetime.date | None = None, persona_id=None,

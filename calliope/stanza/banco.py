@@ -21,7 +21,8 @@ zona grigia, voci sconosciute, «più voci», TV; mai in pausa («abbiamo ospiti
   testo di un blocco di segmenti ritrascritto insieme (niente audio in più).
 - **Scadenza**: dopo N giorni dalla prima accensione smette da sé (lo dice nel log una volta e in
   `calliope stato --turni`); per ricominciare si cancella la cartella (`calliope conserva
-  --svuota`). I file restano per `turn_log_days` (la rotazione a ogni giorno nuovo).
+  --svuota`). I file restano per `turn_log_days`: la rotazione la fa anche la conservazione
+  (all'avvio e a ogni giorno nuovo, dal 17/10, issue #32), non solo `salva`.
 - **Cancellazione**: «dimentica» toglie i file del satellite; `calliope conserva --svuota` tutto
   (anche da un altro processo); `--persona` i segmenti in cui c'è la sua voce.
 
@@ -233,12 +234,14 @@ def _pulita(r: dict | None) -> dict | None:
                                   "fine", "parte", "versione", "minore") if k in r}
 
 
-def ruota(cfg) -> int:
-    """Via le cartelle dei giorni oltre `turn_log_days`."""
+def ruota(cfg, oggi: datetime.date | None = None) -> int:
+    """Via le cartelle dei giorni oltre `turn_log_days` (quanti file audio). Dal 17/10 (issue
+    #32) la chiama anche la conservazione (`Conservazione.ruota`, all'avvio e a ogni giorno
+    nuovo), non solo `salva`: a eccezione scaduta o spenta i file vecchi non restano."""
     d = cartella(cfg)
     if d is None or not d.exists():
         return 0
-    limite = datetime.date.today() - datetime.timedelta(
+    limite = (oggi or datetime.date.today()) - datetime.timedelta(
         days=int(getattr(cfg, "turn_log_days", 60) or 60))
     n = 0
     for g in d.glob("*/*"):

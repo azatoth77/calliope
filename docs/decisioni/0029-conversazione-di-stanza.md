@@ -97,8 +97,9 @@ set registrato apposta non c'è ancora.
   («abbiamo ospiti»).
 - **Scadenza**: N giorni dalla prima accensione (il segno `acceso.json` nella cartella); poi
   smette da sé e lo dice nel log e in `calliope stato --turni`. I file restano per il banco al più
-  `turn_log_days` (rotazione per giorno). Per ricominciare serve una scelta nuova: svuotare la
-  cartella e riaccendere.
+  `turn_log_days` (rotazione per giorno; dal 17/10, issue #32, la fa anche la conservazione
+  all'avvio e a ogni giorno nuovo: fino ad allora girava solo salvando, cioè non a eccezione
+  scaduta). Per ricominciare serve una scelta nuova: svuotare la cartella e riaccendere.
 - **Cancellazione**: «dimentica» toglie i file del satellite; `calliope conserva --svuota` tutto
   (anche il segno dell'accensione), `--persona` i segmenti con la sua voce.
 - **Perché un'eccezione e non una regola nuova**: il punto 1 («l'audio non va mai su disco») resta
