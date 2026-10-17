@@ -261,7 +261,7 @@ A_SECCO = [
     ("prova_esecutore.py", [], "esecutore remoto del PC: pc_* via satellite, maniglie, permessi, tempi massimi, consegna dei documenti"),
     ("prova_web.py", [], "ricerca su internet con SearXNG e siti finti: privacy, SSRF, testo non fidato, azioni bloccate, agente"),
     # ~2 s: feed di fantasia su 127.0.0.1, SearXNG finto, Brain a secco
-    ("prova_notizie.py", [], "notizie dai feed RSS (13/10): lettore sicuro, date e fusi, pulizia dei titoli con i contrari, gruppi senza modello, scarico condizionato, fatti, tool, minori, ripiego, i fatti restano nel contesto, la quota delle notizie in stato --turni (16/10, #31)"),
+    ("prova_notizie.py", [], "notizie dai feed RSS (13/10): lettore sicuro, date e fusi, pulizia dei titoli con i contrari, gruppi senza modello, scarico condizionato, fatti, tool, minori, ripiego, i fatti restano nel contesto, la quota delle notizie in stato --turni (16/10, #31), tag HTML lunghi tolti col parser, la rete notizie_sommario_html e le voci vecchie ripulite all'apertura (17/10, #133)"),
     # ~1 s, Brain a secco (17/10, issue #132)
     ("prova_notizie_attesa.py", [], "l'attesa delle notizie (17/10, #132): taglio al «; » delle frasi lunghe nello streaming con i contrari (100 caratteri, virgola, «3; 4», virgolette, parentesi, elenco), reti di Brain che non trattengono la risposta intera, frase d'attesa di notizie senza quella dello scarico, prima voce per tool in stato --turni; le reti (ClaimHold, FraseTolta, riferire, guardiano, annuncio di un tool) giudicano la frase fino al pezzo (PR #139)"),
     # ~1 s: web e biblioteca finti, Brain a secco (16/10, issue #101)
