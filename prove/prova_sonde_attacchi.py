@@ -26,6 +26,15 @@ ricollaudo con l'estensione ostile (casa, liste, agenda, dati propri, scritture,
 schermi, host della sola candidata), troppi casi, la seconda consegna. Alla fine il server
 cattivo e il registro delle uscite senza esche in nessuna forma.
 
+Solo con `--docker` (17/10, #63; il docker finto gira sull'host e non li può distinguere) due
+controlli in più sul container vero: un **socket diretto** verso 127.0.0.2, la casa e l'IP del
+gateway del container, sia dall'estensione (con l'audit hook) sia da un Python nello stesso
+container senza il runtime di Calliope, deve fallire per `--network none` (solo `lo`, nessuna
+rotta, nessuna connessione arrivata); e l'estensione che legge l'ambiente, `/etc/hosts`,
+`/etc/resolv.conf` e `/proc` non deve trovare niente di Calliope (né un'esca messa
+nell'ambiente del banco, né il nome dell'host, la sua cartella o gli host del banco). Con
+`--docker` i controlli sono 61, a secco 59.
+
 Obiettivo: **zero passaggi**, e i contrari che passano.
 
     python prove\\prova_sonde_attacchi.py            (a secco, docker finto)
@@ -41,6 +50,7 @@ import os
 import shutil
 import socket
 import socketserver
+import subprocess
 import sys
 import tempfile
 import threading
@@ -266,9 +276,71 @@ def esegui(dati, calliope):
 '''
 
 
+ESPLORA = r"""
+import os
+
+
+def esegui(dati, calliope):
+    def leggi(p, n=4000):
+        try:
+            with open(p, encoding="utf-8", errors="replace") as f:
+                return f.read(n)
+        except Exception as e:
+            return "NO " + type(e).__name__
+
+    def elenca(p):
+        try:
+            return sorted(os.listdir(p))[:40]
+        except Exception as e:
+            return ["NO " + type(e).__name__]
+
+    porta = int(dati.get("porta") or 0)
+    prese = {}
+    for ip in ("127.0.0.2", "127.0.0.3", str(dati.get("gateway") or "")):
+        if not ip:
+            continue
+        try:
+            import socket
+            s = socket.create_connection((ip, porta), timeout=2)
+            s.close()
+            prese[ip] = "OK"
+        except Exception as e:
+            prese[ip] = "NO " + type(e).__name__
+    return {"da_dire": "fatto", "ambiente": dict(os.environ), "hosts": leggi("/etc/hosts"),
+            "resolv": leggi("/etc/resolv.conf"), "hostname": leggi("/etc/hostname"),
+            "proc_self": leggi("/proc/self/environ"), "proc_1": leggi("/proc/1/environ"),
+            "cmdline_1": leggi("/proc/1/cmdline"), "reti": elenca("/sys/class/net"),
+            "rotte": leggi("/proc/net/route"), "prese": prese}
+"""
+
+# Lo stesso container senza il runtime di Calliope (niente audit hook): resta solo il container
+GREZZO = r"""
+import json, os, socket, sys
+porta, gw = int(sys.argv[1]), sys.argv[2]
+esiti = {}
+for ip, p in (("127.0.0.2", porta), ("127.0.0.3", porta), ("127.0.0.1", porta), (gw, porta),
+              ("1.1.1.1", 443)):
+    if not ip:
+        continue
+    try:
+        s = socket.create_connection((ip, p), timeout=2)
+        s.close()
+        esiti[ip] = "OK"
+    except Exception as e:
+        esiti[ip] = "NO " + type(e).__name__
+try:
+    reti = sorted(os.listdir("/sys/class/net"))
+except Exception as e:
+    reti = ["NO " + type(e).__name__]
+print(json.dumps({"esiti": esiti, "reti": reti}))
+"""
+ESCA_AMBIENTE = ("CALLIOPE_ESCA_TOKEN", "Tok-Esca-9931-calliope")
+
+
 class Banco:
     def __init__(self, tmp: Path, iso):
         self.tmp = tmp
+        self.iso = iso
         Sito.richieste = []
         self.server = Server(("127.0.0.2", 0), Sito)
         self.porta = Sito.porta = self.server.server_address[1]
@@ -554,6 +626,97 @@ def attacchi_ricollaudo(b: Banco):
     b.sv.collaudi = vecchi
 
 
+def _gateway_docker(docker: str) -> str:
+    try:
+        r = subprocess.run([docker, "network", "inspect", "bridge", "--format",
+                            "{{range .IPAM.Config}}{{.Gateway}} {{end}}"],
+                           capture_output=True, text=True, timeout=15)
+        return next((g for g in r.stdout.split() if g.count(".") == 3), "")
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def _env_immagine(docker: str, immagine: str) -> set:
+    try:
+        r = subprocess.run([docker, "image", "inspect", "--format", "{{json .Config.Env}}",
+                            immagine], capture_output=True, text=True, timeout=15)
+        return {x.split("=", 1)[0] for x in (json.loads(r.stdout or "[]") or [])}
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return set()
+
+
+def attacchi_container(b: Banco):
+    """Solo con --docker (#63): le strade che il docker finto non ha, nel container vero."""
+    sezione("12b. il container vero: socket diretto, ambiente e file")
+    from calliope.estensioni.esecuzione import Esecuzione
+    docker = b.iso.docker[0]
+    gw = _gateway_docker(docker)
+    conta_gw = None
+    if gw:
+        try:
+            conta_gw = Conta(gw, b.porta)
+        except OSError:
+            conta_gw = None
+    n_sito, c_casa, c_vitt = len(Sito.richieste), b.casa.connessioni, b.vittima.connessioni
+    m = manifesto("esplora", "Esplora", "Guarda intorno.",
+                  {"type": "object", "properties": {"porta": {"type": "integer"},
+                                                    "gateway": {"type": "string"}},
+                   "required": []}, {})
+    cart = b.tmp / "esplora"
+    cart.mkdir(parents=True, exist_ok=True)
+    (cart / "manifesto.json").write_text(json.dumps(m), encoding="utf-8")
+    (cart / "estensione.py").write_text(ESPLORA, encoding="utf-8")
+    origine = {"lavoro": "L-esplora", "sviluppo": b.sv.id, "persona": "u1",
+               "persona_nome": "Dario"}
+    r = b.est.prova_bozza(cart, m, {"porta": b.porta, "gateway": gw}, origine)
+    ris = r.get("risultato") or {}
+    # Il Python dello stesso container senza il runtime di Calliope (niente audit hook)
+    es = Esecuzione("E-grezzo", "esplora", 0, m, cart, {}, isolamento=b.iso)
+    cmd = es.comando()
+    i = cmd.index(b.iso.immagine)
+    cmd = cmd[:i + 1] + ["python", "-I", "-c", GREZZO, str(b.porta), gw]
+    try:
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=60,
+                           stdin=subprocess.DEVNULL)
+        grezzo = json.loads((p.stdout or "").strip().splitlines()[-1])
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError) as e:
+        grezzo = {"errore": f"{type(e).__name__}: {e}"[:200]}
+    prese = ris.get("prese") or {}
+    rotte = [x.split() for x in str(ris.get("rotte") or "").splitlines()[1:] if x.strip()]
+    arrivate = (len(Sito.richieste) - n_sito, b.casa.connessioni - c_casa,
+                b.vittima.connessioni - c_vitt, conta_gw.connessioni if conta_gw else 0)
+    verifica("socket diretto verso 127.0.0.2, casa e gateway: fallisce (--network none, anche "
+             "senza audit hook)",
+             r.get("ok") is True and bool(gw) and conta_gw is not None
+             and len(prese) == 3 and all(str(v).startswith("NO") for v in prese.values())
+             and len(grezzo.get("esiti") or {}) == 5
+             and all(str(v).startswith("NO") for v in grezzo["esiti"].values())
+             and grezzo.get("reti") == ["lo"] and ris.get("reti") == ["lo"]
+             and all(x[0] == "lo" for x in rotte) and arrivate == (0, 0, 0, 0),
+             json.dumps({"gw": bool(gw), "prese": prese, "grezzo": grezzo,
+                         "reti": ris.get("reti"), "rotte": len(rotte), "arrivate": arrivate,
+                         "r": {k: v for k, v in r.items() if k != "risultato"}},
+                        ensure_ascii=False)[:600])
+    if conta_gw is not None:
+        conta_gw.s.close()
+    # Ambiente e file: niente di Calliope né dell'host
+    ammesse = {"HOME", "TMPDIR", "PYTHONIOENCODING", "LANG", "PYTHONDONTWRITEBYTECODE",
+               "OPENBLAS_NUM_THREADS", "PATH", "HOSTNAME"} | _env_immagine(docker,
+                                                                          b.iso.immagine)
+    amb = ris.get("ambiente") or {}
+    testo = json.dumps({k: ris.get(k) for k in ("ambiente", "hosts", "resolv", "hostname",
+                                                "proc_self", "proc_1", "cmdline_1")},
+                       ensure_ascii=False)
+    proibiti = [ESCA_AMBIENTE[0], ESCA_AMBIENTE[1], "CALLIOPE_", SEGRETO, "esempio.org",
+                "duckdns", str(b.tmp), str(Path.home()), socket.gethostname()]
+    trovati = [x for x in proibiti if x and x.lower() in testo.lower()]
+    estranee = sorted(set(amb) - ammesse)
+    verifica("ambiente, /etc/hosts e /proc: niente di Calliope né dell'host",
+             r.get("ok") is True and bool(amb) and not trovati and not estranee
+             and amb.get("HOSTNAME") in (None, "estensione"),
+             f"trovati={len(trovati)} estranee={estranee} hostname={amb.get('HOSTNAME')}")
+
+
 def fine(b: Banco):
     sezione("13. alla fine: server e registro")
     testo_server = json.dumps(Sito.richieste, ensure_ascii=False)
@@ -578,6 +741,8 @@ def main():
                     help="sulla DGX: il ricollaudo nel container vero")
     a = ap.parse_args()
     tmp = Path(tempfile.mkdtemp(prefix="calliope-sonde-attacchi-"))
+    # L'esca nell'ambiente del banco: il container non la deve vedere (12b)
+    os.environ[ESCA_AMBIENTE[0]] = ESCA_AMBIENTE[1]
     if a.docker:
         iso = Isolamento("docker", "container", True, "", immagine_predefinita(),
                          [shutil.which("docker")])
@@ -590,9 +755,20 @@ def main():
     try:
         attacchi_sonde(b)
         attacchi_ricollaudo(b)
+        if a.docker:
+            attacchi_container(b)
         fine(b)
     finally:
         b.chiudi()
+        # La cartella del banco (memoria, registro, docker finto) non resta in /tmp
+        # (le versioni approvate dell'archivio sono in sola lettura: prima si rendono scrivibili)
+        for radice, cartelle, file in os.walk(tmp):
+            for x in [radice, *(os.path.join(radice, f) for f in file)]:
+                try:
+                    os.chmod(x, 0o700)
+                except OSError:
+                    pass
+        shutil.rmtree(tmp, ignore_errors=True)
     print(f"\nPassaggi: {errori}." if errori else "\nZero passaggi: tutto bene.")
     sys.exit(1 if errori else 0)
 
