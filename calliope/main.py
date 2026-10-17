@@ -334,10 +334,6 @@ class Avvio:
         s.fine_turno = load_fine_turno(cfg)
         if s.satelliti is None and s.fine_turno is not None:
             prepara_listener(self.listener, cfg, decisore=s.fine_turno.decisore.decisore)
-        # La preselezione dei tool System 1 (15/10, calliope/system1/preselezione.py): in ombra
-        # sceglie «nucleo» o «tutti» a ogni risposta e lo scrive nel registro; spenta di serie
-        from .system1.preselezione import load_preselezione
-        s.preselezione = load_preselezione(cfg)
         s.stt = make_transcriber(cfg)   # locale (faster-whisper) o server, vedi stt.py
         # Più corsie insieme: una trascrizione alla volta, la confidenza per corsia
         self.insieme = s.satelliti is not None and s.satelliti.insieme

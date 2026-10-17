@@ -374,7 +374,8 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
     telefono con onnxruntime-web. *[15/10: la **preselezione dei tool** misurata sulla DGX (richiamo 84 % sui turni veri, +0,4–0,5 s a ogni cambio d'insieme) non conviene ed è spenta; fatta, spenta di serie, la **frase dopo il tool** (`system1_dopo_tool`: per gli esiti chiusi niente seconda passata del modello), da tenere in ombra sulla DGX con lo script `prove/manuali/dopo_tool_dgx.py`; criterio per «attivo»: almeno 50 confronti, frasi diverse sotto il 5 %, nessun altro tool chiamato dopo, risparmio p50 ≥ 0,5 s.]* Casi successivi, nell'ordine proposto: **comandi semplici con
     FunctionGemma** (luci, ore, timer senza il modello grande; il grande quando il piccolo è
     incerto o il comando è fuori dall'elenco chiuso), **preselezione dei tool** (i 5–10 probabili
-    tra i 78, misura già in `scelta_tool.py`), **giudizio «rivolta a Calliope?»** (oggi in ombra con
+    tra i 78, misura già in `scelta_tool.py`) *[storico; 15/10: misurata, non conviene; 16/10
+    (#25): ombra tolta dal ciclo, resta il decisore come misura]*, **giudizio «rivolta a Calliope?»** (oggi in ombra con
     il modello della voce: il grande solo nella zona grigia), **primo filtro di pericolo** davanti
     al guardiano dei minori (fa passare solo le frasi dubbie, mai «sicuro» da solo sotto soglia).
     *Quasi* (fine del turno: misura) · dipende da: i numeri della DGX; per i casi successivi una
@@ -519,6 +520,8 @@ Le voci passate nella coda del 12/10 stanno lassù; qui restano le altre.
 - Recupero dei tool con bge-m3 solo oltre 40–50 tool: oggi i tool sono 65 schemi *[09/10: 72,
   più `esercizi` con un minore in casa]* *[14/10: 75 con tutti i servizi, più quelli che dipendono
   dall'installazione: minori, stanza, conoscenti, meteo]* e la scelta regge; da rimisurare se la qualità scende.
+  *[16/10: superata dalla misura della preselezione (ricerca del 15/10, § 7): un sottoinsieme che
+  cambia rompe la cache del prefisso e gli embedding fanno peggio sul banco.]*
 - Casa: conferme a secondo fattore per i domini delicati; direzione opposta (HA che usa
   Calliope come agente per i satelliti).
 

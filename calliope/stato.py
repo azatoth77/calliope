@@ -40,10 +40,6 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               fine del turno System 1: ms risparmiati, frasi
                                               che avrebbe tagliato, attese più lunghe
                                               (calliope/system1/fine_turno.py, 14/10);
-                                              preselezione dei tool System 1 in ombra:
-                                              «nucleo» o «tutti», richiamo sui turni con
-                                              tool, schemi risparmiati
-                                              (calliope/system1/preselezione.py, 15/10);
                                               frase dopo il tool System 1: codice o
                                               modello, seconda passata risparmiabile e
                                               frasi uguali nella sostanza in ombra
@@ -510,10 +506,6 @@ def main(argv=None) -> int:
         # Il «sì» breve per le azioni importanti, in ombra (15/10, calliope/si_breve.py)
         from . import si_breve
         si_r = si_breve.riassunto(turni)
-        # La preselezione dei tool System 1 in ombra (15/10, calliope/system1/preselezione.py):
-        # richiamo sui turni con tool e schemi risparmiati
-        from .system1 import preselezione as preselezione_s1
-        presel = preselezione_s1.riassunto(turni)
         # La frase dopo il tool System 1 (15/10, calliope/system1/dopo_tool.py): codice o
         # modello, e in ombra la seconda passata risparmiabile
         from .system1 import dopo_tool as dopo_tool_s1
@@ -554,7 +546,7 @@ def main(argv=None) -> int:
                               "dialogo": dialogo, "voce_sola": voce_sola,
                               "riletti_guardia": guardia_riletti,
                               "criterio_e1": criterio_e1,
-                              "scelta_tool": scelta, "preselezione": presel,
+                              "scelta_tool": scelta,
                               "si_breve": si_r,
                               "dopo_tool": dopo_tool_r,
                               "frasi_pronte": pronte,
@@ -583,8 +575,6 @@ def main(argv=None) -> int:
             print(misura_eventi.testo(voce_sola, soglia_ms, guardia_riletti, criterio_e1))
             print()
             print(scelta_tool.testo(scelta))
-            print()
-            print(preselezione_s1.testo(presel))
             print()
             print(dopo_tool_s1.testo(dopo_tool_r))
             print()

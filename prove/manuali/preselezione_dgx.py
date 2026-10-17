@@ -14,6 +14,9 @@ frase di prima e i tool usati vengono dai turni precedenti della stessa voce ent
 (l'insieme scelto contiene tutti i tool usati), quota a «nucleo», i tool mancati per nome, il
 richiamo della variante «nucleo + i più vicini», i cambi d'insieme fra turni vicini della
 stessa persona (ognuno rompe la cache del prefisso), per margine (griglia) e codifica.
+Dal 16/10 (issue #25) è il modo di rimisurare la preselezione: l'ombra nel ciclo è tolta e
+non ci sono più campi `preselezione_*` nella configurazione (il nucleo si prova con
+`--nucleo ora_attuale,calcola,…`).
 
 **--latenza** (usa il modello della voce su Ollama: **a Calliope ferma o inattiva**, perché
 ogni richiesta sposta la cache del prefisso della voce; al turno dopo Calliope la rifà da sé,
@@ -100,7 +103,7 @@ def registro(args, cfg):
             c = ps.CodificaEmbedding(Embedder(url, cfg.conversazioni_embedding, cpu=True))
         else:
             c = ps.CodificaParole()
-        p = ps.Preselettore(c, nucleo=cfg.preselezione_nucleo or None)
+        p = ps.Preselettore(c, nucleo=args.nucleo or None)
         p.aggiorna(reg.all_schemas())
         # I punteggi una volta per frase, poi la griglia del margine
         righe, ms = [], []
@@ -269,6 +272,10 @@ def main():
                     default=[0.0, 0.05, 0.10, 0.15, 0.20])
     ap.add_argument("--embedding", action="store_true",
                     help="anche la codifica «embedding» (carica il modello di embedding)")
+    # Il nucleo da provare (nomi di tool separati da virgole); vuoto = preselezione.NUCLEO.
+    # Fino al 15/10 veniva da `preselezione_nucleo` della configurazione, tolto il 16/10 (#25)
+    ap.add_argument("--nucleo", type=lambda s: [x.strip() for x in s.split(",") if x.strip()],
+                    default=[])
     ap.add_argument("--limite", type=int, default=24)
     ap.add_argument("--storia", type=int, default=10)
     ap.add_argument("--json")

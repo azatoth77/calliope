@@ -170,7 +170,10 @@ soli solo sopra una soglia alta, altrimenti decide chi decideva prima.
   modello grande quando il piccolo è incerto o il comando non è nell'elenco chiuso.
 - **Preselezione dei tool**: un classificatore piccolo sceglie i 5–10 tool probabili tra i 78, il
   modello della voce vede solo quelli (prompt più corto, prima frase prima); misura già pronta in
-  `scelta_tool.py`.
+  `scelta_tool.py`. *[Storico; 15/10: fatta con due insiemi stabili e misurata sulla DGX, non
+  conviene (richiamo 84 %, +0,4–0,5 s a ogni cambio d'insieme:
+  [`2026-10-15-preselezione-tool.md`](2026-10-15-preselezione-tool.md), § 7); 16/10 (issue #25):
+  ombra tolta dal ciclo, resta il decisore come misura.]*
 - **Giudizio «rivolta a Calliope?»** (`rivolta.py`, oggi in ombra con il modello della voce): un
   classificatore piccolo sul testo e sulla voce, il grande solo nella zona grigia.
 - **Primo filtro di pericolo** per i minori: un classificatore piccolo davanti al guardiano (oggi

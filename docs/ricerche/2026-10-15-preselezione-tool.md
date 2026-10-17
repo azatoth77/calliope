@@ -234,7 +234,9 @@ turni il saldo è negativo. Il costo «fuori dal modello» degli schemi visto su
 DGX è 148 ms a cache calda.
 
 **Conclusione**: nessuno dei criteri del § 6 è vicino (richiamo, ≥ 150 ms); la preselezione resta solo
-una misura in ombra e non va accesa. Il divario dei turni con tool (2,71 contro 1,77 s del 14/10) è la
+una misura in ombra e non va accesa. *[16/10, issue #25: l'ombra è tolta dal ciclo con i campi
+`preselezione_*` e la sezione di `calliope stato`; resta il decisore, rimisurabile con
+`prove/manuali/preselezione_dgx.py --registro`.]* Il divario dei turni con tool (2,71 contro 1,77 s del 14/10) è la
 **seconda passata** dopo il tool: è lì che va cercato il prossimo caso System 1.
 
 ## Fonti
