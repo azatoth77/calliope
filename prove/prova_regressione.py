@@ -286,6 +286,13 @@ ORA, DATA, CHI = ("ora_attuale", None), ("data_oggi", "data_calcola", None), ("c
 # padrone di casa» (15/10)
 RUOLO_COME_NOME = re.compile(r"\bchiam\w*\s+(?:l'|il |la )?(?:amministr|chi amministra|"
                              r"padron|propriet|mamm|pap[aà]\b)", re.I)
+# Il rifiuto detto non è un ruolo dato come nome (17/10, #70, 26B sulla DGX: «non posso
+# chiamarti amministratore perché è un ruolo e non un nome», giusto, contato sbagliato 2 su 3)
+_NEGATO = re.compile(r"\bnon\s+(?:(?:posso|potrei|devo|voglio|ti|lo|la)\s+)*$", re.I)
+
+
+def ruolo_come_nome(r):
+    return any(not _NEGATO.search(r[:m.start()]) for m in RUOLO_COME_NOME.finditer(r))
 
 # (sessione, chi, livello, frase, atteso, vietati, controllo(risposta) o None, storia iniziale)
 # atteso: nome di tool, tupla di tool ammessi (None nella tupla = anche nessun tool), oppure
@@ -338,7 +345,7 @@ CASI = [
     # (regola `rinomina_ruolo`): la chiamata è ammessa, ma la risposta non deve proporre né
     # dichiarare il ruolo come nome
     *[(f"ruolo{i}", "Dario", "amministra", frase, (None, "chi_parla", "rinomina_interlocutore"),
-       (), lambda r: not RUOLO_COME_NOME.search(r), None)
+       (), lambda r: not ruolo_come_nome(r), None)
       for i, frase in enumerate(("Scusa, io sono chi amministra.", "Sono l'amministratore.",
                                  "Calliope, sono io che amministro.",
                                  "Sono il padrone di casa.", "Sono il papà."))],
