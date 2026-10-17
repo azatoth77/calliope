@@ -261,6 +261,8 @@ A_SECCO = [
     ("prova_web.py", [], "ricerca su internet con SearXNG e siti finti: privacy, SSRF, testo non fidato, azioni bloccate, agente"),
     # ~2 s: feed di fantasia su 127.0.0.1, SearXNG finto, Brain a secco
     ("prova_notizie.py", [], "notizie dai feed RSS (13/10): lettore sicuro, date e fusi, pulizia dei titoli con i contrari, gruppi senza modello, scarico condizionato, fatti, tool, minori, ripiego, i fatti restano nel contesto, la quota delle notizie in stato --turni (16/10, #31)"),
+    # ~1 s, Brain a secco (17/10, issue #132)
+    ("prova_notizie_attesa.py", [], "l'attesa delle notizie (17/10, #132): taglio al «; » delle frasi lunghe nello streaming con i contrari (100 caratteri, virgola, «3; 4», virgolette, parentesi, elenco), reti di Brain che non trattengono la risposta intera, frase d'attesa di notizie senza quella dello scarico, prima voce per tool in stato --turni"),
     # ~1 s: web e biblioteca finti, Brain a secco (16/10, issue #101)
     ("prova_ricerca_fuori_tema.py", [], "risultati della ricerca fuori tema (16/10, #101): nessun «tipo notizie» nei testi di brain.py, la riga delle ricerche con il tool notizie (tema e numero del fatto), i risultati fuori tema da non riferire e niente nomi e cifre a memoria, la misura di pertinenza (Orione e la startup 0 su 2, i contrari) e «pertinenti» in web_cerca e biblioteca_cerca, fuori dalla busta"),
     # ~5 s: SearXNG, registro delle immagini e docker finti; lo script con bash di Git se c'è

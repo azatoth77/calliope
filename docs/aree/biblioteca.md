@@ -651,3 +651,46 @@ né quante volte un minore chiede una sezione non sua.
   `notizie_seguito`, `minore_notizie` e `web_notizie_al_tool`: le vuote e i ripieghi falliti si
   contano da lì in avanti. L'età della notizia più recente detta resta fuori (misura diversa, un
   campo nuovo nel record del turno).
+
+## L'attesa delle notizie: frase d'attesa e taglio al «; » (17/10, issue #132)
+
+Caso vero (prove a voce sulla DGX del 16–17/10, 26B, dal telefono): 13 turni `notizie` con la
+prima voce sentita a **2,91 s** di mediana (2,51–4,28), contro 1,62 s di `web_cerca`, che ha la
+frase d'attesa. In due turni la risposta era una frase sola di 476 e 644 caratteri coi fatti
+uniti dal «;»: voce a 3,66 e 4,28 s.
+
+- **Frase d'attesa** (`ANNUNCI` in `calliope/tools/notizie.py`: «Vediamo i giornali.», «Guardo
+  le notizie.», «Un attimo, sfoglio i giornali.», diverse da quelle di `web_cerca`): il tool è
+  veloce, la seconda passata che legge i fatti no. Con l'annuncio detto Brain non passa
+  `ctx.attesa`, e la frase dello scarico lento («Un attimo, guardo i giornali.») non si somma;
+  con una frase già detta nella risposta niente annuncio, come per gli altri tool.
+- **Taglio al «; » nello streaming** (`calliope/testi.py` → `taglio_voce`, usato da
+  `tts.split_sentences`): una frase senza punto più lunga di `tts_spezza_streaming` (120
+  caratteri) va alla voce anche a pezzi, dopo un «; » con almeno 40 caratteri di clausola dal «;»
+  o dai due punti di prima; mai alla virgola, né dentro virgolette e parentesi, né in «3; 4»,
+  né in un elenco breve. Regola `taglio_punto_e_virgola` nel registro dei turni (principio 10:
+  forma, il testo resta uguale). **Correzione dell'analisi della issue**: bastava cambiare
+  `split_sentences` solo in apparenza. Dopo `notizie` (una lettura) `ClaimHold` è attivo e
+  trattiene il primo pezzo fino alla fine della prima frase, e `FraseTolta` («scrivo qui», accesa
+  a voce) tiene ogni frase fino al punto: la risposta unita dai «;» restava in Brain fino
+  all'ultimo token. Le due reti ora usano lo stesso `taglio_voce`; il taglio guarda solo il testo
+  prima del «;», così le reti in fila lasciano passare negli stessi punti (con una condizione
+  sulla clausola dopo, provata e scartata, ognuna aspettava la successiva).
+- **Testo per il modello**: `COSA_FARE` chiede «una frase breve per fatto chiusa dal punto (non
+  unire i fatti col punto e virgola)».
+- **Misura**: `frasi_voce` (i pezzi mandati alla voce) nel registro dei turni, e in
+  `calliope stato --turni` la riga «Prima voce sentita per tool» (`latenza.per_tool`: turni,
+  mediana, p90, risposte oltre 300 caratteri in un pezzo solo), chiave `prima_voce_per_tool` nel
+  `--json`.
+- **A secco** (`prove/prova_notizie_attesa.py`; su main non parte: `taglio_voce` e
+  `PAUSA_OLTRE` non c'erano): la risposta di ~650 caratteri con tre «;» data a pezzi di 4
+  caratteri attraverso Brain e `split_sentences` (`misura132`, nello scratchpad): **prima** il
+  primo pezzo al TTS dopo 157 token su 163 (96 %, ~3,9 s di generazione a 40 token/s), nessuna
+  frase d'attesa; **dopo** dopo 38 token (23 %, ~0,95 s), frase d'attesa subito dopo la
+  chiamata, cinque pezzi (148, 184, 161, 126, 27 caratteri).
+- **Da fare sulla DGX** (criterio della issue): dopo `calliope aggiorna`, almeno 20 turni
+  `notizie` dal telefono («le notizie», per tema, «dimmi di più sulla seconda»), poi
+  `calliope stato --turni --giorni 1`: prima voce mediana ≤ 1,7 s e p90 ≤ 2,5 s nella riga per
+  tool, 0 «lunghe in un pezzo». Da guardare: se l'annuncio ai seguiti brevi suona superfluo
+  (seconda passata sotto 1 s), annuncio solo senza `fatto`. Col modello:
+  `prove/prova_notizie_ollama.py` col profilo della DGX, frasi chiuse dal punto.
