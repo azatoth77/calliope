@@ -256,10 +256,37 @@ Cosa cambia (`calliope/tools/builtin.py`, con le correzioni della revisione dell
   *Storico: nel primo commit del ramo «tutto» valeva E3 (`valore._agenda_annulla`), tolto.*
 - il riferimento sbagliato del modello («entrambi» detto della lista): caso `entrambi` nel banco
   di regressione (`prove/prova_regressione.py`, lista letta → «Cancellali entrambi.» →
-  `lista_togli`, mai `agenda_annulla`): gemma4 e4b sul portatile 3/3; da misurare col 26B sulla
-  DGX (criterio ≥ 9/10, #70).
+  `lista_togli`, mai `agenda_annulla`): gemma4 e4b sul portatile 3/3; col 26B sulla DGX 3/3 il
+  17/10 (#70; *storico: «da misurare col 26B»*).
 
 Prova a secco: `prove/prova_agenda_tutto.py`, 45 controlli (il tool con il «sì» e i contrari,
 Brain con «sì», «no», le frasi che non acconsentono, la voce aggiunta dopo con il «sì» accettato
 dalla politica, il «sì» per una parte e la stanza accesa, la classe d'effetto); col codice di
 main ne falliscono 32.
+
+## L'età col 26B, e gli anni nella proposta della nascita (17/10, issue #70, ramo `issue-70-banco-26b`)
+
+Fino a oggi l'età col modello era misurata solo con script fuori dal repository (07/10, 4B).
+Ora c'è la sezione `eta` di `prove/prova_date_ricordi_ollama.py` (`--solo eta`; `--url` e
+`--num-ctx` come in `prova_regressione.py`), con nomi di fantasia: Marta amministra con la
+nascita nel profilo, Bianca minorenne con Marta tutrice, Luca familiare senza nascita. Sette
+casi: «Quanti anni ho?» (minore e adulta), il proprio compleanno, giorni ed età della figlia
+chiesti dalla tutrice, l'età da un ricordo (`eta_dal_ricordo`), «ricordati che il mio compleanno
+è…» → «Sì.» → «Quanti anni ho?» dal profilo. Quattro contrari della privacy: un familiare non
+tutore (età e compleanno della minore), la minore (età della tutrice), un ospite. Criterio:
+almeno il 90 %, i contrari tutti.
+
+**Col 26B sulla DGX** (3 giri): **età 21/21, privacy 12/12**. Una volta la minore riceve «Non ho
+informazioni sull'età di Marta» (dopo `elenca_utenti`, che non le dà l'età): la privacy è
+rispettata, ma la frase non è del tutto vera; le altre due volte risponde con la frase pronta
+di `nascita_riservata`.
+
+**Difetto trovato e corretto** (sezione delle date, caso vero del 05/10: «E dimmi anche quanti
+anni ho?», poi «…sono nato il 4 luglio del 1977»): una volta su tre il 26B chiamava `ricorda`
+con la nascita, e la frase pronta era solo «Me lo ricordo. Lo salvo anche come tua data di
+nascita?», senza l'età chiesta. Ora gli anni li conta il programma dalla data passata
+(`minori.eta`) e la frase è «Me lo ricordo: hai 49 anni. Lo salvo anche come tua data di
+nascita?». Non è una regola sul testo: è la frase del tool. Prova a secco in
+`prove/prova_eta_utenti.py`, che fallisce col codice di main. Col 26B, sezione delle date in 5
+giri con la correzione: **40/40**, e le due volte che ha scelto `ricorda` ha detto gli anni.
+Prima, sui 3 giri: 23/24.

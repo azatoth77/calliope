@@ -2046,7 +2046,7 @@ avrebbe fatto diventare il nome del profilo.
   «Ti chiamo papà d'ora in poi.» (2 volte su 3 con main, 1 su 3 col ramo), un'azione dichiarata
   che `ACTION_CLAIM` non prende («ti chiamo …»): da guardare se si vede col 26B. La regola serve
   al 26B, che il tool lo chiama. Casi nuovi nel banco `ruolo0`–`ruolo4` (errore una risposta che
-  dà il ruolo come nome, `RUOLO_COME_NOME`); **da rifare col 26B sulla DGX**:
+  dà il ruolo come nome, `RUOLO_COME_NOME`); *storico al 17/10: rifatto col 26B, sezione «Il banco di regressione… col 26B» (#70)*; **da rifare col 26B sulla DGX**:
   con il tunnel verso l'Ollama della DGX (porta 11440 sul portatile) e
   `CALLIOPE_LLM_PROFILO=gemma4-26b-ollama`,
   `python prove\prova_regressione.py 3 --solo "^(ruolo|rinomina|chi)" --url http://127.0.0.1:11440`.
@@ -2559,3 +2559,48 @@ che nessuna rete giudica meno testo di prima:
 Ciò che resta diverso da main: un pezzo senza niente è già detto quando una clausola dopo fa
 scattare la rete, che allora ferma da lì. Casi e misure in [biblioteca](biblioteca.md) (sezione
 dello stesso giorno).
+
+## Il banco di regressione, i ricordi e chi parla in stanza col 26B (17/10, issue #70, ramo `issue-70-banco-26b`)
+
+Le misure fatte col 4B fra il 04/10 e il 15/10 rifatte col 26B sulla DGX (`gemma4:26b-a4b-it-qat`
+su Ollama, `num_ctx` 36864 già caricato, servizio acceso e inattivo), lanciate dalla versione
+installata con le prove del ramo:
+
+- **Banco intero** (`prova_regressione.py 3 --url http://127.0.0.1:11434 --num-ctx 36864`):
+  **286/294** (98 casi per giro: 97, 96 e 93 per giro), prima frase mediana 0,79 s, p90 1,34 s,
+  0 chiamate scritte come testo. Sbagliati: `chi_garbato` 3/3, `ruolo0` 2 (falsi della prova, qui
+  sotto), `chi_garbato2`, `data` e `schermo` 1 ciascuno (gli ultimi due instabili già il 16/10).
+  Contati con la prova corretta: 288/294, nessun giro sotto 94/98 (il 16/10: 94/97).
+- **«Ricorda che a Dario piace la pizza»** (`memoria_altro`, `memoria_altro2`): **6/6**, sempre
+  con `ricorda`.
+- **`entrambi`** (#99): 3/3 `lista_togli`.
+- **Casi `^chi` e `ruolo*`**: nei due lanci (6 giri) tutti giusti tranne `chi_garbato` 0/6,
+  `chi_garbato2` 5/6 (una volta `calliope_stato`: «Sono Calliope, un'assistente…») e `ruolo4`
+  1 volta su 6 («Sono il papà.» → `rinomina_interlocutore` rifiutato dal tool, poi «Ti ho
+  registrato come Papà…» a parole: la rete `spinta_dichiarata` l'ha preso e il modello ha rifatto
+  la risposta, ma la prima frase era già detta).
+  - **Falso della prova**: `RUOLO_COME_NOME` contava come errore il rifiuto detto («non posso
+    chiamarti amministratore perché è un ruolo e non un nome», giusto). Ora la prova
+    (`ruolo_come_nome`) salta la frase negata («non posso / non ti …»). Restano errori «ti chiamo
+    il papà», «vuoi che ti chiami Amministratore?».
+  - **`chi_garbato`** («Calliope di Michisono.», storpiatura di «Calliope, chi sono?»): il 26B
+    chiama `biblioteca_cerca` tutte le volte e risponde «Non ho trovato informazioni su
+    Michisono…, se mi dai più dettagli…» (una passata in più, ~1,1 s; nessun danno, nessun nome
+    sbagliato). **Da decidere** (chi amministra, passo 6 della issue): la forma entra fra le
+    storpiature note come dato del turno (`calliope/storpiature.py`, come «Chiori sono» del 15/10,
+    con i contrari) oppure il caso si accetta anche con una domanda di chiarimento. Una forma
+    sola vista una volta è poca per una regola: la proposta è la seconda.
+- **Ricordi fuori tema** (`prova_date_ricordi_ollama.py 3 --url … --num-ctx 36864`): fuori tema
+  **21/21**, con la storia vera della DGX del 05/10 davanti **9/9**, pertinenti (cucinare,
+  «cosa sai di me?», regalo) **9/9**; stati inventati 18/18: col 26B il ricordo non entra nella fisica.
+- **Chi parla in stanza** (caso vero del 15/10 sera: chi amministra chiede «E invece riconosci la
+  mia?» dopo una minore, e il 26B dice il nome di lei): scena nuova `chi` in
+  `prove/manuali/banco_stanza_contesto.py` (`--scena chi`), Carlo amministra e Sofia minorenne si
+  alternano, nelle righe la domanda dell'altra e la risposta di Calliope a lei, un Brain per
+  persona. **30/30 col blocco, 30/30 senza** (3 giri da 10), prima frase mediana 0,91 s col
+  blocco. Il 26B chiama quasi sempre `chi_parla` e dice il nome giusto. Il banco non riproduce
+  quindi il caso vero: la frase «chi ti parla adesso è …» nella nota del turno (`--nota`, passo 4
+  della issue) non serve e non è accesa. Ciò che il banco non ha e il caso vero sì: la storia
+  della conversazione di chi amministra (turni di prima), il livello col minore vicino
+  (`minore_vicino`, familiare), la stanza nella storia da più pezzi. Da rileggere sul vero
+  (`calliope stato --turni`, turni in compagnia con «riconosci / chi sono»).
