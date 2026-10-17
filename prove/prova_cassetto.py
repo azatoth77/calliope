@@ -684,6 +684,77 @@ def prova_terza_revisione():
     verifica("al «no»: niente eliminato", dopo == tutti_vivi, dopo)
 
 
+def prova_quarta_revisione():
+    """La quarta revisione della PR #143 (17/10): al secondo tentativo del modello. Dopo una
+    domanda, un «sì» con un'altra chiamata riceve la domanda che dice di chi è il cassetto (mai
+    due «sì» generici che eliminano il file di un cassetto mai nominato); nessuna domanda su una
+    chiamata che il tool rifiuterebbe; in lettura l'avviso anche sul cassetto di un minore."""
+    cfg = Config()
+    cfg.storia_inattiva_s = 0
+
+    def casa():
+        cas, _ = nuovo()
+        ids = {"bianca": cas.metti("bianca", b"Il compito di storia: Napoleone.", "storia.txt",
+                                   "testo"),
+               "dario_ieri": cas.metti("dario", b"Preventivo: 340 euro.", "preventivo.txt",
+                                       "testo")}
+        cas.ora.avanti(1)
+        return cas, ids
+
+    def turni(cas, frasi_chiamate):
+        b = Brain(cfg, build_registry(allegati=True, cassetto=True, archivio=True),
+                  ctx_per(cas))
+        b.tool_ctx.cassetto = cas
+        copione = []
+        for _f, args in frasi_chiamate:
+            copione += [[("calls", [{"id": "c", "name": "cassetto_gestisci",
+                                     "arguments": args}])], [("text", "Fatto.")]]
+        # (un giro di correzione dopo un errore correggibile chiede un testo in più)
+        b.backend = BackendFinto(copione + [[("text", "Non ci sono riuscita.")]] * 3)
+        uscite = []
+        for frase, _a in frasi_chiamate:
+            uscite.append("".join(b.stream_reply(frase, "familiare")))
+        return uscite
+    frase = "Elimina il file che la mamma di Bianca ti ha mandato ieri."
+    bianca = {"azione": "elimina", "quale": "ieri", "minore": "Bianca"}
+    # a) la prima domanda su un file di chi parla, poi il «sì» con il cassetto di Bianca
+    cas, ids = casa()
+    out = turni(cas, [(frase, {"azione": "elimina", "quale": "ieri"}), ("Sì.", bianca)])
+    verifica("dopo «Nel tuo cassetto…?», il «sì» con minore=Bianca: niente eliminato e la "
+             "domanda dice «Nel cassetto di Bianca»",
+             cas.prendi("bianca", ids["bianca"]) is not None
+             and cas.prendi("dario", ids["dario_ieri"]) is not None
+             and "Nel cassetto di Bianca" in out[1], out)
+    cas.close()
+    # b) tre turni: due «sì» non eliminano mai senza che la persona abbia sentito «Bianca»
+    cas, ids = casa()
+    out = turni(cas, [(frase, {"azione": "elimina", "quale": "ieri"}), ("Sì.", bianca),
+                      ("Sì.", bianca)])
+    sentita = any("Bianca" in o for o in out[:2])
+    verifica("due «sì» di fila: il file di Bianca si elimina solo dopo averla nominata",
+             cas.prendi("bianca", ids["bianca"]) is not None or sentita, out)
+    cas.close()
+    # c) una chiamata che il tool rifiuterebbe (nessun file trovato): nessuna domanda
+    cas, ids = casa()
+    out = turni(cas, [(frase, {"azione": "elimina",
+                               "quale": "il file della mamma di Bianca di ieri"})])
+    verifica("nessuna domanda su una chiamata che il tool rifiuta (nessun file da toccare)",
+             "Nel tuo cassetto" not in out[0] and cas.prendi("dario", ids["dario_ieri"])
+             is not None and cas.prendi("bianca", ids["bianca"]) is not None, out)
+    cas.close()
+    # d) lettura: l'avviso nel cassetto di un minore e il «solo se è proprio suo»
+    cas, ids = casa()
+    ctx = ctx_per(cas)
+    r = call(ctx, "allegato_leggi", {"cassetto": "il file che la mamma di Bianca ti ha mandato"})
+    verifica("l'errore correggibile dice «solo se il file è proprio di un minore»",
+             r.get("correggibile") is True and "proprio di un minore" in r.get("cosa_fare", ""),
+             r)
+    r = call(ctx, "allegato_leggi", {"cassetto": "storia", "minore": "Bianca"})
+    verifica("il cassetto di un minore: «non presentare questi come suoi» in cassetto_di",
+             r.get("ok") and "non presentare" in str(r.get("cassetto_di")), r)
+    cas.close()
+
+
 # ─────────────────────────── tool, permessi, riavvio, busta ───────────────────────────
 def prova_tool():
     cas, tmp = nuovo()
@@ -1123,6 +1194,7 @@ if __name__ == "__main__":
     prova_minore_non_persona()
     prova_seconda_revisione()
     prova_terza_revisione()
+    prova_quarta_revisione()
     prova_politica_e_busta()
     prova_ciclo()
     prova_server()

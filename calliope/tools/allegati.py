@@ -298,9 +298,10 @@ _PERSONA_NELLA_RICHIESTA = {
     "ok": False, "fatto": NIENTE, "correggibile": True,
     "errore": "la richiesta nomina un'altra persona e nel cassetto non trovo un file così",
     "cosa_fare": ("se la persona chiede i file di un altro adulto, di' che i file degli altri "
-                  "non li vedi; se è un minore di casa e chi parla è il suo tutore, richiama "
-                  "con minore=<il suo nome>; se è un file di chi parla, richiama con le sole "
-                  "parole del file (quando, tipo, nome)")}
+                  "non li vedi; se il file è proprio di un minore di casa (non di un suo "
+                  "genitore, amico o insegnante) e chi parla è il suo tutore, richiama con "
+                  "minore=<il suo nome>; se è un file di chi parla, richiama con le sole parole "
+                  "del file (quando, tipo, nome)")}
 
 
 def _trovate_davvero(righe: list, devono: list | None) -> list:
@@ -345,9 +346,14 @@ def _leggi_cassetto(ctx: ToolContext, quale, parte: str = "", di: str | None = N
     # Di chi è il cassetto, nell'esito (17/10, #58, banco col 26B: a «Leggimi il file che mia
     # moglie ti ha mandato ieri» il modello chiamava allegato_leggi(cassetto="ieri") e
     # presentava il file di chi parla come quello della moglie)
+    # (quarta revisione della PR #143: lo stesso avviso per il cassetto di un minore, così al
+    # secondo tentativo il modello non dice «ecco il file della mamma di Bianca»)
     di_chi = (f"il cassetto di {chi.name}, cioè di chi parla: se chiedeva il file di un'altra "
               "persona, di' che i file degli altri non li vedi, e non presentare questi come "
-              "suoi" if chi is prof else f"il cassetto di {chi.name}")
+              "suoi" if chi is prof else
+              f"il cassetto di {chi.name}: sono file di {chi.name}; se la persona chiedeva il "
+              "file di un'altra persona (un genitore, un amico, un insegnante), di' che i file "
+              "degli altri non li vedi, e non presentare questi come suoi")
     righe, esatto = cas.cerca(chi.id, str(quale or ""))
     if devono is not None:
         righe = _trovate_davvero(righe, devono)
@@ -531,12 +537,22 @@ def proprietario_della_chiamata(ctx, args: dict):
         if subito is not None:
             return None
         chi, _prof, err = _proprietario(ctx, di)
+        if err is None:
+            # Niente domanda su una chiamata che il tool rifiuterebbe comunque (nessun file da
+            # toccare: quarta revisione della PR #143)
+            cas = getattr(ctx, "cassetto", None)
+            righe = cas.cerca(chi.id, str(_q or ""))[0] if cas is not None else [None]
+            if _d is not None:
+                righe = _trovate_davvero(righe, _d)
+            if not righe:
+                return None
     finally:
         ctx.regole = regole
     return None if err else chi
 
 
-def altra_persona_nella_frase(testo: str, args: dict, ctx) -> tuple[str, str] | None:
+def altra_persona_nella_frase(testo: str, args: dict, ctx, sempre: bool = False
+                              ) -> tuple[str, str] | None:
     """Vincolo di sicurezza su un'azione distruttiva o che sposta i file (17/10, #58, revisioni
     della PR #143): con `elimina` o `tieni`, se la frase della persona nomina un'altra persona
     di casa o una parentela che non è il proprietario del cassetto che il tool aprirà davvero
@@ -553,7 +569,9 @@ def altra_persona_nella_frase(testo: str, args: dict, ctx) -> tuple[str, str] | 
     from ..speaker_id import name_key
     nominati = [n for n in _nomina_altri(ctx, testo)
                 if name_key(n).split()[0] != name_key(chi.name).split()[0]]
-    if not nominati:
+    # `sempre`: la domanda di `politica.incoerente` quando la chiamata cambia dopo una domanda
+    # (quarta revisione della PR #143): dice comunque di chi è il cassetto
+    if not nominati and not sempre:
         return None
     mio = name_key(chi.name) == _io(ctx)
     dove = "Nel tuo cassetto" if mio else f"Nel cassetto di {chi.name}"

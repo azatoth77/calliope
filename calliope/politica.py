@@ -1163,6 +1163,20 @@ def incoerente(spec, name: str, args: dict, ctx) -> dict | None:
                      if tutto else _uguali(args, t.args_sospeso, ("azione", "stanza", "nome"))))
     if proposta or coerente(t.testo):
         return None
+    # Con Classe.chiedi_se la domanda dice di chi è il cassetto che si toccherebbe (17/10, #58,
+    # quarta revisione della PR #143: al secondo «sì» generico veniva eliminato il file di un
+    # cassetto mai nominato); nessuna domanda se il tool rifiuterebbe comunque
+    if tutto:
+        try:
+            dom = cl.chiedi_se(t.testo or "", args or {}, ctx, sempre=True)
+        except Exception:  # noqa: BLE001 — nel dubbio, la domanda di sempre
+            dom = ("politica_azione_incoerente", None)
+        if dom is None:
+            return None
+        if dom[1]:
+            note_rule(ctx, "politica_azione_incoerente")
+            print(f"   [POLITICA] {name}: politica_azione_incoerente", flush=True)
+            return _risultato(dom[1], name, args, "politica_azione_incoerente")
     descr, conseguenza = d
     try:
         descr = descr(args or {})

@@ -493,6 +493,20 @@ mediana 0,63 s (65 turni). Con «il file che Teodora ti ha mandato ieri» il mod
 `allegato_leggi(cassetto="Teodora", quando="ieri")`, riceve l'errore correggibile e risponde
 «Non sono riuscita a trovare il file»: nessun file di nessuno letto.
 
+**Quarta revisione della PR #143 (17/10 sera): il secondo tentativo del modello.** Dopo una
+domanda, un «sì» con una chiamata diversa (il modello passa a `minore="Bianca"`) riceveva la
+domanda generica di `politica.incoerente` («Intendi eliminare quei file?»), e al secondo «sì»
+il file di Bianca veniva eliminato senza che la persona l'avesse mai sentita nominare. Ora, per
+le classi con `chiedi_se`, `incoerente` usa la domanda di `altra_persona_nella_frase` (con
+`sempre=True`), che dice di chi è il cassetto («Nel cassetto di Bianca: vuoi che elimini i suoi
+file…?»), e non chiede nulla su una chiamata che il tool rifiuterebbe comunque
+(`proprietario_della_chiamata` cerca anche il file). In lettura l'errore correggibile dice di
+usare `minore` solo se il file è proprio di quel minore (non di un suo genitore, amico o
+insegnante), e il `cassetto_di` di un minore ha lo stesso avviso di quello di chi parla («non
+presentare questi come suoi»). Prove in `prova_cassetto.prova_quarta_revisione` (5 controlli,
+tutti falliscono sul codice di 6e8165b; 237 nel file). Le descrizioni dei tool non cambiano:
+banco col 26B non rilanciato.
+
 ### Il tutore dai pulsanti della scheda (08/10, dopo l'unione)
 
 Decisione di Dario: un tutore può operare anche sui file del cassetto del figlio dai pulsanti
