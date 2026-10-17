@@ -144,8 +144,6 @@ class Servizi:
     cancelli_percorso: object = None     # dove si salvano (10/10, main.py); None = in memoria
     # La fine del turno System 1 in ombra (14/10, system1.fine_turno.OmbraFineTurno), o None
     fine_turno: object = None
-    # La preselezione dei tool System 1 in ombra (15/10, system1.preselezione.OmbraPreselezione)
-    preselezione: object = None
     # Il registro degli eventi (10/10, calliope/eventi/): i registri per persona e anonimi per
     # satellite, condivisi dalle corsie; None = solo in memoria per corsia (prove)
     eventi: object = None
@@ -331,9 +329,6 @@ class Ciclo:
         # La fine del turno System 1 in ombra (14/10, calliope/system1/fine_turno.py): la
         # simulazione della frase di questo turno, che gira intanto in un thread suo
         self._fine_turno_job = None
-        # La preselezione dei tool System 1 in ombra (15/10, calliope/system1/preselezione.py):
-        # la scelta di questa risposta, che il decisore prepara mentre il modello risponde
-        self._presel_job = None
         # L'ultima persona riconosciuta dalla voce (sopra soglia) su questo satellite e quando
         # (monotonic): per le frasi cortissime fuori dalla conversazione (08/10, continuità)
         self._voce_recente: tuple[str, float] | None = None
@@ -3853,13 +3848,6 @@ class Ciclo:
                 contesto_turno = (contesto_turno + "\n" if contesto_turno else "") + t.contesto_gioco
             if getattr(t, "contesto_foto", None):
                 contesto_turno = (contesto_turno + "\n" if contesto_turno else "") + t.contesto_foto
-            # La preselezione dei tool in ombra (15/10, calliope/system1/preselezione.py): il
-            # decisore sceglie «nucleo» o «tutti» in un thread suo mentre il modello risponde
-            # (con tutti i tool, come sempre); l'esito va nel registro (_registra_risposta)
-            pre = getattr(s, "preselezione", None)
-            self._presel_job = (pre.valuta(brain, t.text, contesto_turno,
-                                           foto=bool(t.foto or t.files))
-                                if pre is not None else None)
             frasi = split_sentences(brain.stream_reply(
                 t.text, t.level, context=contesto_turno,
                 **({"immagini": t.foto} if t.foto else {}),
@@ -4122,14 +4110,6 @@ class Ciclo:
         from .brain import tools_per_registro
         rec.update(risposta=" ".join(t.said),
                    tool=tools_per_registro(getattr(brain, "last_tools", None)))
-        # La preselezione dei tool in ombra (15/10): l'insieme scelto accanto ai tool usati
-        job, self._presel_job = getattr(self, "_presel_job", None), None
-        pre = getattr(self.s, "preselezione", None)
-        if pre is not None and job is not None:
-            try:
-                pre.chiudi(rec, job)
-            except Exception:  # noqa: BLE001 — una misura non ferma il registro
-                pass
         # La frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py): codice o
         # modello, perché, e in ombra il tempo della seconda passata e il confronto
         if isinstance(getattr(brain, "last_dopo_tool", None), dict):

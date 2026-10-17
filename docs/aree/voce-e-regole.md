@@ -1927,7 +1927,7 @@ rende i cicli più probabili una volta cominciati). Nessuno da solo è una causa
 vale per ogni causa. Da guardare nel registro dei turni della DGX: la regola `ciclo_ripetuto` (quante
 volte, con che contesto).
 
-## La preselezione dei tool, System 1 in ombra (15/10, ramo `system1-preselezione`)
+## La preselezione dei tool, System 1 in ombra (15/10, ramo `system1-preselezione`; chiusa come misura negativa il 16/10)
 
 **Richiesta** (Dario, 14/10): modelli «System 1» veloci per le scelte che pesano sulla latenza.
 Dopo la fine del turno, il secondo caso è **quali tool servono a questa frase**. Il progetto,
@@ -1952,7 +1952,7 @@ le opzioni e le misure sono nella ricerca
     dati del turno o nella proposta, e con una foto o un file.
   - Niente regole sulle parole (principio 10): è una somiglianza statistica sui testi degli
     schemi.
-- **In ombra** (`preselezione_tool: ombra`, spenta di serie):
+- *[Storico, 15/10: dal 16/10 l'ombra è tolta, vedi sotto.]* **In ombra** (`preselezione_tool: ombra`, spenta di serie):
   - il modello vede sempre tutti i tool;
   - il decisore gira nel suo thread mentre il modello risponde (0,3 ms nel thread del ciclo);
   - il registro dei turni scrive `preselezione`: insieme, perché, schemi, `mancati` (tool usati
@@ -1968,12 +1968,41 @@ le opzioni e le misure sono nella ricerca
     75–180 ms sulla CPU del portatile carico.
   - **Riserva**: il banco l'ho scritto conoscendo le descrizioni. Il margine va confermato sui
     turni veri.
-- **Da lanciare sulla DGX**: `prove/manuali/preselezione_dgx.py`, comandi in testa al file.
+- *[Storico, 15/10: lanciato il 15/10 mattina, esiti nel punto sotto.]* **Da lanciare sulla DGX**:
+  `prove/manuali/preselezione_dgx.py`, comandi in testa al file.
   - `--registro`: il richiamo sui turni veri, senza modello;
   - `--latenza`, a Calliope inattiva: «tutti» contro «nucleo» col 26B, cache calda, cambio e
     ritorno, e il lavoro del server fuori dal modello.
   - I criteri proposti per un modo «attiva» sono nella ricerca, § 6. Se il risparmio a cache
     calda non c'è, la preselezione resta una misura.
+- **Misurata il 15/10 sulla DGX** (ricerca, § 7; gemma4 26B, 85 schemi): **non conviene**, ed è
+  spenta sulla DGX dal 15/10 pomeriggio.
+  - Richiamo **84 %** sui 1421 turni veri a margine 0,10 (83–84,5 % fra 0 e 0,20), contro il 100 %
+    del banco a secco: i mancati sono quasi tutti dell'agente e della modalità sviluppo
+    (`delega_lavoro` 46, `estensioni_gestisci` 20), seguiti di conversazioni lunghe.
+  - «Nucleo» solo nel 9 % dei turni.
+  - A cache calda il nucleo guadagna ~40 ms; ogni cambio d'insieme costa **+0,4–0,5 s**,
+    all'andata e al ritorno. Con 111 cambi su 1421 turni il saldo è negativo.
+  - Il divario dei turni con tool è la seconda passata: da lì è nata la
+    [frase dopo il tool](#la-frase-dopo-il-tool-system-1-1510-ramo-system1-dopo-tool) (15/10).
+- **Decisione del 16/10** (chi amministra, issue #25, opzione B): l'ombra esce dal ciclo, il
+  decisore resta come strumento di misura.
+  - Tolti i ganci in `ciclo.py` e `main.py`, la sezione di `calliope stato --turni` e i cinque
+    campi `preselezione_*` di `Config` (e da `calliope.yaml`).
+  - Dal modulo escono `OmbraPreselezione`, `load_preselezione`, `MODI` e `riassunto`. Restano
+    `Preselettore`, le due codifiche e i segnali di struttura.
+  - Per rimisurare resta `prove/manuali/preselezione_dgx.py --registro`, senza modello; il nucleo
+    da provare ora si passa con `--nucleo`.
+  - `prova_preselezione` tiene il banco, ma il richiamo 100 % ora è un avviso: una descrizione
+    cambiata non fa più diventare rossa la prova per il solo richiamo. Resta legata a
+    `calliope/tools/`, perché la copertura degli 85 tool, il nucleo di serie, le almeno 40 frasi
+    a «nucleo» e i casi «Blocca il computer» e la fattura dipendono dal registro dei tool.
+  - Un locale che ha ancora `preselezione_tool` (sulla DGX `spenta`) o un altro campo tolto dà
+    solo «Chiave sconosciuta … ignorata»: l'avvio non si ferma. Va tolto dal locale insieme
+    all'aggiornamento.
+  - Anche il recupero dei tool con un sottoinsieme che cambia a ogni turno (bge-m3, roadmap
+    «Resta da fare») è superato: rompe la cache come la preselezione, e gli embedding sono
+    andati peggio sul banco.
 
 ## Un ruolo non è un nome: la regola `rinomina_ruolo` (15/10, ramo `rinomina-ruolo`)
 

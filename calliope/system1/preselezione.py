@@ -9,12 +9,12 @@ dati del turno). Per questo non si sceglie un sottoinsieme qualsiasi a ogni turn
 sceglie fra **due insiemi stabili**,
 
 - «nucleo»: i tool di tutti i giorni (ora e date, calcoli, agenda, liste, memoria, casa, meteo,
-  ricerche e notizie, la conversazione), `NUCLEO`, o `preselezione_nucleo`;
+  ricerche e notizie, la conversazione), `NUCLEO`, o quelli passati a `Preselettore(nucleo=…)`;
 - «tutti»: l'elenco di oggi.
 
 Decide «nucleo» solo quando nessun tool fuori dal nucleo è vicino alla frase; nel dubbio
 «tutti» (il richiamo deve restare ~100 %: togliere il tool giusto vuol dire un «non posso» o
-un tool sbagliato). In più segna i `TOP` tool più vicini, per misurare in ombra anche la
+un tool sbagliato). In più segna i `TOP` tool più vicini, per misurare anche la
 variante «per famiglie» (che romperebbe la cache a ogni cambio).
 
 Come decide: un indice di **prototipi** costruito dagli schemi stessi (nome del tool, prima
@@ -24,22 +24,27 @@ Due codificatori (principio 2, stessa interfaccia `vettori(testi) -> list`):
 
 - «parole» (di serie): n-grammi di caratteri e parole con pesi tf-idf, sola libreria standard,
   < 5 ms, nessun modello, nessuna memoria;
-- «embedding»: il modello di embedding di Ollama (`preselezione_embedding`, di serie quello
-  delle conversazioni), sulla CPU (`conversazioni.Embedder`): più bravo con le parafrasi, ma
+- «embedding»: il modello di embedding di Ollama (quello delle conversazioni nello script
+  della DGX), sulla CPU (`conversazioni.Embedder`): più bravo con le parafrasi, ma
   tiene un modello residente in più su Ollama.
 
 Più i segnali di struttura, che non leggono il testo: un tool fuori dal nucleo usato nella
 conversazione, una proposta aperta o un tool nominato nei dati del turno, una foto o un file con
 la frase → «tutti».
 
-Principio 10: non è una regola sul testo. In «ombra» (l'unico modo di oggi) non cambia niente
-di ciò che va al modello: decide in un thread suo mentre il modello risponde e scrive nel
-registro dei turni (`preselezione`, solo nomi di tool e numeri) l'insieme scelto accanto ai
-tool usati davvero. `calliope stato --turni` ne fa il richiamo e gli schemi risparmiati.
+Principio 10: non è una regola sul testo.
+
+*[Storico, 15/10: l'ombra nel ciclo (`preselezione_tool: ombra`) scriveva nel registro dei
+turni l'insieme scelto accanto ai tool usati, e `calliope stato --turni` ne faceva il
+richiamo.]* Il 15/10 la misura sulla DGX è stata negativa (§ 7 della ricerca: richiamo 84 %
+sui turni veri, «nucleo» nel 9 %, ogni cambio d'insieme +0,4–0,5 s contro ~40 ms guadagnati).
+Dal 16/10 (issue #25, scelta B) l'ombra è tolta dal ciclo con i suoi campi di configurazione e
+la sezione di `calliope stato`: resta solo il decisore, come strumento di misura per
+`prove/manuali/preselezione_dgx.py --registro` (il richiamo sui turni veri, senza modello) e
+`prove/prova_preselezione.py` (il banco a secco). Nessun modulo di Calliope lo importa.
 """
 from __future__ import annotations
 
-import concurrent.futures as cf
 import math
 import re
 import time
@@ -47,12 +52,11 @@ import unicodedata
 import zlib
 from dataclasses import dataclass, field
 
-from . import Decisione, Sorvegliato
+from . import Decisione
 
 NUCLEO_SCELTA, TUTTI = "nucleo", "tutti"
-MODI = ("spenta", "ombra")
 CODIFICATORI = ("parole", "embedding")
-TOP = 8                         # i tool più vicini segnati nel registro (variante per famiglie)
+TOP = 8                         # i tool più vicini della variante «per famiglie»
 
 # Il nucleo di serie: i tool di tutti i giorni (15/10, dai giri veri: tempo, agenda, liste,
 # memoria, casa, ricerche, conversazione). Un tool che non c'è nell'installazione si ignora
@@ -321,7 +325,7 @@ def preso(scelta: Scelta | dict, accettati) -> bool:
     return any(a in nomi for a in acc)
 
 
-# ─────────────────────────────── l'ombra nel ciclo ───────────────────────────────
+# ─────────────────────── i segnali dalla conversazione ───────────────────────
 def tool_recenti(history, max_messaggi: int = 40) -> tuple[str, ...]:
     """I nomi dei tool chiamati negli ultimi messaggi della conversazione (formato interno di
     Brain: {"role": "assistant", "tool_calls": [{"name": …}]})."""
@@ -355,191 +359,8 @@ def nominati(testi, nomi) -> tuple[str, ...]:
     return tuple(n for n in nomi if n and re.search(rf"\b{re.escape(n)}\b", t))
 
 
-class OmbraPreselezione:
-    """Il modo «ombra»: a ogni risposta, mentre il modello lavora, decide l'insieme in un thread
-    suo (`valuta`); prima di scrivere il turno `chiudi` mette nel registro la scelta e quanti
-    schemi avrebbe tolto. Non tocca mai ciò che va al modello."""
-
-    def __init__(self, cfg, preselettore=None, log=print):
-        self.cfg = cfg
-        self.log = log
-        if isinstance(preselettore, Preselettore):
-            preselettore = _Lavoro(preselettore)
-        self.preselettore = preselettore or crea_preselettore(cfg, log)
-        self.decisore = Sorvegliato(self.preselettore, log)
-        self.valutate = 0
-        try:                      # il thread nasce adesso, non alla prima risposta (~7 ms)
-            self.decisore._pool.submit(lambda: None)
-        except RuntimeError:
-            pass
-
-    def valuta(self, brain, testo: str, contesto: str | None = None,
-               foto: bool = False) -> cf.Future | None:
-        """Copia dal Brain ciò che serve (conversazione, proposta aperta: pochi µs, nel thread
-        del ciclo) e manda il resto al decisore, nel suo thread: gli schemi di oggi, l'indice,
-        la scelta. Mai un errore verso il ciclo: None se non si può."""
-        try:
-            if not testo or not str(testo).strip():
-                return None
-            hist = list(getattr(brain, "history", None) or ())[-40:]
-            pending = getattr(brain, "pending", None)
-            dati = (brain.schemi, str(testo)[-500:], hist,
-                    [contesto, str(pending) if pending else ""], bool(foto))
-        except Exception:  # noqa: BLE001 — una misura non ferma la risposta
-            return None
-        return self.decisore.avvia(dati)
-
-    def chiudi(self, rec: dict, fut: cf.Future | None, attesa_s: float = 0.2):
-        """`rec["preselezione"]`: insieme, perché, schemi, i tool usati fuori dall'insieme
-        («mancati»), i più vicini; solo nomi di tool e numeri."""
-        if fut is None or not isinstance(rec, dict):
-            return
-        try:
-            s = fut.result(timeout=attesa_s)
-        except cf.TimeoutError:
-            fut.cancel()
-            rec["preselezione"] = {"esito": "in_ritardo"}
-            return
-        except Exception as e:  # noqa: BLE001
-            rec["preselezione"] = {"esito": "errore", "errore": type(e).__name__}
-            return
-        usati = [str(t.get("nome")) for t in rec.get("tool") or ()
-                 if isinstance(t, dict) and t.get("nome") and not t.get("sconosciuto")]
-        self.valutate += 1
-        rec["preselezione"] = {
-            "insieme": s.scelta, "perche": s.perche, "schemi": s.schemi,
-            "schemi_tutti": s.schemi_tutti, "ms": s.ms,
-            "mancati": sorted({u for u in usati if u not in s.nomi}),
-            # La variante «nucleo + i più vicini» (cambierebbe l'insieme a ogni turno)
-            "mancati_top": sorted({u for u in usati
-                                   if u not in self.preselettore.p.nucleo and u not in s.top}),
-            "top": list(s.top), "nucleo_max": s.nucleo_max, "fuori_max": s.fuori_max,
-            "codifica": getattr(self.preselettore.codifica, "nome", "?")}
-
-    def ferma(self):
-        self.decisore.chiudi()
-
-
-class _Lavoro:
-    """Adatta il Preselettore al Sorvegliato: (schemi, richiesta) → indice aggiornato e scelta."""
-
-    def __init__(self, p: Preselettore):
-        self.p = p
-        self.nome = p.nome
-        self.scelte = p.scelte
-        self.codifica = p.codifica
-
-    def decide(self, dati):
-        schemi, testo, hist, testi_dati, foto = dati
-        schemas = schemi() if callable(schemi) else schemi
-        self.p.aggiorna(schemas)
-        nomi = [str((x.get("function") or {}).get("name") or "") for x in schemas]
-        r = Richiesta(testo=testo, prima=_ultima_domanda(hist), recenti=tool_recenti(hist),
-                      nominati=nominati(testi_dati, nomi), foto=foto)
-        return self.p.decide(r)
-
-
-def modo(cfg) -> str:
-    m = str(getattr(cfg, "preselezione_tool", "spenta") or "spenta").strip().lower()
-    return m if m in MODI else "spenta"
-
-
-def crea_preselettore(cfg, log=print) -> _Lavoro:
-    cod = None
-    if str(getattr(cfg, "preselezione_codifica", "parole")) == "embedding":
-        try:
-            from ..conversazioni import Embedder
-            url = (getattr(cfg, "conversazioni_embedding_url", "") or
-                   getattr(cfg, "llm_native_url", "") or "http://127.0.0.1:11434")
-            modello = (getattr(cfg, "preselezione_embedding", "") or
-                       getattr(cfg, "conversazioni_embedding", "") or "qwen3-embedding:0.6b")
-            cod = CodificaEmbedding(Embedder(url, modello, cpu=True))
-        except Exception as e:  # noqa: BLE001
-            log(f"   [SYSTEM1] preselezione: embedding non disponibile ({type(e).__name__}), "
-                f"uso le parole")
-    nucleo = getattr(cfg, "preselezione_nucleo", None) or None
-    p = Preselettore(cod, nucleo=nucleo,
-                     margine=float(getattr(cfg, "preselezione_margine", MARGINE)),
-                     soglia_fuori=float(getattr(cfg, "preselezione_soglia_fuori", SOGLIA_FUORI)))
-    return _Lavoro(p)
-
-
 # Tarati sul banco a secco del 15/10 (prove/banco_preselezione.py, 148 frasi, codifica
 # «parole»): con margine 0,05 un tool mancato, da 0,10 nessuno (46 frasi su 148 a «nucleo»).
 # La soglia assoluta resta spenta (1,0): il margine basta
 MARGINE = 0.10
 SOGLIA_FUORI = 1.0
-
-
-def load_preselezione(cfg, log=print) -> OmbraPreselezione | None:
-    if modo(cfg) == "spenta":
-        return None
-    o = OmbraPreselezione(cfg, log=log)
-    log(f"   [SYSTEM1] preselezione dei tool in ombra ({o.preselettore.codifica.nome}): "
-        f"nucleo o tutti, misure in `calliope stato --turni`")
-    return o
-
-
-# ─────────────────────────────── riassunto ───────────────────────────────
-def riassunto(turni: list[dict]) -> dict:
-    """Dai turni con `preselezione`: quante risposte, quante a «nucleo», richiamo sui turni con
-    tool (tutti i tool usati dentro l'insieme), schemi risparmiati in media, mancati per nome,
-    richiamo della variante «nucleo + i più vicini», cambi d'insieme fra turni vicini."""
-    n = nucleo = con_tool = presi = presi_top = 0
-    risparmio, ms, mancati, cambi = [], [], {}, 0
-    prec = None
-    for t in turni:
-        p = t.get("preselezione")
-        if not isinstance(p, dict) or "insieme" not in p:
-            continue
-        n += 1
-        if p["insieme"] == NUCLEO_SCELTA:
-            nucleo += 1
-        if prec is not None and prec != p["insieme"]:
-            cambi += 1
-        prec = p["insieme"]
-        if isinstance(p.get("schemi_tutti"), int) and isinstance(p.get("schemi"), int):
-            risparmio.append(p["schemi_tutti"] - p["schemi"])
-        if isinstance(p.get("ms"), (int, float)):
-            ms.append(p["ms"])
-        usati = [x.get("nome") for x in t.get("tool") or () if isinstance(x, dict)
-                 and x.get("nome") and not x.get("sconosciuto")]
-        if usati:
-            con_tool += 1
-            mm = p.get("mancati") or []
-            if not mm:
-                presi += 1
-            for m in mm:
-                mancati[m] = mancati.get(m, 0) + 1
-            if not p.get("mancati_top"):
-                presi_top += 1
-    ms.sort()
-    return {"risposte": n, "nucleo": nucleo, "con_tool": con_tool, "presi": presi,
-            "richiamo": round(presi / con_tool, 3) if con_tool else None,
-            "richiamo_top": round(presi_top / con_tool, 3) if con_tool else None,
-            "risparmio_medio": round(sum(risparmio) / len(risparmio), 1) if risparmio else None,
-            "cambi": cambi, "ms_p50": ms[len(ms) // 2] if ms else None,
-            "ms_p90": ms[min(len(ms) - 1, int(.9 * len(ms)))] if ms else None,
-            "mancati": sorted(mancati.items(), key=lambda kv: -kv[1])[:8]}
-
-
-def testo(r: dict) -> str:
-    if not r.get("risposte"):
-        return ("Preselezione dei tool (System 1): nessuna risposta misurata "
-                "(preselezione_tool: spenta).")
-    rich = r["richiamo"]
-    righe = [f"Preselezione dei tool (System 1, ombra): {r['risposte']} risposte, «nucleo» in "
-             f"{r['nucleo']} ({100 * r['nucleo'] / r['risposte']:.0f} %), in media "
-             f"{r['risparmio_medio'] or 0} schemi in meno; cambi d'insieme fra turni {r['cambi']}",
-             f"    richiamo sui {r['con_tool']} turni con tool: "
-             + (f"{100 * rich:.1f} %" if rich is not None else "—")
-             + (f" (mancati: " + ", ".join(f"{k} ×{v}" for k, v in r["mancati"]) + ")"
-                if r["mancati"] else "")
-             + (f"; variante nucleo + i {TOP} più vicini {100 * r['richiamo_top']:.1f} %"
-                if r.get("richiamo_top") is not None else "")
-             + f"; decisore p50 {r['ms_p50'] if r['ms_p50'] is not None else '—'} ms, p90 "
-             f"{r['ms_p90'] if r['ms_p90'] is not None else '—'} ms"]
-    if rich is not None and rich < 0.99 and r["con_tool"] >= 20:
-        righe.append("    ATTENZIONE: il richiamo è sotto il 99 %: l'insieme piccolo toglierebbe "
-                     "il tool giusto (da non accendere)")
-    return "\n".join(righe)
