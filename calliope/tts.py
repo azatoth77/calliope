@@ -13,25 +13,31 @@ import sounddevice as sd
 
 from .config import Config
 from .pronuncia import Pronuncia, supporta_fonemi
-from .testi import SENTENCE_END
+from .testi import PAUSA_OLTRE, taglio_voce
 
 
 # ─────────────────────────────── FRASI ───────────────────────────────
 _EMOJI = re.compile(r"[\U0001F000-\U0001FAFF\u2600-\u27BF\uFE0F]")
 
 
-def split_sentences(chunks, min_chars: int = 25):
-    """Raggruppa i token in frasi da mandare al TTS appena sono complete."""
+def split_sentences(chunks, min_chars: int = 25, pausa_oltre: int = PAUSA_OLTRE,
+                    al_taglio=None):
+    """Raggruppa i token in frasi da mandare al TTS appena sono complete. Una frase più lunga
+    di `pausa_oltre` caratteri esce anche a pezzi, dopo un «; » (testi.taglio_voce, 17/10,
+    issue #132); `al_taglio()` si chiama a ogni pezzo tagliato così (la regola
+    `taglio_punto_e_virgola` nel registro dei turni)."""
     buf = ""
     for c in chunks:
         buf += c
         while True:
-            cut = next((m.end() for m in SENTENCE_END.finditer(buf)
-                        if m.end() >= min_chars), None)
-            if cut is None:
+            taglio = taglio_voce(buf, min_chars, pausa_oltre)
+            if taglio is None:
                 break
+            cut, al_pv = taglio
             sentence, buf = buf[:cut].strip(), buf[cut:]
             if sentence:
+                if al_pv and al_taglio is not None:
+                    al_taglio()
                 yield sentence
     if buf.strip():
         yield buf.strip()

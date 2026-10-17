@@ -495,6 +495,12 @@ tts:
   # della sintesi del resto. Velocità della voce e costo della sintesi non si scrivono: li
   # misura Calliope (calliope/taratura_voce.py, voce_taratura.json accanto a questo file).
   tts_primo_pezzo_min: 15
+  # Una frase senza punto più lunga di così (caratteri) va al TTS anche a pezzi, dopo un
+  # «; » (17/10, issue #132, calliope/testi.py → taglio_voce): col 26B le notizie arrivavano
+  # in una frase sola di 500–650 caratteri coi fatti uniti dal «;» e la voce aspettava la
+  # generazione intera. Mai alla virgola; non spezza gli elenchi brevi, le virgolette, le
+  # parentesi né «3; 4». 0 = solo a fine frase, come prima.
+  tts_spezza_streaming: 120
   # Taratura della voce all'avvio (07/10): una frase fissa sintetizzata quando la voce è
   # libera, e con tts_thread «auto» la scelta dei thread. Ogni sintesi vera aggiorna comunque
   # la stima; false = solo l'uso (prima, i predefiniti prudenti). CALLIOPE_TTS_TARATURA=0

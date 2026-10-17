@@ -59,6 +59,7 @@ from .schermi.moduli import annuncio_lavoro, completa as completa_modulo, oscura
 from .speaker_id import estimate_gender
 from .suoni import FINE, INIZIO
 from .tools.builtin import biblioteca_contesto
+from .testi import PAUSA_OLTRE
 from .tts import split_sentences, clean_for_speech, strip_false_citation
 from .wakeword import (SPEGNI_SATELLITE_MSG, closing_kind, exit_action, exit_request,
                        find_wake_word, is_stop, nuova_conversazione_come, risposta_al_nome)
@@ -603,6 +604,19 @@ class Ciclo:
         turni (campo `regole`), così la revisione può misurare quanto scatta e quando."""
         if self.rec is not None:
             self.rec.setdefault("regole", []).append(name)
+
+    def _pausa_oltre(self) -> int:
+        """`tts_spezza_streaming`: oltre quanti caratteri una frase va al TTS anche a pezzi,
+        dopo un «; » (testi.taglio_voce, 17/10, issue #132)."""
+        v = getattr(getattr(getattr(self, "s", None), "cfg", None), "tts_spezza_streaming",
+                    PAUSA_OLTRE)
+        return v if isinstance(v, int) and not isinstance(v, bool) else PAUSA_OLTRE
+
+    def _taglio_pv(self):
+        """Una frase lunga è andata al TTS a pezzi, dopo un «; »: la regola, una volta per
+        turno."""
+        if self.rec is not None and "taglio_punto_e_virgola" not in self.rec.get("regole", ()):
+            self.rule("taglio_punto_e_virgola")
 
     def _rifletti(self):
         """Passo 3 del registro degli eventi: scritto il turno, la storia di Brain diventa la
@@ -3851,7 +3865,8 @@ class Ciclo:
             frasi = split_sentences(brain.stream_reply(
                 t.text, t.level, context=contesto_turno,
                 **({"immagini": t.foto} if t.foto else {}),
-                **({"incerte": incerte} if incerte else {})))
+                **({"incerte": incerte} if incerte else {})),
+                pausa_oltre=self._pausa_oltre(), al_taglio=self._taglio_pv)
             if cfg.rete("riferire"):
                 frasi = riferire.filtra(brain, frasi, t.text, t.esito_u)
             if t.usa_guardia:
@@ -4109,7 +4124,10 @@ class Ciclo:
         # Gli argomenti di un minore senza i valori (13/10: in memoria restano quelli veri)
         from .brain import tools_per_registro
         rec.update(risposta=" ".join(t.said),
-                   tool=tools_per_registro(getattr(brain, "last_tools", None)))
+                   tool=tools_per_registro(getattr(brain, "last_tools", None)),
+                   # I pezzi mandati alla voce (17/10, issue #132: una risposta lunga in un
+                   # pezzo solo aspetta la generazione intera; latenza.per_tool)
+                   frasi_voce=len(t.said))
         # La frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py): codice o
         # modello, perché, e in ombra il tempo della seconda passata e il confronto
         if isinstance(getattr(brain, "last_dopo_tool", None), dict):
@@ -4518,7 +4536,7 @@ class Ciclo:
 
         def rendi(testo: str) -> str:
             frasi = (self._frase_da_dire(t, f, registra=False)
-                     for f in split_sentences([testo]))
+                     for f in split_sentences([testo], pausa_oltre=self._pausa_oltre()))
             return " ".join(f for f in frasi if f)
         try:
             if allinea(t.said, rendi):
@@ -4666,7 +4684,9 @@ class Ciclo:
         self.corsia.entra_llm()
         try:
             # Una continuazione, non un «Cerca pure.» finto dell'utente nella storia
-            for sentence in split_sentences(brain.stream_continuation(t.level, context=extra)):
+            for sentence in split_sentences(brain.stream_continuation(t.level, context=extra),
+                                            pausa_oltre=self._pausa_oltre(),
+                                            al_taglio=self._taglio_pv):
                 sentence = brain.strip_tool_mentions(sentence)
                 sentence = brain.speak_tool_names(sentence)
                 if sentence is None:

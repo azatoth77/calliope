@@ -25,6 +25,58 @@ MESI = ("gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", 
 # Fine di una frase per lo streaming verso il TTS (tts.split_sentences, Brain)
 SENTENCE_END = re.compile(r"[.!?…]+[\"»)\]]?\s+|\n+")
 
+# Il taglio al «; » nello streaming (17/10, issue #132): col 26B le notizie arrivavano in una
+# frase sola di 476 e 644 caratteri, coi fatti uniti da «;», e la voce aspettava la
+# generazione intera (prima voce a 3,7 e 4,3 s). Una frase più lunga di PAUSA_OLTRE caratteri
+# (`tts_spezza_streaming`) va al TTS anche a pezzi, dopo un «; »; mai dopo la virgola, troppo
+# frequente: la voce sarebbe sospesa ogni 20–30 caratteri. È una conversione della forma
+# (principio 10, regola `taglio_punto_e_virgola`): il testo resta uguale, cambia solo dove
+# comincia la sintesi.
+PAUSA_OLTRE = 120
+PAUSA_CLAUSOLA_MIN = 40     # sotto, fra due «;» c'è un elenco («cose: farina; uova; latte»)
+_PUNTO_E_VIRGOLA = re.compile(r";\s+")
+
+
+def _aperta(testo: str) -> bool:
+    """Il testo finisce dentro una citazione o una parentesi ancora aperta."""
+    return (testo.count("«") > testo.count("»") or testo.count('"') % 2 == 1
+            or testo.count("“") > testo.count("”") or testo.count("(") > testo.count(")"))
+
+
+def taglio_voce(buf: str, min_chars: int = 25, pausa_oltre: int = PAUSA_OLTRE
+                ) -> tuple[int, bool] | None:
+    """Dove finisce il primo pezzo di `buf` da mandare al TTS: (posizione, al «;»), oppure
+    None (si aspetta altro testo). È la fine di una frase (SENTENCE_END) dopo almeno
+    `min_chars` caratteri; se non c'è, o arriva oltre `pausa_oltre` caratteri, il primo «; »
+    che va bene: almeno `min_chars` caratteri prima; una clausola di almeno
+    PAUSA_CLAUSOLA_MIN caratteri dal «;» o dai due punti di prima, così un elenco
+    («servono queste cose: farina; uova; latte») non si spezza; fuori da virgolette e
+    parentesi; non fra due cifre («3; 4»). Il «;» resta nel pezzo, come in tts.primo_pezzo:
+    la voce ha l'intonazione sospesa e non quella di fine frase. `pausa_oltre` 0 = solo la
+    fine della frase.
+
+    Guarda solo il testo prima del taglio: le reti di Brain che trattengono il testo
+    (ClaimHold, FraseTolta) lo lasciano passare negli stessi punti, e la stessa frase si
+    taglia uguale in streaming e tutta in una volta (Ciclo._storia_come_detta la ridivide)."""
+    fine = next((m.end() for m in SENTENCE_END.finditer(buf) if m.end() >= min_chars), None)
+    limite = fine if fine is not None else len(buf)
+    if pausa_oltre > 0 and limite > pausa_oltre:
+        da = 0
+        for m in _PUNTO_E_VIRGOLA.finditer(buf, 0, limite):
+            clausola, da = buf[da:m.start()], m.end()
+            clausola = clausola[clausola.rfind(":") + 1:].strip()
+            if (m.end() < min_chars or len(clausola) < PAUSA_CLAUSOLA_MIN
+                    or _aperta(buf[:m.start()])):
+                continue
+            if buf[m.start() - 1:m.start()].isdigit():
+                if m.end() == len(buf):
+                    return None             # «3; » e la cifra dopo può ancora arrivare
+                if buf[m.end()].isdigit():
+                    continue
+            return m.end(), True
+    return (fine, False) if fine is not None else None
+
+
 # Gli indirizzi che restano su questo computer
 LOCALI = ("127.0.0.1", "localhost", "::1")
 

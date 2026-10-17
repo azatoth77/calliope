@@ -40,7 +40,8 @@ from . import (argomenti_incerti, dati_turno, luogo, politica, provenienza, stat
 from .risposte import forma_chiusa
 from .system1 import dopo_tool as dopo_tool_s1
 from .sicurezza import instruction_fact
-from .testi import MESI as _MESI, NIENTE, SENTENCE_END as _SENTENCE_END
+from .testi import MESI as _MESI, NIENTE, PAUSA_OLTRE, SENTENCE_END as _SENTENCE_END
+from .testi import taglio_voce
 from .tools import dialogo
 from .tools.argomento import AZIONI as ARGOMENTO_AZIONI, TOOL as ARGOMENTO_TOOL
 from .tools.registry import NOMI_VECCHI, ToolRegistry
@@ -368,8 +369,6 @@ CLAIM_NUDGE = ("Non hai chiamato nessun tool, quindi in questo turno non hai fat
                "chi parla chiede un'azione, chiama adesso il tool giusto con gli argomenti presi "
                "dalla domanda (bastano le parole dette), anche se l'avevi già fatta in un turno "
                "precedente. Non dire di averla fatta senza chiamare il tool.")
-# Inizio di una frase detta (come tts.split_sentences, almeno 25 caratteri)
-_FIRST_SENTENCE = re.compile(r"[.!?…]+[\"»)\]]?\s+|\n+")
 _WORD = re.compile(r"[a-zàèéìòù0-9]+", re.I)
 
 
@@ -741,15 +740,17 @@ RICERCA_COME_DI_SOLITO = "con una domanda breve e mirata"
 # `scrivo_qui_a_voce`, solo quando la persona parla a voce, non quando scrive dallo schermo)
 SCRIVO_QUI = re.compile(r"\b(?:te\s+|ve\s+)?(?:l[oaie]\s+|l['’]\s*)?scriv\w*\s+(?:qui|qua)\b"
                         r"|\bqui\s+(?:nella|in)\s+(?:conversazione|chat)\b", re.I)
-_FINE_FRASE = re.compile(r"[.!?…]+[\"»)\]]?\s+|\n+")
 
 
 class FraseTolta:
     """Toglie dal testo detto le frasi intere che corrispondono a `rx`. Aspetta la fine di ogni
     frase (il TTS la aspetterebbe comunque); le frasi tolte restano in `tolte`."""
 
-    def __init__(self, rx, active: bool):
+    def __init__(self, rx, active: bool, pausa_oltre: int = PAUSA_OLTRE):
         self.rx, self.active = rx, active
+        # Una frase lunga esce anche a pezzi dopo un «; », come in tts.split_sentences (17/10,
+        # issue #132): senza, una risposta di 600 caratteri senza punto restava qui intera
+        self.pausa_oltre = pausa_oltre
         self.buf = ""
         self.tolte: list[str] = []
 
@@ -759,10 +760,10 @@ class FraseTolta:
         self.buf += text
         out = ""
         while True:
-            m = _FINE_FRASE.search(self.buf)
-            if not m:
+            taglio = taglio_voce(self.buf, 0, self.pausa_oltre)
+            if taglio is None:
                 return out
-            frase, self.buf = self.buf[:m.end()], self.buf[m.end():]
+            frase, self.buf = self.buf[:taglio[0]], self.buf[taglio[0]:]
             if self.rx.search(frase):
                 self.tolte.append(frase.strip())
             else:
@@ -789,7 +790,11 @@ class ClaimHold:
 
     def __init__(self, active: bool, actions=(), non_so: bool = False, rinuncia=None,
                  fallito: bool = False, ripetuta: str | None = None,
-                 ripetuta_soglia: float | None = None):
+                 ripetuta_soglia: float | None = None, pausa_oltre: int = PAUSA_OLTRE):
+        # Il primo pezzo può finire a un «; » di una frase lunga, come in tts.split_sentences
+        # (17/10, issue #132): senza, la risposta delle notizie unita dai «;» restava qui
+        # intera fino all'ultimo token
+        self.pausa_oltre = pausa_oltre
         self.claims = active
         # La risposta precedente (09/10, calliope/ripetizione.py): una risposta che la ripete
         # uguale si trattiene allo stesso modo, kind "ripetuta"; con la domanda insistita
@@ -835,10 +840,10 @@ class ClaimHold:
         self.buf += text
         if self.state == "hold":
             return ""
-        cut = next((m.end() for m in _FIRST_SENTENCE.finditer(self.buf) if m.end() >= 25),
-                   None)
-        if cut is None:
+        taglio = taglio_voce(self.buf, 25, self.pausa_oltre)
+        if taglio is None:
             return ""
+        cut = taglio[0]
         if self._match(self.buf[:cut].strip()):
             self.state = "hold"
             return ""
@@ -2385,10 +2390,12 @@ class Brain:
         guard = TextCallGuard(self.tools.all_schemas() if self._net("textcallguard") else [])
         a_voce = getattr(getattr(getattr(self, "tool_ctx", None), "speaker_ctx", None),
                          "identified_by", None) != "schermo"
-        qui = FraseTolta(SCRIVO_QUI, a_voce and self._net("scrivo_qui_a_voce"))
+        pausa = self._pausa_oltre()
+        qui = FraseTolta(SCRIVO_QUI, a_voce and self._net("scrivo_qui_a_voce"), pausa)
         hold = ClaimHold(hold_claims and self._net("spinta_dichiarata"), actions,
                          non_so=hold_non_so, rinuncia=hold_rinuncia, fallito=hold_fallito,
-                         ripetuta=hold_ripetuta, ripetuta_soglia=hold_ripetuta_soglia)
+                         ripetuta=hold_ripetuta, ripetuta_soglia=hold_ripetuta_soglia,
+                         pausa_oltre=pausa)
         self._held_kind = None
         self.mentions_tool("")                       # prepara _tool_re
         names = ToolNameHold(self._tool_re, hold_names and self._net("chiamata_in_mezzo"))
@@ -2633,6 +2640,12 @@ class Brain:
         if any(k not in args for k in required):
             return None
         return {"id": "call_testo", "name": spec.name, "arguments": args}
+
+    def _pausa_oltre(self) -> int:
+        """Oltre quanti caratteri una frase va al TTS anche a pezzi, dopo un «; »
+        (`tts_spezza_streaming`, testi.taglio_voce, 17/10, issue #132)."""
+        v = getattr(getattr(self, "cfg", None), "tts_spezza_streaming", PAUSA_OLTRE)
+        return v if isinstance(v, int) and not isinstance(v, bool) else PAUSA_OLTRE
 
     def _net(self, name: str) -> bool:
         """La rete o spinta `name` è accesa? (Config.llm_reti_spente, di solito dal profilo
