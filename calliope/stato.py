@@ -43,7 +43,10 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               frase dopo il tool System 1: codice o
                                               modello, seconda passata risparmiabile e
                                               frasi uguali nella sostanza in ombra
-                                              (calliope/system1/dopo_tool.py, 15/10)
+                                              (calliope/system1/dopo_tool.py, 15/10);
+                                              notizie: quota dai giornali e da internet,
+                                              vuote e perché, rifiuti ai minori, per giorno
+                                              (calliope/notizie/misura.py, 16/10)
     python -m calliope.stato --reti [--giorni N] [--json]
                                               le reti del modello per profilo (15/10, E11,
                                               calliope/reti_scatti.py): scatti, risposte
@@ -516,6 +519,9 @@ def main(argv=None) -> int:
         # La pertinenza delle ricerche (16/10, issue #101, calliope/pertinenza.py)
         from . import pertinenza
         pert_r = pertinenza.riassunto(turni)
+        # La quota delle notizie dai giornali e da internet (16/10, issue #31)
+        from .notizie import misura as misura_notizie
+        notizie_r = misura_notizie.riassunto(turni)
         # La conversazione di stanza (13/10, calliope/stanza/misure.py, passo 1): solo numeri
         from .stanza import misure as misure_stanza
         stanza = misure_stanza.riassunto(misure_stanza.leggi(cfg.turn_log_dir, giorni), turni)
@@ -551,6 +557,7 @@ def main(argv=None) -> int:
                               "dopo_tool": dopo_tool_r,
                               "frasi_pronte": pronte,
                               "pertinenza_ricerche": pert_r,
+                              "notizie": notizie_r,
                               "stanza": stanza, "fine_turno": fine_r,
                               "guardia": {k: v for k, v in guardia_r.items()
                                           if k not in ("elenco", "letture")}},
@@ -581,6 +588,8 @@ def main(argv=None) -> int:
             print(frasi.testo(pronte))
             print()
             print(pertinenza.testo(pert_r, pertinenza.modo(cfg)))
+            print()
+            print(misura_notizie.testo(notizie_r))
             print()
             print(misure_stanza.testo(stanza))
             print()
