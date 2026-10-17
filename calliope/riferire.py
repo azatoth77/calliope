@@ -44,6 +44,7 @@ import time
 from dataclasses import dataclass, field
 
 from . import provenienza as prov
+from .testi import di_frase
 
 OK = "ok"
 
@@ -724,23 +725,45 @@ def filtra(brain, frasi, domanda: str, esito: Esito):
     cache: dict = {}
     taciute: list[str] = []
     detta_una = False
+    fermata_aperta = False      # un pezzo di questa frase è stato fermato: il resto non si dice
     try:
         for frase in frasi:
+            # Una frase lunga arriva a pezzi tagliati a un «; » (17/10, issue #132): si giudica
+            # la frase fino a questo pezzo (Pezzo.intera), mai meno di quando arrivava tutta,
+            # così le regole a due elementi (un segreto e «comunicare», un pagamento e il
+            # destinatario) vedono le due metà insieme (revisione della PR #139). Se scatta su
+            # un pezzo dopo, i pezzi prima sono già detti: si ferma da qui alla fine della frase
+            aperta, prima = di_frase(frase)
+            if fermata_aperta:
+                fermata_aperta = aperta
+                continue
+            intera = f"{prima} {frase}" if prima else frase
             t0 = time.perf_counter()
             chiave = (len(getattr(brain, "history", None) or []), bool(getattr(brain, "_in_vista",
                                                                               None)))
             if cache.get("k") != chiave:
                 cache["k"], cache["ctx"] = chiave, contesto_da(brain, domanda)
             ctx = cache["ctx"]
-            g = giudica(frase, ctx)
+            g = giudica(intera, ctx)
             esito.ms.append(round((time.perf_counter() - t0) * 1000, 2))
             if g.esito == OK:
-                if g.frase != frase:
+                detta = g.frase
+                if g.frase != intera:
                     esito.fonte_aggiunta += 1
-                esito.detto.append(g.frase)
+                    if prima:
+                        # La fonte davanti a un pezzo, non alla frase già detta
+                        detta = (f"secondo {prov.detta(g.fonte)}, "
+                                 + (frase[:1].lower() + frase[1:] if frase[1:2].islower()
+                                    else frase))
+                elif prima:
+                    detta = frase
+                if hasattr(frase, "con"):
+                    detta = frase.con(detta)
+                esito.detto.append(detta)
                 detta_una = True
-                yield g.frase
+                yield detta
                 continue
+            fermata_aperta = aperta
             esito.fermate.append((g.esito, g.fonte, g.dettaglio))
             # La frase fermata nel journal (accorciata): senza, i casi veri si indovinavano.
             # Mai le parole per un ospite (conserva.console_riservata; dal 12 al 16/10 anche

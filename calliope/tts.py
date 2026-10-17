@@ -13,7 +13,7 @@ import sounddevice as sd
 
 from .config import Config
 from .pronuncia import Pronuncia, supporta_fonemi
-from .testi import PAUSA_OLTRE, taglio_voce
+from .testi import PAUSA_OLTRE, Pezzo, taglio_voce
 
 
 # ─────────────────────────────── FRASI ───────────────────────────────
@@ -25,22 +25,35 @@ def split_sentences(chunks, min_chars: int = 25, pausa_oltre: int = PAUSA_OLTRE,
     """Raggruppa i token in frasi da mandare al TTS appena sono complete. Una frase più lunga
     di `pausa_oltre` caratteri esce anche a pezzi, dopo un «; » (testi.taglio_voce, 17/10,
     issue #132); `al_taglio()` si chiama a ogni pezzo tagliato così (la regola
-    `taglio_punto_e_virgola` nel registro dei turni)."""
-    buf = ""
+    `taglio_punto_e_virgola` nel registro dei turni).
+
+    Ogni elemento è un `testi.Pezzo`: una stringa con `aperta` (la frase continua nel pezzo
+    dopo) e `prima` (i pezzi della stessa frase già usciti). Chi giudica una frase alla volta
+    giudica `Pezzo.intera()`, come quando la frase arrivava tutta insieme (revisione della PR
+    #139)."""
+    buf, inizio, prima = "", 0, []
     for c in chunks:
         buf += c
         while True:
-            taglio = taglio_voce(buf, min_chars, pausa_oltre)
+            taglio = taglio_voce(buf, min_chars, pausa_oltre, inizio)
             if taglio is None:
                 break
             cut, al_pv = taglio
-            sentence, buf = buf[:cut].strip(), buf[cut:]
-            if sentence:
-                if al_pv and al_taglio is not None:
-                    al_taglio()
-                yield sentence
-    if buf.strip():
-        yield buf.strip()
+            pezzo = buf[inizio:cut].strip()
+            if al_pv:
+                inizio = cut
+                if pezzo:
+                    if al_taglio is not None:
+                        al_taglio()
+                    yield Pezzo(pezzo, True, " ".join(prima))
+                    prima.append(pezzo)
+                continue
+            buf, inizio = buf[cut:], 0
+            if pezzo:
+                yield Pezzo(pezzo, False, " ".join(prima))
+            prima = []
+    if buf[inizio:].strip():
+        yield Pezzo(buf[inizio:].strip(), False, " ".join(prima))
 
 
 # La prima frase a pezzi (07/10, la voce che si sente): Piper sintetizza una frase intera prima

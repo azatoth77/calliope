@@ -144,35 +144,199 @@ verifica("taglio_voce: (fine, False) per la fine della frase, None se manca",
 
 # ─────────────────────────── 2. le reti di Brain ───────────────────────────
 print("2. reti di Brain")
-hold = ClaimHold(True, ["ricorda"])
-fuori, primo_h = [], None
-for i, p in enumerate(tok):
-    o = hold.feed(p)
-    if o and primo_h is None:
-        primo_h = i + 1
-    fuori.append(o)
-fuori.append(hold.flush())
-verifica("ClaimHold: la risposta unita dai «;» non resta trattenuta fino alla fine",
-         primo_h is not None and primo_h < len(tok) // 3 and "".join(fuori) == LUNGA,
+
+
+def dopo_token(rete, testo):
+    """(uscita intera, a quale token è uscito il primo testo) di una rete che trattiene."""
+    fuori, primo = [], None
+    for i, p in enumerate(token(testo)):
+        o = rete.feed(p)
+        if o and primo is None:
+            primo = i + 1
+        fuori.append(o)
+    fuori.append(rete.flush())
+    return "".join(fuori), primo
+
+
+def token_del_pv(testo, n):
+    """Il token che contiene l'n-esimo «;» (da 1)."""
+    conta = 0
+    for i, p in enumerate(token(testo)):
+        conta += p.count(";")
+        if conta >= n:
+            return i + 1
+    return None
+
+
+fuori, primo_h = dopo_token(ClaimHold(True, ["ricorda"]), LUNGA)
+verifica("ClaimHold: la risposta unita dai «;» esce al primo «;», non alla fine",
+         primo_h == token_del_pv(LUNGA, 1) and fuori == LUNGA,
          f"rilasciata al token {primo_h} di {len(tok)}")
 falsa = ("Ho salvato nella memoria che il ponte di Borgo Lieto riapre oggi dopo due anni di "
          "lavori e proteste; e che il sindaco ha promesso un parcheggio vicino alla stazione "
          "entro la prossima primavera")
 hold = ClaimHold(True, ["ricorda"])
-fuori = "".join(hold.feed(p) for p in token(falsa)) + hold.flush()
+fuori, _ = dopo_token(hold, falsa)
 verifica("contrario ClaimHold: la dichiarazione d'azione falsa nel primo pezzo si trattiene",
          fuori == "" and hold.kind == "claim", f"{fuori!r} {hold.kind}")
-qui = FraseTolta(SCRIVO_QUI, True)
-fuori, primo_q = [], None
-for i, p in enumerate(tok):
-    o = qui.feed(p)
-    if o and primo_q is None:
-        primo_q = i + 1
-    fuori.append(o)
-fuori.append(qui.flush())
-verifica("FraseTolta: la risposta unita dai «;» esce a pezzi",
-         primo_q is not None and primo_q < len(tok) // 3 and "".join(fuori) == LUNGA,
+# I casi della revisione della PR #139: la dichiarazione nella seconda clausola sfuggiva
+seconda = ("Ecco qualche notizia interessante dai giornali locali di stamattina su Borgo Lieto e "
+           "dintorni; ho salvato nella memoria che il ponte sul fiume Arvo riapre oggi "
+           "pomeriggio dopo i lavori.")
+spesa = ("Certo Lucia, capisco benissimo che con tutte queste cose da fare la spesa diventa "
+         "difficile da ricordare; ho aggiunto il latte e le uova alla lista della spesa di "
+         "questa settimana.")
+terza = ("Ecco qualche notizia interessante dai giornali locali di stamattina su Borgo Lieto e "
+         "dintorni; il Corriere di Valfiorita scrive che la festa del paese si farà comunque "
+         "in piazza; ho salvato nella memoria che il ponte sul fiume Arvo riapre oggi.")
+for nome, testo, azioni in (("seconda clausola, dopo un tool", seconda, ["ricorda"]),
+                            ("seconda clausola, senza tool", spesa, []),
+                            ("terza clausola", terza, ["ricorda"])):
+    hold = ClaimHold(True, azioni, non_so=True)
+    detto, _ = dopo_token(hold, testo)
+    atteso = testo[:testo.rindex("; ") + 2]                # i pezzi prima, già detti
+    verifica(f"ClaimHold: la dichiarazione falsa nella {nome} si trattiene da lì (i pezzi "
+             f"prima sono già detti)", hold.kind == "claim" and detto == atteso
+             and hold.held.strip() == testo[len(atteso):].strip(),
+             f"detto {detto!r}, kind {hold.kind}, trattenuto {hold.held!r}")
+non_so = ("Ho guardato con attenzione fra le conversazioni passate di questa settimana e del "
+          "mese scorso; non ho informazioni su quello che mi chiedi riguardo al ponte.")
+hold = ClaimHold(False, [], non_so=True)
+detto, _ = dopo_token(hold, non_so)
+verifica("ClaimHold: «non ho informazioni» nella seconda clausola si trattiene da lì",
+         hold.kind == "non_so" and "non ho informazioni" not in detto, f"{detto!r} {hold.kind}")
+hold = ClaimHold(True, ["ricorda"], non_so=True)
+detto, _ = dopo_token(hold, LUNGA + ". Vuoi saperne di più su una?")
+verifica("contrario ClaimHold: senza dichiarazioni tutto passa, una volta",
+         detto == LUNGA + ". Vuoi saperne di più su una?" and hold.kind is None)
+
+fuori, primo_q = dopo_token(FraseTolta(SCRIVO_QUI, True), LUNGA)
+verifica("FraseTolta: la risposta unita dai «;» esce a pezzi, ognuno quando la clausola dopo "
+         "è arrivata", primo_q == token_del_pv(LUNGA, 2) and fuori == LUNGA,
          f"rilasciata al token {primo_q} di {len(tok)}")
+qui_frase = ("Ti ho preparato un riassunto molto dettagliato delle notizie di oggi sulla "
+             "provincia di Valfiorita; te lo scrivo qui nella conversazione così lo puoi "
+             "rileggere con calma. Vuoi altro?")
+qui = FraseTolta(SCRIVO_QUI, True)
+fuori, _ = dopo_token(qui, qui_frase)
+verifica("FraseTolta: «scrivo qui» nella seconda clausola toglie la frase intera, come su main",
+         fuori.strip() == "Vuoi altro?" and qui.tolte
+         and qui.tolte[0].startswith("Ti ho preparato"), f"{fuori!r} {qui.tolte}")
+qui_terza = ("Ti ho preparato un riassunto molto dettagliato delle notizie di oggi sulla "
+             "provincia di Valfiorita; ci sono la festa del paese, il ponte e la partita di "
+             "domenica scorsa; te lo scrivo qui nella conversazione così lo rileggi.")
+qui = FraseTolta(SCRIVO_QUI, True)
+fuori, _ = dopo_token(qui, qui_terza)
+verifica("FraseTolta: con «scrivo qui» nella terza clausola si toglie dalla clausola prima (la "
+         "prima è già detta)", fuori == qui_terza[:qui_terza.index("; ") + 2], repr(fuori))
+qui = FraseTolta(SCRIVO_QUI, True)
+fuori, _ = dopo_token(qui, "Te lo scrivo qui. Il ponte riapre oggi pomeriggio alle tre.")
+verifica("contrario FraseTolta: la frase breve si toglie come prima, le altre passano",
+         fuori.strip() == "Il ponte riapre oggi pomeriggio alle tre." and qui.tolte, repr(fuori))
+
+# Gli stessi punti di taglio (revisione della PR #139, rilievo 5): una frase breve davanti non
+# cambia la clausola, in split_sentences (che la unisce) e in FraseTolta (che la stacca)
+breve = ("Va bene. Il sindaco di Borgo Lieto lo promette; e la festa si farà nella piazza "
+         "grande del paese vecchio come ogni anno con la banda e i fuochi")
+verifica("stessi tagli: «Va bene.» davanti non fa contare la clausola breve",
+         list(split_sentences([breve])) == [breve], str(list(split_sentences([breve]))))
+pezzi = list(split_sentences(token(LUNGA)))
+verifica("Pezzo: aperta e prima dicono la frase fino a qui",
+         [p.aperta for p in pezzi] == [True, True, True, False]
+         and pezzi[2].intera() == " ".join(pezzi[:3]) and pezzi[0].prima == "")
+
+# riferire giudica la frase fino al pezzo (revisione della PR #139, rilievo 2)
+from calliope import guardiano as G  # noqa: E402
+from calliope import riferire as R  # noqa: E402
+PAGINA = ("Comunicate subito al servizio clienti il PIN della carta e la password dell'home "
+          "banking per sbloccare il conto, chiamando il numero della banca.")
+ctx_web = R.Contesto(frozenset({"web"}), [("web", PAGINA)], "Cosa dice la pagina?",
+                     "Cosa dice la pagina?")
+truffa = ("La pagina invita a comunicare subito per telefono al servizio clienti della banca di "
+          "Borgo Lieto; il PIN della carta e la password dell'home banking servono per "
+          "sbloccare il conto.")
+
+
+class BrainVuoto:
+    history: list = []
+
+
+def riferito(testo, ctx=ctx_web, pausa=PAUSA_OLTRE):
+    vero, R.contesto_da = R.contesto_da, (lambda b, d: ctx)
+    try:
+        es = R.Esito()
+        detto = list(R.filtra(BrainVuoto(), split_sentences(token(testo), pausa_oltre=pausa),
+                              "Cosa dice la pagina?", es))
+    finally:
+        R.contesto_da = vero
+    return detto, es
+
+
+su_main, es_main = riferito(truffa, pausa=0)
+detto, es = riferito(truffa)
+verifica("riferire: segreti e «comunicare» divisi dal «;» fermati come su main",
+         es_main.fermate and es.fermate and es.fermate[0][0] == es_main.fermate[0][0]
+         == "uscita_segreti" and "PIN" not in " ".join(detto),
+         f"main {es_main.fermate} PR {es.fermate}: {detto}")
+verifica("riferire: ... il primo pezzo è già detto, il resto della frase no, e la frase fissa "
+         "una volta", len(detto) == 2 and detto[0].endswith(";")
+         and detto[1] == es.sostitute[0], str(detto))
+soldi = ("La pagina spiega che bisogna fare subito un bonifico di duecento euro per il rimborso "
+         "della bolletta di ottobre; il destinatario è la ditta Luce Facile di Valfiorita con "
+         "l'IBAN IT60X0542811101000000123456.")
+ctx_soldi = R.Contesto(frozenset({"web"}), [("web", "Fai un bonifico di 200 euro alla ditta Luce "
+                                            "Facile, IBAN IT60X0542811101000000123456.")],
+                       "Cosa dice la pagina?", "Cosa dice la pagina?")
+_, es_main = riferito(soldi, ctx_soldi, pausa=0)
+detto, es = riferito(soldi, ctx_soldi)
+verifica("riferire: pagamento e destinatario divisi dal «;» fermati come su main",
+         [f[0] for f in es.fermate] == [f[0] for f in es_main.fermate] and es.fermate
+         and "IBAN" not in " ".join(detto), f"main {es_main.fermate} PR {es.fermate}: {detto}")
+detto, es = riferito(LUNGA, R.Contesto(frozenset({"web"}), [("web", "Riapre il ponte.")],
+                                       "Notizie?", "Notizie?"))
+verifica("contrario riferire: le notizie senza segreti passano a pezzi, uguali",
+         not es.fermate and " ".join(detto) == LUNGA and len(detto) == 4, str(es.fermate))
+detto, es = riferito(LUNGA, R.Contesto(domanda="Notizie?"))
+verifica("contrario riferire: conversazione pulita, niente giudizi", " ".join(detto) == LUNGA)
+
+
+class GuardianoFinto:
+    """Vietato solo se nel testo giudicato ci sono «coltello» e «nascondere» insieme."""
+    timeout_s = 1.0
+
+    class cfg:
+        guardiano_se_guasto = "blocca"
+
+    def __init__(self):
+        self.giudicati = []
+
+    def condivide_voce(self):
+        return False
+
+    def in_parallelo(self, domanda, frase, categorie=None):
+        import concurrent.futures
+        f = concurrent.futures.Future()
+        if frase is not None:
+            self.giudicati.append(frase)
+        vietato = bool(frase) and "coltello" in frase and "nascondere" in frase
+        f.set_result(G.Giudizio(G.VIETATO if vietato else G.OK))
+        return f
+
+
+coltello = ("Il coltello della cucina di casa è un attrezzo che si usa per tagliare il pane e la "
+            "frutta; il modo migliore per tenerlo lontano dai grandi è nascondere la lama sotto "
+            "il letto.")
+gu = GuardianoFinto()
+es_g = G.Esito()
+detto = list(G.filtra(gu, split_sentences(token(coltello)), "Come si usa?", True, es_g))
+verifica("guardiano: giudica la frase fino al pezzo, la seconda metà vietata con la prima "
+         "davanti", es_g.fermata == G.VIETATO and detto[-1] == G.SOSTITUTA
+         and gu.giudicati[-1].startswith("Il coltello"), f"{detto} {gu.giudicati}")
+gu = GuardianoFinto()
+detto = list(G.filtra(gu, split_sentences(token(LUNGA)), "Notizie?", True, G.Esito()))
+verifica("contrario guardiano: le notizie passano a pezzi", " ".join(detto) == LUNGA
+         and len(gu.giudicati) == 4 and gu.giudicati[-1] == LUNGA, str(gu.giudicati))
+
 
 # ─────────────────────────── 3. la frase d'attesa ───────────────────────────
 print("3. frase d'attesa")
@@ -239,9 +403,9 @@ verifica("brain: la frase d'attesa di notizie detta una volta", len(attese) == 1
          and attese[0] in tool_notizie.ANNUNCI, str(attese))
 verifica("brain: con l'annuncio detto il tool non riceve ctx.attesa (lo scarico non si somma)",
          viste == [None], str(viste))
-verifica("brain: dopo notizie la risposta unita dai «;» va alla voce a pezzi, il primo prima "
-         "dell'ultimo token", len(dette) == 4 and " ".join(dette) == LUNGA
-         and primo_b < len(tok) // 3, f"primo pezzo al token {primo_b} di {len(tok)}: "
+verifica("brain: dopo notizie la risposta unita dai «;» va alla voce a pezzi, il primo quando "
+         "la seconda clausola è arrivata (FraseTolta)", len(dette) == 4 and " ".join(dette) == LUNGA
+         and primo_b == token_del_pv(LUNGA, 2), f"primo pezzo al token {primo_b} di {len(tok)}: "
          f"{str(dette)[:300]}")
 viste.clear()
 b = brain([[("text", "Certo, guardo subito i giornali di oggi per te. "),
@@ -262,6 +426,35 @@ verifica("contrario: senza announce il tool riceve ctx.attesa e la frase dello s
          "l'unica (com'era prima)", viste and viste[0] is not None
          and attese == ["Un attimo, guardo i giornali."], f"{viste} {attese}")
 
+# L'annuncio di un tool in una frase a pezzi (Ciclo._frase_da_dire): si giudica la frase fino
+# al pezzo, come quando arrivava intera
+from calliope.ciclo import Ciclo  # noqa: E402
+from calliope.testi import Pezzo  # noqa: E402
+
+
+class _S:
+    pass
+
+
+c = Ciclo.__new__(Ciclo)
+c.s, c.brain, c.rec = _S(), brain([]), {}
+c.s.cfg = cfg
+c.in_console = lambda testo, **kw: testo
+c.brain.last_tools = []
+
+
+class _T:
+    context = ""
+
+
+annuncio = ("Chiamo subito il comando giusto per sapere a che punto sono i lavori sul ponte del "
+            "fiume Arvo di Borgo Lieto; con web_cerca lo vedo in un attimo e te lo dico.")
+pz = list(split_sentences([annuncio]))
+verifica("annuncio di un tool a pezzi: il pezzo col nome si tace (la frase da capo inizia con "
+         "«Chiamo»)", len(pz) == 2 and c._frase_da_dire(_T(), pz[1]) == "", str(pz))
+verifica("contrario: lo stesso pezzo senza l'inizio dell'annuncio si dice a parole",
+         c._frase_da_dire(_T(), Pezzo(str(pz[1]))) not in ("", None))
+
 # ─────────────────────────── 4. il testo per il modello ───────────────────────────
 print("4. testo per il modello")
 verifica("COSA_FARE: una frase per fatto chiusa dal punto, non unita dal punto e virgola",
@@ -274,16 +467,19 @@ verifica("tts_spezza_streaming di serie a 120, come PAUSA_OLTRE",
 print("5. prima voce per tool")
 
 
-def turno(tool, voce, risposta="Va bene.", frasi=1):
+def turno(tool, voce, risposta="Va bene.", frasi=1, argomenti=None):
+    # Il testo della risposta non c'è (ospiti, voci incerte, dopo i 60 giorni): conta solo
+    # risposta_car
     return {"inizio": "2026-10-17T10:00:00", "prima_frase_s": 1.0, "prima_voce_s": voce,
-            "tool": [{"nome": n, "ok": True} for n in tool], "risposta": risposta,
-            "frasi_voce": frasi}
+            "tool": [{"nome": n, "ok": True, "argomenti": argomenti or {}} for n in tool],
+            "risposta": None, "risposta_car": len(risposta), "frasi_voce": frasi}
 
 
 turni = ([turno(["notizie"], v) for v in (2.5, 2.9, 3.0, 4.3)]
          + [turno(["notizie"], 3.7, "x" * 476, 1), turno(["notizie"], 1.4, "y" * 476, 4)]
          + [turno(["web_cerca"], v) for v in (1.1, 1.6, 3.1)]
          + [turno(["web_cerca", "notizie"], 1.5)]
+         + [turno(["notizie"], 1.9, argomenti={"fatto": 2})]
          + [{"inizio": "2026-10-17T10:00:00", "prima_frase_s": 1.0,
              "tool": [{"nome": "notizie"}]},                     # senza la misura della voce
             {"inizio": "2026-10-17T10:00:00", "prima_frase_s": 0.9, "prima_voce_s": 1.0,
@@ -295,9 +491,14 @@ verifica("per_tool: notizie 7 turni, mediana e p90 della prima voce",
 verifica("per_tool: le risposte lunghe in un pezzo solo (476 caratteri con 1 pezzo sì, con 4 "
          "no)", r["notizie"]["lunghe_un_pezzo"] == 1)
 verifica("per_tool: web_cerca 4 turni (un turno con due tool conta per entrambi), il più "
-         "chiamato prima", r["web_cerca"]["turni"] == 4 and list(r) == ["notizie", "web_cerca"])
+         "chiamato prima", r["web_cerca"]["turni"] == 4 and list(r)[:2] == ["notizie", "web_cerca"])
 verifica("contrario: i turni senza tool o senza la misura della voce non contano",
-         sum(d["turni"] for d in r.values()) == 11)
+         sum(d["turni"] for d in r.values()) == 12)
+verifica("per_tool: i seguiti di notizie (con «fatto») a parte, senza leggere i valori",
+         r["notizie (seguito)"]["turni"] == 1 and r["notizie (seguito)"]["mediana"] == 1.9)
+import inspect  # noqa: E402
+verifica("per_tool non legge il testo della risposta", '"risposta"' not in
+         inspect.getsource(latenza.per_tool) + inspect.getsource(latenza._nomi_tool))
 riga = latenza.testo_per_tool(r)
 verifica("la riga di stato --turni", riga.startswith("Prima voce sentita per tool: notizie 7 "
                                                      "turni, 2,90 s (p90 4,30 s), 1 lunghe")

@@ -59,7 +59,7 @@ from .schermi.moduli import annuncio_lavoro, completa as completa_modulo, oscura
 from .speaker_id import estimate_gender
 from .suoni import FINE, INIZIO
 from .tools.builtin import biblioteca_contesto
-from .testi import PAUSA_OLTRE
+from .testi import PAUSA_OLTRE, di_frase
 from .tts import split_sentences, clean_for_speech, strip_false_citation
 from .wakeword import (SPEGNI_SATELLITE_MSG, closing_kind, exit_action, exit_request,
                        find_wake_word, is_stop, nuova_conversazione_come, risposta_al_nome)
@@ -88,6 +88,13 @@ def save_debug_audio(cfg: Config, audio: np.ndarray, text: str) -> str:
     with open(folder / "trascrizioni.tsv", "a", encoding="utf-8") as f:
         f.write(f"{stem}\t{cfg.whisper_model}\t{text}\n")
     return stem
+
+
+def _misura_voce(detto: list) -> dict:
+    """Quanti pezzi sono andati alla voce e quanti caratteri in tutto (17/10, issue #132):
+    `latenza.per_tool` legge solo questi due numeri, mai il testo della risposta."""
+    return {"frasi_voce": len(detto or ()),
+            "risposta_car": len(" ".join(str(x) for x in detto or ()))}
 
 
 def domanda_guardia(text: str, files, massimo: int = 3000) -> str:
@@ -4049,11 +4056,17 @@ class Ciclo:
         le regole nel registro (la stessa resa, rifatta per la storia: `_storia_come_detta`)."""
         cfg, brain = self.s.cfg, self.brain
         rule = self.rule if registra else (lambda _nome: None)
+        # Un pezzo di una frase lunga tagliata a un «; » (17/10, issue #132): l'annuncio di un
+        # tool si giudica sulla frase fino a qui, come quando arrivava intera (PR #139)
+        prima = di_frase(sentence)[1]
         sentence = brain.strip_tool_mentions(sentence)
         # Prima della pulizia: clean_for_speech toglie «_» e il nome del tool non
         # si riconosceva più («Uso bibliotecacerca» detto ad alta voce, 01/10)
         if brain.mentions_tool(sentence) and cfg.rete("nome_tool_parlato"):
             parlata = brain.speak_tool_names(sentence)
+            if parlata is not None and prima and brain.speak_tool_names(
+                    f"{prima} {sentence}") is None:
+                parlata = None
             if parlata is None:
                 print(f"({self.in_console(sentence, risposta=True)!r}: annuncia un tool, non "
                       f"la dico) ", end="", flush=True)
@@ -4126,8 +4139,10 @@ class Ciclo:
         rec.update(risposta=" ".join(t.said),
                    tool=tools_per_registro(getattr(brain, "last_tools", None)),
                    # I pezzi mandati alla voce (17/10, issue #132: una risposta lunga in un
-                   # pezzo solo aspetta la generazione intera; latenza.per_tool)
-                   frasi_voce=len(t.said))
+                   # pezzo solo aspetta la generazione intera; latenza.per_tool). Due numeri,
+                   # niente testo: la misura vale anche dove la risposta non resta (ospiti,
+                   # voci incerte, dopo i 60 giorni)
+                   **_misura_voce(t.said))
         # La frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py): codice o
         # modello, perché, e in ombra il tempo della seconda passata e il confronto
         if isinstance(getattr(brain, "last_dopo_tool", None), dict):
@@ -4702,6 +4717,6 @@ class Ciclo:
         self.corsia.esci_llm()
         print()
         u.aspetta()
-        self.rec.update(risposta=" ".join(t.said), ricerca_promessa=True)
+        self.rec.update(risposta=" ".join(t.said), ricerca_promessa=True, **_misura_voce(t.said))
         if t.scritto is not None:
             s.instradamento.risposta_scritta(t.scritto, t.text, u.testo_scritto())

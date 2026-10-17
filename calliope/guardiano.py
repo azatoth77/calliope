@@ -48,6 +48,8 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from .testi import di_frase
+
 OK, VIETATO, PERICOLO, GUASTO = "ok", "vietato", "pericolo", "guasto"
 # Tempo per caricare un modello (avvio e ricarica in secondo piano): un 8B da disco ci mette
 # qualche secondo, con la memoria piena anche decine
@@ -820,8 +822,12 @@ def filtra(guardiano: Guardiano, frasi, domanda: str, minore: bool, esito: Esito
             vuota = not str(frase or "").strip()
             # Il giudizio della frase parte subito, insieme all'attesa di quello della domanda
             # (la prima frase non paga i due giudizi uno dopo l'altro)
-            f_frase = None if vuota else guardiano.in_parallelo(domanda, frase,
-                                                                categorie_attive)
+            # Una frase lunga a pezzi tagliati a un «; » (17/10, issue #132): si giudica la
+            # frase fino a questo pezzo (Pezzo.intera), mai meno di quando arrivava tutta
+            # (revisione della PR #139); con «vietato» lo stream si chiude come sempre
+            _, prima = di_frase(frase)
+            f_frase = None if vuota else guardiano.in_parallelo(
+                domanda, f"{prima} {frase}" if prima else frase, categorie_attive)
             stato = stato_domanda()
             if stato != OK:
                 chiudi()

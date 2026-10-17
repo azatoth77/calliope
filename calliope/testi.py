@@ -37,36 +37,75 @@ PAUSA_CLAUSOLA_MIN = 40     # sotto, fra due «;» c'è un elenco («cose: farin
 _PUNTO_E_VIRGOLA = re.compile(r";\s+")
 
 
+class Pezzo(str):
+    """Un pezzo della risposta per la voce (tts.split_sentences, 17/10, issue #132): il testo, e
+    in più `aperta` (la frase continua nel pezzo dopo: tagliata a un «; ») e `prima` (i pezzi
+    della stessa frase già mandati, uniti da uno spazio). Le reti che giudicano una frase alla
+    volta (riferire, guardiano, l'annuncio di un tool) giudicano `intera()`: mai meno testo di
+    quando la frase arrivava tutta insieme."""
+
+    aperta: bool
+    prima: str
+
+    def __new__(cls, testo: str, aperta: bool = False, prima: str = ""):
+        p = super().__new__(cls, testo)
+        p.aperta, p.prima = bool(aperta), str(prima or "")
+        return p
+
+    def intera(self) -> str:
+        """La frase fino a questo pezzo compreso."""
+        return f"{self.prima} {self}" if self.prima else str(self)
+
+    def con(self, testo: str) -> "Pezzo":
+        """Lo stesso pezzo con un altro testo (una rete l'ha cambiato), stessa frase."""
+        return Pezzo(testo, self.aperta, self.prima)
+
+
+def di_frase(x) -> tuple[bool, str]:
+    """(aperta, prima) di un elemento qualunque dello stream: una stringa semplice è una frase
+    intera."""
+    return bool(getattr(x, "aperta", False)), str(getattr(x, "prima", "") or "")
+
+
 def _aperta(testo: str) -> bool:
     """Il testo finisce dentro una citazione o una parentesi ancora aperta."""
     return (testo.count("«") > testo.count("»") or testo.count('"') % 2 == 1
-            or testo.count("“") > testo.count("”") or testo.count("(") > testo.count(")"))
+            or testo.count("“") > testo.count("”") or testo.count("(") > testo.count(")")
+            or testo.count("[") > testo.count("]"))
 
 
-def taglio_voce(buf: str, min_chars: int = 25, pausa_oltre: int = PAUSA_OLTRE
-                ) -> tuple[int, bool] | None:
-    """Dove finisce il primo pezzo di `buf` da mandare al TTS: (posizione, al «;»), oppure
-    None (si aspetta altro testo). È la fine di una frase (SENTENCE_END) dopo almeno
-    `min_chars` caratteri; se non c'è, o arriva oltre `pausa_oltre` caratteri, il primo «; »
-    che va bene: almeno `min_chars` caratteri prima; una clausola di almeno
-    PAUSA_CLAUSOLA_MIN caratteri dal «;» o dai due punti di prima, così un elenco
-    («servono queste cose: farina; uova; latte») non si spezza; fuori da virgolette e
-    parentesi; non fra due cifre («3; 4»). Il «;» resta nel pezzo, come in tts.primo_pezzo:
-    la voce ha l'intonazione sospesa e non quella di fine frase. `pausa_oltre` 0 = solo la
-    fine della frase.
+def taglio_voce(buf: str, min_chars: int = 25, pausa_oltre: int = PAUSA_OLTRE,
+                inizio: int = 0) -> tuple[int, bool] | None:
+    """Dove finisce il prossimo pezzo di `buf` da mandare al TTS: (posizione, al «;»), oppure
+    None (si aspetta altro testo). `buf` comincia dove comincia la frase, `inizio` è la fine
+    del pezzo già mandato (un taglio a un «;» di prima).
 
-    Guarda solo il testo prima del taglio: le reti di Brain che trattengono il testo
-    (ClaimHold, FraseTolta) lo lasciano passare negli stessi punti, e la stessa frase si
-    taglia uguale in streaming e tutta in una volta (Ciclo._storia_come_detta la ridivide)."""
-    fine = next((m.end() for m in SENTENCE_END.finditer(buf) if m.end() >= min_chars), None)
+    È la fine di una frase (SENTENCE_END) dopo almeno `min_chars` caratteri; se non c'è, il
+    primo «; » dopo `inizio` che va bene: la frase (dall'ultima fine di frase, anche breve,
+    o dall'inizio di `buf`) supera `pausa_oltre` caratteri; una clausola di almeno
+    PAUSA_CLAUSOLA_MIN caratteri dal «;», dai due punti o dalla fine di frase di prima, così
+    un elenco («servono queste cose: farina; uova; latte») non si spezza; fuori da virgolette,
+    parentesi e quadre; non fra due cifre («3; 4»). Il «;» resta nel pezzo, come in
+    tts.primo_pezzo: la voce ha l'intonazione sospesa e non quella di fine frase.
+    `pausa_oltre` 0 = solo la fine della frase.
+
+    Guarda solo il testo prima del taglio, misurato dalla frase: tts.split_sentences e le reti
+    di Brain che trattengono il testo (ClaimHold, FraseTolta) tagliano negli stessi punti
+    anche se cominciano il loro buffer da frasi diverse, e la stessa frase si taglia uguale in
+    streaming e tutta in una volta (Ciclo._storia_come_detta la ridivide)."""
+    fine = next((m.end() for m in SENTENCE_END.finditer(buf, inizio) if m.end() >= min_chars),
+                None)
     limite = fine if fine is not None else len(buf)
-    if pausa_oltre > 0 and limite > pausa_oltre:
-        da = 0
-        for m in _PUNTO_E_VIRGOLA.finditer(buf, 0, limite):
-            clausola, da = buf[da:m.start()], m.end()
+    if pausa_oltre > 0 and limite - inizio > 0:
+        fini = [m.end() for m in SENTENCE_END.finditer(buf, 0, limite)]
+        for m in _PUNTO_E_VIRGOLA.finditer(buf, inizio, limite):
+            base = max((e for e in fini if e <= m.start()), default=0)
+            if limite - base <= pausa_oltre:
+                continue
+            da = max([base] + [x.end() for x in _PUNTO_E_VIRGOLA.finditer(buf, base, m.start())])
+            clausola = buf[da:m.start()]
             clausola = clausola[clausola.rfind(":") + 1:].strip()
-            if (m.end() < min_chars or len(clausola) < PAUSA_CLAUSOLA_MIN
-                    or _aperta(buf[:m.start()])):
+            if len(clausola) < PAUSA_CLAUSOLA_MIN or _aperta(buf[base:m.start()]):
                 continue
             if buf[m.start() - 1:m.start()].isdigit():
                 if m.end() == len(buf):

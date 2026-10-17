@@ -676,23 +676,68 @@ uniti dal «;»: voce a 3,66 e 4,28 s.
   trattiene il primo pezzo fino alla fine della prima frase, e `FraseTolta` («scrivo qui», accesa
   a voce) tiene ogni frase fino al punto: la risposta unita dai «;» restava in Brain fino
   all'ultimo token. Le due reti ora usano lo stesso `taglio_voce`; il taglio guarda solo il testo
-  prima del «;», così le reti in fila lasciano passare negli stessi punti (con una condizione
-  sulla clausola dopo, provata e scartata, ognuna aspettava la successiva).
+  prima del «;», così le reti in fila tagliano negli stessi punti (con una condizione sulla
+  clausola dopo, provata e scartata, ognuna aspettava la successiva). Come giudicano i pezzi
+  `ClaimHold`, `FraseTolta`, `riferire` e il guardiano: correttivi della revisione, sotto.
 - **Testo per il modello**: `COSA_FARE` chiede «una frase breve per fatto chiusa dal punto (non
   unire i fatti col punto e virgola)».
 - **Misura**: `frasi_voce` (i pezzi mandati alla voce) nel registro dei turni, e in
   `calliope stato --turni` la riga «Prima voce sentita per tool» (`latenza.per_tool`: turni,
   mediana, p90, risposte oltre 300 caratteri in un pezzo solo), chiave `prima_voce_per_tool` nel
   `--json`.
-- **A secco** (`prove/prova_notizie_attesa.py`; su main non parte: `taglio_voce` e
-  `PAUSA_OLTRE` non c'erano): la risposta di ~650 caratteri con tre «;» data a pezzi di 4
-  caratteri attraverso Brain e `split_sentences` (uno script a secco fuori dal repository): **prima** il
-  primo pezzo al TTS dopo 157 token su 163 (96 %, ~3,9 s di generazione a 40 token/s), nessuna
-  frase d'attesa; **dopo** dopo 38 token (23 %, ~0,95 s), frase d'attesa subito dopo la
-  chiamata, cinque pezzi (148, 184, 161, 126, 27 caratteri).
+- **A secco** (`prove/prova_notizie_attesa.py`; su main non parte: `taglio_voce`, `Pezzo` e
+  `PAUSA_OLTRE` non c'erano). La risposta di ~650 caratteri con tre «;», data a pezzi di 4
+  caratteri attraverso Brain e `split_sentences` con uno script fuori dal repository, a 40
+  token/s:
+
+  | | primo pezzo al TTS | generazione prima della voce | frase d'attesa |
+  |---|---|---|---|
+  | main | token 157 di 163 (96 %) | ~3,9 s | nessuna |
+  | prima versione della PR | token 38 (23 %) | ~0,95 s | subito dopo la chiamata |
+  | dopo la revisione | token 85 (52 %) | ~2,1 s | subito dopo la chiamata |
+
+  In tutti e tre i casi la risposta esce in cinque pezzi (148, 184, 161, 126, 27 caratteri). La
+  voce dell'annuncio copre parte dell'attesa.
 - **Da fare sulla DGX** (criterio della issue): dopo `calliope aggiorna`, almeno 20 turni
   `notizie` dal telefono («le notizie», per tema, «dimmi di più sulla seconda»), poi
   `calliope stato --turni --giorni 1`: prima voce mediana ≤ 1,7 s e p90 ≤ 2,5 s nella riga per
   tool, 0 «lunghe in un pezzo». Da guardare: se l'annuncio ai seguiti brevi suona superfluo
   (seconda passata sotto 1 s), annuncio solo senza `fatto`. Col modello:
   `prove/prova_notizie_ollama.py` col profilo della DGX, frasi chiuse dal punto.
+
+**Correttivi dopo la revisione della PR #139 (17/10).** Il taglio può anticipare la voce, ma
+nessuna rete deve giudicare meno testo di prima. Prima del correttivo tre reti ne giudicavano
+meno, e in due casi riprodotti la voce diceva ciò che su main era fermato:
+- **`ClaimHold`**: passava al primo pezzo senza niente, e una dichiarazione falsa nella seconda
+  clausola («…; ho salvato nella memoria che…») veniva detta; lo stesso valeva per «non ho
+  informazioni». Ora un pezzo tagliato al «;» si dice, ma la rete resta in prova fino alla fine
+  della frase e giudica ogni volta la frase da capo, coi pezzi già detti davanti. Se la
+  dichiarazione arriva dopo, si trattiene da lì: **i pezzi prima sono già detti**, e la spinta
+  parte come prima.
+- **`riferire.filtra`** (sicurezza, sempre accesa): le regole a due elementi (un segreto e
+  «comunicare» per `uscita_segreti`, un pagamento e il destinatario) non vedevano più le due metà
+  insieme, e una pagina che chiedeva PIN e password arrivava alla voce. Ora `split_sentences` dà
+  dei `testi.Pezzo` (stringhe con `aperta` e `prima`) e `riferire` giudica la frase fino al
+  pezzo (`Pezzo.intera`). Se scatta su un pezzo dopo, si ferma da lì alla fine della frase (il
+  pezzo prima è già detto) e si dice la frase fissa. Una fonte aggiunta a un pezzo va davanti a
+  quel pezzo («…; secondo il sito, …»).
+- **`FraseTolta`** («scrivo qui»): toglieva solo la clausola con «scrivo qui», e la voce diceva
+  «Ti ho preparato un riassunto…;» senza seguito. Ora ogni pezzo resta nella rete finché non è
+  arrivata la clausola dopo, e con «scrivo qui» nella seconda clausola si toglie la frase intera,
+  come su main. Dalla terza clausola in poi la prima è già detta: si toglie dalla clausola prima.
+  **Costo**: la prima voce della risposta delle notizie esce a fine della seconda clausola e non
+  della prima. A secco, al 52 % della risposta invece del 23 %; su main era al 96 %.
+- **Gli altri filtri che giudicano una frase alla volta** sui pezzi di `split_sentences`, tutti
+  controllati: il **guardiano** (minori e ospiti) giudica `Pezzo.intera`, e con «vietato» lo
+  stream si chiude come prima. **L'annuncio di un tool** (`Ciclo._frase_da_dire`, «Chiamo…») si
+  giudica sulla frase da capo. Restano sul pezzo solo trasformazioni locali: le parentesi coi
+  nomi dei tool, il nome detto a parole, la pulizia e «secondo Wikipedia». `_solo_se_rivolta`
+  giudica il turno, non il testo. `ToolNameHold` non usa `taglio_voce`: trattiene fino al punto
+  come prima, e conta solo nelle prime passate (dopo `notizie` è spenta).
+- **Stessi punti di taglio**: la clausola e la lunghezza della frase si misurano dall'ultima fine
+  di frase, anche breve (prima «Va bene. » più 35 caratteri contava 44 in `split_sentences` e 35
+  in `FraseTolta`). Anche le quadre aperte non si tagliano.
+- **Misura senza testo**: `per_tool` legge `risposta_car` (un numero, accanto a `frasi_voce`),
+  mai la risposta, che per ospiti e voci incerte non resta. `_ricerca_promessa` aggiorna i due
+  numeri. I seguiti di `notizie` con `fatto` («dimmi di più sulla seconda») hanno la loro riga,
+  «notizie (seguito)», per decidere se l'annuncio lì è superfluo.

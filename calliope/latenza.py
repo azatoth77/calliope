@@ -306,24 +306,39 @@ def testo(giorni: dict[str, dict], soglia: float = 1.2) -> str:
 LUNGA_CAR = 300          # una risposta più lunga, detta in un pezzo solo: la voce ha aspettato
 
 
+def _nomi_tool(t: dict) -> set[str]:
+    """I tool del turno; `notizie` con `fatto` (un seguito: «dimmi di più sulla seconda») a
+    parte, «notizie (seguito)»: la frase d'attesa parte anche lì e va misurata da sola (issue
+    #132). Solo nomi e chiavi degli argomenti, nessun valore."""
+    nomi = set()
+    for x in t.get("tool") if isinstance(t.get("tool"), list) else ():
+        if not isinstance(x, dict) or not x.get("nome"):
+            continue
+        n = str(x["nome"])
+        arg = x.get("argomenti") if isinstance(x.get("argomenti"), dict) else {}
+        nomi.add(f"{n} (seguito)" if n == "notizie" and arg.get("fatto") not in (None, "")
+                 else n)
+    return nomi
+
+
 def per_tool(turni: list[dict]) -> dict[str, dict]:
     """La prima voce sentita per tool (17/10, issue #132: le notizie a 2,91 s di mediana contro
     1,62 di web_cerca, contate a mano dal registro). Per ogni tool chiamato nel turno: turni con
     la misura, mediana e p90 di `prima_voce_s`, e le risposte più lunghe di LUNGA_CAR caratteri
-    mandate alla voce in un pezzo solo (`frasi_voce`, dal 17/10: prima non c'era)."""
+    mandate alla voce in un pezzo solo (`frasi_voce` e `risposta_car`, dal 17/10: due numeri,
+    mai il testo della risposta, che per ospiti e voci incerte non resta)."""
     gruppi: dict[str, list] = {}
     for t in turni:
         if not isinstance(t, dict) or _num(t, "prima_voce_s") is None:
             continue
-        tool = t.get("tool") if isinstance(t.get("tool"), list) else ()
-        for n in {x.get("nome") for x in tool if isinstance(x, dict) and x.get("nome")}:
-            gruppi.setdefault(str(n), []).append(t)
+        for n in _nomi_tool(t):
+            gruppi.setdefault(n, []).append(t)
     out = {}
     for n, g in gruppi.items():
         pv = [_num(t, "prima_voce_s") for t in g]
         out[n] = {"turni": len(g), "mediana": _med(pv), "p90": _q(pv, .9),
                   "lunghe_un_pezzo": sum(1 for t in g if t.get("frasi_voce") == 1
-                                         and len(str(t.get("risposta") or "")) > LUNGA_CAR)}
+                                         and (_num(t, "risposta_car") or 0) > LUNGA_CAR)}
     return dict(sorted(out.items(), key=lambda kv: (-kv[1]["turni"], kv[0])))
 
 

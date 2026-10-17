@@ -744,14 +744,22 @@ SCRIVO_QUI = re.compile(r"\b(?:te\s+|ve\s+)?(?:l[oaie]\s+|l['’]\s*)?scriv\w*\s
 
 class FraseTolta:
     """Toglie dal testo detto le frasi intere che corrispondono a `rx`. Aspetta la fine di ogni
-    frase (il TTS la aspetterebbe comunque); le frasi tolte restano in `tolte`."""
+    frase (il TTS la aspetterebbe comunque); le frasi tolte restano in `tolte`.
+
+    Una frase lunga senza punto (17/10, issue #132) passa a pezzi tagliati a un «; »
+    (testi.taglio_voce, come tts.split_sentences), ma ogni pezzo resta qui finché non è
+    arrivata anche la clausola dopo, e si giudica sempre la frase da capo: con `rx` nella
+    seconda clausola si toglie la frase intera, come quando passava solo a fine frase. Solo
+    con `rx` dalla terza clausola in poi i pezzi più vecchi sono già detti: allora si toglie il
+    resto della frase (revisione della PR #139)."""
 
     def __init__(self, rx, active: bool, pausa_oltre: int = PAUSA_OLTRE):
         self.rx, self.active = rx, active
-        # Una frase lunga esce anche a pezzi dopo un «; », come in tts.split_sentences (17/10,
-        # issue #132): senza, una risposta di 600 caratteri senza punto restava qui intera
         self.pausa_oltre = pausa_oltre
-        self.buf = ""
+        self.buf = ""            # dall'inizio della frase in corso
+        self.detto = 0           # fin qui lasciato passare
+        self.giudicato = 0       # fin qui giudicato (il pezzo fra detto e giudicato aspetta)
+        self.scarta = False      # la frase in corso corrisponde: il resto non si dice
         self.tolte: list[str] = []
 
     def feed(self, text: str) -> str:
@@ -760,21 +768,41 @@ class FraseTolta:
         self.buf += text
         out = ""
         while True:
-            taglio = taglio_voce(self.buf, 0, self.pausa_oltre)
+            taglio = taglio_voce(self.buf, 0, self.pausa_oltre, self.giudicato)
             if taglio is None:
                 return out
-            frase, self.buf = self.buf[:taglio[0]], self.buf[taglio[0]:]
-            if self.rx.search(frase):
-                self.tolte.append(frase.strip())
-            else:
-                out += frase
+            cut, al_pv = taglio
+            if not self.scarta and self.rx.search(self.buf[:cut]):
+                self.scarta = True
+                self.tolte.append(self.buf[self.detto:cut].strip())
+            elif self.scarta:
+                self.tolte[-1] = (self.tolte[-1] + " " + self.buf[self.giudicato:cut].strip()
+                                  ).strip()
+            if al_pv:
+                if not self.scarta:
+                    out += self.buf[self.detto:self.giudicato]    # il pezzo prima: giudicato
+                    self.detto = self.giudicato
+                else:
+                    self.detto = cut
+                self.giudicato = cut
+                continue
+            if not self.scarta:
+                out += self.buf[self.detto:cut]
+            self.buf, self.detto, self.giudicato, self.scarta = self.buf[cut:], 0, 0, False
 
     def flush(self) -> str:
-        f, self.buf = self.buf, ""
-        if self.active and f.strip() and self.rx.search(f):
-            self.tolte.append(f.strip())
+        f, d, g, scarta = self.buf, self.detto, self.giudicato, self.scarta
+        self.buf, self.detto, self.giudicato, self.scarta = "", 0, 0, False
+        if not self.active:
+            return f
+        if scarta:                         # il resto della frase tolta
+            if f[g:].strip():
+                self.tolte[-1] = (self.tolte[-1] + " " + f[g:].strip()).strip()
             return ""
-        return f
+        if f[d:].strip() and self.rx.search(f):
+            self.tolte.append(f[d:].strip())
+            return ""
+        return f[d:]
 
 
 class ClaimHold:
@@ -784,6 +812,12 @@ class ClaimHold:
     la spinta. Non costa latenza: il TTS aspetterebbe comunque la fine di quella frase.
     Alla fine si guarda di nuovo la risposta intera: se il seguito la rende un ricordo
     (is_claim), si dice tutta.
+
+    Una prima frase lunga senza punto (17/10, issue #132) passa a pezzi tagliati a un «; »
+    (testi.taglio_voce): un pezzo senza niente si dice subito, ma la rete resta in prova fino
+    alla fine della frase e giudica ogni volta la frase da capo, coi pezzi già detti davanti.
+    Se la dichiarazione arriva in un pezzo dopo si trattiene da lì; i pezzi prima sono già
+    detti (revisione della PR #139: prima del correttivo la rete passava al primo pezzo).
 
     `non_so` (05/10): trattiene allo stesso modo un «non ho informazioni…» dopo una
     compressione (NON_SO); `kind` dice quale dei due ("claim" o "non_so")."""
@@ -810,6 +844,7 @@ class ClaimHold:
         self.state = ("probe" if (active or non_so or rinuncia or ripetuta)
                       else "pass")                                       # probe|hold|pass
         self.buf = ""
+        self.detto = 0           # nella frase in corso, i pezzi fin qui già lasciati passare
         self.held = ""
         self.actions = list(actions)
 
@@ -840,27 +875,38 @@ class ClaimHold:
         self.buf += text
         if self.state == "hold":
             return ""
-        taglio = taglio_voce(self.buf, 25, self.pausa_oltre)
-        if taglio is None:
-            return ""
-        cut = taglio[0]
-        if self._match(self.buf[:cut].strip()):
-            self.state = "hold"
-            return ""
-        self.state = "pass"
-        out, self.buf = self.buf, ""
-        return out
+        out = ""
+        while True:
+            taglio = taglio_voce(self.buf, 25, self.pausa_oltre, self.detto)
+            if taglio is None:
+                return out
+            cut, al_pv = taglio
+            # Sempre la frase da capo, coi pezzi già detti davanti (revisione della PR #139:
+            # una dichiarazione nella seconda clausola sfuggiva)
+            if self._match(self.buf[:cut].strip()):
+                self.state = "hold"
+                return out
+            if al_pv:
+                # Un pezzo tagliato al «;» senza niente: si dice, ma la frase resta da giudicare
+                out += self.buf[self.detto:cut]
+                self.detto = cut
+                continue
+            self.state = "pass"
+            out += self.buf[self.detto:]
+            self.buf, self.detto = "", 0
+            return out
 
     def flush(self) -> str:
         if self.state == "probe" and self._match(self.buf.strip(), intera=True):
             self.state = "hold"
         if self.state == "hold" and not self._match(self.buf.strip(), intera=True):
             self.state = "pass"            # il seguito ne fa un ricordo
+        resto = self.buf[self.detto:]      # i pezzi prima di `detto` sono già detti
+        self.buf, self.detto = "", 0
         if self.state == "hold":
-            self.held, self.buf = self.buf, ""
+            self.held = resto
             return ""
-        out, self.buf = self.buf, ""
-        return out
+        return resto
 
 
 # Domanda sui comandi stessi di Calliope (03/10): lì il nome di un tool nella risposta è una
