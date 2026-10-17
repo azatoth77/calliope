@@ -45,6 +45,8 @@ from pathlib import Path
 
 import numpy as np
 
+from prove.porte import porta_fuori_effimere
+
 RADICE = Path(__file__).resolve().parent.parent
 errori = 0
 
@@ -54,14 +56,6 @@ def ok(msg, cond, extra=""):
     print(("ok  " if cond else "ERR ") + msg + (f"  ({extra})" if extra else ""), flush=True)
     if not cond:
         errori += 1
-
-
-def porta_libera() -> int:
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    p = s.getsockname()[1]
-    s.close()
-    return p
 
 
 def attacco(x: np.ndarray, soglia: float = 0.01) -> float | None:
@@ -78,8 +72,58 @@ def aspetta(cond, timeout=10.0, passo=0.02) -> bool:
     while time.monotonic() < fine:
         if cond():
             return True
-        time.sleep(passo)
+        time.sleep(passo)          # legittima: il passo dell'attesa di una condizione
     return bool(cond())
+
+
+# Attese di una condizione al posto delle attese fisse (17/10, #5). Prima la prova dormiva
+# 0,2–2 s «perché nel frattempo» il satellite si riaddormentasse, un thread entrasse in recv o
+# non arrivasse più niente: sotto carico un'attesa di assestamento cade a caso, e un'attesa
+# negativa («dopo N s non è successo niente») passa anche quando l'evento arriverebbe dopo.
+def dentro(thread: threading.Thread, funzione: str) -> bool:
+    """`thread` sta eseguendo `funzione` (in un punto qualunque del suo stack)."""
+    f = sys._current_frames().get(thread.ident)
+    while f is not None:
+        if f.f_code.co_name == funzione:
+            return True
+        f = f.f_back
+    return False
+
+
+def addormentata(ascolti, dopo: float, ora: float | None = None) -> bool:
+    """L'ultimo ascolto aperto dal satellite dopo `dopo` aspetta la wake word e la sua finestra
+    senza il nome (`followup_s`) è chiusa: una frase senza nome adesso resta lì. `ascolti` è
+    `Satellite.ascolti`: (istante, id, wake, sveglia fino a)."""
+    ora = time.monotonic() if ora is None else ora
+    dopo_ = [a for a in list(ascolti) if a[0] > dopo]
+    if not dopo_:
+        return False
+    _, _, wake, fino = dopo_[-1]
+    return bool(wake) and ora > fino + 0.05
+
+
+def fine_ultima_voce(casse) -> float:
+    with casse._lock:
+        return max((b for a, b, v in casse.scritture if v), default=0.0)
+
+
+def ascolti_dopo(sat, t: float) -> list:
+    return [a for a in list(sat.ascolti) if a[0] > t]
+
+
+def riaddormentata(sat, casse, cosa: str, dopo: float | None = None, timeout=20.0) -> bool:
+    """Le casse tacciono e il satellite si è riaddormentato con un ascolto aperto dopo l'ultima
+    voce (o dopo `dopo`): il turno è finito e la domanda seguente trova Calliope addormentata.
+    Se non succede è un errore, con la traccia del satellite."""
+    aspetta(lambda: casse.secondi_di_voce(time.monotonic() - 0.3) == 0, 10)
+    t0 = fine_ultima_voce(casse) if dopo is None else dopo
+    buono = aspetta(lambda: addormentata(sat.ascolti, t0), timeout)
+    if not buono:
+        ok(f"{cosa}: il satellite si riaddormenta", False, "ascolti " + str([
+            (round(t - t0, 2), i, w, round(f - t0, 2) if f != float("inf") else "inf")
+            for t, i, w, f in list(sat.ascolti)[-4:]]) + "; traccia " + ", ".join(
+            f"{t - t0:+.2f} {k} {i}" for t, k, i in list(sat.traccia)[-10:]))
+    return buono
 
 
 # ───────────────────────── microfono e casse finti ─────────────────────────
@@ -132,7 +176,7 @@ class MicFinto:
                 i += 1
                 attesa = t0 + i * self.n / 16000 - time.monotonic()
                 if attesa > 0:
-                    time.sleep(attesa)
+                    time.sleep(attesa)   # legittima: il ritmo del microfono, 32 ms a blocco
         threading.Thread(target=gira, daemon=True).start()
 
     def abort(self):
@@ -183,7 +227,7 @@ class UscitaFinta:
         a = time.monotonic()
         dur = len(data) / 2 / self.samplerate
         voce = bool(np.any(np.frombuffer(bytes(data), dtype="<i2") != 0))
-        time.sleep(dur)
+        time.sleep(dur)          # legittima: una scrittura dura quanto l'audio, come le casse
         with self.casse._lock:
             self.casse.scritture.append((a, a + dur, voce))
 
@@ -328,7 +372,7 @@ class Proxy:
                 t, d = q.popleft()
             attesa = t - time.monotonic()
             if attesa > 0:
-                time.sleep(attesa)
+                time.sleep(attesa)       # legittima: il ritardo della «VPN» finta
             try:
                 if not d:
                     s.shutdown(socket.SHUT_WR)
@@ -391,6 +435,119 @@ def parte_protocollo(tmp: Path):
     scr.close()
 
 
+def parte_attese():
+    """Gli aiuti delle attese di una condizione (17/10, #5): il satellite segna ogni ascolto
+    con la wake word e la fine della finestra senza nome; `addormentata`, `dentro` e la porta
+    fuori dalle effimere, con i casi contrari."""
+    from types import SimpleNamespace
+    from calliope.satellite.client import Satellite
+
+    class ListenerFinto:
+        started_at, woke, wake_score, chiusura = 0.0, True, 0.9, "silenzio"
+
+        def listen(self, *a, **k):
+            return np.zeros(1600, np.float32)
+
+    s = object.__new__(Satellite)
+    s.listener = ListenerFinto()
+    s._seed, s.wake, s._wakeup = None, object(), threading.Event()
+    s.traccia, s.frasi_inviate, s.ascolti = [], 0, []
+    s._manda = lambda **c: None
+    s._suona = lambda tipo: None
+    s.player = SimpleNamespace(occupato=lambda: False)
+    t0 = time.monotonic()
+    s._ascolta({"id": 7, "wake": True, "sveglia_per_s": 1.0})
+    s._ascolta({"id": 8})
+    a, b = (s.ascolti + [None, None])[:2]
+    ok("ascolti del satellite: id, wake e fine della finestra senza nome",
+       a is not None and a[1:3] == (7, True) and t0 + 0.9 < a[3] < time.monotonic() + 1.1,
+       str(s.ascolti))
+    ok("ascolti del satellite: senza wake né finestra (contrario: mai «addormentata»)",
+       b is not None and b[1:] == (8, False, float("inf")), str(s.ascolti))
+
+    ora = 100.0
+    casi = [  # (ascolti, dopo, atteso, perché)
+        ([(10.0, 1, True, 11.0)], 0.0, True, "wake, finestra chiusa"),
+        ([(10.0, 1, True, 0.0)], 0.0, True, "wake, nessuna finestra (resto negativo)"),
+        ([(10.0, 1, True, 99.99)], 0.0, False, "finestra appena chiusa: margine di 50 ms"),
+        ([(10.0, 1, True, 150.0)], 0.0, False, "finestra senza nome ancora aperta"),
+        ([(10.0, 1, False, 0.0)], 0.0, False, "senza wake word (ascolto guidato)"),
+        ([(10.0, 1, True, float("inf"))], 0.0, False, "sveglia per sempre"),
+        ([(10.0, 1, True, 11.0)], 20.0, False, "ascolto di prima del turno"),
+        ([], 0.0, False, "nessun ascolto"),
+        ([(10.0, 1, True, 11.0), (50.0, 2, True, 150.0)], 0.0, False,
+         "l'ultimo ascolto conta, non uno addormentato di prima"),
+        ([(10.0, 1, True, 150.0), (50.0, 2, True, 51.0)], 0.0, True,
+         "l'ultimo ascolto è addormentato"),
+    ]
+    sbagliati = [perché for asc, dopo, atteso, perché in casi
+                 if addormentata(asc, dopo, ora) is not atteso]
+    ok(f"addormentata: {len(casi)} casi (3 sì, 7 contrari)", not sbagliati, "; ".join(sbagliati))
+
+    entra, esci = threading.Event(), threading.Event()
+
+    def aspetta_qui():
+        entra.set()
+        esci.wait(5)
+    th = threading.Thread(target=aspetta_qui, daemon=True)
+    th.start()
+    entra.wait(5)
+    dentro_si = aspetta(lambda: dentro(th, "wait"), 5) and dentro(th, "aspetta_qui")
+    contrario = not dentro(th, "_fai")
+    esci.set()
+    th.join(5)
+    ok("dentro: il thread è nella funzione (e non in un'altra), poi non più",
+       dentro_si and contrario and not dentro(th, "aspetta_qui"))
+
+    # Riconnessione (17/10, #5, trovato sotto carico: «il satellite si ricollega attraverso la
+    # VPN» oltre 15 s): una sessione che si era collegata e poi cade riparte dalla prima attesa;
+    # i tentativi falliti senza collegarsi allungano l'attesa (contrario)
+    # Dalla revisione della PR #145: conta solo una sessione rimasta su almeno
+    # SESSIONE_STABILE_S; accolta e chiusa subito (contrario) le attese crescono, e con 4409
+    # (stesse credenziali su un altro satellite) si aspetta ATTESA_SOSTITUITO_S con una riga
+    from websockets.exceptions import ConnectionClosed
+    from websockets.frames import Close
+    from calliope.satellite import protocollo as P
+
+    def riconnessioni(giri_):
+        r = object.__new__(Satellite)
+        r.cred, r.connessioni, r._fermo = {"token": "t"}, 0, threading.Event()
+        r.cred_path = Path("satellite.json")
+        righe_, attese_, giri_ = [], [], iter(giri_)
+        r.log, r._chiudi_sessione = righe_.append, (lambda: None)
+
+        def sessione():
+            g = next(giri_)
+            if g in ("a lungo", "subito"):
+                r.connessioni += 1
+                r._collegato_dal = time.monotonic() - (r.SESSIONE_STABILE_S + 10
+                                                       if g == "a lungo" else 0.5)
+            if g == "fine":
+                r._fermo.set()
+            if g == "sostituito":
+                raise ConnectionClosed(Close(P.CHIUSO_SOSTITUITO, "sostituito"), None)
+            raise ConnectionError(g)
+        r._sessione, r._attendi = sessione, attese_.append
+        r._esegui()
+        return attese_, righe_
+
+    attese, _ = riconnessioni(["giù", "giù", "giù", "a lungo", "a lungo", "fine"])
+    ok("riconnessione: dopo una sessione collegata a lungo si riparte da 1 s (1, 2, 5 prima)",
+       attese == [1, 2, 5, 1, 1], str(attese))
+    attese, _ = riconnessioni(["giù", "giù", "subito", "subito", "subito", "fine"])
+    ok("riconnessione: accolta e chiusa subito non azzera, le attese crescono (contrario)",
+       attese == [1, 2, 5, 10, 15], str(attese))
+    attese, righe_r = riconnessioni(["giù", "sostituito", "giù", "fine"])
+    ok("riconnessione: sostituito (4409) aspetta a lungo, con una riga chiara",
+       attese == [1, Satellite.ATTESA_SOSTITUITO_S, 1]
+       and Satellite.ATTESA_SOSTITUITO_S >= 60
+       and any("stesse credenziali" in x for x in righe_r), f"{attese}; {righe_r[-1:]}")
+
+    porte = [porta_fuori_effimere() for _ in range(20)]
+    ok("porte delle prove: fra 20000 e 31999, sotto le effimere di Windows e di Linux",
+       all(20000 <= p < 32000 for p in porte), str(porte[:5]))
+
+
 def parte_server(tmp: Path, voce_ok: bool):
     from websockets.exceptions import ConnectionClosed, InvalidStatus
     from websockets.sync.client import connect
@@ -406,10 +563,14 @@ def parte_server(tmp: Path, voce_ok: bool):
     url = f"ws://127.0.0.1:{srv.port}"
 
     # Senza token, con un token sbagliato, da un browser
+    # Tempi massimi di 10 s (17/10, #5): sono attese di una risposta che deve arrivare; con 3 s,
+    # sotto carico, la stretta di mano del rifiuto per l'Origin scadeva (1 giro su 12)
+    # Il limite vero resta l'open_timeout di 3 s del server: se lì la stretta di mano scade, il
+    # server chiude e il controllo cade lo stesso; qui il margine copre solo il lato client
     with connect(url + P.PERCORSO_AUDIO, compression=None) as ws:
         ws.send(P.testo(tipo="ciao", versione=P.VERSIONE, token="sbagliato"))
         try:
-            ws.recv(timeout=3)
+            ws.recv(timeout=10)
             codice = None
         except ConnectionClosed as e:
             codice = e.rcvd.code if e.rcvd else None
@@ -417,14 +578,14 @@ def parte_server(tmp: Path, voce_ok: bool):
     with connect(url + P.PERCORSO_AUDIO, compression=None) as ws:
         ws.send(P.testo(tipo="ciao", versione=P.VERSIONE))
         try:
-            ws.recv(timeout=3)
+            ws.recv(timeout=10)
             codice = None
         except ConnectionClosed as e:
             codice = e.rcvd.code if e.rcvd else None
     ok("senza token: chiuso con 4401", codice == P.CHIUSO_TOKEN)
     try:
         connect(url + P.PERCORSO_AUDIO, additional_headers={"Origin": "http://esempio.it"},
-                open_timeout=3).close()
+                open_timeout=10).close()
         rifiutato = False
     except InvalidStatus as e:
         rifiutato = e.response.status_code == 403
@@ -438,8 +599,11 @@ def parte_server(tmp: Path, voce_ok: bool):
     # Abbinamento con un satellite vero (microfono e casse finti)
     scena, casse = Scena(), Casse()
     cfg_s = cfg_prova(tmp, satellite_server=url)
+    log_s = []
     sat = Satellite(cfg_s, sorgente=lambda **kw: MicFinto(scena, **kw),
-                    apri_uscita=casse.flusso, log=lambda m: None)
+                    apri_uscita=casse.flusso, log=log_s.append)
+    # Sostituito (4409) il satellite aspetta 60 s prima di riprovare (17/10, #5): qui 0,5 s
+    sat.ATTESA_SOSTITUITO_S = 0.5
     t = threading.Thread(target=sat.esegui, daemon=True)
     t.start()
     ok("il satellite nuovo mostra un codice di 6 cifre",
@@ -457,12 +621,13 @@ def parte_server(tmp: Path, voce_ok: bool):
     vecchio = srv.attivo
     with connect(url + P.PERCORSO_AUDIO, compression=None) as ws:
         ws.send(P.testo(tipo="ciao", versione=P.VERSIONE, token=token, primo=False))
-        m = P.leggi(ws.recv(timeout=3))
+        m = P.leggi(ws.recv(timeout=10))
         ws.send(P.testo(tipo="pronto", eco=None))
         ok("seconda connessione: benvenuto e sostituzione della prima",
            m.get("tipo") == "benvenuto" and aspetta(lambda: srv.attivo is not vecchio, 3))
-    ok("il satellite vero si ricollega dopo essere stato sostituito",
-       aspetta(lambda: sat.connessioni >= 2 and srv.attivo_pronto() is not None, 10))
+    ok("il satellite vero si ricollega dopo essere stato sostituito, e dice perché ha aspettato",
+       aspetta(lambda: sat.connessioni >= 2 and srv.attivo_pronto() is not None, 10)
+       and any("stesse credenziali" in x for x in log_s), " / ".join(log_s[-3:]))
     # Revoca: la connessione si chiude e il satellite torna a chiedere un codice
     srv.CONTROLLO_REVOCA_S = 0.3
     sat.codice = None
@@ -507,14 +672,31 @@ def parte_server(tmp: Path, voce_ok: bool):
     cfg_s.satellite_impronta = "00:" * 31 + "00"
     sat2 = Satellite(cfg_s, sorgente=lambda **kw: MicFinto(scena, **kw),
                      apri_uscita=casse.flusso, log=lambda m: None)
+    # Il segno positivo (17/10, #5; prima 0,3 s di attesa e basta): il server ha finito di
+    # gestire proprio questa connessione (cominciata dopo t_rif) senza contarla
+    gestite = []
+    _una = srv._gestisci_una
+
+    def gestisci_una(ws, _una=_una):
+        voce = [time.monotonic(), None]
+        gestite.append(voce)
+        try:
+            return _una(ws)
+        finally:
+            voce[1] = time.monotonic()
+    srv._gestisci_una = gestisci_una
+    t_rif = time.monotonic()
     try:
         sat2._connetti(P.PERCORSO_AUDIO)
         rifiutato = False
     except ImprontaDiversa:
         rifiutato = True
-    time.sleep(0.3)
+    finita = aspetta(lambda: any(a > t_rif and b is not None for a, b in gestite), 10)
+    srv._gestisci_una = _una
     ok("impronta diversa: il satellite si ferma prima di mandare il token",
-       rifiutato and srv.collegati_in_tutto == visti)
+       rifiutato and finita and srv.collegati_in_tutto == visti,
+       f"rifiutato {rifiutato}, connessione finita sul server {finita}, "
+       f"collegati {srv.collegati_in_tutto - visti} in più")
     # websockets legge da un thread suo e scrive da altri: con l'SSLSocket normale ogni
     # tanto la richiesta di apertura non partiva (9 su 300, 03/10) e il passo qui sopra
     # finiva in «timed out while waiting for handshake response». Con calliope/tls_sicuro.py
@@ -581,7 +763,8 @@ def tls_sicuro_tempi(cert: Path, chiave: Path):
     letto = []
     t = threading.Thread(target=lambda: letto.append(c.recv(10)), daemon=True)
     t.start()
-    time.sleep(0.2)
+    # La lettura è davvero ferma (il thread aspetta in SocketTLS._fai): prima 0,2 s fissi
+    ferma = aspetta(lambda: dentro(t, "_fai"), 5)
     t0 = time.monotonic()
     try:
         c.shutdown(socket.SHUT_RDWR)
@@ -590,7 +773,8 @@ def tls_sicuro_tempi(cert: Path, chiave: Path):
     c.close()
     t.join(3)
     ok("SocketTLS: una lettura ferma finisce quando un altro thread chiude",
-       not t.is_alive(), f"{time.monotonic() - t0:.2f} s")
+       ferma and not t.is_alive(), f"{time.monotonic() - t0:.2f} s"
+       + ("" if ferma else "; il thread non è mai entrato nella lettura"))
     lato["s"].close()
     lsock.close()
 
@@ -713,16 +897,29 @@ def parte_rete(tmp: Path):
         def emit(self, record):
             self.righe.append(record.getMessage())
 
-    def caduta(logger) -> tuple[list, object]:
+    class Spia:
+        """Il primo filtro del logger: vede ogni record, anche quelli che il filtro di
+        logger_websockets poi scarta (il segno positivo che il keepalive è caduto davvero)."""
+
+        def __init__(self):
+            self.righe = []
+
+        def filter(self, record):
+            self.righe.append(record.getMessage())
+            return True
+
+    def caduta(logger) -> tuple[list, object, list]:
         rac = Raccogli()
         logger.addHandler(rac)
         logger.propagate = False
+        spia = Spia()
+        logger.filters.insert(0, spia)
         chiusa = {}
 
         def gestisci(ws):
             try:
                 for _ in ws:
-                    pass
+                    chiusa["visto"] = True
             except ConnectionClosed:
                 pass
             chiusa["rcvd"] = ws.protocol.close_rcvd
@@ -733,10 +930,12 @@ def parte_rete(tmp: Path):
         muto = Muto(srv.socket.getsockname()[1])
         cli = connect(f"ws://127.0.0.1:{muto.porta}", ping_interval=None, close_timeout=0.3)
         cli.send("ciao")
-        time.sleep(0.3)
+        # Il server ha ricevuto il messaggio prima che la rete diventi muta (prima 0,3 s), e il
+        # keepalive caduto ha scritto il suo record (prima altri 0,3 s dopo la chiusura)
+        aspetta(lambda: chiusa.get("visto"), 5)
         muto.muto = True
         aspetta(lambda: chiusa.get("fine"), 5)
-        time.sleep(0.3)
+        aspetta(lambda: any("keepalive ping failed" in r for r in spia.righe), 5)
         srv.shutdown()
         muto.chiudi()
         try:
@@ -744,14 +943,17 @@ def parte_rete(tmp: Path):
         except Exception:  # noqa: BLE001
             pass
         logger.removeHandler(rac)
-        return rac.righe, chiusa
+        logger.removeFilter(spia)
+        return rac.righe, chiusa, spia.righe
 
-    righe, _ = caduta(logging.getLogger("prova.websockets.senza_filtro"))
+    righe, _, _ = caduta(logging.getLogger("prova.websockets.senza_filtro"))
     ok("rete muta: senza filtro websockets scrive «keepalive ping failed»",
        any("keepalive ping failed" in r for r in righe), "" if righe else "nessuna riga")
-    righe, chiusa = caduta(P.logger_websockets("prova"))
-    ok("rete muta: con logger_websockets nessuna riga di websockets", not righe,
-       str(righe) if righe else "")
+    righe, chiusa, viste = caduta(P.logger_websockets("prova"))
+    caduto = any("keepalive ping failed" in r for r in viste)
+    ok("rete muta: con logger_websockets il record del keepalive c'è e nessuna riga esce",
+       caduto and not righe, str(righe) if righe else ("" if caduto else
+                                                         "il keepalive non è caduto"))
     ok("rete muta: nessun saluto di chiusura ricevuto (→ «scollegato (rete)»)",
        chiusa.get("fine") and chiusa.get("rcvd") is None)
     rac = []
@@ -936,7 +1138,7 @@ def parte_calliope(tmp: Path, frasi: dict):
     ollama.predefinita = risposta_llm
     ollama.avvia()
     stt = STTFinto()
-    porta_sat = porta_libera()
+    porta_sat = porta_fuori_effimere()   # fuori dalle effimere (17/10, #5)
     voce = RADICE / "voices" / "it_IT-paola-medium.onnx"
     righe = {
         "audio_modo": "satellite", "satellite_porta": porta_sat,
@@ -961,7 +1163,7 @@ def parte_calliope(tmp: Path, frasi: dict):
                CALLIOPE_CONFIG=str(tmp / "calliope.yaml"),
                CALLIOPE_CONFIG_LOCALE=str(tmp / "nessun-file-locale.yaml"),
                CALLIOPE_AGENTI_CONFIG=str(tmp / "nessun-file-dgx.yaml"),
-               CALLIOPE_PORTA_ISTANZA=str(porta_libera()),
+               CALLIOPE_PORTA_ISTANZA=str(porta_fuori_effimere()),
                CALLIOPE_TTS_TARATURA="0")   # come il runner: niente taratura
     cal = Calliope(tmp, env)
     cal.avvia()
@@ -1051,16 +1253,23 @@ def _scenario(cal, sat, scena, casse, stt, frasi, porta_sat, log):
     ok("eco misurata sul saluto (microfono finto: niente eco)",
        sat.eco is not None and sat.eco < 0.05, str(sat.eco))
     aspetta(lambda: "In ascolto" in cal.testo() or "svegliarmi" in cal.testo(), 10)
-    time.sleep(0.5)
+    # Il satellite ascolta da addormentato (prima 0,5 s fissi dopo «In ascolto», 17/10 #5)
+    # Il satellite ascolta da addormentato (riaddormentata scrive da sé l'errore, una volta)
+    riaddormentata(sat, casse, "dopo il saluto", dopo=0.0)
 
-    # Da addormentata: una frase senza nome non esce dal satellite
-    n_stt = len(stt.durate)
-    fine = scena.di(frasi["Che tempo fa domani pomeriggio?"])
+    # Da addormentata: una frase senza nome non esce dal satellite. Il segno positivo viene
+    # dopo (17/10, #5; prima 1,2 s di attesa): la domanda col nome che segue deve essere la
+    # prima e l'unica frase mandata, e l'unica trascrizione
+    n_stt, n_frasi = len(stt.durate), sat.frasi_inviate
+    # La pausa fra le due frasi sta nella scena, in tempo dell'audio (1,2 s di silenzio,
+    # oltre silence_ms): il VAD conta i frame, non i secondi dell'orologio, e chiude la frase
+    # senza nome anche se la macchina è carica. Senza pausa le due frasi sono un parlato solo
+    # e la wake word lo manda intero (giusto: una persona che dice tutto d'un fiato)
+    pausa = np.zeros(int(16000 * 1.2), np.float32)
+    fine = scena.di(np.concatenate([frasi["Che tempo fa domani pomeriggio?"], pausa]))
     fine.wait(15)
-    time.sleep(1.2)
-    ok("da addormentata: frase senza nome, 0 byte mandati, nessuna trascrizione",
-       sat.audio_inviato == 0 and len(stt.durate) == n_stt,
-       f"{sat.audio_inviato} byte, {len(stt.durate) - n_stt} trascrizioni")
+    ok("da addormentata: alla fine della frase senza nome 0 byte mandati",
+       sat.audio_inviato == 0, f"{sat.audio_inviato} byte")
 
     # Sveglia con il nome: frase intera a Whisper, risposta che torna in streaming
     n_turni = len(sat.turni_finiti)
@@ -1075,6 +1284,10 @@ def _scenario(cal, sat, scena, casse, stt, frasi, porta_sat, log):
     inviati = sat.audio_inviato
     ok("audio mandato solo dopo lo scatto: circa la frase (16 kHz × 16 bit)",
        0 < inviati <= (dur + 1.5) * 32000, f"{inviati / 1000:.0f} kB")
+    ok("da addormentata la frase senza nome non è uscita: la domanda col nome è l'unica "
+       "frase mandata e l'unica trascrizione",
+       lat is not None and sat.frasi_inviate - n_frasi == 1 and len(stt.durate) - n_stt == 1,
+       f"{sat.frasi_inviate - n_frasi} frasi, {len(stt.durate) - n_stt} trascrizioni")
     # Qui la voce non è registrata (ospite): dal 03/10 il terminale non stampa né la sua
     # frase né la risposta (analisi di sicurezza S9), ma la risposta c'è
     ok("Calliope ha risposto (nel terminale senza il testo dell'ospite)",
@@ -1092,7 +1305,7 @@ def _scenario(cal, sat, scena, casse, stt, frasi, porta_sat, log):
     with casse._lock:
         fine_voce = max((b for a, b, v in casse.scritture if v), default=time.monotonic())
     while time.monotonic() < fine_voce + 0.1:
-        time.sleep(0.005)
+        time.sleep(0.005)        # legittima: attesa attiva fino a un istante calcolato
     stt.risposta = "Che ore sono?"
     n_stt = len(stt.durate)
     f = frasi["Che ore sono?"]
@@ -1129,12 +1342,10 @@ def _scenario(cal, sat, scena, casse, stt, frasi, porta_sat, log):
        "traccia dalla fine della voce: " + ", ".join(
            f"{t - fine_voce:+.2f} {k} {i}" for t, k, i in list(sat.traccia)
            if t > fine_voce - 2))
-    aspetta(lambda: casse.secondi_di_voce(time.monotonic() - 0.3) == 0, 10)
-
-    # CPU del satellite in ascolto (Calliope sveglia per followup_s, poi addormentata)
-    time.sleep(1.5)
+    # CPU del satellite in ascolto, da addormentato (prima 1,5 s fissi dopo la risposta)
+    riaddormentata(sat, casse, "dopo il follow-up")
     c0, w0 = time.process_time(), time.monotonic()
-    time.sleep(2.0)
+    time.sleep(2.0)              # legittima: la finestra di misura della CPU
     cpu = (time.process_time() - c0) / (time.monotonic() - w0) * 100
     print(f"    misura: CPU del processo del satellite in ascolto {cpu:.1f} % di un core "
           f"(VAD, wake word, microfono e casse finti, server finti fermi)")
@@ -1148,6 +1359,7 @@ def _scenario(cal, sat, scena, casse, stt, frasi, porta_sat, log):
        "" if fine and casse.voce_dopo(fine.t) else "traccia: " + ", ".join(
            f"{t - t_storia:+.2f} {k} {i}" for t, k, i in list(sat.traccia)[-12:]))
     inizio = (casse.voce_dopo(fine.t) if fine else None) or time.monotonic()
+    # Voluta: «basta» dopo un secondo di storia, per sentirla interrompere a metà
     aspetta(lambda: time.monotonic() > inizio + 1.0, 3)
     stt.risposta = "Calliope, basta."
     fermata = False
@@ -1163,7 +1375,8 @@ def _scenario(cal, sat, scena, casse, stt, frasi, porta_sat, log):
         print("    (wake word non scattata su «Calliope, basta.»: la ripeto)", flush=True)
     ok("barge-in: il satellite si ferma da solo", fermata)
     t_int = sat.player.interrotta_a or time.monotonic()
-    time.sleep(1.0)
+    # Il blocco in corso allo scatto è finito (prima 1 s fisso)
+    finito = aspetta(lambda: not sat.player.in_corso, 5)
     coda = max(0.0, sat.player.ultima_scrittura - t_int)
     # Fermo entro un blocco = nessun blocco di voce **cominciato** dopo lo scatto (30 ms di
     # margine: il controllo e la scrittura non sono atomici). La fine dell'ultima scrittura
@@ -1172,49 +1385,67 @@ def _scenario(cal, sat, scena, casse, stt, frasi, porta_sat, log):
     with casse._lock:
         dopo = [round((x - t_int) * 1000) for x, _, v in casse.scritture if v and x > t_int + 0.03]
     ok("barge-in: riproduzione ferma entro un blocco da 100 ms (nessun blocco nuovo)",
-       not dopo, f"ultima scrittura finita {coda * 1000:.0f} ms dopo lo scatto"
-       + (f"; blocchi cominciati dopo: {dopo[:5]} ms" if dopo else ""))
-    time.sleep(2.0)
-    ok("dopo il barge-in nessun'altra frase della storia",
-       casse.secondi_di_voce(t_int + 0.15) == 0, f"{casse.secondi_di_voce(t_int + 0.15):.1f} s")
+       finito and not dopo, f"ultima scrittura finita {coda * 1000:.0f} ms dopo lo scatto"
+       + (f"; blocchi cominciati dopo: {dopo[:5]} ms" if dopo else "")
+       + ("" if finito else "; la riproduzione non si è fermata entro 5 s"))
+    # Il segno positivo (prima 2 s di attesa): «basta» è arrivato al server (fine
+    # dell'ascolto col seme del barge-in), il server l'ha preso per un «basta» e ha aperto
+    # l'ascolto dopo; tutto ciò che il server ha mandato prima è passato dal riproduttore
     ok("Calliope registra l'interruzione e resta in ascolto",
-       aspetta(lambda: "interruzione: resto in ascolto" in cal.testo(), 5))
+       aspetta(lambda: "interruzione: resto in ascolto" in cal.testo(), 10))
+    fini = [t for t, k, _ in list(sat.traccia) if k == "fine_ascolto" and t > t_int]
+    t_basta = fini[0] if fini else time.monotonic()
+    dopo_basta = aspetta(lambda: ascolti_dopo(sat, t_basta)
+                         and not sat.player.occupato(margine=0.15), 10)
+    ok("dopo il barge-in nessun'altra frase della storia",
+       dopo_basta and casse.secondi_di_voce(t_int + 0.15) == 0,
+       f"{casse.secondi_di_voce(t_int + 0.15):.1f} s"
+       + ("" if dopo_basta else "; il server non ha riaperto l'ascolto dopo «basta»: "
+          + ", ".join(f"{t - t_int:+.2f} {k} {i}" for t, k, i in list(sat.traccia)[-10:])))
     detta = casse.secondi_di_voce(inizio, t_int + 0.15)
     print(f"    misura: storia interrotta dopo {detta:.1f} s di voce")
-    time.sleep(1.5)                              # si riaddormenta (followup_s: 1)
+    riaddormentata(sat, casse, "dopo il barge-in", dopo=t_basta)   # followup_s: 1
 
     # Caduta del server: il satellite si ricollega quando Calliope riparte
     cal.ferma()
     ok("caduta del server: il satellite se ne accorge",
        aspetta(lambda: not sat.collegato.is_set(), 10))
     voce_prima = casse.secondi_di_voce(0)
+    t_avvio = time.monotonic()
     cal.avvia()
     ok("Calliope riparte e il satellite si ricollega da solo",
        aspetta(lambda: sat.collegato.is_set() and sat.connessioni >= 2, 60),
        f"connessioni {sat.connessioni}")
-    time.sleep(1.0)
-    ok("alla riconnessione niente saluto", casse.secondi_di_voce(0) - voce_prima < 0.2)
+    # Il segno positivo (prima 1 s di attesa): il saluto viene prima del primo ascolto (il
+    # satellite lo suona e misura l'eco prima di dirsi pronto): con il primo «ascolta» della
+    # connessione nuova arrivato e le casse ferme, un saluto si sarebbe già sentito
+    ascolta = aspetta(lambda: ascolti_dopo(sat, t_avvio)
+                      and not sat.player.occupato(margine=0.15), 20)
+    ok("alla riconnessione niente saluto (fino al primo ascolto)",
+       ascolta and casse.secondi_di_voce(0) - voce_prima < 0.2,
+       f"{casse.secondi_di_voce(0) - voce_prima:.1f} s di voce"
+       + ("" if ascolta else "; nessun ascolto dopo la riconnessione"))
     lat = _domanda(sat, scena, casse, stt, frasi, "Calliope, che ore sono?",
                    "Calliope, che ore sono?")
     ok("dopo la riconnessione risponde", lat is not None)
     if lat:
         latenze.append(lat)
-    aspetta(lambda: casse.secondi_di_voce(time.monotonic() - 0.3) == 0, 10)
-    time.sleep(1.5)
+    riaddormentata(sat, casse, "dopo la riconnessione")
 
     # Latenza aggiunta da una rete tipo VPN: proxy con 25 ms per verso (giro di 50 ms)
     proxy = Proxy(porta_sat, 0.025)
     sat.cfg.satellite_server = f"ws://127.0.0.1:{proxy.porta}"
     n = sat.connessioni
+    t_vpn = time.monotonic()
     sat.ws.close()
     ok("il satellite si ricollega attraverso la «VPN»",
        aspetta(lambda: sat.collegato.is_set() and sat.connessioni > n, 15))
-    time.sleep(0.5)
+    # Il primo ascolto attraverso il proxy (prima 0,5 s fissi)
+    riaddormentata(sat, casse, "attraverso la «VPN»", dopo=t_vpn)
     lat_vpn = []
     for k in range(2):
         if k:
-            aspetta(lambda: casse.secondi_di_voce(time.monotonic() - 0.3) == 0, 10)
-            time.sleep(1.5)
+            riaddormentata(sat, casse, "fra due domande con la «VPN»")
         lat = _domanda(sat, scena, casse, stt, frasi, "Calliope, che ore sono?",
                        "Calliope, che ore sono?")
         if lat:
@@ -1232,14 +1463,19 @@ def _scenario(cal, sat, scena, casse, stt, frasi, porta_sat, log):
            f"+{(vpn - diretta) * 1000:.0f} ms")
     # «Spegniti» da un satellite (02/10): sulla DGX spegneva il servizio, che systemd non
     # riavvia. Ora addormenta: il processo resta vivo, la regola finisce nel registro
-    aspetta(lambda: casse.secondi_di_voce(time.monotonic() - 0.3) == 0, 10)
-    time.sleep(1.5)
+    riaddormentata(sat, casse, "prima di «spegniti»")
     lat = _domanda(sat, scena, casse, stt, frasi, "Calliope, spegniti.", "Calliope, spegniti.")
     ok("«Calliope, spegniti.» dal satellite: risponde a voce", lat is not None)
-    ok("«spegniti» dal satellite addormenta e il server resta acceso",
-       aspetta(lambda: "il server resta acceso" in cal.testo(), 10)
-       and (time.sleep(1.0) or cal.proc.poll() is None),
-       f"uscita {cal.proc.poll()}" if cal.proc.poll() is not None else "")
+    # Il segno positivo (prima 1 s di attesa e poll()): dopo «spegniti» una domanda col nome
+    # riceve risposta, quindi il server è ancora vivo
+    acceso = aspetta(lambda: "il server resta acceso" in cal.testo(), 10)
+    riaddormentata(sat, casse, "dopo «spegniti»")
+    lat = _domanda(sat, scena, casse, stt, frasi, "Calliope, che ore sono?",
+                   "Calliope, che ore sono?")
+    ok("«spegniti» dal satellite addormenta e il server resta acceso (risponde dopo)",
+       acceso and lat is not None and cal.proc.poll() is None,
+       f"uscita {cal.proc.poll()}" if cal.proc.poll() is not None else
+       ("" if lat is not None else "nessuna risposta dopo"))
     def registro() -> str:
         return "".join(f.read_text(encoding="utf-8")
                        for f in (cal.tmp / "registro").glob("*.jsonl"))
@@ -1270,6 +1506,7 @@ def main():
         solo = os.environ.get("PROVA_DEBUG")
         if not solo:
             parte_protocollo(tmp)
+        parte_attese()
         frasi = None
         # Anche CAM++: senza, Calliope vera non parte e la prova riprovava per 60 s (06/10)
         from calliope.config import Config

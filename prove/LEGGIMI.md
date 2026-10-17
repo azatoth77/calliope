@@ -86,6 +86,18 @@ quelle (stesso ambiente dell'hook): serve a ripetere una prova instabile. Le sog
 non aspetta» delle prove degli agenti valgono 0,15 s (`SUBITO_S`): ciò che non va aspettato
 dura da 0,2 s in su, e sotto carico il solo avvio di un thread superava i 50 ms.
 
+Una prova che cade a caso si cerca **in più corsie sotto carico** (dal 17/10 nel repository, #5):
+`.\.venv\Scripts\python.exe prove\manuali\carico.py prova_satellite.py --corsie 3 --giri 20
+--carico 16` la lancia come il runner (`lancia`, stesso ambiente e job object) in 3 corsie
+insieme, 20 giri ciascuna, con 16 processi Python pieni (`--porte N`: anche N thread che aprono e
+chiudono porte effimere, come le altre prove di un `--completo`). Stampa ogni giro (verde o
+caduto, secondi, frasi ripetute perché la wake word non è scattata, contate a parte) e il
+riepilogo; le uscite dei giri vanno in una cartella temporanea (`--uscita` per sceglierla). Il
+carico finisce con lo script. In una prova nuova: niente attese fisse «perché nel frattempo»
+succeda qualcosa (si aspetta la condizione, con un tempo massimo e la traccia se scade), niente
+attese negative senza un segno positivo dopo, e per un sottoprocesso una porta fuori dalle
+effimere (`prove/porte.py`, `porta_fuori_effimere`).
+
 Le prove con il **browser** (Edge o Chromium senza finestra) usano `prove/cdp.py` (06/10): la
 porta di DevTools la sceglie il browser (`--remote-debugging-port=0`, letta da
 `DevToolsActivePort`) e la chiusura passa da `Browser.close`, poi dall'albero dei processi
@@ -159,7 +171,7 @@ agenti sullo stesso portatile; le cause e le misure):
   tratta più come un errore della prova, ci pensa il job object).
 
 **Prove instabili sotto carico: le cause trovate il 15/10** (ramo `correzioni-15-10`). Misure con
-`carico.py` (fuori dal repository): la prova lanciata dal runner in più corsie insieme, con 12–20
+`carico.py` (allora fuori dal repository; dal 17/10 `prove/manuali/carico.py`): la prova lanciata dal runner in più corsie insieme, con 12–20
 processi Python pieni su 24 core e, per il tunnel, 32 thread che aprono e chiudono porte effimere in
 ascolto (come le altre prove di un `--completo`).
 
@@ -196,7 +208,30 @@ ascolto (come le altre prove di un `--completo`).
 - Non ripetute nelle misure: «la delega risponde subito» oltre i 150 ms (14/10 mattina, 315 e 352
   ms) e `lavoro_stato` (già rimisurato dal 14/10).
 
-**Problemi aperti delle prove** (15/10): le attese fisse di `prova_satellite`. *(Storico, 14/10:
+**`prova_satellite`: le attese fisse e una riconnessione lenta nel codice (17/10, #5).** Delle 22
+`time.sleep` restano le 6 legittime, commentate; le 11 di assestamento aspettano una condizione
+(il satellite riaddormentato, da `Satellite.ascolti`; il thread dentro la lettura; il messaggio
+ricevuto; il record del keepalive) e le 5 negative hanno un segno positivo dopo; porte di Calliope
+fuori dalle effimere (`prove/porte.py`). Sotto carico (3 corsie, 16 processi) la prima versione è
+caduta in 2 giri su 3 su «il satellite si ricollega attraverso la «VPN»»: **nel codice**, il
+satellite dopo una sessione collegata e caduta ripartiva dai tentativi falliti di prima (dopo il
+riavvio lento di Calliope, 15 s invece di 1; [satelliti](../docs/aree/satelliti.md)). Corretto:
+**59 giri su 60 verdi** con 3 corsie e 16 processi (durata mediana 131 s, massima 155; 6 frasi
+ripetute dalla wake word in tutto). La caduta rimasta è un'altra: «TLS: 120 aperture», 118/120
+con `InvalidMessage` e la più lenta a 4,8 s, cioè il server che chiude una stretta di mano oltre
+il suo `open_timeout` di 3 s mentre 8 thread aprono insieme nello stesso processo della CPU
+piena; non è un'attesa della prova e non si distingue, dalla prova, dal difetto del 03/10 che
+quel controllo cerca: è un problema aperto, [#146](https://github.com/azatoth77/calliope/issues/146). Senza carico la prova dura
+90–95 s contro 103–107 di prima. Contrario (la stessa prova che non aspetta il riaddormentarsi, 3 corsie × 4 giri con lo stesso
+carico): 10 su 12, una caduta sul follow-up («ascolta» arrivato 0,33 s dopo l'inizio della
+frase, attacco perso) e una sul rifiuto per l'Origin con 3 s di tempo massimo (ora 10 s, come i
+rifiuti per il token: sono attese di una risposta).
+
+**Problemi aperti delle prove** (17/10): «TLS: 120 aperture» di `prova_satellite` cade 1 giro su 60
+sotto carico pieno (3 corsie, 16 processi): il server chiude una stretta di mano oltre il suo
+`open_timeout` di 3 s e dalla prova non si distingue dal difetto del 03/10 che quel controllo cerca
+([#146](https://github.com/azatoth77/calliope/issues/146)). *(Storico, 15/10: «le attese fisse di
+`prova_satellite`», chiuso il 17/10, sopra.)* *(Storico, 14/10:
 «la caduta rara di `prova_agenti` sul tunnel, da leggere con l'`errore` della diagnosi se torna»:
 trovata il 15/10, sopra.)* *(Storico:
 `prova_cronologia_pagina` con «Scarica Markdown» salvava il file nella cartella Download vera di
@@ -216,7 +251,7 @@ prova registrata in `prove/__main__.py` (o uno script di `manuali/`) manca da `e
 voci.)*
 
 <!-- elenco generato da elenco.md con `python -m prove --leggimi`: non scriverlo a mano -->
-- **Voce, modello e regole sul testo** ([elenco](elenco.md#voce-modello-e-regole-sul-testo), [area](../docs/aree/voce-e-regole.md)): `prova_config.py`, `prova_config_modi.py`, `prova_reti_scatti.py`, `prova_dialogo_tool.py`, `prova_testo.py`, `prova_storpiature.py`, `prova_runner.py`, `prova_docs_aree.py`, `prova_conflitti.py`, `prova_dati_privati.py`, `prova_tool.py`, `prova_rinomina_ollama.py`, `prova_robustezza.py`, `prova_ciclo_ripetuto.py`, `prova_brain.py`, `prova_risposta_sospeso.py`, `prova_sfida_esito.py`, `prova_sfida_esito_ollama.py`, `prova_brain_ollama.py`, `prova_gioco_giudice_ollama.py`, `prova_rivolta_ollama.py`, `prova_controlli_regressione.py`, `prova_regressione.py`, `ora_giusta.py`, `prova_llm.py`, `prova_native.py`, `prova_confronto.py`, `prova_ollama_tool.py`, `prova_debug.py`, `prova_prompt.py`, `prova_prompt2.py`, `prova_native2.py`, `prova_native3.py`, `prova_prompt3.py`, `prova_prompt4.py`, `prova_latency.py`, `prova_tool_scala.py`
+- **Voce, modello e regole sul testo** ([elenco](elenco.md#voce-modello-e-regole-sul-testo), [area](../docs/aree/voce-e-regole.md)): `prova_config.py`, `prova_config_modi.py`, `prova_reti_scatti.py`, `prova_dialogo_tool.py`, `prova_testo.py`, `prova_storpiature.py`, `prova_runner.py`, `manuali/carico.py`, `prova_docs_aree.py`, `prova_conflitti.py`, `prova_dati_privati.py`, `prova_tool.py`, `prova_rinomina_ollama.py`, `prova_robustezza.py`, `prova_ciclo_ripetuto.py`, `prova_brain.py`, `prova_risposta_sospeso.py`, `prova_sfida_esito.py`, `prova_sfida_esito_ollama.py`, `prova_brain_ollama.py`, `prova_gioco_giudice_ollama.py`, `prova_rivolta_ollama.py`, `prova_controlli_regressione.py`, `prova_regressione.py`, `ora_giusta.py`, `prova_llm.py`, `prova_native.py`, `prova_confronto.py`, `prova_ollama_tool.py`, `prova_debug.py`, `prova_prompt.py`, `prova_prompt2.py`, `prova_native2.py`, `prova_native3.py`, `prova_prompt3.py`, `prova_prompt4.py`, `prova_latency.py`, `prova_tool_scala.py`
 - **Audio: wake word, STT, TTS, chi parla** ([elenco](elenco.md#audio-wake-word-stt-tts-chi-parla), [area](../docs/aree/stt-tts.md)): `prova_pronuncia.py`, `prova_stt_correzione.py`, `prova_argomenti_incerti.py`, `misura_argomenti_forse.py`, `prova_latenza.py`, `prova_pause.py`, `prova_frase_lunga.py`, `prova_frase_lunga_voce.py`, `prova_fine_turno.py`, `prova_fine_turno_voce.py`, `manuali/fine_turno_dgx.py`, `prova_preselezione.py`, `manuali/preselezione_dgx.py`, `prova_dopo_tool.py`, `manuali/dopo_tool_dgx.py`, `prova_whisper.py`, `prova_speaker.py`, `misura_stt.py`, `sintetizza_dominio.py`, `misura_parole_incerte.py`, `misura_pronuncia.py`, `manuali/misura_whistle.py`, `manuali/registra_whistle.py`, `prova_wakeword.py`, `prova_aec.py`, `misura_voci_compagnia.py`, `misura_rivolta.py`, `prova_compagnia.py`, `prova_stanza.py`, `prova_stanza_voce.py`, `prova_stanza_contesto.py`, `prova_stanza_storia.py`, `prova_stanza_attesa.py`, `prova_stanza_ricorda.py`, `prova_stanza_storpiata.py`, `manuali/banco_stanza_storpiata.py`, `prova_stanza_cerca.py`, `prova_stanza_eco.py`, `prova_stanza_tenuta.py`, `prova_stanza_conoscenti.py`, `prova_conoscenti_conserva.py`, `prova_stanza_guardia.py`, `prova_stanza_lenta.py`, `prova_stanza_lenta_blocchi.py`, `manuali/banco_stanza_guardia.py`, `manuali/banco_stanza_lenta.py`, `manuali/blocchi_stanza.py`, `manuali/ritrascrivi_conservati.py`, `manuali/misura_impronte_satellite.py`, `prova_compagnia_passo0.py`
 - **Memoria, agenda, liste, calcoli** ([elenco](elenco.md#memoria-agenda-liste-calcoli), [area](../docs/aree/memoria-agenda-liste.md)): `prova_tempi.py`, `prova_agenda.py`, `prova_agenda_tutto.py`, `prova_liste.py`, `prova_casa.py`, `prova_date_ricordi_ollama.py`, `prova_calcola.py`, `prova_memoria.py`
 - **Contesto e conversazione** ([elenco](elenco.md#contesto-e-conversazione), [area](../docs/aree/contesto-conversazione.md)): `prova_contesto.py`, `prova_conversazioni.py`, `prova_ricominciamo_ollama.py`, `prova_argomenti_ollama.py`, `misura_argomenti.py`, `prova_conversazioni_ollama.py`, `prova_ollama_carico.py`, `prova_eventi.py`, `prova_eventi_ciclo.py`, `prova_eventi_disco.py`, `prova_eventi_attivo.py`, `prova_dati_fissi.py`, `manuali/banco_cache_swa.py`, `manuali/banco_dati_fissi.py`, `manuali/misura_cache_prefisso.py`, `prova_eventi_guardia.py`, `prova_uscita_unica.py`, `prova_conserva.py`, `prova_banco_rotazione.py`, `prova_mulaw.py`, `prova_scelta_tool.py`, `prova_ciclo.py`, `prova_stati_buchi.py`, `prova_nome_da_solo.py`, `prova_corsie.py`, `prova_ctx.py`, `prova_numctx.py`, `prova_prompt_conversazione.py`, `misura_contesto.py`, `misura_conversazioni.py`, `misura_corsie.py`

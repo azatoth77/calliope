@@ -91,22 +91,9 @@ def porta_tunnel() -> int:
     `--completo`, un altro runner) poteva riceverla da bind(0) o per una connessione in uscita.
     Le cadute del 14/10 erano questo: «porta locale occupata» al --prova, e «VPN accesa» (e già
     «ssh muto») con `ollama_giu` / ConnectTimeout: la sonda del tunnel trovava in ascolto un
-    processo d'altri, che poi spariva. Le porte effimere di Windows partono da 49152, quelle di
-    Linux da 32768: qui 20000–31999, a caso, e libere (Hyper-V ne riserva alcune: si salta)."""
-    import random
-    for _ in range(200):
-        p = random.randrange(20000, 32000)
-        s = socket.socket()
-        try:
-            if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
-                s.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
-            s.bind(("127.0.0.1", p))
-            return p
-        except OSError:
-            continue
-        finally:
-            s.close()
-    return porta_libera()
+    processo d'altri, che poi spariva. Dal 17/10 (#5) l'aiuto è comune, in prove/porte.py."""
+    from prove.porte import porta_fuori_effimere
+    return porta_fuori_effimere()
 
 
 def aspetta(cond, s=10.0):

@@ -242,3 +242,40 @@ non avere porte in rete.
   `calliope.locale.yaml` se ci sono, e l'eventuale regola del firewall di Windows aperta per
   la porta dell'inoltro. Un satellite non ancora aggiornato accende l'inoltro con la sua
   versione vecchia finché non si aggiorna dal server.
+
+## Riconnessione dopo una sessione e `prova_satellite` senza attese fisse (17/10, #5)
+
+- **Nel codice, trovato sotto carico**: `Satellite._esegui` azzerava i tentativi di riconnessione
+  solo quando una sessione finiva *senza* eccezione. Una sessione collegata e poi caduta (rete,
+  server fermato) ripartiva quindi dai tentativi falliti di prima del collegamento: dopo un
+  riavvio lungo del server (1, 2, 5, 10 s di tentativi), la caduta seguente aspettava 15 s invece
+  di 1. Nella prova: «il satellite si ricollega attraverso la «VPN»» oltre i 15 s, 2 giri su 3
+  con 3 corsie e 16 processi di carico. Ora una sessione che si era collegata (`connessioni`
+  cresciuto) riparte dalla prima attesa; i tentativi senza collegamento continuano ad allungarla.
+  Dalla revisione della PR #145: conta solo una sessione rimasta su almeno `SESSIONE_STABILE_S`
+  (30 s, più dell'ultima attesa); una sessione accolta e chiusa subito non azzera, e le attese
+  crescono. Chiuso con 4409 (sostituito: un altro satellite con le stesse credenziali, cartella
+  copiata o due programmi) il satellite lo scrive nel log e aspetta `ATTESA_SOSTITUITO_S` (60 s):
+  con la prima versione della correzione i due si toglievano il posto ogni secondo (40
+  connessioni in 40 s misurate in revisione, 9 con il codice di main).
+- **Ascolti del satellite** (`Satellite.ascolti`, solo diagnostica: istante, id, wake word e fine
+  della finestra senza nome di ogni «ascolta», segnati quando l'ascolto parte davvero). Nessun
+  effetto sul protocollo. Servono alle prove per sapere quando il satellite si è riaddormentato.
+- **`prova_satellite`**: delle 22 `time.sleep` restano le 6 legittime (passo di `aspetta`,
+  microfono a 32 ms, casse in tempo reale, ritardo della «VPN», attesa attiva fino a un istante,
+  finestra della misura della CPU), ognuna col suo commento. Le attese di assestamento
+  aspettano una condizione (riaddormentata, thread dentro `SocketTLS._fai`, messaggio ricevuto
+  dal server, record del keepalive caduto); quelle negative hanno un segno positivo dopo (la
+  domanda col nome è l'unica frase mandata e trascritta, il server riapre l'ascolto dopo
+  «basta», il primo ascolto della connessione nuova senza saluto, una risposta dopo «spegniti»,
+  la connessione con l'impronta diversa finita sul server senza contarla). La pausa fra la
+  frase senza nome e quella col nome sta nell'audio della scena (1,2 s di silenzio): senza, le
+  due frasi sono un parlato solo e la wake word le manda insieme, come farebbe con una persona.
+  Porte di Calliope vera fuori dalle effimere (`prove/porte.py`).
+- Misure (portatile, 24 core, `prove/manuali/carico.py`, nel repository da oggi): con 3 corsie e
+  16 processi di carico **59 giri su 60 verdi** (mediana 131 s, 6 frasi ripetute dalla wake word
+  in tutto); la caduta rimasta è «TLS: 120 aperture» (118/120, il server chiude una stretta di
+  mano oltre il suo `open_timeout` di 3 s mentre 8 thread aprono insieme sulla CPU piena: non è
+  un'attesa, da riguardare se torna senza carico). Prima della correzione della riconnessione 2
+  giri su 3 caduti. Senza carico 90–95 s contro 103–107 della prova di prima. Dettagli in
+  [`prove/LEGGIMI.md`](../../prove/LEGGIMI.md).
