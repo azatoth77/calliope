@@ -633,6 +633,11 @@ più. Il progetto:
    (`prove/manuali/banco_analisi_ragionamento.py`) non dice che trova più contraddizioni vere senza
    far saltare la passata oltre `agenti_accettazione_s`.
 
+«Indipendente» riguarda chi **scrive** gli esempi (una passata a sé, prima del codice), non
+l'isolamento di chi li **esegue**: in Python il test gira nello stesso processo del programma, come
+quelli delle estensioni, e un programma scritto per ingannarlo può falsarne l'esito (revisione della
+PR #141, documento d'area).
+
 Alternative scartate: gli esempi per tutti i programmi subito (l'interfaccia su file è un progetto
 a sé); far scrivere i test di accettazione all'agente stesso (è ciò che il flusso a fasi ha
 tolto); accendere il ragionamento senza misura.

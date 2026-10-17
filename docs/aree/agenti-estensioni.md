@@ -3532,6 +3532,39 @@ e i contrari; la frase. Senza la modifica le prove nuove falliscono (`interpreta
 rossa alla partenza e verde sul riferimento anche per `media`) e `banco_analisi_ragionamento
 --secco`.
 
+**La revisione della PR #141 (17/10).** Quattro correzioni, ognuna con la sua prova che falliva
+prima (`prova_fasi_agente_2` sezione 7e):
+- **Solo esempi d'errore non bastano.** Per un programma come il massimo i numeri uguali a un dato
+  si tolgono, e poteva restare il solo esempio del dato sbagliato. Allora un `massimo.py` con
+  soltanto `sys.exit(1)`, o con soltanto `raise NotImplementedError`, passava tutti gli esempi, e
+  al tetto sarebbe stato «fatto». Ora, senza almeno un esempio che controlla un numero o una
+  parola su una corsa che finisce bene (codice d'uscita 0 o che non conta), il programma resta
+  senza esempi: «nessun esempio che controlla un risultato».
+- **L'eccezione è nell'uscita.** In Python il tipo e il messaggio di un'eccezione del programma
+  vanno nell'uscita che «contiene» controlla, come lo stderr in JavaScript: un programma giusto
+  che rifiuta il voto con `raise ValueError("il voto 11 non valido")` passa. Con il codice
+  d'uscita che non conta, l'eccezione da sola non fa più fallire l'esempio, come in JavaScript:
+  decidono il numero e le parole.
+- **Stdin e uscita veri.** Sono `TextIOWrapper` sopra dei `BytesIO`, non `StringIO`: un programma
+  che usa `sys.stdout.reconfigure`, `sys.stdin.buffer` o `sys.stdout.buffer` passa.
+- **In JavaScript il tempo scaduto è rosso.** Un processo che non finisce in 10 s, o che non parte,
+  fa fallire l'esempio («non ha finito in 10 s»), invece di valere come «si ferma con un errore».
+  Prima un programma che si bloccava sul dato sbagliato passava l'esempio d'errore.
+
+In più, il nome del programma si dice all'agente una volta per lavoro anche dopo una sospensione:
+il segno sta in `lav.accettazione`, non nella chiusura del controllo.
+
+**Cosa vuol dire «indipendente».** Gli esempi sono indipendenti perché li scrive un'altra
+passata, prima del codice e senza vederlo: non sono le ipotesi dell'agente. Non vuol dire che
+chi li esegue è isolato dal programma. In Python il test gira nello stesso processo del programma
+(runpy), come i test delle estensioni, che importano `estensione.py`, e come i test dell'agente.
+Un programma scritto apposta per ingannare può falsare l'esito: risalire i frame fino al segno
+dell'esito di `_avvio.py` e stamparne uno finto, oppure sostituire i metodi di `unittest`. Per
+caso non succede (un `os._exit` senza il segno è rosso). Nascondere il segno a `main()` non basta,
+perché resta raggiungibile dai frame e dal modulo, e lo scambio di `unittest` resterebbe: si
+lascia così, e lo si dice. Il rimedio vero è eseguire il programma in un processo a sé, che la
+sandbox oggi non permette in Python.
+
 **Resta**:
 - i numeri dei due banchi sulla DGX;
 - l'approvazione del progetto (§ 5.5 della ricerca) e, con i numeri, l'accensione di
