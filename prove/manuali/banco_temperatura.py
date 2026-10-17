@@ -21,6 +21,12 @@ con nomi di fantasia, ripetuti:
    astronomiche in chilometri, 12 pollici in piedi, un'unità che non c'è).
 3. **programma** (Python): «rinomina le foto per data» (c01 di prove/prova_lavori.py, con il
    suo test nascosto).
+4. **media** (Python a riga di comando, 17/10, issue #10): «media voti» con gli argomenti, la
+   virgola decimale e il voto fuori da 1 a 10. È il genere di programma per cui l'analisi prima
+   del codice scrive gli esempi (`agenti/accettazione.py`); l'accettazione nascosta cerca da sé
+   il programma e lo esegue con tre casi. Il banco accende per questo caso, in memoria,
+   `agenti_accettazione_programmi_sempre` (gli esempi anche fuori da uno sviluppo). Non è tra
+   i casi di serie: `--casi media` (o `porte,convertitore,programma,media`).
 
 Misure per lavoro: riuscito (consegna «fatto» e accettazione verde), passate, token (e di
 ragionamento), minuti, giri a vuoto (passate fermate per ragionamento ripetuto, passate senza
@@ -210,6 +216,84 @@ def rinomina_cartella(cartella):
 '''
 
 
+# 4. Un programma a riga di comando (17/10, #10: gli esempi per i programmi). L'accettazione
+# nascosta cerca da sé il programma (il nome lo sceglie l'agente o l'analisi) e lo esegue nello
+# stesso processo, come gli esempi (la sandbox non lascia avviare processi)
+COMPITO_MEDIA = (
+    "Un programma Python «media voti»: riceve i voti come argomenti (numeri da 1 a 10, anche con "
+    "la virgola, per esempio 6,5) e stampa la media con due decimali. Se un voto è fuori da 1 a "
+    "10 dice che il voto non è valido ed esce con un codice d'errore. Senza argomenti usa dei "
+    "voti d'esempio.")
+ACCETTAZIONE_MEDIA = r'''import contextlib
+import io
+import os
+import re
+import runpy
+import sys
+import unittest
+
+
+def programmi():
+    for n in sorted(os.listdir(".")):
+        if n.endswith(".py") and not n.startswith(("test", "accettazione")):
+            if "__name__" in open(n, encoding="utf-8").read():
+                yield n
+
+
+def esegui(prog, args):
+    out = io.StringIO()
+    vecchi = sys.argv
+    sys.argv = [prog, *args]
+    codice = 0
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            runpy.run_path(prog, run_name="__main__")
+    except SystemExit as e:
+        codice = e.code if isinstance(e.code, int) else (0 if e.code is None else 1)
+    except Exception:
+        codice = 1
+    finally:
+        sys.argv = vecchi
+    return out.getvalue(), codice
+
+
+def numeri(t):
+    return [float(x.replace(",", ".")) for x in re.findall(r"-?\d+(?:[.,]\d+)?", t)]
+
+
+def giusto(prog):
+    u, c = esegui(prog, ["5", "8", "9"])
+    if c != 0 or not any(abs(x - 7.33) < 0.006 for x in numeri(u)):
+        return False
+    u, c = esegui(prog, ["6,5", "8"])
+    if c != 0 or not any(abs(x - 7.25) < 0.006 for x in numeri(u)):
+        return False
+    u, c = esegui(prog, ["11", "8"])
+    return c != 0 and "valid" in u.lower()
+
+
+class Accettazione(unittest.TestCase):
+    def test_acc_media(self):
+        self.assertTrue(any(giusto(p) for p in programmi()), "nessun programma calcola la media "
+                        "e rifiuta il voto 11")
+'''
+RIFERIMENTO_MEDIA = '''import sys
+
+
+def main(argv):
+    voti = [float(x.replace(",", ".")) for x in argv] if argv else [7.0, 8.0]
+    for v in voti:
+        if not 1 <= v <= 10:
+            print(f"Il voto {v:g} non è valido: deve essere da 1 a 10.")
+            sys.exit(1)
+    print(f"La media è {sum(voti) / len(voti):.2f}".replace(".", ","))
+
+
+if __name__ == "__main__":
+    main(sys.argv[1:])
+'''
+
+
 def casi():
     """{nome: dict} con tipo, compito, file di partenza, accettazione e riferimento."""
     import prova_lavori as PL
@@ -234,6 +318,12 @@ def casi():
                       "accettazione": ("test_nascosto_banco.py", c01[3]),
                       "aiuto": {"pytest_free_raises.py": PL.AIUTO_RAISES},
                       "riferimento": {"rinomina_foto.py": RIFERIMENTO_PROGRAMMA}},
+        "media": {"tipo": "codice", "gioco": False, "correzione": False, "estensione": None,
+                  "compito": COMPITO_MEDIA, "prima": {},
+                  "accettazione": ("test_nascosto_banco.py", ACCETTAZIONE_MEDIA),
+                  "riferimento": {"media_voti.py": RIFERIMENTO_MEDIA},
+                  # Fuori da uno sviluppo gli esempi dei programmi si accendono così (17/10)
+                  "programmi_sempre": True},
     }
 
 
@@ -726,6 +816,8 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
     # Con più giri (13/10) il tetto di un giro è una tappa, come in un lavoro della modalità
     # sviluppo (sviluppo.py lo accende così); con un giro solo resta spento, come prima
     lav.tappe = giri > 1
+    # Gli esempi di un programma fuori da uno sviluppo (17/10, #10): solo in memoria, per caso
+    cfg.agenti_accettazione_programmi_sempre = bool(caso.get("programmi_sempre"))
     iso = svc.scegli_isolamento()
     k = [0]
 

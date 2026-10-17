@@ -206,7 +206,11 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    accettazione tutti verdi (o, per una correzione, con la riproduzione del difetto e i test
    verdi), il lavoro si chiude fatto; i valori nominati nella richiesta diventano controlli, e gli
    esempi si controllano contro la richiesta (conto rifatto, valori non nominati tolti). Banco
-   della DGX del 14/10: 11/15 senza nessun falso «fatto».]*
+   della DGX del 14/10: 11/15 senza nessun falso «fatto».]* *[17/10, #10: gli esempi per i
+   programmi a riga di comando (Python, e JavaScript con Node acceso) con l'interfaccia dichiarata
+   dall'analisi; fuori da uno sviluppo e con il ragionamento solo dietro due interruttori spenti,
+   da accendere dopo il banco della temperatura (caso `media`) e il mini-banco del ragionamento
+   sulla DGX; restano i programmi su file della persona.]*
 
 ### 2. Registro degli eventi e dialogo (E1–E11)
 
