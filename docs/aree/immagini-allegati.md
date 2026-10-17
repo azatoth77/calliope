@@ -417,14 +417,18 @@ davano «I file degli altri non li vedo». Corretto (commit 5daf6bc):
   `ieri`/`oggi`/`altroieri` con `true`), scritti nella firma; verso il cassetto solo con
   `cassetto`, o senza `allegato` e senza file nella conversazione. Tutti gli altri tornano al
   registro come prima: `tool_argomenti_non_validi`, correggibile.
-- **Parentela nella richiesta** (`_chi_e_cosa`): si cerca nel cassetto di chi parla e il file
+- *[storico fino a 877c2e7: un nome di casa in `cassetto`/`quale` spostava il cassetto su quella
+  persona; la terza revisione l'ha tolto, vedi sotto]* **Parentela nella richiesta**
+  (`_chi_e_cosa`): si cerca nel cassetto di chi parla e il file
   vale solo se le parole lo trovano davvero nel nome o nel testo («la pagella di mio figlio» →
   `pagella figlio.txt`), senza il ripiego «solo il giorno» di `Cassetto.cerca`; altrimenti «I
   file degli altri non li vedo». Parentele con plurali e parole comuni (zie, nipoti, genitori,
   bimbo, bambina, consorte, amica, collega…); un profilo registrato col cognome («Teodora
   Rossi») si riconosce dal solo nome; la regola `cassetto_persona_nella_richiesta` è
   controllata nel registro dalla prova.
-- **La domanda prima di eliminare o tenere** (vincolo di sicurezza su un'azione distruttiva,
+- *[storico fino a 877c2e7: la domanda guardava gli argomenti grezzi, «senza nessuna persona
+  nella chiamata», e il «sì» valeva per qualunque chiamata dello stesso tool]* **La domanda
+  prima di eliminare o tenere** (vincolo di sicurezza su un'azione distruttiva,
   effetto reversibile; scelta prudente finché decide chi amministra): `cassetto_gestisci` con
   `elimina` o `tieni`, senza nessuna persona nella chiamata, quando la frase nomina un'altra
   persona di casa o una parentela, chiede «Nel tuo cassetto: vuoi che elimini i tuoi file
@@ -451,6 +455,43 @@ chi parla, `cassetto="ieri"` con o senza `quando`/`tipo`, e lo racconta come il 
 moglie; nessun file di un'altra persona è uscito); nessun errore interno. Prima frase mediana
 1,73 s (65 turni): la GPU era al 96 % per un altro lavoro, contro 0,61 s dei giri di prima.
 Il criterio della #58 per «mia moglie» resta da decidere da chi amministra.
+
+**Terza revisione della PR #143 (17/10 sera): meno regole, più strette** (commit 877c2e7). Ogni
+giro trovava una strada nuova perché più regole leggevano nomi nel testo: un nome di casa in
+`cassetto`/`quale` o nel valore di `ieri` spostava il cassetto («il file che la mamma di Bianca
+ti ha mandato ieri» apriva ed eliminava, dopo la domanda e il «sì», il file di Bianca; così «la
+parete bianca»); la domanda si saltava con `minore="nessuno"`, «io», «mio», «ieri», il nome di
+chi parla, e diceva «i tuoi file» anche quando il cassetto era un altro; il «sì» eseguiva
+qualunque chiamata dello stesso tool («tutti», un altro id, un altro minore). Ora:
+
+- **Un solo punto decide il proprietario**: il campo della persona (`minore`, o `di`/`ragazzo`)
+  e le chiavi `persona`/`proprietario`/`di_chi`/`mittente`, ognuno con le regole strette di
+  `_minore`; se due dicono persone diverse si rifiuta (regola `cassetto_persone_diverse`). Un
+  nome o una parentela in `cassetto`/`quale`/nei valori di `ieri`/`oggi` **non sposta mai il
+  cassetto**: si cerca in quello deciso e il file vale solo se le parole lo trovano davvero;
+  altrimenti un errore correggibile al modello («la persona va in `minore`; per un altro adulto
+  di' che non li vedi»). `quando`/`giorno`/`data`/`tipo` e `ieri`/`oggi`/`altroieri` danno solo
+  forme chiuse, o un errore correggibile.
+- **La domanda** (`politica_cassetto_altra_persona`) chiede il proprietario alla stessa funzione
+  del tool (`proprietario_della_chiamata`), così i valori-ripiego del modello non la saltano, e
+  dice di chi è il cassetto («Nel tuo cassetto: …», «Nel cassetto di Bianca: …»). Chiede quando
+  la frase nomina una persona di casa o una parentela che non è il proprietario. «vicino» non è
+  più una parentela; un nome che è anche una parola («la parete bianca») porta al più a una
+  domanda in più, con il cassetto detto giusto.
+- **Il «sì»** salta la domanda solo con la chiamata identica a quella chiesta (tutti gli
+  argomenti, lo `stessa` di `decidi`); con un'altra chiamata `politica_azione_incoerente`, e
+  `incoerente` confronta tutti gli argomenti per i tool con `chiedi_se`.
+
+Prove a secco: `prova_cassetto.prova_terza_revisione` (232 controlli in tutto il file; 20
+falliscono sul codice di 11720fa), con il file eliminato verificato uno per uno.
+
+**Misura** (26B sulla DGX, versione installata 20261017-2019-a04f0a12, `num_ctx` 36864 già
+caricato, servizio senza turni, GPU libera; il codice del ramo in una cartella temporanea,
+l'installazione uguale prima e dopo per sha256): `prova_cassetto_ollama.py 5`: **ritrova 15/15,
+revisione 15/15, contrari 15/15**, misura «mia moglie» 2/5; nessun errore interno; prima frase
+mediana 0,63 s (65 turni). Con «il file che Teodora ti ha mandato ieri» il modello ora chiama
+`allegato_leggi(cassetto="Teodora", quando="ieri")`, riceve l'errore correggibile e risponde
+«Non sono riuscita a trovare il file»: nessun file di nessuno letto.
 
 ### Il tutore dai pulsanti della scheda (08/10, dopo l'unione)
 
