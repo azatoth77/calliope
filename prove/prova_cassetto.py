@@ -316,6 +316,30 @@ def prova_minore_non_persona():
         r = call(ctx, "cassetto_gestisci", {"azione": "elimina", "quale": "ieri", "minore": chi})
         verifica(f"cassetto_gestisci(elimina, ieri, minore=«{chi}»): rifiutato, niente eliminato",
                  not r.get("ok") and all(cas.prendi("dario", x) is not None for x in (a, s, b)), r)
+    # Argomenti che lo schema non ha (il 26B, 17/10: quando="ieri", "ieri": true, tipo=…): non
+    # fermano il tool; una forma chiusa è parole della richiesta, il resto una persona
+    r = call(ctx, "allegato_leggi", {"cassetto": "il file", "quando": "ieri"})
+    verifica("allegato_leggi(cassetto=«il file», quando=«ieri»): il file di ieri, niente errore",
+             r.get("ok") and "340" in r.get("contenuto", "")
+             and "cassetto_argomento_in_piu" in ctx.regole, r)
+    r = call(ctx, "allegato_leggi", {"cassetto": "il file", "ieri": True})
+    verifica("…e con «ieri»: true", r.get("ok") and "340" in r.get("contenuto", ""), r)
+    for args in ({"cassetto": "ieri", "persona": "mia moglie"},
+                 {"cassetto": "Teodora", "quando": "ieri"},
+                 {"cassetto": "di tua moglie", "quando": "ieri"},
+                 {"cassetto": "il file di mia moglie di ieri"},
+                 {"cassetto": "ieri", "proprietario": "Teodora"}):
+        r = call(ctx, "allegato_leggi", args)
+        testo = json.dumps(r, ensure_ascii=False)
+        verifica(f"allegato_leggi({args}): rifiutato, nessun file di chi parla né dell'altra",
+                 not r.get("ok") and "340" not in testo and "QX" not in testo, r)
+    r = call(ctx, "cassetto_gestisci", {"azione": "elimina", "quale": "quello di Teodora di ieri"})
+    verifica("cassetto_gestisci(elimina, «quello di Teodora di ieri»): niente eliminato",
+             not r.get("ok") and all(cas.prendi("dario", x) is not None for x in (a, s, b)), r)
+    r = call(ctx, "allegato_leggi", {"cassetto": "i file di Bianca", "quando": "ieri"})
+    verifica("…il tutore con il nome della figlia nella richiesta: i file di lei",
+             "QX" not in json.dumps(r) and "340" not in json.dumps(r)
+             and "altri" not in json.dumps(r, ensure_ascii=False), r)
     r = call(ctx, "allegato_leggi", {"cassetto": "ieri", "minore": "Teodora"})
     verifica("un nome di casa resta un nome: i file di un'adulta restano chiusi",
              not r.get("ok") and "QX" not in json.dumps(r), r)
