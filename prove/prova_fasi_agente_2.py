@@ -1442,6 +1442,132 @@ def prova_programmi_tetto(tmp: Path):
              and "nessun esempio" not in f3, f"{f2} | {f3}")
 
 
+def _corri(tmp: Path, nome_caso: str, an: dict, files: dict):
+    """(passano, requisiti rossi, uscita) degli esempi di `an` sui `files`, nella sandbox."""
+    from calliope.agenti import accettazione as acc
+    nome, cont = acc.file_programma(an)
+    sb = G.sandbox(tmp, nome_caso)
+    for f, c in files.items():
+        sb.scrivi(f, c)
+    sb.scrivi(nome, cont)
+    r = sb.test(nome)
+    u = str(r.get("uscita") or "")
+    if nome.endswith(".js"):
+        passano, rossi = acc.esito_js(u)
+    else:
+        passano, rossi = bool(r.get("passano")), acc.rossi(u)
+    return passano, rossi, u
+
+
+def prova_programmi_revisione(tmp: Path):
+    sezione("7e. revisione della PR #141: solo esempi d'errore, eccezioni, stdin e stdout veri, "
+            "tempo scaduto")
+    from calliope.agenti import accettazione as acc
+    # 1. Il massimo: i numeri uguali a un dato si tolgono, resta solo l'esempio d'errore
+    d_max = {"programma": {"linguaggio": "python", "file": "massimo.py",
+                           "interfaccia": "riga_di_comando"},
+             "esempi": [{"requisito": 1, "argomenti": ["3", "9"], "numero": 9},
+                        {"requisito": 1, "argomenti": ["4", "2", "7"], "numero": 7},
+                        {"requisito": 2, "argomenti": ["tre"], "codice_uscita": 1}]}
+    testo_max = "il massimo dei numeri; se un valore non è un numero deve dare errore"
+    mx = acc.interpreta(d_max, 2, False, testo=testo_max, programma=True)
+    verifica("solo esempi d'errore: il programma resta senza esempi (niente «fatto» al tetto)",
+             mx["esempi"] == [] and mx["programma"] == {}
+             and mx["senza_esempi"] == "nessun esempio che controlla un risultato",
+             f"{mx['esempi']} {mx.get('senza_esempi')}")
+    # …con un esempio che controlla il risultato sys.exit(1) e raise NotImplementedError sono
+    # rossi
+    d_ok = dict(d_max, esempi=d_max["esempi"] + [
+        {"requisito": 1, "argomenti": ["3", "9", "4"], "contiene": "massimo",
+         "codice_uscita": 0}])
+    mo = acc.interpreta(d_ok, 2, False, testo=testo_max, programma=True)
+    esiti = {k: _corri(tmp, f"rev-max-{k}", mo, {"massimo.py": c})[0] for k, c in (
+        ("exit1", "import sys\nsys.exit(1)\n"), ("raise", "raise NotImplementedError\n"))}
+    verifica("contrari: massimo.py con solo sys.exit(1) e con solo raise NotImplementedError "
+             "rossi", bool(mo["esempi"]) and esiti == {"exit1": False, "raise": False},
+             str(esiti))
+    # 2. L'eccezione del programma nell'uscita controllata da «contiene», come lo stderr in JS
+    d_voto = {"programma": {"linguaggio": "python", "file": "voto.py",
+                            "interfaccia": "riga_di_comando"},
+              "esempi": [{"requisito": 1, "argomenti": ["7", "9"], "numero": 8},
+                         {"requisito": 2, "argomenti": ["11", "8"], "contiene": "non valido",
+                          "codice_uscita": 1},
+                         {"requisito": 2, "argomenti": ["12", "8"], "contiene": "non valido"}]}
+    testo_voto = "la media dei voti; un voto fuori da 1 a 10 non è valido"
+    av = acc.interpreta(d_voto, 2, False, testo=testo_voto, programma=True)
+    VOTO_RAISE = ("import sys\nv = [float(x) for x in sys.argv[1:]]\n"
+                  "if any(not 1 <= x <= 10 for x in v):\n"
+                  "    raise ValueError('il voto ' + str(max(v)) + ' non valido')\n"
+                  "print('media', sum(v) / len(v))\n")
+    p, rossi, u = _corri(tmp, "rev-voto-py", av, {"voto.py": VOTO_RAISE})
+    verifica("Python: un programma giusto che rifiuta il voto con raise ValueError(…) passa "
+             "(il messaggio è nell'uscita; con il codice che non conta l'eccezione non basta a "
+             "fallire, come in JavaScript)", p and len(av["esempi"]) == 3, u[-500:])
+    VOTO_SENZA = VOTO_RAISE.replace("non valido", "fuori scala")
+    p2, rossi2, u2 = _corri(tmp, "rev-voto-py-no", av, {"voto.py": VOTO_SENZA})
+    verifica("…contrario: un messaggio diverso è rosso (i due esempi del voto)",
+             not p2 and rossi2 == [2], u2[-500:])
+    avj = acc.interpreta({**d_voto, "programma": {"linguaggio": "javascript", "file": "voto.js",
+                                                  "interfaccia": "riga_di_comando"}},
+                         2, False, testo=testo_voto, programma=True,
+                         linguaggi=("python", "javascript"))
+    VOTO_JS = ("const v = process.argv.slice(2).map(Number);\n"
+               "if (v.some((x) => x < 1 || x > 10)) throw new Error(`il voto ${Math.max(...v)} "
+               "non valido`);\nconsole.log('media', v.reduce((a, b) => a + b, 0) / v.length);\n")
+    pj, _, uj = _corri(tmp, "rev-voto-js", avj, {"voto.js": VOTO_JS})
+    pj2, rj2, _ = _corri(tmp, "rev-voto-js-no", avj,
+                         {"voto.js": VOTO_JS.replace("non valido", "fuori scala")})
+    verifica("JavaScript: lo stesso (l'eccezione sullo stderr passa, il messaggio diverso rosso)",
+             pj and not pj2 and rj2 == [2], uj[-500:])
+    # 3. stdin e stdout veri: reconfigure e stdin.buffer
+    d_somma = {"programma": {"linguaggio": "python", "file": "somma.py",
+                             "interfaccia": "riga_di_comando"},
+               "esempi": [{"requisito": 1, "argomenti": ["5", "8"], "numero": 13},
+                          {"requisito": 1, "argomenti": [], "stdin": "2\n3\n", "numero": 5}]}
+    sm = acc.interpreta(d_somma, 1, False, testo="la somma dei numeri", programma=True)
+    GIUSTO = ("import sys\nv = sys.argv[1:] or sys.stdin.read().split()\n"
+              "print('somma', sum(float(x) for x in v))\n")
+    es = {k: _corri(tmp, f"rev-io-{k}", sm, {"somma.py": c}) for k, c in (
+        ("reconfigure", "import sys\nsys.stdout.reconfigure(encoding='utf-8')\n" + GIUSTO),
+        ("buffer", GIUSTO.replace("sys.stdin.read()", "sys.stdin.buffer.read().decode()")),
+        ("scrive_byte", GIUSTO.replace("print('somma', sum(float(x) for x in v))",
+                                       "sys.stdout.buffer.write(('somma %g\\n' % sum(float(x) "
+                                       "for x in v)).encode())")))}
+    verifica("un programma giusto con sys.stdout.reconfigure, sys.stdin.buffer o "
+             "sys.stdout.buffer passa", len(sm["esempi"]) == 2 and all(
+                 x[0] for x in es.values()),
+             str({k: (x[0], x[2][-300:]) for k, x in es.items()}))
+    # 4. JavaScript: tempo scaduto o processo che non parte = rosso, non «errore atteso»
+    d_js = {"programma": {"linguaggio": "javascript", "file": "somma.js",
+                          "interfaccia": "riga_di_comando"},
+            "esempi": [{"requisito": 1, "argomenti": ["5", "8"], "numero": 13},
+                       {"requisito": 2, "argomenti": ["5", "x"], "codice_uscita": 1}]}
+    aj = acc.interpreta(d_js, 2, False, testo="la somma dei numeri; con un valore che non è "
+                        "un numero errore", programma=True, linguaggi=("python", "javascript"))
+    BLOCCO = ("const v = process.argv.slice(2).map(Number);\n"
+              "if (v.some(isNaN)) { while (true) {} }\n"
+              "console.log('somma', v.reduce((a, b) => a + b, 0));\n")
+    pb, rb, ub = _corri(tmp, "rev-js-blocco", aj, {"somma.js": BLOCCO})
+    verifica("JavaScript: il programma che si blocca sul dato sbagliato è rosso (non ha finito)",
+             not pb and rb == [2] and "non ha finito" in ub, ub[-500:])
+    pe, re_, _ = _corri(tmp, "rev-js-errore", aj, {"somma.js": BLOCCO.replace(
+        "while (true) {}", "process.exit(1)")})
+    verifica("…contrario: quello che esce con 1 passa", pe, str(re_))
+    # 5. Il nome del programma non si ridice dopo una sospensione (una chiusura nuova)
+    from types import SimpleNamespace
+    from calliope.agenti.servizio import Lavori
+    srv = SimpleNamespace(log=lambda *_: None)
+    lav = _lavoro("RN", tipo="codice")
+    lav.accettazione = {"stato": "pronta", "file": True, "nome_file": acc.FILE,
+                        "programma": "media_voti.py"}
+    sb = G.sandbox(tmp, "rev-nome")
+    sb.scrivi("media.py", MEDIA_GIUSTA)
+    e1 = Lavori._controlla_programma(srv, lav)(sb)
+    e2 = Lavori._controlla_programma(srv, lav)(sb)        # dopo la ripresa: chiusura nuova
+    verifica("il nome si dice una volta per lavoro, anche dopo una sospensione",
+             bool(e1) and e2 is None, f"{e1} {e2}")
+
+
 if __name__ == "__main__":
     sys.stdout.reconfigure(encoding="utf-8")
     radice = Path(tempfile.mkdtemp(prefix="calliope-fasi2-"))
@@ -1464,6 +1590,7 @@ if __name__ == "__main__":
         prova_programmi_test(radice / "programmi")
         prova_programmi_servizio(radice / "programmi-servizio")
         prova_programmi_tetto(radice / "programmi-tetto")
+        prova_programmi_revisione(radice / "programmi-revisione")
     finally:
         shutil.rmtree(radice, ignore_errors=True)
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'} "

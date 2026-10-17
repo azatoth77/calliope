@@ -1552,18 +1552,20 @@ class Lavori:
         dall'analisi (17/10, #10, come il manifesto delle estensioni): il file con quel nome.
         Lo dice all'agente **una volta**: un'interfaccia troppo rigida non deve far rifiutare
         un programma giusto fino al tetto (gli esempi rossi lo diranno comunque). None senza
-        un programma dichiarato: la consegna di sempre."""
+        un programma dichiarato: la consegna di sempre. «Una volta» vale per il lavoro, anche
+        dopo una sospensione (una chiusura nuova): il segno sta in `lav.accettazione`, che resta
+        con il lavoro."""
         if not (getattr(lav, "accettazione", None) or {}).get("programma"):
             return None
-        detto = []
 
         def controlla(sandbox):
             from .accettazione import controlla_nome
-            if detto:
+            a = getattr(lav, "accettazione", None) or {}
+            if a.get("nome_detto"):
                 return None
-            errore = controlla_nome(sandbox, getattr(lav, "accettazione", None))
+            errore = controlla_nome(sandbox, a)
             if errore:
-                detto.append(errore)
+                a["nome_detto"] = True
                 self.log(f"[AGENTI] {lav.id}: consegna senza il programma dichiarato, lo dico "
                          "all'agente")
             return errore

@@ -615,6 +615,15 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
             out["esempi"], out["tolti"] = _esempi_programma(d, n_requisiti, testo)
             if not out["esempi"]:
                 out["programma"], out["senza_esempi"] = {}, "nessun esempio valido"
+            elif not any(e["codice_uscita"] in (None, 0)
+                         and (e["numero"] is not None or e["contiene"])
+                         for e in out["esempi"]):
+                # Revisione della PR #141: con i soli esempi d'errore (il massimo, dove i numeri
+                # uguali a un dato si tolgono) un programma con sys.exit(1) o con un raise
+                # passerebbe tutto, e al tetto sarebbe «fatto». Serve un risultato controllato
+                # su una corsa che finisce bene
+                out["programma"], out["esempi"] = {}, []
+                out["senza_esempi"] = "nessun esempio che controlla un risultato"
         return out
     if not estensione:
         return out
@@ -901,10 +910,14 @@ def _numeri(testo, dati=""):
 
 
 def _esegui(argomenti, stdin):
-    """(uscita, codice d'uscita, errore) del programma, come se lo si lanciasse."""
-    out = io.StringIO()
+    """(uscita, codice d'uscita, errore) del programma, come se lo si lanciasse. Stdin e uscita
+    sono file di testo veri sopra dei byte (reconfigure, .buffer); un'eccezione, come in Python,
+    finisce nell'uscita con il suo tipo e il messaggio e il codice è 1."""
+    out = io.TextIOWrapper(io.BytesIO(), encoding="utf-8", errors="replace",
+                           write_through=True)
+    entrata = io.TextIOWrapper(io.BytesIO(str(stdin or "").encode("utf-8")), encoding="utf-8")
     vecchi = sys.argv, sys.stdin
-    sys.argv, sys.stdin = [PROGRAMMA, *argomenti], io.StringIO(stdin or "")
+    sys.argv, sys.stdin = [PROGRAMMA, *argomenti], entrata
     codice, errore = 0, ""
     try:
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
@@ -917,9 +930,14 @@ def _esegui(argomenti, stdin):
             out.write(str(e.code) + "\\n")
     except Exception as e:  # noqa: BLE001 — come Python: il programma si ferma con 1
         codice, errore = 1, f"{type(e).__name__}: {e}"
+        out.write(errore + "\\n")
     finally:
         sys.argv, sys.stdin = vecchi
-    return out.getvalue(), codice, errore
+    try:
+        out.flush()
+    except (ValueError, OSError):
+        pass
+    return out.buffer.getvalue().decode("utf-8", "replace"), codice, errore
 
 
 def _prova(self, caso):
@@ -933,10 +951,11 @@ def _prova(self, caso):
     if atteso is not None and atteso != 0:
         self.assertNotEqual(codice, 0, f"{detto}: deve fermarsi con un errore (codice d'uscita "
                             f"diverso da 0), è finito bene; ha stampato «{breve}»")
-    else:
+    elif atteso == 0:
+        # Con il codice che non conta (null) niente controllo, come in JavaScript: decidono il
+        # numero e le parole, e l'eccezione è nell'uscita
         self.assertFalse(errore, f"{detto}: il programma si è fermato con {errore}")
-        if atteso == 0:
-            self.assertEqual(codice, 0, f"{detto}: deve finire bene, codice d'uscita {codice}")
+        self.assertEqual(codice, 0, f"{detto}: deve finire bene, codice d'uscita {codice}")
     if caso.get("numero") is not None:
         n = caso["numero"]
         tol = max(caso.get("tolleranza") or 0, 0.01, abs(n) * 0.002)
@@ -999,7 +1018,11 @@ function esegui(e) {
   const r = spawnSync(process.execPath, ["--permission", `--allow-fs-read=${qui}`,
     `--allow-fs-write=${qui}`, PROGRAMMA, ...e.argomenti],
     { input: e.stdin || "", encoding: "utf8", timeout: 10000 });
-  return { uscita: (r.stdout || "") + (r.stderr || ""), codice: r.status === null ? 1 : r.status };
+  // Tempo scaduto o processo che non parte (revisione della PR #141): non è «si ferma con un
+  // errore», l'esempio è rosso
+  const guasto = r.error ? `non è partito o non ha finito in 10 s (${r.error.code || r.error.message})`
+    : r.signal ? `non ha finito in 10 s (fermato con ${r.signal})` : "";
+  return { uscita: (r.stdout || "") + (r.stderr || ""), codice: r.status === null ? 1 : r.status, guasto };
 }
 test(`R0 esempio 0: c'è il programma ${PROGRAMMA}`, () => {
   assert.ok(fs.existsSync(PROGRAMMA), `manca il programma ${PROGRAMMA}: gli esempi lo eseguono con questo nome`);
@@ -1008,8 +1031,9 @@ ESEMPI.forEach((e, i) => {
   const detto = `R${e.requisito}: ${PROGRAMMA} con gli argomenti ${JSON.stringify(e.argomenti)}` +
     (e.stdin ? ` e lo stdin ${JSON.stringify(e.stdin)}` : "");
   test(`R${e.requisito} esempio ${i + 1}: argomenti ${JSON.stringify(e.argomenti)}`, () => {
-    const { uscita, codice } = esegui(e);
+    const { uscita, codice, guasto } = esegui(e);
     const breve = uscita.trim().slice(-300);
+    assert.ok(!guasto, `${detto}: il programma ${guasto}; ha stampato «${breve}»`);
     if (e.codice_uscita !== null && e.codice_uscita !== 0) {
       assert.notStrictEqual(codice, 0, `${detto}: deve fermarsi con un errore (codice d'uscita diverso da 0), è finito bene; ha stampato «${breve}»`);
     } else if (e.codice_uscita === 0) {
