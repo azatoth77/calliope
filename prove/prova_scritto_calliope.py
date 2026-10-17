@@ -29,7 +29,8 @@ from pathlib import Path
 import httpx
 
 from prova_satellite import (RADICE, VARIANTI, Calliope, Casse, MicFinto, Scena, STTFinto,
-                             _di, aspetta, cfg_prova, porta_libera, sintetizza)
+                             _di, aspetta, cfg_prova, sintetizza)
+from prove.porte import porta_fuori_effimere as porta_libera  # fuori dalle effimere (17/10, #5)
 
 errori = 0
 

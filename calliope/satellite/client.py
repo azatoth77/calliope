@@ -362,6 +362,9 @@ class Satellite:
         self.codice = None                        # ultimo codice di abbinamento mostrato
         # Gli ultimi comandi e risultati, con l'istante (diagnostica e prove)
         self.traccia = collections.deque(maxlen=300)
+        # Gli ultimi ascolti aperti (17/10, #5): (istante, id, con la wake word, fino a quando
+        # sveglia). Dice alle prove quando il satellite si è riaddormentato, senza attese fisse
+        self.ascolti = collections.deque(maxlen=50)
         # Aggiornamenti automatici: solo se avviato da un'installazione (avvio.py della pagina
         # /satellite), mai dal repository (aggiorna.py)
         from .aggiorna import Aggiornatore, Installazione
@@ -448,6 +451,7 @@ class Satellite:
     def _esegui(self):
         tentativi = 0
         while not self._fermo.is_set():
+            prima = self.connessioni
             try:
                 if not self.cred.get("token"):
                     self.abbina()
@@ -470,6 +474,12 @@ class Satellite:
                 continue
             except Exception as e:  # noqa: BLE001 — rete giù, server spento, VPN spenta
                 if not self._fermo.is_set():
+                    if self.connessioni > prima:
+                        # La sessione si era collegata (17/10, #5): una caduta dopo riparte
+                        # dalla prima attesa. Prima valevano i tentativi falliti di prima del
+                        # collegamento: dopo un riavvio lungo del server, la caduta seguente
+                        # aspettava 10–15 s invece di 1
+                        tentativi = 0
                     attesa = ATTESE_RICONNESSIONE[min(tentativi, len(ATTESE_RICONNESSIONE) - 1)]
                     self.log(f"[SATELLITE] Server non raggiungibile ({_breve(e)}): riprovo tra "
                              f"{attesa} s")
@@ -915,6 +925,7 @@ class Satellite:
         # vecchio ignora il tipo «ripresa»
         L.ripresa_muto = self.player.occupato
         L.ripresa_avviso = lambda s, lid=lid: self._manda(tipo="ripresa", id=lid, dopo_s=s)
+        self.ascolti.append((time.monotonic(), lid, bool(m.get("wake")), awake_until))
         try:
             audio = L.listen(self.wake if m.get("wake") else None, awake_until, seed=seed,
                              wakeup=self._wakeup)

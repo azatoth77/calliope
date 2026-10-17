@@ -473,7 +473,7 @@ def prova_client():
     s = object.__new__(Satellite)
     s.listener = ListenerFinto()
     s._seed, s.wake, s._wakeup = None, None, threading.Event()
-    s.traccia, s.frasi_inviate = [], 0
+    s.traccia, s.frasi_inviate, s.ascolti = [], 0, []
     s._manda = lambda **c: mandati.append(c)
     s._suona = lambda tipo: None
     s.player = SimpleNamespace(occupato=lambda: False, frase=lambda *a: None)
