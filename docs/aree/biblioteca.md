@@ -2,7 +2,9 @@
 
 *Wikipedia italiana e le altre fonti Kiwix in puro Python con FTS5; ricerca su internet con SearXNG. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Biblioteca e ricerca web come al 09/10 (sotto). Dal 13/10 le notizie hanno un tool loro, `notizie` (sola lettura, livello `notizie_livello`, di serie ospite): feed RSS delle testate scaricati in casa (`calliope/notizie/`, solo libreria standard), 5 fatti per elenco (`notizie_fatti`), i fatti detti restano nella storia in busta, minori solo sport, tecnologia e ragazzi, SearXNG come ripiego; con lui `web_cerca` non ha più il tipo «notizie» (sezione in fondo). Notizie è la diciannovesima capacità del registro. Da guardare sulla DGX: la quota delle risposte dai feed in `calliope stato --turni`.
+**Stato al 16/10.** Come al 14/10 (sotto), più la **pertinenza dei risultati** verso la conversazione (`calliope/pertinenza.py`, #101, PR #115): una misura in `web_cerca` e `biblioteca_cerca`, in ombra di serie (`ricerca_pertinenza`), mai un filtro, riassunta in `calliope stato --turni`; con «attiva» il risultato fuori tema arriva al modello con la frase da dire (sezione «Risultati fuori tema», in fondo). La quota delle risposte dai feed dal 17/10 è nella riga «Notizie» di `calliope stato --turni` (#31, PR #128; prima lettura da fare); *[storico, 16/10: era solo nel registro dei turni]*.
+
+*Stato al 14/10 (storico dal 16/10: la quota dei feed non era ancora in `--turni`, vedi sopra).* Biblioteca e ricerca web come al 09/10 (sotto). Dal 13/10 le notizie hanno un tool loro, `notizie` (sola lettura, livello `notizie_livello`, di serie ospite): feed RSS delle testate scaricati in casa (`calliope/notizie/`, solo libreria standard), 5 fatti per elenco (`notizie_fatti`), i fatti detti restano nella storia in busta, minori solo sport, tecnologia e ragazzi, SearXNG come ripiego; con lui `web_cerca` non ha più il tipo «notizie» (sezione in fondo). Notizie è la diciannovesima capacità del registro. Da guardare sulla DGX: la quota delle risposte dai feed, dal 17/10 nella riga «Notizie» di `calliope stato --turni` (issue #31, sezione in fondo; prima lettura da fare).
 
 *Stato al 09/10 (storico): biblioteca e ricerca web invariate dalla pubblicazione (07/10). Dall'08/10 notte il testo dei siti letto dall'agente (`web_leggi`) arriva in busta come ogni dato non fidato, e i nomi pubblici di casa sono vietati nella rete delle estensioni e dell'agente ([agenti-estensioni](agenti-estensioni.md)). Restano aperti le tabelle delle voci non lette e i «perché…?» che trovano titoli omonimi. Dal 09/10 SearXNG si tiene aggiornato da solo (controllo quotidiano, aggiornamento provato accanto con il ritorno indietro, «Controlla» e «Aggiorna» nel cruscotto: sezione in fondo); la prima prova vera sulla DGX è da fare.*
 
@@ -14,6 +16,7 @@
 | Ricerca su internet (facoltativa, solo con la rete) | SearXNG in un container di Calliope sulla DGX (`calliope-searxng`, 127.0.0.1:8004, niente log; `setup/linux/motore/searxng.sh`), httpx in POST; pagine con http.client e html.parser, senza SSRF | `calliope/web/` → `Web` (`servizio.py`), `Ripulitore` (`privacy.py`: niente dati personali nelle domande), `scarica`, `estrai_testo` (`pagina.py`), `load_web`; tool `web_cerca` in `calliope/tools/web.py`; `web_cerca` e `web_leggi` dell'agente in `calliope/agenti/ciclo.py`; solo letture dopo un risultato web: `politica.DOPO_DATO` (`politica.bloccata`) |
 | Notizie dai feed RSS (13/10) | feed delle testate scaricati in casa ogni 2 ore (solo se qualcuno chiede notizie), xml.etree, SQLite; la domanda non esce; SearXNG come ripiego | `calliope/notizie/` → `Notizie` (`servizio.py`), `elenco` (`feed.py`), `scarica`, `leggi` (`lettore.py`), `titolo_per_voce` (`pulizia.py`), `raggruppa` (`gruppi.py`), `riduci` (`contesto.py`); tool `notizie` in `calliope/tools/notizie.py` (sezione in fondo) |
 | SearXNG tenuto aggiornato (09/10) | ricerche di prova fisse in POST, registro delle immagini (Docker Hub) con tag e digest, docker tramite lo script | `calliope/web/motore.py` → `MotoreRicerca` (`controlla`, `aggiorna`, `passo`, `avvia_azione`), `giudica`, `almeno_come`, `tag_recenti`; `setup/linux/motore/searxng.sh` (`candidata`, `usa`, `pulisci-immagini`…); `calliope motore searxng controlla|aggiorna|novita|storia` |
+| Pertinenza dei risultati verso la conversazione (16/10, #101) | parole piene in comune con la frase e con gli ultimi messaggi, solo libreria standard; un dato, mai un filtro; `ricerca_pertinenza` ombra di serie | `calliope/pertinenza.py` → `misura`, `applica`, `modo`, `riassunto`; chiamato da `web_cerca` (`calliope/tools/web.py`) e `biblioteca_cerca` (`calliope/tools/builtin.py`); riassunto in `calliope stato --turni` (sezione «Risultati fuori tema») |
 
 ## Problemi noti
 
@@ -208,7 +211,10 @@ registro c'erano già tag più nuovi (2026.10.4 e 2026.10.7). Codice in `calliop
   `calliope/web/`, allo script, al cruscotto e alle capacità; `prova_cruscotto_pagina` con i
   due pulsanti nella pagina vera. Niente rete vera.
 
-**Prima prova vera sulla DGX (da fare, non fatta il 09/10).** Dopo `calliope aggiorna` con
+**Prima prova vera sulla DGX (da fare, non fatta il 09/10).** *(16/10, #82: il controllo
+quotidiano gira, l'ultimo controllo della DGX in `motore/searxng.json` è citato sotto in «Ricerche
+lente»; dei passi 1–5 e di «Aggiorna» dal cruscotto non c'è traccia nei documenti: restano da
+fare, o da segnare fatti con la data da chi amministra.)* Dopo `calliope aggiorna` con
 questo ramo, da terminale:
 
 1. `calliope motore searxng stato` (container, immagine in uso, JSON acceso);
@@ -462,7 +468,8 @@ contesto**; lettore con la libreria standard; scarico in secondo piano ogni 2 or
   `domanda`, obbligatoria; la descrizione rimanda a `notizie`); una chiamata con il tipo rimasta
   nell'abitudine del modello va alle notizie dei feed (`web_notizie_al_tool`). Senza il tool
   (notizie spente) `web_cerca` resta com'era. Gli schemi passano da 77 a **78** (togliere il tipo
-  non toglie uno schema). Prompt: «Per le notizie (di oggi, di sport, di economia, della zona o
+  non toglie uno schema; *storico: vero il 13/10, dal 14/10 i tool sono 75 contati sul registro,
+  CLAUDE.md*). Prompt: «Per le notizie (di oggi, di sport, di economia, della zona o
   su un argomento) chiama notizie…», e le notizie escono dalla frase di `web_cerca` e da «Non puoi
   sapere…»; senza il tool, il prompt di prima parola per parola.
 - **Capacità** «notizie dai giornali» (19 nel registro): spente, senza rete, configurate, attiva
@@ -508,7 +515,8 @@ quelle per ragazzi» (`minore_notizie`); niente ripiego su internet. Il preset �
 c'entra: la domanda non esce.
 
 **Da guardare sulla DGX**: la quota delle risposte dai feed (`notizie_feed` contro
-`notizie_ripiego` in `calliope stato --turni`), l'età della notizia più recente detta, i feed
+`notizie_ripiego`: dal 16/10 la riga «Notizie» di `calliope stato --turni`, issue #31; *[storico,
+fino al 16/10: il comando non la stampava]*), l'età della notizia più recente detta, i feed
 fermi nella capacità, la durata dello scarico nel log (`[NOTIZIE] scarico: …`). Restano dalla
 ricerca: la lettura senza modello (proposta § 6.4, non fatta: le dice il modello), la scheda con
 le immagini (no), i bollettini della Protezione civile detti solo con data e ora (il contenuto è
@@ -603,3 +611,43 @@ dei casi veri), 5 giri, prima (main) e dopo con la misura attiva (`--pertinenza 
 
 Col 4B le notizie restano senza richiamo ma senza invenzioni: il 26B è quello del caso vero, da
 misurare sulla DGX (comando nel file) prima di chiudere il criterio 3 della issue.
+
+## La quota delle notizie in `calliope stato --turni` (16/10, issue #31)
+
+Il documento chiedeva dal 13/10 di guardare sulla DGX «la quota delle risposte dai feed in
+`calliope stato --turni`», ma il comando non stampava niente sulle notizie (incongruenza 1 del
+gruppo casa-biblioteca dell'analisi del 15/10): senza aprire a mano il registro dei turni non si
+sapeva se le notizie arrivano dai giornali scaricati o quasi sempre da internet (decisione 0024),
+né quante volte un minore chiede una sezione non sua.
+
+- **Tre regole nuove** in `calliope/tools/notizie.py`, solo nel registro dei turni (niente al
+  modello, la risposta non cambia): `notizie_vuote` (risposta senza fatti: niente sul tema, una
+  sezione senza giornali in casa, i feed mai scaricati); `notizie_ripiego_fallito` (serviva il
+  ripiego e SearXNG non ha trovato niente, o è giù dall'ultima prova: allora `Web.pronta` è falso e
+  il ripiego non si tenta nemmeno, ma conta come fallito, non come negato);
+  `notizie_ripiego_negato` (serviva il ripiego ma chi parla è un minore o non ha `web_livello`).
+  Con SearXNG **non configurato** (`Web.diagnosi` «non_configurato», o senza il servizio web)
+  né fallito né negato: il ripiego non c'è mai stato. Fallito e negato non sono una parte delle
+  vuote: una risposta dai feed con l'indice vecchio e SearXNG senza risultati ha `notizie_feed`
+  **e** `notizie_ripiego_fallito`. Correzione dell'analisi della issue: il caso «SearXNG giù» non passa
+  da `_ripiego` (si ferma prima, in `_ripiego_possibile`), quindi andava contato a parte.
+- **`calliope/notizie/misura.py`** (solo libreria standard, come `pertinenza.riassunto`):
+  `riassunto(turni)` per giorno e in totale (richieste = turni con una chiamata `notizie` o una
+  delle regole), `testo(r)`; **quota dai feed** = feed / (feed + ripiego), nessuna quota senza
+  nessuno dei due. Legge solo `regole` e i nomi in `tool`: nessun tema, nessun titolo.
+- **La riga** in `calliope stato --turni` dopo la pertinenza delle ricerche, e la chiave
+  `notizie` nel `--json`: «Notizie: 12 richieste, 6 dai giornali (86 %), 1 da internet, 2 vuote;
+  ripiego fallito 1, negato 1; seguiti 1; minori: 1 sezione rifiutata; web_cerca girato a
+  notizie 1.», poi una riga per giorno; senza notizie «Notizie: nessuna richiesta nel registro
+  dei turni.».
+- **Prove** (`prova_notizie`, § 7): le tre regole con i contrari (dai feed e il ripiego riuscito
+  non le hanno; l'ospite e il minore sono «negato», non «fallito»; SearXNG giù due volte di fila
+  resta «fallito»), il conto su un registro finto di due giorni (record senza `regole`, `regole`
+  non lista, un elemento che non è un turno), la riga e il `--json` da `stato.main` su una
+  cartella temporanea. Su main 10 controlli falliscono (le regole e la riga non c'erano).
+- **Da fare sulla DGX** (criterio 4 della issue): dopo `calliope aggiorna`,
+  `calliope stato --turni --giorni 7` e `--json`, e scrivere qui la prima lettura con la data e la
+  quota. I turni prima dell'aggiornamento hanno solo `notizie_feed`, `notizie_ripiego`,
+  `notizie_seguito`, `minore_notizie` e `web_notizie_al_tool`: le vuote e i ripieghi falliti si
+  contano da lì in avanti. L'età della notizia più recente detta resta fuori (misura diversa, un
+  campo nuovo nel record del turno).

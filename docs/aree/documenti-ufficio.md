@@ -179,7 +179,8 @@ permessi per accedere ai file del server» (falso) e `pc_cerca_file` sul PC non 
   «Scarica». Si sceglie per parole del titolo (`Archive.trova`: le parole che dicono il tipo di
   file non contano, «il foglio Excel della pizza»), vuoto per l'ultimo; un titolo che non c'è
   è un errore correggibile con i titoli veri, **mai un altro documento**; solo i documenti di
-  chi parla. Il `cosa_fare` di `documento_crea` lo nomina. Con lui i tool sono **74**.
+  chi parla. Il `cosa_fare` di `documento_crea` lo nomina. Con lui i tool sono **74** *(storico: vero il 09/10;
+  dal 14/10 sono 75 contati sul registro, CLAUDE.md)*.
 - Rimasto **sul server** (`RemoteDelivery`, `remoto: False`) con uno schermo personale di chi
   l'ha chiesto aperto (`Schermi.personale_collegato`): la frase dice «È sulla scheda del tuo
   schermo: per averlo tocca «Scarica».» (`frase_scheda`, regola `documento_sulla_scheda`), e
