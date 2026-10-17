@@ -30,6 +30,10 @@ essere 10/10: se no il problema non è la stanza):
 
     ... banco_stanza_contesto.py --giri 3 --scena chi
     ... banco_stanza_contesto.py --giri 3 --scena chi --nota   # più la frase «chi ti parla adesso»
+    ... banco_stanza_contesto.py --giri 3 --scena chi --vicino # Carlo familiare, minore vicino
+
+`--vicino` (revisione della PR #140): come nel caso vero, chi amministra vale solo familiare col
+minore vicino (`minore_vicino`), cioè livello e dati del turno diversi da quelli di serie.
 """
 
 import argparse
@@ -174,7 +178,7 @@ def scena_chi(cfg, prima):
     return st, ora
 
 
-def giro_chi(cfg, giro, nota, conti):
+def giro_chi(cfg, giro, nota, conti, vicino=False):
     """Dieci scambi (cinque per verso) con il blocco, e gli stessi senza."""
     for i in range(10):
         prima, chi = ("Sofia", "Carlo") if i % 2 == 0 else ("Carlo", "Sofia")
@@ -188,6 +192,8 @@ def giro_chi(cfg, giro, nota, conti):
             b = nuovo(cfg, chi, PersoneChi())
             c = Chi(chi)
             c.compagnia = modo == "blocco"
+            if vicino and chi == "Carlo":
+                c.current_level, c.minore_vicino = "familiare", True
             b.tool_ctx.speaker_ctx = c
             if nota and blocco is not None:
                 vera_nota = ctx_mod.nota_turno
@@ -249,6 +255,8 @@ def main():
                     help="contenuto: i dieci casi del 14/10; chi: chi parla adesso (#70)")
     ap.add_argument("--nota", action="store_true",
                     help="scena chi: «chi ti parla adesso è …» nella nota del turno")
+    ap.add_argument("--vicino", action="store_true",
+                    help="scena chi: Carlo familiare con la minore vicina, come nel caso vero")
     a = ap.parse_args()
     cfg = load_config()
     cfg.stanza, cfg.stanza_contesto = "ombra", True
@@ -260,10 +268,11 @@ def main():
         conti = {"blocco": [], "senza": []}
         for giro in range(1, a.giri + 1):
             n0 = len(conti["blocco"])
-            giro_chi(cfg, giro, a.nota, conti)
+            giro_chi(cfg, giro, a.nota, conti, a.vicino)
             print(f"  giro {giro}: con blocco {sum(conti['blocco'][n0:])}/10, senza "
                   f"{sum(conti['senza'][n0:])}/10", flush=True)
-        print(f"\nRisultato scena chi{' con la nota' if a.nota else ''}: con blocco "
+        print(f"\nRisultato scena chi{' con la nota' if a.nota else ''}"
+              f"{' (Carlo familiare, minore vicino)' if a.vicino else ''}: con blocco "
               f"{sum(conti['blocco'])}/{len(conti['blocco'])}, senza blocco "
               f"{sum(conti['senza'])}/{len(conti['senza'])} (obiettivo 10/10 per giro)")
         return 0 if all(conti["blocco"]) and all(conti["senza"]) else 1
