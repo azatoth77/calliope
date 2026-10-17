@@ -100,6 +100,14 @@ class TurnLog:
         # gira per settimane, e i turni restavano oltre keep_days fino al riavvio
         if self._pulito_il != datetime.date.today():
             self._prune()
+            # E la rotazione della conservazione (17/10, issue #32): prima girava solo
+            # all'avvio e salvando la voce, così il banco della stanza a eccezione scaduta e la
+            # voce di chi non parla più restavano oltre i giorni. In secondo piano, una volta
+            if self.conserva is not None:
+                try:
+                    self.conserva.ruota_se_serve()
+                except Exception:  # noqa: BLE001 — la rotazione non ferma il registro
+                    pass
         rec = dict(record)
         for k, v in self.modello.items():
             rec.setdefault(k, v)

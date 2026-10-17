@@ -1622,3 +1622,23 @@ Whisper suo. Solo la forma chiusa sigla + fascia vera (3, 7, 12, 16, 18): «PG»
 «Pegi», «Peghi», «Peggi» → «PEGI N»; restano come sono «PG-13» dei film, «PG» da sola, «Peggy»,
 «peggio», «pg» minuscola, un numero più lungo o con i decimali. Nel registro dei turni la regola
 `sigla_trascrizione` con le forme cambiate (`sigle`). Casi e contrari in `prove/prova_testo.py`.
+
+## La rotazione dell'audio del banco anche a eccezione scaduta (17/10, issue #32, ramo `issue-32-rotazione-banco`)
+
+Difetto trovato nell'analisi della issue #32: la rotazione dei giorni del banco della stanza
+(`stanza/banco.ruota`, cartelle `<turn_log_dir>/stanza_banco/<satellite>/<giorno>/` oltre
+`turn_log_days`) girava solo dentro `Banco.salva`, cioè solo mentre l'eccezione del 14/10 sera era
+accesa. Dopo la scadenza (sulla DGX il 21/10), o con `stanza_audio_banco_giorni: 0`, nessuno la
+chiamava più: i file restavano oltre i 60 giorni promessi dalla decisione 0029, fino a un
+`calliope conserva --svuota` o a un «dimentica». Ora la chiama anche la conservazione
+(`Conservazione.ruota`, `out["banco"]`, una riga `[CONSERVA] banco della stanza: tolti N segmenti
+audio…` senza parole), che gira all'avvio (la pulizia di `main.py`) e, dal 17/10, anche al primo
+turno di ogni giorno nuovo dal registro dei turni (`TurnLog._write` → `ruota_se_serve`, in secondo
+piano: prima, durante l'esecuzione, solo salvando una frase della voce conservata). Il beneficio
+vale anche per la voce conservata di chi non parla più. Tocca solo i giorni scaduti: `acceso.json`
+resta (la scadenza non si riapre), i giorni non scaduti restano e le misure di #33 e #42 sui 51
+segmenti si possono fare lo stesso. Un errore del banco non ferma la rotazione del resto. La scelta
+sulla proroga dell'eccezione resta a chi amministra (issue #32). Prova a secco
+`prove/prova_banco_rotazione.py` (casi e contrari; con il codice di main i giorni vecchi
+restavano). Sulla DGX, dopo l'aggiornamento: `ls <turn_log_dir>/stanza_banco/*/` mostra al più
+`turn_log_days` giorni.
