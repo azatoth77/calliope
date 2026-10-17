@@ -11,9 +11,6 @@ JSON per i comandi; wake word, VAD e riproduzione sul satellite, tutto il resto 
   server.py       dentro Calliope: ServerSatelliti, AscoltoRemoto (il Listener remoto),
                   UscitaRemota (dove Speaker manda le frasi)
   client.py       il satellite: Satellite, Riproduttore
-  inoltro.py      sul satellite, facoltativo (satellite_inoltro): inoltro TCP grezzo verso la
-                  pagina degli schermi del server, per il telefono nella rete di casa o in
-                  WireGuard quando il server è altrove (TLS da capo a capo)
   esecutore.py    sul satellite Windows: l'esecutore del PC (richieste pc_* del server con
                   LocalWindowsExecutor, documenti ricevuti nella cartella Calliope dei Documenti)
   __main__.py     python -m calliope.satellite: avvia il satellite; sul server abbina,

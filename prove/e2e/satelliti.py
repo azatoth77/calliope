@@ -161,7 +161,6 @@ class SatelliteE2E:
         cfg.satellite_credenziali = str(cred)
         cfg.satellite_server = url
         cfg.satellite_nome = stanza
-        cfg.satellite_inoltro = None
         self.scena = Scena(seme=len(stanza))
         self.casse = Casse()
         self.eventi: list[tuple[float, str, object]] = []

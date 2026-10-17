@@ -15,9 +15,8 @@ mentre Calliope è accesa).
                                                      per i telefoni (web app /telefono):
                                                      la CA si installa una volta sul telefono.
                                                      Più --host (o «IP1,IP2»): tutti gli
-                                                     indirizzi da cui il telefono apre la
-                                                     pagina, anche quello del satellite che
-                                                     fa da inoltro (satellite_inoltro)
+                                                     indirizzi e i nomi da cui il telefono
+                                                     apre la pagina
 
 Il codice non finisce nel registro dei turni né altrove. Con --kiosk il token si stampa una
 volta sola, perché va scritto nel collegamento di avvio di Edge (in kiosk Edge è InPrivate e
@@ -84,8 +83,8 @@ def main(argv=None, out=print) -> int:
     cfg = _config(quiet=True)
     if "--certificato" in argv:
         from .tls import certificato_telefono
-        # Più indirizzi: --host ripetuto o separati da virgole (IP della DGX in VPN e IP del
-        # portatile di casa che fa da inoltro per il telefono: satellite_inoltro)
+        # Più indirizzi: --host ripetuto o separati da virgole (per esempio l'IP della DGX in
+        # VPN e un nome; fino al 16/10 anche l'IP del portatile che faceva da inoltro, #61)
         hosts = [h.strip() for i, a in enumerate(argv[:-1]) if a == "--host"
                  for h in argv[i + 1].split(",") if h.strip()]
         return certificato_telefono(cfg, hosts, "--forza" in argv, out)

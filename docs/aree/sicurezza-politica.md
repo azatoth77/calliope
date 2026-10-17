@@ -201,7 +201,7 @@ chiude la proposta. Il secondo fattore per chi amministra è ancora un progetto.
     Calliope. Il controllo del PC solo ai satelliti con il **ruolo «pc»** deciso da chi
     abbina (`--abbina … --pc`, `--modifica <satellite> --pc | --solo-voce`; i satelliti
     abbinati prima lo tengono): un telefono che dichiara un esecutore non prende volume, file
-    e documenti. Inoltro solo da 192.168.x, WireGuard di HA (172.27.66.0/24), PiVPN
+    e documenti. Inoltro (*storico*, tolto il 16/10 con l'inoltro, #61) solo da 192.168.x, WireGuard di HA (172.27.66.0/24), PiVPN
     (10.6.0.0/24) e loopback (non più 10.x e 172.16.x di bar e uffici). Al più
     `satellite_max_connessioni` (16) connessioni sulla porta dei satelliti, stretta di mano
     entro 3 s.

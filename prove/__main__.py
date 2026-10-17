@@ -209,7 +209,7 @@ A_SECCO = [
     # ~40 s: Calliope vera con un satellite finto; senza voci di Piper o modelli si salta
     ("prova_scritto_calliope.py", [], "testo scritto, modulo e foto dentro Calliope vera: nome tolto, niente STT, foto in attesa, registro e terminale senza codici né byte"),
     # ~6 s: server degli schermi e dei satelliti veri, client WebSocket finti
-    ("prova_telefono.py", [], "telefono (web app): file e CSP, modelli col token, abbinamento e protocollo, prendi/lascia, CA di casa"),
+    ("prova_telefono.py", [], "telefono (web app): file e CSP, modelli col token, abbinamento e protocollo, prendi/lascia, CA di casa, nomi con Host e Origin, impronta nuova al ponte"),
     # ~60 s: la web app in Edge o Chromium senza finestra con il microfono finto; senza
     # browser, onnxruntime-web, modelli della wake word o voci di Piper si salta
     ("prova_telefono_pagina.py", [], "telefono nel browser vero: wake word e VAD come in Python, niente audio senza il nome, voce e barge-in"),
@@ -257,9 +257,6 @@ A_SECCO = [
     ("prova_corsie_satelliti.py", [], "due satelliti insieme con Calliope vera: la conversazione segue la persona, ospiti e altre persone no, risposte in parallelo e coda oltre il limite, doppione"),
     # ~12 s: server e satellite veri su 127.0.0.1, PC finto sul satellite
     ("prova_esecutore.py", [], "esecutore remoto del PC: pc_* via satellite, maniglie, permessi, tempi massimi, consegna dei documenti"),
-    # ~12 s: inoltro TCP del satellite per il telefono di casa; con openssl la CA di casa,
-    # con Edge o Chromium anche la pagina /telefono attraverso l'inoltro
-    ("prova_inoltro.py", [], "inoltro del satellite per il telefono: reti ammesse, limiti, TLS da capo a capo, Host e Origin, impronta nuova al ponte"),
     ("prova_web.py", [], "ricerca su internet con SearXNG e siti finti: privacy, SSRF, testo non fidato, azioni bloccate, agente"),
     # ~2 s: feed di fantasia su 127.0.0.1, SearXNG finto, Brain a secco
     ("prova_notizie.py", [], "notizie dai feed RSS (13/10): lettore sicuro, date e fusi, pulizia dei titoli con i contrari, gruppi senza modello, scarico condizionato, fatti, tool, minori, ripiego, i fatti restano nel contesto"),
@@ -397,7 +394,6 @@ LIVELLO_2 = {
     "prova_fasi_agente.py",          # ~18 s (12/10 sera)
     "prova_fasi_agente_2.py",        # ~20 s (13/10)
     "prova_esecutore.py",            # 12 s
-    "prova_inoltro.py",              # 18 s, con il browser (seriale)
     "prova_telefono_abbina.py",      # 12 s, con il browser (seriale)
     "prova_linux.py",                # 13 s
     "prova_linux_import.py",         # 5 s: solo gli import della DGX simulata (Q7, 06/10)
@@ -427,7 +423,7 @@ LIVELLO_3 = {
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
 # seriale.
-SERIALI = LIVELLO_3 | {"prova_inoltro.py", "prova_telefono_abbina.py"}
+SERIALI = LIVELLO_3 | {"prova_telefono_abbina.py"}
 # Prefisso del percorso cambiato → prove del livello 2 (o 3) da lanciare nel hook. I file
 # trasversali (brain.py, config.py, politica.py, tools/registry.py, tools/spec.py,
 # tools/builtin.py…) scelgono solo prova_linux_import (gli import di tutto il pacchetto su
@@ -585,7 +581,7 @@ LEGAMI = [
     ("calliope/conversazione.py", ["prova_cronologia_schede.py", "prova_conversazioni.py"]),
     ("calliope/tools/schermi.py", ["prova_cronologia_schede.py"]),
     ("calliope/schermi/", ["prova_schermi.py", "prova_cruscotto.py", "prova_scritto.py", "prova_giochi.py",
-                           "prova_telefono_abbina.py", "prova_inoltro.py",
+                           "prova_telefono_abbina.py",
                            "prova_immagini.py", "prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/ufficio/", ["prova_scritto.py"]),
     ("calliope/immagini.py", ["prova_immagini.py"]),
@@ -616,8 +612,7 @@ LEGAMI = [
     ("calliope/schermi/", ["prova_markdown.py"]),
     ("calliope/agenti/", ["prova_markdown.py"]),
     ("calliope/tools/agenti.py", ["prova_markdown.py"]),
-    ("calliope/satellite/", ["prova_esecutore.py", "prova_inoltro.py",
-                             "prova_telefono_abbina.py"]),
+    ("calliope/satellite/", ["prova_esecutore.py", "prova_telefono_abbina.py"]),
     ("calliope/pc/", ["prova_esecutore.py", "prova_documento_proprio.py"]),
     ("calliope/vad.py", ["prova_linux.py"]),
     ("calliope/stt.py", ["prova_linux.py", "prova_robustezza.py", "prova_frase_lunga.py"]),

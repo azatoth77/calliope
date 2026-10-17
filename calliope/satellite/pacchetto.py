@@ -59,8 +59,8 @@ SENZA_DIPENDENZE = ["silero-vad"]
 
 # Da dove parte la chiusura degli import (anche quelli dentro le funzioni)
 ENTRATE = ["calliope.satellite.__main__", "calliope.satellite.client",
-           "calliope.satellite.esecutore", "calliope.satellite.inoltro",
-           "calliope.satellite.aggiorna", "calliope.pc.windows"]
+           "calliope.satellite.esecutore", "calliope.satellite.aggiorna",
+           "calliope.pc.windows"]
 FILE_IN_PIU = ["calliope/satellite/installazione/avvio.py"]
 MODELLI_WAKE = ("calliope.onnx", "melspectrogram.onnx", "embedding_model.onnx")
 

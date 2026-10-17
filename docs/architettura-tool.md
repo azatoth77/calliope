@@ -91,7 +91,7 @@ calliope/                 # package: python -m calliope
 ├── estensioni/           # estensioni permanenti, guardrail, motore dei giochi
 ├── archivio/, ufficio/   # documenti di casa (grafo); modelli, rubrica, fatture
 ├── esercizi/             # esercizi generati da Calliope e programma ministeriale
-├── satellite/            # satelliti (WebSocket, TLS, inoltro)
+├── satellite/            # satelliti (WebSocket, TLS)
 ├── conserva.py           # dati conservati per le misure (12/10)
 ├── minori.py, guardiano.py, avvisi_audio.py  # minori, guardiano, audio degli avvisi (14/10)
 ├── capacita.py           # registro delle capacità: stato, motivo, prossimo passo

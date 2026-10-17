@@ -274,5 +274,55 @@ from prove.__main__ import keep_alive_della_voce
 verifica("runner: keep_alive della voce letto dalla configurazione",
          keep_alive_della_voce() is not None or not (radice / "calliope.yaml").exists())
 
+# 9. L'inoltro del satellite tolto il 16/10 (#61): le quattro chiavi non sono più campi né
+#    chiavi di sezione, il modulo non c'è più; un calliope.locale.yaml scritto prima le ha
+#    ancora: segnalate come «tolte» (senza il «forse …?», che porterebbe a satellite_indirizzo,
+#    l'indirizzo del server) e ignorate, le altre chiavi dello stesso file valgono
+import importlib.util
+from dataclasses import fields
+from calliope.config import SEZIONI
+TOLTE = ("satellite_inoltro", "satellite_inoltro_reti", "satellite_inoltro_max",
+         "satellite_inoltro_inattivita_s")
+nomi_campi = {f.name for f in fields(Config)}
+in_sezioni = {k for chiavi in SEZIONI.values() for k in chiavi}
+verifica("inoltro tolto: satellite_inoltro* non sono campi di Config né chiavi di sezione",
+         not any(k in nomi_campi or k in in_sezioni for k in TOLTE),
+         str([k for k in TOLTE if k in nomi_campi or k in in_sezioni]))
+verifica("inoltro tolto: calliope.satellite.inoltro non c'è più",
+         importlib.util.find_spec("calliope.satellite.inoltro") is None)
+verifica("inoltro tolto: niente satellite_inoltro nel file d'esempio",
+         "satellite_inoltro" not in example_yaml())
+vecchia = tmp / "vecchia"
+vecchia.mkdir()
+(vecchia / "calliope.yaml").write_text("", encoding="utf-8")
+(vecchia / "calliope.locale.yaml").write_text(
+    "satellite:\n  satellite_server: wss://192.168.0.10:8765\n"
+    "  satellite_inoltro: 0.0.0.0:8770\n  satellite_inoltro_reti: [192.168.0.0/16]\n"
+    "  satellite_inoltro_max: 8\n  satellite_inoltro_inattivita_s: 60\n"
+    "satellite_inoltro: 0.0.0.0:8771\n"
+    "llm:\n  llm_temperatur: 0.4\n", encoding="utf-8")
+_prima = os.environ.pop("CALLIOPE_CONFIG_LOCALE", None)
+try:
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        cfg = load_config(str(vecchia / "calliope.yaml"))
+finally:
+    if _prima is not None:
+        os.environ["CALLIOPE_CONFIG_LOCALE"] = _prima
+log = out.getvalue()
+righe_tolte = [r for r in log.splitlines() if "satellite_inoltro" in r]
+verifica("locale con l'inoltro: le altre chiavi dello stesso file valgono",
+         cfg.satellite_server == "wss://192.168.0.10:8765", cfg.satellite_server)
+verifica("locale con l'inoltro: ogni chiave segnalata «tolta il 16/10 (#61)», anche fuori "
+         "sezione", len(righe_tolte) == 5
+         and all("tolta il 16/10 (#61)" in r and "Ignorata" in r for r in righe_tolte),
+         "\n".join(righe_tolte))
+verifica("locale con l'inoltro: nessun «forse …?» per le chiavi tolte",
+         not any("forse" in r for r in righe_tolte))
+verifica("contrario: una chiave sbagliata non tolta ha ancora il suggerimento",
+         "forse «llm_temperature»" in log and "llm_temperatur" not in " ".join(righe_tolte))
+verifica("locale con l'inoltro: nessun campo satellite_inoltro sulla configurazione",
+         not hasattr(cfg, "satellite_inoltro"))
+
 print(f"\n{errori} errori" if errori else "\nTutto a posto.")
 sys.exit(1 if errori else 0)

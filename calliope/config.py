@@ -1061,19 +1061,6 @@ class Config:
     # in documenti_cartella (vuota = Documenti\Calliope). I percorsi dei file non escono dal
     # satellite. false = solo microfono e casse
     satellite_esecutore: bool = True
-    # Lato satellite: inoltro TCP verso la pagina degli schermi e la web app del telefono del
-    # server, per un telefono che è nella rete di casa (o in WireGuard) e non vede il server
-    # (in ufficio, in VPN): "0.0.0.0:8770" o "192.168.1.30:8770" (indirizzo e porta su cui
-    # ascoltare qui). Il TLS resta tra telefono e server: il certificato degli schermi deve
-    # contenere l'indirizzo di questo PC (calliope schermi --certificato --host …). Vuoto =
-    # spento (calliope/satellite/inoltro.py)
-    satellite_inoltro: str = ""
-    # Le reti da cui l'inoltro accetta connessioni: le altre si chiudono subito. Dal 03/10
-    # non più tutte le reti private (bar, alberghi e uffici usano 10.x e 172.16–31.x): i
-    # router di casa (192.168.x), l'add-on WireGuard di Home Assistant (172.27.66.0/24),
-    # PiVPN (10.6.0.0/24) e il loopback. La rete di casa o della VPN, se è un'altra, va qui
-    satellite_inoltro_reti: list[str] = field(default_factory=lambda: [
-        "192.168.0.0/16", "172.27.66.0/24", "10.6.0.0/24", "127.0.0.0/8", "::1/128"])
     # Connessioni insieme sulla porta dei satelliti (anche anonime, in attesa del saluto):
     # oltre si chiudono subito (prima 300 connessioni mute davano 600 thread)
     satellite_max_connessioni: int = 16
@@ -1357,10 +1344,6 @@ class Config:
     conoscenti_min_voce_s: float = 6.0
     # Il file dei conoscenti (relativo alla cartella della configurazione)
     conoscenti_file: str = "conoscenti.json"
-    # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
-    satellite_inoltro_max: int = 32
-    # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
-    satellite_inoltro_inattivita_s: float = 300.0
     # Lato server: la pagina /satellite (e /installa sulla porta dei satelliti) con il comando
     # che fa diventare satellite un PC Windows nuovo, e il pacchetto del satellite per gli
     # aggiornamenti automatici dei satelliti installati così (calliope/satellite/web.py). Solo
@@ -3369,8 +3352,7 @@ SEZIONI: dict[str, list[str]] = {
     "satellite": ["satellite_server", "satellite_credenziali", "satellite_impronta",
                   "satellite_microfono", "satellite_casse", "satellite_webcam",
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
-                  "satellite_inoltro", "satellite_inoltro_reti", "satellite_inoltro_max",
-                  "satellite_inoltro_inattivita_s", "satellite_aggiornamenti"],
+                  "satellite_aggiornamenti"],
     "agenti": ["agenti_enabled", "agenti_config_file", "agenti_url", "agenti_modello",
                "agenti_num_ctx", "agenti_contesti_paralleli", "agenti_token_passata",
                "agenti_ragionamento_passata", "agenti_soglia_file", "agenti_passi_intatti",
@@ -3549,6 +3531,30 @@ def _type_ok(value, annotation) -> bool:
 
 def _warn(msg: str):
     print(f"[CONFIG] {msg}", flush=True)
+
+
+# Chiavi tolte, ancora possibili in un calliope.locale.yaml scritto prima: si segnalano con il
+# perché, senza il «forse …?» del nome più vicino, che porterebbe fuori strada (per
+# satellite_inoltro sarebbe satellite_indirizzo, l'indirizzo su cui ascolta il server)
+_INOLTRO_TOLTO = ("tolta il 16/10 (#61): l'inoltro del satellite per il telefono non c'è più "
+                  "(il telefono raggiunge il server con la sua VPN)")
+CHIAVI_TOLTE: dict[str, str] = {
+    "satellite_inoltro": _INOLTRO_TOLTO,
+    "satellite_inoltro_reti": _INOLTRO_TOLTO,
+    "satellite_inoltro_max": _INOLTRO_TOLTO,
+    "satellite_inoltro_inattivita_s": _INOLTRO_TOLTO,
+}
+
+
+def _chiave_sconosciuta(key: str, path: str, nomi: list[str], sezione: bool = False):
+    """Segnala una chiave che non c'è: con il perché se è tolta, altrimenti con il nome più
+    vicino. Non ferma niente: la chiave si ignora."""
+    if key in CHIAVI_TOLTE:
+        _warn(f"Chiave «{key}» in {path}: {CHIAVI_TOLTE[key]}. Ignorata: toglila dal file")
+        return
+    close = difflib.get_close_matches(key, nomi, n=1)
+    _warn(f"{'Sezione o chiave' if sezione else 'Chiave'} sconosciuta «{key}» in {path}: "
+          "ignorata" + (f" (forse «{close[0]}»?)" if close else ""))
 
 
 # Impostazioni di questa installazione (indirizzo di Home Assistant, cartella dei documenti,
@@ -3968,16 +3974,12 @@ def _apply_file(cfg: Config, path: str, esempio: bool = False):
         elif key in types_by_name:
             flat[key] = value                # chiave messa fuori sezione: va bene lo stesso
         else:
-            close = difflib.get_close_matches(str(key), list(SEZIONI) + names, n=1)
-            _warn(f"Sezione o chiave sconosciuta «{key}» in {path}: ignorata"
-                  + (f" (forse «{close[0]}»?)" if close else ""))
+            _chiave_sconosciuta(str(key), path, list(SEZIONI) + names, sezione=True)
 
     applied = 0
     for key, value in flat.items():
         if key not in types_by_name:
-            close = difflib.get_close_matches(key, names, n=1)
-            _warn(f"Chiave sconosciuta «{key}» in {path}: ignorata"
-                  + (f" (forse «{close[0]}»?)" if close else ""))
+            _chiave_sconosciuta(key, path, names)
             continue
         env = ENV_OVERRIDES.get(key)
         if env and env in os.environ:
