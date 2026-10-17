@@ -282,10 +282,9 @@ def giorno_giusto(delta: int):
 # data_calcola (05/10 sera) vale anche per i giorni: «domani», «ieri» sono date come dette
 ORA, DATA, CHI = ("ora_attuale", None), ("data_oggi", "data_calcola", None), ("chi_parla", None)
 
-# Un ruolo dato come nome nella risposta: «Vuoi che ti chiami Amministratore?», «ti chiamo il
-# padrone di casa» (15/10)
-RUOLO_COME_NOME = re.compile(r"\bchiam\w*\s+(?:l'|il |la )?(?:amministr|chi amministra|"
-                             r"padron|propriet|mamm|pap[aà]\b)", re.I)
+# I controlli del ruolo dato come nome e di «chi_garbato» (17/10, #70): a secco in
+# prove/prova_controlli_regressione.py
+from controlli_regressione import garbato_ok, ruolo_come_nome  # noqa: E402
 
 # (sessione, chi, livello, frase, atteso, vietati, controllo(risposta) o None, storia iniziale)
 # atteso: nome di tool, tupla di tool ammessi (None nella tupla = anche nessun tool), oppure
@@ -329,16 +328,20 @@ CASI = [
                                                               "web_cerca"),
      ("chi_parla", "rinomina_interlocutore"), lambda r: not re.search(r"\bdario\b", r, re.I),
      None),
-    ("chi_garbato","Dario", "amministra", "Calliope di Michisono.", ("chi_parla", None),
-     ("rinomina_interlocutore",), lambda r: not re.search(r"\bti chiamo\b", r, re.I), None),
+    # Decisione di chi amministra (17/10, #70, passo 6): sulla frase storpiata è giusto il nome
+    # oppure una domanda di chiarimento; cercare la forma storpiata (biblioteca, web) resta un
+    # errore, anche se dopo la ricerca chiede (il 26B: biblioteca_cerca 6/6, poi «se mi dai più
+    # dettagli…»). Contrari in CONTROLLI_GARBATO qui sotto
+    ("chi_garbato", "Dario", "amministra", "Calliope di Michisono.", ("chi_parla", None),
+     ("rinomina_interlocutore", "biblioteca_cerca", "web_cerca"), garbato_ok, None),
     ("chi_garbato2", "Dario", "amministra", "Calliope e chiamo risonò.", ("chi_parla", None),
-     ("rinomina_interlocutore",), lambda r: not re.search(r"\bti chiamo\b", r, re.I), None),
+     ("rinomina_interlocutore", "biblioteca_cerca", "web_cerca"), garbato_ok, None),
     # Un ruolo o una parentela non sono un nome (15/10, 26B sulla DGX: «Scusa, io sono chi
     # amministra» → rinomina_interlocutore(nome="Amministratore")). Il tool rifiuta il ruolo
     # (regola `rinomina_ruolo`): la chiamata è ammessa, ma la risposta non deve proporre né
     # dichiarare il ruolo come nome
     *[(f"ruolo{i}", "Dario", "amministra", frase, (None, "chi_parla", "rinomina_interlocutore"),
-       (), lambda r: not RUOLO_COME_NOME.search(r), None)
+       (), lambda r: not ruolo_come_nome(r), None)
       for i, frase in enumerate(("Scusa, io sono chi amministra.", "Sono l'amministratore.",
                                  "Calliope, sono io che amministro.",
                                  "Sono il padrone di casa.", "Sono il papà."))],

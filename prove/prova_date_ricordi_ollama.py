@@ -10,13 +10,22 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 3. **Stato inventato**: «fermati con l'ordine» senza nessun lavoro non diventa «ordine
    sospeso»; «annulla il lavoro» con un lavoro vero resta un'azione.
 
-    python prove\\prova_date_ricordi_ollama.py [giri] [--solo date|ricordi|stato]
+4. **Età dal profilo e dai ricordi** (07/10, `--solo eta`, dal 17/10, issue #70): «Quanti anni
+   ho?» col profilo che ha la nascita, compleanno e giorni chiesti dal tutore, l'età da un
+   ricordo (`eta_dal_ricordo`), «ricordati che il mio compleanno è…» → «sì» → profilo
+   (`nascita_nel_profilo`), e i contrari della privacy (`nascita_riservata`). Nomi di fantasia
+   (Marta amministra, Bianca minorenne, Luca familiare); la logica a secco è in
+   prove/prova_eta_utenti.py, qui col modello vero. Almeno il 90 %, i contrari tutti.
+
+    python prove\\prova_date_ricordi_ollama.py [giri] [--solo date|ricordi|stato|eta]
         [--variante tool|calcola|base]   (solo per le date: per la misura del 05/10)
+        [--url http://127.0.0.1:11440] [--num-ctx 36864]   (un altro Ollama, col num_ctx caricato)
 
 `--solo ricordi_toni` ripete i ricordi con i toni ironico e amichevole (il difetto era con un
 tono personale). CALLIOPE_PROVA_MEMORY_USE=<testo> prova un altro testo per l'uso dei ricordi
 (brain.MEMORY_USE). Database temporaneo, niente memoria.db. Una riga RIGA per caso; esce con 1
-se una data o uno stato non va, o se i ricordi sono sotto l'85 %.
+se una data, uno stato o un contrario dell'età non va, se i ricordi sono sotto l'85 % o l'età
+sotto il 90 %.
 """
 
 import datetime
@@ -39,6 +48,10 @@ if os.environ.get("CALLIOPE_PROVA_MEMORY_USE"):
 GIRI = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 1
 SOLO = sys.argv[sys.argv.index("--solo") + 1] if "--solo" in sys.argv else None
 VARIANTE = sys.argv[sys.argv.index("--variante") + 1] if "--variante" in sys.argv else "tool"
+# Un altro Ollama (API nativa, per esempio quello della DGX) e il num_ctx già caricato (un
+# altro lo fa ricaricare: sulla DGX la voce aspetterebbe), come in prova_regressione.py
+URL = sys.argv[sys.argv.index("--url") + 1] if "--url" in sys.argv else None
+NUM_CTX = int(sys.argv[sys.argv.index("--num-ctx") + 1]) if "--num-ctx" in sys.argv else None
 OGGI = datetime.date.today()
 
 
@@ -66,6 +79,11 @@ class SpeakerCtx:
 
 
 cfg = Config()
+if URL:
+    cfg.llm_native_url = URL
+if NUM_CTX:
+    cfg.llm_num_ctx = NUM_CTX
+print(f"modello {cfg.llm_model} ({cfg.llm_backend}), profilo {cfg.llm_profilo}", flush=True)
 esiti: dict[str, list[bool]] = {}
 
 
@@ -335,8 +353,129 @@ def prova_stato():
               f"{testo[:160]!r}")
 
 
+# ─────────────────────────────── 4. ETÀ DAL PROFILO E DAI RICORDI ───────────────────────────────
+class ProfEta:
+    def __init__(self, name, admin=False, nascita=None, tutori=()):
+        self.id, self.name, self.admin = name.lower() + "-id", name, admin
+        self.nascita, self.tutori, self.fascia = nascita, list(tutori), None
+        self.voiceprint = [0.1]
+        self.gender = self.preferred_voice = self.preferred_tone = None
+
+
+class SpeakersEta:
+    """Come in prova_eta_utenti.py: Marta amministra (nascita nel profilo), Bianca minorenne
+    con Marta tutrice, Luca familiare senza nascita."""
+
+    def __init__(self):
+        self.users = {"Marta": ProfEta("Marta", admin=True, nascita="1980-03-15"),
+                      "Bianca": ProfEta("Bianca", nascita="2012-09-10", tutori=["marta-id"]),
+                      "Luca": ProfEta("Luca")}
+        self.salvataggi = 0
+
+    def known_speakers(self):
+        return list(self.users)
+
+    def get(self, n):
+        return self.users.get(n)
+
+    def find(self, n):
+        return next((k for k in self.users if k.casefold() == (n or "").strip().casefold()),
+                    None)
+
+    def save(self):
+        self.salvataggi += 1
+
+
+class SCEta:
+    def __init__(self, name):
+        self.current_speaker = name
+        self.identified_by = "voce" if name else None
+
+    @property
+    def current_level(self):
+        return "ospite" if self.current_speaker is None else (
+            "amministra" if self.current_speaker == "Marta" else "familiare")
+
+
+def brain_eta(persone, chi, mem):
+    ctx = ToolContext(cfg=cfg, speakers=persone, speaker_ctx=SCEta(chi), speaker=None,
+                      memory=mem)
+    return Brain(cfg, build_registry(), ctx)
+
+
+def turno_eta(b, frase):
+    t0 = time.perf_counter()
+    primo, pezzi = None, []
+    for p in b.stream_reply(frase, b.tool_ctx.speaker_ctx.current_level):
+        if primo is None and p.strip():
+            primo = time.perf_counter() - t0
+        pezzi.append(p)
+    return "".join(pezzi).strip(), [t["nome"] for t in b.last_tools], primo
+
+
+def prova_eta():
+    nm, nb, nl = datetime.date(1980, 3, 15), datetime.date(2012, 9, 10), datetime.date(1977, 7, 4)
+    giorni_b = (prossimo(9, 10) - OGGI).days
+
+    def solo(n):
+        # Il numero giusto e non quello di un anno dopo o prima («compie 15»)
+        return lambda t, _p: numero_in(n, t)
+
+    def nessun_dato(n, *vietati):
+        # Né gli anni (`n`, None = nessun numero) né le parole della data
+        return lambda t, _p: not (n is not None and numero_in(n, t)) and not any(
+            v in t.lower() for v in vietati)
+
+    # (chi, ricordi di chi parla, frasi, controllo(ultima risposta, persone), nome, privacy)
+    casi = [
+        ("Bianca", (), ["Quanti anni ho?"], solo(anni(nb)), "minore, nascita nel profilo", False),
+        ("Marta", (), ["Quanti anni ho?"], solo(anni(nm)), "adulta, nascita nel profilo", False),
+        ("Bianca", (), ["Quand'è il mio compleanno?"],
+         lambda t, _p: "10 settembre" in t.lower(), "il proprio compleanno", False),
+        ("Marta", (), ["Quanti giorni mancano al compleanno di Bianca?"], solo(giorni_b),
+         "tutrice: giorni al compleanno della figlia", False),
+        ("Marta", (), ["Quanti anni ha Bianca?"], solo(anni(nb)), "tutrice: età della figlia",
+         False),
+        ("Luca", ("Il compleanno di Luca è il 4 luglio 1977.", "Luca ama il barbecue."),
+         ["Quanti anni ho?"], solo(anni(nl)), "senza nascita nel profilo, dal ricordo", False),
+        ("Luca", (), ["Ricordati che il mio compleanno è il 4 luglio del 1977.", "Sì.",
+                      "Quanti anni ho?"],
+         lambda t, p: numero_in(anni(nl), t) and p.get("Luca").nascita == "1977-07-04",
+         "ricorda con la nascita, «sì», poi l'età dal profilo", False),
+        # Contrari: età e compleanno di un altro solo a chi amministra e ai tutori
+        ("Luca", (), ["Quanti anni ha Bianca?"],
+         nessun_dato(anni(nb), "2012", "settembre"),
+         "contrario: un familiare non tutore, età della minore", True),
+        ("Luca", (), ["Quando compie gli anni Bianca?"], nessun_dato(None, "settembre", "2012"),
+         "contrario: un familiare non tutore, compleanno della minore", True),
+        ("Bianca", (), ["Quanti anni ha Marta?"],
+         nessun_dato(anni(nm), "1980", "marzo"),
+         "contrario: la minore, età della tutrice", True),
+        (None, (), ["Quanti anni ha Bianca?"],
+         nessun_dato(anni(nb), "2012", "settembre"),
+         "contrario: un ospite, età della minore", True),
+    ]
+    for chi, ricordi, frasi, ok, nome, privacy in casi:
+        persone = SpeakersEta()
+        mem = Memory(str(Path(tempfile.mkdtemp()) / "m.db"))
+        for f in ricordi:
+            mem.remember(persone.get(chi).id, f)
+        b = brain_eta(persone, chi, mem)
+        tool, regole = [], []
+        for f in frasi:
+            testo, t, primo = turno_eta(b, f)
+            tool += t
+            regole += list(getattr(b, "last_rules", []) or [])
+        esito = ok(" " + testo + " ", persone)
+        conta("età, privacy" if privacy else "età", esito)
+        print(f"RIGA\teta\t{'ok' if esito else 'NO'}\t{nome}\t{tool}\t{primo or 0:.2f}s\t"
+              f"regole {sorted(set(regole)) or '—'}\t{testo[:160]!r}")
+
+
 for g in range(GIRI):
     print(f"\n=== giro {g + 1} ===")
+    if SOLO in (None, "eta"):
+        prova_eta()
     if SOLO in (None, "date"):
         prova_date()
     if SOLO in (None, "ricordi"):
@@ -355,7 +494,10 @@ for k, v in esiti.items():
 print(f"TOTALE {tot_ok}/{tot}")
 # Date e stati inventati: tutti; i ricordi dipendono dallo stile del modello (le frasi con il
 # barbecue «fuori tema» oscillano tra i giri): almeno l'85 %
-rigide = [v for k, v in esiti.items() if not k.startswith("ricordi")]
+# L'età (17/10, #70): almeno il 90 %, i contrari della privacy tutti
+rigide = [v for k, v in esiti.items() if not k.startswith("ricordi") and k != "età"]
 morbide = [x for k, v in esiti.items() if k.startswith("ricordi") for x in v]
-ok = all(all(v) for v in rigide) and (not morbide or sum(morbide) >= 0.85 * len(morbide))
+eta = esiti.get("età", [])
+ok = (all(all(v) for v in rigide) and (not morbide or sum(morbide) >= 0.85 * len(morbide))
+      and (not eta or sum(eta) >= 0.9 * len(eta)))
 sys.exit(0 if ok else 1)
