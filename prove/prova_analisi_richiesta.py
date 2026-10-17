@@ -208,6 +208,23 @@ sistema = corpo["messages"][0]["content"]
 verifica("il prompt ha la lista di controllo del codice e le funzioni di Calliope",
          "dati_persona" in sistema and "data_calcola" in sistema and "niente rete" in sistema)
 
+# 17/10, #54: il Node dei soli test dei giochi (JavaScript spento, di serie) non è un linguaggio
+# dei programmi nell'analisi; acceso sì
+from calliope.agenti.sandbox import Isolamento  # noqa: E402
+_prima_iso = getattr(svc, "isolamenti", {})
+for _solo, _atteso in ((True, "linguaggi python, csharp;"),
+                       (False, "linguaggi python, csharp, javascript;")):
+    svc.isolamenti = {"python": Isolamento("docker", "Python", True),
+                      "csharp": Isolamento("docker", "C#", True),
+                      "javascript": Isolamento("docker", "Node", True, solo_test=_solo)}
+    n0 = len(fake.richieste)
+    fake.copione = [risposta(esito="chiara", specifica="Primi fino a mille")]
+    svc.analizzatore.analizza("codice", "Scrivi un programma che trova i primi fino a mille")
+    _sis = ((nuove(n0) or [{}])[0].get("messages") or [{}])[0].get("content", "")
+    verifica(f"analisi: Node {'dei soli test' if _solo else 'acceso'} → «{_atteso}»",
+             _atteso in _sis, _sis[_sis.find("linguaggi"):][:60])
+svc.isolamenti = _prima_iso
+
 sezione("lavoro_affida: raffinabile")
 storia = [("user", "Il mutuo è di 120 000 euro a 20 anni al 3,1 % fisso"),
           ("assistant", "Va bene.")]

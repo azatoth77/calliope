@@ -1447,7 +1447,9 @@ class Config:
     agenti_sandbox_cpu: float = 2.0
     # Linguaggi dei programmi dell'agente (04/10): Python sempre; gli altri solo in un
     # container con la loro immagine (calliope motore sandbox costruisci csharp). Se
-    # l'immagine manca l'agente dice che quel linguaggio qui non c'è
+    # l'immagine manca l'agente dice che quel linguaggio qui non c'è. «javascript» (Node 24,
+    # 17/10, #54) non è di serie: lo accende chi amministra nel locale; spento, il container
+    # di Node serve solo ai test dei giochi
     agenti_linguaggi: list[str] = field(default_factory=lambda: ["python", "csharp"])
     # Il programma finito si esegue e si mostra in diretta sullo schermo personale di chi
     # l'ha chiesto (04/10, agenti/esecuzione.py), anche a richiesta («fammelo vedere»,
@@ -2485,12 +2487,15 @@ class Config:
         # Dal 15/10 (caso vero in auto: medaglie scritte «ARCENTO» e «OR» → «non ha detto quali
         # medaglie»): le righe sono trascrizione grezza, si ricostruisce con prudenza; la
         # correzione di chi parla vale sopra la riga (il testo lungo è nel blocco, STORPIATE)
+        # Dal 16/10 (#134): solo le righe, non la frase del turno, e senza la formula «ti è
+        # sembrato di sentirle» (il 26B la ripeteva anche su frasi chiare)
         room = ("per ciò che si è detto vicino ai dispositivi di casa, anche le tue risposte a "
                 "chi era lì («ti ricordi quando è…?», «cosa avevamo detto di…?»), rispondi dalle "
                 "righe della stanza che hai davanti, se ci sono (sono trascritte con parole "
-                "storpiate: ricostruisci quelle evidenti dicendo che ti è sembrato di sentirle, e "
-                "se chi parla corregge un nome usa subito il suo); se lì non c'è (chi ha detto "
-                "cosa, cosa si era deciso, a che ora, di cosa si parlava in un'altra stanza) "
+                "storpiate: in quelle righe, non in ciò che ti dicono adesso, ricostruisci le "
+                "parole evidenti avvertendo che è una tua ricostruzione, e se chi parla corregge "
+                "un nome usa il suo da subito e per il resto della conversazione); se lì non c'è "
+                "(chi ha detto cosa, cosa si era deciso, a che ora, di cosa si parlava in un'altra stanza) "
                 "stanza_cerca, prima di archivio_cerca, di conversazione_cerca e di dire che non "
                 "lo sai; " if stanza else "")
         # Con la ricerca web: quando usarla, al posto di «non puoi sapere il meteo…»

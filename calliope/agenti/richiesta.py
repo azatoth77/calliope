@@ -484,7 +484,9 @@ class Analizzatore:
         t0 = time.monotonic()
         fine = t0 + self.tempo_s
         imp = self.lavori.imp
-        linguaggi = tuple(getattr(self.lavori, "isolamenti", {}) or ()) or ("python",)
+        # Senza il Node dei soli test dei giochi (17/10, #54)
+        from .linguaggi import programmi
+        linguaggi = tuple(programmi(getattr(self.lavori, "isolamenti", {}))) or ("python",)
         try:
             msgs = messaggi(self.cfg, tipo, compito, storia, detto, strumenti, linguaggi, nota,
                             senza_domande)

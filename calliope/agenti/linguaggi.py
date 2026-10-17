@@ -10,8 +10,11 @@ csc dentro il container (calliope/agenti/esegui_cs.sh), senza NuGet e quindi sen
 
 Misure sulla DGX (04/10, in CLAUDE.md): immagine C# 318 MB contro i 974
 dell'SDK intero; compilazione ed esecuzione di un programma breve 0,52 s di mediana (Python 0,17).
-JavaScript (Node) sarebbe un'altra immagine come questa (node:22-slim, da misurare): non c'è
-ancora, e l'agente lo dice.
+JavaScript (Node, 17/10, issue #54): l'immagine dei test dei giochi (Dockerfile.node,
+node:24.21.0-slim senza npm, npx, corepack e yarn) è anche quella dei programmi. Di serie non è
+tra `agenti_linguaggi`: lo accende chi amministra nel locale. Spento, il container di Node resta
+solo per i *.test.js e per esegui_js dei giochi (`Isolamento.solo_test`): non conta tra i
+`pronti` e un .js non diventa un programma da eseguire.
 
 Chi chiede quali ci sono (l'agente, il registro delle capacità) usa `pronti`: mai dal thread
 della voce, perché chiede a Docker (`docker image inspect`, qualche decina di ms).
@@ -32,19 +35,30 @@ class Linguaggio:
     prefisso: str             # nome dell'immagine senza il tag
     # Per il prompt dell'agente: cosa c'è e come si prova
     per_agente: str
+    strumento: str = ""       # lo strumento dell'agente che lo esegue (esegui_python…)
 
 
 LINGUAGGI = {
     "python": Linguaggio(
         "python", "Python", (".py",), _SANDBOX / "Dockerfile", "calliope-sandbox",
         "Python 3.12 con la libreria standard (e openpyxl, python-docx se servono file "
-        "Office): file .py, si provano con esegui_python ed esegui_test"),
+        "Office): file .py, si provano con esegui_python ed esegui_test", "esegui_python"),
     "csharp": Linguaggio(
         "csharp", "C#", (".cs",), _SANDBOX / "Dockerfile.dotnet", "calliope-sandbox-dotnet",
         "C# con .NET 10 e la sola libreria di base (niente pacchetti NuGet): file .cs in una "
         "cartella, istruzioni di primo livello o un Main; esegui_csharp compila tutti i .cs "
         "della cartella e lo esegue. Niente esegui_test per il C#: prova il programma con "
-        "argomenti noti e controlla l'uscita"),
+        "argomenti noti e controlla l'uscita", "esegui_csharp"),
+    # Node 24 (17/10, #54): stesso container dei test dei giochi. Solo .js in CommonJS: i .js
+    # passano dal controllo della sintassi di test_js.mjs (vm.Script: niente import/export) e
+    # .mjs non è tra le estensioni che la sandbox scrive
+    "javascript": Linguaggio(
+        "javascript", "JavaScript", (".js",), _SANDBOX / "Dockerfile.node",
+        "calliope-sandbox-node",
+        "JavaScript con Node 24 e la sola libreria di base (niente npm né pacchetti, niente "
+        "pagina né DOM): un file .js con require e module.exports (niente import), gli "
+        "argomenti in process.argv.slice(2); si prova con esegui_js ed esegui_test sui file "
+        "*.test.js (node:test)", "esegui_js"),
 }
 
 
@@ -93,22 +107,31 @@ def scegli(cfg, iso_python, docker=None, timeout: float = 5.0) -> dict:
             iso.passo = f"Per il {lg.detto}: {costruisci}."
             iso.descrizione = f"{lg.detto} non disponibile: " + iso.descrizione.split(": ", 1)[-1]
         out[nome] = iso
-    # Node per i test della logica dei giochi (05/10, estensioni/scheda.py): non è un linguaggio
-    # dei programmi dell'agente (niente esegui_javascript), solo il container dei *.test.js
+    # Node per i test della logica dei giochi (05/10, estensioni/scheda.py): con «javascript»
+    # fuori da `agenti_linguaggi` (di serie, 17/10) solo il container dei *.test.js e di
+    # esegui_js, non un linguaggio dei programmi (`solo_test`)
     from .sandbox import immagine_node
     img = immagine_node()
-    if iso_python is not None and iso_python.motore == "docker" and iso_python.docker and img:
+    if ("javascript" not in out and iso_python is not None and iso_python.motore == "docker"
+            and iso_python.docker and img):
         iso = scegli_isolamento("docker", img, docker=iso_python.docker, timeout=timeout,
                                 posix=True)
         if not iso.pronto:
             iso.passo = "Per i test dei giochi: calliope motore sandbox costruisci javascript."
+        iso.solo_test = True
         out["javascript"] = iso
     return out
 
 
+def programmi(isolamenti: dict | None) -> dict:
+    """Gli isolamenti dei linguaggi dei programmi: senza il container di Node dei soli test."""
+    return {n: iso for n, iso in (isolamenti or {}).items()
+            if not getattr(iso, "solo_test", False)}
+
+
 def pronti(isolamenti: dict | None) -> list[str]:
     """I nomi dei linguaggi che si possono eseguire adesso, nell'ordine di LINGUAGGI."""
-    iso = isolamenti or {}
+    iso = programmi(isolamenti)
     return [n for n in LINGUAGGI if n in iso and getattr(iso[n], "pronto", False)]
 
 

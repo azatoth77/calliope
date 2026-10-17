@@ -46,19 +46,21 @@ RIPETUTA_NUDGE = ("La risposta che stavi per dare è uguale alla tua risposta pr
 
 
 # Con l'insistenza (domanda_insistita) la spinta non dice «una cosa nuova»
+# Dal 16/10 (#134) qui e in INSISTE_MSG niente «dicendo che ti è sembrato di sentirlo»: era la
+# stessa formula della nota della stanza, che il 26B ripeteva anche su frasi chiare
 RIPETUTA_NUDGE_INSISTE = (
     "La risposta che stavi per dare è uguale alla tua risposta precedente, e chi parla ti ha "
     "chiesto di nuovo la stessa cosa perché quella risposta non gli è bastata: non ripeterla. "
-    "Dai il dettaglio preciso che chiede con quello che hai, anche se incerto (dicendo che ti "
-    "è sembrato di sentirlo o di capirlo), oppure di' chiaramente quale pezzo non hai capito.")
+    "Dai il dettaglio preciso che chiede con quello che hai, anche se incerto (avvertendo in "
+    "breve che è una tua ricostruzione), oppure di' chiaramente quale pezzo non hai capito.")
 # Dati del turno quando la domanda riprende quella di prima (rete domanda_insistita)
 INSISTE_MSG = (
     "Dati del turno: chi parla ti fa una domanda simile a quella del turno prima. Se ti sta "
     "chiedendo di nuovo la stessa cosa, la tua risposta di prima non gli è bastata: non "
     "ripeterla con altre parole. Di' il dettaglio preciso che chiede (quali, quanti, chi, cosa "
-    "di preciso) con quello che hai, anche incerto, dicendo che ti è sembrato di sentirlo o di "
-    "capirlo; se quel pezzo non l'hai capito, di' quale. Se invece chiede altro, questa riga "
-    "non conta.")
+    "di preciso) con quello che hai, anche incerto, avvertendo in breve che è una tua "
+    "ricostruzione; se quel pezzo non l'hai capito, di' quale. Se invece chiede altro, questa "
+    "riga non conta.")
 # Parole che non dicono di che cosa si parla: articoli, preposizioni, pronomi, ausiliari, le
 # parole delle domande. Le altre sono «piene»
 VUOTE = frozenset("""

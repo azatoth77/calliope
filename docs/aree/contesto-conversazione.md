@@ -2118,7 +2118,9 @@ proprio quelle). Il prompt di sistema, con `stanza_cerca`, ne ha una frase («so
 parole storpiate: ricostruisci quelle evidenti dicendo che ti è sembrato di sentirle, e se chi parla
 corregge un nome usa subito il suo»). Le righe restano come le ha scritte Whisper: niente corretto
 dal codice (principio 10: contesto, non regola). Costo: ~600 caratteri una volta per conversazione,
-nel prefisso.
+nel prefisso. *[storico: testo della nota e frase del prompt fino al 16/10; dal 16/10 il perimetro
+è detto e l'esempio tra virgolette non c'è più, vedi «La nota delle storpiature e chi parla da
+solo» qui sotto]*
 
 **(B) La domanda insistita** (rete `domanda_insistita`, `calliope/ripetizione.py`, di serie accesa,
 categoria «modello»). `insiste` guarda solo la forma: la domanda di adesso riprende quella del turno
@@ -2166,6 +2168,76 @@ era nel prefisso già letto); turno 4 ripetuto prima 2/5, dopo 3/5, con `domanda
 c'è quasi sempre. Il limite è la trascrizione: una parola tronca come «OR» il modello non la
 ricostruisce; da guardare la ritrascrizione del solo segmento (l'audio del banco c'è) e la rete
 `domanda_insistita`, che costa senza effetto misurato.
+
+## La nota delle storpiature e chi parla da solo (16/10, issue #134, ramo `issue-134-storpiate-da-solo`)
+
+**Caso vero** (prove a voce sulla DGX col 26B del 16–17/10; qui di fantasia): chi amministra **da
+solo** dal telefono, stanza accesa con le righe nella storia, nessuna altra voce in tre sessioni. Il
+modello ha detto «mi è sembrato di sentire che…» 4 volte: due riformulando una frase chiara («Oggi
+vado in palestra.» → «Mi è sembrato di sentire che oggi vai in palestra…»), due su un nome di luogo
+storpiato da Whisper **nella frase del turno** («Borgo Lieto» → «Borgolieti»), dove ha «ricostruito»
+un terzo nome e l'ha ripetuto anche dopo la correzione (trascritta di nuovo storpiata). Nella storia
+c'era un pezzo solo della stanza con una riga: la nota del 15/10 bastava ad arrivare.
+
+**Causa**: la nota `STORPIATE` diceva «le righe qui sotto» ma la frase su come ricostruire era
+generica, con l'esempio tra virgolette «mi è sembrato di sentire bronzo nel 2023», che il 26B usava
+come formula (le quattro risposte con le stesse parole); il prompt di sistema lo ripeteva («dicendo
+che ti è sembrato di sentirle»). Confermata leggendo il codice: l'analisi della issue è giusta.
+
+**Correzione** (punti 1 e 2 della issue, contesto e non regola, principio 10):
+
+- la nota vale per **le sole righe della stanza qui sotto**; ciò che chi parla dice adesso «lo prendi
+  com'è e rispondi nel merito, senza ripeterlo come un dubbio»; un nome che non conosci «lo ripeti
+  come l'hai sentito o chiedi com'è, senza mai sostituirlo con un altro»;
+- **nessuna frase di risposta tra virgolette** («avvertendo in breve che è una tua ricostruzione»
+  al posto dell'esempio); restano gli esempi delle storpiature («2.300», «brondo»);
+- la correzione di chi parla vale **da subito e per tutto il resto della conversazione, anche se la
+  scrive in modo un po' diverso: non tornare alla tua**;
+- la frase del prompt con la stanza: «in quelle righe, non in ciò che ti dicono adesso, ricostruisci
+  le parole evidenti avvertendo che è una tua ricostruzione, e se chi parla corregge un nome usa il
+  suo da subito e per il resto della conversazione»;
+- dopo la revisione della PR #138, anche le frasi della domanda insistita (`INSISTE_MSG` e
+  `RIPETUTA_NUDGE_INSISTE`, `calliope/ripetizione.py`, nei dati del turno quando scatta
+  `domanda_insistita`, accesa di serie) senza «dicendo che ti è sembrato di sentirlo o di capirlo»:
+  «avvertendo in breve che è una tua ricostruzione». Una correzione che riprende le parole della
+  domanda di prima poteva farle scattare e riportare la formula.
+
+Il **conteggio del banco** per il caso `da_solo` (`esito_solo`, dopo la stessa revisione) guarda i
+nomi del luogo come parole maiuscole che cominciano con «Borgo» o lontane al più 3 lettere da
+«borgolieto». Al turno 2 vale «ripetuto» solo la forma sentita e vale «chiesto» solo una domanda
+che la nomina o chiede com'è il nome, mai con un terzo nome accanto. Dopo la correzione vale solo
+la forma di Carlo in ogni turno 3–4: un terzo nome come «Borgoletto» si conta, e la forma giusta
+al solo turno 3 non basta. La prima versione contava qualunque «borgo…liet…» e qualunque «?».
+Le misure del 4B qui sotto sono di quella versione. Il 4B non riproduce il caso, quindi la lettura
+che conta è quella del 26B.
+
+**Cache del prefisso** (#95): la nota resta un testo fisso, nel blocco intero e nel primo pezzo
+della storia, mai nei seguiti; cambia il prefisso di ogni conversazione una volta sola, al primo
+turno dopo l'aggiornamento. Da ~600 a ~880 caratteri, una volta per conversazione. Il **punto 3**
+(nota solo con altre voci nel pezzo) **non fatto**: renderebbe la nota meno prevedibile per la cache
+(un pezzo in più quando arriva la prima voce d'altri) e la issue lo vuole solo se il banco col 26B
+dice che i punti 1–2 non bastano.
+
+**Prove**: `prove/prova_stanza_storpiata.py`, parte C: perimetro, nome ripetuto o chiesto, correzione
+per il resto della conversazione, niente «sembrato» né frasi di risposta tra virgolette nella nota e
+nel prompt (falliscono sul codice di prima: 10 errori); con una voce sola e con due (contrario) la
+nota una volta nel primo pezzo, allo stesso posto e uguale a ogni turno, prefisso mai rotto, il
+seguito senza nota, le frasi del turno intatte. **Banco**: `banco_stanza_storpiata.py` ha il caso
+`da_solo` (una riga di Carlo; frase chiara, «Borgolieti», la correzione «Borgolieto», un seguito) e
+il modo `1510` (nota e prompt del 15/10). Sul portatile col 4B (gemma4 e4b, 16/10, 3 giri), da solo:
+«sembrato» in 1/12 turni col 1510 e 0/12 dopo (mai sulla frase chiara, nemmeno col 1510: il 4B non
+riproduce la formula del 26B); nome ripetuto o chiesto al turno 2 3/3 in tutti e due; dopo la
+correzione un'altra forma («Borgolieti» di nuovo) 1/3 col 1510 e 0/3 dopo. Il caso delle due voci
+(2 giri) non peggiora: argento 2/2 e oro 0/2 in entrambi, turno 5 che nega 2/2 → 1/2, nome giusto
+2/2. **Da fare col 26B** (criterio di chiusura: 0/10 «sembrato» sulla frase chiara, nome mai
+sostituito, il caso delle due voci come il 15/10):
+
+    cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+        && $V/.venv/bin/python $V/prove/manuali/banco_stanza_storpiata.py --casi da_solo,due_voci \
+           --modi 1510,dopo --giri 10
+
+Poi 7 giorni d'uso sulla DGX: 0 risposte con «sembrato di sentire» nei turni senza righe di altre
+voci.
 
 ## La ritrascrizione a blocchi: versioni nuove ridistribuite sui segmenti (15/10, ramo `lenta-blocchi`)
 

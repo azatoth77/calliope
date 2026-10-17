@@ -105,7 +105,10 @@ def _run(args) -> int:
         if not nodo:
             print("docker finto: node non c'è su questa macchina", file=sys.stderr)
             return 127
-        cmd = [nodo] + [mappa(a) for a in resto[5:]]
+        # Anche i percorsi dentro --allow-fs-read=/lavoro (17/10, permessi di Node)
+        cmd = [nodo] + [a.split("=", 1)[0] + "=" + mappa(a.split("=", 1)[1])
+                        if a.startswith("--allow-fs-") and "=" in a else mappa(a)
+                        for a in resto[5:]]
     else:
         cmd = [sys.executable] + [mappa(a) for a in resto[5:]]
     avvio = float(os.environ.get("DOCKER_FINTO_AVVIO_S") or 0)
