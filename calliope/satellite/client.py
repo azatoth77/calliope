@@ -18,9 +18,9 @@ Cosa gira qui e perché (docs/ricerche/2026-10-02-satellite.md):
   il server).
 
 Whisper, chi parla, modello, voce (Piper) e tool restano sul server. Il satellite si
-ricollega da solo (attese 1, 2, 5, 10, 15 s) e non ha porte in rete, salvo l'inoltro per il
-telefono di casa se acceso (`satellite_inoltro`, inoltro.py: TCP grezzo verso la pagina degli
-schermi del server, solo dalle reti private).
+ricollega da solo (attese 1, 2, 5, 10, 15 s) e non ha porte in rete (l'inoltro per il telefono
+di casa, `satellite_inoltro`, è stato tolto il 16/10, #61: il telefono raggiunge il server con la
+sua VPN).
 
 Su Windows il satellite è anche l'**esecutore del PC** (03/10, esecutore.py): annuncia nel
 «ciao» le capacità del portatile (volume, musica, luminosità, ricerca di file, app del
@@ -354,11 +354,6 @@ class Satellite:
         self._esiti: queue.Queue = queue.Queue()
         self._schermo_aperto = False
         self._ponte = None                        # ponte TLS verso la pagina in HTTPS
-        # Inoltro TCP per il telefono in casa (satellite_inoltro, inoltro.py): la porta della
-        # pagina degli schermi la dice il server nel benvenuto
-        self.inoltro = None
-        self._porta_schermi = int(getattr(cfg, "schermi_porta", 8770) or 8770)
-        self._schermi_locali = False
         # Misure (prove e terminale)
         self.audio_inviato = 0                    # byte di audio del microfono mandati
         self.ricevuti = 0                         # byte ricevuti dal server (voce compresa)
@@ -445,14 +440,10 @@ class Satellite:
     # ── ciclo principale ──
     def esegui(self):
         """Fino a `ferma()`: abbinamento se serve, sessione, riconnessione."""
-        self._avvia_inoltro()
         if self.aggiornatore is not None:
             threading.Thread(target=self._sorveglia_aggiornamento, name="riavvio",
                              daemon=True).start()
-        try:
-            self._esegui()
-        finally:
-            self._ferma_inoltro()
+        self._esegui()
 
     def _esegui(self):
         tentativi = 0
@@ -493,7 +484,6 @@ class Satellite:
         self._stop_veglia.set()
         if self._ponte is not None:
             self._ponte.ferma()
-        self._ferma_inoltro()
         ws = self.ws
         if ws is not None:
             try:
@@ -575,15 +565,6 @@ class Satellite:
         self._modalita(m, parametri=False)
         self._stanza(m.get("stanza"))
         self.satellite = m.get("satellite") or {}
-        sch = m.get("schermi") or {}
-        if sch.get("porta"):
-            self._porta_schermi = int(sch["porta"])
-        self._schermi_locali = bool(sch.get("locale"))
-        if self.inoltro is not None and (not sch or self._schermi_locali):
-            self.log("[INOLTRO] La pagina degli schermi del server non è raggiungibile da qui ("
-                     + ("schermi spenti sul server" if not sch else
-                        "schermi_indirizzo: 127.0.0.1 sul server") + "): l'inoltro non porta "
-                     "da nessuna parte finché non cambia.")
         self.player.nuova_sessione()
         self.connessioni += 1
         self.log(f"[SATELLITE] Collegato a {self.cfg.satellite_server} come «"
@@ -1004,38 +985,6 @@ class Satellite:
                 self.riavvio = True
                 self.ferma()
                 return
-
-    # ── inoltro per il telefono (inoltro.py) ──
-    def _avvia_inoltro(self):
-        spec = str(getattr(self.cfg, "satellite_inoltro", "") or "").strip()
-        if not spec or self.inoltro is not None:
-            return
-        from .inoltro import Inoltro
-        try:
-            self.inoltro = Inoltro(
-                spec, self._destinazione_inoltro,
-                ammesse=getattr(self.cfg, "satellite_inoltro_reti", None),
-                max_connessioni=getattr(self.cfg, "satellite_inoltro_max", 32),
-                inattivita_s=getattr(self.cfg, "satellite_inoltro_inattivita_s", 300.0),
-                log=self.log)
-        except (OSError, ValueError) as e:
-            self.log(f"[INOLTRO] Spento: non si apre «{spec}» ({_breve(e)}). Controlla "
-                     f"satellite_inoltro in calliope.locale.yaml (un altro programma sulla "
-                     f"porta? indirizzo che non è di questo PC?).")
-            return
-        self.log(f"[INOLTRO] Acceso su {self.inoltro.host}:{self.inoltro.porta} verso la pagina "
-                 f"degli schermi del server (TLS da capo a capo), solo dalle reti private.")
-
-    def _ferma_inoltro(self):
-        inoltro, self.inoltro = self.inoltro, None
-        if inoltro is not None:
-            inoltro.ferma()
-
-    def _destinazione_inoltro(self):
-        """(host, porta) della pagina degli schermi del server: l'host di satellite_server e
-        la porta del benvenuto (prima del primo, schermi_porta)."""
-        host = urlsplit(str(self.cfg.satellite_server)).hostname
-        return (host, self._porta_schermi) if host else None
 
     # ── schermo ──
     def _apri_schermo(self, m: dict):

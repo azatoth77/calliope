@@ -18,6 +18,11 @@ browser: server degli schermi e dei satelliti veri su 127.0.0.1, client WebSocke
   chiude lo restituisce; il controllo del PC resta al portatile anche con il telefono attivo;
 - certificato per i telefoni: CA di casa e certificato firmato da lei (openssl, se c'è),
   verificato davvero con una connessione HTTPS al server degli schermi;
+- nomi e indirizzi (da prova_inoltro.py, tolta il 16/10 con l'inoltro, #61): `calliope schermi
+  --certificato` con più --host e la virgola, ricordo di schermi_nomi; Host di un nome solo se
+  in schermi_nomi (altrimenti 400); WebSocket del telefono con l'IP e con un nome (Origin
+  uguale all'Host) sì, con l'Origin di un'altra porta no; satellite vero: dopo un certificato
+  rifatto il ponte della pagina prende l'impronta nuova alla riconnessione, senza riaprirla;
 - catalogo: l'azione «telefono» (onnxruntime-web e modelli generici, con dimensioni e SHA-256).
 """
 
@@ -131,6 +136,7 @@ def main() -> int:
         web.ferma()
         srv.ferma()
     certificato(cfg)
+    nomi_e_ponte(cfg)
     catalogo()
     shutil.rmtree(TMP, ignore_errors=True)
     print("\nTutto bene." if not ERRORI else f"\n{len(ERRORI)} prove non riuscite.")
@@ -464,6 +470,167 @@ def certificato(cfg):
     finally:
         web.ferma()
         srv.ferma()
+
+
+# ─────────────── nomi, Host e Origin, ponte del satellite (da prova_inoltro, 16/10) ───────────────
+# Fino al 16/10 questi controlli stavano in prova_inoltro.py, attraverso l'inoltro del satellite
+# (tolto il 16/10, #61): qui si fanno verso la porta degli schermi, come ci arriva il telefono
+# con la sua VPN.
+def richiesta(porta, host, ctx, percorso="/telefono/api/stato"):
+    """(stato HTTP, impronta del certificato visto) con Host e SNI = host, verso 127.0.0.1."""
+    import hashlib
+    raw = socket.create_connection(("127.0.0.1", porta), timeout=5)
+    s = ctx.wrap_socket(raw, server_hostname=host.split(":")[0])
+    imp = hashlib.sha256(s.getpeercert(binary_form=True)).hexdigest().upper()
+    s.sendall(f"GET {percorso} HTTP/1.1\r\nHost: {host}\r\nConnection: close\r\n\r\n".encode())
+    risposta = b""
+    while True:
+        d = s.recv(65536)
+        if not d:
+            break
+        risposta += d
+    s.close()
+    return int(risposta.split(b" ", 2)[1]), ":".join(imp[i:i + 2] for i in range(0, 64, 2))
+
+
+def ws_abbina(porta, host, origine, ctx) -> str:
+    """Tipo della prima risposta del WebSocket di abbinamento del telefono (o l'errore)."""
+    from calliope.satellite import protocollo as P
+    from calliope.tls_sicuro import sicuro
+    from websockets.sync.client import connect
+    try:
+        raw = socket.create_connection(("127.0.0.1", porta), timeout=5)
+        with connect(f"wss://{host}/telefono/ws/abbina", sock=raw, ssl=sicuro(ctx),
+                     server_hostname=host.split(":")[0], open_timeout=5,
+                     additional_headers={"Origin": origine}) as ws:
+            ws.send(P.testo(tipo="abbina", versione=2, nome="telefono"))
+            return P.leggi(ws.recv(timeout=5)).get("tipo") or "?"
+    except Exception as e:  # noqa: BLE001
+        return f"rifiutato ({type(e).__name__})"
+
+
+class Rilevatore:
+    """Wake word finta del satellite: non sente mai il nome."""
+
+    def reset(self):
+        pass
+
+    def process(self, frame):
+        return None
+
+
+def nomi_e_ponte(cfg):
+    from calliope.satellite.__main__ import _openssl
+    from calliope.schermi.__main__ import main as schermi_main
+    if _openssl() is None:
+        print("SALTATA IN PARTE: openssl non c'è: salto i nomi e il ponte del satellite")
+        return
+    d = TMP / "nomi"
+    d.mkdir()
+    c = type(cfg)()
+    c.config_dir = str(d)
+    c.memory_db = str(d / "m.db")
+    c.satellite_porta = 0
+    c.audio_modo = "satellite"
+    c.telefono_web, c.wake_model, c.vad_modello = cfg.telefono_web, cfg.wake_model, cfg.vad_modello
+    c.schermi_nomi = ["calliope.lan"]
+    # --host ripetuto e con la virgola, dal terminale vero (calliope schermi --certificato)
+    out = []
+    vecchie = {k: os.environ.get(k) for k in ("CALLIOPE_CONFIG", "CALLIOPE_CONFIG_LOCALE")}
+    os.environ["CALLIOPE_CONFIG"] = str(d / "calliope.yaml")
+    os.environ["CALLIOPE_CONFIG_LOCALE"] = str(d / "calliope.locale.yaml")
+    (d / "calliope.yaml").write_text("", encoding="utf-8")
+    try:
+        rc = schermi_main(["--certificato", "--host", "10.9.8.7,192.168.1.30", "--host",
+                           "calliope.lan", "--host", "casa.lan"], out=out.append)
+    finally:
+        for k, v in vecchie.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    testo = "\n".join(out)
+    verifica("--certificato con più --host e con la virgola: tutti nel certificato",
+             rc == 0 and (d / "schermi.crt").is_file()
+             and all(x in testo for x in ("10.9.8.7", "192.168.1.30", "calliope.lan",
+                                          "127.0.0.1")), f"uscita {rc}")
+    verifica("--certificato: ricorda schermi_nomi per i nomi scelti a mano",
+             "schermi_nomi" in testo and "casa.lan" in testo)
+    if not (d / "schermi.crt").is_file():
+        return
+    c.schermi_indirizzo = "0.0.0.0"
+    c._https = True
+    srv, hub, web, _ = avvia(c)
+    c.schermi_porta = web.port                    # la porta che il benvenuto dice al satellite
+    tls = hub.tls
+    p = web.port
+    try:
+        ca = ssl.create_default_context(cafile=str(d / "calliope-ca.crt"))
+        st, imp = richiesta(p, f"127.0.0.1:{p}", ca)
+        verifica("HTTPS con l'IP: /telefono risponde, il certificato è quello degli schermi",
+                 st == 200 and imp == tls["impronta"], f"HTTP {st}")
+        st, _ = richiesta(p, f"calliope.lan:{p}", ca)
+        verifica("con un nome in schermi_nomi (e nel certificato): accettato", st == 200,
+                 f"HTTP {st}")
+        st, _ = richiesta(p, f"casa.lan:{p}", ca)
+        verifica("con un nome nel certificato ma non in schermi_nomi: «Host non ammesso»",
+                 st == 400, f"HTTP {st}")
+        dove = f"127.0.0.1:{p}"
+        verifica("WebSocket del telefono con l'IP, Origin uguale all'Host: abbinamento",
+                 ws_abbina(p, dove, f"https://{dove}", ca) == "codice")
+        dove = f"calliope.lan:{p}"
+        verifica("WebSocket con un nome: Origin e Host coincidono, abbinamento",
+                 ws_abbina(p, dove, f"https://{dove}", ca) == "codice")
+        verifica("WebSocket con l'Origin della porta di un altro sito: rifiutato",
+                 ws_abbina(p, dove, f"https://calliope.lan:{porta_libera()}", ca)
+                 .startswith("rifiutato"))
+        ponte_impronta_nuova(c, d, srv, hub, tls)
+    finally:
+        web.ferma()
+        srv.ferma()
+
+
+def ponte_impronta_nuova(c, d, srv, hub, tls):
+    """Satellite vero (microfono e casse finti): la pagina degli schermi si apre una volta col
+    ponte TLS e, dopo un certificato rifatto sul server, il ponte prende l'impronta nuova alla
+    riconnessione senza riaprire la pagina."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import prova_satellite as PS
+    from calliope.satellite.client import Satellite
+    from calliope.schermi import tls as T
+    _, token = srv.archivio.crea_con_token("studio")
+    righe, pagine = [], []
+    cfg_s = PS.cfg_prova(d, satellite_server=f"ws://127.0.0.1:{srv.port}",
+                         satellite_credenziali=str(d / "sat.json"),
+                         satellite_schermo="finestra", schermi_porta=1)
+    Path(cfg_s.satellite_credenziali).write_text(json.dumps({"token": token}), encoding="utf-8")
+    sat = Satellite(cfg_s, sorgente=lambda **kw: PS.MicFinto(PS.Scena(), **kw),
+                    apri_uscita=PS.Casse().flusso, log=righe.append, rilevatore=Rilevatore(),
+                    esecutore=False, apri_schermo=pagine.append)
+    t = threading.Thread(target=sat.esegui, daemon=True)
+    t.start()
+    try:
+        verifica("satellite: la pagina degli schermi aperta una volta, ponte con l'impronta",
+                 aspetta(lambda: sat.collegato.is_set() and len(pagine) == 1
+                         and sat._ponte is not None, 10)
+                 and sat._ponte.impronta == tls["impronta"].replace(":", ""))
+        # Certificato rifatto sul server (--forza) e Calliope riavviata: qui basta che il
+        # server mandi l'impronta nuova e che il satellite si ricolleghi
+        T.certificato_telefono(c, ["10.9.8.7"], forza=True, out=lambda m: None)
+        nuovo = T.carica(c)
+        hub.tls = nuovo
+        prima = sat.connessioni
+        srv.collegati[0].ws.close()
+        verifica("certificato rifatto: alla riconnessione il ponte usa l'impronta nuova",
+                 aspetta(lambda: sat.connessioni > prima and sat._ponte is not None
+                         and sat._ponte.impronta == nuovo["impronta"].replace(":", ""), 10)
+                 and nuovo["impronta"] != tls["impronta"],
+                 next((x for x in righe if "certificato della pagina" in x), "nessuna riga"))
+        verifica("certificato rifatto: la pagina non si riapre (si ricollega da sola)",
+                 len(pagine) == 1, str(len(pagine)))
+    finally:
+        sat.ferma()
+        t.join(10)
 
 
 def catalogo():

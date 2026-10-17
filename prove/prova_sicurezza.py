@@ -540,7 +540,6 @@ def prova_satelliti():
     from websockets.sync.client import connect
     from calliope.satellite import protocollo as P
     from calliope.satellite.archivio import ArchivioSatelliti
-    from calliope.satellite.inoltro import RETI_PREDEFINITE, ammesso, reti
     from calliope.satellite.server import AscoltoRemoto, ServerSatelliti, valida_evento
 
     tmp = Path(tempfile.mkdtemp())
@@ -624,14 +623,7 @@ def prova_satelliti():
              f"chiuse {chiuse} su 8")
     srv.ferma()
     arch.close()
-
-    # 4. Inoltro: non più le reti private di bar, alberghi e uffici
-    r = reti(RETI_PREDEFINITE)
-    verifica("S8: inoltro dalla rete di casa e da WireGuard", all(ammesso(ip, r) for ip in
-             ("192.168.1.20", "172.27.66.2", "10.6.0.3", "127.0.0.1")))
-    verifica("S8: inoltro non da 10.x, 172.16.x, link-local, ULA",
-             not any(ammesso(ip, r) for ip in ("10.8.0.2", "172.16.5.4", "169.254.1.1",
-                                               "fe80::1%eth0", "fd00::5")))
+    # 4. Le reti ammesse dell'inoltro: tolte il 16/10 con l'inoltro (#61)
 
 
 # ─────────────── S9: dati personali nel terminale, nel registro e sul disco ───────────────

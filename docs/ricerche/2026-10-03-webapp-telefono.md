@@ -122,6 +122,9 @@ come il telefono; i tocchi vanno fatti da fermi.
 
 ## 8. Da fuori casa (03/10)
 
+*Storico: l'inoltro è stato tolto il 16/10 (#61). Il telefono raggiunge il server con la VPN
+installata sul telefono, senza passare dal portatile.*
+
 Il telefono fuori casa raggiunge Calliope entrando con una VPN nella rete di casa e
 passando dall'inoltro TCP del satellite (`calliope/satellite/inoltro.py`, `satellite_inoltro`,
 reti ammesse in `satellite_inoltro_reti`, TLS da capo a capo con la CA di casa). La
@@ -132,7 +135,7 @@ descrizione della rete di questa installazione non è pubblicata. Prova a secco:
 
 - La prova sui telefoni veri (iPhone e Android, in VPN e a casa) e in auto, con le annotazioni
   qui sopra segnate [V]; CPU e batteria con il microfono acceso per un'ora.
-- La prova da fuori casa con WireGuard e l'inoltro del portatile (§8).
+- La prova da fuori casa con WireGuard e l'inoltro del portatile (§8). *Storico: inoltro tolto il 16/10 (#61), il telefono usa la sua VPN.*
 - Una conversazione per satellite (telefono in auto e portatile a casa insieme).
 - Un satellite sempre in ascolto in tasca non è possibile con una pagina web: servirebbe un'app
   nativa (servizio in primo piano su Android), fuori da questa decisione.

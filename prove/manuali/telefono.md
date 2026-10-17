@@ -121,9 +121,14 @@ il tono di una voce adulta è tra ~85 e ~260 Hz e l'impronta del proprietario su
 (0,48). Un ritmo lontano da ×1, frequenze diverse tra microfono e contesto o un tono oltre i
 300 Hz dicono che l'audio arriva accelerato o rallentato (il difetto di iOS del 03/10).
 
-## Telefono da fuori casa (WireGuard e inoltro, 03/10)
+## Telefono da fuori casa (03/10; inoltro tolto il 16/10, #61)
 
-I passi dipendono dalla rete di casa (VPN, router, indirizzi) e non sono pubblicati:
-in breve, una VPN verso la rete di casa, `satellite_inoltro` sul satellite con le reti ammesse
-in `satellite_inoltro_reti`, il certificato della pagina con gli indirizzi giusti
-(`calliope schermi --certificato --host IP1,IP2`). Prova a secco: `prove/prova_inoltro.py`.
+Dal 16/10 il telefono raggiunge il server con **la VPN installata sul telefono** (quella della
+rete in cui sta il server), senza passare dal portatile: il certificato della pagina deve avere
+l'indirizzo (o il nome, in `schermi_nomi`) con cui il telefono apre `/telefono`
+(`calliope schermi --certificato --host IP1,IP2`). Prova a secco dei nomi e del certificato:
+`prove/prova_telefono.py`. I passi della rete di questa installazione non sono pubblicati.
+
+*Storico (03/10, tolto il 16/10, #61):* una VPN verso la rete di casa, `satellite_inoltro` sul
+satellite con le reti ammesse in `satellite_inoltro_reti`, il certificato della pagina con gli
+indirizzi giusti. Prova a secco: `prove/prova_inoltro.py` (tolta con l'inoltro).

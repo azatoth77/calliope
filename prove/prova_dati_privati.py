@@ -70,7 +70,7 @@ SEGRETI = [
 ]
 
 # Indirizzi privati ammessi: tutti d'esempio, scelti per le prove (SSRF, reti ammesse
-# dell'inoltro, indirizzi di configurazione), nessuno di una rete vera. Uno nuovo si aggiunge
+# dell'inoltro fino al 16/10, indirizzi di configurazione), nessuno di una rete vera. Uno nuovo si aggiunge
 # qui solo se è inventato.
 ESEMPI_IP = {
     # reti intere (CIDR) nelle regole e nei documenti
@@ -78,7 +78,8 @@ ESEMPI_IP = {
     "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24",
     "240.0.0.0/4", "255.255.255.255/32",
     # predefiniti dei prodotti: WireGuard dell'add-on di Home Assistant e PiVPN
-    # (satellite_inoltro_reti), con indirizzi di prova dentro
+    # (satellite_inoltro_reti, tolta il 16/10 con l'inoltro, #61: restano nei documenti
+    # storici), con indirizzi di prova dentro
     "172.27.66.0/24", "172.27.66.2", "10.6.0.0/24", "10.6.0.2", "10.6.0.3",
     # indirizzi inventati delle prove e degli esempi
     "10.0.0.1", "10.0.0.2", "10.0.0.5", "10.0.0.9", "10.1.2.3", "10.255.255.255", "10.8.0.2",

@@ -1704,27 +1704,6 @@ satellite:
   # in documenti_cartella (vuota = Documenti\Calliope). I percorsi dei file non escono dal
   # satellite. false = solo microfono e casse
   satellite_esecutore: true
-  # Lato satellite: inoltro TCP verso la pagina degli schermi e la web app del telefono del
-  # server, per un telefono che è nella rete di casa (o in WireGuard) e non vede il server
-  # (in ufficio, in VPN): "0.0.0.0:8770" o "192.168.1.30:8770" (indirizzo e porta su cui
-  # ascoltare qui). Il TLS resta tra telefono e server: il certificato degli schermi deve
-  # contenere l'indirizzo di questo PC (calliope schermi --certificato --host …). Vuoto =
-  # spento (calliope/satellite/inoltro.py)
-  satellite_inoltro: ''
-  # Le reti da cui l'inoltro accetta connessioni: le altre si chiudono subito. Dal 03/10
-  # non più tutte le reti private (bar, alberghi e uffici usano 10.x e 172.16–31.x): i
-  # router di casa (192.168.x), l'add-on WireGuard di Home Assistant (172.27.66.0/24),
-  # PiVPN (10.6.0.0/24) e il loopback. La rete di casa o della VPN, se è un'altra, va qui
-  satellite_inoltro_reti:
-  - 192.168.0.0/16
-  - 172.27.66.0/24
-  - 10.6.0.0/24
-  - 127.0.0.0/8
-  - ::1/128
-  # Connessioni insieme attraverso l'inoltro (una pagina ne apre 2–6)
-  satellite_inoltro_max: 32
-  # Secondi senza un byte dopo i quali una connessione dell'inoltro si chiude
-  satellite_inoltro_inattivita_s: 300.0
   # Lato satellite installato dalla pagina /satellite: si aggiorna da solo alla versione del
   # server, con ritorno automatico alla precedente se non si ricollega. Il satellite avviato
   # dal repository non si aggiorna mai da solo (calliope/satellite/aggiorna.py)

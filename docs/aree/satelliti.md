@@ -1,6 +1,6 @@
 # Satelliti
 
-*Microfono e casse in rete con Calliope sul server: protocollo, TLS, inoltro, esecutore remoto, uno schermo per satellite. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
+*Microfono e casse in rete con Calliope sul server: protocollo, TLS, esecutore remoto (l'inoltro per il telefono: tolto il 16/10, #61), uno schermo per satellite. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
 **Stato al 14/10.** Come al 09/10 (sotto), più il **protocollo 3** (13/10): un satellite che lo sa fare (Python aggiornato, telefono) manda anche il parlato della stanza in un flusso a parte, accanto a quello dei comandi, solo dove la conversazione di stanza è accesa sul server (`stanza`, di serie spenta); il server accetta ancora le versioni 1 e 2, e un satellite nuovo scende di una versione alla volta. Dal 14/10 campi in più per l'ascolto durante la voce di Calliope (`stanza_durante_voce`). Sezioni in fondo; voce e regole della stanza in [stt-tts](stt-tts.md) e [contesto-conversazione](contesto-conversazione.md).
 
@@ -10,7 +10,7 @@
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Satelliti (microfono e casse in rete, Calliope sul server) | `websockets` (API sincrona), PCM 16 kHz, TLS con `ssl` della libreria standard e impronta fissata; sul satellite lo stesso `Listener` (VAD ONNX, wake word) e `tts.UscitaLocale` | `calliope/satellite/` → `ServerSatelliti`, `AscoltoRemoto`, `UscitaRemota` (`server.py`), `Collegamento` (`suonata`, `canale`, dal 06–07/10), `valida_evento`, `ServerSatelliti.insieme` e `per_pc` (tutti insieme dal 06/10), `Satellite`, `Riproduttore` (`client.py`), `protocollo.py`, `ArchivioSatelliti`, `load_satelliti`; inoltro TCP per il telefono di casa `Inoltro` (`inoltro.py`, dal 03/10); PC nuovo con un comando e aggiornamenti con ritorno indietro (dal 03/10): pagina `/satellite` e `/installa` (`web.py`), pacchetto da `uv.lock` (`pacchetto.py`: `Distributore`), `Aggiornatore` (`aggiorna.py`), `installazione/avvio.py` e `installazione/installa.ps1` (uv 0.12.22, Python 3.14.8); protocollo 3 con l'ascolto della stanza (dal 13/10, sotto) `protocollo.STANZA`, `satellite/stanza.py` (`AscoltoStanza`, `Segmentatore`), `Satellite._stanza`, `Collegamento.stanza_capace`, `ServerSatelliti.conversazione_stanza`; `audio_modo` in `Config`; socket TLS usabile da più thread `calliope/tls_sicuro.py` → `SocketTLS`, `sicuro` (dal 03/10); terminale `python -m calliope.satellite`; avvio `avvia_satellite.py`, `setup/satellite/` |
+| Satelliti (microfono e casse in rete, Calliope sul server) | `websockets` (API sincrona), PCM 16 kHz, TLS con `ssl` della libreria standard e impronta fissata; sul satellite lo stesso `Listener` (VAD ONNX, wake word) e `tts.UscitaLocale` | `calliope/satellite/` → `ServerSatelliti`, `AscoltoRemoto`, `UscitaRemota` (`server.py`), `Collegamento` (`suonata`, `canale`, dal 06–07/10), `valida_evento`, `ServerSatelliti.insieme` e `per_pc` (tutti insieme dal 06/10), `Satellite`, `Riproduttore` (`client.py`), `protocollo.py`, `ArchivioSatelliti`, `load_satelliti`; *storico:* l'inoltro TCP per il telefono di casa (dal 03/10) è stato tolto il 16/10 (#61); PC nuovo con un comando e aggiornamenti con ritorno indietro (dal 03/10): pagina `/satellite` e `/installa` (`web.py`), pacchetto da `uv.lock` (`pacchetto.py`: `Distributore`), `Aggiornatore` (`aggiorna.py`), `installazione/avvio.py` e `installazione/installa.ps1` (uv 0.12.22, Python 3.14.8); protocollo 3 con l'ascolto della stanza (dal 13/10, sotto) `protocollo.STANZA`, `satellite/stanza.py` (`AscoltoStanza`, `Segmentatore`), `Satellite._stanza`, `Collegamento.stanza_capace`, `ServerSatelliti.conversazione_stanza`; `audio_modo` in `Config`; socket TLS usabile da più thread `calliope/tls_sicuro.py` → `SocketTLS`, `sicuro` (dal 03/10); terminale `python -m calliope.satellite`; avvio `avvia_satellite.py`, `setup/satellite/` |
 
 ## Problemi noti
 
@@ -50,7 +50,8 @@
     satellite (comincia a suonare al primo). Niente Opus (librerie native senza wheel
     `win_arm64`), niente Wyoming (nessuna sicurezza, semantica diversa, `wyoming-satellite`
     archiviato). Posto per l'esecutore del PC: stessa connessione, tipi di messaggio nuovi.
-  - **Inoltro per il telefono di casa** (03/10, `calliope/satellite/inoltro.py`, prova
+  - *Storico, tolto il 16/10 (#61): il telefono raggiunge il server con la sua VPN (voce del
+    16/10 in fondo).* **Inoltro per il telefono di casa** (03/10, `calliope/satellite/inoltro.py`, prova
     `prove/prova_inoltro.py`, passi in `prove/LEGGIMI.md`, §8 di
     `docs/ricerche/2026-10-03-webapp-telefono.md`): con `satellite_inoltro: "0.0.0.0:8770"` il
     satellite copia i byte (TCP grezzo, TLS da capo a capo con la CA di casa) verso la pagina
@@ -211,3 +212,33 @@ due sensi (un satellite o un server di prima li ignora, niente cambio di version
   `voceOra` nella pagina del telefono). Il server tiene il testo e la durata delle ultime frasi
   mandate (`Collegamento.frasi_voce`, da `UscitaRemota.invia`) e l'ora in cui hanno cominciato a
   suonare (`suonate`, dal messaggio `suona`).
+
+## Inoltro per il telefono tolto (16/10, #61)
+
+Chi amministra ha deciso il 16/10 che in auto e fuori casa il telefono raggiunge la DGX con **la
+VPN installata sul telefono**, non passando dal portatile: l'inoltro del satellite (dal 03/10,
+spento di serie e provato solo a secco) non era usato ed è stato **tolto**. Il satellite torna a
+non avere porte in rete.
+
+- Codice: `calliope/satellite/inoltro.py` tolto, con il suo uso in `client.py` (avvio e arresto,
+  `_porta_schermi`, `_schermi_locali`, l'avviso `[INOLTRO]` nel benvenuto) e la voce tra le
+  `ENTRATE` del pacchetto del satellite. Il server manda ancora `schermi: {porta, locale}` nel
+  benvenuto: il satellite ne usa la presenza per chiedere lo schermo, porta e «locale» li leggeva
+  solo l'inoltro. Toglierli cambierebbe il protocollo senza motivo, e restano.
+- Configurazione: `satellite_inoltro`, `satellite_inoltro_reti`, `satellite_inoltro_max` e
+  `satellite_inoltro_inattivita_s` non sono più campi. Un `calliope.locale.yaml` scritto prima
+  che le ha ancora avvia lo stesso: `CHIAVI_TOLTE` in `config.py` le segnala con «tolta il 16/10
+  (#61) … Ignorata: toglila dal file», senza il «forse …?» del nome più vicino (porterebbe a
+  `satellite_indirizzo`, l'indirizzo su cui ascolta il server), e le altre chiavi valgono.
+- `calliope schermi --certificato --host IP1,IP2` resta: più indirizzi servono anche senza
+  inoltro (IP della DGX in VPN e un nome). Un certificato che contiene ancora l'indirizzo del
+  portatile è innocuo; rifarlo senza (`--forza`) è una scelta di chi amministra.
+- Prove: `prova_inoltro.py` tolta; i suoi controlli che non riguardavano l'inoltro (certificato
+  con più `--host`, `schermi_nomi`, Host e Origin con un nome, il ponte della pagina che prende
+  l'impronta nuova alla riconnessione) sono in `prova_telefono.py`, verso la porta degli
+  schermi. S8 «reti dell'inoltro» uscita da `prova_sicurezza.py`. `prova_config.py` controlla
+  che le chiavi non siano più campi e la segnalazione «tolta».
+- Da fare a mano sul portatile di chi amministra: togliere `satellite_inoltro*` dal
+  `calliope.locale.yaml` se ci sono, e l'eventuale regola del firewall di Windows aperta per
+  la porta dell'inoltro. Un satellite non ancora aggiornato accende l'inoltro con la sua
+  versione vecchia finché non si aggiorna dal server.
