@@ -2046,10 +2046,11 @@ avrebbe fatto diventare il nome del profilo.
   «Ti chiamo papà d'ora in poi.» (2 volte su 3 con main, 1 su 3 col ramo), un'azione dichiarata
   che `ACTION_CLAIM` non prende («ti chiamo …»): da guardare se si vede col 26B. La regola serve
   al 26B, che il tool lo chiama. Casi nuovi nel banco `ruolo0`–`ruolo4` (errore una risposta che
-  dà il ruolo come nome, `RUOLO_COME_NOME`); *storico al 17/10: rifatto col 26B, sezione «Il banco di regressione… col 26B» (#70)*; **da rifare col 26B sulla DGX**:
-  con il tunnel verso l'Ollama della DGX (porta 11440 sul portatile) e
-  `CALLIOPE_LLM_PROFILO=gemma4-26b-ollama`,
-  `python prove\prova_regressione.py 3 --solo "^(ruolo|rinomina|chi)" --url http://127.0.0.1:11440`.
+  dà il ruolo come nome, `RUOLO_COME_NOME`). Rifatti col 26B sulla DGX il 17/10: numeri nella
+  sezione «Il banco di regressione, i ricordi e chi parla in stanza col 26B» (#70). *Storico fino
+  al 17/10: «da rifare col 26B sulla DGX», con il tunnel verso l'Ollama della DGX (porta 11440
+  sul portatile) e `CALLIOPE_LLM_PROFILO=gemma4-26b-ollama`,
+  `python prove\prova_regressione.py 3 --solo "^(ruolo|rinomina|chi)" --url http://127.0.0.1:11440`.*
 - Casi e contrari a secco in `prova_testo` (la funzione e `risposta_al_nome`) e `prova_tool`
   (il tool: sei ruoli rifiutati senza proposta, anche nella risposta dopo, la regola nel
   registro, «Mamo» proposto).
@@ -2581,15 +2582,25 @@ installata con le prove del ramo:
   la risposta, ma la prima frase era già detta).
   - **Falso della prova**: `RUOLO_COME_NOME` contava come errore il rifiuto detto («non posso
     chiamarti amministratore perché è un ruolo e non un nome», giusto). Ora la prova
-    (`ruolo_come_nome`) salta la frase negata («non posso / non ti …»). Restano errori «ti chiamo
-    il papà», «vuoi che ti chiami Amministratore?».
+    (`ruolo_come_nome`, in `prove/controlli_regressione.py`) salta la frase negata («non posso /
+    non ti …»). Restano errori «ti chiamo il papà», «vuoi che ti chiami Amministratore?» e, dalla
+    revisione della PR #140, la domanda («Perché non ti chiamo papà?») e il ruolo detto dopo con
+    «ma» («Non ti chiamerò Amministratore ma Papà»), su tutte le occorrenze. A secco in
+    `prove/prova_controlli_regressione.py`.
   - **`chi_garbato`** («Calliope di Michisono.», storpiatura di «Calliope, chi sono?»): il 26B
     chiama `biblioteca_cerca` tutte le volte e risponde «Non ho trovato informazioni su
     Michisono…, se mi dai più dettagli…» (una passata in più, ~1,1 s; nessun danno, nessun nome
-    sbagliato). **Da decidere** (chi amministra, passo 6 della issue): la forma entra fra le
-    storpiature note come dato del turno (`calliope/storpiature.py`, come «Chiori sono» del 15/10,
-    con i contrari) oppure il caso si accetta anche con una domanda di chiarimento. Una forma
-    sola vista una volta è poca per una regola: la proposta è la seconda.
+    sbagliato). **Decisione di chi amministra** (17/10, passo 6 della issue): è giusto il nome
+    oppure una domanda di chiarimento («non ho capito, puoi ripetere?»); cercare la forma
+    storpiata (`biblioteca_cerca`, `web_cerca`) resta un errore, anche se dopo la ricerca chiede
+    dettagli, e così una risposta che parla della ricerca. Nessuna storpiatura nuova in
+    `calliope/storpiature.py`. Controllo `garbato_ok` in `prove/controlli_regressione.py`, con i
+    contrari a secco in `prove/prova_controlli_regressione.py`; vale anche per `chi_garbato2`.
+    Col controllo nuovo, `--solo "^(chi|ruolo)"` per 6 giri: **89/96**; `chi_garbato` **0/6** (il
+    26B cerca sempre in biblioteca: la decisione non cambia l'esito), `ruolo4` 5/6 (di nuovo «Ti
+    ho registrato come papà…», presa da `spinta_dichiarata` dopo la prima frase), tutti gli altri
+    6/6 (`chi_garbato2` compreso). Contando anche il lancio di prima: `ruolo4` 10/12, `chi_garbato2`
+    11/12.
 - **Ricordi fuori tema** (`prova_date_ricordi_ollama.py 3 --url … --num-ctx 36864`): fuori tema
   **21/21**, con la storia vera della DGX del 05/10 davanti **9/9**, pertinenti (cucinare,
   «cosa sai di me?», regalo) **9/9**; stati inventati 18/18: col 26B il ricordo non entra nella fisica.
@@ -2598,7 +2609,8 @@ installata con le prove del ramo:
   `prove/manuali/banco_stanza_contesto.py` (`--scena chi`), Carlo amministra e Sofia minorenne si
   alternano, nelle righe la domanda dell'altra e la risposta di Calliope a lei, un Brain per
   persona. **30/30 col blocco, 30/30 senza** (3 giri da 10), prima frase mediana 0,91 s col
-  blocco. Il 26B chiama quasi sempre `chi_parla` e dice il nome giusto. Il banco non riproduce
+  blocco. Con Carlo familiare e la minore vicina (`--vicino`, come nel caso vero; revisione della
+  PR #140): ancora **30/30 e 30/30**. Il 26B chiama quasi sempre `chi_parla` e dice il nome giusto. Il banco non riproduce
   quindi il caso vero: la frase «chi ti parla adesso è …» nella nota del turno (`--nota`, passo 4
   della issue) non serve e non è accesa. Ciò che il banco non ha e il caso vero sì: la storia
   della conversazione di chi amministra (turni di prima), il livello col minore vicino

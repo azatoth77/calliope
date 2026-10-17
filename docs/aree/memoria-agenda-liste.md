@@ -285,8 +285,15 @@ di `nascita_riservata`.
 anni ho?», poi «…sono nato il 4 luglio del 1977»): una volta su tre il 26B chiamava `ricorda`
 con la nascita, e la frase pronta era solo «Me lo ricordo. Lo salvo anche come tua data di
 nascita?», senza l'età chiesta. Ora gli anni li conta il programma dalla data passata
-(`minori.eta`) e la frase è «Me lo ricordo: hai 49 anni. Lo salvo anche come tua data di
-nascita?». Non è una regola sul testo: è la frase del tool. Prova a secco in
+(`minori.eta`) e la frase è «Me lo ricordo. Se la data è la tua, hai 49 anni. Lo salvo anche
+come tua data di nascita?». Dalla revisione della PR #140 gli anni si dicono «se la data è la
+tua», perché la data è di chi parla solo al «sì», e mai quando il fatto nomina un'altra persona
+registrata o una parentela («mia moglie è nata il…»: regola `nascita_altra_persona`, la frase
+torna «Me lo ricordo. Lo salvo…»). Contato bene anche con il compleanno ancora da venire.
+*Storico: nel primo commit del ramo la frase era «Me lo ricordo: hai 49 anni.».* Non è una
+regola sul testo: è la frase del tool. Col 26B con la frase nuova (3 giri): date 24/24, età
+21/21, privacy 12/12. Da guardare: quando il modello chiama sia `ricorda` sia `data_calcola`, la
+risposta dice gli anni e chiede di salvare la data due volte (una per tool). Prova a secco in
 `prove/prova_eta_utenti.py`, che fallisce col codice di main. Col 26B, sezione delle date in 5
 giri con la correzione: **40/40**, e le due volte che ha scelto `ricorda` ha detto gli anni.
 Prima, sui 3 giri: 23/24.
