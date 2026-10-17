@@ -208,7 +208,27 @@ ascolto (come le altre prove di un `--completo`).
 - Non ripetute nelle misure: «la delega risponde subito» oltre i 150 ms (14/10 mattina, 315 e 352
   ms) e `lavoro_stato` (già rimisurato dal 14/10).
 
-**Problemi aperti delle prove** (15/10): le attese fisse di `prova_satellite`. *(Storico, 14/10:
+**`prova_satellite`: le attese fisse e una riconnessione lenta nel codice (17/10, #5).** Delle 22
+`time.sleep` restano le 6 legittime, commentate; le 11 di assestamento aspettano una condizione
+(il satellite riaddormentato, da `Satellite.ascolti`; il thread dentro la lettura; il messaggio
+ricevuto; il record del keepalive) e le 5 negative hanno un segno positivo dopo; porte di Calliope
+fuori dalle effimere (`prove/porte.py`). Sotto carico (3 corsie, 16 processi) la prima versione è
+caduta in 2 giri su 3 su «il satellite si ricollega attraverso la «VPN»»: **nel codice**, il
+satellite dopo una sessione collegata e caduta ripartiva dai tentativi falliti di prima (dopo il
+riavvio lento di Calliope, 15 s invece di 1; [satelliti](../docs/aree/satelliti.md)). Corretto:
+**59 giri su 60 verdi** con 3 corsie e 16 processi (durata mediana 131 s, massima 155; 6 frasi
+ripetute dalla wake word in tutto). La caduta rimasta è un'altra: «TLS: 120 aperture», 118/120
+con `InvalidMessage` e la più lenta a 4,8 s, cioè il server che chiude una stretta di mano oltre
+il suo `open_timeout` di 3 s mentre 8 thread aprono insieme nello stesso processo della CPU
+piena; non è un'attesa della prova e non si distingue, dalla prova, dal difetto del 03/10 che
+quel controllo cerca: resta così, da riguardare se torna senza carico. Senza carico la prova dura
+90–95 s contro 103–107 di prima. Contrario (la stessa prova che non aspetta il riaddormentarsi, 3 corsie × 4 giri con lo stesso
+carico): 10 su 12, una caduta sul follow-up («ascolta» arrivato 0,33 s dopo l'inizio della
+frase, attacco perso) e una sul rifiuto per l'Origin con 3 s di tempo massimo (ora 10 s, come i
+rifiuti per il token: sono attese di una risposta).
+
+**Problemi aperti delle prove** (17/10): nessuno noto. *(Storico, 15/10: «le attese fisse di
+`prova_satellite`», chiuso il 17/10, sopra.)* *(Storico, 14/10:
 «la caduta rara di `prova_agenti` sul tunnel, da leggere con l'`errore` della diagnosi se torna»:
 trovata il 15/10, sopra.)* *(Storico:
 `prova_cronologia_pagina` con «Scarica Markdown» salvava il file nella cartella Download vera di

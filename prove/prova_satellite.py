@@ -539,10 +539,12 @@ def parte_server(tmp: Path, voce_ok: bool):
     url = f"ws://127.0.0.1:{srv.port}"
 
     # Senza token, con un token sbagliato, da un browser
+    # Tempi massimi di 10 s (17/10, #5): sono attese di una risposta che deve arrivare; con 3 s,
+    # sotto carico, la stretta di mano del rifiuto per l'Origin scadeva (1 giro su 12)
     with connect(url + P.PERCORSO_AUDIO, compression=None) as ws:
         ws.send(P.testo(tipo="ciao", versione=P.VERSIONE, token="sbagliato"))
         try:
-            ws.recv(timeout=3)
+            ws.recv(timeout=10)
             codice = None
         except ConnectionClosed as e:
             codice = e.rcvd.code if e.rcvd else None
@@ -550,14 +552,14 @@ def parte_server(tmp: Path, voce_ok: bool):
     with connect(url + P.PERCORSO_AUDIO, compression=None) as ws:
         ws.send(P.testo(tipo="ciao", versione=P.VERSIONE))
         try:
-            ws.recv(timeout=3)
+            ws.recv(timeout=10)
             codice = None
         except ConnectionClosed as e:
             codice = e.rcvd.code if e.rcvd else None
     ok("senza token: chiuso con 4401", codice == P.CHIUSO_TOKEN)
     try:
         connect(url + P.PERCORSO_AUDIO, additional_headers={"Origin": "http://esempio.it"},
-                open_timeout=3).close()
+                open_timeout=10).close()
         rifiutato = False
     except InvalidStatus as e:
         rifiutato = e.response.status_code == 403
@@ -590,7 +592,7 @@ def parte_server(tmp: Path, voce_ok: bool):
     vecchio = srv.attivo
     with connect(url + P.PERCORSO_AUDIO, compression=None) as ws:
         ws.send(P.testo(tipo="ciao", versione=P.VERSIONE, token=token, primo=False))
-        m = P.leggi(ws.recv(timeout=3))
+        m = P.leggi(ws.recv(timeout=10))
         ws.send(P.testo(tipo="pronto", eco=None))
         ok("seconda connessione: benvenuto e sostituzione della prima",
            m.get("tipo") == "benvenuto" and aspetta(lambda: srv.attivo is not vecchio, 3))
