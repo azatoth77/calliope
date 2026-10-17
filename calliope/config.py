@@ -1463,7 +1463,7 @@ class Config:
     # Chi può delegare: documenti, ricerche e altro (livello minimo) e il codice. Gli ospiti
     # mai. «amministra» o «familiare»
     agenti_livello: str = "familiare"
-    agenti_livello_codice: str = "amministra"
+    agenti_livello_codice: str = "amministra"   # codice ed estensioni: «amministra» o «familiare»
     # Conferma a voce prima di avviare: «costosi» (codice ed estensioni, coda già occupata,
     # modello da caricare; le ricerche no dal 08/10), «sempre» o «mai»
     agenti_conferma: str = "costosi"
@@ -3699,13 +3699,6 @@ def _num_ctx_valido(value):
 RIASSUNTORI = ("auto", "agente", "voce", "tagli", "spento")
 
 
-def _riassuntore_valido(value):
-    v = str(value or "").strip().lower()
-    if v not in RIASSUNTORI:
-        raise ValueError("serve uno tra " + ", ".join(RIASSUNTORI))
-    return v
-
-
 def _num_ctx_agenti_valido(value):
     from .contesto import numero
     v = numero(value)
@@ -3731,123 +3724,123 @@ def _tts_thread_valido(value):
     raise ValueError("serve un numero di thread o «auto»")
 
 
-def _dialogo_interprete_valido(value):
-    """«spento» o «ombra» (10/10, calliope/stato_dialogo.py). «acceso» è il passo 2 del progetto,
-    non ancora realizzato: si rifiuta (resta il valore di prima, cioè «ombra»)."""
-    s = str(value or "").strip().lower()
-    if s in ("spento", "ombra"):
-        return s
-    if s == "acceso":
-        raise ValueError("«acceso» non è ancora realizzato (passo 2 della macchina a stati): "
-                         "resta «ombra»")
-    raise ValueError("serve «spento» o «ombra»")
+# ─── Campi a modi (17/10, issue #83) ───
+# Prima ogni campo a modi aveva il suo validatore, e otto non ne avevano nessuno: un refuso nel
+# file locale valeva in silenzio un altro modo (caso del 15/10 sulla DGX:
+# `speaker_impronte_satellite: attiva`, al femminile come `fine_turno`, valeva «spento»; con
+# `minori_pericolo_silenzio: Avvisa` l'avviso ai tutori dopo il silenzio non partiva). Ora un
+# aiuto solo: minuscole e spazi tolti, il «no» di YAML (false) vale il modo spento dove c'è,
+# l'altro genere («attiva» per «attivo», «spento» per «spenta») si accetta con un avviso
+# gentile (scelta del 17/10 nei commenti della issue), tutto il resto è rifiutato con l'avviso
+# di load_config e resta il valore di prima, cioè quello di serie. Questi validatori girano
+# prima del controllo del tipo: false e true di YAML arrivano a loro.
+_ALTRO_GENERE = {"spento": "spenta", "spenta": "spento", "attivo": "attiva", "attiva": "attivo",
+                 "acceso": "accesa", "accesa": "acceso"}
 
 
-def _eventi_valido(value):
-    """«spento», «ombra» o «attivo» (10/10, calliope/eventi/; «attivo» dal passo 3)."""
-    s = str(value or "").strip().lower()
-    if s in ("spento", "ombra", "attivo"):
-        return s
-    raise ValueError("serve «spento», «ombra» o «attivo»")
+def _elenco(valori) -> str:
+    q = [f"«{v}»" for v in valori]
+    return ", ".join(q[:-1]) + " o " + q[-1] if len(q) > 1 else q[0]
 
 
-def _cortesia_voce_min_valido(value):
-    """«spenta», «ombra» o «attiva» (16/10, issue #97, calliope/cortesia.py); il «no» di YAML
-    (false) è «spenta»."""
-    if value is False or value is None:
-        return "spenta"
-    s = str(value).strip().lower()
-    if s in ("spenta", "ombra", "attiva"):
-        return s
-    raise ValueError("serve «spenta», «ombra» o «attiva»")
+def _modi(campo: str, valori, sinonimi: dict | None = None, falso: str | None = None,
+          vero: str | None = None, rifiuti: dict | None = None):
+    """Il validatore di un campo a modi: restituisce il modo normalizzato o ValueError.
+    `sinonimi`: altre forme accettate in silenzio (per esempio «sì» per «si»); `falso`/`vero`:
+    il modo che vale il false/true di YAML (senza, sono rifiutati: true è ambiguo fra «ombra» e
+    «attivo»); `rifiuti`: un motivo più chiaro per un valore rifiutato. `dove`: il file, per
+    l'avviso sull'altro genere."""
+    valori = tuple(valori)
+    sinonimi, rifiuti = dict(sinonimi or {}), dict(rifiuti or {})
+
+    def valida(value, dove: str = ""):
+        if value is False and falso is not None:
+            return falso
+        if value is True and vero is not None:
+            return vero
+        if value is None or isinstance(value, (bool, list, dict)):
+            raise ValueError("serve " + _elenco(valori))
+        s = str(value).strip().lower()
+        s = sinonimi.get(s, s)
+        if s in valori:
+            return s
+        if s in rifiuti:
+            raise ValueError(rifiuti[s])
+        altro = _ALTRO_GENERE.get(s)
+        if altro in valori:
+            _warn(f"«{campo}: {value}»" + (f" in {dove}" if dove else "") + ": ho letto "
+                  f"«{altro}» (qui i modi sono {_elenco(valori)})")
+            return altro
+        raise ValueError("serve " + _elenco(valori))
+
+    valida.modi = valori
+    valida.__name__ = f"modi_{campo}"
+    return valida
 
 
-def _frasi_varianti_valido(value):
-    """«spento», «ombra» o «attivo» (12/10, calliope/frasi.py)."""
-    s = str(value or "").strip().lower()
-    if s in ("spento", "ombra", "attivo"):
-        return s
-    raise ValueError("serve «spento», «ombra» o «attivo»")
+_SI_NO = {"sì": "si", "true": "si", "false": "no"}
+_LIVELLI = ("familiare", "amministra")
 
+_riassuntore_valido = _modi("contesto_riassuntore", RIASSUNTORI, falso="spento")
+# «acceso» è il passo 2 della macchina a stati (calliope/stato_dialogo.py), non ancora fatto
+_dialogo_interprete_valido = _modi(
+    "dialogo_interprete", ("spento", "ombra"), falso="spento",
+    rifiuti={"acceso": "«acceso» non è ancora realizzato (passo 2 della macchina a stati): "
+                       "resta «ombra»"})
+_eventi_valido = _modi("eventi", ("spento", "ombra", "attivo"), falso="spento")
+_cortesia_voce_min_valido = _modi("cortesia_voce_min", ("spenta", "ombra", "attiva"),
+                                  falso="spenta")
+_frasi_varianti_valido = _modi("frasi_varianti", ("spento", "ombra", "attivo"), falso="spento")
+# «attiva» è dei passi dopo (decisione 0029)
+_stanza_valido = _modi("stanza", ("spenta", "ombra"), falso="spenta")
+_stanza_guardia_valido = _modi("stanza_guardia", ("spenta", "ombra", "attiva"), falso="spenta")
+_blocchi_valido = _modi("stanza_lenta_blocchi", ("spento", "ombra", "attivo"), falso="spento")
+_arbitro_memoria_valido = _modi("arbitro_memoria", ("spento", "ombra"), falso="spento")
+_si_no_auto_valido = _modi("stanza_lenta_ritrascrivi", ("auto", "si", "no"), sinonimi=_SI_NO,
+                           falso="no", vero="si")
+_dopo_tool_valido = _modi("system1_dopo_tool", ("spento", "ombra", "attivo"), falso="spento")
+_pertinenza_valida = _modi("ricerca_pertinenza", ("spenta", "ombra", "attiva"), falso="spenta")
+_fine_turno_valido = _modi("fine_turno", ("spenta", "ombra", "attiva"), falso="spenta")
+_tts_dispositivo_valido = _modi("tts_dispositivo", ("auto", "cpu", "cuda"))
 
-def _stanza_valido(value):
-    """«spenta» o «ombra» (13/10, calliope/stanza/; «attiva» è dei passi dopo)."""
-    s = str(value or "").strip().lower()
-    if s in ("spenta", "ombra"):
-        return s
-    raise ValueError("serve «spenta» o «ombra»")
-
-
-def _stanza_guardia_valido(value):
-    """«spenta», «ombra» o «attiva» (14/10, calliope/stanza/guardia.py, passo 6)."""
-    s = str(value or "").strip().lower()
-    if s in ("spenta", "ombra", "attiva"):
-        return s
-    raise ValueError("serve «spenta», «ombra» o «attiva»")
-
-
-def _blocchi_valido(value):
-    """«spento», «ombra» o «attivo» (15/10, la ritrascrizione a blocchi della corsia lenta);
-    il «no» di YAML (false) è «spento»."""
-    if value is False or value is None:
-        return "spento"
-    s = str(value).strip().lower()
-    if s in ("spento", "ombra", "attivo"):
-        return s
-    raise ValueError("serve «spento», «ombra» o «attivo»")
-
-
-def _arbitro_memoria_valido(value):
-    """«spento» o «ombra» (15/10, calliope/arbitro_ombra.py, passo 2)."""
-    s = str(value or "").strip().lower()
-    if s in ("spento", "ombra"):
-        return s
-    raise ValueError("serve «spento» o «ombra»")
-
-
-def _si_no_auto_valido(value):
-    """«auto», «si» o «no» (anche true/false: YAML legge «no» come false)."""
-    if value is True:
-        return "si"
-    if value is False:
-        return "no"
-    s = str(value or "").strip().lower()
-    s = {"sì": "si", "true": "si", "false": "no"}.get(s, s)
-    if s in ("auto", "si", "no"):
-        return s
-    raise ValueError("serve «auto», «si» o «no»")
-
-
-def _dopo_tool_valido(value):
-    """«spento», «ombra» o «attivo» (15/10, calliope/system1/dopo_tool.py)."""
-    s = str(value or "").strip().lower()
-    if s in ("spento", "ombra", "attivo"):
-        return s
-    raise ValueError("serve «spento», «ombra» o «attivo»")
-
-
-def _pertinenza_valida(value):
-    """«spenta», «ombra» o «attiva» (16/10, calliope/pertinenza.py)."""
-    s = str(value or "").strip().lower()
-    if s in ("spenta", "ombra", "attiva"):
-        return s
-    raise ValueError("serve «spenta», «ombra» o «attiva»")
-
-
-def _fine_turno_valido(value):
-    """«spenta», «ombra» o «attiva» (14/10, calliope/system1/fine_turno.py)."""
-    s = str(value or "").strip().lower()
-    if s in ("spenta", "ombra", "attiva"):
-        return s
-    raise ValueError("serve «spenta», «ombra» o «attiva»")
-
-
-def _tts_dispositivo_valido(value):
-    """«auto», «cpu» o «cuda»."""
-    s = str(value or "").strip().lower()
-    if s in ("auto", "cpu", "cuda"):
-        return s
-    raise ValueError("serve «auto», «cpu» o «cuda»")
+# I campi a modi che non avevano un validatore (17/10, issue #83). Il false/true di YAML vale
+# come nel modulo che li legge, dove il modulo lo diceva già
+_MODI_NUOVI = {
+    # Il rischio vero: un valore sconosciuto valeva «niente» e l'avviso ai tutori non partiva.
+    # Il «no» di YAML si rifiuta: resta «avvisa», la scelta prudente
+    "minori_pericolo_silenzio": _modi("minori_pericolo_silenzio", ("avvisa", "niente"),
+                                      sinonimi={"avviso": "avvisa"}),
+    "speaker_impronte_satellite": _modi("speaker_impronte_satellite",
+                                        ("spento", "ombra", "attivo"), falso="spento",
+                                        vero="attivo"),
+    "compagnia_enabled": _modi("compagnia_enabled", ("spenta", "ombra", "attiva"),
+                               falso="spenta", vero="attiva"),
+    "compagnia_rivolta": _modi("compagnia_rivolta", ("spenta", "ombra", "attiva"),
+                               falso="spenta", vero="attiva"),
+    "stanza_lenta_prompt": _modi("stanza_lenta_prompt", ("auto", "si", "no"), sinonimi=_SI_NO,
+                                 falso="no", vero="si"),
+    "agenti_conferma": _modi("agenti_conferma", ("costosi", "sempre", "mai")),
+    "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
+                            sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
+                                      "true": "sempre", "false": "mai"},
+                            falso="mai", vero="sempre"),
+    "agenti_sandbox_motore": _modi("agenti_sandbox_motore", ("auto", "docker", "processo")),
+    # Un livello sconosciuto valeva già «amministra» (RANK.get(…, 2)): ora con l'avviso
+    "agenti_livello": _modi("agenti_livello", _LIVELLI),
+    "agenti_livello_codice": _modi("agenti_livello_codice", _LIVELLI),
+    "ufficio_livello_fiscale": _modi("ufficio_livello_fiscale", _LIVELLI),
+    "wake_posizione": _modi("wake_posizione", ("ovunque", "inizio")),
+    "wake_mode": _modi("wake_mode", ("modello", "testo")),
+    "web_searxng_aggiorna": _modi("web_searxng_aggiorna", ("automatico", "manuale")),
+    "stt_motore": _modi("stt_motore", ("locale", "server")),
+    "vad_motore": _modi("vad_motore", ("auto", "torch", "onnx")),
+    "immagini_modello": _modi("immagini_modello", ("auto", "si", "no"), sinonimi=_SI_NO,
+                              falso="no", vero="si"),
+    "immagini_storia": _modi("immagini_storia", ("messaggio", "descrizione")),
+    "audio_modo": _modi("audio_modo", ("locale", "satellite")),
+    # Il «no» di YAML era un tipo sbagliato, e la pagina si apriva lo stesso
+    "satellite_schermo": _modi("satellite_schermo", ("finestra", "kiosk", "no"), falso="no"),
+}
 
 
 VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valido,
@@ -3863,7 +3856,7 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
                "system1_dopo_tool": _dopo_tool_valido,
                "stanza_lenta_ritrascrivi": _si_no_auto_valido,
                "stanza_lenta_blocchi": _blocchi_valido,
-               "arbitro_memoria": _arbitro_memoria_valido}
+               "arbitro_memoria": _arbitro_memoria_valido, **_MODI_NUOVI}
 
 
 def fuori_limiti(key: str, value) -> tuple[float, float] | None:
@@ -3951,6 +3944,17 @@ def _apply_file(cfg: Config, path: str, esempio: bool = False):
         env = ENV_OVERRIDES.get(key)
         if env and env in os.environ:
             continue                         # la variabile d'ambiente vince sul file
+        val = VALIDATORI.get(key)
+        if getattr(val, "modi", None):
+            # Campi a modi (#83): il validatore prima del tipo, così il false di YAML («no»)
+            # arriva a lui; un valore rifiutato si segnala e resta quello di prima
+            try:
+                value = val(value, dove=path)
+            except ValueError as e:
+                _warn(f"«{key}: {value!r}» in {path} non è valido ({e}): tengo "
+                      f"{getattr(cfg, key)!r}")
+                continue
+            val = None
         if not _type_ok(value, types_by_name[key]):
             _warn(f"«{key}: {value!r}» in {path} non è del tipo giusto "
                   f"({types_by_name[key]}): tengo il predefinito {getattr(cfg, key)!r}")
@@ -3960,9 +3964,9 @@ def _apply_file(cfg: Config, path: str, esempio: bool = False):
             _warn(f"«{key}: {value!r}» in {path} è fuori dall'intervallo ammesso "
                   f"({lim[0]}–{lim[1]}): tengo {getattr(cfg, key)!r}")
             continue
-        if key in VALIDATORI:
+        if val is not None:
             try:
-                value = VALIDATORI[key](value)
+                value = val(value)
             except ValueError as e:
                 _warn(f"«{key}: {value!r}» in {path} non è valido ({e}): tengo "
                       f"{getattr(cfg, key)!r}")
