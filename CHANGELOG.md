@@ -131,3 +131,4 @@ misure, sono nei documenti d'area ([`docs/aree/`](docs/aree/)) e nelle ricerche
 | 17/10 | Preselezione dei tool chiusa come misura negativa: tolta l'ombra dal turno e i campi `preselezione_*`, resta il decisore per rimisurare con `preselezione_dgx.py --registro` (#25, PR #125) |
 | 17/10 | Inoltro del satellite tolto: il telefono raggiunge il server con la sua VPN; le chiavi tolte di un locale vecchio (inoltro e preselezione) si segnalano «tolta», senza fermare l'avvio (`CHIAVI_TOLTE`) (#61, PR #126) |
 | 17/10 | L'audio del banco della stanza ruota anche dopo la scadenza dell'eccezione: la conservazione gira al primo turno di ogni giorno, in secondo piano (#32, PR #127; la scelta sulla proroga resta aperta) |
+| 17/10 | L'elenco delle prove di `prove/LEGGIMI.md` si genera da `prove/elenco.md` (`python -m prove --leggimi`) e `prova_runner` lo controlla; biblioteca e ufficio allineati (#82, PR #129) |
