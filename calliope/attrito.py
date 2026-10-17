@@ -52,7 +52,7 @@ DOMANDE = frozenset({
     "politica_conferma", "politica_sfida", "politica_azione_non_chiesta",
     "politica_azione_non_giustificata", "politica_argomento_esterno",
     "politica_argomento_non_detto", "politica_delega", "politica_cancellazione_non_chiesta",
-    "politica_cassetto_non_chiesto",
+    "politica_cassetto_non_chiesto", "politica_cassetto_altra_persona",
     "politica_cambio_non_chiesto", "politica_azione_incoerente",
     # le guardie di prima del 06/10 (registri vecchi)
     "azione_non_chiesta", "immagine_azione_non_chiesta",

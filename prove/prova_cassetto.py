@@ -90,6 +90,11 @@ class Speakers:
     def known_speakers(self):
         return list(PERSONE)
 
+    # Come in produzione (seconda revisione della PR #143: senza, il ramo di `find` dei tool non
+    # si provava): accenti, cognome
+    from calliope.speaker_id import SpeakerRegistry as _SR
+    find = _SR.find
+
 
 class Archivio:
     def __init__(self):
@@ -410,6 +415,152 @@ def prova_minore_non_persona():
     r = json.loads(reg.call("immagine_archivia", {"foto": -1}, c, "familiare"))
     verifica("…senza foto e senza file: «Non ho una foto da archiviare»", not r.get("ok")
              and "foto" in r.get("conferma", ""), r)
+
+
+def prova_seconda_revisione():
+    """La seconda revisione della PR #143 (17/10): «X di Nome» e i possessivi altrui nel campo
+    della persona, gli argomenti in più fuori dall'elenco chiuso, la parentela dentro la
+    richiesta (solo se le parole trovano davvero il file), la domanda prima di eliminare o
+    tenere quando la frase nomina un'altra persona, le forme delle azioni che non prendono i
+    nomi («il rinnovo», «la conserva», «Salva»)."""
+    cas, _ = nuovo()
+    a = cas.metti("dario", b"Preventivo idraulico: 340 euro.", "preventivo.txt", "testo")
+    p = cas.metti("dario", b"Voti del primo quadrimestre.", "pagella figlio.txt", "testo")
+    cas.metti("bianca", b"Il compito di storia: Napoleone.", "storia.txt", "testo")
+    cas.metti("teodora", b"Palestra QX-4471.", "palestra.txt", "testo")
+    cas.ora.avanti(1)
+
+    def intatti():
+        return (cas.prendi("dario", a) is not None and cas.prendi("dario", p) is not None
+                and len(cas.elenco("bianca")) == 1 and len(cas.elenco("teodora")) == 1)
+    ctx = ctx_per(cas)
+    # 1. «X di Nome», chi parla e i possessivi altrui: rifiutati, in lettura e con elimina
+    for chi in ("la mamma di Bianca", "l'amica di Bianca", "la moglie di Dario",
+                "moglie di Dario", "sua", "suo", "la sua roba", "tua", "lei"):
+        for chiave in ("minore", "di"):
+            r = call(ctx, "allegato_leggi", {"cassetto": "ieri", chiave: chi})
+            testo = json.dumps(r, ensure_ascii=False)
+            verifica(f"allegato_leggi(cassetto=ieri, {chiave}=«{chi}»): rifiutato", not r.get("ok")
+                     and not any(x in testo for x in ("340", "Napoleone", "QX", "Voti")), r)
+        r = call(ctx, "cassetto_gestisci", {"azione": "elimina", "quale": "ieri", "minore": chi})
+        verifica(f"cassetto_gestisci(elimina, ieri, minore=«{chi}»): niente eliminato",
+                 not r.get("ok") and intatti(), r)
+    for chi in ("mia figlia Bianca", "la mia figlia Bianca", "Bianca Rossi", "Biànca"):
+        r = call(ctx, "allegato_leggi", {"cassetto": "storia", "minore": chi})
+        verifica(f"il tutore con «{chi}»: il file della figlia", r.get("ok")
+                 and "Napoleone" in r.get("contenuto", ""), r)
+    # 2. Argomenti in più: solo l'elenco chiuso; gli altri tornano al registro, correggibili
+    ctx = ctx_per(cas)
+    ctx.regole = []
+    from calliope.allegati import Allegati
+    ctx.allegati = Allegati(4)
+    ctx.allegati.aggiungi(prepara(A.pdf([A.BOLLETTA]), "bolletta luce.pdf", persona="dario"))
+    for nome, args in (("allegato_leggi", {"pagina": 3}), ("allegato_leggi", {"numero": 1}),
+                       ("allegato_leggi", {"foglio": "Spese"}),
+                       ("cassetto_gestisci", {"azione": "tieni", "quale": "", "file": "C3"}),
+                       ("cassetto_gestisci", {"azione": "elimina", "quale": "C2",
+                                              "conferma": True}),
+                       ("cassetto_gestisci", {"azione": "tieni", "quale": "C1",
+                                              "cartella": "Bollette"})):
+        ctx.regole = []
+        r = call(ctx, nome, args)
+        verifica(f"{nome}({args}): errore correggibile del registro, niente letto né fatto",
+                 not r.get("ok") and r.get("correggibile") is True
+                 and "tool_argomenti_non_validi" in ctx.regole and intatti()
+                 and "340" not in json.dumps(r), (r, ctx.regole))
+    ctx.allegati = Allegati(4)
+    ctx.regole = []
+    r = call(ctx, "allegato_leggi", {"quando": "ieri"})
+    verifica("allegato_leggi(quando=«ieri») senza file nella conversazione: il cassetto, ieri",
+             r.get("ok") and "cassetto_argomento_in_piu" in ctx.regole, r)
+    # 3. Parentela dentro la richiesta: il file di chi parla solo se le parole lo trovano
+    for q, ok in (("la pagella di mio figlio", True), ("la pagella di mio figlio di ieri", True),
+                  ("la foto della nonna di ieri", False), ("il file di mia moglie di ieri", False),
+                  ("il file delle zie di ieri", False), ("il file del bimbo di ieri", False),
+                  ("il file dei miei genitori di ieri", False),
+                  ("il file della mia consorte di ieri", False),
+                  ("il file dei nipoti di ieri", False), ("il file della bambina di ieri", False)):
+        ctx = ctx_per(cas)
+        ctx.regole = []
+        r = call(ctx, "allegato_leggi", {"cassetto": q})
+        testo = json.dumps(r, ensure_ascii=False)
+        regola = "cassetto_persona_nella_richiesta" in ctx.regole
+        if ok:
+            verifica(f"allegato_leggi(cassetto=«{q}»): il file di chi parla che le parole trovano",
+                     r.get("ok") and "Voti" in testo and regola, (r, ctx.regole))
+        else:
+            verifica(f"allegato_leggi(cassetto=«{q}»): rifiutato (regola nel registro)",
+                     not r.get("ok") and "340" not in testo and regola, (r, ctx.regole))
+    ctx = ctx_per(cas)
+    r = call(ctx, "cassetto_gestisci", {"azione": "elimina", "quale": "il file di mia moglie"})
+    verifica("cassetto_gestisci(elimina, «il file di mia moglie»): niente eliminato",
+             not r.get("ok") and intatti(), r)
+
+    class ConCognome(Speakers):
+        users = {"Dario": PERSONE["Dario"], "Teodora Rossi": PERSONE["Teodora"]}
+
+        def get(self, n):
+            return PERSONE["Teodora"] if n == "Teodora Rossi" else PERSONE.get(n)
+
+        def known_speakers(self):
+            return ["Dario", "Teodora Rossi"]
+    ctx = ctx_per(cas)
+    ctx.speakers = ConCognome()
+    ctx.regole = []
+    r = call(ctx, "allegato_leggi", {"cassetto": "il file di Teodora di ieri"})
+    verifica("«il file di Teodora di ieri» con il profilo «Teodora Rossi»: rifiutato",
+             not r.get("ok") and "340" not in json.dumps(r)
+             and "cassetto_persona_nella_richiesta" in ctx.regole, (r, ctx.regole))
+    cas.close()
+    # 4. La domanda prima di eliminare o tenere, se la frase nomina un'altra persona
+    cfg = Config()
+    cfg.storia_inattiva_s = 0
+    for frase, args, chiede in (
+            ("Elimina il file che mia moglie ti ha mandato ieri.",
+             {"azione": "elimina", "quale": "ieri"}, True),
+            ("Elimina il file che Teodora ti ha mandato ieri.",
+             {"azione": "elimina", "quale": "ieri"}, True),
+            ("Elimina la pagella di mia figlia.", {"azione": "elimina", "quale": "pagella"}, True),
+            ("Tieni il file che mia moglie ti ha mandato ieri.",
+             {"azione": "tieni", "quale": "ieri"}, True),
+            ("Elimina il file che ti ho mandato ieri.", {"azione": "elimina", "quale": "ieri"},
+             False),
+            ("Tienili ancora una settimana, sono di mia moglie.",
+             {"azione": "ancora", "quale": "tutti"}, False)):
+        cas, _ = nuovo()
+        a = cas.metti("dario", b"Preventivo: 340 euro.", "preventivo.txt", "testo")
+        cas.ora.avanti(1)
+        p = cas.metti("dario", b"Voti.", "pagella figlia.txt", "testo")
+        b = Brain(cfg, build_registry(allegati=True, cassetto=True, archivio=True),
+                  ctx_per(cas))
+        b.tool_ctx.cassetto = cas
+        chiamata = [("calls", [{"id": "c1", "name": "cassetto_gestisci", "arguments": args}])]
+        b.backend = BackendFinto([chiamata, [("text", "Fatto.")], chiamata,
+                                  [("text", "Fatto.")]])
+        out = "".join(b.stream_reply(frase, "familiare"))
+        prima = (cas.prendi("dario", a) is not None, cas.prendi("dario", p) is not None)
+        if chiede:
+            regola = "politica_cassetto_altra_persona" in b.rules_fired()
+            "".join(b.stream_reply("Sì.", "familiare"))
+            dopo = (cas.prendi("dario", a) is not None, cas.prendi("dario", p) is not None)
+            verifica(f"«{frase}»: prima la domanda (niente fatto), al «sì» la chiamata parte",
+                     prima == (True, True) and regola and "?" in out and dopo != (True, True),
+                     (out, b.rules_fired(), prima, dopo))
+        else:
+            verifica(f"«{frase}»: nessuna domanda in più", "politica_cassetto_altra_persona"
+                     not in b.rules_fired() and prima != (True, True)
+                     or args["azione"] == "ancora", (out, b.rules_fired(), prima))
+        cas.close()
+    # 5. Le forme delle azioni non prendono i nomi; «tienimeli» sì
+    from calliope.tools.allegati import chiesto_al_cassetto
+    for frase, atteso in (("Ritrovami il rinnovo del contratto di ieri.", False),
+                          ("Leggimi il PDF del prolungamento.", False),
+                          ("Cerca la ricetta della conserva di ieri.", False),
+                          ("Leggimi il file che ha mandato Salva.", False),
+                          ("Tienimeli tutti.", True), ("Rinnovali per un'altra settimana.", True),
+                          ("Prolungali.", True), ("Salva tutto.", True), ("Conservali.", True)):
+        verifica(f"chiesto_al_cassetto(«{frase}») = {atteso}",
+                 chiesto_al_cassetto(frase) is atteso)
 
 
 # ─────────────────────────── tool, permessi, riavvio, busta ───────────────────────────
@@ -849,6 +1000,7 @@ if __name__ == "__main__":
     prova_azioni()
     prova_tool()
     prova_minore_non_persona()
+    prova_seconda_revisione()
     prova_politica_e_busta()
     prova_ciclo()
     prova_server()

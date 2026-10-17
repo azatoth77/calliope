@@ -163,6 +163,10 @@ class Classe:
     # Il nome della regola nel registro quando `verbo_sempre` ferma la chiamata (17/10, #58:
     # per cassetto_gestisci «tieni» e «ancora» non sono cancellazioni)
     regola_verbo_sempre: str = "politica_cancellazione_non_chiesta"
+    # f(testo, args, ctx) → (regola, domanda) o None: una domanda prima di eseguire anche quando
+    # tutto il resto direbbe di sì (17/10, #58: cassetto_gestisci con un'altra persona nella
+    # frase). Al «sì» alla stessa domanda la chiamata parte
+    chiedi_se: object = None
     # L'argomento che, con un valore, cambia una voce già messa invece di crearne una
     # (timer_imposta, promemoria_imposta: `cambia`). Anche con la conversazione pulita il
     # cambio si esegue solo se la frase ha le parole del tool (`verbi`: «aggiungi», «togli»,
@@ -2107,6 +2111,15 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
             d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
     else:
         d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
+    # Una domanda in più prima di eseguire (Classe.chiedi_se, 17/10): non al «sì» alla domanda
+    if d.esito == "esegui" and t is not None and callable(cl.chiedi_se) and not (
+            _proposta(t, name) and (consenso(t.testo) or t.sfida)):
+        try:
+            extra = cl.chiedi_se(t.testo or "", args or {}, ctx)
+        except Exception:  # noqa: BLE001 — nel dubbio, la decisione di sempre
+            extra = None
+        if extra:
+            d = Decisione("conferma", extra[0], extra[1])
     # La modalità sviluppo (08/10, calliope/sviluppo.py): i passi interni dello sviluppo aperto
     # di chi parla, riconosciuto, non chiedono «C'è di mezzo il lavoro di un agente…» a ogni
     # frase: l'intento è lo sviluppo, aperto con la voce da chi amministra, e il bersaglio è il
