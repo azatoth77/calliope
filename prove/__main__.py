@@ -828,9 +828,11 @@ LEGAMI = [
     ("calliope/stato.py", ["prova_pause.py", "prova_fine_turno.py"]),
     ("calliope/satellite/", ["prova_pause.py", "prova_frase_lunga.py", "prova_fine_turno.py"]),
     ("calliope/system1/", ["prova_fine_turno.py", "prova_preselezione.py"]),
-    # La preselezione dei tool (15/10): dal 16/10 (#25) l'ombra è tolta e il richiamo sul banco è
-    # un avviso, quindi non è più legata a calliope/tools/; resta il controllo che i ganci non
-    # tornino nel ciclo, in main, in stato e nella configurazione
+    # La preselezione dei tool (15/10): le descrizioni dei tool sono i suoi prototipi. Dal 16/10
+    # (#25) il richiamo sul banco è un avviso, ma la copertura dei tool, il nucleo di serie, le
+    # frasi a «nucleo» e i casi a «tutti» dipendono ancora dal registro dei tool; in più il
+    # controllo che i ganci non tornino nel ciclo, in main, in stato e nella configurazione
+    ("calliope/tools/", ["prova_preselezione.py"]),
     ("calliope/ciclo.py", ["prova_preselezione.py"]),
     ("calliope/config.py", ["prova_preselezione.py"]),
     ("prove/manuali/preselezione_dgx.py", ["prova_preselezione.py"]),

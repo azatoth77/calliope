@@ -156,10 +156,20 @@ def prova_struttura():
 def prova_tolta():
     """Dal 16/10 (issue #25, scelta B): l'ombra nel ciclo è tolta, il decisore resta come
     strumento di misura (prove/manuali/preselezione_dgx.py --registro)."""
-    for rel in ("calliope/ciclo.py", "calliope/main.py", "calliope/config.py"):
+    for rel in ("calliope/ciclo.py", "calliope/main.py"):
         src = (RADICE / rel).read_text(encoding="utf-8")
         righe = [r.strip() for r in src.splitlines() if "preselezione" in r]
         verifica(f"tolta: nessun «preselezione» in {rel}", not righe, str(righe[:3]))
+    # In config.py solo le strutture: il testo può ancora nominare le chiavi tolte (per esempio
+    # in CHIAVI_TOLTE, che le segnala a chi le ha ancora nel locale)
+    from calliope import config as cm
+    from dataclasses import fields
+    resti = ([f.name for f in fields(cm.Config) if "preselezione" in f.name]
+             + [k for k in cm.VALIDATORI if "preselezione" in k]
+             + [k for k in cm.LIMITI if "preselezione" in k]
+             + [k for sez in cm.SEZIONI.values() for k in sez if "preselezione" in k])
+    verifica("tolta: nessuna preselezione fra campi, VALIDATORI, LIMITI e SEZIONI di config.py",
+             not resti, str(resti))
     src = (RADICE / "calliope" / "stato.py").read_text(encoding="utf-8")
     verifica("tolta: niente sezione della preselezione in calliope stato --turni",
              "preselezione" not in src)
@@ -207,9 +217,14 @@ def prova_tolta():
     ok = fermo is None and cfg is not None and cfg.llm_temperature == 0.5
     verifica("locale di prima: l'avvio non si ferma e il resto del locale vale", ok,
              "" if ok else repr(fermo))
-    ok = ("Chiave sconosciuta «preselezione_tool»" in log
-          and "Chiave sconosciuta «preselezione_margine»" in log)
-    verifica("locale di prima: «preselezione_tool» segnalata come chiave sconosciuta", ok,
+    # Due forme ammesse: «Chiave sconosciuta «…» … ignorata» o, con CHIAVI_TOLTE (PR #126),
+    # «Chiave «…» in …: tolta … Ignorata: toglila dal file»
+    def segnalata(chiave):
+        return any(f"«{chiave}»" in r and ("Chiave sconosciuta" in r and "ignorata" in r
+                                           or "tolta" in r and "Ignorata" in r)
+                   for r in log.splitlines())
+    ok = segnalata("preselezione_tool") and segnalata("preselezione_margine")
+    verifica("locale di prima: le chiavi tolte segnalate (sconosciute o «tolta»)", ok,
              "" if ok else log[-300:])
     verifica("locale di prima: nessun campo nuovo nato dalla chiave",
              cfg is not None and not hasattr(cfg, "preselezione_tool"))

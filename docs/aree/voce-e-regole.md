@@ -1968,7 +1968,8 @@ le opzioni e le misure sono nella ricerca
     75–180 ms sulla CPU del portatile carico.
   - **Riserva**: il banco l'ho scritto conoscendo le descrizioni. Il margine va confermato sui
     turni veri.
-- **Da lanciare sulla DGX**: `prove/manuali/preselezione_dgx.py`, comandi in testa al file.
+- *[Storico, 15/10: lanciato il 15/10 mattina, esiti nel punto sotto.]* **Da lanciare sulla DGX**:
+  `prove/manuali/preselezione_dgx.py`, comandi in testa al file.
   - `--registro`: il richiamo sui turni veri, senza modello;
   - `--latenza`, a Calliope inattiva: «tutti» contro «nucleo» col 26B, cache calda, cambio e
     ritorno, e il lavoro del server fuori dal modello.
@@ -1993,8 +1994,9 @@ le opzioni e le misure sono nella ricerca
   - Per rimisurare resta `prove/manuali/preselezione_dgx.py --registro`, senza modello; il nucleo
     da provare ora si passa con `--nucleo`.
   - `prova_preselezione` tiene il banco, ma il richiamo 100 % ora è un avviso: una descrizione
-    cambiata non fa più diventare rossa una misura che non si usa. Non è più legata a
-    `calliope/tools/`.
+    cambiata non fa più diventare rossa la prova per il solo richiamo. Resta legata a
+    `calliope/tools/`, perché la copertura degli 85 tool, il nucleo di serie, le almeno 40 frasi
+    a «nucleo» e i casi «Blocca il computer» e la fattura dipendono dal registro dei tool.
   - Un locale che ha ancora `preselezione_tool` (sulla DGX `spenta`) o un altro campo tolto dà
     solo «Chiave sconosciuta … ignorata»: l'avvio non si ferma. Va tolto dal locale insieme
     all'aggiornamento.
