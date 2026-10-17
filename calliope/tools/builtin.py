@@ -1721,7 +1721,13 @@ def _ricorda(ctx: ToolContext, fatto: str, per_tutti=False, nascita: str = "") -
         note_rule(ctx, "nascita_non_capita")
     if proposta:
         proposta["argomenti"]["nascita"] = nascita       # come detta (il «sì» la ripete)
-        frase = f"Me lo ricordo. {_NASCITA_DOMANDA}"
+        # Gli anni nella frase (17/10, issue #70, 26B sulla DGX, 1 giro su 3): «E dimmi anche
+        # quanti anni ho?», poi «…sono nato il 4 luglio del 1977» → ricorda con la nascita, e la
+        # risposta pronta chiedeva solo se salvarla, senza l'età chiesta. Gli anni li conta il
+        # programma dalla data passata, come al «sì»
+        anni = minori.eta(d)
+        frase = (f"Me lo ricordo: hai {anni} anni. {_NASCITA_DOMANDA}" if anni is not None
+                 else f"Me lo ricordo. {_NASCITA_DOMANDA}")
         out.update(conferma=frase, risposta_finale=frase, in_sospeso=proposta,
                    fatto="ricordato; la data di nascita NON è ancora nel profilo")
     return out

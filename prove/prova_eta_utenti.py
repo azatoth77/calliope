@@ -325,6 +325,10 @@ verifica("(b) ricorda con nascita: ricordo salvato, domanda «Lo salvo anche com
          and sosp.get("tool") == "ricorda" and sosp.get("argomenti") == ARGS
          and luca.nascita is None and "nascita_proposta" in ctx.regole
          and any("1977" in f for f in MEM.facts(luca.id)), str(r))
+# 17/10 (#70, 26B): «E dimmi anche quanti anni ho?» … «sono nato il 4 luglio del 1977» →
+# ricorda con la nascita; la frase pronta chiedeva solo se salvarla, senza l'età
+verifica("(b) ricorda con nascita: nella frase anche gli anni contati dal programma",
+         f"hai {anni(n77)} anni" in r.get("risposta_finale", ""), r.get("risposta_finale"))
 r = chiama_ctx(ctx, "ricorda", ARGS)
 verifica("(b) nella stessa risposta non si salva nel profilo", luca.nascita is None, str(r))
 salv = SPEAKERS.salvataggi
