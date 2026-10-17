@@ -313,7 +313,10 @@ class Cancelli:
                 return False
             s.aperto, s.esito = False, "silenzio"
         self._salva()
-        avvisa = str(getattr(self.cfg, "minori_pericolo_silenzio", "avvisa")) == "avvisa"
+        # Solo «niente» spegne l'avviso (17/10, #83): un refuso («Avvisa», «avviso») in una
+        # Config costruita a mano non lo spegne più (dai file lo ferma già il validatore)
+        avvisa = str(getattr(self.cfg, "minori_pericolo_silenzio", "avvisa")
+                     or "avvisa").strip().lower() != "niente"
         self.log(f"   [MINORI] segnale da verificare per {s.nome} senza risposta: "
                  + ("avviso non urgente ai tutori" if avvisa else "nessun avviso"))
         if self.registra is not None:

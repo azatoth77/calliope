@@ -149,6 +149,7 @@ A_SECCO = [
     ("prova_eventi_guardia.py", [], "la guardia dei riletti e il criterio di E1 (15/10, issue #11): la base dei giorni d'ombra e l'avviso oltre metà con eventi: attivo su turni finti (contrari: sotto la soglia, pochi turni, base piccola, solo ombra; i riletti stimati), in calliope stato --turni e nella pagina di sempre; eventi_ombra.proiezione_diversa senza i motivi dichiarati; sul ciclo vero in ombra parlato e differenze non a zero per costruzione, la proiezione sì, e lo stesso campo con attivo"),
     ("prova_config.py", [], "calliope.yaml, variabili d'ambiente, chiavi sbagliate"),
     ("prova_config_satellite.py", [], "microfono, casse e webcam nella sezione satellite, ripiego con avviso"),
+    ("prova_config_modi.py", [], "campi a modi (17/10, #83): ogni campo a modi con il suo validatore, maiuscole, altro genere con l'avviso gentile, valori sbagliati con l'avviso e il valore di serie, «no» di YAML, locale della DGX invariato, Cancelli che non spengono l'avviso ai tutori per un refuso, controllo dei campi nuovi"),
     ("prova_contesto.py", [], "finestra di contesto dal setup (modello, memoria, tempo) e token veri a ogni turno"),
     ("prova_conversazioni.py", [], "conversazione come oggetto, archivio delle conversazioni (ricerca ibrida, visibilità), compressione vicino al limite, fine e ripresa, modo cronologico di conversazione_cerca (08/10)"),
     ("prova_ollama_carico.py", [], "modelli residenti in Ollama (06/10, e2e): limite letto o assunto, avviso quando Calliope ne usa di più, embedding delle conversazioni solo senza scacciare nessuno (inattiva, keep_alive 0, ricerca per parole con Ollama pieno)"),
@@ -835,6 +836,9 @@ LEGAMI = [
     ("calliope/tools/", ["prova_preselezione.py"]),
     ("calliope/ciclo.py", ["prova_preselezione.py"]),
     ("calliope/config.py", ["prova_preselezione.py"]),
+    # I campi a modi (17/10, #83): validatori, controllo dei campi nuovi, Cancelli
+    ("calliope/config.py", ["prova_config_modi.py"]),
+    ("calliope/cancelli.py", ["prova_config_modi.py"]),
     ("prove/manuali/preselezione_dgx.py", ["prova_preselezione.py"]),
     ("calliope/stato.py", ["prova_preselezione.py"]),
     ("calliope/main.py", ["prova_preselezione.py"]),
