@@ -209,55 +209,85 @@ _NS = {"content": "http://purl.org/rss/1.0/modules/content/",
        "dc": "http://purl.org/dc/elements/1.1/"}
 _ATOM = "{http://www.w3.org/2005/Atom}"
 
-# Caratteri letti di un campo HTML (#133, 17/10): il sommario se ne tiene 600, un tag con un
-# srcset di trenta immagini ne fa ~3 000; il tetto tiene breve anche il caso peggiore del
-# parser su un input costruito apposta (dato non fidato)
-HTML_MAX = 10_000
-# In coda, ciò che il parser non ha chiuso: un tag o un commento troncato si butta (porta
-# solo attributi), il resto («x<y» senza «>») resta testo
-_TAG_TRONCO = re.compile(r"^<(?:!--|[A-Za-z][^<>]*=)")
+# Caratteri letti di un campo HTML (#133, 17/10): il sommario se ne tiene 600, ma un tag
+# enorme in testa (un'immagine in data: base64, un srcset di trenta immagini) non deve far
+# perdere il paragrafo dopo; il parser è lineare (misure nella prova), il tetto tiene breve
+# anche il caso peggiore su un input costruito apposta (dato non fidato)
+HTML_MAX = 100_000
+# In coda, ciò che il parser non ha chiuso: un tag troncato (nome e attributi in ASCII, almeno
+# uno con «=», anche con un valore fra virgolette aperto) o un commento troncato si buttano; tutto il resto resta testo
+# («x<y», «Saldi <a partire da 5 euro, qualità=prezzo»). Senza quantificatori annidati che si
+# sovrappongono: ogni attributo comincia dopo uno spazio e il valore non contiene spazi o è
+# fra virgolette
+_TAG_TRONCO = re.compile(
+    r"^<(?:!--.*|[A-Za-z][\w:.-]*(?:\s+[\w:.-]+(?:\s*=\s*(?:\"[^\"]*\"?|'[^']*'?|"
+    r"[^\s\"'<>]*))?)*\s*/?)$", re.S | re.A)
 # Ripiego se il parser solleva un'eccezione: lineare anche con molti «<» senza «>»
 _TAG_RIPIEGO = re.compile(r"<[^<>]*>")
+# Elementi saltati col loro contenuto: non sono testo che si legge
+_SALTATI = frozenset({"script", "style", "noscript", "template", "iframe"})
+# Elementi senza chiusura: un attributo «hidden» su questi non nasconde altro
+_VUOTI = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta",
+                    "param", "source", "track", "wbr"})
+_DISPLAY_NONE = re.compile(r"display\s*:\s*none", re.I)
+
+
+def _troncato(resto: str) -> bool:
+    return resto.startswith("<!--") or ("=" in resto and bool(_TAG_TRONCO.match(resto)))
+
+
+def _nascosto(attrs) -> bool:
+    for k, v in attrs:
+        if k == "hidden" or (k == "style" and v and _DISPLAY_NONE.search(v)):
+            return True
+    return False
 
 
 class _SoloTesto(HTMLParser):
-    """Tiene i soli dati di testo, con le entità risolte; salta script e style; ogni tag
-    diventa uno spazio (come faceva la regola di prima: «<b>Ro</b>ma» → «Ro ma»)."""
+    """Tiene i soli dati di testo, con le entità risolte; salta script, style, noscript,
+    template, iframe e gli elementi con «hidden» o «display:none»; ogni tag diventa uno
+    spazio (come faceva la regola di prima: «<b>Ro</b>ma» → «Ro ma»)."""
 
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.pezzi: list[str] = []
-        self.salta = 0
+        self.salta_tag: str | None = None   # l'elemento saltato che si sta attraversando
+        self.salta_prof = 0                 # quanti dello stesso nome aperti dentro
 
     def handle_starttag(self, tag, attrs):
-        if tag in ("script", "style"):
-            self.salta += 1
+        if self.salta_tag is None:
+            if tag in _SALTATI or (tag not in _VUOTI and _nascosto(attrs)):
+                self.salta_tag, self.salta_prof = tag, 1
+        elif tag == self.salta_tag:
+            self.salta_prof += 1
         self.pezzi.append(" ")
 
     def handle_startendtag(self, tag, attrs):
         self.pezzi.append(" ")
 
     def handle_endtag(self, tag):
-        if tag in ("script", "style") and self.salta:
-            self.salta -= 1
+        if tag == self.salta_tag:
+            self.salta_prof -= 1
+            if self.salta_prof <= 0:
+                self.salta_tag = None
         self.pezzi.append(" ")
 
     def handle_data(self, data):
-        if not self.salta:
+        if self.salta_tag is None:
             self.pezzi.append(data)
 
 
 def _senza_tag(t: str) -> str:
     """Un passaggio del parser HTML della libreria standard (#133): toglie i tag di qualunque
     lunghezza, mentre un «<» che non apre un tag («<5 gradi») resta testo. Non si chiama
-    close(): la coda non chiusa la decide `_TAG_TRONCO`, uguale in ogni versione di Python."""
+    close(): la coda non chiusa la decide `_troncato`, uguale in ogni versione di Python."""
     p = _SoloTesto()
     try:
         p.feed(t)
     except Exception:  # noqa: BLE001 — il testo è non fidato: mai un'eccezione al lettore
         return html.unescape(_TAG_RIPIEGO.sub(" ", t))
     resto = p.rawdata
-    if resto and not p.salta and not _TAG_TRONCO.match(resto):
+    if resto and p.salta_tag is None and not _troncato(resto):
         p.pezzi.append(html.unescape(resto))
     return "".join(p.pezzi)
 

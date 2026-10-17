@@ -236,15 +236,33 @@ for testo, atteso in [
         ("AT&amp;amp;T resta scritto così", "AT&amp;T resta scritto così"),
         ("x<y e z senza chiusura", "x<y e z senza chiusura"),
         ("Il porto riapre. <img src=\"https://esempio.invalid/troncato", "Il porto riapre."),
-        ("Il porto riapre. <!-- commento senza fine", "Il porto riapre.")]:
+        ("Il porto riapre. <!-- commento senza fine", "Il porto riapre."),
+        ('Il porto riapre. <img srcset="https://esempio.invalid/a.jpg 100w, https://esempio',
+         "Il porto riapre."),
+        ("Saldi <a partire da 5 euro, il rapporto qualità=prezzo cresce.",
+         "Saldi <a partire da 5 euro, il rapporto qualità=prezzo cresce."),
+        ("<noscript>Attiva JavaScript</noscript><template>t</template><iframe>i</iframe>Testo",
+         "Testo"),
+        ('<div hidden>nascosto <div>anche</div> questo</div><p style="display: none">no</p>Sì',
+         "Sì"),
+        ('<img hidden src="https://esempio.invalid/a.jpg">Il porto riapre.', "Il porto riapre.")]:
     verifica(f"testo semplice: «{testo[:40]}»", lettore.testo_semplice(testo) == atteso,
              repr(lettore.testo_semplice(testo)))
+# Un tag enorme in testa (un'immagine in data: base64 di 60 000 caratteri) non fa perdere il
+# paragrafo: il tetto HTML_MAX è più largo
+v = lettore.testo_semplice('<img src="data:image/png;base64,' + "A" * 60_000 + '"><p>'
+                           + PARAGRAFO + "</p>")
+verifica("tag lungo: un'immagine data: di 60 000 caratteri e poi il paragrafo",
+         v == PARAGRAFO, repr(v[:80]))
 # Dato non fidato: niente tempi quadratici su input costruiti apposta (2 MB per campo, più del
 # tetto HTML_MAX; e il parser da solo su 200 000 caratteri, senza tetto)
 lento = []
 for nome, x in [("«<» senza «>»", "<" * 2_000_000), ("«<a » ripetuto", "<a " * 700_000),
                 ("attributo aperto", '<img src="' + "x" * 2_000_000),
-                ("«&lt;a » ripetuto", "&lt;a " * 400_000)]:
+                ("«&lt;a » ripetuto", "&lt;a " * 400_000),
+                ("attributi senza fine", "<a" + ' b="c' * 400_000),
+                ("attributi senza «>»", "<a" + " b=c" * 500_000 + " !"),
+                ("«hidden» annidati", "<div hidden>" * 150_000)]:
     t0 = time.perf_counter()
     lettore.testo_semplice(x)
     dt_s = time.perf_counter() - t0
@@ -255,7 +273,8 @@ for nome, x in [("«<» senza «>»", "<" * 2_000_000), ("«<a » ripetuto", "<a
         lento.append(f"{nome}: {dt_s:.2f} s, parser {dt_p:.2f} s")
 verifica("tag lungo: input malevoli grandi letti in fretta (< 0,5 s col tetto, < 2 s il parser)",
          not lento, "; ".join(lento))
-# La rete in pulizia: un sommario che porta ancora attributi HTML si scarta (contato)
+# La rete in pulizia: un sommario che porta ancora attributi HTML col loro valore si scarta
+# (contato); si guarda il sommario già ripulito, come si salva
 for somm, atteso, regole in [
         ('img srcset="https://esempio.invalid/a.jpg 800w" Il porto riapre.', "",
          ["notizie_sommario_html"]),
@@ -264,8 +283,12 @@ for somm, atteso, regole in [
         ("La classe di Ada vince il premio di scienze.",
          "La classe di Ada vince il premio di scienze.", []),
         ("Il corso spiega src e href ai ragazzi di Borgo Lieto.",
-         "Il corso spiega src e href ai ragazzi di Borgo Lieto.", [])]:
-    s, r = pulizia.sommario_per_voce(somm, "Il porto riapre domani", "Bit Lumen")
+         "Il corso spiega src e href ai ragazzi di Borgo Lieto.", []),
+        ('Il parametro src="foto.jpg" in un articolo sull\'HTML per i ragazzi.',
+         'Il parametro src="foto.jpg" in un articolo sull\'HTML per i ragazzi.', []),
+        ("Nel corso si scrive src= e poi il nome del file.",
+         "Nel corso si scrive src= e poi il nome del file.", [])]:
+    s, r = pulizia.sommario_senza_html(somm)
     verifica(f"sommario html: «{somm[:40]}»", (s, r) == (atteso, regole), f"{s!r} {r}")
 # Nell'indice: la regola si conta come le altre, la voce resta col solo titolo
 _f_bit = Feed("Bit Lumen", "tecnologia", "https://bit.esempio.invalid/feed.xml")
@@ -275,12 +298,27 @@ _n, _, _conta = _svc_h._inserisci(_f_bit, [
      "sommario": 'img srcset="https://esempio.invalid/a.jpg 800w" class="foto"',
      "data_grezza": rfc(ADESSO - 600)},
     {"titolo": "Il porto di Borgoverde riapre", "link": "https://bit.esempio.invalid/2",
-     "sommario": PARAGRAFO, "data_grezza": rfc(ADESSO - 600)}], ADESSO)
+     "sommario": PARAGRAFO, "data_grezza": rfc(ADESSO - 600)},
+    # «data_src=» non è un attributo per la rete prima della pulizia, «data src=» dopo sì
+    {"titolo": "Borgo Lieto, il museo apre", "link": "https://bit.esempio.invalid/3",
+     "sommario": "data_src=/foto/museo.jpg Il museo apre sabato.",
+     "data_grezza": rfc(ADESSO - 600)},
+    # I segni «<» e «>» veri: le parole in mezzo arrivano (ripulisci_testo le mangiava)
+    {"titolo": "Allerta <gialla> sul Lumenese", "link": "https://bit.esempio.invalid/4",
+     "sommario": "temperature <5 gradi e venti > 30 km/h", "data_grezza": rfc(ADESSO - 600)}],
+    ADESSO)
 _righe = dict(_svc_h.db.execute("SELECT link, sommario FROM voci").fetchall())
+_titoli = dict(_svc_h.db.execute("SELECT link, titolo FROM voci").fetchall())
 verifica("sommario html: nell'indice la voce resta col titolo, la regola è contata",
-         _n == 2 and _righe.get("https://bit.esempio.invalid/1") == ""
+         _n == 4 and _righe.get("https://bit.esempio.invalid/1") == ""
          and _righe.get("https://bit.esempio.invalid/2") == PARAGRAFO
-         and _conta.get("notizie_sommario_html") == 1, f"{_n} {_righe} {_conta}")
+         and _righe.get("https://bit.esempio.invalid/3") == ""
+         and _conta.get("notizie_sommario_html") == 2, f"{_n} {_righe} {_conta}")
+verifica("segni veri: «<5 gradi e venti > 30» e «<gialla>» tengono le parole (senza i segni)",
+         _righe.get("https://bit.esempio.invalid/4") == "temperature 5 gradi e venti 30 km/h"
+         and _titoli.get("https://bit.esempio.invalid/4") == "Allerta gialla sul Lumenese",
+         f"{_righe.get('https://bit.esempio.invalid/4')!r} "
+         f"{_titoli.get('https://bit.esempio.invalid/4')!r}")
 _svc_h.close()
 # Le voci già salvate sporche (INSERT OR IGNORE non le riscrive): all'apertura si tolgono e i
 # loro feed si riscaricano per intero (ETag dimenticato); le altre restano
@@ -320,6 +358,34 @@ with tempfile.TemporaryDirectory() as _dir_db:
     verifica("voci vecchie: alla seconda apertura niente da togliere",
              _n_log == 1 and len(_log) == 1 and "tolte 1 voci" in _log[0], str(_log))
     _s.close()
+# Contrario: una voce che passa la rete all'inserimento non si cancella mai all'apertura (lo
+# stesso testo e lo stesso criterio nei due punti), riaperta più volte, e l'ETag resta
+with tempfile.TemporaryDirectory() as _dir_db:
+    _db = os.path.join(_dir_db, "notizie.db")
+    _log = []
+    _s = Notizie(Config(), [_f_bit], _db, log=_log.append, orologio=lambda: ADESSO)
+    _s._inserisci(_f_bit, [
+        {"titolo": f"Voce di prova numero {i}", "link": f"https://bit.esempio.invalid/c{i}",
+         "sommario": somm, "data_grezza": rfc(ADESSO - 600)}
+        for i, somm in enumerate([
+            "data_src=/foto/museo.jpg Il museo apre sabato.",
+            "Il `src`=/foto.jpg del museo.",
+            "my_class='foto grande' Il museo apre.",
+            'Il parametro src="foto.jpg" in un articolo sull\'HTML.',
+            PARAGRAFO])], ADESSO)
+    _s.db.execute("INSERT INTO feed(url, testata, tema, etag, modificato) VALUES(?,?,?,?,?)",
+                  (_f_bit.url, "Bit Lumen", "tecnologia", '"e1"', "x"))
+    _s.db.commit()
+    _prima = _s.db.execute("SELECT id, sommario FROM voci ORDER BY id").fetchall()
+    _s.close()
+    for _ in range(3):
+        _s = Notizie(Config(), [_f_bit], _db, log=_log.append, orologio=lambda: ADESSO)
+        _dopo = _s.db.execute("SELECT id, sommario FROM voci ORDER BY id").fetchall()
+        _etag = _s.db.execute("SELECT etag FROM feed").fetchone()[0]
+        _s.close()
+    verifica("voci vecchie, contrario: ciò che passa la rete non si cancella mai (3 aperture)",
+             not _log and _dopo == _prima and len(_prima) == 5 and _etag == '"e1"',
+             f"{_log} {_dopo}")
 for tit, link, atteso in [
         ("Il caffè del mattino", "https://www.esempio.it/episodes/caffe-13-10", True),
         ("La newsletter di oggi", "https://www.esempio.it/newsletter/oggi", True),

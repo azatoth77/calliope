@@ -665,39 +665,67 @@ solo il titolo e ne ha inventato il senso; alle 23:05 dello stesso giorno 2 voci
 sezione erano così.
 
 - **`lettore.testo_semplice` con `html.parser`** della libreria standard (nessuna dipendenza
-  nuova): tiene solo i dati di testo con le entità risolte, salta `script` e `style`, ogni tag
-  diventa uno spazio come prima («<b>Ro</b>ma» → «Ro ma»). Un «<» che non apre un tag resta
-  testo («temperature <5 gradi e venti > 30 km/h» intero: la regola di prima ne mangiava un pezzo).
-  Il secondo passaggio per l'HTML scritto come `&lt;p&gt;` si fa con le «&» già risolte protette,
-  così le entità si risolvono una volta sola come prima («AT&amp;amp;T» → «AT&amp;T»).
-  `close()` non si chiama: la coda non chiusa la decide `_TAG_TRONCO` (un tag con attributi o un
-  commento troncati si buttano, «x<y» senza «>» resta), uguale in ogni versione di Python.
-- **Dato non fidato**: ogni campo si legge per i primi `HTML_MAX` 10 000 caratteri (il sommario
-  ne tiene 600; un `srcset` di trenta immagini ne fa ~3 000), così anche un caso peggiore del
-  parser resta breve; se il parser solleva un'eccezione, ripiego su `<[^<>]*>`, lineare anche con
-  molti «<» senza «>» (`<[^>]*>` non lo è). Misura sul portatile (Python 3.14): 2 MB di «<», di
-  «<a » ripetuto, di un attributo aperto e di `&lt;a ` ripetuto in meno di 0,02 s col tetto; il
-  parser senza tetto su 200 000 caratteri in meno di 0,15 s (il caso peggiore, tutti «<»).
-- **Rete in `pulizia.sommario_per_voce`**: regola `notizie_sommario_html`, un sommario che dopo il
-  lettore porta ancora `src=`, `srcset=`, `href=` o `class="…"` si scarta intero (la voce resta col
-  titolo, il modello sa che non c'è altro), contata come le altre `notizie_sommario_*` (entra nel
-  conto di #31). Contrari: «La classe di Ada vince…», «src e href» senza «=».
+  nuova): tiene solo i dati di testo con le entità risolte, ogni tag diventa uno spazio come
+  prima («<b>Ro</b>ma» → «Ro ma»). Salta col loro contenuto `script`, `style`, `noscript`,
+  `template`, `iframe` e gli elementi con `hidden` o `display:none` (mai quelli senza chiusura:
+  un `<img hidden>` non nasconde il testo dopo). Il secondo passaggio per l'HTML scritto come
+  `&lt;p&gt;` si fa con le «&» già risolte protette, così le entità si risolvono una volta sola
+  come prima («AT&amp;amp;T» → «AT&amp;T»). `close()` non si chiama: la coda non chiusa la
+  decide `_troncato`, uguale in ogni versione di Python. Un tag troncato (nome e attributi in
+  ASCII, almeno uno con «=», anche con un valore fra virgolette aperto) o un commento troncato
+  si buttano; il resto resta testo («x<y», «Saldi <a partire da 5 euro, il rapporto
+  qualità=prezzo cresce.»).
+- **Un «<» vero arriva al modello con le sue parole.** Nel lettore «temperature <5 gradi e venti
+  > 30 km/h» resta intero. Prima di `web.servizio.ripulisci_testo`, che toglie comunque i segni
+  «<» e «>», il servizio li fa diventare spazi (`servizio._segni`): così il suo
+  `<[^>]{0,200}>` non mangia più le parole in mezzo. Arriva «temperature 5 gradi e venti 30
+  km/h», e un titolo «Allerta <gialla> sul Lumenese» arriva come «Allerta gialla sul Lumenese».
+  Prima arrivavano «temperature 30 km/h» e «Allerta sul Lumenese». `ripulisci_testo` non si
+  tocca: i risultati di SearXNG restano come prima. *[Correzione del 17/10 dopo la revisione
+  della PR #137: la prima stesura diceva «intero» anche per il modello, ma valeva solo per il
+  lettore.]*
+- **Dato non fidato**: ogni campo si legge per i primi `HTML_MAX` 100 000 caratteri. Un'immagine
+  `data:` di 60 000 caratteri in testa non fa perdere il paragrafo dopo, e anche il caso
+  peggiore del parser resta breve. Se il parser solleva un'eccezione, il ripiego è `<[^<>]*>`,
+  lineare anche con molti «<» senza «>» (`<[^>]*>` non lo è). Misure sul portatile, con 11
+  input malevoli da 2 MB (molti «<», `<a ` e `&lt;a ` ripetuti, attributi aperti o senza «>»,
+  150 000 `<div hidden>` annidati, commenti, `</`, CDATA, script aperto): al più 0,09 s con
+  Python 3.14.6, 0,14 s col `html.parser` di 3.12.15+ e 0,13 s con quello di 3.12.3.
+- **Rete `notizie_sommario_html`** (`pulizia.sommario_senza_html`): un sommario che porta ancora
+  un attributo col suo valore si scarta intero, e la voce resta col titolo. Gli attributi sono
+  `src=`, `srcset=` e `href=` seguiti da `https:`, `/` o `data:`, oppure `class="…"` di sole
+  parole. La regola si conta come le altre `notizie_sommario_*` ed entra nel conto di #31.
+  Contrari: «La classe di Ada vince…», «src e href» senza «=», «src="foto.jpg"» o «src=» detti
+  in un articolo sull'HTML. La rete guarda il sommario **così come si salva**, dopo
+  `ripulisci_testo` e il taglio a 600 caratteri. *[Correzione del 17/10 dopo la revisione: prima
+  guardava il testo di prima della pulizia, e `ripulisci_testo` trasforma «data_src=» in «data
+  src=». Una voce così entrava, all'apertura risultava sporca e si cancellava a ogni avvio, con
+  l'ETag del feed dimenticato.]*
 - **Le voci già salvate**: l'indice inserisce con `INSERT OR IGNORE`, quindi non si sarebbero
-  riscritte per 7 giorni. All'apertura di `notizie.db` (`Notizie._togli_sommari_html`) le voci col
-  sommario che passa la stessa rete si cancellano e ETag e Last-Modified dei loro feed si
-  dimenticano: lo scarico successivo le riporta col paragrafo vero, se sono ancora nel feed.
-  Scelta perché è idempotente (nessun segno di versione, nessun effetto con il disco pulito) e
-  ridà il sommario, invece di lasciarlo vuoto fino alla scadenza; costa una scansione con `LIKE`.
-- **Non toccato**: `web.servizio._TAG` (`{0,200}`) per i risultati di SearXNG, che arrivano già
-  senza HTML dal motore (come dice la issue); per le notizie non conta più, il lettore toglie i
-  tag prima.
-- **Prove** (`prova_notizie`, § 2b): l'`<img>` di fantasia di 965 caratteri con un paragrafo in
-  CDATA, scritto come `&lt;img…&gt;` e in un Atom `summary type="html"` → solo il paragrafo; i
-  contrari («<5 gradi», `&lt;p&gt;`, `script` e `style` col contenuto, entità una volta sola,
-  coda troncata); quattro input malevoli da 2 MB a tempo; la rete con i contrari e la regola
-  contata da `_inserisci`; un `notizie.db` con una voce sporca, una pulita e un contrario
-  riaperto due volte. Su main 7 controlli falliscono e la prova si ferma (`_senza_tag` non c'è).
-- **Da fare sulla DGX** (criterio della issue): dopo `calliope aggiorna` e lo scarico successivo,
-  `sqlite3 notizie.db "select count(*) from voci where sommario like '%src=%' or sommario like
-  '%srcset%'"` deve dare 0; il log dice `[NOTIZIE] tolte N voci col sommario fatto di HTML` alla
-  prima apertura.
+  riscritte per 7 giorni. All'apertura di `notizie.db`, `Notizie._togli_sommari_html` cancella
+  le voci col sommario che passa la stessa rete, sullo stesso testo, e fa dimenticare ETag e
+  Last-Modified dei loro feed. Lo scarico successivo le riporta col paragrafo vero, se sono
+  ancora nel feed. Una voce inserita dopo l'unione non si cancella mai: la rete ha già guardato
+  quel testo. Senza segni di versione: col disco pulito non fa niente, e costa una scansione con
+  `LIKE`.
+- **Python della DGX** (3.12, `setup/linux/gestore.py`): `prova_notizie` lanciata sul portatile
+  col `html.parser` e il `_markupbase` di CPython 3.12.15+ (ramo 3.12) e di 3.12.3 (Ubuntu
+  24.04), presi dai sorgenti di CPython e caricati al posto di quelli della 3.14: tutta verde,
+  tempi compresi. Non è un interprete 3.12 vero (sul portatile non c'è), quindi va lanciata
+  anche sulla DGX dopo l'aggiornamento.
+- **Prove** (`prova_notizie`, § 2b):
+  - l'`<img>` di fantasia di 965 caratteri con un paragrafo, in CDATA, scritto come
+    `&lt;img…&gt;` e in un Atom `summary type="html"`: ne esce solo il paragrafo;
+  - l'immagine `data:` di 60 000 caratteri;
+  - i contrari: «<5 gradi», `&lt;p&gt;`, gli elementi saltati e quelli nascosti, entità risolte
+    una volta sola, code troncate, «Saldi <a partire…»;
+  - 7 input malevoli a tempo;
+  - la rete con i contrari, e da `_inserisci` la regola contata, «data_src=» preso dopo la
+    pulizia, i segni veri con le loro parole;
+  - un `notizie.db` con una voce sporca, una pulita e un contrario, riaperto due volte;
+  - il contrario della revisione: cinque voci inserite, riaperte tre volte, nessuna cancellata e
+    l'ETag tenuto.
+- **Da fare sulla DGX** (criterio della issue): dopo `calliope aggiorna`, `prova_notizie`, poi lo
+  scarico successivo e la query `sqlite3 notizie.db "select count(*) from voci where sommario
+  like '%src=%' or sommario like '%srcset%'"`, che deve dare 0, salvo un articolo che cita «src=» come testo: si guarda il sommario. Alla prima apertura il log dice
+  `[NOTIZIE] tolte N voci col sommario fatto di HTML`, e alle aperture dopo non lo dice più.
