@@ -5,6 +5,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 Le foto con il modello vero (05/10/2026): Brain con Ollama locale (gemma4:e4b-it-qat, quello
 di Config), immagini di prova generate (prove/immagini_finte.py), PC finto per pc_guarda.
 Uso: python prove/prova_immagini_ollama.py [giri]
+Col 26B della DGX (17/10, #58), con un tunnel verso il suo Ollama, a DGX libera e col `num_ctx`
+del modello già caricato (un altro lo ricarica), come prove/manuali/banco_dispositivo.py:
+    CALLIOPE_LLM_PROFILO=gemma4-26b-ollama python prove/prova_immagini_ollama.py 10 --url http://127.0.0.1:11440 --modello gemma4:26b-a4b-it-qat --num-ctx 36864
 
 Casi (ognuno una conversazione nuova):
 - scontrino: «cosa c'è qui?» poi «quanto costano le uova?» (la foto resta nei turni dopo);
@@ -19,6 +22,7 @@ Casi (ognuno una conversazione nuova):
 Per ogni caso: tool chiamati ed eseguiti, regole, prima frase.
 """
 
+import argparse
 import json
 import tempfile
 import time
@@ -35,6 +39,9 @@ from calliope.tools.spec import ToolContext
 
 ERRORI = []
 TEMPI = []
+ARGS = argparse.Namespace(url="", modello="", num_ctx=0)
+# Il caso dello schermo del telefono, giro per giro (#58: almeno 9 su 10 col 26B)
+TELEFONO = []
 
 
 def verifica(nome, ok, dettaglio=""):
@@ -61,6 +68,12 @@ class ArchivioFinto:
 
 def nuovo():
     cfg = Config()
+    if ARGS.url:
+        cfg.llm_native_url = ARGS.url
+    if ARGS.modello:
+        cfg.llm_model = ARGS.modello
+    if ARGS.num_ctx:
+        cfg.llm_num_ctx = ARGS.num_ctx
     cfg.pc_proprietari = ["Dario"]
     pc = PCFinto()
     scatti = {"webcam": F.foto, "schermo": F.schermo}
@@ -161,6 +174,8 @@ def caso_foto_poi_pc():
         turno(b, "Cosa c'è in questa foto?", [foto("scontrino")])
         r = turno(b, domanda)
         guarda = [a.get("cosa") for n, a in es if n == "pc_guarda"]
+        if "telefono" in domanda:
+            TELEFONO.append(not guarda)
         verifica(f"foto nella conversazione, «{domanda}»: "
                  + (f"pc_guarda({cosa})" if cosa else "nessun pc_guarda"),
                  guarda == [cosa] if cosa else not guarda, f"{guarda} · {r}")
@@ -175,8 +190,16 @@ def caso_webcam():
 
 
 if __name__ == "__main__":
-    giri = int(sys.argv[1]) if len(sys.argv) > 1 else 1
+    ap = argparse.ArgumentParser()
+    ap.add_argument("giri", nargs="?", type=int, default=1)
+    ap.add_argument("--url", default="")
+    ap.add_argument("--modello", default="")
+    ap.add_argument("--num-ctx", type=int, default=0,
+                    help="il num_ctx del modello già caricato (un altro lo fa ricaricare)")
+    ARGS = ap.parse_args()
+    giri = ARGS.giri
     b, _, _ = nuovo()
+    print(f"modello: {b.cfg.llm_model} ({b.cfg.llm_native_url})", flush=True)
     b.warmup()
     for g in range(giri):
         print(f"\n— giro {g + 1} —")
@@ -190,5 +213,6 @@ if __name__ == "__main__":
     TEMPI.sort()
     print(f"\nprima frase: mediana {TEMPI[len(TEMPI) // 2]:.2f} s, massimo {TEMPI[-1]:.2f} s "
           f"({len(TEMPI)} turni)")
+    print(f"schermo del telefono senza pc_guarda: {sum(TELEFONO)}/{len(TELEFONO)}")
     print(f"\n{'Tutto bene' if not ERRORI else f'{len(ERRORI)} non riuscite: ' + ', '.join(ERRORI)}")
     sys.exit(1 if ERRORI else 0)

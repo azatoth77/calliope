@@ -160,6 +160,13 @@ class Classe:
     # verbi che la chiedono: senza uno di loro nella frase (e senza il «sì» alla domanda),
     # «Non me l'hai chiesto: vuoi che…?» (regola `politica_cancellazione_non_chiesta`)
     verbo_sempre: object = None
+    # Il nome della regola nel registro quando `verbo_sempre` ferma la chiamata (17/10, #58:
+    # per cassetto_gestisci «tieni» e «ancora» non sono cancellazioni)
+    regola_verbo_sempre: str = "politica_cancellazione_non_chiesta"
+    # f(testo, args, ctx) → (regola, domanda) o None: una domanda prima di eseguire anche quando
+    # tutto il resto direbbe di sì (17/10, #58: cassetto_gestisci con un'altra persona nella
+    # frase). Al «sì» alla stessa domanda la chiamata parte
+    chiedi_se: object = None
     # L'argomento che, con un valore, cambia una voce già messa invece di crearne una
     # (timer_imposta, promemoria_imposta: `cambia`). Anche con la conversazione pulita il
     # cambio si esegue solo se la frase ha le parole del tool (`verbi`: «aggiungi», «togli»,
@@ -1149,10 +1156,29 @@ def incoerente(spec, name: str, args: dict, ctx) -> dict | None:
     d = _distruttiva(cl, args)
     if d is None:
         return None
+    # Con Classe.chiedi_se tutta la chiamata deve essere quella della domanda (17/10, #58)
+    tutto = callable(cl.chiedi_se)
     proposta = (_proposta(t, name) and (consenso(t.testo) or t.sfida)
-                and _uguali(args, t.args_sospeso, ("azione", "stanza", "nome")))
+                and (_uguali(_conta(cl, args or {}), _conta(cl, t.args_sospeso or {}), None)
+                     if tutto else _uguali(args, t.args_sospeso, ("azione", "stanza", "nome"))))
     if proposta or coerente(t.testo):
         return None
+    # Con Classe.chiedi_se la domanda dice di chi è il cassetto che si toccherebbe (17/10, #58,
+    # quarta revisione della PR #143: al secondo «sì» generico veniva eliminato il file di un
+    # cassetto mai nominato); nessuna domanda se il tool rifiuterebbe comunque
+    if tutto:
+        # dom: ("", "") se il tool rifiuterebbe comunque (si salta la domanda), None se la
+        # classe non ha una domanda sua per questa chiamata (resta quella generica di sotto)
+        try:
+            dom = cl.chiedi_se(t.testo or "", args or {}, ctx, sempre=True)
+        except Exception:  # noqa: BLE001 — nel dubbio, la domanda di sempre
+            dom = None
+        if dom == ("", ""):
+            return None
+        if dom and dom[1]:
+            note_rule(ctx, "politica_azione_incoerente")
+            print(f"   [POLITICA] {name}: politica_azione_incoerente", flush=True)
+            return _risultato(dom[1], name, args, "politica_azione_incoerente")
     descr, conseguenza = d
     try:
         descr = descr(args or {})
@@ -1638,7 +1664,7 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
         # parte su un «no» anche se il modello la richiama)
         if (callable(cl.verbo_sempre) and t.testo and not cl.verbo_sempre(t.testo)
                 and not (proposta and (consenso(t.testo) or t.sfida))):
-            return Decisione("conferma", "politica_cancellazione_non_chiesta",
+            return Decisione("conferma", cl.regola_verbo_sempre,
                              f"Non me l'hai chiesto: vuoi che {cosa}?")
         if (_cambio(args, cl.cambio) and t.testo and cl.verbi
                 and not re.search(cl.verbi, t.testo, re.I)
@@ -2104,6 +2130,23 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
             d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
     else:
         d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
+    # Una domanda in più prima di eseguire (Classe.chiedi_se, 17/10): non al «sì» alla domanda,
+    # e solo con la chiamata identica a quella chiesta (tutti gli argomenti: terza revisione
+    # della PR #143, un «sì» con quale="tutti" o un altro minore eliminava altri file)
+    if d.esito == "esegui" and t is not None and callable(cl.chiedi_se):
+        stessa_sosp = (_proposta(t, name) and isinstance(t.args_sospeso, dict)
+                       and _uguali(_conta(cl, args or {}), _conta(cl, t.args_sospeso), None))
+        si = consenso(t.testo) or t.sfida
+        if not (stessa_sosp and si):
+            try:
+                extra = cl.chiedi_se(t.testo or "", args or {}, ctx)
+            except Exception:  # noqa: BLE001 — nel dubbio, la decisione di sempre
+                extra = None
+            if extra:
+                d = Decisione("conferma", extra[0], extra[1])
+            elif _proposta(t, name) and si and t.sospeso_politica and not stessa_sosp:
+                d = Decisione("conferma", "politica_azione_incoerente",
+                              f"Non sono sicura di aver capito: vuoi che {_cosa(cl, args)}?")
     # La modalità sviluppo (08/10, calliope/sviluppo.py): i passi interni dello sviluppo aperto
     # di chi parla, riconosciuto, non chiedono «C'è di mezzo il lavoro di un agente…» a ogni
     # frase: l'intento è lo sviluppo, aperto con la voce da chi amministra, e il bersaglio è il
