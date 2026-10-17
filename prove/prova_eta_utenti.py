@@ -342,6 +342,36 @@ verifica("(b) il «sì» nella risposta dopo: data nel profilo, salvata, frase c
 r, _ = chiama("data_calcola", {"cosa": "eta", "persona": "io"}, chi="Luca")
 verifica("(b) poi «Quanti anni ho?» con persona=io: dal profilo", r.get("ok")
          and r.get("anni") == anni(n77), str(r))
+# Revisione della PR #140: gli anni detti «se la data è la tua», contati anche con il compleanno
+# ancora da venire quest'anno; mai per la data di un'altra persona
+luca.nascita = None
+for detto, args, nome in (
+        ("Ricordati che sono nato il 20 dicembre 1977.",
+         {"fatto": "Luca è nato il 20 dicembre 1977.", "nascita": "20 dicembre 1977"},
+         "compleanno ancora da venire"),
+        ("Ricordati che sono nato il 4 luglio 1977.",
+         {"fatto": "Sono nato il 4 luglio 1977.", "nascita": "4 luglio 1977"},
+         "fatto senza nomi")):
+    d = minori.leggi_data(args["nascita"])
+    c = ctx_di("Luca", 40, detto)
+    r = chiama_ctx(c, "ricorda", args)
+    verifica(f"(b) {nome}: «Se la data è la tua, hai {anni(d)} anni.» e la domanda",
+             f"Se la data è la tua, hai {anni(d)} anni." in r.get("risposta_finale", "")
+             and r.get("risposta_finale", "").endswith("data di nascita?")
+             and "nascita_altra_persona" not in c.regole, r.get("risposta_finale"))
+for detto, args, nome in (
+        ("Ricordati che Marta è nata il 15 marzo 1980.",
+         {"fatto": "Marta è nata il 15 marzo 1980.", "nascita": "15 marzo 1980"},
+         "un'altra adulta registrata"),
+        ("Ricordati che mia moglie è nata il 2 aprile 1979.",
+         {"fatto": "La moglie di Luca, cioè mia moglie, è nata il 2 aprile 1979.",
+          "nascita": "2 aprile 1979"}, "una parentela, anche col nome di chi parla")):
+    c = ctx_di("Luca", 41, detto)
+    r = chiama_ctx(c, "ricorda", args)
+    frase = r.get("risposta_finale", "") or r.get("conferma", "") or ""
+    verifica(f"(b) contrario, {nome}: nessuna età nella frase", " anni" not in frase
+             and (not r.get("in_sospeso") or "nascita_altra_persona" in c.regole), frase)
+luca.nascita = None
 # (a2) la data di nascita in un ricordo di chi parla (il caso vero: il ricordo c'era già)
 def con_ricordi(*fatti):
     global MEM

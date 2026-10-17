@@ -1649,6 +1649,29 @@ def _salva_nascita(ctx: ToolContext, prof, fatto: str, nascita: str) -> dict | N
             "risposta_finale": frase}
 
 
+# Una parentela detta nel fatto («mia moglie è nata il…»): la data è di un'altra persona
+_PARENTELA = re.compile(r"\b(?:mi[aoe]|miei)\s+(?:moglie|marito|madre|padre|mamma|pap[aà]|"
+                        r"figli[oae]?|fratell[oi]|sorell[ae]|nonn[oaie]|compagn[oa]|"
+                        r"suocer[oa]|zi[oa])\b", re.I)
+
+
+def _nomina_altri(ctx, prof, fatto: str) -> bool:
+    """Il fatto parla di un'altra persona? Il nome di un'altra persona registrata, senza quello
+    di chi parla, o una parentela («mia moglie»). Solo per la frase del tool (gli anni detti),
+    non per ciò che si salva."""
+    testo = fatto or ""
+    if _PARENTELA.search(testo):
+        return True
+    mio = getattr(prof, "name", "") or ""
+    if mio and re.search(rf"\b{re.escape(mio)}\b", testo, re.I):
+        return False
+    try:
+        nomi = list(ctx.speakers.known_speakers()) if ctx.speakers is not None else []
+    except Exception:  # noqa: BLE001
+        nomi = []
+    return any(n and n != mio and re.search(rf"\b{re.escape(n)}\b", testo, re.I) for n in nomi)
+
+
 def _ricorda(ctx: ToolContext, fatto: str, per_tutti=False, nascita: str = "") -> dict:
     """Salva un fatto duraturo: su chi parla, o della casa se `per_tutti`. Con `nascita` (la
     data di nascita di chi parla) propone di salvarla anche nel profilo."""
@@ -1724,10 +1747,15 @@ def _ricorda(ctx: ToolContext, fatto: str, per_tutti=False, nascita: str = "") -
         # Gli anni nella frase (17/10, issue #70, 26B sulla DGX, 1 giro su 3): «E dimmi anche
         # quanti anni ho?», poi «…sono nato il 4 luglio del 1977» → ricorda con la nascita, e la
         # risposta pronta chiedeva solo se salvarla, senza l'età chiesta. Gli anni li conta il
-        # programma dalla data passata, come al «sì»
+        # programma dalla data passata, come al «sì». Revisione della PR #140: la data non è
+        # sicuramente di chi parla (il «sì» lo dice), quindi «se la data è la tua»; e niente
+        # anni se il fatto nomina un'altra persona (regola `nascita_altra_persona`)
         anni = minori.eta(d)
-        frase = (f"Me lo ricordo: hai {anni} anni. {_NASCITA_DOMANDA}" if anni is not None
-                 else f"Me lo ricordo. {_NASCITA_DOMANDA}")
+        if anni is not None and _nomina_altri(ctx, prof, fatto):
+            note_rule(ctx, "nascita_altra_persona")
+            anni = None
+        frase = (f"Me lo ricordo. Se la data è la tua, hai {anni} anni. {_NASCITA_DOMANDA}"
+                 if anni is not None else f"Me lo ricordo. {_NASCITA_DOMANDA}")
         out.update(conferma=frase, risposta_finale=frase, in_sospeso=proposta,
                    fatto="ricordato; la data di nascita NON è ancora nel profilo")
     return out
