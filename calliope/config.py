@@ -3516,11 +3516,18 @@ def _warn(msg: str):
 # satellite_inoltro sarebbe satellite_indirizzo, l'indirizzo su cui ascolta il server)
 _INOLTRO_TOLTO = ("tolta il 16/10 (#61): l'inoltro del satellite per il telefono non c'è più "
                   "(il telefono raggiunge il server con la sua VPN)")
+_PRESELEZIONE_TOLTA = ("tolta il 16/10 (#25): la preselezione dei tool è chiusa come misura "
+                       "negativa, resta solo prove/manuali/preselezione_dgx.py --registro")
 CHIAVI_TOLTE: dict[str, str] = {
     "satellite_inoltro": _INOLTRO_TOLTO,
     "satellite_inoltro_reti": _INOLTRO_TOLTO,
     "satellite_inoltro_max": _INOLTRO_TOLTO,
     "satellite_inoltro_inattivita_s": _INOLTRO_TOLTO,
+    "preselezione_tool": _PRESELEZIONE_TOLTA,
+    "preselezione_nucleo": _PRESELEZIONE_TOLTA,
+    "preselezione_codifica": _PRESELEZIONE_TOLTA,
+    "preselezione_embedding": _PRESELEZIONE_TOLTA,
+    "preselezione_margine": _PRESELEZIONE_TOLTA,
 }
 
 
