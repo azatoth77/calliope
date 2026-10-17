@@ -1,26 +1,23 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-"""Prova a secco della preselezione dei tool System 1 (15/10, calliope/system1/preselezione.py,
-in ombra; progetto docs/ricerche/2026-10-15-preselezione-tool.md).
+"""Prova a secco della preselezione dei tool System 1 (15/10, calliope/system1/preselezione.py;
+progetto docs/ricerche/2026-10-15-preselezione-tool.md). Dal 16/10 (issue #25, scelta B) la
+misura è chiusa come negativa (§ 7 della ricerca) e l'ombra nel ciclo è tolta: resta il decisore
+come strumento di misura.
 
 - prototipi dagli schemi (nome, prima frase, esempi tra «…»), codifica «parole»;
 - il banco (prove/banco_preselezione.py, 148 frasi con i tool veri di un registro completo):
-  richiamo 100 % con il margine di serie, almeno un terzo delle frasi a «nucleo», e i
-  contrari (con margine 0 il richiamo cade: il margine serve), tempi del decisore;
+  il richiamo con il margine di serie (dal 16/10 un avviso, non un errore), almeno 40 frasi a
+  «nucleo», e i contrari (con margine 0 il richiamo cade: il margine serve), tempi del decisore;
 - i segnali di struttura: tool recente fuori dal nucleo, tool nominato nei dati del turno o
   nella proposta, foto → «tutti»; un nucleo con tool che non ci sono;
-- `OmbraPreselezione` con un Brain finto: la scelta nel registro (`preselezione`: insieme,
-  perché, schemi, mancati, variante dei più vicini), niente testo; decisore guasto → «errore»
-  e niente eccezioni; spenta → nessun servizio; ciò che va al modello non cambia;
-- configurazione (modo, codifica, margine, calliope.yaml), il ciclo (prima della risposta e
-  nel registro), riassunto e riga di `calliope stato --turni`.
+- l'ombra tolta (16/10): niente ganci in ciclo.py, main.py, stato.py, nessun campo in Config
+  e in calliope.yaml; un locale con le chiavi di prima si segnala e non ferma l'avvio; lo
+  script della DGX prende il nucleo da `--nucleo`; contrario: il decisore resta.
 """
 
-import json
-import time
 from pathlib import Path
-from types import SimpleNamespace
 
 from calliope.config import Config
 from calliope.system1 import preselezione as ps
@@ -88,7 +85,10 @@ def prova_banco():
     presi, nucleo, mancati, p50, p90 = banco(p, ps.MARGINE)
     print(f"    margine {ps.MARGINE}: presi {presi}/{n}, «nucleo» {nucleo}/{n} "
           f"({len(p.nucleo)} schemi su {len(reg._tools)}), decisore p50 {p50} ms, p90 {p90} ms")
-    verifica("banco: richiamo 100 % con il margine di serie", presi == n, str(mancati))
+    # Dal 16/10 (#25) un avviso e non un errore: i prototipi vengono dalle descrizioni dei tool,
+    # e una descrizione cambiata non deve far diventare rossa una misura che non si usa
+    if presi < n:
+        print(f"    AVVISO: richiamo {presi}/{n} sul banco con il margine di serie: {mancati[:5]}")
     verifica("banco: almeno 40 frasi su 148 a «nucleo»", nucleo >= 40, str(nucleo))
     verifica("banco: il decisore sta sotto i 30 ms (p90)", p90 < 30, f"{p90} ms")
     presi0, nucleo0, mancati0, *_ = banco(p, 0.0)
@@ -153,170 +153,76 @@ def prova_struttura():
              p.aggiorna(reg.all_schemas()[1:]) is True)
 
 
-class BrainFinto:
-    def __init__(self, schemas, history=None, pending=None):
-        self._s = schemas
-        self.history = history or []
-        self.pending = pending
-        self.chiamate = 0
-
-    def schemi(self):
-        self.chiamate += 1
-        return self._s
-
-
-def prova_ombra():
-    reg = registro()
-    cfg = Config()
-    cfg.preselezione_tool = "ombra"
-    o = ps.load_preselezione(cfg, log=lambda *_: None)
-    verifica("ombra: il servizio parte con preselezione_tool: ombra", o is not None)
-    brain = BrainFinto(reg.all_schemas())
-    # La prima volta il thread del decisore nasce e l'indice si costruisce (dentro il thread)
-    o.chiudi({}, o.valuta(brain, "Buongiorno", None), attesa_s=5)
-    t0 = time.perf_counter()
-    fut = o.valuta(brain, "Che ore sono?", None)
-    costo = (time.perf_counter() - t0) * 1000
-    verifica("ombra: valuta non aspetta il decisore (< 2 ms nel thread del ciclo)",
-             fut is not None and costo < 2, f"{costo:.2f} ms")
-    rec = {"tool": [{"nome": "ora_attuale", "ok": True}], "testo": "Che ore sono?"}
-    o.chiudi(rec, fut, attesa_s=5)
-    p = rec.get("preselezione") or {}
-    verifica("ombra: nel registro insieme, schemi e niente mancati",
-             p.get("insieme") == "nucleo" and p.get("schemi") == len(ps.NUCLEO)
-             and p.get("schemi_tutti") == len(reg._tools) and p.get("mancati") == []
-             and p.get("codifica") == "parole", str(p))
-    verifica("ombra: solo nomi e numeri, niente testo della frase",
-             "Che ore" not in json.dumps(p, ensure_ascii=False))
-    # Un tool usato fuori dal nucleo con la scelta «nucleo»: mancato
-    fut = o.valuta(brain, "Che ore sono?", None)
-    rec = {"tool": [{"nome": "pc_blocca", "ok": True}, {"nome": "inventato", "sconosciuto": True}]}
-    o.chiudi(rec, fut, attesa_s=5)
-    p = rec["preselezione"]
-    verifica("ombra: il tool usato fuori dall'insieme è un mancato (lo sconosciuto no)",
-             p["mancati"] == ["pc_blocca"] and "pc_blocca" in p["mancati_top"], str(p))
-    # La storia del Brain: il tool recente fuori dal nucleo porta a «tutti»
-    brain2 = BrainFinto(reg.all_schemas(), history=[
-        {"role": "user", "content": "Alza il volume"},
-        {"role": "assistant", "content": "", "tool_calls": [{"name": "pc_volume",
-                                                               "arguments": {}}]}])
-    rec = {"tool": [{"nome": "pc_volume", "ok": True}]}
-    o.chiudi(rec, o.valuta(brain2, "Più forte", None), attesa_s=5)
-    verifica("ombra: «Più forte» dopo pc_volume → tutti, niente mancati",
-             rec["preselezione"]["insieme"] == "tutti"
-             and rec["preselezione"]["perche"] == "tool_recente"
-             and rec["preselezione"]["mancati"] == [], str(rec["preselezione"]))
-    # La proposta aperta con un tool fuori dal nucleo
-    brain3 = BrainFinto(reg.all_schemas(), pending={"tool": "installa_avvia"})
-    rec = {}
-    o.chiudi(rec, o.valuta(brain3, "Sì, vai", None), attesa_s=5)
-    verifica("ombra: la proposta aperta nomina un tool fuori dal nucleo → tutti",
-             rec["preselezione"]["perche"] == "tool_nei_dati", str(rec["preselezione"]))
-    # Il modello vede sempre tutti gli schemi: valuta non tocca il Brain
-    verifica("ombra: gli schemi del Brain non cambiano", len(brain.schemi()) == len(reg._tools))
-    # Frase vuota: niente
-    verifica("ombra: frase vuota → niente", o.valuta(brain, "  ", None) is None)
-    # Decisore guasto: «errore» nel registro, nessuna eccezione
-    class Rotto:
-        def schemi(self):
-            raise RuntimeError("guasto")
-        history = []
-        pending = None
-    rec = {}
-    o.chiudi(rec, o.valuta(Rotto(), "Che ore sono?", None), attesa_s=5)
-    verifica("ombra: decisore guasto → «errore» nel registro, nessuna eccezione",
-             rec.get("preselezione", {}).get("esito") == "errore", str(rec))
-    # Lento: «in_ritardo»
-    class Lento:
-        nome, scelte = "lento", ("nucleo", "tutti")
-
-        def decide(self, dati):
-            time.sleep(0.3)
-            raise RuntimeError("tardi")
-    o2 = ps.OmbraPreselezione(cfg, log=lambda *_: None)
-    o2.decisore.decisore = Lento()
-    rec = {}
-    o2.chiudi(rec, o2.valuta(brain, "Che ore sono?", None), attesa_s=0.01)
-    verifica("ombra: decisore lento → «in_ritardo»",
-             rec.get("preselezione") == {"esito": "in_ritardo"}, str(rec))
-    o.ferma()
-    o2.ferma()
-    cfg.preselezione_tool = "spenta"
-    verifica("spenta: nessun servizio", ps.load_preselezione(cfg, log=lambda *_: None) is None)
-    cfg.preselezione_tool = "boh"
-    verifica("modo sconosciuto: spenta", ps.modo(cfg) == "spenta")
-
-
-def prova_config_e_ciclo():
-    c = Config()
-    verifica("config: di serie spenta, parole, margine 0,10",
-             c.preselezione_tool == "spenta" and c.preselezione_codifica == "parole"
-             and abs(c.preselezione_margine - ps.MARGINE) < 1e-9)
-    from calliope import config as cm
-    verifica("config: modo validato", cm.VALIDATORI["preselezione_tool"](" Ombra ") == "ombra")
-    try:
-        cm.VALIDATORI["preselezione_tool"]("attiva")
-        ok = False
-    except ValueError:
-        ok = True
-    verifica("config, contrario: «attiva» non c'è ancora", ok)
-    verifica("config: margine con un intervallo", cm.fuori_limiti("preselezione_margine", 3.0)
-             is not None and cm.fuori_limiti("preselezione_margine", 0.1) is None)
-    yaml = (RADICE / "calliope.yaml").read_text(encoding="utf-8")
-    verifica("calliope.yaml: i campi della preselezione",
-             "preselezione_tool: spenta" in yaml and "preselezione_margine:" in yaml)
-    src = (RADICE / "calliope" / "ciclo.py").read_text(encoding="utf-8")
-    i_val = src.find("pre.valuta(brain, t.text")
-    i_stream = src.find("frasi = split_sentences(brain.stream_reply(")
-    i_tool = src.find("tool=tools_per_registro(getattr(brain, \"last_tools\", None)))")
-    i_chiudi = src.find("pre.chiudi(rec, job)")
-    verifica("ciclo: il decisore parte prima della risposta e chiude dopo i tool del turno",
-             0 < i_val < i_stream and 0 < i_tool < i_chiudi, f"{i_val} {i_stream} {i_tool} "
-             f"{i_chiudi}")
-    src = (RADICE / "calliope" / "main.py").read_text(encoding="utf-8")
-    verifica("main: il servizio dell'ombra", "s.preselezione = load_preselezione(cfg)" in src)
-
-
-def prova_riassunto():
-    turni = [
-        {"esito": "risposta", "tool": [{"nome": "ora_attuale"}],
-         "preselezione": {"insieme": "nucleo", "schemi": 28, "schemi_tutti": 85, "ms": 2.0,
-                          "mancati": [], "mancati_top": []}},
-        {"esito": "risposta", "tool": [{"nome": "pc_blocca"}],
-         "preselezione": {"insieme": "nucleo", "schemi": 28, "schemi_tutti": 85, "ms": 3.0,
-                          "mancati": ["pc_blocca"], "mancati_top": []}},
-        {"esito": "risposta", "tool": [],
-         "preselezione": {"insieme": "tutti", "schemi": 85, "schemi_tutti": 85, "ms": 4.0,
-                          "mancati": [], "mancati_top": []}},
-        {"esito": "risposta", "preselezione": {"esito": "in_ritardo"}},
-        {"esito": "risposta", "tool": [{"nome": "ora_attuale"}]},
-    ]
-    r = ps.riassunto(turni)
-    verifica("riassunto: risposte, nucleo, richiamo, variante, risparmio, cambi",
-             r["risposte"] == 3 and r["nucleo"] == 2 and r["con_tool"] == 2
-             and r["richiamo"] == 0.5 and r["richiamo_top"] == 1.0
-             and r["risparmio_medio"] == 38.0 and r["cambi"] == 1
-             and r["mancati"] == [("pc_blocca", 1)], str(r))
-    t = ps.testo(r)
-    verifica("riga di calliope stato", "«nucleo» in 2" in t and "50.0 %" in t
-             and "pc_blocca ×1" in t, t)
-    verifica("riga senza misure", "nessuna risposta" in ps.testo(ps.riassunto([])))
-    molti = [turni[1]] * 25
-    verifica("avviso sotto il 99 % con almeno 20 turni con tool",
-             "ATTENZIONE" in ps.testo(ps.riassunto(molti)))
-    verifica("contrario: nessun avviso col richiamo pieno",
-             "ATTENZIONE" not in ps.testo(ps.riassunto([turni[0]] * 25)))
+def prova_tolta():
+    """Dal 16/10 (issue #25, scelta B): l'ombra nel ciclo è tolta, il decisore resta come
+    strumento di misura (prove/manuali/preselezione_dgx.py --registro)."""
+    for rel in ("calliope/ciclo.py", "calliope/main.py", "calliope/config.py"):
+        src = (RADICE / rel).read_text(encoding="utf-8")
+        righe = [r.strip() for r in src.splitlines() if "preselezione" in r]
+        verifica(f"tolta: nessun «preselezione» in {rel}", not righe, str(righe[:3]))
     src = (RADICE / "calliope" / "stato.py").read_text(encoding="utf-8")
-    verifica("calliope stato --turni: sezione e JSON",
-             "preselezione_s1.testo(presel)" in src and '"preselezione": presel' in src)
+    verifica("tolta: niente sezione della preselezione in calliope stato --turni",
+             "preselezione" not in src)
+    c = Config()
+    verifica("tolta: nessun campo preselezione_* in Config",
+             not [k for k in vars(c) if k.startswith("preselezione")])
+    yaml = (RADICE / "calliope.yaml").read_text(encoding="utf-8")
+    verifica("tolta: nessun campo della preselezione in calliope.yaml",
+             "preselezione_" not in yaml)
+    verifica("tolta: il modulo non ha più l'ombra né i modi",
+             not any(hasattr(ps, n) for n in ("OmbraPreselezione", "load_preselezione",
+                                              "MODI", "riassunto")))
+    # Il decisore resta (contrario: non si è tolto troppo)
+    verifica("contrario: Preselettore, Richiesta, preso e il margine restano",
+             all(hasattr(ps, n) for n in ("Preselettore", "Richiesta", "preso", "MARGINE",
+                                          "CodificaParole", "CodificaEmbedding")))
+    # Un locale con le chiavi di prima (la DGX aveva `preselezione_tool: spenta`; un «ombra»
+    # rimasto) dà solo una segnalazione: l'avvio non si ferma e il resto del file vale
+    import contextlib
+    import io
+    import os
+    import tempfile
+    from calliope.config import load_config
+    tmp = Path(tempfile.mkdtemp())
+    base = tmp / "calliope.yaml"
+    base.write_text("llm:\n  llm_temperature: 0.7\n", encoding="utf-8")
+    loc = tmp / "calliope.locale.yaml"
+    loc.write_text("llm:\n  preselezione_tool: ombra\n  preselezione_margine: 0.1\n"
+                   "  llm_temperature: 0.5\n", encoding="utf-8")
+    vecchio = os.environ.get("CALLIOPE_CONFIG_LOCALE")
+    os.environ["CALLIOPE_CONFIG_LOCALE"] = str(loc)
+    out = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+            cfg = load_config(str(base))
+        fermo = None
+    except BaseException as e:  # noqa: BLE001 — è proprio ciò che non deve succedere
+        cfg, fermo = None, e
+    finally:
+        if vecchio is None:
+            os.environ.pop("CALLIOPE_CONFIG_LOCALE", None)
+        else:
+            os.environ["CALLIOPE_CONFIG_LOCALE"] = vecchio
+    log = out.getvalue()
+    ok = fermo is None and cfg is not None and cfg.llm_temperature == 0.5
+    verifica("locale di prima: l'avvio non si ferma e il resto del locale vale", ok,
+             "" if ok else repr(fermo))
+    ok = ("Chiave sconosciuta «preselezione_tool»" in log
+          and "Chiave sconosciuta «preselezione_margine»" in log)
+    verifica("locale di prima: «preselezione_tool» segnalata come chiave sconosciuta", ok,
+             "" if ok else log[-300:])
+    verifica("locale di prima: nessun campo nuovo nato dalla chiave",
+             cfg is not None and not hasattr(cfg, "preselezione_tool"))
+    # Lo script della DGX non legge più la configurazione della preselezione
+    src = (RADICE / "prove" / "manuali" / "preselezione_dgx.py").read_text(encoding="utf-8")
+    verifica("preselezione_dgx.py: il nucleo da --nucleo, non da cfg.preselezione_*",
+             "cfg.preselezione" not in src and '"--nucleo"' in src)
 
 
 if __name__ == "__main__":
     prova_prototipi()
     prova_banco()
     prova_struttura()
-    prova_ombra()
-    prova_config_e_ciclo()
-    prova_riassunto()
+    prova_tolta()
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
     sys.exit(1 if errori else 0)
