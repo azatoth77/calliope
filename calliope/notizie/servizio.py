@@ -60,6 +60,14 @@ FERMO_GIORNI = {"generale": 2, "sport": 2, "economia": 3, "locale": 3, "tecnolog
 _GIORNI = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")
 
 
+def _segni(s) -> str:
+    """«<» e «>» già spazi prima di ripulisci_testo (#133): il lettore ha tolto i tag col
+    parser, quindi qui sono segni veri («temperature <5 gradi e venti > 30 km/h»), e il
+    `<[^>]{0,200}>` di web.servizio ne mangerebbe le parole in mezzo. Il risultato è lo
+    stesso di ripulisci_testo, che quei segni li toglie comunque, ma senza perdere il testo."""
+    return str(s or "").replace("<", " ").replace(">", " ")
+
+
 def _senza_accenti(s: str) -> str:
     t = unicodedata.normalize("NFKD", str(s or "").lower())
     return "".join(c for c in t if not unicodedata.combining(c))
@@ -217,7 +225,29 @@ class Notizie:
             CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT);
         """)
         self.db.commit()
+        self._togli_sommari_html()
         self._ricarica()
+
+    def _togli_sommari_html(self):
+        """Le voci salvate prima del 17/10 (#133) con il sommario fatto del testo di un tag
+        HTML: si tolgono e si dimenticano ETag e Last-Modified dei loro feed, così lo scarico
+        dopo le riporta col sommario giusto (`INSERT OR IGNORE` non le riscriverebbe). Senza
+        segni di versione: a ogni apertura, una scansione con LIKE e nessun effetto se il
+        disco è pulito."""
+        with self._lock:
+            righe = self.db.execute(
+                "SELECT id, feed, sommario FROM voci WHERE sommario LIKE '%src%' "
+                "OR sommario LIKE '%href%' OR sommario LIKE '%class%'").fetchall()
+            sporche = [(i, f) for i, f, s in righe if pulizia.sommario_html(s)]
+            if not sporche:
+                return
+            self.db.executemany("DELETE FROM voci WHERE id=?", [(i,) for i, _ in sporche])
+            feeds = sorted({f for _, f in sporche if f})
+            self.db.executemany("UPDATE feed SET etag='', modificato='' WHERE url=?",
+                                [(f,) for f in feeds])
+            self.db.commit()
+        self.log(f"[NOTIZIE] tolte {len(sporche)} voci col sommario fatto di HTML "
+                 f"({len(feeds)} feed da riscaricare per intero)")
 
     # ── stato su disco ──
     def _meta(self, k: str, v=None):
@@ -310,7 +340,7 @@ class Notizie:
         nuove, ultima, conta = 0, 0.0, {}
         limite = adesso - self.conserva_s
         for g in grezze:
-            titolo_raw = ripulisci_testo(g.get("titolo"), 400)
+            titolo_raw = ripulisci_testo(_segni(g.get("titolo")), 400)
             link = str(g.get("link") or "").strip()[:500]
             if not titolo_raw or pulizia.non_notizia(titolo_raw, link):
                 if titolo_raw:
@@ -319,9 +349,12 @@ class Notizie:
             somm_raw = str(g.get("sommario") or "")
             titolo, regole = pulizia.titolo_per_voce(titolo_raw, somm_raw)
             sommario, r2 = pulizia.sommario_per_voce(somm_raw, titolo, f.testata)
-            regole = regole + r2
-            titolo = ripulisci_testo(titolo, TITOLO_MAX)
-            sommario = ripulisci_testo(sommario, SOMMARIO_MAX)
+            titolo = ripulisci_testo(_segni(titolo), TITOLO_MAX)
+            sommario = ripulisci_testo(_segni(sommario), SOMMARIO_MAX)
+            # La rete sull'HTML sul sommario così come si salva: lo stesso testo che
+            # _togli_sommari_html riguarda all'apertura (#133)
+            sommario, r3 = pulizia.sommario_senza_html(sommario)
+            regole = regole + r2 + r3
             for x in regole:
                 conta[x] = conta.get(x, 0) + 1
             d = lettore.leggi_data(g.get("data_grezza") or "", f.fuso)

@@ -28,6 +28,7 @@ import socket
 import ssl
 import time
 import xml.etree.ElementTree as ET
+from html.parser import HTMLParser
 from urllib.parse import urljoin
 
 from ..web.pagina import (PaginaNonLetta, PaginaVietata, _Connessione, _ConnessioneTLS,
@@ -204,17 +205,130 @@ def leggi_data(testo: str, fuso: str = "") -> dt.datetime | None:
 # ─────────────────────────── lettura ───────────────────────────
 
 _ENTITA = re.compile(rb"<!\s*ENTITY", re.I)
-_TAG = re.compile(r"<[^>]{0,500}>")
 _NS = {"content": "http://purl.org/rss/1.0/modules/content/",
        "dc": "http://purl.org/dc/elements/1.1/"}
 _ATOM = "{http://www.w3.org/2005/Atom}"
 
+# Caratteri letti di un campo HTML (#133, 17/10): il sommario se ne tiene 600, ma un tag
+# enorme in testa (un'immagine in data: base64, un srcset di trenta immagini) non deve far
+# perdere il paragrafo dopo; il parser è lineare (misure nella prova), il tetto tiene breve
+# anche il caso peggiore su un input costruito apposta (dato non fidato)
+HTML_MAX = 100_000
+# In coda, ciò che il parser non ha chiuso: un tag troncato (nome e attributi in ASCII, almeno
+# uno con «=», anche con un valore fra virgolette aperto) o un commento troncato si buttano;
+# tutto il resto resta testo («x<y», «Saldi <a partire da 5 euro, qualità=prezzo»). Gruppi
+# atomici `(?>…)` (Python ≥ 3.11): «a = b» si legge come «a» con valore «b» oppure «a» con
+# valore vuoto e poi l'attributo «b», e senza gruppi atomici le letture possibili crescono come
+# 2^n (seconda revisione della PR #137: 1,5 s con 22 attributi, minuti con 30)
+_TAG_TRONCO = re.compile(
+    r"^<(?:!--.*|[A-Za-z][\w:.-]*(?>\s+[\w:.-]+(?>\s*=\s*(?:\"[^\"]*\"?|'[^']*'?|"
+    r"[^\s\"'<>]*))?)*\s*/?)$", re.S | re.A)
+# Ripiego se il parser solleva un'eccezione: lineare anche con molti «<» senza «>»
+_TAG_RIPIEGO = re.compile(r"<[^<>]*>")
+# Elementi saltati col loro contenuto: non sono testo che si legge
+_SALTATI = frozenset({"script", "style", "noscript", "template", "iframe"})
+# Codice: se resta aperto fino alla fine, il testo saltato resta buttato
+_CODICE = frozenset({"script", "style"})
+# Elementi senza chiusura: un attributo «hidden» su questi non nasconde altro
+_VUOTI = frozenset({"area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta",
+                    "param", "source", "track", "wbr"})
+# Elementi che si chiudono da soli e non si annidano: un altro dello stesso nome chiude quello
+# nascosto («<p hidden>x<p>y» → «y»), senza contare la profondità
+_AUTOCHIUSI = frozenset({"p", "li", "option", "optgroup", "dt", "dd", "tr", "td", "th", "rp",
+                         "rt", "thead", "tbody", "tfoot", "colgroup", "caption"})
+_DISPLAY_NONE = re.compile(r"display\s*:\s*none", re.I)
+
+
+def _troncato(resto: str) -> bool:
+    return resto.startswith("<!--") or ("=" in resto and bool(_TAG_TRONCO.match(resto)))
+
+
+def _nascosto(attrs) -> bool:
+    for k, v in attrs:
+        if k == "hidden" or (k == "style" and v and _DISPLAY_NONE.search(v)):
+            return True
+    return False
+
+
+class _SoloTesto(HTMLParser):
+    """Tiene i soli dati di testo, con le entità risolte; salta script, style, noscript,
+    template, iframe e gli elementi con «hidden» o «display:none»; ogni tag diventa uno
+    spazio (come faceva la regola di prima: «<b>Ro</b>ma» → «Ro ma»). Il testo saltato si
+    tiene da parte: se l'elemento resta aperto fino alla fine (non era un elemento nascosto
+    ma un tag rotto) torna testo, tranne per script e style (`finito`)."""
+
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.pezzi: list[str] = []
+        self.saltati: list[str] = []
+        self.salta_tag: str | None = None   # l'elemento saltato che si sta attraversando
+        self.salta_prof = 0                 # quanti dello stesso nome aperti dentro
+
+    def _chiudi_salto(self):
+        self.salta_tag, self.salta_prof, self.saltati = None, 0, []
+
+    def handle_starttag(self, tag, attrs):
+        if self.salta_tag is not None and tag == self.salta_tag:
+            if tag in _AUTOCHIUSI:
+                self._chiudi_salto()        # «<p hidden>x<p>y»: il secondo chiude il primo
+            else:
+                self.salta_prof += 1
+        if self.salta_tag is None:
+            if tag in _SALTATI or (tag not in _VUOTI and _nascosto(attrs)):
+                self.salta_tag, self.salta_prof, self.saltati = tag, 1, []
+            self.pezzi.append(" ")
+        else:
+            self.saltati.append(" ")
+
+    def handle_startendtag(self, tag, attrs):
+        (self.pezzi if self.salta_tag is None else self.saltati).append(" ")
+
+    def handle_endtag(self, tag):
+        if tag == self.salta_tag:
+            self.salta_prof -= 1
+            if self.salta_prof <= 0 or tag in _AUTOCHIUSI:
+                self._chiudi_salto()
+        (self.pezzi if self.salta_tag is None else self.saltati).append(" ")
+
+    def handle_data(self, data):
+        (self.pezzi if self.salta_tag is None else self.saltati).append(data)
+
+    def finito(self) -> bool:
+        """A fine lettura: rimette il testo di un elemento saltato rimasto aperto (non script
+        né style). Vero se la coda non letta va trattata come testo."""
+        if self.salta_tag is None:
+            return True
+        if self.salta_tag in _CODICE:
+            return False
+        self.pezzi.extend(self.saltati)
+        self._chiudi_salto()
+        return True
+
+
+def _senza_tag(t: str) -> str:
+    """Un passaggio del parser HTML della libreria standard (#133): toglie i tag di qualunque
+    lunghezza, mentre un «<» che non apre un tag («<5 gradi») resta testo. Non si chiama
+    close(): la coda non chiusa la decide `_troncato`, uguale in ogni versione di Python."""
+    p = _SoloTesto()
+    try:
+        p.feed(t)
+    except Exception:  # noqa: BLE001 — il testo è non fidato: mai un'eccezione al lettore
+        return html.unescape(_TAG_RIPIEGO.sub(" ", t))
+    resto = p.rawdata
+    if p.finito() and resto and not _troncato(resto):
+        p.pezzi.append(html.unescape(resto))
+    return "".join(p.pezzi)
+
 
 def testo_semplice(s) -> str:
-    """Senza marcatura HTML e con le entità risolte, spazi normalizzati."""
-    t = _TAG.sub(" ", str(s or ""))
-    t = html.unescape(t)
-    t = _TAG.sub(" ", t)               # l'HTML scritto come &lt;p&gt; nel feed
+    """Senza marcatura HTML e con le entità risolte, spazi normalizzati. Dal 17/10 (#133) con
+    `html.parser` al posto di `<[^>]{0,500}>`, che lasciava intero un `<img srcset=…>` più
+    lungo di 500 caratteri: il sommario diventava il testo del tag."""
+    t = _senza_tag(str(s or "")[:HTML_MAX])
+    if "<" in t:
+        # L'HTML scritto come &lt;p&gt; nel feed: un secondo passaggio, con le «&» già
+        # risolte protette (le entità si risolvono una volta sola, come prima)
+        t = _senza_tag(t.replace("&", "&amp;"))
     return re.sub(r"\s+", " ", t).strip()
 
 

@@ -653,3 +653,97 @@ né quante volte un minore chiede una sezione non sua.
   campo nuovo nel record del turno).
 
 **Prima lettura sulla DGX (17/10, versione 2864b3f).** `calliope stato --turni --giorni 7`: 17 richieste dal 14/10, 11 dai giornali (79 %), 3 da internet, 0 vuote; ripiego fallito 0, negato 0; seguiti 3; nessuna sezione rifiutata ai minori; nessun `web_cerca` girato a notizie. Per giorno: 14/10 67 %, 15/10 0 % (una sola richiesta, da internet), 16/10 100 %. I turni di prima del 17/10 non hanno le regole `notizie_vuote` e `notizie_ripiego_*`: vuote e ripieghi falliti si contano da qui in avanti.
+
+## Tag HTML lunghi nei feed: il sommario era il testo del tag (17/10, issue #133)
+
+Caso vero delle prove a voce del 16/10 sulla DGX: una testata di tecnologia mette in testa alla
+`description` di ogni voce un `<img … srcset="…">` con una decina di indirizzi, lungo oltre 500
+caratteri. Il lettore toglieva i tag con `<[^>]{0,500}>`: quel tag restava intero, la pulizia di
+`web.servizio.ripulisci_testo` ne toglieva solo i segni e il taglio a 600 caratteri lasciava fuori
+il paragrafo. Il sommario era «img width=… src="https://…" class=… srcset=…», il modello aveva
+solo il titolo e ne ha inventato il senso; alle 23:05 dello stesso giorno 2 voci su 5 della
+sezione erano così.
+
+- **`lettore.testo_semplice` con `html.parser`** della libreria standard (nessuna dipendenza
+  nuova): tiene solo i dati di testo con le entità risolte, ogni tag diventa uno spazio come
+  prima («<b>Ro</b>ma» → «Ro ma»). Salta col loro contenuto `script`, `style`, `noscript`,
+  `template`, `iframe` e gli elementi con `hidden` o `display:none` (mai quelli senza chiusura:
+  un `<img hidden>` non nasconde il testo dopo). Il secondo passaggio per l'HTML scritto come
+  `&lt;p&gt;` si fa con le «&» già risolte protette, così le entità si risolvono una volta sola
+  come prima («AT&amp;amp;T» → «AT&amp;T»). `close()` non si chiama: la coda non chiusa la
+  decide `_troncato`, uguale in ogni versione di Python. Un tag troncato (nome e attributi in
+  ASCII, almeno uno con «=», anche con un valore fra virgolette aperto) o un commento troncato
+  si buttano; il resto resta testo («x<y», «Saldi <a partire da 5 euro, il rapporto
+  qualità=prezzo cresce.»). *[Seconda revisione della PR #137, 17/10]* `_TAG_TRONCO` ha i
+  gruppi atomici `(?>…)` (Python ≥ 3.11). «a = b» si può leggere in due modi: «a» con valore
+  «b», oppure «a» con valore vuoto seguito dall'attributo «b». Senza gruppi atomici le letture
+  crescevano come 2^n: con 22 attributi «a = b» senza «>» servivano 1,5 s, con 30 minuti, e un
+  RSS di 342 byte fermava la lettura per 5,9 s (col GIL anche la voce). Ora con 100 000
+  attributi bastano 29 ms, e un feed di 600 kB così si legge in 0,03 s.
+- **Un elemento saltato rimasto aperto non cancella il resto** *(seconda revisione, 17/10)*:
+  il testo saltato si tiene da parte. Se a fine lettura un elemento nascosto, `noscript`,
+  `iframe` o `template` è ancora aperto, quel testo torna («<div hidden>Il porto riapre» →
+  «Il porto riapre»). Per `script` e `style` aperti resta buttato. Gli elementi che si chiudono
+  da soli (`p`, `li`, `option`, `td`…) non contano la profondità: il successivo con lo stesso
+  nome chiude quello nascosto («<p hidden>x<p>y</p>» → «y»).
+- **Testo fra «<» e «>» che non è un tag** arriva al modello come parole: `<|im_start|>`
+  diventa «im start», perché `ripulisci_testo` toglie i segni e il trattino basso. È comunque
+  dentro la busta dei dati non fidati, come tutto il sommario.
+- **Un «<» vero arriva al modello con le sue parole.** Nel lettore «temperature <5 gradi e venti
+  > 30 km/h» resta intero. Prima di `web.servizio.ripulisci_testo`, che toglie comunque i segni
+  «<» e «>», il servizio li fa diventare spazi (`servizio._segni`): così il suo
+  `<[^>]{0,200}>` non mangia più le parole in mezzo. Arriva «temperature 5 gradi e venti 30
+  km/h», e un titolo «Allerta <gialla> sul Lumenese» arriva come «Allerta gialla sul Lumenese».
+  Prima arrivavano «temperature 30 km/h» e «Allerta sul Lumenese». `ripulisci_testo` non si
+  tocca: i risultati di SearXNG restano come prima. *[Correzione del 17/10 dopo la revisione
+  della PR #137: la prima stesura diceva «intero» anche per il modello, ma valeva solo per il
+  lettore.]*
+- **Dato non fidato**: ogni campo si legge per i primi `HTML_MAX` 100 000 caratteri. Un'immagine
+  `data:` di 60 000 caratteri in testa non fa perdere il paragrafo dopo, e anche il caso
+  peggiore del parser resta breve. Se il parser solleva un'eccezione, il ripiego è `<[^<>]*>`,
+  lineare anche con molti «<» senza «>» (`<[^>]*>` non lo è). Misure sul portatile, con 11
+  input malevoli da 2 MB (molti «<», `<a ` e `&lt;a ` ripetuti, attributi aperti o senza «>»,
+  150 000 `<div hidden>` annidati, commenti, `</`, CDATA, script aperto): al più 0,09 s con
+  Python 3.14.6, 0,14 s col `html.parser` di 3.12.15+ e 0,13 s con quello di 3.12.3.
+- **Rete `notizie_sommario_html`** (`pulizia.sommario_senza_html`): un sommario che porta ancora
+  un attributo col suo valore si scarta intero, e la voce resta col titolo. Gli attributi sono
+  `src=`, `srcset=` e `href=` seguiti da `https:`, `/` o `data:`, oppure `class="…"` di sole
+  parole. La regola si conta come le altre `notizie_sommario_*` ed entra nel conto di #31.
+  Contrari: «La classe di Ada vince…», «src e href» senza «=», «src="foto.jpg"» o «src=» detti
+  in un articolo sull'HTML. La rete guarda il sommario **così come si salva**, dopo
+  `ripulisci_testo` e il taglio a 600 caratteri. *[Correzione del 17/10 dopo la revisione: prima
+  guardava il testo di prima della pulizia, e `ripulisci_testo` trasforma «data_src=» in «data
+  src=». Una voce così entrava, all'apertura risultava sporca e si cancellava a ogni avvio, con
+  l'ETag del feed dimenticato.]*
+- **Le voci già salvate**: l'indice inserisce con `INSERT OR IGNORE`, quindi non si sarebbero
+  riscritte per 7 giorni. All'apertura di `notizie.db`, `Notizie._togli_sommari_html` cancella
+  le voci col sommario che passa la stessa rete, sullo stesso testo, e fa dimenticare ETag e
+  Last-Modified dei loro feed. Lo scarico successivo le riporta col paragrafo vero, se sono
+  ancora nel feed. Una voce inserita dopo l'unione non si cancella mai: la rete ha già guardato
+  quel testo. Senza segni di versione: col disco pulito non fa niente, e costa una scansione con
+  `LIKE`.
+- **Python della DGX** (3.12, `setup/linux/gestore.py`): `prova_notizie` lanciata sul portatile
+  col `html.parser` e il `_markupbase` di CPython 3.12.15+ (ramo 3.12) e di 3.12.3 (Ubuntu
+  24.04), presi dai sorgenti di CPython e caricati al posto di quelli della 3.14: tutta verde,
+  tempi compresi. Non è un interprete 3.12 vero (sul portatile non c'è), quindi va lanciata
+  anche sulla DGX dopo l'aggiornamento.
+- **Prove** (`prova_notizie`, § 2b):
+  - l'`<img>` di fantasia di 965 caratteri con un paragrafo, in CDATA, scritto come
+    `&lt;img…&gt;` e in un Atom `summary type="html"`: ne esce solo il paragrafo;
+  - l'immagine `data:` di 60 000 caratteri;
+  - i contrari: «<5 gradi», `&lt;p&gt;`, gli elementi saltati e quelli nascosti, entità risolte
+    una volta sola, code troncate, «Saldi <a partire…»;
+  - gli elementi nascosti rimasti aperti, con i contrari chiusi bene, e `p` e `li` che si
+    chiudono da soli;
+  - 10 input malevoli a tempo, fra cui «a = b» ripetuto 30 e 100 000 volte;
+  - `_TAG_TRONCO` sotto i 50 ms con 30 attributi;
+  - un feed con 40 attributi «a = b» nel titolo e nel sommario;
+  - la rete con i contrari, e da `_inserisci` la regola contata, «data_src=» preso dopo la
+    pulizia, i segni veri con le loro parole;
+  - un `notizie.db` con una voce sporca, una pulita e un contrario, riaperto due volte;
+  - il contrario della revisione: cinque voci inserite, riaperte tre volte, nessuna cancellata e
+    l'ETag tenuto.
+- **Da fare sulla DGX** (criterio della issue): dopo `calliope aggiorna`, `prova_notizie`, poi lo
+  scarico successivo e la query `sqlite3 notizie.db "select count(*) from voci where sommario
+  like '%src=%' or sommario like '%srcset%'"`, che deve dare 0, salvo un articolo che cita «src=» come testo: si guarda il sommario. Alla prima apertura il log dice
+  `[NOTIZIE] tolte N voci col sommario fatto di HTML`, e alle aperture dopo non lo dice più.
