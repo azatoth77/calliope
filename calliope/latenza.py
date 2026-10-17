@@ -303,6 +303,57 @@ def testo(giorni: dict[str, dict], soglia: float = 1.2) -> str:
     return "\n".join(righe)
 
 
+LUNGA_CAR = 300          # una risposta più lunga, detta in un pezzo solo: la voce ha aspettato
+
+
+def _nomi_tool(t: dict) -> set[str]:
+    """I tool del turno; `notizie` con `fatto` (un seguito: «dimmi di più sulla seconda») a
+    parte, «notizie (seguito)»: la frase d'attesa parte anche lì e va misurata da sola (issue
+    #132). Solo nomi e chiavi degli argomenti, nessun valore. Per ospiti e voci incerte
+    `conserva.togli_testo` toglie gli argomenti dal registro: i loro seguiti restano in
+    «notizie»."""
+    nomi = set()
+    for x in t.get("tool") if isinstance(t.get("tool"), list) else ():
+        if not isinstance(x, dict) or not x.get("nome"):
+            continue
+        n = str(x["nome"])
+        arg = x.get("argomenti") if isinstance(x.get("argomenti"), dict) else {}
+        nomi.add(f"{n} (seguito)" if n == "notizie" and arg.get("fatto") not in (None, "")
+                 else n)
+    return nomi
+
+
+def per_tool(turni: list[dict]) -> dict[str, dict]:
+    """La prima voce sentita per tool (17/10, issue #132: le notizie a 2,91 s di mediana contro
+    1,62 di web_cerca, contate a mano dal registro). Per ogni tool chiamato nel turno: turni con
+    la misura, mediana e p90 di `prima_voce_s`, e le risposte più lunghe di LUNGA_CAR caratteri
+    mandate alla voce in un pezzo solo (`frasi_voce` e `risposta_car`, dal 17/10: due numeri,
+    mai il testo della risposta, che per ospiti e voci incerte non resta)."""
+    gruppi: dict[str, list] = {}
+    for t in turni:
+        if not isinstance(t, dict) or _num(t, "prima_voce_s") is None:
+            continue
+        for n in _nomi_tool(t):
+            gruppi.setdefault(n, []).append(t)
+    out = {}
+    for n, g in gruppi.items():
+        pv = [_num(t, "prima_voce_s") for t in g]
+        out[n] = {"turni": len(g), "mediana": _med(pv), "p90": _q(pv, .9),
+                  "lunghe_un_pezzo": sum(1 for t in g if t.get("frasi_voce") == 1
+                                         and (_num(t, "risposta_car") or 0) > LUNGA_CAR)}
+    return dict(sorted(out.items(), key=lambda kv: (-kv[1]["turni"], kv[0])))
+
+
+def testo_per_tool(r: dict[str, dict], massimo: int = 10) -> str:
+    """La riga per `calliope stato --turni`: i tool più chiamati, con la prima voce sentita."""
+    if not r:
+        return "Prima voce sentita per tool: nessun turno con un tool e la misura della voce."
+    pezzi = [f"{n} {d['turni']} turni, {_s(d['mediana'])} (p90 {_s(d['p90'])})"
+             + (f", {d['lunghe_un_pezzo']} lunghe in un pezzo" if d["lunghe_un_pezzo"] else "")
+             for n, d in list(r.items())[:massimo]]
+    return "Prima voce sentita per tool: " + "; ".join(pezzi) + "."
+
+
 def leggi(cartella, giorni: int | None = None) -> list[dict]:
     """I turni degli ultimi `giorni` file (righe rotte saltate: il registro si scrive mentre
     Calliope gira)."""

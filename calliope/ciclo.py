@@ -59,6 +59,7 @@ from .schermi.moduli import annuncio_lavoro, completa as completa_modulo, oscura
 from .speaker_id import estimate_gender
 from .suoni import FINE, INIZIO
 from .tools.builtin import biblioteca_contesto
+from .testi import PAUSA_OLTRE, di_frase
 from .tts import split_sentences, clean_for_speech, strip_false_citation
 from .wakeword import (SPEGNI_SATELLITE_MSG, closing_kind, exit_action, exit_request,
                        find_wake_word, is_stop, nuova_conversazione_come, risposta_al_nome)
@@ -87,6 +88,13 @@ def save_debug_audio(cfg: Config, audio: np.ndarray, text: str) -> str:
     with open(folder / "trascrizioni.tsv", "a", encoding="utf-8") as f:
         f.write(f"{stem}\t{cfg.whisper_model}\t{text}\n")
     return stem
+
+
+def _misura_voce(detto: list) -> dict:
+    """Quanti pezzi sono andati alla voce e quanti caratteri in tutto (17/10, issue #132):
+    `latenza.per_tool` legge solo questi due numeri, mai il testo della risposta."""
+    return {"frasi_voce": len(detto or ()),
+            "risposta_car": len(" ".join(str(x) for x in detto or ()))}
 
 
 def domanda_guardia(text: str, files, massimo: int = 3000) -> str:
@@ -603,6 +611,19 @@ class Ciclo:
         turni (campo `regole`), così la revisione può misurare quanto scatta e quando."""
         if self.rec is not None:
             self.rec.setdefault("regole", []).append(name)
+
+    def _pausa_oltre(self) -> int:
+        """`tts_spezza_streaming`: oltre quanti caratteri una frase va al TTS anche a pezzi,
+        dopo un «; » (testi.taglio_voce, 17/10, issue #132)."""
+        v = getattr(getattr(getattr(self, "s", None), "cfg", None), "tts_spezza_streaming",
+                    PAUSA_OLTRE)
+        return v if isinstance(v, int) and not isinstance(v, bool) else PAUSA_OLTRE
+
+    def _taglio_pv(self):
+        """Una frase lunga è andata al TTS a pezzi, dopo un «; »: la regola, una volta per
+        turno."""
+        if self.rec is not None and "taglio_punto_e_virgola" not in self.rec.get("regole", ()):
+            self.rule("taglio_punto_e_virgola")
 
     def _rifletti(self):
         """Passo 3 del registro degli eventi: scritto il turno, la storia di Brain diventa la
@@ -3851,7 +3872,8 @@ class Ciclo:
             frasi = split_sentences(brain.stream_reply(
                 t.text, t.level, context=contesto_turno,
                 **({"immagini": t.foto} if t.foto else {}),
-                **({"incerte": incerte} if incerte else {})))
+                **({"incerte": incerte} if incerte else {})),
+                pausa_oltre=self._pausa_oltre(), al_taglio=self._taglio_pv)
             if cfg.rete("riferire"):
                 frasi = riferire.filtra(brain, frasi, t.text, t.esito_u)
             if t.usa_guardia:
@@ -4029,16 +4051,43 @@ class Ciclo:
             print(f"   [VOCE] (ombra) frase giudicata non rivolta a me ({g.ms:.0f} ms)",
                   flush=True)
 
+    def _annuncio_taciuto(self, aperta: bool) -> bool:
+        """Un pezzo di prima della stessa frase era l'annuncio di un tool, taciuto: anche questo
+        si tace, fino alla fine della frase, come quando la frase arrivava intera (seconda
+        revisione della PR #139)."""
+        if not self.__dict__.get("_annuncio_aperto"):
+            return False
+        self._annuncio_aperto = aperta
+        return True
+
+    def _nomi_tool_parlati(self, sentence: str, prima: str, aperta: bool) -> str | None:
+        """`Brain.speak_tool_names` sul pezzo, giudicando l'annuncio sulla frase da capo
+        («Uso subito la biblioteca…; il comando è biblioteca_cerca…» è un annuncio anche se il
+        nome arriva nel secondo pezzo). None = annuncio, da tacere col resto della frase."""
+        brain = self.brain
+        parlata = brain.speak_tool_names(sentence)
+        if parlata is not None and prima and brain.speak_tool_names(
+                f"{prima} {sentence}") is None:
+            parlata = None
+        if parlata is None:
+            self._annuncio_aperto = aperta
+        return parlata
+
     def _frase_da_dire(self, t, sentence: str, registra: bool = True) -> str:
         """Una frase del modello pronta per la voce ("" = non si dice). `registra=False`: senza
         le regole nel registro (la stessa resa, rifatta per la storia: `_storia_come_detta`)."""
         cfg, brain = self.s.cfg, self.brain
         rule = self.rule if registra else (lambda _nome: None)
+        # Un pezzo di una frase lunga tagliata a un «; » (17/10, issue #132): l'annuncio di un
+        # tool si giudica sulla frase fino a qui, come quando arrivava intera (PR #139)
+        aperta, prima = di_frase(sentence)
         sentence = brain.strip_tool_mentions(sentence)
+        if Ciclo._annuncio_taciuto(self, aperta):
+            return ""                       # il resto della frase di un annuncio taciuto
         # Prima della pulizia: clean_for_speech toglie «_» e il nome del tool non
         # si riconosceva più («Uso bibliotecacerca» detto ad alta voce, 01/10)
         if brain.mentions_tool(sentence) and cfg.rete("nome_tool_parlato"):
-            parlata = brain.speak_tool_names(sentence)
+            parlata = Ciclo._nomi_tool_parlati(self, sentence, prima, aperta)
             if parlata is None:
                 print(f"({self.in_console(sentence, risposta=True)!r}: annuncia un tool, non "
                       f"la dico) ", end="", flush=True)
@@ -4109,7 +4158,12 @@ class Ciclo:
         # Gli argomenti di un minore senza i valori (13/10: in memoria restano quelli veri)
         from .brain import tools_per_registro
         rec.update(risposta=" ".join(t.said),
-                   tool=tools_per_registro(getattr(brain, "last_tools", None)))
+                   tool=tools_per_registro(getattr(brain, "last_tools", None)),
+                   # I pezzi mandati alla voce (17/10, issue #132: una risposta lunga in un
+                   # pezzo solo aspetta la generazione intera; latenza.per_tool). Due numeri,
+                   # niente testo: la misura vale anche dove la risposta non resta (ospiti,
+                   # voci incerte, dopo i 60 giorni)
+                   **_misura_voce(t.said))
         # La frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py): codice o
         # modello, perché, e in ombra il tempo della seconda passata e il confronto
         if isinstance(getattr(brain, "last_dopo_tool", None), dict):
@@ -4518,7 +4572,7 @@ class Ciclo:
 
         def rendi(testo: str) -> str:
             frasi = (self._frase_da_dire(t, f, registra=False)
-                     for f in split_sentences([testo]))
+                     for f in split_sentences([testo], pausa_oltre=0))
             return " ".join(f for f in frasi if f)
         try:
             if allinea(t.said, rendi):
@@ -4666,9 +4720,15 @@ class Ciclo:
         self.corsia.entra_llm()
         try:
             # Una continuazione, non un «Cerca pure.» finto dell'utente nella storia
-            for sentence in split_sentences(brain.stream_continuation(t.level, context=extra)):
+            for sentence in split_sentences(brain.stream_continuation(t.level, context=extra),
+                                            pausa_oltre=self._pausa_oltre(),
+                                            al_taglio=self._taglio_pv):
+                aperta, prima = di_frase(sentence)
                 sentence = brain.strip_tool_mentions(sentence)
-                sentence = brain.speak_tool_names(sentence)
+                if Ciclo._annuncio_taciuto(self, aperta):
+                    continue
+                # L'annuncio di un tool sulla frase da capo, come in _frase_da_dire (PR #139)
+                sentence = Ciclo._nomi_tool_parlati(self, sentence, prima, aperta)
                 if sentence is None:
                     continue
                 sentence = clean_for_speech(sentence)
@@ -4682,6 +4742,6 @@ class Ciclo:
         self.corsia.esci_llm()
         print()
         u.aspetta()
-        self.rec.update(risposta=" ".join(t.said), ricerca_promessa=True)
+        self.rec.update(risposta=" ".join(t.said), ricerca_promessa=True, **_misura_voce(t.said))
         if t.scritto is not None:
             s.instradamento.risposta_scritta(t.scritto, t.text, u.testo_scritto())

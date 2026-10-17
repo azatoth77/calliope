@@ -40,7 +40,8 @@ from . import (argomenti_incerti, dati_turno, luogo, politica, provenienza, stat
 from .risposte import forma_chiusa
 from .system1 import dopo_tool as dopo_tool_s1
 from .sicurezza import instruction_fact
-from .testi import MESI as _MESI, NIENTE, SENTENCE_END as _SENTENCE_END
+from .testi import MESI as _MESI, NIENTE, PAUSA_OLTRE, SENTENCE_END as _SENTENCE_END
+from .testi import taglio_voce
 from .tools import dialogo
 from .tools.argomento import AZIONI as ARGOMENTO_AZIONI, TOOL as ARGOMENTO_TOOL
 from .tools.registry import NOMI_VECCHI, ToolRegistry
@@ -368,8 +369,6 @@ CLAIM_NUDGE = ("Non hai chiamato nessun tool, quindi in questo turno non hai fat
                "chi parla chiede un'azione, chiama adesso il tool giusto con gli argomenti presi "
                "dalla domanda (bastano le parole dette), anche se l'avevi già fatta in un turno "
                "precedente. Non dire di averla fatta senza chiamare il tool.")
-# Inizio di una frase detta (come tts.split_sentences, almeno 25 caratteri)
-_FIRST_SENTENCE = re.compile(r"[.!?…]+[\"»)\]]?\s+|\n+")
 _WORD = re.compile(r"[a-zàèéìòù0-9]+", re.I)
 
 
@@ -741,16 +740,26 @@ RICERCA_COME_DI_SOLITO = "con una domanda breve e mirata"
 # `scrivo_qui_a_voce`, solo quando la persona parla a voce, non quando scrive dallo schermo)
 SCRIVO_QUI = re.compile(r"\b(?:te\s+|ve\s+)?(?:l[oaie]\s+|l['’]\s*)?scriv\w*\s+(?:qui|qua)\b"
                         r"|\bqui\s+(?:nella|in)\s+(?:conversazione|chat)\b", re.I)
-_FINE_FRASE = re.compile(r"[.!?…]+[\"»)\]]?\s+|\n+")
 
 
 class FraseTolta:
     """Toglie dal testo detto le frasi intere che corrispondono a `rx`. Aspetta la fine di ogni
-    frase (il TTS la aspetterebbe comunque); le frasi tolte restano in `tolte`."""
+    frase (il TTS la aspetterebbe comunque); le frasi tolte restano in `tolte`.
 
-    def __init__(self, rx, active: bool):
+    Una frase lunga senza punto (17/10, issue #132) passa a pezzi tagliati a un «; »
+    (testi.taglio_voce, come tts.split_sentences), ma ogni pezzo resta qui finché non è
+    arrivata anche la clausola dopo, e si giudica sempre la frase da capo: con `rx` nella
+    seconda clausola si toglie la frase intera, come quando passava solo a fine frase. Solo
+    con `rx` dalla terza clausola in poi i pezzi più vecchi sono già detti: allora si toglie il
+    resto della frase (revisione della PR #139)."""
+
+    def __init__(self, rx, active: bool, pausa_oltre: int = PAUSA_OLTRE):
         self.rx, self.active = rx, active
-        self.buf = ""
+        self.pausa_oltre = pausa_oltre
+        self.buf = ""            # dall'inizio della frase in corso
+        self.detto = 0           # fin qui lasciato passare
+        self.giudicato = 0       # fin qui giudicato (il pezzo fra detto e giudicato aspetta)
+        self.scarta = False      # la frase in corso corrisponde: il resto non si dice
         self.tolte: list[str] = []
 
     def feed(self, text: str) -> str:
@@ -759,21 +768,41 @@ class FraseTolta:
         self.buf += text
         out = ""
         while True:
-            m = _FINE_FRASE.search(self.buf)
-            if not m:
+            taglio = taglio_voce(self.buf, 0, self.pausa_oltre, self.giudicato)
+            if taglio is None:
                 return out
-            frase, self.buf = self.buf[:m.end()], self.buf[m.end():]
-            if self.rx.search(frase):
-                self.tolte.append(frase.strip())
-            else:
-                out += frase
+            cut, al_pv = taglio
+            if not self.scarta and self.rx.search(self.buf[:cut]):
+                self.scarta = True
+                self.tolte.append(self.buf[self.detto:cut].strip())
+            elif self.scarta:
+                self.tolte[-1] = (self.tolte[-1] + " " + self.buf[self.giudicato:cut].strip()
+                                  ).strip()
+            if al_pv:
+                if not self.scarta:
+                    out += self.buf[self.detto:self.giudicato]    # il pezzo prima: giudicato
+                    self.detto = self.giudicato
+                else:
+                    self.detto = cut
+                self.giudicato = cut
+                continue
+            if not self.scarta:
+                out += self.buf[self.detto:cut]
+            self.buf, self.detto, self.giudicato, self.scarta = self.buf[cut:], 0, 0, False
 
     def flush(self) -> str:
-        f, self.buf = self.buf, ""
-        if self.active and f.strip() and self.rx.search(f):
-            self.tolte.append(f.strip())
+        f, d, g, scarta = self.buf, self.detto, self.giudicato, self.scarta
+        self.buf, self.detto, self.giudicato, self.scarta = "", 0, 0, False
+        if not self.active:
+            return f
+        if scarta:                         # il resto della frase tolta
+            if f[g:].strip():
+                self.tolte[-1] = (self.tolte[-1] + " " + f[g:].strip()).strip()
             return ""
-        return f
+        if f[d:].strip() and self.rx.search(f):
+            self.tolte.append(f[d:].strip())
+            return ""
+        return f[d:]
 
 
 class ClaimHold:
@@ -784,12 +813,22 @@ class ClaimHold:
     Alla fine si guarda di nuovo la risposta intera: se il seguito la rende un ricordo
     (is_claim), si dice tutta.
 
+    Una prima frase lunga senza punto (17/10, issue #132) passa a pezzi tagliati a un «; »
+    (testi.taglio_voce): un pezzo senza niente si dice subito, ma la rete resta in prova fino
+    alla fine della frase e giudica ogni volta la frase da capo, coi pezzi già detti davanti.
+    Se la dichiarazione arriva in un pezzo dopo si trattiene da lì; i pezzi prima sono già
+    detti (revisione della PR #139: prima del correttivo la rete passava al primo pezzo).
+
     `non_so` (05/10): trattiene allo stesso modo un «non ho informazioni…» dopo una
     compressione (NON_SO); `kind` dice quale dei due ("claim" o "non_so")."""
 
     def __init__(self, active: bool, actions=(), non_so: bool = False, rinuncia=None,
                  fallito: bool = False, ripetuta: str | None = None,
-                 ripetuta_soglia: float | None = None):
+                 ripetuta_soglia: float | None = None, pausa_oltre: int = PAUSA_OLTRE):
+        # Il primo pezzo può finire a un «; » di una frase lunga, come in tts.split_sentences
+        # (17/10, issue #132): senza, la risposta delle notizie unita dai «;» restava qui
+        # intera fino all'ultimo token
+        self.pausa_oltre = pausa_oltre
         self.claims = active
         # La risposta precedente (09/10, calliope/ripetizione.py): una risposta che la ripete
         # uguale si trattiene allo stesso modo, kind "ripetuta"; con la domanda insistita
@@ -805,6 +844,7 @@ class ClaimHold:
         self.state = ("probe" if (active or non_so or rinuncia or ripetuta)
                       else "pass")                                       # probe|hold|pass
         self.buf = ""
+        self.detto = 0           # nella frase in corso, i pezzi fin qui già lasciati passare
         self.held = ""
         self.actions = list(actions)
 
@@ -835,27 +875,38 @@ class ClaimHold:
         self.buf += text
         if self.state == "hold":
             return ""
-        cut = next((m.end() for m in _FIRST_SENTENCE.finditer(self.buf) if m.end() >= 25),
-                   None)
-        if cut is None:
-            return ""
-        if self._match(self.buf[:cut].strip()):
-            self.state = "hold"
-            return ""
-        self.state = "pass"
-        out, self.buf = self.buf, ""
-        return out
+        out = ""
+        while True:
+            taglio = taglio_voce(self.buf, 25, self.pausa_oltre, self.detto)
+            if taglio is None:
+                return out
+            cut, al_pv = taglio
+            # Sempre la frase da capo, coi pezzi già detti davanti (revisione della PR #139:
+            # una dichiarazione nella seconda clausola sfuggiva)
+            if self._match(self.buf[:cut].strip()):
+                self.state = "hold"
+                return out
+            if al_pv:
+                # Un pezzo tagliato al «;» senza niente: si dice, ma la frase resta da giudicare
+                out += self.buf[self.detto:cut]
+                self.detto = cut
+                continue
+            self.state = "pass"
+            out += self.buf[self.detto:]
+            self.buf, self.detto = "", 0
+            return out
 
     def flush(self) -> str:
         if self.state == "probe" and self._match(self.buf.strip(), intera=True):
             self.state = "hold"
         if self.state == "hold" and not self._match(self.buf.strip(), intera=True):
             self.state = "pass"            # il seguito ne fa un ricordo
+        resto = self.buf[self.detto:]      # i pezzi prima di `detto` sono già detti
+        self.buf, self.detto = "", 0
         if self.state == "hold":
-            self.held, self.buf = self.buf, ""
+            self.held = resto
             return ""
-        out, self.buf = self.buf, ""
-        return out
+        return resto
 
 
 # Domanda sui comandi stessi di Calliope (03/10): lì il nome di un tool nella risposta è una
@@ -2385,10 +2436,12 @@ class Brain:
         guard = TextCallGuard(self.tools.all_schemas() if self._net("textcallguard") else [])
         a_voce = getattr(getattr(getattr(self, "tool_ctx", None), "speaker_ctx", None),
                          "identified_by", None) != "schermo"
-        qui = FraseTolta(SCRIVO_QUI, a_voce and self._net("scrivo_qui_a_voce"))
+        pausa = self._pausa_oltre()
+        qui = FraseTolta(SCRIVO_QUI, a_voce and self._net("scrivo_qui_a_voce"), pausa)
         hold = ClaimHold(hold_claims and self._net("spinta_dichiarata"), actions,
                          non_so=hold_non_so, rinuncia=hold_rinuncia, fallito=hold_fallito,
-                         ripetuta=hold_ripetuta, ripetuta_soglia=hold_ripetuta_soglia)
+                         ripetuta=hold_ripetuta, ripetuta_soglia=hold_ripetuta_soglia,
+                         pausa_oltre=pausa)
         self._held_kind = None
         self.mentions_tool("")                       # prepara _tool_re
         names = ToolNameHold(self._tool_re, hold_names and self._net("chiamata_in_mezzo"))
@@ -2494,6 +2547,11 @@ class Brain:
             named = ""
         held = hold.held.strip()
         self._held_kind = hold.kind if held else None
+        # I pezzi di una frase lunga già detti prima che ClaimHold trattenesse il resto (17/10,
+        # seconda revisione della PR #139): _reply li mette nella storia prima della spinta,
+        # così il modello non li ripete da capo
+        self._detto_prima_del_trattenuto = ("".join(out) if held and not hold_request
+                                            else "")
         if held and calls and hold.kind == "rinuncia":
             # «Non posso…» e poi il tool nella stessa passata: la rinuncia non si dice
             held = ""
@@ -2633,6 +2691,12 @@ class Brain:
         if any(k not in args for k in required):
             return None
         return {"id": "call_testo", "name": spec.name, "arguments": args}
+
+    def _pausa_oltre(self) -> int:
+        """Oltre quanti caratteri una frase va al TTS anche a pezzi, dopo un «; »
+        (`tts_spezza_streaming`, testi.taglio_voce, 17/10, issue #132)."""
+        v = getattr(getattr(self, "cfg", None), "tts_spezza_streaming", PAUSA_OLTRE)
+        return v if isinstance(v, int) and not isinstance(v, bool) else PAUSA_OLTRE
 
     def _net(self, name: str) -> bool:
         """La rete o spinta `name` è accesa? (Config.llm_reti_spente, di solito dal profilo
@@ -5018,6 +5082,12 @@ class Brain:
                 # altre passate (potrebbero rientrare nel ciclo)
                 self.history.append({"role": "assistant", "content": text})
                 return
+            detto_prima = self.__dict__.get("_detto_prima_del_trattenuto") or ""
+            if held and not calls and detto_prima.strip():
+                # Un pezzo è già detto (il taglio al «;»): è nella storia come detto, e la
+                # spinta sotto rigenera solo il seguito (seconda revisione della PR #139)
+                self.history.append({"role": "assistant", "content": detto_prima.strip()})
+                spoke = True
             if held and self._held_kind == "ripetuta" and not calls:
                 # Uguale alla risposta di prima: non si dice né entra nella storia; la spinta,
                 # una volta (poi la sua risposta si dice, anche uguale)

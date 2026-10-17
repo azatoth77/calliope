@@ -1642,3 +1642,22 @@ sulla proroga dell'eccezione resta a chi amministra (issue #32). Prova a secco
 `prove/prova_banco_rotazione.py` (casi e contrari; con il codice di main i giorni vecchi
 restavano). Sulla DGX, dopo l'aggiornamento: `ls <turn_log_dir>/stanza_banco/*/` mostra al più
 `turn_log_days` giorni.
+
+## Il taglio al «; » nello streaming (17/10, issue #132, ramo `issue-132-notizie-attesa`)
+
+Fino al 17/10 `split_sentences` mandava al TTS solo frasi chiuse da `[.!?…]` o da un a capo, e
+il taglio alla virgola o al «;» (`primo_pezzo`, `tts_spezza_prima`) valeva solo dentro una frase
+già finita: una risposta di 600 caratteri senza punto aspettava la generazione intera (le
+notizie del 26B, 3,7–4,3 s di silenzio). Ora `testi.taglio_voce`, comune a `split_sentences` e
+a due reti di Brain che trattengono il testo (`ClaimHold`, `FraseTolta`; `ToolNameHold` no,
+trattiene fino al punto come prima): una frase più lunga di
+`tts_spezza_streaming` (120 caratteri; 0 = come prima) esce anche a pezzi dopo un «; », con il
+«;» nel pezzo (intonazione sospesa). Mai alla virgola (le frasi di gemma ne hanno troppe: pezzi
+da 20–30 caratteri); non in «3; 4», fra virgolette o parentesi, né in un elenco breve (clausola
+sotto i 40 caratteri dal «;» o dai due punti di prima). Lo stesso testo si taglia uguale in
+streaming e tutto in una volta (`Ciclo._storia_come_detta`). Regola `taglio_punto_e_virgola`,
+una volta per turno; `frasi_voce` e `risposta_car` nel registro dei turni. Dalla revisione della
+PR #139 ogni pezzo è un `testi.Pezzo` (`aperta`, `prima`): chi giudica una frase alla volta
+(`riferire`, il guardiano, l'annuncio di un tool) giudica la frase fino al pezzo, mai meno di
+prima. La clausola e la lunghezza si misurano dall'ultima fine di frase. Casi, contrari e misure:
+[biblioteca](biblioteca.md) (sezione dello stesso giorno), `prove/prova_notizie_attesa.py`.

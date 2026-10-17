@@ -511,6 +511,12 @@ class Config:
     # della sintesi del resto. Velocità della voce e costo della sintesi non si scrivono: li
     # misura Calliope (calliope/taratura_voce.py, voce_taratura.json accanto a questo file).
     tts_primo_pezzo_min: int = 15
+    # Una frase senza punto più lunga di così (caratteri) va al TTS anche a pezzi, dopo un
+    # «; » (17/10, issue #132, calliope/testi.py → taglio_voce): col 26B le notizie arrivavano
+    # in una frase sola di 500–650 caratteri coi fatti uniti dal «;» e la voce aspettava la
+    # generazione intera. Mai alla virgola; non spezza gli elenchi brevi, le virgolette, le
+    # parentesi né «3; 4». 0 = solo a fine frase, come prima.
+    tts_spezza_streaming: int = 120
     # Taratura della voce all'avvio (07/10): una frase fissa sintetizzata quando la voce è
     # libera, e con tts_thread «auto» la scelta dei thread. Ogni sintesi vera aggiorna comunque
     # la stima; false = solo l'uso (prima, i predefiniti prudenti). CALLIOPE_TTS_TARATURA=0
@@ -3215,7 +3221,7 @@ SEZIONI: dict[str, list[str]] = {
             "stt_incerte_al_modello", "stt_incerte_riscrivi", "stt_argomenti_misura",
             "stt_argomenti_soglia_noto", "stt_argomenti_soglia_p", "stt_argomenti_attesa_s"],
     "tts": ["piper_voice", "tts_tail_s", "tts_lead_s", "tts_keepalive", "tts_spezza_prima",
-            "tts_primo_pezzo_min", "tts_taratura", "tts_thread", "tts_dispositivo",
+            "tts_primo_pezzo_min", "tts_spezza_streaming", "tts_taratura", "tts_thread", "tts_dispositivo",
             "tts_pronuncia",
             "tts_pronuncia_extra"],
     "audio": ["sample_rate", "vad_threshold", "vad_motore", "vad_modello", "silence_ms", "preroll_ms", "min_speech_ms",
@@ -3627,7 +3633,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "azione_in_sospeso_turni": (1, 20), "conferma_sfida_s": (5.0, 600.0),
     "conferma_sfida_parole": (2, 4), "speaker_conferma_breve_soglia": (0.0, 1.0),
     "tts_lead_s": (0.0, 5.0), "tts_tail_s": (0.0, 5.0), "tts_spezza_prima": (0, 10_000), "tts_thread": (0, 256),
-    "tts_primo_pezzo_min": (1, 1000),
+    "tts_primo_pezzo_min": (1, 1000), "tts_spezza_streaming": (0, 10_000),
     "silence_ms": (100, 10_000), "max_utterance_s": (5, 600),
     "fine_turno_sonda_ms": (64, 2000), "fine_turno_soglia": (0.5, 1.0),
     "fine_turno_soglia_attesa": (0.5, 1.0), "fine_turno_attesa_max_ms": (300, 5000),

@@ -558,12 +558,15 @@ def main(argv=None) -> int:
                               "frasi_pronte": pronte,
                               "pertinenza_ricerche": pert_r,
                               "notizie": notizie_r,
+                              "prima_voce_per_tool": latenza.per_tool(turni),
                               "stanza": stanza, "fine_turno": fine_r,
                               "guardia": {k: v for k, v in guardia_r.items()
                                           if k not in ("elenco", "letture")}},
                              ensure_ascii=False, indent=2))
         else:
             print(latenza.testo(dati, soglia))
+            # La prima voce per tool (17/10, issue #132)
+            print(latenza.testo_per_tool(latenza.per_tool(turni)))
             print()
             print(attrito.testo(sicurezza, soglia_a))
             print()

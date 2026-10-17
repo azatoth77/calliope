@@ -2539,3 +2539,23 @@ prova ha i contrari (`amministratore`, `admin`, yes/on/true sulle impronte e sul
 **Da fare sulla DGX** (#84): dopo l'aggiornamento rileggere l'avvio (`journalctl --user -u
 calliope | grep CONFIG`) per vedere se qualche riga del locale era scritta male e valeva un altro
 modo.
+
+## La regola `taglio_punto_e_virgola` e le reti sui pezzi (17/10, issue #132, PR #139)
+
+Una frase senza punto più lunga di `tts_spezza_streaming` (120 caratteri) va alla voce anche a
+pezzi, dopo un «; » con una clausola di almeno 40 caratteri (`testi.taglio_voce`, usata da
+`tts.split_sentences`). Il taglio non cade mai alla virgola, né in «3; 4», virgolette, parentesi,
+quadre o elenchi brevi. Per il principio 10 è una **conversione della forma**: il testo detto
+non cambia, cambia solo dove comincia la sintesi. La regola si scrive nel registro
+(`taglio_punto_e_virgola`, una volta per turno), si spegne con `tts_spezza_streaming: 0` e ha i
+suoi contrari in `prove/prova_notizie_attesa.py`.
+
+Il taglio cambia anche l'unità che vedono le reti. Il principio della revisione della PR #139 è
+che nessuna rete giudica meno testo di prima:
+- `ClaimHold` resta in prova fino alla fine della frase e giudica la frase da capo;
+- `FraseTolta` tiene ogni pezzo finché non arriva la clausola dopo;
+- `riferire`, il guardiano e l'annuncio di un tool giudicano `Pezzo.intera()`.
+
+Ciò che resta diverso da main: un pezzo senza niente è già detto quando una clausola dopo fa
+scattare la rete, che allora ferma da lì. Casi e misure in [biblioteca](biblioteca.md) (sezione
+dello stesso giorno).
