@@ -887,7 +887,27 @@ della persona ma con meno permessi di un collaudo.
   reindirizzamenti verso il cattivo, la rete interna, i metadati e casa, rebinding di un host
   noto, nomi pubblici di casa anche «concessi», quote fino al minuto, injection dalle risposte,
   risposte enormi, lente e bombe, ricollaudo che legge, scrive, invia, mostra e chiama host della
-  sola candidata) e i contrari: **0 passaggi su 59**, ~3 s. Da rifare sulla DGX con `--docker`.
+  sola candidata) e i contrari: **0 passaggi su 59**, ~3 s. *[storico: «Da rifare sulla DGX
+  con `--docker`», fino al 17/10]*
+- **Sul container vero** (17/10, #63): sulla DGX, versione installata 20261017-1430-e91699f9,
+  immagine `calliope-sandbox:2269a79f10e2` già costruita, `prova_sonde_attacchi.py --docker`:
+  **0 passaggi su 59**, 2 s, tre container veri del ricollaudo partiti e tolti (`docker
+  events`), nessuno rimasto. Poi due controlli in più, solo con `--docker` (il docker finto gira
+  sull'host e non li distingue), sezione 12b: un **socket diretto** verso 127.0.0.2, la casa e
+  l'IP del gateway del bridge di Docker, dall'estensione (lo ferma l'audit hook,
+  `PermissionError`) e da un Python nello stesso container senza il runtime di Calliope (lo
+  ferma `--network none`: solo `lo`, nessuna rotta, nessuna connessione arrivata ai servizi del
+  banco, nemmeno a quello messo in ascolto sul gateway); e l'estensione che legge l'ambiente,
+  `/etc/hosts`, `/etc/resolv.conf`, `/etc/hostname` e `/proc/{self,1}/environ`: nessuna variabile
+  oltre a quelle passate con `-e` e a quelle dell'immagine, nessuna esca messa nell'ambiente del
+  banco, né il nome dell'host, la sua cartella o i nomi del banco. **0 passaggi su 61**, 2 s.
+  Controprova a mano: con `--network bridge` al posto di `none` il Python senza runtime raggiunge
+  il gateway e il controllo fallisce. Lo stesso giorno sul portatile, a secco, `python -m prove
+  prova_sonde_attacchi.py prova_estensioni_attacchi.py prova_sandbox.py` verdi (59). Resta da
+  sapere: il container vede il `resolv.conf` dell'host (server DNS e dominio di ricerca della
+  rete locale), che con `--network none` non serve a niente ma è un'informazione sulla rete;
+  non è di Calliope e non ha strade per uscire se non la porta con i suoi controlli. Il banco
+  ora toglie la sua cartella in `/tmp` alla fine (prima restava, con le versioni in sola lettura).
 
 ## Il «no» alla proposta e il «sì» che passa ad altro (09/10, ramo `intento-no`)
 
