@@ -1257,6 +1257,7 @@ AIUTO = """Uso: python -m prove [opzioni] [prova_x.py …]
     --seriale       una prova alla volta (-j 1); -j N: N prove insieme
     --timeout S     tempo massimo per prova (predefinito 300 s)
     prova_x.py …    solo queste (con il livello e il parallelo di sempre)
+    --leggimi       rigenera l'elenco per area di prove/LEGGIMI.md da prove/elenco.md (16/10, #82)
 Codici: 0 tutto bene, 1 qualche prova fallita. Una prova che esce con 77 è SALTATA (contata a parte)."""
 
 
@@ -1268,6 +1269,10 @@ def main(argv: list[str]) -> int:
     if "-h" in argv or "--help" in argv:
         print(AIUTO)
         return 0
+    if "--leggimi" in argv:       # l'elenco di LEGGIMI.md non si scrive a mano (16/10, #82)
+        sys.path.insert(0, str(RADICE / "prove"))
+        import leggimi
+        return leggimi.scrivi()
     if "--staged" in argv and os.environ.get("PROVE_FILE_CAMBIATI") is None:
         return con_indice(argv)
     paralleli = min(6, os.cpu_count() or 2)

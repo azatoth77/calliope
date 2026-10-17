@@ -9,7 +9,10 @@ docs/ricerche/2026-10-06-analisi-2.md § 3.4). A secco, < 1 s:
   area del livello 2 o una del livello 1; brain, ciclo, main e config scelgono
   prova_linux_import (gli import di tutto il pacchetto su Linux);
 - una prova registrata che salta una parte lo dice con «SALTATA IN PARTE:» in testa alla riga
-  (il runner la conta); un salto senza il segnale e senza uscire con 77 fallisce.
+  (il runner la conta); un salto senza il segnale e senza uscire con 77 fallisce;
+- (16/10, #82) ogni prova registrata o manuale e ogni script di `prove/manuali/` compare nella
+  prima colonna di `prove/elenco.md`, e l'elenco per area di `prove/LEGGIMI.md` è quello generato
+  da `elenco.md` (`python -m prove --leggimi`, `prove/leggimi.py`); con i contrari.
 
     python prove/prova_runner.py
 """
@@ -60,6 +63,61 @@ def salti_senza_segnale(path: Path) -> list[str]:
             continue
         out.append(f"{path.name}:{i + 1}: {r.strip()[:90]}")
     return out
+
+
+def elenco_e_leggimi(registrate: set[str], manuali: dict) -> None:
+    """Le prove in elenco.md e l'elenco generato di LEGGIMI.md (16/10, #82: fino al 15/10
+    l'elenco di LEGGIMI.md era scritto a mano e ne mancavano 126 voci)."""
+    sys.path.insert(0, str(RADICE / "prove"))
+    import leggimi
+
+    elenco = leggimi.ELENCO.read_text(encoding="utf-8")
+    nomi = sorted(registrate | set(manuali)
+                  | {p.name for p in (RADICE / "prove").glob("prova_*.py")}
+                  | {f"manuali/{p.name}" for p in (RADICE / "prove" / "manuali").glob("*.py")})
+    manca = leggimi.mancanti(elenco, nomi)
+    verifica(f"ogni prova registrata o manuale e ogni manuali/*.py è in elenco.md ({len(nomi)})",
+             not manca, "da aggiungere nella prima colonna di prove/elenco.md, nella sezione "
+             "della sua area (poi python -m prove --leggimi): " + ", ".join(manca))
+    verifica("l'elenco per area di LEGGIMI.md è quello generato da elenco.md",
+             leggimi.allineato(leggimi.LEGGIMI.read_text(encoding="utf-8"), elenco),
+             "LEGGIMI.md non è allineato a elenco.md: python -m prove --leggimi "
+             "(l'elenco tra i segni <!-- … --> non si scrive a mano)")
+
+    # Contrari, su testi finti
+    finto = ("# Elenco\n\n## Casa (Home Assistant)\n\nDocumento d'area: [`docs/aree/casa.md`]"
+             "(../docs/aree/casa.md)\n\n| File | Cosa fa | Serve Ollama? |\n|---|---|---|\n"
+             "| `prova_casa_ha.py` | Casa, cita `prova_solo_citata.py` | No |\n"
+             "| `misura_x.py`, `riferimenti_x.tsv` | Misura (`--solo y.py`) | Sì |\n"
+             "| `manuali/banco_y.py` | Banco con una descrizione\nlunga a capo | Sì |\n\n"
+             "## Capacità e installazioni\n\n| File | Cosa fa | Serve Ollama? |\n|---|---|---|\n"
+             "| `prova_piano.py` | Piano | No |\n")
+    trovate = leggimi.mancanti(finto, ["prova_casa_ha.py", "manuali/banco_y.py",
+                                       "prova_finta_non_elencata.py", "prova_solo_citata.py",
+                                       "banco_y.py", "riferimenti_x.tsv"])
+    verifica("contrario: una prova finta non elencata (o solo citata in una descrizione, o "
+             "senza manuali/) manca da elenco.md",
+             trovate == ["banco_y.py", "prova_finta_non_elencata.py", "prova_solo_citata.py"],
+             str(trovate))
+    gen = leggimi.genera(finto)
+    verifica("l'elenco generato: sezioni, ancore, area, niente file di dati né argomenti",
+             gen == "- **Casa (Home Assistant)** ([elenco](elenco.md#casa-home-assistant), "
+                    "[area](../docs/aree/casa.md)): `prova_casa_ha.py`, `misura_x.py`, "
+                    "`manuali/banco_y.py`\n- **Capacità e installazioni** "
+                    "([elenco](elenco.md#capacità-e-installazioni)): `prova_piano.py`", gen)
+    leggi = (f"# Prove\n\nTesta.\n\n{leggimi.SEGNO_INIZIO}\n{gen}\n{leggimi.SEGNO_FINE}\n\n"
+             "Coda.\n")
+    con_riga = finto + "| `prova_nuova.py` | Una prova nuova | No |\n"
+    rigenerato = leggimi.sostituisci(leggi, con_riga)
+    verifica("contrario: una riga nuova in elenco.md rende LEGGIMI.md non allineato, e "
+             "rigenerare basta (testa e coda restano)",
+             leggimi.allineato(leggi, finto) and not leggimi.allineato(leggi, con_riga)
+             and leggimi.allineato(rigenerato, con_riga) and "`prova_nuova.py`" in rigenerato
+             and rigenerato.startswith("# Prove\n\nTesta.\n") and rigenerato.endswith("Coda.\n"))
+    a_mano = leggi.replace("`prova_piano.py`", "`prova_piano.py`, `prova_a_mano.py`")
+    verifica("contrari: un nome aggiunto a mano o i segni tolti non sono allineati",
+             not leggimi.allineato(a_mano, finto)
+             and not leggimi.allineato(leggi.replace(leggimi.SEGNO_INIZIO, ""), finto))
 
 
 def main() -> int:
@@ -125,6 +183,7 @@ def main() -> int:
         finto.unlink(missing_ok=True)
     verifica("il controllo dei salti trova solo il salto senza segnale", len(trovati) == 1
              and ":1:" in trovati[0], str(trovati))
+    elenco_e_leggimi(registrate, manuali)
     print(f"\n{errori} errori" if errori else "\nTutto a posto.")
     return 1 if errori else 0
 

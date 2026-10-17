@@ -213,7 +213,8 @@ protetto; primo download di Whisper su Windows con `WinError 1314` → riavviare
   una riga** (la tabella, lo stato o un problema aperto); i problemi risolti escono da qui.
 - Un'affermazione superata non si cancella: si segna come storica, con la data.
 - Prove: una prova nuova va in `prove/__main__.py` e in [`prove/elenco.md`](prove/elenco.md)
-  nella sua area; i passi manuali in `prove/manuali/`. Comandi del runner: vedi la sezione
+  nella sua area (poi `python -m prove --leggimi`: l'elenco di `LEGGIMI.md` si genera, dal 16/10);
+  i passi manuali in `prove/manuali/`. Comandi del runner: vedi la sezione
   «Runner» di [`prove/LEGGIMI.md`](prove/LEGGIMI.md).
 - L'hook lancia `python -m prove --hook --staged` (livelli 1 e 2, ~15–60 s). **Prima
   dell'unione** `python -m prove --completo` (~8 min, con `voices/`, `models/speaker/`,
