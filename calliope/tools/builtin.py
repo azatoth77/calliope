@@ -2223,7 +2223,7 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
     `allegati`: i tool dei file allegati (calliope/tools/allegati.py, 05/10): allegato_leggi,
     allegato_archivia con l'archivio, e il parametro `allegato` di lavoro_affida.
     `cassetto` (08/10, calliope/cassetto.py): con gli allegati, il cassetto dei file per persona
-    (allegato_leggi con `cassetto` e `di`, cassetto_gestisci).
+    (allegato_leggi con `cassetto` e `minore`, prima `di`, cassetto_gestisci).
     `minori_tool`: compiti_aiuto e minore_gestisci (calliope/tools/minori.py, 05/10), con
     almeno un profilo minorenne in casa (il prefisso degli altri non cambia finché non c'è).
     """

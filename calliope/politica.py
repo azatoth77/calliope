@@ -160,6 +160,9 @@ class Classe:
     # verbi che la chiedono: senza uno di loro nella frase (e senza il «sì» alla domanda),
     # «Non me l'hai chiesto: vuoi che…?» (regola `politica_cancellazione_non_chiesta`)
     verbo_sempre: object = None
+    # Il nome della regola nel registro quando `verbo_sempre` ferma la chiamata (17/10, #58:
+    # per cassetto_gestisci «tieni» e «ancora» non sono cancellazioni)
+    regola_verbo_sempre: str = "politica_cancellazione_non_chiesta"
     # L'argomento che, con un valore, cambia una voce già messa invece di crearne una
     # (timer_imposta, promemoria_imposta: `cambia`). Anche con la conversazione pulita il
     # cambio si esegue solo se la frase ha le parole del tool (`verbi`: «aggiungi», «togli»,
@@ -1638,7 +1641,7 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
         # parte su un «no» anche se il modello la richiama)
         if (callable(cl.verbo_sempre) and t.testo and not cl.verbo_sempre(t.testo)
                 and not (proposta and (consenso(t.testo) or t.sfida))):
-            return Decisione("conferma", "politica_cancellazione_non_chiesta",
+            return Decisione("conferma", cl.regola_verbo_sempre,
                              f"Non me l'hai chiesto: vuoi che {cosa}?")
         if (_cambio(args, cl.cambio) and t.testo and cl.verbi
                 and not re.search(cl.verbi, t.testo, re.I)

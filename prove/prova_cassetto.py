@@ -275,13 +275,16 @@ def prova_azioni():
     cas2.close()
 
 
-# ─────────────────────── «ragazzo» che non è una persona (17/10, #58) ───────────────────────
-def prova_ragazzo_non_persona():
-    """Il 26B della DGX (banco prova_cassetto_ollama, 17/10) scriveva il quando o il cosa nel
-    parametro della persona («il file di ieri» → di="ieri", «quello dello scontrino» →
-    di="lo scontrino») e il tool rispondeva «I file degli altri non li vedo». Un valore che non è
-    il nome di nessuno di casa diventa parole della richiesta (regola
-    `cassetto_ragazzo_non_persona`); un nome di casa resta un nome, con i suoi permessi."""
+# ───────────────────── «minore» che non è una persona (17/10, #58) ─────────────────────
+def prova_minore_non_persona():
+    """Il 26B della DGX (banco prova_cassetto_ollama, 17/10) scriveva il quando nel parametro
+    della persona («il file di ieri» → di="ieri") e il tool rispondeva «I file degli altri non
+    li vedo». Solo un valore che è per intero una forma chiusa di quando o cosa («ieri», «le
+    foto», «tutti») diventa parole della richiesta (regola `cassetto_minore_non_persona`);
+    tutto il resto è una persona: un nome di casa (anche con l'accento o dentro il valore) con i
+    suoi permessi, altrimenti il rifiuto di prima. Mai il cassetto di chi parla al posto di
+    quello di un altro (revisione della PR #143: «mia moglie» dava il file di Dario, ed
+    «elimina» lo cancellava)."""
     cas, _ = nuovo()
     a = cas.metti("dario", b"Preventivo idraulico: 340 euro.", "preventivo.txt", "testo")
     cas.ora.avanti(1)
@@ -291,41 +294,96 @@ def prova_ragazzo_non_persona():
     cas.metti("bianca", b"Il compito di storia: Napoleone.", "storia.txt", "testo")
     ctx = ctx_per(cas)
     ctx.regole = []
-    r = call(ctx, "allegato_leggi", {"ragazzo": "ieri"})
-    verifica("allegato_leggi(ragazzo=\"ieri\"): il file di ieri di chi parla, non un rifiuto",
+    r = call(ctx, "allegato_leggi", {"minore": "ieri"})
+    verifica("allegato_leggi(minore=\"ieri\"): il file di ieri di chi parla, non un rifiuto",
              r.get("ok") and "340" in r.get("contenuto", "")
-             and "cassetto_ragazzo_non_persona" in ctx.regole, (r, ctx.regole))
+             and "cassetto_minore_non_persona" in ctx.regole, (r, ctx.regole))
     r = call(ctx, "allegato_leggi", {"cassetto": "tutti", "di": "martedì"})
     verifica("…anche col vecchio nome «di» e un giorno: nessun «I file degli altri»",
              "altri" not in json.dumps(r, ensure_ascii=False), r)
-    r = call(ctx, "cassetto_gestisci", {"azione": "elimina", "quale": "tutti",
-                                        "di": "lo scontrino"})
-    verifica("cassetto_gestisci(elimina, tutti, di=\"lo scontrino\"): solo lo scontrino",
-             r.get("ok") and cas.prendi("dario", s) is None
-             and cas.prendi("dario", b) is not None and cas.prendi("dario", a) is not None, r)
-    r = call(ctx, "allegato_leggi", {"cassetto": "ieri", "ragazzo": "Teodora"})
+    r = call(ctx, "allegato_leggi", {"cassetto": "il file", "minore": "le foto"})
+    verifica("…e con un tipo («le foto»): parole della richiesta",
+             "altri" not in json.dumps(r, ensure_ascii=False), r)
+    # Contrari: parentela, un nome che non c'è, «lo scontrino»; con un giorno insieme
+    for chiave in ("minore", "di", "ragazzo"):
+        for chi in ("mia moglie", "la mamma", "papà", "Ettore", "lo scontrino"):
+            r = call(ctx, "allegato_leggi", {"cassetto": "ieri", chiave: chi})
+            testo = json.dumps(r, ensure_ascii=False)
+            verifica(f"allegato_leggi(cassetto=ieri, {chiave}=«{chi}»): rifiutato, nessun file "
+                     "di chi parla", not r.get("ok") and "340" not in testo
+                     and "QX" not in testo and "preventivo" not in testo, r)
+    for chi in ("mia moglie", "la mamma", "papà", "lo scontrino"):
+        r = call(ctx, "cassetto_gestisci", {"azione": "elimina", "quale": "ieri", "minore": chi})
+        verifica(f"cassetto_gestisci(elimina, ieri, minore=«{chi}»): rifiutato, niente eliminato",
+                 not r.get("ok") and all(cas.prendi("dario", x) is not None for x in (a, s, b)), r)
+    r = call(ctx, "allegato_leggi", {"cassetto": "ieri", "minore": "Teodora"})
     verifica("un nome di casa resta un nome: i file di un'adulta restano chiusi",
              not r.get("ok") and "QX" not in json.dumps(r), r)
-    r = call(ctx, "allegato_leggi", {"cassetto": "storia", "di": "Bianca"})
-    verifica("…e il tutore col vecchio «di» vede ancora il file della figlia",
-             r.get("ok") and "Napoleone" in r.get("contenuto", ""), r)
+    for chi in ("Bianca", "Biànca", "mia figlia Bianca", "bianca"):
+        r = call(ctx, "allegato_leggi", {"cassetto": "storia", "di": chi})
+        verifica(f"il tutore con «{chi}»: vede il file della figlia",
+                 r.get("ok") and "Napoleone" in r.get("contenuto", ""), r)
+    # Con Brain e la politica: «Elimina il file che mia moglie ti ha mandato ieri»
+    cfg = Config()
+    cfg.storia_inattiva_s = 0
+    br = Brain(cfg, build_registry(allegati=True, cassetto=True, archivio=True), ctx_per(cas))
+    br.tool_ctx.cassetto = cas
+    br.backend = BackendFinto([
+        [("calls", [{"id": "c1", "name": "cassetto_gestisci",
+                     "arguments": {"azione": "elimina", "quale": "ieri",
+                                   "minore": "mia moglie"}}])],
+        [("text", "Non posso.")]])
+    "".join(br.stream_reply("Elimina il file che mia moglie ti ha mandato ieri.", "familiare"))
+    verifica("«Elimina il file che mia moglie ti ha mandato ieri»: nessun file eliminato",
+             all(cas.prendi("dario", x) is not None for x in (a, s, b))
+             and len(cas.elenco("teodora")) == 1, br.last_tools)
+    r = call(ctx, "cassetto_gestisci", {"azione": "elimina", "quale": "scontrino"})
+    verifica("…e «elimina lo scontrino» col solo quale: solo lo scontrino",
+             r.get("ok") and cas.prendi("dario", s) is None
+             and cas.prendi("dario", b) is not None, r)
     cas.close()
-    # «Archivia questa bolletta» con un PDF e nessuna foto: immagine_archivia archivia il file
+    # «Archivia questa bolletta» con immagine_archivia: il ripiego sul file solo senza foto e con
+    # un solo file archiviabile
     from calliope.allegati import Allegati
-    ctx = ctx_per(cas)
-    ctx.regole = []
-    ctx.archivio = Archivio()
-    ctx.allegati = Allegati(4)
-    ctx.allegati.aggiungi(prepara(A.pdf([A.BOLLETTA]), "bolletta luce.pdf", persona="dario"))
+    from calliope.immagini import Album
     reg = build_registry(allegati=True, archivio=True,
                          immagini={"storia": "messaggio", "pc": False, "archivio": True})
-    r = json.loads(reg.call("immagine_archivia", {"foto": -1}, ctx, "familiare"))
-    salvati = list(ctx.archivio.cartella.rglob("*.pdf"))
-    verifica("immagine_archivia senza foto e con un PDF: archivia il file (regola "
-             "archivia_file_non_foto)", r.get("ok") and len(salvati) == 1
-             and "archivia_file_non_foto" in ctx.regole, (r, salvati))
-    ctx.allegati = Allegati(4)
-    r = json.loads(reg.call("immagine_archivia", {"foto": -1}, ctx, "familiare"))
+
+    def ctx_archivio(file=(), foto_n=0):
+        c = ctx_per(cas)
+        c.regole = []
+        c.archivio = Archivio()
+        c.allegati = Allegati(4)
+        for dati, nome in file:
+            c.allegati.aggiungi(prepara(dati, nome, persona="dario"))
+        c.immagini = Album(6)
+        for _ in range(foto_n):
+            c.immagini.aggiungi(foto(persona="dario"))
+        return c
+    c = ctx_archivio([(A.pdf([A.BOLLETTA]), "bolletta luce.pdf")])
+    r = json.loads(reg.call("immagine_archivia", {"foto": -1}, c, "familiare"))
+    salvati = list(c.archivio.cartella.rglob("*.*"))
+    verifica("immagine_archivia senza foto e con un solo PDF: archivia il file (regola "
+             "archivia_file_non_foto)", r.get("ok") and [p.suffix for p in salvati] == [".pdf"]
+             and "archivia_file_non_foto" in c.regole, (r, salvati))
+    c = ctx_archivio([(A.pdf([A.BOLLETTA]), "bolletta luce.pdf"),
+                      (A.docx(["Contratto di affitto."]), "contratto.docx")])
+    r = json.loads(reg.call("immagine_archivia", {"foto": -1}, c, "familiare"))
+    verifica("…senza foto e con due file: niente archiviato, chiede quale (l'elenco dei file)",
+             not r.get("ok") and len(r.get("file") or []) == 2
+             and not list(c.archivio.cartella.rglob("*.*")), r)
+    c = ctx_archivio([(A.pdf([A.BOLLETTA]), "bolletta luce.pdf")], foto_n=1)
+    r = json.loads(reg.call("immagine_archivia", {"foto": -1}, c, "familiare"))
+    salvati = list(c.archivio.cartella.rglob("*.*"))
+    verifica("…con una foto e un PDF: si archivia la foto, come prima",
+             r.get("ok") and [p.suffix for p in salvati] == [".jpg"]
+             and "archivia_file_non_foto" not in c.regole, (r, salvati))
+    c = ctx_archivio([(A.pdf([A.BOLLETTA]), "bolletta luce.pdf")], foto_n=1)
+    r = json.loads(reg.call("immagine_archivia", {"foto": 3}, c, "familiare"))
+    verifica("…con una foto e un indice sbagliato: un errore, il PDF non si archivia",
+             not r.get("ok") and not list(c.archivio.cartella.rglob("*.*")), r)
+    c = ctx_archivio()
+    r = json.loads(reg.call("immagine_archivia", {"foto": -1}, c, "familiare"))
     verifica("…senza foto e senza file: «Non ho una foto da archiviare»", not r.get("ok")
              and "foto" in r.get("conferma", ""), r)
 
@@ -340,8 +398,8 @@ def prova_tool():
     f = cas.metti_foto(img, "dario")
     cas.metti("bianca", b"Il compito di storia: Napoleone.", "storia.txt", "testo")
     cas.metti("carlo", b"Diario segreto", "diario.txt", "testo")
-    verifica("i tool: allegato_leggi con «cassetto» e «ragazzo» (prima «di»), cassetto_gestisci",
-             {"cassetto", "ragazzo"} <= set(REG.get("allegato_leggi").parameters["properties"])
+    verifica("i tool: allegato_leggi con «cassetto» e «minore» (prima «di»), cassetto_gestisci",
+             {"cassetto", "minore"} <= set(REG.get("allegato_leggi").parameters["properties"])
              and REG.get("cassetto_gestisci") is not None)
     # Riavvio: un Cassetto nuovo sullo stesso file
     ora = cas.ora()
@@ -384,14 +442,14 @@ def prova_tool():
     r = call(ctx_per(cas, chi="Teodora"), "allegato_leggi", {"cassetto": "C" + str(a)})
     verifica("…nemmeno con l'id", not r.get("ok"), r)
     # Minore e tutore
-    r = call(ctx, "allegato_leggi", {"cassetto": "storia", "ragazzo": "Bianca"})
+    r = call(ctx, "allegato_leggi", {"cassetto": "storia", "minore": "Bianca"})
     verifica("tutore: vede il cassetto della figlia di 10 anni",
              r.get("ok") and "Napoleone" in r.get("contenuto", ""), r)
-    r = call(ctx, "allegato_leggi", {"cassetto": "tutti", "ragazzo": "Carlo"})
+    r = call(ctx, "allegato_leggi", {"cassetto": "tutti", "minore": "Carlo"})
     verifica("tutore: anche dai 14 anni (14/10, come le conversazioni)", r.get("ok"), r)
-    r = call(ctx_per(cas, chi="Teodora"), "allegato_leggi", {"cassetto": "tutti", "ragazzo": "Bianca"})
+    r = call(ctx_per(cas, chi="Teodora"), "allegato_leggi", {"cassetto": "tutti", "minore": "Bianca"})
     verifica("un adulto che non è tutore: no", not r.get("ok"), r)
-    r = call(ctx_per(cas, chi="Bianca"), "allegato_leggi", {"cassetto": "tutti", "ragazzo": "Dario"})
+    r = call(ctx_per(cas, chi="Bianca"), "allegato_leggi", {"cassetto": "tutti", "minore": "Dario"})
     verifica("un minore non vede i file degli adulti", not r.get("ok"), r)
     r = call(ctx_per(cas, chi="Bianca"), "allegato_leggi", {"cassetto": "storia"})
     verifica("il minore vede i suoi", r.get("ok"), r)
@@ -399,9 +457,9 @@ def prova_tool():
     r = call(ctx_per(cas, chi="Bianca"), "cassetto_gestisci", {"azione": "tieni",
                                                                "quale": "storia"})
     verifica("cassetto_gestisci tieni: un minore no", not r.get("ok"), r)
-    r = call(ctx, "cassetto_gestisci", {"azione": "ancora", "quale": "storia", "ragazzo": "Bianca"})
+    r = call(ctx, "cassetto_gestisci", {"azione": "ancora", "quale": "storia", "minore": "Bianca"})
     verifica("cassetto_gestisci: il tutore tiene ancora il file della figlia", r.get("ok"), r)
-    r = call(ctx, "cassetto_gestisci", {"azione": "tieni", "quale": "storia", "ragazzo": "Bianca"})
+    r = call(ctx, "cassetto_gestisci", {"azione": "tieni", "quale": "storia", "minore": "Bianca"})
     tenuti = list(cas.archivio.cartella.rglob("storia*"))
     verifica("cassetto_gestisci: «Tieni» del tutore sul file della figlia va nella SUA cartella",
              r.get("ok") and [p.parent.name for p in tenuti] == ["Dario"], (r, tenuti))
@@ -459,10 +517,20 @@ def prova_politica_e_busta():
              (b.last_tools, b.rules_fired()))
     cas.close()
     # 17/10 (#58, banco col 26B): a «Ritrovami il file di ieri» il modello chiamava
-    # cassetto_gestisci(tieni, tutti) e metteva tutti i file tra i documenti. Le parole di
-    # un'azione servono anche con la conversazione pulita (verbo_sempre)
+    # cassetto_gestisci(tieni, tutti) e metteva tutti i file tra i documenti. Le forme di
+    # un'azione servono anche con la conversazione pulita (verbo_sempre, regola
+    # `politica_cassetto_non_chiesto`); radici larghe come «settiman», «ancora», «salv» no
+    # (revisione della PR #143)
     for frase, eseguita in (("Ritrovami il file che ti ho mandato ieri.", False),
-                            ("Tienili tutti.", True)):
+                            ("Fammi vedere le foto di questa settimana.", False),
+                            ("Ritrovami il file della settimana scorsa.", False),
+                            ("Cosa c'era ancora nella bolletta?", False),
+                            ("Salve, mi ritrovi il PDF?", False),
+                            ("Non tenerli, voglio solo vederli.", False),
+                            ("Tienili tutti.", True), ("Puoi tenerli tutti?", True),
+                            ("Voglio tenere tutti i file.", True),
+                            ("Mettili tra i documenti.", True), ("Salvali tutti.", True),
+                            ("Tienili ancora una settimana.", True)):
         cas, _ = nuovo()
         cas.metti("dario", b"Preventivo: 340 euro.", "preventivo.txt", "testo")
         cas.metti("dario", b"Appunti.", "appunti.txt", "testo")
@@ -480,8 +548,8 @@ def prova_politica_e_busta():
                      (b.last_tools, b.rules_fired()))
         else:
             verifica(f"politica: «{frase}» → cassetto_gestisci(tieni) NON eseguito, «Non me "
-                     "l'hai chiesto»", rimasti == 2
-                     and "politica_cancellazione_non_chiesta" in b.rules_fired(),
+                     "l'hai chiesto» (politica_cassetto_non_chiesto)", rimasti == 2
+                     and "politica_cassetto_non_chiesto" in b.rules_fired(),
                      (out, b.last_tools, b.rules_fired()))
         cas.close()
 
@@ -756,7 +824,7 @@ if __name__ == "__main__":
     prova_scadenza()
     prova_azioni()
     prova_tool()
-    prova_ragazzo_non_persona()
+    prova_minore_non_persona()
     prova_politica_e_busta()
     prova_ciclo()
     prova_server()

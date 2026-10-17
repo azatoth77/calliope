@@ -78,15 +78,27 @@ def _archivia(ctx: ToolContext, foto=None) -> dict:
         return _final("Non ho un archivio dei documenti configurato, quindi la foto non la "
                       "salvo.", ok=False)
     img = album.prendi(_foto_n(foto)) if album is not None else None
-    if img is None:
+    if img is None and (album is None or not len(album)):
         # «Archivia questa bolletta» con un PDF e nessuna foto (17/10, #58, banco col 26B): il
-        # modello sceglie questo tool per il file; si archivia il file (correzione della forma
-        # della scelta del modello, regola `archivia_file_non_foto`)
+        # modello sceglie questo tool per il file. Senza foto nella conversazione e con un solo
+        # file archiviabile si archivia quello (correzione della forma della scelta del
+        # modello, regola `archivia_file_non_foto`); con più file si chiede quale
+        from ..allegati import ARCHIVIABILI
         alb = getattr(ctx, "allegati", None)
-        if alb is not None and len(alb):
+        file = [a for a in (getattr(alb, "foto", None) or [])
+                if ARCHIVIABILI.get(getattr(a, "categoria", None))]
+        if len(file) == 1:
             from .allegati import _archivia as archivia_file
             note_rule(ctx, "archivia_file_non_foto")
-            return archivia_file(ctx, -1)
+            return archivia_file(ctx, file[0].n)
+        if len(file) > 1:
+            note_rule(ctx, "archivia_file_non_foto")
+            return {"ok": False, "fatto": NIENTE,
+                    "errore": "in questa conversazione non ci sono foto ma più file",
+                    "file": [{"allegato": a.n, "tipo": a.tipo()} for a in file[:10]],
+                    "cosa_fare": ("chiedi quale file archiviare, poi richiama allegato_archivia "
+                                  "con allegato=<n>")}
+    if img is None:
         return _final("Non ho una foto da archiviare in questa conversazione.", ok=False)
     name = getattr(ctx.speaker_ctx, "current_speaker", None)
     prof = ctx.speakers.get(name) if name and ctx.speakers else None

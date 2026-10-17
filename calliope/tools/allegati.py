@@ -13,11 +13,11 @@ I tool dei file allegati (05/10/2026, calliope/allegati.py, docs/ricerche/2026-1
   ritrova un file dei giorni passati («il file che ti ho mandato ieri», foto comprese) e
   `cassetto_gestisci(azione, quale)` lo tiene (archivio personale), lo elimina o lo tiene
   ancora una settimana. Solo per chi è riconosciuto con certezza (voce o schermo personale).
-- Dal 17/10 (#58, banco col 26B) il parametro per il cassetto di un ragazzo si chiama `ragazzo`
-  (prima `di`, che resta accettato): il modello ci scriveva «ieri», «martedì», «lo scontrino»
-  («il file di ieri») e il tool rispondeva «I file degli altri non li vedo». Un valore che non è
-  il nome di nessuno di casa diventa parole della richiesta (correzione della forma di una
-  scelta del modello, regola `cassetto_ragazzo_non_persona`).
+- Dal 17/10 (#58, banco col 26B) il parametro per il cassetto di un minore si chiama `minore`
+  (prima `di`, che resta accettato): il modello ci scriveva «ieri», «martedì» («il file di
+  ieri») e il tool rispondeva «I file degli altri non li vedo». Un valore che è per intero una
+  forma chiusa di quando o cosa diventa parole della richiesta (correzione della forma di una
+  scelta del modello, regola `cassetto_minore_non_persona`); tutto il resto è una persona.
 """
 
 import datetime
@@ -119,27 +119,62 @@ def _proprietario(ctx, di: str | None = None):
     return altro, prof, None
 
 
-# Ciò che il modello scrive in `ragazzo` per dire «nessuno» (il 26B: ragazzo="nessuno")
+# Ciò che il modello scrive in `minore` per dire «nessuno» (il 26B: ragazzo="nessuno")
 _NESSUNO = frozenset({"", "nessuno", "nessuna", "niente", "none", "null", "n/a", "na", "no"})
 
 
-def _ragazzo(ctx, nome) -> tuple[str | None, str]:
-    """(nome di una persona di casa o None, parole da aggiungere alla richiesta). Il modello
-    scrive in `ragazzo` (prima `di`) anche il quando o il cosa («ieri», «lo scontrino»): se non
-    è il nome di nessuno, sono parole della richiesta (17/10, #58). Un nome di casa resta un
-    nome, e decide `_proprietario` (gli adulti no, i ragazzi solo per i loro tutori)."""
+def _solo_quando_cosa(s: str) -> bool:
+    """Il valore è per intero una forma chiusa di «quando» o «cosa» che il cassetto sa leggere
+    («ieri», «martedì», «le foto», «tutti», «in scadenza»): ogni parola è una di quelle di
+    `cassetto._VUOTE` o un tipo di `cassetto._TIPI_PAROLE`. «mia moglie», «la mamma»,
+    «Biànca», «lo scontrino» no: sono (o possono essere) persone."""
+    from ..cassetto import _TIPI_PAROLE, _VUOTE, _norm
+    parole = re.findall(r"[a-z0-9]+", _norm(s))
+    return bool(parole) and all(
+        w in _VUOTE or w.isdigit() or any(re.search(p, w) for p, _ in _TIPI_PAROLE)
+        for w in parole)
+
+
+def _minore(ctx, nome) -> tuple[str | None, str]:
+    """(il nome di chi è il cassetto, parole da aggiungere alla richiesta). Il modello scrive in
+    `minore` (prima `ragazzo`, e `di`, ancora accettato) anche il quando o il cosa («ieri», «le
+    foto»): solo se il valore è per intero una di quelle forme chiuse diventa parole della
+    richiesta (17/10, #58, regola `cassetto_minore_non_persona`). Tutto il resto è una persona:
+    il profilo di casa che corrisponde (`speakers.find`: accenti, cognome; o un nome di casa
+    dentro il valore, «mia figlia Bianca»); se non è nessuno, il valore passa così com'è e
+    `_proprietario` rifiuta come prima («mia moglie», «la mamma»: mai il cassetto di chi
+    parla al posto di quello di un altro, revisione della PR #143)."""
     s = str(nome or "").strip()
     if not s or s.casefold().strip(" .-/") in _NESSUNO:
         return None, ""
-    reg = getattr(ctx, "speakers", None)
-    noti = {str(n).casefold() for n in (reg.known_speakers() if reg is not None
-                                        and hasattr(reg, "known_speakers") else [])}
-    noti |= {str(getattr(u, "name", "")).casefold()
-             for u in (getattr(reg, "users", None) or {}).values()}
-    if s.casefold() in noti or s.casefold() in ("io", "me", "mio", "miei", "mia", "mie"):
+    if s.casefold() in ("io", "me", "mio", "miei", "mia", "mie"):
         return s, ""
-    note_rule(ctx, "cassetto_ragazzo_non_persona")
-    return None, s
+    if _solo_quando_cosa(s):
+        note_rule(ctx, "cassetto_minore_non_persona")
+        return None, s
+    reg = getattr(ctx, "speakers", None)
+    nomi = []
+    try:
+        nomi = list(reg.known_speakers()) if reg is not None else []
+    except Exception:  # noqa: BLE001
+        nomi = []
+    nomi += [str(getattr(u, "name", "")) for u in (getattr(reg, "users", None) or {}).values()]
+    trovato = None
+    find = getattr(reg, "find", None)
+    if callable(find):
+        try:
+            trovato = find(s)
+        except Exception:  # noqa: BLE001
+            trovato = None
+    if trovato is None:
+        from ..speaker_id import name_key
+        k = name_key(s)
+        trovato = next((n for n in nomi if n and name_key(n) == k), None)
+        if trovato is None:
+            dentro = [n for n in dict.fromkeys(nomi)
+                      if n and re.search(r"\b" + re.escape(name_key(n)) + r"\b", k)]
+            trovato = dentro[0] if len(dentro) == 1 else None
+    return (trovato or s), ""
 
 
 def _scheda_cassetto(ctx, cas, chi, righe, titolo: str) -> dict | None:
@@ -160,7 +195,7 @@ def _leggi_cassetto(ctx: ToolContext, quale, parte: str = "", di: str | None = N
     («ieri», «la foto di lunedì», «lo scontrino», «C12»). Più file: l'elenco (nomi come dati) e
     la scheda col carosello. Una foto entra nell'album e il modello la vede; il testo di un
     file è un dato non fidato (fonte «allegato», come sempre per questo tool)."""
-    di, resto = _ragazzo(ctx, di)
+    di, resto = _minore(ctx, di)
     quale = " ".join(x for x in (str(quale or "").strip(), resto) if x)
     chi, prof, err = _proprietario(ctx, di)
     if err:
@@ -240,10 +275,10 @@ _AZIONI = {"tieni": "tieni", "archivia": "tieni", "conserva": "tieni", "salva": 
            "rinnova": "ancora"}
 
 
-def _gestisci(ctx: ToolContext, azione: str = "", quale: str = "", ragazzo: str | None = None,
-              di: str | None = None) -> dict:
+def _gestisci(ctx: ToolContext, azione: str = "", quale: str = "", minore: str | None = None,
+              di: str | None = None, ragazzo: str | None = None) -> dict:
     """«Tienili tutti», «elimina quello dello scontrino», «tienilo ancora una settimana»."""
-    di, resto = _ragazzo(ctx, ragazzo or di)
+    di, resto = _minore(ctx, minore or ragazzo or di)
     quale = " ".join(x for x in (str(quale or "").strip(), resto) if x)
     chi, prof, err = _proprietario(ctx, di)
     if err:
@@ -285,6 +320,35 @@ def _gestisci(ctx: ToolContext, azione: str = "", quale: str = "", ragazzo: str 
     return _final(frase, fatti=out.get("fatti"))
 
 
+# Le forme delle tre azioni di cassetto_gestisci (parole intere, non pezzi: «salve», «questa
+# settimana», «cosa c'era ancora» non chiedono niente; revisione della PR #143)
+_CL = r"(?:li|lo|la|le|mi|melo|meli)?"
+_INF = r"(?:e|li|lo|la|le|meli|melo)"
+_PAROLE_CASSETTO = re.compile(
+    r"\b(?:"
+    # tieni
+    r"tien(?:i|ilo|ili|ila|ile|imi)|tenga|tengo|tengano|tener" + _INF + r"|tenete" + _CL
+    + r"|mantien(?:i|ilo|ili|ila|ile)|mantener" + _INF
+    + r"|archivia" + _CL + r"|archiviar" + _INF + r"|archiviate" + _CL
+    + r"|salva" + _CL + r"|salvar" + _INF + r"|conserva" + _CL + r"|conservar" + _INF
+    + r"|mett(?:i|ili|ilo|ila|ile|ere|erli|erlo)\b[^.?!]{0,30}\bdocumenti"
+    # elimina
+    + r"|elimina" + _CL + r"|eliminar" + _INF + r"|cancella" + _CL + r"|cancellar" + _INF
+    + r"|butta" + _CL + r"|buttar" + _INF + r"|togli" + _CL + r"|toglier" + _INF
+    # ancora
+    + r"|(?:ancora|per)\s+(?:una|un'altra|un altra|altra)\s+settimana|un'?\s?altra\s+settimana"
+    + r"|altri\s+(?:sette|7)\s+giorni|prolung\w*|rinnov\w*"
+    + r")\b", re.I)
+_NON_PRIMA = re.compile(r"\bnon\s+(?:\w+\s+){0,2}$", re.I)
+
+
+def chiesto_al_cassetto(testo: str) -> bool:
+    """La frase chiede una delle tre azioni del cassetto (tieni, elimina, ancora) con una sua
+    forma non negata («non tenerli» no)."""
+    t = testo or ""
+    return any(not _NON_PRIMA.search(t[:m.start()]) for m in _PAROLE_CASSETTO.finditer(t))
+
+
 def _classe_gestisci():
     """La classe per la politica dei tool (calliope/politica.py): un'azione della persona,
     sui suoi file; «elimina» è distruttiva (serve un verbo come «elimina», «cancella», «butta»
@@ -300,11 +364,9 @@ def _classe_gestisci():
     # Le parole di una delle tre azioni, anche con la conversazione pulita (17/10, #58, banco col
     # 26B: a «Ritrovami il file che ti ho mandato ieri» il modello ha chiamato
     # cassetto_gestisci(tieni, tutti) e ha messo 5 file tra i documenti). Senza, «Non me l'hai
-    # chiesto: vuoi che…?» (regola `politica_cancellazione_non_chiesta`, vincolo di permesso)
-    parole = re.compile(r"\b(tien|teng|mantien|archivi|salv|conserv|elimin|cancell|butt|togl|"
-                        r"ancora|settiman|prolung|rinnov)", re.I)
-    return Classe(AZIONE, cosa=cosa,
-                  verbo_sempre=lambda testo: bool(parole.search(testo or "")),
+    # chiesto: vuoi che…?» (regola `politica_cassetto_non_chiesto`, vincolo di permesso)
+    return Classe(AZIONE, cosa=cosa, verbo_sempre=chiesto_al_cassetto,
+                  regola_verbo_sempre="politica_cassetto_non_chiesto",
                   distruttiva={"elimina": (lambda a: "eliminare quei file",
                                            "Così non li ritrovo più."),
                                "cancella": (lambda a: "eliminare quei file",
@@ -317,8 +379,9 @@ def _classe_gestisci():
 
 # ───────────────────────────── allegato_leggi ─────────────────────────────
 def _leggi(ctx: ToolContext, allegato=None, parte: str = "", cassetto: str | None = None,
-           ragazzo: str | None = None, di: str | None = None) -> dict:
-    di = ragazzo or di
+           minore: str | None = None, di: str | None = None,
+           ragazzo: str | None = None) -> dict:
+    di = minore or ragazzo or di
     if cassetto not in (None, "") or (di and allegato in (None, "")):
         return _leggi_cassetto(ctx, cassetto, parte, di)
     att, err = prendi(ctx, allegato)
@@ -388,7 +451,8 @@ def _archivia(ctx: ToolContext, allegato=None) -> dict:
 
 def allegati_specs(archivio: bool = False, cassetto: bool = False) -> list[ToolSpec]:
     """`cassetto` (08/10, calliope/cassetto.py): allegato_leggi ritrova anche i file dei giorni
-    passati (parametri `cassetto` e `di`) e c'è cassetto_gestisci."""
+    passati (parametri `cassetto` e `minore`, prima `di`, ancora accettato) e c'è
+    cassetto_gestisci."""
     props = {"allegato": {"type": "integer"}, "parte": {"type": "string"}}
     descr = ("Legge una parte di un file allegato in questa conversazione che non sta "
              "intero nel messaggio («leggimi pagina 3», «cosa c'è nel foglio Spese?», "
@@ -398,14 +462,14 @@ def allegati_specs(archivio: bool = False, cassetto: bool = False) -> list[ToolS
              "oppure le parole da cercare.")
     if cassetto:
         props["cassetto"] = {"type": "string"}
-        props["ragazzo"] = {"type": "string"}
+        props["minore"] = {"type": "string"}
         descr += (" Ritrova e legge anche i file (e le foto) che la persona ha mandato nei "
                   "giorni passati («ritrovami il file di ieri», «cosa diceva la bolletta di "
                   "lunedì?», «fammi vedere le foto della settimana»): sono nel suo cassetto per "
                   "7 giorni; per quelli usa cassetto con le sue parole, quando e cosa insieme "
                   "(«ieri», «la bolletta di lunedì», «le foto della settimana», «lo scontrino», "
-                  "«tutti») o l'id «C12», senza allegato. ragazzo: solo il nome "
-                  "di un figlio minore, quando un suo tutore chiede i file del figlio; mai un "
+                  "«tutti») o l'id «C12», senza allegato. minore: solo il nome "
+                  "di un minore di casa, quando un suo tutore chiede i suoi file; mai un "
                   "giorno né un tipo di file.")
     specs = [ToolSpec(
         name="allegato_leggi",
@@ -425,11 +489,11 @@ def allegati_specs(archivio: bool = False, cassetto: bool = False) -> list[ToolS
                          "«C12». Solo se la persona chiede di tenere, eliminare o prolungare: "
                          "per ritrovare o leggere un file c'è allegato_leggi, e un file di "
                          "questa conversazione si archivia con allegato_archivia. "
-                         "ragazzo: solo il nome di un figlio minore, per un suo "
+                         "minore: solo il nome di un minore di casa, per un suo "
                          "tutore; mai un giorno né un tipo di file."),
             parameters={"type": "object", "properties": {
                 "azione": {"type": "string", "enum": ["tieni", "elimina", "ancora"]},
-                "quale": {"type": "string"}, "ragazzo": {"type": "string"}},
+                "quale": {"type": "string"}, "minore": {"type": "string"}},
                 "required": ["azione", "quale"]},
             func=_gestisci, risk="azione", levels=FAMILY, classe=_classe_gestisci()))
     if archivio:

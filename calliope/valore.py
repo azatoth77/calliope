@@ -101,9 +101,9 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "pc_guarda": {"cosa": Z},
     "immagine_archivia": {"foto": "indice:foto"},
     "allegato_archivia": {"allegato": "indice:allegato"},
-    # 08/10, cassetto dei file: «quale» sceglie i file della persona, «ragazzo» (prima «di», che
+    # 08/10, cassetto dei file: «quale» sceglie i file della persona, «minore» (prima «di», che
     # resta accettato: 17/10, #58) un ragazzo per il suo tutore
-    "cassetto_gestisci": {"azione": Z, "quale": B, "ragazzo": B, "di": B},
+    "cassetto_gestisci": {"azione": Z, "quale": B, "minore": B, "ragazzo": B, "di": B},
     # 08/10, cronologia delle schede per persona: senza argomenti, solo quelle di chi parla
     "schede_pulisci": {},
     # 13/10, conversazione di stanza: ferma o riprende l'ascolto della stanza
