@@ -742,6 +742,33 @@ def prova_quarta_revisione():
              "Nel tuo cassetto" not in out[0] and cas.prendi("dario", ids["dario_ieri"])
              is not None and cas.prendi("bianca", ids["bianca"]) is not None, out)
     cas.close()
+    # e) dopo una domanda, una chiamata cambiata su «ancora» (o su elimina del proprio file)
+    # chiede ancora: la domanda si salta solo se il tool rifiuterebbe
+    for args2 in ({"azione": "ancora", "quale": "tutti"}, {"azione": "elimina", "quale": "C2"}):
+        cas, ids = casa()
+        scade = cas.prendi("dario", ids["dario_ieri"])["scade"]
+        out = turni(cas, [(frase, {"azione": "elimina", "quale": "ieri"}), ("Sì.", args2)])
+        r = cas.prendi("dario", ids["dario_ieri"])
+        verifica(f"dopo la domanda, il «sì» con un'altra chiamata {args2}: chiede, niente fatto",
+                 r is not None and r["scade"] == scade and "?" in out[1]
+                 and cas.prendi("bianca", ids["bianca"]) is not None, out)
+        cas.close()
+    # f) incoerente con una classe che non ha una domanda sua per quella chiamata: resta la
+    # domanda generica; si salta solo se il tool rifiuterebbe (("", ""))
+    from types import SimpleNamespace
+    from calliope import politica as POL
+    for dom, chiede in ((None, True), (("", ""), False)):
+        cl = POL.Classe(POL.AZIONE, cosa=lambda a: "lo elimini",
+                        distruttiva={"elimina": (lambda a: "eliminare quei file", "Così no.")},
+                        chiedi_se=lambda testo, args, ctx, sempre=False, _d=dom: _d)
+        tt = POL.Turno(testo="Sì.", in_sospeso="prova_x", args_sospeso={"azione": "elimina",
+                                                                           "quale": "ieri"})
+        cx = SimpleNamespace(politica=tt, regole=[])
+        r = POL.incoerente(SimpleNamespace(classe=cl), "prova_x",
+                           {"azione": "elimina", "quale": "tutti"}, cx)
+        verifica(f"incoerente, chiedi_se → {dom!r}: " + ("la domanda generica" if chiede
+                                                         else "nessuna domanda"),
+                 (r is not None and "?" in r.get("conferma", "")) if chiede else r is None, r)
     # d) lettura: l'avviso nel cassetto di un minore e il «solo se è proprio suo»
     cas, ids = casa()
     ctx = ctx_per(cas)

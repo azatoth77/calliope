@@ -565,7 +565,8 @@ def altra_persona_nella_frase(testo: str, args: dict, ctx, sempre: bool = False
         return None
     chi = proprietario_della_chiamata(ctx, a)
     if chi is None:
-        return None                          # il tool rifiuterà da sé
+        # il tool rifiuterà da sé; con `sempre` lo dice a `incoerente` con ("", "")
+        return ("", "") if sempre else None
     from ..speaker_id import name_key
     nominati = [n for n in _nomina_altri(ctx, testo)
                 if name_key(n).split()[0] != name_key(chi.name).split()[0]]

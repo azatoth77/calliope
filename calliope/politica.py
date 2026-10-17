@@ -1167,13 +1167,15 @@ def incoerente(spec, name: str, args: dict, ctx) -> dict | None:
     # quarta revisione della PR #143: al secondo «sì» generico veniva eliminato il file di un
     # cassetto mai nominato); nessuna domanda se il tool rifiuterebbe comunque
     if tutto:
+        # dom: ("", "") se il tool rifiuterebbe comunque (si salta la domanda), None se la
+        # classe non ha una domanda sua per questa chiamata (resta quella generica di sotto)
         try:
             dom = cl.chiedi_se(t.testo or "", args or {}, ctx, sempre=True)
         except Exception:  # noqa: BLE001 — nel dubbio, la domanda di sempre
-            dom = ("politica_azione_incoerente", None)
-        if dom is None:
+            dom = None
+        if dom == ("", ""):
             return None
-        if dom[1]:
+        if dom and dom[1]:
             note_rule(ctx, "politica_azione_incoerente")
             print(f"   [POLITICA] {name}: politica_azione_incoerente", flush=True)
             return _risultato(dom[1], name, args, "politica_azione_incoerente")
