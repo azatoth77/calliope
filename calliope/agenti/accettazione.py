@@ -615,13 +615,16 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
             out["esempi"], out["tolti"] = _esempi_programma(d, n_requisiti, testo)
             if not out["esempi"]:
                 out["programma"], out["senza_esempi"] = {}, "nessun esempio valido"
-            elif not any(e["codice_uscita"] in (None, 0)
-                         and (e["numero"] is not None or e["contiene"])
+            elif not any(e["codice_uscita"] == 0 and (e["numero"] is not None or e["contiene"])
+                         or e["codice_uscita"] is None and e["numero"] is not None
                          for e in out["esempi"]):
                 # Revisione della PR #141: con i soli esempi d'errore (il massimo, dove i numeri
                 # uguali a un dato si tolgono) un programma con sys.exit(1) o con un raise
                 # passerebbe tutto, e al tetto sarebbe «fatto». Serve un risultato controllato
-                # su una corsa che finisce bene
+                # su una corsa che finisce bene: un numero (che il test legge solo dallo stdout,
+                # con la corsa finita bene), o una parola con il codice 0. Una parola con il
+                # codice che non conta no: «print('Il massimo è'); raise …» la stampa (seconda
+                # revisione)
                 out["programma"], out["esempi"] = {}, []
                 out["senza_esempi"] = "nessun esempio che controlla un risultato"
         return out
@@ -910,34 +913,40 @@ def _numeri(testo, dati=""):
 
 
 def _esegui(argomenti, stdin):
-    """(uscita, codice d'uscita, errore) del programma, come se lo si lanciasse. Stdin e uscita
-    sono file di testo veri sopra dei byte (reconfigure, .buffer); un'eccezione, come in Python,
-    finisce nell'uscita con il suo tipo e il messaggio e il codice è 1."""
-    out = io.TextIOWrapper(io.BytesIO(), encoding="utf-8", errors="replace",
-                           write_through=True)
+    """(stdout, stderr, codice d'uscita, errore) del programma, come se lo si lanciasse. Stdin,
+    stdout e stderr sono file di testo veri sopra dei byte (reconfigure, .buffer); un'eccezione,
+    come in Python, finisce nello stderr con il suo tipo e il messaggio e il codice è 1. Il
+    numero si legge solo dallo stdout; lo stderr serve alle parole di «contiene»."""
+    def scrivibile():
+        return io.TextIOWrapper(io.BytesIO(), encoding="utf-8", errors="replace",
+                                write_through=True)
+    out, err = scrivibile(), scrivibile()
     entrata = io.TextIOWrapper(io.BytesIO(str(stdin or "").encode("utf-8")), encoding="utf-8")
     vecchi = sys.argv, sys.stdin
     sys.argv, sys.stdin = [PROGRAMMA, *argomenti], entrata
     codice, errore = 0, ""
     try:
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(out):
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             runpy.run_path(PROGRAMMA, run_name="__main__")
     except SystemExit as e:
         if isinstance(e.code, int):
             codice = e.code
         elif e.code is not None:
             codice = 1
-            out.write(str(e.code) + "\\n")
+            err.write(str(e.code) + "\\n")
     except Exception as e:  # noqa: BLE001 — come Python: il programma si ferma con 1
         codice, errore = 1, f"{type(e).__name__}: {e}"
-        out.write(errore + "\\n")
+        err.write(errore + "\\n")
     finally:
         sys.argv, sys.stdin = vecchi
-    try:
-        out.flush()
-    except (ValueError, OSError):
-        pass
-    return out.buffer.getvalue().decode("utf-8", "replace"), codice, errore
+
+    def testo(f):
+        try:
+            f.flush()
+        except (ValueError, OSError):
+            pass
+        return f.buffer.getvalue().decode("utf-8", "replace")
+    return testo(out), testo(err), codice, errore
 
 
 def _prova(self, caso):
@@ -945,25 +954,28 @@ def _prova(self, caso):
              f"{json.dumps(caso['argomenti'], ensure_ascii=False)}"
              + (f" e lo stdin {json.dumps(caso['stdin'], ensure_ascii=False)}" if caso["stdin"]
                 else ""))
-    uscita, codice, errore = _esegui(caso["argomenti"], caso["stdin"])
-    breve = uscita.strip()[-300:]
+    uscita, errori, codice, errore = _esegui(caso["argomenti"], caso["stdin"])
+    breve = (uscita + errori).strip()[-300:]
     atteso = caso.get("codice_uscita")
     if atteso is not None and atteso != 0:
         self.assertNotEqual(codice, 0, f"{detto}: deve fermarsi con un errore (codice d'uscita "
                             f"diverso da 0), è finito bene; ha stampato «{breve}»")
-    elif atteso == 0:
-        # Con il codice che non conta (null) niente controllo, come in JavaScript: decidono il
-        # numero e le parole, e l'eccezione è nell'uscita
+    elif atteso == 0 or caso.get("numero") is not None:
+        # Un risultato si controlla su una corsa che finisce bene: con il codice 0, e anche con
+        # quello che non conta (null) se l'esempio controlla un numero. Senza numero e con null
+        # decidono le parole, che leggono anche lo stderr (come in JavaScript)
         self.assertFalse(errore, f"{detto}: il programma si è fermato con {errore}")
-        self.assertEqual(codice, 0, f"{detto}: deve finire bene, codice d'uscita {codice}")
+        self.assertEqual(codice, 0, f"{detto}: deve finire bene, codice d'uscita {codice}; "
+                         f"ha stampato «{breve}»")
     if caso.get("numero") is not None:
         n = caso["numero"]
         tol = max(caso.get("tolleranza") or 0, 0.01, abs(n) * 0.002)
         dati = " ".join([*caso["argomenti"], caso["stdin"] or ""])
+        # Solo dallo stdout: i messaggi d'errore hanno numeri che non sono risultati
         self.assertTrue(any(abs(x - n) <= tol for x in _numeri(uscita, dati)),
                         f"{detto}: deve stampare {n:g} (± {tol:g}); ha stampato «{breve}»")
     if caso.get("contiene"):
-        frase = _norm(uscita)
+        frase = _norm(uscita + "\\n" + errori)
         if _norm(caso["contiene"]) not in frase:
             for parola in _norm(caso["contiene"]).split():
                 self.assertIn(parola, frase, f"{detto}: l'uscita deve contenere "
@@ -1022,7 +1034,10 @@ function esegui(e) {
   // errore», l'esempio è rosso
   const guasto = r.error ? `non è partito o non ha finito in 10 s (${r.error.code || r.error.message})`
     : r.signal ? `non ha finito in 10 s (fermato con ${r.signal})` : "";
-  return { uscita: (r.stdout || "") + (r.stderr || ""), codice: r.status === null ? 1 : r.status, guasto };
+  // Il numero solo dallo stdout (seconda revisione della PR #141: lo stack di Node ha i numeri di
+  // riga e «Node.js v24»); lo stderr serve alle parole di «contiene»
+  return { uscita: r.stdout || "", tutto: (r.stdout || "") + (r.stderr || ""),
+           codice: r.status === null ? 1 : r.status, guasto };
 }
 test(`R0 esempio 0: c'è il programma ${PROGRAMMA}`, () => {
   assert.ok(fs.existsSync(PROGRAMMA), `manca il programma ${PROGRAMMA}: gli esempi lo eseguono con questo nome`);
@@ -1031,12 +1046,13 @@ ESEMPI.forEach((e, i) => {
   const detto = `R${e.requisito}: ${PROGRAMMA} con gli argomenti ${JSON.stringify(e.argomenti)}` +
     (e.stdin ? ` e lo stdin ${JSON.stringify(e.stdin)}` : "");
   test(`R${e.requisito} esempio ${i + 1}: argomenti ${JSON.stringify(e.argomenti)}`, () => {
-    const { uscita, codice, guasto } = esegui(e);
-    const breve = uscita.trim().slice(-300);
+    const { uscita, tutto, codice, guasto } = esegui(e);
+    const breve = tutto.trim().slice(-300);
     assert.ok(!guasto, `${detto}: il programma ${guasto}; ha stampato «${breve}»`);
     if (e.codice_uscita !== null && e.codice_uscita !== 0) {
       assert.notStrictEqual(codice, 0, `${detto}: deve fermarsi con un errore (codice d'uscita diverso da 0), è finito bene; ha stampato «${breve}»`);
-    } else if (e.codice_uscita === 0) {
+    } else if (e.codice_uscita === 0 || e.numero !== null) {
+      // Un risultato si controlla su una corsa che finisce bene (con il numero anche a codice null)
       assert.strictEqual(codice, 0, `${detto}: deve finire bene, codice d'uscita ${codice}; ha stampato «${breve}»`);
     }
     if (e.numero !== null) {
@@ -1044,9 +1060,9 @@ ESEMPI.forEach((e, i) => {
       assert.ok(numeri(uscita, [...e.argomenti, e.stdin || ""].join(" ")).some((x) => Math.abs(x - e.numero) <= tol),
         `${detto}: deve stampare ${e.numero} (± ${tol}); ha stampato «${breve}»`);
     }
-    if (e.contiene && !norm(uscita).includes(norm(e.contiene))) {
+    if (e.contiene && !norm(tutto).includes(norm(e.contiene))) {
       for (const p of norm(e.contiene).split(" ")) {
-        assert.ok(norm(uscita).includes(p), `${detto}: l'uscita deve contenere «${e.contiene}»; ha stampato «${breve}»`);
+        assert.ok(norm(tutto).includes(p), `${detto}: l'uscita deve contenere «${e.contiene}»; ha stampato «${breve}»`);
       }
     }
   });

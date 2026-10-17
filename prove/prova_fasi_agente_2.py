@@ -1255,10 +1255,12 @@ def prova_programmi_test(tmp: Path):
                                     {"requisito": 1, "argomenti": ["3", "9"], "numero": 9,
                                      "contiene": "massimo"}]},
                         1, False, testo="il massimo dei numeri", programma=True)
-    verifica("contrario: il risultato uguale a un dato non si controlla (resta la parola)",
-             mx["esempi"] == [{"requisito": 1, "argomenti": ["3", "9"], "stdin": "",
-                               "numero": None, "tolleranza": None, "contiene": "massimo",
-                               "codice_uscita": None}] and mx["tolti"]["dati"] == 2,
+    # Dalla seconda revisione della PR #141 la parola che resta, con il codice che non conta,
+    # non è un risultato controllato: il programma resta senza esempi
+    verifica("contrario: il risultato uguale a un dato non si controlla, e con la sola parola "
+             "a codice null il programma resta senza esempi",
+             mx["esempi"] == [] and mx["tolti"]["dati"] == 2
+             and mx["senza_esempi"] == "nessun esempio che controlla un risultato",
              str(mx["esempi"]))
     # JavaScript (17/10, #54): Node in un processo figlio, con i permessi di esegui_js
     js = dict(ANALISI_PROGRAMMA, programma={**ANALISI_PROGRAMMA["programma"],
@@ -1553,6 +1555,58 @@ def prova_programmi_revisione(tmp: Path):
     pe, re_, _ = _corri(tmp, "rev-js-errore", aj, {"somma.js": BLOCCO.replace(
         "while (true) {}", "process.exit(1)")})
     verifica("…contrario: quello che esce con 1 passa", pe, str(re_))
+    # 4b. Seconda revisione della PR #141: il numero solo dallo stdout. Con il codice d'uscita
+    # che non conta, un'eccezione (o un'uscita diversa da 0) fa fallire un esempio con il numero;
+    # il messaggio e lo stderr servono solo a «contiene»
+    def un_esempio(file, esempio, testo, lang="python"):
+        return acc.interpreta({"programma": {"linguaggio": lang, "file": file,
+                                             "interfaccia": "riga_di_comando"},
+                               "esempi": [esempio]}, 1, False, testo=testo, programma=True,
+                              linguaggi=("python", "javascript"))
+    g1 = un_esempio("somma.py", {"requisito": 1, "argomenti": ["3.5", "6.5"], "numero": 10},
+                    "la somma dei numeri")
+    r_int = _corri(tmp, "rev2-int", g1, {"somma.py": "import sys\nprint('somma', "
+                                         "sum(int(x) for x in sys.argv[1:]))\n"})
+    r_ok = _corri(tmp, "rev2-float", g1, {"somma.py": "import sys\nprint('somma', "
+                                          "sum(float(x) for x in sys.argv[1:]))\n"})
+    verifica("Python: int(\"3.5\") si ferma con «… base 10»: rosso (il 10 del messaggio non è il "
+             "risultato); contrario: con float passa", not r_int[0] and r_ok[0], r_int[2][-400:])
+    g4 = un_esempio("coppia.py", {"requisito": 1, "argomenti": ["7"], "numero": 2},
+                    "quante cifre ha il numero")
+    r_unp = _corri(tmp, "rev2-unpack", g4, {"coppia.py": "import sys\na, b = sys.argv[1]\n"
+                                            "print(a, b)\n"})
+    verifica("Python: «expected 2, got 1» non vale come il 2 atteso: rosso", not r_unp[0],
+             r_unp[2][-400:])
+    g2 = acc.interpreta({"programma": {"linguaggio": "python", "file": "massimo.py",
+                                       "interfaccia": "riga_di_comando"},
+                         "esempi": [{"requisito": 1, "argomenti": ["3", "9"], "numero": 9,
+                                     "contiene": "massimo"},
+                                    {"requisito": 2, "argomenti": ["tre"], "codice_uscita": 1}]},
+                        2, False, testo=testo_max, programma=True)
+    verifica("il massimo con la sola parola e il codice che non conta (più l'errore) resta senza "
+             "esempi: «print('Il massimo è'); raise NotImplementedError» non può passare",
+             g2["esempi"] == [] and g2["senza_esempi"] == "nessun esempio che controlla un "
+             "risultato", str(g2["esempi"]))
+    g2b = acc.interpreta({"programma": {"linguaggio": "python", "file": "massimo.py",
+                                        "interfaccia": "riga_di_comando"},
+                          "esempi": [{"requisito": 1, "argomenti": ["3", "9"], "numero": 9,
+                                      "contiene": "massimo", "codice_uscita": None},
+                                     {"requisito": 1, "argomenti": ["3", "9", "4"],
+                                      "contiene": "massimo", "codice_uscita": 0}]},
+                         1, False, testo=testo_max, programma=True)
+    r_et = _corri(tmp, "rev2-etichetta", g2b, {"massimo.py": "print('Il massimo è')\n"
+                                               "raise NotImplementedError\n"})
+    verifica("…e con un esempio a codice 0 lo stesso programma è rosso", bool(g2b["esempi"])
+             and not r_et[0], r_et[2][-400:])
+    g3 = un_esempio("conta.js", {"requisito": 1, "argomenti": ["a", "b"], "numero": 2},
+                    "conta le parole a b", lang="javascript")
+    r_st = _corri(tmp, "rev2-stack", g3, {"conta.js": "const x = undefined;\n"
+                                          "console.log(x.length);\n"})
+    r_st_ok = _corri(tmp, "rev2-stack-ok", g3, {"conta.js": "console.log('parole', "
+                                                "process.argv.slice(2).length);\n"})
+    verifica("JavaScript: lo stack di Node (numeri di riga, «Node.js v24») non fa passare il 2 "
+             "atteso: rosso; contrario: il programma giusto passa", not r_st[0] and r_st_ok[0],
+             r_st[2][-400:])
     # 5. Il nome del programma non si ridice dopo una sospensione (una chiusura nuova)
     from types import SimpleNamespace
     from calliope.agenti.servizio import Lavori
