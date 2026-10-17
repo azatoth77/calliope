@@ -2,9 +2,9 @@
 
 *Wikipedia italiana e le altre fonti Kiwix in puro Python con FTS5; ricerca su internet con SearXNG. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 16/10.** Come al 14/10 (sotto), più la **pertinenza dei risultati** verso la conversazione (`calliope/pertinenza.py`, #101, PR #115): una misura in `web_cerca` e `biblioteca_cerca`, in ombra di serie (`ricerca_pertinenza`), mai un filtro, riassunta in `calliope stato --turni`; con «attiva» il risultato fuori tema arriva al modello con la frase da dire (sezione «Risultati fuori tema», in fondo). La quota delle risposte dai feed dal 17/10 è nella riga «Notizie» di `calliope stato --turni` (#31, PR #128; prima lettura da fare); *[storico, 16/10: era solo nel registro dei turni]*.
+**Stato al 16/10.** Come al 14/10 (sotto), più la **pertinenza dei risultati** verso la conversazione (`calliope/pertinenza.py`, #101, PR #115): una misura in `web_cerca` e `biblioteca_cerca`, in ombra di serie (`ricerca_pertinenza`), mai un filtro, riassunta in `calliope stato --turni`; con «attiva» il risultato fuori tema arriva al modello con la frase da dire (sezione «Risultati fuori tema», in fondo). La quota delle risposte dai feed dal 17/10 è nella riga «Notizie» di `calliope stato --turni` (#31, PR #128; prima lettura del 17/10 in fondo); *[storico, 16/10: era solo nel registro dei turni]*.
 
-*Stato al 14/10 (storico dal 16/10: la quota dei feed non era ancora in `--turni`, vedi sopra).* Biblioteca e ricerca web come al 09/10 (sotto). Dal 13/10 le notizie hanno un tool loro, `notizie` (sola lettura, livello `notizie_livello`, di serie ospite): feed RSS delle testate scaricati in casa (`calliope/notizie/`, solo libreria standard), 5 fatti per elenco (`notizie_fatti`), i fatti detti restano nella storia in busta, minori solo sport, tecnologia e ragazzi, SearXNG come ripiego; con lui `web_cerca` non ha più il tipo «notizie» (sezione in fondo). Notizie è la diciannovesima capacità del registro. Da guardare sulla DGX: la quota delle risposte dai feed, dal 17/10 nella riga «Notizie» di `calliope stato --turni` (issue #31, sezione in fondo; prima lettura da fare).
+*Stato al 14/10 (storico dal 16/10: la quota dei feed non era ancora in `--turni`, vedi sopra).* Biblioteca e ricerca web come al 09/10 (sotto). Dal 13/10 le notizie hanno un tool loro, `notizie` (sola lettura, livello `notizie_livello`, di serie ospite): feed RSS delle testate scaricati in casa (`calliope/notizie/`, solo libreria standard), 5 fatti per elenco (`notizie_fatti`), i fatti detti restano nella storia in busta, minori solo sport, tecnologia e ragazzi, SearXNG come ripiego; con lui `web_cerca` non ha più il tipo «notizie» (sezione in fondo). Notizie è la diciannovesima capacità del registro. Da guardare sulla DGX: la quota delle risposte dai feed, dal 17/10 nella riga «Notizie» di `calliope stato --turni` (issue #31, sezione in fondo, con la prima lettura del 17/10).
 
 *Stato al 09/10 (storico): biblioteca e ricerca web invariate dalla pubblicazione (07/10). Dall'08/10 notte il testo dei siti letto dall'agente (`web_leggi`) arriva in busta come ogni dato non fidato, e i nomi pubblici di casa sono vietati nella rete delle estensioni e dell'agente ([agenti-estensioni](agenti-estensioni.md)). Restano aperti le tabelle delle voci non lette e i «perché…?» che trovano titoli omonimi. Dal 09/10 SearXNG si tiene aggiornato da solo (controllo quotidiano, aggiornamento provato accanto con il ritorno indietro, «Controlla» e «Aggiorna» nel cruscotto: sezione in fondo); la prima prova vera sulla DGX è da fare.*
 
@@ -652,6 +652,8 @@ né quante volte un minore chiede una sezione non sua.
   contano da lì in avanti. L'età della notizia più recente detta resta fuori (misura diversa, un
   campo nuovo nel record del turno).
 
+**Prima lettura sulla DGX (17/10, versione 2864b3f).** `calliope stato --turni --giorni 7`: 17 richieste dal 14/10, 11 dai giornali (79 %), 3 da internet, 0 vuote; ripiego fallito 0, negato 0; seguiti 3; nessuna sezione rifiutata ai minori; nessun `web_cerca` girato a notizie. Per giorno: 14/10 67 %, 15/10 0 % (una sola richiesta, da internet), 16/10 100 %. I turni di prima del 17/10 non hanno le regole `notizie_vuote` e `notizie_ripiego_*`: vuote e ripieghi falliti si contano da qui in avanti.
+
 ## L'attesa delle notizie: frase d'attesa e taglio al «; » (17/10, issue #132)
 
 Caso vero (prove a voce sulla DGX del 16–17/10, 26B, dal telefono): 13 turni `notizie` con la
@@ -684,7 +686,7 @@ uniti dal «;»: voce a 3,66 e 4,28 s.
   `--json`.
 - **A secco** (`prove/prova_notizie_attesa.py`; su main non parte: `taglio_voce` e
   `PAUSA_OLTRE` non c'erano): la risposta di ~650 caratteri con tre «;» data a pezzi di 4
-  caratteri attraverso Brain e `split_sentences` (`misura132`, nello scratchpad): **prima** il
+  caratteri attraverso Brain e `split_sentences` (uno script a secco fuori dal repository): **prima** il
   primo pezzo al TTS dopo 157 token su 163 (96 %, ~3,9 s di generazione a 40 token/s), nessuna
   frase d'attesa; **dopo** dopo 38 token (23 %, ~0,95 s), frase d'attesa subito dopo la
   chiamata, cinque pezzi (148, 184, 161, 126, 27 caratteri).
