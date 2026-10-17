@@ -12,7 +12,7 @@
 |---|---|---|
 | Foto in ingresso (telefono, pagina degli schermi, webcam e schermo del PC su richiesta, dal 05/10) | Pillow (firma dei byte, riduzione a 1280, JPEG senza EXIF); `images` di Ollama / `image_url` dell'API OpenAI; webcam con PyAV (DirectShow, già con faster-whisper), schermata con `ImageGrab`, avviso con tkinter | `calliope/immagini.py` → `prepara`, `Immagine`, `Album` (in `Brain.album`, per conversazione), `InAttesa`, `opzioni_tool`; `Brain._con_immagini`, `_image_tokens`; dato nuovo nel turno `politica.Turno.dato_nuovo` (la guardia delle foto è nella politica dal 06/10); POST `/api/immagine` (`schermi/server.py`); `calliope/pc/cattura.py`, `PCExecutor.cattura` (metodo «cattura» dei satelliti); tool `pc_guarda`, `immagine_archivia`, `immagine_guarda` in `calliope/tools/immagini.py`; scheda `foto`; vedi [`docs/ricerche/2026-10-05-immagini.md`](../ricerche/2026-10-05-immagini.md) |
 | Il dispositivo da cui si parla nei dati del turno, la spinta di schermo e webcam solo col PC raggiungibile (16/10, #100) | niente librerie nuove | `calliope/dispositivo.py` → `descrivi`, `pc_raggiungibile`, `nota`; `Ciclo._dispositivo_turno`; `Brain._foto_pc`, `Brain._turn_context` |
-| Cassetto dei file per persona (08/10): ogni foto, file o audio di chi è riconosciuto resta 7 giorni, poi si elimina | SQLite (tabelle `cassetto_*` in `memory_db`), file sul disco; niente librerie nuove | `calliope/cassetto.py` → `Cassetto` (`metti_allegato`, `metti_foto`, `cerca`, `esegui`, `pulisci`, `da_dire`, `frase`, `scheda`, `da_pagina`), `load_cassetto`; nel ciclo `Ciclo._nel_cassetto`, `_cassetto_dopo`; `allegato_leggi(cassetto=…, di=…)` e `cassetto_gestisci` in `calliope/tools/allegati.py`; POST `/api/cassetto` (`schermi/server.py`); scheda `cassetto` (carosello) in `schermo.js` |
+| Cassetto dei file per persona (08/10): ogni foto, file o audio di chi è riconosciuto resta 7 giorni, poi si elimina | SQLite (tabelle `cassetto_*` in `memory_db`), file sul disco; niente librerie nuove | `calliope/cassetto.py` → `Cassetto` (`metti_allegato`, `metti_foto`, `cerca`, `esegui`, `pulisci`, `da_dire`, `frase`, `scheda`, `da_pagina`), `load_cassetto`; nel ciclo `Ciclo._nel_cassetto`, `_cassetto_dopo`; `allegato_leggi(cassetto=…, ragazzo=…)` (fino al 17/10 `di=…`, ancora accettato) e `cassetto_gestisci` in `calliope/tools/allegati.py`; POST `/api/cassetto` (`schermi/server.py`); scheda `cassetto` (carosello) in `schermo.js` |
 | Allegati di qualsiasi tipo (telefono e pagina degli schermi, «Allega», trascina, incolla, dal 05/10) | tipo dai byte; pypdf e pypdfium2 (pagine scansionate → immagini), python-docx, openpyxl, python-pptx (o ElementTree), zipfile (solo elenco), PyAV + il Whisper della voce per l'audio; niente librerie nuove | `calliope/allegati.py` → `riconosci`, `prepara`, `Allegato` (`blocco`, `parte`), `Allegati` (in `Brain.allegati`, per conversazione), `trascrivi`; `Brain.allega_non_fidato` (porta unica), `_accogli_allegati`, `_quarantena_allegati`, `_con_allegati`, `_blocchi_allegati`, `_allegati_tokens`, nella politica `Turno.dato_nuovo` e la delega al dato (regola «politica_delega»); POST `/api/allegato`; tool `allegato_leggi`, `allegato_archivia` in `calliope/tools/allegati.py`, `lavoro_affida(allegato=…)` (fino all'08/10 `delega_lavoro`); scheda `allegato`; vedi [`docs/ricerche/2026-10-05-allegati.md`](../ricerche/2026-10-05-allegati.md) |
 
 ## Problemi noti
@@ -157,6 +157,14 @@ al condizionale («Se la persona chiede di guardare…») tornava 0/3 («…perc
 guardarlo»). Prove: `prova_immagini.prova_spinta_pc` (a secco, con i contrari) e
 `prova_immagini_ollama.caso_foto_poi_pc`. *Il 26B della DGX da riprovare nell'uso (storico, 15/10).*
 
+**26B sulla DGX, rimisurato (17/10, #58)**: `prova_immagini_ollama.py 10` (ora con `--url`,
+`--modello`, `--num-ctx`), sulla DGX libera col 26B già caricato (`num_ctx` 36864), main del
+17/10 (e91699f) con le correzioni della #58: **17/17 in ognuno dei 10 giri** (170/170), «lo
+schermo del telefono è rotto, si legge il totale?» senza `pc_guarda` **10/10** («Sì, il totale
+indicato nello scontrino è di 14 euro e 10 centesimi»), prima frase mediana 1,69 s (170 turni,
+con le foto). Il caso del 15/10 non torna col 26B: niente decisione da prendere sul punto 4
+della #58. *[storico: «il 26B non è stato rimisurato», fino al 17/10]*
+
 **26B sulla DGX (15/10)**: `prova_immagini_ollama` 1 giro, 16/17: schermo e webcam con la foto davanti ok, ma «lo schermo del telefono è rotto, si legge il totale?» con la spinta chiamava pc_guarda (la spinta dice «parla dello schermo del computer»). La spinta ora non scatta quando lo schermo è di un altro oggetto nominato («schermo del telefono», «della TV», del tablet, della cassa…: `_IMG_PC_ALTRO`); contrari in `prova_spinta_pc`.
 
 ## Il dispositivo e i volti (16/10, issue #100)
@@ -269,9 +277,10 @@ accanto a `memory_db`), `cassetto_giorni`, `cassetto_mb_persona`, `cassetto_avvi
 `cassetto_pulizia_s`. Uno schema in più nel prompt (`cassetto_gestisci`) e due parametri in
 `allegato_leggi`.
 
-**Non provato**: con il modello vero (che gemma4 scelga `allegato_leggi(cassetto=…)` per «il file
-di ieri» e `cassetto_gestisci` per «tienili tutti»: da misurare con un banco Ollama), sul
-telefono vero (il carosello dentro il carosello delle schede), sulla DGX (permessi 600/700 e
+*[storico, fino al 17/10: «Non provato: con il modello vero (che gemma4 scelga
+`allegato_leggi(cassetto=…)` per «il file di ieri» e `cassetto_gestisci` per «tienili tutti»: da
+misurare con un banco Ollama)». Misurato il 17/10, sezione «Il cassetto col modello vero» qui
+sotto.]* **Non provato**: sul telefono vero (il carosello dentro il carosello delle schede), sulla DGX (permessi 600/700 e
 spazio). Le foto non si ritrovano per contenuto («quella dello scontrino») se il nome non lo dice:
 si potrebbe salvare la descrizione breve del modello.
 
@@ -280,11 +289,66 @@ nome del file, solo id («C12»), tipo e kB: un nome ostile («ignora le istruzi
 garage.txt») finiva in chiaro nel registro. `cassetto_gestisci` è nelle tabelle della politica
 per valore (`calliope/valore.py`: azione = scelta chiusa, quale e di = bersagli, effetto E2).
 
+### Il cassetto col modello vero (17/10, issue #58)
+
+Banco nuovo `prove/prova_cassetto_ollama.py` (in `CON_OLLAMA`): un cassetto vero in una cartella
+temporanea con file finti datati (un PDF di ieri, una bolletta di quattro giorni fa, due foto, un
+Excel), Dario riconosciuto dalla voce, una conversazione nuova per caso. Tre gruppi: **ritrova**
+(«Ritrovami il file che ti ho mandato ieri», «Cosa diceva la bolletta che ti ho mandato
+<giorno>?», «Fammi vedere le foto che ti ho mandato questa settimana» → `allegato_leggi` con
+`cassetto`, e l'esito del tool porta al file giusto), **dopo la revisione** (dopo un
+«buongiorno», la frase del ciclo nella storia: «Hai 3 file che scadono domani: …»; poi «Tienili
+tutti», «Elimina quello dello scontrino», «Tienili ancora una settimana» → `cassetto_gestisci`
+con l'azione giusta e l'effetto sul cassetto) e **contrari** (un file arrivato adesso: nessun
+cassetto e il totale dal file; «Archivia questa bolletta» col file adesso: nell'archivio, niente
+cassetto; «Leggimi il file che Teodora ti ha mandato ieri», adulta: nessun file letto né
+inventato).
+
+**Su main (e91699f) il banco ha trovato tre difetti.** Col 26B della DGX (1 giro): ritrova 0/3,
+revisione 1/3, contrari 2/3; con e4b sul portatile (3 giri): ritrova 3/9, revisione 9/9,
+contrari 6/9.
+
+1. **Il parametro `di`.** Il 26B ci scriveva il quando o il cosa: «il file di ieri» →
+   `allegato_leggi(cassetto="tutti", di="martedì")`, «quello dello scontrino» →
+   `cassetto_gestisci(elimina, tutti, di="lo scontrino")`, e il tool rispondeva «I file degli
+   altri non li vedo per te». Corretto: il parametro ora si chiama **`ragazzo`** («solo il nome di
+   un figlio minore, per un suo tutore; mai un giorno né un tipo di file»; `di` resta accettato,
+   anche in `valore.py`), e un valore che non è il nome di nessuno di casa diventa parole della
+   richiesta (regola `cassetto_ragazzo_non_persona`, correzione della forma di una scelta del
+   modello, principio 10); «nessuno» e simili si ignorano. Un nome di casa resta un nome, con i
+   permessi di prima (un'adulta resta chiusa, il tutore vede il figlio).
+2. **«Ritrovami il file di ieri» → `cassetto_gestisci(tieni, tutti)`**, col 26B e con e4b: «Messi
+   5 file tra i tuoi documenti». Con la conversazione pulita la politica la lasciava passare (le
+   parole del tool, che comprendono «file», contano solo con dati non fidati di mezzo). Ora
+   `cassetto_gestisci` vuole sempre le parole di una delle tre azioni nella frase (tieni, mantieni,
+   archivia, salva, conserva, elimina, cancella, butta, togli, ancora, settimana, prolunga,
+   rinnova: `Classe.verbo_sempre`, vincolo di permesso), altrimenti «Non me l'hai chiesto: vuoi che
+   metta quei file tra i tuoi documenti?» (regola `politica_cancellazione_non_chiesta`). E la
+   descrizione di `allegato_leggi` dice «Ritrova e legge anche i file dei giorni passati
+   («ritrovami il file di ieri»…)»: col 26B il ritrova è passato da 6/9 (fermato dalla politica)
+   a 9/9.
+3. **«Archivia questa bolletta» con un PDF appena arrivato**: il 26B sceglieva `immagine_archivia`
+   (la sua descrizione ha lo stesso esempio) e falliva («Non ho una foto da archiviare»), oppure
+   `cassetto_gestisci(tieni, "lo scontrino")`. Ora `immagine_archivia` senza foto e con un file
+   nella conversazione archivia il file (regola `archivia_file_non_foto`), le descrizioni dicono
+   quale tool per cosa, e quella di `cassetto_gestisci` parla dei file «dei giorni passati, di
+   solito dopo la tua domanda «Hai N file che scadono…»» (scrivere lì «archivia questa bolletta»,
+   anche per dire di non usarlo, lo faceva scegliere 5 volte su 5).
+
+**Con le correzioni** (ramo `issue-58-cassetto-ollama`): **26B sulla DGX** (versione installata
+e91699f con i tre file del ramo sopra, DGX libera, `num_ctx` 36864 già caricato, dalla DGX stessa)
+`prova_cassetto_ollama.py 3`: **ritrova 9/9, revisione 9/9, contrari 9/9**, prima frase mediana
+0,62 s (36 turni); a parte i contrari 15/15 in 5 giri. **e4b sul portatile**, 3 giri: **9/9,
+9/9, 9/9**, mediana 0,80 s. Il criterio della #58 (≥ 90 % e contrari 100 %) è raggiunto con
+entrambi. Prove a secco in `prova_cassetto.prova_ragazzo_non_persona` e nella sezione della
+politica di `prova_cassetto` (falliscono su main). Resta: il 26B dice a volte il nome del file
+(«un PDF chiamato preventivo bagno.pdf»), che `cosa_fare` chiede di non dire se non serve.
+
 ### Il tutore dai pulsanti della scheda (08/10, dopo l'unione)
 
 Decisione di Dario: un tutore può operare anche sui file del cassetto del figlio dai pulsanti
 della scheda sul **proprio** schermo personale (la scheda «I file di …» che arriva con
-`allegato_leggi(cassetto=…, di=…)`), alle condizioni di `/api/cassetto` (`schermi/server.py`):
+`allegato_leggi(cassetto=…, di=…)`, dal 17/10 `ragazzo=…`), alle condizioni di `/api/cassetto` (`schermi/server.py`):
 
 - i file della richiesta sono tutti di una persona (altrimenti 409) e `Cassetto.proprietario` li
   attribuisce al figlio dal database, mai dalla pagina;
@@ -299,7 +363,7 @@ della scheda sul **proprio** schermo personale (la scheda «I file di …» che 
 
 **«Tieni» del tutore** va nella cartella del **tutore** nell'archivio dei documenti di casa
 (`<archivio_cartella>/<nome del tutore>/`), sia dai pulsanti sia a voce con
-`cassetto_gestisci(di=…)`. Motivo: per un minore l'archivio è chiuso (è dell'ufficio, come
+`cassetto_gestisci(di=…)` (dal 17/10 `ragazzo=…`). Motivo: per un minore l'archivio è chiuso (è dell'ufficio, come
 `allegato_archivia`), quindi nella cartella del ragazzo il file non lo vedrebbe nessuno dei due
 come suo; tenerlo è una scelta del tutore, che ne risponde e lo ritrova con le sue carte. Il
 ragazzo, da solo, continua a non avere «Tieni» (elimina o tiene ancora). La scheda aggiornata

@@ -19,7 +19,7 @@ import datetime
 import time
 from pathlib import Path
 
-from .spec import ToolContext, ToolSpec
+from .spec import ToolContext, ToolSpec, note_rule
 from ..testi import FAMILY, NIENTE
 
 
@@ -79,6 +79,14 @@ def _archivia(ctx: ToolContext, foto=None) -> dict:
                       "salvo.", ok=False)
     img = album.prendi(_foto_n(foto)) if album is not None else None
     if img is None:
+        # «Archivia questa bolletta» con un PDF e nessuna foto (17/10, #58, banco col 26B): il
+        # modello sceglie questo tool per il file; si archivia il file (correzione della forma
+        # della scelta del modello, regola `archivia_file_non_foto`)
+        alb = getattr(ctx, "allegati", None)
+        if alb is not None and len(alb):
+            from .allegati import _archivia as archivia_file
+            note_rule(ctx, "archivia_file_non_foto")
+            return archivia_file(ctx, -1)
         return _final("Non ho una foto da archiviare in questa conversazione.", ok=False)
     name = getattr(ctx.speaker_ctx, "current_speaker", None)
     prof = ctx.speakers.get(name) if name and ctx.speakers else None
@@ -194,7 +202,8 @@ def immagini_specs(storia: str = "messaggio", pc: bool = False,
             name="immagine_archivia",
             description=("Salva una foto della conversazione nell'archivio dei documenti di "
                          "casa («archivia questa bolletta», «archiviala»): solo se la persona "
-                         "lo chiede. foto: il numero (-1 = l'ultima)."),
+                         "lo chiede. Per un file (PDF, Word, testo) c'è allegato_archivia. "
+                         "foto: il numero (-1 = l'ultima)."),
             parameters={"type": "object", "properties": {"foto": {"type": "integer"}},
                         "required": []},
             func=_archivia, risk="azione", levels=FAMILY))
