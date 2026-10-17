@@ -35,6 +35,28 @@ Sulla DGX (il profilo della voce dal file locale, nella cartella dei dati):
         && $V/.venv/bin/python $V/prove/manuali/banco_stanza_storpiata.py --giri 5
 
 `--modi dopo` per il solo codice di adesso; `--verboso` stampa le risposte intere.
+
+**Caso «da solo»** (16/10, issue #134; prove a voce sulla DGX col 26B, chi amministra da solo dal
+telefono): una riga della stanza sola, di Carlo, e quattro turni:
+
+1. «Oggi pomeriggio vado in palestra con Marta.»          (frase chiara)
+2. «Sai dov'è Borgolieti? Ci devo andare sabato.»        (il luogo «Borgo Lieto» storpiato)
+3. «No, Borgolieto, il paese vicino al lago.»            (la correzione, storpiata di nuovo)
+4. «E com'è la strada per arrivarci da Borgolieto?»
+
+Conta (`esito_solo`, provata a secco in `prove/prova_stanza_storpiata.py`): **«sembrato di
+sentire»** (o «mi pare di aver sentito») nel turno 1 e in tutti; i nomi del luogo sono le parole
+maiuscole che cominciano con «Borgo» o lontane al più 3 lettere da «borgolieto» (`forme_luogo`).
+**Nome al turno 2** ripetuto nella forma sentita («Borgolieti») o chiesto (una domanda che lo
+nomina o chiede com'è il nome, non un «?» qualsiasi), e mai un terzo nome accanto; **dopo la
+correzione** la forma di Carlo («Borgolieto») in ogni turno 3–4 e nessun'altra («Borgolieti»,
+«Borgoletto»…); un turno 3–4 senza il nome non vale come corretto (contato anche a parte: il
+turno 4 chiede la strada da lì, il nome serve). Modo in più `1510`: la nota e il prompt del 15/10
+(«mi è sembrato di sentire bronzo nel 2023»), per il confronto con `dopo`.
+
+    python prove\\manuali\\banco_stanza_storpiata.py --casi da_solo,due_voci --modi 1510,dopo --giri 10
+
+`--casi` sceglie i casi (`due_voci` è quello del 15/10, di serie tutti e due).
 """
 
 import argparse
@@ -134,21 +156,39 @@ def medaglia(testo: str, medaglia_rx, dove_rx) -> bool:
 PRIMA_SEGUITO = ("Altre frasi sentite nella stanza «{dove}» dopo le righe di prima (trascrizione "
                  "automatica, può contenere errori o frasi della TV; non sono richieste per te).")
 PROMPT_NUOVO = re.compile(r" \(sono trascritte con parole storpiate:[^)]*\)")
+# La nota e la frase del prompt del 15/10 al 16/10 (modo «1510»; issue #134)
+NOTA_1510 = (
+    "Nota di Calliope sulla conversazione della stanza qui sotto: è trascritta da un "
+    "riconoscimento vocale e le parole sono spesso sbagliate: numeri (un anno scritto «2.300» "
+    "per 2023), nomi storpiati, parole tronche o sbagliate per il suono («brondo» per bronzo). "
+    "Quando la parola giusta è evidente dal suono e dal discorso, usala e dillo con prudenza "
+    "(«mi è sembrato di sentire bronzo nel 2023»), invece di dire che non è stato detto; se "
+    "un pezzo non si capisce, di' quale. Se chi ti parla corregge un nome o una parola di "
+    "quelle righe, vale la sua forma da subito, già nella risposta che dai adesso.")
+PROMPT_1510 = (" (sono trascritte con parole storpiate: ricostruisci quelle evidenti dicendo che "
+               "ti è sembrato di sentirle, e se chi parla corregge un nome usa subito il suo)")
 
 
-def modo_prima(attivo: bool, salvati: dict):
-    """Rimette (o toglie) i testi di prima del 15/10: niente nota STORPIATE prima della busta,
-    l'intestazione dei seguiti di allora, il prompt senza la parentesi sulle storpiature."""
+def modo_prima(attivo: bool, salvati: dict, modo: str = "prima"):
+    """Rimette (o toglie) i testi di prima: con `prima` quelli di prima del 15/10 (niente nota
+    STORPIATE prima della busta, l'intestazione dei seguiti di allora, il prompt senza la
+    parentesi sulle storpiature); con `1510` la nota e la parentesi del 15/10 (issue #134)."""
     if attivo:
         salvati.update(STORPIATE=ctx_mod.STORPIATE,
                        INTESTAZIONE_SEGUITO=ctx_mod.INTESTAZIONE_SEGUITO,
                        prompt_for=config_mod.Config.prompt_for)
-        ctx_mod.STORPIATE = ""
-        ctx_mod.INTESTAZIONE_SEGUITO = PRIMA_SEGUITO
         vero = salvati["prompt_for"]
+        if modo == "1510":
+            ctx_mod.STORPIATE = NOTA_1510
 
-        def prompt_for(self, *a, **k):
-            return PROMPT_NUOVO.sub("", vero(self, *a, **k))
+            def prompt_for(self, *a, **k):
+                return PROMPT_NUOVO.sub(lambda m: PROMPT_1510, vero(self, *a, **k))
+        else:
+            ctx_mod.STORPIATE = ""
+            ctx_mod.INTESTAZIONE_SEGUITO = PRIMA_SEGUITO
+
+            def prompt_for(self, *a, **k):
+                return PROMPT_NUOVO.sub("", vero(self, *a, **k))
         config_mod.Config.prompt_for = prompt_for
     elif salvati:
         ctx_mod.STORPIATE = salvati["STORPIATE"]
@@ -157,13 +197,13 @@ def modo_prima(attivo: bool, salvati: dict):
         salvati.clear()
 
 
-def scena(cfg):
+def scena(cfg, righe=None):
     st = Stanza(cfg, STTFinto(), registry=Persone(), misure=misure_mod.Misure(None),
                 log=lambda m: None)
     st._info[1] = {"nome": "telefono di Carlo", "stanza": "auto", "canale": "satellite"}
     ora = time.time()
     pers = Persone()
-    for i, (fa, chi, testo) in enumerate(RIGHE):
+    for i, (fa, chi, testo) in enumerate(RIGHE if righe is None else righe):
         fine = ora - fa
         prof = pers.get(chi)
         st._sentita(prof.id, chi, 1, fine)
@@ -202,6 +242,8 @@ def conversazione(cfg, modo: str, verboso: bool) -> dict:
     if modo == "prima":
         modo_prima(True, salvati)
         cfg.llm_reti_spente = reti + ["domanda_insistita"]
+    elif modo == "1510":
+        modo_prima(True, salvati, "1510")
     try:
         st = scena(cfg)
         b = brain(cfg, st)
@@ -252,6 +294,116 @@ def conversazione(cfg, modo: str, verboso: bool) -> dict:
     return esito
 
 
+# ───────────── il caso «da solo» (16/10, issue #134) ─────────────
+RIGHE_SOLO = [(200, "Carlo", "Devo ricordarmi di passare in farmacia prima di cena.")]
+DOMANDE_SOLO = ["Oggi pomeriggio vado in palestra con Marta.",
+                "Sai dov'è Borgolieti? Ci devo andare sabato.",
+                "No, Borgolieto, il paese vicino al lago.",
+                "E com'è la strada per arrivarci da Borgolieto?"]
+SEMBRA = re.compile(r"sembrat\w* di (?:sentir|capir)|pare di (?:aver )?(?:sentit|capit)|"
+                    r"se ho (?:sentito|capito) bene", re.I)
+# Le due forme note del luogo: quella sentita al turno 2 e quella della correzione (normalizzate:
+# minuscole, senza spazi, «Borgo Lieto» = «borgolieto»). Ogni altra è un terzo nome
+SENTITA, CORRETTA = "borgolieti", "borgolieto"
+PAROLE = re.compile(r"[A-Za-zÀ-ÿ]+")
+CHIEDE = re.compile(r"come si (?:chiama|scrive)|come (?:l'hai|hai) dett|puoi ripet|"
+                    r"me lo (?:ripeti|scrivi)|di che (?:paese|posto|luogo)", re.I)
+
+
+def _distanza(a: str, b: str) -> int:
+    """Distanza di Levenshtein (stringhe corte)."""
+    prec = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prec[j] + 1, cur[j - 1] + 1, prec[j - 1] + (ca != cb)))
+        prec = cur
+    return prec[-1]
+
+
+def forme_luogo(testo: str) -> list[str]:
+    """I nomi del luogo nella risposta, normalizzati: le parole maiuscole che cominciano con
+    «Borgo» (unite alla parola dopo se «Borgo» è staccato) o lontane al più 3 lettere da
+    «borgolieto». Un «borgo» minuscolo («un borgo vicino») non conta."""
+    p = PAROLE.findall(testo or "")
+    out, i = [], 0
+    while i < len(p):
+        w = p[i]
+        if w[0].isupper():
+            n = w.lower()
+            if n == "borgo" and i + 1 < len(p):
+                out.append(n + p[i + 1].lower())
+                i += 2
+                continue
+            if (n.startswith("borgo") and len(n) > 5) or _distanza(n, CORRETTA) <= 3:
+                out.append(n)
+        i += 1
+    return out
+
+
+def chiede_nome(testo: str) -> bool:
+    """Una domanda sul nome: una frase che finisce con «?» e nomina il luogo con la forma
+    sentita, o chiede com'è il nome. Un «?» qualsiasi («Vuoi che cerchi la strada?») no."""
+    for f in re.split(r"(?<=[.!?])\s+", testo or ""):
+        if f.rstrip().endswith("?") and (SENTITA in forme_luogo(f) or CHIEDE.search(f)):
+            return True
+    return False
+
+
+def esito_solo(risposte: list[str]) -> dict:
+    """Il conteggio del caso «da solo» sulle quattro risposte."""
+    f2 = forme_luogo(risposte[1])
+    dopo = [forme_luogo(r) for r in risposte[2:]]
+    terzi_t2 = [f for f in f2 if f not in (SENTITA, CORRETTA)]
+    return {
+        "sembra_t1": bool(SEMBRA.search(risposte[0])),
+        "sembra": sum(bool(SEMBRA.search(r)) for r in risposte),
+        # Il nome sentito ripetuto così, o chiesto; mai con un terzo nome accanto
+        "nome_t2": (SENTITA in f2 or chiede_nome(risposte[1])) and not terzi_t2,
+        "terzo_t2": bool(terzi_t2),
+        # La forma di Carlo in ogni turno dopo la correzione, e nessun'altra
+        "corretto": all(CORRETTA in f and set(f) == {CORRETTA} for f in dopo),
+        "altra_forma": any(x != CORRETTA for f in dopo for x in f),
+        "senza_nome": any(not f for f in dopo),
+    }
+
+
+def conversazione_sola(cfg, modo: str, verboso: bool) -> dict:
+    salvati: dict = {}
+    if modo == "prima":
+        modo_prima(True, salvati)
+    elif modo == "1510":
+        modo_prima(True, salvati, "1510")
+    try:
+        st = scena(cfg, RIGHE_SOLO)
+        b = brain(cfg, st)
+        risposte = []
+        for n, frase in enumerate(DOMANDE_SOLO):
+            b.stanza_turno = ctx_mod.costruisci(st, 1, cfg, time.time())
+            b.chiamate = []
+            t0 = time.perf_counter()
+            primo, parti = None, []
+            for pezzo in b.stream_reply(frase, "amministra"):
+                if primo is None and pezzo.strip():
+                    primo = time.perf_counter() - t0
+                parti.append(pezzo)
+            r = re.sub(r"\s+", " ", "".join(parti)).strip()
+            risposte.append(r)
+            print(f"  [solo {modo}] {n + 1} prima frase "
+                  f"{'—' if primo is None else f'{primo:.2f} s'}, tool {b.chiamate or '—'}: "
+                  f"«{frase}» → {r if verboso else r[:160]!r}", flush=True)
+        st.chiudi()
+    finally:
+        modo_prima(False, salvati)
+    esito = esito_solo(risposte)
+    print(f"  [solo {modo}] esito: «sembrato» al turno 1 {esito['sembra_t1']}, in "
+          f"{esito['sembra']}/4 turni; nome al turno 2 ripetuto o chiesto {esito['nome_t2']} "
+          f"(terzo nome {esito['terzo_t2']}); dopo la correzione la forma di Carlo in ogni "
+          f"turno {esito['corretto']}, un'altra forma {esito['altra_forma']}, un turno senza "
+          f"il nome {esito['senza_nome']}", flush=True)
+    return esito
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -261,7 +413,9 @@ def main():
     ap.add_argument("--giri", type=int, default=3)
     ap.add_argument("--modi", default="prima,dopo")
     ap.add_argument("--verboso", action="store_true")
+    ap.add_argument("--casi", default="due_voci,da_solo")
     a = ap.parse_args()
+    casi = a.casi.split(",")
     cfg = load_config()
     # Come sulla DGX in auto: stanza in ombra, righe al modello nella storia, stanza_cerca acceso;
     # niente satelliti veri dal file locale (qui c'è solo quello finto)
@@ -270,11 +424,30 @@ def main():
     cfg.stanza_satelliti = []
     print(f"modello: {cfg.llm_model} ({cfg.llm_backend}, profilo {cfg.llm_profilo})", flush=True)
     tot: dict = {}
+    soli: dict = {}
     for giro in range(1, a.giri + 1):
         for modo in a.modi.split(","):
             print(f"giro {giro}, modo {modo}", flush=True)
-            tot.setdefault(modo, []).append(conversazione(cfg, modo, a.verboso))
-    print("\nRiepilogo (conversazioni):")
+            if "due_voci" in casi:
+                tot.setdefault(modo, []).append(conversazione(cfg, modo, a.verboso))
+            if "da_solo" in casi:
+                soli.setdefault(modo, []).append(conversazione_sola(cfg, modo, a.verboso))
+    if soli:
+        print("\nRiepilogo del caso «da solo» (conversazioni):")
+    for modo, es in soli.items():
+        n = len(es)
+        print(f"  {modo:>5}: «sembrato» sulla frase chiara {sum(e['sembra_t1'] for e in es)}/{n}"
+              f" (turni con «sembrato» {sum(e['sembra'] for e in es)}/{4 * n}); nome ripetuto o "
+              f"chiesto al turno 2 {sum(e['nome_t2'] for e in es)}/{n} (terzo nome "
+              f"{sum(e['terzo_t2'] for e in es)}); forma di Carlo in ogni turno dopo la "
+              f"correzione {sum(e['corretto'] for e in es)}/{n}, un'altra forma "
+              f"{sum(e['altra_forma'] for e in es)}/{n}, un turno senza il nome "
+              f"{sum(e['senza_nome'] for e in es)}/{n}")
+    if soli:
+        print("Obiettivo per «dopo» (issue #134): «sembrato» sulla frase chiara 0, nome ripetuto "
+              "o chiesto e forma di Carlo in tutte, un'altra forma 0.")
+    if tot:
+        print("\nRiepilogo (conversazioni):")
     for modo, es in tot.items():
         n = len(es)
 
@@ -286,8 +459,9 @@ def main():
               f"{c('storpiato_t2')}), storpiato nei turni 3–5 {c('storpiato_dopo')}/{n}; "
               f"turno 4 ripetuto {c('ripetuta_t4')}/{n} "
               f"(domanda_insistita {c('insistita')}, spinta_ripetuta {c('spinta_ripetuta')})")
-    print("Obiettivo per «dopo»: medaglie entrambe e nome giusto in quasi tutte; turno 5 che "
-          "nega, nome storpiato nei turni 3–5 e turno 4 ripetuto a 0.")
+    if tot:
+        print("Obiettivo per «dopo»: medaglie entrambe e nome giusto in quasi tutte; turno 5 "
+              "che nega, nome storpiato nei turni 3–5 e turno 4 ripetuto a 0.")
     return 0
 
 
