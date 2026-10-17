@@ -1156,8 +1156,11 @@ def incoerente(spec, name: str, args: dict, ctx) -> dict | None:
     d = _distruttiva(cl, args)
     if d is None:
         return None
+    # Con Classe.chiedi_se tutta la chiamata deve essere quella della domanda (17/10, #58)
+    tutto = callable(cl.chiedi_se)
     proposta = (_proposta(t, name) and (consenso(t.testo) or t.sfida)
-                and _uguali(args, t.args_sospeso, ("azione", "stanza", "nome")))
+                and (_uguali(_conta(cl, args or {}), _conta(cl, t.args_sospeso or {}), None)
+                     if tutto else _uguali(args, t.args_sospeso, ("azione", "stanza", "nome"))))
     if proposta or coerente(t.testo):
         return None
     descr, conseguenza = d
@@ -2111,15 +2114,23 @@ def controlla(spec, name: str, args: dict, ctx) -> dict | None:
             d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
     else:
         d = decidi(name, args, cl, t, cv, vf, bool(propria), cosa, intento is not None)
-    # Una domanda in più prima di eseguire (Classe.chiedi_se, 17/10): non al «sì» alla domanda
-    if d.esito == "esegui" and t is not None and callable(cl.chiedi_se) and not (
-            _proposta(t, name) and (consenso(t.testo) or t.sfida)):
-        try:
-            extra = cl.chiedi_se(t.testo or "", args or {}, ctx)
-        except Exception:  # noqa: BLE001 — nel dubbio, la decisione di sempre
-            extra = None
-        if extra:
-            d = Decisione("conferma", extra[0], extra[1])
+    # Una domanda in più prima di eseguire (Classe.chiedi_se, 17/10): non al «sì» alla domanda,
+    # e solo con la chiamata identica a quella chiesta (tutti gli argomenti: terza revisione
+    # della PR #143, un «sì» con quale="tutti" o un altro minore eliminava altri file)
+    if d.esito == "esegui" and t is not None and callable(cl.chiedi_se):
+        stessa_sosp = (_proposta(t, name) and isinstance(t.args_sospeso, dict)
+                       and _uguali(_conta(cl, args or {}), _conta(cl, t.args_sospeso), None))
+        si = consenso(t.testo) or t.sfida
+        if not (stessa_sosp and si):
+            try:
+                extra = cl.chiedi_se(t.testo or "", args or {}, ctx)
+            except Exception:  # noqa: BLE001 — nel dubbio, la decisione di sempre
+                extra = None
+            if extra:
+                d = Decisione("conferma", extra[0], extra[1])
+            elif _proposta(t, name) and si and t.sospeso_politica and not stessa_sosp:
+                d = Decisione("conferma", "politica_azione_incoerente",
+                              f"Non sono sicura di aver capito: vuoi che {_cosa(cl, args)}?")
     # La modalità sviluppo (08/10, calliope/sviluppo.py): i passi interni dello sviluppo aperto
     # di chi parla, riconosciuto, non chiedono «C'è di mezzo il lavoro di un agente…» a ogni
     # frase: l'intento è lo sviluppo, aperto con la voce da chi amministra, e il bersaglio è il

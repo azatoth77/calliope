@@ -342,9 +342,10 @@ def prova_minore_non_persona():
     verifica("cassetto_gestisci(elimina, «quello di Teodora di ieri»): niente eliminato",
              not r.get("ok") and all(cas.prendi("dario", x) is not None for x in (a, s, b)), r)
     r = call(ctx, "allegato_leggi", {"cassetto": "i file di Bianca", "quando": "ieri"})
-    verifica("…il tutore con il nome della figlia nella richiesta: i file di lei",
-             "QX" not in json.dumps(r) and "340" not in json.dumps(r)
-             and "altri" not in json.dumps(r, ensure_ascii=False), r)
+    verifica("…il nome della figlia nella sola richiesta non sposta il cassetto: errore "
+             "correggibile (va in minore), niente letto",
+             not r.get("ok") and r.get("correggibile") is True
+             and not any(x in json.dumps(r) for x in ("QX", "340", "Napoleone")), r)
     r = call(ctx, "allegato_leggi", {"cassetto": "ieri", "minore": "Teodora"})
     verifica("un nome di casa resta un nome: i file di un'adulta restano chiusi",
              not r.get("ok") and "QX" not in json.dumps(r), r)
@@ -561,6 +562,126 @@ def prova_seconda_revisione():
                           ("Prolungali.", True), ("Salva tutto.", True), ("Conservali.", True)):
         verifica(f"chiesto_al_cassetto(«{frase}») = {atteso}",
                  chiesto_al_cassetto(frase) is atteso)
+
+
+def prova_terza_revisione():
+    """La terza revisione della PR #143 (17/10): un solo punto decide il cassetto (il campo
+    della persona); un nome o una parentela nella richiesta non lo sposta mai; la domanda usa
+    il proprietario vero e lo dice; il «sì» vale solo per la chiamata identica."""
+    def casa():
+        cas, _ = nuovo()
+        ids = {"bianca": cas.metti("bianca", b"Il compito di storia: Napoleone.", "storia.txt",
+                                   "testo"),
+               "teodora_foto": cas.metti("teodora", b"Parete.", "Foto parete.jpg", "testo")}
+        cas.ora.avanti(1)
+        ids["dario_ieri"] = None
+        cas.ora.avanti(-1)
+        ids["dario_ieri"] = cas.metti("dario", b"Preventivo: 340 euro.", "preventivo.txt",
+                                      "testo")
+        cas.ora.avanti(1)
+        ids["dario_oggi"] = cas.metti("dario", b"Appunti.", "appunti.txt", "testo")
+        return cas, ids
+
+    def vivi(cas, ids):
+        return {k: cas.prendi(p, ids[k]) is not None for k, p in (
+            ("bianca", "bianca"), ("dario_ieri", "dario"), ("dario_oggi", "dario"),
+            ("teodora_foto", "teodora"))}
+    # 1. Un nome o una parentela in cassetto/quale/ieri non sposta il cassetto
+    cas, ids = casa()
+    for chi, args in (("Dario", {"cassetto": "il file che la mamma di Bianca ti ha mandato ieri"}),
+                      ("Dario", {"cassetto": "il file dell'amica di Bianca di ieri"}),
+                      ("Dario", {"cassetto": "ieri", "ieri": "l'amica di Bianca"}),
+                      ("Dario", {"cassetto": "la foto della parete bianca di ieri"}),
+                      ("Teodora", {"cassetto": "la foto della parete bianca di ieri"})):
+        r = call(ctx_per(cas, chi=chi), "allegato_leggi", args)
+        verifica(f"{chi}: allegato_leggi({args}): mai il file di Bianca",
+                 "Napoleone" not in json.dumps(r) and r.get("cassetto_di") != "il cassetto di "
+                 "Bianca", r)
+    r = call(ctx_per(cas), "cassetto_gestisci",
+             {"azione": "elimina", "quale": "il file che la mamma di Bianca ti ha mandato ieri"})
+    verifica("cassetto_gestisci(elimina, «il file che la mamma di Bianca…»): niente eliminato",
+             not r.get("ok") and all(vivi(cas, ids).values()), r)
+    # 5. Due persone diverse negli argomenti: rifiuto
+    for args in ({"cassetto": "ieri", "minore": "Bianca", "mittente": "la mamma di Bianca"},
+                 {"cassetto": "ieri", "minore": "io", "persona": "Teodora"}):
+        r = call(ctx_per(cas), "allegato_leggi", args)
+        verifica(f"allegato_leggi({args}): persone diverse, rifiutato",
+                 not r.get("ok") and not any(x in json.dumps(r) for x in ("Napoleone", "340",
+                                                                          "Parete")), r)
+    r = call(ctx_per(cas), "cassetto_gestisci", {"azione": "elimina", "quale": "ieri",
+                                                 "minore": "Bianca",
+                                                 "mittente": "la mamma di Bianca"})
+    verifica("cassetto_gestisci(elimina, minore=Bianca, mittente=«la mamma di Bianca»): niente",
+             not r.get("ok") and all(vivi(cas, ids).values()), r)
+    cas.close()
+    # 2–4. La domanda: lo stesso proprietario del tool, i «nessuno» non la saltano, il «sì»
+    # solo alla chiamata identica, e quale file viene eliminato davvero
+    cfg = Config()
+    cfg.storia_inattiva_s = 0
+
+    def giro(frase, args, risposta=None, args2=None):
+        cas, ids = casa()
+        b = Brain(cfg, build_registry(allegati=True, cassetto=True, archivio=True),
+                  ctx_per(cas))
+        b.tool_ctx.cassetto = cas
+        c1 = [("calls", [{"id": "c1", "name": "cassetto_gestisci", "arguments": args}])]
+        c2 = [("calls", [{"id": "c2", "name": "cassetto_gestisci",
+                          "arguments": args2 if args2 is not None else args}])]
+        b.backend = BackendFinto([c1, [("text", "Fatto.")], c2, [("text", "Fatto.")]])
+        out = "".join(b.stream_reply(frase, "familiare"))
+        regole = list(b.rules_fired())
+        prima = vivi(cas, ids)
+        dopo = None
+        if risposta:
+            "".join(b.stream_reply(risposta, "familiare"))
+            dopo = vivi(cas, ids)
+        cas.close()
+        return out, regole, prima, dopo
+    tutti_vivi = {"bianca": True, "dario_ieri": True, "dario_oggi": True, "teodora_foto": True}
+    for minore in ("nessuno", "io", "Dario", "mio", "ieri", None):
+        args = {"azione": "elimina", "quale": "ieri"}
+        if minore is not None:
+            args["minore"] = minore
+        out, regole, prima, _ = giro("Elimina il file che mia moglie ti ha mandato ieri.", args)
+        verifica(f"«Elimina il file che mia moglie…» con minore={minore!r}: prima la domanda "
+                 "«Nel tuo cassetto»", prima == tutti_vivi
+                 and "politica_cassetto_altra_persona" in regole and "Nel tuo cassetto" in out,
+                 (out, regole, prima))
+    for frase, args in (("Elimina tutti i file di mia moglie.",
+                         {"azione": "elimina", "quale": "tutti", "minore": "nessuno"}),
+                        ("Tieni tutti i file di mia moglie.",
+                         {"azione": "tieni", "quale": "tutti", "minore": "nessuno"})):
+        out, regole, prima, _ = giro(frase, args)
+        verifica(f"«{frase}» con minore=«nessuno»: prima la domanda, niente fatto",
+                 prima == tutti_vivi and "politica_cassetto_altra_persona" in regole,
+                 (out, regole, prima))
+    out, regole, prima, _ = giro("Elimina il compito che la mamma di Bianca ti ha mandato.",
+                                 {"azione": "elimina", "quale": "storia", "minore": "Bianca"})
+    verifica("il tutore, «…la mamma di Bianca…» con minore=Bianca: la domanda dice «Nel cassetto "
+             "di Bianca»", prima == tutti_vivi and "Nel cassetto di Bianca" in out, (out, regole))
+    out, regole, prima, _ = giro("Elimina la foto della parete bianca.",
+                                 {"azione": "elimina", "quale": "appunti"})
+    verifica("«la parete bianca» (colore): al più una domanda, e dice «Nel tuo cassetto»",
+             prima == tutti_vivi and "Nel tuo cassetto" in out, (out, regole))
+    out, regole, prima, _ = giro("Elimina il file del vicino di ieri.",
+                                 {"azione": "elimina", "quale": "ieri"})
+    verifica("«il file del vicino»: nessuna domanda in più (vicino non è una parentela)",
+             "politica_cassetto_altra_persona" not in regole and not prima["dario_ieri"],
+             (out, regole, prima))
+    # 3. Il «sì» esegue solo la chiamata identica, e il file giusto
+    frase = "Elimina il file che mia moglie ti ha mandato ieri."
+    args = {"azione": "elimina", "quale": "ieri"}
+    _o, _r, _p, dopo = giro(frase, args, "Sì.")
+    verifica("al «sì» con la stessa chiamata: eliminato proprio il file di ieri di Dario",
+             dopo == {**tutti_vivi, "dario_ieri": False}, dopo)
+    for args2 in ({"azione": "elimina", "quale": "tutti"}, {"azione": "elimina", "quale": "C3"},
+                  {"azione": "elimina", "quale": "ieri", "minore": "Bianca"},
+                  {"azione": "elimina", "quale": "storia", "minore": "Bianca"}):
+        _o, regole, _p, dopo = giro(frase, args, "Sì.", args2)
+        verifica(f"al «sì» con un'altra chiamata {args2}: niente eliminato",
+                 dopo == tutti_vivi, (dopo, regole))
+    _o, _r, _p, dopo = giro(frase, args, "No.")
+    verifica("al «no»: niente eliminato", dopo == tutti_vivi, dopo)
 
 
 # ─────────────────────────── tool, permessi, riavvio, busta ───────────────────────────
@@ -1001,6 +1122,7 @@ if __name__ == "__main__":
     prova_tool()
     prova_minore_non_persona()
     prova_seconda_revisione()
+    prova_terza_revisione()
     prova_politica_e_busta()
     prova_ciclo()
     prova_server()

@@ -134,7 +134,7 @@ genitori figlio figlia figli figlie fratello fratelli sorella sorelle nonno nonn
 zio zia zii zie cugino cugina cugini cugine compagno compagna compagni compagne fidanzato
 fidanzata fidanzati ragazzo ragazza suocero suocera suoceri cognato cognata cognati cognate
 nipote nipoti bimbo bimba bimbi bimbe bambino bambina bambini bambine consorte amico amica
-amici amiche collega colleghi colleghe vicino vicina vicini
+amici amiche collega colleghi colleghe
 """.split())
 
 
@@ -221,47 +221,86 @@ _CHIAVI_PERSONA = ("persona", "proprietario", "di_chi", "mittente")
 _CHIAVI_GIORNO = ("ieri", "oggi", "altroieri")
 
 
-def _chi_e_cosa(ctx, quale, persona, extra: dict | None = None
-                ) -> tuple[str | None, str, list | None]:
-    """(di chi è il cassetto, la richiesta a parole, le parole che devono trovare il file o
-    None) dagli argomenti del modello (17/10, #58, banco col 26B).
+def _nomina_altri(ctx, testo: str) -> list[str]:
+    """Le persone di casa (escluso chi parla) e le parentele nominate nel testo: solo per
+    rifiutare o chiedere, mai per scegliere un cassetto."""
+    from ..speaker_id import name_key
+    parole = name_key(testo or "").split()
+    io = _io(ctx)
+    altri = [n for n in _nomi_di_casa(ctx) if name_key(n) != io
+             and name_key(n).split()[0] in parole]
+    return altri + [w for w in parole if w in _PARENTI]
 
-    - Il parametro della persona passa da `_minore`.
-    - Le chiavi in più dell'elenco chiuso (`quando`, `tipo`, `persona`, «ieri»: true…): una
-      forma chiusa di quando o cosa diventa parole della richiesta, il resto una persona
-      (regola `cassetto_argomento_in_piu`).
-    - Il nome di un'altra persona di casa dentro la richiesta («il file di Teodora», anche col
-      solo nome di un profilo registrato col cognome) vale come la persona; una parentela
-      («la pagella di mio figlio», «di mia moglie») cerca nel cassetto di chi parla, ma il file
-      vale solo se le parole lo trovano davvero nel nome o nel testo, altrimenti si rifiuta
-      (regola `cassetto_persona_nella_richiesta`)."""
-    di, resto = _minore(ctx, persona)
-    parole = [str(quale or "").strip(), resto]
-    for k, v in (extra or {}).items():
+
+def _chi_e_cosa(ctx, quale, persona, extra: dict | None = None
+                ) -> tuple[str | None, str, list | None, dict | None]:
+    """(di chi è il cassetto, la richiesta a parole, le parole che devono trovare il file o
+    None, l'esito da dare subito o None), dagli argomenti del modello (17/10, #58).
+
+    **Un solo punto decide il proprietario** (terza revisione della PR #143): il campo della
+    persona (`minore`, o `di`/`ragazzo`) e le chiavi `persona`/`proprietario`/`di_chi`/
+    `mittente` dell'elenco chiuso, ognuno risolto con le regole strette di `_minore`; se due di
+    loro dicono persone diverse, si rifiuta. Le chiavi `quando`/`giorno`/`data`/`tipo` e
+    `ieri`/`oggi`/`altroieri` danno solo parole della richiesta (forme chiuse), altrimenti un
+    errore correggibile. Un nome o una parentela dentro `cassetto`/`quale` **non sposta mai il
+    cassetto**: si cerca in quello deciso, e il file vale solo se le parole lo trovano davvero
+    nel nome o nel testo («la pagella di mio figlio»); altrimenti un errore correggibile
+    («dimmi di chi è il file», regola `cassetto_persona_nella_richiesta`)."""
+    voci = [persona] + [(extra or {}).get(k) for k in _CHIAVI_PERSONA]
+    risolti, parole = [], [str(quale or "").strip()]
+    for v in voci:
+        if v in (None, "", False):
+            continue
+        if v is True:
+            return None, "", None, _correggi("una persona non è vera o falsa")
+        chi, resto = _minore(ctx, v)
+        if resto:
+            parole.append(resto)
+        if chi is not None:
+            risolti.append(chi)
+    for k in _CHIAVI_QUANDO_COSA + _CHIAVI_GIORNO:
+        v = (extra or {}).get(k)
         if v in (None, "", False):
             continue
         note_rule(ctx, "cassetto_argomento_in_piu")
         val = str(k) if v is True else str(v).strip()
-        if k in _CHIAVI_GIORNO or (k in _CHIAVI_QUANDO_COSA and _solo_quando_cosa(val)):
-            parole.append(val)
-        elif di is None:
-            di = _minore(ctx, val)[0] or val
+        if k in _CHIAVI_GIORNO and v is not True and not _solo_quando_cosa(val):
+            return None, "", None, _correggi(f"«{k}» vale solo true")
+        if not _solo_quando_cosa(val):
+            return None, "", None, _correggi(f"«{val[:40]}» non è un giorno né un tipo di file")
+        parole.append(val)
+    if any(x != c for x in risolti for c in risolti):
+        from ..speaker_id import name_key
+        if len({name_key(x) for x in risolti}) > 1:
+            note_rule(ctx, "cassetto_persone_diverse")
+            return None, "", None, _final(_ALTRI_NO, ok=False)
+    di = risolti[0] if risolti else None
     q = " ".join(x for x in parole if x)
     devono = None
-    if di is None and q:
+    if q and _nomina_altri(ctx, q):
         from ..cassetto import _VUOTE
         from ..speaker_id import name_key
-        k = name_key(q).split()
-        io = _io(ctx)
-        altri = [n for n in _nomi_di_casa(ctx) if name_key(n) != io
-                 and name_key(n).split()[0] in k]
-        if altri:
-            note_rule(ctx, "cassetto_persona_nella_richiesta")
-            di = altri[0]
-        elif any(w in _PARENTI for w in k):
-            note_rule(ctx, "cassetto_persona_nella_richiesta")
-            devono = [w for w in k if len(w) >= 3 and (w not in _VUOTE or w in _PARENTI)]
-    return di, q, devono
+        note_rule(ctx, "cassetto_persona_nella_richiesta")
+        devono = [w for w in name_key(q).split()
+                  if len(w) >= 3 and w not in _VUOTE or w in _PARENTI]
+    return di, q, devono, None
+
+
+def _correggi(perche: str) -> dict:
+    """Un errore correggibile al modello: richiama il tool con gli argomenti giusti."""
+    return {"ok": False, "fatto": NIENTE, "correggibile": True, "errore": perche,
+            "cosa_fare": ("richiama il tool: la persona di cui è il cassetto va solo in minore "
+                          "(un minore di casa, per il suo tutore), il quando e il cosa in "
+                          "cassetto o quale")}
+
+
+_PERSONA_NELLA_RICHIESTA = {
+    "ok": False, "fatto": NIENTE, "correggibile": True,
+    "errore": "la richiesta nomina un'altra persona e nel cassetto non trovo un file così",
+    "cosa_fare": ("se la persona chiede i file di un altro adulto, di' che i file degli altri "
+                  "non li vedi; se è un minore di casa e chi parla è il suo tutore, richiama "
+                  "con minore=<il suo nome>; se è un file di chi parla, richiama con le sole "
+                  "parole del file (quando, tipo, nome)")}
 
 
 def _trovate_davvero(righe: list, devono: list | None) -> list:
@@ -296,7 +335,9 @@ def _leggi_cassetto(ctx: ToolContext, quale, parte: str = "", di: str | None = N
     («ieri», «la foto di lunedì», «lo scontrino», «C12»). Più file: l'elenco (nomi come dati) e
     la scheda col carosello. Una foto entra nell'album e il modello la vede; il testo di un
     file è un dato non fidato (fonte «allegato», come sempre per questo tool)."""
-    di, quale, devono = _chi_e_cosa(ctx, quale, di, extra)
+    di, quale, devono, subito = _chi_e_cosa(ctx, quale, di, extra)
+    if subito is not None:
+        return subito
     chi, prof, err = _proprietario(ctx, di)
     if err:
         return err
@@ -311,7 +352,7 @@ def _leggi_cassetto(ctx: ToolContext, quale, parte: str = "", di: str | None = N
     if devono is not None:
         righe = _trovate_davvero(righe, devono)
         if not righe:
-            return _final(_ALTRI_NO, ok=False)
+            return dict(_PERSONA_NELLA_RICHIESTA)
     if not righe:
         n = len(cas.elenco(chi.id))
         return {"ok": False, "errore": f"nel cassetto non trovo «{str(quale)[:60]}»",
@@ -396,7 +437,9 @@ def _gestisci(ctx: ToolContext, azione: str = "", quale: str = "", minore: str |
                                    persona=persona, proprietario=proprietario, di_chi=di_chi,
                                    mittente=mittente, ieri=ieri, oggi=oggi,
                                    altroieri=altroieri).items() if v not in (None, "")}
-    di, quale, devono = _chi_e_cosa(ctx, quale, minore or ragazzo or di, extra)
+    di, quale, devono, subito = _chi_e_cosa(ctx, quale, minore or ragazzo or di, extra)
+    if subito is not None:
+        return subito
     chi, prof, err = _proprietario(ctx, di)
     if err:
         return err
@@ -409,7 +452,7 @@ def _gestisci(ctx: ToolContext, azione: str = "", quale: str = "", minore: str |
     if devono is not None:
         righe = _trovate_davvero(righe, devono)
         if not righe:
-            return _final(_ALTRI_NO, ok=False)
+            return dict(_PERSONA_NELLA_RICHIESTA)
     if not righe:
         return _final("Nel cassetto non trovo quel file.", ok=False)
     tutti = bool(re.search(r"\btutt[ieo]\b|\bentrambi\b|\bscad", q.lower())) or not q
@@ -474,31 +517,51 @@ def chiesto_al_cassetto(testo: str) -> bool:
     return any(not _NON_PRIMA.search(t[:m.start()]) for m in _PAROLE_CASSETTO.finditer(t))
 
 
+def proprietario_della_chiamata(ctx, args: dict):
+    """Il profilo di cui è il cassetto che `cassetto_gestisci` aprirà con questi argomenti (la
+    stessa strada del tool: `_chi_e_cosa` e `_proprietario`), o None se il tool rifiuterà."""
+    a = dict(args or {})
+    persona = a.pop("minore", None) or a.pop("ragazzo", None) or a.pop("di", None)
+    extra = {k: a.get(k) for k in _CHIAVI_QUANDO_COSA + _CHIAVI_PERSONA + _CHIAVI_GIORNO
+             if a.get(k) not in (None, "")}
+    regole = getattr(ctx, "regole", None)
+    try:
+        ctx.regole = []                      # la domanda non scrive le regole del tool
+        di, _q, _d, subito = _chi_e_cosa(ctx, a.get("quale"), persona, extra)
+        if subito is not None:
+            return None
+        chi, _prof, err = _proprietario(ctx, di)
+    finally:
+        ctx.regole = regole
+    return None if err else chi
+
+
 def altra_persona_nella_frase(testo: str, args: dict, ctx) -> tuple[str, str] | None:
-    """Vincolo di sicurezza su un'azione distruttiva o che sposta i file (17/10, #58, seconda
-    revisione della PR #143): con `elimina` o `tieni` senza nessuna persona nella chiamata, se
-    la frase della persona nomina un'altra persona di casa o una parentela («Elimina il file che
-    mia moglie ti ha mandato ieri»), il cassetto è quello di chi parla e potrebbe non essere il
-    file che intende: si chiede prima (regola `politica_cassetto_altra_persona`, effetto
-    reversibile: una domanda). Al «sì» la chiamata parte."""
+    """Vincolo di sicurezza su un'azione distruttiva o che sposta i file (17/10, #58, revisioni
+    della PR #143): con `elimina` o `tieni`, se la frase della persona nomina un'altra persona
+    di casa o una parentela che non è il proprietario del cassetto che il tool aprirà davvero
+    (stessa funzione del tool: «nessuno», «io», «ieri» in `minore` non la saltano), si chiede
+    prima dicendo di chi è il cassetto (regola `politica_cassetto_altra_persona`, effetto
+    reversibile: una domanda). Al «sì» parte solo la chiamata identica."""
     a = args or {}
     az = _AZIONI.get(str(a.get("azione") or "").strip().lower(), "")
-    if az not in ("elimina", "tieni") or any(a.get(k) for k in ("minore", "di", "ragazzo")):
+    if az not in ("elimina", "tieni"):
         return None
+    chi = proprietario_della_chiamata(ctx, a)
+    if chi is None:
+        return None                          # il tool rifiuterà da sé
     from ..speaker_id import name_key
-    parole = name_key(testo or "").split()
-    io = _io(ctx)
-    altri = [n for n in _nomi_di_casa(ctx) if name_key(n) != io
-             and name_key(n).split()[0] in parole]
-    parenti = [w for w in parole if w in _PARENTI]
-    if not (altri or parenti):
+    nominati = [n for n in _nomina_altri(ctx, testo)
+                if name_key(n).split()[0] != name_key(chi.name).split()[0]]
+    if not nominati:
         return None
-    chi = altri[0] if altri else "altre persone"
+    mio = name_key(chi.name) == _io(ctx)
+    dove = "Nel tuo cassetto" if mio else f"Nel cassetto di {chi.name}"
     fare = "elimini" if az == "elimina" else "metta tra i tuoi documenti"
     q = str(a.get("quale") or "").strip()
     return ("politica_cassetto_altra_persona",
-            f"Nel tuo cassetto: vuoi che {fare} i tuoi file{f' («{q[:40]}»)' if q else ''}? "
-            f"Quelli di {chi} non li vedo.")
+            f"{dove}: vuoi che {fare} {'i tuoi file' if mio else 'i suoi file'}"
+            f"{f' («{q[:40]}»)' if q else ''}? I file degli altri non li vedo.")
 
 
 def _classe_gestisci():
