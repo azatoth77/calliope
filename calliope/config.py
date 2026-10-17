@@ -1441,7 +1441,9 @@ class Config:
     agenti_sandbox_cpu: float = 2.0
     # Linguaggi dei programmi dell'agente (04/10): Python sempre; gli altri solo in un
     # container con la loro immagine (calliope motore sandbox costruisci csharp). Se
-    # l'immagine manca l'agente dice che quel linguaggio qui non c'è
+    # l'immagine manca l'agente dice che quel linguaggio qui non c'è. «javascript» (Node 24,
+    # 17/10, #54) non è di serie: lo accende chi amministra nel locale; spento, il container
+    # di Node serve solo ai test dei giochi
     agenti_linguaggi: list[str] = field(default_factory=lambda: ["python", "csharp"])
     # Il programma finito si esegue e si mostra in diretta sullo schermo personale di chi
     # l'ha chiesto (04/10, agenti/esecuzione.py), anche a richiesta («fammelo vedere»,

@@ -541,18 +541,24 @@ def sistema_codice(linguaggi=("python",)) -> str:
         testo = testo.replace(
             "esegui_python, esegui_test, consegna.",
             "esegui_python, esegui_test, " + ", ".join(
-                f"esegui_{n}" for n in nomi if n != "python") + ", consegna.")
+                LINGUAGGI[n].strumento for n in nomi if n != "python") + ", consegna.")
         testo = testo.replace(
             "niente pip: solo la libreria standard di Python (e openpyxl, python-docx se servono "
             "file Office).",
             "niente pip né pacchetti. Linguaggi che qui si possono eseguire: "
             + "; ".join(LINGUAGGI[n].per_agente for n in nomi) + ".")
+    # Con il JavaScript acceso (17/10, #54) un programma JS è uno script per Node; la pagina
+    # web per il browser resta una cosa che si scrive e non si esegue
+    pagine = ("le pagine web per il browser, in HTML e CSS con il loro JavaScript, invece "
+              "vanno bene ma si scrivono, non si eseguono qui: un programma JavaScript è uno "
+              "script per Node, senza pagina" if "javascript" in nomi else
+              "le pagine web in HTML, CSS e JavaScript per il browser invece vanno bene: si "
+              "scrivono, non si eseguono qui")
     return testo + (
         " Se il compito chiede un programma in un linguaggio diverso da "
         f"{elenco_detto(nomi).replace(' e ', ' o ')}, non scriverlo: chiama subito consegna "
         "con esito impossibile e nel riassunto di' che qui posso eseguire solo "
-        f"{elenco_detto(nomi)} (le pagine web in HTML, CSS e JavaScript per il browser invece "
-        "vanno bene: si scrivono, non si eseguono qui). Il programma finito lo eseguo davanti "
+        f"{elenco_detto(nomi)} ({pagine}). Il programma finito lo eseguo davanti "
         "a chi l'ha chiesto, senza input dalla tastiera: deve funzionare anche senza argomenti "
         "(se non ne riceve usa valori d'esempio, o casuali se richiesto) e stampare in "
         "italiano dati e risultati in modo leggibile. In consegna, programma = il file da "
@@ -1168,10 +1174,12 @@ class Agente:
                          f"suo): lavora su quello e salva il risultato con lo stesso nome.")
             if sistema is None:
                 # Il contratto delle capacità anche per i programmi (05/10): cosa si prova qui
-                # e cosa no, generato dal codice
+                # e cosa no, generato dal codice. Senza il Node dei soli test dei giochi
+                # (17/10, #54: il JavaScript dei programmi si accende in agenti_linguaggi)
                 from ..estensioni.contratto import testo as contratto
-                sistema = (sistema_codice(self._linguaggi(sandbox)) + "\n\n"
-                           + contratto(self.cfg, "codice", self._linguaggi(sandbox)))
+                progr = self._linguaggi(sandbox, programmi=True)
+                sistema = (sistema_codice(progr) + "\n\n"
+                           + contratto(self.cfg, "codice", progr))
             messages = [{"role": "system", "content": sistema},
                         {"role": "user", "content": user}]
             spinte, scritti, rimandi = 0, 0, 0
@@ -1767,10 +1775,12 @@ class Agente:
                  "riassunto": f"serve un permesso: {cosa}"})
 
     @staticmethod
-    def _linguaggi(sandbox) -> list[str]:
-        """I linguaggi che la sandbox sa eseguire adesso (Python sempre)."""
+    def _linguaggi(sandbox, programmi: bool = False) -> list[str]:
+        """I linguaggi che la sandbox sa eseguire adesso (Python sempre). `programmi`: senza
+        il container di Node dei soli test dei giochi (17/10, #54)."""
         altri = getattr(sandbox, "linguaggi", None) or {}
-        return ["python"] + [n for n, iso in altri.items() if getattr(iso, "pronto", False)]
+        return ["python"] + [n for n, iso in altri.items() if getattr(iso, "pronto", False)
+                             and not (programmi and getattr(iso, "solo_test", False))]
 
     def _resta_tempo(self, lav: Lavoro) -> bool:
         """Restano almeno due passate (correggere e richiamare consegna) e un po' di tempo?"""

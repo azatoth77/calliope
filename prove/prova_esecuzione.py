@@ -23,16 +23,23 @@ per il C# esegue il Python scritto in un commento /* FINTO_PY … */) e l'Ollama
   lavoro_annulla che ferma prima il programma;
 - lavoro di codice con l'Ollama finto: a lavoro finito il programma si esegue sullo schermo,
   l'annuncio dice com'è andata e la scheda dell'esecuzione torna in cima; senza schermi no;
-  l'agente vede esegui_csharp e i linguaggi solo se il C# c'è.
+  l'agente vede esegui_csharp e i linguaggi solo se il C# c'è;
+- JavaScript (17/10, issue #54; il docker finto usa il Node della macchina, se c'è): di serie
+  spento (il Node dei test dei giochi non è un linguaggio dei programmi), acceso con
+  agenti_linguaggi; il programma .js in diretta con argomenti e stdin, «eseguilo con 3 e 5»,
+  tempo scaduto; contrari: lo script di una pagina web, il .js di un gioco, JavaScript spento o
+  senza immagine; il prompt e lo scheletro solo se acceso; un lavoro JS dell'agente finto.
 
 Con `--docker` (sulla DGX, con le immagini costruite: calliope motore sandbox costruisci
-tutte): Python e C# veri nel container, con le misure (tempo d'avvio, compilazione, uscita in
-diretta, rete assente nel C#, sola lettura, utente non root, tempo scaduto).
+tutte; senza Docker esce con 77): Python e C# veri nel container, con le misure (tempo
+d'avvio, compilazione, uscita in diretta, rete assente nel C#, sola lettura, utente non root,
+tempo scaduto); il JavaScript vero acceso, se c'è l'immagine di Node, con le stesse prove.
 """
 
 import argparse
 import json
 import queue
+import shutil
 import statistics
 import subprocess
 import tempfile
@@ -48,6 +55,8 @@ from calliope.config import Config
 RADICE = Path(__file__).resolve().parent.parent
 FINTO = [sys.executable, str(Path(__file__).with_name("docker_finto.py"))]
 TMP = Path(tempfile.mkdtemp(prefix="calliope-esecuzione-"))
+# Il docker finto esegue il JavaScript con il Node della macchina delle prove (17/10, #54)
+NODE = shutil.which("node") is not None
 errori = 0
 T0 = time.perf_counter()
 
@@ -380,7 +389,13 @@ def a_secco():
              and "solo funzioni" in frase, frase)
 
     sezione("tool programma_esegui e lavoro_annulla")
-    tool_e_annulla(iso, isos)
+    # Con il JavaScript acceso (17/10, #54) anche «eseguilo con 3 e 5» su un programma .js
+    isos_js = None
+    if NODE:
+        os.environ["DOCKER_FINTO_IMMAGINI"] = f"{img_py},{img_cs},{linguaggi.immagine('javascript')}"
+        isos_js = linguaggi.scegli(cfg_base(agenti_linguaggi=["python", "csharp", "javascript"]),
+                                   iso)
+    tool_e_annulla(iso, isos_js or isos, js=bool(isos_js))
 
     sezione("lavoro di codice: dimostrazione a lavoro finito")
     dimostrazione(iso, isos)
@@ -407,6 +422,8 @@ def a_secco():
              == "Qui posso eseguire solo Python e C#. Va bene?"
              and per_la_voce("Uso #include. Fatto.") == "Fatto.")
 
+    javascript_a_secco(iso, img_py, img_cs)
+
     sezione("pagina")
     js = (RADICE / "calliope/schermi/pagina/schermo.js").read_text(encoding="utf-8")
     verifica("la pagina disegna la scheda «esecuzione» come testo, con il tempo che scorre",
@@ -414,7 +431,7 @@ def a_secco():
              and "innerHTML" not in js)
 
 
-def tool_e_annulla(iso, isos):
+def tool_e_annulla(iso, isos, js=False):
     from calliope.tools.builtin import build_registry
     from calliope.tools.spec import ToolContext
     from calliope.documenti.formato import FORMATI
@@ -517,6 +534,237 @@ def tool_e_annulla(iso, isos):
     verifica("programma_esegui per i familiari, non per gli ospiti",
              reg.allowed("programma_esegui", "familiare") and not reg.allowed("programma_esegui",
                                                                           "ospite"))
+    if js:
+        # 17/10, #54: un programma JavaScript, «eseguilo con 3 e 5»
+        svc.lavori.append(LavoroFinto("L22", {"conti.js": JS_CONTI}))
+        cfg.agenti_esecuzione_attesa_s = 5.0
+        out, _ = tool("programma_esegui", {"dati": "3 e 5"}, "Dario", "amministra")
+        verifica("JavaScript: «eseguilo con 3 e 5» su conti.js, la risposta con l'esito",
+                 out.get("ok") and "«somma 8»" in out["risposta_finale"],
+                 out.get("risposta_finale"))
+
+
+# Un programma JavaScript (17/10, #54): argomenti, stdin, stderr separato
+JS_CONTI = ("\"use strict\";\nconst n = process.argv.slice(2).map(Number);\n"
+            "console.log('somma', (n.length ? n : [2, 2]).reduce((a, b) => a + b, 0));\n")
+JS_DATI = ("\"use strict\";\nconst fs = require('node:fs');\n"
+           "function somma(a, b) { return a + b; }\n"
+           "function main(argv) {\n  console.log('argomenti:', argv.join(' '));\n"
+           "  console.error('errore finto');\n"
+           "  console.log('stdin:', fs.readFileSync(0, 'utf8').split(/\\s+/).filter(Boolean)"
+           ".join(','));\n}\n"
+           "if (require.main === module) main(process.argv.slice(2));\n"
+           "module.exports = { somma };\n")
+JS_TEST = ("const { test } = require('node:test');\nconst assert = require('node:assert');\n"
+           "const { somma } = require('./programma.js');\n"
+           "test('la somma', () => { assert.strictEqual(somma(2, 3), 5); });\n")
+
+
+def javascript_a_secco(iso, img_py, img_cs):
+    """Il JavaScript come linguaggio dei programmi (17/10, issue #54), con il docker finto (che
+    per Node usa il Node della macchina delle prove). Di serie spento: lo accende chi
+    amministra con «javascript» in agenti_linguaggi."""
+    from calliope.agenti.ciclo import Agente, sistema_codice, strumenti_codice
+    from calliope.agenti.sandbox import immagine_node
+    img_js = linguaggi.immagine("javascript")
+    sezione("JavaScript: linguaggio dei programmi (#54)")
+    verifica("immagine del JavaScript: quella dei test dei giochi (Dockerfile.node)",
+             img_js and img_js == immagine_node() and img_js.startswith("calliope-sandbox-node:")
+             and linguaggi.LINGUAGGI["javascript"].strumento == "esegui_js", str(img_js))
+    df = (RADICE / "setup/linux/sandbox/Dockerfile.node").read_text(encoding="utf-8")
+    verifica("Dockerfile di Node: versione fissata, senza npm né npx",
+             "FROM node:24.21.0-slim" in df and "/usr/local/bin/npm" in df
+             and "/usr/local/bin/npx" in df and "rm -rf" in df)
+    verifica("di serie «javascript» non è tra i linguaggi dei programmi",
+             "javascript" not in Config().agenti_linguaggi)
+    os.environ["DOCKER_FINTO_IMMAGINI"] = f"{img_py},{img_cs},{img_js}"
+    cfg_js = cfg_base(agenti_linguaggi=["python", "csharp", "javascript"])
+    isos_serie = linguaggi.scegli(cfg_base(), iso)
+    isos_js = linguaggi.scegli(cfg_js, iso)
+    verifica("spento (di serie): il Node dei test c'è ma non è un linguaggio dei programmi",
+             isos_serie["javascript"].pronto and isos_serie["javascript"].solo_test
+             and linguaggi.pronti(isos_serie) == ["python", "csharp"]
+             and "javascript" not in linguaggi.programmi(isos_serie))
+    verifica("acceso: JavaScript pronto tra i programmi",
+             linguaggi.pronti(isos_js) == ["python", "csharp", "javascript"]
+             and not isos_js["javascript"].solo_test and isos_js["javascript"].immagine == img_js,
+             str(linguaggi.pronti(isos_js)))
+    verifica("acceso: «Python, C# e JavaScript» detto", linguaggi.elenco_detto(
+        linguaggi.pronti(isos_js)) == "Python, C# e JavaScript")
+    os.environ["DOCKER_FINTO_IMMAGINI"] = f"{img_py},{img_cs}"
+    isos_senza = linguaggi.scegli(cfg_js, iso)
+    verifica("acceso senza l'immagine di Node: non pronto, con il passo «costruisci javascript»",
+             not isos_senza["javascript"].pronto
+             and "calliope motore sandbox costruisci javascript" in isos_senza["javascript"].passo
+             and "JavaScript non disponibile" in isos_senza["javascript"].descrizione
+             and linguaggi.pronti(isos_senza) == ["python", "csharp"],
+             isos_senza["javascript"].descrizione + " | " + isos_senza["javascript"].passo)
+    isos_proc = linguaggi.scegli(cfg_js, scegli_isolamento("processo"))
+    verifica("acceso col motore «processo»: il JavaScript mai fuori da un container",
+             not isos_proc["javascript"].pronto and "container" in isos_proc["javascript"].passo)
+    os.environ["DOCKER_FINTO_IMMAGINI"] = f"{img_py},{img_cs},{img_js}"
+
+    sezione("JavaScript: docker run e sandbox")
+    sb = Sandbox(TMP / "sbjs", tempo_s=5, memoria_mb=512, isolamento=iso, linguaggi=isos_js)
+    s = " ".join(sb._comando_docker("x", "js", "programma.js", ["3", "5"],
+                                    isolamento=isos_js["javascript"]))
+    attesi = ["--network none", "--read-only", "--cap-drop ALL", "--pids-limit",
+              f"{img_js} timeout -s KILL 10 node /lavoro/programma.js 3 5"]
+    mancano = [a for a in attesi if a not in s]
+    verifica("JS: stessa rete negata e gli stessi tetti, Node nella sua immagine", not mancano,
+             str(mancano))
+    if NODE:
+        sb.scrivi("programma.js", JS_DATI)
+        pezzi = []
+        r = sb.esegui("programma.js", ["3", "5"], stdin="3\n5\n",
+                      flusso=lambda tipo, t: pezzi.append((tipo, t)))
+        out = "".join(t for k, t in pezzi if k == "out").replace("\r", "")
+        err = "".join(t for k, t in pezzi if k == "err").replace("\r", "")
+        verifica("JS: eseguito con argomenti e stdin, stdout e stderr separati in diretta",
+                 r["codice_uscita"] == 0 and "argomenti: 3 5" in out and "stdin: 3,5" in out
+                 and "errore finto" in err and "errore finto" not in out, str(pezzi)[:300])
+        sb.scrivi("programma.test.js", JS_TEST)
+        t = sb.test()
+        verifica("JS: esegui_test sui *.test.js del programma", t.get("passano")
+                 and t["esito"]["eseguiti"] == 1, str(t.get("uscita"))[-200:])
+    else:
+        print("SALTATA IN PARTE: Node non c'è su questa macchina, esecuzioni JavaScript")
+
+    sezione("JavaScript: quale programma")
+    casi = [
+        ({"programma.js": JS_DATI, "programma.test.js": JS_TEST}, "", None, "programma.js"),
+        ({"index.js": "console.log(1);\n", "utile.js": "module.exports = {};\n"}, "", None,
+         "index.js"),
+        ({"a.js": "module.exports = {};\n", "b.js": JS_DATI}, "", None, "b.js"),
+        ({"prova_somma.js": "console.log(1);\n", "conti.js": JS_CONTI}, "", None, "conti.js"),
+        # contrari: lo script di una pagina web, i soli test, JavaScript spento
+        ({"index.html": "<p>ciao</p>\n", "app.js": "document.title = 'x';\n"}, "app.js", None,
+         None),
+        ({"programma.test.js": JS_TEST}, "", None, None),
+        ({"conti.js": JS_CONTI}, "", ["python", "csharp"], None),
+        ({"main.py": "print(1)\n", "conti.js": JS_CONTI}, "", ["python", "csharp"], "main.py"),
+    ]
+    for i, (files, prog, accesi, atteso) in enumerate(casi):
+        lav = LavoroFinto(f"J{i}", files, programma=prog)
+        got, perche = Esecuzioni.programma_di(lav, accesi)
+        verifica(f"JS: programma tra {sorted(files)} (indicato «{prog}», accesi {accesi}): "
+                 f"{atteso}", got == atteso, f"{got} {perche}")
+    lav = LavoroFinto("J9", {"logica.js": "const GIOCO = {};\n"})
+    lav.tipo = "estensione"
+    got, perche = Esecuzioni.programma_di(lav)
+    verifica("JS: il .js di un gioco (un'estensione) non è un programma", got is None, perche)
+
+    sezione("JavaScript: esecuzione in diretta")
+    svc = ServizioFinto(cfg_base(), iso, isos_js)
+    esec = Esecuzioni(svc, log=lambda *_: None)
+    if NODE:
+        lav = LavoroFinto("JL1", {"programma.js": JS_DATI, "programma.test.js": JS_TEST})
+        reg = Registro()
+        es, frase = esec.avvia(lav, ["3", "5"], on_scheda=reg)
+        if es:
+            esec.attendi(es, 15)
+        fin = reg.tutte()[-1][1] if reg.tutte() else {}
+        testo = "".join(r["testo"] for r in fin.get("righe") or [])
+        verifica("JS: sulla scheda, con i dati come argomenti e stdin, finito",
+                 es is not None and es.stato == "fatto" and es.linguaggio == "javascript"
+                 and "argomenti: 3 5" in testo and "stdin: 3,5" in testo
+                 and fin.get("chiave") == "esecuzione:JL1-1", f"{frase} {testo[-120:]}")
+        svc.cfg.agenti_dimostrazione_s = 1.5
+        lav = LavoroFinto("JL2", {"infinito.js": "setInterval(() => {}, 1000);\n"})
+        es, _ = esec.avvia(lav)
+        if es:
+            esec.attendi(es, 15)
+        verifica("JS: tempo scaduto, fermato", es is not None and es.stato == "scaduto",
+                 es and es.stato)
+        svc.cfg.agenti_dimostrazione_s = 8.0
+    es, frase = esec.avvia(LavoroFinto("JL3", {"index.html": "<p>x</p>\n",
+                                               "app.js": "document.title = 'x';\n"}))
+    verifica("JS: una pagina web non si esegue", es is None and "non trovo" in frase, frase)
+    es, frase = Esecuzioni(ServizioFinto(cfg_base(), iso, isos_serie), log=lambda *_: None
+                           ).avvia(LavoroFinto("JL4", {"conti.js": JS_CONTI}))
+    verifica("JS spento: non parte, e dice che lo accende chi amministra",
+             es is None and "agenti_linguaggi" in frase and "JavaScript" in frase, frase)
+    es, frase = Esecuzioni(ServizioFinto(cfg_base(), iso, isos_senza), log=lambda *_: None
+                           ).avvia(LavoroFinto("JL5", {"conti.js": JS_CONTI}))
+    verifica("JS acceso senza immagine: non parte, e dice il passo",
+             es is None and "JavaScript" in frase and "costruisci javascript" in frase, frase)
+
+    sezione("JavaScript: l'agente")
+    nomi = [t["function"]["name"] for t in strumenti_codice(["python", "javascript"])]
+    verifica("acceso: esegui_js tra gli strumenti, niente esegui_javascript",
+             "esegui_js" in nomi and "esegui_javascript" not in nomi)
+    p_js = sistema_codice(["python", "csharp", "javascript"])
+    p_cs = sistema_codice(["python", "csharp"])
+    verifica("prompt con il JavaScript: Node 24, gli strumenti giusti, il suo scheletro, la "
+             "pagina web che non si esegue",
+             "Node 24" in p_js and "esegui_csharp, esegui_js, consegna" in p_js
+             and "esegui_javascript" not in p_js and "diverso da Python, C# o JavaScript" in p_js
+             and "programma.test.js" in p_js and "require.main === module" in p_js
+             and "script per Node" in p_js, "")
+    verifica("prompt senza il JavaScript: niente Node, niente scheletro JS, pagine solo scritte",
+             "Node 24" not in p_cs and "programma.test.js" not in p_cs
+             and "diverso da Python o C#" in p_cs and "si scrivono, non si eseguono qui" in p_cs)
+
+    class SbFinta:
+        def __init__(self, isos):
+            self.linguaggi = {k: v for k, v in isos.items() if k != "python"}
+    verifica("spento: per i giochi esegui_js resta, per i programmi il JavaScript no",
+             "javascript" in Agente._linguaggi(SbFinta(isos_serie))
+             and "javascript" not in Agente._linguaggi(SbFinta(isos_serie), programmi=True)
+             and "javascript" in Agente._linguaggi(SbFinta(isos_js), programmi=True))
+
+    sezione("JavaScript: lavoro di codice con l'agente finto (#54)")
+    if NODE:
+        dimostrazione_js(iso, isos_js)
+    else:
+        print("SALTATA IN PARTE: Node non c'è, lavoro JavaScript dell'agente finto")
+
+
+def dimostrazione_js(iso, isos):
+    """Un lavoro di codice in JavaScript dall'agente finto: il prompt lo dice, i test passano
+    e a lavoro finito il programma si esegue sullo schermo con gli argomenti d'esempio."""
+    from calliope.agenti import Lavori, carica
+    from prove.ollama_finto import FakeOllama
+    fake = FakeOllama(modelli=("qwen3.6:35b",)).avvia()
+
+    def call(name, args=None):
+        return {"name": name, "arguments": args or {}}
+    fake.copione = [
+        {"tool_calls": [call("scrivi_file", {"percorso": "programma.js", "contenuto": JS_DATI})]},
+        {"tool_calls": [call("scrivi_file", {"percorso": "programma.test.js",
+                                             "contenuto": JS_TEST})]},
+        {"tool_calls": [call("esegui_test")]},
+        {"tool_calls": [call("esegui_js", {"percorso": "programma.js", "argomenti": ["1"]})]},
+        {"tool_calls": [call("consegna", {"riassunto": "Ho scritto il programma in JavaScript.",
+                                          "esito": "fatto", "programma": "programma.js",
+                                          "argomenti_esempio": ["3", "5"]})]},
+    ]
+    cfg = cfg_base(agenti_url=fake.url, agenti_modello="qwen3.6:35b",
+                   agenti_modelli=str(TMP / "modelli"), llm_native_url="http://127.0.0.1:9",
+                   agenti_sandbox=str(TMP / "sandbox-js"),
+                   agenti_linguaggi=["python", "csharp", "javascript"])
+    svc = Lavori(cfg, carica(cfg), log=lambda *_: None)
+    svc.scegli_isolamento = lambda: (setattr(svc, "isolamento", iso),
+                                     setattr(svc, "isolamenti", isos), iso)[-1]
+    reg = Registro()
+    lav = svc.nuovo("codice", "Scrivi un programma in JavaScript che somma due numeri",
+                    "dario-id", "Dario", "amministra")
+    lav.on_scheda = reg
+    svc.avvia(lav)
+    item = svc.done.get(timeout=60)
+    sistema = next((m.get("content") or "" for r in fake.richieste
+                    for m in (r.get("messages") or []) if m.get("role") == "system"), "")
+    verifica("il prompt dell'agente dice il JavaScript con Node", "Node 24" in sistema
+             and "esegui_js" in sistema, sistema[:120])
+    verifica("lavoro JS fatto e programma eseguito: l'annuncio dice com'è andata",
+             item["stato"] == "fatto" and "Il programma ha finito in" in item["messaggio"],
+             item["messaggio"])
+    es = [c for _, c in reg.tutte() if str(c.get("chiave", "")).startswith("esecuzione:")]
+    testo = "".join(r["testo"] for r in (es[-1].get("righe") or [])) if es else ""
+    verifica("sulla scheda l'uscita del programma JS con gli argomenti d'esempio",
+             es and es[-1]["stato"] == "fatto" and "argomenti: 3 5" in testo, testo[-120:])
+    svc.close()
+    fake.ferma()
 
 
 def dimostrazione(iso, isos):
@@ -597,8 +845,105 @@ def dimostrazione(iso, isos):
 
 
 # ═══════════════════════════ Docker vero (DGX) ═══════════════════════════
+def docker_vero_js(iso):
+    """Il JavaScript vero nel container di Node (17/10, #54), acceso come lo accende chi
+    amministra: argomenti e stdin, diretta, rete, disco, utente, tempo scaduto, misure."""
+    cfg = cfg_base(agenti_linguaggi=["python", "javascript"])
+    isos = linguaggi.scegli(cfg, iso)
+    js = isos.get("javascript")
+    if js is None or not js.pronto:
+        print("SALTATA IN PARTE: JavaScript, immagine di Node non costruita "
+              "(calliope motore sandbox costruisci javascript)")
+        return
+    r = subprocess.run(["docker", "images", "calliope-sandbox-node", "--format",
+                        "{{.Tag}} {{.Size}}"], capture_output=True, text=True)
+    print(f"   immagine calliope-sandbox-node: {r.stdout.strip()}")
+    sb = Sandbox(TMP / "vero-js", tempo_s=20, memoria_mb=512, isolamento=iso, linguaggi=isos)
+    sb.scrivi("programma.js",
+              "\"use strict\";\nconst fs = require('node:fs');\n"
+              "const dorme = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);\n"
+              "for (let i = 0; i < 5; i++) { console.log(`${i} x ${i} = ${i * i}`); dorme(300); }\n"
+              "console.error('fine (stderr)');\n"
+              "console.log('argomenti: ' + process.argv.slice(2).join(' '));\n"
+              "console.log('stdin: ' + fs.readFileSync(0, 'utf8').trim());\n")
+    pezzi, t_primo = [], [None]
+    t0 = time.monotonic()
+
+    def flusso(tipo, t):
+        if t_primo[0] is None:
+            t_primo[0] = time.monotonic() - t0
+        pezzi.append((tipo, t))
+    r = sb.esegui("programma.js", ["3", "5"], stdin="ciao\n", flusso=flusso)
+    dt = time.monotonic() - t0
+    uscita = "".join(t for _, t in pezzi)
+    verifica("JS vero: esegue, argomenti e stdin", r["codice_uscita"] == 0
+             and "argomenti: 3 5" in uscita and "stdin: ciao" in uscita, uscita[-300:])
+    verifica("JS vero: la prima riga arriva prima della fine (diretta)",
+             t_primo[0] is not None and t_primo[0] < dt - 1.0,
+             f"prima riga {t_primo[0]:.2f} s, fine {dt:.2f} s")
+    verifica("JS vero: stderr separato", ("err", "fine (stderr)\n") in pezzi, str(pezzi[-4:]))
+    sb.scrivi("programma.js", "console.log('ok');\n")
+    tempi = [sb.esegui("programma.js")["secondi"] for _ in range(5)]
+    print(f"   JavaScript (Node 24): mediana {statistics.median(tempi):.3f} s, "
+          f"max {max(tempi):.3f}")
+    attacchi = {
+        "rete": ("const s = require('node:net').connect(80, '1.1.1.1');\n"
+                 "s.on('connect', () => { console.log('RETE APERTA'); process.exit(0); });\n"
+                 "s.on('error', (e) => console.log('rete bloccata: ' + e.code));\n"
+                 "setTimeout(() => { console.log('rete bloccata: tempo'); process.exit(0); }, 3000);\n"),
+        "scrittura": ("try { require('node:fs').writeFileSync('/opt/x', 'x'); console.log('SCRITTO'); }"
+                      " catch (e) { console.log('sola lettura: ' + e.code); }\n"),
+        "utente": "console.log('uid ' + process.getuid());\n",
+        "npm": ("const fs = require('node:fs');\n"
+                "console.log(['/usr/local/bin/npm', '/usr/local/bin/npx'].map((p) => "
+                "fs.existsSync(p) ? 'C\\'È ' + p : 'niente ' + p).join(', '));\n"),
+        "processi": ("try { require('node:child_process').execSync('true');"
+                     " console.log('processo avviato'); } catch (e) "
+                     "{ console.log('processo: ' + e.code); }\n"),
+    }
+    for nome, codice in attacchi.items():
+        sb.scrivi("programma.js", codice)
+        out = sb.esegui("programma.js")["uscita"].strip()
+        if nome == "rete":
+            verifica("JS: rete irraggiungibile", "rete bloccata" in out and "APERTA" not in out,
+                     out[-200:])
+        elif nome == "scrittura":
+            verifica("JS: disco in sola lettura fuori dalla cartella", "sola lettura" in out,
+                     out[-200:])
+        elif nome == "utente":
+            verifica("JS: utente non root", "uid " in out and "uid 0" not in out, out[-200:])
+        elif nome == "npm":
+            verifica("JS: niente npm né npx nell'immagine", "C'È" not in out, out[-200:])
+        else:
+            print(f"   processi nel container di Node (limitati da --pids-limit): {out[-120:]}")
+    sb.scrivi("programma.js", "while (true) { }\n")
+    sb.tempo_s = 3
+    t0 = time.monotonic()
+    r = sb.esegui("programma.js")
+    verifica("JS: tempo scaduto, container fermato", r["scaduto"] and time.monotonic() - t0 < 8,
+             f"{time.monotonic() - t0:.1f} s")
+    svc = ServizioFinto(cfg, iso, isos)
+    esec = Esecuzioni(svc, log=print)
+    lav = LavoroFinto("DJ1", {"programma.js":
+                              "const a = Number(process.argv[2] || 3), b = Number(process.argv[3] || 5);\n"
+                              "console.log(`Input: a=${a}, b=${b} -> ipotenusa = "
+                              "${Math.hypot(a, b).toFixed(2)}`);\n"})
+    reg = Registro()
+    es, _ = esec.avvia(lav, ["3", "4"], on_scheda=reg)
+    esec.attendi(es, 30)
+    print(f"   esecuzione dimostrativa JS: {es.stato} in {es.fine - es.inizio:.2f} s; "
+          f"voce: {esec.frase(es)}")
+    verifica("esecuzione dimostrativa JS vera: finita, «5.00» con 3 e 4",
+             es.stato == "fatto" and "ipotenusa = 5.00" in es.testo(), es.testo()[-120:])
+
+
 def docker_vero():
     iso = scegli_isolamento("docker")
+    if not iso.pronto or iso.motore != "docker":
+        # Senza Docker (o senza l'immagine di Python) la prova vera non ha senso: si salta
+        print(f"Docker non pronto: {iso.descrizione}. Prova saltata.")
+        sys.exit(77)
+    docker_vero_js(iso)
     cfg = cfg_base()
     isos = linguaggi.scegli(cfg, iso)
     verifica("Docker e le immagini di Python e del C# pronti",

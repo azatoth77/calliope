@@ -23,6 +23,10 @@ nel container usa-e-getta, ma chi l'aveva chiesto non vedeva mai il programma gi
 - **Voce**: un riassunto breve fatto dal programma, mai dal modello: com'è finito e le ultime
   una o due righe dell'uscita (`frase`). Mai tutto l'output.
 
+JavaScript (17/10, issue #54): con «javascript» in `agenti_linguaggi` un .js di un lavoro di codice
+è un programma come gli altri (Node 24 nel container dei test dei giochi, argomenti e stdin come
+per Python); mai accanto a un .html (lo script di una pagina) né in un'estensione.
+
 Costo per chi chiama: `avvia` crea la cartella e fa partire un thread («lavori-esecuzione»):
 pochi millisecondi. Tutto il resto (Docker, lettura dell'uscita, schede) sta nei thread suoi.
 """
@@ -43,7 +47,7 @@ SCHEDA_RIGHE = 200
 SCHEDA_CARATTERI = 12_000
 TESTA_CARATTERI = 8_000          # l'inizio che resta quando l'uscita supera il tetto
 MARCA_COMPILAZIONE = "— compilazione non riuscita —"
-_NOMI_PROGRAMMA = ("main", "programma", "program", "app", "calcolo", "principale")
+_NOMI_PROGRAMMA = ("main", "programma", "program", "app", "calcolo", "principale", "index")
 
 
 def _secondi(s: float) -> str:
@@ -149,15 +153,33 @@ class Esecuzioni:
         return int(float(getattr(self.cfg, "agenti_dimostrazione_uscita_kb", 64)) * 1024)
 
     @staticmethod
-    def programma_di(lav) -> tuple[str | None, str]:
+    def programma_di(lav, linguaggi=None) -> tuple[str | None, str]:
         """(percorso relativo, "") del programma di un lavoro di codice finito, o (None,
         motivo). Prima quello indicato dall'agente con consegna(programma=…), poi l'unico file
-        di codice che non è un test, poi i nomi soliti (main.py, Program.cs…) o il file con
-        `if __name__ == "__main__"`."""
+        di codice che non è un test, poi i nomi soliti (main.py, Program.cs, index.js…) o il
+        file con `if __name__ == "__main__"` (`require.main === module` in JavaScript).
+        `linguaggi`: i linguaggi dei programmi accesi (None: tutti). Un .js (17/10, #54) è un
+        programma solo in un lavoro di codice senza pagine web: accanto a un .html è lo script
+        della pagina, e i giochi sono estensioni, non lavori di codice."""
         r = getattr(lav, "risultato", None) or {}
         dest = Path(r.get("cartella") or "")
-        files = [f for f in (r.get("file") or []) if per_estensione(f)]
+        if getattr(lav, "tipo", "codice") != "codice":
+            return None, "non è un programma ma un'estensione"
+        tutti = [str(f) for f in (r.get("file") or [])]
+        pagina = any(Path(f).suffix.lower() in (".html", ".htm") for f in tutti)
+
+        def ammesso(f):
+            lg = per_estensione(f)
+            if lg is None or (lg.nome == "javascript" and pagina):
+                return False
+            return linguaggi is None or lg.nome in linguaggi
+        files = [f for f in tutti if ammesso(f)]
         if not files or not dest.is_dir():
+            if (dest.is_dir() and not pagina and linguaggi is not None
+                    and "javascript" not in linguaggi
+                    and any(f.lower().endswith(".js") for f in tutti)):
+                return None, ("qui i programmi in JavaScript non si eseguono: li accende chi "
+                              "amministra, con javascript in agenti_linguaggi")
             return None, "non trovo i file del programma"
         scelto = str(r.get("programma") or "").strip().replace("\\", "/")
         if scelto and scelto in files:
@@ -165,7 +187,10 @@ class Esecuzioni:
 
         def test(f):
             n = Path(f).name.lower()
-            return n.startswith("test") or n.endswith(("_test.py", "tests.cs", "test.cs"))
+            return (n.startswith("test") or n.endswith(("_test.py", "tests.cs", "test.cs"))
+                    # JavaScript (17/10): i test di node:test e le prove a pezzi di esegui_js
+                    or n.endswith((".test.js", ".spec.js"))
+                    or (n.startswith("prova_") and n.endswith(".js")))
         # Un file Python è un programma se fa qualcosa quando lo si esegue: `__main__` o
         # istruzioni di primo livello che non sono definizioni né import (un modulo di sole
         # funzioni, eseguito, non stamperebbe niente)
@@ -190,7 +215,9 @@ class Esecuzioni:
                 t = (dest / f).read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            if "__main__" in t or re.search(r"\bstatic\s+(?:async\s+)?\w+\s+Main\s*\(", t):
+            if ("__main__" in t or re.search(r"\bstatic\s+(?:async\s+)?\w+\s+Main\s*\(", t)
+                    or (f.lower().endswith(".js")
+                        and re.search(r"\brequire\.main\s*===?\s*module\b", t))):
                 principali.append(f)
         if len(principali) == 1:
             return principali[0], ""
@@ -222,12 +249,16 @@ class Esecuzioni:
         """(Esecuzione, "") partita in secondo piano, o (None, frase) se non si può. Non
         aspetta: la cartella si prepara qui (copie di pochi file), Docker nel thread suo."""
         from .sandbox import ErroreSandbox, Sandbox
+        from .linguaggi import programmi
         from .servizio import cartella_sandbox
-        prog, perche = self.programma_di(lav)
+        isolamenti = getattr(self.lavori, "isolamenti", None) or {}
+        # Il JavaScript solo se acceso in agenti_linguaggi (17/10, #54): il container di Node
+        # dei soli test dei giochi non esegue programmi
+        accesi = [n for n in LINGUAGGI if n != "javascript" or n in programmi(isolamenti)]
+        prog, perche = self.programma_di(lav, accesi)
         if prog is None:
             return None, f"Non posso eseguire «{lav.titolo}»: {perche}."
         lg = per_estensione(prog)
-        isolamenti = getattr(self.lavori, "isolamenti", None) or {}
         iso = isolamenti.get(lg.nome) if lg.nome != "python" else (
             isolamenti.get("python") or self.lavori.isolamento)
         if iso is None or not iso.pronto:

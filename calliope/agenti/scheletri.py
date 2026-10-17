@@ -35,6 +35,9 @@ scheletro), una riga dice i modelli e il test del disegno controlla anche il pal
 dei caratteri: scheletro 3 347 (prima 2 923, ~120 token in più), §5 del contratto 6 294 (prima
 4 973, ~380 token), il prompt intero del gioco 24 900 (prima 22 902, ~575 token); stima con il
 rapporto 3,47 caratteri per token di Qwen3.6, da rimisurare sulla DGX.
+
+Dal 17/10 (issue #54) il programma JavaScript, solo con «javascript» acceso in agenti_linguaggi:
+740 caratteri, ~210 token con lo stesso rapporto.
 """
 
 GIOCO = """SCHELETRO DI PARTENZA (gioco): parti da qui e cambia solo quello che serve. \
@@ -223,11 +226,32 @@ Console.WriteLine($"La somma di {a} e {b} è {Somma(a, b)}");
 Si prova con esegui_csharp e argomenti noti, controllando l'uscita; un errore di \
 compilazione o un'eccezione dicono file e riga: correggi quel punto con modifica_file."""
 
+# JavaScript (17/10, #54): Node in CommonJS, la funzione esportata per il test e il main solo
+# quando il file si esegue
+PROGRAMMA_JAVASCRIPT = """SCHELETRO DI PARTENZA (programma JavaScript, Node): parti da qui.
+programma.js:
+"use strict";
+function calcola(a, b) { return a + b; }
+function main(argv) {
+  const [a, b] = argv.length >= 2 ? argv.slice(0, 2).map(Number) : [3, 5];
+  console.log(`La somma di ${a} e ${b} è ${calcola(a, b)}`);
+}
+if (require.main === module) main(process.argv.slice(2));
+module.exports = { calcola };
+programma.test.js:
+const { test } = require("node:test");
+const assert = require("node:assert");
+const { calcola } = require("./programma.js");
+test("la somma", () => { assert.strictEqual(calcola(2, 3), 5); });
+Si prova con esegui_js (argomenti noti) ed esegui_test; un test che fallisce dice \
+l'asserzione e file:riga: correggi quel punto con modifica_file."""
+
 SCHELETRI = {"gioco": GIOCO, "estensione": ESTENSIONE, "python": PROGRAMMA_PYTHON,
-             "csharp": PROGRAMMA_CSHARP}
+             "csharp": PROGRAMMA_CSHARP, "javascript": PROGRAMMA_JAVASCRIPT}
 
 
 def per_programma(linguaggi=("python",)) -> str:
     """Gli scheletri dei programmi per i linguaggi che qui si eseguono (Python sempre)."""
-    nomi = ["python"] + (["csharp"] if "csharp" in set(linguaggi or ()) else [])
+    voluti = set(linguaggi or ())
+    nomi = ["python"] + [n for n in ("csharp", "javascript") if n in voluti]
     return "\n\n".join(SCHELETRI[n] for n in nomi)

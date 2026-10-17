@@ -249,7 +249,7 @@ A_SECCO = [
     ("prova_analisi_richiesta.py", [], "agenti: analisi della richiesta prima della proposta (chiara, raffinabile, vaga, c'è già, impossibile qui), ripieghi, fonte web, modulo, motivo del tetto in parole"),
     # ~14 s: Ollama finto (anche l'API OpenAI) e Schermi senza server
     ("prova_avanzamento.py", [], "agenti: avanzamento dei lavori sugli schermi in diretta: ritmo, chiave unica, spostamento, visibilità, pausa"),
-    ("prova_esecuzione.py", [], "agenti: il programma finito eseguito in diretta sullo schermo (Python e C# con un docker finto), «eseguilo con…», «fermalo», tetti"),
+    ("prova_esecuzione.py", [], "agenti: il programma finito eseguito in diretta sullo schermo (Python e C# con un docker finto; JavaScript acceso a mano dal 17/10, #54: programma .js con argomenti e stdin, contrari pagina web, gioco, spento, senza immagine), «eseguilo con…», «fermalo», tetti"),
     # ~70 s: Calliope vera in un sottoprocesso, satellite con microfono e casse finti in tempo
     # reale; senza voci di Piper o modelli della wake word fa solo la parte breve
     ("prova_satellite.py", [], "satelliti: abbinamento, token, TLS, wake word, streaming, barge-in, riconnessione, latenza"),
