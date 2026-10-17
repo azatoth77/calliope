@@ -2195,7 +2195,21 @@ che ti è sembrato di sentirle»). Confermata leggendo il codice: l'analisi dell
   scrive in modo un po' diverso: non tornare alla tua**;
 - la frase del prompt con la stanza: «in quelle righe, non in ciò che ti dicono adesso, ricostruisci
   le parole evidenti avvertendo che è una tua ricostruzione, e se chi parla corregge un nome usa il
-  suo da subito e per il resto della conversazione».
+  suo da subito e per il resto della conversazione»;
+- dopo la revisione della PR #138, anche le frasi della domanda insistita (`INSISTE_MSG` e
+  `RIPETUTA_NUDGE_INSISTE`, `calliope/ripetizione.py`, nei dati del turno quando scatta
+  `domanda_insistita`, accesa di serie) senza «dicendo che ti è sembrato di sentirlo o di capirlo»:
+  «avvertendo in breve che è una tua ricostruzione». Una correzione che riprende le parole della
+  domanda di prima poteva farle scattare e riportare la formula.
+
+Il **conteggio del banco** per il caso `da_solo` (`esito_solo`, dopo la stessa revisione) guarda i
+nomi del luogo come parole maiuscole che cominciano con «Borgo» o lontane al più 3 lettere da
+«borgolieto». Al turno 2 vale «ripetuto» solo la forma sentita e vale «chiesto» solo una domanda
+che la nomina o chiede com'è il nome, mai con un terzo nome accanto. Dopo la correzione vale solo
+la forma di Carlo in ogni turno 3–4: un terzo nome come «Borgoletto» si conta, e la forma giusta
+al solo turno 3 non basta. La prima versione contava qualunque «borgo…liet…» e qualunque «?».
+Le misure del 4B qui sotto sono di quella versione. Il 4B non riproduce il caso, quindi la lettura
+che conta è quella del 26B.
 
 **Cache del prefisso** (#95): la nota resta un testo fisso, nel blocco intero e nel primo pezzo
 della storia, mai nei seguiti; cambia il prefisso di ogni conversazione una volta sola, al primo

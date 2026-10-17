@@ -6,13 +6,19 @@ in auto col 26B; qui con nomi e risultati di fantasia).
 
 A. Le righe della stanza sono trascrizione grezza: il blocco, il primo pezzo nella storia, i
    pezzi dopo e il prompt di sistema (con stanza_cerca) dicono al modello di ricostruire con
-   prudenza le parole evidenti («mi è sembrato di sentire…») invece di dire che non sono state
-   dette, e che la correzione di chi parla su un nome vale subito.
+   prudenza le parole evidenti invece di dire che non sono state dette (fino al 16/10 con
+   l'esempio «mi è sembrato di sentire…», storico; dal 16/10 «avvertendo in breve che è una tua
+   ricostruzione», parte C), e che la correzione di chi parla su un nome vale subito.
 C. Dal 16/10 (issue #134, chi parla da solo): la nota vale per le sole righe della stanza, non
    per la frase di chi parla adesso (presa com'è; un nome che non si conosce si ripete o si
    chiede, mai sostituito), senza una formula di risposta da ripetere («mi è sembrato…»), e la
    correzione vale per il resto della conversazione; la nota resta ferma nel prefisso (una volta,
-   nel primo pezzo, uguale a ogni turno: cache #95), con una voce sola e con due.
+   nel primo pezzo, uguale a ogni turno: cache #95), con una voce sola e con due. Anche le
+   frasi della domanda insistita (INSISTE_MSG, RIPETUTA_NUDGE_INSISTE) senza «sembrato».
+D. Il conteggio del caso `da_solo` del banco (prove/manuali/banco_stanza_storpiata.py, 16/10,
+   #134) su risposte finte: il nome sentito ripetuto o chiesto, un terzo nome («Borgoletto»,
+   «Borgolietti») contato, un «?» qualsiasi non è una domanda sul nome, la forma corretta solo
+   al turno 3 non basta.
 B. La domanda che riprende quella di prima dopo una risposta lunga (rete `domanda_insistita`,
    calliope/ripetizione.py): una frase condizionale nei dati del turno (INSISTE_MSG, regola
    `domanda_insistita`) e, se la risposta è di nuovo uguale, la spinta senza «una cosa nuova»
@@ -363,6 +369,46 @@ def prova_config():
     verifica("rete domanda_insistita fra quelle del modello (si spegne dal profilo)",
              "domanda_insistita" in RETI and RETI["domanda_insistita"].categoria == "modello")
     verifica("accesa di serie", Config().rete("domanda_insistita"))
+    verifica("domanda insistita: niente formula «sembrato di sentirlo» (16/10, #134)",
+             "sembrat" not in INSISTE_MSG and "sembrat" not in RIPETUTA_NUDGE_INSISTE
+             and "ricostruzione" in INSISTE_MSG and "ricostruzione" in RIPETUTA_NUDGE_INSISTE)
+
+
+def prova_conteggio_banco():
+    import importlib.util
+    qui = os.path.dirname(os.path.abspath(__file__))
+    spec = importlib.util.spec_from_file_location(
+        "banco_stanza_storpiata", os.path.join(qui, "manuali", "banco_stanza_storpiata.py"))
+    bn = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(bn)
+    chiara = "Buon allenamento con Marta!"
+    giusto = "Borgolieto è vicino al lago, ci vuole mezz'ora."
+    seguito = "Da Borgolieto la strada costeggia il lago."
+    e = bn.esito_solo([chiara, "Non so dove sia Borgolieti, vuoi che cerchi?", giusto, seguito])
+    verifica("banco: la forma sentita ripetuta, poi quella di Carlo in ogni turno",
+             e["nome_t2"] and not e["terzo_t2"] and e["corretto"] and not e["altra_forma"]
+             and not e["senza_nome"] and e["sembra"] == 0, str(e))
+    e = bn.esito_solo([chiara, "Intendi forse Borgoletto, vicino al lago?", giusto, seguito])
+    verifica("banco: un terzo nome al turno 2 («Borgoletto») non è «ripetuto o chiesto»",
+             not e["nome_t2"] and e["terzo_t2"], str(e))
+    e = bn.esito_solo([chiara, "Non conosco quel posto. Vuoi che cerchi la strada?", giusto,
+                       seguito])
+    verifica("banco: un «?» qualsiasi non è una domanda sul nome", not e["nome_t2"], str(e))
+    e = bn.esito_solo([chiara, "Come si scrive il nome del paese?", giusto, seguito])
+    verifica("banco: chiedere com'è il nome vale", e["nome_t2"], str(e))
+    e = bn.esito_solo([chiara, "Borgolieti? Non lo conosco.", giusto,
+                       "Da Borgolietti la strada sale."])
+    verifica("banco: un terzo nome dopo la correzione («Borgolietti») è un'altra forma",
+             e["altra_forma"] and not e["corretto"], str(e))
+    e = bn.esito_solo([chiara, "Borgolieti? Non lo conosco.", giusto,
+                       "La strada costeggia il lago."])
+    verifica("banco: la forma corretta solo al turno 3 non basta",
+             not e["corretto"] and e["senza_nome"] and not e["altra_forma"], str(e))
+    e = bn.esito_solo(["Mi è sembrato di sentire che vai in palestra.", "Borgolieti?", giusto,
+                       "Da Borgo Lieto la strada costeggia un borgo vicino."])
+    verifica("banco: «sembrato» sulla frase chiara; «Borgo Lieto» staccato è la forma di Carlo, "
+             "un «borgo» minuscolo no", e["sembra_t1"] and e["corretto"]
+             and not e["altra_forma"], str(e))
 
 
 prova_righe()
@@ -370,5 +416,6 @@ prova_perimetro()
 prova_forma()
 prova_brain()
 prova_config()
+prova_conteggio_banco()
 print(f"\n{errori} errori" if errori else "\nTutto bene")
 sys.exit(1 if errori else 0)

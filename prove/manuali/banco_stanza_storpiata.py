@@ -44,10 +44,14 @@ telefono): una riga della stanza sola, di Carlo, e quattro turni:
 3. «No, Borgolieto, il paese vicino al lago.»            (la correzione, storpiata di nuovo)
 4. «E com'è la strada per arrivarci da Borgolieto?»
 
-Conta: **«sembrato di sentire»** (o «mi pare di aver sentito») nel turno 1 e in tutti; **nome**
-al turno 2 ripetuto come sentito («Borgo…liet…») o chiesto (una domanda), altrimenti
-«sostituito»; dopo la correzione (turni 3–4) **la forma di Carlo** («Borgolieto») e mai più un'altra
-(«Borgolieti» o un terzo nome «Borgo…liet…»). Modo in più `1510`: la nota e il prompt del 15/10
+Conta (`esito_solo`, provata a secco in `prove/prova_stanza_storpiata.py`): **«sembrato di
+sentire»** (o «mi pare di aver sentito») nel turno 1 e in tutti; i nomi del luogo sono le parole
+maiuscole che cominciano con «Borgo» o lontane al più 3 lettere da «borgolieto» (`forme_luogo`).
+**Nome al turno 2** ripetuto nella forma sentita («Borgolieti») o chiesto (una domanda che lo
+nomina o chiede com'è il nome, non un «?» qualsiasi), e mai un terzo nome accanto; **dopo la
+correzione** la forma di Carlo («Borgolieto») in ogni turno 3–4 e nessun'altra («Borgolieti»,
+«Borgoletto»…); un turno 3–4 senza il nome non vale come corretto (contato anche a parte: il
+turno 4 chiede la strada da lì, il nome serve). Modo in più `1510`: la nota e il prompt del 15/10
 («mi è sembrato di sentire bronzo nel 2023»), per il confronto con `dopo`.
 
     python prove\\manuali\\banco_stanza_storpiata.py --casi da_solo,due_voci --modi 1510,dopo --giri 10
@@ -298,7 +302,70 @@ DOMANDE_SOLO = ["Oggi pomeriggio vado in palestra con Marta.",
                 "E com'è la strada per arrivarci da Borgolieto?"]
 SEMBRA = re.compile(r"sembrat\w* di (?:sentir|capir)|pare di (?:aver )?(?:sentit|capit)|"
                     r"se ho (?:sentito|capito) bene", re.I)
-LUOGO = re.compile(r"borgo\s*-?\s*(liet\w*)", re.I)
+# Le due forme note del luogo: quella sentita al turno 2 e quella della correzione (normalizzate:
+# minuscole, senza spazi, «Borgo Lieto» = «borgolieto»). Ogni altra è un terzo nome
+SENTITA, CORRETTA = "borgolieti", "borgolieto"
+PAROLE = re.compile(r"[A-Za-zÀ-ÿ]+")
+CHIEDE = re.compile(r"come si (?:chiama|scrive)|come (?:l'hai|hai) dett|puoi ripet|"
+                    r"me lo (?:ripeti|scrivi)|di che (?:paese|posto|luogo)", re.I)
+
+
+def _distanza(a: str, b: str) -> int:
+    """Distanza di Levenshtein (stringhe corte)."""
+    prec = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prec[j] + 1, cur[j - 1] + 1, prec[j - 1] + (ca != cb)))
+        prec = cur
+    return prec[-1]
+
+
+def forme_luogo(testo: str) -> list[str]:
+    """I nomi del luogo nella risposta, normalizzati: le parole maiuscole che cominciano con
+    «Borgo» (unite alla parola dopo se «Borgo» è staccato) o lontane al più 3 lettere da
+    «borgolieto». Un «borgo» minuscolo («un borgo vicino») non conta."""
+    p = PAROLE.findall(testo or "")
+    out, i = [], 0
+    while i < len(p):
+        w = p[i]
+        if w[0].isupper():
+            n = w.lower()
+            if n == "borgo" and i + 1 < len(p):
+                out.append(n + p[i + 1].lower())
+                i += 2
+                continue
+            if (n.startswith("borgo") and len(n) > 5) or _distanza(n, CORRETTA) <= 3:
+                out.append(n)
+        i += 1
+    return out
+
+
+def chiede_nome(testo: str) -> bool:
+    """Una domanda sul nome: una frase che finisce con «?» e nomina il luogo con la forma
+    sentita, o chiede com'è il nome. Un «?» qualsiasi («Vuoi che cerchi la strada?») no."""
+    for f in re.split(r"(?<=[.!?])\s+", testo or ""):
+        if f.rstrip().endswith("?") and (SENTITA in forme_luogo(f) or CHIEDE.search(f)):
+            return True
+    return False
+
+
+def esito_solo(risposte: list[str]) -> dict:
+    """Il conteggio del caso «da solo» sulle quattro risposte."""
+    f2 = forme_luogo(risposte[1])
+    dopo = [forme_luogo(r) for r in risposte[2:]]
+    terzi_t2 = [f for f in f2 if f not in (SENTITA, CORRETTA)]
+    return {
+        "sembra_t1": bool(SEMBRA.search(risposte[0])),
+        "sembra": sum(bool(SEMBRA.search(r)) for r in risposte),
+        # Il nome sentito ripetuto così, o chiesto; mai con un terzo nome accanto
+        "nome_t2": (SENTITA in f2 or chiede_nome(risposte[1])) and not terzi_t2,
+        "terzo_t2": bool(terzi_t2),
+        # La forma di Carlo in ogni turno dopo la correzione, e nessun'altra
+        "corretto": all(CORRETTA in f and set(f) == {CORRETTA} for f in dopo),
+        "altra_forma": any(x != CORRETTA for f in dopo for x in f),
+        "senza_nome": any(not f for f in dopo),
+    }
 
 
 def conversazione_sola(cfg, modo: str, verboso: bool) -> dict:
@@ -328,19 +395,12 @@ def conversazione_sola(cfg, modo: str, verboso: bool) -> dict:
         st.chiudi()
     finally:
         modo_prima(False, salvati)
-    forme_t2 = [f.lower() for f in LUOGO.findall(risposte[1])]
-    forme_dopo = [f.lower() for f in LUOGO.findall(" ".join(risposte[2:]))]
-    esito = {
-        "sembra_t1": bool(SEMBRA.search(risposte[0])),
-        "sembra": sum(bool(SEMBRA.search(r)) for r in risposte),
-        "nome_t2": bool(forme_t2) or "?" in risposte[1],
-        "corretto": bool(forme_dopo) and all(f == "lieto" for f in forme_dopo),
-        "altra_forma": any(f != "lieto" for f in forme_dopo),
-    }
+    esito = esito_solo(risposte)
     print(f"  [solo {modo}] esito: «sembrato» al turno 1 {esito['sembra_t1']}, in "
-          f"{esito['sembra']}/4 turni; nome al turno 2 ripetuto o chiesto {esito['nome_t2']}; "
-          f"dopo la correzione la forma di Carlo {esito['corretto']}, un'altra forma "
-          f"{esito['altra_forma']}", flush=True)
+          f"{esito['sembra']}/4 turni; nome al turno 2 ripetuto o chiesto {esito['nome_t2']} "
+          f"(terzo nome {esito['terzo_t2']}); dopo la correzione la forma di Carlo in ogni "
+          f"turno {esito['corretto']}, un'altra forma {esito['altra_forma']}, un turno senza "
+          f"il nome {esito['senza_nome']}", flush=True)
     return esito
 
 
@@ -378,9 +438,11 @@ def main():
         n = len(es)
         print(f"  {modo:>5}: «sembrato» sulla frase chiara {sum(e['sembra_t1'] for e in es)}/{n}"
               f" (turni con «sembrato» {sum(e['sembra'] for e in es)}/{4 * n}); nome ripetuto o "
-              f"chiesto al turno 2 {sum(e['nome_t2'] for e in es)}/{n}; forma di Carlo dopo la "
+              f"chiesto al turno 2 {sum(e['nome_t2'] for e in es)}/{n} (terzo nome "
+              f"{sum(e['terzo_t2'] for e in es)}); forma di Carlo in ogni turno dopo la "
               f"correzione {sum(e['corretto'] for e in es)}/{n}, un'altra forma "
-              f"{sum(e['altra_forma'] for e in es)}/{n}")
+              f"{sum(e['altra_forma'] for e in es)}/{n}, un turno senza il nome "
+              f"{sum(e['senza_nome'] for e in es)}/{n}")
     if soli:
         print("Obiettivo per «dopo» (issue #134): «sembrato» sulla frase chiara 0, nome ripetuto "
               "o chiesto e forma di Carlo in tutte, un'altra forma 0.")
