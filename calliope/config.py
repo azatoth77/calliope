@@ -2939,7 +2939,10 @@ PROFILI_LLM: dict[str, dict] = {
         # scrivesse una chiamata come testo la voce la leggerebbe ad alta voce
         # La rete sulle dichiarazioni false resta accesa (04/10): «Ho registrato che sei tu
         # l'amministratore. Procedo subito…» senza nessun tool, nella prova vera sulla DGX
-        "llm_reti_spente": ["spinta_promessa", "spinta_richiesta", "ricerca_promessa"],
+        # domanda_insistita spenta (18/10, #15, decisione di chi amministra): come nel profilo
+        # del 26B su Ollama qui sotto
+        "llm_reti_spente": ["spinta_promessa", "spinta_richiesta", "ricerca_promessa",
+                            "domanda_insistita"],
     },
     # Gemma 4 26B-A4B QAT (Q4 su tutti i pesi) sull'Ollama della DGX, lo stesso della voce:
     # API nativa, num_ctx rispettato, reti come il 26B su vLLM. 74–79 token/s; banco del
@@ -2956,7 +2959,13 @@ PROFILI_LLM: dict[str, dict] = {
         # scrivesse una chiamata come testo la voce la leggerebbe ad alta voce
         # La rete sulle dichiarazioni false resta accesa (04/10): «Ho registrato che sei tu
         # l'amministratore. Procedo subito…» senza nessun tool, nella prova vera sulla DGX
-        "llm_reti_spente": ["spinta_promessa", "spinta_richiesta", "ricerca_promessa"],
+        # domanda_insistita spenta (18/10, #15, decisione di chi amministra, senza rifare il
+        # banco): sul registro della DGX dal 09 al 17/10 25 domande insistite su ~680 risposte
+        # (3,7 %) e solo 2 risposte tornate quasi uguali; la rete accesa non è mai scattata e il
+        # banco del 15/10 non mostrava un effetto (2/5 contro 3/5). Resta risposta_ripetuta.
+        # Di serie accesa nei profili piccoli
+        "llm_reti_spente": ["spinta_promessa", "spinta_richiesta", "ricerca_promessa",
+                            "domanda_insistita"],
     },
     # Qwen3.6-35B-A3B NVFP4, lo stesso vLLM dell'agente (container calliope-vllm, porta
     # 8000): solo per le misure del 03/10, non per l'uso (la voce aspetterebbe i lavori
@@ -3103,7 +3112,7 @@ RETI: dict[str, Rete] = {
         "incerto, o quale pezzo non hai capito» (INSISTE_MSG) e, se la risposta è uguale, la "
         "spinta senza «una cosa nuova» (calliope/ripetizione.py)", MODELLO,
         "«Ma quali sono questi risultati? Lo hai capito?» → la stessa risposta su «mondiali WMO "
-        "2.500», due volte (26B, 15/10, in auto)"),
+        "2.500», due volte (26B, 15/10, in auto); spenta nei profili del 26B dal 18/10 (#15)"),
     "ciclo_ripetuto": Rete(
         "risposta che gira in tondo (la stessa parola, lo stesso gruppo o la stessa frase di "
         "fila oltre la soglia): lo stream si chiude, il ciclo non si dice, resta la parte sana o "
