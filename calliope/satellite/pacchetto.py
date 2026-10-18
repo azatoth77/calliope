@@ -333,7 +333,9 @@ def da_zip(dati: bytes) -> Pacchetto:
     return Pacchetto(dati, versione, nomi)
 
 
-# Il processo che costruisce il pacchetto (18/10, #146): solo libreria standard, lo zip su
+# Il processo che costruisce il pacchetto (18/10, #146): importa calliope.satellite (quindi
+# calliope.capacita), pacchetto.py e, se c'è, packaging dal venv; legge solo uv.lock, i moduli
+# del satellite e i modelli della wake word, niente configurazione né rete. Lo zip su
 # stdout; il motivo di un pacchetto che non si può fare su stderr (uscita 3). Priorità normale:
 # usa un core come il thread di prima, e con la priorità bassa di Windows (BELOW_NORMAL) sulla
 # CPU piena non partiva quasi (più di 15 s nell'hook)
@@ -361,9 +363,11 @@ class Distributore:
     Si costruisce in un **processo a parte** (18/10, #146): `moduli` legge con `ast.parse` i
     file di calliope, e ogni `ast.parse` tiene il GIL per tutto il file (brain.py ~0,3 s,
     ~5 s in tutto). Nel processo del server fermava tutti gli altri thread proprio all'avvio,
-    quando i satelliti si ricollegano: una sonda che dorme 1 ms si svegliava fino a 300 ms dopo
-    (15 ms senza), e sotto carico le strette di mano TLS sforavano l'`open_timeout` di 3 s.
-    Se il processo non parte (niente `sys.executable`), si costruisce qui come prima."""
+    quando i satelliti si ricollegano: una sonda che dorme 1 ms si svegliava fino a 300-584 ms
+    dopo (15-44 ms senza), e sotto carico le strette di mano TLS sforavano l'`open_timeout` di 3 s.
+    Se il processo non parte, cade senza un motivo suo o non consegna uno zip intero, si
+    costruisce qui come prima. Oltre `ATTESA_FIGLIO_S` il motivo resta (niente ripiego: sarebbero
+    altri minuti col GIL preso)."""
 
     ATTESA_FIGLIO_S = 600.0
 
@@ -438,10 +442,15 @@ class Distributore:
             # non riprodotto in 24 costruzioni parallele): meglio il pacchetto che il GIL libero
             raise _FiglioNonParte(f"uscita {f.returncode}"
                                   + (f": {msg.splitlines()[-1]}" if msg else ""))
+        # Uscita 0 ma niente zip intero, o byte prima dello zip (un .pth, un print in un modulo
+        # importato: zipfile lo leggerebbe lo stesso, con un altro SHA-256 e la stessa versione):
+        # anche questo è un figlio caduto senza motivo, e il pacchetto si costruisce qui
+        if not out.startswith(b"PK\x03\x04"):
+            raise _FiglioNonParte(f"lo zip dal processo non comincia con PK ({len(out)} byte)")
         try:
             return da_zip(out)
         except (zipfile.BadZipFile, KeyError, ValueError) as e:
-            raise _ErroreDelFiglio(f"zip non valido dal processo ({type(e).__name__})") from e
+            raise _FiglioNonParte(f"zip non valido dal processo ({type(e).__name__})") from e
 
     def pacchetto(self) -> Pacchetto | None:
         with self._lock:

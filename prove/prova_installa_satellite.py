@@ -266,6 +266,23 @@ def parte_a_parte(tmp: Path, rif):
     ok("il processo cade (uscita 9): il pacchetto si costruisce qui, con l'uscita nella riga",
        p is not None and p.sha256 == rif.sha256 and getattr(d, "costruiti_qui", None) == 1
        and any("uscita 9" in r for r in righe), f"{righe}")
+    # Uscita 0 senza zip, e byte prima dello zip (un .pth, un print in un modulo importato:
+    # zipfile lo leggerebbe, con la stessa versione e un altro SHA-256): anche allora qui, e lo
+    # SHA-256 resta quello di costruisci (revisione della PR #154)
+    for nome, codice in (("uscita 0 senza zip", "pass"),
+                         ("byte prima dello zip",
+                          "import sys; sys.stdout.buffer.write(b'rumore\\n')\n" + (figlio or ""))):
+        righe[:] = []
+        PK._FIGLIO = codice
+        d = PK.Distributore(cfg, radice=SORGENTE, log=righe.append)
+        try:
+            p = d.pacchetto()
+        finally:
+            PK._FIGLIO = figlio
+        ok(f"il processo dà {nome}: il pacchetto si costruisce qui, con lo SHA-256 di costruisci",
+           p is not None and p.sha256 == rif.sha256 and getattr(d, "costruiti_qui", None) == 1
+           and not d.motivo and any("lo costruisco qui" in r for r in righe),
+           f"motivo {d.motivo!r}; {righe}")
 
     # Il server si ferma mentre il pacchetto si costruisce: il processo non resta vivo
     d = PK.Distributore(cfg, radice=SORGENTE, log=righe.append)

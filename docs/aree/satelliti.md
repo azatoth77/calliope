@@ -309,7 +309,9 @@ dà **lo stesso** `InvalidMessage` (il server chiude allo scadere dei suoi 3 s).
 resta com'era, ed è ancora rosso contro quel difetto (9, 10 e 31 aperture perse su 120).
 
 **Correzione** (`calliope/satellite/pacchetto.py`): lo zip lo fa un **processo figlio**
-(`sys.executable -I -c …`, solo libreria standard, lo zip su stdout, il motivo su stderr con
+(`sys.executable -I -c …`; importa `calliope.satellite`, quindi `calliope.capacita`, `pacchetto.py` e
+`packaging` dal venv, più ciò che caricano i `.pth` del venv; apre solo `uv.lock`, i moduli del
+satellite e i modelli della wake word, niente configurazione né rete; lo zip su stdout, il motivo su stderr con
 uscita 3 per «pacchetto non disponibile» e 4 per un file illeggibile); il server legge solo lo zip
 (`da_zip`: versione da `VERSIONE.json`, nomi dallo zip), stesso pacchetto byte per byte di
 `costruisci`. Il figlio importa il `pacchetto.py` del processo, non quello di `radice`. Priorità
@@ -317,8 +319,12 @@ normale: con `BELOW_NORMAL_PRIORITY_CLASS` di Windows, sulla CPU piena il figlio
 (più di 15 s nell'hook); usa un core come il thread di prima. Se il figlio non parte (niente
 `sys.executable`) o cade senza un motivo suo (un'uscita diversa da 0, 3, 4: una volta
 0xC0000005 nell'hook con 144 prove in parallelo, non riprodotta in 24 costruzioni parallele
-sotto carico) il pacchetto si costruisce nel processo come prima, con una riga nel log
-(`costruiti_qui`). `ServerSatelliti.ferma` chiude il figlio (`Distributore.ferma`): niente
+sotto carico), o esce con 0 senza uno zip intero o con byte prima dello zip (deve cominciare con
+`PK`: `zipfile` leggerebbe anche uno zip con un prefisso, e il server lo darebbe con la
+stessa versione e un altro SHA-256; dalla revisione della PR #154), il pacchetto si costruisce nel
+processo come prima, con una riga nel log (`costruiti_qui`). Oltre `ATTESA_FIGLIO_S` (600 s) il
+figlio si chiude e il **motivo resta**, come per le uscite 3 e 4: niente ripiego, sarebbero altri
+minuti col GIL preso. `ServerSatelliti.ferma` chiude il figlio (`Distributore.ferma`): niente
 processi lasciati vivi, e dopo nessun nuovo tentativo. L'`open_timeout` di 3 s resta: con le
 fasi a pochi ms non c'è misura che lo dica irrealistico. Il backlog di 8 del socket in ascolto
 (`socket_in_ascolto(…, 8)`) resta: il tempo in coda non conta nell'`open_timeout` del server
@@ -328,8 +334,12 @@ crea uno a connessione, ma è sull'altra macchina.
 
 Prova: `prova_installa_satellite` (`parte_a_parte`): stesso pacchetto di `costruisci` senza
 nessun `_import_di` nel processo della prova (la sonda del GIL solo nella riga), motivo dal
-figlio senza modelli e con un modulo illeggibile, ripiego se il figlio non parte o cade, figlio
-chiuso dal `ferma` del server; 4 controlli rossi col codice di main.
+figlio senza modelli e con un modulo illeggibile, ripiego se il figlio non parte, cade, esce con 0
+senza zip o scrive byte prima dello zip (con lo SHA-256 di `costruisci`), figlio chiuso dal `ferma`
+del server; 5 controlli rossi col codice di main (due solo perché manca `costruiti_qui`: quello che
+conta è «nessun file letto con ast»), più i due casi dello zip rossi col codice di prima della
+revisione. Il criterio di chiusura della issue (60/60 sotto carico) non distingue: è 60/60 anche su
+main; la prova della causa sono le fasi e la sonda.
 
 Con `prove/manuali/carico.py prova_satellite.py` (3 corsie × 20 giri, 16 processi di carico, la
 macchina condivisa con altri agenti), prima e dopo: «TLS: 120 aperture» **60/60 in tutte e due**
