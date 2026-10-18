@@ -49,6 +49,13 @@ modello** in questo passo: si misura (stanza/misure.py, `calliope stato --turni`
   l'audio del segmento trascritto non si butta subito: resta in RAM (al più `stanza_audio_min`)
   finché la corsia lenta non l'ha rivisto a DGX libera (versione 2 delle righe, chi parla sullo
   scambio, TV, allucinazioni, riassunto).
+- **Compagnia** (18/10, issue #147, calliope/compagnia.py): ogni segmento trascritto con
+  un'impronta (almeno `speaker_min_voice_s` di voce) va alla compagnia della corsia del satellite
+  che l'ha sentito (`su_voce`, collegato da main.Avvio), con il suo istante, il nome solo per una
+  persona di casa riconosciuta dalla voce e i segni della zona grigia e del conoscente (la
+  compagnia decide cosa tenere: `compagnia_da_stanza`, di serie in ombra). L'impronta è quella già
+  calcolata per chi parla (`_chi`): niente CAM++ in più, e la chiamata è un'aggiunta in memoria.
+  Non vanno i segmenti detti mentre Calliope parlava (l'audio ha anche la sua voce).
 """
 
 import collections
@@ -191,6 +198,9 @@ class Stanza:
         self.conoscenti = None
         # La corsia lenta (stanza/lenta.Lenta, 14/10, passo 3), None con `stanza_lenta: false`
         self.lenta = None
+        # La compagnia della corsia del satellite (18/10, #147): f(sat, impronta, voce_s, nome,
+        # ora monotonic), None senza corsie (prove, stanza da sola)
+        self.su_voce = None
         self._fermo = threading.Event()
         self._thread = threading.Thread(target=self._lavora, name="stanza-veloce", daemon=True)
         self._thread.start()
@@ -923,6 +933,7 @@ class Stanza:
                 return
             testo, tolte = e.testo, e.tolte
         chi = self._chi(audio, s.voce_s, s.fine_epoch, s.nome, s.canale)
+        emb = chi.pop("emb", None)            # solo in memoria: alla compagnia, mai nella riga
         s.esito = "riga"
         extra = {}
         if chi.get("gruppo") is not None:
@@ -944,6 +955,7 @@ class Stanza:
         # deduzione dei nomi dei conoscenti
         self._anello(s, chi, getattr(e_riga, "seq", None), audio)
         self._osserva(s.sat, e_riga)
+        self._alla_compagnia(s, chi, emb)
         if self.lenta is not None:
             # La corsia lenta (passo 3): l'audio resta in RAM finché non è rivisto
             try:
@@ -951,6 +963,22 @@ class Stanza:
             except Exception as ex:  # noqa: BLE001 — la corsia lenta non ferma la veloce
                 self.log(f"   [STANZA] corsia lenta: segmento non tenuto ({type(ex).__name__})")
         self._fatto(s, testo, None, attesa, stt_s, eco)
+
+    def _alla_compagnia(self, s: "Segmento", chi: dict, emb):
+        """Il segmento alla compagnia della corsia del suo satellite (18/10, #147). Il nome solo
+        per una persona di casa riconosciuta dalla voce sopra soglia (come `nome_voce` del
+        turno); la zona grigia lo dice (la compagnia non la conta sconosciuta), il conoscente
+        anche (è sconosciuto per definizione). Non i segmenti detti mentre Calliope parlava:
+        l'audio ha anche la sua voce."""
+        f = self.su_voce
+        if f is None or emb is None or s.durante or s.dette:
+            return
+        nome = chi.get("nome") if chi.get("sicurezza") == "voce" and chi.get("persona") else None
+        try:
+            f(s.sat, emb, float(s.voce_s or 0.0), nome, s.fine,
+              grigia=chi.get("sicurezza") == "grigia", conoscente=bool(chi.get("conoscente")))
+        except Exception as e:  # noqa: BLE001 — la compagnia non ferma la stanza
+            self.log(f"   [STANZA] compagnia: {type(e).__name__}: {e}")
 
     def _anello(self, s: "Segmento", chi: dict, seq, audio):
         """L'audio del segmento nell'anello degli avvisi (14/10 sera, `avvisi_audio`, solo in
@@ -1055,10 +1083,13 @@ class Stanza:
                 minore = False
             if sim >= thr and netta:
                 return {"chi": f"persona:{pid}", "persona": pid, "nome": nome,
-                        "sicurezza": "voce", "minore": minore}
+                        "sicurezza": "voce", "minore": minore, "emb": emb}
             if sim >= thr - float(getattr(cfg, "speaker_id_session_margin", 0.08)):
                 out = {"chi": f"persona:{pid}", "persona": pid, "nome": nome,
                        "sicurezza": "grigia", "minore": minore}
+        # L'impronta resta nel dizionario per la compagnia (18/10, #147): `_trascrivi` la toglie
+        # prima della riga, non va mai nel registro della stanza
+        out = dict(out, emb=emb)
         con = self.conoscenti
         if con is None:
             return out
@@ -1068,7 +1099,7 @@ class Stanza:
             if k is not None:
                 return {"chi": f"conoscente:{k.id}", "conoscente": k.id,
                         "nome": k.nome_pieno(), "nota": k.nota, "sicurezza": "voce",
-                        "minore": False}
+                        "minore": False, "emb": emb}
             if out["sicurezza"] == "nessuna":
                 g = con.assegna(emb, voce_s, t)
                 if g is not None:

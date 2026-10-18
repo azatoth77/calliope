@@ -350,6 +350,8 @@ class Avvio:
                                    log=lambda m: print(m, flush=True))
             s.satelliti.conversazione_stanza = s.stanza
             s.stanza.server = s.satelliti
+            # I segmenti della stanza nella compagnia della corsia del satellite (18/10, #147)
+            s.stanza.su_voce = self._compagnia_dalla_stanza
             # La tenuta su disco (14/10, `stanza_tenuta`): «svuota» e i conteggi della
             # conservazione la vedono
             if getattr(s, "conserva", None) is not None:
@@ -828,6 +830,16 @@ class Avvio:
             if not getattr(cfg, "giochi_giudice", True):
                 from .tools.schermi import gioco_spec
                 s.tools.register(gioco_spec())
+
+    def _compagnia_dalla_stanza(self, sat, emb, voce_s, nome, ora, grigia=False,
+                                conoscente=False):
+        """Un segmento della stanza sentito da `sat` (thread della stanza, 18/10, #147): nella
+        compagnia della corsia di quel satellite, solo in memoria; le altre corsie non lo
+        vedono."""
+        c = corsie.corsia_del_satellite(self.corsie_tutte, sat, self.insieme, self.s.satelliti)
+        comp = getattr(getattr(c, "ciclo", None), "compagnia", None) if c is not None else None
+        if comp is not None:
+            comp.osserva_stanza(emb, voce_s, nome, ora, grigia=grigia, conoscente=conoscente)
 
     def _luogo_satellite(self):
         """La stanza del satellite per l'archivio delle conversazioni. stanza_corrente è la

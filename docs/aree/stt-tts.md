@@ -15,7 +15,7 @@
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto); la frase al tetto e il suo seguito nello stesso turno (dal 10/10, sotto) `Listener._dopo_il_tetto`, `Ciclo._seguito_del_tetto`, `pause.TETTO_ATTESA_S`; la fine del turno System 1 (dal 14/10, spenta di serie, sotto) `calliope/system1/` → `Decisione`, `Sorvegliato`, `fine_turno.SmartTurn`, `Politica`, `Anticipo` (attiva, nel `Listener`), `OmbraFineTurno` (ombra, sul server), `log_mel`, `simula`, `esito`, `riassunto` |
-| Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; impronte per satellite (15/10, spente di serie, in fondo) `calliope/impronte_satellite.py` → `Impronta`, `chiavi`, `punteggio`, `sicura`, `impara`, `riassunto`, `SpeakerRegistry.classifica(emb, chiavi)`, `impara_satellite`, `Ciclo._decisione_alternativa`, `Ciclo._impara_impronte`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto`, e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
+| Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; impronte per satellite (15/10, spente di serie, in fondo) `calliope/impronte_satellite.py` → `Impronta`, `chiavi`, `punteggio`, `sicura`, `impara`, `riassunto`, `SpeakerRegistry.classifica(emb, chiavi)`, `impara_satellite`, `Ciclo._decisione_alternativa`, `Ciclo._impara_impronte`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto` (dal 18/10 anche dai segmenti della stanza, `osserva_stanza`, in fondo), e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
 | Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; sigle storpiate riscritte dopo la trascrizione (15/10, turni, stanza e corsia lenta, sotto) `calliope/sigle.py` → `correggi_sigle`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole`; tempo massimo della richiesta in proporzione alla frase `ServerTranscriber.tempo_massimo` (10/10); frasi tipiche delle allucinazioni scartate per intero in `calliope/allucinazioni.py` (09/10) |
 | Conversazione di stanza, passo 1 in ombra (13/10, sotto) | Silero VAD in ONNX (un secondo VAD, suo), Whisper con la precedenza, CAM++ | sul satellite `calliope/satellite/stanza.py` → `Segmentatore`, `AscoltoStanza`, rubinetto `Listener.rubinetto`; sul server `calliope/stanza/` → `Stanza` (`ascolto.py`: `copertura`, `turno_testo`, `pausa`, `riprendi`, `dimentica`, `presenti`, `presenze`, `durante_qui`, `pronto`), filtro dell'eco del passo 5 `filtra`, `Detta` (`eco.py`), `Riproduttore.voce_ora`, `Collegamento.frasi_voce`, `Copertura`, `Precedenza` (`coda.py`), `RegistroStanza` (`registro.py`), `Misure`, `riassunto` (`misure.py`), `load_stanza`; `STTCondiviso.transcribe(priorita=…, prompt=…)`; ganci `Ciclo._stanza_copertura`, `Ciclo._stanza_turno`; tool `stanza_pausa` (`calliope/tools/stanza.py`) |
 | Corsia lenta della stanza (14/10 sera, passo 3, `stanza_lenta`, sotto; ritrascrizione solo con un Whisper suo o un beam che conta, `stanza_lenta_ritrascrivi`) | Whisper con la precedenza LENTA (o un Whisper suo, `stanza_lenta_stt_url`: `setup/linux/motore/whisper-lento.sh`, large-v3 q5_0), CAM++ a finestre, solo libreria standard | `calliope/stanza/lenta.py` → `Lenta` (`metti`, `dovuti`, `passo`, `giro`, `rivedi`, `prompt`, `finestre`, `pendente`), `allucinazione`, `dividi_testo`, `cambio_sostanziale`, `riassuntore_guardiano`; `calliope/stanza/banco.py` → `Banco` (eccezione dell'audio del banco), `banco.ruota` (dal 17/10 anche da `Conservazione.ruota`, sotto); ritrascrizione a blocchi (15/10, `stanza_lenta_blocchi`, sotto) `Blocco`, `passo_blocco`, `rivedi_blocco`; `Transcriber.transcribe(…, beam=)`; prova `prove/prova_stanza_lenta.py`, banco `prove/manuali/banco_stanza_lenta.py`, `prove/manuali/ritrascrivi_conservati.py` |
@@ -1665,3 +1665,151 @@ PR #139 ogni pezzo è un `testi.Pezzo` (`aperta`, `prima`): chi giudica una fras
 (`riferire`, il guardiano, l'annuncio di un tool) giudica la frase fino al pezzo, mai meno di
 prima. La clausola e la lunghezza si misurano dall'ultima fine di frase. Casi, contrari e misure:
 [biblioteca](biblioteca.md) (sezione dello stesso giorno), `prove/prova_notizie_attesa.py`.
+
+## La compagnia conta le voci sentite dalla stanza, in ombra di serie (18/10, issue #147, ramo `issue-147-compagnia-stanza`)
+
+**Caso vero** (DGX, sera del 17/10): telefono come satellite in cucina, chi amministra con il
+minore e alcune persone non registrate che chiacchierano; la stanza (in ombra) le sentiva, i
+conoscenti contavano 4 voci sconosciute nuove, ma le 4 domande di chi amministra col nome
+risultavano «non in compagnia» (`calliope stato --turni`: «22 frasi con la voce, in compagnia 0»).
+La compagnia vedeva solo le frasi del turno (`Ciclo._osserva_compagnia`); i segmenti della stanza,
+che hanno già la loro impronta CAM++ per chi parla, non ci entravano mai.
+
+**Il collegamento**: ogni segmento della stanza trascritto con un'impronta (almeno
+`speaker_min_voice_s` di voce: sotto, `Stanza._chi` non la calcola) va alla compagnia della corsia
+del satellite che l'ha sentito: `Stanza.su_voce` → `Avvio._compagnia_dalla_stanza` →
+`corsie.corsia_del_satellite` (con i satelliti insieme la sua corsia; con una corsia sola quella
+che segue l'attivo, solo se l'attivo è quel satellite; le altre corsie non lo vedono) →
+`Compagnia.osserva_stanza`, con il suo istante (`Segmento.fine`, monotonic, mai oltre adesso), il
+nome solo per una persona di casa riconosciuta dalla voce sopra soglia, e i segni della zona
+grigia e del conoscente. L'impronta è quella che `_chi` ha già calcolato per chi parla e per i
+conoscenti (CAM++ una volta per segmento). Non vanno i segmenti detti mentre Calliope parlava.
+
+**Interruttore `compagnia_da_stanza`** (di serie **ombra**; «attiva», «spenta»; il true di YAML
+è rifiutato). In ombra la stanza non cambia niente per la voce: nel registro del turno
+`voce.compagnia_stanza` è lo stato con la stanza quando avrebbe cambiato l'effetto (accanto a
+`voce.compagnia`, quello del turno), con la regola `compagnia_da_stanza_ombra`; una frase senza il
+nome nella finestra che con la stanza attiva non si sarebbe presa passa e scrive
+`compagnia_da_stanza_ombra_nome` (la misura dell'attrito). `calliope stato --turni` conta «dalla
+stanza, non applicata: N frasi (in compagnia in più, con voci sconosciute in più, per un minore
+o un cancello)». **L'accensione la decide chi amministra dopo la misura sulla DGX.**
+
+**La regola della voce sconosciuta per la stanza** (dopo la seconda e la terza revisione della
+PR #161). La prova «profilo» di sempre confronta una frase di nessuno con il profilo di ciascuna
+persona riconosciuta nella finestra: con la sola famiglia in cucina un segmento di Carlo non
+riconosciuto (lontano dal microfono) sta quasi sempre sotto 0,20 sul profilo di Luca, un'altra
+voce, e valeva «sconosciuta». La simulazione della revisione (CAM++ vero su audio vero, 3 profili
+di casa, Carlo e Luca in stanza per 5 minuti, segmenti 1–8 s puliti o con riverbero, rumore e
+μ-law, 40 giri) dava con la prima versione del ramo il 72–100 % di «voce sconosciuta» con la
+famiglia, 2–45 % da solo, contro lo 0–2 % del solo turno. Ora, nello stato con la stanza, **nella
+sola prova «profilo»** (la prova di un segmento solo) una frase di nessuno, al turno o dalla
+stanza, conta solo se sta sotto `compagnia_soglia_profilo` su **tutti** i profili di casa (regola
+rigida di `Compagnia._calcola_su`), o se è di un conoscente riconosciuto. La prova «gruppi» resta
+quella di sempre, così l'amico del 09/10 (0,22–0,33 su chi amministra, frasi da 5 a 14 s: nella
+fascia normale di un estraneo, non una voce «vicina») conta anche se lo sente solo la stanza. La
+zona grigia della stanza non entra. Nessuna soglia nuova. (*Storico, versione del ramo del 18/10
+mattina: la regola rigida buttava i segmenti a 0,20 o più da un profilo di casa prima dei gruppi,
+e l'amico del 09/10 sentito solo dalla stanza non contava: terza revisione, rilievo 4.*)
+
+**La simulazione rifatta con la regola corretta** (lo stesso script della revisione con
+`compagnia_da_stanza: attiva` e la zona grigia col suo segno, 40 giri, stesso seme; script fuori
+dal repository, audio fuori da git, solo numeri). Percentuale dei giri con «voce sconosciuta» (il
+nome obbligatorio) alla seconda frase di Carlo; fra parentesi la regola rigida anche sui gruppi
+(versione del 18/10 mattina) e la prima versione del ramo (dalla revisione); il solo turno (main)
+resta 0–2,5 % ovunque:
+
+| scenario | 6 segmenti in 5 min | 15 | 30 |
+|---|---|---|---|
+| famiglia, pulito | 5 % (5; 72) | 2,5 % (2,5; 82) | 2,5 % (2,5; 92) |
+| famiglia, vicino (RT60 0,3 s, SNR 20 dB) | 10 % (7,5; 82) | 10 % (10; 97) | 17,5 % (17,5; 100) |
+| famiglia, medio | 17,5 % (17,5) | 30 % (27,5) | 52,5 % (50; prima 90–100) |
+| famiglia, lontano | 47,5 % (37,5) | 60 % (55) | 77,5 % (75; prima 90–100) |
+| da solo, pulito | 2,5 % (2,5; 2) | 5 % (5; 5) | 12,5 % (12,5; 12) |
+| da solo, vicino | 7,5 % (7,5; 7) | 20 % (20; 22) | 25 % (25; 27) |
+| da solo, medio | 25 % (25; 27) | 27,5 % (27,5; 27) | 40 % (40; 45) |
+| da solo, lontano | 47,5 % (45) | 75 % (67,5) | 95 % (95) |
+
+Rimettere i gruppi costa poco (al più 10 punti, solo con l'audio lontano: i gruppi decidono in 1–4
+giri su 40). Con la famiglia in compagnia sì quasi sempre (90–100 %, «due profili»: è vero, ci
+sono due persone, e vale la compagnia senza il nome obbligatorio). Il resto della «voce
+sconosciuta» viene quasi tutto dalla prova «profilo» su segmenti **della stessa persona** lontani
+dal microfono, sotto 0,20 su tutti i profili compreso il suo (Carlo lontano: riconosciuto nel 9 %
+dei segmenti, nessuno nell'81 %): la regola non lo tocca, ed è lo stesso caso del «da solo». Le
+registrazioni del portatile fra sessioni diverse rendono i numeri pessimisti (Carlo pulito
+riconosciuto nel 54 % dei segmenti). Con la stanza vicina e pulita l'attrito è basso (2,5–17,5 %);
+con il satellite lontano da chi parla resta alto: per questo resta in ombra, da misurare sulla
+DGX. Se la misura lo conferma, il passo dopo è una prova propria per i segmenti della stanza (per
+esempio la voce sconosciuta solo dai gruppi, con due segmenti, e non da un segmento solo), da
+decidere sui numeri veri.
+
+**Solo se cambia l'effetto, e solo verso la prudenza**: lo stato del turno si calcola come prima,
+al momento, a ogni chiamata (`stato_turno`): in ombra e con la stanza spenta il ramo decide come
+main (confronto a secco della terza revisione, 300 sequenze, 1485 turni: 0 turni diversi in
+`ombra` e in `spenta`; prima della correzione 4, perché lo stato tenuto da parte non vedeva
+`registry.adapt`). Quello con la stanza vale solo se cambia «in compagnia» o «voci sconosciute»
+(`stato_stanza`, `da_stanza`, regola `compagnia_da_stanza`): un cambio del solo numero di voci o
+della distanza non conta, e prova e distanza restano quelle del turno. Mai via la compagnia né la
+sconosciuta del turno: il calcolo su tutte insieme da solo non basterebbe, perché un profilo di
+casa sentito dalla stanza può assorbire nei gruppi la voce di un ospite che le frasi del turno
+contano sconosciuta (caso nella prova). Resta scoperto, come al turno, l'ospite sentito **solo**
+dalla stanza con una voce vicina a un profilo di casa riconosciuto (sopra `compagnia_soglia_gruppi`
+sul suo profilo, che lo assorbe). La stanza non tocca `_voce_recente` (niente continuità), il
+riconoscimento né le impronte.
+
+**Minori e cancelli** (prima e terza revisione della PR #161): con **un minore registrato in
+casa** (`minori_enabled`) o un cancello aperto sulla corsia (`Cancelli.aperto_su`), lo stato
+cambiato dalla stanza non vale e resta quello del turno (`Ciclo._tutela_minori`, regola
+`compagnia_da_stanza_minori`, nel registro `compagnia_stanza.minori`). Il minore lontano dal
+microfono non lo riconosce la voce (0,30–0,40 sul suo profilo): guardare solo i minori
+riconosciuti lasciava buttare la sua frase senza il nome prima del cancello 2 e del rilevatore, e
+la strada più semplice è questa. E se la compagnia viene solo dalla stanza il giudizio «non
+rivolta» non spegne il segnale di pericolo (`_pericolo_vale`, regola `pericolo_solo_stanza`).
+
+**La tutela è larga, e va detto in chiaro**: con un minore in casa vale lo stato del solo turno
+anche per le protezioni d'identità di chi amministra verso gli ospiti (finestra chiusa, niente
+frase breve né «sì» breve, sfida per le azioni). Rispetto a main non toglie niente, ma **nel caso
+del 17/10 (chi amministra, il minore, gli ospiti) `attiva` non cambierebbe niente**: in quella casa
+il caso vero si misura soltanto, in ombra (`calliope stato --turni`, «per un minore o un
+cancello»). L'alternativa (la tutela solo sugli effetti che toccano il minore: lo scarto della
+frase senza il nome e il giudizio «non rivolta») resta possibile; la scelta è di chi amministra
+quando decide l'accensione.
+
+**Gli effetti a valle con `attiva`** (esistevano già per la compagnia del turno: con la stanza
+scattano più spesso). Con una voce sconosciuta: la finestra senza il nome si chiude anche per la
+risposta a una domanda di Calliope, quindi il «sì» a una conferma o la frase di sfida vanno detti
+col nome; il segno «In compagnia: chiamami per nome» (si aggiorna al cambio di stato della voce,
+non all'arrivo del segmento). Con qualunque compagnia, anche di sole voci di casa: niente frase
+breve né conferma breve (un «sì» breve di chi amministra vale ospite), azioni senza il nome
+rifiutate con «Dimmi pure "Calliope, …"», zona grigia ospite per le azioni, `voce_proprietario`
+spento, l'impronta non si adatta (`impronta_compagnia`) e le impronte per satellite non imparano
+(#42: con il telefono in cucina l'apprendimento si fermerebbe quasi del tutto); la voce non si
+conserva. La misura E6 del «sì» breve (`si_breve`) conterebbe molti più «sì brevi con rischio
+compagnia» dovuti alla stanza: da leggere sapendolo. Il cancello 2 è protetto (sopra). La TV con
+parole trascritte entra come voce sconosciuta (dai gruppi, o sotto 0,20 su tutti): finché non c'è il filtro
+della TV la casa resterebbe in compagnia per tutto il programma e 5 minuti dopo; «abbiamo ospiti»
+(`stanza_pausa`) ferma i segmenti, quindi la compagnia dalla stanza sparisce proprio con gli ospiti
+dichiarati (non peggio di main). Da misurare in ombra con l'attrito, prima di accendere.
+
+**Costo**: lo stato del turno si calcola al momento come su main (poche frasi); il calcolo con la
+stanza si tiene da parte e si rifà solo quando cambiano frasi, segmenti o impronte di casa
+(chiave sul contenuto delle impronte: `adapt` le sposta); all'arrivo del segmento lo fa il
+thread della stanza, il turno lo trova pronto. `osserva` e il cambio dalla stanza sotto lo stesso
+lock (`osserva_con_stanza`: il registro non mescola due memorie). Al più 80 segmenti per corsia (`STANZA_MAX`): con voci tutte diverse
+(la TV) ~6–10 ms nel thread della stanza, 0,01 ms a chiamata nel thread della voce (prima ~40–65
+ms a ogni `stato()` con 200 segmenti, revisione della PR #161).
+
+**Solo in memoria** (decisione 0031): le impronte restano nella lista della compagnia; nella riga
+della stanza l'impronta non entra (`_trascrivi` la toglie), su disco niente: la prova lo verifica
+con la tenuta accesa cercando l'impronta in ogni file della cartella.
+
+**Limiti noti**: la stanza trascrive dopo il turno (precedenza), quindi i segmenti detti subito
+prima della prima domanda possono arrivare dopo la sua decisione e contare dalla frase dopo (o per
+la finestra, con `stato()` dinamico); il giudizio su chi parla è quello veloce (la corsia lenta lo
+corregge a posteriori). Prova a secco `prove/prova_compagnia_stanza.py` (casi e contrari; ogni
+caso principale fallisce su 0bae0a8; i mutanti della revisione presi: senza `min()` sull'istante,
+senza regola rigida, zona grigia dentro, senza tutela, `_pericolo_vale` di prima, `da_stanza` sul
+numero di voci, senza stato tenuto da parte, ombra applicata; dalla terza: lo stato del turno
+tenuto da parte dopo `adapt`, la tutela del solo minore riconosciuto). **Verifica sulla DGX**, in ombra,
+alla prossima serata con ospiti e il telefono in stanza: `calliope stato --turni --giorni 1`, la
+riga «dalla stanza, non applicata» e la regola `compagnia_da_stanza_ombra_nome` (quante frasi
+sarebbero state scartate), confrontate con le serate della sola famiglia.

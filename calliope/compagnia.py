@@ -30,6 +30,29 @@ si chiude finché le prove non escono dalla finestra (calliope/ciclo.py). Gli al
 niente frase breve, continuità né zona grigia per le azioni; per i minori «voce non sicura» nei
 due cancelli) valgono con `compagnia_enabled: attiva`; «ombra» registra soltanto.
 
+**Dalla stanza** (18/10, issue #147, `compagnia_da_stanza`, di serie «ombra»): con la
+conversazione di stanza accesa i segmenti della stanza sentiti da un satellite entrano nella
+memoria della sua corsia (`osserva_stanza`, dal thread della stanza: l'impronta è quella che la
+stanza ha già calcolato per chi parla, niente CAM++ in più) con il loro istante. Una voce di casa
+riconosciuta sopra soglia entra con il nome; la zona grigia non entra; le altre entrano senza nome
+(un conoscente riconosciuto col suo segno).
+
+Lo stato del turno si calcola come prima, al momento, a ogni chiamata (`stato_turno`): in ombra e
+con la stanza spenta tutto è uguale a main. Con i segmenti si calcola anche lo stato su tutte, con
+la **prova «profilo» rigida**: una frase di nessuno (al turno o dalla stanza) è la prova di una
+voce sconosciuta solo se sta sotto `compagnia_soglia_profilo` su tutti i profili di casa, non solo
+su quelli riconosciuti nella finestra (con la sola famiglia in cucina la prova di prima dava una
+voce sconosciuta nel 72–100 % dei casi, simulazione della revisione della PR #161); il conoscente
+riconosciuto sì. La prova «gruppi» resta quella di sempre: l'amico del 09/10 (0,22–0,33 su chi
+amministra, frasi lunghe) conta anche dalla stanza. La stanza conta **solo se cambia l'effetto**
+(in compagnia sì/no, voci sconosciute sì/no) e solo verso la prudenza: mai via la compagnia né la
+sconosciuta; il numero di voci o la distanza da soli non contano (`stato_stanza`, `da_stanza`).
+«attiva»: lo stato che vale (`stato`) è quello con la stanza; «ombra»: vale quello del turno, e
+quello con la stanza va solo nel registro dei turni (misura dell'attrito); «spenta»: i segmenti non
+entrano. Il calcolo con la stanza si tiene da parte finché non cambiano le frasi, i segmenti o i
+profili di casa (`registry.adapt` assegna un'impronta nuova). Le impronte restano solo qui, in
+memoria (decisione 0031: le voci sconosciute mai su disco).
+
 `riassunto`/`testo`: la sezione di `calliope stato --turni` (solo numeri e regole).
 """
 from __future__ import annotations
@@ -41,6 +64,20 @@ import time
 import numpy as np
 
 SPENTA, OMBRA, ATTIVA = "spenta", "ombra", "attiva"
+# Segmenti della stanza tenuti per corsia nella finestra (i più nuovi). Con 200 voci tutte diverse
+# (la TV) un calcolo costava ~40–65 ms, con 80 ~10 ms (revisione della PR #161)
+STANZA_MAX = 80
+
+
+def modo_stanza(cfg) -> str:
+    """`compagnia_da_stanza` (18/10, #147): «ombra» di serie (solo il registro), «attiva»,
+    «spenta». Un valore sconosciuto vale ombra: niente effetti finché chi amministra non decide
+    dopo la misura."""
+    v = getattr(cfg, "compagnia_da_stanza", OMBRA)
+    if v is False:
+        return SPENTA
+    v = str(v or "").strip().lower()
+    return v if v in (SPENTA, OMBRA, ATTIVA) else OMBRA
 
 
 def modo(cfg) -> str:
@@ -82,6 +119,8 @@ class Frase:
     emb: np.ndarray
     voce_s: float
     nome: str | None
+    # Un conoscente riconosciuto dalla stanza (18/10, #147): una voce di fuori casa per definizione
+    conoscente: bool = False
 
 
 class Compagnia:
@@ -94,8 +133,14 @@ class Compagnia:
         self.registry = registry
         self.orologio = orologio
         self._frasi: list[Frase] = []
+        self._stanza: list[Frase] = []          # i segmenti della stanza (18/10, #147)
         self._lock = threading.Lock()
         self._ultimo: dict | None = None        # l'ultimo stato calcolato (per i cambi)
+        # Il calcolo con la stanza tenuto da parte (18/10, #147): (chiave, stato su tutte). La
+        # chiave cambia con le frasi, i segmenti e le impronte di casa; lo stato del turno no, si
+        # calcola sempre al momento come su main
+        self._versione = 0
+        self._cache: tuple | None = None
 
     # ── configurazione ──
     def _f(self, nome: str, predefinito: float) -> float:
@@ -112,45 +157,140 @@ class Compagnia:
     def acceso(self) -> bool:
         return modo(self.cfg) != SPENTA
 
+    @property
+    def stanza_modo(self) -> str:
+        return SPENTA if not self.acceso else modo_stanza(self.cfg)
+
     # ── memoria ──
     def _pulisci(self, ora: float):
         w = self.finestra_s
+        n = len(self._frasi) + len(self._stanza)
         self._frasi = [f for f in self._frasi if ora - f.ora <= w]
+        if self._stanza:
+            self._stanza = [f for f in self._stanza if ora - f.ora <= w][-STANZA_MAX:]
+        if len(self._frasi) + len(self._stanza) != n:
+            self._versione += 1
 
     def dimentica(self):
         """Via tutte le impronte (riavvio della corsia, prove)."""
         with self._lock:
             self._frasi.clear()
+            self._stanza.clear()
             self._ultimo = None
+            self._versione += 1
+            self._cache = None
 
     def __len__(self):
         with self._lock:
             return len(self._frasi)
 
+    def segmenti_stanza(self) -> int:
+        """Quanti segmenti della stanza sono nella memoria adesso (prove, misure)."""
+        with self._lock:
+            return len(self._stanza)
+
+    def nomi(self) -> set:
+        """Le persone riconosciute dalla voce nella finestra, al turno o dalla stanza."""
+        with self._lock:
+            return {f.nome for f in self._frasi + self._stanza if f.nome}
+
+    def _impronte_casa(self) -> list:
+        users = getattr(self.registry, "users", None)
+        vps = ([getattr(p, "voiceprint", None) for p in list(users.values())]
+               if isinstance(users, dict) else [])
+        return [v for v in vps if v is not None]
+
+    def _chiave_casa(self) -> tuple:
+        """Le impronte di casa come sono adesso (il loro contenuto, non l'oggetto: un array
+        liberato può tornare con lo stesso id): `adapt`, un arruolamento, un nome cambiato o una
+        voce dimenticata cambiano la chiave, e il calcolo con la stanza si rifà."""
+        users = getattr(self.registry, "users", None)
+        if not isinstance(users, dict):
+            return ()
+        out = []
+        for n, p in list(users.items()):
+            vp = getattr(p, "voiceprint", None)
+            out.append((n, None if vp is None else hash(np.asarray(vp).tobytes())))
+        return tuple(out)
+
+    def osserva_stanza(self, emb, voce_s: float, nome: str | None,
+                       ora: float | None = None, grigia: bool = False,
+                       conoscente: bool = False) -> bool:
+        """Un segmento della stanza sentito dal satellite di questa corsia (18/10, #147): solo
+        in memoria, con il suo istante (`ora`, sullo stesso orologio: monotonic; mai oltre
+        adesso) e il nome della persona di casa riconosciuta dalla voce sopra soglia. Non entra
+        sotto `speaker_min_voice_s` (l'impronta non decide) né in zona grigia (`grigia`). Il
+        thread della voce non aspetta: il calcolo con la stanza si rifà qui, e il turno lo trova
+        pronto. True se tenuto."""
+        if self.stanza_modo == SPENTA:
+            return False
+        v = _unit(emb)
+        if v is None or grigia or float(voce_s or 0.0) < self._f("speaker_min_voice_s", 1.0):
+            return False
+        adesso = self.orologio()
+        quando = adesso if ora is None else min(float(ora), adesso)
+        with self._lock:
+            if adesso - quando > self.finestra_s:
+                return False
+            self._stanza.append(Frase(quando, v, float(voce_s), nome or None,
+                                      bool(conoscente and not nome)))
+            self._versione += 1
+            self._pulisci(adesso)
+            self._calcola()
+        return True
+
     def osserva(self, emb, voce_s: float, nome: str | None) -> dict | None:
         """Una frase detta su questa corsia: la tiene in memoria (se c'è l'impronta) e
         restituisce lo stato (None: una voce sola, o spenta)."""
+        return self.osserva_con_stanza(emb, voce_s, nome)[0]
+
+    def osserva_con_stanza(self, emb, voce_s: float, nome: str | None) -> tuple:
+        """Come `osserva`, e sotto lo stesso lock il cambio dalla stanza (`stato_stanza`): lo
+        stato che vale e il cambio sono della stessa memoria."""
         if not self.acceso:
-            return None
+            return None, None
         v = _unit(emb)
         ora = self.orologio()
         with self._lock:
             self._pulisci(ora)
             if v is not None:
                 self._frasi.append(Frase(ora, v, float(voce_s or 0.0), nome or None))
-            st = self._calcola()
+                self._versione += 1
+            base, cambio = self._calcola()
+            st = self._effettivo(base, cambio)
             self._ultimo = st
-            return st
+            return st, cambio
 
     def stato(self) -> dict | None:
-        """Lo stato adesso (le frasi uscite dalla finestra non contano più)."""
+        """Lo stato che vale adesso (le frasi uscite dalla finestra non contano più): con
+        `compagnia_da_stanza: attiva` quello con la stanza, altrimenti quello del turno."""
         if not self.acceso:
             return None
         with self._lock:
             self._pulisci(self.orologio())
-            st = self._calcola()
+            st = self._effettivo(*self._calcola())
             self._ultimo = st
             return st
+
+    def stato_turno(self) -> dict | None:
+        """Lo stato delle sole frasi del turno, come prima del 18/10."""
+        if not self.acceso:
+            return None
+        with self._lock:
+            self._pulisci(self.orologio())
+            return self._calcola()[0]
+
+    def stato_stanza(self) -> dict | None:
+        """Lo stato con la stanza solo se cambia l'effetto di quello del turno (in compagnia,
+        voci sconosciute), in ombra come attiva: None altrimenti, o con la stanza spenta."""
+        if not self.acceso:
+            return None
+        with self._lock:
+            self._pulisci(self.orologio())
+            return self._calcola()[1]
+
+    def _effettivo(self, base, cambio):
+        return cambio if cambio is not None and self.stanza_modo == ATTIVA else base
 
     # ── le prove ──
     def _profilo(self, nome: str):
@@ -158,10 +298,33 @@ class Compagnia:
         prof = reg.get(nome) if reg is not None and nome else None
         return _unit(getattr(prof, "voiceprint", None)) if prof is not None else None
 
-    def _calcola(self) -> dict | None:
-        frasi = self._frasi
+    def _calcola(self) -> tuple:
+        """(stato del turno, cambio dalla stanza o None), con il lock. Lo stato del turno sempre
+        al momento (come su main: legge i profili, che `adapt` sposta); quello su tutte, il
+        calcolo lungo, tenuto da parte finché frasi, segmenti e impronte di casa non cambiano."""
+        base = self._calcola_su(self._frasi)
+        if not self._stanza or self.stanza_modo == SPENTA:
+            return base, None
+        chiave = (self._versione, self._chiave_casa())
+        if self._cache is None or self._cache[0] != chiave:
+            tutte = sorted(self._frasi + self._stanza, key=lambda f: f.ora)
+            self._cache = (chiave, self._calcola_su(tutte, rigido=True))
+        return base, _unisci(base, self._cache[1])
+
+    def _calcola_su(self, frasi: list, rigido: bool = False) -> dict | None:
+        """Le tre prove sulle frasi. `rigido` (lo stato con la stanza, 18/10): nella prova
+        «profilo» una frase di nessuno conta solo se sta sotto `compagnia_soglia_profilo` su
+        tutti i profili di casa (un familiare non riconosciuto non è una voce sconosciuta), o se
+        è di un conoscente; i gruppi restano quelli di sempre."""
         if not frasi:
             return None
+        lontane = None
+        if rigido:
+            soglia = self._f("compagnia_soglia_profilo", 0.20)
+            casa = [_unit(x) for x in self._impronte_casa()]
+            casa = [x for x in casa if x is not None]
+            lontane = {id(f) for f in frasi if f.nome is None and (
+                f.conoscente or all(float(np.dot(f.emb, x)) < soglia for x in casa))}
         nomi = list(dict.fromkeys(f.nome for f in frasi if f.nome))
         profili = {n: p for n in nomi if (p := self._profilo(n)) is not None}
         # 1. Contro il profilo di chi è stato riconosciuto: una frase non sua, abbastanza lunga,
@@ -175,6 +338,8 @@ class Compagnia:
                 # prova «due profili», non una voce sconosciuta (in auto Carlo e Luca stanno a
                 # 0,17 tra loro)
                 if f.nome is not None or f.voce_s < min_p:
+                    continue
+                if lontane is not None and id(f) not in lontane:
                     continue
                 c = float(np.dot(f.emb, vp))
                 if c < soglia_p and (dist_p is None or c < dist_p):
@@ -227,12 +392,31 @@ class Compagnia:
                 "sconosciute": bool(sconosciute)}
 
 
+def _unisci(base: dict | None, con: dict | None) -> dict | None:
+    """Il cambio che la stanza porta allo stato del turno, solo verso la prudenza e solo se
+    cambia l'effetto (in compagnia, voci sconosciute): None se non cambia niente. Il numero di
+    voci è il più alto dei due, la sconosciuta resta se c'era."""
+    if con is None:
+        return None
+    sconosciute = bool(con["sconosciute"] or (base and base["sconosciute"]))
+    if base is not None and sconosciute == bool(base["sconosciute"]):
+        return None
+    out = dict(con, sconosciute=sconosciute, da_stanza=True)
+    if base is not None:
+        out["voci"] = max(int(con["voci"]), int(base["voci"]))
+    return out
+
+
 # ─────────────────────────── calliope stato --turni ───────────────────────────
 
 REGOLE = ("voci_compagnia", "compagnia_nome", "compagnia_senza_breve",
           "compagnia_voce_nella_frase", "pericolo_compagnia", "non_rivolta_ombra", "non_rivolta",
           # passo 0 della conversazione di stanza (13/10)
-          "compagnia_azioni_col_nome", "compagnia_anonima_continua", "pericolo_non_rivolta")
+          "compagnia_azioni_col_nome", "compagnia_anonima_continua", "pericolo_non_rivolta",
+          # i segmenti della stanza nella compagnia (18/10, #147): applicato, in ombra, fermato
+          # per un minore o un cancello aperto, una frase che in ombra sarebbe stata scartata
+          "compagnia_da_stanza", "compagnia_da_stanza_ombra", "compagnia_da_stanza_minori",
+          "compagnia_da_stanza_ombra_nome", "pericolo_solo_stanza")
 
 
 def riassunto(turni: list[dict]) -> dict:
@@ -248,6 +432,9 @@ def riassunto(turni: list[dict]) -> dict:
             continue
         data = str(t.get("inizio") or "")[:10] or "?"
         d = giorni.setdefault(data, {"frasi": 0, "in_compagnia": 0, "sconosciute": 0,
+                                     "da_stanza": 0, "stanza_non_applicata": 0,
+                                     "stanza_compagnia": 0, "stanza_sconosciute": 0,
+                                     "stanza_minori": 0,
                                      "prove": {}, "regole": {}, "giudizi": 0, "no": 0,
                                      "guasti": 0, "ms": []})
         if v is not None and "punteggio" in v:
@@ -256,8 +443,17 @@ def riassunto(turni: list[dict]) -> dict:
         if c:
             d["in_compagnia"] += 1
             d["sconosciute"] += bool(c.get("sconosciute"))
+            d["da_stanza"] += bool(c.get("da_stanza"))
             p = str(c.get("prova") or "?")
             d["prove"][p] = d["prove"].get(p, 0) + 1
+        cs = v.get("compagnia_stanza") if v is not None else None
+        if isinstance(cs, dict):
+            # Ciò che la stanza avrebbe cambiato (18/10, #147): in ombra, o fermata per un minore
+            d["stanza_non_applicata"] += 1
+            d["stanza_compagnia"] += not c
+            d["stanza_sconosciute"] += bool(cs.get("sconosciute")
+                                            and not (c and c.get("sconosciute")))
+            d["stanza_minori"] += bool(cs.get("minori"))
         for x in regole:
             d["regole"][x] = d["regole"].get(x, 0) + 1
         if r is not None:
@@ -283,8 +479,14 @@ def testo(giorni: dict) -> str:
         riga = f"{data}  {d['frasi']} frasi con la voce, in compagnia {d['in_compagnia']}"
         if d["in_compagnia"]:
             riga += (f" (con voci sconosciute {d['sconosciute']}; "
+                     + (f"dalla stanza {d['da_stanza']}; " if d.get("da_stanza") else "")
                      + ", ".join(f"{k} {v}" for k, v in d["prove"].items()) + ")")
         righe.append(riga)
+        if d.get("stanza_non_applicata"):
+            righe.append(f"    dalla stanza, non applicata: {d['stanza_non_applicata']} frasi "
+                         f"(in compagnia in più {d['stanza_compagnia']}, con voci sconosciute "
+                         f"in più {d['stanza_sconosciute']}; per un minore o un cancello "
+                         f"{d['stanza_minori']})")
         if d["regole"]:
             righe.append("    regole: " + ", ".join(f"{k} {v}" for k, v in d["regole"].items()))
         if d["giudizi"]:

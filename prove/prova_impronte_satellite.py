@@ -368,7 +368,9 @@ def prova_attivo():
     dopo = {k: (i.n if i.pronta else -len(i.attesa))
             for k, i in reg.users["Carlo"].impronte_satellite.items()}
     verifica("contrari: zona grigia e frasi corte non insegnano", prima == dopo, f"{prima} {dopo}")
-    ciclo.compagnia.osserva = lambda emb, vs, nome: {"voci": 2, "prova": "profilo"}
+    # Dal 18/10 (#147) il ciclo chiede lo stato e il cambio dalla stanza insieme
+    ciclo.compagnia.osserva_con_stanza = lambda emb, vs, nome: ({"voci": 2, "prova": "profilo"},
+                                                                None)
     riconosci(ciclo, sc, frase(carlo=0.70, luca=0.1, tel=0.6, seme=14), 3.0)
     dopo2 = {k: (i.n if i.pronta else -len(i.attesa))
              for k, i in reg.users["Carlo"].impronte_satellite.items()}

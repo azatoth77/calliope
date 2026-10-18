@@ -1580,6 +1580,12 @@ familiare a un'azione E3, la sfida superata anche passando da Brain, la richiest
 voce; contrari: E1 chiesta, lettura, chiamata rifiutata o mandata alla sfida, righe di un'altra
 risposta, misura che si rompe (il tool parte lo stesso).
 
+*18/10 (issue #147):* con `compagnia_da_stanza: attiva` (di serie in ombra, l'accensione la decide
+chi amministra dopo la misura) la compagnia può venire anche dalle voci sentite dalla stanza, e
+con lei la sfida per le azioni senza la voce nella frase, il «sì» breve che non vale, la zona
+grigia ospite per le azioni; la misura E6 qui sopra conterà più «sì brevi con rischio compagnia»
+dovuti alla stanza ([stt-tts](stt-tts.md), sezione del 18/10).
+
 ## La risposta al dato chiesto da un tool è la richiesta (16/10, issue #98, ramo `issue-98-risposta-in-sospeso`)
 
 **Caso vero della DGX del 15/10 sera** (nomi di fantasia). Con la stanza accesa, alle 19:58:28
