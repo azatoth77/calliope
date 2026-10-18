@@ -717,19 +717,28 @@ class Frasi:
         """La rotazione delle persone di casa dal registro dei turni di oggi (`turni-<giorno>.jsonl`
         di `turn_log_dir`): gli stessi `pronte` che legge la misura, così dopo un riavvio nessuno
         riceve la variante appena detta. Niente file nuovo: la scadenza è il giorno (la misura
-        conta per giorno) e il registro ha la sua. Mai le voci senza persona né i turni di livello
-        ospite (conoscenti compresi): la loro rotazione resta in memoria (decisione 0031).
-        Restituisce quante persone; non solleva."""
+        conta per giorno) e il registro ha la sua. Mai le voci senza persona, i turni di livello
+        ospite né quelli di un conoscente: la loro rotazione resta in memoria (decisione 0031).
+        Restituisce quante persone. Non solleva mai (revisione della PR #162): un file troncato,
+        una riga coi tipi sbagliati o un guasto qualunque valgono 0 e una riga nel log."""
+        try:
+            return self._riprendi(cartella, oggi)
+        except Exception as e:  # noqa: BLE001 — la rotazione riparte da capo, come prima
+            print(f"   [FRASI] rotazione non ripresa dai turni: {type(e).__name__}: {e}",
+                  flush=True)
+            return 0
+
+    def _riprendi(self, cartella, oggi) -> int:
         if not cartella:
             return 0
         import json
         from pathlib import Path
         giorno = (oggi or datetime.date.today()).isoformat()
         f = Path(cartella) / f"turni-{giorno}.jsonl"
-        try:
-            righe = f.read_text(encoding="utf-8").splitlines() if f.is_file() else []
-        except OSError:
+        if not f.is_file():
             return 0
+        # Un'ultima riga troncata a metà di una lettera accentata (crollo durante la scrittura)
+        righe = f.read_text(encoding="utf-8", errors="replace").splitlines()
         viste = set()
         with self._lock:
             for riga in righe:
@@ -739,19 +748,24 @@ class Frasi:
                     t = json.loads(riga)
                 except ValueError:
                     continue
-                v = t.get("voce") if isinstance(t, dict) else None
+                if not isinstance(t, dict):
+                    continue
+                v = t.get("voce")
                 pid = v.get("id") if isinstance(v, dict) else None
-                if not pid or t.get("livello") == "ospite":
+                if (not isinstance(pid, str) or not pid or t.get("livello") == "ospite"
+                        or v.get("conoscente")):
                     continue
                 p = self._persona(pid)
                 p["turno"] += 1
                 viste.add(pid)
                 try:
                     ora = datetime.datetime.fromisoformat(str(t.get("inizio"))).timestamp()
-                except ValueError:
+                except (ValueError, OverflowError, OSError):
                     ora = None
-                for x in t.get("pronte") or ():
-                    if isinstance(x, dict) and x.get("id") in CATALOGO:
+                pronte = t.get("pronte")
+                for x in pronte if isinstance(pronte, list) else ():
+                    if (isinstance(x, dict) and isinstance(x.get("id"), str)
+                            and x["id"] in CATALOGO and isinstance(x.get("tono"), str)):
                         self._conta(x, pid, ora)
         return len(viste)
 

@@ -248,7 +248,10 @@ senza parole (ospiti, dal 01/10 nel registro solo numeri) confronta id, tono e v
 - **voci senza persona**: una chiave sola, `ANONIMA`, per tutte (come le raggruppa la misura;
   non per corsia, che la misura non distingue), **solo in memoria**, e **senza forma breve**: chi
   parla adesso può non essere chi ha sentito la frase prima. Una scelta non detta continua a non
-  contare. Nessuna modifica al ciclo: la persona None arrivava già;
+  contare. Nessuna modifica al ciclo: la persona None arrivava già. Effetto in più: ora ruotano
+  anche gli **annunci dei lavori in secondo piano** (`lavori.avviato`, `lavori.in_coda`,
+  `lavori.nessuno`…, scelti da `agenti/servizio.py` fuori dal turno di una persona), che prima
+  dicevano sempre la variante 0 e ora girano sulla stessa chiave anonima;
 - **persone di casa dopo un riavvio**: `Frasi.riprendi` all'avvio (in `main`, subito dopo
   `configura`) rilegge **il registro dei turni di oggi** (`turni-<giorno>.jsonl` di
   `turn_log_dir`) e rifà i conti della rotazione e della forma breve dalle `pronte` (id, tono,
@@ -258,7 +261,13 @@ senza parole (ospiti, dal 01/10 nel registro solo numeri) confronta id, tono e v
   ripetizione che la persona sente davvero;
 - **mai su disco per gli ospiti** (decisione 0031): `riprendi` salta i turni senza `voce.id` e
   quelli di livello ospite (conoscenti compresi), quindi la rotazione anonima riparte da capo a
-  ogni avvio, e `Frasi` non scrive file.
+  ogni avvio, e `Frasi` non scrive file. Si salta anche una riga con `voce.conoscente` vero
+  quando manca `livello` (revisione della PR #162);
+- **mai un guasto all'avvio** (revisione della PR #162): `riprendi` non solleva mai. Il file si
+  legge con `errors="replace"` (un'ultima riga troncata a metà di una lettera accentata), le righe
+  coi tipi sbagliati (`pronte` non lista, `voce.id`, `id` o `tono` non stringhe) si saltano, ogni
+  altro guasto vale 0 con una riga `[FRASI]` nel log; e in `main` la chiamata è anche dentro un
+  `try`.
 
 **Misure.** Sul codice di main la prova nuova dà 18 errori (le due prove della issue comprese:
 due «grazie» di fila da una voce sconosciuta uguali, 3 ripetizioni su 4 nella misura; la variante
@@ -273,5 +282,6 @@ con un ospite possono contare una ripetizione. Da verificare sulla DGX: la lettu
 frasi pronte, sotto 8 ogni 100.
 
 Prove: `prova_frasi_rotazione` (livello 1, con i contrari: niente su disco per una voce
-sconosciuta, turni di ospiti e conoscenti non riletti, turni di ieri, righe rotte, cartella
-assente, id senza tono).
+sconosciuta, turni di ospiti e conoscenti non riletti, anche senza `livello`, turni di ieri,
+righe rotte, UTF-8 troncato, valori del tipo sbagliato, guasto dentro, cartella assente, id senza
+tono, la chiamata protetta in `main`).

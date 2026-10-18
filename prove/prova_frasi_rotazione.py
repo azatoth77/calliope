@@ -192,10 +192,58 @@ riprendi(fs, str(cart4))
 verifica("contrario: un id senza tono (frasi_varianti spento) non fa girare niente",
          fs._persone.get("anna", {}).get("giri"), {})
 
+# Mai sollevare (revisione della PR #162): l'avvio non si ferma per il registro
+def sicura(fn):
+    try:
+        return fn()
+    except Exception as e:  # noqa: BLE001
+        return f"sollevata {type(e).__name__}"
+
+
+G = {"id": "cortesia.grazie", "tono": "normale", "variante": 1, "breve": False}
+cart5 = Path(tempfile.mkdtemp(prefix="calliope-rotazione-"))
+buona = json.dumps(turno(ora, "anna", pronte=[G]), ensure_ascii=False)
+tronca = json.dumps(turno(ora, "anna", pronte=[G], risposta="Ciao, è tutto"),
+                    ensure_ascii=False).encode("utf-8")
+tronca = tronca[:tronca.index("è".encode("utf-8")) + 1]          # metà della «è»
+(cart5 / f"turni-{OGGI.isoformat()}.jsonl").write_bytes(buona.encode("utf-8") + b"\n" + tronca)
+fu = F.Frasi("attivo")
+verifica("contrario: un UTF-8 troncato dentro una lettera accentata non solleva",
+         sicura(lambda: riprendi(fu, str(cart5))), 1)
+verifica("UTF-8 troncato: la riga buona conta lo stesso",
+         sicura(lambda: fu._persone["anna"]["giri"]), {("cortesia.grazie", "normale", False): 1})
+storte = [
+    {"inizio": ora.isoformat(), "voce": {"id": "anna"}, "pronte": "cortesia.grazie"},
+    {"inizio": ora.isoformat(), "voce": {"id": 5}, "pronte": [G]},
+    {"inizio": ora.isoformat(), "voce": {"id": ["anna"]}, "pronte": [G]},
+    {"inizio": ora.isoformat(), "voce": "anna", "pronte": [G]},
+    {"inizio": 12, "voce": {"id": "anna"}, "pronte": [
+        {"id": ["cortesia.grazie"], "tono": "normale"}, {"id": "cortesia.grazie", "tono": 3},
+        {"id": {"x": 1}, "tono": None}, "cortesia.grazie", None]},
+    ["voce", {"id": "anna"}],
+    {"inizio": ora.isoformat(), "voce": {"id": "con-2", "conoscente": True}, "pronte": [G]},
+]
+(cart5 / f"turni-{OGGI.isoformat()}.jsonl").write_text(
+    "\n".join(json.dumps(x) for x in storte) + "\n" + buona + "\n", encoding="utf-8")
+fw = F.Frasi("attivo")
+verifica("contrario: valori del tipo sbagliato (pronte, voce.id, id, tono) non sollevano",
+         sicura(lambda: riprendi(fw, str(cart5))), 1)
+verifica("tipi sbagliati: conta solo la riga buona, i turni di anna sì",
+         sicura(lambda: (fw._persone["anna"]["giri"], fw._persone["anna"]["turno"])),
+         ({("cortesia.grazie", "normale", False): 1}, 3))
+verifica("contrario: un conoscente senza `livello` non si rilegge",
+         sicura(lambda: "con-2" in fw._persone), False)
+fg = F.Frasi("attivo")
+fg._riprendi = lambda *a: 1 / 0
+verifica("contrario: un guasto qualunque dentro vale 0, senza sollevare",
+         sicura(lambda: riprendi(fg, str(cart5))), 0)
+
 # main riprende la rotazione all'avvio, subito dopo la configurazione
 src = (Path(__file__).resolve().parent.parent / "calliope" / "main.py").read_text(encoding="utf-8")
 i, j = src.find("frasi.FRASI.configura(cfg)"), src.find("frasi.FRASI.riprendi(cfg.turn_log_dir)")
 verifica("main: riprende dai turni dopo configura", 0 <= i < j, True)
+verifica("main: la ripresa dentro un try (un guasto non ferma l'avvio)",
+         j > 0 and src.rfind("try:", i, j) > i and "except Exception" in src[j:j + 400], True)
 
 print(f"\n{'Tutto ok' if not errori else f'{errori} errori'}")
 sys.exit(1 if errori else 0)
