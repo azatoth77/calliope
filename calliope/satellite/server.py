@@ -584,6 +584,9 @@ class ServerSatelliti:
         if self._fermato:
             return
         self._fermato = True
+        # Il processo che costruisce il pacchetto dei satelliti (18/10, #146) non resta vivo
+        if self.distributore is not None:
+            self.distributore.ferma()
         c = self._attivo
         if c is not None:
             c.chiudi(1001, "Calliope si spegne")
