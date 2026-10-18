@@ -251,6 +251,14 @@ la misura. Durante un `--completo` in un altro worktree main 0 su 10, il ramo 10
 processi pieni cade ancora (esecuzioni oltre i 60 s, dette nella traccia).
 [agenti-estensioni](../docs/aree/agenti-estensioni.md)
 
+**`prova_agenti`, `prova_sandbox`, `prova_esecuzione`: lo stesso criterio (18/10, #156).** `prova_agenti` aveva gli stessi tetti di 15 s e la stessa sandbox: ora 60 s per esecuzione, il
+lavoro 4 × 60 + 10 s con la traccia, la fine di quel lavoro, lo stream partito al posto delle
+attese fisse di 0,4 s; `prova_sandbox` dava 4 s di tempo massimo anche alle esecuzioni che devono
+finire (ora 60, i 4 s solo dove sono la misura); in `prova_esecuzione` «avvia non aspetta Docker»
+si prova con il thread dell'esecuzione fermo (nessun `docker run` prima del ritorno), e le attese
+di fine sono di 60 s. Le misure nel documento d'area.
+[agenti-estensioni](../docs/aree/agenti-estensioni.md)
+
 **Problemi aperti delle prove** (18/10): con un carico più forte di quello del 17/10 (3 corsie, 16 processi e la macchina condivisa) `prova_satellite` cade circa 1 giro su 2, quasi sempre su «il satellite si ricollega attraverso la «VPN»» (si ricollega, ma oltre i 15 s), su main come sul ramo di #146 ([#155](https://github.com/azatoth77/calliope/issues/155)). *(Storico, 17/10: «TLS: 120 aperture» che cadeva 1 giro su 60: chiuso il 18/10, #146, sopra.)* *(Storico, 15/10: «le attese fisse di
 `prova_satellite`», chiuso il 17/10, sopra.)* *(Storico, 14/10:
 «la caduta rara di `prova_agenti` sul tunnel, da leggere con l'`errore` della diagnosi se torna»:

@@ -34,6 +34,12 @@ Con `--docker` (sulla DGX, con le immagini costruite: calliope motore sandbox co
 tutte; senza Docker esce con 77): Python e C# veri nel container, con le misure (tempo
 d'avvio, compilazione, uscita in diretta, rete assente nel C#, sola lettura, utente non root,
 tempo scaduto); il JavaScript vero acceso, se c'è l'immagine di Node, con le stesse prove.
+
+Tempi (18/10, #156, il criterio di #142): l'attesa che un'esecuzione finisca o che arrivi il
+suo annuncio è larga (ATTESA_S); restano i tetti che misurano (avvia, fermalo, i tempi
+massimi). «avvia non aspetta Docker» si prova con il thread dell'esecuzione tenuto fermo:
+nessun `docker run` prima che avvia torni; i 0,3 s restano la misura della preparazione, con
+una seconda misura se la prima è lenta (sotto carico era caduta il 18/10).
 """
 
 import argparse
@@ -57,6 +63,9 @@ FINTO = [sys.executable, str(Path(__file__).with_name("docker_finto.py"))]
 TMP = Path(tempfile.mkdtemp(prefix="calliope-esecuzione-"))
 # Il docker finto esegue il JavaScript con il Node della macchina delle prove (17/10, #54)
 NODE = shutil.which("node") is not None
+# Un'esecuzione che deve finire, o il suo annuncio (#156; prima 10–20 s): a vuoto un secondo o
+# due con il docker finto, sotto carico di più. Il tetto serve solo a non restare appesi
+ATTESA_S = 60.0
 errori = 0
 T0 = time.perf_counter()
 
@@ -278,12 +287,44 @@ def a_secco():
                              "print('dati:', sys.argv[1:], sys.stdin.read().split())\n"})
     svc.lavori.append(lav)
     reg = Registro()
-    t0 = time.perf_counter()
-    es, frase = esec.avvia(lav, ["3", "5"], on_scheda=reg)
-    dt_avvia = time.perf_counter() - t0
-    verifica("avvia non aspetta Docker", es is not None and dt_avvia < 0.3,
-             f"{dt_avvia * 1000:.0f} ms {frase}")
-    finita = esec.attendi(es, 15)
+
+    def docker_run(lv) -> int:
+        """I `docker run` della cartella di quel lavoro: durante la seconda misura parte
+        l'esecuzione della prima, che non va contata (revisione della PR #166)."""
+        f = TMP / "docker" / "comandi.jsonl"
+        righe = f.read_text(encoding="utf-8").splitlines() if f.is_file() else []
+        cartella = f"{lv.id}-esecuzione-"
+        return sum(json.loads(x)[:1] == ["run"] and cartella in x for x in righe)
+
+    def avvia_tenuta(lv, *a, **k):
+        """avvia con il thread dell'esecuzione tenuto fermo (#156): se avvia aspettasse Docker
+        resterebbe appesa; torna (es, frase, secondi, docker run partiti prima del ritorno).
+        Il thread resta fermo al più 5 s: avvia torna in millisecondi, e se restasse appesa
+        5 s bastano a far cadere la misura dei 0,3 s."""
+        tiene, corri = threading.Event(), esec._corri
+        esec._corri = lambda e: (tiene.wait(5.0), corri(e))
+        try:
+            n0, t0 = docker_run(lv), time.perf_counter()
+            e, fr = esec.avvia(lv, *a, **k)
+            dt, n = time.perf_counter() - t0, docker_run(lv) - n0
+        finally:
+            del esec._corri
+            tiene.set()
+        return e, fr, dt, n
+
+    es, frase, dt_avvia, prima_del_ritorno = avvia_tenuta(lav, ["3", "5"], on_scheda=reg)
+    if es is not None and dt_avvia >= 0.3:
+        # Una seconda misura su un altro programma distingue una preparazione lenta da un
+        # processo fermo un attimo sotto carico (come lavoro_stato in prova_agenti, 14/10)
+        lav0 = LavoroFinto("L0", {"zero.py": "print(0)\n"})
+        es0, _, dt2, n2 = avvia_tenuta(lav0)
+        print(f"   avvia lenta una volta ({dt_avvia * 1000:.0f} ms), di nuovo: {dt2 * 1000:.0f} ms")
+        dt_avvia, prima_del_ritorno = min(dt_avvia, dt2), prima_del_ritorno + n2
+        esec.attendi(es0, ATTESA_S)
+    verifica("avvia non aspetta Docker", es is not None and prima_del_ritorno == 0
+             and dt_avvia < 0.3, f"{dt_avvia * 1000:.0f} ms, docker run prima del ritorno: "
+             f"{prima_del_ritorno} {frase}")
+    finita = esec.attendi(es, ATTESA_S)
     tutte = reg.tutte()
     chiavi = {c.get("chiave") for _, c in tutte}
     verifica("finita e senza annuncio (la risposta l'ha aspettata)",
@@ -320,7 +361,7 @@ def a_secco():
     sezione("tetti: uscita lunga, tempo, fermalo, errori")
     lav2 = LavoroFinto("L2", {"molto.py": "for i in range(20000):\n    print('riga', i)\n"})
     es2, _ = esec.avvia(lav2, on_scheda=(reg2 := Registro()))
-    esec.attendi(es2, 20)
+    esec.attendi(es2, ATTESA_S)
     fin = reg2.tutte()[-1][1]
     testo = "".join(r["testo"] for r in fin["righe"])
     verifica("uscita oltre il tetto: tagliata, con i caratteri omessi e la coda",
@@ -338,7 +379,7 @@ def a_secco():
     es3, _ = esec.avvia(lav3)
     finita = esec.attendi(es3, 0.2)
     verifica("non finita in tempo: annuncio dopo", not finita and es3.annuncia)
-    item = svc.done.get(timeout=15)
+    item = svc.done.get(timeout=ATTESA_S)
     verifica("tempo scaduto: fermato, annuncio a chi l'ha chiesto",
              es3.stato == "scaduto" and item["tipo"] == "esecuzione" and item["chi"] == "dario-id"
              and item["messaggio"].startswith("Dario, ho fermato il programma dopo"),
@@ -347,13 +388,13 @@ def a_secco():
     lav4 = LavoroFinto("L4", {"lungo.py": "import time\nprint('parto', flush=True)\n"
                               "time.sleep(30)\n"})
     es4, _ = esec.avvia(lav4, on_scheda=(reg4 := Registro()))
-    aspetta(lambda: "parto" in es4.testo(), 10)
+    aspetta(lambda: "parto" in es4.testo(), ATTESA_S)
     t0 = time.perf_counter()
     altri = esec.ferma("bianca-id")
     verifica("fermalo: una familiare non ferma il programma di un altro", not altri)
     fermate = esec.ferma("dario-id")
     dt_ferma = time.perf_counter() - t0
-    esec.attendi(es4, 10)
+    esec.attendi(es4, ATTESA_S)
     verifica("fermalo: subito, con docker kill", fermate == [es4] and es4.stato == "fermato"
              and dt_ferma < 0.3 and es4.fine - es4.inizio < 6,
              f"{dt_ferma * 1000:.0f} ms, durata {es4.fine - es4.inizio:.1f} s")
@@ -361,23 +402,23 @@ def a_secco():
     lav5 = LavoroFinto("L5", {"rotto.py": "import sys\nprint('calcolo…')\n"
                               "print('divisione per zero', file=sys.stderr)\nsys.exit(3)\n"})
     es5, _ = esec.avvia(lav5)
-    esec.attendi(es5, 10)
+    esec.attendi(es5, ATTESA_S)
     fr = esec.frase(es5)
     verifica("errore: il codice d'uscita e l'ultima riga dello stderr",
              es5.stato == "errore" and "codice 3" in fr and "divisione per zero" in fr, fr)
     lav6 = LavoroFinto("L6", {"Program.cs": "// FINTO_ERRORE_COMPILAZIONE\n"})
     es6, _ = esec.avvia(lav6)
-    esec.attendi(es6, 10)
+    esec.attendi(es6, ATTESA_S)
     fr = esec.frase(es6)
     verifica("C# che non si compila: lo dice con l'errore", es6.stato == "errore"
              and fr.startswith("Il programma non si compila") and "CS1002" in fr, fr)
     lav7 = LavoroFinto("L7", {"Program.cs": CS_ARGS})
     es7, _ = esec.avvia(lav7, ["7", "8"])
-    esec.attendi(es7, 10)
+    esec.attendi(es7, ATTESA_S)
     verifica("C#: eseguito con i dati", es7.stato == "fatto" and "argomenti: 7 8" in es7.testo(),
              es7.testo()[-100:])
     es8, frase = esec.avvia(lav7) if not esec.in_corso() else (None, "")
-    esec.attendi(es8, 10)
+    esec.attendi(es8, ATTESA_S)
     verifica("una seconda esecuzione ha il suo numero", es8 and es8.id == "L7-2", es8 and es8.id)
     svc_no = ServizioFinto(cfg_base(), iso, isos_senza)
     es9, frase = Esecuzioni(svc_no, log=lambda *_: None).avvia(LavoroFinto("L9", {"P.cs": CS_ARGS}))
@@ -470,7 +511,10 @@ def tool_e_annulla(iso, isos, js=False):
         def annulla(self, persona=None, tutti_di_tutti=False, quale="ultimo"):
             return {"ok": False, "frase": "Non ho lavori in corso da fermare."}
 
-    cfg = cfg_base(agenti_esecuzione_attesa_s=3.0)
+    # Quanto la risposta aspetta il programma prima di «lo sto eseguendo» (#156: prima 3 s, che
+    # sotto carico il docker finto sforava, e la risposta diceva «lo sto eseguendo» invece
+    # dell'esito). Un programma corto torna appena finisce; la misura è il caso lungo, 0,3 s
+    cfg = cfg_base(agenti_esecuzione_attesa_s=ATTESA_S)
     svc = SvcConLavori(cfg, iso, isos)
     svc.esecuzioni = Esecuzioni(svc, log=lambda *_: None)
     hub = Hub()
@@ -523,7 +567,7 @@ def tool_e_annulla(iso, isos, js=False):
              and out["risposta_finale"] == "Ho fermato il programma." and dt < 1.5,
              f"{out.get('risposta_finale')} {dt * 1000:.0f} ms")
     try:
-        item = svc.done.get(timeout=10)
+        item = svc.done.get(timeout=ATTESA_S)
     except queue.Empty:
         item = None
     verifica("fermato: l'annuncio lo dice", item and "ho fermato il programma" in
@@ -537,7 +581,7 @@ def tool_e_annulla(iso, isos, js=False):
     if js:
         # 17/10, #54: un programma JavaScript, «eseguilo con 3 e 5»
         svc.lavori.append(LavoroFinto("L22", {"conti.js": JS_CONTI}))
-        cfg.agenti_esecuzione_attesa_s = 5.0
+        cfg.agenti_esecuzione_attesa_s = ATTESA_S
         out, _ = tool("programma_esegui", {"dati": "3 e 5"}, "Dario", "amministra")
         verifica("JavaScript: «eseguilo con 3 e 5» su conti.js, la risposta con l'esito",
                  out.get("ok") and "«somma 8»" in out["risposta_finale"],
@@ -679,7 +723,7 @@ def javascript_a_secco(iso, img_py, img_cs):
         reg = Registro()
         es, frase = esec.avvia(lav, ["3", "5"], on_scheda=reg)
         if es:
-            esec.attendi(es, 15)
+            esec.attendi(es, ATTESA_S)
         fin = reg.tutte()[-1][1] if reg.tutte() else {}
         testo = "".join(r["testo"] for r in fin.get("righe") or [])
         verifica("JS: sulla scheda, con i dati come argomenti e stdin, finito",
@@ -690,7 +734,7 @@ def javascript_a_secco(iso, img_py, img_cs):
         lav = LavoroFinto("JL2", {"infinito.js": "setInterval(() => {}, 1000);\n"})
         es, _ = esec.avvia(lav)
         if es:
-            esec.attendi(es, 15)
+            esec.attendi(es, ATTESA_S)
         verifica("JS: tempo scaduto, fermato", es is not None and es.stato == "scaduto",
                  es and es.stato)
         svc.cfg.agenti_dimostrazione_s = 8.0

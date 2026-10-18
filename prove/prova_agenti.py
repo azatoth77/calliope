@@ -25,9 +25,20 @@ Niente DGX, niente ssh vero, niente Ollama vero:
 - annuncio (niente codice a voce) e scheda personale con il codice intero;
 - capacità «agenti» e `python -m calliope.agenti --prova` in un sottoprocesso.
 Tutto in cartelle temporanee: non legge dgx.yaml né calliope.locale.yaml.
+
+Tempi (18/10, #156, lo stesso criterio di `prova_agenti_openai` in #142 e di `prova_satellite`
+in #5): un'attesa di un evento (il lavoro finito, un'esecuzione nella sandbox, lo stream
+partito, il tunnel riaperto, il comando --prova) aspetta l'evento con un tetto largo e, se
+scade, stampa la traccia; restano stretti i tetti che misurano una cosa che deve essere veloce
+(SUBITO_S, lo stream chiuso dall'annullo e dall'arbitro, il tempo massimo della sandbox e del
+tunnel). Il lavoro di codice esegue i test quattro volte (esegui_test, due alla consegna, uno
+alla fine) e su Windows la sandbox «processo» gira sotto il normale: con la CPU piena di
+processi a priorità normale (le altre prove di un `--completo`) un Python lì dentro parte in
+secondi o minuti invece di 0,2–0,4 s.
 """
 
 import json
+import queue
 import socket
 import subprocess
 import tempfile
@@ -38,6 +49,7 @@ from pathlib import Path
 from calliope import capacita
 from calliope.contesto import finestra
 from calliope.agenti import Lavori, carica
+from calliope.agenti import sandbox as sandbox_mod
 from calliope.agenti.ciclo import per_la_voce
 from calliope.agenti.impostazioni import ConfigAgentiNonValida, ssh_eseguibile, stesso_ollama
 from calliope.agenti.remoto import ClienteOllama
@@ -61,6 +73,34 @@ errori = 0
 # prove insieme: «la delega risponde subito  50.5 ms», dove c'è anche l'avvio di un thread)
 SUBITO_S = 0.15
 LOG: list[str] = []
+# Attese di un evento (#156): larghe, perché sotto carico la sandbox a bassa priorità rallenta
+# di minuti e non è ciò che la prova guarda. Il tetto serve solo a non restare appesi: il
+# runner ferma comunque una prova oltre i 300 s
+# Ogni esecuzione nella sandbox (prima 15 s): a vuoto 0,2–0,4 s, durante un `--completo` fino
+# a 27 s misurati il 18/10 in prova_agenti_openai (#142)
+ESECUZIONE_S = 60.0
+# Un lavoro finito (prima 15 s): il codice esegue i test quattro volte, e se una sfora il tetto
+# qui sopra il lavoro finisce con «il test non passa» e la traccia, non con un'attesa scaduta
+ATTESA_LAVORO_S = 4 * ESECUZIONE_S + 10
+ATTESA_SENZA_SANDBOX_S = 60.0   # un lavoro che non esegue niente (errori, testo, documento)
+ATTESA_COMANDO_S = 120.0        # python -m calliope.agenti --prova (prima 60)
+# Le esecuzioni dei test nella sandbox, con la durata: la traccia se un lavoro sfora
+ESECUZIONI: list[str] = []
+_test_originale = sandbox_mod.Sandbox.test
+
+
+def _test_misurato(self, *a, **k):
+    t = time.perf_counter()
+    try:
+        r = _test_originale(self, *a, **k)
+    except Exception as e:
+        ESECUZIONI.append(f"{time.perf_counter() - t:.1f} s: {type(e).__name__}")
+        raise
+    ESECUZIONI.append(f"{time.perf_counter() - t:.1f} s, passano: {r.get('passano')}")
+    return r
+
+
+sandbox_mod.Sandbox.test = _test_misurato
 
 
 T0 = time.perf_counter()
@@ -74,14 +114,6 @@ def verifica(nome, ok, dettaglio=""):
     global errori
     errori += not ok
     print(f"{'ok ' if ok else 'ERR'} {nome}" + (f"  {dettaglio}" if dettaglio else ""), flush=True)
-
-
-def porta_libera() -> int:
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    p = s.getsockname()[1]
-    s.close()
-    return p
 
 
 def porta_tunnel() -> int:
@@ -151,7 +183,7 @@ def cfg_base(fake_url=None, **kw) -> Config:
     cfg.agenti_sandbox_motore = "processo"
     cfg.agenti_modelli = str(TMP / "modelli")
     cfg.llm_native_url = "http://127.0.0.1:9"     # la voce altrove: niente contesa
-    cfg.agenti_esecuzione_s = 15.0
+    cfg.agenti_esecuzione_s = ESECUZIONE_S
     for k, v in kw.items():
         setattr(cfg, k, v)
     return cfg
@@ -161,12 +193,42 @@ def servizio(cfg, **kw) -> Lavori:
     return Lavori(cfg, carica(cfg), log=LOG.append, formati=FORMATI, **kw)
 
 
-def fine(svc, s=15.0):
+def traccia() -> str:
+    """Le esecuzioni della sandbox e le ultime righe del servizio (per un lavoro che sfora)."""
+    return (f"esecuzioni della sandbox: {ESECUZIONI or 'nessuna'}; ultime righe: "
+            + " | ".join(LOG[-6:]))
+
+
+def avvia(svc, lav):
+    """Avvia il lavoro con le esecuzioni della sandbox azzerate (la traccia è la sua)."""
+    ESECUZIONI.clear()
+    return svc.avvia(lav)
+
+
+def fine(svc, lav, s=ATTESA_LAVORO_S):
+    """La fine di quel lavoro. Quella di un lavoro precedente che ha sforato si scarta, detta:
+    prima arrivava al controllo del lavoro dopo e gli errori andavano a cascata (#142, #156)."""
+    t = time.perf_counter()
+    while (resta := s - (time.perf_counter() - t)) > 0:
+        try:
+            item = svc.done.get(timeout=resta)
+        except queue.Empty:
+            break
+        if item.get("id") == lav.id:
+            return item
+        print(f"    scartata la fine di un altro lavoro ({item.get('id')}, {item.get('stato')})",
+              flush=True)
+    print(f"    il lavoro {lav.id} non è finito in {time.perf_counter() - t:.0f} s; "
+          f"{traccia()}", flush=True)
+    return None
+
+
+def svuota(svc, s=3.0):
+    """Toglie dalla coda l'annuncio di un lavoro annullato, se arriva (nessuna verifica)."""
     try:
-        import queue
-        return svc.done.get(timeout=s)
+        svc.done.get(timeout=s)
     except queue.Empty:
-        return None
+        pass
 
 
 def call(name, args=None):
@@ -254,7 +316,7 @@ verifica("comando: -N -L 127.0.0.1:LP:127.0.0.1:11434, BatchMode, ExitOnForwardF
          and "ExitOnForwardFailure=yes" in argv and "ServerAliveInterval=15" in argv
          and argv[-2:] == ["--", "dgx-finto"] and "ForwardAgent=no" in argv, " ".join(argv))
 t.chiudi()
-verifica("chiuso: porta libera (job object terminato)", aspetta(lambda: not porta_in_uso(LP), 3))
+verifica("chiuso: porta libera (job object terminato)", aspetta(lambda: not porta_in_uso(LP), 10))
 for modo, attesa in (("chiave", "chiave"), ("vpn", "vpn"), ("nome", "nome"),
                      ("host", "host_sconosciuto"), ("porta", "porta_locale")):
     t, code, dt = tunnel_prova(modo)
@@ -284,7 +346,7 @@ code = t.assicura()
 time.sleep(1.2)
 os.environ["SSH_FINTO_MODO"] = "ok"
 verifica("il tunnel cade e si riapre da solo", code == "ok" and aspetta(
-    lambda: t.codice == "ok" and t.tentativi >= 2 and t.vivo(), 8), f"{t.codice} {t.tentativi}")
+    lambda: t.codice == "ok" and t.tentativi >= 2 and t.vivo(), 30), f"{t.codice} {t.tentativi}")
 t.chiudi()
 verifica("messaggi del tunnel senza utente né indirizzo",
          not any(ssh_finto.UTENTE in m or ssh_finto.HOST in m for m in messaggi), str(messaggi))
@@ -292,9 +354,11 @@ verifica("messaggi del tunnel senza utente né indirizzo",
 # ═══════════════════════════ 3. sandbox ═══════════════════════════
 sezione("sandbox")
 # 15 s: con due runner insieme un attacco da 3 s di tempo massimo finiva a volte senza
-# uscita (Python non era ancora partito) e la verifica cadeva su un IndexError (06/10). Il
-# tempo massimo si prova più sotto con 3 s
-sb = Sandbox(TMP / "sb", tempo_s=15, memoria_mb=512)
+# uscita (Python non era ancora partito) e la verifica cadeva su un IndexError (06/10). Dal
+# 18/10 (#156) ESECUZIONE_S: la sandbox gira sotto il normale e durante un `--completo` un
+# Python lì dentro può partire dopo decine di secondi. Il tempo massimo, che è la misura, si
+# prova più sotto con 3 s
+sb = Sandbox(TMP / "sb", tempo_s=ESECUZIONE_S, memoria_mb=512)
 sb.scrivi("ciao.py", "print('ciao', 2 + 2)\n")
 r = sb.esegui("ciao.py")
 verifica("esegue un file della cartella", r["codice_uscita"] == 0 and "ciao 4" in r["uscita"])
@@ -339,7 +403,7 @@ sb.scrivi("ciclo.py", "while True:\n    pass\n")
 t0 = time.perf_counter()
 sb.tempo_s = 3.0
 r = sb.esegui("ciclo.py")
-sb.tempo_s = 15.0
+sb.tempo_s = ESECUZIONE_S
 verifica("tempo massimo: processo fermato", r["scaduto"] and time.perf_counter() - t0 < 8,
          f"{time.perf_counter() - t0:.1f}s")
 sb.scrivi("memoria.py", "x = bytearray(3_000_000_000)\n")
@@ -382,7 +446,7 @@ if sys.platform == "win32":
                               "except OSError as e:\n print('NEGATO', e.winerror)\n"],
                              job, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                              creationflags=winjob.CREATE_NO_WINDOW)
-    out = p.communicate(timeout=20)[0].decode(errors="replace")
+    out = p.communicate(timeout=ESECUZIONE_S)[0].decode(errors="replace")
     job.close()
     verifica("job object da solo (senza audit hook): un secondo processo non parte",
              "NEGATO" in out and "PARTITO" not in out, out.strip())
@@ -439,13 +503,16 @@ fake.richieste.clear()
 lav = svc.nuovo("codice", "Scrivi una funzione Python che somma due numeri, con un test",
                 "dario-id", "Dario", "amministra")
 lav.on_scheda = lambda card: hub.invia(card, "Dario")
+ESECUZIONI.clear()   # prima di avviare: il lavoro può eseguire i test subito
 t0 = time.perf_counter()
 frase = svc.avvia(lav)
 dt = time.perf_counter() - t0
-item = fine(svc)
+item = fine(svc, lav)
+# Sempre, per misurare (#156): quanto ha preso ogni esecuzione dei test nella sandbox
+print(f"    nota: esecuzioni della sandbox del lavoro di codice: {ESECUZIONI}", flush=True)
 verifica("avvia non aspetta niente", dt < SUBITO_S, f"{dt * 1000:.1f} ms")
 verifica("lavoro di codice finito, annunciato e on_done chiamato",
-         item is not None and item["stato"] == "fatto" and ev.is_set(), str(item))
+         item is not None and item["stato"] == "fatto" and ev.is_set(), f"{item}; {traccia()}")
 msg = (item or {}).get("messaggio", "")
 verifica("annuncio breve, con il test detto dal programma e senza codice",
          msg.startswith("Dario, ho finito «") and "Il test passa." in msg and "`" not in msg
@@ -478,8 +545,8 @@ fake.copione = [{"content": "```json\n{\"name\": \"scrivi_file\", \"arguments\":
                             "\"ciao.py\", \"contenuto\": \"print('ciao')\\n\"}}\n```"},
                 {"tool_calls": [call("consegna", {"riassunto": "Fatto.", "esito": "fatto"})]}]
 lav = svc.nuovo("codice", "Scrivi un programma che saluta", "dario-id", "Dario")
-svc.avvia(lav)
-item = fine(svc)
+avvia(svc, lav)
+item = fine(svc, lav)
 verifica("chiamata scritta come testo eseguita lo stesso", item and item["stato"] == "fatto"
          and (Path(item["cartella"]) / "ciao.py").is_file() and "Non ci sono test" in
          item["messaggio"], str(item and item["messaggio"]))
@@ -494,8 +561,8 @@ fake.copione = [{"tool_calls": [call("scrivi_file", {
     "        self.assertEqual(1, 2)\n"})]}] + [{"tool_calls": [call("elenca_file")]}
                                              for _ in range(6)]
 lav = svc.nuovo("codice", "Un lavoro che non finisce mai", "dario-id", "Dario")
-svc.avvia(lav)
-item = fine(svc)
+avvia(svc, lav)
+item = fine(svc, lav)
 verifica("tetto dei passi: fermato e detto", item and item["esito"] == "limite"
          and "ho fermato" in item["messaggio"] and lav.passi == 3, str(item and item["messaggio"]))
 # 06/10: vicino al tetto l'agente riceve una volta l'avviso di chiudere; fermato, l'annuncio
@@ -531,8 +598,8 @@ fake.copione = [{"tool_calls": [call("consegna", {
 fake.richieste.clear()
 lav = svc.nuovo("codice", "Scrivi lo script rimborso.py che legge viaggi.csv e stampa il "
                 "rimborso con la tariffa al chilometro che usa la mia azienda", "dario-id", "Dario")
-svc.avvia(lav)
-item = fine(svc)
+avvia(svc, lav)
+item = fine(svc, lav)
 _sis = fake.richieste[0]["messages"][0]["content"] if fake.richieste else ""
 verifica("prompt del codice: i dati della persona si chiedono, mai un valore tipico",
          "della sua azienda" in _sis and "valore tipico" in _sis and "PRIMA di scrivere il codice"
@@ -542,7 +609,7 @@ verifica("dato della persona chiesto come prima mossa: lavoro in attesa, nessun 
          and not list(Path(lav.risultato.get("cartella") or TMP / "nessuna").glob("*.py")),
          str(item and item.get("messaggio")))
 svc.annulla("dario-id")
-fine(svc, 3.0)
+svuota(svc)
 
 # Consegna con i test che falliscono (verifica sulla DGX del 04/10: accettata, poi «1 test su
 # 4 non passa»): il programma rifà i test e la rimanda all'agente con l'uscita, al più 2
@@ -558,8 +625,8 @@ CONSEGNA = {"tool_calls": [call("consegna", {"riassunto": "Fatto.", "esito": "fa
 fake.copione = [dict(SBAGLIATA), dict(TEST_D), dict(CONSEGNA), dict(GIUSTA), dict(CONSEGNA)]
 fake.richieste.clear()
 lav = svc.nuovo("codice", "Scrivi la funzione doppio con un test", "dario-id", "Dario")
-svc.avvia(lav)
-item = fine(svc)
+avvia(svc, lav)
+item = fine(svc, lav)
 _rif = [m for m in fake.richieste[-1]["messages"] if m.get("role") == "tool"
         and "rifiutata" in str(m.get("content"))] if fake.richieste else []
 verifica("consegna con i test che falliscono: rimandata con l'uscita dei test",
@@ -573,8 +640,8 @@ fake.copione = [dict(SBAGLIATA), dict(TEST_D)] + [dict(CONSEGNA) for _ in range(
 fake.richieste.clear()
 lav = svc.nuovo("codice", "Scrivi la funzione doppio con un test, versione testarda",
                 "dario-id", "Dario")
-svc.avvia(lav)
-item = fine(svc)
+avvia(svc, lav)
+item = fine(svc, lav)
 _rif = [m for m in fake.richieste[-1]["messages"] if m.get("role") == "tool"
         and "rifiutata" in str(m.get("content"))] if fake.richieste else []
 verifica("al più 2 rimandi, poi l'annuncio dice che i test non passano",
@@ -586,8 +653,8 @@ fake.copione = [dict(SBAGLIATA), dict(TEST_D), {"content": "Ho finito."},
 fake.richieste.clear()
 lav = svc.nuovo("codice", "Scrivi la funzione doppio con un test, senza consegna",
                 "dario-id", "Dario")
-svc.avvia(lav)
-item = fine(svc)
+avvia(svc, lav)
+item = fine(svc, lav)
 _usr = [m for m in fake.richieste[-1]["messages"] if m.get("role") == "user"
         and "I test non passano" in str(m.get("content"))] if fake.richieste else []
 verifica("finito senza consegna e test rossi: torna all'agente, poi i test passano",
@@ -598,8 +665,8 @@ svc.agente.max_passi = 3
 fake.copione = [dict(SBAGLIATA), dict(TEST_D), dict(CONSEGNA)]
 fake.richieste.clear()
 lav = svc.nuovo("codice", "Scrivi la funzione doppio, pochi passi", "dario-id", "Dario")
-svc.avvia(lav)
-item = fine(svc)
+avvia(svc, lav)
+item = fine(svc, lav)
 verifica("senza passi rimasti la consegna non si rimanda (niente limite raggiunto)",
          item is not None and item["stato"] == "fatto" and "non passa" in item["messaggio"]
          and len(fake.richieste) == 3, str(item and item["messaggio"]))
@@ -621,8 +688,8 @@ verifica("titolo detto: niente estensioni, trattini bassi, parentesi; il resto u
 fake.copione = [dict(GIUSTA), dict(TEST_D), dict(CONSEGNA)]
 lav = svc.nuovo("codice", "Scrivi il modulo doppio_numeri.py con la funzione doppio(x)",
                 "dario-id", "Dario")
-svc.avvia(lav)
-item = fine(svc)
+avvia(svc, lav)
+item = fine(svc, lav)
 _m = (item or {}).get("messaggio", "")
 verifica("annuncio con il titolo detto (la cartella resta col titolo intero)",
          "«modulo doppio numeri con la funzione doppio»" in _m and "_" not in _m
@@ -642,9 +709,17 @@ hub.inviate.clear()
 lav = svc.nuovo("documento", "Prepara una relazione di due pagine sul giardino", "bianca-id",
                 "Bianca", formato="word")
 lav.on_scheda = lambda card: hub.invia(card, "Bianca")
-svc.avvia(lav)
-item = fine(svc)
-docx = list(Path(item["cartella"]).glob("*.docx")) if item else []
+# La fine in ritardo di un lavoro di prima (sotto carico un lavoro di codice sforava il tetto
+# di 15 s e la sua fine arrivava al controllo di quello dopo, #156): fine() aspetta quella del
+# documento e la scarta
+svc.done.put({"id": "L-ritardo", "tipo": "codice", "stato": "fatto", "messaggio": "in ritardo",
+              "cartella": ""})
+avvia(svc, lav)
+item = fine(svc, lav)
+verifica("la fine in ritardo di un altro lavoro non prende il posto del documento",
+         item is not None and item.get("id") == lav.id and item.get("tipo") == "documento",
+         str(item and (item.get("id"), item.get("tipo"))))
+docx = list(Path(item["cartella"]).glob("*.docx")) if item and item.get("cartella") else []
 verifica("documento: file Word nella cartella del lavoro", item and item["stato"] == "fatto"
          and len(docx) == 1, str(item and item["messaggio"]))
 verifica("documento: bozza con thinking, JSON con lo schema e senza thinking",
@@ -680,8 +755,8 @@ fake.copione = [{"content": json.dumps({"condominio": "Le Querce", "data": "3 ot
 fake.richieste.clear()
 lav = svc2.nuovo("documento", "Compila il verbale del condominio Le Querce del 3 ottobre: "
                  "facciata e ascensore", "dario-id", "Dario", modello="verbale")
-svc2.avvia(lav)
-item = fine(svc2)
+avvia(svc2, lav)
+item = fine(svc2, lav)
 verifica("modello completo: documento compilato dal programma",
          item and item["stato"] == "fatto" and list(Path(item["cartella"]).glob("*.docx")),
          str(item and item["messaggio"]))
@@ -693,8 +768,8 @@ fake.copione = [{"content": json.dumps({"condominio": "Le Querce", "data": None,
                                         "note": None})}]
 lav = svc2.nuovo("documento", "Compila il verbale del condominio Le Querce", "dario-id", "Dario",
                  modello="verbale")
-svc2.avvia(lav)
-item = fine(svc2)
+avvia(svc2, lav)
+item = fine(svc2, lav)
 # Dal 03/10 il lavoro aspetta la risposta (stato in_attesa, lavoro_rispondi): vedi
 # prove/prova_agenti_domande.py
 verifica("modello con dati mancanti: chiede invece di inventare",
@@ -702,7 +777,7 @@ verifica("modello con dati mancanti: chiede invece di inventare",
          and "data dell'assemblea" in item["messaggio"]
          and "punti discussi" in item["messaggio"], str(item and item["messaggio"]))
 svc2.annulla("dario-id")
-fine(svc2, 3.0)
+svuota(svc2)
 # 04/10: la data di oggi nel prompt (la data del documento, se non detta, è oggi) e, con un
 # dato solo, «mi serve … Me la dici?» invece di «mi servono: … Me li dici?»
 from calliope.documenti.scrittore import today_text  # noqa: E402
@@ -714,8 +789,8 @@ fake.copione = [{"content": json.dumps({"condominio": "Le Querce", "data": None,
                                         "punti": ["Facciata"], "note": None})}]
 lav = svc2.nuovo("documento", "Compila il verbale del condominio Le Querce: la facciata",
                  "dario-id", "Dario", modello="verbale")
-svc2.avvia(lav)
-item = fine(svc2)
+avvia(svc2, lav)
+item = fine(svc2, lav)
 verifica("modello con un dato solo mancante: «mi serve … Me la dici?»",
          item and item["stato"] == "in_attesa" and "mi serve la data dell'assemblea. Me la dici?"
          in item["messaggio"], str(item and item["messaggio"]))
@@ -728,14 +803,15 @@ verifica("accordo della domanda con un dato solo: la/una, le, i/gli, il/l'/nient
              ("servono", "li"), ("serve", "lo"), ("serve", "lo"), ("serve", "lo"),
              ("serve", "lo")])
 svc2.annulla("dario-id")
-fine(svc2, 3.0)
+svuota(svc2)
 svc2.close()
 
 # Errori dell'Ollama dell'agente
 cfg_m = cfg_base(fake.url, agenti_modello="modello-che-non-ce:1b")
 svc_m = servizio(cfg_m)
-svc_m.avvia(svc_m.nuovo("altro", "Fai un lavoro", "dario-id", "Dario"))
-item = fine(svc_m)
+lav = svc_m.nuovo("altro", "Fai un lavoro", "dario-id", "Dario")
+avvia(svc_m, lav)
+item = fine(svc_m, lav, ATTESA_SENZA_SANDBOX_S)
 verifica("modello mancante sull'agente: «manca … ollama pull …»",
          item and item["stato"] == "errore" and "ollama pull modello-che-non-ce:1b"
          in item["messaggio"], str(item and item["messaggio"]))
@@ -743,10 +819,13 @@ d = capacita.check_agenti(cfg_m, svc_m)
 verifica("capacità: modello mancante → passo con ollama pull", d["stato"] == "mancante"
          and "ollama pull" in d["prossimo_passo"], str(d))
 svc_m.close()
-cfg_g = cfg_base(f"http://127.0.0.1:{porta_libera()}")
+# Una porta fuori dalle effimere: una presa con bind(0) e rilasciata può finire a un altro
+# processo, che risponderebbe al posto dell'Ollama giù (prove/porte.py, #5)
+cfg_g = cfg_base(f"http://127.0.0.1:{porta_tunnel()}")
 svc_g = servizio(cfg_g)
-svc_g.avvia(svc_g.nuovo("altro", "Fai un lavoro", "dario-id", "Dario"))
-item = fine(svc_g, 20)
+lav = svc_g.nuovo("altro", "Fai un lavoro", "dario-id", "Dario")
+avvia(svc_g, lav)
+item = fine(svc_g, lav, ATTESA_SENZA_SANDBOX_S)
 verifica("Ollama dell'agente giù: errore detto", item and item["stato"] == "errore"
          and "non risponde" in item["messaggio"], str(item and item["messaggio"]))
 svc_g.close()
@@ -757,13 +836,15 @@ fake.copione = [{"content": "x" * 300}]
 interrotte = fake.interrotte
 lav = svc.nuovo("altro", "Scrivi un racconto lunghissimo", "dario-id", "Dario")
 svc.avvia(lav)
-aspetta(lambda: lav.stato == "in_corso" and len(fake.richieste) > 0, 5)
-time.sleep(0.4)
+# Lo stream aperto e già a metà (un pezzo ogni 0,25 s): prima un'attesa fissa di 0,4 s, che
+# sotto carico poteva finire prima che lo stream partisse (#156)
+pezzi0 = fake.pezzi_nativi
+in_corso = aspetta(lambda: lav.stato == "in_corso" and fake.pezzi_nativi >= pezzi0 + 2, 20)
 t0 = time.perf_counter()
 res = svc.annulla("dario-id")
 dt = time.perf_counter() - t0
-verifica("annulla risponde subito", res["ok"] and dt < SUBITO_S and "Ho fermato" in res["frase"],
-         f"{dt * 1000:.1f} ms {res['frase']}")
+verifica("annulla risponde subito", in_corso and res["ok"] and dt < SUBITO_S and "Ho fermato" in res["frase"],
+         f"{dt * 1000:.1f} ms {res['frase']}, stream partito: {in_corso}")
 verifica("lavoro annullato in meno di un secondo, stream chiuso, nessun annuncio",
          aspetta(lambda: lav.stato == "annullato", 2) and aspetta(
              lambda: fake.interrotte > interrotte, 3) and svc.done.empty(),
@@ -783,16 +864,18 @@ fake.copione = [{"content": "y" * 200}, {"content": "z" * 50 + "\nRIASSUNTO: Fat
 fake.richieste.clear()
 interrotte = fake.interrotte
 lav = svc_s.nuovo("altro", "Scrivi un testo lungo", "dario-id", "Dario")
+pezzi0 = fake.pezzi_nativi
 svc_s.avvia(lav)
-aspetta(lambda: len(fake.richieste) >= 1, 5)
-time.sleep(0.4)
+# Lo stream partito (un pezzo ogni 0,2 s): prima un'attesa fissa di 0,4 s (#156)
+in_corso = aspetta(lambda: len(fake.richieste) >= 1 and fake.pezzi_nativi >= pezzi0 + 2, 20)
 t0 = time.perf_counter()
 svc_s.arbitro.voce_occupata()
 dt = time.perf_counter() - t0
 # Il criterio è «non aspetta la chiusura dello stream» (un pezzo dura 200 ms): con più prove
 # insieme sul portatile il solo avvio di un thread arrivava a 15–18 ms (03/10); ora la
 # chiusura la fa un thread già pronto dell'arbitro
-verifica("la voce non aspetta: voce_occupata subito", dt < SUBITO_S, f"{dt * 1000:.2f} ms")
+verifica("la voce non aspetta: voce_occupata subito", in_corso and dt < SUBITO_S,
+         f"{dt * 1000:.2f} ms, stream partito: {in_corso}")
 verifica("lo stream dell'agente si chiude subito", aspetta(
     lambda: fake.interrotte > interrotte, 2), f"{fake.interrotte - interrotte}")
 n = len(fake.richieste)
@@ -800,7 +883,7 @@ time.sleep(0.8)
 verifica("mentre la voce è occupata l'agente non manda richieste", len(fake.richieste) == n)
 fake.ritardo_pezzo, fake.pezzi = 0.0, 4
 svc_s.arbitro.voce_libera()
-item = fine(svc_s, 10)
+item = fine(svc_s, lav, ATTESA_SENZA_SANDBOX_S)
 verifica("finita la voce l'agente riparte e finisce", item and item["stato"] == "fatto"
          and lav.cedimenti >= 1, f"{item and item['messaggio']} cedimenti={lav.cedimenti}")
 body = fake.richieste[-1]
@@ -857,13 +940,14 @@ out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script 
 verifica("familiare e codice: solo chi amministra", out.get("ok") is False
          and "amministra" in out["risposta_finale"] and not svc_t.lavori)
 fake.copione = [{"content": "Testo.\nRIASSUNTO: Ho scritto il testo."}]
+ESECUZIONI.clear()   # prima di avviare dal tool: la traccia è quella del lavoro
 out, dt = tool("lavoro_affida", {"tipo": "altro", "compito": "Scrivi un racconto per bambini"},
                "Bianca", "familiare", 3)
 verifica("familiare e lavoro non costoso: parte subito, senza conferma",
          out.get("ok") and "Ci lavoro" in out["risposta_finale"] and "in_sospeso" not in out,
          out.get("risposta_finale"))
 verifica("la delega risponde subito", dt < SUBITO_S, f"{dt * 1000:.1f} ms")
-item = fine(svc_t)
+item = fine(svc_t, svc_t.lavori[-1], ATTESA_SENZA_SANDBOX_S)   # niente sandbox
 verifica("annuncio a Bianca", item and item["messaggio"].startswith("Bianca, ho finito"),
          str(item and item["messaggio"]))
 out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script che rinomina le "
@@ -898,7 +982,9 @@ out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Sì", "proposta": 
               "amministra", 31, how="breve")
 verifica("«sì» nel turno dopo (frase breve): lavoro avviato", out.get("ok") and
          "Ci lavoro" in out["risposta_finale"] and svc_t.attivi(), out["risposta_finale"])
-aspetta(lambda: svc_t.corrente is not None, 3)
+# Un evento (il thread dei lavori che prende il lavoro): prima 3 s, con l'esito ignorato
+verifica("il lavoro confermato è in corso", aspetta(lambda: svc_t.corrente is not None,
+                                                    ATTESA_SENZA_SANDBOX_S))
 out, dt = tool("lavoro_stato", {}, "Dario", "amministra", 32)
 if dt >= SUBITO_S:
     # Sola lettura: una seconda misura distingue l'attesa vera (il lavoro dura ~2 s, la
@@ -916,18 +1002,21 @@ out, _ = tool("lavoro_annulla", {}, "Dario", "amministra", 34)
 verifica("chi l'ha chiesto lo ferma", out.get("ok") and "Ho fermato" in out["risposta_finale"]
          and aspetta(lambda: not svc_t.attivi(), 3))
 fake.ritardo_pezzo, fake.pezzi = 0.0, 4
-aspetta(lambda: svc_t.corrente is None, 3)
+# Un evento (il thread dei lavori che lascia il lavoro annullato): prima 3 s, esito ignorato
+verifica("dopo l'annullo il thread dei lavori è libero", aspetta(
+    lambda: svc_t.corrente is None, ATTESA_SENZA_SANDBOX_S))
 # Conferma implicita: dopo il «sì» il modello richiama lavoro_affida senza conferma
 out, _ = tool("lavoro_affida", {"tipo": "ricerca", "compito": "Fai una ricerca sulla storia di "
                                 "Venezia e scrivi una relazione"}, "Dario", "amministra", 40)
 fake.copione = [{"content": "Venezia.\nRIASSUNTO: Relazione su Venezia pronta."}]
 ctx = ctx_per("Dario", "amministra", 41, "breve", "Sì, procedi.")
+ESECUZIONI.clear()
 out = json.loads(reg.call("lavoro_affida", {"tipo": "ricerca", "compito": "Ricerca sulla storia "
                           "di Venezia e relazione"}, ctx, "amministra"))
 verifica("conferma implicita (stesso tipo, compito simile, turno dopo)",
          out.get("ok") and "Ci lavoro" in out["risposta_finale"]
          and "lavori_conferma_implicita" in ctx.regole, str(ctx.regole))
-item = fine(svc_t)
+item = fine(svc_t, svc_t.lavori[-1], ATTESA_SENZA_SANDBOX_S)   # niente sandbox
 # Dal 07/10 il testo dell'agente è Markdown in risultato.md (PDF e Word a richiesta)
 verifica("ricerca senza biblioteca: testo in risultato.md", item and item["stato"] == "fatto"
          and (Path(item["cartella"]) / "risultato.md").is_file()
@@ -939,12 +1028,13 @@ out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script 
                                 "foto per data"}, "Dario", "amministra", 50)
 fake.copione = [dict(x) for x in CODICE]
 ctx = ctx_per("Dario", "amministra", 51, "breve", "Sì, vai.")
+ESECUZIONI.clear()   # un lavoro di codice con i test: resta il tetto di ATTESA_LAVORO_S
 out = json.loads(reg.call("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script "
                           "Python che rinomina le foto per data"}, ctx, "amministra"))
 verifica("conferma implicita di un programma con il «sì» breve", out.get("ok")
          and "Ci lavoro" in out["risposta_finale"] and "lavori_conferma_implicita" in ctx.regole,
          out.get("risposta_finale", ""))
-fine(svc_t)
+fine(svc_t, svc_t.lavori[-1])
 out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi un programma per i backup"},
               "Dario", "amministra", 60, how="breve")
 # Dal 04/10 chi amministra con una frase che non basta riceve la frase di sfida
@@ -965,8 +1055,9 @@ svc_d = servizio(cfg_d)
 verifica("servizio con il tunnel", svc_d.tunnel is not None and svc_d.imp.url ==
          f"http://127.0.0.1:{LP}")
 reg_d = build_registry(documenti=FORMATI, agenti=True)
-svc_d.avvia(svc_d.nuovo("altro", "Fai un riassunto", "dario-id", "Dario"))
-item = fine(svc_d)
+lav = svc_d.nuovo("altro", "Fai un riassunto", "dario-id", "Dario")
+avvia(svc_d, lav)
+item = fine(svc_d, lav, ATTESA_SENZA_SANDBOX_S)
 verifica("VPN spenta: il lavoro non parte e l'annuncio dice perché, senza host né utente",
          item and item["stato"] == "errore" and "VPN" in item["messaggio"]
          and ssh_finto.HOST not in item["messaggio"], str(item and item["messaggio"]))
@@ -983,7 +1074,8 @@ verifica("delega con l'agente irraggiungibile da poco: rifiuto subito con il mot
 os.environ["SSH_FINTO_MODO"] = "muto"
 svc_d.diagnosi["quando"] -= 100       # diagnosi vecchia: si lascia provare al lavoro
 fake.copione = [{"content": "Ok.\nRIASSUNTO: Fatto."}]
-svc_d.avvia(svc_d.nuovo("altro", "Fai un riassunto", "dario-id", "Dario"))
+lav_muto = svc_d.nuovo("altro", "Fai un riassunto", "dario-id", "Dario")
+avvia(svc_d, lav_muto)
 aspetta(lambda: svc_d.corrente is not None, 2)
 ctx.turno = 60
 t0 = time.perf_counter()
@@ -996,7 +1088,7 @@ verifica("tunnel bloccato nel thread dei lavori: i tool rispondono subito", dt <
 verifica("un lavoro già in corso: il nuovo chiede conferma e dice che va in coda",
          out.get("in_sospeso") and "prima devo finire" in out["risposta_finale"],
          out.get("risposta_finale"))
-item = fine(svc_d, 10)
+item = fine(svc_d, lav_muto, ATTESA_SENZA_SANDBOX_S)
 verifica("ssh muto: errore «la DGX non risponde»", item and item["stato"] == "errore"
          and "non risponde" in item["messaggio"], str(item and item["messaggio"]))
 os.environ["SSH_FINTO_MODO"] = "ok"
@@ -1008,15 +1100,16 @@ d = svc_d.verifica()
 verifica("VPN accesa: il tunnel si apre e l'agente risponde", d["codice"] == "ok"
          and svc_d.tunnel.aperto(), str(d))
 fake.copione = [{"content": "Ok.\nRIASSUNTO: Fatto il riassunto."}]
-svc_d.avvia(svc_d.nuovo("altro", "Fai un riassunto", "dario-id", "Dario"))
-item = fine(svc_d)
+lav = svc_d.nuovo("altro", "Fai un riassunto", "dario-id", "Dario")
+avvia(svc_d, lav)
+item = fine(svc_d, lav, ATTESA_SENZA_SANDBOX_S)
 verifica("lavoro fatto attraverso il tunnel", item and item["stato"] == "fatto",
          str(item and item["messaggio"]))
 cap = capacita.check_agenti(cfg_d, svc_d)
 verifica("capacità attiva con la descrizione (alias, mai l'host)", cap["stato"] == "attiva"
          and "dgx-finto" in cap["motivo"] and ssh_finto.HOST not in json.dumps(cap), cap["motivo"])
 svc_d.close()
-verifica("chiusura: tunnel chiuso, porta libera", aspetta(lambda: not porta_in_uso(LP), 3))
+verifica("chiusura: tunnel chiuso, porta libera", aspetta(lambda: not porta_in_uso(LP), 10))
 
 # ═══════════════════════════ 7. Brain: delega → «Procedo?» → «sì» ═══════════════════════════
 sezione("Brain con una voce finta")
@@ -1051,10 +1144,11 @@ def conferma_dal_sospeso(body):
 voce.copione = [conferma_dal_sospeso]
 fake.copione = [dict(x) for x in CODICE]
 ctx_b.speaker_ctx = SpeakerCtx("Dario", "amministra", "breve")
+ESECUZIONI.clear()   # un lavoro di codice con i test: resta il tetto di ATTESA_LAVORO_S
 risposta = "".join(brain.stream_reply("Sì, vai.", "amministra"))
 verifica("«sì»: il modello vede l'azione in sospeso e il lavoro parte",
          "Ci lavoro" in risposta and "azione_in_sospeso" in brain.rules_fired(), risposta)
-item = fine(svc_b)
+item = fine(svc_b, svc_b.lavori[-1])
 verifica("lavoro finito e annunciato", item and item["stato"] == "fatto",
          str(item and item["messaggio"]))
 brain.record_announcement(item["messaggio"])
@@ -1097,7 +1191,7 @@ def prova_cmd(modo):
     env.pop("CALLIOPE_AGENTI_URL", None)
     r = subprocess.run([sys.executable, "-m", "calliope.agenti", "--prova"], cwd=RADICE, env=env,
                        capture_output=True, text=True, encoding="utf-8", errors="replace",
-                       timeout=60)
+                       timeout=ATTESA_COMANDO_S)
     return r.returncode, r.stdout + r.stderr
 
 
@@ -1105,7 +1199,7 @@ rc, out = prova_cmd("ok")
 verifica("--prova: tunnel, versione, modelli, modello presente, tunnel chiuso", rc == 0
          and "Tutto pronto" in out and "Tunnel chiuso" in out and "BatchMode=yes" in out,
          out[-400:])
-verifica("--prova: porta libera dopo", aspetta(lambda: not porta_in_uso(LP), 3))
+verifica("--prova: porta libera dopo", aspetta(lambda: not porta_in_uso(LP), 10))
 rc, out = prova_cmd("chiave")
 verifica("--prova con la chiave rifiutata: esce con 1 e dice cosa fare, senza host né utente",
          rc == 1 and "ssh-add" in out and ssh_finto.HOST not in out and ssh_finto.UTENTE
