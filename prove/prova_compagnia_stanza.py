@@ -64,9 +64,13 @@ def prova(nome, f):
         verifica(f"{nome}: senza eccezioni", False, f"{type(e).__name__}: {e}")
 
 
-def ciclo_finto(modo="attiva"):
+def ciclo_finto(modo="attiva", minore=False):
+    """Il ciclo di prova_voci_famiglia. Con `minore` Luca è il minore di casa (la tutela vale
+    sempre, 18/10); senza, è un adulto e in casa non ci sono minori."""
     reg, sc, ciclo, regole = VF.ciclo_finto()
     reg.cfg.compagnia_da_stanza = modo
+    if not minore:
+        reg.users["Luca"].nascita, reg.users["Luca"].tutori = None, []
     ciclo.speaker = VoceFinta()
     ciclo.listener = Ascoltatore()
     orol = Orologio()
@@ -186,8 +190,8 @@ def prova_rigida():
     dalla_stanza(ciclo, orol, frase(bianca=0.72, carlo=0.20), 2.5, "Bianca")
     tenuto = dalla_stanza(ciclo, orol, frase(carlo=0.35, bianca=0.10), 3.5)
     st = ciclo.compagnia.stato()
-    verifica("famiglia: Carlo non riconosciuto dalla stanza (0,35 su di sé) non entra: non è "
-             "una voce sconosciuta", tenuto is False and st is not None
+    verifica("famiglia: Carlo non riconosciuto dalla stanza (0,35 su di sé, 0,10 su Bianca) non "
+             "è una voce sconosciuta", tenuto is True and st is not None
              and st.get("sconosciute") is False and st.get("prova") == "due_profili",
              json.dumps(st))
     verifica("…e la finestra senza il nome resta (compagnia di sole voci di casa)",
@@ -207,15 +211,37 @@ def prova_rigida():
     ok = dalla_stanza(ciclo, orol, frase(carlo=0.10, ospite=0.6), 3.5, grigia=True)
     verifica("contrario: un segmento in zona grigia non conta sconosciuto (non entra)",
              ok is False and ciclo._stato_compagnia() is None)
-    # Sotto 0,20 su uno solo dei profili di casa non basta (Bianca a 0,30)
-    ok = dalla_stanza(ciclo, orol, frase(carlo=0.05, bianca=0.30, ospite=0.5), 3.5)
-    verifica("contrario: lontano da Carlo ma a 0,30 da Bianca → può essere Bianca, non entra",
-             ok is False and ciclo._stato_compagnia() is None)
+    # Sotto 0,20 su uno solo dei profili di casa non basta alla prova «profilo» (Bianca a 0,30)
+    ok = dalla_stanza(ciclo, orol, frase(carlo=0.05, bianca=0.30, ospite=0.5), 2.0)
+    verifica("contrario: un segmento lontano da Carlo ma a 0,30 da Bianca → la prova «profilo» "
+             "non vale (può essere Bianca), nessuna compagnia", ok is True
+             and ciclo._stato_compagnia() is None)
     # Il conoscente riconosciuto è sconosciuto anche vicino a un profilo
-    ok = dalla_stanza(ciclo, orol, frase(carlo=0.25, ospite=0.6), 3.5, conoscente=True)
+    reg, sc, ciclo, regole, orol = ciclo_finto()
+    turno(ciclo, sc, orol, carlo(), 2.2)
+    dalla_stanza(ciclo, orol, frase(carlo=0.05, bianca=0.30, ospite=0.5), 2.0, conoscente=True)
     st = ciclo._stato_compagnia() or {}
-    verifica("un conoscente riconosciuto (0030) entra sconosciuto", ok is True
-             and st.get("sconosciute") is True, json.dumps(st))
+    verifica("un conoscente riconosciuto (0030) vale la prova «profilo» anche vicino a Bianca",
+             st.get("sconosciute") is True and st.get("prova") == "profilo", json.dumps(st))
+    # La prova «gruppi» resta quella di sempre: l'amico del 09/10 (0,22–0,33 su Carlo, frasi
+    # lunghe) sentito solo dalla stanza
+    reg, sc, ciclo, regole, orol = ciclo_finto()
+    turno(ciclo, sc, orol, carlo(), 2.2)
+    for s_, d in ((0.22, 6.1), (0.30, 4.9), (0.26, 14.3), (0.33, 8.0)):
+        dalla_stanza(ciclo, orol, frase(carlo=s_, ospite=0.65), d)
+    st = ciclo._stato_compagnia() or {}
+    verifica("l'amico del 09/10 sentito solo dalla stanza (0,22–0,33 su Carlo) → voce "
+             "sconosciuta dai gruppi, come al turno", st.get("sconosciute") is True
+             and st.get("prova") == "gruppi" and ciclo._chiede_nome(), json.dumps(st))
+    # Un segmento lungo vicino a Bianca (non riconosciuta nella finestra) fa un gruppo da solo,
+    # come al turno: la regola rigida riguarda solo la prova «profilo»
+    reg, sc, ciclo, regole, orol = ciclo_finto()
+    turno(ciclo, sc, orol, carlo(), 2.2)
+    dalla_stanza(ciclo, orol, frase(carlo=0.05, bianca=0.30, ospite=0.5), 3.5)
+    st = ciclo._stato_compagnia() or {}
+    verifica("un segmento di 3,5 s a 0,30 da Bianca → gruppo lungo, sconosciuta (gruppi come al "
+             "turno)", st.get("sconosciute") is True and st.get("prova") == "gruppi",
+             json.dumps(st))
     # Solo voci di casa: compagnia sì, sconosciute no
     reg, sc, ciclo, regole, orol = ciclo_finto()
     dalla_stanza(ciclo, orol, frase(bianca=0.72, carlo=0.20), 2.5, "Bianca")
@@ -305,7 +331,7 @@ class CancelliFinti:
 def prova_minori():
     # Luca (minore) riconosciuto dalla stanza, l'ospite pure: con la stanza la finestra si
     # chiuderebbe, e la frase senza il nome di Luca non arriverebbe al guardiano
-    reg, sc, ciclo, regole, orol = ciclo_finto()
+    reg, sc, ciclo, regole, orol = ciclo_finto(minore=True)
     dalla_stanza(ciclo, orol, frase(luca=0.72, carlo=0.20), 2.5, "Luca")
     dalla_stanza(ciclo, orol, ignoto(), 3.4)
     n, how, v, t = turno(ciclo, sc, orol, carlo(), 2.2)
@@ -317,7 +343,7 @@ def prova_minori():
              cs.get("minori") is True and cs.get("sconosciute") is True
              and "compagnia_da_stanza_minori" in regole, json.dumps(cs))
     # Il minore che parla al turno (chi parla)
-    reg, sc, ciclo, regole, orol = ciclo_finto()
+    reg, sc, ciclo, regole, orol = ciclo_finto(minore=True)
     dalla_stanza(ciclo, orol, ignoto(), 3.4)
     turno(ciclo, sc, orol, frase(luca=0.72, carlo=0.20), 2.2)
     verifica("il minore che parla al turno: la finestra resta per la sua risposta",
@@ -332,8 +358,24 @@ def prova_minori():
     ciclo.s.cancelli.aperto = False
     verifica("contrario: cancello chiuso, nessun minore → la finestra si chiude",
              ciclo._chiede_nome() and frase_in_finestra(ciclo, "E domani?") is _FINE)
+    # Il minore lontano dal microfono che la voce non riconosce (terza revisione della PR #161):
+    # Luca a 0,35 sul suo profilo, Carlo a 0,26; un ospite sentito solo dalla stanza
+    for minore in (True, False):
+        reg, sc, ciclo, regole, orol = ciclo_finto(minore=minore)
+        turno(ciclo, sc, orol, carlo(), 2.2)
+        dalla_stanza(ciclo, orol, ignoto(), 3.4)
+        n, how, v, t = turno(ciclo, sc, orol, frase(luca=0.35, carlo=0.26), 2.0)
+        scartata = frase_in_finestra(ciclo, "Mi aiuti? Non sto bene.") is _FINE
+        if minore:
+            verifica("un minore in casa, lontano (0,35 sul suo profilo, non riconosciuto): la sua "
+                     "frase senza il nome non si butta, arriva al cancello 2 e al rilevatore",
+                     n is None and not scartata and not ciclo._chiede_nome()
+                     and "compagnia_da_stanza_minori" in regole, f"{n} {regole}")
+        else:
+            verifica("contrario: la stessa frase in una casa senza minori → si butta (serve il "
+                     "nome)", scartata and ciclo._chiede_nome())
     # Un minore con una voce sconosciuta già al turno: come prima (lo stato del turno vale)
-    reg, sc, ciclo, regole, orol = ciclo_finto()
+    reg, sc, ciclo, regole, orol = ciclo_finto(minore=True)
     turno(ciclo, sc, orol, frase(luca=0.72, carlo=0.20), 2.2)
     turno(ciclo, sc, orol, frase(carlo=0.10, luca=0.05, amico=0.6), 2.2)
     verifica("contrario: la voce sconosciuta al turno col minore → la finestra si chiude come "
@@ -375,26 +417,52 @@ def prova_costo():
     vero = comp._calcola_su
 
     def contato(*a, **k):
-        conta[0] += 1
+        conta[0] += bool(k.get("rigido"))       # il calcolo con la stanza (il turno: sempre)
         return vero(*a, **k)
 
     comp._calcola_su = contato
     for _ in range(20):
         ciclo._stato_compagnia()
         ciclo._chiede_nome()
-    verifica("lo stato tenuto da parte: 40 chiamate senza segmenti nuovi → nessun calcolo (già "
-             "fatto all'arrivo del segmento, nel thread della stanza)", conta[0] == 0,
+    verifica("il calcolo con la stanza tenuto da parte: 40 chiamate senza segmenti nuovi → "
+             "nessun calcolo (già fatto all'arrivo del segmento)", conta[0] == 0,
              str(conta[0]))
     dalla_stanza(ciclo, orol, ignoto(), 2.0, dopo_s=0.5)
     dopo_segmento = conta[0]
     ciclo._stato_compagnia()
     ciclo._stato_compagnia()
-    verifica("un segmento nuovo → si ricalcola una volta, all'arrivo (le due prove, turno e "
-             "stanza); le chiamate dopo lo trovano pronto", dopo_segmento == 2
-             and conta[0] == 2, f"{dopo_segmento} {conta[0]}")
+    verifica("un segmento nuovo → il calcolo con la stanza si rifà una volta, all'arrivo; le "
+             "chiamate dopo lo trovano pronto", dopo_segmento == 1 and conta[0] == 1,
+             f"{dopo_segmento} {conta[0]}")
+    # L'impronta di Carlo che si adatta (registry.adapt assegna un array nuovo): si rifà
+    vp = reg.users["Carlo"].voiceprint
+    reg.users["Carlo"].voiceprint = (vp + 0.05 * VF.ALTRO) / np.linalg.norm(vp + 0.05 * VF.ALTRO)
+    ciclo._stato_compagnia()
+    verifica("l'impronta di casa cambiata (adapt) → il calcolo con la stanza si rifà",
+             conta[0] == 2, str(conta[0]))
     orol.t += 301
-    verifica("una frase uscita dalla finestra → si ricalcola (e torna una voce sola)",
-             ciclo._stato_compagnia() is None and conta[0] > 2, str(conta[0]))
+    verifica("una frase uscita dalla finestra → torna una voce sola",
+             ciclo._stato_compagnia() is None, str(conta[0]))
+    # adapt dopo osserva (terza revisione della PR #161): lo stato del turno si calcola al
+    # momento, come su main. Carlo e una frase di nessuno a 0,22 su di lui: niente; poi l'impronta
+    # di Carlo si adatta e la frase scende sotto 0,20 → su main in compagnia subito
+    for modo in ("ombra", "spenta", "attiva"):
+        reg, sc, ciclo, regole, orol = ciclo_finto(modo)
+        turno(ciclo, sc, orol, carlo(), 2.2)
+        dalla_stanza(ciclo, orol, frase(bianca=0.72, carlo=0.20), 2.0, "Bianca")
+        f = frase(carlo=0.22, amico=0.6)
+        turno(ciclo, sc, orol, f, 2.0)
+        prima = ciclo._stato_compagnia()
+        vp = reg.users["Carlo"].voiceprint - 0.5 * f
+        reg.users["Carlo"].voiceprint = (vp / np.linalg.norm(vp)).astype(np.float32)
+        comp = ciclo.compagnia
+        main = comp._calcola_su(list(comp._frasi))           # lo stato di main, al momento
+        dopo = comp.stato_turno()
+        verifica(f"{modo}: adapt dopo osserva → lo stato del turno è quello di main, subito",
+                 (prima is None or not prima.get("sconosciute")) and main is not None
+                 and dopo == main and (modo == "attiva" or ciclo._stato_compagnia() == main)
+                 and ciclo._chiede_nome(), json.dumps({"prima": prima, "main": main,
+                                                       "dopo": dopo}))
     # Il tempo: 200 segmenti di voci tutte diverse (la TV), lo stato a ogni chiamata
     reg, sc, ciclo, regole, orol = ciclo_finto()
     turno(ciclo, sc, orol, carlo(), 2.2)

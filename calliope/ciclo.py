@@ -443,10 +443,14 @@ class Ciclo:
             return None
 
     def _tutela_minori(self) -> bool:
-        """Un minore qui (riconosciuto dalla voce nella finestra della compagnia, al turno o
-        dalla stanza; chi parla, il minore vicino o incerto) o un cancello aperto su questa
-        corsia (18/10, #147): la stanza non cambia la compagnia."""
-        s, sc = self.s, self.speaker_ctx
+        """Un minore registrato in casa (con `minori_enabled`) o un cancello aperto su questa
+        corsia (18/10, #147, revisioni della PR #161): la stanza non cambia la compagnia, vale
+        lo stato delle frasi del turno come su main. Un minore lontano dal microfono non è
+        riconosciuto dalla voce (0,30–0,40 sul suo profilo): senza questa regola la sua frase
+        senza il nome si butterebbe prima del cancello 2 e del rilevatore. La tutela è larga:
+        vale anche per le protezioni d'identità di chi amministra (la scelta resta a chi
+        amministra quando accende)."""
+        s = self.s
         c = getattr(s, "cancelli", None)
         try:
             if c is not None and c.aperto_su(getattr(self.corsia, "chiave", None)):
@@ -455,15 +459,11 @@ class Ciclo:
             return True
         if not getattr(s.cfg, "minori_enabled", True):
             return False
-        nomi = set()
         try:
-            nomi = set(self.compagnia.nomi())
-        except Exception:  # noqa: BLE001
-            pass
-        nomi |= {n for n in (getattr(sc, "current_speaker", None),
-                             getattr(sc, "minore_vicino", None),
-                             getattr(sc, "minore_incerto", None)) if isinstance(n, str)}
-        return any(minori.e_minore(s.registry.get(n)) for n in nomi if s.registry.get(n))
+            return any(minori.e_minore(p) for p in list(getattr(s.registry, "users",
+                                                                    {}).values()))
+        except Exception:  # noqa: BLE001 — nel dubbio, tutela
+            return True
 
     def _compagnia_attiva(self) -> bool:
         """Gli effetti sull'identità (F1) valgono: `compagnia_enabled: attiva` e più voci qui."""
@@ -2699,8 +2699,8 @@ class Ciclo:
         """La frase nella memoria della corsia (calliope/compagnia.py): lo stato «in compagnia»
         dopo questa frase, la regola `voci_compagnia` e, quando cambia, una riga in console."""
         try:
-            st = self.compagnia.osserva(emb, t.voiced_s, t.nome_voce)
-            cambio = self.compagnia.stato_stanza()
+            # Lo stato e il cambio dalla stanza della stessa memoria (sotto lo stesso lock)
+            st, cambio = self.compagnia.osserva_con_stanza(emb, t.voiced_s, t.nome_voce)
         except Exception as e:  # noqa: BLE001 — la compagnia non ferma la voce
             print(f"   [VOCE] compagnia non calcolata: {type(e).__name__}: {e}", flush=True)
             return None

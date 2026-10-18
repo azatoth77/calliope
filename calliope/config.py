@@ -1865,9 +1865,11 @@ class Config:
     compagnia_pericolo_solo_rivolte: bool = True
     # La compagnia anche dai segmenti della conversazione di stanza (18/10, issue #147): con la
     # stanza accesa i segmenti con un'impronta entrano nella compagnia della corsia del loro
-    # satellite; una voce di nessuno conta sconosciuta solo sotto `compagnia_soglia_profilo` su
-    # tutti i profili di casa, la zona grigia mai, un conoscente sì. Vale solo se cambia l'effetto
-    # (in compagnia, voci sconosciute) e mai con un minore qui o un cancello aperto. «ombra»: niente
+    # satellite; nella prova «profilo» una voce di nessuno conta sconosciuta solo sotto
+    # `compagnia_soglia_profilo` su tutti i profili di casa (i gruppi come sempre), la zona grigia
+    # mai, un conoscente sì. Vale solo se cambia l'effetto (in compagnia, voci sconosciute) e mai
+    # con un minore registrato in casa o un cancello aperto (anche per le protezioni di chi
+    # amministra: in una casa con un minore «attiva» non cambia niente). «ombra»: niente
     # effetti, nel registro dei turni cosa sarebbe cambiato (`voce.compagnia_stanza`, regole
     # `compagnia_da_stanza_ombra` e `compagnia_da_stanza_ombra_nome`, `calliope stato --turni`):
     # la misura dell'attrito, prima di accendere; «attiva»: la finestra senza il nome si chiude,

@@ -34,21 +34,24 @@ due cancelli) valgono con `compagnia_enabled: attiva`; «ombra» registra soltan
 conversazione di stanza accesa i segmenti della stanza sentiti da un satellite entrano nella
 memoria della sua corsia (`osserva_stanza`, dal thread della stanza: l'impronta è quella che la
 stanza ha già calcolato per chi parla, niente CAM++ in più) con il loro istante. Una voce di casa
-riconosciuta sopra soglia entra con il nome; la zona grigia non entra; una voce di nessuno entra
-come sconosciuta **solo se sta sotto `compagnia_soglia_profilo` su tutti i profili di casa**
-(non solo su quelli riconosciuti nella finestra: con la sola famiglia in cucina la prova
-«profilo» di prima dava una voce sconosciuta nel 72–100 % dei casi, simulazione della revisione
-della PR #161); un conoscente riconosciuto (decisione 0030) è sconosciuto per definizione.
+riconosciuta sopra soglia entra con il nome; la zona grigia non entra; le altre entrano senza nome
+(un conoscente riconosciuto col suo segno).
 
-Lo stato del turno si calcola come prima (`stato_turno`); con i segmenti si calcola anche quello
-su tutte, con la regola rigida sopra anche per le frasi del turno di nessuno, e la stanza conta
-**solo se cambia l'effetto** (in compagnia sì/no, voci sconosciute sì/no) e solo verso la
-prudenza: mai via la compagnia né la sconosciuta; il numero di voci o la distanza da soli non
-contano (`stato_stanza`, con `da_stanza`). «attiva»: lo stato che vale (`stato`) è quello con la
-stanza; «ombra»: vale quello del turno, e quello con la stanza va solo nel registro dei turni
-(misura dell'attrito); «spenta»: i segmenti non entrano. Lo stato si tiene da parte e si ricalcola
-solo quando arriva una frase o un segmento o quando una frase esce dalla finestra. Le impronte
-restano solo qui, in memoria (decisione 0031: le voci sconosciute mai su disco).
+Lo stato del turno si calcola come prima, al momento, a ogni chiamata (`stato_turno`): in ombra e
+con la stanza spenta tutto è uguale a main. Con i segmenti si calcola anche lo stato su tutte, con
+la **prova «profilo» rigida**: una frase di nessuno (al turno o dalla stanza) è la prova di una
+voce sconosciuta solo se sta sotto `compagnia_soglia_profilo` su tutti i profili di casa, non solo
+su quelli riconosciuti nella finestra (con la sola famiglia in cucina la prova di prima dava una
+voce sconosciuta nel 72–100 % dei casi, simulazione della revisione della PR #161); il conoscente
+riconosciuto sì. La prova «gruppi» resta quella di sempre: l'amico del 09/10 (0,22–0,33 su chi
+amministra, frasi lunghe) conta anche dalla stanza. La stanza conta **solo se cambia l'effetto**
+(in compagnia sì/no, voci sconosciute sì/no) e solo verso la prudenza: mai via la compagnia né la
+sconosciuta; il numero di voci o la distanza da soli non contano (`stato_stanza`, `da_stanza`).
+«attiva»: lo stato che vale (`stato`) è quello con la stanza; «ombra»: vale quello del turno, e
+quello con la stanza va solo nel registro dei turni (misura dell'attrito); «spenta»: i segmenti non
+entrano. Il calcolo con la stanza si tiene da parte finché non cambiano le frasi, i segmenti o i
+profili di casa (`registry.adapt` assegna un'impronta nuova). Le impronte restano solo qui, in
+memoria (decisione 0031: le voci sconosciute mai su disco).
 
 `riassunto`/`testo`: la sezione di `calliope stato --turni` (solo numeri e regole).
 """
@@ -116,9 +119,8 @@ class Frase:
     emb: np.ndarray
     voce_s: float
     nome: str | None
-    # Il coseno più alto sui profili di casa (18/10, #147; None: da calcolare; -1 un conoscente),
-    # per la regola rigida dello stato con la stanza
-    casa: float | None = None
+    # Un conoscente riconosciuto dalla stanza (18/10, #147): una voce di fuori casa per definizione
+    conoscente: bool = False
 
 
 class Compagnia:
@@ -134,10 +136,11 @@ class Compagnia:
         self._stanza: list[Frase] = []          # i segmenti della stanza (18/10, #147)
         self._lock = threading.Lock()
         self._ultimo: dict | None = None        # l'ultimo stato calcolato (per i cambi)
-        # Lo stato tenuto da parte (18/10, #147): (del turno, cambio dalla stanza), valido finché
-        # non arriva una frase o un segmento e fino all'istante in cui la prima esce dalla finestra
+        # Il calcolo con la stanza tenuto da parte (18/10, #147): (chiave, stato su tutte). La
+        # chiave cambia con le frasi, i segmenti e le impronte di casa; lo stato del turno no, si
+        # calcola sempre al momento come su main
+        self._versione = 0
         self._cache: tuple | None = None
-        self._scade = 0.0
 
     # ── configurazione ──
     def _f(self, nome: str, predefinito: float) -> float:
@@ -166,7 +169,7 @@ class Compagnia:
         if self._stanza:
             self._stanza = [f for f in self._stanza if ora - f.ora <= w][-STANZA_MAX:]
         if len(self._frasi) + len(self._stanza) != n:
-            self._cache = None
+            self._versione += 1
 
     def dimentica(self):
         """Via tutte le impronte (riavvio della corsia, prove)."""
@@ -174,6 +177,7 @@ class Compagnia:
             self._frasi.clear()
             self._stanza.clear()
             self._ultimo = None
+            self._versione += 1
             self._cache = None
 
     def __len__(self):
@@ -190,62 +194,72 @@ class Compagnia:
         with self._lock:
             return {f.nome for f in self._frasi + self._stanza if f.nome}
 
-    def _casa(self, v) -> float | None:
-        """Il coseno più alto di `v` sui profili di casa (tutti, non solo quelli riconosciuti):
-        None senza profili."""
+    def _impronte_casa(self) -> list:
         users = getattr(self.registry, "users", None)
-        vps = ([_unit(getattr(p, "voiceprint", None)) for p in list(users.values())]
+        vps = ([getattr(p, "voiceprint", None) for p in list(users.values())]
                if isinstance(users, dict) else [])
-        return max((float(np.dot(v, x)) for x in vps if x is not None), default=None)
+        return [v for v in vps if v is not None]
+
+    def _chiave_casa(self) -> tuple:
+        """Le impronte di casa come sono adesso (il loro contenuto, non l'oggetto: un array
+        liberato può tornare con lo stesso id): `adapt`, un arruolamento, un nome cambiato o una
+        voce dimenticata cambiano la chiave, e il calcolo con la stanza si rifà."""
+        users = getattr(self.registry, "users", None)
+        if not isinstance(users, dict):
+            return ()
+        out = []
+        for n, p in list(users.items()):
+            vp = getattr(p, "voiceprint", None)
+            out.append((n, None if vp is None else hash(np.asarray(vp).tobytes())))
+        return tuple(out)
 
     def osserva_stanza(self, emb, voce_s: float, nome: str | None,
                        ora: float | None = None, grigia: bool = False,
                        conoscente: bool = False) -> bool:
         """Un segmento della stanza sentito dal satellite di questa corsia (18/10, #147): solo
         in memoria, con il suo istante (`ora`, sullo stesso orologio: monotonic; mai oltre
-        adesso) e il nome della persona di casa riconosciuta dalla voce sopra soglia. Non entra:
-        sotto `speaker_min_voice_s` (l'impronta non decide), la zona grigia (`grigia`), una voce
-        di nessuno a `compagnia_soglia_profilo` o più da un profilo di casa (può essere della
-        famiglia). Un conoscente riconosciuto entra sconosciuto. Il thread della voce non aspetta:
-        lo stato si ricalcola qui, nel thread della stanza, e il turno lo trova pronto. True se
-        tenuto."""
+        adesso) e il nome della persona di casa riconosciuta dalla voce sopra soglia. Non entra
+        sotto `speaker_min_voice_s` (l'impronta non decide) né in zona grigia (`grigia`). Il
+        thread della voce non aspetta: il calcolo con la stanza si rifà qui, e il turno lo trova
+        pronto. True se tenuto."""
         if self.stanza_modo == SPENTA:
             return False
         v = _unit(emb)
         if v is None or grigia or float(voce_s or 0.0) < self._f("speaker_min_voice_s", 1.0):
             return False
-        casa = None
-        if not nome:
-            casa = -1.0 if conoscente else self._casa(v)
-            if casa is not None and casa >= self._f("compagnia_soglia_profilo", 0.20):
-                return False
         adesso = self.orologio()
         quando = adesso if ora is None else min(float(ora), adesso)
         with self._lock:
             if adesso - quando > self.finestra_s:
                 return False
-            self._stanza.append(Frase(quando, v, float(voce_s), nome or None, casa))
-            self._cache = None
+            self._stanza.append(Frase(quando, v, float(voce_s), nome or None,
+                                      bool(conoscente and not nome)))
+            self._versione += 1
             self._pulisci(adesso)
-            # Lo stato nuovo si calcola qui, nel thread della stanza: il turno lo trova pronto
             self._calcola()
         return True
 
     def osserva(self, emb, voce_s: float, nome: str | None) -> dict | None:
         """Una frase detta su questa corsia: la tiene in memoria (se c'è l'impronta) e
         restituisce lo stato (None: una voce sola, o spenta)."""
+        return self.osserva_con_stanza(emb, voce_s, nome)[0]
+
+    def osserva_con_stanza(self, emb, voce_s: float, nome: str | None) -> tuple:
+        """Come `osserva`, e sotto lo stesso lock il cambio dalla stanza (`stato_stanza`): lo
+        stato che vale e il cambio sono della stessa memoria."""
         if not self.acceso:
-            return None
+            return None, None
         v = _unit(emb)
         ora = self.orologio()
         with self._lock:
             self._pulisci(ora)
             if v is not None:
                 self._frasi.append(Frase(ora, v, float(voce_s or 0.0), nome or None))
-                self._cache = None
-            st = self._effettivo(*self._calcola())
+                self._versione += 1
+            base, cambio = self._calcola()
+            st = self._effettivo(base, cambio)
             self._ultimo = st
-            return st
+            return st, cambio
 
     def stato(self) -> dict | None:
         """Lo stato che vale adesso (le frasi uscite dalla finestra non contano più): con
@@ -285,34 +299,32 @@ class Compagnia:
         return _unit(getattr(prof, "voiceprint", None)) if prof is not None else None
 
     def _calcola(self) -> tuple:
-        """(stato del turno, cambio dalla stanza o None), tenuto da parte finché la memoria non
-        cambia (con il lock)."""
-        ora = self.orologio()
-        if self._cache is not None and ora < self._scade:
-            return self._cache
+        """(stato del turno, cambio dalla stanza o None), con il lock. Lo stato del turno sempre
+        al momento (come su main: legge i profili, che `adapt` sposta); quello su tutte, il
+        calcolo lungo, tenuto da parte finché frasi, segmenti e impronte di casa non cambiano."""
         base = self._calcola_su(self._frasi)
-        cambio = None
-        if self._stanza and self.stanza_modo != SPENTA:
+        if not self._stanza or self.stanza_modo == SPENTA:
+            return base, None
+        chiave = (self._versione, self._chiave_casa())
+        if self._cache is None or self._cache[0] != chiave:
             tutte = sorted(self._frasi + self._stanza, key=lambda f: f.ora)
-            cambio = _unisci(base, self._calcola_su(tutte, rigido=True))
-        primo = min((f.ora for f in self._frasi + self._stanza), default=None)
-        self._scade = float("inf") if primo is None else primo + self.finestra_s
-        self._cache = (base, cambio)
-        return self._cache
+            self._cache = (chiave, self._calcola_su(tutte, rigido=True))
+        return base, _unisci(base, self._cache[1])
 
     def _calcola_su(self, frasi: list, rigido: bool = False) -> dict | None:
-        """Le tre prove sulle frasi. `rigido` (lo stato con la stanza, 18/10): una frase di
-        nessuno conta solo se sta sotto `compagnia_soglia_profilo` su tutti i profili di casa
-        (un familiare non riconosciuto non è una voce sconosciuta); le altre restano fuori."""
-        if rigido:
-            soglia = self._f("compagnia_soglia_profilo", 0.20)
-            for f in frasi:
-                if f.nome is None and f.casa is None:
-                    f.casa = self._casa(f.emb)
-            frasi = [f for f in frasi if f.nome is not None or f.casa is None
-                     or f.casa < soglia]
+        """Le tre prove sulle frasi. `rigido` (lo stato con la stanza, 18/10): nella prova
+        «profilo» una frase di nessuno conta solo se sta sotto `compagnia_soglia_profilo` su
+        tutti i profili di casa (un familiare non riconosciuto non è una voce sconosciuta), o se
+        è di un conoscente; i gruppi restano quelli di sempre."""
         if not frasi:
             return None
+        lontane = None
+        if rigido:
+            soglia = self._f("compagnia_soglia_profilo", 0.20)
+            casa = [_unit(x) for x in self._impronte_casa()]
+            casa = [x for x in casa if x is not None]
+            lontane = {id(f) for f in frasi if f.nome is None and (
+                f.conoscente or all(float(np.dot(f.emb, x)) < soglia for x in casa))}
         nomi = list(dict.fromkeys(f.nome for f in frasi if f.nome))
         profili = {n: p for n in nomi if (p := self._profilo(n)) is not None}
         # 1. Contro il profilo di chi è stato riconosciuto: una frase non sua, abbastanza lunga,
@@ -326,6 +338,8 @@ class Compagnia:
                 # prova «due profili», non una voce sconosciuta (in auto Carlo e Luca stanno a
                 # 0,17 tra loro)
                 if f.nome is not None or f.voce_s < min_p:
+                    continue
+                if lontane is not None and id(f) not in lontane:
                     continue
                 c = float(np.dot(f.emb, vp))
                 if c < soglia_p and (dist_p is None or c < dist_p):

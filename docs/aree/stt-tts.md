@@ -1694,40 +1694,47 @@ nome nella finestra che con la stanza attiva non si sarebbe presa passa e scrive
 stanza, non applicata: N frasi (in compagnia in più, con voci sconosciute in più, per un minore
 o un cancello)». **L'accensione la decide chi amministra dopo la misura sulla DGX.**
 
-**La regola della voce sconosciuta per la stanza** (dopo la seconda revisione della PR #161).
-La prova «profilo» di sempre confronta una frase di nessuno con il profilo di ciascuna persona
-riconosciuta nella finestra: con la sola famiglia in cucina un segmento di Carlo non riconosciuto
-(lontano dal microfono) sta quasi sempre sotto 0,20 sul profilo di Luca, un'altra voce, e valeva
-«sconosciuta». La simulazione della revisione (CAM++ vero su audio vero, 3 profili di casa, Carlo
-e Luca in stanza per 5 minuti, segmenti 1–8 s puliti o con riverbero, rumore e μ-law, 40 giri)
-dava con la prima versione del ramo il 72–100 % di «voce sconosciuta» con la famiglia, 2–45 % da
-solo, contro lo 0–2 % del solo turno. Ora, per lo stato con la stanza: una frase di nessuno (al
-turno o dalla stanza) conta solo se sta sotto `compagnia_soglia_profilo` su **tutti** i profili di
-casa (`Compagnia._casa`, regola rigida di `_calcola_su`); la zona grigia della stanza non entra; un
-conoscente riconosciuto è sconosciuto per definizione. Nessuna soglia nuova.
+**La regola della voce sconosciuta per la stanza** (dopo la seconda e la terza revisione della
+PR #161). La prova «profilo» di sempre confronta una frase di nessuno con il profilo di ciascuna
+persona riconosciuta nella finestra: con la sola famiglia in cucina un segmento di Carlo non
+riconosciuto (lontano dal microfono) sta quasi sempre sotto 0,20 sul profilo di Luca, un'altra
+voce, e valeva «sconosciuta». La simulazione della revisione (CAM++ vero su audio vero, 3 profili
+di casa, Carlo e Luca in stanza per 5 minuti, segmenti 1–8 s puliti o con riverbero, rumore e
+μ-law, 40 giri) dava con la prima versione del ramo il 72–100 % di «voce sconosciuta» con la
+famiglia, 2–45 % da solo, contro lo 0–2 % del solo turno. Ora, nello stato con la stanza, **nella
+sola prova «profilo»** (la prova di un segmento solo) una frase di nessuno, al turno o dalla
+stanza, conta solo se sta sotto `compagnia_soglia_profilo` su **tutti** i profili di casa (regola
+rigida di `Compagnia._calcola_su`), o se è di un conoscente riconosciuto. La prova «gruppi» resta
+quella di sempre, così l'amico del 09/10 (0,22–0,33 su chi amministra, frasi da 5 a 14 s: nella
+fascia normale di un estraneo, non una voce «vicina») conta anche se lo sente solo la stanza. La
+zona grigia della stanza non entra. Nessuna soglia nuova. (*Storico, versione del ramo del 18/10
+mattina: la regola rigida buttava i segmenti a 0,20 o più da un profilo di casa prima dei gruppi,
+e l'amico del 09/10 sentito solo dalla stanza non contava: terza revisione, rilievo 4.*)
 
-**La simulazione rifatta con la regola nuova** (lo stesso script della revisione con
+**La simulazione rifatta con la regola corretta** (lo stesso script della revisione con
 `compagnia_da_stanza: attiva` e la zona grigia col suo segno, 40 giri, stesso seme; script fuori
 dal repository, audio fuori da git, solo numeri). Percentuale dei giri con «voce sconosciuta» (il
-nome obbligatorio) alla seconda frase di Carlo; fra parentesi la prima versione del ramo, dalla
-revisione; il solo turno (main) resta 0–2,5 % ovunque:
+nome obbligatorio) alla seconda frase di Carlo; fra parentesi la regola rigida anche sui gruppi
+(versione del 18/10 mattina) e la prima versione del ramo (dalla revisione); il solo turno (main)
+resta 0–2,5 % ovunque:
 
 | scenario | 6 segmenti in 5 min | 15 | 30 |
 |---|---|---|---|
-| famiglia, pulito | 5 % (72) | 2,5 % (82) | 2,5 % (92) |
-| famiglia, vicino (RT60 0,3 s, SNR 20 dB) | 7,5 % (82) | 10 % (97) | 17,5 % (100) |
-| famiglia, medio | 17,5 % | 27,5 % | 50 % (prima 90–100) |
-| famiglia, lontano | 37,5 % | 55 % | 75 % (prima 90–100) |
-| da solo, pulito | 2,5 % (2) | 5 % (5) | 12,5 % (12) |
-| da solo, vicino | 7,5 % (7) | 20 % (22) | 25 % (27) |
-| da solo, medio | 25 % (27) | 27,5 % (27) | 40 % (45) |
-| da solo, lontano | 45 % | 67,5 % | 95 % |
+| famiglia, pulito | 5 % (5; 72) | 2,5 % (2,5; 82) | 2,5 % (2,5; 92) |
+| famiglia, vicino (RT60 0,3 s, SNR 20 dB) | 10 % (7,5; 82) | 10 % (10; 97) | 17,5 % (17,5; 100) |
+| famiglia, medio | 17,5 % (17,5) | 30 % (27,5) | 52,5 % (50; prima 90–100) |
+| famiglia, lontano | 47,5 % (37,5) | 60 % (55) | 77,5 % (75; prima 90–100) |
+| da solo, pulito | 2,5 % (2,5; 2) | 5 % (5; 5) | 12,5 % (12,5; 12) |
+| da solo, vicino | 7,5 % (7,5; 7) | 20 % (20; 22) | 25 % (25; 27) |
+| da solo, medio | 25 % (25; 27) | 27,5 % (27,5; 27) | 40 % (40; 45) |
+| da solo, lontano | 47,5 % (45) | 75 % (67,5) | 95 % (95) |
 
-Con la famiglia in compagnia sì quasi sempre (82–100 %, «due profili»: è vero, ci sono due
-persone, e vale la compagnia senza il nome obbligatorio). Il resto della «voce sconosciuta» viene
-tutto dalla prova «profilo» su segmenti della **stessa persona** lontani dal microfono, sotto
-0,20 su tutti i profili compreso il suo (Carlo lontano: riconosciuto nel 9 % dei segmenti, nessuno
-nell'81 %): la regola nuova non lo tocca, ed è lo stesso caso del «da solo», che non cambia. Le
+Rimettere i gruppi costa poco (al più 10 punti, solo con l'audio lontano: i gruppi decidono in 1–4
+giri su 40). Con la famiglia in compagnia sì quasi sempre (90–100 %, «due profili»: è vero, ci
+sono due persone, e vale la compagnia senza il nome obbligatorio). Il resto della «voce
+sconosciuta» viene quasi tutto dalla prova «profilo» su segmenti **della stessa persona** lontani
+dal microfono, sotto 0,20 su tutti i profili compreso il suo (Carlo lontano: riconosciuto nel 9 %
+dei segmenti, nessuno nell'81 %): la regola non lo tocca, ed è lo stesso caso del «da solo». Le
 registrazioni del portatile fra sessioni diverse rendono i numeri pessimisti (Carlo pulito
 riconosciuto nel 54 % dei segmenti). Con la stanza vicina e pulita l'attrito è basso (2,5–17,5 %);
 con il satellite lontano da chi parla resta alto: per questo resta in ombra, da misurare sulla
@@ -1735,26 +1742,37 @@ DGX. Se la misura lo conferma, il passo dopo è una prova propria per i segmenti
 esempio la voce sconosciuta solo dai gruppi, con due segmenti, e non da un segmento solo), da
 decidere sui numeri veri.
 
-**Solo se cambia l'effetto, e solo verso la prudenza**: lo stato del turno si calcola come prima
-(`stato_turno`); quello con la stanza vale solo se cambia «in compagnia» o «voci sconosciute»
+**Solo se cambia l'effetto, e solo verso la prudenza**: lo stato del turno si calcola come prima,
+al momento, a ogni chiamata (`stato_turno`): in ombra e con la stanza spenta il ramo decide come
+main (confronto a secco della terza revisione, 300 sequenze, 1485 turni: 0 turni diversi in
+`ombra` e in `spenta`; prima della correzione 4, perché lo stato tenuto da parte non vedeva
+`registry.adapt`). Quello con la stanza vale solo se cambia «in compagnia» o «voci sconosciute»
 (`stato_stanza`, `da_stanza`, regola `compagnia_da_stanza`): un cambio del solo numero di voci o
 della distanza non conta, e prova e distanza restano quelle del turno. Mai via la compagnia né la
 sconosciuta del turno: il calcolo su tutte insieme da solo non basterebbe, perché un profilo di
 casa sentito dalla stanza può assorbire nei gruppi la voce di un ospite che le frasi del turno
 contano sconosciuta (caso nella prova). Resta scoperto, come al turno, l'ospite sentito **solo**
-dalla stanza con una voce vicina a un profilo di casa (0,20 o più): non conta, ed è la scelta che
-tiene basso l'attrito. La stanza non tocca `_voce_recente` (niente continuità), il riconoscimento
-né le impronte.
+dalla stanza con una voce vicina a un profilo di casa riconosciuto (sopra `compagnia_soglia_gruppi`
+sul suo profilo, che lo assorbe). La stanza non tocca `_voce_recente` (niente continuità), il
+riconoscimento né le impronte.
 
-**Minori e cancelli** (prima revisione della PR #161): con un minore qui (riconosciuto dalla voce
-nella finestra, al turno o dalla stanza; chi parla, il minore vicino o incerto) o un cancello
-aperto sulla corsia (`Cancelli.aperto_su`), lo stato cambiato dalla stanza non vale e resta
-quello del turno (`Ciclo._tutela_minori`, regola `compagnia_da_stanza_minori`, nel registro
-`compagnia_stanza.minori`): la frase senza il nome del minore e la risposta al cancello 2 arrivano
-al guardiano come prima. E se la compagnia viene solo dalla stanza il giudizio «non rivolta» non
-spegne il segnale di pericolo (`_pericolo_vale`, regola `pericolo_solo_stanza`). Così nella casa
-del caso vero, con il minore riconosciuto in cucina, la stanza non chiude la finestra: lo si
-legge in `calliope stato --turni` («per un minore o un cancello»).
+**Minori e cancelli** (prima e terza revisione della PR #161): con **un minore registrato in
+casa** (`minori_enabled`) o un cancello aperto sulla corsia (`Cancelli.aperto_su`), lo stato
+cambiato dalla stanza non vale e resta quello del turno (`Ciclo._tutela_minori`, regola
+`compagnia_da_stanza_minori`, nel registro `compagnia_stanza.minori`). Il minore lontano dal
+microfono non lo riconosce la voce (0,30–0,40 sul suo profilo): guardare solo i minori
+riconosciuti lasciava buttare la sua frase senza il nome prima del cancello 2 e del rilevatore, e
+la strada più semplice è questa. E se la compagnia viene solo dalla stanza il giudizio «non
+rivolta» non spegne il segnale di pericolo (`_pericolo_vale`, regola `pericolo_solo_stanza`).
+
+**La tutela è larga, e va detto in chiaro**: con un minore in casa vale lo stato del solo turno
+anche per le protezioni d'identità di chi amministra verso gli ospiti (finestra chiusa, niente
+frase breve né «sì» breve, sfida per le azioni). Rispetto a main non toglie niente, ma **nel caso
+del 17/10 (chi amministra, il minore, gli ospiti) `attiva` non cambierebbe niente**: in quella casa
+il caso vero si misura soltanto, in ombra (`calliope stato --turni`, «per un minore o un
+cancello»). L'alternativa (la tutela solo sugli effetti che toccano il minore: lo scarto della
+frase senza il nome e il giudizio «non rivolta») resta possibile; la scelta è di chi amministra
+quando decide l'accensione.
 
 **Gli effetti a valle con `attiva`** (esistevano già per la compagnia del turno: con la stanza
 scattano più spesso). Con una voce sconosciuta: la finestra senza il nome si chiude anche per la
@@ -1767,14 +1785,16 @@ spento, l'impronta non si adatta (`impronta_compagnia`) e le impronte per satell
 (#42: con il telefono in cucina l'apprendimento si fermerebbe quasi del tutto); la voce non si
 conserva. La misura E6 del «sì» breve (`si_breve`) conterebbe molti più «sì brevi con rischio
 compagnia» dovuti alla stanza: da leggere sapendolo. Il cancello 2 è protetto (sopra). La TV con
-parole trascritte entra come voce sconosciuta (sotto 0,20 su tutti): finché non c'è il filtro
+parole trascritte entra come voce sconosciuta (dai gruppi, o sotto 0,20 su tutti): finché non c'è il filtro
 della TV la casa resterebbe in compagnia per tutto il programma e 5 minuti dopo; «abbiamo ospiti»
 (`stanza_pausa`) ferma i segmenti, quindi la compagnia dalla stanza sparisce proprio con gli ospiti
 dichiarati (non peggio di main). Da misurare in ombra con l'attrito, prima di accendere.
 
-**Costo**: lo stato si tiene da parte e si ricalcola solo quando arriva una frase o un segmento o
-quando una frase esce dalla finestra; all'arrivo del segmento lo calcola il thread della stanza,
-il turno lo trova pronto. Al più 80 segmenti per corsia (`STANZA_MAX`): con voci tutte diverse
+**Costo**: lo stato del turno si calcola al momento come su main (poche frasi); il calcolo con la
+stanza si tiene da parte e si rifà solo quando cambiano frasi, segmenti o impronte di casa
+(chiave sul contenuto delle impronte: `adapt` le sposta); all'arrivo del segmento lo fa il
+thread della stanza, il turno lo trova pronto. `osserva` e il cambio dalla stanza sotto lo stesso
+lock (`osserva_con_stanza`: il registro non mescola due memorie). Al più 80 segmenti per corsia (`STANZA_MAX`): con voci tutte diverse
 (la TV) ~6–10 ms nel thread della stanza, 0,01 ms a chiamata nel thread della voce (prima ~40–65
 ms a ogni `stato()` con 200 segmenti, revisione della PR #161).
 
@@ -1788,7 +1808,8 @@ la finestra, con `stato()` dinamico); il giudizio su chi parla è quello veloce 
 corregge a posteriori). Prova a secco `prove/prova_compagnia_stanza.py` (casi e contrari; ogni
 caso principale fallisce su 0bae0a8; i mutanti della revisione presi: senza `min()` sull'istante,
 senza regola rigida, zona grigia dentro, senza tutela, `_pericolo_vale` di prima, `da_stanza` sul
-numero di voci, senza stato tenuto da parte, ombra applicata). **Verifica sulla DGX**, in ombra,
+numero di voci, senza stato tenuto da parte, ombra applicata; dalla terza: lo stato del turno
+tenuto da parte dopo `adapt`, la tutela del solo minore riconosciuto). **Verifica sulla DGX**, in ombra,
 alla prossima serata con ospiti e il telefono in stanza: `calliope stato --turni --giorni 1`, la
 riga «dalla stanza, non applicata» e la regola `compagnia_da_stanza_ombra_nome` (quante frasi
 sarebbero state scartate), confrontate con le serate della sola famiglia.

@@ -1282,12 +1282,15 @@ al cancello 1 diventava un silenzio, con l'avviso non urgente al posto di quello
 `stanza_guardia` in ombra nessuno la ripesca), e il giudizio «non rivolta» che in compagnia toglie
 il segnale di pericolo (`_pericolo_vale`). Correzioni:
 
-- con un **minore qui** (riconosciuto dalla voce nella finestra della compagnia, al turno o dalla
-  stanza; chi parla; il minore vicino o incerto) o un **cancello aperto** sulla corsia
-  (`Cancelli.aperto_su`) lo stato cambiato dalla stanza non vale: resta quello delle frasi del
-  turno, come prima (`Ciclo._tutela_minori`, regola `compagnia_da_stanza_minori`, nel registro
-  `voce.compagnia_stanza.minori`). La frase senza il nome del minore e la risposta al cancello 2
-  arrivano al guardiano;
+- con un **minore registrato in casa** (con `minori_enabled`) o un **cancello aperto** sulla
+  corsia (`Cancelli.aperto_su`) lo stato cambiato dalla stanza non vale: resta quello delle frasi
+  del turno, come su main (`Ciclo._tutela_minori`, regola `compagnia_da_stanza_minori`, nel
+  registro `voce.compagnia_stanza.minori`). La frase senza il nome del minore e la risposta al
+  cancello 2 arrivano al guardiano anche quando la voce non lo riconosce (lontano dal microfono,
+  0,30–0,40 sul suo profilo: la terza revisione ha trovato che guardare solo i minori
+  riconosciuti lasciava buttare quella frase). La tutela è larga: in una casa con un minore vale
+  anche per le protezioni d'identità di chi amministra, e nel caso del 17/10 `attiva` non
+  cambierebbe niente (si misura soltanto, in ombra; la scelta è di chi amministra);
 - se la compagnia viene **solo** dalla stanza, il giudizio «non rivolta» non spegne il segnale
   (regola `pericolo_solo_stanza`), come con una persona sola.
 

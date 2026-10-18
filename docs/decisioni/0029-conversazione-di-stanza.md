@@ -205,6 +205,12 @@ set registrato apposta non c'è ancora.
   dichiarata nel file locale); un comando detto dalla TV letto come riga (la busta e il contatore
   «ESEGUITE con un bersaglio dal dato» devono restare a 0); la latenza dei turni con la coda
   della stanza (`stt_s` invariato è una misura obbligatoria del passo 1).
+- **Compagnia dalla stanza, 18/10** (issue #147, `compagnia_da_stanza`, **di serie in ombra**):
+  i segmenti della stanza entrano nella compagnia della corsia del loro satellite, solo in memoria,
+  e solo verso la prudenza; in ombra nessun effetto, nel registro dei turni cosa sarebbe cambiato
+  (l'attrito). Con un minore in casa o un cancello aperto vale la compagnia del solo turno, anche
+  per il passo 0 qui sopra. Si accende solo dopo la misura sulla DGX, per scelta di chi amministra
+  ([stt-tts](../aree/stt-tts.md), sezione del 18/10).
 
 ## Fonti
 
