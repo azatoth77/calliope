@@ -623,7 +623,21 @@ export async function fumo(file, opzioni = {}) {
 //   g.detti, g.dati                        // le frasi fatte dire a Calliope, i dati salvati
 // Un'eccezione che esce da un gestore durante tocca/comando/avanza fa fallire il test con
 // file:riga, come nella prova di fumo. Un elemento disabilitato non riceve il tocco (come nel
-// browser).
+// browser). Ogni partita comincia nella fase «preparazione»: si esce con «Inizia» (giocatori
+// min = max: il pulsante «N giocatori» non c'è) o con «N giocatori» (min < max); dal 18/10
+// (#174) apriGioco({ inizia: true }) lo fa da sé e il test parte dalla fase d'inizio del gioco
+// (con «giocatori: N» e min < max sceglie N giocatori).
+//   const g = await apriGioco({ seme: 1, inizia: true });
+
+// La via d'uscita dalla preparazione, per i messaggi d'errore (18/10, #174): i comandi attivi
+// dicono quale pulsante c'è
+export function viaDallaPreparazione(attivi) {
+  const quanti = (attivi || []).map(String).filter((c) => /^giocatori_\d+$/.test(c));
+  const n = quanti.map((c) => Number(c.split("_")[1]));
+  const tocca = n.length ? `${n.find((x) => x >= 2) || n[0]} giocatori` : "Inizia";
+  return `: la partita è ancora nella fase «preparazione», da cui comincia sempre; prima delle mosse tocca «${tocca}» (await g.tocca("${tocca}")${quanti.length ? ", o un altro numero di giocatori" : ""}), oppure apri il gioco con apriGioco({ inizia: true }), che parte già dalla fase d'inizio. Se l'ha scritto un tuo test, correggi il test, non il manifesto`;
+}
+
 export async function apriGioco(file, opzioni = {}) {
   const amb = await prepara(file, opzioni);
   const { errori, nodi, radice, lancia, evento, avanza, respira, ascolti } = amb;
@@ -652,6 +666,10 @@ export async function apriGioco(file, opzioni = {}) {
     // Il più interno (il testo di un pulsante è anche quello del suo contenitore)
     return c.filter((n) => !c.some((m) => m !== n && n.contains(m)));
   }
+  // La fase della partita adesso ("" senza la macchina a stati)
+  const faseOra = () => {
+    try { return amb.motore && amb.motore.partita ? amb.motore.partita.istantanea().fase : ""; } catch (e) { return ""; }
+  };
   const DITO = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
   const TOCCO = ["touchstart", "touchend"];
   async function passa(ms) {
@@ -670,7 +688,8 @@ export async function apriGioco(file, opzioni = {}) {
       if (!n) {
         throw new Error(`nessun elemento da toccare con «${cosa}»`
           + (tutti.length ? ` (ce ne sono ${tutti.length})` : "")
-          + `: nel riquadro si legge «${visibile(amb).slice(0, 300)}»`);
+          + `: nel riquadro si legge «${visibile(amb).slice(0, 300)}»`
+          + (faseOra() === "preparazione" ? viaDallaPreparazione(amb.attivi()) : ""));
       }
       if (n.disabled) return g;
       const da = errori.length;
@@ -713,12 +732,16 @@ export async function apriGioco(file, opzioni = {}) {
       const attivi = amb.attivi();
       if (!attivi.includes(String(nome))) {
         // La fase di adesso (14/10 sera, banco delle porte L7 e L10: l'agente credeva che dopo
-        // «2 giocatori» servisse «avanti», riscriveva la macchina e girava a vuoto)
-        let fase = "";
-        try { fase = amb.motore && amb.motore.partita ? amb.motore.partita.istantanea().fase : ""; } catch (e) { fase = ""; }
-        const perche = String(nome) === "avanti" && fase && fase !== "esito"
-          ? ": «avanti» vale solo nella fase «esito», dopo una mossa con un esito; dopo la scelta dei giocatori la partita è già nella fase d'inizio della macchina"
-          : "";
+        // «2 giocatori» servisse «avanti», riscriveva la macchina e girava a vuoto). Dal 18/10
+        // (#174, il tris per due sulla DGX: tre test scritti dall'agente davano per scontato che
+        // la partita cominciasse in «turno», e per un'ora ha cambiato il manifesto invece del
+        // test) nella preparazione l'errore dice anche come se ne esce
+        const fase = faseOra();
+        const perche = fase === "preparazione" && String(nome) !== "avanti"
+          ? viaDallaPreparazione(attivi)
+          : String(nome) === "avanti" && fase && fase !== "esito"
+            ? ": «avanti» vale solo nella fase «esito», dopo una mossa con un esito; dopo la scelta dei giocatori la partita è già nella fase d'inizio della macchina"
+            : "";
         throw new Error(`il comando «${nome}» adesso non è attivo (${fase ? `fase «${fase}», ` : ""}attivi: ${attivi.join(", ") || "nessuno"})${perche}`);
       }
       const da = errori.length;
@@ -772,5 +795,12 @@ export async function apriGioco(file, opzioni = {}) {
       return g;
     },
   }) });
+  // { inizia: true } (18/10, #174): fuori dalla preparazione prima di dare il gioco al test
+  if (opzioni.inizia && amb.motore && faseOra() === "preparazione") {
+    const n = Number(opzioni.giocatori) || 0;
+    const quanti = (opzioni.minimo || 1) < (opzioni.massimo || 1) && n
+      && amb.attivi().includes(`giocatori_${n}`);
+    await g.comando(quanti ? `giocatori_${n}` : "inizia");
+  }
   return g;
 }

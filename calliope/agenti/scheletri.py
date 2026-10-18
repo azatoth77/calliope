@@ -86,7 +86,7 @@ const { test } = require("node:test");
 const assert = require("node:assert");
 test("si apre una porta e poi tocca all'altro", async () => {
   const g = await apriGioco({ seme: 1 });
-  await g.tocca("2 giocatori");
+  await g.tocca("2 giocatori");  // min = max: «Inizia»
   await g.tocca("Porta 1");
   assert.match(g.testo(), /Porta 1 aperta/);
   await g.comando("avanti");
