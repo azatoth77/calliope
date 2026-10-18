@@ -396,7 +396,12 @@ def prova_minori():
              and "pericolo_solo_stanza" in regole and "pericolo_non_rivolta" not in regole)
     turno(ciclo, sc, orol, frase(carlo=0.10, amico=0.6), 2.2)       # l'ospite al turno
     regole.clear()
-    verifica("contrario: compagnia del turno, «non rivolta» → non vale come prima",
+    verifica("contrario: compagnia del turno, «non rivolta» in ombra → vale (#29, 18/10)",
+             ciclo._pericolo_vale(con_giudizio(ciclo, False)) is True
+             and "pericolo_non_rivolta_ombra" in regole and "pericolo_non_rivolta" not in regole)
+    regole.clear()
+    reg.cfg.compagnia_rivolta = "attiva"
+    verifica("contrario: compagnia del turno, «non rivolta» col giudizio attivo → non vale",
              ciclo._pericolo_vale(con_giudizio(ciclo, False)) is False
              and "pericolo_non_rivolta" in regole)
     verifica("contrario: «rivolta» → vale, senza regole nuove",

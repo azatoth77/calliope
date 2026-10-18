@@ -902,7 +902,9 @@ punti, un interruttore ciascuno, accesi di serie:
   `compagnia_anonima_continua`): dettagli in [contesto-conversazione](contesto-conversazione.md).
 - **Rilevatore solo sulle frasi rivolte** (`compagnia_pericolo_solo_rivolte`, regola
   `pericolo_non_rivolta`): dettagli in [minori](minori.md). Il giudizio «rivolta» resta in ombra:
-  qui conta il suo esito, non la sua modalità.
+  qui conta il suo esito, non la sua modalità. *[Storico: dal 18/10 (#29) conta anche la
+  modalità, il «non rivolta» spegne il segnale solo con `compagnia_rivolta: attiva`; sezione del
+  18/10 in fondo.]*
 
 `SpeakerContext.compagnia_sconosciute` dice per la frase se tra le voci ce n'è una che nessun
 profilo riconosce (serve alla conversazione condivisa). Le tre regole sono contate nella sezione
@@ -1813,3 +1815,13 @@ tenuto da parte dopo `adapt`, la tutela del solo minore riconosciuto). **Verific
 alla prossima serata con ospiti e il telefono in stanza: `calliope stato --turni --giorni 1`, la
 riga «dalla stanza, non applicata» e la regola `compagnia_da_stanza_ombra_nome` (quante frasi
 sarebbero state scartate), confrontate con le serate della sola famiglia.
+
+## Il giudizio «rivolta» in ombra e il rilevatore di pericolo (18/10, issue #29, ramo `issue-15-29-decisioni`)
+
+Decisione di chi amministra del 18/10: finché il prompt del giudizio «rivolta a Calliope» non è
+corretto (falsi negativi sulle frasi lunghe che parlano di Calliope in terza persona, rilettura
+del 15/10 sera), un «non rivolta» **in ombra** non spegne più il rilevatore di pericolo. In
+`Ciclo._pericolo_vale` la regola `pericolo_non_rivolta` scatta solo con `compagnia_rivolta:
+attiva`; in ombra il segnale vale e nel registro c'è `pericolo_non_rivolta_ombra` (fra le regole
+della compagnia). Il giudizio in ombra per il resto non cambia (`non_rivolta_ombra`, misura dei
+tempi, nessun silenzio). Dettagli e prove in [minori](minori.md), sezione del 18/10.

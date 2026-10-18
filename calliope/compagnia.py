@@ -416,7 +416,9 @@ REGOLE = ("voci_compagnia", "compagnia_nome", "compagnia_senza_breve",
           # i segmenti della stanza nella compagnia (18/10, #147): applicato, in ombra, fermato
           # per un minore o un cancello aperto, una frase che in ombra sarebbe stata scartata
           "compagnia_da_stanza", "compagnia_da_stanza_ombra", "compagnia_da_stanza_minori",
-          "compagnia_da_stanza_ombra_nome", "pericolo_solo_stanza")
+          "compagnia_da_stanza_ombra_nome", "pericolo_solo_stanza",
+          # il giudizio in ombra non spegne più il segnale di pericolo (18/10, #29)
+          "pericolo_non_rivolta_ombra")
 
 
 def riassunto(turni: list[dict]) -> dict:
