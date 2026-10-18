@@ -10,19 +10,19 @@ area e, in fondo, la roadmap com'era, con le voci fatte segnate. Nessuna data pr
 - **Conversazione di stanza** (decisione [0029](decisioni/0029-conversazione-di-stanza.md)): fatti
   i passi 0–6 del piano (il passo 3, corsia lenta, il 14/10 sera), la tenuta su disco e i conoscenti
   (decisione [0030](decisioni/0030-conoscenti.md)), ognuno dietro il suo interruttore e spento di
-  serie. Sulla DGX sono accesi il contesto, la ricerca, la tenuta, l'ascolto durante la voce, la
-  corsia lenta e i conoscenti; il guardiano e i blocchi della corsia lenta sono in ombra (tabella
-  «Interruttori sulla DGX» di [setup-dgx](aree/setup-dgx.md#interruttori-sulla-dgx)). L'ascolto
-  durante la voce e i conoscenti sono accesi senza un criterio scritto: restano la misura dell'eco
-  al telefono (#37) e quella dei conoscenti (#38), il filtro della TV (#34), la rilettura del
-  guardiano (#36), le voci sconosciute della stanza che non fanno compagnia (#147) e i passi 7–8
-  (voce 3.7-bis).
+  serie; cosa è acceso sulla DGX è nella tabella «Interruttori sulla DGX» di
+  [setup-dgx](aree/setup-dgx.md#interruttori-sulla-dgx). L'ascolto durante la voce e i conoscenti
+  sono accesi sulla DGX senza un criterio scritto: restano la misura dell'eco al telefono (#37) e
+  quella dei conoscenti (#38), il filtro della TV (#34), la rilettura del guardiano (#36), le voci
+  sconosciute della stanza che non fanno compagnia (#147) e i passi 7–8 (voce 3.7-bis).
 - **Latenza**: con la stanza accesa la prima frase mediana è salita a 2,31 s (14/10 sera) e a
   2,58 s il 15/10, con la cache del prefisso persa in 62 turni su 93; la correzione (#95, 16/10) è
   da misurare sulla DGX, il criterio con la stanza è in #41
   ([contesto-conversazione](aree/contesto-conversazione.md)).
 - **Registro degli eventi** ancora in ombra: il criterio di E1 si legge in `calliope stato --turni`
-  dal 18/10, con i turni contati da quando il codice è sulla DGX (voce 2.1, #13).
+  dal 15–16/10 (#11). Lettura del 18/10 sulla DGX (#13): 66 turni col campo dal 16/10, 0 con la
+  proiezione diversa, ne servono 200; i turni interrotti non hanno il campo (#159). Si resta in
+  ombra fino al 22/10 (voce 2.1).
 - Dal 15/10 ogni voce aperta ha la sua issue su GitHub (le epic #85–#91 seguono le sezioni di questa
   coda); qui resta il quadro, con le voci fatte segnate.
 - *Stato del 14/10, storico:*
@@ -32,8 +32,8 @@ area e, in fondo, la roadmap com'era, con le voci fatte segnate. Nessuna data pr
   [0030](decisioni/0030-conoscenti.md)), ognuno dietro il suo interruttore e spento di serie; sulla
   DGX la stanza è accesa col contesto e la ricerca dal 14/10. Restano la corsia lenta (passo 3)
   con il filtro della TV, le accensioni dopo le misure (eco del passo 5, ombra del guardiano) e i
-  passi 7–8 (voce 3.7-bis). *[Storico: il passo 3 è fatto il 14/10 sera; l'ascolto durante la voce
-  e i conoscenti sono accesi sulla DGX dal 14/10 senza aspettare le misure (#37, #38).]*
+  passi 7–8 (voce 3.7-bis). *[Storico fino al 14/10 sera: il passo 3 è fatto quella sera; l'ascolto
+  durante la voce e i conoscenti sono accesi sulla DGX senza aspettare le misure (#37, #38).]*
 - **Registro degli eventi** ancora in ombra: `eventi: attivo` non prima del 18/10 (voce 2.1).
 - *Stato del 12/10, storico:*
 
@@ -58,27 +58,28 @@ Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
 - **Arbitro della memoria**, passo 2 in ombra (voce 0.4); **minori conservati come gli adulti**
   (decisione [0031](decisioni/0031-conservazione-dei-minori.md), voce 0.1).
 - **Giochi**: chi è quale giocatore e «Gira il telefono» (voce 1.4); **agente**: esempi di
-  accettazione per i programmi a riga di comando (voce 1.5, #10) e JavaScript per i programmi,
-  acceso a mano (voce 4.10, #54).
+  accettazione per i programmi a riga di comando (voce 1.5; resta in #10) e JavaScript per i
+  programmi, acceso a mano (voce 4.10, #54).
 - **Dialogo**: il criterio di E1 misurabile in ombra e la guardia dei riletti (voce 2.1, #11), il
   «sì» breve misurato in ombra (voce 2.6), `calliope stato --reti` (voce 2.11).
 - **System 1**: la frase dopo il tool, spenta di serie; la preselezione dei tool misurata e chiusa
   come misura negativa (voce 3.12, #25).
 - **Stanza e voce**: la ritrascrizione a blocchi e le impronte della voce per satellite, in ombra;
   la cache del prefisso che non si perde a ogni turno (#95).
-- **Cassetto** col modello vero (#58).
+- **Cassetto** col modello vero (resta in #58).
 
-### Fatto il 13 e il 14/10 (storico)
+### Fatto il 13 e il 14/10
 
 Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
 
-- **Conversazione di stanza**, passi 0–2 e 4–6 (voce 3.7-bis; il passo 3 il 14/10 sera): in compagnia niente azioni senza il
-  nome; la stanza trascritta in ombra da satellite e telefono, con le presenze e «abbiamo ospiti»;
-  le righe nei dati del turno e nella storia in sola aggiunta; `stanza_cerca` con la ricerca
-  anticipata; il testo su disco per 60 giorni (`stanza_tenuta`); l'ascolto durante la voce col
-  filtro dell'eco e il taglio morbido dei segmenti; il guardiano a posteriori in ombra, che riprende
-  dal disco e giudica col gioco aperto ([contesto-conversazione](aree/contesto-conversazione.md),
-  [stt-tts](aree/stt-tts.md), [minori](aree/minori.md)).
+- **Conversazione di stanza**, passi 0–2 e 4–6 (voce 3.7-bis; il passo 3 il 14/10 sera): in
+  compagnia niente azioni senza il nome; la stanza trascritta in ombra da satellite e telefono, con
+  le presenze e «abbiamo ospiti»; le righe nei dati del turno e nella storia in sola aggiunta;
+  `stanza_cerca` con la ricerca anticipata; il testo su disco per 60 giorni (`stanza_tenuta`);
+  l'ascolto durante la voce col filtro dell'eco e il taglio morbido dei segmenti; il guardiano a
+  posteriori in ombra, che riprende dal disco e giudica col gioco aperto
+  ([contesto-conversazione](aree/contesto-conversazione.md), [stt-tts](aree/stt-tts.md),
+  [minori](aree/minori.md)).
 - **Conoscenti** (decisione [0030](decisioni/0030-conoscenti.md)): voci sconosciute di adulti
   raggruppate, nome dedotto dalla conversazione, proposta sullo schermo di chi amministra, livello
   ospite, promozione a familiare solo da chi amministra ([stt-tts](aree/stt-tts.md)).
@@ -195,7 +196,7 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
 1. ~~**La specifica dai requisiti**~~ *[fatta il 12/10, `calliope/requisiti.py`]*: a ogni modifica
    la specifica si riscrive intera e i requisiti si rifanno da lì, invece di accodare «Con questa
    modifica: …» ([agenti-estensioni](aree/agenti-estensioni.md)). *[Storico: «In corso» fino al
-   18/10.]*
+   12/10.]*
 2. ~~**Voce onesta**~~ *[fatta il 12/10]*: esito vero del collaudo e dell'agente, conteggio per
    tipo, revisione dal testo del tool, meno parole e meno conferme
    ([agenti-estensioni](aree/agenti-estensioni.md)).
@@ -275,10 +276,10 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    i token della stanza riletti con `attivo` sono quelli di `ombra` e la conversazione di gruppo ha
    i nomi ([contesto-conversazione](aree/contesto-conversazione.md)). *Quasi* · dipende da: i dati
    d'ombra sulla DGX.
-2. ~~**«Dimentica» chiude anche la conversazione in corso**~~ *[fatta il 13/10]* (E2). *Pronta* · dipende da: niente
-   (confermato il 12/10). **Fatto il 13/10** (ramo `dimentica-conversazione`): sempre, anche con
-   `eventi: spento`, senza archivio né riassunto, e la domanda e la conferma lo dicono
-   ([contesto-conversazione](aree/contesto-conversazione.md)).
+2. ~~**«Dimentica» chiude anche la conversazione in corso**~~ *[fatta il 13/10]* (E2). *Pronta* ·
+   dipende da: niente (confermato il 12/10). **Fatto il 13/10** (ramo `dimentica-conversazione`):
+   sempre, anche con `eventi: spento`, senza archivio né riassunto, e la domanda e la conferma lo
+   dicono ([contesto-conversazione](aree/contesto-conversazione.md)).
 3. **Passo 4 del registro: le domande come eventi** (E3), con `attivo` già acceso; 2–3 giorni
    (circa 170 domande in 35 moduli). *Quasi* · dipende da: E1.
 4. **Spezzare `Brain._reply`** (E4, era Q14) subito dopo il passo 4, fermando per qualche giorno
@@ -323,9 +324,10 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
 
 1. **Satelliti ESPHome** (decisione [0026](decisioni/0026-satelliti-esphome-senza-home-assistant.md)):
    il Voice PE non c'è ancora (V1): adattatore da provare con un dispositivo finto (#43; nessun
-   modulo ESPHome nel codice al 18/10); la prova vera quando arriva, senza data. «Okay Nabu» va bene solo in ufficio e per la prova, finché non c'è il
-   firmware nostro (V2) ([`ricerche/2026-10-10-wyoming.md`](ricerche/2026-10-10-wyoming.md)).
-   *Pronta* (passi a secco) · dipende da: il dispositivo finto; il dispositivo vero per i passi 3–7.
+   modulo ESPHome nel codice al 18/10); la prova vera quando arriva, senza data. «Okay Nabu» va bene
+   solo in ufficio e per la prova, finché non c'è il firmware nostro (V2)
+   ([`ricerche/2026-10-10-wyoming.md`](ricerche/2026-10-10-wyoming.md)). *Pronta* (passi a secco) ·
+   dipende da: il dispositivo finto; il dispositivo vero per i passi 3–7.
 2. **Frasi pronte meno monotone**, fasi 0–1 (V3): le varianti le scrive un agente, chi amministra
    ne rilegge un campione di 30 prima dell'accensione; obiettivo sotto 8 ripetizioni ogni 100
    ([`ricerche/2026-10-08-frasi-pronte.md`](ricerche/2026-10-08-frasi-pronte.md)). *Pronta* ·
@@ -398,11 +400,11 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    **Resta** (14/10): (a) il **passo 3, corsia lenta**: ritrascrizione, chi parla sull'intero
    scambio, allucinazioni, riassunto progressivo, e il **filtro della TV** a strati (§ 5.2 del
    progetto); *da approfondire* · dipende da: un set di scambi registrati da adulti consenzienti in
-   `privato/` e il posto in memoria nel piano (0.2). *[Storico: il passo 3 è fatto il 14/10 sera
-   (`stanza_lenta`, accesa sulla DGX); resta il filtro della TV (#34).]* (b) **Accendere il guardiano** a posteriori
-   (`stanza_guardia: attiva`) dopo l'ombra: meno di un acuto falso a settimana letto con
-   `calliope stato --guardia`; *quasi* · dipende da: i giorni d'ombra sulla DGX (#36). (c) **Misura
-   dell'eco** del passo 5 sul telefono in auto e sul portatile
+   `privato/` e il posto in memoria nel piano (0.2). *[Storico fino al 14/10 sera: il passo 3 è
+   fatto quella sera (`stanza_lenta`); resta il filtro della TV (#34).]* (b) **Accendere il
+   guardiano** a posteriori (`stanza_guardia: attiva`) dopo l'ombra: meno di un acuto falso a
+   settimana letto con `calliope stato --guardia`; *quasi* · dipende da: i giorni d'ombra sulla DGX
+   (#36). (c) **Misura dell'eco** del passo 5 sul telefono in auto e sul portatile
    ([`prove/manuali/misura-eco-stanza.md`](../prove/manuali/misura-eco-stanza.md)) prima di
    accendere `stanza_durante_voce`; *pronta* · dipende da: chi amministra con il telefono.
    *[Storico: il portatile è misurato il 14/10 sera e `stanza_durante_voce` è acceso sulla DGX dal
@@ -435,9 +437,10 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
     incerto o il comando è fuori dall'elenco chiuso), **preselezione dei tool** (i 5–10 probabili
     tra i 78, misura già in `scelta_tool.py`) *[storico; 15/10: misurata, non conviene; 16/10
     (#25): ombra tolta dal ciclo, resta il decisore come misura; 17/10: i campi tolti dalla
-    configurazione, chiavi vecchie in `CHIAVI_TOLTE`]*, **giudizio «rivolta a Calliope?»** (oggi in ombra con
-    il modello della voce: il grande solo nella zona grigia), **primo filtro di pericolo** davanti
-    al guardiano dei minori (fa passare solo le frasi dubbie, mai «sicuro» da solo sotto soglia).
+    configurazione, chiavi vecchie in `CHIAVI_TOLTE`]*, **giudizio «rivolta a Calliope?»** (oggi in
+    ombra con il modello della voce: il grande solo nella zona grigia), **primo filtro di pericolo**
+    davanti al guardiano dei minori (fa passare solo le frasi dubbie, mai «sicuro» da solo sotto
+    soglia).
     *Quasi* (fine del turno: misura) · dipende da: i numeri della DGX; per i casi successivi una
     ricerca breve ciascuno.
 
