@@ -4,7 +4,8 @@
 # (calliope/agenti/sandbox.py, motore «docker»; misure in docs/ricerche/2026-10-03-sandbox.md).
 # Dal 04/10 un'immagine per linguaggio (calliope/agenti/linguaggi.py): python (sempre) e
 # csharp (facoltativa, ~300 MB: runtime di .NET e compilatore, senza SDK né NuGet).
-# javascript (facoltativa, ~200 MB: Node per i test della logica dei giochi, 05/10).
+# javascript (facoltativa, ~200 MB: Node per i test della logica dei giochi, 05/10; dal 17/10
+# anche per i programmi dell'agente, con javascript in agenti_linguaggi: issue #54).
 #
 #   setup/linux/motore/sandbox.sh costruisci [python|csharp|javascript|tutte]
 #                                       costruisce l'immagine (predefinita: python; chiede
