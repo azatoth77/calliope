@@ -100,6 +100,14 @@ def prova_fumo(tmp: Path):
     verifica("…e la via d'uscita: «Inizia», o apriGioco({ inizia: true }), correggere il test",
              'g.tocca("Inizia")' in u and "apriGioco({ inizia: true })" in u
              and "correggi il test, non il manifesto" in u, u[-600:])
+    from calliope.agenti.diagnosi import da_uscita
+    riga = [r for r in u.splitlines() if r.startswith("FALLITO x: ")][:1]
+    breve = da_uscita("FALLITO vince chi fa tris in riga con la terza casella in alto: "
+                      + (riga[0].split("FALLITO x: ", 1)[1] if riga else ""))
+    verifica("…in testa all'errore: nei fallimenti in breve (360 caratteri) restano «Inizia» e "
+             "l'opzione", bool(riga) and riga[0].startswith("FALLITO x: prima delle mosse tocca "
+                                                          "«Inizia»")
+             and 'g.tocca("Inizia")' in breve and "apriGioco({ inizia: true })" in breve, breve)
     u = _esegui_js(tmp, "tocco", due, 'test("x", async () => { const g = await apriGioco('
                    '{ seme: 1 }); await g.tocca("Casella 1"); });')
     verifica("…anche un tocco su una casella che nella preparazione non c'è",
@@ -120,6 +128,14 @@ def prova_fumo(tmp: Path):
                    'assert.strictEqual(g.stato().fase, "turno"); '
                    'assert.strictEqual(g.stato().giocatori.length, 2); });')
     verifica("…con min < max e «giocatori: 2» sceglie due giocatori", "ok x" in u, u[-600:])
+    u = _esegui_js(tmp, "inizia_senza_n", _tris(1, 2), 'test("x", async () => { await '
+                   'apriGioco({ seme: 1, inizia: true }); });')
+    verifica("…con min < max senza «giocatori» lo dice (niente ripiego in silenzio)",
+             "FALLITO x" in u and "serve anche «giocatori: N»" in u, u[-600:])
+    u = _esegui_js(tmp, "inizia_fuori", _tris(1, 2), 'test("x", async () => { await '
+                   'apriGioco({ seme: 1, inizia: true, giocatori: 5 }); });')
+    verifica("…con un numero fuori dal manifesto lo dice, non parte con un altro numero",
+             "FALLITO x" in u and "5 non c'è" in u, u[-600:])
     u = _esegui_js(tmp, "senza", due, 'test("x", async () => { const g = await apriGioco('
                    '{ seme: 1 }); assert.strictEqual(g.stato().fase, "preparazione"); });')
     verifica("contrario: senza l'opzione si parte dalla preparazione, come prima",
@@ -226,9 +242,11 @@ def prova_ciclo(tmp: Path):
             # giro 2: la stessa strada, lo stesso punto
             _modifica("a * b", "b - a"), ESEGUI, _chiama(("leggi_file", {"percorso": "somma.py"})),
             ESEGUI,
-            # giro 3 (dopo il «sì» a consegnare): corregge e consegna
-            _modifica("b - a", "a + b"), ESEGUI,
-            _chiama(("consegna", {"riassunto": "La somma è corretta.", "esito": "fatto"}))]
+            # giro 3 (dopo il «sì» a consegnare): toglie il test rosso e consegna (il rischio
+            # della revisione della PR #179: lo deve dire il codice)
+            _chiama(("scrivi_file", {"percorso": "test_somma.py", "contenuto": TEST_SOMMA.split(
+                "\n\n\ndef test_somma")[0] + "\n"})), ESEGUI,
+            _chiama(("consegna", {"riassunto": "La somma è fatta.", "esito": "fatto"}))]
         lav = svc.nuovo("codice", "Scrivi somma.py con somma(a, b) che restituisce la somma.",
                         "ada-id", "Ada", "amministra")
         lav.tappe = True
@@ -238,12 +256,13 @@ def prova_ciclo(tmp: Path):
         verifica("tappa al tetto del giro 1", svc.in_tappa(lav), f"{lav.stato} {lav.risultato}")
         verifica("4. modifica_file è una novità: 1 passata senza novità (la seconda prova uguale; "
                  "prima 2)", seg.get("senza_novita") == 1, str(seg.get("senza_novita")))
-        verifica("4. …e 2 passate senza un test verde in più (dopo il primo esegui_test)",
-                 seg.get("senza_progressi") == 2, str(seg.get("senza_progressi")))
+        verifica("4. …e 1 esecuzione dei test senza un test verde in più (si contano le "
+                 "esecuzioni, non le passate)", seg.get("senza_progressi") == 1,
+                 str(seg.get("senza_progressi")))
         s = segnali_giro(SimpleNamespace(segnali={"senza_novita": 0, "senza_progressi": 6}), 8)
-        verifica("4. la frase a voce dice cosa è successo: «6 passate senza far passare test "
-                 "nuovi»", "6 passate senza far passare test nuovi" in s["frasi"]
-                 and s["a_vuoto"], str(s))
+        verifica("4. la frase a voce dice cosa è successo: «ha rifatto i test 6 volte senza "
+                 "farne passare di nuovi»", "ha rifatto i test 6 volte senza farne passare di "
+                 "nuovi" in s["frasi"] and s["a_vuoto"], str(s))
         s = segnali_giro(SimpleNamespace(segnali={"senza_novita": 5, "senza_progressi": 6}), 8)
         verifica("4. …e senza nessuna novità «senza cambiare i file né l'esito dei test», una "
                  "frase sola", s["frasi"] == ["5 passate senza cambiare i file né l'esito dei "
@@ -288,6 +307,57 @@ def prova_ciclo(tmp: Path):
                  and "La persona ha chiesto anche" not in str(ultimo_giro[-1]["content"])
                  and "consegna_dopo_giri" not in lav.segnali, str(ultimo_giro[-1:])[:600])
         verifica("6. …e il lavoro si chiude «fatto»", lav.stato == "fatto", lav.stato)
+        r = lav.risultato
+        verifica("1. il test tolto dopo i giri uguali lo dice il codice: nel risultato, con la "
+                 "regola", (r.get("test_tolti") or {}).get("meno") == 1
+                 and (lav.segnali.get("regole") or {}).get("agente_test_tolti") == 1,
+                 f"{r.get('test_tolti')} {lav.segnali.get('test_tappa')}")
+        verifica("1. …e a voce, nell'annuncio",
+                 "Attenzione: rispetto all'ultima tappa l'agente ha tolto o rinominato un test"
+                 in item["messaggio"], item["messaggio"])
+        verifica("1. …e l'istruzione vieta di togliere i test del cuore",
+                 "Non togliere mai i test del cuore della richiesta" in CONSEGNA_DOPO_GIRI
+                 and "il pareggio" in CONSEGNA_DOPO_GIRI)
+
+        # 2. A, B, A, B: un contenuto già visto non è una novità (revisione della PR #179)
+        def scrivi(c):
+            return _chiama(("scrivi_file", {"percorso": "somma.py",
+                                            "contenuto": f"def somma(a, b):\n    return {c}\n"}))
+        fake.copione = [scrivi("a - b"), scrivi("a * b"), scrivi("a - b"), scrivi("a * b"),
+                        _modifica("a * b", "a - b"), _modifica("a - b", "a * b")]
+        lav2 = svc.nuovo("codice", "Scrivi somma.py con somma(a, b).", "ada-id", "Ada",
+                         "amministra")
+        cfg.agenti_max_passi = 6
+        svc.agente.max_passi = 6
+        lav2.tappe = True
+        svc.avvia(lav2)
+        svc.done.get(timeout=60)
+        verifica("2. A, B, A, B e due modifica_file che riportano a contenuti già visti: 4 "
+                 "passate senza novità", lav2.segnali.get("senza_novita") == 4,
+                 str(lav2.segnali.get("senza_novita")))
+
+        # 3. i test verdi e l'agente che aggiunge file: non gira a vuoto
+        def nuovo(n):
+            return _chiama(("scrivi_file", {"percorso": f"aiuto{n}.py",
+                                            "contenuto": f"def aiuto{n}():\n    return {n}\n"}))
+        fake.copione = [
+            _chiama(("scrivi_file", {"percorso": "somma.py",
+                                     "contenuto": "def somma(a, b):\n    return a + b\n"}),
+                    ("scrivi_file", {"percorso": "test_somma.py", "contenuto": TEST_SOMMA})),
+            ESEGUI, nuovo(1), nuovo(2), nuovo(3), nuovo(4)]
+        lav3 = svc.nuovo("codice", "Scrivi somma.py e quattro aiuti.", "ada-id", "Ada",
+                         "amministra")
+        lav3.tappe = True
+        svc.avvia(lav3)
+        item3 = svc.done.get(timeout=60)
+        s = segnali_giro(lav3, 6)
+        verifica("3. test verdi e quattro file nuovi senza rifare i test: nessun «gira a vuoto»",
+                 int(lav3.segnali.get("senza_progressi") or 0) == 0 and not s["a_vuoto"]
+                 and "girare a vuoto" not in item3["messaggio"],
+                 f"{lav3.segnali.get('senza_progressi')} {s} {item3['messaggio']}")
+        verifica("1. contrario: nessun test tolto, niente avviso",
+                 "test_tolti" not in (lav3.risultato or {})
+                 and "ha tolto o rinominato" not in item3["messaggio"])
     finally:
         if svc is not None:
             svc.close()
@@ -382,6 +452,43 @@ def prova_specifica(tmp: Path):
                  and "sviluppo_nucleo_impossibile" in ctx.regole
                  and (out.get("in_sospeso") or {}).get("tool") == "sviluppo_passo",
                  json.dumps(out, ensure_ascii=False, default=str)[:400])
+        # Dopo un riavvio la proposta rifatta non ha più l'attributo: il blocco viene dai
+        # requisiti dello sviluppo, su disco (revisione della PR #179)
+        from calliope.agenti.ciclo import Lavoro
+        from calliope.agenti import ripresa
+        dopo = Lavoro("L11", "estensione", spec_vera, "carla-id", "Carla")
+        avviati.clear()
+        out = ta._avvia(ctx, svc, dopo)
+        verifica("7. dopo un riavvio (una proposta nuova senza il segno) il blocco resta: viene "
+                 "dai requisiti dello sviluppo", not avviati and out.get("ok") is False
+                 and dopo.non_si_parte, json.dumps(out, ensure_ascii=False, default=str)[:300])
+        svs2 = Sviluppi(cfg, tmp / "sviluppi", None, log=lambda *a: None)
+        sv3b = next(s for s in svs2.sviluppi if s.id == sv3.id)
+        verifica("7. …e lo sviluppo riletto dal disco è ancora bloccato",
+                 bool(svs2.motivo_blocco(sv3b)))
+        segnato = Lavoro("L12", "estensione", spec_vera, "carla-id", "Carla")
+        segnato.non_si_parte = "Oggi qui non si può fare: tris in Python con Pygame."
+        riletto = ripresa.ricostruisci(ripresa.voce(segnato, 0.0), Lavoro)
+        verifica("7. …il segno sul lavoro sopravvive al file dei lavori (in_corso.json)",
+                 riletto.non_si_parte == segnato.non_si_parte, riletto.non_si_parte)
+        # L'uscita dal blocco: una modifica rende fattibile il cuore, la proposta torna «Va
+        # bene così?» e il «sì» avvia
+        sv3.requisiti[0] = dict(sv3.requisiti[0], testo="tris a turno sugli schermi",
+                                si_puo=True, limite="")
+        lav5 = lavoro()
+        lav5.id, lav5.persona, lav5.tipo = "L13", "carla-id", "estensione"
+        lav5.cambiamento = [{"op": "sostituisci", "prima": "tris in Python con Pygame",
+                             "dopo": "tris a turno sugli schermi", "si_puo": True}]
+        frase = svs.frase_proposta(sv3, lav5)
+        verifica("7. uscita dal blocco: dopo la modifica la domanda di sempre",
+                 frase.endswith(DOMANDA_PROPOSTA) and not lav5.non_si_parte, frase)
+        ta._schermo = lambda *a, **k: None
+        try:
+            ta._avvia(ctx, svc, lav5)
+        except Exception:  # noqa: BLE001 — su_avvio senza il servizio vero
+            pass
+        verifica("7. …e il «sì» avvia il lavoro", avviati == [lav5], str(avviati))
+        avviati.clear()
         lav4 = lavoro()
         lav4.non_si_parte = ""
         ta._schermo = lambda *a, **k: None

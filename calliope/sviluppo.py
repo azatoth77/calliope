@@ -1004,6 +1004,11 @@ class Sviluppi:
                           ": correzione senza un test che riproduce il problema"
                           if non_riprodotto else ""))
             item["messaggio"] = self.frase_pronto(sv, lav, altro)
+            # I test spariti dall'ultima tappa, detti dal codice (revisione della PR #179)
+            from .agenti.ciclo import frase_test_tolti
+            tolti = frase_test_tolti((getattr(lav, "risultato", None) or {}).get("test_tolti"))
+            if tolti:
+                item["messaggio"] = str(item["messaggio"]).rstrip() + " " + tolti
             if non_riprodotto:
                 # «Non sono riuscita a riprodurre il problema» (decisione del 12/10, domanda 3
                 # della ricerca 2026-10-12-flusso-agente-fasi): non è «pronto», e la risposta
@@ -1348,18 +1353,37 @@ class Sviluppi:
         requisiti principali `si_puo: false`, e lo sviluppo era partito lo stesso): il motivo
         resta sul lavoro (`non_si_parte`), la proposta chiede cosa cambiare e `_avvia`
         (tools/agenti.py) non lo avvia. Regola sviluppo_nucleo_impossibile. True se bloccato."""
-        from . import requisiti as rq
         if lav is None:
             return False
-        req = list(sv.requisiti or [])
-        principali = [r for r in req if r.get("nucleo")] or req
-        if not principali or any(r.get("si_puo", True) for r in principali):
-            lav.non_si_parte = ""
+        lav.non_si_parte = self.motivo_blocco(sv)
+        if not lav.non_si_parte:
             return False
-        lav.non_si_parte = rq.frase_limiti(req) or "Così com'è qui non si può fare."
         self.log(f"[SVILUPPO] {sv.id}: i requisiti principali qui non si possono fare, il "
                  "lavoro non parte (regola sviluppo_nucleo_impossibile)")
         return True
+
+    @staticmethod
+    def motivo_blocco(sv) -> str:
+        """Il motivo per cui lo sviluppo non parte, dai suoi requisiti (su disco: vale anche
+        dopo un riavvio, revisione della PR #179); "" se il cuore si può fare."""
+        from . import requisiti as rq
+        req = list(getattr(sv, "requisiti", None) or [])
+        principali = [r for r in req if r.get("nucleo")] or req
+        if not principali or any(r.get("si_puo", True) for r in principali):
+            return ""
+        return rq.frase_limiti(req) or "Così com'è qui non si può fare."
+
+    def blocco_per_lavoro(self, lav) -> str:
+        """Il blocco per l'avvio di `lav` (tools/agenti._avvia): quello segnato sul lavoro, o
+        quello dello sviluppo all'analisi di chi l'ha chiesto, ricalcolato dai requisiti (una
+        proposta rifatta dopo un riavvio, o una modifica che ha reso fattibile il cuore)."""
+        persona = getattr(lav, "persona", None)
+        sv = self.di_lavoro(getattr(lav, "id", None), persona) or self.corrente(persona)
+        if sv is None or sv.fase != "analisi" or not self._stesso_tipo(sv, lav):
+            return str(getattr(lav, "non_si_parte", "") or "")
+        motivo = self.motivo_blocco(sv)
+        lav.non_si_parte = motivo
+        return motivo
 
     def _specifica_senza_limiti(self, sv: Sviluppo, lav, gioco: bool) -> bool:
         """Un gioco con dei requisiti che qui non si possono fare (18/10, #174: la richiesta

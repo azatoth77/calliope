@@ -507,6 +507,14 @@ def _titolo_estensione(nome: str, esito) -> str:
 
 def _avvia(ctx, svc, lav) -> dict:
     motivo = str(getattr(lav, "non_si_parte", "") or "").strip()
+    svs = getattr(svc, "sviluppi", None)
+    if svs is not None and hasattr(svs, "blocco_per_lavoro"):
+        # Ricalcolato dai requisiti dello sviluppo (revisione della PR #179): vale dopo un
+        # riavvio, e si toglie quando una modifica rende fattibile il cuore
+        try:
+            motivo = str(svs.blocco_per_lavoro(lav) or "").strip()
+        except Exception:  # noqa: BLE001 — nel dubbio quello segnato sul lavoro
+            pass
     if motivo:
         # 18/10 (#174): i requisiti principali qui non si possono fare (sviluppo.py,
         # _blocca_se_impossibile): il lavoro non parte nemmeno con un «sì»

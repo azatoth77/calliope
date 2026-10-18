@@ -84,6 +84,8 @@ def voce(lav, ora: float) -> dict:
          "estensione": getattr(lav, "estensione", None),
          "gioco": bool(getattr(lav, "gioco", False)),
          "doppione_chiesto": bool(getattr(lav, "doppione_chiesto", False)),
+         # il blocco del cuore impossibile (18/10, #174)
+         "non_si_parte": str(getattr(lav, "non_si_parte", "") or ""),
          "file_iniziali": iniziali,
          "annunciato": bool(getattr(lav, "annunciato", False)),
          "vivo": ora if lav.stato in VIVI else (getattr(lav, "vivo", None) or ora),
@@ -155,6 +157,7 @@ def ricostruisci(riga: dict, Lavoro):
     lav.estensione = riga.get("estensione")
     lav.gioco = bool(riga.get("gioco"))
     lav.doppione_chiesto = bool(riga.get("doppione_chiesto"))
+    lav.non_si_parte = str(riga.get("non_si_parte") or "")
     lav.file_iniziali = dict(riga.get("file_iniziali") or {})
     lav.iniziali_ok = riga.get("file_iniziali") is not None
     lav.file_persona = bool(riga.get("file_persona"))

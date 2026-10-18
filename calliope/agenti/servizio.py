@@ -2042,6 +2042,11 @@ class Lavori:
                     self.log(f"[AGENTI] scheda non inviata: {e}")
         who = f"{lav.persona_nome}, " if lav.persona_nome else ""
         msg = who + text if who else text[0].upper() + text[1:]
+        # I test spariti dall'ultima tappa, detti dal codice (revisione della PR #179, #174)
+        from .ciclo import frase_test_tolti
+        tolti = frase_test_tolti((lav.risultato or {}).get("test_tolti"))
+        if tolti:
+            msg = msg.rstrip() + " " + tolti
         item = {"id": lav.id, "tipo": lav.tipo, "titolo": lav.titolo, "stato": lav.stato,
                 "esito": lav.risultato.get("esito"), "messaggio": msg,
                 "chi": lav.persona, "chi_nome": lav.persona_nome, "passi": lav.passi,

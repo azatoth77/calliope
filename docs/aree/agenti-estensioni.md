@@ -3782,3 +3782,29 @@ dall'agente in al più 2 giri col modello di oggi. Nel log: `agente_giri_uguali`
         cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
           && $V/.venv/bin/python $V/prove/manuali/banco_temperatura.py \
              --temperature config --presence config --ripetizioni 2 --casi tris2 --giri 2
+
+**Dopo la revisione della PR #179 (18/10).**
+- **I test tolti li dice il codice.** A ogni tappa si segnano i test (nomi di «ok …» e
+  «FALLITO …», di «FAIL:»/«ERROR:» per Python, e quanti). Alla consegna quelli spariti vanno nel
+  risultato (`test_tolti`) e a voce, nell'annuncio e nella frase dello sviluppo: «Attenzione:
+  rispetto all'ultima tappa l'agente ha tolto o rinominato un test … Quello che provava non è più
+  controllato.» Regola `agente_test_tolti`. `CONSEGNA_DOPO_GIRI` vieta di togliere i test del
+  cuore della richiesta (per un gioco: chi vince, il pareggio, a chi tocca): lì si consegna
+  «impossibile» dicendo cosa manca.
+- **Novità**: per ogni file le impronte già viste, del contenuto letto dalla sandbox dopo la
+  scrittura (vale anche per `modifica_file`). Un file che torna a un contenuto già visto (A, B,
+  A, B; `a*b → b-a → a*b`) non è una novità; così anche un conto dei test già visto.
+- **«Senza progressi»** conta le esecuzioni dei test senza un test verde in più, non le
+  passate: chi scrive file nuovi con i test verdi non «gira a vuoto». A voce: «ha rifatto i test
+  N volte senza farne passare di nuovi».
+- **L'errore della preparazione** ha la via d'uscita in testa (i fallimenti in breve tagliano a
+  360 caratteri). `apriGioco({ inizia: true })` con min < max vuole `giocatori: N` (detto nel
+  contratto) e con un N che non c'è fallisce, senza ripiego; se il test ha già chiesto
+  l'opzione, l'errore non la consiglia di nuovo. Il commento dello scheletro dice «min < max;
+  con min = max «Inizia»».
+- **Il blocco del cuore impossibile** si ricalcola dai requisiti dello sviluppo all'avvio
+  (`Sviluppi.blocco_per_lavoro`, `motivo_blocco`): vale dopo un riavvio (i requisiti sono su
+  disco) e si toglie quando una modifica rende fattibile il cuore. `non_si_parte` è un campo di
+  `Lavoro`, salvato in `in_corso.json`. In `prova_agente_giri_uguali` l'uscita dal blocco
+  (modifica, «Va bene così?», avvio), il riavvio, A, B, A, B, i file nuovi con i test verdi, il
+  test tolto e il contrario.
