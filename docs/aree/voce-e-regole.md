@@ -2,7 +2,9 @@
 
 *Ciclo principale, modello della voce, tool calling, reti e spinte di Brain, regole deterministiche sul testo, azione in sospeso, robustezza. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Sulla DGX la voce è gemma4 26B su Ollama (`llm_profilo`). In un'installazione con tutti i servizi il modello vede **75 schemi** uguali per ogni livello (contati sul registro il 14/10; tabella completa con classe e «quando c'è» in [`architettura-tool.md`](../architettura-tool.md)). Dal 10/10: lo **stato del dialogo** in ombra (`proposta_rispondi`, corsia veloce, `dialogo_interprete: ombra`), il **registro degli eventi** (passi 0–2 in ombra e uscita unica verso la voce; passo 3 con `eventi: attivo`, acceso a mano, e il tool `argomento`), le forme chiuse storpiate da Whisper (`calliope/storpiature.py`); dall'11/10 i comandi a voce dei giochi (`gioco_comando`); dal 13/10 il tool `notizie` e il passo 0 della conversazione di stanza (in compagnia niente azioni senza il nome). Molte misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX dove è scritto.
+**Stato al 18/10.** Sulla DGX la voce è gemma4 26B su Ollama (profilo `gemma4-26b-ollama` in `llm_profilo`; banco di regressione del 17/10 286/294 (288 con la prova corretta), #70). In un'installazione con tutti i servizi il modello vede **75 schemi** uguali per ogni livello (contati sul registro il 14/10; nessun tool nuovo fino al 17/10; tabella completa con classe e «quando c'è» in [`architettura-tool.md`](../architettura-tool.md)). Dal 15/10: la regola `rinomina_ruolo` (un ruolo non è un nome), `calliope stato --reti` (E11, `calliope/reti_scatti.py`), la rete `domanda_insistita`, `ricorda(` scritto in mezzo alla frase recuperato, la frase dopo il tool System 1 (`system1_dopo_tool`, spenta di serie; dal 16/10 le richieste contate e le letture brevi, #103). Dal 16/10: il criterio di E1 misurabile in ombra e la guardia dei riletti (#11), l'esito vero dopo la frase di sfida (#94), «Grazie.» sul rumore (`cortesia_senza_voce`, in ombra, #97), la preselezione dei tool chiusa come misura negativa (#25; dal 17/10 senza ombra né campi, chiavi vecchie in `CHIAVI_TOLTE`). Dal 17/10: i campi a modi con un validatore solo (#83), la regola `taglio_punto_e_virgola` (#132), il banco col 26B e gli anni della nascita solo «se la data è la tua» (`nascita_altra_persona`, #70). Molte misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX dove è scritto.
+
+*Stato al 14/10 (storico):* Sulla DGX la voce è gemma4 26B su Ollama (`llm_profilo`). In un'installazione con tutti i servizi il modello vede **75 schemi** uguali per ogni livello (contati sul registro il 14/10; tabella completa con classe e «quando c'è» in [`architettura-tool.md`](../architettura-tool.md)). Dal 10/10: lo **stato del dialogo** in ombra (`proposta_rispondi`, corsia veloce, `dialogo_interprete: ombra`), il **registro degli eventi** (passi 0–2 in ombra e uscita unica verso la voce; passo 3 con `eventi: attivo`, acceso a mano, e il tool `argomento`), le forme chiuse storpiate da Whisper (`calliope/storpiature.py`); dall'11/10 i comandi a voce dei giochi (`gioco_comando`); dal 13/10 il tool `notizie` e il passo 0 della conversazione di stanza (in compagnia niente azioni senza il nome). Molte misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX dove è scritto.
 
 *Stato al 09/10 (storico):* Sulla DGX la voce è gemma4 26B su Ollama (`llm_profilo`), 72 schemi di tool
 uguali per ogni livello, con i nomi nuovi dei lavori e dello sviluppo dall'08/10 (i vecchi valgono
@@ -21,6 +23,9 @@ misure di questo documento sono col 4B in locale: da rifare col 26B sulla DGX do
 | Tool nativi | — | `calliope/tools/` (`spec.py`, `registry.py`, `builtin.py`); errori degli argomenti in parole `dialogo.py` (dal 09/10); `proposta.py` (`proposta_rispondi`) e `argomento.py` (`argomento`, solo con `eventi: attivo`), dal 10/10; tabella completa in [`architettura-tool.md`](../architettura-tool.md); argomenti che nominano qualcosa `ToolSpec.nomi` e la loro misura in Brain (`_argomenti_inizio`, `_argomenti_fine`, `argomenti_per_registro`, dal 08/10: [stt-tts](stt-tts.md)); forma degli argomenti ricondotta a quella del tool `ToolSpec.prepara` (dal 08/10) |
 | Dati del turno (contesti prima della domanda, mai nel prompt di sistema) | — | `calliope/brain.py` → `TURN_CONTEXT_MSG`, `PENDING_MSG`, `AGENDA_MSG`, `SOSPESO_ALTRUI_MSG`, `EST_NOMINATA_MSG`, `RIFIUTO_MSG` (dal 09/10); modalità sviluppo `calliope/sviluppo.py` → `SVILUPPO_MSG`, `Sviluppi.dati_turno` (dal 08/10) |
 | «La frase è rivolta a Calliope?» in compagnia (dal 09/10, in ombra) | Ollama, output strutturato sul modello del rilevatore di pericolo | `calliope/rivolta.py` → `Giudice`, `etichetta`; `Brain.dimentica_ultimo_turno`; la compagnia è in [stt-tts](stt-tts.md) |
+| Reti sul testo: la risposta che gira in tondo, la domanda insistita, il ruolo come nome, i pezzi al «;» | — | `calliope/ciclo_ripetuto.py` → `CicloRipetuto`, `coda_periodica` (rete `ciclo_ripetuto`, dal 14/10); `calliope/ripetizione.py` → `insiste`, `INSISTE_MSG` (rete `domanda_insistita`, dal 15/10); `calliope/testi.py` → `ruolo_non_nome`, `RUOLI_NON_NOME` (dal 15/10), `taglio_voce`, `Pezzo` (dal 17/10); `calliope/cortesia.py` → `senza_voce` (dal 16/10) |
+| Scatti delle reti per rete e per profilo (dal 15/10, E11) | registro dei turni | `calliope/reti_scatti.py` → `riassunto`, `testo`, `mai_scattate`, `REGOLE_RETE`, `NEL_CODICE_DAL` (`calliope stato --reti`) |
+| System 1 per il modello (dal 15/10) | — | `calliope/system1/dopo_tool.py` → `DopoTool`, `COPERTI`, `richieste_della_persona`, `frase_agenda`, `sostanza`, `riassunto` (frase dopo il tool, `system1_dopo_tool`, spenta di serie); `calliope/system1/preselezione.py` → `Preselettore`, `CodificaParole`, `CodificaEmbedding`, `NUCLEO` (dal 16/10 solo misura, #25: `prove/manuali/preselezione_dgx.py`) |
 | Pulizia output | regex | `calliope/brain.py` → `ThinkFilter`, `TextCallGuard`; `calliope/tts.py` → `split_sentences`, `clean_for_speech` |
 | Configurazione | dataclass + YAML (PyYAML) | `calliope/config.py` → `Config`, `load_config`, `VOICE_MAP`; file `calliope.yaml` |
 | Stato del dialogo (dal 10/10, in ombra) | — | `calliope/stato_dialogo.py` → `Proposta`, `StatoPersona`, `StatoCorsia`, `blocco`, `decidi`, `consenso_progetto`, `confronto`; corsia veloce `calliope/risposte.py` → `forma_chiusa`; tool di risposta `calliope/tools/proposta.py` → `proposta_rispondi`; in Brain `_dialogo_inizio`, `_proposta_rispondi`, `_dialogo_fine` (sezione «Stato del dialogo, passo 1») |
@@ -1341,8 +1346,8 @@ Decisione [0027](../decisioni/0027-conversazione-come-registro-di-eventi.md), pr
 [`2026-10-10-registro-eventi.md`](../ricerche/2026-10-10-registro-eventi.md) § 8, passi 0 e 1.
 **Niente cambia in ciò che Calliope dice o in ciò che il modello vede**: la storia di Brain resta la
 fonte; gli eventi si scrivono accanto e si confrontano. Interruttore `eventi: spento | ombra` (sezione
-`conversazioni` di calliope.yaml, predefinito `ombra`; «attivo» è il passo 3, rifiutato e riportato a
-`ombra` come `dialogo_interprete: acceso`). Con `spento` niente osservatore, niente campi nuovi,
+`conversazioni` di calliope.yaml, predefinito `ombra`; *[storico, fino al passo 3 del 10/10: «attivo» è il passo 3, rifiutato e riportato a
+`ombra` come `dialogo_interprete: acceso`]*; da allora `eventi: attivo` è valido, `_eventi_valido` in `config.py`, sezione «Una voce sola, passo 3»). Con `spento` niente osservatore, niente campi nuovi,
 niente tabella: come prima.
 
 **Che cosa è andato alla voce.** *Storico: dal passo 2 lo dice l'uscita unica (sezione «Una voce
@@ -1997,8 +2002,10 @@ le opzioni e le misure sono nella ricerca
     cambiata non fa più diventare rossa la prova per il solo richiamo. Resta legata a
     `calliope/tools/`, perché la copertura degli 85 tool, il nucleo di serie, le almeno 40 frasi
     a «nucleo» e i casi «Blocca il computer» e la fattura dipendono dal registro dei tool.
-  - Un locale che ha ancora `preselezione_tool` (sulla DGX `spenta`) o un altro campo tolto dà
-    solo «Chiave sconosciuta … ignorata»: l'avvio non si ferma. Va tolto dal locale insieme
+  - Un locale che ha ancora `preselezione_tool` (sulla DGX `spenta` *[storico: il 18/10 la chiave non è più nel locale della DGX, [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)]*) o un altro campo tolto non
+    ferma l'avvio. *[storico: l'avviso era «Chiave sconosciuta … ignorata», col nome più vicino,
+    fino al 17/10]*: dal 17/10 (#61) le cinque chiavi sono in `CHIAVI_TOLTE` di `config.py` e
+    l'avviso dice «tolta il 16/10 (#25)… Ignorata: toglila dal file». Va tolta dal locale insieme
     all'aggiornamento.
   - Anche il recupero dei tool con un sottoinsieme che cambia a ogni turno (bge-m3, roadmap
     «Resta da fare») è superato: rompe la cache come la preselezione, e gli embedding sono
@@ -2513,7 +2520,7 @@ dice una cosa preoccupante e poi tace.
 
 **Il locale della DGX non cambia significato**: i valori noti (`system1_dopo_tool: ombra`,
 `llm_reti_spente: [domanda_insistita]`, `arbitro_memoria: ombra`, `speaker_impronte_satellite:
-ombra`, `stanza_lenta_blocchi: ombra`, `eventi: ombra`) passano uguali e senza avvisi (provato a
+ombra`, `stanza_lenta_blocchi: ombra`, `eventi: ombra` *[18/10: `eventi` non è nel locale della DGX, vale il predefinito `ombra`; elenco vero in [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)]*) passano uguali e senza avvisi (provato a
 secco con le stesse sezioni). Rischio scritto nella issue: un valore che oggi «funziona per caso»
 (per esempio `compagnia_enabled: si`) ora è rifiutato con l'avviso e vale il predefinito.
 

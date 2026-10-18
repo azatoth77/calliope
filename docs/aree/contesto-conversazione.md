@@ -2,7 +2,9 @@
 
 *Finestra di contesto, compressione e archivio delle conversazioni, una conversazione per persona (corsie). Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto), più: la storia come proiezione degli eventi (10/10, in ombra; con `eventi: attivo` il contesto viene dalla proiezione); la **conservazione** (12/10): turni, eventi, voce (col consenso) e archivio delle conversazioni per `turn_log_days` (60) giorni, ospiti solo in memoria, `calliope conserva --svuota` (dal 16/10, decisione 0031, anche i minori su disco come gli adulti, la loro voce col consenso dei tutori; dal 12 al 16/10 i minori solo in memoria); «dimentica» che chiude anche la conversazione in corso (13/10); la **conversazione di stanza** (13–14/10, decisione 0029, ogni passo spento di serie): conversazione anonima condivisa in compagnia (passo 0), registro della stanza in memoria (passo 1, `stanza: ombra`), righe della stanza nei dati del turno e nella storia in sola aggiunta (`stanza_contesto`), `stanza_cerca` (passo 4), tenuta su disco per 60 giorni (`stanza_tenuta`), guardiano a posteriori (`stanza_guardia`), avvisi ai tutori con data, origine, trascrizione e audio, e i conoscenti (decisione 0030, sezioni in fondo). La latenza vera sulla DGX con la stanza accesa è da misurare (`calliope stato --turni`, sezione «Stanza»).
+**Stato al 18/10.** Come al 14/10 (sotto), più: la **corsia lenta** della stanza (passo 3, 14/10 sera, `stanza_lenta`, spenta di serie: righe di versione 2, riassunto progressivo, la guardia che aspetta la versione 2) e dal 15/10 le versioni nuove dei blocchi ridistribuite sui segmenti (`stanza_lenta_blocchi`); l'**ascolto durante la voce** di Calliope (passo 5, 14/10, `stanza_durante_voce`, spento di serie); le righe della stanza come trascrizione grezza e la domanda insistita (15/10), la nota delle storpiature solo sulle righe della stanza e la correzione di chi parla per il resto della conversazione (16–17/10, #134); la guardia dei token riletti e `_stanza`/`_chi` nella proiezione con `eventi: attivo` (15–16/10, #11 e #12); la **cache del prefisso** che non si perde più a ogni turno (16/10, #95: ricordi, avvisi e riassunto della stanza nella storia solo quando cambiano, `dati_turno_tetto_token`); i minori conservati come gli adulti (16/10, decisione 0031); la prima voce per tool in `calliope stato --turni` (17/10, #132). La **latenza con la stanza accesa è misurata**: prima frase mediana 2,31 s nella seconda prova in auto del 14/10 sera (sezione del pezzo «in attesa») e 2,58 s il 15/10 con la cache del prefisso persa in 62 turni su 93 (sezione della cache, 16/10); la misura sulla DGX dopo la correzione di #95 è da fare (criteri nell'issue).
+
+*Stato al 14/10 (storico).* Come al 09/10 (sotto), più: la storia come proiezione degli eventi (10/10, in ombra; con `eventi: attivo` il contesto viene dalla proiezione); la **conservazione** (12/10): turni, eventi, voce (col consenso) e archivio delle conversazioni per `turn_log_days` (60) giorni, ospiti solo in memoria, `calliope conserva --svuota` (dal 16/10, decisione 0031, anche i minori su disco come gli adulti, la loro voce col consenso dei tutori; dal 12 al 16/10 i minori solo in memoria); «dimentica» che chiude anche la conversazione in corso (13/10); la **conversazione di stanza** (13–14/10, decisione 0029, ogni passo spento di serie): conversazione anonima condivisa in compagnia (passo 0), registro della stanza in memoria (passo 1, `stanza: ombra`), righe della stanza nei dati del turno e nella storia in sola aggiunta (`stanza_contesto`), `stanza_cerca` (passo 4), tenuta su disco per 60 giorni (`stanza_tenuta`), guardiano a posteriori (`stanza_guardia`), avvisi ai tutori con data, origine, trascrizione e audio, e i conoscenti (decisione 0030, sezioni in fondo). La latenza vera sulla DGX con la stanza accesa è da misurare (`calliope stato --turni`, sezione «Stanza»; *[storico: misurata la sera stessa, 2,31 s, sopra]*).
 
 *Stato al 09/10 (storico): una conversazione per persona con i satelliti insieme (06/10), finestra dal setup, compressione e archivio; dal 07/10 prima frase a pezzi, taratura della voce e Piper sulla GPU secondo la macchina; dall'08/10 la generazione nel registro, l'archivio a turno finito con la scheda «Conversazione» e le domande cronologiche («più indietro»); dal 09/10 la finestra d'ascolto si chiude in compagnia con una voce sconosciuta. La latenza vera sulla DGX è da rimisurare con un giorno d'uso (`calliope stato --turni`).*
 
@@ -1355,7 +1357,7 @@ Prove: `prove/prova_stanza_contesto.py` (livello 1, con i contrari).
 Passo 4 della conversazione di stanza ([progetto](../ricerche/2026-10-13-conversazione-di-stanza.md)
 § 3.5 ter, § 3.7, § 3.8, § 6 riga 4; decisione [0029](../decisioni/0029-conversazione-di-stanza.md)
 punti 5 e 6). Dietro **`stanza_cerca`** (di serie `false`; vale solo con `stanza: ombra`): con il
-tool spento non c'è nemmeno lo schema, come `stanza_pausa` (il conteggio dei 78 schemi non cambia:
+tool spento non c'è nemmeno lo schema, come `stanza_pausa` (il conteggio dei 78 schemi, *[storico: 75 dal 14/10, contati sul registro]*, non cambia:
 sono tool che dipendono dall'installazione). Codice in `calliope/stanza/cerca.py` (chi vede cosa,
 filtri, attesa) e `calliope/tools/stanza.py` (il tool).
 
@@ -1428,9 +1430,11 @@ filtri, attesa) e `calliope/tools/stanza.py` (il tool).
 - **Configurazione**: `stanza_cerca`, `stanza_cerca_righe`, `stanza_cerca_caratteri`,
   `stanza_cerca_attesa_max_s`, `stanza_cerca_attesa_s` nella sezione `conversazione_stanza`.
 
-**Non fatti**: la ricerca su disco (con `stanza_tenuta`, che non c'è ancora), i vettori
-dell'archivio (solo parole), l'attesa della corsia lenta (passo 3), le «stanze legate in
-configurazione» del § 3.8 (si cerca in tutte quelle che chi chiede può vedere).
+**Non fatti**: la ricerca su disco (con `stanza_tenuta`, che non c'è ancora; *[storico: dal 14/10
+`stanza_cerca` cerca anche su disco con gli stessi permessi, sezione della tenuta]*), i vettori
+dell'archivio (solo parole), l'attesa della corsia lenta (passo 3; *[dal 14/10 sera la corsia lenta
+c'è, ma `stanza_cerca` non aspetta ancora le sue righe di versione 2: cerca quelle che ci sono]*),
+le «stanze legate in configurazione» del § 3.8 (si cerca in tutte quelle che chi chiede può vedere).
 
 **Misure a secco** (portatile, gemma4 e4b, `prove/manuali/banco_stanza_cerca.py`, due giri, dopo
 la frase nel prompt, i ripieghi e `spinta_stanza`): **9/10 e 9/10** (obiettivo ≥ 8/10); prima di
@@ -1602,7 +1606,10 @@ legge la stanza:
   `presenze`, `stato_pausa`, `_info` e `_registri` come `stanza/cerca.py`.
 - **Righe assestate**: finite da `stanza_guardia_attesa_s` e con la stanza quieta da altrettanto (o
   uno scambio lungo a pezzi di `stanza_guardia_blocco_max_s`); quando ci sarà la corsia lenta
-  (passo 3) qui si aspetteranno le righe di versione 2.
+  (passo 3) qui si aspetteranno le righe di versione 2 (*[dal 14/10 sera: con `stanza_lenta` la
+  guardia aspetta la versione 2, al più `stanza_guardia_blocco_max_s`, e una riga già raccolta che
+  diventa versione 2 si rigiudica solo per un cambio sostanziale; sezione della corsia lenta e
+  [minori](minori.md)]*).
 - **Il contesto del blocco**: fino a 6 righe prima e 3 dopo, comprese le risposte di Calliope e le
   frasi rivolte a lei (solo contesto), mai la TV; entro 3 600 caratteri.
 - **Mai davanti ai turni**: giudica solo con la voce ferma da `stanza_guardia_quiete_s` (il
@@ -1639,7 +1646,10 @@ intero come prima, per il confronto):
   turno prima, le righe nuove e i dati del turno, come senza stanza più le sole righe nuove.
 - Una riga già mandata **non si rimanda mai** (`Conversazione.stanza_mandate`: `(satellite, seq)`
   e `(satellite, "seg", segmento)`), nemmeno se cambia dopo (la «rivolta» rivista, una versione 2
-  dello stesso segmento quando ci sarà la corsia lenta: da guardare allora). Le frasi della
+  dello stesso segmento quando ci sarà la corsia lenta: da guardare allora; *[dal 14/10 sera la
+  corsia lenta c'è e una riga già mandata resta quella: la versione 2 entra solo nelle righe non
+  ancora mandate, sezione della corsia lenta. Domanda aperta: rimandare la riga corretta quando
+  cambia il senso, a costo della cache del prefisso?]*). Le frasi della
   conversazione stessa (la domanda «→ Calliope» e la risposta di Calliope, già nella storia) non
   entrano nei pezzi (`gia_nella_storia`, confronto dei testi normalizzati); quelle rivolte a
   Calliope da un'altra persona sì.
@@ -2056,7 +2066,7 @@ RAM piena; il banco con ospite, zona grigia, conoscente, misto, pausa, scaduto, 
 corsia lenta, dimentica e svuota). Banco: `prove/manuali/banco_stanza_lenta.py` (misure in
 [stt-tts](stt-tts.md)).
 
-**Accendere** (installazione di chi amministra, dopo la misura sulla DGX): `stanza_lenta: true` nella
+*Sulla DGX `stanza_lenta: true` e `stanza_audio_banco_giorni: 7` dal 14/10 sera (letto il 18/10: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)).* **Accendere** (installazione di chi amministra, dopo la misura sulla DGX): `stanza_lenta: true` nella
 sezione `conversazione_stanza` del `calliope.locale.yaml`; per il banco anche
 `stanza_audio_banco_giorni: 7`. Prima conviene guardare il piano (`calliope stato --piano`, riga
 «Stanza lenta») e, se c'è posto, un secondo whisper-server più accurato su `stanza_lenta_stt_url`.
@@ -2123,7 +2133,7 @@ nel prefisso. *[storico: testo della nota e frase del prompt fino al 16/10; dal 
 solo» qui sotto]*
 
 **(B) La domanda insistita** (rete `domanda_insistita`, `calliope/ripetizione.py`, di serie accesa,
-categoria «modello»). `insiste` guarda solo la forma: la domanda di adesso riprende quella del turno
+categoria «modello»; sulla DGX spenta con `llm_reti_spente`, letto il 18/10: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)). `insiste` guarda solo la forma: la domanda di adesso riprende quella del turno
 prima (quasi uguale, o le **parole piene** della più corta, cioè senza articoli, preposizioni,
 pronomi, ausiliari, parole delle domande e numeri, almeno al 60 % nell'altra) e la risposta di prima
 era lunga (almeno 8 parole). Allora:
@@ -2167,7 +2177,7 @@ era nel prefisso già letto); turno 4 ripetuto prima 2/5, dopo 3/5, con `domanda
 5/5 e una passata in più quando la spinta trattiene (prima frase 2,13 s). Il «mi è sembrato di…»
 c'è quasi sempre. Il limite è la trascrizione: una parola tronca come «OR» il modello non la
 ricostruisce; da guardare la ritrascrizione del solo segmento (l'audio del banco c'è) e la rete
-`domanda_insistita`, che costa senza effetto misurato.
+`domanda_insistita`, che costa senza effetto misurato. *18/10: sulla DGX la rete è spenta (`llm_reti_spente: [domanda_insistita]`, data non scritta: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)).*
 
 ## La nota delle storpiature e chi parla da solo (16/10, issue #134, ramo `issue-134-storpiate-da-solo`)
 

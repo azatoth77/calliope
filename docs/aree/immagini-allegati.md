@@ -2,7 +2,7 @@
 
 *Foto in ingresso, webcam e schermata del PC, allegati di qualsiasi tipo. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 16/10.** Il dispositivo da cui si parla nei dati del turno, la spinta di schermo e webcam solo col PC raggiungibile, i volti non si riconoscono (sezione «Il dispositivo e i volti», issue #100). *Stato al 15/10 (storico):* Schermo e webcam chiesti con una foto di prima nella conversazione: una spinta nel turno (sezione sotto). Al 14/10: come al 09/10 (sotto), con due cambi del 14/10 nel cassetto: un tutore vede i file del figlio a ogni età (prima solo sotto i 14 anni, `minori.conversazioni_visibili_ai_tutori`), e l'audio di un avviso di pericolo (`avvisi_audio`, di serie spento) entra nel cassetto del tutore con la fonte «da un avviso di pericolo» e una scadenza sua (`avvisi_audio_giorni`, 30), fuori dalla revisione del cassetto ([minori](minori.md)).
+**Stato al 18/10.** Il cassetto col modello vero (17/10, #58): parametro `minore`, un solo punto decide di chi è il cassetto, le parole dell'azione sempre per `cassetto_gestisci`, la domanda prima di eliminare o tenere con un'altra persona nominata, «Archivia questa bolletta» con un file; banco `prova_cassetto_ollama` col 26B 15/15 nei tre gruppi (sezione «Il cassetto col modello vero»). Le foto col 26B rimisurate, 170/170 (17/10). *Stato al 16/10 (storico):* il dispositivo da cui si parla nei dati del turno, la spinta di schermo e webcam solo col PC raggiungibile, i volti non si riconoscono (sezione «Il dispositivo e i volti», issue #100). *Stato al 15/10 (storico):* Schermo e webcam chiesti con una foto di prima nella conversazione: una spinta nel turno (sezione sotto). Al 14/10: come al 09/10 (sotto), con due cambi del 14/10 nel cassetto: un tutore vede i file del figlio a ogni età (prima solo sotto i 14 anni, `minori.conversazioni_visibili_ai_tutori`), e l'audio di un avviso di pericolo (`avvisi_audio`, di serie spento) entra nel cassetto del tutore con la fonte «da un avviso di pericolo» e una scadenza sua (`avvisi_audio_giorni`, 30), fuori dalla revisione del cassetto ([minori](minori.md)).
 
 *Stato al 09/10 (storico): foto e allegati come dal 05/10, con la guardia nella politica dal 06/10; dall'08/10 ogni file di una persona riconosciuta resta 7 giorni nel suo cassetto (sezione sotto), anche per il tutore dai pulsanti della scheda. Resta aperto «cosa vedi sul mio schermo?» con una foto nella conversazione («Non me l'hai chiesto», chiuso il 15/10: sezione «Schermo e webcam con una foto di prima»); il modello vero sul cassetto non è ancora misurato.*
 
@@ -33,7 +33,9 @@
   dopo. Testo nella foto = dato non fidato: il 4B tentava `casa_comando` da un foglio 6/6,
   `_guardia_immagini` lo ferma 6/6 (le pericolose chiedono sempre conferma finché c'è una foto
   nella conversazione; le altre azioni solo se chieste). Non provati: telefono vero, C920,
-  qwen3.6 e il 26B sulla DGX (token da misurare).
+  qwen3.6 *[storico: «e il 26B sulla DGX», fino al 15/10: provato il 15/10 e il 17/10 con
+  `prova_immagini_ollama`, banchi col 26B del 16–17/10 nelle sezioni sotto; i token per foto del
+  26B restano da contare]*.
   **06/10, DGX**: una foto dal telefono con «Dimmi cosa vedi» faceva chiamare `pc_guarda`
   (webcam) e poi `allegato_leggi(0)`: la foto arrivava nella richiesta (`images`), ma
   l'etichetta «allegata a questo messaggio» con `allegato_leggi` presente (e4b 4/4) e «cosa
@@ -220,7 +222,7 @@ tenuto»). La vita nella conversazione non cambia: il cassetto serve a ritrovarl
   e senza profilo non c'è cassetto). Per leggere o gestire il cassetto a voce serve la voce
   riconosciuta in quella frase o lo scritto dello schermo personale: **mai la zona grigia** né la
   frase breve («Per i tuoi file devo riconoscere bene la tua voce…»). Ognuno vede solo il suo.
-  **Minori**: un tutore vede e gestisce il cassetto del figlio con `di`, con la stessa regola
+  **Minori**: un tutore vede e gestisce il cassetto del figlio con `minore` (fino al 17/10 `di`; `di` e `ragazzo` sono ancora accettati tutti e due), con la stessa regola
   delle conversazioni archiviate (`minori.conversazioni_visibili_ai_tutori`: dal 14/10 a ogni
   età; prima sotto i 14 anni sì, dai 14 no); un minore non può «Tieni» (i documenti di casa sono dell'ufficio, come
   `allegato_archivia`), può eliminare o tenere ancora.
@@ -270,7 +272,8 @@ tenuto»). La vita nella conversazione non cambia: il cassetto serve a ritrovarl
 - **Pulizia**: un thread all'avvio e ogni `cassetto_pulizia_s` (1 h): file scaduti eliminati
   (byte compresi), righe chiuse tolte dopo 30 giorni, `.tmp` orfani tolti.
 - **Registro dei turni**: righe `esito: cassetto` con l'evento (entrato, tenuto, eliminato,
-  prorogato, scaduto) e per ogni file solo nome, tipo e kB, mai il contenuto.
+  prorogato, scaduto) e per ogni file solo id («C12»), tipo e kB, mai il nome né il contenuto
+  *[storico: «solo nome, tipo e kB», fino all'unione dell'08/10: nota sotto]*.
 
 Configurazione (sezione `allegati`): `cassetto_enabled`, `cassetto_cartella` (vuoto = «cassetto»
 accanto a `memory_db`), `cassetto_giorni`, `cassetto_mb_persona`, `cassetto_avviso_giorni`,
@@ -511,7 +514,7 @@ banco col 26B non rilanciato.
 
 Decisione di Dario: un tutore può operare anche sui file del cassetto del figlio dai pulsanti
 della scheda sul **proprio** schermo personale (la scheda «I file di …» che arriva con
-`allegato_leggi(cassetto=…, di=…)`, dal 17/10 `ragazzo=…`), alle condizioni di `/api/cassetto` (`schermi/server.py`):
+`allegato_leggi(cassetto=…, di=…)`, dal 17/10 `minore=…`; *[storico: «dal 17/10 `ragazzo=…`», nome di un passo della PR #143]*), alle condizioni di `/api/cassetto` (`schermi/server.py`):
 
 - i file della richiesta sono tutti di una persona (altrimenti 409) e `Cassetto.proprietario` li
   attribuisce al figlio dal database, mai dalla pagina;
@@ -526,7 +529,7 @@ della scheda sul **proprio** schermo personale (la scheda «I file di …» che 
 
 **«Tieni» del tutore** va nella cartella del **tutore** nell'archivio dei documenti di casa
 (`<archivio_cartella>/<nome del tutore>/`), sia dai pulsanti sia a voce con
-`cassetto_gestisci(di=…)` (dal 17/10 `ragazzo=…`). Motivo: per un minore l'archivio è chiuso (è dell'ufficio, come
+`cassetto_gestisci(di=…)` (dal 17/10 `minore=…`; *[storico: «dal 17/10 `ragazzo=…`», un passo della PR #143]*). Motivo: per un minore l'archivio è chiuso (è dell'ufficio, come
 `allegato_archivia`), quindi nella cartella del ragazzo il file non lo vedrebbe nessuno dei due
 come suo; tenerlo è una scelta del tutore, che ne risponde e lo ritrova con le sue carte. Il
 ragazzo, da solo, continua a non avere «Tieni» (elimina o tiene ancora). La scheda aggiornata

@@ -2,7 +2,9 @@
 
 *Cosa funziona e cosa manca (`calliope_stato`, `python -m calliope.stato`), installazioni a voce dal catalogo. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Diciannove capacità nel registro (`capacita.DEFINIZIONI`: llm, stt, voce, wake, chi_parla, audio, satellite, memoria, biblioteca, pc, documenti, casa, schermi, agenti, archivio, ufficio, conversazioni, web e, dal 13/10, notizie). Il resto come al 09/10 (sotto): piano dei modelli in sola lettura, fasi 3–6 della taratura da fare, installazioni con internet vero non provate.
+**Stato al 18/10.** Diciannove capacità nel registro (`capacita.DEFINIZIONI`, contate il 18/10; nessuna nuova dopo `notizie` del 13/10). Dal 14/10 sera il conto della memoria in sola lettura (passo 1 dell'arbitro, `calliope stato --memoria`), dal 15/10 il passo 2 in ombra (`arbitro_memoria: ombra`, spento di serie, `calliope stato --memoria --storia`) e il secondo Whisper nel conto con la porta 8005 e 2,0 GB della variante q5_0 (#2). Il resto come al 14/10 (sotto): piano dei modelli in sola lettura, fasi 3–6 della taratura da fare, installazioni con internet vero non provate.
+
+*Stato al 14/10 (storico):* Diciannove capacità nel registro (`capacita.DEFINIZIONI`: llm, stt, voce, wake, chi_parla, audio, satellite, memoria, biblioteca, pc, documenti, casa, schermi, agenti, archivio, ufficio, conversazioni, web e, dal 13/10, notizie). Il resto come al 09/10 (sotto): piano dei modelli in sola lettura, fasi 3–6 della taratura da fare, installazioni con internet vero non provate.
 
 **`calliope stato` al 14/10** (`calliope/stato.py`; sulla DGX `calliope stato …`, su Windows `python -m calliope.stato …`): senza opzioni la tabella delle capacità con finestra di contesto, costo della voce e avvisi di latenza e attrito (`--dettagli`, `--json`); `--catalogo` e `--installa <azione>` (installazioni); `--piano [--json] [--inventario FILE]` (piano dei modelli); `--turni [--giorni N] [--json]` (latenza, attrito della politica, argomenti incerti, compagnia, stato del dialogo, voce sola, scelta dei tool, frasi pronte, stanza e guardia della stanza; con `--pause` le pause e la fine del turno); `--eventi` (il registro degli eventi su disco); `--guardia [--falso ID | --vero ID]` (i segnali del guardiano della stanza, senza parole, 14/10); `--avvisi [--giorni N] [--falso ID]` (gli avvisi ai tutori, 14/10); `--memoria [--json] [--inventario FILE]` (il conto della memoria adesso con le classi e cosa farebbe l'arbitro, 14/10 sera, sola lettura); `--memoria --storia [--giorni N]` (il registro dell'arbitro in ombra per giorno e il criterio per il passo 3, 15/10). La conservazione ha un comando suo: `calliope conserva [--json]`, `calliope conserva --svuota [--persona …]` e, una tantum dal 14/10 sera, `calliope conserva --converti-audio` (i WAV μ-law di prima nel G.711 vero, rilanciabile; [contesto-conversazione](contesto-conversazione.md), «Il G.711 vero») (`calliope/conserva.py`).
 
@@ -238,14 +240,15 @@ cambia nel comportamento.**
   − margine) oppure chi scaricherebbe, nell'ordine sfondo (il meno usato prima) → a richiesta fermi
   → vicini, mai il tempo reale; l'agente solo dal passo 4 (sonno di vLLM misurato).
 - `calliope stato --memoria` (sola lettura; con `--inventario FILE` una macchina salvata).
-- **Misure** da fare sulla DGX con `prove/manuali/misura_memoria_dgx.py` (comandi in
+- **Misure** da fare sulla DGX *[storico: lanciate in parte il 14/10, voce «Misure del 14/10 nel
+  conto» sotto e [setup-dgx](setup-dgx.md)]* con `prove/manuali/misura_memoria_dgx.py` (comandi in
   [setup-dgx](setup-dgx.md)): caricamento a freddo e a caldo, memoria vera contro `/api/ps`, secondo
   Whisper suo, effetto sulla prima frase con un caricamento in parallelo, sonno di vLLM come comando
   separato con conferma.
 
 Con i numeri di Dario (119 GiB, 97 usati, ~21 disponibili; vLLM 47,8, 26B 15, guardiano 5,3, e4b
-3,1, whisper 2,1; *[15/10: misurati embedding 6,7 GB e whisper 2,6, sotto]*) Calliope tiene ~75–78 GiB, gli altri ~19–22; FLUX (13) e il secondo Whisper (3,6)
-ci starebbero ciascuno, non insieme. Prova a secco `prove/prova_arbitro_memoria.py` (DGX finta,
+3,1, whisper 2,1; *[14/10: misurati embedding 6,7 GB e whisper 2,6, sotto]*) Calliope tiene ~75–78 GiB, gli altri ~19–22; FLUX (13) e il secondo Whisper (3,6
+*[storico: 2,0 dal 15/10, sezione «Secondo Whisper»]*) ci starebbero ciascuno, non insieme. Prova a secco `prove/prova_arbitro_memoria.py` (DGX finta,
 portatile, solo CPU; contrari: mai il tempo reale, mai un modello non di Calliope, memoria non
 letta).
 
@@ -301,7 +304,8 @@ si registra soltanto cosa l'arbitro avrebbe fatto.
   di sempre in GB (i 47,8 della ricerca erano GiB).
 
 Si accende con `arbitro_memoria: ombra` in `calliope.locale.yaml` (sezione `registro`) e un
-riavvio; si spegne togliendo la riga. Prova a secco `prove/prova_arbitro_memoria.py` (sezioni 6 e 7:
+riavvio; si spegne togliendo la riga. Sulla DGX è in ombra (letto il 18/10, data d'accensione non
+scritta: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)). Prova a secco `prove/prova_arbitro_memoria.py` (sezioni 6 e 7:
 quiete, confronto con i quattro posti, coda, minuto, registro, storia e criterio).
 
 ## Secondo Whisper: porta e memoria giuste nel conto (15/10, issue #2)

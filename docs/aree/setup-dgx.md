@@ -2,7 +2,9 @@
 
 *Installazione e aggiornamento sulla DGX Spark (Ubuntu 24.04 aarch64): uv, gestore `calliope`, systemd, motori. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto): nessun cambio al gestore né ai motori dopo il 09/10. Dal 14/10 sera lo script di misura per l'arbitro della memoria (sotto, da lanciare). Il gestore passa a Calliope anche `calliope stato …` (tutte le opzioni in [capacita-installazioni](capacita-installazioni.md)), `calliope conserva [--svuota [--persona …]] [--json]` (dati conservati per le misure, dal 12/10), `calliope satellite …` e `calliope schermi …` (abbinamenti e certificati) ed `calliope esegui` (Calliope in primo piano); `calliope prova-e2e` e `calliope motore …` hanno il loro ramo. Comandi controllati sul codice il 14/10.
+**Stato al 18/10.** Come al 14/10 (sotto): nessun cambio al gestore né ai motori dopo il 14/10. Dal 15/10 il secondo Whisper della corsia lenta sta sulla porta 8005 da un posto solo (#2; la 8004 è di SearXNG). Lo script di misura per l'arbitro della memoria è stato lanciato in parte il 14/10 (sezione sotto). Dal 17/10 l'immagine `javascript` della sandbox serve anche ai programmi dell'agente, se `javascript` è in `agenti_linguaggi` del locale (#54, [agenti-estensioni](agenti-estensioni.md)); sulla DGX è acceso dal 17/10 sera (sezione «Interruttori sulla DGX», qui sotto). Il posto unico, con la data, del valore vero delle chiavi del file locale della DGX è quella sezione (letto da chi amministra il 18/10, #84).
+
+*Stato al 14/10 (storico):* Come al 09/10 (sotto): nessun cambio al gestore né ai motori dopo il 09/10. Dal 14/10 sera lo script di misura per l'arbitro della memoria (sotto, da lanciare). Il gestore passa a Calliope anche `calliope stato …` (tutte le opzioni in [capacita-installazioni](capacita-installazioni.md)), `calliope conserva [--svuota [--persona …]] [--json]` (dati conservati per le misure, dal 12/10), `calliope satellite …` e `calliope schermi …` (abbinamenti e certificati) ed `calliope esegui` (Calliope in primo piano); `calliope prova-e2e` e `calliope motore …` hanno il loro ramo. Comandi controllati sul codice il 14/10.
 
 *Stato al 09/10 (storico):* Calliope gira sulla DGX dal 02/10 come servizio utente systemd, aggiornata con `calliope aggiorna` (ritorno automatico; dal 06/10 non interrompe in silenzio i lavori dell'agente). Voce su Ollama scelta con `llm_profilo`, Whisper con whisper.cpp, agente qwen3.6 su vLLM, SearXNG e sandbox Docker accanto. Dal 07/10 l'extra `voce-gpu` porta Piper sulla GPU (onnxruntime-gpu su aarch64). La prova end-to-end su un'istanza di prova c'è dal 06/10.
 
@@ -12,6 +14,57 @@
 |---|---|---|
 | Installazione e aggiornamento (Linux, DGX) | uv (lock universale), git, systemd utente; gestore in sola libreria standard | `pyproject.toml`, `uv.lock`; `setup/linux/` → `gestore.py` (comando `calliope`: `installa`, `aggiorna`, `torna`…), `installa.sh`, `calliope.service`, `calliope.locale.esempio.yaml`, `motore/vllm.sh` (voce e agente su vLLM; Whisper su vLLM provato e scartato il 02/10), `motore/whisper.sh` e `motore/calliope-whisper.service` (whisper.cpp), `motore/whisper-lento.sh` e `motore/calliope-whisper-lento.service` (il secondo Whisper della corsia lenta della stanza, dal 14/10 sera, facoltativo), `motore/sandbox.sh`, `motore/searxng.sh`, `motore/gemma4_template.py` |
 | Prova end-to-end su un'istanza di prova (06/10) | solo libreria standard; satelliti veri con microfono e casse finti | `prove/e2e/` → `lancia.py`, `istanza.py`, `satelliti.py`, `copioni.py`, `verifica.py`; manuale [`prove/manuali/e2e-dgx.md`](../../prove/manuali/e2e-dgx.md) |
+
+## Interruttori sulla DGX
+
+*Il posto unico dello stato dell'installazione vera (dal 18/10, issue #84). Il file locale della
+DGX non è nel repository e lo legge solo chi amministra: qui ci sono gli interruttori, mai
+indirizzi, percorsi, nomi o dati dell'ufficio. **Chi accende, spegne o cambia una di queste chiavi
+sulla DGX aggiorna questa tabella** (valore, data, e la riga datata nel documento d'area), e i
+documenti d'area rimandano qui invece di ripetere lo stato.*
+
+**Letti da chi amministra il 18/10** (versione installata: main f882e35). «Di serie» è il valore
+del codice (`calliope/config.py`), che vale per tutte le chiavi non elencate. «Da quando» è la data
+scritta nei documenti; «non scritta» dove nessun documento la dice.
+
+| Chiave | Sulla DGX | Di serie | Da quando | Area |
+|---|---|---|---|---|
+| `llm_profilo` | `gemma4-26b-ollama` (l'e4b resta caricato per il guardiano e il giudizio «rivolta») | vuoto (il modello di `llm_model`) | verificato il 16/10 | [voce-e-regole](voce-e-regole.md) |
+| `llm_reti_spente` | `[domanda_insistita]`; si aggiungono quelle del profilo (`spinta_promessa`, `spinta_richiesta`, `ricerca_promessa`), quindi quattro spente in tutto | `[]` (tutte accese, o quelle del profilo) | non scritta | [contesto-conversazione](contesto-conversazione.md) |
+| `system1_dopo_tool` | `ombra` | `spento` | 15/10 | [voce-e-regole](voce-e-regole.md) |
+| `frasi_varianti` | `attivo` | `ombra` | non scritta (#28 è ancora aperta) | [personalita](personalita.md) |
+| `fine_turno` | `ombra` | `spenta` | non scritta (#24) | [stt-tts](stt-tts.md) |
+| `speaker_impronte_satellite` | `ombra` | `spento` | 15/10 | [stt-tts](stt-tts.md) |
+| `arbitro_memoria` | `ombra` | `spento` | non scritta (#1) | [capacita-installazioni](capacita-installazioni.md) |
+| `stanza` | `ombra` | `spenta` | 14/10 | [stt-tts](stt-tts.md), [contesto-conversazione](contesto-conversazione.md) |
+| `stanza_contesto` | `true` | `false` | 14/10 | [contesto-conversazione](contesto-conversazione.md) |
+| `stanza_cerca` | `true` | `false` | 14/10 | [contesto-conversazione](contesto-conversazione.md) |
+| `stanza_tenuta` | `true` | `false` | 14/10 sera (prova in auto) | [contesto-conversazione](contesto-conversazione.md) |
+| `stanza_durante_voce` | `true` | `false` | 14/10, dopo la misura sul portatile; criterio per il telefono non scritto (#37) | [stt-tts](stt-tts.md) |
+| `stanza_guardia` | `ombra` | `spenta` | 14/10 sera (#36) | [minori](minori.md) |
+| `stanza_lenta` | `true` | `false` | 14/10 sera | [stt-tts](stt-tts.md) |
+| `stanza_lenta_blocchi` | `ombra` (pausa 8 s) | `spento` | 15/10 | [stt-tts](stt-tts.md) |
+| `stanza_audio_banco_giorni` | `7` | `0` | 14/10 sera; l'eccezione della 0029 scade il 21/10 (#32) | [stt-tts](stt-tts.md) |
+| `stanza_conoscenti` | `true` | `false` | 14/10 sera (prova in auto); criterio non scritto (#38) | [stt-tts](stt-tts.md) |
+| `avvisi_audio` | `true` | `false` | non scritta; criterio non scritto (nessuna issue) | [minori](minori.md) |
+| `notizie_accese` | le due testate spente di serie (Il Post, Il Sole 24 Ore) | `[]` | non scritta | [biblioteca](biblioteca.md) |
+| `agenti_linguaggi` | `[python, csharp, javascript]` | `[python, csharp]` | 17/10 (#54) | [agenti-estensioni](agenti-estensioni.md) |
+| `eventi` | `ombra` (di serie, non nel locale) | `ombra` | — | [contesto-conversazione](contesto-conversazione.md) |
+| `politica_per_valore` | `true` (di serie, non nel locale) | `true` (dal 09/10 sera) | — | [sicurezza-politica](sicurezza-politica.md) |
+| `agenti_accettazione_programmi_sempre` | `false` (di serie, non nel locale) | `false` | — | [agenti-estensioni](agenti-estensioni.md) |
+| `agenti_accettazione_ragionamento` | `0` (di serie, non nel locale) | `0` | — | [agenti-estensioni](agenti-estensioni.md) |
+| `preselezione_tool` | non nel locale; il campo è tolto dal codice il 17/10 (PR #125, #25) | — | spenta dal 15/10 pomeriggio, tolta il 17/10 | [voce-e-regole](voce-e-regole.md) |
+| `web_searxng_url` | presente (l'indirizzo resta fuori dal repository) | vuoto | — | [biblioteca](biblioteca.md) |
+| `fatture_emittente` | presente (i dati dell'ufficio restano fuori dal repository) | vuoto | — | [documenti-ufficio](documenti-ufficio.md) |
+
+Una chiave «accesa senza criterio scritto» è accesa nell'uso senza la soglia che la issue chiede
+prima dell'accensione: la misura resta da fare (le issue tra parentesi), non è già fatta. Per una lettura
+d'ombra con la data «non scritta», il primo giorno sicuro da cui contare è il 18/10.
+
+Per rifarla: chi amministra legge il locale della DGX e riporta solo le chiavi a modi, vero/falso e
+le liste di nomi; per le chiavi con indirizzi o dati solo «presente» o «assente». Il comando
+`calliope stato --interruttori` proposto nella #84 (stampa il valore effettivo senza mai un
+indirizzo) non c'è ancora.
 
 ## Setup (DGX Linux)
 
@@ -198,7 +251,14 @@ prova: [`prove/manuali/e2e-dgx.md`](../../prove/manuali/e2e-dgx.md).
 
 Progetto in [`ricerche/2026-10-14-arbitro-memoria.md`](../ricerche/2026-10-14-arbitro-memoria.md),
 conto in sola lettura con `calliope stato --memoria` ([capacita-installazioni](capacita-installazioni.md)).
-Lo script `prove/manuali/misura_memoria_dgx.py` **non è ancora stato lanciato**: va sulla DGX, nella
+Lo script `prove/manuali/misura_memoria_dgx.py` *[storico: «non è ancora stato lanciato» fino al 14/10
+sera]*: il 14/10 è stato lanciato almeno il sottocomando `ollama` (qwen3-embedding: 6,7 GB di
+MemAvailable da caricato, caricamento 1,5 s), che è nel conto (`MISURE_UNIFICATA_GB`,
+[capacita-installazioni](capacita-installazioni.md), «Misure del 14/10 nel conto», con i 2,6 GB del
+whisper-server dei turni dello stesso giorno: da quale sottocomando non risulta). Di `whisper` e
+`voce --durante` non risulta nessuna misura scritta, e `vllm-sonno` esce con 77 finché il
+container dell'agente non ha `--enable-sleep-mode` (passo 4): quali sottocomandi siano stati lanciati
+lo dice chi amministra. Va sulla DGX, nella
 cartella dei dati, con il servizio acceso e Calliope inattiva (controlla da sé il journal come il
 deploy: nessun turno da 10 minuti, nessun lavoro dell'agente; si ferma se un turno arriva a metà).
 Stampa solo numeri.

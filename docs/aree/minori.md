@@ -2,7 +2,7 @@
 
 *Fasce d'età, preset, guardiano, compiti, avvisi ai tutori. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 16/10.** Dal 16/10 i minori di casa si conservano come gli adulti (decisione [0031](../decisioni/0031-conservazione-dei-minori.md), issue #104: turni, eventi, archivio e journal per 60 giorni, rileggibili dai tutori; la voce solo col consenso dei tutori; sezione in fondo). *Storico al 14/10:* come al 09/10 (sotto), più: nessuna conservazione per i minori (12/10: le loro parole né nel registro dei turni né nel journal, esercizi e richieste che scadono con la conservazione; superato il 16/10); l'indice del programma ministeriale per gli esercizi (12/10 sera); le notizie solo di sport, tecnologia e ragazzi (13/10); il rilevatore solo sulle frasi rivolte a Calliope (13/10); dal 14/10 i tutori vedono conversazioni e cassetto del figlio a ogni età, il **guardiano a posteriori della stanza** (`stanza_guardia`, spento di serie; in ombra solo misure, `calliope stato --guardia`), gli avvisi con data e origine (`calliope stato --avvisi`, azione `avvisi` di `minore_gestisci`), la trascrizione (`avvisi_trascrizione`, accesa) e l'audio (`avvisi_audio`, spento) sulla scheda del tutore. Da confermare con Dario le scelte prudenti dei cancelli; da rimisurare sulla DGX col 26B.
+**Stato al 18/10.** Dal 16/10 i minori di casa si conservano come gli adulti (decisione [0031](../decisioni/0031-conservazione-dei-minori.md), issue #104: turni, eventi, archivio e journal per 60 giorni, rileggibili dai tutori; la voce solo col consenso dei tutori, il «sì» breve dei tutori e la voce cancellata alla maggiore età, #108 e #114; sezioni in fondo); dal 16/10 l'ospite con la voce vicina a quella di un minore che ha parlato da poco riceve il modo di parlare della sua fascia (`minori_ospite_vicino`, #102). Dal 14/10 sera il guardiano a posteriori della stanza aspetta le righe di versione 2 della corsia lenta e non rigiudica una riga solo perché è stata riscritta (sottosezione «14/10 sera: il guardiano a posteriori e la corsia lenta»). Dal 17/10 nel cassetto di un minore letto da un tutore l'avviso «non presentare questi come suoi» (#58, [immagini-allegati](immagini-allegati.md)). *Storico al 14/10:* come al 09/10 (sotto), più: nessuna conservazione per i minori (12/10: le loro parole né nel registro dei turni né nel journal, esercizi e richieste che scadono con la conservazione; superato il 16/10); l'indice del programma ministeriale per gli esercizi (12/10 sera); le notizie solo di sport, tecnologia e ragazzi (13/10); il rilevatore solo sulle frasi rivolte a Calliope (13/10); dal 14/10 i tutori vedono conversazioni e cassetto del figlio a ogni età, il **guardiano a posteriori della stanza** (`stanza_guardia`, spento di serie; in ombra solo misure, `calliope stato --guardia`), gli avvisi con data e origine (`calliope stato --avvisi`, azione `avvisi` di `minore_gestisci`), la trascrizione (`avvisi_trascrizione`, accesa) e l'audio (`avvisi_audio`, spento) sulla scheda del tutore. Da confermare con Dario le scelte prudenti dei cancelli; da rimisurare sulla DGX col 26B.
 
 *Stato al 09/10 (storico):* Profili dei minori con fasce, preset e tutori; guardiano (Llama Guard 3) su
 domanda e frasi, rilevatore di pericolo sulla domanda; compiti guidati; esercizi di matematica e italiano
@@ -155,7 +155,7 @@ amministra. Il minore va registrato di nuovo per canale quando c'è (stt-tts).
 - **Cassetto dei file** (08/10, [immagini-allegati](immagini-allegati.md)): i file mandati da un
   minore restano 7 giorni nel suo cassetto come quelli degli adulti; un tutore li vede e li
   gestisce (`allegato_leggi`/`cassetto_gestisci` con `di`) con la regola delle conversazioni
-  archiviate (sotto i 14 anni). Il minore non può «Tieni» (archivio dei documenti di casa).
+  archiviate (sotto i 14 anni; *dal 14/10 a ogni età, vedi sotto*). Il minore non può «Tieni» (archivio dei documenti di casa).
 - **Cassetto, tutore dai pulsanti** (08/10): il tutore opera sui file del figlio sotto i 14 anni (dal 14/10 a ogni età, vedi sotto)
   anche dai pulsanti della scheda sul proprio schermo, solo in una conversazione verificata dalla
   voce; «Tieni» li mette nella cartella del tutore ([immagini-allegati](immagini-allegati.md)).
@@ -366,8 +366,9 @@ bene così); verifiche **11/11** (5 smentite, 6 conferme con reticenze); gravit�
 scambio di memoria). Costo: solo nei turni con un pericolo (gravità) e nel turno dopo un segnale
 aperto (verifica); la voce degli altri turni non cambia. Da rimisurare sulla DGX.
 
-**Da confermare con Dario**: avviso non urgente sul silenzio (o niente); attesa 300 s e finestra
-1800 s; acuto con la voce incerta come acuto (protezione e avviso «la voce non era sicura»);
+**Da confermare con Dario**: avviso non urgente sul silenzio (o niente) (*[deciso il 10/10: avvisa,
+`minori_pericolo_silenzio: avvisa`, sezione dei segnali dopo un riavvio]*). **Restano da
+confermare**: attesa 300 s e finestra 1800 s; acuto con la voce incerta come acuto (protezione e avviso «la voce non era sicura»);
 «Aiuto.» da solo acuto; avviso «sicurezza» rinviato a voce per 600 s sul satellite del minore.
 
 ## In compagnia la voce non è sicura (09/10, ramo `compagnia`)
@@ -802,7 +803,9 @@ amministra («non live, dopo che la trascrizione è stata analizzata e corretta�
   niente.
 - **Quando**: righe finite da `stanza_guardia_attesa_s` (120 s) e stanza quieta da altrettanto, o
   uno scambio che non tace da `stanza_guardia_blocco_max_s` (15 min). Fino al passo 3 la
-  trascrizione è quella veloce (versione 1): l'attesa è il posto dove si inserirà la corsia lenta.
+  trascrizione è quella veloce (versione 1): l'attesa è il posto dove si inserirà la corsia lenta
+  (*[dal 14/10 sera, con `stanza_lenta`, l'attesa aspetta la versione 2 del segmento, al più
+  `stanza_guardia_blocco_max_s` dalla fine: sottosezione «14/10 sera: il guardiano a posteriori e la corsia lenta»]*).
 - **Il giudizio**: a blocchi di al più 10 righe con 6 di contesto prima e 3 dopo, nel prompt
   `guardia.PROMPT` (conversazione di famiglia: scherzi, litigi per finta, videogiochi, giochi da
   tavolo, TV, compiti, esagerazioni sono NIENTE), al rilevatore di oggi con
@@ -854,7 +857,9 @@ DGX da misurare.
 **Non fatto**: ~~la rilettura dopo un riavvio dal disco (`stanza_tenuta`: il giro riparte dalle
 righe nuove in memoria), il filtro della modalità gioco del satellite (oggi lo fa solo il contesto
 «gioco» del giudizio)~~ (fatti la sera del 14/10, sezione qui sotto), le righe di versione 2 della
-corsia lenta (passo 3: oggi una riga riscritta si rigiudicherebbe), il riepilogo dei dubbi nel
+corsia lenta (passo 3: oggi una riga riscritta si rigiudicherebbe; *[fatto la sera del 14/10: una
+riga diventata versione 2 non si rigiudica, salvo un cambio sostanziale del testo o di chi parla da o verso un minore,
+`lenta.cambio_sostanziale`, sottosezione «14/10 sera: il guardiano a posteriori e la corsia lenta»]*), il riepilogo dei dubbi nel
 riepilogo del giorno.
 
 ## Il guardiano a posteriori dopo un riavvio e con un gioco aperto (14/10 sera, ramo `stanza-guardia-2`)
@@ -1023,7 +1028,8 @@ senza parole, arrivato giorni dopo, non si capisce.
 
 **Prove**: `prove/prova_avvisi_audio.py` (a secco, con i contrari: non tutore, altro schermo, chi
 amministra, schermo di stanza, ombra, ospite, adulto senza minori, altra stanza, scadenza, svuota,
-dimentica, anello pieno, spento). Sulla DGX: accendere `avvisi_audio: true` nel file locale.
+dimentica, anello pieno, spento). Sulla DGX: accendere `avvisi_audio: true` nel file locale. *18/10:
+sulla DGX `avvisi_audio: true` (data e criterio d'accensione non scritti, nessuna issue: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)).*
 
 ### 14/10 sera: «Scarica l'audio» anche dopo un riavvio (ramo `conoscenti-avvisi-2`)
 

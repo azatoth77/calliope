@@ -2,7 +2,7 @@
 
 *Politica unica dei tool e provenienza, permessi, conferme e frase di sfida, analisi di sicurezza del 03/10. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 15/10.** Come al 09/10 (sotto), con: lo stato del dialogo in ombra (10/10: `proposta_rispondi` e il consenso del progetto confrontato con la politica, `dialogo_interprete: ombra`); la visibilità per evento col contesto dagli eventi (`eventi: attivo`, acceso a mano); i dati conservati per le misure con i loro permessi e il tool `dati_conservati` (12/10); le notizie come dato non fidato che resta nella storia in busta (13/10); il resoconto della stanza in busta, mai un'istruzione (14/10); il «sì» breve per le azioni importanti misurato in ombra, senza effetto (15/10, `calliope/si_breve.py`, roadmap 2.6). Classe, livello e quando c'è di ogni tool: tabella in [`architettura-tool.md`](../architettura-tool.md). Il secondo fattore per chi amministra è ancora un progetto.
+**Stato al 18/10.** Come al 15/10 (sotto), più: le sonde dell'agente provate sul container vero della DGX, 0 passaggi su 61 (17/10, #63, sezione delle sonde); per `cassetto_gestisci` le parole di un'azione sempre nella frase (`Classe.verbo_sempre`, regola `politica_cassetto_non_chiesto`) e la domanda prima di eliminare o tenere quando la frase nomina un'altra persona (`Classe.chiedi_se`, regola `politica_cassetto_altra_persona`), contate nell'attrito (17/10, #58: dettagli in [immagini-allegati](immagini-allegati.md)); le reti dell'inoltro del satellite uscite dalla politica con l'inoltro (16/10, #61). *Stato al 15/10 (storico):* come al 09/10 (sotto), con: lo stato del dialogo in ombra (10/10: `proposta_rispondi` e il consenso del progetto confrontato con la politica, `dialogo_interprete: ombra`); la visibilità per evento col contesto dagli eventi (`eventi: attivo`, acceso a mano); i dati conservati per le misure con i loro permessi e il tool `dati_conservati` (12/10); le notizie come dato non fidato che resta nella storia in busta (13/10); il resoconto della stanza in busta, mai un'istruzione (14/10); il «sì» breve per le azioni importanti misurato in ombra, senza effetto (15/10, `calliope/si_breve.py`, roadmap 2.6). Classe, livello e quando c'è di ogni tool: tabella in [`architettura-tool.md`](../architettura-tool.md). Il secondo fattore per chi amministra è ancora un progetto.
 
 *Stato al 09/10 (storico):* Politica unica dei tool in `ToolRegistry.call` (classi, provenienza, dati non
 fidati in busta, conferme e frase di sfida, controllo di ciò che dice). Sicurezza per valore:
@@ -498,7 +498,12 @@ eseguite entro 3 turni (indizio automatico di falso positivo), le frasi «te l'h
 confronto con l'ombra. In `calliope stato --turni` (anche `--json`, chiave `attrito`), in `calliope
 stato` e all'avvio (`[SICUREZZA] …`) l'avviso D6 (`attrito_avviso`, 3). Sui registri della DGX:
 05/10 **7,4** (2 ripetute), 06/10 **0**, 07/10 **16,8** su 244 turni (33 della politica, 8 di ciò
-che dice, 17 ripetute, 20 su 33 poi eseguite, 5 «già detto»), 08/10 mattina 0 su 41. Le parole
+che dice, 17 ripetute, 20 su 33 poi eseguite, 5 «già detto»), 08/10 mattina 0 su 41. *Nota del
+18/10 (#81): il 15,8 del 07/10 della sezione sopra e questo 16,8 sono due conteggi diversi dello
+stesso giorno, non una correzione. 15,8 è l'analisi a mano del rapporto (29 domande della politica
+su 184 turni con una frase, § 2.2 del rapporto); 16,8 è `calliope/attrito.py` (244 turni: anche il
+denominatore è contato in un altro modo), che conta anche le domande di ciò che dice (33 + 8 = 41).
+Per i confronti nel tempo vale il secondo, quello di `calliope stato --turni`.* Le parole
 che fanno fermare una frase a riferire (proposte nel piano) non sono nel registro: `riferire.py` è
 di un altro ramo, da fare dopo.
 
@@ -1301,7 +1306,7 @@ traccia `_fonte` resta sul messaggio proiettato, la conversazione resta contamin
 senza il testo, dopo un riavvio); `proposta_rispondi` scritto con visibilità «registro». La
 proiezione ammette solo «modello» e «turno»; `fughe` resta 0.
 
-**Il banco rigiocato sul registro** (`prova_eventi_attivo`, `prova_eventi_visibilita`): le prove di
+**Il banco rigiocato sul registro** (`prova_eventi_attivo.prova_visibilita`; *[storico: «`prova_eventi_visibilita`», un file che non c'è mai stato]*): le prove di
 `prova_politica` (attacchi 99/99 da web, foto, allegati, audio, pagina, estensioni, archivio,
 agente; riformulati; sfida dopo un dato; conferma vera) e `attacchi_nuovi` di `prova_valore` (con la
 politica per valore accesa e spenta) girano con `attivo`: ogni turno passa dall'uscita unica,

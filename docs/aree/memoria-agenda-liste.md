@@ -2,7 +2,9 @@
 
 *Memoria per persona e della casa, timer, promemoria, appuntamenti, liste, `calcola`, `data_calcola`. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto): nessun cambio a memoria, agenda, liste e tempi dopo il 09/10; nomi, campi e tool di questa pagina controllati sul codice il 14/10.
+**Stato al 18/10.** Come al 14/10, più quattro cambi dal 15/10: «ricorda(…)» scritto come testo in mezzo alla frase si esegue (`Brain.mentions_tool` prende anche i nomi senza «_» attaccati a «(», rete `chiamata_in_mezzo`, 15/10: [voce-e-regole](voce-e-regole.md)); i ricordi di chi parla entrano nella storia solo quando cambiano, davanti alla frase di quel turno (`dati_stabili_in_storia`, 16/10, #95, voce in «Problemi noti»); annullare tutta l'agenda chiede conferma con l'elenco e al «sì» annulla solo le voci nominate (16/10, #99); la proposta di salvare la nascita dice gli anni «se la data è la tua», mai per un'altra persona (`nascita_altra_persona`), e l'età col 26B è misurata sulla DGX: 21/21, privacy 12/12 (17/10, #70).
+
+*Stato al 14/10 (storico):* Come al 09/10 (sotto): nessun cambio a memoria, agenda, liste e tempi dopo il 09/10; nomi, campi e tool di questa pagina controllati sul codice il 14/10.
 
 *Stato al 09/10 (storico):* Memoria per persona e della casa, timer, promemoria, appuntamenti e liste
 in SQLite, con conti e date fatti dal programma (`calcola`, `data_calcola`); età e compleanni
@@ -145,7 +147,8 @@ La data di nascita era nel profilo (`speakers.json` v2, `nascita`), il modello n
   codice di prima **2/14**, dopo **18/21** (3 giri). Restano 2/3 «Quanti anni ha Bianca?» in cui il
   4B chiede la data invece di chiamare il tool (con la descrizione «non chiederla prima» da 0/2 a
   1/3), e 1/3 «quanti giorni mancano…». Prima frase mediana 0,88 → 2,4 s, ma prima erano quasi
-  tutte risposte senza tool («ho bisogno della data di nascita»). Da rimisurare col 26B.
+  tutte risposte senza tool («ho bisogno della data di nascita»). *[storico: «da rimisurare col
+  26B» fino al 17/10]*: col 26B sulla DGX età 21/21 e privacy 12/12 (sezione del 17/10, in fondo).
 - Prova: `prove/prova_eta_utenti.py` (35 controlli).
 
 ## La propria data di nascita: dai ricordi e nel profilo (07/10 pomeriggio, DGX, ramo `correzioni-giro7`)
@@ -184,8 +187,9 @@ l'età calcolata dal programma.
 - Misura con gemma4 e4b locale (3 giri, memoria vera, profilo senza data): «Quanti anni ho?» col
   ricordo «Il compleanno di Luca è il 4 luglio 1977.» **3/3** (prima 0/3: errore, oppure 47 anni
   contati a mente); «Ok, ricordati che il mio compleanno è il 4 luglio del 1977» → `ricorda` con
-  `nascita` → «Sì, grazie.» → profilo → «Quanti anni ho?» dal profilo **3/3**. Da rimisurare col
-  26B sulla DGX.
+  `nascita` → «Sì, grazie.» → profilo → «Quanti anni ho?» dal profilo **3/3**. *[storico: «da
+  rimisurare col 26B sulla DGX» fino al 17/10]*: col 26B `eta_dal_ricordo` e il compleanno salvato
+  sono nei 21/21 della sezione del 17/10, in fondo.
 - Prove: `prove/prova_eta_utenti.py` (sezione 7, (a), (a2), (b), (c) e contrari).
 
 ## Il timer già suonato e il cambio non chiesto (07/10 sera, DGX, ramo `correzioni-giro8`)

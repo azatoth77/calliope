@@ -2,7 +2,9 @@
 
 *Toni di voce, modalità startrek, suoni d'ascolto, wake word diversa dal nome. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto), più le frasi pronte con varianti per tono e forma breve (fasi 0–1 del 12/10): il catalogo c'è, la misura delle ripetizioni è nel registro dei turni (`calliope stato --turni`), le varianti sono **in ombra** (`frasi_varianti: ombra` di serie; `attivo` nel file locale dopo la rilettura del campione). Sezione «Frasi pronte: misura e catalogo» in fondo.
+**Stato al 18/10.** Il codice dell'area è quello del 14/10: sei toni, modalità startrek a voce, suoni d'ascolto, frasi pronte con varianti per tono e forma breve **in ombra** (`frasi_varianti: ombra` di serie; `attivo` nel file locale dopo la rilettura del campione, issue #28). Il catalogo (`calliope/frasi.py`, `CATALOGO`) ha **26 id, 13 con varianti**: ai 10 del 12/10 si sono aggiunti `onesta.non_salvato` (12/10 sera), `scusa.incartata` e `attesa.stanza` (14/10); gli altri 13 sono delle classi bloccate, solo per la misura. Sezione «Frasi pronte: misura e catalogo» in fondo. *18/10: sulla DGX `frasi_varianti: attivo` (data non scritta; #28 ancora aperta: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)).*
+
+*Stato al 14/10 (storico):* Come al 09/10 (sotto), più le frasi pronte con varianti per tono e forma breve (fasi 0–1 del 12/10): il catalogo c'è, la misura delle ripetizioni è nel registro dei turni (`calliope stato --turni`), le varianti sono **in ombra** (`frasi_varianti: ombra` di serie; `attivo` nel file locale dopo la rilettura del campione). Sezione «Frasi pronte: misura e catalogo» in fondo.
 
 *Stato al 09/10 (storico):* Sei toni (della casa e per persona), modalità startrek accesa e spenta a
 voce da chi amministra senza riavvio (il ritorno alla normale anche scritto), suoni d'ascolto
@@ -146,7 +148,8 @@ ancora le frasi di oggi, parola per parola, finché chi amministra non rilegge i
   con la **stima delle varianti** in ombra (come se si fossero dette) e le più dette; avviso
   sopra 8 ogni 100 con almeno 50 frasi pronte. I turni di prima del 12/10 si riconoscono per
   modello (la cortesia dall'esito).
-- **Fase 1, catalogo** (`calliope/frasi.py`, `CATALOGO`): 10 frasi, 190 forme in tutto,
+- **Fase 1, catalogo** (`calliope/frasi.py`, `CATALOGO`): 10 frasi, 190 forme in tutto
+  *[storico: il catalogo del 12/10; al 18/10 13 frasi con varianti e 239 forme, voce sotto]*,
   scritte da un agente il 12/10: `lavori.avviato`, `lavori.in_coda`, `lavori.proposta`
   («Procedo?» identico e in fondo), `lavori.nessuno`, `lavori.nessuna_domanda`,
   `estensione.attiva`, `sviluppo.correzione`, `sviluppo.stato`, `cortesia.grazie` e
@@ -215,3 +218,11 @@ trovato quattro difetti; tutte le forme (132 diverse) rilette da capo:
 preposizioni davanti a «{titolo}», forme brevi che suppongono che nulla sia cambiato, incisi
 staccati), con i contrari presi dal campione; stima e approvazione senza tu né lei; la proposta
 di un'estensione nel formale, intera e breve.
+
+**Il catalogo al 18/10** (contato sul codice). `CATALOGO` ha 26 id; 13 hanno varianti per tono (239 forme in tutto, contate le brevi), gli altri 13 sono delle classi bloccate (politica, sfida, permessi, ripiego, annuncio del collaudo) e stanno lì solo per la misura delle ripetizioni. Ai 10 del 12/10 si sono aggiunti:
+
+- `onesta.non_salvato` (classe «onesta», 12/10 sera): la frase onesta al posto del ripiego quando una nota è dichiarata due volte senza tool ([voce-e-regole](voce-e-regole.md), «Una nota dichiarata due volte»);
+- `scusa.incartata` (14/10 notte): la frase detta quando la rete `ciclo_ripetuto` ferma una risposta che gira in tondo ([voce-e-regole](voce-e-regole.md), «La risposta che gira in tondo»);
+- `attesa.stanza` (14/10, passo 4 della stanza): la frase d'attesa di `stanza_cerca` ([contesto-conversazione](contesto-conversazione.md)).
+
+Valgono per loro gli stessi modi (`frasi_varianti`), la rotazione per persona e la forma breve. Il campione per chi amministra (`python -m calliope.frasi --campione`) le comprende; l'accensione resta la rilettura della issue #28.
