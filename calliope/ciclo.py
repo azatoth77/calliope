@@ -3694,6 +3694,8 @@ class Ciclo:
             s.lavori.arbitro.voce_occupata()     # anche senza VAD (frase dopo un barge-in)
         if s.compressore is not None:
             s.compressore.voce_occupata()
+        # La «voce ferma» dell'arbitro della memoria (#157): la tenuta massima riparte da qui
+        arbitro_memoria.QUIETE.voce_occupata()
         t.level = self.speaker_ctx.current_level
         # Incerta tra il proprietario del satellite e un minore (09/10, voce_proprietario): la
         # frase resta del proprietario, ma il guardiano la giudica come per il minore, e un

@@ -378,18 +378,32 @@ non hanno il problema perché il `Ciclo` li libera da sé (`_inizio_giro` e `_co
 - **Tenuta massima** (`Quiete.tenuta_max_s`, di serie `TENUTA_MAX_S` = 180 s; main.py la rifà
   come `max_utterance_s` + 60 s, almeno 180): oltre questo tempo dall'ultimo «occupata» senza
   nessuno che la liberi, la voce torna libera da sé, con la riga `[ARBITRO] voce occupata da N s
-  senza un segno…` nel log, `ultimo_motivo = "tenuta"` e il conto in `tenute`. Copre solo il
-  parlato: la risposta (il varco) e Whisper hanno i loro segnali. Una frase al tetto unita al
+  senza un segno…` nel log, `ultimo_motivo = "tenuta"` e il conto in `tenute`. *[storico, 18/10
+  mattina: «copre solo il parlato, la risposta e Whisper hanno i loro segnali». Falso, dalla
+  revisione della PR #163: la tenuta partiva dall'ultimo `on_speech_start` e copriva il turno
+  intero, mentre il varco si chiude a `esci_llm` e la coda delle frasi ancora da dire resta
+  coperta solo dalla voce; l'ultimo pezzo al tetto, un tool lento e una risposta lunga la
+  facevano scattare a turno aperto]*. Dal pomeriggio la tenuta conta **dall'ultimo segno**:
+  un «occupata» (l'inizio del parlato e, nuovo, l'inizio della risposta in
+  `Ciclo._prepara_risposta`, come l'arbitro dell'agente «anche senza VAD») oppure un segnale
+  occupato mentre la voce è tenuta (la risposta coi suoi tool, Whisper). Restano scoperte solo
+  le frasi dette dopo che il modello ha finito, ben sotto i 180 s. Una frase al tetto unita al
   seguito ricomincia la tenuta (un `listen` nuovo, un `on_speech_start` nuovo). Nella riga del
   minuto del registro dell'arbitro `tenute_voce` dice quante sono state nel minuto (solo se ce
-  ne sono): dopo la correzione deve restare 0, e una tenuta vuol dire un posto che occupa la voce
-  e non la libera.
+  ne sono), e `calliope stato --memoria --storia` le somma per giorno (anche `--json`) con una
+  riga e l'avviso, solo se ce ne sono: deve restare 0, e una tenuta vuol dire un posto che occupa
+  la voce e non la libera.
 
 Prova a secco `prove/prova_arbitro_quiete.py` (~2 s): collegamento vero di main.py con le corsie
 insieme e un `Ciclo` vero col microfono di un satellite finto (`AscoltoRemoto` vero, server
 finto); su main fallisce in tre punti (la voce resta «voce»). Contrari: frase buttata e poi la
 buona, un'altra corsia che parla ancora, la tenuta che non scatta a 179 s e riparte a un
-«occupata» nuovo. Da verificare sulla DGX dopo l'installazione: una giornata di `calliope stato
+«occupata» nuovo; dal pomeriggio un turno lungo vero nel `Ciclo` (Whisper che fa passare 150 s,
+poi 170 s di voce: 320 s senza tenuta) e con l'orologio finto (tetto, Whisper, tool lento,
+risposta lunga: 395 s; scatta 180 s dopo la fine del modello), il secondo avvio nello stesso
+processo con un thread morto del primo, la storia per giorno. Ognuno fallisce se si toglie la
+sua parte (la chiamata in `_prepara_risposta`, la coppia dai metodi della classe, il segnale
+come segno). Da verificare sulla DGX dopo l'installazione: una giornata di `calliope stato
 --memoria --storia` senza periodi di voce occupata più lunghi di un turno, le richieste in coda
 che partono e `tenute_voce` a 0. Le misure del passo 3 vanno lette solo dal giorno dopo.
 
