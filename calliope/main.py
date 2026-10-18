@@ -963,9 +963,14 @@ class Avvio:
         q.segnali = segnali
         # Il VAD: con più corsie la voce è ferma solo quando nessuna la tiene (come l'arbitro
         # dell'agente); i satelliti li prendono da `parlato` (_ciclo_locale, dopo di qui)
-        occupa, libera = q.voce_occupata, q.voce_libera
+        q.tenuta_max_s = max(am.Quiete.TENUTA_MAX_S, float(cfg.max_utterance_s) + 60.0)
+        occupa = am.Quiete.voce_occupata.__get__(q)
+        libera = am.Quiete.voce_libera.__get__(q)
         if self.insieme:
             occupa, libera = corsie.condivisa(occupa, libera)
+        # Una frase accettata la libera la corsia all'inizio del giro dopo (Ciclo._inizio_giro,
+        # #157): con più corsie la stessa coppia condivisa, dal thread che l'ha occupata
+        q.voce_occupata, q.voce_libera = occupa, libera
         listener = self.listener
         prima_inizio, prima_fine = listener.on_speech_start, listener.on_speech_end
 

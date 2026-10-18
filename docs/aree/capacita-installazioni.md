@@ -16,7 +16,7 @@
 |---|---|---|
 | Registro delle capacità | — (controlli rapidi in sola lettura) | `calliope/capacita.py` → `Registro`, `REGISTRO`, `segnala`, `controlla`, `testo_prompt`; terminale `calliope/stato.py` (`python -m calliope.stato`); tool `calliope_stato` in `calliope/tools/stato.py` (con `cosa=macchina` la macchina e i modelli: `calliope/macchina.py`; dal 09/10 le aree `capacita.AREE`/`aree`, `cosa=novita` e `cosa=chi_sei`: `calliope/novita.py`) |
 | Piano dei modelli per la macchina, in sola lettura (dal 08/10) | — (nvidia-smi, /proc/meminfo, registro di Windows, Ollama `/api/version` `/api/tags` `/api/ps`, vLLM `/v1/models` `/version` `/metrics`, `systemctl show` in sola lettura) | `calliope/macchina.py` → `inventario`, `Sonde`; catalogo `calliope/modelli.py` → `MODELLI`, `GPU`, `WHISPER`, `VERSIONE`; regole `calliope/piano.py` → `piano`, `da_config`, `testo`, `Funzioni`; terminale `python -m calliope.stato --piano [--json] [--inventario FILE]`; prova `prove/prova_piano.py` |
-| Conto della memoria e classi delle attività, in sola lettura (dal 14/10, passo 1 dell'arbitro della memoria) | — (lo stesso inventario; RSS del servizio da `systemctl --user show` e /proc) | `calliope/arbitro_memoria.py` → `conto`, `proposta`, `scaricabili`, `da_config`, `Occupante`, `Conto`, `MARGINE_LIBERO_GB`, `MISURE_UNIFICATA_GB`; dal 15/10 (passo 2, in ombra) `Quiete`, `QUIETE`, `quiete`, `tempo_reale_toccato` e `calliope/arbitro_ombra.py` → `Ombra` (`richiesta`, `confronta`, `minuto`), `storia`, `criterio`, `load_ombra` (`arbitro_memoria: ombra`); terminale `python -m calliope.stato --memoria [--json] [--inventario FILE]` e `--memoria --storia`; prova `prove/prova_arbitro_memoria.py`; misure sulla DGX `prove/manuali/misura_memoria_dgx.py` |
+| Conto della memoria e classi delle attività, in sola lettura (dal 14/10, passo 1 dell'arbitro della memoria) | — (lo stesso inventario; RSS del servizio da `systemctl --user show` e /proc) | `calliope/arbitro_memoria.py` → `conto`, `proposta`, `scaricabili`, `da_config`, `Occupante`, `Conto`, `MARGINE_LIBERO_GB`, `MISURE_UNIFICATA_GB`; dal 15/10 (passo 2, in ombra) `Quiete`, `QUIETE`, `quiete`, `tempo_reale_toccato` e `calliope/arbitro_ombra.py` → `Ombra` (`richiesta`, `confronta`, `minuto`), `storia`, `criterio`, `load_ombra` (`arbitro_memoria: ombra`); terminale `python -m calliope.stato --memoria [--json] [--inventario FILE]` e `--memoria --storia`; prova `prove/prova_arbitro_memoria.py` (dal 18/10 anche `prove/prova_arbitro_quiete.py`, #157); misure sulla DGX `prove/manuali/misura_memoria_dgx.py` |
 | Installazioni dal catalogo | httpx (Range, checksum), API `/api/pull` di Ollama | `calliope/installa/` → `catalogo` (`catalogo.py`), `scarica_file` (`scarica.py`), `Installazioni` (`servizio.py`); tool `installa_proponi`, `installa_avvia`, `installa_gestisci` in `calliope/tools/stato.py`; anche `whisper_riserva` e `telefono` nel catalogo (vedi [setup-dgx](setup-dgx.md), [schermi-telefono](schermi-telefono.md)) |
 
 ## Problemi noti
@@ -263,7 +263,9 @@ si registra soltanto cosa l'arbitro avrebbe fatto.
   parla a Calliope (il VAD della corsia locale e dei satelliti, come l'arbitro dell'agente; un
   comando da un satellite negli ultimi 2 s), nessuna risposta in corso (il varco), nessuna frase di
   un turno che aspetta Whisper, la coda della stanza vuota; vero adesso e da almeno `secondi`. I
-  segnali li dà `main.Avvio._arbitro_memoria`; un segnale guasto vale «occupata».
+  segnali li dà `main.Avvio._arbitro_memoria`; un segnale guasto vale «occupata». *[storico: fino al
+  18/10 la voce di una frase accettata non tornava mai libera, sezione «La voce ferma resta
+  occupata» sotto]*
 - **Riunire le quattro definizioni senza cambiare il comportamento non si può**, e non si è fatto:
   guardia (`stanza/guardia.libera`: varco, comando da satellite, Whisper, 5 s), corsia lenta
   (`stanza/lenta.libera`: le stesse più la coda della stanza, 5 s), embedding
@@ -344,6 +346,66 @@ Prove: `prova_piano` (SearXNG sulla 8004 e secondo Whisper spento → non visto 
 «solo scaricando» passa da 10 a 9 GB liberi, perché con 10 − 8 di margine 2,0 GB ci starebbero
 giusti), `prova_gestore` (porta uguale allo script, conto della q5_0 fra i pesi e i pesi + 1,5 GB).
 La DGX non è stata toccata.
+
+## La voce ferma resta occupata dopo una frase accettata (18/10, issue #157)
+
+**Caso vero.** La lettura del registro dell'arbitro in ombra sulla DGX del 18/10 (#1): la «voce
+ferma» unica occupata dal 15/10 18:50 al 16/10 08:59 (849 minuti), dal 16/10 23:01 al 17/10 10:55
+(714 minuti) e in altri due periodi più brevi, ognuno dalla prima frase dal telefono dopo un
+riavvio fino al riavvio dopo. Risultato: 28 richieste in coda buttate dopo 3600 s, tutte
+«occupata: voce», e le divergenze di `quiete()` tutte in una direzione. La misura del passo 3 su
+quei giorni non vale.
+
+**Causa, verificata sul codice.** `main.Avvio._arbitro_memoria` collegava `QUIETE` solo a
+`on_speech_start` e `on_speech_end`, e `on_speech_end` arriva solo per una frase **buttata** (o per
+il collegamento chiuso), mai per una accettata. L'analisi della issue la dava come cosa dei
+satelliti (`AscoltoRemoto.listen`, ramo `frase_finita`), ma il `Listener` locale fa lo stesso
+(`audio.py`, `return np.concatenate(speech)` senza `on_end`): vale per ogni corsia, e sulla DGX si
+vede col telefono perché lì non c'è un microfono locale. L'arbitro dell'agente e la compressione
+non hanno il problema perché il `Ciclo` li libera da sé (`_inizio_giro` e `_compressione_dopo`);
+`QUIETE` no, e non aveva una tenuta massima.
+
+**Correzione.**
+- `Ciclo._inizio_giro` libera `arbitro_memoria.QUIETE` nello stesso punto dell'arbitro
+  dell'agente, cioè subito prima di ascoltare di nuovo, dopo ogni turno (anche quelli chiusi
+  senza risposta). Una riga sola in `ciclo.py`; senza l'arbitro in ombra `QUIETE` non la legge
+  nessuno e la voce non cambia.
+- In `main.py` la coppia occupata/libera con le corsie insieme (`corsie.condivisa`) va anche
+  su `QUIETE` stessa, così la liberazione del `Ciclo` passa per lo stesso conto per thread: una
+  corsia che finisce il turno non libera la voce di un'altra che sta parlando. La coppia si fa
+  dai metodi della classe, perché un secondo avvio nello stesso processo (le prove) non la
+  avvolga due volte.
+- **Tenuta massima** (`Quiete.tenuta_max_s`, di serie `TENUTA_MAX_S` = 180 s; main.py la rifà
+  come `max_utterance_s` + 60 s, almeno 180): oltre questo tempo dall'ultimo «occupata» senza
+  nessuno che la liberi, la voce torna libera da sé, con la riga `[ARBITRO] voce occupata da N s
+  senza un segno…` nel log, `ultimo_motivo = "tenuta"` e il conto in `tenute`. *[storico, 18/10
+  mattina: «copre solo il parlato, la risposta e Whisper hanno i loro segnali». Falso, dalla
+  revisione della PR #163: la tenuta partiva dall'ultimo `on_speech_start` e copriva il turno
+  intero, mentre il varco si chiude a `esci_llm` e la coda delle frasi ancora da dire resta
+  coperta solo dalla voce; l'ultimo pezzo al tetto, un tool lento e una risposta lunga la
+  facevano scattare a turno aperto]*. Dal pomeriggio la tenuta conta **dall'ultimo segno**:
+  un «occupata» (l'inizio del parlato e, nuovo, l'inizio della risposta in
+  `Ciclo._prepara_risposta`, come l'arbitro dell'agente «anche senza VAD») oppure un segnale
+  occupato mentre la voce è tenuta (la risposta coi suoi tool, Whisper). Restano scoperte solo
+  le frasi dette dopo che il modello ha finito, ben sotto i 180 s. Una frase al tetto unita al
+  seguito ricomincia la tenuta (un `listen` nuovo, un `on_speech_start` nuovo). Nella riga del
+  minuto del registro dell'arbitro `tenute_voce` dice quante sono state nel minuto (solo se ce
+  ne sono), e `calliope stato --memoria --storia` le somma per giorno (anche `--json`) con una
+  riga e l'avviso, solo se ce ne sono: deve restare 0, e una tenuta vuol dire un posto che occupa
+  la voce e non la libera.
+
+Prova a secco `prove/prova_arbitro_quiete.py` (~2 s): collegamento vero di main.py con le corsie
+insieme e un `Ciclo` vero col microfono di un satellite finto (`AscoltoRemoto` vero, server
+finto); su main fallisce in tre punti (la voce resta «voce»). Contrari: frase buttata e poi la
+buona, un'altra corsia che parla ancora, la tenuta che non scatta a 179 s e riparte a un
+«occupata» nuovo; dal pomeriggio un turno lungo vero nel `Ciclo` (Whisper che fa passare 150 s,
+poi 170 s di voce: 320 s senza tenuta) e con l'orologio finto (tetto, Whisper, tool lento,
+risposta lunga: 395 s; scatta 180 s dopo la fine del modello), il secondo avvio nello stesso
+processo con un thread morto del primo, la storia per giorno. Ognuno fallisce se si toglie la
+sua parte (la chiamata in `_prepara_risposta`, la coppia dai metodi della classe, il segnale
+come segno). Da verificare sulla DGX dopo l'installazione: una giornata di `calliope stato
+--memoria --storia` senza periodi di voce occupata più lunghi di un turno, le richieste in coda
+che partono e `tenute_voce` a 0. Le misure del passo 3 vanno lette solo dal giorno dopo.
 
 ## «Cosa sai fare?» per aree, novità e «chi sei?» (09/10)
 
