@@ -469,23 +469,42 @@ class Quiete:
 
     In ombra (passo 2) nessuno decide con questa funzione: guardia, corsia lenta, embedding e
     arbitro dell'agente decidono come prima e l'arbitro in ombra conta quando le risposte
-    divergono (`calliope stato --memoria --storia`)."""
+    divergono (`calliope stato --memoria --storia`).
 
-    def __init__(self, orologio=None):
+    La voce del VAD (18/10, issue #157): il VAD dice «libera» solo per una frase buttata (in
+    locale come dal satellite); una frase accettata la libera la corsia all'inizio del giro dopo
+    (`Ciclo._inizio_giro`, come l'arbitro dell'agente). Rete di sicurezza: la voce tenuta oltre
+    `tenuta_max_s` senza un segno torna libera da sé (come la tenuta massima dell'arbitro
+    dell'agente), con una riga nel log e il conto in `tenute` (nella riga del minuto
+    dell'arbitro in ombra e in `calliope stato --memoria --storia`). Un segno è un «occupata»
+    (l'inizio del parlato, e l'inizio della risposta: `Ciclo._prepara_risposta`) oppure un
+    segnale occupato (la risposta del modello coi suoi tool, Whisper): la tenuta conta solo
+    dall'ultimo, così un turno lungo vero (l'ultimo pezzo al tetto, un tool lento, una risposta
+    lunga) non la fa scattare."""
+
+    # Più della frase più lunga (max_utterance_s, 120 s di serie; main.py la rifà dalla
+    # configurazione) e della coda di frasi ancora da dire quando il modello ha finito
+    TENUTA_MAX_S = 180.0
+
+    def __init__(self, orologio=None, tenuta_max_s: float | None = None, log=None):
         import threading
         import time
         self._ora = orologio or time.monotonic
         self._lock = threading.Lock()
         self.segnali: list[tuple[str, object]] = []
         self._voce = False
+        self._voce_dal = 0.0
         self._ultimo_occupato = self._ora()     # all'avvio: si conta come appena occupata
         self.ultimo_motivo = "avvio"
+        self.tenuta_max_s = float(self.TENUTA_MAX_S if tenuta_max_s is None else tenuta_max_s)
+        self.tenute = 0
+        self.log = log or (lambda m: print(m, flush=True))
 
     # ── il VAD (come l'arbitro dell'agente e la compressione) ──
     def voce_occupata(self, *a, **k):
         with self._lock:
             self._voce = True
-            self._ultimo_occupato = self._ora()
+            self._voce_dal = self._ultimo_occupato = self._ora()
             self.ultimo_motivo = "voce"
 
     def voce_libera(self, *a, **k):
@@ -503,7 +522,29 @@ class Quiete:
     def occupata(self) -> str:
         """Il motivo per cui la voce è occupata adesso ("" se libera). Nel dubbio occupata."""
         if self._voce:
-            return "voce"
+            tenuta = None
+            if self._segnale():
+                with self._lock:          # il turno è ancora aperto (risposta, Whisper): un segno
+                    self._voce_dal = self._ora()
+                return "voce"
+            with self._lock:
+                ora = self._ora()
+                if self._voce and ora - self._voce_dal > self.tenuta_max_s:
+                    tenuta = ora - self._voce_dal       # nessuno l'ha liberata (#157)
+                    self._voce = False
+                    self._ultimo_occupato = ora
+                    self.ultimo_motivo = "tenuta"
+                    self.tenute += 1
+            if tenuta is None:
+                return "voce"
+            try:
+                self.log(f"[ARBITRO] voce occupata da {tenuta:.0f} s senza un segno: oltre la "
+                         f"tenuta massima ({self.tenuta_max_s:.0f} s), la libero")
+            except Exception:  # noqa: BLE001 — il log non cambia la risposta
+                pass
+        return self._segnale()
+
+    def _segnale(self) -> str:
         for nome, f in list(self.segnali):
             try:
                 if f():

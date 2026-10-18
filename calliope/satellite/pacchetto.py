@@ -26,6 +26,7 @@ import ast
 import hashlib
 import io
 import json
+import os
 import re
 import threading
 import zipfile
@@ -69,6 +70,15 @@ _DATA_ZIP = (1980, 1, 1, 0, 0, 0)
 
 class PacchettoNonDisponibile(Exception):
     """Il pacchetto non si può fare (manca uv.lock, un modello della wake word…)."""
+
+
+class _FiglioNonParte(Exception):
+    """Il processo che costruisce il pacchetto non è partito o è caduto senza un motivo
+    (18/10, #146): allora il pacchetto si costruisce nel processo del server, come prima."""
+
+
+class _ErroreDelFiglio(OSError):
+    """Il processo che costruisce il pacchetto è finito con un errore (il suo messaggio)."""
 
 
 # ───────────────────────────── moduli ─────────────────────────────
@@ -315,9 +325,51 @@ def radice_codice() -> Path:
     return Path(__file__).resolve().parent.parent.parent
 
 
+def da_zip(dati: bytes) -> Pacchetto:
+    """Il Pacchetto dai byte dello zip fatto da `costruisci` (versione da VERSIONE.json)."""
+    with zipfile.ZipFile(io.BytesIO(dati)) as z:
+        nomi = sorted(z.namelist())
+        versione = json.loads(z.read("VERSIONE.json"))["versione"]
+    return Pacchetto(dati, versione, nomi)
+
+
+# Il processo che costruisce il pacchetto (18/10, #146): importa calliope.satellite (quindi
+# calliope.capacita), pacchetto.py e, se c'è, packaging dal venv; legge solo uv.lock, i moduli
+# del satellite e i modelli della wake word, niente configurazione né rete. Lo zip su
+# stdout; il motivo di un pacchetto che non si può fare su stderr (uscita 3). Priorità normale:
+# usa un core come il thread di prima, e con la priorità bassa di Windows (BELOW_NORMAL) sulla
+# CPU piena non partiva quasi (più di 15 s nell'hook)
+_FIGLIO = r"""
+import sys
+sys.path.insert(0, sys.argv[1])
+from pathlib import Path
+from calliope.satellite.pacchetto import PacchettoNonDisponibile, costruisci
+try:
+    p = costruisci(Path(sys.argv[2]), Path(sys.argv[3]), wake_extra=tuple(sys.argv[4:]))
+except PacchettoNonDisponibile as e:
+    sys.stderr.buffer.write(str(e).encode("utf-8"))
+    sys.exit(3)
+except (OSError, SyntaxError, UnicodeDecodeError) as e:
+    sys.stderr.buffer.write(f"{type(e).__name__}: {e}".encode("utf-8"))
+    sys.exit(4)
+sys.stdout.buffer.write(p.dati)
+"""
+
+
 class Distributore:
-    """Il pacchetto della versione in uso, costruito una volta (in un thread all'avvio del
-    server o alla prima richiesta) e tenuto in memoria (~1 MB)."""
+    """Il pacchetto della versione in uso, costruito una volta (all'avvio del server o alla
+    prima richiesta) e tenuto in memoria (~5 MB).
+
+    Si costruisce in un **processo a parte** (18/10, #146): `moduli` legge con `ast.parse` i
+    file di calliope, e ogni `ast.parse` tiene il GIL per tutto il file (brain.py ~0,3 s,
+    ~5 s in tutto). Nel processo del server fermava tutti gli altri thread proprio all'avvio,
+    quando i satelliti si ricollegano: una sonda che dorme 1 ms si svegliava fino a 300-584 ms
+    dopo (15-44 ms senza), e sotto carico le strette di mano TLS sforavano l'`open_timeout` di 3 s.
+    Se il processo non parte, cade senza un motivo suo o non consegna uno zip intero, si
+    costruisce qui come prima. Oltre `ATTESA_FIGLIO_S` il motivo resta (niente ripiego: sarebbero
+    altri minuti col GIL preso)."""
+
+    ATTESA_FIGLIO_S = 600.0
 
     def __init__(self, cfg, radice: Path | None = None, log=print):
         self.cfg = cfg
@@ -326,6 +378,10 @@ class Distributore:
         self._lock = threading.Lock()
         self._pacchetto: Pacchetto | None = None
         self.motivo = ""
+        self._figlio = None
+        self._fermato = False
+        # Quante volte si è costruito in questo processo invece che a parte (per le prove)
+        self.costruiti_qui = 0
 
     def cartella_wake(self) -> Path:
         wake = Path(str(getattr(self.cfg, "wake_model", "") or "wakeword/modelli/calliope.onnx"))
@@ -334,9 +390,71 @@ class Distributore:
     def prepara_in_background(self):
         threading.Thread(target=self.pacchetto, name="pacchetto-satellite", daemon=True).start()
 
+    def ferma(self):
+        """Chiude il processo della costruzione, se c'è ancora (il server si spegne)."""
+        self._fermato = True
+        f = self._figlio
+        if f is not None and f.poll() is None:
+            try:
+                f.kill()
+            except OSError:
+                pass
+
+    def _costruisci_a_parte(self, wake_extra: tuple[str, ...]) -> Pacchetto | None:
+        """Lo zip da un processo figlio; None se il server si è fermato intanto. Solleva
+        PacchettoNonDisponibile o OSError come `costruisci`; _FiglioNonParte se il processo
+        non parte o cade senza un motivo (allora si costruisce qui)."""
+        import subprocess
+        import sys
+        if not sys.executable:
+            raise _FiglioNonParte("sys.executable vuoto")
+        flag = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+        try:
+            f = subprocess.Popen(
+                # Il pacchetto.py di questo processo (non quello di `radice`, che può essere
+                # un'altra versione del codice)
+                [sys.executable, "-I", "-c", _FIGLIO, str(Path(__file__).resolve().parents[2]),
+                 str(self.radice), str(self.cartella_wake()), *[n for n in wake_extra if n]],
+                stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                creationflags=flag)
+        except OSError as e:
+            raise _FiglioNonParte(f"{type(e).__name__}: {e}") from e
+        self._figlio = f
+        if self._fermato:
+            f.kill()
+        try:
+            out, err = f.communicate(timeout=self.ATTESA_FIGLIO_S)
+        except subprocess.TimeoutExpired:
+            f.kill()
+            f.communicate()
+            raise _ErroreDelFiglio(f"costruzione oltre {self.ATTESA_FIGLIO_S:.0f} s") from None
+        finally:
+            self._figlio = None
+        if self._fermato:
+            return None
+        msg = err.decode("utf-8", "replace").strip()
+        if f.returncode == 3:
+            raise PacchettoNonDisponibile(msg)
+        if f.returncode == 4:
+            raise _ErroreDelFiglio(msg)
+        if f.returncode != 0:
+            # Caduto senza un motivo suo (una volta, nell'hook con la macchina piena: 0xC0000005
+            # non riprodotto in 24 costruzioni parallele): meglio il pacchetto che il GIL libero
+            raise _FiglioNonParte(f"uscita {f.returncode}"
+                                  + (f": {msg.splitlines()[-1]}" if msg else ""))
+        # Uscita 0 ma niente zip intero, o byte prima dello zip (un .pth, un print in un modulo
+        # importato: zipfile lo leggerebbe lo stesso, con un altro SHA-256 e la stessa versione):
+        # anche questo è un figlio caduto senza motivo, e il pacchetto si costruisce qui
+        if not out.startswith(b"PK\x03\x04"):
+            raise _FiglioNonParte(f"lo zip dal processo non comincia con PK ({len(out)} byte)")
+        try:
+            return da_zip(out)
+        except (zipfile.BadZipFile, KeyError, ValueError) as e:
+            raise _FiglioNonParte(f"zip non valido dal processo ({type(e).__name__})") from e
+
     def pacchetto(self) -> Pacchetto | None:
         with self._lock:
-            if self._pacchetto is None and not self.motivo:
+            if self._pacchetto is None and not self.motivo and not self._fermato:
                 try:
                     # Anche i classificatori delle modalità («computer.onnx»): così un
                     # satellite installato ha già la parola di una modalità scelta poi a voce
@@ -344,14 +462,22 @@ class Distributore:
                     wake = [Path(str(getattr(self.cfg, "wake_model", "") or "")).name]
                     wake += [Path(str(p.get("wake_model") or "")).name
                              for p in MODALITA.values()]
-                    self._pacchetto = costruisci(self.radice, self.cartella_wake(),
-                                                 wake_extra=tuple(dict.fromkeys(wake)))
+                    wake = tuple(dict.fromkeys(wake))
+                    try:
+                        self._pacchetto = self._costruisci_a_parte(wake)
+                    except _FiglioNonParte as e:
+                        self.log(f"   [SATELLITE] il processo del pacchetto non è riuscito ({e}): "
+                                 f"lo costruisco qui")
+                        self.costruiti_qui += 1
+                        self._pacchetto = costruisci(self.radice, self.cartella_wake(),
+                                                     wake_extra=wake)
                 except PacchettoNonDisponibile as e:
                     self.motivo = str(e)
                     self.log(f"   [SATELLITE] installazione e aggiornamenti dei satelliti spenti: "
                              f"{e}")
                 except (OSError, SyntaxError, UnicodeDecodeError) as e:
-                    self.motivo = f"{type(e).__name__}: {e}"
+                    self.motivo = (str(e) if isinstance(e, _ErroreDelFiglio)
+                                   else f"{type(e).__name__}: {e}")
                     self.log(f"   [SATELLITE] il pacchetto dei satelliti non si costruisce: "
                              f"{self.motivo}")
             return self._pacchetto

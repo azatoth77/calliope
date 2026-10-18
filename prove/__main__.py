@@ -35,6 +35,7 @@ A_SECCO = [
     ("prova_pronuncia.py", [], "pronuncia degli inglesismi (04/10): «file» → «fàil», contrari, solo il testo per Piper"),
     ("prova_personalita.py", [], "personalità (04/10): toni di voce, wake word cambiata e in testa alla frase, modalità startrek, suoni di ascolto"),
     ("prova_frasi.py", [], "frasi pronte meno monotone (12/10, calliope/frasi.py): catalogo con varianti per tono e forma breve (segnaposto, domanda in fondo, lei nel formale, classi bloccate), ombra/attivo/spento, rotazione per persona, id dall'uscita unica nel registro dei turni, ripetizioni ogni 100 in stato --turni, campione di 30; lingua delle forme (accordo col titolo, forme brevi, lei nel formale) con i contrari (12/10 sera)"),
+    ("prova_frasi_rotazione.py", [], "rotazione delle frasi pronte (18/10, #158, calliope/frasi.py): due «grazie» di fila da una voce sconosciuta danno due varianti (attivo e ombra), senza forma breve, e la misura non conta ripetizioni; dopo un riavvio simulato (Frasi.riprendi dai turni di oggi) la stessa persona non riceve la variante appena detta e la forma breve riprende; contrari: niente su disco per una voce sconosciuta (nessun file, turni di ospiti e conoscenti non riletti, registro senza parole), turni di ieri, righe rotte, UTF-8 troncato, valori del tipo sbagliato e guasti senza sollevare (PR #162), conoscente senza livello, cartella assente, id senza tono; main la chiama dopo configura, dentro un try"),
     ("prova_modalita.py", [], "modalità cambiata a voce (05/10): solo chi amministra dalla voce, subito e salvata, cosa è acceso davvero, satellite collegato aggiornato e modello mandato dal server, satellite vecchio, telefono, ritorno alla normale"),
     ("prova_tool.py", [], "tool nativi e permessi per livello"),
     ("prova_sicurezza.py", [], "sicurezza (analisi del 03/10): registrazione della voce, fatti della casa, sandbox, apri, permessi"),
@@ -174,6 +175,7 @@ A_SECCO = [
     ("prova_novita.py", [], "chi è Calliope e cosa c'è di nuovo (09/10, caso vero della DGX): CHANGELOG finto (tabella, sezioni, intervalli, «(notte)»), gestore finto (versione installata, storia, versione di prima), voci per periodo e dall'ultimo aggiornamento, frase breve senza host né percorsi, scheda personale con «Scarica»; «chi sei?» con fatti veri; «cosa sai fare?» per aree e il dettaglio con area; contrari"),
     ("prova_piano.py", [], "taratura della macchina, fasi 1–2 (08/10): inventario con sonde finte (portatile, DGX unificata, senza GPU, registro, GPU fuori catalogo, modello in parte sulla CPU), catalogo con fonti, piano su macchine finte (solo CPU, 8, 16, 24, 32 GB, DGX di oggi ritrovata, Windows su ARM) con i contrari, calliope stato --piano in sola lettura"),
     ("prova_arbitro_memoria.py", [], "arbitro della memoria, passo 1 (14/10): conto della memoria e classi delle attività in sola lettura sulla DGX finta (tempo reale, sfondo, a richiesta, «fuori»), proposta in ombra (sfondo dal meno usato, agente solo dal passo 4), contrari: mai il tempo reale né un modello non di Calliope, memoria non letta; portatile e solo CPU; da_config; calliope stato --memoria senza chiamate esterne; passo 2 (15/10): quiete() unica, confronto in ombra con guardia, corsia lenta, embedding e agente senza cambiare le decisioni, l'arbitro in ombra (coda per precedenza a voce ferma, un caricamento alla volta, buttate, proposta con la memoria vera, a richiesta ogni minuto, tempo reale mai), registro e calliope stato --memoria --storia con il criterio"),
+    ("prova_arbitro_quiete.py", [], "la «voce ferma» dell'arbitro della memoria dopo una frase accettata (18/10, #157): main.py e Ciclo veri, satellite finto (AscoltoRemoto vero): libera all'inizio del giro dopo; contrari: frase buttata, un'altra corsia che parla ancora, un turno lungo vero (tetto, tool lento, risposta lunga) senza tenuta, il secondo avvio; tenuta massima con la riga nel log, tenute_voce nella riga del minuto e nella storia"),
     ("prova_installa.py", [], "installazioni con un server HTTP finto: catalogo, permessi, offerta, ripresa"),
     ("prova_schermi.py", [], "schermi: server e SSE veri, abbinamento, visibilità, schede dei tool, log"),
     # ~3 s: server degli schermi vero, registro dei turni finto (anche grande: 28 000 turni)
@@ -879,6 +881,12 @@ LEGAMI = [
     ("calliope/agenti/arbitro.py", ["prova_arbitro_memoria.py"]),
     ("calliope/stato.py", ["prova_arbitro_memoria.py"]),
     ("calliope/main.py", ["prova_arbitro_memoria.py"]),
+    # La «voce ferma» liberata a fine turno e la tenuta massima (18/10, #157)
+    ("calliope/arbitro_memoria.py", ["prova_arbitro_quiete.py"]),
+    ("calliope/arbitro_ombra.py", ["prova_arbitro_quiete.py"]),
+    ("calliope/ciclo.py", ["prova_arbitro_quiete.py"]),
+    ("calliope/main.py", ["prova_arbitro_quiete.py"]),
+    ("calliope/satellite/server.py", ["prova_arbitro_quiete.py"]),
 ]
 # Prove che il runner non lancia, con il perché (06/10, Q7): prova_runner controlla che ogni
 # prove/prova_*.py sia in A_SECCO, in CON_OLLAMA o qui. Una prova nuova dimenticata fallisce.

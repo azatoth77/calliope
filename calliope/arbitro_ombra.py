@@ -150,6 +150,7 @@ class Ombra:
         self._righe_minuto = 0
         self._conti_minuto: dict[str, int] = {}
         self.buttate = 0
+        self._tenute_minuto = int(getattr(self.quiete, "tenute", 0) or 0)
         self.richieste_viste = 0
         # L'arbitro dell'agente (agenti/arbitro.py): la sua «voce libera» si confronta qui, dal
         # thread (occupata_ora: un flag sotto il suo lock, senza effetti)
@@ -424,6 +425,11 @@ class Ombra:
                 "coda": len(self._coda), "buttate": self.buttate}
         if tr:
             riga["tempo_reale_ruoli"] = sorted(set(tr))
+        # La voce liberata dalla tenuta massima in questo minuto (#157): deve restare 0
+        tenute = int(getattr(self.quiete, "tenute", 0) or 0)
+        if tenute > self._tenute_minuto:
+            riga["tenute_voce"] = tenute - self._tenute_minuto
+        self._tenute_minuto = tenute
         self._conti_minuto = {}
         self.buttate = 0
         self._scrivi("minuto", **riga)
@@ -455,13 +461,15 @@ def leggi(cartella: str | None, giorni: int | None = None) -> list[dict]:
 def storia(righe: list[dict]) -> dict:
     """Per giorno: memoria libera minima vera, minuti in cui un a richiesta non ci sarebbe
     stato (o solo scaricando), «avrebbe scaricato il tempo reale», divergenze di quiete(),
-    richieste per chi, partite, buttate e attese della coda in ombra."""
+    richieste per chi, partite, buttate e attese della coda in ombra, voce liberata dalla
+    tenuta massima (`tenute_voce`, dal 18/10: #157)."""
     giorni: dict = {}
     for r in righe:
         g = giorni.setdefault(str(r.get("t", ""))[:10], {
             "minuti": 0, "libera_min_gb": None, "margine_gb": None, "sotto_margine": 0,
             "non_possibile": {}, "solo_scaricando": {}, "tempo_reale": 0, "divergenze": {},
-            "richieste": {}, "rifiuti": 0, "partite": 0, "buttate": 0, "attesa_max_s": 0.0})
+            "richieste": {}, "rifiuti": 0, "partite": 0, "buttate": 0, "attesa_max_s": 0.0,
+            "tenute_voce": 0})
         tipo = r.get("tipo")
         if tipo == "minuto":
             g["minuti"] += 1
@@ -481,6 +489,7 @@ def storia(righe: list[dict]) -> dict:
                 elif not a.get("senza_scaricare"):
                     g["solo_scaricando"][ruolo] = g["solo_scaricando"].get(ruolo, 0) + 1
             g["tempo_reale"] += int(r.get("tempo_reale") or 0)
+            g["tenute_voce"] += int(r.get("tenute_voce") or 0)
             for f, d in (r.get("divergenze") or {}).items():
                 x = g["divergenze"].setdefault(f, {"vecchia_si": 0, "vecchia_no": 0, "s": 0.0})
                 x["vecchia_si"] += int(d.get("vecchia_si") or 0)
@@ -550,6 +559,9 @@ def testo_storia(st: dict, modo_: str = OMBRA) -> str:
                 f"per quiete ({_gb(d['s'])} s)" for f, d in sorted(g["divergenze"].items())))
         if g["sotto_margine"]:
             r.append(f"              minuti sotto il margine: {g['sotto_margine']}")
+        if g.get("tenute_voce"):
+            r.append(f"              voce liberata dalla tenuta massima: {g['tenute_voce']}"
+                     "  ← AVVISO: deve essere 0 (un posto occupa la voce e non la libera)")
     c = criterio(st)
     tot_tr = sum(g["tempo_reale"] for g in st.values())
     if tot_tr:
