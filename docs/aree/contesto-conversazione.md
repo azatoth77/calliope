@@ -1408,7 +1408,9 @@ filtri, attesa) e `calliope/tools/stanza.py` (il tool).
   passano davanti (`recupero`) e si aspettano al più `stanza_cerca_attesa_max_s` (3 s); oltre
   `stanza_cerca_attesa_s` (0,7 s) parte la frase **`attesa.stanza`** del catalogo di `frasi.py`
   (classe `attesa`, varianti per i sei toni, senza forma breve; in ombra si dice la base «Un
-  attimo, ripenso a cosa vi siete detti.» e il registro scrive la variante, misura delle
+  attimo, ripenso a cosa vi siete detti.» *[storico: dal 18/10, issue #28, «Un attimo, ripenso
+  a cosa si è detto.», vera anche per il tutore che cerca le righe di un minore senza esserci
+  stato]* e il registro scrive la variante, misura delle
   ripetizioni come le altre), atto nuovo **`attesa_stanza`** dell'uscita unica (`voluto`, fuori
   dalla storia). Brain passa l'atto all'`announce` del ciclo (`ctx.attesa(frase, atto)`). Senza
   righe in coda la ricerca dura millisecondi e non dice niente; oltre il tetto risponde con ciò che

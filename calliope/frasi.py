@@ -401,7 +401,7 @@ _v("onesta.non_salvato", "onesta",
        "normale": (
            "Scusa, ho capito. Non ho salvato niente, però: se vuoi che me lo ricordi, "
            "chiedimelo.",
-           "Ho capito, scusa. Non me lo sono segnato: se vuoi che lo ricordi, dimmelo.",
+           "Ho capito, scusa. Non l'ho salvato: se vuoi che lo ricordi, dimmelo.",
            "Scusami, ho capito. Non ho salvato niente: se ti serve che lo ricordi, chiedimelo."),
        "formale": (
            "Mi scusi, ho capito. Non ho salvato nulla, però: se desidera che lo ricordi, me lo "
@@ -412,18 +412,18 @@ _v("onesta.non_salvato", "onesta",
        "amichevole": (
            "Scusa, ho capito! Non ho salvato niente, però: se vuoi che me lo ricordi, "
            "chiedimelo.",
-           "Ho capito, scusami! Non me lo sono segnato: se vuoi che lo tenga a mente, dimmelo.",
-           "Scusa, chiaro! Non ho salvato niente: se ti va che lo ricordi, chiedimelo pure."),
+           "Ho capito, scusami! Non l'ho salvato: se vuoi che lo tenga a mente, dimmelo.",
+           "Ho capito, scusa! Non ho salvato niente: se ti va che lo ricordi, chiedimelo pure."),
        "ironico": (
            "Scusa, ho capito. Per onestà: non ho salvato niente. Se vuoi che me lo ricordi, "
            "chiedimelo.",
            "Ho capito, scusa. Non l'ho scritto da nessuna parte: se vuoi che lo ricordi, "
            "dimmelo.",
-           "Scusa, chiaro. Non ho salvato niente, giuro: se vuoi che lo ricordi, chiedimelo."),
+           "Capito, scusa. Non ho salvato niente, giuro: se vuoi che lo ricordi, chiedimelo."),
        "essenziale": ("Scusa, ho capito. Non ho salvato niente.",
                       "Ho capito, scusa. Non l'ho salvato."),
-       "computer_di_bordo": ("Ricevuto. Nessun dato in memoria: per salvarlo, chiedimelo.",
-                             "Ricevuto. Niente in memoria: per salvarlo, chiedimelo."),
+       "computer_di_bordo": ("Ricevuto. Dato non salvato: per salvarlo, chiedimelo.",
+                             "Ricevuto. Dato non salvato: per memorizzarlo, chiedimelo."),
    },
    breve={
        "normale": ("Scusa, ho capito. Non ho salvato niente.",
@@ -432,23 +432,39 @@ _v("onesta.non_salvato", "onesta",
        "amichevole": ("Scusa, ho capito! Non ho salvato niente.",),
        "ironico": ("Scusa, ho capito. Non ho salvato niente.",),
    })
+# La stessa frase onesta per un ospite (18/10, issue #28): senza l'invito «se vuoi che me lo
+# ricordi, chiedimelo», che a lui non è vero (`ricorda` è di livello familiare). Forme diverse da
+# quelle di `onesta.non_salvato`, perché `riconosci` non confonda i due id. Senza forma breve:
+# la rotazione delle voci anonime non la usa (#158)
+_v("onesta.non_salvato_ospite", "onesta", "Scusa, ho capito, ma non ho salvato niente.", toni={
+    "normale": ("Scusa, ho capito, ma non ho salvato niente.",
+                "Ho capito, scusa: non ho salvato niente."),
+    "formale": ("Mi scusi, ho capito, ma non ho salvato nulla.",
+                "Ho capito, mi scusi: non ho salvato nulla."),
+    "amichevole": ("Scusa, ho capito! Ma non ho salvato niente.",
+                   "Ho capito, scusami: non ho salvato niente."),
+    "ironico": ("Scusa, ho capito, ma per onestà: non ho salvato niente.",
+                "Capito, scusa: non ho salvato niente, giuro."),
+    "essenziale": ("Capito, scusa: non ho salvato niente.",),
+    "computer_di_bordo": ("Ricevuto. Dato non salvato.",),
+})
 
 # La frase d'attesa della ricerca nella conversazione della stanza (14/10, passo 4,
 # tools/stanza.stanza_cerca): solo quando la ricerca aspetta righe ancora in coda oltre
 # `stanza_cerca_attesa_s`. Senza forma breve (è rara per costruzione: obiettivo < 10 % dei turni
 # in stanza, progetto § 3.8)
-_v("attesa.stanza", "attesa", "Un attimo, ripenso a cosa vi siete detti.", toni={
-    "normale": ("Un attimo, ripenso a cosa vi siete detti.", "Ci ripenso un momento.",
+_v("attesa.stanza", "attesa", "Un attimo, ripenso a cosa si è detto.", toni={
+    "normale": ("Un attimo, ripenso a cosa si è detto.", "Faccio mente locale un momento.",
                 "Un momento, ricostruisco cosa si è detto."),
     "formale": ("Un momento, ricostruisco la conversazione.",
                 "Un istante, ripercorro quanto si è detto.",
                 "Mi conceda un momento, ricostruisco la conversazione."),
-    "amichevole": ("Fammi ricordare un attimo.", "Un attimo, ripesco cosa vi siete detti.",
-                   "Aspetta, ci ripenso un secondo."),
+    "amichevole": ("Fammi ricordare un attimo.", "Un attimo, ripesco cosa si è detto.",
+                   "Aspetta, faccio mente locale un secondo."),
     "ironico": ("Un attimo, sfoglio i miei appunti.", "Fammi riavvolgere il nastro un momento.",
                 "Un momento, ripasso la cronaca della stanza."),
     "essenziale": ("Controllo.", "Un attimo."),
-    "computer_di_bordo": ("Ricostruisco il registro della stanza.",
+    "computer_di_bordo": ("Aggiorno il registro della stanza.",
                           "Consulto il registro della stanza."),
 })
 
@@ -460,11 +476,11 @@ _v("scusa.incartata", "scusa", "Scusa, mi sono incartata: ripetimelo, per favore
     "normale": ("Scusa, mi sono incartata: ripetimelo, per favore.",
                 "Scusa, mi sono inceppata. Dimmelo di nuovo, per favore.",
                 "Mi sono incartata, scusa: ripetimelo, per favore."),
-    "formale": ("Mi scusi, mi sono incartata: me lo ripeta, per favore.",
+    "formale": ("Mi scusi, ho perso il filo: me lo ripeta, per favore.",
                 "Mi perdoni, mi sono inceppata. Me lo ripeta, per cortesia."),
     "amichevole": ("Ops, mi sono incartata! Ripetimelo, per favore.",
                    "Scusami, mi sono ingarbugliata: dimmelo di nuovo, per favore."),
-    "ironico": ("Mi sono incartata come un disco rotto, scusa: ripetimelo, per favore.",
+    "ironico": ("Mi sono incantata come un disco rotto, scusa: ripetimelo, per favore.",
                 "Scusa, mi si sono annodate le parole. Ripetimelo, per favore."),
     "essenziale": ("Scusa, mi sono incartata. Ripeti, per favore.",),
     "computer_di_bordo": ("Risposta interrotta per anomalia. Ripetere la richiesta.",

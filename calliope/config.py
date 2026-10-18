@@ -1150,7 +1150,7 @@ class Config:
     stanza_cerca_righe: int = 20
     stanza_cerca_caratteri: int = 2400
     # Righe delle stanze cercate ancora in coda per Whisper: passano davanti e si aspettano al
-    # più così; la frase d'attesa («Un attimo, ripenso a cosa vi siete detti.») solo oltre
+    # più così; la frase d'attesa («Un attimo, ripenso a cosa si è detto.») solo oltre
     # `stanza_cerca_attesa_s`
     stanza_cerca_attesa_max_s: float = 3.0
     stanza_cerca_attesa_s: float = 0.7
