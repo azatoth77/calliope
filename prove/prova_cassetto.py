@@ -8,7 +8,7 @@ Dario del 07/10, docs/aree/immagini-allegati.md):
 
 - entrata: foto (il JPEG senza EXIF), file (i byte originali), audio con la trascrizione;
   mai un programma; nomi casuali sul disco (mai il nome del file), scrittura atomica, permessi
-  600/700 fuori da Windows; nel registro dei turni solo nome, tipo e dimensione;
+  600/700 fuori da Windows; nel registro dei turni solo id, tipo e dimensione, mai il nome (08/10);
 - scadenza: dopo 7 giorni la pulizia elimina file e byte, e la volta dopo «Ho eliminato un file
   che non avevi tenuto» (una volta sola);
 - revisione: alla prima conversazione del giorno, solo con file che scadono entro 2 giorni,

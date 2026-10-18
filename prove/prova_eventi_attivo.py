@@ -17,7 +17,7 @@ proiezione degli eventi.
 3. **Cache del prefisso** (`prova_eventi_prefisso`): turni definitivi uguali byte per byte da una
    richiesta all'altra, forma viva e definitiva una volta sola, `riletti` dal motore e
    `cache_rotta` nel registro dei turni e in `calliope stato --turni`.
-4. **Visibilità** (`prova_eventi_visibilita`): il banco d'attacco di prova_politica (99/99, i
+4. **Visibilità** (`prova_visibilita`): il banco d'attacco di prova_politica (99/99, i
    riformulati, la sfida dopo un dato) e gli attacchi di prova_valore rigiocati con `attivo`
    sul registro; nessun evento non ammesso nella proiezione (fughe 0, testo dei siti tolto con
    la traccia della fonte, riservati e personali sigillati, proposta_rispondi fuori).
