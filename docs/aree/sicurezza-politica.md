@@ -1715,34 +1715,52 @@ cause vere sono tre.
 
 **Cosa cambia.**
 
-- **Segni d'elenco** (`valore.senza_segni_elenco`, solo per le parole distintive di un testo
-  libero): un numero di una o due cifre con il punto o la parentesi, in testa al valore o dopo
-  un confine di frase («:», «.», «;», «!», «?», un a capo) e seguito da uno spazio, diventa un
-  confine di frase. «Via dei Platani 12. Poi…», «chiama il 3», «porta 8443» restano numeri
-  distintivi. È una correzione della forma che il modello ha dato al valore (principio 10).
+- **Segni d'elenco** (`valore.segni_elenco`, `senza_segni_elenco`, solo per le parole
+  distintive di un testo libero): un numero di una o due cifre con il punto o la parentesi, in
+  testa al valore o dopo un confine di frase («:», «.», «;», «!», «?», un a capo) e seguito da uno
+  spazio, è un segno d'elenco **solo se fa parte della sequenza 1, 2, 3… in ordine** nello stesso
+  valore; dopo «:» solo il primo della sequenza (l'«1»), e un «1.» da solo solo in testa al
+  valore. Del segno si toglie la sola cifra: il punto o la parentesi restano, e la parola dopo
+  vale come sul codice di prima. «Via dei Platani 12. Poi…», «chiama il 3», «al piano 21» restano
+  numeri distintivi. È una correzione della forma che il modello ha dato al valore (principio 10).
+  *[storico: la prima versione del ramo (18/10) prendeva ogni numero di una o due cifre dopo un
+  confine di frase, e lo cambiava in un punto; la revisione della PR #177 ha mostrato che così
+  passavano «Consegna al piano: 3.», «Suona all'interno: 12.», «Il codice del portone è: 47.»,
+  «numero: 12)» e il nome dopo «4)», presi da una pagina]*
 - **La fonte vera** (`valore.solo_dal_dato`, `fonte_del_valore(…, parole)`): la domanda nomina il
   dato che contiene **le parole che fanno chiedere**: quelle «solo nel dato» per un bersaglio o
   un contenuto, le distintive per un testo libero. Vince il dato che ne ha di più, a pari numero
   il più recente. Una parola senza fonte con una foto di mezzo è «da una foto», come per
   l'etichetta. Senza parole (un indice) resta come prima.
-- **Il blocco senza la frase del turno** (`stanza/contesto.frase_del_turno`): una riga «rivolta:
-  sì» (la scrive solo `turno_testo`) finita dopo l'inizio della frase è la frase stessa, e non
-  entra nel blocco, nella finestra dei pezzi della storia né fra i dati della politica. Le righe
-  delle altre voci dette durante la domanda restano, e così le frasi dei turni di prima.
+- **Il blocco senza la frase del turno** (`stanza/contesto.frase_del_turno`, `costruisci(…,
+  seq_turno)`): il ciclo passa il numero della riga che ha appena scritto con il testo del turno
+  (`t.stanza_seq`, da `turno_testo`), e quella sola riga non entra nel blocco, nella finestra dei
+  pezzi della storia né fra i dati della politica. Senza numero (il pezzo in attesa, fuori da un
+  turno) non si toglie niente. Le righe delle altre voci dette durante la domanda restano, e così
+  le frasi dei turni di prima, anche di un'altra persona nello stesso segmento della stanza.
+  *[storico: la prima versione del ramo (18/10) la riconosceva da «rivolta: sì» e dall'orario;
+  la revisione della PR #177 ha mostrato che così usciva anche la frase di prima della persona di
+  casa che finiva dopo l'inizio del turno di un ospite]*
 
 **Rischio** (da far leggere a chi amministra). Le prime due modifiche non allargano l'ancora né
-le etichette. Cambia solo **quali numeri** di un testo libero contano come distintivi: un numero
-di una o due cifre messo da una pagina come segno d'elenco, in testa a una frase del compito, non
-fa più chiedere. Un numero più lungo, o dentro la frase, fa chiedere come prima. La terza toglie
-dai dati la sola frase di chi parla nel turno. I contrari chiedono tutti, con la fonte giusta: un
-nome o un numero della pagina, anche dentro l'elenco puntato, un civico prima di un punto, l'IBAN
-e il numero di un documento dell'archivio, un nome detto da un'altra voce nella stanza (in un
-testo libero e in un contenuto), una foto con la descrizione e una senza testo.
+le etichette. Cambia solo **quali numeri** di un testo libero contano come distintivi: non fa più
+chiedere un numero di una o due cifre che sta al posto giusto di una sequenza 1, 2, 3… in testa a
+una frase del compito (dopo «:» solo l'«1»). Una pagina può ancora far passare un numero solo se
+è proprio il segno successivo dell'elenco («… 2. Prepara. 3. …»). Fa chiedere come prima un
+numero più lungo, uno dentro la frase, uno dopo «:» che non è l'«1» («piano: 3.», «interno: 12.»,
+«il codice del portone è: 47.», «numero: 12)»), uno fuori sequenza, e il nome dopo «4)». La terza
+toglie dai dati la sola riga della frase del turno, per numero. I contrari chiedono tutti, con la
+fonte giusta: un nome o un numero della pagina, anche di due cifre dentro l'elenco puntato, un
+civico prima di un punto, i cinque casi della revisione (`sviluppo_apri` e `lavoro_affida`),
+l'IBAN e il numero di un documento dell'archivio, un nome detto da un'altra voce nella stanza (in
+un testo libero e in un contenuto), una foto con la descrizione e una senza testo. Nel blocco
+resta la frase di prima della persona di casa nello stesso segmento del turno di un ospite.
 
 Prova `prove/prova_valore_dettato.py` (livello 2, ~1 s). Sul codice di main (ff9e91a8)
-falliscono 8 verifiche: il caso vero nelle due forme, i numeri dell'elenco, i segni, la fonte
-(due casi), il blocco con la frase del turno e il documento, che chiedeva ma diceva «dalla
-stanza». Prove toccate verdi: `prova_valore`, `prova_politica`, `prova_stanza_contesto`,
+falliscono 8 verifiche (il caso vero nelle due forme, i numeri dell'elenco, i segni con i loro
+contrari, la fonte in due casi, il documento, che chiedeva ma diceva «dalla stanza») e la parte
+del blocco si ferma; i sei contrari della revisione chiedono su main e si eseguivano sulla prima
+versione del ramo. Prove toccate verdi: `prova_valore`, `prova_politica`, `prova_stanza_contesto`,
 `prova_stanza_storia`, `prova_stanza`, `prova_risposta_sospeso`, `prova_ricerca_fuori_tema`,
 `prova_sviluppo_giro3`, `prova_sviluppo_giro6`, `prova_giro_halloween`, `prova_sonde_attacchi`,
 `prova_eventi_attivo`, `prova_attrito`. Il `--completo` non è stato lanciato: sul portatile la

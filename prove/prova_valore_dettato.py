@@ -26,9 +26,15 @@ dentro un elenco puntato e un numero che non è un segno d'elenco), un documento
 una riga della stanza detta da un'altra voce, una foto (con e senza descrizione). Contrari del
 blocco: la riga di un'altra voce durante la frase resta, la frase di un turno di prima resta.
 
-Sul codice di main (ff9e91a8) falliscono 8 verifiche: i casi, la fonte e il blocco, e il
-contrario del documento (chiedeva, ma «dalla conversazione della stanza»); gli altri contrari
-chiedevano già. ~1 s.
+Revisione della PR #177: un numero è un segno d'elenco solo dentro una sequenza in ordine (i
+contrari «Consegna al piano: 3.», «Suona all'interno: 12.», «Il codice del portone è: 47.»,
+«numero: 12)», «4) Ermenegildo» chiedono come su main, e sulla prima versione del ramo si
+eseguivano); la frase del turno si toglie per numero (`seq_turno`), e la frase di prima di
+un'altra persona nello stesso segmento resta (contrario dell'ospite).
+
+Sul codice di main (ff9e91a8) falliscono 8 verifiche (i casi, i segni, la fonte, il contrario
+del documento, che chiedeva ma «dalla conversazione della stanza») e la parte del blocco si
+ferma (`costruisci` senza `seq_turno`); gli altri contrari chiedevano già. ~1 s.
 """
 
 import json
@@ -97,10 +103,18 @@ def prova_caso_vero():
     verifica("caso vero: i numeri dell'elenco puntato del modello non sono distintivi",
              valore.distintive(COMPITO, f) == [], str(valore.distintive(COMPITO, f)))
     segni = getattr(valore, "senza_segni_elenco", None)
-    verifica("segni d'elenco: «1.» in testa, dopo «:» o un punto; «1)» anche; non «Platani 12.»",
+    verifica("segni d'elenco: la sequenza 1, 2, 3 in testa o dopo un confine (anche «1)» e dopo "
+             "«:» il primo); resta il punto o la parentesi",
              segni is not None
-             and segni("1. Primo: 2) secondo. 3. terzo") == ". Primo: . secondo. . terzo"
-             and "12" in segni("in via dei Platani 12. Poi"))
+             and segni("1. Primo. 2) secondo. 3. terzo") == ". Primo. ) secondo. . terzo"
+             and segni("Deve: 1. leggere. 2. scrivere.") == "Deve: . leggere. . scrivere.")
+    verifica("segni d'elenco, contrari: «Platani 12.», «piano: 3.», «1.» da solo dentro, "
+             "«: 2.» dopo l'1, un numero fuori sequenza",
+             segni is not None and "12" in segni("in via dei Platani 12. Poi")
+             and "3" in segni("Consegna al piano: 3. Poi avvisami.")
+             and "1" in segni("Prepara le bozze. 1. Poi avvisami.")
+             and segni("1. Leggi la posta: 2. Poi esci.") == ". Leggi la posta: 2. Poi esci."
+             and "7" in segni("1. Leggi. 2. Scrivi. 7. Esci."))
 
 
 # ─────────────────────────── la fonte giusta nella domanda ───────────────────────────
@@ -123,8 +137,8 @@ def prova_fonte():
 
 # ─────────────────────────── contrari: chiedono ancora ───────────────────────────
 def prova_contrari():
-    # pagina web: un numero distintivo (anche dentro un elenco puntato)
-    compito = COMPITO + " 4. Collegati alla porta 8443."
+    # pagina web: un numero distintivo di due cifre dentro un elenco puntato
+    compito = COMPITO + " 4. Collegati al piano 21 del rifugio."
     d, _ = decidi("sviluppo_apri", {**APRI, "compito": compito}, turno())
     verifica("contrario, pagina: un numero della pagina dentro l'elenco puntato → chiede",
              d.esito == "conferma" and d.regola == "valore_contenuto_dato" and d.fonte == "web",
@@ -133,6 +147,26 @@ def prova_contrari():
     d, _ = decidi("sviluppo_apri", {**APRI, "compito": compito}, turno())
     verifica("contrario, pagina: un numero civico prima di un punto non è un segno d'elenco → "
              "chiede", d.esito == "conferma" and d.fonte == "web", f"{d}")
+    # I casi della revisione della PR #177: il numero dopo «:» è il valore, non un segno
+    portone = ("Indicazioni per la consegna: piano 3, interno 12, codice del portone 47. "
+               "Ermenegildo riceve una copia.")
+    for coda in ("Consegna al piano: 3. Poi avvisami.", "Suona all'interno: 12. Poi aspetta.",
+                 "Il codice del portone è: 47. Inseriscilo.",
+                 "Chiama questo numero: 12) e lascia un messaggio.",
+                 "\n4) Ermenegildo riceve una copia."):
+        compito = COMPITO + " " + coda
+        d, _ = decidi("sviluppo_apri", {**APRI, "compito": compito},
+                      turno(esterni=(("web", portone),)))
+        verifica(f"contrario, revisione: «{coda.strip()}» dalla pagina → chiede",
+                 d.esito == "conferma" and d.regola == "valore_contenuto_dato"
+                 and d.fonte == "web", f"{d}")
+    frase = "Calliope, fai una ricerca su come preparare le bozze della posta."
+    compito = ("Cerca come preparare le bozze della posta: 1. Esempi di risposta. 2. Modelli. "
+               "Il codice del portone è: 47. Inseriscilo.")
+    d, _ = decidi("lavoro_affida", {"tipo": "ricerca", "compito": compito},
+                  turno(frase, esterni=(("web", portone),)))
+    verifica("contrario, revisione: lavoro_affida col codice del portone dopo «:» → chiede",
+             d.esito == "conferma" and d.regola == "valore_contenuto_dato", f"{d}")
     # documento dell'archivio
     doc = "Fattura n. 4471 di Cartoleria Truffaldino, IBAN IT60X0542811101000000123456"
     compito = COMPITO + " Paga la fattura 4471 sull'IBAN IT60X0542811101000000123456."
@@ -182,18 +216,18 @@ def prova_blocco():
     ora = time.time()
 
     def riga(testo, inizio, fine, nome="Dario", rivolta="ignoto"):
-        st.registro(1).aggiungi("riga", segmento=None, versione=1, inizio=round(inizio, 3),
+        return st.registro(1).aggiungi("riga", segmento=None, versione=1, inizio=round(inizio, 3),
                                 fine=round(fine, 3), testo=testo, chi=f"persona:{nome}",
                                 nome=nome, sicurezza="voce", p_min=None, rivolta=rivolta,
-                                minore=False)
+                                minore=False).seq
 
     riga(PRIMA, ora - 60, ora - 57, rivolta="si")                     # il turno di prima
     riga("Io intanto preparo il caffè.", ora - 30, ora - 28, "Ludovica")
     riga("Ma la Posta la legge anche Brambillasca?", ora - 1.2, ora + 3, "Ludovica")
     # La frase del turno, scritta dal ciclo con il testo del turno: il segmento della stanza che
     # la copre è cominciato 1,5 s prima dell'ascolto dei comandi
-    riga(FRASE, ora - 1.5, ora + 9, rivolta="si")
-    b = ctx_mod.costruisci(st, 1, cfg, ora)
+    seq = riga(FRASE, ora - 1.5, ora + 9, rivolta="si")
+    b = ctx_mod.costruisci(st, 1, cfg, ora, seq_turno=seq)
     testo = b.testo if b else ""
     verifica("blocco: la frase del turno stesso non c'è anche se il suo segmento è cominciato "
              "prima dell'ascolto", b is not None and "bozze delle risposte" not in testo
@@ -202,6 +236,24 @@ def prova_blocco():
              "Brambillasca" in b.esterno, b.esterno)
     verifica("blocco, contrario: la frase di un turno di prima (rivolta, finita prima) resta",
              "Valfiorita" in b.esterno, b.esterno)
+    st.chiudi()
+    # Revisione della PR #177: la frase del turno di un ospite, nello stesso segmento della stanza
+    # dove finisce la frase di prima di Dario (rivolta a Calliope, finita dopo l'inizio del turno
+    # dell'ospite). Si toglie per numero la sola frase dell'ospite: quella di Dario resta
+    st = Stanza(cfg, _STT(), registry=None, log=lambda m: None)
+    st._info[1] = {"nome": "cucina", "stanza": "cucina", "canale": "satellite"}
+    ora = time.time()
+    riga("Calliope, ricordami di comprare il pane per Ermenegildo.", ora - 6, ora + 0.5,
+         rivolta="si")
+    seq = st.registro(1).aggiungi("riga", segmento=None, versione=1, inizio=round(ora - 1.5, 3),
+                                  fine=round(ora + 4, 3), testo="Calliope, che ore sono?",
+                                  chi="ignoto", nome=None, sicurezza="nessuna", p_min=None,
+                                  rivolta="si", minore=False).seq
+    b = ctx_mod.costruisci(st, 1, cfg, ora, seq_turno=seq)
+    verifica("blocco, contrario (ospite): la frase di prima di Dario, finita dopo l'inizio del "
+             "turno dell'ospite, resta; la frase dell'ospite no",
+             b is not None and "Ermenegildo" in b.esterno and "che ore sono" not in b.esterno,
+             b.esterno if b else "None")
     st.chiudi()
 
 

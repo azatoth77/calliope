@@ -306,25 +306,26 @@ def _presenti(stanza, sat) -> str:
     return f"; presenti riconosciuti dalla voce: {', '.join(nomi)}" if nomi else ""
 
 
-def frase_del_turno(r: dict, inizio_turno: float) -> bool:
-    """La riga è la frase del turno stesso (18/10, issue #169): rivolta a Calliope (la scrive il
-    ciclo con il testo del turno, Stanza.turno_testo) e finita dopo l'inizio della frase. Il
+def frase_del_turno(r: dict, seq_turno) -> bool:
+    """La riga è la frase del turno stesso (18/10, issue #169): quella che il ciclo ha scritto
+    con il testo del turno (Stanza.turno_testo, il suo numero `seq` in `t.stanza_seq`). Il
     segmento della stanza che la copre può cominciare prima dell'ascolto dei comandi (oltre
     `MARGINE_TURNO_S`), e allora la domanda entrava nel blocco: per la politica per valore le
-    parole dettate «venivano dalla stanza». Le righe delle altre voci non sono mai «rivolta: sì»
-    da sole, e quelle dei turni di prima sono finite prima."""
-    if r.get("rivolta") != "si" or r.get("chi") == "calliope":
-        return False
-    return float(r.get("fine") or r.get("t") or 0) >= inizio_turno
+    parole dettate «venivano dalla stanza». Per numero e non per «rivolta: sì» e orario
+    (revisione della PR #177): la frase di un turno di prima di un'altra persona, nello stesso
+    segmento della stanza, resta. Senza numero (il pezzo in attesa, fuori da un turno) nessuna."""
+    return seq_turno is not None and r.get("seq") == seq_turno
 
 
 def acceso(cfg) -> bool:
     return bool(getattr(cfg, "stanza_contesto", False))
 
 
-def costruisci(stanza, sat, cfg, inizio_turno: float, mancano: int = 0) -> Blocco | None:
+def costruisci(stanza, sat, cfg, inizio_turno: float, mancano: int = 0,
+               seq_turno=None) -> Blocco | None:
     """Il blocco della stanza di `sat` per una frase cominciata a `inizio_turno` (epoch), o None
-    (spento, stanza non accesa lì o in pausa, nessuna riga)."""
+    (spento, stanza non accesa lì o in pausa, nessuna riga). `seq_turno`: il numero della riga
+    della frase del turno (`frase_del_turno`), che non entra."""
     if stanza is None or sat is None or not acceso(cfg):
         return None
     if not stanza.accesa_qui(sat):
@@ -332,7 +333,7 @@ def costruisci(stanza, sat, cfg, inizio_turno: float, mancano: int = 0) -> Blocc
     righe = [r for r in stanza.registro(sat).righe()
              if str(r.get("testo") or "").strip()
              and float(r.get("inizio") or r.get("t") or 0) < inizio_turno - MARGINE_TURNO_S
-             and not frase_del_turno(r, inizio_turno)]
+             and not frase_del_turno(r, seq_turno)]
     if not righe:
         return None
     scelte, sempre, tagliate = scegli(

@@ -1990,8 +1990,10 @@ class Ciclo:
                 tetto = float(getattr(self.s.cfg, "stanza_recupero_max_s", 1.5) or 0.0)
                 cop.aspetta(cop.t0 + tetto)
                 mancano = cop.mancano()
+            # la frase del turno, già nella stanza (_stanza_turno), per numero (#169)
             b = stanza_ctx.costruisci(st, sat, self.s.cfg, self._stanza_inizio_epoch(),
-                                      mancano=mancano)
+                                      mancano=mancano,
+                                      seq_turno=getattr(t, "stanza_seq", None))
             if hasattr(cop, "nel_blocco"):
                 cop.nel_blocco(b.segmenti if b is not None else set())
             info["contesto"] = b.per_registro() if b is not None else {"righe": 0}

@@ -593,15 +593,42 @@ def fuori_dai_valori(spec, k: str, valore) -> bool:
 # Il numero di un elenco puntato che il modello scrive riformulando la richiesta («L'estensione
 # deve: 1. Gestire… 2. Classificare…»; 18/10, issue #169, caso vero della DGX delle 14:47: «1»,
 # «2», «3» stanno in ogni risultato web, e la descrizione dettata a voce «veniva da una pagina
-# internet»). Solo in testa al valore o dopo un confine di frase («:», «.», «;», un a capo), con
-# il punto o la parentesi e poi uno spazio: «Via dei Tigli 4. Poi…» o «chiama il 3» restano
-# numeri distintivi. Il segno diventa un confine di frase, così la parola dopo resta in testa
-_SEGNO_ELENCO = re.compile(r"(?:(?<=^)|(?<=[:;.!?\n]\s)|(?<=\n))\d{1,2}[.)](?=\s)")
+# internet»). Candidato: in testa al valore o dopo un confine di frase («:», «.», «;», «!», «?»,
+# un a capo), con il punto o la parentesi e poi uno spazio; «Via dei Tigli 4. Poi…» o «chiama il
+# 3» non lo sono mai. Un candidato è un segno solo se fa parte di una **sequenza in ordine** nello
+# stesso valore (1, 2, 3…; revisione della PR #177: «Consegna al piano: 3.», «Suona all'interno:
+# 12.», «Il codice del portone è: 47.» sono il valore, non un segno), dopo «:» solo il primo
+# della sequenza, e un «1.» da solo solo in testa al valore. Del segno si toglie solo la cifra:
+# il punto o la parentesi restano, così la parola dopo vale come prima («4) Ermenegildo» resta
+# distintivo, come sul codice di prima)
+_SEGNO_ELENCO = re.compile(r"(?:(?<=^)|(?<=[:;.!?\n]\s)|(?<=\n))(\d{1,2})([.)])(?=\s)")
+
+
+def segni_elenco(testo: str) -> list:
+    """I segni d'elenco del testo (già senza spazi in testa): i `re.Match` di `_SEGNO_ELENCO`
+    che formano la sequenza 1, 2, 3… (vedi sopra)."""
+    presi, atteso = [], 1
+    for m in _SEGNO_ELENCO.finditer(testo):
+        n = int(m.group(1))
+        if n != atteso:
+            continue
+        dopo_due_punti = m.start() >= 2 and testo[m.start() - 2] == ":"
+        if dopo_due_punti and n != 1:
+            continue
+        presi.append(m)
+        atteso += 1
+    if len(presi) == 1 and presi[0].start() != 0:
+        return []                           # un «1.» da solo dentro il valore non è un elenco
+    return presi
 
 
 def senza_segni_elenco(testo: str) -> str:
-    """Il testo con i numeri dell'elenco puntato al posto di un punto (`_SEGNO_ELENCO`)."""
-    return _SEGNO_ELENCO.sub(".", str(testo or "").lstrip())
+    """Il testo con le cifre dei segni dell'elenco puntato tolte (`segni_elenco`): resta il
+    punto o la parentesi."""
+    t = str(testo or "").lstrip()
+    for m in reversed(segni_elenco(t)):
+        t = t[:m.start()] + m.group(2) + t[m.end():]
+    return t
 
 
 def distintive(valore, f: Fonti) -> list[str]:
