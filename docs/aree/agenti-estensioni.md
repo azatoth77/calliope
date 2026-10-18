@@ -2,7 +2,9 @@
 
 *Gemma davanti, agenti dietro: delega, sandbox, arbitro e pausa di vLLM, programmi in diretta, contesto degli agenti, estensioni permanenti e guardrail. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto: qwen3.6 su vLLM, sandbox, arbitro, nomi nuovi dei tool, modalità sviluppo), con i passi dal 10 al 14/10, ognuno nella sua sezione datata: chiusura degli sviluppi a voce e nomi `sviluppo_<azione>` (10/10); il collaudo di un gioco che si guarda, revisione onesta requisito per requisito e tappe per le richieste ricche (11/10); la specifica viva (una modifica cambia i requisiti, `sviluppo_requisiti`), voce onesta con l'esito vero detto dal codice, comandi del flusso e ripresa (12/10); il flusso a fasi: la correzione che parte da un test rosso (`calliope/agenti/riproduzione.py`) e, nella parte 2, l'analisi prima del codice con gli esempi di accettazione in sola lettura (`calliope/agenti/accettazione.py`, `agenti_accettazione` di serie acceso) e «da guardare tu» nella revisione (12–13/10); i giochi con la macchina a stati di Calliope (13/10, [giochi](giochi.md)); al tetto si rieseguono gli esempi e, se tutto è verde con i file della consegna, il lavoro si consegna (13–14/10). Temperatura dell'agente 0,6 dal 13/10 (`agenti_temperatura`); banco della temperatura sulla DGX 11/15 il 14/10 (sezioni in fondo).
+**Stato al 18/10.** Come al 14/10 (sotto), più i passi del 15–17/10, ognuno nella sua sezione: la sandbox fermata dal tempo massimo sotto carico (15/10); **JavaScript come linguaggio dei programmi** (17/10, #54: Node 24 senza npm con `--permission`, di serie spento, si accende con `javascript` in `agenti_linguaggi` del locale; sulla DGX acceso dal 17/10 sera, restano il tempo con `--docker` e il caso vero a voce); gli **esempi di accettazione per i programmi** a riga di comando, Python e JavaScript, e il ragionamento dell'analisi (17/10, #10, PR #141: `agenti_accettazione_programmi_sempre` e `agenti_accettazione_ragionamento` spenti fino ai banchi sulla DGX); il banco delle sonde sul container vero (17/10, #63, PR #144: socket diretto e ambiente, sulla DGX 0 passaggi su 61; la sezione è in [sicurezza-politica](sicurezza-politica.md)). Presence penalty 0,5 per estensioni e giochi dall'11/10 (misurato), 0 per il codice (non misurato).
+
+*Stato al 14/10 (storico):* Come al 09/10 (sotto: qwen3.6 su vLLM, sandbox, arbitro, nomi nuovi dei tool, modalità sviluppo), con i passi dal 10 al 14/10, ognuno nella sua sezione datata: chiusura degli sviluppi a voce e nomi `sviluppo_<azione>` (10/10); il collaudo di un gioco che si guarda, revisione onesta requisito per requisito e tappe per le richieste ricche (11/10); la specifica viva (una modifica cambia i requisiti, `sviluppo_requisiti`), voce onesta con l'esito vero detto dal codice, comandi del flusso e ripresa (12/10); il flusso a fasi: la correzione che parte da un test rosso (`calliope/agenti/riproduzione.py`) e, nella parte 2, l'analisi prima del codice con gli esempi di accettazione in sola lettura (`calliope/agenti/accettazione.py`, `agenti_accettazione` di serie acceso) e «da guardare tu» nella revisione (12–13/10); i giochi con la macchina a stati di Calliope (13/10, [giochi](giochi.md)); al tetto si rieseguono gli esempi e, se tutto è verde con i file della consegna, il lavoro si consegna (13–14/10). Temperatura dell'agente 0,6 dal 13/10 (`agenti_temperatura`); banco della temperatura sulla DGX 11/15 il 14/10 (sezioni in fondo).
 
 *Stato al 09/10 (storico):* L'agente è qwen3.6 su vLLM sulla DGX (sandbox Docker, arbitro e pausa di vLLM). Dal 08/10 i tool hanno i nomi nuovi: `lavoro_affida`, `lavoro_stato`, `lavoro_annulla`, `lavoro_rispondi`, `lavoro_risultato`, `programma_esegui`, `estensione_gestisci`; i vecchi (`delega_lavoro`, `lavori_stato`, `lavori_esegui`, `risultato_lavoro`, `estensione_crea`, `estensioni_gestisci`, `sviluppo`, `sviluppo_prova`) valgono ancora nel registro (`NOMI_VECCHI`) e restano nelle sezioni scritte prima dell'08/10, che raccontano quei giorni. Programmi ed estensioni passano dalla **modalità sviluppo** (analisi → sviluppo e test → collaudo → revisione → attivazione: `sviluppo_apri`, `sviluppo_passo` con le azioni stato, avanti, analisi, rifai, ferma, sospendi, riprendi, chiudi, promuovi; `sviluppo_collauda`, `sviluppo_chiedi`, `sviluppo_correggi`), con il ricollaudo alla consegna e le sonde dell'agente (08/10 notte). Restano da misurare sulla DGX col 26B e l'agente vero gran parte dei giri dell'08/10 (vedi le singole sezioni).
 
@@ -318,7 +320,7 @@
     stato intervenuto»), sanzioni da 50 euro e date inventate, un file chiamato
     «Introduzione.docx», 10,9 min. `gpt-oss:120b` non provato: 65 GB con vLLM acceso e
     ~60 GB liberi. Scelta: **qwen3.6 su vLLM** per documenti e modelli.
-  - **Capacità «agenti»** (la 13ª *[storico, 02/10: oggi le capacità sono 18]*): attiva con la descrizione («qwen3.6:35b sulla DGX via
+  - **Capacità «agenti»** (la 13ª *[storico, 02/10; «oggi le capacità sono 18» fino al 12/10: dal 13/10, con `notizie`, sono 19]*): attiva con la descrizione («qwen3.6:35b sulla DGX via
     tunnel SSH «dgx» (porta locale 11435)», mai l'host), da configurare senza `dgx.yaml`,
     guasta con il motivo e il passo (VPN, chiave, impronta, porta, Ollama remoto), mancante
     con «sulla DGX manca qwen3.6:35b: scaricalo con ollama pull». Dentro Calliope è dinamica
@@ -2159,11 +2161,13 @@ Decisione di Dario: valgono per **tutti** gli sviluppi, non solo per i giochi.
     della sua prima riga, se compare più volte chiede più righe intorno; le regole di
     scrivi_file, sola lettura compresa) e **`leggi_file` con `riga`** (le righe intorno,
     numerate). Prima l'unico modo di correggere una riga era riscrivere 730 righe;
-  - `agenti_presence_penalty` per «estensione» resta 0 (la scheda di Qwen3.6 lo consiglia per
+  - *[storico, fino all'11/10 sera]* `agenti_presence_penalty` per «estensione» resta 0 (la scheda di Qwen3.6 lo consiglia per
     il codice): si cambia solo con una misura. Script pronto,
     `prove/manuali/misura_presence_penalty.py` (sul caso vero, valori 0/0,5/1/1,5, messaggio di
     fumo vecchio e nuovo; da lanciare sulla DGX libera, comando in testa al file). **Da
-    misurare.**
+    misurare.** Misurato l'11/10 sera («Presence penalty misurato» più sotto): per «estensione»,
+    giochi compresi, vale 0,5 (nessuna passata a vuoto, 6 correzioni mirate su 6); resta da
+    misurare solo «codice», che è 0.
 - **Prove**: `prova_agente_guida.py` (livello 2, ~10 s; il caso del gioco ricostruito con nomi
   di fantasia); `prova_contesto_agenti` ha 400 token di margine per il prompt fisso nuovo (con
   8 192 di finestra il picco era già 4 086 su 4 096); `prova_agenti` conta 7 strumenti.

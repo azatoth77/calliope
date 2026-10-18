@@ -2,7 +2,9 @@
 
 *Installazione e aggiornamento sulla DGX Spark (Ubuntu 24.04 aarch64): uv, gestore `calliope`, systemd, motori. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto): nessun cambio al gestore né ai motori dopo il 09/10. Dal 14/10 sera lo script di misura per l'arbitro della memoria (sotto, da lanciare). Il gestore passa a Calliope anche `calliope stato …` (tutte le opzioni in [capacita-installazioni](capacita-installazioni.md)), `calliope conserva [--svuota [--persona …]] [--json]` (dati conservati per le misure, dal 12/10), `calliope satellite …` e `calliope schermi …` (abbinamenti e certificati) ed `calliope esegui` (Calliope in primo piano); `calliope prova-e2e` e `calliope motore …` hanno il loro ramo. Comandi controllati sul codice il 14/10.
+**Stato al 18/10.** Come al 14/10 (sotto): nessun cambio al gestore né ai motori dopo il 14/10. Dal 15/10 il secondo Whisper della corsia lenta sta sulla porta 8005 da un posto solo (#2; la 8004 è di SearXNG). Lo script di misura per l'arbitro della memoria è stato lanciato in parte il 14/10 (sezione sotto). Dal 17/10 l'immagine `javascript` della sandbox serve anche ai programmi dell'agente, se `javascript` è in `agenti_linguaggi` del locale (#54, [agenti-estensioni](agenti-estensioni.md)); sulla DGX è acceso dal 17/10 sera.
+
+*Stato al 14/10 (storico):* Come al 09/10 (sotto): nessun cambio al gestore né ai motori dopo il 09/10. Dal 14/10 sera lo script di misura per l'arbitro della memoria (sotto, da lanciare). Il gestore passa a Calliope anche `calliope stato …` (tutte le opzioni in [capacita-installazioni](capacita-installazioni.md)), `calliope conserva [--svuota [--persona …]] [--json]` (dati conservati per le misure, dal 12/10), `calliope satellite …` e `calliope schermi …` (abbinamenti e certificati) ed `calliope esegui` (Calliope in primo piano); `calliope prova-e2e` e `calliope motore …` hanno il loro ramo. Comandi controllati sul codice il 14/10.
 
 *Stato al 09/10 (storico):* Calliope gira sulla DGX dal 02/10 come servizio utente systemd, aggiornata con `calliope aggiorna` (ritorno automatico; dal 06/10 non interrompe in silenzio i lavori dell'agente). Voce su Ollama scelta con `llm_profilo`, Whisper con whisper.cpp, agente qwen3.6 su vLLM, SearXNG e sandbox Docker accanto. Dal 07/10 l'extra `voce-gpu` porta Piper sulla GPU (onnxruntime-gpu su aarch64). La prova end-to-end su un'istanza di prova c'è dal 06/10.
 
@@ -198,7 +200,14 @@ prova: [`prove/manuali/e2e-dgx.md`](../../prove/manuali/e2e-dgx.md).
 
 Progetto in [`ricerche/2026-10-14-arbitro-memoria.md`](../ricerche/2026-10-14-arbitro-memoria.md),
 conto in sola lettura con `calliope stato --memoria` ([capacita-installazioni](capacita-installazioni.md)).
-Lo script `prove/manuali/misura_memoria_dgx.py` **non è ancora stato lanciato**: va sulla DGX, nella
+Lo script `prove/manuali/misura_memoria_dgx.py` *[storico: «non è ancora stato lanciato» fino al 14/10
+sera]*: il 14/10 è stato lanciato almeno il sottocomando `ollama` (qwen3-embedding: 6,7 GB di
+MemAvailable da caricato, caricamento 1,5 s), che è nel conto (`MISURE_UNIFICATA_GB`,
+[capacita-installazioni](capacita-installazioni.md), «Misure del 14/10 nel conto», con i 2,6 GB del
+whisper-server dei turni dello stesso giorno: da quale sottocomando non risulta). Di `whisper` e
+`voce --durante` non risulta nessuna misura scritta, e `vllm-sonno` esce con 77 finché il
+container dell'agente non ha `--enable-sleep-mode` (passo 4): quali sottocomandi siano stati lanciati
+lo dice chi amministra. Va sulla DGX, nella
 cartella dei dati, con il servizio acceso e Calliope inattiva (controlla da sé il journal come il
 deploy: nessun turno da 10 minuti, nessun lavoro dell'agente; si ferma se un turno arriva a metà).
 Stampa solo numeri.
