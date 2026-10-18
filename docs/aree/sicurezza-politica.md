@@ -1681,3 +1681,74 @@ i plurali e i pronomi («Fate una foto», «Scattate una foto», «Facci una fot
 **Da guardare sulla DGX** (7 giorni, `calliope stato --turni`): 0 `valore_non_ancorata` con
 `azione_in_sospeso` sullo stesso tool; «ESEGUITE con un bersaglio dal dato» = 0; quante
 `valore_risposta_sospeso` e `valore_sfida_sospeso`, e l'attrito sotto la soglia.
+
+## Le parole dettate a voce «da una pagina» o «dalla stanza» (18/10, issue #169, ramo `issue-169-valore-dettato`)
+
+**Caso vero della DGX del 18/10 pomeriggio** (nomi di fantasia nelle prove). Chi amministra,
+dal telefono, detta che cosa deve fare l'estensione «Posta» (leggere la posta, classificarla,
+preparare le bozze). Il modello chiama `sviluppo_apri` con il compito riformulato come elenco
+puntato («Crea un'estensione chiamata Posta. L'estensione deve: 1. Gestire… 2. Classificare…
+3. Preparare…»). Alle 14:47 la politica per valore chiede «… viene da una pagina internet, non da
+te», alle 14:55, per la stessa richiesta, «… viene dalla conversazione della stanza»; regola
+`valore_contenuto_dato` tutte e due le volte. Prima c'era stata una ricerca web su un altro
+argomento (14:39), e la stanza era accesa con `stanza_contesto`.
+
+**Perché** (riprodotto a secco, `prove/prova_valore_dettato.py`). L'ipotesi della issue, il
+valore riformulato «non ancorato» e attribuito al dato più vicino, era giusta solo in parte. Le
+cause vere sono tre.
+
+1. **I numeri dell'elenco puntato.** `sviluppo_apri.compito` è un testo libero: chiede solo per
+   le parole *distintive* (nomi propri, sigle, numeri) che stanno in un dato e non nelle parole
+   della persona (`valore.distintive`). «1», «2», «3» scritti dal modello come segni d'elenco
+   valevano numeri distintivi, e stanno in ogni risultato web. Le parole della persona erano
+   tutte sue.
+2. **La fonte detta nella domanda.** `valore.fonte_del_valore` sceglieva l'ultimo dato con
+   **una parola qualunque** in comune col valore. Il blocco della stanza è l'ultimo dei dati del
+   turno, e contiene anche le frasi di chi parla: con la stanza accesa vinceva sempre. Alle
+   14:47 non c'erano righe della stanza nel contesto, quindi «pagina»; alle 14:55 c'era la riga
+   della dettatura delle 14:47, quindi «stanza». La causa era sempre quella dei numeri.
+3. **La frase del turno nel blocco.** Il ciclo scrive la frase del turno nella stanza
+   (`Stanza.turno_testo`, «rivolta: sì») prima di costruire il blocco, con l'inizio del segmento
+   della stanza che la copre. `stanza/contesto.costruisci` la toglieva solo se cominciava dopo
+   l'inizio dell'ascolto meno 0,3 s, e il segmento della stanza può cominciare prima. Con il testo
+   uguale a quello del turno non cambia l'etichetta, ma mette le parole della persona fra i dati.
+
+**Cosa cambia.**
+
+- **Segni d'elenco** (`valore.senza_segni_elenco`, solo per le parole distintive di un testo
+  libero): un numero di una o due cifre con il punto o la parentesi, in testa al valore o dopo
+  un confine di frase («:», «.», «;», «!», «?», un a capo) e seguito da uno spazio, diventa un
+  confine di frase. «Via dei Platani 12. Poi…», «chiama il 3», «porta 8443» restano numeri
+  distintivi. È una correzione della forma che il modello ha dato al valore (principio 10).
+- **La fonte vera** (`valore.solo_dal_dato`, `fonte_del_valore(…, parole)`): la domanda nomina il
+  dato che contiene **le parole che fanno chiedere**: quelle «solo nel dato» per un bersaglio o
+  un contenuto, le distintive per un testo libero. Vince il dato che ne ha di più, a pari numero
+  il più recente. Una parola senza fonte con una foto di mezzo è «da una foto», come per
+  l'etichetta. Senza parole (un indice) resta come prima.
+- **Il blocco senza la frase del turno** (`stanza/contesto.frase_del_turno`): una riga «rivolta:
+  sì» (la scrive solo `turno_testo`) finita dopo l'inizio della frase è la frase stessa, e non
+  entra nel blocco, nella finestra dei pezzi della storia né fra i dati della politica. Le righe
+  delle altre voci dette durante la domanda restano, e così le frasi dei turni di prima.
+
+**Rischio** (da far leggere a chi amministra). Le prime due modifiche non allargano l'ancora né
+le etichette. Cambia solo **quali numeri** di un testo libero contano come distintivi: un numero
+di una o due cifre messo da una pagina come segno d'elenco, in testa a una frase del compito, non
+fa più chiedere. Un numero più lungo, o dentro la frase, fa chiedere come prima. La terza toglie
+dai dati la sola frase di chi parla nel turno. I contrari chiedono tutti, con la fonte giusta: un
+nome o un numero della pagina, anche dentro l'elenco puntato, un civico prima di un punto, l'IBAN
+e il numero di un documento dell'archivio, un nome detto da un'altra voce nella stanza (in un
+testo libero e in un contenuto), una foto con la descrizione e una senza testo.
+
+Prova `prove/prova_valore_dettato.py` (livello 2, ~1 s). Sul codice di main (ff9e91a8)
+falliscono 8 verifiche: il caso vero nelle due forme, i numeri dell'elenco, i segni, la fonte
+(due casi), il blocco con la frase del turno e il documento, che chiedeva ma diceva «dalla
+stanza». Prove toccate verdi: `prova_valore`, `prova_politica`, `prova_stanza_contesto`,
+`prova_stanza_storia`, `prova_stanza`, `prova_risposta_sospeso`, `prova_ricerca_fuori_tema`,
+`prova_sviluppo_giro3`, `prova_sviluppo_giro6`, `prova_giro_halloween`, `prova_sonde_attacchi`,
+`prova_eventi_attivo`, `prova_attrito`. Il `--completo` non è stato lanciato: sul portatile la
+memoria era poca, con un'altra suite completa in corso.
+
+**Da guardare sulla DGX**, con la stanza accesa: dettare a voce un'estensione con un elenco di
+cose da fare, dopo una ricerca web. Non deve arrivare nessuna domanda «viene da…». Poi
+`calliope stato --turni`: `valore_contenuto_dato` su `sviluppo_apri` e `lavoro_affida` deve
+scendere, «ESEGUITE con un bersaglio dal dato» deve restare 0.
