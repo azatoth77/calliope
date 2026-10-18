@@ -132,6 +132,20 @@ agenti sullo stesso portatile; le cause e le misure):
   dopo un riavvio. Si scrive `prove.orologio.fa(secondi)`, e il contrario gira con
   `appena_acceso(modulo)` (il `time` di quel modulo vede un computer acceso da 5 s). Il codice
   era giusto: le sentinelle sono `None` o `-1e9`.
+- **L'ora del giorno** (18/10, #151). Una scena scritta «ore prima di adesso» e controllata
+  con un formato fisso cade a certe ore. `prova_stanza_cerca` voleva «HH:MM», e fra mezzanotte
+  e le 3 le righe di tre ore prima diventavano «ieri 23:42»: l'hook fermava ogni commit di
+  notte. `prova_esercizi` usava la pausa «00:00-23:59» per dire «sempre fuori orario», ma la
+  fine non è compresa e nel minuto 23:59 non lo era. Regola: la scena gira a un'ora nota con
+  `prove.orologio.ora_del_giorno(12, 0)`, che sposta `time.time()` del processo, e le ore della
+  notte si provano apposta, ognuna con la sua forma attesa. Una fascia «sempre» si scrive con
+  due fasce che coprono il giorno. Ricognizione del 18/10: le 186 prove dei livelli 1 e 2 con
+  l'orologio del processo spostato alle 00:30, 02:59, 06:14, 08:00, 12:00, 18:30, 21:30 e
+  23:59 (un `sitecustomize` fuori dal repository). Le cadute vere erano solo queste due. Le
+  altre venivano dallo spostamento stesso: date vere dei file contro l'orologio spostato
+  (`prova_personalita`, `prova_modalita`, `prova_installa`, `prova_searxng_aggiorna`), un
+  sottoprocesso con l'ora vera (`prova_schermi`) e il carico, perché rilanciate da sole
+  all'ora che le aveva fatte cadere passavano.
 - **`prova_agenti`**: la caduta del 14/10 («VPN accesa»: `ollama_giu` con il tunnel finto e 1 s
   di tempo massimo) non si è ripetuta in ~110 giri sotto carico (prova intera con il runner che
   gira altre 12 prove degli agenti, e il solo passo del tunnel 60 volte). Da allora la diagnosi
