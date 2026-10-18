@@ -2,7 +2,7 @@
 
 *Microfono e casse in rete con Calliope sul server: protocollo, TLS, esecutore remoto (l'inoltro per il telefono: tolto il 16/10, #61), uno schermo per satellite. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 18/10.** Come al 14/10 (sotto), più: l'inoltro per il telefono **tolto** (16/10, #61: il telefono raggiunge la DGX con la sua VPN, il satellite non ha più porte in rete); la riconnessione che riparte da 1 s solo dopo una sessione stabile, 4409 che aspetta 60 s, e `prova_satellite` senza attese fisse (17/10, #5). Resta: «TLS: 120 aperture» cade 1 giro su 60 sotto carico pieno (#146). *Stato al 14/10 (storico):* come al 09/10 (sotto), più il **protocollo 3** (13/10): un satellite che lo sa fare (Python aggiornato, telefono) manda anche il parlato della stanza in un flusso a parte, accanto a quello dei comandi, solo dove la conversazione di stanza è accesa sul server (`stanza`, di serie spenta); il server accetta ancora le versioni 1 e 2, e un satellite nuovo scende di una versione alla volta. Dal 14/10 campi in più per l'ascolto durante la voce di Calliope (`stanza_durante_voce`). Sezioni in fondo; voce e regole della stanza in [stt-tts](stt-tts.md) e [contesto-conversazione](contesto-conversazione.md).
+**Stato al 18/10.** Come al 14/10 (sotto), più: l'inoltro per il telefono **tolto** (16/10, #61: il telefono raggiunge la DGX con la sua VPN, il satellite non ha più porte in rete); la riconnessione che riparte da 1 s solo dopo una sessione stabile, 4409 che aspetta 60 s, e `prova_satellite` senza attese fisse (17/10, #5). *[storico: «Resta: «TLS: 120 aperture» cade 1 giro su 60 sotto carico pieno (#146)» fino al 18/10]*; dal 18/10 il pacchetto dei satelliti si costruisce in un processo a parte (#146, sezione «Aperture TLS col server carico» sotto). Resta la riconnessione attraverso la «VPN» oltre i 15 s sotto carico forte (#155). *Stato al 14/10 (storico):* come al 09/10 (sotto), più il **protocollo 3** (13/10): un satellite che lo sa fare (Python aggiornato, telefono) manda anche il parlato della stanza in un flusso a parte, accanto a quello dei comandi, solo dove la conversazione di stanza è accesa sul server (`stanza`, di serie spenta); il server accetta ancora le versioni 1 e 2, e un satellite nuovo scende di una versione alla volta. Dal 14/10 campi in più per l'ascolto durante la voce di Calliope (`stanza_durante_voce`). Sezioni in fondo; voce e regole della stanza in [stt-tts](stt-tts.md) e [contesto-conversazione](contesto-conversazione.md).
 
 *Stato al 09/10 (storico):* Calliope gira sulla DGX e il portatile e il telefono sono satelliti, con TLS, inoltro, esecutore del PC, installazione con un comando e aggiornamenti. Dal 06/10 i satelliti ascoltano **tutti insieme**, una corsia e una conversazione per persona ciascuno ([contesto-conversazione](contesto-conversazione.md)); dal 06/10 il satellite manda quando una frase comincia a suonare (prima voce sentita), dal 07/10 le pause dentro la frase (solo misura). Più voci vicino allo stesso satellite (modalità compagnia, 09/10) sono in [voce-e-regole](voce-e-regole.md) e [stt-tts](stt-tts.md). Non provato: un PC Windows pulito come satellite.
 
@@ -279,6 +279,77 @@ non avere porte in rete.
   16 processi di carico **59 giri su 60 verdi** (mediana 131 s, 6 frasi ripetute dalla wake word
   in tutto); la caduta rimasta è «TLS: 120 aperture» (118/120, il server chiude una stretta di
   mano oltre il suo `open_timeout` di 3 s mentre 8 thread aprono insieme sulla CPU piena: non è
-  un'attesa, da riguardare se torna senza carico). Prima della correzione della riconnessione 2
+  un'attesa, da riguardare se torna senza carico; *storico, 18/10: la causa era il pacchetto costruito nel processo del server, sotto, #146*). Prima della correzione della riconnessione 2
   giri su 3 caduti. Senza carico 90–95 s contro 103–107 della prova di prima. Dettagli in
   [`prove/LEGGIMI.md`](../../prove/LEGGIMI.md).
+
+## Aperture TLS col server carico: il pacchetto in un processo a parte (18/10, #146)
+
+La caduta rimasta del 17/10 («TLS: 120 aperture», 118/120 con `InvalidMessage`, la più lenta a
+4,8 s) **non era l'`open_timeout` di 3 s troppo stretto**: le strette di mano lato server durano
+pochi millisecondi (TLS mediana 5–6 ms, WebSocket 1–3 ms, misurate con le fasi di websockets
+sotto sonda). A tenerle oltre i 3 s era un lavoro sincrono nello stesso processo:
+all'avvio del server dei satelliti il `Distributore` costruiva il pacchetto in un thread, e
+`moduli()` legge con `ast.parse` i 244 file di calliope che il satellite importa. Ogni
+`ast.parse` tiene il GIL per tutto il file (brain.py 0,3 s, sviluppo.py 0,25 s, ~5 s in tutto;
+la costruzione intera 5 s a riposo, 10–30 s con la macchina piena). Il pacchetto si costruisce
+proprio all'avvio, cioè quando i satelliti si ricollegano (dopo un riavvio della DGX), e nella
+prova proprio durante le 120 aperture.
+
+Misure (portatile, 24 core, macchina condivisa con altri agenti; `scratchpad` della sessione,
+sonda = un thread che dorme 1 ms e misura quanto si sveglia tardi; 120 aperture, 8 in parallelo,
+sul `ServerSatelliti` vero col certificato):
+
+| | sonda del GIL, massimo | fasi lato server, massimo | aperture |
+|---|---|---|---|
+| main, pacchetto in costruzione | 270–584 ms (6 volte oltre 100 ms) | TLS 360 ms, WS 144 ms | 120/120, più lenta 0,8–1,0 s |
+| main, senza pacchetto (`satellite_installazione: false`) | 14–15 ms | TLS 58 ms, WS 126 ms | 120/120, più lenta 0,5 s |
+| ramo, pacchetto in costruzione nel figlio | 14–44 ms | TLS 14 ms, WS 16 ms | 120/120, più lenta 0,05–0,15 s |
+| ramo con il difetto del 03/10 rimesso (`sicuro` che non fa niente) | 21–36 ms | WS **3,0 s** (il tetto) | 89–111/120, `InvalidMessage` |
+
+L'ultima riga dice anche perché dalla prova i due casi non si distinguevano: il difetto del 03/10
+dà **lo stesso** `InvalidMessage` (il server chiude allo scadere dei suoi 3 s). Il controllo
+resta com'era, ed è ancora rosso contro quel difetto (9, 10 e 31 aperture perse su 120).
+
+**Correzione** (`calliope/satellite/pacchetto.py`): lo zip lo fa un **processo figlio**
+(`sys.executable -I -c …`; importa `calliope.satellite`, quindi `calliope.capacita`, `pacchetto.py` e
+`packaging` dal venv, più ciò che caricano i `.pth` del venv; apre solo `uv.lock`, i moduli del
+satellite e i modelli della wake word, niente configurazione né rete; lo zip su stdout, il motivo su stderr con
+uscita 3 per «pacchetto non disponibile» e 4 per un file illeggibile); il server legge solo lo zip
+(`da_zip`: versione da `VERSIONE.json`, nomi dallo zip), stesso pacchetto byte per byte di
+`costruisci`. Il figlio importa il `pacchetto.py` del processo, non quello di `radice`. Priorità
+normale: con `BELOW_NORMAL_PRIORITY_CLASS` di Windows, sulla CPU piena il figlio non partiva quasi
+(più di 15 s nell'hook); usa un core come il thread di prima. Se il figlio non parte (niente
+`sys.executable`) o cade senza un motivo suo (un'uscita diversa da 0, 3, 4: una volta
+0xC0000005 nell'hook con 144 prove in parallelo, non riprodotta in 24 costruzioni parallele
+sotto carico), o esce con 0 senza uno zip intero o con byte prima dello zip (deve cominciare con
+`PK\x03\x04`: `zipfile` leggerebbe anche uno zip con un prefisso, e il server lo darebbe con la
+stessa versione e un altro SHA-256; dalla revisione della PR #154), il pacchetto si costruisce nel
+processo come prima, con una riga nel log (`costruiti_qui`). Oltre `ATTESA_FIGLIO_S` (600 s) il
+figlio si chiude e il **motivo resta**, come per le uscite 3 e 4: niente ripiego, sarebbero altri
+minuti col GIL preso. `ServerSatelliti.ferma` chiude il figlio (`Distributore.ferma`): niente
+processi lasciati vivi, e dopo nessun nuovo tentativo. L'`open_timeout` di 3 s resta: con le
+fasi a pochi ms non c'è misura che lo dica irrealistico. Il backlog di 8 del socket in ascolto
+(`socket_in_ascolto(…, 8)`) resta: il tempo in coda non conta nell'`open_timeout` del server
+(la scadenza parte nel thread della connessione, dopo `accept`), e nessuna misura l'ha visto
+pieno. Il contesto SSL del server si crea una volta all'avvio (`contesto_tls`); il client ne
+crea uno a connessione, ma è sull'altra macchina.
+
+Prova: `prova_installa_satellite` (`parte_a_parte`): stesso pacchetto di `costruisci` senza
+nessun `_import_di` nel processo della prova (la sonda del GIL solo nella riga), motivo dal
+figlio senza modelli e con un modulo illeggibile, ripiego se il figlio non parte, cade, esce con 0
+senza zip o scrive byte prima dello zip (con lo SHA-256 di `costruisci`), figlio chiuso dal `ferma`
+del server; 5 controlli rossi col codice di main (due solo perché manca `costruiti_qui`: quello che
+conta è «nessun file letto con ast»), più i due casi dello zip rossi col codice di prima della
+revisione. Il criterio di chiusura della issue (60/60 sotto carico) non distingue: è 60/60 anche su
+main; la prova della causa sono le fasi e la sonda.
+
+Con `prove/manuali/carico.py prova_satellite.py` (3 corsie × 20 giri, 16 processi di carico, la
+macchina condivisa con altri agenti), prima e dopo: «TLS: 120 aperture» **60/60 in tutte e due**
+(la caduta di 1 su 60 del 17/10 non è tornata nemmeno su main), ma la più lenta per giro scende
+da mediana 0,51 s e massimo 1,84 s (main) a mediana 0,23 s e massimo 1,45 s (ramo). Il resto del
+tempo è la CPU piena, non il GIL. **Da guardare a parte:** con questo carico, più forte di quello
+del 17/10, la prova intera è verde solo 31/60 su main e 30/60 sul ramo, quasi tutte su «il satellite
+si ricollega attraverso la «VPN»» (atteso entro 15 s; subito dopo «con la «VPN» risponde» è verde,
+quindi si ricollega, solo tardi: le attese che crescono dopo una sessione più corta di
+`SESSIONE_STABILE_S`, #5). Non tocca questo lavoro.

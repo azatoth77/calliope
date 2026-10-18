@@ -8,6 +8,9 @@ calliope/satellite/pacchetto.py, web.py, aggiorna.py, installazione/avvio.py e i
   (non cambia se cambia un modulo che il satellite non importa), moduli del satellite e
   niente prove né documenti, requisiti da uv.lock con gli SHA-256 dei wheel per Windows,
   silero-vad senza dipendenze, modello della wake word mancante, wheel ARM64 mancante;
+- il pacchetto del server costruito in un processo a parte (18/10, #146: nel processo del
+  server `ast.parse` teneva il GIL): stesso pacchetto, errori col motivo, ripiego in casa
+  se il processo non parte o cade, processo chiuso quando il server si ferma;
 - server dei satelliti vero su 127.0.0.1 con TLS (openssl): pagina, script, manifesto e
   pacchetto sulla stessa porta del WebSocket, che continua a funzionare; benvenuto con
   l'annuncio della versione; pagina /satellite del server degli schermi;
@@ -186,6 +189,120 @@ def parte_pacchetto(tmp: Path):
         ok("un wheel win_arm64 mancante ferma il pacchetto, con il nome", "onnxruntime" in str(e)
            and "win_arm64" in str(e), str(e))
     return a
+
+
+def parte_a_parte(tmp: Path, rif):
+    """Il Distributore costruisce il pacchetto in un processo a parte (18/10, #146): nel
+    processo del server ogni `ast.parse` di `moduli` teneva il GIL (fino a ~0,3 s per
+    brain.py) e le strette di mano TLS dei satelliti che si ricollegavano all'avvio sforavano
+    l'open_timeout di 3 s. `rif`: il pacchetto di `costruisci` con gli stessi modelli."""
+    from calliope.satellite import pacchetto as PK
+    from calliope.satellite.archivio import ArchivioSatelliti
+    from calliope.satellite.server import ServerSatelliti
+    cfg = cfg_prova(tmp)
+    # Nessun file di calliope letto con ast in questo processo
+    letti, vero = [], PK._import_di
+    PK._import_di = lambda p, m: (letti.append(m), vero(p, m))[1]
+    fermi, finito = [], threading.Event()
+
+    def sonda():
+        while not finito.is_set():
+            t = time.perf_counter()
+            time.sleep(0.001)
+            fermi.append(time.perf_counter() - t)
+    threading.Thread(target=sonda, daemon=True).start()
+    righe = []
+    d = PK.Distributore(cfg, radice=SORGENTE, log=righe.append)
+    t0 = time.perf_counter()
+    try:
+        p = d.pacchetto()
+    finally:
+        PK._import_di = vero
+        finito.set()
+    dt = time.perf_counter() - t0
+    # La sonda è solo una misura nella riga (il carico della macchina la sposta): il controllo
+    # è che qui non si legga nessun file
+    print(f"   a parte in {dt:.1f} s; una sonda di 1 ms ferma al più "
+          f"{max(fermi, default=0) * 1000:.0f} ms", flush=True)
+    ok("a parte: lo stesso pacchetto di costruisci, nessun file letto con ast in questo processo",
+       p is not None and p.sha256 == rif.sha256 and p.versione == rif.versione
+       and p.file == rif.file and not letti and getattr(d, "costruiti_qui", None) == 0,
+       f"letti qui {len(letti)}, motivo {d.motivo!r}, {righe[-1:]}")
+
+    # Contrari: gli errori del processo arrivano come prima, con il motivo
+    d = PK.Distributore(cfg_prova(tmp, wake_model=str(tmp / "nessuno" / "calliope.onnx")),
+                        radice=SORGENTE, log=righe.append)
+    ok("a parte, senza i modelli della wake word: niente pacchetto, il motivo dal processo",
+       d.pacchetto() is None and "wake word" in d.motivo
+       and getattr(d, "costruiti_qui", None) == 0, d.motivo)
+    rotto = tmp / "rotto"
+    (rotto / "calliope" / "satellite").mkdir(parents=True)
+    shutil.copy2(SORGENTE / "uv.lock", rotto / "uv.lock")
+    (rotto / "calliope" / "__init__.py").write_text("", encoding="utf-8")
+    (rotto / "calliope" / "satellite" / "__init__.py").write_text("", encoding="utf-8")
+    (rotto / "calliope" / "satellite" / "__main__.py").write_text("def (\n", encoding="utf-8")
+    d = PK.Distributore(cfg, radice=rotto, log=righe.append)
+    ok("a parte, un modulo del satellite che non si legge: il SyntaxError nel motivo",
+       d.pacchetto() is None and d.motivo.startswith("SyntaxError"), d.motivo)
+    # Il processo non parte: si costruisce qui, come prima, con una riga
+    exe, sys.executable = sys.executable, ""
+    righe.clear()
+    d = PK.Distributore(cfg, radice=SORGENTE, log=righe.append)
+    try:
+        p = d.pacchetto()
+    finally:
+        sys.executable = exe
+    ok("il processo non parte: il pacchetto si costruisce qui, con una riga",
+       p is not None and p.sha256 == rif.sha256 and getattr(d, "costruiti_qui", None) == 1
+       and any("lo costruisco qui" in r for r in righe), f"{righe}")
+    # Il processo cade senza un motivo suo (uscita fuori da 0, 3 e 4): anche allora qui
+    figlio, righe[:] = getattr(PK, "_FIGLIO", None), []
+    PK._FIGLIO = "import sys; sys.exit(9)"
+    d = PK.Distributore(cfg, radice=SORGENTE, log=righe.append)
+    try:
+        p = d.pacchetto()
+    finally:
+        PK._FIGLIO = figlio
+    ok("il processo cade (uscita 9): il pacchetto si costruisce qui, con l'uscita nella riga",
+       p is not None and p.sha256 == rif.sha256 and getattr(d, "costruiti_qui", None) == 1
+       and any("uscita 9" in r for r in righe), f"{righe}")
+    # Uscita 0 senza zip, e byte prima dello zip (un .pth, un print in un modulo importato:
+    # zipfile lo leggerebbe, con la stessa versione e un altro SHA-256): anche allora qui, e lo
+    # SHA-256 resta quello di costruisci (revisione della PR #154)
+    for nome, codice in (("uscita 0 senza zip", "pass"),
+                         ("byte prima dello zip",
+                          "import sys; sys.stdout.buffer.write(b'rumore\\n')\n" + (figlio or ""))):
+        righe[:] = []
+        PK._FIGLIO = codice
+        d = PK.Distributore(cfg, radice=SORGENTE, log=righe.append)
+        try:
+            p = d.pacchetto()
+        finally:
+            PK._FIGLIO = figlio
+        ok(f"il processo dà {nome}: il pacchetto si costruisce qui, con lo SHA-256 di costruisci",
+           p is not None and p.sha256 == rif.sha256 and getattr(d, "costruiti_qui", None) == 1
+           and not d.motivo and any("lo costruisco qui" in r for r in righe),
+           f"motivo {d.motivo!r}; {righe}")
+
+    # Il server si ferma mentre il pacchetto si costruisce: il processo non resta vivo
+    d = PK.Distributore(cfg, radice=SORGENTE, log=righe.append)
+    d.prepara_in_background()
+    partito = aspetta(lambda: getattr(d, "_figlio", None) is not None, 10, 0.01)
+    figlio = getattr(d, "_figlio", None)
+    arch = ArchivioSatelliti(str(tmp / "ferma.db"))
+    srv = ServerSatelliti(cfg, arch, log=lambda m: None)
+    srv.distributore = d
+    srv.ferma()
+    chiuso = figlio is not None and aspetta(lambda: figlio.poll() is not None, 10)
+    ok("il server si ferma durante la costruzione: il processo si chiude, niente pacchetto né "
+       "motivo, e non si riprova", partito and chiuso
+       and aspetta(lambda: getattr(d, "_figlio", 1) is None, 10)
+       and d.pronto() is None and not d.motivo and d.pacchetto() is None,
+       f"partito {partito}, chiuso {chiuso}, motivo {d.motivo!r}")
+    arch.close()
+    if figlio is not None and figlio.poll() is None:
+        figlio.kill()
+        figlio.wait(10)
 
 
 # ───────────────────────────── server ─────────────────────────────
@@ -693,6 +810,7 @@ def main():
         from calliope.satellite import pacchetto as PK
         PK.radice_codice = lambda: SORGENTE
         pacchetto = parte_pacchetto(tmp / "p")
+        parte_a_parte(tmp / "a", PK.costruisci(SORGENTE, modelli_finti(tmp / "a" / "wake")))
         ris = parte_server(tmp / "s")
         try:
             if ris is not None:
