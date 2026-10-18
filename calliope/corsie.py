@@ -88,6 +88,25 @@ def per_corsia(predefinito, nome: str):
     return v if v is not None else predefinito
 
 
+def corsia_del_satellite(corsie_tutte: dict, sat, insieme: bool, satelliti=None):
+    """La corsia che ascolta il satellite `sat` (18/10, #147: la compagnia dai segmenti della
+    stanza). Con i satelliti insieme la sua (`sat:<id>`); con una corsia sola quella che segue il
+    satellite attivo, solo se l'attivo è proprio `sat` (un altro satellite è un'altra stanza).
+    None se nessuna corsia lo ascolta adesso: il segmento non va da nessuna parte."""
+    c = corsie_tutte.get(f"sat:{sat}")
+    if c is not None or insieme:
+        return c
+    c = corsie_tutte.get("locale")
+    if c is None or not getattr(getattr(c, "listener", None), "remoto", False):
+        return None
+    try:
+        att = satelliti.attivo_pronto() if satelliti is not None else None
+    except Exception:  # noqa: BLE001
+        return None
+    sid = (getattr(att, "satellite", None) or {}).get("id") if att is not None else None
+    return c if sid is not None and sid == sat else None
+
+
 # ───────────────────────────── corsia ─────────────────────────────
 class Corsia:
     """Un satellite (o l'audio di questo computer) con il suo ciclo e i suoi oggetti."""

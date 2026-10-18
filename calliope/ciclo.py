@@ -2672,7 +2672,8 @@ class Ciclo:
             if st:
                 dist = st.get("distanza")
                 print(f"   [VOCE] in compagnia: {st['voci']} voci (prova {st['prova']}"
-                      + (f", {dist:.2f}" if dist is not None else "") + ")"
+                      + (f", {dist:.2f}" if dist is not None else "")
+                      + (", dalla stanza" if st.get("da_stanza") else "") + ")"
                       + (": serve il nome a ogni frase" if self._chiede_nome(st) else ""),
                       flush=True)
             else:
@@ -2680,6 +2681,10 @@ class Ciclo:
         self._compagnia_detta = st
         if st:
             self.rule("voci_compagnia")
+            if st.get("da_stanza"):
+                # La compagnia (o la voce sconosciuta) la vedono i segmenti della stanza, non le
+                # frasi del turno (18/10, #147): la misura distingue le due vie
+                self.rule("compagnia_da_stanza")
         return st
 
     def _compagnia_senza_nome(self, t):

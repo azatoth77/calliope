@@ -15,7 +15,7 @@
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Cattura + VAD | sounddevice + Silero VAD (PyTorch, oppure il suo ONNX con onnxruntime senza torch: Linux) | `calliope/audio.py` → `Listener` (`listen`, `watch_for_name`, `measure_echo`); `calliope/vad.py` → `carica_vad`, `SileroOnnx`, `SileroTorch`; pause e fine del turno (dal 07/10, solo misura) `calliope/pause.py` → `MisuraPause`, `OsservaRipresa`, `inizio_ripresa`, `riassunto` (sotto); la frase al tetto e il suo seguito nello stesso turno (dal 10/10, sotto) `Listener._dopo_il_tetto`, `Ciclo._seguito_del_tetto`, `pause.TETTO_ATTESA_S`; la fine del turno System 1 (dal 14/10, spenta di serie, sotto) `calliope/system1/` → `Decisione`, `Sorvegliato`, `fine_turno.SmartTurn`, `Politica`, `Anticipo` (attiva, nel `Listener`), `OmbraFineTurno` (ombra, sul server), `log_mel`, `simula`, `esito`, `riassunto` |
-| Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; impronte per satellite (15/10, spente di serie, in fondo) `calliope/impronte_satellite.py` → `Impronta`, `chiavi`, `punteggio`, `sicura`, `impara`, `riassunto`, `SpeakerRegistry.classifica(emb, chiavi)`, `impara_satellite`, `Ciclo._decisione_alternativa`, `Ciclo._impara_impronte`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto`, e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
+| Chi parla | CAM++ (3D-Speaker) in ONNX con onnxruntime | `calliope/speaker_id.py` → `SpeakerEmbedder`, `SpeakerRegistry`, `SpeakerContext`; `arruola.py`; impronte per satellite (15/10, spente di serie, in fondo) `calliope/impronte_satellite.py` → `Impronta`, `chiavi`, `punteggio`, `sicura`, `impara`, `riassunto`, `SpeakerRegistry.classifica(emb, chiavi)`, `impara_satellite`, `Ciclo._decisione_alternativa`, `Ciclo._impara_impronte`; margine tra i profili e voce incerta tra un adulto e un minore (07/10) `Ciclo._confronta_voce`, `Ciclo._chiedi_chi_parla`, `SpeakerContext.incerta`; continuità delle frasi cortissime (08/10) `Ciclo._per_continuita`; il nome da solo dopo lo scatto acustico `ciclo.solo_nome_acustico`; più voci vicino allo stesso satellite (dal 09/10, sotto) `calliope/compagnia.py` → `Compagnia`, `modo`, `riassunto` (dal 18/10 anche dai segmenti della stanza, `osserva_stanza`, in fondo), e il giudizio «rivolta a Calliope» `calliope/rivolta.py` → `Giudice`, `etichetta` |
 | Speech-to-Text | faster-whisper nel processo, oppure un server con l'API OpenAI (sulla DGX whisper.cpp con CUDA, servizio `calliope-whisper`; vLLM scartato) con ripiego su faster-whisper su CPU (modello di riserva dal catalogo, `whisper_riserva`) | `calliope/stt.py` → `Transcriber`, `ServerTranscriber`, `make_transcriber`, `modello_whisper`; server in `setup/linux/motore/whisper.sh`; sigle storpiate riscritte dopo la trascrizione (15/10, turni, stanza e corsia lenta, sotto) `calliope/sigle.py` → `correggi_sigle`; correzione delle frasi incerte (spenta) `calliope/stt_correzione.py` → `Correttore`, `accettabile`, `min_utile`; a capo di whisper-server tolti `stt.unisci_righe`; parole incerte al modello (B, spenta) `stt_correzione.parole_incerte`, `Brain.STT_INCERTE_MSG`; frase capita trattenuta (B2, spenta) `Brain.CapitoHold`, `Brain._applica_capito`, `STT_RISCRIVI_MSG` (confronto A/B/B2/C in fondo); parole incerte negli argomenti dei tool (dal 08/10, F0 e F1, sotto) `calliope/argomenti_incerti.py` → `Ascolto`, `Misura`, `Vocabolario`, `allinea`, `esito`, `suggerimento`, `riassunto`, con le probabilità per parola `Transcriber.parole` e `ServerTranscriber.parole`; tempo massimo della richiesta in proporzione alla frase `ServerTranscriber.tempo_massimo` (10/10); frasi tipiche delle allucinazioni scartate per intero in `calliope/allucinazioni.py` (09/10) |
 | Conversazione di stanza, passo 1 in ombra (13/10, sotto) | Silero VAD in ONNX (un secondo VAD, suo), Whisper con la precedenza, CAM++ | sul satellite `calliope/satellite/stanza.py` → `Segmentatore`, `AscoltoStanza`, rubinetto `Listener.rubinetto`; sul server `calliope/stanza/` → `Stanza` (`ascolto.py`: `copertura`, `turno_testo`, `pausa`, `riprendi`, `dimentica`, `presenti`, `presenze`, `durante_qui`, `pronto`), filtro dell'eco del passo 5 `filtra`, `Detta` (`eco.py`), `Riproduttore.voce_ora`, `Collegamento.frasi_voce`, `Copertura`, `Precedenza` (`coda.py`), `RegistroStanza` (`registro.py`), `Misure`, `riassunto` (`misure.py`), `load_stanza`; `STTCondiviso.transcribe(priorita=…, prompt=…)`; ganci `Ciclo._stanza_copertura`, `Ciclo._stanza_turno`; tool `stanza_pausa` (`calliope/tools/stanza.py`) |
 | Corsia lenta della stanza (14/10 sera, passo 3, `stanza_lenta`, sotto; ritrascrizione solo con un Whisper suo o un beam che conta, `stanza_lenta_ritrascrivi`) | Whisper con la precedenza LENTA (o un Whisper suo, `stanza_lenta_stt_url`: `setup/linux/motore/whisper-lento.sh`, large-v3 q5_0), CAM++ a finestre, solo libreria standard | `calliope/stanza/lenta.py` → `Lenta` (`metti`, `dovuti`, `passo`, `giro`, `rivedi`, `prompt`, `finestre`, `pendente`), `allucinazione`, `dividi_testo`, `cambio_sostanziale`, `riassuntore_guardiano`; `calliope/stanza/banco.py` → `Banco` (eccezione dell'audio del banco), `banco.ruota` (dal 17/10 anche da `Conservazione.ruota`, sotto); ritrascrizione a blocchi (15/10, `stanza_lenta_blocchi`, sotto) `Blocco`, `passo_blocco`, `rivedi_blocco`; `Transcriber.transcribe(…, beam=)`; prova `prove/prova_stanza_lenta.py`, banco `prove/manuali/banco_stanza_lenta.py`, `prove/manuali/ritrascrivi_conservati.py` |
@@ -1665,3 +1665,51 @@ PR #139 ogni pezzo è un `testi.Pezzo` (`aperta`, `prima`): chi giudica una fras
 (`riferire`, il guardiano, l'annuncio di un tool) giudica la frase fino al pezzo, mai meno di
 prima. La clausola e la lunghezza si misurano dall'ultima fine di frase. Casi, contrari e misure:
 [biblioteca](biblioteca.md) (sezione dello stesso giorno), `prove/prova_notizie_attesa.py`.
+
+## La compagnia conta le voci sentite dalla stanza (18/10, issue #147, ramo `issue-147-compagnia-stanza`)
+
+**Caso vero** (DGX, sera del 17/10): telefono come satellite in cucina, chi amministra con il
+minore e alcune persone non registrate che chiacchierano; la stanza (in ombra) le sentiva, i
+conoscenti contavano 4 voci sconosciute nuove, ma le 4 domande di chi amministra col nome
+risultavano «non in compagnia» (`calliope stato --turni`: «22 frasi con la voce, in compagnia 0»).
+La compagnia vedeva solo le frasi del turno (`Ciclo._osserva_compagnia`); i segmenti della stanza,
+che hanno già la loro impronta CAM++ per chi parla, non ci entravano mai. Così la finestra
+d'ascolto senza il nome restava aperta e valevano frase breve e continuità.
+
+**Correzione**: ogni segmento della stanza trascritto con un'impronta (almeno
+`speaker_min_voice_s` di voce: sotto, `Stanza._chi` non la calcola) va alla compagnia della corsia
+del satellite che l'ha sentito: `Stanza.su_voce` → `Avvio._compagnia_dalla_stanza` →
+`corsie.corsia_del_satellite` (con i satelliti insieme la sua corsia; con una corsia sola quella
+che segue l'attivo, solo se l'attivo è quel satellite; le altre corsie non lo vedono) →
+`Compagnia.osserva_stanza`, con il suo istante (`Segmento.fine`, monotonic) e il nome solo per
+una persona di casa riconosciuta dalla voce sopra soglia; zona grigia, conoscente e nessuno valgono
+«sconosciuta». **Niente calcolo in più**: l'impronta è quella che `_chi` ha già calcolato per chi
+parla e per i conoscenti (CAM++ una volta per segmento), la chiamata è un'aggiunta in memoria nel
+thread della stanza, nessuno stato calcolato lì; il thread della voce non aspetta niente. Non
+vanno i segmenti detti mentre Calliope parlava (l'audio ha anche la sua voce). Stesse finestre e
+soglie della compagnia di prima, nessuna nuova; al più 200 segmenti per corsia.
+
+**Solo verso la prudenza**: lo stato si calcola sulle frasi del turno come prima e, se ci sono
+segmenti, anche su tutte; vale il più prudente (più voci, la sconosciuta se c'è in uno dei due).
+Il calcolo su tutte da solo non basterebbe: un profilo di casa sentito dalla stanza entra fra i
+gruppi e può assorbire la voce di un ospite che le frasi del turno contano sconosciuta (caso
+nella prova). La stanza non tocca `_voce_recente` (niente continuità), il riconoscimento né le
+impronte: mette in compagnia o aggiunge «con voci sconosciute», mai il contrario. Quando decide la
+stanza lo stato ha `da_stanza: true` (in `voce.compagnia` del registro dei turni), la regola
+`compagnia_da_stanza`, in console «dalla stanza»; `calliope stato --turni` conta «dalla stanza N».
+Lo stato dinamico (`Compagnia.stato`) chiude la finestra senza il nome anche prima del turno dopo.
+
+**Solo in memoria** (decisione 0031): le impronte restano nella lista della compagnia; nella riga
+della stanza l'impronta non entra (`_trascrivi` la toglie), su disco niente: la prova lo verifica
+con la tenuta accesa cercando l'impronta in ogni file della cartella.
+
+**Limiti noti**: la stanza trascrive dopo il turno (precedenza), quindi i segmenti detti subito
+prima della prima domanda possono arrivare dopo la sua decisione e contare dal turno dopo o per la
+finestra; il giudizio su chi parla è quello veloce (la corsia lenta lo corregge a posteriori, 6
+segmenti su 47 il 17/10), un'approssimazione accettabile solo perché vale in direzione prudente. La
+TV sentita dalla stanza crea compagnia (come al turno). Rischio di attrito con la sola famiglia in
+stanza (impronte meno nette sui segmenti lontani dal microfono): da guardare con l'attrito di
+`calliope stato --turni`. Prova a secco `prove/prova_compagnia_stanza.py` (casi e contrari; ogni
+caso principale fallisce su 0bae0a8). **Verifica sulla DGX** alla prossima serata con ospiti e il
+telefono in stanza: `calliope stato --turni --giorni 1` deve dare «in compagnia» maggiore di 0 per
+le frasi di chi amministra, con voci sconosciute e «dalla stanza».
