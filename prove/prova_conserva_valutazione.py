@@ -562,6 +562,95 @@ try:
         st.tenuta.chiudi()
         st.chiudi()
 
+    # ───────── seconda revisione della PR #178 ─────────
+    from calliope.stanza.registro import RIGA as T_RIGA
+    # 1. Con la sfida in attesa una frase che non è la risposta resta vera (e nell'indice)
+    cfg_s = PL.cfg_base(registro="sf_altra", stanza_contesto=True)
+    st, le = PL.nuova(cfg_s, banco=banco_mod.Banco(cfg_s, log=lambda m: None))
+    st.tenuta = Tenuta(PL.TMP / "sf_altra.db", registry=None, log=lambda m: None)
+    st._info[30] = {"nome": "cucina", "stanza": "cucina", "canale": "satellite"}
+    f = ciclo_finto(st, cfg_s, "voce")
+    f.speaker_ctx.sfida = SimpleNamespace(scaduta=lambda: False)
+    t4 = nuovo_turno("che tempo fa domani", "Domani sole.")
+    Ciclo._stanza_turno(f, t4)
+    in_attesa = [str(e.dati.get("testo")) for e in st.registro(30).eventi()]
+    Ciclo._stanza_esito(f, t4, {**f.rec, "esito": "risposta", "testo": t4.text, "regole": []})
+    st.tenuta.attendi()
+    fts = st.tenuta.db.execute("SELECT count(*) FROM righe_fts WHERE righe_fts MATCH "
+                               "'tempo'").fetchone()[0]
+    verifica("contrario: con la sfida in attesa «che tempo fa domani» (non è la risposta) resta "
+             "nella stanza e nell'indice; il tratto provvisorio si toglie",
+             "(frase di conferma)" in in_attesa and fts == 1
+             and "che tempo fa domani" in [str(e.dati.get("testo"))
+                                           for e in st.registro(30).eventi()]
+             and not st.segreto_in(30, time.time() - 1.5, time.time() - 1.0),
+             f"{in_attesa} {fts}")
+    st.tenuta.chiudi()
+    st.chiudi()
+    # 2. Il codice con la sola tenuta, senza stanza_contesto
+    cfg_s = PL.cfg_base(registro="sf_tenuta", stanza_contesto=False)
+    st, le = PL.nuova(cfg_s, banco=banco_mod.Banco(cfg_s, log=lambda m: None))
+    st.tenuta = Tenuta(PL.TMP / "sf_tenuta.db", registry=None, log=lambda m: None)
+    st._info[30] = {"nome": "cucina", "stanza": "cucina", "canale": "satellite"}
+    f = ciclo_finto(st, cfg_s, "voce")
+    t5 = nuovo_turno("il codice è 123456", "Abbinato.")
+    Ciclo._stanza_turno(f, t5)
+    Ciclo._stanza_esito(f, t5, {**f.rec, "esito": "risposta", "testo": "il codice è ******",
+                                "regole": []})
+    st.tenuta.attendi()
+    testi = [r[0] for r in st.tenuta.db.execute("SELECT testo FROM righe")]
+    verifica("il codice anche senza stanza_contesto: «******» nella tenuta e il tratto segreto",
+             testi == ["il codice è ******"]
+             and st.segreto_in(30, time.time() - 1.5, time.time() - 1.0), str(testi))
+    st.tenuta.chiudi()
+    st.chiudi()
+    # 3. La corsia lenta col tratto provvisorio (turno in corso), e le righe della veloce dentro
+    #    un tratto segreto
+    cfg_s = PL.cfg_base(registro="sf_lenta", conserva_valutazione_fino=DOMANI)
+    st, le = PL.nuova(cfg_s, banco=banco_mod.Banco(cfg_s, log=lambda m: None))
+    st.tenuta = Tenuta(PL.TMP / "sf_lenta.db", registry=None, log=lambda m: None)
+    st.tenuta.valutazione = lambda: C.valutazione_attiva(cfg_s)
+    c = PL.Coll(30, "cucina")
+    st._info[30] = {"nome": "cucina", "stanza": "cucina", "canale": "satellite"}
+
+    def riga_seg(seg):
+        return [e for e in st.registro(30).eventi()
+                if e.tipo == T_RIGA and e.dati.get("segmento") == seg][0]
+
+    def nel_banco():
+        d = banco_mod.cartella(cfg_s)
+        return [json.loads(j.read_text(encoding="utf-8")).get("segmento")
+                for j in d.rglob("*.json")] if d.exists() else []
+
+    s_a = PL.parla(st, c, 191, [(0.35, 2.0)], testi=("Nel frattempo parlo io.",) * 2)
+    tratto = st.segreto(30, float(riga_seg(s_a).dati["inizio"]), provvisorio=True)
+    le.giro(PL.tardi(cfg_s))
+    verifica("corsia lenta: il segmento nel tratto provvisorio di un turno in corso non va nel "
+             "banco (segreto passato a Banco.salva)",
+             s_a not in nel_banco() and st.lenta.banco.saltati.get("segreto") == 1,
+             f"{nel_banco()} {st.lenta.banco.saltati}")
+    st.chiudi_segreto(30, tratto, False)
+    # una riga della veloce già scritta, poi il tratto segreto a turno finito
+    s_b = PL.parla(st, c, 193, [(0.35, 2.0)], testi=("Il codice è uno due tre.",) * 2)
+    rb = riga_seg(s_b).dati
+    st.segreto(30, float(rb["inizio"]), float(rb["fine"]))
+    # e una della veloce trascritta dopo, dentro un tratto già segreto
+    st.segreto(30, PL.adesso() - 0.5, PL.adesso() + 60)
+    s_c = PL.parla(st, c, 195, [(0.35, 2.0)], testi=("Ripeto: girasole.",) * 2)
+    le.giro(PL.tardi(cfg_s))
+    st.tenuta.attendi()
+    mem = [str(e.dati.get("testo")) for e in st.registro(30).eventi()
+           if e.tipo == T_RIGA and e.dati.get("segmento") in (s_b, s_c)]
+    disco = [r[0] for r in st.tenuta.db.execute("SELECT testo FROM righe")]
+    verifica("riga della veloce nel tratto segreto: mascherata in memoria e sul disco, prima e "
+             "dopo il tratto, mai rivista dalla lenta né nel banco",
+             mem and set(mem) == {"(frase di conferma)"}
+             and not any("uno due tre" in x or "girasole" in x for x in disco)
+             and s_b not in nel_banco() and s_c not in nel_banco(),
+             f"{mem} {disco} {nel_banco()}")
+    st.tenuta.chiudi()
+    st.chiudi()
+
     # ───────── i conoscenti: --persona e «dimentica» (PR #178) ─────────
     cfg_k = PL.cfg_base(registro="conoscente", conserva_valutazione_fino=DOMANI)
     bk = banco_mod.Banco(cfg_k, log=lambda m: None)

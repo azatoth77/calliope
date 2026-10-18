@@ -1924,3 +1924,17 @@ più i segmenti nel tratto di una frase di sfida o di un codice detto (`Stanza.s
 `segreto` in `saltati`), anche a valutazione spenta e per le voci di casa; la riga della stanza
 porta «(frase di conferma)» o «******». I conoscenti nel banco si tolgono con `--persona` e col
 loro «dimentica», e i blocchi della valutazione hanno le persone giuste e il segno.
+
+**Seconda revisione della PR #178 (18/10).** Con una frase di sfida in attesa la riga del turno è
+«(frase di conferma)» solo fino all'esito: se la frase non era la risposta torna vera (con
+`brain.redact`) e si ritrova nell'indice. La correzione dei codici e il tratto segreto valgono
+anche senza `stanza_contesto`. Il tratto del turno nasce **provvisorio** all'inizio della frase
+(`Stanza.segreto(…, provvisorio=True)`, al più 300 s se nessuno lo chiude): la corsia lenta non ne
+salva i segmenti nel banco finché il turno non finisce, e a turno finito `chiudi_segreto` lo tiene
+o lo toglie (la corsa fra il turno e la corsia lenta è chiusa). Le righe della corsia veloce dentro
+un tratto segreto si mascherano, quelle già scritte (`_maschera_tratto`, con `Lenta.scarta`) e
+quelle trascritte dopo (`_trascrivi`, senza corsia lenta). Limite: un blocco chiuso della
+ritrascrizione a blocchi non si riapre. Prove in `prova_conserva_valutazione`: il contrario «che
+tempo fa domani» con la sfida in attesa (vero e nell'indice FTS), il codice con la sola tenuta, il
+segmento della lenta nel tratto provvisorio (cade con `segreto=False`), le righe della veloce prima
+e dopo il tratto.

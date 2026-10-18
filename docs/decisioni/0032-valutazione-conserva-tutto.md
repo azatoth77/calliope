@@ -66,8 +66,16 @@ testo e audio.
    - la frase di sfida e i codici detti, ovunque: nel registro dei turni e nella voce come prima,
      e dal 18/10 (revisione della PR #178) anche nella stanza. La riga del turno porta «(frase di
      conferma)» o «******», la risposta di Calliope «ripeti: …», e il banco non salva i segmenti
-     nel tratto del turno (regola `segreto`). Vale sempre, anche a interruttore spento: su main la
-     stanza teneva le parole della sfida delle voci di casa;
+     nel tratto del turno (regola `segreto`). Vale sempre, anche a interruttore spento e anche
+     senza `stanza_contesto` (con la sola tenuta): su main la stanza teneva le parole della sfida
+     delle voci di casa. Dalla seconda revisione: con una sfida in attesa la riga del turno resta
+     mascherata solo fino all'esito, e torna vera (con i codici redatti) se la frase non era la
+     risposta; il tratto del turno è **provvisorio** dall'inizio della frase (il banco non salva
+     i segmenti che lo toccano finché il turno non finisce: chiude la corsa con la corsia lenta)
+     e a turno finito si tiene o si toglie; le righe della corsia veloce che cadono in un tratto
+     segreto, già scritte o trascritte dopo, diventano «(frase di conferma)» e la corsia lenta
+     non le rivede. Limite: un blocco della ritrascrizione a blocchi (`stanza_lenta_blocchi`,
+     spento di serie) già chiuso con quel segmento dentro non si riapre;
    - dello scritto solo l'audio, che non c'è: il testo scritto da un ospite resta, come quello
      detto;
    - le frasi non rivolte a Calliope nei turni (le prende la stanza);

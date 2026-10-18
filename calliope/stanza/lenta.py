@@ -347,6 +347,12 @@ class Lenta:
         self.sentito(s.sat, a.fine)
         self._pota()
 
+    def scarta(self, sat, segmento) -> bool:
+        """Il segmento non si rivede più (18/10, seconda revisione della PR #178: cade nel tratto
+        di una frase di sfida o di un codice): via dalla RAM, niente versione 2 né banco."""
+        with self._lock:
+            return self._anello.get(sat, {}).pop(segmento, None) is not None
+
     def _pota(self, ora: float | None = None):
         """Al più `stanza_audio_min` minuti per satellite, e niente più vecchio di così."""
         ora = time.time() if ora is None else ora
