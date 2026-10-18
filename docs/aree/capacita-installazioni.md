@@ -301,7 +301,8 @@ si registra soltanto cosa l'arbitro avrebbe fatto.
   di sempre in GB (i 47,8 della ricerca erano GiB).
 
 Si accende con `arbitro_memoria: ombra` in `calliope.locale.yaml` (sezione `registro`) e un
-riavvio; si spegne togliendo la riga. Prova a secco `prove/prova_arbitro_memoria.py` (sezioni 6 e 7:
+riavvio; si spegne togliendo la riga. Sulla DGX è in ombra (letto il 18/10, data d'accensione non
+scritta: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)). Prova a secco `prove/prova_arbitro_memoria.py` (sezioni 6 e 7:
 quiete, confronto con i quattro posti, coda, minuto, registro, storia e criterio).
 
 ## Secondo Whisper: porta e memoria giuste nel conto (15/10, issue #2)

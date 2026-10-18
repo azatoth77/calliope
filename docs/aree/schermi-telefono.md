@@ -2,7 +2,7 @@
 
 *Schede sugli schermi, abbinamento, visibilità, scrivere invece di parlare, telefono come satellite (PWA), rispondi dove ti ho chiesto. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto), più: la **modalità gioco** a tutta la finestra con il pallino della voce e la variante «collaudo» (11/10), il palco fisso dei giochi (14/10, [giochi](giochi.md)); la **stanza** sugli schermi (13/10): il segno «Ascolto la stanza» o la pausa, l'interruttore «Ascolto la stanza» del telefono (acceso di serie), la sezione «Stanza (in ombra)» del cruscotto con soli numeri; dal 14/10 la scheda «avviso» del tutore con «Leggi cosa si è detto» e «Scarica l'audio», solo sul suo schermo personale ([minori](minori.md)). Restano da provare sul vero l'iPhone e lo scaricamento dalla PWA.
+**Stato al 18/10.** Come al 14/10 (sotto), più: chi è quale giocatore e «Gira il telefono» sugli schermi (15/10, [giochi](giochi.md)); la foto mandata dallo schermo che aspetta la domanda anche se in mezzo parla un'altra voce (16/10, #96, [immagini-allegati](immagini-allegati.md)); l'inoltro del satellite tolto (16/10, #61): fuori casa il telefono raggiunge la DGX con la sua VPN ([satelliti](satelliti.md), [`prove/manuali/telefono.md`](../../prove/manuali/telefono.md)). Le prove manuali stanno in `prove/manuali/` dal 06/10. *Stato al 14/10 (storico):* come al 09/10 (sotto), più: la **modalità gioco** a tutta la finestra con il pallino della voce e la variante «collaudo» (11/10), il palco fisso dei giochi (14/10, [giochi](giochi.md)); la **stanza** sugli schermi (13/10): il segno «Ascolto la stanza» o la pausa, l'interruttore «Ascolto la stanza» del telefono (acceso di serie), la sezione «Stanza (in ombra)» del cruscotto con soli numeri; dal 14/10 la scheda «avviso» del tutore con «Leggi cosa si è detto» e «Scarica l'audio», solo sul suo schermo personale ([minori](minori.md)). Restano da provare sul vero l'iPhone e lo scaricamento dalla PWA.
 
 *Stato al 09/10 (storico): schermi e telefono come dal 06/10 (scheda a schermo intero, cruscotto in sola lettura), più il lettore Markdown e «Scarica» (07/10), la scheda degli esercizi e del cassetto, la vista dello sviluppo con il flusso dell'agente e la cronologia delle schede per persona con la scheda «Conversazione» (08/10), il segno della compagnia (09/10). Restano da provare sul vero l'iPhone (audio, schermo acceso, auto) e lo scaricamento dalla PWA.*
 
@@ -63,7 +63,7 @@
   (0/6 chiamate) e il modulo non compare. Non provato con un telefono vero.
 
 - **Schermi** (02/10, `calliope/schermi/`, `calliope/tools/schermi.py`; prove
-  `prova_schermi.py` a secco e `prova_schermi_ollama.py`; prova manuale in `prove/LEGGIMI.md`).
+  `prova_schermi.py` a secco e `prova_schermi_ollama.py`; prova manuale in `prove/manuali/schermi.md`, dal 06/10; *[storico: «in `prove/LEGGIMI.md`», fino al 06/10]*).
   Fase 1 di [`docs/ricerche/2026-10-01-mappe-e-schermi.md`](../ricerche/2026-10-01-mappe-e-schermi.md);
   le fasi 2–4 (mappe, luoghi, percorsi) no. Una pagina kiosk su PC, tablet o TV, abbinata con
   un codice detto a voce, mostra le schede dei tool (lista della spesa, timer con il conto alla
@@ -133,7 +133,7 @@
     2 giri: `prova_pc_ollama` 62/62 (prima frase mediana 0,48 s), `prova_casa` 42/42 (0,52),
     `prova_documenti_ollama` 34/34 (1,35), `prova_casa_ha_ollama` 58/58 (0,43),
     `prova_stato_ollama` 34/34 (0,49).
-  - Registro delle capacità: 12 capacità *[storico, 02/10: oggi 18]*; «schermi» conta come presente nel prompt se i tool
+  - Registro delle capacità: 12 capacità *[storico, 02/10: poi 18; 19 dal 13/10, `len(capacita.DEFINIZIONI)`]*; «schermi» conta come presente nel prompt se i tool
     ci sono, anche senza schermi abbinati (si abbinano proprio a voce). Pagina provata in Edge
     headless via DevTools: abbinamento, tutte le schede, revoca, nessun errore JS.
   - **Riavvii e schede aggiornate** (02/10, dopo la prima sera sulla DGX): la porta si riapre
@@ -242,7 +242,7 @@
   «Compila» nel carosello) e casella per scrivere sono strati sopra. Misure a 375×812, 320×568,
   812×375 con 0 e 6 schede, ogni scheda in vista, e i tre strati. Il trucco del video muto in loop (NoSleep) non c'è: senza un
   iPhone con iOS < 18.4 non si misura se serve. Provato in Edge headless con un wake lock finto
-  «alla WebKit»; sull'iPhone vero no (passi in `prove/LEGGIMI.md`, «Prova manuale del telefono» 9).
+  «alla WebKit»; sull'iPhone vero no (passi in `prove/manuali/telefono.md`, «Prova manuale del telefono» 9; *[storico: «in `prove/LEGGIMI.md`», fino al 06/10]*).
 
 - **Abbinamento del telefono che riprende** (03/10, iPhone 13 mini con Edge): per dire il codice
   la persona esce dal browser, iOS sospende la pagina e chiude il WebSocket, e il token mandato

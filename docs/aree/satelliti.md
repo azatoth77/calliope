@@ -2,7 +2,7 @@
 
 *Microfono e casse in rete con Calliope sul server: protocollo, TLS, esecutore remoto (l'inoltro per il telefono: tolto il 16/10, #61), uno schermo per satellite. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 14/10.** Come al 09/10 (sotto), più il **protocollo 3** (13/10): un satellite che lo sa fare (Python aggiornato, telefono) manda anche il parlato della stanza in un flusso a parte, accanto a quello dei comandi, solo dove la conversazione di stanza è accesa sul server (`stanza`, di serie spenta); il server accetta ancora le versioni 1 e 2, e un satellite nuovo scende di una versione alla volta. Dal 14/10 campi in più per l'ascolto durante la voce di Calliope (`stanza_durante_voce`). Sezioni in fondo; voce e regole della stanza in [stt-tts](stt-tts.md) e [contesto-conversazione](contesto-conversazione.md).
+**Stato al 18/10.** Come al 14/10 (sotto), più: l'inoltro per il telefono **tolto** (16/10, #61: il telefono raggiunge la DGX con la sua VPN, il satellite non ha più porte in rete); la riconnessione che riparte da 1 s solo dopo una sessione stabile, 4409 che aspetta 60 s, e `prova_satellite` senza attese fisse (17/10, #5). Resta: «TLS: 120 aperture» cade 1 giro su 60 sotto carico pieno (#146). *Stato al 14/10 (storico):* come al 09/10 (sotto), più il **protocollo 3** (13/10): un satellite che lo sa fare (Python aggiornato, telefono) manda anche il parlato della stanza in un flusso a parte, accanto a quello dei comandi, solo dove la conversazione di stanza è accesa sul server (`stanza`, di serie spenta); il server accetta ancora le versioni 1 e 2, e un satellite nuovo scende di una versione alla volta. Dal 14/10 campi in più per l'ascolto durante la voce di Calliope (`stanza_durante_voce`). Sezioni in fondo; voce e regole della stanza in [stt-tts](stt-tts.md) e [contesto-conversazione](contesto-conversazione.md).
 
 *Stato al 09/10 (storico):* Calliope gira sulla DGX e il portatile e il telefono sono satelliti, con TLS, inoltro, esecutore del PC, installazione con un comando e aggiornamenti. Dal 06/10 i satelliti ascoltano **tutti insieme**, una corsia e una conversazione per persona ciascuno ([contesto-conversazione](contesto-conversazione.md)); dal 06/10 il satellite manda quando una frase comincia a suonare (prima voce sentita), dal 07/10 le pause dentro la frase (solo misura). Più voci vicino allo stesso satellite (modalità compagnia, 09/10) sono in [voce-e-regole](voce-e-regole.md) e [stt-tts](stt-tts.md). Non provato: un PC Windows pulito come satellite.
 
@@ -35,7 +35,7 @@
 
 - **Satelliti** (02/10, `calliope/satellite/`, [`docs/ricerche/2026-10-02-satellite.md`](../ricerche/2026-10-02-satellite.md);
   prova a secco `prove/prova_satellite.py`, prova manuale e passi per la DGX in
-  `prove/LEGGIMI.md`). Il portatile come satellite di Calliope sulla DGX: con `audio_modo:
+  `prove/manuali/satelliti.md` *[storico: «in `prove/LEGGIMI.md`», fino al 06/10]*). Il portatile come satellite di Calliope sulla DGX: con `audio_modo:
   satellite` microfono, VAD, wake word e casse sono di un satellite in rete, Whisper, modello,
   Piper e tool restano sul server; stesso ciclo di `main.py`. Provato con Calliope vera e un
   satellite con microfono e casse finti. **La DGX vera non è ancora stata contattata.** *[Storico (02/10): dalla sera del 02/10 Calliope gira sulla DGX come servizio; vedi [setup-dgx](setup-dgx.md).]*
@@ -113,8 +113,11 @@
     403). In rete il server non parte senza certificato (salvo `satellite_senza_tls`, con un
     avviso); certificato autofirmato di `openssl`, impronta SHA-256 fissata dal satellite
     all'abbinamento (stampata dai due lati da confrontare), token mandato solo dopo il
-    controllo. La pagina degli schermi resta in http: in ufficio il suo token viaggerebbe in
-    chiaro (`satellite_schermo: no` per non aprirla).
+    controllo. *[storico: «La pagina degli schermi resta in http: in ufficio il suo token
+    viaggerebbe in chiaro (`satellite_schermo: no` per non aprirla)», fino al 02/10: dal 02/10
+    in rete la pagina è in HTTPS e il server non parte senza certificato (salvo
+    `schermi_senza_tls`, falso di serie); il satellite la apre dal suo ponte TLS su 127.0.0.1
+    (`calliope/schermi/ponte.py`), vedi [schermi-telefono](schermi-telefono.md)]*
   - **Misure a secco** (Calliope vera, Ollama e Whisper finti, Piper vero, satellite con
     microfono e casse finti in tempo reale): fine frase → prima voce 0,67–0,80 s, con 50 ms di
     giro simulati +30–93 ms (≈ un giro); VAD + wake word 1,4 % di un core; ~74 kB verso il
