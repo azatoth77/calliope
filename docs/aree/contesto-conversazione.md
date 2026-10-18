@@ -1449,6 +1449,20 @@ tool sotto 1 ms (nessuna riga in coda nel banco), frase d'attesa 0/20, prima fra
 quota della frase d'attesa e il p90 del tool. Prove: `prove/prova_stanza_cerca.py` (livello 1, con
 i contrari).
 
+**18/10: la prova a qualunque ora (issue #151).** Caso vero: la notte del 18/10, verso le 2:40,
+l'hook fermava un ramo di soli documenti perché `prova_stanza_cerca` era rossa, anche su main.
+La scena stava tre ore prima di adesso e la prova voleva un'etichetta «HH:MM». Fra mezzanotte
+e le 3 le righe sono del giorno prima e il tool le scrive, come deve, «ieri 23:42». Il difetto
+era della prova, il formato del tool è quello voluto e non cambia. Ora la prova gira con
+`time.time()` alle 12:00 di oggi (`prove.orologio.ora_del_giorno`) e rifà la scena alle 00:30
+(quattro righe «ieri HH:MM»), alle 02:59 (una di ieri e tre di oggi nello stesso risultato),
+alle 12:00 e alle 23:59 (niente «ieri»). Prova anche `dalle`/`alle` a cavallo della mezzanotte
+e le tre forme dell'etichetta (oggi, ieri, «gg/mm HH:MM»). Una mutazione che toglie «ieri» o
+cambia i due punti fa cadere i casi giusti. Con l'orologio di sistema spostato alle 00:30,
+02:40, 02:59, 12:00 e 23:59 la prova passa; su main cadeva alle 00:30 e alle 02:59. Nella stessa
+ricognizione è emerso `prova_esercizi`, con la pausa «00:00-23:59» che non copriva il minuto
+23:59 (`prove/LEGGIMI.md`, «L'ora del giorno»).
+
 ## `stanza_cerca` più veloce: la ricerca anticipata, il discorso intorno (14/10 sera, ramo `stanza-cerca-2`)
 
 Il banco sulla DGX col 26B (`gemma4:26b-a4b-it-qat` su Ollama, `--giri 3`) aveva dato **24/30**
