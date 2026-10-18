@@ -13,6 +13,10 @@ A secco (predefinito, anche su Windows), con il docker FINTO di prove/docker_fin
 - esecuzioni attraverso il docker finto: script, test con l'esito, attacchi fermati
   dall'audit hook (seconda linea), tempo scaduto con `docker kill`, annullo con `docker kill`;
 - registro delle capacità: la capacità «agenti» dice quale isolamento è attivo.
+Tempi (18/10, #156, il criterio di #142): le esecuzioni che devono finire hanno un tempo
+massimo largo (ESECUZIONE_S); quello stretto di 4 s resta per i casi che lo misurano (tempo
+scaduto, annullo). Prima tutte avevano 4 s, e sotto carico il docker finto (un Python che ne
+avvia un altro) poteva sforarli.
 
 Con `--docker` (sulla DGX, con l'immagine costruita: calliope motore sandbox costruisci),
 Docker vero:
@@ -45,6 +49,9 @@ RADICE = Path(__file__).resolve().parent.parent
 FINTO = [sys.executable, str(Path(__file__).with_name("docker_finto.py"))]
 errori = 0
 T0 = time.perf_counter()
+# Il tempo massimo di un'esecuzione che deve finire (#156): a vuoto meno di un secondo con il
+# docker finto, sotto carico decine; il tetto serve solo a non restare appesi
+ESECUZIONE_S = 60.0
 
 
 def sezione(nome):
@@ -179,6 +186,7 @@ def a_secco():
         verifica("cartella con una virgola rifiutata (romperebbe --mount)", True)
 
     sezione("esecuzioni con il docker finto")
+    sb.tempo_s = ESECUZIONE_S      # il comando qui sopra è stato fatto con 4 s (timeout 9)
     sb.scrivi("ciao.py", "import os, sys\nprint('ciao', 2 + 2, sys.argv[1:], os.environ['HOME'])\n")
     r = sb.esegui("ciao.py", ["x"])
     verifica("esegue nel «container»", r["codice_uscita"] == 0 and "ciao 4 ['x']" in r["uscita"],
@@ -199,6 +207,7 @@ def a_secco():
         verifica(f"audit hook dentro il container: {nome}", r["codice_uscita"] != 0
                  and "Bloccato dalla sandbox" in r["uscita"], ultima(r["uscita"]))
     sb.scrivi("ciclo.py", "while True:\n    pass\n")
+    sb.tempo_s = 4                 # da qui il tempo massimo è la misura
     n_kill = sum(c[:1] == ["kill"] for c in log)
     t0 = time.perf_counter()
     r = sb.esegui("ciclo.py")
