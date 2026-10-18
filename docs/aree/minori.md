@@ -1367,3 +1367,16 @@ contare due volte. Dal riavvio dopo si conta solo il delta.
 Prova `prova_stanza_guardia` (ripresa): il secondo riavvio non
 conta di nuovo la riga (su main 2), le due frasi rivolte a Calliope fuori dal conto (su main 3),
 le misure di prima col massimo e le nuove sommate; contrario: la riga non rivolta resta contata.
+
+## La valutazione e i minori (18/10, issue #173, ramo `issue-173-valutazione`)
+
+Durante la valutazione (`conserva_valutazione_fino`, decisione
+[0032](../decisioni/0032-valutazione-conserva-tutto.md), dettagli in
+[contesto-conversazione](contesto-conversazione.md) e [stt-tts](stt-tts.md)) l'audio dei turni si
+tiene anche nel **dubbio fra un adulto e un minore** e senza il consenso dei tutori (in
+`voce/_valutazione/<id della persona decisa>/`), e la stanza tiene anche le righe e l'audio degli
+ospiti vicino a un minore. **Cosa non cambia**: i permessi, il guardiano e la guardia a posteriori
+(le righe della valutazione non entrano né nella ricerca né nel giudizio della guardia), la
+revoca di un tutore (toglie anche le frasi della valutazione del minore), i tutori che rileggono
+le stesse cose di prima. La revoca vale per il passato: durante la valutazione le frasi nuove si
+tengono di nuovo, per scelta di chi amministra.
