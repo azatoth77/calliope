@@ -976,3 +976,14 @@ su uno schermo con due persone «gioco anch'io» detto da tutte e due e «porta 
 non è di turno (Calliope: «Tocca a …»); «che giocatore sono?»; quanto spesso la voce di una mossa
 è riconosciuta (se quasi mai, su uno schermo solo decide sempre il turno): `calliope stato
 --turni`, esito `gioco_turno_altrui`. Un gioco con una tela orizzontale sul telefono in piedi.
+
+## La preparazione detta all'agente e `apriGioco({ inizia: true })` (18/10, issue #174)
+
+Il tris per due della DGX (18/10): l'agente ha girato a vuoto cinque giri perché i suoi test di
+`gioco.test.js` facevano la prima mossa senza uscire dalla fase «preparazione» (con giocatori
+min = max se ne esce solo con «Inizia»). Ora il contratto lo dice (ogni partita comincia nella
+preparazione: «Inizia» con min = max, «N giocatori» con min < max), `apriGioco({ inizia: true })`
+parte dalla fase d'inizio del gioco, e l'errore di un comando o di un tocco nella preparazione
+dice la via d'uscita («prima delle mosse tocca «Inizia»… correggi il test, non il manifesto»).
+Il banco della temperatura ha il caso fisso `tris2`. Il resto (firme degli errori, novità, giri
+uguali, specifica) in [agenti-estensioni](agenti-estensioni.md), voce del 18/10 su #174.

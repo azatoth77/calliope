@@ -3694,3 +3694,91 @@ sarebbe da misurare. Il «fatto» al tetto si fida di questi esempi, e lo si sa.
   la firma e si riesegue. Si risparmia un'esecuzione su quattro nel caso tipico (sulla DGX un
   container in meno per lavoro); la prova a secco conterebbe 3 esecuzioni invece di 4, con il
   contrario di un file cambiato dopo la consegna.
+
+## L'agente dei giochi che gira a vuoto: la preparazione, le novità vere, i giri uguali (18/10, issue #174, ramo `issue-174-agente-giochi`)
+
+**Il caso vero** (DGX, 18/10, lavoro L1, sviluppo S32, qwen3.6-35B-A3B su vLLM): il «tris due
+giocatori», 5 giri, 120 passate, 149 000 token di cui 118 000 di ragionamento, 10 passate fermate
+per ragionamento ripetuto. Dalle 17:02 la prova di fumo era verde; restavano rossi tre test di
+`gioco.test.js` scritti dall'agente, che davano per scontato che la partita cominciasse in
+«turno». Con giocatori min = max (2 e 2) dalla preparazione si esce solo con «Inizia» (il
+pulsante «N giocatori» non c'è): bastava `await g.tocca("Inizia")` in testa ai tre test.
+L'agente ha cambiato per ore `min` e la fase «preparazione» nel manifesto. A voce, a ogni tappa,
+«21 passate senza file né test nuovi», falso: i file li cambiava con `modifica_file`.
+
+**Cosa cambia.**
+1. **Il contratto** (`estensioni/contratto.scheda_testo`, § 5): «Ogni partita comincia nella
+   fase «preparazione»: in gioco.test.js, dopo apriGioco e prima delle mosse, si tocca «Inizia»
+   se giocatori min = max … o «N giocatori» se min < max; oppure apriGioco({ inizia: true })».
+   Prima diceva solo «dopo g.tocca("2 giocatori") si è già nella fase d'inizio». L'opzione
+   `inizia` c'è davvero (`agenti/fumo_js.mjs`): esce dalla preparazione con «Inizia», o con
+   «N giocatori» se min < max e c'è `giocatori: N`. Nello scheletro del gioco un commento
+   (`// min = max: «Inizia»`).
+2. **L'errore di apriGioco nella preparazione** dice la via d'uscita: un comando non attivo
+   (`g.comando("casella", 1)`) o un tocco su un elemento che non c'è aggiungono «la partita è
+   ancora nella fase «preparazione», da cui comincia sempre; prima delle mosse tocca «Inizia»
+   (await g.tocca("Inizia")), oppure … apriGioco({ inizia: true }) … Se l'ha scritto un tuo test,
+   correggi il test, non il manifesto». Con min < max il pulsante detto è «2 giocatori». La frase
+   di «avanti» fuori dall'esito resta com'era. Il messaggio si allunga di ~300 caratteri, solo
+   nella preparazione.
+3. **`firma_errore`** (`agenti/ciclo.py`): la riga del test PASSATO «ok casella occupata:
+   errore» era la firma di ogni esecuzione (l'ultima riga con «errore»), quindi un esito diverso
+   dei test non era mai una novità e «i test falliscono 3 volte con lo stesso errore» era falso.
+   Ora: la prima riga dei fallimenti in breve (`fallimenti`, diagnosi.py), poi la prima riga
+   «FALLITO»/«FAIL», poi l'ultima riga d'errore; mai una riga «ok …».
+4. **Le novità** (nel ciclo, dopo ogni strumento): contano anche `modifica_file`, un file
+   riscritto con un contenuto diverso (impronta in `segnali["impronte"]`) e un conto dei test
+   diverso (eseguiti, rossi). Segnale nuovo `senza_progressi`: le passate dal primo `esegui_test`
+   senza un test verde in più (si azzera a ogni giro, come `senza_novita`). A voce
+   (`segnali_giro`): «N passate senza cambiare i file né l'esito dei test», altrimenti «N passate
+   senza far passare test nuovi»; «senza file né test nuovi» non si dice più.
+5. **La specifica** (`sviluppo.py`): un gioco con dei requisiti che qui non si possono fare ha la
+   specifica riscritta dai requisiti (`specifica_da_requisiti`, la stessa forma della specifica
+   viva: le cose da fare e a parte «Qui non si può fare, quindi non va fatto: …»), per lo
+   sviluppo e per il lavoro (`compito`). Regola `sviluppo_specifica_dai_requisiti`. Così
+   all'agente non arriva più «Il linguaggio deve essere Python con la libreria Pygame». Con
+   **tutti i requisiti principali** (il nucleo; senza nucleo tutti) `si_puo: false` il lavoro non
+   parte: la proposta chiude con «Così non la faccio partire: cosa vuoi cambiare?» (in sospeso
+   verso `sviluppo_passo` analisi), e `tools/agenti._avvia` non lo avvia nemmeno con un «sì».
+   Regola `sviluppo_nucleo_impossibile`. Un programma (non un gioco) tiene la sua specifica.
+   Cambiata l'attesa di `prova_revisione_onesta`: il gioco di Halloween con la classifica su
+   internet ha ora la specifica dai requisiti, e «continua» non la cambia, come prima. Il prezzo:
+   la specifica di un gioco con un limite perde la forma naturale dell'analisi (restano i
+   requisiti con i dettagli); da rileggere sulla DGX.
+6. **Giri uguali** (`ciclo.giri_uguali`, `servizio.domanda_tappa`): a ogni tappa si segna il
+   punto di fine giro (test rifatti: quanti, quanti rossi, la firma del primo errore). Dalla
+   seconda tappa di fila allo stesso punto (`GIRI_UGUALI` = 2, regola `agente_giri_uguali`) il
+   rapporto chiude con «Due giri di fila sono finiti allo stesso punto, con gli stessi test che
+   non passano: un altro giro uguale non servirebbe. Faccio consegnare all'agente quello che
+   funziona già, o vuoi cambiare la richiesta?», e la domanda in sospeso è «Faccio consegnare
+   quello che funziona?». Il «sì» (senza nota) fa un giro con l'istruzione di Calliope
+   `CONSEGNA_DOPO_GIRI` al posto di «cambia strada» (rileggere l'errore, correggere il test che
+   dà per scontato ciò che il contratto non dice, togliere il proprio test di un requisito che
+   non riesce e dirlo, poi consegnare), regola `agente_consegna_dopo_giri`; la voce dice
+   «D'accordo: faccio consegnare all'agente quello che funziona già…». Con una nota della
+   persona il giro è quello di sempre con la nota. Anche la ripresa dello sviluppo fermo a una
+   tappa fa la stessa domanda. La consegna resta quella di sempre (test verdi due volte).
+7. **Il banco** (`prove/manuali/banco_temperatura.py`): il caso fisso `tris2`, tra quelli di
+   serie: il tris per due da zero, con l'accettazione nascosta che parte dalla preparazione,
+   tocca «Inizia», gioca 1, 4, 2, 5, 3 con il comando «casella» e legge la fine con un punto;
+   riferimento `prove/giochi/tris` con due giocatori fissi. `--secco`: rossa alla partenza,
+   verde sul riferimento, e la mossa senza «Inizia» fallisce con l'errore che dice la
+   preparazione (ok).
+
+**Non fatto qui**: la scelta del modello dell'agente (punto 4 dell'analisi, nella sua issue);
+il lato voce dello stesso caso (#172).
+
+**Prove.** `prova_agente_giri_uguali` (nuova, livello 2, ~10 s; sul codice di main fallisce in
+tutte le sezioni), `banco_temperatura.py --secco` tutto ok; `prova_revisione_onesta`,
+`prova_agente_guida` (lo scheletro del gioco resta sotto i 3 400 caratteri), `prova_sviluppo_v2`,
+`prova_fasi_agente`, `prova_fasi_agente_2`, `prova_giochi`, `prova_gioco_macchina`,
+`prova_estensioni*`, `prova_sviluppo*` verdi. Niente `--completo` sul portatile (memoria).
+
+**Da misurare sulla DGX** (dopo l'unione): «Calliope, facciamo un gioco del tris per due
+giocatori», e il banco con `--casi tris2 --giri 2`: il criterio della issue è il tris chiuso
+dall'agente in al più 2 giri col modello di oggi. Nel log: `agente_giri_uguali`,
+`agente_consegna_dopo_giri`, `sviluppo_specifica_dai_requisiti`, `sviluppo_nucleo_impossibile`.
+
+        cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+          && $V/.venv/bin/python $V/prove/manuali/banco_temperatura.py \
+             --temperature config --presence config --ripetizioni 2 --casi tris2 --giri 2
