@@ -347,7 +347,17 @@ class Cruscotto:
                 "regole": self._parte(self._regole, turni),
                 "errori": self._parte(self._errori, turni),
                 "attesa": self._parte(self._attesa),
-                "stanza": self._parte(self._stanza)}
+                "stanza": self._parte(self._stanza),
+                "valutazione": self._parte(self._valutazione)}
+
+    def _valutazione(self) -> dict | None:
+        """La valutazione (18/10, decisione 0032): la riga di `calliope stato`; None se non c'è
+        una data."""
+        from ..conserva import testo_valutazione, valutazione_attiva
+        testo = testo_valutazione(self.cfg)
+        if not testo:
+            return None
+        return {"testo": testo, "attiva": valutazione_attiva(self.cfg)}
 
     def _stanza(self) -> dict | None:
         """La conversazione di stanza (13/10, passo 1 in ombra): per satellite se ascolta o è in

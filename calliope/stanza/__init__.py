@@ -73,8 +73,12 @@ def load_tenuta(cfg, registry=None, log=print):
     except Exception as e:  # noqa: BLE001
         log(f"[STANZA] tenuta su disco non pronta ({type(e).__name__}: {e}): solo in memoria")
         return None
+    # La valutazione (18/10, decisione 0032): fino alla data anche ospiti e zona grigia
+    from ..conserva import valutazione_attiva
+    t.valutazione = lambda: valutazione_attiva(cfg)
     log(f"[STANZA] Testo della stanza anche su disco per {t.giorni} giorni (famiglia e minori; "
-        f"mai ospiti né zona grigia)")
+        + ("durante la valutazione anche ospiti e zona grigia)" if valutazione_attiva(cfg)
+           else "mai ospiti né zona grigia)"))
     return t
 
 
@@ -123,7 +127,9 @@ def load_lenta(cfg, stanza, guardiano=None, occupato=(), log=print, media=None):
             riass = None
     banco = None
     from . import banco as B
-    if B.giorni(cfg) > 0:
+    from ..conserva import valutazione_fino
+    if B.giorni(cfg) > 0 or valutazione_fino(cfg) is not None:
+        # Anche per la valutazione (18/10, decisione 0032): tutti i segmenti fino alla data
         banco = B.Banco(cfg, log=log)
     le = L.Lenta(cfg, stanza, riassuntore=riass, occupato=occupato, banco=banco, media=media,
                  log=log)
@@ -137,8 +143,10 @@ def load_lenta(cfg, stanza, guardiano=None, occupato=(), log=print, media=None):
     log("[STANZA] Corsia lenta a DGX libera: " + rit + ", chi parla sullo scambio, TV, "
         "allucinazioni"
         + (", riassunto progressivo" if riass else ", senza riassunto (nessun rilevatore)")
-        + (f"; audio del banco su disco per {B.giorni(cfg)} giorni (eccezione)" if banco
-           else ""))
+        + (f"; audio del banco su disco per {B.giorni(cfg)} giorni (eccezione)"
+           if banco and B.giorni(cfg) > 0 else "")
+        + ("; audio di tutti i segmenti per la valutazione (decisione 0032)"
+           if banco and B.valutazione_attiva(cfg) else ""))
     return le
 
 

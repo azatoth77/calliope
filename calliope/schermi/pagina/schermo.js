@@ -1970,6 +1970,10 @@
       : "Solo lettura: per cambiare qualcosa usa la voce o il terminale."));
     if (c.errore) corpo.append(el("p", "cr-avviso", "Non riesco a leggere lo stato: " + c.errore));
     if (!c.dati) return;
+    // La valutazione (18/10, decisione 0032): si conserva tutto, ospiti compresi, fino alla data
+    if (d.valutazione && d.valutazione.testo) {
+      corpo.append(el("p", d.valutazione.attiva ? "cr-avviso" : "cr-tenue", d.valutazione.testo));
+    }
 
     // Versione
     let s = sezione(corpo, "Versione");

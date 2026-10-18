@@ -2314,6 +2314,17 @@ registro:
   conserva_voce: true
   # Tetto della voce conservata, in MB: oltre, si tolgono i giorni più vecchi. 0 = nessun tetto
   conserva_voce_mb: 2000
+  # La valutazione (18/10, decisione 0032, issue #173, eccezione alle decisioni 0031 e 0029
+  # decisa da chi amministra): fino a questa data compresa («AAAA-MM-GG») si conservano testo
+  # e audio di tutte le conversazioni, ospiti, zona grigia, voci sconosciute e conoscenti
+  # compresi: le parole dei turni, l'audio di ogni frase del turno (senza soglia né consenso,
+  # in turn_log_dir/voce/_valutazione, sotto il tetto conserva_voce_mb), il testo della stanza
+  # nella tenuta (se `stanza_tenuta`), l'audio di tutti i segmenti nel banco (se
+  # `stanza_lenta`), le conversazioni degli ospiti nell'archivio. Restano fuori la frase di
+  # sfida e i codici detti, la pausa («abbiamo ospiti»), lo scritto e `conserva_voce: false`.
+  # I file restano per turn_log_days; «dimentica» e `calliope conserva --svuota` li tolgono.
+  # Alla scadenza smette da sé e lo dice il log. Vuoto (di serie) = spento, come prima
+  conserva_valutazione_fino: ''
   # Latenza vera della voce (06/10, calliope/latenza.py): se la mediana della prima frase di
   # oggi o di ieri (dal registro dei turni, almeno 10 risposte) supera questi secondi, lo
   # dicono l'avvio e `calliope stato`; dettagli con `calliope stato --turni`. 0 = mai. Dal 02

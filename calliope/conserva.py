@@ -65,6 +65,10 @@ cartelle 700 su Linux. Fino al 14/10 sera la codifica non era G.711 (i lettori s
 sentivano rumore): i file nuovi portano un segno nel WAV, `leggi_wav` legge anche i vecchi e
 `--converti-audio` li riscrive.
 
+**La valutazione** (18/10, decisione 0032, issue #173): con `conserva_valutazione_fino:
+"AAAA-MM-GG"`, fino a quella data compresa, si conserva tutto, ospiti compresi (sezione «la
+valutazione» qui sotto). Vuoto di serie: le regole sopra, invariate.
+
 **Privacy**: niente esce mai da qui (nessun invio, nessun tool che legga la cartella); nei log
 solo conteggi, mai testo né nomi. La conservazione non usa la GPU: nel profilo ridotto da 8 GB
 c'è uguale.
@@ -125,6 +129,54 @@ class Decisione:
 
     def __bool__(self) -> bool:
         return self.ok
+
+
+# ─────────────────────────── la valutazione (18/10, decisione 0032) ───────────────────────────
+# Con `conserva_valutazione_fino: "AAAA-MM-GG"` fino a quel giorno compreso si conserva tutto,
+# ospiti compresi (eccezione alle decisioni 0031 e 0029 decisa da chi amministra, issue #173). Le
+# scritture sono quelle di sempre, con meno filtri: le parole dei turni di tutti, l'audio di ogni
+# frase del turno in `voce/_valutazione/<persona o «ospiti»>/` (quando la regola di sempre non lo
+# terrebbe), il testo della stanza (righe segnate `sicurezza: valutazione`, che la ricerca e la
+# guardia non leggono), l'audio di tutti i segmenti del banco, le conversazioni degli ospiti su
+# disco (`ospite = 2`, che nessuna ricerca legge). Restano fuori sempre: la frase di sfida e i
+# codici detti (`_segreto`), lo scritto (non c'è audio), la pausa della stanza, `conserva_voce:
+# false`. I file restano per `turn_log_days`; «dimentica» e `--svuota` li tolgono come gli altri.
+CARTELLA_VALUTAZIONE = "_valutazione"     # dentro la cartella della voce; mai un id (uuid hex)
+VALUTAZIONE_OSPITI = "ospiti"             # la cartella delle frasi senza un profilo
+# I motivi di `voce_turno` che valgono anche durante la valutazione: niente audio (scritto), frasi
+# non rivolte o vuote (le prende la stanza), la voce spenta nel file, la frase di sfida e i codici
+VOCE_MAI = frozenset({"scritto", "non_rivolta", "spenta", "segreto"})
+
+
+def valutazione_fino(cfg) -> datetime.date | None:
+    """La data di `conserva_valutazione_fino`, o None (vuoto o scritta male: spento)."""
+    v = getattr(cfg, "conserva_valutazione_fino", "") if cfg is not None else ""
+    if isinstance(v, datetime.datetime):
+        return v.date()
+    if isinstance(v, datetime.date):
+        return v
+    try:
+        return datetime.date.fromisoformat(str(v or "").strip()) if v else None
+    except ValueError:
+        return None
+
+
+def valutazione_attiva(cfg, oggi: datetime.date | None = None) -> bool:
+    """Vale adesso la valutazione? Fino alla data compresa."""
+    f = valutazione_fino(cfg)
+    return f is not None and (oggi or datetime.date.today()) <= f
+
+
+def testo_valutazione(cfg, oggi: datetime.date | None = None) -> str | None:
+    """La riga dell'avvio, di `calliope stato` e del cruscotto; None se non c'è una data."""
+    f = valutazione_fino(cfg)
+    if f is None:
+        return None
+    if valutazione_attiva(cfg, oggi):
+        return (f"Valutazione: si conserva tutto fino al {f.strftime('%d/%m/%Y')} compreso "
+                f"(testo e audio, ospiti compresi; decisione 0032)")
+    return (f"Valutazione finita il {f.strftime('%d/%m/%Y')}: si conserva come di serie (i file "
+            f"fatti restano per {int(getattr(cfg, 'turn_log_days', 60) or 60)} giorni)")
 
 
 def categoria(prof) -> str:
@@ -704,6 +756,9 @@ class Conservazione:
         self._svuotando = False
         self._lock = threading.Lock()
         self._ruotata_il = None
+        # La valutazione (18/10, decisione 0032): vista accesa in questo processo, per dire una
+        # volta nel log quando finisce
+        self._valutazione_vista = None
         self.salvate = 0            # frasi salvate da quando è partita
         self.errori = 0
         self.proposte: dict = {}    # persona → turno della domanda (tool dati_conservati)
@@ -782,9 +837,31 @@ class Conservazione:
             self.log(f"   [CONSERVA] dati del conoscente non tolti: {type(e).__name__}")
             return None
 
+    # ── la valutazione (18/10, decisione 0032) ──
+    def valutazione(self) -> bool:
+        """Vale adesso la valutazione? Alla scadenza (vista accesa in questo processo) lo dice
+        una volta nel log: da lì si conserva come di serie."""
+        attiva = valutazione_attiva(self.cfg)
+        if self._valutazione_vista and not attiva:
+            f = valutazione_fino(self.cfg)
+            self.log(f"   [CONSERVA] Valutazione finita"
+                     + (f" il {f.strftime('%d/%m/%Y')}" if f else "")
+                     + f": da adesso si conserva come di serie (i file fatti restano per "
+                       f"{self.giorni} giorni)")
+        self._valutazione_vista = attiva
+        return attiva
+
     # ── le decisioni (sempre da `decidi`) ──
     def testo_turno(self, rec: dict) -> Decisione:
-        """Le parole di questo turno restano nel registro dei turni e negli eventi su disco?"""
+        """Le parole di questo turno restano nel registro dei turni e negli eventi su disco?
+        Durante la valutazione (18/10, decisione 0032) sì per tutti: «valutazione»."""
+        d = self._testo_turno(rec)
+        if not d and isinstance(rec, dict) and self.valutazione():
+            return Decisione(True, "valutazione")
+        return d
+
+    def _testo_turno(self, rec: dict) -> Decisione:
+        """La regola di serie (decisioni 0028, 0030 e 0031)."""
         if not isinstance(rec, dict):
             return Decisione(False, "ospite")
         v = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}
@@ -878,6 +955,11 @@ class Conservazione:
             d = self.testo_turno(rec)
             if not d:
                 rec["conserva"] = {"testo": False, "motivo": d.motivo}
+            elif d.motivo == "valutazione":
+                # Le parole restano per la valutazione (18/10, decisione 0032): il segno dice
+                # anche la regola di serie, così le misure distinguono questi turni
+                rec["conserva"] = {"testo": True, "motivo": "valutazione",
+                                   "di_serie": self._testo_turno(rec).motivo}
             if audio is not None and len(audio):
                 f = self.salva_voce(rec, audio, sr)
                 if f:
@@ -894,7 +976,10 @@ class Conservazione:
         della voce, o None."""
         d = self.voce_turno(rec)
         if not d:
-            return None
+            if (d.motivo in VOCE_MAI or not getattr(self.cfg, "conserva_voce", True)
+                    or not self.valutazione()):
+                return None
+            return self._salva_valutazione(rec, audio, sr)
         v = rec.get("voce") or {}
         prof = self.profilo(nome=v.get("nome"), persona_id=v.get("id"))
         pid = getattr(prof, "id", None)
@@ -905,6 +990,32 @@ class Conservazione:
         ora = quando[11:23].replace(":", "").replace(".", "-") or time.strftime("%H%M%S")
         rel = f"{pid}/{giorno}/{ora}.wav"
         _scrivi_privato(self.voce_dir / rel, wav_mulaw(audio, sr))
+        self.salvate += 1
+        self.ruota_se_serve()
+        return rel
+
+    def _chi_valutazione(self, rec: dict) -> str:
+        """La cartella della valutazione per questo turno: l'id del profilo (o del conoscente)
+        se c'è, anche quello deciso nella zona grigia; altrimenti «ospiti»."""
+        v = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}
+        prof = self.profilo(nome=v.get("nome"), persona_id=v.get("id"))
+        pid = str(getattr(prof, "id", None) or "")
+        pulito = "".join(c for c in pid if c.isalnum() or c in "-_")[:64]
+        return pulito if pulito and pulito != CARTELLA_VALUTAZIONE else VALUTAZIONE_OSPITI
+
+    def _salva_valutazione(self, rec: dict, audio, sr: int = 16000) -> str | None:
+        """La frase che la regola di serie non terrebbe (ospite, zona grigia, senza consenso,
+        compagnia, dubbio con un minore), durante la valutazione (18/10, decisione 0032): stesso
+        formato, in `voce/_valutazione/<persona o «ospiti»>/<giorno>/<ora>.wav`. Sotto il tetto
+        `conserva_voce_mb` come il resto."""
+        if not self.voce_dir:
+            return None
+        quando = str(rec.get("inizio") or datetime.datetime.now().isoformat())
+        giorno = quando[:10]
+        ora = quando[11:23].replace(":", "").replace(".", "-") or time.strftime("%H%M%S")
+        rel = f"{CARTELLA_VALUTAZIONE}/{self._chi_valutazione(rec)}/{giorno}/{ora}.wav"
+        _scrivi_privato(self.voce_dir / rel, wav_mulaw(audio, sr))
+        rec["voce_valutazione"] = True
         self.salvate += 1
         self.ruota_se_serve()
         return rel
@@ -927,16 +1038,20 @@ class Conservazione:
     def cancella_voce(self, persona_id) -> int:
         if not persona_id or not self.voce_dir:
             return 0
-        p = self.voce_dir / str(persona_id)
-        n = sum(1 for _ in p.rglob("*.wav")) if p.exists() else 0
-        shutil.rmtree(p, ignore_errors=True)
+        n = 0
+        # Anche le frasi della valutazione (18/10, decisione 0032) sotto il suo id
+        for p in (self.voce_dir / str(persona_id),
+                  self.voce_dir / CARTELLA_VALUTAZIONE / str(persona_id)):
+            n += sum(1 for _ in p.rglob("*.wav")) if p.exists() else 0
+            shutil.rmtree(p, ignore_errors=True)
         return n
 
     def registrazioni(self, persona_id) -> int:
         if not persona_id or not self.voce_dir:
             return 0
-        p = self.voce_dir / str(persona_id)
-        return sum(1 for _ in p.rglob("*.wav")) if p.exists() else 0
+        return sum(sum(1 for _ in p.rglob("*.wav")) if p.exists() else 0
+                   for p in (self.voce_dir / str(persona_id),
+                             self.voce_dir / CARTELLA_VALUTAZIONE / str(persona_id)))
 
     # ── rotazione ──
     def ruota_se_serve(self):
@@ -944,6 +1059,8 @@ class Conservazione:
         oggi = datetime.date.today()
         if self._ruotata_il != oggi:
             self._ruotata_il = oggi
+            if self._valutazione_vista:
+                self.valutazione()        # il giorno dopo la data: lo dice il log (decisione 0032)
 
             def giro():
                 try:
@@ -951,6 +1068,19 @@ class Conservazione:
                 except Exception as e:  # noqa: BLE001 — la rotazione non ferma niente
                     self.log(f"   [CONSERVA] rotazione non riuscita: {type(e).__name__}")
             threading.Thread(target=giro, daemon=True, name="conserva-rotazione").start()
+
+    def _cartelle_voce(self) -> list[tuple[Path, bool]]:
+        """(cartella di una persona, della valutazione?): quelle delle persone e, dentro
+        `_valutazione` (18/10, decisione 0032), quelle per persona o «ospiti»."""
+        out = []
+        for x in self.voce_dir.iterdir():
+            if not x.is_dir():
+                continue
+            if x.name == CARTELLA_VALUTAZIONE:
+                out += [(y, True) for y in x.iterdir() if y.is_dir()]
+            else:
+                out.append((x, False))
+        return out
 
     def ruota(self, oggi: datetime.date | None = None) -> dict:
         """Esercizi e richieste ai tutori oltre `turn_log_days` (12/10 sera). La voce: via i
@@ -974,11 +1104,22 @@ class Conservazione:
             return out
         with self._lock:
             giorni: list[tuple[str, Path]] = []
-            for pdir in [x for x in self.voce_dir.iterdir() if x.is_dir()]:
+            for pdir, valut in self._cartelle_voce():
                 prof = self.profilo(persona_id=pdir.name)
-                if prof is None or not consenso_voce(prof, self.registry) \
+                if valut:
+                    # La valutazione (18/10, decisione 0032): niente consenso da guardare, i
+                    # giorni restano per `turn_log_days` anche a valutazione finita; via le
+                    # cartelle di un profilo tolto, e tutto con `conserva_voce: false`
+                    via = (not getattr(self.cfg, "conserva_voce", True)
+                           or (pdir.name != VALUTAZIONE_OSPITI and prof is None))
+                elif prof is None or not consenso_voce(prof, self.registry) \
                         or not getattr(self.cfg, "conserva_voce", True):
-                    if voce_dei_tutori_scaduta(prof) and getattr(self.cfg, "conserva_voce", True):
+                    via = True
+                else:
+                    via = False
+                if via:
+                    if (not valut and voce_dei_tutori_scaduta(prof)
+                            and getattr(self.cfg, "conserva_voce", True)):
                         # Diventata maggiorenne (16/10, issue #108): il sì dei tutori non vale
                         # più, da adulta lo ridice lei. Una riga con l'id, mai il nome
                         self.log(f"   [CONSERVA] {pdir.name}: maggiorenne, tolte le "
@@ -1235,12 +1376,22 @@ class Conservazione:
                "voce_file": 0, "voce_mb": 0.0, "voce_persone": 0, "voce_giorni": 0,
                "turni_file": 0, "conversazioni": 0, "conversazioni_turni": 0}
         if self.voce_dir and self.voce_dir.exists():
-            persone = [x for x in self.voce_dir.iterdir() if x.is_dir()]
+            cartelle = self._cartelle_voce()
+            persone = [p for p, valut in cartelle if not valut]
             out["voce_persone"] = len(persone)
             out["voce_file"] = sum(1 for _ in self.voce_dir.rglob("*.wav"))
             out["voce_mb"] = round(_mb(self.voce_dir), 2)
-            out["voce_giorni"] = len({g.name for p in persone for g in p.iterdir()
+            out["voce_giorni"] = len({g.name for p, _v in cartelle for g in p.iterdir()
                                       if g.is_dir()})
+        # La valutazione (18/10, decisione 0032): fino a quando, e quanto audio in più
+        f = valutazione_fino(self.cfg)
+        if f is not None or (self.voce_dir and (self.voce_dir / CARTELLA_VALUTAZIONE).exists()):
+            vd = self.voce_dir / CARTELLA_VALUTAZIONE if self.voce_dir else None
+            out["valutazione"] = {
+                "fino": f.isoformat() if f else None, "attiva": valutazione_attiva(self.cfg),
+                "voce_file": sum(1 for _ in vd.rglob("*.wav")) if vd and vd.exists() else 0,
+                "voce_mb": round(_mb(vd), 2) if vd and vd.exists() else 0.0,
+                "testo": testo_valutazione(self.cfg)}
         if self.cartella and self.cartella.exists():
             out["turni_file"] = len(list(self.cartella.glob("turni-*.jsonl")))
         out.update(self.conta_conversazioni())
@@ -1286,8 +1437,15 @@ def testo_stato(d: dict | None) -> str | None:
     st = d.get("stanza")
     stanza = (f"; stanza su disco {st['righe']} righe ({st['mb']:.1f} MB, "
               f"{st.get('giorni_tenuta', 60)} giorni, famiglia e minori)" if st else "")
-    return (f"Conservazione ({d['giorni']} giorni, persone di casa): {d['turni_file']} giorni di "
-            f"turni; {voce}{conv}{stanza}")
+    riga = (f"Conservazione ({d['giorni']} giorni, persone di casa): {d['turni_file']} giorni "
+            f"di turni; {voce}{conv}{stanza}")
+    val = d.get("valutazione")
+    if val:
+        # La valutazione (18/10, decisione 0032): la riga prima, con l'audio in più
+        riga = ((val.get("testo") or "Valutazione: file rimasti")
+                + f"; voce della valutazione {val.get('voce_file', 0)} frasi, "
+                  f"{float(val.get('voce_mb') or 0):.1f} MB\n" + riga)
+    return riga
 
 
 def conta_archivio(cfg, persona_id=None) -> dict:

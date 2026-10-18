@@ -21,6 +21,9 @@ giorni). Così la compressione della storia e la fine di una conversazione non p
   (prima `conversazioni_giorni`, 30). La pulizia di ogni giorno toglie anche, con
   `secure_delete`, le conversazioni rimaste su disco di chi non ne ha più il diritto (ospiti,
   profili tolti: niente migrazioni, Calliope non è in produzione). I minori restano dal 16/10.
+  Durante la **valutazione** (18/10, decisione 0032, `conserva_valutazione_fino`) quelle della
+  sessione vanno anche su disco, con `ospite = 2`: solo per chi le rilegge dal file, nessuna
+  ricerca le vede; restano per `turn_log_days` e le tolgono `svuota` e «dimentica».
 
 - **Tabelle**: `conversazioni` (chi, dove, quando, riassunto di chiusura), `turni` (domanda,
   risposta, azioni con l'esito e la frase detta; mai gli argomenti dei tool), `turni_fts`
@@ -405,6 +408,8 @@ class ArchivioConversazioni:
             except AttributeError:
                 pass
             if dove is not self:
+                # La valutazione (18/10, decisione 0032): anche su disco, a parte
+                self._archivia_valutazione(conv, turni, persona, nome)
                 return dove.archivia(conv, turni, persona, nome, ospite)
         elif not self.in_memoria and not self.su_disco(persona, ospite):
             return                       # su disco senza una sessione: chi non va su disco, no
@@ -450,6 +455,52 @@ class ArchivioConversazioni:
                         g(str(persona), [v for v in nuovi if v is not None])
                     except Exception as e:  # noqa: BLE001 — lo schermo non ferma l'archivio
                         self.log(f"[CONVERSAZIONI] schermi non avvisati: {type(e).__name__}")
+        self._in_coda(f)
+
+    def _archivia_valutazione(self, conv, turni: list[dict], persona, nome):
+        """Durante la valutazione (18/10, decisione 0032, `conserva_valutazione_fino`) le
+        conversazioni che vanno nell'archivio della sessione (ospiti, profili tolti) si scrivono
+        anche su disco, con `ospite = 2`: nessuna ricerca, scheda o ripresa le legge (cercano
+        `ospite = 0` o `ospite = 1`), la rotazione dei non conservati le lascia, la scadenza di
+        `turn_log_days` e `svuota` le tolgono, «dimentica» quelle con la persona. Il riassunto di
+        chiusura resta nella sessione."""
+        if self.in_memoria or not self.scrivibile or not turni:
+            return
+        try:
+            from .conserva import valutazione_attiva
+            if not valutazione_attiva(self.cfg):
+                return
+        except Exception:  # noqa: BLE001 — nel dubbio come di serie
+            return
+        turni = list(turni)
+
+        def f():
+            with self.lock:
+                cid = getattr(conv, "id_valutazione", None)
+                if cid is not None and not self.db.execute(
+                        "SELECT 1 FROM conversazioni WHERE id = ?", (cid,)).fetchone():
+                    cid = None
+                if cid is None:
+                    cid = self.db.execute(
+                        "INSERT INTO conversazioni (persona, nome, ospite, luogo, inizio) "
+                        "VALUES (?, ?, 2, ?, ?)",
+                        (persona, nome, conv.luogo, conv.inizio)).lastrowid
+                    try:
+                        conv.id_valutazione = cid
+                    except AttributeError:
+                        pass
+                from .conversazione import testo_turno
+                for t in turni:
+                    meta = t.get("meta") if isinstance(t.get("meta"), dict) else None
+                    cur = self.db.execute(
+                        "INSERT INTO turni (conv, quando, domanda, risposta, azioni, riservato, "
+                        "meta) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (cid, t["quando"], t["domanda"], t["risposta"],
+                         json.dumps(t["azioni"], ensure_ascii=False), int(t["riservato"]),
+                         json.dumps(meta, ensure_ascii=False) if meta else None))
+                    self.db.execute("INSERT INTO turni_fts (rowid, testo) VALUES (?, ?)",
+                                    (cur.lastrowid, testo_turno(t)))
+                self.db.commit()
         self._in_coda(f)
 
     # ── la scheda «Conversazione» (08/10) ──
@@ -583,8 +634,9 @@ class ArchivioConversazioni:
                     return
             with self.lock:
                 righe = self.db.execute(
-                    "SELECT id, domanda, risposta, azioni FROM turni WHERE vettore IS NULL "
-                    "OR modello IS NOT ? ORDER BY id DESC LIMIT ?",
+                    "SELECT id, domanda, risposta, azioni FROM turni WHERE (vettore IS NULL "
+                    "OR modello IS NOT ?) AND conv NOT IN (SELECT id FROM conversazioni WHERE "
+                    "ospite = 2) ORDER BY id DESC LIMIT ?",
                     (emb.modello, lotto)).fetchall()
             if not righe:
                 return
@@ -813,7 +865,8 @@ class ArchivioConversazioni:
         self.attendi(3.0)
         with self.lock:
             ids = [r[0] for r in self.db.execute(
-                "SELECT id FROM conversazioni WHERE persona = ? AND ospite = 0",
+                # Anche le copie della valutazione (`ospite = 2`, 18/10, decisione 0032)
+                "SELECT id FROM conversazioni WHERE persona = ? AND ospite IN (0, 2)",
                 (str(persona),))]
             prima = self.db.execute("PRAGMA secure_delete").fetchone()
             self.db.execute("PRAGMA secure_delete = ON")
@@ -941,6 +994,10 @@ class ArchivioConversazioni:
         from .eventi.registro import checkpoint
 
         def via(persona, ospite) -> bool:
+            if ospite == 2:
+                # Una copia della valutazione (18/10, decisione 0032): resta per
+                # `turn_log_days` anche a valutazione finita (la toglie `_scadute`)
+                return False
             if ospite or persona in (None, ""):
                 return True
             f = self.conserva

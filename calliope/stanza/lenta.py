@@ -1096,7 +1096,8 @@ class Lenta:
                      attesa_s=round(time.time() - a.fine, 1), prompt=ris.get("prompt"))
         # L'eccezione del banco (14/10 sera): l'audio su disco solo con voci tutte di casa
         b = self.banco
-        if b is not None and esito not in ("allucinazione", "tv"):
+        # Durante la valutazione (18/10, decisione 0032) anche la TV e le allucinazioni
+        if b is not None and (esito not in ("allucinazione", "tv") or b.valutazione()):
             v2 = [dict(e.dati) for e in scritte] if scritte else []
             try:
                 f = b.salva(sat, (self.stanza._info.get(sat) or {}),
