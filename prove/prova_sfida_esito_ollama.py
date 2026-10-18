@@ -3,8 +3,9 @@ caso di `prova_sfida_esito.py` (registra_utente riuscito con `cosa_fare`, nomi d
 con il modello di Config() al posto del backend finto. Per un altro modello il profilo in
 CALLIOPE_LLM_PROFILO (calliope/config.py, PROFILI_LLM).
 
-Errore: «Non ho salvato niente», una rete delle azioni dichiarate scattata, il tool eseguito
-più di una volta. A parte (solo contato): quante risposte dicono che adesso deve parlare lei
+Errore: la frase onesta «non ho salvato niente» (riconosciuta dall'atto `onesta` o dalla regola
+`dichiarata_onesta`, non dal testo: dal 18/10, issue #28, ha varianti per tono e una forma per gli
+ospiti), una rete delle azioni dichiarate scattata, il tool eseguito più di una volta. A parte (solo contato): quante risposte dicono che adesso deve parlare lei
 (`cosa_fare` del risultato).
 
     python prove\\prova_sfida_esito_ollama.py       # 3 giri
@@ -36,8 +37,10 @@ for giro in range(1, GIRI + 1):
     t0 = time.perf_counter()
     detto = "".join(b.stream_reply(P.SFIDA_DETTA, "amministra")).strip()
     reti = [r for r in b.rules_fired() if r in P.RETI]
-    ok = (fatti == [{"nome": P.NOME}] and bool(detto) and "Non ho salvato" not in detto
-          and not reti)
+    # La frase onesta dall'atto o dalla regola, non dal testo (18/10, #28: le varianti)
+    onesta = ("dichiarata_onesta" in b.rules_fired()
+              or any(m[2] == "onesta" for m in b.__dict__.get("parlato_marcato") or ()))
+    ok = fatti == [{"nome": P.NOME}] and bool(detto) and not onesta and not reti
     errori += not ok
     parlare += bool(re.search(r"\bparl", detto, re.I))
     print(f"{'ok ' if ok else 'ERR'} [{giro}] {time.perf_counter() - t0:.1f} s, tool "

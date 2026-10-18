@@ -285,3 +285,44 @@ Prove: `prova_frasi_rotazione` (livello 1, con i contrari: niente su disco per u
 sconosciuta, turni di ospiti e conoscenti non riletti, anche senza `livello`, turni di ieri,
 righe rotte, UTF-8 troncato, valori del tipo sbagliato, guasto dentro, cartella assente, id senza
 tono, la chiamata protetta in `main`).
+
+## Le tre frasi nuove rilette (18/10, issue #28, ramo `issue-28-frasi-rilette`)
+
+Chi amministra ha riletto tutte le 49 forme delle tre frasi pronte nate dopo il campione del
+12/10 (`onesta.non_salvato` 21, di cui 5 brevi; `attesa.stanza` 16; `scusa.incartata` 12), ognuna
+confrontata col punto del codice che la dice (commento del 18/10 nella issue #28). Ne cambiano 13
+in `calliope/frasi.py`; le altre 36 restano:
+
+- **`onesta.non_salvato`** (6): «Non me lo sono segnato» diventa «Non l'ho salvato» (normale e
+  amichevole, seconda variante); «Scusa, chiaro» diventa «Ho capito, scusa» (amichevole) e
+  «Capito, scusa» (ironico); nel computer di bordo «Nessun dato in memoria» e «Niente in memoria»
+  diventano «Dato non salvato» (la frase di prima faceva credere che la memoria fosse vuota);
+- **`attesa.stanza`** (5): «cosa vi siete detti» diventa «cosa si è detto» nella base (quindi
+  anche la prima variante del normale) e in amichevole, perché non è sempre vera (il tutore che
+  cerca le righe di un minore senza esserci stato); «ci ripenso» diventa «faccio mente locale»
+  (normale e amichevole: si poteva capire «cambio idea»); il computer di bordo «aggiorna» il
+  registro della stanza, non lo «ricostruisce». Cambia la base: commento di
+  `stanza_cerca_attesa_max_s` in `config.py` e `calliope.yaml` rigenerato;
+- **`scusa.incartata`** (2): nel formale la prima variante «ho perso il filo» (al posto di
+  «mi sono incartata», troppo colloquiale col «lei»); nell'ironico «mi sono incantata come un
+  disco rotto» (il disco si incanta, non si incarta).
+
+**Nel codice.** Per un ospite l'invito «se vuoi che me lo ricordi, chiedimelo» non era vero:
+`ricorda` è di livello familiare. Brain (`dichiarata_onesta`) per il livello `ospite` sceglie
+l'id nuovo **`onesta.non_salvato_ospite`** (classe `onesta`, varianti per i sei toni, senza
+invito e senza forma breve: la rotazione delle voci anonime non la usa, #158), con forme diverse
+da quelle per la famiglia perché `riconosci` non confonda i due id nella misura. Un id a parte e
+non la variante essenziale: il formale resta col «lei».
+
+**Nella prova col modello.** `prova_sfida_esito_ollama` riconosceva la frase onesta dal testo
+fisso «Non ho salvato niente», che con le varianti non basta più: ora dall'atto `onesta` (uscita
+unica) o dalla regola `dichiarata_onesta`.
+
+**Misure.** Nessuna latenza in più (solo testo). Sul codice di main le prove nuove di
+`prova_brain` danno 3 errori (la frase per l'ospite con l'invito, le sue forme, il riconoscimento),
+col ramo 0; il contrario (un familiare sente l'invito) passa su entrambi. Resta la lettura di #28
+a 50 frasi pronte sulla DGX.
+
+Prove: `prova_brain` (`prova_dichiarata_nota`: l'ospite senza invito, nessuna forma che inviti a
+chiedere, i due id distinti per `riconosci`; contrario: il familiare con l'invito), `prova_frasi`
+(il catalogo con l'id nuovo), `prova_stanza_cerca`, `prova_ciclo_ripetuto`.
