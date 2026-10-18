@@ -590,10 +590,52 @@ def fuori_dai_valori(spec, k: str, valore) -> bool:
     return valore.strip().lower() not in {str(a).strip().lower() for a in ammessi}
 
 
+# Il numero di un elenco puntato che il modello scrive riformulando la richiesta («L'estensione
+# deve: 1. Gestire… 2. Classificare…»; 18/10, issue #169, caso vero della DGX delle 14:47: «1»,
+# «2», «3» stanno in ogni risultato web, e la descrizione dettata a voce «veniva da una pagina
+# internet»). Candidato: in testa al valore o dopo un confine di frase («:», «.», «;», «!», «?»,
+# un a capo), con il punto o la parentesi e poi uno spazio; «Via dei Tigli 4. Poi…» o «chiama il
+# 3» non lo sono mai. Un candidato è un segno solo se fa parte di una **sequenza in ordine** nello
+# stesso valore (1, 2, 3…; revisione della PR #177: «Consegna al piano: 3.», «Suona all'interno:
+# 12.», «Il codice del portone è: 47.» sono il valore, non un segno), dopo «:» solo il primo
+# della sequenza, e un «1.» da solo solo in testa al valore. Del segno si toglie solo la cifra:
+# il punto o la parentesi restano, così la parola dopo vale come prima («4) Ermenegildo» resta
+# distintivo, come sul codice di prima)
+_SEGNO_ELENCO = re.compile(r"(?:(?<=^)|(?<=[:;.!?\n]\s)|(?<=\n))(\d{1,2})([.)])(?=\s)")
+
+
+def segni_elenco(testo: str) -> list:
+    """I segni d'elenco del testo (già senza spazi in testa): i `re.Match` di `_SEGNO_ELENCO`
+    che formano la sequenza 1, 2, 3… (vedi sopra)."""
+    presi, atteso = [], 1
+    for m in _SEGNO_ELENCO.finditer(testo):
+        n = int(m.group(1))
+        if n != atteso:
+            continue
+        dopo_due_punti = m.start() >= 2 and testo[m.start() - 2] == ":"
+        if dopo_due_punti and n != 1:
+            continue
+        presi.append(m)
+        atteso += 1
+    if len(presi) == 1 and presi[0].start() != 0:
+        return []                           # un «1.» da solo dentro il valore non è un elenco
+    return presi
+
+
+def senza_segni_elenco(testo: str) -> str:
+    """Il testo con le cifre dei segni dell'elenco puntato tolte (`segni_elenco`): resta il
+    punto o la parentesi."""
+    t = str(testo or "").lstrip()
+    for m in reversed(segni_elenco(t)):
+        t = t[:m.start()] + m.group(2) + t[m.end():]
+    return t
+
+
 def distintive(valore, f: Fonti) -> list[str]:
     """Le parole distintive del valore che stanno in un dato non fidato e non nelle parole
-    della persona (ora o prima)."""
-    testo = _testo(valore) or ""
+    della persona (ora o prima). I numeri di un elenco puntato scritto dal modello non lo sono
+    (#169, `_SEGNO_ELENCO`)."""
+    testo = senza_segni_elenco(_testo(valore) or "")
     out = []
     for m in _DISTINTIVA.finditer(" " + testo):
         for w in prov.parole(m.group(0)) | _gettoni_numeri(m.group(0)):
@@ -634,17 +676,42 @@ VALORE_REGOLE = (
     "valore_sfida_sospeso")
 
 
-def fonte_del_valore(valore, t) -> str:
+def solo_dal_dato(valore, f: Fonti) -> set[str]:
+    """Le parole e i numeri del valore che stanno in un dato non fidato e non fra quelli della
+    persona (detti ora o prima, anche storpiati): quelli che fanno l'etichetta «dato»."""
+    testo = _testo(valore) or ""
+    out = {w for w in prov.parole(testo) if w in f.dato and w not in f.frase
+           and w not in f.persona and not prov.vicina(w, f.frase)
+           and not prov.vicina(w, f.persona)}
+    out |= {n for n in _gettoni_numeri(testo) if n in f.numeri_dato
+            and n not in f.numeri_frase and n not in f.numeri_persona}
+    return out
+
+
+def fonte_del_valore(valore, t, parole: set | None = None) -> str:
     """La fonte del dato non fidato da cui vengono le parole del valore (09/10, analisi delle
     regole § 3.3: prima si diceva la prima fonte in ordine alfabetico, «viene da una foto» per
-    un numero della pagina). "" se nessuna (o una foto, che non ha testo)."""
+    un numero della pagina). "" se nessuna (o una foto, che non ha testo).
+
+    `parole`: le sole parole che hanno fatto chiedere (`solo_dal_dato`, o le distintive di un
+    testo libero). Dal 18/10 (issue #169, caso vero della DGX delle 14:55) la matrice le passa:
+    con tutte le parole del valore vinceva l'ultimo dato con una parola qualunque in comune, e
+    il blocco della stanza, che ha anche le frasi di chi parla, «era» la fonte di una
+    descrizione dettata a voce. Con le `parole` vince il dato che ne ha di più (a pari numero
+    il più recente)."""
     testo = _testo(valore) or ""
-    ps = prov.parole(testo) | _gettoni_numeri(testo)
+    ps = set(parole) if parole else prov.parole(testo) | _gettoni_numeri(testo)
     if not ps:
         return ""
+    meglio, quante = "", 0
     for f, txt in reversed(list(getattr(t, "esterni", None) or ())):
-        if ps & (prov.parole(txt) | _gettoni_numeri(txt)):
+        n = len(ps & (prov.parole(txt) | _gettoni_numeri(txt)))
+        if n and not parole:
             return f
+        if n > quante:
+            meglio, quante = f, n
+    if meglio:
+        return meglio
     return "foto" if "foto" in (getattr(t, "contaminazione", None) or ()) else ""
 
 
@@ -902,16 +969,27 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
     det["argomenti"] = etichette
     det["bersagli"] = sorted({etichette[k].split("/")[1] for k in etichette
                               if etichette[k].startswith((BERSAGLIO + "/", INDICE + "/"))})
+    # La fonte detta nella domanda: quella delle parole che fanno chiedere (#169)
+    def _da(k):
+        v = args[k]
+        if k in OGGETTO_VALORI.get(name, ()):
+            v = " ".join(pol._valori_foglia(v)) if pol._valori_foglia(v) else v
+        tipo = (tipi or {}).get(k, BERSAGLIO)
+        ps = set(distintive(v, f)) if tipo == LIBERO else solo_dal_dato(v, f)
+        if not ps and f.foto and tipo in (BERSAGLIO, CONTENUTO) and _testo(v):
+            return "foto"          # parole senza fonte con una foto di mezzo (etichetta)
+        return fonte_del_valore(v, t, ps) or fonte
+
     if bers_dato:
         k = bers_dato[0]
-        da = fonte_del_valore(args[k], t) or fonte
+        da = _da(k)
         domanda = (f"«{_mostra(args[k])}» viene {prov.da(da)}, non da te: vuoi davvero che "
                    f"{cosa}?")
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_bersaglio_dato",
                              domanda, da), det
     if cont_dato and E >= E2:
         k = cont_dato[0]
-        da = fonte_del_valore(args[k], t) or fonte
+        da = _da(k)
         domanda = (f"«{_mostra(args[k])}» viene {prov.da(da)}, non da te: vuoi davvero che "
                    f"{cosa}?")
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_contenuto_dato",
