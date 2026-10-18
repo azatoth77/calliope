@@ -285,6 +285,7 @@ A_SECCO = [
     ("prova_installa_satellite.py", [], "PC nuovo come satellite con un comando: pacchetto, chiave, installa.ps1, aggiornamento e ritorno indietro"),
     ("prova_zim.py", [],"lettore ZIM in puro Python: formato, redirect, xz/zstd, file rovinati"),
     ("prova_biblioteca_indice.py", [], "indice SQLite FTS5: ricerca, validità, annullo, processi"),
+    ("prova_arm_comune.py", [], "script di prove/arm/ (18/10, #64): --dati legge i file di quella cartella anche con CALLIOPE_CONFIG e CALLIOPE_CONFIG_LOCALE nell'ambiente, memoria del processo"),
     # ~5 s; se il file ZIM non c'è (non è in git) salta ed esce con 0
     ("prova_biblioteca.py", [], "biblioteca offline: recall@3 e latenza della ricerca"),
 ]
@@ -826,6 +827,7 @@ LEGAMI = [
     ("calliope/si_breve.py", ["prova_si_breve.py"]),
     ("calliope/zim.py", ["prova_zim.py", "prova_biblioteca.py"]),
     ("calliope/biblioteca", ["prova_biblioteca_indice.py", "prova_biblioteca.py"]),
+    ("prove/arm/", ["prova_arm_comune.py"]),
     # Pause e fine del turno (07/10, solo misura): dove sta il VAD e il registro
     ("calliope/pause.py", ["prova_pause.py", "prova_frase_lunga.py", "prova_fine_turno.py"]),
     ("calliope/audio.py", ["prova_pause.py", "prova_frase_lunga.py", "prova_fine_turno.py"]),
