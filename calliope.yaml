@@ -1506,7 +1506,7 @@ conversazione_stanza:
   stanza_cerca_righe: 20
   stanza_cerca_caratteri: 2400
   # Righe delle stanze cercate ancora in coda per Whisper: passano davanti e si aspettano al
-  # più così; la frase d'attesa («Un attimo, ripenso a cosa vi siete detti.») solo oltre
+  # più così; la frase d'attesa («Un attimo, ripenso a cosa si è detto.») solo oltre
   # `stanza_cerca_attesa_s`
   stanza_cerca_attesa_max_s: 3.0
   stanza_cerca_attesa_s: 0.7
