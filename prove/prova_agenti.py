@@ -940,13 +940,14 @@ out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script 
 verifica("familiare e codice: solo chi amministra", out.get("ok") is False
          and "amministra" in out["risposta_finale"] and not svc_t.lavori)
 fake.copione = [{"content": "Testo.\nRIASSUNTO: Ho scritto il testo."}]
+ESECUZIONI.clear()   # prima di avviare dal tool: la traccia è quella del lavoro
 out, dt = tool("lavoro_affida", {"tipo": "altro", "compito": "Scrivi un racconto per bambini"},
                "Bianca", "familiare", 3)
 verifica("familiare e lavoro non costoso: parte subito, senza conferma",
          out.get("ok") and "Ci lavoro" in out["risposta_finale"] and "in_sospeso" not in out,
          out.get("risposta_finale"))
 verifica("la delega risponde subito", dt < SUBITO_S, f"{dt * 1000:.1f} ms")
-item = fine(svc_t, svc_t.lavori[-1])
+item = fine(svc_t, svc_t.lavori[-1], ATTESA_SENZA_SANDBOX_S)   # niente sandbox
 verifica("annuncio a Bianca", item and item["messaggio"].startswith("Bianca, ho finito"),
          str(item and item["messaggio"]))
 out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script che rinomina le "
@@ -981,7 +982,9 @@ out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Sì", "proposta": 
               "amministra", 31, how="breve")
 verifica("«sì» nel turno dopo (frase breve): lavoro avviato", out.get("ok") and
          "Ci lavoro" in out["risposta_finale"] and svc_t.attivi(), out["risposta_finale"])
-aspetta(lambda: svc_t.corrente is not None, 3)
+# Un evento (il thread dei lavori che prende il lavoro): prima 3 s, con l'esito ignorato
+verifica("il lavoro confermato è in corso", aspetta(lambda: svc_t.corrente is not None,
+                                                    ATTESA_SENZA_SANDBOX_S))
 out, dt = tool("lavoro_stato", {}, "Dario", "amministra", 32)
 if dt >= SUBITO_S:
     # Sola lettura: una seconda misura distingue l'attesa vera (il lavoro dura ~2 s, la
@@ -999,18 +1002,21 @@ out, _ = tool("lavoro_annulla", {}, "Dario", "amministra", 34)
 verifica("chi l'ha chiesto lo ferma", out.get("ok") and "Ho fermato" in out["risposta_finale"]
          and aspetta(lambda: not svc_t.attivi(), 3))
 fake.ritardo_pezzo, fake.pezzi = 0.0, 4
-aspetta(lambda: svc_t.corrente is None, 3)
+# Un evento (il thread dei lavori che lascia il lavoro annullato): prima 3 s, esito ignorato
+verifica("dopo l'annullo il thread dei lavori è libero", aspetta(
+    lambda: svc_t.corrente is None, ATTESA_SENZA_SANDBOX_S))
 # Conferma implicita: dopo il «sì» il modello richiama lavoro_affida senza conferma
 out, _ = tool("lavoro_affida", {"tipo": "ricerca", "compito": "Fai una ricerca sulla storia di "
                                 "Venezia e scrivi una relazione"}, "Dario", "amministra", 40)
 fake.copione = [{"content": "Venezia.\nRIASSUNTO: Relazione su Venezia pronta."}]
 ctx = ctx_per("Dario", "amministra", 41, "breve", "Sì, procedi.")
+ESECUZIONI.clear()
 out = json.loads(reg.call("lavoro_affida", {"tipo": "ricerca", "compito": "Ricerca sulla storia "
                           "di Venezia e relazione"}, ctx, "amministra"))
 verifica("conferma implicita (stesso tipo, compito simile, turno dopo)",
          out.get("ok") and "Ci lavoro" in out["risposta_finale"]
          and "lavori_conferma_implicita" in ctx.regole, str(ctx.regole))
-item = fine(svc_t, svc_t.lavori[-1])
+item = fine(svc_t, svc_t.lavori[-1], ATTESA_SENZA_SANDBOX_S)   # niente sandbox
 # Dal 07/10 il testo dell'agente è Markdown in risultato.md (PDF e Word a richiesta)
 verifica("ricerca senza biblioteca: testo in risultato.md", item and item["stato"] == "fatto"
          and (Path(item["cartella"]) / "risultato.md").is_file()
@@ -1022,6 +1028,7 @@ out, _ = tool("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script 
                                 "foto per data"}, "Dario", "amministra", 50)
 fake.copione = [dict(x) for x in CODICE]
 ctx = ctx_per("Dario", "amministra", 51, "breve", "Sì, vai.")
+ESECUZIONI.clear()   # un lavoro di codice con i test: resta il tetto di ATTESA_LAVORO_S
 out = json.loads(reg.call("lavoro_affida", {"tipo": "codice", "compito": "Scrivi uno script "
                           "Python che rinomina le foto per data"}, ctx, "amministra"))
 verifica("conferma implicita di un programma con il «sì» breve", out.get("ok")
@@ -1137,6 +1144,7 @@ def conferma_dal_sospeso(body):
 voce.copione = [conferma_dal_sospeso]
 fake.copione = [dict(x) for x in CODICE]
 ctx_b.speaker_ctx = SpeakerCtx("Dario", "amministra", "breve")
+ESECUZIONI.clear()   # un lavoro di codice con i test: resta il tetto di ATTESA_LAVORO_S
 risposta = "".join(brain.stream_reply("Sì, vai.", "amministra"))
 verifica("«sì»: il modello vede l'azione in sospeso e il lavoro parte",
          "Ci lavoro" in risposta and "azione_in_sospeso" in brain.rules_fired(), risposta)

@@ -288,20 +288,25 @@ def a_secco():
     svc.lavori.append(lav)
     reg = Registro()
 
-    def docker_run() -> int:
+    def docker_run(lv) -> int:
+        """I `docker run` della cartella di quel lavoro: durante la seconda misura parte
+        l'esecuzione della prima, che non va contata (revisione della PR #166)."""
         f = TMP / "docker" / "comandi.jsonl"
         righe = f.read_text(encoding="utf-8").splitlines() if f.is_file() else []
-        return sum(json.loads(x)[:1] == ["run"] for x in righe)
+        cartella = f"{lv.id}-esecuzione-"
+        return sum(json.loads(x)[:1] == ["run"] and cartella in x for x in righe)
 
     def avvia_tenuta(lv, *a, **k):
         """avvia con il thread dell'esecuzione tenuto fermo (#156): se avvia aspettasse Docker
-        resterebbe appesa; torna (es, frase, secondi, docker run partiti prima del ritorno)."""
+        resterebbe appesa; torna (es, frase, secondi, docker run partiti prima del ritorno).
+        Il thread resta fermo al più 5 s: avvia torna in millisecondi, e se restasse appesa
+        5 s bastano a far cadere la misura dei 0,3 s."""
         tiene, corri = threading.Event(), esec._corri
-        esec._corri = lambda e: (tiene.wait(ATTESA_S), corri(e))
+        esec._corri = lambda e: (tiene.wait(5.0), corri(e))
         try:
-            n0, t0 = docker_run(), time.perf_counter()
+            n0, t0 = docker_run(lv), time.perf_counter()
             e, fr = esec.avvia(lv, *a, **k)
-            dt, n = time.perf_counter() - t0, docker_run() - n0
+            dt, n = time.perf_counter() - t0, docker_run(lv) - n0
         finally:
             del esec._corri
             tiene.set()
