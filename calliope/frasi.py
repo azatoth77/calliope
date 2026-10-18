@@ -32,6 +32,13 @@ una risposta del modello 2,2. Qui:
 Profilo ridotto da 8 GB (decisione 0028): uguale. Nessun modello, nessuna memoria della GPU,
 pochi kB di testo; la memoria per persona sta in RAM (al più `PERSONE_MAX` persone).
 
+Dal 18/10 (issue #158) la rotazione gira anche per le voci senza persona (sconosciute, ospiti):
+tutte insieme su una chiave sola (`ANONIMA`), come le raggruppa la misura (`_chi` → «?»), solo in
+memoria e senza forma breve (chi parla adesso può non essere chi l'ha sentita prima). E dopo un
+riavvio la rotazione delle persone di casa riprende dal registro dei turni di oggi
+(`Frasi.riprendi`): il campo `pronte` ha già id, tono e variante, con la scadenza del registro;
+niente file nuovo, e i turni degli ospiti non si rileggono (decisione 0031).
+
 Solo libreria standard.
 """
 from __future__ import annotations
@@ -53,6 +60,8 @@ PERSONE_MAX = 200         # memoria per persona: oltre, si dimentica la più vec
 SCELTE_MAX = 200          # scelte non ancora dette (un risultato scartato non resta per sempre)
 FINESTRA = 20             # ripetizione: uguale a una delle ultime 20 risposte alla persona
 OBIETTIVO = 8.0           # ripetizioni ogni 100 frasi pronte dopo la fase 1 (roadmap V3)
+# La chiave della rotazione per le voci senza persona (18/10, #158): una sola, in memoria
+ANONIMA = ("anonima",)
 
 # Classi che non cambiano mai parola (§ 2 della ricerca): solo misura
 CLASSI_BLOCCATE = frozenset({"sfida", "permesso", "politica", "ripiego", "annuncio"})
@@ -634,9 +643,10 @@ class Frasi:
         """(breve, indice, forma). A rotazione per persona, tono e forma; breve se lo stesso id è
         stato detto a questa persona negli ultimi `breve_turni` turni e nell'ultima ora."""
         with self._lock:
-            p = self._persone.get(persona) if persona is not None else None
+            # Senza persona la rotazione delle voci anonime (18/10, #158), senza forma breve
+            p = self._persone.get(persona if persona is not None else ANONIMA)
             breve = False
-            if p is not None and self.breve_turni and v.forme(tono, breve=True):
+            if persona is not None and p is not None and self.breve_turni                     and v.forme(tono, breve=True):
                 u = p["ultimo"].get(v.id)
                 if u is not None and p["turno"] - u[0] <= self.breve_turni \
                         and time.time() - u[1] <= BREVE_S:
@@ -687,19 +697,62 @@ class Frasi:
                 return [info]
         return [{"id": i} for i in riconosci(testo)]
 
-    def _conta(self, info: dict, persona):
-        """Rotazione e forma breve (con il lock)."""
-        if persona is None or "tono" not in info:
+    def _conta(self, info: dict, persona, ora: float | None = None):
+        """Rotazione e forma breve (con il lock). Senza persona la rotazione anonima (18/10)."""
+        if "tono" not in info:
             return
         o = info.get("ombra") or {}
         breve = bool(info.get("breve", o.get("breve", False)))
         i = info.get("variante", o.get("variante"))
-        p = self._persona(persona)
+        p = self._persona(persona if persona is not None else ANONIMA)
         chiave = (info["id"], info["tono"], breve)
         p["giri"][chiave] = p["giri"].get(chiave, 0) + 1
-        p["ultimo"][info["id"]] = (p["turno"], time.time())
+        p["ultimo"][info["id"]] = (p["turno"], time.time() if ora is None else ora)
         r = p["recenti"].setdefault(info["id"], collections.deque(maxlen=2))
         r.append((breve, i))
+
+    # ── dopo un riavvio (18/10, #158) ──
+    def riprendi(self, cartella, oggi: datetime.date | None = None) -> int:
+        """La rotazione delle persone di casa dal registro dei turni di oggi (`turni-<giorno>.jsonl`
+        di `turn_log_dir`): gli stessi `pronte` che legge la misura, così dopo un riavvio nessuno
+        riceve la variante appena detta. Niente file nuovo: la scadenza è il giorno (la misura
+        conta per giorno) e il registro ha la sua. Mai le voci senza persona né i turni di livello
+        ospite (conoscenti compresi): la loro rotazione resta in memoria (decisione 0031).
+        Restituisce quante persone; non solleva."""
+        if not cartella:
+            return 0
+        import json
+        from pathlib import Path
+        giorno = (oggi or datetime.date.today()).isoformat()
+        f = Path(cartella) / f"turni-{giorno}.jsonl"
+        try:
+            righe = f.read_text(encoding="utf-8").splitlines() if f.is_file() else []
+        except OSError:
+            return 0
+        viste = set()
+        with self._lock:
+            for riga in righe:
+                if '"voce"' not in riga:
+                    continue
+                try:
+                    t = json.loads(riga)
+                except ValueError:
+                    continue
+                v = t.get("voce") if isinstance(t, dict) else None
+                pid = v.get("id") if isinstance(v, dict) else None
+                if not pid or t.get("livello") == "ospite":
+                    continue
+                p = self._persona(pid)
+                p["turno"] += 1
+                viste.add(pid)
+                try:
+                    ora = datetime.datetime.fromisoformat(str(t.get("inizio"))).timestamp()
+                except ValueError:
+                    ora = None
+                for x in t.get("pronte") or ():
+                    if isinstance(x, dict) and x.get("id") in CATALOGO:
+                        self._conta(x, pid, ora)
+        return len(viste)
 
     def tutte(self, ident: str, toni=None) -> list[str]:
         """Le forme (varianti e brevi) dei toni dati, senza segnaposto: per la cortesia da
