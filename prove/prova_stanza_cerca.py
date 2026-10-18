@@ -19,12 +19,21 @@ Contrari: spento, ospite, zona grigia, minore che cerca un adulto, adulto non tu
 minore, pausa per ospiti, stanza sbagliata, niente trovato, voce non riconosciuta, «dimentica»,
 periodo che non c'entra, frase d'attesa sotto la soglia o senza righe in coda.
 
+L'ora (18/10, issue #151): la scena sta ore prima di adesso, e fra mezzanotte e le 3 le righe
+diventavano di «ieri» («ieri 23:42») e il controllo «HH:MM» cadeva. La prova gira con
+`time.time()` alle 12:00 di oggi (`prove.orologio.ora_del_giorno`); `prova_ore` rifà la scena
+alle 00:30, 02:59, 12:00 e 23:59 e controlla l'etichetta di ogni riga: «HH:MM» per oggi, «ieri
+HH:MM» per il giorno prima (alle 02:59 tutte e due nello stesso risultato), e «dalle/alle» a
+cavallo della mezzanotte.
+
 Nomi di fantasia (Carlo amministra ed è tutore di Nicola, 14 anni; Bianca è di famiglia). ~3 s.
 """
 
 import collections
+import datetime
 import json
 import os
+import re
 import sys
 import threading
 import time
@@ -43,6 +52,7 @@ from calliope.stanza import misure as misure_mod
 from calliope.stanza.ascolto import Segmento, Stanza
 from calliope.tools import stanza as tool_mod
 from calliope.tools.spec import ToolContext
+from prove.orologio import ora_del_giorno
 
 errori = 0
 
@@ -88,9 +98,15 @@ def cfg_base(**k) -> Config:
     return c
 
 
-ORA = time.time()
-T0 = ORA - 3 * 3600          # in cucina, tre ore fa
-T1 = ORA - 3600              # in sala, un'ora fa
+ORA = T0 = T1 = 0.0
+
+
+def imposta_ora(adesso: float):
+    """La scena è relativa ad adesso: si rifà dentro ogni `ora_del_giorno` (#151)."""
+    global ORA, T0, T1
+    ORA = adesso
+    T0 = ORA - 3 * 3600      # in cucina, tre ore fa
+    T1 = ORA - 3600          # in sala, un'ora fa
 
 
 def riga(st, sat, testo, fine, nome=None, sicurezza="voce", segmento=None):
@@ -154,9 +170,10 @@ def prova_permessi():
              "e quelle di Nicola", r["ok"] and r["trovato"] and "Borgoverde" in testo
              and "panini" in testo and "partita" in testo and "In cucina:" in testo, testo)
     tutto = cerca(st, "Carlo", stanza="cucina").get("risultati", "")
-    verifica("le etichette di sempre (nome, «Carlo?» in zona grigia) e l'ora",
+    verifica("le etichette di sempre (nome, «Carlo?» in zona grigia) e l'ora (alle 12:00 la "
+             "scena è di oggi: «HH:MM»; le altre ore in `prova_ore`)",
              "Carlo: Sabato andiamo" in tutto and "Carlo?: Allora partiamo" in tutto
-             and tutto.split("\n")[1][2] == ":", tutto)
+             and re.match(r"\d\d:\d\d Carlo: Sabato", tutto.split("\n")[1]) is not None, tutto)
     verifica("contrario: la voce non riconosciuta non si cerca mai (ospiti mai nella ricerca)",
              "trasmissione" not in testo)
     r = cerca(st, "Bianca", parole="gita")
@@ -746,19 +763,77 @@ def prova_misure():
     st.chiudi()
 
 
+# ─────────────────────────── 7. l'ora del giorno (#151) ───────────────────────────
+# Le righe della cucina che Carlo vede (sue, di Bianca e di Nicola), in secondi da T0
+# (`inizio` = fine - 2; la TV non si vede)
+RIGHE_CUCINA = (8, 68, 123, 288)
+
+
+def etichetta_attesa(epoch: float, adesso: float) -> str:
+    """L'ora come la deve scrivere `stanza_cerca`, calcolata qui da capo."""
+    d = datetime.datetime.fromtimestamp(epoch)
+    ieri = datetime.date.fromtimestamp(adesso) - datetime.timedelta(days=1)
+    return ("ieri " if d.date() == ieri else "") + d.strftime("%H:%M")
+
+
+def prova_ore():
+    """Caso vero del 18/10: alle 2:40 l'hook cadeva su un ramo di soli documenti, perché la
+    scena di tre ore prima era di ieri e la prova voleva «HH:MM». La stessa scena a quattro ore
+    del giorno: ogni riga con l'etichetta giusta per il suo giorno."""
+    for ore, minuti, di_ieri in ((0, 30, 4), (2, 59, 1), (12, 0, 0), (23, 59, 0)):
+        quando = f"{ore:02d}:{minuti:02d}"
+        with ora_del_giorno(ore, minuti) as adesso:
+            imposta_ora(adesso)
+            st = scena()
+            tutto = cerca(st, "Carlo", stanza="cucina").get("risultati", "")
+            righe = tutto.split("\n")[1:]
+            attese = [etichetta_attesa(T0 + s, adesso) for s in RIGHE_CUCINA]
+            verifica(f"alle {quando}: ogni riga con la sua ora, {di_ieri} di ieri «ieri HH:MM» "
+                     f"e {4 - di_ieri} di oggi «HH:MM»",
+                     len(righe) == 4 and sum(a.startswith("ieri ") for a in attese) == di_ieri
+                     and all(r.startswith(a + " ") for r, a in zip(righe, attese))
+                     and all(re.match(r"(ieri )?\d\d:\d\d [A-Z][a-z]+\??: ", r) for r in righe),
+                     f"{attese} {tutto}")
+            if di_ieri == 4:
+                verifica(f"alle {quando}: «ieri HH:MM» per le righe del giorno prima",
+                         all(re.match(r"ieri \d\d:\d\d ", r) for r in righe), tutto)
+            elif di_ieri == 0:
+                verifica(f"contrario alle {quando}: righe di oggi, niente «ieri»",
+                         "ieri" not in tutto
+                         and all(re.match(r"\d\d:\d\d ", r) for r in righe), tutto)
+            da = datetime.datetime.fromtimestamp(T0 - 600).strftime("%H:%M")
+            a = datetime.datetime.fromtimestamp(T0 + 600).strftime("%H:%M")
+            r = cerca(st, "Carlo", parole="gita", dalle=da, alle=a)
+            verifica(f"alle {quando}: dalle/alle ({da}–{a}) trovano la gita, anche a cavallo "
+                     "della mezzanotte", r.get("trovato") is True
+                     and "Borgoverde" in r.get("risultati", ""), str(r)[:200])
+            st.chiudi()
+    # Più vecchia di ieri: il giorno e il mese
+    adesso = datetime.datetime(2026, 10, 14, 9, 30).timestamp()
+    oggi = datetime.date.fromtimestamp(adesso)
+    verifica("etichette: oggi «HH:MM», ieri «ieri HH:MM», prima «gg/mm HH:MM»",
+             cerca_mod._giorno(adesso - 3600, oggi) == "08:30"
+             and cerca_mod._giorno(adesso - 12 * 3600, oggi) == "ieri 21:30"
+             and cerca_mod._giorno(adesso - 3 * 86400, oggi) == "11/10 09:30")
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
-    prova_permessi()
-    prova_filtri()
-    prova_contrari()
-    prova_attesa()
-    prova_brain()
-    prova_discorso()
-    prova_anticipo()
-    prova_misure()
+    # Un'ora nota (#151): la scena «tre ore fa» resta di oggi a qualunque ora giri la prova
+    with ora_del_giorno(12, 0) as adesso:
+        imposta_ora(adesso)
+        prova_permessi()
+        prova_filtri()
+        prova_contrari()
+        prova_attesa()
+        prova_brain()
+        prova_discorso()
+        prova_anticipo()
+        prova_misure()
+    prova_ore()
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
     return 1 if errori else 0
 

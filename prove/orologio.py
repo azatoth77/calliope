@@ -8,8 +8,17 @@ modulo un orologio monotono che parte da pochi secondi.
 
     with appena_acceso(sessione_mod):     # sessione_mod.time.monotonic() ≈ 5 s
         ...
+
+L'ora del giorno (18/10, issue #151). Una scena «tre ore fa» controllata con un formato fisso
+(«HH:MM») cadeva fra mezzanotte e le 3, quando le righe diventano di «ieri» («ieri 23:42»):
+`prova_stanza_cerca` fermava l'hook ogni notte. Con `ora_del_giorno` la prova gira a un'ora nota
+di oggi, e i casi della notte si provano apposta:
+
+    with ora_del_giorno(0, 30):           # time.time() = oggi alle 00:30, e avanza
+        ...
 """
 import contextlib
+import datetime
 import time
 from unittest import mock
 
@@ -41,3 +50,21 @@ def appena_acceso(*moduli, inizio: float = 5.0):
         for m in moduli:
             pila.enter_context(mock.patch.object(m, "time", finto))
         yield finto
+
+
+def adesso_alle(ore: int, minuti: int = 0, giorno: datetime.date | None = None) -> float:
+    """L'epoch di `giorno` (di serie oggi) alle `ore`:`minuti`, ora locale."""
+    giorno = giorno or datetime.date.today()
+    return datetime.datetime(giorno.year, giorno.month, giorno.day, ore, minuti).timestamp()
+
+
+@contextlib.contextmanager
+def ora_del_giorno(ore: int, minuti: int = 0, giorno: datetime.date | None = None):
+    """Dentro il blocco `time.time()` di tutto il processo parte da `giorno` (di serie oggi)
+    alle `ore`:`minuti` e avanza come quello vero. Solo `time.time()`: `datetime.now()` e
+    `time.monotonic()` restano veri (le scene che dipendono dall'ora si scrivono da
+    `time.time()`). Rende l'epoch di partenza."""
+    vero = time.time
+    scarto = adesso_alle(ore, minuti, giorno) - vero()
+    with mock.patch.object(time, "time", lambda: vero() + scarto):
+        yield vero() + scarto
