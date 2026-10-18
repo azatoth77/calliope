@@ -3601,3 +3601,38 @@ sarebbe da misurare. Il «fatto» al tetto si fida di questi esempi, e lo si sa.
 - gli esempi per i programmi su file della persona (il caso «rinomina le foto»: serve
   un'interfaccia con una cartella d'esempio);
 - la revisione che legge la nota dell'agente su un esempio che gli sembra sbagliato.
+
+## `prova_agenti_openai` sotto carico: la sandbox a bassa priorità e le attese (18/10, issue #142, ramo `issue-142-tetti-agenti-openai`)
+
+- **La causa vera, più stretta di quella della issue.** Il lavoro di codice finto non esegue i
+  test due volte ma **quattro** (`esegui_test`, le due di `_test_falliti` alla consegna, quella
+  finale di `ciclo.py` dopo la consegna, sullo stesso codice). Ognuna avvia nella sandbox
+  «processo» un Python a priorità «sotto il normale» (`BELOW_NORMAL_PRIORITY_CLASS`), e su
+  Windows un processo così, con la CPU piena di processi a priorità normale, gira quasi solo
+  con le spinte contro l'affamamento: misurato con 32 processi pieni su 24 core, lo stesso
+  `import unittest` 2,9 s a priorità normale e **93 s** sotto il normale, il test della sandbox
+  119–190 s (a vuoto 0,2–0,4 s). Durante un `--completo` in un altro worktree le quattro
+  esecuzioni hanno preso fino a 27 s l'una (43 s in tutto). Su Linux (DGX, `nice 10`) il peso è
+  ridotto, non azzerato: niente da cambiare lì.
+- **La prova** (stesso criterio di `prova_satellite` in #5): le attese di un evento sono larghe
+  e, se scadono, stampano la traccia (le esecuzioni della sandbox con la durata e le ultime
+  righe del servizio): 60 s per esecuzione (prima 15), il lavoro finito 4 × 60 + 10 s (prima
+  15), il comando `--prova` 120 s (prima 60), lo stream chiuso visto dal server 10 s (prima 3),
+  il collegamento del `--prova` 10 s (prima 2). `fine()` aspetta la fine di **quel** lavoro e
+  scarta, dicendolo, quella in ritardo di un lavoro di prima: erano gli errori a cascata della
+  issue (la cartella che manca, il documento che riceve il lavoro di codice); caso nuovo, che
+  col `fine()` di prima cade. L'attesa fissa di 0,6 s prima di `interrompi` aspetta lo stream
+  partito (due pezzi arrivati al server finto). Resta il tetto di **1 s** di «interrompi chiude
+  lo stream subito», perché è la misura: l'arbitro chiude lo stream quando qualcuno parla, e
+  non dipende dalla CPU libera. Porte dei server giù fuori dalle effimere (`prove/porte.py`).
+  Ogni giro stampa la riga «nota: esecuzioni della sandbox…», per misurare.
+- **Misure**: durante un `--completo` in un altro worktree (con altre prove sotto carico sullo
+  stesso portatile), 10 giri alternati: main **0 su 10** (4 ERR a giro, 41–50 s), il ramo **10 su
+  10** (42–116 s); poi 5 giri del ramo, verdi, 8–54 s. A vuoto 8–9 s. Con 6 corsie, 32 processi
+  pieni e 16 thread di porte (`prove/manuali/carico.py`) la prova cade ancora: le esecuzioni
+  sforano i 60 s e la traccia lo dice (main: 0 su 18; ramo 0 su 6, con le esecuzioni a 60 s
+  nella riga dell'errore). Con 3 corsie e 16 processi, main era già verde 12 su 12.
+- **Da decidere** (non toccato qui): la quarta esecuzione dei test, dopo le due di
+  `_test_falliti` sullo stesso codice, si potrebbe togliere; e sul portatile la sandbox sotto il
+  normale può restare affamata per minuti da un programma qualunque a priorità normale (il
+  motore «processo» è solo scelto a mano, e l'agente gira sulla DGX).

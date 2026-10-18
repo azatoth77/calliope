@@ -227,6 +227,16 @@ carico): 10 su 12, una caduta sul follow-up («ascolta» arrivato 0,33 s dopo l'
 frase, attacco perso) e una sul rifiuto per l'Origin con 3 s di tempo massimo (ora 10 s, come i
 rifiuti per il token: sono attese di una risposta).
 
+**`prova_agenti_openai`: i tetti di 15 s e la sandbox affamata (18/10, #142).** Il lavoro di
+codice finto esegue i test quattro volte nella sandbox «processo», a priorità «sotto il normale»:
+con la CPU piena di processi a priorità normale (un `--completo`) ogni esecuzione prendeva fino a
+27 s invece di 0,2–0,4, e il lavoro sforava i 15 s; poi gli errori a cascata. Ora le attese di un
+evento sono larghe con la traccia (60 s per esecuzione, il lavoro 4 × 60 + 10 s) e ogni attesa
+prende la fine del suo lavoro; resta il tetto di 1 s di «interrompi chiude lo stream subito», che è
+la misura. Durante un `--completo` in un altro worktree main 0 su 10, il ramo 10 su 10. Con 32
+processi pieni cade ancora (esecuzioni oltre i 60 s, dette nella traccia).
+[agenti-estensioni](../docs/aree/agenti-estensioni.md)
+
 **Problemi aperti delle prove** (17/10): «TLS: 120 aperture» di `prova_satellite` cade 1 giro su 60
 sotto carico pieno (3 corsie, 16 processi): il server chiude una stretta di mano oltre il suo
 `open_timeout` di 3 s e dalla prova non si distingue dal difetto del 03/10 che quel controllo cerca
