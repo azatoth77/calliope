@@ -27,7 +27,9 @@ Un modello che non c'è dà 404 come vLLM («The model `x` does not exist.»); u
 prossimo) e le richieste nuove aspettano: come vLLM con `mode=keep`. `ritardo_pausa` rallenta
 la risposta a /pause (una pausa che non risponde), `stato_pausa` (es. 500) la fa fallire;
 `chiamate_pausa` elenca «pausa»/«ripresa» in ordine; `pezzi_tempi` tiene l'istante
-(monotonic) di ogni pezzo mandato dall'API OpenAI. Senza `dev` sono 404, come vLLM normale.
+(monotonic) di ogni pezzo mandato dall'API OpenAI, `pezzi_nativi` conta quelli dello stream
+nativo (18/10, #156: lo stream partito, al posto di un'attesa fissa). Senza `dev` sono 404,
+come vLLM normale.
 """
 
 import json
@@ -62,6 +64,7 @@ class FakeOllama:
         self.stato_pausa = 200
         self.chiamate_pausa: list[str] = []
         self.pezzi_tempi: list[float] = []
+        self.pezzi_nativi = 0
         self._libero = threading.Event()      # non in pausa
         self._libero.set()
         self._lock = threading.Lock()
@@ -171,6 +174,8 @@ class FakeOllama:
                 self.end_headers()
 
                 def chunk(obj):
+                    with fake._lock:
+                        fake.pezzi_nativi += 1
                     data = (json.dumps(obj) + "\n").encode()
                     self.wfile.write(f"{len(data):x}\r\n".encode() + data + b"\r\n")
                     self.wfile.flush()
