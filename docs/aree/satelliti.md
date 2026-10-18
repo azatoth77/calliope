@@ -320,7 +320,7 @@ normale: con `BELOW_NORMAL_PRIORITY_CLASS` di Windows, sulla CPU piena il figlio
 `sys.executable`) o cade senza un motivo suo (un'uscita diversa da 0, 3, 4: una volta
 0xC0000005 nell'hook con 144 prove in parallelo, non riprodotta in 24 costruzioni parallele
 sotto carico), o esce con 0 senza uno zip intero o con byte prima dello zip (deve cominciare con
-`PK`: `zipfile` leggerebbe anche uno zip con un prefisso, e il server lo darebbe con la
+`PK\x03\x04`: `zipfile` leggerebbe anche uno zip con un prefisso, e il server lo darebbe con la
 stessa versione e un altro SHA-256; dalla revisione della PR #154), il pacchetto si costruisce nel
 processo come prima, con una riga nel log (`costruiti_qui`). Oltre `ATTESA_FIGLIO_S` (600 s) il
 figlio si chiude e il **motivo resta**, come per le uscite 3 e 4: niente ripiego, sarebbero altri
