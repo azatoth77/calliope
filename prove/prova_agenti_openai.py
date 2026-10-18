@@ -116,7 +116,6 @@ def traccia() -> str:
 def fine(svc, lav, s=ATTESA_LAVORO_S):
     """La fine di quel lavoro. Quella di un lavoro precedente che ha sforato si scarta, detta:
     prima arrivava al controllo del lavoro dopo e gli errori andavano a cascata (#142)."""
-    ESECUZIONI.clear()
     t = time.perf_counter()
     while (resta := s - (time.perf_counter() - t)) > 0:
         try:
@@ -350,6 +349,7 @@ fake.copione = [dict(x) for x in CODICE]
 fake.richieste.clear()
 lav = svc.nuovo("codice", "Scrivi una funzione Python che somma due numeri, con un test",
                 "dario-id", "Dario", "amministra")
+ESECUZIONI.clear()   # prima di avviare: il lavoro può eseguire i test subito
 svc.avvia(lav)
 item = fine(svc, lav)
 verifica("lavoro di codice finito con il test passato", item is not None
@@ -383,7 +383,9 @@ lav = svc.nuovo("documento", "Prepara una relazione sul giardino", "bianca-id", 
                 formato="word")
 # La fine in ritardo di un lavoro di prima (sotto carico il codice sforava il tetto, #142):
 # fine() aspetta quella del documento e la scarta
-svc.done.put({"id": "L-ritardo", "tipo": "codice", "stato": "fatto", "messaggio": "in ritardo"})
+svc.done.put({"id": "L-ritardo", "tipo": "codice", "stato": "fatto", "messaggio": "in ritardo",
+             "cartella": ""})
+ESECUZIONI.clear()   # prima di avviare: il lavoro può eseguire i test subito
 svc.avvia(lav)
 item = fine(svc, lav)
 verifica("la fine in ritardo di un altro lavoro non prende il posto del documento",
@@ -401,7 +403,8 @@ cfg_m = cfg_base(fake.url + "/v1", agenti_modello="modello-che-non-ce")
 svc_m = Lavori(cfg_m, carica(cfg_m), log=LOG.append, formati=FORMATI)
 lav = svc_m.nuovo("altro", "Fai un lavoro", "dario-id", "Dario")
 svc_m.avvia(lav)
-item = fine(svc_m, lav)
+# Senza sandbox: 60 s bastano (i 250 s solo per il codice e per il documento che lo segue)
+item = fine(svc_m, lav, 60)
 verifica("modello non servito: detto senza «ollama pull»", item and item["stato"] == "errore"
          and "ollama pull" not in item["messaggio"] and "modello-che-non-ce" in item["messaggio"],
          str(item and item["messaggio"]))
@@ -414,7 +417,7 @@ cfg_g = cfg_base(f"http://127.0.0.1:{porta_fuori_effimere()}/v1")
 svc_g = Lavori(cfg_g, carica(cfg_g), log=LOG.append, formati=FORMATI)
 lav = svc_g.nuovo("altro", "Fai un lavoro", "dario-id", "Dario")
 svc_g.avvia(lav)
-item = fine(svc_g, lav)
+item = fine(svc_g, lav, 60)
 verifica("motore giù: «il server del modello dell'agente non risponde»",
          item and item["stato"] == "errore" and "server del modello" in item["messaggio"]
          and "non risponde" in item["messaggio"], str(item and item["messaggio"]))
