@@ -28,6 +28,7 @@ from pathlib import Path
 
 import numpy as np
 
+from . import arbitro_memoria
 from . import avvisi_audio
 from . import cancelli as cancelli_mod
 from . import compagnia as compagnia_mod
@@ -1312,6 +1313,9 @@ class Ciclo:
         # agenti_ripresa_s. La voce lo ferma di nuovo appena qualcuno le parla (on_speech_start)
         if s.lavori is not None:
             s.lavori.arbitro.voce_libera()
+        # Anche la «voce ferma» dell'arbitro della memoria (#157): il VAD la libera solo per una
+        # frase buttata. Senza l'arbitro in ombra non la legge nessuno
+        arbitro_memoria.QUIETE.voce_libera()
         if guided:
             self.awake_until = max(self.awake_until, time.monotonic() + cfg.followup_s)
         awake = not cfg.wake_word_enabled or time.monotonic() < self.awake_until

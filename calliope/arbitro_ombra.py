@@ -150,6 +150,7 @@ class Ombra:
         self._righe_minuto = 0
         self._conti_minuto: dict[str, int] = {}
         self.buttate = 0
+        self._tenute_minuto = int(getattr(self.quiete, "tenute", 0) or 0)
         self.richieste_viste = 0
         # L'arbitro dell'agente (agenti/arbitro.py): la sua «voce libera» si confronta qui, dal
         # thread (occupata_ora: un flag sotto il suo lock, senza effetti)
@@ -424,6 +425,11 @@ class Ombra:
                 "coda": len(self._coda), "buttate": self.buttate}
         if tr:
             riga["tempo_reale_ruoli"] = sorted(set(tr))
+        # La voce liberata dalla tenuta massima in questo minuto (#157): deve restare 0
+        tenute = int(getattr(self.quiete, "tenute", 0) or 0)
+        if tenute > self._tenute_minuto:
+            riga["tenute_voce"] = tenute - self._tenute_minuto
+        self._tenute_minuto = tenute
         self._conti_minuto = {}
         self.buttate = 0
         self._scrivi("minuto", **riga)
