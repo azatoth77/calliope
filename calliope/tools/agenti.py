@@ -335,11 +335,22 @@ def _proponi(ctx, svc, lav, turno) -> dict:
         # la cambiamo?»). Prima la modalità non si vedeva (DGX, 08/10 11:06)
         frase = svc.sviluppi.frase_proposta(sv, lav, attesa=getattr(ctx, "attesa", None))
         # Dal 11/10 la proposta a tappe chiude con la sua domanda (calliope/requisiti.py)
-        domanda = svc.sviluppi.domanda_proposta(sv)
+        domanda = svc.sviluppi.domanda_proposta(sv, lav)
         if ctx is not None:
             note_rule(ctx, "sviluppo_apertura")
             if sv.tappe_stato == "proposte":
                 note_rule(ctx, "sviluppo_tappe_proposte")
+        if getattr(lav, "non_si_parte", ""):
+            # Il cuore della richiesta qui non si può fare (18/10, #174): il «sì» non avvia
+            # niente, la risposta è una modifica della richiesta
+            if ctx is not None:
+                note_rule(ctx, "sviluppo_nucleo_impossibile")
+            return _final(frase, fatto="proposta NON avviabile: i requisiti principali qui non "
+                                       "si possono fare; il lavoro NON è cominciato",
+                          in_sospeso={"domanda": domanda, "cosa": "cambiare la richiesta",
+                                      "tool": "sviluppo_passo",
+                                      "argomenti": "azione = analisi, cambia = quello che la "
+                                                   "persona vuole cambiare"})
     return _final(frase, fatto="proposta: il lavoro NON è ancora cominciato",
                   in_sospeso={"domanda": domanda, "cosa": f"affidare all'agente "
                               f"«{lav.titolo}»", "tool": tool,
@@ -495,7 +506,18 @@ def _titolo_estensione(nome: str, esito) -> str:
 
 
 def _avvia(ctx, svc, lav) -> dict:
-
+    motivo = str(getattr(lav, "non_si_parte", "") or "").strip()
+    if motivo:
+        # 18/10 (#174): i requisiti principali qui non si possono fare (sviluppo.py,
+        # _blocca_se_impossibile): il lavoro non parte nemmeno con un «sì»
+        note_rule(ctx, "sviluppo_nucleo_impossibile")
+        from ..sviluppo import DOMANDA_NON_SI_PARTE
+        return _final(f"{motivo} {DOMANDA_NON_SI_PARTE}", ok=False,
+                      fatto="NON avviato: i requisiti principali qui non si possono fare",
+                      in_sospeso={"domanda": DOMANDA_NON_SI_PARTE, "cosa": "cambiare la "
+                                  "richiesta", "tool": "sviluppo_passo",
+                                  "argomenti": "azione = analisi, cambia = quello che la "
+                                               "persona vuole cambiare"})
     _schermo(ctx, lav)
     frase = svc.avvia(lav)
     # La modalità sviluppo (08/10): il «sì» alla specifica, si passa allo sviluppo

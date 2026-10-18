@@ -277,6 +277,7 @@ def prova_caso_vero(tmp: Path):
     verifica("i dati del turno: «continua» → completa, e niente «tutto a posto» inventato",
              "azione completa" in riga and "non dire che è tutto a posto" in riga, riga)
 
+    spec_prima = sv.specifica
     out = chiama(reg, ctx, "sviluppo_passo", {"azione": "continua"}, 5, "Continua a farli.")
     nuovo = svc.lavori[-1]
     verifica("«continua» alla revisione → l'agente completa quello che manca",
@@ -288,8 +289,14 @@ def prova_caso_vero(tmp: Path):
              "variabile (ora: Le porte sono sempre 5)" in nuovo.vincoli
              and "musica cupa ma divertente" in nuovo.vincoli
              and "classifica condivisa su internet (" not in nuovo.vincoli.split("Completa")[1]
-             .split(".")[0] and nuovo.compito.startswith("Crea un gioco di Halloween")
-             and sv.specifica.startswith("Crea un gioco di Halloween"), nuovo.vincoli)
+             .split(".")[0] and nuovo.compito.startswith(spec_prima.rstrip("."))
+             and sv.specifica == spec_prima, f"{nuovo.vincoli}\n{nuovo.compito!r}")
+    # Dal 18/10 (#174) la specifica di un gioco con un requisito che qui non si può fare (la
+    # classifica su internet) è quella riscritta dai requisiti all'analisi
+    verifica("…la specifica è quella riscritta dai requisiti all'analisi, con il limite a parte",
+             spec_prima.startswith("Un gioco sugli schermi di Calliope")
+             and "Qui non si può fare, quindi non va fatto: classifica condivisa su internet"
+             in spec_prima, spec_prima)
     verifica("…e lo dice", detta(out).startswith("D'accordo: l'agente continua con quello che "
                                                  "manca, porte in numero variabile"), detta(out))
 

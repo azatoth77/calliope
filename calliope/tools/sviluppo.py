@@ -1036,9 +1036,15 @@ def _ripresa(ctx, svs, sv, testa: str) -> dict:
                                "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}}
     elif sv.fase == "sviluppo" and tappa is not None:
         # Fermo a una tappa (12/10, A5): il lavoro c'è ancora e aspetta la persona
-        domanda = "Continuo con un altro giro?"
+        # Dopo giri finiti allo stesso punto (18/10, #174) non un altro giro uguale
+        from ..agenti.servizio import giri_uguali
+        uguali = bool(giri_uguali(tappa))
+        domanda = ("Faccio consegnare all'agente quello che funziona già, o vuoi cambiare la "
+                   "richiesta?" if uguali else "Continuo con un altro giro?")
         frase += f" Il lavoro dell'agente è fermo a una tappa e aspetta te. {domanda}"
-        extra["in_sospeso"] = {"domanda": domanda, "cosa": "un altro giro di lavoro",
+        extra["in_sospeso"] = {"domanda": domanda, "cosa": (
+                                   "consegnare quello che funziona" if uguali
+                                   else "un altro giro di lavoro"),
                                "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}}
     elif sv.fase == "sviluppo" and svs.lavoro_attivo(sv):
         frase += " L'agente ci sta lavorando: te lo dico quando è pronto."

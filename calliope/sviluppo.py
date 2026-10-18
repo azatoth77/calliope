@@ -77,6 +77,8 @@ DOMANDA_GIOCO = "Lo apro in prova?"
 # La proposta in analisi, e quella a tappe (11/10, calliope/requisiti.py)
 DOMANDA_PROPOSTA = "Va bene così, o la cambiamo?"
 DOMANDA_TAPPE = "Comincio dalla prima tappa, o lo faccio tutto insieme?"
+# Il cuore della richiesta qui non si può fare (18/10, #174): non si parte, si chiede cosa cambiare
+DOMANDA_NON_SI_PARTE = "Così non la faccio partire: cosa vuoi cambiare?"
 # La nota di un lavoro fermo a una tappa o a una domanda che ha aspettato troppo (12/10, A5)
 MESSO_DA_PARTE = "messo da parte"
 # I file di un giro fermo che non tornano all'agente: il runtime e il contratto li rimette
@@ -1261,8 +1263,14 @@ class Sviluppi:
         self._salva()
         self.agli_schermi(sv)
         if sv.stato == "aperta":
-            item["in_sospeso"] = {"domanda": "Continuo?", "tool": "sviluppo_passo",
-                                  "cosa": f"un altro giro di lavoro per «{sv.titolo}»",
+            # Dopo giri finiti allo stesso punto (18/10, #174) il «sì» è «consegna ciò che va»
+            from .agenti.servizio import giri_uguali
+            uguali = bool(giri_uguali(lav))
+            item["in_sospeso"] = {"domanda": "Faccio consegnare quello che funziona?" if uguali
+                                  else "Continuo?", "tool": "sviluppo_passo",
+                                  "cosa": (f"consegnare quello che funziona di «{sv.titolo}»"
+                                           if uguali else
+                                           f"un altro giro di lavoro per «{sv.titolo}»"),
                                   "argomenti": {"azione": "avanti"}}
         else:
             item["messaggio"] = (str(item.get("messaggio") or "").rstrip()
@@ -1293,7 +1301,7 @@ class Sviluppi:
             detto_scelte = ("Dove non mi hai risposto ho scelto io: " + "; ".join(scelte[:3])
                             + "." if scelte else "")
             frase = " ".join(p for p in (self._frase_proposta(sv, lav), detto_scelte, aggiunta,
-                                         self.domanda_proposta(sv)) if p)
+                                         self.domanda_proposta(sv, lav)) if p)
         self.agli_schermi(sv)
         return frase
 
@@ -1322,12 +1330,57 @@ class Sviluppi:
             if sv.tappe_stato in ("proposte", "accettate") and prima else []
         if dopo:
             parti.append(f"Per la tappa dopo restano: {rq.elenco_voce(dopo)}.")
-        parti.append(self.domanda_proposta(sv))
+        self._blocca_se_impossibile(sv, lav)
+        parti.append(self.domanda_proposta(sv, lav))
         return " ".join(p for p in parti if p)
 
-    def domanda_proposta(self, sv: Sviluppo) -> str:
-        """La domanda in fondo alla proposta (l'azione in sospeso, tools/agenti._proponi)."""
+    def domanda_proposta(self, sv: Sviluppo, lav=None) -> str:
+        """La domanda in fondo alla proposta (l'azione in sospeso, tools/agenti._proponi). Con
+        il cuore della richiesta che qui non si può fare (18/10, #174) non «Procedo?»: cosa
+        cambiare."""
+        if getattr(lav, "non_si_parte", ""):
+            return DOMANDA_NON_SI_PARTE
         return DOMANDA_TAPPE if sv.tappe_stato == "proposte" else DOMANDA_PROPOSTA
+
+    def _blocca_se_impossibile(self, sv: Sviluppo, lav) -> bool:
+        """Il lavoro non parte se tutti i requisiti principali (il nucleo; senza nucleo tutti)
+        qui non si possono fare (18/10, #174: il tris chiesto «in Python con Pygame», i cinque
+        requisiti principali `si_puo: false`, e lo sviluppo era partito lo stesso): il motivo
+        resta sul lavoro (`non_si_parte`), la proposta chiede cosa cambiare e `_avvia`
+        (tools/agenti.py) non lo avvia. Regola sviluppo_nucleo_impossibile. True se bloccato."""
+        from . import requisiti as rq
+        if lav is None:
+            return False
+        req = list(sv.requisiti or [])
+        principali = [r for r in req if r.get("nucleo")] or req
+        if not principali or any(r.get("si_puo", True) for r in principali):
+            lav.non_si_parte = ""
+            return False
+        lav.non_si_parte = rq.frase_limiti(req) or "Così com'è qui non si può fare."
+        self.log(f"[SVILUPPO] {sv.id}: i requisiti principali qui non si possono fare, il "
+                 "lavoro non parte (regola sviluppo_nucleo_impossibile)")
+        return True
+
+    def _specifica_senza_limiti(self, sv: Sviluppo, lav, gioco: bool) -> bool:
+        """Un gioco con dei requisiti che qui non si possono fare (18/10, #174: la richiesta
+        diceva «Python con Pygame», lo sviluppo è diventato un gioco sugli schermi e all'agente
+        restava «Il linguaggio deve essere Python con la libreria Pygame»): la specifica si
+        riscrive dai requisiti, che dicono solo cosa fare e, a parte, cosa non va fatto. Così
+        all'agente non arriva una richiesta che contraddice il contratto. Regola
+        sviluppo_specifica_dai_requisiti. True se riscritta."""
+        from . import requisiti as rq
+        if not gioco or lav is None or not rq.limiti(sv.requisiti) \
+                or not rq.da_fare(sv.requisiti):
+            return False
+        cosa = "Un gioco sugli schermi di Calliope"
+        spec = rq.specifica_da_requisiti(sv.requisiti, cosa, sv.titolo)
+        with self._lock:
+            sv.specifica, sv.requisiti_da = spec, rq.impronta(spec)
+        lav.specifica = spec
+        lav.compito = spec
+        self.log(f"[SVILUPPO] {sv.id}: specifica riscritta dai requisiti, senza ciò che qui non "
+                 "si può fare (regola sviluppo_specifica_dai_requisiti)")
+        return True
 
     def _requisiti_proposta(self, sv: Sviluppo, lav, attesa=None) -> str:
         """Alla prima proposta: i requisiti estratti, i limiti detti, le tappe proposte e i
@@ -1336,6 +1389,7 @@ class Sviluppi:
         from . import requisiti as rq
         if sv.tappe_stato or sv.requisiti or not getattr(self.cfg, "sviluppo_requisiti", True):
             # Una proposta dopo la prima (una modifica): la tappa decisa vale ancora
+            self._blocca_se_impossibile(sv, lav)
             self._metti_vincoli(sv, lav)
             return ""
         spec = sv.specifica or sv.richiesta
@@ -1354,6 +1408,11 @@ class Sviluppi:
                 sv.tappa, sv.tappe_stato = 1, "proposte"
         self.log(f"[SVILUPPO] {sv.id}: {len(req)} requisiti, stima {stima or '?'}"
                  + (", regola sviluppo_tappe_proposte" if tappe else ""))
+        # 18/10 (#174): senza il cuore fattibile non si parte; un gioco con dei limiti ha la
+        # specifica riscritta dai requisiti
+        if not self._blocca_se_impossibile(sv, lav):
+            self._specifica_senza_limiti(sv, lav, self.e_gioco(sv)
+                                         or bool(getattr(lav, "gioco", False)))
         self._salva()
         self._metti_vincoli(sv, lav)
         parti = [rq.frase_limiti(req)]

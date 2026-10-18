@@ -366,8 +366,29 @@ def frase_tappa(lav, titolo: str) -> str:
     seg = (r.get("segnali") or {}).get("frasi") or []
     if seg:
         parti.append("Attenzione, sembra girare a vuoto: " + ", ".join(seg) + ".")
-    parti.append("Continuo con un altro giro, vuoi cambiare qualcosa prima, o lo fermo?")
+    parti.append(domanda_tappa(lav))
     return " ".join(parti)
+
+
+def giri_uguali(lav) -> int:
+    """Da quante tappe di fila il lavoro finisce il giro allo stesso punto (18/10, #174: gli
+    stessi test rossi con lo stesso errore, agenti/ciclo.giri_uguali); 0 altrimenti."""
+    from .ciclo import GIRI_UGUALI
+    n = int((getattr(lav, "risultato", None) or {}).get("giri_uguali") or 0)
+    return n if n >= GIRI_UGUALI else 0
+
+
+def domanda_tappa(lav) -> str:
+    """La domanda in fondo al rapporto di una tappa. Dopo giri finiti allo stesso punto (18/10,
+    #174: cinque giri del tris per due, e a ogni tappa «Continuo con un altro giro?») non si
+    propone un altro giro uguale: consegnare ciò che funziona, o cambiare la richiesta."""
+    n = giri_uguali(lav)
+    if n:
+        quanti = {2: "Due", 3: "Tre", 4: "Quattro", 5: "Cinque"}.get(n, str(n))
+        return (f"{quanti} giri di fila sono finiti allo stesso punto, con gli stessi test che "
+                "non passano: un altro giro uguale non servirebbe. Faccio consegnare all'agente "
+                "quello che funziona già, o vuoi cambiare la richiesta?")
+    return "Continuo con un altro giro, vuoi cambiare qualcosa prima, o lo fermo?"
 
 
 def titolo_file(titolo: str) -> str:
@@ -667,16 +688,33 @@ class Lavori:
             lav.passi0, lav.token0 = lav.passi, lav.token
             lav.attesa0, lav.giro_inizio = lav.attesa_s, ora
             lav.avvisato = False
+            uguali = giri_uguali(lav)
             if isinstance(lav.segnali, dict):
                 lav.segnali["senza_novita"] = 0
+                lav.segnali["senza_progressi"] = 0
+                # Il «sì» a «faccio consegnare quello che funziona?» (18/10, #174): il giro
+                # dopo dice all'agente di consegnare, non di riprovare (agenti/ciclo.py)
+                if uguali and not nota:
+                    lav.segnali["consegna_dopo_giri"] = uguali
             lav.nota_giro = nota
             lav.risposta = nota or "continua"
             lav.stato, lav.passo = "in_coda", f"riprende: giro {lav.giro}"
             occupato = self.corrente is not None
         self.log(f"[AGENTI] {lav.id}: giro {lav.giro}" + (f", con la nota «{nota[:80]}»"
-                                                          if nota else ""))
+                                                          if nota else "")
+                 + (" per consegnare ciò che funziona dopo giri uguali (regola "
+                    "agente_consegna_dopo_giri)" if uguali and not nota else ""))
+        if uguali and not nota:
+            from ..sonde import nota as nota_regola
+            nota_regola(lav, "agente_consegna_dopo_giri")
         self._coda.put(lav)
         self._salva_stato()
+        if uguali and not nota:
+            return (f"D'accordo: faccio consegnare all'agente quello che funziona già di "
+                    f"«{titolo_detto(lav.titolo)}», con un altro giro di "
+                    f"{_durata(self.agente.tempo_max_s)}"
+                    + (", appena finisce il lavoro in corso" if occupato else "")
+                    + ". Ti avviso quando è pronto.")
         return (f"Continuo «{titolo_detto(lav.titolo)}»: un altro giro di "
                 f"{_durata(self.agente.tempo_max_s)}"
                 + (" con la tua indicazione" if nota else "")
@@ -2012,8 +2050,12 @@ class Lavori:
                 "cartella": lav.risultato.get("cartella"), "test": lav.risultato.get("test")}
         if self.in_tappa(lav):
             # Una tappa (08/10): «continuo?»; la modalità sviluppo la riscrive con la fase
-            item["in_sospeso"] = {"domanda": "Continuo?", "tool": "lavoro_rispondi",
-                                  "cosa": f"un altro giro di lavoro per «{lav.titolo}»",
+            uguali = bool(giri_uguali(lav))        # 18/10, #174
+            item["in_sospeso"] = {"domanda": "Faccio consegnare quello che funziona?" if uguali
+                                  else "Continuo?", "tool": "lavoro_rispondi",
+                                  "cosa": (f"consegnare quello che funziona di «{lav.titolo}»"
+                                           if uguali else
+                                           f"un altro giro di lavoro per «{lav.titolo}»"),
                                   "argomenti": {"lavoro": lav.id, "risposta": "continua"}}
             item["tappa"] = True
         elif lav.stato == "in_attesa":
