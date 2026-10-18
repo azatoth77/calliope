@@ -1484,7 +1484,8 @@ serie**):
   calcola con le stesse regole senza toccare lo stato di chi parla). In attivo lo stesso blocco con
   la decisione senza. `calliope stato --turni`, sezione «Impronte per satellite»: per satellite
   rifiutate → riconosciute, riconosciute → rifiutate, scambi fra persone (minore → chi amministra e
-  il contrario), zona grigia → voce, frasi che hanno insegnato.
+  il contrario), zona grigia → voce, frasi che hanno insegnato. *Dal 18/10 (issue #159) gli scambi
+  divisi fra base sicura e base incerta: voce del 18/10 in fondo.*
 - La **stanza** in attivo usa le impronte del satellite del segmento in sola lettura (non le
   insegna). Il barge-in di livello B sul portatile resta con l'impronta di partenza.
 - **Tenuta e cancellazione** come le impronte di sempre (dati biometrici, stessi permessi): in
@@ -1813,3 +1814,20 @@ tenuto da parte dopo `adapt`, la tutela del solo minore riconosciuto). **Verific
 alla prossima serata con ospiti e il telefono in stanza: `calliope stato --turni --giorni 1`, la
 riga «dalla stanza, non applicata» e la regola `compagnia_da_stanza_ombra_nome` (quante frasi
 sarebbero state scartate), confrontate con le serate della sola famiglia.
+
+## Gli scambi delle impronte contro una base incerta (18/10, issue #159, ramo `issue-159-misure-ombra`)
+
+**Caso vero** (lettura d'ombra del 18/10, commento in #42): l'unico «minore → chi amministra» del
+16/10 nelle impronte per satellite era contro una decisione senza impronte **incerta** (sotto la
+soglia, presa per continuità): quasi certamente una correzione, non un errore. Il riassunto
+contava uno scambio prendendo per vera la decisione senza impronte comunque fosse stata presa.
+
+**La correzione** (solo misura). `impronte_satellite.base_sicura`: la decisione senza è sicura se
+`come` è «voce» (sopra la soglia e col margine sul secondo profilo, `Ciclo._confronta_voce`); zona
+grigia e continuità («conversazione»), frase breve, profilo più protetto, il satellite di chi è
+stato riconosciuto da poco sono una base incerta. Nel riassunto `scambi`, `minore_ad_amministra` e
+`amministra_a_minore` contano ora la sola base sicura, e accanto `scambi_incerti`,
+`minore_ad_amministra_incerti`, `amministra_a_minore_incerti`; `calliope stato --turni` dice
+«scambi fra persone con la base sicura N (…), con la base incerta M (…)». Prova
+`prova_impronte_satellite` (ombra): lo scambio contro una decisione per continuità non è sicuro
+(su main sì), contrario: contro una decisione dalla voce resta uno scambio sicuro.

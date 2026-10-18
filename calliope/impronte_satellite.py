@@ -234,11 +234,21 @@ def _chi(d: dict) -> str | None:
     return f"conoscente:{d['conoscente']}" if d.get("conoscente") else None
 
 
+def base_sicura(senza: dict) -> bool:
+    """La decisione senza le impronte del satellite è sicura: decisa dalla voce (sopra la soglia,
+    con il margine sul secondo profilo). Zona grigia, frase breve, continuità, il profilo più
+    protetto, il satellite di chi è stato riconosciuto da poco sono una base incerta: uno
+    scambio contro di lei è più spesso una correzione che un errore (18/10, issue #159: l'unico
+    «minore → chi amministra» del 16/10 era deciso per continuità)."""
+    return senza.get("come") == "voce"
+
+
 def riassunto(turni: list[dict]) -> dict:
     """Per satellite, dai blocchi `voce.impronte_satellite` (ombra o attivo): frasi con il blocco,
     rifiutate dalla decisione senza le impronte e riconosciute con («recuperate»), il contrario
     («perse»), scambi fra persone (e quelli fra un minore e chi amministra, nei due versi),
-    frasi passate dalla zona grigia alla voce, frasi che hanno insegnato un'impronta."""
+    divisi fra «base sicura» e «base incerta» (`base_sicura`, dal 18/10), frasi passate dalla
+    zona grigia alla voce, frasi che hanno insegnato un'impronta."""
     per: dict = {}
     for r in turni:
         v = r.get("voce") if isinstance(r.get("voce"), dict) else None
@@ -249,6 +259,8 @@ def riassunto(turni: list[dict]) -> dict:
         senza = b.get("senza") if isinstance(b.get("senza"), dict) else {}
         d = per.setdefault(_luogo(r), {"frasi": 0, "recuperate": 0, "perse": 0, "scambi": 0,
                                        "minore_ad_amministra": 0, "amministra_a_minore": 0,
+                                       "scambi_incerti": 0, "minore_ad_amministra_incerti": 0,
+                                       "amministra_a_minore_incerti": 0,
                                        "piu_voce": 0, "imparate": 0, "dal_satellite": 0,
                                        "modo": b.get("modo")})
         d["frasi"] += 1
@@ -259,11 +271,13 @@ def riassunto(turni: list[dict]) -> dict:
         elif ns is not None and nc is None:
             d["perse"] += 1
         elif ns is not None and nc is not None and ns != nc:
-            d["scambi"] += 1
+            # Con la base sicura «scambi», con quella incerta «scambi_incerti» (18/10, #159)
+            suf = "" if base_sicura(senza) else "_incerti"
+            d["scambi" + suf] += 1
             if senza.get("minore") and con.get("amministra"):
-                d["minore_ad_amministra"] += 1
+                d["minore_ad_amministra" + suf] += 1
             if senza.get("amministra") and con.get("minore"):
-                d["amministra_a_minore"] += 1
+                d["amministra_a_minore" + suf] += 1
         if con.get("come") == "voce" and senza.get("come") != "voce" and nc == ns:
             d["piu_voce"] += 1
         if b.get("imparata"):
@@ -284,8 +298,12 @@ def testo(r: dict) -> str:
         righe.append(
             f"  {luogo} ({d.get('modo') or '?'}): {d['frasi']} frasi, rifiutate → riconosciute "
             f"{d['recuperate']}, riconosciute → rifiutate {d['perse']}, scambi fra persone "
-            f"{d['scambi']} (minore → chi amministra {d['minore_ad_amministra']}, chi amministra "
-            f"→ minore {d['amministra_a_minore']}), zona grigia → voce {d['piu_voce']}; punteggio "
+            f"con la base sicura {d['scambi']} (minore → chi amministra "
+            f"{d['minore_ad_amministra']}, chi amministra → minore {d['amministra_a_minore']}), "
+            f"con la base incerta {d.get('scambi_incerti', 0)} (minore → chi amministra "
+            f"{d.get('minore_ad_amministra_incerti', 0)}, chi amministra → minore "
+            f"{d.get('amministra_a_minore_incerti', 0)}), zona grigia → voce {d['piu_voce']}; "
+            f"punteggio "
             f"dall'impronta del satellite {d['dal_satellite']}, frasi che l'hanno insegnata "
             f"{d['imparate']}")
     return "\n".join(righe)
