@@ -4046,8 +4046,9 @@ class Ciclo:
         decisione 0029; risposta 4 di chi amministra). Il rilevatore ha detto «pericolo» sulla
         domanda: vale se la frase era rivolta a Calliope. In compagnia una frase senza il nome
         ha il giudizio «rivolta»: se dice di no, è una chiacchiera e non si giudica in diretta
-        (dal 18/10, #29, solo con `compagnia_rivolta: attiva`; in ombra il segnale vale) (caso vero del 12/10 in auto: una frase breve e storpiata del
-        ragazzo dentro la finestra presa per un pericolo, poi Telefono Azzurro e 112 nell'auto).
+        (dal 18/10, #29, solo con `compagnia_rivolta: attiva`; in ombra il segnale vale). Caso
+        vero del 12/10 in auto: una frase breve e storpiata del ragazzo dentro la finestra presa
+        per un pericolo, poi Telefono Azzurro e 112 nell'auto.
         Il guardiano sulle frasi di Calliope resta. Senza il giudizio (una persona sola, col
         nome, giudizio spento) come prima; un giudizio guasto o scaduto vale «rivolta». Vincolo
         sulla sicurezza deciso dall'audio e dal giudizio, non dal testo (principio 10);

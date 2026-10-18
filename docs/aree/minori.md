@@ -760,8 +760,8 @@ tutore sullo schermo personale, mai «Va tutto bene?» al ragazzo).
 `pericolo_non_rivolta`, interruttore `compagnia_pericolo_solo_rivolte`): quando il rilevatore (o il
 guardiano) dice «pericolo» sulla domanda, il ciclo guarda il giudizio «rivolta a Calliope», che in
 compagnia parte già su ogni frase senza il nome (`Ciclo._avvia_rivolta`). Se dice di no, **anche
-con il giudizio in ombra** *[storico: dal 18/10, #29, solo con `compagnia_rivolta: attiva`; in
-ombra il segnale vale, sezione del 18/10 in fondo]*, il segnale non vale: niente protezione, niente cancelli, niente avviso;
+con il giudizio in ombra** *[storico: dal 18/10, #29, solo con `compagnia_rivolta: attiva`;
+in ombra il segnale vale, sezione del 18/10 in fondo]*, il segnale non vale: niente protezione, niente cancelli, niente avviso;
 si risponde come sempre e il guardiano giudica ogni frase di Calliope. Nel registro dei turni solo
 `guardiano.pericolo_non_rivolta` con le categorie, e per il minore niente testo. Un giudizio guasto
 o scaduto vale «rivolta», cioè il pericolo vale. Senza giudizio (una persona sola, col nome, dopo il
@@ -1302,7 +1302,9 @@ dice «vicino al microfono parlavano anche altre persone». Contrario provato: l
 già al turno col minore chiude la finestra come prima (la tutela riguarda solo la stanza). Prova
 `prove/prova_compagnia_stanza.py` (sezione «i minori»).
 
-## Il «non rivolta» in ombra non spegne più il rilevatore di pericolo (18/10, issue #29, ramo `issue-15-29-decisioni`)
+## Il «non rivolta» in ombra non spegne più il rilevatore di pericolo
+
+*18/10, issue #29, ramo `issue-15-29-decisioni`.*
 
 La rilettura a mano del 15/10 sera ha trovato **falsi negativi** nel giudizio «rivolta a
 Calliope» in ombra: delle 8 frasi «non rivolte» almeno 3 di chi amministra erano per Calliope

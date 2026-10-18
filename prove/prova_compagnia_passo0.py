@@ -398,7 +398,8 @@ def prova_pericolo():
     cfg.compagnia_rivolta = "spenta"
     giudizio[0] = '{"per_calliope": false}'
     verifica("contrario: giudizio spento → nessun giudizio, il pericolo vale",
-             ciclo._pericolo_vale(turno()) is True and "pericolo_non_rivolta" not in regole)
+             ciclo._pericolo_vale(turno()) is True and "pericolo_non_rivolta" not in regole
+             and "pericolo_non_rivolta_ombra" not in regole, regole)
     cfg.compagnia_rivolta = "attiva"
     giudizio[0] = '{"per_calliope": false}'
     cfg.compagnia_pericolo_solo_rivolte = False

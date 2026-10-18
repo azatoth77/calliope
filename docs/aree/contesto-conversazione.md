@@ -2080,7 +2080,9 @@ RAM piena; il banco con ospite, zona grigia, conoscente, misto, pausa, scaduto, 
 corsia lenta, dimentica e svuota). Banco: `prove/manuali/banco_stanza_lenta.py` (misure in
 [stt-tts](stt-tts.md)).
 
-*Sulla DGX `stanza_lenta: true` e `stanza_audio_banco_giorni: 7` dal 14/10 sera (letto il 18/10: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)).* **Accendere** (installazione di chi amministra, dopo la misura sulla DGX): `stanza_lenta: true` nella
+*Sulla DGX `stanza_lenta: true` e `stanza_audio_banco_giorni: 7` dal 14/10 sera (letto il 18/10:
+[setup-dgx](setup-dgx.md#interruttori-sulla-dgx)) [storico: dal 18/10 `22`, fino al 05/11, #33;
+sezione del 18/10 in [stt-tts](stt-tts.md)].* **Accendere** (installazione di chi amministra, dopo la misura sulla DGX): `stanza_lenta: true` nella
 sezione `conversazione_stanza` del `calliope.locale.yaml`; per il banco anche
 `stanza_audio_banco_giorni: 7`. Prima conviene guardare il piano (`calliope stato --piano`, riga
 «Stanza lenta») e, se c'è posto, un secondo whisper-server più accurato su `stanza_lenta_stt_url`.
@@ -2191,7 +2193,10 @@ era nel prefisso già letto); turno 4 ripetuto prima 2/5, dopo 3/5, con `domanda
 5/5 e una passata in più quando la spinta trattiene (prima frase 2,13 s). Il «mi è sembrato di…»
 c'è quasi sempre. Il limite è la trascrizione: una parola tronca come «OR» il modello non la
 ricostruisce; da guardare la ritrascrizione del solo segmento (l'audio del banco c'è) e la rete
-`domanda_insistita`, che costa senza effetto misurato. *18/10: sulla DGX la rete è spenta (`llm_reti_spente: [domanda_insistita]`, data non scritta: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)).*
+`domanda_insistita`, che costa senza effetto misurato. *18/10: sulla DGX la rete è spenta (`llm_reti_spente: [domanda_insistita]`, data non scritta:
+[setup-dgx](setup-dgx.md#interruttori-sulla-dgx)). Dal 18/10 (#15) è spenta nei profili del 26B
+([voce-e-regole](voce-e-regole.md), sezione del 18/10); la riga del locale si toglie dopo
+l'installazione.*
 
 ## La nota delle storpiature e chi parla da solo (16/10, issue #134, ramo `issue-134-storpiate-da-solo`)
 

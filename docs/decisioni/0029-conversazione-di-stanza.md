@@ -84,7 +84,10 @@ progetto chiede WER e attribuzione «su un set di scambi registrati da adulti co
 set registrato apposta non c'è ancora.
 
 - **Cosa**: con `stanza_audio_banco_giorni: N` nel file locale (di serie **0 = mai**; chi
-  amministra: 7) e la corsia lenta accesa (`stanza_lenta`), l'audio dei segmenti della stanza va
+  amministra: 7 *[storico: dal 18/10 22, cioè fino al 05/11, decisione di chi amministra del
+  18/10 per arrivare ai 30 blocchi rivisti della corsia lenta, #33 e #32; le regole restano:
+  solo voci di casa, minori della famiglia compresi col sì dei tutori, mai ospiti, conoscenti
+  né zona grigia]*) e la corsia lenta accesa (`stanza_lenta`), l'audio dei segmenti della stanza va
   su disco con le trascrizioni della corsia veloce (v1) e della lenta (v2), in
   `<turn_log_dir>/stanza_banco/` (file 600, cartelle 700, fuori da git), per il banco
   `prove/manuali/banco_stanza_lenta.py --banco` (il riferimento lo scrive a mano chi
