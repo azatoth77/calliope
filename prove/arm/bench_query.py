@@ -9,7 +9,7 @@ Domande: i tre banchi di prove/prova_biblioteca.py (107), due giri, si misura il
 su Windows, RssAnon di /proc su Linux; picco). Configurazione con `load_config`: senza `--dati`
 quella della cartella del codice senza il file locale, con `--dati <cartella>` quella della
 cartella dei dati, locale compreso. Da
-rifare sullo Spark. Sull'Alienware (01/10, Wikipedia ridotta): full-text FTS5 3,9 / 36 / 57 ms
+rifare sullo Spark [storico: misurato sulla DGX il 18/10, docs/aree/biblioteca.md]. Sull'Alienware (01/10, Wikipedia ridotta): full-text FTS5 3,9 / 36 / 57 ms
 contro Xapian 1,1 / 6,7 / 12 ms; suggerimenti FTS5 3,1 / 18 / 46 ms contro 10,9 / 40 / 64 ms
 (docs/ricerche/2026-10-01-biblioteca-senza-libzim.md, §3).
 """

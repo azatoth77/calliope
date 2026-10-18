@@ -446,7 +446,9 @@ contiene anche gli EPUB, che non si indicizzano.
 - **Prestazioni su ARM non misurate**: niente macchina ARM qui. Tutto è Python più C della
   libreria standard (zstd, lzma, sqlite), compilato nativo ARM64 da python.org, senza
   emulazione: ci si aspettano tempi simili o migliori. **Da misurare sullo Spark** con
-  `confronta_lettore.py tempi` e `prova_arm.py`.
+  `confronta_lettore.py tempi` e `prova_arm.py`. *[storico: misurato sulla DGX, Linux aarch64,
+  il 18/10 con `prove/arm/`: tempi simili o migliori, `cerca` p95 61–64 ms; numeri in
+  [`aree/biblioteca.md`](../aree/biblioteca.md), #64]*
 - **Formato ZIM che cambia**: è stabile dalla 6.1 (2021), e la 6.2–6.3 ha solo aggiunto alias e
   tolto l'elenco v0. Prova a secco con un file costruito ad hoc più un confronto con libzim su
   x64 quando c'è.

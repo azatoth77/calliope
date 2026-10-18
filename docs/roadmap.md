@@ -603,7 +603,8 @@ Le voci passate nella coda del 12/10 stanno lassù; qui restano le altre.
 - Altre fonti nella ricerca (WikiMed, Wikivoyage, Wikibooks, Wikiversità, Wikisource,
   Gutenberg con l'indice a pezzi).
 - Riparazione all'avvio di chi parla e del modello quando mancano.
-- Misure del lettore ZIM e dell'indice sullo Spark (`prove/arm/`).
+- *[storico: «Misure del lettore ZIM e dell'indice sullo Spark (`prove/arm/`)», fatte sulla
+  DGX il 18/10 (#64, [biblioteca](aree/biblioteca.md)); resta Windows su ARM, senza macchina]*
 
 **Schermi, satelliti, telefono**
 - Dalla fase 4 di [`ricerche/2026-10-01-mappe-e-schermi.md`](ricerche/2026-10-01-mappe-e-schermi.md):
@@ -678,7 +679,8 @@ Le voci passate nella coda del 12/10 stanno lassù; qui restano le altre.
    la riparazione di chi parla e del modello all'avvio quando mancano (oggi Calliope non
    parte: si installano da terminale). Fatte il 01/10 la biblioteca senza libzim (lettore
    ZIM in puro Python e indice SQLite FTS5, azione `biblioteca_indice`) e Wikiquote per le
-   citazioni; resta da misurare sullo Spark (`prove/arm/`).
+   citazioni; resta da misurare sullo Spark (`prove/arm/`) *[storico: misurato sulla DGX il
+   18/10, #64, [biblioteca](aree/biblioteca.md); resta Windows su ARM]*.
    Fatta il 02/10 la fase 1 degli **schermi** (server delle schede, pagina kiosk, abbinamento,
    visibilità, schede dei tool, `schermo_mostra`, `schermo_gestisci`). Restano, dal rapporto
    [`docs/ricerche/2026-10-01-mappe-e-schermi.md`](ricerche/2026-10-01-mappe-e-schermi.md):

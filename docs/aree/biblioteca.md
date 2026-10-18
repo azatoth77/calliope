@@ -101,7 +101,10 @@
       apertura 0,05–0,12 ms (0,2–0,5); lettura mediana / p95 ridotta 1,18 / 1,90 ms, completa
       1,51 / 2,20, Vikidia 0,82 / 1,50, Wikizionario 0,98 / 1,70 (1,6–2,6 / 3–4); memoria
       privata 112–126 MB (~100), picco 133–321 MB (il residente conta le pagine dei file
-      mappati).
+      mappati). La «privata» non è la stessa grandezza sulle due macchine: su Windows è la
+      memoria impegnata (`private` di psutil, anche non residente: sul portatile supera il
+      picco del working set), su Linux `RssAnon`, la sola memoria anonima residente; 112
+      contro 100 non è un peggioramento.
     - Primitive FTS5 (`bench_query.py --dati ~/calliope`, 107 domande, secondo giro, due
       lanci uguali): full-text 3,8 / 44 / 64 ms (3,9 / 36 / 57), titoli 1,8 / 12 / 32 ms
       (3,1 / 18 / 46); privata 18 MB, picco 224 MB.
@@ -112,8 +115,12 @@
     - Gli indici veri sono stati **costruiti sulla DGX** (l'intestazione SQLite porta 3.45.1,
       la versione della DGX; quella del portatile è 3.50.4; scritti il 02/10 dopo i download).
       Costruzione di prova in una cartella temporanea, 4 processi a `nice 19`: Vikidia 0,9 s,
-      57 MB di picco; Wikiquote 15 s, 336 MB di picco (sul portatile oggi 2 e 33 s); stesse
-      dimensioni degli indici veri.
+      Wikiquote 15 s (picco di memoria del processo 57 e 336 MB; gli indici pesano 10 e
+      144 MiB, le stesse dimensioni di quelli veri). Sul portatile, lo stesso giorno, 2 e 33 s,
+      ma con la macchina carica (altri agenti e prove in corso): per Vikidia vale l'1 s del
+      01/10 a macchina scarica. L'indice della Wikipedia ridotta (240 s e 1,3 GB sul
+      portatile) non è stato ricostruito su ARM: non serviva, quello vero è già stato
+      costruito lì.
     In breve: il puro Python regge su ARM, lettura e titoli più veloci del portatile, il
     full-text sulle parole frequenti un po' più lento al p95 (44 contro 36 ms) senza pesare
     su `cerca`. Resta da misurare Windows su ARM (nessuna macchina).

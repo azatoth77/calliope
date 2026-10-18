@@ -9,7 +9,8 @@
 MIME, SHA-1 del contenuto, ricerca per titolo, percorsi inesistenti, metadati.
 `tempi`: un file per volta (tutti e quattro se non se ne indica uno); apertura, ricerca per
 percorso e per titolo, lettura di una voce, memoria del processo (privata: psutil su Windows,
-RssAnon di /proc su Linux; picco). Da rifare sullo Spark
+RssAnon di /proc su Linux; picco). Da rifare sullo Spark [storico: misurato sulla DGX il
+18/10, docs/aree/biblioteca.md]
 (docs/ricerche/2026-10-01-biblioteca-senza-libzim.md, §2). I file sono quelli di calliope.yaml
 (cartella biblioteca/). `--dati <cartella>`: i dati stanno lì e non accanto al codice (la DGX:
 calliope.yaml e il file locale di quella cartella; 18/10, #64).

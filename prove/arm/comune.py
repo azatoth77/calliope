@@ -16,8 +16,9 @@ def prepara(argv: list[str]) -> list[str]:
 
     Con `--dati` si lavora nella cartella dei dati (calliope.yaml, il file locale e i percorsi
     relativi della biblioteca sono quelli di lì, locale compreso: serve per trovare i file
-    veri). Senza, come prima: la cartella del codice e niente calliope.locale.yaml, come le
-    altre prove. Restituisce gli argomenti senza `--dati`."""
+    veri), anche con CALLIOPE_CONFIG o CALLIOPE_CONFIG_LOCALE nell'ambiente. Senza, come
+    prima: la cartella del codice e niente calliope.locale.yaml, come le altre prove (un
+    CALLIOPE_CONFIG_LOCALE già nell'ambiente resta). Restituisce gli argomenti senza `--dati`."""
     argv = list(argv)
     dati = None
     if "--dati" in argv:
@@ -32,6 +33,11 @@ def prepara(argv: list[str]) -> list[str]:
         sys.path.insert(0, str(RADICE))
     if dati:
         os.chdir(dati)
+        # I due file di questa cartella anche se l'ambiente ne indica altri: load_config dà la
+        # precedenza a CALLIOPE_CONFIG e CALLIOPE_CONFIG_LOCALE (il runner delle prove imposta
+        # il secondo, una shell può averli esportati; revisione della PR #164)
+        os.environ.pop("CALLIOPE_CONFIG", None)
+        os.environ["CALLIOPE_CONFIG_LOCALE"] = str(dati / "calliope.locale.yaml")
     else:
         os.chdir(RADICE)
         os.environ.setdefault("CALLIOPE_CONFIG_LOCALE",
