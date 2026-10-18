@@ -3636,3 +3636,61 @@ sarebbe da misurare. Il «fatto» al tetto si fida di questi esempi, e lo si sa.
   `_test_falliti` sullo stesso codice, si potrebbe togliere; e sul portatile la sandbox sotto il
   normale può restare affamata per minuti da un programma qualunque a priorità normale (il
   motore «processo» è solo scelto a mano, e l'agente gira sulla DGX).
+
+## `prova_agenti`, `prova_sandbox` e `prova_esecuzione` sotto carico: lo stesso criterio (18/10, issue #156, ramo `issue-156-prova-agenti`)
+
+- **La causa, come in #142, ma con un punto in più.** `prova_agenti` aveva gli stessi tetti di
+  15 s (il lavoro finito, `agenti_esecuzione_s`) e **anche la sandbox delle prove dirette**
+  (`Sandbox(tempo_s=15)`): sotto carico la prima esecuzione, «esegue un file della cartella»,
+  sforava i 15 s prima che il Python sotto il normale partisse. Con 3 corsie e 16 processi
+  pieni (`prove/manuali/carico.py`) main è caduta 3 giri su 6, tutti lì. A vuoto la prova dura
+  ~55 s; sotto quel carico 120–250 s, di cui ~70 nella sezione della sandbox e ~125 in quella
+  dei lavori: le esecuzioni sono ~60 e ognuna prende 1,5–3 s invece di 0,2–0,4.
+- **La prova** (criterio di #142 e #5): 60 s per esecuzione nella sandbox (prima 15), il lavoro
+  finito 4 × 60 + 10 s con la traccia delle esecuzioni (60 s per i lavori che non eseguono
+  niente), il `--prova` 120 s (prima 60), la porta libera dopo la chiusura 10 s (prima 3), la
+  riapertura del tunnel 30 s (prima 8), il job object da solo 60 s (prima 20). `fine()` aspetta
+  la fine di **quel** lavoro e scarta quella in ritardo di un altro: caso nuovo, che col
+  `fine()` di prima cade (e trascina con sé le tre verifiche del documento, come nella issue).
+  Le attese fisse di 0,4 s prima di annullare e prima di `voce_occupata` aspettano lo stream
+  partito (due pezzi, contati da `ollama_finto.py` nel nuovo `pezzi_nativi`). Restano stretti,
+  perché sono la misura: `SUBITO_S` (avvia, annulla, la delega, `voce_occupata`,
+  `lavoro_stato`), lo stream chiuso dall'annullo e dall'arbitro (2–3 s), il tempo massimo della
+  sandbox (3 s, fermato entro 8) e del tunnel (ssh muto entro 3,5 s).
+- **`prova_sandbox`** aveva lo stesso schema: 4 s di tempo massimo per tutte le esecuzioni con il
+  docker finto, anche quelle che devono finire. Ora 60 s, e i 4 s solo dove sono la misura
+  (tempo scaduto, annullo); il comando `docker run` si controlla ancora con 4 s (`timeout 9`).
+- **`prova_esecuzione`, «avvia non aspetta Docker»** (caduta sotto carico il 18/10): il tetto di
+  0,3 s era l'unica prova che avvia non aspettasse Docker. Ora il thread dell'esecuzione è
+  tenuto fermo mentre si misura: nessun `docker run` deve partire prima che avvia torni (se
+  avvia lo aspettasse resterebbe appesa); i 0,3 s restano come misura della preparazione, con
+  una seconda misura su un altro programma se la prima è lenta (come `lavoro_stato` il 14/10).
+  Le attese che un'esecuzione finisca o che arrivi l'annuncio sono di 60 s (prima 10–20).
+  Anche `agenti_esecuzione_attesa_s` dei casi con un programma corto (prima 3 e 5 s).
+- **Nessuna verifica tolta**: con le mutazioni del codice restano rosse «consegna con i test che
+  falliscono» (`_test_falliti` che non controlla), «annulla risponde subito» e «avvia non
+  aspetta niente» (0,3 s in più), «la voce non aspetta» (`voce_occupata` lenta), «tempo
+  massimo» in `prova_agenti` e «tempo scaduto» in `prova_sandbox` (il tempo massimo × 4),
+  «avvia non aspetta Docker» (l'esecuzione nel thread di chi chiama: 2 `docker run` prima del
+  ritorno).
+- **Misure** (3 corsie, 16 processi pieni, con altri agenti sul portatile): `prova_agenti` main
+  3 su 6, il ramo 12 su 12 (118–248 s, mediana 164). `prova_esecuzione` main 9 su 9 in quel giro
+  (la caduta del 18/10 non si è ripetuta), il ramo 8 su 9: la caduta era un'altra attesa, il
+  tool `programma_esegui` che aspetta il programma 3 s prima di «lo sto eseguendo» (ora 60 s
+  per i programmi corti, che tornano appena finiscono; il caso lungo resta a 0,3 s), poi 12 su
+  12 (40–41 s). «avvia» sotto carico 10–69 ms. `prova_sandbox` 9 su 9 su main e sul ramo.
+- **Il tetto del runner.** Sotto quel carico il ramo arriva a 248 s, vicino ai 300 s per prova del
+  runner: con un carico più forte la prova non cadrà più per un'attesa ma per il tempo totale
+  («più di 300 s»). È il prezzo delle ~60 esecuzioni sotto il normale; da guardare se torna.
+- **La quarta esecuzione dei test** (`Agente.codice`, dopo la consegna), misurata con la firma
+  SHA-256 dei file della sandbox a ogni `Sandbox.test`: in `prova_agenti` 34 esecuzioni, 8 sono
+  la quarta, 7 di queste su file identici all'ultima di `_test_falliti`; l'ottava (il lavoro
+  «senza passi rimasti», dove `_test_falliti` non gira) è l'unica dopo la consegna. In
+  `prova_agenti_openai` 4 esecuzioni, la quarta sugli stessi file. **Proposta, non applicata**:
+  `_test_falliti` ricorda sul lavoro l'esito della seconda esecuzione con la firma dei file, e
+  alla fine di `codice()` con la stessa firma si usa quello, altrimenti si eseguono i test come
+  oggi. Restano le due esecuzioni della consegna (la stabilità) e i casi senza `_test_falliti`
+  (tetto dei rimandi, tempo finito, esito diverso da «fatto»); un test che scrive file cambia
+  la firma e si riesegue. Si risparmia un'esecuzione su quattro nel caso tipico (sulla DGX un
+  container in meno per lavoro); la prova a secco conterebbe 3 esecuzioni invece di 4, con il
+  contrario di un file cambiato dopo la consegna.
