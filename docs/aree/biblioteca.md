@@ -86,7 +86,37 @@
     680 ms); apertura della biblioteca ~75 ms con gli indici. Full-text più lento di Xapian
     sulle parole frequenti (p95 36 ms contro 7), suggerimenti più veloci (p95 18 contro 40).
   - Su una macchina senza libzim (venv nudo, solo libreria standard) lettore, indice e banco
-    danno gli stessi numeri. Da misurare sullo Spark: `prove/arm/` (vedi `prove/LEGGIMI.md`).
+    danno gli stessi numeri. *[storico: «Da misurare sullo Spark: `prove/arm/`», fatto il
+    18/10 sulla DGX, voce sotto]*
+  - **Sulla DGX, Linux aarch64** (18/10, #64; main 914ce9d, Python 3.12.3, SQLite 3.45.1;
+    Calliope accesa e ferma ai turni, carico ~0,2, script a `nice 19`). Gli script di
+    `prove/arm/` prima non giravano lì: `psutil` è solo di Windows (`ModuleNotFoundError`) e il
+    `chdir` sulla cartella del codice non trovava la biblioteca (`bench_query.py` «Biblioteca
+    assente», `confronta_lettore.py` usciva 0 senza misurare niente). Ora `--dati <cartella>`
+    (la cartella dei dati, con il suo `calliope.yaml` e il file locale), `load_config()` anche in
+    `bench_query.py`, e la memoria con la libreria standard su Linux (`RssAnon` di /proc come
+    privata, `ru_maxrss` come picco; `prove/arm/comune.py`). Numeri, portatile del 01/10 tra
+    parentesi:
+    - Lettore (`confronta_lettore.py tempi zim --dati ~/calliope`, 300 voci per file):
+      apertura 0,05–0,12 ms (0,2–0,5); lettura mediana / p95 ridotta 1,18 / 1,90 ms, completa
+      1,51 / 2,20, Vikidia 0,82 / 1,50, Wikizionario 0,98 / 1,70 (1,6–2,6 / 3–4); memoria
+      privata 112–126 MB (~100), picco 133–321 MB (il residente conta le pagine dei file
+      mappati).
+    - Primitive FTS5 (`bench_query.py --dati ~/calliope`, 107 domande, secondo giro, due
+      lanci uguali): full-text 3,8 / 44 / 64 ms (3,9 / 36 / 57), titoli 1,8 / 12 / 32 ms
+      (3,1 / 18 / 46); privata 18 MB, picco 224 MB.
+    - `cerca` intera (`prova_biblioteca.py` da `~/calliope`, due giri): mediana **24 e 20 ms**,
+      p95 **64 e 61 ms** (28 / 73), massimo del banco 130 e 120 ms (152), prima domanda 47 e
+      37 ms (46); apertura della biblioteca 10 ms (~75). Banchi **49/56 e 36/46**, uguali al
+      portatile, citazioni 4/4: stessi file e stesso estrattore.
+    - Gli indici veri sono stati **costruiti sulla DGX** (l'intestazione SQLite porta 3.45.1,
+      la versione della DGX; quella del portatile è 3.50.4; scritti il 02/10 dopo i download).
+      Costruzione di prova in una cartella temporanea, 4 processi a `nice 19`: Vikidia 0,9 s,
+      57 MB di picco; Wikiquote 15 s, 336 MB di picco (sul portatile oggi 2 e 33 s); stesse
+      dimensioni degli indici veri.
+    In breve: il puro Python regge su ARM, lettura e titoli più veloci del portatile, il
+    full-text sulle parole frequenti un po' più lento al p95 (44 contro 36 ms) senza pesare
+    su `cerca`. Resta da misurare Windows su ARM (nessuna macchina).
   - Con `processi` > 1 la costruzione usa `multiprocessing` «spawn»: va chiamata da un main
     protetto (`python -m calliope.biblioteca_indice`), mai da uno script senza
     `if __name__ == "__main__"` (i figli lo rieseguirebbero all'infinito).

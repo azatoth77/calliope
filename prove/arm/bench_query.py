@@ -2,25 +2,30 @@
 
     python prove\\arm\\bench_query.py            # indice SQLite FTS5 (calliope/biblioteca_indice.py)
     python prove\\arm\\bench_query.py libzim     # Xapian dentro gli ZIM, se libzim c'è (solo x64)
+    <python della versione> prove/arm/bench_query.py --dati ~/calliope   # DGX (18/10, #64)
 
 Domande: i tre banchi di prove/prova_biblioteca.py (107), due giri, si misura il secondo
-(cache calda). Stampa mediana, p95 e massimo in ms, e la memoria privata del processo. Da
+(cache calda). Stampa mediana, p95 e massimo in ms, e la memoria del processo (privata: psutil
+su Windows, RssAnon di /proc su Linux; picco). Configurazione con `load_config`: senza `--dati`
+quella della cartella del codice senza il file locale, con `--dati <cartella>` quella della
+cartella dei dati, locale compreso. Da
 rifare sullo Spark. Sull'Alienware (01/10, Wikipedia ridotta): full-text FTS5 3,9 / 36 / 57 ms
 contro Xapian 1,1 / 6,7 / 12 ms; suggerimenti FTS5 3,1 / 18 / 46 ms contro 10,9 / 40 / 64 ms
 (docs/ricerche/2026-10-01-biblioteca-senza-libzim.md, §3).
 """
 import json
-import os
 import sys
 import time
 from pathlib import Path
 
 RADICE = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RADICE))
-os.chdir(RADICE)
+from prove.arm.comune import memoria, prepara  # noqa: E402
+
+ARGV = prepara(sys.argv)
 
 from calliope.biblioteca import _DATA_HINTS, Biblioteca, keywords  # noqa: E402
-from calliope.config import Config  # noqa: E402
+from calliope.config import load_config  # noqa: E402
 from prove.prova_biblioteca import BANCO, BANCO_DIFFICILE, BANCO_NUOVO  # noqa: E402
 
 
@@ -61,11 +66,11 @@ class _Xapian:
 
 
 def main():
-    impl = sys.argv[1] if len(sys.argv) > 1 else "fts5"
-    cfg = Config()
+    impl = ARGV[1] if len(ARGV) > 1 else "fts5"
+    cfg = load_config()
     bib = Biblioteca(cfg)
     if not bib.archivi:
-        print("Biblioteca assente: niente da misurare.")
+        print("Biblioteca assente: niente da misurare (dati altrove: --dati <cartella>).")
         return 1
     arch = bib.archivi[0]
     if impl == "libzim":
@@ -92,11 +97,8 @@ def main():
     res = dict(impl=impl, domande=len(qs), fulltext_med=p(tf, .5), fulltext_p95=p(tf, .95),
                fulltext_max=round(max(tf), 1), titoli_med=p(tt, .5), titoli_p95=p(tt, .95),
                titoli_max=round(max(tt), 1))
-    try:
-        import psutil
-        res["privata_mb"] = round(getattr(psutil.Process().memory_info(), "private", 0) / 2**20)
-    except ImportError:
-        pass
+    mem = memoria()
+    res["privata_mb"], res["picco_mb"] = mem["privata_mb"], mem["picco_mb"]
     print(json.dumps(res))
     return 0
 

@@ -3,17 +3,19 @@
     python prove\\arm\\confronta_lettore.py corretto              # serve libzim (solo x64)
     python prove\\arm\\confronta_lettore.py tempi zim [<file>]    # anche senza libzim (ARM)
     python prove\\arm\\confronta_lettore.py tempi libzim [<file>]
+    <python della versione> prove/arm/confronta_lettore.py tempi zim --dati ~/calliope  # DGX
 
 `corretto`: 150 voci a caso del namespace C per file; titolo, redirect e destinazione, tipo
 MIME, SHA-1 del contenuto, ricerca per titolo, percorsi inesistenti, metadati.
 `tempi`: un file per volta (tutti e quattro se non se ne indica uno); apertura, ricerca per
-percorso e per titolo, lettura di una voce, memoria privata del processo. Da rifare sullo
-Spark (docs/ricerche/2026-10-01-biblioteca-senza-libzim.md, §2). I file sono quelli di
-calliope.yaml (cartella biblioteca/).
+percorso e per titolo, lettura di una voce, memoria del processo (privata: psutil su Windows,
+RssAnon di /proc su Linux; picco). Da rifare sullo Spark
+(docs/ricerche/2026-10-01-biblioteca-senza-libzim.md, §2). I file sono quelli di calliope.yaml
+(cartella biblioteca/). `--dati <cartella>`: i dati stanno lì e non accanto al codice (la DGX:
+calliope.yaml e il file locale di quella cartella; 18/10, #64).
 """
 import hashlib
 import json
-import os
 import random
 import subprocess
 import sys
@@ -22,9 +24,10 @@ from pathlib import Path
 
 RADICE = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RADICE))
-os.chdir(RADICE)
-# Come le altre prove: niente calliope.locale.yaml (valori di questa installazione)
-os.environ.setdefault("CALLIOPE_CONFIG_LOCALE", str(RADICE / "prove" / "nessun-file-locale.yaml"))
+from prove.arm.comune import memoria, prepara  # noqa: E402
+
+# Senza --dati, come le altre prove: la cartella del codice e niente calliope.locale.yaml
+ARGV = prepara(sys.argv)
 
 from calliope import zim  # noqa: E402
 from calliope.config import load_config  # noqa: E402
@@ -38,7 +41,7 @@ def files() -> list[str]:
                  "biblioteca_dizionario"):
         p = risolvi_zim(getattr(cfg, attr, None))
         if p and Path(p).is_file():
-            out.append(p)
+            out.append(str(Path(p).resolve()))
     return out
 
 
@@ -101,13 +104,11 @@ def corretto(n_per_file=150) -> int:
 
 
 def tempi(impl: str, f: str, n=300):
-    import psutil
-    proc = psutil.Process()
     z0 = zim.ZimFile(f)
     paths = sample_paths(z0, n, seed=7)
     titles = [z0.get_entry_by_path(p).title for p in paths]
     z0.close()
-    rss_base = proc.memory_info().rss
+    rss_base = memoria()["rss_mb"]
     t = time.perf_counter()
     if impl == "libzim":
         from libzim.reader import Archive
@@ -134,13 +135,13 @@ def tempi(impl: str, f: str, n=300):
         xs = sorted(xs)
         return round(xs[min(len(xs) - 1, int(p * len(xs)))], 3)
 
-    mem = proc.memory_info()
+    mem = memoria()
     print(json.dumps(dict(impl=impl, file=Path(f).name, apertura_ms=round(open_ms, 2),
                           percorso_med=q(t_path, .5), percorso_p95=q(t_path, .95),
                           titolo_med=q(t_title, .5), titolo_p95=q(t_title, .95),
                           lettura_med=q(t_read, .5), lettura_p95=q(t_read, .95),
-                          rss_mb=round((mem.rss - rss_base) / 2**20, 1),
-                          privata_mb=round(getattr(mem, "private", 0) / 2**20, 1))))
+                          rss_mb=round(mem["rss_mb"] - rss_base, 1),
+                          privata_mb=mem["privata_mb"], picco_mb=mem["picco_mb"])))
 
 
 if __name__ == "__main__":
@@ -148,14 +149,20 @@ if __name__ == "__main__":
         sys.stdout.reconfigure(encoding="utf-8")
     except (AttributeError, ValueError):
         pass
-    if len(sys.argv) < 2 or sys.argv[1] not in ("corretto", "tempi"):
+    if len(ARGV) < 2 or ARGV[1] not in ("corretto", "tempi"):
         print(__doc__)
         sys.exit(2)
-    if sys.argv[1] == "corretto":
+    if ARGV[1] == "corretto":
         sys.exit(corretto())
-    impl = sys.argv[2] if len(sys.argv) > 2 else "zim"
-    if len(sys.argv) > 3:
-        tempi(impl, sys.argv[3])
+    impl = ARGV[2] if len(ARGV) > 2 else "zim"
+    if len(ARGV) > 3:
+        tempi(impl, ARGV[3])
     else:                       # un processo per file: memoria e cache pulite
-        for f in files():
-            subprocess.run([sys.executable, __file__, "tempi", impl, f])
+        tutti = files()
+        if not tutti:
+            print("Biblioteca assente: niente da misurare (dati altrove: --dati <cartella>)")
+            sys.exit(1)
+        esito = 0
+        for f in tutti:         # percorso assoluto: il figlio lavora nella cartella del codice
+            esito |= subprocess.run([sys.executable, __file__, "tempi", impl, f]).returncode
+        sys.exit(esito)
