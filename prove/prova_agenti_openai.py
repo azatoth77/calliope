@@ -17,11 +17,19 @@ dell'agente; l'agente passa a vLLM (API compatibile OpenAI). Qui, senza rete e s
   schema, errori detti a voce senza «ollama pull»;
 - `python -m calliope.agenti --prova` con un dgx.yaml diretto e motore «openai».
 Tutto in cartelle temporanee: non legge dgx.yaml né calliope.locale.yaml.
+
+Tempi (18/10, #142, lo stesso criterio di `prova_satellite` in #5): un'attesa di un evento
+(il lavoro finito, il test nella sandbox, lo stream chiuso sul server, il comando --prova)
+aspetta l'evento con un tetto largo e, se scade, stampa la traccia; resta stretto solo ciò
+che misura una cosa che deve essere veloce («interrompi chiude lo stream subito»). Il lavoro
+di codice esegue i test quattro volte (esegui_test, due alla consegna, uno alla fine), e
+su Windows la sandbox «processo» gira sotto il normale: con la CPU piena di processi a
+priorità normale (le altre prove di un `--completo`) un Python lì dentro parte in secondi o
+minuti invece di 0,3 s.
 """
 
 import json
 import queue
-import socket
 import subprocess
 import tempfile
 import threading
@@ -35,7 +43,9 @@ from calliope.agenti.remoto import ClienteOllama, ErroreOllama, Interrotto, crea
 from calliope.agenti.remoto_openai import ClienteOpenAI, traduci_corpo
 from calliope.config import Config
 from calliope.documenti.formato import FORMATI
+from calliope.agenti import sandbox as sandbox_mod
 from prove.ollama_finto import FakeOllama
+from prove.porte import porta_fuori_effimere
 
 RADICE = Path(__file__).resolve().parent.parent
 TMP = Path(tempfile.mkdtemp(prefix="calliope-agenti-openai-"))
@@ -55,14 +65,6 @@ def verifica(nome, ok, dettaglio=""):
     print(f"{'ok ' if ok else 'ERR'} {nome}" + (f"  {dettaglio}" if dettaglio else ""), flush=True)
 
 
-def porta_libera() -> int:
-    s = socket.socket()
-    s.bind(("127.0.0.1", 0))
-    p = s.getsockname()[1]
-    s.close()
-    return p
-
-
 def aspetta(cond, s=5.0):
     t = time.monotonic() + s
     while time.monotonic() < t:
@@ -76,11 +78,58 @@ def call(name, args=None):
     return {"name": name, "arguments": args or {}}
 
 
-def fine(svc, s=15.0):
+# Attese di un evento (#142): larghe, perché sotto carico la sandbox a bassa priorità rallenta
+# di minuti e non è ciò che la prova guarda. Il tetto serve solo a non restare appesi: il
+# runner ferma comunque una prova oltre i 300 s
+# Ogni esecuzione nella sandbox (prima 15 s): a vuoto 0,2–0,4 s, durante un `--completo` fino
+# a 27 s misurati il 18/10 (e oltre i 60 con 32 processi pieni a priorità normale)
+ESECUZIONE_S = 60.0
+# Un lavoro finito (prima 15 s): il codice esegue i test quattro volte, e se una sfora il tetto
+# qui sopra il lavoro finisce con «il test non passa» e la traccia, non con un'attesa scaduta
+ATTESA_LAVORO_S = 4 * ESECUZIONE_S + 10
+ATTESA_COMANDO_S = 120.0     # python -m calliope.agenti --prova (prima 60)
+# Le esecuzioni dei test nella sandbox, con la durata: la traccia se un lavoro sfora
+ESECUZIONI: list[str] = []
+_test_originale = sandbox_mod.Sandbox.test
+
+
+def _test_misurato(self, *a, **k):
+    t = time.perf_counter()
     try:
-        return svc.done.get(timeout=s)
-    except queue.Empty:
-        return None
+        r = _test_originale(self, *a, **k)
+    except Exception as e:
+        ESECUZIONI.append(f"{time.perf_counter() - t:.1f} s: {type(e).__name__}")
+        raise
+    ESECUZIONI.append(f"{time.perf_counter() - t:.1f} s, passano: {r.get('passano')}")
+    return r
+
+
+sandbox_mod.Sandbox.test = _test_misurato
+
+
+def traccia() -> str:
+    """Le esecuzioni della sandbox e le ultime righe del servizio (per un lavoro che sfora)."""
+    return (f"esecuzioni della sandbox: {ESECUZIONI or 'nessuna'}; ultime righe: "
+            + " | ".join(LOG[-6:]))
+
+
+def fine(svc, lav, s=ATTESA_LAVORO_S):
+    """La fine di quel lavoro. Quella di un lavoro precedente che ha sforato si scarta, detta:
+    prima arrivava al controllo del lavoro dopo e gli errori andavano a cascata (#142)."""
+    ESECUZIONI.clear()
+    t = time.perf_counter()
+    while (resta := s - (time.perf_counter() - t)) > 0:
+        try:
+            item = svc.done.get(timeout=resta)
+        except queue.Empty:
+            break
+        if item.get("id") == lav.id:
+            return item
+        print(f"    scartata la fine di un altro lavoro ({item.get('id')}, {item.get('stato')})",
+              flush=True)
+    print(f"    il lavoro non è finito in {time.perf_counter() - t:.0f} s; {traccia()}",
+          flush=True)
+    return None
 
 
 def cfg_base(url, **kw) -> Config:
@@ -93,7 +142,7 @@ def cfg_base(url, **kw) -> Config:
     cfg.agenti_sandbox_motore = "processo"
     cfg.agenti_modelli = str(TMP / "modelli")
     cfg.llm_native_url = "http://127.0.0.1:9"     # la voce altrove: niente contesa
-    cfg.agenti_esecuzione_s = 15.0
+    cfg.agenti_esecuzione_s = ESECUZIONE_S
     for k, v in kw.items():
         setattr(cfg, k, v)
     return cfg
@@ -235,7 +284,9 @@ fake.senza_think.clear()
 fake.vllm = False
 verifica("server senza /version (llama.cpp): risponde con «?»", cl.versione() == "?")
 fake.vllm = True
-giu = ClienteOpenAI(f"http://127.0.0.1:{porta_libera()}", timeout_connessione=2)
+# Una porta fuori dalle effimere: una presa con bind(0) e rilasciata può finire a un altro
+# processo, che risponderebbe al posto del server giù (prove/porte.py, #5)
+giu = ClienteOpenAI(f"http://127.0.0.1:{porta_fuori_effimere()}", timeout_connessione=2)
 try:
     giu.versione()
     verifica("server giù → motore_giu", False)
@@ -255,15 +306,24 @@ def lungo():
         res["interrotto"] = True
 
 
+pezzi0 = len(fake.pezzi_tempi)
 th = threading.Thread(target=lungo)
 th.start()
-time.sleep(0.6)
+# Lo stream aperto e già a metà (il secondo pezzo arriva 0,2 s dopo il primo): prima un'attesa
+# fissa di 0,6 s, che sotto carico poteva finire prima che lo stream partisse (#142)
+in_corso = aspetta(lambda: len(fake.pezzi_tempi) >= pezzi0 + 2, 20)
 t0 = time.perf_counter()
 cl.interrompi()
 th.join(3)
-verifica("interrompi chiude lo stream subito", res.get("interrotto") and not th.is_alive()
-         and time.perf_counter() - t0 < 1.0 and aspetta(lambda: fake.interrotte > interrotte, 3),
-         str(res)[:100])
+chiuso_s = time.perf_counter() - t0
+# Il tetto di 1 s resta: è la misura. L'arbitro chiude lo stream dell'agente quando qualcuno
+# parla, e la voce riavrà la GPU solo dopo: non dipende dalla CPU libera (il thread ha la
+# risposta in mano e la chiude), mentre lo stream intero durerebbe 6 s. Lo stream chiuso visto
+# dal server è invece un'attesa: 10 s
+verifica("interrompi chiude lo stream subito", in_corso and res.get("interrotto")
+         and not th.is_alive() and chiuso_s < 1.0
+         and aspetta(lambda: fake.interrotte > interrotte, 10),
+         f"{res}"[:100] + f" in {chiuso_s:.2f} s, stream partito: {in_corso}")
 fake.ritardo_pezzo, fake.pezzi = 0.0, 4
 
 # ═══════════════════════════ 4. servizio dei lavori con il motore openai ═══════════════════════════
@@ -291,10 +351,12 @@ fake.richieste.clear()
 lav = svc.nuovo("codice", "Scrivi una funzione Python che somma due numeri, con un test",
                 "dario-id", "Dario", "amministra")
 svc.avvia(lav)
-item = fine(svc)
+item = fine(svc, lav)
 verifica("lavoro di codice finito con il test passato", item is not None
          and item["stato"] == "fatto" and "Il test passa." in item["messaggio"],
-         str(item and item["messaggio"]))
+         f"{item and item['messaggio']}; {traccia()}")
+# Sempre, per misurare (#142): quanto ha preso ogni esecuzione dei test nella sandbox
+print(f"    nota: esecuzioni della sandbox del lavoro di codice: {ESECUZIONI}", flush=True)
 dest = Path((item or {}).get("cartella") or TMP)
 verifica("file nella cartella del lavoro", (dest / "somma.py").is_file()
          and (dest / "test_somma.py").is_file())
@@ -319,8 +381,14 @@ fake.copione = [{"content": "Bozza: il giardino e l'acqua."},
 fake.richieste.clear()
 lav = svc.nuovo("documento", "Prepara una relazione sul giardino", "bianca-id", "Bianca",
                 formato="word")
+# La fine in ritardo di un lavoro di prima (sotto carico il codice sforava il tetto, #142):
+# fine() aspetta quella del documento e la scarta
+svc.done.put({"id": "L-ritardo", "tipo": "codice", "stato": "fatto", "messaggio": "in ritardo"})
 svc.avvia(lav)
-item = fine(svc)
+item = fine(svc, lav)
+verifica("la fine in ritardo di un altro lavoro non prende il posto del documento",
+         item is not None and item.get("id") == lav.id and item.get("tipo") == "documento",
+         str(item and (item.get("id"), item.get("tipo"))))
 verifica("documento Word con lo schema come response_format",
          item and item["stato"] == "fatto"
          and len(list(Path(item["cartella"]).glob("*.docx"))) == 1
@@ -331,8 +399,9 @@ svc.close()
 
 cfg_m = cfg_base(fake.url + "/v1", agenti_modello="modello-che-non-ce")
 svc_m = Lavori(cfg_m, carica(cfg_m), log=LOG.append, formati=FORMATI)
-svc_m.avvia(svc_m.nuovo("altro", "Fai un lavoro", "dario-id", "Dario"))
-item = fine(svc_m)
+lav = svc_m.nuovo("altro", "Fai un lavoro", "dario-id", "Dario")
+svc_m.avvia(lav)
+item = fine(svc_m, lav)
 verifica("modello non servito: detto senza «ollama pull»", item and item["stato"] == "errore"
          and "ollama pull" not in item["messaggio"] and "modello-che-non-ce" in item["messaggio"],
          str(item and item["messaggio"]))
@@ -341,10 +410,11 @@ verifica("capacità: mancante, con i modelli serviti e senza ollama pull",
          d["stato"] == "mancante" and MODELLO in d["prossimo_passo"]
          and "ollama pull" not in d["prossimo_passo"], str(d))
 svc_m.close()
-cfg_g = cfg_base(f"http://127.0.0.1:{porta_libera()}/v1")
+cfg_g = cfg_base(f"http://127.0.0.1:{porta_fuori_effimere()}/v1")
 svc_g = Lavori(cfg_g, carica(cfg_g), log=LOG.append, formati=FORMATI)
-svc_g.avvia(svc_g.nuovo("altro", "Fai un lavoro", "dario-id", "Dario"))
-item = fine(svc_g, 20)
+lav = svc_g.nuovo("altro", "Fai un lavoro", "dario-id", "Dario")
+svc_g.avvia(lav)
+item = fine(svc_g, lav)
 verifica("motore giù: «il server del modello dell'agente non risponde»",
          item and item["stato"] == "errore" and "server del modello" in item["messaggio"]
          and "non risponde" in item["messaggio"], str(item and item["messaggio"]))
@@ -353,7 +423,7 @@ svc_g.close()
 # ═══════════════════════════ 5. python -m calliope.agenti --prova ═══════════════════════════
 sezione("python -m calliope.agenti --prova (motore openai)")
 dgx.write_text(f"dgx:\n  collegamento: diretto\n  motore: openai\n  url_diretto: {fake.url}\n"
-               f"  agente_modello: {MODELLO}\n  timeout_collegamento_s: 2\n", encoding="utf-8")
+               f"  agente_modello: {MODELLO}\n  timeout_collegamento_s: 10\n", encoding="utf-8")
 
 
 def prova_cmd():
@@ -364,7 +434,7 @@ def prova_cmd():
     env.pop("CALLIOPE_AGENTI_URL", None)
     r = subprocess.run([sys.executable, "-m", "calliope.agenti", "--prova"], cwd=RADICE, env=env,
                        capture_output=True, text=True, encoding="utf-8", errors="replace",
-                       timeout=60)
+                       timeout=ATTESA_COMANDO_S)
     return r.returncode, r.stdout + r.stderr
 
 
