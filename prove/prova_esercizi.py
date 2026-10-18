@@ -673,8 +673,13 @@ try:
     st, r = chiedi(port, "/api/esercizio", sess["b"], dati={"azione": "pippo", "esercizio":
                                                            SRV.sessione(BIANCA.id).es.firma})
     verifica("azione sconosciuta → 400", st == 400, st)
-    # Fuori orario: niente esercizi nemmeno dalla scheda
-    M.regole().imposta(BIANCA.id, "orari", ["00:00-23:59"])
+    # Fuori orario: niente esercizi nemmeno dalla scheda. La pausa copre il giorno intero con
+    # due fasce: «00:00-23:59» lasciava fuori il minuto 23:59 (la fine non è compresa) e la
+    # prova cadeva ogni notte in quel minuto (18/10, #151)
+    M.regole().imposta(BIANCA.id, "orari", ["00:00-12:00", "12:00-00:00"])
+    verifica("la pausa della prova copre ogni minuto del giorno (00:00, 11:59, 12:00, 23:59)",
+             all(M.fuori_orario(BIANCA, datetime.datetime(2026, 10, 18, h, m)) is not None
+                 for h, m in ((0, 0), (11, 59), (12, 0), (23, 59))))
     st, r = chiedi(port, "/api/esercizio", sess["b"], dati={"azione": "aiuto", "esercizio":
                                                            SRV.sessione(BIANCA.id).es.firma})
     verifica("fuori orario → 403 con la frase della pausa", st == 403 and "riposare" in r.get(
