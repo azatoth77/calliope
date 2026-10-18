@@ -1863,6 +1863,17 @@ class Config:
     # (decisione 0029, risposta 4 di chi amministra; regola `pericolo_non_rivolta`). Il
     # guardiano sulle frasi di Calliope resta. Un giudizio guasto o scaduto vale «rivolta»
     compagnia_pericolo_solo_rivolte: bool = True
+    # La compagnia anche dai segmenti della conversazione di stanza (18/10, issue #147): con la
+    # stanza accesa i segmenti con un'impronta entrano nella compagnia della corsia del loro
+    # satellite; una voce di nessuno conta sconosciuta solo sotto `compagnia_soglia_profilo` su
+    # tutti i profili di casa, la zona grigia mai, un conoscente sì. Vale solo se cambia l'effetto
+    # (in compagnia, voci sconosciute) e mai con un minore qui o un cancello aperto. «ombra»: niente
+    # effetti, nel registro dei turni cosa sarebbe cambiato (`voce.compagnia_stanza`, regole
+    # `compagnia_da_stanza_ombra` e `compagnia_da_stanza_ombra_nome`, `calliope stato --turni`):
+    # la misura dell'attrito, prima di accendere; «attiva»: la finestra senza il nome si chiude,
+    # niente frase breve né sì breve, la sfida per le azioni, le impronte non imparano (#42);
+    # «spenta». L'accensione la decide chi amministra dopo la misura
+    compagnia_da_stanza: str = "ombra"
     speaker_enroll_phrases: int = 5      # frasi di arruolamento (con 5: Dario rifiutato 4 %)
     speaker_enroll_min_s: float = 1.5     # voce minima per una frase di arruolamento
     # Una registrazione della voce senza frasi valide per questo tempo si chiude da sola:
@@ -3248,6 +3259,7 @@ SEZIONI: dict[str, list[str]] = {
                   "compagnia_rivolta", "compagnia_rivolta_modello",
                   "compagnia_rivolta_timeout_s", "compagnia_azioni_col_nome",
                   "compagnia_anonima_condivisa", "compagnia_pericolo_solo_rivolte",
+                  "compagnia_da_stanza",
                   "speaker_enroll_phrases", "speaker_enroll_min_s", "speaker_enroll_timeout_s",
                   "speaker_adapt_threshold",
                   "speaker_adapt_alpha", "speaker_adapt_max_drift",
@@ -3853,6 +3865,9 @@ _MODI_NUOVI = {
                                vero="attiva"),
     "compagnia_rivolta": _modi("compagnia_rivolta", ("spenta", "ombra", "attiva"),
                                falso="spenta"),
+    # Il true di YAML è ambiguo fra «ombra» e «attiva» (effetti su identità e minori): rifiutato
+    "compagnia_da_stanza": _modi("compagnia_da_stanza", ("spenta", "ombra", "attiva"),
+                                 falso="spenta"),
     "stanza_lenta_prompt": _modi("stanza_lenta_prompt", ("auto", "si", "no"), sinonimi=_SI_NO,
                                  falso="no", vero="si"),
     "agenti_conferma": _modi("agenti_conferma", ("costosi", "sempre", "mai")),

@@ -277,6 +277,15 @@ class Cancelli:
                     return s
         return None
 
+    def aperto_su(self, corsia) -> bool:
+        """Un segnale ancora aperto su questa corsia, di chiunque (18/10, #147: finché c'è, la
+        compagnia dalla stanza non chiude la finestra d'ascolto della risposta)."""
+        ora = self.orologio()
+        with self._lock:
+            attesa = self._attesa()
+            return any(s.aperto and s.corsia == corsia
+                       and not (attesa > 0 and ora - s.ora > attesa) for s in self.segnali)
+
     def recente(self, persona_id: str | None, anche_smentiti: bool = False) -> Segnale | None:
         """Un altro segnale dubbio di questo minore entro `minori_pericolo_finestra_s` (aperto,
         confermato o rimasto senza risposta): un secondo segnale vale confermato.

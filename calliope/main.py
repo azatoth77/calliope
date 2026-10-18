@@ -831,14 +831,15 @@ class Avvio:
                 from .tools.schermi import gioco_spec
                 s.tools.register(gioco_spec())
 
-    def _compagnia_dalla_stanza(self, sat, emb, voce_s, nome, ora):
+    def _compagnia_dalla_stanza(self, sat, emb, voce_s, nome, ora, grigia=False,
+                                conoscente=False):
         """Un segmento della stanza sentito da `sat` (thread della stanza, 18/10, #147): nella
         compagnia della corsia di quel satellite, solo in memoria; le altre corsie non lo
         vedono."""
         c = corsie.corsia_del_satellite(self.corsie_tutte, sat, self.insieme, self.s.satelliti)
         comp = getattr(getattr(c, "ciclo", None), "compagnia", None) if c is not None else None
         if comp is not None:
-            comp.osserva_stanza(emb, voce_s, nome, ora)
+            comp.osserva_stanza(emb, voce_s, nome, ora, grigia=grigia, conoscente=conoscente)
 
     def _luogo_satellite(self):
         """La stanza del satellite per l'archivio delle conversazioni. stanza_corrente è la

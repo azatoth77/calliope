@@ -51,11 +51,11 @@ modello** in questo passo: si misura (stanza/misure.py, `calliope stato --turni`
   scambio, TV, allucinazioni, riassunto).
 - **Compagnia** (18/10, issue #147, calliope/compagnia.py): ogni segmento trascritto con
   un'impronta (almeno `speaker_min_voice_s` di voce) va alla compagnia della corsia del satellite
-  che l'ha sentito (`su_voce`, collegato da main.Avvio), con il suo istante e il nome solo per una
-  persona di casa riconosciuta dalla voce. L'impronta è quella già calcolata per chi parla
-  (`_chi`): niente CAM++ in più, e la chiamata è un'aggiunta in memoria. Non vanno i segmenti
-  detti mentre Calliope parlava (l'audio ha anche la sua voce). Solo verso la prudenza: la
-  compagnia può mettere «in compagnia», mai toglierla.
+  che l'ha sentito (`su_voce`, collegato da main.Avvio), con il suo istante, il nome solo per una
+  persona di casa riconosciuta dalla voce e i segni della zona grigia e del conoscente (la
+  compagnia decide cosa tenere: `compagnia_da_stanza`, di serie in ombra). L'impronta è quella già
+  calcolata per chi parla (`_chi`): niente CAM++ in più, e la chiamata è un'aggiunta in memoria.
+  Non vanno i segmenti detti mentre Calliope parlava (l'audio ha anche la sua voce).
 """
 
 import collections
@@ -967,14 +967,16 @@ class Stanza:
     def _alla_compagnia(self, s: "Segmento", chi: dict, emb):
         """Il segmento alla compagnia della corsia del suo satellite (18/10, #147). Il nome solo
         per una persona di casa riconosciuta dalla voce sopra soglia (come `nome_voce` del
-        turno); zona grigia, conoscente e nessuno valgono «sconosciuta». Non i segmenti detti
-        mentre Calliope parlava: l'audio ha anche la sua voce."""
+        turno); la zona grigia lo dice (la compagnia non la conta sconosciuta), il conoscente
+        anche (è sconosciuto per definizione). Non i segmenti detti mentre Calliope parlava:
+        l'audio ha anche la sua voce."""
         f = self.su_voce
         if f is None or emb is None or s.durante or s.dette:
             return
         nome = chi.get("nome") if chi.get("sicurezza") == "voce" and chi.get("persona") else None
         try:
-            f(s.sat, emb, float(s.voce_s or 0.0), nome, s.fine)
+            f(s.sat, emb, float(s.voce_s or 0.0), nome, s.fine,
+              grigia=chi.get("sicurezza") == "grigia", conoscente=bool(chi.get("conoscente")))
         except Exception as e:  # noqa: BLE001 — la compagnia non ferma la stanza
             self.log(f"   [STANZA] compagnia: {type(e).__name__}: {e}")
 

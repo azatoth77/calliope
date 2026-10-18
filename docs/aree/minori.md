@@ -1269,3 +1269,31 @@ satellite, voce riconosciuta, conoscente, interruttore spento, finestra a 0).
 Prove: `prova_minore_ospite` (17 errori su main 3bbc674; contrari nuovi: adulto lontano dal
 profilo del minore, finestra propria a 60 s con quella degli avvisi a 0, nessun fatto sul minore
 nella nota, riga di `stato --turni` vuota senza turni).
+
+## La compagnia dalla stanza e i minori (18/10, issue #147, ramo `issue-147-compagnia-stanza`)
+
+Dal 18/10 la compagnia può contare anche le voci sentite dalla conversazione di stanza
+(`compagnia_da_stanza`, **di serie in ombra**: nessun effetto, solo il registro; l'accensione la
+decide chi amministra dopo la misura; dettagli in [stt-tts](stt-tts.md), sezione dello stesso
+giorno). La prima revisione della PR #161 ha trovato due allentamenti per i minori che la stanza
+avrebbe fatto scattare: la frase senza il nome nella finestra scartata da
+`_compagnia_senza_nome` **prima** del secondo cancello e del rilevatore (la risposta del minore
+al cancello 1 diventava un silenzio, con l'avviso non urgente al posto di quello urgente; con
+`stanza_guardia` in ombra nessuno la ripesca), e il giudizio «non rivolta» che in compagnia toglie
+il segnale di pericolo (`_pericolo_vale`). Correzioni:
+
+- con un **minore qui** (riconosciuto dalla voce nella finestra della compagnia, al turno o dalla
+  stanza; chi parla; il minore vicino o incerto) o un **cancello aperto** sulla corsia
+  (`Cancelli.aperto_su`) lo stato cambiato dalla stanza non vale: resta quello delle frasi del
+  turno, come prima (`Ciclo._tutela_minori`, regola `compagnia_da_stanza_minori`, nel registro
+  `voce.compagnia_stanza.minori`). La frase senza il nome del minore e la risposta al cancello 2
+  arrivano al guardiano;
+- se la compagnia viene **solo** dalla stanza, il giudizio «non rivolta» non spegne il segnale
+  (regola `pericolo_solo_stanza`), come con una persona sola.
+
+Gli altri effetti della compagnia con una voce sconosciuta restano quelli di prima e, con
+`attiva`, scatterebbero più spesso: la voce del minore «non sicura» nei due cancelli, il secondo
+segnale ravvicinato che non conferma in compagnia (`pericolo_compagnia_cancello1`), l'avviso che
+dice «vicino al microfono parlavano anche altre persone». Contrario provato: la voce sconosciuta
+già al turno col minore chiude la finestra come prima (la tutela riguarda solo la stanza). Prova
+`prove/prova_compagnia_stanza.py` (sezione «i minori»).

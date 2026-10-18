@@ -236,6 +236,9 @@ class Turno:
     stanza_seq: int | None = None
     stanza_esito_fatto: bool = False
     compagnia: dict | None = None        # lo stato «in compagnia» dopo questa frase
+    # Ciò che la stanza avrebbe cambiato e non ha cambiato (18/10, #147: in ombra, o fermata per
+    # un minore o un cancello aperto), per la misura dell'attrito: solo numeri
+    compagnia_stanza: dict | None = None
     # I comandi a voce di un gioco (11/10, calliope/gioco_voce.py): il gioco aperto sullo
     # schermo di questo satellite che aspettava un comando quando si è aperto l'ascolto, e se
     # la frase è cominciata nella sua finestra senza nome (fuori da quella di sempre)
@@ -427,10 +430,40 @@ class Ciclo:
 
     # ── compagnia (09/10, calliope/compagnia.py) ──
     def _stato_compagnia(self) -> dict | None:
+        """Lo stato che vale. Quello cambiato dalla stanza (`compagnia_da_stanza: attiva`) non
+        vale con un minore qui o un cancello aperto (18/10, #147, revisione della PR #161):
+        resta quello delle frasi del turno, così la frase senza il nome del minore e la risposta
+        al cancello arrivano al guardiano come prima."""
         try:
-            return self.compagnia.stato()
+            st = self.compagnia.stato()
+            if st and st.get("da_stanza") and self._tutela_minori():
+                st = self.compagnia.stato_turno()
+            return st
         except Exception:  # noqa: BLE001 — la compagnia non ferma la voce
             return None
+
+    def _tutela_minori(self) -> bool:
+        """Un minore qui (riconosciuto dalla voce nella finestra della compagnia, al turno o
+        dalla stanza; chi parla, il minore vicino o incerto) o un cancello aperto su questa
+        corsia (18/10, #147): la stanza non cambia la compagnia."""
+        s, sc = self.s, self.speaker_ctx
+        c = getattr(s, "cancelli", None)
+        try:
+            if c is not None and c.aperto_su(getattr(self.corsia, "chiave", None)):
+                return True
+        except Exception:  # noqa: BLE001 — nel dubbio, tutela
+            return True
+        if not getattr(s.cfg, "minori_enabled", True):
+            return False
+        nomi = set()
+        try:
+            nomi = set(self.compagnia.nomi())
+        except Exception:  # noqa: BLE001
+            pass
+        nomi |= {n for n in (getattr(sc, "current_speaker", None),
+                             getattr(sc, "minore_vicino", None),
+                             getattr(sc, "minore_incerto", None)) if isinstance(n, str)}
+        return any(minori.e_minore(s.registry.get(n)) for n in nomi if s.registry.get(n))
 
     def _compagnia_attiva(self) -> bool:
         """Gli effetti sull'identità (F1) valgono: `compagnia_enabled: attiva` e più voci qui."""
@@ -2667,9 +2700,21 @@ class Ciclo:
         dopo questa frase, la regola `voci_compagnia` e, quando cambia, una riga in console."""
         try:
             st = self.compagnia.osserva(emb, t.voiced_s, t.nome_voce)
+            cambio = self.compagnia.stato_stanza()
         except Exception as e:  # noqa: BLE001 — la compagnia non ferma la voce
             print(f"   [VOCE] compagnia non calcolata: {type(e).__name__}: {e}", flush=True)
             return None
+        if cambio is not None:
+            # La stanza cambierebbe l'effetto (18/10, #147). Con un minore o un cancello aperto
+            # non vale; in ombra non vale mai: nel registro cosa sarebbe cambiato
+            tutela = self._tutela_minori()
+            if st and st.get("da_stanza") and tutela:
+                st = self.compagnia.stato_turno()
+                self.rule("compagnia_da_stanza_minori")
+            if not (st and st.get("da_stanza")):
+                t.compagnia_stanza = dict(cambio, **({"minori": True} if tutela else {}))
+                if compagnia_mod.modo_stanza(self.s.cfg) == compagnia_mod.OMBRA:
+                    self.rule("compagnia_da_stanza_ombra")
         prima = self._compagnia_detta
         if bool(st) != bool(prima) or (st and prima and st.get("sconosciute")
                                        != prima.get("sconosciute")):
@@ -2708,6 +2753,7 @@ class Ciclo:
         if find_wake_word(t.text, cfg.wake_names, 0.5) is not None:
             return None
         if not self._chiede_nome():
+            self._senza_nome_in_ombra()
             return None
         print("   (in compagnia con una voce sconosciuta: frase senza il nome, non la prendo)",
               flush=True)
@@ -2716,6 +2762,22 @@ class Ciclo:
         self.rec["testo"] = None          # come le frasi ignorate senza niente del nome
         self.awake_until = 0.0
         return _FINE
+
+    def _senza_nome_in_ombra(self):
+        """`compagnia_da_stanza: ombra` (18/10, #147): la frase senza il nome nella finestra che
+        con la stanza attiva non si sarebbe presa (regola `compagnia_da_stanza_ombra_nome`, la
+        misura dell'attrito); la frase passa come sempre."""
+        cfg = self.s.cfg
+        if (compagnia_mod.modo_stanza(cfg) != compagnia_mod.OMBRA
+                or compagnia_mod.modo(cfg) != compagnia_mod.ATTIVA
+                or not getattr(cfg, "compagnia_nome_obbligatorio", True)):
+            return
+        try:
+            st = self.compagnia.stato_stanza()
+        except Exception:  # noqa: BLE001
+            return
+        if st and st.get("sconosciute") and not self._tutela_minori():
+            self.rule("compagnia_da_stanza_ombra_nome")
 
     def _minore_vicino(self, name, sim, classifica) -> str | None:
         """Il minore con un punteggio a meno di `minori_margine_amministra` da chi amministra
@@ -2876,7 +2938,10 @@ class Ciclo:
                                 "punteggio_conversazione": round(own, 3)}
                                if how == "breve" and own is not None else {}),
                             # Più voci qui (09/10): solo numeri, mai le impronte
-                            **({"compagnia": comp} if comp else {})}
+                            **({"compagnia": comp} if comp else {}),
+                            # Ciò che la stanza avrebbe cambiato (18/10, #147): solo numeri
+                            **({"compagnia_stanza": t.compagnia_stanza}
+                               if t.compagnia_stanza else {})}
         if alt is not None:
             # Con e senza le impronte del satellite (15/10): solo punteggi e decisioni
             reale = self._descrivi_decisione(t, emb, name, how, sim, best,
@@ -3991,6 +4056,15 @@ class Ciclo:
             return True
         g = self._giudizio_rivolta(t)
         if g is None or g.per_calliope is not False:
+            return True
+        try:
+            solo_stanza = self.compagnia.stato_turno() is None
+        except Exception:  # noqa: BLE001 — nel dubbio il segnale vale
+            solo_stanza = True
+        if solo_stanza:
+            # La compagnia viene solo dalla stanza (18/10, #147, revisione della PR #161): il
+            # giudizio «non rivolta» non spegne il segnale, come con una persona sola
+            self.rule("pericolo_solo_stanza")
             return True
         self.rule("pericolo_non_rivolta")
         print("   [GUARDIANO] segnale su una frase non rivolta a me (in compagnia): non vale, "

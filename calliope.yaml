@@ -691,6 +691,17 @@ chi_parla:
   # (decisione 0029, risposta 4 di chi amministra; regola `pericolo_non_rivolta`). Il
   # guardiano sulle frasi di Calliope resta. Un giudizio guasto o scaduto vale «rivolta»
   compagnia_pericolo_solo_rivolte: true
+  # La compagnia anche dai segmenti della conversazione di stanza (18/10, issue #147): con la
+  # stanza accesa i segmenti con un'impronta entrano nella compagnia della corsia del loro
+  # satellite; una voce di nessuno conta sconosciuta solo sotto `compagnia_soglia_profilo` su
+  # tutti i profili di casa, la zona grigia mai, un conoscente sì. Vale solo se cambia l'effetto
+  # (in compagnia, voci sconosciute) e mai con un minore qui o un cancello aperto. «ombra»: niente
+  # effetti, nel registro dei turni cosa sarebbe cambiato (`voce.compagnia_stanza`, regole
+  # `compagnia_da_stanza_ombra` e `compagnia_da_stanza_ombra_nome`, `calliope stato --turni`):
+  # la misura dell'attrito, prima di accendere; «attiva»: la finestra senza il nome si chiude,
+  # niente frase breve né sì breve, la sfida per le azioni, le impronte non imparano (#42);
+  # «spenta». L'accensione la decide chi amministra dopo la misura
+  compagnia_da_stanza: ombra
   # frasi di arruolamento (con 5: Dario rifiutato 4 %)
   speaker_enroll_phrases: 5
   # voce minima per una frase di arruolamento

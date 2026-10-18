@@ -70,6 +70,7 @@ CASI = {
     "minori_pericolo_silenzio": ("niente", "NIENTE", None, ["acceso", "sì", "avvisaa", "nessuno"]),
     "compagnia_enabled": ("ombra", "Ombra", ("attivo", "attiva"), ["accesa", "sì", "ombre"]),
     "compagnia_rivolta": ("attiva", "Attiva", ("spento", "spenta"), ["acceso", "sì", "rivolta"]),
+    "compagnia_da_stanza": ("attiva", " Attiva ", ("attivo", "attiva"), ["acceso", "sì", "stanza"]),
     "stanza_lenta_prompt": ("si", "SI", None, ["acceso", "forse", "aut"]),
     "agenti_conferma": ("mai", "Mai", None, ["acceso", "sì", "costoso"]),
     "agenti_arbitro": ("mai", " MAI ", None, ["acceso", "talvolta"]),
