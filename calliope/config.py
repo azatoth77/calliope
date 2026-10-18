@@ -364,13 +364,10 @@ class Config:
     # turno si conta in `calliope stato --turni`. 0 = nessun tetto
     dati_turno_tetto_token: int = 450
     # Reti e spinte da spegnere (03/10): servono al modello piccolo, uno più forte può farne
-    # a meno. Nomi in RETI (in fondo a questo file), solo quelle di categoria «modello»:
-    # textcallguard, chiamata_in_mezzo, spinta_promessa, spinta_richiesta, spinta_dichiarata,
-    # riferimento_casa, riferimento_agenda, conferma_al_posto_del_vuoto,
-    # vuoto_seconda_passata, ricerca_promessa, citazione_tolta, nome_tool_parlato,
-    # eco_contesto, spinta_archivio, spinta_rinuncia, spinta_esercizi, correzione_tool,
-    # ricerca_recente, risposta_ripetuta, scrivo_qui_a_voce, spinta_stanza,
-    # ciclo_ripetuto, domanda_insistita; "tutte"
+    # a meno. Nomi in RETI (in fondo a calliope/config.py), solo quelle di categoria «modello»
+    # (reti_di("modello"): 28 il 18/10). L'elenco non è scritto qui perché cresce a ogni rete
+    # nuova (fino al 18/10 ne mancavano cinque); `calliope stato --reti` le mostra per profilo
+    # con gli scatti, e un nome sbagliato si segnala all'avvio col più vicino. "tutte"
     # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
@@ -2915,7 +2912,8 @@ PROFILI_LLM: dict[str, dict] = {
     # Gemma 4 26B-A4B NVFP4 su vLLM (container calliope-vllm-voce, porta 8001 della DGX:
     # setup/linux/motore/vllm.sh voce avvia). Thinking spento dal modello di chat. Più bravo
     # del 4B (banco 112/116 contro 98–100) ma più lento: prima frase 0,90 s di mediana e
-    # ~1,9 s al p90 (genera a 29 token/s): per ora la DGX resta sul 4B (03/10)
+    # ~1,9 s al p90 (genera a 29 token/s), misure del 03/10. Quale profilo usa
+    # un'installazione si sceglie nel suo file locale con llm_profilo
     "gemma4-26b-vllm": {
         "llm_backend": "openai", "llm_base_url": "http://127.0.0.1:8001/v1",
         "llm_model": "gemma4-26b", "llm_reasoning_effort": None,
@@ -2933,7 +2931,8 @@ PROFILI_LLM: dict[str, dict] = {
     # Gemma 4 26B-A4B QAT (Q4 su tutti i pesi) sull'Ollama della DGX, lo stesso della voce:
     # API nativa, num_ctx rispettato, reti come il 26B su vLLM. 74–79 token/s; banco del
     # 03/10 pomeriggio sulla DGX 143/144 (4B 139/144), prima frase 0,68 / 1,18 s (4B 0,47 /
-    # 0,88), codice delegato 10/10: raccomandato per la DGX, non attivo (decide l'utente)
+    # 0,88), codice delegato 10/10. Quale profilo usa un'installazione si sceglie nel suo
+    # file locale con llm_profilo
     "gemma4-26b-ollama": {
         "llm_backend": "ollama", "llm_native_url": "http://127.0.0.1:11434",
         "llm_model": "gemma4:26b-a4b-it-qat", "llm_think": False,
