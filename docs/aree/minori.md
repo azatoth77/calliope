@@ -888,7 +888,8 @@ ripartiva dalle righe nuove in memoria.
 - **Oltre il limite**: le righe di un minore più vecchie non si giudicano; si contano nella misura
   `ripresa` (`oltre_limite`), che dice anche righe e blocchi ripresi; la sezione di
   `calliope stato --turni` le mostra per giorno («ripresi dal disco dopo un riavvio», «righe di un
-  minore oltre il limite della ripresa»).
+  minore oltre il limite della ripresa»). *Dal 18/10 (issue #159) contate una volta sola fra i
+  riavvii e senza le righe escluse per scelta: vedi la voce del 18/10 in fondo.*
 - **Cosa non si riprende**: ciò che il disco non tiene (zona grigia, voci non riconosciute, frasi in
   pausa: decisione della tenuta), e le righe di questo avvio (le dà il registro in memoria). Le
   misure di un giudizio ripreso hanno `disco: true`; i conti degli avvisi si riprendevano già dal
@@ -1333,3 +1334,36 @@ persona sola) e `prove/prova_compagnia_stanza.py` (compagnia del turno: in ombra
 **Resta** (issue #29): lo strumento di rilettura, i campi `parole` e `nomina` nel registro, la
 correzione del prompt; poi il campione di 50 giudizi, dopo la #147 sulla DGX. Il conteggio di
 `pericolo_non_rivolta_ombra` dice quante volte il giudizio di oggi avrebbe spento il segnale.
+
+## Le righe «oltre il limite della ripresa» contate una volta sola (18/10, issue #159, ramo `issue-159-misure-ombra`)
+
+**Caso vero** (lettura d'ombra del 18/10, commento in #36): il 17/10 `calliope stato --guardia`
+diceva 203 righe di un minore oltre il limite della ripresa, ma le righe erano 29, tutte rivolte a
+Calliope: perse davvero 0. Due errori. `Guardia._riprendi_disco` a ogni riavvio scriveva il
+**totale** delle righe non giudicate dall'inizio del diario (`tenuta.non_giudicate_minori` da
+`guardia_dal`), e `guardia.riassunto` sommava le misure del giorno: con sette riavvii le stesse 29
+righe facevano 203. E `non_giudicate_minori` contava anche le righe che la guardia non giudica per
+scelta (`_da_giudicare`: di Calliope, della TV, rivolte a Calliope, vuote), che non entrano mai nel
+diario.
+
+**La correzione** (solo misura). `non_giudicate_minori` toglie le righe con `chi` «calliope» o
+«tv», `rivolta` «si» e il testo vuoto. Il conto parte da dove l'aveva lasciato l'avvio di prima:
+`guardia_meta.oltre_fino` (nello stesso `stanza.db`, `Tenuta.oltre_contate_fino` e
+`segna_oltre_contate`, scritto quando la ripresa è finita) e la misura `ripresa` ha
+`oltre_delta: true`. Nel riassunto le misure nuove si sommano; quelle di prima (senza
+`oltre_delta`) valgono col **massimo del giorno**, così le letture del 22/10 e del 28/10 sui
+registri vecchi non tornano a 203.
+
+**Come leggere i giorni prima dell'installazione** (revisione della PR #167). Per quei giorni il
+numero resta il **massimo del giorno**: è il totale dall'inizio del diario, **non filtrato** (le
+righe rivolte a Calliope comprese), quindi un limite superiore e non il numero vero: il 17/10
+dirà ancora 29, non 0. Il numero vero arriva dalla **prima ripresa dopo l'installazione**:
+`oltre_fino` è ancora vuoto, quindi conta da `guardia_dal` con il filtro nuovo (in
+`calliope stato --guardia`, riga del giorno dell'installazione). Limite: quella prima misura ha
+`oltre_delta: true` ma è un totale; se nello stesso giorno ci sono anche misure scritte prima, il
+riassunto la somma al loro massimo, e **nel solo giorno dell'installazione** lo stesso dato può
+contare due volte. Dal riavvio dopo si conta solo il delta.
+
+Prova `prova_stanza_guardia` (ripresa): il secondo riavvio non
+conta di nuovo la riga (su main 2), le due frasi rivolte a Calliope fuori dal conto (su main 3),
+le misure di prima col massimo e le nuove sommate; contrario: la riga non rivolta resta contata.

@@ -630,7 +630,12 @@ class Guardia:
         try:
             righe = t.righe_guardia(limite - BLOCCO_PAUSA_S)
             giochi = t.giochi(limite - BLOCCO_PAUSA_S)
-            oltre = t.non_giudicate_minori(float(t.guardia_dal), limite)
+            # Solo le righe non contate da un avvio di prima (18/10, issue #159: ogni riavvio
+            # scriveva di nuovo il totale, e il riassunto lo sommava)
+            fino = getattr(t, "oltre_contate_fino", lambda: None)()
+            da = (max(float(t.guardia_dal), float(fino)) if fino is not None
+                  else float(t.guardia_dal))
+            oltre = t.non_giudicate_minori(da, limite)
         except Exception as e:  # noqa: BLE001 — senza il disco, come prima
             self.log(f"   [GUARDIA] ripresa dal disco non riuscita: {type(e).__name__}")
             self._ripresa = False
@@ -662,7 +667,10 @@ class Guardia:
             self._ripresa = False
         if n or (oltre and not self._ripresa):
             self._misura(esito="ripresa", righe=ripresi, blocchi=n,
-                         oltre_limite=oltre if not self._ripresa else 0, ore=ore)
+                         oltre_limite=oltre if not self._ripresa else 0, ore=ore,
+                         oltre_delta=True)
+        if not self._ripresa and hasattr(t, "segna_oltre_contate"):
+            t.segna_oltre_contate(limite)
         if n:
             self.log(f"   [GUARDIA] ripresi dal disco {n} blocchi di prima del riavvio")
         return n
@@ -1100,7 +1108,13 @@ def riassunto(righe: list[dict]) -> dict:
         e = r.get("esito")
         if e == "ripresa":
             g["ripresi"] += int(r.get("blocchi") or 0)
-            g["oltre_limite"] += int(r.get("oltre_limite") or 0)
+            if r.get("oltre_delta"):
+                g["oltre_limite"] += int(r.get("oltre_limite") or 0)
+            else:
+                # Le misure di prima del 18/10 (issue #159) hanno il totale a ogni riavvio:
+                # del giorno vale il più grande, non la somma
+                g["_oltre_totali"] = max(g.get("_oltre_totali", 0),
+                                         int(r.get("oltre_limite") or 0))
             continue
         if e == "guasto":
             g["guasti"] += 1
@@ -1143,6 +1157,7 @@ def riassunto(righe: list[dict]) -> dict:
     settimane = max(1.0, len(giorni) / 7.0) if giorni else None
     for g in giorni.values():
         g["ore"] = round(g.pop("parlato_s") / 3600, 3)
+        g["oltre_limite"] += g.pop("_oltre_totali", 0)
     return {"giorni": giorni, "ore": round(ore, 3),
             "per_ora": {k: (round(v / ore, 2) if ore > 0 else None)
                         for k, v in per_livello.items()},

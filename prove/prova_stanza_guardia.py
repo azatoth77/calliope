@@ -764,6 +764,54 @@ def prova_ripresa():
              "ripresi dal disco dopo un riavvio 1" in tt and "oltre il limite della ripresa 1"
              in tt, tt)
     st.chiudi()
+    # 18/10, issue #159: un altro riavvio non conta di nuovo la stessa riga (prima ogni avvio
+    # scriveva il totale e il riassunto lo sommava: 203 il 17/10 per 29 righe)
+    st = _avvio(cfg_b, path_b)
+    g = guardia(cfg_b, st)
+    g.giro(ORA + 60)
+    rip = [r for r in misure_guardia(cfg_b) if r.get("esito") == "ripresa"]
+    r = gm.riassunto(misure_mod.leggi(cfg_b.turn_log_dir))
+    oltre = sum(x["oltre_limite"] for x in r["giorni"].values())
+    verifica("un secondo riavvio conta solo il delta: la riga oltre il limite resta 1, non 2",
+             oltre == 1 and all(x.get("oltre_limite", 0) == 0 for x in rip[1:]),
+             f"{oltre} {rip}")
+    st.chiudi()
+    # …senza le righe che la guardia non giudica per scelta: rivolte a Calliope, di Calliope,
+    # della TV, vuote (il 17/10 le 29 righe erano tutte rivolte a Calliope)
+    cfg_e = cfg_base(registro="r8i", stanza_tenuta=True)
+    path_e = os.path.join(CARTELLA, "stanza-r8i.db")
+    st = _avvio(cfg_e, path_e)
+    st.tenuta.db.execute("UPDATE guardia_meta SET valore = ? WHERE chiave = 'dal'",
+                         (ORA - 100 * 3600,))
+    st.tenuta.guardia_dal = ORA - 100 * 3600
+    riga(st, 1, "Calliope, che ore sono?", ORA - 31 * 3600, "Nicola", rivolta="si")
+    riga(st, 1, "Calliope, metti la musica.", ORA - 30.5 * 3600, "Nicola", rivolta="si")
+    riga(st, 1, "Il mister mi picchia quando sbaglio.", ORA - 30 * 3600, "Nicola")
+    st.chiudi()
+    st = _avvio(cfg_e, path_e)
+    g = guardia(cfg_e, st)
+    g.giro(ORA)
+    rip = [r for r in misure_guardia(cfg_e) if r.get("esito") == "ripresa"]
+    verifica("oltre il limite: le frasi rivolte a Calliope non contano (1, non 3)",
+             rip and rip[-1].get("oltre_limite") == 1, str(rip))
+    verifica("contrario: la riga non rivolta resta contata, con il delta segnato",
+             rip and rip[-1].get("oltre_delta") is True
+             and st.tenuta.oltre_contate_fino() is not None, str(rip))
+    st.chiudi()
+    # Le misure di prima (senza `oltre_delta`): del giorno il più grande, non la somma
+    vecchie = [{"tipo": "guardia", "esito": "ripresa", "t": "2026-10-17T08:00:00",
+                "blocchi": 0, "oltre_limite": 29},
+               {"tipo": "guardia", "esito": "ripresa", "t": "2026-10-17T09:00:00",
+                "blocchi": 0, "oltre_limite": 29}]
+    nuove = [{"tipo": "guardia", "esito": "ripresa", "t": "2026-10-18T08:00:00",
+              "blocchi": 0, "oltre_limite": 2, "oltre_delta": True},
+             {"tipo": "guardia", "esito": "ripresa", "t": "2026-10-18T09:00:00",
+              "blocchi": 0, "oltre_limite": 3, "oltre_delta": True}]
+    r = gm.riassunto(vecchie + nuove)
+    verifica("riassunto: le misure di prima col massimo del giorno (29, non 58), le nuove "
+             "sommate (5)",
+             r["giorni"]["2026-10-17"]["oltre_limite"] == 29
+             and r["giorni"]["2026-10-18"]["oltre_limite"] == 5, str(r["giorni"]))
     # Contrari: ripresa spenta (0 ore), righe non ancora assestate, satellite in pausa,
     # dimentica dopo la ripresa con il blocco in coda, righe di prima del diario
     for nome_c, ore in (("r8c", 0.0), ("r8d", 24.0)):

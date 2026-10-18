@@ -2648,3 +2648,43 @@ Prove: `prova_stanza_storpiata` (`prova_config`) applica ogni profilo con `apply
 controlla la rete spenta nei due del 26B, accesa negli altri, e spenta col 4B dalla riga del
 locale (fallisce su main); `prova_reti_scatti` scrive per i turni finti del 15/10 le reti spente
 di allora, senza `domanda_insistita`.
+
+## I turni interrotti nel criterio di E1 (18/10, issue #159, ramo `issue-159-misure-ombra`)
+
+**Caso vero** (lettura d'ombra del 18/10, commento in #13): i 2 turni interrotti dal 16/10 avevano
+la voce partita (`prima_voce_s` 1,06 s e 1,81 s), la risposta nel registro vuota e `eventi_ombra`
+senza `proiezione_diversa` né `parlato`: «0 su N» del criterio di E1 non guardava proprio la frase
+interrotta, il caso da cui E1 nasce.
+
+**Perché le frasi non arrivavano: un difetto della misura, non del satellite.** Il satellite
+(`satellite/client.py`, `Riproduttore`) al nome si ferma da sé (`ferma`, senza aspettare il
+server), tiene in `dette` le frasi suonate per intero e le rimanda con `turno_finito` alla fine del
+turno; la frase a metà non ci entra, per scelta. Lato server `Speaker._send_worker` passa la fine
+del turno anche dopo l'interruzione e `played` si riempie con quelle frasi; `Uscita.turno()` le
+dà all'ombra (`("fine", played, interrotta)`) prima di azzerarle. Nei due turni il nome è arrivato
+**durante la prima frase** (la prima frase lunga va in due pezzi, `primo_pezzo`, e nemmeno il primo
+era finito): `played` era vuoto davvero, e la risposta vuota nel registro lo conferma. La misura
+invece, in `misura.misura_finestra`, usciva subito senza frasi sentite (salvo l'esito
+`interruzione`, che è lo stop), quindi senza `sentite`, e `Ombra._chiudi_turno` scrive
+`proiezione_diversa` solo con `sentite`.
+
+**La correzione** (solo misura: la voce non cambia). `misura_finestra` misura anche un pezzo
+interrotto senza frasi sentite: `sentite: 0` e, sulla storia di Brain, il motivo
+`interrotta_persa` (la frase a metà sentita e persa, come quando se ne sente una parte). Sulla
+proiezione il turno ha `proiezione_diversa` (la proiezione dice «… (interrotta)» e niente altro:
+0) e il campo nuovo `eventi_ombra.interrotta` = {`inviate`, `sentite`, `motivo`}: `niente_di_intero`
+(nessuna frase sentita per intero) o `in_parte`. In `calliope stato --turni` la riga del criterio
+aggiunge «interrotti N, di cui M diversi (motivi)», e la riga su tutto il registro «interrotti N,
+di cui M diversi» (`criterio_e1` con `interrotti` e `interrotti_diversi` solo se ce ne sono). Prova
+`prova_eventi_guardia` sezione 4: interrotto durante la prima frase (su main senza campo) e dopo
+una frase, i turni normali senza il campo. I numeri sui registri della DGX del 14–18/10 vanno
+ricalcolati dopo l'installazione (`calliope stato --turni --giorni 7`) e scritti in #13.
+
+**I registri di prima e l'annuncio interrotto** (revisione della PR #167). I turni interrotti
+scritti prima del 18/10 non hanno il campo e restavano fuori dal conto: ora sono «interrotti non
+misurati» (`interrotta: true` nel turno, `eventi_ombra` senza `interrotta`), una riga per giorno
+in `calliope stato --turni` e nel criterio su tutto il registro (`interrotti_non_misurati`): così
+i due turni del 16/10 si vedono accanto a «0 su N». Un annuncio interrotto fra un turno e l'altro
+(`rec` None, va nel riporto) non scrive il campo `interrotta`: altrimenti `_somma` lo avrebbe
+unito al turno dopo, che sarebbe risultato «interrotto» con `fra_turni: 1`; il suo passo 0 resta
+nel riporto come prima.

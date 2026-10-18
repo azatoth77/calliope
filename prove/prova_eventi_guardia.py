@@ -17,6 +17,9 @@ docs/ricerche/2026-10-10-registro-eventi.md, voce 2.1 della roadmap).
    sintetico di prova_eventi_ciclo: interruzione, stop, timer, frase filtrata, «Sì?») in ombra
    `parlato.diverso` e `eventi_ombra.differenze` non sono zero per costruzione, mentre
    `proiezione_diversa` c'è in ogni turno e vale 0; con `attivo` lo stesso campo vale 0.
+4. **I turni interrotti** (18/10, issue #159): interrotto durante la prima frase (niente sentito
+   per intero) il turno ha `proiezione_diversa` e `eventi_ombra.interrotta` (inviate, sentite,
+   motivo), contato a parte nel criterio; contrari: interrotto dopo una frase, turni normali.
 
 Nomi di fantasia, niente rete né audio: pochi secondi.
 """
@@ -251,10 +254,87 @@ def prova_ciclo():
              str([o.get("proiezione_motivi") for o in eo]))
 
 
+# ──────────── 4. i turni interrotti nel criterio di E1 (18/10, issue #159) ────────────
+def _giro_interrotto(dopo):
+    """Un turno interrotto dal nome dopo `dopo` frasi sentite per intero (0: durante la prima,
+    come i due turni del 16/10 sulla DGX), fra due turni normali."""
+    tmp = tempfile.mkdtemp(prefix=f"eventi-interrotto-{dopo}-")
+    copione = [[("text", "Sono le dieci.")],
+               [("text", "Venezia è sulla laguna. Ha più di cento isole. È bellissima.")],
+               [("text", "Va bene.")]]
+    b, c, voce, stt, turni, annunci, registri = pe.prepara(tmp, copione, modo="ombra")
+    pe.giro(c, stt, "Calliope, che ore sono?")
+    voce.interrompi_dopo = dopo
+    pe.giro(c, stt, "Calliope, raccontami di Venezia.")
+    voce.interrompi_dopo = None
+    pe.giro(c, stt, "Calliope, e adesso?")
+    c._scrivi_turno(c.rec)
+    c.rec = None
+    registri.disco.db.close()
+    return turni
+
+
+def prova_interrotti():
+    print("— 4. i turni interrotti nel criterio di E1 (issue #159)")
+    turni = _giro_interrotto(0)
+    inter = [r for r in turni if r.get("interrotta")]
+    o = (inter[0].get("eventi_ombra") or {}) if inter else {}
+    verifica("interrotto durante la prima frase (niente sentito per intero): il turno c'è, con "
+             "la risposta vuota", len(inter) == 1 and not inter[0].get("risposta"), str(inter))
+    verifica("…e ha proiezione_diversa (0: la proiezione non dice niente di non sentito)",
+             o.get("proiezione_diversa") == 0, json.dumps(o, ensure_ascii=False))
+    verifica("…con le frasi sentite davvero (0 su quelle inviate) e il motivo",
+             o.get("interrotta", {}).get("sentite") == 0
+             and o["interrotta"].get("inviate", 0) >= 1
+             and o["interrotta"].get("motivo") == "niente_di_intero", str(o.get("interrotta")))
+    verifica("…e nel passo 0 sulla storia di Brain la frase a metà persa",
+             (inter[0].get("parlato") or {}).get("sentite") == 0
+             and "interrotta_persa" in (inter[0].get("parlato") or {}).get("motivi", {}),
+             str(inter[0].get("parlato")))
+    verifica("contrario: i turni non interrotti non hanno il campo «interrotta»",
+             all("interrotta" not in (r.get("eventi_ombra") or {}) for r in turni
+                 if not r.get("interrotta")))
+    turni2 = _giro_interrotto(1)
+    o2 = next((r.get("eventi_ombra") or {} for r in turni2 if r.get("interrotta")), {})
+    verifica("contrario: interrotto dopo una frase sentita, «in_parte» con 1 sentita",
+             o2.get("proiezione_diversa") == 0
+             and o2.get("interrotta", {}).get("sentite") == 1
+             and o2["interrotta"].get("motivo") == "in_parte", str(o2))
+    tutti = turni + turni2
+    e1 = misura.criterio_e1(tutti)
+    testo = misura.testo(misura.riassunto(tutti), e1=e1)
+    verifica("criterio di E1: gli interrotti contati a parte (2, nessuno diverso), nel giorno e "
+             "su tutto il registro",
+             e1.get("interrotti") == 2 and e1.get("interrotti_diversi") == 0
+             and "interrotti 2, di cui 0 diversi (in_parte 1, niente_di_intero 1)" in testo
+             and "; interrotti 2, di cui 0 diversi." in testo, testo)
+    verifica("contrario: senza interrotti la riga è quella di prima",
+             "interrotti" not in misura.testo(misura.riassunto(
+                 [turno("2026-10-15", proiezione_diversa=0)]),
+                 e1=misura.criterio_e1([turno("2026-10-15", proiezione_diversa=0)])))
+    # I registri di prima (revisione della PR #167): l'interrotto del 16/10 senza il campo
+    vecchio = dict(turno("2026-10-16"), interrotta=True, risposta="")
+    vecchi = [vecchio, turno("2026-10-16", proiezione_diversa=0)]
+    e1 = misura.criterio_e1(vecchi + tutti)
+    testo = misura.testo(misura.riassunto(vecchi), e1=e1)
+    verifica("registri di prima: l'interrotto senza il campo contato come «non misurato»",
+             misura.riassunto(vecchi)["2026-10-16"].get("interrotti_non_misurati") == 1
+             and e1.get("interrotti_non_misurati") == 1
+             and "interrotti non misurati (scritti prima del 18/10, senza "
+                 "eventi_ombra.interrotta): 1" in testo
+             and "interrotti non misurati (scritti prima del 18/10, senza il campo) 1" in testo,
+             testo)
+    verifica("contrario: gli interrotti di oggi (col campo) non sono «non misurati»",
+             misura.criterio_e1(tutti).get("interrotti_non_misurati") is None
+             and all(g["interrotti_non_misurati"] == 0
+                     for g in misura.riassunto(tutti).values()))
+
+
 def main():
     prova_guardia()
     prova_criterio()
     prova_ciclo()
+    prova_interrotti()
     print(f"\n{'Tutto bene' if not errori else f'{errori} errori'}")
     return 1 if errori else 0
 

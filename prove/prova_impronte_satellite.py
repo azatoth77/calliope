@@ -330,6 +330,41 @@ def prova_ombra():
     verifica("stato --turni: il testo, per satellite", "telefono di prova (ombra)" in tx
              and "rifiutate → riconosciute 2" in tx, tx)
     verifica("stato --turni: senza misura lo dice", "spento" in IS.testo(IS.riassunto([])))
+    # 18/10, issue #159: lo scambio contro una base incerta (il «minore → chi amministra» del
+    # 16/10 era deciso per continuità: una correzione, non un errore) si conta a parte
+    def scambio(come_senza):
+        return {"ascolto": {"satellite": "telefono di prova"}, "voce": {"impronte_satellite": {
+            "modo": "ombra",
+            "con": {"nome": "Carlo", "come": "voce", "punteggio": 0.7, "amministra": True},
+            "senza": {"nome": "Luca", "come": come_senza, "punteggio": 0.41, "minore": True}}}}
+    d = IS.riassunto([scambio("conversazione")])["satelliti"]["telefono di prova"]
+    verifica("scambio contro una base incerta (continuità, zona grigia): non è uno scambio "
+             "sicuro", (d["scambi"], d["minore_ad_amministra"], d.get("scambi_incerti"),
+                        d.get("minore_ad_amministra_incerti")) == (0, 0, 1, 1), str(d))
+    d = IS.riassunto([scambio("voce")])["satelliti"]["telefono di prova"]
+    verifica("contrario: contro una decisione dalla voce resta uno scambio sicuro",
+             (d["scambi"], d["minore_ad_amministra"], d.get("scambi_incerti", 0)) == (1, 1, 0), str(d))
+    tx = IS.testo(IS.riassunto([scambio("voce"), scambio("breve"), scambio("conversazione")]))
+    verifica("stato --turni: base sicura e base incerta divise nel testo",
+             "con la base sicura 1 (minore → chi amministra 1" in tx
+             and "con la base incerta 2 (minore → chi amministra 2" in tx, tx)
+    # Il cancello per «attivo» (revisione della PR #167): nel verso pericoloso conta anche la
+    # base incerta
+    r = IS.riassunto([scambio("conversazione")])
+    tx = IS.testo(r)
+    verifica("cancello: minore → chi amministra su base incerta dà l'ATTENZIONE per «attivo»",
+             r["satelliti"]["telefono di prova"].get("minore_ad_amministra_tutti") == 1
+             and "ATTENZIONE: 1 frasi minore → chi amministra (base sicura 0, incerta 1)" in tx,
+             tx)
+    inverso = scambio("conversazione")
+    b = inverso["voce"]["impronte_satellite"]
+    b["con"], b["senza"] = ({"nome": "Luca", "come": "voce", "punteggio": 0.7, "minore": True},
+                            {"nome": "Carlo", "come": "conversazione", "punteggio": 0.41,
+                             "amministra": True})
+    r = IS.riassunto([inverso])
+    verifica("contrario: chi amministra → minore (verso prudente) non apre l'ATTENZIONE",
+             r["satelliti"]["telefono di prova"].get("minore_ad_amministra_tutti", 0) == 0
+             and "ATTENZIONE" not in IS.testo(r), IS.testo(r))
 
 
 def prova_attivo():
