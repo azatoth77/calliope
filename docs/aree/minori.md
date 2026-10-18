@@ -1023,7 +1023,8 @@ senza parole, arrivato giorni dopo, non si capisce.
 
 **Prove**: `prove/prova_avvisi_audio.py` (a secco, con i contrari: non tutore, altro schermo, chi
 amministra, schermo di stanza, ombra, ospite, adulto senza minori, altra stanza, scadenza, svuota,
-dimentica, anello pieno, spento). Sulla DGX: accendere `avvisi_audio: true` nel file locale.
+dimentica, anello pieno, spento). Sulla DGX: accendere `avvisi_audio: true` nel file locale. *18/10:
+sulla DGX `avvisi_audio: true` (data e criterio d'accensione non scritti, nessuna issue: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)).*
 
 ### 14/10 sera: «Scarica l'audio» anche dopo un riavvio (ramo `conoscenti-avvisi-2`)
 

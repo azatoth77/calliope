@@ -482,6 +482,7 @@ contesto**; lettore con la libreria standard; scarico in secondo piano ogni 2 or
   Protezione civile (allerta); Il Post e i due feed del Sole 24 Ore nell'elenco ma spenti.
   **Per accenderli**, in `calliope.locale.yaml`, sezione `notizie`:
   `notizie_accese: [Il Post, Il Sole 24 Ore]`. Una testata della città: `notizie_feed_extra`.
+  *18/10: sulla DGX le due testate sono accese (data non scritta: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)).*
 - **Misure** (portatile, 13/10): sull'istantanea della ricerca (52 feed, 1 857 voci) lettura,
   inserimento e gruppi in 0,62 s, ricarica dell'indice con i gruppi 0,39 s, una ricerca
   0,6–0,8 ms; sui feed veri (21 di serie con Il Post, il Sole e la Lombardia) primo scarico

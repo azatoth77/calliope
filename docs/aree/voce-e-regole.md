@@ -1997,7 +1997,7 @@ le opzioni e le misure sono nella ricerca
     cambiata non fa più diventare rossa la prova per il solo richiamo. Resta legata a
     `calliope/tools/`, perché la copertura degli 85 tool, il nucleo di serie, le almeno 40 frasi
     a «nucleo» e i casi «Blocca il computer» e la fattura dipendono dal registro dei tool.
-  - Un locale che ha ancora `preselezione_tool` (sulla DGX `spenta`) o un altro campo tolto dà
+  - Un locale che ha ancora `preselezione_tool` (sulla DGX `spenta` *[storico: il 18/10 la chiave non è più nel locale della DGX, [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)]*) o un altro campo tolto dà
     solo «Chiave sconosciuta … ignorata»: l'avvio non si ferma. Va tolto dal locale insieme
     all'aggiornamento.
   - Anche il recupero dei tool con un sottoinsieme che cambia a ogni turno (bge-m3, roadmap
@@ -2513,7 +2513,7 @@ dice una cosa preoccupante e poi tace.
 
 **Il locale della DGX non cambia significato**: i valori noti (`system1_dopo_tool: ombra`,
 `llm_reti_spente: [domanda_insistita]`, `arbitro_memoria: ombra`, `speaker_impronte_satellite:
-ombra`, `stanza_lenta_blocchi: ombra`, `eventi: ombra`) passano uguali e senza avvisi (provato a
+ombra`, `stanza_lenta_blocchi: ombra`, `eventi: ombra` *[18/10: `eventi` non è nel locale della DGX, vale il predefinito `ombra`; elenco vero in [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)]*) passano uguali e senza avvisi (provato a
 secco con le stesse sezioni). Rischio scritto nella issue: un valore che oggi «funziona per caso»
 (per esempio `compagnia_enabled: si`) ora è rifiutato con l'avviso e vale il predefinito.
 

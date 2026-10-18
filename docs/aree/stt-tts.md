@@ -1107,7 +1107,9 @@ p50 0,12, max 0,22, quindi qui non serve. Non misurata la chiacchiera a due (una
 **Da misurare sul vero** (passi in [`prove/manuali/misura-eco-stanza.md`](../../prove/manuali/misura-eco-stanza.md)):
 telefono in auto (motore acceso e spento, volume medio e alto) e in casa, portatile col microfono
 interno in MME, e il contrario delle casse esterne senza cancellazione (cancello chiuso). Si accende
-sulla DGX solo se l'eco residua resta sotto 2 ogni 100 parole e le righe false a 0. Prove:
+sulla DGX solo se l'eco residua resta sotto 2 ogni 100 parole e le righe false a 0. *[storico: «si
+accende solo se…», fino al 14/10: sulla DGX `stanza_durante_voce: true` dal 14/10 dopo la misura
+sul portatile; per il telefono in auto il criterio è ancora da misurare (#37). Letto il 18/10: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)]* Prove:
 `prove/prova_stanza_eco.py` (livello 1, ~3 s).
 
 ## I conoscenti: voci sconosciute di adulti col nome dedotto (14/10, ramo `stanza-conoscenti`)
@@ -1149,7 +1151,7 @@ righe della stanza (`Stanza._chi`):
   memoria tornano «ignoto», `RegistroStanza.riscrivi_chi`).
 
 Misura a secco (impronte finte): la prova copre la logica, non la somiglianza vera delle voci.
-**Da misurare sulla DGX** prima di accenderlo: quanti gruppi per ospite vero (una voce spezzata in
+**Da misurare sulla DGX** *[storico: «prima di accenderlo»; sulla DGX `stanza_conoscenti: true` dal 14/10 sera, acceso senza il criterio scritto (#38). Letto il 18/10: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)]*: quanti gruppi per ospite vero (una voce spezzata in
 due gruppi divide gli indizi), quante proposte confermate, quante voci simili finite nello stesso
 gruppo. Prova: `prove/prova_stanza_conoscenti.py` (livello 1, ~3 s).
 
@@ -1255,7 +1257,7 @@ portatile (50 ms con un thread), p50 25–58 ms secondo il carico.
 **Da fare (Dario).** Sulla DGX: il modello e lo script a secco sulle ~95 frasi conservate di chi
 amministra (`prove/manuali/fine_turno_dgx.py`, comando in testa: accordo, griglia di soglie e
 parlato minimo, ms del decisore, solo numeri); poi `fine_turno: ombra` nel file locale per almeno
-una settimana. Criteri proposti per «attiva» su un satellite: tagli sotto l'1 % a soglia 0,9,
+una settimana. *18/10: sulla DGX `fine_turno: ombra` (data d'accensione non scritta, #24: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)).* Criteri proposti per «attiva» su un satellite: tagli sotto l'1 % a soglia 0,9,
 almeno metà delle frasi chiuse prima, decisore p90 sotto 100 ms sul satellite.
 
 Prove: `prove/prova_fine_turno.py` (livello 2, a secco: decisore finto, frase completa, sospesa
