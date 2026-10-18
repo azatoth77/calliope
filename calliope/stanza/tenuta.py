@@ -668,15 +668,44 @@ class Tenuta:
 
     def non_giudicate_minori(self, da: float, a: float) -> int:
         """Quante righe di un minore degli avvii di prima, finite tra `da` e `a`, non sono nel
-        diario (oltre il limite della ripresa: non si giudicano più, si contano)."""
+        diario (oltre il limite della ripresa: non si giudicano più, si contano). Senza le righe
+        che la guardia non giudica per scelta (`Guardia._da_giudicare`: Calliope, la TV, le
+        frasi rivolte a Calliope, il testo vuoto; 18/10, issue #159: il 17/10 erano 29 righe su
+        29, contate come perse)."""
         if self.guardia_dal is None or a <= da:
             return 0
         with self.lock:
             return int(self.db.execute(
                 "SELECT COUNT(*) FROM righe r WHERE r.avvio != ? AND r.minore = 1 AND r.fine >= ? "
-                "AND r.fine < ? AND NOT EXISTS (SELECT 1 FROM guardia_giudicate g WHERE "
+                "AND r.fine < ? AND r.chi NOT IN ('calliope', 'tv') "
+                "AND COALESCE(r.rivolta, '') != 'si' AND TRIM(r.testo) != '' "
+                "AND NOT EXISTS (SELECT 1 FROM guardia_giudicate g WHERE "
                 "g.avvio = r.avvio AND g.sat = r.sat AND g.seq = r.seq)",
                 (self.avvio, float(da), float(a))).fetchone()[0])
+
+    def oltre_contate_fino(self) -> float | None:
+        """Fin dove le righe oltre il limite della ripresa sono già state contate da un avvio di
+        prima (18/10, issue #159: ogni riavvio contava di nuovo le stesse). None se mai."""
+        if self.guardia_dal is None:
+            return None
+        with self.lock:
+            row = self.db.execute("SELECT valore FROM guardia_meta WHERE chiave = "
+                                  "'oltre_fino'").fetchone()
+        return float(row[0]) if row and row[0] is not None else None
+
+    def segna_oltre_contate(self, fino: float) -> None:
+        """Le righe oltre il limite fino a `fino` sono contate: il riavvio dopo conta il resto."""
+        if self.guardia_dal is None:
+            return
+
+        def f():
+            with self.lock:
+                self.db.execute(
+                    "INSERT INTO guardia_meta(chiave, valore) VALUES ('oltre_fino', ?) ON "
+                    "CONFLICT(chiave) DO UPDATE SET valore = MAX(valore, excluded.valore)",
+                    (float(fino),))
+                self.db.commit()
+        self._lavoro(f)
 
     def segna_giudicate(self, chiavi, esito: str) -> None:
         """Le righe (avvio, sat, seq) giudicate o buttate per sempre: dopo un riavvio non si
