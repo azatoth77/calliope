@@ -1023,6 +1023,14 @@ class Avvio:
         # e le risposte di cortesia («Prego!», «Bene!») nel tono della casa e delle persone
         # Le frasi pronte del catalogo (12/10, calliope/frasi.py): ombra, attivo o spento
         frasi.FRASI.configura(cfg)
+        # Dopo un riavvio la rotazione delle persone di casa riprende dai turni di oggi (18/10,
+        # #158); le voci sconosciute ruotano solo in memoria
+        try:                                # un guasto qui non ferma mai l'avvio
+            n = frasi.FRASI.riprendi(cfg.turn_log_dir)
+            if n:
+                print(f"   [FRASI] rotazione ripresa dai turni di oggi: {n} persone", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"   [FRASI] rotazione non ripresa: {type(e).__name__}: {e}", flush=True)
         s.cortesia = Cortesia()
         speaker.prepare(s.tools.announcements() + [s.stt.ATTESA, FRASE_DURA, corsie.FRASE_CODA]
                         + s.cortesia.frasi([cfg.tono] + [u.preferred_tone for u in

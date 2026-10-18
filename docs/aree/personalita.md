@@ -2,7 +2,7 @@
 
 *Toni di voce, modalità startrek, suoni d'ascolto, wake word diversa dal nome. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 18/10.** Il codice dell'area è quello del 14/10: sei toni, modalità startrek a voce, suoni d'ascolto, frasi pronte con varianti per tono e forma breve **in ombra** (`frasi_varianti: ombra` di serie; `attivo` nel file locale dopo la rilettura del campione, issue #28). Il catalogo (`calliope/frasi.py`, `CATALOGO`) ha **26 id, 13 con varianti**: ai 10 del 12/10 si sono aggiunti `onesta.non_salvato` (12/10 sera), `scusa.incartata` e `attesa.stanza` (14/10); gli altri 13 sono delle classi bloccate, solo per la misura. Sezione «Frasi pronte: misura e catalogo» in fondo. *18/10: sulla DGX `frasi_varianti: attivo` (data non scritta; #28 ancora aperta: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)).*
+**Stato al 18/10.** Il codice dell'area è quello del 14/10: sei toni, modalità startrek a voce, suoni d'ascolto, frasi pronte con varianti per tono e forma breve **in ombra** (`frasi_varianti: ombra` di serie; `attivo` nel file locale dopo la rilettura del campione, issue #28). Il catalogo (`calliope/frasi.py`, `CATALOGO`) ha **26 id, 13 con varianti**: ai 10 del 12/10 si sono aggiunti `onesta.non_salvato` (12/10 sera), `scusa.incartata` e `attesa.stanza` (14/10); gli altri 13 sono delle classi bloccate, solo per la misura. Sezione «Frasi pronte: misura e catalogo» in fondo. *18/10: sulla DGX `frasi_varianti: attivo` (data non scritta; #28 ancora aperta: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)). Dal 18/10 (#158) la rotazione gira anche per le voci sconosciute e riprende dopo un riavvio: sezione «La rotazione per le voci sconosciute e dopo un riavvio» in fondo.*
 
 *Stato al 14/10 (storico):* Come al 09/10 (sotto), più le frasi pronte con varianti per tono e forma breve (fasi 0–1 del 12/10): il catalogo c'è, la misura delle ripetizioni è nel registro dei turni (`calliope stato --turni`), le varianti sono **in ombra** (`frasi_varianti: ombra` di serie; `attivo` nel file locale dopo la rilettura del campione). Sezione «Frasi pronte: misura e catalogo» in fondo.
 
@@ -18,7 +18,7 @@ vedi «Frasi pronte: misura e catalogo» in fondo.)*
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Personalità: tono di voce, modalità startrek, suoni di ascolto (dal 04/10) | testo nel prompt (`TONI`) o nei dati del turno; suoni sintetici con numpy, WAV con `wave` | `calliope/config.py` → `TONI`, `nome_tono`, `frase_tono`, `MODALITA`, `apply_modalita`; `calliope/personalita.py` (tono della casa, `personalita.json`); `Brain._tone_note`; tool `cambia_voce` (`tono`, `per_tutti`); `calliope/suoni.py` → `SuoniAscolto`, `sintetico`; `Listener.on_wake`; addestramento di un'altra parola `wakeword/parole.py` (`WW_PAROLA`); vedi [`docs/ricerche/2026-10-04-personalita-wake-word.md`](../ricerche/2026-10-04-personalita-wake-word.md) |
-| Frasi pronte meno monotone: catalogo, varianti per tono, forma breve, misura (dal 12/10) | solo libreria standard | `calliope/frasi.py` → `CATALOGO`, `Frasi`, `FRASI`, `scegli`, `riconosci`, `riassunto`, `campione`; `Uscita.di` (`su_pronta`); `Ciclo._pronta_detta`, `Ciclo._frasi_turno`; `Cortesia.risposta` (`persona`); configurazione `frasi_varianti`, `frasi_breve_turni`; vedi [`docs/ricerche/2026-10-08-frasi-pronte.md`](../ricerche/2026-10-08-frasi-pronte.md) |
+| Frasi pronte meno monotone: catalogo, varianti per tono, forma breve, misura (dal 12/10) | solo libreria standard | `calliope/frasi.py` → `CATALOGO`, `Frasi`, `FRASI`, `scegli`, `riconosci`, `riassunto`, `campione`, `Frasi.riprendi` e `ANONIMA` (dal 18/10, #158); `Uscita.di` (`su_pronta`); `Ciclo._pronta_detta`, `Ciclo._frasi_turno`; `Cortesia.risposta` (`persona`); configurazione `frasi_varianti`, `frasi_breve_turni`; vedi [`docs/ricerche/2026-10-08-frasi-pronte.md`](../ricerche/2026-10-08-frasi-pronte.md) |
 
 ## Problemi noti
 
@@ -226,3 +226,62 @@ di un'estensione nel formale, intera e breve.
 - `attesa.stanza` (14/10, passo 4 della stanza): la frase d'attesa di `stanza_cerca` ([contesto-conversazione](contesto-conversazione.md)).
 
 Valgono per loro gli stessi modi (`frasi_varianti`), la rotazione per persona e la forma breve. Il campione per chi amministra (`python -m calliope.frasi --campione`) le comprende; l'accensione resta la rilettura della issue #28.
+
+## La rotazione per le voci sconosciute e dopo un riavvio (18/10, issue #158)
+
+**Caso vero.** La lettura d'ombra del 18/10 per #28, con `frasi_varianti: attivo` sulla DGX: le
+frasi pronte si ripetevano **37,5 volte ogni 100** (6 su 16), contro l'obiettivo sotto 8, tutte su
+`cortesia.grazie` e `cortesia.conferma`, quasi sempre con la variante 0. Due difetti della
+rotazione, non delle varianti (l'analisi della issue era giusta, verificata sul codice):
+
+1. **Voce sconosciuta** (4 su 6). Il ciclo passa `persona=None` per una voce non riconosciuta, e
+   `Frasi._decidi` e `Frasi._conta` con la persona None non ruotavano: sempre la variante 0.
+2. **Riavvii** (2 su 6, il 14/10 con più di 20 riavvii). La memoria della rotazione stava solo in
+   RAM e ripartiva dalla variante 0, mentre la misura (`riassunto`) confronta le ultime 20 risposte
+   alla stessa persona **nell'intera giornata**, letta dal registro dei turni.
+
+**Cosa conta la misura** (verificato su `riassunto` e `_chi`): per giorno e per chi parla,
+`voce.id` del turno; le voci senza persona finiscono **tutte sotto «?»**, di qualunque satellite;
+senza parole (ospiti, dal 01/10 nel registro solo numeri) confronta id, tono e variante delle
+`pronte`. Quindi la soluzione più semplice che rende giuste insieme voce e misura:
+
+- **voci senza persona**: una chiave sola, `ANONIMA`, per tutte (come le raggruppa la misura;
+  non per corsia, che la misura non distingue), **solo in memoria**, e **senza forma breve**: chi
+  parla adesso può non essere chi ha sentito la frase prima. Una scelta non detta continua a non
+  contare. Nessuna modifica al ciclo: la persona None arrivava già. Effetto in più: ora ruotano
+  anche gli **annunci dei lavori in secondo piano** (`lavori.avviato`, `lavori.in_coda`,
+  `lavori.nessuno`…, scelti da `agenti/servizio.py` fuori dal turno di una persona), che prima
+  dicevano sempre la variante 0 e ora girano sulla stessa chiave anonima;
+- **persone di casa dopo un riavvio**: `Frasi.riprendi` all'avvio (in `main`, subito dopo
+  `configura`) rilegge **il registro dei turni di oggi** (`turni-<giorno>.jsonl` di
+  `turn_log_dir`) e rifà i conti della rotazione e della forma breve dalle `pronte` (id, tono,
+  variante, breve, già scritte dal 12/10). Niente file nuovo: il posto dei dati è quello che c'è e
+  la scadenza è il giorno, la stessa della misura (il registro ha poi la sua di 60 giorni). La
+  strada di far contare alla misura solo la stessa vita del processo è scartata: nasconderebbe una
+  ripetizione che la persona sente davvero;
+- **mai su disco per gli ospiti** (decisione 0031): `riprendi` salta i turni senza `voce.id` e
+  quelli di livello ospite (conoscenti compresi), quindi la rotazione anonima riparte da capo a
+  ogni avvio, e `Frasi` non scrive file. Si salta anche una riga con `voce.conoscente` vero
+  quando manca `livello` (revisione della PR #162);
+- **mai un guasto all'avvio** (revisione della PR #162): `riprendi` non solleva mai. Il file si
+  legge con `errors="replace"` (un'ultima riga troncata a metà di una lettera accentata), le righe
+  coi tipi sbagliati (`pronte` non lista, `voce.id`, `id` o `tono` non stringhe) si saltano, ogni
+  altro guasto vale 0 con una riga `[FRASI]` nel log; e in `main` la chiamata è anche dentro un
+  `try`.
+
+**Misure.** Sul codice di main la prova nuova dà 18 errori (le due prove della issue comprese:
+due «grazie» di fila da una voce sconosciuta uguali, 3 ripetizioni su 4 nella misura; la variante
+appena detta ridetta dopo il riavvio); col ramo 0. `riprendi` su un registro finto di 5000 turni
+(~1 KB l'uno): 44 ms all'avvio, una volta; nessuna latenza in più nei turni. Profilo da 8 GB:
+uguale.
+
+**Limiti.** La rotazione anonima è condivisa fra ospiti di satelliti diversi (rischio accettato
+nella issue: al più una variante saltata). Un conoscente è sotto il suo `voce.id` nella misura
+ma ruota sulla chiave anonima, come prima dell'arruolamento della voce: due conoscenti alternati
+con un ospite possono contare una ripetizione. Da verificare sulla DGX: la lettura di #28 a 50
+frasi pronte, sotto 8 ogni 100.
+
+Prove: `prova_frasi_rotazione` (livello 1, con i contrari: niente su disco per una voce
+sconosciuta, turni di ospiti e conoscenti non riletti, anche senza `livello`, turni di ieri,
+righe rotte, UTF-8 troncato, valori del tipo sbagliato, guasto dentro, cartella assente, id senza
+tono, la chiamata protetta in `main`).
