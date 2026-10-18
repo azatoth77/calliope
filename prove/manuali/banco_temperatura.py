@@ -27,6 +27,13 @@ con nomi di fantasia, ripetuti:
    il programma e lo esegue con tre casi. Il banco accende per questo caso, in memoria,
    `agenti_accettazione_programmi_sempre` (gli esempi anche fuori da uno sviluppo). Non è tra
    i casi di serie: `--casi media` (o `porte,convertitore,programma,media`).
+5. **tris2** (gioco nuovo, 18/10, issue #174, tra i casi di serie): il tris per due con
+   giocatori min = max = 2, il caso vero su cui l'agente ha girato a vuoto per cinque giri (i
+   suoi test non uscivano dalla fase «preparazione»: con min = max se ne esce solo con
+   «Inizia»). Accettazione: un test nascosto che parte dalla preparazione, tocca «Inizia», gioca
+   1, 4, 2, 5, 3 con il comando «casella» e legge la fine con un punto. Riferimento: il tris
+   delle prove dei giochi (`prove/giochi/tris`) con due giocatori fissi. Il criterio di #174:
+   chiuso in al più 2 giri (`--casi tris2 --giri 2`).
 
 Misure per lavoro: riuscito (consegna «fatto» e accettazione verde), passate, token (e di
 ragionamento), minuti, giri a vuoto (passate fermate per ragionamento ripetuto, passate senza
@@ -294,6 +301,59 @@ if __name__ == "__main__":
 '''
 
 
+# 5. Il tris per due (18/10, #174): il gioco nuovo con giocatori min = max = 2, su cui il 18/10
+# l'agente ha girato a vuoto per cinque giri (i suoi test davano per scontato che la partita
+# cominciasse in «turno»; con min = max dalla preparazione si esce solo con «Inizia»)
+COMPITO_TRIS2 = (
+    "Il gioco del tris per due giocatori sugli schermi (nome tris_due): sempre esattamente due "
+    "giocatori, che a turno mettono X e O su una griglia 3×3 toccando una casella o dicendo "
+    "«casella N» (il comando si chiama casella, con N da 1 a 9, da sinistra a destra e "
+    "dall'alto in basso). Chi mette tre segni in fila (riga, colonna o diagonale) vince e prende "
+    "un punto; con la griglia piena è pareggio; poi si può giocare ancora.")
+ACCETTAZIONE_TRIS2 = """const { test } = require("node:test");
+const assert = require("node:assert");
+async function mossa(g, n) {
+  while (g.stato().fase === "esito") await g.comando("avanti");
+  await g.comando("casella", n);
+}
+test("ACC tris2: si parte dalla preparazione, «Inizia», due giocatori", async () => {
+  const g = await apriGioco({ seme: 1 });
+  assert.strictEqual(g.stato().fase, "preparazione");
+  await g.tocca("Inizia");
+  assert.notStrictEqual(g.stato().fase, "preparazione");
+  assert.strictEqual(g.stato().giocatori.length, 2);
+});
+test("ACC tris2: tre in fila vince, la partita finisce con un punto", async () => {
+  const g = await apriGioco({ seme: 1 });
+  await g.tocca("Inizia");
+  for (const n of [1, 4, 2, 5, 3]) await mossa(g, n);
+  await g.avanza(20000);
+  while (g.stato().fase === "esito") await g.comando("avanti");
+  const s = g.stato();
+  assert.strictEqual(s.fase, "fine");
+  assert.deepStrictEqual(s.giocatori.map((x) => x.punti).sort(), [0, 1]);
+});
+"""
+
+
+TEST_SENZA_INIZIA = """const { test } = require("node:test");
+test("ACC tris2 come l'agente: la prima mossa subito", async () => {
+  const g = await apriGioco({ seme: 1 });
+  await g.comando("casella", 1);
+});
+"""
+
+
+def riferimento_tris2() -> dict:
+    """Il tris delle prove dei giochi (prove/giochi/tris) con giocatori min = max = 2."""
+    cartella = RADICE / "prove" / "giochi" / "tris"
+    m = json.loads((cartella / "manifesto.json").read_text(encoding="utf-8"))
+    m["nome"], m["titolo"] = "tris_due", "Tris per due"
+    m["scheda"]["giocatori"] = {"min": 2, "max": 2}
+    return {"logica.js": (cartella / "logica.js").read_text(encoding="utf-8"),
+            "manifesto.json": json.dumps(m, ensure_ascii=False, indent=1)}
+
+
 def casi():
     """{nome: dict} con tipo, compito, file di partenza, accettazione e riferimento."""
     import prova_lavori as PL
@@ -324,6 +384,11 @@ def casi():
                   "riferimento": {"media_voti.py": RIFERIMENTO_MEDIA},
                   # Fuori da uno sviluppo gli esempi dei programmi si accendono così (17/10)
                   "programmi_sempre": True},
+        # Il gioco nuovo, da zero: alla partenza la cartella è vuota (18/10, #174)
+        "tris2": {"tipo": "estensione", "gioco": True, "correzione": False,
+                  "estensione": None, "compito": COMPITO_TRIS2, "prima": {},
+                  "accettazione": ("accettazione_banco.test.js", ACCETTAZIONE_TRIS2),
+                  "riferimento": riferimento_tris2()},
     }
 
 
@@ -440,6 +505,17 @@ def secco() -> int:
             print(f"{'ok ' if ok else 'ERR'} {nome}: accettazione rossa alla partenza, verde sul "
                   "riferimento" + ("" if ok else f"  prima={prima['uscita'][-300:]!r} "
                                                  f"riferimento={rif['uscita'][-500:]!r}"))
+        if shutil.which("node"):
+            # Il test che l'agente aveva scritto il 18/10 (#174): la mossa senza «Inizia».
+            # Sul riferimento fallisce, e l'errore dice la fase e come se ne esce
+            caso = casi()["tris2"]
+            r = accettazione(nuova, caso["riferimento"], dict(caso, accettazione=(
+                "accettazione_banco.test.js", TEST_SENZA_INIZIA)))
+            ok = (not r["verde"] and "fase «preparazione»" in r["uscita"]
+                  and 'g.tocca("Inizia")' in r["uscita"])
+            errori += not ok
+            print(f"{'ok ' if ok else 'ERR'} tris2: la mossa senza «Inizia» fallisce e l'errore "
+                  "dice la preparazione e «Inizia»" + ("" if ok else f"  {r['uscita'][-600:]!r}"))
         vin = vincoli_correzione(casi()["porte"])
         ok = "gioco.test.js" in vin and "deve FALLIRE" in vin and PROBLEMA_PORTE in vin
         errori += not ok
@@ -968,7 +1044,7 @@ def main(argv) -> int:
                     help="l'analisi prima del codice con gli esempi di accettazione "
                     "(agenti_accettazione, 13/10): come nella Config, accesa o spenta")
     ap.add_argument("--ripetizioni", type=int, default=2)
-    ap.add_argument("--casi", default="porte,convertitore,programma")
+    ap.add_argument("--casi", default="porte,convertitore,programma,tris2")
     ap.add_argument("--minuti", type=float, default=20.0, help="tetto di tempo per lavoro "
                     "(con --giri N diviso per N: lo stesso tempo in tutto)")
     ap.add_argument("--giri", type=int, default=1, help="giri per lavoro: le passate e il "

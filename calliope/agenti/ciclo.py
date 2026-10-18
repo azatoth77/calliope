@@ -31,6 +31,7 @@ contesto_lavoro.py (risultati lunghi nei file, diario del lavoro). A ogni passat
 (stesso Ollama) e il lavoro può essere annullato: lo stream si chiude subito.
 """
 
+import hashlib
 import inspect
 import json
 import re
@@ -197,9 +198,13 @@ class Lavoro:
     attesa0: float = 0.0
     giro_inizio: float | None = None
     # Segnali di giro a vuoto misurati dal codice: scritture per file, firme degli errori dei
-    # test che falliscono, passate senza file né test nuovi (nel giro)
+    # test che falliscono, passate senza novità e senza un test verde in più (nel giro), i punti
+    # di fine giro delle tappe (18/10, #174)
     segnali: dict = field(default_factory=dict)
     nota_giro: str = ""               # la nota della persona per il giro dopo («cambia e continua»)
+    # Il motivo per cui la proposta non parte (18/10, #174: i requisiti principali qui non si
+    # possono fare, sviluppo.py); salvato con il lavoro (ripresa.py)
+    non_si_parte: str = ""
     # L'analisi prima del codice (13/10, accettazione.py): {"stato": domanda | pronta |
     # non_fatta | saltata, gli esempi, i requisiti al collaudo, le scelte, l'esito}
     accettazione: dict = field(default_factory=dict)
@@ -1134,13 +1139,18 @@ class Agente:
             spinte, scritti = ctx["spinte"], ctx["scritti"]
             rimandi = ctx.get("rimandi", 0)
             nota = str(lav.nota_giro or "").strip()
+            # Dopo giri finiti allo stesso punto (18/10, #174) il «sì» della persona vuol dire
+            # «consegna quello che va» (servizio.continua): lo dice Calliope, non la persona
+            uguali = isinstance(lav.segnali, dict) and lav.segnali.pop("consegna_dopo_giri",
+                                                                       None)
             messages.append({"role": "user", "content":
                              f"Hai un altro giro di lavoro ({self.max_passi} passate, "
                              f"{self.tempo_max_s / 60:.0f} minuti). Riprendi da dove eri, senza "
                              "rifare quello che c'è già: guarda il diario e i file."
                              + (f" La persona ha chiesto anche: «{nota}»." if nota else "")
-                             + " Se un test fallisce sempre con lo stesso errore, cambia "
-                               "strada. Alla fine chiama consegna."})
+                             + (" " + CONSEGNA_DOPO_GIRI if uguali else
+                                " Se un test fallisce sempre con lo stesso errore, cambia "
+                                "strada. Alla fine chiama consegna.")})
             lav.nota_giro = ""
         elif ctx and lav.risposta is not None:
             # Ripresa dopo una domanda (03/10): la conversazione dell'agente è quella di prima
@@ -1442,7 +1452,13 @@ class Agente:
                         seg["test_verde"] = None        # i file sono cambiati dopo i test
                         scritti += 1
                         p = str(result.get("percorso") or args.get("percorso") or "?")
-                        novita = novita or p not in seg["scritture"]
+                        # Novità (18/10, #174): un contenuto del file mai visto prima, letto
+                        # dopo la scrittura (scrivi_file o modifica_file). Prima solo il primo
+                        # scrivi_file di un file nuovo, e a voce «passate senza file»; dalla
+                        # revisione della PR #179 un file che torna a un contenuto già visto
+                        # (A, B, A, B; a*b → b-a → a*b) non è una novità: è il giro a vuoto
+                        if novita_file(seg, p, _contenuto_dopo(sandbox, p, name, args)):
+                            novita = True
                         if name == "scrivi_file":
                             # Riscritture intere di fila dello stesso file lungo (11/10)
                             if p in seg["scritture"] and int(result.get("righe") or 0) \
@@ -1461,6 +1477,23 @@ class Agente:
                         elif result.get("passano"):
                             novita = True
                             fila.clear()
+                        conto = conto_test(result) if not args.get("percorso") else None
+                        if conto is not None:
+                            # I numeri dei test (18/10, #174): un conto mai visto è una novità; un
+                            # test verde in più (o tutti verdi) è un progresso. Dalla revisione
+                            # della PR #179 si contano le esecuzioni dei test senza progressi,
+                            # non le passate: chi scrive file nuovi con i test verdi lavora
+                            visti = seg.setdefault("conti_visti", [])
+                            if list(conto) not in visti:
+                                novita = True
+                                seg["conti_visti"] = (visti + [list(conto)])[-30:]
+                            seg["conto_test"] = list(conto)
+                            verdi, prima = conto[0] - conto[1], seg.get("verdi_max")
+                            if prima is None or verdi > int(prima) or result.get("passano"):
+                                seg["senza_progressi"] = 0
+                            else:
+                                seg["senza_progressi"] = int(seg.get("senza_progressi") or 0) + 1
+                            seg["verdi_max"] = verdi if prima is None else max(verdi, int(prima))
                         seg["ultimo_errore"] = ((ultimo_errore(result) or {
                             "test": "", "errore": firma, "dove": ""}) if firma else None)
                         # Tutto verde (13/10): per l'avviso di chiusura e la spinta a consegnare
@@ -1524,7 +1557,14 @@ class Agente:
         if self._ha_test(sandbox):
             test = sandbox.test()
         esito = str(consegna.get("esito") or "fatto")
+        # I test spariti dall'ultima tappa (revisione della PR #179, #174): li dice il codice
+        tolti = test_tolti(seg, test) if test is not None else None
+        if tolti:
+            from ..sonde import nota as nota_regola
+            nota_regola(lav, "agente_test_tolti", self.log,
+                        ", ".join(tolti["nomi"])[:120] or f"{tolti['meno']} in meno")
         return {"esito": esito if esito in ("fatto", "mancano_dati", "impossibile") else "fatto",
+                **({"test_tolti": tolti} if tolti else {}),
                 "riassunto": str(consegna.get("riassunto") or ""),
                 "domanda": str(consegna.get("domanda") or ""),
                 "programma": str(consegna.get("programma") or "").strip(),
@@ -1669,7 +1709,20 @@ class Agente:
         except Exception as ex:  # noqa: BLE001
             self.log(f"[AGENTI] {lav.id}: test alla tappa non eseguiti: {ex}")
         self.log(f"[AGENTI] {lav.id}: tappa del giro {lav.giro} ({e.tipo}): {e}")
+        # Lo stesso punto di fine giro di fila (18/10, #174: cinque giri del tris, sempre gli
+        # stessi tre test rossi): dalla seconda volta la proposta cambia (servizio.frase_tappa)
+        seg = lav.segnali if isinstance(lav.segnali, dict) else {}
+        lav.segnali = seg
+        uguali = giri_uguali(seg, test)
+        if isinstance(test, dict) and conto_test(test) is not None:
+            # I test della tappa, per dire alla consegna quelli spariti (revisione della PR #179)
+            seg["test_tappa"] = {"nomi": nomi_test(test.get("uscita") or "")[:200],
+                                 "eseguiti": conto_test(test)[0]}
+        if uguali >= GIRI_UGUALI:
+            from ..sonde import nota as nota_regola
+            nota_regola(lav, "agente_giri_uguali", self.log, f"{uguali} tappe")
         return {"esito": "tappa", "tipo_limite": e.tipo, "motivo": str(e),
+                "giri_uguali": uguali,
                 "riassunto": _fatto_finora(gc, messages), "manca": manca,
                 "segnali": segnali_giro(lav, self.max_passi), "giro": lav.giro,
                 "test": (test or {}).get("esito"), "test_passano": (test or {}).get("passano"),
@@ -2508,21 +2561,158 @@ class Agente:
 
 
 def firma_errore(res) -> str:
-    """La firma dell'errore di un esegui_test che non passa (08/10, segnali di giro a vuoto):
-    l'ultima riga d'errore dell'uscita, senza numeri di riga né indirizzi, o "" se passano."""
+    """La firma dell'errore di un esegui_test che non passa (08/10, segnali di giro a vuoto),
+    senza numeri di riga né indirizzi, o "" se passano. Dal 18/10 (#174, il tris per due sulla
+    DGX: la riga di un test PASSATO, «ok casella occupata: errore», era la firma di ogni
+    esecuzione, e un esito diverso dei test non contava mai come novità) prima la prima riga dei
+    fallimenti in breve (`fallimenti`, diagnosi.py), poi la prima riga di un test fallito
+    (FALLITO, FAIL), poi l'ultima riga d'errore; mai la riga di un test passato («ok …»)."""
     if not isinstance(res, dict) or res.get("passano") or res.get("ok") is False and \
             not res.get("uscita"):
         return ""
-    righe = [r.strip() for r in str(res.get("uscita") or "").splitlines() if r.strip()]
+
+    def forma(riga: str) -> str:
+        return re.sub(r"0x[0-9a-f]+|\d+", "#", riga)[:160]
+    fall = [r.strip() for r in str(res.get("fallimenti") or "").splitlines() if r.strip()]
+    if fall:
+        return forma(fall[0])
+    righe = [r.strip() for r in str(res.get("uscita") or "").splitlines()
+             if r.strip() and not re.match(r"(?i)ok\b", r.strip())]
+    falliti = [r for r in righe if re.match(r"(FALLITO|FAIL|FAILED|ERROR)\b", r)]
+    if falliti:
+        return forma(falliti[0])
     cand = [r for r in righe if re.search(r"(Error|Exception|assert|FAILED|errore)", r)]
-    riga = (cand or righe or [""])[-1]
-    riga = re.sub(r"0x[0-9a-f]+|\d+", "#", riga)
-    return riga[:160]
+    return forma((cand or righe or [""])[-1])
+
+
+def _contenuto_dopo(sandbox, percorso: str, nome: str, args: dict) -> str | None:
+    """Il contenuto del file dopo scrivi_file o modifica_file, letto dalla sandbox (per
+    modifica_file è l'unico modo di saperlo); None se non si legge e non c'è negli argomenti."""
+    try:
+        return sandbox.leggi(percorso, 5_000_000)
+    except Exception:  # noqa: BLE001 — l'impronta aiuta, non ferma il lavoro
+        return str(args.get("contenuto")) if nome == "scrivi_file" and args.get(
+            "contenuto") is not None else None
+
+
+def novita_file(seg: dict, percorso: str, contenuto: str | None) -> bool:
+    """Un contenuto del file mai visto (revisione della PR #179, #174): le impronte già viste
+    per file in `segnali["impronte"]`. Un file che torna a un contenuto già visto (A, B, A, B)
+    non è una novità; un contenuto che non si legge sì (nel dubbio)."""
+    impronte = seg.setdefault("impronte", {})
+    if contenuto is None:
+        return True
+    h = hashlib.sha1(contenuto.encode("utf-8", "replace")).hexdigest()[:12]
+    viste = impronte.get(percorso)
+    viste = list(viste) if isinstance(viste, list) else []
+    if h in viste:
+        return False
+    impronte[percorso] = (viste + [h])[-40:]
+    return True
+
+
+# I controlli di Calliope nell'uscita dei test, che non sono test dell'agente
+_NON_TEST = ("prova di fumo", "manifesto.json")
+
+
+def nomi_test(uscita: str) -> list[str]:
+    """I nomi dei test che si leggono nell'uscita (revisione della PR #179, #174): «ok …» e
+    «FALLITO …» di test_js.mjs, «FAIL: …» ed «ERROR: …» di unittest (i test Python verdi non
+    hanno il nome nell'uscita: per quelli conta il numero)."""
+    out = []
+    for r in str(uscita or "").splitlines():
+        r = r.strip()
+        m = re.match(r"(?:ok|FALLITO) (.+)$", r)
+        if m:
+            nome = m.group(1).partition(": ")[0].strip()
+        else:
+            m = re.match(r"(?:FAIL|ERROR): (\S+)", r)
+            if not m:
+                continue
+            nome = m.group(1)
+        if nome and not nome.startswith(_NON_TEST) and nome not in out:
+            out.append(nome)
+    return out
+
+
+def test_tolti(seg: dict, test) -> dict | None:
+    """I test che c'erano all'ultima tappa e alla consegna non ci sono più (revisione della PR
+    #179, #174: dopo i giri uguali l'agente può togliere un suo test, e lo deve dire il codice,
+    non solo il suo riassunto). {"nomi": [...], "meno": N} o None."""
+    tappa = seg.get("test_tappa")
+    if not isinstance(tappa, dict) or not isinstance(test, dict):
+        return None
+    ora = nomi_test(test.get("uscita") or "")
+    nomi = [n for n in tappa.get("nomi") or [] if n not in ora]
+    meno = int(tappa.get("eseguiti") or 0) - int((test.get("esito") or {}).get("eseguiti") or 0)
+    if not nomi and meno <= 0:
+        return None
+    return {"nomi": nomi, "meno": max(meno, len(nomi))}
+
+
+def frase_test_tolti(tolti) -> str:
+    """La frase a voce dei test tolti dopo l'ultima tappa, detta dal codice; "" se nessuno."""
+    if not isinstance(tolti, dict) or not (tolti.get("nomi") or tolti.get("meno")):
+        return ""
+    nomi = [f"«{n}»" for n in (tolti.get("nomi") or [])[:3]]
+    n = int(tolti.get("meno") or len(nomi))
+    quanti = "un test" if n == 1 else f"{n} test"
+    return ("Attenzione: rispetto all'ultima tappa l'agente ha tolto o rinominato "
+            + quanti + (": " + ", ".join(nomi) if nomi else "")
+            + ". Quello che provava" + ("" if n == 1 else "no") + " non è più controllato.")
+
+
+def conto_test(res) -> tuple[int, int] | None:
+    """(eseguiti, non passati) di un esegui_test o dei test rifatti alla tappa, o None."""
+    e = (res or {}).get("esito") if isinstance(res, dict) else None
+    if not isinstance(e, dict) or "eseguiti" not in e:
+        return None
+    return (int(e.get("eseguiti") or 0),
+            int(e.get("falliti") or 0) + int(e.get("errori") or 0))
+
+
+# Dopo quante tappe di fila con gli stessi test rossi e lo stesso errore la proposta cambia
+# (18/10, #174): non un altro giro uguale, ma consegnare ciò che va o cambiare la richiesta
+GIRI_UGUALI = 2
+# Il giro dopo, quando la persona ha detto di sì a «faccio consegnare quello che funziona?»
+CONSEGNA_DOPO_GIRI = (
+    "Gli ultimi giri sono finiti allo stesso punto, con gli stessi test che non passano: non "
+    "riprovare la stessa strada. Rileggi l'ultimo errore parola per parola: dice la fase, i "
+    "comandi attivi e cosa manca. Se a fallire è un tuo test che dà per scontato qualcosa che il "
+    "contratto non dice (per un gioco: ogni partita comincia nella fase «preparazione»), correggi "
+    "il test, non il resto. Non togliere mai i test del cuore della richiesta (per un gioco: chi "
+    "vince, il pareggio, a chi tocca): se uno di quelli non riesci a farlo passare, consegna con "
+    "esito impossibile e di' cosa manca. Solo il tuo test di un requisito secondario che non "
+    "riesci a fare si può togliere, e va detto nel riassunto: Calliope confronta i test con quelli "
+    "della tappa e lo dice lo stesso. Poi rifai esegui_test e consegna quello che funziona.")
+
+
+def giri_uguali(seg: dict, test) -> int:
+    """Alla tappa (18/10, #174): segna il punto in cui il giro è finito (i test rifatti adesso:
+    quanti, quanti rossi, il primo errore) e dice da quante tappe di fila è lo stesso. 0 con i
+    test verdi o senza test: lì non c'è un giro a vuoto da dire."""
+    conto = conto_test(test)
+    if conto is None or conto[1] <= 0:
+        seg["tappe"] = (list(seg.get("tappe") or []) + [None])[-6:]
+        return 0
+    punto = [conto[0], conto[1], firma_errore(test)]
+    tappe = (list(seg.get("tappe") or []) + [punto])[-6:]
+    seg["tappe"] = tappe
+    n = 0
+    for x in reversed(tappe):
+        if x != punto:
+            break
+        n += 1
+    return n
 
 
 def segnali_giro(lav, max_passi: int) -> dict:
     """I segnali di giro a vuoto misurati dal codice (08/10): file riscritti più volte, test che
-    falliscono con lo stesso errore, passate senza file né test nuovi; con le frasi da dire."""
+    falliscono con lo stesso errore, passate senza novità (file cambiati, un errore nuovo, i
+    numeri dei test diversi), dal 18/10 (#174) anche le esecuzioni dei test senza un test verde
+    in più (non le passate: chi scrive file nuovi con i test verdi sta lavorando); con
+    le frasi da dire, che dicono quello che è successo davvero (prima «21 passate senza file né
+    test nuovi» mentre l'agente i file li cambiava con modifica_file)."""
     seg = getattr(lav, "segnali", None) or {}
     riscritti = sorted(((p, n) for p, n in (seg.get("scritture") or {}).items() if n >= 3),
                        key=lambda x: -x[1])
@@ -2536,22 +2726,26 @@ def segnali_giro(lav, max_passi: int) -> dict:
             n_stesso += 1
         stesso = ultimo if n_stesso >= 2 else ""
     vuote = int(seg.get("senza_novita") or 0)
+    fermi = int(seg.get("senza_progressi") or 0)
+    soglia = max(3, max_passi // 4)
     frasi = []
     if riscritti:
         p, n = riscritti[0]
         frasi.append(f"ha riscritto {p.rsplit('/', 1)[-1]} {n} volte")
     if stesso:
         frasi.append(f"i test falliscono {n_stesso} volte di fila con lo stesso errore")
-    if vuote >= max(3, max_passi // 4):
-        frasi.append(f"{vuote} passate senza file né test nuovi")
+    if vuote >= soglia:
+        frasi.append(f"{vuote} passate senza cambiare i file né l'esito dei test")
+    elif fermi >= soglia:
+        frasi.append(f"ha rifatto i test {fermi} volte senza farne passare di nuovi")
     ripetute = int(seg.get("ripetizioni") or 0)
     if ripetute:
         frasi.append("ha ripetuto lo stesso ragionamento ("
                      + ("una passata fermata" if ripetute == 1
                         else f"{ripetute} passate fermate") + ")")
     return {"riscritti": [list(x) for x in riscritti[:5]], "errore_ripetuto": stesso,
-            "volte_errore": n_stesso, "senza_novita": vuote, "ripetizioni": ripetute,
-            "frasi": frasi,
+            "volte_errore": n_stesso, "senza_novita": vuote, "senza_progressi": fermi,
+            "ripetizioni": ripetute, "frasi": frasi,
             "a_vuoto": bool(frasi)}
 
 

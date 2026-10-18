@@ -623,7 +623,28 @@ export async function fumo(file, opzioni = {}) {
 //   g.detti, g.dati                        // le frasi fatte dire a Calliope, i dati salvati
 // Un'eccezione che esce da un gestore durante tocca/comando/avanza fa fallire il test con
 // file:riga, come nella prova di fumo. Un elemento disabilitato non riceve il tocco (come nel
-// browser).
+// browser). Ogni partita comincia nella fase «preparazione»: si esce con «Inizia» (giocatori
+// min = max: il pulsante «N giocatori» non c'è) o con «N giocatori» (min < max); dal 18/10
+// (#174) apriGioco({ inizia: true }) lo fa da sé e il test parte dalla fase d'inizio del gioco
+// (con min < max serve anche «giocatori: N», uno dei numeri del manifesto).
+//   const g = await apriGioco({ seme: 1, inizia: true });
+
+// La via d'uscita dalla preparazione, IN TESTA ai messaggi d'errore (18/10, #174; revisione
+// della PR #179: i fallimenti in breve tagliano l'errore a 360 caratteri, e in fondo si
+// perdeva). I comandi attivi dicono quale pulsante c'è; con `conOpzione` false (il test ha già
+// chiesto { inizia: true }) niente consiglio di usarla di nuovo. "" se non c'è un'uscita.
+export function viaDallaPreparazione(attivi, conOpzione = true) {
+  const a = (attivi || []).map(String);
+  const n = a.filter((c) => /^giocatori_\d+$/.test(c)).map((c) => Number(c.split("_")[1]));
+  if (!n.length && !a.includes("inizia")) return "";
+  const k = n.find((x) => x >= 2) || n[0];
+  const tocca = n.length ? `${k} giocatori` : "Inizia";
+  const opz = n.length ? `{ inizia: true, giocatori: ${k} }` : "{ inizia: true }";
+  return `prima delle mosse tocca «${tocca}» (await g.tocca("${tocca}"))`
+    + (conOpzione ? ` o apri con apriGioco(${opz})` : "")
+    + ": ogni partita comincia nella fase «preparazione»; correggi il test, non il manifesto. ";
+}
+
 export async function apriGioco(file, opzioni = {}) {
   const amb = await prepara(file, opzioni);
   const { errori, nodi, radice, lancia, evento, avanza, respira, ascolti } = amb;
@@ -652,6 +673,10 @@ export async function apriGioco(file, opzioni = {}) {
     // Il più interno (il testo di un pulsante è anche quello del suo contenitore)
     return c.filter((n) => !c.some((m) => m !== n && n.contains(m)));
   }
+  // La fase della partita adesso ("" senza la macchina a stati)
+  const faseOra = () => {
+    try { return amb.motore && amb.motore.partita ? amb.motore.partita.istantanea().fase : ""; } catch (e) { return ""; }
+  };
   const DITO = ["pointerdown", "mousedown", "pointerup", "mouseup", "click"];
   const TOCCO = ["touchstart", "touchend"];
   async function passa(ms) {
@@ -668,7 +693,9 @@ export async function apriGioco(file, opzioni = {}) {
       const ascoltano = tutti.filter((n) => gestori(n, [...DITO, ...TOCCO]));
       const n = (ascoltano.length ? ascoltano : tutti)[indice];
       if (!n) {
-        throw new Error(`nessun elemento da toccare con «${cosa}»`
+        throw new Error((faseOra() === "preparazione"
+          ? viaDallaPreparazione(amb.attivi(), !opzioni.inizia) : "")
+          + `nessun elemento da toccare con «${cosa}»`
           + (tutti.length ? ` (ce ne sono ${tutti.length})` : "")
           + `: nel riquadro si legge «${visibile(amb).slice(0, 300)}»`);
       }
@@ -713,13 +740,17 @@ export async function apriGioco(file, opzioni = {}) {
       const attivi = amb.attivi();
       if (!attivi.includes(String(nome))) {
         // La fase di adesso (14/10 sera, banco delle porte L7 e L10: l'agente credeva che dopo
-        // «2 giocatori» servisse «avanti», riscriveva la macchina e girava a vuoto)
-        let fase = "";
-        try { fase = amb.motore && amb.motore.partita ? amb.motore.partita.istantanea().fase : ""; } catch (e) { fase = ""; }
+        // «2 giocatori» servisse «avanti», riscriveva la macchina e girava a vuoto). Dal 18/10
+        // (#174, il tris per due sulla DGX: tre test scritti dall'agente davano per scontato che
+        // la partita cominciasse in «turno», e per un'ora ha cambiato il manifesto invece del
+        // test) nella preparazione l'errore dice anche come se ne esce
+        const fase = faseOra();
+        const testa = fase === "preparazione" && String(nome) !== "avanti"
+          ? viaDallaPreparazione(attivi, !opzioni.inizia) : "";
         const perche = String(nome) === "avanti" && fase && fase !== "esito"
           ? ": «avanti» vale solo nella fase «esito», dopo una mossa con un esito; dopo la scelta dei giocatori la partita è già nella fase d'inizio della macchina"
           : "";
-        throw new Error(`il comando «${nome}» adesso non è attivo (${fase ? `fase «${fase}», ` : ""}attivi: ${attivi.join(", ") || "nessuno"})${perche}`);
+        throw new Error(`${testa}il comando «${nome}» adesso non è attivo (${fase ? `fase «${fase}», ` : ""}attivi: ${attivi.join(", ") || "nessuno"})${perche}`);
       }
       const da = errori.length;
       const dati = Object.freeze({ comando: String(nome), ...(giocatore ? { giocatore: String(giocatore) } : {}) });
@@ -772,5 +803,24 @@ export async function apriGioco(file, opzioni = {}) {
       return g;
     },
   }) });
+  // { inizia: true } (18/10, #174): fuori dalla preparazione prima di dare il gioco al test
+  // Revisione della PR #179: mai un ripiego in silenzio con un altro numero di giocatori
+  if (opzioni.inizia && amb.motore && faseOra() === "preparazione") {
+    const gmin = opzioni.minimo || 1, gmax = opzioni.massimo || 1;
+    const attivi = amb.attivi();
+    if (gmin < gmax) {
+      const n = Number(opzioni.giocatori) || 0;
+      if (!n || !attivi.includes(`giocatori_${n}`)) {
+        throw new Error(`apriGioco({ inizia: true }): con giocatori da ${gmin} a ${gmax} nel manifesto serve anche «giocatori: N», con N da ${gmin} a ${gmax}`
+          + (n ? ` (${n} non c'è: attivi ${attivi.join(", ") || "nessuno"})` : ""));
+      }
+      await g.comando(`giocatori_${n}`);
+    } else {
+      if (!attivi.includes("inizia")) {
+        throw new Error(`apriGioco({ inizia: true }): nella preparazione «Inizia» non è attivo (attivi: ${attivi.join(", ") || "nessuno"})`);
+      }
+      await g.comando("inizia");
+    }
+  }
   return g;
 }
