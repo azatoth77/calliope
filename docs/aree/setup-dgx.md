@@ -51,7 +51,7 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 | `politica_per_valore` | `true` (di serie, non nel locale) | `true` (dal 09/10 sera) | — | [sicurezza-politica](sicurezza-politica.md) |
 | `agenti_accettazione_programmi_sempre` | `false` (di serie, non nel locale) | `false` | — | [agenti-estensioni](agenti-estensioni.md) |
 | `agenti_accettazione_ragionamento` | `0` (di serie, non nel locale) | `0` | — | [agenti-estensioni](agenti-estensioni.md) |
-| `preselezione_tool` | non nel locale; il campo è tolto dal codice il 16/10 (#25) | — | spenta dal 15/10 pomeriggio, tolta il 16/10 | [voce-e-regole](voce-e-regole.md) |
+| `preselezione_tool` | non nel locale; il campo è tolto dal codice il 17/10 (PR #125, #25) | — | spenta dal 15/10 pomeriggio, tolta il 17/10 | [voce-e-regole](voce-e-regole.md) |
 | `web_searxng_url` | presente (l'indirizzo resta fuori dal repository) | vuoto | — | [biblioteca](biblioteca.md) |
 | `fatture_emittente` | presente (i dati dell'ufficio restano fuori dal repository) | vuoto | — | [documenti-ufficio](documenti-ufficio.md) |
 

@@ -222,7 +222,7 @@ tenuto»). La vita nella conversazione non cambia: il cassetto serve a ritrovarl
   e senza profilo non c'è cassetto). Per leggere o gestire il cassetto a voce serve la voce
   riconosciuta in quella frase o lo scritto dello schermo personale: **mai la zona grigia** né la
   frase breve («Per i tuoi file devo riconoscere bene la tua voce…»). Ognuno vede solo il suo.
-  **Minori**: un tutore vede e gestisce il cassetto del figlio con `minore` (fino al 17/10 `di`, ancora accettato come `ragazzo`), con la stessa regola
+  **Minori**: un tutore vede e gestisce il cassetto del figlio con `minore` (fino al 17/10 `di`; `di` e `ragazzo` sono ancora accettati tutti e due), con la stessa regola
   delle conversazioni archiviate (`minori.conversazioni_visibili_ai_tutori`: dal 14/10 a ogni
   età; prima sotto i 14 anni sì, dai 14 no); un minore non può «Tieni» (i documenti di casa sono dell'ufficio, come
   `allegato_archivia`), può eliminare o tenere ancora.

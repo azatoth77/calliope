@@ -61,8 +61,10 @@ Con uno schermo personale e Calliope sulla DGX:
 4. Lasciarli scadere: alla conversazione dopo «Ho eliminato … file che non avevi tenuto.»
 5. Dalla voce di un'altra persona o nella zona grigia: «leggimi il file di ieri» → «Per i tuoi
    file devo riconoscere bene la tua voce…» o «non trovo».
-6. (17/10, #58) «Elimina il file che mi ha mandato ieri mia moglie» → prima di eliminare la
-   domanda che dice di chi è il cassetto («Nel tuo cassetto: vuoi che elimini i tuoi file…? I
-   file degli altri non li vedo.»); al «no» niente eliminato. «Leggimi il file che Teodora ti ha
-   mandato ieri» (un'adulta): nessun suo file letto («I file degli altri non li vedo per te…» o
+6. (17/10, #58) Con `cassetto_giorni` di serie e un file mandato ieri (come al passo 2):
+   «Elimina il file che mi ha mandato ieri mia moglie» → niente viene eliminato senza un «sì».
+   L'esito giusto è una domanda che dice di chi è il cassetto (il tuo, non quello della moglie)
+   prima di eliminare, oppure un rifiuto; al «no» resta tutto. «Leggimi il file che ti ha
+   mandato ieri» detto nominando un'altra adulta di casa: nessun file di lei letto (rifiuto, o
    «non trovo»). «Ritrovami il file di ieri» lo legge e **non** lo mette tra i documenti.
+   Le frasi esatte cambiano col tono: si controlla il comportamento, non la stringa.
