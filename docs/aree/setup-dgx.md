@@ -30,7 +30,8 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 | Chiave | Sulla DGX | Di serie | Da quando | Area |
 |---|---|---|---|---|
 | `llm_profilo` | `gemma4-26b-ollama` (l'e4b resta caricato per il guardiano e il giudizio «rivolta») | vuoto (il modello di `llm_model`) | verificato il 16/10 | [voce-e-regole](voce-e-regole.md) |
-| `llm_reti_spente` | `[domanda_insistita]`; si aggiungono quelle del profilo (`spinta_promessa`, `spinta_richiesta`, `ricerca_promessa`), quindi quattro spente in tutto. **Resta fino all'installazione del profilo nuovo** (dal 18/10 `domanda_insistita` è spenta nei profili del 26B, #15), poi chi amministra la toglie | `[]` (tutte accese, o quelle del profilo) | non scritta; decisione del 18/10 (#15) | [voce-e-regole](voce-e-regole.md) |
+| `llm_reti_spente` | non nel locale dal 18/10 sera: le quattro spente (`spinta_promessa`, `spinta_richiesta`, `ricerca_promessa`, `domanda_insistita`) vengono dal profilo del 26B (#15). *[storico: `[domanda_insistita]` nel locale fino al 18/10]* | `[]` (tutte accese, o quelle del profilo) | 18/10 (#15) | [voce-e-regole](voce-e-regole.md) |
+| `conserva_valutazione_fino` | `"2026-11-05"`: si conserva tutto, ospiti compresi, testo e audio | vuoto (spento) | 18/10 sera, deciso da chi amministra (#173, decisione [0032](../decisioni/0032-valutazione-conserva-tutto.md)) | [contesto-conversazione](contesto-conversazione.md) |
 | `system1_dopo_tool` | `ombra` | `spento` | 15/10 | [voce-e-regole](voce-e-regole.md) |
 | `frasi_varianti` | `attivo` | `ombra` | non scritta (#28 è ancora aperta) | [personalita](personalita.md) |
 | `fine_turno` | `spenta` (era `ombra`) | `spenta` | 18/10: la griglia non ha nessuna soglia sotto l'1 % di tagli (#24) | [stt-tts](stt-tts.md) |
