@@ -18,7 +18,7 @@ docs/ricerche/2026-10-10-registro-eventi.md, voce 2.1 della roadmap).
    `parlato.diverso` e `eventi_ombra.differenze` non sono zero per costruzione, mentre
    `proiezione_diversa` c'è in ogni turno e vale 0; con `attivo` lo stesso campo vale 0.
 4. **I turni interrotti** (18/10, issue #159): interrotto durante la prima frase (niente sentito
-   per intero) il turno ha `proiezione_diversa` e `eventi_ombra.interrotta` (mandate, sentite,
+   per intero) il turno ha `proiezione_diversa` e `eventi_ombra.interrotta` (inviate, sentite,
    motivo), contato a parte nel criterio; contrari: interrotto dopo una frase, turni normali.
 
 Nomi di fantasia, niente rete né audio: pochi secondi.
@@ -283,7 +283,7 @@ def prova_interrotti():
              "la risposta vuota", len(inter) == 1 and not inter[0].get("risposta"), str(inter))
     verifica("…e ha proiezione_diversa (0: la proiezione non dice niente di non sentito)",
              o.get("proiezione_diversa") == 0, json.dumps(o, ensure_ascii=False))
-    verifica("…con le frasi sentite davvero (0 su quelle mandate) e il motivo",
+    verifica("…con le frasi sentite davvero (0 su quelle inviate) e il motivo",
              o.get("interrotta", {}).get("sentite") == 0
              and o["interrotta"].get("inviate", 0) >= 1
              and o["interrotta"].get("motivo") == "niente_di_intero", str(o.get("interrotta")))
@@ -312,6 +312,22 @@ def prova_interrotti():
              "interrotti" not in misura.testo(misura.riassunto(
                  [turno("2026-10-15", proiezione_diversa=0)]),
                  e1=misura.criterio_e1([turno("2026-10-15", proiezione_diversa=0)])))
+    # I registri di prima (revisione della PR #167): l'interrotto del 16/10 senza il campo
+    vecchio = dict(turno("2026-10-16"), interrotta=True, risposta="")
+    vecchi = [vecchio, turno("2026-10-16", proiezione_diversa=0)]
+    e1 = misura.criterio_e1(vecchi + tutti)
+    testo = misura.testo(misura.riassunto(vecchi), e1=e1)
+    verifica("registri di prima: l'interrotto senza il campo contato come «non misurato»",
+             misura.riassunto(vecchi)["2026-10-16"].get("interrotti_non_misurati") == 1
+             and e1.get("interrotti_non_misurati") == 1
+             and "interrotti non misurati (scritti prima del 18/10, senza "
+                 "eventi_ombra.interrotta): 1" in testo
+             and "interrotti non misurati (scritti prima del 18/10, senza il campo) 1" in testo,
+             testo)
+    verifica("contrario: gli interrotti di oggi (col campo) non sono «non misurati»",
+             misura.criterio_e1(tutti).get("interrotti_non_misurati") is None
+             and all(g["interrotti_non_misurati"] == 0
+                     for g in misura.riassunto(tutti).values()))
 
 
 def main():

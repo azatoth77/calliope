@@ -256,7 +256,8 @@ def riassunto(turni: list[dict]) -> dict:
             "dimentica": 0, "attivo": 0, "riletti": [], "stimati": [], "cache_rotta": 0,
             "proiezione_ms": [], "proiezione": 0, "proiezione_diversa": 0,
             "proiezione_motivi": {}, "proiezione_interrotte": 0,
-            "proiezione_interrotte_diverse": 0, "interrotte_motivi": {}})
+            "proiezione_interrotte_diverse": 0, "interrotte_motivi": {},
+            "interrotti_non_misurati": 0})
         if ca is not None:
             # La cache del prefisso (passo 3, § 10 punto 5): riletti dal motore e stimati
             if isinstance(ca.get("riletti"), int):
@@ -279,6 +280,8 @@ def riassunto(turni: list[dict]) -> dict:
             g["offerte"] += int(p.get("offerte") or 0)
             for k, v in (p.get("voluti") or {}).items():
                 g["voluti"][k] = g["voluti"].get(k, 0) + int(v or 0)
+        if _non_misurato(t):
+            g["interrotti_non_misurati"] += 1
         if isinstance(o, dict):
             g["ombra"] += 1
             g["attivo"] += 1 if o.get("modo") == "attivo" else 0
@@ -446,6 +449,14 @@ def avviso_riletti(cfg, oggi=None) -> str | None:
     return None
 
 
+def _non_misurato(t: dict) -> bool:
+    """Un turno interrotto con l'ombra ma senza `eventi_ombra.interrotta`: scritto prima del
+    18/10 (issue #159), quando l'interrotto senza frasi sentite restava fuori dal criterio. Si
+    conta a parte, così «0 su N» non lo nasconde."""
+    o = t.get("eventi_ombra")
+    return bool(t.get("interrotta")) and isinstance(o, dict) and "interrotta" not in o
+
+
 def criterio_e1(turni: list[dict]) -> dict:
     """Il criterio di E1 su tutto il registro letto (non solo `--giorni`): quanti turni hanno
     il campo `eventi_ombra.proiezione_diversa`, quanti con un valore > 0, da che giorno."""
@@ -459,6 +470,8 @@ def criterio_e1(turni: list[dict]) -> dict:
                 "interrotti_diversi": sum(1 for t in inter
                                           if t["eventi_ombra"]["proiezione_diversa"])}
                if inter else {}),
+            **({"interrotti_non_misurati": nm}
+               if (nm := sum(1 for t in turni if _non_misurato(t))) else {}),
             **({"dal": date[0]} if date else {})}
 
 
@@ -470,7 +483,10 @@ def testo_e1(e1: dict | None) -> list[str]:
             + f", di cui {e1['diversi']} con proiezione_diversa > 0 (servono almeno 200 turni, "
             f"tutti a 0)" + (f"; interrotti {e1['interrotti']}, di cui "
                              f"{e1.get('interrotti_diversi', 0)} diversi"
-                             if e1.get("interrotti") else "") + ".")
+                             if e1.get("interrotti") else "")
+            + (f"; interrotti non misurati (scritti prima del 18/10, senza il campo) "
+               f"{e1['interrotti_non_misurati']}" if e1.get("interrotti_non_misurati") else "")
+            + ".")
     return [riga]
 
 
@@ -529,6 +545,9 @@ def testo(r: dict, contesto_ms_avviso: float = 20.0, guardia: dict | None = None
                             f"{g['proiezione_interrotte_diverse']} diversi "
                             f"({_elenco(g['interrotte_motivi'])})"
                             if g["proiezione_interrotte"] else ""))
+        if g["interrotti_non_misurati"]:
+            righe.append(f"    interrotti non misurati (scritti prima del 18/10, senza "
+                         f"eventi_ombra.interrotta): {g['interrotti_non_misurati']}")
         if g["parlato_diverso"]:
             righe.append(f"    ATTENZIONE: in {g['parlato_diverso']} turni la storia del modello "
                          f"non dice ciò che la persona ha sentito (deve restare 0 dal passo 3)")

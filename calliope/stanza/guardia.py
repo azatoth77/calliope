@@ -633,7 +633,8 @@ class Guardia:
             # Solo le righe non contate da un avvio di prima (18/10, issue #159: ogni riavvio
             # scriveva di nuovo il totale, e il riassunto lo sommava)
             fino = getattr(t, "oltre_contate_fino", lambda: None)()
-            da = max(float(t.guardia_dal), float(fino)) if fino is not None                 else float(t.guardia_dal)
+            da = (max(float(t.guardia_dal), float(fino)) if fino is not None
+                  else float(t.guardia_dal))
             oltre = t.non_giudicate_minori(da, limite)
         except Exception as e:  # noqa: BLE001 — senza il disco, come prima
             self.log(f"   [GUARDIA] ripresa dal disco non riuscita: {type(e).__name__}")

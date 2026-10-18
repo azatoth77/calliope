@@ -2654,3 +2654,12 @@ di cui M diversi» (`criterio_e1` con `interrotti` e `interrotti_diversi` solo s
 `prova_eventi_guardia` sezione 4: interrotto durante la prima frase (su main senza campo) e dopo
 una frase, i turni normali senza il campo. I numeri sui registri della DGX del 14–18/10 vanno
 ricalcolati dopo l'installazione (`calliope stato --turni --giorni 7`) e scritti in #13.
+
+**I registri di prima e l'annuncio interrotto** (revisione della PR #167). I turni interrotti
+scritti prima del 18/10 non hanno il campo e restavano fuori dal conto: ora sono «interrotti non
+misurati» (`interrotta: true` nel turno, `eventi_ombra` senza `interrotta`), una riga per giorno
+in `calliope stato --turni` e nel criterio su tutto il registro (`interrotti_non_misurati`): così
+i due turni del 16/10 si vedono accanto a «0 su N». Un annuncio interrotto fra un turno e l'altro
+(`rec` None, va nel riporto) non scrive il campo `interrotta`: altrimenti `_somma` lo avrebbe
+unito al turno dopo, che sarebbe risultato «interrotto» con `fra_turni: 1`; il suo passo 0 resta
+nel riporto come prima.

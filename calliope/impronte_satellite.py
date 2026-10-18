@@ -284,6 +284,10 @@ def riassunto(turni: list[dict]) -> dict:
             d["imparate"] += 1
         if str(con.get("fonte") or "base") != "base":
             d["dal_satellite"] += 1
+    for d in per.values():
+        # Il verso pericoloso in tutto, sicuro e incerto: il cancello per «attivo» (PR #167)
+        d["minore_ad_amministra_tutti"] = (d["minore_ad_amministra"]
+                                           + d["minore_ad_amministra_incerti"])
     return {"satelliti": per}
 
 
@@ -306,6 +310,15 @@ def testo(r: dict) -> str:
             f"punteggio "
             f"dall'impronta del satellite {d['dal_satellite']}, frasi che l'hanno insegnata "
             f"{d['imparate']}")
+        # Il cancello per «attivo» (18/10, revisione della PR #167): nel verso pericoloso conta
+        # ogni scambio, sicuro o incerto (la base incerta può essere il minore dato da
+        # piu_protetto o dalla continuità: in attivo la frase avrebbe i permessi di chi amministra)
+        sicuri = d["minore_ad_amministra"]
+        incerti = d.get("minore_ad_amministra_incerti", 0)
+        if sicuri + incerti:
+            righe.append(f"    ATTENZIONE: {sicuri + incerti} frasi minore → chi amministra "
+                         f"(base sicura {sicuri}, incerta {incerti}): per «attivo» devono essere "
+                         f"0, o rilette una per una")
     return "\n".join(righe)
 
 

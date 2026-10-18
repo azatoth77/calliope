@@ -348,6 +348,23 @@ def prova_ombra():
     verifica("stato --turni: base sicura e base incerta divise nel testo",
              "con la base sicura 1 (minore → chi amministra 1" in tx
              and "con la base incerta 2 (minore → chi amministra 2" in tx, tx)
+    # Il cancello per «attivo» (revisione della PR #167): nel verso pericoloso conta anche la
+    # base incerta
+    r = IS.riassunto([scambio("conversazione")])
+    tx = IS.testo(r)
+    verifica("cancello: minore → chi amministra su base incerta dà l'ATTENZIONE per «attivo»",
+             r["satelliti"]["telefono di prova"].get("minore_ad_amministra_tutti") == 1
+             and "ATTENZIONE: 1 frasi minore → chi amministra (base sicura 0, incerta 1)" in tx,
+             tx)
+    inverso = scambio("conversazione")
+    b = inverso["voce"]["impronte_satellite"]
+    b["con"], b["senza"] = ({"nome": "Luca", "come": "voce", "punteggio": 0.7, "minore": True},
+                            {"nome": "Carlo", "come": "conversazione", "punteggio": 0.41,
+                             "amministra": True})
+    r = IS.riassunto([inverso])
+    verifica("contrario: chi amministra → minore (verso prudente) non apre l'ATTENZIONE",
+             r["satelliti"]["telefono di prova"].get("minore_ad_amministra_tutti", 0) == 0
+             and "ATTENZIONE" not in IS.testo(r), IS.testo(r))
 
 
 def prova_attivo():

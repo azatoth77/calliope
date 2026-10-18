@@ -1319,6 +1319,18 @@ diario.
 `segna_oltre_contate`, scritto quando la ripresa è finita) e la misura `ripresa` ha
 `oltre_delta: true`. Nel riassunto le misure nuove si sommano; quelle di prima (senza
 `oltre_delta`) valgono col **massimo del giorno**, così le letture del 22/10 e del 28/10 sui
-registri vecchi non tornano a 203. Prova `prova_stanza_guardia` (ripresa): il secondo riavvio non
+registri vecchi non tornano a 203.
+
+**Come leggere i giorni prima dell'installazione** (revisione della PR #167). Per quei giorni il
+numero resta il **massimo del giorno**: è il totale dall'inizio del diario, **non filtrato** (le
+righe rivolte a Calliope comprese), quindi un limite superiore e non il numero vero: il 17/10
+dirà ancora 29, non 0. Il numero vero arriva dalla **prima ripresa dopo l'installazione**:
+`oltre_fino` è ancora vuoto, quindi conta da `guardia_dal` con il filtro nuovo (in
+`calliope stato --guardia`, riga del giorno dell'installazione). Limite: quella prima misura ha
+`oltre_delta: true` ma è un totale; se nello stesso giorno ci sono anche misure scritte prima, il
+riassunto la somma al loro massimo, e **nel solo giorno dell'installazione** lo stesso dato può
+contare due volte. Dal riavvio dopo si conta solo il delta.
+
+Prova `prova_stanza_guardia` (ripresa): il secondo riavvio non
 conta di nuovo la riga (su main 2), le due frasi rivolte a Calliope fuori dal conto (su main 3),
 le misure di prima col massimo e le nuove sommate; contrario: la riga non rivolta resta contata.

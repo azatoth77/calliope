@@ -351,8 +351,10 @@ class Ombra:
                 ombra["proiezione_motivi"] = motivi_p
             # Il turno interrotto (18/10, issue #159): quante frasi erano andate alla voce,
             # quante si sono sentite per intero e il motivo, contato a parte nel criterio
+            # Solo per un turno della persona: un annuncio interrotto fra un turno e l'altro
+            # (`rec` None) andrebbe nel riporto e farebbe «interrotto» il turno dopo
             inter = [p for p in pezzi if p["interrotta"]]
-            if inter:
+            if inter and rec is not None:
                 inviate = sum(p["inviate"] for p in inter)
                 sentite = sum(min(p["sentite"], p["inviate"]) for p in inter)
                 ombra["interrotta"] = {

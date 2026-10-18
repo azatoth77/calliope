@@ -1516,7 +1516,9 @@ persona sbagliata. Opzioni per provare altri valori (`--seme`, `--margine`, `--m
 non hanno audio (la voce di un ospite non si conserva: contate a parte dal registro), la decisione
 è semplificata (senza zona grigia né continuità), l'impronta di partenza è quella di oggi. Poi:
 `speaker_impronte_satellite: ombra` nel locale, qualche giorno di `calliope stato --turni`, e
-attivo solo con «minore → chi amministra» a 0.
+attivo solo con «minore → chi amministra» a 0. *Dal 18/10 (revisione della PR #167): a 0 sia
+la base sicura sia quella incerta (`minore_ad_amministra_tutti`, l'ATTENZIONE della sezione), o
+le frasi rilette una per una.*
 
 **Prima misura sulla DGX (15/10, `misura_impronte_satellite.py`, 156 frasi con l'audio: 106
 conservate e 50 del banco della stanza, 2 persone)**: sul satellite dello studio l'impronta di chi
@@ -1831,3 +1833,12 @@ stato riconosciuto da poco sono una base incerta. Nel riassunto `scambi`, `minor
 «scambi fra persone con la base sicura N (…), con la base incerta M (…)». Prova
 `prova_impronte_satellite` (ombra): lo scambio contro una decisione per continuità non è sicuro
 (su main sì), contrario: contro una decisione dalla voce resta uno scambio sicuro.
+
+**Il cancello per «attivo» guarda anche la base incerta** (revisione della PR #167). Nel verso
+pericoloso la base incerta è proprio il caso da guardare: `minori.piu_protetto` o la continuità
+danno il minore con `come: conversazione`, e con le impronte vince chi amministra «dalla voce»;
+in attivo quella frase avrebbe i suoi permessi. Il criterio per accendere `attivo` è quindi
+«minore → chi amministra» a 0 **sicuri e incerti insieme** (nel JSON
+`minore_ad_amministra_tutti`), oppure ogni frase riletta una per una; `calliope stato --turni` lo
+dice con un'ATTENZIONE per satellite. Prova: lo scambio su base incerta apre l'ATTENZIONE;
+contrario: chi amministra → minore (il verso prudente) no.
