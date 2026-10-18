@@ -364,10 +364,10 @@ class Config:
     # turno si conta in `calliope stato --turni`. 0 = nessun tetto
     dati_turno_tetto_token: int = 450
     # Reti e spinte da spegnere (03/10): servono al modello piccolo, uno più forte può farne
-    # a meno. Nomi in RETI (in fondo a calliope/config.py), solo quelle di categoria «modello»
+    # a meno. Nomi in RETI in calliope/config.py, solo quelle di categoria «modello»
     # (reti_di("modello"): 28 il 18/10). L'elenco non è scritto qui perché cresce a ogni rete
-    # nuova (fino al 18/10 ne mancavano cinque); `calliope stato --reti` le mostra per profilo
-    # con gli scatti, e un nome sbagliato si segnala all'avvio col più vicino. "tutte"
+    # nuova; `calliope stato --reti` le mostra per profilo con gli scatti, e un nome sbagliato
+    # si segnala all'avvio col più vicino. "tutte"
     # le spegne tutte. Quelle di
     # «sicurezza» (permessi, politica…) non si spengono: un nome di sicurezza o sconosciuto si
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.

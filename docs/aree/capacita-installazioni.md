@@ -247,7 +247,7 @@ cambia nel comportamento.**
   separato con conferma.
 
 Con i numeri di Dario (119 GiB, 97 usati, ~21 disponibili; vLLM 47,8, 26B 15, guardiano 5,3, e4b
-3,1, whisper 2,1; *[15/10: misurati embedding 6,7 GB e whisper 2,6, sotto]*) Calliope tiene ~75–78 GiB, gli altri ~19–22; FLUX (13) e il secondo Whisper (3,6
+3,1, whisper 2,1; *[14/10: misurati embedding 6,7 GB e whisper 2,6, sotto]*) Calliope tiene ~75–78 GiB, gli altri ~19–22; FLUX (13) e il secondo Whisper (3,6
 *[storico: 2,0 dal 15/10, sezione «Secondo Whisper»]*) ci starebbero ciascuno, non insieme. Prova a secco `prove/prova_arbitro_memoria.py` (DGX finta,
 portatile, solo CPU; contrari: mai il tempo reale, mai un modello non di Calliope, memoria non
 letta).
