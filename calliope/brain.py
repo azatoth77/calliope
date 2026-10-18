@@ -5270,7 +5270,9 @@ class Brain:
                     # Solo una nota dichiarata (12/10 sera): una frase onesta, non il ripiego
                     from . import frasi
                     self._rule("dichiarata_onesta")
-                    said = frasi.scegli("onesta.non_salvato")
+                    # Per un ospite senza l'invito a chiederlo: `ricorda` è familiare (#28)
+                    said = frasi.scegli("onesta.non_salvato_ospite" if level == "ospite"
+                                        else "onesta.non_salvato")
                     self.history.append({"role": "assistant", "content": said})
                     yield self._marca(said, "atto", "onesta")
                     return

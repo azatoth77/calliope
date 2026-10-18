@@ -432,6 +432,22 @@ _v("onesta.non_salvato", "onesta",
        "amichevole": ("Scusa, ho capito! Non ho salvato niente.",),
        "ironico": ("Scusa, ho capito. Non ho salvato niente.",),
    })
+# La stessa frase onesta per un ospite (18/10, issue #28): senza l'invito «se vuoi che me lo
+# ricordi, chiedimelo», che a lui non è vero (`ricorda` è di livello familiare). Forme diverse da
+# quelle di `onesta.non_salvato`, perché `riconosci` non confonda i due id. Senza forma breve:
+# la rotazione delle voci anonime non la usa (#158)
+_v("onesta.non_salvato_ospite", "onesta", "Scusa, ho capito, ma non ho salvato niente.", toni={
+    "normale": ("Scusa, ho capito, ma non ho salvato niente.",
+                "Ho capito, scusa: non ho salvato niente."),
+    "formale": ("Mi scusi, ho capito, ma non ho salvato nulla.",
+                "Ho capito, mi scusi: non ho salvato nulla."),
+    "amichevole": ("Scusa, ho capito! Ma non ho salvato niente.",
+                   "Ho capito, scusami: non ho salvato niente."),
+    "ironico": ("Scusa, ho capito, ma per onestà: non ho salvato niente.",
+                "Capito, scusa: non ho salvato niente, giuro."),
+    "essenziale": ("Capito, scusa: non ho salvato niente.",),
+    "computer_di_bordo": ("Ricevuto. Dato non salvato.",),
+})
 
 # La frase d'attesa della ricerca nella conversazione della stanza (14/10, passo 4,
 # tools/stanza.stanza_cerca): solo quando la ricerca aspetta righe ancora in coda oltre

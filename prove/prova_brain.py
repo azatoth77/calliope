@@ -336,6 +336,30 @@ def prova_dichiarata_nota():
     detto = "".join(b.stream_reply("Ricordamelo domani.", "amministra"))
     verifica("contrario: promemoria promesso → ripiego", detto,
              "Non ci sono riuscita: puoi ripetere la richiesta?")
+    # 18/10, issue #28: per un ospite l'invito «se vuoi che me lo ricordi, chiedimelo» non è
+    # vero (`ricorda` è di livello familiare): la frase onesta senza invito
+    import re
+    ospite = (frasi.CATALOGO["onesta.non_salvato_ospite"].base
+              if "onesta.non_salvato_ospite" in frasi.CATALOGO else "(manca la forma ospite)")
+    b = brain_finto([[("text", frase)], [("text", frase)]])
+    detto = "".join(b.stream_reply("Non sono un bambino.", "ospite"))
+    verifica("ospite: la frase onesta senza l'invito a chiederlo",
+             (detto, "chied" in detto.lower() or "dimmelo" in detto.lower(),
+              "dichiarata_onesta" in b.rules_fired()), (ospite, False, True))
+    forme_ospite = [f for t in frasi.TONI_FRASI for br in (False, True)
+                    for f in (frasi.CATALOGO["onesta.non_salvato_ospite"].forme(t, br)
+                              if "onesta.non_salvato_ospite" in frasi.CATALOGO else ("chiedimelo",))]
+    verifica("ospite: nessuna forma invita a chiedere di ricordare",
+             [f for f in forme_ospite if re.search(r"chied|dimmelo|me lo dica|ricord", f, re.I)],
+             [])
+    verifica("ospite: le forme non si confondono con quelle per la famiglia",
+             sorted({i for f in forme_ospite for i in frasi.riconosci(f)}),
+             ["onesta.non_salvato_ospite"])
+    # Contrario: per un familiare l'invito resta
+    b = brain_finto([[("text", frase)], [("text", frase)]])
+    detto = "".join(b.stream_reply("Non sono un bambino.", "familiare"))
+    verifica("contrario: familiare, la frase onesta con l'invito", (detto, "chiedimelo" in detto),
+             (onesta, True))
 
 
 def _storia_taverna():
