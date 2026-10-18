@@ -349,6 +349,15 @@ class Ombra:
             ombra["proiezione_diversa"] = diversa
             if motivi_p:
                 ombra["proiezione_motivi"] = motivi_p
+            # Il turno interrotto (18/10, issue #159): quante frasi erano andate alla voce,
+            # quante si sono sentite per intero e il motivo, contato a parte nel criterio
+            inter = [p for p in pezzi if p["interrotta"]]
+            if inter:
+                inviate = sum(p["inviate"] for p in inter)
+                sentite = sum(min(p["sentite"], p["inviate"]) for p in inter)
+                ombra["interrotta"] = {
+                    "inviate": inviate, "sentite": sentite,
+                    "motivo": "niente_di_intero" if not sentite else "in_parte"}
         if rec is None:
             self._riporta(parlato, ombra)
             return

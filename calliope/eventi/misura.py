@@ -194,7 +194,11 @@ def misura_finestra(pezzi: list[dict], storia: str, info: dict) -> dict:
     vive = info.get("conversazione", True)
     if voluti:
         out["voluti"] = voluti
-    if not sentite_conv and info.get("esito") != "interruzione" and not info.get("capito"):
+    # Un turno interrotto si misura anche senza frasi sentite per intero (18/10, issue #159: il
+    # nome arrivato durante la prima frase, `prima_voce_s` c'era ma `played` vuoto, restava
+    # fuori dal criterio di E1 proprio nel caso da cui E1 nasce)
+    if (not sentite_conv and not interrotta and info.get("esito") != "interruzione"
+            and not info.get("capito")):
         return out
     out["sentite"] = len(sentite_conv)
     if vive:
@@ -251,7 +255,8 @@ def riassunto(turni: list[dict]) -> dict:
             "byte": [], "fughe": 0, "troncati": 0, "errori": 0, "porte": {},
             "dimentica": 0, "attivo": 0, "riletti": [], "stimati": [], "cache_rotta": 0,
             "proiezione_ms": [], "proiezione": 0, "proiezione_diversa": 0,
-            "proiezione_motivi": {}})
+            "proiezione_motivi": {}, "proiezione_interrotte": 0,
+            "proiezione_interrotte_diverse": 0, "interrotte_motivi": {}})
         if ca is not None:
             # La cache del prefisso (passo 3, § 10 punto 5): riletti dal motore e stimati
             if isinstance(ca.get("riletti"), int):
@@ -298,6 +303,13 @@ def riassunto(turni: list[dict]) -> dict:
                 g["proiezione_diversa"] += 1 if o.get("proiezione_diversa") else 0
                 for k, v in (o.get("proiezione_motivi") or {}).items():
                     g["proiezione_motivi"][k] = g["proiezione_motivi"].get(k, 0) + int(v or 0)
+                # I turni interrotti a parte (18/10, issue #159), con il motivo
+                it = o.get("interrotta")
+                if isinstance(it, dict):
+                    g["proiezione_interrotte"] += 1
+                    g["proiezione_interrotte_diverse"] += 1 if o.get("proiezione_diversa") else 0
+                    m = str(it.get("motivo") or "?")
+                    g["interrotte_motivi"][m] = g["interrotte_motivi"].get(m, 0) + 1
     for g in giorni.values():
         ms = sorted(g.pop("contesto_ms"))
         g["contesto_ms"] = ({"n": len(ms), "mediana": ms[len(ms) // 2],
@@ -440,8 +452,13 @@ def criterio_e1(turni: list[dict]) -> dict:
     con = [t for t in turni if isinstance(t.get("eventi_ombra"), dict)
            and "proiezione_diversa" in t["eventi_ombra"]]
     date = sorted(str(t.get("inizio") or "")[:10] for t in con)
+    inter = [t for t in con if isinstance(t["eventi_ombra"].get("interrotta"), dict)]
     return {"turni": len(con),
             "diversi": sum(1 for t in con if t["eventi_ombra"]["proiezione_diversa"]),
+            **({"interrotti": len(inter),
+                "interrotti_diversi": sum(1 for t in inter
+                                          if t["eventi_ombra"]["proiezione_diversa"])}
+               if inter else {}),
             **({"dal": date[0]} if date else {})}
 
 
@@ -451,7 +468,9 @@ def testo_e1(e1: dict | None) -> list[str]:
     riga = (f"Criterio di E1 su tutto il registro: {e1['turni']} turni col campo "
             f"eventi_ombra.proiezione_diversa" + (f" (dal {e1['dal']})" if e1.get("dal") else "")
             + f", di cui {e1['diversi']} con proiezione_diversa > 0 (servono almeno 200 turni, "
-            f"tutti a 0).")
+            f"tutti a 0)" + (f"; interrotti {e1['interrotti']}, di cui "
+                             f"{e1.get('interrotti_diversi', 0)} diversi"
+                             if e1.get("interrotti") else "") + ".")
     return [riga]
 
 
@@ -505,7 +524,11 @@ def testo(r: dict, contesto_ms_avviso: float = 20.0, guardia: dict | None = None
             righe.append(f"    criterio di E1: proiezione degli eventi diversa da ciò che si è "
                          f"sentito in {g['proiezione_diversa']} turni su {g['proiezione']}"
                          + (f" (motivi: {_elenco(g['proiezione_motivi'])})"
-                            if g["proiezione_motivi"] else ""))
+                            if g["proiezione_motivi"] else "")
+                         + (f"; interrotti {g['proiezione_interrotte']}, di cui "
+                            f"{g['proiezione_interrotte_diverse']} diversi "
+                            f"({_elenco(g['interrotte_motivi'])})"
+                            if g["proiezione_interrotte"] else ""))
         if g["parlato_diverso"]:
             righe.append(f"    ATTENZIONE: in {g['parlato_diverso']} turni la storia del modello "
                          f"non dice ciò che la persona ha sentito (deve restare 0 dal passo 3)")
