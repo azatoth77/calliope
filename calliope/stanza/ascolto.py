@@ -191,6 +191,9 @@ class Stanza:
         self._intervalli = collections.deque(maxlen=2000)   # (persona, sat, inizio, fine)
         self._n_scambi = 0
         self._detto_contate: dict = {}         # sat → id delle frasi già contate (misure eco)
+        # I tratti di tempo con una frase di sfida o un codice detto (18/10, revisione della PR
+        # #178): sat → deque di (inizio, fine) in epoch; il banco non salva i segmenti dentro
+        self._segreti: dict = {}
         # La tenuta su disco (stanza/tenuta.Tenuta, 14/10), None con `stanza_tenuta: false`
         self.tenuta = None
         self._presenze_scritte: dict = {}      # persona → (sat, inizio, ultimo) già sul disco
@@ -546,6 +549,92 @@ class Stanza:
             self._sentita(chiave, chi.get("nome"), sat, time.time())
         self._osserva(sat, e)
         return e.seq
+
+    # ── la frase di sfida e i codici (18/10, revisione della PR #178) ──
+    # Un tratto aperto (il turno non è ancora finito) vale al più così, se nessuno lo chiude
+    SEGRETO_APERTO_S = 300.0
+
+    def segreto(self, sat, inizio: float | None, fine: float | None = None,
+                salvo_seq=None, provvisorio: bool = False):
+        """Fra `inizio` e `fine` (epoch) si è detta una frase di sfida o un codice: il banco non
+        salva i segmenti che lo toccano (`segreto_in`), e le righe della corsia veloce dentro il
+        tratto (non quella del turno, `salvo_seq`) si mascherano. `provvisorio` (seconda
+        revisione della PR #178): il turno è in corso e non si sa ancora; il tratto resta aperto
+        (al più `SEGRETO_APERTO_S`) e ferma solo il banco, finché `chiudi_segreto` non lo tiene
+        o lo toglie. Restituisce il tratto, o None."""
+        if inizio is None:
+            return None
+        tratto = {"a": float(inizio) - 1.0,
+                  "b": None if provvisorio else float(fine if fine is not None
+                                                      else time.time()) + 1.0,
+                  "provvisorio": provvisorio}
+        with self._cond:
+            self._segreti.setdefault(sat, collections.deque(maxlen=50)).append(tratto)
+        if not provvisorio:
+            self._maschera_tratto(sat, tratto["a"], tratto["b"], salvo_seq)
+        return tratto
+
+    def chiudi_segreto(self, sat, tratto, tieni: bool, fine: float | None = None,
+                       salvo_seq=None):
+        """Il turno è finito: il tratto provvisorio si tiene (fino a `fine`, di solito adesso) o
+        si toglie."""
+        if not tratto:
+            return
+        with self._cond:
+            q = self._segreti.get(sat)
+            if q is not None and tratto in q and not tieni:
+                q.remove(tratto)
+            if tieni:
+                tratto["b"] = float(fine if fine is not None else time.time()) + 1.0
+                tratto["provvisorio"] = False
+        if tieni:
+            self._maschera_tratto(sat, tratto["a"], tratto["b"], salvo_seq)
+
+    def segreto_in(self, sat, inizio: float | None, fine: float | None,
+                   provvisori: bool = True) -> bool:
+        if inizio is None or fine is None:
+            return False
+        with self._cond:
+            for x in self._segreti.get(sat, ()):
+                if x["provvisorio"] and not provvisori:
+                    continue
+                b = x["b"] if x["b"] is not None else x["a"] + self.SEGRETO_APERTO_S
+                if x["a"] <= float(fine) and float(inizio) <= b:
+                    return True
+        return False
+
+    def _maschera_tratto(self, sat, a: float, b: float, salvo_seq=None):
+        """Le righe della corsia veloce (con un segmento) che cadono nel tratto segreto: il testo
+        diventa «(frase di conferma)» in memoria e sul disco, e la corsia lenta non le rivede."""
+        segmenti = set()
+        for e in self.registro(sat).eventi():
+            d = e.dati or {}
+            if (e.tipo != RIGA or e.seq == salvo_seq or d.get("segmento") is None
+                    or d.get("testo") == "(frase di conferma)"):
+                continue
+            try:
+                ini, fin = float(d.get("inizio") or e.t), float(d.get("fine") or e.t)
+            except (TypeError, ValueError):
+                continue
+            if a <= fin and ini <= b:
+                self.correggi_turno(sat, e.seq, "(frase di conferma)")
+                segmenti.add(d.get("segmento"))
+        le = self.lenta
+        for seg in segmenti:
+            if le is not None and hasattr(le, "scarta"):
+                le.scarta(sat, seg)
+
+    def correggi_turno(self, sat, seq, testo: str):
+        """La riga di un turno (`turno_testo`) con il testo ripulito: la frase di sfida ripetuta
+        diventa «(frase di conferma)», un codice detto «******». In memoria e sul disco."""
+        if seq is None:
+            return
+        for e in self.registro(sat).eventi():
+            if e.tipo == RIGA and e.seq == seq:
+                e.dati["testo"] = str(testo)
+        t = self.tenuta
+        if t is not None:
+            t.correggi(sat, seq, str(testo))
 
     @staticmethod
     def _chi_presenza(chi: dict) -> str | None:
@@ -932,6 +1021,11 @@ class Stanza:
                 self._fatto(s, None, "eco", attesa, stt_s, eco)
                 return
             testo, tolte = e.testo, e.tolte
+        # Dentro il tratto di una frase di sfida o di un codice già detti (18/10, seconda
+        # revisione della PR #178): la riga senza le parole, e niente corsia lenta né banco
+        segreto = self.segreto_in(s.sat, s.inizio_epoch, s.fine_epoch, provvisori=False)
+        if segreto:
+            testo = "(frase di conferma)"
         chi = self._chi(audio, s.voce_s, s.fine_epoch, s.nome, s.canale)
         emb = chi.pop("emb", None)            # solo in memoria: alla compagnia, mai nella riga
         s.esito = "riga"
@@ -956,7 +1050,7 @@ class Stanza:
         self._anello(s, chi, getattr(e_riga, "seq", None), audio)
         self._osserva(s.sat, e_riga)
         self._alla_compagnia(s, chi, emb)
-        if self.lenta is not None:
+        if self.lenta is not None and not segreto:
             # La corsia lenta (passo 3): l'audio resta in RAM finché non è rivisto
             try:
                 self.lenta.metti(s, audio, e_riga.seq)

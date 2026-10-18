@@ -1734,6 +1734,19 @@ class Config:
     conserva_voce: bool = True
     # Tetto della voce conservata, in MB: oltre, si tolgono i giorni più vecchi. 0 = nessun tetto
     conserva_voce_mb: int = 2000
+    # La valutazione (18/10, decisione 0032, issue #173, eccezione alle decisioni 0031 e 0029
+    # decisa da chi amministra): fino a questa data compresa («AAAA-MM-GG») si conservano testo
+    # e audio di tutte le conversazioni, ospiti, zona grigia, voci sconosciute e conoscenti
+    # compresi: le parole dei turni, l'audio di ogni frase del turno (senza soglia né consenso,
+    # in turn_log_dir/voce/_valutazione, sotto il tetto conserva_voce_mb), il testo della stanza
+    # nella tenuta (se `stanza_tenuta`), l'audio di tutti i segmenti nel banco (se
+    # `stanza_lenta`), le conversazioni degli ospiti nell'archivio. Restano fuori la frase di
+    # sfida e i codici detti, la stanza in pausa («abbiamo ospiti»), l'audio (che non c'è) dello
+    # scritto, la voce di chi le ha detto no e `conserva_voce: false`. Ciò che si legge (ricerche,
+    # schede, contesto) resta quello di serie.
+    # I file restano per turn_log_days; «dimentica» e `calliope conserva --svuota` li tolgono.
+    # Alla scadenza smette da sé e lo dice il log. Vuoto (di serie) = spento, come prima
+    conserva_valutazione_fino: str = ""
     # Latenza vera della voce (06/10, calliope/latenza.py): se la mediana della prima frase di
     # oggi o di ieri (dal registro dei turni, almeno 10 risposte) supera questi secondi, lo
     # dicono l'avvio e `calliope stato`; dettagli con `calliope stato --turni`. 0 = mai. Dal 02
@@ -3432,6 +3445,7 @@ SEZIONI: dict[str, list[str]] = {
                 "notizie_db", "notizie_fatti"],
     "segreti": ["segreti_file"],
     "registro": ["turn_log_dir", "turn_log_days", "conserva_voce", "conserva_voce_mb",
+                 "conserva_valutazione_fino",
                  "latenza_avviso_s", "attrito_avviso", "arbitro_memoria", "debug_audio_dir"],
     "rete": ["online"],
 }
@@ -3913,7 +3927,30 @@ _MODI_NUOVI = {
 }
 
 
+def _data_valida(value, dove: str = ""):
+    """`conserva_valutazione_fino` (18/10, decisione 0032): una data «AAAA-MM-GG» (anche la
+    data che YAML legge da sé, senza virgolette) o vuoto. Una data scritta male è rifiutata con
+    l'avviso e resta il valore di prima: spento, mai «tutto»."""
+    import datetime as _dt
+    if value is None or value == "":
+        return ""
+    if isinstance(value, _dt.datetime):
+        value = value.date()
+    if isinstance(value, _dt.date):
+        return value.isoformat()
+    if isinstance(value, str):
+        try:
+            return _dt.date.fromisoformat(value.strip()).isoformat()
+        except ValueError:
+            pass
+    raise ValueError("serve una data «AAAA-MM-GG» (fino a quel giorno compreso), o vuoto")
+
+
+_data_valida.prima_del_tipo = True
+
+
 VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valido,
+              "conserva_valutazione_fino": _data_valida,
               "tts_thread": _tts_thread_valido, "tts_dispositivo": _tts_dispositivo_valido,
               "agenti_num_ctx": _num_ctx_agenti_valido,
               "contesto_riassuntore": _riassuntore_valido,
@@ -4015,9 +4052,10 @@ def _apply_file(cfg: Config, path: str, esempio: bool = False):
         if env and env in os.environ:
             continue                         # la variabile d'ambiente vince sul file
         val = VALIDATORI.get(key)
-        if getattr(val, "modi", None):
+        if getattr(val, "modi", None) or getattr(val, "prima_del_tipo", False):
             # Campi a modi (#83): il validatore prima del tipo, così il false di YAML («no»)
-            # arriva a lui; un valore rifiutato si segnala e resta quello di prima
+            # arriva a lui; un valore rifiutato si segnala e resta quello di prima. Anche la
+            # data della valutazione (18/10): YAML legge 2026-11-30 senza virgolette come data
             try:
                 value = val(value, dove=path)
             except ValueError as e:

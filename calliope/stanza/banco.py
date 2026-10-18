@@ -25,6 +25,11 @@ zona grigia, voci sconosciute, «più voci», TV; mai in pausa («abbiamo ospiti
   (all'avvio e a ogni giorno nuovo, dal 17/10, issue #32), non solo `salva`.
 - **Cancellazione**: «dimentica» toglie i file del satellite; `calliope conserva --svuota` tutto
   (anche da un altro processo); `--persona` i segmenti in cui c'è la sua voce.
+- **La valutazione** (18/10, decisione 0032, `conserva_valutazione_fino`): fino alla data, con la
+  corsia lenta accesa, **tutti** i segmenti che le arrivano (ospiti, conoscenti, zona grigia, voci
+  sconosciute, «più voci», TV, allucinazioni, i segmenti detti mentre Calliope parla), con
+  `"valutazione": true` nel `.json`; mai in pausa. Indipendente da `stanza_audio_banco_giorni`
+  (non tocca `acceso.json`). Stessa rotazione e cancellazione.
 
 Solo libreria standard e `conserva` (μ-law, scrittura privata).
 """
@@ -39,6 +44,8 @@ import shutil
 import threading
 import time
 from pathlib import Path
+
+from ..conserva import valutazione_attiva
 
 CARTELLA = "stanza_banco"
 ACCESO = "acceso.json"
@@ -97,6 +104,16 @@ class Banco:
         return float(m.get("dal") or 0) + giorni(self.cfg) * GIORNO_S
 
     def attivo(self, ora: float | None = None) -> bool:
+        """Si salva qualcosa adesso? L'eccezione del banco, o la valutazione (18/10)."""
+        return self.eccezione(ora) or self.valutazione()
+
+    def valutazione(self) -> bool:
+        """La valutazione (18/10, decisione 0032, `conserva_valutazione_fino`): fino alla data
+        tutti i segmenti, ospiti compresi. Vuole la corsia lenta (è lei che li porta qui)."""
+        return (self.dir is not None and bool(getattr(self.cfg, "stanza_lenta", False))
+                and valutazione_attiva(self.cfg))
+
+    def eccezione(self, ora: float | None = None) -> bool:
         """Vale adesso l'eccezione? Accesa nel file, con la corsia lenta, e non scaduta (la prima
         volta segna l'accensione)."""
         if giorni(self.cfg) <= 0 or self.dir is None or not getattr(self.cfg, "stanza_lenta",
@@ -136,22 +153,35 @@ class Banco:
 
     def salva(self, sat, info: dict | None, seg: dict, pcm_int16: bytes, sr: int,
               v1: dict | None, v2: list[dict], finestre_ignote: int = 0,
-              in_pausa: bool = False, ora: float | None = None) -> str | None:
+              in_pausa: bool = False, ora: float | None = None,
+              segreto: bool = False) -> str | None:
         """Il segmento su disco se vale l'eccezione e le voci lo permettono: il percorso
         relativo, o None (contato in `saltati` per motivo)."""
         def salta(m):
             self.saltati[m] = self.saltati.get(m, 0) + 1
             return None
-        if not self.attivo(ora):
+        eccezione = self.eccezione(ora)
+        valuta = self.valutazione()
+        if not eccezione and not valuta:
             return None
         if in_pausa:
             return salta("pausa")
+        if segreto:
+            # Una frase di sfida o un codice detti nel tratto del segmento (18/10, revisione
+            # della PR #178): mai l'audio, nemmeno per le voci di casa
+            return salta("segreto")
         # Le righe di tutte e due le versioni: una zona grigia della corsia veloce corretta
         # dalla lenta resta fuori (nel dubbio no)
         righe = ([v1] if v1 else []) + list(v2 or [])
         ok, motivo = self.ammesso(righe, finestre_ignote)
-        if not ok:
-            return salta(motivo)
+        if not (ok and eccezione):
+            if not valuta:
+                return salta(motivo)
+            # La valutazione (18/10, decisione 0032): anche ospiti, zona grigia, conoscenti,
+            # voci sconosciute, TV e allucinazioni, con il segno nel .json
+            ok = False
+        else:
+            ok = True
         import numpy as np
         from ..conserva import _scrivi_privato, wav_mulaw
         audio = np.frombuffer(pcm_int16, dtype="<i2").astype(np.float32) / 32768.0
@@ -159,15 +189,21 @@ class Banco:
         quando = datetime.datetime.fromtimestamp(ini)
         rel = (f"{_nome_file(sat)}/{quando.date().isoformat()}/"
                f"{quando.strftime('%H%M%S')}-{_nome_file(seg.get('segmento'))}")
-        persone = sorted({str(r.get("persona") or str(r.get("chi"))[len("persona:"):])
-                          for r in righe})
+        if ok:
+            persone = sorted({str(r.get("persona") or str(r.get("chi"))[len("persona:"):])
+                              for r in righe})
+        else:
+            # Le persone e i conoscenti decisi (anche nella zona grigia): `--persona` toglie i
+            # segmenti in cui c'è il loro nome; gli ospiti non hanno un id
+            persone = sorted({p for p in (_persona_di(r) for r in righe) if p})
         meta = {"sat": str(sat), "stanza": (info or {}).get("stanza"),
                 "satellite": (info or {}).get("nome"), "segmento": seg.get("segmento"),
                 "scambio": seg.get("scambio"), "inizio": ini, "fine": seg.get("fine"),
                 "voce_s": seg.get("voce_s"), "persone": persone,
                 # «uguale»: la corsia lenta ha dato lo stesso testo (v2 vuota qui)
                 "esito_lenta": seg.get("esito"),
-                "v1": _pulita(v1), "v2": [_pulita(r) for r in v2]}
+                "v1": _pulita(v1), "v2": [_pulita(r) for r in v2],
+                **({} if ok else {"valutazione": True, "finestre_ignote": int(finestre_ignote)})}
         try:
             _scrivi_privato(self.dir / (rel + ".wav"), wav_mulaw(audio, sr))
             _scrivi_privato(self.dir / (rel + ".json"),
@@ -189,19 +225,24 @@ class Banco:
         if not self.attivo(ora) or in_pausa:
             return None
         ok, _ = self.ammesso(righe, 0)
-        if not ok:
+        ok = ok and self.eccezione(ora)
+        if not ok and not self.valutazione():
             return None
         from ..conserva import _scrivi_privato
         ini = float(blocco.get("inizio") or time.time())
         quando = datetime.datetime.fromtimestamp(ini)
         rel = (f"{_nome_file(sat)}/{quando.date().isoformat()}/"
                f"{quando.strftime('%H%M%S')}-blocco-{_nome_file(blocco.get('blocco'))}")
-        persone = sorted({str(r.get("persona") or str(r.get("chi"))[len("persona:"):])
-                          for r in righe})
+        if ok:
+            persone = sorted({str(r.get("persona") or str(r.get("chi"))[len("persona:"):])
+                              for r in righe})
+        else:
+            # La valutazione (revisione della PR #178): le persone come in `salva`
+            persone = sorted({p for p in (_persona_di(r) for r in righe) if p})
         meta = dict(blocco, sat=str(sat), stanza=(info or {}).get("stanza"),
                     satellite=(info or {}).get("nome"), persone=persone, tipo="blocco",
                     allora=[_pulita(r) for r in righe], testo_blocco=testo,
-                    pezzi=list(pezzi or []))
+                    pezzi=list(pezzi or []), **({} if ok else {"valutazione": True}))
         try:
             _scrivi_privato(self.dir / (rel + ".json"),
                             json.dumps(meta, ensure_ascii=False, indent=1).encode("utf-8"))
@@ -225,6 +266,16 @@ class Banco:
             return
         self._ultima_rotazione = oggi
         ruota(self.cfg)
+
+
+def _persona_di(r: dict) -> str | None:
+    """L'id della persona (o «conoscente:<id>») di una riga, o None (ospite, voce ignota, TV)."""
+    if r.get("persona"):
+        return str(r["persona"])
+    chi = str(r.get("chi") or "")
+    if chi.startswith("persona:"):
+        return chi[len("persona:"):] or None
+    return chi if chi.startswith("conoscente:") else None
 
 
 def _pulita(r: dict | None) -> dict | None:
@@ -266,6 +317,11 @@ def svuota(cfg, persona=None) -> int:
         shutil.rmtree(d, ignore_errors=True)
         return n
     n = 0
+    # Un conoscente (18/10, revisione della PR #178) è «conoscente:<id>» nei segmenti: vale
+    # l'id nudo (`Conservazione.svuota`, il suo «dimentica») e la forma con il prefisso
+    nudo = str(persona)[len("conoscente:"):] if str(persona).startswith("conoscente:") \
+        else str(persona)
+    cerca = {nudo, f"conoscente:{nudo}"}
     for j in d.rglob("*.json"):
         if j.name == ACCESO:
             continue
@@ -273,7 +329,7 @@ def svuota(cfg, persona=None) -> int:
             meta = json.loads(j.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             continue
-        if str(persona) in [str(p) for p in meta.get("persone") or ()]:
+        if cerca & {str(p) for p in meta.get("persone") or ()}:
             w = j.with_suffix(".wav")
             n += w.exists()
             w.unlink(missing_ok=True)

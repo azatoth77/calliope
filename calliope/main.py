@@ -273,6 +273,12 @@ class Avvio:
         # turn_log_days giorni; niente GPU
         from .conserva import Conservazione
         s.conserva = Conservazione(cfg, s.registry, log=lambda m: print(m, flush=True))
+        # La valutazione (18/10, decisione 0032): una riga all'avvio, accesa o finita
+        from .conserva import testo_valutazione
+        riga = testo_valutazione(cfg)
+        if riga:
+            print(f"[CONSERVA] {riga}", flush=True)
+            s.conserva.valutazione()
         # L'impronta si calcola in parallelo a Whisper: 25–50 ms che non pesano sulla risposta
         s.embed_pool = ThreadPoolExecutor(max_workers=1)
         # Persone registrate e voci da registrare di nuovo (es. dopo il passaggio dall'MFCC a

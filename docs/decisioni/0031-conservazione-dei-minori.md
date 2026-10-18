@@ -6,7 +6,8 @@
   come lo scrive il ciclo, punto 3; il limite del journal, punto 8) e dopo la issue #108 (il «sì»
   breve di ogni tutore, punto 2; la maggiore età e i conoscenti, conseguenze). Supera il punto 1 (T1) della
   [0028](0028-decisioni-roadmap-12-10.md) per i minori di famiglia: «di minori e ospiti mai»
-  diventa «degli ospiti mai».
+  diventa «degli ospiti mai». **Eccezione a tempo dal 18/10**: durante la valutazione
+  (`conserva_valutazione_fino`) anche gli ospiti, vedi [0032](0032-valutazione-conserva-tutto.md).
 - **Area**: [contesto-conversazione](../aree/contesto-conversazione.md), [minori](../aree/minori.md);
   codice in `calliope/conserva.py` (il solo posto che decide) e `calliope/tools/conserva.py`
 

@@ -2581,3 +2581,79 @@ argomenti e due numeri del registro dei turni (`frasi_voce`, `risposta_car`, dal
 testo della risposta. Prima il confronto fra `notizie` (2,91 s) e `web_cerca` (1,62 s) si faceva
 a mano. Il criterio di #132 sulla DGX: notizie con mediana ≤ 1,7 s e p90 ≤ 2,5 s, 0 «lunghe in
 un pezzo».
+
+## La valutazione: si conserva tutto fino a una data (18/10, issue #173, ramo `issue-173-valutazione`)
+
+**Caso vero.** Il 17/10 non c'erano né l'audio né il testo per verificare due segnali del
+guardiano; il 18/10 le frasi non riconosciute in auto erano «(una frase di un ospite)», senza
+parole né audio. Chi amministra ha deciso che durante la valutazione resta tutto: decisione
+[0032](../decisioni/0032-valutazione-conserva-tutto.md), eccezione a tempo alla 0031 e alla 0029.
+
+**L'interruttore.** `conserva_valutazione_fino: "AAAA-MM-GG"` (sezione `registro` del locale, o
+fuori sezione; anche senza virgolette, YAML la legge come data); vuoto di serie = spento. Vale
+fino alla data compresa; una data scritta male è rifiutata con l'avviso e resta spento. Il solo
+posto che la legge è `conserva.valutazione_attiva`; `Conservazione.valutazione()` lo dice nel log
+una volta quando finisce. Avvio, `calliope stato` e cruscotto: «Valutazione: si conserva tutto
+fino al … compreso».
+
+**Le scritture sono quelle di prima, con meno filtri**:
+- **turni**: `Conservazione.testo_turno` dà «valutazione» dove la regola di serie
+  (`_testo_turno`, invariata) direbbe no; il turno porta `conserva: {testo: true, motivo:
+  valutazione, di_serie: …}` e `TurnLog` lo scrive con le parole (anche le righe di altri senza
+  segno). Le misure dell'ombra distinguono questi turni dal motivo;
+- **archivio delle conversazioni**: le conversazioni che vanno nella sessione (ospiti, profili
+  tolti) si scrivono anche su disco con `ospite = 2` (`ArchivioConversazioni._archivia_valutazione`,
+  nel thread dell'archivio). Nessuna lettura le usa (le query cercano `ospite = 0` o `1`, i
+  vettori le saltano); la pulizia dei non conservati le lascia, `_scadute` le toglie dopo
+  `turn_log_days`, `svuota` e «dimentica» della persona pure. Il riassunto di chiusura resta
+  nella sessione;
+- **tenuta della stanza**: le righe che di serie restano fuori vanno su disco con `sicurezza:
+  valutazione` (`Tenuta.valutazione`, collegata da `load_tenuta`); `cerca`, `nomi`, `stanze`,
+  `righe_guardia` e `non_giudicate_minori` le escludono, quindi la ricerca e il blocco caldo non
+  cambiano. «Dimentica» del satellite, `--svuota` e `--persona` (con la persona decisa) le
+  tolgono; i conteggi le dicono (`righe_valutazione`). In pausa la stanza non scrive niente, come
+  prima.
+
+Restano fuori il journal (le frasi degli ospiti mascherate: il journal non si svuota), le frasi
+ignorate dei turni (le prende la stanza), la frase di sfida e i codici; dello scritto solo
+l'audio, che non c'è (il testo resta). I turni rivolti a Calliope durante la pausa della stanza
+restano come gli altri; la stanza in pausa no.
+
+**Disco** (DGX, letto in sola lettura il 18/10 dal registro): voce dei turni 0,7–9,1 MB al giorno
+dal 14 al 18/10 (18/10: 55 frasi con l'audio, 567 s, 9,1 MB; 24 frasi parlate senza, ~90 s), banco
+0,1–5,9 MB (18/10: 82 segmenti salvati su 123 giudicati). Con la valutazione il 18/10 sarebbe stato
+~10,5 MB di voce e ~9 MB di banco, cioè ~20 MB al giorno invece di ~15; il 15/10 (44 turni di un
+ospite) ~15 invece di ~7. In 60 giorni ~1,2 GB; liberi 2,2 TB. Il tetto `conserva_voce_mb` (2000)
+vale per la voce dei turni (cartella `_valutazione` compresa), il banco ha solo la rotazione.
+
+**Prova** `prova_conserva_valutazione` (livello 1, ~5–10 s): con una data di domani il turno di un
+ospite e della zona grigia con le parole e il segno, l'audio dell'ospite in
+`voce/_valutazione/ospiti/`, l'archivio con `ospite = 2` che nessuna ricerca vede dopo un riavvio;
+la stanza dal giro vero (sotto, in [stt-tts](stt-tts.md)); contrari: vuoto, data passata, data
+scritta male come prima, la frase di sfida e lo scritto senza audio anche accesa. Le prove di
+prima («ospiti mai su disco») restano verdi senza cambiare. Su main fallisce.
+
+**Dopo la revisione della PR #178 (18/10).** La revisione ha trovato un bloccante e tre difetti,
+corretti sul ramo:
+- **la zona grigia diventava leggibile**: `Ciclo._segna_conserva` usava `testo_turno`, che durante
+  la valutazione dice sì, quindi il turno della zona grigia entrava nell'archivio della persona
+  (`ospite = 0`) e lo davano `chat()` e `cerca()`; l'ombra degli eventi non lo trattava come
+  anonimo. Ora chi **usa** le parole segue la regola di serie (`Conservazione.testo_di_serie`) e
+  l'ombra tratta come anonimo anche `motivo: valutazione`; la zona grigia va solo nella copia
+  `ospite = 2` e nel registro dei turni;
+- **la frase di sfida e i codici nella stanza** (anche su main, per le voci di casa): con una sfida
+  in attesa la riga del turno è «(frase di conferma)», a turno finito la riga si corregge col testo
+  del registro dei turni («******» per un codice), la risposta di Calliope porta «ripeti: …», e il
+  tratto del turno è segnato (`Stanza.segreto`): il banco non ne salva i segmenti (`saltati:
+  segreto`). `Tenuta.correggi` riscrive la riga e l'indice;
+- **conoscenti nel banco**: `banco.svuota` trova `conoscente:<id>` anche con l'id nudo (`--persona`
+  e il loro «dimentica»), e `salva_blocco` scrive le persone giuste e il segno `valutazione`;
+- **la revoca vale**: chi ha detto no alla voce non si registra nemmeno in `_valutazione`.
+
+Il ritorno a una versione di prima rende trovabili le righe della stanza della valutazione:
+scelto come rischio noto, scritto nella 0032 con il rimedio. Prove nuove in
+`prova_conserva_valutazione`: la zona grigia dal giro vero di `_segna_conserva` (accesa e spenta:
+`chat()` e `cerca()` vuoti), l'ombra su disco con il contrario, la sfida e il codice dal giro di
+`_stanza_turno` e `_stanza_esito` (valutazione accesa con la zona grigia, e spenta con la voce di
+casa), il banco che salta il tratto, conoscente con `--persona` e «dimentica», la revoca e il
+contrario del consenso mai chiesto. Tutte falliscono col codice prima della correzione.

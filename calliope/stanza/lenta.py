@@ -347,6 +347,12 @@ class Lenta:
         self.sentito(s.sat, a.fine)
         self._pota()
 
+    def scarta(self, sat, segmento) -> bool:
+        """Il segmento non si rivede più (18/10, seconda revisione della PR #178: cade nel tratto
+        di una frase di sfida o di un codice): via dalla RAM, niente versione 2 né banco."""
+        with self._lock:
+            return self._anello.get(sat, {}).pop(segmento, None) is not None
+
     def _pota(self, ora: float | None = None):
         """Al più `stanza_audio_min` minuti per satellite, e niente più vecchio di così."""
         ora = time.time() if ora is None else ora
@@ -1096,7 +1102,8 @@ class Lenta:
                      attesa_s=round(time.time() - a.fine, 1), prompt=ris.get("prompt"))
         # L'eccezione del banco (14/10 sera): l'audio su disco solo con voci tutte di casa
         b = self.banco
-        if b is not None and esito not in ("allucinazione", "tv"):
+        # Durante la valutazione (18/10, decisione 0032) anche la TV e le allucinazioni
+        if b is not None and (esito not in ("allucinazione", "tv") or b.valutazione()):
             v2 = [dict(e.dati) for e in scritte] if scritte else []
             try:
                 f = b.salva(sat, (self.stanza._info.get(sat) or {}),
@@ -1104,7 +1111,10 @@ class Lenta:
                              "fine": a.fine, "voce_s": a.voce_s, "esito": esito}, a.pcm, SR,
                             v1, v2,
                             finestre_ignote=ris.get("ignote", 0),
-                            in_pausa=self.stanza._pausa_viva(sat) is not None)
+                            in_pausa=self.stanza._pausa_viva(sat) is not None,
+                            # La frase di sfida o un codice detti lì (18/10, PR #178)
+                            segreto=bool(getattr(self.stanza, "segreto_in", None)
+                                         and self.stanza.segreto_in(sat, a.inizio, a.fine)))
             except Exception as e:  # noqa: BLE001 — il banco non ferma la corsia
                 self.log(f"   [STANZA] audio del banco: {type(e).__name__}")
                 f = None

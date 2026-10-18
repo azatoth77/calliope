@@ -23,6 +23,12 @@ regressione non lo leggono.
 - **mai**: le voci non riconosciute (ospiti), la zona grigia (nel dubbio no), ciò che si dice in
   pausa («abbiamo ospiti»: in pausa la stanza non scrive niente, nemmeno in memoria), l'audio
   (non arriva mai qui), i profili tolti (la rotazione li cancella).
+- **durante la valutazione** (18/10, decisione 0032, `conserva_valutazione_fino`): anche le righe
+  che sopra restano fuori (ospiti, zona grigia, voci sconosciute, la TV, le risposte di Calliope a
+  loro), con `sicurezza: valutazione`. Solo per chi rilegge il file: la ricerca, la guardia, i
+  nomi e le stanze leggono soltanto le righe di sempre (`sicurezza: voce`). Mai in pausa. Restano
+  per `stanza_tenuta_giorni` e le tolgono «dimentica» (il satellite), `--svuota` e, con la
+  persona decisa nella zona grigia, `--persona`.
 
 **Una porta sola verso il modello**: la ricerca (`stanza_cerca` e la ricerca anticipata,
 stanza/cerca.py) con gli **stessi permessi** della memoria. Il blocco caldo dei dati del turno
@@ -70,6 +76,9 @@ RECENTI_MAX = 300
 VICINE_FINESTRA_S = 900.0
 VICINE_PER_RIGA = 40
 VICINE_RIGHE_MAX = 30
+# Le righe tenute solo per la valutazione (18/10, decisione 0032): nessuna lettura le usa
+VALUTAZIONE = "valutazione"
+_NON_VALUTAZIONE = "COALESCE(r.sicurezza, '') != 'valutazione'"
 
 
 def accesa(cfg) -> bool:
@@ -205,6 +214,9 @@ class Tenuta:
         # I conoscenti (stanza/conoscenti.Conoscenti, 14/10): le loro righe si tengono finché
         # il profilo c'è
         self.conoscenti = None
+        # La valutazione (18/10, decisione 0032): una funzione che dice se vale adesso
+        # (load_tenuta: conserva.valutazione_attiva); None = mai, come prima
+        self.valutazione = None
         self.scritte = 0              # righe scritte da quando è partita
         self.saltate = 0              # righe non scritte (ospiti, zona grigia, profilo tolto)
         self.errori = 0
@@ -290,6 +302,13 @@ class Tenuta:
             return reg is None
         return bool(decidi(_profilo(reg, persona), "stanza", "voce"))
 
+    def _in_valutazione(self) -> bool:
+        f = self.valutazione
+        try:
+            return bool(f()) if callable(f) else False
+        except Exception:  # noqa: BLE001 — nel dubbio come di serie
+            return False
+
     # ── dal registro della stanza (thread della stanza o del ciclo) ──
     def evento(self, sat, info: dict | None, e) -> None:
         """Un evento del registro della stanza di `sat` (stanza/registro.Evento): le righe e le
@@ -303,7 +322,13 @@ class Tenuta:
             pid = (chi[len("persona:"):] if chi.startswith("persona:")
                    else chi if chi.startswith("conoscente:") else None)
             seg = d.get("segmento")
-            if not self._tieni(pid, d.get("sicurezza")) or not str(d.get("testo") or "").strip():
+            testo_ok = bool(str(d.get("testo") or "").strip())
+            sic = "voce"
+            if testo_ok and not self._tieni(pid, d.get("sicurezza")) and self._in_valutazione():
+                # La valutazione (18/10, decisione 0032): la riga resta, segnata (la ricerca e la
+                # guardia non la leggono); una versione nuova toglie quella di prima come sempre
+                sic = VALUTAZIONE
+            elif not testo_ok or not self._tieni(pid, d.get("sicurezza")):
                 self.saltate += 1
                 if seg is not None and int(d.get("versione") or 1) >= 2:
                     # Una versione nuova dello stesso segmento che non si tiene (passo 3: chi
@@ -317,22 +342,26 @@ class Tenuta:
                     "versione": int(d.get("versione") or 1),
                     "inizio": float(d.get("inizio") or e.t), "fine": float(d.get("fine") or e.t),
                     "testo": str(d.get("testo")), "chi": chi, "persona": pid,
-                    "nome": d.get("nome"), "sicurezza": "voce", "rivolta": d.get("rivolta"),
+                    "nome": d.get("nome"), "sicurezza": sic, "rivolta": d.get("rivolta"),
                     "minore": 1 if d.get("minore") else 0, "per_persona": None,
                     "nota": d.get("nota") or None}
             self._lavoro(lambda: self._scrivi(riga))
         elif e.tipo == DETTO_CALLIOPE:
             per = d.get("per") if isinstance(d.get("per"), dict) else {}
             pid = per.get("persona")
-            if not self._tieni(pid, per.get("sicurezza")) or not str(d.get("testo") or "").strip():
+            testo_ok = bool(str(d.get("testo") or "").strip())
+            sic = "voce"
+            if testo_ok and not self._tieni(pid, per.get("sicurezza")) and self._in_valutazione():
+                sic = VALUTAZIONE            # la risposta a un ospite (18/10, decisione 0032)
+            elif not testo_ok or not self._tieni(pid, per.get("sicurezza")):
                 self.saltate += 1
                 return
             riga = {"sat": s, "stanza": info.get("stanza"), "satellite": info.get("nome"),
                     "seq": e.seq, "segmento": None, "scambio": None, "versione": 1,
                     "inizio": float(d.get("inizio") or e.t), "fine": float(d.get("fine") or e.t),
                     "testo": str(d.get("testo")), "chi": "calliope", "persona": None,
-                    "nome": "Calliope", "sicurezza": "voce", "rivolta": None, "minore": 0,
-                    "per_persona": str(pid), "nota": None}
+                    "nome": "Calliope", "sicurezza": sic, "rivolta": None, "minore": 0,
+                    "per_persona": str(pid) if pid else None, "nota": None}
             self._lavoro(lambda: self._scrivi(riga))
         elif e.tipo == ANALISI and d.get("analisi") == "rivolta":
             seq, esito = d.get("riga"), d.get("esito")
@@ -383,6 +412,28 @@ class Tenuta:
                             (rid, r["testo"]))
             self.db.commit()
         self.scritte += 1
+
+    def correggi(self, sat, seq, testo: str) -> None:
+        """Il testo di una riga di questo avvio, ripulito (18/10, revisione della PR #178: la
+        frase di sfida e i codici non restano sul disco della stanza), anche nell'indice. In
+        coda dopo la scrittura della riga."""
+        s, q, nuovo = str(sat), int(seq), str(testo)
+
+        def f():
+            with self.lock:
+                ids = [r[0] for r in self.db.execute(
+                    "SELECT id FROM righe WHERE avvio = ? AND sat = ? AND seq = ?",
+                    (self.avvio, s, q))]
+                for rid in ids:
+                    _cancella_sicuro(self.db, "DELETE FROM righe_fts WHERE rowid = ?", (rid,))
+                    self.db.execute("UPDATE righe SET testo = ? WHERE id = ?", (nuovo, rid))
+                    self.db.execute("INSERT INTO righe_fts(rowid, testo) VALUES (?, ?)",
+                                    (rid, nuovo))
+                if ids:
+                    self._compatta()
+                else:
+                    self.db.commit()
+        self._lavoro(f)
 
     def _rivolta(self, sat: str, seq, esito):
         if seq is None:
@@ -534,14 +585,15 @@ class Tenuta:
         """{sat come testo: {stanza, nome}} dei satelliti con righe su disco (l'ultimo nome)."""
         with self.lock:
             rows = self.db.execute(
-                "SELECT sat, stanza, satellite FROM righe WHERE id IN (SELECT max(id) FROM "
-                "righe GROUP BY sat)").fetchall()
+                "SELECT sat, stanza, satellite FROM righe WHERE id IN (SELECT max(r.id) FROM "
+                f"righe r WHERE {_NON_VALUTAZIONE} GROUP BY r.sat)").fetchall()
         return {r[0]: {"stanza": r[1], "nome": r[2]} for r in rows}
 
     def nomi(self) -> list[str]:
         with self.lock:
             return [r[0] for r in self.db.execute(
-                "SELECT DISTINCT nome FROM righe WHERE nome IS NOT NULL")]
+                f"SELECT DISTINCT r.nome FROM righe r WHERE r.nome IS NOT NULL AND "
+                f"{_NON_VALUTAZIONE}")]
 
     @staticmethod
     def _riga(row) -> dict:
@@ -568,7 +620,7 @@ class Tenuta:
         permessi già qui: un minore (`minore_pid`) solo le sue con la voce; un adulto le righe
         dei minori solo di quelli in `tutore_di`. `escludi`: {sat: set dei seq} ancora nel
         registro in memoria di questo avvio (non si ripetono)."""
-        filtri, args = [], []
+        filtri, args = [_NON_VALUTAZIONE], []
         if da is not None:
             filtri.append("r.fine >= ?")
             args.append(float(da))
@@ -647,7 +699,8 @@ class Tenuta:
             rows = self.db.execute(
                 f"SELECT {_SELEZIONE}, EXISTS(SELECT 1 FROM guardia_giudicate g WHERE "
                 f"g.avvio = r.avvio AND g.sat = r.sat AND g.seq = r.seq) FROM righe r WHERE "
-                f"r.avvio != ? AND r.fine >= ? ORDER BY r.sat, r.inizio, r.id",
+                f"r.avvio != ? AND r.fine >= ? AND {_NON_VALUTAZIONE} ORDER BY r.sat, r.inizio, "
+                f"r.id",
                 (self.avvio, float(da))).fetchall()
         out = []
         for row in rows:
@@ -679,6 +732,7 @@ class Tenuta:
                 "SELECT COUNT(*) FROM righe r WHERE r.avvio != ? AND r.minore = 1 AND r.fine >= ? "
                 "AND r.fine < ? AND r.chi NOT IN ('calliope', 'tv') "
                 "AND COALESCE(r.rivolta, '') != 'si' AND TRIM(r.testo) != '' "
+                f"AND {_NON_VALUTAZIONE} "
                 "AND NOT EXISTS (SELECT 1 FROM guardia_giudicate g WHERE "
                 "g.avvio = r.avvio AND g.sat = r.sat AND g.seq = r.seq)",
                 (self.avvio, float(da), float(a))).fetchone()[0])
@@ -765,6 +819,8 @@ def _conta(db, path: str, persona=None) -> dict:
         "SELECT COUNT(*), COUNT(DISTINCT persona), COUNT(DISTINCT sat), min(fine) FROM "
         "righe").fetchone()
     minori = db.execute("SELECT COUNT(*) FROM righe WHERE minore = 1").fetchone()[0]
+    valut = db.execute("SELECT COUNT(*) FROM righe WHERE sicurezza = ?",
+                       (VALUTAZIONE,)).fetchone()[0]
     mb = 0.0
     if path and path != ":memory:":
         for suff in ("", "-wal"):
@@ -774,6 +830,7 @@ def _conta(db, path: str, persona=None) -> dict:
                 pass
     return {"righe": int(n), "persone": int(persone or 0), "stanze": int(stanze or 0),
             "righe_minori": int(minori), "mb": round(mb, 2),
+            **({"righe_valutazione": int(valut)} if valut else {}),
             "giorni": (round((time.time() - float(prima)) / GIORNO_S, 1) if prima else 0.0)}
 
 

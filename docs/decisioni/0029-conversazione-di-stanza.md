@@ -7,7 +7,9 @@
   (corsia lenta, con il filtro della TV), il resto del passo 7 e il passo 8; vedi «Conseguenze»]*
   *[storico: il 14/10 sera fatto anche il passo 3 (corsia lenta, `stanza_lenta`, spenta di
   serie), con l'**eccezione temporanea** dell'audio del banco (sezione qui sotto); restano il
-  resto del passo 7 e il passo 8]*
+  resto del passo 7 e il passo 8]*. **Eccezione a tempo dal 18/10**: durante la valutazione
+  (`conserva_valutazione_fino`) il testo e l'audio della stanza di tutte le voci, ospiti compresi
+  (punti 1 e 5), vedi [0032](0032-valutazione-conserva-tutto.md).
 - **Area**: [stt-tts](../aree/stt-tts.md), [contesto-conversazione](../aree/contesto-conversazione.md),
   [voce-e-regole](../aree/voce-e-regole.md), [minori](../aree/minori.md),
   [satelliti](../aree/satelliti.md), [schermi-telefono](../aree/schermi-telefono.md)

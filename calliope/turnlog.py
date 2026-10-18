@@ -17,7 +17,9 @@ minore tengono le parole (dal 12 al 16/10 no). Lo decide `Conservazione.testo_tu
 solo posto; il ciclo lo segna nel turno (`conserva`), e qui vale anche per le righe scritte da
 altri (cassetto, schermi, installazioni). Dal 14/10 sera (decisione 0030 aggiornata) anche i
 turni di un **conoscente**: livello ospite, ma nel campo `voce` il suo id, il nome
-(`nome_conoscente`) e le parole, come un adulto.
+(`nome_conoscente`) e le parole, come un adulto. Durante la **valutazione** (18/10, decisione
+0032, `conserva_valutazione_fino`) le parole restano per tutti, ospiti compresi: il ciclo segna
+il turno `conserva: {testo: true, motivo: valutazione, di_serie: …}`.
 """
 
 import datetime
@@ -68,6 +70,16 @@ class TurnLog:
         aggiornata) è di livello ospite ma le parole restano, se lo dice la conservazione."""
         if _segnato_no(rec):
             return True
+        if _segnato_valutazione(rec):
+            return False                 # la valutazione (18/10, decisione 0032), dal ciclo
+        if self.conserva is not None and "conserva" not in rec:
+            # Righe di altri (cassetto, schermi) durante la valutazione: le parole restano
+            valuta = getattr(self.conserva, "valutazione", None)
+            try:
+                if callable(valuta) and valuta():
+                    return False
+            except Exception:  # noqa: BLE001 — nel dubbio la regola di serie
+                pass
         v = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}
         conoscente = bool(v.get("conoscente") and v.get("id") and not v.get("nome"))
         if rec.get("livello") == "ospite" and not conoscente:
@@ -127,6 +139,11 @@ class TurnLog:
 def _segnato_no(rec: dict) -> bool:
     c = rec.get("conserva")
     return isinstance(c, dict) and c.get("testo") is False
+
+
+def _segnato_valutazione(rec: dict) -> bool:
+    c = rec.get("conserva")
+    return isinstance(c, dict) and c.get("testo") is True and c.get("motivo") == "valutazione"
 
 
 def read_turns(folder: str, days: int | None = None) -> list[dict]:

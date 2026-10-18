@@ -1883,3 +1883,58 @@ in attivo quella frase avrebbe i suoi permessi. Il criterio per accendere `attiv
 `minore_ad_amministra_tutti`), oppure ogni frase riletta una per una; `calliope stato --turni` lo
 dice con un'ATTENZIONE per satellite. Prova: lo scambio su base incerta apre l'ATTENZIONE;
 contrario: chi amministra → minore (il verso prudente) no.
+
+## La valutazione: l'audio di tutte le frasi e di tutti i segmenti fino a una data (18/10, issue #173, ramo `issue-173-valutazione`)
+
+Con `conserva_valutazione_fino: "AAAA-MM-GG"` (decisione
+[0032](../decisioni/0032-valutazione-conserva-tutto.md); il resto in
+[contesto-conversazione](contesto-conversazione.md)), fino alla data compresa:
+
+- **la voce dei turni**: ogni frase del turno che la regola di serie non terrebbe (ospite, zona
+  grigia, voce sotto soglia, senza consenso, compagnia, dubbio con un minore) va in
+  `turn_log_dir/voce/_valutazione/<id o «ospiti»>/<giorno>/<ora>.wav`, nello stesso G.711 μ-law,
+  dal `Conservazione.salva_voce` di sempre (a turno finito, mai nel thread della voce mentre
+  parla). Il turno porta `voce_valutazione: true` accanto a `voce_file`. Restano senza audio la
+  frase di sfida e i codici (`_segreto`), lo scritto, le frasi ignorate o vuote, e tutto con
+  `conserva_voce: false`. La rotazione tiene i giorni per `turn_log_days` anche dopo la data e
+  toglie la cartella di un profilo tolto; `svuota --persona` e la revoca del consenso tolgono le
+  frasi sotto il suo id; il tetto `conserva_voce_mb` vale per tutta la cartella;
+- **il banco della stanza**: `Banco.attivo` è l'eccezione del 14/10 **o** la valutazione
+  (`Banco.valutazione`: vuole `stanza_lenta`); con la valutazione `salva` tiene anche i segmenti
+  che `ammesso` rifiuta (ospiti, conoscenti, zona grigia, voci sconosciute, «più voci») e la corsia
+  lenta passa anche TV e allucinazioni (`lenta.py`); nel `.json` `"valutazione": true` e le
+  persone decise (per `--persona`). Non dipende da `stanza_audio_banco_giorni` né tocca
+  `acceso.json`: la scadenza dell'eccezione (05/11 sulla DGX) resta la sua. In pausa niente.
+
+**Limite.** L'audio arriva al banco solo dalla corsia lenta: un segmento che scade in RAM prima
+che la DGX sia libera (`stanza_audio_min`, «scaduto» in `calliope stato --turni`) ha la riga ma
+non l'audio.
+
+**Prova** `prova_conserva_valutazione` (stanza): con i finti di `prova_stanza_lenta` (corsia
+veloce, lenta, tenuta su disco e banco veri) il segmento di una voce sconosciuta ha la riga nella
+tenuta con `sicurezza: valutazione` (la ricerca non la vede) e l'audio nel banco con
+`valutazione: true` senza `stanza_audio_banco_giorni`; il segmento di casa anche lui, con la
+persona; `--persona` toglie i suoi e lascia quello dell'ospite; contrari: spenta, data passata, in
+pausa. Le prove della stanza di prima restano verdi.
+
+**Dopo la revisione della PR #178 (18/10).** Non arrivano al banco neanche i segmenti che la
+corsia veloce scarta (vuoti, tutta eco durante la voce, allucinazioni della veloce: non vanno mai
+alla lenta) né quelli legati a un turno (il loro audio è nella voce dei turni). Il banco non salva
+più i segmenti nel tratto di una frase di sfida o di un codice detto (`Stanza.segreto`, motivo
+`segreto` in `saltati`), anche a valutazione spenta e per le voci di casa; la riga della stanza
+porta «(frase di conferma)» o «******». I conoscenti nel banco si tolgono con `--persona` e col
+loro «dimentica», e i blocchi della valutazione hanno le persone giuste e il segno.
+
+**Seconda revisione della PR #178 (18/10).** Con una frase di sfida in attesa la riga del turno è
+«(frase di conferma)» solo fino all'esito: se la frase non era la risposta torna vera (con
+`brain.redact`) e si ritrova nell'indice. La correzione dei codici e il tratto segreto valgono
+anche senza `stanza_contesto`. Il tratto del turno nasce **provvisorio** all'inizio della frase
+(`Stanza.segreto(…, provvisorio=True)`, al più 300 s se nessuno lo chiude): la corsia lenta non ne
+salva i segmenti nel banco finché il turno non finisce, e a turno finito `chiudi_segreto` lo tiene
+o lo toglie (la corsa fra il turno e la corsia lenta è chiusa). Le righe della corsia veloce dentro
+un tratto segreto si mascherano, quelle già scritte (`_maschera_tratto`, con `Lenta.scarta`) e
+quelle trascritte dopo (`_trascrivi`, senza corsia lenta). Limite: un blocco chiuso della
+ritrascrizione a blocchi non si riapre. Prove in `prova_conserva_valutazione`: il contrario «che
+tempo fa domani» con la sfida in attesa (vero e nell'indice FTS), il codice con la sola tenuta, il
+segmento della lenta nel tratto provvisorio (cade con `segreto=False`), le righe della veloce prima
+e dopo il tratto.
