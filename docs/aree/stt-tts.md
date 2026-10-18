@@ -902,7 +902,9 @@ punti, un interruttore ciascuno, accesi di serie:
   `compagnia_anonima_continua`): dettagli in [contesto-conversazione](contesto-conversazione.md).
 - **Rilevatore solo sulle frasi rivolte** (`compagnia_pericolo_solo_rivolte`, regola
   `pericolo_non_rivolta`): dettagli in [minori](minori.md). Il giudizio «rivolta» resta in ombra:
-  qui conta il suo esito, non la sua modalità.
+  qui conta il suo esito, non la sua modalità. *[Storico: dal 18/10 (#29) conta anche la
+  modalità, il «non rivolta» spegne il segnale solo con `compagnia_rivolta: attiva`; sezione del
+  18/10 in fondo.]*
 
 `SpeakerContext.compagnia_sconosciute` dice per la frase se tra le voci ce n'è una che nessun
 profilo riconosce (serve alla conversazione condivisa). Le tre regole sono contate nella sezione
@@ -1259,7 +1261,9 @@ portatile (50 ms con un thread), p50 25–58 ms secondo il carico.
 **Da fare (Dario).** Sulla DGX: il modello e lo script a secco sulle ~95 frasi conservate di chi
 amministra (`prove/manuali/fine_turno_dgx.py`, comando in testa: accordo, griglia di soglie e
 parlato minimo, ms del decisore, solo numeri); poi `fine_turno: ombra` nel file locale per almeno
-una settimana. *18/10: sulla DGX `fine_turno: ombra` (data d'accensione non scritta, #24: [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)).* Criteri proposti per «attiva» su un satellite: tagli sotto l'1 % a soglia 0,9,
+una settimana. *[Storico: letto il 18/10 «sulla DGX `fine_turno: ombra`» (data d'accensione non
+scritta); dal 18/10 `spenta` dopo la griglia (#24), sezione del 18/10 in fondo e
+[setup-dgx](setup-dgx.md#interruttori-sulla-dgx).]* Criteri proposti per «attiva» su un satellite: tagli sotto l'1 % a soglia 0,9,
 almeno metà delle frasi chiuse prima, decisore p90 sotto 100 ms sul satellite.
 
 Prove: `prove/prova_fine_turno.py` (livello 2, a secco: decisore finto, frase completa, sospesa
@@ -1632,7 +1636,7 @@ Whisper suo. Solo la forma chiusa sigla + fascia vera (3, 7, 12, 16, 18): «PG»
 Difetto trovato nell'analisi della issue #32: la rotazione dei giorni del banco della stanza
 (`stanza/banco.ruota`, cartelle `<turn_log_dir>/stanza_banco/<satellite>/<giorno>/` oltre
 `turn_log_days`) girava solo dentro `Banco.salva`, cioè solo mentre l'eccezione del 14/10 sera era
-accesa. Dopo la scadenza (sulla DGX il 21/10), o con `stanza_audio_banco_giorni: 0`, nessuno la
+accesa. Dopo la scadenza (sulla DGX il 21/10 *[storico: dal 18/10 il 05/11, #33]*), o con `stanza_audio_banco_giorni: 0`, nessuno la
 chiamava più: i file restavano oltre i 60 giorni promessi dalla decisione 0029, fino a un
 `calliope conserva --svuota` o a un «dimentica». Ora la chiama anche la conservazione
 (`Conservazione.ruota`, `out["banco"]`, una riga `[CONSERVA] banco della stanza: tolti N segmenti
@@ -1813,3 +1817,40 @@ tenuto da parte dopo `adapt`, la tutela del solo minore riconosciuto). **Verific
 alla prossima serata con ospiti e il telefono in stanza: `calliope stato --turni --giorni 1`, la
 riga «dalla stanza, non applicata» e la regola `compagnia_da_stanza_ombra_nome` (quante frasi
 sarebbero state scartate), confrontate con le serate della sola famiglia.
+
+## Il giudizio «rivolta» in ombra e il rilevatore di pericolo (18/10, issue #29)
+
+Decisione di chi amministra del 18/10: finché il prompt del giudizio «rivolta a Calliope» non è
+corretto (falsi negativi sulle frasi lunghe che parlano di Calliope in terza persona, rilettura
+del 15/10 sera), un «non rivolta» **in ombra** non spegne più il rilevatore di pericolo. In
+`Ciclo._pericolo_vale` la regola `pericolo_non_rivolta` scatta solo con `compagnia_rivolta:
+attiva`; in ombra il segnale vale e nel registro c'è `pericolo_non_rivolta_ombra` (fra le regole
+della compagnia). Il giudizio in ombra per il resto non cambia (`non_rivolta_ombra`, misura dei
+tempi, nessun silenzio). Dettagli e prove in [minori](minori.md), sezione del 18/10.
+
+## Fine del turno spenta, deriva delle impronte a 0,60, audio del banco fino al 05/11 (18/10, cambi nel locale della DGX)
+
+Tre cambi fatti da chi amministra il 18/10 nel file locale della DGX, con il servizio riavviato.
+Valori nella tabella [«Interruttori sulla DGX»](setup-dgx.md#interruttori-sulla-dgx).
+
+- **`fine_turno: spenta`** (era `ombra`; #24, issue chiusa). Griglia delle soglie sulla DGX
+  (`prove/manuali/fine_turno_dgx.py --giorni 14`, 180 frasi conservate rigiocate, 87 pause
+  interne): a 0,5 tagli 38 (21 %), a 0,9 29 (16 %), a 0,95 26 (14 %), a 0,98 12 (6,7 %); a 0,98
+  con almeno 1200 ms di parlato **10 tagli su 180 (5,6 %)**, 108 chiuse prima. Accordo a 0,5 sulle
+  pause interne «non finito»: **12/48** dal satellite e **13/39** dal telefono: il modello prende
+  quasi ogni pausa per la fine della frase. Decisore p50 31 ms. Nessuna soglia sotto l'1 % di
+  tagli (criterio deciso il 18/10), quindi resta il silenzio fisso. Per riprovarci servirebbe un
+  modello che distingua le pause dell'italiano parlato (uno Smart Turn tarato sull'italiano).
+- **`speaker_impronte_deriva_arruolamento: 0.60`** (di serie 0,70), con le impronte per satellite
+  **sempre in ombra** (#42). Riascolto sulle registrazioni di 4 giorni (164 frasi, 21 del
+  minore): a 0,70 insegnano 29 frasi, a 0,60 63 e chi amministra preso per minore scende da 11 a
+  7; a 0,50 111 e 0, ma il margine del minore scende da 0,55 a 0,37. In nessun caso il minore è
+  preso per chi amministra. Si rilegge il 22/10; lo scambio contato contro una base incerta è in
+  #159.
+- **`stanza_audio_banco_giorni: 22`** (era 7 dalla prima accensione del 14/10 sera), cioè l'audio
+  del banco della stanza fino al **05/11** invece del 21/10 (#33, #32): con 10 blocchi rivisti su
+  30 e il ritmo di questi giorni, i 30 arrivano verso il 02/11, e senza audio i blocchi non si
+  rivedono. `stanza/banco.py` calcola la scadenza col valore corrente: la proroga vale senza
+  toccare `acceso.json`. Le regole restano quelle dell'eccezione della decisione
+  [0029](../decisioni/0029-conversazione-di-stanza.md) (nota storica del 18/10): solo voci di
+  casa, minori della famiglia compresi col sì dei tutori, mai ospiti, conoscenti né zona grigia.

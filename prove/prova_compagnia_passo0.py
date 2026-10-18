@@ -377,8 +377,17 @@ def prova_pericolo():
     t = turno()
     verifica("ombra: il giudizio parte (precondizione)", t.rivolta is not None
              and t.rivolta["modo"] == "ombra")
-    verifica("ombra, non rivolta: il pericolo non vale (regola pericolo_non_rivolta)",
-             ciclo._pericolo_vale(t) is False and "pericolo_non_rivolta" in regole)
+    # 18/10 (#29, decisione di chi amministra): finché il prompt del giudizio non è corretto,
+    # un «non rivolta» in ombra non spegne il segnale; lo spegne solo con il giudizio «attiva»
+    verifica("ombra, non rivolta: il pericolo vale, regola pericolo_non_rivolta_ombra (#29)",
+             ciclo._pericolo_vale(t) is True and "pericolo_non_rivolta_ombra" in regole
+             and "pericolo_non_rivolta" not in regole, regole)
+    regole.clear()
+    cfg.compagnia_rivolta = "attiva"
+    verifica("contrario: giudizio attivo, non rivolta → il pericolo non vale "
+             "(regola pericolo_non_rivolta)",
+             ciclo._pericolo_vale(turno()) is False and "pericolo_non_rivolta" in regole
+             and "pericolo_non_rivolta_ombra" not in regole, regole)
     regole.clear()
     giudizio[0] = '{"per_calliope": true}'
     verifica("contrario: rivolta → il pericolo vale", ciclo._pericolo_vale(turno()) is True
@@ -386,6 +395,12 @@ def prova_pericolo():
     giudizio[0] = "non è JSON"
     verifica("contrario: giudizio guasto → vale «rivolta», il pericolo vale",
              ciclo._pericolo_vale(turno()) is True)
+    cfg.compagnia_rivolta = "spenta"
+    giudizio[0] = '{"per_calliope": false}'
+    verifica("contrario: giudizio spento → nessun giudizio, il pericolo vale",
+             ciclo._pericolo_vale(turno()) is True and "pericolo_non_rivolta" not in regole
+             and "pericolo_non_rivolta_ombra" not in regole, regole)
+    cfg.compagnia_rivolta = "attiva"
     giudizio[0] = '{"per_calliope": false}'
     cfg.compagnia_pericolo_solo_rivolte = False
     verifica("interruttore spento (compagnia_pericolo_solo_rivolte: false) → vale",
@@ -415,6 +430,21 @@ def prova_pericolo():
     verifica("registro: pericolo_non_rivolta con le categorie, niente parole del minore",
              g.get("pericolo_non_rivolta") == ["autolesionismo"] and ciclo.rec["testo"] is None
              and "fermata" not in g, json.dumps(ciclo.rec, ensure_ascii=False))
+    # Lo stesso turno col giudizio in ombra (#29): la protezione, nessun pericolo ignorato
+    cfg.compagnia_rivolta = "ombra"
+    t = turno()
+    t.usa_guardia, t.minore_turno = True, True
+    t.esito_u = __import__("calliope.riferire", fromlist=["Esito"]).Esito()
+    t.esito_g = guardia.Esito()
+    detto = list(guardia.filtra(GuardianoFinto(), iter(["Ok."]), "frase", True, t.esito_g,
+                                pericolo_vale=lambda g: ciclo._pericolo_vale(t)))
+    ciclo.rec = {"testo": "Ma no, mi ammazzo dal ridere.", "richiesta": "x"}
+    ciclo._registra_controlli(t)
+    g = ciclo.rec.get("guardiano") or {}
+    verifica("contrario: in ombra la protezione si dice e il registro non ha "
+             "pericolo_non_rivolta (#29)",
+             detto == [guardia.PROTEZIONE] and "pericolo_non_rivolta" not in g
+             and g.get("fermata") == guardia.PERICOLO, json.dumps(ciclo.rec, ensure_ascii=False))
 
 
 if __name__ == "__main__":

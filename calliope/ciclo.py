@@ -4045,9 +4045,10 @@ class Ciclo:
         """Regola `pericolo_non_rivolta` (13/10, passo 0 della conversazione di stanza,
         decisione 0029; risposta 4 di chi amministra). Il rilevatore ha detto «pericolo» sulla
         domanda: vale se la frase era rivolta a Calliope. In compagnia una frase senza il nome
-        ha il giudizio «rivolta» (anche in ombra): se dice di no, è una chiacchiera e non si
-        giudica in diretta (caso vero del 12/10 in auto: una frase breve e storpiata del
-        ragazzo dentro la finestra presa per un pericolo, poi Telefono Azzurro e 112 nell'auto).
+        ha il giudizio «rivolta»: se dice di no, è una chiacchiera e non si giudica in diretta
+        (dal 18/10, #29, solo con `compagnia_rivolta: attiva`; in ombra il segnale vale). Caso
+        vero del 12/10 in auto: una frase breve e storpiata del ragazzo dentro la finestra presa
+        per un pericolo, poi Telefono Azzurro e 112 nell'auto.
         Il guardiano sulle frasi di Calliope resta. Senza il giudizio (una persona sola, col
         nome, giudizio spento) come prima; un giudizio guasto o scaduto vale «rivolta». Vincolo
         sulla sicurezza deciso dall'audio e dal giudizio, non dal testo (principio 10);
@@ -4065,6 +4066,13 @@ class Ciclo:
             # La compagnia viene solo dalla stanza (18/10, #147, revisione della PR #161): il
             # giudizio «non rivolta» non spegne il segnale, come con una persona sola
             self.rule("pericolo_solo_stanza")
+            return True
+        if compagnia_mod.modo_rivolta(self.s.cfg) != compagnia_mod.ATTIVA:
+            # Il giudizio in ombra ha falsi negativi (18/10, #29, decisione di chi amministra:
+            # frasi lunghe che parlano di Calliope in terza persona, prompt da correggere):
+            # finché non è «attiva» un «non rivolta» non spegne il segnale; nel registro solo
+            # che l'avrebbe spento
+            self.rule("pericolo_non_rivolta_ombra")
             return True
         self.rule("pericolo_non_rivolta")
         print("   [GUARDIANO] segnale su una frase non rivolta a me (in compagnia): non vale, "

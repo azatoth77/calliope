@@ -689,7 +689,11 @@ chi_parla:
   # In compagnia una frase senza il nome giudicata «non rivolta a Calliope» (anche col giudizio
   # in ombra) non passa dal rilevatore di pericolo: le chiacchiere non si giudicano in diretta
   # (decisione 0029, risposta 4 di chi amministra; regola `pericolo_non_rivolta`). Il
-  # guardiano sulle frasi di Calliope resta. Un giudizio guasto o scaduto vale «rivolta»
+  # guardiano sulle frasi di Calliope resta. Un giudizio guasto o scaduto vale «rivolta».
+  # Dal 18/10 (#29, decisione di chi amministra) vale solo con `compagnia_rivolta: attiva`: il
+  # giudizio in ombra ha falsi negativi (frasi che parlano di Calliope in terza persona) e,
+  # finché il prompt non è corretto, il suo «non rivolta» lascia valere il segnale (regola
+  # `pericolo_non_rivolta_ombra`, nel registro)
   compagnia_pericolo_solo_rivolte: true
   # La compagnia anche dai segmenti della conversazione di stanza (18/10, issue #147): con la
   # stanza accesa i segmenti con un'impronta entrano nella compagnia della corsia del loro

@@ -23,18 +23,19 @@ indirizzi, percorsi, nomi o dati dell'ufficio. **Chi accende, spegne o cambia un
 sulla DGX aggiorna questa tabella** (valore, data, e la riga datata nel documento d'area), e i
 documenti d'area rimandano qui invece di ripetere lo stato.*
 
-**Letti da chi amministra il 18/10** (versione installata: main f882e35). «Di serie» è il valore
+**Letti da chi amministra il 18/10** (versione installata: main f882e35; cambi del 18/10 fatti da chi amministra segnati nella colonna «Da quando»). «Di serie» è il valore
 del codice (`calliope/config.py`), che vale per tutte le chiavi non elencate. «Da quando» è la data
 scritta nei documenti; «non scritta» dove nessun documento la dice.
 
 | Chiave | Sulla DGX | Di serie | Da quando | Area |
 |---|---|---|---|---|
 | `llm_profilo` | `gemma4-26b-ollama` (l'e4b resta caricato per il guardiano e il giudizio «rivolta») | vuoto (il modello di `llm_model`) | verificato il 16/10 | [voce-e-regole](voce-e-regole.md) |
-| `llm_reti_spente` | `[domanda_insistita]`; si aggiungono quelle del profilo (`spinta_promessa`, `spinta_richiesta`, `ricerca_promessa`), quindi quattro spente in tutto | `[]` (tutte accese, o quelle del profilo) | non scritta | [contesto-conversazione](contesto-conversazione.md) |
+| `llm_reti_spente` | `[domanda_insistita]`; si aggiungono quelle del profilo (`spinta_promessa`, `spinta_richiesta`, `ricerca_promessa`), quindi quattro spente in tutto. **Resta fino all'installazione del profilo nuovo** (dal 18/10 `domanda_insistita` è spenta nei profili del 26B, #15), poi chi amministra la toglie | `[]` (tutte accese, o quelle del profilo) | non scritta; decisione del 18/10 (#15) | [voce-e-regole](voce-e-regole.md) |
 | `system1_dopo_tool` | `ombra` | `spento` | 15/10 | [voce-e-regole](voce-e-regole.md) |
 | `frasi_varianti` | `attivo` | `ombra` | non scritta (#28 è ancora aperta) | [personalita](personalita.md) |
-| `fine_turno` | `ombra` | `spenta` | non scritta (#24) | [stt-tts](stt-tts.md) |
+| `fine_turno` | `spenta` (era `ombra`) | `spenta` | 18/10: la griglia non ha nessuna soglia sotto l'1 % di tagli (#24) | [stt-tts](stt-tts.md) |
 | `speaker_impronte_satellite` | `ombra` | `spento` | 15/10 | [stt-tts](stt-tts.md) |
+| `speaker_impronte_deriva_arruolamento` | `0.60` (con le impronte in ombra) | `0.70` | 18/10 (#42) | [stt-tts](stt-tts.md) |
 | `arbitro_memoria` | `ombra` | `spento` | non scritta (#1) | [capacita-installazioni](capacita-installazioni.md) |
 | `stanza` | `ombra` | `spenta` | 14/10 | [stt-tts](stt-tts.md), [contesto-conversazione](contesto-conversazione.md) |
 | `stanza_contesto` | `true` | `false` | 14/10 | [contesto-conversazione](contesto-conversazione.md) |
@@ -44,7 +45,7 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 | `stanza_guardia` | `ombra` | `spenta` | 14/10 sera (#36) | [minori](minori.md) |
 | `stanza_lenta` | `true` | `false` | 14/10 sera | [stt-tts](stt-tts.md) |
 | `stanza_lenta_blocchi` | `ombra` (pausa 8 s) | `spento` | 15/10 | [stt-tts](stt-tts.md) |
-| `stanza_audio_banco_giorni` | `7` | `0` | 14/10 sera; l'eccezione della 0029 scade il 21/10 (#32) | [stt-tts](stt-tts.md) |
+| `stanza_audio_banco_giorni` | `22` (era `7`), cioè fino al 05/11 | `0` | 14/10 sera; portata a 22 giorni il 18/10 (#33, #32): l'eccezione della 0029 scade il 05/11 invece del 21/10 | [stt-tts](stt-tts.md) |
 | `stanza_conoscenti` | `true` | `false` | 14/10 sera (prova in auto); criterio non scritto (#38) | [stt-tts](stt-tts.md) |
 | `avvisi_audio` | `true` | `false` | non scritta; criterio non scritto (nessuna issue) | [minori](minori.md) |
 | `notizie_accese` | le due testate spente di serie (Il Post, Il Sole 24 Ore) | `[]` | non scritta | [biblioteca](biblioteca.md) |

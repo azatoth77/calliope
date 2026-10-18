@@ -2623,3 +2623,28 @@ installata con le prove del ramo:
   della conversazione di chi amministra (turni di prima), il livello col minore vicino
   (`minore_vicino`, familiare), la stanza nella storia da più pezzi. Da rileggere sul vero
   (`calliope stato --turni`, turni in compagnia con «riconosci / chi sono»).
+
+## `domanda_insistita` spenta nei profili del 26B (18/10, issue #15, ramo `issue-15-29-decisioni`)
+
+Lettura d'ombra sulla DGX del 18/10, sul registro dei turni dal 09 al 17/10 (stima: la stessa
+regola `ripetizione.insiste`, stessa persona entro 5 minuti, riapplicata a posteriori):
+
+- sulla DGX la rete è stata accesa solo per 8 risposte, il 15/10, e non è mai scattata; poi
+  `llm_reti_spente: [domanda_insistita]` nel locale l'ha spenta;
+- su circa 680 risposte con le parole, **25 domande insistite** (3,7 %), e solo **2** risposte
+  tornate quasi uguali (una il 10/10, prima della rete; una il 15/10); dopo lo spegnimento una
+  domanda insistita e nessuna risposta ripetuta;
+- la rete di riserva `risposta_ripetuta` è scattata 5 volte, l'ultima il 15/10;
+- il banco del 15/10 non mostrava un effetto (2/5 contro 3/5, con due cose cambiate insieme).
+
+**Decisione di chi amministra** (18/10): la rete si spegne nei profili `gemma4-26b-ollama` e
+`gemma4-26b-vllm` di `PROFILI_LLM`, senza rifare il banco da 10 giri; di serie resta accesa nei
+profili piccoli (`gemma4-e4b-ollama`, `qwen3.6-35b-vllm`) e senza profilo. Resta accesa
+`risposta_ripetuta`, che trattiene la risposta lunga uguale alla precedente. La riga del locale
+della DGX si toglie quando la versione col profilo nuovo è installata (setup-dgx, tabella
+«Interruttori sulla DGX»). `calliope.yaml` non cambia (i profili stanno nel codice).
+
+Prove: `prova_stanza_storpiata` (`prova_config`) applica ogni profilo con `apply_llm_profile` e
+controlla la rete spenta nei due del 26B, accesa negli altri, e spenta col 4B dalla riga del
+locale (fallisce su main); `prova_reti_scatti` scrive per i turni finti del 15/10 le reti spente
+di allora, senza `domanda_insistita`.

@@ -69,6 +69,9 @@ verifica("e nel codice ci sono quasi tutte le reti del modello",
 # ── 2. registro finto ──
 P26, P4 = "gemma4-26b-ollama", "gemma4-e4b-ollama"
 SP26 = list(PROFILI_LLM[P26]["llm_reti_spente"])
+# Le reti spente dal profilo del 26B il 15/10, come le scriveva il registro: domanda_insistita
+# si spegne nel profilo solo dal 18/10 (#15)
+SP26_15 = [x for x in SP26 if x != "domanda_insistita"]
 
 
 def t(giorno, ora, regole=(), chi="p-ada", testo="Accendi la luce.", esito="risposta",
@@ -101,8 +104,8 @@ turni = [
     t("10", "17:00:00", ["spinta_rinuncia"], testo=None, chi="p-minore"),  # senza parole
     t("10", "17:00:20", testo=None, chi="p-minore"),
     # dal 15/10: reti_spente nel turno (il locale spegne anche eco_contesto)
-    t("15", "09:00:00", ["domanda_insistita"], spente=SP26 + ["eco_contesto"]),
-    t("15", "09:01:00", spente=SP26 + ["eco_contesto"], testo="Altro."),
+    t("15", "09:00:00", ["domanda_insistita"], spente=SP26_15 + ["eco_contesto"]),
+    t("15", "09:01:00", spente=SP26_15 + ["eco_contesto"], testo="Altro."),
     # profilo del 4B: tutto acceso, spinta_promessa scatta
     t("12", "09:00:00", ["spinta_promessa", "spinta_promessa"], profilo=P4, spente=[]),
     t("12", "09:10:00", profilo=P4, spente=["tutte"], testo="Ciao."),

@@ -369,6 +369,26 @@ def prova_config():
     verifica("rete domanda_insistita fra quelle del modello (si spegne dal profilo)",
              "domanda_insistita" in RETI and RETI["domanda_insistita"].categoria == "modello")
     verifica("accesa di serie", Config().rete("domanda_insistita"))
+    # 18/10 (#15, decisione di chi amministra): spenta nei due profili del 26B, accesa negli
+    # altri; una riga nel locale si aggiunge a quelle del profilo
+    from calliope.config import PROFILI_LLM, apply_llm_profile
+    accesa = {}
+    for nome in PROFILI_LLM:
+        c = Config()
+        c.llm_profilo = nome
+        apply_llm_profile(c)
+        accesa[nome] = c.rete("domanda_insistita")
+    del26 = {"gemma4-26b-ollama", "gemma4-26b-vllm"}
+    verifica("profili del 26B: domanda_insistita spenta",
+             all(not accesa[n] for n in del26), accesa)
+    verifica("contrario: negli altri profili accesa (il 4B e il qwen)",
+             len(accesa) > len(del26) and all(accesa[n] for n in accesa if n not in del26),
+             accesa)
+    c = Config()
+    c.llm_profilo = "gemma4-e4b-ollama"
+    c.llm_reti_spente = ["domanda_insistita"]
+    apply_llm_profile(c)
+    verifica("contrario: col 4B la spegne la riga del locale", not c.rete("domanda_insistita"))
     verifica("domanda insistita: niente formula «sembrato di sentirlo» (16/10, #134)",
              "sembrat" not in INSISTE_MSG and "sembrat" not in RIPETUTA_NUDGE_INSISTE
              and "ricostruzione" in INSISTE_MSG and "ricostruzione" in RIPETUTA_NUDGE_INSISTE)

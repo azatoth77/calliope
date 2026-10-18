@@ -760,7 +760,8 @@ tutore sullo schermo personale, mai «Va tutto bene?» al ragazzo).
 `pericolo_non_rivolta`, interruttore `compagnia_pericolo_solo_rivolte`): quando il rilevatore (o il
 guardiano) dice «pericolo» sulla domanda, il ciclo guarda il giudizio «rivolta a Calliope», che in
 compagnia parte già su ogni frase senza il nome (`Ciclo._avvia_rivolta`). Se dice di no, **anche
-con il giudizio in ombra**, il segnale non vale: niente protezione, niente cancelli, niente avviso;
+con il giudizio in ombra** *[storico: dal 18/10, #29, solo con `compagnia_rivolta: attiva`;
+in ombra il segnale vale, sezione del 18/10 in fondo]*, il segnale non vale: niente protezione, niente cancelli, niente avviso;
 si risponde come sempre e il guardiano giudica ogni frase di Calliope. Nel registro dei turni solo
 `guardiano.pericolo_non_rivolta` con le categorie, e per il minore niente testo. Un giudizio guasto
 o scaduto vale «rivolta», cioè il pericolo vale. Senza giudizio (una persona sola, col nome, dopo il
@@ -1300,3 +1301,35 @@ segnale ravvicinato che non conferma in compagnia (`pericolo_compagnia_cancello1
 dice «vicino al microfono parlavano anche altre persone». Contrario provato: la voce sconosciuta
 già al turno col minore chiude la finestra come prima (la tutela riguarda solo la stanza). Prova
 `prove/prova_compagnia_stanza.py` (sezione «i minori»).
+
+## Il «non rivolta» in ombra non spegne più il rilevatore di pericolo
+
+*18/10, issue #29, ramo `issue-15-29-decisioni`.*
+
+La rilettura a mano del 15/10 sera ha trovato **falsi negativi** nel giudizio «rivolta a
+Calliope» in ombra: delle 8 frasi «non rivolte» almeno 3 di chi amministra erano per Calliope
+(frasi lunghe che parlano *di* Calliope o del dispositivo in terza persona), e il prompt
+(`calliope/rivolta.py`) mette ancora fra i «no» i commenti su Calliope in terza persona. Sulla
+DGX, dal 12/10, 61 giudizi e 16 «non rivolte»; la regola `pericolo_non_rivolta` non è mai
+scattata, ma con quei falsi negativi avrebbe potuto spegnere un segnale vero.
+
+**Decisione di chi amministra** (18/10): finché il prompt del giudizio non è corretto, un «non
+rivolta» in ombra non spegne più il rilevatore. Forma scelta, la più semplice: in
+`Ciclo._pericolo_vale` il «non rivolta» spegne il segnale solo con `compagnia_rivolta: attiva`
+(regola `pericolo_non_rivolta`, come prima); in ombra il segnale vale (protezione, cancelli,
+avviso come con una persona sola) e nel registro dei turni resta la regola nuova
+`pericolo_non_rivolta_ombra`, cioè «l'avrebbe spento» (fra le regole della compagnia di
+`calliope stato --turni`). Senza giudizio, col giudizio guasto, scaduto o «rivolta», e con la
+compagnia della sola stanza (`pericolo_solo_stanza`) tutto come prima. Nessun interruttore
+nuovo; `compagnia_pericolo_solo_rivolte: false` lo spegne ancora del tutto. Sulla DGX il giudizio è
+in ombra (di serie), quindi da questa versione il rilevatore vale su ogni frase in compagnia.
+
+Prove: `prove/prova_compagnia_passo0.py` (ombra e «non rivolta» → il segnale vale con la regola
+nuova, e nel registro la protezione senza `guardiano.pericolo_non_rivolta`; contrari: «attiva» e
+«non rivolta» → non vale, «rivolta», guasto, giudizio spento, interruttore spento, col nome, una
+persona sola) e `prove/prova_compagnia_stanza.py` (compagnia del turno: in ombra vale, con
+«attiva» no; la sola stanza come prima). I due casi in ombra falliscono su main.
+
+**Resta** (issue #29): lo strumento di rilettura, i campi `parole` e `nomina` nel registro, la
+correzione del prompt; poi il campione di 50 giudizi, dopo la #147 sulla DGX. Il conteggio di
+`pericolo_non_rivolta_ombra` dice quante volte il giudizio di oggi avrebbe spento il segnale.
