@@ -646,7 +646,8 @@ class Frasi:
             # Senza persona la rotazione delle voci anonime (18/10, #158), senza forma breve
             p = self._persone.get(persona if persona is not None else ANONIMA)
             breve = False
-            if persona is not None and p is not None and self.breve_turni                     and v.forme(tono, breve=True):
+            if (persona is not None and p is not None and self.breve_turni
+                    and v.forme(tono, breve=True)):
                 u = p["ultimo"].get(v.id)
                 if u is not None and p["turno"] - u[0] <= self.breve_turni \
                         and time.time() - u[1] <= BREVE_S:
