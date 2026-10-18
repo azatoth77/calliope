@@ -191,6 +191,9 @@ class Stanza:
         self._intervalli = collections.deque(maxlen=2000)   # (persona, sat, inizio, fine)
         self._n_scambi = 0
         self._detto_contate: dict = {}         # sat → id delle frasi già contate (misure eco)
+        # I tratti di tempo con una frase di sfida o un codice detto (18/10, revisione della PR
+        # #178): sat → deque di (inizio, fine) in epoch; il banco non salva i segmenti dentro
+        self._segreti: dict = {}
         # La tenuta su disco (stanza/tenuta.Tenuta, 14/10), None con `stanza_tenuta: false`
         self.tenuta = None
         self._presenze_scritte: dict = {}      # persona → (sat, inizio, ultimo) già sul disco
@@ -546,6 +549,36 @@ class Stanza:
             self._sentita(chiave, chi.get("nome"), sat, time.time())
         self._osserva(sat, e)
         return e.seq
+
+    # ── la frase di sfida e i codici (18/10, revisione della PR #178) ──
+    def segreto(self, sat, inizio: float | None, fine: float | None = None):
+        """Fra `inizio` e `fine` (epoch) si è detta una frase di sfida o un codice: il banco non
+        salva i segmenti che lo toccano (`segreto_in`)."""
+        if inizio is None:
+            return
+        fine = float(fine if fine is not None else time.time())
+        with self._cond:
+            self._segreti.setdefault(sat, collections.deque(maxlen=50)).append(
+                (float(inizio) - 1.0, fine + 1.0))
+
+    def segreto_in(self, sat, inizio: float | None, fine: float | None) -> bool:
+        if inizio is None or fine is None:
+            return False
+        with self._cond:
+            return any(a <= float(fine) and float(inizio) <= b
+                       for a, b in self._segreti.get(sat, ()))
+
+    def correggi_turno(self, sat, seq, testo: str):
+        """La riga di un turno (`turno_testo`) con il testo ripulito: la frase di sfida ripetuta
+        diventa «(frase di conferma)», un codice detto «******». In memoria e sul disco."""
+        if seq is None:
+            return
+        for e in self.registro(sat).eventi():
+            if e.tipo == RIGA and e.seq == seq:
+                e.dati["testo"] = str(testo)
+        t = self.tenuta
+        if t is not None:
+            t.correggi(sat, seq, str(testo))
 
     @staticmethod
     def _chi_presenza(chi: dict) -> str | None:

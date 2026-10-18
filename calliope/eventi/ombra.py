@@ -606,7 +606,10 @@ class Ombra:
 
         # Le parole di questo turno non si conservano (12/10, calliope/conserva.py: zona
         # grigia; dal 12 al 16/10 anche il dubbio con un minore): restano solo in memoria
-        anonimo = isinstance(rec.get("conserva"), dict) and rec["conserva"].get("testo") is False
+        # Dal 18/10 (decisione 0032) anche i turni tenuti solo per la valutazione: le parole
+        # restano nel registro dei turni, mai nel registro della persona (né nel contesto)
+        c = rec.get("conserva") if isinstance(rec.get("conserva"), dict) else {}
+        anonimo = c.get("testo") is False or c.get("motivo") == "valutazione"
 
         def add(_tipo, **dati):
             if anonimo:

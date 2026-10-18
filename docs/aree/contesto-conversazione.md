@@ -2613,7 +2613,9 @@ fino al … compreso».
   prima.
 
 Restano fuori il journal (le frasi degli ospiti mascherate: il journal non si svuota), le frasi
-ignorate dei turni (le prende la stanza), la frase di sfida e i codici, lo scritto.
+ignorate dei turni (le prende la stanza), la frase di sfida e i codici; dello scritto solo
+l'audio, che non c'è (il testo resta). I turni rivolti a Calliope durante la pausa della stanza
+restano come gli altri; la stanza in pausa no.
 
 **Disco** (DGX, letto in sola lettura il 18/10 dal registro): voce dei turni 0,7–9,1 MB al giorno
 dal 14 al 18/10 (18/10: 55 frasi con l'audio, 567 s, 9,1 MB; 24 frasi parlate senza, ~90 s), banco
@@ -2628,3 +2630,28 @@ ospite e della zona grigia con le parole e il segno, l'audio dell'ospite in
 la stanza dal giro vero (sotto, in [stt-tts](stt-tts.md)); contrari: vuoto, data passata, data
 scritta male come prima, la frase di sfida e lo scritto senza audio anche accesa. Le prove di
 prima («ospiti mai su disco») restano verdi senza cambiare. Su main fallisce.
+
+**Dopo la revisione della PR #178 (18/10).** La revisione ha trovato un bloccante e tre difetti,
+corretti sul ramo:
+- **la zona grigia diventava leggibile**: `Ciclo._segna_conserva` usava `testo_turno`, che durante
+  la valutazione dice sì, quindi il turno della zona grigia entrava nell'archivio della persona
+  (`ospite = 0`) e lo davano `chat()` e `cerca()`; l'ombra degli eventi non lo trattava come
+  anonimo. Ora chi **usa** le parole segue la regola di serie (`Conservazione.testo_di_serie`) e
+  l'ombra tratta come anonimo anche `motivo: valutazione`; la zona grigia va solo nella copia
+  `ospite = 2` e nel registro dei turni;
+- **la frase di sfida e i codici nella stanza** (anche su main, per le voci di casa): con una sfida
+  in attesa la riga del turno è «(frase di conferma)», a turno finito la riga si corregge col testo
+  del registro dei turni («******» per un codice), la risposta di Calliope porta «ripeti: …», e il
+  tratto del turno è segnato (`Stanza.segreto`): il banco non ne salva i segmenti (`saltati:
+  segreto`). `Tenuta.correggi` riscrive la riga e l'indice;
+- **conoscenti nel banco**: `banco.svuota` trova `conoscente:<id>` anche con l'id nudo (`--persona`
+  e il loro «dimentica»), e `salva_blocco` scrive le persone giuste e il segno `valutazione`;
+- **la revoca vale**: chi ha detto no alla voce non si registra nemmeno in `_valutazione`.
+
+Il ritorno a una versione di prima rende trovabili le righe della stanza della valutazione:
+scelto come rischio noto, scritto nella 0032 con il rimedio. Prove nuove in
+`prova_conserva_valutazione`: la zona grigia dal giro vero di `_segna_conserva` (accesa e spenta:
+`chat()` e `cerca()` vuoti), l'ombra su disco con il contrario, la sfida e il codice dal giro di
+`_stanza_turno` e `_stanza_esito` (valutazione accesa con la zona grigia, e spenta con la voce di
+casa), il banco che salta il tratto, conoscente con `--persona` e «dimentica», la revoca e il
+contrario del consenso mai chiesto. Tutte falliscono col codice prima della correzione.

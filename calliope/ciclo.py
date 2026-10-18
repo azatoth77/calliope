@@ -235,6 +235,8 @@ class Turno:
     # del satellite (per segnarla «non rivolta» se resta senza risposta)
     stanza_seq: int | None = None
     stanza_esito_fatto: bool = False
+    # Inizio e fine (epoch) della frase nella stanza (18/10, PR #178): il tratto della sfida
+    stanza_tempo: tuple | None = None
     compagnia: dict | None = None        # lo stato «in compagnia» dopo questa frase
     # Ciò che la stanza avrebbe cambiato e non ha cambiato (18/10, #147: in ombra, o fermata per
     # un minore o un cancello aperto), per la misura dell'attrito: solo numeri
@@ -1960,7 +1962,15 @@ class Ciclo:
             fine = time.time() - (time.monotonic() - (self.listener.ended_at or
                                                       time.monotonic()))
             inizio = time.time() - (time.monotonic() - self.listener.started_at)
-            t.stanza_seq = st.turno_testo(sat, lid, t.text, chi, inizio=inizio, fine=fine)
+            testo = t.text
+            t.stanza_tempo = (inizio, fine)
+            sfida = getattr(getattr(self, "speaker_ctx", None), "sfida", None)
+            if sfida is not None and not getattr(sfida, "scaduta", lambda: False)():
+                # Una frase di sfida in attesa (18/10, revisione della PR #178): questa frase è
+                # la risposta; le sue parole non vanno nella stanza, né l'audio nel banco
+                testo = "(frase di conferma)"
+                st.segreto(sat, inizio, fine)
+            t.stanza_seq = st.turno_testo(sat, lid, testo, chi, inizio=inizio, fine=fine)
         except Exception as e:  # noqa: BLE001 — la stanza non ferma la voce
             print(f"   [STANZA] turno nella stanza: {type(e).__name__}: {e}", flush=True)
 
@@ -2028,7 +2038,31 @@ class Ciclo:
             elif t.stanza_seq is not None and giudizio is False:
                 # In ombra Calliope ha risposto: la riga resta «rivolta», il giudizio si annota
                 st.segna_rivolta(sat, t.stanza_seq, "si", giudizio)
+            # La frase di sfida e i codici (18/10, revisione della PR #178): la riga del turno
+            # con il testo del registro dei turni («(frase di conferma)», «******») e il tratto
+            # del turno, fino alla risposta detta, fuori dal banco
+            regole = set(rec.get("regole") or ()) if isinstance(rec, dict) else set()
+            try:
+                regole |= set(self.brain.rules_fired())
+            except Exception:  # noqa: BLE001
+                pass
+            testo_reg = rec.get("testo") if isinstance(rec, dict) else None
+            segreto = bool({"sfida_voce", "sfida_risposta"} & regole) or (
+                isinstance(testo_reg, str) and (testo_reg == "(frase di conferma)"
+                                                or "******" in testo_reg))
+            if segreto:
+                ini = (getattr(t, "stanza_tempo", None) or (None, None))[0]
+                st.segreto(sat, ini if ini is not None else time.time() - 120)
+                if (t.stanza_seq is not None and isinstance(testo_reg, str)
+                        and testo_reg != t.text):
+                    st.correggi_turno(sat, t.stanza_seq, testo_reg)
             detto = " ".join(t.said or ()).strip()
+            if detto:
+                pul = getattr(self, "_ripulisci_per_registro", None)
+                if callable(pul):
+                    detto = pul(t, detto)
+                elif segreto:
+                    detto = re.sub(r"([Rr]ipeti:).*", r"\1 …", detto)
             if detto and not t.non_rivolta and esito not in ("ignorato", "non_rivolta"):
                 # A chi rispondeva (14/10, tenuta su disco): solo per una persona di casa
                 # riconosciuta dalla voce la risposta va anche sul disco della stanza
@@ -4350,7 +4384,10 @@ class Ciclo:
         if cons is None or not isinstance(rec, dict):
             return
         try:
-            tieni = bool(cons.testo_turno(rec))
+            # La regola di serie, anche durante la valutazione (18/10, decisione 0032): le
+            # parole di quel turno restano nel registro dei turni, mai nell'archivio della persona
+            di_serie = getattr(cons, "testo_di_serie", None) or cons.testo_turno
+            tieni = bool(di_serie(rec))
         except Exception:  # noqa: BLE001 — nel dubbio no
             tieni = False
         if not tieni:

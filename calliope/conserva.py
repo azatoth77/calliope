@@ -860,6 +860,12 @@ class Conservazione:
             return Decisione(True, "valutazione")
         return d
 
+    def testo_di_serie(self, rec: dict) -> Decisione:
+        """La regola di serie, quale che sia la valutazione: per chi **usa** le parole (l'archivio
+        della persona, il registro degli eventi, il contesto), non solo le conserva (revisione
+        della PR #178: la zona grigia diventava leggibile da `chat` e `cerca`)."""
+        return self._testo_turno(rec)
+
     def _testo_turno(self, rec: dict) -> Decisione:
         """La regola di serie (decisioni 0028, 0030 e 0031)."""
         if not isinstance(rec, dict):
@@ -977,7 +983,7 @@ class Conservazione:
         d = self.voce_turno(rec)
         if not d:
             if (d.motivo in VOCE_MAI or not getattr(self.cfg, "conserva_voce", True)
-                    or not self.valutazione()):
+                    or not self.valutazione() or self._voce_revocata(rec)):
                 return None
             return self._salva_valutazione(rec, audio, sr)
         v = rec.get("voce") or {}
@@ -993,6 +999,14 @@ class Conservazione:
         self.salvate += 1
         self.ruota_se_serve()
         return rel
+
+    def _voce_revocata(self, rec: dict) -> bool:
+        """La persona del turno ha detto «no» alla voce (`voce_conservata: false`, anche la revoca
+        di un tutore): la revoca vale anche durante la valutazione (revisione della PR #178). Un
+        consenso mai chiesto, invece, non ferma la valutazione."""
+        v = rec.get("voce") if isinstance(rec.get("voce"), dict) else {}
+        prof = self.profilo(nome=v.get("nome"), persona_id=v.get("id"))
+        return prof is not None and getattr(prof, "voce_conservata", None) is False
 
     def _chi_valutazione(self, rec: dict) -> str:
         """La cartella della valutazione per questo turno: l'id del profilo (o del conoscente)

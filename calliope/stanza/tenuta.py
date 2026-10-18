@@ -413,6 +413,28 @@ class Tenuta:
             self.db.commit()
         self.scritte += 1
 
+    def correggi(self, sat, seq, testo: str) -> None:
+        """Il testo di una riga di questo avvio, ripulito (18/10, revisione della PR #178: la
+        frase di sfida e i codici non restano sul disco della stanza), anche nell'indice. In
+        coda dopo la scrittura della riga."""
+        s, q, nuovo = str(sat), int(seq), str(testo)
+
+        def f():
+            with self.lock:
+                ids = [r[0] for r in self.db.execute(
+                    "SELECT id FROM righe WHERE avvio = ? AND sat = ? AND seq = ?",
+                    (self.avvio, s, q))]
+                for rid in ids:
+                    _cancella_sicuro(self.db, "DELETE FROM righe_fts WHERE rowid = ?", (rid,))
+                    self.db.execute("UPDATE righe SET testo = ? WHERE id = ?", (nuovo, rid))
+                    self.db.execute("INSERT INTO righe_fts(rowid, testo) VALUES (?, ?)",
+                                    (rid, nuovo))
+                if ids:
+                    self._compatta()
+                else:
+                    self.db.commit()
+        self._lavoro(f)
+
     def _rivolta(self, sat: str, seq, esito):
         if seq is None:
             return

@@ -284,6 +284,84 @@ try:
     n = cons3.imposta_consenso(reg3.get("Ginevra"), False)
     verifica("revoca del consenso: via anche le sue frasi della valutazione",
              n >= 1 and not (cons3.voce_dir / gg["voce_file"]).exists())
+    dopo = scrivi(cons3, tl3, turno("Ginevra", modo="conversazione", reg=reg3))
+    dopo2 = scrivi(cons3, tl3, turno("Ginevra", reg=reg3))
+    verifica("revoca: dopo il «no» la sua voce non si registra più nemmeno in valutazione "
+             "(il testo sì)", not dopo.get("voce_file") and not dopo2.get("voce_file")
+             and not (cons3.voce_dir / "_valutazione" / "p-adu").exists()
+             and righe(cfg3)[-1]["testo"], f"{dopo.get('voce_file')} {dopo2.get('voce_file')}")
+    reg3.get("Ginevra").voce_conservata = None
+    mai = scrivi(cons3, tl3, turno("Ginevra", reg=reg3))
+    verifica("…contrario: un consenso mai chiesto non ferma la valutazione",
+             str(mai.get("voce_file", "")).startswith("_valutazione/p-adu/"))
+
+    # ───────── la zona grigia di casa resta illeggibile (revisione della PR #178) ─────────
+    from calliope.ciclo import Ciclo
+    from calliope.conversazione import Conversazione as Conv0, turni as turni0
+    from calliope.conversazioni import ArchivioConversazioni as Arch0
+    for nome, fino in (("grigia_accesa", DOMANI), ("grigia_spenta", "")):
+        cfg4, reg4, cons4, tl4, _ = nuova(nome, fino)
+        rec = turno("Ginevra", modo="conversazione", reg=reg4)
+        rec["testo"] = "la frase della zona grigia"
+        finto = SimpleNamespace(s=SimpleNamespace(conserva=cons4), _meta_turno={})
+        Ciclo._segna_conserva(finto, rec)                  # il giro vero del ciclo
+        cons4.al_turno(rec)
+        (tmp / nome).mkdir(parents=True, exist_ok=True)
+        a4 = Arch0(tmp / nome / "conv.db", giorni=60, log=lambda m: None, avvia=False,
+                   cfg=cfg4, conserva=cons4.conversazioni_su_disco)
+        cv = Conv0("persona:p-adu")
+        cv.owner, cv.last_turn_at = "p-adu", time.monotonic()
+        ms = [{"role": "user", "content": "la frase della zona grigia",
+               **({"_turno": finto._meta_turno} if finto._meta_turno else {})},
+              {"role": "assistant", "content": "Va bene."}]
+        cv.history += ms
+        a4.archivia(cv, turni0(ms), "p-adu", "Ginevra", ospite=False)
+        righe4 = a4.db.execute("SELECT c.ospite, t.domanda FROM turni t JOIN conversazioni c "
+                               "ON c.id = t.conv").fetchall()
+        verifica(f"zona grigia «{nome}»: il segno del ciclo c'è, chat() e cerca() non la danno, "
+                 "l'archivio della persona non la ha",
+                 finto._meta_turno.get("conserva") is False
+                 and not a4.chat("p-adu") and not a4.cerca("zona grigia", "p-adu")["risultati"]
+                 and (0, "la frase della zona grigia") not in righe4, f"{finto._meta_turno} {righe4}")
+        if fino:
+            verifica("zona grigia accesa: la copia della valutazione (ospite = 2) e il registro "
+                     "dei turni con le parole; l'ombra degli eventi la tratta come anonima",
+                     (2, "la frase della zona grigia") in righe4
+                     and rec["conserva"]["motivo"] == "valutazione", str(righe4))
+        a4.close()
+    # L'ombra degli eventi con il registro su disco: le parole del turno della valutazione no
+    from calliope.eventi.ombra import Ombra
+    from calliope.eventi.registro import Disco, Registri
+
+    def ombra_su_disco(nome, conserva):
+        dpath = tmp / f"eventi-{nome}.db"
+        dsk = Disco.file(str(dpath))
+        rgs = Registri(dsk, log=lambda m: None)
+        cvo = Conv0("persona:p-adu")
+        cvo.history = [{"role": "user", "content": "la frase della zona grigia"},
+                       {"role": "assistant", "content": "Il melograno è pronto."}]
+        br = SimpleNamespace(conv=cvo, last_capito=None, last_sfida=False, redact=lambda x: x)
+        cc = SimpleNamespace(brain=br, speaker=SimpleNamespace(played=[], interrupted=False),
+                             corsia=SimpleNamespace(chiave="locale", nome="locale"),
+                             speaker_ctx=None, rule=lambda n: None)
+        om = Ombra(SimpleNamespace(eventi="ombra"), rgs, cc, log=lambda m: None)
+        om.sente(("frase", {"testo": "Il melograno è pronto.", "atto": "risposta",
+                            "autore": "esito", "canale": "voce"}))
+        om.chiudi_turno({"esito": "risposta", "regole": [],
+                         **({"conserva": conserva} if conserva else {})},
+                        SimpleNamespace(text="la frase della zona grigia", scritto=None))
+        rgs.scrivi()
+        dsk.db.commit()
+        byte = dpath.read_bytes() + (Path(str(dpath) + "-wal").read_bytes()
+                                     if Path(str(dpath) + "-wal").exists() else b"")
+        dsk.db.close()
+        return b"melograno" in byte
+
+    verifica("ombra degli eventi: le parole di un turno della valutazione mai sul disco del "
+             "registro della persona (contrario: un turno di casa sì)",
+             not ombra_su_disco("val", {"testo": True, "motivo": "valutazione",
+                                        "di_serie": "voce_incerta"})
+             and ombra_su_disco("casa", None))
     verifica("la riga dell'avvio e del cruscotto",
              C.testo_valutazione(cfg3).startswith("Valutazione: si conserva tutto fino al")
              and C.testo_valutazione(Config()) is None
@@ -410,6 +488,107 @@ try:
              not st.tenuta.db.execute("SELECT 1 FROM righe").fetchall())
     st.tenuta.chiudi()
     st.chiudi()
+
+    # ───────── la frase di sfida e i codici fuori anche dalla stanza (PR #178) ─────────
+    import types
+    from calliope.ciclo import Ciclo
+
+    def ciclo_finto(st, cfg_s, modo):
+        f = SimpleNamespace()
+        f.s = SimpleNamespace(stanza=st, registry=PL.Voci(), cfg=cfg_s)
+        f.rec = {"voce": {"nome": "Carlo", "modo": modo}}
+        f.speaker_ctx = SimpleNamespace(sfida=None, conoscente=None)
+        f.listener = SimpleNamespace(started_at=time.monotonic() - 2.0,
+                                     ended_at=time.monotonic() - 0.5)
+        f._stanza_dove = lambda: (30, None)
+        f.regole = []
+        f.brain = SimpleNamespace(rules_fired=lambda: list(f.regole),
+                                  redact=lambda x: x.replace("123456", "******")
+                                  if isinstance(x, str) else x)
+        f._ripulisci_per_registro = types.MethodType(Ciclo._ripulisci_per_registro, f)
+        return f
+
+    def nuovo_turno(testo, detto):
+        return SimpleNamespace(text=testo, scritto=None, said=[detto], non_rivolta=False,
+                               stanza_seq=None, stanza_esito_fatto=False)
+
+    for nome, fino, modo in (("sf_grigia", DOMANI, "conversazione"), ("sf_casa", "", "voce")):
+        cfg_s = PL.cfg_base(registro=nome, conserva_valutazione_fino=fino, stanza_contesto=True,
+                            stanza_audio_banco_giorni=7)
+        st, le = PL.nuova(cfg_s, banco=banco_mod.Banco(cfg_s, log=lambda m: None))
+        st.tenuta = Tenuta(PL.TMP / f"{nome}.db", registry=None, log=lambda m: None)
+        st.tenuta.valutazione = lambda c=cfg_s: C.valutazione_attiva(c)
+        st._info[30] = {"nome": "cucina", "stanza": "cucina", "canale": "satellite"}
+        f = ciclo_finto(st, cfg_s, modo)
+        # 1. La richiesta: Calliope chiede la sfida
+        t1 = nuovo_turno("cancella il documento", "Per conferma ripeti: girasole, treno.")
+        Ciclo._stanza_turno(f, t1)
+        f.regole = ["sfida_voce"]
+        Ciclo._stanza_esito(f, t1, {**f.rec, "esito": "risposta", "testo": t1.text,
+                                    "regole": ["sfida_voce"]})
+        # 2. La risposta ripetuta, con la sfida in attesa
+        f.speaker_ctx.sfida = SimpleNamespace(scaduta=lambda: False)
+        f.regole = []
+        t2 = nuovo_turno("girasole treno sette", "Fatto.")
+        Ciclo._stanza_turno(f, t2)
+        f.regole = ["sfida_risposta"]
+        Ciclo._stanza_esito(f, t2, {**f.rec, "esito": "risposta",
+                                    "testo": "(frase di conferma)",
+                                    "regole": ["sfida_risposta"]})
+        # 3. Un codice detto: il registro dei turni l'ha già tolto
+        f.speaker_ctx.sfida = None
+        f.regole = []
+        t3 = nuovo_turno("il codice è 123456", "Abbinato.")
+        Ciclo._stanza_turno(f, t3)
+        Ciclo._stanza_esito(f, t3, {**f.rec, "esito": "risposta",
+                                    "testo": "il codice è ******", "regole": []})
+        st.tenuta.attendi()
+        testi = [r[0] for r in st.tenuta.db.execute("SELECT testo FROM righe ORDER BY id")]
+        tutto = " ".join(testi) + " " + " ".join(str(e.dati.get("testo"))
+                                                 for e in st.registro(30).eventi())
+        verifica(f"sfida «{nome}»: né le parole della sfida né il codice nella stanza, in "
+                 "memoria e sul disco",
+                 testi and "girasole" not in tutto and "123456" not in tutto
+                 and "(frase di conferma)" in testi and "il codice è ******" in testi
+                 and any("ripeti: …" in x for x in testi), str(testi))
+        verifica(f"sfida «{nome}»: il banco salta il segmento nel tratto della sfida",
+                 st.segreto_in(30, time.time() - 1.5, time.time() - 1.0)
+                 and st.lenta.banco.salva(30, {}, {"segmento": 777, "inizio": time.time() - 1.5,
+                                                   "fine": time.time() - 1.0},
+                                          b"\0\0" * SR, SR,
+                                          {"chi": "persona:p-carlo", "sicurezza": "voce",
+                                           "testo": "x"}, [], segreto=True) is None
+                 and st.lenta.banco.saltati.get("segreto") == 1)
+        st.tenuta.chiudi()
+        st.chiudi()
+
+    # ───────── i conoscenti: --persona e «dimentica» (PR #178) ─────────
+    cfg_k = PL.cfg_base(registro="conoscente", conserva_valutazione_fino=DOMANI)
+    bk = banco_mod.Banco(cfg_k, log=lambda m: None)
+    rk = {"chi": "conoscente:k1", "sicurezza": "voce", "testo": "Piacere, Marco.", "nome": "Marco"}
+    for seg in (501, 502):
+        bk.salva(30, {}, {"segmento": seg, "inizio": time.time() - 3600 + seg}, b"\0\0" * SR, SR,
+                 rk, [])
+    bk.salva_blocco(30, {}, {"blocco": 9, "inizio": time.time() - 3000}, [rk], "Piacere, Marco.",
+                    ["Piacere, Marco."])
+    metas = [json.loads(j.read_text(encoding="utf-8"))
+             for j in banco_mod.cartella(cfg_k).rglob("*.json")]
+    blocco = next((m for m in metas if m.get("tipo") == "blocco"), {})
+    verifica("conoscente: segmenti e blocco con «conoscente:k1» e il segno della valutazione",
+             all(m.get("persone") == ["conoscente:k1"] and m.get("valutazione") for m in metas)
+             and blocco and len(metas) == 3, str(metas)[:300])
+    verifica("conoscente: --persona con l'id nudo toglie i suoi segmenti",
+             banco_mod.svuota(cfg_k, "k1") == 2)
+    resto = list(banco_mod.cartella(cfg_k).rglob("*.json"))
+    verifica("…e anche il blocco", not resto, str(resto))
+    bk.salva(30, {}, {"segmento": 503, "inizio": time.time() - 500}, b"\0\0" * SR, SR, rk, [])
+    ck = C.Conservazione(cfg_k, Registro(), log=lambda m: None)
+    ck.conoscente = lambda pid: SimpleNamespace(id=pid, tipo="conoscente") if pid == "k1" else None
+    r = ck.conoscente_tolto("k1")
+    verifica("conoscente: «dimentica» (conoscente tolto) toglie il suo audio dal banco",
+             r is not None and r.get("stanza_banco") == 1
+             and not list(banco_mod.cartella(cfg_k).rglob("*.wav")), str(r))
+
     for nome, fino in (("st_spenta", ""), ("st_passata", IERI)):
         st, cfg_s, (s_o, s_g, _c), meta, dischi = stanza(nome, fino)
         verifica(f"stanza, contrario «{nome}»: niente dell'ospite su disco, né audio",

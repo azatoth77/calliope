@@ -1916,3 +1916,11 @@ tenuta con `sicurezza: valutazione` (la ricerca non la vede) e l'audio nel banco
 `valutazione: true` senza `stanza_audio_banco_giorni`; il segmento di casa anche lui, con la
 persona; `--persona` toglie i suoi e lascia quello dell'ospite; contrari: spenta, data passata, in
 pausa. Le prove della stanza di prima restano verdi.
+
+**Dopo la revisione della PR #178 (18/10).** Non arrivano al banco neanche i segmenti che la
+corsia veloce scarta (vuoti, tutta eco durante la voce, allucinazioni della veloce: non vanno mai
+alla lenta) né quelli legati a un turno (il loro audio è nella voce dei turni). Il banco non salva
+più i segmenti nel tratto di una frase di sfida o di un codice detto (`Stanza.segreto`, motivo
+`segreto` in `saltati`), anche a valutazione spenta e per le voci di casa; la riga della stanza
+porta «(frase di conferma)» o «******». I conoscenti nel banco si tolgono con `--persona` e col
+loro «dimentica», e i blocchi della valutazione hanno le persone giuste e il segno.

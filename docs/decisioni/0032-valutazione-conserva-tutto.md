@@ -32,12 +32,19 @@ testo e audio.
    una data scritta male è rifiutata con un avviso e resta spento.
 2. **Il testo dei turni per tutti**: ospiti, zona grigia, voci sconosciute e conoscenti, con il
    livello e il «chi» come prima. Il turno porta il segno `conserva: {testo: true, motivo:
-   valutazione, di_serie: <il motivo per cui di serie non sarebbe restato>}`.
+   valutazione, di_serie: <il motivo per cui di serie non sarebbe restato>}`. Conservare non è
+   usare: chi usa le parole (l'archivio della persona con la scheda «Conversazione», la ricerca e
+   «l'ultima volta…», il registro degli eventi e il contesto) segue la regola di serie
+   (`Conservazione.testo_di_serie`, aggiornato il 18/10 dopo la revisione della PR #178): la
+   zona grigia di una persona di casa resta illeggibile, e va solo nella copia a parte
+   dell'archivio (punto 6).
 3. **L'audio di ogni frase del turno**, qualunque sia la soglia della voce o il consenso, nello
    stesso formato (G.711 μ-law), in `turn_log_dir/voce/_valutazione/<id della persona o
    «ospiti»>/<giorno>/<ora>.wav`: le frasi che la regola di sempre tiene restano dove sono. Il
    tetto `conserva_voce_mb` vale per tutta la cartella, con la riga nel log quando lo si
-   raggiunge.
+   raggiunge. **Un «no» detto vale** (aggiornato il 18/10, revisione della PR #178): chi ha detto
+   no alla sua voce, o il minore per cui un tutore l'ha revocata (`voce_conservata: false`), non
+   si registra nemmeno qui; un consenso mai chiesto invece non ferma la valutazione.
 4. **Il testo della stanza per tutte le voci** nella tenuta (`stanza_tenuta`), con `sicurezza:
    valutazione`: la ricerca (`stanza_cerca`), i nomi, la guardia e la ripresa dopo un riavvio
    leggono solo le righe di sempre, quindi quello che Calliope sa e dice non cambia.
@@ -47,18 +54,29 @@ testo e audio.
    `stanza_audio_banco_giorni` e non tocca `acceso.json`.
 6. **Le conversazioni degli ospiti nell'archivio** su disco, con `ospite = 2`: nessuna ricerca,
    scheda «Conversazione», ripresa o riga «l'ultima volta…» le legge; l'archivio della sessione in
-   memoria resta com'era.
+   memoria resta com'era. Nella stessa copia a parte vanno anche i turni della zona grigia di una
+   persona di casa, che l'archivio della persona salta come prima.
 7. **Valgono sempre**: `turn_log_days` (i file restano per quei giorni anche a valutazione
    finita), «dimentica» (il satellite per la stanza, la persona per le conversazioni),
    `calliope conserva --svuota` e `--persona` (anche sulle frasi della zona grigia attribuite a
    lei), la revoca del consenso alla voce (cancella anche le sue frasi della valutazione), la
    cancellazione di un profilo tolto. I dati restano sulla DGX, fuori da git, con i permessi
    privati di sempre (file 600, cartelle 700).
-8. **Restano fuori anche durante la valutazione**: la frase di sfida e i codici detti (l'audio
-   servirebbe a ripeterli), lo scritto (non c'è audio), le frasi non rivolte a Calliope nei turni
-   (le prende la stanza), la **pausa** della stanza («abbiamo ospiti»: chi è presente l'ha chiesta
-   in quel momento), `conserva_voce: false` (il no di chi amministra a tutta la voce), il journal
-   di systemd (le frasi degli ospiti restano mascherate: il journal non si svuota con `--svuota`).
+8. **Restano fuori anche durante la valutazione**:
+   - la frase di sfida e i codici detti, ovunque: nel registro dei turni e nella voce come prima,
+     e dal 18/10 (revisione della PR #178) anche nella stanza. La riga del turno porta «(frase di
+     conferma)» o «******», la risposta di Calliope «ripeti: …», e il banco non salva i segmenti
+     nel tratto del turno (regola `segreto`). Vale sempre, anche a interruttore spento: su main la
+     stanza teneva le parole della sfida delle voci di casa;
+   - dello scritto solo l'audio, che non c'è: il testo scritto da un ospite resta, come quello
+     detto;
+   - le frasi non rivolte a Calliope nei turni (le prende la stanza);
+   - la **pausa** della stanza («abbiamo ospiti»: chi è presente l'ha chiesta in quel momento):
+     niente righe né audio della stanza. I turni **rivolti a Calliope** durante la pausa, invece,
+     restano come gli altri (registro dei turni, voce, archivio);
+   - `conserva_voce: false` (il no di chi amministra a tutta la voce);
+   - il journal di systemd: le frasi degli ospiti restano mascherate, perché il journal non si
+     svuota con `--svuota`.
 9. **Si dice**: all'avvio una riga «Valutazione: si conserva tutto fino al … compreso», e lo
    dicono `calliope stato` e il cruscotto di chi amministra; alla scadenza Calliope smette da sola
    e lo scrive nel log, una volta.
@@ -84,9 +102,21 @@ testo e audio.
 - **Latenza**: nessuna scrittura nuova nel thread della voce; le stesse scritture di prima, con
   meno filtri (il turno a voce finita, la stanza nel suo thread e in quello della corsia lenta,
   l'archivio nel suo).
-- **Limite**: l'audio della stanza arriva al banco dalla corsia lenta; un segmento che scade in
-  RAM prima che la DGX sia libera (`stanza_audio_min`, misura «scaduto» in `calliope stato
-  --turni`) non ha l'audio, solo la riga.
+- **Limiti**: l'audio della stanza arriva al banco solo dalla corsia lenta, quindi non ce l'hanno:
+  - un segmento che scade in RAM prima che la DGX sia libera (`stanza_audio_min`, misura
+    «scaduto» in `calliope stato --turni`): resta solo la riga;
+  - i segmenti che la corsia veloce scarta e che non arrivano mai alla lenta: vuoti, tutta eco
+    durante la voce, allucinazioni della veloce;
+  - i segmenti legati a un turno, il cui audio è nella voce dei turni.
+- **Rischio noto, il ritorno a una versione di prima** (scelto il 18/10 invece di una tabella a
+  parte): le righe della valutazione stanno nella tabella `righe` della tenuta, distinte solo da
+  `sicurezza = 'valutazione'`. Se `calliope aggiorna` torna (da solo o a mano) a una versione di
+  prima di questa decisione, le sue letture non le filtrano: le righe degli ospiti diventano
+  trovabili da `stanza_cerca` e dalla guardia fino alla loro scadenza. L'archivio (`ospite = 2`) e
+  la voce (`_valutazione`) non hanno questo rischio. Rimedio: dopo un ritorno indietro, togliere la
+  data dal locale e svuotare la stanza (`calliope conserva --svuota`), oppure tornare a questa
+  versione. Una tabella a parte toglierebbe il rischio, ma raddoppierebbe scrittura, rotazione e
+  cancellazione della tenuta per un caso che dura al più fino alla data.
 - Nessuna regola sul testo nuova (principio 10); le misure d'ombra che contano «ospiti mai su
   disco» restano vere a interruttore spento.
 

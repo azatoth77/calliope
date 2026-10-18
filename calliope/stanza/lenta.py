@@ -1105,7 +1105,10 @@ class Lenta:
                              "fine": a.fine, "voce_s": a.voce_s, "esito": esito}, a.pcm, SR,
                             v1, v2,
                             finestre_ignote=ris.get("ignote", 0),
-                            in_pausa=self.stanza._pausa_viva(sat) is not None)
+                            in_pausa=self.stanza._pausa_viva(sat) is not None,
+                            # La frase di sfida o un codice detti lì (18/10, PR #178)
+                            segreto=bool(getattr(self.stanza, "segreto_in", None)
+                                         and self.stanza.segreto_in(sat, a.inizio, a.fine)))
             except Exception as e:  # noqa: BLE001 — il banco non ferma la corsia
                 self.log(f"   [STANZA] audio del banco: {type(e).__name__}")
                 f = None

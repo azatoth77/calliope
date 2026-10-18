@@ -1741,7 +1741,9 @@ class Config:
     # in turn_log_dir/voce/_valutazione, sotto il tetto conserva_voce_mb), il testo della stanza
     # nella tenuta (se `stanza_tenuta`), l'audio di tutti i segmenti nel banco (se
     # `stanza_lenta`), le conversazioni degli ospiti nell'archivio. Restano fuori la frase di
-    # sfida e i codici detti, la pausa («abbiamo ospiti»), lo scritto e `conserva_voce: false`.
+    # sfida e i codici detti, la stanza in pausa («abbiamo ospiti»), l'audio (che non c'è) dello
+    # scritto, la voce di chi le ha detto no e `conserva_voce: false`. Ciò che si legge (ricerche,
+    # schede, contesto) resta quello di serie.
     # I file restano per turn_log_days; «dimentica» e `calliope conserva --svuota` li tolgono.
     # Alla scadenza smette da sé e lo dice il log. Vuoto (di serie) = spento, come prima
     conserva_valutazione_fino: str = ""

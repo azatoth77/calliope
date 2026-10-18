@@ -1378,5 +1378,11 @@ tiene anche nel **dubbio fra un adulto e un minore** e senza il consenso dei tut
 ospiti vicino a un minore. **Cosa non cambia**: i permessi, il guardiano e la guardia a posteriori
 (le righe della valutazione non entrano né nella ricerca né nel giudizio della guardia), la
 revoca di un tutore (toglie anche le frasi della valutazione del minore), i tutori che rileggono
-le stesse cose di prima. La revoca vale per il passato: durante la valutazione le frasi nuove si
-tengono di nuovo, per scelta di chi amministra.
+le stesse cose di prima. *[storico, fino alla revisione della PR #178 del 18/10: «La revoca vale
+per il passato: durante la valutazione le frasi nuove si tengono di nuovo»; ora vale anche per le
+frasi nuove, sotto]*
+
+*Aggiornato il 18/10 dopo la revisione della PR #178:* la revoca di un tutore vale anche per le
+frasi nuove durante la valutazione (`voce_conservata: false` ferma anche `_valutazione`); la zona
+grigia fra un adulto e un minore non entra nell'archivio della persona né nel registro degli
+eventi (resta nel registro dei turni e nella copia `ospite = 2`).

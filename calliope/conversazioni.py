@@ -414,6 +414,11 @@ class ArchivioConversazioni:
         elif not self.in_memoria and not self.su_disco(persona, ospite):
             return                       # su disco senza una sessione: chi non va su disco, no
         if not self.in_memoria:
+            # La zona grigia di una persona di casa (18/10, revisione della PR #178): mai
+            # nell'archivio della persona; durante la valutazione nella copia a parte
+            fuori = [t for t in turni if t.get("non_conservare")]
+            if fuori:
+                self._archivia_valutazione(conv, fuori, persona, nome)
             turni = [t for t in turni if not t.get("non_conservare")]
         if not turni or not self.scrivibile:
             return
