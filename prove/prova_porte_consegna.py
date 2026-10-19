@@ -254,6 +254,18 @@ def prova_prosa(tmp: Path):
     verifica("contrario: il controllo della consegna che non va, niente consegna d'ufficio: "
              "«limite»", ris.get("eccezione") == "Limite" and ris.get("tipo") == "prosa",
              str(ris)[:300])
+    from calliope.agenti.ciclo import Lavoro
+    ag = G.agente()
+    sb_senza = G.sandbox(tmp, "senza-test")
+    sb_senza.scrivi("programma.py", GIUSTO)
+    sb_con = G.sandbox(tmp, "con-test")
+    sb_con.scrivi("programma.py", GIUSTO)
+    sb_con.scrivi("test_programma.py", TEST)
+    verifica("contrario: i test tolti dopo il verde, niente consegna «passano i suoi test» "
+             "(seconda revisione della PR #183); con i test sì",
+             ag._consegna_dalla_prosa(Lavoro("S1", "codice", "x"), sb_senza, None, False, None)
+             is None and (ag._consegna_dalla_prosa(Lavoro("S2", "codice", "x"), sb_con, None,
+                                                   False, None) or {}).get("esito") == "fatto")
     # Con gli esempi di accettazione verdi: consegna il codice, alla seconda
     lav, sb, F2 = _estensione_con_esempi(tmp, "verde-esempi")
     lav, ris, log, cli, _ = gira(tmp, "verde-esempi", [[scrivi("estensione.py", F2.GIUSTA)],
@@ -457,7 +469,7 @@ def prova_riproduzione(tmp: Path):
              "if (typeof module !== \"undefined\") module.exports = { ricomincia };\n")
     giusto = rotto.replace("  return punteggio;", "  const punteggio = 0;\n  return punteggio;")
     es, _ = _riproduci(tmp, "js-ref", {"logica.js": rotto}, {"logica.js": giusto,
-                       "logica.test.js": testa.replace("const l =", "const l =")
+                       "logica.test.js": testa
                        + 'test("ricomincia", () => { assert.strictEqual(l.ricomincia(), 0); });\n'})
     verifica("contrario: il ReferenceError nato in logica.js (il difetto segnalato): riprodotto",
              es["stato"] == "riprodotto", str(es)[:300])

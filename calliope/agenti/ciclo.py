@@ -1798,6 +1798,11 @@ class Agente:
         if con_esempi or getattr(lav, "correzione", False):
             return self._consegna_al_tetto(lav, sandbox, e, controlla, piano, stato_piano)
         try:
+            # Senza test (tolti dopo il verde) `_test_falliti` direbbe None: «passano i suoi
+            # test» sarebbe falso (seconda revisione della PR #183)
+            if not self._ha_test(sandbox):
+                self.log(f"[AGENTI] {lav.id}: dopo la prosa niente consegna: nessun test")
+                return None
             if self._test_falliti(lav, sandbox) is not None:
                 return None
             errore = controlla(sandbox) if controlla is not None else None
