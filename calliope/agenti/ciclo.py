@@ -152,7 +152,7 @@ class Lavoro:
     fine: float | None = None
     annulla: threading.Event = field(default_factory=threading.Event)
     avvisato: bool = False            # l'avviso di chiusura vicino ai tetti è già stato dato
-    letture: dict = field(default_factory=dict)   # percorso → [impronta, volte] di leggi_file
+    letture: dict = field(default_factory=dict)   # percorso → [impronta, volte, pezzi letti]
     risultato: dict = field(default_factory=dict)
     on_scheda: object = None          # funzione(scheda) degli schermi, presa alla delega
     cedimenti: int = 0                # volte che ha ceduto la GPU alla voce
@@ -1021,6 +1021,10 @@ class Agente:
                 self.arbitro.togli_stream(chiave)
             if out.get("giro_a_vuoto"):
                 return out
+            if out.get("budget_tolto"):
+                # Il server ha rifiutato thinking_token_budget (19/10, #185): tolto, detto qui
+                self.log(f"[AGENTI] {lav.id}: il server non accetta thinking_token_budget: "
+                         "tolto, da qui il ragionamento della passata ha solo il tetto dei token")
             if not servizio:
                 lav.passi += 1
             lav.token += out["eval"]
@@ -1289,6 +1293,8 @@ class Agente:
         # quando i test passano o con una correzione mirata (modifica_file)
         fila = seg.setdefault("riscritture_fila", {})
         giri_vuoti = 0
+        # Lo stato della cartella all'inizio (19/10, #185): tornarci (A, B, A) è uno stato già visto
+        segna_cartella(seg, impronta_cartella(sandbox), lav.passi)
         # Le passate di fila senza chiamate (19/10, #180) e il controllo della consegna senza
         # effetti, lo stesso dentro esegui_test (`Lavori._controlla_estensione`)
         prosa_fila = 0
@@ -1350,6 +1356,11 @@ class Agente:
             giri_vuoti = 0
             novita = False
             calls = out["tool_calls"]
+            # Le chiamate arrivate a metà (19/10, #185): argomenti che non si leggono, o l'ultima
+            # di una passata fermata a max_tokens (il client lo sa: remoto_openai). Prima
+            # diventavano {} e l'agente riceveva «manca percorso» e riprovava uguale
+            troncate = {i for i in out.get("rotti") or () if isinstance(i, int)}
+            troncata = out.get("fine") == "length"
             if not calls:
                 c = self.chiamata_da_testo(out["content"], strumenti)
                 calls = [c] if c else []
@@ -1413,17 +1424,51 @@ class Agente:
                                            rimandi, stato_piano, piano, rifiuti)
                     raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)},
                                  tipo="prosa")
+                if troncata:
+                    # Fermata a max_tokens senza una chiamata intera (19/10, #185): il fatto, al
+                    # posto della spinta di sempre
+                    nota_regola(lav, "agente_uscita_troncata", self.log, "senza chiamate")
+                    messages.append({"role": "user", "content": USCITA_TRONCATA_TESTO})
+                    continue
                 messages.append({"role": "user", "content": SPINTA_STRUMENTI})
                 continue
             letture = set()
             rossa = None              # la consegna rossa che ferma il lavoro (19/10, #180)
-            for c in calls:
+            nomi_strumenti = [(t.get("function") or {}).get("name") for t in strumenti]
+            for i_call, c in enumerate(calls):
                 name, args = c["name"], c.get("arguments") or {}
-                if consegna is not None:
-                    break                       # chiuso dal piano o da chiedi_permesso
+                if consegna is not None or rossa is not None:
+                    # Le chiamate dopo la consegna (o dopo chiedi_permesso, la consegna rossa)
+                    # nella stessa passata (19/10, #185): ognuna con la sua risposta, perché la
+                    # storia resti ben formata alla ripresa. Prima restavano senza
+                    from ..sonde import nota as nota_regola
+                    nota_regola(lav, "agente_dopo_consegna", self.log, name[:40])
+                    perche = (DOPO_FERMO if rossa is not None else DOPO_DOMANDA
+                              if str(consegna.get("esito")) == "mancano_dati" else DOPO_CONSEGNA)
+                    messages.append({"role": "tool", "tool_name": name, "content": json.dumps(
+                        {"ok": False, "nota": perche}, ensure_ascii=False)})
+                    continue
                 # Il registro in diretta sugli schermi (08/10, avanzamento.py): la chiamata e,
                 # sotto, il suo esito in breve (mai il contenuto dei file)
                 lav.nota("strumento", nome=name, argomenti=args)
+                if i_call in troncate:
+                    from ..sonde import nota as nota_regola
+                    nota_regola(lav, "agente_uscita_troncata", self.log, name[:40])
+                    result = {"ok": False, "errore": USCITA_TRONCATA}
+                    messages.append({"role": "tool", "tool_name": name,
+                                     "content": gc.risultato(name, result)})
+                    lav.nota("esito", nome=name, esito=result)
+                    continue
+                if name not in nomi_strumenti:
+                    # Uno strumento che non c'è (19/10, #185): l'errore con l'elenco dei veri
+                    from ..sonde import nota as nota_regola
+                    nota_regola(lav, "agente_strumento_sconosciuto", self.log, str(name)[:40])
+                    result = {"ok": False, "errore": f"lo strumento «{name}» non c'è; gli "
+                              "strumenti sono: " + ", ".join(n for n in nomi_strumenti if n)}
+                    messages.append({"role": "tool", "tool_name": name,
+                                     "content": gc.risultato(name, result)})
+                    lav.nota("esito", nome=name, esito=result)
+                    continue
                 # Argomenti contro lo schema dello strumento (09/10, tools/dialogo.py): un
                 # obbligatorio assente o un valore fuori dai valori ammessi tornano all'agente
                 # come errore chiaro, con un esempio, invece di un'eccezione dello strumento
@@ -1526,6 +1571,8 @@ class Agente:
                         result = {"ok": True, "nota": "domanda inoltrata a chi ha chiesto il "
                                                       "lavoro: aspetta la risposta"}
                 else:
+                    scrive = name in ("scrivi_file", "modifica_file")
+                    imp_prima = impronta_cartella(sandbox) if scrive else None
                     result = self._strumento(lav, sandbox, name, args, consegnabile)
                     if name in ("scrivi_file", "modifica_file") and result.get("ok") \
                             and lav.tipo == "estensione" and str(
@@ -1545,8 +1592,17 @@ class Agente:
                         # scrivi_file di un file nuovo, e a voce «passate senza file»; dalla
                         # revisione della PR #179 un file che torna a un contenuto già visto
                         # (A, B, A, B; a*b → b-a → a*b) non è una novità: è il giro a vuoto
-                        if novita_file(seg, p, _contenuto_dopo(sandbox, p, name, args)):
+                        dopo = _contenuto_dopo(sandbox, p, name, args)
+                        if novita_file(seg, p, dopo):
                             novita = True
+                        # Lo stato già visto detto all'agente (19/10, #185), nel risultato: la
+                        # cartella (o il file) com'era N passate fa, con i test di allora
+                        gia = nota_stato_gia_visto(seg, p, dopo, impronta_cartella(sandbox),
+                                                   imp_prima, lav.passi)
+                        if gia:
+                            from ..sonde import nota as nota_regola
+                            nota_regola(lav, "agente_stato_gia_visto", self.log, gia[:120])
+                            result = {**result, "gia_visto": gia}
                         if name == "scrivi_file":
                             # Riscritture intere di fila dello stesso file lungo (11/10)
                             if p in seg["scritture"] and int(result.get("righe") or 0) \
@@ -1595,8 +1651,6 @@ class Agente:
                 messages.append({"role": "tool", "tool_name": name,
                                  "content": gc.risultato(name, result)})
                 lav.nota("esito", nome=name, esito=result)
-                if rossa is not None:
-                    break
             if rossa is not None:
                 # La consegna rossa (19/10, #180): in uno sviluppo una tappa con il motivo detto,
                 # fuori «limite» con i test rifatti nel risultato (Lavori._parziale)
@@ -2109,23 +2163,68 @@ class Agente:
         if not isinstance(vecchio, str) or not isinstance(nuovo, str) or not vecchio:
             return {"ok": False, "errore": "servono vecchio (non vuoto) e nuovo, come testo"}
         lav.passo = f"corregge {rel or 'un file'}"
+        from ..sonde import nota as nota_regola
+        if vecchio == nuovo:
+            # 19/10, #185: prima riusciva, senza cambiare niente (e i test verdi «scadevano»)
+            nota_regola(lav, "agente_modifica_nulla", self.log, rel[:80])
+            return {"ok": False, "errore": "vecchio e nuovo sono uguali: la modifica non "
+                                           "cambierebbe niente, e non l'ho fatta"}
         testo = sandbox.leggi(rel, max_caratteri=10**9)
         n = testo.count(vecchio)
         if n == 0:
-            # Spesso sono gli spazi in testa o gli a capo: lo si dice con la riga più vicina
-            prima = vecchio.strip().splitlines()[0].strip() if vecchio.strip() else ""
-            righe = [i + 1 for i, r in enumerate(testo.splitlines()) if prima and prima in r]
-            return {"ok": False, "errore": "il testo vecchio non c'è nel file: copialo esatto "
-                    "(spazi e a capo compresi) da leggi_file"
-                    + (f"; la sua prima riga è alla riga {righe[0]}" if righe else "")}
+            # Spesso sono gli spazi in testa o gli a capo. Dal 19/10 (#185) le righe vere intorno
+            # al punto più simile, numerate: prima solo il numero della riga, se la prima riga
+            # del testo vecchio c'era uguale
+            righe = testo.splitlines()
+            i = punto_piu_simile(testo, vecchio)
+            out = {"ok": False, "errore": "il testo vecchio non c'è nel file: copialo esatto "
+                   "(spazi e a capo compresi)"
+                   + (f"; il punto più simile è alla riga {i + 1}, ecco le righe vere" if i is
+                      not None else "; nessuna riga gli somiglia: rileggi il file con leggi_file")}
+            if i is not None:
+                lunghe = max(1, len(vecchio.strip("\n").splitlines()))
+                out["righe_vere"] = righe_numerate(righe, i - 2, i + min(lunghe, 12) + 2)[:1500]
+            return out
         if n > 1:
-            return {"ok": False, "errore": f"il testo vecchio compare {n} volte: aggiungi "
-                                           "qualche riga intorno perché sia unico"}
+            # Dove (19/10, #185): le righe delle occorrenze
+            pos, da = [], 0
+            while len(pos) < 8:
+                k = testo.find(vecchio, da)
+                if k < 0:
+                    break
+                pos.append(testo[:k].count("\n") + 1)
+                da = k + len(vecchio)
+            return {"ok": False, "errore": f"il testo vecchio compare {n} volte, alle righe "
+                                           + ", ".join(map(str, pos)) + (" e altre" if n > len(pos)
+                                                                         else "")
+                                           + ": aggiungi qualche riga intorno perché sia unico"}
+        seg = lav.segnali if isinstance(lav.segnali, dict) else {}
+        lav.segnali = seg
+        mods = seg.get("modifiche") if isinstance(seg.get("modifiche"), dict) else {}
+        chiave = rel.strip().replace("\\", "/").removeprefix("./")
+        storia = list(mods.get(chiave) or [])
+        hv, hn = _h(vecchio), _h(nuovo)
+        inversa = next((m for m in reversed(storia) if m[1] == hn and m[2] == hv), None)
+        if inversa is not None:
+            # La modifica che rimette esattamente il testo tolto da una modifica precedente
+            # (19/10, #185): l'oscillazione A, B, A del tris (#174), detta con i test di allora
+            nota_regola(lav, "agente_modifica_inversa", self.log,
+                        f"{rel[:60]}, {quando(inversa[0], lav.passi)}")
+            cart = seg.get("cartelle") if isinstance(seg.get("cartelle"), dict) else {}
+            test = (cart.get(inversa[3]) or {}).get("test") if len(inversa) > 3 else None
+            return {"ok": False, "errore": "questa modifica rimette esattamente il testo che la "
+                    f"tua modifica_file di {quando(inversa[0], lav.passi)} aveva tolto, e non "
+                    "l'ho fatta" + (f"; prima di quella modifica esegui_test dava: {test}"
+                                    if test else "")
+                    + ". Se vuoi davvero tornare a com'era, riscrivi il file con scrivi_file"}
+        prima = impronta_cartella(sandbox)
         r = sandbox.scrivi(rel, testo.replace(vecchio, nuovo, 1))
         if r.get("ok"):
             riga = testo[:testo.index(vecchio)].count("\n") + 1
             r["riga"] = riga
             lav.nota("file", nome=r.get("percorso") or rel, testo=testo.replace(vecchio, nuovo, 1))
+            mods[chiave] = (storia + [[int(lav.passi), hv, hn, prima]])[-20:]
+            seg["modifiche"] = mods
         return r
 
     def _strumento(self, lav, sandbox, name, args, consegnabile=None) -> dict:
@@ -2186,6 +2285,25 @@ class Agente:
             if name == "sonda_rete":
                 return self._sonda_rete(lav, args)
             if name == "esegui_test":
+                seg = lav.segnali if isinstance(lav.segnali, dict) else {}
+                lav.segnali = seg
+                imp = impronta_cartella(sandbox)
+                # Lo stesso controllo della consegna: senza o con il predicato (#180) l'esito cambia
+                chiave = [imp, str(args.get("percorso") or ""), consegnabile is not None]
+                ultimo = seg.get("ultimo_test")
+                if imp and isinstance(ultimo, dict) and ultimo.get("chiave") == chiave \
+                        and isinstance(ultimo.get("risultato"), dict):
+                    # Nessun file cambiato dall'ultima esecuzione (19/10, #185): stesso codice,
+                    # stesso esito (i test col caso o col tempo li ferma già la consegna, che li
+                    # rifà due volte). Prima si rieseguivano sempre, senza nota
+                    from ..sonde import nota as nota_regola
+                    nota_regola(lav, "agente_test_invariati", self.log,
+                                quando(ultimo.get("passo"), lav.passi))
+                    lav.passo = frase_test((ultimo["risultato"] or {}).get("esito"))
+                    return {**ultimo["risultato"], "invariato": (
+                        "nessun file è cambiato dall'esecuzione di "
+                        f"{quando(ultimo.get('passo'), lav.passi)}: non ho rieseguito i test, "
+                        "l'esito è questo")}
                 lav.passo = "prova il codice con i test"
                 r = sandbox.test(args.get("percorso") or None)
                 if lav.tipo == "estensione" and not args.get("percorso"):
@@ -2195,10 +2313,21 @@ class Agente:
                 # L'uscita intera: se è lunga va nel file .calliope, qui resta la coda. Prima
                 # i fallimenti in breve (11/10, diagnosi.py): test, errore e file:riga, che
                 # restano anche quando il contesto accorcia l'uscita
-                return _con_fallimenti(
+                out = _con_fallimenti(
                     {"esito": r["esito"], "passano": r["passano"], "uscita": r["uscita"],
                      **({"errore": r["errore"]} if r.get("errore") else {})})
-            return {"errore": f"strumento sconosciuto: {name}"}
+                # L'esito di questa versione della cartella (19/10, #185): per «già visto» e per
+                # non rifare i test invariati; non dopo un'esecuzione scaduta o che non è partita
+                if imp and not r.get("scaduto") and not r.get("errore"):
+                    seg["ultimo_test"] = {"chiave": chiave, "passo": int(lav.passi),
+                                          "risultato": {**out, "uscita": str(
+                                              out.get("uscita") or "")[-3000:]}}
+                    if not args.get("percorso"):
+                        segna_cartella(seg, imp, lav.passi, out)
+                else:
+                    seg.pop("ultimo_test", None)
+                return out
+            return {"ok": False, "errore": f"strumento sconosciuto: {name}"}
         except ErroreSandbox as e:
             return {"ok": False, "errore": str(e)}
         except Exception as e:  # noqa: BLE001 — l'errore torna all'agente, non ferma il lavoro
@@ -2374,25 +2503,40 @@ class Agente:
             a, b = max(0, riga - 1 - RIGHE_INTORNO), min(len(righe), riga + RIGHE_INTORNO)
             if a >= len(righe):
                 return {"errore": f"il file ha {len(righe)} righe"}
-            return {"righe": f"{a + 1}-{b} di {len(righe)}",
-                    "contenuto": "\n".join(f"{i + 1}: {righe[i]}" for i in range(a, b))}
-        pezzo = testo[da:da + self.LEGGI_MAX]
-        if da == 0 and len(testo) <= self.LEGGI_MAX:
-            out = {"contenuto": testo}
+            out = {"righe": f"{a + 1}-{b} di {len(righe)}",
+                   "contenuto": "\n".join(f"{i + 1}: {righe[i]}" for i in range(a, b))}
+            inizi = [0]
+            for r in testo.splitlines(keepends=True):
+                inizi.append(inizi[-1] + len(r))
+            pezzo = (inizi[a], inizi[b])
         else:
-            out = {"contenuto": pezzo, "caratteri": len(testo), "da_carattere": da}
-            if da + self.LEGGI_MAX < len(testo):
-                out["continua"] = (f"[… tagliato: {len(testo)} caratteri in tutto; il resto "
-                                   f"con da_carattere={da + self.LEGGI_MAX}]")
+            if da == 0 and len(testo) <= self.LEGGI_MAX:
+                out = {"contenuto": testo}
+            else:
+                out = {"contenuto": testo[da:da + self.LEGGI_MAX], "caratteri": len(testo),
+                       "da_carattere": da}
+                if da + self.LEGGI_MAX < len(testo):
+                    out["continua"] = (f"[… tagliato: {len(testo)} caratteri in tutto; il resto "
+                                       f"con da_carattere={da + self.LEGGI_MAX}]")
+            pezzo = (min(da, len(testo)), min(len(testo), da + self.LEGGI_MAX))
         # Lo stesso file, uguale, riletto più volte (06/10, finestra di 16 384: l'agente
         # rileggeva a turno codice e test per 8–10 passate, perché i due insieme non ci
-        # stavano): dalla terza volta una nota che lo dice
+        # stavano): dalla terza volta una nota che lo dice. Dal 19/10 (#185) il conto è per file
+        # e contenuto, non per argomenti: vale anche con riga, e un da_carattere diverso non lo
+        # azzera più. Conta una rilettura la lettura di un pezzo già letto tutto (i pezzi nuovi
+        # di un file lungo no); un contenuto cambiato riparte da capo
         if not e_passo(rel):
-            impronta = hash((da, testo))
+            impronta = _h(testo)
             prima = lav.letture.get(rel)
-            volte = prima[1] + 1 if prima and prima[0] == impronta else 1
-            lav.letture[rel] = [impronta, volte]
-            if volte >= 3:
+            if not (isinstance(prima, list) and len(prima) >= 3 and prima[0] == impronta):
+                prima = [impronta, 0, []]
+            visti = [list(x) for x in prima[2]]
+            letto = _coperto(visti, pezzo)
+            volte = int(prima[1]) + 1 if letto or not prima[1] else int(prima[1])
+            lav.letture[rel] = [impronta, volte, _unisci(visti + [list(pezzo)])]
+            if letto and volte >= 3:
+                from ..sonde import nota as nota_regola
+                nota_regola(lav, "agente_rilettura", self.log, f"{rel[:60]}, {volte} volte")
                 out["nota"] = (f"hai letto questo file {volte} volte senza cambiarlo: il "
                                "contenuto è qui, non rileggerlo né rileggere gli altri file. "
                                "Scrivi adesso la versione corretta con scrivi_file ed esegui "
@@ -2764,6 +2908,150 @@ def novita_file(seg: dict, percorso: str, contenuto: str | None) -> bool:
         return False
     impronte[percorso] = (viste + [h])[-40:]
     return True
+
+
+# ─────────── strumenti onesti (19/10, #185): ciò che il codice sa, detto all'agente ───────────
+# Le note sono fatti, nel risultato dello strumento che le riguarda: mai un messaggio a parte, e
+# mai riscrivendo i messaggi vecchi (la cache dei prefissi resta). Ognuna col suo nome nel registro
+
+USCITA_TRONCATA = ("la tua uscita è stata troncata (fermata a max_tokens): questa chiamata è "
+                   "arrivata a metà e non l'ho eseguita. Scrivi il file in pezzi più corti, oppure "
+                   "cambia solo le righe che servono con modifica_file")
+# Una passata fermata a max_tokens senza chiamate: al posto della spinta di sempre
+USCITA_TRONCATA_TESTO = ("La tua uscita è stata troncata (fermata a max_tokens) prima di una "
+                         "chiamata completa. Scrivi il file in pezzi più corti, oppure cambia solo "
+                         "le righe che servono con modifica_file.")
+DOPO_CONSEGNA = "non eseguita: il lavoro era già consegnato"
+DOPO_DOMANDA = "non eseguita: il lavoro aspetta la risposta di chi l'ha chiesto"
+DOPO_FERMO = "non eseguita: il lavoro si è fermato"
+# Gli stati ricordati della cartella (impronta → passata ed esito dei test) e di ogni file
+STATI_MAX = 40
+
+
+def _h(testo: str) -> str:
+    return hashlib.sha1(str(testo).encode("utf-8", "replace")).hexdigest()[:12]
+
+
+def impronta_cartella(sandbox) -> str | None:
+    """L'impronta dell'intera cartella del lavoro (Sandbox.impronta), o None se non si sa."""
+    f = getattr(sandbox, "impronta", None)
+    if f is None:
+        return None
+    try:
+        return f()
+    except Exception:  # noqa: BLE001 — un'impronta aiuta, non ferma il lavoro
+        return None
+
+
+def quando(passo, ora) -> str:
+    """«3 passate fa», detto all'agente: i numeri delle passate non li vede."""
+    try:
+        n = int(ora) - int(passo)
+    except (TypeError, ValueError):
+        return "prima"
+    return "questa passata" if n <= 0 else "una passata fa" if n == 1 else f"{n} passate fa"
+
+
+def esito_test_breve(res) -> str:
+    """L'esito di un esegui_test in una riga: quanti, quanti rossi, il primo errore."""
+    if not isinstance(res, dict):
+        return ""
+    conto = conto_test(res)
+    if res.get("passano"):
+        return f"tutti i {conto[0]} test passavano" if conto else "i test passavano"
+    fall = [r.strip() for r in str(res.get("fallimenti") or res.get("errore") or "").splitlines()
+            if r.strip()]
+    primo = (fall[0] if fall else firma_errore(res))[:160]
+    testa = f"{conto[1]} test su {conto[0]} non passavano" if conto else "i test non passavano"
+    return testa + (f" ({primo})" if primo else "")
+
+
+def segna_cartella(seg: dict, impronta: str | None, passo: int, test=None) -> None:
+    """Uno stato della cartella visto (all'inizio, dopo una scrittura, ai test): la passata in
+    cui è apparso la prima volta e, se i test ci sono girati, il loro esito in breve."""
+    if not impronta:
+        return
+    cart = seg.get("cartelle")
+    cart = cart if isinstance(cart, dict) else {}
+    st = cart.pop(impronta, None) or {"passo": int(passo)}
+    if test is not None:
+        st["test"] = esito_test_breve(test)
+    cart[impronta] = st
+    while len(cart) > STATI_MAX:
+        cart.pop(next(iter(cart)))
+    seg["cartelle"] = cart
+
+
+def nota_stato_gia_visto(seg: dict, percorso: str, dopo: str | None, impronta: str | None,
+                         impronta_prima: str | None, passo: int) -> str:
+    """Dopo scrivi_file o modifica_file (19/10, #185): la cartella o il file tornati a uno stato
+    già visto (A, B, A), detto come fatto con la passata e l'esito dei test di allora; "" se lo
+    stato è nuovo. Segna anche lo stato di adesso. Prima lo sapeva solo `novita_file`, per il
+    rapporto a voce della tappa."""
+    nota = ""
+    cart = seg.get("cartelle") if isinstance(seg.get("cartelle"), dict) else {}
+    visti = seg.get("file_visti") if isinstance(seg.get("file_visti"), dict) else {}
+    del_file = visti.get(percorso) if isinstance(visti.get(percorso), dict) else {}
+    if impronta and impronta == impronta_prima:
+        nota = f"«{percorso}» è uguale a com'era già: non è cambiato niente"
+    elif impronta and impronta != impronta_prima and impronta in cart:
+        st = cart[impronta]
+        nota = (f"questa versione della cartella è identica a quella di "
+                f"{quando(st.get('passo'), passo)}"
+                + (f", quando esegui_test dava: {st['test']}" if st.get("test") else ""))
+    elif dopo is not None and _h(dopo) in del_file:
+        nota = f"«{percorso}» è tornato identico a com'era {quando(del_file[_h(dopo)], passo)}"
+    if dopo is not None:
+        del_file.setdefault(_h(dopo), int(passo))
+        while len(del_file) > STATI_MAX:
+            del_file.pop(next(iter(del_file)))
+        visti[percorso] = del_file
+        seg["file_visti"] = visti
+    segna_cartella(seg, impronta, passo)
+    return nota
+
+
+def _unisci(intervalli: list) -> list:
+    """Gli intervalli [inizio, fine) letti di un file, uniti (leggi_file, 19/10, #185)."""
+    out = []
+    for x, y in sorted(intervalli):
+        if out and x <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], y)
+        else:
+            out.append([x, y])
+    return out[-50:]
+
+
+def _coperto(intervalli: list, pezzo) -> bool:
+    """Il pezzo [inizio, fine) è già stato letto tutto?"""
+    x, y = pezzo
+    return any(a <= x and y <= b for a, b in _unisci(intervalli))
+
+
+def righe_numerate(righe: list, a: int, b: int) -> str:
+    return "\n".join(f"{i + 1}: {righe[i]}" for i in range(max(0, a), min(len(righe), b)))
+
+
+def punto_piu_simile(testo: str, vecchio: str) -> int | None:
+    """L'indice della riga del file più simile alla prima riga non vuota del testo vecchio
+    (modifica_file, 19/10, #185), o None se nessuna gli somiglia abbastanza."""
+    import difflib
+    prima = next((r.strip() for r in vecchio.splitlines() if r.strip()), "")
+    righe = testo.splitlines()
+    if not prima or not righe:
+        return None
+    esatte = [i for i, r in enumerate(righe) if prima in r]
+    if esatte:
+        return esatte[0]
+    meglio, punti = None, 0.0
+    for i, r in enumerate(righe):
+        m = difflib.SequenceMatcher(None, r.strip(), prima)
+        if m.real_quick_ratio() <= punti or m.quick_ratio() <= punti:
+            continue
+        x = m.ratio()
+        if x > punti:
+            meglio, punti = i, x
+    return meglio if punti >= 0.6 else None
 
 
 # I controlli di Calliope nell'uscita dei test, che non sono test dell'agente
