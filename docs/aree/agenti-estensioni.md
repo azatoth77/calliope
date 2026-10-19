@@ -3808,3 +3808,47 @@ dall'agente in al più 2 giri col modello di oggi. Nel log: `agente_giri_uguali`
   `Lavoro`, salvato in `in_corso.json`. In `prova_agente_giri_uguali` l'uscita dal blocco
   (modifica, «Va bene così?», avvio), il riavvio, A, B, A, B, i file nuovi con i test verdi, il
   test tolto e il contrario.
+
+## Il banco del revisore: lo stesso modello a contesto pulito (19/10, issue #182, ramo `issue-182-banco-revisore`)
+
+**Perché.** Nei giri a vuoto del 18/10 (#174) il giudizio «è il test o è il codice?» lo dava
+l'agente su sé stesso, o la persona alla tappa; nessuno guarda le passate. Prima di costruire
+un revisore nel ciclo (passo 6 della ricerca del 19/10 sulla solidità dell'harness, § 3.6 e
+§ 4) si misura se una passata dello **stesso modello** (qwen3.6 su vLLM, dalla Config) a
+**contesto pulito** dà i verdetti della persona. Rischi noti: l'eco («// Musica: fatto»,
+11/10), gli errori dello stesso modello, il revisore che dà sempre la stessa risposta.
+
+**Il banco** (`prove/manuali/banco_revisore.py`). Il revisore vede solo il pacchetto delle prove:
+il contratto del gioco (`estensioni/contratto.testo`), i requisiti, i file senza commenti né
+docstring (le righe restano al loro posto, i file:riga dell'uscita valgono), l'esito vero dei
+test con i fallimenti in breve (`diagnosi.da_uscita`) e la coda dell'uscita, il registro dei
+tentativi se c'è; mai la trascrizione, il diario o il riassunto dell'agente. Una passata con
+`requisiti.chiama` (che ora accetta la `temperatura`, di serie 0 come prima, e dice i token di
+ragionamento in `uso`), il ragionamento acceso (`--ragionamento`, 4096) e la temperatura
+dell'agente (`--temperatura` per cambiarla); schema chiuso: `verdetto` tra continua,
+cambia_strada, test_sbagliato, codice_sbagliato, consegna, chiedi_persona, con file, riga, test,
+causa e azione.
+
+**I casi** (l'uscita dei test si genera a ogni esecuzione, con Node e il motore dei giochi di
+adesso: la sandbox della Config se il container di Node c'è, altrimenti il Node della
+macchina): `tris-inizia` (il tris per due con il test del 18/10 che muove senza «Inizia») e
+`porte-disegno` (le porte giuste con il test del disegno di L7 del 14/10) → `test_sbagliato`
+su gioco.test.js; i contrari `codice_sbagliato` (le porte rotte con il test giusto, logica.js),
+`consegna` (il tris per due tutto verde), `cambia_strada` (le porte rotte e cinque tentativi
+A-B-A-B-A su `giocatori.min` del manifesto con lo stesso errore vero) e `chiedi_persona` (quanto
+vale la caramella lo decide la persona, il test dell'agente ne ha scelto uno). `--da-lavoro
+<cartella> --atteso <verdetto>` costruisce lo stesso pacchetto da un lavoro vero sulla DGX
+(test rieseguiti, requisiti dallo sviluppo del lavoro in sviluppi.json); niente di quella
+cartella va nel repository.
+
+**Criterio** (#182): ≥ 4/5 sui due casi e ≥ 4/5 su ciascun contrario → il revisore a contesto
+pulito si costruisce con qwen3.6; sotto, serve un modello diverso (#175) o il revisore non
+vale. I numeri della DGX vanno qui e nella ricerca del 19/10.
+
+        cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+          && $V/.venv/bin/python ~/banchi/src-issue182/prove/manuali/banco_revisore.py \
+             --ripetizioni 5 --uscita ~/banco-revisore
+
+**Prove.** `banco_revisore.py --secco` tutto ok (l'uscita vera dei sei casi, il pacchetto senza
+commenti né trascrizione anche da una cartella di lavoro finta, un modello finto con verdetti
+giusti e sbagliati contati come devono, il criterio e `riepilogo.json`).
