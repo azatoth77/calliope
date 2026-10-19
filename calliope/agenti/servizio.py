@@ -326,6 +326,9 @@ def _senza_conti_dei_test(testo: str) -> str:
 # sera, Agente._consegna_al_tetto)
 AL_TETTO = ("L'agente non ha fatto in tempo a consegnare, ma gli esempi di accettazione "
             "passano tutti: il lavoro l'ho chiuso io.")
+# …senza esempi né riproduzione, dopo le passate senza strumenti con i test verdi (revisione
+# della PR #183, #180: Agente._consegna_dalla_prosa)
+AL_TETTO_TEST = "L'agente non ha consegnato, ma i suoi test passano: il lavoro l'ho chiuso io."
 # …e quella di una correzione senza esempi chiusa con il test che riproduce il problema (14/10)
 AL_TETTO_CORREZIONE = ("L'agente non ha fatto in tempo a consegnare, ma il test del problema "
                        "che mi hai segnalato adesso passa: il lavoro l'ho chiuso io.")
@@ -1928,7 +1931,8 @@ class Lavori:
             if r.get("consegna_al_tetto"):
                 # Chiusa dal codice al tetto (13/10 sera): detto, in una frase
                 al_tetto = (AL_TETTO_CORREZIONE if r.get("consegna_al_tetto_con")
-                            == "riproduzione" else AL_TETTO)
+                            == "riproduzione" else AL_TETTO_TEST if r.get(
+                                "consegna_al_tetto_con") == "test" else AL_TETTO)
                 if r.get("consegna_al_tetto") in ("a_vuoto", "prosa"):
                     # Non un tetto: l'agente ha smesso senza consegnare (19/10, #180)
                     al_tetto = al_tetto.replace("non ha fatto in tempo a consegnare",

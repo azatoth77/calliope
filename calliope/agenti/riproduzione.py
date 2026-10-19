@@ -19,8 +19,9 @@ Qui il codice lo controlla sugli artefatti, alla consegna di una correzione:
   controllo dei test alla consegna (`Agente._test_falliti`);
 - dal 19/10 (#180) devono fallire **sul comportamento**: un'asserzione, o un errore del codice
   di prima mentre gira (il pulsante che non c'è, una divisione per zero). Un test che fallisce
-  solo per un import, la sintassi o un nome che prima non c'era (l'`ImportError` della funzione
-  che la correzione aggiunge) non prova niente del problema: «struttura», regola
+  solo per un import, la sintassi o un nome che prima non c'era e che chiama il test
+  (l'`ImportError` della funzione che la correzione aggiunge; lo stesso errore nato nel codice
+  di prima è il difetto, e vale) non prova niente del problema: «struttura», regola
   agente_riproduzione_asserzione. Quando l'uscita non si riconosce, nel dubbio vale come prima.
 
 La prova di fumo dei giochi non conta come riproduzione (non l'ha scritta l'agente): sulla
@@ -51,23 +52,34 @@ NON_RIPRODOTTO = ("uguale", "nessun_test", "passa_prima", "struttura")
 # I fallimenti che non dicono niente del comportamento (19/10, #180): l'import, la sintassi, un
 # nome o un argomento che nella versione di prima non c'erano. Python dal tipo dell'eccezione
 # (diagnosi.fallimenti), JavaScript dal tipo che test_js.mjs mette in testa al messaggio
-_STRUTTURA_PY = re.compile(r"^(?:\w+\.)*(?:ImportError|ModuleNotFoundError|SyntaxError|"
-                           r"IndentationError|TabError|NameError|UnboundLocalError)\b|"
-                           r"^(?:\w+\.)*AttributeError\b(?!.*'NoneType')|"
-                           r"^(?:\w+\.)*TypeError\b.*(?:unexpected keyword argument|positional "
-                           r"argument|required (?:keyword-only )?argument)")
-_STRUTTURA_JS = re.compile(r"^(?:SyntaxError|ReferenceError)\b|^TypeError\b.*\bis not a "
-                           r"(?:function|constructor)\b|Cannot find module|does not provide an "
-                           r"export named")
+_STRUTTURA = re.compile(r"^(?:\w+\.)*(?:ImportError|ModuleNotFoundError|SyntaxError|"
+                        r"IndentationError|TabError)\b|Cannot find module|does not provide an "
+                        r"export named")
+# …e quelli di un nome o di una firma che mancano: struttura solo se nascono nel test (il test
+# chiama ciò che prima non c'era); nati nel codice di prima sono spesso proprio il difetto
+# segnalato (revisione della PR #183: il ReferenceError di logica.js, «x.map is not a
+# function»). UnboundLocalError mai: è un difetto di esecuzione
+_NOME = re.compile(r"^(?:\w+\.)*NameError\b|^(?:\w+\.)*AttributeError\b(?!.*'NoneType')|"
+                   r"^(?:\w+\.)*TypeError\b.*(?:unexpected keyword argument|positional "
+                   r"argument|required (?:keyword-only )?argument|\bis not a "
+                   r"(?:function|constructor)\b)|^ReferenceError\b")
+
+
+def _nasce_nel_test(dove: str) -> bool:
+    """Il frame più interno (diagnosi: «codice.py:9 ← test_codice.py:5», «logica.js:12») è un
+    file di test, oppure non si sa."""
+    interno = str(dove or "").split("←", 1)[0].strip().rsplit(":", 1)[0]
+    return not interno or bool(TEST.search(interno))
 
 
 def strutturale(f: dict) -> bool:
     """Un fallimento (diagnosi.fallimenti: test, errore, dove) che viene dalla struttura del
-    codice, non dal suo comportamento: import, sintassi, nome mancante."""
+    codice, non dal suo comportamento: import, sintassi, un nome che il test chiama e prima non
+    c'era."""
     test, errore = str(f.get("test") or ""), str(f.get("errore") or "").strip()
-    if test.startswith("import di") or test == "sintassi":
+    if test.startswith("import di") or test == "sintassi" or _STRUTTURA.search(errore):
         return True
-    return bool(_STRUTTURA_PY.search(errore) or _STRUTTURA_JS.search(errore))
+    return bool(_NOME.search(errore)) and _nasce_nel_test(f.get("dove"))
 
 
 def solo_struttura(uscita: str) -> dict | None:
@@ -134,8 +146,10 @@ def _sandbox_prima(sandbox, prima: dict, nuovi: list[str]):
         dato = bool(NON_CODICE.search(rel)) and not TEST.search(rel) and rel not in (prima or {})
         # Gli esempi di accettazione in sola lettura (test_accettazione.py, accettazione.test.js)
         # no (19/10, #180): li scrive il codice, e un loro rosso sulla versione di prima non è
-        # un test nuovo dell'agente che riproduce il problema
-        if (rel in nuovi or (rel in sola and not TEST.search(rel)) or dato
+        # un test nuovo dell'agente che riproduce il problema; nemmeno quando sono tra i nuovi
+        # (revisione della PR #183: `_testi` li toglie già, qui si dice anche alla copia)
+        if ((rel in nuovi and not (rel in sola and TEST.search(rel)))
+                or (rel in sola and not TEST.search(rel)) or dato
                 or Path(rel).suffix.lower() in ESTENSIONI_DATI):
             dest = sb.root / rel
             dest.parent.mkdir(parents=True, exist_ok=True)

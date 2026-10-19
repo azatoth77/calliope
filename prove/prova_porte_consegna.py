@@ -6,17 +6,20 @@ controllo della consegna senza aver fatto il lavoro. Qui, con l'agente finto e l
 docker finto:
 
 1. un esito fuori dall'enum («completato») è un errore con l'elenco dei valori (regola
-   agente_esito_non_valido) e non chiude il lavoro; contrari: «Fatto» con la maiuscola vale,
-   i tool della voce decidono loro, «mancano_dati» e «impossibile» invariati;
+   agente_esito_non_valido) e non chiude il lavoro, anche vuoto; la regola anche per gli
+   strumenti grafo_* della ricerca; contrari: «Fatto» con la maiuscola vale, i tool della voce
+   decidono loro, «mancano_dati» e «impossibile» invariati;
 2. una passata senza chiamate non è mai una consegna (agente_prosa_non_consegna): con lo stato
    consegnabile prima il fatto, poi la consegna decisa dal codice con gli esempi rifatti
-   (consegna_al_tetto «prosa»); senza esempi niente «fatto»; dopo PROSA_MAX di fila «limite» o,
-   in uno sviluppo, la tappa;
+   (consegna_al_tetto «prosa»), senza esempi con i test rifatti verdi (contrario: il controllo
+   della consegna che non va); dopo PROSA_MAX di fila «limite» o, in uno sviluppo, la tappa;
 3. la consegna rossa (i test dopo l'ultimo rimando, il controllo dopo l'ultimo rifiuto) non è
    «fatto» (agente_consegna_rossa_tappa): «limite» fuori da uno sviluppo, tappa dentro; i
-   contatori restano dopo una tappa; contrario: la consegna verde invariata;
+   contatori ripartono a ogni giro dopo una tappa (anche dopo «consegna_rossa») e restano
+   dopo una domanda; contrario: la consegna verde invariata;
 4. la riproduzione vale solo con un fallimento di comportamento (agente_riproduzione_asserzione):
-   l'ImportError o «non è una funzione» no, l'asserzione e l'errore mentre gira sì;
+   l'ImportError o «non è una funzione» nati nel test no, l'asserzione, l'errore mentre gira e
+   un nome che manca nel codice di prima (il ReferenceError di logica.js) sì;
 5. esegui_test rosso con il controllo della consegna (un file della scheda che manca, il nome
    preso); contrari: senza il predicato il solo manifesto, con tutto a posto niente;
 6. la correzione di un gioco: accettazione.test.js torna dai file della versione e resta in sola
@@ -145,6 +148,24 @@ def prova_enum(tmp: Path):
                                             {"riassunto": "Fatto.", "esito": "Fatto"})
     verifica("contrario: «Fatto» con la maiuscola è una conversione di forma, vale",
              err is None and args["esito"] == "fatto", str(err))
+    _, err = dialogo.controlla_strumento("consegna", STRUMENTI_CODICE,
+                                         {"riassunto": "Fatto.", "esito": ""})
+    verifica("esito vuoto: un errore con l'elenco (prima valeva «fatto»)",
+             err is not None and "fatto, mancano_dati, impossibile" in err["errore"], str(err))
+    from calliope.agenti.ciclo import nota_valore_non_ammesso
+    from calliope.archivio.esplora import STRUMENTI as GRAFO
+    vicini = next(t["function"]["name"] for t in GRAFO if "verso" in json.dumps(
+        t["function"]["parameters"]))
+    lav_r = SimpleNamespace(id="R1", segnali={})
+    a, err = dialogo.controlla_strumento(vicini, GRAFO, {"nodo": 3, "verso": "sopra"})
+    verifica(f"ricerca: {vicini}(verso=«sopra») è un errore con l'elenco, e la regola nel "
+             "registro (revisione della PR #183)", err is not None and "uscenti" in err["errore"]
+             and nota_valore_non_ammesso(lav_r, vicini, err, a)
+             and regole(lav_r).get("agente_esito_non_valido") == 1, str(err))
+    _, err = dialogo.controlla_strumento(vicini, GRAFO, {})
+    verifica("contrario: un obbligatorio che manca non è la regola dell'enum",
+             err is not None and not nota_valore_non_ammesso(SimpleNamespace(segnali={}),
+                                                              vicini, err, {}), str(err))
     params = {"type": "object", "properties": {"azione": {"type": "string",
                                                           "enum": ["avvia", "ferma"]}}}
     _, _, err = dialogo.controlla("timer", params, {"azione": "stop"})
@@ -201,10 +222,11 @@ def prova_prosa(tmp: Path):
     # Il caso della issue: le scuse dopo una spinta, con i test rossi
     lav, ris, log, cli, _ = gira(tmp, "scuse", [SCRIVE_SBAGLIATO] + [SCUSE] * (PROSA_MAX + 1))
     verifica("le scuse («Hai ragione, correggo il test») con i test rossi non chiudono il "
-             "lavoro: «limite» col motivo dopo PROSA_MAX di fila",
+             "lavoro: «limite» col motivo dopo PROSA_MAX di fila; la regola conta solo le "
+             "passate che prima erano una consegna (dopo la prima spinta)",
              ris.get("eccezione") == "Limite" and ris.get("tipo") == "prosa"
              and "senza usare gli strumenti" in ris.get("motivo", "")
-             and regole(lav).get("agente_prosa_non_consegna") == PROSA_MAX + 1, f"{ris}")
+             and regole(lav).get("agente_prosa_non_consegna") == PROSA_MAX, f"{ris}")
     verifica("…con la spinta di sempre, mai il fatto dello stato consegnabile",
              SPINTA_STRUMENTI in utenti(cli) and PROSA_FATTUALE not in utenti(cli),
              str(utenti(cli))[-300:])
@@ -215,13 +237,23 @@ def prova_prosa(tmp: Path):
     from calliope.agenti.servizio import frase_tappa
     f = frase_tappa(SimpleNamespace(risultato=ris, segnali={}), "Somma")
     verifica("…e a voce la tappa dice perché", "senza usare gli strumenti" in f, f)
-    # Lo stato consegnabile, un programma senza esempi: il fatto, poi niente «fatto» d'ufficio
+    # Lo stato consegnabile, un programma senza esempi: il fatto, poi la consegna con i
+    # controlli di una consegna «fatto» (revisione della PR #183)
     lav, ris, log, cli, _ = gira(tmp, "verde", [SCRIVE_GIUSTO, [ESEGUI]] + ["Ho finito."] * 5)
     verifica("test verdi e un testo: la prima volta il fatto «nessuno strumento chiamato»",
              PROSA_FATTUALE in utenti(cli), str(utenti(cli))[-300:])
-    verifica("…senza esempi né riproduzione il codice non consegna: «limite», mai «fatto» "
-             "(prima la seconda prosa era «fatto»)", ris.get("eccezione") == "Limite"
-             and ris.get("tipo") == "prosa", str(ris)[:300])
+    verifica("…senza esempi né riproduzione, alla seconda consegna il codice con i test rifatti "
+             "verdi (consegna_al_tetto_con «test»)", ris.get("esito") == "fatto"
+             and ris.get("consegna_al_tetto") == "prosa"
+             and ris.get("consegna_al_tetto_con") == "test" and len(cli.corpi) == 4
+             and "passano i suoi test" in ris.get("riassunto", ""), str(ris)[:300])
+    from calliope.agenti.servizio import AL_TETTO_TEST
+    verifica("…e la frase a voce non parla di esempi", "esempi" not in AL_TETTO_TEST)
+    lav, ris, *_ = gira(tmp, "verde-controllo", [SCRIVE_GIUSTO, [ESEGUI]] + ["Ho finito."] * 5,
+                        controlla=lambda x: "manca il programma dichiarato")
+    verifica("contrario: il controllo della consegna che non va, niente consegna d'ufficio: "
+             "«limite»", ris.get("eccezione") == "Limite" and ris.get("tipo") == "prosa",
+             str(ris)[:300])
     # Con gli esempi di accettazione verdi: consegna il codice, alla seconda
     lav, sb, F2 = _estensione_con_esempi(tmp, "verde-esempi")
     lav, ris, log, cli, _ = gira(tmp, "verde-esempi", [[scrivi("estensione.py", F2.GIUSTA)],
@@ -287,17 +319,36 @@ def prova_rossa(tmp: Path):
              f"{ris.get('esito')} {lav.contesto.get('rifiuti_consegna')}")
     lav.risposta = "continua"
     lav.passi0 = lav.passi
-    lav, ris, log, cli, _ = gira(tmp, "giri", [[consegna()], [consegna()], [LEGGI], [LEGGI]],
+    lav, ris, log, cli, _ = gira(tmp, "giri", [[consegna()]] * 4 + [[LEGGI]] * 3,
                                  max_passi=20, lav=lav, sb=sb, controlla=no)
-    verifica("…nel giro dopo il terzo rifiuto e poi la tappa rossa (prima tre rifiuti nuovi)",
-             ris.get("esito") == "tappa" and ris.get("tipo_limite") == "consegna_rossa"
-             and len(cli.corpi) == 2 and lav.contesto.get("rifiuti_consegna") == 3,
+    verifica("…nel giro dopo i rifiuti ripartono: tre rifiuti nuovi, poi la tappa rossa "
+             "(revisione della PR #183)", ris.get("esito") == "tappa"
+             and ris.get("tipo_limite") == "consegna_rossa" and len(cli.corpi) == 4
+             and lav.contesto.get("rifiuti_consegna") == 3,
              f"{ris.get('tipo_limite')} {len(cli.corpi)} {lav.contesto.get('rifiuti_consegna')}")
-    lav, ris, *_ = gira(tmp, "rimandi", [SCRIVE_SBAGLIATO, [consegna()], [LEGGI], [LEGGI]],
-                        max_passi=4, tappe=True)
-    verifica("…e i rimandi: uno nel primo giro resta nel contesto della tappa",
-             ris.get("esito") == "tappa" and lav.contesto.get("rimandi") == 1,
+    lav, ris, log, cli, sb = gira(tmp, "giri-rossi", [SCRIVE_SBAGLIATO] + [[consegna()]] * 3,
+                                  tappe=True)
+    verifica("tappa «consegna_rossa» dopo i due rimandi", ris.get("tipo_limite") ==
+             "consegna_rossa" and lav.contesto.get("rimandi") == RIMANDI_MAX, str(ris)[:200])
+    lav.risposta = "continua"
+    lav.passi0 = lav.passi
+    lav, ris, log, cli, _ = gira(tmp, "giri-rossi", [[consegna()], [scrivi("programma.py",
+                                                                         GIUSTO)], [consegna()]],
+                                 lav=lav, sb=sb)
+    r = risultati(lav, "consegna")
+    verifica("…«continua»: il primo test rosso del giro nuovo ha di nuovo i suoi rimandi, "
+             "l'agente corregge e consegna", ris.get("esito") == "fatto"
+             and "correggi" in r[-2] and "si ferma qui" not in r[-2], f"{ris} {r[-2:]}")
+    lav, ris, log, cli, sb = gira(tmp, "domanda", [SCRIVE_SBAGLIATO, [consegna()],
+                                                   [consegna("mancano_dati",
+                                                             domanda="In che unità?")]])
+    verifica("ripresa dopo una domanda: il rimando resta nel contesto",
+             ris.get("esito") == "mancano_dati" and lav.contesto.get("rimandi") == 1,
              f"{ris.get('esito')} {lav.contesto.get('rimandi')}")
+    lav.risposta = "in metri"
+    lav, ris, log, cli, _ = gira(tmp, "domanda", [[consegna()], [consegna()]], lav=lav, sb=sb)
+    verifica("…e dopo la risposta resta un rimando solo, poi la consegna rossa",
+             ris.get("tipo") == "consegna_rossa" and len(cli.corpi) == 2, str(ris)[:300])
     lav, ris, *_ = gira(tmp, "verde-dopo", [SCRIVE_SBAGLIATO, [consegna()],
                                             [scrivi("programma.py", GIUSTO)], [consegna()]])
     verifica("contrario: corretto dopo un rimando, la consegna verde è «fatto»",
@@ -346,6 +397,26 @@ def prova_riproduzione(tmp: Path):
                                            "    assert media([]) == 0\n"})
     verifica("contrario: un errore del codice di prima mentre gira (ZeroDivisionError): "
              "riprodotto", es["stato"] == "riprodotto", str(es)[:300])
+    verifica("strutturale(): un nome o una firma che mancano nati nel codice di prima no "
+             "(revisione della PR #183); nel test sì",
+             not any(strutturale(f) for f in (
+                 {"test": "r", "errore": "ReferenceError: punteggio is not defined",
+                  "dove": "logica.js:12"},
+                 {"test": "m", "errore": "TypeError: stato.giocatori.map is not a function",
+                  "dove": "logica.js:40"},
+                 {"test": "t", "errore": "UnboundLocalError: cannot access local variable 'tot'",
+                  "dove": "media.py:7"},
+                 {"test": "t", "errore": "NameError: name 'totale' is not defined",
+                  "dove": "conti.py:9 ← test_conti.py:5"},
+                 {"test": "t", "errore": "AttributeError: 'str' object has no attribute "
+                                         "'append'", "dove": "conti.py:9"}))
+             and all(strutturale(f) for f in (
+                 {"test": "t", "errore": "NameError: name 'doppio' is not defined",
+                  "dove": "test_conti.py:5"},
+                 {"test": "n", "errore": "TypeError: l.g is not a function",
+                  "dove": "logica.test.js:2"},
+                 {"test": "t", "errore": "ImportError: cannot import name 'doppio'",
+                  "dove": "conti.py:1"})))
     verifica("strutturale(): import, sintassi, NameError, AttributeError e argomenti sì; "
              "asserzione, NoneType e divisione no",
              all(strutturale(f) for f in (
@@ -361,6 +432,7 @@ def prova_riproduzione(tmp: Path):
                  {"test": "t", "errore": "AssertionError: 0 != 2"},
                  {"test": "t", "errore": "AttributeError: 'NoneType' object has no attribute 'x'"},
                  {"test": "t", "errore": "ZeroDivisionError: division by zero"},
+                 {"test": "t", "errore": "UnboundLocalError: cannot access local variable 'x'"},
                  {"test": "a", "errore": "Expected values to be strictly equal: 1 !== 2"},
                  {"test": "r", "errore": "TypeError: Cannot read properties of undefined"},
                  {"test": "g", "errore": "nessun elemento da toccare con «Ricomincia»"})))
@@ -381,6 +453,14 @@ def prova_riproduzione(tmp: Path):
                         testa + 'test("f", () => { assert.strictEqual(l.f(), 2); });\n'})
     verifica("contrario: JavaScript con un'asserzione: riprodotto", es["stato"] == "riprodotto",
              str(es)[:300])
+    rotto = ("function ricomincia() {\n  return punteggio;\n}\n"
+             "if (typeof module !== \"undefined\") module.exports = { ricomincia };\n")
+    giusto = rotto.replace("  return punteggio;", "  const punteggio = 0;\n  return punteggio;")
+    es, _ = _riproduci(tmp, "js-ref", {"logica.js": rotto}, {"logica.js": giusto,
+                       "logica.test.js": testa.replace("const l =", "const l =")
+                       + 'test("ricomincia", () => { assert.strictEqual(l.ricomincia(), 0); });\n'})
+    verifica("contrario: il ReferenceError nato in logica.js (il difetto segnalato): riprodotto",
+             es["stato"] == "riprodotto", str(es)[:300])
 
 
 # ═══════════════════════════ 5. esegui_test consegnabile ═══════════════════════════

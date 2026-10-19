@@ -797,6 +797,20 @@ SPINTA_STRUMENTI = ("Usa gli strumenti con chiamate di funzione vere: scrivi i f
                     "scrivi_file, prova con esegui_test, e alla fine chiama consegna.")
 
 
+def nota_valore_non_ammesso(lav, nome: str, errore: dict, args, log=None) -> bool:
+    """La regola agente_esito_non_valido (19/10, #180) se l'errore degli argomenti è un valore
+    fuori dai valori ammessi: nel codice (prima consegna(esito="completato") saltava i controlli
+    e finiva «fatto») e nella ricerca (gli strumenti grafo_*, revisione della PR #183)."""
+    campo = (errore or {}).get("campo")
+    if not campo or not (((errore or {}).get("argomenti") or {}).get(campo) or {}).get(
+            "valori_ammessi"):
+        return False
+    from ..sonde import nota as nota_regola
+    nota_regola(lav, "agente_esito_non_valido", log,
+                f"{nome}.{campo}={str((args or {}).get(campo))[:40]}")
+    return True
+
+
 def esito_fatto(args) -> bool:
     """Una consegna che chiede di chiudere il lavoro come fatto (19/10, #180): tutto ciò che non
     è «mancano_dati» o «impossibile». Prima si guardava solo `== "fatto"`, e un esito fuori
@@ -1173,9 +1187,12 @@ class Agente:
             # conversazione di prima, compattata, e la nota della persona se c'è
             messages = ctx["messages"]
             spinte, scritti = ctx["spinte"], ctx["scritti"]
-            # I contatori della consegna restano col contesto (19/10, #180: `rifiuti_consegna` si
-            # perdeva a ogni ripresa e a ogni tappa, e i rifiuti ricominciavano da zero)
-            rimandi, rifiuti = ctx.get("rimandi", 0), ctx.get("rifiuti_consegna", 0)
+            # I contatori della consegna ripartono a ogni giro (revisione della PR #183, #180):
+            # dal 19/10 a rimandi finiti la consegna rossa ferma il lavoro, e tenerli dal giro di
+            # prima toglieva all'agente ogni rimando nel giro che la persona ha chiesto (anche
+            # dopo la tappa «consegna_rossa» e il «sì» di #174). Il giro ha il suo tetto di
+            # passate. Restano invece alla ripresa dopo una domanda (sotto) e dopo un riavvio
+            rimandi, rifiuti = 0, 0
             nota = str(lav.nota_giro or "").strip()
             # Dopo giri finiti allo stesso punto (18/10, #174) il «sì» della persona vuol dire
             # «consegna quello che va» (servizio.continua): lo dice Calliope, non la persona
@@ -1194,6 +1211,8 @@ class Agente:
             # Ripresa dopo una domanda (03/10): la conversazione dell'agente è quella di prima
             messages = ctx["messages"]
             spinte, scritti = ctx["spinte"], ctx["scritti"]
+            # I contatori della consegna restano col contesto (19/10, #180: `rifiuti_consegna` si
+            # perdeva a ogni ripresa, e i rifiuti ricominciavano da zero)
             rimandi, rifiuti = ctx.get("rimandi", 0), ctx.get("rifiuti_consegna", 0)
             chi =lav.persona_nome or "chi ha chiesto il lavoro"
             extra = ""
@@ -1364,7 +1383,9 @@ class Agente:
                 # sempre, e dopo PROSA_MAX di fila tappa o «limite»
                 prosa_fila += 1
                 from ..sonde import nota as nota_regola
-                if scritti:
+                if scritti and spinte >= 1:
+                    # Contata solo dove prima la passata era una consegna (revisione della PR
+                    # #183): file scritti e una spinta già data
                     nota_regola(lav, "agente_prosa_non_consegna", self.log, f"{prosa_fila}ª")
                 pronto = bool(scritti and seg.get("test_verde") is True
                               and self._pronto_da_consegnare(lav, sandbox, piano, stato_piano,
@@ -1375,12 +1396,14 @@ class Agente:
                     messages.append({"role": "user", "content": PROSA_FATTUALE})
                     continue
                 if pronto and prosa_fila == 2:
-                    chiusura = self._consegna_al_tetto(
-                        lav, sandbox, Limite("ha risposto senza strumenti", tipo="prosa"),
-                        controlla, piano, stato_piano)
+                    chiusura = self._consegna_dalla_prosa(lav, sandbox, controlla, piano,
+                                                          stato_piano)
                     if chiusura is not None:
                         consegna = chiusura
                         break
+                # `spinte` resta solo un conto nel contesto: il limite di prima (più di 3 spinte
+                # in tutto il lavoro) è sostituito da PROSA_MAX di fila, e il totale lo limita
+                # già il tetto delle passate (revisione della PR #183)
                 spinte += 1
                 if prosa_fila > PROSA_MAX:
                     e = Limite(f"ha risposto {prosa_fila} volte di fila senza usare gli "
@@ -1406,14 +1429,7 @@ class Agente:
                 # come errore chiaro, con un esempio, invece di un'eccezione dello strumento
                 args, errore_args = dialogo.controlla_strumento(name, strumenti, args)
                 if errore_args is not None:
-                    campo = errore_args.get("campo")
-                    if campo and ((errore_args.get("argomenti") or {}).get(campo) or {}).get(
-                            "valori_ammessi"):
-                        # Un valore fuori dai valori ammessi (19/10, #180): prima
-                        # consegna(esito="completato") saltava i controlli e finiva «fatto»
-                        from ..sonde import nota as nota_regola
-                        nota_regola(lav, "agente_esito_non_valido", self.log,
-                                    f"{name}.{campo}={str(args.get(campo))[:40]}")
+                    nota_valore_non_ammesso(lav, name, errore_args, args, self.log)
                     messages.append({"role": "tool", "tool_name": name,
                                      "content": gc.risultato(name, errore_args)})
                     lav.nota("esito", nome=name, esito=errore_args)
@@ -1765,6 +1781,44 @@ class Agente:
                 "Chiuso al tetto: l'agente non ha fatto in tempo a consegnare.")
         return {"esito": "fatto", "_al_tetto": e.tipo, "_al_tetto_con": con,
                 "riassunto": f"{detto} {fine}"}
+
+    def _consegna_dalla_prosa(self, lav: Lavoro, sandbox, controlla, piano: bool,
+                              stato_piano) -> dict | None:
+        """La seconda passata di fila senza chiamate con lo stato consegnabile (19/10, #180):
+        con gli esempi di accettazione o in una correzione decide `_consegna_al_tetto` (tipo
+        «prosa»). Senza nessuno dei due (un programma con l'analisi spenta o saltata), dalla
+        revisione della PR #183 il lavoro si consegna con gli stessi controlli di una consegna
+        «fatto» dell'agente: i test rifatti verdi due volte, il controllo della consegna e il
+        piano, il ricollaudo che va. Prima di #180 quel testo era una consegna dell'agente, e i
+        suoi test erano l'unico controllo anche lì: «limite» con i test verdi buttava un lavoro
+        fatto. None: la spinta di sempre."""
+        e = Limite("ha risposto senza strumenti", tipo="prosa")
+        a = getattr(lav, "accettazione", None) or {}
+        con_esempi = a.get("stato") == "pronta" and bool(a.get("file"))
+        if con_esempi or getattr(lav, "correzione", False):
+            return self._consegna_al_tetto(lav, sandbox, e, controlla, piano, stato_piano)
+        try:
+            if self._test_falliti(lav, sandbox) is not None:
+                return None
+            errore = controlla(sandbox) if controlla is not None else None
+            if not errore and piano and stato_piano is not None:
+                errore = _fuori_piano(sandbox, stato_piano)
+            if errore or (getattr(lav, "ricollaudo", None) or {}).get("vanno") is False:
+                self.log(f"[AGENTI] {lav.id}: dopo la prosa niente consegna: "
+                         f"{str(errore or 'il ricollaudo non va')[:160]}")
+                return None
+        except Exception as ex:  # noqa: BLE001 — nel dubbio la spinta
+            self.log(f"[AGENTI] {lav.id}: controllo dopo la prosa non riuscito: {ex}")
+            return None
+        from ..sonde import nota as nota_regola
+        nota_regola(lav, "agente_consegna_al_tetto", self.log, "prosa, test")
+        lav.nota("flusso", tipo="esito", testo="l'agente ha smesso senza consegnare, ma i suoi "
+                                               "test passano: l'ho chiuso come consegnato")
+        cosa = ("Il gioco è scritto" if getattr(lav, "gioco", False) else
+                "La funzione è scritta" if lav.tipo == "estensione" else "Il lavoro è fatto")
+        return {"esito": "fatto", "_al_tetto": "prosa", "_al_tetto_con": "test",
+                "riassunto": f"{cosa} e passano i suoi test. Chiuso da me: l'agente ha smesso "
+                             "di usare gli strumenti senza consegnare."}
 
     # ── tappe (08/10, versione 2 della modalità sviluppo) ──
     def _tappa(self, lav: Lavoro, sandbox, gc, messages: list, e: Limite, spinte: int,
@@ -2581,6 +2635,7 @@ class Agente:
                            "cosa_fare": "usa solo gli strumenti dell'elenco: "
                                         + ", ".join(sorted(nomi))}
                 elif errore_args is not None:
+                    nota_valore_non_ammesso(lav, c["name"], errore_args, args, self.log)
                     res = errore_args
                 elif c["name"] == "leggi_file":
                     res = self._leggi(lav, None, args)
