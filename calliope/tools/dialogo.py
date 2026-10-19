@@ -306,7 +306,9 @@ def controlla_strumento(nome: str, strumenti, argomenti):
     (argomenti in forma, errore o None). Più indulgente dei tool della voce: manca solo un
     obbligatorio **assente** (un file vuoto si scrive con contenuto «»), e gli argomenti in più
     si lasciano (gli strumenti leggono solo i loro). Stessa forma dell'errore, con `cosa_fare`
-    per l'agente."""
+    per l'agente. Dal 19/10 (#180) un valore fuori dai valori ammessi è un errore con l'elenco:
+    per la voce «decide il tool» (`_forma`), per l'agente no, perché nessuno strumento ha
+    sinonimi suoi e `consegna(esito="completato")` saltava tutti i controlli della consegna."""
     schema = next((t.get("function") or {} for t in strumenti or ()
                    if (t.get("function") or {}).get("name") == nome), None)
     if schema is None:
@@ -320,7 +322,8 @@ def controlla_strumento(nome: str, strumenti, argomenti):
         if v is None or k not in props:
             continue
         nuovo, conv, ok = _forma(v, props.get(k))
-        if not ok:
+        ammessi = (props.get(k) or {}).get("enum")
+        if not ok or (ammessi and nuovo not in ammessi):
             sbagliati.append(k)
         elif conv:
             args[k] = nuovo
@@ -329,6 +332,10 @@ def controlla_strumento(nome: str, strumenti, argomenti):
     err = errore_argomenti(nome, params, args, schema.get("description") or "", manca=manca,
                            sbagliati=sbagliati)
     err.pop("fatto", None)
+    elenchi = [f"«{k}» vale uno di: " + ", ".join(str(a) for a in props[k]["enum"])
+               for k in sbagliati if (props.get(k) or {}).get("enum")]
+    if elenchi:
+        err["errore"] = err["errore"].rstrip(".") + " (" + "; ".join(elenchi) + ")."
     err["cosa_fare"] = (f"Richiama {nome} con gli argomenti giusti, come nell'esempio; non "
                         f"ripetere la stessa chiamata.")
     return args, err

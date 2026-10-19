@@ -3809,6 +3809,110 @@ dall'agente in al più 2 giri col modello di oggi. Nel log: `agente_giri_uguali`
   (modifica, «Va bene così?», avvio), il riavvio, A, B, A, B, i file nuovi con i test verdi, il
   test tolto e il contrario.
 
+## Le porte oneste della consegna (19/10, issue #180, ramo `issue-180-porte-oneste`)
+
+**Il caso** (analisi del 19/10, `docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.1):
+nel ciclo dell'agente c'erano porte che si aprivano da sole. Un modello piccolo (qwen3.6-35B-A3B)
+poteva chiudere «fatto» un lavoro non fatto, e il banco (#9) contava quei «fatto». Tutte
+correzioni per costruzione, ognuna col suo nome nel registro.
+
+**Cosa cambia.**
+1. **L'esito fuori dall'enum** (`tools/dialogo.controlla_strumento`, solo per gli strumenti
+   dell'agente): un valore che non è tra i valori ammessi, dopo le conversioni di forma («Fatto»
+   → «fatto»), è un errore con l'elenco (««esito» vale uno di: fatto, mancano_dati,
+   impossibile»). Prima `consegna(esito="completato")` passava («decide il tool», giusto per la
+   voce), il ciclo controllava solo `== "fatto"` e saltava piano, controllo, test rifatti e
+   riproduzione, e alla fine diventava «fatto». Nel ciclo «fatto» è ora tutto ciò che non è
+   «mancano_dati» o «impossibile» (`esito_fatto`). Regola `agente_esito_non_valido`. I tool
+   della voce restano come sono. Vale anche per gli strumenti dell'archivio nella ricerca
+   (`grafo_*`, con i loro enum).
+2. **La prosa non è una consegna**: dopo una spinta, una passata senza chiamate con dei file
+   scritti valeva «fatto» («Hai ragione, correggo il test» chiudeva il lavoro). Ora, con lo stato
+   consegnabile (l'ultimo esegui_test verde, nessun file cambiato da allora, i file che la
+   consegna chiede), la prima volta il fatto (`PROSA_FATTUALE`: «Nessuno strumento chiamato…»),
+   la seconda il codice passa da `_consegna_al_tetto` col tipo `prosa` (esempi di accettazione o
+   riproduzione, test rifatti due volte, controllo della consegna: consegna solo se passano,
+   anche in uno sviluppo; il riassunto dice «l'agente ha smesso di usare gli strumenti senza
+   consegnare», e la frase a voce «non ha consegnato» invece di «non ha fatto in tempo»).
+   Altrimenti la spinta di sempre; dopo `PROSA_MAX` = 3 passate così **di fila** tappa in uno
+   sviluppo, «limite» fuori, col motivo (prima: 4 spinte in tutto, e «limite» anche in uno
+   sviluppo). Regola `agente_prosa_non_consegna`.
+3. **La consegna rossa**: dopo `RIMANDI_MAX` = 2 rimandi, o senza più passate né tempo per un
+   rimando, i test si rifanno lo stesso e una consegna rossa non è «fatto» (prima passava senza
+   rifarli, e lo sviluppo andava al collaudo con i test rossi); così il controllo della consegna
+   ancora in errore dopo `RIFIUTI_MAX` = 3 rifiuti (prima l'errore era ignorato e la consegna, coi
+   test verdi, passava). In uno sviluppo diventa una tappa (`tipo_limite` «consegna_rossa», a
+   voce «l'agente ha consegnato, ma la consegna non va: i test non passano o manca qualcosa che la
+   consegna chiede», `PERCHE_TAPPA`); fuori «limite» con l'errore (`errore_consegna`) e i test
+   rifatti nel risultato. `rifiuti_consegna` ora sta col contesto salvato (alla domanda, alla
+   tappa) insieme a `rimandi`: prima si perdeva a ogni ripresa. Regola
+   `agente_consegna_rossa_tappa`.
+4. **La riproduzione** (`riproduzione.controlla`): un test nuovo deve fallire sulla versione di
+   prima sul **comportamento**, un'asserzione o un errore del codice di prima mentre gira (la
+   divisione per zero, il pulsante che non c'è). Se tutti i fallimenti sono di struttura (import,
+   sintassi, `NameError`, `AttributeError` su un nome che non c'era, argomenti nuovi; in
+   JavaScript `ReferenceError`, `SyntaxError`, «is not a function») l'esito è `struttura`, tra i
+   non riprodotti, col rimando che dice perché. Regola `agente_riproduzione_asserzione`. Per
+   saperlo in JavaScript `test_js.mjs` mette ora il tipo in testa al messaggio per `TypeError`,
+   `ReferenceError` e `SyntaxError` («FALLITO n: TypeError: l.g is not a function»). Un'uscita che
+   non si riconosce vale come prima. Nella sandbox della versione di prima non vanno più gli
+   esempi di accettazione in sola lettura: un loro rosso lì non è un test nuovo dell'agente (prima
+   bastava a dire «riprodotto»).
+5. **«Tutto verde» vuol dire consegnabile**: `Lavori._controlla_estensione` dà anche
+   `controlla.consegnabile`, lo stesso `controlla_consegna` con i nomi ma senza il ricollaudo (che
+   ha effetti); il ciclo lo passa a esegui_test (`_con_manifesto`), che con un errore ha in testa
+   «FALLITO controllo della consegna: …», e alla spinta a consegnare. Prima solo il manifesto: il
+   nome preso, i file della scheda (stile e risorse non li guarda la prova di fumo), `require` in
+   logica.js restavano verdi fino alla consegna (banco L8 del 14/10). Senza il predicato (le prove
+   che chiamano `Agente.codice` da sole, i programmi) il solo manifesto come prima.
+6. **La correzione di un gioco**, verificato con la prova: `accettazione.test.js` torna con i file
+   della versione (`candidata_da_lavoro` lo tiene, `file_per_modifica` lo ridà) e l'analisi lì
+   non si rifà, quindi era scrivibile. Ora in una correzione di un gioco resta in sola lettura
+   (`_analisi_prima_`). Una **modifica** lo lascia scrivibile (le regole possono cambiare). Gli
+   esempi dei programmi persi con `copia_in` sono di #10.
+
+**Prove.** `prova_porte_consegna` (nuova, livello 2, ~20 s; sul codice di main fallisce la
+sezione 1 e le altre non importano le costanti nuove), con i contrari: «Fatto», i tool della
+voce, «mancano_dati» e «impossibile», la consegna vera verde, gli esempi rossi, la consegna verde
+dopo un rimando, l'asserzione e la divisione per zero, la modifica di un gioco.
+
+**Rischi.** Un lavoro buono che finiva «fatto» per la via della prosa ora passa dal tetto (e con
+gli esempi verdi il codice lo consegna lo stesso) oppure va a tappa; i contatori salvati fanno sì
+che in un giro dopo la tappa la prima consegna rossa fermi subito il giro (i test si rifanno
+sempre: verde, si consegna). Più tappe nei primi giorni: da guardare nel banco. Un test di
+riproduzione che si aspetta un'eccezione del codice di prima va: la regola esclude solo gli
+errori di struttura.
+
+**Da misurare sulla DGX** (dopo l'unione): il banco di #9 (criterio: zero consegne «fatto» con i
+test rossi o con l'esito fuori dall'enum); nel log `agente_esito_non_valido`,
+`agente_prosa_non_consegna`, `agente_consegna_rossa_tappa`, `agente_riproduzione_asserzione`, e
+le tappe con `tipo_limite` «consegna_rossa» e «prosa».
+
+**Dopo la revisione della PR #183 (19/10).**
+- **La riproduzione guarda dove nasce l'errore.** `NameError`, `AttributeError`, i `TypeError`
+  di firma, `ReferenceError` e «is not a function» sono struttura solo se il frame più interno
+  (`dove` di diagnosi.py) è un file di test, o se manca. Nati nel codice di prima sono spesso il
+  difetto segnalato (il `ReferenceError` di logica.js col pulsante «Ricomincia» che non va): lì
+  vale come riproduzione. `UnboundLocalError` non è mai struttura. Import, sintassi e «Cannot find
+  module» lo sono sempre. Gli esempi in sola lettura restano fuori dalla sandbox di prima anche se
+  fossero tra i test nuovi (`_testi` li toglieva già).
+- **I contatori ripartono a ogni giro.** Dal 19/10, a rimandi finiti, la consegna rossa ferma il
+  lavoro, quindi tenerli dal giro di prima toglieva all'agente ogni rimando nel giro chiesto dalla
+  persona. Ora `rimandi` e `rifiuti_consegna` si azzerano all'inizio di un giro dopo una tappa
+  (anche dopo «consegna_rossa» e il «sì» di #174). Restano alla ripresa dopo una domanda e dopo
+  un riavvio. Il giro ha il suo tetto di passate.
+- **La prosa con i test verdi senza esempi né riproduzione** (un programma con l'analisi spenta o
+  saltata) ora si consegna, alla seconda passata, con gli stessi controlli di una consegna
+  «fatto» dell'agente: test rifatti verdi due volte, controllo della consegna, piano, ricollaudo
+  (`_consegna_dalla_prosa`, `consegna_al_tetto_con` «test», a voce «L'agente non ha consegnato,
+  ma i suoi test passano: il lavoro l'ho chiuso io.»). Prima di #180 quel testo era una consegna
+  dell'agente con i soli suoi test: «limite» buttava un lavoro fatto. `spinte` resta solo un conto
+  nel contesto: il limite di prima (più di 3 spinte in tutto il lavoro) l'ha sostituito
+  `PROSA_MAX` di fila, e il totale lo limita il tetto delle passate.
+- `agente_prosa_non_consegna` si conta solo dove la passata prima era una consegna (file scritti
+  e una spinta già data). `agente_esito_non_valido` si scrive anche per gli strumenti `grafo_*`
+  della ricerca (`nota_valore_non_ammesso`). L'esito vuoto è un errore (prima valeva «fatto»).
+
 ## Il banco del revisore: lo stesso modello a contesto pulito (19/10, issue #182, ramo `issue-182-banco-revisore`)
 
 **Perché.** Nei giri a vuoto del 18/10 (#174) il giudizio «è il test o è il codice?» lo dava
@@ -3831,24 +3935,42 @@ causa e azione.
 
 **I casi** (l'uscita dei test si genera a ogni esecuzione, con Node e il motore dei giochi di
 adesso: la sandbox della Config se il container di Node c'è, altrimenti il Node della
-macchina): `tris-inizia` (il tris per due con il test del 18/10 che muove senza «Inizia») e
+macchina): `tris-inizia` (il tris per due con il test del 18/10 che muove senza «Inizia»),
+`tris-inizia-muto` (lo stesso, con il consiglio dell'errore tolto dal pacchetto) e
 `porte-disegno` (le porte giuste con il test del disegno di L7 del 14/10) → `test_sbagliato`
 su gioco.test.js; i contrari `codice_sbagliato` (le porte rotte con il test giusto, logica.js),
 `consegna` (il tris per due tutto verde), `cambia_strada` (le porte rotte e cinque tentativi
 A-B-A-B-A su `giocatori.min` del manifesto con lo stesso errore vero) e `chiedi_persona` (quanto
 vale la caramella lo decide la persona, il test dell'agente ne ha scelto uno). `--da-lavoro
 <cartella> --atteso <verdetto>` costruisce lo stesso pacchetto da un lavoro vero sulla DGX
-(test rieseguiti, requisiti dallo sviluppo del lavoro in sviluppi.json); niente di quella
-cartella va nel repository.
+(test rieseguiti su tutti i file; nel pacchetto niente `risultato.md` né `esempi_veri/`, al più
+12 000 caratteri per file e 60 000 in tutto, con un avviso; requisiti dallo sviluppo del lavoro
+in sviluppi.json, e senza l'ora con più sviluppi candidati il banco chiede `--sviluppo`); niente
+di quella cartella va nel repository.
 
-**Criterio** (#182): ≥ 4/5 sui due casi e ≥ 4/5 su ciascun contrario → il revisore a contesto
+**Come leggere i numeri** (revisione della PR #184). In `tris-inizia` l'errore vero del motore
+dice già «…ogni partita comincia nella fase «preparazione»; correggi il test, non il manifesto»
+(`fumo_js.mjs`, `viaDallaPreparazione`, da #174), e in `porte-disegno` l'errore spiega perché
+«avanti» non vale: lì un 5/5 misura soprattutto se il modello legge il suggerimento, che
+l'agente riceve già. Per questo c'è `tris-inizia-muto` (restano la fase e i comandi attivi,
+e il contratto, che dice di toccare «Inizia» con min = max), e contano di più i contrari e
+`--da-lavoro`. In `chiedi_persona` la logica dà «Nessun punto!» alla caramella mentre il
+requisito dice che vale dei punti: un `codice_sbagliato` lì è un'ambiguità del caso più che un
+errore del revisore.
+
+**Criterio** (#182): ≥ 4/5 sui tre casi e ≥ 4/5 su ciascun contrario → il revisore a contesto
 pulito si costruisce con qwen3.6; sotto, serve un modello diverso (#175) o il revisore non
 vale. I numeri della DGX vanno qui e nella ricerca del 19/10.
 
         cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
-          && $V/.venv/bin/python ~/banchi/src-issue182/prove/manuali/banco_revisore.py \
+          && $V/.venv/bin/python $V/prove/manuali/banco_revisore.py \
              --ripetizioni 5 --uscita ~/banco-revisore
 
-**Prove.** `banco_revisore.py --secco` tutto ok (l'uscita vera dei sei casi, il pacchetto senza
-commenti né trascrizione anche da una cartella di lavoro finta, un modello finto con verdetti
+Prima dell'unione, da un clone del ramo (`git clone -b issue-182-banco-revisore
+https://github.com/azatoth77/calliope ~/banchi/src-issue182`) con lo stesso interprete:
+`$V/.venv/bin/python ~/banchi/src-issue182/prove/manuali/banco_revisore.py …`.
+
+**Prove.** `banco_revisore.py --secco` tutto ok (l'uscita vera dei sette casi, il consiglio tolto in
+`tris-inizia-muto`, il pacchetto senza commenti né trascrizione anche da una cartella di lavoro
+finta, i tetti e lo sviluppo ambiguo di `--da-lavoro`, un modello finto con verdetti
 giusti e sbagliati contati come devono, il criterio e `riepilogo.json`).
