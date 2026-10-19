@@ -27,49 +27,64 @@ della Config se il container di Node c'è, altrimenti il Node della macchina con
 delle prove; senza Node i casi si saltano, 77):
 
 - `tris-inizia` → `test_sbagliato`, gioco.test.js: il tris per due di `prove/giochi/tris`
-  (min = max = 2) con il test dell'agente del 18/10 che muove senza «Inizia»;
+  (min = max = 2) con il test dell'agente del 18/10 che muove senza «Inizia»; l'errore vero
+  del motore dice già «correggi il test, non il manifesto» (fumo_js.mjs, `viaDallaPreparazione`,
+  da #174), quindi qui si misura anche se il modello legge il suggerimento;
+- `tris-inizia-muto` → lo stesso, ma nel pacchetto la frase di consiglio dell'errore è tolta
+  (restano la fase e i comandi attivi): si vede se riconosce il test sbagliato da solo;
 - `porte-disegno` → `test_sbagliato`, gioco.test.js: le porte giuste di
   `prove/prova_fasi_agente.py` con il test del disegno di L7 del 14/10 («avanti» subito dopo
   «2 giocatori», `stato().punti["Giocatore 1"]`);
 - contrari (senza, un revisore che dice sempre «test sbagliato» fa 100 %):
   `codice_sbagliato` → logica.js: le porte rotte (il mostro della porta accanto) con il test
   del disegno giusto; `consegna`: il tris per due con i test verdi, la prova di fumo compresa;
-  `cambia_strada`: le porte rotte e un registro A-B-A-B (giocatori.min del manifesto 2 → 1 →
-  2 → 1) con lo stesso errore, vero, a ogni tentativo; `chiedi_persona`: un requisito lasciato
+  `cambia_strada`: le porte rotte e un registro di cinque tentativi A-B-A-B-A (giocatori.min del
+  manifesto 2 → 1 → 2 → 1 → 2 → 1) con lo stesso errore, vero, a ogni tentativo; `chiedi_persona`: un requisito lasciato
   alla persona («la caramella vale dei punti: quanti, poi te lo dico») e un test dell'agente
-  che ne ha scelto uno.
+  che ne ha scelto uno (la logica dà «Nessun punto!» alla caramella: un «codice_sbagliato» è
+  un'ambiguità del caso più che un errore del revisore).
 
 **Da un lavoro vero** (`--da-lavoro <cartella>`, solo sulla DGX; niente di quella cartella va
 nel repository): lo stesso pacchetto dalla cartella della sandbox di un lavoro o dalla sua
-cartella dei risultati: i file (senza `.calliope/`, `lavoro.json`, CAPACITA.md e il runtime),
-i test rieseguiti adesso in una sandbox nuova, i requisiti dello sviluppo del lavoro
-(sviluppi.json accanto alle sandbox, trovati dal numero del lavoro e dall'ora; `--sviluppo S32`
-per sceglierlo), altrimenti la richiesta di lavoro.json; `--registro <file>` (JSON o testo)
+cartella dei risultati: i file (senza `.calliope/`, `esempi_veri/`, `lavoro.json`,
+`risultato.md`, CAPACITA.md e il runtime; al più MAX_FILE caratteri per file e MAX_FILE_TOTALE in
+tutto, con un avviso se taglia), i test rieseguiti adesso in una sandbox nuova su tutti i file,
+i requisiti dello sviluppo del lavoro (sviluppi.json accanto alle sandbox, trovati dal numero
+del lavoro e dall'ora; senza l'ora e con più sviluppi candidati il banco si ferma e chiede
+`--sviluppo S32`), altrimenti la richiesta di lavoro.json; `--registro <file>` (JSON o testo)
 aggiunge un registro dei tentativi. Il verdetto atteso lo dà `--atteso` (con `--file-atteso`).
 
 **Misura**: per caso, N ripetizioni (`--ripetizioni`, 5): verdetti giusti su N, file giusto e
 test giusto su N (dove il caso li dice), secondi e token medi (anche di ragionamento); una
 tabella alla fine e `riepilogo.json` nella cartella d'uscita (`--uscita`). Criterio di #182:
-≥ 4/5 sui casi (`tris-inizia`, `porte-disegno`) e ≥ 4/5 su ciascun contrario: il revisore a
+≥ 4/5 sui casi (`tris-inizia`, `tris-inizia-muto`, `porte-disegno`) e ≥ 4/5 su ciascun contrario: il revisore a
 contesto pulito si costruisce con qwen3.6; sotto, serve un modello diverso (#175) o il revisore
 non vale.
 
 **Sulla DGX quando vLLM è libero** (non insieme al banco della temperatura né a un lavoro
 dell'agente), dalla cartella dei dati (configurazione e motore dell'agente di questa
-installazione), con l'interprete di Calliope. Da un clone intero del ramo il banco usa il
-codice del clone (`requisiti.chiama` con la temperatura, dal 19/10), non quello installato:
+installazione), con l'interprete di Calliope. Dopo l'unione, dalla versione installata:
 
+    cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \\
+        && $V/.venv/bin/python $V/prove/manuali/banco_revisore.py --ripetizioni 5 \\
+           --uscita ~/banco-revisore
+
+Prima dell'unione, da un clone intero del ramo (il banco usa il codice del clone:
+`requisiti.chiama` con la temperatura, dal 19/10), con l'interprete e i dati installati:
+
+    git clone -b issue-182-banco-revisore https://github.com/azatoth77/calliope \\
+        ~/banchi/src-issue182        # già clonato: git -C ~/banchi/src-issue182 pull
     cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \\
         && $V/.venv/bin/python ~/banchi/src-issue182/prove/manuali/banco_revisore.py \\
            [--ripetizioni 5] [--casi tris-inizia,porte-disegno,...] [--ragionamento 4096] \\
            [--temperatura 0.6] [--uscita ~/banco-revisore]
 
 Una passata dura 20–90 s (fino a 4096 token di ragionamento più l'uscita, ~7 000 token di
-prompt): 6 casi × 5 ripetizioni = 30 passate, 15–40 minuti.
+prompt): 7 casi × 5 ripetizioni = 35 passate, 20–50 minuti.
 
 A secco (nessun modello, anche sul portatile; serve Node), per controllare il banco stesso:
-l'uscita vera di ogni caso (rossa o verde come deve, «preparazione» per tris-inizia, lo stesso
-errore nei quattro tentativi), il pacchetto senza commenti né trascrizione (anche da una
+l'uscita vera di ogni caso (rossa o verde come deve, «preparazione» per tris-inizia, senza il consiglio
+per tris-inizia-muto, lo stesso errore nei cinque tentativi), il pacchetto senza commenti né trascrizione (anche da una
 cartella di lavoro finta con diario e passo-N.txt), e un modello finto con verdetti preparati,
 giusti e sbagliati, contati come devono:
 
@@ -97,9 +112,16 @@ sys.path.insert(0, str(RADICE / "prove"))
 VERDETTI = ("continua", "cambia_strada", "test_sbagliato", "codice_sbagliato", "consegna",
             "chiedi_persona")
 SALTATO = 77
-CASI = ("tris-inizia", "porte-disegno", "codice_sbagliato", "consegna", "cambia_strada",
+CASI = ("tris-inizia", "tris-inizia-muto", "porte-disegno", "codice_sbagliato", "consegna", "cambia_strada",
         "chiedi_persona")
 CODA_USCITA = 2500          # caratteri della coda dell'uscita dei test nel pacchetto
+MAX_FILE = 12_000           # --da-lavoro: caratteri al più per file nel pacchetto…
+MAX_FILE_TOTALE = 60_000    # …e in tutto (un messaggio oltre num_ctx, o prove diluite)
+# Il consiglio dell'errore della preparazione (fumo_js.mjs, viaDallaPreparazione, da #174):
+# tolto per tris-inizia-muto; restano la fase e i comandi attivi
+CONSIGLIO = re.compile(r"prima delle mosse tocca «[^»]*» \(await g\.tocca\(\"[^\"]*\"\)\)"
+                       r"(?: o apri con apriGioco\([^)]*\))?: ogni partita comincia nella fase "
+                       r"«preparazione»; correggi il test, non il manifesto\. ")
 
 
 # ═══════════════════════════ il revisore ═══════════════════════════
@@ -394,6 +416,11 @@ def casi() -> dict:
                         "atteso": {"verdetto": "test_sbagliato", "file": "gioco.test.js",
                                    "test": "tre in fila vince"},
                         "contrario": False},
+        "tris-inizia-muto": {"requisiti": REQUISITI_TRIS,
+                             "file": file_tris(GIOCO_TEST_TRIS_SENZA_INIZIA), "muto": True,
+                             "atteso": {"verdetto": "test_sbagliato", "file": "gioco.test.js",
+                                        "test": "tre in fila vince"},
+                             "contrario": False},
         "porte-disegno": {"requisiti": REQUISITI_PORTE,
                           "file": file_porte(F.GIOCO_GIUSTO, GIOCO_TEST_PORTE_L7),
                           "atteso": {"verdetto": "test_sbagliato", "file": "gioco.test.js",
@@ -511,11 +538,14 @@ def firma(r: dict) -> str:
 
 # ═══════════════════════════ il pacchetto ═══════════════════════════
 
-ESCLUSI = {"lavoro.json", "CAPACITA.md", "calliope_estensione.py"}
+ESCLUSI = {"lavoro.json", "CAPACITA.md", "calliope_estensione.py", "risultato.md"}
+# --da-lavoro: cartelle eseguite con i test ma non mostrate (le risposte vere delle sonde, fino
+# a 8000 caratteri l'una: diluiscono le prove)
+CARTELLE_ESCLUSE = ("esempi_veri",)
 
 
 def pacchetto(cfg, requisiti: list, file: dict, r: dict, registro: list | None = None,
-              richiesta: str = "") -> dict:
+              richiesta: str = "", mostrati: dict | None = None) -> dict:
     """Le sezioni che il revisore vede, e nient'altro: contratto, requisiti, file senza
     commenti, esito dei test, registro dei tentativi."""
     from calliope.agenti import diagnosi
@@ -529,8 +559,8 @@ def pacchetto(cfg, requisiti: list, file: dict, r: dict, registro: list | None =
         "requisiti": ("\n".join(f"{i}. {x}" for i, x in enumerate(requisiti, 1)) if requisiti
                       else f"(requisiti non trovati; la richiesta: «{richiesta}»)"
                       if richiesta else "(requisiti non trovati)"),
-        "file": {n: senza_commenti(n, t) for n, t in sorted(file.items())
-                 if n not in ESCLUSI},
+        "file": {n: senza_commenti(n, t) for n, t in sorted((
+            file if mostrati is None else mostrati).items()) if n not in ESCLUSI},
         "test": {"esito": diagnosi.conto_detto(r) + ("" if r.get("passano") else
                                                      ", non passano tutti"),
                  "passano": bool(r.get("passano")), "fallimenti": fall,
@@ -569,10 +599,46 @@ def prepara(cfg, sbx: Sandboxes, caso: dict) -> dict:
         registro.append({"file": f, "cosa": cosa, "esito": firma(sbx.test(stato))})
     p = pacchetto(cfg, caso["requisiti"], caso["file"], r, registro)
     p["_risultato"] = {"passano": bool(r.get("passano")), "uscita": str(r.get("uscita") or "")}
+    if caso.get("muto"):
+        return muto(p)
     return p
 
 
+def muto(p: dict) -> dict:
+    """Il pacchetto senza il consiglio dell'errore della preparazione (tris-inizia-muto): il
+    revisore vede la fase e i comandi attivi, non «correggi il test, non il manifesto»."""
+    t = dict(p["test"])
+    for k in ("fallimenti", "uscita"):
+        t[k] = CONSIGLIO.sub("", t[k])
+    reg = [dict(x, esito=CONSIGLIO.sub("", str(x.get("esito") or ""))) if isinstance(x, dict)
+           else CONSIGLIO.sub("", str(x)) for x in p["registro"]]
+    return {**p, "test": t, "registro": reg}
+
+
 # ═══════════════════════════ da un lavoro vero ═══════════════════════════
+
+class SviluppoAmbiguo(Exception):
+    """Senza l'ora del lavoro più sviluppi lo contengono: si sceglie con --sviluppo."""
+
+
+def per_revisore(file: dict) -> tuple[dict, list[str]]:
+    """I file da mostrare di un lavoro vero: senza CARTELLE_ESCLUSE, al più MAX_FILE caratteri
+    per file e MAX_FILE_TOTALE in tutto; gli avvisi dicono cosa è stato tagliato o tolto."""
+    out, avvisi, totale = {}, [], 0
+    for n, t in sorted(file.items()):
+        if n.split("/")[0] in CARTELLE_ESCLUSE or Path(n).name in ESCLUSI:
+            continue
+        if totale >= MAX_FILE_TOTALE:
+            avvisi.append(f"{n} tolto: il pacchetto ha già {MAX_FILE_TOTALE} caratteri di file")
+            continue
+        tetto = min(MAX_FILE, MAX_FILE_TOTALE - totale)
+        if len(t) > tetto:
+            avvisi.append(f"{n} tagliato a {tetto} caratteri su {len(t)}")
+            t = t[:tetto] + "\n…[tagliato dal banco]"
+        out[n] = t
+        totale += len(t)
+    return out, avvisi
+
 
 def file_lavoro(cartella: Path) -> dict:
     out = {}
@@ -616,7 +682,7 @@ def requisiti_lavoro(cfg, cartella: Path, sviluppo: str = "") -> tuple[list, str
         dati = json.loads((cartella_sandbox(cfg) / FILE).read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001 — niente sviluppi: resta la richiesta
         dati = {}
-    scelto, dist = None, None
+    scelto, dist, candidati = None, None, []
     for sv in dati.get("sviluppi") or []:
         if sviluppo:
             if sv.get("id") == sviluppo:
@@ -626,9 +692,19 @@ def requisiti_lavoro(cfg, cartella: Path, sviluppo: str = "") -> tuple[list, str
         for x in sv.get("lavori") or []:
             if x.get("id") != ident:
                 continue
-            d = abs(float(x.get("creato") or 0) - quando) if quando else 0.0
+            candidati.append(sv)
+            if quando is None:
+                continue
+            d = abs(float(x.get("creato") or 0) - quando)
             if d < 86400 and (dist is None or d < dist):
                 scelto, dist = sv, d
+    if not sviluppo and quando is None:
+        # Senza l'ora gli id dei lavori si ripetono dopo un riavvio: non si sceglie a caso
+        ids = list(dict.fromkeys(str(sv.get("id")) for sv in candidati))
+        if len(ids) > 1:
+            raise SviluppoAmbiguo(f"il lavoro {ident} è in più sviluppi ({', '.join(ids)}) e "
+                                  "la cartella non dice l'ora: scegli con --sviluppo")
+        scelto = candidati[0] if candidati else None
     if scelto and scelto.get("requisiti"):
         req = [str(r.get("testo") or "") + (f" — {r['dettaglio']}" if r.get("dettaglio") else "")
                + ("" if r.get("si_puo", True) else " [qui non si può: non va fatto]")
@@ -654,7 +730,9 @@ def caso_da_lavoro(cfg, sbx: Sandboxes, args) -> tuple[dict, dict, str]:
     file = file_lavoro(cartella)
     req, richiesta, da = requisiti_lavoro(cfg, cartella, args.sviluppo or "")
     r = sbx.test(file)
-    p = pacchetto(cfg, req, file, r, registro_da_file(args.registro), richiesta)
+    mostrati, avvisi = per_revisore(file)
+    p = pacchetto(cfg, req, file, r, registro_da_file(args.registro), richiesta, mostrati)
+    p["_avvisi"] = avvisi
     atteso = {"verdetto": args.atteso}
     if args.file_atteso:
         atteso["file"] = args.file_atteso
@@ -812,6 +890,20 @@ def secco() -> int:
                  "fallimenti in breve", "preparazione" in u["fallimenti"]
                  and "Inizia" in u["fallimenti"] and "gioco.test.js" in u["fallimenti"],
                  u["fallimenti"])
+        u = pac["tris-inizia"]["test"]["fallimenti"]
+        verifica("tris-inizia: l'errore vero ha il consiglio «correggi il test, non il "
+                 "manifesto» (quello che tris-inizia-muto toglie)",
+                 bool(CONSIGLIO.search(u)) and "correggi il test" in u, u)
+        mm = messaggio(pac["tris-inizia-muto"])
+        m = mm[mm.index("# ESITO DEI TEST"):]
+        verifica("tris-inizia-muto: senza il consiglio nell'esito dei test (il contratto resta "
+                 "quello dell'agente), con la fase e i comandi attivi, e lo "
+                 "stesso errore per il resto", "correggi il test" not in m
+                 and "prima delle mosse" not in m and "apriGioco({ inizia" not in m
+                 and "fase «preparazione», attivi:" in m
+                 and pac["tris-inizia-muto"]["test"]["fallimenti"]
+                 == CONSIGLIO.sub("", pac["tris-inizia"]["test"]["fallimenti"]),
+                 pac["tris-inizia-muto"]["test"]["fallimenti"])
         u = pac["porte-disegno"]["test"]["fallimenti"]
         verifica("porte-disegno: l'errore dice «avanti» non attivo", "avanti" in u, u)
         u = pac["codice_sbagliato"]["test"]["fallimenti"]
@@ -850,6 +942,10 @@ def secco() -> int:
             {"id": "L3", "compito": "il tris per due", "riassunto": "RIASSUNTO-DELL-AGENTE"}),
             encoding="utf-8")
         (lav / "CAPACITA.md").write_text("CONTRATTO-COPIATO", encoding="utf-8")
+        (lav / "risultato.md").write_text("TESTO-DEL-RISULTATO", encoding="utf-8")
+        (lav / "esempi_veri").mkdir()
+        (lav / "esempi_veri" / "x_1.json").write_text('"RISPOSTA-VERA"', encoding="utf-8")
+        (lav / "dati.txt").write_text("riga di dati\n" * 2000, encoding="utf-8")
         sv = tmp / "sandbox"
         sv.mkdir()
         (sv / "sviluppi.json").write_text(json.dumps({"sviluppi": [
@@ -873,12 +969,33 @@ def secco() -> int:
         verifica("--da-lavoro: i requisiti dello sviluppo del lavoro (S9, dall'ora), i test "
                  "rieseguiti adesso", da == "sviluppo S9" and "Il tris per due giocatori" in m
                  and "qui non si può" in m and "preparazione" in m, f"{da} {m[-400:]!r}")
+        verifica("--da-lavoro: risultato.md ed esempi_veri/ fuori dal pacchetto, il file lungo "
+                 "tagliato con l'avviso", "TESTO-DEL-RISULTATO" not in m
+                 and "RISPOSTA-VERA" not in m and "…[tagliato dal banco]" in m
+                 and any("dati.txt tagliato" in a for a in p.get("_avvisi", [])),
+                 p.get("_avvisi"))
+        senza_ora = tmp / "senza-ora"
+        shutil.copytree(lav, senza_ora)
+        (senza_ora / "lavoro.json").write_text(json.dumps({"id": "L3", "compito": "x"}),
+                                               encoding="utf-8")
+        try:
+            requisiti_lavoro(cfg, senza_ora)
+            ambiguo = False
+        except SviluppoAmbiguo as e:
+            ambiguo = "S7" in str(e) and "S9" in str(e) and "--sviluppo" in str(e)
+        verifica("--da-lavoro senza l'ora e con due sviluppi candidati: fermo, chiede "
+                 "--sviluppo", ambiguo)
+        req, _, da2 = requisiti_lavoro(cfg, senza_ora, "S7")
+        verifica("…e con --sviluppo S7 prende quello", da2 == "sviluppo S7"
+                 and req == ["Un altro gioco"], da2)
         # 4. il modello finto: verdetti preparati, giusti e sbagliati, contati come devono
         risposte = {
             "tris-inizia": [{"verdetto": "test_sbagliato", "file": "gioco.test.js",
                              "test": "tre in fila vince e prende un punto"},
                             {"verdetto": "codice_sbagliato", "file": "manifesto.json",
                              "test": ""}],
+            "tris-inizia-muto": [{"verdetto": "test_sbagliato", "file": "gioco.test.js",
+                                  "test": "tre in fila vince"}] * 2,
             "porte-disegno": [{"verdetto": "test_sbagliato", "file": "logica.js",
                                "test": "la porta del fantasmino…"}, None],
             "codice_sbagliato": [{"verdetto": "codice_sbagliato", "file": "logica.js",
@@ -911,7 +1028,8 @@ def secco() -> int:
                     for n, p in pac.items()}
         righe = misura(svc, pubblici, tutti, 2, 4096, 0.6, 30, log=lambda *_: None)
         c = conti(righe)
-        attesi = {"tris-inizia": (1, 1, 1), "porte-disegno": (1, 0, 1),
+        attesi = {"tris-inizia": (1, 1, 1), "tris-inizia-muto": (2, 2, 2),
+                  "porte-disegno": (1, 0, 1),
                   "codice_sbagliato": (2, 2, 2), "consegna": (1, None, None),
                   "cambia_strada": (2, 1, None), "chiedi_persona": (0, None, None)}
         for n, (v, f, t) in attesi.items():
@@ -943,7 +1061,7 @@ def secco() -> int:
                          "secco")
         rr = json.loads((uscita / "riepilogo.json").read_text(encoding="utf-8"))
         verifica("riepilogo.json con i conti per caso, il criterio e le righe",
-                 rr["conti"]["codice_sbagliato"]["verdetti"] == 2 and len(rr["righe"]) == 12
+                 rr["conti"]["codice_sbagliato"]["verdetti"] == 2 and len(rr["righe"]) == 14
                  and "criterio" in rr)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -1020,11 +1138,17 @@ def main(argv) -> int:
     # Solo il cliente del motore dell'agente: niente servizio dei lavori, niente coda
     svc = SimpleNamespace(cliente=crea_cliente(imp), imp=imp, cfg=cfg)
     if args.da_lavoro:
-        p, info, da = caso_da_lavoro(cfg, sbx, args)
+        try:
+            p, info, da = caso_da_lavoro(cfg, sbx, args)
+        except SviluppoAmbiguo as e:
+            print(f"Fermo: {e}.")
+            return 2
+        for a in p.pop("_avvisi", []):
+            print(f"   avviso: {a}")
         nome = "lavoro:" + Path(args.da_lavoro).name
         pacchetti, infos = {nome: p}, {nome: info}
         print(f"Dal lavoro {args.da_lavoro}: {len(p['file'])} file, requisiti da {da}, test "
-              f"{p['test']['esito']}")
+              f"{p['test']['esito']}; pacchetto di {len(messaggio(p))} caratteri")
     else:
         tutti = casi()
         scelti = [c.strip() for c in args.casi.split(",") if c.strip()]
