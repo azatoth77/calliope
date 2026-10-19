@@ -987,3 +987,65 @@ parte dalla fase d'inizio del gioco, e l'errore di un comando o di un tocco nell
 dice la via d'uscita («prima delle mosse tocca «Inizia»… correggi il test, non il manifesto»).
 Il banco della temperatura ha il caso fisso `tris2`. Il resto (firme degli errori, novità, giri
 uguali, specifica) in [agenti-estensioni](agenti-estensioni.md), voce del 18/10 su #174.
+
+## Il contratto del gioco e la partenza già verde (19/10, issue #186, ramo `issue-186-contratto-giochi`)
+
+**Il caso** (analisi del 19/10, `docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.5,
+n. 28–32): i casi peggiori del catalogo (Halloween dell'11/10, le porte del 12–14/10, il tris per
+due del 18/10, #174) sono giochi. Un gioco partiva da una cartella vuota e l'agente ricopiava dal
+prompt manifesto, logica e test, proprio la parte rotta in #174; il prompt prometteva cose che il
+motore non fa; il 45 % del testo di un gioco riguardava le estensioni Python.
+
+**Cosa cambia.**
+1. **La partenza già verde** (`agenti/scheletri.file_gioco`, `prepara_gioco`; nel servizio
+   `Lavori._prepara_cartella_gioco`, dopo l'analisi prima del codice): un gioco nuovo trova nella
+   cartella `manifesto.json`, `logica.js`, `logica.test.js` e `gioco.test.js`, scritti dal codice
+   con giocatori min e max della richiesta. È il gioco delle porte dello scheletro di prima (una
+   fase «turno», «porta {n}», le porte due in più dei giocatori, un punto a porta, la fine quando
+   sono aperte tutte); `gioco.test.js` comincia dalla preparazione con «Inizia» (min = max) o «N
+   giocatori» (min < max, il primo N da 2), controlla l'esito, il turno, i punti, i comandi come
+   oggetto, il palco e la fine. Passa i test e la prova di fumo per fasi per costruzione
+   (`prova_partenza_gioco` per 1–1, 2–2, 1–4, 2–4, 3–8). Min e max li dice l'analisi prima del
+   codice (`accettazione.py`, campo nuovo `giocatori` dello schema del gioco: «per due» → 2 e 2;
+   un esempio fuori da quel numero si toglie); senza l'analisi (spenta, o un gioco fuori da uno
+   sviluppo) restano 1–4, quelli dello scheletro di prima. Il nome e il titolo
+   vengono dal titolo del lavoro, se fanno un manifesto valido; altrimenti il segnaposto
+   `gioco_nuovo`, che la consegna rifiuta («dai al gioco un nome suo»). Una modifica, una
+   correzione o una ripresa hanno già un manifesto e non ricevono niente. Nel prompt al posto dei
+   quattro file c'è un paragrafo che dice cosa c'è nella cartella (prima 3 347 caratteri, ora
+   831).
+2. **`g.stato()` esatto**: `{ n, fase, tocca, turno, giocatori: [{ nome, punti }], esito,
+   comandi }`, con `comandi` un oggetto (`g.stato().comandi.porta`), non una lista. Il prompt non
+   promette più il «vincitore» (prima «punti, esito e vincitore»), che l'istantanea non ha: chi
+   vince si legge dai punti. Non l'ho aggiunto all'istantanea perché la valida anche il server
+   (`gioco_stato.py`, il banco d'attacco delle istantanee): un campo in più lì è un cambio del
+   protocollo, non del contratto.
+3. **Gli errori nuovi del motore** (`motore_gioco.js`, `controlla`): `{ esito, fase: "fine" }`
+   perdeva l'esito senza dirlo (il motore andava subito alla fase), e `{ dopo }` senza esito era
+   ignorato. Ora sono errori con fase e comando e con cosa fare («Per mostrare il testo e poi
+   andare a «fine»: { esito: "…", dopo: "fine" }; per andarci subito senza testo: { fase: "fine"
+   }»). Un esito vuoto conta come nessun esito. Restano validi `{ esito, dopo }`, `{ fase }`,
+   `{ esito, fase: "esito" }` e `{ dati }`. La prova di fumo non consiglia più «fase o dopo:
+   "fine"» ma «esito con dopo: "fine", oppure fase: "fine" senza esito», prima della strada (il
+   messaggio si taglia a 200 caratteri e il consiglio in fondo si perdeva). Le prove dei giochi
+   esistenti e i giochi delle prove (`prove/giochi/*`) non usavano le due forme: verdi senza
+   cambiare niente.
+4. **Il contratto esatto** (`contratto.scheda_testo`, ora il §2 del contratto del gioco): «Inizia»
+   c'è sempre, anche con min < max, e parte con min giocatori (o con quanti hanno detto «gioco
+   anch'io»); `turni` è vero di serie (false: muove chiunque); il caso: Math.random va bene, in
+   apriGioco e nella prova di fumo ha un seme fisso, in `logica.test.js` un risultato che dipende
+   dal caso si prova con i dati fatti a mano. Le tre forme di una mossa in una riga sola. Per il
+   caso ho scelto il seme detto, non un `caso` passato a `nuovaPartita`: il motore lo fa già
+   (`creaCaso` su Math.random nel contesto), e un parametro nuovo sarebbe stato un'altra cosa da
+   copiare.
+5. **Un prompt per tipo** (in [agenti-estensioni](agenti-estensioni.md), voce del 19/10 su #186):
+   il gioco ha il suo prompt (`SISTEMA_GIOCO`) e il suo contratto, senza Python, porta stretta,
+   codifica degli indirizzi; per un gioco niente `esegui_python` né `scarica_esempio` tra gli
+   strumenti. Il prompt di un gioco è passato da 26 437 a 16 330 caratteri.
+
+**Il banco della temperatura**: il caso `tris2` ora parte dai file di partenza (2–2, «Inizia»):
+il banco, che non apre uno sviluppo, mette nel lavoro i giocatori del caso come li direbbe
+l'analisi (`lav.accettazione = {"stato": "saltata", "giocatori": …}`), e il controllo a secco
+verifica che la partenza sia verde e che l'accettazione nascosta su di lei sia rossa. Il criterio
+di #174 (il tris in al più 2 giri, `--casi tris2,porte --giri 2`) va misurato sulla DGX dopo
+l'unione.
