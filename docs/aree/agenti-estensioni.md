@@ -3887,3 +3887,28 @@ errori di struttura.
 test rossi o con l'esito fuori dall'enum); nel log `agente_esito_non_valido`,
 `agente_prosa_non_consegna`, `agente_consegna_rossa_tappa`, `agente_riproduzione_asserzione`, e
 le tappe con `tipo_limite` «consegna_rossa» e «prosa».
+
+**Dopo la revisione della PR #183 (19/10).**
+- **La riproduzione guarda dove nasce l'errore.** `NameError`, `AttributeError`, i `TypeError`
+  di firma, `ReferenceError` e «is not a function» sono struttura solo se il frame più interno
+  (`dove` di diagnosi.py) è un file di test, o se manca. Nati nel codice di prima sono spesso il
+  difetto segnalato (il `ReferenceError` di logica.js col pulsante «Ricomincia» che non va): lì
+  vale come riproduzione. `UnboundLocalError` non è mai struttura. Import, sintassi e «Cannot find
+  module» lo sono sempre. Gli esempi in sola lettura restano fuori dalla sandbox di prima anche se
+  fossero tra i test nuovi (`_testi` li toglieva già).
+- **I contatori ripartono a ogni giro.** Dal 19/10, a rimandi finiti, la consegna rossa ferma il
+  lavoro, quindi tenerli dal giro di prima toglieva all'agente ogni rimando nel giro chiesto dalla
+  persona. Ora `rimandi` e `rifiuti_consegna` si azzerano all'inizio di un giro dopo una tappa
+  (anche dopo «consegna_rossa» e il «sì» di #174). Restano alla ripresa dopo una domanda e dopo
+  un riavvio. Il giro ha il suo tetto di passate.
+- **La prosa con i test verdi senza esempi né riproduzione** (un programma con l'analisi spenta o
+  saltata) ora si consegna, alla seconda passata, con gli stessi controlli di una consegna
+  «fatto» dell'agente: test rifatti verdi due volte, controllo della consegna, piano, ricollaudo
+  (`_consegna_dalla_prosa`, `consegna_al_tetto_con` «test», a voce «L'agente non ha consegnato,
+  ma i suoi test passano: il lavoro l'ho chiuso io.»). Prima di #180 quel testo era una consegna
+  dell'agente con i soli suoi test: «limite» buttava un lavoro fatto. `spinte` resta solo un conto
+  nel contesto: il limite di prima (più di 3 spinte in tutto il lavoro) l'ha sostituito
+  `PROSA_MAX` di fila, e il totale lo limita il tetto delle passate.
+- `agente_prosa_non_consegna` si conta solo dove la passata prima era una consegna (file scritti
+  e una spinta già data). `agente_esito_non_valido` si scrive anche per gli strumenti `grafo_*`
+  della ricerca (`nota_valore_non_ammesso`). L'esito vuoto è un errore (prima valeva «fatto»).
