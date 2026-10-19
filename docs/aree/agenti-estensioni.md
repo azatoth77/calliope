@@ -3809,6 +3809,110 @@ dall'agente in al più 2 giri col modello di oggi. Nel log: `agente_giri_uguali`
   (modifica, «Va bene così?», avvio), il riavvio, A, B, A, B, i file nuovi con i test verdi, il
   test tolto e il contrario.
 
+## Le porte oneste della consegna (19/10, issue #180, ramo `issue-180-porte-oneste`)
+
+**Il caso** (analisi del 19/10, `docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.1):
+nel ciclo dell'agente c'erano porte che si aprivano da sole. Un modello piccolo (qwen3.6-35B-A3B)
+poteva chiudere «fatto» un lavoro non fatto, e il banco (#9) contava quei «fatto». Tutte
+correzioni per costruzione, ognuna col suo nome nel registro.
+
+**Cosa cambia.**
+1. **L'esito fuori dall'enum** (`tools/dialogo.controlla_strumento`, solo per gli strumenti
+   dell'agente): un valore che non è tra i valori ammessi, dopo le conversioni di forma («Fatto»
+   → «fatto»), è un errore con l'elenco (««esito» vale uno di: fatto, mancano_dati,
+   impossibile»). Prima `consegna(esito="completato")` passava («decide il tool», giusto per la
+   voce), il ciclo controllava solo `== "fatto"` e saltava piano, controllo, test rifatti e
+   riproduzione, e alla fine diventava «fatto». Nel ciclo «fatto» è ora tutto ciò che non è
+   «mancano_dati» o «impossibile» (`esito_fatto`). Regola `agente_esito_non_valido`. I tool
+   della voce restano come sono. Vale anche per gli strumenti dell'archivio nella ricerca
+   (`grafo_*`, con i loro enum).
+2. **La prosa non è una consegna**: dopo una spinta, una passata senza chiamate con dei file
+   scritti valeva «fatto» («Hai ragione, correggo il test» chiudeva il lavoro). Ora, con lo stato
+   consegnabile (l'ultimo esegui_test verde, nessun file cambiato da allora, i file che la
+   consegna chiede), la prima volta il fatto (`PROSA_FATTUALE`: «Nessuno strumento chiamato…»),
+   la seconda il codice passa da `_consegna_al_tetto` col tipo `prosa` (esempi di accettazione o
+   riproduzione, test rifatti due volte, controllo della consegna: consegna solo se passano,
+   anche in uno sviluppo; il riassunto dice «l'agente ha smesso di usare gli strumenti senza
+   consegnare», e la frase a voce «non ha consegnato» invece di «non ha fatto in tempo»).
+   Altrimenti la spinta di sempre; dopo `PROSA_MAX` = 3 passate così **di fila** tappa in uno
+   sviluppo, «limite» fuori, col motivo (prima: 4 spinte in tutto, e «limite» anche in uno
+   sviluppo). Regola `agente_prosa_non_consegna`.
+3. **La consegna rossa**: dopo `RIMANDI_MAX` = 2 rimandi, o senza più passate né tempo per un
+   rimando, i test si rifanno lo stesso e una consegna rossa non è «fatto» (prima passava senza
+   rifarli, e lo sviluppo andava al collaudo con i test rossi); così il controllo della consegna
+   ancora in errore dopo `RIFIUTI_MAX` = 3 rifiuti (prima l'errore era ignorato e la consegna, coi
+   test verdi, passava). In uno sviluppo diventa una tappa (`tipo_limite` «consegna_rossa», a
+   voce «l'agente ha consegnato, ma la consegna non va: i test non passano o manca qualcosa che la
+   consegna chiede», `PERCHE_TAPPA`); fuori «limite» con l'errore (`errore_consegna`) e i test
+   rifatti nel risultato. `rifiuti_consegna` ora sta col contesto salvato (alla domanda, alla
+   tappa) insieme a `rimandi`: prima si perdeva a ogni ripresa. Regola
+   `agente_consegna_rossa_tappa`.
+4. **La riproduzione** (`riproduzione.controlla`): un test nuovo deve fallire sulla versione di
+   prima sul **comportamento**, un'asserzione o un errore del codice di prima mentre gira (la
+   divisione per zero, il pulsante che non c'è). Se tutti i fallimenti sono di struttura (import,
+   sintassi, `NameError`, `AttributeError` su un nome che non c'era, argomenti nuovi; in
+   JavaScript `ReferenceError`, `SyntaxError`, «is not a function») l'esito è `struttura`, tra i
+   non riprodotti, col rimando che dice perché. Regola `agente_riproduzione_asserzione`. Per
+   saperlo in JavaScript `test_js.mjs` mette ora il tipo in testa al messaggio per `TypeError`,
+   `ReferenceError` e `SyntaxError` («FALLITO n: TypeError: l.g is not a function»). Un'uscita che
+   non si riconosce vale come prima. Nella sandbox della versione di prima non vanno più gli
+   esempi di accettazione in sola lettura: un loro rosso lì non è un test nuovo dell'agente (prima
+   bastava a dire «riprodotto»).
+5. **«Tutto verde» vuol dire consegnabile**: `Lavori._controlla_estensione` dà anche
+   `controlla.consegnabile`, lo stesso `controlla_consegna` con i nomi ma senza il ricollaudo (che
+   ha effetti); il ciclo lo passa a esegui_test (`_con_manifesto`), che con un errore ha in testa
+   «FALLITO controllo della consegna: …», e alla spinta a consegnare. Prima solo il manifesto: il
+   nome preso, i file della scheda (stile e risorse non li guarda la prova di fumo), `require` in
+   logica.js restavano verdi fino alla consegna (banco L8 del 14/10). Senza il predicato (le prove
+   che chiamano `Agente.codice` da sole, i programmi) il solo manifesto come prima.
+6. **La correzione di un gioco**, verificato con la prova: `accettazione.test.js` torna con i file
+   della versione (`candidata_da_lavoro` lo tiene, `file_per_modifica` lo ridà) e l'analisi lì
+   non si rifà, quindi era scrivibile. Ora in una correzione di un gioco resta in sola lettura
+   (`_analisi_prima_`). Una **modifica** lo lascia scrivibile (le regole possono cambiare). Gli
+   esempi dei programmi persi con `copia_in` sono di #10.
+
+**Prove.** `prova_porte_consegna` (nuova, livello 2, ~20 s; sul codice di main fallisce la
+sezione 1 e le altre non importano le costanti nuove), con i contrari: «Fatto», i tool della
+voce, «mancano_dati» e «impossibile», la consegna vera verde, gli esempi rossi, la consegna verde
+dopo un rimando, l'asserzione e la divisione per zero, la modifica di un gioco.
+
+**Rischi.** Un lavoro buono che finiva «fatto» per la via della prosa ora passa dal tetto (e con
+gli esempi verdi il codice lo consegna lo stesso) oppure va a tappa; i contatori salvati fanno sì
+che in un giro dopo la tappa la prima consegna rossa fermi subito il giro (i test si rifanno
+sempre: verde, si consegna). Più tappe nei primi giorni: da guardare nel banco. Un test di
+riproduzione che si aspetta un'eccezione del codice di prima va: la regola esclude solo gli
+errori di struttura.
+
+**Da misurare sulla DGX** (dopo l'unione): il banco di #9 (criterio: zero consegne «fatto» con i
+test rossi o con l'esito fuori dall'enum); nel log `agente_esito_non_valido`,
+`agente_prosa_non_consegna`, `agente_consegna_rossa_tappa`, `agente_riproduzione_asserzione`, e
+le tappe con `tipo_limite` «consegna_rossa» e «prosa».
+
+**Dopo la revisione della PR #183 (19/10).**
+- **La riproduzione guarda dove nasce l'errore.** `NameError`, `AttributeError`, i `TypeError`
+  di firma, `ReferenceError` e «is not a function» sono struttura solo se il frame più interno
+  (`dove` di diagnosi.py) è un file di test, o se manca. Nati nel codice di prima sono spesso il
+  difetto segnalato (il `ReferenceError` di logica.js col pulsante «Ricomincia» che non va): lì
+  vale come riproduzione. `UnboundLocalError` non è mai struttura. Import, sintassi e «Cannot find
+  module» lo sono sempre. Gli esempi in sola lettura restano fuori dalla sandbox di prima anche se
+  fossero tra i test nuovi (`_testi` li toglieva già).
+- **I contatori ripartono a ogni giro.** Dal 19/10, a rimandi finiti, la consegna rossa ferma il
+  lavoro, quindi tenerli dal giro di prima toglieva all'agente ogni rimando nel giro chiesto dalla
+  persona. Ora `rimandi` e `rifiuti_consegna` si azzerano all'inizio di un giro dopo una tappa
+  (anche dopo «consegna_rossa» e il «sì» di #174). Restano alla ripresa dopo una domanda e dopo
+  un riavvio. Il giro ha il suo tetto di passate.
+- **La prosa con i test verdi senza esempi né riproduzione** (un programma con l'analisi spenta o
+  saltata) ora si consegna, alla seconda passata, con gli stessi controlli di una consegna
+  «fatto» dell'agente: test rifatti verdi due volte, controllo della consegna, piano, ricollaudo
+  (`_consegna_dalla_prosa`, `consegna_al_tetto_con` «test», a voce «L'agente non ha consegnato,
+  ma i suoi test passano: il lavoro l'ho chiuso io.»). Prima di #180 quel testo era una consegna
+  dell'agente con i soli suoi test: «limite» buttava un lavoro fatto. `spinte` resta solo un conto
+  nel contesto: il limite di prima (più di 3 spinte in tutto il lavoro) l'ha sostituito
+  `PROSA_MAX` di fila, e il totale lo limita il tetto delle passate.
+- `agente_prosa_non_consegna` si conta solo dove la passata prima era una consegna (file scritti
+  e una spinta già data). `agente_esito_non_valido` si scrive anche per gli strumenti `grafo_*`
+  della ricerca (`nota_valore_non_ammesso`). L'esito vuoto è un errore (prima valeva «fatto»).
+
 ## Il banco scrive i motivi: tolti, calcolo, no al tetto, regole e limite (19/10, issue #9, ramo `issue-9-banco-motivi`)
 
 Il passo 0 della [ricerca sulla solidità dell'harness](../ricerche/2026-10-19-solidita-harness-sviluppo.md)
@@ -3821,16 +3925,22 @@ Nessun cambio di comportamento: solo dati salvati nel lavoro e scritti nella rig
   «si riconosce» in più), `tolti` per genere (`fuori`, `numero`, `contiene`; per un programma
   anche `dati`) e `con_calcolo`, quanti esempi tenuti hanno il `calcolo` rifatto dal codice
   (contato in `accettazione.interpreta`; prima si vedeva solo quando non tornava, in
-  `tolti.numero`).
+  `tolti.numero`); in un programma non conta l'esempio il cui numero è tolto perché uguale a
+  un dato.
 - **Il no al tetto**: la funzione `no` di `Agente._consegna_al_tetto` scrive il motivo anche in
   `lav.segnali["al_tetto_no"]` (con il tetto in `al_tetto_tipo`); nella riga `al_tetto_no` e
-  `al_tetto_no_tipo`. I motivi possibili: «senza esempi di accettazione», «mancano i file che la
+  `al_tetto_no_tipo`, solo per un lavoro finito «limite». Dopo due passate di sola prosa con lo
+  stato consegnabile (#180) la stessa funzione decide con il tipo «prosa», anche a tappe: lì il
+  no non ferma il lavoro, che continua e può consegnare, e va a parte in `prosa_no` (revisione
+  della PR #181: prima restava `al_tetto_no` in un lavoro poi «fatto»). I motivi possibili: «senza esempi di accettazione», «mancano i file che la
   consegna chiede», «esempi di accettazione rossi (requisiti …)», «i test dell'agente non
   passano», «la consegna non va: …», «il ricollaudo con i casi della persona non va»,
   «correzione non riprodotta (…)», «controllo non riuscito (…)».
 - **Il limite**: il servizio mette il tipo del `Limite` in `lav.segnali["limite"]` («passate»,
-  «tempo», «token», «a_vuoto», «altro» per gli altri, per esempio il modello che non usa gli
-  strumenti); nella riga `limite`, solo per un lavoro finito «limite». Non va nel risultato:
+  «tempo», «token», «a_vuoto»; con #180 anche «prosa», più di `PROSA_MAX` passate di fila senza
+  strumenti, e «consegna_rossa», la consegna con i test rossi; «altro» per gli altri, per
+  esempio il modello che non usa gli strumenti); nella riga `limite`, solo per un lavoro finito
+  «limite». Non va nel risultato:
   lì `tipo_limite` è quello di una tappa e cambia la frase.
 - **Le regole** (`regole`, da `lav.segnali["regole"]`, `sonde.nota`): dal 19/10 contate anche
   `agente_ragionamento_ripetuto` e `agente_riscrittura_ripetuta`, che prima andavano solo nel
@@ -3848,4 +3958,5 @@ ogni convertitore la riga ha `nominati`, `tolti` e `con_calcolo`. A secco (`--se
 al tetto controlla i campi nuovi: l'esempio con «leghe» (non nella richiesta) tolto come
 `fuori`, `nominati == {"da": ["miglia"]}`, `con_calcolo == 1`; nel contrario «limite» delle
 passate con «esempi di accettazione rossi», nelle porte senza il test «correzione non
-riprodotta». Resta il banco sulla DGX (punto 2 di #9), di chi amministra.
+riprodotta»; e le porte con due passate di prosa, poi il test e la consegna: «fatto», niente
+`al_tetto_no` né `limite`, «correzione non riprodotta» in `prosa_no`. Resta il banco sulla DGX (punto 2 di #9), di chi amministra.

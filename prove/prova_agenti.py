@@ -635,7 +635,8 @@ verifica("consegna con i test che falliscono: rimandata con l'uscita dei test",
 verifica("dopo la correzione la consegna vale e i test passano", item is not None
          and item["stato"] == "fatto" and "Il test passa." in item["messaggio"]
          and len(fake.richieste) == 5, str(item and item["messaggio"]))
-# Sempre sbagliata: rimandata 2 volte, poi accettata con l'annuncio onesto
+# Sempre sbagliata: rimandata 2 volte, poi (19/10, #180) la terza non è «fatto»: «limite» con i
+# test rossi detti, non più accettata
 fake.copione = [dict(SBAGLIATA), dict(TEST_D)] + [dict(CONSEGNA) for _ in range(3)]
 fake.richieste.clear()
 lav = svc.nuovo("codice", "Scrivi la funzione doppio con un test, versione testarda",
@@ -644,10 +645,13 @@ avvia(svc, lav)
 item = fine(svc, lav)
 _rif = [m for m in fake.richieste[-1]["messages"] if m.get("role") == "tool"
         and "rifiutata" in str(m.get("content"))] if fake.richieste else []
-verifica("al più 2 rimandi, poi l'annuncio dice che i test non passano",
+verifica("al più 2 rimandi, poi la consegna rossa ferma il lavoro e l'annuncio lo dice",
          len(_rif) == 2 and len(fake.richieste) == 5 and item is not None
-         and "1 test su 1 non passa" in item["messaggio"], str(item and item["messaggio"]))
-# Finito senza chiamare consegna (testo dopo la spinta), con i test rossi: lo stesso controllo
+         and item["stato"] != "fatto"
+         and "ha consegnato con i test che non passano" in item["messaggio"]
+         and "ne passano 0 su 1" in item["messaggio"], str(item and item["messaggio"]))
+# Finito senza chiamare consegna (testo dopo la spinta), con i test rossi: dal 19/10 (#180) il
+# testo non è una consegna, torna la spinta a usare gli strumenti
 fake.copione = [dict(SBAGLIATA), dict(TEST_D), {"content": "Ho finito."},
                 {"content": "Ho finito davvero."}, dict(GIUSTA), dict(CONSEGNA)]
 fake.richieste.clear()
@@ -656,19 +660,22 @@ lav = svc.nuovo("codice", "Scrivi la funzione doppio con un test, senza consegna
 avvia(svc, lav)
 item = fine(svc, lav)
 _usr = [m for m in fake.richieste[-1]["messages"] if m.get("role") == "user"
-        and "I test non passano" in str(m.get("content"))] if fake.richieste else []
-verifica("finito senza consegna e test rossi: torna all'agente, poi i test passano",
-         len(_usr) == 1 and item is not None and "Il test passa." in item["messaggio"]
+        and "Usa gli strumenti con chiamate di funzione vere" in str(m.get("content"))] \
+    if fake.richieste else []
+verifica("finito senza consegna e test rossi: il testo non consegna, la spinta, poi i test "
+         "passano", len(_usr) == 2 and item is not None and "Il test passa." in item["messaggio"]
          and len(fake.richieste) == 6, str(item and item["messaggio"]))
-# Senza passi per correggere la consegna vale subito
+# Senza passi per correggere: dal 19/10 (#180) i test si rifanno lo stesso e la consegna rossa
+# ferma il lavoro (prima valeva subito, «fatto» con i test rossi)
 svc.agente.max_passi = 3
 fake.copione = [dict(SBAGLIATA), dict(TEST_D), dict(CONSEGNA)]
 fake.richieste.clear()
 lav = svc.nuovo("codice", "Scrivi la funzione doppio, pochi passi", "dario-id", "Dario")
 avvia(svc, lav)
 item = fine(svc, lav)
-verifica("senza passi rimasti la consegna non si rimanda (niente limite raggiunto)",
-         item is not None and item["stato"] == "fatto" and "non passa" in item["messaggio"]
+verifica("senza passi rimasti la consegna rossa non si rimanda e non è «fatto»",
+         item is not None and item["stato"] != "fatto"
+         and "ha consegnato con i test che non passano" in item["messaggio"]
          and len(fake.richieste) == 3, str(item and item["messaggio"]))
 svc.agente.max_passi = 24
 

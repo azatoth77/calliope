@@ -642,7 +642,13 @@ def prova_ciclo(tmp: Path):
     sezione("3c. contrari della fila: un file corto, un errore che cambia")
     corto = {"name": "scrivi_file", "arguments": {"percorso": "test_programma.py",
                                                   "contenuto": test}}
-    cli = _Copione([[corto], [{"name": "esegui_test", "arguments": {}}]] + [[corto]] * 4)
+    # In fondo il programma giusto: dal 19/10 (#180) la consegna con i test rossi non chiude
+    # più il lavoro «fatto», e il copione finito consegna
+    giusto = {"name": "scrivi_file", "arguments": {"percorso": "programma.py",
+                                                   "contenuto": "def somma(a, b):\n"
+                                                                "    return a + b\n"}}
+    cli = _Copione([[corto], [{"name": "esegui_test", "arguments": {}}]] + [[corto]] * 4
+                   + [[giusto]])
     ag = agente(cli, [])
     sb = sandbox(tmp, "ciclo2")
     sb.scrivi("programma.py", "def somma(a, b):\n    return a - b\n")
