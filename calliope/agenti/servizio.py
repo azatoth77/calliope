@@ -1291,6 +1291,8 @@ class Lavori:
                     if domanda is not None:
                         self._sospendi(lav, domanda, dest)
                         return
+                    if gioco:
+                        self._prepara_cartella_gioco(lav, sb, presi)
                     ris = self.agente.codice(
                         lav, sb, sistema=sistema_estensione(self.cfg, gioco=gioco),
                         controlla=self._controlla_estensione(lav, presi, atteso),
@@ -1417,6 +1419,24 @@ class Lavori:
         if scritti:
             self.log(f"[AGENTI] {lav.id}: nella cartella di partenza " + ", ".join(scritti))
 
+    def _prepara_cartella_gioco(self, lav: Lavoro, sb, presi=()):
+        """Un gioco nuovo: i file di partenza già verdi (19/10, #186, agenti/scheletri.py),
+        dopo l'analisi prima del codice, che dice quanti possono giocare. Una modifica, una
+        correzione o una ripresa hanno già il loro manifesto e non li ricevono. Mai
+        un'eccezione: senza, l'agente scrive i file da sé come prima."""
+        from .scheletri import prepara_gioco
+        giocatori = (getattr(lav, "accettazione", None) or {}).get("giocatori")
+        try:
+            scritti = prepara_gioco(sb, giocatori, getattr(lav, "titolo", "") or "", presi)
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[AGENTI] {lav.id}: file di partenza del gioco non scritti: {e}")
+            return
+        if scritti:
+            g = giocatori or {}
+            self.log(f"[AGENTI] {lav.id}: nella cartella di partenza " + ", ".join(scritti)
+                     + (f" (giocatori da {g['min']} a {g['max']})" if g else
+                        " (giocatori di serie: l'analisi non li ha detti)"))
+
     def _analisi_prima(self, lav: Lavoro, sb, gioco: bool) -> dict | None:
         """`_analisi_prima_` senza eccezioni: un errore qui non ferma il lavoro."""
         try:
@@ -1540,6 +1560,8 @@ class Lavori:
                             "al_collaudo": an["al_collaudo"],
                             "testi_al_collaudo": testi(an["al_collaudo"]),
                             "scelte": an["scelte"], "domande": 1 if risposta else 0,
+                            # Quanti possono giocare, per i file di partenza (19/10, #186)
+                            **({"giocatori": an["giocatori"]} if an.get("giocatori") else {}),
                             "secondi": secondi,
                             # Il programma dichiarato, o perché senza esempi (17/10, #10)
                             **({"programma": prog} if prog and scritto else {}),

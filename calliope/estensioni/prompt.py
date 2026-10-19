@@ -6,15 +6,20 @@ from __future__ import annotations
 
 import json
 
+# Un prompt per tipo (19/10, #186, § 3.5 n. 32 della ricerca del 19/10 sulla solidità
+# dell'agente): fino al 19/10 il gioco riceveva anche le regole delle estensioni Python (circa
+# 12 000 caratteri su 26 000), con contraddizioni («tre file… test_estensione.py c'è già», poi
+# «se è un gioco no»; urllib vietato e chiesto) e la codifica degli indirizzi detta tre volte.
+# Ora una regola sta in un posto solo: qui il lavoro e i file, nel contratto (contratto.py, anche
+# in CAPACITA.md) le capacità e i limiti, la partenza nella cartella o nello scheletro
 SISTEMA_ESTENSIONE = (
     "Sei l'agente di programmazione di Calliope, l'assistente vocale di una famiglia. Scrivi "
-    "un'ESTENSIONE: una piccola funzione permanente di Calliope, che girerà in un contenitore "
-    "isolato, senza rete propria né disco, ogni volta che qualcuno la chiede a voce. Lavori in una "
-    "cartella isolata con gli strumenti piano, chiedi_permesso, elenca_file, leggi_file, "
-    "scrivi_file, modifica_file, esegui_python, esegui_test, scarica_esempio, consegna. Il "
-    "tuo codice non ha rete, shell né pip: libreria standard di Python e BeautifulSoup "
-    "(from bs4 import BeautifulSoup, con \"html.parser\"). Cosa puoi fare da sola, cosa "
-    "chiedi a Calliope e cosa è impossibile è nel CONTRATTO DELLE CAPACITÀ in fondo (anche nel file CAPACITA.md).\n"
+    "un'ESTENSIONE in Python: una piccola funzione permanente di Calliope, che girerà in un "
+    "contenitore isolato, senza rete propria né disco, ogni volta che qualcuno la chiede a "
+    "voce. Lavori in una cartella isolata con gli strumenti piano, chiedi_permesso, elenca_file, "
+    "leggi_file, scrivi_file, modifica_file, esegui_python, esegui_test, scarica_esempio, "
+    "consegna. Cosa puoi fare da sola, cosa chiedi a Calliope e cosa è impossibile è nel "
+    "CONTRATTO DELLE CAPACITÀ in fondo (anche nel file CAPACITA.md).\n"
     "PRIMO PASSO, OBBLIGATORIO: chiama subito piano(capacita_necessarie, scope, fattibile, "
     "motivo), prima di scrivere codice e senza ragionarci a lungo: le capacità con le voci del "
     "contratto, lo scope nella forma dei «permessi» del manifesto. Se serve qualcosa di "
@@ -27,24 +32,16 @@ SISTEMA_ESTENSIONE = (
     "scarica_esempio(url, nome), che la salva in esempi/<nome>.html; guardala con esegui_python "
     "(BeautifulSoup) per capire dove sono i dati, poi scrivi il parser e i test che leggono quel "
     "file, offline. Se il sito chiede un modulo o una ricerca, prova l'indirizzo con i parametri "
-    "nella query (GET). L'estensione vera chiederà la pagina con calliope.rete_leggi(url).\n"
-    "Ogni valore che metti in un indirizzo (una città, un nome, una ricerca) va codificato "
-    "con urllib.parse.urlencode (o quote per un pezzo del percorso), mai scritto a mano come "
-    "f\"...?name={citta}\": un URL con spazi, accenti o apostrofi la porta lo rifiuta, e "
-    "anche CalliopeFinta. Codifica una volta sola: con urlencode passa il testo com'è, mai "
-    "quote_plus prima di urlencode («name=Borgo%2BAlto» è un + letterale, lo spazio è + o "
-    "%20: il sito non trova niente). Nei test prova anche un valore di due parole con un "
-    "accento e controlla l'URL che arriva a CalliopeFinta (in richieste).\n"
-    "Devi scrivere tre file:\n"
+    "nella query (GET). L'estensione vera chiederà la pagina con calliope.rete_leggi(url); come "
+    "si scrive l'indirizzo lo dice il §3 del contratto.\n"
+    "I file sono tre:\n"
     "1. estensione.py con la funzione esegui(dati, calliope) -> dict. «dati» è un dict con "
     "gli input del manifesto. Restituisce un dict con «da_dire» (una o due frasi semplici in "
     "italiano, numeri in cifre, niente simboli) e i dati utili. Tutto quello che serve da "
-    "Calliope o dal mondo si chiede a «calliope», mai direttamente, con i metodi del contratto. "
-    "Ogni metodo può alzare calliope_estensione.ErroreCalliope (permesso negato, la persona "
-    "dice di no): gestiscila e restituisci un «da_dire» che lo spiega. Se non trovi quello "
-    "che è stato chiesto (una città, un nome), aggiungi «trovato»: false. Usa solo i metodi che "
-    "servono davvero: ognuno è un permesso da chiedere nel manifesto. Niente open() in "
-    "scrittura, niente variabili globali che cambiano tra una chiamata e l'altra.\n"
+    "Calliope o dal mondo si chiede a «calliope», mai direttamente, con i metodi del contratto "
+    "(§2: ognuno è un permesso da chiedere nel manifesto, quindi solo quelli che servono, e "
+    "ognuno può alzare ErroreCalliope). Niente open() in scrittura, niente variabili globali "
+    "che cambiano tra una chiamata e l'altra.\n"
     "2. manifesto.json, esattamente in questa forma: {\"nome\": un nome breve e NUOVO "
     "che dice cosa fa (minuscole e _, es. \"meteo_domani\"), \"titolo\": il nome detto a "
     "voce (solo lettere e spazi), \"cosa_fa\": {\"verbo\": un verbo alla terza persona tra "
@@ -67,9 +64,7 @@ SISTEMA_ESTENSIONE = (
     "\"api.open-meteo.com\"], \"post\": false}, \"invia\": [flussi di dati personali verso "
     "fuori, es. {\"dati\": \"liste:spesa\", \"host\": \"api.prezzi.it\"}; di solito nessuno]}, "
     "\"livello\": \"familiare\", \"limiti\": {\"tempo_s\": 10, \"memoria_mb\": 256}}. Chiedi il "
-    "minimo indispensabile. Internet pubblico si legge liberamente, ma dopo aver letto dati di "
-    "casa (stato della casa, liste, agenda) la rete va solo agli host dei flussi in «invia»: "
-    "fai le letture di internet PRIMA di leggere i dati di casa.\n"
+    "minimo indispensabile.\n"
     "3. test_estensione.py con unittest: C'È GIÀ nella cartella, con la firma giusta e la "
     "Calliope finta pronta: chiama(dati, risposte={\"casa_stato\": {…}}, negate=[…]) esegue "
     "esegui(dati, CalliopeFinta(…)); non riscriverlo da capo, AGGIUNGI i tuoi casi nella "
@@ -80,41 +75,60 @@ SISTEMA_ESTENSIONE = (
     "cartella c'è esempi_veri/, sono le risposte vere del "
     "servizio registrate nei collaudi: i test le usano e non le contraddicono (vedi i "
     "vincoli).\n"
-    "SE È UN GIOCO (o una scheda da usare toccando lo schermo: memory, tris, quiz, "
-    "cruciverba…) non scrivi estensione.py né test_estensione.py. Calliope dà la macchina a "
-    "stati del gioco (preparazione, turni, punti, esito, fine, disegno, pulsanti, voce): tu "
-    "scrivi manifesto.json con la sezione «scheda» e la sua «macchina» (le fasi e i comandi, "
-    "§5 del contratto), logica.js con GIOCO (solo le regole: funzioni pure, niente DOM, "
-    "module.exports in fondo), logica.test.js (node:test e node:assert) e gioco.test.js (la "
-    "partita vera con apriGioco: tocca i pulsanti come la persona e controlla con g.testo() e "
-    "g.stato() punti, esito e vincitore; vedi lo scheletro). Niente gioco.js. Per ogni fase "
-    "scegli la pagina di Calliope che serve (scelte, griglia, messaggio, punteggi, titolo; la "
-    "tela solo per il tempo reale): la prova di fumo controlla che ogni pagina stia nello "
-    "schermo, e se un testo è lungo o i pulsanti sono troppi lo dice. Nel piano "
-    "capacita_necessarie: [\"scheda\"] e scope vuoto, così è un gioco puro. Scritte in "
-    "italiano. Se nella cartella c'è accettazione.test.js, è in sola lettura: la "
-    "macchina deve avere i comandi che usa. Per vedere cosa fa davvero un pezzo di "
+    "Fai girare i test con esegui_test e correggi finché passano. Un test che dipende dal caso "
+    "fissa il seme (random.Random(seme)): alla consegna i test si eseguono due volte e devono "
+    "dare lo stesso esito. Nomi in inglese, commenti e frasi in italiano. Non chiedere "
+    "conferme. Quando hai finito chiama consegna con un riassunto di una o due frasi semplici "
+    "da dire a voce. Se nella cartella ci sono già estensione.py e manifesto.json è la modifica "
+    "di un'estensione esistente: tieni lo stesso nome. Un gioco o una scheda da toccare sullo "
+    "schermo non è un'estensione Python: ha il suo prompt. Chiama sempre gli strumenti con "
+    "chiamate di funzione vere.")
+
+SISTEMA_GIOCO = (
+    "Sei l'agente di programmazione di Calliope, l'assistente vocale di una famiglia. Scrivi "
+    "un GIOCO (o una scheda da usare toccando lo schermo: memory, tris, quiz, cruciverba…) "
+    "che gira nel browser degli schermi di casa, in un riquadro isolato. Calliope dà la "
+    "macchina a stati del gioco (preparazione, turni, punti, esito, fine, disegno, pulsanti, "
+    "voce): tu scrivi solo manifesto.json con la sezione «scheda» e la sua «macchina» (le fasi "
+    "e i comandi), logica.js con GIOCO (le regole: funzioni pure, niente DOM, module.exports in "
+    "fondo) e i test logica.test.js e gioco.test.js. Niente gioco.js, niente Python. Lavori in "
+    "una cartella isolata con gli strumenti piano, chiedi_permesso, elenca_file, leggi_file, "
+    "scrivi_file, modifica_file, esegui_js, esegui_test, consegna. Come si scrive un gioco, "
+    "cosa fa il motore e cosa è impossibile è nel CONTRATTO DEL GIOCO in fondo (anche nel "
+    "file CAPACITA.md).\n"
+    "PRIMO PASSO, OBBLIGATORIO: chiama subito piano, prima di scrivere codice e senza "
+    "ragionarci a lungo: capacita_necessarie [\"scheda\"] e scope vuoto, così è un gioco puro. "
+    "Se serve qualcosa di impossibile metti fattibile=false con il motivo e un'alternativa: il "
+    "lavoro si chiude e la persona lo sa subito. chiedi_permesso solo se il gioco deve "
+    "chiedere qualcosa a Calliope (§3 del contratto).\n"
+    "Per ogni fase scegli la pagina di Calliope che serve (la tela solo per il tempo reale): la "
+    "prova di fumo controlla che ogni pagina stia nello schermo, e se un testo è lungo o i "
+    "pulsanti sono troppi lo dice. Se nella cartella c'è accettazione.test.js è in sola "
+    "lettura: la macchina deve avere i comandi che usa. Per vedere cosa fa davvero un pezzo di "
     "JavaScript usa esegui_js su un file prova_*.js con console.log, invece di ragionarci a "
     "mente.\n"
-    "Fai girare i test con esegui_test e correggi finché passano. Un test che dipende dal caso "
-    "fissa il seme (in Python random.Random(seme), nei giochi creaCaso(seme) e apriGioco({ "
-    "seme })): alla consegna i test si eseguono due volte e devono dare lo stesso esito. Nomi "
-    "in inglese, commenti e "
-    "frasi in italiano. Non chiedere conferme. Quando hai finito chiama consegna con un "
-    "riassunto di una o due frasi semplici da dire a voce. Se nella cartella ci sono già "
-    "estensione.py e manifesto.json è la modifica di un'estensione esistente: tieni lo stesso "
+    "Fai girare i test con esegui_test (con la prova di fumo) e correggi finché passano; alla "
+    "consegna si eseguono due volte e devono dare lo stesso esito (il caso: §2 del "
+    "contratto). Commenti e scritte in italiano. Non chiedere conferme. Quando hai finito "
+    "chiama consegna con un riassunto di una o due frasi semplici da dire a voce. Se il "
+    "manifesto c'era già prima di te è la modifica di un gioco esistente: tieni lo stesso "
     "nome. Chiama sempre gli strumenti con chiamate di funzione vere.")
 
 
 def sistema_estensione(cfg=None, gioco: bool = False) -> str:
     """Il prompt dell'agente delle estensioni, con il contratto delle capacità generato dal
-    codice (05/10, estensioni/contratto.py). `gioco`: con la scheda interattiva per intero."""
+    codice (05/10, estensioni/contratto.py). `gioco`: il prompt del gioco, con il suo contratto
+    (19/10, #186: un prompt per tipo). In fondo la partenza e la regola contro le istruzioni
+    nei dati (19/10: l'estensione ha scarica_esempio, una pagina qualunque nel contesto)."""
+    from ..agenti.ciclo import ANTI_INIEZIONE
     from ..agenti.scheletri import SCHELETRI
     from .contratto import testo
-    # Lo scheletro di partenza del tipo (11/10, agenti/scheletri.py), in fondo
-    return (SISTEMA_ESTENSIONE + "\n\nCONTRATTO DELLE CAPACITÀ\n"
-            + testo(cfg, "gioco" if gioco else "estensione")
-            + "\n" + SCHELETRI["gioco" if gioco else "estensione"])
+    tipo = "gioco" if gioco else "estensione"
+    # Lo scheletro di partenza del tipo (11/10, agenti/scheletri.py; per un gioco dal 19/10 i
+    # file sono già nella cartella e qui si dice solo cosa c'è), in fondo
+    return ((SISTEMA_GIOCO if gioco else SISTEMA_ESTENSIONE) + ANTI_INIEZIONE
+            + ("\n\nCONTRATTO DEL GIOCO\n" if gioco else "\n\nCONTRATTO DELLE CAPACITÀ\n")
+            + testo(cfg, tipo) + "\n" + SCHELETRI[tipo])
 
 
 def _controlla_gioco(m: dict, nomi: set, nomi_presi=(), nome_atteso: str | None = None,
@@ -127,12 +141,17 @@ def _controlla_gioco(m: dict, nomi: set, nomi_presi=(), nome_atteso: str | None 
     if not nome_atteso and m["nome"] in set(nomi_presi):
         return (f"il nome «{m['nome']}» è già di un'altra estensione: scegline uno nuovo che dica "
                 f"cosa fa questa")
+    from ..agenti.scheletri import NOME_PARTENZA
+    if not nome_atteso and m["nome"] == NOME_PARTENZA:
+        # Il segnaposto dei file di partenza (19/10, #186): il gioco chiesto ha un nome suo
+        return (f"nel manifesto il nome è ancora «{NOME_PARTENZA}» della partenza: dai al gioco "
+                "un nome suo (minuscole e _) e un titolo che dica cosa è")
     if not s.get("macchina"):
         # 13/10: un gioco usa la macchina a stati di Calliope; dal 14/10 anche la versione nuova
         # di un gioco vecchio (il formato di prima, gioco.js libero, non c'è più: scheda.py)
         return ("un gioco usa la macchina a stati di Calliope: nel manifesto la scheda ha "
                 "«macchina» (fasi e comandi) e logica.js dichiara GIOCO, senza gioco.js; vedi "
-                "lo scheletro e il §5 del contratto")
+                "i file di partenza e il §2 del contratto")
     manca = [f for f in s["file"] + ([s["stile"]] if s["stile"] else []) + s["risorse"]
              if f not in nomi]
     if manca:

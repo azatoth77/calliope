@@ -64,10 +64,15 @@ DA_SOLA = {
     "calcolo": "conti, conversioni, date, testo: con la libreria standard di Python",
     "parser": "estrarre dati dal testo di una pagina avuta da rete_leggi (html.parser, "
               "BeautifulSoup, json, csv, xml)",
-    # 05/10: un gioco (o una scheda che si usa toccando) nel browser degli schermi
+    # 05/10: un gioco (o una scheda che si usa toccando) nel browser degli schermi; dal 19/10
+    # (#186) ha il suo prompt e il suo contratto (`testo(cfg, "gioco")`)
     "scheda": "una scheda interattiva sugli schermi (un gioco): JavaScript nel browser, in un "
-              "riquadro isolato, con la sezione «scheda» del manifesto (vedi §5)",
+              "riquadro isolato, con la sezione «scheda» del manifesto",
 }
+# Dove la voce «scheda» rimanda, secondo il contratto
+_SCHEDA_DOVE = {"estensione": " (non un'estensione Python: si chiede con sviluppo_apri "
+                              "gioco=true e ha il suo contratto)",
+                "gioco": " (§2)"}
 
 # Impossibile per costruzione: la porta non ha un metodo per farlo. Ogni voce: cosa, e
 # l'alternativa da proporre a chi l'ha chiesto
@@ -88,7 +93,7 @@ IMPOSSIBILI = {
                 "biblioteca", "i dati che servono li passa chi la usa, come input"),
     "microfono_camera": ("usare microfono, webcam, schermo o tastiera del PC", "nessuna"),
     "altri_tool": ("chiamare altre estensioni o altri tool di Calliope", "solo i metodi della "
-                   "porta qui sotto"),
+                   "porta stretta"),
     "credenziali": ("accedere a siti con utente e password, token, chiavi o cookie (login)",
                     "solo pagine e API pubbliche senza accesso"),
     "javascript": ("leggere dati che una pagina mostra solo con JavaScript nel browser",
@@ -147,7 +152,10 @@ def scheda_testo(cfg=None) -> list[str]:
     codice: formato, interfaccia del riquadro, tetti, test, chi approva. Dal 13/10 un gioco
     nuovo usa la macchina a stati di Calliope (estensioni/macchina.py, motore_gioco.js):
     l'agente scrive solo la dichiarazione delle fasi e la logica pura. Dal 14/10 (il palco
-    fisso) sceglie per ogni fase un modello di pagina, e la prova di fumo misura il palco."""
+    fisso) sceglie per ogni fase un modello di pagina, e la prova di fumo misura il palco.
+    Dal 19/10 (#186) è il §2 del contratto del gioco, una regola per argomento: la forma esatta
+    di g.stato(), la preparazione con «Inizia» anche con min < max, le tre forme di una mossa
+    (gli errori nuovi del motore), turni di serie e il caso. Le righe senza l'intestazione."""
     from . import macchina as mc
     from . import scheda as sc
     from ..schermi import giochi as gi
@@ -155,85 +163,100 @@ def scheda_testo(cfg=None) -> list[str]:
     std = ", ".join(f"«{f}»" for n in ("inizia", "avanti", "ancora", "anchio")
                     for f in mc.COMANDI_STANDARD[n][0])
     return [
-        "", "## 5. Scheda interattiva (giochi)",
         "Un gioco gira nel BROWSER degli schermi (PC, tablet, telefono), in un riquadro isolato "
         "(iframe sandbox, origine opaca): niente rete, niente localStorage, niente pagina "
-        "intorno. Non serve estensione.py: solo JavaScript. Calliope dà la MACCHINA A STATI del "
-        "gioco: preparazione (quanti giocatori), turni, punti, esito di ogni mossa, fine con la "
-        "classifica e «ancora», il disegno della pagina su un palco fisso (1280×720, e 720×1280 "
-        "sul telefono in verticale, scalato alla finestra, mai scroll), un pulsante per ogni "
-        "comando e i comandi a voce. Tu scrivi solo la dichiarazione delle fasi nel manifesto e "
-        "la logica pura in logica.js. Niente gioco.js, niente DOM, niente CSS di posizioni o "
-        "misure, niente turni o punti fatti a mano.",
+        "intorno. Calliope dà la MACCHINA A STATI del gioco: preparazione (quanti giocatori), "
+        "turni, punti, esito di ogni mossa, fine con la classifica e «ancora», il disegno della "
+        "pagina su un palco fisso (1280×720, e 720×1280 sul telefono in verticale, scalato alla "
+        "finestra, mai scroll), un pulsante per ogni comando e i comandi a voce. Tu scrivi solo "
+        "la dichiarazione delle fasi nel manifesto e la logica pura in logica.js. Niente "
+        "gioco.js, niente DOM, niente CSS di posizioni o misure, niente turni o punti fatti a "
+        "mano.",
         "- file: logica.js con `const GIOCO = {…}` e in fondo `if (typeof module !== "
         "\"undefined\") module.exports = { GIOCO, … };`; facoltativi tema.css (solo le "
         "variabili del tema: --sfondo, --testo, --primario, --accento, --carattere, --raggio, "
-        "--casella, --bordo; posizioni e misure le mette Calliope) e disegni .svg; i test "
-        "logica.test.js (node:test e node:assert, `const { GIOCO } = require(\"./logica.js\")`) "
-        "e gioco.test.js, che gioca la partita vera con la macchina (apriGioco: "
-        "g.tocca(\"Porta 1\"), g.comando(\"porta\", 3), g.avanza(ms), g.testo(), g.stato() → "
-        "{ fase, tocca (il nome), giocatori: [{ nome, punti }], esito, comandi }; g.palco() → [] "
-        "se la pagina di adesso sta nel palco). Ogni partita comincia nella fase "
-        "«preparazione»: in gioco.test.js, dopo apriGioco e prima delle mosse, si tocca "
-        "«Inizia» se nel manifesto giocatori min = max (il pulsante «N giocatori» allora non "
-        "c'è) o «N giocatori» se min < max (g.tocca(\"2 giocatori\")); oppure "
+        "--casella, --bordo) e disegni .svg; i test logica.test.js (node:test e node:assert, "
+        "`const { GIOCO } = require(\"./logica.js\")`: le regole) e gioco.test.js (la partita "
+        "vera con la macchina, apriGioco). esegui_test li fa girare con Node insieme alla prova "
+        "di fumo per fasi: ogni fase con ogni comando e ogni valore, partite intere fino alla "
+        "fine, e ogni pagina misurata sul palco nei due orientamenti (niente fuori, niente "
+        "sovrapposto, testo che ci sta)",
+        "- manifesto: \"scheda\": {\"tipo\": \"gioco\", \"file\": [\"logica.js\"], \"stile\": "
+        "\"tema.css\" (facoltativo), \"risorse\": [disegni .svg], \"giocatori\": {\"min\", "
+        "\"max\"}, \"salva\": false, \"voce\": false, \"azioni\": [], \"condivisa\": false, "
+        "\"macchina\": {\"inizio\": la prima fase, \"fasi\": {…}, \"esito_s\": "
+        f"{mc.ESITO_S:g}}}}} (la forma intera è nel manifesto.json di partenza); cosa_fa per "
+        "esempio {\"verbo\": \"propone\", \"oggetto\": \"una partita a tris sullo schermo\"}; "
+        "input di solito nessuno",
+        "- la partita. Ogni partita comincia nella fase «preparazione», di Calliope. «Inizia» "
+        "c'è sempre e parte con min giocatori (o con quanti hanno detto «gioco anch'io», se sono "
+        "di più); con min < max ci sono anche i pulsanti «N giocatori», da min a max. In "
+        "gioco.test.js, dopo apriGioco e prima delle mosse, si tocca «Inizia» se nel manifesto "
+        "giocatori min = max o «N giocatori» se min < max (g.tocca(\"2 giocatori\")); oppure "
         "apriGioco({ inizia: true }) con min = max, o apriGioco({ inizia: true, giocatori: 2 }) "
         "con min < max (lì giocatori serve sempre, da min a max), che parte già dalla fase "
-        "d'inizio. Dopo si è nella fase "
-        "d'inizio, e «avanti» vale solo nella fase «esito». esegui_test li fa girare con Node insieme alla prova di fumo per "
-        "fasi: ogni fase con ogni comando e ogni valore, partite intere fino alla fine, e ogni "
-        "pagina misurata sul palco nei due orientamenti (niente fuori, niente sovrapposto, testo "
-        "che ci sta)",
-        "- manifesto: \"scheda\": {\"tipo\": \"gioco\", \"file\": [\"logica.js\"], \"stile\": "
-        "\"tema.css\", \"risorse\": [], \"giocatori\": {\"min\": 1, \"max\": 4}, \"salva\": "
-        "false, \"voce\": false, \"azioni\": [], \"macchina\": {\"inizio\": \"turno\", "
-        "\"fasi\": {\"turno\": {\"pagina\": \"scelte\", \"turni\": true, \"verso\": [\"esito\", "
-        "\"fine\"], \"comandi\": {\"porta\": {\"forme\": [\"porta {n}\", \"la porta {n}\", "
-        "\"{n}\"], \"n\": {\"da\": 1, \"a\": 6}, \"etichetta\": \"Porta {n}\"}}}}, \"esito_s\": "
-        f"{mc.ESITO_S:g}}}}}; cosa_fa per esempio {{\"verbo\": \"propone\", \"oggetto\": \"una "
-        "partita a tris sullo schermo\"}; input di solito nessuno",
+        "d'inizio. Dopo l'ultima mossa si va a «fine» (classifica e «ancora»); "
+        "«avanti» vale solo nella fase «esito»",
         f"- fasi: al più {mc.MAX_FASI} del gioco (nomi in minuscolo); preparazione, esito e fine "
-        "sono di Calliope e non si dichiarano. Per ogni fase: pagina, turni (true: dopo la mossa "
-        "tocca al giocatore dopo), verso (le fasi dove una mossa può portare; esito e fine "
-        f"valgono sempre), comandi (al più {mc.MAX_COMANDI_FASE}). Le pagine sono di Calliope "
-        "(scegli quella che serve, il disegno lo fa lei): scelte (titolo, testo e un pulsante "
-        "per comando e valore, quanti ne stanno: una ventina in orizzontale); griglia (una "
-        "scacchiera fino a 12×12: vista dà «caselle»); messaggio (un testo grande e i pulsanti "
-        "in fondo); punteggi (i giocatori con i punti); titolo (un titolo grande e un "
-        "pulsante); classifica; tela (sotto). Un comando: forme da dire "
-        "per intero (1–5 parole; il nome davanti e i numeri in cifre o in parole valgono già), "
-        "al più uno slot {n} per forma con \"n\": {\"da\": 1, \"a\": 6} (un numero, al più "
-        f"{mc.MAX_NUMERI}) o \"n\": {{\"valori\": {{\"rosso\": [\"rosso\"], \"blu\": [\"blu\", "
-        f"\"azzurro\"]}}}} (al più {mc.MAX_VALORI}); {{n}} da solo solo con al più "
-        f"{mc.MAX_SOLO_SLOT} valori; etichetta del pulsante. In tutto, con i valori, al più "
-        f"{mc.MAX_PIATTI} comandi a voce. Non si usano «basta», «stop», «esci» né le forme di "
-        f"Calliope ({std}, «N giocatori», «siamo in N»), né le domande che Calliope "
+        "sono di Calliope e non si dichiarano. Per ogni fase: pagina; turni (di serie true: dopo "
+        "la mossa tocca al giocatore dopo; false: muove chiunque, e i punti vanno a chi ha "
+        "mosso, se si sa); verso (le fasi dove una mossa può portare; esito e fine valgono "
+        f"sempre); comandi (al più {mc.MAX_COMANDI_FASE}). Le pagine sono di Calliope (scegli "
+        "quella che serve, il disegno lo fa lei): scelte (titolo, testo e un pulsante per comando "
+        "e valore, quanti ne stanno: una ventina in orizzontale); griglia (una scacchiera fino a "
+        "12×12: vista dà «caselle»); messaggio (un testo grande e i pulsanti in fondo); punteggi "
+        "(i giocatori con i punti); titolo (un titolo grande e un pulsante); classifica; tela "
+        "(sotto)",
+        "- comandi: forme da dire per intero (1–5 parole; il nome davanti e i numeri in cifre o "
+        "in parole valgono già), al più uno slot {n} per forma con \"n\": {\"da\": 1, \"a\": 6} "
+        f"(un numero, al più {mc.MAX_NUMERI}) o \"n\": {{\"valori\": {{\"rosso\": [\"rosso\"], "
+        f"\"blu\": [\"blu\", \"azzurro\"]}}}} (al più {mc.MAX_VALORI}); {{n}} da solo solo con "
+        f"al più {mc.MAX_SOLO_SLOT} valori; etichetta del pulsante. In tutto, con i valori, al "
+        f"più {mc.MAX_PIATTI} comandi a voce. Non si usano «basta», «stop», «esci» né le forme "
+        f"di Calliope ({std}, «N giocatori», «siamo in N»), né le domande che Calliope "
         "risponde da sé («a chi tocca?», «quanti punti ho?», «chi sta vincendo?», «cosa posso "
-        "dire?»). I nomi dei giocatori sono di Calliope («gioco anch'io» a voce, o scritti "
-        "toccando il nome nella fascia dei punti): arrivano in nuovaPartita({ nomi }) e in "
-        "ctx.giocatori. L'esito va avanti da solo dopo esito_s secondi (0: solo con «avanti» o "
-        "il tocco). Con \"condivisa\": true nella scheda la stessa partita si gioca da più "
-        "schermi di casa: la tiene un motore solo, gli altri schermi la vedono e mandano le "
-        "mosse, e chi è quale giocatore (schermo e voce) lo decide Calliope (niente da scrivere "
-        "in più). Chi dice «gioco anch'io» a partita cominciata entra dalla prossima partita; "
-        "con GIOCO.entra(dati, ctx) → i dati con il giocatore nuovo (ctx.nuovo è la sua "
-        "posizione) entra subito",
+        "dire?»)",
+        "- giocatori: i nomi sono di Calliope («gioco anch'io» a voce, o scritti toccando il nome "
+        "nella fascia dei punti) e arrivano in nuovaPartita({ nomi }) e in ctx.giocatori. Con "
+        "\"condivisa\": true nella scheda la stessa partita si gioca da più schermi di casa (un "
+        "motore solo; chi è quale giocatore lo decide Calliope, niente da scrivere in più). Chi "
+        "dice «gioco anch'io» a partita cominciata entra dalla prossima partita; con "
+        "GIOCO.entra(dati, ctx) → i dati con il giocatore nuovo (ctx.nuovo è la sua posizione) "
+        "entra subito. Con \"giocatore\": true nella macchina la mossa riceve anche giocatore (il "
+        "nome di chi l'ha detta, se la voce è riconosciuta; spesso manca: il gioco va anche "
+        "senza)",
         "- GIOCO: nuovaPartita({ giocatori, nomi }) → i dati della partita (un oggetto JSON); "
-        "mosse[fase][comando](dati, { valore, chi, giocatori, turno }) → { dati, punti, esito, "
-        "fase, dopo, ancora } e NIENT'ALTRO (dati: lo stato del gioco dopo la mossa; punti: un "
-        "numero a chi ha mosso o un elenco, uno per giocatore; esito: il testo da mostrare, poi "
-        "la fase «dopo»; fase: dove andare subito; ancora: true se lo stesso giocatore muove di nuovo); "
         "attivi[fase](dati, ctx) → { comando: true | false | [valori] } (restringe, mai fuori dal "
-        "manifesto; senza: tutti); vista[fase](dati, ctx) → { titolo, sottotitolo, testo } "
-        "(solo testi brevi: il titolo sta in due righe, il testo in tre; il disegno è della "
-        "macchina) e, nella pagina griglia, «caselle»: un elenco di righe uguali, ogni casella "
-        "un testo o { testo, colore, risorsa, comando, valore } (colore: rosso, verde, blu, "
-        "giallo, arancio, viola, azzurro, rosa, marrone, grigio, nero, bianco o #rrggbb; "
-        "risorsa: un .svg di «risorse»; con comando e valore attivi la casella è il pulsante "
-        "della mossa, gli altri comandi attivi vanno in fondo). La partita finisce portando a "
-        "\"fine\"; una fase che non è la fine ha sempre almeno un comando attivo. Con "
-        "\"giocatore\": true nella macchina la mossa riceve anche giocatore (il nome di chi l'ha "
-        "detta, se la voce è riconosciuta; spesso manca: il gioco va anche senza)",
+        "manifesto; senza: tutti; una fase che non è la fine ha sempre almeno un comando "
+        "attivo); vista[fase](dati, ctx) → { titolo, sottotitolo, testo } (solo testi brevi: il "
+        "titolo sta in due righe, il testo in tre) e, nella pagina griglia, «caselle»: un elenco "
+        "di righe uguali, ogni casella un testo o { testo, colore, risorsa, comando, valore } "
+        "(colore: rosso, verde, blu, giallo, arancio, viola, azzurro, rosa, marrone, grigio, "
+        "nero, bianco o #rrggbb; risorsa: un .svg di «risorse»; con comando e valore attivi la casella "
+        "è il pulsante della mossa, gli altri comandi attivi vanno in fondo)",
+        "- mosse[fase][comando](dati, { valore, chi, giocatori, turno }) → { dati, punti, esito, "
+        "fase, dopo, ancora } e NIENT'ALTRO: dati è lo stato del gioco dopo la mossa (tutto lì "
+        "dentro); punti un numero a chi ha mosso o un elenco, uno per giocatore; ancora: true se "
+        "lo stesso giocatore muove di nuovo. Dove si va, in una di tre forme: { dati, esito: "
+        "\"…\", dopo: \"turno\" } mostra il testo nella fase «esito» e poi va a «dopo» (senza "
+        "dopo: la stessa fase; dopo: \"fine\" per finire la partita); { dati, fase: \"fine\" } "
+        "va subito lì, senza testo; { dati } resta nella fase. «esito» insieme a «fase» e "
+        "«dopo» senza «esito» sono errori del motore (l'esito non si vedrebbe, dopo non farebbe "
+        f"niente). L'esito va avanti da solo dopo esito_s secondi (0: solo con «avanti» o il "
+        "tocco)",
+        "- g.stato() in gioco.test.js dà esattamente { n, fase, tocca, turno, "
+        "giocatori: [{ nome, punti }], esito, comandi }: tocca è il nome di chi muove "
+        "(\"Giocatore 1\" senza nomi; null nella preparazione), esito il testo dell'esito "
+        "(null fuori dalla fase «esito»), comandi un OGGETTO dei comandi che valgono adesso { porta: [1, 3], avanti: "
+        "true } (non una lista: g.stato().comandi.porta, \"avanti\" in g.stato().comandi). Non "
+        "c'è il vincitore: chi vince si legge dai punti di giocatori. Le altre: g.tocca(\"testo "
+        "del pulsante\"), g.comando(\"porta\", 3) (come la voce), g.avanza(ms), g.testo() (il "
+        "testo visibile), g.palco() → [] se la pagina di adesso sta nel palco",
+        "- il caso: Math.random() in logica.js va bene; in apriGioco e nella prova di fumo ha un "
+        "seme fisso (apriGioco({ seme: 7 }): la stessa partita a ogni esecuzione). In "
+        "logica.test.js un risultato che dipende dal caso si prova con i dati fatti a mano (il "
+        "premio dietro la porta 2), non con nuovaPartita; creaCaso(seme) → una funzione come "
+        "Math.random, con il seme (c'è già nei test, senza require)",
         "- giochi in tempo reale o senza turni (memory a tempo, abilità, disegno): una fase con "
         "\"pagina\": \"tela\" e GIOCO.tela[fase](area, dati, tela): disegni dentro area (DOM o "
         "canvas, eventi con addEventListener; misura tela.larghezza × tela.altezza px del "
@@ -244,7 +267,8 @@ def scheda_testo(cfg=None) -> list[str]:
         "calliope.salva(chiave, valore) e calliope.leggi(chiave) → Promise (con «salva», "
         f"valore JSON fino a {gi.MAX_SALVA // 1000} kB), calliope.di(testo) → Promise (con "
         f"«voce»: al più {c('giochi_frasi_minuto', 3)} frasi al minuto, {gi.MAX_FRASE} "
-        "caratteri), calliope.risorsa(\"carta.svg\") → indirizzo data: del disegno",
+        "caratteri), calliope.risorsa(\"carta.svg\") → indirizzo data: del disegno, "
+        "calliope.azione(nome, argomenti) → Promise (§3)",
         f"- tetti: un messaggio fino a {c('giochi_messaggio_max', 4096)} byte, "
         f"{c('giochi_messaggi_secondo', 10)} al secondo; se il riquadro non risponde per "
         f"{c('giochi_watchdog_s', 6.0):g} s (un ciclo infinito) si chiude; script "
@@ -252,7 +276,9 @@ def scheda_testo(cfg=None) -> list[str]:
         "- vietato nel codice del gioco (il riquadro lo blocca e chi approva lo vede): fetch, "
         "XMLHttpRequest, WebSocket, WebRTC, Worker, eval e new Function, localStorage e "
         "cookie, window.open, location, top/parent/opener, postMessage diretto, onclick=\"…\" "
-        "nell'HTML (usa addEventListener), iframe, script o link creati a mano",
+        "nell'HTML (usa addEventListener), iframe, script o link creati a mano; require, import "
+        "ed export nei file della scheda (si caricano uno dopo l'altro come i <script>: solo "
+        "module.exports in fondo, per i test)",
         "- GIOCO PURO: «permessi» vuoti e «azioni» vuote (solo il riquadro, i dati suoi, la "
         "voce): lo usano tutti, anche gli ospiti e sugli schermi di stanza, e lo approva un "
         "adulto di casa. Con permessi o azioni lo approva solo chi amministra: per un gioco "
@@ -260,30 +286,66 @@ def scheda_testo(cfg=None) -> list[str]:
     ]
 
 
+def _azioni_gioco() -> list[str]:
+    """Le azioni della porta che un riquadro può chiedere (scheda.AZIONI), con il loro scope
+    dalla tabella della porta: il §3 del contratto del gioco (19/10, #186)."""
+    from .scheda import AZIONI
+    righe = ["- Solo da una tela: calliope.azione(nome, argomenti) → Promise, con il nome in "
+             "«scheda.azioni» e lo scope in «permessi» del manifesto (lo chiedi con "
+             "chiedi_permesso). Il gioco smette di essere puro: lo approva solo chi amministra."]
+    for az in AZIONI:
+        es, scope, cosa = PORTA[az]
+        righe.append(f"- {az}: {cosa}. Scope: `{_scope_detto(scope)}`.")
+    return righe
+
+
 def _scope_detto(s: dict) -> str:
     import json
     return json.dumps(s, ensure_ascii=False)
 
 
+def _impossibili(n: int) -> list[str]:
+    """La sezione degli impossibili, numerata `n`, e le voci per il piano."""
+    righe = ["", f"## {n}. Impossibile (dillo subito con piano(fattibile=false), con "
+             "l'alternativa)"]
+    righe += [f"- {k}: {cosa}. Alternativa: {alt}." for k, (cosa, alt) in IMPOSSIBILI.items()]
+    righe += ["", "Voci per piano.capacita_necessarie: " + ", ".join(CAPACITA_IDS) + "."]
+    return righe
+
+
 def testo(cfg=None, tipo: str = "estensione", linguaggi=("python",)) -> str:
-    """Il contratto, in Markdown semplice (anche nel prompt). `tipo`: «estensione» o
-    «codice» (un programma qualunque nella sandbox)."""
+    """Il contratto, in Markdown semplice (anche nel prompt). `tipo`: «estensione», «gioco»
+    (dal 19/10, #186, un contratto suo: la scheda, le azioni del riquadro, gli impossibili;
+    niente porta Python né limiti del contenitore) o «codice» (un programma qualunque nella
+    sandbox). Le sezioni sono in ordine e una regola sta in una sezione sola."""
     from ..web import rete as _rete
     from . import porta as _porta
     tmax = float(getattr(cfg, "estensioni_tempo_max_s", 30) or 30)
     mmax = int(getattr(cfg, "estensioni_memoria_max_mb", 512) or 512)
-    # «gioco» (05/10): il contratto delle estensioni con la scheda interattiva per intero
-    est = tipo in ("estensione", "gioco")
-    righe = [f"# Contratto delle capacità ({ {'gioco': 'gioco', 'estensione': 'estensione'}.get(tipo, 'programma')})",
-             "Generato dal codice di Calliope. Leggilo prima di decidere: il primo passo è "
-             "lo strumento «piano»." if est else
-             "Generato dal codice di Calliope: cosa può fare un programma nella sandbox."]
-    if est:
-        righe += ["", "## 1. Da sola (nessun permesso)"]
-        righe += [f"- {k}: {v}" for k, v in DA_SOLA.items()]
-        righe += ["- linguaggio: Python 3.12, libreria standard, BeautifulSoup (bs4), "
-                  "json/csv/xml; niente pip, niente rete diretta (socket, urllib: vietati), "
-                  "niente disco (solo /tmp)",
+    titolo = {"gioco": "gioco", "estensione": "estensione"}.get(tipo, "programma")
+    righe = [f"# Contratto delle capacità ({titolo})"]
+    if tipo == "gioco":
+        righe += ["Generato dal codice di Calliope. Leggilo prima di decidere: il primo passo è "
+                  "lo strumento «piano».", "", "## 1. Da sola (nessun permesso)",
+                  f"- scheda: {DA_SOLA['scheda']}{_SCHEDA_DOVE['gioco']}",
+                  "- linguaggio: JavaScript nel riquadro del browser; i test con Node (node:test "
+                  "e node:assert). Niente Python, niente estensione.py",
+                  "", "## 2. La scheda e la macchina a stati"]
+        righe += scheda_testo(cfg)
+        righe += ["", "## 3. Chiedendo a Calliope (di solito non serve)"] + _azioni_gioco()
+        righe += _impossibili(4)
+        return "\n".join(righe) + "\n"
+    if tipo == "estensione":
+        righe += ["Generato dal codice di Calliope. Leggilo prima di decidere: il primo passo è "
+                  "lo strumento «piano».", "", "## 1. Da sola (nessun permesso)"]
+        righe += [f"- {k}: {v}{_SCHEDA_DOVE['estensione'] if k == 'scheda' else ''}"
+                  for k, v in DA_SOLA.items()]
+        # urllib.parse sì, la rete diretta no (19/10, #186: il contratto vietava «urllib» e il
+        # prompt chiedeva urllib.parse.urlencode)
+        righe += ["- linguaggio: Python 3.12, libreria standard, BeautifulSoup (from bs4 import "
+                  "BeautifulSoup, con \"html.parser\"), json/csv/xml; niente pip, niente rete "
+                  "diretta (socket, urllib.request, http.client: vietati; urllib.parse per "
+                  "scrivere gli indirizzi sì), niente disco (solo /tmp)",
                   "", "## 2. Chiedendo a Calliope (porta stretta): metodo, scope da "
                   "dichiarare in «permessi» del manifesto, come lo tratta il guardrail"]
         for az, (es, scope, cosa) in PORTA.items():
@@ -312,12 +374,14 @@ def testo(cfg=None, tipo: str = "estensione", linguaggi=("python",)) -> str:
                   f"{int(getattr(cfg, 'estensioni_rete_max_minuto', 30) or 30)} richieste al "
                   "minuto per tutto Calliope; mai dati riservati di casa nell'indirizzo",
                   "- indirizzi: i valori dei parametri (una città, un nome, una ricerca) si "
-                  "codificano con urllib.parse.urlencode o quote, mai a mano: un URL con "
-                  "spazi, accenti o apostrofi non codificati la porta lo rifiuta («URL non "
-                  "valido…»), e anche CalliopeFinta nei test. Codifica una volta sola: con "
-                  "urlencode passa il testo com'è, mai quote_plus prima («name=Borgo%2BAlto» "
-                  "cerca un + letterale e non trova niente; la traccia lo segna come possibile "
-                  "doppia codifica)",
+                  "codificano con urllib.parse.urlencode (o quote per un pezzo del percorso), "
+                  "mai a mano come f\"...?name={citta}\": un URL con spazi, accenti o apostrofi "
+                  "non codificati la porta lo rifiuta («URL non valido…»), e anche CalliopeFinta "
+                  "nei test. Codifica una volta sola: con urlencode passa il testo com'è, mai "
+                  "quote_plus prima («name=Borgo%2BAlto» cerca un + letterale e non trova "
+                  "niente; la traccia lo segna come possibile doppia codifica). Nei test prova "
+                  "anche un valore di due parole con un accento e controlla l'URL che arriva a "
+                  "CalliopeFinta (in richieste)",
                   # Le sonde e il ricollaudo (08/10 notte, calliope/sonde.py, § 9.5)
                   "- sonde (solo nelle correzioni): sonda_rete fa una GET vera al posto di "
                   "scarica_esempio, solo verso i siti già usati nei collaudi o approvati, solo "
@@ -331,32 +395,24 @@ def testo(cfg=None, tipo: str = "estensione", linguaggi=("python",)) -> str:
                   f"{_porta.MAX_DATI_BYTE // 1000} kB in tutto",
                   "- input: al più 6 proprietà (string, number, integer, boolean), testi fino "
                   "a 500 caratteri"]
-    else:
-        from ..agenti.linguaggi import LINGUAGGI
-        righe += ["", "## 1. Da solo",
-                  "- " + "; ".join(LINGUAGGI[n].per_agente for n in linguaggi if n in LINGUAGGI),
-                  "- leggere e scrivere i file della cartella del lavoro; eseguire e testare",
-                  "", "## 2. Chiedendo a chi ha chiesto il lavoro",
-                  "- un dato che manca (suo, della sua casa o azienda): consegna con esito "
-                  "mancano_dati e la domanda, prima di scrivere il codice",
-                  "", "## 3. Limiti",
-                  f"- niente rete, niente shell, niente pip; tempo per esecuzione "
-                  f"{float(getattr(cfg, 'agenti_esecuzione_s', 30) or 30):g} s, memoria "
-                  f"{int(getattr(cfg, 'agenti_memoria_mb', 1024) or 1024)} MB",
-                  "", "## 4. Non si prova qui",
-                  "- rete, altri programmi, interfacce grafiche, file fuori dalla cartella: se "
-                  "il compito li vuole, scrivi il codice con i test sulle parti che si provano "
-                  "e dillo nel riassunto",
-                  "- se il compito non si può fare affatto, consegna SUBITO con esito "
-                  "impossibile e un'alternativa, senza ragionarci a lungo"]
+        righe += _impossibili(4)
         return "\n".join(righe) + "\n"
-    righe += scheda_testo(cfg) if tipo == "gioco" else [
-        "", "## 5. Scheda interattiva (giochi)",
-        "- un gioco sullo schermo (tris, memory, quiz) è un'estensione con una «scheda» in "
-        "JavaScript nel browser, non in Python: si chiede con sviluppo_apri gioco=true, e il "
-        "contratto per i giochi lo spiega"]
-    righe +=["", "## 4. Impossibile (dillo subito con piano(fattibile=false), con "
-              "l'alternativa)"]
-    righe += [f"- {k}: {cosa}. Alternativa: {alt}." for k, (cosa, alt) in IMPOSSIBILI.items()]
-    righe += ["", "Voci per piano.capacita_necessarie: " + ", ".join(CAPACITA_IDS) + "."]
+    from ..agenti.linguaggi import LINGUAGGI
+    righe += ["Generato dal codice di Calliope: cosa può fare un programma nella sandbox.",
+              "", "## 1. Da solo",
+              "- " + "; ".join(LINGUAGGI[n].per_agente for n in linguaggi if n in LINGUAGGI),
+              "- leggere e scrivere i file della cartella del lavoro; eseguire e testare",
+              "", "## 2. Chiedendo a chi ha chiesto il lavoro",
+              "- un dato che manca (suo, della sua casa o azienda): consegna con esito "
+              "mancano_dati e la domanda, prima di scrivere il codice",
+              "", "## 3. Limiti",
+              f"- niente rete, niente shell, niente pip; tempo per esecuzione "
+              f"{float(getattr(cfg, 'agenti_esecuzione_s', 30) or 30):g} s, memoria "
+              f"{int(getattr(cfg, 'agenti_memoria_mb', 1024) or 1024)} MB",
+              "", "## 4. Non si prova qui",
+              "- rete, altri programmi, interfacce grafiche, file fuori dalla cartella: se "
+              "il compito li vuole, scrivi il codice con i test sulle parti che si provano "
+              "e dillo nel riassunto",
+              "- se il compito non si può fare affatto, consegna SUBITO con esito "
+              "impossibile e un'alternativa, senza ragionarci a lungo"]
     return "\n".join(righe) + "\n"

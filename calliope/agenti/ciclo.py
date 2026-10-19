@@ -1296,9 +1296,14 @@ class Agente:
         while consegna is None:
             lav.passo = "sta pensando al codice" if not scritti else "sta lavorando al codice"
             strumenti = strumenti_codice(self._linguaggi(sandbox))
+            gioco = bool(getattr(lav, "gioco", False))
+            if gioco:
+                # Un gioco (19/10, #186): JavaScript nel riquadro, senza Python né pagine
+                # d'esempio dalla rete
+                strumenti = [s for s in strumenti if s["function"]["name"] != "esegui_python"]
             if piano:
                 strumenti = [PIANO, CHIEDI_PERMESSO] + strumenti
-            if esempi:
+            if esempi and not gioco:
                 # Nelle correzioni di uno sviluppo (08/10 notte) sonda_rete al posto di
                 # scarica_esempio: GET solo verso gli host noti, con i valori del caso
                 if self._sonde_ok(lav) is None:

@@ -386,46 +386,43 @@ def prova_scheletri(tmp: Path):
              SCHELETRI["gioco"] in pg and SCHELETRI["estensione"] in pe
              and SCHELETRI["python"] in pp and SCHELETRI["csharp"] in pc)
     verifica("contrari: niente gioco nel prompt dell'estensione, niente C# senza il C#",
-             "SCHELETRO DI PARTENZA (gioco)" not in pe and "(programma C#)" not in pp
+             "LA PARTENZA (gioco)" not in pe and "(programma C#)" not in pp
              and "(estensione)" not in pg)
-    # Il gioco dall'11/10 sera mostra anche i comandi a voce (ascolta, quandoComando): ~215
-    # caratteri in più, circa 60 token
-    # Dal 12/10 sera anche gioco.test.js con apriGioco (il test del disegno): ~650 caratteri.
-    # Dal 14/10 (il palco) la pagina della fase, i modelli e g.palco(): ~420 caratteri
-    verifica("corti: al più 3 400 caratteri il gioco, 1 600 l'estensione, 600 i programmi",
-             len(SCHELETRI["gioco"]) <= 3400 and len(SCHELETRI["estensione"]) <= 1600
+    # Dal 19/10 (#186) il gioco non ha più i file nel prompt: sono nella cartella, già verdi
+    # (scheletri.prepara_gioco, prova_partenza_gioco); qui si dice solo cosa c'è (prima 3 347
+    # caratteri, il tetto era 3 400)
+    verifica("corti: al più 1 200 caratteri il gioco, 1 600 l'estensione, 600 i programmi",
+             len(SCHELETRI["gioco"]) <= 1200 and len(SCHELETRI["estensione"]) <= 1600
              and len(SCHELETRI["python"]) <= 600 and len(SCHELETRI["csharp"]) <= 600,
              str({k: len(v) for k, v in SCHELETRI.items()}))
-    g = _estrai(SCHELETRI["gioco"], {"manifesto.json", "logica.js", "logica.test.js",
-                                     "gioco.test.js"})
+    from calliope.agenti.scheletri import file_gioco
+    g = file_gioco(1, 4)
     # Dal 13/10 la macchina a stati di Calliope: la scheda con «macchina», logica.js con GIOCO
     # e niente gioco.js (niente DOM, niente gestori: il disegno è del motore)
     from calliope.estensioni import scheda as sch
     try:
-        scheda_gioco = sch.normalizza(json.loads(g.get("manifesto.json", "{}")), {})
+        scheda_gioco = sch.normalizza(json.loads(g["manifesto.json"])["scheda"], {})
     except (ValueError, sch.SchedaNonValida) as e:
         scheda_gioco = None
         print("   ", e)
-    verifica("gioco: la scheda con la macchina a stati è valida, logica.js dichiara GIOCO, "
-             "niente gioco.js", len(g) == 4 and scheda_gioco is not None
-             and scheda_gioco.get("macchina") and "const GIOCO" in g["logica.js"]
-             and "gioco.js" not in scheda_gioco["file"] and "document" not in g["logica.js"],
-             str(sorted(g)))
+    verifica("gioco: i file di partenza con la macchina a stati valida, logica.js dichiara "
+             "GIOCO, niente gioco.js", sorted(g) == ["gioco.test.js", "logica.js",
+                                                    "logica.test.js", "manifesto.json"]
+             and scheda_gioco is not None and scheda_gioco.get("macchina")
+             and "const GIOCO" in g["logica.js"] and "gioco.js" not in scheda_gioco["file"]
+             and "document" not in g["logica.js"], str(sorted(g)))
     if shutil.which("node"):
         sb = sandbox(tmp, "scheletro-gioco")
         for k, v in g.items():
-            if k != "manifesto.json":
-                sb.scrivi(k, v)
-        sb.scrivi("manifesto.json", json.dumps({**MANIFESTO_GIOCO,
-                                                "scheda": json.loads(g["manifesto.json"])}))
+            sb.scrivi(k, v)
         r = sb.test()
-        verifica("…e passa i suoi test (anche quello della partita, con apriGioco) e la prova "
-                 "di fumo per fasi", r["passano"] and "ok prova di fumo" in r["uscita"]
-                 and "ok si apre una porta e poi tocca all'altro" in r["uscita"],
-                 r["uscita"][-300:])
+        verifica("…e passano i loro test (anche la partita, con apriGioco) e la prova di fumo "
+                 "per fasi", r["passano"] and "ok prova di fumo" in r["uscita"]
+                 and "ok una porta aperta: il testo, il punto e poi tocca all'altro"
+                 in r["uscita"], r["uscita"][-300:])
         from calliope.estensioni.prompt import controlla_consegna
-        verifica("…e la consegna del gioco", controlla_consegna(sb) is None,
-                 str(controlla_consegna(sb)))
+        verifica("…e la consegna chiede un nome suo (il segnaposto della partenza)",
+                 "gioco_nuovo" in str(controlla_consegna(sb)), str(controlla_consegna(sb)))
     else:
         print("SALTATA IN PARTE: node non c'è")
     sb = sandbox(tmp, "scheletro-est")

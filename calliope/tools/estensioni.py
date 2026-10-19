@@ -280,7 +280,7 @@ def _estensione_crea(ctx: ToolContext, compito: str = "", nome: str = "", propos
     return _con_avviso(out, esistente, simile, est)
 
 
-VINCOLO_GIOCO = ("È un GIOCO sullo schermo: scheda interattiva (§5 del contratto), gioco puro, "
+VINCOLO_GIOCO = ("È un GIOCO sullo schermo: scheda interattiva (§2 del contratto), gioco puro, "
                  "senza estensione.py.")
 
 

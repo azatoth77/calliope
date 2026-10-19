@@ -53,6 +53,10 @@ def analizza(sorgenti: dict[str, str]) -> dict:
                         else [n.module or ""])
                 for m in mods:
                     top = m.split(".")[0]
+                    if m == "urllib.parse":
+                        # Scrive gli indirizzi, non va in rete: il contratto la chiede (19/10,
+                        # #186: prima era vietata «urllib» e chiesta urllib.parse.urlencode)
+                        continue
                     if top in MODULI and not (test and top in ("sys", "unittest")):
                         rischi.append({"file": nome, "riga": riga, "cosa": f"import {m}",
                                        "perche": MODULI[top]})
