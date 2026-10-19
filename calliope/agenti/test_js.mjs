@@ -61,7 +61,13 @@ if (prove.length && !conto.errori) {
       .map((r) => r.match(/([^\s()\/\\]+\.js):(\d+)(?::\d+)?\)?\s*$/))
       .find((m) => m && file.some((f) => f.replace(/\\/g, "/").split("/").pop() === m[1]));
     // Il messaggio su una riga (le asserzioni di node:assert vanno a capo)
-    const msg = String((causa && causa.message) || causa || "").replace(/\s+/g, " ").trim();
+    let msg = String((causa && causa.message) || causa || "").replace(/\s+/g, " ").trim();
+    // Il tipo degli errori di sintassi, di nome e di tipo (19/10, #180, riproduzione.py): un
+    // test che fallisce sulla versione di prima solo perché un nome non c'era non riproduce
+    const tipo = causa && causa.name;
+    if (["SyntaxError", "ReferenceError", "TypeError"].includes(tipo) && !msg.startsWith(tipo)) {
+      msg = `${tipo}: ${msg}`;
+    }
     scrivi(`FALLITO ${e.name}: ${msg.slice(0, 600)}` + (dove ? ` [in ${dove[1]}:${dove[2]}]` : "")
       + "\n");
   });

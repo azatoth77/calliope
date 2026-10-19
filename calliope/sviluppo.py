@@ -1918,8 +1918,9 @@ class Sviluppi:
         r = (getattr(lav, "risultato", None) or {}) if lav is not None else {}
         if lav is not None and getattr(lav, "stato", "") == "in_attesa" \
                 and r.get("esito") == "tappa":
+            from .agenti.servizio import PERCHE_TAPPA
             perche = {"passate": "ha finito le passate del giro", "tempo": "è finito il tempo "
-                      "del giro", "token": "ha finito i token del giro"}.get(
+                      "del giro", "token": "ha finito i token del giro", **PERCHE_TAPPA}.get(
                 r.get("tipo_limite"), "è arrivato al limite del giro")
             seg = (r.get("segnali") or {}).get("frasi") or []
             return ("Il lavoro è fermo a una tappa: " if voce else "è fermo a una tappa: ") \
