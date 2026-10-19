@@ -566,7 +566,9 @@ def _esempi_programma(d: dict, n_requisiti: int, testo: str) -> tuple[list[dict]
                     "argomenti": args, "stdin": stdin, "numero": numero,
                     "tolleranza": abs(tol) if tol is not None else None,
                     "contiene": contiene, "codice_uscita": cod})
-        con_calcolo += calcolo is not None
+        # Solo se il numero resta: tolto perché uguale a un dato, il calcolo non controlla più
+        # niente (revisione della PR #181)
+        con_calcolo += calcolo is not None and numero is not None
         if len(out) >= MAX_ESEMPI:
             break
     return out, tolti, con_calcolo

@@ -104,9 +104,12 @@ per genere (`tolti`: fuori, numero, contiene; per un programma anche dati) e qua
 tenuti hanno il `calcolo` rifatto dal codice (`con_calcolo`). Poi `regole` (da `lav.segnali`,
 con `agente_ragionamento_ripetuto` e `agente_riscrittura_ripetuta`), `segnali_giro` di fine
 lavoro (senza_novita, senza_progressi, ripetizioni, riscritti), `limite` (il tipo del Limite di
-un lavoro finito «limite»: passate, tempo, token, a_vuoto, altro) e `al_tetto_no` con
-`al_tetto_no_tipo` (perché al tetto Calliope non l'ha chiuso da sé: «mancano i file che la
-consegna chiede», «esempi di accettazione rossi», «correzione non riprodotta»…). Il criterio
+un lavoro finito «limite»: passate, tempo, token, a_vuoto; dal 19/10 con #180 anche `prosa`,
+più di PROSA_MAX passate di fila senza strumenti, e `consegna_rossa`, la consegna con i test
+rossi; altro) e, solo per un lavoro finito «limite», `al_tetto_no` con `al_tetto_no_tipo`
+(perché al tetto Calliope non l'ha chiuso da sé: «mancano i file che la consegna chiede»,
+«esempi di accettazione rossi», «correzione non riprodotta»…). `prosa_no`: l'ultimo no dopo due
+passate di sola prosa con lo stato consegnabile (#180), che non ferma il lavoro. Il criterio
 «0 "mancano i file" con l'accettazione verde» è `al_tetto_no` contro `accettazione`.
 
 Durata: un lavoro dura 3–15 minuti; con i valori predefiniti 2 × 2 × 2 × 3 = 24 lavori, da 2 a
@@ -857,6 +860,32 @@ def secco_tetto(tmp: Path) -> int:
                  and str(r["al_tetto_no"]).startswith("correzione non riprodotta"),
                  json.dumps({k: r.get(k) for k in ("limite", "al_tetto_no")},
                             ensure_ascii=False))
+        # Revisione della PR #181: dopo due passate di sola prosa (#180) decide
+        # _consegna_al_tetto con il tipo «prosa»; il suo no non è un no al tetto (il lavoro
+        # continua), e se poi l'agente consegna la riga non dice «al tetto no»
+        fake.copione = porte(False) + [
+            {"content": "Ho corretto il gioco."}, {"content": "Il gioco ora funziona."},
+            chiama(("scrivi_file", {"percorso": "gioco.test.js",
+                                    "contenuto": F.TEST_GIOCO_PORTE})),
+            chiama(("esegui_test", {})),
+            chiama(("consegna", {"riassunto": "Corretto: la porta mostra il suo mostro.",
+                                 "esito": "fatto"}))]
+        passi = cfg.agenti_max_passi, svc.agente.max_passi
+        cfg.agenti_max_passi = svc.agente.max_passi = 12
+        try:
+            r = un_lavoro(svc, cfg, tmp, "porte", casi()["porte"], "secco")
+        finally:
+            cfg.agenti_max_passi, svc.agente.max_passi = passi
+        verifica("contrario: il no dopo la prosa (correzione non riprodotta), poi il test e la "
+                 "consegna: «fatto», niente «al tetto no» né limite nella riga, il motivo a parte",
+                 r["esito"] == "fatto" and not r["consegna_al_tetto"]
+                 and r["al_tetto_no"] is None and r["al_tetto_no_tipo"] is None
+                 and r["limite"] is None
+                 and str(r["prosa_no"]).startswith("correzione non riprodotta"),
+                 json.dumps({k: r.get(k) for k in ("esito", "motivo", "consegna_al_tetto",
+                                                   "al_tetto_no", "prosa_no", "limite",
+                                                   "regole")},
+                            ensure_ascii=False, default=str))
     finally:
         if svc is not None:
             svc.close()
@@ -989,6 +1018,7 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
                  if cartella and cartella.is_dir() else None)
     seg = segnali_giro(lav, cfg.agenti_max_passi)
     segnali = lav.segnali if isinstance(lav.segnali, dict) else {}
+    limite = ris.get("esito") == "limite"
     fatto = (ris.get("esito") == "fatto" or lav.stato == "fatto")
     giro_acc = next((x["giro"] for x in per_giro if x.get("accettazione")), None)
     giro_consegna = per_giro[-1]["giro"] if fatto else None
@@ -1017,11 +1047,15 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             "segnali_giro": {k: seg.get(k) for k in ("senza_novita", "senza_progressi",
                                                       "ripetizioni", "riscritti")},
             # Un lavoro finito a un limite (19/10, #9): il tipo del Limite («passate», «tempo»,
-            # «token», «a_vuoto», «altro»), e perché al tetto Calliope non l'ha chiuso da sé
-            # (la funzione no di _consegna_al_tetto), con il tetto che l'ha chiesto
-            "limite": segnali.get("limite") if ris.get("esito") == "limite" else None,
-            "al_tetto_no": segnali.get("al_tetto_no"),
-            "al_tetto_no_tipo": segnali.get("al_tetto_tipo"),
+            # «token», «a_vuoto», dal 19/10 con #180 «prosa» e «consegna_rossa», «altro»), e
+            # perché al tetto Calliope non l'ha chiuso da sé (la funzione no di
+            # _consegna_al_tetto), con il tetto che l'ha chiesto: solo con l'esito «limite»
+            # (revisione della PR #181). `prosa_no`: l'ultimo no dopo due passate di sola
+            # prosa (#180), che non ferma il lavoro
+            "limite": segnali.get("limite") if limite else None,
+            "al_tetto_no": segnali.get("al_tetto_no") if limite else None,
+            "al_tetto_no_tipo": segnali.get("al_tetto_tipo") if limite else None,
+            "prosa_no": segnali.get("prosa_no"),
             "cartella": str(cartella),
             "giri": len(per_giro), "giri_max": giri, "giro_accettazione": giro_acc,
             "giro_consegna": giro_consegna, "sbloccato": sbloccato,

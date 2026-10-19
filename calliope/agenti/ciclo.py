@@ -1715,12 +1715,16 @@ class Agente:
         def no(perche: str):
             self.log(f"[AGENTI] {lav.id}: al tetto niente consegna d'ufficio: {perche}")
             # Anche nei segnali del lavoro (19/10, #9): la riga del banco dice il motivo del
-            # «limite» senza contarlo a mano dal log
+            # «limite» senza contarlo a mano dal log. Dopo la prosa (#180) non è un no al tetto:
+            # il lavoro continua con la spinta e può ancora consegnare, il motivo va a parte
             try:
                 seg = lav.segnali if isinstance(getattr(lav, "segnali", None), dict) else {}
                 lav.segnali = seg
-                seg["al_tetto_no"] = perche
-                seg["al_tetto_tipo"] = e.tipo
+                if e.tipo == "prosa":
+                    seg["prosa_no"] = perche
+                else:
+                    seg["al_tetto_no"] = perche
+                    seg["al_tetto_tipo"] = e.tipo
             except Exception:  # noqa: BLE001 — una misura non ferma niente
                 pass
             return None
