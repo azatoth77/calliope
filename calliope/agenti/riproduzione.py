@@ -16,7 +16,12 @@ Qui il codice lo controlla sugli artefatti, alla consegna di una correzione:
 - quei test, eseguiti sulla **versione di prima** in una sandbox nuova accanto (stesso
   isolamento, stesso container, come il ricollaudo), devono **fallire**: altrimenti
   «passa_prima» (non riproducono il problema). Che passino sulla versione nuova lo dice già il
-  controllo dei test alla consegna (`Agente._test_falliti`).
+  controllo dei test alla consegna (`Agente._test_falliti`);
+- dal 19/10 (#180) devono fallire **sul comportamento**: un'asserzione, o un errore del codice
+  di prima mentre gira (il pulsante che non c'è, una divisione per zero). Un test che fallisce
+  solo per un import, la sintassi o un nome che prima non c'era (l'`ImportError` della funzione
+  che la correzione aggiunge) non prova niente del problema: «struttura», regola
+  agente_riproduzione_asserzione. Quando l'uscita non si riconosce, nel dubbio vale come prima.
 
 La prova di fumo dei giochi non conta come riproduzione (non l'ha scritta l'agente): sulla
 versione di prima si eseguono solo i test nuovi o cambiati, senza la prova di fumo.
@@ -41,7 +46,39 @@ NON_CODICE = re.compile(r"(^|/)(manifesto\.json|CAPACITA\.md|calliope_estensione
 TEST = re.compile(r"(^|/)test[^/]*\.py$|_test\.py$|\.test\.js$")
 
 # Gli esiti che non valgono come correzione
-NON_RIPRODOTTO = ("uguale", "nessun_test", "passa_prima")
+NON_RIPRODOTTO = ("uguale", "nessun_test", "passa_prima", "struttura")
+
+# I fallimenti che non dicono niente del comportamento (19/10, #180): l'import, la sintassi, un
+# nome o un argomento che nella versione di prima non c'erano. Python dal tipo dell'eccezione
+# (diagnosi.fallimenti), JavaScript dal tipo che test_js.mjs mette in testa al messaggio
+_STRUTTURA_PY = re.compile(r"^(?:\w+\.)*(?:ImportError|ModuleNotFoundError|SyntaxError|"
+                           r"IndentationError|TabError|NameError|UnboundLocalError)\b|"
+                           r"^(?:\w+\.)*AttributeError\b(?!.*'NoneType')|"
+                           r"^(?:\w+\.)*TypeError\b.*(?:unexpected keyword argument|positional "
+                           r"argument|required (?:keyword-only )?argument)")
+_STRUTTURA_JS = re.compile(r"^(?:SyntaxError|ReferenceError)\b|^TypeError\b.*\bis not a "
+                           r"(?:function|constructor)\b|Cannot find module|does not provide an "
+                           r"export named")
+
+
+def strutturale(f: dict) -> bool:
+    """Un fallimento (diagnosi.fallimenti: test, errore, dove) che viene dalla struttura del
+    codice, non dal suo comportamento: import, sintassi, nome mancante."""
+    test, errore = str(f.get("test") or ""), str(f.get("errore") or "").strip()
+    if test.startswith("import di") or test == "sintassi":
+        return True
+    return bool(_STRUTTURA_PY.search(errore) or _STRUTTURA_JS.search(errore))
+
+
+def solo_struttura(uscita: str) -> dict | None:
+    """Il primo fallimento, se **tutti** quelli dell'uscita sono di struttura; None se almeno
+    uno è un'asserzione o un errore mentre il codice gira, o se non se ne riconosce nessuno
+    (nel dubbio la riproduzione vale, come prima)."""
+    from .diagnosi import fallimenti
+    fall = fallimenti(uscita)
+    if not fall or not all(strutturale(f) for f in fall):
+        return None
+    return fall[0]
 
 
 def codice(file: dict) -> dict:
@@ -95,7 +132,10 @@ def _sandbox_prima(sandbox, prima: dict, nuovi: list[str]):
         # scaricati in questo lavoro, esempi veri): un test che legge un esempio nuovo non deve
         # «fallire prima» solo perché l'esempio mancava
         dato = bool(NON_CODICE.search(rel)) and not TEST.search(rel) and rel not in (prima or {})
-        if (rel in nuovi or rel in sola or dato
+        # Gli esempi di accettazione in sola lettura (test_accettazione.py, accettazione.test.js)
+        # no (19/10, #180): li scrive il codice, e un loro rosso sulla versione di prima non è
+        # un test nuovo dell'agente che riproduce il problema
+        if (rel in nuovi or (rel in sola and not TEST.search(rel)) or dato
                 or Path(rel).suffix.lower() in ESTENSIONI_DATI):
             dest = sb.root / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -149,6 +189,14 @@ def controlla(lav, sandbox, log=print) -> dict:
     uscita = str(r.get("uscita") or "")[-1500:]
     if r.get("passano"):
         return {"stato": "passa_prima", "test": nuovi, "uscita": uscita}
+    primo = solo_struttura(str(r.get("uscita") or ""))
+    if primo is not None:
+        from ..sonde import nota
+        nota(lav, "agente_riproduzione_asserzione", log,
+             f"{primo.get('test') or '?'}: {str(primo.get('errore') or '')[:80]}")
+        return {"stato": "struttura", "test": nuovi, "uscita": uscita,
+                "perche": (f"{primo.get('test')}: " if primo.get("test") else "")
+                + str(primo.get("errore") or "")[:200]}
     return {"stato": "riprodotto", "test": nuovi, "uscita": uscita,
             "esito": r.get("esito")}
 
@@ -172,6 +220,13 @@ def messaggio_agente(esito: dict, problema: str = "", gioco: bool = False) -> st
                 "vedi fallire sul codice di prima; poi correggi finché passa. Alla consegna "
                 "rieseguo quel test sulla versione di prima: lì deve fallire." + come)
     test = ", ".join(esito.get("test") or []) or "i tuoi test"
+    if stato == "struttura":
+        return (f"Ho rieseguito i test nuovi o cambiati ({test}) sulla versione di PRIMA della "
+                "correzione: falliscono, ma solo per un import, la sintassi o un nome che prima "
+                f"non c'era ({esito.get('perche') or '?'}), non per un'asserzione. Così non "
+                f"riproducono il problema segnalato{p}: il test deve usare solo ciò che c'era "
+                "già (le funzioni e i pulsanti di prima) e fallire su un controllo del risultato "
+                "(assert); poi correggi il codice finché passa." + come)
     return (f"Ho rieseguito i test nuovi o cambiati ({test}) sulla versione di PRIMA della "
             f"correzione e passano anche lì: non riproducono il problema segnalato{p}. Scrivi "
             "un test che controlla proprio ciò che la persona dice che non va e che sulla "
