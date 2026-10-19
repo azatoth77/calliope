@@ -3808,3 +3808,44 @@ dall'agente in al più 2 giri col modello di oggi. Nel log: `agente_giri_uguali`
   `Lavoro`, salvato in `in_corso.json`. In `prova_agente_giri_uguali` l'uscita dal blocco
   (modifica, «Va bene così?», avvio), il riavvio, A, B, A, B, i file nuovi con i test verdi, il
   test tolto e il contrario.
+
+## Il banco scrive i motivi: tolti, calcolo, no al tetto, regole e limite (19/10, issue #9, ramo `issue-9-banco-motivi`)
+
+Il passo 0 della [ricerca sulla solidità dell'harness](../ricerche/2026-10-19-solidita-harness-sviluppo.md)
+(§ 3.7 e § 5): prima di cambiare il comportamento dell'agente, la riga di `riepilogo.json` di
+`prove/manuali/banco_temperatura.py` dice da sé quello che il 14/10 si contava a mano dal log.
+Nessun cambio di comportamento: solo dati salvati nel lavoro e scritti nella riga.
+
+- **L'analisi prima del codice** (`analisi` della riga, da `lav.accettazione`): `nominati` (i
+  valori nominati per input, quelli che la richiesta dice alla lettera), `valori` (i controlli
+  «si riconosce» in più), `tolti` per genere (`fuori`, `numero`, `contiene`; per un programma
+  anche `dati`) e `con_calcolo`, quanti esempi tenuti hanno il `calcolo` rifatto dal codice
+  (contato in `accettazione.interpreta`; prima si vedeva solo quando non tornava, in
+  `tolti.numero`).
+- **Il no al tetto**: la funzione `no` di `Agente._consegna_al_tetto` scrive il motivo anche in
+  `lav.segnali["al_tetto_no"]` (con il tetto in `al_tetto_tipo`); nella riga `al_tetto_no` e
+  `al_tetto_no_tipo`. I motivi possibili: «senza esempi di accettazione», «mancano i file che la
+  consegna chiede», «esempi di accettazione rossi (requisiti …)», «i test dell'agente non
+  passano», «la consegna non va: …», «il ricollaudo con i casi della persona non va»,
+  «correzione non riprodotta (…)», «controllo non riuscito (…)».
+- **Il limite**: il servizio mette il tipo del `Limite` in `lav.segnali["limite"]` («passate»,
+  «tempo», «token», «a_vuoto», «altro» per gli altri, per esempio il modello che non usa gli
+  strumenti); nella riga `limite`, solo per un lavoro finito «limite». Non va nel risultato:
+  lì `tipo_limite` è quello di una tappa e cambia la frase.
+- **Le regole** (`regole`, da `lav.segnali["regole"]`, `sonde.nota`): dal 19/10 contate anche
+  `agente_ragionamento_ripetuto` e `agente_riscrittura_ripetuta`, che prima andavano solo nel
+  log e sulla scheda (senza riga in più nel log). Le altre c'erano già: `agente_spinta_consegna`,
+  `agente_test_tolti`, `agente_consegna_al_tetto`, `agente_giri_uguali`,
+  `agente_consegna_dopo_giri`, `agente_test_instabili`, `agente_riscrittura_piccola`.
+- **I segnali di giro** di fine lavoro (`segnali_giro`: `senza_novita`, `senza_progressi`,
+  `ripetizioni`, `riscritti`, da `segnali_giro`); con più giri i primi due sono dell'ultimo
+  giro, perché ripartono a ogni «continua».
+
+**Come leggerla.** Il criterio di #9 «0 lavori fermati al tetto con "mancano i file che la
+consegna chiede" e accettazione nascosta verde» è `al_tetto_no == "mancano i file…"` con
+`accettazione: true`; il falso «fatto» resta `esito == "fatto"` con `accettazione: false`. Per
+ogni convertitore la riga ha `nominati`, `tolti` e `con_calcolo`. A secco (`--secco`) la consegna
+al tetto controlla i campi nuovi: l'esempio con «leghe» (non nella richiesta) tolto come
+`fuori`, `nominati == {"da": ["miglia"]}`, `con_calcolo == 1`; nel contrario «limite» delle
+passate con «esempi di accettazione rossi», nelle porte senza il test «correzione non
+riprodotta». Resta il banco sulla DGX (punto 2 di #9), di chi amministra.
