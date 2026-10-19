@@ -994,6 +994,10 @@ class Agente:
         seg = lav.segnali if isinstance(lav.segnali, dict) else {}
         lav.segnali = seg
         seg["ripetizioni"] = int(seg.get("ripetizioni", 0) or 0) + 1
+        # Contata anche tra le regole del lavoro (19/10, #9: la riga del banco), senza riga
+        # in più nel log
+        from ..sonde import nota as nota_regola
+        nota_regola(lav, "agente_ragionamento_ripetuto")
         frase = rip.scattato if rip is not None else ""
         self.log(f"[AGENTI] {lav.id}: giro a vuoto nel ragionamento, passata fermata "
                  f"(regola agente_ragionamento_ripetuto, {seg['ripetizioni']}ª volta): "
@@ -1527,6 +1531,8 @@ class Agente:
             for p, n in list(fila.items()):
                 if n >= RISCRITTURE_MAX and consegna is None:
                     from .ripetizioni import spinta_riscritture
+                    from ..sonde import nota as nota_regola
+                    nota_regola(lav, "agente_riscrittura_ripetuta")   # 19/10, #9: il banco
                     self.log(f"[AGENTI] {lav.id}: {p} riscritto per intero {n} volte di fila "
                              "(regola agente_riscrittura_ripetuta)")
                     lav.nota("spinta", motivo="riscrive il file intero",
@@ -1604,6 +1610,15 @@ class Agente:
 
         def no(perche: str):
             self.log(f"[AGENTI] {lav.id}: al tetto niente consegna d'ufficio: {perche}")
+            # Anche nei segnali del lavoro (19/10, #9): la riga del banco dice il motivo del
+            # «limite» senza contarlo a mano dal log
+            try:
+                seg = lav.segnali if isinstance(getattr(lav, "segnali", None), dict) else {}
+                lav.segnali = seg
+                seg["al_tetto_no"] = perche
+                seg["al_tetto_tipo"] = e.tipo
+            except Exception:  # noqa: BLE001 — una misura non ferma niente
+                pass
             return None
         con_esempi = a.get("stato") == "pronta" and bool(a.get("file"))
         if not con_esempi and not correzione:
