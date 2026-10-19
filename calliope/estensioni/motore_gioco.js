@@ -710,6 +710,19 @@
         }
       });
       if (ris.dopo === "esito") throw errore(dove + ": «dopo» è la fase dopo l'esito, non «esito»");
+      // Le due forme che perdevano qualcosa senza dirlo (19/10, #186): con «fase» il motore va
+      // subito lì e l'esito non si vedeva; «dopo» vale solo dopo un esito e senza era ignorato
+      var conEsito = typeof ris.esito === "string" && ris.esito !== "";
+      var fase = ris.fase === undefined || ris.fase === null ? null : ris.fase;
+      var dopo = ris.dopo === undefined || ris.dopo === null ? null : ris.dopo;
+      if (conEsito && fase !== null && fase !== "esito") {
+        throw errore(dove + ": «esito» con «fase»: \"" + fase + "\" non si vede, perché «fase» va subito a «" + fase + "». "
+          + "Per mostrare il testo e poi andare a «" + fase + "»: { esito: \"…\", dopo: \"" + fase + "\" }; per andarci subito senza testo: { fase: \"" + fase + "\" }");
+      }
+      if (!conEsito && dopo !== null && fase !== "esito") {
+        throw errore(dove + ": «dopo»: \"" + dopo + "\" senza «esito» non fa niente («dopo» è la fase dopo il testo dell'esito). "
+          + "Per andare subito a «" + dopo + "»: { fase: \"" + dopo + "\" }; per mostrare un testo e poi andarci: { esito: \"…\", dopo: \"" + dopo + "\" }");
+      }
     }
     // Applica un comando: lo stato nuovo (S non cambia). Un errore della logica o della forma
     // lancia, con fase e comando nel messaggio
