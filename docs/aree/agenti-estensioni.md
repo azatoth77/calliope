@@ -3912,3 +3912,88 @@ le tappe con `tipo_limite` «consegna_rossa» e «prosa».
 - `agente_prosa_non_consegna` si conta solo dove la passata prima era una consegna (file scritti
   e una spinta già data). `agente_esito_non_valido` si scrive anche per gli strumenti `grafo_*`
   della ricerca (`nota_valore_non_ammesso`). L'esito vuoto è un errore (prima valeva «fatto»).
+
+## Gli strumenti onesti dell'agente (19/10, issue #185, ramo `issue-185-strumenti-onesti`)
+
+**Il caso** (analisi del 19/10, `docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.2,
+passo 2 del § 5): il ciclo calcolava molto durante il giro (impronte dei file, firme degli errori,
+conti dei test), ma quasi nulla arrivava all'agente. Il ritorno a uno stato già visto (A, B, A, B)
+lo sapeva `novita_file` e serviva solo al rapporto a voce della tappa; un'uscita troncata diventava
+`{}` e l'agente riceveva «manca percorso» e riprovava uguale. Nel catalogo dei 44 fallimenti veri
+l'oscillazione e il comando ripetuto tornano dal 06/10 al 18/10 (il tris di #174). Le note sono
+**fatti**, mai rimproveri, e stanno nel risultato dello strumento che le riguarda: nessun messaggio
+a parte, nessun messaggio vecchio riscritto (la cache dei prefissi resta, la prova lo controlla).
+
+**Cosa cambia.**
+1. **Lo stato già visto** (`nota_stato_gia_visto`, regola `agente_stato_gia_visto`): l'impronta
+   dell'intera cartella del lavoro (`Sandbox.impronta`: percorsi e contenuti dei file dell'elenco,
+   senza `.calliope` e `.tmp`) si segna all'inizio del lavoro, dopo ogni scrittura e a ogni
+   esegui_test, con la passata e l'esito dei test in breve (`segnali["cartelle"]`, al più 40
+   stati). Nel risultato di scrivi_file e modifica_file, sotto `gia_visto`: «questa versione della
+   cartella è identica a quella di 4 passate fa, quando esegui_test dava: 1 test su 1 non
+   passavano (…)»; se la cartella è nuova ma il file no, ««programma.py» è tornato identico a
+   com'era 3 passate fa»; una riscrittura uguale, «… è uguale a com'era già: non è cambiato niente».
+   La passata si dice relativa («N passate fa»): i numeri delle passate l'agente non li vede.
+2. **L'uscita troncata** (regola `agente_uscita_troncata`): il client di vLLM legge ora
+   `finish_reason` (`out["fine"]`) e segna le chiamate con gli argomenti che non si leggono
+   (`out["rotti"]`); con «length» anche l'ultima chiamata, perché lì gli argomenti arrivano a pezzi e
+   un JSON che si legge può avere il contenuto a metà. Il client di Ollama legge `done_reason` e
+   segna gli argomenti in stringa rotti, ma non l'ultima chiamata a max_tokens: Ollama manda le
+   chiamate intere. Una chiamata rotta non si esegue e riceve «la tua uscita è stata troncata
+   (fermata a max_tokens): questa chiamata è arrivata a metà e non l'ho eseguita. Scrivi il file in
+   pezzi più corti, oppure cambia solo le righe che servono con modifica_file». Una passata fermata a
+   max_tokens senza chiamate riceve lo stesso fatto al posto della spinta «usa gli strumenti». Quando
+   il server rifiuta `thinking_token_budget` e il client lo toglie (`senza_budget`), il ciclo lo
+   scrive nel log una volta (`budget_tolto`): prima cadeva in silenzio.
+3. **esegui_test invariato** (regola `agente_test_invariati`): con la stessa impronta della
+   cartella, lo stesso file di test e lo stesso controllo della consegna dell'ultima esecuzione i
+   test non si rieseguono: torna l'esito di allora (l'uscita tagliata a 3 000 caratteri) con
+   «invariato»: «nessun file è cambiato dall'esecuzione di una passata fa: non ho rieseguito i test,
+   l'esito è questo». Un'esecuzione scaduta o che non è partita (`errore`) non si ricorda. I test
+   alla consegna si rifanno sempre, due volte (lì si vedono quelli col caso o col tempo, #174).
+4. **Le letture** (regola `agente_rilettura`, la nota del 06/10): il conto è per file e impronta del
+   contenuto, non per argomenti. Vale anche con `riga` (prima usciva prima del conto) e un
+   `da_carattere` diverso non lo azzera più. Si conta come rilettura la lettura di un pezzo già letto
+   tutto (gli intervalli letti, uniti): i pezzi nuovi di un file lungo no. Un contenuto cambiato
+   riparte da capo. La deduplica nella stessa passata resta com'era.
+5. **modifica_file**: il testo vecchio che non c'è ha nel risultato le righe vere, numerate, intorno
+   alla riga più simile alla sua prima riga (`righe_vere`, `punto_piu_simile` con difflib, soglia
+   0,6; sotto «nessuna riga gli somiglia: rileggi il file»), prima solo il numero di riga quando la
+   prima riga c'era uguale; il testo ambiguo dice le righe delle occorrenze («compare 2 volte, alle
+   righe 5, 9»). `vecchio == nuovo` è rifiutata (`agente_modifica_nulla`: prima riusciva e faceva
+   «scadere» i test verdi). La modifica che rimette esattamente il testo tolto da una modifica
+   precedente dello stesso file è rifiutata, con il passo e l'esito dei test sulla cartella di prima
+   di quella modifica, se c'è (`agente_modifica_inversa`, `segnali["modifiche"]`, impronte e non
+   testi): «questa modifica rimette esattamente il testo che la tua modifica_file di una passata fa
+   aveva tolto, e non l'ho fatta; prima di quella modifica esegui_test dava: … Se vuoi davvero
+   tornare a com'era, riscrivi il file con scrivi_file».
+6. **Lo strumento sconosciuto** ha `ok: False` e l'elenco degli strumenti di quella passata
+   (`agente_strumento_sconosciuto`); anche il ripiego di `_strumento` ha `ok: False`. **Le chiamate
+   dopo la consegna** nella stessa passata ricevono ognuna «non eseguita: il lavoro era già
+   consegnato» (dopo chiedi_permesso «… aspetta la risposta di chi l'ha chiesto», dopo la consegna
+   rossa di #180 «… si è fermato»), regola `agente_dopo_consegna`: prima restavano senza risposta, e
+   la storia ripresa dopo una domanda o una tappa era malformata.
+
+**Prove.** `prova_strumenti_onesti` (nuova, livello 2, ~15 s), con i contrari: gli stati nuovi
+senza nota, gli argomenti mancanti veri, la chiamata intera, un file cambiato e un altro file di
+test, i pezzi nuovi di un file lungo, una modifica diversa, la consegna da sola.
+`prova_porte_consegna`: la sezione 5 chiama esegui_test due volte sulla stessa cartella con e senza
+il predicato della consegna, e per questo il controllo della consegna sta nella chiave
+dell'esecuzione ricordata.
+
+**Non fatto qui**: il ciclo della ricerca (`ricerca`) ha lo stesso «dopo la consegna» e il suo
+strumento sconosciuto, non toccati; il test rifatto alla tappa e i segnali nel giro dopo (n. 16
+dell'analisi, il blocco di stato del § 4).
+
+**Rischi.** L'impronta della cartella costa una lettura di tutti i file a ogni scrittura (due per
+scrivi_file, tre per modifica_file) e a ogni esegui_test: le cartelle dei lavori sono piccole (al
+più 100 file, 5 MB), da guardare nel banco. Un test che dipende dal caso o dal tempo, rieseguito
+senza cambiare niente, ora dà lo stesso esito invece di un altro: la consegna lo trova comunque
+(due esecuzioni, `agente_test_instabili`). Un agente che vuole davvero annullare una sua modifica
+deve passare da scrivi_file.
+
+**Da misurare sulla DGX** (dopo l'unione): il banco di #9; criterio della ricerca, nel banco calano
+le passate senza novità e le riletture, e nessun lavoro torna allo stesso stato della cartella più
+di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_troncata`,
+`agente_test_invariati`, `agente_rilettura`, `agente_modifica_nulla`, `agente_modifica_inversa`,
+`agente_strumento_sconosciuto`, `agente_dopo_consegna` e la riga «non accetta thinking_token_budget».
