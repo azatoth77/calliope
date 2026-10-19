@@ -331,13 +331,22 @@ AL_TETTO_CORREZIONE = ("L'agente non ha fatto in tempo a consegnare, ma il test 
                        "che mi hai segnalato adesso passa: il lavoro l'ho chiuso io.")
 
 
+# Le tappe che non vengono da un tetto del giro (19/10, #180): la consegna rossa (i test che non
+# passano dopo l'ultimo rimando, o il controllo della consegna dopo l'ultimo rifiuto) e le passate
+# di fila senza strumenti
+PERCHE_TAPPA = {"consegna_rossa": "l'agente ha consegnato, ma la consegna non va: i test non "
+                                  "passano o manca qualcosa che la consegna chiede",
+                "prosa": "l'agente ha risposto più volte senza usare gli strumenti"}
+
+
 def frase_tappa(lav, titolo: str) -> str:
     """Il rapporto di una tappa (08/10, versione 2 della modalità sviluppo), senza il nome di
     chi l'ha chiesto: cosa è fatto, cosa blocca, i segnali di giro a vuoto, la scelta."""
     r = lav.risultato or {}
     perche = {"passate": "ha finito le passate del giro", "tempo": "è finito il tempo del giro",
-              "token": "ha finito i token del giro: ho compresso il suo diario"}.get(
-        r.get("tipo_limite"), "è arrivato al limite del giro")
+              "token": "ha finito i token del giro: ho compresso il suo diario",
+              # 19/10 (#180): non sono tetti, ma porte della consegna che non si aprono
+              **PERCHE_TAPPA}.get(r.get("tipo_limite"), "è arrivato al limite del giro")
     parti = [f"«{titolo}» si è fermato a una tappa: {perche}."]
     t = r.get("test") or {}
     rifatti = isinstance(t, dict) and bool(t.get("eseguiti"))
@@ -1427,6 +1436,13 @@ class Lavori:
         if stato.get("stato") == "pronta" and stato.get("file"):
             # dopo un riavvio la sandbox è la stessa
             sb.sola_lettura |= {stato.get("nome_file") or acc.FILE}
+        if gioco and getattr(lav, "correzione", False) and acc.FILE_GIOCO in (
+                getattr(lav, "file_iniziali", None) or {}):
+            # La correzione di un gioco (19/10, #180, verificato con la prova): gli esempi di
+            # accettazione tornano con i file della versione (file_per_modifica) e qui l'analisi
+            # non si rifà, quindi restavano scrivibili e l'agente poteva cambiarli. Li ha scritti
+            # il codice dalla richiesta: restano in sola lettura come nel lavoro di prima
+            sb.sola_lettura |= {acc.FILE_GIOCO}
         if not getattr(self.cfg, "agenti_accettazione", True) or lav.tipo not in (
                 "codice", "estensione") or (stato and stato.get("stato") != "domanda"):
             return None
@@ -1680,6 +1696,10 @@ class Lavori:
             except Exception as e:  # noqa: BLE001 — il ricollaudo non ferma la consegna
                 self.log(f"[AGENTI] {lav.id}: ricollaudo non riuscito: {type(e).__name__}: {e}")
                 return None
+        # Lo stesso controllo senza il ricollaudo, che ha effetti (19/10, #180): dentro il
+        # risultato di esegui_test, perché «tutto verde» voglia dire consegnabile
+        controlla.consegnabile = lambda sandbox: controlla_consegna(
+            sandbox, nomi_presi=presi, nome_atteso=atteso)
         return controlla
 
     def _tappa(self, lav: Lavoro, ris: dict, dest: Path, sb):
@@ -1909,6 +1929,10 @@ class Lavori:
                 # Chiusa dal codice al tetto (13/10 sera): detto, in una frase
                 al_tetto = (AL_TETTO_CORREZIONE if r.get("consegna_al_tetto_con")
                             == "riproduzione" else AL_TETTO)
+                if r.get("consegna_al_tetto") in ("a_vuoto", "prosa"):
+                    # Non un tetto: l'agente ha smesso senza consegnare (19/10, #180)
+                    al_tetto = al_tetto.replace("non ha fatto in tempo a consegnare",
+                                                "non ha consegnato")
                 return (str(r["estensione"]["frase"]).rstrip() + " " + al_tetto).strip()
             return r["estensione"]["frase"]
         if lav.tipo in ("codice", "estensione"):
