@@ -209,6 +209,18 @@ Ogni passo è una issue e una PR, con il suo criterio sul banco. L'ordine segue 
    calo, a parità di riuscite.
 5. **Le spinte e la scala** (§3.4: 23–27). Le spinte in prosa diventano gradini con nome.
 6. **I ruoli** (§3.1: 7–9; §3.6). Il passo più grande, dopo che 1–5 hanno reso leggibili i numeri.
+7. **I tetti per profilo dell'agente** (aggiunto il 19/10, prima di #175). Oggi tempo, token al
+   minuto, budget del ragionamento per passata e guardia dei minuti senza strumenti sono numeri
+   fissi tarati sulla velocità dell'A3B (`agenti_tempo_max_min` 30, `agenti_token_minuto` 5 000,
+   `agenti_ragionamento_passata` 8 192, `agenti_minuti_senza_strumenti` 5). Un modello denso da
+   27B sulla Spark genera, a stima dalla banda (~273 GB/s, ~15 GB di pesi in NVFP4), 12–15 token/s
+   contro i 23–74 dell'A3B: 30 minuti valgono ~23 000 token, una passata di ragionamento pieno
+   ~10 minuti, e la guardia dei 5 minuti scatterebbe dentro una passata normale. Senza tetti
+   relativi al modello il confronto di #175 misurerebbe il tempo, non la qualità. Proposta: i
+   tetti nel profilo dell'agente (come `llm_profilo` per la voce, una riga per cambiare modello)
+   o calcolati dalla velocità misurata delle prime passate; le guardie a tempo diventano a token.
+   Criterio: lo stesso lavoro con due profili ha lo stesso budget in token, e il banco riporta
+   tempo e token per lavoro riuscito.
 
 Da verificare sulla DGX prima del passo 2: quali `top_p` e `top_k` usa davvero vLLM (Calliope
 manda solo temperatura e `presence_penalty`); se `tool_choice: "required"` convive con il parser
@@ -218,4 +230,7 @@ storia (non verificato, da misurare contro il contesto).
 ## 6. Cosa non è in questa analisi
 
 La scelta del modello dell'agente (#175): un harness più solido rende quella misura più pulita,
-e conviene farla dopo i passi 0–3. Il lato voce dello sviluppo (#172).
+e conviene farla dopo i passi 0–3 e il 7. Un modello più capace non toglie i passi 1, 3 e 6: le
+porte, il contratto e la verifica indipendente non dipendono dal modello, e un modello più
+capace sa anche aggirare meglio i controlli (casi speciali per gli esempi visibili, test
+indeboliti). Rende invece meno necessari i rilevatori che compensano la memoria corta. Il lato voce dello sviluppo (#172).
