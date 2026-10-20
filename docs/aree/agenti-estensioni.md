@@ -4374,3 +4374,18 @@ preparate, deposito dei segreti, autonomia (#53), capacità dell'infrastruttura 
 **Niente codice in questo lavoro**: fino al primo passo il contratto, il piano dell'agente,
 l'analisi della richiesta e i requisiti trattano ancora i dodici impossibili come prima. Il piano
 aspetta l'approvazione di chi amministra; poi una issue per passo.
+
+**Le risposte della sera** (20/10, nella 0033 e nel § 10 dell'analisi, con le correzioni della
+revisione della PR #195): serrature, cancello, garage, gas e allarme restano «mai» anche per le
+estensioni finché non c'è il secondo fattore (#52); la webcam e le altre capacità E4 si **attivano
+per sessione d'uso** (la scheda aperta o la conversazione; la attiva chi usa l'estensione, se ha il
+livello), mai in una corsa a orario, e ogni comando della casa chiede ancora la sfida; il «sì,
+sempre» diventa una concessione che dà solo chi amministra (un familiare dice «sì» per quella volta);
+**revocare non chiede la sfida** e un familiare sospende le concessioni sui propri dati; la
+sospensione è a due livelli (oltre le quote la concessione, fuori dall'ambito l'estensione);
+irreversibile è ciò che Calliope non sa riportare com'era (le cancellazioni dei suoi dati diventano
+reversibili con un cestino a tempo); leggere dati personali vale almeno E2; i dati letti seguono la
+conservazione della conversazione e «dimentica»; promemoria mensile; tornando indietro di versione le
+concessioni si richiedono; niente concessioni a minori e ospiti. Il piano è ora in passi 0–6, 7a
+(divieti con una strada nuova: posta, file della persona, rete di casa), 7b (attivazione E4) e 7c
+(limiti dell'infrastruttura), con la misura delle conferme ogni 100 esecuzioni creata dal passo 0.

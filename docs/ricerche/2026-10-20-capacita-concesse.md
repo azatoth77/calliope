@@ -3,7 +3,8 @@
 *Issue #193, decisione [0033](../decisioni/0033-capacita-concesse-e-revocabili.md). Solo documenti:
 nessun codice cambia con questo lavoro. I riferimenti `file:riga` sono verificati su main al commit
 `d2f0cc93` (20/10). Area: [agenti-estensioni](../aree/agenti-estensioni.md),
-[sicurezza-politica](../aree/sicurezza-politica.md).*
+[sicurezza-politica](../aree/sicurezza-politica.md). Aggiornato la sera del 20/10 con le risposte di
+chi amministra (§ 10) e con le correzioni della revisione della PR #195.*
 
 ## 1. Il principio, in breve
 
@@ -49,14 +50,14 @@ Sintesi (il dettaglio nei paragrafi):
 |---|---|---|---|---|
 | `email` | divieto di politica | E3 (esce) | l'invio | coda delle azioni preparate, connettore di un canale, deposito |
 | `telefono` | limite dell'infrastruttura | (E3 se esistesse) | chiamare, mandare SMS | un canale verso il telefono vero (app nativa o modem): fuori portata |
-| `file_persona` | divieto di politica | E2 leggere, E3 sovrascrivere | cancellare o sovrascrivere senza copia | un metodo della porta verso il satellite PC |
-| `rete_locale` | divieto di politica | E1–E3 per dispositivo | comandi che cancellano o cambiano la rete | una rete privata ad host precisi dentro la porta |
+| `file_persona` | divieto di politica | E2 leggere (dato personale), E3 sovrascrivere | cancellare o sovrascrivere senza copia | un metodo della porta verso il satellite PC |
+| `rete_locale` | divieto di politica | E1–E3 per dispositivo (i delicati della casa: «mai») | comandi che cancellano senza copia (un NAS) o cambiano la rete | una rete privata ad host precisi dentro la porta |
 | `orari_fissi` | divieto di politica | la classe delle operazioni, approvata come E3 | niente in autonomia | il pianificatore di #53 |
 | `pacchetti` | limite dell'infrastruttura | — (si decide quando si costruisce la versione) | — | un catalogo di pacchetti verificati nella versione |
-| `memoria` | divieto di politica | E0 (lettura), con la categoria del dato | — | metodi della porta verso i tool di lettura |
-| `microfono_camera` | limite dell'infrastruttura, con un divieto forte sopra | E4 | — | uno scatto alla volta dal satellite PC |
+| `memoria` | divieto di politica | E2 per i dati di una persona (ricordi, rubrica), E0 per la biblioteca | — | metodi della porta verso i tool di lettura |
+| `microfono_camera` | limite dell'infrastruttura, con un divieto forte sopra | E4, attivata per sessione d'uso | — | uno scatto alla volta dal satellite PC |
 | `altri_tool` | divieto di politica | quella del tool (`valore.effetto`) | quella del tool | la porta li sa già chiamare |
-| `credenziali` | divieto di politica | quella delle operazioni dell'account | ciò che l'account permette di inviare, pagare, cancellare | deposito, login delegato, connettori |
+| `credenziali` | divieto di politica | almeno E2 per leggere (dato personale), poi quella delle operazioni | ciò che l'account permette di inviare, pagare, cancellare | deposito, login delegato, connettori |
 | `javascript` | limite dell'infrastruttura | E0 | — | un browser senza testa dietro `RetePubblica` |
 | `modello` | limite dell'infrastruttura | E0, l'uscita resta un dato non fidato | — | un metodo della porta verso un modello locale, con l'arbitro |
 
@@ -64,6 +65,18 @@ Sette divieti di politica e cinque limiti dell'infrastruttura. Diversi divieti d
 **anche** un pezzo mancante (un divieto che oggi coincide con l'assenza di un metodo): toglierne il
 divieto non basta, serve la strada. Per questo il piano (§ 7) separa la concessione (il modello e il
 controllo, uguali per tutti) dalle capacità nuove (una alla volta).
+
+**Due regole valgono per tutte le voci** (revisione della PR #195):
+
+- **Irreversibile** è ciò che Calliope non sa riportare com'era: inviare fuori casa, pagare,
+  cancellare fuori casa, cancellare o sovrascrivere senza copia i file della persona o un NAS di
+  casa. Le cancellazioni dei dati di Calliope (`lista_togli`, `dati_cancella` e simili; oggi
+  `ricorrente=True` in `guardrail.py:258-269`, quindi già concedibili con «sì, sempre») diventano
+  reversibili con un **cestino a tempo**, e solo così restano concedibili in anticipo. La tabella
+  (`preparate`, § 5.9) sta nel codice, per operazione.
+- **Leggere dati personali** (un account, i file di una persona, i suoi ricordi, la rubrica) vale
+  **almeno E2**: per l'effetto sarebbe una lettura (E0), ma la riservatezza pesa nell'approvazione
+  come un effetto che resta. Le letture pubbliche (biblioteca, internet) restano E0.
 
 ### 3.1 `email`: mandare email, SMS, messaggi o notifiche fuori casa
 
@@ -78,7 +91,8 @@ controllo, uguali per tutti) dalle capacità nuove (una alla volta).
   o a orario), quante bozze al giorno.
 - **Classe**: E3 (esce di casa). La notifica alla web app di casa **non esce di casa**: E2,
   concedibile in anticipo come la scheda personale di oggi (è la prima cosa che chiedeva la risposta
-  S10 del 12/10).
+  S10 del 12/10). Va però **a una persona**: al telefono abbinato a chi l'ha chiesta (o a chi la
+  concessione nomina), mai a tutti i telefoni di casa, per la regola «il risultato solo a lei».
 - **Revoca**: la concessione; le bozze in coda si tolgono con lei.
 - **Irreversibile**: l'invio. Si concede di preparare; l'invio lo conferma la persona al momento,
   con destinatario e testo letti dalla bozza che tiene Calliope (§ 5.6), mai dalla frase
@@ -120,7 +134,11 @@ controllo, uguali per tutti) dalle capacità nuove (una alla volta).
   i metodi, un elenco chiuso di percorsi o comandi), mai una rete intera. Per i dispositivi che Home
   Assistant conosce già resta la strada di oggi (`casa_stato`, `casa_comando`).
 - **Classe**: per dispositivo, con la tabella della casa come guida (`valore._casa`,
-  `calliope/valore.py:170-188`: luci E1, clima E2, nomi delicati E4, con la conferma per sessione d'uso del § 10, decisione 1); il resto E3. Una **telecamera**
+  `calliope/valore.py:170-188`: luci E1, clima E2); il resto E3. I **delicati** (serrature, cancello,
+  garage, gas, allarme: `valore._DELICATI`, `:176-177`) per `calliope/casa/regole.py:9-10` «si
+  leggono, non si comandano», e restano fra i «mai» anche per le estensioni finché non c'è il secondo
+  fattore (#52; § 10, decisione 1). Un dispositivo fuori da Home Assistant con lo stesso ruolo (una
+  serratura in rete) segue la stessa regola. Una **telecamera**
   è un'immagine delle persone di casa: va col § 3.8, non qui.
 - **Revoca**: la concessione; il dispositivo esce dall'elenco della rete privata della porta.
 - **Irreversibile**: i comandi che cancellano (un NAS) o che cambiano la rete (il router): preparati.
@@ -139,8 +157,12 @@ controllo, uguali per tutti) dalle capacità nuove (una alla volta).
 - **Classe**: quella delle operazioni che l'estensione fa, ma l'approvazione dell'autonomia pesa
   come una E3 anche per un'estensione che legge soltanto: nessuno è lì a guardare.
 - **Revoca**: «togli la pianificazione», o tutta l'estensione.
-- **E4**: mai in autonomia, perché valgono solo per una sessione aperta da una persona (§ 10,
-  decisione 1).
+- **E4**: mai in autonomia, perché si attivano solo in una sessione aperta da una persona (§ 10,
+  decisione 1). Un'estensione con concessioni E4 si può pianificare, ma la corsa a orario gira senza
+  quelle capacità.
+- **Il tetto di 30 s** della [0013](../decisioni/0013-estensioni-porta-stretta.md) resta per ogni
+  chiamata: «in secondo piano» vuol dire chiamate brevi a intervalli, non un'esecuzione lunga. Un
+  processo che resta acceso è infrastruttura nuova e va deciso a parte.
 - **Irreversibile**: niente in autonomia. Una pericolosa senza la persona presente è vietata, come
   già nel ricollaudo (`calliope/estensioni/porta.py:92-104`, regola `ricollaudo_senza_conferme`); una
   preparazione resta in coda per la persona.
@@ -163,8 +185,9 @@ controllo, uguali per tutti) dalle capacità nuove (una alla volta).
 - **Capacità concessa**: lettura di una fonte precisa, con un ambito (la biblioteca; l'archivio dei
   documenti di casa per un tipo di documento; la rubrica dell'ufficio; i ricordi **di una persona**,
   collegati solo con lei presente).
-- **Classe**: E0 per l'effetto. Il rischio qui è la riservatezza, non l'effetto: per questo la
-  lettura **contamina** l'esecuzione con la categoria del dato (come oggi `casa`, `agenda`,
+- **Classe**: per l'effetto sarebbe E0, ma i ricordi di una persona, la rubrica e l'archivio dei
+  documenti di casa sono dati personali: **almeno E2** (§ 3, regole comuni). La biblioteca resta E0.
+  Il rischio qui è la riservatezza: per questo la lettura **contamina** l'esecuzione con la categoria del dato (come oggi `casa`, `agenda`,
   `liste:<nome>`: `guardrail.categoria_lettura`, `:140-143`), e i dati letti escono solo lungo un
   flusso approvato. La biblioteca è pubblica: non contamina.
 - **Revoca**: la concessione. **Irreversibile**: niente (sola lettura; scrivere un ricordo è E2 e
@@ -178,10 +201,11 @@ controllo, uguali per tutti) dalle capacità nuove (una alla volta).
   [0029](../decisioni/0029-conversazione-di-stanza.md)).
 - **Capacità concessa**: al più **uno scatto alla volta**, con la persona presente e davanti al suo
   PC; mai un flusso continuo, mai il microfono (che resta di Calliope). Classe E4 (riguarda la
-  fiducia e le persone di casa): vale la **conferma per sessione d'uso** (§ 10, decisione 1), quindi
-  mai a orario.
+  fiducia e le persone di casa): la concessione la dà chi amministra, e in più ogni sessione d'uso va
+  **attivata** da chi usa l'estensione, se ha il livello per farlo (§ 10, decisione 1); quindi mai a
+  orario.
 - *[storico fino al 20/10 sera: «chiede a chi amministra se vuole tenerla fra i "mai"»]*: deciso il
-  20/10, la webcam non è fra i «mai» (§ 10, decisione 2); resta l'ultima del passo 7, perché è la
+  20/10, la webcam non è fra i «mai» (§ 10, decisione 2); resta l'ultima del passo 7c, perché è la
   voce più vicina a «sorveglianza».
 
 ### 3.9 `altri_tool`: chiamare altre estensioni o altri tool di Calliope
@@ -208,8 +232,8 @@ controllo, uguali per tutti) dalle capacità nuove (una alla volta).
 - **Capacità concessa**: «un account» di un servizio, **di una persona** (o della casa), collegato
   con lei presente; ambito: le operazioni (leggere, cercare, preparare), gli oggetti (una cartella
   della posta, un calendario), la frequenza.
-- **Classe**: quella delle operazioni. Leggere è E0 per l'effetto, ma il dato è della persona: la
-  lettura contamina con la categoria `account:<nome>` e i dati escono solo lungo un flusso
+- **Classe**: quella delle operazioni, e leggere vale **almeno E2** perché il dato è della persona
+  (§ 3, regole comuni); la lettura contamina con la categoria `account:<nome>` e i dati escono solo lungo un flusso
   approvato. Preparare è E2; gli atti (inviare, pagare, cancellare) E3 e irreversibili.
 - **Revoca**: Calliope dimentica il segreto (il deposito lo cancella) e, dove il fornitore ha
   un'API per farlo, lo revoca anche presso di lui; dove non c'è, Calliope lo dice («revocalo anche
@@ -263,7 +287,7 @@ Il principio nuovo non parte da zero: una buona metà delle sue parti esiste, co
 | Chi approva | un gioco puro anche un familiare; il resto solo chi amministra, con la sfida | `servizio.py:890-971` (`approvabile_da_familiare` a `:913`, sfida a `:924-930`) | è la scelta del 20/10: concede chi amministra |
 | Frase di sfida e conferme | tre parole e un numero; il «sì» breve di chi amministra; la proposta valida per più turni | `conferme.py` (`chiedi_conferma` `:263`, `e_admin` `:131`, `admin_confermato` `:136`) | per l'approvazione e per gli atti finali |
 | Conferma di un'azione della porta | solo chi ha usato l'estensione, mai nella stessa risposta della domanda, sfida se la regola la vuole, scadenza `estensioni_conferma_s` (120 s) | `servizio.py:1026-1061`; `config.py:1513` | è l'atto finale di una preparazione (§ 5.6) |
-| «Sì, sempre» | concessione per persona, regola, bersaglio e versione; decade con una versione nuova; revoca per estensione | `archivio.py:293-314`, decadenza a `:227-228` | il germe del modello dati: va generalizzato |
+| «Sì, sempre» | concessione per persona, regola, bersaglio e versione; decade con una versione nuova; revoca per estensione | `archivio.py:293-314`, decadenza a `:227-228`; lo dà chi ha usato l'estensione, anche un familiare (`servizio.py:1031-1045`, `porta.py:125-126`) | il germe del modello dati, ma cambia chi lo dà (§ 5.1) |
 | Host concessi alle sonde | il «sì» a `chiedi_permesso` per un host lo rende noto alle sonde | `sonde.py:189` (`concedi`), `:159` (`host_noti`) | un'altra concessione, oggi a parte |
 | Registro delle decisioni | ogni decisione della porta con regola, classe, esito e chi | `porta.py:130-141`; `archivio.py:341-347` (`decisioni.jsonl`) | registro degli usi (ma va ridotto: § 5.8) |
 | Registro delle uscite | una riga per richiesta di rete, fatta o bloccata; solo l'host, mai percorso né query | `web/rete.py:23-26`, `:303-320` (`uscite.jsonl`) | il modello per «cosa e quando, mai il contenuto» |
@@ -300,8 +324,19 @@ come l'indice con `persistenza.scrivi_json`):
 - `usi`: i contatori per le quote e l'ultimo uso.
 
 Il «sì, sempre» di oggi (`archivio.py:300-306`) diventa una concessione con `capacita` uguale alla
-regola del guardrail e `oggetto` uguale al bersaglio: così il passo 0 si prova in ombra su ciò che
-c'è.
+regola del guardrail e `oggetto` uguale al bersaglio. Oggi però lo dà **chi ha usato l'estensione**,
+anche un familiare (`servizio.py:1031-1045`, `porta.py:125-126`), mentre una concessione la dà solo
+chi amministra (scelta del 20/10). Deciso dopo la revisione della PR #195: il «sempre» **diventa una
+concessione che dà solo chi amministra**; un familiare può dire «sì» **per quella volta**. Nel passo 0
+i «sempre» di oggi dati da un familiare si traducono in concessioni segnate `da_rivedere` (contate a
+parte nel criterio, non nelle differenze), e al passo 1 si richiedono a chi amministra.
+
+**Concessione e attivazione.** La concessione è durevole e non scade (scelta del 20/10). Le capacità
+E4 hanno in più un'**attivazione per sessione d'uso** (`attivazioni`: estensione, sessione, chi l'ha
+data, quando), che si spegne alla chiusura della scheda o della conversazione: la concessione resta,
+l'attivazione no. Un gioco condiviso su più schermi ha una sessione sola, quella della partita: la
+attiva chi l'ha aperta, e chi entra dopo non la riattiva (proposta, da confermare nell'issue del
+passo).
 
 ### 5.2 Il controllo a ogni chiamata
 
@@ -340,7 +375,12 @@ fa con azioni nuove di `estensione_gestisci` (nessun tool nuovo: il conto di 75 
 [0009](../decisioni/0009-tool-uguali-per-ogni-livello.md) restano); dal cruscotto con le azioni che
 restringono di #124. Revocare è una restrizione: deciso il 20/10 (§ 10, decisione 5), **revocare
 non chiede la frase di sfida** (togliere potere è facile, darlo no), e un familiare può sospendere
-le concessioni sui propri dati.
+le concessioni sui propri dati. Oggi è diverso: la revoca dei «sempre» chiede la sfida a chi non è
+riconosciuto come chi amministra (`servizio.py:636-639`), e un familiare non usa affatto
+`estensione_gestisci` (`:599-601`); il passo 2 cambia questi due punti, che la 0033 segna in «Cosa
+cambia». La revoca vale **anche a metà**: la chiamata dopo di un'esecuzione in corso trova la
+concessione revocata (il controllo è a ogni chiamata), e le preparazioni in coda di quella concessione
+si tolgono, senza partire.
 
 ### 5.5 La sospensione per anomalia
 
@@ -381,12 +421,23 @@ preparazioni restano in coda, con un tetto e una scadenza.
   deve sapere vivere con una concessione negata o revocata (l'errore della porta c'è già:
   `ErroreCalliope`).
 
-### 5.8 Un registro senza contenuto
+### 5.8 Un registro senza contenuto, e la conservazione
 
 Il registro delle decisioni oggi tiene gli argomenti accorciati a 120 caratteri (`porta.py:480-494`,
 `_riduci`): le voci aggiunte a una lista, il comando della casa. Va bene per la casa, non per un
 account: gli usi di una concessione su un dato della persona vanno registrati come **operazione,
 oggetto, quantità e momento**, mai il testo (come il registro delle uscite, che tiene solo l'host).
+
+Il registro non è l'unico posto: quando Calliope dice o mostra un risultato, quel testo entra nel
+registro dei turni, nell'archivio delle conversazioni, nella cronologia delle schede e, con la
+[0032](../decisioni/0032-valutazione-conserva-tutto.md) accesa, nell'audio dei turni. Deciso dopo la
+revisione della PR #195: **i dati letti da un account o dai file di una persona seguono le regole
+della conversazione** in cui arrivano ([0028](../decisioni/0028-decisioni-roadmap-12-10.md),
+[0031](../decisioni/0031-conservazione-dei-minori.md), 0032): si conservano come il resto di quel
+turno, per quella persona e per lo stesso tempo (60 giorni), mai per un ospite (che non ha
+concessioni). **«Dimentica»** e `calliope conserva --svuota` / `--persona` valgono anche per loro;
+revocare un account non cancella da solo ciò che è già stato detto (va detto nella frase della revoca,
+con la proposta «vuoi che dimentichi anche quello che ti ho letto?»).
 
 ### 5.9 Le classi alla porta
 
@@ -395,7 +446,13 @@ politica per valore (E0–E4); il contesto della porta spegne la politica (`port
 classe di una concessione va presa da `valore.effetto` del tool che la porta chiama (per le voci che
 passano dai tool veri) e da una tabella del codice per le capacità nuove (connettori, rete privata).
 Le E-classi non dicono «irreversibile» in modo esplicito (E3 mescola «esce», «esegue» e «non si
-disfa»): la concessione ha bisogno di un segno a sé (`preparate`), deciso dal codice per operazione.
+disfa»): la concessione ha bisogno di un segno a sé (`preparate`), deciso dal codice per operazione,
+con la definizione del § 3 (ciò che Calliope non sa riportare com'era). Esito per le azioni di oggi
+della porta: `lista_togli` e `dati_cancella` reversibili solo con il cestino a tempo (fino ad allora
+restano pericolose, senza «sempre» per un familiare); `rete_invia` irreversibile (oggi già con la sfida
+a ogni invio); `casa_comando` non irreversibile ma con la sfida a ogni comando, come oggi
+(`guardrail.py:243-249`), anche dentro una sessione E4 attivata; il resto reversibile. Una seconda
+regola, la **riservatezza**: una lettura di dati personali pesa almeno E2 nell'approvazione.
 
 ## 6. I rischi nuovi e come li coprono i meccanismi che ci sono
 
@@ -408,96 +465,147 @@ disfa»): la concessione ha bisogno di un segno a sé (`preparate`), deciso dal 
 | **Concessioni dimenticate** (non scadono, scelta del 20/10) | nessuno, oggi i «sempre» non si elencano da nessuna parte | il cruscotto le elenca con l'ultimo uso; il promemoria una volta al mese a chi amministra, e a ogni persona per quelle sui suoi dati (§ 10, decisione 6); una concessione mai usata da molto tempo si dice per prima: passo 2 |
 | **Confused deputy** (un familiare fa concedere a nome di un altro) | approvare solo chi amministra con la sfida; la conferma solo da chi ha usato l'estensione | i dati di una persona si collegano solo con lei presente (scelta del 20/10): il collegamento avviene sul suo schermo personale, con la sua voce riconosciuta: passo 5 |
 | **Una versione nuova con lo stesso nome** | la versione nuova si riapprova; i «sempre» decadono | le concessioni decadono con la versione e si richiedono; la scheda dice quali sono nuove (come `permessi_nuovi`): passo 1 |
-| **Voce clonata di chi amministra** | la frase di sfida ferma registrazioni e TV, non una voce in tempo reale | le concessioni E3–E4 chiederanno il secondo fattore quando c'è (#52); fino ad allora il problema aperto «Voce unico fattore» di CLAUDE.md vale anche qui |
+| **Voce clonata di chi amministra** | la frase di sfida ferma registrazioni e TV, non una voce in tempo reale | i delicati della casa restano «mai» finché non c'è il secondo fattore (#52, § 10, decisione 1); le altre concessioni E3–E4 lo chiederanno quando c'è; fino ad allora il problema aperto «Voce unico fattore» di CLAUDE.md vale anche qui |
 
 ## 7. Piano a passi
+
+*[storico: la prima versione del 20/10 aveva otto passi (0–7), con l'E4 dentro il passo 1, il primo
+connettore sia nel passo 5 sia nel 7 e criteri non misurabili («l'attrito delle estensioni in
+`calliope stato --turni`», che non conta le estensioni: la politica è spenta per la porta,
+`porta.py:155`). Riscritto la sera del 20/10 dopo la revisione della PR #195.]*
 
 Ogni passo ha il suo interruttore, **spento di serie**, e un criterio scritto prima di accenderlo
 ([0019](../decisioni/0019-ombra-prima-di-accendere.md)). Chi lo accende sulla DGX aggiorna la tabella
 «Interruttori sulla DGX» di [setup-dgx](../aree/setup-dgx.md#interruttori-sulla-dgx). Una issue per
 passo, aperta dopo l'approvazione del piano. I nomi delle chiavi sono proposte.
 
-**Passo 0 — Il registro delle concessioni, in ombra.** Il modello dati (§ 5.1) e la traduzione di ciò
-che c'è: i permessi del manifesto approvato e i «sempre» diventano concessioni; la porta calcola anche
-la decisione con le concessioni e la scrive in `decisioni.jsonl` (`concessione_ombra`: decisione
-vera, decisione nuova, regola), senza cambiare niente. `calliope stato --concessioni` le elenca.
+**La misura che manca, creata dal passo 0.** Oggi nessuna vista conta le domande delle estensioni.
+Il passo 0 aggiunge a `calliope stato --concessioni` le **conferme ogni 100 esecuzioni**, contate
+dalle righe di `decisioni.jsonl` con esito `confermata`, `negata`, `scaduta` e `sempre`, divise per
+estensione e per regola. È la misura dell'attrito delle estensioni nei passi che seguono.
+
+**Passo 0: il registro delle concessioni e la misura, in ombra.** Il modello dati (§ 5.1) e la
+traduzione di ciò che c'è: i permessi del manifesto approvato e i «sì, sempre» diventano concessioni
+(i «sempre» dati da un familiare, segnati `da_rivedere`). La porta calcola **due** decisioni in più e
+le scrive in `decisioni.jsonl` (`concessione_ombra`), senza cambiare niente: `traduzione`, con le
+regole di oggi espresse come concessioni, e `nuova`, con i significati della 0033 (il «sempre» solo da
+chi amministra, letture personali almeno E2, approvazione per classe).
 - Interruttore: `estensioni_concessioni: ombra` (di serie `spento`).
-- Criterio: due giorni d'uso sulla DGX con le estensioni attive, **0 differenze** tra la decisione
-  vera e quella nuova; la prova a secco con tutte le regole del guardrail.
+- Criterio: almeno due giorni **e** almeno 200 chiamate alla porta sulla DGX (se in due giorni sono
+  meno, l'ombra continua fino a 200); **0 differenze** fra la decisione vera e `traduzione`; la prova
+  a secco con tutte le regole del guardrail. Le differenze fra vera e `nuova` non contano qui: sono
+  l'ombra del passo 1.
 
-**Passo 1 — Il controllo a ogni chiamata, la scheda e l'approvazione per classe.** La porta decide con
-le concessioni (§ 5.2); la scheda di revisione le dice in parole, con la classe e cosa resta preparato;
-le concessioni decadono con la versione, e anche tornando a una versione di prima si richiedono
-(§ 10, decisione 7); il risultato di una concessione a nome di una persona va solo a lei. Le
-concessioni **E4** valgono per **sessione d'uso** (§ 10, decisione 1): all'apertura dell'estensione,
-prima di partire, Calliope chiede la conferma dei suoi permessi E4; col sì valgono per quella sessione
-(la scheda aperta, per un'estensione con scheda o un gioco; la conversazione, per una usata solo a
-voce) e alla chiusura decadono. Nessuna concessione a nome di un ospite; un minore non chiede
-concessioni (§ 10, decisione 8).
+**Passo 1: il controllo a ogni chiamata, la scheda, chi concede.** La porta decide con le concessioni
+(§ 5.2); la scheda di revisione le dice in parole, con la classe e cosa resta preparato; le concessioni
+decadono con la versione, e anche tornando a una versione di prima (§ 10, decisione 7); il «sempre» lo
+dà solo chi amministra, un familiare dice «sì» per quella volta; le letture personali pesano almeno
+E2; il risultato a nome di una persona va solo a lei, e i dati letti seguono la conservazione della
+conversazione (§ 5.8). Minori e ospiti: nessuna concessione a nome di un ospite, un minore non chiede,
+i dati di un minore solo con un tutore presente (§ 10, decisione 8). **Il minore come utente** di
+un'estensione con concessioni date da altri: usa solo quelle che non sono a nome di un'altra persona,
+dentro le sue regole (pause e orari di `minori.py`, guardiano sui risultati come oggi). **Collaudo e
+ricollaudo** ([0016](../decisioni/0016-modalita-sviluppo-con-collaudo.md),
+[0017](../decisioni/0017-ricollaudo-e-sonde.md)): prima dell'approvazione non c'è nessuna concessione,
+quindi il collaudo usa una **concessione di collaudo** che la porta esercita con dati di prova (un
+servizio di fantasia, `CalliopeFinta` per i test), mai con i dati veri di una persona; il ricollaudo
+gira senza la persona, come l'autonomia: niente conferme, niente E4, solo dati di prova per i dati
+personali.
 - Interruttore: `estensioni_concessioni: attivo`.
-- Criterio: il passo 0 con 0 differenze; il banco d'attacco (`prova_estensioni_attacchi.py`) a **0
-  passaggi** con i casi nuovi (fuori ambito, oltre quota, versione nuova o versione di prima con le
-  concessioni dell'altra, concessione sospesa, un permesso E4 dopo la chiusura della sessione); nessun «sì» in più per le estensioni di oggi (l'attrito delle
-  estensioni in `calliope stato --turni` non cresce).
+- Criterio: il passo 0 pulito; le differenze fra vera e `nuova` dell'ombra **rilette a mano**, ognuna
+  spiegata da una regola della 0033 (nessuna differenza senza spiegazione); il banco d'attacco
+  (`prova_estensioni_attacchi.py`) a **0 passaggi** anche con i casi nuovi (fuori ambito, oltre quota,
+  versione nuova o di prima con le concessioni dell'altra, concessione sospesa, collaudo che chiede i
+  dati veri); le **prove dei contrari**: un ospite, un minore che chiede, un tool E3 o E4 del § 3.9
+  chiesto come concessione, un «sempre» di un familiare; le conferme ogni 100 esecuzioni, tolte quelle
+  dei «sempre» di un familiare, non crescono rispetto alla misura del passo 0.
 
-**Passo 2 — Revoca a più livelli, sospensione per anomalia, promemoria.** La revoca di una
-concessione, di un account o persona, di tutto (§ 5.4), a voce e dal cruscotto (con #124); la
-sospensione (§ 5.5: oltre le quote la concessione, fuori dall'ambito l'estensione); l'elenco nel
-cruscotto e il promemoria delle concessioni attive, una volta al mese (§ 10, decisione 6). Revocare
-non chiede la frase di sfida; un familiare sospende le concessioni sui propri dati.
-- Interruttore: le revoche sono restrizioni e valgono appena il passo 1 è attivo; la sospensione
-  automatica ha `estensioni_sospensione: ombra | attiva` (di serie spenta): in ombra scrive solo
-  «avrebbe sospeso».
-- Criterio per `attiva`: una settimana d'ombra con **al più una sospensione falsa** (riletta a mano)
-  su tutte le estensioni attive; ogni revoca provata a secco su tutti e quattro i livelli.
+**Passo 2: revoca a più livelli, sospensione per anomalia, promemoria.** La revoca di una concessione,
+di un account o persona, di tutto (§ 5.4), a voce e dal cruscotto (con #124), **senza la frase di
+sfida**; un familiare sospende le concessioni sui propri dati (oggi la revoca chiede la sfida e un
+familiare non usa `estensione_gestisci`: il passo cambia `servizio.py:599-601` e `:636-639`). La
+sospensione: oltre le quote la concessione, fuori dall'ambito l'estensione (§ 5.5). L'elenco nel
+cruscotto e il promemoria una volta al mese (§ 10, decisione 6).
+- Interruttore: la revoca senza sfida e la sospensione del familiare valgono con il passo 1 attivo,
+  **detto in modo esplicito** perché cambiano il comportamento di oggi;
+  `estensioni_sospensione: ombra | attiva` (di serie spenta) per la sospensione automatica: in ombra
+  scrive solo «avrebbe sospeso».
+- Criterio per `attiva`: una settimana d'ombra con **al più una sospensione falsa** (riletta a mano) su
+  tutte le estensioni attive; le prove a secco della revoca sui quattro livelli, **anche a metà di
+  un'esecuzione** (la chiamata dopo trova la concessione revocata) e **con una preparazione in coda**
+  (si toglie senza partire).
 
-**Passo 3 — Il piano che chiede invece di chiudere.** Il catalogo con lo stato delle voci, il
-contratto, il prompt, l'analisi della richiesta e i requisiti (§ 5.7).
+**Passo 3: il piano che chiede invece di chiudere.** Il catalogo con lo stato delle voci, il contratto
+(anche la sezione degli impossibili dei giochi, `_IMPOSSIBILI_GIOCO`), il prompt, l'analisi della
+richiesta, i requisiti e la regola `sviluppo_nucleo_impossibile` (§ 5.7). **Migrazione delle prove**
+che oggi dipendono dagli impossibili e dagli esiti «impossibile» o «Non si può fare»:
+`prova_estensioni_piano`, `prova_analisi_richiesta`, `prova_sviluppo`, `prova_porte_consegna`,
+`prova_partenza_gioco`, `prova_esecuzione`, `prova_estensioni_versioni`, `prova_fasi_agente_2`,
+`prova_flusso_ripresa`, `prova_agente_giri_uguali`, `prova_giro_pomeriggio`, `prova_giro_sera_gioco`,
+`prove/manuali/banco_temperatura.py`. **Cosa si vede**: in quel momento nessuna voce degli impossibili
+è ancora `offerta`, quindi l'effetto visibile è la frase («serve una capacità nuova: …» al posto di
+«non si può fare») e la riga per chi amministra; il caso vero resta senza capacità fino ai passi 4, 5
+e 7a.
 - Interruttore: `estensioni_piano_chiede: ombra | attivo` (di serie spento). In ombra l'analisi e il
   piano calcolano anche l'esito nuovo e lo scrivono nel registro del lavoro, senza cambiare quello
   detto.
-- Criterio: il banco delle richieste (`prove/banco_richieste.py`) con i casi nuovi: ogni richiesta che
-  tocca solo voci `offerta` diventa «da concedere» e nessuna voce `da_costruire` diventa «da
-  concedere»; nessun caso di oggi (estensioni, giochi, programmi) cambia esito; un giro vero
+- Criterio: le tredici prove migrate e verdi con l'interruttore spento e acceso; il banco delle
+  richieste (`prove/banco_richieste.py`) con i casi nuovi: ogni richiesta che tocca solo voci
+  `offerta` diventa «da concedere», nessuna voce `da_costruire` o `mai` diventa «da concedere» (fra i
+  contrari: disinserire l'allarme, aprire il cancello); nessun caso di oggi cambia esito; un giro vero
   dell'agente sulla DGX che arriva alla consegna dopo un `chiedi_permesso` di una concessione.
 
-**Passo 4 — Preparare senza compiere, e le prime capacità nuove dalla porta.** La coda delle azioni
-preparate (§ 5.6) e le capacità che non chiedono infrastruttura nuova: i tool di Calliope per nome
-(E0–E2, § 3.9), la memoria con la categoria del dato (§ 3.7), le notifiche alla web app di casa
-(§ 3.1).
-- Interruttore: `estensioni_preparate` (di serie spento); ogni capacità nuova entra nel catalogo come
+**Passo 4: preparare senza compiere, il cestino, le prime capacità dalla porta.** La coda delle azioni
+preparate (§ 5.6), il cestino a tempo per `lista_togli` e `dati_cancella` (§ 5.9), e le capacità che
+non chiedono infrastruttura nuova: i tool di Calliope per nome (E0–E2, § 3.9), la memoria (§ 3.7), le
+notifiche alla web app sul telefono della persona (§ 3.1).
+- Interruttore: `estensioni_preparate` (di serie spento); ogni capacità entra nel catalogo come
   `offerta` solo con il suo passo acceso.
 - Criterio: nel registro, **0 atti irreversibili senza la riga della conferma** (chi, quando, sfida);
-  le prove a secco del ciclo «prepara, mostra, conferma, scade»; un caso vero a voce per capacità.
+  le prove a secco del ciclo «prepara, mostra, conferma, scade» e della preparazione la cui
+  concessione è revocata; un ripristino dal cestino provato; un caso vero a voce per capacità.
 
-**Passo 5 — Il deposito dei segreti e il login delegato.** Il deposito (§ 5.3), il collegamento sullo
-schermo personale con la persona presente, il primo connettore tipizzato, la revoca presso il
-fornitore dove c'è.
+**Passo 5: il deposito dei segreti e il login delegato** (il meccanismo, non i servizi). Il deposito
+(§ 5.3), il collegamento sullo schermo personale con la persona presente (con un tutore per un
+minore), la revoca presso il fornitore come interfaccia, provati con **un connettore di prova di
+fantasia**. I connettori veri sono nel passo 7a.
 - Interruttore: `estensioni_segreti` (di serie spento).
 - Criterio: il banco d'attacco esteso ai segreti a **0 passaggi** (il segreto non esce mai: né nel
   risultato, né nei registri, né verso un host fuori ambito, né dopo un reindirizzamento, né a pezzi);
-  la revoca provata dall'inizio alla fine su un servizio di prova di fantasia; un collegamento rifiutato
-  se la persona non è riconosciuta dalla voce sul suo schermo.
+  la revoca provata dall'inizio alla fine sul connettore di prova; i contrari: un collegamento con la
+  persona dei dati **assente** (o non riconosciuta dalla voce sul suo schermo) rifiutato, un ospite
+  rifiutato.
 
-**Passo 6 — L'autonomia** (il progetto di #53 come concessione). Le corse a orario e in secondo piano,
-a nome di chi l'ha chiesta, con i permessi del momento, risultato solo a lei, preparazioni in coda.
-Una corsa a orario non ha un'apertura da parte di una persona, quindi **non usa capacità E4** (§ 10,
-decisione 1).
+**Passo 6: l'autonomia** (il progetto di #53 come concessione). Le corse a orario e in secondo piano,
+a nome di chi l'ha chiesta, con i permessi del momento, risultato solo a lei, preparazioni in coda,
+**senza capacità E4** (§ 10, decisione 1); il tetto di 30 s per chiamata resta (§ 3.5).
 - Interruttore: `estensioni_orari: ombra | attivo` (di serie spento); in ombra la corsa si registra
   («sarebbe partita») senza girare.
 - Criterio: i criteri di #53 (tetto al giorno, coda dei risultati con tetto e scadenza, notte a voce
   ferma con `quiete()`); in ombra, una settimana senza corse previste in una pausa di un minore o con
-  un livello cambiato; nessuna estensione con concessioni E4 pianificabile.
+  un livello cambiato; **0 usi di capacità E4 da una corsa a orario** nel registro (le prove a secco
+  lo provano con un'estensione che ha una concessione E4).
 
-**Passo 7 — Le capacità dell'infrastruttura, una issue ciascuna**, nell'ordine scelto da chi
-amministra il 20/10 (§ 10, decisione 9): connettori di posta con le loro porte (§ 3.1), file della
-persona (§ 3.3), rete di casa ad host precisi (§ 3.4), browser senza testa (§ 3.11), catalogo dei
-pacchetti (§ 3.6), modello dalla porta (§ 3.12), telefono (§ 3.2), scatto della webcam (§ 3.8).
-Ognuna con la sua analisi breve, il suo interruttore e il suo criterio.
+**Passo 7a: i divieti di politica che vogliono una strada nuova**, nell'ordine scelto da chi amministra
+(§ 10, decisione 9): il **connettore di posta** (il primo connettore vero, con le sue porte fuori da
+80 e 443: § 3.1), i **file della persona** dal satellite PC (§ 3.3), la **rete di casa** verso host
+precisi (§ 3.4). Una issue, un interruttore e un criterio ciascuna; il banco d'attacco per ognuna.
 
-**Profilo ridotto da 8 GB**: i passi 0–6 sono solo codice (niente modelli, niente GPU) e valgono anche
-lì; al passo 7 il modello dalla porta e il browser senza testa dipendono dalla memoria disponibile e
-lì restano «da costruire».
+**Passo 7b: l'attivazione per sessione delle capacità E4.** L'attivazione all'apertura (§ 5.1,
+«Concessione e attivazione»), data da chi usa l'estensione se ha il livello; la frase di sfida di ogni
+comando della casa resta. Serve prima della webcam.
+- Interruttore: `estensioni_e4_sessione` (di serie spento: senza, nessuna capacità E4 è `offerta`).
+- Criterio: le prove a secco dell'apertura, della chiusura (scheda chiusa, conversazione finita) e dei
+  contrari (chi non ha il livello, un minore, una corsa a orario, un gioco condiviso aperto da un
+  altro); nessun comando dei delicati della casa possibile (restano «mai»).
+
+**Passo 7c: i limiti dell'infrastruttura**, nello stesso ordine: browser senza testa (§ 3.11),
+catalogo dei pacchetti (§ 3.6), modello dalla porta (§ 3.12), telefono (§ 3.2), scatto della webcam
+(§ 3.8, dopo il 7b). Una issue, un interruttore e un criterio ciascuna.
+
+**Profilo ridotto da 8 GB**: i passi 0–7b sono solo codice (niente modelli, niente GPU) e valgono anche
+lì; nel 7c il modello dalla porta e il browser senza testa dipendono dalla memoria disponibile e lì
+restano «da costruire».
 
 ## 8. Caso di verifica generale
 
@@ -513,8 +621,9 @@ conto in sola lettura.
    alle 7) e chiama `chiedi_permesso` con l'ambito; il lavoro **non si chiude**.
 3. **Revisione e approvazione** (passo 1): la scheda dice le tre concessioni in parole, con la classe;
    dice che l'invio **non** è concesso e resterà una bozza. Chi amministra approva con la frase di
-   sfida.
-4. **Collegamento** (passo 5): Ada, presente, collega il suo account sul suo schermo personale; il
+   sfida. Al collaudo l'estensione ha girato con una concessione di collaudo e una posta di
+   fantasia, mai con quella di Ada.
+4. **Collegamento** (passo 5, con il connettore di posta del 7a): Ada, presente, collega il suo account sul suo schermo personale; il
    segreto va nel deposito; l'estensione non lo vede mai.
 5. **Ogni corsa** (passi 1 e 6): la porta controlla la concessione, l'orario, i permessi di Ada di
    quel momento; le letture contaminano con `account:posta di Ada`; il riassunto va solo sul suo
@@ -527,7 +636,8 @@ conto in sola lettura.
    tutta l'estensione. Calliope lo dice ad Ada e a chi amministra.
 8. **Revoca** (passi 2 e 5): «dimentica l'account della posta di Ada» toglie il segreto dal deposito,
    lo revoca presso il fornitore se si può, sospende le concessioni di quell'account in tutte le
-   estensioni.
+   estensioni; ciò che Calliope le ha già letto resta nella sua conversazione per i 60 giorni di
+   sempre, e Calliope le chiede se vuole dimenticare anche quello (§ 5.8).
 9. **Versione nuova**: le concessioni si richiedono; la scheda dice cosa cambia.
 
 Il caso attraversa tutti i passi; ogni passo ha comunque i suoi casi, che non dipendono da questo.
@@ -551,15 +661,22 @@ Il caso attraversa tutti i passi; ogni passo ha comunque i suoi casi, che non di
 *[storico fino al 20/10 sera: «Domande per chi amministra», dieci domande aperte nella prima versione
 della PR #195; le risposte di chi amministra sono queste, e il piano del § 7 è aggiornato.]*
 
-1. **E4 a un'estensione** (comandi delicati della casa, lo scatto della webcam): concedibili con la
-   **conferma per sessione d'uso**. All'apertura dell'estensione, prima di partire, Calliope chiede la
-   conferma dei suoi permessi E4; col sì valgono per tutta quella sessione; alla chiusura decadono e la
-   volta dopo si riconcedono. La sessione è il tempo in cui la scheda è aperta, per un'estensione con
-   scheda o un gioco; la conversazione, per un'estensione usata solo a voce. Una corsa a orario non ha
-   un'apertura da parte di una persona, quindi non usa capacità E4. Le irreversibili restano diverse:
-   conferma al momento di ogni atto.
-2. **I «mai» delle altre decisioni** (disinserire l'allarme, la frase di sfida e i codici, un livello
-   oltre familiare alla porta) restano non concedibili, con il rimando alla decisione. La webcam non è
+1. **E4 a un'estensione**. *[storico, prima risposta della sera del 20/10: «comandi delicati della
+   casa e scatto della webcam concedibili con la conferma per sessione d'uso»; corretta la stessa sera
+   dopo la revisione della PR #195, perché contraddiceva le regole della casa (`casa/regole.py:9-10`:
+   i delicati «si leggono, non si comandano») e la visione (punto 9: il secondo fattore per porta e
+   allarme)]*. Decisione: **serrature, cancello, garage, gas e allarme** (`valore._DELICATI`,
+   `valore.py:176-177`) restano fra i «mai» per le estensioni come per la voce, **finché non c'è il
+   secondo fattore** (#52). La **conferma per sessione d'uso** vale per la webcam e per le altre
+   capacità E4: all'apertura, prima di partire, Calliope chiede di attivarle; col sì valgono per quella
+   sessione (la scheda aperta, per un'estensione con scheda o un gioco; la conversazione, per una usata
+   solo a voce), alla chiusura si spengono e la volta dopo si riattivano. È un'attivazione, non una
+   scadenza della concessione (§ 5.1). La conferma la dà **chi usa l'estensione**, se ha il livello
+   per farlo. **Ogni comando della casa** continua a chiedere la frase di sfida anche dentro la
+   sessione (`guardrail.py:243-249`). Una corsa a orario non ha un'apertura da parte di una persona,
+   quindi non usa capacità E4. Le irreversibili restano diverse: conferma al momento di ogni atto.
+2. **I «mai» delle altre decisioni** (disinserire l'allarme, comandare i delicati della casa senza
+   il secondo fattore, la frase di sfida e i codici, un livello oltre familiare alla porta) restano non concedibili, con il rimando alla decisione. La webcam non è
    fra questi: vale il punto 1.
 3. **L'atto finale** di una preparazione lo conferma la persona proprietaria dell'account; per un
    account della casa, chi amministra.
@@ -572,7 +689,18 @@ della PR #195; le risposte di chi amministra sono queste, e il piano del § 7 è
 7. **Tornando a una versione di prima** le concessioni si richiedono, come per una versione nuova.
 8. **Minori e ospiti**: un minore non chiede concessioni; i dati di un minore si collegano solo con un
    tutore presente; nessuna concessione a nome di un ospite.
-9. **L'ordine delle capacità del passo 7**: posta, file della persona, rete di casa verso host precisi,
+9. **L'ordine delle capacità dei passi 7a e 7c**: posta, file della persona, rete di casa verso host precisi,
    browser senza testa, pacchetti, modello, telefono, webcam.
 10. **I messaggi fuori casa** diventano chiedibili, sempre preparati e inviati solo con la conferma al
     momento: cambia la risposta S10 del 12/10 (roadmap 4.9).
+
+**Dopo la revisione della PR #195 (20/10 sera)**, oltre alla risposta 1 corretta:
+
+11. **Il «sì, sempre»** diventa una concessione che dà solo chi amministra; un familiare può dire «sì»
+    per quella volta (§ 5.1).
+12. **Irreversibile** è ciò che Calliope non sa riportare com'era; le cancellazioni dei dati di
+    Calliope diventano reversibili con un cestino a tempo e quindi concedibili; i file della persona e
+    il NAS senza copia sono irreversibili (§ 3, § 5.9).
+13. **Leggere dati personali** (account, file della persona, ricordi) vale almeno E2 (§ 3).
+14. **I dati letti** da un account seguono le regole di conservazione della conversazione, e
+    «dimentica» vale anche per loro (§ 5.8).

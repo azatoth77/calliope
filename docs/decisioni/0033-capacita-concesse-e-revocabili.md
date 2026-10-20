@@ -49,11 +49,17 @@ costruzione.**
    tool), quali operazioni, quando (a voce, a orario, in secondo piano), quanto spesso (quote). È
    dichiarato nel manifesto e detto in parole nella scheda di revisione.
 4. **Il peso dell'approvazione segue la classe di rischio**, cioè le classi per effetto della
-   politica per valore (E0–E4, [0015](0015-sicurezza-per-valore.md)).
-5. **Revocabile non vuol dire reversibile.** Le azioni irreversibili (inviare fuori casa, pagare,
-   cancellare fuori casa) **non si concedono mai in anticipo**: si concede di **prepararle**, e l'atto
-   finale chiede sempre la conferma al momento, con quello che sta per succedere detto da Calliope e
-   non dall'estensione.
+   politica per valore (E0–E4, [0015](0015-sicurezza-per-valore.md)). **Leggere dati personali**
+   (un account, i file di una persona, i suoi ricordi) vale **almeno E2**, anche se per l'effetto
+   sarebbe una lettura: la riservatezza pesa come un effetto che resta (revisione della PR #195).
+5. **Revocabile non vuol dire reversibile.** È **irreversibile** ciò che Calliope non sa riportare
+   com'era: inviare fuori casa, pagare, cancellare fuori casa, cancellare o sovrascrivere senza copia
+   i file della persona o un NAS di casa. Le irreversibili **non si concedono mai in anticipo**: si
+   concede di **prepararle**, e l'atto finale chiede sempre la conferma al momento, con quello che sta
+   per succedere detto da Calliope e non dall'estensione. Le cancellazioni dei **dati di Calliope**
+   (`lista_togli`, `dati_cancella` e simili) diventano reversibili con un **cestino a tempo**, e quindi
+   concedibili. La tabella di ciò che è irreversibile sta nel codice, per operazione, mai nel
+   manifesto.
 6. **I segreti li tiene Calliope** (un deposito), e la porta li usa per conto dell'estensione, che
    non li vede mai. Revocare vuol dire che Calliope li dimentica e, dove il fornitore lo permette, li
    revoca anche presso di lui.
@@ -61,7 +67,13 @@ costruzione.**
    con i suoi permessi **del momento** (#53). Senza la persona presente nessuna domanda è possibile,
    quindi in autonomia si fa solo ciò che è concesso senza conferma.
 8. **Ogni uso va nel registro** (cosa e quando, mai il contenuto) e nel cruscotto. Un uso fuori
-   ambito o oltre le quote **sospende da solo** la concessione e lo dice.
+   ambito o oltre le quote **sospende da solo** (la concessione o l'estensione: risposta 4) e lo
+   dice. **I dati letti** da un account o dai file di una persona, quando Calliope li dice o li
+   mostra, seguono le regole della conversazione in cui arrivano
+   ([0028](0028-decisioni-roadmap-12-10.md), [0031](0031-conservazione-dei-minori.md),
+   [0032](0032-valutazione-conserva-tutto.md)): si conservano come il resto di quel turno, per la
+   stessa persona e per lo stesso tempo, e «dimentica» e `calliope conserva --svuota` valgono anche
+   per loro.
 9. **La revoca è a più livelli**: una concessione, un'estensione, un account, tutto; a voce e dal
    cruscotto. Una **versione nuova** dell'estensione richiede di nuovo le concessioni, come oggi i
    permessi «sempre» (`calliope/estensioni/archivio.py:227-228`).
@@ -74,15 +86,31 @@ costruzione.**
 - **Le concessioni non scadono** fino alla revoca o a una versione nuova; il cruscotto le elenca e
   Calliope ricorda di tanto in tanto quelle attive.
 
+**Concessione e attivazione.** La **concessione** è durevole: la dà chi amministra, non scade, si
+toglie con la revoca o con una versione nuova. Per le capacità E4 serve in più l'**attivazione per
+sessione d'uso** (risposta 1): la concessione resta, ma ogni sessione va attivata da capo. Non è una
+scadenza della concessione.
+
 **Le risposte di chi amministra alle dieci domande dell'analisi (20/10 sera)**:
 
-1. **E4** (comandi delicati della casa, lo scatto della webcam): concedibili con la **conferma per
-   sessione d'uso**. All'apertura dell'estensione, prima di partire, Calliope chiede la conferma dei
-   suoi permessi E4; col sì valgono per tutta quella sessione, alla chiusura decadono e la volta dopo
-   si riconcedono. La sessione è il tempo in cui la scheda è aperta (un'estensione con scheda, un
-   gioco) o la conversazione (un'estensione usata solo a voce). Una corsa a orario non ha un'apertura
-   da parte di una persona, quindi **non usa capacità E4**. Le irreversibili restano diverse: conferma
-   al momento di ogni atto.
+1. **E4**: *[storico, prima versione della sera del 20/10: «comandi delicati della casa e scatto
+   della webcam concedibili con la conferma per sessione d'uso»; corretta la stessa sera dopo la
+   revisione della PR #195, perché contraddiceva le regole della casa e la visione]*. Decisione:
+   - **serrature, cancello, garage, gas e allarme** (gli E4 della casa, `valore._DELICATI`,
+     `calliope/valore.py:176-177`; per `calliope/casa/regole.py:9-10` «si leggono, non si comandano»)
+     **restano fra i «mai»** per le estensioni come per la voce, **finché non c'è il secondo fattore**
+     (#52);
+   - la **conferma per sessione d'uso** vale per la webcam e per le altre capacità E4: all'apertura
+     dell'estensione, prima di partire, Calliope chiede di attivare i suoi permessi E4; col sì valgono
+     per quella sessione, alla chiusura si spengono e la volta dopo si riattivano. La sessione è il
+     tempo in cui la scheda è aperta (un'estensione con scheda, un gioco) o la conversazione
+     (un'estensione usata solo a voce);
+   - la conferma all'apertura la dà **chi usa l'estensione**, se ha il livello per quella capacità
+     (altrimenti l'estensione parte senza le capacità E4, o non parte se senza non serve);
+   - **ogni comando della casa** continua a chiedere la frase di sfida anche dentro la sessione, come
+     oggi (`calliope/guardrail.py:243-249`): l'attivazione non la sostituisce;
+   - una corsa a orario non ha un'apertura da parte di una persona, quindi **non usa capacità E4**;
+   - le irreversibili restano diverse: conferma al momento di ogni atto.
 2. **I «mai» delle altre decisioni** restano non concedibili, con il rimando (sotto, «Cosa cambia»).
    La webcam non è fra questi: vale il punto 1.
 3. **L'atto finale** di una preparazione lo conferma la persona proprietaria dell'account; per un
@@ -96,7 +124,7 @@ costruzione.**
 7. **Tornando a una versione di prima** le concessioni si richiedono, come per una versione nuova.
 8. **Minori e ospiti**: un minore non chiede concessioni; i dati di un minore si collegano solo con un
    tutore presente; nessuna concessione a nome di un ospite.
-9. **Ordine delle capacità dell'infrastruttura** (passo 7): posta, file della persona, rete di casa
+9. **Ordine delle capacità** (passi 7a e 7c del piano): posta, file della persona, rete di casa
    verso host precisi, browser senza testa, pacchetti, modello, telefono, webcam.
 10. **I messaggi fuori casa** diventano chiedibili, sempre preparati e inviati solo con la conferma al
     momento (cambia la risposta S10 del 12/10, sotto).
@@ -107,8 +135,23 @@ costruzione.**
   segreti, la porta come unica strada, i tool veri di Calliope con al più il livello familiare,
   l'impronta, l'approvazione con la sfida e il secondo parere che può solo alzare. Cambia il senso
   della porta: non è più un elenco chiuso di metodi che definisce cosa esiste, ma il punto in cui si
-  controlla una concessione. Il «sì, sempre» di oggi (per persona, regola, bersaglio e versione)
-  diventa un caso particolare della concessione.
+  controlla una concessione. Il file e la riga del README della 0013 lo segnano («in parte cambiata
+  dalla 0033»). Il **tetto di 30 s** per chiamata della 0013 resta per le chiamate a voce e a
+  orario; «restare accesa in secondo piano» lo contraddice ed è infrastruttura (un'esecuzione lunga,
+  o una serie di chiamate brevi a intervalli): si decide nel passo dell'autonomia, non qui.
+- **Il «sì, sempre» di oggi** (`calliope/estensioni/servizio.py:1031-1045`, `porta.py:125-126`) lo
+  dà chi ha usato l'estensione, anche un familiare. Con la 0033 il «sempre» **diventa una concessione,
+  e la dà solo chi amministra**; un familiare può dire «sì» **per quella volta**.
+- **La revoca e la sospensione**: oggi la revoca dei «sempre» chiede la frase di sfida a chi non è
+  riconosciuto come chi amministra (`servizio.py:636-639`), e un familiare non usa
+  `estensione_gestisci` (`:599-601`). Con la 0033 **revocare non chiede la sfida**, e un
+  **familiare può sospendere** le concessioni sui propri dati (risposta 5).
+- **Le cancellazioni con «sì, sempre»**: oggi `lista_togli` e `dati_cancella` ammettono il «sempre»
+  (`calliope/guardrail.py:258-269`). Con la 0033 diventano reversibili con un cestino a tempo
+  (punto 5), e solo allora restano concedibili in anticipo.
+- **Le regole della casa** (`calliope/casa/regole.py`) e la **visione** (punto 9, il secondo fattore
+  per porta e allarme): non cambiano. I delicati restano in sola lettura anche per le estensioni
+  (risposta 1).
 - **[0015](0015-sicurezza-per-valore.md)** (classi per effetto): non cambia; ne diventa l'uso per le
   estensioni. Oggi la porta ha una tabella sua (sicura, pericolosa, vietata: `calliope/guardrail.py`)
   e la politica per valore non la guarda (`calliope/estensioni/porta.py:153-155`). La classe di una
@@ -119,8 +162,9 @@ costruzione.**
   preparati e mai inviati senza la conferma al momento. Le notifiche alla web app di casa non escono
   di casa e restano la prima cosa da fare.
 - **Restano non concedibili** le cose che un'altra decisione dice «mai»: disinserire l'allarme
-  ([0028](0028-decisioni-roadmap-12-10.md), visione), la frase di sfida e i codici detti, un livello
-  più alto di familiare alla porta. Si possono **chiedere** (la richiesta resta scritta), ma la
+  ([0028](0028-decisioni-roadmap-12-10.md), visione), comandare serrature, cancello, garage, gas e
+  allarme finché non c'è il secondo fattore (regole della casa, risposta 1), la frase di sfida e i
+  codici detti, un livello più alto di familiare alla porta. Si possono **chiedere** (la richiesta resta scritta), ma la
   risposta è quella decisione; cambiarla vuol dire cambiare quella decisione.
 
 ## Alternative considerate
