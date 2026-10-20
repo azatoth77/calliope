@@ -73,7 +73,8 @@ costruzione.**
    ([0028](0028-decisioni-roadmap-12-10.md), [0031](0031-conservazione-dei-minori.md),
    [0032](0032-valutazione-conserva-tutto.md)): si conservano come il resto di quel turno, per la
    stessa persona e per lo stesso tempo, e «dimentica» e `calliope conserva --svuota` valgono anche
-   per loro.
+   per loro. Alla revoca di un account Calliope chiede alla persona se vuole dimenticare anche ciò che
+   le ha già letto.
 9. **La revoca è a più livelli**: una concessione, un'estensione, un account, tutto; a voce e dal
    cruscotto. Una **versione nuova** dell'estensione richiede di nuovo le concessioni, come oggi i
    permessi «sempre» (`calliope/estensioni/archivio.py:227-228`).
@@ -96,11 +97,14 @@ scadenza della concessione.
 1. **E4**: *[storico, prima versione della sera del 20/10: «comandi delicati della casa e scatto
    della webcam concedibili con la conferma per sessione d'uso»; corretta la stessa sera dopo la
    revisione della PR #195, perché contraddiceva le regole della casa e la visione]*. Decisione:
-   - **serrature, cancello, garage, gas e allarme** (gli E4 della casa, `valore._DELICATI`,
-     `calliope/valore.py:176-177`; per `calliope/casa/regole.py:9-10` «si leggono, non si comandano»)
-     **restano fra i «mai»** per le estensioni come per la voce, **finché non c'è il secondo fattore**
-     (#52);
-   - la **conferma per sessione d'uso** vale per la webcam e per le altre capacità E4: all'apertura
+   - **i delicati della casa** (serrature, cancello, portone, porta, garage, basculante, gas, valvole, acqua, allarme e antifurto: gli E4 della casa, `valore._DELICATI`,
+     `calliope/valore.py:176-177`, e `casa_sola_lettura_domini` / `casa_sola_lettura_classi` della
+     configurazione; per `calliope/casa/regole.py:9-10` «si leggono, non si comandano») **restano fra
+     i «mai»** per le estensioni come per la voce, **finché non c'è il secondo fattore** (#52).
+     **Disinserire l'allarme resta «mai» anche dopo** il secondo fattore
+     ([0028](0028-decisioni-roadmap-12-10.md));
+   - la **conferma per sessione d'uso** vale per la webcam e per le altre capacità E4 (oggi
+     l'unica capacità E4 concedibile è la webcam): all'apertura
      dell'estensione, prima di partire, Calliope chiede di attivare i suoi permessi E4; col sì valgono
      per quella sessione, alla chiusura si spengono e la volta dopo si riattivano. La sessione è il
      tempo in cui la scheda è aperta (un'estensione con scheda, un gioco) o la conversazione
@@ -147,8 +151,8 @@ scadenza della concessione.
   `estensione_gestisci` (`:599-601`). Con la 0033 **revocare non chiede la sfida**, e un
   **familiare può sospendere** le concessioni sui propri dati (risposta 5).
 - **Le cancellazioni con «sì, sempre»**: oggi `lista_togli` e `dati_cancella` ammettono il «sempre»
-  (`calliope/guardrail.py:258-269`). Con la 0033 diventano reversibili con un cestino a tempo
-  (punto 5), e solo allora restano concedibili in anticipo.
+  (`calliope/guardrail.py:258-269`). Con la 0033 (seconda revisione della PR #195): dal passo 1 **nessuno, nemmeno chi amministra, dà «sì, sempre»** su `lista_togli` e `dati_cancella` finché non c'è il cestino a tempo, e i «sempre» di oggi su queste regole **decadono al passo 1** (si conferma a ogni volta); con il cestino (passo 4) diventano concedibili
+  (punto 5).
 - **Le regole della casa** (`calliope/casa/regole.py`) e la **visione** (punto 9, il secondo fattore
   per porta e allarme): non cambiano. I delicati restano in sola lettura anche per le estensioni
   (risposta 1).

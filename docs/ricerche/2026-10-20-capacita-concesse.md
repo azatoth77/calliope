@@ -334,9 +334,11 @@ parte nel criterio, non nelle differenze), e al passo 1 si richiedono a chi ammi
 **Concessione e attivazione.** La concessione è durevole e non scade (scelta del 20/10). Le capacità
 E4 hanno in più un'**attivazione per sessione d'uso** (`attivazioni`: estensione, sessione, chi l'ha
 data, quando), che si spegne alla chiusura della scheda o della conversazione: la concessione resta,
-l'attivazione no. Un gioco condiviso su più schermi ha una sessione sola, quella della partita: la
-attiva chi l'ha aperta, e chi entra dopo non la riattiva (proposta, da confermare nell'issue del
-passo).
+l'attivazione no. Un **gioco condiviso** su più schermi (proposta per il passo 7b, con le tre regole
+della seconda revisione della PR #195): l'attivazione vale **solo sul dispositivo di chi la dà**, mai
+sugli schermi degli altri; **si spegne quando esce** chi l'ha attivata; chi entra dopo, con il
+livello, attiva la sua sul proprio dispositivo. *[storico: «una sessione sola, quella della partita:
+la attiva chi l'ha aperta», fino alla seconda revisione]*
 
 ### 5.2 Il controllo a ogni chiamata
 
@@ -448,8 +450,8 @@ passano dai tool veri) e da una tabella del codice per le capacità nuove (conne
 Le E-classi non dicono «irreversibile» in modo esplicito (E3 mescola «esce», «esegue» e «non si
 disfa»): la concessione ha bisogno di un segno a sé (`preparate`), deciso dal codice per operazione,
 con la definizione del § 3 (ciò che Calliope non sa riportare com'era). Esito per le azioni di oggi
-della porta: `lista_togli` e `dati_cancella` reversibili solo con il cestino a tempo (fino ad allora
-restano pericolose, senza «sempre» per un familiare); `rete_invia` irreversibile (oggi già con la sfida
+della porta: `lista_togli` e `dati_cancella` reversibili solo con il cestino a tempo: dal passo 1 **nessuno, nemmeno chi amministra, dà «sì, sempre»** su `lista_togli` e `dati_cancella` finché non c'è il cestino a tempo, e i «sempre» di oggi su queste regole **decadono al passo 1** (si conferma a ogni volta); con il cestino (passo 4) diventano concedibili
+(seconda revisione della PR #195); `rete_invia` irreversibile (oggi già con la sfida
 a ogni invio); `casa_comando` non irreversibile ma con la sfida a ogni comando, come oggi
 (`guardrail.py:243-249`), anche dentro una sessione E4 attivata; il resto reversibile. Una seconda
 regola, la **riservatezza**: una lettura di dati personali pesa almeno E2 nell'approvazione.
@@ -481,8 +483,9 @@ passo, aperta dopo l'approvazione del piano. I nomi delle chiavi sono proposte.
 
 **La misura che manca, creata dal passo 0.** Oggi nessuna vista conta le domande delle estensioni.
 Il passo 0 aggiunge a `calliope stato --concessioni` le **conferme ogni 100 esecuzioni**, contate
-dalle righe di `decisioni.jsonl` con esito `confermata`, `negata`, `scaduta` e `sempre`, divise per
-estensione e per regola. È la misura dell'attrito delle estensioni nei passi che seguono.
+dalle righe di `decisioni.jsonl` con esito `confermata`, `negata` e `scaduta`, divise per estensione e
+per regola; le esecuzioni passate con un «sempre» (esito `sempre`) si contano **a parte**, perché non
+sono domande. È la misura dell'attrito delle estensioni nei passi che seguono.
 
 **Passo 0: il registro delle concessioni e la misura, in ombra.** Il modello dati (§ 5.1) e la
 traduzione di ciò che c'è: i permessi del manifesto approvato e i «sì, sempre» diventano concessioni
@@ -499,7 +502,8 @@ chi amministra, letture personali almeno E2, approvazione per classe).
 **Passo 1: il controllo a ogni chiamata, la scheda, chi concede.** La porta decide con le concessioni
 (§ 5.2); la scheda di revisione le dice in parole, con la classe e cosa resta preparato; le concessioni
 decadono con la versione, e anche tornando a una versione di prima (§ 10, decisione 7); il «sempre» lo
-dà solo chi amministra, un familiare dice «sì» per quella volta; le letture personali pesano almeno
+dà solo chi amministra, un familiare dice «sì» per quella volta, e su `lista_togli` e
+`dati_cancella` nessuno lo dà finché non c'è il cestino (quelli di oggi decadono: § 5.9); le letture personali pesano almeno
 E2; il risultato a nome di una persona va solo a lei, e i dati letti seguono la conservazione della
 conversazione (§ 5.8). Minori e ospiti: nessuna concessione a nome di un ospite, un minore non chiede,
 i dati di un minore solo con un tutore presente (§ 10, decisione 8). **Il minore come utente** di
@@ -552,8 +556,11 @@ e 7a.
 - Criterio: le tredici prove migrate e verdi con l'interruttore spento e acceso; il banco delle
   richieste (`prove/banco_richieste.py`) con i casi nuovi: ogni richiesta che tocca solo voci
   `offerta` diventa «da concedere», nessuna voce `da_costruire` o `mai` diventa «da concedere» (fra i
-  contrari: disinserire l'allarme, aprire il cancello); nessun caso di oggi cambia esito; un giro vero
-  dell'agente sulla DGX che arriva alla consegna dopo un `chiedi_permesso` di una concessione.
+  contrari: disinserire l'allarme, aprire il cancello); nessun caso di oggi cambia esito. Per il
+  banco, siccome al passo 3 nessuna voce è ancora `offerta`, il catalogo delle prove ha **una voce
+  `offerta` di prova** (di fantasia, solo nel banco). Il **giro vero dell'agente** sulla DGX che arriva
+  alla consegna dopo un `chiedi_permesso` di una concessione è un criterio del passo 4, con la prima
+  voce `offerta` vera.
 
 **Passo 4: preparare senza compiere, il cestino, le prime capacità dalla porta.** La coda delle azioni
 preparate (§ 5.6), il cestino a tempo per `lista_togli` e `dati_cancella` (§ 5.9), e le capacità che
@@ -563,7 +570,9 @@ notifiche alla web app sul telefono della persona (§ 3.1).
   `offerta` solo con il suo passo acceso.
 - Criterio: nel registro, **0 atti irreversibili senza la riga della conferma** (chi, quando, sfida);
   le prove a secco del ciclo «prepara, mostra, conferma, scade» e della preparazione la cui
-  concessione è revocata; un ripristino dal cestino provato; un caso vero a voce per capacità.
+  concessione è revocata; un ripristino dal cestino provato; un caso vero a voce per capacità; il
+  giro vero dell'agente sulla DGX che arriva alla consegna dopo un `chiedi_permesso` di una voce
+  `offerta` (spostato qui dal passo 3).
 
 **Passo 5: il deposito dei segreti e il login delegato** (il meccanismo, non i servizi). Il deposito
 (§ 5.3), il collegamento sullo schermo personale con la persona presente (con un tutore per un
@@ -596,8 +605,8 @@ precisi (§ 3.4). Una issue, un interruttore e un criterio ciascuna; il banco d'
 comando della casa resta. Serve prima della webcam.
 - Interruttore: `estensioni_e4_sessione` (di serie spento: senza, nessuna capacità E4 è `offerta`).
 - Criterio: le prove a secco dell'apertura, della chiusura (scheda chiusa, conversazione finita) e dei
-  contrari (chi non ha il livello, un minore, una corsa a orario, un gioco condiviso aperto da un
-  altro); nessun comando dei delicati della casa possibile (restano «mai»).
+  contrari (chi non ha il livello, un minore, una corsa a orario, un gioco condiviso: l'attivazione
+  di un altro non vale sul mio schermo, e si spegne quando lui esce); nessun comando dei delicati della casa possibile (restano «mai»).
 
 **Passo 7c: i limiti dell'infrastruttura**, nello stesso ordine: browser senza testa (§ 3.11),
 catalogo dei pacchetti (§ 3.6), modello dalla porta (§ 3.12), telefono (§ 3.2), scatto della webcam
@@ -665,9 +674,10 @@ della PR #195; le risposte di chi amministra sono queste, e il piano del § 7 è
    casa e scatto della webcam concedibili con la conferma per sessione d'uso»; corretta la stessa sera
    dopo la revisione della PR #195, perché contraddiceva le regole della casa (`casa/regole.py:9-10`:
    i delicati «si leggono, non si comandano») e la visione (punto 9: il secondo fattore per porta e
-   allarme)]*. Decisione: **serrature, cancello, garage, gas e allarme** (`valore._DELICATI`,
-   `valore.py:176-177`) restano fra i «mai» per le estensioni come per la voce, **finché non c'è il
-   secondo fattore** (#52). La **conferma per sessione d'uso** vale per la webcam e per le altre
+   allarme)]*. Decisione: **i delicati della casa** (serrature, cancello, portone, porta, garage, basculante, gas, valvole, acqua, allarme e antifurto: `valore._DELICATI`, `valore.py:176-177`, e
+   `casa_sola_lettura_domini` / `casa_sola_lettura_classi`) restano fra i «mai» per le estensioni
+   come per la voce, **finché non c'è il secondo fattore** (#52); disinserire l'allarme resta «mai»
+   anche dopo (0028). Oggi l'unica capacità E4 concedibile è la webcam. La **conferma per sessione d'uso** vale per la webcam e per le altre
    capacità E4: all'apertura, prima di partire, Calliope chiede di attivarle; col sì valgono per quella
    sessione (la scheda aperta, per un'estensione con scheda o un gioco; la conversazione, per una usata
    solo a voce), alla chiusura si spengono e la volta dopo si riattivano. È un'attivazione, non una
@@ -699,7 +709,8 @@ della PR #195; le risposte di chi amministra sono queste, e il piano del § 7 è
 11. **Il «sì, sempre»** diventa una concessione che dà solo chi amministra; un familiare può dire «sì»
     per quella volta (§ 5.1).
 12. **Irreversibile** è ciò che Calliope non sa riportare com'era; le cancellazioni dei dati di
-    Calliope diventano reversibili con un cestino a tempo e quindi concedibili; i file della persona e
+    Calliope diventano reversibili con un cestino a tempo e quindi concedibili (fino al cestino, dal
+    passo 1, nessun «sempre» su di loro, nemmeno da chi amministra, e quelli di oggi decadono); i file della persona e
     il NAS senza copia sono irreversibili (§ 3, § 5.9).
 13. **Leggere dati personali** (account, file della persona, ricordi) vale almeno E2 (§ 3).
 14. **I dati letti** da un account seguono le regole di conservazione della conversazione, e

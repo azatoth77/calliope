@@ -1785,7 +1785,8 @@ quattro cose:
   almeno E2** (la riservatezza pesa come un effetto che resta), e **irreversibile** (ciò che Calliope
   non sa riportare com'era) è un segno a sé, per operazione: le irreversibili non si concedono mai in
   anticipo, si preparano e l'atto si conferma al momento, con le parole composte da Calliope.
-- **I delicati della casa restano «mai»**: serrature, cancello, garage, gas e allarme
+- **I delicati della casa restano «mai»**: serrature, cancello, portone, porta, garage, basculante,
+  gas, valvole, acqua, allarme e antifurto
   (`valore._DELICATI`, `casa/regole.py`) non si comandano da un'estensione come non si comandano a voce,
   finché non c'è il secondo fattore (#52). Le altre E4 (la webcam) si attivano per sessione d'uso; ogni
   comando della casa di un'estensione chiede ancora la frase di sfida (`guardrail.py:243-249`).

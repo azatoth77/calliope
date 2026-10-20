@@ -4359,7 +4359,8 @@ viene dal controllo a ogni uso e dalla revoca, non dall'assenza. L'estensione re
 controlla a ogni chiamata una **concessione** con il suo ambito (su cosa, quali operazioni, quando,
 quanto spesso) e la sua classe (E0–E4). «Non concesso» diventa una richiesta nel piano e
 nell'analisi; ciò che manca all'infrastruttura diventa «serve una capacità nuova». Le irreversibili
-(inviare, pagare, cancellare fuori casa) **mai in anticipo**: si preparano, e l'atto si conferma al
+*[storico: «(inviare, pagare, cancellare fuori casa)», definizione superata la sera del 20/10: vedi
+sotto, «ciò che Calliope non sa riportare com'era»]* **mai in anticipo**: si preparano, e l'atto si conferma al
 momento. I segreti li tiene Calliope; revoca a più livelli; un uso fuori ambito sospende da solo.
 Scelte di chi amministra: concede chi amministra (con la sfida; i dati di una persona solo con lei
 presente), le concessioni non scadono fino alla revoca o a una versione nuova.
@@ -4368,7 +4369,8 @@ presente), le concessioni non scadono fino alla revoca o a una versione nuova.
 i dodici impossibili uno per uno (sette divieti di politica, cinque limiti dell'infrastruttura),
 cosa c'è da riusare (porta, guardrail, flussi e contaminazione, `chiedi_permesso`, i «sì, sempre»
 come germe della concessione, scheda di revisione, sfida, registri, revoche, cruscotto), cosa manca,
-i rischi nuovi e un piano in otto passi, ognuno con l'interruttore spento di serie: registro delle
+i rischi nuovi e un piano *[storico: «in otto passi», fino alla sera del 20/10; ora 0–6, 7a, 7b e
+7c, sotto]*, ognuno con l'interruttore spento di serie: registro delle
 concessioni in ombra, controllo a ogni chiamata, revoca e sospensione, piano che chiede, azioni
 preparate, deposito dei segreti, autonomia (#53), capacità dell'infrastruttura una per una.
 **Niente codice in questo lavoro**: fino al primo passo il contratto, il piano dell'agente,
@@ -4376,15 +4378,17 @@ l'analisi della richiesta e i requisiti trattano ancora i dodici impossibili com
 aspetta l'approvazione di chi amministra; poi una issue per passo.
 
 **Le risposte della sera** (20/10, nella 0033 e nel § 10 dell'analisi, con le correzioni della
-revisione della PR #195): serrature, cancello, garage, gas e allarme restano «mai» anche per le
-estensioni finché non c'è il secondo fattore (#52); la webcam e le altre capacità E4 si **attivano
+revisione della PR #195): i delicati della casa (serrature, cancello, portone, porta, garage,
+basculante, gas, valvole, acqua, allarme, antifurto) restano «mai» anche per le estensioni finché non
+c'è il secondo fattore (#52), e disinserire l'allarme anche dopo; la webcam e le altre capacità E4 si **attivano
 per sessione d'uso** (la scheda aperta o la conversazione; la attiva chi usa l'estensione, se ha il
 livello), mai in una corsa a orario, e ogni comando della casa chiede ancora la sfida; il «sì,
 sempre» diventa una concessione che dà solo chi amministra (un familiare dice «sì» per quella volta);
 **revocare non chiede la sfida** e un familiare sospende le concessioni sui propri dati; la
 sospensione è a due livelli (oltre le quote la concessione, fuori dall'ambito l'estensione);
 irreversibile è ciò che Calliope non sa riportare com'era (le cancellazioni dei suoi dati diventano
-reversibili con un cestino a tempo); leggere dati personali vale almeno E2; i dati letti seguono la
+reversibili con un cestino a tempo; fino ad allora, dal passo 1, nessun «sì, sempre» su
+`lista_togli` e `dati_cancella`, nemmeno da chi amministra); leggere dati personali vale almeno E2; i dati letti seguono la
 conservazione della conversazione e «dimentica»; promemoria mensile; tornando indietro di versione le
 concessioni si richiedono; niente concessioni a minori e ospiti. Il piano è ora in passi 0–6, 7a
 (divieti con una strada nuova: posta, file della persona, rete di casa), 7b (attivazione E4) e 7c
