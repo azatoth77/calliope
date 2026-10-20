@@ -104,7 +104,7 @@ def prova_partenza(tmp: Path):
     # Nomi e titoli tagliati a parola intera, con le cifre, senza simboli (20/10, revisione
     # della PR #188)
     casi = {"un gioco del memory con le carte di Halloween per tutta la famiglia":
-            ("un_gioco_del_memory_con_le", "un gioco del memory con le carte di"),
+            ("un_gioco_del_memory", "un gioco del memory con le carte"),
             "Tic-tac-toe 3x3": ("tic_tac_toe_3x3", "Tic tac toe 3x3"),
             "quiz sulle capitali d'Europa con 10 domande":
             ("quiz_sulle_capitali_d_europa", "quiz sulle capitali d'Europa con 10"),
@@ -293,6 +293,10 @@ def prova_contratto():
              all(x not in tg for x in ("(pip)", "libreria standard", "porta stretta",
                                        "dentro l'estensione", "- javascript:"))
              and "- javascript:" in te and "(pip)" in te)
+    voci_g = [r for r in tg.splitlines() if r.startswith("Voci per piano")][0]
+    voci_e = [r for r in te.splitlines() if r.startswith("Voci per piano")][0]
+    verifica("…e «javascript» fuori dalle voci del piano del gioco (in quelle dell'estensione no)",
+             " javascript" not in voci_g and " javascript," in voci_e, voci_g)
     verifica("l'estensione senza il contratto del gioco; un gioco chiesto qui → piano("
              "fattibile=false), non un tool della voce",
              "macchina a stati" not in te.lower() and "sviluppo_apri" not in te
@@ -401,7 +405,8 @@ def prova_servizio(tmp: Path):
         # 20/10 (revisione della PR #188): chiamato lo stesso, non si esegue
         verifica("…ed esegui_python chiamato lo stesso non parte: «non è disponibile», con gli "
                  "strumenti offerti", "«esegui_python» non è disponibile in questo lavoro"
-                 in esiti and "\"esegui_test\"" in esiti, esiti[-400:])
+                 in esiti and "senza Python né rete" in esiti and "\"esegui_test\"" in esiti,
+                 esiti[-400:])
         lav, nomi, m, root, esiti = lavoro(True)
         verifica("contrario: senza l'analisi i giocatori di serie (1–4), «2 giocatori»",
                  m is not None and m["scheda"]["giocatori"] == {"min": 1, "max": 4}
@@ -414,6 +419,28 @@ def prova_servizio(tmp: Path):
                  and "scheda" not in (m or {}) and (root / "test_estensione.py").is_file(),
                  f"{sorted(nomi)} {m} {root} "
                  f"{sorted(p.name for p in root.iterdir()) if root else ''}")
+        # Il piano di un gioco (20/10, seconda revisione della PR #188): «javascript» chiudeva
+        # il gioco come impossibile («un'estensione non può leggere dati che una pagina mostra
+        # solo con JavaScript»), e «pacchetti» diceva pip
+        def piano(gioco, caps):
+            lv = svc.nuovo("estensione", "Il tris per due.", "ada-id", "Ada", "amministra")
+            lv.gioco = gioco
+            sb = _sandbox(tmp, f"piano-{lv.id}")
+            return svc.agente._piano(lv, sb, {"capacita_necessarie": caps, "scope": {},
+                                              "fattibile": True, "motivo": "prova"}, None)
+        out, chiusura = piano(True, ["scheda", "javascript"])
+        verifica("il piano di un gioco con «javascript» va avanti (la voce si ignora)",
+                 chiusura is None and out.get("ok") is True, f"{out} {chiusura}")
+        out, chiusura = piano(True, ["scheda", "pacchetti"])
+        frase = str((chiusura or {}).get("riassunto"))
+        verifica("…«pacchetti» in un gioco: impossibile, detto per un gioco (niente pip)",
+                 (chiusura or {}).get("esito") == "impossibile"
+                 and "un gioco non può installare librerie" in frase and "pip" not in frase,
+                 frase)
+        out, chiusura = piano(False, ["javascript"])
+        verifica("contrario: in un'estensione «javascript» resta impossibile, con la sua frase",
+                 (chiusura or {}).get("esito") == "impossibile"
+                 and "un'estensione non può" in str(chiusura.get("riassunto")), str(chiusura))
     finally:
         if svc is not None:
             svc.chiudi() if hasattr(svc, "chiudi") else None

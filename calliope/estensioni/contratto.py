@@ -315,14 +315,29 @@ def _scope_detto(s: dict) -> str:
     return json.dumps(s, ensure_ascii=False)
 
 
+def impossibili(gioco: bool = False) -> dict:
+    """{voce: (cosa, alternativa)} degli impossibili; per un gioco con le voci dette per un
+    gioco e senza quelle che lì non valgono (`_IMPOSSIBILI_GIOCO`). Li usano il contratto e
+    lo strumento piano (agenti/ciclo.py), così il piano dice le stesse cose del contratto."""
+    voci = {k: (_IMPOSSIBILI_GIOCO.get(k, v) if gioco else v) for k, v in IMPOSSIBILI.items()}
+    return {k: v for k, v in voci.items() if v}
+
+
+def voci_piano(gioco: bool = False) -> tuple:
+    """Le voci che lo strumento piano accetta in capacita_necessarie (per un gioco senza quelle
+    che lì non valgono: 20/10, seconda revisione della PR #188, «javascript» chiudeva un gioco
+    come impossibile)."""
+    tolte = {k for k, v in _IMPOSSIBILI_GIOCO.items() if v is None} if gioco else set()
+    return tuple(x for x in CAPACITA_IDS if x not in tolte)
+
+
 def _impossibili(n: int, gioco: bool = False) -> list[str]:
     """La sezione degli impossibili, numerata `n`, e le voci per il piano. `gioco`: con le voci
     dette per un gioco (`_IMPOSSIBILI_GIOCO`)."""
     righe = ["", f"## {n}. Impossibile (dillo subito con piano(fattibile=false), con "
              "l'alternativa)"]
-    voci = {k: (_IMPOSSIBILI_GIOCO.get(k, v) if gioco else v) for k, v in IMPOSSIBILI.items()}
-    righe += [f"- {k}: {v[0]}. Alternativa: {v[1]}." for k, v in voci.items() if v]
-    righe += ["", "Voci per piano.capacita_necessarie: " + ", ".join(CAPACITA_IDS) + "."]
+    righe += [f"- {k}: {v[0]}. Alternativa: {v[1]}." for k, v in impossibili(gioco).items()]
+    righe += ["", "Voci per piano.capacita_necessarie: " + ", ".join(voci_piano(gioco)) + "."]
     return righe
 
 

@@ -165,6 +165,12 @@ def giocatori_partenza(giocatori=None) -> tuple[int, int]:
     return GIOCATORI_PARTENZA
 
 
+_IN_FONDO_NO = frozenset(
+    "di a da in con su per tra fra del dello della dei degli delle al allo alla ai agli alle "
+    "dal dalla dai dalle nel nella nei nelle sul sulla sui sulle il lo la i gli le un uno una "
+    "e o ed".split())
+
+
 def _nome_titolo(titolo: str, presi=()) -> tuple[str, str]:
     """Il nome e il titolo del manifesto di partenza dal titolo del lavoro, se fanno un
     manifesto valido; altrimenti quelli di `NOME_PARTENZA`, che la consegna non accetta."""
@@ -179,7 +185,11 @@ def _nome_titolo(titolo: str, presi=()) -> tuple[str, str]:
             if len(prova) > massimo:
                 break
             out = prova
-        return out
+        # Né una preposizione né un articolo in fondo («…le carte di»: seconda revisione)
+        pezzi = out.split(sep)
+        while len(pezzi) > 1 and pezzi[-1].lower() in _IN_FONDO_NO:
+            pezzi.pop()
+        return sep.join(pezzi)
     # Solo lettere vere e cifre («3x3» resta, × e ÷ no: sono simboli, non lettere)
     parole = re.findall(r"[^\W_]+(?:['’][^\W_]+)*", str(titolo or ""))
     t = intere(parole, 40, " ")
