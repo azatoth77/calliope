@@ -98,8 +98,8 @@ scadenza della concessione.
    della webcam concedibili con la conferma per sessione d'uso»; corretta la stessa sera dopo la
    revisione della PR #195, perché contraddiceva le regole della casa e la visione]*. Decisione:
    - **i delicati della casa** (serrature, cancello, portone, porta, garage, basculante, gas, valvole, acqua, allarme e antifurto: gli E4 della casa, `valore._DELICATI`,
-     `calliope/valore.py:176-177`, e `casa_sola_lettura_domini` / `casa_sola_lettura_classi` della
-     configurazione; per `calliope/casa/regole.py:9-10` «si leggono, non si comandano») **restano fra
+     `calliope/valore.py:176-177`, e `casa_sola_lettura_domini`, `casa_sola_lettura_classi` e
+     `casa_nomi_delicati` della configurazione; per `calliope/casa/regole.py:9-10` «si leggono, non si comandano») **restano fra
      i «mai»** per le estensioni come per la voce, **finché non c'è il secondo fattore** (#52).
      **Disinserire l'allarme resta «mai» anche dopo** il secondo fattore
      ([0028](0028-decisioni-roadmap-12-10.md));
@@ -167,7 +167,7 @@ scadenza della concessione.
   di casa e restano la prima cosa da fare.
 - **Restano non concedibili** le cose che un'altra decisione dice «mai»: disinserire l'allarme
   ([0028](0028-decisioni-roadmap-12-10.md), visione), comandare i delicati della casa
-  (serrature, cancello, portone, porta, garage, basculante, gas, valvole, acqua, allarme e antifurto (`valore._DELICATI`, `casa_sola_lettura_domini`, `casa_sola_lettura_classi`), più i nomi di `casa_nomi_delicati` (`calliope/config.py:830-832`: anche box, portoncino, sirene, idrico, caldaia)) finché non c'è il secondo fattore (regole della casa, risposta 1). Il blocco delle regole della casa vale per l'**unione** dei tre elenchi, qualunque sia la classe che `valore.py` dà al comando: la caldaia, per esempio, è E2 per `_CLIMA` ma per `casa_nomi_delicati` non si comanda comunque; la classe E4 dice solo quanto pesa la domanda, il «mai» lo dice la regola della casa. Restano «mai» anche la frase di sfida e i
+  (serrature, cancello, portone, porta, garage, basculante, gas, valvole, acqua, allarme e antifurto (`valore._DELICATI`, `casa_sola_lettura_domini`, `casa_sola_lettura_classi`), più i nomi di `casa_nomi_delicati` (`calliope/config.py:830-832`: anche box, portoncino, sirene, idrico, caldaia)) finché non c'è il secondo fattore (regole della casa, risposta 1). Il «mai» lo decide `casa/regole.py` (`Regole.delicata`), non la classe: si leggono e non si comandano i domini di `casa_sola_lettura_domini`, le tapparelle, i sensori e le valvole con una classe di `casa_sola_lettura_classi`, e gli interruttori, i pulsanti, le valvole, le sirene e le tapparelle senza classe (o con classe door, gate o garage) il cui nome, stanza o alias contiene una parola di `casa_nomi_delicati`. `valore._DELICATI` dà solo la classe E4 alla domanda. Per esempio uno switch «caldaia» non si comanda anche se `_CLIMA` lo conta E2, mentre il termostato della caldaia (`climate`) si comanda. Restano «mai» anche la frase di sfida e i
   codici detti, un livello più alto di familiare alla porta. Si possono **chiedere** (la richiesta resta scritta), ma la
   risposta è quella decisione; cambiarla vuol dire cambiare quella decisione.
 
