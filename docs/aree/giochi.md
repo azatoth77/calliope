@@ -1104,3 +1104,106 @@ finto (regola `agente_motore_finto`). Il suggerimento del palco con troppi pulsa
 già «griglia» dice di mettere comando e valore nelle caselle (tris2 L3), non «usa la pagina
 «griglia»». Il resto (la tappa consegnabile, il segnaposto, il banco) è in
 [agenti-estensioni](agenti-estensioni.md), voce del 20/10 su #192.
+
+## L'esito solo quando una mano finisce, e gli esempi del tris (20/10, issue #197, ramo `issue-197-esito-giochi`)
+
+**Il caso** (banco sulla DGX del 20/10 sera, `~/banchi/giri2-1020-1753`, versione
+`20261020-1750-0437d490` con #192, `--casi tris2 --giri 2 --ripetizioni 3`): **tris2 0/3**, le
+porte 3/3. In L3 i test dell'agente si aspettavano un esito a ogni mossa («FALLITO mossa valida:
+casella vuota riceve X: + 'Mossa effettuata' - null») e la logica dava `esito: "Mossa effettuata"`
+a ogni casella, che per il motore vuol dire «la mano è finita»; l'analisi prima del codice aveva
+dato 0 esempi (`esempi: 0`, `tolti: {}`, stato «pronta»). In L1 e L5 l'accettazione degli esempi
+restava rossa (requisiti 3, 4, 5).
+
+**Gli esempi di L1 e L5 erano sbagliati, non il codice.** Giocati sul tris di riferimento
+(`prove/giochi/tris` con giocatori 2–2, `banco_temperatura.riferimento_tris2`) cadevano **tutti,
+11 su 11**: «fase esito» dopo una mossa normale (5 esempi); parole sullo schermo scelte dal modello
+(«ok» tre volte, «Vittoria», «Nuova») dove il tris giusto scrive «Ha vinto X!»; il pareggio
+«1, 2, 3, …, 9» (quattro esempi), che fa vincere il primo alla 7ª mossa (3, 5, 7), così l'8ª non
+vale più; «1, 2, 3, 4, 5, 6 → fine con un punto», dove il primo ha 1, 3 e 5 (le mosse non sono a
+turno nella testa del modello). La causa principale era il prompt del progettista dei test
+(`accettazione.SISTEMA_GIOCO`): «dopo ogni mossa di solito c'è la fase «esito»». La stessa idea
+era nel contratto («turni, punti, **esito di ogni mossa**») e in `CAPACITA_GIOCO`: il modello
+dell'agente e quello degli esempi la prendevano alla lettera, e gli esempi la imponevano al codice.
+
+**Cosa cambia.**
+1. **I testi**: il contratto del gioco dice «il testo dell'esito quando una mano finisce» e, nella
+   forma delle mosse, «L'ESITO C'È SOLO QUANDO UNA MANO FINISCE (una vittoria, un pareggio, un
+   punto fatto): una mossa normale (una casella segnata, una carta girata) restituisce { dati } (e
+   i punti, se ci sono) e resta nella fase, senza esito». Lo stesso in `CAPACITA_GIOCO`
+   (requisiti.py), nel prompt del progettista dei test (in più: le mosse sono a turno, «nel tris
+   1, 4, 2, 5, 3 il primo vince alla 5ª; 1, 2, 3 non fa vincere nessuno», fermarsi alla mossa che
+   finisce, al più 7 mosse, il testo solo con parole della richiesta, «esito» solo con i punti),
+   in `VINCOLO_CORREZIONE_GIOCO` («l'esito di una mano finita») e nel commento della logica di
+   partenza (lì ogni porta aperta è un punto fatto: per questo c'è l'esito).
+2. **L'avviso della prova di fumo** (`fumo_js.avvisoEsito`, nelle partite a caso di `esplora`):
+   si contano le mosse del gioco e quelle con un esito che non chiude niente (senza punti e senza
+   `dopo: "fine"`). Scatta quando ce l'ha più della metà delle mosse o la prima mossa di **ogni**
+   partita; test_js.mjs scrive «AVVISO prova di fumo del gioco: N mosse su M hanno un esito senza
+   punti né fine, anche la prima di ogni partita (GIOCO.mosse.turno.casella → esito «Mossa
+   effettuata»): l'esito vuol dire che la mano è finita (una vittoria, un pareggio, un punto
+   fatto): per una mossa normale restituisci { dati } (e i punti, se ci sono) e resta nella fase.
+   Se ogni mossa chiude davvero una mano (una domanda di un quiz), lascialo così». È un avviso, non
+   un fallimento (un quiz ha davvero un esito a ogni risposta). Nel ciclo dell'agente la riga
+   accende la regola `gioco_esito_ogni_mossa`, una volta per lavoro. Niente avviso sul tris giusto,
+   sulle porte delle prove (`prove/giochi/porte_fasi`: la ragnatela dà un esito a zero punti una
+   volta su quattro) e sulla partenza delle porte (un punto a ogni porta). Il punto di distinzione
+   è il punto: con i soli esiti contati («più della metà con un esito») la partenza, che dà un
+   esito a ogni porta, avrebbe avuto l'avviso.
+3. **Gli esempi filtrati** (`accettazione._esempi_gioco`, con la richiesta): il testo atteso si
+   tiene solo se le sue parole sono nella richiesta, di seguito, al singolare o al plurale (i
+   numeri giocati nelle mosse non contano: «porta 2» dopo la porta 2); la fase «esito» attesa
+   senza i punti si toglie (non dice cosa è finito); un esempio con più di 7 mosse del gioco si
+   toglie (`MAX_MOSSE_SICURE`: sul banco erano sbagliati tutti quelli con 9 mosse); due esempi che
+   si contraddicono (uno finisce la partita, l'altro con le stesse mosse in testa continua) si
+   tolgono tutti e due. Senza la richiesta (le prove di prima) il testo resta.
+4. **Il contesto della mossa nel contratto** (analisi della macchina a stati, PR #200): il
+   `TypeError: Cannot read properties of undefined (reading 'punti') [in logica.js:62]` di tris2
+   L5 non veniva da `turno`: i test dell'agente chiamavano `nuovaPartita({ giocatori: ["G1",
+   "G2"] })`, un elenco, dove il motore passa il numero (`{ giocatori: 2, nomi }`), e la logica
+   (`for (i < dati.giocatori)`) restava senza giocatori; la stessa logica teneva poi un suo indice
+   del turno (`d.turno`, sempre 0: metteva sempre X) invece di usare la posizione che il motore
+   le dà. Lo stesso nome con due tipi (`giocatori` numero in `nuovaPartita`, elenco nel contesto)
+   e `tocca` posizione nel contesto ma nome in `g.stato()` non erano spiegati. Ora il contratto
+   dice: in `nuovaPartita` giocatori è il NUMERO; nel contesto della mossa `{ valore, tocca, chi,
+   giocatori, turno }` tocca è la POSIZIONE di chi muove («nel tris il segno è ["X",
+   "O"][tocca]»), giocatori l'ELENCO `[{ nome, punti }]`, turno il GIRO (1, 1, 2, 2… con due
+   giocatori, non chi muove); in `g.stato()` tocca è il NOME; chi muove lo tiene Calliope, non
+   anche i dati. La prova controlla anche il motore vero (tocca 0, 1, 0, 1 e turno 1, 1, 2, 2).
+5. **I punti senza turni** (revisione dell'analisi della PR #200): in una fase con `"turni":
+   false`, con più giocatori e senza sapere chi ha mosso (la voce non riconosciuta, lo stesso
+   schermo per tutti, la tela), il motore dava `chi` e un numero di punti al giocatore di
+   `tocca`, che senza turni resta il primo: **i punti di chiunque andavano al Giocatore 1**. Era
+   un difetto, non una scelta: il contratto diceva «i punti vanno a chi ha mosso, se si sa». Ora
+   lì un numero di punti non va a nessuno e `chi` è null (l'elenco dei punti, uno per giocatore,
+   vale come prima); il contratto lo dice. Contrari nella prova: con la voce riconosciuta i punti
+   vanno a chi ha mosso, con un giocatore solo sono suoi, con i turni vanno a chi è di turno.
+
+**I numeri.** Gli esempi di L1 (6) e L5 (5) col codice nuovo: 1 e 3 tenuti; L5 tutto verde sul
+tris giusto, di L1 resta «1, …, 6 → fine con un punto», sbagliato e che nessuna regola sul testo
+vede senza giocare la partita. Otto analisi nuove sulla DGX col prompt nuovo (qwen3.6 su vLLM,
+temperatura 0, in sola lettura): 26 esempi, col filtro di prima 24 tenuti e 5 verdi sul
+riferimento; col filtro nuovo 10 tenuti e 2 verdi. Gli 8 rossi che restano: mosse non a turno
+(«1, 5, 9» o «1, 2, 3» come se muovesse uno solo), una casella già presa che «deve valere ancora»,
+un testo della richiesta nel momento sbagliato («ancora» a partita aperta) e due volte la fase
+del gioco chiamata «gioco» (contro il riferimento è un errore; in uno sviluppo l'agente riceve
+quel nome nei vincoli, quindi non lo è). **Il progettista dei test non sa giocare a tris**: i
+filtri tolgono la maggior parte degli esempi sbagliati, e con loro quasi tutti; un esempio che
+resta può ancora far fallire il codice giusto, e il tetto non chiude d'ufficio con un esempio
+rosso. Da decidere: giocare gli esempi su un riferimento non c'è in generale (un gioco nuovo non
+ne ha); restano un modello più capace per l'analisi (#175) o esempi che non bloccano la chiusura.
+
+**I 0 esempi di L3.** Il JSON grezzo del modello non è salvato, quindi la causa non si legge più;
+in 20 analisi rifatte sulla DGX col prompt di allora (stessa richiesta, stessi requisiti,
+temperatura 0, in sola lettura) il modello ne ha scritti sempre 4 o 5 e il codice ne ha tolti al
+più 1 (un doppione). Il difetto vero era che `_esempi_gioco` toglieva in silenzio (atteso o
+giocatori che non si leggono, comandi o valori che non ci sono, niente da controllare, doppioni)
+e `tolti` restava `{}`: «0 esempi» non diceva se li aveva tolti il codice o se il modello non ne
+aveva scritti. Ora ogni causa è contata in `tolti` (`forma`, `mosse`, `lunghi`, `niente`,
+`doppioni`, `testo`, `esito_senza_punti`, `dopo_la_fine`), il lavoro ha `esempi_modello` (anche
+nella riga del banco), il log dice le cause, e con esempi scritti dal modello e tutti tolti c'è la
+regola `accettazione_esempi_tutti_tolti` con il conto e le cause. Nel banco
+`SviluppoBanco.segna_accettazione` non fa niente: prima il log diceva «requisiti al collaudo non
+segnati: 'SviluppoBanco' object has no attribute …» (L3, L5).
+
+**Le prove**: `prove/prova_esito_giochi.py` (nuova, livello 2, ~10 s).

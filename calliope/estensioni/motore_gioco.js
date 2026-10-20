@@ -806,6 +806,10 @@
       // (la sua voce, o il suo schermo con un giocatore solo)
       var daChi = !M.fasi[S0.fase].turni && chi.da !== null && chi.da !== undefined && S0.giocatori[chi.da] ? chi.da : null;
       if (daChi !== null) ctx.chi = S0.giocatori[daChi].nome;
+      // Senza turni, con più giocatori e senza sapere chi ha mosso (20/10, #197, revisione
+      // dell'analisi della PR #200): prima «chi» e i punti erano del giocatore di «tocca», che
+      // senza turni resta il primo: i punti di chiunque andavano al Giocatore 1. Ora chi è null
+      else if (ignoto(S0, null)) ctx.chi = null;
       var ris = fn(copia(S0.dati, "dati"), ctx);
       return risultato(S0, S, ris, dove, daChi);
     }
@@ -817,8 +821,15 @@
       S.n = S0.n + 1;
       return risultato(S0, S, ris, "tela.esci nella fase «" + S0.fase + "»");
     }
+    // Una fase senza turni, con più giocatori, in cui non si sa chi ha mosso (la voce non
+    // riconosciuta, nessuno schermo con un giocatore solo, la tela)
+    function ignoto(S0, daChi) {
+      return !M.fasi[S0.fase].turni && (daChi === null || daChi === undefined) && S0.giocatori.length > 1;
+    }
     function risultato(S0, S, ris, dove, daChi) {
-      var chiPos = daChi !== null && daChi !== undefined ? daChi : S0.tocca;
+      // Lì un numero di punti non va a nessuno (20/10, #197): per darli serve l'elenco, uno per
+      // giocatore; prima andava al Giocatore 1
+      var chiPos = daChi !== null && daChi !== undefined ? daChi : ignoto(S0, daChi) ? -1 : S0.tocca;
       var chi = S0.giocatori[chiPos] ? S0.giocatori[chiPos].nome : null;
       controlla(ris, dove, S0);
       S.dati = copia(ris.dati, dove + ", dati");

@@ -1802,6 +1802,12 @@ class Agente:
                         else:
                             fila.pop(p, None)       # una correzione mirata: si riparte
                     elif name == "esegui_test":
+                        if AVVISO_ESITO in str(result.get("uscita") or "") and not seg.get(
+                                "avviso_esito"):
+                            # L'esito a ogni mossa (20/10, #197): una volta per lavoro
+                            from ..sonde import nota as nota_regola
+                            seg["avviso_esito"] = True
+                            nota_regola(lav, "gioco_esito_ogni_mossa", self.log)
                         firma = firma_errore(result)
                         if firma:
                             if firma not in seg["errori_test"][-1:]:
@@ -3390,6 +3396,9 @@ def punto_piu_simile(testo: str, vecchio: str) -> int | None:
 
 # I controlli di Calliope nell'uscita dei test, che non sono test dell'agente
 _NON_TEST = ("prova di fumo", "manifesto.json", "controllo della consegna")
+# La riga dell'avviso dell'esito a ogni mossa nell'uscita dei test (20/10, #197, fumo_js.mjs
+# avvisoEsito): la regola gioco_esito_ogni_mossa nel registro, una volta per lavoro
+AVVISO_ESITO = "AVVISO prova di fumo del gioco: "
 
 
 def nomi_test(uscita: str) -> list[str]:

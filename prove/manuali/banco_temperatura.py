@@ -1121,6 +1121,10 @@ class SviluppoBanco:
     def di_lavoro(self, *a, **k):
         return self.sv
 
+    def segna_accettazione(self, *a, **k):
+        """Nessuna revisione da segnare (20/10, #197: senza, il log del banco diceva «requisiti
+        al collaudo non segnati: 'SviluppoBanco' object has no attribute …»)."""
+
 
 def con_sviluppo(svc, caso: dict):
     """L'analisi prima del codice di `svc` vede `SviluppoBanco` del caso, come in uno sviluppo;
@@ -1280,7 +1284,9 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
                          "perche",
                          # 19/10 (#9): i controlli dei valori nominati, i valori per input,
                          # gli esempi tolti per genere e quanti hanno il «calcolo»
-                         "valori", "nominati", "tolti", "con_calcolo")}}
+                         "valori", "nominati", "tolti", "con_calcolo",
+                         # 20/10 (#197): quanti esempi aveva scritto il modello
+                         "esempi_modello")}}
     if not acc["verde"]:
         riga["accettazione_uscita"] = acc["uscita"][-600:]
     return riga

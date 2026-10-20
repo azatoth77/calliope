@@ -517,12 +517,21 @@ export function esplora(amb, opzioni = {}) {
   // Con la visita in ampiezza al tetto (troppi stati) le fasi e i comandi si cercano anche in
   // molte più partite a caso, prima di dirli «mai raggiunti»
   const partite = (opzioni.partite || 20) + (completa ? 0 : (opzioni.partite_in_piu || 300));
+  // L'esito a ogni mossa (20/10, #197, banco tris2 L3: «esito: "Mossa effettuata"» a ogni
+  // casella, che per il motore vuol dire «la mano è finita»). Si contano le mosse del gioco e
+  // quelle con un esito che non chiude niente: senza punti e senza «dopo: "fine"» (le porte di
+  // partenza danno un punto a ogni porta: lì l'esito è giusto). Un avviso, non un errore
+  const conta = { mosse: 0, vuoti: 0, prime: 0, primeVuote: 0, esempio: "" };
+  const standard = new Set(["anchio", "fine_partita"]);
+  const daMossa = (S0, c) => S0.fase in M.fasi && !standard.has(c);
+  const vuoto = (S0, S1) => S1.fase === "esito" && S1.dopo !== "fine"
+    && S1.giocatori.every((x, k) => !S0.giocatori[k] || x.punti === S0.giocatori[k].punti);
   for (let i = 0; i < partite && !errori.length; i++) {
     const [c0, v0] = partenze[i % partenze.length];
     const s = [nu.piatto(c0, v0)];
     let S;
     try { S = nu.applica(nu.nuovo(), c0, v0); } catch (e) { nota("partita", e); break; }
-    let passi = 0;
+    let passi = 0, prima = true;
     while (S.fase !== "fine" && passi < 500) {
       raggiunte.add(S.fase);
       let cs;
@@ -531,7 +540,15 @@ export function esplora(amb, opzioni = {}) {
       for (const [c] of cs) attiviVisti.add(`${S.fase}.${c}`);
       if (!palco(S, s)) break;
       const [c, v] = cs[Math.floor(caso() * cs.length)];
+      const S0 = S;
       try { S = nu.applica(S, c, v, {}); } catch (e) { nota(`partita ${i + 1}, comando «${nu.piatto(c, v)}» (strada: ${strada(s)})`, e); break; }
+      if (daMossa(S0, c)) {
+        const senza = vuoto(S0, S);
+        conta.mosse++;
+        if (senza) conta.vuoti++;
+        if (prima) { conta.prime++; if (senza) conta.primeVuote++; prima = false; }
+        if (senza && !conta.esempio) conta.esempio = `GIOCO.mosse.${S0.fase}.${c} → esito «${String((S.esito || {}).testo || "").slice(0, 40)}»`;
+      }
       s.push(nu.piatto(c, v));
       passi++;
     }
@@ -543,6 +560,8 @@ export function esplora(amb, opzioni = {}) {
     }
   }
   if (errori.length) return errori;
+  const avviso = avvisoEsito(conta);
+  if (avviso && Array.isArray(opzioni.avvisi)) opzioni.avvisi.push(avviso);
   for (const f of Object.keys(M.fasi).concat(["fine"])) {
     if (!raggiunte.has(f)) nota(`fase «${f}»`, `dichiarata ma mai raggiunta: nessuna mossa ci porta (fase: "${f}" senza esito, oppure esito con dopo: "${f}"; e «verso» nel manifesto)`);
   }
@@ -552,6 +571,21 @@ export function esplora(amb, opzioni = {}) {
     }
   }
   return errori;
+}
+
+// L'avviso dell'esito a ogni mossa (20/10, #197): "" se non c'è. Scatta quando la prima mossa di
+// OGNI partita ha un esito che non chiude niente, o quando ce l'ha più della metà delle mosse.
+// Una mossa con un punto o che porta alla fine chiude una mano: lì l'esito è giusto
+export function avvisoEsito(conta) {
+  if (!conta || !conta.mosse) return "";
+  const tutte = conta.prime > 0 && conta.primeVuote === conta.prime;
+  if (!tutte && conta.vuoti * 2 <= conta.mosse) return "";
+  return `${conta.vuoti} mosse su ${conta.mosse} hanno un esito senza punti né fine`
+    + (tutte ? ", anche la prima di ogni partita" : "")
+    + (conta.esempio ? ` (${conta.esempio})` : "")
+    + `: l'esito vuol dire che la mano è finita (una vittoria, un pareggio, un punto fatto): per `
+    + `una mossa normale restituisci { dati } (e i punti, se ci sono) e resta nella fase. Se `
+    + `ogni mossa chiude davvero una mano (una domanda di un quiz), lascialo così`;
 }
 
 export async function fumo(file, opzioni = {}) {

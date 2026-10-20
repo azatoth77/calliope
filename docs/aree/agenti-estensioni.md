@@ -4499,3 +4499,7 @@ conservazione della conversazione e «dimentica»; promemoria mensile; tornando 
 concessioni si richiedono; niente concessioni a minori e ospiti. Il piano è ora in passi 0–6, 7a
 (divieti con una strada nuova: posta, file della persona, rete di casa), 7b (attivazione E4) e 7c
 (limiti dell'infrastruttura), con la misura delle conferme ogni 100 esecuzioni creata dal passo 0.
+
+**L'esito dei giochi e gli esempi tolti in silenzio (20/10, issue #197).** L'analisi prima del
+codice di un gioco conta gli esempi tolti per causa, scrive `esempi_modello` e, se li toglie
+tutti, la regola `accettazione_esempi_tutti_tolti`; voce intera in [giochi](giochi.md), 20/10.
