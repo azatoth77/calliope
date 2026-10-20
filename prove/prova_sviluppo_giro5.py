@@ -353,8 +353,9 @@ def prova_ripetizioni():
     verifica("la passata si ferma presto (lo stream chiuso), torna come giro a vuoto",
              out.get("giro_a_vuoto") and cli.letti < 15 and out["tool_calls"] == []
              and lav.passi == 1 and lav.token > 0, f"letti {cli.letti}, {out}")
-    verifica("…il segnale, la regola nel log, il passo sulla scheda",
+    verifica("…il segnale, la regola nel log e nei segnali (19/10, #9), il passo sulla scheda",
              lav.segnali.get("ripetizioni") == 1
+             and lav.segnali.get("regole") == {"agente_ragionamento_ripetuto": 1}
              and any("agente_ragionamento_ripetuto" in x for x in log)
              and any(ev == "flusso" and "girava a vuoto" in d.get("testo", "")
                      for ev, d in eventi)
