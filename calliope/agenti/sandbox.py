@@ -331,6 +331,16 @@ class Sandbox:
         return [{"percorso": p.relative_to(self.root).as_posix(), "byte": p.stat().st_size}
                 for p in self._files()]
 
+    def impronta(self) -> str:
+        """L'impronta dell'intera cartella del lavoro (19/10, #185): percorsi e contenuti dei
+        file dell'elenco, senza le cartelle nascoste (.calliope, .tmp). Due stati uguali della
+        cartella hanno la stessa impronta: il ciclo sa se ci torna e se i test sono da rifare."""
+        h = hashlib.sha1()
+        for p in self._files():
+            h.update(p.relative_to(self.root).as_posix().encode("utf-8") + b"\0")
+            h.update(hashlib.sha1(p.read_bytes()).digest())
+        return h.hexdigest()[:16]
+
     def leggi(self, rel, max_caratteri: int = 12_000) -> str:
         path = self.percorso(rel)
         if not path.is_file():

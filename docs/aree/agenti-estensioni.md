@@ -4078,3 +4078,173 @@ giudizio sulle prove (test o codice o consegna: 24/25 sui casi di quel tipo (tes
 non per le etichette di processo; nel ciclo il menu si restringe a
 `test_sbagliato`, `codice_sbagliato`, `consegna` e una `domanda` facoltativa per la persona, e
 il giro in tondo resta deciso dal codice. Scelta di chi amministra (#182).
+
+## Gli strumenti onesti dell'agente (19/10, issue #185, ramo `issue-185-strumenti-onesti`)
+
+**Il caso** (analisi del 19/10, `docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.2,
+passo 2 del § 5): il ciclo calcolava molto durante il giro (impronte dei file, firme degli errori,
+conti dei test), ma quasi nulla arrivava all'agente. Il ritorno a uno stato già visto (A, B, A, B)
+lo sapeva `novita_file` e serviva solo al rapporto a voce della tappa; un'uscita troncata diventava
+`{}` e l'agente riceveva «manca percorso» e riprovava uguale. Nel catalogo dei 44 fallimenti veri
+l'oscillazione e il comando ripetuto tornano dal 06/10 al 18/10 (il tris di #174). Le note sono
+**fatti**, mai rimproveri, e stanno nel risultato dello strumento che le riguarda: nessun messaggio
+a parte, nessun messaggio vecchio riscritto (la cache dei prefissi resta, la prova lo controlla).
+
+**Cosa cambia.**
+1. **Lo stato già visto** (`nota_stato_gia_visto`, regola `agente_stato_gia_visto`): l'impronta
+   dell'intera cartella del lavoro (`Sandbox.impronta`: percorsi e contenuti dei file dell'elenco,
+   senza `.calliope` e `.tmp`) si segna all'inizio del lavoro, dopo ogni scrittura e a ogni
+   esegui_test, con la passata e l'esito dei test in breve (`segnali["cartelle"]`, al più 40
+   stati). Nel risultato di scrivi_file e modifica_file, sotto `gia_visto`: «questa versione della
+   cartella è identica a quella di 4 passate fa, quando esegui_test dava: 1 test su 1 non
+   passavano (…)»; se la cartella è nuova ma il file no, ««programma.py» è tornato identico a
+   com'era 3 passate fa»; una riscrittura uguale, «… è uguale a com'era già: non è cambiato niente».
+   La passata si dice relativa («N passate fa»): i numeri delle passate l'agente non li vede.
+2. **L'uscita troncata** (regola `agente_uscita_troncata`): il client di vLLM legge ora
+   `finish_reason` (`out["fine"]`) e segna le chiamate con gli argomenti che non si leggono
+   (`out["rotti"]`); con «length» anche l'ultima chiamata (tolto e rimesso il 20/10, vedi sotto), perché lì gli argomenti arrivano a pezzi e
+   un JSON che si legge può avere il contenuto a metà. Il client di Ollama legge `done_reason` e
+   segna gli argomenti in stringa rotti, ma non l'ultima chiamata a max_tokens: Ollama manda le
+   chiamate intere. Una chiamata rotta non si esegue e riceve «la tua uscita è stata troncata
+   (fermata a max_tokens): questa chiamata è arrivata a metà e non l'ho eseguita. Scrivi il file in
+   pezzi più corti, oppure cambia solo le righe che servono con modifica_file». Una passata fermata a
+   max_tokens senza chiamate riceve lo stesso fatto al posto della spinta «usa gli strumenti». Quando
+   il server rifiuta `thinking_token_budget` e il client lo toglie (`senza_budget`), il ciclo lo
+   scrive nel log una volta (`budget_tolto`): prima cadeva in silenzio.
+3. **esegui_test invariato** (regola `agente_test_invariati`): con la stessa impronta della
+   cartella, lo stesso file di test e lo stesso controllo della consegna dell'ultima esecuzione i
+   test non si rieseguono: torna l'esito di allora (l'uscita tagliata a 3 000 caratteri) con
+   «invariato»: «nessun file è cambiato dall'esecuzione di una passata fa: non ho rieseguito i test,
+   l'esito è questo». Un'esecuzione scaduta o che non è partita (`errore`) non si ricorda. I test
+   alla consegna si rifanno sempre, due volte (lì si vedono quelli col caso o col tempo, #174).
+4. **Le letture** (regola `agente_rilettura`, la nota del 06/10): il conto è per file e impronta del
+   contenuto, non per argomenti. Vale anche con `riga` (prima usciva prima del conto) e un
+   `da_carattere` diverso non lo azzera più. Si conta come rilettura la lettura di un pezzo già letto
+   tutto (gli intervalli letti, uniti): i pezzi nuovi di un file lungo no. Un contenuto cambiato
+   riparte da capo. La deduplica nella stessa passata resta com'era.
+5. **modifica_file**: il testo vecchio che non c'è ha nel risultato le righe vere, numerate, intorno
+   alla riga più simile alla sua prima riga (`righe_vere`, `punto_piu_simile` con difflib, soglia
+   0,6; sotto «nessuna riga gli somiglia: rileggi il file»), prima solo il numero di riga quando la
+   prima riga c'era uguale; il testo ambiguo dice le righe delle occorrenze («compare 2 volte, alle
+   righe 5, 9»). `vecchio == nuovo` è rifiutata (`agente_modifica_nulla`: prima riusciva e faceva
+   «scadere» i test verdi). La modifica che rimette esattamente il testo tolto da una modifica
+   precedente dello stesso file è rifiutata, con il passo e l'esito dei test sulla cartella di prima
+   di quella modifica, se c'è (`agente_modifica_inversa`, `segnali["modifiche"]`, impronte e non
+   testi): «questa modifica rimette esattamente il testo che la tua modifica_file di una passata fa
+   aveva tolto, e non l'ho fatta; prima di quella modifica esegui_test dava: … Se vuoi davvero
+   tornare a com'era, riscrivi il file con scrivi_file».
+6. **Lo strumento sconosciuto** ha `ok: False` e l'elenco degli strumenti di quella passata
+   (`agente_strumento_sconosciuto`); anche il ripiego di `_strumento` ha `ok: False`. **Le chiamate
+   dopo la consegna** nella stessa passata ricevono ognuna «non eseguita: il lavoro era già
+   consegnato» (dopo chiedi_permesso «… aspetta la risposta di chi l'ha chiesto», dopo la consegna
+   rossa di #180 «… si è fermato»), regola `agente_dopo_consegna`: prima restavano senza risposta, e
+   la storia ripresa dopo una domanda o una tappa era malformata.
+
+**Prove.** `prova_strumenti_onesti` (nuova, livello 2, ~15 s), con i contrari: gli stati nuovi
+senza nota, gli argomenti mancanti veri, la chiamata intera, un file cambiato e un altro file di
+test, i pezzi nuovi di un file lungo, una modifica diversa, la consegna da sola.
+`prova_porte_consegna`: la sezione 5 chiama esegui_test due volte sulla stessa cartella con e senza
+il predicato della consegna, e per questo il controllo della consegna sta nella chiave
+dell'esecuzione ricordata.
+
+**Non fatto qui**: il ciclo della ricerca (`ricerca`) ha lo stesso «dopo la consegna» e il suo
+strumento sconosciuto, non toccati; il test rifatto alla tappa e i segnali nel giro dopo (n. 16
+dell'analisi, il blocco di stato del § 4).
+
+**Rischi.** L'impronta della cartella costa una lettura di tutti i file a ogni scrittura (due per
+scrivi_file, tre per modifica_file *[storico: due dal 20/10]*) e a ogni esegui_test: le cartelle dei lavori sono piccole (al
+più 100 file, 5 MB), da guardare nel banco. Un test che dipende dal caso o dal tempo, rieseguito
+senza cambiare niente, ora dà lo stesso esito invece di un altro: la consegna lo trova comunque
+(due esecuzioni, `agente_test_instabili`). Un agente che vuole davvero annullare una sua modifica
+deve passare da scrivi_file.
+
+**Da misurare sulla DGX** (dopo l'unione): il banco di #9; criterio della ricerca, nel banco calano
+le passate senza novità e le riletture, e nessun lavoro torna allo stesso stato della cartella più
+di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_troncata`,
+`agente_test_invariati`, `agente_rilettura`, `agente_modifica_nulla`, `agente_modifica_inversa`,
+`agente_strumento_sconosciuto`, `agente_dopo_consegna` e la riga «non accetta thinking_token_budget».
+
+**Dopo la revisione della PR #187 (20/10).**
+- **La passata troncata senza chiamate viene prima** della guardia dei token senza strumenti e
+  del conto della prosa, e lì non conta: con i valori di serie (16 384 token per passata, guardia
+  a 12 000) finiva in «ha ragionato per 32 768 token senza usare gli strumenti», e la regola non
+  scattava mai. Come dopo una chiamata, la guardia riparte; il limite resta quello dei tetti
+  (passate, token, tempo). La prova ha il caso con tre passate piene di fila. *[storico: «la
+  guardia riparte» e «il limite dei tetti» fino alla seconda revisione, sotto]*
+- **La modifica inversa si rifiuta solo nell'oscillazione pura**: la cartella di adesso è quella
+  subito dopo la modifica di prima (`segnali["modifiche"]` tiene anche l'impronta di dopo). Se nel
+  frattempo è cambiato altro (un'altra funzione corretta), tornare indietro è una correzione e si
+  fa. Lo storico delle modifiche di un file si azzera a ogni scrivi_file di quel file.
+- **L'esito ricordato dei test** (`segnali["ultimo_test"]`) si butta all'inizio di ogni ciclo
+  (giro dopo una tappa, ripresa): dipende anche da ciò che non è nella cartella (il motore e i
+  controlli di Calliope dopo un aggiornamento, il controllo della consegna con la specifica viva).
+  Costa un'esecuzione per giro.
+- Il già visto con i test dice la passata dell'esecuzione («identica a quella su cui esegui_test,
+  2 passate fa, dava: …»), non quella in cui lo stato era apparso; senza test, come prima.
+- Un'impronta della cartella che non si legge si scrive nel log, una volta per lavoro.
+- modifica_file legge la cartella due volte (prima e dopo) e il ciclo le riusa; scrivi_file due.
+- Con vLLM e «length» l'ultima chiamata col JSON valido e intero si esegue: rotta solo se il JSON
+  non si legge (prima era rotta sempre, e se il parser tratteneva una seconda chiamata a metà la
+  prima, intera, andava persa). *[storico: tolto dalla seconda revisione, sotto]*
+- Il ciclo della ricerca ha la sua issue (#189). Riletto, è meno grave di quanto detto nella PR:
+  lo strumento sconosciuto ha già `ok: False` con l'elenco, e manca solo il nome della regola. La
+  consegna fa `return` subito, e le chiamate dopo di essa non si eseguono e restano senza
+  risposta. Non legge `rotti` e prende per relazione anche una passata troncata.
+
+**Dopo la seconda revisione della PR #187 (20/10).**
+- **Il solo ragionamento troncato non è un'uscita troncata.** Il fatto «troncata» vale solo
+  quando la troncatura è nell'uscita: una chiamata con gli argomenti rotti, o un testo fermato a
+  max_tokens di almeno `TRONCATA_TESTO_MIN` = 20 caratteri. Una passata «length» con il contenuto
+  vuoto o quasi, fatta tutta di ragionamento, resta nella guardia dei token senza strumenti come
+  prima (alla seconda soglia «limite»). *[storico: «il contenuto vuoto o quasi» come discriminante fino alla
+  terza revisione, sotto]* Con la prima correzione, 30 passate così arrivavano al tetto
+  dei token del lavoro (150 000, i 30 minuti) con «scrivi il file in pezzi», che non c'entrava. La
+  troncata vera non si somma ai token senza strumenti e non li azzera.
+- **Un tetto suo**: oltre `TRONCATE_MAX` = 3 passate di fila con l'uscita troncata (anche le
+  chiamate rotte; dalla terza revisione solo le passate con tutte le chiamate rotte) il lavoro si ferma col motivo «la sua uscita si è fermata N volte di fila al
+  tetto dei token della passata», `tipo` «troncata»: tappa in uno sviluppo (`PERCHE_TAPPA`, a voce
+  «l'uscita dell'agente si è fermata più volte di fila al tetto dei token della passata»), fuori
+  «limite».
+- **Con vLLM e «length» l'ultima chiamata è di nuovo rotta**, anche col JSON che si legge. A fine
+  stream vLLM manda gli argomenti già chiusi dal parser con la stringa a metà: un file, un `nuovo` di
+  modifica_file o un riassunto della consegna a metà scritti in silenzio costano più di una passata
+  persa. Il comportamento del parser `qwen3_xml` sulla DGX è da misurare (max_tokens piccolo e uno
+  scrivi_file lungo).
+- La troncata azzera la prosa di fila: alternate, «N volte di fila senza usare gli strumenti» non
+  si dice più a torto.
+
+**Dopo la terza revisione della PR #187 (20/10).**
+- **La discriminante della troncata senza chiamate è sui token, non sul contenuto**
+  (`troncata_nell_uscita`). Un testo di almeno 20 caratteri è un'uscita troncata. Col contenuto
+  vuoto decide il ragionamento: se è almeno `RAGIONAMENTO_QUOTA` = 0,4 dei token generati è
+  ragionamento troncato, e vale la guardia come prima. Il conto è quello del motore (vLLM) o la
+  stima dai caratteri, un token ogni `TOKEN_CARATTERI` = 3: è grossolana, per questo la quota è
+  bassa. Altrimenti l'uscita c'era, ma l'ha trattenuta il parser dei tool: è la chiamata a metà
+  con Ollama, il caso M1 della prima revisione, che con la seconda correzione era tornato in «ha
+  ragionato per 32 768 token». Il valore della quota è da misurare sulla DGX: nel log il conto di
+  `agente_uscita_troncata` e le righe «token senza strumenti».
+- **Il tetto delle troncate per le passate con chiamate viene dopo il giro sulle chiamate**:
+  ognuna ha la sua risposta nella storia, prima della tappa o del «limite». Una passata conta «di
+  fila» solo se tutte le sue chiamate sono rotte. Con vLLM e «length» una passata con una chiamata
+  intera e l'ultima rotta va avanti: le intere si eseguono, e l'agente scrive un file per passata.
+- **Il tempo di una passata troncata esce dalla guardia dei minuti senza strumenti**: come i
+  token, non si somma e non la azzera. Prima una troncata da 330 s seguita da una passata di prosa
+  faceva scattare «ha ragionato per 100 token».
+- **Fuori da uno sviluppo il «limite» «troncata» passa da `_consegna_al_tetto`**, come gli altri
+  tetti. Con gli esempi di accettazione verdi il codice consegna, `consegna_al_tetto` «troncata», e
+  a voce «non ha consegnato», come per `a_vuoto` e `prosa`.
+- Un giro a vuoto azzera le troncate di fila. Il banco (#9) ha `troncata` tra i tipi del limite.
+- **I casi dei copioni delle tre revisioni sono nella prova** (`prova_strumenti_onesti`, sezione
+  7), con il nome che avevano e con i contrari:
+  - A ed L1: l'uscita trattenuta;
+  - E: il solo ragionamento, con vLLM e con Ollama;
+  - F: troncate e prosa alternate;
+  - J e J2: il tempo, con un orologio finto; il contrario è la prosa lenta;
+  - M: chiamate intere e rotte;
+  - N: tappa e «limite» con la storia ben formata;
+  - R4: la consegna al tetto con gli esempi;
+  - R6: il giro a vuoto in mezzo;
+  - I: senza `rotti` la chiamata intera si esegue;
+  - B, C, D, G e H: la modifica inversa e il già visto.
+
+  Ogni tornata di correzioni aveva rotto un caso di quella prima.
