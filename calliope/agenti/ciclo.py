@@ -787,6 +787,12 @@ RIFIUTI_MAX = 3
 # Le passate di fila senza nessuna chiamata dopo le quali il lavoro si ferma (19/10, #180):
 # tappa in uno sviluppo, «limite» fuori
 PROSA_MAX = 3
+# Le passate di fila con l'uscita troncata a max_tokens (revisione della PR #187, #185): oltre,
+# tappa in uno sviluppo o «limite», con il motivo suo invece del tetto dei token
+TRONCATE_MAX = 3
+# Il contenuto sotto cui una passata fermata a max_tokens senza chiamate è di solo ragionamento:
+# lì vale la guardia dei token senza strumenti, come prima
+TRONCATA_TESTO_MIN = 20
 # La risposta a una passata senza chiamate con lo stato consegnabile (19/10, #180): un fatto,
 # non una consegna. Prima il testo dopo una spinta valeva come «fatto» («Hai ragione, correggo
 # il test» chiudeva il lavoro)
@@ -1302,6 +1308,7 @@ class Agente:
         # Le passate di fila senza chiamate (19/10, #180) e il controllo della consegna senza
         # effetti, lo stesso dentro esegui_test (`Lavori._controlla_estensione`)
         prosa_fila = 0
+        troncate_fila = 0         # passate di fila con l'uscita troncata (revisione della PR #187)
         consegnabile = getattr(controlla, "consegnabile", None)
         while consegna is None:
             lav.passo = "sta pensando al codice" if not scritti else "sta lavorando al codice"
@@ -1372,15 +1379,29 @@ class Agente:
             if calls:
                 msg["tool_calls"] = [{"function": c} for c in calls]
             messages.append(msg)
-            if not calls and troncata:
+            # La troncatura nell'uscita (revisione della PR #187): una chiamata rotta, o un testo
+            # fermato a max_tokens. Una passata di solo ragionamento troncato (il contenuto vuoto
+            # o quasi) non lo è: resta nella guardia dei token senza strumenti, come prima
+            nell_uscita = bool(troncate) or (not calls and troncata and len(
+                str(out.get("content") or "").strip()) >= TRONCATA_TESTO_MIN)
+            troncate_fila = troncate_fila + 1 if nell_uscita else 0
+            if troncate_fila > TRONCATE_MAX:
+                e = Limite(f"la sua uscita si è fermata {troncate_fila} volte di fila al tetto "
+                           "dei token della passata", tipo="troncata")
+                if getattr(lav, "tappe", False):
+                    return self._tappa(lav, sandbox, gc, messages, e, spinte, scritti,
+                                       rimandi, stato_piano, piano, rifiuti)
+                raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)},
+                             tipo="troncata")
+            if nell_uscita and not calls:
                 # Fermata a max_tokens senza una chiamata intera (19/10, #185): il fatto, prima
-                # della guardia dei token senza strumenti e del conto della prosa, e senza
-                # contarla lì (revisione della PR #187: con i valori di serie, 16 384 per passata
-                # contro 12 000, finiva in «ha ragionato per 32 768 token»). L'agente ci provava:
-                # come dopo una chiamata, la guardia riparte. Il limite resta quello dei tetti
+                # della guardia dei token senza strumenti e del conto della prosa (revisione della
+                # PR #187: con i valori di serie, 16 384 per passata contro 12 000, finiva in «ha
+                # ragionato per 32 768 token»). Non si somma ai token senza strumenti, e non li
+                # azzera; la prosa di fila sì, riparte. Il limite è TRONCATE_MAX
                 from ..sonde import nota as nota_regola
                 nota_regola(lav, "agente_uscita_troncata", self.log, "senza chiamate")
-                vuoto_tok, vuoto_t0, vuote = 0, time.monotonic(), 0
+                prosa_fila = 0
                 messages.append({"role": "user", "content": USCITA_TRONCATA_TESTO})
                 continue
             if calls:

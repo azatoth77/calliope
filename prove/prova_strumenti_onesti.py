@@ -253,10 +253,10 @@ def prova_troncata(tmp: Path):
     piena = int(cfg.agenti_token_passata)
     verifica("i valori di serie: la passata piena supera la guardia",
              piena > int(cfg.agenti_token_senza_strumenti), str(piena))
+    a_meta = {"content": "Scrivo il programma:\ndef somma(a, b):\n    return", "fine": "length",
+              "eval": piena, "ragionamento": piena // 2}
     lav, ris, log, cli, sb = gira(tmp, "tronca_vera", [
-        {"content": "", "fine": "length", "eval": piena},
-        {"content": "", "fine": "length", "eval": piena},
-        {"content": "", "fine": "length", "eval": piena},
+        a_meta, a_meta, a_meta,
         [scrivi("programma.py", GIUSTO), scrivi("test_programma.py", TEST)], [ESEGUI],
         [CONSEGNA]])
     utenti = [x["content"] for x in lav.contesto.get("messages", []) if x.get("role") == "user"]
@@ -267,6 +267,31 @@ def prova_troncata(tmp: Path):
     verifica("…e nemmeno la prosa: nessuna spinta «usa gli strumenti»",
              SPINTA_STRUMENTI not in utenti and "agente_prosa_non_consegna" not in regole(lav),
              str(regole(lav)))
+
+    # Seconda revisione della PR #187. Il solo ragionamento troncato (il contenuto vuoto) non è
+    # un'uscita troncata: la guardia dei token senza strumenti chiude alla seconda soglia, come
+    # prima, e non il tetto dei token del lavoro dopo 30 passate
+    pensa = {"content": "", "thinking": "penso " * 200, "fine": "length", "eval": piena}
+    lav, ris, log, cli, sb = gira(tmp, "tronca_pensiero", [dict(pensa) for _ in range(30)],
+                                  max_passi=24)
+    verifica("contrario: 30 passate di solo ragionamento troncato chiudono alla seconda soglia",
+             ris.get("eccezione") == "Limite" and "ha ragionato per" in ris.get("motivo", "")
+             and len(cli.corpi) == 2 and "agente_uscita_troncata" not in regole(lav),
+             str(ris)[:200] + f" passate {len(cli.corpi)}")
+    # Il tetto delle troncate di fila, con il motivo suo
+    lav, ris, log, cli, sb = gira(tmp, "tronca_tetto", [dict(a_meta) for _ in range(8)])
+    verifica("oltre TRONCATE_MAX troncate di fila: «limite» col motivo suo, non il tetto dei token",
+             ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
+             and "fermata 4 volte di fila al tetto dei token" in ris.get("motivo", "")
+             and len(cli.corpi) == 4, str(ris)[:200])
+    # La troncata azzera la prosa di fila: alternate, nessun «4 volte di fila»
+    lav, ris, log, cli, sb = gira(tmp, "tronca_prosa", [
+        a_meta, "Ci penso.", a_meta, "Ci penso.", a_meta, "Ci penso.", a_meta, "Ci penso.",
+        [scrivi("programma.py", GIUSTO), scrivi("test_programma.py", TEST)], [ESEGUI],
+        [CONSEGNA]], max_passi=14)
+    verifica("troncate e prosa alternate: nessuna delle due «di fila», il lavoro finisce",
+             ris.get("esito") == "fatto" and regole(lav).get("agente_uscita_troncata") == 4,
+             str(ris)[:200] + str(regole(lav)))
 
     # Il client di vLLM: finish_reason, argomenti rotti, budget che cade
     from calliope.agenti.remoto_openai import ClienteOpenAI
@@ -283,9 +308,9 @@ def prova_troncata(tmp: Path):
     cl.http = _Http([_Risposta(_sse(_pezzo('{"percorso": "a.py", "contenuto": "x"}'),
                                     {"choices": [{"delta": {}, "finish_reason": "length"}]}))])
     out = cl.chat(dict(corpo))
-    # Revisione della PR #187: prima l'ultima chiamata a max_tokens era sempre rotta
-    verifica("contrario: a max_tokens l'ultima chiamata col JSON intero si esegue",
-             not out.get("rotti") and out.get("fine") == "length", str(out))
+    # Seconda revisione della PR #187: a fine stream vLLM chiude il JSON con la stringa a metà
+    verifica("vLLM: a max_tokens l'ultima chiamata è rotta anche col JSON che si legge",
+             out.get("rotti") == [0] and out.get("fine") == "length", str(out))
     cl.http = _Http([_Risposta(_sse(_pezzo('{"percorso": "a.py", "contenuto": "x"}',
                                            "tool_calls")))])
     out = cl.chat(dict(corpo))

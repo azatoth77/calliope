@@ -339,7 +339,9 @@ AL_TETTO_CORREZIONE = ("L'agente non ha fatto in tempo a consegnare, ma il test 
 # di fila senza strumenti
 PERCHE_TAPPA = {"consegna_rossa": "l'agente ha consegnato, ma la consegna non va: i test non "
                                   "passano o manca qualcosa che la consegna chiede",
-                "prosa": "l'agente ha risposto più volte senza usare gli strumenti"}
+                "prosa": "l'agente ha risposto più volte senza usare gli strumenti",
+                "troncata": "l'uscita dell'agente si è fermata più volte di fila al tetto dei "
+                            "token della passata"}
 
 
 def frase_tappa(lav, titolo: str) -> str:
