@@ -411,8 +411,11 @@ SCHELETRI = {"gioco": GIOCO, "estensione": ESTENSIONE, "python": PROGRAMMA_PYTHO
              "csharp": PROGRAMMA_CSHARP, "javascript": PROGRAMMA_JAVASCRIPT}
 
 
-def per_programma(linguaggi=("python",)) -> str:
-    """Gli scheletri dei programmi per i linguaggi che qui si eseguono (Python sempre)."""
+def per_programma(linguaggi=("python",), linguaggio=None) -> str:
+    """Gli scheletri dei programmi per i linguaggi che qui si eseguono (Python sempre). Con
+    `linguaggio` (20/10 sera, #198: quello già scelto per il programma) solo il suo."""
     voluti = set(linguaggi or ())
+    if linguaggio in SCHELETRI and linguaggio in voluti | {"python"}:
+        return SCHELETRI[linguaggio]
     nomi = ["python"] + [n for n in ("csharp", "javascript") if n in voluti]
     return "\n\n".join(SCHELETRI[n] for n in nomi)

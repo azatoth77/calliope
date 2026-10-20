@@ -4401,7 +4401,47 @@ porte senza il gioco.test.js che una versione vera ha).
    (`REQUISITI_TRIS2`) e la richiesta, quindi gli esempi di accettazione e i giocatori, e al tetto
    o alla tappa il codice può chiudere da sé; prima il banco metteva `{"stato": "saltata"}` e
    `_consegna_al_tetto` rispondeva sempre «senza esempi di accettazione». Con `--accettazione no`
-   «saltata» e i giocatori del caso, come prima. La riga ha `tappa_no`.
+   «saltata» e i giocatori del caso, come prima. La riga ha `tappa_no`. *Dal 20/10 sera (#198,
+   parte 2)* il caso `tris-nudo`, fuori da quelli di serie: lo stesso tris come programma
+   JavaScript (`tris.js` con `nuovaPartita`, `mossa`, `vincitore`, `pareggio`, `aChiTocca` pure,
+   test dell'agente con node:test, senza macchina né contratto dei giochi, senza analisi prima
+   del codice), riferimento in `prove/programmi/tris`, «javascript» acceso in memoria per il solo
+   caso. Dopo le revisioni delle PR #199 e #200 (stessa sera): l'accettazione nascosta di tris2
+   passa da 2 a 10 test (i due di prima con lo stesso nome, più gli otto punti di tris-nudo:
+   mosse alternate, casella occupata o fuori da 1–9, niente mosse dopo la fine, colonna,
+   diagonale anche del secondo, pareggio, a chi tocca, «ancora»), e tris-nudo ha gli stessi dieci
+   con lo stesso nome (prima ne aveva otto più severi e diceva «equivalente» a torto: lo stato
+   ricevuto intatto non si prova più, in tris2 non ha un equivalente); richiesta e requisiti di
+   tris2 dicono anche la casella già presa. Un terzo caso, `tris2-solo-logica`: tris2 com'è ma la
+   richiesta chiede solo logica.js e logica.test.js, e la partenza è senza gioco.test.js (separa
+   l'API dei test con apriGioco dall'interfaccia della macchina). La riga conta i test verdi
+   dell'accettazione su quelli totali (`accettazione_verdi`, `accettazione_totali`, i nomi dei
+   rossi; colonna «test acc.»). **La metrica del confronto è l'accettazione nascosta**, non
+   «riuscito»: solo i tris2 hanno gli esempi dell'analisi e si possono chiudere al tetto.
+   Comando, partenze e regole di lettura scritte prima nella docstring del banco, alla lettera
+   come il § 7 dell'analisi (`2026-10-20-giochi-macchina-o-interfaccia.md`): alto ≥ 8/10, basso
+   ≤ 3/10, e 8/10 contro 3/10 (p = 0,070 a due code) è una soglia di decisione, non una prova,
+   che basta per A e A′; per aprire il prototipo di C il margine più forte (tris-nudo a 9/10 con
+   gli altri due ≤ 3/10, oppure 8/10 con gli altri due ≤ 2/10); il caso intermedio si rigira una
+   volta con altre 10 ripetizioni che si sommano alle prime (20 contro 20, alto ≥ 16/20, basso
+   ≤ 6/20; se resta intermedio, A); le regole in ordine, vale la prima che si avvera. Dopo la
+   seconda revisione della PR #199: il comando di decisione ha `--accettazione no`, come il § 7
+   (in nessun caso esempi visibili né chiusura al tetto con gli esempi, che avrebbero solo i
+   tris2; per la decisione del 20/10 sera in #190 gli esempi non bloccano più comunque); lo
+   0,5 di presence per tutti è uno scostamento voluto dal § 7 («lo stesso presence della
+   Config» darebbe 0,5 a tris2 e 0 a tris-nudo), come la partenza vuota di tris-nudo (la
+   partenza vera di un programma è lo scheletro nel prompt); tris2-solo-logica è A′ vero, solo
+   nel banco (`solo_logica`: prompt, contratto e «prossimo» dopo il piano senza gioco.test.js),
+   e la riga ha `test_apri_gioco` (un lavoro di A′ con quel campo pieno non misura A′), la firma
+   del primo errore dei test e i test dell'agente rieseguiti alla fine; «test acc.» parte da
+   2/10 nei tris2 e da 0/10 in tris-nudo, le regole usano il 10/10. Sulla DGX
+   dopo #197, `--accettazione no`, `--presence 0.5` (con
+   `config` tris2 avrebbe 0,5 e tris-nudo 0), `--casi tris2,tris2-solo-logica,tris-nudo --giri 2
+   --ripetizioni 10`, da lanciare. Nel prompt di un programma JavaScript scelto dall'analisi
+   (il file dichiarato) i test sono `*.test.js`, il seme la funzione del caso e lo scheletro solo
+   il suo; senza un linguaggio scelto, con il JavaScript acceso, test e seme si dicono per i due
+   linguaggi (`sistema_codice(…, linguaggio)`, prova in `prova_esecuzione`). tris-nudo non ha
+   l'analisi e vede quindi il prompt per i due linguaggi.
 
 **Prove.** `prova_apri_gioco_tappa` (nuova, livello 2, ~11 s), con i contrari: la frase nel
 contratto, nei vincoli e nel rimando (contrari: l'estensione, il programma); il motore finto
