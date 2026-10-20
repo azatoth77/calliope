@@ -3991,3 +3991,13 @@ volta in più. Il punto 7 della issue (CalliopeFinta che dice «nessuna risposta
   motivo «è un gioco: va chiesto come gioco». Così anche il prompt.
 - Caratteri dopo la revisione: gioco 16 171, estensione 15 566.
 - `from urllib import parse` resta segnalato dall'analisi statica (solo un avviso a chi approva).
+
+**Dopo la seconda revisione della PR #188 (20/10).** La spinta del ragionamento a vuoto
+(`_vuoto_spinta`) propone solo gli strumenti offerti nella passata (prima «piano, scarica_esempio
+o scrivi_file» anche a un gioco o a un programma, che ora li vedrebbero rifiutati). Il rifiuto di
+uno strumento non offerto dice il perché quando c'è: per un gioco «JavaScript nel riquadro, senza
+Python né rete», in una correzione «usa sonda_rete», altrimenti il motivo di `_esempi_ok` o
+`_sonde_ok` (senza internet, un file della persona). Il piano di un gioco: vedi
+[giochi](giochi.md). Il blocco dello strumento non offerto si unirà con quello dello strumento
+sconosciuto di #187 (#185) dopo la sua unione: un blocco solo, con la regola
+`agente_strumento_sconosciuto`.

@@ -1035,8 +1035,14 @@ motore non fa; il 45 % del testo di un gioco riguardava le estensioni Python.
    cambiare niente. **I giochi già installati** che le usano si rompono alla mossa, nel
    riquadro vero e non solo nei test (l'errore del motore ferma la partita): niente migrazioni
    (Calliope non è in produzione), ma prima di aggiornare la DGX vanno cercati nei `logica.js`
-   installati (`esito` insieme a `fase` diversa da «esito», `dopo` senza `esito`) e rifatti con
-   una correzione.
+   installati (`esito` non vuoto insieme a `fase` diversa da «esito»; `dopo` senza `esito`, con
+   `fase` diversa da «esito»; anche `esito: ""` vale come senza esito) e rifatti con una
+   correzione. Come cercarli: un grep da solo non basta (l'oggetto può essere costruito su più
+   righe o con variabili). Il modo sicuro è far girare la prova di fumo (`agenti/fumo_js.mjs`,
+   quella di esegui_test) su ogni gioco installato prima di `calliope aggiorna`, sapendo che
+   trova solo le strade che percorre; per partire, un grep come `rg -n
+   "esito\s*:.*fase\s*:|fase\s*:.*esito\s*:|dopo\s*:"` sui `logica.js` delle estensioni
+   installate (la cartella è da verificare sulla DGX), poi i casi letti a mano.
 4. **Il contratto esatto** (`contratto.scheda_testo`, ora il §2 del contratto del gioco): «Inizia»
    c'è sempre, anche con min < max, e parte con min giocatori (o con quanti hanno detto «gioco
    anch'io»); `turni` è vero di serie (false: muove chiunque); il caso: Math.random va bene, in
@@ -1078,3 +1084,12 @@ l'unione.
   libreria standard, la porta stretta, «dentro l'estensione», le pagine fatte in JavaScript).
 - Il piano di un gioco non dice più «scarica_esempio… estensione.py» come prossimo passo:
   dice di leggere e cambiare i file di partenza.
+
+**Dopo la seconda revisione della PR #188 (20/10).** Nel piano di un gioco la voce «javascript»
+(il gioco è JavaScript) chiudeva il lavoro come impossibile, con la frase delle estensioni
+(«un'estensione non può leggere dati che una pagina mostra solo con JavaScript»). Ora per un gioco le voci senza senso
+(`_IMPOSSIBILI_GIOCO` a None) non sono tra le voci del piano e, se arrivano, si ignorano; gli
+impossibili e le frasi vengono dal contratto del gioco («un gioco non può installare librerie o
+programmi»), con `contratto.impossibili(gioco)` e `voci_piano(gioco)` usati dal contratto e dallo
+strumento piano. Il titolo della partenza non finisce più con una preposizione o un articolo
+(«…con le carte», non «…con le carte di»).
