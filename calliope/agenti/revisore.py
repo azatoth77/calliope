@@ -18,21 +18,24 @@ requisiti, i file senza commenti (le righe al loro posto), l'esito vero dei test
 fallimenti in breve, il registro dei tentativi, quali test sono esempi di accettazione. Mai la
 trascrizione, il diario o il riassunto dell'agente.
 
-**Quando entra** (lo decide il codice, `ciclo.Agente`): alla consegna dell'agente e quando il
-lavoro si chiuderebbe da sé (tetto, tappa, prosa, giro a vuoto) con un esempio di accettazione
-rosso, una passata per esempio; a ogni tappa con i test dell'agente rossi (anche la consegna
-rossa e dopo due giri uguali, prima della domanda alla persona); quando lo stesso errore torna
-`STESSO_ERRORE_N` volte di fila. Al più una volta per giro per i momenti dei test, una per
-esempio, al più `agenti_revisore_passate_giro` passate nel giro, mai mentre la voce ha la
-precedenza (l'arbitro), con il suo tempo (`agenti_revisore_s`) e i suoi token (non quelli
-dell'agente).
+**Quando entra** (lo decide il codice, `ciclo.Agente`), sempre sull'esito dei test appena
+eseguito e solo se è rosso (non li rifà): alla consegna dell'agente e quando il lavoro si
+chiuderebbe da sé (tetto, tappa, prosa, giro a vuoto) con degli esempi di accettazione rossi, una
+passata sola per tutti quelli non ancora giudicati nel giro (al più MAX_ESEMPI_PASSATA), con un
+verdetto per esempio che vale per l'esempio che nomina (`abbina`); a ogni tappa con i test
+dell'agente rossi (anche la consegna rossa e dopo due giri uguali, prima della domanda alla
+persona); quando lo stesso errore torna `STESSO_ERRORE_N` volte di fila. Al più una volta per
+giro per i momenti dei test, una per esempio, al più `agenti_revisore_passate_giro` passate nel
+giro, mai mentre la voce ha la precedenza (l'arbitro), con il suo tempo (`agenti_revisore_s`,
+che non conta nel tempo del giro dell'agente) e i suoi token (non quelli dell'agente).
 
 **Cosa ne fa il codice** (`agenti_revisore: attivo`): l'esempio giudicato sbagliato si toglie
-dagli esempi del lavoro (il file lo riscrive il codice, l'agente non lo cambia mai), con la
-regola nel registro, il rapporto e la scheda di revisione; il codice sbagliato è un fatto per
-l'agente con file e causa; `consegna` vale solo con lo stato consegnabile (#180: i test
-dell'agente verdi e i file che la consegna chiede), altrimenti si ignora e si scrive. Con
-`ombra` (di serie) il verdetto va solo nel registro e nella riga del banco: all'agente niente.
+dagli esempi del lavoro (il file lo riscrive il codice, l'agente non lo cambia mai; tolto
+l'ultimo, il nome resta in sola lettura), con la regola nel registro, il rapporto e la scheda di
+revisione; il codice sbagliato è un fatto per l'agente con file e causa; con `consegna` un
+esempio resta (il revisore non ha detto che è sbagliato) e alla tappa vale solo con lo stato
+consegnabile, altrimenti si ignora e si scrive. Con `ombra` (di serie) il verdetto va solo nel
+registro e nella riga del banco: all'agente niente, e gli esempi rossi bloccano come prima.
 """
 
 from __future__ import annotations
@@ -56,6 +59,7 @@ CODA_USCITA = 2500          # caratteri della coda dell'uscita dei test nel pacc
 MAX_FILE = 12_000           # caratteri al più per file nel pacchetto…
 MAX_FILE_TOTALE = 60_000    # …e in tutto (un messaggio oltre num_ctx, o prove diluite)
 MAX_VERDETTI = 30           # quanti verdetti restano nei segnali del lavoro
+MAX_ESEMPI_PASSATA = 16     # gli esempi rossi al più in una passata (gli altri alla prossima)
 ESCLUSI = {"lavoro.json", "CAPACITA.md", "calliope_estensione.py", "risultato.md"}
 # Cartelle eseguite con i test ma non mostrate (le risposte vere delle sonde, fino a 8000
 # caratteri l'una: diluiscono le prove)
@@ -361,9 +365,10 @@ def schema_esempi(verdetti=VERDETTI) -> dict:
     della PR #202): un verdetto per esempio, nella lista «esempi», e la domanda facoltativa."""
     voce = schema(verdetti, domanda=False)
     voce = {"type": "object", "properties": voce["properties"],
-            "required": ["test"] + voce["required"]}
+            "required": list(voce["required"])}       # «test» c'è già
     return {"type": "object",
-            "properties": {"esempi": {"type": "array", "items": voce, "maxItems": 16},
+            "properties": {"esempi": {"type": "array", "items": voce,
+                                      "maxItems": MAX_ESEMPI_PASSATA},
                            "domanda": {"type": "string", "maxLength": 300}},
             "required": ["esempi"]}
 
@@ -588,6 +593,15 @@ def _stato_giro(lav) -> dict:
     return st
 
 
+def secondi_giro(lav) -> float:
+    """I secondi del revisore nel giro di adesso (per `Agente.trascorso`); 0 senza."""
+    seg = lav.segnali if isinstance(getattr(lav, "segnali", None), dict) else {}
+    st = seg.get("revisore_giro")
+    if not isinstance(st, dict) or st.get("giro") != int(getattr(lav, "giro", 1) or 1):
+        return 0.0
+    return float(st.get("s") or 0.0)
+
+
 def _voce_occupata(ag) -> bool:
     arb = getattr(ag, "arbitro", None)
     try:
@@ -661,9 +675,10 @@ def pacchetto_lavoro(ag, lav, sandbox, test: dict, in_esame: str = "") -> dict:
 def _una(ag, lav, chiavi, momento: str, p: dict, per_esempi: int = 0):
     """Una passata del revisore per `chiavi` (segnate come giudicate nel giro), contata nel
     giro: (risposta o None, la riga della passata). I secondi della passata non sono tempo
-    dell'agente (revisione della PR #202): vanno in `lav.attesa_s`, come l'attesa della voce, e
-    in `segnali["revisore_s"]` (il ciclo li toglie dalla guardia senza strumenti). Il passo del
-    lavoro torna com'era."""
+    dell'agente (revisioni della PR #202): vanno in `segnali["revisore_s"]` (in tutto: il ciclo
+    li toglie dalla guardia senza strumenti) e nel conto del giro (`revisore_giro["s"]`, che
+    `Agente.trascorso` sottrae come l'attesa), non in `lav.attesa_s`: le misure del lavoro
+    (secondi, minuti, scheda) restano com'erano. Il passo del lavoro torna com'era."""
     st = _stato_giro(lav)
     st["chiavi"] += list(chiavi)
     st["passate"] += 1
@@ -678,7 +693,7 @@ def _una(ag, lav, chiavi, momento: str, p: dict, per_esempi: int = 0):
                     float(_cfg(ag, "agenti_revisore_s", 90.0) or 90.0), per_esempi=per_esempi)
     finally:
         secondi = time.monotonic() - t0
-        lav.attesa_s = float(getattr(lav, "attesa_s", 0.0) or 0.0) + secondi
+        st["s"] = round(float(st.get("s") or 0.0) + secondi, 3)
         seg = lav.segnali
         seg["revisore_s"] = round(float(seg.get("revisore_s") or 0.0) + secondi, 3)
         lav.passo = passo
@@ -753,6 +768,54 @@ def _esito(**kw) -> dict:
     return out
 
 
+_NOME_RICONOSCIBILE = re.compile(r"\bR\d+ esempio \d+\b|\btest_r\d+_\d+\b")
+
+
+def abbina(voci: list, da_giudicare: list, nome_file: str) -> dict:
+    """I verdetti della passata sugli esempi, uno per esempio (seconda revisione della PR #202):
+    un verdetto vale per l'esempio che nomina; la posizione conta solo per i verdetti senza un
+    nome riconoscibile, e solo se i verdetti sono tanti quanti gli esempi; ogni verdetto si usa
+    una volta. Un nome che non è fra gli esempi giudicati, o due verdetti per lo stesso esempio,
+    non toccano nessun esempio. {"per_esempio": {indice: voce}, "scartati": [(voce, perché)]}."""
+    indici = [x[0] for x in da_giudicare]
+    nomi = {x[1]: x[0] for x in da_giudicare}
+    per_nome: dict = {}
+    senza_nome, scartati, doppi = [], [], set()
+    for pos, v in enumerate(voci):
+        t = str(v.get("test") or "").strip()
+        i = nomi.get(t)
+        if i is None and _NOME_RICONOSCIBILE.search(t):
+            i = esempio_nel_test(nome_file, t)
+            if i not in indici:
+                scartati.append((v, f"«{t}» non è fra gli esempi rossi giudicati"))
+                continue
+        if i is None:
+            senza_nome.append((pos, v))
+            continue
+        if i in per_nome or i in doppi:
+            doppi.add(i)
+            continue
+        per_nome[i] = v
+    for i in doppi:
+        v = per_nome.pop(i, None)
+        for x in [v] + [w for w in voci if w is not v and (
+                nomi.get(str(w.get("test") or "").strip()) == i
+                or esempio_nel_test(nome_file, w.get("test")) == i)]:
+            if x is not None:
+                scartati.append((x, "più verdetti per lo stesso esempio"))
+    per_esempio = dict(per_nome)
+    if senza_nome and len(voci) == len(da_giudicare):
+        for pos, v in senza_nome:
+            i = indici[pos]
+            if i in per_esempio or i in doppi:
+                scartati.append((v, "senza nome, e il suo posto è di un altro esempio"))
+            else:
+                per_esempio[i] = v
+    else:
+        scartati += [(v, "senza un nome riconoscibile") for _, v in senza_nome]
+    return {"per_esempio": per_esempio, "scartati": scartati}
+
+
 def rivedi_esempi(ag, lav, sandbox, momento: str, test: dict | None = None) -> dict:
     """Gli esempi di accettazione rossi quando il lavoro vorrebbe consegnare o chiudersi
     (consegna dell'agente, tetto, tappa, prosa). `test`: l'esito dei test appena eseguiti dal
@@ -786,6 +849,9 @@ def rivedi_esempi(ag, lav, sandbox, momento: str, test: dict | None = None) -> d
                                if esempio is not None else nome_test)
         if chiave not in st["chiavi"]:
             da_giudicare.append((indice, nome_test, riga, esempio, chiave))
+    # Al più MAX_ESEMPI_PASSATA in una passata: gli altri non si segnano come giudicati e
+    # restano per la prossima (seconda revisione della PR #202)
+    da_giudicare = da_giudicare[:MAX_ESEMPI_PASSATA]
     if not da_giudicare:
         return out
     perche = puo_entrare(ag, lav, da_giudicare[0][4])
@@ -809,12 +875,14 @@ def rivedi_esempi(ag, lav, sandbox, momento: str, test: dict | None = None) -> d
         return out
     voci = list(d.get("esempi") or [])
     domanda = str(d.get("domanda") or "").strip()
+    scelte = abbina(voci, da_giudicare, nome)
+    for voce, perche in scelte["scartati"]:
+        _segna(lav, {"momento": momento, "test": str(voce.get("test") or "")[:200],
+                     "verdetto": voce.get("verdetto"), "esito": f"scartato: {perche}",
+                     "modo": m})
     tolti_ora = 0
     for k, (indice, nome_test, riga, esempio, chiave) in enumerate(da_giudicare):
-        voce = next((x for x in voci if esempio_nel_test(nome, x.get("test")) == indice
-                     or str(x.get("test") or "").strip() == nome_test), None)
-        if voce is None and len(voci) == len(da_giudicare):
-            voce = voci[k]          # nello stesso ordine, senza il nome
+        voce = scelte["per_esempio"].get(indice)
         if voce is None:
             _segna(lav, {"momento": momento, "chiave": chiave, "test": nome_test,
                          "verdetto": None, "esito": "senza verdetto per l'esempio", "modo": m})

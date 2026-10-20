@@ -1182,11 +1182,14 @@ class Agente:
 
     @staticmethod
     def trascorso(lav: Lavoro) -> float:
-        """I secondi di lavoro del giro (l'attesa di una risposta non conta)."""
+        """I secondi di lavoro del giro (l'attesa di una risposta non conta, né dal 20/10 le
+        passate del revisore a contesto pulito, #190)."""
         inizio = getattr(lav, "giro_inizio", None) or lav.inizio
         if not inizio:
             return 0.0
-        return time.time() - inizio - (lav.attesa_s - float(getattr(lav, "attesa0", 0) or 0))
+        from .revisore import secondi_giro
+        return (time.time() - inizio - (lav.attesa_s - float(getattr(lav, "attesa0", 0) or 0))
+                - secondi_giro(lav))
 
     def tetto_token(self, lav: Lavoro | None = None) -> int:
         """I token che un lavoro di quel tipo può generare: agenti_token_minuto del tipo (o di
@@ -1292,6 +1295,15 @@ class Agente:
     # ── codice ──
     def codice(self, lav: Lavoro, sandbox, sistema: str | None = None,
                controlla=None, esempi: bool = False, piano: bool = False) -> dict:
+        """`_codice`; a fine lavoro (o giro) l'esito dei test tenuto per il revisore si butta
+        (seconda revisione della PR #202)."""
+        try:
+            return self._codice(lav, sandbox, sistema, controlla, esempi, piano)
+        finally:
+            self._ultimi_test.pop(lav.id, None)
+
+    def _codice(self, lav: Lavoro, sandbox, sistema: str | None = None,
+                controlla=None, esempi: bool = False, piano: bool = False) -> dict:
         """`sistema`: un altro prompt (le estensioni, 04/10); `controlla(sandbox)` → None o
         l'errore da restituire all'agente quando chiama consegna con esito fatto (manifesto non
         valido, test mancanti): corregge e richiama consegna. `piano` (05/10, estensioni): il
@@ -1456,7 +1468,7 @@ class Agente:
             raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)}, tipo="troncata")
         consegnabile = getattr(controlla, "consegnabile", None)
         # I secondi del revisore (20/10, #190, revisione della PR #202) non sono dell'agente:
-        # sono già in lav.attesa_s (il tempo del giro) e qui escono dalla guardia senza strumenti
+        # `trascorso` li toglie dal tempo del giro, e qui escono dalla guardia senza strumenti
         rev_s = float(seg.get("revisore_s") or 0.0)
         while consegna is None:
             if float(seg.get("revisore_s") or 0.0) > rev_s:
@@ -2556,8 +2568,12 @@ class Agente:
         # stesso esito. Il 12/10 alle 07:39 un test con Math.random senza seme era 28 su 28 per
         # l'agente e 27 su 28 al ricontrollo
         r2 = sandbox.test()
-        # L'esito intero, per il revisore (revisione della PR #202: non rifà i test)
-        self._ultimi_test[lav.id] = r2
+        # L'esito intero, per il revisore (revisione della PR #202: non rifà i test); solo se
+        # rosso, e a fine lavoro si butta (`codice`)
+        if r2.get("passano"):
+            self._ultimi_test.pop(lav.id, None)
+        else:
+            self._ultimi_test[lav.id] = r2
         lav.nota("test", esito=r.get("esito"), passano=r.get("passano"))
         from .diagnosi import conto_detto, instabili
         nomi = instabili(r, r2)

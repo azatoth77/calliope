@@ -4657,7 +4657,7 @@ fra le due serie (riusciti, giri, token, e nella riga `revisore`, `revisore_toke
 interruttori di [setup-dgx](setup-dgx.md#interruttori-sulla-dgx).
 
 **Dopo la revisione della PR #202 (20/10).**
-- **I secondi del revisore non sono tempo dell'agente**: vanno in `lav.attesa_s`, come l'attesa
+- **I secondi del revisore non sono tempo dell'agente**: vanno in `lav.attesa_s` *[storico: dalla seconda revisione in un conto a parte, sotto]*, come l'attesa
   della voce, e in `segnali["revisore_s"]`, che il ciclo toglie dalla guardia dei minuti senza
   strumenti. Prima, vicino al tetto, l'ombra cambiava le decisioni: con un giro di 30 s e un
   revisore di 27 s l'agente aveva 2 passate invece di 4, senza i rimandi. Ora ombra e spento danno
@@ -4685,3 +4685,18 @@ interruttori di [setup-dgx](setup-dgx.md#interruttori-sulla-dgx).
   automatico dei prefissi, di norma resta. **Con l'ombra di serie la decisione della sera («gli
   esempi non bloccano più») non è in vigore**: gli esempi rossi bloccano come prima finché non si
   accende `agenti_revisore: attivo`.
+
+**Dopo la seconda revisione della PR #202 (20/10).**
+- **Un verdetto vale per l'esempio che nomina** (`revisore.abbina`). La posizione nella lista conta
+  solo per un verdetto senza un nome riconoscibile, e solo se i verdetti sono tanti quanti gli
+  esempi e quel posto è libero. Ogni verdetto si usa una volta. Un nome che non è fra gli esempi
+  rossi giudicati, o due verdetti per lo stesso esempio, non toccano nessun esempio: nella riga
+  del banco «scartato» con il motivo. Prima un verdetto con un nome sbagliato poteva togliere
+  l'esempio al suo posto.
+- **Il tempo del revisore non va in `lav.attesa_s`**, che cambierebbe i secondi e i minuti del
+  lavoro e la scheda. Ha un conto suo: `segnali["revisore_s"]` in tutto (per la guardia senza
+  strumenti) e `revisore_giro["s"]` nel giro, che `Agente.trascorso` sottrae come l'attesa.
+- Oltre i 16 esempi di una passata (`MAX_ESEMPI_PASSATA`) quelli che non entrano non si segnano
+  come giudicati: restano per la passata dopo.
+- L'esito dei test tenuto per il revisore (`Agente._ultimi_test`) c'è solo se è rosso e si butta
+  alla fine di `codice`. Lo schema per esempio non ha più «test» due volte fra gli obbligatori.

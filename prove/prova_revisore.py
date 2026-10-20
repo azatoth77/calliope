@@ -531,7 +531,7 @@ def prova_tappa(tmp: Path):
     lav, ris, log, cli, sb = gira(tmp, "rossa", [[ESEGUI], [consegna()], [consegna()],
                                                  [consegna()]], tappe=True, test=TEST_ROSSO,
                                   revisore=[
-                                      {"verdetto": "codice_sbagliato", "test": GIUSTO_ES},
+                                      {"verdetto": "codice_sbagliato", "test": SBAGLIATO},
                                       {"verdetto": "test_sbagliato", "file": acc.FILE,
                                        "test": SBAGLIATO, "causa": "sono 2000"},
                                       {"verdetto": "test_sbagliato",
@@ -614,14 +614,52 @@ def prova_revisione_202(tmp: Path):
         lav, ris, log, cli, sb = gira(tmp, f"tempo-{modo}", [list(x) for x in passate], V,
                                       modo=modo, dorme=5.0, tempo_s=8.0)
         out[modo] = (len(cli.corpi), ris.get("tipo"), len(risultati(lav, "consegna")),
-                     len(cli.revisioni), lav.attesa_s, lav.passo)
+                     len(cli.revisioni), lav.attesa_s, lav.passo,
+                     float((lav.segnali or {}).get("revisore_s") or 0.0))
     verifica("il revisore lento (5 s in un giro di 8): in ombra le stesse passate dell'agente e "
              "lo stesso esito di spento, con i rimandi", out["spento"][:3] == out["ombra"][:3]
              and out["ombra"][3] == 1 and out["spento"][0] == 4, str(out))
-    verifica("…i suoi secondi sono attesa, non tempo del giro; il passo torna com'era (P4)",
-             out["ombra"][4] >= 5.0 and out["spento"][4] < 1.0
+    verifica("…i suoi secondi a parte (revisore_s), non nell'attesa del lavoro: le misure del "
+             "lavoro restano com'erano (seconda revisione); il passo torna com'era (P4)",
+             out["ombra"][6] >= 5.0 and out["spento"][6] == 0.0
+             and out["ombra"][4] == out["spento"][4] == 0.0
              and out["ombra"][5] == out["spento"][5]
              and "revisore" not in str(out["ombra"][5]), str(out))
+    # Q1: i verdetti per nome; un nome inesistente o un doppione non toccano niente
+    lav, sb = estensione(tmp, "abbina", codice=ROTTA)
+    lav, ris, log, cli, sb = gira(tmp, "abbina", [[ESEGUI], [consegna()]], [[
+        {"verdetto": "test_sbagliato", "file": acc.FILE, "test": "test_r1_9", "causa": "x"},
+        {"verdetto": "test_sbagliato", "file": acc.FILE, "test": "test_r1_7", "causa": "x"}]],
+        lav=lav, sb=sb, max_passi=3)
+    scartati = [x for x in lav.segnali.get("revisore") or []
+                if str(x.get("esito") or "").startswith("scartato")]
+    verifica("verdetti con nomi che non ci sono: nessun esempio tolto, scartati con il motivo",
+             len(esempi_file(sb)) == 2 and len(scartati) == 2
+             and "non è fra gli esempi" in scartati[0]["esito"]
+             and not regole(lav).get("agente_revisore_esempio_tolto"), str(scartati))
+    lav, sb = estensione(tmp, "doppio", codice=ROTTA)
+    lav, ris, log, cli, sb = gira(tmp, "doppio", [[ESEGUI], [consegna()]], [[
+        {"verdetto": "test_sbagliato", "file": acc.FILE, "test": SBAGLIATO, "causa": "x"},
+        {"verdetto": "codice_sbagliato", "file": "estensione.py", "test": SBAGLIATO,
+         "causa": "y"}]], lav=lav, sb=sb, max_passi=3)
+    scartati = [x for x in lav.segnali.get("revisore") or []
+                if str(x.get("esito") or "").startswith("scartato")]
+    verifica("due verdetti per lo stesso esempio: nessuno vale, l'esempio resta, il motivo",
+             len(esempi_file(sb)) == 2 and len(scartati) == 2
+             and all("più verdetti" in x["esito"] for x in scartati), str(scartati))
+    from calliope.agenti.revisore import abbina
+    da = [(1, "test_r1_1", "", None, "a"), (2, "test_r1_2", "", None, "b")]
+    a = abbina([{"test": "", "verdetto": "test_sbagliato"},
+                {"test": "test_r1_2", "verdetto": "codice_sbagliato"}], da, acc.FILE)
+    verifica("il caso normale: il verdetto vale per l'esempio che nomina, la posizione solo "
+             "senza nome (e solo se libera)", a["per_esempio"][2]["verdetto"] == "codice_sbagliato"
+             and a["per_esempio"][1]["verdetto"] == "test_sbagliato" and not a["scartati"],
+             str(a))
+    a = abbina([{"test": "", "verdetto": "test_sbagliato"},
+                {"test": "test_r1_1", "verdetto": "codice_sbagliato"}], da, acc.FILE)
+    verifica("…senza nome al posto di un esempio già nominato: scartato, non spostato",
+             a["per_esempio"] == {1: {"test": "test_r1_1", "verdetto": "codice_sbagliato"}}
+             and len(a["scartati"]) == 1, str(a))
     # P2: con tutto verde nessuna esecuzione dei test in più
     conti = {}
     for modo in ("spento", "ombra"):
