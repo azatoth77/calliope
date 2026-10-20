@@ -81,7 +81,12 @@ def prova_partenza(tmp: Path):
                  sorted(scritti) == sorted(f) and r["passano"] and r["esito"]["eseguiti"] == 6
                  and "ok prova di fumo del gioco" in r["uscita"],
                  str(r["esito"]) + r["uscita"][-600:])
-        verifica(f"{gmin}–{gmax}: la consegna chiede un nome suo (il segnaposto)",
+        e = str(controlla_consegna(sb))
+        verifica(f"{gmin}–{gmax}: la consegna rifiuta la partenza d'esempio non cambiata",
+                 "gioco d'esempio delle porte" in e, e)
+        sb.scrivi("logica.js", sb.leggi("logica.js", 100_000).replace("Quale porta apri?",
+                                                                     "Quale porta?"))
+        verifica(f"{gmin}–{gmax}: …e con la logica cambiata chiede un nome suo (il segnaposto)",
                  NOME_PARTENZA in str(controlla_consegna(sb)), str(controlla_consegna(sb)))
     if not shutil.which("node"):
         print("SALTATA IN PARTE: node non c'è")
@@ -96,13 +101,41 @@ def prova_partenza(tmp: Path):
     m = json.loads(f["manifesto.json"])
     verifica("contrario: un titolo che il controllo dei testi non accetta → il segnaposto",
              m["nome"] == NOME_PARTENZA and m["titolo"] != "Quando ti pare", m["titolo"])
+    # Nomi e titoli tagliati a parola intera, con le cifre, senza simboli (20/10, revisione
+    # della PR #188)
+    casi = {"un gioco del memory con le carte di Halloween per tutta la famiglia":
+            ("un_gioco_del_memory_con_le", "un gioco del memory con le carte di"),
+            "Tic-tac-toe 3x3": ("tic_tac_toe_3x3", "Tic tac toe 3x3"),
+            "quiz sulle capitali d'Europa con 10 domande":
+            ("quiz_sulle_capitali_d_europa", "quiz sulle capitali d'Europa con 10"),
+            "Tris 3×3": ("tris_3_3", "Tris 3 3"), "3 in fila": ("gioco_3_in_fila", "3 in fila")}
+    sbagliati = []
+    for t, atteso in casi.items():
+        m = json.loads(file_gioco(1, 1, t)["manifesto.json"])
+        if (m["nome"], m["titolo"]) != atteso:
+            sbagliati.append((t, m["nome"], m["titolo"]))
+    verifica("nome e titolo a parola intera, con le cifre, senza × né trattini", not sbagliati,
+             str(sbagliati))
     if shutil.which("node"):
         sb = _sandbox(tmp, "partenza-titolo")
         prepara_gioco(sb, {"min": 2, "max": 2}, "Il tris per due")
-        verifica("…con un nome suo la consegna della partenza va", controlla_consegna(sb) is None,
+        # La revisione della PR #188: prima questa partenza, con un nome suo, si consegnava
+        # così com'era (le porte col nome del tris, fuori da uno sviluppo)
+        e = str(controlla_consegna(sb))
+        verifica("la partenza d'esempio non cambiata non si consegna, nemmeno con un nome suo",
+                 "gioco d'esempio delle porte" in e and "da sostituire" in e, e)
+        logica = sb.leggi("logica.js", 100_000).replace("Quale porta apri?", "Quale casella?")
+        sb.scrivi("logica.js", logica)
+        verifica("contrario: con logica.js cambiato la consegna va", controlla_consegna(sb) is None,
                  str(controlla_consegna(sb)))
         verifica("contrario: con il nome già preso no",
                  "già di un'altra" in str(controlla_consegna(sb, nomi_presi=("il_tris_per_due",))))
+        sb2 = _sandbox(tmp, "partenza-modifica-porte")
+        prepara_gioco(sb2, {"min": 2, "max": 2}, "Il tris per due")
+        verifica("contrario: la modifica di un gioco con quella logica (nome atteso) non è "
+                 "fermata da questo controllo",
+                 controlla_consegna(sb2, nome_atteso="il_tris_per_due") is None,
+                 str(controlla_consegna(sb2, nome_atteso="il_tris_per_due")))
     sb = _sandbox(tmp, "partenza-modifica")
     sb.scrivi("manifesto.json", '{"nome": "tris"}')
     verifica("contrario: con un manifesto (modifica, correzione, ripresa) nessun file",
@@ -137,7 +170,12 @@ def prova_analisi():
     an = A.interpreta(dati, 3, estensione=False, gioco=True)
     verifica("min e max validati; l'esempio con 3 giocatori in un gioco per due si toglie",
              an["giocatori"] == {"min": 2, "max": 2}
-             and [e["giocatori"] for e in an["esempi"]] == [2], json.dumps(an)[:300])
+             and [e["giocatori"] for e in an["esempi"]] == [2]
+             and an["tolti"] == {"giocatori": 1}, json.dumps(an)[:300])
+    an = A.interpreta({**dati, "esempi": [es(3), es(4)]}, 3, estensione=False, gioco=True)
+    verifica("tutti fuori: min e max non si tengono, gli esempi restano (contati in tolti)",
+             an["giocatori"] is None and len(an["esempi"]) == 2
+             and an["tolti"] == {"giocatori_scartati": 1}, json.dumps(an)[:300])
     an = A.interpreta({**dati, "giocatori": {"min": 3, "max": 1}}, 3, estensione=False, gioco=True)
     verifica("contrario: giocatori non validi → None, gli esempi restano",
              an["giocatori"] is None and len(an["esempi"]) == 2)
@@ -249,8 +287,16 @@ def prova_contratto():
     verifica("il gioco senza la porta Python né i limiti del contenitore",
              "calliope.rete_leggi(" not in tg and "limiti.tempo_s" not in tg
              and "urlencode" not in tg and "## 2. La scheda" in tg)
-    verifica("l'estensione senza il contratto del gioco, ma con dove si chiede",
-             "macchina a stati" not in te.lower() and "sviluppo_apri gioco=true" in te)
+    # 20/10 (revisione della PR #188): i residui Python degli impossibili
+    verifica("gli impossibili del gioco senza pip, libreria standard, porta stretta, «dentro "
+             "l'estensione» né la voce sulle pagine in JavaScript",
+             all(x not in tg for x in ("(pip)", "libreria standard", "porta stretta",
+                                       "dentro l'estensione", "- javascript:"))
+             and "- javascript:" in te and "(pip)" in te)
+    verifica("l'estensione senza il contratto del gioco; un gioco chiesto qui → piano("
+             "fattibile=false), non un tool della voce",
+             "macchina a stati" not in te.lower() and "sviluppo_apri" not in te
+             and "«è un gioco: va chiesto come gioco»" in te)
     verifica("urllib.parse sì, la rete diretta no (prima «urllib: vietati»)",
              "urllib: vietati" not in te and "urllib.parse per scrivere gli indirizzi sì" in te
              and "urllib.request" in te)
@@ -279,8 +325,9 @@ def prova_prompt():
              "esito e vincitore" not in pg)
     verifica("l'estensione senza il gioco", "SE È UN GIOCO" not in pe
              and "accettazione.test.js" not in pe and "LA PARTENZA (gioco)" not in pe)
-    verifica("la regola contro le istruzioni nei dati in tutti e due (l'estensione ha "
-             "scarica_esempio)", ANTI_INIEZIONE in pe and ANTI_INIEZIONE in pg)
+    verifica("la regola contro le istruzioni nei dati in fondo a tutti e due (l'estensione ha "
+             "scarica_esempio)", pe.endswith(ANTI_INIEZIONE.strip())
+             and pg.endswith(ANTI_INIEZIONE.strip()))
     verifica("la codifica degli indirizzi una volta sola nel prompt dell'estensione",
              pe.count("urlencode (o quote") == 1 and "urlencode" not in SISTEMA_ESTENSIONE)
     verifica("gli strumenti detti nel prompt del gioco: esegui_js, niente esegui_python",
@@ -311,7 +358,7 @@ def prova_servizio(tmp: Path):
         cfg.agenti_modelli = str(tmp / "modelli")
         cfg.llm_native_url = "http://127.0.0.1:9"
         cfg.agenti_conferma = "mai"
-        cfg.agenti_max_passi = 2
+        cfg.agenti_max_passi = 3
         cfg.agenti_accettazione = False
         righe = []
         svc = Lavori(cfg, carica(cfg), log=righe.append)
@@ -321,7 +368,8 @@ def prova_servizio(tmp: Path):
             fake.copione = [{"tool_calls": [{"name": "piano", "arguments": {
                 "capacita_necessarie": ["scheda" if gioco else "calcolo"], "scope": {},
                 "fattibile": True, "motivo": "prova"}}]},
-                {"tool_calls": [{"name": "elenca_file", "arguments": {}}]}]
+                {"tool_calls": [{"name": "elenca_file", "arguments": {}},
+                                {"name": "esegui_python", "arguments": {"percorso": "x.py"}}]}]
             lav = svc.nuovo("estensione", "Il tris per due giocatori sugli schermi.", "ada-id",
                             "Ada", "amministra")
             lav.gioco = gioco
@@ -334,8 +382,12 @@ def prova_servizio(tmp: Path):
             sb_root = next((Path(cfg.agenti_sandbox).glob(f"{lav.id}-*")), None)
             m = (json.loads((sb_root / "manifesto.json").read_text(encoding="utf-8"))
                  if sb_root and (sb_root / "manifesto.json").is_file() else None)
-            return lav, nomi, m, sb_root
-        lav, nomi, m, root = lavoro(True, {"min": 2, "max": 2})
+            # Gli esiti degli strumenti che l'agente ha visto (l'ultima richiesta)
+            esiti = " ".join(str(x.get("content")) for x in (fake.richieste[-1].get("messages")
+                                                            if fake.richieste else [])
+                             if x.get("role") == "tool")
+            return lav, nomi, m, sb_root, esiti
+        lav, nomi, m, root, esiti = lavoro(True, {"min": 2, "max": 2})
         verifica("un gioco nuovo: la partenza con min e max dell'analisi (2–2)",
                  m is not None and m["scheda"]["giocatori"] == {"min": 2, "max": 2}
                  and (root / "gioco.test.js").is_file()
@@ -346,12 +398,16 @@ def prova_servizio(tmp: Path):
         verifica("…senza esegui_python né scarica_esempio, con esegui_test e consegna",
                  nomi and "esegui_python" not in nomi and "scarica_esempio" not in nomi
                  and {"esegui_test", "consegna", "piano"} <= nomi, str(sorted(nomi)))
-        lav, nomi, m, root = lavoro(True)
+        # 20/10 (revisione della PR #188): chiamato lo stesso, non si esegue
+        verifica("…ed esegui_python chiamato lo stesso non parte: «non è disponibile», con gli "
+                 "strumenti offerti", "«esegui_python» non è disponibile in questo lavoro"
+                 in esiti and "\"esegui_test\"" in esiti, esiti[-400:])
+        lav, nomi, m, root, esiti = lavoro(True)
         verifica("contrario: senza l'analisi i giocatori di serie (1–4), «2 giocatori»",
                  m is not None and m["scheda"]["giocatori"] == {"min": 1, "max": 4}
                  and 'g.tocca("2 giocatori")' in (root / "gioco.test.js").read_text(
                      encoding="utf-8"), str(m and m.get("scheda")))
-        lav, nomi, m, root = lavoro(False)
+        lav, nomi, m, root, esiti = lavoro(False)
         verifica("contrario: un'estensione Python ha esegui_python e scarica_esempio, e niente "
                  "partenza del gioco", "esegui_python" in nomi and "scarica_esempio" in nomi
                  and root is not None and not (root / "logica.js").exists()

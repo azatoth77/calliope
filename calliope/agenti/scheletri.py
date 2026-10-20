@@ -170,10 +170,24 @@ def _nome_titolo(titolo: str, presi=()) -> tuple[str, str]:
     manifesto valido; altrimenti quelli di `NOME_PARTENZA`, che la consegna non accetta."""
     import re
     import unicodedata
-    t = " ".join(re.sub(r"[^A-Za-zÀ-ÿ ]+", " ", str(titolo or "")).split())[:40].strip()
+
+    def intere(parole, massimo, sep):
+        # Tagliate all'ultima parola intera (20/10, revisione della PR #188: «Hallowe»)
+        out = ""
+        for p in parole:
+            prova = f"{out}{sep}{p}" if out else p
+            if len(prova) > massimo:
+                break
+            out = prova
+        return out
+    # Solo lettere vere e cifre («3x3» resta, × e ÷ no: sono simboli, non lettere)
+    parole = re.findall(r"[^\W_]+(?:['’][^\W_]+)*", str(titolo or ""))
+    t = intere(parole, 40, " ")
     base = unicodedata.normalize("NFD", t.lower())
     base = "".join(c for c in base if not unicodedata.combining(c))
-    nome = "_".join(re.findall(r"[a-z]+", base))[:31].strip("_")
+    nome = intere(re.findall(r"[a-z0-9]+", base), 31, "_")
+    if nome[:1].isdigit():
+        nome = "gioco_" + nome if len("gioco_" + nome) <= 31 else ""
     if not t or len(nome) < 3 or nome in set(presi or ()) or nome == NOME_PARTENZA:
         return NOME_PARTENZA, TITOLO_PARTENZA
     return nome, t

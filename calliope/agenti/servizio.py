@@ -1574,7 +1574,12 @@ class Lavori:
                  + "".join(f", {n} {cosa}" for k, cosa in (
                      ("fuori", "esempi tolti con un valore che la richiesta non nomina"),
                      ("numero", "numeri che non tornano (col conto o con «trovato»: false)"),
-                     ("contiene", "parole tolte che ripetono i dati"))
+                     ("contiene", "parole tolte che ripetono i dati"),
+                     # Un gioco (20/10, #186): gli esempi con un numero di giocatori fuori da
+                     # min e max, o min e max non tenuti perché nessun esempio ci stava
+                     ("giocatori", "esempi tolti con un numero di giocatori fuori da min e max"),
+                     ("giocatori_scartati", "volta min e max non tenuti: nessun esempio ci "
+                                            "stava"))
                      for n in [(an.get("tolti") or {}).get(k)] if n)
                  + (f", al collaudo i requisiti {an['al_collaudo']}" if an["al_collaudo"]
                     else "") + (f", {len(an['scelte'])} scelte" if an["scelte"] else "")

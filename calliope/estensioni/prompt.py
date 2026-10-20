@@ -81,8 +81,9 @@ SISTEMA_ESTENSIONE = (
     "conferme. Quando hai finito chiama consegna con un riassunto di una o due frasi semplici "
     "da dire a voce. Se nella cartella ci sono già estensione.py e manifesto.json è la modifica "
     "di un'estensione esistente: tieni lo stesso nome. Un gioco o una scheda da toccare sullo "
-    "schermo non è un'estensione Python: ha il suo prompt. Chiama sempre gli strumenti con "
-    "chiamate di funzione vere.")
+    "schermo non è un'estensione Python: se il compito è quello, chiama piano con "
+    "fattibile=false e il motivo «è un gioco: va chiesto come gioco». Chiama sempre gli "
+    "strumenti con chiamate di funzione vere.")
 
 SISTEMA_GIOCO = (
     "Sei l'agente di programmazione di Calliope, l'assistente vocale di una famiglia. Scrivi "
@@ -126,9 +127,9 @@ def sistema_estensione(cfg=None, gioco: bool = False) -> str:
     tipo = "gioco" if gioco else "estensione"
     # Lo scheletro di partenza del tipo (11/10, agenti/scheletri.py; per un gioco dal 19/10 i
     # file sono già nella cartella e qui si dice solo cosa c'è), in fondo
-    return ((SISTEMA_GIOCO if gioco else SISTEMA_ESTENSIONE) + ANTI_INIEZIONE
+    return ((SISTEMA_GIOCO if gioco else SISTEMA_ESTENSIONE)
             + ("\n\nCONTRATTO DEL GIOCO\n" if gioco else "\n\nCONTRATTO DELLE CAPACITÀ\n")
-            + testo(cfg, tipo) + "\n" + SCHELETRI[tipo])
+            + testo(cfg, tipo) + "\n" + SCHELETRI[tipo] + "\n\n" + ANTI_INIEZIONE.strip())
 
 
 def _controlla_gioco(m: dict, nomi: set, nomi_presi=(), nome_atteso: str | None = None,
@@ -141,7 +142,15 @@ def _controlla_gioco(m: dict, nomi: set, nomi_presi=(), nome_atteso: str | None 
     if not nome_atteso and m["nome"] in set(nomi_presi):
         return (f"il nome «{m['nome']}» è già di un'altra estensione: scegline uno nuovo che dica "
                 f"cosa fa questa")
-    from ..agenti.scheletri import NOME_PARTENZA
+    from ..agenti.scheletri import LOGICA_PARTENZA, NOME_PARTENZA
+    if not nome_atteso and sandbox is not None and "logica.js" in nomi and " ".join(
+            sandbox.leggi("logica.js", 400_000).split()) == " ".join(LOGICA_PARTENZA.split()):
+        # La partenza d'esempio consegnata così com'è (20/10, revisione della PR #188): è verde
+        # per costruzione, quindi senza questo controllo un gioco chiesto fuori da uno
+        # sviluppo (senza esempi di accettazione) poteva uscire come le porte col suo nome
+        return ("logica.js è ancora il gioco d'esempio delle porte della partenza: è un esempio "
+                "da sostituire con il gioco chiesto (regole in GIOCO, fasi e comandi nel "
+                "manifesto, i test che lo provano), non da consegnare")
     if not nome_atteso and m["nome"] == NOME_PARTENZA:
         # Il segnaposto dei file di partenza (19/10, #186): il gioco chiesto ha un nome suo
         return (f"nel manifesto il nome è ancora «{NOME_PARTENZA}» della partenza: dai al gioco "

@@ -625,7 +625,16 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
             # Un esempio con un numero di giocatori che il gioco non ammette non si gioca:
             # fallirebbe nella preparazione, non sulla regola che prova (19/10, #186)
             g = out["giocatori"]
-            out["esempi"] = [e for e in out["esempi"] if g["min"] <= e["giocatori"] <= g["max"]]
+            dentro = [e for e in out["esempi"] if g["min"] <= e["giocatori"] <= g["max"]]
+            fuori = len(out["esempi"]) - len(dentro)
+            if fuori and not dentro:
+                # Tutti fuori (20/10, revisione della PR #188): è il numero detto a non tornare
+                # con gli esempi, non gli esempi; restano, e la partenza usa quelli di serie
+                out["giocatori"] = None
+                out["tolti"] = {"giocatori_scartati": 1}
+            else:
+                out["esempi"] = dentro
+                out["tolti"] = {"giocatori": fuori} if fuori else {}
         usati = {c for e in out["esempi"] for c, _ in e["mosse"]} | {
             x[0] for e in out["esempi"] for k in ("attivi", "non_attivi")
             for x in e["atteso"].get(k, [])}

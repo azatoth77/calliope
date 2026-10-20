@@ -70,9 +70,20 @@ DA_SOLA = {
               "riquadro isolato, con la sezione «scheda» del manifesto",
 }
 # Dove la voce «scheda» rimanda, secondo il contratto
-_SCHEDA_DOVE = {"estensione": " (non un'estensione Python: si chiede con sviluppo_apri "
-                              "gioco=true e ha il suo contratto)",
+_SCHEDA_DOVE = {"estensione": " (non qui: per un gioco piano con fattibile=false e il motivo "
+                              "«è un gioco: va chiesto come gioco»)",
                 "gioco": " (§2)"}
+# Le voci degli impossibili dette per un gioco (20/10, revisione della PR #188): quelle scritte
+# per Python (pip, la libreria standard, la porta stretta, «dentro l'estensione») e quella sulle
+# pagine fatte in JavaScript, che in un gioco in JavaScript confondeva. None: la voce non c'è
+_IMPOSSIBILI_GIOCO = {
+    "pacchetti": ("installare librerie o programmi", "il JavaScript del riquadro, senza "
+                  "librerie esterne"),
+    "javascript": None,
+    "modello": ("usare un modello linguistico o l'IA dentro il gioco", "regole deterministiche"),
+    "altri_tool": ("chiamare altre estensioni o altri tool di Calliope", "solo le azioni del "
+                   "§3"),
+}
 
 # Impossibile per costruzione: la porta non ha un metodo per farlo. Ogni voce: cosa, e
 # l'alternativa da proporre a chi l'ha chiesto
@@ -304,11 +315,13 @@ def _scope_detto(s: dict) -> str:
     return json.dumps(s, ensure_ascii=False)
 
 
-def _impossibili(n: int) -> list[str]:
-    """La sezione degli impossibili, numerata `n`, e le voci per il piano."""
+def _impossibili(n: int, gioco: bool = False) -> list[str]:
+    """La sezione degli impossibili, numerata `n`, e le voci per il piano. `gioco`: con le voci
+    dette per un gioco (`_IMPOSSIBILI_GIOCO`)."""
     righe = ["", f"## {n}. Impossibile (dillo subito con piano(fattibile=false), con "
              "l'alternativa)"]
-    righe += [f"- {k}: {cosa}. Alternativa: {alt}." for k, (cosa, alt) in IMPOSSIBILI.items()]
+    voci = {k: (_IMPOSSIBILI_GIOCO.get(k, v) if gioco else v) for k, v in IMPOSSIBILI.items()}
+    righe += [f"- {k}: {v[0]}. Alternativa: {v[1]}." for k, v in voci.items() if v]
     righe += ["", "Voci per piano.capacita_necessarie: " + ", ".join(CAPACITA_IDS) + "."]
     return righe
 
@@ -333,7 +346,7 @@ def testo(cfg=None, tipo: str = "estensione", linguaggi=("python",)) -> str:
                   "", "## 2. La scheda e la macchina a stati"]
         righe += scheda_testo(cfg)
         righe += ["", "## 3. Chiedendo a Calliope (di solito non serve)"] + _azioni_gioco()
-        righe += _impossibili(4)
+        righe += _impossibili(4, gioco=True)
         return "\n".join(righe) + "\n"
     if tipo == "estensione":
         righe += ["Generato dal codice di Calliope. Leggilo prima di decidere: il primo passo è "

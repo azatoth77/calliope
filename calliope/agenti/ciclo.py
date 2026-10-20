@@ -1429,6 +1429,21 @@ class Agente:
                 # Il registro in diretta sugli schermi (08/10, avanzamento.py): la chiamata e,
                 # sotto, il suo esito in breve (mai il contenuto dei file)
                 lav.nota("strumento", nome=name, argomenti=args)
+                offerti = [s["function"]["name"] for s in strumenti]
+                if name not in offerti:
+                    # Si esegue solo ciò che questa passata offre (20/10, revisione della PR
+                    # #188, #186): a un gioco esegui_python e scarica_esempio non si danno, e
+                    # chiamati lo stesso (per abitudine, da un contesto ripreso) non partono
+                    non_offerto = {"ok": False, "errore": f"lo strumento «{name}» non è "
+                                   "disponibile in questo lavoro"
+                                   + (": in una correzione usa sonda_rete verso i siti già "
+                                      "usati" if name == "scarica_esempio"
+                                      and "sonda_rete" in offerti else ""),
+                                   "strumenti": offerti}
+                    messages.append({"role": "tool", "tool_name": name,
+                                     "content": gc.risultato(name, non_offerto)})
+                    lav.nota("esito", nome=name, esito=non_offerto)
+                    continue
                 # Argomenti contro lo schema dello strumento (09/10, tools/dialogo.py): un
                 # obbligatorio assente o un valore fuori dai valori ammessi tornano all'agente
                 # come errore chiaro, con un esempio, invece di un'eccezione dello strumento
@@ -1971,6 +1986,11 @@ class Agente:
                            + (" e i tuoi casi in test_estensione.py, che c'è già, con "
                               "modifica_file" if "test_estensione.py" in nomi else
                               " e test_estensione.py"))
+        if getattr(lav, "gioco", False):
+            # Un gioco (20/10, #186): niente scarica_esempio né estensione.py
+            out["prossimo"] = ("leggi i file nella cartella (manifesto.json, logica.js, "
+                               "logica.test.js, gioco.test.js), cambiali nel gioco chiesto con "
+                               "modifica_file e rifai esegui_test")
         return out, None
 
     def _chiedi_permesso(self, lav: Lavoro, args: dict, stato_piano: dict | None):

@@ -421,8 +421,9 @@ def prova_scheletri(tmp: Path):
                  and "ok una porta aperta: il testo, il punto e poi tocca all'altro"
                  in r["uscita"], r["uscita"][-300:])
         from calliope.estensioni.prompt import controlla_consegna
-        verifica("…e la consegna chiede un nome suo (il segnaposto della partenza)",
-                 "gioco_nuovo" in str(controlla_consegna(sb)), str(controlla_consegna(sb)))
+        # Dal 20/10 (revisione della PR #188) la partenza non cambiata non si consegna
+        verifica("…e la consegna non la accetta: è un esempio da sostituire",
+                 "gioco d'esempio" in str(controlla_consegna(sb)), str(controlla_consegna(sb)))
     else:
         print("SALTATA IN PARTE: node non c'è")
     sb = sandbox(tmp, "scheletro-est")
