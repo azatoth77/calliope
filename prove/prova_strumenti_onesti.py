@@ -136,8 +136,10 @@ def prova_gia_visto(tmp: Path):
     verifica("contrario: gli stati nuovi senza nota (A, il test, B)",
              len(sc) == 6 and not any("gia_visto" in r for r in sc[:3]), str(sc)[:400])
     a = sc[3].get("gia_visto", "") if len(sc) > 3 else ""
-    verifica("A, B, A: la cartella identica a 4 passate fa, con l'esito dei test di allora",
-             "identica a quella di 4 passate fa" in a and "esegui_test dava: 1 test su 1 non "
+    # I test su quello stato sono della passata 2: «3 passate fa» (revisione della PR #187:
+    # prima la passata in cui lo stato era apparso, la 1, con l'esito della 2)
+    verifica("A, B, A: la cartella identica a quella su cui esegui_test, 3 passate fa, dava…",
+             "identica a quella su cui esegui_test, 3 passate fa, dava: 1 test su 1 non "
              "passavano" in a and "AssertionError" in a, a)
     u = sc[4].get("gia_visto", "") if len(sc) > 4 else ""
     verifica("la riscrittura uguale: non è cambiato niente", "non è cambiato niente" in u, u)
@@ -244,6 +246,28 @@ def prova_troncata(tmp: Path):
              regole(lav).get("agente_uscita_troncata") == 2 and ris.get("esito") == "fatto",
              str(regole(lav)) + str(ris)[:200])
 
+    # Con i token veri (revisione della PR #187): una passata fermata a max_tokens ne ha 16 384,
+    # sopra la guardia dei token senza strumenti (12 000). Il fatto viene prima, e non conta lì
+    from calliope.config import Config
+    cfg = Config()
+    piena = int(cfg.agenti_token_passata)
+    verifica("i valori di serie: la passata piena supera la guardia",
+             piena > int(cfg.agenti_token_senza_strumenti), str(piena))
+    lav, ris, log, cli, sb = gira(tmp, "tronca_vera", [
+        {"content": "", "fine": "length", "eval": piena},
+        {"content": "", "fine": "length", "eval": piena},
+        {"content": "", "fine": "length", "eval": piena},
+        [scrivi("programma.py", GIUSTO), scrivi("test_programma.py", TEST)], [ESEGUI],
+        [CONSEGNA]])
+    utenti = [x["content"] for x in lav.contesto.get("messages", []) if x.get("role") == "user"]
+    verifica("tre passate piene troncate di fila: il fatto tre volte, niente «ha ragionato»",
+             ris.get("esito") == "fatto" and utenti.count(USCITA_TRONCATA_TESTO) == 3
+             and regole(lav).get("agente_uscita_troncata") == 3
+             and not any("token senza strumenti" in x for x in log), str(ris)[:200] + str(log))
+    verifica("…e nemmeno la prosa: nessuna spinta «usa gli strumenti»",
+             SPINTA_STRUMENTI not in utenti and "agente_prosa_non_consegna" not in regole(lav),
+             str(regole(lav)))
+
     # Il client di vLLM: finish_reason, argomenti rotti, budget che cade
     from calliope.agenti.remoto_openai import ClienteOpenAI
     cl = ClienteOpenAI("http://127.0.0.1:9")
@@ -259,8 +283,9 @@ def prova_troncata(tmp: Path):
     cl.http = _Http([_Risposta(_sse(_pezzo('{"percorso": "a.py", "contenuto": "x"}'),
                                     {"choices": [{"delta": {}, "finish_reason": "length"}]}))])
     out = cl.chat(dict(corpo))
-    verifica("vLLM: fermata a max_tokens anche col JSON che si legge → l'ultima è rotta",
-             out.get("rotti") == [0], str(out))
+    # Revisione della PR #187: prima l'ultima chiamata a max_tokens era sempre rotta
+    verifica("contrario: a max_tokens l'ultima chiamata col JSON intero si esegue",
+             not out.get("rotti") and out.get("fine") == "length", str(out))
     cl.http = _Http([_Risposta(_sse(_pezzo('{"percorso": "a.py", "contenuto": "x"}',
                                            "tool_calls")))])
     out = cl.chat(dict(corpo))
@@ -334,6 +359,37 @@ def prova_invariati(tmp: Path):
     verifica("…la regola una volta, e la consegna rifà i test lo stesso («fatto», verdi)",
              regole(lav).get("agente_test_invariati") == 1 and ris.get("esito") == "fatto"
              and ris.get("test_passano") is True, str(regole(lav)) + str(ris)[:200])
+
+    # L'esito ricordato non passa a un altro giro o a una ripresa (revisione della PR #187): il
+    # motore, i controlli di Calliope e il controllo della consegna non sono nella cartella
+    from calliope.agenti.ciclo import Lavoro, impronta_cartella
+    sb = G.sandbox(tmp, "ripresa")
+    sb.scrivi("programma.py", GIUSTO)
+    sb.scrivi("test_programma.py", TEST)
+    lav = Lavoro("R", "codice", "x")
+    lav.segnali = {"ultimo_test": {"chiave": [impronta_cartella(sb), "", False], "passo": 0,
+                                   "risultato": {"esito": {"eseguiti": 9}, "passano": False,
+                                                 "uscita": "vecchio"}}}
+    ag = G.agente(Copione([[ESEGUI], [CONSEGNA]]), [])
+    ris = ag.codice(lav, sb)
+    et = risultati(lav, "esegui_test")
+    verifica("contrario: all'inizio del ciclo l'esito ricordato si butta, e i test si rifanno",
+             et and "invariato" not in et[0] and et[0].get("passano") is True
+             and ris.get("esito") == "fatto", str(et)[:200])
+
+    # L'impronta che non si legge: detto nel log, una volta
+    log = []
+    ag = G.agente(Copione([]), log)
+    lav = Lavoro("I", "codice", "x")
+
+    def rotta():
+        raise PermissionError("file del container")
+    sb.impronta = rotta
+    ag._strumento(lav, sb, "esegui_test", {})
+    ag._strumento(lav, sb, "esegui_test", {})
+    righe = [x for x in log if "impronta della cartella non letta" in x]
+    verifica("l'impronta che non si legge: una riga nel log, una volta per lavoro",
+             len(righe) == 1 and "PermissionError" in righe[0], str(log))
 
     # Un'esecuzione scaduta non si ricorda: si rifà
     from calliope.agenti.ciclo import Lavoro
@@ -434,6 +490,22 @@ def prova_modifica(tmp: Path):
              regole(lav).get("agente_modifica_nulla") == 1
              and regole(lav).get("agente_modifica_inversa") == 1, str(regole(lav)))
 
+    # Revisione della PR #187: si rifiuta solo l'oscillazione pura. Dopo un altro cambiamento
+    # nella cartella tornare indietro è una correzione; dopo scrivi_file lo storico riparte
+    sb.scrivi("somma.py", "def somma(a, b):\n    return a + b\n\n\ndef doppio(x):\n"
+                          "    return x * 2\n")
+    lav.passi = 6
+    r1 = ag._modifica(lav, sb, {"percorso": "somma.py", "vecchio": "a + b", "nuovo": "a - b"})
+    lav.passi = 7
+    r2 = ag._modifica(lav, sb, {"percorso": "somma.py", "vecchio": "x * 2", "nuovo": "x + x"})
+    lav.passi = 8
+    r3 = ag._modifica(lav, sb, {"percorso": "somma.py", "vecchio": "a - b", "nuovo": "a + b"})
+    verifica("contrario: a+b → a-b, poi doppio cambiato, poi di nuovo a+b: accettata",
+             r1.get("ok") and r2.get("ok") and r3.get("ok") is True
+             and "a + b" in sb.leggi("somma.py"), str(r3))
+    verifica("…_modifica dà al ciclo le due impronte della cartella (una lettura in meno)",
+             "_impronte" in r3 and len(r3["_impronte"]) == 2, str(r3))
+
     # L'inversa con i test di allora, nel ciclo
     lav, ris, log, cli, sb = gira(tmp, "inversa", [
         [scrivi("programma.py", SBAGLIATO), scrivi("test_programma.py", TEST)], [ESEGUI],
@@ -446,6 +518,27 @@ def prova_modifica(tmp: Path):
              "una passata fa aveva tolto" in inv and "esegui_test dava: 1 test su 1 non "
              "passavano" in inv, inv)
     verifica("…e il lavoro finisce «fatto»", ris.get("esito") == "fatto", str(ris)[:200])
+
+    # Nel ciclo, i contrari della revisione: la correzione dopo un altro cambiamento, e
+    # l'inversa dopo uno scrivi_file dello stesso file
+    due = "def somma(a, b):\n    return a + b\n\n\ndef doppio(x):\n    return x * 2\n"
+    test2 = TEST + "\n    def test_doppio(self):\n        from programma import doppio\n" \
+                   "        self.assertEqual(doppio(3), 6)\n"
+    lav, ris, log, cli, sb = gira(tmp, "correzione", [
+        [scrivi("programma.py", due), scrivi("test_programma.py", test2)], [ESEGUI],
+        [modifica("programma.py", "a + b", "a - b")],
+        [modifica("programma.py", "x * 2", "x + x")], [ESEGUI],
+        [modifica("programma.py", "a - b", "a + b")],
+        [modifica("programma.py", "x + x", "x + x + 0")],
+        [scrivi("programma.py", due.replace("x * 2", "x + x + 0"))],
+        [modifica("programma.py", "x + x + 0", "x + x")], [ESEGUI], [CONSEGNA]])
+    mf = risultati(lav, "modifica_file")
+    verifica("nel ciclo: tornare ad a+b dopo aver cambiato doppio è accettato",
+             len(mf) == 5 and mf[2].get("ok") is True
+             and not any("_impronte" in m for m in mf), str(mf)[:400])
+    verifica("nel ciclo: l'inversa dopo scrivi_file dello stesso file è accettata",
+             len(mf) == 5 and mf[4].get("ok") is True and ris.get("esito") == "fatto"
+             and "agente_modifica_inversa" not in regole(lav), str(mf[-1:]) + str(regole(lav)))
 
 
 # ═══════════════════════ 6. strumento sconosciuto, dopo la consegna ═══════════════════════

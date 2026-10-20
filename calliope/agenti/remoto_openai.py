@@ -337,12 +337,9 @@ class ClienteOpenAI:
                 out.setdefault("rotti", []).append(len(out["tool_calls"]))
             out["tool_calls"].append({"name": c["name"],
                                       "arguments": args if isinstance(args, dict) else {}})
-        if out.get("fine") == "length" and out["tool_calls"]:
-            # Qui le chiamate arrivano a pezzi: fermata a max_tokens, l'ultima è tagliata anche se
-            # il suo JSON si legge (un contenuto a metà). Con Ollama no: le chiamate arrivano intere
-            ultima = len(out["tool_calls"]) - 1
-            if ultima not in out.setdefault("rotti", []):
-                out["rotti"].append(ultima)
+        # Con «length» l'ultima chiamata tagliata ha il JSON che non si legge, ed è tra le rotte
+        # qui sopra; quella col JSON intero si esegue (revisione della PR #187: prima l'ultima era
+        # sempre rotta, anche intera)
         out["s"] = round(time.perf_counter() - t0, 2)
         return out
 

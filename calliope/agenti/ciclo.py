@@ -1294,7 +1294,11 @@ class Agente:
         fila = seg.setdefault("riscritture_fila", {})
         giri_vuoti = 0
         # Lo stato della cartella all'inizio (19/10, #185): tornarci (A, B, A) è uno stato già visto
-        segna_cartella(seg, impronta_cartella(sandbox), lav.passi)
+        segna_cartella(seg, impronta_cartella(sandbox, lav, self.log), lav.passi)
+        # L'esito ricordato dei test non passa da un giro all'altro né da una ripresa (revisione
+        # della PR #187): dipende anche da ciò che non è nella cartella (il motore e i controlli
+        # di Calliope dopo un aggiornamento, il controllo della consegna con la specifica viva)
+        seg.pop("ultimo_test", None)
         # Le passate di fila senza chiamate (19/10, #180) e il controllo della consegna senza
         # effetti, lo stesso dentro esegui_test (`Lavori._controlla_estensione`)
         prosa_fila = 0
@@ -1356,9 +1360,9 @@ class Agente:
             giri_vuoti = 0
             novita = False
             calls = out["tool_calls"]
-            # Le chiamate arrivate a metà (19/10, #185): argomenti che non si leggono, o l'ultima
-            # di una passata fermata a max_tokens (il client lo sa: remoto_openai). Prima
-            # diventavano {} e l'agente riceveva «manca percorso» e riprovava uguale
+            # Le chiamate arrivate a metà (19/10, #185): argomenti che non si leggono (i client li
+            # segnano in `rotti`). Prima diventavano {} e l'agente riceveva «manca percorso» e
+            # riprovava uguale
             troncate = {i for i in out.get("rotti") or () if isinstance(i, int)}
             troncata = out.get("fine") == "length"
             if not calls:
@@ -1368,6 +1372,17 @@ class Agente:
             if calls:
                 msg["tool_calls"] = [{"function": c} for c in calls]
             messages.append(msg)
+            if not calls and troncata:
+                # Fermata a max_tokens senza una chiamata intera (19/10, #185): il fatto, prima
+                # della guardia dei token senza strumenti e del conto della prosa, e senza
+                # contarla lì (revisione della PR #187: con i valori di serie, 16 384 per passata
+                # contro 12 000, finiva in «ha ragionato per 32 768 token»). L'agente ci provava:
+                # come dopo una chiamata, la guardia riparte. Il limite resta quello dei tetti
+                from ..sonde import nota as nota_regola
+                nota_regola(lav, "agente_uscita_troncata", self.log, "senza chiamate")
+                vuoto_tok, vuoto_t0, vuote = 0, time.monotonic(), 0
+                messages.append({"role": "user", "content": USCITA_TRONCATA_TESTO})
+                continue
             if calls:
                 vuoto_tok, vuoto_t0, vuote = 0, time.monotonic(), 0
                 prosa_fila = 0
@@ -1424,12 +1439,6 @@ class Agente:
                                            rimandi, stato_piano, piano, rifiuti)
                     raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)},
                                  tipo="prosa")
-                if troncata:
-                    # Fermata a max_tokens senza una chiamata intera (19/10, #185): il fatto, al
-                    # posto della spinta di sempre
-                    nota_regola(lav, "agente_uscita_troncata", self.log, "senza chiamate")
-                    messages.append({"role": "user", "content": USCITA_TRONCATA_TESTO})
-                    continue
                 messages.append({"role": "user", "content": SPINTA_STRUMENTI})
                 continue
             letture = set()
@@ -1571,9 +1580,14 @@ class Agente:
                         result = {"ok": True, "nota": "domanda inoltrata a chi ha chiesto il "
                                                       "lavoro: aspetta la risposta"}
                 else:
-                    scrive = name in ("scrivi_file", "modifica_file")
-                    imp_prima = impronta_cartella(sandbox) if scrive else None
+                    # L'impronta della cartella prima di scrivere; per modifica_file la legge
+                    # _modifica, prima e dopo, e qui si riusa (`_impronte`, mai all'agente)
+                    imp_prima = (impronta_cartella(sandbox, lav, self.log)
+                                 if name == "scrivi_file" else None)
                     result = self._strumento(lav, sandbox, name, args, consegnabile)
+                    impronte = result.pop("_impronte", None) if isinstance(result, dict) else None
+                    if impronte:
+                        imp_prima = impronte[0]
                     if name in ("scrivi_file", "modifica_file") and result.get("ok") \
                             and lav.tipo == "estensione" and str(
                                 result.get("percorso") or args.get("percorso") or ""
@@ -1597,13 +1611,19 @@ class Agente:
                             novita = True
                         # Lo stato già visto detto all'agente (19/10, #185), nel risultato: la
                         # cartella (o il file) com'era N passate fa, con i test di allora
-                        gia = nota_stato_gia_visto(seg, p, dopo, impronta_cartella(sandbox),
-                                                   imp_prima, lav.passi)
+                        imp = impronte[1] if impronte else impronta_cartella(sandbox, lav,
+                                                                              self.log)
+                        gia = nota_stato_gia_visto(seg, p, dopo, imp, imp_prima, lav.passi)
                         if gia:
                             from ..sonde import nota as nota_regola
                             nota_regola(lav, "agente_stato_gia_visto", self.log, gia[:120])
                             result = {**result, "gia_visto": gia}
                         if name == "scrivi_file":
+                            # Dopo una riscrittura intera le modifiche di prima non valgono più
+                            # per l'inversa (revisione della PR #187)
+                            mods = seg.get("modifiche")
+                            if isinstance(mods, dict):
+                                mods.pop(chiave_file(p), None)
                             # Riscritture intere di fila dello stesso file lungo (11/10)
                             if p in seg["scritture"] and int(result.get("righe") or 0) \
                                     >= RISCRITTURA_RIGHE:
@@ -2201,13 +2221,20 @@ class Agente:
         seg = lav.segnali if isinstance(lav.segnali, dict) else {}
         lav.segnali = seg
         mods = seg.get("modifiche") if isinstance(seg.get("modifiche"), dict) else {}
-        chiave = rel.strip().replace("\\", "/").removeprefix("./")
+        chiave = chiave_file(rel)
         storia = list(mods.get(chiave) or [])
         hv, hn = _h(vecchio), _h(nuovo)
+        # Una lettura della cartella prima, una dopo: il ciclo le riusa (`_impronte`)
+        prima = impronta_cartella(sandbox, lav, self.log)
         inversa = next((m for m in reversed(storia) if m[1] == hn and m[2] == hv), None)
+        if inversa is not None and not (len(inversa) > 4 and prima and inversa[4] == prima):
+            # Dopo quella modifica nella cartella è cambiato altro (revisione della PR #187): è
+            # una correzione, non un'oscillazione, e si fa
+            inversa = None
         if inversa is not None:
             # La modifica che rimette esattamente il testo tolto da una modifica precedente
-            # (19/10, #185): l'oscillazione A, B, A del tris (#174), detta con i test di allora
+            # (19/10, #185), con la cartella com'era subito dopo quella: l'oscillazione A, B, A
+            # del tris (#174), detta con i test di allora
             nota_regola(lav, "agente_modifica_inversa", self.log,
                         f"{rel[:60]}, {quando(inversa[0], lav.passi)}")
             cart = seg.get("cartelle") if isinstance(seg.get("cartelle"), dict) else {}
@@ -2217,14 +2244,16 @@ class Agente:
                     "l'ho fatta" + (f"; prima di quella modifica esegui_test dava: {test}"
                                     if test else "")
                     + ". Se vuoi davvero tornare a com'era, riscrivi il file con scrivi_file"}
-        prima = impronta_cartella(sandbox)
         r = sandbox.scrivi(rel, testo.replace(vecchio, nuovo, 1))
         if r.get("ok"):
             riga = testo[:testo.index(vecchio)].count("\n") + 1
             r["riga"] = riga
             lav.nota("file", nome=r.get("percorso") or rel, testo=testo.replace(vecchio, nuovo, 1))
-            mods[chiave] = (storia + [[int(lav.passi), hv, hn, prima]])[-20:]
+            dopo = impronta_cartella(sandbox, lav, self.log)
+            # [passata, vecchio, nuovo, cartella prima, cartella dopo], come impronte
+            mods[chiave] = (storia + [[int(lav.passi), hv, hn, prima, dopo]])[-20:]
             seg["modifiche"] = mods
+            r["_impronte"] = [prima, dopo]
         return r
 
     def _strumento(self, lav, sandbox, name, args, consegnabile=None) -> dict:
@@ -2287,7 +2316,7 @@ class Agente:
             if name == "esegui_test":
                 seg = lav.segnali if isinstance(lav.segnali, dict) else {}
                 lav.segnali = seg
-                imp = impronta_cartella(sandbox)
+                imp = impronta_cartella(sandbox, lav, self.log)
                 # Lo stesso controllo della consegna: senza o con il predicato (#180) l'esito cambia
                 chiave = [imp, str(args.get("percorso") or ""), consegnabile is not None]
                 ultimo = seg.get("ultimo_test")
@@ -2932,15 +2961,27 @@ def _h(testo: str) -> str:
     return hashlib.sha1(str(testo).encode("utf-8", "replace")).hexdigest()[:12]
 
 
-def impronta_cartella(sandbox) -> str | None:
-    """L'impronta dell'intera cartella del lavoro (Sandbox.impronta), o None se non si sa."""
+def impronta_cartella(sandbox, lav=None, log=None) -> str | None:
+    """L'impronta dell'intera cartella del lavoro (Sandbox.impronta), o None se non si sa. Un
+    errore (un file del container che non si legge) spegne insieme lo stato già visto, i test
+    invariati e la modifica inversa: con `lav` e `log` lo si scrive, una volta per lavoro."""
     f = getattr(sandbox, "impronta", None)
     if f is None:
         return None
     try:
         return f()
-    except Exception:  # noqa: BLE001 — un'impronta aiuta, non ferma il lavoro
+    except Exception as e:  # noqa: BLE001 — un'impronta aiuta, non ferma il lavoro
+        seg = getattr(lav, "segnali", None)
+        if log is not None and isinstance(seg, dict) and not seg.get("impronta_non_letta"):
+            seg["impronta_non_letta"] = True
+            log(f"[AGENTI] {getattr(lav, 'id', '?')}: impronta della cartella non letta "
+                f"({type(e).__name__}: {str(e)[:120]}): stato già visto e test invariati spenti")
         return None
+
+
+def chiave_file(rel) -> str:
+    """Il percorso di un file come chiave dei segnali (modifiche)."""
+    return str(rel or "").strip().replace("\\", "/").removeprefix("./")
 
 
 def quando(passo, ora) -> str:
@@ -2968,7 +3009,8 @@ def esito_test_breve(res) -> str:
 
 def segna_cartella(seg: dict, impronta: str | None, passo: int, test=None) -> None:
     """Uno stato della cartella visto (all'inizio, dopo una scrittura, ai test): la passata in
-    cui è apparso la prima volta e, se i test ci sono girati, il loro esito in breve."""
+    cui è apparso la prima volta e, se i test ci sono girati, il loro esito in breve con la
+    passata dell'ultima esecuzione (`test_passo`)."""
     if not impronta:
         return
     cart = seg.get("cartelle")
@@ -2976,6 +3018,7 @@ def segna_cartella(seg: dict, impronta: str | None, passo: int, test=None) -> No
     st = cart.pop(impronta, None) or {"passo": int(passo)}
     if test is not None:
         st["test"] = esito_test_breve(test)
+        st["test_passo"] = int(passo)
     cart[impronta] = st
     while len(cart) > STATI_MAX:
         cart.pop(next(iter(cart)))
@@ -2995,10 +3038,14 @@ def nota_stato_gia_visto(seg: dict, percorso: str, dopo: str | None, impronta: s
     if impronta and impronta == impronta_prima:
         nota = f"«{percorso}» è uguale a com'era già: non è cambiato niente"
     elif impronta and impronta != impronta_prima and impronta in cart:
+        # Con i test, la passata dell'esecuzione (revisione della PR #187: prima la prima
+        # passata dello stato con l'esito dell'ultima esecuzione)
         st = cart[impronta]
-        nota = (f"questa versione della cartella è identica a quella di "
-                f"{quando(st.get('passo'), passo)}"
-                + (f", quando esegui_test dava: {st['test']}" if st.get("test") else ""))
+        nota = ((f"questa versione della cartella è identica a quella su cui esegui_test, "
+                 f"{quando(st.get('test_passo', st.get('passo')), passo)}, dava: {st['test']}")
+                if st.get("test") else
+                f"questa versione della cartella è identica a quella di "
+                f"{quando(st.get('passo'), passo)}")
     elif dopo is not None and _h(dopo) in del_file:
         nota = f"«{percorso}» è tornato identico a com'era {quando(del_file[_h(dopo)], passo)}"
     if dopo is not None:
