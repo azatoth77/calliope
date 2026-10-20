@@ -60,32 +60,58 @@ con nomi di fantasia, ripetuti:
    analisi prima del codice, accettazione nascosta), ma la richiesta chiede solo manifesto,
    logica.js e logica.test.js sulle funzioni di GIOCO, niente gioco.test.js né test con
    apriGioco. Separa l'API dei test dei giochi (dove stava quasi ogni fallimento dei banchi dal
-   14/10) dall'interfaccia della macchina. Il prompt e il contratto parlano ancora di
-   gioco.test.js (sono quelli di oggi): cambia solo la richiesta e la partenza.
+   14/10) dall'interfaccia della macchina. Dalla seconda revisione della PR #199 è A′ come nel
+   § 7 dell'analisi («prompt, contratto e partenza senza gioco.test.js»), solo nel banco
+   (Calliope non cambia): per il caso il banco passa da `solo_logica` il prompt del gioco, il
+   contratto (anche CAPACITA.md nella cartella) e il «prossimo» dopo il piano, che senza diceva
+   di leggere un gioco.test.js che non c'è. Restano le frasi su apriGioco che non chiedono di
+   scriverlo (gli esempi dell'analisi in sola lettura, i rimandi di un errore). La riga ha
+   `test_apri_gioco`: i test dell'agente con apriGioco (i *.test.js finali che lo chiamano, più
+   un gioco.test.js scritto e poi tolto); **un lavoro di tris2-solo-logica con quel campo pieno
+   non misura A′** e va letto a parte.
 
 **Le partenze dei tre casi del tris** (20/10 sera; il banco usa quelle del servizio di main,
 quindi dopo #197 cambiano con lui). tris2: i quattro file di partenza del servizio
 (`agenti/scheletri.py`, `file_gioco` con 2–2 giocatori: il gioco d'esempio delle porte, con
-l'esito a ogni mossa, manifesto, logica.js, logica.test.js e gioco.test.js), il contratto in
-sola lettura (CAPACITA.md) e gli esempi dell'analisi (accettazione.test.js, sola lettura).
-tris2-solo-logica: gli stessi senza gioco.test.js. tris-nudo: la cartella vuota, con lo scheletro
-del programma JavaScript nel prompt (programma.js con una somma e il suo test). Le differenze che
-restano sono quelle che il banco misura: il prompt di un gioco è circa 2,5 volte quello di un
-programma (revisione della PR #199).
+l'esito a ogni mossa, manifesto, logica.js, logica.test.js e gioco.test.js) e il contratto in
+sola lettura (CAPACITA.md); con l'analisi accesa anche i suoi esempi (accettazione.test.js, sola
+lettura). tris2-solo-logica: gli stessi senza gioco.test.js. tris-nudo: la cartella vuota, con lo
+scheletro del programma JavaScript nel prompt (programma.js con una somma e il suo test). **È uno
+scostamento dal § 7**, che vuole tutti i casi dallo stesso gioco d'esempio scritto nella forma del
+caso: un tris-nudo che partisse dalle porte riscritte come programma sarebbe un programma di
+fantasia che nessuno chiede, e la partenza vera di un programma JavaScript, quella che il
+servizio dà a chiunque, è lo scheletro nel prompt; tris-nudo è il tetto del modello con l'harness
+dei programmi com'è, non una forma alternativa dei giochi. Le altre differenze sono quelle che il
+banco misura: il prompt di un gioco è circa 2,5 volte quello di un programma (revisione della PR
+#199).
 
 **Come si confrontano** (20/10 sera, revisioni delle PR #199 e #200). Sulla DGX, solo dopo
-l'unione di #197 (il contratto dell'esito e gli esempi del tris) e a DGX libera, tutti e tre i
-casi con lo stesso presence_penalty (con `--presence config` tris2 avrebbe quello delle
-estensioni, 0,5, e tris-nudo quello del codice, 0), 10 ripetizioni obbligatorie:
+l'unione di #197 (il contratto dell'esito e gli esempi del tris) e a DGX libera, 10 ripetizioni
+obbligatorie, il comando di decisione:
 
-       … banco_temperatura.py --temperature config --presence 0.5 \\
+       … banco_temperatura.py --temperature config --presence 0.5 --accettazione no \\
            --casi tris2,tris2-solo-logica,tris-nudo --giri 2 --ripetizioni 10 \\
            --uscita ~/banco-tris
 
-La metrica è l'**accettazione nascosta** (colonna «acc.») e i suoi test verdi («test acc.»),
-non «riuscito»: solo i due tris2 hanno gli esempi dell'analisi, quindi solo loro si possono
-chiudere «fatto» al tetto o alla tappa. Per lo stesso motivo un secondo giro con
-`--accettazione no` (nessuno ha l'analisi) dice se pesa. Le regole di lettura, scritte prima di
+`--accettazione no`, come il § 7 («in tutti i casi … oppure in nessuno»): senza l'analisi prima
+del codice nessuno dei tre casi ha esempi visibili né la chiusura al tetto o alla tappa con gli
+esempi verdi, che oggi avrebbero solo i due tris2 (tris-nudo, un programma fuori da uno sviluppo,
+non ha l'analisi) e li favorirebbero; e per la decisione di chi amministra del 20/10 sera
+(scritta in #190, da fare) gli esempi non bloccano più la consegna né la chiusura al tetto
+(quelli del tris scritti a mente erano sbagliati 11 su 11), quindi spegnerli non toglie un
+controllo che conti. Lo stesso comando senza `--accettazione no` è
+una misura in più, non la decisione. `--presence 0.5` per tutti e tre è uno **scostamento voluto
+dal § 7**, che dice «lo stesso presence della Config»: con `--presence config` tris2 avrebbe
+quello delle estensioni, 0,5, e tris-nudo quello del codice, 0, cioè non lo stesso.
+
+La metrica è l'**accettazione nascosta** verde (colonna «acc.», 10/10), non «riuscito». I test
+verdi («test acc.») aiutano a leggere, ma non partono da zero per tutti: i due tris2 partono da
+**2/10** (il motore dà la preparazione con «Inizia» e la partita nuova; e in tris2 il rifiuto di
+casella 0 e 10 e niente mosse a partita finita li dà il motore, in tris-nudo li scrive l'agente),
+tris-nudo da **0/10**. Le regole usano il 10/10, che non ne risente. Per la regola 5 la riga ha
+`firma_primo_errore` (il primo errore dei test dell'agente nel lavoro, come l'ha visto il ciclo,
+fra le ultime 12 firme diverse), `firma_errore_finale` e `test_finali_passano` (i test
+dell'agente rieseguiti dal banco sui file finali). Le regole di lettura, scritte prima di
 girare (§ 7 di docs/ricerche/2026-10-20-giochi-macchina-o-interfaccia.md): alto vuol dire
 ≥ 8/10, basso ≤ 3/10. Nel caso peggiore, 8/10 contro 3/10, Fisher esatto dà p = 0,070 a due code
 (0,035 a una): è una soglia di decisione, non una prova, e basta per scegliere A o A′, che
@@ -680,6 +706,102 @@ def senza_gioco_test(svc):
 
 def partenza_vera(svc):
     svc.__dict__.pop("_prepara_cartella_gioco", None)
+    svc.agente.__dict__.pop("_piano", None)
+    import calliope.estensioni.contratto as C
+    import calliope.estensioni.prompt as P
+    for mod, nome in ((C, "testo"), (P, "sistema_estensione")):
+        vera = getattr(getattr(mod, nome), "_banco_vera", None)
+        if vera is not None:
+            setattr(mod, nome, vera)
+
+
+def solo_logica(t: str) -> str:
+    """Il prompt, il contratto e il suggerimento dopo il piano di un gioco senza gioco.test.js
+    (20/10 sera, seconda revisione della PR #199: A′ come nel § 7 dell'analisi, «prompt,
+    contratto e partenza senza gioco.test.js»). Solo nel banco: Calliope non cambia. Restano le
+    frasi su apriGioco che non chiedono di scriverlo (il seme della prova di fumo, i rimandi di
+    un errore)."""
+    import re
+    t = t.replace("e i test logica.test.js e gioco.test.js.",
+                  "e i test della sola logica in logica.test.js (niente test con apriGioco: la "
+                  "partita intera la provano la prova di fumo e Calliope).")
+    t = re.sub(r" e gioco\.test\.js \(la partita vera con la macchina, apriGioco: [^)]*\)\. "
+               r"esegui_test li fa girare", ". esegui_test lo fa girare", t)
+    t = re.sub(r"In gioco\.test\.js, dopo apriGioco e prima delle mosse,.*?dalla fase "
+               r"d'inizio\. ", "", t, flags=re.S)
+    t = "\n".join(r for r in t.split("\n") if not r.startswith("- g.stato() in gioco.test.js"))
+    t = t.replace("in apriGioco e nella prova di fumo ha un seme fisso (apriGioco({ seme: 7 }): "
+                  "la stessa partita a ogni esecuzione)",
+                  "nella prova di fumo ha un seme fisso (la stessa partita a ogni esecuzione)")
+    t = t.replace("ci sono già quattro file", "ci sono già tre file")
+    t = t.replace("), logica.test.js e gioco.test.js (la partita vera con apriGioco, che comincia "
+                  "dalla preparazione).", ") e logica.test.js.")
+    return t.replace("logica.js, logica.test.js, gioco.test.js)", "logica.js, logica.test.js)")
+
+
+def con_solo_logica(svc):
+    """tris2-solo-logica: prompt e contratto (anche CAPACITA.md) e il «prossimo» dopo il piano
+    passati da `solo_logica`, per il solo caso (`partenza_vera` li rimette)."""
+    import calliope.estensioni.contratto as C
+    import calliope.estensioni.prompt as P
+    for mod, nome in ((C, "testo"), (P, "sistema_estensione")):
+        vera = getattr(mod, nome)
+
+        def finta(*a, _vera=vera, **k):
+            return solo_logica(_vera(*a, **k))
+        finta._banco_vera = vera
+        setattr(mod, nome, finta)
+    piano = svc.agente._piano
+
+    def piano_finto(*a, **k):
+        out, chiusura = piano(*a, **k)
+        if isinstance(out, dict) and isinstance(out.get("prossimo"), str):
+            out["prossimo"] = solo_logica(out["prossimo"])
+        return out, chiusura
+    svc.agente._piano = piano_finto
+
+
+def test_apri_gioco(file: dict, lav) -> list[str]:
+    """I test dell'agente con apriGioco (20/10 sera, seconda revisione della PR #199): i
+    *.test.js finali che lo chiamano, senza gli esempi dell'analisi e l'accettazione del banco,
+    più un gioco.test.js scritto durante il lavoro anche se poi tolto. In tris2-solo-logica un
+    lavoro con questo campo pieno non misura A′."""
+    import re
+    fuori = {"accettazione.test.js", "accettazione_banco.test.js"}
+    out = {n for n, t in file.items() if n.endswith(".test.js") and Path(n).name not in fuori
+           and re.search(r"\bapriGioco\s*\(", str(t))}
+    seg = lav.segnali if isinstance(getattr(lav, "segnali", None), dict) else {}
+    out |= {str(p) for p in (seg.get("scritture") or {})
+            if Path(str(p)).name == "gioco.test.js"}
+    return sorted(out)
+
+
+def test_finali(sandbox_nuova, file: dict, caso: dict) -> dict:
+    """I test dell'agente rieseguiti dal banco sui file finali (20/10 sera, seconda revisione
+    della PR #199, § 7 dell'analisi: «i rossi dei test dell'agente alla fine e la firma del primo
+    errore»): il conto, i rossi e la firma del primo fallimento (`firma_errore` del ciclo)."""
+    from calliope.agenti.ciclo import firma_errore
+    fuori = {"accettazione.test.js", "accettazione_banco.test.js", "test_accettazione.py",
+             caso["accettazione"][0]}
+    sb = sandbox_nuova()
+    for rel, testo in file.items():
+        if Path(rel).name in fuori:
+            continue
+        try:
+            sb.scrivi(rel, testo)
+        except Exception:  # noqa: BLE001 — un nome non ammesso: si salta
+            pass
+    if caso["tipo"] == "estensione" and not caso.get("gioco"):
+        import calliope.estensioni as E
+        shutil.copy(Path(E.__file__).parent / "_ospite.py", sb.root / "calliope_estensione.py")
+    for rel, testo in (caso.get("aiuto") or {}).items():
+        sb.scrivi(rel, testo)
+    try:
+        r = sb.test()
+    except Exception as e:  # noqa: BLE001 — nessun test
+        return {"passano": False, "esito": None, "firma": f"{type(e).__name__}: {e}"[:160]}
+    return {"passano": bool(r.get("passano")), "esito": r.get("esito"),
+            "firma": firma_errore(r)}
 
 
 def riferimento_tris_nudo() -> dict:
@@ -1017,6 +1139,66 @@ def secco() -> int:
             errori += not ok
             print(f"{'ok ' if ok else 'ERR'} tris-nudo: alla partenza 0/10, anche i test che non "
                   "arrivano a girare contano rossi" + ("" if ok else f"  {p0}"))
+            # Le partenze dei tris2 (seconda revisione della PR #199): 2/10, il motore dà la
+            # preparazione con «Inizia» e la partita nuova
+            from calliope.agenti.scheletri import file_gioco
+            for nome_c in ("tris2", "tris2-solo-logica"):
+                c = casi()[nome_c]
+                part = file_gioco(2, 2)
+                if c.get("senza_gioco_test"):
+                    part.pop("gioco.test.js")
+                pp = accettazione(nuova, part, c)
+                ok = pp["verdi"] == 2 and pp["totali"] == 10
+                errori += not ok
+                print(f"{'ok ' if ok else 'ERR'} {nome_c}: alla partenza {pp['verdi']}/"
+                      f"{pp['totali']} (atteso 2/10, come dice la docstring)"
+                      + ("" if ok else f"  {pp['rossi']}"))
+            # La firma dei test finali (seconda revisione): sul riferimento nessuna, sul tris
+            # nudo che sovrascrive la casella occupata il test che fallisce
+            rotto = tn["riferimento"]["tris.js"].replace(TRIS_NUDO_SOVRASCRIVE, "")
+            ok_rif = test_finali(nuova, tn["riferimento"], tn)
+            tr = test_finali(nuova, {**tn["riferimento"], "tris.js": rotto}, tn)
+            ok = (ok_rif["passano"] and not ok_rif["firma"] and not tr["passano"]
+                  and "casella occupata" in tr["firma"])
+            errori += not ok
+            print(f"{'ok ' if ok else 'ERR'} test finali: sul riferimento verdi senza firma, sul "
+                  f"tris rotto la firma del test rosso ({tr['firma']!r})"
+                  + ("" if ok else f"  {ok_rif} {tr}"))
+        # I test con apriGioco nella riga (seconda revisione della PR #199)
+        finto = SimpleNamespace(segnali={"scritture": {}})
+        ok = (test_apri_gioco({"gioco.test.js": "const g = await apriGioco({ seme: 1 });",
+                               "logica.test.js": "require('./logica.js')",
+                               "accettazione.test.js": "await apriGioco({})"}, finto)
+              == ["gioco.test.js"]
+              and test_apri_gioco({"logica.test.js": "// niente apriGioco qui\n",
+                                   "accettazione.test.js": "await apriGioco({})"}, finto) == []
+              and test_apri_gioco({}, SimpleNamespace(segnali={"scritture": {
+                  "gioco.test.js": 1}})) == ["gioco.test.js"])
+        errori += not ok
+        print(f"{'ok ' if ok else 'ERR'} test_apri_gioco: un test dell'agente con apriGioco, "
+              "anche scritto e poi tolto; contrari: gli esempi dell'analisi, un commento")
+        # A′ come nel § 7: prompt, contratto e suggerimento dopo il piano senza gioco.test.js
+        from calliope.config import Config
+        from calliope.estensioni.contratto import testo as contratto_vero
+        from calliope.estensioni.prompt import sistema_estensione
+        prossimo = ("leggi i file nella cartella (manifesto.json, logica.js, logica.test.js, "
+                    "gioco.test.js), cambiali nel gioco chiesto con modifica_file e rifai "
+                    "esegui_test")
+        veri = [sistema_estensione(Config(), gioco=True), contratto_vero(Config(), "gioco"),
+                prossimo]
+        nuovi = [solo_logica(t) for t in veri]
+        ok = (all("gioco.test.js" in t for t in veri)
+              and not any("gioco.test.js" in t for t in nuovi)
+              and "i test della sola logica in logica.test.js" in nuovi[0]
+              and "ci sono già tre file" in nuovi[0]
+              and "apriGioco({ seme: 7 })" not in nuovi[1]
+              and "esegui_test lo fa girare" in nuovi[1])
+        errori += not ok
+        print(f"{'ok ' if ok else 'ERR'} tris2-solo-logica: prompt, contratto e «prossimo» "
+              "senza gioco.test.js (contrario: quelli veri lo dicono)"
+              + ("" if ok else "  " + " | ".join(
+                  t[max(0, t.find("gioco.test.js") - 200):t.find("gioco.test.js") + 60]
+                  for t in nuovi if "gioco.test.js" in t)))
         vin = vincoli_correzione(casi()["porte"])
         ok = "gioco.test.js" in vin and "deve FALLIRE" in vin and PROBLEMA_PORTE in vin
         errori += not ok
@@ -1231,6 +1413,9 @@ def secco_analisi(tmp: Path) -> int:
         # gioco.test.js; la richiesta chiede solo la logica. Il caso dopo ha la partenza intera
         for nome_caso, con_test in (("tris2-solo-logica", False), ("tris2", True)):
             fake.copione = [{"content": json.dumps(gioco)},
+                            {"tool_calls": [{"name": "piano", "arguments": {
+                                "capacita_necessarie": [], "fattibile": True,
+                                "motivo": "un gioco a turni", "scope": {}}}]},
                             {"tool_calls": [{"name": "consegna", "arguments": {
                                 "riassunto": "Non lo faccio.", "esito": "impossibile"}}]}]
             prima = set(Path(cfg.agenti_sandbox).glob("*"))
@@ -1240,6 +1425,16 @@ def secco_analisi(tmp: Path) -> int:
                        if x.is_dir()), None)
             nomi_sb = sorted(x.name for x in sb.iterdir()) if sb else []
             detto = json.dumps(fake.richieste[n0:], ensure_ascii=False)
+            # Il prompt di sistema, il contratto nella cartella e il «prossimo» dopo il piano
+            # (seconda revisione della PR #199: A′ come nel § 7)
+            sistema = next((m.get("content") or "" for q in fake.richieste[n0:]
+                            for m in q.get("messages") or [] if m.get("role") == "system"
+                            and "CONTRATTO DEL GIOCO" in str(m.get("content"))), "")
+            dopo_piano = [str(m.get("content")) for q in fake.richieste[n0:]
+                          for m in q.get("messages") or [] if m.get("role") == "tool"
+                          and "prossimo" in str(m.get("content"))]
+            cap = next((p.read_text(encoding="utf-8") for p in (sb.glob("CAPACITA*") if sb
+                                                                 else [])), "")
             verifica(f"{nome_caso}: l'analisi pronta, la partenza con logica.test.js e "
                      + ("gioco.test.js" if con_test else "senza gioco.test.js, la richiesta "
                         "della sola logica"),
@@ -1247,6 +1442,21 @@ def secco_analisi(tmp: Path) -> int:
                      and "accettazione.test.js" in nomi_sb
                      and ("gioco.test.js" in nomi_sb) == con_test
                      and ("Scrivi solo la logica" in detto) != con_test, str(nomi_sb))
+            verifica(f"{nome_caso}: prompt, contratto in cartella e «prossimo» dopo il piano "
+                     + ("con gioco.test.js" if con_test else "senza gioco.test.js"),
+                     bool(sistema) and bool(cap) and bool(dopo_piano)
+                     and all(("gioco.test.js" in t) == con_test
+                             for t in (sistema, cap, dopo_piano[0])),
+                     f"sistema {bool(sistema)}, contratto {bool(cap)}, piano {dopo_piano[:1]}")
+            verifica(f"{nome_caso}: la riga ha la firma, i test finali e test_apri_gioco",
+                     all(k in r for k in ("firma_primo_errore", "firma_errore_finale",
+                                          "test_finali_passano", "test_apri_gioco")),
+                     str(sorted(r)))
+        import calliope.estensioni.contratto as C
+        import calliope.estensioni.prompt as P
+        verifica("…e dopo il caso prompt, contratto e piano veri", not hasattr(
+            C.testo, "_banco_vera") and not hasattr(P.sistema_estensione, "_banco_vera")
+            and "_piano" not in svc.agente.__dict__)
         fake.copione = [{"tool_calls": [{"name": "consegna", "arguments": {
             "riassunto": "Non lo faccio.", "esito": "impossibile"}}]}]
         cfg.agenti_accettazione = False
@@ -1577,6 +1787,7 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
     partenza_vera(svc)
     if caso.get("senza_gioco_test"):
         senza_gioco_test(svc)        # tris2-solo-logica (20/10 sera, #198)
+        con_solo_logica(svc)
     analisi_vera = bool(caso.get("requisiti")) and getattr(cfg, "agenti_accettazione", True)
     if analisi_vera:
         # L'analisi prima del codice come in uno sviluppo (20/10, #192): il servizio la fa con i
@@ -1649,6 +1860,13 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
     acc = accettazione(nuova, file_di(cartella), caso) if cartella and cartella.is_dir() else {
         "verde": False, "esito": None, "uscita": "nessuna cartella"}
     per_giro[-1]["accettazione"] = acc["verde"]
+    partenza_vera(svc)               # prompt, contratto e partenza veri per il caso dopo
+    # I test dell'agente alla fine, la firma del primo errore e i test con apriGioco (20/10
+    # sera, seconda revisione della PR #199, § 7 dell'analisi)
+    finali = file_di(cartella) if cartella and cartella.is_dir() else {}
+    tf = test_finali(nuova, finali, caso) if finali else {"passano": None, "esito": None,
+                                                          "firma": ""}
+    firme = list((lav.segnali if isinstance(lav.segnali, dict) else {}).get("errori_test") or [])
     # Gli esempi dell'agente rieseguiti dal banco sui file finali (13/10 sera)
     from calliope.agenti.servizio import cartella_sandbox
     sbl = sorted(cartella_sandbox(cfg).glob(f"{lav.id}-*"))
@@ -1672,6 +1890,14 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             # I test verdi dell'accettazione su quelli totali e i nomi dei rossi (20/10 sera, #198)
             "accettazione_verdi": acc.get("verdi", 0), "accettazione_totali": acc.get("totali", 0),
             "accettazione_rossi": acc.get("rossi"),
+            # 20/10 sera (seconda revisione della PR #199): i test dell'agente rieseguiti sui
+            # file finali, la firma del primo errore (dei test di tutto il lavoro, come li ha
+            # visti il ciclo: le ultime 12 diverse) e quella del primo rosso alla fine; i test
+            # con apriGioco (in tris2-solo-logica un lavoro con questo campo non misura A′)
+            "test_finali_passano": tf["passano"], "test_finali_esito": tf["esito"],
+            "firma_primo_errore": firme[0] if firme else "",
+            "firma_errore_finale": tf["firma"],
+            "test_apri_gioco": test_apri_gioco(finali, lav),
             "passate": lav.passi, "token": lav.token,
             "ragionamento": lav.ragionamento, "minuti": round(minuti, 2),
             "ripetizioni": seg.get("ripetizioni", 0), "senza_novita": seg.get("senza_novita", 0),
@@ -1870,6 +2096,10 @@ def main(argv) -> int:
                               + (f", riproduzione {r['riproduzione']}" if r["riproduzione"]
                                  else "")
                               + (f", domande {len(r['domande'])}" if r["domande"] else "")
+                              + (f", primo errore «{r['firma_primo_errore']}»"
+                                 if r["firma_primo_errore"] else "")
+                              + (f", test con apriGioco {r['test_apri_gioco']}"
+                                 if r["test_apri_gioco"] else "")
                               + detto_esempi(r)
                               + (f", consegna al tetto ({r['consegna_al_tetto']}, con "
                                  f"{r.get('consegna_al_tetto_con') or 'esempi'})"

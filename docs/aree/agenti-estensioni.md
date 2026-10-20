@@ -4424,8 +4424,18 @@ porte senza il gioco.test.js che una versione vera ha).
    che basta per A e A′; per aprire il prototipo di C il margine più forte (tris-nudo a 9/10 con
    gli altri due ≤ 3/10, oppure 8/10 con gli altri due ≤ 2/10); il caso intermedio si rigira una
    volta con altre 10 ripetizioni che si sommano alle prime (20 contro 20, alto ≥ 16/20, basso
-   ≤ 6/20; se resta intermedio, A); le regole in ordine, vale la prima che si avvera. Sulla DGX
-   dopo #197, `--presence 0.5` (con
+   ≤ 6/20; se resta intermedio, A); le regole in ordine, vale la prima che si avvera. Dopo la
+   seconda revisione della PR #199: il comando di decisione ha `--accettazione no`, come il § 7
+   (in nessun caso esempi visibili né chiusura al tetto con gli esempi, che avrebbero solo i
+   tris2; per la decisione del 20/10 sera in #190 gli esempi non bloccano più comunque); lo
+   0,5 di presence per tutti è uno scostamento voluto dal § 7 («lo stesso presence della
+   Config» darebbe 0,5 a tris2 e 0 a tris-nudo), come la partenza vuota di tris-nudo (la
+   partenza vera di un programma è lo scheletro nel prompt); tris2-solo-logica è A′ vero, solo
+   nel banco (`solo_logica`: prompt, contratto e «prossimo» dopo il piano senza gioco.test.js),
+   e la riga ha `test_apri_gioco` (un lavoro di A′ con quel campo pieno non misura A′), la firma
+   del primo errore dei test e i test dell'agente rieseguiti alla fine; «test acc.» parte da
+   2/10 nei tris2 e da 0/10 in tris-nudo, le regole usano il 10/10. Sulla DGX
+   dopo #197, `--accettazione no`, `--presence 0.5` (con
    `config` tris2 avrebbe 0,5 e tris-nudo 0), `--casi tris2,tris2-solo-logica,tris-nudo --giri 2
    --ripetizioni 10`, da lanciare. Nel prompt di un programma JavaScript scelto dall'analisi
    (il file dichiarato) i test sono `*.test.js`, il seme la funzione del caso e lo scheletro solo
