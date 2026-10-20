@@ -3936,7 +3936,7 @@ a parte, nessun messaggio vecchio riscritto (la cache dei prefissi resta, la pro
    La passata si dice relativa («N passate fa»): i numeri delle passate l'agente non li vede.
 2. **L'uscita troncata** (regola `agente_uscita_troncata`): il client di vLLM legge ora
    `finish_reason` (`out["fine"]`) e segna le chiamate con gli argomenti che non si leggono
-   (`out["rotti"]`); con «length» anche l'ultima chiamata *[storico: fino al 20/10, vedi sotto]*, perché lì gli argomenti arrivano a pezzi e
+   (`out["rotti"]`); con «length» anche l'ultima chiamata (tolto e rimesso il 20/10, vedi sotto), perché lì gli argomenti arrivano a pezzi e
    un JSON che si legge può avere il contenuto a metà. Il client di Ollama legge `done_reason` e
    segna gli argomenti in stringa rotti, ma non l'ultima chiamata a max_tokens: Ollama manda le
    chiamate intere. Una chiamata rotta non si esegue e riceve «la tua uscita è stata troncata
@@ -4003,7 +4003,8 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
   del conto della prosa, e lì non conta: con i valori di serie (16 384 token per passata, guardia
   a 12 000) finiva in «ha ragionato per 32 768 token senza usare gli strumenti», e la regola non
   scattava mai. Come dopo una chiamata, la guardia riparte; il limite resta quello dei tetti
-  (passate, token, tempo). La prova ha il caso con tre passate piene di fila.
+  (passate, token, tempo). La prova ha il caso con tre passate piene di fila. *[storico: «la
+  guardia riparte» e «il limite dei tetti» fino alla seconda revisione, sotto]*
 - **La modifica inversa si rifiuta solo nell'oscillazione pura**: la cartella di adesso è quella
   subito dopo la modifica di prima (`segnali["modifiche"]` tiene anche l'impronta di dopo). Se nel
   frattempo è cambiato altro (un'altra funzione corretta), tornare indietro è una correzione e si
@@ -4018,8 +4019,29 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
 - modifica_file legge la cartella due volte (prima e dopo) e il ciclo le riusa; scrivi_file due.
 - Con vLLM e «length» l'ultima chiamata col JSON valido e intero si esegue: rotta solo se il JSON
   non si legge (prima era rotta sempre, e se il parser tratteneva una seconda chiamata a metà la
-  prima, intera, andava persa).
+  prima, intera, andava persa). *[storico: tolto dalla seconda revisione, sotto]*
 - Il ciclo della ricerca ha la sua issue (#189). Riletto, è meno grave di quanto detto nella PR:
   lo strumento sconosciuto ha già `ok: False` con l'elenco, e manca solo il nome della regola. La
   consegna fa `return` subito, e le chiamate dopo di essa non si eseguono e restano senza
   risposta. Non legge `rotti` e prende per relazione anche una passata troncata.
+
+**Dopo la seconda revisione della PR #187 (20/10).**
+- **Il solo ragionamento troncato non è un'uscita troncata.** Il fatto «troncata» vale solo
+  quando la troncatura è nell'uscita: una chiamata con gli argomenti rotti, o un testo fermato a
+  max_tokens di almeno `TRONCATA_TESTO_MIN` = 20 caratteri. Una passata «length» con il contenuto
+  vuoto o quasi, fatta tutta di ragionamento, resta nella guardia dei token senza strumenti come
+  prima (alla seconda soglia «limite»). Con la prima correzione, 30 passate così arrivavano al tetto
+  dei token del lavoro (150 000, i 30 minuti) con «scrivi il file in pezzi», che non c'entrava. La
+  troncata vera non si somma ai token senza strumenti e non li azzera.
+- **Un tetto suo**: oltre `TRONCATE_MAX` = 3 passate di fila con l'uscita troncata (anche le
+  chiamate rotte) il lavoro si ferma col motivo «la sua uscita si è fermata N volte di fila al
+  tetto dei token della passata», `tipo` «troncata»: tappa in uno sviluppo (`PERCHE_TAPPA`, a voce
+  «l'uscita dell'agente si è fermata più volte di fila al tetto dei token della passata»), fuori
+  «limite».
+- **Con vLLM e «length» l'ultima chiamata è di nuovo rotta**, anche col JSON che si legge. A fine
+  stream vLLM manda gli argomenti già chiusi dal parser con la stringa a metà: un file, un `nuovo` di
+  modifica_file o un riassunto della consegna a metà scritti in silenzio costano più di una passata
+  persa. Il comportamento del parser `qwen3_xml` sulla DGX è da misurare (max_tokens piccolo e uno
+  scrivi_file lungo).
+- La troncata azzera la prosa di fila: alternate, «N volte di fila senza usare gli strumenti» non
+  si dice più a torto.
