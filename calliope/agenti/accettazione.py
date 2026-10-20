@@ -87,6 +87,10 @@ FILE_GIOCO = "accettazione.test.js"
 MAX_ESEMPI = 8
 MAX_COMANDI_GIOCO = 6
 MAX_MOSSE = 12
+# Le mosse del gioco di un esempio oltre le quali il progettista dei test sbaglia la partita
+# (20/10, #197: sul banco tris2, 12 esempi su 12 con 9 mosse erano sbagliati, la vittoria arrivava
+# prima: «1, 2, …, 9» vince alla 7ª). Un esempio più lungo si toglie («lunghi» nei tolti)
+MAX_MOSSE_SICURE = 7
 STANDARD_GIOCO = ("avanti", "ancora")     # i comandi di Calliope che un esempio può usare
 FASI_STANDARD = ("preparazione", "esito", "fine")
 MAX_DOMANDE = 2
@@ -115,15 +119,15 @@ Ogni esempio controlla almeno una cosa (numero, contiene o trovato false). Se la
 
 
 SISTEMA_GIOCO = """
-Il gioco usa la macchina a stati di Calliope: la partita comincia scegliendo il numero dei giocatori (lo fa il test), poi la fase d'inizio del gioco; dopo ogni mossa di solito c'è la fase «esito» (il testo di cosa è successo, poi si va avanti da soli), e alla fine la fase «fine» con la classifica. I turni passano da soli al giocatore dopo; i punti li tiene Calliope. Ogni comando del gioco è un nome breve (minuscole e _), in una fase, con al più un valore: un numero (da, a) o una voce di un elenco (valori).
+Il gioco usa la macchina a stati di Calliope: la partita comincia scegliendo il numero dei giocatori (lo fa il test), poi la fase d'inizio del gioco. Una mossa normale (una casella segnata, una carta girata) resta nella fase del gioco e tocca al giocatore dopo; la fase «esito» (il testo di cosa è successo, poi si va avanti da soli) c'è solo quando una mano finisce: una vittoria, un pareggio, un punto fatto. Alla fine la fase «fine» con la classifica. I turni passano da soli al giocatore dopo; i punti li tiene Calliope. Ogni comando del gioco è un nome breve (minuscole e _), in una fase, con al più un valore: un numero (da, a) o una voce di un elenco (valori).
 giocatori: quanti possono giocare, min e max (uguali se la richiesta dice un numero fisso, per esempio «per due» → 2 e 2; se non lo dice, 1 e 4).
 comandi: i comandi che il gioco DEVE avere perché gli esempi si possano giocare (al più 6), con fase (minuscole, di solito «turno»), nome, e da/a per un numero oppure valori per un elenco; niente valore se il comando non ne ha. Non usare i nomi di Calliope (inizia, avanti, ancora, giocatori).
-esempi: da 2 a 6 partite brevi, una per requisito che si controlla giocando. Per ognuna: requisito (il numero), giocatori (quanti, tra min e max), mosse (comando e valore, nell'ordine; «avanti» non serve: il test va avanti da solo dopo l'esito), e atteso, lo stato dopo l'ultima mossa:
-- fase: la fase in cui si è (una dei comandi, «esito» o «fine»), se il requisito lo dice;
+esempi: da 2 a 6 partite brevi, una per requisito che si controlla giocando. Per ognuna: requisito (il numero), giocatori (quanti, tra min e max), mosse (comando e valore, nell'ordine; «avanti» non serve: il test va avanti da solo dopo l'esito), e atteso, lo stato dopo l'ultima mossa. Le mosse sono A TURNO: con due giocatori la 1ª, la 3ª e la 5ª sono del primo, la 2ª e la 4ª del secondo (nel tris «1, 4, 2, 5, 3»: il primo mette 1, 2 e 3 e vince alla 5ª mossa; «1, 2, 3» non fa vincere nessuno). Segui la partita mossa per mossa e fermati alla mossa che la finisce: dopo una vittoria non ci sono altre mosse. Al più 7 mosse per esempio: una partita più lunga (il pareggio di una griglia piena) non va negli esempi, la provano i test dell'agente. Se non sei sicuro di come finisce una partita, non mettere quell'esempio.
+- fase: la fase in cui si è (una dei comandi, «esito» o «fine»), se il requisito lo dice; dopo una mossa normale è la fase del gioco, mai «esito»; «esito» solo quando la mano finisce (una vittoria, un pareggio, un punto fatto), mai dopo la prima mossa del gioco;
 - tocca: il numero del giocatore a cui tocca dopo (1 è il primo), se conta;
 - punti: i punti di ogni giocatore, solo se NON dipendono dal caso;
 - attivi e non_attivi: comandi (con il valore) che devono valere ancora o non più (una porta già aperta non si riapre);
-- testo: una o due parole che si devono leggere sullo schermo subito dopo l'ultima mossa (un nome detto dalla persona), mai una frase intera.
+- testo: una o due parole che si devono leggere sullo schermo subito dopo l'ultima mossa, solo se la richiesta le usa (un nome detto dalla persona, «pareggio» se lo dice); mai parole scelte da te («vittoria», «ok», «turno 2»): le sceglie il gioco. Mai una frase intera.
 Ogni esempio usa almeno un comando del gioco nelle mosse e controlla almeno una cosa. Mai controllare ciò che dipende dal caso (cosa c'è dietro una porta, chi vince): controlla le regole (turni, comandi che spariscono, la fine quando le mosse finiscono)."""
 
 
@@ -306,19 +310,51 @@ def _coppia(x, comandi: dict, standard: bool = True):
     return (c, v) if v in d["valori"] else None
 
 
-def _esempi_gioco(d: dict, comandi: dict, n_requisiti: int) -> list[dict]:
+def simili(a: str, b: str) -> bool:
+    """Due parole (già normalizzate) nella stessa forma o in una forma vicina: uguali, oppure di
+    almeno 4 lettere con l'inizio in comune per max(3, la più corta - 2) lettere («vince» e
+    «vinto», «pareggio» e «pareggi», «punto» e «punti»; non «vittoria» e «vince»). La stessa
+    regola è in accettazione.test.js per il testo sullo schermo (revisione della PR #201)."""
+    if a == b:
+        return True
+    n = min(len(a), len(b))
+    k = max(3, n - 2)
+    return n >= 4 and a[:k] == b[:k]
+
+
+def _esempi_gioco(d: dict, comandi: dict, n_requisiti: int,
+                  testo: str = "") -> tuple[list[dict], dict]:
+    """(esempi, tolti): gli esempi validati e quanti ne sono stati tolti per ogni causa (20/10,
+    #197: prima si toglievano in silenzio, e «tolti» vuoto con 0 esempi non diceva se il
+    modello non ne aveva scritti o se li aveva tolti tutti il codice). Cause: «forma» (atteso o
+    giocatori che non si leggono), «mosse» (un comando o un valore che non c'è, nessun comando
+    del gioco), «lunghi» (più di MAX_MOSSE_SICURE mosse del gioco), «niente» (nessun controllo
+    rimasto), «doppioni», «esito_prima_mossa» (il controllo della fase «esito» senza i punti
+    dopo una mossa sola, tolto), «dopo_la_fine» (due esempi che
+    si contraddicono: uno finisce la partita e l'altro, con le stesse mosse in testa, continua a
+    giocare). `testo`: la richiesta; il «testo» atteso si tiene solo se le sue parole ci sono
+    in una forma vicina (`simili`), altrimenti si toglie quel controllo («testo» nei tolti)."""
     from ..requisiti import pulito
     out, chiavi = [], set()
+    tolti = {"forma": 0, "mosse": 0, "lunghi": 0, "niente": 0, "doppioni": 0, "testo": 0,
+             "esito_prima_mossa": 0, "dopo_la_fine": 0}
+    detto = _norm(testo).split() if str(testo or "").strip() else None
     fasi = {x["fase"] for x in comandi.values()} | set(FASI_STANDARD) - {"preparazione"}
     for e in d.get("esempi") or ():
         if not isinstance(e, dict) or not isinstance(e.get("atteso"), dict):
+            tolti["forma"] += 1
             continue
         g = e.get("giocatori")
         if not isinstance(g, int) or isinstance(g, bool) or not 1 <= g <= 8:
+            tolti["forma"] += 1
             continue
         mosse = [_coppia(m, comandi) for m in (e.get("mosse") or ())][:MAX_MOSSE]
         if not mosse or None in mosse or not any(c not in STANDARD_GIOCO for c, _ in mosse):
+            tolti["mosse"] += 1
             continue                       # almeno un comando del gioco: fallisce senza
+        if sum(c not in STANDARD_GIOCO for c, _ in mosse) > MAX_MOSSE_SICURE:
+            tolti["lunghi"] += 1
+            continue
         a = e["atteso"]
         atteso = {}
         if isinstance(a.get("fase"), str) and a["fase"] in fasi:
@@ -335,13 +371,37 @@ def _esempi_gioco(d: dict, comandi: dict, n_requisiti: int) -> list[dict]:
             cs = [list(x) for x in cs if x is not None]
             if cs:
                 atteso[k] = cs
-        testo = pulito(a.get("testo"), 40)
-        if testo and len(testo.split()) <= 3:
-            atteso["testo"] = testo
+        t = pulito(a.get("testo"), 40)
+        if t and len(t.split()) <= 3:
+            # Il testo sullo schermo (20/10, #197, banco tris2: «ok», «Vittoria», «Turno 2»,
+            # «Nuova» dove il tris giusto scrive «Ha vinto X!»): una parola che la richiesta non
+            # usa la sceglie il gioco, e il codice giusto non la scrive. Si tiene solo se le
+            # sue parole sono nella richiesta in una forma vicina (revisione della PR #201:
+            # «vinto» sullo schermo e «vince» nella richiesta; `simili`, la stessa regola del
+            # controllo sullo schermo in accettazione.test.js). I numeri giocati nelle mosse non
+            # contano: «porta 2» dopo la porta 2
+            giocati = {_norm(v) for _, v in mosse if v is not None}
+            parole = [w for w in _norm(t).split() if w not in giocati]
+            if detto is None or all(any(simili(w, x) for x in detto) for w in parole):
+                atteso["testo"] = t
+            else:
+                tolti["testo"] += 1
+        if atteso.get("fase") == "esito" and "punti" not in atteso and sum(
+                c not in STANDARD_GIOCO for c, _ in mosse) == 1:
+            # La fase «esito» vuol dire che una mano è finita (20/10, #197, banco tris2: «casella
+            # 5 → esito» dopo una mossa normale, per il prompt di prima che la metteva dopo ogni
+            # mossa). Alla prima mossa del gioco e senza punti non chiude niente (la stessa idea
+            # dell'avviso della prova di fumo): quel controllo si toglie. Dopo resta, perché il
+            # pareggio è un esito senza punti (revisione della PR #201: «1, 4, 2, 5, 3 → esito»
+            # del tris giusto veniva tolto)
+            del atteso["fase"]
+            tolti["esito_prima_mossa"] += 1
         if not atteso:
+            tolti["niente"] += 1
             continue
         chiave = json.dumps([g, mosse, atteso], sort_keys=True, ensure_ascii=False)
         if chiave in chiavi:
+            tolti["doppioni"] += 1
             continue
         chiavi.add(chiave)
         r = e.get("requisito")
@@ -350,7 +410,25 @@ def _esempi_gioco(d: dict, comandi: dict, n_requisiti: int) -> list[dict]:
                     "giocatori": g, "mosse": [list(m) for m in mosse], "atteso": atteso})
         if len(out) >= MAX_ESEMPI:
             break
-    return out
+    # Due esempi che si contraddicono (20/10, #197, banco tris2 L1: «1, 2, 3, 4, 5, 6» finiva la
+    # partita e «1, …, 9» con le stesse mosse in testa continuava a giocare): almeno uno è
+    # sbagliato, e non si sa quale. Si tolgono tutti e due
+    def gioca(e):
+        return [m for m in e["mosse"] if m[0] not in STANDARD_GIOCO]
+    finiti = [(e["giocatori"], gioca(e)) for e in out if e["atteso"].get("fase") == "fine"]
+    sospetti = set()
+    for i, e in enumerate(out):
+        mie = gioca(e)
+        for k, (g, pre) in enumerate(finiti):
+            if g == e["giocatori"] and len(mie) > len(pre) and mie[:len(pre)] == pre:
+                sospetti.add(i)
+                sospetti.update(j for j, x in enumerate(out)
+                                if x["atteso"].get("fase") == "fine" and x["giocatori"] == g
+                                and gioca(x) == pre)
+    if sospetti:
+        tolti["dopo_la_fine"] = len(sospetti)
+        out = [e for i, e in enumerate(out) if i not in sospetti]
+    return out, {k: v for k, v in tolti.items() if v}
 
 
 def _norm(testo) -> str:
@@ -625,7 +703,13 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
     if not estensione and gioco:
         comandi = _comandi_gioco(d)
         out["giocatori"] = _giocatori(d.get("giocatori"))
-        out["esempi"] = _esempi_gioco(d, comandi, n_requisiti)
+        out["esempi"], tolti = _esempi_gioco(d, comandi, n_requisiti, testo)
+        # Quanti esempi ha scritto il modello (20/10, #197): con 0 tenuti dice se li ha tolti
+        # tutti il codice (la regola accettazione_esempi_tutti_tolti nel registro) o se il
+        # modello non ne ha scritti
+        out["esempi_modello"] = len(d.get("esempi") or ()) if isinstance(
+            d.get("esempi"), list) else 0
+        out["tolti"] = tolti
         if out["giocatori"]:
             # Un esempio con un numero di giocatori che il gioco non ammette non si gioca:
             # fallirebbe nella preparazione, non sulla regola che prova (19/10, #186)
@@ -636,10 +720,10 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
                 # Tutti fuori (20/10, revisione della PR #188): è il numero detto a non tornare
                 # con gli esempi, non gli esempi; restano, e la partenza usa quelli di serie
                 out["giocatori"] = None
-                out["tolti"] = {"giocatori_scartati": 1}
+                out["tolti"] = {**tolti, "giocatori_scartati": 1}
             else:
                 out["esempi"] = dentro
-                out["tolti"] = {"giocatori": fuori} if fuori else {}
+                out["tolti"] = {**tolti, **({"giocatori": fuori} if fuori else {})}
         usati = {c for e in out["esempi"] for c, _ in e["mosse"]} | {
             x[0] for e in out["esempi"] for k in ("attivi", "non_attivi")
             for x in e["atteso"].get(k, [])}
@@ -878,7 +962,14 @@ ESEMPI.forEach((e, i) => {
     const g = await partita(e);
     const a = e.atteso;
     if (a.testo) {
-      assert.ok(norm(g.testo()).includes(norm(a.testo)),
+      // Le parole in una forma vicina (revisione della PR #201: «vince» e «Ha vinto X!»), con la
+      // stessa regola di accettazione.simili, e DI SEGUITO (seconda revisione: sciolte, la «X»
+      // di una casella faceva passare «Mette X» con «Mette O» scritto)
+      const sullo = norm(g.testo()).split(/[^a-z0-9]+/).filter(Boolean);
+      const att = norm(a.testo).split(/[^a-z0-9]+/).filter(Boolean);
+      const vicine = (x, y) => { const n = Math.min(x.length, y.length), k = Math.max(3, n - 2);
+                                 return x === y || (n >= 4 && x.slice(0, k) === y.slice(0, k)); };
+      assert.ok(sullo.some((_, i) => att.every((w, j) => sullo[i + j] !== undefined && vicine(w, sullo[i + j]))),
         `${detto}: dopo l'ultima mossa sullo schermo deve esserci «${a.testo}»; si legge «${g.testo().slice(0, 200)}»`);
     }
     let s = g.stato();

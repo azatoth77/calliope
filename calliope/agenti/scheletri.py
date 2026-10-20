@@ -76,8 +76,10 @@ const GIOCO = {
   // I comandi che valgono adesso, dentro quelli del manifesto: le porte ancora chiuse
   attivi: { turno: (d) => ({ porta: chiuse(d) }) },
   mosse: { turno: {
-    // Un punto a chi apre, il testo nella fase «esito», poi «dopo»: di nuovo «turno» (tocca al
-    // giocatore dopo) o «fine» quando sono aperte tutte
+    // Qui ogni porta aperta è un punto fatto, quindi una mano finita: il testo nella fase
+    // «esito», poi «dopo»: di nuovo «turno» (tocca al giocatore dopo) o «fine» quando sono aperte
+    // tutte. Una mossa normale, che non chiude una mano (una casella del tris), restituisce solo
+    // { dati } (e i punti, se ci sono) e resta nella fase: niente esito
     porta(d, { valore }) {
       const aperte = d.aperte.concat([valore]);
       return { dati: { ...d, aperte }, punti: 1, esito: `Porta ${valore} aperta!`,
@@ -411,8 +413,11 @@ SCHELETRI = {"gioco": GIOCO, "estensione": ESTENSIONE, "python": PROGRAMMA_PYTHO
              "csharp": PROGRAMMA_CSHARP, "javascript": PROGRAMMA_JAVASCRIPT}
 
 
-def per_programma(linguaggi=("python",)) -> str:
-    """Gli scheletri dei programmi per i linguaggi che qui si eseguono (Python sempre)."""
+def per_programma(linguaggi=("python",), linguaggio=None) -> str:
+    """Gli scheletri dei programmi per i linguaggi che qui si eseguono (Python sempre). Con
+    `linguaggio` (20/10 sera, #198: quello già scelto per il programma) solo il suo."""
     voluti = set(linguaggi or ())
+    if linguaggio in SCHELETRI and linguaggio in voluti | {"python"}:
+        return SCHELETRI[linguaggio]
     nomi = ["python"] + [n for n in ("csharp", "javascript") if n in voluti]
     return "\n\n".join(SCHELETRI[n] for n in nomi)

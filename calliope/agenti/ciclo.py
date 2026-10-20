@@ -605,16 +605,39 @@ def strumenti_codice(linguaggi=()) -> list:
             + ([ESEGUI_JS] if "javascript" in linguaggi else []))
 
 
-def sistema_codice(linguaggi=("python",), mancanti=None) -> str:
+# I test e il seme detti per linguaggio (20/10 sera, #198, revisione della PR #199: il prompt di
+# un programma JavaScript diceva solo «test_*.py» e «random.Random(seme)», e mostrava lo
+# scheletro Python prima del suo)
+_TEST_PY = "scrivi i test (file test_*.py)"
+_SEME_PY = "(random.Random(seme) passato alla funzione)"
+_TEST_JS = "scrivi i test (file *.test.js con node:test e node:assert)"
+_SEME_JS = ("(la funzione del caso passata alla logica, per esempio caso = Math.random, e nei "
+            "test una funzione con il seme fisso)")
+_TEST_TUTTI = ("scrivi i test (in Python file test_*.py; in JavaScript file *.test.js con "
+               "node:test)")
+_SEME_TUTTI = ("(in Python random.Random(seme) passato alla funzione; in JavaScript la funzione "
+               "del caso passata alla logica, e nei test una con il seme fisso)")
+
+
+def sistema_codice(linguaggi=("python",), mancanti=None, linguaggio=None) -> str:
     """Il prompt dell'agente di codice con i linguaggi che qui si possono eseguire (04/10):
     se il compito ne chiede un altro lo dice, invece di scriverlo senza poterlo provare. E il
     programma finito deve girare da solo: Calliope lo esegue davanti a chi l'ha chiesto.
     `mancanti` (17/10, #54): {linguaggio: passo} per quelli accesi in agenti_linguaggi ma non
-    pronti (manca l'immagine): l'agente dice come si prepara, come fa l'esecuzione."""
+    pronti (manca l'immagine): l'agente dice come si prepara, come fa l'esecuzione.
+    `linguaggio` (20/10 sera, #198): quello del programma già scelto dal modello (il file
+    dichiarato dall'analisi prima del codice): i test, il seme e lo scheletro solo per lui. Senza,
+    con il JavaScript acceso i test e il seme si dicono per i due linguaggi."""
     from .linguaggi import LINGUAGGI, elenco_detto
     from .scheletri import per_programma        # lo scheletro di partenza (11/10)
     nomi = [n for n in LINGUAGGI if n in set(linguaggi or ()) | {"python"}]
+    if linguaggio not in nomi:
+        linguaggio = None
     testo = SISTEMA_CODICE
+    if linguaggio == "javascript":
+        testo = testo.replace(_TEST_PY, _TEST_JS).replace(_SEME_PY, _SEME_JS)
+    elif linguaggio is None and "javascript" in nomi:
+        testo = testo.replace(_TEST_PY, _TEST_TUTTI).replace(_SEME_PY, _SEME_TUTTI)
     if nomi != ["python"]:
         testo = testo.replace(
             "esegui_python, esegui_test, consegna.",
@@ -643,7 +666,7 @@ def sistema_codice(linguaggi=("python",), mancanti=None) -> str:
         "eseguire, e argomenti_esempio = i valori d'esempio da passargli se ne vuole (per "
         "esempio [\"3\", \"5\"]). Nel riassunto chiamalo programma o script: le estensioni di "
         "Calliope sono un'altra cosa.") + _non_pronti(nomi, mancanti) + "\n\n" + \
-        per_programma(nomi)
+        per_programma(nomi, linguaggio)
 
 
 def _non_pronti(nomi, mancanti) -> str:
@@ -687,9 +710,9 @@ SISTEMA_CODICE = (
     "alla cartella; niente rete, niente comandi di shell, niente pip: solo la libreria "
     "standard di Python (e openpyxl, python-docx se servono file Office). Prima guarda i "
     "file che ci sono, poi "
-    "scrivi il codice con scrivi_file, scrivi i test (file test_*.py) e falli girare con "
+    "scrivi il codice con scrivi_file, " + _TEST_PY + " e falli girare con "
     "esegui_test; correggi finché passano. Un test che dipende dal caso fissa il seme "
-    "(random.Random(seme) passato alla funzione): alla consegna i test si eseguono due volte e "
+    + _SEME_PY + ": alla consegna i test si eseguono due volte e "
     "devono dare lo stesso esito. Nomi in inglese, commenti e messaggi in italiano. "
     "Non chiedere conferme: fai il lavoro. Se manca un dato indispensabile chiama consegna "
     "con esito mancano_dati e una domanda breve e chiara: il lavoro si sospende, la domanda "
@@ -1372,7 +1395,12 @@ class Agente:
                             (getattr(sandbox, "linguaggi", None) or {}).items()
                             if not getattr(iso, "pronto", False)
                             and not getattr(iso, "solo_test", False)}
-                sistema = (sistema_codice(progr, mancanti) + "\n\n"
+                # Il linguaggio del programma, se il modello l'ha già scelto (20/10 sera, #198):
+                # il file dichiarato dall'analisi prima del codice
+                from .linguaggi import per_estensione
+                lg = per_estensione(str((getattr(lav, "accettazione", None) or {})
+                                        .get("programma") or ""))
+                sistema = (sistema_codice(progr, mancanti, lg.nome if lg else None) + "\n\n"
                            + contratto(self.cfg, "codice", progr))
             messages = [{"role": "system", "content": sistema},
                         {"role": "user", "content": user}]
@@ -1830,6 +1858,13 @@ class Agente:
                         else:
                             fila.pop(p, None)       # una correzione mirata: si riparte
                     elif name == "esegui_test":
+                        for regola in regole_avvisi(result.get("uscita")):
+                            # Gli avvisi della prova di fumo (20/10, #197): ognuno con la sua
+                            # regola, una volta per lavoro
+                            if not seg.get("avviso_" + regola):
+                                from ..sonde import nota as nota_regola
+                                seg["avviso_" + regola] = True
+                                nota_regola(lav, regola, self.log)
                         firma = firma_errore(result)
                         if firma:
                             if firma not in seg["errori_test"][-1:]:
@@ -3536,6 +3571,24 @@ def punto_piu_simile(testo: str, vecchio: str) -> int | None:
 
 # I controlli di Calliope nell'uscita dei test, che non sono test dell'agente
 _NON_TEST = ("prova di fumo", "manifesto.json", "controllo della consegna")
+# Le righe degli avvisi della prova di fumo nell'uscita dei test (20/10, #197, fumo_js.mjs):
+# ognuna con la sua regola nel registro, una volta per lavoro. Riconosciute dal prefisso e da
+# una frase loro (seconda revisione della PR #201: dal solo prefisso anche i punti persi
+# contavano come «esito a ogni mossa»)
+AVVISO_ESITO = "AVVISO prova di fumo del gioco: "
+AVVISI_REGOLE = (("l'esito vuol dire che la mano è finita", "gioco_esito_ogni_mossa"),
+                 ("non vanno a nessuno", "gioco_punti_persi"))
+
+
+def regole_avvisi(uscita) -> list[str]:
+    """Le regole degli avvisi della prova di fumo nell'uscita dei test, senza doppioni."""
+    out = []
+    for riga in str(uscita or "").splitlines():
+        if riga.startswith(AVVISO_ESITO):
+            for frase, regola in AVVISI_REGOLE:
+                if frase in riga and regola not in out:
+                    out.append(regola)
+    return out
 
 
 def nomi_test(uscita: str) -> list[str]:

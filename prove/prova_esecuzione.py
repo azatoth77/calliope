@@ -768,6 +768,25 @@ def javascript_a_secco(iso, img_py, img_cs):
     verifica("prompt senza il JavaScript: niente Node, niente scheletro JS, pagine solo scritte",
              "Node 24" not in p_cs and "programma.test.js" not in p_cs
              and "diverso da Python o C#" in p_cs and "si scrivono, non si eseguono qui" in p_cs)
+    # 20/10 sera (#198, revisione della PR #199): il prompt di un programma JavaScript diceva
+    # solo i test Python, il seme di Python e lo scheletro Python per primo
+    p_jsp = sistema_codice(["python", "csharp", "javascript"], linguaggio="javascript")
+    verifica("un programma JavaScript (scelto dall'analisi): i test *.test.js, il seme con la "
+             "funzione del caso, solo il suo scheletro; niente test_*.py né random.Random",
+             "*.test.js con node:test" in p_jsp and "caso = Math.random" in p_jsp
+             and "require.main === module" in p_jsp and "test_*.py" not in p_jsp
+             and "random.Random" not in p_jsp and "programma.py" not in p_jsp
+             and "SCHELETRO DI PARTENZA (programma JavaScript" in p_jsp, p_jsp[:300])
+    p_pyp = sistema_codice(["python", "csharp", "javascript"], linguaggio="python")
+    verifica("contrario: un programma Python le indicazioni Python le vede ancora, senza lo "
+             "scheletro JavaScript", "test_*.py" in p_pyp and "random.Random(seme)" in p_pyp
+             and "require.main === module" not in p_pyp and "*.test.js con node:test" not in p_pyp)
+    verifica("contrario: senza un linguaggio scelto, con il JavaScript acceso, test e seme per "
+             "i due linguaggi; senza il JavaScript come prima",
+             "in Python file test_*.py; in JavaScript file *.test.js" in p_js
+             and "in JavaScript la funzione del caso" in p_js
+             and "scrivi i test (file test_*.py)" in p_cs and "Math.random" not in p_cs
+             and sistema_codice(["python"], linguaggio="javascript") == sistema_codice(["python"]))
 
     class SbFinta:
         def __init__(self, isos):
@@ -795,6 +814,16 @@ def javascript_a_secco(iso, img_py, img_cs):
     verifica("C# e JavaScript accesi senza immagini: i due passi",
              p and "costruisci csharp" in p and "costruisci javascript" in p
              and "esegui_csharp" not in p, p[:100])
+    # 20/10 sera (#198): il linguaggio scelto dall'analisi arriva al prompt vero del lavoro
+    p = prompt_del_lavoro(iso, isos_js, "sandbox-p4", programma="somma.js")
+    verifica("il programma dichiarato somma.js: nel prompt vero i test *.test.js e solo lo "
+             "scheletro JavaScript", p and "*.test.js con node:test" in p
+             and "test_*.py" not in p and "random.Random" not in p
+             and "SCHELETRO DI PARTENZA (programma Python)" not in p, p[:300])
+    p = prompt_del_lavoro(iso, isos_js, "sandbox-p5", programma="somma.py")
+    verifica("contrario: il programma dichiarato somma.py, le indicazioni Python",
+             p and "scrivi i test (file test_*.py)" in p
+             and "SCHELETRO DI PARTENZA (programma JavaScript" not in p, p[:300])
 
     sezione("JavaScript: lavoro di codice con l'agente finto (#54)")
     if NODE:
@@ -803,8 +832,9 @@ def javascript_a_secco(iso, img_py, img_cs):
         print("SALTATA IN PARTE: Node non c'è, lavoro JavaScript dell'agente finto")
 
 
-def prompt_del_lavoro(iso, isos, cartella: str) -> str:
-    """Il prompt di sistema che il ciclo del lavoro di codice manda all'agente finto (17/10)."""
+def prompt_del_lavoro(iso, isos, cartella: str, programma: str = "") -> str:
+    """Il prompt di sistema che il ciclo del lavoro di codice manda all'agente finto (17/10).
+    `programma` (20/10 sera, #198): il file dichiarato dall'analisi prima del codice."""
     from calliope.agenti import Lavori, carica
     from prove.ollama_finto import FakeOllama
     fake = FakeOllama(modelli=("qwen3.6:35b",)).avvia()
@@ -819,6 +849,8 @@ def prompt_del_lavoro(iso, isos, cartella: str) -> str:
                                      setattr(svc, "isolamenti", isos), iso)[-1]
     lav = svc.nuovo("codice", "Scrivi un programma in JavaScript che somma due numeri",
                     "dario-id", "Dario", "amministra")
+    if programma:
+        lav.accettazione = {"stato": "pronta", "file": True, "programma": programma}
     svc.avvia(lav)
     try:
         svc.done.get(timeout=30)

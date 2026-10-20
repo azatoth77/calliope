@@ -2397,7 +2397,7 @@ MAX_CHIESTI_RIPETUTA = 5
 # logica.js e dalla pagina scelta nel manifesto
 VINCOLO_CORREZIONE_GIOCO = (
     " È un GIOCO e il problema l'ha visto la persona sullo schermo: la causa può essere in ciò "
-    "che si mostra (GIOCO.vista, l'«esito» delle mosse, la pagina e le etichette nel "
+    "che si mostra (GIOCO.vista, l'«esito» di una mano finita, la pagina e le etichette nel "
     "manifesto) o in quali comandi valgono (GIOCO.attivi), non solo nelle regole. Segui il tocco "
     "della persona fino a ciò che appare: che il pulsante chiami la mossa giusta e che il "
     "risultato (cosa c'è dietro la porta, i punti, chi vince e perché) venga mostrato. Il test "
