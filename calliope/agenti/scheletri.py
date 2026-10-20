@@ -38,32 +38,53 @@ rapporto 3,47 caratteri per token di Qwen3.6, da rimisurare sulla DGX.
 
 Dal 17/10 (issue #54) il programma JavaScript, solo con «javascript» acceso in agenti_linguaggi:
 740 caratteri, ~210 token con lo stesso rapporto.
+
+Dal 19/10 (issue #186) il gioco non ha più lo scheletro nel prompt: i quattro file di partenza li
+scrive il codice nella cartella (`file_gioco`, `prepara_gioco`), coerenti con min e max della
+richiesta e verdi (test e prova di fumo), e nel prompt resta il paragrafo che dice cosa c'è
+(`GIOCO`, 831 caratteri invece di 3 347). Ciò che si può dare come file già verde non si descrive
+in prosa.
 """
 
-GIOCO = """SCHELETRO DI PARTENZA (gioco): parti da qui e cambia solo quello che serve. \
-Preparazione (quanti giocatori), turni, punti, esito della mossa, fine con la classifica e \
-«ancora», il disegno della pagina, i pulsanti e la voce sono della macchina a stati di Calliope: \
-NON scriverli. Ogni comando è anche un pulsante. Niente gioco.js, niente DOM.
-manifesto.json — la sezione "scheda":
-{"tipo": "gioco", "file": ["logica.js"], "giocatori": {"min": 1, "max": 4},
- "macchina": {"inizio": "turno", "fasi": {"turno": {"pagina": "scelte", "verso": ["esito", "fine"],
-  "comandi": {"porta": {"forme": ["porta {n}", "la porta {n}", "{n}"], "n": {"da": 1, "a": 6},
-                        "etichetta": "Porta {n}"}}}}}}
-Ogni fase sceglie una pagina di Calliope: scelte (un pulsante per comando e valore), griglia \
-(una scacchiera: vista dà «caselle»), messaggio, punteggi, titolo, classifica; tela solo per il \
-tempo reale.
-logica.js — solo GIOCO, funzioni pure, niente DOM:
-"use strict";
+GIOCO = """LA PARTENZA (gioco): per un gioco nuovo nella cartella ci sono già quattro file che \
+passano i test e la prova di fumo, con giocatori min e max della richiesta: manifesto.json (la \
+scheda con la macchina: una fase «turno» con il comando d'esempio «porta {n}»), logica.js (GIOCO: \
+aprire le porte, un punto a porta, la fine quando sono aperte tutte), logica.test.js e \
+gioco.test.js (la partita vera con apriGioco, che comincia dalla preparazione). È un gioco \
+d'esempio: leggili, poi cambiali in quello chiesto con modifica_file, un pezzo alla volta, \
+rifacendo girare esegui_test; nel manifesto cambia anche nome, titolo e cosa_fa. In una modifica \
+o in una correzione ci sono invece i file della versione di prima: riparti da quelli. Un test che \
+fallisce, o la prova di fumo, dice fase, comando, strada e file:riga: correggi quel punto."""
+
+# I file di partenza di un gioco nuovo (19/10, #186, § 3.5 n. 28 della ricerca del 19/10 sulla
+# solidità dell'agente): prima il gioco partiva da una cartella vuota e l'agente ricopiava dal
+# prompt manifesto, logica e test, proprio la parte rotta nel tris per due del 18/10 (#174: i
+# test davano per scontato che la partita cominciasse in «turno»). Li scrive il codice, coerenti
+# con min e max della richiesta (l'analisi prima del codice, accettazione.py), e passano i test
+# e la prova di fumo per costruzione (prova_partenza_gioco). Le porte sono quelle dello scheletro
+# di prima: due in più dei giocatori, così il gioco finisce sempre
+NOME_PARTENZA = "gioco_nuovo"
+TITOLO_PARTENZA = "Gioco nuovo"
+GIOCATORI_PARTENZA = (1, 4)         # senza l'analisi: come lo scheletro di prima
+
+LOGICA_PARTENZA = """"use strict";
+// Il gioco d'esempio della partenza: cambialo nel gioco chiesto. Solo GIOCO, funzioni pure,
+// niente DOM: preparazione, turni, punti, esito, fine e disegno sono della macchina di Calliope
 const GIOCO = {
-  nuovaPartita({ giocatori }) { return { porte: 2 + giocatori, aperte: [] }; },
+  // I dati della partita: un oggetto JSON (qui le porte e quelle già aperte)
+  nuovaPartita({ giocatori }) { return { porte: giocatori + 2, aperte: [] }; },
+  // I comandi che valgono adesso, dentro quelli del manifesto: le porte ancora chiuse
   attivi: { turno: (d) => ({ porta: chiuse(d) }) },
   mosse: { turno: {
+    // Un punto a chi apre, il testo nella fase «esito», poi «dopo»: di nuovo «turno» (tocca al
+    // giocatore dopo) o «fine» quando sono aperte tutte
     porta(d, { valore }) {
       const aperte = d.aperte.concat([valore]);
       return { dati: { ...d, aperte }, punti: 1, esito: `Porta ${valore} aperta!`,
                dopo: aperte.length === d.porte ? "fine" : "turno" };
     } } },
-  vista: { turno: (d) => ({ titolo: "Quale porta apri?" }) },
+  vista: { turno: (d) => ({ titolo: "Quale porta apri?",
+                            testo: `Porte aperte: ${d.aperte.length} su ${d.porte}` }) },
 };
 function chiuse(d) {
   const c = [];
@@ -71,37 +92,177 @@ function chiuse(d) {
   return c;
 }
 if (typeof module !== "undefined") module.exports = { GIOCO, chiuse };
-logica.test.js:
-const { test } = require("node:test");
+"""
+
+TEST_LOGICA_PARTENZA = """const { test } = require("node:test");
 const assert = require("node:assert");
-const { GIOCO } = require("./logica.js");
-test("una porta aperta dà un punto", () => {
-  const r = GIOCO.mosse.turno.porta(GIOCO.nuovaPartita({ giocatori: 1 }), { valore: 2 });
+const { GIOCO, chiuse } = require("./logica.js");
+
+test("una porta aperta dà un punto e la partita va avanti", () => {
+  const r = GIOCO.mosse.turno.porta(GIOCO.nuovaPartita({ giocatori: __N__ }), { valore: 2 });
   assert.deepStrictEqual(r.dati.aperte, [2]);
   assert.strictEqual(r.punti, 1);
+  assert.strictEqual(r.dopo, "turno");
 });
-gioco.test.js — la partita vera con la macchina di Calliope; apriGioco e creaCaso ci sono già, \
-senza require:
-const { test } = require("node:test");
+
+test("l'ultima porta chiusa porta alla fine", () => {
+  // Dati fatti a mano: un risultato che dipende dal caso si prova così, non con nuovaPartita
+  const d = { porte: 3, aperte: [1, 3] };
+  assert.deepStrictEqual(chiuse(d), [2]);
+  assert.strictEqual(GIOCO.mosse.turno.porta(d, { valore: 2 }).dopo, "fine");
+});
+"""
+
+TEST_GIOCO_PARTENZA = """const { test } = require("node:test");
 const assert = require("node:assert");
-test("si apre una porta e poi tocca all'altro", async () => {
+// La partita vera con la macchina di Calliope: apriGioco e creaCaso ci sono già, senza require.
+// Ogni partita comincia nella fase «preparazione»: __USCITA__
+
+test("la partita comincia dalla preparazione", async () => {
   const g = await apriGioco({ seme: 1 });
-  await g.tocca("2 giocatori");  // min < max; con min = max «Inizia»
+  assert.strictEqual(g.stato().fase, "preparazione");
+  await g.tocca("__TOCCA__");
+  assert.strictEqual(g.stato().fase, "turno");
+  assert.strictEqual(g.stato().giocatori.length, __N__);
+});
+
+test("una porta aperta: il testo, il punto e poi tocca __DOPO__", async () => {
+  const g = await apriGioco(__APRI__);
   await g.tocca("Porta 1");
+  assert.strictEqual(g.stato().fase, "esito");
   assert.match(g.testo(), /Porta 1 aperta/);
   await g.comando("avanti");
-  assert.strictEqual(g.stato().tocca, "Giocatore 2");
+  const s = g.stato();
+  assert.strictEqual(s.fase, "turno");
+  assert.strictEqual(s.tocca, "__TOCCA_DOPO__");
+  assert.deepStrictEqual(s.giocatori.map((x) => x.punti), __PUNTI__);
+  assert.deepStrictEqual(s.comandi.porta, __CHIUSE__);
   assert.deepStrictEqual(g.palco(), []);
 });
-Una mossa restituisce SOLO { dati, punti, esito, fase, dopo, ancora }: tutto lo stato del gioco \
-dentro «dati», il testo da mostrare in «esito», e «dopo» (la fase dopo l'esito, di solito la \
-stessa o "fine"). attivi restringe (true, false o valori), mai fuori dal manifesto; vista dà \
-solo testi { titolo, sottotitolo, testo }. Ciò che la persona deve VEDERE si prova in \
-gioco.test.js: g.tocca("testo"), g.comando("porta", 3) (come la voce), g.avanza(ms), g.testo(), \
-g.stato() (fase, tocca, giocatori e punti, esito, comandi), g.palco() (cosa non sta nella \
-pagina). La prova di fumo percorre ogni fase con ogni comando e valore, gioca partite intere e \
-misura ogni pagina sul palco (1280×720 e 720×1280: testi troppo lunghi, troppi pulsanti): un \
-errore dice fase, pagina, strada e file:riga. Correggi quel punto con modifica_file."""
+
+test("aperte tutte le porte la partita finisce", async () => {
+  const g = await apriGioco(__APRI__);
+  for (let k = 0; k < 50 && g.stato().fase !== "fine"; k++) {
+    if (g.stato().fase === "esito") await g.comando("avanti");
+    else await g.comando("porta", g.stato().comandi.porta[0]);
+  }
+  const s = g.stato();
+  assert.strictEqual(s.fase, "fine");
+  assert.strictEqual(s.giocatori.reduce((t, x) => t + x.punti, 0), __PORTE__);
+});
+"""
+
+
+def giocatori_partenza(giocatori=None) -> tuple[int, int]:
+    """(min, max) dei giocatori della partenza: quelli dell'analisi se validi, altrimenti
+    `GIOCATORI_PARTENZA`."""
+    from ..estensioni.scheda import MAX_GIOCATORI
+    g = giocatori if isinstance(giocatori, dict) else {}
+    a, b = g.get("min"), g.get("max")
+    if all(isinstance(x, int) and not isinstance(x, bool) for x in (a, b)) \
+            and 1 <= a <= b <= MAX_GIOCATORI:
+        return a, b
+    return GIOCATORI_PARTENZA
+
+
+_IN_FONDO_NO = frozenset(
+    "di a da in con su per tra fra del dello della dei degli delle al allo alla ai agli alle "
+    "dal dalla dai dalle nel nella nei nelle sul sulla sui sulle il lo la i gli le un uno una "
+    "e o ed".split())
+
+
+def _nome_titolo(titolo: str, presi=()) -> tuple[str, str]:
+    """Il nome e il titolo del manifesto di partenza dal titolo del lavoro, se fanno un
+    manifesto valido; altrimenti quelli di `NOME_PARTENZA`, che la consegna non accetta."""
+    import re
+    import unicodedata
+
+    def intere(parole, massimo, sep):
+        # Tagliate all'ultima parola intera (20/10, revisione della PR #188: «Hallowe»)
+        out = ""
+        for p in parole:
+            prova = f"{out}{sep}{p}" if out else p
+            if len(prova) > massimo:
+                break
+            out = prova
+        # Né una preposizione né un articolo in fondo («…le carte di»: seconda revisione)
+        pezzi = out.split(sep)
+        while len(pezzi) > 1 and pezzi[-1].lower() in _IN_FONDO_NO:
+            pezzi.pop()
+        return sep.join(pezzi)
+    # Solo lettere vere e cifre («3x3» resta, × e ÷ no: sono simboli, non lettere)
+    parole = re.findall(r"[^\W_]+(?:['’][^\W_]+)*", str(titolo or ""))
+    t = intere(parole, 40, " ")
+    base = unicodedata.normalize("NFD", t.lower())
+    base = "".join(c for c in base if not unicodedata.combining(c))
+    nome = intere(re.findall(r"[a-z0-9]+", base), 31, "_")
+    if nome[:1].isdigit():
+        nome = "gioco_" + nome if len("gioco_" + nome) <= 31 else ""
+    if not t or len(nome) < 3 or nome in set(presi or ()) or nome == NOME_PARTENZA:
+        return NOME_PARTENZA, TITOLO_PARTENZA
+    return nome, t
+
+
+def file_gioco(gmin: int, gmax: int, titolo: str = "", presi=()) -> dict[str, str]:
+    """I quattro file di partenza di un gioco nuovo con `gmin`..`gmax` giocatori: manifesto,
+    logica e i due test. Con min = max la partita si apre con «Inizia», con min < max con «N
+    giocatori» (il primo N da 2, se c'è: così il test vede passare il turno)."""
+    import json
+    nome, tit = _nome_titolo(titolo, presi)
+    manifesto = {
+        "nome": nome, "titolo": tit,
+        "cosa_fa": {"verbo": "propone", "oggetto": "una partita sullo schermo"},
+        "input": {"type": "object", "properties": {}, "required": []},
+        "permessi": {}, "livello": "familiare",
+        "scheda": {"tipo": "gioco", "file": ["logica.js"], "giocatori": {"min": gmin, "max": gmax},
+                   "macchina": {"inizio": "turno", "fasi": {"turno": {
+                       "pagina": "scelte", "turni": True, "verso": ["esito", "fine"],
+                       "comandi": {"porta": {"forme": ["porta {n}", "la porta {n}", "{n}"],
+                                             "n": {"da": 1, "a": gmax + 2},
+                                             "etichetta": "Porta {n}"}}}}}}}
+    from ..estensioni.manifesto import ManifestoNonValido, valida
+    try:
+        valida(manifesto)
+    except ManifestoNonValido:
+        # Un titolo del lavoro che il controllo dei testi non accetta: il segnaposto
+        manifesto["nome"], manifesto["titolo"] = NOME_PARTENZA, TITOLO_PARTENZA
+    n = gmin if gmin == gmax else next((k for k in range(gmin, gmax + 1) if k >= 2), gmin)
+    if gmin == gmax:
+        tocca, apri = "Inizia", "{ seme: 1, inizia: true }"
+        uscita = (f"con giocatori min = max ({gmin}) c'è solo «Inizia»; apriGioco({{ inizia: "
+                  "true }) parte già dalla fase d'inizio.")
+    else:
+        tocca, apri = f"{n} giocatori", f"{{ seme: 1, inizia: true, giocatori: {n} }}"
+        uscita = (f"con min < max ({gmin}–{gmax}) «N giocatori» sceglie quanti (e «Inizia» "
+                  f"parte con {gmin}); apriGioco({{ inizia: true, giocatori: N }}) parte già "
+                  "dalla fase d'inizio.")
+    porte = n + 2
+    sost = {"__USCITA__": uscita, "__TOCCA__": tocca, "__N__": str(n), "__APRI__": apri,
+            "__DOPO__": "all'altro" if n > 1 else "di nuovo a te",
+            "__TOCCA_DOPO__": "Giocatore 2" if n > 1 else "Giocatore 1",
+            "__PUNTI__": json.dumps([1] + [0] * (n - 1)),
+            "__CHIUSE__": json.dumps(list(range(2, porte + 1))), "__PORTE__": str(porte)}
+    test_gioco, test_logica = TEST_GIOCO_PARTENZA, TEST_LOGICA_PARTENZA
+    for k, v in sost.items():
+        test_gioco, test_logica = test_gioco.replace(k, v), test_logica.replace(k, v)
+    return {"manifesto.json": json.dumps(manifesto, ensure_ascii=False, indent=1) + "\n",
+            "logica.js": LOGICA_PARTENZA, "logica.test.js": test_logica,
+            "gioco.test.js": test_gioco}
+
+
+def prepara_gioco(sandbox, giocatori=None, titolo: str = "", presi=()) -> list[str]:
+    """La cartella di un gioco nuovo prima della prima passata: i file di partenza, solo se
+    non c'è ancora un manifesto (una modifica, una correzione o una ripresa tengono i loro).
+    I file scritti."""
+    if any(f["percorso"] == "manifesto.json" for f in sandbox.elenca()):
+        return []
+    gmin, gmax = giocatori_partenza(giocatori)
+    scritti = []
+    for nome, testo in file_gioco(gmin, gmax, titolo, presi).items():
+        sandbox.scrivi(nome, testo)
+        scritti.append(nome)
+    return scritti
+
 
 ESTENSIONE = """SCHELETRO DI PARTENZA (estensione): parti da qui e cambia solo quello che serve.
 estensione.py:

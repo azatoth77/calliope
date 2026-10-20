@@ -538,12 +538,13 @@ export function esplora(amb, opzioni = {}) {
     if (errori.length) break;
     raggiunte.add(S.fase);
     if (S.fase !== "fine") {
-      nota(`partita ${i + 1}`, `non arriva alla fine in 500 passi, ferma in «${S.fase}» (strada: ${strada(s)}): quando la partita è finita una mossa deve portare alla fine (fase o dopo: "fine")`);
+      // Il consiglio prima della strada (19/10, #186): il messaggio si taglia a 200 caratteri
+      nota(`partita ${i + 1}`, `non arriva alla fine in 500 passi, ferma in «${S.fase}»: a partita finita una mossa porta alla fine (esito con dopo: "fine", oppure fase: "fine" senza esito); strada: ${strada(s)}`);
     }
   }
   if (errori.length) return errori;
   for (const f of Object.keys(M.fasi).concat(["fine"])) {
-    if (!raggiunte.has(f)) nota(`fase «${f}»`, `dichiarata ma mai raggiunta: nessuna mossa ci porta (fase o dopo: "${f}", e «verso» nel manifesto)`);
+    if (!raggiunte.has(f)) nota(`fase «${f}»`, `dichiarata ma mai raggiunta: nessuna mossa ci porta (fase: "${f}" senza esito, oppure esito con dopo: "${f}"; e «verso» nel manifesto)`);
   }
   for (const [f, d] of Object.entries(M.fasi)) {
     for (const c of Object.keys(d.comandi)) {

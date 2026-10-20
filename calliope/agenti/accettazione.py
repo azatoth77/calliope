@@ -66,7 +66,9 @@ che valgono e che non valgono più, una parola che si legge). Il test lo scrive 
 (`test_js`, `accettazione.test.js` in sola lettura) e gioca la partita vera con il motore di
 Calliope nel DOM finto (`apriGioco`, `g.comando`, `g.stato()`): lo stesso stato che vede la
 persona. Un esempio usa sempre almeno un comando del gioco, quindi fallisce su un gioco che non
-ce l'ha. Le mosse non devono dipendere dal caso (dove sta il premio): lo dice il prompt.
+ce l'ha. Le mosse non devono dipendere dal caso (dove sta il premio): lo dice il prompt. Dal
+19/10 (#186) la passata dice anche quanti possono giocare (`giocatori`: min e max): i file di
+partenza del gioco (agenti/scheletri.py) li usano, e un esempio fuori da quel numero si toglie.
 
 Il client e la passata sono quelli dei requisiti (`requisiti.chiama`: schema chiuso, temperatura
 0, senza ragionamento; dal 17/10 il ragionamento si accende con
@@ -114,8 +116,9 @@ Ogni esempio controlla almeno una cosa (numero, contiene o trovato false). Se la
 
 SISTEMA_GIOCO = """
 Il gioco usa la macchina a stati di Calliope: la partita comincia scegliendo il numero dei giocatori (lo fa il test), poi la fase d'inizio del gioco; dopo ogni mossa di solito c'è la fase «esito» (il testo di cosa è successo, poi si va avanti da soli), e alla fine la fase «fine» con la classifica. I turni passano da soli al giocatore dopo; i punti li tiene Calliope. Ogni comando del gioco è un nome breve (minuscole e _), in una fase, con al più un valore: un numero (da, a) o una voce di un elenco (valori).
+giocatori: quanti possono giocare, min e max (uguali se la richiesta dice un numero fisso, per esempio «per due» → 2 e 2; se non lo dice, 1 e 4).
 comandi: i comandi che il gioco DEVE avere perché gli esempi si possano giocare (al più 6), con fase (minuscole, di solito «turno»), nome, e da/a per un numero oppure valori per un elenco; niente valore se il comando non ne ha. Non usare i nomi di Calliope (inizia, avanti, ancora, giocatori).
-esempi: da 2 a 6 partite brevi, una per requisito che si controlla giocando. Per ognuna: requisito (il numero), giocatori (quanti), mosse (comando e valore, nell'ordine; «avanti» non serve: il test va avanti da solo dopo l'esito), e atteso, lo stato dopo l'ultima mossa:
+esempi: da 2 a 6 partite brevi, una per requisito che si controlla giocando. Per ognuna: requisito (il numero), giocatori (quanti, tra min e max), mosse (comando e valore, nell'ordine; «avanti» non serve: il test va avanti da solo dopo l'esito), e atteso, lo stato dopo l'ultima mossa:
 - fase: la fase in cui si è (una dei comandi, «esito» o «fine»), se il requisito lo dice;
 - tocca: il numero del giocatore a cui tocca dopo (1 è il primo), se conta;
 - punti: i punti di ogni giocatore, solo se NON dipendono dal caso;
@@ -183,6 +186,10 @@ def schema(estensione: bool, gioco: bool = False, programma: bool = False) -> di
             "comando": {"type": "string", "maxLength": 14},
             "valore": {"type": ["integer", "string", "null"]}}, "required": ["comando"]}
         prop.update({
+            # Quanti possono giocare (19/10, #186): i file di partenza del gioco li usano
+            "giocatori": {"type": "object", "properties": {
+                "min": {"type": "integer"}, "max": {"type": "integer"}},
+                "required": ["min", "max"]},
             "comandi": {"type": "array", "maxItems": MAX_COMANDI_GIOCO, "items": {
                 "type": "object", "properties": {
                     "fase": {"type": "string", "maxLength": 16},
@@ -204,7 +211,7 @@ def schema(estensione: bool, gioco: bool = False, programma: bool = False) -> di
                         "non_attivi": {"type": "array", "maxItems": 4, "items": coppia},
                         "testo": {"type": "string", "maxLength": 40}}}},
                 "required": ["requisito", "giocatori", "mosse", "atteso"]}}})
-        richiesti += ["comandi", "esempi"]
+        richiesti += ["giocatori", "comandi", "esempi"]
     elif programma:
         # 17/10 (#10): l'interfaccia a riga di comando dichiarata prima del codice
         prop.update({
@@ -267,6 +274,17 @@ def _comandi_gioco(d: dict) -> dict:
         if len(out) >= MAX_COMANDI_GIOCO:
             break
     return out
+
+
+def _giocatori(g) -> dict | None:
+    """{"min", "max"} dei giocatori, validati (da 1 a 8, min ≤ max), o None."""
+    if not isinstance(g, dict):
+        return None
+    a, b = g.get("min"), g.get("max")
+    if not all(isinstance(x, int) and not isinstance(x, bool) for x in (a, b)) \
+            or not 1 <= a <= b <= 8:
+        return None
+    return {"min": a, "max": b}
 
 
 def _coppia(x, comandi: dict, standard: bool = True):
@@ -606,7 +624,22 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
            "esempi": [], "riconosciuti": []}
     if not estensione and gioco:
         comandi = _comandi_gioco(d)
+        out["giocatori"] = _giocatori(d.get("giocatori"))
         out["esempi"] = _esempi_gioco(d, comandi, n_requisiti)
+        if out["giocatori"]:
+            # Un esempio con un numero di giocatori che il gioco non ammette non si gioca:
+            # fallirebbe nella preparazione, non sulla regola che prova (19/10, #186)
+            g = out["giocatori"]
+            dentro = [e for e in out["esempi"] if g["min"] <= e["giocatori"] <= g["max"]]
+            fuori = len(out["esempi"]) - len(dentro)
+            if fuori and not dentro:
+                # Tutti fuori (20/10, revisione della PR #188): è il numero detto a non tornare
+                # con gli esempi, non gli esempi; restano, e la partenza usa quelli di serie
+                out["giocatori"] = None
+                out["tolti"] = {"giocatori_scartati": 1}
+            else:
+                out["esempi"] = dentro
+                out["tolti"] = {"giocatori": fuori} if fuori else {}
         usati = {c for e in out["esempi"] for c, _ in e["mosse"]} | {
             x[0] for e in out["esempi"] for k in ("attivi", "non_attivi")
             for x in e["atteso"].get(k, [])}

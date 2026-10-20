@@ -534,11 +534,22 @@ def _spinta_ripetizioni(messages: list, frase, errore: dict | None = None) -> No
     _aggiungi_spinta(messages, spinta(frase if isinstance(frase, str) else "", errore))
 
 
-def _vuoto_spinta(token: int) -> str:
+def _vuoto_spinta(token: int, nomi=None) -> str:
+    """La spinta dopo il ragionamento a vuoto. `nomi`: gli strumenti offerti nella passata
+    (20/10, seconda revisione della PR #188: a un gioco scarica_esempio non si dà, a un
+    programma nemmeno piano, e la spinta li proponeva lo stesso). None: com'era."""
+    nomi = None if nomi is None else set(nomi)
+
+    def c(n):
+        return nomi is None or n in nomi
+    scelte = [x for x, ok in (("piano (se non l'hai ancora chiamato)", c("piano")),
+                              ("scarica_esempio", c("scarica_esempio")),
+                              ("scrivi_file", c("scrivi_file"))) if ok]
+    elenco = (", ".join(scelte[:-1]) + " o " + scelte[-1]) if len(scelte) > 1 else         (scelte[0] if scelte else "uno degli strumenti")
     return (f"Stai ragionando da {token} token senza usare gli strumenti. Smetti di pensare "
-            "e agisci adesso con una chiamata di funzione: piano (se non l'hai ancora "
-            "chiamato), scarica_esempio o scrivi_file. Se il compito non si può fare, chiama "
-            "piano con fattibile=false, oppure consegna con esito impossibile.")
+            f"e agisci adesso con una chiamata di funzione: {elenco}. Se il compito non si può "
+            "fare, chiama " + ("piano con fattibile=false, oppure " if c("piano") else "")
+            + "consegna con esito impossibile.")
 
 
 def strumenti_codice(linguaggi=()) -> list:
@@ -1352,9 +1363,14 @@ class Agente:
         while consegna is None:
             lav.passo = "sta pensando al codice" if not scritti else "sta lavorando al codice"
             strumenti = strumenti_codice(self._linguaggi(sandbox))
+            gioco = bool(getattr(lav, "gioco", False))
+            if gioco:
+                # Un gioco (19/10, #186): JavaScript nel riquadro, senza Python né pagine
+                # d'esempio dalla rete
+                strumenti = [s for s in strumenti if s["function"]["name"] != "esegui_python"]
             if piano:
                 strumenti = [PIANO, CHIEDI_PERMESSO] + strumenti
-            if esempi:
+            if esempi and not gioco:
                 # Nelle correzioni di uno sviluppo (08/10 notte) sonda_rete al posto di
                 # scarica_esempio: GET solo verso gli host noti, con i valori del caso
                 if self._sonde_ok(lav) is None:
@@ -1461,7 +1477,8 @@ class Agente:
                         raise Limite(f"ha ragionato per {vuoto_tok} token senza usare gli "
                                      "strumenti: non sapeva come procedere")
                     lav.nota("spinta", motivo="ragionamento senza strumenti")
-                    messages.append({"role": "user", "content": _vuoto_spinta(vuoto_tok)})
+                    messages.append({"role": "user", "content": _vuoto_spinta(
+                        vuoto_tok, [t["function"]["name"] for t in strumenti])})
                     continue
             if not calls:
                 # Una passata senza chiamate non è mai una consegna (19/10, #180). Prima, dopo
@@ -1533,11 +1550,36 @@ class Agente:
                     lav.nota("esito", nome=name, esito=result)
                     continue
                 if name not in nomi_strumenti:
-                    # Uno strumento che non c'è (19/10, #185): l'errore con l'elenco dei veri
+                    # Uno strumento che non c'è (19/10, #185) o che questa passata non offre
+                    # (20/10, #186: a un gioco esegui_python e scarica_esempio non si danno, e
+                    # chiamati lo stesso, per abitudine o da un contesto ripreso, non partono).
+                    # Un blocco solo per i due casi, con la regola di #185
                     from ..sonde import nota as nota_regola
                     nota_regola(lav, "agente_strumento_sconosciuto", self.log, str(name)[:40])
-                    result = {"ok": False, "errore": f"lo strumento «{name}» non c'è; gli "
-                              "strumenti sono: " + ", ".join(n for n in nomi_strumenti if n)}
+                    noti = {t["function"]["name"] for t in strumenti_codice(
+                        ("csharp", "javascript")) + [PIANO, CHIEDI_PERMESSO, SONDA_RETE,
+                                                     SCARICA_ESEMPIO]}
+                    offerti = [n for n in nomi_strumenti if n]
+                    if name in noti:
+                        # Il perché, quando c'è (seconda revisione della PR #188): come prima
+                        # del controllo, il motivo di _esempi_ok o di _sonde_ok
+                        if name == "scarica_esempio" and "sonda_rete" in offerti:
+                            motivo = "in una correzione usa sonda_rete verso i siti già usati"
+                        elif name in ("scarica_esempio", "sonda_rete", "esegui_python") \
+                                and getattr(lav, "gioco", False):
+                            motivo = "un gioco è JavaScript nel riquadro, senza Python né rete"
+                        elif name == "scarica_esempio":
+                            motivo = self._esempi_ok(lav) or ""
+                        elif name == "sonda_rete":
+                            motivo = self._sonde_ok(lav) or ""
+                        else:
+                            motivo = ""
+                        perche = "non è disponibile in questo lavoro" + (
+                            f" ({motivo})" if motivo else "")
+                    else:
+                        perche = "non c'è"
+                    result = {"ok": False, "errore": f"lo strumento «{name}» {perche}; gli "
+                              "strumenti sono: " + ", ".join(offerti), "strumenti": offerti}
                     messages.append({"role": "tool", "tool_name": name,
                                      "content": gc.risultato(name, result)})
                     lav.nota("esito", nome=name, esito=result)
@@ -2068,17 +2110,25 @@ class Agente:
         if ignote:
             return {"ok": False, "errore": f"voci sconosciute: {', '.join(ignote)}; usa solo "
                     f"quelle del contratto: {', '.join(ct.CAPACITA_IDS)}"}, None
-        impossibili = [x for x in caps if x in ct.IMPOSSIBILI]
+        # Un gioco (20/10, seconda revisione della PR #188, #186): le voci che lì non valgono
+        # («javascript»: il gioco è JavaScript) si ignorano, e gli impossibili con le frasi del
+        # contratto del gioco («un gioco non può installare librerie…», non «pip»)
+        gioco = bool(getattr(lav, "gioco", False))
+        voci = ct.voci_piano(gioco)
+        caps = [x for x in caps if x in voci]
+        imp = ct.impossibili(gioco)
+        impossibili = [x for x in caps if x in imp]
         motivo = " ".join(str(args.get("motivo") or "").split())[:300]
         alternativa = " ".join(str(args.get("alternativa") or "").split())[:300]
         fattibile = args.get("fattibile")
         if isinstance(fattibile, str):
             fattibile = fattibile.strip().lower() not in ("false", "no", "0")
         if impossibili or fattibile is False:
-            perche = "; ".join(ct.IMPOSSIBILI[x][0] for x in impossibili)
-            alt = alternativa or "; ".join(ct.IMPOSSIBILI[x][1] for x in impossibili
-                                           if ct.IMPOSSIBILI[x][1] != "nessuna")
-            frase = ("Non si può fare: " + (f"un'estensione non può {perche}" if perche
+            perche = "; ".join(imp[x][0] for x in impossibili)
+            alt = alternativa or "; ".join(imp[x][1] for x in impossibili
+                                           if imp[x][1] != "nessuna")
+            chi = "un gioco" if gioco else "un'estensione"
+            frase = ("Non si può fare: " + (f"{chi} non può {perche}" if perche
                                             else motivo or "manca una capacità")
                      + (f" ({motivo})" if perche and motivo else "") + "."
                      + (f" In alternativa: {alt}." if alt else ""))
@@ -2127,6 +2177,11 @@ class Agente:
                            + (" e i tuoi casi in test_estensione.py, che c'è già, con "
                               "modifica_file" if "test_estensione.py" in nomi else
                               " e test_estensione.py"))
+        if getattr(lav, "gioco", False):
+            # Un gioco (20/10, #186): niente scarica_esempio né estensione.py
+            out["prossimo"] = ("leggi i file nella cartella (manifesto.json, logica.js, "
+                               "logica.test.js, gioco.test.js), cambiali nel gioco chiesto con "
+                               "modifica_file e rifai esegui_test")
         return out, None
 
     def _chiedi_permesso(self, lav: Lavoro, args: dict, stato_piano: dict | None):

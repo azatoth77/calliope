@@ -219,9 +219,10 @@ def messaggio_agente(esito: dict, problema: str = "", gioco: bool = False) -> st
     """Il rimando all'agente quando la correzione non riproduce il problema."""
     p = f" («{str(problema).strip()[:200]}»)" if str(problema or "").strip() else ""
     come = (" Per un gioco il test va in gioco.test.js e tocca il gioco vero, perché il "
-            "problema l'ha visto la persona sullo schermo: const g = await apriGioco(); await "
-            "g.tocca(\"testo del pulsante\"); poi g.testo() per leggere cosa compare (non solo "
-            "logica.js)." if gioco else "")
+            "problema l'ha visto la persona sullo schermo: const g = await apriGioco({ seme: 1, "
+            "inizia: true }) (con min < max anche giocatori: N: ogni partita comincia nella "
+            "preparazione, §2 del contratto); await g.tocca(\"testo del pulsante\"); poi "
+            "g.testo() per leggere cosa compare (non solo logica.js)." if gioco else "")
     stato = esito.get("stato")
     if stato == "uguale":
         return ("La correzione non è valida: i file del codice sono uguali a quelli di prima, "

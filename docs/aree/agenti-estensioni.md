@@ -4248,3 +4248,99 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
   - B, C, D, G e H: la modifica inversa e il già visto.
 
   Ogni tornata di correzioni aveva rotto un caso di quella prima.
+
+## Il contratto dei giochi e un prompt per tipo (19/10, issue #186, ramo `issue-186-contratto-giochi`)
+
+**Il caso** (analisi del 19/10, `docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.5,
+n. 28–32 e 35, passo 3 del § 5): un gioco partiva da una cartella vuota e ricopiava dal prompt la
+parte rotta in #174; il prompt prometteva cose che il motore non fa; circa 12 000 caratteri su
+26 000 del prompt di un gioco erano per le estensioni Python, con contraddizioni («tre file…
+test_estensione.py c'è già» e poi «se è un gioco no»; `urllib` vietato nel contratto e
+`urllib.parse.urlencode` chiesto nel prompt e nello scheletro), sezioni del contratto in ordine 1,
+2, 3, 5, 4 e la codifica degli indirizzi detta tre volte. Il principio dal catalogo dei casi
+veri: ciò che si può dare come file già verde non si descrive in prosa; una regola per
+argomento; un errore del motore dice cosa fare.
+
+**Cosa cambia.** La parte dei giochi (partenza, `g.stato()`, errori del motore, contratto) è in
+[giochi](giochi.md), voce del 19/10 su #186. Qui il resto:
+1. **Un prompt per tipo** (`estensioni/prompt.py`): `SISTEMA_ESTENSIONE` è solo per le
+   estensioni Python (niente più «SE È UN GIOCO»); `SISTEMA_GIOCO` è nuovo, con gli strumenti
+   del gioco, il piano con `["scheda"]` e scope vuoto, accettazione.test.js in sola lettura,
+   esegui_js. `sistema_estensione(cfg, gioco)` sceglie il prompt e il contratto. Il prompt
+   dell'estensione rimanda al §3 del contratto per gli indirizzi invece di ripeterli; ciò che il
+   contratto dice già (ErroreCalliope, «trovato»: false, le letture di internet prima dei dati
+   di casa, la libreria e BeautifulSoup con «html.parser») non si ripete nel prompt: non manca
+   niente, sta in un posto solo.
+2. **Il contratto per tipo** (`estensioni/contratto.testo`): l'estensione ha 1 Da sola, 2 Porta
+   stretta, 3 Limiti (la codifica degli indirizzi tutta qui, con il test di due parole con
+   l'accento che prima era solo nel prompt), 4 Impossibile, in ordine; la voce «scheda» rimanda
+   a `sviluppo_apri gioco=true`. Il gioco ha 1 Da sola (scheda, JavaScript), 2 La scheda e la
+   macchina a stati, 3 Chiedendo a Calliope (le azioni di una tela, `calliope.azione`, con lo
+   scope di ogni azione dalla tabella della porta: prima il contratto le nominava senza dire
+   come si chiedono), 4 Impossibile. Niente porta Python né limiti del contenitore nel gioco.
+   «urllib: vietati» diventa «socket, urllib.request, http.client: vietati; urllib.parse per
+   scrivere gli indirizzi sì», e l'analisi statica (`estensioni/analisi.py`) non segna più
+   `import urllib.parse` come rischio di rete (`urllib.request` sì). L'alternativa di «altri
+   tool» dice «i metodi della porta stretta» invece di «qui sotto» (la porta stava sopra).
+3. **Gli strumenti del gioco** (`agenti/ciclo.py`, tre righe nel ciclo di `Agente.codice`): per
+   un lavoro con `gioco` niente `esegui_python`, e niente `scarica_esempio` né `sonda_rete`. Il
+   resto del ciclo non cambia (lo tocca anche #185, in parallelo).
+4. **`ANTI_INIEZIONE` nel prompt delle estensioni** (n. 35): l'estensione ha `scarica_esempio`,
+   cioè una pagina qualunque nel contesto, e la regola contro le istruzioni nei dati non c'era.
+   Ora è in fondo ai due prompt, come in quelli dell'agente di codice (circa 650 caratteri).
+
+**I caratteri** (`len(sistema_estensione(Config(), gioco=…))`, sul main `94bfe640` e sul ramo):
+gioco **26 437 → 16 330** (−38 %), estensione **17 068 → 15 468** (−9 %, con `ANTI_INIEZIONE`
+in più). Token con il rapporto 3,47 caratteri per token di Qwen3.6 (stima, da rimisurare sulla
+DGX): gioco circa 7 600 → 4 700. In più, per un gioco nuovo, la prima lettura dei quattro file di
+partenza (circa 4 400 caratteri, una volta sola in una risposta di uno strumento, non a ogni
+passata nel prompt di sistema).
+
+**Prove**: `prova_partenza_gioco` (nuova, livello 2: partenza verde per min = max e min < max,
+analisi, errori del motore con i contrari, contratto, prompt, servizio con l'Ollama finto e i suoi
+strumenti). Attese cambiate per scelta: `prova_agente_guida` (lo scheletro del gioco nel prompt è
+il paragrafo della partenza, al più 1 200 caratteri; i quattro file si provano da
+`file_gioco(1, 4)`, e la consegna chiede un nome suo), `prova_sviluppo_giro3` e
+`prova_sviluppo_giro5` (la codifica degli indirizzi si cerca nel prompt intero, una volta sola,
+non più anche in `SISTEMA_ESTENSIONE`). `banco_temperatura.py --secco`: il caso `tris2` parte
+dalla partenza 2–2, che deve essere verde; l'accettazione nascosta resta rossa sulla partenza e
+verde sul riferimento.
+
+**Rischi.** Un gioco con min, max o fasi diversi da quelli della partenza riceve un file da
+cambiare, non da scrivere; senza l'analisi (un gioco fuori da uno sviluppo) i giocatori sono 1–4
+e il manifesto va cambiato a mano dall'agente. I giochi già fatti non cambiano (niente
+migrazioni). Se l'agente consegna un gioco con il nome segnaposto la consegna lo rimanda una
+volta in più. Il punto 7 della issue (CalliopeFinta che dice «nessuna risposta preparata»,
+`valida` con tutti gli errori, `chiama` in sola lettura) resta aperto.
+
+**Dopo la revisione della PR #188 (20/10).**
+- **Si esegue solo ciò che la passata offre** (`Agente.codice`): uno strumento chiamato ma non
+  offerto (`esegui_python` o `scarica_esempio` in un gioco, `esegui_csharp` senza il C#) torna
+  `{"ok": false, "errore": "lo strumento «…» non è disponibile in questo lavoro", "strumenti":
+  […]}` e non parte. Prima toglierli dall'elenco non bastava: `_strumento` li eseguiva lo
+  stesso. Va riconciliato con #187 (#185), che cambia la gestione dello strumento sconosciuto
+  nello stesso ciclo.
+- `ANTI_INIEZIONE` sta davvero in fondo ai due prompt, dopo la partenza (prima era tra il testo
+  del prompt e il contratto, e la voce del 19/10 diceva «in fondo»).
+- Il contratto dell'estensione non rimanda più a `sviluppo_apri gioco=true` (un tool della voce,
+  che l'agente non ha): un gioco chiesto come estensione è `piano(fattibile=false)` con il
+  motivo «è un gioco: va chiesto come gioco». Così anche il prompt.
+- Caratteri dopo la revisione: gioco 16 171, estensione 15 566.
+- `from urllib import parse` resta segnalato dall'analisi statica (solo un avviso a chi approva).
+
+**Dopo la seconda revisione della PR #188 (20/10).** La spinta del ragionamento a vuoto
+(`_vuoto_spinta`) propone solo gli strumenti offerti nella passata (prima «piano, scarica_esempio
+o scrivi_file» anche a un gioco o a un programma, che ora li vedrebbero rifiutati). Il rifiuto di
+uno strumento non offerto dice il perché quando c'è: per un gioco «JavaScript nel riquadro, senza
+Python né rete», in una correzione «usa sonda_rete», altrimenti il motivo di `_esempi_ok` o
+`_sonde_ok` (senza internet, un file della persona). Il piano di un gioco: vedi
+[giochi](giochi.md). Il blocco dello strumento non offerto si unirà con quello dello strumento
+sconosciuto di #187 (#185) dopo la sua unione: un blocco solo, con la regola
+`agente_strumento_sconosciuto`.
+
+**Unione con #187 (20/10).** I due controlli sono diventati un blocco solo, nella posizione di
+#185 (dopo le chiamate troncate, su `nomi_strumenti` calcolato una volta per passata), con la
+regola `agente_strumento_sconosciuto`: uno strumento dell'agente che questa passata non offre è
+«non è disponibile in questo lavoro», con il perché quando c'è (un gioco senza Python né rete,
+`sonda_rete` in una correzione, il motivo di `_esempi_ok` o `_sonde_ok`); un nome inventato è
+«non c'è». L'elenco degli strumenti sta nel testo dell'errore e nella chiave `strumenti`.

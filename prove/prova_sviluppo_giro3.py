@@ -238,10 +238,13 @@ def prova_url():
                      riga), json.dumps(riga, ensure_ascii=False))
     from calliope.estensioni import contratto
     from calliope.estensioni.prompt import SISTEMA_ESTENSIONE as SIS
+    from calliope.estensioni.prompt import sistema_estensione
     cfg = SimpleNamespace(estensioni_rete_max_minuto=30)
+    # Dal 19/10 (#186, una regola per argomento) la codifica degli indirizzi la dice solo il
+    # contratto, che è anche nel prompt; il prompt rimanda al §3
     verifica("il contratto (CAPACITA.md) e il prompt dell'agente lo dicono",
-             "urlencode" in contratto.testo(cfg) and "urlencode" in SIS
-             and "CalliopeFinta" in SIS)
+             "urlencode" in contratto.testo(cfg) and "urlencode" in sistema_estensione(cfg)
+             and "§3 del contratto" in SIS and "CalliopeFinta" in SIS)
 
 
 # ═══════════════════════════ 2. traccia di rete del collaudo ═══════════════════════════

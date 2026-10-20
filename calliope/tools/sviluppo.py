@@ -2402,10 +2402,14 @@ VINCOLO_CORREZIONE_GIOCO = (
     "della persona fino a ciò che appare: che il pulsante chiami la mossa giusta e che il "
     "risultato (cosa c'è dietro la porta, i punti, chi vince e perché) venga mostrato. Il test "
     "che riproduce il problema va in gioco.test.js e guida il gioco vero: const g = await "
-    "apriGioco({ seme: 1 }); await g.tocca(\"2 giocatori\"); await g.tocca(\"testo del "
-    "pulsante\"); poi controlla con g.testo() e g.stato() proprio quello che la persona dice "
-    "che non va (il mostro, i punti, il vincitore), e con g.palco() se dice che qualcosa non "
-    "si vede o esce dallo schermo. I test di logica.test.js non vedono la pagina.")
+    "apriGioco({ seme: 1, inizia: true }) (con giocatori min < max nel manifesto anche "
+    "giocatori: N; o dalla preparazione con «Inizia» o «N giocatori», §2 del contratto), poi "
+    "await g.tocca(\"testo del pulsante\") e controlla con g.testo() e g.stato() proprio "
+    "quello che la persona dice che non va (il mostro, i punti; chi vince si legge dai punti), "
+    "e con g.palco() se dice che qualcosa non si vede o esce dallo schermo. I test di "
+    "logica.test.js non vedono la pagina.")
+# 20/10 (revisione della PR #188, #186): prima «g.tocca("2 giocatori")» fisso, che con min = max
+# non c'è (la trappola del tris per due, #174), e «il vincitore», che g.stato() non ha
 
 
 # La correzione parte da un test che fallisce (12/10 sera, parte 1 del flusso a fasi; ricerca

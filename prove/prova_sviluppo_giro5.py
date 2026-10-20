@@ -153,11 +153,14 @@ def prova_doppia(tmp):
              and "ATTENZIONE" not in svc2.sviluppi.testo_traccia(sv2), json.dumps(r0)[:300])
 
     from calliope.estensioni import contratto
-    from calliope.estensioni.prompt import SISTEMA_ESTENSIONE as SIS
+    from calliope.estensioni.prompt import sistema_estensione
     cfgc = SimpleNamespace(estensioni_rete_max_minuto=30)
+    # Dal 19/10 (#186, una regola per argomento) solo nel contratto, che è anche nel prompt:
+    # una volta sola
+    p = sistema_estensione(cfgc)
     verifica("il contratto (CAPACITA.md) e il prompt dell'agente: «codifica una volta sola»",
-             "Codifica una volta sola" in contratto.testo(cfgc) and "una volta sola" in SIS
-             and "%2B" in SIS)
+             "Codifica una volta sola" in contratto.testo(cfgc) and p.count("una volta sola") == 1
+             and "%2B" in p)
 
 
 # ═══════════════════════════ 2. due collaudi con `argomenti` ═══════════════════════════

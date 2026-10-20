@@ -33,7 +33,10 @@ con nomi di fantasia, ripetuti:
    «Inizia»). Accettazione: un test nascosto che parte dalla preparazione, tocca «Inizia», gioca
    1, 4, 2, 5, 3 con il comando «casella» e legge la fine con un punto. Riferimento: il tris
    delle prove dei giochi (`prove/giochi/tris`) con due giocatori fissi. Il criterio di #174:
-   chiuso in al più 2 giri (`--casi tris2 --giri 2`).
+   chiuso in al più 2 giri (`--casi tris2 --giri 2`). Dal 19/10 (#186) un gioco nuovo parte
+   dai file di partenza già verdi (agenti/scheletri.py) con min e max dell'analisi prima del
+   codice; il banco, che non apre uno sviluppo, mette nel lavoro i giocatori del caso (2–2)
+   come li direbbe l'analisi.
 
 Misure per lavoro: riuscito (consegna «fatto» e accettazione verde), passate, token (e di
 ragionamento), minuti, giri a vuoto (passate fermate per ragionamento ripetuto, passate senza
@@ -400,9 +403,11 @@ def casi():
                   "riferimento": {"media_voti.py": RIFERIMENTO_MEDIA},
                   # Fuori da uno sviluppo gli esempi dei programmi si accendono così (17/10)
                   "programmi_sempre": True},
-        # Il gioco nuovo, da zero: alla partenza la cartella è vuota (18/10, #174)
+        # Il gioco nuovo (18/10, #174): dal 19/10 (#186) la cartella non è vuota, il servizio
+        # ci scrive i file di partenza con i giocatori dell'analisi («giocatori»)
         "tris2": {"tipo": "estensione", "gioco": True, "correzione": False,
                   "estensione": None, "compito": COMPITO_TRIS2, "prima": {},
+                  "giocatori": {"min": 2, "max": 2},
                   "accettazione": ("accettazione_banco.test.js", ACCETTAZIONE_TRIS2),
                   "riferimento": riferimento_tris2()},
     }
@@ -514,8 +519,24 @@ def secco() -> int:
             if caso.get("gioco") and not shutil.which("node"):
                 print(f"SALTATO {nome}: node non c'è")
                 continue
-            prima = accettazione(nuova, caso["prima"], caso)
-            rif = accettazione(nuova, {**caso["prima"], **caso["riferimento"]}, caso)
+            partenza = dict(caso["prima"])
+            if caso.get("giocatori"):
+                # La partenza vera di un gioco nuovo (19/10, #186): i file che scrive il
+                # servizio, verdi da soli (test e prova di fumo) ma non il gioco chiesto
+                from calliope.agenti.scheletri import file_gioco
+                g = caso["giocatori"]
+                partenza = file_gioco(g["min"], g["max"])
+                sb = nuova()
+                for rel, testo in partenza.items():
+                    sb.scrivi(rel, testo)
+                r = sb.test()
+                ok = bool(r.get("passano")) and "ok prova di fumo" in str(r.get("uscita"))
+                errori += not ok
+                print(f"{'ok ' if ok else 'ERR'} {nome}: la partenza ({g['min']}–{g['max']} "
+                      "giocatori) passa i suoi test e la prova di fumo"
+                      + ("" if ok else f"  {str(r.get('uscita'))[-500:]!r}"))
+            prima = accettazione(nuova, partenza, caso)
+            rif = accettazione(nuova, {**partenza, **caso["riferimento"]}, caso)
             ok = not prima["verde"] and rif["verde"]
             errori += not ok
             print(f"{'ok ' if ok else 'ERR'} {nome}: accettazione rossa alla partenza, verde sul "
@@ -957,6 +978,10 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
     if caso["tipo"] == "estensione":
         lav.estensione = caso.get("estensione")
         lav.gioco = bool(caso.get("gioco"))
+    if caso.get("giocatori"):
+        # Quanti giocano, come li direbbe l'analisi prima del codice in uno sviluppo (19/10,
+        # #186): i file di partenza del gioco li usano
+        lav.accettazione = {"stato": "saltata", "giocatori": dict(caso["giocatori"])}
     if caso.get("correzione"):
         lav.correzione = True
         lav.problema_correzione = caso["problema"]
