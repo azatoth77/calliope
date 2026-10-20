@@ -20,11 +20,30 @@ def _regola_ok(voluta: str, regole: list[str]) -> bool:
     return voluta in regole
 
 
+def _lista(v) -> list:
+    return list(v) if isinstance(v, (list, tuple)) else [v]
+
+
+def _porta_ok(voluta: str, decisioni: list[str]) -> bool:
+    """«regola» (con «*» finale un prefisso) o «regola:esito» tra le decisioni della porta
+    stretta del passo, scritte come «regola:esito»."""
+    regola, _, esito = voluta.partition(":")
+    for d in decisioni:
+        r, _, e = d.partition(":")
+        if (r.startswith(regola[:-1]) if regola.endswith("*") else r == regola) and (
+                not esito or e == esito):
+            return True
+    return False
+
+
 def controlla(attese: dict, turno: dict | None, testo: str, extra: dict | None = None
               ) -> list[str]:
     """Gli scostamenti dalle attese (vuoto = passo riuscito). `testo`: le frasi sentite dal
     satellite (o la risposta del registro); `extra`: suoni, servizi dell'HA e azioni del PC
-    fatti durante il passo, annuncio sentito."""
+    fatti durante il passo, annuncio sentito; dal 20/10 anche `porta` (le decisioni della porta
+    stretta scritte durante il passo, «regola:esito»), `sviluppo` ({fase, stato} dello sviluppo
+    toccato per ultimo, dopo il passo), `log` (il log dell'istanza durante il passo, annuncio
+    compreso) e `schede` (le schede arrivate allo schermo dello studio)."""
     extra = extra or {}
     errori = []
     turno = turno or {}
@@ -35,16 +54,17 @@ def controlla(attese: dict, turno: dict | None, testo: str, extra: dict | None =
         if risposta.strip():
             errori.append(f"doveva tacere, ha detto: {risposta[:80]!r}")
         return errori
-    if "tool" in attese and not any(t in tool for t in attese["tool"]):
+    # «est_*»: un prefisso (il tool di un'estensione ha il nome che le dà l'agente, 20/10)
+    if "tool" in attese and not any(_regola_ok(t, tool) for t in attese["tool"]):
         errori.append(f"tool attesi {attese['tool']}, chiamati {tool}")
     for t in attese.get("tool_tutti") or []:
-        if t not in tool:
+        if not _regola_ok(t, tool):
             errori.append(f"manca il tool {t} (chiamati {tool})")
     nt = attese.get("no_tool")
     if nt is True and tool:
         errori.append(f"nessun tool atteso, chiamati {tool}")
     elif isinstance(nt, (list, tuple)):
-        vietati = [t for t in tool if t in nt]
+        vietati = [t for t in tool if any(_regola_ok(x, [t]) for x in nt)]
         if vietati:
             errori.append(f"tool da non chiamare: {vietati}")
     for r in attese.get("regole") or []:
@@ -88,6 +108,37 @@ def controlla(attese: dict, turno: dict | None, testo: str, extra: dict | None =
         errori.append(f"lo schermo dello studio non ha mostrato «pensa» o «parla» ({stati})")
     if attese.get("voce_studio_ferma") and any(x in ("pensa", "parla") for x in stati):
         errori.append(f"lo schermo dello studio mostra la voce di un'altra stanza ({stati})")
+    # Estensioni, sviluppo e giochi (20/10, issue #75)
+    porta = list(extra.get("porta") or [])
+    for v in attese.get("porta") or []:
+        if not _porta_ok(v, porta):
+            errori.append(f"porta stretta: manca {v} (decisioni {porta})")
+    for v in attese.get("porta_no") or []:
+        if _porta_ok(v, porta):
+            errori.append(f"porta stretta: {v} non doveva esserci")
+    sv = extra.get("sviluppo") or {}
+    if "sviluppo" in attese and sv.get("fase") not in _lista(attese["sviluppo"]):
+        errori.append(f"sviluppo in fase {sv.get('fase')!r}, attesa {_lista(attese['sviluppo'])}")
+    if "sviluppo_stato" in attese and sv.get("stato") not in _lista(attese["sviluppo_stato"]):
+        errori.append(f"sviluppo {sv.get('stato')!r}, atteso {_lista(attese['sviluppo_stato'])}")
+    log = extra.get("log") or ""
+    for p in attese.get("log") or []:
+        if not re.search(p, log, re.I):
+            errori.append(f"nel log dell'istanza manca {p!r}")
+    for p in attese.get("no_log") or []:
+        m = re.search(p, log, re.I)
+        if m:
+            errori.append(f"nel log dell'istanza c'è {m.group(0)[:120]!r}")
+    if attese.get("scheda"):
+        schede = extra.get("schede") or []
+        if not any(re.search(p, s, re.I) for p in attese["scheda"] for s in schede):
+            errori.append(f"nessuna scheda sullo studio con {attese['scheda']} "
+                          f"({len(schede)} schede)")
+    if attese.get("gioco"):
+        g = turno.get("gioco") if isinstance(turno.get("gioco"), dict) else {}
+        for k, rx in attese["gioco"].items():
+            if g.get(k) is None or not re.search(str(rx), str(g.get(k)), re.I):
+                errori.append(f"gioco.{k} = {g.get(k)!r}, atteso {rx!r}")
     if "annuncio" in attese and not extra.get("annuncio"):
         errori.append(f"annuncio {attese['annuncio'][0]!r} non sentito entro "
                       f"{attese['annuncio'][1]} s")

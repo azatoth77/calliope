@@ -146,7 +146,10 @@ class Runner:
                 if ev == "voce" and t0 <= x <= t1 and isinstance(d, dict)]
 
     def disponibili(self) -> set:
-        """Cosa c'è per i copioni: registrazioni vere, agente, web, biblioteca, schermo."""
+        """Cosa c'è per i copioni: registrazioni vere, agente, web, biblioteca, schermo. Non
+        c'è ancora «pagina» (20/10, #75): la pagina vera dello schermo dello studio aperta in
+        Edge attraverso un tunnel, come quella del telefono (telefono.py), dove gira il motore
+        dei giochi; senza, i copioni delle partite si saltano («manca pagina»)."""
         import httpx
         ok = set()
         if self.voci.cartella_reale and self.voci.ha_reale("ore"):
@@ -188,6 +191,36 @@ class Runner:
             t, mandata = sat.di(audio)
         return t, mandata, tentativi
 
+    def decisioni(self) -> list[dict]:
+        """Le righe del registro delle estensioni dell'istanza (`decisioni.jsonl`: porta
+        stretta, approvazioni, giochi)."""
+        f = self.ist.ist / "estensioni" / "decisioni.jsonl"
+        out = []
+        try:
+            righe = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return out
+        for r in righe:
+            try:
+                out.append(json.loads(r))
+            except ValueError:
+                pass
+        return out
+
+    def sviluppo_ultimo(self) -> dict | None:
+        """{fase, stato, titolo, gioco} dello sviluppo toccato per ultimo (`sviluppi.json`
+        dell'istanza), o None."""
+        try:
+            dati = json.loads((self.ist.ist / "lavori" / "sviluppi.json").read_text(
+                encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        svs = [s for s in dati.get("sviluppi") or [] if isinstance(s, dict)]
+        if not svs:
+            return None
+        s = max(svs, key=lambda x: float(x.get("ultimo") or x.get("aperta") or 0))
+        return {k: s.get(k) for k in ("fase", "stato", "titolo", "gioco")}
+
     def turni_nuovi(self, n0: int, attesa: float = 10.0) -> list[dict]:
         fine = time.monotonic() + attesa
         while time.monotonic() < fine:
@@ -202,6 +235,8 @@ class Runner:
         sat = self.sat[passo.stanza]
         n0 = len(self.ist.turni())
         ha0, pc0 = len(self.ha.servizi), len(self.pc.azioni)
+        dec0, log0 = len(self.decisioni()), len(self.ist.log_testo())
+        sch0 = len(getattr(self, "eventi_schermo", []))
         rec = {"copione": cop.id, "area": cop.area, "passo": i, "chi": passo.chi,
                "stanza": passo.stanza, "tipo": passo.tipo}
         testo_detto = passo.testo
@@ -211,9 +246,32 @@ class Runner:
             rec.update(esito_passo="ok", detto=None, nota="sfida già chiesta: «sì» non serve")
             rec["risposta"] = (prec or {}).get("risposta", "")
             return rec
+        # Un passo che risponde a una domanda che può non arrivare (20/10: «Procedo?» per più
+        # di 10 voci, la domanda dell'agente a metà lavoro): si dice solo se la risposta o
+        # l'annuncio del passo prima la contengono
+        if passo.dati.get("se_domanda"):
+            import re
+            prima = " ".join(str((prec or {}).get(k) or "") for k in ("risposta", "annuncio"))
+            if not re.search(passo.dati["se_domanda"], prima, re.I):
+                rec.update(esito_passo="ok", detto=None,
+                           nota=f"nessuna domanda {passo.dati['se_domanda']!r}: passo non detto")
+                rec["risposta"], rec["annuncio"] = (prec or {}).get("risposta", ""), \
+                    (prec or {}).get("annuncio")
+                return rec
         if passo.tipo in ("voce", "sfida"):
             if passo.tipo == "sfida":
                 parole = V.parole_sfida((prec or {}).get("risposta", ""))
+                if not parole and passo.dati.get("se_sfida"):
+                    # Un gioco puro approvato con la voce riconosciuta non chiede la sfida
+                    rec.update(esito_passo="ok", detto=None, nota="nessuna frase di sfida: "
+                               "non serviva", risposta=(prec or {}).get("risposta", ""),
+                               regole=(prec or {}).get("regole") or [])
+                    errori = V.controlla({k: v for k, v in passo.attese.items()
+                                          if k in ("regole", "no_regole")},
+                                         {"regole": rec["regole"]}, rec["risposta"])
+                    if errori:
+                        rec.update(esito_passo="fallito", errori=errori)
+                    return rec
                 if not parole:
                     rec.update(esito_passo="saltato", errori=["nessuna frase di sfida da ripetere"])
                     return rec
@@ -258,6 +316,15 @@ class Runner:
         extra = {"suoni": r["suoni"], "ha": [f"{s}:{e}" for s, e, _ in self.ha.servizi[ha0:]],
                  "voce_studio": self.voce_studio(t_fine - 1.0, (r["fine_audio"] or t_fine) + 1),
                  "pc": [a[0] for a in self.pc.azioni[pc0:]], "annuncio": annuncio}
+        # Estensioni, sviluppo e giochi (20/10, #75): le decisioni della porta stretta e dei
+        # giochi scritte nel passo, lo sviluppo toccato per ultimo, il log dell'istanza (il
+        # lavoro dell'agente, fino all'annuncio) e le schede arrivate allo studio
+        extra.update(
+            porta=[f"{d.get('regola')}:{d.get('esito')}" for d in self.decisioni()[dec0:]],
+            sviluppo=self.sviluppo_ultimo(), log=self.ist.log_testo()[log0:],
+            schede=[json.dumps(d, ensure_ascii=False)[:2000]
+                    for _, ev, d in getattr(self, "eventi_schermo", [])[sch0:]
+                    if ev == "scheda"])
         risposta = r["testo"] or (turno or {}).get("risposta") or ""
         errori = V.controlla(passo.attese, turno, risposta, extra)
         if altro is not None:
@@ -283,7 +350,8 @@ class Runner:
                                                    "stt_correzione_scaduta", "stt_corretta",
                                                    "stt_capito")
                  if (turno or {}).get(k) is not None},
-            annuncio=annuncio, extra={k: v for k, v in extra.items() if k != "annuncio"},
+            annuncio=annuncio,
+            extra={k: v for k, v in extra.items() if k not in ("annuncio", "log")},
             errori=errori, giudizio=passo.attese.get("giudizio"),
             esito_passo="ok" if not errori else "fallito")
         from prove.e2e.istanza import modelli_ollama

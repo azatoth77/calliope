@@ -1093,3 +1093,16 @@ impossibili e le frasi vengono dal contratto del gioco («un gioco non può inst
 programmi»), con `contratto.impossibili(gioco)` e `voci_piano(gioco)` usati dal contratto e dallo
 strumento piano. Il titolo della partenza non finisce più con una preposizione o un articolo
 («…con le carte», non «…con le carte di»).
+
+## Il copione delle prove dal vero e i giochi nella prova end-to-end (20/10, #7 e #75)
+
+Le prove dal vero di tutte le capacità dei giochi (macchina a stati, i sette modelli di pagina e i
+due formati, tela e «Gira il telefono», comandi a voce, giudice, domande, «gioco anch'io», nomi
+scritti, chi è quale giocatore, «Riapri», partite condivise, collaudo a tutta la finestra,
+partenza già verde) sono le serie D ed E di
+[`prove/manuali/copione-estensioni-giochi.md`](../../prove/manuali/copione-estensioni-giochi.md),
+con la tabella di copertura. Nella prova end-to-end l'area `giochi` crea dieci giochi con l'agente
+vero (porte 2–4, tris 2–2, memory, quiz, sette e mezzo, oca in quattro, lucciole su tela, la spesa
+con un'azione, forza quattro condiviso, il quiz che vuole internet) e controlla dal log la partenza
+con i giocatori dell'analisi; le **partite** (`partita-porte`) chiedono la pagina vera dello schermo
+in Edge, che la prova non ha ancora: si saltano finché non c'è (il punto aperto di #75).

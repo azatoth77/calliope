@@ -20,7 +20,12 @@ from prove.e2e.voci import ARRUOLA_PIPER, PERSONE, elenco_reale  # noqa: E402
 errori = 0
 CHIAVI = {"tool", "tool_tutti", "no_tool", "regole", "no_regole", "esito", "livello", "chi",
           "testo", "non_testo", "annuncio", "suoni", "ha", "ha_no", "pc", "giudizio", "muto",
-          "voce_studio", "voce_studio_ferma"}
+          "voce_studio", "voce_studio_ferma",
+          # 20/10 (#75): estensioni, sviluppo e giochi
+          "porta", "porta_no", "sviluppo", "sviluppo_stato", "log", "no_log", "scheda", "gioco"}
+RICHIEDE = {"reale", "agente", "web", "biblioteca", "schermo", "pagina"}
+FASI = {"analisi", "sviluppo", "collaudo", "revisione", "attivazione"}
+STATI = {"aperta", "sospesa", "chiusa"}
 
 
 def ok(nome, cond, extra=""):
@@ -74,12 +79,55 @@ def main():
                 re.compile(rx)
                 if not 10 <= s <= 3600:
                     problemi.append(f"{dove}: attesa dell'annuncio {s}")
+            for rx in (p.attese.get("log") or []) + (p.attese.get("no_log") or []) + (
+                    p.attese.get("scheda") or []) + list((p.attese.get("gioco") or {}).values()):
+                try:
+                    re.compile(str(rx))
+                except re.error as e:
+                    problemi.append(f"{dove}: regex {rx!r} ({e})")
+            if p.dati.get("se_domanda"):
+                try:
+                    re.compile(p.dati["se_domanda"])
+                except re.error as e:
+                    problemi.append(f"{dove}: se_domanda {e}")
+            for k, ammessi in (("sviluppo", FASI), ("sviluppo_stato", STATI)):
+                if k in p.attese and not set(V._lista(p.attese[k])) <= ammessi:
+                    problemi.append(f"{dove}: {k} {p.attese[k]!r}")
+            for v in (p.attese.get("porta") or []) + (p.attese.get("porta_no") or []):
+                if not re.fullmatch(r"[a-z_]+\*?(:[a-z_]+)?", v):
+                    problemi.append(f"{dove}: porta {v!r} (regola o regola:esito)")
+            usa_agente = any(t in ("sviluppo_apri", "lavoro_affida")
+                             for t in p.attese.get("tool") or [])
+            if usa_agente and p.attese.get("annuncio") and "agente" not in c.richiede:
+                problemi.append(f"{dove}: lavoro dell'agente senza richiede=agente")
+        if not set(c.richiede) <= RICHIEDE:
+            problemi.append(f"{c.id}: richiede {c.richiede}")
+        if "agente" in c.richiede and not c.lento:
+            problemi.append(f"{c.id}: agente vero senza lento=True")
     ok("copioni ben fatti (persone, registrazioni, attese, regex)", not problemi,
        "; ".join(problemi[:8]))
     ok("un copione per ogni area chiesta", {"voce-vera", "casa", "agenda", "minori",
                                             "satelliti", "immagini", "allegati", "agenti",
                                             "estensioni", "personalita", "permessi",
-                                            "biblioteca", "web"} <= {c.area for c in C.COPIONI})
+                                            "biblioteca", "web", "sviluppo", "giochi"}
+       <= {c.area for c in C.COPIONI})
+    # 20/10 (#75): le serie del copione manuale (prove/manuali/copione-estensioni-giochi.md)
+    est = {c.id for c in C.COPIONI if c.area in ("estensioni", "sviluppo", "giochi")}
+    ok("copioni di estensioni, sviluppo e giochi: lavori, contrari e partite",
+       {"est-cambio", "est-bacheca", "est-notte", "est-notte-contrari", "est-nutriscore",
+        "svil-differenziata", "svil-versioni", "svil-miglia", "imp-orari", "imp-gioco-modello",
+        "est-minore", "est-ospite", "gioco-porte", "gioco-tris", "gioco-spesa",
+        "partita-porte"} <= est, str(sorted(est))[:200])
+    ok("le partite chiedono la pagina vera e i loro giochi si creano prima nello stesso file",
+       all("pagina" in c.richiede for c in C.COPIONI if c.id.startswith("partita-"))
+       and [c.id for c in C.COPIONI].index("gioco-porte")
+       < [c.id for c in C.COPIONI].index("partita-porte"))
+    ok("i copioni nuovi stanno prima della chiusura («esci»)", C.COPIONI[-1].id == "esci-andrea")
+    ok("scegli per area: estensioni, sviluppo e giochi a parte, lenti esclusi con --senza-lenti",
+       all(c.area == "giochi" for c in C.scegli({"giochi"}))
+       and {c.id for c in C.scegli({"estensioni"}, lenti=False)} >= {"est-minore", "est-ospite",
+                                                                   "est-elenco"}
+       and not any(c.lento for c in C.scegli({"sviluppo", "giochi"}, lenti=False)))
     ok("scegli: aree, id, lenti e requisiti", (
         all(c.area == "casa" for c in C.scegli({"casa"}))
         and not any(c.lento for c in C.scegli(lenti=False))
@@ -140,6 +188,43 @@ def main():
     ok("fisica: «intendevi Heisenberg?» va bene", not V.controlla(
         passo["fisica", 1].attese, {}, "Forse intendevi il principio di indeterminazione di "
                                        "Heisenberg?"))
+    # Le attese nuove del 20/10 (#75): porta stretta, fase dello sviluppo, log, schede, gioco
+    est = {"tool": [{"nome": "est_cambio_valute"}], "regole": [], "esito": "risposta"}
+    extra = {"porta": ["estensione_rete_pubblica:eseguita", "estensione_quota_casa:rifiutata"],
+             "sviluppo": {"fase": "collaudo", "stato": "aperta"},
+             "log": "[AGENTI] L3: analisi prima del codice (12 s): 5 esempi di accettazione",
+             "schede": ['{"titolo": "Bacheca", "testo": "pacco giovedì"}']}
+    att = {"tool": ["est_*"], "no_tool": ["web_*"], "porta": ["estensione_rete_*:eseguita",
+                                                             "estensione_quota_casa"],
+           "porta_no": ["estensione_casa_comando:confermata"], "sviluppo": ["collaudo"],
+           "sviluppo_stato": "aperta", "log": [C.ANALISI], "no_log": [r"piano impossibile"],
+           "scheda": [r"pacco"]}
+    ok("estensioni: tool con il prefisso, porta, sviluppo, log e scheda giusti",
+       V.controlla(att, est, "Sono 1.234 yen.", extra) == [],
+       str(V.controlla(att, est, "x", extra)))
+    e = V.controlla(att, {"tool": [{"nome": "web_cerca"}]}, "x",
+                    {"porta": ["estensione_casa_comando:confermata"],
+                     "sviluppo": {"fase": "sviluppo", "stato": "sospesa"},
+                     "log": "piano impossibile (orari_fissi)", "schede": []})
+    ok("estensioni: ogni attesa mancata segnalata (contrari)", len(e) == 10, str(e))
+    ok("porta: «regola» senza esito e prefisso",
+       V._porta_ok("estensione_dati_scrivi", ["estensione_dati_scrivi:eseguita"])
+       and not V._porta_ok("estensione_dati_scrivi:eseguita",
+                           ["estensione_dati_scrivi:rifiutata"])
+       and V._porta_ok("estensione_*", ["estensione_flusso:eseguita"])
+       and not V._porta_ok("estensione_flusso", ["estensione_flusso_negato:rifiutata"]))
+    g = {"esito": "gioco_comando", "gioco": {"partita": "p1", "comando": "porta:3", "ms": 80}}
+    ok("gioco: il comando del turno controllato",
+       not V.controlla({"esito": "gioco_comando", "gioco": {"comando": "porta"}}, g, "")
+       and V.controlla({"gioco": {"comando": "anchio"}}, g, "")
+       and V.controlla({"gioco": {"comando": "porta"}}, {"esito": "risposta"}, ""))
+    ok("impossibile: il piano chiuso si legge nel log, la partenza di un gioco no",
+       not V.controlla(passo["imp-orari", 1].attese, {}, "",
+                       {"annuncio": "Non si può fare: …", "log": "[AGENTI] L4: piano "
+                        "impossibile (orari_fissi)"})
+       and V.controlla(passo["imp-orari", 1].attese, {}, "",
+                       {"annuncio": "Non si può fare", "log": "piano impossibile; nella "
+                        "cartella di partenza manifesto.json"}))
     q = V.quantili([1.0, 2.0, 3.0, 4.0])
     ok("quantili", q["n"] == 4 and q["mediana"] == 3.0 and q["max"] == 4.0, str(q))
 

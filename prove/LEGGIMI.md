@@ -309,4 +309,5 @@ voci.)*
 - `manuali/risultati-2026-09-23.md` (privato, fuori dal repository): risultati dei test del 23–24/09
 - [`manuali/dgx-agenti.md`](manuali/dgx-agenti.md): «Prima prova sulla DGX Spark (agenti, 02/10/2026)»
 - [`manuali/dgx-web-estensioni-giochi.md`](manuali/dgx-web-estensioni-giochi.md): «Ricerca su internet sulla DGX (SearXNG, 03/10)»; «Estensioni sulla DGX (04/10)»; «Giochi sulla DGX (05/10)»
+- [`manuali/copione-estensioni-giochi.md`](manuali/copione-estensioni-giochi.md): «Copione delle prove a voce di estensioni e giochi sulla DGX (20/10)»: sette serie (A–F, T) con frasi, attese e registro, la tabella di copertura delle capacità, e quali copioni della prova end-to-end (aree `estensioni`, `sviluppo`, `giochi`) le fanno
 - [`manuali/e2e-dgx.md`](manuali/e2e-dgx.md): «Prova end-to-end sulla DGX, senza nessuno che parli (06/10)»: istanza di prova separata, satelliti finti con VAD e wake word veri, voce vera di chi amministra, `python -m prove.e2e.lancia`
