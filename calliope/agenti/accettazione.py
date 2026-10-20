@@ -491,14 +491,16 @@ def _numeri_detti(testo) -> list[float]:
     return out
 
 
-def _esempi_programma(d: dict, n_requisiti: int, testo: str) -> tuple[list[dict], dict]:
+def _esempi_programma(d: dict, n_requisiti: int, testo: str) -> tuple[list[dict], dict, int]:
     """Gli esempi di un programma a riga di comando, validati come quelli delle estensioni:
     argomenti o stdin (sempre: senza argomenti il programma usa valori d'esempio suoi, che la
     richiesta non dice), un controllo che lo scheletro non passa (numero, parola, codice
     d'uscita diverso da 0), il «calcolo» rifatto dal codice; un esempio con una parola che la
-    richiesta non dice vale solo se aspetta un errore (codice d'uscita diverso da 0)."""
+    richiesta non dice vale solo se aspetta un errore (codice d'uscita diverso da 0). Il terzo
+    valore: quanti degli esempi tenuti hanno un «calcolo» che il codice ha rifatto (19/10, #9:
+    la misura del banco)."""
     from ..requisiti import pulito
-    out, chiavi = [], set()
+    out, chiavi, con_calcolo = [], set(), 0
     tolti = {"fuori": 0, "numero": 0, "contiene": 0, "dati": 0}
     detto = _radici(testo)
     for e in d.get("esempi") or ():
@@ -564,9 +566,12 @@ def _esempi_programma(d: dict, n_requisiti: int, testo: str) -> tuple[list[dict]
                     "argomenti": args, "stdin": stdin, "numero": numero,
                     "tolleranza": abs(tol) if tol is not None else None,
                     "contiene": contiene, "codice_uscita": cod})
+        # Solo se il numero resta: tolto perché uguale a un dato, il calcolo non controlla più
+        # niente (revisione della PR #181)
+        con_calcolo += calcolo is not None and numero is not None
         if len(out) >= MAX_ESEMPI:
             break
-    return out, tolti
+    return out, tolti, con_calcolo
 
 
 def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
@@ -612,7 +617,8 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
         prog, perche = _file_programma(d.get("programma"), linguaggi)
         out["programma"], out["senza_esempi"] = prog, perche
         if prog:
-            out["esempi"], out["tolti"] = _esempi_programma(d, n_requisiti, testo)
+            out["esempi"], out["tolti"], out["con_calcolo"] = _esempi_programma(
+                d, n_requisiti, testo)
             if not out["esempi"]:
                 out["programma"], out["senza_esempi"] = {}, "nessun esempio valido"
             elif not any(e["codice_uscita"] == 0 and (e["numero"] is not None or e["contiene"])
@@ -653,6 +659,9 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
     frasi = sorted({f for fs in nominati.values() for f in fs if f}, key=len, reverse=True)
     detto = _radici(testo)
     tolti = {"fuori": 0, "numero": 0, "contiene": 0}
+    # Gli esempi tenuti con un «calcolo» rifatto dal codice (19/10, #9: si vedeva solo quando
+    # non tornava, nei «tolti»)
+    con_calcolo = 0
     for e in d.get("esempi") or ():
         if not isinstance(e, dict) or not isinstance(e.get("dati"), dict):
             continue
@@ -707,12 +716,14 @@ def interpreta(dati, n_requisiti: int = 0, estensione: bool = True,
             and (n_requisiti <= 0 or 1 <= r <= n_requisiti) else 0,
             "dati": dati_e, "numero": numero, "tolleranza": abs(tol) if tol is not None else None,
             "contiene": contiene, "trovato": trovato})
+        con_calcolo += calcolo is not None and trovato is not False
         if len(out["esempi"]) >= MAX_ESEMPI:
             break
     if any(e["numero"] is not None for e in out["esempi"]) and not out["campo_numero"]:
         out["campo_numero"] = "risultato"
     out["riconosciuti"] = _riconosciuti(out)
     out["tolti"] = tolti
+    out["con_calcolo"] = con_calcolo
     return out
 
 

@@ -97,6 +97,21 @@ lavoro, in una sandbox nuova, con il file degli esempi preso dalla sandbox del l
 lettura e non va nella cartella del risultato). La riga ha anche `consegna_al_tetto`: il tetto
 toccato quando Calliope ha chiuso il lavoro da sé con gli esempi verdi (agenti/ciclo.py).
 
+**I motivi nella riga** (19/10, issue #9, passo 0 di docs/ricerche/2026-10-19-solidita-harness-
+sviluppo.md): prima si contavano a mano dal log. Nell'`analisi` i valori nominati per input
+(`nominati`), i controlli «si riconosce» in più (`valori`), gli esempi tolti contro la richiesta
+per genere (`tolti`: fuori, numero, contiene; per un programma anche dati) e quanti esempi
+tenuti hanno il `calcolo` rifatto dal codice (`con_calcolo`). Poi `regole` (da `lav.segnali`,
+con `agente_ragionamento_ripetuto` e `agente_riscrittura_ripetuta`), `segnali_giro` di fine
+lavoro (senza_novita, senza_progressi, ripetizioni, riscritti), `limite` (il tipo del Limite di
+un lavoro finito «limite»: passate, tempo, token, a_vuoto; dal 19/10 con #180 anche `prosa`,
+più di PROSA_MAX passate di fila senza strumenti, e `consegna_rossa`, la consegna con i test
+rossi; altro) e, solo per un lavoro finito «limite», `al_tetto_no` con `al_tetto_no_tipo`
+(perché al tetto Calliope non l'ha chiuso da sé: «mancano i file che la consegna chiede»,
+«esempi di accettazione rossi», «correzione non riprodotta»…). `prosa_no`: l'ultimo no dopo due
+passate di sola prosa con lo stato consegnabile (#180), che non ferma il lavoro. Il criterio
+«0 "mancano i file" con l'accettazione verde» è `al_tetto_no` contro `accettazione`.
+
 Durata: un lavoro dura 3–15 minuti; con i valori predefiniti 2 × 2 × 2 × 3 = 24 lavori, da 2 a
 4 ore. Per una prima idea: --ripetizioni 1 --casi porte,convertitore (8 lavori).
 """
@@ -708,11 +723,17 @@ def secco_tetto(tmp: Path) -> int:
 
     def chiama(*cc):
         return {"tool_calls": [{"name": n, "arguments": a} for n, a in cc]}
+    # 19/10 (#9): un valore nominato che la richiesta non dice («leghe»: fuori dai valori, e
+    # il suo esempio tolto) e il «calcolo» dell'esempio tenuto, per i campi nuovi della riga
     analisi = {"contraddizioni": [], "scelte": [], "al_collaudo": [],
-               "input": [{"nome": "valore", "tipo": "number"}, {"nome": "da", "tipo": "string"},
+               "input": [{"nome": "valore", "tipo": "number"},
+                         {"nome": "da", "tipo": "string", "valori": ["miglia", "leghe"]},
                          {"nome": "a", "tipo": "string"}], "campo_numero": "risultato",
                "esempi": [{"requisito": 1, "dati": {"valore": 1, "da": "miglia", "a": "metri"},
                            "numero": 1609.344, "tolleranza": 0.01, "contiene": "",
+                           "trovato": None, "calcolo": "1 * 1609.344"},
+                          {"requisito": 1, "dati": {"valore": 1, "da": "leghe", "a": "metri"},
+                           "numero": 4828.0, "tolleranza": None, "contiene": "",
                            "trovato": None}]}
     manifesto = {"nome": "convertitore_distanze", "titolo": "Convertitore di distanze",
                  "cosa_fa": {"verbo": "converte", "oggetto": "una distanza tra due unità"},
@@ -763,6 +784,19 @@ def secco_tetto(tmp: Path) -> int:
         verifica("…il riepilogo dice gli esempi rieseguiti alla fine: verdi",
                  r["esempi_finali"] is True and r["analisi"].get("passano") is True
                  and detto_esempi(r) == ", esempi 1 verdi", f"{r['esempi_finali']} {r['analisi']}")
+        # 19/10 (#9): la riga dice l'analisi (valori nominati, tolti, calcolo), le regole e i
+        # segnali di giro; consegnato al tetto, niente limite né motivo del no
+        an = r["analisi"]
+        verifica("…la riga ha i valori nominati, i tolti per genere e gli esempi col calcolo",
+                 an.get("nominati") == {"da": ["miglia"]} and an.get("valori") == 0
+                 and an.get("tolti") == {"fuori": 1, "numero": 0, "contiene": 0}
+                 and an.get("con_calcolo") == 1, json.dumps(an, ensure_ascii=False))
+        verifica("…i segnali di giro di fine lavoro, nessun limite né no al tetto",
+                 set(r["segnali_giro"]) == {"senza_novita", "senza_progressi", "ripetizioni",
+                                            "riscritti"}
+                 and r["limite"] is None and r["al_tetto_no"] is None,
+                 json.dumps({k: r.get(k) for k in ("segnali_giro", "limite", "al_tetto_no")},
+                            ensure_ascii=False))
         fake.copione = copione(sbagliata)
         r = un_lavoro(svc, cfg, tmp, "convertitore", casi()["convertitore"], "secco")
         verifica("contrario: l'ultima passata scrive quello sbagliato, «limite» ed esempi rossi",
@@ -772,6 +806,11 @@ def secco_tetto(tmp: Path) -> int:
                  and detto_esempi(r) == ", esempi 1 rossi",
                  json.dumps({k: r.get(k) for k in ("esito", "esempi_finali", "analisi")},
                             ensure_ascii=False, default=str))
+        verifica("…la riga dice il limite delle passate e perché al tetto non l'ha chiuso",
+                 r["limite"] == "passate" and r["al_tetto_no_tipo"] == "passate"
+                 and str(r["al_tetto_no"]).startswith("esempi di accettazione rossi"),
+                 json.dumps({k: r.get(k) for k in ("limite", "al_tetto_no", "al_tetto_no_tipo")},
+                            ensure_ascii=False))
         # Le porte (14/10, banco L7 e L10): una correzione di un gioco non ha esempi, al tetto
         # vale il test che riproduce il problema. L'agente corregge logica.js e scrive il test
         # del disegno, poi non consegna
@@ -815,6 +854,37 @@ def secco_tetto(tmp: Path) -> int:
                  "l'accettazione nascosta verde)",
                  r["esito"] == "limite" and not r["consegna_al_tetto"] and r["accettazione"],
                  json.dumps({k: r.get(k) for k in ("esito", "riproduzione", "accettazione")},
+                            ensure_ascii=False, default=str))
+        verifica("…e la riga dice il no al tetto: correzione non riprodotta",
+                 r["limite"] == "passate"
+                 and str(r["al_tetto_no"]).startswith("correzione non riprodotta"),
+                 json.dumps({k: r.get(k) for k in ("limite", "al_tetto_no")},
+                            ensure_ascii=False))
+        # Revisione della PR #181: dopo due passate di sola prosa (#180) decide
+        # _consegna_al_tetto con il tipo «prosa»; il suo no non è un no al tetto (il lavoro
+        # continua), e se poi l'agente consegna la riga non dice «al tetto no»
+        fake.copione = porte(False) + [
+            {"content": "Ho corretto il gioco."}, {"content": "Il gioco ora funziona."},
+            chiama(("scrivi_file", {"percorso": "gioco.test.js",
+                                    "contenuto": F.TEST_GIOCO_PORTE})),
+            chiama(("esegui_test", {})),
+            chiama(("consegna", {"riassunto": "Corretto: la porta mostra il suo mostro.",
+                                 "esito": "fatto"}))]
+        passi = cfg.agenti_max_passi, svc.agente.max_passi
+        cfg.agenti_max_passi = svc.agente.max_passi = 12
+        try:
+            r = un_lavoro(svc, cfg, tmp, "porte", casi()["porte"], "secco")
+        finally:
+            cfg.agenti_max_passi, svc.agente.max_passi = passi
+        verifica("contrario: il no dopo la prosa (correzione non riprodotta), poi il test e la "
+                 "consegna: «fatto», niente «al tetto no» né limite nella riga, il motivo a parte",
+                 r["esito"] == "fatto" and not r["consegna_al_tetto"]
+                 and r["al_tetto_no"] is None and r["al_tetto_no_tipo"] is None
+                 and r["limite"] is None
+                 and str(r["prosa_no"]).startswith("correzione non riprodotta"),
+                 json.dumps({k: r.get(k) for k in ("esito", "motivo", "consegna_al_tetto",
+                                                   "al_tetto_no", "prosa_no", "limite",
+                                                   "regole")},
                             ensure_ascii=False, default=str))
     finally:
         if svc is not None:
@@ -947,6 +1017,8 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
                                sbl[-1] if sbl else None)
                  if cartella and cartella.is_dir() else None)
     seg = segnali_giro(lav, cfg.agenti_max_passi)
+    segnali = lav.segnali if isinstance(lav.segnali, dict) else {}
+    limite = ris.get("esito") == "limite"
     fatto = (ris.get("esito") == "fatto" or lav.stato == "fatto")
     giro_acc = next((x["giro"] for x in per_giro if x.get("accettazione")), None)
     giro_consegna = per_giro[-1]["giro"] if fatto else None
@@ -967,7 +1039,23 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             # …con gli esempi o con la riproduzione di una correzione senza esempi (14/10)
             "consegna_al_tetto_con": ris.get("consegna_al_tetto_con"),
             "esempi_finali": es_finali,
-            "regole": dict(((lav.segnali or {}).get("regole") or {})),
+            # Le regole scattate nel lavoro, da lav.segnali (sonde.nota): dal 19/10 (#9) anche
+            # agente_ragionamento_ripetuto e agente_riscrittura_ripetuta
+            "regole": dict(segnali.get("regole") or {}),
+            # I segnali di giro a vuoto di fine lavoro (19/10, #9; con più giri senza_novita e
+            # senza_progressi sono dell'ultimo giro: ripartono a ogni continua)
+            "segnali_giro": {k: seg.get(k) for k in ("senza_novita", "senza_progressi",
+                                                      "ripetizioni", "riscritti")},
+            # Un lavoro finito a un limite (19/10, #9): il tipo del Limite («passate», «tempo»,
+            # «token», «a_vuoto», dal 19/10 con #180 «prosa» e «consegna_rossa», «altro»), e
+            # perché al tetto Calliope non l'ha chiuso da sé (la funzione no di
+            # _consegna_al_tetto), con il tetto che l'ha chiesto: solo con l'esito «limite»
+            # (revisione della PR #181). `prosa_no`: l'ultimo no dopo due passate di sola
+            # prosa (#180), che non ferma il lavoro
+            "limite": segnali.get("limite") if limite else None,
+            "al_tetto_no": segnali.get("al_tetto_no") if limite else None,
+            "al_tetto_no_tipo": segnali.get("al_tetto_tipo") if limite else None,
+            "prosa_no": segnali.get("prosa_no"),
             "cartella": str(cartella),
             "giri": len(per_giro), "giri_max": giri, "giro_accettazione": giro_acc,
             "giro_consegna": giro_consegna, "sbloccato": sbloccato,
@@ -977,7 +1065,10 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             "domande": domande, "analisi": {k: v for k, v in (
                 getattr(lav, "accettazione", None) or {}).items()
                 if k in ("stato", "esempi", "passano", "rossi", "al_collaudo", "secondi",
-                         "perche")}}
+                         "perche",
+                         # 19/10 (#9): i controlli dei valori nominati, i valori per input,
+                         # gli esempi tolti per genere e quanti hanno il «calcolo»
+                         "valori", "nominati", "tolti", "con_calcolo")}}
     if not acc["verde"]:
         riga["accettazione_uscita"] = acc["uscita"][-600:]
     return riga
@@ -1126,6 +1217,9 @@ def main(argv) -> int:
                               + (f", consegna al tetto ({r['consegna_al_tetto']}, con "
                                  f"{r.get('consegna_al_tetto_con') or 'esempi'})"
                                  if r.get("consegna_al_tetto") else "")
+                              + (f", limite {r['limite']}" if r.get("limite") else "")
+                              + (f", al tetto no: {r['al_tetto_no']}" if r.get("al_tetto_no")
+                                 else "")
                               + (f"; giri {r['giri']} (passate {r['passate_giri']}), "
                                  f"accettazione verde al giro {r['giro_accettazione']}, "
                                  f"consegna al giro {r['giro_consegna']}, "
