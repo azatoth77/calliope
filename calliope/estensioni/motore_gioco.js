@@ -823,6 +823,7 @@
     }
     // Una fase senza turni, con più giocatori, in cui non si sa chi ha mosso (la voce non
     // riconosciuta, nessuno schermo con un giocatore solo, la tela)
+    var puntiPersi = [];
     function ignoto(S0, daChi) {
       return !M.fasi[S0.fase].turni && (daChi === null || daChi === undefined) && S0.giocatori.length > 1;
     }
@@ -836,6 +837,9 @@
       var guadagno = 0;
       if (Array.isArray(ris.punti)) ris.punti.forEach(function (p, i) { S.giocatori[i].punti += p; });
       else if (typeof ris.punti === "number" && S.giocatori[chiPos]) { S.giocatori[chiPos].punti += ris.punti; guadagno = ris.punti; }
+      // Un numero di punti che non va a nessuno (senza turni e chi non si sa, revisione della
+      // PR #201): contato, perché la prova di fumo lo dica (nel riquadro non cambia niente)
+      else if (typeof ris.punti === "number" && ris.punti !== 0 && chiPos === -1) puntiPersi.push(dove);
       var meta = ris.fase || (ris.esito ? "esito" : S0.fase);
       var passa = M.fasi[S0.fase].turni && !ris.ancora && S.giocatori.length > 1;
       if (meta === "esito") {
@@ -1086,6 +1090,7 @@
       return p;
     }
     return { M: M, nuovo: nuovo, attivi: attivi, piatti: piatti, daPiatto: daPiatto, applica: applica, esciTela: esciTela,
+             puntiPersi: function () { return puntiPersi.slice(); },
              vista: vista, istantanea: istantanea, perCalliope: perCalliope, classifica: classifica, etichetta: etichetta,
              pagina: pagina, contesto: contesto, piatto: piatto, rinomina: rinomina, riprendi: riprendi,
              chiMuove: chiMuove };

@@ -1133,7 +1133,7 @@ dell'agente e quello degli esempi la prendevano alla lettera, e gli esempi la im
    i punti, se ci sono) e resta nella fase, senza esito». Lo stesso in `CAPACITA_GIOCO`
    (requisiti.py), nel prompt del progettista dei test (in più: le mosse sono a turno, «nel tris
    1, 4, 2, 5, 3 il primo vince alla 5ª; 1, 2, 3 non fa vincere nessuno», fermarsi alla mossa che
-   finisce, al più 7 mosse, il testo solo con parole della richiesta, «esito» solo con i punti),
+   finisce, al più 7 mosse, il testo solo con parole della richiesta, «esito» solo con i punti *[storico: dalla revisione della PR #201 «esito» quando la mano finisce, anche il pareggio, mai dopo la prima mossa]*),
    in `VINCOLO_CORREZIONE_GIOCO` («l'esito di una mano finita») e nel commento della logica di
    partenza (lì ogni porta aperta è un punto fatto: per questo c'è l'esito).
 2. **L'avviso della prova di fumo** (`fumo_js.avvisoEsito`, nelle partite a caso di `esplora`):
@@ -1151,9 +1151,9 @@ dell'agente e quello degli esempi la prendevano alla lettera, e gli esempi la im
    è il punto: con i soli esiti contati («più della metà con un esito») la partenza, che dà un
    esito a ogni porta, avrebbe avuto l'avviso.
 3. **Gli esempi filtrati** (`accettazione._esempi_gioco`, con la richiesta): il testo atteso si
-   tiene solo se le sue parole sono nella richiesta, di seguito, al singolare o al plurale (i
+   tiene solo se le sue parole sono nella richiesta, di seguito, al singolare o al plurale *[storico: dalla revisione della PR #201 in una forma vicina, sotto]* (i
    numeri giocati nelle mosse non contano: «porta 2» dopo la porta 2); la fase «esito» attesa
-   senza i punti si toglie (non dice cosa è finito); un esempio con più di 7 mosse del gioco si
+   senza i punti si toglie (non dice cosa è finito) *[storico: dalla revisione della PR #201 solo dopo una mossa sola]*; un esempio con più di 7 mosse del gioco si
    toglie (`MAX_MOSSE_SICURE`: sul banco erano sbagliati tutti quelli con 9 mosse); due esempi che
    si contraddicono (uno finisce la partita, l'altro con le stesse mosse in testa continua) si
    tolgono tutti e due. Senza la richiesta (le prove di prima) il testo resta.
@@ -1176,10 +1176,10 @@ dell'agente e quello degli esempi la prendevano alla lettera, e gli esempi la im
    `tocca`, che senza turni resta il primo: **i punti di chiunque andavano al Giocatore 1**. Era
    un difetto, non una scelta: il contratto diceva «i punti vanno a chi ha mosso, se si sa». Ora
    lì un numero di punti non va a nessuno e `chi` è null (l'elenco dei punti, uno per giocatore,
-   vale come prima); il contratto lo dice. Contrari nella prova: con la voce riconosciuta i punti
+   vale come prima); il contratto lo dice *[storico: «lì i punti si danno con l'elenco» fino alla revisione della PR #201: senza sapere chi ha mosso non si può; ora «usa i turni» e l'avviso, sotto]*. Contrari nella prova: con la voce riconosciuta i punti
    vanno a chi ha mosso, con un giocatore solo sono suoi, con i turni vanno a chi è di turno.
 
-**I numeri.** Gli esempi di L1 (6) e L5 (5) col codice nuovo: 1 e 3 tenuti; L5 tutto verde sul
+**I numeri** *[storico: del primo giro della PR; quelli dopo la revisione sono sotto]*. Gli esempi di L1 (6) e L5 (5) col codice nuovo: 1 e 3 tenuti; L5 tutto verde sul
 tris giusto, di L1 resta «1, …, 6 → fine con un punto», sbagliato e che nessuna regola sul testo
 vede senza giocare la partita. Otto analisi nuove sulla DGX col prompt nuovo (qwen3.6 su vLLM,
 temperatura 0, in sola lettura): 26 esempi, col filtro di prima 24 tenuti e 5 verdi sul
@@ -1200,10 +1200,43 @@ più 1 (un doppione). Il difetto vero era che `_esempi_gioco` toglieva in silenz
 giocatori che non si leggono, comandi o valori che non ci sono, niente da controllare, doppioni)
 e `tolti` restava `{}`: «0 esempi» non diceva se li aveva tolti il codice o se il modello non ne
 aveva scritti. Ora ogni causa è contata in `tolti` (`forma`, `mosse`, `lunghi`, `niente`,
-`doppioni`, `testo`, `esito_senza_punti`, `dopo_la_fine`), il lavoro ha `esempi_modello` (anche
+`doppioni`, `testo`, `esito_prima_mossa`, `dopo_la_fine`; *[storico: `esito_senza_punti` fino alla revisione della PR #201]*), il lavoro ha `esempi_modello` (anche
 nella riga del banco), il log dice le cause, e con esempi scritti dal modello e tutti tolti c'è la
 regola `accettazione_esempi_tutti_tolti` con il conto e le cause. Nel banco
 `SviluppoBanco.segna_accettazione` non fa niente: prima il log diceva «requisiti al collaudo non
 segnati: 'SviluppoBanco' object has no attribute …» (L3, L5).
+
+**Dopo la revisione della PR #201 (20/10).**
+1. **`turno` con un giocatore solo resta 1** (il turno passa solo con più giocatori): il
+   contratto lo dice, «per contare le mosse tienile nei dati», così un solitario non conta i giri
+   con `turno` e non resta senza fine.
+2. **Punti senza turni**: il consiglio «lì i punti si danno con l'elenco» non si poteva seguire
+   (senza sapere chi ha mosso la logica non sa a chi darli). Il contratto dice «se i punti vanno a
+   chi muove, usa una fase con i turni»; il motore conta i punti che non vanno a nessuno
+   (`puntiPersi`, solo per la prova: nel riquadro non cambia niente) e la prova di fumo lo avvisa
+   («… dà un numero di punti in una fase senza turni: … quei punti non vanno a nessuno. Se i punti
+   vanno a chi muove, usa una fase con i turni»), così il test dell'agente non vede 0 punti senza
+   capire. Contrari: i turni, l'elenco, un giocatore solo.
+3. **Il pareggio è un esito senza punti**: il prompt del progettista dice «esito» quando la mano
+   finisce (una vittoria, un pareggio, un punto fatto), mai dopo la prima mossa del gioco; il
+   filtro toglie il controllo della fase «esito» senza punti solo dopo una mossa sola
+   (`esito_prima_mossa` nei tolti, la stessa idea dell'avviso della prova di fumo). «1, 4, 2, 5, 3
+   → esito» del tris giusto resta.
+4. Il residuo «l'«esito» delle mosse» nel messaggio del disegno della prova di fumo è diventato
+   «l'«esito» di una mano finita».
+5. L'avviso dell'esito dice anche dove va il messaggio di una mossa normale («troppo alto»,
+   «casella già presa»: nei testi di GIOCO.vista). Il testo atteso si confronta in una forma
+   vicina (`accettazione.simili`: uguali, oppure almeno 4 lettere con l'inizio in comune per
+   max(3, la più corta − 2) lettere), sia nel filtro con la richiesta sia sullo schermo in
+   accettazione.test.js: «vinto» non si toglie più e «vince» atteso passa con «Ha vinto X!»;
+   «Vittoria» resta fuori. Contrari: «pareggio» atteso dopo una vittoria resta rosso; un esempio
+   di 7 mosse resta, di 8 si toglie.
+
+**I numeri dopo la revisione** (gli stessi esempi, sul tris di riferimento): L1 da 6 a 3 tenuti,
+rossi i requisiti 2 e 3 («1, 2 → esito» e «1, 2, 3 → esito» con le mosse non a turno, e «1…6
+finisce»); L5 da 5 a 3, rosso solo «5, 1 → esito». Le otto analisi nuove: 26 esempi, 15 tenuti,
+5 verdi (col filtro del primo giro 10 e 2). Il filtro più largo tiene più esempi giusti e più
+sbagliati: lo scambio è voluto, perché un esempio giusto tolto non torna, e gli esempi non
+bloccano più la chiusura (#190).
 
 **Le prove**: `prove/prova_esito_giochi.py` (nuova, livello 2, ~10 s).

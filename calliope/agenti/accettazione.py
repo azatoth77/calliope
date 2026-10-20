@@ -123,7 +123,7 @@ Il gioco usa la macchina a stati di Calliope: la partita comincia scegliendo il 
 giocatori: quanti possono giocare, min e max (uguali se la richiesta dice un numero fisso, per esempio «per due» → 2 e 2; se non lo dice, 1 e 4).
 comandi: i comandi che il gioco DEVE avere perché gli esempi si possano giocare (al più 6), con fase (minuscole, di solito «turno»), nome, e da/a per un numero oppure valori per un elenco; niente valore se il comando non ne ha. Non usare i nomi di Calliope (inizia, avanti, ancora, giocatori).
 esempi: da 2 a 6 partite brevi, una per requisito che si controlla giocando. Per ognuna: requisito (il numero), giocatori (quanti, tra min e max), mosse (comando e valore, nell'ordine; «avanti» non serve: il test va avanti da solo dopo l'esito), e atteso, lo stato dopo l'ultima mossa. Le mosse sono A TURNO: con due giocatori la 1ª, la 3ª e la 5ª sono del primo, la 2ª e la 4ª del secondo (nel tris «1, 4, 2, 5, 3»: il primo mette 1, 2 e 3 e vince alla 5ª mossa; «1, 2, 3» non fa vincere nessuno). Segui la partita mossa per mossa e fermati alla mossa che la finisce: dopo una vittoria non ci sono altre mosse. Al più 7 mosse per esempio: una partita più lunga (il pareggio di una griglia piena) non va negli esempi, la provano i test dell'agente. Se non sei sicuro di come finisce una partita, non mettere quell'esempio.
-- fase: la fase in cui si è (una dei comandi, «esito» o «fine»), se il requisito lo dice; dopo una mossa normale è la fase del gioco, mai «esito»; «esito» solo con i punti;
+- fase: la fase in cui si è (una dei comandi, «esito» o «fine»), se il requisito lo dice; dopo una mossa normale è la fase del gioco, mai «esito»; «esito» solo quando la mano finisce (una vittoria, un pareggio, un punto fatto), mai dopo la prima mossa del gioco;
 - tocca: il numero del giocatore a cui tocca dopo (1 è il primo), se conta;
 - punti: i punti di ogni giocatore, solo se NON dipendono dal caso;
 - attivi e non_attivi: comandi (con il valore) che devono valere ancora o non più (una porta già aperta non si riapre);
@@ -310,6 +310,18 @@ def _coppia(x, comandi: dict, standard: bool = True):
     return (c, v) if v in d["valori"] else None
 
 
+def simili(a: str, b: str) -> bool:
+    """Due parole (già normalizzate) nella stessa forma o in una forma vicina: uguali, oppure di
+    almeno 4 lettere con l'inizio in comune per max(3, la più corta - 2) lettere («vince» e
+    «vinto», «pareggio» e «pareggi», «punto» e «punti»; non «vittoria» e «vince»). La stessa
+    regola è in accettazione.test.js per il testo sullo schermo (revisione della PR #201)."""
+    if a == b:
+        return True
+    n = min(len(a), len(b))
+    k = max(3, n - 2)
+    return n >= 4 and a[:k] == b[:k]
+
+
 def _esempi_gioco(d: dict, comandi: dict, n_requisiti: int,
                   testo: str = "") -> tuple[list[dict], dict]:
     """(esempi, tolti): gli esempi validati e quanti ne sono stati tolti per ogni causa (20/10,
@@ -317,16 +329,16 @@ def _esempi_gioco(d: dict, comandi: dict, n_requisiti: int,
     modello non ne aveva scritti o se li aveva tolti tutti il codice). Cause: «forma» (atteso o
     giocatori che non si leggono), «mosse» (un comando o un valore che non c'è, nessun comando
     del gioco), «lunghi» (più di MAX_MOSSE_SICURE mosse del gioco), «niente» (nessun controllo
-    rimasto), «doppioni», «esito_senza_punti» (il controllo della fase «esito» senza i punti,
-    tolto), «dopo_la_fine» (due esempi che
+    rimasto), «doppioni», «esito_prima_mossa» (il controllo della fase «esito» senza i punti
+    dopo una mossa sola, tolto), «dopo_la_fine» (due esempi che
     si contraddicono: uno finisce la partita e l'altro, con le stesse mosse in testa, continua a
     giocare). `testo`: la richiesta; il «testo» atteso si tiene solo se le sue parole ci sono
-    (§ testo), altrimenti si toglie quel controllo («testo» nei tolti)."""
+    in una forma vicina (`simili`), altrimenti si toglie quel controllo («testo» nei tolti)."""
     from ..requisiti import pulito
     out, chiavi = [], set()
     tolti = {"forma": 0, "mosse": 0, "lunghi": 0, "niente": 0, "doppioni": 0, "testo": 0,
-             "esito_senza_punti": 0, "dopo_la_fine": 0}
-    detto = _radici(testo) if str(testo or "").strip() else None
+             "esito_prima_mossa": 0, "dopo_la_fine": 0}
+    detto = _norm(testo).split() if str(testo or "").strip() else None
     fasi = {x["fase"] for x in comandi.values()} | set(FASI_STANDARD) - {"preparazione"}
     for e in d.get("esempi") or ():
         if not isinstance(e, dict) or not isinstance(e.get("atteso"), dict):
@@ -364,20 +376,26 @@ def _esempi_gioco(d: dict, comandi: dict, n_requisiti: int,
             # Il testo sullo schermo (20/10, #197, banco tris2: «ok», «Vittoria», «Turno 2»,
             # «Nuova» dove il tris giusto scrive «Ha vinto X!»): una parola che la richiesta non
             # usa la sceglie il gioco, e il codice giusto non la scrive. Si tiene solo se le
-            # sue parole sono nella richiesta, di seguito (singolare o plurale come i valori)
-            # (i numeri giocati nelle mosse non contano: «porta 2» dopo la porta 2)
+            # sue parole sono nella richiesta in una forma vicina (revisione della PR #201:
+            # «vinto» sullo schermo e «vince» nella richiesta; `simili`, la stessa regola del
+            # controllo sullo schermo in accettazione.test.js). I numeri giocati nelle mosse non
+            # contano: «porta 2» dopo la porta 2
             giocati = {_norm(v) for _, v in mosse if v is not None}
-            parole = tuple(r for r in _radici(t) if r not in giocati)
-            if detto is None or not parole or _dentro(parole, detto):
+            parole = [w for w in _norm(t).split() if w not in giocati]
+            if detto is None or all(any(simili(w, x) for x in detto) for w in parole):
                 atteso["testo"] = t
             else:
                 tolti["testo"] += 1
-        if atteso.get("fase") == "esito" and "punti" not in atteso:
+        if atteso.get("fase") == "esito" and "punti" not in atteso and sum(
+                c not in STANDARD_GIOCO for c, _ in mosse) == 1:
             # La fase «esito» vuol dire che una mano è finita (20/10, #197, banco tris2: «casella
             # 5 → esito» dopo una mossa normale, per il prompt di prima che la metteva dopo ogni
-            # mossa). Senza i punti attesi non dice cosa è finito: quel controllo si toglie
+            # mossa). Alla prima mossa del gioco e senza punti non chiude niente (la stessa idea
+            # dell'avviso della prova di fumo): quel controllo si toglie. Dopo resta, perché il
+            # pareggio è un esito senza punti (revisione della PR #201: «1, 4, 2, 5, 3 → esito»
+            # del tris giusto veniva tolto)
             del atteso["fase"]
-            tolti["esito_senza_punti"] += 1
+            tolti["esito_prima_mossa"] += 1
         if not atteso:
             tolti["niente"] += 1
             continue
@@ -944,7 +962,12 @@ ESEMPI.forEach((e, i) => {
     const g = await partita(e);
     const a = e.atteso;
     if (a.testo) {
-      assert.ok(norm(g.testo()).includes(norm(a.testo)),
+      // Le parole in una forma vicina (revisione della PR #201: «vince» e «Ha vinto X!»), con la
+      // stessa regola di accettazione.simili
+      const sullo = norm(g.testo()).split(/[^a-z0-9]+/).filter(Boolean);
+      const vicine = (x, y) => { const n = Math.min(x.length, y.length), k = Math.max(3, n - 2);
+                                 return x === y || (n >= 4 && x.slice(0, k) === y.slice(0, k)); };
+      assert.ok(norm(a.testo).split(/[^a-z0-9]+/).filter(Boolean).every((w) => sullo.some((s) => vicine(w, s))),
         `${detto}: dopo l'ultima mossa sullo schermo deve esserci «${a.testo}»; si legge «${g.testo().slice(0, 200)}»`);
     }
     let s = g.stato();

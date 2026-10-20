@@ -1603,7 +1603,8 @@ class Lavori:
                      ("forma", "esempi tolti che non si leggono"),
                      ("mosse", "esempi tolti con un comando o un valore che non c'è"),
                      ("lunghi", "esempi tolti troppo lunghi"),
-                     ("esito_senza_punti", "controlli della fase «esito» senza punti tolti"),
+                     ("esito_prima_mossa", "controlli della fase «esito» senza punti alla "
+                                           "prima mossa tolti"),
                      ("niente", "esempi tolti senza niente da controllare"),
                      ("doppioni", "esempi doppi tolti"),
                      ("testo", "testi attesi tolti con parole che la richiesta non usa"),

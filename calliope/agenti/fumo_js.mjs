@@ -562,6 +562,15 @@ export function esplora(amb, opzioni = {}) {
   if (errori.length) return errori;
   const avviso = avvisoEsito(conta);
   if (avviso && Array.isArray(opzioni.avvisi)) opzioni.avvisi.push(avviso);
+  // I punti che non vanno a nessuno (revisione della PR #201): senza turni, con più giocatori e
+  // senza sapere chi ha mosso, un numero di punti si perde; il test dell'agente vedrebbe 0 punti
+  // senza capire perché
+  const persi = typeof nu.puntiPersi === "function" ? nu.puntiPersi() : [];
+  if (persi.length && Array.isArray(opzioni.avvisi)) {
+    opzioni.avvisi.push(`${persi[0]} dà un numero di punti in una fase senza turni: con più `
+      + `giocatori Calliope non sa chi ha mosso (nei test e con lo stesso schermo) e quei punti non `
+      + `vanno a nessuno. Se i punti vanno a chi muove, usa una fase con i turni ("turni": true)`);
+  }
   for (const f of Object.keys(M.fasi).concat(["fine"])) {
     if (!raggiunte.has(f)) nota(`fase «${f}»`, `dichiarata ma mai raggiunta: nessuna mossa ci porta (fase: "${f}" senza esito, oppure esito con dopo: "${f}"; e «verso» nel manifesto)`);
   }
@@ -584,7 +593,8 @@ export function avvisoEsito(conta) {
     + (tutte ? ", anche la prima di ogni partita" : "")
     + (conta.esempio ? ` (${conta.esempio})` : "")
     + `: l'esito vuol dire che la mano è finita (una vittoria, un pareggio, un punto fatto): per `
-    + `una mossa normale restituisci { dati } (e i punti, se ci sono) e resta nella fase. Se `
+    + `una mossa normale restituisci { dati } (e i punti, se ci sono) e resta nella fase; il `
+    + `suo messaggio («troppo alto», «casella già presa») va nei testi di GIOCO.vista. Se `
     + `ogni mossa chiude davvero una mano (una domanda di un quiz), lascialo così`;
 }
 
@@ -636,7 +646,7 @@ export async function fumo(file, opzioni = {}) {
     // stessa classe: gioco.js che legge un campo nel posto sbagliato
     const strano = visibile(amb).match(/\bundefined\b|\bNaN\b|\[object Object\]/);
     if (strano) {
-      nota("disegno", `dopo il tocco su ${tocchi[tocchi.length - 1] || "il gioco"} nel testo visibile c'è «${strano[0]}»: la pagina mostra un campo che la logica non dà (controlla i testi di GIOCO.vista e l'«esito» delle mosse in logica.js: la forma di ciò che restituisce logica.js)`);
+      nota("disegno", `dopo il tocco su ${tocchi[tocchi.length - 1] || "il gioco"} nel testo visibile c'è «${strano[0]}»: la pagina mostra un campo che la logica non dà (controlla i testi di GIOCO.vista e l'«esito» di una mano finita in logica.js: la forma di ciò che restituisce logica.js)`);
     }
     if (errori.length) break;
   }

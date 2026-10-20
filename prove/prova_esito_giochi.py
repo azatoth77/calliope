@@ -136,8 +136,16 @@ def prova_testi():
              and "qui giocatori è il NUMERO dei giocatori" in c
              and "In g.stato() invece tocca è il NOME" in c, c[:300])
     verifica("il contratto: senza turni, con più giocatori e chi non si sa, un numero di punti "
-             "non va a nessuno (l'elenco sì)", "non va a nessuno e chi è null" in c
-             and "i punti si danno con l'elenco, uno per giocatore" in c)
+             "non va a nessuno e la prova di fumo lo avvisa; se vanno a chi muove, i turni",
+             "non va a nessuno e chi è null, e la prova di fumo lo avvisa" in c
+             and "usa una fase con i turni" in c and "l'elenco, uno per giocatore)" not in c)
+    verifica("il contratto: con un giocatore solo turno resta 1, le mosse si contano nei dati",
+             "con un giocatore solo resta 1: per contare le mosse tienile nei dati" in c)
+    from calliope.agenti import accettazione as A2
+    verifica("il progettista dei test: «esito» quando la mano finisce, anche il pareggio, mai "
+             "dopo la prima mossa; niente più «esito» solo con i punti",
+             "«esito» solo quando la mano finisce (una vittoria, un pareggio, un punto fatto)"
+             in A2.SISTEMA_GIOCO and "«esito» solo con i punti" not in A2.SISTEMA_GIOCO)
     verifica("la logica di partenza spiega perché lì c'è l'esito (un punto a ogni porta) e "
              "che una mossa normale restituisce { dati }",
              "un punto fatto, quindi una mano finita" in scheletri.LOGICA_PARTENZA
@@ -174,7 +182,8 @@ def prova_avviso(tmp: Path):
              and "l'esito vuol dire che la mano è finita" in u
              and "per una mossa normale restituisci { dati }" in u
              and "anche la prima di ogni partita" in u
-             and "GIOCO.mosse.turno.casella → esito «Mossa effettuata»" in u, u[-900:])
+             and "GIOCO.mosse.turno.casella → esito «Mossa effettuata»" in u
+             and "va nei testi di GIOCO.vista" in u, u[-900:])
     verifica("…l'avviso non è un fallimento: nessuna riga FALLITO della prova di fumo",
              "FALLITO prova di fumo" not in u, u[-600:])
     for nome, file in (("il tris giusto (prove/giochi/tris)", tris),
@@ -212,6 +221,7 @@ def prova_avviso(tmp: Path):
         verifica("contrario: in g.stato() tocca è il nome («Giocatore 1»), non la posizione",
                  'TOCCA "Giocatore 1"' in u, u[-400:])
     prova_senza_turni(tmp)
+    prova_punti_persi(tmp)
     # Nel ciclo dell'agente: la regola nel registro, una volta per lavoro anche con due esecuzioni
     import prova_strumenti_onesti as SO
     esegui = {"name": "esegui_test", "arguments": {}}
@@ -302,22 +312,69 @@ def prova_senza_turni(tmp: Path):
              o.get("turni") == {"punti": [1, 0], "chi": "Giocatore 1"}, str(o))
 
 
+GARA = """"use strict";
+const GIOCO = {
+  nuovaPartita: () => ({ n: 0 }),
+  attivi: { gara: (d) => ({ premi: d.n < 3 }) },
+  mosse: { gara: { premi: (d, c) => ({ dati: { n: d.n + 1 }, __PUNTI__,
+                                     ...(d.n + 1 >= 3 ? { fase: "fine" } : {}) }) } },
+  vista: { gara: (d) => ({ titolo: "Premi", testo: `Premuto ${d.n} volte` }) },
+};
+if (typeof module !== "undefined") module.exports = { GIOCO };
+"""
+
+
+TEST_GARA = ('const { test } = require("node:test");\n'
+             'const { GIOCO } = require("./logica.js");\n'
+             'test("parte", () => GIOCO.nuovaPartita({ giocatori: 2 }));\n')
+
+
+def prova_punti_persi(tmp: Path):
+    """L'avviso dei punti che non vanno a nessuno (revisione della PR #201)."""
+    from calliope.agenti.ciclo import AVVISO_ESITO
+    for nome, punti, turni, gmax, attesa in (
+            ("senza turni, due giocatori, un numero", "punti: 1", False, 2, True),
+            ("contrario: con i turni", "punti: 1", True, 2, False),
+            ("contrario: senza turni, l'elenco",
+             "punti: c.giocatori.map((g, i) => (i ? 0 : 1))", False, 2, False),
+            ("contrario: senza turni, un giocatore solo", "punti: 1", False, 1, False)):
+        m = {"nome": "gara", "titolo": "Gara", "cosa_fa": {"verbo": "propone",
+             "oggetto": "una gara sullo schermo"},
+             "input": {"type": "object", "properties": {}, "required": []}, "permessi": {},
+             "livello": "familiare",
+             "scheda": {"tipo": "gioco", "file": ["logica.js"],
+                        "giocatori": {"min": 1, "max": gmax},
+                        "macchina": {"inizio": "gara", "fasi": {"gara": {
+                            "pagina": "scelte", "turni": turni, "verso": ["fine"],
+                            "comandi": {"premi": {"forme": ["premi"]}}}}}}}
+        u = _sandbox(tmp, "persi_" + str(abs(hash(nome)) % 10 ** 6), {
+            "logica.js": GARA.replace("__PUNTI__", punti),
+            "manifesto.json": json.dumps(m),
+            "logica.test.js": TEST_GARA,
+            }).test()["uscita"]
+        dice = AVVISO_ESITO in u and "non vanno a nessuno" in u and '"turni": true' in u
+        verifica(f"i punti che non vanno a nessuno: {nome} → "
+                 + ("avviso" if attesa else "niente avviso"),
+                 "ok prova di fumo del gioco" in u and dice is attesa, u[-700:])
+
+
 # ═══════════════════════════ 3. gli esempi del tris ═══════════════════════════
 
 def prova_esempi(tmp: Path):
     sezione("3. gli esempi del tris del banco, filtrati")
     from calliope.agenti import accettazione as acc
     an1 = acc.interpreta(analisi(L1), 5, False, True, TESTO)
-    verifica("L1: 6 esempi del modello, 1 tenuto; tolti per causa (testo «ok», «esito» senza "
-             "punti, più di 7 mosse, senza niente da controllare)",
-             an1["esempi_modello"] == 6 and len(an1["esempi"]) == 1
-             and an1["tolti"] == {"lunghi": 2, "niente": 3, "testo": 3,
-                                  "esito_senza_punti": 3}, json.dumps(an1, ensure_ascii=False))
+    verifica("L1: 6 esempi del modello, 3 tenuti; tolti per causa (testo «ok», «esito» senza "
+             "punti alla prima mossa, più di 7 mosse, senza niente da controllare)",
+             an1["esempi_modello"] == 6 and len(an1["esempi"]) == 3
+             and an1["tolti"] == {"lunghi": 2, "niente": 1, "testo": 3,
+                                  "esito_prima_mossa": 1}, json.dumps(an1, ensure_ascii=False))
     an5 = acc.interpreta(analisi(L5), 5, False, True, TESTO)
     verifica("L5: 5 del modello, 3 tenuti («X» e «O» sono nella richiesta, «Vittoria» no)",
              an5["esempi_modello"] == 5 and len(an5["esempi"]) == 3
-             and an5["tolti"] == {"lunghi": 2, "testo": 1, "esito_senza_punti": 2}
+             and an5["tolti"] == {"lunghi": 2, "testo": 1, "esito_prima_mossa": 1}
              and an5["esempi"][0]["atteso"] == {"testo": "X"}
+             and an5["esempi"][1]["atteso"] == {"fase": "esito", "testo": "O"}
              and an5["esempi"][2]["atteso"] == {"fase": "fine", "punti": [1, 0]},
              json.dumps(an5, ensure_ascii=False))
     # I due esempi che si contraddicono: «1…6» finisce, «1…7» con le stesse mosse continua
@@ -342,7 +399,34 @@ def prova_esempi(tmp: Path):
     an = acc.interpreta(analisi(L1[:1]), 5, False, True)
     verifica("contrario: senza la richiesta il testo resta (le prove di prima)",
              an["esempi"] and an["esempi"][0]["atteso"].get("testo") == "ok"
-             and "esito_senza_punti" in an["tolti"], json.dumps(an, ensure_ascii=False))
+             and "esito_prima_mossa" in an["tolti"], json.dumps(an, ensure_ascii=False))
+    # Dalla revisione della PR #201
+    an = acc.interpreta(analisi([_e(3, [1, 4, 2, 5, 3], fase="esito"),
+                                 _e(3, [1, 4, 2, 5, 3, 6, 7], non_attivi=[
+                                     {"comando": "casella", "valore": 7}]),
+                                 _e(3, [1, 4, 2, 5, 3, 6, 7, 8], non_attivi=[
+                                     {"comando": "casella", "valore": 8}])]),
+                        5, False, True, TESTO)
+    verifica("contrari: «1, 4, 2, 5, 3 → esito» senza punti resta (il pareggio e la vittoria "
+             "sono esiti), un esempio di 7 mosse resta, di 8 si toglie",
+             len(an["esempi"]) == 2 and an["esempi"][0]["atteso"] == {"fase": "esito"}
+             and len(an["esempi"][1]["mosse"]) == 7 and an["tolti"] == {"lunghi": 1},
+             json.dumps(an, ensure_ascii=False)[:600])
+    an = acc.interpreta(analisi([_e(3, [1, 4, 2, 5, 3], testo="vinto"),
+                                 _e(3, [1, 4, 2, 5, 3], testo="vince"),
+                                 _e(3, [1, 4, 2, 5, 3], testo="Vittoria")]),
+                        5, False, True, TESTO)
+    verifica("il testo in una forma vicina: «vinto» (sullo schermo) e «vince» (nella richiesta) "
+             "restano, «Vittoria» no",
+             [e["atteso"].get("testo") for e in an["esempi"]] == ["vinto", "vince"]
+             and an["tolti"] == {"testo": 1, "niente": 1}, json.dumps(an, ensure_ascii=False))
+    casi = {("vince", "vinto"): True, ("pareggio", "pareggi"): True, ("punto", "punti"): True,
+            ("vittoria", "vince"): False, ("ok", "oca"): False, ("x", "x"): True,
+            ("turno", "tutti"): False}
+    for (a, b), atteso in casi.items():
+        verifica(f"simili({a!r}, {b!r}) = {atteso}", acc.simili(a, b) is atteso)
+    vicino = acc.interpreta(analisi([_e(3, [1, 4, 2, 5, 3], fase="fine", testo="vince")]),
+                            5, False, True, TESTO)
     an = acc.interpreta(analisi([_e(4, TUTTE, testo="pareggio")]), 5, False, True, TESTO)
     verifica("tutti tolti: 0 tenuti con il conto del modello (1) e la causa",
              an["esempi"] == [] and an["esempi_modello"] == 1 and an["tolti"] == {"lunghi": 1})
@@ -360,13 +444,26 @@ def prova_esempi(tmp: Path):
         r = sb.test(acc.FILE_GIOCO, fumo=False)
         passano, rossi = acc.esito_js(r["uscita"])
         if nome == "L1":
-            # Il «1…6 finisce con un punto» resta: è sbagliato (X ha 1, 3, 5) e nessuna regola
-            # sul testo lo vede senza giocare la partita
-            verifica("L1 sul tris giusto: rosso solo il requisito 3 («1…6» non finisce)",
-                     not passano and rossi == [3], r["uscita"][-600:])
+            # Restano sbagliati «1, 2 → esito», «1, 2, 3 → esito» (le mosse non a turno) e
+            # «1…6 finisce con un punto» (X ha 1, 3, 5): nessuna regola sul testo li vede
+            # senza giocare la partita
+            verifica("L1 sul tris giusto: rossi i requisiti 2 e 3 (mosse non a turno)",
+                     not passano and rossi == [2, 3], r["uscita"][-600:])
         else:
-            verifica("L5 sul tris giusto: i 3 tenuti verdi", passano and not rossi,
+            verifica("L5 sul tris giusto: rosso solo il requisito 2 («5, 1 → esito»: dopo la "
+                     "prima mossa il filtro non lo vede)", not passano and rossi == [2],
                      r["uscita"][-600:])
+    sb = _sandbox(tmp, "rif_vince", {"logica.js": tris["logica.js"],
+                                     "manifesto.json": json.dumps(m)})
+    sb.scrivi(acc.FILE_GIOCO, acc.test_js(vicino))
+    r = sb.test(acc.FILE_GIOCO, fumo=False)
+    verifica("sullo schermo una forma vicina basta: «vince» atteso, «Ha vinto X!» scritto",
+             acc.esito_js(r["uscita"]) == (True, []), r["uscita"][-600:])
+    sb.scrivi(acc.FILE_GIOCO, acc.test_js(acc.interpreta(analisi([_e(
+        3, [1, 4, 2, 5, 3], fase="fine", testo="pareggio")]), 5, False, True, TESTO)))
+    r = sb.test(acc.FILE_GIOCO, fumo=False)
+    verifica("contrario: «pareggio» atteso dopo una vittoria resta rosso",
+             acc.esito_js(r["uscita"]) == (False, [3]), r["uscita"][-600:])
 
 
 # ═══════════════════════════ 4. nel servizio ═══════════════════════════
