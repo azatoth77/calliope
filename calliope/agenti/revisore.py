@@ -768,41 +768,51 @@ def _esito(**kw) -> dict:
     return out
 
 
-_NOME_RICONOSCIBILE = re.compile(r"\bR\d+ esempio \d+\b|\btest_r\d+_\d+\b")
+_NOME_RICONOSCIBILE = re.compile(r"\bR\d+ esempio \d+\b|\btest_r\d+_\d+\b", re.I)
+
+
+def _norm_nome(t) -> str:
+    """Un nome di test senza badare alle maiuscole e agli spazi (terzo controllo della PR #202)."""
+    return " ".join(str(t or "").lower().split())
 
 
 def abbina(voci: list, da_giudicare: list, nome_file: str) -> dict:
-    """I verdetti della passata sugli esempi, uno per esempio (seconda revisione della PR #202):
-    un verdetto vale per l'esempio che nomina; la posizione conta solo per i verdetti senza un
-    nome riconoscibile, e solo se i verdetti sono tanti quanti gli esempi; ogni verdetto si usa
-    una volta. Un nome che non è fra gli esempi giudicati, o due verdetti per lo stesso esempio,
-    non toccano nessun esempio. {"per_esempio": {indice: voce}, "scartati": [(voce, perché)]}."""
+    """I verdetti della passata sugli esempi, uno per esempio (revisioni della PR #202): un
+    verdetto vale per l'esempio che nomina (senza badare alle maiuscole e agli spazi); la
+    posizione conta solo per i verdetti senza nessun nome, e solo se i verdetti sono tanti
+    quanti gli esempi e quel posto è libero; ogni verdetto si usa una volta. Un nome che non
+    corrisponde a nessun esempio rosso giudicato, o due verdetti per lo stesso esempio, non
+    toccano nessun esempio. {"per_esempio": {indice: voce}, "scartati": [(voce, perché)]}."""
     indici = [x[0] for x in da_giudicare]
-    nomi = {x[1]: x[0] for x in da_giudicare}
-    per_nome: dict = {}
-    senza_nome, scartati, doppi = [], [], set()
-    for pos, v in enumerate(voci):
+    nomi = {_norm_nome(x[1]): x[0] for x in da_giudicare}
+
+    def quale(v):
+        """(indice o None, motivo dello scarto o None); (None, None): senza nome."""
         t = str(v.get("test") or "").strip()
-        i = nomi.get(t)
+        if not t:
+            return None, None
+        i = nomi.get(_norm_nome(t))
         if i is None and _NOME_RICONOSCIBILE.search(t):
             i = esempio_nel_test(nome_file, t)
-            if i not in indici:
-                scartati.append((v, f"«{t}» non è fra gli esempi rossi giudicati"))
-                continue
-        if i is None:
+        if i is None or i not in indici:
+            return None, f"«{t}» non corrisponde a nessun esempio rosso giudicato"
+        return i, None
+    risolti = [quale(v) for v in voci]
+    per_nome: dict = {}
+    senza_nome, scartati, doppi = [], [], set()
+    for pos, (v, (i, perche)) in enumerate(zip(voci, risolti)):
+        if perche:
+            scartati.append((v, perche))
+        elif i is None:
             senza_nome.append((pos, v))
-            continue
-        if i in per_nome or i in doppi:
+        elif i in per_nome or i in doppi:
             doppi.add(i)
-            continue
-        per_nome[i] = v
+        else:
+            per_nome[i] = v
     for i in doppi:
-        v = per_nome.pop(i, None)
-        for x in [v] + [w for w in voci if w is not v and (
-                nomi.get(str(w.get("test") or "").strip()) == i
-                or esempio_nel_test(nome_file, w.get("test")) == i)]:
-            if x is not None:
-                scartati.append((x, "più verdetti per lo stesso esempio"))
+        per_nome.pop(i, None)
+        scartati += [(v, "più verdetti per lo stesso esempio")
+                     for v, (k, _) in zip(voci, risolti) if k == i]
     per_esempio = dict(per_nome)
     if senza_nome and len(voci) == len(da_giudicare):
         for pos, v in senza_nome:
@@ -812,7 +822,8 @@ def abbina(voci: list, da_giudicare: list, nome_file: str) -> dict:
             else:
                 per_esempio[i] = v
     else:
-        scartati += [(v, "senza un nome riconoscibile") for _, v in senza_nome]
+        scartati += [(v, "senza un nome, e i verdetti non sono uno per esempio")
+                     for _, v in senza_nome]
     return {"per_esempio": per_esempio, "scartati": scartati}
 
 
@@ -934,7 +945,8 @@ def esempio_nel_test(nome_file: str | None, test: str) -> int | None:
     if not nome_file:
         return None
     t = str(test or "")
-    m = re.search(r"\bR\d+ esempio (\d+)\b", t) or re.search(r"\btest_r\d+_(\d+)\b", t)
+    m = (re.search(r"\bR\d+ esempio (\d+)\b", t, re.I)
+         or re.search(r"\btest_r\d+_(\d+)\b", t, re.I))
     return int(m.group(1)) if m and int(m.group(1)) > 0 else None
 
 

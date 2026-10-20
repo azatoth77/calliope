@@ -635,7 +635,7 @@ def prova_revisione_202(tmp: Path):
                 if str(x.get("esito") or "").startswith("scartato")]
     verifica("verdetti con nomi che non ci sono: nessun esempio tolto, scartati con il motivo",
              len(esempi_file(sb)) == 2 and len(scartati) == 2
-             and "non è fra gli esempi" in scartati[0]["esito"]
+             and "non corrisponde" in scartati[0]["esito"]
              and not regole(lav).get("agente_revisore_esempio_tolto"), str(scartati))
     lav, sb = estensione(tmp, "doppio", codice=ROTTA)
     lav, ris, log, cli, sb = gira(tmp, "doppio", [[ESEGUI], [consegna()]], [[
@@ -660,6 +660,21 @@ def prova_revisione_202(tmp: Path):
     verifica("…senza nome al posto di un esempio già nominato: scartato, non spostato",
              a["per_esempio"] == {1: {"test": "test_r1_1", "verdetto": "codice_sbagliato"}}
              and len(a["scartati"]) == 1, str(a))
+    # Terzo controllo della PR #202: maiuscole e spazi, e i nomi con la forma di un test
+    a = abbina([{"test": "TEST_R1_2", "verdetto": "test_sbagliato"}], da[1:], acc.FILE)
+    verifica("«TEST_R1_2» vale per test_r1_2 (senza badare alle maiuscole)",
+             list(a["per_esempio"]) == [2] and not a["scartati"], str(a))
+    da3 = da + [(3, "test_r2_3", "", None, "c")]
+    a = abbina([{"test": "TEST_R1_2", "verdetto": "a"}, {"test": " Test_R1_1 ", "verdetto": "b"},
+                {"test": "test_r2_3", "verdetto": "c"}], da3, acc.FILE)
+    verifica("[TEST_R1_2, Test_R1_1, test_r2_3] abbinati per nome, non per posizione",
+             {i: x["verdetto"] for i, x in a["per_esempio"].items()} == {2: "a", 1: "b", 3: "c"}
+             and not a["scartati"], str(a))
+    a = abbina([{"test": "test_foo", "verdetto": "test_sbagliato"},
+                {"test": "test_r1_2", "verdetto": "codice_sbagliato"}], da, acc.FILE)
+    verifica("«test_foo» non corrisponde a nessun esempio: scartato col motivo, non per posizione",
+             list(a["per_esempio"]) == [2] and len(a["scartati"]) == 1
+             and "non corrisponde" in a["scartati"][0][1], str(a))
     # P2: con tutto verde nessuna esecuzione dei test in più
     conti = {}
     for modo in ("spento", "ombra"):
