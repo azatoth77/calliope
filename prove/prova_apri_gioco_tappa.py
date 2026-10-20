@@ -10,13 +10,18 @@ sandbox col docker finto:
    rimando della riproduzione; contrari: il contratto dell'estensione e il rimando di un
    programma no;
 2. un *.test.js di un gioco che definisce apriGioco o creaCaso: nel risultato di esegui_test il
-   fatto del motore finto e la regola agente_motore_finto; contrari: le chiamate, i commenti, un
+   fatto del motore finto e la regola agente_motore_finto; contrari: le chiamate, i commenti
+   (anche a blocco), gli alias dal globale (`const apriGioco = globalThis.apriGioco`), un
    file in sola lettura, un lavoro che non è un gioco;
 3. alla tappa con lo stato consegnabile (decisione di chi amministra del 20/10) il lavoro si
    chiude «fatto» (regola agente_consegna_alla_tappa, a voce «non ha consegnato, ma ha finito»),
    con gli esempi verdi o con la riproduzione «riprodotto»; contrari: i test verdi senza
    controllo indipendente, i test dell'agente rossi, gli esempi rossi, la correzione senza un
-   test che riproduce (e il suo rimando resta per il giro dopo);
+   test che riproduce (e il suo rimando resta per il giro dopo); con «tappa» anche il tetto del
+   giro (`consegna_al_tetto_giro`). Dalle revisioni della PR #194: un giro con una nota della
+   persona («aggiungi anche …») non si chiude d'ufficio, e la nota resta anche nel giro dopo
+   senza nota (tappa); contrario: l'agente consegna da sé «fatto», la nota esce e una tappa dopo
+   può chiudersi. Dopo due passate di prosa il no della riproduzione non consuma il rimando;
 4. scrivi_file e il «nuovo» di modifica_file rifiutano il segnaposto della compattazione
    (regola agente_segnaposto); contrari: un testo con le parentesi quadre, la scrittura vera;
 (il suggerimento del palco con la pagina già «griglia» è in prova_gioco_palco, sezione 1b).
@@ -281,14 +286,19 @@ def prova_tappa(tmp: Path):
              ris.get("consegna_al_tetto") == "tappa"
              and ris.get("consegna_al_tetto_giro") == "passate", str(ris)[:300])
     # Revisione della PR #194: un giro con una nota della persona non si chiude d'ufficio
-    sbagliata = [P.scrivi("estensione.py", F2.SBAGLIATA)]
-    corretta = [P.scrivi("estensione.py", F2.GIUSTA)]
-    lav, ris, log, sb = _estensione(tmp, "nota", [sbagliata, [P.ESEGUI], [F2.LEGGI]])
+    # Copioni nuovi a ogni giro: il contesto compatta gli argomenti delle chiamate vecchie sul
+    # posto, e un copione riusato scriverebbe il segnaposto
+    def sbagliata():
+        return [P.scrivi("estensione.py", F2.SBAGLIATA)]
+
+    def corretta():
+        return [P.scrivi("estensione.py", F2.GIUSTA)]
+    lav, ris, log, sb = _estensione(tmp, "nota", [sbagliata(), [P.ESEGUI], [F2.LEGGI]])
     verifica("giro 1 con gli esempi rossi: tappa", ris.get("esito") == "tappa"
              and str(lav.segnali.get("tappa_no")).startswith("esempi di accettazione rossi"),
              f"{ris.get('esito')} {lav.segnali.get('tappa_no')}")
     lav.risposta, lav.nota_giro, lav.passi0 = "continua", "aggiungi anche le iarde", lav.passi
-    lav, ris, log, sb = _estensione(tmp, "nota", [corretta, [P.ESEGUI], [F2.LEGGI]], lav=lav,
+    lav, ris, log, sb = _estensione(tmp, "nota", [corretta(), [P.ESEGUI], [F2.LEGGI]], lav=lav,
                                     sb=sb)
     verifica("contrario: giro 2 con la nota «aggiungi anche …», al tetto con gli esempi verdi "
              "ma senza averla fatta: resta tappa, il motivo in tappa_no",
@@ -298,9 +308,30 @@ def prova_tappa(tmp: Path):
              and not regole(lav).get("agente_consegna_alla_tappa"), f"{ris} {lav.segnali}")
     lav.risposta, lav.passi0 = "continua", lav.passi
     lav, ris, log, sb = _estensione(tmp, "nota", [[F2.LEGGI]] * 3, lav=lav, sb=sb)
-    verifica("…il giro dopo senza nota la toglie, e la tappa si chiude «fatto»",
-             ris.get("esito") == "fatto" and ris.get("consegna_al_tetto") == "tappa"
-             and "nota_giro" not in lav.segnali, f"{ris.get('esito')} {lav.segnali}")
+    # Seconda revisione della PR #194: un «continua» senza nota non la toglie
+    verifica("…giro 3 senza nota: la richiesta non è fatta, la nota resta e resta tappa",
+             ris.get("esito") == "tappa"
+             and lav.segnali.get("nota_giro") == "aggiungi anche le iarde"
+             and lav.segnali.get("tappa_no") == "la persona ha chiesto qualcosa in questo giro",
+             f"{ris.get('esito')} {lav.segnali}")
+    # Il contrario: al giro 3 l'agente consegna da sé, la nota esce e una tappa dopo può
+    # chiudersi
+    lav, ris, log, sb = _estensione(tmp, "nota-consegna", [sbagliata(), [P.ESEGUI], [F2.LEGGI]])
+    lav.risposta, lav.nota_giro, lav.passi0 = "continua", "aggiungi anche le iarde", lav.passi
+    lav, ris, log, sb = _estensione(tmp, "nota-consegna", [corretta(), [P.ESEGUI], [F2.LEGGI]],
+                                    lav=lav, sb=sb)
+    lav.risposta, lav.passi0 = "continua", lav.passi
+    lav, ris, log, sb = _estensione(tmp, "nota-consegna", [[P.consegna()]], lav=lav, sb=sb)
+    verifica("contrario: al giro 3 l'agente consegna da sé «fatto»: la nota esce",
+             ris.get("esito") == "fatto" and not ris.get("consegna_al_tetto")
+             and "nota_giro" not in lav.segnali, f"{ris} {lav.segnali}")
+    from calliope.agenti.ciclo import Limite
+    from calliope.estensioni.prompt import controlla_consegna
+    chiusura = G.agente()._consegna_alla_tappa(lav, sb, Limite("tetto", tipo="passate"),
+                                               lambda x: controlla_consegna(x), False, None)
+    verifica("…e una tappa dopo può chiudersi d'ufficio",
+             (chiusura or {}).get("esito") == "fatto"
+             and (chiusura or {}).get("_al_tetto") == "tappa", str(chiusura))
     # Revisione della PR #194: dopo la prosa il no della riproduzione non consuma il rimando
     lav, ris, log = _correzione(tmp, "prosa", [giusta, [P.ESEGUI], "Ho finito.", "Ho finito.",
                                                 [P.consegna()], [P.consegna()]],

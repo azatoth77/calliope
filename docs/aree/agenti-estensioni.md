@@ -4436,8 +4436,10 @@ di nuovo, più `--casi porte --giri 1 --ripetizioni 5` per il confronto col 19/1
 - **Un giro con una nota della persona non si chiude d'ufficio alla tappa.** La nota di «cambia e
   continua» (`lav.nota_giro`) entrava nel messaggio del giro e poi si azzerava: nessuno sapeva più
   che il giro aveva una richiesta, e gli esempi e la riproduzione non la vedono. Ora resta in
-  `segnali["nota_giro"]` per tutto il giro (anche dopo una domanda; un giro senza nota la toglie),
-  e `_consegna_alla_tappa` con la nota dice no, «la persona ha chiesto qualcosa in questo giro», in
+  `segnali["nota_giro"]` (anche dopo una domanda) finché l'agente non consegna da sé «fatto» e la
+  consegna passa, o finché una nota nuova non la sostituisce: un «continua» senza nota non la
+  toglie (seconda revisione; *[storico: «un giro senza nota la toglie» fino alla seconda
+  revisione]*). `_consegna_alla_tappa` con la nota dice no, «la persona ha chiesto qualcosa in questo giro», in
   `tappa_no`. Il caso del revisore: giro 1 tappa con gli esempi rossi, nota «aggiungi anche le
   iarde», giro 2 al tetto con gli esempi verdi senza le iarde: era «fatto», ora tappa.
 - **Dopo la prosa il no della riproduzione non consuma il rimando** (`_consegna_dalla_prosa`, lo

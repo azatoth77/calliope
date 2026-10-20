@@ -1029,11 +1029,14 @@ def secco_tetto(tmp: Path) -> int:
         fake.copione = porte(True)
         r = un_lavoro(svc, cfg, tmp, "porte", casi()["porte"], "secco g=2", giri=2)
         verifica("a due giri, le porte corrette e il test del disegno alla tappa del giro 1: "
-                 "«fatto» lì, con la riproduzione e la regola agente_consegna_alla_tappa",
+                 "«fatto» lì, con la riproduzione, il tetto del giro e la regola "
+                 "agente_consegna_alla_tappa",
                  r["esito"] == "fatto" and r["consegna_al_tetto"] == "tappa"
+                 and r["consegna_al_tetto_giro"] == "passate"
                  and r["consegna_al_tetto_con"] == "riproduzione" and r["giri"] == 1
                  and r["regole"].get("agente_consegna_alla_tappa") == 1 and r["riuscito"],
-                 json.dumps({k: r.get(k) for k in ("esito", "consegna_al_tetto", "giri",
+                 json.dumps({k: r.get(k) for k in ("esito", "consegna_al_tetto",
+                                                   "consegna_al_tetto_giro", "giri",
                                                    "riproduzione", "regole", "tappa_no")},
                             ensure_ascii=False, default=str))
         fake.copione = porte(False)

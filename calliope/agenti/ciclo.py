@@ -1299,15 +1299,14 @@ class Agente:
                                 " Se un test fallisce sempre con lo stesso errore, cambia "
                                 "strada. Alla fine chiama consegna.")})
             lav.nota_giro = ""
-            # La nota del giro resta nei segnali per tutto il giro, anche dopo una domanda
-            # (revisione della PR #194): con una richiesta della persona in questo giro la tappa
-            # non si chiude d'ufficio (`_consegna_alla_tappa`); un giro senza nota la toglie
+            # La nota del giro resta nei segnali (revisioni della PR #194): con una richiesta
+            # della persona la tappa non si chiude d'ufficio (`_consegna_alla_tappa`). Esce solo
+            # quando l'agente consegna da sé «fatto» (sotto, dopo il ciclo) o la sostituisce una
+            # nota nuova: un «continua» senza nota non la toglie, la richiesta non è fatta
             if not isinstance(lav.segnali, dict):
                 lav.segnali = {}
             if nota:
                 lav.segnali["nota_giro"] = nota
-            else:
-                lav.segnali.pop("nota_giro", None)
         elif ctx and lav.risposta is not None:
             # Ripresa dopo una domanda (03/10): la conversazione dell'agente è quella di prima
             messages = ctx["messages"]
@@ -1914,6 +1913,10 @@ class Agente:
         if self._ha_test(sandbox):
             test = sandbox.test()
         esito = str(consegna.get("esito") or "fatto")
+        if esito_fatto(consegna) and not consegna.get("_al_tetto"):
+            # La consegna «fatto» dell'agente, accettata: la nota della persona è sua da qui
+            # (seconda revisione della PR #194). Una chiusura d'ufficio non la toglie
+            seg.pop("nota_giro", None)
         # I test spariti dall'ultima tappa (revisione della PR #179, #174): li dice il codice
         tolti = test_tolti(seg, test) if test is not None else None
         if tolti:
