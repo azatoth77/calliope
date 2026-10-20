@@ -4344,3 +4344,33 @@ regola `agente_strumento_sconosciuto`: uno strumento dell'agente che questa pass
 «non è disponibile in questo lavoro», con il perché quando c'è (un gioco senza Python né rete,
 `sonda_rete` in una correzione, il motivo di `_esempi_ok` o `_sonde_ok`); un nome inventato è
 «non c'è». L'elenco degli strumenti sta nel testo dell'errore e nella chiave `strumenti`.
+
+## Capacità concesse e revocabili invece degli impossibili (20/10, issue #193, ramo `issue-193-capacita-concesse`)
+
+**Il caso** (20/10): chi amministra ha chiesto un'estensione con capacità che il contratto elenca
+fra gli impossibili (`contratto.py:90-114`: un login con un token, una partenza a orario, un
+messaggio fuori casa), e il lavoro è stato negato alla prima passata (`agenti/ciclo.py:2126-2139`).
+La richiesta: «vorrei che si potesse fare tutto ma che sia tutto revocabile alla bisogna». Si
+cambia il principio, non si scrive un'eccezione.
+
+**Deciso** (decisione [0033](../decisioni/0033-capacita-concesse-e-revocabili.md)): la certezza
+viene dal controllo a ogni uso e dalla revoca, non dall'assenza. L'estensione resta senza poteri
+(container senza rete né segreti); ogni capacità la esercita Calliope dalla porta stretta, che
+controlla a ogni chiamata una **concessione** con il suo ambito (su cosa, quali operazioni, quando,
+quanto spesso) e la sua classe (E0–E4). «Non concesso» diventa una richiesta nel piano e
+nell'analisi; ciò che manca all'infrastruttura diventa «serve una capacità nuova». Le irreversibili
+(inviare, pagare, cancellare fuori casa) **mai in anticipo**: si preparano, e l'atto si conferma al
+momento. I segreti li tiene Calliope; revoca a più livelli; un uso fuori ambito sospende da solo.
+Scelte di chi amministra: concede chi amministra (con la sfida; i dati di una persona solo con lei
+presente), le concessioni non scadono fino alla revoca o a una versione nuova.
+
+**Analisi e piano** in [`../ricerche/2026-10-20-capacita-concesse.md`](../ricerche/2026-10-20-capacita-concesse.md):
+i dodici impossibili uno per uno (sette divieti di politica, cinque limiti dell'infrastruttura),
+cosa c'è da riusare (porta, guardrail, flussi e contaminazione, `chiedi_permesso`, i «sì, sempre»
+come germe della concessione, scheda di revisione, sfida, registri, revoche, cruscotto), cosa manca,
+i rischi nuovi e un piano in otto passi, ognuno con l'interruttore spento di serie: registro delle
+concessioni in ombra, controllo a ogni chiamata, revoca e sospensione, piano che chiede, azioni
+preparate, deposito dei segreti, autonomia (#53), capacità dell'infrastruttura una per una.
+**Niente codice in questo lavoro**: fino al primo passo il contratto, il piano dell'agente,
+l'analisi della richiesta e i requisiti trattano ancora i dodici impossibili come prima. Il piano
+aspetta l'approvazione di chi amministra; poi una issue per passo.
