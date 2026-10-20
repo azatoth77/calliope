@@ -1117,3 +1117,47 @@ vero (porte 2–4, tris 2–2, memory, quiz, sette e mezzo, oca in quattro, lucc
 con un'azione, forza quattro condiviso, il quiz che vuole internet) e controlla dal log la partenza
 con i giocatori dell'analisi; le **partite** (`partita-porte`) chiedono la pagina vera dello schermo
 in Edge, che la prova non ha ancora: si saltano finché non c'è (il punto aperto di #75).
+
+## La macchina a stati serve ancora? Analisi delle opzioni (20/10, issue #198, parte 1)
+
+Il 20/10 sera, con tutto l'harness del 19–20/10 installato, la correzione delle porte fa 8/8 e il
+tris per due da zero fa 0/3. Chi amministra ritiene Qwen3.6-35B-A3B adatto a un tris e chiede di
+cercare il problema nell'harness o nelle specifiche. La macchina (13/10) è nata prima di
+quell'harness. L'analisi in sola lettura è in
+[`2026-10-20-giochi-macchina-o-interfaccia.md`](../ricerche/2026-10-20-giochi-macchina-o-interfaccia.md).
+In breve:
+- **le garanzie di Calliope non dipendono dalle fasi dichiarate dal gioco**: comandi a voce,
+  giudice, domande, istantanea validata, partite condivise, ripresa, chi è quale giocatore e palco
+  usano un elenco chiuso di comandi nel manifesto, un'istantanea numerata, uno stato
+  serializzabile con una vista pura, e preparazione, fine e disegno di Calliope;
+- **il costo per l'agente**:
+  - circa 3 300–3 500 caratteri su 9 141 del §2 del contratto (36–38 %) parlano soltanto della
+    macchina;
+  - `tocca` è un nome in `g.stato()` e una posizione nel contesto della mossa;
+  - `turno` nel contesto è il numero del giro, e il contratto non lo dice;
+  - senza turni, se non si sa chi ha mosso, i punti vanno al Giocatore 1;
+  - contratto, prompt dell'analisi («dopo ogni mossa di solito c'è la fase «esito»») e gioco
+    della partenza suggeriscono l'esito a ogni mossa;
+- **il catalogo dal 14/10**: 14 lavori di gioco falliti, e un'interfaccia senza fasi ne
+  toglierebbe 5–6: 4 certi e 1 probabile con un concetto della macchina come causa principale,
+  più il «dopo» di un lavoro della transizione, contato fra i 3 qui sotto. Gli altri:
+  - 3 vengono dalla transizione dai giochi di prima;
+  - 2 dalla regressione dell'harness chiusa da #192;
+  - 3 dalla logica e dalla forma della vista, che resta;
+  - 1 non ha la causa scritta.
+
+  La correzione di un gioco che c'è già fa 14/16 dal 19/10, e 8/8 dopo #192;
+- **le opzioni**: A, la macchina con il contratto semplificato; A′, la macchina con l'agente che
+  scrive solo i test della logica; B, una macchina più piccola; C, quattro funzioni pure su uno
+  stato del gioco con `tocca`, `punti` e `fine`, anche come **facciata** sopra il motore di oggi
+  (2–3 giorni di prototipo). C perde la validazione dei comandi per fase, pagina e turni per fase,
+  e turni e punti coerenti per costruzione; D, JavaScript libero;
+- **la raccomandazione**: prima #197; poi il banco della parte 2 con `tris2`, `tris2-solo-logica`
+  e `tris-nudo`, a 10 ripetizioni per caso;
+  - le soglie si scrivono prima: alto ≥ 8/10, basso ≤ 3/10, applicate in ordine, con il caso
+    intermedio. Il rilancio si somma ai primi 10;
+  - 8/10 contro 3/10 è una soglia di decisione, non una prova (p = 0,070 a due code);
+  - il prototipo di C si fa solo con un margine più forte: 9/10 contro ≤ 3/10, oppure 8/10
+    contro ≤ 2/10.
+
+  La scelta la fa il banco, non un parere.
