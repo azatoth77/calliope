@@ -157,11 +157,15 @@ class ClienteOllama:
                             try:
                                 args = json.loads(args)
                             except ValueError:
+                                # Rotti o troncati (19/10, #185): il ciclo lo dice all'agente
                                 args = {}
+                                out.setdefault("rotti", []).append(len(out["tool_calls"]))
                         out["tool_calls"].append({"name": fn.get("name", ""),
                                                   "arguments": args if isinstance(args, dict)
                                                   else {}})
                     if obj.get("done"):
+                        if obj.get("done_reason"):
+                            out["fine"] = str(obj["done_reason"])     # «length»: num_predict
                         out["eval"] = int(obj.get("eval_count") or 0)
                         out["prompt"] = int(obj.get("prompt_eval_count") or 0)
                         break

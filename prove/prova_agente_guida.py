@@ -600,10 +600,12 @@ def prova_ciclo(tmp: Path):
              f"per intero {RISCRITTURE_MAX} volte" in rif
              and "AssertionError: -1 != 5" in rif and "in test_programma.py:7" in rif
              and "leggi_file con percorso «test_programma.py» e riga 7" in rif, rif[:400])
-    verifica("…la regola nel log e sulla scheda",
+    verifica("…la regola nel log, sulla scheda e contata nei segnali del lavoro (19/10, #9)",
              any("agente_riscrittura_ripetuta" in x for x in log)
              and any(ev == "spinta" and d.get("regola") == "agente_riscrittura_ripetuta"
-                     for ev, d in eventi), str(log[-3:]))
+                     for ev, d in eventi)
+             and (lav.segnali.get("regole") or {}).get("agente_riscrittura_ripetuta", 0) >= 1,
+             f"{log[-3:]} {lav.segnali.get('regole')}")
     rip = next((u for u in utenti if "stai ripetendo lo stesso ragionamento" in u), "")
     verifica("giro a vuoto con un errore noto: la spinta concreta",
              "AssertionError: -1 != 5" in rip and "non riscrivere il file intero" in rip,

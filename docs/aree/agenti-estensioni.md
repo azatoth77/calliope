@@ -3913,6 +3913,342 @@ le tappe con `tipo_limite` «consegna_rossa» e «prosa».
   e una spinta già data). `agente_esito_non_valido` si scrive anche per gli strumenti `grafo_*`
   della ricerca (`nota_valore_non_ammesso`). L'esito vuoto è un errore (prima valeva «fatto»).
 
+## Il banco scrive i motivi: tolti, calcolo, no al tetto, regole e limite (19/10, issue #9, ramo `issue-9-banco-motivi`)
+
+Il passo 0 della [ricerca sulla solidità dell'harness](../ricerche/2026-10-19-solidita-harness-sviluppo.md)
+(§ 3.7 e § 5): prima di cambiare il comportamento dell'agente, la riga di `riepilogo.json` di
+`prove/manuali/banco_temperatura.py` dice da sé quello che il 14/10 si contava a mano dal log.
+Nessun cambio di comportamento: solo dati salvati nel lavoro e scritti nella riga.
+
+- **L'analisi prima del codice** (`analisi` della riga, da `lav.accettazione`): `nominati` (i
+  valori nominati per input, quelli che la richiesta dice alla lettera), `valori` (i controlli
+  «si riconosce» in più), `tolti` per genere (`fuori`, `numero`, `contiene`; per un programma
+  anche `dati`) e `con_calcolo`, quanti esempi tenuti hanno il `calcolo` rifatto dal codice
+  (contato in `accettazione.interpreta`; prima si vedeva solo quando non tornava, in
+  `tolti.numero`); in un programma non conta l'esempio il cui numero è tolto perché uguale a
+  un dato.
+- **Il no al tetto**: la funzione `no` di `Agente._consegna_al_tetto` scrive il motivo anche in
+  `lav.segnali["al_tetto_no"]` (con il tetto in `al_tetto_tipo`); nella riga `al_tetto_no` e
+  `al_tetto_no_tipo`, solo per un lavoro finito «limite». Dopo due passate di sola prosa con lo
+  stato consegnabile (#180) la stessa funzione decide con il tipo «prosa», anche a tappe: lì il
+  no non ferma il lavoro, che continua e può consegnare, e va a parte in `prosa_no` (revisione
+  della PR #181: prima restava `al_tetto_no` in un lavoro poi «fatto»). I motivi possibili: «senza esempi di accettazione», «mancano i file che la
+  consegna chiede», «esempi di accettazione rossi (requisiti …)», «i test dell'agente non
+  passano», «la consegna non va: …», «il ricollaudo con i casi della persona non va»,
+  «correzione non riprodotta (…)», «controllo non riuscito (…)».
+- **Il limite**: il servizio mette il tipo del `Limite` in `lav.segnali["limite"]` («passate»,
+  «tempo», «token», «a_vuoto»; con #180 anche «prosa», più di `PROSA_MAX` passate di fila senza
+  strumenti, e «consegna_rossa», la consegna con i test rossi; «altro» per gli altri, per
+  esempio il modello che non usa gli strumenti); nella riga `limite`, solo per un lavoro finito
+  «limite». Non va nel risultato:
+  lì `tipo_limite` è quello di una tappa e cambia la frase.
+- **Le regole** (`regole`, da `lav.segnali["regole"]`, `sonde.nota`): dal 19/10 contate anche
+  `agente_ragionamento_ripetuto` e `agente_riscrittura_ripetuta`, che prima andavano solo nel
+  log e sulla scheda (senza riga in più nel log). Le altre c'erano già: `agente_spinta_consegna`,
+  `agente_test_tolti`, `agente_consegna_al_tetto`, `agente_giri_uguali`,
+  `agente_consegna_dopo_giri`, `agente_test_instabili`, `agente_riscrittura_piccola`.
+- **I segnali di giro** di fine lavoro (`segnali_giro`: `senza_novita`, `senza_progressi`,
+  `ripetizioni`, `riscritti`, da `segnali_giro`); con più giri i primi due sono dell'ultimo
+  giro, perché ripartono a ogni «continua».
+
+**Come leggerla.** Il criterio di #9 «0 lavori fermati al tetto con "mancano i file che la
+consegna chiede" e accettazione nascosta verde» è `al_tetto_no == "mancano i file…"` con
+`accettazione: true`; il falso «fatto» resta `esito == "fatto"` con `accettazione: false`. Per
+ogni convertitore la riga ha `nominati`, `tolti` e `con_calcolo`. A secco (`--secco`) la consegna
+al tetto controlla i campi nuovi: l'esempio con «leghe» (non nella richiesta) tolto come
+`fuori`, `nominati == {"da": ["miglia"]}`, `con_calcolo == 1`; nel contrario «limite» delle
+passate con «esempi di accettazione rossi», nelle porte senza il test «correzione non
+riprodotta»; e le porte con due passate di prosa, poi il test e la consegna: «fatto», niente
+`al_tetto_no` né `limite`, «correzione non riprodotta» in `prosa_no`. *[storico: «Resta il banco sulla DGX (punto 2 di #9), di chi amministra.» fino al 19/10: fatto, sotto]*
+
+**Il banco sulla DGX del 19/10** (punto 2 di #9; qwen3.6-35B-A3B su vLLM, t 0,6, presence della
+Config, 5 ripetizioni × 3 casi; installata `20261018-2042-97bacbb6`, cioè main prima di #180;
+banco dal ramo a `c234a7b`; `~/banchi/valori-1019-1552`, 35 minuti, 145 000 token). **13/15**
+contro gli 11/15 del 14/10 mattina: porte **5/5** (3/5), tutte con la riproduzione «riprodotto»
+e 9–13 passate; convertitore **4/5** (3/5); programma **4/5** (5/5). I due rossi:
+- **convertitore L5**: 24 passate, «limite» per le passate, `estensione.py` riscritto 4 volte,
+  10 passate senza novità, 24 errori su 30 test suoi e 4 su 5 degli esempi, tutti dallo stesso
+  `NameError: name 'NOME_TESTO' is not defined` (estensione.py:109); `al_tetto_no` «esempi di
+  accettazione rossi (requisiti [1])». È il giro in tondo che #185 (strumenti onesti) vuole
+  dire all'agente: la stessa firma a ogni esecuzione e il ritorno a stati già visti.
+- **programma L15**: «fatto» in 3 passate con i suoi 5 test verdi e l'accettazione nascosta
+  rossa (si aspettava `2026-09-14_gatto.JPG`, l'estensione del file com'era): un programma non
+  ha esempi di accettazione, quindi l'harness non aveva niente per accorgersene (#10).
+
+Criteri di #9: 15 lavori sì; porte ≥ 3/5 sì; 0 «mancano i file» con l'accettazione verde sì;
+valori, tolti e `con_calcolo` nella riga sì (nel convertitore L5, letto
+dalla riga: 10 nominati per input, 7 tolti «contiene», 6 col calcolo); **0 «fatto» con l'accettazione nascosta rossa no (1, il programma)**:
+si chiude solo con gli esempi dei programmi (#10).
+
+## Il banco del revisore: lo stesso modello a contesto pulito (19/10, issue #182, ramo `issue-182-banco-revisore`)
+
+**Perché.** Nei giri a vuoto del 18/10 (#174) il giudizio «è il test o è il codice?» lo dava
+l'agente su sé stesso, o la persona alla tappa; nessuno guarda le passate. Prima di costruire
+un revisore nel ciclo (passo 6 della ricerca del 19/10 sulla solidità dell'harness, § 3.6 e
+§ 4) si misura se una passata dello **stesso modello** (qwen3.6 su vLLM, dalla Config) a
+**contesto pulito** dà i verdetti della persona. Rischi noti: l'eco («// Musica: fatto»,
+11/10), gli errori dello stesso modello, il revisore che dà sempre la stessa risposta.
+
+**Il banco** (`prove/manuali/banco_revisore.py`). Il revisore vede solo il pacchetto delle prove:
+il contratto del gioco (`estensioni/contratto.testo`), i requisiti, i file senza commenti né
+docstring (le righe restano al loro posto, i file:riga dell'uscita valgono), l'esito vero dei
+test con i fallimenti in breve (`diagnosi.da_uscita`) e la coda dell'uscita, il registro dei
+tentativi se c'è; mai la trascrizione, il diario o il riassunto dell'agente. Una passata con
+`requisiti.chiama` (che ora accetta la `temperatura`, di serie 0 come prima, e dice i token di
+ragionamento in `uso`), il ragionamento acceso (`--ragionamento`, 4096) e la temperatura
+dell'agente (`--temperatura` per cambiarla); schema chiuso: `verdetto` tra continua,
+cambia_strada, test_sbagliato, codice_sbagliato, consegna, chiedi_persona, con file, riga, test,
+causa e azione.
+
+**I casi** (l'uscita dei test si genera a ogni esecuzione, con Node e il motore dei giochi di
+adesso: la sandbox della Config se il container di Node c'è, altrimenti il Node della
+macchina): `tris-inizia` (il tris per due con il test del 18/10 che muove senza «Inizia»),
+`tris-inizia-muto` (lo stesso, con il consiglio dell'errore tolto dal pacchetto) e
+`porte-disegno` (le porte giuste con il test del disegno di L7 del 14/10) → `test_sbagliato`
+su gioco.test.js; i contrari `codice_sbagliato` (le porte rotte con il test giusto, logica.js),
+`consegna` (il tris per due tutto verde), `cambia_strada` (le porte rotte e cinque tentativi
+A-B-A-B-A su `giocatori.min` del manifesto con lo stesso errore vero) e `chiedi_persona` (quanto
+vale la caramella lo decide la persona, il test dell'agente ne ha scelto uno). `--da-lavoro
+<cartella> --atteso <verdetto>` costruisce lo stesso pacchetto da un lavoro vero sulla DGX
+(test rieseguiti su tutti i file; nel pacchetto niente `risultato.md` né `esempi_veri/`, al più
+12 000 caratteri per file e 60 000 in tutto, con un avviso; requisiti dallo sviluppo del lavoro
+in sviluppi.json, e senza l'ora con più sviluppi candidati il banco chiede `--sviluppo`); niente
+di quella cartella va nel repository.
+
+**Come leggere i numeri** (revisione della PR #184). In `tris-inizia` l'errore vero del motore
+dice già «…ogni partita comincia nella fase «preparazione»; correggi il test, non il manifesto»
+(`fumo_js.mjs`, `viaDallaPreparazione`, da #174), e in `porte-disegno` l'errore spiega perché
+«avanti» non vale: lì un 5/5 misura soprattutto se il modello legge il suggerimento, che
+l'agente riceve già. Per questo c'è `tris-inizia-muto` (restano la fase e i comandi attivi,
+e il contratto, che dice di toccare «Inizia» con min = max), e contano di più i contrari e
+`--da-lavoro`. In `chiedi_persona` la logica dà «Nessun punto!» alla caramella mentre il
+requisito dice che vale dei punti: un `codice_sbagliato` lì è un'ambiguità del caso più che un
+errore del revisore.
+
+**Criterio** (#182): ≥ 4/5 sui tre casi e ≥ 4/5 su ciascun contrario → il revisore a contesto
+pulito si costruisce con qwen3.6; sotto, serve un modello diverso (#175) o il revisore non
+vale. I numeri della DGX vanno qui e nella ricerca del 19/10.
+
+        cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+          && $V/.venv/bin/python $V/prove/manuali/banco_revisore.py \
+             --ripetizioni 5 --uscita ~/banco-revisore
+
+Prima dell'unione, da un clone del ramo (`git clone -b issue-182-banco-revisore
+https://github.com/azatoth77/calliope ~/banchi/src-issue182`) con lo stesso interprete:
+`$V/.venv/bin/python ~/banchi/src-issue182/prove/manuali/banco_revisore.py …`.
+
+**Prove.** `banco_revisore.py --secco` tutto ok (l'uscita vera dei sette casi, il consiglio tolto in
+`tris-inizia-muto`, il pacchetto senza commenti né trascrizione anche da una cartella di lavoro
+finta, i tetti e lo sviluppo ambiguo di `--da-lavoro`, un modello finto con verdetti
+giusti e sbagliati contati come devono, il criterio e `riepilogo.json`).
+
+**Il banco sulla DGX del 19/10** (qwen3.6-35B-A3B su vLLM, ragionamento 4096, t 0,6, 5
+ripetizioni × 7 casi, commit `9a3b576`; `~/banchi/revisore-1019-1747`, 25 minuti, 35–48 s e
+~2 800–3 700 token a passata):
+
+| caso | atteso | verdetti | file |
+|---|---|---|---|
+| tris-inizia | test_sbagliato | 5/5 | 5/5 |
+| tris-inizia-muto | test_sbagliato | **5/5** | 5/5 |
+| porte-disegno | test_sbagliato | 4/5 (1 «non è JSON») | 4/5 |
+| codice_sbagliato (c) | codice_sbagliato | 5/5 | 5/5 |
+| consegna (c) | consegna | 5/5 | — |
+| cambia_strada (c) | cambia_strada | 2/5 | 4/5 |
+| chiedi_persona (c) | chiedi_persona | 0/5 | — |
+
+**Criterio di #182 alla lettera: non raggiunto** (i casi sì, due contrari no). Ma le cause
+cambiano la lettura:
+- **tris-inizia-muto 5/5**: il contratto nel pacchetto dice la regola della preparazione; il
+  caso muto misura se il modello collega l'errore al contratto, senza il suggerimento dentro
+  l'errore, sul test sbagliato che è il caso #174 e il punto debole del catalogo dei
+  fallimenti veri.
+- **cambia_strada**: in 4 su 5 la causa dice il giro in tondo *e* il bug vero con la riga e la
+  correzione («logica.js:14 usa `valore % DIETRO.length`, va `valore - 1`»), e due di quelle
+  hanno l'etichetta `codice_sbagliato`; una sola volta (`chiedi_persona` su domande inventate)
+  è un verdetto sbagliato. Il giro in tondo, però, lo sa già il codice (impronte, firme, giri
+  uguali): non serve che il revisore lo etichetti.
+- **chiedi_persona**: 4 su 5 «il test fissa a 1 il punteggio che i requisiti lasciano alla
+  persona: togli l'asserzione» (`test_sbagliato`), una volta `codice_sbagliato`. È una risposta
+  giusta con l'etichetta che il caso non si aspettava: il caso era ambiguo (vedi sopra).
+
+Conclusione proposta per il passo 6: il revisore a contesto pulito con qwen3.6 vale per il
+giudizio sulle prove (test o codice o consegna: 24/25 sui casi di quel tipo (test sbagliato
+14/15: tris 5/5, tris muto 5/5, porte 4/5; codice sbagliato 5/5; consegna 5/5), il file giusto
+14/15 sui test sbagliati; 29/30 solo contando come giusti i 5 di chiedi_persona riletti),
+non per le etichette di processo; nel ciclo il menu si restringe a
+`test_sbagliato`, `codice_sbagliato`, `consegna` e una `domanda` facoltativa per la persona, e
+il giro in tondo resta deciso dal codice. Scelta di chi amministra (#182).
+
+## Gli strumenti onesti dell'agente (19/10, issue #185, ramo `issue-185-strumenti-onesti`)
+
+**Il caso** (analisi del 19/10, `docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.2,
+passo 2 del § 5): il ciclo calcolava molto durante il giro (impronte dei file, firme degli errori,
+conti dei test), ma quasi nulla arrivava all'agente. Il ritorno a uno stato già visto (A, B, A, B)
+lo sapeva `novita_file` e serviva solo al rapporto a voce della tappa; un'uscita troncata diventava
+`{}` e l'agente riceveva «manca percorso» e riprovava uguale. Nel catalogo dei 44 fallimenti veri
+l'oscillazione e il comando ripetuto tornano dal 06/10 al 18/10 (il tris di #174). Le note sono
+**fatti**, mai rimproveri, e stanno nel risultato dello strumento che le riguarda: nessun messaggio
+a parte, nessun messaggio vecchio riscritto (la cache dei prefissi resta, la prova lo controlla).
+
+**Cosa cambia.**
+1. **Lo stato già visto** (`nota_stato_gia_visto`, regola `agente_stato_gia_visto`): l'impronta
+   dell'intera cartella del lavoro (`Sandbox.impronta`: percorsi e contenuti dei file dell'elenco,
+   senza `.calliope` e `.tmp`) si segna all'inizio del lavoro, dopo ogni scrittura e a ogni
+   esegui_test, con la passata e l'esito dei test in breve (`segnali["cartelle"]`, al più 40
+   stati). Nel risultato di scrivi_file e modifica_file, sotto `gia_visto`: «questa versione della
+   cartella è identica a quella di 4 passate fa, quando esegui_test dava: 1 test su 1 non
+   passavano (…)»; se la cartella è nuova ma il file no, ««programma.py» è tornato identico a
+   com'era 3 passate fa»; una riscrittura uguale, «… è uguale a com'era già: non è cambiato niente».
+   La passata si dice relativa («N passate fa»): i numeri delle passate l'agente non li vede.
+2. **L'uscita troncata** (regola `agente_uscita_troncata`): il client di vLLM legge ora
+   `finish_reason` (`out["fine"]`) e segna le chiamate con gli argomenti che non si leggono
+   (`out["rotti"]`); con «length» anche l'ultima chiamata (tolto e rimesso il 20/10, vedi sotto), perché lì gli argomenti arrivano a pezzi e
+   un JSON che si legge può avere il contenuto a metà. Il client di Ollama legge `done_reason` e
+   segna gli argomenti in stringa rotti, ma non l'ultima chiamata a max_tokens: Ollama manda le
+   chiamate intere. Una chiamata rotta non si esegue e riceve «la tua uscita è stata troncata
+   (fermata a max_tokens): questa chiamata è arrivata a metà e non l'ho eseguita. Scrivi il file in
+   pezzi più corti, oppure cambia solo le righe che servono con modifica_file». Una passata fermata a
+   max_tokens senza chiamate riceve lo stesso fatto al posto della spinta «usa gli strumenti». Quando
+   il server rifiuta `thinking_token_budget` e il client lo toglie (`senza_budget`), il ciclo lo
+   scrive nel log una volta (`budget_tolto`): prima cadeva in silenzio.
+3. **esegui_test invariato** (regola `agente_test_invariati`): con la stessa impronta della
+   cartella, lo stesso file di test e lo stesso controllo della consegna dell'ultima esecuzione i
+   test non si rieseguono: torna l'esito di allora (l'uscita tagliata a 3 000 caratteri) con
+   «invariato»: «nessun file è cambiato dall'esecuzione di una passata fa: non ho rieseguito i test,
+   l'esito è questo». Un'esecuzione scaduta o che non è partita (`errore`) non si ricorda. I test
+   alla consegna si rifanno sempre, due volte (lì si vedono quelli col caso o col tempo, #174).
+4. **Le letture** (regola `agente_rilettura`, la nota del 06/10): il conto è per file e impronta del
+   contenuto, non per argomenti. Vale anche con `riga` (prima usciva prima del conto) e un
+   `da_carattere` diverso non lo azzera più. Si conta come rilettura la lettura di un pezzo già letto
+   tutto (gli intervalli letti, uniti): i pezzi nuovi di un file lungo no. Un contenuto cambiato
+   riparte da capo. La deduplica nella stessa passata resta com'era.
+5. **modifica_file**: il testo vecchio che non c'è ha nel risultato le righe vere, numerate, intorno
+   alla riga più simile alla sua prima riga (`righe_vere`, `punto_piu_simile` con difflib, soglia
+   0,6; sotto «nessuna riga gli somiglia: rileggi il file»), prima solo il numero di riga quando la
+   prima riga c'era uguale; il testo ambiguo dice le righe delle occorrenze («compare 2 volte, alle
+   righe 5, 9»). `vecchio == nuovo` è rifiutata (`agente_modifica_nulla`: prima riusciva e faceva
+   «scadere» i test verdi). La modifica che rimette esattamente il testo tolto da una modifica
+   precedente dello stesso file è rifiutata, con il passo e l'esito dei test sulla cartella di prima
+   di quella modifica, se c'è (`agente_modifica_inversa`, `segnali["modifiche"]`, impronte e non
+   testi): «questa modifica rimette esattamente il testo che la tua modifica_file di una passata fa
+   aveva tolto, e non l'ho fatta; prima di quella modifica esegui_test dava: … Se vuoi davvero
+   tornare a com'era, riscrivi il file con scrivi_file».
+6. **Lo strumento sconosciuto** ha `ok: False` e l'elenco degli strumenti di quella passata
+   (`agente_strumento_sconosciuto`); anche il ripiego di `_strumento` ha `ok: False`. **Le chiamate
+   dopo la consegna** nella stessa passata ricevono ognuna «non eseguita: il lavoro era già
+   consegnato» (dopo chiedi_permesso «… aspetta la risposta di chi l'ha chiesto», dopo la consegna
+   rossa di #180 «… si è fermato»), regola `agente_dopo_consegna`: prima restavano senza risposta, e
+   la storia ripresa dopo una domanda o una tappa era malformata.
+
+**Prove.** `prova_strumenti_onesti` (nuova, livello 2, ~15 s), con i contrari: gli stati nuovi
+senza nota, gli argomenti mancanti veri, la chiamata intera, un file cambiato e un altro file di
+test, i pezzi nuovi di un file lungo, una modifica diversa, la consegna da sola.
+`prova_porte_consegna`: la sezione 5 chiama esegui_test due volte sulla stessa cartella con e senza
+il predicato della consegna, e per questo il controllo della consegna sta nella chiave
+dell'esecuzione ricordata.
+
+**Non fatto qui**: il ciclo della ricerca (`ricerca`) ha lo stesso «dopo la consegna» e il suo
+strumento sconosciuto, non toccati; il test rifatto alla tappa e i segnali nel giro dopo (n. 16
+dell'analisi, il blocco di stato del § 4).
+
+**Rischi.** L'impronta della cartella costa una lettura di tutti i file a ogni scrittura (due per
+scrivi_file, tre per modifica_file *[storico: due dal 20/10]*) e a ogni esegui_test: le cartelle dei lavori sono piccole (al
+più 100 file, 5 MB), da guardare nel banco. Un test che dipende dal caso o dal tempo, rieseguito
+senza cambiare niente, ora dà lo stesso esito invece di un altro: la consegna lo trova comunque
+(due esecuzioni, `agente_test_instabili`). Un agente che vuole davvero annullare una sua modifica
+deve passare da scrivi_file.
+
+**Da misurare sulla DGX** (dopo l'unione): il banco di #9; criterio della ricerca, nel banco calano
+le passate senza novità e le riletture, e nessun lavoro torna allo stesso stato della cartella più
+di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_troncata`,
+`agente_test_invariati`, `agente_rilettura`, `agente_modifica_nulla`, `agente_modifica_inversa`,
+`agente_strumento_sconosciuto`, `agente_dopo_consegna` e la riga «non accetta thinking_token_budget».
+
+**Dopo la revisione della PR #187 (20/10).**
+- **La passata troncata senza chiamate viene prima** della guardia dei token senza strumenti e
+  del conto della prosa, e lì non conta: con i valori di serie (16 384 token per passata, guardia
+  a 12 000) finiva in «ha ragionato per 32 768 token senza usare gli strumenti», e la regola non
+  scattava mai. Come dopo una chiamata, la guardia riparte; il limite resta quello dei tetti
+  (passate, token, tempo). La prova ha il caso con tre passate piene di fila. *[storico: «la
+  guardia riparte» e «il limite dei tetti» fino alla seconda revisione, sotto]*
+- **La modifica inversa si rifiuta solo nell'oscillazione pura**: la cartella di adesso è quella
+  subito dopo la modifica di prima (`segnali["modifiche"]` tiene anche l'impronta di dopo). Se nel
+  frattempo è cambiato altro (un'altra funzione corretta), tornare indietro è una correzione e si
+  fa. Lo storico delle modifiche di un file si azzera a ogni scrivi_file di quel file.
+- **L'esito ricordato dei test** (`segnali["ultimo_test"]`) si butta all'inizio di ogni ciclo
+  (giro dopo una tappa, ripresa): dipende anche da ciò che non è nella cartella (il motore e i
+  controlli di Calliope dopo un aggiornamento, il controllo della consegna con la specifica viva).
+  Costa un'esecuzione per giro.
+- Il già visto con i test dice la passata dell'esecuzione («identica a quella su cui esegui_test,
+  2 passate fa, dava: …»), non quella in cui lo stato era apparso; senza test, come prima.
+- Un'impronta della cartella che non si legge si scrive nel log, una volta per lavoro.
+- modifica_file legge la cartella due volte (prima e dopo) e il ciclo le riusa; scrivi_file due.
+- Con vLLM e «length» l'ultima chiamata col JSON valido e intero si esegue: rotta solo se il JSON
+  non si legge (prima era rotta sempre, e se il parser tratteneva una seconda chiamata a metà la
+  prima, intera, andava persa). *[storico: tolto dalla seconda revisione, sotto]*
+- Il ciclo della ricerca ha la sua issue (#189). Riletto, è meno grave di quanto detto nella PR:
+  lo strumento sconosciuto ha già `ok: False` con l'elenco, e manca solo il nome della regola. La
+  consegna fa `return` subito, e le chiamate dopo di essa non si eseguono e restano senza
+  risposta. Non legge `rotti` e prende per relazione anche una passata troncata.
+
+**Dopo la seconda revisione della PR #187 (20/10).**
+- **Il solo ragionamento troncato non è un'uscita troncata.** Il fatto «troncata» vale solo
+  quando la troncatura è nell'uscita: una chiamata con gli argomenti rotti, o un testo fermato a
+  max_tokens di almeno `TRONCATA_TESTO_MIN` = 20 caratteri. Una passata «length» con il contenuto
+  vuoto o quasi, fatta tutta di ragionamento, resta nella guardia dei token senza strumenti come
+  prima (alla seconda soglia «limite»). *[storico: «il contenuto vuoto o quasi» come discriminante fino alla
+  terza revisione, sotto]* Con la prima correzione, 30 passate così arrivavano al tetto
+  dei token del lavoro (150 000, i 30 minuti) con «scrivi il file in pezzi», che non c'entrava. La
+  troncata vera non si somma ai token senza strumenti e non li azzera.
+- **Un tetto suo**: oltre `TRONCATE_MAX` = 3 passate di fila con l'uscita troncata (anche le
+  chiamate rotte; dalla terza revisione solo le passate con tutte le chiamate rotte) il lavoro si ferma col motivo «la sua uscita si è fermata N volte di fila al
+  tetto dei token della passata», `tipo` «troncata»: tappa in uno sviluppo (`PERCHE_TAPPA`, a voce
+  «l'uscita dell'agente si è fermata più volte di fila al tetto dei token della passata»), fuori
+  «limite».
+- **Con vLLM e «length» l'ultima chiamata è di nuovo rotta**, anche col JSON che si legge. A fine
+  stream vLLM manda gli argomenti già chiusi dal parser con la stringa a metà: un file, un `nuovo` di
+  modifica_file o un riassunto della consegna a metà scritti in silenzio costano più di una passata
+  persa. Il comportamento del parser `qwen3_xml` sulla DGX è da misurare (max_tokens piccolo e uno
+  scrivi_file lungo).
+- La troncata azzera la prosa di fila: alternate, «N volte di fila senza usare gli strumenti» non
+  si dice più a torto.
+
+**Dopo la terza revisione della PR #187 (20/10).**
+- **La discriminante della troncata senza chiamate è sui token, non sul contenuto**
+  (`troncata_nell_uscita`). Un testo di almeno 20 caratteri è un'uscita troncata. Col contenuto
+  vuoto decide il ragionamento: se è almeno `RAGIONAMENTO_QUOTA` = 0,4 dei token generati è
+  ragionamento troncato, e vale la guardia come prima. Il conto è quello del motore (vLLM) o la
+  stima dai caratteri, un token ogni `TOKEN_CARATTERI` = 3: è grossolana, per questo la quota è
+  bassa. Altrimenti l'uscita c'era, ma l'ha trattenuta il parser dei tool: è la chiamata a metà
+  con Ollama, il caso M1 della prima revisione, che con la seconda correzione era tornato in «ha
+  ragionato per 32 768 token». Il valore della quota è da misurare sulla DGX: nel log il conto di
+  `agente_uscita_troncata` e le righe «token senza strumenti».
+- **Il tetto delle troncate per le passate con chiamate viene dopo il giro sulle chiamate**:
+  ognuna ha la sua risposta nella storia, prima della tappa o del «limite». Una passata conta «di
+  fila» solo se tutte le sue chiamate sono rotte. Con vLLM e «length» una passata con una chiamata
+  intera e l'ultima rotta va avanti: le intere si eseguono, e l'agente scrive un file per passata.
+- **Il tempo di una passata troncata esce dalla guardia dei minuti senza strumenti**: come i
+  token, non si somma e non la azzera. Prima una troncata da 330 s seguita da una passata di prosa
+  faceva scattare «ha ragionato per 100 token».
+- **Fuori da uno sviluppo il «limite» «troncata» passa da `_consegna_al_tetto`**, come gli altri
+  tetti. Con gli esempi di accettazione verdi il codice consegna, `consegna_al_tetto` «troncata», e
+  a voce «non ha consegnato», come per `a_vuoto` e `prosa`.
+- Un giro a vuoto azzera le troncate di fila. Il banco (#9) ha `troncata` tra i tipi del limite.
+- **I casi dei copioni delle tre revisioni sono nella prova** (`prova_strumenti_onesti`, sezione
+  7), con il nome che avevano e con i contrari:
+  - A ed L1: l'uscita trattenuta;
+  - E: il solo ragionamento, con vLLM e con Ollama;
+  - F: troncate e prosa alternate;
+  - J e J2: il tempo, con un orologio finto; il contrario è la prosa lenta;
+  - M: chiamate intere e rotte;
+  - N: tappa e «limite» con la storia ben formata;
+  - R4: la consegna al tetto con gli esempi;
+  - R6: il giro a vuoto in mezzo;
+  - I: senza `rotti` la chiamata intera si esegue;
+  - B, C, D, G e H: la modifica inversa e il già visto.
+
+  Ogni tornata di correzioni aveva rotto un caso di quella prima.
+
 ## Il contratto dei giochi e un prompt per tipo (19/10, issue #186, ramo `issue-186-contratto-giochi`)
 
 **Il caso** (analisi del 19/10, `docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.5,
@@ -4001,3 +4337,10 @@ Python né rete», in una correzione «usa sonda_rete», altrimenti il motivo di
 [giochi](giochi.md). Il blocco dello strumento non offerto si unirà con quello dello strumento
 sconosciuto di #187 (#185) dopo la sua unione: un blocco solo, con la regola
 `agente_strumento_sconosciuto`.
+
+**Unione con #187 (20/10).** I due controlli sono diventati un blocco solo, nella posizione di
+#185 (dopo le chiamate troncate, su `nomi_strumenti` calcolato una volta per passata), con la
+regola `agente_strumento_sconosciuto`: uno strumento dell'agente che questa passata non offre è
+«non è disponibile in questo lavoro», con il perché quando c'è (un gioco senza Python né rete,
+`sonda_rete` in una correzione, il motivo di `_esempi_ok` o `_sonde_ok`); un nome inventato è
+«non c'è». L'elenco degli strumenti sta nel testo dell'errore e nella chiave `strumenti`.

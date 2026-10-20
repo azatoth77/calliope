@@ -236,13 +236,15 @@ def _cliente(svc, dalla_voce: bool):
 
 def chiama(svc, sistema: str, utente: str, schema: dict, tempo_s: float, attesa=None,
            frase_attesa: str = "", dalla_voce: bool = True, num_predict: int = 700,
-           ragionamento: int = 0, uso: dict | None = None):
+           ragionamento: int = 0, uso: dict | None = None, temperatura: float = 0.0):
     """(dict, "modello") dal modello dell'agente con l'output strutturato, o (None, esito):
     «tempo», «errore: …», «senza agente». Una passata, senza ragionamento, temperatura 0, entro
     `tempo_s`; `attesa(frase)` dopo ATTESA_DOPO_S. Mai un'eccezione. `ragionamento` (17/10,
     #10, la passata dell'analisi prima del codice: Config.agenti_accettazione_ragionamento): i
     token di ragionamento concessi (vLLM: thinking_token_budget), in più a `num_predict`; 0 =
-    spento. `uso`: riceve token generati e del prompt, caratteri di ragionamento e secondi."""
+    spento. `uso`: riceve token generati e del prompt, caratteri di ragionamento (e i token, se
+    il motore li dice) e secondi. `temperatura` (19/10, #182: il banco del revisore la prende
+    dalla Config dell'agente): di serie 0, come sempre."""
     if svc is None or getattr(svc, "cliente", None) is None or getattr(svc, "imp", None) is None:
         return None, "senza agente"
     try:
@@ -254,7 +256,7 @@ def chiama(svc, sistema: str, utente: str, schema: dict, tempo_s: float, attesa=
             "messages": [{"role": "system", "content": sistema},
                          {"role": "user", "content": utente}],
             "think": bool(ragionamento and ragionamento > 0), "format": schema,
-            "options": {"temperature": 0.0,
+            "options": {"temperature": float(temperatura or 0.0),
                         "num_predict": num_predict + max(0, int(ragionamento or 0)),
                         "num_ctx": num_ctx},
             "keep_alive": getattr(getattr(svc, "cfg", None), "llm_keep_alive", None) or "30m"}
@@ -298,6 +300,7 @@ def chiama(svc, sistema: str, utente: str, schema: dict, tempo_s: float, attesa=
     if uso is not None:
         uso.update(eval=int(r.get("eval") or 0), prompt=int(r.get("prompt") or 0),
                    ragionamento=len(str(r.get("thinking") or "")),
+                   ragionamento_token=int(r.get("ragionamento") or 0),
                    s=round(time.monotonic() - t0, 2))
     testo = str(r.get("content") or "").strip()
     testo = re.sub(r"^```(?:json)?\s*|\s*```$", "", testo)

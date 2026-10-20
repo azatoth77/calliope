@@ -227,7 +227,9 @@ class ClienteOpenAI:
                     and "thinking_token_budget" in msg):
                 self.senza_budget.add(model)
                 req.pop("thinking_token_budget", None)
-                return self._chat(req, su_pezzo, controlla, su_flusso)
+                # Detto a chi chiama (19/10, #185): da qui il ragionamento della passata non ha
+                # più un tetto suo, solo max_tokens; il ciclo lo scrive nel log una volta
+                return dict(self._chat(req, su_pezzo, controlla, su_flusso), budget_tolto=True)
             if (("chat_template_kwargs" in req or "reasoning_effort" in req)
                     and e.codice == "motore_errore"
                     and ("enable_thinking" in msg or "reasoning" in msg
@@ -280,6 +282,9 @@ class ClienteOpenAI:
                         if isinstance(det, dict) and det.get("reasoning_tokens") is not None:
                             out["ragionamento"] = int(det.get("reasoning_tokens") or 0)
                     for ch in obj.get("choices") or []:
+                        if ch.get("finish_reason"):
+                            # «length»: l'uscita si è fermata a max_tokens (19/10, #185)
+                            out["fine"] = str(ch["finish_reason"])
                         d = ch.get("delta") or {}
                         th = d.get("reasoning_content") or d.get("reasoning")
                         if th:
@@ -326,9 +331,21 @@ class ClienteOpenAI:
             try:
                 args = json.loads(c["arguments"]) if c["arguments"].strip() else {}
             except ValueError:
+                # Argomenti rotti o troncati (19/10, #185): restano {} come prima, ma il ciclo sa
+                # quale chiamata era e lo dice all'agente invece di «manca percorso»
                 args = {}
+                out.setdefault("rotti", []).append(len(out["tool_calls"]))
             out["tool_calls"].append({"name": c["name"],
                                       "arguments": args if isinstance(args, dict) else {}})
+        if out.get("fine") == "length" and out["tool_calls"]:
+            # Qui le chiamate arrivano a pezzi: fermata a max_tokens, l'ultima è tagliata anche se
+            # il suo JSON si legge (a fine stream vLLM manda gli argomenti già chiusi dal parser,
+            # con la stringa a metà). Un file o un riassunto a metà scritto in silenzio costa più
+            # di una passata persa (seconda revisione della PR #187). Con Ollama no: le chiamate
+            # arrivano intere
+            ultima = len(out["tool_calls"]) - 1
+            if ultima not in out.setdefault("rotti", []):
+                out["rotti"].append(ultima)
         out["s"] = round(time.perf_counter() - t0, 2)
         return out
 
