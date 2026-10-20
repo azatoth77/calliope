@@ -3980,6 +3980,105 @@ valori, tolti e `con_calcolo` nella riga sì (nel convertitore L5, letto
 dalla riga: 10 nominati per input, 7 tolti «contiene», 6 col calcolo); **0 «fatto» con l'accettazione nascosta rossa no (1, il programma)**:
 si chiude solo con gli esempi dei programmi (#10).
 
+## Il banco del revisore: lo stesso modello a contesto pulito (19/10, issue #182, ramo `issue-182-banco-revisore`)
+
+**Perché.** Nei giri a vuoto del 18/10 (#174) il giudizio «è il test o è il codice?» lo dava
+l'agente su sé stesso, o la persona alla tappa; nessuno guarda le passate. Prima di costruire
+un revisore nel ciclo (passo 6 della ricerca del 19/10 sulla solidità dell'harness, § 3.6 e
+§ 4) si misura se una passata dello **stesso modello** (qwen3.6 su vLLM, dalla Config) a
+**contesto pulito** dà i verdetti della persona. Rischi noti: l'eco («// Musica: fatto»,
+11/10), gli errori dello stesso modello, il revisore che dà sempre la stessa risposta.
+
+**Il banco** (`prove/manuali/banco_revisore.py`). Il revisore vede solo il pacchetto delle prove:
+il contratto del gioco (`estensioni/contratto.testo`), i requisiti, i file senza commenti né
+docstring (le righe restano al loro posto, i file:riga dell'uscita valgono), l'esito vero dei
+test con i fallimenti in breve (`diagnosi.da_uscita`) e la coda dell'uscita, il registro dei
+tentativi se c'è; mai la trascrizione, il diario o il riassunto dell'agente. Una passata con
+`requisiti.chiama` (che ora accetta la `temperatura`, di serie 0 come prima, e dice i token di
+ragionamento in `uso`), il ragionamento acceso (`--ragionamento`, 4096) e la temperatura
+dell'agente (`--temperatura` per cambiarla); schema chiuso: `verdetto` tra continua,
+cambia_strada, test_sbagliato, codice_sbagliato, consegna, chiedi_persona, con file, riga, test,
+causa e azione.
+
+**I casi** (l'uscita dei test si genera a ogni esecuzione, con Node e il motore dei giochi di
+adesso: la sandbox della Config se il container di Node c'è, altrimenti il Node della
+macchina): `tris-inizia` (il tris per due con il test del 18/10 che muove senza «Inizia»),
+`tris-inizia-muto` (lo stesso, con il consiglio dell'errore tolto dal pacchetto) e
+`porte-disegno` (le porte giuste con il test del disegno di L7 del 14/10) → `test_sbagliato`
+su gioco.test.js; i contrari `codice_sbagliato` (le porte rotte con il test giusto, logica.js),
+`consegna` (il tris per due tutto verde), `cambia_strada` (le porte rotte e cinque tentativi
+A-B-A-B-A su `giocatori.min` del manifesto con lo stesso errore vero) e `chiedi_persona` (quanto
+vale la caramella lo decide la persona, il test dell'agente ne ha scelto uno). `--da-lavoro
+<cartella> --atteso <verdetto>` costruisce lo stesso pacchetto da un lavoro vero sulla DGX
+(test rieseguiti su tutti i file; nel pacchetto niente `risultato.md` né `esempi_veri/`, al più
+12 000 caratteri per file e 60 000 in tutto, con un avviso; requisiti dallo sviluppo del lavoro
+in sviluppi.json, e senza l'ora con più sviluppi candidati il banco chiede `--sviluppo`); niente
+di quella cartella va nel repository.
+
+**Come leggere i numeri** (revisione della PR #184). In `tris-inizia` l'errore vero del motore
+dice già «…ogni partita comincia nella fase «preparazione»; correggi il test, non il manifesto»
+(`fumo_js.mjs`, `viaDallaPreparazione`, da #174), e in `porte-disegno` l'errore spiega perché
+«avanti» non vale: lì un 5/5 misura soprattutto se il modello legge il suggerimento, che
+l'agente riceve già. Per questo c'è `tris-inizia-muto` (restano la fase e i comandi attivi,
+e il contratto, che dice di toccare «Inizia» con min = max), e contano di più i contrari e
+`--da-lavoro`. In `chiedi_persona` la logica dà «Nessun punto!» alla caramella mentre il
+requisito dice che vale dei punti: un `codice_sbagliato` lì è un'ambiguità del caso più che un
+errore del revisore.
+
+**Criterio** (#182): ≥ 4/5 sui tre casi e ≥ 4/5 su ciascun contrario → il revisore a contesto
+pulito si costruisce con qwen3.6; sotto, serve un modello diverso (#175) o il revisore non
+vale. I numeri della DGX vanno qui e nella ricerca del 19/10.
+
+        cd ~/calliope && V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale) \
+          && $V/.venv/bin/python $V/prove/manuali/banco_revisore.py \
+             --ripetizioni 5 --uscita ~/banco-revisore
+
+Prima dell'unione, da un clone del ramo (`git clone -b issue-182-banco-revisore
+https://github.com/azatoth77/calliope ~/banchi/src-issue182`) con lo stesso interprete:
+`$V/.venv/bin/python ~/banchi/src-issue182/prove/manuali/banco_revisore.py …`.
+
+**Prove.** `banco_revisore.py --secco` tutto ok (l'uscita vera dei sette casi, il consiglio tolto in
+`tris-inizia-muto`, il pacchetto senza commenti né trascrizione anche da una cartella di lavoro
+finta, i tetti e lo sviluppo ambiguo di `--da-lavoro`, un modello finto con verdetti
+giusti e sbagliati contati come devono, il criterio e `riepilogo.json`).
+
+**Il banco sulla DGX del 19/10** (qwen3.6-35B-A3B su vLLM, ragionamento 4096, t 0,6, 5
+ripetizioni × 7 casi, commit `9a3b576`; `~/banchi/revisore-1019-1747`, 25 minuti, 35–48 s e
+~2 800–3 700 token a passata):
+
+| caso | atteso | verdetti | file |
+|---|---|---|---|
+| tris-inizia | test_sbagliato | 5/5 | 5/5 |
+| tris-inizia-muto | test_sbagliato | **5/5** | 5/5 |
+| porte-disegno | test_sbagliato | 4/5 (1 «non è JSON») | 4/5 |
+| codice_sbagliato (c) | codice_sbagliato | 5/5 | 5/5 |
+| consegna (c) | consegna | 5/5 | — |
+| cambia_strada (c) | cambia_strada | 2/5 | 4/5 |
+| chiedi_persona (c) | chiedi_persona | 0/5 | — |
+
+**Criterio di #182 alla lettera: non raggiunto** (i casi sì, due contrari no). Ma le cause
+cambiano la lettura:
+- **tris-inizia-muto 5/5**: il contratto nel pacchetto dice la regola della preparazione; il
+  caso muto misura se il modello collega l'errore al contratto, senza il suggerimento dentro
+  l'errore, sul test sbagliato che è il caso #174 e il punto debole del catalogo dei
+  fallimenti veri.
+- **cambia_strada**: in 4 su 5 la causa dice il giro in tondo *e* il bug vero con la riga e la
+  correzione («logica.js:14 usa `valore % DIETRO.length`, va `valore - 1`»), e due di quelle
+  hanno l'etichetta `codice_sbagliato`; una sola volta (`chiedi_persona` su domande inventate)
+  è un verdetto sbagliato. Il giro in tondo, però, lo sa già il codice (impronte, firme, giri
+  uguali): non serve che il revisore lo etichetti.
+- **chiedi_persona**: 4 su 5 «il test fissa a 1 il punteggio che i requisiti lasciano alla
+  persona: togli l'asserzione» (`test_sbagliato`), una volta `codice_sbagliato`. È una risposta
+  giusta con l'etichetta che il caso non si aspettava: il caso era ambiguo (vedi sopra).
+
+Conclusione proposta per il passo 6: il revisore a contesto pulito con qwen3.6 vale per il
+giudizio sulle prove (test o codice o consegna: 24/25 sui casi di quel tipo (test sbagliato
+14/15: tris 5/5, tris muto 5/5, porte 4/5; codice sbagliato 5/5; consegna 5/5), il file giusto
+14/15 sui test sbagliati; 29/30 solo contando come giusti i 5 di chiedi_persona riletti),
+non per le etichette di processo; nel ciclo il menu si restringe a
+`test_sbagliato`, `codice_sbagliato`, `consegna` e una `domanda` facoltativa per la persona, e
+il giro in tondo resta deciso dal codice. Scelta di chi amministra (#182).
+
 ## Gli strumenti onesti dell'agente (19/10, issue #185, ramo `issue-185-strumenti-onesti`)
 
 **Il caso** (analisi del 19/10, `docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.2,
