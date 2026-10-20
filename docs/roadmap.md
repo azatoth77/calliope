@@ -486,7 +486,8 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    progetto breve (dove va il risultato, di notte, arbitro della GPU).
 9. **Messaggi verso l'esterno dalle estensioni** (S10): nessuno per ora; più avanti solo notifiche
    alla web app sul telefono di casa. *[20/10, decisione
-   [0033](decisioni/0033-capacita-concesse-e-revocabili.md): i messaggi fuori casa diventano
+   [0033](decisioni/0033-capacita-concesse-e-revocabili.md), che cambia questa risposta S10 del 12/10: i
+   messaggi fuori casa diventano
    chiedibili, sempre preparati dall'estensione e inviati solo con la conferma al momento; le
    notifiche alla web app restano le prime (passo 4 del piano, da approvare).]*
 10. **Node/JavaScript** come linguaggio dei programmi in diretta, sullo schema del C#. *Pronta* ·

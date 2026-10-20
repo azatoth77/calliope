@@ -107,7 +107,8 @@ controllo, uguali per tutti) dalle capacità nuove (una alla volta).
 - **Revoca**: la concessione, oppure tutte quelle di quel PC.
 - **Irreversibile**: cancellare o sovrascrivere un file senza una copia. Si concede di preparare
   («sostituisco questi tre file?»), l'atto si conferma al momento.
-- **Presenza**: la cartella di una persona si collega solo con lei presente (scelta del 20/10).
+- **Presenza**: la cartella di una persona si collega solo con lei presente (scelta del 20/10); quella
+  di un minore solo con un tutore presente (§ 10, decisione 8).
 
 ### 3.4 `rete_locale`: dispositivi della rete di casa o dell'ufficio
 
@@ -119,7 +120,7 @@ controllo, uguali per tutti) dalle capacità nuove (una alla volta).
   i metodi, un elenco chiuso di percorsi o comandi), mai una rete intera. Per i dispositivi che Home
   Assistant conosce già resta la strada di oggi (`casa_stato`, `casa_comando`).
 - **Classe**: per dispositivo, con la tabella della casa come guida (`valore._casa`,
-  `calliope/valore.py:170-188`: luci E1, clima E2, nomi delicati E4); il resto E3. Una **telecamera**
+  `calliope/valore.py:170-188`: luci E1, clima E2, nomi delicati E4, con la conferma per sessione d'uso del § 10, decisione 1); il resto E3. Una **telecamera**
   è un'immagine delle persone di casa: va col § 3.8, non qui.
 - **Revoca**: la concessione; il dispositivo esce dall'elenco della rete privata della porta.
 - **Irreversibile**: i comandi che cancellano (un NAS) o che cambiano la rete (il router): preparati.
@@ -138,6 +139,8 @@ controllo, uguali per tutti) dalle capacità nuove (una alla volta).
 - **Classe**: quella delle operazioni che l'estensione fa, ma l'approvazione dell'autonomia pesa
   come una E3 anche per un'estensione che legge soltanto: nessuno è lì a guardare.
 - **Revoca**: «togli la pianificazione», o tutta l'estensione.
+- **E4**: mai in autonomia, perché valgono solo per una sessione aperta da una persona (§ 10,
+  decisione 1).
 - **Irreversibile**: niente in autonomia. Una pericolosa senza la persona presente è vietata, come
   già nel ricollaudo (`calliope/estensioni/porta.py:92-104`, regola `ricollaudo_senza_conferme`); una
   preparazione resta in coda per la persona.
@@ -173,11 +176,13 @@ controllo, uguali per tutti) dalle capacità nuove (una alla volta).
   schermo esiste per la voce, col PC di chi parla (`calliope/pc/cattura.py`, dal 16/10, #100);
   l'audio lo ascolta solo Calliope, con le sue regole (half-duplex, la stanza della
   [0029](../decisioni/0029-conversazione-di-stanza.md)).
-- **Proposta**: al più **uno scatto alla volta**, chiesto a voce con la persona presente e davanti al
-  suo PC; mai a orario, mai un flusso continuo, mai il microfono (che resta di Calliope). Classe E4
-  (riguarda la fiducia e le persone di casa).
-- **Onestà**: è la voce più vicina a «sorveglianza». Il piano la lascia per ultima, e chiede a chi
-  amministra se vuole tenerla fra i «mai» (§ 10).
+- **Capacità concessa**: al più **uno scatto alla volta**, con la persona presente e davanti al suo
+  PC; mai un flusso continuo, mai il microfono (che resta di Calliope). Classe E4 (riguarda la
+  fiducia e le persone di casa): vale la **conferma per sessione d'uso** (§ 10, decisione 1), quindi
+  mai a orario.
+- *[storico fino al 20/10 sera: «chiede a chi amministra se vuole tenerla fra i "mai"»]*: deciso il
+  20/10, la webcam non è fra i «mai» (§ 10, decisione 2); resta l'ultima del passo 7, perché è la
+  voce più vicina a «sorveglianza».
 
 ### 3.9 `altri_tool`: chiamare altre estensioni o altri tool di Calliope
 
@@ -333,14 +338,16 @@ l'eliminazione. Mancano: una concessione sola; tutte quelle di un account o di u
 (attraversando le estensioni); «tutto» (tutte le concessioni, tutte le estensioni ferme). A voce si
 fa con azioni nuove di `estensione_gestisci` (nessun tool nuovo: il conto di 75 schemi e la
 [0009](../decisioni/0009-tool-uguali-per-ogni-livello.md) restano); dal cruscotto con le azioni che
-restringono di #124. Revocare è una restrizione: proposta, niente frase di sfida per chi amministra
-riconosciuto dalla voce, e anche un familiare può sospendere le concessioni a suo nome (§ 10).
+restringono di #124. Revocare è una restrizione: deciso il 20/10 (§ 10, decisione 5), **revocare
+non chiede la frase di sfida** (togliere potere è facile, darlo no), e un familiare può sospendere
+le concessioni sui propri dati.
 
 ### 5.5 La sospensione per anomalia
 
 Un uso fuori ambito o oltre le quote oggi è una richiesta vietata e registrata, e l'esecuzione va
-avanti. Domani, oltre a vietarla, **sospende la concessione** (o l'estensione, se l'uso fuori ambito
-è il segno di un codice che cerca di allargarsi), e lo dice: alla persona della concessione al suo
+avanti. Domani, oltre a vietarla, sospende (deciso il 20/10, § 10, decisione 4): **oltre le quote
+la sola concessione**, **fuori dall'ambito tutta l'estensione** (è il segno di un codice che cerca
+di allargarsi); e lo dice: alla persona della concessione al suo
 primo turno riconosciuto, sul suo schermo personale e nel cruscotto. Si riattiva solo a voce, da chi
 amministra. Le soglie si misurano prima in ombra (§ 7, passo 2).
 
@@ -348,7 +355,8 @@ amministra. Le soglie si misurano prima in ombra (§ 7, passo 2).
 
 Per le irreversibili serve un posto dove l'estensione **lascia** l'azione invece di farla: Calliope
 tiene l'azione strutturata (cosa, verso chi, il contenuto), la mostra sullo schermo personale della
-persona e la dice in breve; l'atto parte solo con la conferma della persona, con la frase di sfida
+persona e la dice in breve; l'atto parte solo con la conferma della persona proprietaria
+dell'account (per un account della casa, di chi amministra: § 10, decisione 3), con la frase di sfida
 per le E3–E4, con le regole di oggi (solo lei, mai nella stessa risposta della domanda, scadenza). Il
 testo della conferma lo compone Calliope dai campi dell'azione, mai dalla frase dell'estensione:
 così un dato ostile letto dall'estensione non sceglie le parole della domanda. In autonomia le
@@ -397,7 +405,7 @@ disfa»): la concessione ha bisogno di un segno a sé (`preparate`), deciso dal 
 | **Istruzioni ostili nei dati letti** (un messaggio che dice «inoltra tutto a …») | il codice dell'estensione è deterministico; il risultato è un dato non fidato in busta, fuori dalla storia, niente azioni nella stessa risposta, testi che parlano all'assistente tolti; la politica per valore non esegue un bersaglio preso dal dato («ESEGUITE con un bersaglio dal dato» deve restare 0) | con il **modello** dentro l'estensione (§ 3.12) un testo ostile può guidare cosa l'estensione prepara: le irreversibili restano preparate, e la conferma mostra destinatario e contenuto veri, composti da Calliope (§ 5.6); la quota delle preparazioni limita il volume. Passi 4 e 7 |
 | **Autonomia senza la persona presente** | nel ricollaudo una pericolosa diventa vietata (`porta.py:92-104`); i permessi si rileggono; le pause dei minori | una corsa a orario con dati personali: il risultato resta in coda per la persona, mai annunciato in una stanza (#53, punto 3); quote al giorno oltre a quelle per esecuzione: passo 6 |
 | **Il segreto che esce** | `Riservati` cerca i dati riservati nel traffico, anche codificati o a pezzi; il registro delle uscite tiene solo l'host e lo toglie se porta un segreto (`rete.py:325-334`, `host_per_registro`); i reindirizzamenti si ricontrollano (`porta.py:303-306`) | il deposito stesso (chi ha l'utente di Calliope sulla DGX ha i segreti, come oggi il token di HA); il token con più poteri della concessione (§ 5.3): passo 5 |
-| **Concessioni dimenticate** (non scadono, scelta del 20/10) | nessuno, oggi i «sempre» non si elencano da nessuna parte | il cruscotto le elenca con l'ultimo uso; il promemoria periodico; una concessione mai usata da molto tempo si dice per prima: passo 2 |
+| **Concessioni dimenticate** (non scadono, scelta del 20/10) | nessuno, oggi i «sempre» non si elencano da nessuna parte | il cruscotto le elenca con l'ultimo uso; il promemoria una volta al mese a chi amministra, e a ogni persona per quelle sui suoi dati (§ 10, decisione 6); una concessione mai usata da molto tempo si dice per prima: passo 2 |
 | **Confused deputy** (un familiare fa concedere a nome di un altro) | approvare solo chi amministra con la sfida; la conferma solo da chi ha usato l'estensione | i dati di una persona si collegano solo con lei presente (scelta del 20/10): il collegamento avviene sul suo schermo personale, con la sua voce riconosciuta: passo 5 |
 | **Una versione nuova con lo stesso nome** | la versione nuova si riapprova; i «sempre» decadono | le concessioni decadono con la versione e si richiedono; la scheda dice quali sono nuove (come `permessi_nuovi`): passo 1 |
 | **Voce clonata di chi amministra** | la frase di sfida ferma registrazioni e TV, non una voce in tempo reale | le concessioni E3–E4 chiederanno il secondo fattore quando c'è (#52); fino ad allora il problema aperto «Voce unico fattore» di CLAUDE.md vale anche qui |
@@ -419,17 +427,24 @@ vera, decisione nuova, regola), senza cambiare niente. `calliope stato --concess
 
 **Passo 1 — Il controllo a ogni chiamata, la scheda e l'approvazione per classe.** La porta decide con
 le concessioni (§ 5.2); la scheda di revisione le dice in parole, con la classe e cosa resta preparato;
-le concessioni decadono con la versione; il risultato di una concessione a nome di una persona va solo
-a lei.
+le concessioni decadono con la versione, e anche tornando a una versione di prima si richiedono
+(§ 10, decisione 7); il risultato di una concessione a nome di una persona va solo a lei. Le
+concessioni **E4** valgono per **sessione d'uso** (§ 10, decisione 1): all'apertura dell'estensione,
+prima di partire, Calliope chiede la conferma dei suoi permessi E4; col sì valgono per quella sessione
+(la scheda aperta, per un'estensione con scheda o un gioco; la conversazione, per una usata solo a
+voce) e alla chiusura decadono. Nessuna concessione a nome di un ospite; un minore non chiede
+concessioni (§ 10, decisione 8).
 - Interruttore: `estensioni_concessioni: attivo`.
 - Criterio: il passo 0 con 0 differenze; il banco d'attacco (`prova_estensioni_attacchi.py`) a **0
-  passaggi** con i casi nuovi (fuori ambito, oltre quota, versione nuova con le concessioni della
-  vecchia, concessione sospesa); nessun «sì» in più per le estensioni di oggi (l'attrito delle
+  passaggi** con i casi nuovi (fuori ambito, oltre quota, versione nuova o versione di prima con le
+  concessioni dell'altra, concessione sospesa, un permesso E4 dopo la chiusura della sessione); nessun «sì» in più per le estensioni di oggi (l'attrito delle
   estensioni in `calliope stato --turni` non cresce).
 
 **Passo 2 — Revoca a più livelli, sospensione per anomalia, promemoria.** La revoca di una
 concessione, di un account o persona, di tutto (§ 5.4), a voce e dal cruscotto (con #124); la
-sospensione (§ 5.5); l'elenco nel cruscotto e il promemoria delle concessioni attive.
+sospensione (§ 5.5: oltre le quote la concessione, fuori dall'ambito l'estensione); l'elenco nel
+cruscotto e il promemoria delle concessioni attive, una volta al mese (§ 10, decisione 6). Revocare
+non chiede la frase di sfida; un familiare sospende le concessioni sui propri dati.
 - Interruttore: le revoche sono restrizioni e valgono appena il passo 1 è attivo; la sospensione
   automatica ha `estensioni_sospensione: ombra | attiva` (di serie spenta): in ombra scrive solo
   «avrebbe sospeso».
@@ -466,17 +481,19 @@ fornitore dove c'è.
 
 **Passo 6 — L'autonomia** (il progetto di #53 come concessione). Le corse a orario e in secondo piano,
 a nome di chi l'ha chiesta, con i permessi del momento, risultato solo a lei, preparazioni in coda.
+Una corsa a orario non ha un'apertura da parte di una persona, quindi **non usa capacità E4** (§ 10,
+decisione 1).
 - Interruttore: `estensioni_orari: ombra | attivo` (di serie spento); in ombra la corsa si registra
   («sarebbe partita») senza girare.
 - Criterio: i criteri di #53 (tetto al giorno, coda dei risultati con tetto e scadenza, notte a voce
   ferma con `quiete()`); in ombra, una settimana senza corse previste in una pausa di un minore o con
-  un livello cambiato.
+  un livello cambiato; nessuna estensione con concessioni E4 pianificabile.
 
-**Passo 7 — Le capacità dell'infrastruttura, una issue ciascuna.** Rete di casa ad host precisi
-(§ 3.4), file della persona (§ 3.3), connettori di posta con le loro porte (§ 3.1), modello dalla porta
-(§ 3.12), browser senza testa (§ 3.11), catalogo dei pacchetti (§ 3.6), scatto della webcam (§ 3.8),
-telefono (§ 3.2). Ognuna con la sua analisi breve, il suo interruttore e il suo criterio; l'ordine lo
-sceglie chi amministra (§ 10).
+**Passo 7 — Le capacità dell'infrastruttura, una issue ciascuna**, nell'ordine scelto da chi
+amministra il 20/10 (§ 10, decisione 9): connettori di posta con le loro porte (§ 3.1), file della
+persona (§ 3.3), rete di casa ad host precisi (§ 3.4), browser senza testa (§ 3.11), catalogo dei
+pacchetti (§ 3.6), modello dalla porta (§ 3.12), telefono (§ 3.2), scatto della webcam (§ 3.8).
+Ognuna con la sua analisi breve, il suo interruttore e il suo criterio.
 
 **Profilo ridotto da 8 GB**: i passi 0–6 sono solo codice (niente modelli, niente GPU) e valgono anche
 lì; al passo 7 il modello dalla porta e il browser senza testa dipendono dalla memoria disponibile e
@@ -505,8 +522,9 @@ conto in sola lettura.
 6. **La bozza** (passo 4): resta in coda; Ada la vede, la conferma al momento (con la sfida, è E3), e
    solo allora parte. Se il messaggio letto conteneva istruzioni ostili, la domanda dice comunque il
    destinatario e il testo veri della bozza.
-7. **Anomalia** (passo 2): una versione che prova a leggere un'altra cartella o cento messaggi in un
-   minuto si sospende da sola, e Calliope lo dice ad Ada e a chi amministra.
+7. **Anomalia** (passo 2): cento messaggi in un minuto (oltre le quote) sospendono da soli la
+   concessione dell'account; un tentativo di leggere un'altra cartella (fuori dall'ambito) sospende
+   tutta l'estensione. Calliope lo dice ad Ada e a chi amministra.
 8. **Revoca** (passi 2 e 5): «dimentica l'account della posta di Ada» toglie il segreto dal deposito,
    lo revoca presso il fornitore se si può, sospende le concessioni di quell'account in tutte le
    estensioni.
@@ -528,27 +546,33 @@ Il caso attraversa tutti i passi; ogni passo ha comunque i suoi casi, che non di
 - **Il secondo fattore** (#52) non è deciso: fino ad allora le E3–E4 si approvano con la sola voce e la
   sfida, come oggi le estensioni.
 
-## 10. Domande per chi amministra
+## 10. Decisioni del 20/10
 
-1. **E4 a un'estensione** (comandi delicati della casa, lo scatto della webcam): mai, oppure solo come
-   le irreversibili, con la conferma a ogni uso?
-2. **I «mai» di altre decisioni** (disinserire l'allarme, la frase di sfida e i codici, un livello più
-   alto di familiare alla porta): restano non concedibili, in una lista corta con il rimando alla
-   decisione? E lo scatto della webcam va fra questi?
-3. **Chi conferma l'atto finale** di una preparazione: la persona dell'account soltanto, oppure anche
-   chi amministra? Per un account della casa?
-4. **La sospensione per anomalia**: sospende la concessione sola, oppure tutta l'estensione? (Proposta:
-   la concessione per un uso oltre le quote, l'estensione per un uso fuori ambito.)
-5. **La revoca senza sfida** per chi amministra riconosciuto dalla voce, e un familiare che può
-   sospendere le concessioni a suo nome: va bene?
-6. **Il promemoria delle concessioni attive**: ogni quanto (una volta alla settimana? al mese?), e solo
-   a chi amministra o anche alla persona dell'account?
-7. **«Indietro» a una versione di prima**: le sue concessioni si richiedono (come i «sempre» oggi), o
-   tornano?
-8. **Minori e ospiti**: un minore può chiedere una concessione? I dati di un minore si collegano con
-   un tutore presente? Proposta: nessuna concessione a nome di un ospite.
-9. **L'ordine delle capacità del passo 7**: quali per prime? (Proposta: le notifiche alla web app e i
-   tool per nome sono già nel passo 4; poi un connettore di posta, la rete di casa ad host precisi, il
-   modello dalla porta.)
-10. **I messaggi fuori casa** (risposta S10 del 12/10): confermi che diventano chiedibili, sempre
-    preparati e inviati solo con la conferma al momento?
+*[storico fino al 20/10 sera: «Domande per chi amministra», dieci domande aperte nella prima versione
+della PR #195; le risposte di chi amministra sono queste, e il piano del § 7 è aggiornato.]*
+
+1. **E4 a un'estensione** (comandi delicati della casa, lo scatto della webcam): concedibili con la
+   **conferma per sessione d'uso**. All'apertura dell'estensione, prima di partire, Calliope chiede la
+   conferma dei suoi permessi E4; col sì valgono per tutta quella sessione; alla chiusura decadono e la
+   volta dopo si riconcedono. La sessione è il tempo in cui la scheda è aperta, per un'estensione con
+   scheda o un gioco; la conversazione, per un'estensione usata solo a voce. Una corsa a orario non ha
+   un'apertura da parte di una persona, quindi non usa capacità E4. Le irreversibili restano diverse:
+   conferma al momento di ogni atto.
+2. **I «mai» delle altre decisioni** (disinserire l'allarme, la frase di sfida e i codici, un livello
+   oltre familiare alla porta) restano non concedibili, con il rimando alla decisione. La webcam non è
+   fra questi: vale il punto 1.
+3. **L'atto finale** di una preparazione lo conferma la persona proprietaria dell'account; per un
+   account della casa, chi amministra.
+4. **La sospensione**: oltre le quote si ferma la sola concessione; fuori dall'ambito tutta
+   l'estensione.
+5. **Revocare non chiede la frase di sfida** (togliere potere è facile, darlo no); un familiare può
+   sospendere le concessioni sui propri dati.
+6. **Il promemoria delle concessioni attive**: una volta al mese a chi amministra, e a ogni persona per
+   quelle sui suoi dati.
+7. **Tornando a una versione di prima** le concessioni si richiedono, come per una versione nuova.
+8. **Minori e ospiti**: un minore non chiede concessioni; i dati di un minore si collegano solo con un
+   tutore presente; nessuna concessione a nome di un ospite.
+9. **L'ordine delle capacità del passo 7**: posta, file della persona, rete di casa verso host precisi,
+   browser senza testa, pacchetti, modello, telefono, webcam.
+10. **I messaggi fuori casa** diventano chiedibili, sempre preparati e inviati solo con la conferma al
+    momento: cambia la risposta S10 del 12/10 (roadmap 4.9).

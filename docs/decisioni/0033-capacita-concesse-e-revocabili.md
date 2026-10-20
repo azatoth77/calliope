@@ -1,6 +1,7 @@
 # 0033. Le capacità delle estensioni si concedono e si revocano, invece di essere impossibili
 
-- **Stato**: accettata (20/10/2026: il principio e le tre scelte di chi amministra, issue #193);
+- **Stato**: accettata (20/10/2026: il principio e le tre scelte di chi amministra, issue #193; la
+  sera le risposte alle dieci domande dell'analisi);
   il **piano a passi** è una proposta, nell'analisi, da approvare. Nel codice non c'è ancora niente:
   fino al primo passo valgono il contratto e il piano di oggi, con i 12 impossibili. Cambia una
   parte della [0013](0013-estensioni-porta-stretta.md) (vedi «Cosa cambia nelle decisioni di prima»)
@@ -72,6 +73,33 @@ costruzione.**
   di una persona si collegano **solo con lei presente**.
 - **Le concessioni non scadono** fino alla revoca o a una versione nuova; il cruscotto le elenca e
   Calliope ricorda di tanto in tanto quelle attive.
+
+**Le risposte di chi amministra alle dieci domande dell'analisi (20/10 sera)**:
+
+1. **E4** (comandi delicati della casa, lo scatto della webcam): concedibili con la **conferma per
+   sessione d'uso**. All'apertura dell'estensione, prima di partire, Calliope chiede la conferma dei
+   suoi permessi E4; col sì valgono per tutta quella sessione, alla chiusura decadono e la volta dopo
+   si riconcedono. La sessione è il tempo in cui la scheda è aperta (un'estensione con scheda, un
+   gioco) o la conversazione (un'estensione usata solo a voce). Una corsa a orario non ha un'apertura
+   da parte di una persona, quindi **non usa capacità E4**. Le irreversibili restano diverse: conferma
+   al momento di ogni atto.
+2. **I «mai» delle altre decisioni** restano non concedibili, con il rimando (sotto, «Cosa cambia»).
+   La webcam non è fra questi: vale il punto 1.
+3. **L'atto finale** di una preparazione lo conferma la persona proprietaria dell'account; per un
+   account della casa, chi amministra.
+4. **Sospensione**: oltre le quote si ferma la sola concessione; fuori dall'ambito tutta
+   l'estensione.
+5. **Revocare non chiede la frase di sfida** (togliere potere è facile, darlo no); un familiare può
+   sospendere le concessioni sui propri dati.
+6. **Promemoria** delle concessioni attive: una volta al mese a chi amministra, e a ogni persona per
+   quelle sui suoi dati.
+7. **Tornando a una versione di prima** le concessioni si richiedono, come per una versione nuova.
+8. **Minori e ospiti**: un minore non chiede concessioni; i dati di un minore si collegano solo con un
+   tutore presente; nessuna concessione a nome di un ospite.
+9. **Ordine delle capacità dell'infrastruttura** (passo 7): posta, file della persona, rete di casa
+   verso host precisi, browser senza testa, pacchetti, modello, telefono, webcam.
+10. **I messaggi fuori casa** diventano chiedibili, sempre preparati e inviati solo con la conferma al
+    momento (cambia la risposta S10 del 12/10, sotto).
 
 ## Cosa cambia nelle decisioni di prima
 
