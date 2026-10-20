@@ -75,6 +75,28 @@ Risultati: `~/calliope-e2e/risultati/<data>/rapporto.txt` (per area, passi falli
 detta, trascrizione e risposta, latenza, ritrascrizione, wake word, chi parla, errori del log),
 `passi.jsonl` (un passo per riga), `istanza.log`.
 
+## Estensioni, sviluppo e giochi (20/10, #75 e #7)
+
+Tre aree nuove di copioni, da scegliere a parte perché ogni lavoro dell'agente dura 10–25 minuti:
+`estensioni` (porta stretta, conferme e frase di sfida, «sì, sempre», flussi e `chiedi_permesso`,
+dati che mancano, istruzioni nei dati, minore e ospite, gli impossibili di oggi destinati a
+cambiare con la decisione 0033), `sviluppo` (il ciclo di vita intero: tappe, analisi cambiata,
+collaudi, domanda, correzione con ricollaudo, modifica a metà lavoro, pausa, revisione,
+attivazione, versione 2, indietro, rinomina, disattiva ed elimina, ferma e «rifallo», promuovi)
+e `giochi` (dieci giochi nuovi dall'agente con la partenza già verde di #186 e i giocatori
+dell'analisi, l'approvazione di un gioco puro da una familiare, un gioco con un'azione che approva
+solo chi amministra). Indice, frasi, attese e tabella di copertura in
+[`copione-estensioni-giochi.md`](copione-estensioni-giochi.md); i comandi lì, «Nella prova
+end-to-end». Le attese nuove di `verifica.py`: `porta`/`porta_no` (le righe di `decisioni.jsonl`
+dell'istanza scritte nel passo), `sviluppo`/`sviluppo_stato` (`lavori/sviluppi.json`), `log`/`no_log`
+(il log dell'istanza durante il passo), `scheda`, `gioco`; nel copione `se_domanda`, `se_sfida`, `log_dal_passo`, l'attesa `o` (strade alternative) e `est_@` (il tool dell'estensione dell'ultimo sviluppo).
+
+Le **partite** (`partita-porte`) chiedono `pagina`, che il runner non dà ancora: serve la pagina
+vera dello schermo dello studio in Edge senza finestra, attraverso un tunnel verso la porta degli
+schermi dell'istanza come per il telefono (`telefono.py`), perché il motore dei giochi gira nel
+browser; senza, il copione si salta («manca pagina»). Le attese dei copioni nuovi sono scritte sul
+codice, non ancora su un giro vero: il primo giro le corregge (come i giri 1–4 del 06/10).
+
 ## Cosa non prova
 
 - il telefono sulla DGX (Chromium non c'è e installarlo vuole sudo): con `--telefono` la pagina vera si apre in Edge **sul portatile**, attraverso un tunnel SSH verso la porta degli schermi dell'istanza, con il microfono finto di Edge, muto (`--mute-audio`: niente dalle casse del portatile) (una frase sola: abbinamento, wake word e VAD nel browser, risposta); niente iPhone vero;

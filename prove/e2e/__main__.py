@@ -55,6 +55,9 @@ class Runner:
         self.sessione = None
         self.ultima_fine = 0.0
         self.attese_guardia = 0.0
+        self._log_passi: dict[str, list[int]] = {}
+        self.estensione = None
+        self._sv_prima = None
 
     def log(self, m: str):
         riga = f"{datetime.datetime.now():%H:%M:%S} {m}"
@@ -146,7 +149,10 @@ class Runner:
                 if ev == "voce" and t0 <= x <= t1 and isinstance(d, dict)]
 
     def disponibili(self) -> set:
-        """Cosa c'è per i copioni: registrazioni vere, agente, web, biblioteca, schermo."""
+        """Cosa c'è per i copioni: registrazioni vere, agente, web, biblioteca, schermo. Non
+        c'è ancora «pagina» (20/10, #75): la pagina vera dello schermo dello studio aperta in
+        Edge attraverso un tunnel, come quella del telefono (telefono.py), dove gira il motore
+        dei giochi; senza, i copioni delle partite si saltano («manca pagina»)."""
         import httpx
         ok = set()
         if self.voci.cartella_reale and self.voci.ha_reale("ore"):
@@ -188,6 +194,47 @@ class Runner:
             t, mandata = sat.di(audio)
         return t, mandata, tentativi
 
+    def decisioni(self) -> list[dict]:
+        """Le righe del registro delle estensioni dell'istanza (`decisioni.jsonl`: porta
+        stretta, approvazioni, giochi)."""
+        f = self.ist.ist / "estensioni" / "decisioni.jsonl"
+        out = []
+        try:
+            righe = f.read_text(encoding="utf-8", errors="replace").splitlines()
+        except OSError:
+            return out
+        for r in righe:
+            try:
+                out.append(json.loads(r))
+            except ValueError:
+                pass
+        return out
+
+    def sviluppo_ultimo(self) -> dict | None:
+        """{fase, stato, titolo, gioco} dello sviluppo toccato per ultimo (`sviluppi.json`
+        dell'istanza), o None."""
+        try:
+            dati = json.loads((self.ist.ist / "lavori" / "sviluppi.json").read_text(
+                encoding="utf-8"))
+        except (OSError, ValueError):
+            return None
+        svs = [s for s in dati.get("sviluppi") or [] if isinstance(s, dict)]
+        if not svs:
+            return None
+        s = max(svs, key=lambda x: float(x.get("ultimo") or x.get("aperta") or 0))
+        return {k: s.get(k) for k in ("id", "fase", "stato", "titolo", "gioco", "estensione")}
+
+    def _frasi_dopo(self, t: float) -> str:
+        """Tutte le frasi dette dai satelliti dopo la fine del turno del passo (l'annuncio
+        intero e ciò che segue, fino al silenzio già aspettato da `_aspetta_annuncio`)."""
+        out = []
+        for s in self.sat.values():
+            fini = s.eventi_dopo(t, "fine_turno")
+            if not fini:
+                continue
+            out += [d for x, _, d in s.eventi_dopo(t, "frase") if x > fini[0][0] and d]
+        return " ".join(out)
+
     def turni_nuovi(self, n0: int, attesa: float = 10.0) -> list[dict]:
         fine = time.monotonic() + attesa
         while time.monotonic() < fine:
@@ -202,6 +249,15 @@ class Runner:
         sat = self.sat[passo.stanza]
         n0 = len(self.ist.turni())
         ha0, pc0 = len(self.ha.servizi), len(self.pc.azioni)
+        dec0, log0 = len(self.decisioni()), len(self.ist.log_testo())
+        sch0 = len(getattr(self, "eventi_schermo", []))
+        # Dove comincia il log di ogni passo del copione: `log_dal_passo` (-2: due passi
+        # prima) allarga la finestra del log a un lavoro cominciato prima (la correzione)
+        inizi = getattr(self, "_log_passi", {}).setdefault(cop.id, [])
+        inizi.append(log0)
+        k = passo.dati.get("log_dal_passo")
+        if isinstance(k, int) and k < 0 and len(inizi) > -k:
+            log0 = inizi[k - 1]
         rec = {"copione": cop.id, "area": cop.area, "passo": i, "chi": passo.chi,
                "stanza": passo.stanza, "tipo": passo.tipo}
         testo_detto = passo.testo
@@ -211,9 +267,40 @@ class Runner:
             rec.update(esito_passo="ok", detto=None, nota="sfida già chiesta: «sì» non serve")
             rec["risposta"] = (prec or {}).get("risposta", "")
             return rec
+        # Un passo che risponde a una domanda che può non arrivare (20/10: «Procedo?» per più
+        # di 10 voci, la domanda dell'agente a metà lavoro, «Lo apro in prova?»): si dice solo
+        # se la risposta del passo prima, il suo annuncio o una frase dopo l'annuncio fino al
+        # silenzio (`seguito`: «Lo apro in prova?» è l'ultima frase dell'annuncio, non la
+        # prima, revisione della PR #196) la contengono. Un passo non detto si conta a parte
+        if passo.dati.get("se_domanda"):
+            import re
+            # Solo le domande (le frasi che finiscono con «?»): una parola in un titolo o in una
+            # mancanza detta non basta (seconda revisione della PR #196)
+            prima = V.domande(*((prec or {}).get(k) or ""
+                                for k in ("risposta", "annuncio", "seguito")))
+            if not re.search(passo.dati["se_domanda"], prima, re.I):
+                rec.update(esito_passo="ok", detto=None, non_detto=True,
+                           nota=f"nessuna domanda {passo.dati['se_domanda']!r}: passo non detto")
+                for k in ("risposta", "annuncio", "seguito"):
+                    rec[k] = (prec or {}).get(k)
+                return rec
         if passo.tipo in ("voce", "sfida"):
             if passo.tipo == "sfida":
                 parole = V.parole_sfida((prec or {}).get("risposta", ""))
+                if not parole and passo.dati.get("se_sfida"):
+                    # Un gioco puro approvato con la voce riconosciuta non chiede la sfida: le
+                    # attese sulle regole e sul testo valgono sulla risposta del passo prima
+                    # (l'approvazione); le altre (porta, log…) non si controllano qui
+                    rec.update(esito_passo="ok", detto=None, nota="nessuna frase di sfida: "
+                               "non serviva", risposta=(prec or {}).get("risposta", ""),
+                               regole=(prec or {}).get("regole") or [])
+                    errori = V.controlla({k: v for k, v in passo.attese.items()
+                                          if k in ("regole", "no_regole", "testo",
+                                                   "non_testo")},
+                                         {"regole": rec["regole"]}, rec["risposta"])
+                    if errori:
+                        rec.update(esito_passo="fallito", errori=errori)
+                    return rec
                 if not parole:
                     rec.update(esito_passo="saltato", errori=["nessuna frase di sfida da ripetere"])
                     return rec
@@ -255,9 +342,25 @@ class Runner:
         if "annuncio" in passo.attese:
             regex, secondi = passo.attese["annuncio"]
             annuncio = self._aspetta_annuncio(t_fine, regex, secondi)
+            if annuncio:
+                rec["seguito"] = self._frasi_dopo(t_fine)
         extra = {"suoni": r["suoni"], "ha": [f"{s}:{e}" for s, e, _ in self.ha.servizi[ha0:]],
                  "voce_studio": self.voce_studio(t_fine - 1.0, (r["fine_audio"] or t_fine) + 1),
                  "pc": [a[0] for a in self.pc.azioni[pc0:]], "annuncio": annuncio}
+        # Estensioni, sviluppo e giochi (20/10, #75): le decisioni della porta stretta e dei
+        # giochi scritte nel passo, lo sviluppo toccato per ultimo, il log dell'istanza (il
+        # lavoro dell'agente, fino all'annuncio) e le schede arrivate allo studio
+        sv = self.sviluppo_ultimo()
+        if sv and sv.get("estensione") and sv.get("id") != getattr(self, "_sv_prima", None):
+            # L'estensione dell'ultimo sviluppo: «est_@» nelle attese è il suo tool
+            self.estensione = sv["estensione"]
+        extra.update(
+            porta=[f"{d.get('regola')}:{d.get('esito')}" for d in self.decisioni()[dec0:]],
+            sviluppo=sv, log=self.ist.log_testo()[log0:],
+            estensione=getattr(self, "estensione", None), seguito=rec.get("seguito"),
+            schede=[json.dumps(d, ensure_ascii=False)[:2000]
+                    for _, ev, d in getattr(self, "eventi_schermo", [])[sch0:]
+                    if ev == "scheda"])
         risposta = r["testo"] or (turno or {}).get("risposta") or ""
         errori = V.controlla(passo.attese, turno, risposta, extra)
         if altro is not None:
@@ -283,7 +386,8 @@ class Runner:
                                                    "stt_correzione_scaduta", "stt_corretta",
                                                    "stt_capito")
                  if (turno or {}).get(k) is not None},
-            annuncio=annuncio, extra={k: v for k, v in extra.items() if k != "annuncio"},
+            annuncio=annuncio,
+            extra={k: v for k, v in extra.items() if k not in ("annuncio", "log")},
             errori=errori, giudizio=passo.attese.get("giudizio"),
             esito_passo="ok" if not errori else "fallito")
         from prove.e2e.istanza import modelli_ollama
@@ -391,6 +495,12 @@ class Runner:
             # di reale-cortesia (giri 1 e 4 del 06/10)
             if self.pc is not None:
                 self.pc.locked = False
+            # Un copione che crea un'estensione o un gioco parte senza quella di prima: «est_@»
+            # vale solo per uno sviluppo aperto in questo copione (seconda revisione della PR
+            # #196: una creazione non arrivata alla consegna ereditava l'estensione di prima)
+            if C.apre_sviluppo(cop):
+                self.estensione = None
+                self._sv_prima = (self.sviluppo_ultimo() or {}).get("id")
             prec = None
             for i, passo in enumerate(cop.passi):
                 if i:
@@ -549,6 +659,10 @@ def rapporto(run: Runner, scelti, disponibili, durata) -> str:
         righe.append(f"  {a:14s} {ok}/{len(ps)}")
     tot = sum(p.get("esito_passo") == "ok" for p in passi)
     righe.append(f"  {'TOTALE':14s} {tot}/{len(passi)}")
+    nd = [p for p in passi if p.get("non_detto")]
+    if nd:
+        quali = ", ".join(f"{p['copione']}#{p['passo']}" for p in nd[:12])
+        righe.append(f"  di cui non detti (la domanda non c'era): {len(nd)} ({quali})")
     saltati = [c.id for c in scelti if not any(p["copione"] == c.id for p in passi)]
     if saltati:
         righe.append(f"Copioni non eseguiti: {', '.join(saltati)}")
@@ -667,7 +781,9 @@ def main(argv=None):
         for c in tutti:
             if c not in scelti:
                 run.log(f"[e2e] salto {c.id}: manca {sorted(set(c.richiede) - disp)}")
-        # I lenti (agente vero) per primi: mentre l'agente lavora i copioni aspettano
+        # Nell'ordine del file: i copioni che usano un'estensione o un gioco vengono dopo
+        # quello che li crea (20/10, revisione della PR #196: il commento di prima diceva «i
+        # lenti per primi», e non era vero)
         run.esegui(scelti)
         if a.telefono:
             run.telefono(a.telefono)
