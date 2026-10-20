@@ -170,9 +170,19 @@ def controlla(attese: dict, turno: dict | None, testo: str, extra: dict | None =
 
 def domande(*testi: str) -> str:
     """Le sole frasi che finiscono con «?» (seconda revisione della PR #196): `se_domanda`
-    scatta su una domanda, non su un titolo o una mancanza detti nell'annuncio."""
-    frasi = re.split(r"(?<=[.!?])\s+", " ".join(str(t or "") for t in testi))
-    return " ".join(f for f in frasi if f.strip().endswith("?"))
+    scatta su una domanda, non su un titolo o una mancanza detti nell'annuncio.
+    Con ogni domanda anche la frase subito prima (la domanda dell'agente in due frasi: «…non
+    conosco il calendario della raccolta. Me lo dici?»); conta anche «?» seguito da una
+    virgoletta di chiusura («?»», «?"»)."""
+    frasi = re.split(r"(?<=[.!?])\s+|(?<=[.!?][»”\"')])\s+",
+                     " ".join(str(t or "") for t in testi))
+    tenute = []
+    for i, f in enumerate(frasi):
+        if re.search(r"\?[»”\"')]*$", f.strip()):
+            if i and frasi[i - 1] not in tenute:
+                tenute.append(frasi[i - 1])
+            tenute.append(f)
+    return " ".join(tenute)
 
 
 def normalizza(s: str) -> str:

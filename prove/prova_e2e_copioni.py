@@ -266,20 +266,34 @@ def main():
                        {"estensione": "cambio_valute"})
        and V.controlla({"tool": ["est_@"]}, {"tool": [{"nome": "est_bacheca"}]}, "", {}))
     # Seconda revisione della PR #196: se_domanda solo sulle domande; l'annuncio intero
-    ann = ("Andrea, il lavoro di «Calendario della carta» è pronto: siamo al collaudo. Manca "
-           "ancora il giorno del vetro. Con cosa provo?")
+    # (dall'ultima revisione: con ogni domanda anche la frase subito prima, e «?»» conta)
+    ann = ("Andrea, il lavoro di «Calendario della carta» è pronto: siamo al collaudo. Ho "
+           "controllato i requisiti. Con cosa provo?")
     calendario = next(p for p in C.COPIONI if p.id == "svil-differenziata").passi[3]
+    se_cal = calendario.dati["se_domanda"]
     ok("se_domanda: una parola nel titolo o in una mancanza detta non basta",
-       not re.search(calendario.dati["se_domanda"], V.domande(ann), re.I)
-       and re.search(calendario.dati["se_domanda"],
-                     V.domande("Una domanda dell'agente. Che giorno passa la carta?"), re.I))
+       not re.search(se_cal, V.domande(ann), re.I)
+       and re.search(se_cal, V.domande("Una domanda dell'agente. Che giorno passa la carta?"),
+                     re.I))
+    ok("se_domanda: la domanda dell'agente in due frasi fa scattare il calendario",
+       re.search(se_cal, V.domande("Andrea, una domanda sul lavoro. Non conosco il calendario "
+                                   "della raccolta. Me lo dici?"), re.I))
+    ok("se_domanda: «calendario» senza nessuna domanda dopo non scatta",
+       not re.search(se_cal, V.domande("Andrea, il calendario della raccolta è pronto. Lo "
+                                       "trovi sullo schermo."), re.I)
+       and not V.domande("Il calendario è pronto."))
+    ok("se_domanda: «?» seguito dalla virgoletta di chiusura è una domanda",
+       re.search(se_cal, V.domande("L'agente chiede: «Che giorno passa la carta?» Aspetto la "
+                                   "risposta."), re.I)
+       and "?»" in V.domande("Ha chiesto «Me lo dici?»"))
     permesso = next(p for p in C.COPIONI if p.id == "est-notte").passi[3]
-    ok("se_domanda: il permesso solo nella frase della domanda",
+    ok("se_domanda: il permesso solo vicino alla domanda",
        re.search(permesso.dati["se_domanda"], V.domande(
            "Per la funzione mi servirebbe comandare le luci. Posso metterlo tra i permessi "
            "della funzione?"), re.I)
        and not re.search(permesso.dati["se_domanda"], V.domande(
-           "Il lavoro è pronto: i permessi sono quelli detti. Con cosa provo?"), re.I))
+           "Il lavoro è pronto: i permessi sono quelli detti. Ho finito i test. Con cosa "
+           "provo?"), re.I))
     lascia = next(p for p in C.COPIONI if p.id == "svil-differenziata").passi[9]
     ok("ricollaudo riuscito: detto nell'annuncio intero, non la sola regola nel log",
        not V.controlla({"annuncio_testo": lascia.attese["annuncio_testo"]}, {}, "",
