@@ -1117,3 +1117,31 @@ vero (porte 2–4, tris 2–2, memory, quiz, sette e mezzo, oca in quattro, lucc
 con un'azione, forza quattro condiviso, il quiz che vuole internet) e controlla dal log la partenza
 con i giocatori dell'analisi; le **partite** (`partita-porte`) chiedono la pagina vera dello schermo
 in Edge, che la prova non ha ancora: si saltano finché non c'è (il punto aperto di #75).
+
+## La macchina a stati serve ancora? Analisi delle opzioni (20/10, issue #198, parte 1)
+
+Il 20/10 sera, con tutto l'harness del 19–20/10 installato, la correzione delle porte fa 8/8 e il
+tris per due da zero fa 0/3. Chi amministra ritiene Qwen3.6-35B-A3B adatto a un tris e chiede di
+cercare il problema nell'harness o nelle specifiche. La macchina (13/10) è nata prima di
+quell'harness. L'analisi in sola lettura è in
+[`2026-10-20-giochi-macchina-o-interfaccia.md`](../ricerche/2026-10-20-giochi-macchina-o-interfaccia.md).
+In breve:
+- **le garanzie di Calliope non dipendono dalle fasi dichiarate dal gioco**: comandi a voce,
+  giudice, domande, istantanea validata, partite condivise, ripresa, chi è quale giocatore e palco
+  usano un elenco chiuso di comandi nel manifesto, un'istantanea numerata, uno stato
+  serializzabile con una vista pura, e preparazione, fine e disegno di Calliope;
+- **il costo per l'agente**: circa 4 400 caratteri su 9 141 del §2 del contratto parlano della
+  macchina; `tocca` è un nome in `g.stato()` e una posizione nel contesto della mossa; `turno` nel
+  contesto è il numero del giro e il contratto non lo dice; contratto, prompt dell'analisi
+  («dopo ogni mossa di solito c'è la fase «esito»») e gioco della partenza suggeriscono l'esito a
+  ogni mossa;
+- **il catalogo dal 14/10**: 14 lavori di gioco falliti, 11 toccano un concetto o l'API dei test
+  della macchina, 4–5 con un concetto della macchina come causa principale; la correzione di un
+  gioco che c'è già fa 13/13 dal 19/10;
+- **le opzioni**: A, la macchina con il contratto semplificato; B, una macchina più piccola;
+  C, quattro funzioni pure su uno stato del gioco con `tocca`, `punti` e `fine`; D, JavaScript
+  libero. Per C c'è una bozza concreta, anche come **facciata** sopra il motore di oggi (1–2
+  giorni di prototipo, nessuna garanzia persa);
+- **la raccomandazione**: prima #197, poi il banco della parte 2 con `tris2`, `tris-nudo` e
+  `tris-facciata`, stessa accettazione e almeno 5 ripetizioni; la scelta la fa il banco, non un
+  parere.
