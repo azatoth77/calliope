@@ -4097,11 +4097,12 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
   quando la troncatura è nell'uscita: una chiamata con gli argomenti rotti, o un testo fermato a
   max_tokens di almeno `TRONCATA_TESTO_MIN` = 20 caratteri. Una passata «length» con il contenuto
   vuoto o quasi, fatta tutta di ragionamento, resta nella guardia dei token senza strumenti come
-  prima (alla seconda soglia «limite»). Con la prima correzione, 30 passate così arrivavano al tetto
+  prima (alla seconda soglia «limite»). *[storico: «il contenuto vuoto o quasi» come discriminante fino alla
+  terza revisione, sotto]* Con la prima correzione, 30 passate così arrivavano al tetto
   dei token del lavoro (150 000, i 30 minuti) con «scrivi il file in pezzi», che non c'entrava. La
   troncata vera non si somma ai token senza strumenti e non li azzera.
 - **Un tetto suo**: oltre `TRONCATE_MAX` = 3 passate di fila con l'uscita troncata (anche le
-  chiamate rotte) il lavoro si ferma col motivo «la sua uscita si è fermata N volte di fila al
+  chiamate rotte; dalla terza revisione solo le passate con tutte le chiamate rotte) il lavoro si ferma col motivo «la sua uscita si è fermata N volte di fila al
   tetto dei token della passata», `tipo` «troncata»: tappa in uno sviluppo (`PERCHE_TAPPA`, a voce
   «l'uscita dell'agente si è fermata più volte di fila al tetto dei token della passata»), fuori
   «limite».
@@ -4112,3 +4113,39 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
   scrivi_file lungo).
 - La troncata azzera la prosa di fila: alternate, «N volte di fila senza usare gli strumenti» non
   si dice più a torto.
+
+**Dopo la terza revisione della PR #187 (20/10).**
+- **La discriminante della troncata senza chiamate è sui token, non sul contenuto**
+  (`troncata_nell_uscita`). Un testo di almeno 20 caratteri è un'uscita troncata. Col contenuto
+  vuoto decide il ragionamento: se è almeno `RAGIONAMENTO_QUOTA` = 0,4 dei token generati è
+  ragionamento troncato, e vale la guardia come prima. Il conto è quello del motore (vLLM) o la
+  stima dai caratteri, un token ogni `TOKEN_CARATTERI` = 3: è grossolana, per questo la quota è
+  bassa. Altrimenti l'uscita c'era, ma l'ha trattenuta il parser dei tool: è la chiamata a metà
+  con Ollama, il caso M1 della prima revisione, che con la seconda correzione era tornato in «ha
+  ragionato per 32 768 token». Il valore della quota è da misurare sulla DGX: nel log il conto di
+  `agente_uscita_troncata` e le righe «token senza strumenti».
+- **Il tetto delle troncate per le passate con chiamate viene dopo il giro sulle chiamate**:
+  ognuna ha la sua risposta nella storia, prima della tappa o del «limite». Una passata conta «di
+  fila» solo se tutte le sue chiamate sono rotte. Con vLLM e «length» una passata con una chiamata
+  intera e l'ultima rotta va avanti: le intere si eseguono, e l'agente scrive un file per passata.
+- **Il tempo di una passata troncata esce dalla guardia dei minuti senza strumenti**: come i
+  token, non si somma e non la azzera. Prima una troncata da 330 s seguita da una passata di prosa
+  faceva scattare «ha ragionato per 100 token».
+- **Fuori da uno sviluppo il «limite» «troncata» passa da `_consegna_al_tetto`**, come gli altri
+  tetti. Con gli esempi di accettazione verdi il codice consegna, `consegna_al_tetto` «troncata», e
+  a voce «non ha consegnato», come per `a_vuoto` e `prosa`.
+- Un giro a vuoto azzera le troncate di fila. Il banco (#9) ha `troncata` tra i tipi del limite.
+- **I casi dei copioni delle tre revisioni sono nella prova** (`prova_strumenti_onesti`, sezione
+  7), con il nome che avevano e con i contrari:
+  - A ed L1: l'uscita trattenuta;
+  - E: il solo ragionamento, con vLLM e con Ollama;
+  - F: troncate e prosa alternate;
+  - J e J2: il tempo, con un orologio finto; il contrario è la prosa lenta;
+  - M: chiamate intere e rotte;
+  - N: tappa e «limite» con la storia ben formata;
+  - R4: la consegna al tetto con gli esempi;
+  - R6: il giro a vuoto in mezzo;
+  - I: senza `rotti` la chiamata intera si esegue;
+  - B, C, D, G e H: la modifica inversa e il già visto.
+
+  Ogni tornata di correzioni aveva rotto un caso di quella prima.
