@@ -1359,6 +1359,12 @@ class Lavori:
             lav.stato = "errore"
             ris = {"esito": "limite", "motivo": f"ho dovuto fermarlo: {e}",
                    **{k: v for k, v in e.parziale.items() if v}}
+            # Il tipo del limite nei segnali (19/10, #9: la riga del banco), non nel risultato:
+            # lì «tipo_limite» è quello di una tappa e cambia la frase
+            if isinstance(getattr(lav, "segnali", None), dict):
+                lav.segnali["limite"] = e.tipo or "altro"
+            else:
+                lav.segnali = {"limite": e.tipo or "altro"}
             if self._sandbox is not None:
                 ris.update(self._parziale(lav, self._sandbox, dest))
                 # Gli esempi di accettazione rieseguiti anche qui, sui file del momento (13/10
@@ -1537,6 +1543,11 @@ class Lavori:
                             "valori": len(an.get("riconosciuti") or []),
                             # Gli esempi tolti o cambiati contro la richiesta (14/10 sera)
                             "tolti": dict(an.get("tolti") or {}),
+                            # Per il banco (19/10, #9): i valori nominati per input e quanti
+                            # esempi tenuti hanno il «calcolo» rifatto dal codice
+                            "nominati": {i["nome"]: list(i["valori"])
+                                         for i in an.get("input") or () if i.get("valori")},
+                            "con_calcolo": int(an.get("con_calcolo") or 0),
                             "requisiti_provati": acc.numeri_esempi(an) if scritto else [],
                             "testi_provati": testi(acc.numeri_esempi(an)) if scritto else [],
                             "al_collaudo": an["al_collaudo"],

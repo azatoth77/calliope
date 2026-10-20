@@ -3913,6 +3913,73 @@ le tappe con `tipo_limite` «consegna_rossa» e «prosa».
   e una spinta già data). `agente_esito_non_valido` si scrive anche per gli strumenti `grafo_*`
   della ricerca (`nota_valore_non_ammesso`). L'esito vuoto è un errore (prima valeva «fatto»).
 
+## Il banco scrive i motivi: tolti, calcolo, no al tetto, regole e limite (19/10, issue #9, ramo `issue-9-banco-motivi`)
+
+Il passo 0 della [ricerca sulla solidità dell'harness](../ricerche/2026-10-19-solidita-harness-sviluppo.md)
+(§ 3.7 e § 5): prima di cambiare il comportamento dell'agente, la riga di `riepilogo.json` di
+`prove/manuali/banco_temperatura.py` dice da sé quello che il 14/10 si contava a mano dal log.
+Nessun cambio di comportamento: solo dati salvati nel lavoro e scritti nella riga.
+
+- **L'analisi prima del codice** (`analisi` della riga, da `lav.accettazione`): `nominati` (i
+  valori nominati per input, quelli che la richiesta dice alla lettera), `valori` (i controlli
+  «si riconosce» in più), `tolti` per genere (`fuori`, `numero`, `contiene`; per un programma
+  anche `dati`) e `con_calcolo`, quanti esempi tenuti hanno il `calcolo` rifatto dal codice
+  (contato in `accettazione.interpreta`; prima si vedeva solo quando non tornava, in
+  `tolti.numero`); in un programma non conta l'esempio il cui numero è tolto perché uguale a
+  un dato.
+- **Il no al tetto**: la funzione `no` di `Agente._consegna_al_tetto` scrive il motivo anche in
+  `lav.segnali["al_tetto_no"]` (con il tetto in `al_tetto_tipo`); nella riga `al_tetto_no` e
+  `al_tetto_no_tipo`, solo per un lavoro finito «limite». Dopo due passate di sola prosa con lo
+  stato consegnabile (#180) la stessa funzione decide con il tipo «prosa», anche a tappe: lì il
+  no non ferma il lavoro, che continua e può consegnare, e va a parte in `prosa_no` (revisione
+  della PR #181: prima restava `al_tetto_no` in un lavoro poi «fatto»). I motivi possibili: «senza esempi di accettazione», «mancano i file che la
+  consegna chiede», «esempi di accettazione rossi (requisiti …)», «i test dell'agente non
+  passano», «la consegna non va: …», «il ricollaudo con i casi della persona non va»,
+  «correzione non riprodotta (…)», «controllo non riuscito (…)».
+- **Il limite**: il servizio mette il tipo del `Limite` in `lav.segnali["limite"]` («passate»,
+  «tempo», «token», «a_vuoto»; con #180 anche «prosa», più di `PROSA_MAX` passate di fila senza
+  strumenti, e «consegna_rossa», la consegna con i test rossi; «altro» per gli altri, per
+  esempio il modello che non usa gli strumenti); nella riga `limite`, solo per un lavoro finito
+  «limite». Non va nel risultato:
+  lì `tipo_limite` è quello di una tappa e cambia la frase.
+- **Le regole** (`regole`, da `lav.segnali["regole"]`, `sonde.nota`): dal 19/10 contate anche
+  `agente_ragionamento_ripetuto` e `agente_riscrittura_ripetuta`, che prima andavano solo nel
+  log e sulla scheda (senza riga in più nel log). Le altre c'erano già: `agente_spinta_consegna`,
+  `agente_test_tolti`, `agente_consegna_al_tetto`, `agente_giri_uguali`,
+  `agente_consegna_dopo_giri`, `agente_test_instabili`, `agente_riscrittura_piccola`.
+- **I segnali di giro** di fine lavoro (`segnali_giro`: `senza_novita`, `senza_progressi`,
+  `ripetizioni`, `riscritti`, da `segnali_giro`); con più giri i primi due sono dell'ultimo
+  giro, perché ripartono a ogni «continua».
+
+**Come leggerla.** Il criterio di #9 «0 lavori fermati al tetto con "mancano i file che la
+consegna chiede" e accettazione nascosta verde» è `al_tetto_no == "mancano i file…"` con
+`accettazione: true`; il falso «fatto» resta `esito == "fatto"` con `accettazione: false`. Per
+ogni convertitore la riga ha `nominati`, `tolti` e `con_calcolo`. A secco (`--secco`) la consegna
+al tetto controlla i campi nuovi: l'esempio con «leghe» (non nella richiesta) tolto come
+`fuori`, `nominati == {"da": ["miglia"]}`, `con_calcolo == 1`; nel contrario «limite» delle
+passate con «esempi di accettazione rossi», nelle porte senza il test «correzione non
+riprodotta»; e le porte con due passate di prosa, poi il test e la consegna: «fatto», niente
+`al_tetto_no` né `limite`, «correzione non riprodotta» in `prosa_no`. *[storico: «Resta il banco sulla DGX (punto 2 di #9), di chi amministra.» fino al 19/10: fatto, sotto]*
+
+**Il banco sulla DGX del 19/10** (punto 2 di #9; qwen3.6-35B-A3B su vLLM, t 0,6, presence della
+Config, 5 ripetizioni × 3 casi; installata `20261018-2042-97bacbb6`, cioè main prima di #180;
+banco dal ramo a `c234a7b`; `~/banchi/valori-1019-1552`, 35 minuti, 145 000 token). **13/15**
+contro gli 11/15 del 14/10 mattina: porte **5/5** (3/5), tutte con la riproduzione «riprodotto»
+e 9–13 passate; convertitore **4/5** (3/5); programma **4/5** (5/5). I due rossi:
+- **convertitore L5**: 24 passate, «limite» per le passate, `estensione.py` riscritto 4 volte,
+  10 passate senza novità, 24 errori su 30 test suoi e 4 su 5 degli esempi, tutti dallo stesso
+  `NameError: name 'NOME_TESTO' is not defined` (estensione.py:109); `al_tetto_no` «esempi di
+  accettazione rossi (requisiti [1])». È il giro in tondo che #185 (strumenti onesti) vuole
+  dire all'agente: la stessa firma a ogni esecuzione e il ritorno a stati già visti.
+- **programma L15**: «fatto» in 3 passate con i suoi 5 test verdi e l'accettazione nascosta
+  rossa (si aspettava `2026-09-14_gatto.JPG`, l'estensione del file com'era): un programma non
+  ha esempi di accettazione, quindi l'harness non aveva niente per accorgersene (#10).
+
+Criteri di #9: 15 lavori sì; porte ≥ 3/5 sì; 0 «mancano i file» con l'accettazione verde sì;
+valori, tolti e `con_calcolo` nella riga sì (nel convertitore L5, letto
+dalla riga: 10 nominati per input, 7 tolti «contiene», 6 col calcolo); **0 «fatto» con l'accettazione nascosta rossa no (1, il programma)**:
+si chiude solo con gli esempi dei programmi (#10).
+
 ## Gli strumenti onesti dell'agente (19/10, issue #185, ramo `issue-185-strumenti-onesti`)
 
 **Il caso** (analisi del 19/10, `docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.2,
