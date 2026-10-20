@@ -1187,6 +1187,10 @@ class Sviluppi:
         if altro is not None:
             parti.append(f"ho sospeso «{altro.titolo}».")
         parti.append(f"il lavoro di «{sv.titolo}» è pronto: siamo al collaudo.")
+        if r.get("consegna_al_tetto") == "tappa":
+            # Chiuso dal codice alla tappa con lo stato consegnabile (20/10, #192): detto
+            from .agenti.servizio import AL_TETTO_TAPPA
+            parti.append(AL_TETTO_TAPPA)
         if sv.tipo == "estensione":
             parti.append(f"La versione {sv.versione or 'nuova'} non è ancora attiva.")
         # Meno parole (12/10, annunci di 7–9 frasi nei log): cosa doveva cambiare in parole, i

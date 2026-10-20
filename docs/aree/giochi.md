@@ -1094,6 +1094,17 @@ programmi»), con `contratto.impossibili(gioco)` e `voci_piano(gioco)` usati dal
 strumento piano. Il titolo della partenza non finisce più con una preposizione o un articolo
 («…con le carte», non «…con le carte di»).
 
+**apriGioco nelle correzioni e la pagina già «griglia» (20/10, issue #192, ramo
+`issue-192-apri-gioco-tappa`).** Nel banco del 20/10 a due giri (porte L4 e L6) l'agente di una
+correzione scriveva in gioco.test.js un `apriGioco` suo, un motore finto che copre quello vero, e
+passava i giri a correggerlo con logica.js già giusto: dopo #186 la frase «ci sono già» stava solo
+nel gioco.test.js di partenza, che una correzione non riceve. Ora la dicono il contratto del gioco,
+i vincoli della correzione e il rimando della riproduzione, ed esegui_test ha il fatto del motore
+finto (regola `agente_motore_finto`). Il suggerimento del palco con troppi pulsanti in una pagina
+già «griglia» dice di mettere comando e valore nelle caselle (tris2 L3), non «usa la pagina
+«griglia»». Il resto (la tappa consegnabile, il segnaposto, il banco) è in
+[agenti-estensioni](agenti-estensioni.md), voce del 20/10 su #192.
+
 ## Il copione delle prove dal vero e i giochi nella prova end-to-end (20/10, #7 e #75)
 
 Le prove dal vero di tutte le capacità dei giochi (macchina a stati, i sette modelli di pagina e i

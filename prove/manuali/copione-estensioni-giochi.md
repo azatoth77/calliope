@@ -34,7 +34,7 @@ Il tempo è quello della persona; **un lavoro dell'agente** (una prova con «lav
 
 Segni:
 - **[#192]**: dipende dalla correzione dei giochi di #192 (la correzione non sa che `apriGioco` c'è
-  già, la tappa consegnabile chiusa d'ufficio), non ancora installata: prima di #192 la prova si fa
+  già, la tappa consegnabile chiusa d'ufficio), unita su main il 20/10 e da installare sulla DGX con `calliope aggiorna`: prima di #192 la prova si fa
   lo stesso, ma l'esito atteso è segnato «prima» e «dopo»;
 - **[0033]**: una prova sugli **impossibili** di oggi (`contratto.IMPOSSIBILI`), **destinata a
   cambiare** con la decisione 0033 in arrivo (#193: capacità concesse e revocabili al posto degli

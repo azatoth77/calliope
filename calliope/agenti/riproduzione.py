@@ -38,6 +38,8 @@ import shutil
 import time
 from pathlib import Path
 
+from ..testi import APRI_GIOCO_C_E
+
 # I file che non cambiano ciò che il codice fa: il manifesto, il contratto e il runtime, i test,
 # gli esempi, i file di prova dell'agente (esegui_js, esegui_python su un pezzo: prova_*.js/.py)
 NON_CODICE = re.compile(r"(^|/)(manifesto\.json|CAPACITA\.md|calliope_estensione\.py)$|"
@@ -222,7 +224,9 @@ def messaggio_agente(esito: dict, problema: str = "", gioco: bool = False) -> st
             "problema l'ha visto la persona sullo schermo: const g = await apriGioco({ seme: 1, "
             "inizia: true }) (con min < max anche giocatori: N: ogni partita comincia nella "
             "preparazione, §2 del contratto); await g.tocca(\"testo del pulsante\"); poi "
-            "g.testo() per leggere cosa compare (non solo logica.js)." if gioco else "")
+            "g.testo() per leggere cosa compare (non solo logica.js). "
+            # 20/10 (#192): una correzione non riceve il gioco.test.js di partenza
+            f"{APRI_GIOCO_C_E}." if gioco else "")
     stato = esito.get("stato")
     if stato == "uguale":
         return ("La correzione non è valida: i file del codice sono uguali a quelli di prima, "
