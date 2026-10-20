@@ -34,7 +34,7 @@ Qwen3.6-35B-A3B adatto a un tris, e chiede se il problema sia nell'harness o nel
 
    Niente di questo ha bisogno che il gioco dichiari fasi, `verso`, `dopo`, la fase «esito» o
    `ancora` (§ 2).
-2. **Quei concetti costano all'agente.** Circa un terzo del §2 del contratto del gioco
+2. **Quei concetti costano all'agente.** Più di un terzo del §2 del contratto del gioco
    (≈ 3 300–3 500 caratteri su 9 141, il 36–38 %) descrive soltanto la macchina: fasi,
    preparazione, le tre forme di una mossa, `g.stato()`. Ci sono anche tre incoerenze verificate
    nel codice:
@@ -47,9 +47,10 @@ Qwen3.6-35B-A3B adatto a un tris, e chiede se il problema sia nell'harness o nel
    Tre testi suggeriscono un esito a ogni mossa: il contratto, il prompt dell'analisi e il gioco
    della partenza (§ 3.1).
 3. **Gli errori dei giochi dal 14/10.** Su 14 lavori di gioco falliti nei banchi e nei casi veri,
-   un'interfaccia senza fasi ne toglierebbe **5–6**. In 4–5 la causa principale è un concetto
-   della macchina (la preparazione, «avanti» ed «esito», `dopo`, l'esito a ogni mossa), più un
-   probabile sull'interfaccia della mossa. Il resto ha altre cause:
+   un'interfaccia senza fasi ne toglierebbe **5–6**. La causa principale è un concetto della
+   macchina (la preparazione, «avanti» ed «esito», l'esito a ogni mossa) in 4 lavori certi e in 1
+   probabile, sull'interfaccia della mossa. In più c'è il «dopo» di un lavoro della transizione,
+   contato fra i 3 qui sotto. Il resto ha altre cause:
    - 3 vengono dalla transizione dai giochi di prima, che non c'è più;
    - 2 dalla regressione dell'harness chiusa da #192;
    - 3 dalla logica del modello e dalla forma della vista, che resta anche in C;
@@ -235,7 +236,7 @@ che un modello piccolo deve tenere insieme. La ricerca del 19/10 (§ 1) lo dice 
 contromisure in prosa si ripresentano in forma nuova, quelle per costruzione chiudono la loro
 famiglia.
 
-### 3.3 Gli errori dei banchi e dei casi veri dal 13/10 (catalogo)
+### 3.3 Gli errori dei banchi e dei casi veri dal 14/10 (catalogo)
 
 Ogni riga è un lavoro di gioco **non riuscito**. Fonte: la voce d'area o la issue citata. Le
 etichette dell'attribuzione:
@@ -607,7 +608,7 @@ può anche restare l'implementazione.
 **I casi.** Stesso compito, stessa semantica dell'accettazione nascosta. Gli stessi giri (2), le
 stesse passate per giro, la stessa temperatura e lo stesso presence della Config. **10
 ripetizioni per caso, obbligatorie**: con 5, anche 4/5 contro 2/5 non si distingue dal caso
-(Fisher esatto a due code, p ≈ 0,52), e 8/10 contro 3/10 dà p ≈ 0,07.
+(Fisher esatto a due code, p ≈ 0,52), e 8/10 contro 3/10 dà p ≈ 0,070 (0,035 a una coda).
 
 | Caso | Ambiente | Accettazione nascosta |
 |---|---|---|
@@ -631,22 +632,33 @@ ogni mossa.
 - le regole scattate (`agente_motore_finto`, `agente_stato_gia_visto`, `agente_consegna_alla_tappa`);
 - gli esempi dell'analisi e i tolti.
 
-**Le soglie, scritte prima di girare.** Alto vuol dire ≥ 8/10, basso ≤ 3/10. Le regole si
-applicano in quest'ordine, e vale la prima che si avvera:
+**Le soglie, scritte prima di girare.** Alto vuol dire ≥ 8/10, basso ≤ 3/10.
+
+Nel caso peggiore, 8/10 contro 3/10, il test di Fisher esatto dà p = 0,070 a due code e 0,035 a
+una coda. È una **soglia di decisione, non una prova**. Va bene per scegliere A o A′, che costano
+poco e si disfano. Per aprire il prototipo di C (regola 4) serve un margine più forte.
+
+Le regole si applicano in quest'ordine, e vale la prima che si avvera:
 1. **`tris2` alto:** basta A (#197). Gli altri casi restano come misura, senza cambiare formato.
 2. **`tris2-solo-logica` alto e `tris2` basso:** il costo era l'API dei test. Si fa A′ (una PR),
    niente C.
 3. **`tris-nudo` basso:** il limite è il modello o l'harness generico, non la macchina. Si tiene A
    e si guarda #175.
-4. **`tris-nudo` alto, `tris2` e `tris2-solo-logica` bassi:** il costo è dell'interfaccia. Si fa il
-   prototipo e `tris-facciata` a 10 ripetizioni:
+4. **`tris-nudo` alto, `tris2` e `tris2-solo-logica` bassi, con il margine più forte:**
+   `tris-nudo` a 9/10 con gli altri due ≤ 3/10, oppure 8/10 con gli altri due ≤ 2/10 (p ≈ 0,02 a
+   due code). Il costo è dell'interfaccia. Si fa il prototipo e `tris-facciata` a 10 ripetizioni:
    - alto: C, con una decisione nuova;
    - basso: il costo sta nelle parti che restano (vista, comandi), e si torna ad A sui punti
-     trovati dalle firme degli errori.
+     trovati dalle firme degli errori;
+   - intermedio: ricade nella regola 5.
+
+   Con il margine solo di 8/10 contro 3/10 vale la regola 5.
 5. **Il caso intermedio** (un caso fra 4/10 e 7/10, o due casi a meno di 5 punti su 10 l'uno
    dall'altro): nessuna decisione. Si leggono le firme del primo errore per classe e si
-   rigirano i due casi in dubbio con altre 10 ripetizioni. Una sola volta: se resta intermedio,
-   vale la regola 1 con A.
+   rigirano i due casi in dubbio con altre 10 ripetizioni.
+   - Il rilancio **si somma ai primi 10**: si leggono 20 lavori contro 20, con le stesse soglie in
+     proporzione (alto ≥ 16/20, basso ≤ 6/20).
+   - Si rilancia una volta sola: se resta intermedio, vale la regola 1 con A.
 
 **Cautele.**
 - **`tris-nudo` misura un tetto, non un'alternativa:** non ha voce, palco, manifesto né

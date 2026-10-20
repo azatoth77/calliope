@@ -1139,8 +1139,8 @@ In breve:
   - contratto, prompt dell'analisi («dopo ogni mossa di solito c'è la fase «esito»») e gioco
     della partenza suggeriscono l'esito a ogni mossa;
 - **il catalogo dal 14/10**: 14 lavori di gioco falliti, e un'interfaccia senza fasi ne
-  toglierebbe 5–6 (i 4–5 con un concetto della macchina come causa principale, più uno
-  probabile). Gli altri:
+  toglierebbe 5–6: 4 certi e 1 probabile con un concetto della macchina come causa principale,
+  più il «dopo» di un lavoro della transizione, contato fra i 3 qui sotto. Gli altri:
   - 3 vengono dalla transizione dai giochi di prima;
   - 2 dalla regressione dell'harness chiusa da #192;
   - 3 dalla logica e dalla forma della vista, che resta;
@@ -1153,6 +1153,11 @@ In breve:
   (2–3 giorni di prototipo). C perde la validazione dei comandi per fase, pagina e turni per fase,
   e turni e punti coerenti per costruzione; D, JavaScript libero;
 - **la raccomandazione**: prima #197; poi il banco della parte 2 con `tris2`, `tris2-solo-logica`
-  e `tris-nudo`, 10 ripetizioni per caso e soglie scritte prima (alto ≥ 8/10, basso ≤ 3/10, in
-  ordine, con il caso intermedio); il prototipo di C solo se `tris-nudo` è alto e gli altri due
-  bassi. La scelta la fa il banco, non un parere.
+  e `tris-nudo`, a 10 ripetizioni per caso;
+  - le soglie si scrivono prima: alto ≥ 8/10, basso ≤ 3/10, applicate in ordine, con il caso
+    intermedio. Il rilancio si somma ai primi 10;
+  - 8/10 contro 3/10 è una soglia di decisione, non una prova (p = 0,070 a due code);
+  - il prototipo di C si fa solo con un margine più forte: 9/10 contro ≤ 3/10, oppure 8/10
+    contro ≤ 2/10.
+
+  La scelta la fa il banco, non un parere.
