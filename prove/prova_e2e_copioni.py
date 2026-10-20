@@ -22,7 +22,8 @@ CHIAVI = {"tool", "tool_tutti", "no_tool", "regole", "no_regole", "esito", "live
           "testo", "non_testo", "annuncio", "suoni", "ha", "ha_no", "pc", "giudizio", "muto",
           "voce_studio", "voce_studio_ferma",
           # 20/10 (#75): estensioni, sviluppo e giochi
-          "porta", "porta_no", "sviluppo", "sviluppo_stato", "log", "no_log", "scheda", "gioco", "o"}
+          "porta", "porta_no", "sviluppo", "sviluppo_stato", "log", "no_log", "scheda", "gioco", "o",
+          "annuncio_testo"}
 RICHIEDE = {"reale", "agente", "web", "biblioteca", "schermo", "pagina"}
 FASI = {"analisi", "sviluppo", "collaudo", "revisione", "attivazione"}
 STATI = {"aperta", "sospesa", "chiusa"}
@@ -264,6 +265,37 @@ def main():
        and V.controlla({"tool": ["est_@"]}, {"tool": [{"nome": "est_bacheca"}]}, "",
                        {"estensione": "cambio_valute"})
        and V.controlla({"tool": ["est_@"]}, {"tool": [{"nome": "est_bacheca"}]}, "", {}))
+    # Seconda revisione della PR #196: se_domanda solo sulle domande; l'annuncio intero
+    ann = ("Andrea, il lavoro di «Calendario della carta» è pronto: siamo al collaudo. Manca "
+           "ancora il giorno del vetro. Con cosa provo?")
+    calendario = next(p for p in C.COPIONI if p.id == "svil-differenziata").passi[3]
+    ok("se_domanda: una parola nel titolo o in una mancanza detta non basta",
+       not re.search(calendario.dati["se_domanda"], V.domande(ann), re.I)
+       and re.search(calendario.dati["se_domanda"],
+                     V.domande("Una domanda dell'agente. Che giorno passa la carta?"), re.I))
+    permesso = next(p for p in C.COPIONI if p.id == "est-notte").passi[3]
+    ok("se_domanda: il permesso solo nella frase della domanda",
+       re.search(permesso.dati["se_domanda"], V.domande(
+           "Per la funzione mi servirebbe comandare le luci. Posso metterlo tra i permessi "
+           "della funzione?"), re.I)
+       and not re.search(permesso.dati["se_domanda"], V.domande(
+           "Il lavoro è pronto: i permessi sono quelli detti. Con cosa provo?"), re.I))
+    lascia = next(p for p in C.COPIONI if p.id == "svil-differenziata").passi[9]
+    ok("ricollaudo riuscito: detto nell'annuncio intero, non la sola regola nel log",
+       not V.controlla({"annuncio_testo": lascia.attese["annuncio_testo"]}, {}, "",
+                       {"annuncio": "Andrea, il lavoro è pronto.",
+                        "seguito": "L'ho già riprovata con «le pile»: ora va. Con cosa provo?"})
+       and V.controlla({"annuncio_testo": lascia.attese["annuncio_testo"]}, {}, "",
+                       {"annuncio": "Andrea, il lavoro è pronto.",
+                        "seguito": "L'ho riprovata: con «le pile» non va ancora."}))
+    cre = {c.id: C.apre_sviluppo(c) for c in C.COPIONI}
+    ok("est_@: azzerata nei copioni che aprono uno sviluppo, tenuta in quelli che usano",
+       cre["est-cambio"] and cre["gioco-porte"] and cre["svil-versioni"]
+       and not cre["est-notte-contrari"] and not cre["partita-porte"])
+    ok("la frase di chi non amministra: «il gioco» solo per un gioco",
+       "il gioco" in C.attiva("Giulia", gioco=True)[1].testo
+       and "il gioco" not in C.attiva("Giulia")[1].testo
+       and C.attiva("Andrea")[1].testo == "Attivala, per favore.")
     from prove.e2e.__main__ import Runner
 
     class SatFinto:

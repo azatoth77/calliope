@@ -156,10 +156,23 @@ def controlla(attese: dict, turno: dict | None, testo: str, extra: dict | None =
         for k, rx in attese["gioco"].items():
             if g.get(k) is None or not re.search(str(rx), str(g.get(k)), re.I):
                 errori.append(f"gioco.{k} = {g.get(k)!r}, atteso {rx!r}")
+    if attese.get("annuncio_testo"):
+        # L'annuncio intero: la frase che ha combaciato e quelle dette dopo fino al silenzio
+        intero = f"{extra.get('annuncio') or ''} {extra.get('seguito') or ''}"
+        for p in attese["annuncio_testo"]:
+            if not re.search(p, intero, re.I):
+                errori.append(f"nell'annuncio manca {p!r}: {intero[:160]!r}")
     if "annuncio" in attese and not extra.get("annuncio"):
         errori.append(f"annuncio {attese['annuncio'][0]!r} non sentito entro "
                       f"{attese['annuncio'][1]} s")
     return errori
+
+
+def domande(*testi: str) -> str:
+    """Le sole frasi che finiscono con «?» (seconda revisione della PR #196): `se_domanda`
+    scatta su una domanda, non su un titolo o una mancanza detti nell'annuncio."""
+    frasi = re.split(r"(?<=[.!?])\s+", " ".join(str(t or "") for t in testi))
+    return " ".join(f for f in frasi if f.strip().endswith("?"))
 
 
 def normalizza(s: str) -> str:

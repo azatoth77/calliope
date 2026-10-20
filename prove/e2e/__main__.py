@@ -57,6 +57,7 @@ class Runner:
         self.attese_guardia = 0.0
         self._log_passi: dict[str, list[int]] = {}
         self.estensione = None
+        self._sv_prima = None
 
     def log(self, m: str):
         riga = f"{datetime.datetime.now():%H:%M:%S} {m}"
@@ -221,7 +222,7 @@ class Runner:
         if not svs:
             return None
         s = max(svs, key=lambda x: float(x.get("ultimo") or x.get("aperta") or 0))
-        return {k: s.get(k) for k in ("fase", "stato", "titolo", "gioco", "estensione")}
+        return {k: s.get(k) for k in ("id", "fase", "stato", "titolo", "gioco", "estensione")}
 
     def _frasi_dopo(self, t: float) -> str:
         """Tutte le frasi dette dai satelliti dopo la fine del turno del passo (l'annuncio
@@ -273,8 +274,10 @@ class Runner:
         # prima, revisione della PR #196) la contengono. Un passo non detto si conta a parte
         if passo.dati.get("se_domanda"):
             import re
-            prima = " ".join(str((prec or {}).get(k) or "")
-                             for k in ("risposta", "annuncio", "seguito"))
+            # Solo le domande (le frasi che finiscono con «?»): una parola in un titolo o in una
+            # mancanza detta non basta (seconda revisione della PR #196)
+            prima = V.domande(*((prec or {}).get(k) or ""
+                                for k in ("risposta", "annuncio", "seguito")))
             if not re.search(passo.dati["se_domanda"], prima, re.I):
                 rec.update(esito_passo="ok", detto=None, non_detto=True,
                            nota=f"nessuna domanda {passo.dati['se_domanda']!r}: passo non detto")
@@ -348,13 +351,13 @@ class Runner:
         # giochi scritte nel passo, lo sviluppo toccato per ultimo, il log dell'istanza (il
         # lavoro dell'agente, fino all'annuncio) e le schede arrivate allo studio
         sv = self.sviluppo_ultimo()
-        if sv and sv.get("estensione"):
+        if sv and sv.get("estensione") and sv.get("id") != getattr(self, "_sv_prima", None):
             # L'estensione dell'ultimo sviluppo: «est_@» nelle attese è il suo tool
             self.estensione = sv["estensione"]
         extra.update(
             porta=[f"{d.get('regola')}:{d.get('esito')}" for d in self.decisioni()[dec0:]],
             sviluppo=sv, log=self.ist.log_testo()[log0:],
-            estensione=getattr(self, "estensione", None),
+            estensione=getattr(self, "estensione", None), seguito=rec.get("seguito"),
             schede=[json.dumps(d, ensure_ascii=False)[:2000]
                     for _, ev, d in getattr(self, "eventi_schermo", [])[sch0:]
                     if ev == "scheda"])
@@ -492,6 +495,12 @@ class Runner:
             # di reale-cortesia (giri 1 e 4 del 06/10)
             if self.pc is not None:
                 self.pc.locked = False
+            # Un copione che crea un'estensione o un gioco parte senza quella di prima: «est_@»
+            # vale solo per uno sviluppo aperto in questo copione (seconda revisione della PR
+            # #196: una creazione non arrivata alla consegna ereditava l'estensione di prima)
+            if C.apre_sviluppo(cop):
+                self.estensione = None
+                self._sv_prima = (self.sviluppo_ultimo() or {}).get("id")
             prec = None
             for i, passo in enumerate(cop.passi):
                 if i:

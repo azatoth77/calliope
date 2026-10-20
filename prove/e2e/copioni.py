@@ -375,7 +375,9 @@ COPIONI: list[Copione] = [
 # il motore dei giochi, che la prova non ha ancora (#75): oggi si saltano da soli.
 
 LAVORO_S = 1800                    # un lavoro dell'agente: 10–25 minuti, con margine
-PERSONE_ADMIN = {"Carlo": True, "Andrea": True}   # come prove/e2e/voci.py (admin=True)
+from .voci import PERSONE  # noqa: E402 — chi amministra (admin=True) come nella prova
+
+PERSONE_ADMIN = {n: p.admin for n, p in PERSONE.items()}
 # «est_@» nelle attese di `tool`: il tool dell'estensione dell'ultimo sviluppo (il runner la
 # legge da sviluppi.json), non un'estensione qualunque come «est_*»
 # L'annuncio della fine di un lavoro (pronto per il collaudo, «Lo apro in prova?», o una
@@ -414,7 +416,8 @@ def attiva(chi: str = "Andrea", gioco: bool = False, **attese) -> list[Passo]:
         # almeno ~2 s (con Piper «Attivalo, per favore.» dura ~1,2 s, vicino a
         # speaker_min_voice_s: revisione della PR #196)
         P(chi, f"Attiva{la}, per favore." if PERSONE_ADMIN.get(chi) else
-          f"Sì, attiva{la} pure, il gioco per me va bene così.",
+          f"Sì, attiva{la} pure, " + ("il gioco per me va bene così." if gioco
+                                      else "per me va bene così."),
           attese={"tool": ["sviluppo_passo", "estensione_gestisci"]}, max_s=90),
         Passo(chi, tipo="sfida", dati={"se_sfida": True},
               attese={"regole": ["estensione_approvata", *attese.pop("regole", [])],
@@ -745,11 +748,14 @@ NUOVI: list[Copione] = [
         P("Andrea", "Cambia: voglio anche gli ingombranti il primo martedì del mese.",
           attese={"tool": ["sviluppo_passo"], "testo": [r"ingombranti|\?"]}, max_s=90),
         # Il log dalla «Correggila» (due passi prima, `log_dal_passo`) fino alla consegna: la
-        # riproduzione della correzione (all'inizio del lavoro) e il ricollaudo riuscito alla
-        # consegna (regola sviluppo_pronto_riprovato), revisione della PR #196
+        # riproduzione della correzione (all'inizio del lavoro) e il ricollaudo alla consegna
+        # (sviluppo_pronto_riprovato si scrive per ogni ricollaudo, riuscito o no: seconda
+        # revisione della PR #196). Che sia riuscito lo dice la frase dell'annuncio
+        # («L'ho già riprovata con «…»: ora va.», sviluppo._frase_ricollaudo)
         P("Andrea", "No, lascia com'era.", dati={"log_dal_passo": -2},
           attese={"tool": ["sviluppo_passo"], "annuncio": (PRONTO, LAVORO_S),
-                  "log": [r"riproduzione della correzione", r"sviluppo_pronto_riprovato"]},
+                  "log": [r"riproduzione della correzione", r"sviluppo_pronto_riprovato"],
+                  "annuncio_testo": [r"già riprovata con .*ora va"]},
           max_s=90),
         P("Andrea", "Mettiamo in pausa lo sviluppo della differenziata.",
           attese={"tool": ["sviluppo_passo"], "sviluppo_stato": "sospesa"}, max_s=60),
@@ -964,6 +970,12 @@ _ids = [c.id for c in NUOVI]
 NUOVI.insert(_ids.index("gioco-porte") + 1, NUOVI.pop(_ids.index("partita-porte")))
 # Prima della chiusura («esci»): i copioni nuovi in mezzo
 COPIONI[-1:-1] = NUOVI
+
+
+def apre_sviluppo(c: Copione) -> bool:
+    """Il copione apre uno sviluppo (crea o cambia un'estensione o un gioco): il runner gli
+    azzera l'estensione di «est_@» all'inizio."""
+    return any("sviluppo_apri" in (p.attese.get("tool") or []) for p in c.passi)
 
 
 def scegli(aree: set | None = None, ids: set | None = None, lenti: bool = True,
