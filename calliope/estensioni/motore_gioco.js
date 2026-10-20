@@ -408,7 +408,10 @@
     var dove = "nella pagina «" + imp.modello + "» (" + imp.orientamento + " " + imp.W + "×" + imp.H + ")";
     function aggiungi(t) { if (t && out.indexOf(t) < 0) out.push(t); }
     d.forEach(function (x) {
-      if (x.tipo === "troppi") aggiungi(x.n + " pulsanti non ci stanno " + dove + ": al più " + x.max + " di almeno " + PULSANTE.wMin + "×" + PULSANTE.hMin + " px. Restringi i comandi attivi (GIOCO.attivi), accorcia le etichette o usa la pagina «griglia»");
+      // nella griglia (20/10, #192: tris2 L3 del banco) la pagina c'è già: i pulsanti in fondo
+      // sono i comandi che nessuna casella mostra
+      if (x.tipo === "troppi") aggiungi(x.n + " pulsanti non ci stanno " + dove + ": al più " + x.max + " di almeno " + PULSANTE.wMin + "×" + PULSANTE.hMin + " px. Restringi i comandi attivi (GIOCO.attivi), accorcia le etichette o "
+        + (imp.modello === "griglia" ? "metti comando e valore nelle caselle (in vista, { testo, comando, valore }): la casella diventa il pulsante della mossa, e in fondo restano solo gli altri comandi" : "usa la pagina «griglia»"));
       else if (x.tipo === "caselle") aggiungi("la griglia " + x.R + "×" + x.C + " non ci sta " + dove + ": le caselle verrebbero di " + x.lato + " px (al più " + x.maxR + " righe e " + x.maxC + " colonne da " + CASELLA.min + " px). Usa meno righe o colonne");
       else if (x.tipo === "righe") aggiungi(x.n + " righe non ci stanno " + dove);
       else if (x.tipo === "tela_piccola") aggiungi("la tela resta alta solo " + x.h + " px " + dove + ": accorcia titolo e testo della fase");

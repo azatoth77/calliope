@@ -39,6 +39,7 @@ import threading
 import time
 from dataclasses import dataclass, field
 
+from ..testi import APRI_GIOCO_C_E
 from ..tools import dialogo
 from .arbitro import _interrompi
 from .remoto import ErroreOllama, Interrotto
@@ -409,6 +410,9 @@ def _fuori_piano(sandbox, stato_piano: dict) -> str | None:
 
 # Passate fermate di fila per giro a vuoto (ripetizioni.py) prima di chiudere il lavoro
 RIPETIZIONI_MAX = 3
+# Le tappe dai tetti del giro che con lo stato consegnabile si chiudono «fatto» (20/10, #192:
+# `Agente._consegna_alla_tappa`)
+TAPPA_CONSEGNABILE = ("passate", "tempo", "token", "troncata")
 # Riscritture intere dello stesso file, di fila con lo stesso errore, prima della spinta
 # (11/10: gioco.js di 730 righe riscritto nove volte). Solo i file lunghi: un test di venti
 # righe si riscrive prima di correggerlo
@@ -440,6 +444,42 @@ def nota_riscrittura(prima: str | None, dopo: str, nome: str) -> str:
     return (f"Hai riscritto {nome.rsplit('/', 1)[-1]} intero ({len(a)} righe) per cambiarne "
             f"{cambiate}: per correggere un pezzo usa modifica_file (vecchio → nuovo), è più "
             "veloce e il resto del file non si tocca.")
+
+
+# Un apriGioco o un creaCaso definito in un test JavaScript (20/10, issue #192): una funzione,
+# una dichiarazione o un'assegnazione (anche a globalThis). Una chiamata no
+_MOTORE_FINTO = re.compile(
+    r"\bfunction\s*\*?\s*(apriGioco|creaCaso)\s*\("
+    r"|\b(?:const|let|var)\s+(apriGioco|creaCaso)\s*=(?!=)"
+    r"|(?:\bglobalThis\.|^[ \t]*)(apriGioco|creaCaso)\s*=(?!=)", re.M)
+
+
+def motore_finto(sandbox) -> list[tuple[str, str]]:
+    """I (file, nome) dei *.test.js scrivibili che definiscono apriGioco o creaCaso: nei giochi
+    li dà già agenti/test_js.mjs, e uno scritto nel test lo copre (le porte del banco del 20/10,
+    L4 e L6: i giri a correggere un motore finto con logica.js giusto). Mai un'eccezione."""
+    out = []
+    try:
+        for f in sandbox.elenca():
+            p = f["percorso"]
+            if not p.endswith(".test.js") or p in getattr(sandbox, "sola_lettura", ()):
+                continue
+            # Senza i commenti di riga: «// apriGioco = …» in una spiegazione non è codice
+            testo = re.sub(r"//[^\n]*", "", sandbox.leggi(p, max_caratteri=200_000))
+            for m in _MOTORE_FINTO.finditer(testo):
+                n = next(x for x in m.groups() if x)
+                if (p, n) not in out:
+                    out.append((p, n))
+    except Exception:  # noqa: BLE001 — una nota in meno, non un errore
+        return out
+    return out
+
+
+def nota_motore_finto(finti: list[tuple[str, str]]) -> str:
+    """Il fatto per il risultato di esegui_test."""
+    dove = "; ".join(f"{p} definisce un suo {n}" for p, n in finti)
+    return (f"{dove}: così il test prova un motore finto, non quello vero di Calliope. Toglilo e "
+            f"usa quello che c'è ({APRI_GIOCO_C_E}).")
 
 
 def manifesto_non_valido(sandbox) -> str | None:
@@ -1353,6 +1393,10 @@ class Agente:
             e = Limite(f"la sua uscita si è fermata {troncate_fila} volte di fila al tetto dei "
                        "token della passata", tipo="troncata")
             if getattr(lav, "tappe", False):
+                chiusura = self._consegna_alla_tappa(lav, sandbox, e, controlla, piano,
+                                                     stato_piano)
+                if chiusura is not None:
+                    return "consegna", chiusura
                 return "tappa", self._tappa(lav, sandbox, gc, messages, e, spinte, scritti,
                                             rimandi, stato_piano, piano, rifiuti)
             chiusura = self._consegna_al_tetto(lav, sandbox, e, controlla, piano, stato_piano)
@@ -1388,7 +1432,13 @@ class Agente:
                 if getattr(lav, "tappe", False) and e.tipo in ("passate", "tempo", "token"):
                     # Un lavoro di uno sviluppo (08/10, versione 2): il tetto è una tappa.
                     # Il contesto resta (compattato; con il tetto dei token anche il diario
-                    # senza modello) e il rapporto va alla persona, che sceglie
+                    # senza modello) e il rapporto va alla persona, che sceglie. Con lo stato
+                    # consegnabile e un controllo indipendente verde (20/10, #192) si consegna
+                    chiusura = self._consegna_alla_tappa(lav, sandbox, e, controlla, piano,
+                                                         stato_piano)
+                    if chiusura is not None:
+                        consegna = chiusura
+                        break
                     return self._tappa(lav, sandbox, gc, messages, e, spinte, scritti,
                                        rimandi, stato_piano, piano, rifiuti)
                 # Al tetto, prima di chiudere «limite» (13/10 sera, banco della temperatura L7:
@@ -1872,7 +1922,7 @@ class Agente:
 
     # ── consegna al tetto (13/10 sera) ──
     def _consegna_al_tetto(self, lav: Lavoro, sandbox, e: Limite, controlla, piano: bool,
-                           stato_piano) -> dict | None:
+                           stato_piano, tappa: bool = False) -> dict | None:
         """Al tetto di passate, tempo o token di un lavoro che non va a tappe (o all'ultimo
         giro), e dal 14/10 alla terza passata a vuoto di fila (`a_vuoto`), prima di chiuderlo
         «limite»: con gli esempi di accettazione (scritti dall'analisi prima del codice, in sola
@@ -1888,23 +1938,30 @@ class Agente:
         riproduzione (i programmi, l'analisi spenta) mai: i test dell'agente da soli ereditano
         le sue ipotesi. Dal 19/10 (#180) anche alla seconda passata di fila senza chiamate con lo
         stato consegnabile (`prosa`), pure in uno sviluppo: lì l'agente ha smesso di lavorare, e
-        la tappa non porterebbe niente di più. Mai un'eccezione."""
+        la tappa non porterebbe niente di più. Dal 20/10 (#192, decisione di chi amministra)
+        anche a una tappa di un tetto del giro (`tappa`, `_consegna_alla_tappa`): lo stesso
+        controllo indipendente, e il no non ferma niente (la tappa resta com'è). Mai
+        un'eccezione."""
         if e.tipo not in ("passate", "tempo", "token", "a_vuoto", "prosa", "troncata") or (
-                getattr(lav, "tappe", False) and e.tipo != "prosa"):
+                getattr(lav, "tappe", False) and e.tipo != "prosa" and not tappa):
             return None
         a = getattr(lav, "accettazione", None) or {}
         correzione = bool(getattr(lav, "correzione", False)) and lav.tipo in ("codice",
                                                                                "estensione")
 
         def no(perche: str):
-            self.log(f"[AGENTI] {lav.id}: al tetto niente consegna d'ufficio: {perche}")
+            self.log(f"[AGENTI] {lav.id}: {'alla tappa' if tappa else 'al tetto'} niente "
+                     f"consegna d'ufficio: {perche}")
             # Anche nei segnali del lavoro (19/10, #9): la riga del banco dice il motivo del
             # «limite» senza contarlo a mano dal log. Dopo la prosa (#180) non è un no al tetto:
             # il lavoro continua con la spinta e può ancora consegnare, il motivo va a parte
             try:
                 seg = lav.segnali if isinstance(getattr(lav, "segnali", None), dict) else {}
                 lav.segnali = seg
-                if e.tipo == "prosa":
+                if tappa:
+                    # La tappa resta (20/10, #192): il motivo a parte, come dopo la prosa
+                    seg["tappa_no"] = perche
+                elif e.tipo == "prosa":
                     seg["prosa_no"] = perche
                 else:
                     seg["al_tetto_no"] = perche
@@ -1946,22 +2003,26 @@ class Agente:
             # la riproduzione è il solo controllo indipendente: deve esserci davvero
             if correzione:
                 from .riproduzione import NON_RIPRODOTTO
-                self._riproduzione(lav, sandbox)
+                # Alla tappa il lavoro continua: il rimando della riproduzione resta per la
+                # consegna dell'agente nel giro dopo
+                self._riproduzione(lav, sandbox, rimanda=not tappa)
                 stato = (getattr(lav, "riproduzione", None) or {}).get("stato")
                 if stato in NON_RIPRODOTTO or (not con_esempi and stato != "riprodotto"):
                     return no(f"correzione non riprodotta ({stato or '?'})")
         except Exception as ex:  # noqa: BLE001 — nel dubbio «limite», come prima
             return no(f"controllo non riuscito ({type(ex).__name__}: {ex})")
         from ..sonde import nota as nota_regola
-        nota_regola(lav, "agente_consegna_al_tetto", self.log, e.tipo)
+        regola = "agente_consegna_alla_tappa" if tappa else "agente_consegna_al_tetto"
+        nota_regola(lav, regola, self.log, e.tipo)
         con = "esempi" if con_esempi else "riproduzione"
-        self.log(f"[AGENTI] {lav.id}: al tetto ({e}) "
+        self.log(f"[AGENTI] {lav.id}: {'alla tappa' if tappa else 'al tetto'} ({e}) "
                  + ("gli esempi di accettazione passano tutti" if con_esempi else
                     "il test che riproduce il problema ora passa")
-                 + " e anche i test: lo chiudo come consegnato (regola agente_consegna_al_tetto)")
+                 + f" e anche i test: lo chiudo come consegnato (regola {regola})")
         lav.nota("flusso", tipo="esito", testo=(
-            "al limite del lavoro " + ("gli esempi passano tutti" if con_esempi else
-                                       "il test del problema segnalato passa")
+            ("alla tappa del giro " if tappa else "al limite del lavoro ")
+            + ("gli esempi passano tutti" if con_esempi else
+               "il test del problema segnalato passa")
             + ": l'ho chiuso come consegnato"))
         quanti = int(a.get("esempi") or 0)
         cosa = "La funzione è scritta" if lav.tipo == "estensione" else "Il lavoro è fatto"
@@ -1978,12 +2039,31 @@ class Agente:
                     "La correzione è fatta")
             detto = (f"{cosa}: il test che riproduce il problema segnalato prima falliva e ora "
                      "passa, e passano anche gli altri test.")
-        fine = ("Chiuso da me: l'agente girava a vuoto senza consegnare." if e.tipo == "a_vuoto"
+        fine = ("Chiuso da me alla tappa: l'agente non ha consegnato, ma aveva finito." if tappa
+                else "Chiuso da me: l'agente girava a vuoto senza consegnare."
+                if e.tipo == "a_vuoto"
                 else "Chiuso da me: l'agente ha smesso di usare gli strumenti senza consegnare."
                 if e.tipo == "prosa" else
                 "Chiuso al tetto: l'agente non ha fatto in tempo a consegnare.")
-        return {"esito": "fatto", "_al_tetto": e.tipo, "_al_tetto_con": con,
+        # Alla tappa `_al_tetto` è «tappa»: la frase a voce è servizio.AL_TETTO_TAPPA
+        return {"esito": "fatto", "_al_tetto": "tappa" if tappa else e.tipo, "_al_tetto_con": con,
                 "riassunto": f"{detto} {fine}"}
+
+    def _consegna_alla_tappa(self, lav: Lavoro, sandbox, e: Limite, controlla, piano: bool,
+                             stato_piano) -> dict | None:
+        """Una tappa da un tetto del giro (passate, tempo, token, troncata) con lo stato
+        consegnabile (20/10, issue #192, decisione di chi amministra): i test dell'agente verdi
+        due volte e un controllo indipendente verde (gli esempi di accettazione, o in una
+        correzione la riproduzione «riprodotto») chiudono il lavoro «fatto» con gli stessi
+        controlli di una consegna, come al tetto (`_consegna_al_tetto` con `tappa`). Il caso:
+        porte L6 del banco del 20/10, test e accettazione verdi alla tappa del giro 1, e al
+        giro 2 l'agente ha rotto ciò che andava. Senza controllo indipendente (i soli test
+        dell'agente) None: la tappa resta com'è, e la persona sceglie. Le tappe della consegna
+        rossa e della prosa no: lì i controlli li ha già fatti il ciclo."""
+        if e.tipo not in TAPPA_CONSEGNABILE:
+            return None
+        return self._consegna_al_tetto(lav, sandbox, e, controlla, piano, stato_piano,
+                                       tappa=True)
 
     def _consegna_dalla_prosa(self, lav: Lavoro, sandbox, controlla, piano: bool,
                               stato_piano) -> dict | None:
@@ -2289,11 +2369,12 @@ class Agente:
                        "rifai esegui_test, poi richiama consegna"},
             uscita=str(r.get("uscita") or ""))
 
-    def _riproduzione(self, lav: Lavoro, sandbox) -> str | None:
+    def _riproduzione(self, lav: Lavoro, sandbox, rimanda: bool = True) -> str | None:
         """La consegna «fatto» di una correzione (12/10 sera, riproduzione.py): un test nuovo o
         cambiato deve fallire sulla versione di prima, e il codice deve essere cambiato. None
         se la consegna va avanti; il messaggio che la rimanda all'agente, una volta sola e
-        solo se restano passate. L'esito resta in `lav.riproduzione` (la frase a voce)."""
+        solo se restano passate. L'esito resta in `lav.riproduzione` (la frase a voce). Con
+        `rimanda` False (alla tappa, #192) solo l'esito: il rimando non si consuma."""
         if not getattr(lav, "correzione", False) or lav.tipo not in ("codice", "estensione"):
             return None
         from ..sonde import nota as nota_regola
@@ -2307,7 +2388,7 @@ class Agente:
         self.log(f"[AGENTI] {lav.id}: riproduzione della correzione: {esito['stato']}"
                  + (f" ({esito.get('perche')})" if esito.get("perche") else "")
                  + (f", test {', '.join(esito.get('test') or [])}" if esito.get("test") else ""))
-        if esito["stato"] not in NON_RIPRODOTTO:
+        if esito["stato"] not in NON_RIPRODOTTO or not rimanda:
             return None
         if esito["rimandi"] >= 1 or not self._resta_tempo(lav):
             nota_regola(lav, "correzione_non_riprodotta", self.log, esito["stato"])
@@ -2316,6 +2397,21 @@ class Agente:
         nota_regola(lav, "correzione_rimandata", self.log, esito["stato"])
         return messaggio_agente(esito, getattr(lav, "problema_correzione", ""),
                                 bool(getattr(lav, "gioco", False)))
+
+    def _con_segnaposto(self, lav: Lavoro, testo, campo: str) -> dict | None:
+        """Il rifiuto di una scrittura con il segnaposto della compattazione (20/10, #192: tris2
+        L1 del banco, gioco.test.js scritto come «[6000 caratteri: completo in
+        .calliope/passo-15.txt]»), o None. Il segnaposto sta al posto di un argomento lungo di
+        una chiamata vecchia: il testo vero è nel file, non lì."""
+        from .contesto_lavoro import segnaposto
+        s = segnaposto(testo)
+        if s is None:
+            return None
+        from ..sonde import nota as nota_regola
+        nota_regola(lav, "agente_segnaposto", self.log, s[:80])
+        return {"ok": False, "errore": (
+            f"«{campo}» contiene {s}: è il segnaposto di un risultato vecchio, non il testo del "
+            "file, e non l'ho scritto. Rileggi il file con leggi_file e scrivi il testo vero")}
 
     def _modifica(self, lav: Lavoro, sandbox, args: dict) -> dict:
         """modifica_file (11/10): il testo vecchio, che deve comparire una volta sola, diventa
@@ -2331,6 +2427,9 @@ class Agente:
             nota_regola(lav, "agente_modifica_nulla", self.log, rel[:80])
             return {"ok": False, "errore": "vecchio e nuovo sono uguali: la modifica non "
                                            "cambierebbe niente, e non l'ho fatta"}
+        rifiuto = self._con_segnaposto(lav, nuovo, "nuovo")
+        if rifiuto is not None:
+            return rifiuto
         testo = sandbox.leggi(rel, max_caratteri=10**9)
         n = testo.count(vecchio)
         if n == 0:
@@ -2414,6 +2513,9 @@ class Agente:
                 return self._leggi(lav, sandbox, args)
             if name == "scrivi_file":
                 lav.passo = f"scrive {args.get('percorso') or 'un file'}"
+                rifiuto = self._con_segnaposto(lav, args.get("contenuto"), "contenuto")
+                if rifiuto is not None:
+                    return rifiuto
                 try:
                     prima = sandbox.leggi(args.get("percorso"), max_caratteri=10**9)
                 except Exception:  # noqa: BLE001 — un file nuovo (o un percorso che non va)
@@ -2487,6 +2589,15 @@ class Agente:
                 out = _con_fallimenti(
                     {"esito": r["esito"], "passano": r["passano"], "uscita": r["uscita"],
                      **({"errore": r["errore"]} if r.get("errore") else {})})
+                finti = motore_finto(sandbox) if getattr(lav, "gioco", False) else []
+                if finti:
+                    # Un apriGioco o un creaCaso scritto nei test (20/10, #192): copre quello
+                    # vero di test_js.mjs, e i test provano un motore finto. Il fatto nel
+                    # risultato, a ogni esecuzione finché c'è
+                    from ..sonde import nota as nota_regola
+                    nota_regola(lav, "agente_motore_finto", self.log,
+                                ", ".join(f"{n} in {p}" for p, n in finti)[:120])
+                    out["motore_finto"] = nota_motore_finto(finti)
                 # L'esito di questa versione della cartella (19/10, #185): per «già visto» e per
                 # non rifare i test invariati; non dopo un'esecuzione scaduta o che non è partita
                 if imp and not r.get("scaduto") and not r.get("errore"):

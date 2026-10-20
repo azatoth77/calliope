@@ -55,6 +55,18 @@ _LIMITATI = {"leggi_file"}
 
 NOTA_FILE = "risultato completo nel file: rileggilo con leggi_file se ti serve"
 
+# Il segnaposto di un argomento lungo di una chiamata vecchia (`_alleggerisci`): «[6000
+# caratteri: completo in .calliope/passo-15.txt]». Il 20/10 (banco, tris2 L1, #192) l'agente
+# l'ha scritto come contenuto di gioco.test.js: scrivi_file e modifica_file lo rifiutano
+SEGNAPOSTO = re.compile(r"\[\d+ caratteri: completo in " + re.escape(CARTELLA)
+                        + r"/passo-\d+\.txt\]")
+
+
+def segnaposto(testo) -> str | None:
+    """Il segnaposto della compattazione dentro `testo`, o None."""
+    m = SEGNAPOSTO.search(testo) if isinstance(testo, str) else None
+    return m.group(0) if m else None
+
 # Il diario (06/10, misura con qwen3.6 vero: docs/ricerche/2026-10-05-contesto-agenti.md §4).
 # Il modello scrive solo le voci NUOVE dei passi che escono dal contesto; il diario di prima lo
 # unisce il codice (`unisci`): con «riscrivi tutto il diario» il secondo diario aveva perso le
@@ -337,6 +349,7 @@ class ContestoLavoro:
                         rel = self.passi.salva(self.n, v)
                         self.salvati.append([rel, nome, f"«{k}» di {nome} {dove}".strip()])
                         self.uso["file"] = int(self.uso.get("file") or 0) + 1
+                        # La forma di SEGNAPOSTO: una scrittura che lo contiene si rifiuta
                         fn["arguments"] = dict(args, **{k: f"[{len(v)} caratteri: completo in "
                                                            f"{rel}]"})
                         args = fn["arguments"]
