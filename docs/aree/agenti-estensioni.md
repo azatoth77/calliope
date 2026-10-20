@@ -3960,3 +3960,22 @@ al tetto controlla i campi nuovi: l'esempio con «leghe» (non nella richiesta) 
 passate con «esempi di accettazione rossi», nelle porte senza il test «correzione non
 riprodotta»; e le porte con due passate di prosa, poi il test e la consegna: «fatto», niente
 `al_tetto_no` né `limite`, «correzione non riprodotta» in `prosa_no`. Resta il banco sulla DGX (punto 2 di #9), di chi amministra.
+
+**Il banco sulla DGX del 19/10** (punto 2 di #9; qwen3.6-35B-A3B su vLLM, t 0,6, presence della
+Config, 5 ripetizioni × 3 casi; installata `20261018-2042-97bacbb6`, cioè main prima di #180;
+banco dal ramo a `c234a7b`; `~/banchi/valori-1019-1552`, 35 minuti, 145 000 token). **13/15**
+contro gli 11/15 del 14/10 mattina: porte **5/5** (3/5), tutte con la riproduzione «riprodotto»
+e 9–13 passate; convertitore **4/5** (3/5); programma **4/5** (5/5). I due rossi:
+- **convertitore L5**: 24 passate, «limite» per le passate, `estensione.py` riscritto 4 volte,
+  10 passate senza novità, 24 errori su 30 test suoi e 4 su 5 degli esempi, tutti dallo stesso
+  `NameError: name 'NOME_TESTO' is not defined` (estensione.py:109); `al_tetto_no` «esempi di
+  accettazione rossi (requisiti [1])». È il giro in tondo che #185 (strumenti onesti) vuole
+  dire all'agente: la stessa firma a ogni esecuzione e il ritorno a stati già visti.
+- **programma L15**: «fatto» in 3 passate con i suoi 5 test verdi e l'accettazione nascosta
+  rossa (si aspettava `2026-09-14_gatto.JPG`, l'estensione del file com'era): un programma non
+  ha esempi di accettazione, quindi l'harness non aveva niente per accorgersene (#10).
+
+Criteri di #9: 15 lavori sì; porte ≥ 3/5 sì; 0 «mancano i file» con l'accettazione verde sì;
+valori, tolti e `con_calcolo` nella riga sì (convertitore: 10 nominati per input, 7 tolti
+«contiene», 6 col calcolo); **0 «fatto» con l'accettazione nascosta rossa no (1, il programma)**:
+si chiude solo con gli esempi dei programmi (#10).
