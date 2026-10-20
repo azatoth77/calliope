@@ -4380,7 +4380,8 @@ aspetta l'approvazione di chi amministra; poi una issue per passo.
 **Le risposte della sera** (20/10, nella 0033 e nel § 10 dell'analisi, con le correzioni della
 revisione della PR #195): i delicati della casa (serrature, cancello, portone, porta, garage,
 basculante, gas, valvole, acqua, allarme, antifurto) restano «mai» anche per le estensioni finché non
-c'è il secondo fattore (#52), e disinserire l'allarme anche dopo; la webcam e le altre capacità E4 si **attivano
+c'è il secondo fattore (#52), e disinserire l'allarme anche dopo; la webcam (oggi l'unica capacità E4 concedibile) e le altre
+capacità E4 si **attivano
 per sessione d'uso** (la scheda aperta o la conversazione; la attiva chi usa l'estensione, se ha il
 livello), mai in una corsa a orario, e ogni comando della casa chiede ancora la sfida; il «sì,
 sempre» diventa una concessione che dà solo chi amministra (un familiare dice «sì» per quella volta);

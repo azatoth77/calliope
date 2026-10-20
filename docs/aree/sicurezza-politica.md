@@ -1788,7 +1788,8 @@ quattro cose:
 - **I delicati della casa restano «mai»**: serrature, cancello, portone, porta, garage, basculante,
   gas, valvole, acqua, allarme e antifurto
   (`valore._DELICATI`, `casa/regole.py`) non si comandano da un'estensione come non si comandano a voce,
-  finché non c'è il secondo fattore (#52). Le altre E4 (la webcam) si attivano per sessione d'uso; ogni
+  finché non c'è il secondo fattore (#52); disinserire l'allarme resta «mai» anche dopo il secondo
+  fattore ([0028](../decisioni/0028-decisioni-roadmap-12-10.md)). Le altre E4 (la webcam) si attivano per sessione d'uso; ogni
   comando della casa di un'estensione chiede ancora la frase di sfida (`guardrail.py:243-249`).
 - **Togliere potere è facile, darlo no**: revocare una concessione non chiede la frase di sfida, e un
   familiare può sospendere le concessioni sui propri dati; concedere resta di chi amministra con la

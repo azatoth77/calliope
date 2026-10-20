@@ -166,8 +166,8 @@ scadenza della concessione.
   preparati e mai inviati senza la conferma al momento. Le notifiche alla web app di casa non escono
   di casa e restano la prima cosa da fare.
 - **Restano non concedibili** le cose che un'altra decisione dice «mai»: disinserire l'allarme
-  ([0028](0028-decisioni-roadmap-12-10.md), visione), comandare serrature, cancello, garage, gas e
-  allarme finché non c'è il secondo fattore (regole della casa, risposta 1), la frase di sfida e i
+  ([0028](0028-decisioni-roadmap-12-10.md), visione), comandare i delicati della casa
+  (serrature, cancello, portone, porta, garage, basculante, gas, valvole, acqua, allarme e antifurto (`valore._DELICATI`, `casa_sola_lettura_domini`, `casa_sola_lettura_classi`), più i nomi di `casa_nomi_delicati` (`calliope/config.py:830-832`: anche box, portoncino, sirene, idrico, caldaia)) finché non c'è il secondo fattore (regole della casa, risposta 1). Il blocco delle regole della casa vale per l'**unione** dei tre elenchi, qualunque sia la classe che `valore.py` dà al comando: la caldaia, per esempio, è E2 per `_CLIMA` ma per `casa_nomi_delicati` non si comanda comunque; la classe E4 dice solo quanto pesa la domanda, il «mai» lo dice la regola della casa. Restano «mai» anche la frase di sfida e i
   codici detti, un livello più alto di familiare alla porta. Si possono **chiedere** (la richiesta resta scritta), ma la
   risposta è quella decisione; cambiarla vuol dire cambiare quella decisione.
 

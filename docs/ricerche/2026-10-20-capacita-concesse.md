@@ -134,9 +134,8 @@ controllo, uguali per tutti) dalle capacità nuove (una alla volta).
   i metodi, un elenco chiuso di percorsi o comandi), mai una rete intera. Per i dispositivi che Home
   Assistant conosce già resta la strada di oggi (`casa_stato`, `casa_comando`).
 - **Classe**: per dispositivo, con la tabella della casa come guida (`valore._casa`,
-  `calliope/valore.py:170-188`: luci E1, clima E2); il resto E3. I **delicati** (serrature, cancello,
-  garage, gas, allarme: `valore._DELICATI`, `:176-177`) per `calliope/casa/regole.py:9-10` «si
-  leggono, non si comandano», e restano fra i «mai» anche per le estensioni finché non c'è il secondo
+  `calliope/valore.py:170-188`: luci E1, clima E2); il resto E3. I **delicati** (serrature, cancello, portone, porta, garage, basculante, gas, valvole, acqua, allarme e antifurto (`valore._DELICATI`, `casa_sola_lettura_domini`, `casa_sola_lettura_classi`), più i nomi di `casa_nomi_delicati` (`calliope/config.py:830-832`: anche box, portoncino, sirene, idrico, caldaia); `valore._DELICATI` a `:176-177`) per `calliope/casa/regole.py:9-10` «si
+  leggono, non si comandano». Il blocco delle regole della casa vale per l'**unione** dei tre elenchi, qualunque sia la classe che `valore.py` dà al comando: la caldaia, per esempio, è E2 per `_CLIMA` ma per `casa_nomi_delicati` non si comanda comunque; la classe E4 dice solo quanto pesa la domanda, il «mai» lo dice la regola della casa. I delicati restano fra i «mai» anche per le estensioni finché non c'è il secondo
   fattore (#52; § 10, decisione 1). Un dispositivo fuori da Home Assistant con lo stesso ruolo (una
   serratura in rete) segue la stessa regola. Una **telecamera**
   è un'immagine delle persone di casa: va col § 3.8, non qui.
@@ -522,7 +521,9 @@ personali.
   versione nuova o di prima con le concessioni dell'altra, concessione sospesa, collaudo che chiede i
   dati veri); le **prove dei contrari**: un ospite, un minore che chiede, un tool E3 o E4 del § 3.9
   chiesto come concessione, un «sempre» di un familiare; le conferme ogni 100 esecuzioni, tolte quelle
-  dei «sempre» di un familiare, non crescono rispetto alla misura del passo 0.
+  dei «sempre» di un familiare **e quelle di `lista_togli` e `dati_cancella`** (che crescono per
+  costruzione: dal passo 1 su di loro nessun «sempre» fino al cestino, § 5.9), non crescono rispetto
+  alla misura del passo 0.
 
 **Passo 2: revoca a più livelli, sospensione per anomalia, promemoria.** La revoca di una concessione,
 di un account o persona, di tutto (§ 5.4), a voce e dal cruscotto (con #124), **senza la frase di
