@@ -3974,3 +3974,36 @@ https://github.com/azatoth77/calliope ~/banchi/src-issue182`) con lo stesso inte
 `tris-inizia-muto`, il pacchetto senza commenti né trascrizione anche da una cartella di lavoro
 finta, i tetti e lo sviluppo ambiguo di `--da-lavoro`, un modello finto con verdetti
 giusti e sbagliati contati come devono, il criterio e `riepilogo.json`).
+
+**Il banco sulla DGX del 19/10** (qwen3.6-35B-A3B su vLLM, ragionamento 4096, t 0,6, 5
+ripetizioni × 7 casi, commit `9a3b576`; `~/banchi/revisore-1019-1747`, 25 minuti, 35–48 s e
+~2 800–3 700 token a passata):
+
+| caso | atteso | verdetti | file |
+|---|---|---|---|
+| tris-inizia | test_sbagliato | 5/5 | 5/5 |
+| tris-inizia-muto | test_sbagliato | **5/5** | 5/5 |
+| porte-disegno | test_sbagliato | 4/5 (1 «non è JSON») | 4/5 |
+| codice_sbagliato (c) | codice_sbagliato | 5/5 | 5/5 |
+| consegna (c) | consegna | 5/5 | — |
+| cambia_strada (c) | cambia_strada | 2/5 | 4/5 |
+| chiedi_persona (c) | chiedi_persona | 0/5 | — |
+
+**Criterio di #182 alla lettera: non raggiunto** (i casi sì, due contrari no). Ma le cause
+cambiano la lettura:
+- **tris-inizia-muto 5/5**: senza il suggerimento dell'errore il revisore riconosce da solo il
+  test sbagliato, che è il caso #174 e il punto debole del catalogo dei fallimenti veri.
+- **cambia_strada**: in 4 su 5 la causa dice il giro in tondo *e* il bug vero con la riga e la
+  correzione («logica.js:14 usa `valore % DIETRO.length`, va `valore - 1`»), e due di quelle
+  hanno l'etichetta `codice_sbagliato`; una sola volta (`chiedi_persona` su domande inventate)
+  è un verdetto sbagliato. Il giro in tondo, però, lo sa già il codice (impronte, firme, giri
+  uguali): non serve che il revisore lo etichetti.
+- **chiedi_persona**: 4 su 5 «il test fissa a 1 il punteggio che i requisiti lasciano alla
+  persona: togli l'asserzione» (`test_sbagliato`), una volta `codice_sbagliato`. È una risposta
+  giusta con l'etichetta che il caso non si aspettava: il caso era ambiguo (vedi sopra).
+
+Conclusione proposta per il passo 6: il revisore a contesto pulito con qwen3.6 vale per il
+giudizio sulle prove (test o codice o consegna: 29/30 sui casi e sui contrari di quel tipo,
+con file giusto), non per le etichette di processo; nel ciclo il menu si restringe a
+`test_sbagliato`, `codice_sbagliato`, `consegna` e una `domanda` facoltativa per la persona, e
+il giro in tondo resta deciso dal codice. Scelta di chi amministra (#182).
