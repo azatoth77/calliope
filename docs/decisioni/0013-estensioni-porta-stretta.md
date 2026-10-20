@@ -1,7 +1,8 @@
 # 0013. Estensioni con porta stretta e approvazione con la sfida
 
 - **Stato**: accettata (04/10/2026); rete delle estensioni dal 05/10; le estensioni che leggono
-  soltanto sono letture dal 09/10
+  soltanto sono letture dal 09/10; **in parte cambiata dalla [0033](0033-capacita-concesse-e-revocabili.md)**
+  (20/10: gli impossibili diventano capacità concesse e revocabili; la porta resta l'unica strada)
 - **Area**: [agenti-estensioni](../aree/agenti-estensioni.md)
 
 ## Contesto
