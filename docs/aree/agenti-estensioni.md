@@ -3936,7 +3936,7 @@ a parte, nessun messaggio vecchio riscritto (la cache dei prefissi resta, la pro
    La passata si dice relativa («N passate fa»): i numeri delle passate l'agente non li vede.
 2. **L'uscita troncata** (regola `agente_uscita_troncata`): il client di vLLM legge ora
    `finish_reason` (`out["fine"]`) e segna le chiamate con gli argomenti che non si leggono
-   (`out["rotti"]`); con «length» anche l'ultima chiamata, perché lì gli argomenti arrivano a pezzi e
+   (`out["rotti"]`); con «length» anche l'ultima chiamata *[storico: fino al 20/10, vedi sotto]*, perché lì gli argomenti arrivano a pezzi e
    un JSON che si legge può avere il contenuto a metà. Il client di Ollama legge `done_reason` e
    segna gli argomenti in stringa rotti, ma non l'ultima chiamata a max_tokens: Ollama manda le
    chiamate intere. Una chiamata rotta non si esegue e riceve «la tua uscita è stata troncata
@@ -3986,7 +3986,7 @@ strumento sconosciuto, non toccati; il test rifatto alla tappa e i segnali nel g
 dell'analisi, il blocco di stato del § 4).
 
 **Rischi.** L'impronta della cartella costa una lettura di tutti i file a ogni scrittura (due per
-scrivi_file, tre per modifica_file) e a ogni esegui_test: le cartelle dei lavori sono piccole (al
+scrivi_file, tre per modifica_file *[storico: due dal 20/10]*) e a ogni esegui_test: le cartelle dei lavori sono piccole (al
 più 100 file, 5 MB), da guardare nel banco. Un test che dipende dal caso o dal tempo, rieseguito
 senza cambiare niente, ora dà lo stesso esito invece di un altro: la consegna lo trova comunque
 (due esecuzioni, `agente_test_instabili`). Un agente che vuole davvero annullare una sua modifica
@@ -3997,3 +3997,29 @@ le passate senza novità e le riletture, e nessun lavoro torna allo stesso stato
 di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_troncata`,
 `agente_test_invariati`, `agente_rilettura`, `agente_modifica_nulla`, `agente_modifica_inversa`,
 `agente_strumento_sconosciuto`, `agente_dopo_consegna` e la riga «non accetta thinking_token_budget».
+
+**Dopo la revisione della PR #187 (20/10).**
+- **La passata troncata senza chiamate viene prima** della guardia dei token senza strumenti e
+  del conto della prosa, e lì non conta: con i valori di serie (16 384 token per passata, guardia
+  a 12 000) finiva in «ha ragionato per 32 768 token senza usare gli strumenti», e la regola non
+  scattava mai. Come dopo una chiamata, la guardia riparte; il limite resta quello dei tetti
+  (passate, token, tempo). La prova ha il caso con tre passate piene di fila.
+- **La modifica inversa si rifiuta solo nell'oscillazione pura**: la cartella di adesso è quella
+  subito dopo la modifica di prima (`segnali["modifiche"]` tiene anche l'impronta di dopo). Se nel
+  frattempo è cambiato altro (un'altra funzione corretta), tornare indietro è una correzione e si
+  fa. Lo storico delle modifiche di un file si azzera a ogni scrivi_file di quel file.
+- **L'esito ricordato dei test** (`segnali["ultimo_test"]`) si butta all'inizio di ogni ciclo
+  (giro dopo una tappa, ripresa): dipende anche da ciò che non è nella cartella (il motore e i
+  controlli di Calliope dopo un aggiornamento, il controllo della consegna con la specifica viva).
+  Costa un'esecuzione per giro.
+- Il già visto con i test dice la passata dell'esecuzione («identica a quella su cui esegui_test,
+  2 passate fa, dava: …»), non quella in cui lo stato era apparso; senza test, come prima.
+- Un'impronta della cartella che non si legge si scrive nel log, una volta per lavoro.
+- modifica_file legge la cartella due volte (prima e dopo) e il ciclo le riusa; scrivi_file due.
+- Con vLLM e «length» l'ultima chiamata col JSON valido e intero si esegue: rotta solo se il JSON
+  non si legge (prima era rotta sempre, e se il parser tratteneva una seconda chiamata a metà la
+  prima, intera, andava persa).
+- Il ciclo della ricerca ha la sua issue (#189). Riletto, è meno grave di quanto detto nella PR:
+  lo strumento sconosciuto ha già `ok: False` con l'elenco, e manca solo il nome della regola. La
+  consegna fa `return` subito, e le chiamate dopo di essa non si eseguono e restano senza
+  risposta. Non legge `rotti` e prende per relazione anche una passata troncata.
