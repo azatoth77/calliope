@@ -23,7 +23,7 @@ cancella: si segna come tale.
 | [0010](0010-server-di-casa-e-satelliti.md) | Un server di casa (DGX Spark) e satelliti in rete | accettata, 02/10 |
 | [0011](0011-modello-davanti-agenti-dietro.md) | Un modello veloce davanti, agenti dietro (senza framework, con l'arbitro) | accettata, 02/10 |
 | [0012](0012-sandbox-docker.md) | Il codice dell'agente in una sandbox Docker | accettata, 03/10 |
-| [0013](0013-estensioni-porta-stretta.md) | Estensioni con porta stretta e approvazione con la sfida | accettata, 04/10 |
+| [0013](0013-estensioni-porta-stretta.md) | Estensioni con porta stretta e approvazione con la sfida | accettata, 04/10; in parte cambiata dalla [0033](0033-capacita-concesse-e-revocabili.md) (20/10) |
 | [0014](0014-politica-unica-dati-in-busta.md) | Una politica unica dei tool, con i dati non fidati in busta | accettata, 05/10 |
 | [0015](0015-sicurezza-per-valore.md) | Sicurezza per valore ed effetto | accettata, accesa 09/10 |
 | [0016](0016-modalita-sviluppo-con-collaudo.md) | Modalità sviluppo a fasi, con il collaudo prima dell'approvazione | accettata, 08/10 |
@@ -43,6 +43,7 @@ cancella: si segna come tale.
 | [0031](0031-conservazione-dei-minori.md) | Le parole dei minori di casa si conservano come quelle degli adulti (turni, eventi, archivio, journal; la voce col consenso dei tutori; nel dubbio con un adulto il testo sì e la voce no; ospiti fuori come prima) | accettata e fatta, 16/10 (supera la 0028 T1 per i minori) |
 | [0030](0030-conoscenti.md) | I conoscenti: voci sconosciute di adulti col nome dedotto dalla conversazione, salvati solo col sì di chi amministra sullo schermo personale (livello ospite, omonimi distinti dall'impronta, promozione a familiare solo da chi amministra a voce) | accettata e fatta, 14/10 (spenta di serie) |
 | [0032](0032-valutazione-conserva-tutto.md) | Durante la valutazione si conserva tutto fino a una data (`conserva_valutazione_fino`): testo e audio dei turni di tutti, testo e audio della stanza di tutte le voci, conversazioni degli ospiti; ricerca e risposte invariate; fuori sempre la frase di sfida, la pausa, lo scritto | accettata e fatta, 18/10 (eccezione a tempo alla 0031 e alla 0029, spenta di serie) |
+| [0033](0033-capacita-concesse-e-revocabili.md) | Le capacità delle estensioni si concedono e si revocano invece di essere impossibili: tutto chiedibile, controllo a ogni uso dalla porta stretta, ambito e classe per ogni concessione, le irreversibili mai in anticipo (si preparano, l'atto si conferma al momento), segreti tenuti da Calliope, revoca a più livelli; concede chi amministra, le concessioni non scadono | accettata, 20/10 (principio, scelte e risposte della sera di chi amministra; cambia in parte la 0013); piano a passi proposto, niente codice |
 
 Una decisione nuova prende il numero successivo e segue lo stesso formato; quando ne supera una
 vecchia, la vecchia cambia solo lo stato («superata il …, vedi NNNN»).

@@ -1770,3 +1770,30 @@ memoria era poca, con un'altra suite completa in corso.
 cose da fare, dopo una ricerca web. Non deve arrivare nessuna domanda «viene da…». Poi
 `calliope stato --turni`: `valore_contenuto_dato` su `sviluppo_apri` e `lavoro_affida` deve
 scendere, «ESEGUITE con un bersaglio dal dato» deve restare 0.
+
+## Le capacità delle estensioni concesse e revocabili (20/10, issue #193, ramo `issue-193-capacita-concesse`)
+
+Solo documenti: decisione [0033](../decisioni/0033-capacita-concesse-e-revocabili.md) e analisi
+[`../ricerche/2026-10-20-capacita-concesse.md`](../ricerche/2026-10-20-capacita-concesse.md); il
+dettaglio delle estensioni è in [agenti-estensioni](agenti-estensioni.md). Per quest'area contano
+quattro cose:
+
+- **Le classi per effetto entrano nella porta**: oggi la porta delle estensioni ha la sua tabella
+  (sicura, pericolosa, vietata, `guardrail.valuta_porta`) e spegne la politica dei tool
+  (`estensioni/porta.py:153-155`). La classe di una concessione si prende da `valore.effetto` del tool
+  che la porta chiama, o da una tabella del codice per le capacità nuove; **leggere dati personali vale
+  almeno E2** (la riservatezza pesa come un effetto che resta), e **irreversibile** (ciò che Calliope
+  non sa riportare com'era) è un segno a sé, per operazione: le irreversibili non si concedono mai in
+  anticipo, si preparano e l'atto si conferma al momento, con le parole composte da Calliope.
+- **I delicati della casa restano «mai»**: serrature, cancello, portone, porta, garage, basculante,
+  gas, valvole, acqua, allarme e antifurto
+  (`valore._DELICATI`, `casa/regole.py`) non si comandano da un'estensione come non si comandano a voce,
+  finché non c'è il secondo fattore (#52); disinserire l'allarme resta «mai» anche dopo il secondo
+  fattore ([0028](../decisioni/0028-decisioni-roadmap-12-10.md)). Le altre E4 (la webcam) si attivano per sessione d'uso; ogni
+  comando della casa di un'estensione chiede ancora la frase di sfida (`guardrail.py:243-249`).
+- **Togliere potere è facile, darlo no**: revocare una concessione non chiede la frase di sfida, e un
+  familiare può sospendere le concessioni sui propri dati; concedere resta di chi amministra con la
+  sfida, anche il «sì, sempre» di oggi (che un familiare dava).
+- **Da guardare quando si accende**: le conferme delle estensioni ogni 100 esecuzioni (misura nuova
+  del passo 0, `calliope stato --concessioni`), accanto all'attrito della voce di `calliope stato
+  --turni`, che le estensioni non le conta.

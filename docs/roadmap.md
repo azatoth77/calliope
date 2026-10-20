@@ -485,7 +485,11 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
    momento; il risultato va solo a lui; le pause dei minori valgono. *Quasi* · dipende da: un
    progetto breve (dove va il risultato, di notte, arbitro della GPU).
 9. **Messaggi verso l'esterno dalle estensioni** (S10): nessuno per ora; più avanti solo notifiche
-   alla web app sul telefono di casa.
+   alla web app sul telefono di casa. *[20/10, decisione
+   [0033](decisioni/0033-capacita-concesse-e-revocabili.md), che cambia questa risposta S10 del 12/10: i
+   messaggi fuori casa diventano
+   chiedibili, sempre preparati dall'estensione e inviati solo con la conferma al momento; le
+   notifiche alla web app restano le prime (passo 4 del piano, da approvare).]*
 10. **Node/JavaScript** come linguaggio dei programmi in diretta, sullo schema del C#. *Pronta* ·
     dipende da: i limiti dell'immagine (npm senza rete).
     *[17/10, issue #54: fatto a secco; acceso a mano con `javascript` in `agenti_linguaggi` del
