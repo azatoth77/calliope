@@ -3959,7 +3959,7 @@ al tetto controlla i campi nuovi: l'esempio con «leghe» (non nella richiesta) 
 `fuori`, `nominati == {"da": ["miglia"]}`, `con_calcolo == 1`; nel contrario «limite» delle
 passate con «esempi di accettazione rossi», nelle porte senza il test «correzione non
 riprodotta»; e le porte con due passate di prosa, poi il test e la consegna: «fatto», niente
-`al_tetto_no` né `limite`, «correzione non riprodotta» in `prosa_no`. Resta il banco sulla DGX (punto 2 di #9), di chi amministra.
+`al_tetto_no` né `limite`, «correzione non riprodotta» in `prosa_no`. *[storico: «Resta il banco sulla DGX (punto 2 di #9), di chi amministra.» fino al 19/10: fatto, sotto]*
 
 **Il banco sulla DGX del 19/10** (punto 2 di #9; qwen3.6-35B-A3B su vLLM, t 0,6, presence della
 Config, 5 ripetizioni × 3 casi; installata `20261018-2042-97bacbb6`, cioè main prima di #180;
@@ -3976,6 +3976,6 @@ e 9–13 passate; convertitore **4/5** (3/5); programma **4/5** (5/5). I due ros
   ha esempi di accettazione, quindi l'harness non aveva niente per accorgersene (#10).
 
 Criteri di #9: 15 lavori sì; porte ≥ 3/5 sì; 0 «mancano i file» con l'accettazione verde sì;
-valori, tolti e `con_calcolo` nella riga sì (convertitore: 10 nominati per input, 7 tolti
-«contiene», 6 col calcolo); **0 «fatto» con l'accettazione nascosta rossa no (1, il programma)**:
+valori, tolti e `con_calcolo` nella riga sì (nel convertitore L5, letto
+dalla riga: 10 nominati per input, 7 tolti «contiene», 6 col calcolo); **0 «fatto» con l'accettazione nascosta rossa no (1, il programma)**:
 si chiude solo con gli esempi dei programmi (#10).
