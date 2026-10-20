@@ -123,7 +123,7 @@ Le persone della prova (`prove/e2e/voci.py`, `PERSONE`) al posto dei ruoli: **An
 amministra, Piper «ugo») per «tu», **Giulia** (familiare) per Bruno, **Sofia** (minore, tutori
 Andrea e Carlo) per Bianca, **ospite** per l'ospite; satelliti «studio» e «cucina», lo schermo
 personale di Andrea nello studio (scritto e schede), Home Assistant finto (`prove/ha_finto.py`: le
-luci del piano terra sono cucina, sottopensile, lampadario della sala, piantana e taverna).
+luci del piano terra sono cucina, sottopensile, lampadario della sala, piantana e taverna; la taverna, spenta, la aggiunge il runner, `prove/e2e/__main__.py`, a quelle di `ha_finto.entita_casa`).
 
 ```powershell
 python -m prove.e2e.lancia --aree estensioni --copioni est-elenco,est-gia-fatto,est-minore,est-ospite   # i veloci, ~5 min
@@ -142,7 +142,7 @@ scritte in `decisioni.jsonl` durante il passo, «regola» o «regola:esito»), `
 partenza del gioco, il piano impossibile), `scheda` (una scheda arrivata allo schermo dello studio),
 `gioco` (il campo `gioco` del turno: il comando). Un passo con `se_domanda` si dice solo se la
 domanda c'è stata (il «Procedo?» per più di 10 voci, la domanda dell'agente a metà lavoro); una
-frase di sfida con `se_sfida` si salta se non serve (un gioco puro approvato con la voce).
+frase di sfida con `se_sfida` si salta se non serve (un gioco puro approvato con la voce), e allora regole e testo si controllano sulla risposta dell'approvazione. `se_domanda` guarda la risposta, l'annuncio e tutte le frasi dette dopo fino al silenzio («Lo apro in prova?» è l'ultima frase dell'annuncio); i passi non detti si contano a parte nel rapporto. `est_@` in `tool` è il tool dell'estensione dell'ultimo sviluppo (da `sviluppi.json`), `o` un elenco di strade alternative (l'impossibile fermato all'analisi o dal piano), `log_dal_passo` allarga la finestra del log a un passo prima (la correzione).
 
 | Serie | Prove di questo documento | Copioni |
 |---|---|---|
@@ -151,7 +151,7 @@ frase di sfida con `se_sfida` si salta se non serve (un gioco puro approvato con
 | C | C1–C8, C11, C12; C13–C16; C9 (e il copione di sviluppo di #75); C17 | `svil-differenziata`; `svil-versioni`; `svil-miglia`; `svil-promuovi` |
 | D | D1–D9; F14 | `gioco-porte`, `gioco-tris`, `gioco-memory`, `gioco-quiz`, `gioco-carte`, `gioco-oca`, `gioco-lucciole`, `gioco-spesa`, `gioco-forza4`; `gioco-quiz-internet` |
 | E | E1–E9, F18 (le frasi; serve la pagina) | `partita-porte` (`richiede` «pagina»: oggi si salta) |
-| F | F1; F3; F7; F9; F11a–g | `est-minore`; `est-ospite`; `est-titolo` (indirizzi scritti dallo schermo); in `est-bacheca`; `imp-orari`, `imp-credenziali`, `imp-notifiche`, `imp-rete-casa`, `imp-ricordi`, `imp-modello`, `imp-gioco-modello` |
+| F | F1; F3; F4; F7; F9; F11a–g | `est-minore`; `est-ospite`; in `svil-differenziata` e `gioco-spesa` (Giulia che approva); `est-titolo` (indirizzi scritti dallo schermo); in `est-bacheca`; `imp-orari`, `imp-credenziali`, `imp-notifiche`, `imp-rete-casa`, `imp-ricordi`, `imp-modello`, `imp-gioco-modello` |
 | T | T1, T2 (log della partenza in ogni `gioco-*`); T5; T7 (log della correzione) | `gioco-*`; `est-codice-fiscale`; `svil-differenziata` |
 
 **Non ancora nella prova end-to-end**, da fare a mano da qui: le partite (E1–E27: serve la
@@ -417,7 +417,7 @@ di sfida, «sì, sempre», le quote e le quantità, i dati letti scritti in un p
 - Esito: ___
 
 **B10 · Invio di prova con POST** — P3 · lavoro + 5 min · studio, tu
-- Dici: «Calliope, crea un'estensione di prova che manda il testo che le detto al servizio di prova
+- Dici: «Calliope, crea un'estensione di prova che manda il testo che le dico al servizio di prova
   httpbin.org e mi dice cosa ha ricevuto.»
 - Atteso: `chiedi_permesso` per l'invio in POST verso quell'host; in uso **sempre** «L'estensione
   «…» vuole che mandi dei dati a httpbin.org. Procedo?» con la frase di sfida, anche dopo un «sì,

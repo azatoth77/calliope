@@ -45,6 +45,23 @@ def controlla(attese: dict, turno: dict | None, testo: str, extra: dict | None =
     toccato per ultimo, dopo il passo), `log` (il log dell'istanza durante il passo, annuncio
     compreso) e `schede` (le schede arrivate allo schermo dello studio)."""
     extra = extra or {}
+    if attese.get("o"):
+        # Strade alternative (20/10, revisione della PR #196): l'impossibile fermato
+        # all'analisi o dal piano dell'agente. Basta una; se nessuna va, gli scostamenti della
+        # prima
+        resto = {k: v for k, v in attese.items() if k != "o"}
+        prove_o = [controlla({**resto, **alt}, turno, testo, extra) for alt in attese["o"]]
+        if any(not e for e in prove_o):
+            return []
+        return prove_o[0] + [f"(e nessuna delle {len(prove_o)} strade alternative)"]
+    # «est_@»: il tool dell'estensione del copione (`extra["estensione"]`, il nome interno
+    # dallo sviluppo che l'ha creata: revisione della PR #196, «est_*» accettava ogni estensione)
+    nome = extra.get("estensione")
+    if any("est_@" in (attese.get(k) or ()) for k in ("tool", "tool_tutti", "no_tool")
+           if isinstance(attese.get(k), (list, tuple))):
+        attese = {k: ([f"est_{nome}" if x == "est_@" else x for x in v]
+                      if k in ("tool", "tool_tutti", "no_tool") and isinstance(v, (list, tuple))
+                      else v) for k, v in attese.items()}
     errori = []
     turno = turno or {}
     tool = _tool(turno)

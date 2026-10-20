@@ -89,7 +89,7 @@ solo chi amministra). Indice, frasi, attese e tabella di copertura in
 [`copione-estensioni-giochi.md`](copione-estensioni-giochi.md); i comandi lì, «Nella prova
 end-to-end». Le attese nuove di `verifica.py`: `porta`/`porta_no` (le righe di `decisioni.jsonl`
 dell'istanza scritte nel passo), `sviluppo`/`sviluppo_stato` (`lavori/sviluppi.json`), `log`/`no_log`
-(il log dell'istanza durante il passo), `scheda`, `gioco`; nel copione `se_domanda` e `se_sfida`.
+(il log dell'istanza durante il passo), `scheda`, `gioco`; nel copione `se_domanda`, `se_sfida`, `log_dal_passo`, l'attesa `o` (strade alternative) e `est_@` (il tool dell'estensione dell'ultimo sviluppo).
 
 Le **partite** (`partita-porte`) chiedono `pagina`, che il runner non dà ancora: serve la pagina
 vera dello schermo dello studio in Edge senza finestra, attraverso un tunnel verso la porta degli
