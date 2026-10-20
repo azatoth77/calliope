@@ -3991,8 +3991,10 @@ ripetizioni × 7 casi, commit `9a3b576`; `~/banchi/revisore-1019-1747`, 25 minut
 
 **Criterio di #182 alla lettera: non raggiunto** (i casi sì, due contrari no). Ma le cause
 cambiano la lettura:
-- **tris-inizia-muto 5/5**: senza il suggerimento dell'errore il revisore riconosce da solo il
-  test sbagliato, che è il caso #174 e il punto debole del catalogo dei fallimenti veri.
+- **tris-inizia-muto 5/5**: il contratto nel pacchetto dice la regola della preparazione; il
+  caso muto misura se il modello collega l'errore al contratto, senza il suggerimento dentro
+  l'errore, sul test sbagliato che è il caso #174 e il punto debole del catalogo dei
+  fallimenti veri.
 - **cambia_strada**: in 4 su 5 la causa dice il giro in tondo *e* il bug vero con la riga e la
   correzione («logica.js:14 usa `valore % DIETRO.length`, va `valore - 1`»), e due di quelle
   hanno l'etichetta `codice_sbagliato`; una sola volta (`chiedi_persona` su domande inventate)
@@ -4003,7 +4005,9 @@ cambiano la lettura:
   giusta con l'etichetta che il caso non si aspettava: il caso era ambiguo (vedi sopra).
 
 Conclusione proposta per il passo 6: il revisore a contesto pulito con qwen3.6 vale per il
-giudizio sulle prove (test o codice o consegna: 29/30 sui casi e sui contrari di quel tipo,
-con file giusto), non per le etichette di processo; nel ciclo il menu si restringe a
+giudizio sulle prove (test o codice o consegna: 24/25 sui casi di quel tipo (test sbagliato
+14/15: tris 5/5, tris muto 5/5, porte 4/5; codice sbagliato 5/5; consegna 5/5), il file giusto
+14/15 sui test sbagliati; 29/30 solo contando come giusti i 5 di chiedi_persona riletti),
+non per le etichette di processo; nel ciclo il menu si restringe a
 `test_sbagliato`, `codice_sbagliato`, `consegna` e una `domanda` facoltativa per la persona, e
 il giro in tondo resta deciso dal codice. Scelta di chi amministra (#182).

@@ -38,17 +38,19 @@ delle prove; senza Node i casi si saltano, 77):
 - contrari (senza, un revisore che dice sempre «test sbagliato» fa 100 %):
   `codice_sbagliato` → logica.js: le porte rotte (il mostro della porta accanto) con il test
   del disegno giusto; `consegna`: il tris per due con i test verdi, la prova di fumo compresa;
-  `cambia_strada`: le porte rotte e un registro di cinque tentativi A-B-A-B-A (giocatori.min del
-  manifesto 2 → 1 → 2 → 1 → 2 → 1) con lo stesso errore, vero, a ogni tentativo; `chiedi_persona`: un requisito lasciato
-  alla persona («la caramella vale dei punti: quanti, poi te lo dico») e un test dell'agente
-  che ne ha scelto uno (la logica dà «Nessun punto!» alla caramella: un «codice_sbagliato» è
-  un'ambiguità del caso più che un errore del revisore).
+  `cambia_strada`: le porte rotte e un registro di cinque tentativi A-B-A-B-A
+  (giocatori.min del manifesto 2 → 1 → 2 → 1 → 2 → 1) con lo stesso errore, vero, a ogni
+  tentativo; `chiedi_persona`: un requisito lasciato alla persona («la caramella vale dei
+  punti: quanti, poi te lo dico») e un test dell'agente che ne ha scelto uno (la logica dà
+  «Nessun punto!» alla caramella: un «codice_sbagliato» è un'ambiguità del caso più che un
+  errore del revisore).
 
 **Da un lavoro vero** (`--da-lavoro <cartella>`, solo sulla DGX; niente di quella cartella va
 nel repository): lo stesso pacchetto dalla cartella della sandbox di un lavoro o dalla sua
 cartella dei risultati: i file (senza `.calliope/`, `esempi_veri/`, `lavoro.json`,
-`risultato.md`, CAPACITA.md e il runtime; al più MAX_FILE caratteri per file e MAX_FILE_TOTALE in
-tutto, con un avviso se taglia), i test rieseguiti adesso in una sandbox nuova su tutti i file,
+`risultato.md`, CAPACITA.md e il runtime; senza commenti, al più MAX_FILE caratteri per file
+e MAX_FILE_TOTALE in tutto, prima il manifesto, il codice e i test, con l'avviso del taglio
+anche nel pacchetto), i test rieseguiti adesso in una sandbox nuova su tutti i file,
 i requisiti dello sviluppo del lavoro (sviluppi.json accanto alle sandbox, trovati dal numero
 del lavoro e dall'ora; senza l'ora e con più sviluppi candidati il banco si ferma e chiede
 `--sviluppo S32`), altrimenti la richiesta di lavoro.json; `--registro <file>` (JSON o testo)
@@ -57,9 +59,9 @@ aggiunge un registro dei tentativi. Il verdetto atteso lo dà `--atteso` (con `-
 **Misura**: per caso, N ripetizioni (`--ripetizioni`, 5): verdetti giusti su N, file giusto e
 test giusto su N (dove il caso li dice), secondi e token medi (anche di ragionamento); una
 tabella alla fine e `riepilogo.json` nella cartella d'uscita (`--uscita`). Criterio di #182:
-≥ 4/5 sui casi (`tris-inizia`, `tris-inizia-muto`, `porte-disegno`) e ≥ 4/5 su ciascun contrario: il revisore a
-contesto pulito si costruisce con qwen3.6; sotto, serve un modello diverso (#175) o il revisore
-non vale.
+≥ 4/5 sui casi (`tris-inizia`, `tris-inizia-muto`, `porte-disegno`) e ≥ 4/5 su ciascun
+contrario: il revisore a contesto pulito si costruisce con qwen3.6; sotto, serve un modello
+diverso (#175) o il revisore non vale.
 
 **Sulla DGX quando vLLM è libero** (non insieme al banco della temperatura né a un lavoro
 dell'agente), dalla cartella dei dati (configurazione e motore dell'agente di questa
@@ -83,9 +85,10 @@ Una passata dura 20–90 s (fino a 4096 token di ragionamento più l'uscita, ~7 
 prompt): 7 casi × 5 ripetizioni = 35 passate, 20–50 minuti.
 
 A secco (nessun modello, anche sul portatile; serve Node), per controllare il banco stesso:
-l'uscita vera di ogni caso (rossa o verde come deve, «preparazione» per tris-inizia, senza il consiglio
-per tris-inizia-muto, lo stesso errore nei cinque tentativi), il pacchetto senza commenti né trascrizione (anche da una
-cartella di lavoro finta con diario e passo-N.txt), e un modello finto con verdetti preparati,
+l'uscita vera di ogni caso (rossa o verde come deve, «preparazione» per tris-inizia, senza il
+consiglio per tris-inizia-muto, lo stesso errore nei cinque tentativi), il pacchetto senza
+commenti né trascrizione (anche da una cartella di lavoro finta con diario e passo-N.txt, con
+la precedenza e il marcatore del taglio), e un modello finto con verdetti preparati,
 giusti e sbagliati, contati come devono:
 
     python prove/manuali/banco_revisore.py --secco
@@ -112,8 +115,8 @@ sys.path.insert(0, str(RADICE / "prove"))
 VERDETTI = ("continua", "cambia_strada", "test_sbagliato", "codice_sbagliato", "consegna",
             "chiedi_persona")
 SALTATO = 77
-CASI = ("tris-inizia", "tris-inizia-muto", "porte-disegno", "codice_sbagliato", "consegna", "cambia_strada",
-        "chiedi_persona")
+CASI = ("tris-inizia", "tris-inizia-muto", "porte-disegno", "codice_sbagliato", "consegna",
+        "cambia_strada", "chiedi_persona")
 CODA_USCITA = 2500          # caratteri della coda dell'uscita dei test nel pacchetto
 MAX_FILE = 12_000           # --da-lavoro: caratteri al più per file nel pacchetto…
 MAX_FILE_TOTALE = 60_000    # …e in tutto (un messaggio oltre num_ctx, o prove diluite)
@@ -433,8 +436,8 @@ def casi() -> dict:
                              "contrario": True},
         "consegna": {"requisiti": REQUISITI_TRIS, "file": file_tris(GIOCO_TEST_TRIS),
                      "atteso": {"verdetto": "consegna"}, "contrario": True},
-        # A-B-A-B: l'agente cambia giocatori.min nel manifesto (2 → 1 → 2 → 1) e l'errore,
-        # nella logica, resta lo stesso; lo stato di adesso è l'ultimo tentativo
+        # A-B-A-B-A: l'agente cambia giocatori.min nel manifesto (2 → 1 → 2 → 1 → 2 → 1) e
+        # l'errore, nella logica, resta lo stesso; lo stato di adesso è l'ultimo tentativo
         "cambia_strada": {"requisiti": REQUISITI_PORTE,
                           "file": file_porte(F.GIOCO_ROTTO, F.TEST_GIOCO_PORTE, minimo=1),
                           "registro": [
@@ -542,10 +545,12 @@ ESCLUSI = {"lavoro.json", "CAPACITA.md", "calliope_estensione.py", "risultato.md
 # --da-lavoro: cartelle eseguite con i test ma non mostrate (le risposte vere delle sonde, fino
 # a 8000 caratteri l'una: diluiscono le prove)
 CARTELLE_ESCLUSE = ("esempi_veri",)
+TAGLIATO = "…[tagliato dal banco]"
 
 
 def pacchetto(cfg, requisiti: list, file: dict, r: dict, registro: list | None = None,
-              richiesta: str = "", mostrati: dict | None = None) -> dict:
+              richiesta: str = "", mostrati: dict | None = None,
+              avvisi: list | None = None) -> dict:
     """Le sezioni che il revisore vede, e nient'altro: contratto, requisiti, file senza
     commenti, esito dei test, registro dei tentativi."""
     from calliope.agenti import diagnosi
@@ -559,13 +564,15 @@ def pacchetto(cfg, requisiti: list, file: dict, r: dict, registro: list | None =
         "requisiti": ("\n".join(f"{i}. {x}" for i, x in enumerate(requisiti, 1)) if requisiti
                       else f"(requisiti non trovati; la richiesta: «{richiesta}»)"
                       if richiesta else "(requisiti non trovati)"),
-        "file": {n: senza_commenti(n, t) for n, t in sorted((
-            file if mostrati is None else mostrati).items()) if n not in ESCLUSI},
+        # `mostrati` (--da-lavoro) è già senza commenti e tagliato: non si tocca di nuovo
+        "file": ({n: senza_commenti(n, t) for n, t in sorted(file.items()) if n not in ESCLUSI}
+                 if mostrati is None else dict(sorted(mostrati.items()))),
         "test": {"esito": diagnosi.conto_detto(r) + ("" if r.get("passano") else
                                                      ", non passano tutti"),
                  "passano": bool(r.get("passano")), "fallimenti": fall,
                  "uscita": u[-CODA_USCITA:]},
         "registro": list(registro or []),
+        "avvisi": list(avvisi or []),
     }
 
 
@@ -581,6 +588,9 @@ def messaggio(p: dict) -> str:
     if t["fallimenti"]:
         parti += ["Fallimenti in breve:", t["fallimenti"]]
     parti += ["Coda dell'uscita:", t["uscita"], ""]
+    if p.get("avvisi"):
+        parti += ["# AVVISI DEL BANCO (file tagliati o tolti dal pacchetto)"]
+        parti += [f"- {a}" for a in p["avvisi"]] + [""]
     if p["registro"]:
         parti += ["# REGISTRO DEI TENTATIVI DELL'AGENTE (dal più vecchio)"]
         for i, x in enumerate(p["registro"], 1):
@@ -621,20 +631,31 @@ class SviluppoAmbiguo(Exception):
     """Senza l'ora del lavoro più sviluppi lo contengono: si sceglie con --sviluppo."""
 
 
+def precedenza(nome: str) -> tuple:
+    """L'ordine dei file sotto il tetto: il manifesto, il codice, i test, poi il resto."""
+    b = Path(nome).name.lower()
+    test = b.endswith((".test.js", "_test.py")) or (b.startswith("test") and b.endswith(".py"))
+    codice = b.endswith((".js", ".mjs", ".cjs", ".ts", ".py", ".cs"))
+    return (0 if b == "manifesto.json" else 2 if test else 1 if codice else 3, nome)
+
+
 def per_revisore(file: dict) -> tuple[dict, list[str]]:
-    """I file da mostrare di un lavoro vero: senza CARTELLE_ESCLUSE, al più MAX_FILE caratteri
-    per file e MAX_FILE_TOTALE in tutto; gli avvisi dicono cosa è stato tagliato o tolto."""
+    """I file da mostrare di un lavoro vero, già senza commenti: senza CARTELLE_ESCLUSE, al più
+    MAX_FILE caratteri per file e MAX_FILE_TOTALE in tutto, prima il manifesto, il codice e i
+    test (`precedenza`). I commenti si tolgono prima di tagliare, così il marcatore del taglio
+    non finisce dentro un commento; gli avvisi dicono cosa è stato tagliato o tolto."""
     out, avvisi, totale = {}, [], 0
-    for n, t in sorted(file.items()):
+    for n in sorted(file, key=precedenza):
         if n.split("/")[0] in CARTELLE_ESCLUSE or Path(n).name in ESCLUSI:
             continue
+        t = senza_commenti(n, file[n])
         if totale >= MAX_FILE_TOTALE:
             avvisi.append(f"{n} tolto: il pacchetto ha già {MAX_FILE_TOTALE} caratteri di file")
             continue
         tetto = min(MAX_FILE, MAX_FILE_TOTALE - totale)
         if len(t) > tetto:
             avvisi.append(f"{n} tagliato a {tetto} caratteri su {len(t)}")
-            t = t[:tetto] + "\n…[tagliato dal banco]"
+            t = t[:tetto] + "\n" + TAGLIATO
         out[n] = t
         totale += len(t)
     return out, avvisi
@@ -731,8 +752,8 @@ def caso_da_lavoro(cfg, sbx: Sandboxes, args) -> tuple[dict, dict, str]:
     req, richiesta, da = requisiti_lavoro(cfg, cartella, args.sviluppo or "")
     r = sbx.test(file)
     mostrati, avvisi = per_revisore(file)
-    p = pacchetto(cfg, req, file, r, registro_da_file(args.registro), richiesta, mostrati)
-    p["_avvisi"] = avvisi
+    p = pacchetto(cfg, req, file, r, registro_da_file(args.registro), richiesta, mostrati,
+                  avvisi)
     atteso = {"verdetto": args.atteso}
     if args.file_atteso:
         atteso["file"] = args.file_atteso
@@ -946,6 +967,12 @@ def secco() -> int:
         (lav / "esempi_veri").mkdir()
         (lav / "esempi_veri" / "x_1.json").write_text('"RISPOSTA-VERA"', encoding="utf-8")
         (lav / "dati.txt").write_text("riga di dati\n" * 2000, encoding="utf-8")
+        for i in range(1, 6):
+            (lav / f"aaa{i}.txt").write_text("d" * 11_000, encoding="utf-8")
+        # Un commento a blocchi a cavallo del tetto: il marcatore resta dopo il taglio
+        (lav / "lungo.js").write_text("const a = 1;\n" * 900 + "/* COMMENTO-TAGLIATO "
+                                      + "x" * 3000 + " */\n" + "const b = `t`;\n" * 200,
+                                      encoding="utf-8")
         sv = tmp / "sandbox"
         sv.mkdir()
         (sv / "sviluppi.json").write_text(json.dumps({"sviluppi": [
@@ -972,8 +999,17 @@ def secco() -> int:
         verifica("--da-lavoro: risultato.md ed esempi_veri/ fuori dal pacchetto, il file lungo "
                  "tagliato con l'avviso", "TESTO-DEL-RISULTATO" not in m
                  and "RISPOSTA-VERA" not in m and "…[tagliato dal banco]" in m
-                 and any("dati.txt tagliato" in a for a in p.get("_avvisi", [])),
-                 p.get("_avvisi"))
+                 and any("lungo.js tagliato" in a for a in p.get("avvisi", []))
+                 and "# AVVISI DEL BANCO" in m and "lungo.js tagliato a" in m,
+                 p.get("avvisi"))
+        verifica("--da-lavoro: sotto il tetto prima il manifesto, il codice e i test (i file "
+                 "di dati «aaa» in testa all'alfabeto tolti, con l'avviso nel pacchetto)",
+                 all(f"## {n}" in m for n in ("manifesto.json", "logica.js", "gioco.test.js",
+                                              "logica.test.js"))
+                 and "aaa5.txt tolto" in m and "dati.txt tolto" in m, p.get("avvisi"))
+        verifica("--da-lavoro: il taglio dentro un commento lascia il marcatore, senza il "
+                 "commento", "## lungo.js" in m and TAGLIATO in m[m.index("## lungo.js"):]
+                 and "COMMENTO-TAGLIATO" not in m)
         senza_ora = tmp / "senza-ora"
         shutil.copytree(lav, senza_ora)
         (senza_ora / "lavoro.json").write_text(json.dumps({"id": "L3", "compito": "x"}),
@@ -1143,7 +1179,7 @@ def main(argv) -> int:
         except SviluppoAmbiguo as e:
             print(f"Fermo: {e}.")
             return 2
-        for a in p.pop("_avvisi", []):
+        for a in p.get("avvisi") or []:
             print(f"   avviso: {a}")
         nome = "lavoro:" + Path(args.da_lavoro).name
         pacchetti, infos = {nome: p}, {nome: info}
