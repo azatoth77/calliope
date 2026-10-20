@@ -4450,6 +4450,18 @@ di nuovo, più `--casi porte --giri 1 --ripetizioni 5` per il confronto col 19/1
 - `motore_finto` non conta gli alias dal globale (`const apriGioco = globalThis.apriGioco`) e
   toglie anche i commenti `/* … */`.
 
+## Il copione delle prove dal vero e le estensioni nella prova end-to-end (20/10, #75)
+
+Le prove dal vero della porta stretta, del guardrail, del manifesto e del ciclo di vita intero, con
+i contrari e una prova per ognuna delle regole dell'harness del 19–20/10 che si vede dal vero
+(#180, #185, #186), sono le serie A, B, C, F e T di
+[`prove/manuali/copione-estensioni-giochi.md`](../../prove/manuali/copione-estensioni-giochi.md),
+con la tabella di copertura e ciò che dal vero non si prova. Girano nella prova end-to-end, aree
+`estensioni` e `sviluppo` di `prove/e2e/copioni.py`, con le attese nuove di `prove/e2e/verifica.py`
+(decisioni della porta, fase dello sviluppo, righe del log del lavoro, schede). Le prove sugli
+impossibili di oggi (`imp-*`) sono il «prima» della decisione 0033 (#193); la correzione di un
+gioco usa #192 (unita il 20/10: da guardare dopo `calliope aggiorna`).
+
 ## Capacità concesse e revocabili invece degli impossibili (20/10, issue #193, ramo `issue-193-capacita-concesse`)
 
 **Il caso** (20/10): chi amministra ha chiesto un'estensione con capacità che il contratto elenca

@@ -2,6 +2,11 @@
 
 *Passi spostati da `prove/LEGGIMI.md` il 06/10/2026. I comandi si lanciano dalla radice del repository.*
 
+*Dal 20/10 le prove a voce di estensioni e giochi (tutte le capacità, con i contrari e la tabella
+di copertura) sono in [`copione-estensioni-giochi.md`](copione-estensioni-giochi.md), e girano
+nella prova end-to-end (aree `estensioni`, `sviluppo`, `giochi`). Qui restano i comandi di
+preparazione e le prove col container vero.*
+
 ## Ricerca su internet sulla DGX (SearXNG, 03/10)
 
 ```bash
