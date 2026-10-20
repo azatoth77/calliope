@@ -11,6 +11,13 @@ import re
 # modello diceva «ho registrato…» (vedi la memoria in CLAUDE.md)
 NIENTE = "NIENTE: l'azione NON è stata eseguita"
 
+# Il motore del gioco nei test dell'agente (20/10, issue #192): nel contratto del gioco, nei
+# vincoli e nel rimando di una correzione. Dopo #186 la frase stava solo in gioco.test.js di
+# partenza, che una correzione non riceve, e nelle porte del banco del 20/10 l'agente ha scritto
+# un apriGioco suo (un motore finto, che copre quello vero di agenti/test_js.mjs)
+APRI_GIOCO_C_E = ("apriGioco e creaCaso ci sono già in gioco.test.js, senza require: non "
+                  "scriverli tu")
+
 # Livelli di chi parla (docs/architettura-tool.md)
 ALL = frozenset({"ospite", "familiare", "amministra"})
 FAMILY = frozenset({"familiare", "amministra"})

@@ -720,10 +720,15 @@ def prova_consegna_al_tetto(tmp: Path):
              ris.get("eccezione") == "Limite"
              and any("i test dell'agente non passano" in x for x in log), f"{ris} {log[-2:]}")
     lav, ris, log = _gira_tetto(tmp, "tetto-tappa", GIUSTA, tappe=True)
-    verifica("contrario: un lavoro a tappe (non l'ultimo giro) si ferma alla tappa",
-             ris.get("esito") == "tappa"
-             and not (lav.segnali.get("regole") or {}).get("agente_consegna_al_tetto"),
-             str(ris)[:300])
+    # Dal 20/10 (#192, decisione di chi amministra) la tappa con gli esempi verdi e i test
+    # dell'agente verdi si chiude «fatto» (prima: «si ferma alla tappa»); i contrari sono in
+    # prova_apri_gioco_tappa
+    regole = lav.segnali.get("regole") or {}
+    verifica("un lavoro a tappe con gli esempi verdi alla tappa: «fatto» lì, con la regola "
+             "agente_consegna_alla_tappa (non quella del tetto)",
+             ris.get("esito") == "fatto" and ris.get("consegna_al_tetto") == "tappa"
+             and regole.get("agente_consegna_alla_tappa") == 1
+             and not regole.get("agente_consegna_al_tetto"), str(ris)[:300])
     lav, ris, log = _gira_tetto(tmp, "tetto-manifesto", GIUSTA,
                                 extra={"manifesto.json": "{}"})
     verifica("contrario: il controllo della consegna non passa (manifesto non valido), "

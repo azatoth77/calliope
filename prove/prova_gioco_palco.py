@@ -153,6 +153,10 @@ const base = (n, c, v) => { const k = carica("pagine"); let s = k.applica(k.nuov
   const g = k.pagina(s);
   g.caselle[0][0].testo = "una casella con un testo davvero troppo lungo per starci dentro tutto quanto ".repeat(3);
   r.apposta.casella = esame(g);
+  // troppi pulsanti in una pagina già «griglia» (20/10, #192: tris2 L3 del banco)
+  const gt = k.pagina(s);
+  gt.pulsanti = Array.from({ length: 40 }, (_, i) => ({ c: "colore", v: String(i), etichetta: "Porta " + (i + 1) }));
+  r.apposta.troppi_griglia = esame(gt);
   const g12 = k.pagina(s);
   g12.caselle = Array.from({ length: 12 }, () => Array.from({ length: 12 }, () => ({ testo: "", colore: "", risorsa: "" })));
   r.apposta.griglia12_solo_titolo = esame(g12);
@@ -220,6 +224,17 @@ def prova_impaginazione(tmp: Path):
                  in x and "GIOCO.attivi" in x and "«griglia»" in x for x in d)
              and any("escono dal palco in basso" in x for x in d)
              and any("si sovrappone" in x for x in d), str(d))
+    d = a["troppi_griglia"]["orizzontale"]["difetti"] + a["troppi_griglia"]["verticale"][
+        "difetti"]
+    verifica("…nella pagina già «griglia»: comando e valore nelle caselle, non «usa la "
+             "griglia» (20/10, #192)",
+             any("pulsanti non ci stanno nella pagina «griglia»" in x
+                 and "metti comando e valore nelle caselle" in x for x in d)
+             and not any("usa la pagina «griglia»" in x for x in d), str(d)[:400])
+    verifica("…contrario: nella pagina «scelte» resta «usa la pagina «griglia»»",
+             not any("metti comando e valore" in x for x in a["troppi"]["orizzontale"]["difetti"])
+             and any("usa la pagina «griglia»" in x
+                     for x in a["troppi"]["orizzontale"]["difetti"]))
     verifica("…la misura è per orientamento: in verticale 40 pulsanti ci stanno (4 colonne "
              "per 10 righe)", not a["troppi"]["verticale"]["difetti"]
              and a["troppi"]["verticale"]["pulsanti"] == 40, str(a["troppi"]["verticale"]))

@@ -332,6 +332,9 @@ AL_TETTO_TEST = "L'agente non ha consegnato, ma i suoi test passano: il lavoro l
 # …e quella di una correzione senza esempi chiusa con il test che riproduce il problema (14/10)
 AL_TETTO_CORREZIONE = ("L'agente non ha fatto in tempo a consegnare, ma il test del problema "
                        "che mi hai segnalato adesso passa: il lavoro l'ho chiuso io.")
+# …e quella di un lavoro chiuso alla tappa con lo stato consegnabile (20/10, #192:
+# Agente._consegna_alla_tappa), con gli esempi o con la riproduzione
+AL_TETTO_TAPPA = "L'agente non ha consegnato, ma ha finito: l'ho chiuso io."
 
 
 # Le tappe che non vengono da un tetto del giro (19/10, #180): la consegna rossa (i test che non
@@ -1891,6 +1894,8 @@ class Lavori:
                 "consegna_al_tetto": r.get("consegna_al_tetto") or None,
                 # …con gli esempi o, per una correzione senza esempi, la riproduzione (14/10)
                 "consegna_al_tetto_con": r.get("consegna_al_tetto_con") or None,
+                # …e alla tappa (20/10, #192) il tetto del giro: passate, tempo, token, troncata
+                "consegna_al_tetto_giro": r.get("consegna_al_tetto_giro") or None,
                 "modello": self.imp.modello, "passi": lav.passi, "token": lav.token,
                 "token_letti": lav.prompt_token, "cedimenti": lav.cedimenti,
                 # 05/10: il ragionamento a parte, e il contesto (finestra, picco dei token
@@ -1977,6 +1982,8 @@ class Lavori:
                     # Non un tetto: l'agente ha smesso senza consegnare (19/10, #180)
                     al_tetto = al_tetto.replace("non ha fatto in tempo a consegnare",
                                                 "non ha consegnato")
+                elif r.get("consegna_al_tetto") == "tappa":
+                    al_tetto = AL_TETTO_TAPPA       # 20/10, #192
                 return (str(r["estensione"]["frase"]).rstrip() + " " + al_tetto).strip()
             return r["estensione"]["frase"]
         if lav.tipo in ("codice", "estensione"):

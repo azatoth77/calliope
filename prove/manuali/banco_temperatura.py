@@ -116,6 +116,14 @@ max_tokens; altro) e, solo per un lavoro finito «limite», `al_tetto_no` con `a
 passate di sola prosa con lo stato consegnabile (#180), che non ferma il lavoro. Il criterio
 «0 "mancano i file" con l'accettazione verde» è `al_tetto_no` contro `accettazione`.
 
+**Le partenze vere** (20/10, issue #192, banco del 20/10 a due giri: 1/6). Le porte partono con
+il `gioco.test.js` della forma della partenza (l'apriGioco vero dalla preparazione), come una
+versione di un gioco dopo #186. tris2 ha l'analisi prima del codice del servizio come in uno
+sviluppo (`SviluppoBanco`, con i requisiti del caso: gli esempi di accettazione e i giocatori),
+così al tetto o alla tappa il codice può chiudere il lavoro da sé; con `--accettazione no`
+«saltata» e i giocatori del caso, come prima. Dal 20/10 una tappa con lo stato consegnabile si
+chiude «fatto» (`consegna_al_tetto` «tappa»); `tappa_no` nella riga dice perché no.
+
 Durata: un lavoro dura 3–15 minuti; con i valori predefiniti 2 × 2 × 2 × 3 = 24 lavori, da 2 a
 4 ore. Per una prima idea: --ripetizioni 1 --casi porte,convertitore (8 lavori).
 """
@@ -159,6 +167,46 @@ test("ACC porte: toccando la prima porta si vedono il mostro e i suoi punti", as
   await g.tocca("Porta 1");
   assert.match(g.testo(), /Fantasmino/);
   assert.match(g.testo(), /\\+\\s*3 punti/);
+});
+"""
+# La partita vera nella versione di prima (20/10, #192): dopo #186 un gioco consegnato ha il suo
+# gioco.test.js della forma della partenza (agenti/scheletri.py, TEST_GIOCO_PARTENZA), con
+# l'apriGioco vero dalla preparazione. Verde anche sul gioco rotto: guarda i punti e i turni, non
+# il mostro che si vede. Prima il banco delle porte partiva senza
+TEST_GIOCO_PRIMA_PORTE = """const { test } = require("node:test");
+const assert = require("node:assert");
+// La partita vera con la macchina di Calliope: apriGioco e creaCaso ci sono già, senza require.
+// Ogni partita comincia nella fase «preparazione»: con min < max si sceglie in quanti
+
+test("la partita comincia dalla preparazione", async () => {
+  const g = await apriGioco({ seme: 1 });
+  assert.strictEqual(g.stato().fase, "preparazione");
+  await g.tocca("2 giocatori");
+  assert.strictEqual(g.stato().fase, "turno");
+  assert.strictEqual(g.stato().giocatori.length, 2);
+});
+
+test("una porta aperta: il punto e poi tocca all'altro", async () => {
+  const g = await apriGioco({ seme: 1, inizia: true, giocatori: 2 });
+  await g.tocca("Porta 1");
+  assert.strictEqual(g.stato().fase, "esito");
+  await g.comando("avanti");
+  const s = g.stato();
+  assert.strictEqual(s.fase, "turno");
+  assert.strictEqual(s.tocca, "Giocatore 2");
+  assert.deepStrictEqual(s.giocatori.map((x) => x.punti), [3, 0]);
+  assert.deepStrictEqual(s.comandi.porta, [2, 3]);
+});
+
+test("aperte tutte le porte la partita finisce", async () => {
+  const g = await apriGioco({ seme: 1, inizia: true, giocatori: 2 });
+  for (let k = 0; k < 50 && g.stato().fase !== "fine"; k++) {
+    if (g.stato().fase === "esito") await g.comando("avanti");
+    else await g.comando("porta", g.stato().comandi.porta[0]);
+  }
+  const s = g.stato();
+  assert.strictEqual(s.fase, "fine");
+  assert.strictEqual(s.giocatori.reduce((t, x) => t + x.punti, 0), 5);
 });
 """
 
@@ -329,6 +377,20 @@ COMPITO_TRIS2 = (
     "«casella N» (il comando si chiama casella, con N da 1 a 9, da sinistra a destra e "
     "dall'alto in basso). Chi mette tre segni in fila (riga, colonna o diagonale) vince e prende "
     "un punto; con la griglia piena è pareggio; poi si può giocare ancora.")
+# I requisiti come li scriverebbe l'analisi di uno sviluppo (20/10, #192): con questi l'analisi
+# prima del codice scrive gli esempi di accettazione del gioco, e al tetto o alla tappa il codice
+# può chiudere il lavoro da sé. Fuori da uno sviluppo un gioco salta l'analisi, e il banco
+# metteva «saltata»: «senza esempi di accettazione» sempre
+REQUISITI_TRIS2 = [
+    {"testo": "Due giocatori, sempre esattamente due", "nucleo": True, "si_puo": True},
+    {"testo": "Griglia 3×3: a turno si mette X o O toccando una casella o dicendo «casella N», "
+              "con N da 1 a 9 da sinistra a destra e dall'alto in basso", "nucleo": True,
+     "si_puo": True},
+    {"testo": "Tre segni in fila (riga, colonna o diagonale) vincono e danno un punto",
+     "nucleo": True, "si_puo": True},
+    {"testo": "Con la griglia piena senza tre in fila è pareggio", "nucleo": False,
+     "si_puo": True},
+    {"testo": "Finita la partita si può giocare ancora", "nucleo": False, "si_puo": True}]
 ACCETTAZIONE_TRIS2 = """const { test } = require("node:test");
 const assert = require("node:assert");
 async function mossa(g, n) {
@@ -380,6 +442,7 @@ def casi():
     c01 = next(c for c in PL.CODICE if c[0] == "c01")
     prima = {"logica.js": F.GIOCO_ROTTO,
              "logica.test.js": F.TEST_LOGICA_PORTE,
+             "gioco.test.js": TEST_GIOCO_PRIMA_PORTE,
              "manifesto.json": json.dumps(F.MANIFESTO_PORTE, ensure_ascii=False, indent=1)}
     return {
         "porte": {"tipo": "estensione", "gioco": True, "correzione": True,
@@ -404,9 +467,12 @@ def casi():
                   # Fuori da uno sviluppo gli esempi dei programmi si accendono così (17/10)
                   "programmi_sempre": True},
         # Il gioco nuovo (18/10, #174): dal 19/10 (#186) la cartella non è vuota, il servizio
-        # ci scrive i file di partenza con i giocatori dell'analisi («giocatori»)
+        # ci scrive i file di partenza con i giocatori dell'analisi. Dal 20/10 (#192) l'analisi
+        # prima del codice la fa il servizio, come in uno sviluppo, con questi requisiti
+        # (`SviluppoBanco`); «giocatori» resta per --accettazione no e per --secco
         "tris2": {"tipo": "estensione", "gioco": True, "correzione": False,
                   "estensione": None, "compito": COMPITO_TRIS2, "prima": {},
+                  "requisiti": REQUISITI_TRIS2,
                   "giocatori": {"min": 2, "max": 2},
                   "accettazione": ("accettazione_banco.test.js", ACCETTAZIONE_TRIS2),
                   "riferimento": riferimento_tris2()},
@@ -535,6 +601,20 @@ def secco() -> int:
                 print(f"{'ok ' if ok else 'ERR'} {nome}: la partenza ({g['min']}–{g['max']} "
                       "giocatori) passa i suoi test e la prova di fumo"
                       + ("" if ok else f"  {str(r.get('uscita'))[-500:]!r}"))
+            if "gioco.test.js" in caso["prima"]:
+                # La versione di prima di una correzione (20/10, #192): il suo gioco.test.js
+                # della forma della partenza passa sul gioco rotto (non guarda il mostro)
+                sb = nuova()
+                for rel, testo in partenza.items():
+                    sb.scrivi(rel, testo)
+                r = sb.test()
+                u = str(r.get("uscita"))
+                ok = (bool(r.get("passano")) and "ok prova di fumo" in u
+                      and "la partita comincia dalla preparazione" in u)
+                errori += not ok
+                print(f"{'ok ' if ok else 'ERR'} {nome}: la versione di prima ha gioco.test.js "
+                      "della partenza, verde con la prova di fumo"
+                      + ("" if ok else f"  {u[-500:]!r}"))
             prima = accettazione(nuova, partenza, caso)
             rif = accettazione(nuova, {**partenza, **caso["riferimento"]}, caso)
             ok = not prima["verde"] and rif["verde"]
@@ -720,6 +800,42 @@ def secco_analisi(tmp: Path) -> int:
                                                   "calliope_estensione.py",
                                                   "test_estensione.py")),
                  str(sorted(x.name for x in sb.iterdir())) if sb else "nessuna sandbox")
+        # tris2 (20/10, #192): l'analisi come in uno sviluppo, con i requisiti del caso. Prima
+        # il banco metteva «saltata» e il tetto non poteva mai chiudere il lavoro da sé
+        es = {"requisito": 1, "giocatori": 2, "mosse": [{"comando": "casella", "valore": 1}],
+              "atteso": {"tocca": 2}}
+        gioco = {"contraddizioni": [], "scelte": [], "al_collaudo": [],
+                 "giocatori": {"min": 2, "max": 2}, "esempi": [es],
+                 "comandi": [{"fase": "turno", "nome": "casella", "da": 1, "a": 9}]}
+        fake.copione = [{"content": json.dumps(gioco)},
+                        {"tool_calls": [{"name": "consegna", "arguments": {
+                            "riassunto": "Non lo faccio.", "esito": "impossibile"}}]}]
+        prima = set(Path(cfg.agenti_sandbox).glob("*"))
+        r = un_lavoro(svc, cfg, tmp, "tris2", casi()["tris2"], "secco")
+        sb = next((x for x in set(Path(cfg.agenti_sandbox).glob("*")) - prima if x.is_dir()),
+                  None)
+        m = (json.loads((sb / "manifesto.json").read_text(encoding="utf-8"))
+             if sb and (sb / "manifesto.json").is_file() else {})
+        verifica("tris2: l'analisi come in uno sviluppo, pronta con l'esempio; i requisiti nel "
+                 "messaggio dell'analisi",
+                 r["analisi"].get("stato") == "pronta" and r["analisi"].get("esempi") == 1
+                 and any("Tre segni in fila" in json.dumps(q, ensure_ascii=False)
+                         for q in fake.richieste), json.dumps(r["analisi"]))
+        verifica("…accettazione.test.js nella cartella, e la partenza con i giocatori "
+                 "dell'analisi (2–2)", sb is not None and (sb / "accettazione.test.js").is_file()
+                 and (m.get("scheda") or {}).get("giocatori") == {"min": 2, "max": 2},
+                 str(sorted(x.name for x in sb.iterdir())) if sb else "nessuna sandbox")
+        verifica("…e il servizio è tornato com'era: niente sviluppo finto fuori dall'analisi",
+                 getattr(svc, "sviluppi", None) is None)
+        fake.copione = [{"tool_calls": [{"name": "consegna", "arguments": {
+            "riassunto": "Non lo faccio.", "esito": "impossibile"}}]}]
+        cfg.agenti_accettazione = False
+        try:
+            r = un_lavoro(svc, cfg, tmp, "tris2", casi()["tris2"], "secco")
+        finally:
+            cfg.agenti_accettazione = True
+        verifica("contrario: con l'analisi spenta «saltata», i giocatori del caso",
+                 r["analisi"].get("stato") == "saltata", json.dumps(r["analisi"]))
     finally:
         if svc is not None:
             svc.close()
@@ -908,6 +1024,31 @@ def secco_tetto(tmp: Path) -> int:
                                                    "al_tetto_no", "prosa_no", "limite",
                                                    "regole")},
                             ensure_ascii=False, default=str))
+        # 20/10 (#192, porte L6 del banco): a due giri le porte corrette con il test del disegno
+        # alla tappa del giro 1 si chiudono «fatto» lì; prima la tappa non chiudeva mai
+        fake.copione = porte(True)
+        r = un_lavoro(svc, cfg, tmp, "porte", casi()["porte"], "secco g=2", giri=2)
+        verifica("a due giri, le porte corrette e il test del disegno alla tappa del giro 1: "
+                 "«fatto» lì, con la riproduzione, il tetto del giro e la regola "
+                 "agente_consegna_alla_tappa",
+                 r["esito"] == "fatto" and r["consegna_al_tetto"] == "tappa"
+                 and r["consegna_al_tetto_giro"] == "passate"
+                 and r["consegna_al_tetto_con"] == "riproduzione" and r["giri"] == 1
+                 and r["regole"].get("agente_consegna_alla_tappa") == 1 and r["riuscito"],
+                 json.dumps({k: r.get(k) for k in ("esito", "consegna_al_tetto",
+                                                   "consegna_al_tetto_giro", "giri",
+                                                   "riproduzione", "regole", "tappa_no")},
+                            ensure_ascii=False, default=str))
+        fake.copione = porte(False)
+        r = un_lavoro(svc, cfg, tmp, "porte", casi()["porte"], "secco g=2", giri=2)
+        verifica("contrario: senza il test che riproduce la tappa del giro 1 resta (il motivo in "
+                 "tappa_no), anche con l'accettazione nascosta verde",
+                 r["per_giro"][0]["esito"] == "tappa" and r["consegna_al_tetto"] != "tappa"
+                 and str(r["tappa_no"]).startswith("correzione non riprodotta")
+                 and r["per_giro"][0]["accettazione"] is True
+                 and "agente_consegna_alla_tappa" not in r["regole"],
+                 json.dumps({k: r.get(k) for k in ("esito", "per_giro", "tappa_no", "regole")},
+                            ensure_ascii=False, default=str))
     finally:
         if svc is not None:
             svc.close()
@@ -968,6 +1109,40 @@ def dividi_budget(cfg, giri: int, minuti: float) -> dict:
             "minuti_totali": float(minuti)}
 
 
+class SviluppoBanco:
+    """Lo sviluppo che il banco non apre (20/10, #192), visto solo dall'analisi prima del codice
+    del servizio (`Lavori._analisi_prima_`): i requisiti e la richiesta del caso. Nient'altro del
+    servizio lo vede: `con_sviluppo` lo mette solo durante l'analisi."""
+
+    def __init__(self, caso: dict):
+        self.sv = SimpleNamespace(requisiti=[dict(r) for r in caso["requisiti"]],
+                                  richiesta=caso["compito"])
+
+    def di_lavoro(self, *a, **k):
+        return self.sv
+
+
+def con_sviluppo(svc, caso: dict):
+    """L'analisi prima del codice di `svc` vede `SviluppoBanco` del caso, come in uno sviluppo;
+    il resto del servizio (fine del lavoro, sonde) vede `svc.sviluppi` com'è. Un lavoro alla
+    volta, come fa il banco; il caso dopo rimette l'analisi vera (`senza_sviluppo`)."""
+    vera = type(svc)._analisi_prima_
+    finto = SviluppoBanco(caso)
+
+    def analisi(lav, sb, gioco):
+        prima = getattr(svc, "sviluppi", None)
+        svc.sviluppi = finto
+        try:
+            return vera(svc, lav, sb, gioco)
+        finally:
+            svc.sviluppi = prima
+    svc._analisi_prima_ = analisi
+
+
+def senza_sviluppo(svc):
+    svc.__dict__.pop("_analisi_prima_", None)
+
+
 def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
               giri: int = 1) -> dict:
     from calliope.agenti.ciclo import segnali_giro
@@ -978,9 +1153,15 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
     if caso["tipo"] == "estensione":
         lav.estensione = caso.get("estensione")
         lav.gioco = bool(caso.get("gioco"))
-    if caso.get("giocatori"):
+    senza_sviluppo(svc)              # quella di un caso di prima
+    analisi_vera = bool(caso.get("requisiti")) and getattr(cfg, "agenti_accettazione", True)
+    if analisi_vera:
+        # L'analisi prima del codice come in uno sviluppo (20/10, #192): il servizio la fa con i
+        # requisiti del caso e scrive gli esempi di accettazione; i giocatori li dice lei
+        con_sviluppo(svc, caso)
+    elif caso.get("giocatori"):
         # Quanti giocano, come li direbbe l'analisi prima del codice in uno sviluppo (19/10,
-        # #186): i file di partenza del gioco li usano
+        # #186): i file di partenza del gioco li usano. Con l'analisi spenta (--accettazione no)
         lav.accettazione = {"stato": "saltata", "giocatori": dict(caso["giocatori"])}
     if caso.get("correzione"):
         lav.correzione = True
@@ -1064,6 +1245,8 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             "consegna_al_tetto": ris.get("consegna_al_tetto"),
             # …con gli esempi o con la riproduzione di una correzione senza esempi (14/10)
             "consegna_al_tetto_con": ris.get("consegna_al_tetto_con"),
+            # …e con «tappa» (20/10, #192) il tetto del giro che l'ha chiesta
+            "consegna_al_tetto_giro": ris.get("consegna_al_tetto_giro"),
             "esempi_finali": es_finali,
             # Le regole scattate nel lavoro, da lav.segnali (sonde.nota): dal 19/10 (#9) anche
             # agente_ragionamento_ripetuto e agente_riscrittura_ripetuta
@@ -1083,6 +1266,8 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             "al_tetto_no": segnali.get("al_tetto_no") if limite else None,
             "al_tetto_no_tipo": segnali.get("al_tetto_tipo") if limite else None,
             "prosa_no": segnali.get("prosa_no"),
+            # 20/10 (#192): l'ultimo no alla consegna d'ufficio di una tappa, che resta tappa
+            "tappa_no": segnali.get("tappa_no"),
             "cartella": str(cartella),
             "giri": len(per_giro), "giri_max": giri, "giro_accettazione": giro_acc,
             "giro_consegna": giro_consegna, "sbloccato": sbloccato,
