@@ -1830,6 +1830,13 @@ class Agente:
                         else:
                             fila.pop(p, None)       # una correzione mirata: si riparte
                     elif name == "esegui_test":
+                        for regola in regole_avvisi(result.get("uscita")):
+                            # Gli avvisi della prova di fumo (20/10, #197): ognuno con la sua
+                            # regola, una volta per lavoro
+                            if not seg.get("avviso_" + regola):
+                                from ..sonde import nota as nota_regola
+                                seg["avviso_" + regola] = True
+                                nota_regola(lav, regola, self.log)
                         firma = firma_errore(result)
                         if firma:
                             if firma not in seg["errori_test"][-1:]:
@@ -3418,6 +3425,24 @@ def punto_piu_simile(testo: str, vecchio: str) -> int | None:
 
 # I controlli di Calliope nell'uscita dei test, che non sono test dell'agente
 _NON_TEST = ("prova di fumo", "manifesto.json", "controllo della consegna")
+# Le righe degli avvisi della prova di fumo nell'uscita dei test (20/10, #197, fumo_js.mjs):
+# ognuna con la sua regola nel registro, una volta per lavoro. Riconosciute dal prefisso e da
+# una frase loro (seconda revisione della PR #201: dal solo prefisso anche i punti persi
+# contavano come «esito a ogni mossa»)
+AVVISO_ESITO = "AVVISO prova di fumo del gioco: "
+AVVISI_REGOLE = (("l'esito vuol dire che la mano è finita", "gioco_esito_ogni_mossa"),
+                 ("non vanno a nessuno", "gioco_punti_persi"))
+
+
+def regole_avvisi(uscita) -> list[str]:
+    """Le regole degli avvisi della prova di fumo nell'uscita dei test, senza doppioni."""
+    out = []
+    for riga in str(uscita or "").splitlines():
+        if riga.startswith(AVVISO_ESITO):
+            for frase, regola in AVVISI_REGOLE:
+                if frase in riga and regola not in out:
+                    out.append(regola)
+    return out
 
 
 def nomi_test(uscita: str) -> list[str]:

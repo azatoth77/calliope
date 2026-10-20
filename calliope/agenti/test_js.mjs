@@ -81,8 +81,10 @@ if (prove.length && !conto.errori) {
 if (scheda && Array.isArray(scheda.file) && !conto.errori && !senzaFumo) {
   const presenti = scheda.file.filter((f) => file.includes(f));
   conto.eseguiti++;
+  // Gli avvisi (20/10, #197): non fanno fallire la prova, si leggono nell'uscita
+  const avvisi = [];
   const errori = presenti.length === scheda.file.length
-    ? await giochi.fumo(presenti, opzioniScheda())
+    ? await giochi.fumo(presenti, { ...opzioniScheda(), avvisi })
     : ["i file della scheda non ci sono tutti: " + scheda.file.join(", ")];
   if (errori.length) {
     conto.falliti++;
@@ -99,6 +101,7 @@ if (scheda && Array.isArray(scheda.file) && !conto.errori && !senzaFumo) {
   } else {
     scrivi("ok prova di fumo del gioco\n");
   }
+  for (const a of avvisi) scrivi(`AVVISO prova di fumo del gioco: ${a}\n`);
 }
 scrivi(`${segno} ${JSON.stringify(conto)}\n`);
 process.exit(0);

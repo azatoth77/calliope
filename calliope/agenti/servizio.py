@@ -1562,6 +1562,9 @@ class Lavori:
             return [requisiti[n - 1]["testo"] for n in numeri if 0 < n <= len(requisiti)]
         lav.accettazione = {"stato": "pronta", "file": scritto, "nome_file": nome_file,
                             "esempi": len(an["esempi"]),
+                            # Quanti ne aveva scritti il modello, per un gioco (20/10, #197)
+                            **({"esempi_modello": an["esempi_modello"]}
+                               if "esempi_modello" in an else {}),
                             # I valori nominati controllati in più (14/10)
                             "valori": len(an.get("riconosciuti") or []),
                             # Gli esempi tolti o cambiati contro la richiesta (14/10 sera)
@@ -1595,13 +1598,31 @@ class Lavori:
                      # min e max, o min e max non tenuti perché nessun esempio ci stava
                      ("giocatori", "esempi tolti con un numero di giocatori fuori da min e max"),
                      ("giocatori_scartati", "volta min e max non tenuti: nessun esempio ci "
-                                            "stava"))
+                                            "stava"),
+                     # Gli esempi di un gioco tolti per ogni causa (20/10, #197)
+                     ("forma", "esempi tolti che non si leggono"),
+                     ("mosse", "esempi tolti con un comando o un valore che non c'è"),
+                     ("lunghi", "esempi tolti troppo lunghi"),
+                     ("esito_prima_mossa", "controlli della fase «esito» senza punti alla "
+                                           "prima mossa tolti"),
+                     ("niente", "esempi tolti senza niente da controllare"),
+                     ("doppioni", "esempi doppi tolti"),
+                     ("testo", "testi attesi tolti con parole che la richiesta non usa"),
+                     ("dopo_la_fine", "esempi tolti che si contraddicono (uno finisce la "
+                                      "partita, l'altro continua)"))
                      for n in [(an.get("tolti") or {}).get(k)] if n)
                  + (f", al collaudo i requisiti {an['al_collaudo']}" if an["al_collaudo"]
                     else "") + (f", {len(an['scelte'])} scelte" if an["scelte"] else "")
                  + (f", programma {prog}" if prog and scritto else
                     f", niente esempi per il programma: {lav.accettazione['senza_esempi']}"
                     if programma and not scritto else ""))
+        if an.get("esempi_modello") and not an["esempi"]:
+            # Tutti tolti dal codice (20/10, #197, banco tris2 L3: «0 esempi» e nessuna causa):
+            # nel registro, perché il tetto e la tappa senza esempi non chiudono d'ufficio
+            from ..sonde import nota as nota_regola
+            nota_regola(lav, "accettazione_esempi_tutti_tolti", self.log,
+                        f"{an['esempi_modello']} del modello: " + ", ".join(
+                            f"{k} {n}" for k, n in (an.get("tolti") or {}).items()))
         if sv is not None and requisiti and svs is not None:
             try:
                 svs.segna_accettazione(sv, lav.accettazione["testi_al_collaudo"])
