@@ -4405,9 +4405,27 @@ porte senza il gioco.test.js che una versione vera ha).
    parte 2)* il caso `tris-nudo`, fuori da quelli di serie: lo stesso tris come programma
    JavaScript (`tris.js` con `nuovaPartita`, `mossa`, `vincitore`, `pareggio`, `aChiTocca` pure,
    test dell'agente con node:test, senza macchina né contratto dei giochi, senza analisi prima
-   del codice), accettazione nascosta equivalente a quella di tris2 sulle sole funzioni,
-   riferimento in `prove/programmi/tris`, «javascript» acceso in memoria per il solo caso;
-   confronto sulla DGX `--casi tris2,tris-nudo --giri 2 --ripetizioni 5`, da lanciare.
+   del codice), riferimento in `prove/programmi/tris`, «javascript» acceso in memoria per il solo
+   caso. Dopo le revisioni delle PR #199 e #200 (stessa sera): l'accettazione nascosta di tris2
+   passa da 2 a 10 test (i due di prima con lo stesso nome, più gli otto punti di tris-nudo:
+   mosse alternate, casella occupata o fuori da 1–9, niente mosse dopo la fine, colonna,
+   diagonale anche del secondo, pareggio, a chi tocca, «ancora»), e tris-nudo ha gli stessi dieci
+   con lo stesso nome (prima ne aveva otto più severi e diceva «equivalente» a torto: lo stato
+   ricevuto intatto non si prova più, in tris2 non ha un equivalente); richiesta e requisiti di
+   tris2 dicono anche la casella già presa. Un terzo caso, `tris2-solo-logica`: tris2 com'è ma la
+   richiesta chiede solo logica.js e logica.test.js, e la partenza è senza gioco.test.js (separa
+   l'API dei test con apriGioco dall'interfaccia della macchina). La riga conta i test verdi
+   dell'accettazione su quelli totali (`accettazione_verdi`, `accettazione_totali`, i nomi dei
+   rossi; colonna «test acc.»). **La metrica del confronto è l'accettazione nascosta**, non
+   «riuscito»: solo i tris2 hanno gli esempi dell'analisi e si possono chiudere al tetto.
+   Comando, partenze e regole di lettura scritte prima (≥ 8/10 contro ≤ 3/10, il caso
+   intermedio, l'ordine) nella docstring del banco; sulla DGX dopo #197, `--presence 0.5` (con
+   `config` tris2 avrebbe 0,5 e tris-nudo 0), `--casi tris2,tris2-solo-logica,tris-nudo --giri 2
+   --ripetizioni 10`, da lanciare. Nel prompt di un programma JavaScript scelto dall'analisi
+   (il file dichiarato) i test sono `*.test.js`, il seme la funzione del caso e lo scheletro solo
+   il suo; senza un linguaggio scelto, con il JavaScript acceso, test e seme si dicono per i due
+   linguaggi (`sistema_codice(…, linguaggio)`, prova in `prova_esecuzione`). tris-nudo non ha
+   l'analisi e vede quindi il prompt per i due linguaggi.
 
 **Prove.** `prova_apri_gioco_tappa` (nuova, livello 2, ~11 s), con i contrari: la frase nel
 contratto, nei vincoli e nel rimando (contrari: l'estensione, il programma); il motore finto

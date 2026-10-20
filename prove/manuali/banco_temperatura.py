@@ -36,24 +36,66 @@ con nomi di fantasia, ripetuti:
    chiuso in al più 2 giri (`--casi tris2 --giri 2`). Dal 19/10 (#186) un gioco nuovo parte
    dai file di partenza già verdi (agenti/scheletri.py) con min e max dell'analisi prima del
    codice; il banco, che non apre uno sviluppo, mette nel lavoro i giocatori del caso (2–2)
-   come li direbbe l'analisi.
+   come li direbbe l'analisi. Dal 20/10 sera (#198, revisione della PR #199) l'accettazione
+   nascosta ha dieci test: i due di prima con lo stesso nome (per il confronto con i banchi di
+   prima) e gli otto punti di tris-nudo con lo stesso nome (la partita nuova e a chi tocca, mosse
+   alternate, casella occupata o fuori da 1–9 rifiutata, tre in fila in riga e poi niente mosse,
+   colonna, diagonale vinta anche dal secondo, pareggio, «ancora» con la partita vuota), giocati
+   con apriGioco dalla preparazione; la richiesta e i requisiti dicono anche chi comincia, la
+   casella già presa e niente segni a partita finita, come quella di tris-nudo.
 6. **tris-nudo** (programma JavaScript, 20/10, issue #198 parte 2, non tra i casi di serie): lo
-   stesso tris per due senza la macchina a stati né il contratto dei giochi, il riferimento di
-   quanto sa fare il modello. Un lavoro «codice» con la cartella vuota (lo scheletro del
-   programma JavaScript è nel prompt): `tris.js` in CommonJS con cinque funzioni pure dette
+   stesso tris per due senza la macchina a stati né il contratto dei giochi, il tetto di quanto
+   sa fare il modello fuori dal nostro ambiente dei giochi (non un'alternativa: niente voce,
+   palco né manifesto). Un lavoro «codice»: `tris.js` in CommonJS con cinque funzioni pure dette
    nella richiesta (`nuovaPartita()`, `mossa(stato, casella)` che restituisce lo stato nuovo e
    lancia un errore sulla casella occupata, fuori da 1–9 o a partita finita, `vincitore`,
-   `pareggio`, `aChiTocca`), i test dell'agente con node:test. Accettazione nascosta equivalente
-   a quella di tris2, sulle sole funzioni (lo stato non si guarda dentro): inizio, mosse
-   alternate e stato ricevuto intatto, casella occupata o fuori rifiutata, tre in fila in riga,
-   colonna e diagonale, pareggio, a chi tocca, partita nuova. Riferimento in
+   `pareggio`, `aChiTocca`), i test dell'agente con node:test. Accettazione nascosta: gli stessi
+   dieci punti di tris2 con lo stesso nome (al posto della preparazione, che qui non c'è, la
+   partita nuova), sulle sole funzioni, senza guardare dentro lo stato. Riferimento in
    `prove/programmi/tris`. Senza analisi prima del codice (fuori da uno sviluppo un programma
    non l'ha, come «programma»); «javascript» in `agenti_linguaggi` acceso in memoria per il solo
-   caso se il locale non l'ha (sulla DGX è acceso dal 17/10). Il confronto con tris2, stessi
-   giri e ripetizioni:
+   caso se il locale non l'ha (sulla DGX è acceso dal 17/10).
+7. **tris2-solo-logica** (gioco nuovo, 20/10 sera, issue #198, revisione dell'analisi nella PR
+   #200, non tra i casi di serie): tris2 com'è (macchina, contratto e prompt di oggi, requisiti,
+   analisi prima del codice, accettazione nascosta), ma la richiesta chiede solo manifesto,
+   logica.js e logica.test.js sulle funzioni di GIOCO, niente gioco.test.js né test con
+   apriGioco. Separa l'API dei test dei giochi (dove stava quasi ogni fallimento dei banchi dal
+   14/10) dall'interfaccia della macchina. Il prompt e il contratto parlano ancora di
+   gioco.test.js (sono quelli di oggi): cambia solo la richiesta e la partenza.
 
-       … banco_temperatura.py --temperature config --presence config \\
-           --casi tris2,tris-nudo --giri 2 --ripetizioni 5 --uscita ~/banco-tris-nudo
+**Le partenze dei tre casi del tris** (20/10 sera; il banco usa quelle del servizio di main,
+quindi dopo #197 cambiano con lui). tris2: i quattro file di partenza del servizio
+(`agenti/scheletri.py`, `file_gioco` con 2–2 giocatori: il gioco d'esempio delle porte, con
+l'esito a ogni mossa, manifesto, logica.js, logica.test.js e gioco.test.js), il contratto in
+sola lettura (CAPACITA.md) e gli esempi dell'analisi (accettazione.test.js, sola lettura).
+tris2-solo-logica: gli stessi senza gioco.test.js. tris-nudo: la cartella vuota, con lo scheletro
+del programma JavaScript nel prompt (programma.js con una somma e il suo test). Le differenze che
+restano sono quelle che il banco misura: il prompt di un gioco è circa 2,5 volte quello di un
+programma (revisione della PR #199).
+
+**Come si confrontano** (20/10 sera, revisioni delle PR #199 e #200). Sulla DGX, solo dopo
+l'unione di #197 (il contratto dell'esito e gli esempi del tris) e a DGX libera, tutti e tre i
+casi con lo stesso presence_penalty (con `--presence config` tris2 avrebbe quello delle
+estensioni, 0,5, e tris-nudo quello del codice, 0), 10 ripetizioni obbligatorie:
+
+       … banco_temperatura.py --temperature config --presence 0.5 \\
+           --casi tris2,tris2-solo-logica,tris-nudo --giri 2 --ripetizioni 10 \\
+           --uscita ~/banco-tris
+
+La metrica è l'**accettazione nascosta** (colonna «acc.») e i suoi test verdi («test acc.»),
+non «riuscito»: solo i due tris2 hanno gli esempi dell'analisi, quindi solo loro si possono
+chiudere «fatto» al tetto o alla tappa. Per lo stesso motivo un secondo giro con
+`--accettazione no` (nessuno ha l'analisi) dice se pesa. Le regole di lettura, scritte prima e
+in quest'ordine (la prima che vale decide; 8/10 contro 3/10 ha p ≈ 0,07 con Fisher):
+1. tris2 ≥ 8/10: basta la macchina com'è (A); gli altri due restano misure.
+2. tris-nudo ≤ 3/10: il limite è il modello o l'harness generico, non la macchina; si tiene A.
+3. tris-nudo ≥ 8/10 e tris2 ≤ 3/10: il costo è del nostro ambiente. Allora tris2-solo-logica:
+   ≥ 8/10 il costo sta nei test con apriGioco (A con i test della sola logica); ≤ 3/10 sta
+   nell'interfaccia della macchina (un'interfaccia più piccola, misurata con il suo prototipo);
+   in mezzo, tutte e due.
+4. Il caso intermedio (nessuna delle tre: per esempio tris-nudo alto e tris2 fra 4 e 7 su 10,
+   o tris-nudo fra 4 e 7): non decide. Si leggono i test verdi per punto e i primi errori, e si
+   rifanno 10 ripetizioni prima di scegliere.
 
 Misure per lavoro: riuscito (consegna «fatto» e accettazione verde), passate, token (e di
 ragionamento), minuti, giri a vuoto (passate fermate per ragionamento ripetuto, passate senza
@@ -392,8 +434,10 @@ COMPITO_TRIS2 = (
     "Il gioco del tris per due giocatori sugli schermi (nome tris_due): sempre esattamente due "
     "giocatori, che a turno mettono X e O su una griglia 3×3 toccando una casella o dicendo "
     "«casella N» (il comando si chiama casella, con N da 1 a 9, da sinistra a destra e "
-    "dall'alto in basso). Chi mette tre segni in fila (riga, colonna o diagonale) vince e prende "
-    "un punto; con la griglia piena è pareggio; poi si può giocare ancora.")
+    "dall'alto in basso). Comincia il primo giocatore con X. Una casella già presa non si può "
+    "prendere, e a partita finita non si mettono più segni. Chi mette tre segni in fila (riga, "
+    "colonna o diagonale) vince e prende un punto; con la griglia piena è pareggio; poi si può "
+    "giocare ancora.")
 # I requisiti come li scriverebbe l'analisi di uno sviluppo (20/10, #192): con questi l'analisi
 # prima del codice scrive gli esempi di accettazione del gioco, e al tetto o alla tappa il codice
 # può chiudere il lavoro da sé. Fuori da uno sviluppo un gioco salta l'analisi, e il banco
@@ -403,6 +447,9 @@ REQUISITI_TRIS2 = [
     {"testo": "Griglia 3×3: a turno si mette X o O toccando una casella o dicendo «casella N», "
               "con N da 1 a 9 da sinistra a destra e dall'alto in basso", "nucleo": True,
      "si_puo": True},
+    # 20/10 sera (#198, revisione della PR #199): come la richiesta di tris-nudo
+    {"testo": "Comincia il primo giocatore con X; una casella già presa non si può prendere, e "
+              "a partita finita non si mettono più segni", "nucleo": True, "si_puo": True},
     {"testo": "Tre segni in fila (riga, colonna o diagonale) vincono e danno un punto",
      "nucleo": True, "si_puo": True},
     {"testo": "Con la griglia piena senza tre in fila è pareggio", "nucleo": False,
@@ -431,14 +478,84 @@ test("ACC tris2: tre in fila vince, la partita finisce con un punto", async () =
   assert.strictEqual(s.fase, "fine");
   assert.deepStrictEqual(s.giocatori.map((x) => x.punti).sort(), [0, 1]);
 });
+// Dal 20/10 sera (#198, revisione della PR #199) gli stessi punti dell'accettazione di tris-nudo,
+// giocati con apriGioco dalla preparazione: i due test di sopra restano con il loro nome, per il
+// confronto con i banchi di prima
+async function partita(...caselle) {
+  const g = await apriGioco({ seme: 1 });
+  await g.tocca("Inizia");
+  for (const n of caselle) await mossa(g, n);
+  return g;
+}
+async function finita(g) {
+  await g.avanza(20000);
+  while (g.stato().fase === "esito") await g.comando("avanti");
+  return g.stato();
+}
+const chi = (s, i) => s.giocatori[i].nome;
+test("ACC tris2: la partita nuova: tocca al primo, nessun vincitore", async () => {
+  const s = (await partita()).stato();
+  assert.strictEqual(s.tocca, chi(s, 0));
+  assert.deepStrictEqual(s.giocatori.map((x) => x.punti), [0, 0]);
+  assert.notStrictEqual(s.fase, "fine");
+});
+test("ACC tris2: le mosse si alternano", async () => {
+  const g = await partita(5);
+  assert.strictEqual(g.stato().tocca, chi(g.stato(), 1));
+  await mossa(g, 1);
+  assert.strictEqual(g.stato().tocca, chi(g.stato(), 0));
+});
+test("ACC tris2: la casella occupata o fuori da 1–9 è rifiutata", async () => {
+  const g = await partita(5);
+  await assert.rejects(() => g.comando("casella", 5));
+  await assert.rejects(() => g.comando("casella", 0));
+  await assert.rejects(() => g.comando("casella", 10));
+  assert.strictEqual(g.stato().tocca, chi(g.stato(), 1));
+});
+test("ACC tris2: tre in fila in riga vince, poi non si gioca più", async () => {
+  const s = await finita(await partita(1, 4, 2, 5, 3));
+  assert.strictEqual(s.fase, "fine");
+  assert.deepStrictEqual(s.giocatori.map((x) => x.punti), [1, 0]);
+  assert.ok(!(s.comandi.casella || []).length);
+});
+test("ACC tris2: tre in fila in colonna vince", async () => {
+  const s = await finita(await partita(1, 2, 4, 5, 7));
+  assert.strictEqual(s.fase, "fine");
+  assert.deepStrictEqual(s.giocatori.map((x) => x.punti), [1, 0]);
+});
+test("ACC tris2: tre in fila in diagonale vince anche il secondo", async () => {
+  const s = await finita(await partita(2, 1, 3, 5, 4, 9));
+  assert.strictEqual(s.fase, "fine");
+  assert.deepStrictEqual(s.giocatori.map((x) => x.punti), [0, 1]);
+  const t = await finita(await partita(3, 1, 5, 2, 7));
+  assert.deepStrictEqual(t.giocatori.map((x) => x.punti), [1, 0]);
+});
+test("ACC tris2: la griglia piena senza tre in fila è pareggio", async () => {
+  const s = await finita(await partita(1, 2, 3, 5, 4, 6, 8, 7, 9));
+  assert.strictEqual(s.fase, "fine");
+  assert.deepStrictEqual(s.giocatori.map((x) => x.punti), [0, 0]);
+  const g = await partita(1, 2, 3);
+  assert.notStrictEqual(g.stato().fase, "fine");
+});
+test("ACC tris2: si può giocare ancora, la partita nuova è vuota", async () => {
+  const g = await partita(1, 4, 2, 5, 3);
+  await finita(g);
+  await g.comando("ancora");
+  if (g.stato().fase === "preparazione") await g.tocca("Inizia");
+  const s = g.stato();
+  assert.strictEqual(s.tocca, chi(s, 0));
+  assert.deepStrictEqual([...(s.comandi.casella || [])].sort((a, b) => a - b),
+                         [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+});
 """
 
 
 # 6. Il tris nudo (20/10, issue #198, parte 2): lo stesso tris per due, ma come un programma
 # JavaScript con funzioni pure e i test dell'agente, senza la macchina a stati né il contratto dei
-# giochi. È il riferimento di quanto sa fare il modello: l'accettazione dice le stesse cose di
-# quella di tris2 (inizio, mosse alternate, casella occupata, tre in fila in riga, colonna e
-# diagonale, pareggio, a chi tocca) sulle funzioni, senza guardare dentro lo stato
+# giochi. È il tetto di quanto sa fare il modello fuori dal nostro ambiente: dal 20/10 sera
+# (revisione della PR #199) l'accettazione ha gli stessi dieci test di quella di tris2, con lo
+# stesso nome dopo «ACC tris-nudo:», sulle funzioni e senza guardare dentro lo stato (lo stato
+# ricevuto intatto non si prova: in tris2 non ha un equivalente)
 COMPITO_TRIS_NUDO = (
     "Un programma JavaScript per Node: il tris per due giocatori, X e O, su una griglia 3×3 con "
     "le caselle numerate da 1 a 9 da sinistra a destra e dall'alto in basso. Il file tris.js "
@@ -456,18 +573,25 @@ const T = require("./tris.js");
 function gioca(...caselle) {
   return caselle.reduce((s, n) => T.mossa(s, n), T.nuovaPartita());
 }
-test("ACC tris-nudo: la partita nuova, tocca a X, nessun vincitore", () => {
+test("ACC tris-nudo: si parte dalla partita nuova, due giocatori X e O", () => {
+  const s = T.nuovaPartita();
+  assert.strictEqual(T.aChiTocca(s), "X");
+  assert.strictEqual(T.aChiTocca(T.mossa(s, 1)), "O");
+});
+test("ACC tris-nudo: tre in fila vince, la partita finisce", () => {
+  const s = gioca(1, 4, 2, 5, 3);
+  assert.strictEqual(T.vincitore(s), "X");
+  assert.ok(!T.aChiTocca(s));
+});
+test("ACC tris-nudo: la partita nuova: tocca al primo, nessun vincitore", () => {
   const s = T.nuovaPartita();
   assert.strictEqual(T.aChiTocca(s), "X");
   assert.ok(!T.vincitore(s));
   assert.ok(!T.pareggio(s));
 });
-test("ACC tris-nudo: le mosse si alternano, lo stato ricevuto non cambia", () => {
-  const s0 = T.nuovaPartita();
-  const s1 = T.mossa(s0, 5);
+test("ACC tris-nudo: le mosse si alternano", () => {
+  const s1 = gioca(5);
   assert.strictEqual(T.aChiTocca(s1), "O");
-  assert.strictEqual(T.aChiTocca(s0), "X");
-  assert.doesNotThrow(() => T.mossa(s0, 5));
   assert.strictEqual(T.aChiTocca(T.mossa(s1, 1)), "X");
 });
 test("ACC tris-nudo: la casella occupata o fuori da 1–9 è rifiutata", () => {
@@ -487,7 +611,7 @@ test("ACC tris-nudo: tre in fila in riga vince, poi non si gioca più", () => {
 test("ACC tris-nudo: tre in fila in colonna vince", () => {
   assert.strictEqual(T.vincitore(gioca(1, 2, 4, 5, 7)), "X");
 });
-test("ACC tris-nudo: tre in fila in diagonale vince anche O", () => {
+test("ACC tris-nudo: tre in fila in diagonale vince anche il secondo", () => {
   assert.strictEqual(T.vincitore(gioca(2, 1, 3, 5, 4, 9)), "O");
   assert.strictEqual(T.vincitore(gioca(3, 1, 5, 2, 7)), "X");
 });
@@ -500,11 +624,51 @@ test("ACC tris-nudo: la griglia piena senza tre in fila è pareggio", () => {
 });
 test("ACC tris-nudo: si può giocare ancora, la partita nuova è vuota", () => {
   gioca(1, 4, 2, 5, 3);
-  const s = T.nuovaPartita();
-  assert.strictEqual(T.aChiTocca(s), "X");
-  assert.doesNotThrow(() => T.mossa(s, 1));
+  for (let n = 1; n <= 9; n++) {
+    const s = T.nuovaPartita();
+    assert.strictEqual(T.aChiTocca(s), "X");
+    assert.doesNotThrow(() => T.mossa(s, n));
+  }
 });
 """
+
+
+# 7. Il tris2 della sola logica (20/10 sera, issue #198, revisione dell'analisi nella PR #200):
+# la macchina, il contratto, il prompt, i requisiti, l'analisi e l'accettazione nascosta di
+# tris2, ma all'agente si chiede solo la logica e i test della logica, niente gioco.test.js con
+# apriGioco (la partita intera la provano la prova di fumo e l'accettazione). Separa l'API dei
+# test dei giochi (apriGioco, dove stava quasi ogni fallimento dei banchi dal 14/10)
+# dall'interfaccia della macchina. La partenza è quella di tris2 senza gioco.test.js
+COMPITO_TRIS2_SOLO_LOGICA = (
+    COMPITO_TRIS2 + " Scrivi solo la logica: manifesto.json, logica.js e i test della logica in "
+    "logica.test.js, sulle funzioni di GIOCO (nuovaPartita, attivi, mosse) chiamate "
+    "direttamente; niente gioco.test.js né altri test con apriGioco: la partita intera la "
+    "provano la prova di fumo e Calliope.")
+
+
+def riferimento_tris2_solo_logica() -> dict:
+    """Il riferimento di tris2 con i test della sola logica del tris (prove/giochi/tris)."""
+    cartella = RADICE / "prove" / "giochi" / "tris"
+    return {**riferimento_tris2(),
+            "logica.test.js": (cartella / "logica.test.js").read_text(encoding="utf-8")}
+
+
+def senza_gioco_test(svc):
+    """I file di partenza del gioco come li scrive il servizio, poi via gioco.test.js (20/10
+    sera, tris2-solo-logica): la stessa partenza di tris2 senza il test con apriGioco. Solo per
+    il caso: il caso dopo rimette quella vera (`partenza_vera`)."""
+    vera = type(svc)._prepara_cartella_gioco
+
+    def prepara(lav, sb, presi=()):
+        vera(svc, lav, sb, presi)
+        p = Path(sb.root) / "gioco.test.js"
+        if p.is_file():
+            p.unlink()
+    svc._prepara_cartella_gioco = prepara
+
+
+def partenza_vera(svc):
+    svc.__dict__.pop("_prepara_cartella_gioco", None)
 
 
 def riferimento_tris_nudo() -> dict:
@@ -577,6 +741,14 @@ def casi():
                   "giocatori": {"min": 2, "max": 2},
                   "accettazione": ("accettazione_banco.test.js", ACCETTAZIONE_TRIS2),
                   "riferimento": riferimento_tris2()},
+        # Il tris2 della sola logica (20/10 sera, #198): come tris2, la richiesta chiede solo
+        # la logica e la partenza è senza gioco.test.js
+        "tris2-solo-logica": {"tipo": "estensione", "gioco": True, "correzione": False,
+                              "estensione": None, "compito": COMPITO_TRIS2_SOLO_LOGICA,
+                              "prima": {}, "requisiti": REQUISITI_TRIS2,
+                              "giocatori": {"min": 2, "max": 2}, "senza_gioco_test": True,
+                              "accettazione": ("accettazione_banco.test.js", ACCETTAZIONE_TRIS2),
+                              "riferimento": riferimento_tris2_solo_logica()},
         # Il tris nudo (20/10, #198): un programma JavaScript, la cartella vuota (lo scheletro
         # del programma è nel prompt), nessuna analisi prima del codice (fuori da uno sviluppo
         # un programma non l'ha, come «programma»). Il JavaScript dei programmi solo in memoria,
@@ -621,11 +793,25 @@ def accettazione(sandbox_nuova, file: dict, caso: dict) -> dict:
     sb.scrivi(nome, testo)
     r = sb.test(nome)
     u = str(r.get("uscita") or "")
+    # I test verdi su quelli dell'accettazione (20/10 sera, #198, revisione della PR #199): il
+    # confronto tra tris2 e tris-nudo guarda quanti punti tornano, non solo verde o rosso. Per
+    # JavaScript dai nomi «ACC …» (rossi anche quelli che non sono arrivati a girare: errore di
+    # sintassi o di require), per Python dal conto del runner
     if nome.endswith(".js"):
-        verde = "ok ACC " in u and "FALLITO ACC " not in u
+        import re
+        tutti = re.findall(r'test\("(ACC [^"]+)"', testo)
+        passati = set(re.findall(r"^ok (ACC .+?)\s*$", u, re.M))
+        rossi = [x for x in tutti if x not in passati]
+        verdi, totali = len(tutti) - len(rossi), len(tutti)
+        verde = "ok ACC " in u and "FALLITO ACC " not in u and not rossi
     else:
+        e = r.get("esito") or {}
+        totali = int(e.get("eseguiti") or 0)
+        verdi = max(0, totali - int(e.get("falliti") or 0) - int(e.get("errori") or 0))
+        rossi = None
         verde = bool(r.get("passano"))
-    return {"verde": verde, "esito": r.get("esito"), "uscita": u[-1500:]}
+    return {"verde": verde, "esito": r.get("esito"), "uscita": u[-1500:], "verdi": verdi,
+            "totali": totali, "rossi": rossi}
 
 
 def esempi_finali(sandbox_nuova, file: dict, caso: dict, stato: dict,
@@ -702,6 +888,8 @@ def secco() -> int:
                 from calliope.agenti.scheletri import file_gioco
                 g = caso["giocatori"]
                 partenza = file_gioco(g["min"], g["max"])
+                if caso.get("senza_gioco_test"):
+                    partenza.pop("gioco.test.js")       # tris2-solo-logica (20/10 sera)
                 sb = nuova()
                 for rel, testo in partenza.items():
                     sb.scrivi(rel, testo)
@@ -725,6 +913,20 @@ def secco() -> int:
                 print(f"{'ok ' if ok else 'ERR'} {nome}: la versione di prima ha gioco.test.js "
                       "della partenza, verde con la prova di fumo"
                       + ("" if ok else f"  {u[-500:]!r}"))
+            if caso.get("senza_gioco_test"):
+                # Il riferimento della sola logica: i suoi test (logica.test.js del tris) e la
+                # prova di fumo verdi, senza nessun test con apriGioco
+                sb = nuova()
+                for rel, testo in {**partenza, **caso["riferimento"]}.items():
+                    sb.scrivi(rel, testo)
+                r = sb.test()
+                u = str(r.get("uscita"))
+                ok = (bool(r.get("passano")) and "ok prova di fumo" in u
+                      and "apriGioco" not in "".join(caso["riferimento"].values())
+                      and not (sb.root / "gioco.test.js").exists())
+                errori += not ok
+                print(f"{'ok ' if ok else 'ERR'} {nome}: il riferimento passa i test della logica "
+                      "e la prova di fumo, senza gioco.test.js" + ("" if ok else f"  {u[-500:]!r}"))
             prima = accettazione(nuova, partenza, caso)
             rif = accettazione(nuova, {**partenza, **caso["riferimento"]}, caso)
             ok = not prima["verde"] and rif["verde"]
@@ -764,6 +966,46 @@ def secco() -> int:
             print(f"{'ok ' if ok else 'ERR'} tris-nudo: contrario, la casella occupata "
                   "sovrascritta fa rossa l'accettazione su quel punto"
                   + ("" if ok else f"  {u[-600:]!r}"))
+            # Le due accettazioni uguali (20/10 sera, revisione della PR #199): gli stessi test
+            # per nome, tutti verdi sui due riferimenti, e il conto nella riga
+            import re
+            t2, tn = casi()["tris2"], casi()["tris-nudo"]
+
+            def nomi(c):
+                return [x.split(": ", 1)[1] for x in re.findall(r'test\("(ACC [^"]+)"',
+                                                                  c["accettazione"][1])]
+            r2 = accettazione(nuova, t2["riferimento"], t2)
+            rn = accettazione(nuova, tn["riferimento"], tn)
+            n2 = [x for x in nomi(t2) if x not in (
+                "si parte dalla preparazione, «Inizia», due giocatori",
+                "tre in fila vince, la partita finisce con un punto")]
+            nn = [x for x in nomi(tn) if x not in (
+                "si parte dalla partita nuova, due giocatori X e O",
+                "tre in fila vince, la partita finisce")]
+            ok = (n2 == nn and len(n2) == 8 and r2["verdi"] == r2["totali"] == 10
+                  and rn["verdi"] == rn["totali"] == 10)
+            errori += not ok
+            print(f"{'ok ' if ok else 'ERR'} tris2 e tris-nudo: la stessa accettazione (gli otto "
+                  "punti comuni con lo stesso nome più i due di prima), 10/10 sui riferimenti"
+                  + ("" if ok else f"  {n2} {nn} {r2['verdi']}/{r2['totali']} "
+                                   f"{rn['verdi']}/{rn['totali']} {r2['uscita'][-600:]!r}"))
+            # Il contrario di tris2: la logica che lascia attive anche le caselle prese
+            rotto = t2["riferimento"]["logica.js"].replace(
+                "turno: (d) => ({ casella: libere(d.celle) }),",
+                "turno: (d) => ({ casella: [1, 2, 3, 4, 5, 6, 7, 8, 9] }),")
+            r = accettazione(nuova, {**t2["riferimento"], "logica.js": rotto}, t2)
+            ok = (rotto != t2["riferimento"]["logica.js"] and not r["verde"]
+                  and any("casella occupata" in x for x in r["rossi"] or [])
+                  and 0 < r["verdi"] < r["totali"] == 10)
+            errori += not ok
+            print(f"{'ok ' if ok else 'ERR'} tris2: contrario, la casella presa ancora attiva fa "
+                  f"rossa l'accettazione su quel punto ({r['verdi']}/{r['totali']} verdi)"
+                  + ("" if ok else f"  {r['rossi']} {r['uscita'][-600:]!r}"))
+            p0 = accettazione(nuova, {}, tn)
+            ok = p0["verdi"] == 0 and p0["totali"] == 10 and len(p0["rossi"]) == 10
+            errori += not ok
+            print(f"{'ok ' if ok else 'ERR'} tris-nudo: alla partenza 0/10, anche i test che non "
+                  "arrivano a girare contano rossi" + ("" if ok else f"  {p0}"))
         vin = vincoli_correzione(casi()["porte"])
         ok = "gioco.test.js" in vin and "deve FALLIRE" in vin and PROBLEMA_PORTE in vin
         errori += not ok
@@ -974,6 +1216,26 @@ def secco_analisi(tmp: Path) -> int:
                  str(sorted(x.name for x in sb.iterdir())) if sb else "nessuna sandbox")
         verifica("…e il servizio è tornato com'era: niente sviluppo finto fuori dall'analisi",
                  getattr(svc, "sviluppi", None) is None)
+        # tris2-solo-logica (20/10 sera, #198): la stessa analisi e la stessa partenza, senza
+        # gioco.test.js; la richiesta chiede solo la logica. Il caso dopo ha la partenza intera
+        for nome_caso, con_test in (("tris2-solo-logica", False), ("tris2", True)):
+            fake.copione = [{"content": json.dumps(gioco)},
+                            {"tool_calls": [{"name": "consegna", "arguments": {
+                                "riassunto": "Non lo faccio.", "esito": "impossibile"}}]}]
+            prima = set(Path(cfg.agenti_sandbox).glob("*"))
+            n0 = len(fake.richieste)
+            r = un_lavoro(svc, cfg, tmp, nome_caso, casi()[nome_caso], "secco")
+            sb = next((x for x in set(Path(cfg.agenti_sandbox).glob("*")) - prima
+                       if x.is_dir()), None)
+            nomi_sb = sorted(x.name for x in sb.iterdir()) if sb else []
+            detto = json.dumps(fake.richieste[n0:], ensure_ascii=False)
+            verifica(f"{nome_caso}: l'analisi pronta, la partenza con logica.test.js e "
+                     + ("gioco.test.js" if con_test else "senza gioco.test.js, la richiesta "
+                        "della sola logica"),
+                     r["analisi"].get("stato") == "pronta" and "logica.test.js" in nomi_sb
+                     and "accettazione.test.js" in nomi_sb
+                     and ("gioco.test.js" in nomi_sb) == con_test
+                     and ("Scrivi solo la logica" in detto) != con_test, str(nomi_sb))
         fake.copione = [{"tool_calls": [{"name": "consegna", "arguments": {
             "riassunto": "Non lo faccio.", "esito": "impossibile"}}]}]
         cfg.agenti_accettazione = False
@@ -1301,6 +1563,9 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
         lav.estensione = caso.get("estensione")
         lav.gioco = bool(caso.get("gioco"))
     senza_sviluppo(svc)              # quella di un caso di prima
+    partenza_vera(svc)
+    if caso.get("senza_gioco_test"):
+        senza_gioco_test(svc)        # tris2-solo-logica (20/10 sera, #198)
     analisi_vera = bool(caso.get("requisiti")) and getattr(cfg, "agenti_accettazione", True)
     if analisi_vera:
         # L'analisi prima del codice come in uno sviluppo (20/10, #192): il servizio la fa con i
@@ -1392,7 +1657,11 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
     riga = {"caso": nome, "variante": etichetta, "lavoro": lav.id, "stato": lav.stato,
             "esito": ris.get("esito"), "motivo": ris.get("motivo"),
             "riuscito": bool(fatto and acc["verde"]), "accettazione": acc["verde"],
-            "accettazione_esito": acc["esito"], "passate": lav.passi, "token": lav.token,
+            "accettazione_esito": acc["esito"],
+            # I test verdi dell'accettazione su quelli totali e i nomi dei rossi (20/10 sera, #198)
+            "accettazione_verdi": acc.get("verdi", 0), "accettazione_totali": acc.get("totali", 0),
+            "accettazione_rossi": acc.get("rossi"),
+            "passate": lav.passi, "token": lav.token,
             "ragionamento": lav.ragionamento, "minuti": round(minuti, 2),
             "ripetizioni": seg.get("ripetizioni", 0), "senza_novita": seg.get("senza_novita", 0),
             "a_vuoto": seg.get("a_vuoto", False), "test_agente": ris.get("test"),
@@ -1466,15 +1735,23 @@ def colonna_giri(rr: list[dict]) -> str:
     return "+".join(map(str, verdi)) + f" s{sum(1 for r in rr if r.get('sbloccato'))}"
 
 
+def test_acc(rr: list[dict]) -> str:
+    """I test verdi dell'accettazione nascosta su quelli totali, sommati sui lavori del gruppo
+    (20/10 sera, #198): «41/50» per cinque lavori da dieci test."""
+    return (f"{sum(int(r.get('accettazione_verdi') or 0) for r in rr)}/"
+            f"{sum(int(r.get('accettazione_totali') or 0) for r in rr)}")
+
+
 def tabella(righe: list[dict]):
-    print("\nvariante                    caso          riusciti  acc.  passate  token(med)  "
-          "giri a vuoto  minuti(med)  giri")
+    print("\nvariante                    caso          riusciti  acc.  test acc.  passate  "
+          "token(med)  giri a vuoto  minuti(med)  giri")
     chiavi = sorted({(r["variante"], r["caso"]) for r in righe})
     for v, c in chiavi:
         rr = [r for r in righe if r["variante"] == v and r["caso"] == c]
         med = lambda k: statistics.median([r[k] for r in rr]) if rr else 0  # noqa: E731
         print(f"{v:<27} {c:<13} {sum(r['riuscito'] for r in rr)}/{len(rr):<7} "
-              f"{sum(r['accettazione'] for r in rr)}/{len(rr):<3} {med('passate'):>7} "
+              f"{sum(r['accettazione'] for r in rr)}/{len(rr):<3} "
+              f"{test_acc(rr):>9} {med('passate'):>7} "
               f"{med('token'):>10} {sum(r['ripetizioni'] + (1 if r['a_vuoto'] else 0) for r in rr):>13} "
               f"{med('minuti'):>11}  {colonna_giri(rr)}")
     if any(int(r.get("giri_max") or 1) > 1 for r in righe):
@@ -1574,7 +1851,8 @@ def main(argv) -> int:
                                       giri=args.giri)
                         righe.append(r)
                         print(f"{'ok ' if r['riuscito'] else 'NO '} {nome} {etichetta}: "
-                              f"accettazione {'verde' if r['accettazione'] else 'rossa'}, "
+                              f"accettazione {'verde' if r['accettazione'] else 'rossa'} "
+                              f"({r['accettazione_verdi']}/{r['accettazione_totali']} test), "
                               f"{r['passate']} passate, {r['token']} token, "
                               f"{r['minuti']} min, giri a vuoto {r['ripetizioni']}"
                               f"{' (a vuoto)' if r['a_vuoto'] else ''}, esito {r['esito']}"
