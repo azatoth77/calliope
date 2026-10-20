@@ -34,6 +34,7 @@ import json
 import shutil
 import sys
 import tempfile
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -62,17 +63,30 @@ class Copione:
     passata con lo schema del revisore prende da `revisore` (un dict per il verdetto, None per
     una risposta che non è JSON) e non consuma le passate dell'agente."""
 
-    def __init__(self, passate, revisore=()):
+    def __init__(self, passate, revisore=(), dorme=0.0):
         self.passate, self.revisore = list(passate), list(revisore)
         self.corpi, self.revisioni, self.url = [], [], None
+        self.dorme = dorme          # i secondi di una passata del revisore (il revisore lento)
 
     def chat(self, body, su_pezzo=None, controlla=None, su_flusso=None):
-        if '"verdetto"' in json.dumps(body.get("format") or {}):
+        if G.e_revisore(body):
             self.revisioni.append(body)
+            if self.dorme:
+                time.sleep(self.dorme)
             v = self.revisore.pop(0) if self.revisore else None
-            return {"content": json.dumps({"file": "", "riga": 0, "test": "", "causa": "c",
-                                           "azione": "a", **v}, ensure_ascii=False)
-                    if v else "non è JSON", "eval": 300, "prompt": 5000}
+            if v is None:
+                return {"content": "non è JSON", "eval": 300, "prompt": 5000}
+            base = {"file": "", "riga": 0, "test": "", "causa": "c", "azione": "a"}
+            if "esempi" in (body.get("format") or {}).get("properties", {}):
+                # La passata sugli esempi rossi: un verdetto per esempio
+                voci = v if isinstance(v, list) else [v]
+                dati = {"esempi": [{**base, **x} for x in voci]}
+                dati.update({k: x["domanda"] for x in voci if x.get("domanda")
+                             for k in ("domanda",)})
+            else:
+                dati = {**base, **(v[0] if isinstance(v, list) else v)}
+            return {"content": json.dumps(dati, ensure_ascii=False), "eval": 300,
+                    "prompt": 5000}
         self.corpi.append(json.loads(json.dumps(body["messages"], default=str)))
         p = self.passate.pop(0) if self.passate else "Ho finito."
         out = {"content": "", "thinking": "", "tool_calls": [], "eval": 50, "prompt": 100,
@@ -160,18 +174,23 @@ class ArbitroVoce:
 
 
 def gira(tmp, nome, passate, revisore=(), modo="attivo", lav=None, sb=None, max_passi=12,
-         tappe=False, voce=False, **kw):
-    """Agente.codice con il copione; (lavoro, risultato o {"eccezione", …}, log, copione, sb)."""
-    cli = Copione(passate, revisore)
+         tappe=False, voce=False, dorme=0.0, tempo_s=None, **kw):
+    """Agente.codice con il copione; (lavoro, risultato o {"eccezione", …}, log, copione, sb).
+    `dorme`: i secondi di ogni passata del revisore; `tempo_s`: il tempo del giro."""
+    cli = Copione(passate, revisore, dorme)
     log = []
     ag = G.agente(cli, log)
     ag.cfg.agenti_revisore = modo
     ag.max_passi = max_passi
+    if tempo_s:
+        ag.tempo_max_s = tempo_s
     if voce:
         ag.arbitro = ArbitroVoce()
     if lav is None:
         lav, sb = estensione(tmp, nome, **kw)
     lav.tappe = tappe
+    if tempo_s:
+        lav.inizio = time.time()
     try:
         ris = ag.codice(lav, sb)
     except Exception as e:  # noqa: BLE001 — Limite
@@ -338,18 +357,23 @@ def prova_consegna(tmp: Path):
     an_prima = (sb.root / acc.FILE).read_bytes()
     lav, ris, log, cli, sb = gira(tmp, "codice", [[ESEGUI], [consegna()],
                                                   [scrivi("estensione.py", GIUSTA)], [consegna()]],
-                                  revisore=[
+                                  revisore=[[
                                       {"verdetto": "codice_sbagliato", "file": "estensione.py",
                                        "riga": 1, "test": GIUSTO_ES,
                                        "causa": "un miglio è 1609,344 metri, non 1500"},
                                       {"verdetto": "test_sbagliato", "file": acc.FILE,
-                                       "test": SBAGLIATO, "causa": "sono 2000 metri"}],
+                                       "test": SBAGLIATO, "causa": "sono 2000 metri"}]],
                                   lav=lav, sb=sb)
     c = risultati(lav, "consegna")
     verifica("esempio rosso giudicato giusto: resta, e il rimando all'agente ha il fatto del "
              "revisore con file:riga e causa",
              '"revisore":' in c[0] and "estensione.py:1" in c[0] and "1609,344" in c[0]
              and regole(lav).get("agente_revisore_codice_sbagliato") == 1, c[0][:600])
+    verifica("…una passata sola per i due esempi rossi, con un verdetto per esempio",
+             len(cli.revisioni) == 1 and '"esempi"' in json.dumps(
+                 cli.revisioni[0]["format"]) and GIUSTO_ES in cli.revisioni[0]["messages"][1][
+                     "content"] and SBAGLIATO in cli.revisioni[0]["messages"][1]["content"],
+             str(len(cli.revisioni)))
     verifica("…l'esempio sbagliato è stato tolto, il giusto no; dopo la correzione «fatto»",
              ris.get("esito") == "fatto" and esempi_file(sb) == [ANALISI["esempi"][0]],
              f"{ris.get('esito')} {esempi_file(sb)}")
@@ -358,11 +382,11 @@ def prova_consegna(tmp: Path):
              == an_prima.split(b"ESEMPI = ")[0])
     # Una sola volta per giro per lo stesso esempio
     lav, ris, log, cli, sb = gira(tmp, "una-volta", [[ESEGUI], [consegna()], [consegna()],
-                                                     [consegna()]], codice=ROTTA, revisore=[
+                                                     [consegna()]], codice=ROTTA, revisore=[[
         {"verdetto": "codice_sbagliato", "file": "estensione.py", "test": GIUSTO_ES},
-        {"verdetto": "codice_sbagliato", "file": "estensione.py", "test": SBAGLIATO}] * 3)
-    verifica("tre consegne con gli stessi esempi rossi: due passate (una per esempio), non sei",
-             len(cli.revisioni) == 2, str(len(cli.revisioni)))
+        {"verdetto": "codice_sbagliato", "file": "estensione.py", "test": SBAGLIATO}]] * 3)
+    verifica("tre consegne con gli stessi due esempi rossi: una passata sola nel giro",
+             len(cli.revisioni) == 1, str(len(cli.revisioni)))
     verifica("…e senza un verdetto che toglie, la consegna resta rossa come prima",
              ris.get("tipo") == "consegna_rossa", str(ris)[:200])
     # «consegna» senza lo stato consegnabile: il test dell'agente rosso
@@ -372,13 +396,15 @@ def prova_consegna(tmp: Path):
     verifica("«consegna» con un test dell'agente rosso: ignorata, l'esempio resta, la regola",
              regole(lav).get("agente_revisore_consegna_ignorata") == 1
              and len(esempi_file(sb)) == 2
-             and (lav.segnali.get("revisore") or [{}])[-1].get("effetto")
-             == "ignorato: non consegnabile", f"{regole(lav)} {esempi_file(sb)}")
+             and "ignorato" in str((lav.segnali.get("revisore") or [{}])[-1].get("effetto")),
+             f"{regole(lav)} {esempi_file(sb)}")
     lav, ris, log, cli, sb = gira(tmp, "consegnabile", [[ESEGUI], [consegna()]], revisore=[
         {"verdetto": "consegna", "test": SBAGLIATO, "causa": "il resto va"}])
-    verifica("…con lo stato consegnabile (i test dell'agente verdi): l'esempio messo da parte, "
-             "«fatto»", ris.get("esito") == "fatto" and len(esempi_file(sb)) == 1
-             and not regole(lav).get("agente_revisore_consegna_ignorata"), f"{ris.get('esito')}")
+    verifica("…anche con i test dell'agente verdi «consegna» non toglie l'esempio (non ha detto "
+             "che è sbagliato: revisione della PR #202), e non si dice «tolto»",
+             ris.get("esito") != "fatto" and len(esempi_file(sb)) == 2
+             and regole(lav).get("agente_revisore_consegna_ignorata") == 1
+             and not ris.get("esempi_tolti"), f"{ris.get('esito')} {regole(lav)}")
     # Contrari: test verdi, la voce, spento
     lav, sb = estensione(tmp, "verdi")
     sb.sola_lettura.discard(acc.FILE)
@@ -574,6 +600,103 @@ def prova_sola_lettura(tmp: Path):
              and acc.FILE in sb.sola_lettura, f"{ris.get('esito')} {esempi_file(sb)}")
 
 
+# ═══════════════════════════ 8. la revisione della PR #202 ═══════════════════════════
+
+def prova_revisione_202(tmp: Path):
+    sezione("8. revisione della PR #202: il tempo, i test, i test tolti, il passo, il nome")
+    from calliope.agenti import accettazione as acc
+    from calliope.agenti.ciclo import frase_test_tolti
+    V = [{"verdetto": "test_sbagliato", "file": acc.FILE, "test": SBAGLIATO, "causa": "x"}] * 4
+    # P1: un giro corto e un revisore lento, ombra e spento danno all'agente le stesse passate
+    passate = [[ESEGUI], [consegna()], [consegna()], [consegna()]]
+    out = {}
+    for modo in ("spento", "ombra"):
+        lav, ris, log, cli, sb = gira(tmp, f"tempo-{modo}", [list(x) for x in passate], V,
+                                      modo=modo, dorme=5.0, tempo_s=8.0)
+        out[modo] = (len(cli.corpi), ris.get("tipo"), len(risultati(lav, "consegna")),
+                     len(cli.revisioni), lav.attesa_s, lav.passo)
+    verifica("il revisore lento (5 s in un giro di 8): in ombra le stesse passate dell'agente e "
+             "lo stesso esito di spento, con i rimandi", out["spento"][:3] == out["ombra"][:3]
+             and out["ombra"][3] == 1 and out["spento"][0] == 4, str(out))
+    verifica("…i suoi secondi sono attesa, non tempo del giro; il passo torna com'era (P4)",
+             out["ombra"][4] >= 5.0 and out["spento"][4] < 1.0
+             and out["ombra"][5] == out["spento"][5]
+             and "revisore" not in str(out["ombra"][5]), str(out))
+    # P2: con tutto verde nessuna esecuzione dei test in più
+    conti = {}
+    for modo in ("spento", "ombra"):
+        lav, sb = estensione(tmp, f"verde-{modo}")
+        sb.sola_lettura.discard(acc.FILE)
+        sb.scrivi(acc.FILE, acc.test_python(acc.interpreta(
+            dict(ANALISI, esempi=ANALISI["esempi"][:1]), 1, True)))
+        sb.sola_lettura.add(acc.FILE)
+        vero = sb.test
+        n = [0]
+
+        def contato(*a, _v=vero, _n=n, **k):
+            _n[0] += 1
+            return _v(*a, **k)
+        sb.test = contato
+        lav, ris, *_ = gira(tmp, f"verde-{modo}", [[ESEGUI], [consegna()]], V, modo=modo,
+                            lav=lav, sb=sb)
+        conti[modo] = (n[0], ris.get("esito"))
+    verifica("tutto verde alla consegna: in ombra le stesse esecuzioni dei test di spento",
+             conti["spento"] == conti["ombra"] and conti["ombra"][1] == "fatto", str(conti))
+    # P3: l'esempio tolto al giro 2 non è un test tolto dall'agente
+    lav, ris, log, cli, sb = gira(tmp, "tolti", [[ESEGUI], [LEGGI], [LEGGI]], [
+        {"verdetto": "codice_sbagliato", "file": "estensione.py", "test": SBAGLIATO,
+         "causa": "y"}], max_passi=3, tappe=True)
+    tappa = dict((lav.segnali or {}).get("test_tappa") or {})
+    lav.risposta, lav.giro, lav.passi0 = "continua", 2, lav.passi
+    lav, ris, log, cli, sb = gira(tmp, "tolti", [[ESEGUI], [consegna()]], [
+        {"verdetto": "test_sbagliato", "file": acc.FILE, "test": SBAGLIATO,
+         "causa": "sono 2000"}], lav=lav, sb=sb)
+    verifica("l'esempio tolto dal revisore al giro dopo la tappa non è «l'agente ha tolto un "
+             "test»: niente test_tolti né agente_test_tolti, una frase sola",
+             SBAGLIATO in (tappa.get("nomi") or []) and ris.get("esito") == "fatto"
+             and not ris.get("test_tolti") and "agente_test_tolti" not in regole(lav)
+             and [x["nome"] for x in ris.get("esempi_tolti") or []] == [SBAGLIATO]
+             and frase_test_tolti(ris.get("test_tolti")) == "",
+             f"{tappa} {ris.get('test_tolti')} {regole(lav)}")
+    from calliope.agenti.ciclo import test_tolti
+    seg = {"test_tappa": {"nomi": ["R1 esempio 2", "R1 esempio 3", "tre in fila"],
+                          "eseguiti": 3}}
+    t = test_tolti(seg, {"uscita": "ok R1 esempio 2: 2 giocatori\nok tre in fila\n",
+                         "esito": {"eseguiti": 3}})
+    verifica("…in JavaScript gli esempi rinumerati non sembrano tolti; contrario: il test "
+             "dell'agente sparito sì", t is None and test_tolti(
+                 seg, {"uscita": "ok R1 esempio 2: x\nok R1 esempio 3: y\n",
+                       "esito": {"eseguiti": 2}}) == {"nomi": ["tre in fila"], "meno": 1}, str(t))
+    # P5: tolto l'ultimo esempio, il nome resta in sola lettura
+    lav, sb = estensione(tmp, "ultimo")
+    sb.sola_lettura.discard(acc.FILE)
+    sb.scrivi(acc.FILE, acc.test_python(acc.interpreta(
+        dict(ANALISI, esempi=ANALISI["esempi"][1:]), 1, True)))
+    sb.sola_lettura.add(acc.FILE)
+    lav, ris, log, cli, sb = gira(tmp, "ultimo", [[ESEGUI], [consegna()],
+                                                  [scrivi(acc.FILE, "import unittest\n")]],
+                                  [{"verdetto": "test_sbagliato", "file": acc.FILE,
+                                    "test": "test_r1_1", "causa": "sono 2000"}], lav=lav, sb=sb)
+    s_ = risultati(lav, "scrivi_file")
+    verifica("tolto l'ultimo esempio: il file non c'è più, il nome resta in sola lettura e "
+             "l'agente non ne scrive uno suo", not (sb.root / acc.FILE).exists()
+             and acc.FILE in sb.sola_lettura and lav.accettazione.get("file") is False
+             and ris.get("esito") == "fatto", f"{ris.get('esito')} {sb.sola_lettura} {s_}")
+    lav2, sb2 = estensione(tmp, "ultimo-scrive")
+    sb2.sola_lettura.discard(acc.FILE)
+    sb2.scrivi(acc.FILE, acc.test_python(acc.interpreta(
+        dict(ANALISI, esempi=ANALISI["esempi"][1:]), 1, True)))
+    sb2.sola_lettura.add(acc.FILE)
+    from calliope.agenti.revisore import togli_esempio
+    togli_esempio(lav2, sb2, acc.FILE, 1, "test_r1_1", "x")
+    try:
+        sb2.scrivi(acc.FILE, "import unittest\n")
+        rifiutato = False
+    except Exception:  # noqa: BLE001 — ErroreSandbox
+        rifiutato = True
+    verifica("…scrivi_file sul nome dell'esempio tolto rifiutato", rifiutato)
+
+
 def main():
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -588,6 +711,7 @@ def main():
         prova_tappa(tmp)
         prova_stesso_errore(tmp)
         prova_sola_lettura(tmp)
+        prova_revisione_202(tmp)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")

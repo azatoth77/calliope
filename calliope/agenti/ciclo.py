@@ -943,6 +943,8 @@ class Agente:
         # thread dei lavori, e rifatta ogni FINESTRA_S (il server può essere ripartito)
         self._finestra = None             # Budget
         self._finestra_t = 0.0
+        # L'ultimo esito intero dei test rifatti alla consegna, per lavoro (il revisore, #190)
+        self._ultimi_test: dict = {}
 
     # ── finestra di contesto ──
     FINESTRA_S = 600.0
@@ -1425,7 +1427,13 @@ class Agente:
                 return "consegna", chiusura
             raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)}, tipo="troncata")
         consegnabile = getattr(controlla, "consegnabile", None)
+        # I secondi del revisore (20/10, #190, revisione della PR #202) non sono dell'agente:
+        # sono già in lav.attesa_s (il tempo del giro) e qui escono dalla guardia senza strumenti
+        rev_s = float(seg.get("revisore_s") or 0.0)
         while consegna is None:
+            if float(seg.get("revisore_s") or 0.0) > rev_s:
+                vuoto_t0 += float(seg["revisore_s"]) - rev_s
+                rev_s = float(seg["revisore_s"])
             lav.passo = "sta pensando al codice" if not scritti else "sta lavorando al codice"
             strumenti = strumenti_codice(self._linguaggi(sandbox))
             gioco = bool(getattr(lav, "gioco", False))
@@ -1712,9 +1720,9 @@ class Agente:
                     rimando = None
                     # Gli esempi di accettazione rossi alla consegna (20/10, #190, decisione di
                     # chi amministra): il revisore a contesto pulito dice se è sbagliato l'esempio
-                    # (tolto, e la consegna va avanti senza) o il codice (il fatto all'agente)
-                    rev = (self._revisore_esempi(lav, sandbox, "consegna", piano, stato_piano,
-                                                 consegnabile) if fatto and not errore else None)
+                    # (tolto, e la consegna va avanti senza) o il codice (il fatto all'agente).
+                    # Solo con i test rossi, sull'esito appena rifatto (`_test_rivisti`)
+                    rev = None
                     if errore and rifiuti < RIFIUTI_MAX:
                         rifiuti += 1
                         rimando = {"ok": False, "errore": errore,
@@ -1727,7 +1735,7 @@ class Agente:
                         rimando = {"ok": False, "consegna": "rifiutata", "errore": str(errore),
                                    "nota": "il lavoro si ferma qui: la consegna non va"}
                     elif fatto and rimandi < RIMANDI_MAX and self._resta_tempo(lav):
-                        rimando = self._test_falliti(lav, sandbox)
+                        rimando, rev = self._test_rivisti(lav, sandbox, "consegna")
                         if rimando is not None:
                             # Consegna con i test che falliscono (verifica sulla DGX del 04/10):
                             # non si accetta finché restano passi e tempo, al più RIMANDI_MAX volte
@@ -1738,7 +1746,7 @@ class Agente:
                         # Dopo l'ultimo rimando, o senza più passate né tempo (19/10, #180): i
                         # test si rifanno lo stesso, e una consegna rossa non è «fatto». Prima
                         # passava, e lo sviluppo andava al collaudo con i test rossi
-                        r = self._test_falliti(lav, sandbox)
+                        r, rev = self._test_rivisti(lav, sandbox, "consegna")
                         if r is not None:
                             rossa = ("ha consegnato con i test che non passano",
                                      str(r.get("fallimenti") or r.get("errore") or "")[:300])
@@ -2029,21 +2037,26 @@ class Agente:
         try:
             if not self._pronto_da_consegnare(lav, sandbox, piano, stato_piano):
                 return no("mancano i file che la consegna chiede")
-            # Gli esempi rossi quando il lavoro si chiuderebbe da sé (20/10, #190): prima il
-            # revisore, che può toglierne uno sbagliato; i suoi fatti vanno al giro dopo (dopo la
-            # prosa a questo giro, che continua)
-            rev = self._revisore_esempi(lav, sandbox, "tappa" if tappa else e.tipo, piano,
-                                        stato_piano)
-            self._fatti_revisore(lav, rev, ora=e.tipo == "prosa" and not tappa)
-            if rev["tolti"]:
-                a = getattr(lav, "accettazione", None) or {}
-                con_esempi = a.get("stato") == "pronta" and bool(a.get("file"))
-                if not con_esempi and not correzione:
-                    return no("senza esempi di accettazione (tolti dal revisore)")
+            # Gli esempi rossi quando il lavoro si chiuderebbe da sé (20/10, #190): il revisore,
+            # sull'esito appena eseguito, può toglierne uno sbagliato; i suoi fatti vanno al giro
+            # dopo (dopo la prosa a questo giro, che continua)
+            momento = "tappa" if tappa else e.tipo
+            ora = e.tipo == "prosa" and not tappa
             if con_esempi:
                 from . import accettazione as acc
                 lav.passo = "riprova gli esempi di accettazione"
                 es = acc.esegui(sandbox, a)
+                if es and not es["passano"]:
+                    rev = self._revisore_esempi(lav, sandbox, momento, test={
+                        "passano": False, "esito": es.get("esito"), "uscita": es.get("uscita")})
+                    self._fatti_revisore(lav, rev, ora=ora)
+                    if rev["tolti"]:
+                        a = getattr(lav, "accettazione", None) or {}
+                        con_esempi = a.get("stato") == "pronta" and bool(a.get("file"))
+                        if not con_esempi and not correzione:
+                            return no("senza esempi di accettazione (tolti dal revisore)")
+                        es = acc.esegui(sandbox, a) if con_esempi else {
+                            "passano": True, "esito": {"eseguiti": 1}}
                 n = int(((es or {}).get("esito") or {}).get("eseguiti") or 0)
                 if not es or not es["passano"] or (n <= 0 and not a.get("nome_file", "")
                                                    .endswith(".js")):
@@ -2052,7 +2065,7 @@ class Agente:
                                  else ""))
             # I test dell'agente come alla consegna: due volte, stesso esito, tutti verdi (per
             # un gioco con la prova di fumo)
-            if self._test_falliti(lav, sandbox) is not None:
+            if self._test_rivisti(lav, sandbox, momento, ora=ora)[0] is not None:
                 return no("i test dell'agente non passano")
             errore = controlla(sandbox) if controlla is not None else None
             if not errore and piano and stato_piano is not None:
@@ -2187,22 +2200,33 @@ class Agente:
                              "di usare gli strumenti senza consegnare."}
 
     # ── il revisore a contesto pulito (20/10, issue #190, agenti/revisore.py) ──
-    def _revisore_esempi(self, lav: Lavoro, sandbox, momento: str, piano: bool, stato_piano,
-                         consegnabile=None, test: dict | None = None) -> dict:
-        """Gli esempi di accettazione rossi quando il lavoro vorrebbe consegnare o chiudersi:
-        `revisore.rivedi_esempi`, con lo stato consegnabile per il verdetto «consegna». Mai
-        un'eccezione: nel dubbio niente revisore, come prima."""
+    def _revisore_esempi(self, lav: Lavoro, sandbox, momento: str, test: dict | None) -> dict:
+        """Gli esempi di accettazione rossi quando il lavoro vorrebbe consegnare o chiudersi,
+        sull'esito `test` appena eseguito: `revisore.rivedi_esempi`. Mai un'eccezione: nel
+        dubbio niente revisore, come prima."""
         from . import revisore as rv
-        if rv.modo(self.cfg) == "spento":
+        if rv.modo(self.cfg) == "spento" or not test:
             return rv._esito()
-
-        def pronto():
-            return self._pronto_da_consegnare(lav, sandbox, piano, stato_piano, consegnabile)
         try:
-            return rv.rivedi_esempi(self, lav, sandbox, momento, pronto, test=test)
+            return rv.rivedi_esempi(self, lav, sandbox, momento, test=test)
         except Exception as ex:  # noqa: BLE001
             self.log(f"[AGENTI] {lav.id}: revisore non riuscito ({type(ex).__name__}: {ex})")
             return rv._esito()
+
+    def _test_rivisti(self, lav: Lavoro, sandbox, momento: str, ora: bool | None = None):
+        """`_test_falliti` con il revisore (revisione della PR #202): solo se i test sono rossi,
+        sull'esito appena rifatto, gli esempi di accettazione rossi vanno al revisore; se ne
+        toglie uno, i test si rifanno. (rimando o None, esito del revisore o None). Con `ora`
+        (True o False) i fatti si mettono da parte per dopo; con None li usa chi chiama."""
+        r = self._test_falliti(lav, sandbox)
+        if r is None:
+            return None, None
+        rev = self._revisore_esempi(lav, sandbox, momento, self._ultimi_test.pop(lav.id, None))
+        if ora is not None:
+            self._fatti_revisore(lav, rev, ora=ora)
+        if rev["tolti"]:
+            r = self._test_falliti(lav, sandbox)
+        return r, rev
 
     def _revisore_test(self, lav: Lavoro, sandbox, momento: str, test: dict, piano: bool,
                        stato_piano, consegnabile=None) -> dict:
@@ -2280,8 +2304,7 @@ class Agente:
             if rv.modo(self.cfg) != "spento":
                 momento = ("consegna_rossa" if e.tipo == "consegna_rossa" else "giri_uguali"
                            if uguali >= GIRI_UGUALI else "tappa_rossa")
-                rev = self._revisore_esempi(lav, sandbox, momento, piano, stato_piano,
-                                            test=test)
+                rev = self._revisore_esempi(lav, sandbox, momento, test)
                 _, altri = rv.fallimenti_divisi(test.get("uscita"), rv.file_esempi(lav, sandbox),
                                                 False)
                 if altri:
@@ -2498,6 +2521,8 @@ class Agente:
         # stesso esito. Il 12/10 alle 07:39 un test con Math.random senza seme era 28 su 28 per
         # l'agente e 27 su 28 al ricontrollo
         r2 = sandbox.test()
+        # L'esito intero, per il revisore (revisione della PR #202: non rifà i test)
+        self._ultimi_test[lav.id] = r2
         lav.nota("test", esito=r.get("esito"), passano=r.get("passano"))
         from .diagnosi import conto_detto, instabili
         nomi = instabili(r, r2)
@@ -3533,6 +3558,9 @@ def nomi_test(uscita: str) -> list[str]:
     return out
 
 
+_NOME_ESEMPIO = re.compile(r"^(?:R\d+ esempio \d+|test_r\d+_\d+)$")
+
+
 def test_tolti(seg: dict, test) -> dict | None:
     """I test che c'erano all'ultima tappa e alla consegna non ci sono più (revisione della PR
     #179, #174: dopo i giri uguali l'agente può togliere un suo test, e lo deve dire il codice,
@@ -3541,7 +3569,9 @@ def test_tolti(seg: dict, test) -> dict | None:
     if not isinstance(tappa, dict) or not isinstance(test, dict):
         return None
     ora = nomi_test(test.get("uscita") or "")
-    nomi = [n for n in tappa.get("nomi") or [] if n not in ora]
+    # Gli esempi di accettazione non sono test dell'agente (revisione della PR #202): li toglie
+    # solo il revisore, e in JavaScript dopo uno tolto i numeri degli altri cambiano
+    nomi = [n for n in tappa.get("nomi") or [] if n not in ora and not _NOME_ESEMPIO.match(n)]
     meno = int(tappa.get("eseguiti") or 0) - int((test.get("esito") or {}).get("eseguiti") or 0)
     if not nomi and meno <= 0:
         return None

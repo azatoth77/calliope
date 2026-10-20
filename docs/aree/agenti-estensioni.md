@@ -4528,12 +4528,12 @@ esempi del tris scritti a mente erano sbagliati 11 su 11 e bloccavano il codice 
    delle firme degli errori del giro, quali file sono esempi di accettazione, il test da
    giudicare), il prompt, lo schema e la passata (`requisiti.chiama`, il modello dell'agente,
    ragionamento `agenti_revisore_ragionamento` = 4096, la temperatura dell'agente, al più
-   `agenti_revisore_s` = 180 s). Mai la trascrizione, il diario o il riassunto: dalla sandbox
+   `agenti_revisore_s` = 180 s *[storico: 90 s dalla revisione della PR #202, sotto]*). Mai la trascrizione, il diario o il riassunto: dalla sandbox
    niente cartelle nascoste (`.calliope`). `prove/manuali/banco_revisore.py` lo importa (il menu
    del banco del 19/10 è `VERDETTI_BANCO`, il prompt uguale parola per parola) e con `--menu
    ciclo` misura il menu del ciclo.
 2. **Quando entra** (lo decide il codice): con un **esempio di accettazione rosso** quando il
-   lavoro vorrebbe consegnare o chiudersi, una passata per esempio: alla consegna «fatto»
+   lavoro vorrebbe consegnare o chiudersi, una passata per esempio *[storico: una passata per tutti gli esempi rossi del momento dalla revisione della PR #202]*: alla consegna «fatto»
    dell'agente (prima dei rimandi dei test), al tetto, alla tappa, dopo la prosa, al giro a vuoto
    e alle troncate (tutto ciò che passa da `_consegna_al_tetto`); **a una tappa con i test
    dell'agente rossi**, con il momento «consegna_rossa» (la consegna rossa che diventa tappa),
@@ -4557,7 +4557,7 @@ esempi del tris scritti a mente erano sbagliati 11 su 11 e bloccavano il codice 
    errore, o in apertura del giro dopo una tappa; così un test dell'agente giudicato sbagliato.
    `consegna` vale solo con lo stato consegnabile (nessun test rosso oltre gli esempi, i file che
    la consegna chiede con il predicato di #180): allora l'esempio rosso si mette da parte come
-   sbagliato; altrimenti si ignora (`agente_revisore_consegna_ignorata`). La `domanda` va nel
+   sbagliato; altrimenti si ignora (`agente_revisore_consegna_ignorata`) *[storico: dalla revisione della PR #202 con «consegna» l'esempio resta sempre]*. La `domanda` va nel
    rapporto della tappa («Il revisore chiede: …»). Ogni verdetto nel registro
    (`agente_revisore_<verdetto>`, `agente_revisore_errore` per una risposta che non si legge) e in
    `segnali["revisore"]` (momento, verdetto, file, causa, effetto, secondi, token).
@@ -4600,7 +4600,7 @@ dell'Ollama finto cadeva: il revisore in ombra consumava il copione), `prova_rev
 
 **Rischi.** Con l'ombra di serie ogni esempio rosso alla consegna, al tetto o alla tappa costa una
 passata (35–50 s e ~3 000 token sul banco del 19/10), al più tre per giro, e un'esecuzione dei test
-in più quando il lavoro ha gli esempi; il lavoro dura di più. Un verdetto sbagliato detto con
+in più quando il lavoro ha gli esempi *[storico: nessuna dalla revisione della PR #202]*; il lavoro dura di più. Un verdetto sbagliato detto con
 autorità (per questo l'ombra prima); un esempio giusto tolto in `attivo` toglie un controllo
 indipendente (il rapporto e la scheda lo dicono, il collaudo resta della persona); il revisore che
 dice «consegna» a torto è filtrato dallo stato consegnabile. I clienti finti delle prove che non
@@ -4611,3 +4611,33 @@ sono l'Ollama finto ricevono anche le passate del revisore.
 fra le due serie (riusciti, giri, token, e nella riga `revisore`, `revisore_token`,
 `esempi_tolti`); nel log `agente_revisore_*`. La decisione di accenderlo va nella tabella degli
 interruttori di [setup-dgx](setup-dgx.md#interruttori-sulla-dgx).
+
+**Dopo la revisione della PR #202 (20/10).**
+- **I secondi del revisore non sono tempo dell'agente**: vanno in `lav.attesa_s`, come l'attesa
+  della voce, e in `segnali["revisore_s"]`, che il ciclo toglie dalla guardia dei minuti senza
+  strumenti. Prima, vicino al tetto, l'ombra cambiava le decisioni: con un giro di 30 s e un
+  revisore di 27 s l'agente aveva 2 passate invece di 4, senza i rimandi. Ora ombra e spento danno
+  le stesse passate (la prova ha il revisore lento).
+- **Nessuna esecuzione dei test in più**: il revisore giudica l'esito appena eseguito (i test
+  rifatti alla consegna, gli esempi rifatti al tetto, i test della tappa) ed entra solo se è rosso.
+  I test si rifanno solo dopo un esempio tolto.
+- **Una passata sola per tutti gli esempi rossi del momento**, con un verdetto per esempio (lo
+  schema `schema_esempi`, la lista «esempi» con il nome di ognuno). Con una passata per esempio il
+  tetto di 3 passate per giro lasciava bloccanti gli esempi oltre il terzo (il tris ne aveva 11
+  sbagliati).
+- **Un esempio tolto non è un test tolto dall'agente**: `test_tolti` lascia fuori i nomi degli
+  esempi (in JavaScript, dopo uno tolto, gli altri cambiano numero) e il conto della tappa scende
+  di uno. A voce si sente una frase sola.
+- Il passo del lavoro torna com'era dopo la passata. Tolto l'ultimo esempio, il nome del file resta
+  in sola lettura, così l'agente non ne scrive uno suo con quel nome.
+- **Con «consegna» l'esempio non si toglie**, come in `rivedi_test`: il revisore non ha detto che
+  è sbagliato (`agente_revisore_consegna_ignorata`).
+- I clienti finti delle prove (`_Copione` di prova_agente_guida, `Copione` di
+  prova_porte_consegna e prova_strumenti_onesti) riconoscono le passate del revisore come l'Ollama
+  finto, e il copione dell'agente torna a essere recitato per intero.
+- Il tempo di serie di una passata è ora 90 s (`agenti_revisore_s`; misurati 35–50 s).
+- **Costi da sapere**. Su un Ollama con un solo slot (il portatile) la passata del revisore, con
+  un prompt diverso, fa perdere all'agente la cache del suo prefisso. Su vLLM, con il caching
+  automatico dei prefissi, di norma resta. **Con l'ombra di serie la decisione della sera («gli
+  esempi non bloccano più») non è in vigore**: gli esempi rossi bloccano come prima finché non si
+  accende `agenti_revisore: attivo`.

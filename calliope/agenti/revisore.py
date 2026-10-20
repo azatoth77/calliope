@@ -356,18 +356,40 @@ def messaggio(p: dict) -> str:
     return "\n".join(parti)
 
 
+def schema_esempi(verdetti=VERDETTI) -> dict:
+    """Lo schema di una passata sugli esempi di accettazione rossi di un momento (revisione
+    della PR #202): un verdetto per esempio, nella lista «esempi», e la domanda facoltativa."""
+    voce = schema(verdetti, domanda=False)
+    voce = {"type": "object", "properties": voce["properties"],
+            "required": ["test"] + voce["required"]}
+    return {"type": "object",
+            "properties": {"esempi": {"type": "array", "items": voce, "maxItems": 16},
+                           "domanda": {"type": "string", "maxLength": 300}},
+            "required": ["esempi"]}
+
+
 def passata(svc, p: dict, ragionamento: int, temperatura: float, tempo_s: float,
-            verdetti=VERDETTI, dalla_voce: bool = False) -> dict:
+            verdetti=VERDETTI, dalla_voce: bool = False, per_esempi: int = 0) -> dict:
     """Una passata del revisore con `requisiti.chiama` (schema chiuso, senza strumenti):
     {risposta (dict o None), esito, s, token, prompt, ragionamento_token,
-    ragionamento_caratteri}. Mai un'eccezione."""
+    ragionamento_caratteri}. `per_esempi` (quanti esempi rossi): lo schema con un verdetto per
+    esempio. Mai un'eccezione."""
     from ..requisiti import chiama
     uso: dict = {}
     t0 = time.monotonic()
-    dati, esito = chiama(svc, sistema(verdetti), messaggio(p), schema(verdetti), tempo_s,
-                         dalla_voce=dalla_voce, num_predict=700, ragionamento=ragionamento,
-                         uso=uso, temperatura=temperatura)
-    if isinstance(dati, dict) and dati.get("verdetto") not in verdetti:
+    dati, esito = chiama(svc, sistema(verdetti), messaggio(p),
+                         schema_esempi(verdetti) if per_esempi else schema(verdetti), tempo_s,
+                         dalla_voce=dalla_voce,
+                         num_predict=min(2400, 400 + 250 * per_esempi) if per_esempi else 700,
+                         ragionamento=ragionamento, uso=uso, temperatura=temperatura)
+    if per_esempi and isinstance(dati, dict):
+        voci = dati.get("esempi")
+        if not isinstance(voci, list):
+            dati, esito = None, "errore: manca la lista «esempi»"
+        else:
+            dati["esempi"] = [v for v in voci if isinstance(v, dict)
+                              and v.get("verdetto") in verdetti]
+    elif isinstance(dati, dict) and dati.get("verdetto") not in verdetti:
         dati, esito = None, f"errore: verdetto fuori dal menu ({dati.get('verdetto')!r})"
     return {"risposta": dati, "esito": esito, "s": round(uso.get("s") or
                                                           (time.monotonic() - t0), 1),
@@ -513,9 +535,11 @@ def togli_esempio(lav, sandbox, nome_file: str, indice: int, nome: str, causa: s
                 if isinstance(sola, set):
                     sola.add(nome_file)
         else:
+            # Il nome resta in sola lettura (revisione della PR #202): l'agente non ne scrive
+            # uno suo con quel nome
             p.unlink()
             if isinstance(sola, set):
-                sola.discard(nome_file)
+                sola.add(nome_file)
     except Exception as e:  # noqa: BLE001 — l'esempio resta, come prima
         if log is not None:
             log(f"[AGENTI] {getattr(lav, 'id', '?')}: esempio {nome} non tolto: {e}")
@@ -528,6 +552,10 @@ def togli_esempio(lav, sandbox, nome_file: str, indice: int, nome: str, causa: s
            "giro": int(getattr(lav, "giro", 1) or 1), "causa": str(causa or "")[:300],
            "esempio": json.dumps(tolto, ensure_ascii=False)[:300]}
     a.setdefault("tolti_revisore", []).append(rec)
+    # Non è un test tolto dall'agente (revisione della PR #202): l'ultima tappa ne conta uno meno
+    seg = lav.segnali if isinstance(getattr(lav, "segnali", None), dict) else None
+    if seg is not None and isinstance(seg.get("test_tappa"), dict):
+        seg["test_tappa"]["eseguiti"] = max(0, int(seg["test_tappa"].get("eseguiti") or 0) - 1)
     if a.get("stato") == "pronta":
         a["esempi"] = max(0, int(a.get("esempi") or 0) - 1)
         rimasti = esempi_del_file(nuovo)
@@ -630,26 +658,44 @@ def pacchetto_lavoro(ag, lav, sandbox, test: dict, in_esame: str = "") -> dict:
                      accettazione=[nome] if nome else (), in_esame=in_esame)
 
 
-def _una(ag, lav, chiave: str, momento: str, p: dict) -> dict | None:
-    """Una passata per `chiave`, contata nel giro; il verdetto (o l'errore) nei segnali."""
+def _una(ag, lav, chiavi, momento: str, p: dict, per_esempi: int = 0):
+    """Una passata del revisore per `chiavi` (segnate come giudicate nel giro), contata nel
+    giro: (risposta o None, la riga della passata). I secondi della passata non sono tempo
+    dell'agente (revisione della PR #202): vanno in `lav.attesa_s`, come l'attesa della voce, e
+    in `segnali["revisore_s"]` (il ciclo li toglie dalla guardia senza strumenti). Il passo del
+    lavoro torna com'era."""
     st = _stato_giro(lav)
-    st["chiavi"].append(chiave)
+    st["chiavi"] += list(chiavi)
     st["passate"] += 1
     svc = SimpleNamespace(cliente=ag.cliente, imp=ag.imp, cfg=ag.cfg,
                           arbitro=getattr(ag, "arbitro", None), agente=ag)
+    passo = getattr(lav, "passo", "")
     lav.passo = "il revisore guarda le prove"
-    r = passata(svc, p, int(_cfg(ag, "agenti_revisore_ragionamento", 4096) or 0),
-                float(_cfg(ag, "agenti_temperatura", 0.4) or 0.0),
-                float(_cfg(ag, "agenti_revisore_s", 180.0) or 180.0))
-    seg = lav.segnali
+    t0 = time.monotonic()
+    try:
+        r = passata(svc, p, int(_cfg(ag, "agenti_revisore_ragionamento", 4096) or 0),
+                    float(_cfg(ag, "agenti_temperatura", 0.4) or 0.0),
+                    float(_cfg(ag, "agenti_revisore_s", 90.0) or 90.0), per_esempi=per_esempi)
+    finally:
+        secondi = time.monotonic() - t0
+        lav.attesa_s = float(getattr(lav, "attesa_s", 0.0) or 0.0) + secondi
+        seg = lav.segnali
+        seg["revisore_s"] = round(float(seg.get("revisore_s") or 0.0) + secondi, 3)
+        lav.passo = passo
     seg["revisore_token"] = int(seg.get("revisore_token") or 0) + r["token"]
-    from ..sonde import nota as nota_regola
     d = r["risposta"]
     if not isinstance(d, dict):
+        from ..sonde import nota as nota_regola
         nota_regola(lav, "agente_revisore_errore", ag.log, f"{momento}: {r['esito']}")
-        _segna(lav, {"momento": momento, "chiave": chiave, "verdetto": None,
+        _segna(lav, {"momento": momento, "chiave": ", ".join(chiavi)[:200], "verdetto": None,
                      "esito": r["esito"], "s": r["s"], "token": r["token"]})
-        return None
+        return None, r
+    return d, r
+
+
+def _verdetto(ag, lav, momento: str, d: dict, r: dict, chiave: str) -> dict:
+    """Un verdetto letto: la regola nel registro, la riga nel log."""
+    from ..sonde import nota as nota_regola
     v = {k: d.get(k) for k in ("verdetto", "file", "riga", "test", "causa", "azione",
                                "domanda")}
     v["domanda"] = str(v.get("domanda") or "").strip()
@@ -707,26 +753,21 @@ def _esito(**kw) -> dict:
     return out
 
 
-def rivedi_esempi(ag, lav, sandbox, momento: str, pronto=None, test: dict | None = None) -> dict:
+def rivedi_esempi(ag, lav, sandbox, momento: str, test: dict | None = None) -> dict:
     """Gli esempi di accettazione rossi quando il lavoro vorrebbe consegnare o chiudersi
-    (consegna dell'agente, tetto, tappa, prosa): una passata per esempio non ancora giudicato
-    nel giro. `pronto()`: i file che la consegna chiede ci sono (per `consegna`, con i test
-    dell'agente verdi); `test`: l'esito di tutti i test appena rifatti (senza, li rifà qui).
-    {tolti, fatti, domande, verdetti}; con «ombra» solo i verdetti."""
+    (consegna dell'agente, tetto, tappa, prosa). `test`: l'esito dei test appena eseguiti dal
+    ciclo (revisione della PR #202: il revisore non li rifà; senza, niente revisore). Una
+    passata sola per tutti gli esempi rossi non ancora giudicati nel giro, con un verdetto per
+    esempio (revisione della PR #202: con una passata per esempio il tetto del giro lasciava
+    esempi che bloccavano). {tolti, fatti, domande, verdetti}; con «ombra» solo i verdetti."""
     out = _esito()
     m = modo(ag.cfg)
-    if m == "spento":
+    if m == "spento" or not isinstance(test, dict) or test.get("passano"):
         return out
     nome = file_esempi(lav, sandbox)
     if not nome:
         return out
-    if test is None:
-        try:
-            test = sandbox.test()
-        except Exception as e:  # noqa: BLE001 — senza i test niente revisore
-            ag.log(f"[AGENTI] {lav.id}: revisore: test non eseguiti ({e})")
-            return out
-    rossi, altri = fallimenti_divisi(test.get("uscita"), nome, bool(test.get("passano")))
+    rossi, _ = fallimenti_divisi(test.get("uscita"), nome, bool(test.get("passano")))
     rossi.sort(key=lambda x: x[0])
     if not rossi:
         return out
@@ -736,43 +777,54 @@ def rivedi_esempi(ag, lav, sandbox, momento: str, pronto=None, test: dict | None
         testo = ""
     esempi, ric = esempi_del_file(testo)
     tutti = esempi + ric
-    consegnabile = None
-    tolti_ora = 0
+    st = _stato_giro(lav)
+    da_giudicare = []
     for indice, nome_test, riga in rossi:
         # La chiave è l'esempio com'è scritto: dopo un esempio tolto i numeri dei test cambiano
         esempio = tutti[indice - 1] if 0 < indice <= len(tutti) else None
         chiave = "esempio:" + (json.dumps(esempio, sort_keys=True, ensure_ascii=False)
                                if esempio is not None else nome_test)
-        perche = puo_entrare(ag, lav, chiave)
-        if perche:
-            if perche == "voce":
-                from ..sonde import nota as nota_regola
-                nota_regola(lav, "agente_revisore_saltato", ag.log, f"{momento}: voce")
+        if chiave not in st["chiavi"]:
+            da_giudicare.append((indice, nome_test, riga, esempio, chiave))
+    if not da_giudicare:
+        return out
+    perche = puo_entrare(ag, lav, da_giudicare[0][4])
+    if perche:
+        if perche == "voce":
+            from ..sonde import nota as nota_regola
+            nota_regola(lav, "agente_revisore_saltato", ag.log, f"{momento}: voce")
+        return out
+    righe = []
+    for indice, nome_test, riga, esempio, _ in da_giudicare:
+        righe.append(f"- «{nome_test}»: {riga.strip()}"
+                     + (f"\n  com'è scritto: {json.dumps(esempio, ensure_ascii=False)}"
+                        if esempio is not None else ""))
+    in_esame = (f"Gli esempi di accettazione rossi in {nome}:\n" + "\n".join(righe)
+                + "\nPer ognuno, in «esempi», un verdetto con il suo nome esatto in «test»: "
+                  "sbagliato l'esempio (test_sbagliato), il codice (codice_sbagliato), o il "
+                  "lavoro va consegnato così (consegna).")
+    d, r = _una(ag, lav, [x[4] for x in da_giudicare], momento,
+                pacchetto_lavoro(ag, lav, sandbox, test, in_esame), per_esempi=len(da_giudicare))
+    if d is None:
+        return out
+    voci = list(d.get("esempi") or [])
+    domanda = str(d.get("domanda") or "").strip()
+    tolti_ora = 0
+    for k, (indice, nome_test, riga, esempio, chiave) in enumerate(da_giudicare):
+        voce = next((x for x in voci if esempio_nel_test(nome, x.get("test")) == indice
+                     or str(x.get("test") or "").strip() == nome_test), None)
+        if voce is None and len(voci) == len(da_giudicare):
+            voce = voci[k]          # nello stesso ordine, senza il nome
+        if voce is None:
+            _segna(lav, {"momento": momento, "chiave": chiave, "test": nome_test,
+                         "verdetto": None, "esito": "senza verdetto per l'esempio", "modo": m})
             continue
-        in_esame =(f"L'esempio di accettazione «{nome_test}» in {nome} è rosso: {riga.strip()}"
-                    + (f"\nL'esempio com'è scritto: {json.dumps(esempio, ensure_ascii=False)}"
-                       if esempio is not None else "")
-                    + "\nDì se è sbagliato l'esempio (test_sbagliato), il codice "
-                      "(codice_sbagliato) o se il lavoro va consegnato così (consegna).")
-        v = _una(ag, lav, chiave, momento, pacchetto_lavoro(ag, lav, sandbox, test, in_esame))
-        if v is None:
-            continue
-        v["test"] = v.get("test") or nome_test
+        v = _verdetto(ag, lav, momento, {**voce, "test": voce.get("test") or nome_test}, r,
+                      chiave)
         effetto = "ombra" if m == "ombra" else "nessuno"
         if m == "attivo":
             f = Path(str(v.get("file") or "")).name
-            sul_file = not f or f == Path(nome).name
-            togli = v["verdetto"] == "test_sbagliato" and sul_file
-            if v["verdetto"] == "consegna":
-                if consegnabile is None:
-                    consegnabile = altri == 0 and (pronto is None or bool(pronto()))
-                togli = consegnabile
-                if not consegnabile:
-                    from ..sonde import nota as nota_regola
-                    nota_regola(lav, "agente_revisore_consegna_ignorata", ag.log,
-                                f"{momento}: {nome_test}")
-                    effetto = "ignorato: non consegnabile"
-            if togli:
+            if v["verdetto"] == "test_sbagliato" and (not f or f == Path(nome).name):
                 rec = togli_esempio(lav, sandbox, nome, indice - tolti_ora, nome_test,
                                     v.get("causa"), ag.log)
                 if rec is not None:
@@ -785,16 +837,23 @@ def rivedi_esempi(ag, lav, sandbox, momento: str, pronto=None, test: dict | None
                     out["tolti"].append(rec)
                     out["fatti"].append(fatto_tolto(rec))
                     effetto = "esempio tolto"
+            elif v["verdetto"] == "consegna":
+                # «consegna» non dice che l'esempio è sbagliato (revisione della PR #202): resta,
+                # come in rivedi_test
+                from ..sonde import nota as nota_regola
+                nota_regola(lav, "agente_revisore_consegna_ignorata", ag.log,
+                            f"{momento}: {nome_test}")
+                effetto = "ignorato: con «consegna» l'esempio resta"
             elif v["verdetto"] == "codice_sbagliato":
                 out["fatti"].append(fatto_codice(v))
                 effetto = "fatto all'agente"
             elif v["verdetto"] == "test_sbagliato":
                 out["fatti"].append(fatto_test(v))
                 effetto = "fatto all'agente"
-            if v.get("domanda"):
-                out["domande"].append(v["domanda"])
         _segna(lav, {**v, "modo": m, "effetto": effetto})
         out["verdetti"].append(v)
+    if m == "attivo" and domanda:
+        out["domande"].append(domanda)
     if tolti_ora:
         seg = lav.segnali
         seg["test_verde"] = None
@@ -828,9 +887,10 @@ def rivedi_test(ag, lav, sandbox, momento: str, test: dict, pronto=None) -> dict
             nota_regola(lav, "agente_revisore_saltato", ag.log, f"{momento}: voce")
         return out
     nome = file_esempi(lav, sandbox)
-    v = _una(ag, lav, "test", momento, pacchetto_lavoro(ag, lav, sandbox, test))
-    if v is None:
+    d, r = _una(ag, lav, ["test"], momento, pacchetto_lavoro(ag, lav, sandbox, test))
+    if d is None:
         return out
+    v = _verdetto(ag, lav, momento, d, r, "test")
     effetto = "ombra"
     if m == "attivo":
         f = Path(str(v.get("file") or "")).name
