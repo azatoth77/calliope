@@ -4401,7 +4401,13 @@ porte senza il gioco.test.js che una versione vera ha).
    (`REQUISITI_TRIS2`) e la richiesta, quindi gli esempi di accettazione e i giocatori, e al tetto
    o alla tappa il codice può chiudere da sé; prima il banco metteva `{"stato": "saltata"}` e
    `_consegna_al_tetto` rispondeva sempre «senza esempi di accettazione». Con `--accettazione no`
-   «saltata» e i giocatori del caso, come prima. La riga ha `tappa_no`.
+   «saltata» e i giocatori del caso, come prima. La riga ha `tappa_no`. *Dal 20/10 sera (#198,
+   parte 2)* il caso `tris-nudo`, fuori da quelli di serie: lo stesso tris come programma
+   JavaScript (`tris.js` con `nuovaPartita`, `mossa`, `vincitore`, `pareggio`, `aChiTocca` pure,
+   test dell'agente con node:test, senza macchina né contratto dei giochi, senza analisi prima
+   del codice), accettazione nascosta equivalente a quella di tris2 sulle sole funzioni,
+   riferimento in `prove/programmi/tris`, «javascript» acceso in memoria per il solo caso;
+   confronto sulla DGX `--casi tris2,tris-nudo --giri 2 --ripetizioni 5`, da lanciare.
 
 **Prove.** `prova_apri_gioco_tappa` (nuova, livello 2, ~11 s), con i contrari: la frase nel
 contratto, nei vincoli e nel rimando (contrari: l'estensione, il programma); il motore finto

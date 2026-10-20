@@ -37,6 +37,23 @@ con nomi di fantasia, ripetuti:
    dai file di partenza già verdi (agenti/scheletri.py) con min e max dell'analisi prima del
    codice; il banco, che non apre uno sviluppo, mette nel lavoro i giocatori del caso (2–2)
    come li direbbe l'analisi.
+6. **tris-nudo** (programma JavaScript, 20/10, issue #198 parte 2, non tra i casi di serie): lo
+   stesso tris per due senza la macchina a stati né il contratto dei giochi, il riferimento di
+   quanto sa fare il modello. Un lavoro «codice» con la cartella vuota (lo scheletro del
+   programma JavaScript è nel prompt): `tris.js` in CommonJS con cinque funzioni pure dette
+   nella richiesta (`nuovaPartita()`, `mossa(stato, casella)` che restituisce lo stato nuovo e
+   lancia un errore sulla casella occupata, fuori da 1–9 o a partita finita, `vincitore`,
+   `pareggio`, `aChiTocca`), i test dell'agente con node:test. Accettazione nascosta equivalente
+   a quella di tris2, sulle sole funzioni (lo stato non si guarda dentro): inizio, mosse
+   alternate e stato ricevuto intatto, casella occupata o fuori rifiutata, tre in fila in riga,
+   colonna e diagonale, pareggio, a chi tocca, partita nuova. Riferimento in
+   `prove/programmi/tris`. Senza analisi prima del codice (fuori da uno sviluppo un programma
+   non l'ha, come «programma»); «javascript» in `agenti_linguaggi` acceso in memoria per il solo
+   caso se il locale non l'ha (sulla DGX è acceso dal 17/10). Il confronto con tris2, stessi
+   giri e ripetizioni:
+
+       … banco_temperatura.py --temperature config --presence config \\
+           --casi tris2,tris-nudo --giri 2 --ripetizioni 5 --uscita ~/banco-tris-nudo
 
 Misure per lavoro: riuscito (consegna «fatto» e accettazione verde), passate, token (e di
 ragionamento), minuti, giri a vuoto (passate fermate per ragionamento ripetuto, passate senza
@@ -417,6 +434,90 @@ test("ACC tris2: tre in fila vince, la partita finisce con un punto", async () =
 """
 
 
+# 6. Il tris nudo (20/10, issue #198, parte 2): lo stesso tris per due, ma come un programma
+# JavaScript con funzioni pure e i test dell'agente, senza la macchina a stati né il contratto dei
+# giochi. È il riferimento di quanto sa fare il modello: l'accettazione dice le stesse cose di
+# quella di tris2 (inizio, mosse alternate, casella occupata, tre in fila in riga, colonna e
+# diagonale, pareggio, a chi tocca) sulle funzioni, senza guardare dentro lo stato
+COMPITO_TRIS_NUDO = (
+    "Un programma JavaScript per Node: il tris per due giocatori, X e O, su una griglia 3×3 con "
+    "le caselle numerate da 1 a 9 da sinistra a destra e dall'alto in basso. Il file tris.js "
+    "esporta con module.exports cinque funzioni pure: nuovaPartita() restituisce lo stato di una "
+    "partita nuova (comincia X); mossa(stato, casella) mette il segno di chi tocca nella casella "
+    "(un numero da 1 a 9) e restituisce lo stato nuovo senza cambiare quello che riceve, e se la "
+    "casella è occupata, fuori da 1 a 9 o la partita è finita lancia un errore; vincitore(stato) "
+    "dice \"X\" o \"O\" se uno dei due ha tre segni in fila (riga, colonna o diagonale), "
+    "altrimenti null; pareggio(stato) è true con la griglia piena senza tre in fila; "
+    "aChiTocca(stato) dice \"X\" o \"O\", e null a partita finita. Eseguito da solo gioca una "
+    "partita d'esempio e stampa la griglia. Con i test.")
+ACCETTAZIONE_TRIS_NUDO = """const { test } = require("node:test");
+const assert = require("node:assert");
+const T = require("./tris.js");
+function gioca(...caselle) {
+  return caselle.reduce((s, n) => T.mossa(s, n), T.nuovaPartita());
+}
+test("ACC tris-nudo: la partita nuova, tocca a X, nessun vincitore", () => {
+  const s = T.nuovaPartita();
+  assert.strictEqual(T.aChiTocca(s), "X");
+  assert.ok(!T.vincitore(s));
+  assert.ok(!T.pareggio(s));
+});
+test("ACC tris-nudo: le mosse si alternano, lo stato ricevuto non cambia", () => {
+  const s0 = T.nuovaPartita();
+  const s1 = T.mossa(s0, 5);
+  assert.strictEqual(T.aChiTocca(s1), "O");
+  assert.strictEqual(T.aChiTocca(s0), "X");
+  assert.doesNotThrow(() => T.mossa(s0, 5));
+  assert.strictEqual(T.aChiTocca(T.mossa(s1, 1)), "X");
+});
+test("ACC tris-nudo: la casella occupata o fuori da 1–9 è rifiutata", () => {
+  const s = gioca(5);
+  assert.throws(() => T.mossa(s, 5));
+  assert.throws(() => T.mossa(s, 0));
+  assert.throws(() => T.mossa(s, 10));
+  assert.strictEqual(T.aChiTocca(s), "O");
+});
+test("ACC tris-nudo: tre in fila in riga vince, poi non si gioca più", () => {
+  const s = gioca(1, 4, 2, 5, 3);
+  assert.strictEqual(T.vincitore(s), "X");
+  assert.ok(!T.pareggio(s));
+  assert.ok(!T.aChiTocca(s));
+  assert.throws(() => T.mossa(s, 9));
+});
+test("ACC tris-nudo: tre in fila in colonna vince", () => {
+  assert.strictEqual(T.vincitore(gioca(1, 2, 4, 5, 7)), "X");
+});
+test("ACC tris-nudo: tre in fila in diagonale vince anche O", () => {
+  assert.strictEqual(T.vincitore(gioca(2, 1, 3, 5, 4, 9)), "O");
+  assert.strictEqual(T.vincitore(gioca(3, 1, 5, 2, 7)), "X");
+});
+test("ACC tris-nudo: la griglia piena senza tre in fila è pareggio", () => {
+  const s = gioca(1, 2, 3, 5, 4, 6, 8, 7, 9);
+  assert.ok(!T.vincitore(s));
+  assert.strictEqual(T.pareggio(s), true);
+  assert.ok(!T.aChiTocca(s));
+  assert.ok(!T.pareggio(gioca(1, 2, 3)));
+});
+test("ACC tris-nudo: si può giocare ancora, la partita nuova è vuota", () => {
+  gioca(1, 4, 2, 5, 3);
+  const s = T.nuovaPartita();
+  assert.strictEqual(T.aChiTocca(s), "X");
+  assert.doesNotThrow(() => T.mossa(s, 1));
+});
+"""
+
+
+def riferimento_tris_nudo() -> dict:
+    """Il tris nudo giusto (prove/programmi/tris): tris.js e i test come li scriverebbe l'agente."""
+    cartella = RADICE / "prove" / "programmi" / "tris"
+    return {n: (cartella / n).read_text(encoding="utf-8") for n in ("tris.js", "tris.test.js")}
+
+
+# Il contrario del riferimento per --secco: la casella occupata si sovrascrive
+TRIS_NUDO_SOVRASCRIVE = ('  if (stato.caselle[casella - 1] !== null) throw new Error(`la casella '
+                         '${casella} è occupata`);\n')
+
+
 TEST_SENZA_INIZIA = """const { test } = require("node:test");
 test("ACC tris2 come l'agente: la prima mossa subito", async () => {
   const g = await apriGioco({ seme: 1 });
@@ -476,6 +577,14 @@ def casi():
                   "giocatori": {"min": 2, "max": 2},
                   "accettazione": ("accettazione_banco.test.js", ACCETTAZIONE_TRIS2),
                   "riferimento": riferimento_tris2()},
+        # Il tris nudo (20/10, #198): un programma JavaScript, la cartella vuota (lo scheletro
+        # del programma è nel prompt), nessuna analisi prima del codice (fuori da uno sviluppo
+        # un programma non l'ha, come «programma»). Il JavaScript dei programmi solo in memoria,
+        # se il locale non l'ha acceso (sulla DGX acceso dal 17/10)
+        "tris-nudo": {"tipo": "codice", "gioco": False, "correzione": False, "estensione": None,
+                      "compito": COMPITO_TRIS_NUDO, "prima": {}, "linguaggi": ["javascript"],
+                      "accettazione": ("accettazione_banco.test.js", ACCETTAZIONE_TRIS_NUDO),
+                      "riferimento": riferimento_tris_nudo()},
     }
 
 
@@ -582,7 +691,8 @@ def secco() -> int:
     errori = 0
     try:
         for nome, caso in casi().items():
-            if caso.get("gioco") and not shutil.which("node"):
+            if ((caso.get("gioco") or caso["accettazione"][0].endswith(".js"))
+                    and not shutil.which("node")):
                 print(f"SALTATO {nome}: node non c'è")
                 continue
             partenza = dict(caso["prima"])
@@ -633,6 +743,27 @@ def secco() -> int:
             errori += not ok
             print(f"{'ok ' if ok else 'ERR'} tris2: la mossa senza «Inizia» fallisce e l'errore "
                   "dice la preparazione e «Inizia»" + ("" if ok else f"  {r['uscita'][-600:]!r}"))
+            # Il tris nudo (20/10, #198): i test del riferimento passano da soli, e il contrario
+            # che sovrascrive la casella occupata è rosso proprio lì
+            caso = casi()["tris-nudo"]
+            sb = nuova()
+            for rel, testo in caso["riferimento"].items():
+                sb.scrivi(rel, testo)
+            r = sb.test()
+            ok = bool(r.get("passano")) and "ok tre in fila vince" in str(r.get("uscita"))
+            errori += not ok
+            print(f"{'ok ' if ok else 'ERR'} tris-nudo: i test del riferimento passano"
+                  + ("" if ok else f"  {str(r.get('uscita'))[-500:]!r}"))
+            rotto = caso["riferimento"]["tris.js"].replace(TRIS_NUDO_SOVRASCRIVE, "")
+            r = accettazione(nuova, {**caso["riferimento"], "tris.js": rotto}, caso)
+            u = r["uscita"]
+            ok = (rotto != caso["riferimento"]["tris.js"] and not r["verde"]
+                  and "FALLITO ACC tris-nudo: la casella occupata" in u
+                  and "ok ACC tris-nudo: tre in fila in riga" in u)
+            errori += not ok
+            print(f"{'ok ' if ok else 'ERR'} tris-nudo: contrario, la casella occupata "
+                  "sovrascritta fa rossa l'accettazione su quel punto"
+                  + ("" if ok else f"  {u[-600:]!r}"))
         vin = vincoli_correzione(casi()["porte"])
         ok = "gioco.test.js" in vin and "deve FALLIRE" in vin and PROBLEMA_PORTE in vin
         errori += not ok
@@ -736,6 +867,22 @@ def secco_giri(tmp: Path) -> int:
                  b["passate_giro"] == 6 and r["esito"] == "limite" and r["giri"] == 1
                  and r["passate"] == 6 and r["sbloccato"] is None
                  and colonna_giri([r]) == "-", f"{r['esito']} {r['per_giro']}")
+        # 4. Il tris nudo (20/10, #198): il JavaScript dei programmi acceso in memoria solo per
+        # il caso, con la Config di serie che non l'ha; il caso dopo torna com'era
+        fine = {"tool_calls": [{"name": "consegna", "arguments": {
+            "riassunto": "Non lo faccio.", "esito": "impossibile"}}]}
+        fake.copione = [fine]
+        n0 = len(fake.richieste)
+        un_lavoro(svc, cfg, tmp, "tris-nudo", casi()["tris-nudo"], "secco")
+        sistema = json.dumps(fake.richieste[n0:], ensure_ascii=False)
+        verifica("tris-nudo: «javascript» acceso in memoria per il caso, il prompt del "
+                 "programma lo dice", "javascript" in cfg.agenti_linguaggi
+                 and "Il JavaScript è previsto" in sistema, str(cfg.agenti_linguaggi))
+        fake.copione = [fine]
+        un_lavoro(svc, cfg, tmp, "somma", CASO_SOMMA, "secco")
+        verifica("…e il caso dopo torna ai linguaggi della Config",
+                 cfg.agenti_linguaggi == list(Config().agenti_linguaggi),
+                 str(cfg.agenti_linguaggi))
     finally:
         if svc is not None:
             svc.close()
@@ -1171,6 +1318,15 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
     lav.tappe = giri > 1
     # Gli esempi di un programma fuori da uno sviluppo (17/10, #10): solo in memoria, per caso
     cfg.agenti_accettazione_programmi_sempre = bool(caso.get("programmi_sempre"))
+    # I linguaggi dei programmi che il caso vuole (20/10, #198: il JavaScript del tris nudo),
+    # solo in memoria e solo per quel caso: gli altri casi restano con quelli della Config
+    if not hasattr(svc, "banco_linguaggi"):
+        svc.banco_linguaggi = list(getattr(cfg, "agenti_linguaggi", None) or ["python"])
+    in_piu = [x for x in caso.get("linguaggi") or () if x not in svc.banco_linguaggi]
+    if in_piu:
+        print(f"   (acceso in memoria per il caso: {', '.join(in_piu)} in agenti_linguaggi)",
+              flush=True)
+    cfg.agenti_linguaggi = svc.banco_linguaggi + in_piu
     iso = svc.scegli_isolamento()
     k = [0]
 
