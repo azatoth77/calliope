@@ -1130,18 +1130,29 @@ In breve:
   giudice, domande, istantanea validata, partite condivise, ripresa, chi è quale giocatore e palco
   usano un elenco chiuso di comandi nel manifesto, un'istantanea numerata, uno stato
   serializzabile con una vista pura, e preparazione, fine e disegno di Calliope;
-- **il costo per l'agente**: circa 4 400 caratteri su 9 141 del §2 del contratto parlano della
-  macchina; `tocca` è un nome in `g.stato()` e una posizione nel contesto della mossa; `turno` nel
-  contesto è il numero del giro e il contratto non lo dice; contratto, prompt dell'analisi
-  («dopo ogni mossa di solito c'è la fase «esito»») e gioco della partenza suggeriscono l'esito a
-  ogni mossa;
-- **il catalogo dal 14/10**: 14 lavori di gioco falliti, 11 toccano un concetto o l'API dei test
-  della macchina, 4–5 con un concetto della macchina come causa principale; la correzione di un
-  gioco che c'è già fa 13/13 dal 19/10;
-- **le opzioni**: A, la macchina con il contratto semplificato; B, una macchina più piccola;
-  C, quattro funzioni pure su uno stato del gioco con `tocca`, `punti` e `fine`; D, JavaScript
-  libero. Per C c'è una bozza concreta, anche come **facciata** sopra il motore di oggi (1–2
-  giorni di prototipo, nessuna garanzia persa);
-- **la raccomandazione**: prima #197, poi il banco della parte 2 con `tris2`, `tris-nudo` e
-  `tris-facciata`, stessa accettazione e almeno 5 ripetizioni; la scelta la fa il banco, non un
-  parere.
+- **il costo per l'agente**:
+  - circa 3 300–3 500 caratteri su 9 141 del §2 del contratto (36–38 %) parlano soltanto della
+    macchina;
+  - `tocca` è un nome in `g.stato()` e una posizione nel contesto della mossa;
+  - `turno` nel contesto è il numero del giro, e il contratto non lo dice;
+  - senza turni, se non si sa chi ha mosso, i punti vanno al Giocatore 1;
+  - contratto, prompt dell'analisi («dopo ogni mossa di solito c'è la fase «esito»») e gioco
+    della partenza suggeriscono l'esito a ogni mossa;
+- **il catalogo dal 14/10**: 14 lavori di gioco falliti, e un'interfaccia senza fasi ne
+  toglierebbe 5–6 (i 4–5 con un concetto della macchina come causa principale, più uno
+  probabile). Gli altri:
+  - 3 vengono dalla transizione dai giochi di prima;
+  - 2 dalla regressione dell'harness chiusa da #192;
+  - 3 dalla logica e dalla forma della vista, che resta;
+  - 1 non ha la causa scritta.
+
+  La correzione di un gioco che c'è già fa 14/16 dal 19/10, e 8/8 dopo #192;
+- **le opzioni**: A, la macchina con il contratto semplificato; A′, la macchina con l'agente che
+  scrive solo i test della logica; B, una macchina più piccola; C, quattro funzioni pure su uno
+  stato del gioco con `tocca`, `punti` e `fine`, anche come **facciata** sopra il motore di oggi
+  (2–3 giorni di prototipo). C perde la validazione dei comandi per fase, pagina e turni per fase,
+  e turni e punti coerenti per costruzione; D, JavaScript libero;
+- **la raccomandazione**: prima #197; poi il banco della parte 2 con `tris2`, `tris2-solo-logica`
+  e `tris-nudo`, 10 ripetizioni per caso e soglie scritte prima (alto ≥ 8/10, basso ≤ 3/10, in
+  ordine, con il caso intermedio); il prototipo di C solo se `tris-nudo` è alto e gli altri due
+  bassi. La scelta la fa il banco, non un parere.
