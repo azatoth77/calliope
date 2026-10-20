@@ -231,9 +231,9 @@ def prova_avviso(tmp: Path):
                                                                     [SO.CONSEGNA]], sb=sb)
         n = SO.regole(lav).get("gioco_esito_ogni_mossa", 0)
         verifica(("nel ciclo dell'agente, due esecuzioni dei test: la regola "
-                  "gioco_esito_ogni_mossa una volta") if attese else
-                 "contrario: il tris giusto nel ciclo, niente regola", n == attese,
-                 str(SO.regole(lav)))
+                  "gioco_esito_ogni_mossa una volta, e non gioco_punti_persi") if attese else
+                 "contrario: il tris giusto nel ciclo, niente regola", n == attese
+                 and not SO.regole(lav).get("gioco_punti_persi"), str(SO.regole(lav)))
     # La soglia, sulla funzione da sola
     fumo = (RADICE / "calliope" / "agenti" / "fumo_js.mjs").as_uri()
     casi = {"metà esatta: niente": ({"mosse": 10, "vuoti": 5, "prime": 2, "primeVuote": 1}, False),
@@ -356,6 +356,12 @@ def prova_punti_persi(tmp: Path):
         verifica(f"i punti che non vanno a nessuno: {nome} → "
                  + ("avviso" if attesa else "niente avviso"),
                  "ok prova di fumo del gioco" in u and dice is attesa, u[-700:])
+        # La regola sua, nel registro (seconda revisione della PR #201)
+        from calliope.agenti.ciclo import regole_avvisi
+        verifica(f"…la regola: {nome} → "
+                 + ("gioco_punti_persi, e non quella dell'esito" if attesa else "nessuna"),
+                 regole_avvisi(u) == (["gioco_punti_persi"] if attesa else []), str(
+                     regole_avvisi(u)))
 
 
 # ═══════════════════════════ 3. gli esempi del tris ═══════════════════════════
@@ -464,6 +470,17 @@ def prova_esempi(tmp: Path):
     r = sb.test(acc.FILE_GIOCO, fumo=False)
     verifica("contrario: «pareggio» atteso dopo una vittoria resta rosso",
              acc.esito_js(r["uscita"]) == (False, [3]), r["uscita"][-600:])
+    # Le parole di seguito (seconda revisione della PR #201): «X» e «O» sono anche nelle caselle
+    for mosse, testo, verde in (([1], "Mette O", True), ([1], "Mette X", False),
+                                ([1, 4], "Mette X", True), ([1, 4], "Mette O", False)):
+        an = acc.interpreta(analisi([_e(2, mosse, testo=testo)]), 5, False, True, TESTO)
+        sb.scrivi(acc.FILE_GIOCO, acc.test_js(an))
+        r = sb.test(acc.FILE_GIOCO, fumo=False)
+        verifica(f"sullo schermo le parole di seguito: {mosse} → «{testo}» "
+                 + ("verde" if verde else "rosso (la lettera è in una casella)"),
+                 an["esempi"] and acc.esito_js(r["uscita"]) == ((True, []) if verde
+                                                                else (False, [2])),
+                 r["uscita"][-500:])
 
 
 # ═══════════════════════════ 4. nel servizio ═══════════════════════════

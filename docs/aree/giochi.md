@@ -1239,4 +1239,14 @@ finisce»); L5 da 5 a 3, rosso solo «5, 1 → esito». Le otto analisi nuove: 2
 sbagliati: lo scambio è voluto, perché un esempio giusto tolto non torna, e gli esempi non
 bloccano più la chiusura (#190).
 
+**Dopo la seconda revisione della PR #201 (20/10).** Sullo schermo le parole attese si
+confrontano di seguito, in una finestra di parole consecutive del testo visibile, ognuna in una
+forma vicina: con le parole sciolte la «X» di una casella faceva passare «Mette X» dove il tris
+giusto scrive «Mette O», e un esempio verde falso alla tappa chiude il lavoro. Contrari sul tris
+giusto: `[1] → «Mette O»` verde e «Mette X» rosso, il contrario con `[1, 4]`; «vince» con «Ha vinto
+X!» resta verde. Il filtro in Python resta con le parole sciolte (tiene un controllo, non lo dà
+per buono). L'avviso dei punti persi ha la sua regola, `gioco_punti_persi`: il ciclo riconosce
+ogni avviso dal prefisso e da una frase sua (`ciclo.regole_avvisi`), mentre prima dal solo
+prefisso contava come `gioco_esito_ogni_mossa`. `puntiPersi` tiene solo il primo.
+
 **Le prove**: `prove/prova_esito_giochi.py` (nuova, livello 2, ~10 s).

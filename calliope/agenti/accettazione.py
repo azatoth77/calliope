@@ -963,11 +963,13 @@ ESEMPI.forEach((e, i) => {
     const a = e.atteso;
     if (a.testo) {
       // Le parole in una forma vicina (revisione della PR #201: «vince» e «Ha vinto X!»), con la
-      // stessa regola di accettazione.simili
+      // stessa regola di accettazione.simili, e DI SEGUITO (seconda revisione: sciolte, la «X»
+      // di una casella faceva passare «Mette X» con «Mette O» scritto)
       const sullo = norm(g.testo()).split(/[^a-z0-9]+/).filter(Boolean);
+      const att = norm(a.testo).split(/[^a-z0-9]+/).filter(Boolean);
       const vicine = (x, y) => { const n = Math.min(x.length, y.length), k = Math.max(3, n - 2);
                                  return x === y || (n >= 4 && x.slice(0, k) === y.slice(0, k)); };
-      assert.ok(norm(a.testo).split(/[^a-z0-9]+/).filter(Boolean).every((w) => sullo.some((s) => vicine(w, s))),
+      assert.ok(sullo.some((_, i) => att.every((w, j) => sullo[i + j] !== undefined && vicine(w, sullo[i + j]))),
         `${detto}: dopo l'ultima mossa sullo schermo deve esserci «${a.testo}»; si legge «${g.testo().slice(0, 200)}»`);
     }
     let s = g.stato();

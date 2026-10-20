@@ -828,8 +828,8 @@
       return !M.fasi[S0.fase].turni && (daChi === null || daChi === undefined) && S0.giocatori.length > 1;
     }
     function risultato(S0, S, ris, dove, daChi) {
-      // Lì un numero di punti non va a nessuno (20/10, #197): per darli serve l'elenco, uno per
-      // giocatore; prima andava al Giocatore 1
+      // Lì un numero di punti non va a nessuno (20/10, #197; prima andava al Giocatore 1): se
+      // vanno a chi muove serve una fase con i turni, e la prova di fumo lo avvisa
       var chiPos = daChi !== null && daChi !== undefined ? daChi : ignoto(S0, daChi) ? -1 : S0.tocca;
       var chi = S0.giocatori[chiPos] ? S0.giocatori[chiPos].nome : null;
       controlla(ris, dove, S0);
@@ -839,7 +839,7 @@
       else if (typeof ris.punti === "number" && S.giocatori[chiPos]) { S.giocatori[chiPos].punti += ris.punti; guadagno = ris.punti; }
       // Un numero di punti che non va a nessuno (senza turni e chi non si sa, revisione della
       // PR #201): contato, perché la prova di fumo lo dica (nel riquadro non cambia niente)
-      else if (typeof ris.punti === "number" && ris.punti !== 0 && chiPos === -1) puntiPersi.push(dove);
+      else if (typeof ris.punti === "number" && ris.punti !== 0 && chiPos === -1 && !puntiPersi.length) puntiPersi.push(dove);   // basta il primo
       var meta = ris.fase || (ris.esito ? "esito" : S0.fase);
       var passa = M.fasi[S0.fase].turni && !ris.ancora && S.giocatori.length > 1;
       if (meta === "esito") {
