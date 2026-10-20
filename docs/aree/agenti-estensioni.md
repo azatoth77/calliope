@@ -4344,3 +4344,90 @@ regola `agente_strumento_sconosciuto`: uno strumento dell'agente che questa pass
 «non è disponibile in questo lavoro», con il perché quando c'è (un gioco senza Python né rete,
 `sonda_rete` in una correzione, il motivo di `_esempi_ok` o `_sonde_ok`); un nome inventato è
 «non c'è». L'elenco degli strumenti sta nel testo dell'errore e nella chiave `strumenti`.
+
+## apriGioco c'è già, la tappa consegnabile si chiude, il banco a due giri (20/10, issue #192, ramo `issue-192-apri-gioco-tappa`)
+
+**Il caso** (banco del criterio di #174 sulla DGX del 20/10, `~/banchi/giri-1020-1018`, installata
+`20261020-1015-15aac123` con tutto il lotto dell'harness, `--casi tris2,porte --giri 2
+--ripetizioni 3`): **1/6**, con l'accettazione nascosta verde al primo giro in 5 lavori su 6 e
+niente consegna. Il 19/10, prima del lotto, a un giro le porte facevano 5/5. L'analisi in sola
+lettura dei sei lavori: una regressione di #186 (le porte L4 e L6 con un `apriGioco` scritto
+dall'agente in gioco.test.js, un motore finto), una tappa con tutto verde che non chiude per
+costruzione (porte L6: test e accettazione verdi alla tappa del giro 1, e al giro 2 l'agente ha
+rotto ciò che andava), due difetti dell'harness nei tris (il segnaposto della compattazione
+scritto come file, il suggerimento del palco sbagliato) e due del banco (tris2 senza l'analisi, le
+porte senza il gioco.test.js che una versione vera ha).
+
+**Cosa cambia.**
+1. **apriGioco c'è già, anche in una correzione.** Dopo #186 la frase «apriGioco e creaCaso ci
+   sono già, senza require» stava solo in `TEST_GIOCO_PARTENZA` (agenti/scheletri.py), scritto
+   per un gioco nuovo. Ora `testi.APRI_GIOCO_C_E` («apriGioco e creaCaso ci sono già in
+   gioco.test.js, senza require: non scriverli tu») è nel contratto del gioco dove si descrive
+   gioco.test.js, in `VINCOLO_CORREZIONE_GIOCO` (con «un apriGioco tuo proverebbe un motore
+   finto») e nel rimando di `riproduzione.messaggio_agente` per un gioco. In esegui_test di un
+   gioco, un `*.test.js` scrivibile che definisce apriGioco o creaCaso (una funzione, una
+   dichiarazione, un'assegnazione anche a `globalThis`; senza i commenti di riga, mai una
+   chiamata) ha nel risultato `motore_finto`: «gioco.test.js definisce un suo apriGioco: così il
+   test prova un motore finto, non quello vero di Calliope. Toglilo e usa quello che c'è (…)»,
+   regola `agente_motore_finto` (`ciclo.motore_finto`, `nota_motore_finto`).
+2. **La tappa con lo stato consegnabile si chiude** (decisione di chi amministra del 20/10). A
+   una tappa da un tetto del giro (`TAPPA_CONSEGNABILE`: passate, tempo, token, troncata) il
+   ciclo chiama `_consegna_alla_tappa`, cioè `_consegna_al_tetto` con `tappa`: gli stessi
+   controlli di una consegna (i file chiesti, gli esempi di accettazione rieseguiti verdi, i test
+   dell'agente verdi due volte, il controllo della consegna e il piano, il ricollaudo; in una
+   correzione la riproduzione, che senza esempi deve essere «riprodotto»). Se passano il lavoro
+   si chiude «fatto» con `consegna_al_tetto` «tappa», il riassunto «… Chiuso da me alla tappa:
+   l'agente non ha consegnato, ma aveva finito.», la regola `agente_consegna_alla_tappa` e a
+   voce `AL_TETTO_TAPPA`, «L'agente non ha consegnato, ma ha finito: l'ho chiuso io.», sia nella
+   frase di un'estensione sia nell'annuncio del collaudo di uno sviluppo (`frase_pronto`: le
+   tappe ci sono solo lì). Senza un controllo indipendente (i soli test dell'agente, un programma
+   senza esempi) o con un controllo rosso la tappa resta com'è, e il motivo va in
+   `segnali["tappa_no"]` (non in `al_tetto_no`: il lavoro non è finito). Alla tappa la
+   riproduzione non consuma il rimando (`_riproduzione(rimanda=False)`): resta per la consegna
+   dell'agente nel giro dopo. Le tappe della consegna rossa e della prosa no: lì i controlli li
+   ha già fatti il ciclo.
+3. **Il segnaposto della compattazione non si scrive.** scrivi_file (`contenuto`) e modifica_file
+   (`nuovo`) rifiutano un testo che è o contiene «[N caratteri: completo in
+   .calliope/passo-K.txt]» (`contesto_lavoro.SEGNAPOSTO`, la forma di `_alleggerisci`): «è il
+   segnaposto di un risultato vecchio, non il testo del file, e non l'ho scritto. Rileggi il file
+   con leggi_file e scrivi il testo vero», regola `agente_segnaposto`. Il caso: tris2 L1, il
+   gioco.test.js scritto come `[6000 caratteri: completo in .calliope/passo-15.txt]`.
+4. **Il palco con la pagina già «griglia»**: in [giochi](giochi.md), voce del 20/10.
+5. **Il banco** (`prove/manuali/banco_temperatura.py`): le porte partono con un gioco.test.js della
+   forma della partenza (`TEST_GIOCO_PRIMA_PORTE`, l'apriGioco vero dalla preparazione, verde sul
+   gioco rotto perché guarda i punti e i turni, non il mostro), come una versione di un gioco dopo
+   #186. tris2 ha l'analisi prima del codice del servizio come in uno sviluppo: `SviluppoBanco`
+   dà all'analisi (solo a lei, per la durata della passata: `con_sviluppo`) i requisiti del caso
+   (`REQUISITI_TRIS2`) e la richiesta, quindi gli esempi di accettazione e i giocatori, e al tetto
+   o alla tappa il codice può chiudere da sé; prima il banco metteva `{"stato": "saltata"}` e
+   `_consegna_al_tetto` rispondeva sempre «senza esempi di accettazione». Con `--accettazione no`
+   «saltata» e i giocatori del caso, come prima. La riga ha `tappa_no`.
+
+**Prove.** `prova_apri_gioco_tappa` (nuova, livello 2, ~11 s), con i contrari: la frase nel
+contratto, nei vincoli e nel rimando (contrari: l'estensione, il programma); il motore finto
+trovato in esegui_test (contrari: chiamate, commenti, un file in sola lettura, un lavoro che non è
+un gioco, la partenza); la tappa con gli esempi verdi e con la riproduzione «riprodotto» →
+«fatto», la frase a voce e l'annuncio dello sviluppo (contrari, la tappa resta: un test dell'agente
+rosso, gli esempi rossi, i test verdi senza esempi, la correzione senza test con il rimando
+intatto); il segnaposto vero dal contesto rifiutato in scrivi_file e modifica_file (contrari: le
+parentesi quadre, una modifica vera). `prova_gioco_palco` 1b: troppi pulsanti nella griglia
+(contrario: nelle scelte). `banco_temperatura.py --secco` tutto ok, con in più: la versione di
+prima delle porte verde con la prova di fumo; tris2 con l'analisi pronta, `accettazione.test.js`
+nella cartella e la partenza 2–2 (contrario: `--accettazione no` «saltata»); le porte a due giri
+corrette alla tappa del giro 1 → «fatto» lì, `consegna_al_tetto` «tappa» con la riproduzione
+(contrario senza il test che riproduce: tappa e `tappa_no` «correzione non riprodotta», con
+l'accettazione nascosta verde). **Attesa cambiata per scelta**: `prova_fasi_agente_2`, «un lavoro
+a tappe si ferma alla tappa» con gli esempi verdi è ora «fatto» con `agente_consegna_alla_tappa`.
+
+**Rischi.** Chiudere un lavoro che la persona avrebbe voluto continuare: per questo serve un
+controllo indipendente verde, mai i soli test dell'agente. Un gioco con gli esempi verdi ma un
+requisito che gli esempi non provano si chiude prima di averlo fatto: la revisione onesta al
+collaudo dice ciò che manca («mancanze_dette»), e il collaudo resta della persona. A ogni tappa
+il codice riesegue esempi, test (due volte) e, in una correzione, la riproduzione: qualche secondo
+in più per giro. Il fatto del motore finto è un'espressione regolare sul testo: un `apriGioco =`
+dentro una stringa su più righe sarebbe un falso positivo (resta una nota, non un rifiuto).
+
+**Da misurare sulla DGX** (dopo l'unione): il banco `--casi tris2,porte --giri 2 --ripetizioni 3`
+di nuovo, più `--casi porte --giri 1 --ripetizioni 5` per il confronto col 19/10 (atteso: porte ≥
+4/5 a un giro e ≥ 2/3 a due giri); nel log `agente_motore_finto`, `agente_consegna_alla_tappa`,
+`agente_segnaposto`, e nella riga `tappa_no`.
