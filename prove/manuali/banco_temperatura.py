@@ -1242,6 +1242,8 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             "consegna_al_tetto": ris.get("consegna_al_tetto"),
             # …con gli esempi o con la riproduzione di una correzione senza esempi (14/10)
             "consegna_al_tetto_con": ris.get("consegna_al_tetto_con"),
+            # …e con «tappa» (20/10, #192) il tetto del giro che l'ha chiesta
+            "consegna_al_tetto_giro": ris.get("consegna_al_tetto_giro"),
             "esempi_finali": es_finali,
             # Le regole scattate nel lavoro, da lav.segnali (sonde.nota): dal 19/10 (#9) anche
             # agente_ragionamento_ripetuto e agente_riscrittura_ripetuta

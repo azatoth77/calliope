@@ -448,10 +448,14 @@ def nota_riscrittura(prima: str | None, dopo: str, nome: str) -> str:
 
 # Un apriGioco o un creaCaso definito in un test JavaScript (20/10, issue #192): una funzione,
 # una dichiarazione o un'assegnazione (anche a globalThis). Una chiamata no
+# Un alias del globale (`const apriGioco = globalThis.apriGioco`) non è un motore finto
+# (revisione della PR #194)
+_DAL_GLOBALE = (r"(?!=)(?!\s*(?:globalThis|global|window|self)\s*\.\s*"
+                r"(?:apriGioco|creaCaso)\b)")
 _MOTORE_FINTO = re.compile(
     r"\bfunction\s*\*?\s*(apriGioco|creaCaso)\s*\("
-    r"|\b(?:const|let|var)\s+(apriGioco|creaCaso)\s*=(?!=)"
-    r"|(?:\bglobalThis\.|^[ \t]*)(apriGioco|creaCaso)\s*=(?!=)", re.M)
+    r"|\b(?:const|let|var)\s+(apriGioco|creaCaso)\s*=" + _DAL_GLOBALE
+    + r"|(?:\bglobalThis\.|^[ \t]*)(apriGioco|creaCaso)\s*=" + _DAL_GLOBALE, re.M)
 
 
 def motore_finto(sandbox) -> list[tuple[str, str]]:
@@ -464,8 +468,10 @@ def motore_finto(sandbox) -> list[tuple[str, str]]:
             p = f["percorso"]
             if not p.endswith(".test.js") or p in getattr(sandbox, "sola_lettura", ()):
                 continue
-            # Senza i commenti di riga: «// apriGioco = …» in una spiegazione non è codice
-            testo = re.sub(r"//[^\n]*", "", sandbox.leggi(p, max_caratteri=200_000))
+            # Senza i commenti, di riga e a blocco: «// apriGioco = …» in una spiegazione non è
+            # codice
+            testo = re.sub(r"/\*.*?\*/|//[^\n]*", "",
+                           sandbox.leggi(p, max_caratteri=200_000), flags=re.S)
             for m in _MOTORE_FINTO.finditer(testo):
                 n = next(x for x in m.groups() if x)
                 if (p, n) not in out:
@@ -1293,6 +1299,15 @@ class Agente:
                                 " Se un test fallisce sempre con lo stesso errore, cambia "
                                 "strada. Alla fine chiama consegna.")})
             lav.nota_giro = ""
+            # La nota del giro resta nei segnali per tutto il giro, anche dopo una domanda
+            # (revisione della PR #194): con una richiesta della persona in questo giro la tappa
+            # non si chiude d'ufficio (`_consegna_alla_tappa`); un giro senza nota la toglie
+            if not isinstance(lav.segnali, dict):
+                lav.segnali = {}
+            if nota:
+                lav.segnali["nota_giro"] = nota
+            else:
+                lav.segnali.pop("nota_giro", None)
         elif ctx and lav.risposta is not None:
             # Ripresa dopo una domanda (03/10): la conversazione dell'agente è quella di prima
             messages = ctx["messages"]
@@ -1916,7 +1931,10 @@ class Agente:
                 "test": (test or {}).get("esito"), "test_passano": (test or {}).get("passano"),
                 "test_uscita": (test or {}).get("uscita", "")[-3000:],
                 **({"consegna_al_tetto": consegna["_al_tetto"],
-                    "consegna_al_tetto_con": consegna.get("_al_tetto_con") or "esempi"}
+                    "consegna_al_tetto_con": consegna.get("_al_tetto_con") or "esempi",
+                    # alla tappa il tetto del giro (revisione della PR #194)
+                    **({"consegna_al_tetto_giro": consegna["_al_tetto_giro"]}
+                       if consegna.get("_al_tetto_giro") else {})}
                    if consegna.get("_al_tetto") else {}),
                 **({"piano": stato_piano} if piano else {})}
 
@@ -2003,9 +2021,10 @@ class Agente:
             # la riproduzione è il solo controllo indipendente: deve esserci davvero
             if correzione:
                 from .riproduzione import NON_RIPRODOTTO
-                # Alla tappa il lavoro continua: il rimando della riproduzione resta per la
-                # consegna dell'agente nel giro dopo
-                self._riproduzione(lav, sandbox, rimanda=not tappa)
+                # Alla tappa e dopo la prosa il lavoro continua dopo un no: il rimando della
+                # riproduzione resta per la consegna dell'agente (dopo la prosa dalla revisione
+                # della PR #194: prima si consumava senza che il messaggio arrivasse all'agente)
+                self._riproduzione(lav, sandbox, rimanda=not (tappa or e.tipo == "prosa"))
                 stato = (getattr(lav, "riproduzione", None) or {}).get("stato")
                 if stato in NON_RIPRODOTTO or (not con_esempi and stato != "riprodotto"):
                     return no(f"correzione non riprodotta ({stato or '?'})")
@@ -2045,8 +2064,10 @@ class Agente:
                 else "Chiuso da me: l'agente ha smesso di usare gli strumenti senza consegnare."
                 if e.tipo == "prosa" else
                 "Chiuso al tetto: l'agente non ha fatto in tempo a consegnare.")
-        # Alla tappa `_al_tetto` è «tappa»: la frase a voce è servizio.AL_TETTO_TAPPA
-        return {"esito": "fatto", "_al_tetto": "tappa" if tappa else e.tipo, "_al_tetto_con": con,
+        # Alla tappa `_al_tetto` è «tappa» (la frase a voce è servizio.AL_TETTO_TAPPA) e il tetto
+        # del giro resta in `_al_tetto_giro` (revisione della PR #194: per il banco e la voce)
+        return {"esito": "fatto", "_al_tetto": "tappa" if tappa else e.tipo,
+                **({"_al_tetto_giro": e.tipo} if tappa else {}), "_al_tetto_con": con,
                 "riassunto": f"{detto} {fine}"}
 
     def _consegna_alla_tappa(self, lav: Lavoro, sandbox, e: Limite, controlla, piano: bool,
@@ -2061,6 +2082,16 @@ class Agente:
         dell'agente) None: la tappa resta com'è, e la persona sceglie. Le tappe della consegna
         rossa e della prosa no: lì i controlli li ha già fatti il ciclo."""
         if e.tipo not in TAPPA_CONSEGNABILE:
+            return None
+        seg = lav.segnali if isinstance(getattr(lav, "segnali", None), dict) else {}
+        if str(seg.get("nota_giro") or "").strip():
+            # Un giro con una richiesta della persona («cambia e continua», revisione della PR
+            # #194): gli esempi e la riproduzione non la vedono, e al tetto è la nota non finita
+            # il caso più probabile. La tappa resta, la persona sceglie
+            perche = "la persona ha chiesto qualcosa in questo giro"
+            self.log(f"[AGENTI] {lav.id}: alla tappa niente consegna d'ufficio: {perche}")
+            seg["tappa_no"] = perche
+            lav.segnali = seg
             return None
         return self._consegna_al_tetto(lav, sandbox, e, controlla, piano, stato_piano,
                                        tappa=True)

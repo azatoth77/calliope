@@ -4431,3 +4431,19 @@ dentro una stringa su più righe sarebbe un falso positivo (resta una nota, non 
 di nuovo, più `--casi porte --giri 1 --ripetizioni 5` per il confronto col 19/10 (atteso: porte ≥
 4/5 a un giro e ≥ 2/3 a due giri); nel log `agente_motore_finto`, `agente_consegna_alla_tappa`,
 `agente_segnaposto`, e nella riga `tappa_no`.
+
+**Dopo la revisione della PR #194 (20/10).**
+- **Un giro con una nota della persona non si chiude d'ufficio alla tappa.** La nota di «cambia e
+  continua» (`lav.nota_giro`) entrava nel messaggio del giro e poi si azzerava: nessuno sapeva più
+  che il giro aveva una richiesta, e gli esempi e la riproduzione non la vedono. Ora resta in
+  `segnali["nota_giro"]` per tutto il giro (anche dopo una domanda; un giro senza nota la toglie),
+  e `_consegna_alla_tappa` con la nota dice no, «la persona ha chiesto qualcosa in questo giro», in
+  `tappa_no`. Il caso del revisore: giro 1 tappa con gli esempi rossi, nota «aggiungi anche le
+  iarde», giro 2 al tetto con gli esempi verdi senza le iarde: era «fatto», ora tappa.
+- **Dopo la prosa il no della riproduzione non consuma il rimando** (`_consegna_dalla_prosa`, lo
+  stesso difetto della tappa, c'era da #180): il lavoro continua, e alla consegna dell'agente il
+  rimando arriva.
+- Con «tappa» il risultato tiene anche il tetto del giro, `consegna_al_tetto_giro` (passate, tempo,
+  token, troncata), nel registro dei lavori e nella riga del banco.
+- `motore_finto` non conta gli alias dal globale (`const apriGioco = globalThis.apriGioco`) e
+  toglie anche i commenti `/* … */`.

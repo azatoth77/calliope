@@ -126,6 +126,10 @@ def prova_motore_finto(tmp: Path):
     sb.scrivi("gioco.test.js", FINTO_FUNZIONE)
     sb.scrivi("altro.test.js", FINTO_ASSEGNATO)
     sb.scrivi("chiama.test.js", SOLO_CHIAMATE)
+    # Revisione della PR #194: un alias dal globale e un commento a blocco non sono un motore
+    sb.scrivi("alias.test.js", "const apriGioco = globalThis.apriGioco;\n"
+                               "let creaCaso = global . creaCaso;\n"
+                               "/* async function apriGioco(o) {\n  return 1;\n} */\n")
     sb.scrivi("logica.js", "function apriGioco() {}\n")
     sb.scrivi("accettazione.test.js", "async function apriGioco() {}\n")
     sb.sola_lettura |= {"accettazione.test.js"}
@@ -134,8 +138,9 @@ def prova_motore_finto(tmp: Path):
              sorted(finti) == [("altro.test.js", "creaCaso"), ("gioco.test.js", "apriGioco")],
              str(finti))
     verifica("contrari: le chiamate e i commenti, un file che non è un test, un test in sola "
-             "lettura", not any(p in ("chiama.test.js", "logica.js", "accettazione.test.js")
-                                for p, _ in finti), str(finti))
+             "lettura, l'alias dal globale e il commento a blocco",
+             not any(p in ("chiama.test.js", "logica.js", "accettazione.test.js",
+                           "alias.test.js") for p, _ in finti), str(finti))
     n = nota_motore_finto([("gioco.test.js", "apriGioco")])
     verifica("il fatto: dove, perché e cosa fare, con la frase",
              "gioco.test.js definisce un suo apriGioco" in n and "motore finto" in n
@@ -170,17 +175,48 @@ def prova_motore_finto(tmp: Path):
 
 # ═══════════════════════════ 3. la tappa consegnabile ═══════════════════════════
 
-def _correzione(tmp, nome, passate, max_passi=3):
-    """Una correzione di un programma a tappe, senza esempi: l'agente finto recita `passate`
-    e non consegna; al tetto del giro la tappa."""
-    import prova_fasi_agente as F
+def _estensione(tmp, nome, passate, lav=None, sb=None, max_passi=3):
+    """Un'estensione a tappe con gli esempi di accettazione (come prova_fasi_agente_2
+    ._gira_tetto), che si può continuare: con `lav` e `sb` di un giro di prima il giro dopo.
+    (lavoro, risultato, log, sandbox)."""
+    import prova_fasi_agente_2 as F2
+    from calliope.agenti import accettazione as acc
     from calliope.agenti.ciclo import Lavoro
+    from calliope.agenti.scheletri import prepara_estensione
+    from calliope.estensioni.prompt import controlla_consegna
     cli = G._Copione(passate)
     log = []
     ag = G.agente(cli, log)
     ag.max_passi = max_passi
+    if sb is None:
+        sb = G.sandbox(tmp, nome)
+        prepara_estensione(sb)
+        sb.scrivi("manifesto.json", json.dumps(F2.MANIFESTO))
+        lav = Lavoro(nome, "estensione", "Un convertitore di distanze")
+        lav.tappe = True
+        an = acc.interpreta(F2.ANALISI, 3, True)
+        sb.scrivi(acc.FILE, acc.test_python(an))
+        sb.sola_lettura |= {acc.FILE}
+        lav.accettazione = {"stato": "pronta", "file": True, "nome_file": acc.FILE,
+                            "esempi": len(an["esempi"])}
+    try:
+        ris = ag.codice(lav, sb, controlla=lambda x: controlla_consegna(x))
+    except Exception as e:  # noqa: BLE001 — Limite
+        ris = {"eccezione": type(e).__name__, "motivo": str(e)}
+    return lav, ris, log, sb
+
+
+def _correzione(tmp, nome, passate, max_passi=3, tappe=True):
+    """Una correzione di un programma, di serie a tappe, senza esempi: l'agente finto recita
+    `passate`; al tetto del giro la tappa."""
+    import prova_fasi_agente as F
+    from calliope.agenti.ciclo import Lavoro
+    cli = P.Copione(passate)      # anche le passate di sola prosa
+    log = []
+    ag = G.agente(cli, log)
+    ag.max_passi = max_passi
     lav = Lavoro(nome, "codice", "una funzione che somma")
-    lav.tappe = True
+    lav.tappe = tappe
     lav.correzione = True
     lav.problema_correzione = "il risultato non è quello giusto"
     lav.file_iniziali = dict(F.PRIMA)
@@ -239,6 +275,42 @@ def prova_tappa(tmp: Path):
              and str(lav.segnali.get("tappa_no")).startswith("correzione non riprodotta")
              and int(lav.riproduzione.get("rimandi", 0)) == 0
              and not regole(lav).get("correzione_rimandata"), f"{ris} {lav.riproduzione}")
+    # Revisione della PR #194: il tetto del giro resta nel risultato
+    lav, ris, log = _correzione(tmp, "riprodotta-tetto", [giusta, rosso, [P.ESEGUI]])
+    verifica("…con «tappa» il risultato tiene anche il tetto del giro (passate)",
+             ris.get("consegna_al_tetto") == "tappa"
+             and ris.get("consegna_al_tetto_giro") == "passate", str(ris)[:300])
+    # Revisione della PR #194: un giro con una nota della persona non si chiude d'ufficio
+    sbagliata = [P.scrivi("estensione.py", F2.SBAGLIATA)]
+    corretta = [P.scrivi("estensione.py", F2.GIUSTA)]
+    lav, ris, log, sb = _estensione(tmp, "nota", [sbagliata, [P.ESEGUI], [F2.LEGGI]])
+    verifica("giro 1 con gli esempi rossi: tappa", ris.get("esito") == "tappa"
+             and str(lav.segnali.get("tappa_no")).startswith("esempi di accettazione rossi"),
+             f"{ris.get('esito')} {lav.segnali.get('tappa_no')}")
+    lav.risposta, lav.nota_giro, lav.passi0 = "continua", "aggiungi anche le iarde", lav.passi
+    lav, ris, log, sb = _estensione(tmp, "nota", [corretta, [P.ESEGUI], [F2.LEGGI]], lav=lav,
+                                    sb=sb)
+    verifica("contrario: giro 2 con la nota «aggiungi anche …», al tetto con gli esempi verdi "
+             "ma senza averla fatta: resta tappa, il motivo in tappa_no",
+             ris.get("esito") == "tappa"
+             and lav.segnali.get("tappa_no") == "la persona ha chiesto qualcosa in questo giro"
+             and lav.segnali.get("nota_giro") == "aggiungi anche le iarde"
+             and not regole(lav).get("agente_consegna_alla_tappa"), f"{ris} {lav.segnali}")
+    lav.risposta, lav.passi0 = "continua", lav.passi
+    lav, ris, log, sb = _estensione(tmp, "nota", [[F2.LEGGI]] * 3, lav=lav, sb=sb)
+    verifica("…il giro dopo senza nota la toglie, e la tappa si chiude «fatto»",
+             ris.get("esito") == "fatto" and ris.get("consegna_al_tetto") == "tappa"
+             and "nota_giro" not in lav.segnali, f"{ris.get('esito')} {lav.segnali}")
+    # Revisione della PR #194: dopo la prosa il no della riproduzione non consuma il rimando
+    lav, ris, log = _correzione(tmp, "prosa", [giusta, [P.ESEGUI], "Ho finito.", "Ho finito.",
+                                                [P.consegna()], [P.consegna()]],
+                                max_passi=8, tappe=False)
+    verifica("dopo due passate di prosa la correzione senza test: no («correzione non "
+             "riprodotta»), e alla consegna dell'agente il rimando c'è ancora",
+             str(lav.segnali.get("prosa_no")).startswith("correzione non riprodotta")
+             and regole(lav).get("correzione_rimandata") == 1
+             and any("La correzione non è valida" in r for r in P.risultati(lav, "consegna")),
+             f"{lav.segnali.get('prosa_no')} {regole(lav)} {ris}")
     # A voce: fuori da uno sviluppo la frase dell'estensione, in uno sviluppo l'annuncio
     from calliope.agenti.ciclo import Lavoro
     from calliope.agenti.servizio import AL_TETTO_TAPPA, Lavori

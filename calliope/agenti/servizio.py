@@ -1894,6 +1894,8 @@ class Lavori:
                 "consegna_al_tetto": r.get("consegna_al_tetto") or None,
                 # …con gli esempi o, per una correzione senza esempi, la riproduzione (14/10)
                 "consegna_al_tetto_con": r.get("consegna_al_tetto_con") or None,
+                # …e alla tappa (20/10, #192) il tetto del giro: passate, tempo, token, troncata
+                "consegna_al_tetto_giro": r.get("consegna_al_tetto_giro") or None,
                 "modello": self.imp.modello, "passi": lav.passi, "token": lav.token,
                 "token_letti": lav.prompt_token, "cedimenti": lav.cedimenti,
                 # 05/10: il ragionamento a parte, e il contesto (finestra, picco dei token
