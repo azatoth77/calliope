@@ -4418,8 +4418,14 @@ porte senza il gioco.test.js che una versione vera ha).
    dell'accettazione su quelli totali (`accettazione_verdi`, `accettazione_totali`, i nomi dei
    rossi; colonna «test acc.»). **La metrica del confronto è l'accettazione nascosta**, non
    «riuscito»: solo i tris2 hanno gli esempi dell'analisi e si possono chiudere al tetto.
-   Comando, partenze e regole di lettura scritte prima (≥ 8/10 contro ≤ 3/10, il caso
-   intermedio, l'ordine) nella docstring del banco; sulla DGX dopo #197, `--presence 0.5` (con
+   Comando, partenze e regole di lettura scritte prima nella docstring del banco, alla lettera
+   come il § 7 dell'analisi (`2026-10-20-giochi-macchina-o-interfaccia.md`): alto ≥ 8/10, basso
+   ≤ 3/10, e 8/10 contro 3/10 (p = 0,070 a due code) è una soglia di decisione, non una prova,
+   che basta per A e A′; per aprire il prototipo di C il margine più forte (tris-nudo a 9/10 con
+   gli altri due ≤ 3/10, oppure 8/10 con gli altri due ≤ 2/10); il caso intermedio si rigira una
+   volta con altre 10 ripetizioni che si sommano alle prime (20 contro 20, alto ≥ 16/20, basso
+   ≤ 6/20; se resta intermedio, A); le regole in ordine, vale la prima che si avvera. Sulla DGX
+   dopo #197, `--presence 0.5` (con
    `config` tris2 avrebbe 0,5 e tris-nudo 0), `--casi tris2,tris2-solo-logica,tris-nudo --giri 2
    --ripetizioni 10`, da lanciare. Nel prompt di un programma JavaScript scelto dall'analisi
    (il file dichiarato) i test sono `*.test.js`, il seme la funzione del caso e lo scheletro solo

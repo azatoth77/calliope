@@ -85,17 +85,28 @@ estensioni, 0,5, e tris-nudo quello del codice, 0), 10 ripetizioni obbligatorie:
 La metrica è l'**accettazione nascosta** (colonna «acc.») e i suoi test verdi («test acc.»),
 non «riuscito»: solo i due tris2 hanno gli esempi dell'analisi, quindi solo loro si possono
 chiudere «fatto» al tetto o alla tappa. Per lo stesso motivo un secondo giro con
-`--accettazione no` (nessuno ha l'analisi) dice se pesa. Le regole di lettura, scritte prima e
-in quest'ordine (la prima che vale decide; 8/10 contro 3/10 ha p ≈ 0,07 con Fisher):
-1. tris2 ≥ 8/10: basta la macchina com'è (A); gli altri due restano misure.
-2. tris-nudo ≤ 3/10: il limite è il modello o l'harness generico, non la macchina; si tiene A.
-3. tris-nudo ≥ 8/10 e tris2 ≤ 3/10: il costo è del nostro ambiente. Allora tris2-solo-logica:
-   ≥ 8/10 il costo sta nei test con apriGioco (A con i test della sola logica); ≤ 3/10 sta
-   nell'interfaccia della macchina (un'interfaccia più piccola, misurata con il suo prototipo);
-   in mezzo, tutte e due.
-4. Il caso intermedio (nessuna delle tre: per esempio tris-nudo alto e tris2 fra 4 e 7 su 10,
-   o tris-nudo fra 4 e 7): non decide. Si leggono i test verdi per punto e i primi errori, e si
-   rifanno 10 ripetizioni prima di scegliere.
+`--accettazione no` (nessuno ha l'analisi) dice se pesa. Le regole di lettura, scritte prima di
+girare (§ 7 di docs/ricerche/2026-10-20-giochi-macchina-o-interfaccia.md): alto vuol dire
+≥ 8/10, basso ≤ 3/10. Nel caso peggiore, 8/10 contro 3/10, Fisher esatto dà p = 0,070 a due code
+(0,035 a una): è una soglia di decisione, non una prova, e basta per scegliere A o A′, che
+costano poco e si disfano; per aprire il prototipo di C serve il margine più forte (regola 4).
+Le regole si applicano in quest'ordine, e vale la prima che si avvera:
+1. tris2 alto: basta A (#197). Gli altri casi restano come misura, senza cambiare formato.
+2. tris2-solo-logica alto e tris2 basso: il costo era l'API dei test. Si fa A′ (una PR), niente
+   C.
+3. tris-nudo basso: il limite è il modello o l'harness generico, non la macchina. Si tiene A e si
+   guarda #175.
+4. tris-nudo alto, tris2 e tris2-solo-logica bassi, con il margine più forte: tris-nudo a 9/10
+   con gli altri due ≤ 3/10, oppure 8/10 con gli altri due ≤ 2/10 (p ≈ 0,02 a due code). Il costo
+   è dell'interfaccia: si fa il prototipo e `tris-facciata` a 10 ripetizioni (alto: C, con una
+   decisione nuova; basso: il costo sta nelle parti che restano, vista e comandi, e si torna ad A
+   sui punti trovati dalle firme degli errori; intermedio: regola 5). Con il margine solo di
+   8/10 contro 3/10 vale la regola 5.
+5. Il caso intermedio (un caso fra 4/10 e 7/10, o due casi a meno di 5 punti su 10 l'uno
+   dall'altro): nessuna decisione. Si leggono le firme del primo errore per classe e si rigirano
+   i due casi in dubbio con altre 10 ripetizioni. Il rilancio si somma ai primi 10: si leggono 20
+   lavori contro 20, con le stesse soglie in proporzione (alto ≥ 16/20, basso ≤ 6/20). Si rilancia
+   una volta sola: se resta intermedio, vale la regola 1 con A.
 
 Misure per lavoro: riuscito (consegna «fatto» e accettazione verde), passate, token (e di
 ragionamento), minuti, giri a vuoto (passate fermate per ragionamento ripetuto, passate senza
