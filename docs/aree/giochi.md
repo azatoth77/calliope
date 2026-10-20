@@ -1017,9 +1017,12 @@ motore non fa; il 45 % del testo di un gioco riguardava le estensioni Python.
 2. **`g.stato()` esatto**: `{ n, fase, tocca, turno, giocatori: [{ nome, punti }], esito,
    comandi }`, con `comandi` un oggetto (`g.stato().comandi.porta`), non una lista. Il prompt non
    promette più il «vincitore» (prima «punti, esito e vincitore»), che l'istantanea non ha: chi
-   vince si legge dai punti. Non l'ho aggiunto all'istantanea perché la valida anche il server
-   (`gioco_stato.py`, il banco d'attacco delle istantanee): un campo in più lì è un cambio del
-   protocollo, non del contratto.
+   vince si legge dai punti. Non l'ho aggiunto: con i pareggi e le partite senza punti
+   «vincitore» va deciso dal gioco, e i punti dicono già tutto. *[storico: «perché la valida
+   anche il server, sarebbe un cambio del protocollo» fino al 20/10, non esatto: g.stato() è
+   `istantanea()` del motore, solo per i test; il server valida `perCalliope()`
+   (`macchina.CHIAVI_ISTANTANEA`), e aggiungerlo a `istantanea()` non cambierebbe il
+   protocollo (revisione della PR #188)]*
 3. **Gli errori nuovi del motore** (`motore_gioco.js`, `controlla`): `{ esito, fase: "fine" }`
    perdeva l'esito senza dirlo (il motore andava subito alla fase), e `{ dopo }` senza esito era
    ignorato. Ora sono errori con fase e comando e con cosa fare («Per mostrare il testo e poi
@@ -1029,7 +1032,11 @@ motore non fa; il 45 % del testo di un gioco riguardava le estensioni Python.
    "fine"» ma «esito con dopo: "fine", oppure fase: "fine" senza esito», prima della strada (il
    messaggio si taglia a 200 caratteri e il consiglio in fondo si perdeva). Le prove dei giochi
    esistenti e i giochi delle prove (`prove/giochi/*`) non usavano le due forme: verdi senza
-   cambiare niente.
+   cambiare niente. **I giochi già installati** che le usano si rompono alla mossa, nel
+   riquadro vero e non solo nei test (l'errore del motore ferma la partita): niente migrazioni
+   (Calliope non è in produzione), ma prima di aggiornare la DGX vanno cercati nei `logica.js`
+   installati (`esito` insieme a `fase` diversa da «esito», `dopo` senza `esito`) e rifatti con
+   una correzione.
 4. **Il contratto esatto** (`contratto.scheda_testo`, ora il §2 del contratto del gioco): «Inizia»
    c'è sempre, anche con min < max, e parte con min giocatori (o con quanti hanno detto «gioco
    anch'io»); `turni` è vero di serie (false: muove chiunque); il caso: Math.random va bene, in
@@ -1049,3 +1056,25 @@ l'analisi (`lav.accettazione = {"stato": "saltata", "giocatori": …}`), e il co
 verifica che la partenza sia verde e che l'accettazione nascosta su di lei sia rossa. Il criterio
 di #174 (il tris in al più 2 giri, `--casi tris2,porte --giri 2`) va misurato sulla DGX dopo
 l'unione.
+
+**Dopo la revisione della PR #188 (20/10).**
+- La consegna rifiuta un `logica.js` uguale a quello della partenza («è un esempio da sostituire
+  con il gioco chiesto»). Prima, con un nome dal titolo del lavoro, le porte d'esempio si
+  consegnavano così com'erano: in uno sviluppo le fermano gli esempi di accettazione e la
+  revisione, fuori da uno sviluppo (`estensione_gestisci`) niente. Il manifesto con la sola
+  fase d'esempio non si controlla a parte: le regole nuove passano da `logica.js`, e una
+  modifica (nome atteso) non è toccata dal controllo.
+- Le correzioni dei giochi non hanno più `g.tocca("2 giocatori")` fisso (con min = max non
+  c'è: la trappola del tris per due) né «il vincitore»: `VINCOLO_CORREZIONE_GIOCO`
+  (`tools/sviluppo.py`) e il rimando della riproduzione (`agenti/riproduzione.py`) dicono
+  `apriGioco({ seme: 1, inizia: true })` (con min < max anche `giocatori: N`) e rimandano al §2
+  del contratto.
+- Nome e titolo della partenza sono tagliati all'ultima parola intera, tengono le cifre e
+  l'apostrofo, e niente × né ÷ («Tic-tac-toe 3x3» → `tic_tac_toe_3x3`, «Tic tac toe 3x3»).
+- Gli esempi d'accettazione tolti perché fuori da min e max si contano in `tolti` e nel
+  registro. Se sarebbero tolti tutti, si tengono gli esempi e non si tiene min e max (la
+  partenza va con 1–4).
+- Il contratto del gioco non ha più le voci scritte per Python negli impossibili (pip, la
+  libreria standard, la porta stretta, «dentro l'estensione», le pagine fatte in JavaScript).
+- Il piano di un gioco non dice più «scarica_esempio… estensione.py» come prossimo passo:
+  dice di leggere e cambiare i file di partenza.

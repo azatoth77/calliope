@@ -3976,3 +3976,18 @@ e il manifesto va cambiato a mano dall'agente. I giochi già fatti non cambiano 
 migrazioni). Se l'agente consegna un gioco con il nome segnaposto la consegna lo rimanda una
 volta in più. Il punto 7 della issue (CalliopeFinta che dice «nessuna risposta preparata»,
 `valida` con tutti gli errori, `chiama` in sola lettura) resta aperto.
+
+**Dopo la revisione della PR #188 (20/10).**
+- **Si esegue solo ciò che la passata offre** (`Agente.codice`): uno strumento chiamato ma non
+  offerto (`esegui_python` o `scarica_esempio` in un gioco, `esegui_csharp` senza il C#) torna
+  `{"ok": false, "errore": "lo strumento «…» non è disponibile in questo lavoro", "strumenti":
+  […]}` e non parte. Prima toglierli dall'elenco non bastava: `_strumento` li eseguiva lo
+  stesso. Va riconciliato con #187 (#185), che cambia la gestione dello strumento sconosciuto
+  nello stesso ciclo.
+- `ANTI_INIEZIONE` sta davvero in fondo ai due prompt, dopo la partenza (prima era tra il testo
+  del prompt e il contratto, e la voce del 19/10 diceva «in fondo»).
+- Il contratto dell'estensione non rimanda più a `sviluppo_apri gioco=true` (un tool della voce,
+  che l'agente non ha): un gioco chiesto come estensione è `piano(fattibile=false)` con il
+  motivo «è un gioco: va chiesto come gioco». Così anche il prompt.
+- Caratteri dopo la revisione: gioco 16 171, estensione 15 566.
+- `from urllib import parse` resta segnalato dall'analisi statica (solo un avviso a chi approva).
