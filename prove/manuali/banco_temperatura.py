@@ -106,7 +106,8 @@ con `agente_ragionamento_ripetuto` e `agente_riscrittura_ripetuta`), `segnali_gi
 lavoro (senza_novita, senza_progressi, ripetizioni, riscritti), `limite` (il tipo del Limite di
 un lavoro finito «limite»: passate, tempo, token, a_vuoto; dal 19/10 con #180 anche `prosa`,
 più di PROSA_MAX passate di fila senza strumenti, e `consegna_rossa`, la consegna con i test
-rossi; altro) e, solo per un lavoro finito «limite», `al_tetto_no` con `al_tetto_no_tipo`
+rossi; dal 20/10 con #185 `troncata`, più di TRONCATE_MAX passate di fila con l'uscita troncata a
+max_tokens; altro) e, solo per un lavoro finito «limite», `al_tetto_no` con `al_tetto_no_tipo`
 (perché al tetto Calliope non l'ha chiuso da sé: «mancano i file che la consegna chiede»,
 «esempi di accettazione rossi», «correzione non riprodotta»…). `prosa_no`: l'ultimo no dopo due
 passate di sola prosa con lo stato consegnabile (#180), che non ferma il lavoro. Il criterio
@@ -1047,7 +1048,8 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             "segnali_giro": {k: seg.get(k) for k in ("senza_novita", "senza_progressi",
                                                       "ripetizioni", "riscritti")},
             # Un lavoro finito a un limite (19/10, #9): il tipo del Limite («passate», «tempo»,
-            # «token», «a_vuoto», dal 19/10 con #180 «prosa» e «consegna_rossa», «altro»), e
+            # «token», «a_vuoto», dal 19/10 con #180 «prosa» e «consegna_rossa», dal 20/10 con
+            # #185 «troncata», «altro»), e
             # perché al tetto Calliope non l'ha chiuso da sé (la funzione no di
             # _consegna_al_tetto), con il tetto che l'ha chiesto: solo con l'esito «limite»
             # (revisione della PR #181). `prosa_no`: l'ultimo no dopo due passate di sola

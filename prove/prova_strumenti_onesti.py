@@ -94,17 +94,19 @@ NUOVE = ("agente_stato_gia_visto", "agente_uscita_troncata", "agente_test_invari
          "agente_strumento_sconosciuto", "agente_dopo_consegna")
 
 
-def gira(tmp, nome, passate, max_passi=14):
+def gira(tmp, nome, passate, max_passi=14, tappe=False, lav=None, sb=None, controlla=None):
     """Agente.codice con il copione: (lavoro, risultato o {"eccezione"…}, log, copione, sandbox)."""
     from calliope.agenti.ciclo import Lavoro
     cli = Copione(passate)
     log = []
     ag = G.agente(cli, log)
     ag.max_passi = max_passi
-    sb = G.sandbox(tmp, nome)
-    lav = Lavoro(nome, "codice", "una funzione che somma")
+    sb = sb or G.sandbox(tmp, nome)
+    if lav is None:
+        lav = Lavoro(nome, "codice", "una funzione che somma")
+        lav.tappe = tappe
     try:
-        ris = ag.codice(lav, sb)
+        ris = ag.codice(lav, sb, controlla=controlla)
     except Exception as e:  # noqa: BLE001 — Limite
         ris = {"eccezione": type(e).__name__, "tipo": getattr(e, "tipo", ""), "motivo": str(e)}
     return lav, ris, log, cli, sb
@@ -271,7 +273,9 @@ def prova_troncata(tmp: Path):
     # Seconda revisione della PR #187. Il solo ragionamento troncato (il contenuto vuoto) non è
     # un'uscita troncata: la guardia dei token senza strumenti chiude alla seconda soglia, come
     # prima, e non il tetto dei token del lavoro dopo 30 passate
-    pensa = {"content": "", "thinking": "penso " * 200, "fine": "length", "eval": piena}
+    # Un ragionamento vero di 16 384 token sono ~50 000 caratteri (terza revisione: la
+    # discriminante è sui token, non sul contenuto)
+    pensa = {"content": "", "thinking": "penso " * 11000, "fine": "length", "eval": piena}
     lav, ris, log, cli, sb = gira(tmp, "tronca_pensiero", [dict(pensa) for _ in range(30)],
                                   max_passi=24)
     verifica("contrario: 30 passate di solo ragionamento troncato chiudono alla seconda soglia",
@@ -605,6 +609,187 @@ def prova_sconosciuto(tmp: Path):
              not any(r in regole(lav) for r in NUOVE), str(regole(lav)))
 
 
+# ═══════════════ 7. i casi delle tre revisioni della PR #187, permanenti ═══════════════
+# Ogni tornata di correzioni aveva rotto un caso di quella prima: qui restano tutti, con i
+# contrari, con il nome che avevano nei copioni della revisione
+
+LAVORO = [[scrivi("programma.py", GIUSTO), scrivi("test_programma.py", TEST)], [ESEGUI],
+          [CONSEGNA]]
+PIENA = 16384
+A_META = {"content": "Scrivo il programma:\ndef somma(a, b):\n    return", "fine": "length",
+          "eval": PIENA}
+
+
+def _storia_ben_formata(lav) -> bool:
+    """Ogni messaggio dell'agente con N chiamate ha dopo di sé N risposte."""
+    msgs = (lav.contesto or {}).get("messages") or []
+    for i, m in enumerate(msgs):
+        n = len(m.get("tool_calls") or []) if m.get("role") == "assistant" else 0
+        if n and sum(1 for x in msgs[i + 1:i + 1 + n] if x.get("role") == "tool") != n:
+            return False
+    return True
+
+
+class _Orologio:
+    """time.monotonic finto: una passata troncata del copione dura 330 s (16 384 token a ~50
+    token/s, oltre i 5 minuti della guardia del tempo senza strumenti), le altre 120 s."""
+    t = 1000.0
+
+    def monotonic(self):
+        return _Orologio.t
+
+    def __getattr__(self, n):
+        import time
+        return getattr(time, n)
+
+
+def prova_revisioni(tmp: Path):
+    sezione("7. i casi delle tre revisioni della PR #187")
+    from calliope.agenti import ciclo as C
+    from calliope.agenti.ciclo import USCITA_TRONCATA_TESTO, TRONCATE_MAX
+    # A, L0 e L1 (prima e terza revisione, R3): contenuto vuoto, poco o niente ragionamento,
+    # eval al tetto. È l'uscita trattenuta dal parser dei tool (Ollama, una chiamata a metà):
+    # una troncata, non «ha ragionato per 32 768 token»
+    for tag, th in (("A", ""), ("L1", "Devo scrivere programma.py con somma. " * 10)):
+        p = {"content": "", "thinking": th, "fine": "length", "eval": PIENA}
+        lav, ris, log, cli, sb = gira(tmp, "rev" + tag, [p, p, p] + LAVORO)
+        verifica(f"{tag}: contenuto vuoto e poco ragionamento a {PIENA} token → troncata, «fatto»",
+                 ris.get("esito") == "fatto" and regole(lav).get("agente_uscita_troncata") == 3
+                 and not any("token senza strumenti" in x for x in log), str(ris)[:200])
+    # E (seconda): solo ragionamento, contato dal motore (vLLM) o stimato dai caratteri
+    for tag, p in (("E-vLLM", {"content": "", "ragionamento": PIENA - 10, "fine": "length",
+                               "eval": PIENA}),
+                   ("E-Ollama", {"content": "", "thinking": "penso " * 11000, "fine": "length",
+                                 "eval": PIENA})):
+        lav, ris, log, cli, sb = gira(tmp, "rev" + tag, [dict(p) for _ in range(30)],
+                                      max_passi=24)
+        verifica(f"{tag}: il solo ragionamento troncato chiude alla seconda soglia, come prima",
+                 ris.get("eccezione") == "Limite" and "ha ragionato per" in ris.get("motivo", "")
+                 and len(cli.corpi) == 2 and "agente_uscita_troncata" not in regole(lav),
+                 str(ris)[:200])
+    # F (seconda): troncate alternate a prosa, nessuna delle due «di fila»: arriva al tetto delle
+    # passate, mai a «N volte di fila»
+    vuota = {"content": "", "fine": "length", "eval": PIENA}
+    lav, ris, log, cli, sb = gira(tmp, "revF", [vuota, "Ci penso."] * 12, max_passi=24)
+    # (a 16 384 token l'una arriva prima il tetto dei token del lavoro: caro, ma finito)
+    verifica("F: troncate e prosa alternate fino a un tetto del lavoro, nessun «di fila»",
+             ris.get("eccezione") == "Limite" and ris.get("tipo") in ("passate", "token")
+             and "di fila" not in ris.get("motivo", "")
+             and regole(lav).get("agente_uscita_troncata", 0) >= 4, str(ris)[:200])
+    # J e J2 (terza, R2): il tempo delle troncate esce dalla guardia del tempo senza strumenti
+    vero, vero_time = Copione.chat, C.time
+
+    def lenta(self, *a, **k):
+        prossima = self.passate[0] if self.passate else None
+        _Orologio.t += 330 if isinstance(prossima, dict) and prossima.get("fine") else 120
+        return vero(self, *a, **k)
+    C.time, Copione.chat = _Orologio(), lenta
+    try:
+        lav, ris, log, cli, sb = gira(tmp, "revJ", [A_META, "Ci penso.", A_META, "Ci penso."]
+                                      + LAVORO, max_passi=14)
+        verifica("J: passate troncate da 330 s alternate a prosa: «fatto», niente «ha ragionato»",
+                 ris.get("esito") == "fatto" and not any("senza strumenti" in x for x in log),
+                 str(ris)[:200] + str(log[-3:]))
+        lav, ris, log, cli, sb = gira(tmp, "revJ2", [A_META, "Ci penso."] + LAVORO, max_passi=14)
+        ut = [str(m.get("content")) for m in lav.contesto.get("messages", [])
+              if m.get("role") == "user"]
+        verifica("J2: una troncata e una prosa: nessuna spinta «stai ragionando»",
+                 ris.get("esito") == "fatto" and not any("Stai ragionando" in u for u in ut),
+                 str(ut)[-300:])
+        lav, ris, log, cli, sb = gira(tmp, "revJ3", ["Ci penso."] * 4, max_passi=8)
+        verifica("contrario J: la prosa vera, 120 s a passata, fa ancora scattare la guardia",
+                 any("senza strumenti" in x for x in log), str(log[-3:]))
+    finally:
+        C.time, Copione.chat = vero_time, vero
+    # M (terza): con vLLM e «length» una chiamata intera e l'ultima rotta, quattro di fila:
+    # l'agente va avanti (un file per passata), le intere si eseguono, non è «di fila»
+    pp = [{"tool_calls": [scrivi(f"f{i}.py", "x = 1\n"), scrivi("programma.py", "def s")],
+           "rotti": [1], "fine": "length", "eval": PIENA} for i in range(4)]
+    lav, ris, log, cli, sb = gira(tmp, "revM", pp + LAVORO)
+    verifica("M: chiamate intere eseguite e l'ultima rotta, quattro volte: «fatto», i file scritti",
+             ris.get("esito") == "fatto" and all((sb.root / f"f{i}.py").exists() for i in range(4))
+             and regole(lav).get("agente_uscita_troncata") == 4, str(ris)[:200])
+    # N (terza, R1): in uno sviluppo, solo chiamate rotte oltre TRONCATE_MAX → tappa, e ogni
+    # chiamata ha la sua risposta nella storia
+    rotte = [{"tool_calls": [scrivi("programma.py", "def s"), scrivi("altro.py", "def t")],
+              "rotti": [0, 1], "fine": "length", "eval": PIENA} for _ in range(TRONCATE_MAX + 1)]
+    lav, ris, log, cli, sb = gira(tmp, "revN", rotte, tappe=True)
+    verifica("N: tappa «troncata» dopo il giro sulle chiamate: la storia è ben formata",
+             ris.get("esito") == "tappa" and ris.get("tipo_limite") == "troncata"
+             and _storia_ben_formata(lav), str(ris)[:200])
+    lav, ris, log, cli, sb = gira(tmp, "revN2", rotte)
+    verifica("…fuori da uno sviluppo «limite» col motivo suo, la storia ben formata",
+             ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
+             and _storia_ben_formata(lav), str(ris)[:200])
+    # R4 (terza): fuori da uno sviluppo, con gli esempi di accettazione verdi, le troncate oltre
+    # il tetto passano da _consegna_al_tetto come gli altri tetti
+    import prova_porte_consegna as PC
+    from calliope.estensioni.prompt import controlla_consegna
+    lav, sb, F2 = PC._estensione_con_esempi(tmp, "revR4")
+    lav, ris, log, cli, sb = gira(tmp, "revR4", [[scrivi("estensione.py", F2.GIUSTA)], [ESEGUI]]
+                                  + [dict(A_META) for _ in range(TRONCATE_MAX + 1)],
+                                  lav=lav, sb=sb, controlla=lambda x: controlla_consegna(x))
+    verifica("R4: esempi verdi e troncate oltre il tetto: «fatto» consegnato dal codice",
+             ris.get("esito") == "fatto" and ris.get("consegna_al_tetto") == "troncata",
+             str(ris)[:300])
+    # R6 (terza): una passata a vuoto in mezzo non lascia le troncate «di fila»
+    vuoto = {"giro_a_vuoto": "penso penso"}
+    lav, ris, log, cli, sb = gira(tmp, "revR6", [A_META] * TRONCATE_MAX + [vuoto, A_META] + LAVORO)
+    verifica("R6: tre troncate, un giro a vuoto, una troncata: non è la quarta di fila",
+             ris.get("esito") == "fatto", str(ris)[:200])
+    # I (seconda) e N2: col client di vLLM l'ultima chiamata a max_tokens è rotta anche col JSON
+    # che si legge (sezione 2); qui il contrario del ciclo: senza `rotti` (Ollama, chiamate
+    # intere) la chiamata si esegue
+    lav, ris, log, cli, sb = gira(tmp, "revI", [
+        {"tool_calls": [scrivi("programma.py", GIUSTO)], "fine": "length", "eval": PIENA},
+        [scrivi("test_programma.py", TEST)], [ESEGUI], [CONSEGNA]])
+    verifica("I: contrario, senza `rotti` la chiamata intera si esegue (Ollama)",
+             ris.get("esito") == "fatto" and "agente_uscita_troncata" not in regole(lav),
+             str(regole(lav)))
+    # B, C, D, G, H (prima e seconda): la modifica inversa e il già visto
+    due = "def somma(a, b):\n    return a + b\n\n\ndef doppio(x):\n    return x\n"
+    lav, ris, *_ = gira(tmp, "revB", [
+        [scrivi("programma.py", due), scrivi("test_programma.py", TEST)],
+        [modifica("programma.py", "return a + b", "return a - b")],
+        [modifica("programma.py", "return x", "return 2 * x")], [ESEGUI],
+        [modifica("programma.py", "return a - b", "return a + b")], [ESEGUI], [CONSEGNA]])
+    mf = risultati(lav, "modifica_file")
+    verifica("B: la correzione vera dopo un altro cambiamento è accettata",
+             [m.get("ok") for m in mf] == [True, True, True] and ris.get("esito") == "fatto",
+             str(mf)[:300])
+    lav, ris, *_ = gira(tmp, "revC", [
+        [scrivi("programma.py", GIUSTO), scrivi("test_programma.py", TEST)],
+        [modifica("programma.py", "a + b", "b + a")],
+        [scrivi("programma.py", "def somma(a, b):\n    # nuova versione\n    return b + a\n")],
+        [modifica("programma.py", "b + a", "a + b")], [ESEGUI], [CONSEGNA]])
+    mf = risultati(lav, "modifica_file")
+    verifica("C: dopo uno scrivi_file la modifica che rimette un testo tolto prima è accettata",
+             [m.get("ok") for m in mf] == [True, True], str(mf)[:300])
+    lav, ris, *_ = gira(tmp, "revD", [
+        [scrivi("programma.py", SBAGLIATO), scrivi("test_programma.py", TEST)],
+        [scrivi("programma.py", ALTRO)], [scrivi("programma.py", SBAGLIATO)], [ESEGUI],
+        [scrivi("programma.py", ALTRO)], [scrivi("programma.py", SBAGLIATO)],
+        [scrivi("programma.py", GIUSTO)], [ESEGUI], [CONSEGNA]])
+    sc = [r.get("gia_visto") or "" for r in risultati(lav, "scrivi_file")]
+    verifica("D: A, B, A, test, B, A: la passata detta è quella del test (2 passate fa)",
+             "su cui esegui_test, 2 passate fa, dava" in sc[5], str(sc))
+    lav, ris, *_ = gira(tmp, "revG", [
+        [scrivi("programma.py", GIUSTO), scrivi("test_programma.py", TEST)],
+        [modifica("programma.py", "a + b", "b + a")], [ESEGUI],
+        [modifica("programma.py", "b + a", "a + b")], [CONSEGNA]])
+    mf = risultati(lav, "modifica_file")
+    verifica("G: l'oscillazione pura con un esegui_test in mezzo è rifiutata",
+             [m.get("ok") for m in mf] == [True, False], str(mf)[:300])
+    lav, ris, *_ = gira(tmp, "revH", [
+        [scrivi("programma.py", GIUSTO), scrivi("test_programma.py", TEST)],
+        [modifica("programma.py", "a + b", "b + a")], [scrivi("note.txt", "x")],
+        [modifica("programma.py", "b + a", "a + b")], [CONSEGNA]])
+    mf = risultati(lav, "modifica_file")
+    verifica("H: l'inversa dopo lo scrivi_file di un altro file è accettata",
+             [m.get("ok") for m in mf] == [True, True], str(mf)[:300])
+    verifica("il fatto della troncata è quello di sempre", "max_tokens" in USCITA_TRONCATA_TESTO)
+
+
 def main():
     tmp = Path(tempfile.mkdtemp(prefix="calliope-onesti-"))
     os.environ.setdefault("CALLIOPE_CONFIG_LOCALE", str(tmp / "nessuno.yaml"))
@@ -615,6 +800,7 @@ def main():
         prova_letture(tmp / "letture")
         prova_modifica(tmp / "modifica")
         prova_sconosciuto(tmp / "sconosciuto")
+        prova_revisioni(tmp / "revisioni")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("\nTutto bene." if not errori else f"\n{errori} errori.")

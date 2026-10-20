@@ -1946,7 +1946,7 @@ class Lavori:
                 al_tetto = (AL_TETTO_CORREZIONE if r.get("consegna_al_tetto_con")
                             == "riproduzione" else AL_TETTO_TEST if r.get(
                                 "consegna_al_tetto_con") == "test" else AL_TETTO)
-                if r.get("consegna_al_tetto") in ("a_vuoto", "prosa"):
+                if r.get("consegna_al_tetto") in ("a_vuoto", "prosa", "troncata"):
                     # Non un tetto: l'agente ha smesso senza consegnare (19/10, #180)
                     al_tetto = al_tetto.replace("non ha fatto in tempo a consegnare",
                                                 "non ha consegnato")
