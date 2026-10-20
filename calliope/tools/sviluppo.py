@@ -39,7 +39,7 @@ import time
 
 from .. import frasi as frasi_pronte
 from .spec import ToolContext, ToolSpec, note_rule
-from ..testi import FAMILY, NIENTE
+from ..testi import APRI_GIOCO_C_E, FAMILY, NIENTE
 
 AZIONI = ["stato", "avanti", "analisi", "rifai", "ferma", "sospendi", "riprendi", "chiudi",
           "promuovi", "completa", "indietro"]
@@ -2406,8 +2406,11 @@ VINCOLO_CORREZIONE_GIOCO = (
     "giocatori: N; o dalla preparazione con «Inizia» o «N giocatori», §2 del contratto), poi "
     "await g.tocca(\"testo del pulsante\") e controlla con g.testo() e g.stato() proprio "
     "quello che la persona dice che non va (il mostro, i punti; chi vince si legge dai punti), "
-    "e con g.palco() se dice che qualcosa non si vede o esce dallo schermo. I test di "
-    "logica.test.js non vedono la pagina.")
+    "e con g.palco() se dice che qualcosa non si vede o esce dallo schermo. "
+    f"{APRI_GIOCO_C_E}: un apriGioco tuo proverebbe un motore "
+    "finto, non il gioco. I test di logica.test.js non vedono la pagina.")
+# 20/10 (#192): la frase di APRI_GIOCO_C_E. Nelle porte del banco (L4, L6) l'agente scriveva un
+# apriGioco suo in gioco.test.js e passava i giri a correggerlo, con logica.js già giusto
 # 20/10 (revisione della PR #188, #186): prima «g.tocca("2 giocatori")» fisso, che con min = max
 # non c'è (la trappola del tris per due, #174), e «il vincitore», che g.stato() non ha
 

@@ -20,6 +20,7 @@ Va nel prompt dell'agente e nella cartella del lavoro come `CAPACITA.md`, in sol
 from __future__ import annotations
 
 from .. import guardrail as gr
+from ..testi import APRI_GIOCO_C_E
 
 FILE = "CAPACITA.md"
 
@@ -188,7 +189,8 @@ def scheda_testo(cfg=None) -> list[str]:
         "variabili del tema: --sfondo, --testo, --primario, --accento, --carattere, --raggio, "
         "--casella, --bordo) e disegni .svg; i test logica.test.js (node:test e node:assert, "
         "`const { GIOCO } = require(\"./logica.js\")`: le regole) e gioco.test.js (la partita "
-        "vera con la macchina, apriGioco). esegui_test li fa girare con Node insieme alla prova "
+        f"vera con la macchina, apriGioco: {APRI_GIOCO_C_E}). esegui_test li fa girare con "
+        "Node insieme alla prova "
         "di fumo per fasi: ogni fase con ogni comando e ogni valore, partite intere fino alla "
         "fine, e ogni pagina misurata sul palco nei due orientamenti (niente fuori, niente "
         "sovrapposto, testo che ci sta)",
