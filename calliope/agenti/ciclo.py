@@ -1290,11 +1290,18 @@ class Agente:
             # «consegna quello che va» (servizio.continua): lo dice Calliope, non la persona
             uguali = isinstance(lav.segnali, dict) and lav.segnali.pop("consegna_dopo_giri",
                                                                        None)
+            # I fatti del revisore della tappa (20/10, #190): il giro dopo si apre con quelli
+            from .revisore import FATTI_TAPPA
+            fatti = (lav.segnali.pop("revisore_fatti", None)
+                     if isinstance(lav.segnali, dict) else None) or []
+            if isinstance(lav.segnali, dict):
+                lav.segnali.pop("revisore_domande", None)     # dette alla tappa
             messages.append({"role": "user", "content":
                              f"Hai un altro giro di lavoro ({self.max_passi} passate, "
                              f"{self.tempo_max_s / 60:.0f} minuti). Riprendi da dove eri, senza "
                              "rifare quello che c'è già: guarda il diario e i file."
                              + (f" La persona ha chiesto anche: «{nota}»." if nota else "")
+                             + (" " + FATTI_TAPPA + " " + " ".join(fatti) if fatti else "")
                              + (" " + CONSEGNA_DOPO_GIRI if uguali else
                                 " Se un test fallisce sempre con lo stesso errore, cambia "
                                 "strada. Alla fine chiama consegna.")})
@@ -1584,7 +1591,10 @@ class Agente:
                                            rimandi, stato_piano, piano, rifiuti)
                     raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)},
                                  tipo="prosa")
-                messages.append({"role": "user", "content": SPINTA_STRUMENTI})
+                # I fatti del revisore dopo la prosa (20/10, #190): il lavoro continua qui
+                ora = seg.pop("revisore_fatti_ora", None) or []
+                messages.append({"role": "user", "content": SPINTA_STRUMENTI
+                                 + ("\n\n" + " ".join(ora) if ora else "")})
                 continue
             letture = set()
             rossa = None              # la consegna rossa che ferma il lavoro (19/10, #180)
@@ -1700,6 +1710,11 @@ class Agente:
                     if not errore and piano and stato_piano is not None and fatto:
                         errore = _fuori_piano(sandbox, stato_piano)
                     rimando = None
+                    # Gli esempi di accettazione rossi alla consegna (20/10, #190, decisione di
+                    # chi amministra): il revisore a contesto pulito dice se è sbagliato l'esempio
+                    # (tolto, e la consegna va avanti senza) o il codice (il fatto all'agente)
+                    rev = (self._revisore_esempi(lav, sandbox, "consegna", piano, stato_piano,
+                                                 consegnabile) if fatto and not errore else None)
                     if errore and rifiuti < RIFIUTI_MAX:
                         rifiuti += 1
                         rimando = {"ok": False, "errore": errore,
@@ -1728,6 +1743,11 @@ class Agente:
                             rossa = ("ha consegnato con i test che non passano",
                                      str(r.get("fallimenti") or r.get("errore") or "")[:300])
                             rimando = {**r, "nota": "il lavoro si ferma qui: i test non passano"}
+                    if rev and rev["fatti"]:
+                        if rossa is not None:
+                            self._fatti_revisore(lav, rev)      # per il giro dopo la tappa
+                        elif rimando is not None:
+                            rimando = {**rimando, "revisore": " ".join(rev["fatti"])}
                     if rimando is None and fatto:
                         # Una correzione vale se un test che prima falliva adesso passa (12/10
                         # sera, riproduzione.py): rimandata una volta sola
@@ -1835,6 +1855,16 @@ class Agente:
                                              and not args.get("percorso")
                                              and int((result.get("esito") or {}).get(
                                                  "eseguiti") or 0) > 0)
+                        # Lo stesso errore STESSO_ERRORE_N volte di fila nel giro (20/10, #190):
+                        # il revisore a contesto pulito, al più una volta per giro; il suo fatto
+                        # sta nel risultato di questo esegui_test
+                        if firma and not args.get("percorso") and not result.get("invariato"):
+                            from . import revisore as rv
+                            if rv.modo(self.cfg) != "spento" and rv.stesso_errore(seg):
+                                rev = self._revisore_test(lav, sandbox, "stesso_errore", result,
+                                                          piano, stato_piano, consegnabile)
+                                if rev["fatti"]:
+                                    result = {**result, "revisore": " ".join(rev["fatti"])}
                     elif name in ("esegui_python", "esegui_csharp", "esegui_js") and \
                             result.get("fallimenti"):
                         seg["ultimo_errore"] = ultimo_errore(result)
@@ -1923,8 +1953,11 @@ class Agente:
             from ..sonde import nota as nota_regola
             nota_regola(lav, "agente_test_tolti", self.log,
                         ", ".join(tolti["nomi"])[:120] or f"{tolti['meno']} in meno")
+        # Gli esempi di accettazione tolti dal revisore (20/10, #190): nel rapporto e sulla scheda
+        tolti_rev = list((getattr(lav, "accettazione", None) or {}).get("tolti_revisore") or [])
         return {"esito": esito if esito in ("fatto", "mancano_dati", "impossibile") else "fatto",
                 **({"test_tolti": tolti} if tolti else {}),
+                **({"esempi_tolti": tolti_rev} if tolti_rev else {}),
                 "riassunto": str(consegna.get("riassunto") or ""),
                 "domanda": str(consegna.get("domanda") or ""),
                 "programma": str(consegna.get("programma") or "").strip(),
@@ -1996,6 +2029,17 @@ class Agente:
         try:
             if not self._pronto_da_consegnare(lav, sandbox, piano, stato_piano):
                 return no("mancano i file che la consegna chiede")
+            # Gli esempi rossi quando il lavoro si chiuderebbe da sé (20/10, #190): prima il
+            # revisore, che può toglierne uno sbagliato; i suoi fatti vanno al giro dopo (dopo la
+            # prosa a questo giro, che continua)
+            rev = self._revisore_esempi(lav, sandbox, "tappa" if tappa else e.tipo, piano,
+                                        stato_piano)
+            self._fatti_revisore(lav, rev, ora=e.tipo == "prosa" and not tappa)
+            if rev["tolti"]:
+                a = getattr(lav, "accettazione", None) or {}
+                con_esempi = a.get("stato") == "pronta" and bool(a.get("file"))
+                if not con_esempi and not correzione:
+                    return no("senza esempi di accettazione (tolti dal revisore)")
             if con_esempi:
                 from . import accettazione as acc
                 lav.passo = "riprova gli esempi di accettazione"
@@ -2142,6 +2186,53 @@ class Agente:
                 "riassunto": f"{cosa} e passano i suoi test. Chiuso da me: l'agente ha smesso "
                              "di usare gli strumenti senza consegnare."}
 
+    # ── il revisore a contesto pulito (20/10, issue #190, agenti/revisore.py) ──
+    def _revisore_esempi(self, lav: Lavoro, sandbox, momento: str, piano: bool, stato_piano,
+                         consegnabile=None, test: dict | None = None) -> dict:
+        """Gli esempi di accettazione rossi quando il lavoro vorrebbe consegnare o chiudersi:
+        `revisore.rivedi_esempi`, con lo stato consegnabile per il verdetto «consegna». Mai
+        un'eccezione: nel dubbio niente revisore, come prima."""
+        from . import revisore as rv
+        if rv.modo(self.cfg) == "spento":
+            return rv._esito()
+
+        def pronto():
+            return self._pronto_da_consegnare(lav, sandbox, piano, stato_piano, consegnabile)
+        try:
+            return rv.rivedi_esempi(self, lav, sandbox, momento, pronto, test=test)
+        except Exception as ex:  # noqa: BLE001
+            self.log(f"[AGENTI] {lav.id}: revisore non riuscito ({type(ex).__name__}: {ex})")
+            return rv._esito()
+
+    def _revisore_test(self, lav: Lavoro, sandbox, momento: str, test: dict, piano: bool,
+                       stato_piano, consegnabile=None) -> dict:
+        """I test rossi in un momento dei test (tappa, stesso errore): `revisore.rivedi_test`.
+        Mai un'eccezione."""
+        from . import revisore as rv
+
+        def pronto():
+            return self._pronto_da_consegnare(lav, sandbox, piano, stato_piano, consegnabile)
+        try:
+            return rv.rivedi_test(self, lav, sandbox, momento, test, pronto)
+        except Exception as ex:  # noqa: BLE001
+            self.log(f"[AGENTI] {lav.id}: revisore non riuscito ({type(ex).__name__}: {ex})")
+            return rv._esito()
+
+    @staticmethod
+    def _fatti_revisore(lav: Lavoro, rev: dict | None, ora: bool = False) -> None:
+        """I fatti del revisore per il giro dopo la tappa (`revisore_fatti`) o, con `ora`, per
+        la passata dopo nello stesso giro (`revisore_fatti_ora`, dopo la prosa); le domande per
+        il rapporto della tappa. Senza ripetizioni, al più 6."""
+        if not rev or not (rev.get("fatti") or rev.get("domande")):
+            return
+        seg = lav.segnali if isinstance(getattr(lav, "segnali", None), dict) else {}
+        lav.segnali = seg
+        for chiave, nuovi in (("revisore_fatti_ora" if ora else "revisore_fatti",
+                               rev.get("fatti") or []),
+                              ("revisore_domande", rev.get("domande") or [])):
+            if nuovi:
+                seg[chiave] = list(dict.fromkeys(list(seg.get(chiave) or []) + nuovi))[-6:]
+
     # ── tappe (08/10, versione 2 della modalità sviluppo) ──
     def _tappa(self, lav: Lavoro, sandbox, gc, messages: list, e: Limite, spinte: int,
                scritti: int, rimandi: int, stato_piano, piano: bool, rifiuti: int = 0) -> dict:
@@ -2179,6 +2270,30 @@ class Agente:
         seg = lav.segnali if isinstance(lav.segnali, dict) else {}
         lav.segnali = seg
         uguali = giri_uguali(seg, test)
+        # Il revisore a contesto pulito alla tappa con i test rossi (20/10, #190): gli esempi di
+        # accettazione rossi non ancora giudicati nel giro, poi i test dell'agente (anche dopo la
+        # consegna rossa e dopo giri uguali, prima della domanda alla persona). I fatti aprono il
+        # giro dopo, la domanda va nel rapporto
+        rev = None
+        if isinstance(test, dict) and test.get("passano") is False:
+            from . import revisore as rv
+            if rv.modo(self.cfg) != "spento":
+                momento = ("consegna_rossa" if e.tipo == "consegna_rossa" else "giri_uguali"
+                           if uguali >= GIRI_UGUALI else "tappa_rossa")
+                rev = self._revisore_esempi(lav, sandbox, momento, piano, stato_piano,
+                                            test=test)
+                _, altri = rv.fallimenti_divisi(test.get("uscita"), rv.file_esempi(lav, sandbox),
+                                                False)
+                if altri:
+                    r2 = self._revisore_test(lav, sandbox, momento, test, piano, stato_piano)
+                    for k in ("tolti", "fatti", "domande", "verdetti"):
+                        rev[k] += r2[k]
+                self._fatti_revisore(lav, rev)
+                if rev["tolti"]:
+                    try:
+                        test = sandbox.test()       # il rapporto dice i test di adesso
+                    except Exception as ex:  # noqa: BLE001
+                        self.log(f"[AGENTI] {lav.id}: test alla tappa non rifatti: {ex}")
         if isinstance(test, dict) and conto_test(test) is not None:
             # I test della tappa, per dire alla consegna quelli spariti (revisione della PR #179)
             seg["test_tappa"] = {"nomi": nomi_test(test.get("uscita") or "")[:200],
@@ -2186,8 +2301,14 @@ class Agente:
         if uguali >= GIRI_UGUALI:
             from ..sonde import nota as nota_regola
             nota_regola(lav, "agente_giri_uguali", self.log, f"{uguali} tappe")
+        tolti_rev = list((getattr(lav, "accettazione", None) or {}).get("tolti_revisore") or [])
         return {"esito": "tappa", "tipo_limite": e.tipo, "motivo": str(e),
                 "giri_uguali": uguali,
+                # anche quelli di _consegna_alla_tappa, prima, nello stesso giro
+                **({"revisore": {"fatti": list(seg.get("revisore_fatti") or []),
+                                 "domande": list(seg.get("revisore_domande") or [])}}
+                   if seg.get("revisore_fatti") or seg.get("revisore_domande") else {}),
+                **({"esempi_tolti": tolti_rev} if tolti_rev else {}),
                 "riassunto": _fatto_finora(gc, messages), "manca": manca,
                 "segnali": segnali_giro(lav, self.max_passi), "giro": lav.giro,
                 "test": (test or {}).get("esito"), "test_passano": (test or {}).get("passano"),

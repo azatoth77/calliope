@@ -383,6 +383,11 @@ def frase_tappa(lav, titolo: str) -> str:
     seg = (r.get("segnali") or {}).get("frasi") or []
     if seg:
         parti.append("Attenzione, sembra girare a vuoto: " + ", ".join(seg) + ".")
+    # La domanda del revisore a contesto pulito per la persona (20/10, #190), con il rapporto
+    domande = [per_la_voce(str(x), 200).rstrip() for x in
+               ((r.get("revisore") or {}).get("domande") or [])[:1]]
+    if domande and domande[0]:
+        parti.append(f"Il revisore chiede: {domande[0]}")
     parti.append(domanda_tappa(lav))
     return " ".join(parti)
 
@@ -2120,6 +2125,14 @@ class Lavori:
         # I test spariti dall'ultima tappa, detti dal codice (revisione della PR #179, #174)
         from .ciclo import frase_test_tolti
         tolti = frase_test_tolti((lav.risultato or {}).get("test_tolti"))
+        if tolti:
+            msg = msg.rstrip() + " " + tolti
+        # Gli esempi di accettazione tolti dal revisore (20/10, #190), detti nel rapporto
+        from .revisore import frase_esempi_tolti
+        r = lav.risultato or {}
+        tolti = frase_esempi_tolti([t for t in r.get("esempi_tolti") or [] if isinstance(t, dict)
+                                    and (r.get("esito") != "tappa"
+                                         or t.get("giro") == r.get("giro"))])
         if tolti:
             msg = msg.rstrip() + " " + tolti
         item = {"id": lav.id, "tipo": lav.tipo, "titolo": lav.titolo, "stato": lav.stato,

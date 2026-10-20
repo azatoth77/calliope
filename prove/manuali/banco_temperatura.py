@@ -1268,6 +1268,14 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             "prosa_no": segnali.get("prosa_no"),
             # 20/10 (#192): l'ultimo no alla consegna d'ufficio di una tappa, che resta tappa
             "tappa_no": segnali.get("tappa_no"),
+            # 20/10 (#190): il revisore a contesto pulito, con il modo (agenti_revisore), i
+            # verdetti del lavoro (momento, verdetto, file, causa, effetto, secondi, token), i
+            # suoi token e gli esempi di accettazione che ha tolto
+            "revisore_modo": str(getattr(cfg, "agenti_revisore", "") or ""),
+            "revisore": list(segnali.get("revisore") or []),
+            "revisore_token": int(segnali.get("revisore_token") or 0),
+            "esempi_tolti": list((getattr(lav, "accettazione", None) or {}).get(
+                "tolti_revisore") or []),
             "cartella": str(cartella),
             "giri": len(per_giro), "giri_max": giri, "giro_accettazione": giro_acc,
             "giro_consegna": giro_consegna, "sbloccato": sbloccato,

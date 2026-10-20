@@ -19,7 +19,10 @@ tentativi se il caso ne ha uno. Mai la trascrizione, il diario o il riassunto de
 passata senza strumenti), con il ragionamento acceso (`--ragionamento`, di serie 4096 token) e
 la temperatura dell'agente (`agenti_temperatura`, salvo `--temperatura`). Lo schema: `verdetto`
 ∈ {continua, cambia_strada, test_sbagliato, codice_sbagliato, consegna, chiedi_persona},
-`file`, `riga`, `test`, `causa`, `azione` (una frase).
+`file`, `riga`, `test`, `causa`, `azione` (una frase). Dal 20/10 (#190) il pacchetto, il prompt,
+lo schema e la passata stanno in `calliope/agenti/revisore.py`, quello del revisore nel ciclo, e
+il banco li importa; `--menu ciclo` misura il menu del ciclo (test_sbagliato, codice_sbagliato,
+consegna e la domanda facoltativa), senza i casi cambia_strada e chiedi_persona.
 
 **I casi fissi**, costruiti dai riferimenti che ci sono già; l'uscita dei test è **vera**,
 generata a ogni esecuzione del banco con Node e il motore dei giochi di adesso (la sandbox
@@ -96,7 +99,6 @@ giusti e sbagliati, contati come devono:
 
 import argparse
 import datetime
-import io
 import json
 import re
 import shutil
@@ -104,7 +106,6 @@ import statistics
 import sys
 import tempfile
 import time
-import tokenize
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -112,14 +113,9 @@ RADICE = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(RADICE))
 sys.path.insert(0, str(RADICE / "prove"))
 
-VERDETTI = ("continua", "cambia_strada", "test_sbagliato", "codice_sbagliato", "consegna",
-            "chiedi_persona")
 SALTATO = 77
 CASI = ("tris-inizia", "tris-inizia-muto", "porte-disegno", "codice_sbagliato", "consegna",
         "cambia_strada", "chiedi_persona")
-CODA_USCITA = 2500          # caratteri della coda dell'uscita dei test nel pacchetto
-MAX_FILE = 12_000           # --da-lavoro: caratteri al più per file nel pacchetto…
-MAX_FILE_TOTALE = 60_000    # …e in tutto (un messaggio oltre num_ctx, o prove diluite)
 # Il consiglio dell'errore della preparazione (fumo_js.mjs, viaDallaPreparazione, da #174):
 # tolto per tris-inizia-muto; restano la fase e i comandi attivi
 CONSIGLIO = re.compile(r"prima delle mosse tocca «[^»]*» \(await g\.tocca\(\"[^\"]*\"\)\)"
@@ -127,151 +123,25 @@ CONSIGLIO = re.compile(r"prima delle mosse tocca «[^»]*» \(await g\.tocca\(\"
                        r"«preparazione»; correggi il test, non il manifesto\. ")
 
 
-# ═══════════════════════════ il revisore ═══════════════════════════
+# Il pacchetto, il prompt, lo schema e la passata stanno in calliope/agenti/revisore.py dal 20/10
+# (#190, il revisore nel ciclo): il banco li importa, così misura quello che gira nel ciclo
+from calliope.agenti import revisore as R  # noqa: E402
 
-SISTEMA = """Sei il revisore di un lavoro di sviluppo per Calliope, un'assistente di casa. Un \
-agente ha scritto il codice e i test; tu non scrivi codice e non hai strumenti. Giudichi solo \
-dalle prove che ricevi: il contratto (cosa offre l'ambiente e come si scrivono i test), i \
-requisiti della persona, i file del lavoro (senza commenti), l'esito vero dei test e, se c'è, \
-il registro dei tentativi dell'agente. Dai il verdetto che darebbe una persona esperta che \
-guarda il lavoro.
-
-Verdetti:
-- continua: il lavoro va nella direzione giusta e l'agente ha già quello che serve per andare \
-avanti; nessun intervento.
-- cambia_strada: il registro mostra che l'agente gira in tondo (torna a versioni già provate, \
-lo stesso errore a ogni tentativo): la strada presa non porta da nessuna parte. Vale anche se \
-sai dov'è l'errore vero: dillo in causa e azione.
-- test_sbagliato: un test chiede qualcosa che il contratto o i requisiti non dicono (o il \
-contrario di quello che dicono), e il codice è giusto: va corretto il test.
-- codice_sbagliato: il test è giusto e il codice no: va corretto il codice.
-- consegna: i test passano tutti e i file coprono i requisiti: si può consegnare.
-- chiedi_persona: quello che decide dipende da una scelta che i requisiti lasciano alla \
-persona: né il test né il codice possono saperla.
-
-In «file» e «riga» il punto da cambiare (vuoto e 0 se non serve), in «test» il nome del test \
-che conta (vuoto se nessuno), in «causa» il perché in breve, in «azione» una sola frase con \
-la prossima cosa da fare. Rispondi solo con il JSON dello schema."""
+VERDETTI = R.VERDETTI_BANCO
+CODA_USCITA, MAX_FILE, MAX_FILE_TOTALE = R.CODA_USCITA, R.MAX_FILE, R.MAX_FILE_TOTALE
+SISTEMA = R.SISTEMA_BANCO
+senza_commenti_js, senza_commenti_py, senza_commenti = (R.senza_commenti_js,
+                                                        R.senza_commenti_py, R.senza_commenti)
+ESCLUSI, CARTELLE_ESCLUSE, TAGLIATO = R.ESCLUSI, R.CARTELLE_ESCLUSE, R.TAGLIATO
+pacchetto, messaggio, precedenza, per_revisore = (R.pacchetto, R.messaggio, R.precedenza,
+                                                  R.per_revisore)
+_manifesto = R._manifesto
+# Il menu del ciclo (`--menu ciclo`): test_sbagliato, codice_sbagliato, consegna e la domanda
+MENU = {"banco": R.VERDETTI_BANCO, "ciclo": R.VERDETTI}
 
 
-def schema() -> dict:
-    return {"type": "object",
-            "properties": {"verdetto": {"type": "string", "enum": list(VERDETTI)},
-                           "file": {"type": "string", "maxLength": 120},
-                           "riga": {"type": "integer"},
-                           "test": {"type": "string", "maxLength": 200},
-                           "causa": {"type": "string", "maxLength": 400},
-                           "azione": {"type": "string", "maxLength": 300}},
-            "required": ["verdetto", "file", "riga", "test", "causa", "azione"]}
-
-
-# ═══════════════════════════ i file senza commenti ═══════════════════════════
-
-_PRIMA_REGEX = set("(,=:[!&|?{};+-*%<>~^") | {""}
-_PAROLE_REGEX = ("return", "typeof", "case", "in", "of", "delete", "void", "throw", "new")
-
-
-def senza_commenti_js(testo: str) -> str:
-    """Il JavaScript senza commenti // e /* */, con le stringhe, i template e le espressioni
-    regolari intatti, e le righe al loro posto (i file:riga dell'uscita dei test restano
-    giusti)."""
-    s, out, i, n = str(testo or ""), [], 0, len(str(testo or ""))
-    ultimo = ""             # l'ultimo carattere significativo, per riconoscere una regex
-
-    def prima_parola():
-        m = re.search(r"([A-Za-z_$][\w$]*)\s*$", "".join(out[-40:]))
-        return m.group(1) if m else ""
-    while i < n:
-        c = s[i]
-        if c == "/" and i + 1 < n and s[i + 1] == "/":
-            while i < n and s[i] != "\n":
-                i += 1
-            continue
-        if c == "/" and i + 1 < n and s[i + 1] == "*":
-            j = s.find("*/", i + 2)
-            j = n if j < 0 else j + 2
-            out.append("\n" * s.count("\n", i, j))
-            i = j
-            continue
-        if c in "'\"`":
-            j = i + 1
-            while j < n and s[j] != c:
-                if s[j] == "\\":
-                    j += 1
-                elif s[j] == "\n" and c != "`":
-                    break
-                j += 1
-            out.append(s[i:j + 1])
-            i, ultimo = j + 1, c
-            continue
-        if c == "/" and (ultimo in _PRIMA_REGEX or prima_parola() in _PAROLE_REGEX):
-            j, classe = i + 1, False
-            while j < n and s[j] != "\n":
-                if s[j] == "\\":
-                    j += 2
-                    continue
-                if s[j] == "[":
-                    classe = True
-                elif s[j] == "]":
-                    classe = False
-                elif s[j] == "/" and not classe:
-                    break
-                j += 1
-            j += 1
-            while j < n and (s[j].isalpha()):
-                j += 1
-            out.append(s[i:j])
-            i, ultimo = j, "a"
-            continue
-        out.append(c)
-        if not c.isspace():
-            ultimo = c
-        i += 1
-    return "\n".join(r.rstrip() for r in "".join(out).split("\n"))
-
-
-def senza_commenti_py(testo: str) -> str:
-    """Il Python senza commenti né docstring (una stringa da sola su una riga), con le righe al
-    loro posto. Se non si riesce a leggerlo, solo le righe che cominciano con #."""
-    s = str(testo or "")
-    try:
-        toks = list(tokenize.generate_tokens(io.StringIO(s).readline))
-    except (tokenize.TokenError, IndentationError, SyntaxError):
-        return "\n".join("" if r.lstrip().startswith("#") else r for r in s.split("\n"))
-    righe = s.split("\n")
-    via: list[tuple] = []        # (riga, colonna, riga fine, colonna fine) da svuotare
-    prima = tokenize.NEWLINE
-    for k, t in enumerate(toks):
-        if t.type == tokenize.COMMENT:
-            via.append((*t.start, *t.end))
-        elif (t.type == tokenize.STRING and prima in (tokenize.NEWLINE, tokenize.INDENT,
-                                                      tokenize.DEDENT, tokenize.NL)
-              and k + 1 < len(toks) and toks[k + 1].type in (tokenize.NEWLINE,
-                                                              tokenize.ENDMARKER)):
-            via.append((*t.start, *t.end, "docstring"))
-        if t.type not in (tokenize.COMMENT, tokenize.NL):
-            prima = t.type
-    for v in reversed(via):
-        r0, c0, r1, c1 = v[:4]
-        segnaposto = '""' if len(v) > 4 else ""
-        if r0 == r1:
-            riga = righe[r0 - 1]
-            righe[r0 - 1] = riga[:c0] + segnaposto + riga[c1:]
-        else:
-            righe[r0 - 1] = righe[r0 - 1][:c0] + segnaposto
-            for r in range(r0, r1 - 1):
-                righe[r] = ""
-            righe[r1 - 1] = righe[r1 - 1][c1:]
-    return "\n".join(r.rstrip() for r in righe)
-
-
-def senza_commenti(nome: str, testo: str) -> str:
-    n = nome.lower()
-    if n.endswith((".js", ".mjs", ".cjs", ".ts", ".cs")):
-        return senza_commenti_js(testo)
-    if n.endswith(".py"):
-        return senza_commenti_py(testo)
-    return str(testo or "")
+def schema(verdetti=VERDETTI) -> dict:
+    return R.schema(verdetti)
 
 
 # ═══════════════════════════ i casi fissi ═══════════════════════════
@@ -518,14 +388,6 @@ class Sandboxes:
         return r
 
 
-def _manifesto(file: dict) -> dict:
-    try:
-        m = json.loads(file.get("manifesto.json") or "")
-        return m if isinstance(m, dict) else {}
-    except ValueError:
-        return {}
-
-
 def _gioco(file: dict) -> bool:
     return ((_manifesto(file).get("scheda") or {}).get("tipo") == "gioco")
 
@@ -540,66 +402,6 @@ def firma(r: dict) -> str:
 
 
 # ═══════════════════════════ il pacchetto ═══════════════════════════
-
-ESCLUSI = {"lavoro.json", "CAPACITA.md", "calliope_estensione.py", "risultato.md"}
-# --da-lavoro: cartelle eseguite con i test ma non mostrate (le risposte vere delle sonde, fino
-# a 8000 caratteri l'una: diluiscono le prove)
-CARTELLE_ESCLUSE = ("esempi_veri",)
-TAGLIATO = "…[tagliato dal banco]"
-
-
-def pacchetto(cfg, requisiti: list, file: dict, r: dict, registro: list | None = None,
-              richiesta: str = "", mostrati: dict | None = None,
-              avvisi: list | None = None) -> dict:
-    """Le sezioni che il revisore vede, e nient'altro: contratto, requisiti, file senza
-    commenti, esito dei test, registro dei tentativi."""
-    from calliope.agenti import diagnosi
-    from calliope.estensioni import contratto
-    gioco = _gioco(file)
-    tipo = "gioco" if gioco else "estensione" if _manifesto(file) else "codice"
-    u = str(r.get("uscita") or "")
-    fall = "" if r.get("passano") else diagnosi.da_uscita(u)
-    return {
-        "contratto": contratto.testo(cfg, tipo),
-        "requisiti": ("\n".join(f"{i}. {x}" for i, x in enumerate(requisiti, 1)) if requisiti
-                      else f"(requisiti non trovati; la richiesta: «{richiesta}»)"
-                      if richiesta else "(requisiti non trovati)"),
-        # `mostrati` (--da-lavoro) è già senza commenti e tagliato: non si tocca di nuovo
-        "file": ({n: senza_commenti(n, t) for n, t in sorted(file.items()) if n not in ESCLUSI}
-                 if mostrati is None else dict(sorted(mostrati.items()))),
-        "test": {"esito": diagnosi.conto_detto(r) + ("" if r.get("passano") else
-                                                     ", non passano tutti"),
-                 "passano": bool(r.get("passano")), "fallimenti": fall,
-                 "uscita": u[-CODA_USCITA:]},
-        "registro": list(registro or []),
-        "avvisi": list(avvisi or []),
-    }
-
-
-def messaggio(p: dict) -> str:
-    """Il pacchetto come messaggio dell'utente della passata."""
-    parti = ["# CONTRATTO (quello che vede l'agente)", p["contratto"], "",
-             "# REQUISITI DELLA PERSONA", p["requisiti"], "", "# FILE DEL LAVORO"]
-    for n, t in p["file"].items():
-        righe = t.split("\n")
-        parti += [f"## {n}", "\n".join(f"{i:>3}| {x}" for i, x in enumerate(righe, 1)), ""]
-    t = p["test"]
-    parti += ["# ESITO DEI TEST (eseguiti adesso)", t["esito"]]
-    if t["fallimenti"]:
-        parti += ["Fallimenti in breve:", t["fallimenti"]]
-    parti += ["Coda dell'uscita:", t["uscita"], ""]
-    if p.get("avvisi"):
-        parti += ["# AVVISI DEL BANCO (file tagliati o tolti dal pacchetto)"]
-        parti += [f"- {a}" for a in p["avvisi"]] + [""]
-    if p["registro"]:
-        parti += ["# REGISTRO DEI TENTATIVI DELL'AGENTE (dal più vecchio)"]
-        for i, x in enumerate(p["registro"], 1):
-            parti.append(f"{i}. {x}" if isinstance(x, str) else
-                         f"{i}. {x.get('file')}: {x.get('cosa')} → test: {x.get('esito')}")
-    else:
-        parti += ["# REGISTRO DEI TENTATIVI", "(nessun registro per questo lavoro)"]
-    return "\n".join(parti)
-
 
 def prepara(cfg, sbx: Sandboxes, caso: dict) -> dict:
     """Il pacchetto di un caso fisso, con l'uscita vera dei test e del registro."""
@@ -629,36 +431,6 @@ def muto(p: dict) -> dict:
 
 class SviluppoAmbiguo(Exception):
     """Senza l'ora del lavoro più sviluppi lo contengono: si sceglie con --sviluppo."""
-
-
-def precedenza(nome: str) -> tuple:
-    """L'ordine dei file sotto il tetto: il manifesto, il codice, i test, poi il resto."""
-    b = Path(nome).name.lower()
-    test = b.endswith((".test.js", "_test.py")) or (b.startswith("test") and b.endswith(".py"))
-    codice = b.endswith((".js", ".mjs", ".cjs", ".ts", ".py", ".cs"))
-    return (0 if b == "manifesto.json" else 2 if test else 1 if codice else 3, nome)
-
-
-def per_revisore(file: dict) -> tuple[dict, list[str]]:
-    """I file da mostrare di un lavoro vero, già senza commenti: senza CARTELLE_ESCLUSE, al più
-    MAX_FILE caratteri per file e MAX_FILE_TOTALE in tutto, prima il manifesto, il codice e i
-    test (`precedenza`). I commenti si tolgono prima di tagliare, così il marcatore del taglio
-    non finisce dentro un commento; gli avvisi dicono cosa è stato tagliato o tolto."""
-    out, avvisi, totale = {}, [], 0
-    for n in sorted(file, key=precedenza):
-        if n.split("/")[0] in CARTELLE_ESCLUSE or Path(n).name in ESCLUSI:
-            continue
-        t = senza_commenti(n, file[n])
-        if totale >= MAX_FILE_TOTALE:
-            avvisi.append(f"{n} tolto: il pacchetto ha già {MAX_FILE_TOTALE} caratteri di file")
-            continue
-        tetto = min(MAX_FILE, MAX_FILE_TOTALE - totale)
-        if len(t) > tetto:
-            avvisi.append(f"{n} tagliato a {tetto} caratteri su {len(t)}")
-            t = t[:tetto] + "\n" + TAGLIATO
-        out[n] = t
-        totale += len(t)
-    return out, avvisi
 
 
 def file_lavoro(cartella: Path) -> dict:
@@ -781,27 +553,21 @@ def giudica(risposta: dict | None, atteso: dict) -> dict:
             else None}
 
 
-def una_passata(svc, p: dict, ragionamento: int, temperatura: float, tempo_s: float) -> dict:
-    from calliope.requisiti import chiama
-    uso: dict = {}
-    t0 = time.monotonic()
-    dati, esito = chiama(svc, SISTEMA, messaggio(p), schema(), tempo_s, dalla_voce=False,
-                         num_predict=700, ragionamento=ragionamento, uso=uso,
-                         temperatura=temperatura)
-    return {"risposta": dati, "esito": esito, "s": round(uso.get("s") or
-                                                          (time.monotonic() - t0), 1),
-            "token": int(uso.get("eval") or 0), "prompt": int(uso.get("prompt") or 0),
-            "ragionamento_token": int(uso.get("ragionamento_token") or 0),
-            "ragionamento_caratteri": int(uso.get("ragionamento") or 0)}
+def una_passata(svc, p: dict, ragionamento: int, temperatura: float, tempo_s: float,
+                verdetti=VERDETTI) -> dict:
+    """La passata del revisore del ciclo (calliope/agenti/revisore.passata) con il menu dato:
+    di serie quello del banco del 19/10."""
+    return R.passata(svc, p, ragionamento, temperatura, tempo_s, verdetti=verdetti)
 
 
 def misura(svc, pacchetti: dict, info: dict, ripetizioni: int, ragionamento: int,
-           temperatura: float, tempo_s: float, scrivi=None, log=print) -> list[dict]:
+           temperatura: float, tempo_s: float, scrivi=None, log=print,
+           verdetti=VERDETTI) -> list[dict]:
     righe = []
     for rip in range(ripetizioni):
         for nome, p in pacchetti.items():
             atteso = info[nome]["atteso"]
-            r = una_passata(svc, p, ragionamento, temperatura, tempo_s)
+            r = una_passata(svc, p, ragionamento, temperatura, tempo_s, verdetti)
             g = giudica(r["risposta"], atteso)
             riga = {"caso": nome, "ripetizione": rip + 1, "atteso": atteso,
                     "contrario": info[nome]["contrario"], "giusto": g, **r}
@@ -1129,7 +895,10 @@ def main(argv) -> int:
     ap.add_argument("--secco", action="store_true", help="solo il controllo del banco, con un "
                     "modello finto")
     ap.add_argument("--ripetizioni", type=int, default=5)
-    ap.add_argument("--casi", default=",".join(CASI))
+    ap.add_argument("--casi", default="", help="di serie tutti quelli del menu")
+    ap.add_argument("--menu", default="banco", choices=tuple(MENU), help="banco: i sei verdetti "
+                    "del 19/10; ciclo: il menu del revisore nel ciclo (#190), senza i casi "
+                    "cambia_strada e chiedi_persona")
     ap.add_argument("--ragionamento", type=int, default=4096, help="token di ragionamento "
                     "della passata (0 = spento)")
     ap.add_argument("--temperatura", type=float, default=None, help="di serie quella "
@@ -1187,7 +956,8 @@ def main(argv) -> int:
               f"{p['test']['esito']}; pacchetto di {len(messaggio(p))} caratteri")
     else:
         tutti = casi()
-        scelti = [c.strip() for c in args.casi.split(",") if c.strip()]
+        scelti = [c.strip() for c in args.casi.split(",") if c.strip()] or [
+            c for c in CASI if tutti[c]["atteso"]["verdetto"] in MENU[args.menu]]
         ignoti = [c for c in scelti if c not in tutti]
         if ignoti:
             ap.error(f"casi che non ci sono: {ignoti} (ci sono: {list(tutti)})")
@@ -1197,7 +967,7 @@ def main(argv) -> int:
             p.pop("_risultato", None)
             pacchetti[n], infos[n] = p, tutti[n]
             print(f"   {n}: test {p['test']['esito']}", flush=True)
-    print(f"Banco del revisore: {imp.modello}, ragionamento {args.ragionamento}, temperatura "
+    print(f"Banco del revisore: {imp.modello}, menu {args.menu}, ragionamento {args.ragionamento}, temperatura "
           f"{temperatura:g}, {args.ripetizioni} ripetizioni, casi {list(pacchetti)}; test con "
           f"{sbx.descrizione}; risultati in {uscita}", flush=True)
     (uscita / "pacchetti.json").write_text(json.dumps(
@@ -1209,7 +979,8 @@ def main(argv) -> int:
         (uscita / "righe.json").write_text(json.dumps(righe, ensure_ascii=False, indent=1),
                                            encoding="utf-8")
     righe = misura(svc, pacchetti, infos, args.ripetizioni, args.ragionamento, temperatura,
-                   args.tempo, scrivi=scrivi, log=lambda m: print(m, flush=True))
+                   args.tempo, scrivi=scrivi, log=lambda m: print(m, flush=True),
+                   verdetti=MENU[args.menu])
     tabella(conti(righe))
     r = scrivi_riepilogo(uscita, imp.modello, args.ripetizioni, args.ragionamento,
                          temperatura, list(pacchetti), righe, t0, sbx.descrizione)

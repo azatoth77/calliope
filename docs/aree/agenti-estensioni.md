@@ -4511,3 +4511,103 @@ conservazione della conversazione e «dimentica»; promemoria mensile; tornando 
 concessioni si richiedono; niente concessioni a minori e ospiti. Il piano è ora in passi 0–6, 7a
 (divieti con una strada nuova: posta, file della persona, rete di casa), 7b (attivazione E4) e 7c
 (limiti dell'infrastruttura), con la misura delle conferme ogni 100 esecuzioni creata dal passo 0.
+
+## Il revisore a contesto pulito nel ciclo (20/10, issue #190, ramo `issue-190-revisore`)
+
+**Il caso.** Il banco del revisore del 19/10 (#182, sopra): qwen3.6 a contesto pulito, con le sole
+prove, dà il giudizio giusto su test, codice o consegna 24 volte su 25; male sulle etichette di
+processo. Decisione di chi amministra del 20/10: il revisore si costruisce con il **menu ridotto**
+`test_sbagliato` / `codice_sbagliato` / `consegna` e una `domanda` facoltativa per la persona; il
+giro in tondo lo decide il codice. Decisione della sera (da #197, PR #201): gli esempi di
+accettazione **non bloccano più da soli** la consegna né la chiusura al tetto o alla tappa (gli
+esempi del tris scritti a mente erano sbagliati 11 su 11 e bloccavano il codice giusto).
+
+**Cosa cambia.**
+1. **Il modulo** `calliope/agenti/revisore.py`: il pacchetto (contratto, requisiti, file senza
+   commenti con le righe al loro posto, esito vero dei test con i fallimenti in breve, registro
+   delle firme degli errori del giro, quali file sono esempi di accettazione, il test da
+   giudicare), il prompt, lo schema e la passata (`requisiti.chiama`, il modello dell'agente,
+   ragionamento `agenti_revisore_ragionamento` = 4096, la temperatura dell'agente, al più
+   `agenti_revisore_s` = 180 s). Mai la trascrizione, il diario o il riassunto: dalla sandbox
+   niente cartelle nascoste (`.calliope`). `prove/manuali/banco_revisore.py` lo importa (il menu
+   del banco del 19/10 è `VERDETTI_BANCO`, il prompt uguale parola per parola) e con `--menu
+   ciclo` misura il menu del ciclo.
+2. **Quando entra** (lo decide il codice): con un **esempio di accettazione rosso** quando il
+   lavoro vorrebbe consegnare o chiudersi, una passata per esempio: alla consegna «fatto»
+   dell'agente (prima dei rimandi dei test), al tetto, alla tappa, dopo la prosa, al giro a vuoto
+   e alle troncate (tutto ciò che passa da `_consegna_al_tetto`); **a una tappa con i test
+   dell'agente rossi**, con il momento «consegna_rossa» (la consegna rossa che diventa tappa),
+   «giri_uguali» (dalla seconda tappa allo stesso punto, prima della domanda alla persona) o
+   «tappa_rossa»; quando **lo stesso errore** (la firma di #174) torna `STESSO_ERRORE_N` = 3 volte
+   di fila nel giro, dopo esegui_test. Al più una passata per giro per i momenti dei test e una
+   per esempio (la chiave è l'esempio com'è scritto), al più `agenti_revisore_passate_giro` = 3
+   passate nel giro, mai mentre la voce ha la precedenza (`Arbitro.occupata_ora`: la passata
+   salta, regola `agente_revisore_saltato`); i token del revisore a parte
+   (`segnali["revisore_token"]`), non nel tetto dell'agente.
+3. **Cosa ne fa il codice** (`attivo`): l'esempio giudicato sbagliato si **toglie dagli esempi del
+   lavoro**: il codice riscrive solo la lista `ESEMPI` del file (il resto uguale byte per byte),
+   che resta in sola lettura per l'agente; senza più esempi il file si toglie e il lavoro non ha
+   più il controllo indipendente (al tetto «senza esempi di accettazione (tolti dal
+   revisore)»). Regola `agente_revisore_esempio_tolto`, il segno in
+   `lav.accettazione["tolti_revisore"]`, nel risultato `esempi_tolti`, a voce nel rapporto («Il
+   revisore ha giudicato sbagliato l'esempio di accettazione …: l'ho tolto, è sulla scheda di
+   revisione.») e sulla scheda di revisione dell'estensione (con la causa, anche in
+   `revisione`). Il codice sbagliato è un **fatto per l'agente** con file:riga, causa e azione:
+   nel rimando della consegna (`revisore`), nel risultato del terzo esegui_test con lo stesso
+   errore, o in apertura del giro dopo una tappa; così un test dell'agente giudicato sbagliato.
+   `consegna` vale solo con lo stato consegnabile (nessun test rosso oltre gli esempi, i file che
+   la consegna chiede con il predicato di #180): allora l'esempio rosso si mette da parte come
+   sbagliato; altrimenti si ignora (`agente_revisore_consegna_ignorata`). La `domanda` va nel
+   rapporto della tappa («Il revisore chiede: …»). Ogni verdetto nel registro
+   (`agente_revisore_<verdetto>`, `agente_revisore_errore` per una risposta che non si legge) e in
+   `segnali["revisore"]` (momento, verdetto, file, causa, effetto, secondi, token).
+4. **Interruttore** `agenti_revisore`: spento / ombra / attivo, **di serie «ombra»**: il verdetto
+   solo nel registro e nella riga del banco (`revisore_modo`, `revisore`, `revisore_token`,
+   `esempi_tolti` in `banco_temperatura.py`), all'agente niente e nessun esempio tolto. Il true di
+   YAML è rifiutato. Sulla DGX non è nel file locale: vale il valore di serie, «ombra» (la tabella
+   degli interruttori dice solo le chiavi del locale).
+5. **L'Ollama finto delle prove** (`prove/ollama_finto.py`): una richiesta con lo schema del
+   revisore non consuma il copione dell'agente né va in `richieste` (risponde `revisore`, di serie
+   un testo vuoto): con l'ombra di serie, le prove scritte prima restano com'erano.
+
+**Dove la issue non corrispondeva al codice.**
+- Tre dei quattro momenti della issue (la consegna rossa che diventa tappa, ogni tappa con i test
+  rossi, i giri uguali prima della domanda) sono nel codice un punto solo, `Agente._tappa`: la
+  domanda dopo i giri uguali si fa alla tappa. Lì entra una volta, con il momento detto.
+- «La soglia da `segnali` (#185)»: nei segnali c'è la firma degli errori (`errori_test`), non una
+  soglia; è la costante `STESSO_ERRORE_N` = 3 del modulo.
+- «Il predicato `consegnabile` (#180)»: nel codice `controlla.consegnabile` dice solo i file e il
+  manifesto, non i test; lo stato consegnabile di #180 è anche «l'ultimo esegui_test verde». Per il
+  revisore vale: nessun fallimento oltre gli esempi di accettazione e `_pronto_da_consegnare` con
+  quel predicato.
+- «`test_sbagliato` di un test di accettazione va alla persona alla tappa»: superato dalla
+  decisione della sera, l'esempio si toglie. Va alla persona (come domanda) solo un verdetto sul
+  file degli esempi che non dice quale esempio.
+- `lav.accettazione` non tiene l'analisi da cui il file è scritto: l'esempio si toglie rileggendo
+  la lista dal file stesso (`const ESEMPI = …` in JavaScript, `ESEMPI = json.loads(…)` in
+  Python). Così vale anche per `accettazione.test.js` venuto con la versione nella correzione di
+  un gioco (lì l'analisi è «saltata», ma gli esempi in sola lettura bloccavano lo stesso), e
+  `agenti/accettazione.py` non cambia (lo tocca la PR #201).
+
+**Prove.** `prova_revisore` (nuova, livello 2, ~45 s), con i contrari: test verdi, una volta per
+giro, la voce che parla, spento, la risposta che non è JSON, «consegna» senza lo stato
+consegnabile, l'ombra (file degli esempi uguale byte per byte, all'agente niente, la consegna rossa
+come prima), errori diversi, l'esempio mai cambiato dall'agente (scrivi_file e modifica_file
+rifiutati anche dopo una rimozione). Verdi `prova_porte_consegna`, `prova_strumenti_onesti`,
+`prova_apri_gioco_tappa`, `prova_fasi_agente*`, `prova_agente_giri_uguali` (che senza la modifica
+dell'Ollama finto cadeva: il revisore in ombra consumava il copione), `prova_revisione_onesta`,
+`prova_sviluppo*`; `banco_temperatura.py --secco` e `banco_revisore.py --secco` tutto ok.
+
+**Rischi.** Con l'ombra di serie ogni esempio rosso alla consegna, al tetto o alla tappa costa una
+passata (35–50 s e ~3 000 token sul banco del 19/10), al più tre per giro, e un'esecuzione dei test
+in più quando il lavoro ha gli esempi; il lavoro dura di più. Un verdetto sbagliato detto con
+autorità (per questo l'ombra prima); un esempio giusto tolto in `attivo` toglie un controllo
+indipendente (il rapporto e la scheda lo dicono, il collaudo resta della persona); il revisore che
+dice «consegna» a torto è filtrato dallo stato consegnabile. I clienti finti delle prove che non
+sono l'Ollama finto ricevono anche le passate del revisore.
+
+**Da misurare sulla DGX** (dopo l'unione, criterio della issue): il banco della temperatura con
+`agenti_revisore: ombra` e `--casi tris2,porte,convertitore --giri 2`, poi con `attivo`: confronto
+fra le due serie (riusciti, giri, token, e nella riga `revisore`, `revisore_token`,
+`esempi_tolti`); nel log `agente_revisore_*`. La decisione di accenderlo va nella tabella degli
+interruttori di [setup-dgx](setup-dgx.md#interruttori-sulla-dgx).
