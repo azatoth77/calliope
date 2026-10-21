@@ -4715,7 +4715,7 @@ ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costant
   Ognuna ha la sua risposta, «non eseguita: il lavoro era già consegnato» (`DOPO_CONSEGNA`), e
   la regola `agente_dopo_consegna`. Una `consegna` messa prima di una `web_leggi` chiude quindi
   il lavoro senza la lettura, ma non più in silenzio: la regola e l'esito sono nel registro e
-  sugli schermi. Non si è scelto di rifiutare la consegna per eseguire prima la lettura: nel
+  sugli schermi. *[storico: «e sugli schermi» fino alla prima revisione della PR #218, sotto]* Non si è scelto di rifiutare la consegna per eseguire prima la lettura: nel
   codice la consegna vale lo stesso, e una regola diversa per ciclo sarebbe da spiegare
   all'agente. Se la regola scatta spesso sul banco, si ripensa per tutti e due i cicli.
 - **L'uscita troncata.** Il ciclo legge `out["rotti"]` e `out["fine"]` dei client come il codice.
@@ -4739,3 +4739,28 @@ ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costant
   Copre lo strumento sconosciuto, la consegna seguita da web_leggi, la chiamata e la consegna a
   metà, la relazione fermata a max_tokens e il tetto. I contrari sono l'argomento davvero
   mancante, la lettura prima della consegna e la relazione intera.
+
+**Dopo la prima revisione della PR #218 (21/10).**
+- **Due rami difesi da una prova.** Il giro a vuoto azzera le troncate di fila (come R6 nel
+  codice). Una passata con una chiamata buona e una rotta non conta «di fila» (come M). Ognuno ha
+  il suo copione nella sezione 8. Togliendo l'azzeramento, o contando «di fila» con
+  `len(troncate) > 0`, la prova cade: l'ho verificato con le due mutazioni.
+- **«Ognuna con la sua risposta»** si controlla sulla storia mandata al modello (i corpi delle
+  richieste del client finto): N chiamate, N messaggi `tool` con gli stessi nomi nello stesso
+  ordine. Prima la prova guardava solo gli eventi degli schermi.
+- **Dopo la consegna sugli schermi non va più niente**, come nel ciclo del codice. Prima andava
+  l'esito «non eseguita» senza la riga della sua chiamata, e finiva sotto la chiamata della
+  passata prima. Restano la regola e la risposta nella storia. Nella ricerca quella risposta non
+  arriva mai al modello, perché la consegna chiude il lavoro.
+- **Il consiglio è quello del caso vero.**
+  - La consegna a metà riceve `USCITA_TRONCATA_RICERCA` (una relazione più breve).
+  - Un altro strumento a metà (biblioteca_cerca, web_leggi, grafo_*) riceve
+    `USCITA_TRONCATA_STRUMENTO`: «rifalla intera, con argomenti brevi e meno ragionamento prima».
+  - Senza chiamate, un testo a metà riceve `USCITA_TRONCATA_TESTO_RICERCA`.
+  - Il solo ragionamento fermato, col testo vuoto, riceve `USCITA_TRONCATA_PENSIERO`: «ragiona
+    meno e chiama lo strumento del prossimo passo, o consegna».
+- **Al «limite» per le troncate l'ultima relazione tagliata non si perde.** Se c'era un testo, va
+  nel parziale come `testo`, preceduto da `RELAZIONE_TAGLIATA` («Relazione incompleta: …tagliato a
+  metà»), con `relazione_tagliata: true`. Così si rilegge con lavoro_risultato. Senza testo
+  tagliato il parziale non inventa niente. Resta da contare sul banco quante ricerche arrivano al
+  tetto «troncata»: per chi aspettava una relazione lunga è un cambiamento.

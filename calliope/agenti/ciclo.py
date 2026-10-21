@@ -3248,6 +3248,15 @@ class Agente:
         gc = ContestoLavoro(self.cfg, self.num_ctx(), PassiMemoria(), log=self.log)
         lav.gestore = gc
         troncate_fila = 0         # passate di fila con l'uscita troncata (21/10, #189)
+        tagliata = ""             # l'ultima relazione tagliata a max_tokens (revisione PR #218)
+
+        def parziale_troncate() -> dict:
+            """Il parziale del «limite» per le troncate: il fatto finora e, se c'è, l'ultima
+            relazione tagliata, detta come tagliata (`relazione_tagliata`)."""
+            p = {"riassunto": _fatto_finora(gc, messages)}
+            if tagliata:
+                p.update(testo=RELAZIONE_TAGLIATA + "\n\n" + tagliata, relazione_tagliata=True)
+            return p
         while True:
             if not lav.passo.startswith("cerca"):
                 lav.passo = "cerca nella biblioteca" if esp is None else "cerca nei documenti"
@@ -3288,12 +3297,17 @@ class Agente:
                 if troncata:
                     # Fermata a max_tokens senza chiamate (21/10, #189): una relazione tagliata a
                     # metà non è una relazione. Il fatto, e si continua fino a TRONCATE_MAX
+                    testo = str(out.get("content") or "").strip()
+                    if testo:
+                        tagliata = testo
                     if troncate_fila > TRONCATE_MAX:
-                        raise Limite(troncate_motivo(troncate_fila),
-                                     {"riassunto": _fatto_finora(gc, messages)}, tipo="troncata")
+                        raise Limite(troncate_motivo(troncate_fila), parziale_troncate(),
+                                     tipo="troncata")
                     from ..sonde import nota as nota_regola
                     nota_regola(lav, "agente_uscita_troncata", self.log, "senza chiamate")
-                    messages.append({"role": "user", "content": USCITA_TRONCATA_TESTO_RICERCA})
+                    # Il testo a metà o il solo ragionamento fermato: il consiglio del caso vero
+                    messages.append({"role": "user", "content": USCITA_TRONCATA_TESTO_RICERCA
+                                     if testo else USCITA_TRONCATA_PENSIERO})
                     continue
                 # Senza consegna il testo è la relazione: il riassunto ne è l'inizio, senza
                 # Markdown (07/10: «# Titolo» finiva tra le frasi dette)
@@ -3307,13 +3321,13 @@ class Agente:
                     # Le chiamate dopo la consegna nella stessa passata (21/10, #189): la stessa
                     # semantica del codice (#185). La consegna vale, le chiamate dopo non si
                     # eseguono e ognuna ha la sua risposta e la regola: una consegna messa prima
-                    # di una web_leggi chiude senza la lettura, ma non più in silenzio
+                    # di una web_leggi chiude senza la lettura, ma non più in silenzio. Sugli
+                    # schermi niente, come nel codice (prima revisione della PR #218: l'esito
+                    # senza la riga della sua chiamata finiva sotto quella della passata prima)
                     from ..sonde import nota as nota_regola
                     nota_regola(lav, "agente_dopo_consegna", self.log, str(c["name"])[:40])
-                    res = {"ok": False, "nota": DOPO_CONSEGNA}
-                    messages.append({"role": "tool", "tool_name": c["name"],
-                                     "content": json.dumps(res, ensure_ascii=False)})
-                    lav.nota("esito", nome=c["name"], esito=res)
+                    messages.append({"role": "tool", "tool_name": c["name"], "content": json.dumps(
+                        {"ok": False, "nota": DOPO_CONSEGNA}, ensure_ascii=False)})
                     continue
                 if i_call in troncate:
                     # La chiamata a metà non si esegue, e il risultato lo dice (anche la
@@ -3321,7 +3335,8 @@ class Agente:
                     from ..sonde import nota as nota_regola
                     nota_regola(lav, "agente_uscita_troncata", self.log, str(c["name"])[:40])
                     lav.nota("strumento", nome=c["name"], argomenti=args)
-                    res = {"ok": False, "errore": USCITA_TRONCATA_RICERCA}
+                    res = {"ok": False, "errore": USCITA_TRONCATA_RICERCA
+                           if c["name"] == "consegna" else USCITA_TRONCATA_STRUMENTO}
                     messages.append({"role": "tool", "tool_name": c["name"],
                                      "content": gc.risultato(c["name"], res)})
                     lav.nota("esito", nome=c["name"], esito=res)
@@ -3380,8 +3395,8 @@ class Agente:
             if troncate_fila > TRONCATE_MAX:
                 # Le passate con le chiamate tutte rotte: il tetto dopo il giro sulle chiamate,
                 # così ognuna ha la sua risposta (come nel codice)
-                raise Limite(troncate_motivo(troncate_fila),
-                             {"riassunto": _fatto_finora(gc, messages)}, tipo="troncata")
+                raise Limite(troncate_motivo(troncate_fila), parziale_troncate(),
+                             tipo="troncata")
 
     def _web(self, lav: Lavoro, web, nome: str, args: dict, rete: dict) -> dict:
         """web_cerca e web_leggi dell'agente, con i tetti del lavoro. Il testo torna marcato
@@ -3504,11 +3519,22 @@ USCITA_TRONCATA_TESTO = (TRONCATA_TESTO + " Scrivi il file in pezzi più corti, 
                          "le righe che servono con modifica_file.")
 # Nella ricerca (21/10, #189): la chiamata a metà è quasi sempre una consegna con la relazione
 # lunga, e il testo a metà senza chiamate non è una relazione
-USCITA_TRONCATA_RICERCA = (TRONCATA_CHIAMATA + " Rifai la chiamata più corta: in consegna una "
-                           "relazione più breve, con i fatti essenziali e le fonti")
+USCITA_TRONCATA_RICERCA = (TRONCATA_CHIAMATA + " Rifai la consegna più corta: una relazione più "
+                           "breve, con i fatti essenziali e le fonti")
+# Un altro strumento a metà (prima revisione della PR #218): il consiglio della relazione lì
+# non c'entra
+USCITA_TRONCATA_STRUMENTO = (TRONCATA_CHIAMATA + " Rifalla intera, con argomenti brevi e meno "
+                             "ragionamento prima")
 USCITA_TRONCATA_TESTO_RICERCA = (TRONCATA_TESTO + " Un testo a metà non è una relazione: chiama "
                                  "consegna con una relazione più breve, con i fatti essenziali e "
                                  "le fonti.")
+# Fermato il solo ragionamento, senza testo (prima revisione della PR #218)
+USCITA_TRONCATA_PENSIERO = (TRONCATA_TESTO + " Ragiona meno e chiama lo strumento del prossimo "
+                            "passo, o consegna.")
+# Il testo del risultato parziale quando la ricerca si ferma per le troncate (prima revisione della
+# PR #218): l'ultima relazione tagliata non si perde, ma si dice che è tagliata
+RELAZIONE_TAGLIATA = ("Relazione incompleta: l'agente si è fermato al tetto dei token della "
+                      "passata e il testo è tagliato a metà.")
 DOPO_CONSEGNA = "non eseguita: il lavoro era già consegnato"
 DOPO_DOMANDA = "non eseguita: il lavoro aspetta la risposta di chi l'ha chiesto"
 DOPO_FERMO = "non eseguita: il lavoro si è fermato"
