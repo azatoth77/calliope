@@ -710,7 +710,10 @@ def prova_revisioni(tmp: Path):
              and len(cli.corpi) == 5, str(ris)[:200])
     # V1 (quarta revisione, #191): vLLM con il budget applicato (8 192 su 16 384, quota 0,5) e il
     # resto trattenuto dal parser: oltre il budget il ragionamento non va, è una troncata
-    v1 = {"content": "", "ragionamento": 8192, "budget": 8192, "fine": "length", "eval": PIENA}
+    # Senza il conto esatto del motore (vLLM che non riempie reasoning_tokens): la stima dai
+    # caratteri, 27 000 / 3 = 9 000 token, sopra la quota, direbbe «ragionamento»
+    v1 = {"content": "", "thinking": "penso " * 4500, "budget": 8192, "fine": "length",
+          "eval": PIENA}
     lav, ris, log, cli, sb = gira(tmp, "revV1", [dict(v1) for _ in range(3)] + LAVORO)
     verifica("V1: budget applicato, eval oltre budget + 1024, contenuto vuoto → troncata, «fatto»",
              ris.get("esito") == "fatto" and regole(lav).get("agente_uscita_troncata") == 3
@@ -724,12 +727,23 @@ def prova_revisioni(tmp: Path):
              ris.get("eccezione") == "Limite" and "ha ragionato per" in ris.get("motivo", "")
              and len(cli.corpi) == 2 and "agente_uscita_troncata" not in regole(lav),
              str(ris)[:200])
+    # P1 (revisione della PR #219): il budget non rifiutato non vuol dire applicato (llama.cpp
+    # lo ignora); col conto esatto del ragionamento decide quello, come E
+    e_budget = {"content": "", "ragionamento": PIENA - 10, "budget": 8192, "fine": "length",
+                "eval": PIENA}
+    lav, ris, log, cli, sb = gira(tmp, "revV1P1", [dict(e_budget) for _ in range(30)],
+                                  max_passi=24)
+    verifica("contrario V1 (P1): budget non rifiutato e 16 374 di ragionamento esatto → come E",
+             ris.get("eccezione") == "Limite" and "ha ragionato per" in ris.get("motivo", "")
+             and len(cli.corpi) == 2 and "agente_uscita_troncata" not in regole(lav),
+             str(ris)[:200])
     t = C.troncata_nell_uscita
     verifica("V1: i bordi di troncata_nell_uscita",
              t(v1) and not t(dict(v1, eval=8192 + C.BUDGET_MARGINE))
              and t(dict(v1, eval=8192 + C.BUDGET_MARGINE + 1))
              and not t(dict(v1, budget_tolto=True)) and not t(dict(v1, budget=0))
-             and not t(dict(v1, fine="stop"))
+             and not t(dict(v1, fine="stop")) and not t(e_budget)
+             and t(dict(e_budget, ragionamento=2000))
              and not t({"content": "", "ragionamento": PIENA - 10, "fine": "length",
                         "eval": PIENA}), "")
     # J e J2 (terza, R2): il tempo delle troncate esce dalla guardia del tempo senza strumenti
@@ -788,11 +802,33 @@ def prova_revisioni(tmp: Path):
     verifica("R4: esempi verdi e troncate oltre il tetto: «fatto» consegnato dal codice",
              ris.get("esito") == "fatto" and ris.get("consegna_al_tetto") == "troncata",
              str(ris)[:300])
-    # R6 (terza): una passata a vuoto in mezzo non lascia le troncate «di fila»
+    # R6 (terza; dalla revisione della PR #219, #191): il giro a vuoto in mezzo alle troncate.
+    # Non è una chiamata eseguita e non le azzera più: tre troncate, un giro a vuoto e una
+    # troncata sono la quarta. Il giro a vuoto non rompe il conto: con una chiamata eseguita dopo
+    # di lui si riparte e il lavoro finisce «fatto»
     vuoto = {"giro_a_vuoto": "penso penso"}
     lav, ris, log, cli, sb = gira(tmp, "revR6", [A_META] * TRONCATE_MAX + [vuoto, A_META] + LAVORO)
-    verifica("R6: tre troncate, un giro a vuoto, una troncata: non è la quarta di fila",
-             ris.get("esito") == "fatto", str(ris)[:200])
+    verifica("R6: tre troncate, un giro a vuoto, una troncata: la quarta, «limite» «troncata»",
+             ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
+             and len(cli.corpi) == TRONCATE_MAX + 2, str(ris)[:200])
+    lav, ris, log, cli, sb = gira(tmp, "revR6b", [A_META] * TRONCATE_MAX
+                                  + [vuoto, [scrivi("note.txt", "x")], A_META] + LAVORO)
+    verifica("contrario R6: il giro a vuoto e poi una chiamata eseguita: si riparte, «fatto»",
+             ris.get("esito") == "fatto"
+             and regole(lav).get("agente_uscita_troncata") == TRONCATE_MAX + 1, str(ris)[:200])
+    # Troncate alternate a giri a vuoto: prima il tetto dei token dopo 19 passate
+    lav, ris, log, cli, sb = gira(tmp, "revR6c", [dict(vuota), dict(vuoto)] * 20, max_passi=40)
+    verifica("R6: troncate e giri a vuoto alternati → «troncata» alla settima passata",
+             ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
+             and len(cli.corpi) == 7, str(ris)[:200] + f" passate {len(cli.corpi)}")
+    # P3 (revisione della PR #219): una chiamata che non parte (strumento sconosciuto, argomenti
+    # contro lo schema) non è una chiamata eseguita e non azzera le troncate
+    for tag, c in (("sconosciuto", {"name": "inesistente", "arguments": {}}),
+                   ("argomenti", {"name": "scrivi_file", "arguments": {}})):
+        lav, ris, log, cli, sb = gira(tmp, "revP3" + tag, [dict(vuota), [c]] * 12, max_passi=40)
+        verifica(f"P3: troncate alternate a una chiamata che non parte ({tag}) → «troncata»",
+                 ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
+                 and len(cli.corpi) == 7, str(ris)[:200] + f" passate {len(cli.corpi)}")
     # I (seconda) e N2: col client di vLLM l'ultima chiamata a max_tokens è rotta anche col JSON
     # che si legge (sezione 2); qui il contrario del ciclo: senza `rotti` (Ollama, chiamate
     # intere) la chiamata si esegue

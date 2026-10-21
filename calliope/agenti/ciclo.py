@@ -877,10 +877,12 @@ TRONCATE_MAX = 3
 # stima dai caratteri: TOKEN_CARATTERI per token, grossolana, per questo la quota è bassa) è
 # ragionamento troncato e vale la guardia dei token senza strumenti, come prima; altrimenti
 # l'uscita c'era ma il parser dei tool l'ha trattenuta (Ollama con una chiamata a metà)
-# Con il budget del ragionamento applicato dal server (vLLM, `budget` nell'uscita del client:
-# 21/10, #191) il ragionamento non va oltre il budget: una passata che ha generato più di
-# budget + BUDGET_MARGINE token è uscita trattenuta, qualunque sia la quota (sulla DGX il budget
-# di serie è 8 192 su 16 384, quota 0,5, sopra RAGIONAMENTO_QUOTA)
+# Con il budget del ragionamento mandato e non rifiutato (vLLM, `budget` nell'uscita del client:
+# 21/10, #191) e senza il conto esatto del motore (`ragionamento`), una passata che ha generato
+# più di budget + BUDGET_MARGINE token è uscita trattenuta, qualunque sia la stima dai caratteri
+# (sulla DGX il budget di serie è 8 192 su 16 384, quota 0,5, sopra RAGIONAMENTO_QUOTA). Il conto
+# esatto, quando c'è, decide lui (prima revisione della PR #219): «non rifiutato» non vuol dire
+# applicato (llama.cpp ignora i campi che non conosce)
 TRONCATA_TESTO_MIN = 20
 RAGIONAMENTO_QUOTA = 0.4
 TOKEN_CARATTERI = 3
@@ -897,10 +899,11 @@ def troncata_nell_uscita(out: dict) -> bool:
     gen = int(out.get("eval") or 0)
     if gen <= 0:
         return False
-    budget = int(out.get("budget") or 0)
-    if budget > 0 and not out.get("budget_tolto") and gen > budget + BUDGET_MARGINE:
-        return True
     r = out.get("ragionamento")
+    budget = int(out.get("budget") or 0)
+    if (r is None and budget > 0 and not out.get("budget_tolto")
+            and gen > budget + BUDGET_MARGINE):
+        return True
     stima = int(r) if r is not None else len(out.get("thinking") or "") / TOKEN_CARATTERI
     return stima < RAGIONAMENTO_QUOTA * gen
 # La risposta a una passata senza chiamate con lo stato consegnabile (19/10, #180): un fatto,
@@ -1461,8 +1464,8 @@ class Agente:
         troncate_fila = 0
 
         def troppe_troncate():
-            """Oltre TRONCATE_MAX troncate senza una chiamata eseguita: tappa in uno sviluppo; fuori, come gli altri
-            tetti, prima i controlli di una consegna (`_consegna_al_tetto`), poi «limite».
+            """Oltre TRONCATE_MAX troncate senza una chiamata eseguita: tappa in uno sviluppo;
+            fuori, come gli altri tetti, prima i controlli di una consegna (`_consegna_al_tetto`), poi «limite».
             ("tappa", risultato) o ("consegna", chiusura)."""
             e = Limite(f"la sua uscita si è fermata {troncate_fila} volte al tetto dei token "
                        "della passata senza una chiamata eseguita in mezzo", tipo="troncata")
@@ -1536,7 +1539,8 @@ class Agente:
                 # Il ragionamento ripeteva la stessa frase (08/10 sera): la spinta, e alla
                 # terza passata fermata di fila il lavoro si chiude con il motivo
                 giri_vuoti += 1
-                troncate_fila = 0       # non più «di fila» (terza revisione della PR #187)
+                # Le troncate restano (21/10, revisione della PR #219): il giro a vuoto non è una
+                # chiamata eseguita. *[storico: azzerate qui dalla terza revisione della PR #187]*
                 if giri_vuoti >= RIPETIZIONI_MAX:
                     e = Limite("ha ripetuto lo stesso ragionamento in "
                                f"{giri_vuoti} passate di fila senza decidere", tipo="a_vuoto")
@@ -1571,15 +1575,15 @@ class Agente:
             # senza chiamate fermata a max_tokens che non è di solo ragionamento
             # (`troncata_nell_uscita`). Il solo ragionamento troncato resta nella guardia dei token
             # senza strumenti, come prima. Le troncate si azzerano solo con una chiamata eseguita
-            # (21/10, #191): la prosa e il ragionamento troncato in mezzo non le azzerano più
-            # (troncate a contenuto vuoto alternate a «Va bene, divido il file» arrivavano al
-            # tetto dei token o dei 30 minuti). Il giro a vuoto sì (R6, sopra): ha il suo tetto
+            # (21/10, #191): la prosa, il ragionamento troncato e il giro a vuoto in mezzo non le
+            # azzerano più (troncate a contenuto vuoto alternate a «Va bene, divido il file», o a
+            # giri a vuoto, arrivavano al tetto dei token o dei 30 minuti), e nemmeno una chiamata
+            # che non parte (strumento sconosciuto, argomenti sbagliati: revisione della PR #219).
+            # L'azzeramento è dopo il giro sulle chiamate (`eseguita`)
             nell_uscita = (len(troncate) >= len(calls) > 0 if calls
                            else troncata and troncata_nell_uscita(out))
             if nell_uscita:
                 troncate_fila += 1
-            elif calls:
-                troncate_fila = 0
             if nell_uscita and not calls:
                 if troncate_fila > TRONCATE_MAX:
                     fine = troppe_troncate()
@@ -1664,6 +1668,7 @@ class Agente:
             letture = set()
             rossa = None              # la consegna rossa che ferma il lavoro (19/10, #180)
             nomi_strumenti = [(t.get("function") or {}).get("name") for t in strumenti]
+            eseguita = False      # almeno una chiamata partita davvero (#191)
             for i_call, c in enumerate(calls):
                 name, args = c["name"], c.get("arguments") or {}
                 if consegna is not None or rossa is not None:
@@ -1744,6 +1749,7 @@ class Agente:
                         continue
                     letture.add(chiave)
                 if piano and name == "piano":
+                    eseguita = True
                     result, chiusura = self._piano(lav, sandbox, args, stato_piano)
                     if result.get("ok"):
                         stato_piano = result.pop("_stato")
@@ -1754,6 +1760,7 @@ class Agente:
                     lav.nota("esito", nome=name, esito=result)
                     continue
                 if piano and name == "chiedi_permesso":
+                    eseguita = True
                     result, chiusura = self._chiedi_permesso(lav, args, stato_piano)
                     if chiusura is not None:
                         consegna = chiusura
@@ -1769,6 +1776,7 @@ class Agente:
                          "fattibile, motivo): è il primo passo obbligatorio"},
                         ensure_ascii=False)})
                     continue
+                eseguita = True
                 if name == "consegna":
                     fatto = esito_fatto(args)
                     errore = (controlla(sandbox) if controlla is not None and fatto else None)
@@ -1943,6 +1951,8 @@ class Agente:
                 messages.append({"role": "tool", "tool_name": name,
                                  "content": gc.risultato(name, result)})
                 lav.nota("esito", nome=name, esito=result)
+            if eseguita:
+                troncate_fila = 0
             if rossa is None and consegna is None and calls and troncate_fila > TRONCATE_MAX:
                 # Le passate con le chiamate tutte rotte (terza revisione della PR #187): il tetto
                 # dopo il giro sulle chiamate, così ognuna ha la sua risposta nella storia

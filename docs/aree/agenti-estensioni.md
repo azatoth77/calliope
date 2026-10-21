@@ -4233,7 +4233,8 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
 - **Fuori da uno sviluppo il «limite» «troncata» passa da `_consegna_al_tetto`**, come gli altri
   tetti. Con gli esempi di accettazione verdi il codice consegna, `consegna_al_tetto` «troncata», e
   a voce «non ha consegnato», come per `a_vuoto` e `prosa`.
-- Un giro a vuoto azzera le troncate di fila. Il banco (#9) ha `troncata` tra i tipi del limite.
+- Un giro a vuoto azzera le troncate di fila. *[storico: fino alla revisione della PR #219, 21/10,
+  sotto]* Il banco (#9) ha `troncata` tra i tipi del limite.
 - **I casi dei copioni delle tre revisioni sono nella prova** (`prova_strumenti_onesti`, sezione
   7), con il nome che avevano e con i contrari:
   - A ed L1: l'uscita trattenuta;
@@ -4261,14 +4262,16 @@ rispetto a main.
   (`budget_tolto`) non c'è, e con Ollama neppure, perché lì il budget non si applica. In
   `troncata_nell_uscita`, con `eval > budget + BUDGET_MARGINE` (1 024) la passata è una troncata,
   qualunque sia la quota. Il caso E (il solo ragionamento) resta com'era: col budget tolto, o con
-  Ollama, decide ancora la quota.
+  Ollama, decide ancora la quota. *[storico: «qualunque sia la quota» e «accettato» fino alla
+  revisione della PR #219, sotto]*
 - **F, troncate a contenuto vuoto alternate a prosa.** Le troncate si azzerano solo con una
   chiamata eseguita: una passata con chiamate non tutte rotte, anche quella letta dal testo. La
   prosa e il ragionamento troncato in mezzo non le azzerano più. Prima una serie come «troncata,
   "Va bene, divido il file", troncata…» arrivava al tetto dei token o dei 30 minuti: sulla DGX
   dopo ~5 troncate, fino a ~20 minuti in più, con un motivo («token», «tempo») che non parlava
   delle troncate. Ora alla quarta il lavoro si ferma col motivo suo. Il giro a vuoto le azzera
-  ancora (R6), perché ha un tetto suo (`RIPETIZIONI_MAX`). La troncata azzera ancora la prosa di
+  ancora (R6), perché ha un tetto suo (`RIPETIZIONI_MAX`). *[storico: il giro a vuoto e «una
+  passata con chiamate non tutte rotte» fino alla revisione della PR #219, sotto]* La troncata azzera ancora la prosa di
   fila (N3). Il motivo, ora che non sono più per forza «di fila», è «la sua uscita si è fermata N
   volte al tetto dei token della passata senza una chiamata eseguita in mezzo». A voce, alla
   tappa: «l'uscita dell'agente si è fermata più volte al tetto dei token della passata, senza una
@@ -4289,6 +4292,49 @@ rispetto a main.
   piccolo e uno scrivi_file lungo. Da guardare anche se vLLM riempie
   `completion_tokens_details.reasoning_tokens` (caso V3 della revisione). Il criterio di
   chiusura di #191 è parziale finché questa misura non è scritta qui.
+
+**Dopo la revisione della PR #219 (21/10).**
+- **Il conto esatto del ragionamento vince sul budget.** `budget` dice solo che il server non ha
+  rifiutato `thinking_token_budget`, non che l'ha applicato: llama.cpp, dato come motore «openai»
+  accanto a vLLM, ignora i campi che non conosce. Col conto del motore (`ragionamento`) presente,
+  per esempio 16 374 su 16 384 con un budget di 8 192, la regola del budget faceva della passata
+  una troncata, e il caso E finiva «la sua uscita si è fermata 4 volte…» invece di «ha ragionato
+  per 32 768 token». Ora la regola del budget vale solo quando `ragionamento` manca, cioè quando
+  vLLM non riempie `reasoning_tokens` e resta la stima dai caratteri. Se il conto c'è, decide
+  quello con la quota, come su main. Resta un caso non coperto: llama.cpp senza conto esatto e
+  con un ragionamento vero oltre il budget. Lì la regola dice «troncata», e il lavoro si ferma
+  alla quarta col motivo delle troncate invece che alla seconda soglia. Il caso è raro, perché
+  l'agente sulla DGX gira su vLLM.
+- **Il giro a vuoto non azzera più le troncate.** Il tetto suo (`RIPETIZIONI_MAX`) è di fila, e
+  una troncata azzera `giri_vuoti`. Così troncate alternate a giri a vuoto arrivavano al tetto dei
+  token dopo 19 passate. R6 è riscritta come `tronca_prosa`: tre troncate, un giro a vuoto e una
+  troncata fanno la quarta, «limite» «troncata». Il contrario: dopo il giro a vuoto una chiamata
+  eseguita fa ripartire il conto, e il lavoro finisce «fatto».
+- **«Chiamata eseguita» vuol dire partita davvero.** Prima azzerava qualunque passata con
+  chiamate non tutte rotte. Non azzerano più uno strumento sconosciuto o non offerto, gli
+  argomenti contro lo schema, la lettura ripetuta nella stessa passata, le chiamate dopo la
+  consegna e il «prima chiama piano». Azzerano piano, chiedi_permesso, consegna e gli strumenti
+  della sandbox, anche quando l'esito è un errore. L'azzeramento è ora dopo il giro sulle chiamate
+  (`eseguita` in `Agente.codice`).
+- **Prove** (sezione 7):
+  - il contrario di V1, P1: budget, 16 374 di ragionamento esatto, come E;
+  - V1 con la sola stima dai caratteri;
+  - nei bordi, il budget col conto esatto, sopra e sotto la quota;
+  - R6, il suo contrario e le troncate alternate ai giri a vuoto («troncata» alla settima
+    passata);
+  - P3 con uno strumento sconosciuto e con gli argomenti mancanti.
+
+  Ho tolto a mano ogni correzione, una per volta, e ognuna fa cadere la sua prova:
+  - la regola del budget fa cadere V1 e i bordi;
+  - la condizione su `ragionamento` fa cadere P1 e i bordi;
+  - `budget_tolto` fa cadere i bordi;
+  - l'azzeramento sul giro a vuoto fa cadere R6 e i giri alternati;
+  - l'azzeramento con qualunque chiamata fa cadere P3 e N;
+  - la prosa che azzera fa cadere F e P3;
+  - senza nessun azzeramento cadono i contrari di F e di R6.
+- **Con la PR #218** (la ricerca, `troncate_motivo()`): la ricerca azzera le troncate a ogni
+  passata non troncata, quindi conta davvero «di fila», e il codice dice invece «senza una
+  chiamata eseguita in mezzo». Sono due testi, da tenere distinti quando si unisce main.
 
 ## Il contratto dei giochi e un prompt per tipo (19/10, issue #186, ramo `issue-186-contratto-giochi`)
 
