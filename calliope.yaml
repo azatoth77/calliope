@@ -1930,6 +1930,23 @@ agenti:
   # secondi in più, e oltre agenti_accettazione_s la passata salta
   agenti_accettazione_programmi_sempre: false
   agenti_accettazione_ragionamento: 0
+  # Il revisore a contesto pulito (20/10, #190, calliope/agenti/revisore.py; banco del 19/10,
+  # #182: 24 su 25 sul giudizio test, codice o consegna): una passata a sé del modello
+  # dell'agente con le sole prove (contratto, requisiti, file senza commenti, esito dei test,
+  # registro degli errori; mai la trascrizione), menu test_sbagliato / codice_sbagliato /
+  # consegna e una domanda per la persona. Entra con un esempio di accettazione rosso quando
+  # il lavoro vorrebbe consegnare o chiudersi (una passata per tutti gli esempi rossi del
+  # momento), a una tappa con i test rossi e con lo stesso errore tre volte di fila; al più
+  # una volta per giro e per esempio, mai mentre parla la voce; i suoi secondi non contano nel
+  # tempo del giro dell'agente. «attivo»: l'esempio sbagliato si toglie dagli esempi del
+  # lavoro (rapporto e scheda di revisione), il codice sbagliato è un fatto per l'agente;
+  # «ombra»: il verdetto solo nel registro e nella riga del banco, all'agente niente, e gli
+  # esempi rossi bloccano come prima; «spento»: come prima. Secondi al più per passata
+  # (misurati 35–50), token di ragionamento, passate al più per giro
+  agenti_revisore: ombra
+  agenti_revisore_s: 90.0
+  agenti_revisore_ragionamento: 4096
+  agenti_revisore_passate_giro: 3
   agenti_attesa_risposta_min: 120.0
   # I file della persona dati all'agente (03/10, «correggi lo script backup.py»): solo
   # testo, codice, Word, Excel e PDF, al più tanti MB; del testo di un documento l'agente

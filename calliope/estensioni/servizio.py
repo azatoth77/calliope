@@ -1105,6 +1105,10 @@ class Estensioni:
         if not getattr(lav, "estensione", None) and self.archivio.voce(m["nome"]) is not None:
             return {"errore": f"il nome «{m['nome']}» è già di un'altra estensione"}
         file.pop("manifesto.json", None)
+        if ris.get("esempi_tolti"):
+            # Gli esempi di accettazione tolti dal revisore (20/10, #190): restano con la
+            # versione, e la scheda di revisione li mostra a chi approva
+            an["esempi_tolti"] = list(ris["esempi_tolti"])[:20]
         vecchio = self.archivio.manifesto(m["nome"])        # la versione approvata, se c'è
         n = self.archivio.nuova_candidata(m, file, lav.persona_nome, test, an, lav.id, passano)
         # Il titolo dato dalla persona resta anche nell'annuncio (vedi `revisione`)
@@ -1162,7 +1166,8 @@ class Estensioni:
                    + ([f"Piano: {', '.join((piano or {}).get('capacita') or [])}"]
                       if piano else [])
                    + [f"  {r['file']}:{r['riga']} {r['cosa']} ({r['perche']})"
-                      for r in an.get("rischi", [])[:10]])}
+                      for r in an.get("rischi", [])[:10]]
+                   + _righe_tolti(an))}
         if approvabile:
             out["in_sospeso"] = {"domanda": "Vuoi approvarla?",
                                  "cosa": f"approvare {chi_e(m, n, vecchio)}",
@@ -1248,6 +1253,8 @@ class Estensioni:
              f"- Analisi del codice: {in_parole(an, 10)}", f"- Test: {esito_test}"]
             + [f"- {r['file']}:{r['riga']} {r['cosa']} ({r['perche']})"
                for r in (an.get("rischi") or [])[:10]]
+            + [("- " + x if x.startswith("Esempi") else "  - " + x.strip())
+               for x in _righe_tolti(an)]
             + ([f"- {diff_detto}", "", "```diff", diff_testo, "```"] if diff_testo else []))
         return {"frase": frase, "testo": testo, "approvabile": approvabile, "versione": n}
 
@@ -1255,6 +1262,16 @@ class Estensioni:
         for es in list(self.esecuzioni.values()):
             if es.stato in ("in_corso", "in_attesa"):
                 es.annulla()
+
+
+def _righe_tolti(an: dict) -> list[str]:
+    """Gli esempi di accettazione tolti dal revisore (20/10, #190), per la scheda di revisione."""
+    from ..agenti.revisore import righe_esempi_tolti
+    righe = righe_esempi_tolti((an or {}).get("esempi_tolti"))
+    if not righe:
+        return []
+    return ["Esempi di accettazione tolti dal revisore (giudicati sbagliati, a contesto "
+            "pulito):"] + [f"  {x}" for x in righe]
 
 
 _ORDINE = re.compile(r"\b(assistente|istruzion\w*|system prompt|prompt di sistema|ignora\w*|"

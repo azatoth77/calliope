@@ -58,8 +58,13 @@ class Copione:
 
     def __init__(self, passate):
         self.passate, self.corpi, self.url = list(passate), [], None
+        self.revisioni = []
 
     def chat(self, body, su_pezzo=None, controlla=None, su_flusso=None):
+        if G.e_revisore(body):
+            # Il revisore a contesto pulito (#190) non si prende le passate del copione
+            self.revisioni.append(body)
+            return {"content": "", "eval": 0, "prompt": 0}
         self.corpi.append(json.loads(json.dumps(body["messages"], default=str)))
         p = self.passate.pop(0) if self.passate else "Ho finito."
         out = {"content": "", "thinking": "", "tool_calls": [], "eval": 50, "prompt": 100,

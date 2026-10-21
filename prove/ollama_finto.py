@@ -30,6 +30,13 @@ la risposta a /pause (una pausa che non risponde), `stato_pausa` (es. 500) la fa
 (monotonic) di ogni pezzo mandato dall'API OpenAI, `pezzi_nativi` conta quelli dello stream
 nativo (18/10, #156: lo stream partito, al posto di un'attesa fissa). Senza `dev` sono 404,
 come vLLM normale.
+
+**Il revisore a contesto pulito** (20/10, #190, calliope/agenti/revisore.py): una richiesta con lo
+schema del revisore (il campo «verdetto») non consuma il `copione` dell'agente e non va in
+`richieste`: risponde `revisore` (una lista che si consuma, come il copione, o un dict o una
+funzione(body)), di serie un testo vuoto (per il ciclo «non è JSON», nessun effetto), e il corpo va
+in `revisioni`. Così le prove scritte prima del revisore restano com'erano anche con il revisore
+in ombra di serie.
 """
 
 import json
@@ -49,6 +56,8 @@ class FakeOllama:
         self.pezzi = 4
         self.pezzi_argomenti = 2             # API OpenAI: in quanti pezzi gli argomenti
         self.richieste: list[dict] = []
+        self.revisore = None                 # le risposte del revisore (20/10, #190)
+        self.revisioni: list[dict] = []
         self.interrotte = 0
         self.senza_think: set[str] = set()   # modelli che rispondono 400 a think
         # /api/show: le capacità del modello (05/10: «vision» per le foto, calliope/immagini.py)
@@ -147,8 +156,11 @@ class FakeOllama:
                 if self.path != "/api/chat":
                     return self._json(404, {"error": "not found"})
                 with fake._lock:
-                    fake.richieste.append(body)
-                    step = fake.copione.pop(0) if fake.copione else fake.predefinita
+                    if fake._e_revisore(body):
+                        step = fake._revisione(body)
+                    else:
+                        fake.richieste.append(body)
+                        step = fake.copione.pop(0) if fake.copione else fake.predefinita
                 model = body.get("model")
                 if model not in fake.modelli:
                     return self._json(404, {"error": f"model '{model}' not found"})
@@ -205,8 +217,10 @@ class FakeOllama:
                         fake.interrotte += 1
 
             def _openai(self, body):
+                revisione = fake._e_revisore(body)
                 with fake._lock:
-                    fake.richieste.append(body)
+                    if not revisione:
+                        fake.richieste.append(body)
                 model = body.get("model")
                 if model not in fake.modelli:
                     return self._json(404, {"object": "error", "type": "NotFoundError",
@@ -218,7 +232,8 @@ class FakeOllama:
                                                        "non supportato", "code": 400})
                 # il copione si consuma solo se la richiesta arriva al «modello»
                 with fake._lock:
-                    step = fake.copione.pop(0) if fake.copione else fake.predefinita
+                    step = (fake._revisione(body) if revisione else
+                            fake.copione.pop(0) if fake.copione else fake.predefinita)
                 if callable(step):
                     step = step(body)
                 if step.get("status"):
@@ -304,6 +319,20 @@ class FakeOllama:
         self.srv.daemon_threads = True
         threading.Thread(target=self.srv.serve_forever, daemon=True, name="ollama-finto").start()
         return self
+
+    @staticmethod
+    def _e_revisore(body: dict) -> bool:
+        """Una passata del revisore (calliope/agenti/revisore.py): lo schema con «verdetto»."""
+        f = body.get("format") or body.get("response_format") or {}
+        return isinstance(f, dict) and '"verdetto"' in json.dumps(f)
+
+    def _revisione(self, body: dict):
+        """La risposta del revisore, sotto il lock: da `revisore`, di serie un testo vuoto."""
+        self.revisioni.append(body)
+        r = self.revisore
+        if isinstance(r, list):
+            r = r.pop(0) if r else None
+        return r if r is not None else {"content": ""}
 
     @property
     def porta(self) -> int:

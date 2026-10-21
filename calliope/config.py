@@ -1649,6 +1649,23 @@ class Config:
     # secondi in più, e oltre agenti_accettazione_s la passata salta
     agenti_accettazione_programmi_sempre: bool = False
     agenti_accettazione_ragionamento: int = 0
+    # Il revisore a contesto pulito (20/10, #190, calliope/agenti/revisore.py; banco del 19/10,
+    # #182: 24 su 25 sul giudizio test, codice o consegna): una passata a sé del modello
+    # dell'agente con le sole prove (contratto, requisiti, file senza commenti, esito dei test,
+    # registro degli errori; mai la trascrizione), menu test_sbagliato / codice_sbagliato /
+    # consegna e una domanda per la persona. Entra con un esempio di accettazione rosso quando
+    # il lavoro vorrebbe consegnare o chiudersi (una passata per tutti gli esempi rossi del
+    # momento), a una tappa con i test rossi e con lo stesso errore tre volte di fila; al più
+    # una volta per giro e per esempio, mai mentre parla la voce; i suoi secondi non contano nel
+    # tempo del giro dell'agente. «attivo»: l'esempio sbagliato si toglie dagli esempi del
+    # lavoro (rapporto e scheda di revisione), il codice sbagliato è un fatto per l'agente;
+    # «ombra»: il verdetto solo nel registro e nella riga del banco, all'agente niente, e gli
+    # esempi rossi bloccano come prima; «spento»: come prima. Secondi al più per passata
+    # (misurati 35–50), token di ragionamento, passate al più per giro
+    agenti_revisore: str = "ombra"
+    agenti_revisore_s: float = 90.0
+    agenti_revisore_ragionamento: int = 4096
+    agenti_revisore_passate_giro: int = 3
     # Lavori interrotti da un riavvio di Calliope (06/10, calliope/agenti/ripresa.py): chi li
     # aveva chiesti lo sente al primo silenzio («… Lo rifaccio?») se il lavoro era vivo meno
     # di tante ore fa; quelli più vecchi restano solo nell'elenco di lavoro_stato, per un giorno
@@ -3409,6 +3426,8 @@ SEZIONI: dict[str, list[str]] = {
                "agenti_precedenza_voce", "agenti_ripresa_s", "agenti_arbitro", "agenti_pausa_vllm",
                "agenti_domande_max", "agenti_accettazione", "agenti_accettazione_s",
                "agenti_accettazione_programmi_sempre", "agenti_accettazione_ragionamento",
+               "agenti_revisore", "agenti_revisore_s", "agenti_revisore_ragionamento",
+               "agenti_revisore_passate_giro",
                "agenti_attesa_risposta_min", "agenti_file_max_mb", "agenti_file_caratteri",
                "agenti_esempi_max", "agenti_esempio_kb", "agenti_interrotti_annuncio_h",
                "sviluppo_enabled", "sviluppo_sospendi_min", "sviluppo_promemoria",
@@ -3900,6 +3919,8 @@ _MODI_NUOVI = {
     "stanza_lenta_prompt": _modi("stanza_lenta_prompt", ("auto", "si", "no"), sinonimi=_SI_NO,
                                  falso="no", vero="si"),
     "agenti_conferma": _modi("agenti_conferma", ("costosi", "sempre", "mai")),
+    # Il revisore (20/10, #190): il true di YAML è ambiguo fra «ombra» e «attivo», rifiutato
+    "agenti_revisore": _modi("agenti_revisore", ("spento", "ombra", "attivo"), falso="spento"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},

@@ -537,6 +537,13 @@ def prova_spinte():
              and "modifica_file" in s, s)
 
 
+def e_revisore(body) -> bool:
+    """Una passata del revisore a contesto pulito (20/10, #190): lo schema con «verdetto», come
+    `ollama_finto._e_revisore`. I clienti finti delle prove non le danno il copione."""
+    f = (body or {}).get("format") or {}
+    return isinstance(f, dict) and '"verdetto"' in json.dumps(f)
+
+
 class _Copione:
     """Un cliente finto che recita le passate: ogni voce è una lista di chiamate o «ripete»
     (un ragionamento ripetuto, che il rilevatore ferma)."""
@@ -546,8 +553,13 @@ class _Copione:
 
     def __init__(self, passate):
         self.passate, self.corpi, self.url = list(passate), [], None
+        self.revisioni = []
 
     def chat(self, body, su_pezzo=None, controlla=None, su_flusso=None):
+        if e_revisore(body):
+            # Il revisore a contesto pulito (#190) non si prende le passate del copione
+            self.revisioni.append(body)
+            return {"content": "", "eval": 0, "prompt": 0}
         self.corpi.append(json.loads(json.dumps(body["messages"], default=str)))
         p = self.passate.pop(0) if self.passate else [
             {"name": "consegna", "arguments": {"riassunto": "Fatto.", "esito": "fatto"}}]
