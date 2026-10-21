@@ -345,6 +345,22 @@ def prova_risultato():
         verifica("ricerca fermata con la relazione tagliata: «incompleta», dal testo, senza "
                  "«cartella Lavori»", ta.RELAZIONE_INCOMPLETA_VOCE in detta(r)
                  and "cartella" not in detta(r) and "HACS" in detta(r), detta(r))
+        # o. lo stesso con un riassunto salvato lungo e non ancora detto (terza revisione della
+        # PR #218). Come nel servizio: il riassunto è l'elenco degli strumenti usati
+        # (_fatto_finora, che per la voce non si dice) e il motivo del «limite», che lo
+        # sostituisce: oltre 80 caratteri, si diceva quello e non la relazione
+        lf.risultato["riassunto"] = ("fatto: web_cerca storia del borgo di Valfiorita; web_leggi "
+                                     "la pagina del comune; biblioteca_cerca fondazione del "
+                                     "borgo nel Trecento")
+        lf.risultato["motivo"] = ("ho dovuto fermarlo: la sua uscita si è fermata 4 volte di "
+                                  "fila al tetto dei token della passata")
+        ctx, _ = contesto(cfg, svc, detto="Com'è andata la ricerca sul borgo?")
+        r = ta._risultato_lavoro(ctx, lavoro=lf.id)
+        verifica("ricerca fermata, riassunto salvato lungo: la relazione incompleta dal testo, "
+                 "non l'elenco né il motivo", len(ar.riassunto_salvato(lf)) > 80
+                 and ta.RELAZIONE_INCOMPLETA_VOCE in detta(r) and "HACS" in detta(r)
+                 and "web_cerca" not in detta(r) and "tetto dei token" not in detta(r),
+                 detta(r) + " | salvato: " + ar.riassunto_salvato(lf))
         lf.risultato.pop("testo")
         r = ta._risultato_lavoro(ctx, lavoro=lf.id)
         verifica("contrario: fermata senza relazione, niente «incompleta» né «cartella Lavori»",
