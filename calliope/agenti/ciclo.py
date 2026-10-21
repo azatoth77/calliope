@@ -867,8 +867,9 @@ RIFIUTI_MAX = 3
 # Le passate di fila senza nessuna chiamata dopo le quali il lavoro si ferma (19/10, #180):
 # tappa in uno sviluppo, «limite» fuori
 PROSA_MAX = 3
-# Le passate di fila con l'uscita troncata a max_tokens (revisione della PR #187, #185): oltre,
-# tappa in uno sviluppo o «limite», con il motivo suo invece del tetto dei token
+# Le passate con l'uscita troncata a max_tokens senza una chiamata eseguita in mezzo (revisione
+# della PR #187, #185; dal 21/10, #191, la prosa in mezzo non le azzera): oltre, tappa in uno
+# sviluppo o «limite», con il motivo suo invece del tetto dei token
 TRONCATE_MAX = 3
 # Una passata fermata a max_tokens senza chiamate (terza revisione della PR #187): con un testo
 # di almeno TRONCATA_TESTO_MIN caratteri la troncatura è nell'uscita; col contenuto vuoto decide
@@ -876,9 +877,14 @@ TRONCATE_MAX = 3
 # stima dai caratteri: TOKEN_CARATTERI per token, grossolana, per questo la quota è bassa) è
 # ragionamento troncato e vale la guardia dei token senza strumenti, come prima; altrimenti
 # l'uscita c'era ma il parser dei tool l'ha trattenuta (Ollama con una chiamata a metà)
+# Con il budget del ragionamento applicato dal server (vLLM, `budget` nell'uscita del client:
+# 21/10, #191) il ragionamento non va oltre il budget: una passata che ha generato più di
+# budget + BUDGET_MARGINE token è uscita trattenuta, qualunque sia la quota (sulla DGX il budget
+# di serie è 8 192 su 16 384, quota 0,5, sopra RAGIONAMENTO_QUOTA)
 TRONCATA_TESTO_MIN = 20
 RAGIONAMENTO_QUOTA = 0.4
 TOKEN_CARATTERI = 3
+BUDGET_MARGINE = 1024
 
 
 def troncata_nell_uscita(out: dict) -> bool:
@@ -891,6 +897,9 @@ def troncata_nell_uscita(out: dict) -> bool:
     gen = int(out.get("eval") or 0)
     if gen <= 0:
         return False
+    budget = int(out.get("budget") or 0)
+    if budget > 0 and not out.get("budget_tolto") and gen > budget + BUDGET_MARGINE:
+        return True
     r = out.get("ragionamento")
     stima = int(r) if r is not None else len(out.get("thinking") or "") / TOKEN_CARATTERI
     return stima < RAGIONAMENTO_QUOTA * gen
@@ -1447,14 +1456,16 @@ class Agente:
         # Le passate di fila senza chiamate (19/10, #180) e il controllo della consegna senza
         # effetti, lo stesso dentro esegui_test (`Lavori._controlla_estensione`)
         prosa_fila = 0
-        troncate_fila = 0         # passate di fila con l'uscita troncata (revisione della PR #187)
+        # Le passate con l'uscita troncata senza una chiamata eseguita in mezzo (revisione della
+        # PR #187; #191)
+        troncate_fila = 0
 
         def troppe_troncate():
-            """Oltre TRONCATE_MAX troncate di fila: tappa in uno sviluppo; fuori, come gli altri
+            """Oltre TRONCATE_MAX troncate senza una chiamata eseguita: tappa in uno sviluppo; fuori, come gli altri
             tetti, prima i controlli di una consegna (`_consegna_al_tetto`), poi «limite».
             ("tappa", risultato) o ("consegna", chiusura)."""
-            e = Limite(f"la sua uscita si è fermata {troncate_fila} volte di fila al tetto dei "
-                       "token della passata", tipo="troncata")
+            e = Limite(f"la sua uscita si è fermata {troncate_fila} volte al tetto dei token "
+                       "della passata senza una chiamata eseguita in mezzo", tipo="troncata")
             if getattr(lav, "tappe", False):
                 chiusura = self._consegna_alla_tappa(lav, sandbox, e, controlla, piano,
                                                      stato_piano)
@@ -1559,10 +1570,16 @@ class Agente:
             # si è eseguita l'agente va avanti, e la passata non conta «di fila»), o una passata
             # senza chiamate fermata a max_tokens che non è di solo ragionamento
             # (`troncata_nell_uscita`). Il solo ragionamento troncato resta nella guardia dei token
-            # senza strumenti, come prima
+            # senza strumenti, come prima. Le troncate si azzerano solo con una chiamata eseguita
+            # (21/10, #191): la prosa e il ragionamento troncato in mezzo non le azzerano più
+            # (troncate a contenuto vuoto alternate a «Va bene, divido il file» arrivavano al
+            # tetto dei token o dei 30 minuti). Il giro a vuoto sì (R6, sopra): ha il suo tetto
             nell_uscita = (len(troncate) >= len(calls) > 0 if calls
                            else troncata and troncata_nell_uscita(out))
-            troncate_fila = troncate_fila + 1 if nell_uscita else 0
+            if nell_uscita:
+                troncate_fila += 1
+            elif calls:
+                troncate_fila = 0
             if nell_uscita and not calls:
                 if troncate_fila > TRONCATE_MAX:
                     fine = troppe_troncate()

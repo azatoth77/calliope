@@ -291,15 +291,18 @@ def prova_troncata(tmp: Path):
     lav, ris, log, cli, sb = gira(tmp, "tronca_tetto", [dict(a_meta) for _ in range(8)])
     verifica("oltre TRONCATE_MAX troncate di fila: «limite» col motivo suo, non il tetto dei token",
              ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
-             and "fermata 4 volte di fila al tetto dei token" in ris.get("motivo", "")
+             and "fermata 4 volte al tetto dei token" in ris.get("motivo", "")
+             and "senza una chiamata eseguita" in ris.get("motivo", "")
              and len(cli.corpi) == 4, str(ris)[:200])
-    # La troncata azzera la prosa di fila: alternate, nessun «4 volte di fila»
+    # La troncata azzera la prosa di fila (N3): quattro prose alternate a tre troncate, nessun
+    # «4 volte di fila senza usare gli strumenti». Dal 21/10 (#191) la prosa non azzera le
+    # troncate: le quattro troncate alternate sono nella sezione 7, caso F
     lav, ris, log, cli, sb = gira(tmp, "tronca_prosa", [
-        a_meta, "Ci penso.", a_meta, "Ci penso.", a_meta, "Ci penso.", a_meta, "Ci penso.",
+        "Ci penso.", a_meta, "Ci penso.", a_meta, "Ci penso.", a_meta, "Ci penso.",
         [scrivi("programma.py", GIUSTO), scrivi("test_programma.py", TEST)], [ESEGUI],
         [CONSEGNA]], max_passi=14)
-    verifica("troncate e prosa alternate: nessuna delle due «di fila», il lavoro finisce",
-             ris.get("esito") == "fatto" and regole(lav).get("agente_uscita_troncata") == 4,
+    verifica("troncate e prosa alternate: nessuna delle due oltre il tetto, il lavoro finisce",
+             ris.get("esito") == "fatto" and regole(lav).get("agente_uscita_troncata") == 3,
              str(ris)[:200] + str(regole(lav)))
 
     # Il client di vLLM: finish_reason, argomenti rotti, budget che cade
@@ -314,6 +317,7 @@ def prova_troncata(tmp: Path):
     verifica("vLLM: JSON a metà e finish_reason «length» → la chiamata è tra le rotte",
              out.get("fine") == "length" and out.get("rotti") == [0]
              and out["tool_calls"][0]["arguments"] == {}, str(out))
+    verifica("vLLM: il budget mandato torna nell'uscita (#191)", out.get("budget") == 50, str(out))
     cl.http = _Http([_Risposta(_sse(_pezzo('{"percorso": "a.py", "contenuto": "x"}'),
                                     {"choices": [{"delta": {}, "finish_reason": "length"}]}))])
     out = cl.chat(dict(corpo))
@@ -333,13 +337,14 @@ def prova_troncata(tmp: Path):
     out = cl.chat(dict(corpo))
     verifica("vLLM: thinking_token_budget rifiutato → tolto e detto (budget_tolto)",
              out.get("budget_tolto") is True and "thinking_token_budget" in cl.http.corpi[0]
-             and "thinking_token_budget" not in cl.http.corpi[1], str(out))
+             and "thinking_token_budget" not in cl.http.corpi[1] and "budget" not in out,
+             str(out))
     cl.http = _Http([_Risposta(_sse({"choices": [{"delta": {"content": "ciao"},
                                                   "finish_reason": "stop"}]}))])
     out = cl.chat(dict(corpo))
     verifica("contrario: la volta dopo il budget non si manda e non c'è niente da dire",
-             not out.get("budget_tolto") and "thinking_token_budget" not in cl.http.corpi[0],
-             str(out))
+             not out.get("budget_tolto") and "thinking_token_budget" not in cl.http.corpi[0]
+             and "budget" not in out, str(out))
     log = []
     ag = G.agente(Copione([{"content": "ok", "budget_tolto": True}]), log)
     from calliope.agenti.ciclo import Lavoro
@@ -355,9 +360,11 @@ def prova_troncata(tmp: Path):
         "name": "scrivi_file", "arguments": '{"percorso": "a.py", "cont'}}]}}),
         json.dumps({"done": True, "done_reason": "length", "eval_count": 9})]
     co.http = _Http([_Risposta(righe)])
-    out = co.chat({"model": "m", "messages": []})
+    out = co.chat({"model": "m", "messages": [], "think": True, "thinking_budget": 50})
     verifica("Ollama: argomenti rotti e done_reason «length»",
              out.get("rotti") == [0] and out.get("fine") == "length", str(out))
+    verifica("contrario: Ollama non applica il budget e non lo dice (#191)",
+             "budget" not in out, str(out))
     righe = [json.dumps({"message": {"tool_calls": [{"function": {
         "name": "scrivi_file", "arguments": {"percorso": "a.py", "contenuto": "x"}}}]}}),
         json.dumps({"done": True, "done_reason": "length", "eval_count": 9})]
@@ -672,15 +679,59 @@ def prova_revisioni(tmp: Path):
                  ris.get("eccezione") == "Limite" and "ha ragionato per" in ris.get("motivo", "")
                  and len(cli.corpi) == 2 and "agente_uscita_troncata" not in regole(lav),
                  str(ris)[:200])
-    # F (seconda): troncate alternate a prosa, nessuna delle due «di fila»: arriva al tetto delle
-    # passate, mai a «N volte di fila»
+    # F (seconda; #191 dal 21/10): troncate a contenuto vuoto alternate a prosa. Prima arrivavano
+    # a un tetto del lavoro (i token, sulla DGX i 30 minuti); ora la prosa non azzera le troncate
+    # e alla quarta il lavoro si ferma col motivo suo, senza «di fila»
     vuota = {"content": "", "fine": "length", "eval": PIENA}
     lav, ris, log, cli, sb = gira(tmp, "revF", [vuota, "Ci penso."] * 12, max_passi=24)
-    # (a 16 384 token l'una arriva prima il tetto dei token del lavoro: caro, ma finito)
-    verifica("F: troncate e prosa alternate fino a un tetto del lavoro, nessun «di fila»",
-             ris.get("eccezione") == "Limite" and ris.get("tipo") in ("passate", "token")
-             and "di fila" not in ris.get("motivo", "")
-             and regole(lav).get("agente_uscita_troncata", 0) >= 4, str(ris)[:200])
+    verifica("F: quattro troncate alternate a prosa → «limite» «troncata» alla settima passata",
+             ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
+             and "senza una chiamata eseguita" in ris.get("motivo", "")
+             and "di fila" not in ris.get("motivo", "") and len(cli.corpi) == 7
+             and regole(lav).get("agente_uscita_troncata") == TRONCATE_MAX, str(ris)[:200])
+    lav, ris, log, cli, sb = gira(tmp, "revF2", [vuota, "Ci penso."] * 12, max_passi=24,
+                                  tappe=True)
+    verifica("…in uno sviluppo la tappa «troncata», la storia ben formata",
+             ris.get("esito") == "tappa" and ris.get("tipo_limite") == "troncata"
+             and _storia_ben_formata(lav), str(ris)[:200])
+    # Contrario: una chiamata eseguita in mezzo azzera le troncate (tre, la chiamata, tre)
+    lav, ris, log, cli, sb = gira(tmp, "revF3", [vuota, "Ci penso.", vuota, "Ci penso.", vuota,
+                                                 [scrivi("note.txt", "x")], vuota, "Ci penso.",
+                                                 vuota, vuota] + LAVORO, max_passi=24)
+    verifica("contrario F: una chiamata eseguita in mezzo azzera le troncate, «fatto»",
+             ris.get("esito") == "fatto" and regole(lav).get("agente_uscita_troncata") == 6,
+             str(ris)[:200])
+    # …e il ragionamento troncato in mezzo (nella guardia) non le azzera
+    pensa = {"content": "", "ragionamento": PIENA - 10, "fine": "length", "eval": PIENA}
+    lav, ris, log, cli, sb = gira(tmp, "revF4", [vuota, vuota, vuota, pensa, vuota] + LAVORO,
+                                  max_passi=24)
+    verifica("F: il ragionamento troncato in mezzo non azzera le troncate: la quarta ferma",
+             ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
+             and len(cli.corpi) == 5, str(ris)[:200])
+    # V1 (quarta revisione, #191): vLLM con il budget applicato (8 192 su 16 384, quota 0,5) e il
+    # resto trattenuto dal parser: oltre il budget il ragionamento non va, è una troncata
+    v1 = {"content": "", "ragionamento": 8192, "budget": 8192, "fine": "length", "eval": PIENA}
+    lav, ris, log, cli, sb = gira(tmp, "revV1", [dict(v1) for _ in range(3)] + LAVORO)
+    verifica("V1: budget applicato, eval oltre budget + 1024, contenuto vuoto → troncata, «fatto»",
+             ris.get("esito") == "fatto" and regole(lav).get("agente_uscita_troncata") == 3
+             and not any("token senza strumenti" in x for x in log), str(ris)[:200])
+    # Contrari: E con il budget tolto dal server resta nella guardia; e i bordi della funzione
+    e_tolto = dict(v1, ragionamento=PIENA - 10, budget_tolto=True)
+    e_tolto.pop("budget")
+    lav, ris, log, cli, sb = gira(tmp, "revV1E", [dict(e_tolto) for _ in range(30)],
+                                  max_passi=24)
+    verifica("contrario V1: E col budget tolto chiude alla seconda soglia, come prima",
+             ris.get("eccezione") == "Limite" and "ha ragionato per" in ris.get("motivo", "")
+             and len(cli.corpi) == 2 and "agente_uscita_troncata" not in regole(lav),
+             str(ris)[:200])
+    t = C.troncata_nell_uscita
+    verifica("V1: i bordi di troncata_nell_uscita",
+             t(v1) and not t(dict(v1, eval=8192 + C.BUDGET_MARGINE))
+             and t(dict(v1, eval=8192 + C.BUDGET_MARGINE + 1))
+             and not t(dict(v1, budget_tolto=True)) and not t(dict(v1, budget=0))
+             and not t(dict(v1, fine="stop"))
+             and not t({"content": "", "ragionamento": PIENA - 10, "fine": "length",
+                        "eval": PIENA}), "")
     # J e J2 (terza, R2): il tempo delle troncate esce dalla guardia del tempo senza strumenti
     vero, vero_time = Copione.chat, C.time
 

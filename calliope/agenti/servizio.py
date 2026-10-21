@@ -343,8 +343,8 @@ AL_TETTO_TAPPA = "L'agente non ha consegnato, ma ha finito: l'ho chiuso io."
 PERCHE_TAPPA = {"consegna_rossa": "l'agente ha consegnato, ma la consegna non va: i test non "
                                   "passano o manca qualcosa che la consegna chiede",
                 "prosa": "l'agente ha risposto più volte senza usare gli strumenti",
-                "troncata": "l'uscita dell'agente si è fermata più volte di fila al tetto dei "
-                            "token della passata"}
+                "troncata": "l'uscita dell'agente si è fermata più volte al tetto dei token "
+                            "della passata, senza una chiamata eseguita in mezzo"}
 
 
 def frase_tappa(lav, titolo: str) -> str:
