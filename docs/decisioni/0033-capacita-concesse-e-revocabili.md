@@ -2,7 +2,8 @@
 
 - **Stato**: accettata (20/10/2026: il principio e le tre scelte di chi amministra, issue #193; la
   sera le risposte alle dieci domande dell'analisi);
-  il **piano a passi** è una proposta, nell'analisi, da approvare. Nel codice non c'è ancora niente:
+  il **piano a passi** dell'analisi è approvato da chi amministra il 21/10, una issue per passo (#203–#217, il passo 6
+  in #53) *[storico: «una proposta, da approvare» fino al 21/10]*. Nel codice non c'è ancora niente:
   fino al primo passo valgono il contratto e il piano di oggi, con i 12 impossibili. Cambia una
   parte della [0013](0013-estensioni-porta-stretta.md) (vedi «Cosa cambia nelle decisioni di prima»)
   e la risposta S10 del 12/10 sui messaggi verso l'esterno (roadmap 4.9).
