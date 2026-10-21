@@ -4204,7 +4204,7 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
   chiamate rotte; dalla terza revisione solo le passate con tutte le chiamate rotte) il lavoro si ferma col motivo «la sua uscita si è fermata N volte di fila al
   tetto dei token della passata», `tipo` «troncata»: tappa in uno sviluppo (`PERCHE_TAPPA`, a voce
   «l'uscita dell'agente si è fermata più volte di fila al tetto dei token della passata»), fuori
-  «limite».
+  «limite». *[storico: «di fila» e i due motivi fino al 21/10, #191, sotto]*
 - **Con vLLM e «length» l'ultima chiamata è di nuovo rotta**, anche col JSON che si legge. A fine
   stream vLLM manda gli argomenti già chiusi dal parser con la stringa a metà: un file, un `nuovo` di
   modifica_file o un riassunto della consegna a metà scritti in silenzio costano più di una passata
@@ -4248,6 +4248,47 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
   - B, C, D, G e H: la modifica inversa e il già visto.
 
   Ogni tornata di correzioni aveva rotto un caso di quella prima.
+
+**I due bordi della quarta revisione della PR #187 (21/10, issue #191, ramo
+`issue-191-troncate`).** La quarta revisione aveva lasciato fuori due casi limite, non regressioni
+rispetto a main.
+- **V1, vLLM con il budget del ragionamento applicato.** Sulla DGX il budget di serie è 8 192 su
+  16 384 token di passata, una quota di 0,5, sopra `RAGIONAMENTO_QUOTA` = 0,4. Una passata
+  «length» col contenuto vuoto e senza chiamate finiva quindi nella guardia dei token senza
+  strumenti («ha ragionato per 32 768 token»). Eppure, col budget applicato, il ragionamento non
+  può superarlo: il resto è uscita, trattenuta dal parser dei tool. Ora il client di vLLM mette
+  in `budget` il `thinking_token_budget` che ha mandato e il server ha accettato. Quello rifiutato
+  (`budget_tolto`) non c'è, e con Ollama neppure, perché lì il budget non si applica. In
+  `troncata_nell_uscita`, con `eval > budget + BUDGET_MARGINE` (1 024) la passata è una troncata,
+  qualunque sia la quota. Il caso E (il solo ragionamento) resta com'era: col budget tolto, o con
+  Ollama, decide ancora la quota.
+- **F, troncate a contenuto vuoto alternate a prosa.** Le troncate si azzerano solo con una
+  chiamata eseguita: una passata con chiamate non tutte rotte, anche quella letta dal testo. La
+  prosa e il ragionamento troncato in mezzo non le azzerano più. Prima una serie come «troncata,
+  "Va bene, divido il file", troncata…» arrivava al tetto dei token o dei 30 minuti: sulla DGX
+  dopo ~5 troncate, fino a ~20 minuti in più, con un motivo («token», «tempo») che non parlava
+  delle troncate. Ora alla quarta il lavoro si ferma col motivo suo. Il giro a vuoto le azzera
+  ancora (R6), perché ha un tetto suo (`RIPETIZIONI_MAX`). La troncata azzera ancora la prosa di
+  fila (N3). Il motivo, ora che non sono più per forza «di fila», è «la sua uscita si è fermata N
+  volte al tetto dei token della passata senza una chiamata eseguita in mezzo». A voce, alla
+  tappa: «l'uscita dell'agente si è fermata più volte al tetto dei token della passata, senza una
+  chiamata eseguita in mezzo».
+- **Prove** (`prova_strumenti_onesti`, sezione 7, livello 2): F diventa «limite» «troncata» alla
+  settima passata (quattro troncate e tre prose); in uno sviluppo è tappa, con la storia ben
+  formata. I contrari: una chiamata eseguita in mezzo le azzera e il lavoro finisce «fatto»; il
+  ragionamento troncato in mezzo non le azzera. Poi V1 (tre passate col budget, «fatto») e il suo
+  contrario, E col budget tolto, che chiude alla seconda soglia come prima. Infine i bordi di
+  `troncata_nell_uscita` (budget + 1 024 no, + 1 025 sì, budget tolto, budget 0, «stop», E senza
+  budget). Nella sezione 2, `budget` nell'uscita del client vLLM, assente dopo il rifiuto e con
+  Ollama. `tronca_prosa` (N3) ha ora quattro prose e tre troncate. Ho tolto a mano ciascuna delle
+  due correzioni e la prova è caduta sui casi suoi (V1 e i bordi; F, F in uno sviluppo e il
+  ragionamento in mezzo).
+- **Da misurare sulla DGX** (la DGX non era raggiungibile il 21/10): come il parser `qwen3_xml`
+  chiude uno stream fermato a max_tokens a metà di una chiamata, cioè se manda gli argomenti a
+  pezzi (finiscono in `rotti`) o li trattiene (contenuto vuoto, il caso V1). La prova: max_tokens
+  piccolo e uno scrivi_file lungo. Da guardare anche se vLLM riempie
+  `completion_tokens_details.reasoning_tokens` (caso V3 della revisione). Il criterio di
+  chiusura di #191 è parziale finché questa misura non è scritta qui.
 
 ## Il contratto dei giochi e un prompt per tipo (19/10, issue #186, ramo `issue-186-contratto-giochi`)
 
