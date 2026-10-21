@@ -4189,7 +4189,8 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
 - Il ciclo della ricerca ha la sua issue (#189). Riletto, è meno grave di quanto detto nella PR:
   lo strumento sconosciuto ha già `ok: False` con l'elenco, e manca solo il nome della regola. La
   consegna fa `return` subito, e le chiamate dopo di essa non si eseguono e restano senza
-  risposta. Non legge `rotti` e prende per relazione anche una passata troncata.
+  risposta. Non legge `rotti` e prende per relazione anche una passata troncata. *[storico:
+  vero fino al 21/10, corretto da #189 nella voce «Gli strumenti onesti nella ricerca»]*
 
 **Dopo la seconda revisione della PR #187 (20/10).**
 - **Il solo ragionamento troncato non è un'uscita troncata.** Il fatto «troncata» vale solo
@@ -4700,3 +4701,41 @@ interruttori di [setup-dgx](setup-dgx.md#interruttori-sulla-dgx).
   come giudicati: restano per la passata dopo.
 - L'esito dei test tenuto per il revisore (`Agente._ultimi_test`) c'è solo se è rosso e si butta
   alla fine di `codice`. Lo schema per esempio non ha più «test» due volte fra gli obbligatori.
+
+## Gli strumenti onesti nella ricerca (21/10, issue #189, ramo `issue-189-ricerca-onesta`)
+
+#185 aveva portato i fatti del codice all'agente solo in `Agente.codice`. Ora valgono anche nel
+ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costanti.
+
+- **Lo strumento sconosciuto** aveva già `ok: False` con l'elenco (`cosa_fare`). Ora scrive anche
+  la regola `agente_strumento_sconosciuto` nel registro.
+- **Le chiamate dopo la consegna** nella stessa passata. Prima la `consegna` faceva `return`
+  subito, e le chiamate dopo non avevano risposta. Si è scelta **la stessa semantica del codice
+  (#185)**: le chiamate si leggono in ordine, la consegna vale e quelle dopo non si eseguono.
+  Ognuna ha la sua risposta, «non eseguita: il lavoro era già consegnato» (`DOPO_CONSEGNA`), e
+  la regola `agente_dopo_consegna`. Una `consegna` messa prima di una `web_leggi` chiude quindi
+  il lavoro senza la lettura, ma non più in silenzio: la regola e l'esito sono nel registro e
+  sugli schermi. Non si è scelto di rifiutare la consegna per eseguire prima la lettura: nel
+  codice la consegna vale lo stesso, e una regola diversa per ciclo sarebbe da spiegare
+  all'agente. Se la regola scatta spesso sul banco, si ripensa per tutti e due i cicli.
+- **L'uscita troncata.** Il ciclo legge `out["rotti"]` e `out["fine"]` dei client come il codice.
+  Una chiamata arrivata a metà non si esegue, e il risultato dice «troncata (fermata a
+  max_tokens)» e non «manca domanda». Lo stesso vale per una `consegna` a metà, che prima
+  chiudeva il lavoro con la relazione vuota. La regola è `agente_uscita_troncata`.
+- **La passata senza chiamate fermata a max_tokens** (`fine == "length"`) non è più una
+  relazione: è una relazione tagliata a metà. L'agente riceve il fatto e il lavoro continua. Nel
+  codice il solo ragionamento troncato resta nella guardia dei token senza strumenti
+  (`troncata_nell_uscita`). La ricerca quella guardia non ce l'ha, e un testo vuoto non è
+  comunque una relazione: qui vale ogni «length» senza chiamate.
+- **Il tetto delle troncate di fila** è lo stesso del codice (`TRONCATE_MAX` = 3): alla quarta
+  arriva «limite» di tipo «troncata», con il riassunto di ciò che si è fatto, dopo che ogni
+  chiamata ha avuto la sua risposta. Il giro a vuoto azzera il conto.
+- **Le costanti** ora hanno il fatto separato dal consiglio: `TRONCATA_CHIAMATA` e
+  `TRONCATA_TESTO` sono il fatto, comune ai due cicli. `USCITA_TRONCATA` e `USCITA_TRONCATA_TESTO`
+  (codice: «scrivi il file in pezzi più corti») hanno il testo di prima, parola per parola.
+  `USCITA_TRONCATA_RICERCA` e `USCITA_TRONCATA_TESTO_RICERCA` consigliano una relazione più breve.
+  Il motivo del «limite» si scrive in un posto solo, `troncate_motivo`.
+- Prova: la sezione 8 di `prova_strumenti_onesti`, a secco con la biblioteca e la rete finte.
+  Copre lo strumento sconosciuto, la consegna seguita da web_leggi, la chiamata e la consegna a
+  metà, la relazione fermata a max_tokens e il tetto. I contrari sono l'argomento davvero
+  mancante, la lettura prima della consegna e la relazione intera.
