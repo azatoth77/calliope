@@ -332,6 +332,24 @@ def prova_risultato():
         verifica("lavoro_stato con un lavoro finito: «Vuoi sentire il risultato?»",
                  detta(r).endswith("Vuoi sentire il risultato?")
                  and (r.get("in_sospeso") or {}).get("tool") == "lavoro_risultato", detta(r))
+        # n. la ricerca fermata (seconda revisione della PR #218): nessun file nella cartella
+        # Lavori; la relazione tagliata detta come incompleta, letta dal testo
+        from calliope.agenti.ciclo import RELAZIONE_TAGLIATA
+        lf = finito(svc, compito="Cerca la storia del borgo antico di Valfiorita.",
+                    riassunto="fatto: web_cerca storia del borgo; web_leggi una pagina sul borgo "
+                              "di Valfiorita e la sua fondazione",
+                    testo=RELAZIONE_TAGLIATA + "\n\n" + TESTO[:300])
+        lf.stato, lf.risultato["esito"] = "errore", "limite"
+        ctx, _ = contesto(cfg, svc, detto="E la ricerca sul borgo?")
+        r = ta._risultato_lavoro(ctx, lavoro=lf.id)
+        verifica("ricerca fermata con la relazione tagliata: «incompleta», dal testo, senza "
+                 "«cartella Lavori»", ta.RELAZIONE_INCOMPLETA_VOCE in detta(r)
+                 and "cartella" not in detta(r) and "HACS" in detta(r), detta(r))
+        lf.risultato.pop("testo")
+        r = ta._risultato_lavoro(ctx, lavoro=lf.id)
+        verifica("contrario: fermata senza relazione, niente «incompleta» né «cartella Lavori»",
+                 ta.RELAZIONE_INCOMPLETA_VOCE not in detta(r) and "cartella" not in detta(r),
+                 detta(r))
         svc.close(), svc2.close(), svc3.close(), svc4.close()
     finally:
         agente.ferma()

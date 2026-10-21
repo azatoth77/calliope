@@ -966,7 +966,7 @@ def prova_ricerca():
     # L'ultima relazione tagliata resta nel parziale, detta come tagliata (revisione PR #218)
     par = ris.get("parziale") or {}
     verifica("…e l'ultima relazione tagliata nel risultato, detta come tagliata",
-             par.get("relazione_tagliata") is True
+             "relazione_tagliata" not in par
              and str(par.get("testo", "")).startswith(RELAZIONE_TAGLIATA)
              and "Il borgo fu fondato nel" in par.get("testo", ""),
              str(par)[:300])
@@ -983,8 +983,61 @@ def prova_ricerca():
              and sum(1 for m in corpo if m.get("role") == "tool") == 2 * TRONCATE_MAX
              and len(esiti) == 2 * (TRONCATE_MAX + 1), str(ris)[:200] + f" esiti {len(esiti)}")
     verifica("contrario: senza testo tagliato il parziale non ha una relazione",
-             "testo" not in (ris.get("parziale") or {})
-             and "relazione_tagliata" not in (ris.get("parziale") or {}), str(ris)[:300])
+             "testo" not in (ris.get("parziale") or {}), str(ris)[:300])
+    # La consegna fermata a max_tokens col testo che si legge (seconda revisione della PR #218:
+    # vLLM la segna rotta anche col JSON leggibile): la relazione fino al taglio non si perde,
+    # e le consegne rifiutate non sono fra le cose fatte
+    tagliata = {"tool_calls": [{"name": "consegna", "arguments": {
+        "testo": "# Il borgo\nIl borgo fu fondato nel Trecento e poi"}}], "rotti": [0],
+        "fine": "length"}
+    lav, ris, cli, web, esiti = ricerca([[cerca]] + [dict(tagliata) for _ in range(8)])
+    par = ris.get("parziale") or {}
+    verifica("ricerca, quattro consegne tagliate: «limite» col testo della consegna nel parziale",
+             ris.get("tipo") == "troncata" and str(par.get("testo", "")).startswith(
+                 RELAZIONE_TAGLIATA) and "fondato nel Trecento e poi" in par.get("testo", "")
+             and len(cli.corpi) == TRONCATE_MAX + 2, str(ris)[:300])
+    verifica("…e nel riassunto le cose fatte, senza le consegne rifiutate",
+             "web_cerca" in par.get("riassunto", "") and "consegna" not in par.get("riassunto", ""),
+             str(par.get("riassunto")))
+    from calliope.agenti.contesto_lavoro import estrattivo
+    d = estrattivo([{"role": "assistant", "content": "", "tool_calls": [
+        {"function": {"name": "consegna", "arguments": {"riassunto": "Fatto."}}}]},
+        {"role": "tool", "tool_name": "consegna", "content": json.dumps({"ok": True})}], None)
+    verifica("contrario: la consegna accettata resta fra le cose fatte", d["fatto"] == ["consegna"],
+             str(d["fatto"]))
+    # La consegna buona e poi una chiamata rotta: è «dopo la consegna», non «troncata» (seconda
+    # revisione della PR #218: l'ordine dei due controlli, come nel codice)
+    lav, ris, cli, web, esiti = ricerca([[cerca], {"tool_calls": [
+        _consegna_r(), {"name": "web_leggi", "arguments": {}}], "rotti": [1], "fine": "length"}])
+    verifica("ricerca, consegna buona e una chiamata rotta dopo: consegnata, «dopo la consegna»",
+             ris.get("esito") == "fatto" and regole(lav).get("agente_dopo_consegna") == 1
+             and "agente_uscita_troncata" not in regole(lav)
+             and not [e for e in esiti if e.get("nome") == "web_leggi"], str(regole(lav)))
+
+    # A voce (seconda revisione della PR #218): la ricerca fermata non ha un file nella cartella
+    # Lavori, e la relazione tagliata si offre
+    from calliope.agenti.ciclo import Lavoro
+    from calliope.agenti.servizio import RICERCA_INCOMPLETA, Lavori
+    from types import SimpleNamespace
+    s = SimpleNamespace(female=True, in_tappa=lambda lv: False)
+    motivo = "ho dovuto fermarlo: " + "la sua uscita si è fermata 4 volte di fila"
+    lv = Lavoro("R1", "ricerca", "la storia del borgo", titolo="La storia del borgo")
+    lv.stato = "errore"
+    lv.risultato = {"esito": "limite", "motivo": motivo, "riassunto": "fatto: web_cerca",
+                    "testo": RELAZIONE_TAGLIATA + "\n\nIl borgo fu fondato nel"}
+    f = Lavori.frase_finale(s, lv)
+    verifica("a voce: la ricerca fermata con la relazione tagliata la offre, senza «cartella»",
+             f.endswith(RICERCA_INCOMPLETA) and "cartella" not in f and "fermata 4 volte" in f, f)
+    lv.risultato = {"esito": "limite", "motivo": motivo, "riassunto": "fatto: web_cerca"}
+    f = Lavori.frase_finale(s, lv)
+    verifica("contrario: senza relazione tagliata niente offerta, e nemmeno la «cartella»",
+             RICERCA_INCOMPLETA not in f and "cartella" not in f, f)
+    lc = Lavoro("C1", "codice", "una funzione", titolo="La somma")
+    lc.stato = "errore"
+    lc.risultato = {"esito": "limite", "motivo": motivo, "file": ["somma.py"]}
+    f = Lavori.frase_finale(s, lc)
+    verifica("contrario: il codice fermato ha i file nella cartella Lavori, come prima",
+             "cartella Lavori" in f and RICERCA_INCOMPLETA not in f, f)
     # Il giro a vuoto azzera le troncate di fila, come R6 nel codice (revisione della PR #218)
     vuoto = {"giro_a_vuoto": "penso penso"}
     lav, ris, cli, web, esiti = ricerca([dict(a_meta) for _ in range(TRONCATE_MAX)]

@@ -237,6 +237,10 @@ _PAROLE_ESTENSIONE = re.compile(
     r"alle|nelle|sulle|dalle|queste|quelle)\s+)?(estension[ei])\b", re.I)
 
 
+# La ricerca fermata con la relazione tagliata (seconda revisione della PR #218)
+RICERCA_INCOMPLETA = "C'è una relazione incompleta: se vuoi te la leggo."
+
+
 def cosa_ha_fatto(lav, r: dict) -> str:
     """Un lavoro di codice o un'estensione fermato da un tetto senza il codice vero (06/10):
     «ha cercato i dati senza arrivare a scrivere il codice» se ci sono solo pagine d'esempio e
@@ -1982,6 +1986,13 @@ class Lavori:
                 elif t:
                     test = f" Dei test che ha scritto ne passano {max(0, n - ko)} su {max(n, ko)}."
                 limite = r.get('motivo', '').split(': ', 1)[-1]
+                if lav.tipo == "ricerca" and not r.get("file"):
+                    # Una ricerca fermata non ha un file nella cartella Lavori (seconda revisione
+                    # della PR #218): la relazione tagliata, se c'è, si offre a voce
+                    from .ciclo import relazione_incompleta
+                    return (f"ho fermato «{titolo}»: {limite}."
+                            + (" " + RICERCA_INCOMPLETA if relazione_incompleta(r.get("testo"))
+                               else ""))
                 # Cosa ha fatto, in parole (06/10, L1 della DGX: «ha fatto tutte le 24 passate»
                 # non diceva che non c'era nemmeno una riga dell'estensione)
                 fatto = cosa_ha_fatto(lav, r)

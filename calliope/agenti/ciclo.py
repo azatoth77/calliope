@@ -3252,10 +3252,11 @@ class Agente:
 
         def parziale_troncate() -> dict:
             """Il parziale del «limite» per le troncate: il fatto finora e, se c'è, l'ultima
-            relazione tagliata, detta come tagliata (`relazione_tagliata`)."""
+            relazione tagliata, detta come tagliata (il prefisso RELAZIONE_TAGLIATA, che resta
+            anche in lavoro.json: `relazione_incompleta`)."""
             p = {"riassunto": _fatto_finora(gc, messages)}
             if tagliata:
-                p.update(testo=RELAZIONE_TAGLIATA + "\n\n" + tagliata, relazione_tagliata=True)
+                p["testo"] = RELAZIONE_TAGLIATA + "\n\n" + tagliata
             return p
         while True:
             if not lav.passo.startswith("cerca"):
@@ -3335,6 +3336,11 @@ class Agente:
                     from ..sonde import nota as nota_regola
                     nota_regola(lav, "agente_uscita_troncata", self.log, str(c["name"])[:40])
                     lav.nota("strumento", nome=c["name"], argomenti=args)
+                    if c["name"] == "consegna" and str(args.get("testo") or "").strip():
+                        # La consegna fermata a max_tokens col JSON che si legge (seconda
+                        # revisione della PR #218: vLLM la segna rotta lo stesso,
+                        # remoto_openai.py): la relazione fino al taglio è l'ultima tagliata
+                        tagliata = str(args["testo"]).strip()
                     res = {"ok": False, "errore": USCITA_TRONCATA_RICERCA
                            if c["name"] == "consegna" else USCITA_TRONCATA_STRUMENTO}
                     messages.append({"role": "tool", "tool_name": c["name"],
@@ -3535,6 +3541,12 @@ USCITA_TRONCATA_PENSIERO = (TRONCATA_TESTO + " Ragiona meno e chiama lo strument
 # PR #218): l'ultima relazione tagliata non si perde, ma si dice che è tagliata
 RELAZIONE_TAGLIATA = ("Relazione incompleta: l'agente si è fermato al tetto dei token della "
                       "passata e il testo è tagliato a metà.")
+
+
+def relazione_incompleta(testo) -> bool:
+    """Il testo di una ricerca fermata è la relazione tagliata (seconda revisione della PR #218):
+    la voce lo dice, anche dopo un riavvio (il prefisso è nel testo di lavoro.json)."""
+    return str(testo or "").startswith(RELAZIONE_TAGLIATA)
 DOPO_CONSEGNA = "non eseguita: il lavoro era già consegnato"
 DOPO_DOMANDA = "non eseguita: il lavoro aspetta la risposta di chi l'ha chiesto"
 DOPO_FERMO = "non eseguita: il lavoro si è fermato"

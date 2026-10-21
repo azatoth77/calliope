@@ -4715,9 +4715,11 @@ ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costant
   Ognuna ha la sua risposta, «non eseguita: il lavoro era già consegnato» (`DOPO_CONSEGNA`), e
   la regola `agente_dopo_consegna`. Una `consegna` messa prima di una `web_leggi` chiude quindi
   il lavoro senza la lettura, ma non più in silenzio: la regola e l'esito sono nel registro e
-  sugli schermi. *[storico: «e sugli schermi» fino alla prima revisione della PR #218, sotto]* Non si è scelto di rifiutare la consegna per eseguire prima la lettura: nel
+  sugli schermi. Non si è scelto di rifiutare la consegna per eseguire prima la lettura: nel
   codice la consegna vale lo stesso, e una regola diversa per ciclo sarebbe da spiegare
   all'agente. Se la regola scatta spesso sul banco, si ripensa per tutti e due i cicli.
+  *[storico: «e sugli schermi» vero fino alla prima revisione della PR #218, sotto: ora sugli
+  schermi non va niente]*
 - **L'uscita troncata.** Il ciclo legge `out["rotti"]` e `out["fine"]` dei client come il codice.
   Una chiamata arrivata a metà non si esegue, e il risultato dice «troncata (fermata a
   max_tokens)» e non «manca domanda». Lo stesso vale per una `consegna` a metà, che prima
@@ -4763,4 +4765,29 @@ ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costant
   nel parziale come `testo`, preceduto da `RELAZIONE_TAGLIATA` («Relazione incompleta: …tagliato a
   metà»), con `relazione_tagliata: true`. Così si rilegge con lavoro_risultato. Senza testo
   tagliato il parziale non inventa niente. Resta da contare sul banco quante ricerche arrivano al
-  tetto «troncata»: per chi aspettava una relazione lunga è un cambiamento.
+  tetto «troncata»: per chi aspettava una relazione lunga è un cambiamento. *[storico: vero solo
+  per il testo senza chiamate e con `relazione_tagliata` fino alla seconda revisione della PR
+  #218, sotto]*
+
+**Dopo la seconda revisione della PR #218 (21/10).**
+- **La consegna tagliata tiene la sua relazione.** È il caso più comune: su vLLM una consegna
+  fermata a max_tokens è segnata rotta anche quando il JSON si legge (`remoto_openai.py`), e
+  `testo` ha la relazione fino al taglio. Ora quel testo diventa l'ultima relazione tagliata, e
+  al «limite» va nel parziale come quella senza chiamate. `relazione_tagliata` è tolto: non lo
+  leggeva nessuno e dopo un riavvio si perdeva. Vale il prefisso `RELAZIONE_TAGLIATA` del testo,
+  che resta in `lavoro.json` (`relazione_incompleta`).
+- **L'ordine dei controlli ha la sua prova.** Una consegna buona e poi una chiamata rotta nella
+  stessa passata danno «dopo la consegna», non «troncata».
+- **Dopo il «limite» la voce dice cosa c'è davvero.**
+  - Le consegne rifiutate non sono più fra le cose fatte del riassunto (`estrattivo`: prima
+    «fatto: consegna; consegna; …»). Vale anche per il diario del codice, dove una consegna
+    rifiutata non era fatta nemmeno prima.
+  - La frase finale di una ricerca fermata non dice più «nella cartella Lavori», perché non c'è
+    un file. Con la relazione tagliata aggiunge «C'è una relazione incompleta: se vuoi te la
+    leggo.» (`RICERCA_INCOMPLETA`).
+  - `lavoro_risultato` su una ricerca fermata non dice la cartella. Con la relazione tagliata la
+    riassume dal testo, anche quando il riassunto salvato è lungo, e dice «La relazione è
+    incompleta: l'agente si è fermato prima di finirla.» (`RELAZIONE_INCOMPLETA_VOCE`).
+- Ogni correzione ha la sua mutazione, e tutte fanno cadere la prova. Le mutazioni: il testo
+  della consegna rotta non tenuto, i due controlli invertiti, le consegne rifiutate fra le fatte,
+  la frase finale di prima, la cartella e «incompleta» in `lavoro_risultato`.
