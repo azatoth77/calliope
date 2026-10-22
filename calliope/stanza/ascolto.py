@@ -670,7 +670,10 @@ class Stanza:
         if not testo or sat not in self._info or self._pausa_viva(sat) is not None:
             return
         ora = time.time()
-        extra = ({"per": {"persona": per.get("persona"), "sicurezza": per.get("sicurezza")}}
+        extra = ({"per": {"persona": per.get("persona"), "sicurezza": per.get("sicurezza"),
+                          # Un conoscente (22/10, issue #171): non è una voce non riconosciuta
+                          **({"conoscente": per["conoscente"]} if per.get("conoscente")
+                             else {})}}
                  if isinstance(per, dict) else {})
         self.registro(sat).aggiungi(DETTO_CALLIOPE, testo=testo[:2000],
                                     inizio=round(inizio or ora, 3), fine=round(fine or ora, 3),

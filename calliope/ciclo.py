@@ -2103,6 +2103,11 @@ class Ciclo:
                 per = {"persona": getattr(prof, "id", None) or nome,
                        "sicurezza": ("voce" if voce.get("modo") == "voce" and nome
                                      else "grigia" if nome else "nessuna")}
+                # Un conoscente non è una voce non riconosciuta: la riga di Calliope non dice
+                # «→ voce non riconosciuta» (22/10, issue #171, stanza/contesto.etichetta)
+                k = getattr(getattr(self, "speaker_ctx", None), "conoscente", None)
+                if not nome and isinstance(k, dict) and k.get("id"):
+                    per["conoscente"] = k["id"]
                 st.detto(sat, detto, per=per)
         except Exception as e:  # noqa: BLE001 — la stanza non ferma la voce
             print(f"   [STANZA] esito del turno nella stanza: {type(e).__name__}: {e}",

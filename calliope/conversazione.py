@@ -105,6 +105,9 @@ class Conversazione:
         # conversazione di stanza, Brain._anonima_condivisa): più persone presenti, ognuna con
         # i suoi permessi per frase. Solo in memoria
         self.condivisa = False
+        # Detto una volta nei dati del turno che la voce è riconosciuta dopo un ospite (22/10,
+        # issue #171, Brain._voce_ora_riconosciuta): non si ripete in questa conversazione
+        self.voce_ora_detta = False
         # Le righe della conversazione di stanza mandate al modello (14/10 sera,
         # stanza/contesto.Pezzo): un pezzo per turno, messo nella richiesta subito prima della
         # frase di quel turno (che ha il segno `_stanza` col numero del pezzo). Solo in memoria:

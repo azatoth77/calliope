@@ -34,7 +34,8 @@ fuori dal prefisso. Tetto e potatura in Brain (`stanza_storia_caratteri`).
 
 Etichette (§ 3.5): il nome solo con la voce sopra soglia; «Carlo?» per la zona grigia; «voce
 non riconosciuta» altrimenti; «→ Calliope» per le frasi rivolte a lei; «Calliope» per ciò che
-ha detto lei. Minori e ospiti: le loro righe stanno nel blocco (dette lì, ad alta voce, davanti
+ha detto lei, «Calliope → voce non riconosciuta» per le sue risposte a un ospite (22/10, issue
+#171: `risposta_a_ospite`). Minori e ospiti: le loro righe stanno nel blocco (dette lì, ad alta voce, davanti
 a chi interpella) e in memoria, come al passo 1.
 
 **Corsia lenta** (passo 3, 14/10, stanza/lenta.py): le righe sono la versione migliore (la
@@ -196,7 +197,7 @@ class Pezzo:
 
 def etichetta(r: dict) -> str:
     if r.get("chi") == "calliope":
-        return "Calliope"
+        return "Calliope → voce non riconosciuta" if risposta_a_ospite(r) else "Calliope"
     if r.get("chi") == "tv":
         return TV
     if r.get("chi") == "piu_voci":
@@ -215,6 +216,20 @@ def etichetta(r: dict) -> str:
     if r.get("rivolta") == "si":
         base += " → Calliope"
     return base
+
+
+def risposta_a_ospite(r: dict) -> bool:
+    """Una risposta di Calliope a una voce non riconosciuta (22/10, issue #171): `per` della riga
+    (Stanza.detto) senza persona né conoscente, con sicurezza «nessuna». Caso vero del 18/10 dal
+    telefono in auto: le risposte all'ospite («il sistema dice che sei un ospite») entravano
+    nella conversazione di chi amministra, riconosciuto alla terza frase, come «Calliope: …»,
+    senza dire a chi erano rivolte, e restavano nella storia (`stanza_contesto_in_storia`): il
+    modello continuava a trattarlo da ospite. Le domande lo dicevano già («voce non riconosciuta
+    → Calliope»). Le risposte alle persone restano «Calliope» (nessun nome in più nelle righe:
+    stanza_cerca le mostra anche a chi non è tutore di un minore)."""
+    per = r.get("per")
+    return (isinstance(per, dict) and per.get("sicurezza") == "nessuna"
+            and not per.get("persona") and not per.get("conoscente"))
 
 
 def _ora(epoch: float) -> str:

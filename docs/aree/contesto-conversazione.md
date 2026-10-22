@@ -2657,3 +2657,117 @@ scelto come rischio noto, scritto nella 0032 con il rimedio. Prove nuove in
 `_stanza_turno` e `_stanza_esito` (valutazione accesa con la zona grigia, e spenta con la voce di
 casa), il banco che salta il tratto, conoscente con `--persona` e «dimentica», la revoca e il
 contrario del consenso mai chiesto. Tutte falliscono col codice prima della correzione.
+
+## Da ospite a voce riconosciuta: il cambio nei dati del turno (22/10, issue #171, ramo `issue-171-ospite-riconosciuto`)
+
+**Caso vero (18/10 pomeriggio, telefono in auto).** Le prime due frasi di chi amministra non sono
+riconosciute (ospite); dalla terza la voce lo riconosce e il registro ha il suo nome, ma il modello
+continua: «Il sistema dice che sei un ospite… chiedi a chi gestisce la casa». Ha smesso solo a «chi
+sono e quali sono i miei hobby?».
+
+**Cosa succede nel codice** (letto il 22/10 su main 950b877):
+- le due frasi da ospite: la voce sopra soglia ma non netta sul secondo profilo (voci di famiglia
+  al telefono, #73) o sotto la zona grigia vale nessuno (`Ciclo._confronta_voce`); la conversazione
+  è quella anonima del satellite, `ospite:<corsia>` (`RegistroConversazioni.scegli`, ultimo ramo);
+- la terza, riconosciuta dalla voce: `scegli` dà la conversazione **della persona**
+  (`persona:<id>`), un'altra; le frasi da ospite e le risposte restano nell'anonima. Dove la
+  persona finisce nella stessa conversazione anonima (frase breve, zona grigia, continuità con la
+  sua conversazione presa da un altro satellite), `Brain._check_conversation` la chiude (owner
+  `None` → id), tranne in compagnia senza voci sconosciute, dove resta condivisa (13/10) e le frasi
+  hanno l'etichetta `_chi` «voce non riconosciuta» nella nota del gruppo;
+- cosa il modello vede ancora delle frasi da ospite: con la stanza nei dati del turno
+  (`stanza_contesto`, acceso sulla DGX dal 14/10) il primo pezzo della conversazione nuova
+  (riapertura, fino all'inizio dell'ultimo scambio) porta le righe «voce non riconosciuta →
+  Calliope: …» e «Calliope: …» delle risposte all'ospite (`stanza/contesto.etichetta`;
+  `gia_nella_storia` toglie solo le frasi di questa conversazione); in compagnia la storia stessa;
+- i dati del turno nuovi dicevano solo «persona: Carlo, riconosciuta dalla voce.»: niente sul
+  cambio. Con le righe di prima marcate «non riconosciuta» e Calliope che parlava a un ospite, il
+  modello ha continuato la parte. La ricostruzione dalla stanza è la più probabile per il 18/10
+  (da confermare sul registro dei turni della DGX, regola `stanza_contesto` nei turni dopo il
+  riconoscimento).
+
+**La correzione: un dato del turno, una volta.** `Brain._voce_ora_riconosciuta` (in
+`stream_reply`, dopo `_inizio_conversazione`): se il turno di prima su questo Brain era di un
+ospite (voce non riconosciuta e nessun conoscente), nello stesso luogo *[storico: dalla
+revisione la stessa corsia, il luogo solo col Brain unico]* ed entro `storia_inattiva_s`, e adesso parla una persona riconosciuta, i dati del turno aggiungono dopo chi
+parla «Ora la voce è riconosciuta: parla Carlo. Le frasi di prima qui erano di una voce non
+riconosciuta, trattata da ospite (forse la stessa persona): ciò che hai detto allora all'ospite non
+vale per chi parla adesso.» (regola `voce_ora_riconosciuta`; *[storico: «(forse la stessa persona)»
+tolto nella seconda revisione]*). Il turno dopo non la ripete (il
+segno è del turno, qualunque sia; *[storico: dopo la revisione, una volta per conversazione, solo
+con la voce e per corsia, vedi sotto]*). Interruttore `voce_ora_riconosciuta` (sezione `chi_parla`,
+acceso di serie). Permessi e livello non cambiano: seguono la voce del turno.
+- **Cache del prefisso (#95)**: la riga sta nei dati del turno, che sono già dopo la storia e
+  cambiano a ogni turno (l'ora); mai nella storia, quindi niente da riavvolgere oltre ciò che
+  sparisce comunque. ~60 token una volta, dentro `dati_turno_tetto_token`.
+- **Le frasi da ospite** restano dove sono e sono già marcate: nella stanza «voce non
+  riconosciuta», nella conversazione condivisa `_chi` e la nota del gruppo; nella conversazione
+  della persona non ci sono. Nessuna etichetta nuova nel testo (la storia resta uguale byte per
+  byte). *[storico: «già marcate» valeva per le domande, non per le risposte di Calliope; dopo la
+  revisione le risposte all'ospite sono marcate nella stanza, vedi sotto (22/10)]*
+- **Il verso inverso** (una persona, poi un ospite nella conversazione condivisa) non ha la riga:
+  «persona: un ospite» basta, e una riga «prima parlava Carlo» direbbe a un ospite chi c'era (la
+  nota del gruppo lo dice già, solo in compagnia senza voci sconosciute). Da riguardare se il
+  modello tratta da Carlo l'ospite che segue.
+- Non coperti: un conoscente dopo l'ospite (resta un ospite, niente riga); con un Brain solo che
+  segue il satellite attivo il luogo decide «qui» (senza luogo vale il Brain) *[storico: dalla
+  revisione un Brain per satellite confronta la corsia, il luogo vale solo col Brain unico]*.
+
+**Prova** `prova_ospite_riconosciuto` (livello 1, ~1 s, modello finto): due frasi da ospite e poi
+Carlo con le conversazioni per persona e nella conversazione condivisa; contrari: riconosciuto
+dall'inizio, quarto turno, ospite troppo vecchio, altro luogo, conoscente, ospite dopo Carlo,
+interruttore spento. Su main: 2 errori e un'eccezione (dopo la revisione: 8 errori). **Da verificare sulla DGX** (chi
+amministra, telefono in auto): la prima risposta dopo il riconoscimento usa il nome e non parla di
+ospite.
+
+### 22/10: dopo la revisione della PR #221, le risposte all'ospite marcate nella stanza
+
+La revisione ha trovato che la riga del cambio esce per un turno solo, mentre con
+`stanza_contesto_in_storia` le righe dello scambio da ospite restano nella storia della
+conversazione di Carlo per tutta la sua vita. Le domande erano marcate («voce non riconosciuta →
+Calliope»), le **risposte no** («Calliope: il sistema dice che sei un ospite»), ed è la parte che il
+modello ripete. Correzioni:
+- **alla fonte, nella stanza**: le risposte di Calliope a una voce non riconosciuta sono
+  «Calliope → voce non riconosciuta: …» (`stanza/contesto.risposta_a_ospite`, dal campo `per` che
+  `Ciclo._stanza_esito` già scriveva su `Stanza.detto`; sicurezza «nessuna», nessuna persona, e
+  dal 22/10 nessun conoscente, segnato in `per.conoscente`). Il pezzo si scrive una volta e resta
+  uguale byte per byte: la cache non si rompe. Le risposte alle persone restano «Calliope» (un nome
+  in più nelle righe arriverebbe anche a `stanza_cerca`, che le mostra a chi non è tutore di un
+  minore); le righe lette dal disco (la tenuta, senza `per`) restano «Calliope»;
+- **la riga del cambio resta**, ma solo con la voce (`identified_by` None o «voce»: non la zona
+  grigia, la continuità, il profilo più protetto, il minore vicino, lo schermo, un'estensione),
+  mai nella conversazione condivisa in compagnia (lì la frase «ospite» è di una persona presente e
+  la nota del gruppo dice che ciò che Calliope ha detto l'hanno sentito tutte), al più una volta
+  per conversazione (`Conversazione.voce_ora_detta`), sulla stessa corsia (`Brain.satellite`; col
+  Brain solo che segue il satellite attivo, il luogo) ed entro `storia_inattiva_s` e comunque
+  `VOCE_ORA_MAX_S` (600 s, anche con 0).
+
+**Perché tutte e due.** L'etichetta copre la durata: ogni turno della conversazione dice a chi
+erano rivolte quelle risposte. La riga copre il momento del cambio, che il caso vero ha sbagliato
+proprio al terzo turno, e l'eventuale conversazione condivisa resta coperta dalla nota del gruppo.
+Senza la stanza (conversazioni separate) il modello non vede lo scambio da ospite e la riga è un
+contesto in più, breve. La combinazione più semplice che copre il caso vero è questa; togliere lo
+scambio dall'anonima dal pezzo di riapertura avrebbe nascosto anche ciò che si è detto davvero ad
+alta voce.
+
+**Non coperti**: dopo un riavvio fra la frase da ospite e quella riconosciuta la riga non c'è
+(`_voce_prima` è in memoria; le etichette della stanza sì, finché la riga è nel registro in
+memoria); la riga di Calliope a un ospite letta dalla tenuta su disco resta «Calliope»; il giro
+del ciclo che scrive `per.conoscente` non ha una prova sua (la prova chiama `Stanza.detto`).
+Mutazioni (script fuori dal repository): ne cadono 8 su 9; sopravvive «sicurezza grigia come
+nessuna», equivalente (una risposta alla zona grigia ha sempre la persona). Seconda revisione:
+16 mutazioni, 13 cadono; le tre sopravvissute erano le due righe del ciclo che scrivono
+`per.conoscente` (adesso provate dal giro di `Ciclo._stanza_esito`, sotto) e i controlli
+`not persona` e `sicurezza == "nessuna"` di `risposta_a_ospite`, equivalenti fra loro (il ciclo
+scrive «nessuna» solo senza nome).
+
+**Seconda revisione (22/10).** Niente riga in compagnia con voci sconosciute, al turno da ospite o
+a quello riconosciuto: l'ospite può essere davvero un'altra persona lì (un collega in auto che dice
+«sono allergico alle noci»), e la riga spingerebbe il modello ad attribuire a chi parla le sue
+parole. Per lo stesso motivo il testo non dice più «forse la stessa persona». Il giro di
+`Ciclo._stanza_esito` con un conoscente (risposta «Calliope», `per.conoscente` nel registro) e con
+un ospite («Calliope → voce non riconosciuta») è in `prova_ospite_riconosciuto`. Da tenere presente:
+l'etichetta nuova arriva anche a `stanza_cerca`, al giudizio «rivolta» (in ombra: l'ingresso non è
+più quello misurato il 09/10, da rileggere prima di accenderlo) e al riassunto della corsia lenta;
+il guardiano a posteriori ha la sua etichetta e resta «Calliope».
+

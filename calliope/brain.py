@@ -1302,6 +1302,20 @@ TURN_CONTEXT_MSG = ("Dati del turno (non ripeterli nella risposta se non te li c
                     "{data} (quelle dette prima nella conversazione sono vecchie). Per tutto il "
                     "resto chiama i tool come sempre.")
 
+# Da ospite a voce riconosciuta (22/10, issue #171, `voce_ora_riconosciuta`): una volta, nei dati
+# del turno, dopo chi parla. Caso vero del 18/10 dal telefono in auto: le prime due frasi di chi
+# amministra prese per un ospite, dalla terza riconosciuto, e il modello continuava a dirgli «il
+# sistema dice che sei un ospite» (le frasi di prima, nella stanza o nella conversazione condivisa,
+# erano di una «voce non riconosciuta», e niente diceva che adesso era cambiato). Un dato, non un
+# ordine
+# Le frasi da ospite «di prima» valgono al più per questi secondi, anche con storia_inattiva_s 0
+VOCE_ORA_MAX_S = 600.0
+# Senza «forse la stessa persona» (seconda revisione della PR #221): il modello poteva attribuire
+# a chi parla adesso le parole di un ospite vero
+VOCE_RICONOSCIUTA_MSG = ("Ora la voce è riconosciuta: parla {nome}. Le frasi di prima qui erano "
+                         "di una voce non riconosciuta, trattata da ospite: ciò che hai detto "
+                         "allora all'ospite non vale per chi parla adesso.")
+
 # Parole incerte della trascrizione (07/10, stt_incerte_al_modello, variante B del confronto
 # in docs/aree/stt-tts.md): le parole che Whisper ha scritto con probabilità sotto
 # stt_correzione_soglia, il nome escluso, dette al modello della voce dentro i dati del turno
@@ -2991,6 +3005,8 @@ class Brain:
         self._indizio = self.__dict__.pop("indizio_turno", None)
         # Turni finiti nell'archivio, compressione pronta, ripresa (05/10)
         self._inizio_conversazione()
+        # Da ospite a voce riconosciuta qui (22/10, issue #171): nei dati del turno, una volta
+        self._voce_ora = self._voce_ora_riconosciuta()
         pending = self._take_pending() if self._net("azione_in_sospeso") else None
         if dmodo != stato_dialogo.SPENTO:
             pending = self._dialogo_inizio(user_text, pending, prima, cancello)
@@ -4728,6 +4744,61 @@ class Brain:
                 + "; ciò che hai detto l'hanno sentito tutte; permessi e azioni sono di chi parla "
                 "adesso.")
 
+    def _voce_ora_riconosciuta(self) -> str | None:
+        """Il nome di chi parla se è il primo turno di una persona riconosciuta **dalla voce** dopo
+        una frase da ospite (voce non riconosciuta, nessun conoscente) sulla stessa corsia (22/10,
+        issue #171).
+
+        Le conversazioni sono una per persona (corsie.py): la frase riconosciuta va nella
+        conversazione della persona, senza le frasi da ospite, ma con la stanza nei dati del turno
+        il modello vede ancora lo scambio di prima: «voce non riconosciuta → Calliope» e, dal
+        22/10, «Calliope → voce non riconosciuta» (stanza/contesto.etichetta); niente diceva che
+        adesso la voce era cambiata. Condizioni (revisione della PR #221):
+          - solo con la voce (`identified_by` None o «voce»): non per la zona grigia, la
+            continuità, il profilo più protetto, il minore vicino, lo schermo, un'estensione, dove
+            il nome è una scelta prudente del codice e la riga lo darebbe per certo;
+          - mai nella conversazione anonima condivisa in compagnia: lì la frase «ospite» è di una
+            delle persone presenti, e la nota del gruppo dice che ciò che Calliope ha detto
+            l'hanno sentito tutte;
+          - al più una volta per conversazione (`Conversazione.voce_ora_detta`), non a ogni
+            alternanza;
+          - la stessa corsia (`Brain.satellite`, un Brain per satellite); con il Brain solo che
+            segue il satellite attivo, il luogo;
+          - entro `storia_inattiva_s`, e comunque entro `VOCE_ORA_MAX_S` (anche con 0);
+          - mai in compagnia con voci sconosciute, al turno da ospite o a questo (seconda
+            revisione): l'ospite di prima può essere davvero un'altra persona lì vicino, e la riga
+            spingerebbe il modello ad attribuire a chi parla le sue parole (memoria, preferenze).
+        Solo in memoria: dopo un riavvio fra le due frasi la riga non c'è. Il verso inverso (una
+        persona, poi un ospite) non ha la riga: «persona: un ospite» basta, e il nome di chi
+        parlava prima non va detto a un ospite. Un dato del turno, mai una regola: permessi e
+        livello restano della voce del turno."""
+        sc = getattr(self.tool_ctx, "speaker_ctx", None)
+        nome = getattr(sc, "current_speaker", None) or None
+        ospite = nome is None and self._speaker_key() is None
+        ora = time.monotonic()
+        dove = self.__dict__.get("satellite") or ("luogo", getattr(self._c(), "luogo", None))
+        prima = self.__dict__.get("_voce_prima")
+        estranei = bool(getattr(sc, "compagnia", False)
+                        and getattr(sc, "compagnia_sconosciute", False))
+        self._voce_prima = (ospite, ora, dove, estranei)
+        if not nome or not isinstance(prima, tuple) or not prima[0]:
+            return None
+        if not getattr(self.cfg, "voce_ora_riconosciuta", True):
+            return None
+        if getattr(sc, "identified_by", None) not in (None, "voce"):
+            return None
+        if estranei or (len(prima) > 3 and prima[3]):
+            return None
+        conv = self._c()
+        if getattr(conv, "condivisa", False) or getattr(conv, "voce_ora_detta", False):
+            return None
+        idle = float(getattr(self.cfg, "storia_inattiva_s", 0) or 0)
+        finestra = min(idle, VOCE_ORA_MAX_S) if idle > 0 else VOCE_ORA_MAX_S
+        if ora - float(prima[1]) > finestra or prima[2] != dove:
+            return None
+        conv.voce_ora_detta = True
+        return str(nome)
+
     def _seal_private(self, start: int):
         """I risultati dei tool riservati (documenti di casa) e personali (promemoria,
         appuntamenti, ricordi, chi parla) dalla posizione `start` della storia in poi: i
@@ -6085,6 +6156,12 @@ class Brain:
             # come dato su chi parla (come il tono); i permessi li controlla il codice
             young = self._minor_note(name)
             who += "".join(f"; {x}" for x in (tone, young) if x) + "."
+            if getattr(self, "_voce_ora", None) == name:
+                # Da ospite a voce riconosciuta (22/10, issue #171): una volta, deciso in
+                # stream_reply (la continuazione dello stesso turno lo ripete)
+                who += " " + VOCE_RICONOSCIUTA_MSG.format(nome=name)
+                if "voce_ora_riconosciuta" not in (getattr(self, "last_rules", None) or ()):
+                    self._rule("voce_ora_riconosciuta")
         elif isinstance(getattr(sctx, "conoscente", None), dict) and sctx.conoscente.get("nome"):
             # Un conoscente (14/10, decisione 0030, rifiniture): il nome come dato su chi parla,
             # ma resta un ospite (i permessi li decide il codice, non questa riga)
