@@ -882,14 +882,15 @@ def prova_partenza_gioco(tmp: Path):
 # ═══════════════════ dalla terza revisione della PR #232 ═══════════════════
 
 def prova_ricollaudo_3():
-    sezione("1c. ricollaudo: l'eco degli argomenti, i contatori a zero, i metadati (terza "
-            "revisione)")
-    for ris in ({"luogo": "Borgo Alto", "eventi": []},
-                {"citta": "Borgo Alto", "risultati": None},
-                {"eventi": [], "totale": 0},
-                {"eventi": [], "fonte": "https://example.org"},
-                {"dati": {"luogo": "Borgo Alto", "eventi": []}}):
-        ok, motivo = sonde.va(caso(), esito(ris))
+    sezione("1c. ricollaudo: la regola stretta del vuoto (terza e quarta revisione)")
+    for argomenti, ris in (({"luogo": "Borgo Alto"}, {"luogo": "Borgo Alto", "eventi": []}),
+                           ({"luogo": "Borgo Alto"}, {"luogo": "borgo alto", "eventi": []}),
+                           ({"citta": "Borgo Alto"}, {"citta": "Borgo Alto", "risultati": None}),
+                           ({"luogo": "Borgo Alto"}, {"eventi": [], "totale": 0}),
+                           ({"luogo": "Borgo Alto"}, {"eventi": [], "fonte": "https://example.org"}),
+                           ({"luogo": "Borgo Alto"},
+                            {"dati": {"luogo": "Borgo Alto", "eventi": []}})):
+        ok, motivo = sonde.va(caso(argomenti=argomenti), esito(ris))
         verifica(f"{ris} dopo un errore: vuoto", ok is False and motivo == sonde.MOTIVO_VUOTO,
                  f"{ok} {motivo}")
     for ris in ({"luogo": "Borgo Alto", "eventi": [{"nome": "fiera", "quando": "sabato"}]},
@@ -898,6 +899,37 @@ def prova_ricollaudo_3():
                 {"temperatura": 0.5}):
         ok, motivo = sonde.va(caso(), esito(ris))
         verifica(f"contrario: {ris} ha un dato vero", ok is True, f"{ok} {motivo}")
+    # Le risposte piene della quarta revisione: zeri, booleani, indirizzi, url, la risposta
+    # uguale all'argomento su un'altra chiave
+    for argomenti, ris in (
+            ({"citta": "Bergamo"}, {"citta": "Bergamo", "temperatura": 0}),
+            ({"citta": "Bergamo"}, {"temperatura": 0, "pioggia_mm": 0}),
+            ({"farmacia": "Farmacia Centrale"}, {"farmacia": "Farmacia Centrale", "aperta": False}),
+            ({"luogo": "Borgo Alto"}, {"aperto": True}),
+            ({"citta": "Bergamo"}, {"citta": "Bergamo", "piove": False}),
+            ({"prodotto": "latte"}, {"prodotto": "latte", "disponibile": True}),
+            ({"treno": "R 1234"}, {"treno": "R 1234", "ritardo_min": 0}),
+            ({"luogo": "Borgo Alto"}, {"posti_liberi": 0}),
+            ({"farmacia": "Farmacia Centrale"},
+             {"farmacia": "Farmacia Centrale", "indirizzo": "Via Roma 3"}),
+            ({"comune": "Borgo Alto"},
+             {"comune": "Borgo Alto", "url": "https://borgoalto.example.it"}),
+            ({"provincia": "Bergamo"}, {"provincia": "Bergamo", "capoluogo": "Bergamo"}),
+            # zeri e booleani accanto a una lista vuota, ma non contatori: il dato
+            ({"luogo": "Borgo Alto"}, {"eventi": [], "temperatura": 0}),
+            ({"luogo": "Borgo Alto"}, {"eventi": [], "aperto": False}),
+            ({"luogo": "Borgo Alto"}, {"eventi": [], "indirizzo": "Via Roma 3"}),
+            # un contatore a zero da solo è il dato
+            ({"luogo": "Borgo Alto"}, {"totale": 0}),
+            # la risposta uguale all'argomento su un'altra chiave, accanto a una lista vuota
+            ({"provincia": "Bergamo"}, {"provincia": "Bergamo", "capoluogo": "Bergamo",
+                                        "frazioni": []})):
+        ok, motivo = sonde.va(caso(argomenti=argomenti), esito(ris))
+        verifica(f"contrario: {ris} dopo un errore è una risposta piena", ok is True,
+                 f"{ok} {motivo}")
+    ok, motivo = sonde.va(caso(), esito({"luoghi": ["Borgo Alto"], "eventi": []}))
+    verifica("falso negativo noto: l'eco dentro una lista di un'altra chiave conta come dato",
+             ok is True, f"{ok} {motivo}")
 
 
 def prova_gioco_puro(tmp: Path, iso):

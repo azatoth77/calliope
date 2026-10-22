@@ -597,11 +597,14 @@ MOTIVO_VUOTO = ("risultati vuoti e nessuna frase, ma il caso della persona chied
 _CAMPI_FRASE = ("da_dire", "messaggio", "testo", "risposta")
 
 
-# I campi che descrivono la ricerca, non la risposta (terza revisione della PR #232): la fonte,
-# l'indirizzo, quando è stata fatta, che cosa si è cercato
-_METADATI = frozenset({"fonte", "fonti", "sorgente", "source", "url", "link", "indirizzo",
-                       "aggiornato", "aggiornamento", "timestamp", "data_ricerca", "cercato_il",
-                       "query", "ricerca", "cercato", "parametri", "argomenti", "richiesta"})
+# Accanto a una raccolta vuota, e solo lì (quarta revisione della PR #232: la regola è
+# stretta, perché ogni allargamento ha dato falsi positivi), non tolgono il «vuoto» i
+# contatori a zero e i metadati della ricerca. Da soli, o accanto ad altri campi, zeri,
+# booleani, indirizzi e url sono il dato («temperatura: 0», «aperta: false», l'indirizzo
+# chiesto)
+_CONTATORI = frozenset({"totale", "numero", "count", "conteggio", "trovati", "n"})
+_METADATI = frozenset({"fonte", "fonti", "source", "aggiornato", "aggiornamento", "query",
+                       "ricerca", "timestamp", "data_ricerca"})
 
 
 def _vuoto(v) -> bool:
@@ -612,31 +615,25 @@ def _vuoto(v) -> bool:
     return False
 
 
-def _e_dato(chiave: str, v, valori: list[str]) -> bool:
-    """Un campo porta un dato vero: non vuoto, non un contatore a zero o un sì/no, non un
-    metadato della ricerca, non l'eco degli argomenti del caso (l'estensione che ripete il
-    luogo chiesto accanto alla lista vuota: la stessa idea di argomenti_incerti._ha_dati)."""
-    from .argomenti_incerti import chiave as norm, uguali
-    if _vuoto(v) or isinstance(v, bool):
+def _eco(chiave: str, v, argomenti) -> bool:
+    """Il campo ripete l'argomento del caso **sulla stessa chiave** e con lo stesso valore
+    (`luogo` → `luogo`; non `capoluogo` con lo stesso valore, che è la risposta)."""
+    from .argomenti_incerti import chiave as norm
+    if not isinstance(argomenti, dict) or chiave not in argomenti or not isinstance(v, str):
         return False
-    if isinstance(v, (int, float)) and v == 0:
-        return False
-    if str(chiave).strip().lower() in _METADATI:
-        return False
-    if isinstance(v, str) and any(uguali(v, x) or norm(x) == norm(v) for x in valori
-                                  if len(norm(x)) >= 3):
-        return False
-    if isinstance(v, dict):
-        return not esito_vuoto(v, valori=valori)
-    return True
+    x = argomenti.get(chiave)
+    return isinstance(x, str) and bool(norm(x)) and norm(x) == norm(v)
 
 
-def esito_vuoto(ris, argomenti=None, valori=None) -> bool:
+def esito_vuoto(ris, argomenti=None) -> bool:
     """Il risultato è vuoto **per struttura** (§ 9.3, 22/10, #223; dalla seconda revisione della
-    PR #232 niente parole): nessuna frase per chi parla e nessun campo con un dato vero
-    (`_e_dato`: non l'eco degli argomenti, i contatori a zero, i metadati, i None), o «trovato»:
-    false senza una frase. Una frase, qualunque cosa dica, non è mai vuota: è un dato detto, e lo
-    giudicano il modello e la persona (principio 10)."""
+    PR #232 niente parole, dalla quarta una regola stretta): nessuna frase per chi parla, almeno
+    una raccolta vuota (lista o dizionario vuoti, anche annidati) o un `None`, e nessun altro
+    campo con un valore, a parte l'eco di un argomento sulla stessa chiave e, accanto a quella
+    raccolta, i contatori a zero e i metadati della ricerca. Oppure «trovato»: false senza una
+    frase. Una frase, qualunque cosa dica, non è mai vuota: è un dato detto, e lo giudicano il
+    modello e la persona (principio 10). Resta un falso negativo voluto: l'eco dentro una lista
+    di un'altra chiave (`{"luoghi": ["Borgo Alto"], "eventi": []}`) conta come dato."""
     if isinstance(ris, str):
         return not ris.strip()
     if isinstance(ris, list):
@@ -647,10 +644,16 @@ def esito_vuoto(ris, argomenti=None, valori=None) -> bool:
         return False
     if ris.get("trovato") is False or ris.get("trovata") is False:
         return True
-    if valori is None:
-        from .argomenti_incerti import _valori
-        valori = _valori(argomenti)
-    return not any(_e_dato(k, v, valori) for k, v in ris.items())
+    vuote, altri = [], []
+    for k, v in ris.items():
+        if _vuoto(v) or (isinstance(v, dict) and esito_vuoto(v, argomenti)):
+            vuote.append(k)
+        elif not _eco(k, v, argomenti):
+            altri.append((str(k).strip().lower(), v))
+    if not vuote:
+        return False
+    return all((k in _CONTATORI and isinstance(v, (int, float)) and not isinstance(v, bool)
+                and v == 0) or k in _METADATI for k, v in altri)
 
 
 def va(caso: dict, r: dict) -> tuple[bool, str]:

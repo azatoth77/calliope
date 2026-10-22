@@ -5143,7 +5143,7 @@ sul testo davano ancora falsi positivi.
   - Il criterio della issue («il ricollaudo «non ho trovato» bocciato») resta storico.
   - Il ricollaudo boccia solo ciò che si vede dalla struttura: nessuna frase, e nessun campo
     con un dato vero.
-- **N. 5, la struttura guarda la sostanza** (`sonde._e_dato`). Non sono un dato:
+- **N. 5, la struttura guarda la sostanza** (`sonde._e_dato`). *[storico: superato dalla quarta revisione, sotto: zeri, booleani, indirizzi e l'eco su un'altra chiave davano falsi «non va»]* Non sono un dato:
   - l'eco degli argomenti del caso (la stessa idea di `argomenti_incerti._ha_dati`);
   - i contatori a zero, i sì/no, i `None`;
   - i metadati della ricerca: fonte, url, aggiornato, query…
@@ -5176,3 +5176,26 @@ sul testo davano ancora falsi positivi.
   - per il sì del familiare: «hai scelto» detto a chiunque, e `chi` non salvato.
 
   La prova conta 150 controlli.
+
+**Dopo la quarta revisione della PR #232 (22/10): il vuoto con una regola stretta.** Ogni
+allargamento aveva dato falsi positivi. Nella terza revisione zeri, booleani, `indirizzo` e
+`url` non contavano come dato, e il ricollaudo bocciava risposte piene come
+`{"citta": "Bergamo", "temperatura": 0}`, `{"aperta": False}` o l'indirizzo chiesto.
+- **Vuoto (`sonde.esito_vuoto`)**: nessuna frase per chi parla, almeno una raccolta vuota (lista
+  o dizionario vuoti, anche annidati) o un `None`, e nessun altro campo con un valore. Fanno
+  eccezione:
+  - l'eco di un argomento **sulla stessa chiave** e con lo stesso valore (`luogo` → `luogo`,
+    non `capoluogo`);
+  - accanto alla raccolta vuota, e solo lì, i contatori a zero (`totale`, `numero`, `count`…) e
+    i metadati della ricerca (`fonte`, `aggiornato`, `query`…).
+- Zeri, booleani, `indirizzo`, `url` e `link`, da soli o accanto ad altri campi, sono il dato.
+- `«trovato»: false` senza una frase resta vuoto: è il segno esplicito del risultato.
+- **Prova**: restano vuoti i casi della Q8 (con l'argomento sulla stessa chiave). Sono contrari
+  tutte le 11 risposte piene della Q12, più tre: lo zero, il booleano e l'indirizzo accanto a
+  una lista vuota. Sono contrari anche un contatore a zero da solo, e la risposta uguale
+  all'argomento su un'altra chiave accanto a una lista vuota.
+- **Falso negativo noto, lasciato com'è**: l'eco dentro una lista di un'altra chiave
+  (`{"luoghi": ["Borgo Alto"], "eventi": []}`) conta come dato, e quel ricollaudo va.
+- **Mutazioni**: 6, e cadono tutte: l'eco su ogni chiave, zeri e booleani di ogni campo,
+  indirizzo e url come metadati, contatori e metadati anche senza una raccolta vuota, niente
+  eco, `None` non vuoto. La prova conta 168 controlli.
