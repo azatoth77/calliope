@@ -488,6 +488,11 @@ def nota_motore_finto(finti: list[tuple[str, str]]) -> str:
             f"usa quello che c'è ({APRI_GIOCO_C_E}).")
 
 
+# Il tetto del messaggio del manifesto nell'esito di esegui_test: tutti gli errori di valida,
+# ognuno al più manifesto.MAX_ERRORE_DETTO caratteri
+MAX_ERRORI_MANIFESTO = 3000
+
+
 def manifesto_non_valido(sandbox) -> str | None:
     """Il motivo per cui manifesto.json non passerebbe il controllo della consegna
     (estensioni/manifesto.valida, lo stesso di controlla_consegna), o None (anche senza
@@ -498,7 +503,9 @@ def manifesto_non_valido(sandbox) -> str | None:
         from ..estensioni.manifesto import valida
         valida(json.loads(sandbox.leggi("manifesto.json", 50_000)))
     except ValueError as e:                # anche ManifestoNonValido e il JSON rotto
-        return str(e)[:400]
+        # Tutti gli errori del manifesto arrivano (22/10, prima revisione della PR #231: con
+        # 400 caratteri restava il primo); ognuno è già accorciato da valida
+        return str(e)[:MAX_ERRORI_MANIFESTO]
     except Exception:  # noqa: BLE001 — nel dubbio lo dice la consegna
         return None
     return None
@@ -521,7 +528,8 @@ def _con_manifesto(r: dict, sandbox, consegnabile=None) -> dict:
             errore = consegnabile(sandbox)
         except Exception:  # noqa: BLE001 — nel dubbio lo dice la consegna
             errore = None
-        riga = (f"FALLITO controllo della consegna: {str(errore)[:400]} (è il controllo che fa "
+        riga = (f"FALLITO controllo della consegna: {str(errore)[:MAX_ERRORI_MANIFESTO]} (è il "
+                "controllo che fa "
                 "consegna: correggi quello che dice, non i test)\n") if errore else ""
     else:
         errore = manifesto_non_valido(sandbox)

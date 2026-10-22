@@ -115,7 +115,8 @@ esempi: da 3 a 8 esempi dato → risultato, almeno uno per ogni requisito che si
 - calcolo: lo stesso numero come conto con soli numeri e + - * / ( ), per esempio «10 * 1609.344 / 1000»: lo rifà il codice;
 - contiene: una o due parole che la frase da_dire deve contenere (un nome detto dalla persona, «non»); mai numeri, mai frasi intere; in un esempio con il numero non serve ripetere i valori dei dati;
 - trovato: false se il dato non esiste o non si capisce e l'estensione deve dire che non l'ha trovato; altrimenti null.
-Ogni esempio controlla almeno una cosa (numero, contiene o trovato false). Se la richiesta nomina valori di più parole o con l'accento metti un esempio con uno di quelli; metti anche un caso con un dato sconosciuto."""
+Ogni esempio controlla almeno una cosa (numero, contiene o trovato false). Se la richiesta nomina valori di più parole o con l'accento metti un esempio con uno di quelli; metti anche un caso con un dato sconosciuto.
+Negli esempi Calliope non ha dati: le letture (casa, liste, agenda) rispondono vuote e la rete non risponde. Gli esempi non dipendono da dati letti (quelli li provano i test dell'agente)."""
 
 
 SISTEMA_GIOCO = """
@@ -851,7 +852,7 @@ import json
 import unicodedata
 import unittest
 
-from calliope_estensione import CalliopeFinta
+from calliope_estensione import CalliopeFinta, ErroreDelTest
 from estensione import esegui
 
 '''
@@ -863,10 +864,19 @@ def _norm(testo):
     return " ".join("".join(c for c in t if not unicodedata.combining(c)).split())
 
 
+def _esegui(dati):
+    # Le letture rispondono vuote; un errore del test inghiottito dall'estensione si rialza
+    finta = CalliopeFinta(letture="vuote")
+    out = esegui(dict(dati), finta)
+    if finta.errori_test:
+        raise ErroreDelTest(finta.errori_test[0])
+    return out
+
+
 def _prova(self, caso):
     dati = caso["dati"]
     detto = f"R{caso['requisito']}, con i dati {json.dumps(dati, ensure_ascii=False)}"
-    out = esegui(dict(dati), CalliopeFinta())
+    out = _esegui(dati)
     self.assertIsInstance(out, dict, f"{detto}: esegui deve restituire un dict")
     if caso.get("numero") is not None:
         valore = out.get(CAMPO)
@@ -893,7 +903,7 @@ def _riconosce(self, caso):
     dati = caso["dati"]
     detto = (f"R{caso['requisito']}: la richiesta nomina «{caso['valore']}» per "
              f"«{caso['input']}»; con i dati {json.dumps(dati, ensure_ascii=False)}")
-    out = esegui(dict(dati), CalliopeFinta())
+    out = _esegui(dati)
     self.assertIsInstance(out, dict, f"{detto}: esegui deve restituire un dict")
     self.assertTrue(str(out.get("da_dire") or "").strip(), f"{detto}: manca la frase da_dire")
     self.assertIsNot(out.get("trovato"), False,

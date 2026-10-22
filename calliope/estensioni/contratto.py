@@ -432,6 +432,7 @@ def testo(cfg=None, tipo: str = "estensione", linguaggi=("python",)) -> str:
     niente porta Python né limiti del contenitore) o «codice» (un programma qualunque nella
     sandbox). Le sezioni sono in ordine e una regola sta in una sezione sola."""
     from ..web import rete as _rete
+    from . import manifesto as _manifesto
     from . import porta as _porta
     tmax = float(getattr(cfg, "estensioni_tempo_max_s", 30) or 30)
     mmax = int(getattr(cfg, "estensioni_memoria_max_mb", 512) or 512)
@@ -507,7 +508,11 @@ def testo(cfg=None, tipo: str = "estensione", linguaggi=("python",)) -> str:
                   f"- dati propri: {_porta.MAX_DATO_BYTE // 1000} kB per testo, "
                   f"{_porta.MAX_DATI_BYTE // 1000} kB in tutto",
                   "- input: al più 6 proprietà (string, number, integer, boolean), testi fino "
-                  "a 500 caratteri"]
+                  "a 500 caratteri",
+                  # Le parole vietate dalla stessa costante del controllo (22/10, #228)
+                  "- testi del manifesto (titolo, cosa_fa, input): li legge il modello, quindi "
+                  "senza simboli né queste parole («…»: qualunque finale): "
+                  f"{_manifesto.parole_vietate_dette()}"]
         righe += _impossibili(4)
         return "\n".join(righe) + "\n"
     from ..agenti.linguaggi import LINGUAGGI
