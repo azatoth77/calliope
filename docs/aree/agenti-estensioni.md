@@ -5378,7 +5378,9 @@ contraddicono o rimproverano, la radice delle passate di scuse senza modifiche.
   tutti (29) e nessuna coppia lo è.
 - **Al più una spinta per passata** (`Scala`, `Agente._dici`). Le spinte si propongono dove
   nascono, e prima della passata dopo esce la più alta, in coda all'ultimo messaggio «user» o in
-  uno nuovo. Le altre sono lasciate, contate in `segnali["spinte_lasciate"]` e non dette. L'avviso
+  uno nuovo. Le altre sono lasciate e contate in `segnali["spinte_lasciate"]`; dalla prima
+  revisione della PR #233 se ne lasciano i passi, il fatto arriva (*[storico: «e non dette» fino
+  alla prima revisione]*). L'avviso
   di chiusura e la spinta a consegnare si segnano dette solo quando escono, quindi tornano alla
   passata dopo. Prima l'avviso finiva in coda alla spinta delle riscritture, nello stesso
   messaggio. L'ordine, dall'alto: l'avviso di chiusura (una volta per lavoro, vicino al tetto;
@@ -5501,3 +5503,23 @@ vietata, mai un messaggio «user» con due «Passi possibili». La lettura nuova
 `self._strumento`, su `lav.letture`) e la fotografia (`test_prima` prima di `self._strumento`,
 `segnali["test_scritti"]`) guardano cose diverse e stanno insieme: la prima conta le novità per
 la fila, la seconda i test indeboliti.
+
+**Dopo la seconda revisione della PR #233 (22/10).**
+- **Il principio dei fatti ha la sua prova nel ciclo vero** (Q1). Ci sono due prose con lo stato
+  consegnabile e il no di `_consegna_dalla_prosa`, che scrive i fatti del revisore con
+  `_fatti_revisore(ora=True)` come quando giudica gli esempi rossi. I fatti arrivano nel messaggio
+  della passata dopo, insieme all'avviso di chiusura. Senza `scala.fatto` la prova cade.
+- **Il log dice la regola solo quando la spinta esce** (Q2). Lo scrive `_dici`; alla proposta
+  della spinta a consegnare e delle riscritture non c'è più «(regola …)». L'avviso proposto e
+  mai detto in un giro torna nel log del giro dopo.
+- **La ricerca coi documenti di casa** propone prima `grafo_trova` e `grafo_schema` (Q3), in un
+  ordine fisso d'uso.
+- **Prima del piano** il giro a vuoto e la prosa propongono solo `piano` (Q6), come
+  `senza_strumenti`: il ciclo rifiuterebbe ogni altro strumento con «prima chiama piano».
+- **Limiti di `lettura_nuova`, noti** (Q5):
+  - le letture dei risultati salvati in `.calliope` non contano mai come novità, perché `e_passo`
+    non aggiorna `lav.letture`, e chi legge a pezzi un risultato lungo salvato può arrivare al
+    gradino. È prudente: rileggere un risultato già avuto non è esplorare;
+  - per contenuto si tengono al più 50 intervalli letti (`_unisci`). Oltre, con molte finestre
+    `riga` sparse in un file lungo, i più vecchi si perdono e rileggerli conta come novità.
+- **Mutazioni**: 28, cinque nuove (Q1, Q2 ×2, Q3, Q6), e tutte fanno cadere `prova_scala_spinte`.

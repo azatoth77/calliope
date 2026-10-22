@@ -209,7 +209,7 @@ def _passi_errore(errore: dict | None) -> list:
 # ─────────────────────────── le spinte (gradino 2: un messaggio) ───────────────────────────
 
 def ripetizioni(frase: str = "", errore: dict | None = None, nomi=None, tappe: bool = False,
-                ricerca: bool = False) -> Spinta:
+                ricerca: bool = False, prima_il_piano: bool = False) -> Spinta:
     """Dopo una passata fermata per giro a vuoto (ripetizioni.py). Con l'ultimo errore noto
     (11/10, giro vero della DGX: un piano ripetuto una decina di volte, poi gioco.js riscritto
     intero) i passi sono sul punto dell'errore. `nomi`: gli strumenti offerti (None: quelli del
@@ -221,14 +221,20 @@ def ripetizioni(frase: str = "", errore: dict | None = None, nomi=None, tappe: b
     if ricerca:
         # Nella ricerca (P3 della prima revisione della PR #233): gli strumenti di ricerca
         # offerti e la consegna della relazione, mai scrivi_file né esegui_test
-        cerca = [n for n in ("biblioteca_cerca", "web_cerca", "web_leggi", "leggi_file")
-                 if nomi is None or n in set(nomi)]
-        cerca += sorted(n for n in (nomi or ()) if str(n).startswith("grafo_"))[:2]
+        # In ordine d'uso, e coi documenti di casa da grafo_trova e grafo_schema, da cui si
+        # parte (seconda revisione della PR #233: prima gli ultimi due in ordine alfabetico)
+        cerca = [n for n in ("biblioteca_cerca", "web_cerca", "grafo_trova", "grafo_schema",
+                             "web_leggi", "leggi_file")
+                 if (nomi is None and not n.startswith("grafo_")) or n in set(nomi or ())]
         passi = ([("cerca", " o ".join(cerca))] if cerca else []) + ["relazione"]
         return _fai("agente_ragionamento_ripetuto", fatto, passi)
     if errore_detto(errore):
         return _fai("agente_ragionamento_ripetuto", fatto + " " + _fatto_errore(errore),
                     _passi_errore(errore), esclusi=("riscrivi",))
+    if prima_il_piano:
+        # Un'estensione prima del piano (Q6 della seconda revisione): il ciclo rifiuta ogni altro
+        # strumento con «prima chiama piano»
+        return _fai("agente_ragionamento_ripetuto", fatto, [("piano", "piano")])
     offerti = None if nomi is None else set(nomi)
     passi = [p for p, n in ((("leggi_punto", "leggi_file"), "leggi_file"),
                             ("scrivi", "scrivi_file"), ("test", "esegui_test"))
@@ -278,13 +284,14 @@ def prosa_consegnabile() -> Spinta:
                 ["consegna_se_finito", "prossimo"])
 
 
-def prosa(tappe: bool = False) -> Spinta:
+def prosa(tappe: bool = False, prima_il_piano: bool = False) -> Spinta:
     """Una passata senza chiamate. *[storico: «Usa gli strumenti con chiamate di funzione vere:
     scrivi i file con scrivi_file, prova con esegui_test, e alla fine chiama consegna.» fino al
     22/10]*"""
     return _fai("agente_spinta_strumenti",
                 "Nessuno strumento chiamato in questa passata: il testo non scrive file e non "
                 "esegue test, servono chiamate di funzione vere.",
+                [("piano", "piano")] if prima_il_piano else
                 [("scrivi", "scrivi_file o modifica_file"), "test", _consegna(tappe)])
 
 
@@ -499,6 +506,8 @@ def tutte(errore: dict | None = None, tappe: bool = False) -> list[Spinta]:
         out += [fine(t) for t in ("codice", "ricerca", "verde")]
         out += [troncata(d) for d in ("ricerca_testo", "pensiero")]
         out += [nota_troncata(d) for d in ("ricerca", "strumento")]
-        out += [ripetizioni("una frase", ricerca=True),
+        out += [ripetizioni("una frase", prima_il_piano=True), prosa(prima_il_piano=True),
+                ripetizioni("x", ricerca=True, nomi=["grafo_trova", "grafo_schema", "consegna"]),
+                ripetizioni("una frase", ricerca=True),
                 ripetizioni("", ricerca=True, nomi=["biblioteca_cerca", "consegna"])]
     return out

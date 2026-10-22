@@ -55,7 +55,7 @@ def sezione(t):
     print(f"\n— {t}", flush=True)
 
 
-def gira(tmp, nome, passate, max_passi=14, tappe=False, prepara=None):
+def gira(tmp, nome, passate, max_passi=14, tappe=False, prepara=None, segnali=None):
     """Agente.codice con il copione: (lavoro, risultato o {"eccezione"…}, log, copione)."""
     from calliope.agenti.ciclo import Lavoro
     cli = Copione(passate)
@@ -67,6 +67,8 @@ def gira(tmp, nome, passate, max_passi=14, tappe=False, prepara=None):
     sb = G.sandbox(tmp, nome)
     lav = Lavoro(nome, "codice", "una funzione che somma")
     lav.tappe = tappe
+    if segnali is not None:
+        lav.segnali = dict(segnali)
     try:
         ris = ag.codice(lav, sb)
     except Exception as e:  # noqa: BLE001 — Limite
@@ -171,6 +173,16 @@ def prova_vocabolario():
              "scarica_esempio a un programma)",
              "12.000 token" in s.testo and "scrivi_file" in s.testo and "piano" not in s.testo
              and "scarica_esempio" not in s.testo, s.testo)
+    s = sp.ripetizioni("x", ricerca=True, nomi=["grafo_cammino", "grafo_documenti",
+                                                "grafo_schema", "grafo_trova", "consegna"])
+    verifica("la ricerca coi documenti di casa parte da grafo_trova e grafo_schema (Q3)",
+             "Passi possibili: grafo_trova o grafo_schema" in s.passi
+             and "grafo_cammino" not in s.passi, s.passi)
+    s = sp.ripetizioni("x", prima_il_piano=True)
+    p = sp.prosa(prima_il_piano=True)
+    verifica("prima del piano il giro a vuoto e la prosa propongono solo piano (Q6)",
+             s.passi == "Passi possibili: piano." and p.passi == "Passi possibili: piano.",
+             s.passi + " " + p.passi)
     s = sp.ripetizioni("x", ricerca=True, nomi=["biblioteca_cerca", "web_cerca", "consegna"])
     verifica("il giro a vuoto nella ricerca (P3): i suoi strumenti e la relazione, mai "
              "scrivi_file né esegui_test",
@@ -297,8 +309,10 @@ def prova_scala(tmp: Path):
              (lav.segnali.get("regole") or {}).get("agente_avviso_fine") == 1
              and "agente_riscrittura_ripetuta" not in (lav.segnali.get("regole") or {}),
              str(lav.segnali.get("regole")))
-    verifica("…il log dell'avviso una volta",
-             sum("avviso di chiusura (" in x for x in log) == 1, str(log)[-300:])
+    verifica("…il log dell'avviso una volta, e nessuna «regola» della riscrittura lasciata (Q2)",
+             sum("avviso di chiusura (" in x for x in log) == 1
+             and not any("regola agente_riscrittura_ripetuta" in x for x in log),
+             str(log)[-300:])
     brutti = [u[:60] for u in ut if vietate(u.replace("Compito:", ""))]
     verifica("…e in nessun messaggio dell'harness le parole di rimprovero", not brutti,
              str(brutti))
@@ -320,6 +334,35 @@ def prova_scala(tmp: Path):
              ris.get("esito") == "fatto" and sum(sp.consegna().testo in u for u in ut) == 1
              and sum(AVVISO_FINE["verde"] in u for u in ut) == 1
              and lav.segnali.get("spinta_consegna") is True, str(ut)[-500:])
+
+    # Q1 (seconda revisione): nel ciclo vero, i fatti del revisore «ora» dopo la seconda prosa
+    # con lo stato consegnabile arrivano alla passata dopo, insieme all'avviso di chiusura.
+    # `_consegna_dalla_prosa` dice no come quando il revisore giudica gli esempi rossi: scrive i
+    # suoi fatti con `_fatti_revisore(ora=True)` (#190) e non consegna
+    fatto_rev = "Il revisore: l'esempio 2 è giusto, sbaglia la conversione in estensione.py:4."
+
+    def revisore_no(ag, cli):
+        def no(lav, *a, **k):
+            ag._fatti_revisore(lav, {"fatti": [fatto_rev], "domande": []}, ora=True)
+            return None
+        ag._consegna_dalla_prosa = no
+    lav, ris, log, cli = gira(tmp, "revisore-ora", [
+        [scrivi("programma.py", GIUSTO), scrivi("test_programma.py", TEST)], [ESEGUI],
+        "Ho finito.", "Ho finito davvero.", [CONSEGNA]], max_passi=6, prepara=revisore_no)
+    ut = utenti_corpi(cli)
+    con = [u for u in ut if fatto_rev in u]
+    verifica("nel ciclo i fatti del revisore «ora» dopo la prosa arrivano alla passata dopo, con "
+             "l'avviso di chiusura (Q1)",
+             ris.get("esito") == "fatto" and len(con) == 1 and AVVISO_FINE["verde"] in con[0]
+             and not lav.segnali.get("revisore_fatti_ora"), str(ut)[-600:])
+    verifica("…e nel log nessuna «regola» di una spinta lasciata (Q2)",
+             not any("(regola agente_" in x for x in log), str([x for x in log
+                                                                if "(regola" in x]))
+    lav, ris, log, cli = gira(tmp, "avviso-giro", [
+        [scrivi("programma.py", GIUSTO), scrivi("test_programma.py", TEST)], [ESEGUI],
+        [CONSEGNA]], max_passi=4, segnali={"avviso_fine_log": True})
+    verifica("l'avviso proposto e mai detto nel giro di prima va nel log del giro dopo (Q2)",
+             sum("avviso di chiusura (" in x for x in log) == 1, str(log)[-300:])
 
     # P3 nel ciclo della ricerca: il giro a vuoto con i passi della ricerca
     import prova_strumenti_onesti as S

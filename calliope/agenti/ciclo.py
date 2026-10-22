@@ -1474,6 +1474,9 @@ class Agente:
         seg.setdefault("scritture", {})
         seg.setdefault("errori_test", [])
         seg.setdefault("senza_novita", 0)
+        # L'avviso proposto e mai detto nel giro di prima va nel log di questo (Q2)
+        if not lav.avvisato:
+            seg.pop("avviso_fine_log", None)
         # Le riscritture intere di fila per file (11/10): si azzerano quando l'errore cambia,
         # quando i test passano o con una correzione mirata (modifica_file)
         fila = seg.setdefault("riscritture_fila", {})
@@ -1603,6 +1606,7 @@ class Agente:
                     raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)},
                                  tipo="a_vuoto")
                 scala.proponi(sp.ripetizioni(out["giro_a_vuoto"], seg.get("ultimo_errore"),
+                                             prima_il_piano=bool(piano and stato_piano is None),
                                              tappe=bool(getattr(lav, "tappe", False))))
                 continue
             giri_vuoti = 0
@@ -1723,7 +1727,8 @@ class Agente:
                 ora = seg.pop("revisore_fatti_ora", None) or []
                 # I fatti non competono nella scala (P1 della prima revisione della PR #233):
                 # tolti dai segnali, arrivano anche se la prosa è lasciata
-                scala.proponi(sp.prosa(bool(getattr(lav, "tappe", False))))
+                scala.proponi(sp.prosa(bool(getattr(lav, "tappe", False)),
+                                       prima_il_piano=bool(piano and stato_piano is None)))
                 scala.fatto(" ".join(ora))
                 continue
             letture = set()
@@ -2084,17 +2089,15 @@ class Agente:
                 # I test passano e i file chiesti ci sono (13/10): una volta per lavoro la
                 # spinta a consegnare o a dire cosa manca; la consegna resta dell'agente. Il
                 # segno «detta» lo mette la scala solo se esce (22/10, #224)
-                self.log(f"[AGENTI] {lav.id}: i test passano, spinta a consegnare "
-                         "(regola agente_spinta_consegna)")
                 scala.proponi(sp.consegna())
             # Lo stesso file lungo riscritto per intero più volte di fila con lo stesso errore
             # (11/10, giro vero: gioco.js di 730 righe, nove volte): la spinta con l'ultimo
             # errore, e la fila riparte
             for p, n in list(fila.items()):
                 if n >= RISCRITTURE_MAX and consegna is None:
-                    # La regola (19/10, #9: il banco) la conta la scala quando la spinta esce
-                    self.log(f"[AGENTI] {lav.id}: {p} riscritto per intero {n} volte di fila "
-                             "(regola agente_riscrittura_ripetuta)")
+                    # La regola (19/10, #9: il banco) la conta la scala quando la spinta esce, e
+                    # il suo log la dice (seconda revisione della PR #233: qui niente «regola»)
+                    self.log(f"[AGENTI] {lav.id}: {p} riscritto per intero {n} volte di fila")
                     scala.proponi(sp.riscritture(p.rsplit("/", 1)[-1], n,
                                                  seg.get("ultimo_errore")))
                     fila[p] = 0
