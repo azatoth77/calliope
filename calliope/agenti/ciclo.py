@@ -37,7 +37,7 @@ import json
 import re
 import threading
 import time
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 
 from ..testi import APRI_GIOCO_C_E
 from ..tools import dialogo
@@ -1238,21 +1238,29 @@ class Agente:
             # L'ultimo esegui_test era verde e niente è cambiato dopo (13/10): consegna
             tipo = "verde_tappa" if tipo == "tappa" else "verde"
             cosa += ", con i test verdi"
-        # Il perché resta nel log, non nel messaggio all'agente (niente conto alla rovescia)
-        self.log(f"[AGENTI] {lav.id}: avviso di chiusura ({cosa})")
+        # Il perché resta nel log, non nel messaggio all'agente (niente conto alla rovescia); una
+        # volta sola anche se l'avviso è lasciato (P5 della prima revisione della PR #233)
+        if isinstance(seg, dict) and not seg.get("avviso_fine_log"):
+            seg["avviso_fine_log"] = True
+            self.log(f"[AGENTI] {lav.id}: avviso di chiusura ({cosa})")
         return sp.fine(tipo)
 
     def _dici(self, lav: Lavoro, messages: list, scala: "sp.Scala") -> "sp.Spinta | None":
         """Al più una spinta per passata (22/10, #224, spinte.py): la più alta della scala, in
         coda all'ultimo messaggio «user» o in uno nuovo; la sua regola nel registro (se non la
         conta già il rilevatore), il conto delle spinte dette e lasciate nei segnali, l'evento
-        sulla scheda. Le lasciate non si dicono: quelle «una volta per lavoro» tornano."""
-        s, lasciate = scala.scegli()
-        if s is None:
-            return None
-        g = s.gradino
+        sulla scheda. Delle lasciate si dicono i fatti, non i passi: quelle «una volta per lavoro»
+        tornano intere. I fatti a parte (`Scala.fatto`) arrivano sempre, anche senza spinte (la
+        scala ordina solo i consigli, mai i fatti: prima revisione della PR #233)."""
         seg = lav.segnali if isinstance(lav.segnali, dict) else {}
         lav.segnali = seg
+        testo, s, lasciate = scala.messaggio(seg.get("spinte_lasciate"))
+        if not testo:
+            return None
+        if s is None:
+            _aggiungi_spinta(messages, testo)       # solo fatti
+            return None
+        g = s.gradino
         if g.registra:
             from ..sonde import nota as nota_regola
             nota_regola(lav, g.nome)
@@ -1265,9 +1273,10 @@ class Agente:
         self.log(f"[AGENTI] {lav.id}: spinta {g.nome}"
                  + (f" (lasciate: {', '.join(x.nome for x in lasciate)})" if lasciate else ""))
         lav.nota("spinta", motivo=g.motivo, regola=g.nome)
-        _aggiungi_spinta(messages, s.testo)
+        _aggiungi_spinta(messages, testo)
         if s.nome == "agente_avviso_fine":
             lav.avvisato = True
+            seg.pop("avviso_fine_log", None)        # il giro dopo lo scrive di nuovo
         elif s.nome == "agente_spinta_consegna":
             seg["spinta_consegna"] = True
         return s
@@ -1585,7 +1594,8 @@ class Agente:
                         break
                     raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)},
                                  tipo="a_vuoto")
-                scala.proponi(sp.ripetizioni(out["giro_a_vuoto"], seg.get("ultimo_errore")))
+                scala.proponi(sp.ripetizioni(out["giro_a_vuoto"], seg.get("ultimo_errore"),
+                                             tappe=bool(getattr(lav, "tappe", False))))
                 continue
             giri_vuoti = 0
             novita = False
@@ -1631,7 +1641,8 @@ class Agente:
                 # di fila sì, riparte. Il limite è TRONCATE_MAX
                 from ..sonde import nota as nota_regola
                 nota_regola(lav, "agente_uscita_troncata", self.log, "senza chiamate")
-                vuoto_t0 += time.monotonic() - t_passata
+                # (senza l'attesa della voce, già tolta sopra: P7 della prima revisione)
+                vuoto_t0 += time.monotonic() - t_passata - (lav.attesa_voce_s - voce_s)
                 prosa_fila = 0
                 scala.proponi(sp.troncata("codice"))
                 continue
@@ -1702,11 +1713,10 @@ class Agente:
                                  tipo="prosa")
                 # I fatti del revisore dopo la prosa (20/10, #190): il lavoro continua qui
                 ora = seg.pop("revisore_fatti_ora", None) or []
-                s_prosa = sp.prosa()
-                if ora:
-                    s_prosa = replace(s_prosa, testo=s_prosa.testo + "\n\n"
-                                                  + " ".join(ora))
-                scala.proponi(s_prosa)
+                # I fatti non competono nella scala (P1 della prima revisione della PR #233):
+                # tolti dai segnali, arrivano anche se la prosa è lasciata
+                scala.proponi(sp.prosa(bool(getattr(lav, "tappe", False))))
+                scala.fatto(" ".join(ora))
                 continue
             letture = set()
             rossa = None              # la consegna rossa che ferma il lavoro (19/10, #180)
@@ -1890,14 +1900,13 @@ class Agente:
                     # _modifica, prima e dopo, e qui si riusa (`_impronte`, mai all'agente)
                     imp_prima = (impronta_cartella(sandbox, lav, self.log)
                                  if name == "scrivi_file" else None)
-                    letto_prima = (json.dumps(lav.letture.get(str(args.get("percorso") or "")))
-                                   if name == "leggi_file" else None)
                     result = self._strumento(lav, sandbox, name, args, consegnabile)
                     impronte = result.pop("_impronte", None) if isinstance(result, dict) else None
                     if name == "leggi_file" and lettura_nuova(
-                            letto_prima, lav.letture.get(str(args.get("percorso") or ""))):
-                        # Un pezzo di file mai letto (22/10, #224): per le passate senza novità
-                        # di fila leggere file nuovi non è girare a vuoto
+                            seg, str(args.get("percorso") or ""),
+                            lav.letture.get(str(args.get("percorso") or ""))):
+                        # Un contenuto mai letto in questo lavoro (22/10, #224): per le passate
+                        # senza novità di fila leggere file nuovi non è girare a vuoto
                         novita = True
                     if impronte:
                         imp_prima = impronte[0]
@@ -2028,7 +2037,8 @@ class Agente:
                 # ora al gradino (SENZA_NOVITA_FILA) la spinta, una volta per fila
                 seg["senza_novita"] = int(seg.get("senza_novita", 0)) + 1
                 if seg["senza_novita"] == sp.SENZA_NOVITA_FILA:
-                    scala.proponi(sp.senza_novita(seg["senza_novita"], seg.get("ultimo_errore")))
+                    scala.proponi(sp.senza_novita(seg["senza_novita"], seg.get("ultimo_errore"),
+                                                  tappe=bool(getattr(lav, "tappe", False))))
             elif novita:
                 seg["senza_novita"] = 0
             if (consegna is None and seg.get("test_verde") is True
@@ -3127,7 +3137,7 @@ class Agente:
                 nota_regola(lav, "agente_rilettura", self.log, f"{rel[:60]}, {volte} volte")
                 # Dal 22/10 (#224) senza «scrivi la versione corretta con scrivi_file»,
                 # contro «usa modifica_file» delle altre spinte
-                out["nota"] = sp.nota_rilettura(volte).testo
+                out["nota"] = sp.nota_rilettura(volte, bool(getattr(lav, "tappe", False))).testo
         return out
 
     def _diario_modello(self, lav: Lavoro):
@@ -3350,7 +3360,7 @@ class Agente:
                 if int((lav.segnali or {}).get("ripetizioni", 0)) >= RIPETIZIONI_MAX:
                     raise Limite("ha ripetuto lo stesso ragionamento senza decidere",
                                  {"riassunto": _fatto_finora(gc, messages)})
-                scala.proponi(sp.ripetizioni(out["giro_a_vuoto"]))
+                scala.proponi(sp.ripetizioni(out["giro_a_vuoto"], nomi=nomi, ricerca=True))
                 continue
             # Le chiamate arrivate a metà (21/10, #189, come nel codice da #185): i client le
             # segnano in `rotti`. Prima gli argomenti diventavano {} e l'agente riceveva «manca
@@ -3721,16 +3731,23 @@ def nota_stato_gia_visto(seg: dict, percorso: str, dopo: str | None, impronta: s
     return nota
 
 
-def lettura_nuova(prima_json: str | None, dopo) -> bool:
-    """leggi_file ha letto qualcosa di nuovo (22/10, #224): un file mai letto, un contenuto
-    cambiato o un pezzo che i pezzi già letti non coprivano. `prima_json`: `lav.letture[rel]`
-    prima della lettura, in JSON (la lista si aggiorna sul posto); `dopo`: quella di adesso."""
-    if not isinstance(dopo, list) or len(dopo) < 3:
+def lettura_nuova(seg: dict, rel: str, dopo) -> bool:
+    """leggi_file ha letto un contenuto mai letto in questo lavoro (22/10, #224; prima revisione
+    della PR #233): un'impronta del file mai vista, o un pezzo che le letture di quella impronta
+    non coprivano. Un file tornato a un contenuto già letto (A, B, A con le riletture) non è una
+    novità. `dopo`: `lav.letture[rel]` dopo la lettura ([impronta, volte, pezzi])."""
+    if not isinstance(dopo, list) or len(dopo) < 3 or not isinstance(seg, dict):
         return False
-    prima = json.loads(prima_json) if prima_json else None
-    if not isinstance(prima, list) or len(prima) < 3:
-        return True
-    return prima[0] != dopo[0] or _unisci(prima[2]) != _unisci(dopo[2])
+    viste = seg.get("letture_viste") if isinstance(seg.get("letture_viste"), dict) else {}
+    del_file = viste.get(rel) if isinstance(viste.get(rel), dict) else {}
+    prima = _unisci(list(del_file.get(dopo[0]) or []))
+    ora = _unisci(prima + [list(x) for x in dopo[2]])
+    del_file[dopo[0]] = ora
+    while len(del_file) > STATI_MAX:
+        del_file.pop(next(iter(del_file)))
+    viste[rel] = del_file
+    seg["letture_viste"] = viste
+    return ora != prima
 
 
 def _unisci(intervalli: list) -> list:

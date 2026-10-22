@@ -353,7 +353,8 @@ PERCHE_TAPPA = {"consegna_rossa": "l'agente ha consegnato, ma la consegna non va
                             "a metà, senza fare un passo avanti",
                 # 22/10 (#224, n. 26): prima chiudevano lo sviluppo come «limite»
                 "vuoto": "l'agente ripeteva lo stesso ragionamento senza fare un passo avanti",
-                "ragionamento": "l'agente ha ragionato a lungo senza usare gli strumenti"}
+                "ragionamento": "l'agente ha ragionato a lungo senza scrivere né provare il "
+                                "codice"}
 # Il segnale di giro a vuoto che la tappa «vuoto» dice già nel perché (22/10, #224)
 _GIA_DETTO = {"vuoto": "stesso ragionamento"}
 

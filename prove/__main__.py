@@ -420,7 +420,7 @@ LIVELLO_2 = {
     "prova_strumenti_onesti.py",     # ~25 s (19/10, #185: il docker finto)
     "prova_apri_gioco_tappa.py",     # ~15 s (20/10, #192: Node e il docker finto)
     "prova_revisore.py",             # ~50 s (20/10, #190: il docker finto)
-    "prova_scala_spinte.py",         # ~16 s (22/10, #224: il docker finto)
+    "prova_scala_spinte.py",         # ~25 s (22/10, #224: il docker finto e Node)
     "prova_esito_giochi.py",         # ~10 s (20/10, #197: Node e il docker finto)
     "prova_esecutore.py",            # 12 s
     "prova_telefono_abbina.py",      # 12 s, con il browser (seriale)

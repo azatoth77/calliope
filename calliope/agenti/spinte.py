@@ -21,7 +21,23 @@ Qui l'unica sorgente:
   note nei risultati degli strumenti, e controlla che nessuna coppia lo sia;
 - `Scala` tiene le proposte di una passata e ne dice **al più una**, la più alta. Le altre si
   lasciano: quelle «una volta per lavoro» (l'avviso di chiusura, la spinta a consegnare) tornano
-  alla passata dopo, perché chi le propone segna di averle dette solo quando escono.
+  alla passata dopo, perché chi le propone segna di averle dette solo quando escono, e dopo
+  `LASCIATE_MAX` volte lasciate passano davanti.
+
+**La scala ordina solo le spinte (i consigli), mai i fatti** (prima revisione della PR #233). Ogni
+spinta è un fatto e i suoi passi: della spinta lasciata si lasciano i passi, il fatto arriva lo
+stesso nel messaggio, prima della spinta che esce («il ragionamento ripeteva la stessa frase;
+l'ultimo errore è X in f:r», «la tua uscita è stata troncata»). I fatti che non sono spinte (i
+fatti del revisore «ora» di #190) si danno alla scala con `Scala.fatto` e arrivano sempre, anche
+senza una spinta: chi li toglie dai segnali li consegna così, mai a una spinta che può essere
+lasciata. Le spinte «una volta per lavoro» lasciate non ripetono il fatto, perché tornano intere.
+I fatti nei risultati degli strumenti (esiti dei test, stato già visto, troncata della chiamata)
+non passano dalla scala.
+
+**I passi sono quelli del lavoro**: gli strumenti offerti (la ricerca non ha scrivi_file né
+esegui_test, e la sua consegna è una relazione) e, in uno sviluppo (`tappe`), la consegna sempre
+con la stessa condizione («se il lavoro è finito»): l'avviso della tappa esclude la consegna
+senza condizione, e `incompatibili` lo vede.
 
 Le note nei risultati degli strumenti (gradino 1: la rilettura, la riscrittura piccola, la
 modifica inversa, l'uscita troncata) hanno la stessa forma e lo stesso vocabolario, perché
@@ -47,7 +63,8 @@ PASSI = {
     "modifica_righe": "modifica_file sulle sole righe che servono",
     "test": "esegui_test",
     "consegna": "consegna con cosa funziona e cosa manca",
-    "consegna_se_finito": "consegna, se il lavoro è finito",
+    "consegna_se_finito": "consegna con cosa funziona e cosa manca, se il lavoro è finito",
+    "cerca": "lo strumento di ricerca del prossimo passo",
     "resta": "una riga su cosa resta da fare",
     "prossimo": "lo strumento del prossimo passo",
     "piano": "piano (se non l'hai ancora chiamato)",
@@ -75,22 +92,24 @@ class Gradino:
     posto: int
     motivo: str               # per la scheda del lavoro («spinta», motivo)
     registra: bool = True
+    una_volta: bool = False   # detta una volta per lavoro: lasciata torna intera, senza il fatto
 
 
-# Dall'alto in basso. L'uscita troncata è un fatto del sistema (la chiamata non è partita): se
-# non lo sa, l'agente crede di aver scritto il file. L'avviso di chiusura viene subito dopo: è
-# una volta per lavoro, vicino al tetto, e la passata dopo potrebbe non esserci. Poi i giri a
-# vuoto, dal più preciso (la frase ripetuta, il file riscritto) al più generico
+# Dall'alto in basso. L'avviso di chiusura è in cima: una volta per lavoro, vicino al tetto, e
+# la passata dopo potrebbe non esserci (prima revisione della PR #233: sotto la troncata due
+# troncate nelle ultime passate non lo facevano uscire mai); i fatti delle lasciate arrivano lo
+# stesso. Poi la troncata (la chiamata non è partita), i giri a vuoto dal più preciso (la frase
+# ripetuta, il file riscritto) al più generico, la prosa, la spinta a consegnare
 GRADINI = {g.nome: g for g in (
+    Gradino("agente_avviso_fine", 100, "vicino ai tetti del lavoro", una_volta=True),
     Gradino("agente_uscita_troncata", 90, "uscita troncata", registra=False),
-    Gradino("agente_avviso_fine", 80, "vicino ai tetti del lavoro"),
     Gradino("agente_ragionamento_ripetuto", 70, "ragionamento ripetuto", registra=False),
     Gradino("agente_riscrittura_ripetuta", 60, "riscrive il file intero"),
     Gradino("agente_ragionamento_senza_strumenti", 50, "ragionamento senza strumenti"),
     Gradino("agente_senza_novita", 40, "passate di fila senza novità"),
     Gradino("agente_prosa_non_consegna", 35, "nessuno strumento chiamato", registra=False),
     Gradino("agente_spinta_strumenti", 30, "nessuno strumento chiamato"),
-    Gradino("agente_spinta_consegna", 20, "i test passano"),
+    Gradino("agente_spinta_consegna", 20, "i test passano", una_volta=True),
 )}
 
 # Le note nei risultati degli strumenti (gradino 1): stessa forma, nessuna scelta da fare (ogni
@@ -101,10 +120,17 @@ NOTE = ("agente_rilettura", "agente_riscrittura_piccola", "agente_modifica_inver
 
 @dataclass(frozen=True)
 class Spinta:
+    """`fatto`: ciò che è successo (arriva sempre, anche da lasciata); `passi`: «Passi possibili:
+    …» (solo della spinta che esce)."""
     nome: str
-    testo: str
+    fatto: str
+    passi: str = ""
     ammessi: tuple = ()
     esclusi: tuple = field(default=())
+
+    @property
+    def testo(self) -> str:
+        return (self.fatto + " " + self.passi).strip()
 
     @property
     def gradino(self) -> Gradino:
@@ -134,9 +160,14 @@ def _fai(nome: str, fatto: str, passi, esclusi=()) -> Spinta:
     for k, _ in passi:
         if k not in PASSI:
             raise KeyError(f"passo fuori dal vocabolario: {k}")
-    fatto = fatto.strip()
-    testo = (fatto + " " + passi_detti(passi)).strip()
-    return Spinta(nome, testo, tuple(k for k, _ in passi), tuple(esclusi))
+    return Spinta(nome, fatto.strip(), passi_detti(passi), tuple(k for k, _ in passi),
+                  tuple(esclusi))
+
+
+def _consegna(tappe: bool) -> str:
+    """La consegna fra i passi: in uno sviluppo sempre con la condizione (P4 della prima
+    revisione della PR #233: «non consegnare a metà» dell'avviso della tappa)."""
+    return "consegna_se_finito" if tappe else "consegna"
 
 
 def incompatibili(a: Spinta, b: Spinta) -> set:
@@ -177,19 +208,32 @@ def _passi_errore(errore: dict | None) -> list:
 
 # ─────────────────────────── le spinte (gradino 2: un messaggio) ───────────────────────────
 
-def ripetizioni(frase: str = "", errore: dict | None = None) -> Spinta:
+def ripetizioni(frase: str = "", errore: dict | None = None, nomi=None, tappe: bool = False,
+                ricerca: bool = False) -> Spinta:
     """Dopo una passata fermata per giro a vuoto (ripetizioni.py). Con l'ultimo errore noto
     (11/10, giro vero della DGX: un piano ripetuto una decina di volte, poi gioco.js riscritto
-    intero) i passi sono sul punto dell'errore. *[storico: «Ti ho fermato: stai ripetendo lo
-    stesso ragionamento… Non ripensarci: decidi adesso…» fino al 22/10]*"""
+    intero) i passi sono sul punto dell'errore. `nomi`: gli strumenti offerti (None: quelli del
+    codice); `ricerca`: i passi della ricerca (cercare, la relazione). *[storico: «Ti ho fermato:
+    stai ripetendo lo stesso ragionamento… Non ripensarci: decidi adesso…» fino al 22/10]*"""
     frase = frase if isinstance(frase, str) else ""
     fatto = ("La passata si è fermata: il ragionamento ripeteva la stessa frase"
              + (f" («{frase[:120]}»)" if frase else "") + " e nessuno strumento è partito.")
+    if ricerca:
+        # Nella ricerca (P3 della prima revisione della PR #233): gli strumenti di ricerca
+        # offerti e la consegna della relazione, mai scrivi_file né esegui_test
+        cerca = [n for n in ("biblioteca_cerca", "web_cerca", "web_leggi", "leggi_file")
+                 if nomi is None or n in set(nomi)]
+        cerca += sorted(n for n in (nomi or ()) if str(n).startswith("grafo_"))[:2]
+        passi = ([("cerca", " o ".join(cerca))] if cerca else []) + ["relazione"]
+        return _fai("agente_ragionamento_ripetuto", fatto, passi)
     if errore_detto(errore):
         return _fai("agente_ragionamento_ripetuto", fatto + " " + _fatto_errore(errore),
                     _passi_errore(errore), esclusi=("riscrivi",))
-    return _fai("agente_ragionamento_ripetuto", fatto,
-                [("leggi_punto", "leggi_file"), "scrivi", "test", "consegna"])
+    offerti = None if nomi is None else set(nomi)
+    passi = [p for p, n in ((("leggi_punto", "leggi_file"), "leggi_file"),
+                            ("scrivi", "scrivi_file"), ("test", "esegui_test"))
+             if offerti is None or n in offerti]
+    return _fai("agente_ragionamento_ripetuto", fatto, passi + [_consegna(tappe)])
 
 
 def riscritture(percorso: str, volte: int, errore: dict | None = None) -> Spinta:
@@ -234,14 +278,14 @@ def prosa_consegnabile() -> Spinta:
                 ["consegna_se_finito", "prossimo"])
 
 
-def prosa() -> Spinta:
+def prosa(tappe: bool = False) -> Spinta:
     """Una passata senza chiamate. *[storico: «Usa gli strumenti con chiamate di funzione vere:
     scrivi i file con scrivi_file, prova con esegui_test, e alla fine chiama consegna.» fino al
     22/10]*"""
     return _fai("agente_spinta_strumenti",
                 "Nessuno strumento chiamato in questa passata: il testo non scrive file e non "
                 "esegue test, servono chiamate di funzione vere.",
-                [("scrivi", "scrivi_file o modifica_file"), "test", "consegna"])
+                [("scrivi", "scrivi_file o modifica_file"), "test", _consegna(tappe)])
 
 
 def consegna() -> Spinta:
@@ -250,7 +294,7 @@ def consegna() -> Spinta:
     return _fai("agente_spinta_consegna",
                 "I tuoi test passano e i file che il lavoro chiede ci sono.",
                 ["consegna_se_finito", ("resta", "una riga su cosa manca e il prossimo "
-                                                 "strumento, se non lo è")])
+                                                 "strumento, se non è finito")])
 
 
 # L'avviso di chiusura (06/10), senza numeri (12/10 sera, ricerca 2026-10-12-flusso-agente-fasi
@@ -265,9 +309,9 @@ def fine(tipo: str = "codice") -> Spinta:
     if tipo == "tappa":
         return _fai(n, "Il lavoro continua da qui con i tuoi file, anche dopo questo giro.",
                     [("scrivi", "scrivi_file o modifica_file"), "test",
-                     ("consegna_se_finito", "consegna con cosa funziona e cosa manca, se il "
-                                            "lavoro è finito e i test passano"),
-                     ("resta", "con il lavoro a metà, una riga su cosa resta da fare")])
+                     "consegna_se_finito",
+                     ("resta", "con il lavoro a metà, una riga su cosa resta da fare")],
+                    esclusi=("consegna",))
     if tipo == "ricerca":
         return _fai(n, "È il momento di chiudere la ricerca con quello che c'è.", ["relazione"],
                     esclusi=("ricerche",))
@@ -277,8 +321,8 @@ def fine(tipo: str = "codice") -> Spinta:
     if tipo == "verde_tappa":
         return _fai(n, "I tuoi test passano e i file non sono cambiati da allora.",
                     ["consegna_se_finito", ("resta", "il prossimo passo e una riga su cosa "
-                                                     "resta da fare, se non lo è")],
-                    esclusi=("riscrivi",))
+                                                     "resta da fare, se non è finito")],
+                    esclusi=("riscrivi", "consegna"))
     return _fai(n, "È il momento di chiudere il lavoro con quello che c'è; con il codice "
                    "cambiato dall'ultimo esegui_test, prima i test.", ["test", "consegna"])
 
@@ -289,13 +333,13 @@ def fine(tipo: str = "codice") -> Spinta:
 SENZA_NOVITA_FILA = 6
 
 
-def senza_novita(n: int, errore: dict | None = None) -> Spinta:
+def senza_novita(n: int, errore: dict | None = None, tappe: bool = False) -> Spinta:
     fatto = (f"Le ultime {n} passate non hanno cambiato i file né l'esito dei test: i "
              "contenuti scritti erano già visti, o niente è stato scritto.")
     if errore_detto(errore):
         return _fai("agente_senza_novita", fatto + " " + _fatto_errore(errore),
-                    _passi_errore(errore) + ["consegna"], esclusi=("rileggi",))
-    return _fai("agente_senza_novita", fatto, ["modifica", "test", "consegna"],
+                    _passi_errore(errore) + [_consegna(tappe)], esclusi=("rileggi",))
+    return _fai("agente_senza_novita", fatto, ["modifica", "test", _consegna(tappe)],
                 esclusi=("rileggi",))
 
 
@@ -333,14 +377,14 @@ def nota_troncata(dove: str = "codice") -> Spinta:
     return _fai(n, TRONCATA_CHIAMATA, ["scrivi_pezzi", "modifica_righe"])
 
 
-def nota_rilettura(volte: int) -> Spinta:
+def nota_rilettura(volte: int, tappe: bool = False) -> Spinta:
     """La terza lettura di un file invariato (06/10; per file e contenuto dal 19/10, #185).
     *[storico: «…non rileggerlo né rileggere gli altri file. Scrivi adesso la versione corretta
     con scrivi_file ed esegui i test» fino al 22/10: contro «usa modifica_file, non riscrivere»
     delle altre]*"""
     return _fai("agente_rilettura",
                 f"hai letto questo file {volte} volte senza cambiarlo: il contenuto è qui.",
-                ["modifica", "test", "consegna"], esclusi=("rileggi",))
+                ["modifica", "test", _consegna(tappe)], esclusi=("rileggi",))
 
 
 def nota_riscrittura(nome: str, righe: int, cambiate: int) -> Spinta:
@@ -371,26 +415,59 @@ def nota_manifesto(errore: str) -> Spinta:
 
 # ─────────────────────────── la scala di una passata ───────────────────────────
 
+# Le volte che una spinta «una volta per lavoro» può essere lasciata: poi passa davanti (P5 della
+# prima revisione della PR #233: lasciata a ogni passata non usciva mai)
+LASCIATE_MAX = 2
+
+
 class Scala:
-    """Le spinte proposte in una passata; `scegli` dà la più alta (al più una) e le lasciate.
+    """Le spinte proposte in una passata e i fatti da dire. `messaggio` dà il testo (i fatti
+    delle lasciate, poi la spinta più alta, poi i fatti a parte), la spinta scelta e le lasciate.
     La stessa spinta proposta due volte vale una (l'ultima)."""
 
     def __init__(self):
         self.proposte: dict[str, Spinta] = {}
+        self.fatti: list[str] = []
 
     def proponi(self, s: Spinta | None) -> None:
         if s is not None:
             self.proposte[s.nome] = s
 
-    def __bool__(self):
-        return bool(self.proposte)
+    def fatto(self, testo: str) -> None:
+        """Un fatto che non è una spinta (i fatti del revisore «ora», #190): arriva sempre."""
+        if str(testo or "").strip():
+            self.fatti.append(str(testo).strip())
 
-    def scegli(self) -> tuple[Spinta | None, list]:
+    def __bool__(self):
+        return bool(self.proposte or self.fatti)
+
+    def scegli(self, lasciate_prima: dict | None = None) -> tuple[Spinta | None, list]:
+        """La spinta più alta e le lasciate. `lasciate_prima`: quante volte ognuna è già stata
+        lasciata nel lavoro; una «una volta» lasciata LASCIATE_MAX volte passa davanti."""
         if not self.proposte:
             return None, []
-        ordine = sorted(self.proposte.values(), key=lambda s: -s.gradino.posto)
+        conto = lasciate_prima or {}
+
+        def posto(s):
+            g = s.gradino
+            return g.posto + (1000 if g.una_volta and int(conto.get(s.nome, 0)) >= LASCIATE_MAX
+                              else 0)
+        ordine = sorted(self.proposte.values(), key=lambda s: -posto(s))
         self.proposte = {}
         return ordine[0], ordine[1:]
+
+    def messaggio(self, lasciate_prima: dict | None = None) -> tuple[str, Spinta | None, list]:
+        s, lasciate = self.scegli(lasciate_prima)
+        fatti = [x.fatto for x in lasciate if not x.gradino.una_volta and x.fatto]
+        parti = list(dict.fromkeys(f for f in fatti if not (s and f == s.fatto)))
+        if s is not None:
+            parti.append(s.testo)
+        testo = " ".join(parti)
+        extra = list(dict.fromkeys(self.fatti))
+        self.fatti = []
+        if extra:
+            testo = (testo + "\n\n" if testo else "") + " ".join(extra)
+        return testo, s, lasciate
 
 
 # ─────────────────────────── per la prova ───────────────────────────
@@ -402,19 +479,26 @@ PAROLE_VIETATE = (r"\bti ho fermato\b", r"\bripensar", r"\bsmetti\b", r"\bnon se
                   r"\bnon riscrivere\b", r"\bnon rileggerlo\b", r"\bsei incerto\b")
 
 
-def tutte(errore: dict | None = None) -> list[Spinta]:
-    """Ogni testo della scala, con e senza errore, per la prova."""
+def tutte(errore: dict | None = None, tappe: bool = False) -> list[Spinta]:
+    """Ogni testo della scala che può stare nello stesso lavoro, con e senza errore, per la
+    prova: `tappe` False il codice fuori da uno sviluppo e la ricerca, True il codice di uno
+    sviluppo (P4 della prima revisione della PR #233)."""
     e = errore or {"test": "test_x", "errore": "AssertionError: 1 != 2", "dove": "a.py:3"}
     out = []
     for err in (None, e):
-        out += [ripetizioni("una frase", err), ripetizioni("", err), riscritture("a.py", 3, err),
-                senza_novita(SENZA_NOVITA_FILA, err)]
-    out += [senza_strumenti(12000), senza_strumenti(12000, ["scrivi_file"]), prosa(),
-            prosa_consegnabile(), consegna()]
-    out += [fine(t) for t in ("codice", "tappa", "ricerca", "verde", "verde_tappa")]
-    out += [troncata(d) for d in ("codice", "ricerca_testo", "pensiero")]
-    out += [nota_troncata(d) for d in ("codice", "ricerca", "strumento")]
-    out += [nota_rilettura(3), nota_riscrittura("a.py", 40, 1),
+        out += [ripetizioni("una frase", err, tappe=tappe), ripetizioni("", err, tappe=tappe),
+                riscritture("a.py", 3, err), senza_novita(SENZA_NOVITA_FILA, err, tappe=tappe)]
+    out += [senza_strumenti(12000), senza_strumenti(12000, ["scrivi_file"]), prosa(tappe),
+            prosa_consegnabile(), consegna(), nota_rilettura(3, tappe), troncata("codice"),
+            nota_troncata("codice"), nota_riscrittura("a.py", 40, 1),
             nota_modifica_inversa("2 passate fa", "1 test su 1 non passavano"),
             nota_modifica_inversa("una passata fa"), nota_manifesto("manca il nome")]
+    if tappe:
+        out += [fine("tappa"), fine("verde_tappa")]
+    else:
+        out += [fine(t) for t in ("codice", "ricerca", "verde")]
+        out += [troncata(d) for d in ("ricerca_testo", "pensiero")]
+        out += [nota_troncata(d) for d in ("ricerca", "strumento")]
+        out += [ripetizioni("una frase", ricerca=True),
+                ripetizioni("", ricerca=True, nomi=["biblioteca_cerca", "consegna"])]
     return out
