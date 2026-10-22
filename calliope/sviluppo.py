@@ -1009,16 +1009,12 @@ class Sviluppi:
                           ": correzione senza un test che riproduce il problema"
                           if non_riprodotto else ""))
             item["messaggio"] = self.frase_pronto(sv, lav, altro)
-            # I test spariti dall'ultima tappa, detti dal codice (revisione della PR #179)
-            from .agenti.ciclo import frase_test_tolti
-            tolti = frase_test_tolti((getattr(lav, "risultato", None) or {}).get("test_tolti"))
-            if tolti:
-                item["messaggio"] = str(item["messaggio"]).rstrip() + " " + tolti
-            # I test indeboliti dalla prima esecuzione (22/10, #223), detti dal codice
-            from .agenti.fotografia_test import frase_voce
-            deboli = frase_voce((getattr(lav, "risultato", None) or {}).get("test_indeboliti"))
-            if deboli:
-                item["messaggio"] = str(item["messaggio"]).rstrip() + " " + deboli
+            # I test spariti dall'ultima tappa (revisione della PR #179) e quelli indeboliti dalla
+            # prima esecuzione (22/10, #223), detti dal codice con un solo «Attenzione»
+            from .agenti.fotografia_test import avvisi_voce
+            avvisi = avvisi_voce(getattr(lav, "risultato", None))
+            if avvisi:
+                item["messaggio"] = str(item["messaggio"]).rstrip() + " " + avvisi
             if non_riprodotto:
                 # «Non sono riuscita a riprodurre il problema» (decisione del 12/10, domanda 3
                 # della ricerca 2026-10-12-flusso-agente-fasi): non è «pronto», e la risposta
@@ -2538,7 +2534,7 @@ class Sviluppi:
         cercava la causa nel codice)."""
         c = {"quando": time.time(), "dati": str(dati or "")[:120], "ok": bool(ok),
              "esito": re.sub(r"\s+", " ", str(esito or "")).strip()[:200],
-             "versione": sv.versione}
+             "versione": sv.versione, "lavoro": sv.lavoro}
         # Il tipo (12/10): risposta, «non trovato», errore dell'estensione, fermata
         c["tipo"] = tipo if tipo in TIPI_COLLAUDO else ("risposta" if ok else "errore")
         if anteprima:

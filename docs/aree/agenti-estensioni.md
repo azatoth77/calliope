@@ -5004,4 +5004,68 @@ Verifica del 22/10 dei buchi della ricerca del 19/10
   fatto di `esegui_test`, la nota di scrittura, i file iniziali, il rapporto della consegna e il
   conto per nomi invece che per numero.
 - **Resta**: `estensione_gestisci` con `approva` detto direttamente non passa da
-  `sviluppo_passo`. Ha la frase di sfida e i test verdi, ma non la porta delle prove.
+  `sviluppo_passo`. Ha la frase di sfida e i test verdi, ma non la porta delle prove. *[storico:
+  vero fino alla prima revisione della PR #232, sotto: ora la porta c'è anche lì]*
+
+**Dopo la prima revisione della PR #232 (22/10).**
+- **N. 10, le prove della versione di adesso.** Anche le anteprime sono filtrate per versione:
+  un gioco visto alla versione 1 non è visto alla 2. Per un programma, che non ha versioni,
+  conta il lavoro. Il collaudo salva `lavoro`, e quelli del programma di prima della
+  correzione non valgono più.
+- **N. 10, `estensione_gestisci approva` dentro lo sviluppo.** `sviluppo.passo_interno` lo
+  tratta come un passo, quindi il modello poteva rispondere ad «attivala» con quel tool e
+  saltare la porta. Per un gioco puro con la voce sicura saltava anche la frase di sfida.
+  Adesso `Estensioni._approva` passa da `tools/sviluppo.porta_approvazione` quando c'è uno
+  sviluppo aperto sull'estensione, prima della sfida e prima della strada senza sfida.
+- **N. 10, la domanda per prima.** La porta sta in testa a `_revisione`. Prima veniva dopo il
+  confronto con la richiesta, che può durare `sviluppo_verifica_voce_s`, e la regola
+  `sviluppo_revisione_senza_collaudo` si contava due volte. «Gli esempi non sono stati
+  eseguiti» si dice solo se erano stati scritti; senza esempi la frase dice «non ci sono
+  esempi».
+- **N. 10, il sì sicuro, provato con la politica del turno vera.** Non vale come sì senza
+  prove un «sì» detto per «Lo chiudo?» o per «Vuoi attivarla?». Non vale nemmeno «Sì,
+  attivala.» senza nessuna proposta in sospeso, come dopo un riavvio.
+- **N. 7, niente accuse false a voce.** Le misure della revisione mostravano che riscritture
+  oneste finivano a voce come «indebolito». Erano i cicli, `subTest`, `parametrize`, i cicli
+  JavaScript e gli oggetti con `skip:`/`todo:` di un gioco o di una lista.
+  - A voce e nella revisione vanno solo tre segnali, che non hanno una spiegazione onesta:
+    - un test tolto senza un sostituto;
+    - un salto vero del runner;
+    - un controllo che non controlla niente: soli valori scritti, `True or …`, lo stesso
+      valore ai due lati, dopo un `return`, sotto `if False`, dentro un try che ingoia
+      l'AssertionError (Python con `ast`; in JavaScript il `return` in testa al test e
+      `if (false)`).
+  - Le asserzioni calate restano un fatto per l'agente, che le può spiegare nel riassunto.
+  - Un ciclo su valori scritti conta tante asserzioni quante sono le voci, e un
+    `parametrize` tanti test quanti sono i casi.
+  - In JavaScript un salto conta solo come `test.skip`/`it.skip`/`describe.skip` (o `.todo`),
+    come `t.skip()`/`t.todo()`, o come opzione `{ skip: … }` di una chiamata `test`. I
+    sottotest `t.test(…)` contano come test. I commenti si tolgono rispettando le stringhe
+    («"a//b"» resta).
+- **N. 7, le frasi.** Niente più «dalla prima prova», che si confondeva con il collaudo: la
+  frase dice «da quando ha eseguito i test la prima volta». Con i test tolti dall'ultima tappa
+  c'è un solo «Attenzione» (`fotografia_test.avvisi_voce`) e lo stesso test non si conta due
+  volte.
+- **N. 7, un file alla volta.** Anche un'esecuzione parziale di `esegui_test` fotografa il suo
+  file e lo confronta.
+- **N. 5, il ricollaudo.** Il motivo all'agente aggiunge «se il dato non esiste davvero, dillo
+  nel riassunto della consegna»: un «Non trovo nessun luogo chiamato…» può essere la
+  correzione onesta, e lo dice l'agente, non il codice.
+  - Sono vuote anche «Mi dispiace, nessuna fiera…», «Nessun evento trovato…» e «Purtroppo non
+    sono riuscita a trovare…»: una frase sola, in testa e senza un seguito (`esito_vuoto`).
+  - Non è vuota «Non ho trovato pioggia: sereno, 21 gradi.», anche con il solo `da_dire`: ha
+    un numero o qualcosa dopo i due punti. Non lo è nemmeno «Nessuna pioggia, cielo sereno».
+  - La regola `ricollaudo_esito_vuoto` si scrive in `sonde.esito_caso`.
+- **Le mutazioni sopravvissute alla prima revisione** (M1–M9) adesso hanno ognuna la sua prova:
+  - il controllo della domanda e quello di `tool_in_sospeso`;
+  - i collaudi di ogni versione;
+  - la frase nell'annuncio dei lavori, in quello dello sviluppo e nella revisione;
+  - il rapporto della tappa;
+  - la regola del ricollaudo;
+  - la sola lettura in `misura_cartella`.
+
+  In tutto la prova ha 39 mutazioni, e cadono tutte. Oltre alle 9 qui sopra, ce n'è almeno una
+  per ognuna delle correzioni di questa revisione (P1, P2, P5, P6, P7, P8, P9, P10), e le 14 di
+  prima sono riscritte sul codice nuovo. La prova conta 101 controlli.
+- **Prova cambiata:** `prova_sviluppo_giro4` approvava con `estensione_gestisci`, dentro lo
+  sviluppo e senza nessuna prova. Adesso ha un collaudo prima.

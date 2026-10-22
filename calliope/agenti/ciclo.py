@@ -1932,10 +1932,13 @@ class Agente:
                         else:
                             fila.pop(p, None)       # una correzione mirata: si riparte
                     elif name == "esegui_test":
-                        if not args.get("percorso") and isinstance(result.get("esito"), dict):
+                        if isinstance(result.get("esito"), dict):
                             # La fotografia dei test (22/10, #223, n. 7): alla prima
-                            # esecuzione; poi test, asserzioni e salti confrontati con lei
-                            debole = self._test_indeboliti(lav, sandbox, seg)
+                            # esecuzione; poi test, asserzioni e salti confrontati con lei.
+                            # Un'esecuzione di un file solo fotografa e confronta quel file
+                            # (revisione della PR #232: chi lancia un file alla volta)
+                            debole = self._test_indeboliti(lav, sandbox, seg,
+                                                           args.get("percorso") or None)
                             if debole:
                                 result = {**result, "test_indeboliti": debole}
                         for regola in regole_avvisi(result.get("uscita")):
@@ -2628,27 +2631,34 @@ class Agente:
         except Exception:  # noqa: BLE001 — nel dubbio niente spinta
             return False
 
-    def _cambi_test(self, lav: Lavoro, sandbox, seg: dict) -> list[dict]:
+    def _cambi_test(self, lav: Lavoro, sandbox, seg: dict, solo=None) -> list[dict]:
         """La fotografia dei test aggiornata (la prima volta con i file iniziali del lavoro) e i
-        cambi che indeboliscono rispetto a lei (agenti/fotografia_test.py). Mai un'eccezione."""
+        cambi che indeboliscono rispetto a lei (agenti/fotografia_test.py). `solo`: il file di
+        un'esecuzione parziale, l'unico che entra nella fotografia e si confronta. Mai
+        un'eccezione."""
         from . import fotografia_test as ft
         try:
             ora = ft.misura_cartella(sandbox)
+            if solo is not None:
+                solo = ft.normale(solo)
+                foto = ft.aggiorna(seg, {k: v for k, v in ora.items() if k == solo},
+                                   getattr(lav, "file_iniziali", None))
+                return ft.confronta(foto, ora, solo)
             foto = ft.aggiorna(seg, ora, getattr(lav, "file_iniziali", None))
             return ft.confronta(foto, ora)
         except Exception as e:  # noqa: BLE001 — una misura non ferma il lavoro
             self.log(f"[AGENTI] {lav.id}: fotografia dei test non fatta: {e}")
             return []
 
-    def _test_indeboliti(self, lav: Lavoro, sandbox, seg: dict) -> str:
+    def _test_indeboliti(self, lav: Lavoro, sandbox, seg: dict, solo=None) -> str:
         """Il fatto per il risultato di esegui_test, "" se i test non sono più deboli della
         fotografia. La regola `agente_test_indeboliti` una volta per ogni stato diverso."""
-        cambi = self._cambi_test(lav, sandbox, seg)
+        cambi = self._cambi_test(lav, sandbox, seg, solo)
         if not cambi:
             return ""
         from . import fotografia_test as ft
-        chiave = sorted((c["file"], c["test_meno"], c["asserzioni_meno"], c["skip_piu"])
-                        for c in cambi)
+        chiave = sorted((c["file"], c["test_meno"], c["asserzioni_meno"], c["skip_piu"],
+                         c["banali_piu"]) for c in cambi)
         if seg.get("indeboliti_detti") != [list(x) for x in chiave]:
             seg["indeboliti_detti"] = [list(x) for x in chiave]
             from ..sonde import nota as nota_regola

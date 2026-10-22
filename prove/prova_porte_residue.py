@@ -115,15 +115,17 @@ def prova_ricollaudo():
 
 # ═══════════════════════════ 2. revisione senza prove ═══════════════════════════
 
-def al_collaudo(tmp, iso, esempi=None, test_passano=True):
+def al_collaudo(tmp, iso, esempi=None, test_passano=True, **risultato):
     cfg, reg, ctx, est, svc = PS.ambiente(tmp, iso)
     P.installa(est, PS.M1, PS.CODICE1)
     _, _, lav = PS.apri_e_avvia(ctx, est, svc)
     lav.accettazione = esempi if esempi is not None else {"stato": "non_fatta",
                                                          "perche": "tempo scaduto"}
     n = PS.candidata(est, test_passano=test_passano)
-    svc.finisci(lav, "fatto", estensione={"nome": "meteo_citta", "versione": n})
+    item = svc.finisci(lav, "fatto", estensione={"nome": "meteo_citta", "versione": n},
+                       **risultato)
     sv = svc.sviluppi.corrente("u1")
+    sv.annuncio = (item or {}).get("messaggio", "")
     ctx.regole = []
     return reg, ctx, est, svc, sv, lav
 
@@ -146,9 +148,11 @@ def prova_senza_prove(tmp: Path, iso):
     sosp = out.get("in_sospeso") or {}
     verifica("senza collaudo e con gli esempi «non_fatta»: niente revisione, la ragione e la "
              "domanda", sv.fase == "collaudo" and f == (
-                 "Non c'è nessuna prova: non l'hai provata e gli esempi non sono stati "
-                 "eseguiti. Vado avanti lo stesso?")
-             and "sviluppo_senza_prove_chiesto" in ctx.regole, f"{sv.fase} {f}")
+                 "Non c'è nessuna prova: non l'hai provata e non ci sono esempi. Vado avanti "
+                 "lo stesso?")
+             and "sviluppo_senza_prove_chiesto" in ctx.regole
+             # la domanda viene prima della revisione: la sua regola si conta una volta, al sì
+             and "sviluppo_revisione_senza_collaudo" not in ctx.regole, f"{sv.fase} {f}")
     verifica("…la domanda in sospeso verso sviluppo_passo avanti",
              sosp.get("tool") == "sviluppo_passo" and sosp.get("argomenti") == {
                  "azione": "avanti"} and sosp.get("domanda") == "Vado avanti lo stesso?"
@@ -255,7 +259,7 @@ def prova_misura():
     m = ft.misura("test_programma.py", PY)
     verifica("Python: due test, due asserzioni, nessun salto",
              m == {"test": 2, "nomi": ["P.test_somma", "P.test_zero"], "asserzioni": 2,
-                   "skip": 0}, str(m))
+                   "banali": 0, "skip": 0}, str(m))
     casi = [
         ("assertEqual → assertTrue(True)",
          PY.replace("self.assertEqual(somma(2, 3), 5)", "self.assertTrue(True)"),
@@ -318,8 +322,8 @@ def prova_misura():
         "test_programma.py", PY.replace("self.assertEqual(somma(2, 3), 5)",
                                         "self.skipTest('x')"))}))
     verifica("la frase a voce: i conti, senza nomi di file",
-             frase == "Attenzione: dalla prima prova l'agente ha indebolito i suoi test: un "
-                      "controllo in meno e un test saltato." and ".py" not in frase, frase)
+             frase == "Attenzione: da quando ha eseguito i test la prima volta, l'agente li ha "
+                      "indeboliti: un test saltato." and ".py" not in frase, frase)
 
 
 def prova_ciclo(tmp: Path):
@@ -395,6 +399,293 @@ def prova_ciclo(tmp: Path):
              es and "un'asserzione in meno" in str(es[0].get("test_indeboliti")), str(es)[:300])
 
 
+# ═══════════════════ dalla prima revisione della PR #232 ═══════════════════
+
+def prova_ricollaudo_2():
+    sezione("1b. ricollaudo: le frasi vuote e quelle con un dato (revisione della PR #232)")
+    for testo in ("Non trovo nessun luogo chiamato Borgo Alto.",
+                  "Mi dispiace, nessuna fiera a Borgo Alto.",
+                  "Nessun evento trovato a Borgo Alto.",
+                  "Purtroppo non sono riuscita a trovare la fiera."):
+        ok, motivo = sonde.va(caso(), esito({"da_dire": testo}))
+        verifica(f"«{testo}» dopo un errore: vuoto", ok is False and motivo == sonde.MOTIVO_VUOTO,
+                 f"{ok} {motivo}")
+    verifica("…e il motivo dice la via onesta (il dato che non esiste, nel riassunto)",
+             "se il dato non esiste davvero, dillo nel riassunto" in sonde.MOTIVO_VUOTO)
+    for testo in ("Non ho trovato pioggia: sereno, 21 gradi.",
+                  "Nessuna pioggia, cielo sereno su Borgo Alto.",
+                  "La fiera di Borgo Alto è il 12 novembre."):
+        ok, motivo = sonde.va(caso(), esito({"da_dire": testo}))
+        verifica(f"contrario: «{testo}» (solo da_dire) è pieno", ok is True, f"{ok} {motivo}")
+    from types import SimpleNamespace
+    lav = SimpleNamespace(id="L5", segnali={})
+    sonde.esito_caso(lav, caso(), esito({"da_dire": "Non ho trovato la fiera."}))
+    sonde.esito_caso(lav, caso(), esito({"da_dire": "Il 12 novembre, in piazza."}))
+    verifica("la regola ricollaudo_esito_vuoto nel registro del lavoro, una volta",
+             (lav.segnali.get("regole") or {}).get("ricollaudo_esito_vuoto") == 1,
+             str(lav.segnali))
+
+
+def prova_si_sicuro(tmp: Path, iso):
+    sezione("2b. il sì vale solo per «Vado avanti lo stesso?» (revisione della PR #232)")
+    from calliope import politica
+    reg, ctx, est, svc, sv, lav = al_collaudo(tmp / "si", iso)
+    P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=5)
+    for domanda in ("Lo chiudo?", "Vuoi attivarla?"):
+        ctx.tool_in_sospeso = "sviluppo_passo"
+        ctx.politica = politica.Turno(testo="Sì.", in_sospeso="sviluppo_passo",
+                                      domanda_sospeso=domanda)
+        ctx.user_text = "Sì."
+        out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=6)
+        verifica(f"un «sì» detto per «{domanda}» non è il sì senza prove",
+                 sv.fase == "collaudo" and PS.detta(out).endswith("Vado avanti lo stesso?")
+                 and "sviluppo_senza_prove_confermato" not in ctx.regole, PS.detta(out))
+    ctx.tool_in_sospeso = None
+    ctx.politica = politica.Turno(testo="Sì, attivala.")
+    ctx.user_text = "Sì, attivala."
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=7)
+    verifica("«Sì, attivala.» senza nessuna proposta in sospeso (dopo un riavvio): la domanda",
+             sv.fase == "collaudo" and PS.detta(out).endswith("Vado avanti lo stesso?"),
+             PS.detta(out))
+    ctx.tool_in_sospeso = "sviluppo_passo"
+    ctx.politica = politica.Turno(testo="Sì, vai.", in_sospeso="sviluppo_passo",
+                                  domanda_sospeso="Vado avanti lo stesso?")
+    ctx.user_text = "Sì, vai."
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=8)
+    verifica("contrario: il sì a «Vado avanti lo stesso?» con la politica del turno: avanti",
+             sv.fase == "revisione" and "sviluppo_senza_prove_confermato" in ctx.regole,
+             PS.detta(out))
+    ctx.politica = None
+    niente(ctx)
+
+
+def prova_versioni(tmp: Path, iso):
+    sezione("2c. le prove della versione di adesso (revisione della PR #232)")
+    reg, ctx, est, svc, sv, lav = al_collaudo(tmp / "ant", iso)
+    sv.collaudi.append({"quando": 1.0, "dati": "", "ok": True, "esito": "visto",
+                        "anteprima": True, "versione": (sv.versione or 1) - 1})
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=5)
+    verifica("un'anteprima della versione di prima non è una prova di questa",
+             sv.fase == "collaudo" and PS.detta(out).endswith("Vado avanti lo stesso?"),
+             PS.detta(out))
+    reg, ctx, est, svc, sv, lav = al_collaudo(tmp / "vecchio", iso)
+    sv.collaudi.append({"quando": 1.0, "dati": "Bergamo", "ok": True, "esito": "sereno",
+                        "versione": (sv.versione or 1) - 1})
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=5)
+    verifica("…né un collaudo della versione di prima",
+             sv.fase == "collaudo" and PS.detta(out).endswith("Vado avanti lo stesso?"),
+             PS.detta(out))
+    reg, ctx, est, svc, sv, lav = al_collaudo(tmp / "scritti", iso, {"stato": "pronta",
+                                                                     "file": "x"})
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=5)
+    verifica("gli esempi scritti e non eseguiti: «gli esempi non sono stati eseguiti»",
+             "non l'hai provata e gli esempi non sono stati eseguiti." in PS.detta(out),
+             PS.detta(out))
+    # Un programma corretto: i collaudi del lavoro di prima non valgono
+    cfg, reg, ctx, est, svc = PS.ambiente(tmp / "prog", iso)
+    svs = svc.sviluppi
+    sv = svs.apri("u1", "Dario", "programma", "somma", titolo="somma")
+    cart = tmp / "prog" / "ris"
+    cart.mkdir(parents=True)
+    (cart / "somma.py").write_text("print(3 + 5)\n", encoding="utf-8")
+    sv.cartella, sv.lavoro = str(cart), "L2"
+    sv.collaudi.append({"quando": 1.0, "dati": "3 e 5", "ok": True, "esito": "8",
+                        "versione": None, "lavoro": "L1"})
+    svs.passa(sv, "collaudo")
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=3)
+    verifica("un programma corretto: il collaudo del programma di prima non vale",
+             sv.fase == "collaudo" and PS.detta(out).endswith("Vado avanti lo stesso?"),
+             PS.detta(out))
+    sv.collaudi.append({"quando": 2.0, "dati": "3 e 5", "ok": True, "esito": "8",
+                        "versione": None, "lavoro": "L2"})
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=4)
+    verifica("contrario: un collaudo del programma corretto vale", sv.fase == "revisione",
+             PS.detta(out))
+    sv3 = svs.apri("u2", "Ada", "programma", "x", titolo="x")
+    sv3.lavoro = "L7"
+    svs.collaudo(sv3, "1", True, "uno")
+    verifica("il collaudo salvato dice il lavoro", sv3.collaudi[-1].get("lavoro") == "L7",
+             str(sv3.collaudi[-1]))
+
+
+def prova_approva(tmp: Path, iso):
+    sezione("2d. estensione_gestisci approva dentro lo sviluppo (revisione della PR #232)")
+    reg, ctx, est, svc, sv, lav = al_collaudo(tmp / "approva", iso)
+    prima = est.archivio.voce("meteo_citta")["attiva"]
+    ctx.speaker_ctx.sfida_superata = True
+    out = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "approva", "nome": "meteo_citta"},
+                   turno=5)
+    ctx.speaker_ctx.sfida_superata = False
+    verifica("senza prove, anche con la frase di sfida superata: la domanda, non approvata",
+             PS.detta(out).endswith("Vado avanti lo stesso?")
+             and est.archivio.voce("meteo_citta")["attiva"] == prima
+             and "sviluppo_senza_prove_chiesto" in ctx.regole, PS.detta(out))
+    P.chiama(reg, ctx, "sviluppo_collauda", {"dati": "Bergamo"}, turno=6)
+    out = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "approva", "nome": "meteo_citta"},
+                   turno=7)
+    verifica("contrario: con un collaudo, l'approvazione di sempre (la frase di sfida)",
+             "ripeti" in PS.detta(out) and not PS.detta(out).endswith("Vado avanti lo stesso?"),
+             PS.detta(out))
+
+
+DEBOLE = [{"file": "test_meteo.py", "tolto": False, "test_meno": 0, "asserzioni_meno": 0,
+           "skip_piu": 0, "banali_piu": 1, "nomi": []}]
+CALO = [{"file": "test_meteo.py", "tolto": False, "test_meno": 0, "asserzioni_meno": 3,
+         "skip_piu": 0, "banali_piu": 0, "nomi": []}]
+FRASE = "Attenzione: da quando ha eseguito i test la prima volta, l'agente li ha indeboliti"
+
+
+def prova_voce(tmp: Path, iso):
+    sezione("3c. i test indeboliti a voce: annuncio, revisione, rapporto (revisione della PR #232)")
+    reg, ctx, est, svc, sv, lav = al_collaudo(tmp / "voce", iso, test_indeboliti=DEBOLE)
+    verifica("l'annuncio dello sviluppo lo dice (una asserzione che non controlla niente)",
+             FRASE + ": un controllo che non controlla niente." in sv.annuncio, sv.annuncio)
+    P.chiama(reg, ctx, "sviluppo_collauda", {"dati": "Bergamo"}, turno=5)
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=6)
+    verifica("…e la revisione", FRASE in PS.detta(out), PS.detta(out))
+    reg, ctx, est, svc, sv, lav = al_collaudo(tmp / "calo", iso, test_indeboliti=CALO)
+    verifica("contrario: le asserzioni calate (un ciclo, un parametrize) non vanno a voce",
+             "indebolit" not in sv.annuncio, sv.annuncio)
+    from calliope.agenti import fotografia_test as F
+    unite = F.avvisi_voce({"test_tolti": {"nomi": ["test_zero"], "meno": 1},
+                           "test_indeboliti": [{**DEBOLE[0], "test_meno": 1, "skip_piu": 1}]})
+    verifica("con i test tolti dall'ultima tappa: un solo «Attenzione», il test non contato due "
+             "volte", unite.count("Attenzione") == 1 and "In più, da quando ha eseguito i test "
+             "la prima volta: un test saltato e un controllo che non controlla niente." in unite
+             and "test tolto" not in unite.split("In più")[1], unite)
+    verifica("niente «dalla prima prova» (si confonde con il collaudo)",
+             "prima prova" not in F.frase_voce(DEBOLE))
+    # L'annuncio dei lavori fuori da uno sviluppo (agenti/servizio.Lavori._annuncia)
+    from calliope.agenti import Lavori, carica
+    from calliope.agenti.ciclo import Lavoro
+    from calliope.config import Config
+    cfg = Config()
+    for k in ("risultati", "sandbox", "modelli"):
+        setattr(cfg, f"agenti_{k}", str(tmp / "lavori-annuncio" / k))
+    cfg.agenti_sandbox_motore = "processo"
+    cfg.agenti_url, cfg.agenti_modello = "http://127.0.0.1:9", "agente-finto"
+    cfg.llm_native_url = "http://127.0.0.1:9"
+    lavori = Lavori(cfg, carica(cfg), log=lambda *a: None)
+    lavori.sviluppi = None
+    lv = Lavoro("L9", "codice", "una funzione che somma")
+    lv.stato = "fatto"
+    lv.risultato = {"esito": "fatto", "riassunto": "Fatto.", "cartella": str(tmp),
+                    "test_indeboliti": DEBOLE}
+    lavori._annuncia(lv)
+    item = lavori.done.get_nowait()
+    verifica("l'annuncio di un lavoro (Lavori) lo dice", FRASE in item["messaggio"],
+             item["messaggio"])
+
+
+def prova_misura_2():
+    sezione("3d. riscritture oneste e salti veri (revisione della PR #232)")
+    quattro = ("import unittest\nfrom m import f\n\n\nclass P(unittest.TestCase):\n"
+               "    def test_f(self):\n"
+               "        self.assertEqual(f(1), 1)\n        self.assertEqual(f(2), 4)\n"
+               "        self.assertEqual(f(3), 9)\n        self.assertEqual(f(4), 16)\n")
+    ciclo = ("import unittest\nfrom m import f\n\n\nclass P(unittest.TestCase):\n"
+             "    def test_f(self):\n        for x, y in [(1, 1), (2, 4), (3, 9), (4, 16)]:\n"
+             "            with self.subTest(x=x):\n                self.assertEqual(f(x), y)\n")
+    tre = ("from m import f\n\n\ndef test_uno():\n    assert f(1) == 1\n\n\n"
+           "def test_due():\n    assert f(2) == 4\n\n\ndef test_tre():\n    assert f(3) == 9\n")
+    param = ("import pytest\nfrom m import f\n\n\n@pytest.mark.parametrize('x,y', "
+             "[(1, 1), (2, 4), (3, 9)])\ndef test_f(x, y):\n    assert f(x) == y\n")
+    for nome, prima, dopo in [("quattro assertEqual in un ciclo con subTest", quattro, ciclo),
+                              ("tre test in un parametrize", tre, param)]:
+        verifica(f"contrario: {nome}: niente", ft.nota_scrittura("test_m.py", prima, dopo) == "",
+                 ft.nota_scrittura("test_m.py", prima, dopo))
+    js = ('const test = require("node:test");\nconst assert = require("node:assert");\n'
+          'test("lista", () => { assert.deepStrictEqual(aggiungi([], "pane"), ["pane"]); });\n')
+    for nome, extra in [("un oggetto con «todo» di un'app di liste",
+                         'test("todo", () => { assert.ok(aggiungi(l, { todo: "latte" })); });\n'),
+                        ("«salta il turno» di un gioco",
+                         'test("salta", () => { assert.ok(mossa(stato(), { skip: true })); });\n'),
+                        ("un metodo skip del gioco",
+                         'test("salta 2", () => { assert.ok(gioco.skip(1)); });\n')]:
+        m = ft.misura("a.test.js", js + extra)
+        verifica(f"contrario JavaScript: {nome}: nessun salto", m["skip"] == 0, str(m))
+    for nome, dopo in [
+            ("t.skip() nel test", js.replace("() => {", "(t) => { t.skip();")),
+            ("{ todo: true } nelle opzioni", js.replace('test("lista", ', 'test("lista", '
+                                                        '{ todo: true }, ')),
+            ("describe.skip", js + 'describe.skip("tutto", () => {});\n')]:
+        verifica(f"JavaScript, {nome}: un salto vero", ft.misura("a.test.js", dopo)["skip"] == 1,
+                 str(ft.misura("a.test.js", dopo)))
+    for nome, dopo in [
+            ("return in testa (Python)", PY.replace(
+                "    def test_somma(self):\n", "    def test_somma(self):\n        return\n")),
+            ("if False (Python)", PY.replace("        self.assertEqual(somma(2, 3), 5)",
+                                             "        if False:\n"
+                                             "            self.assertEqual(somma(2, 3), 5)")),
+            ("try che ingoia l'AssertionError", PY.replace(
+                "        self.assertEqual(somma(2, 3), 5)",
+                "        try:\n            self.assertEqual(somma(2, 3), 5)\n"
+                "        except AssertionError:\n            pass")),
+            ("True or …", PY.replace("self.assertEqual(somma(2, 3), 5)",
+                                     "self.assertTrue(True or somma(2, 3) == 5)")),
+            ("lo stesso valore ai due lati", PY.replace("self.assertEqual(somma(2, 3), 5)",
+                                                        "self.assertEqual(somma(2, 3), "
+                                                        "somma(2, 3))"))]:
+        cambi = ft.confronta({"t.py": ft.misura("test_programma.py", PY)},
+                             {"t.py": ft.misura("test_programma.py", dopo)})
+        verifica(f"{nome}: un controllo che non controlla niente, detto a voce",
+                 "un controllo che non controlla niente" in ft.frase_voce(cambi), str(cambi))
+    for nome, dopo in [
+            ("return in testa (JavaScript)", JS.replace('test("somma", () => { ',
+                                                       'test("somma", () => { return; ')),
+            ("if (false) (JavaScript)", JS.replace("assert.strictEqual(somma(2, 3), 5);",
+                                                   "if (false) { assert.strictEqual(somma(2, 3)"
+                                                   ", 5); }"))]:
+        cambi = ft.confronta({"t.js": ft.misura("a.test.js", JS)},
+                             {"t.js": ft.misura("a.test.js", dopo)})
+        verifica(f"{nome}: detto", "un controllo che non controlla niente"
+                 in ft.frase_voce(cambi), str(cambi))
+    verifica("«//» dentro una stringa non taglia la riga",
+             ft.misura("a.test.js", 'test("u", () => { assert.strictEqual(url("a//b"), 1); '
+                                    'assert.ok(f(2)); });\n')["asserzioni"] == 2)
+    verifica("i sottotest t.test(…) contano come test",
+             ft.misura("a.test.js", 'test("p", async (t) => { await t.test("a", () => '
+                                    '{ assert.ok(f(1)); }); });\n')["test"] == 2)
+    calo = ft.confronta({"t.py": ft.misura("test_programma.py", PY)},
+                        {"t.py": ft.misura("test_programma.py", PY.replace(
+                            "        self.assertEqual(somma(0, 0), 0)\n", "        pass\n"))})
+    verifica("un'asserzione tolta: un fatto per l'agente, non a voce",
+             calo and calo[0]["asserzioni_meno"] == 1 and ft.frase_voce(calo) == ""
+             and "un'asserzione in meno" in ft.fatto_per_agente(calo), str(calo))
+
+
+def prova_ciclo_2(tmp: Path):
+    sezione("3e. nel ciclo: l'esecuzione di un file solo, la tappa, la sola lettura")
+    lav, ris, log, cli, sb = SO.gira(tmp, "parziale", [
+        [SO.scrivi("programma.py", GIUSTO), SO.scrivi("test_programma.py", PY)],
+        [{"name": "esegui_test", "arguments": {"percorso": "test_programma.py"}}],
+        [SO.modifica("test_programma.py", "self.assertEqual(somma(2, 3), 5)",
+                     "self.skipTest('dopo')")],
+        [{"name": "esegui_test", "arguments": {"percorso": "test_programma.py"}}],
+        [SO.CONSEGNA]])
+    es = SO.risultati(lav, "esegui_test")
+    verifica("chi lancia un file alla volta: la fotografia del file e il fatto dopo",
+             len(es) == 2 and "test_indeboliti" not in es[0]
+             and "un test saltato in più" in str(es[1].get("test_indeboliti"))
+             and ris.get("test_indeboliti"), str(es)[:300])
+    lav, ris, log, cli, sb = SO.gira(tmp, "tappa", [
+        [SO.scrivi("programma.py", GIUSTO), SO.scrivi("test_programma.py", PY)],
+        [SO.ESEGUI],
+        [SO.modifica("test_programma.py", "self.assertEqual(somma(2, 3), 5)",
+                     "self.assertTrue(True)")],
+        [SO.ESEGUI], [SO.ESEGUI], [SO.ESEGUI], [SO.ESEGUI]], max_passi=5, tappe=True)
+    verifica("alla tappa: i test indeboliti nel rapporto",
+             ris.get("esito") == "tappa" and ris.get("test_indeboliti")
+             and ris["test_indeboliti"][0]["banali_piu"] == 1, str(ris)[:300])
+    sb = SO.G.sandbox(tmp, "sola")
+    sb.scrivi("test_calliope.py", PY)
+    sb.scrivi("test_mio.py", PY)
+    sb.sola_lettura.add("test_calliope.py")
+    m = ft.misura_cartella(sb)
+    verifica("i file in sola lettura (di Calliope) non si fotografano",
+             "test_calliope.py" not in m and "test_mio.py" in m, str(list(m)))
+
+
 def main():
     tmp = Path(tempfile.mkdtemp(prefix="calliope-porte-residue-"))
     os.environ.setdefault("CALLIOPE_CONFIG_LOCALE", str(tmp / "nessuno.yaml"))
@@ -404,9 +695,16 @@ def main():
     iso = P.Isolamento("docker", "docker finto", True, "", P.IMMAGINE, P.FINTO)
     try:
         prova_ricollaudo()
+        prova_ricollaudo_2()
         prova_senza_prove(tmp / "senza_prove", iso)
+        prova_si_sicuro(tmp / "si_sicuro", iso)
+        prova_versioni(tmp / "versioni", iso)
+        prova_approva(tmp / "approva", iso)
         prova_misura()
+        prova_misura_2()
+        prova_voce(tmp / "voce", iso)
         prova_ciclo(tmp / "ciclo")
+        prova_ciclo_2(tmp / "ciclo2")
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("\nTutto bene." if not errori else f"\n{errori} errori.")

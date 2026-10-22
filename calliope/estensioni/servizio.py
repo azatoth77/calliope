@@ -891,6 +891,13 @@ class Estensioni:
         n = self.archivio.candidata(nome)
         if n is None:
             return _final("Non c'è nessuna versione da approvare.", ok=False, fatto=NIENTE)
+        # Dentro uno sviluppo aperto su di lei, l'approvazione passa dalla porta delle prove
+        # (22/10, #223, revisione della PR #232: tools/sviluppo.porta_approvazione), prima
+        # della frase di sfida e prima della strada senza sfida di un gioco puro
+        from ..tools.sviluppo import porta_approvazione
+        porta = porta_approvazione(ctx, getattr(self, "sviluppi", None), nome)
+        if porta is not None:
+            return porta
         ver = self.archivio.versione(nome, n)
         # Con il titolo dato dalla persona, se l'ha rinominata (vedi `revisione`)
         m = self.archivio.manifesto(nome, n) or ver["manifesto"]

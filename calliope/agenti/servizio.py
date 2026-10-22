@@ -2156,17 +2156,13 @@ class Lavori:
                     self.log(f"[AGENTI] scheda non inviata: {e}")
         who = f"{lav.persona_nome}, " if lav.persona_nome else ""
         msg = who + text if who else text[0].upper() + text[1:]
-        # I test spariti dall'ultima tappa, detti dal codice (revisione della PR #179, #174)
-        from .ciclo import frase_test_tolti
-        tolti = frase_test_tolti((lav.risultato or {}).get("test_tolti"))
-        if tolti:
-            msg = msg.rstrip() + " " + tolti
-        # I test indeboliti dalla prima esecuzione (22/10, #223, agenti/fotografia_test.py),
-        # detti dal codice e senza nomi di file
-        from .fotografia_test import frase_voce
-        deboli = frase_voce((lav.risultato or {}).get("test_indeboliti"))
-        if deboli:
-            msg = msg.rstrip() + " " + deboli
+        # I test spariti dall'ultima tappa (revisione della PR #179, #174) e quelli indeboliti
+        # dalla prima esecuzione (22/10, #223, agenti/fotografia_test.py), detti dal codice con
+        # un solo «Attenzione» e senza nomi di file
+        from .fotografia_test import avvisi_voce
+        avvisi = avvisi_voce(lav.risultato)
+        if avvisi:
+            msg = msg.rstrip() + " " + avvisi
         # Gli esempi di accettazione tolti dal revisore (20/10, #190), detti nel rapporto
         from .revisore import frase_esempi_tolti
         r = lav.risultato or {}
