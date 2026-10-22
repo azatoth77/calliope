@@ -119,6 +119,20 @@ def _decoratore_salta(d) -> bool:
     return False
 
 
+def _decoratore_certo(d) -> bool:
+    """Un salto senza condizione (terza revisione della PR #232: `@skipIf(sys.platform == …)`
+    sulla DGX può girare, e a voce non si dice): @unittest.skip, @expectedFailure,
+    @pytest.mark.skip, @pytest.mark.xfail senza la condizione."""
+    if not _decoratore_salta(d):
+        return False
+    ultimo = _puntato(d.func if isinstance(d, ast.Call) else d).rsplit(".", 1)[-1]
+    if ultimo in ("skipIf", "skipUnless", "skipif"):
+        return False
+    if ultimo == "xfail" and isinstance(d, ast.Call) and d.args:
+        return False
+    return True
+
+
 def _chiamata_salta(n: ast.Call) -> bool:
     """`self.skipTest(…)` o `pytest.skip(…)`: non un `p.skip()` di una partita."""
     f = n.func
@@ -153,6 +167,8 @@ class _Conto:
         self.asserzioni = 0
         self.banali = 0
         self.salti = 0
+        self.salti_certi = 0          # fuori da ogni if: il test non gira di sicuro
+        self.cond = 0
 
     def chiamata(self, n: ast.Call, morto: bool, molt: int):
         nome = _nome_chiamata(n.func)
@@ -167,6 +183,7 @@ class _Conto:
                 self.asserzioni += molt
         elif _chiamata_salta(n):
             self.salti += 1
+            self.salti_certi += self.cond == 0
 
     def espressione(self, nodo, morto: bool, molt: int):
         for x in ast.walk(nodo):
@@ -193,6 +210,7 @@ class _Conto:
             e = st.exc.func if isinstance(st.exc, ast.Call) else st.exc
             if _nome_chiamata(e) in ("SkipTest", "Skipped"):
                 self.salti += 1
+                self.salti_certi += self.cond == 0
             return
         if isinstance(st, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             m = 1
@@ -206,6 +224,14 @@ class _Conto:
             vero = _vero(st.test)
             self.blocco(st.body, morto or not vero, molt)
             self.blocco(st.orelse, morto or vero, molt)
+            return
+        if isinstance(st, (ast.If, ast.While)):
+            # Sotto una condizione un salto può non scattare (sulla DGX il test gira)
+            self.espressione(st.test, morto, molt)
+            self.cond += 1
+            self.blocco(st.body, morto, molt)
+            self.blocco(st.orelse, morto, molt)
+            self.cond -= 1
             return
         if isinstance(st, (ast.For, ast.AsyncFor)):
             self.espressione(st.iter, morto, molt)
@@ -256,13 +282,15 @@ def misura_python(testo: str) -> dict | None:
                 n_test += casi
                 c = _Conto()
                 c.blocco(n.body, False, 1)
+                # «s»: un salto senza condizione (per la voce); i condizionali restano nei
+                # conti per l'agente
                 per_test[n.name] = {"a": c.asserzioni, "b": c.banali,
-                                    "s": salta_classe or c.salti > 0 or any(
-                                        _decoratore_salta(d) for d in n.decorator_list)}
+                                    "s": salta_classe or c.salti_certi > 0 or any(
+                                        _decoratore_certo(d) for d in n.decorator_list)}
     visita_funzioni(albero.body)
     for n in albero.body:
         # una classe saltata intera: tutti i suoi test sono saltati
-        if isinstance(n, ast.ClassDef) and any(_decoratore_salta(d) for d in n.decorator_list):
+        if isinstance(n, ast.ClassDef) and any(_decoratore_certo(d) for d in n.decorator_list):
             for f in n.body:
                 if isinstance(f, (ast.FunctionDef, ast.AsyncFunctionDef)) and f.name in per_test:
                     per_test[f.name]["s"] = True
@@ -282,6 +310,8 @@ _SOTTOTEST_JS = re.compile(r"(?<![\w.$])(?:t|ctx|context)\s*\.\s*test\s*\(\s*([\
 _TEST_SALTATO_JS = re.compile(r"(?<![\w.$])(?:test|it)\s*\.\s*(?:skip|todo)\s*\(\s*([\"'`])"
                               r"(.*?)(?<!\\)\1", re.S)
 _DESCRIBE_SALTATO_JS = re.compile(r"(?<![\w$.])describe\s*\.\s*(?:skip|todo)\s*\(")
+# Un salto senza condizione: { skip: true } o { skip: "motivo" }, non { skip: !process.env.X }
+_SALTO_OPZIONE_CERTO = re.compile(r"(?<![\w$])(?:skip|todo)\s*:\s*(?:true\b|[\"'`])")
 _SALTO_OPZIONE = re.compile(r"(?<![\w$])(?:skip|todo)\s*:(?!\s*(?:false\b|0\b|\"\"|''))")
 _ASSERT_JS = re.compile(r"(?<![\w$.])(?:(?:t|ctx|context)\s*\.\s*)?"
                         r"(?:assert(?:\s*\.\s*\w+)?|expect)\s*\(")
@@ -383,7 +413,7 @@ def _test_js(t: str) -> list[dict]:
     for saltato, regex in ((False, _TEST_JS), (False, _SOTTOTEST_JS), (True, _TEST_SALTATO_JS)):
         for m in regex.finditer(t):
             voce = {"nome": m.group(2).strip()[:120], "saltato": saltato, "inizio": None,
-                    "fine": None, "param": None, "per_nome": saltato}
+                    "fine": None, "param": None, "per_nome": saltato, "certo": saltato}
             c = _CORPO_JS.search(t, m.end())
             prima = t[m.end():c.end()] if c is not None else ""
             # La callback è di questo test solo se fra il nome e lei c'è al più un oggetto di
@@ -397,8 +427,30 @@ def _test_js(t: str) -> list[dict]:
                     voce["param"] = p.group(1) or p.group(2) or p.group(3)
                 if _SALTO_OPZIONE.search(prima):
                     voce["saltato"] = True
+                    voce["certo"] = bool(_SALTO_OPZIONE_CERTO.search(prima))
             out.append(voce)
     return out
+
+
+def _profondita_js(testo: str, fino: int) -> int:
+    """Le graffe aperte prima di `fino`, fuori dalle stringhe."""
+    prof, i, apici = 0, 0, None
+    while i < fino:
+        c = testo[i]
+        if apici:
+            if c == "\\":
+                i += 2
+                continue
+            if c == apici:
+                apici = None
+        elif c in "\"'`":
+            apici = c
+        elif c == "{":
+            prof += 1
+        elif c == "}":
+            prof -= 1
+        i += 1
+    return prof
 
 
 def _zone_morte_js(t: str, test: list[dict]) -> list[tuple[int, int]]:
@@ -440,16 +492,20 @@ def misura_js(testo: str) -> dict:
     salti = len(_DESCRIBE_SALTATO_JS.findall(t))
     per_test = {}
     for v in test:
-        s = v["saltato"]
+        s, certo = v["saltato"], v["certo"]
         if v["param"] and v["inizio"] is not None:
-            # t.skip() / t.todo() sul contesto del test, non un metodo «skip» di un gioco
-            if re.search(r"(?<![\w$.])" + re.escape(v["param"]) + r"\s*\.\s*(?:skip|todo)\s*\(",
-                         t[v["inizio"]:v["fine"]]):
+            # t.skip() / t.todo() sul contesto del test, non un metodo «skip» di un gioco; senza
+            # condizione solo al primo livello del corpo (non dentro un if)
+            corpo = t[v["inizio"]:v["fine"]]
+            for m2 in re.finditer(r"(?<![\w$.])" + re.escape(v["param"])
+                                  + r"\s*\.\s*(?:skip|todo)\s*\(", corpo):
                 s = True
+                certo = certo or _profondita_js(corpo, m2.start()) == 0
         salti += s
         dentro = [vera for pos, vera in posti
                   if v["inizio"] is not None and v["inizio"] <= pos < v["fine"]]
-        per_test[v["nome"]] = {"a": sum(dentro), "b": len(dentro) - sum(dentro), "s": s}
+        per_test[v["nome"]] = {"a": sum(dentro), "b": len(dentro) - sum(dentro),
+                               "s": bool(s and certo)}
     # Un test.skip("…") non conta fra i test che girano (com'era dal 22/10)
     nomi = [v["nome"] for v in test if not v.get("per_nome")]
     return {"test": len(nomi), "nomi": nomi[:100], "asserzioni": asserzioni, "banali": banali,
@@ -545,27 +601,34 @@ def confronta(foto: dict | None, ora: dict[str, dict], solo: str | None = None) 
 
 
 def segnali(foto: dict | None, ora: dict[str, dict], solo: str | None = None) -> list[dict]:
-    """I soli segnali senza ambiguità, su uno **stesso test** (lo stesso nome, nello stesso
-    file o spostato in un altro): prima controllava qualcosa e girava; ora non controlla niente
-    (solo asserzioni banali) o ha un salto vero. [{test, cosa: «banale» | «saltato»}]. Un test
-    tolto, unito o rinominato non è qui: è un cambio per l'agente e per la scheda."""
-    prima, adesso = {}, {}
-    for f in (foto or {}).values():
-        for n, v in ((f or {}).get("per_test") or {}).items():
-            prima.setdefault(n, v)
-    for p, o in (ora or {}).items():
-        for n, v in ((o or {}).get("per_test") or {}).items():
-            # in un'esecuzione parziale vale il file eseguito, o un test spostato altrove
-            adesso.setdefault(n, v)
-    out = []
-    for n, f in prima.items():
-        o = adesso.get(n)
-        if o is None or f.get("s") or int(f.get("a") or 0) <= 0:
+    """I soli segnali senza ambiguità, su uno **stesso test**: prima controllava qualcosa e
+    girava; ora non controlla niente (solo asserzioni banali) o ha un salto senza condizione.
+    [{test, cosa: «banale» | «saltato»}]. Il test si abbina nello stesso file per nome (terza
+    revisione della PR #232: `test_base` si ripete fra file diversi); se nel suo file non c'è più,
+    vale lo spostamento solo se il nome compare in un solo altro file, dove prima non c'era. Un
+    test tolto, unito o rinominato non è qui: è un cambio per l'agente e per la scheda."""
+    ora = ora or {}
+    out, visti = [], set()
+    for p, f in (foto or {}).items():
+        if solo is not None and p != solo:
             continue
-        if o.get("s"):
-            out.append({"test": n, "cosa": "saltato"})
-        elif int(o.get("a") or 0) == 0 and int(o.get("b") or 0) > 0:
-            out.append({"test": n, "cosa": "banale"})
+        stessi = (ora.get(p) or {}).get("per_test") or {}
+        for n, v in ((f or {}).get("per_test") or {}).items():
+            o = stessi.get(n)
+            if o is None:
+                altrove = [q for q, oq in ora.items() if q != p
+                           and n in ((oq or {}).get("per_test") or {})
+                           and n not in (((foto or {}).get(q) or {}).get("per_test") or {})]
+                if len(altrove) != 1:
+                    continue
+                o = ora[altrove[0]]["per_test"][n]
+            if v.get("s") or int(v.get("a") or 0) <= 0:
+                continue
+            cosa = ("saltato" if o.get("s") else "banale" if int(o.get("a") or 0) == 0
+                    and int(o.get("b") or 0) > 0 else "")
+            if cosa and (n, cosa) not in visti:
+                visti.add((n, cosa))
+                out.append({"test": n, "cosa": cosa})
     return out
 
 
@@ -637,9 +700,29 @@ def nota_scrittura(percorso: str, prima: str | None, dopo: str | None) -> str:
               "per una ragione, dillo nel riassunto.")
 
 
+def leggibile(nome: str) -> str:
+    """Il nome di un test com'è da dire (principio 5): un identificatore Python come
+    `test_somma_zero` diventa «somma zero»; i nomi di JavaScript sono già frasi. "" se non resta
+    niente da dire."""
+    n = str(nome or "").strip()
+    if re.fullmatch(r"[A-Za-z_]\w*", n):
+        n = re.sub(r"^test_?", "", n).replace("_", " ").strip()
+    return n[:60]
+
+
+def _chi(nomi: list[str], verbo_uno: str, verbo_molti: str) -> str:
+    detti = [leggibile(n) for n in nomi]
+    if len(nomi) == 1:
+        return (f"il test «{detti[0]}» {verbo_uno}" if detti[0] else f"un test {verbo_uno}")
+    if all(detti) and len(nomi) <= 3:
+        return "i test " + _e([f"«{d}»" for d in detti]) + f" {verbo_molti}"
+    return f"{len(nomi)} test {verbo_molti}"
+
+
 def frase_voce(segnali_test) -> str:
     """Il fatto neutro a voce (annuncio e revisione), solo per i segnali senza ambiguità su uno
-    stesso test: "" se niente. Mai «indebolito»: lo dice il codice, giudica la persona."""
+    stesso test, con i nomi resi leggibili: "" se niente. Mai «indebolito»: lo dice il codice,
+    giudica la persona."""
     if not isinstance(segnali_test, list):
         return ""
     banali = [s["test"] for s in segnali_test if isinstance(s, dict) and s.get("cosa") == "banale"]
@@ -647,13 +730,9 @@ def frase_voce(segnali_test) -> str:
                and s.get("cosa") == "saltato"]
     parti = []
     if banali:
-        nomi = _e([f"«{n}»" for n in banali[:3]])
-        parti.append((f"il test {nomi} adesso non controlla niente" if len(banali) == 1 else
-                      f"i test {nomi} adesso non controllano niente"))
+        parti.append(_chi(banali, "adesso non controlla niente", "adesso non controllano niente"))
     if saltati:
-        nomi = _e([f"«{n}»" for n in saltati[:3]])
-        parti.append((f"il test {nomi} adesso è saltato" if len(saltati) == 1 else
-                      f"i test {nomi} adesso sono saltati"))
+        parti.append(_chi(saltati, "adesso è saltato", "adesso sono saltati"))
     if not parti:
         return ""
     return "Sui test dell'agente: " + "; ".join(parti) + "."

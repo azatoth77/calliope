@@ -597,6 +597,13 @@ MOTIVO_VUOTO = ("risultati vuoti e nessuna frase, ma il caso della persona chied
 _CAMPI_FRASE = ("da_dire", "messaggio", "testo", "risposta")
 
 
+# I campi che descrivono la ricerca, non la risposta (terza revisione della PR #232): la fonte,
+# l'indirizzo, quando è stata fatta, che cosa si è cercato
+_METADATI = frozenset({"fonte", "fonti", "sorgente", "source", "url", "link", "indirizzo",
+                       "aggiornato", "aggiornamento", "timestamp", "data_ricerca", "cercato_il",
+                       "query", "ricerca", "cercato", "parametri", "argomenti", "richiesta"})
+
+
 def _vuoto(v) -> bool:
     if v is None or v == "" or v == [] or v == {}:
         return True
@@ -605,10 +612,31 @@ def _vuoto(v) -> bool:
     return False
 
 
-def esito_vuoto(ris) -> bool:
+def _e_dato(chiave: str, v, valori: list[str]) -> bool:
+    """Un campo porta un dato vero: non vuoto, non un contatore a zero o un sì/no, non un
+    metadato della ricerca, non l'eco degli argomenti del caso (l'estensione che ripete il
+    luogo chiesto accanto alla lista vuota: la stessa idea di argomenti_incerti._ha_dati)."""
+    from .argomenti_incerti import chiave as norm, uguali
+    if _vuoto(v) or isinstance(v, bool):
+        return False
+    if isinstance(v, (int, float)) and v == 0:
+        return False
+    if str(chiave).strip().lower() in _METADATI:
+        return False
+    if isinstance(v, str) and any(uguali(v, x) or norm(x) == norm(v) for x in valori
+                                  if len(norm(x)) >= 3):
+        return False
+    if isinstance(v, dict):
+        return not esito_vuoto(v, valori=valori)
+    return True
+
+
+def esito_vuoto(ris, argomenti=None, valori=None) -> bool:
     """Il risultato è vuoto **per struttura** (§ 9.3, 22/10, #223; dalla seconda revisione della
-    PR #232 niente parole): nessuna frase per chi parla e i risultati vuoti, o «trovato»: false
-    senza una frase. Una frase, qualunque cosa dica, non è mai vuota."""
+    PR #232 niente parole): nessuna frase per chi parla e nessun campo con un dato vero
+    (`_e_dato`: non l'eco degli argomenti, i contatori a zero, i metadati, i None), o «trovato»:
+    false senza una frase. Una frase, qualunque cosa dica, non è mai vuota: è un dato detto, e lo
+    giudicano il modello e la persona (principio 10)."""
     if isinstance(ris, str):
         return not ris.strip()
     if isinstance(ris, list):
@@ -619,7 +647,10 @@ def esito_vuoto(ris) -> bool:
         return False
     if ris.get("trovato") is False or ris.get("trovata") is False:
         return True
-    return all(_vuoto(v) for v in ris.values())
+    if valori is None:
+        from .argomenti_incerti import _valori
+        valori = _valori(argomenti)
+    return not any(_e_dato(k, v, valori) for k, v in ris.items())
 
 
 def va(caso: dict, r: dict) -> tuple[bool, str]:
@@ -646,7 +677,8 @@ def va(caso: dict, r: dict) -> tuple[bool, str]:
     # una frase negativa («Non ho trovato la fiera», «Nessuna allerta») è un dato, e il suo
     # giudizio è del modello e della persona (seconda revisione della PR #232, principio 10)
     from .sviluppo import tipo_collaudo as tipo_salvato
-    if tipo_salvato(caso) in ("risposta", "errore", "errore_dichiarato") and esito_vuoto(ris):
+    if tipo_salvato(caso) in ("risposta", "errore", "errore_dichiarato") and esito_vuoto(
+            ris, caso.get("argomenti")):
         return False, MOTIVO_VUOTO
     nuovo = _esito_testo(r)
     if caso.get("giudizio") or caso.get("ok"):

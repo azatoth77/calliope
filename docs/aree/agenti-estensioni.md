@@ -5134,3 +5134,45 @@ sul testo davano ancora falsi positivi.
   Mu non c'è più, perché `_testo_con_dati` è stato tolto. Il gioco puro con la voce sicura non
   ha una prova sua: la porta sta prima di quella strada, e la mutazione Q4 lo copre per la
   frase di sfida. La prova conta 129 controlli.
+
+**Dopo la terza revisione della PR #232 (22/10).**
+- **N. 5, una scelta di principio scritta come tale.** Il caso che aveva motivato il n. 5 adesso
+  **va**: prima un errore, poi la frase «Non ho trovato la fiera di Borgo Alto.».
+  - È una frase, quindi un dato detto, e se sia giusta lo giudicano il modello e la persona,
+    non una regola sul testo (principio 10).
+  - Il criterio della issue («il ricollaudo «non ho trovato» bocciato») resta storico.
+  - Il ricollaudo boccia solo ciò che si vede dalla struttura: nessuna frase, e nessun campo
+    con un dato vero.
+- **N. 5, la struttura guarda la sostanza** (`sonde._e_dato`). Non sono un dato:
+  - l'eco degli argomenti del caso (la stessa idea di `argomenti_incerti._ha_dati`);
+  - i contatori a zero, i sì/no, i `None`;
+  - i metadati della ricerca: fonte, url, aggiornato, query…
+
+  Quindi `{"luogo": "Borgo Alto", "eventi": []}`, `{"citta": …, "risultati": None}`,
+  `{"eventi": [], "totale": 0}` e `{"eventi": [], "fonte": …}` dopo un errore non vanno.
+  Contrari: un evento nella lista, un campo con una data, un totale diverso da zero.
+- **N. 10, il gioco puro e il sì da `estensione_gestisci` hanno la loro prova.**
+  - Un familiare adulto con la voce riconosciuta e nessuna prova riceve la domanda, non
+    «Fatto». È la strada senza sfida.
+  - Il suo sì, raccolto da `estensione_gestisci`, attiva il gioco.
+- **N. 10, chi dà il sì.** Vale la regola del 05/10 sui giochi puri: il familiare adulto che può
+  attivare un gioco puro può dare anche il sì «senza prove». Il commento non dice più «il sì di
+  chi amministra». `Sviluppo.senza_prove` salva `chi`, e la revisione lo dice senza
+  attribuirlo a chi parla («Nessuna prova: Bianca ha scelto di andare avanti senza prove.»).
+- **N. 7, i casi residui del fatto a voce.**
+  - Lo stesso test si abbina per file e per nome. Uno spostamento vale solo se il nome
+    compare in un solo altro file, dove prima non c'era: `test_base` ripetuto fra file diversi
+    non dà più un falso «adesso non controlla niente».
+  - A voce valgono solo i salti senza condizione. Non contano `@skipIf`, `@skipUnless`,
+    `pytest.mark.skipif`, `xfail` con la condizione, `self.skipTest` sotto un `if`,
+    `{ skip: !process.env.X }` e `t.skip()` dentro un `if`: restano nei conti per l'agente.
+  - Il nome Python si dice leggibile (principio 5): `test_somma_zero` diventa «somma zero»,
+    un nome che non lascia niente diventa «un test». I nomi JavaScript sono già frasi.
+- **Mutazioni:** 15, e cadono tutte:
+  - Mg (la porta saltata per il gioco puro) e Mtool (il sì solo da `sviluppo_passo`);
+  - per il ricollaudo: l'eco, gli zeri, i metadati, `None`;
+  - per la fotografia: l'abbinamento per nome su tutti i file, lo spostamento ignorato, i
+    quattro salti condizionali presi per certi, i nomi tecnici a voce;
+  - per il sì del familiare: «hai scelto» detto a chiunque, e `chi` non salvato.
+
+  La prova conta 150 controlli.

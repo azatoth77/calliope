@@ -1647,7 +1647,9 @@ def _completa(ctx, svs, sv, prof) -> dict:
 # agenti/servizio.py) il lavoro arrivava alla revisione e all'attivazione senza nessuna prova.
 # Adesso revisione e attivazione vogliono almeno una prova della versione di adesso (un
 # collaudo, un'anteprima di un gioco o gli esempi eseguiti alla fine del lavoro), oppure il sì
-# di chi amministra alla domanda che lo dice: la proposta in sospeso di sempre verso
+# alla domanda che lo dice di chi può approvare (chi amministra; per un gioco puro anche un
+# familiare adulto con la voce riconosciuta, la regola del 05/10: terza revisione della PR #232),
+# e la revisione dice chi l'ha dato. La proposta in sospeso di sempre verso
 # sviluppo_passo avanti, e il sì letto come per le altre proposte (politica.accettata, la frase
 # di sfida, politica.consenso). Vincolo di permesso su un'azione già scelta (principio 10),
 # regole `sviluppo_senza_prove_chiesto` e `sviluppo_senza_prove_confermato`
@@ -1745,7 +1747,8 @@ def _porta_prove(ctx, svs, sv, tool: str = "sviluppo_passo",
         return None
     if _senza_prove_si(ctx, sv):
         note_rule(ctx, "sviluppo_senza_prove_confermato")
-        sv.senza_prove = {**sp, "confermata": chiave, "quando": time.time()}
+        chi = str(getattr(getattr(ctx, "speaker_ctx", None), "current_speaker", "") or "")
+        sv.senza_prove = {**sp, "confermata": chiave, "quando": time.time(), "chi": chi}
         svs.tocca(sv)
         return None
     note_rule(ctx, "sviluppo_senza_prove_chiesto")
@@ -1767,14 +1770,21 @@ def _porta_prove(ctx, svs, sv, tool: str = "sviluppo_passo",
                               "tool": tool, "argomenti": argomenti or {"azione": "avanti"}})
 
 
-def _con_senza_prove(svs, sv, detto_coll: str) -> str:
+def _con_senza_prove(svs, sv, detto_coll: str, ctx=None) -> str:
     """Le prove dette dalla revisione: dopo il sì senza prove lo dice al posto di «Il collaudo
     l'hai saltato…»; e il fatto neutro sugli stessi test dell'agente, quando è senza ambiguità
     (22/10, #223, agenti/fotografia_test.frase_voce: un test che adesso non controlla niente o è
     saltato). Mai un sospetto a voce: i conti cambiati vanno sulla scheda (`_riga_test`)."""
     c, a = _prove_della_versione(sv)
-    if not (c or a) and (sv.senza_prove or {}).get("confermata") == _chiave_prove(sv):
-        detto_coll = "Nessuna prova: hai scelto di andare avanti lo stesso."
+    sp = sv.senza_prove or {}
+    if not (c or a) and sp.get("confermata") == _chiave_prove(sv):
+        # Chi ha scelto (terza revisione della PR #232): per un gioco puro può essere un
+        # familiare adulto, e non va attribuito a chi parla adesso
+        adesso = str(getattr(getattr(ctx, "speaker_ctx", None), "current_speaker", "") or "")
+        chi = str(sp.get("chi") or "")
+        detto_coll = ("Nessuna prova: hai scelto di andare avanti lo stesso." if not chi
+                      or chi == adesso else
+                      f"Nessuna prova: {chi} ha scelto di andare avanti senza prove.")
     from ..agenti.fotografia_test import frase_voce
     lav = svs._lavoro(sv.lavoro)
     fatto = frase_voce((getattr(lav, "risultato", None) or {}).get("test_segnali"))
@@ -1835,7 +1845,7 @@ def _revisione(ctx, svs, sv) -> dict:
     if manca:
         note_rule(ctx, "sviluppo_revisione_manca")
     if sv.tipo == "estensione":
-        detto_coll = _con_senza_prove(svs, sv, detto_coll)
+        detto_coll = _con_senza_prove(svs, sv, detto_coll, ctx)
         sv.revisione = rev["testo"] + f"\n- {detto_coll}" + _riga_test(svs, sv)
         fumo = ""
         if svs.e_gioco(sv):
@@ -1872,7 +1882,7 @@ def _revisione(ctx, svs, sv) -> dict:
                                   "cosa": f"attivare «{sv.titolo}»", "tool": "sviluppo_passo",
                                   "argomenti": {"azione": "avanti"}})
     # Un programma: file, righe, test, prove; e se è grande, la proposta di un'estensione
-    detto_coll = _con_senza_prove(svs, sv, detto_coll)
+    detto_coll = _con_senza_prove(svs, sv, detto_coll, ctx)
     misura = misura_programma(sv.cartella)
     lav = svs._lavoro(sv.lavoro)
     test = ((getattr(lav, "risultato", None) or {}).get("test") if lav is not None else None) \

@@ -322,7 +322,7 @@ def prova_misura():
         "self.assertEqual(somma(2, 3), 5)", "self.skipTest('x')"))}
     frase = ft.frase_voce(ft.segnali(foto, ora))
     verifica("a voce un fatto neutro sullo stesso test, senza nomi di file né accuse",
-             frase == "Sui test dell'agente: il test «test_somma» adesso è saltato."
+             frase == "Sui test dell'agente: il test «somma» adesso è saltato."
              and ".py" not in frase and "indebolit" not in frase, frase)
     banale = {"test_programma.py": ft.misura("test_programma.py", PY.replace(
         "self.assertEqual(somma(2, 3), 5)", "self.assertTrue(True)"))}
@@ -530,7 +530,7 @@ def prova_approva(tmp: Path, iso):
 SEGNALE = [{"test": "test_meteo", "cosa": "banale"}]
 CALO = [{"file": "test_meteo.py", "tolto": False, "test_meno": 1, "asserzioni_meno": 3,
          "skip_piu": 0, "banali_piu": 0, "nomi": ["test_vento"]}]
-FRASE = "Sui test dell'agente: il test «test_meteo» adesso non controlla niente."
+FRASE = "Sui test dell'agente: il test «meteo» adesso non controlla niente."
 
 
 def prova_voce(tmp: Path, iso):
@@ -879,6 +879,116 @@ def prova_partenza_gioco(tmp: Path):
              str(lav.segnali.get("foto_test"))[:300])
 
 
+# ═══════════════════ dalla terza revisione della PR #232 ═══════════════════
+
+def prova_ricollaudo_3():
+    sezione("1c. ricollaudo: l'eco degli argomenti, i contatori a zero, i metadati (terza "
+            "revisione)")
+    for ris in ({"luogo": "Borgo Alto", "eventi": []},
+                {"citta": "Borgo Alto", "risultati": None},
+                {"eventi": [], "totale": 0},
+                {"eventi": [], "fonte": "https://example.org"},
+                {"dati": {"luogo": "Borgo Alto", "eventi": []}}):
+        ok, motivo = sonde.va(caso(), esito(ris))
+        verifica(f"{ris} dopo un errore: vuoto", ok is False and motivo == sonde.MOTIVO_VUOTO,
+                 f"{ok} {motivo}")
+    for ris in ({"luogo": "Borgo Alto", "eventi": [{"nome": "fiera", "quando": "sabato"}]},
+                {"luogo": "Borgo Alto", "prossima": "12 novembre"},
+                {"eventi": [], "totale": 3},
+                {"temperatura": 0.5}):
+        ok, motivo = sonde.va(caso(), esito(ris))
+        verifica(f"contrario: {ris} ha un dato vero", ok is True, f"{ok} {motivo}")
+
+
+def prova_gioco_puro(tmp: Path, iso):
+    sezione("2f. il gioco puro senza sfida e il sì raccolto da estensione_gestisci (terza "
+            "revisione)")
+    from calliope import politica
+    from calliope.estensioni import servizio as es
+    reg, ctx, est, svc, sv, lav = al_collaudo(tmp / "puro", iso)
+    prima = est.archivio.voce("meteo_citta")["attiva"]
+    vero = es.approvabile_da_familiare
+    es.approvabile_da_familiare = lambda ver: True      # un gioco puro (prova di fumo a parte)
+    dario = ctx.speaker_ctx
+    try:
+        ctx.speaker_ctx = P.speaker("Bianca", "familiare")
+        out = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "approva",
+                                                         "nome": "meteo_citta"}, turno=5)
+        verifica("un gioco puro, un familiare adulto con la voce, nessuna prova: la domanda, "
+                 "non «Fatto» (la strada senza sfida non salta la porta)",
+                 PS.detta(out).endswith("Vado avanti lo stesso?")
+                 and est.archivio.voce("meteo_citta")["attiva"] == prima, PS.detta(out))
+        ctx.tool_in_sospeso = "estensione_gestisci"
+        ctx.politica = politica.Turno(testo="Sì.", in_sospeso="estensione_gestisci",
+                                      domanda_sospeso="Vado avanti lo stesso?")
+        ctx.user_text = "Sì."
+        out = P.chiama(reg, ctx, "estensione_gestisci", {"azione": "approva",
+                                                         "nome": "meteo_citta"}, turno=6)
+        verifica("il sì raccolto da estensione_gestisci (la regola del 05/10): attivata",
+                 est.archivio.voce("meteo_citta")["attiva"] != prima
+                 and (sv.senza_prove or {}).get("chi") == "Bianca", PS.detta(out))
+    finally:
+        es.approvabile_da_familiare = vero
+        ctx.speaker_ctx = dario
+        ctx.politica = None
+        niente(ctx)
+    # La revisione dice chi ha scelto
+    reg, ctx, est, svc, sv, lav = al_collaudo(tmp / "chi", iso)
+    P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=5)
+    sv.senza_prove = {**sv.senza_prove, "confermata": f"{sv.versione}|{sv.lavoro or ''}",
+                      "chi": "Bianca"}
+    out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=6)
+    verifica("la revisione dice chi ha scelto di andare avanti senza prove, non «hai scelto»",
+             "Nessuna prova: Bianca ha scelto di andare avanti senza prove." in PS.detta(out)
+             and "hai scelto" not in PS.detta(out), PS.detta(out))
+
+
+def prova_segnali_3():
+    sezione("3g. il fatto a voce: lo stesso file, i salti condizionali, i nomi leggibili "
+            "(terza revisione)")
+    vero = PY
+    banale = PY.replace("self.assertEqual(somma(2, 3), 5)", "self.assertTrue(True)")
+    foto = {"test_c.py": ft.misura("test_c.py", vero), "test_b.py": ft.misura("test_b.py", banale)}
+    ora = {"test_b.py": ft.misura("test_b.py", banale), "test_c.py": ft.misura("test_c.py", vero)}
+    verifica("contrario: lo stesso nome in due file (uno vero, uno banale), nessun cambio, i "
+             "file in un altro ordine: niente", ft.segnali(foto, ora) == [],
+             str(ft.segnali(foto, ora)))
+    foto2 = {"test_a.py": ft.misura("test_a.py", vero), "test_b.py": ft.misura("test_b.py", vero)}
+    ora2 = {"test_a.py": ft.misura("test_a.py", vero), "test_b.py": ft.misura("test_b.py", banale)}
+    verifica("…ma lo stesso test reso banale nel suo file sì, anche col nome ripetuto altrove",
+             ft.segnali(foto2, ora2) == [{"test": "test_somma", "cosa": "banale"}],
+             str(ft.segnali(foto2, ora2)))
+    for nome, dopo in [
+            ("@skipIf(sys.platform == 'win32')", PY.replace(
+                "    def test_somma", "    @unittest.skipIf(sys.platform == 'win32', 'x')\n"
+                                     "    def test_somma")),
+            ("self.skipTest dentro un if", PY.replace(
+                "        self.assertEqual(somma(2, 3), 5)",
+                "        if not RETE:\n            self.skipTest('senza rete')\n"
+                "        self.assertEqual(somma(2, 3), 5)"))]:
+        sig = ft.segnali({"t.py": ft.misura("test_programma.py", PY)},
+                         {"t.py": ft.misura("test_programma.py", dopo)})
+        verifica(f"contrario: un salto condizionale ({nome}): niente a voce", sig == [], str(sig))
+    for nome, dopo in [
+            ("{ skip: !process.env.X }", JS.replace('test("somma", ',
+                                                    'test("somma", { skip: !process.env.X }, ')),
+            ("t.skip() dentro un if", JS.replace('test("somma", () => { ',
+                                                 'test("somma", (t) => { if (!rete) { t.skip(); } '))]:
+        sig = ft.segnali({"t.js": ft.misura("a.test.js", JS)}, {"t.js": ft.misura("a.test.js", dopo)})
+        verifica(f"contrario JavaScript: {nome}: niente a voce", sig == [], str(sig))
+    sig = ft.segnali({"t.js": ft.misura("a.test.js", JS)}, {"t.js": ft.misura(
+        "a.test.js", JS.replace('test("somma", ', 'test("somma", { skip: "da rifare" }, '))})
+    verifica("…mentre { skip: \"da rifare\" } è un salto senza condizione",
+             sig == [{"test": "somma", "cosa": "saltato"}], str(sig))
+    frase = ft.frase_voce([{"test": "test_somma_zero", "cosa": "banale"}])
+    verifica("a voce il nome Python reso leggibile, senza il trattino basso",
+             frase == "Sui test dell'agente: il test «somma zero» adesso non controlla niente."
+             and "_" not in frase, frase)
+    verifica("…e un test senza nome da dire è «un test»",
+             ft.frase_voce([{"test": "test", "cosa": "saltato"}])
+             == "Sui test dell'agente: un test adesso è saltato.")
+
+
 def main():
     tmp = Path(tempfile.mkdtemp(prefix="calliope-porte-residue-"))
     os.environ.setdefault("CALLIOPE_CONFIG_LOCALE", str(tmp / "nessuno.yaml"))
@@ -888,17 +998,20 @@ def main():
     iso = P.Isolamento("docker", "docker finto", True, "", P.IMMAGINE, P.FINTO)
     try:
         prova_ricollaudo()
+        prova_ricollaudo_3()
         prova_senza_prove(tmp / "senza_prove", iso)
         prova_si_sicuro(tmp / "si_sicuro", iso)
         prova_versioni(tmp / "versioni", iso)
         prova_approva(tmp / "approva", iso)
         prova_porta_2(tmp / "porta2", iso)
+        prova_gioco_puro(tmp / "puro", iso)
         prova_misura()
         prova_misura_2()
         prova_voce(tmp / "voce", iso)
         prova_ciclo(tmp / "ciclo")
         prova_ciclo_2(tmp / "ciclo2")
         prova_partenza_gioco(tmp / "partenza")
+        prova_segnali_3()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("\nTutto bene." if not errori else f"\n{errori} errori.")

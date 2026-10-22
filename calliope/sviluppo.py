@@ -356,8 +356,9 @@ class Sviluppo:
     giro: dict = field(default_factory=dict)
     # ── la revisione senza nessuna prova (22/10, issue #223) ──
     # Revisione e attivazione vogliono almeno una prova della versione (collaudo, anteprima o
-    # esempi eseguiti), oppure il sì di chi amministra alla domanda che dice che non ce n'è:
-    # {chiesta, confermata (la chiave della versione: «versione|lavoro»), quando}
+    # esempi eseguiti), oppure il sì alla domanda che dice che non ce n'è, di chi può approvare
+    # (chi amministra; per un gioco puro anche un familiare adulto, regola del 05/10):
+    # {chiesta, confermata (la chiave della versione: «versione|lavoro»), quando, chi}
     senza_prove: dict = field(default_factory=dict)
     # La chiave «versione|lavoro» della versione i cui esempi di accettazione sono stati eseguiti
     # alla fine del lavoro (seconda revisione della PR #232): vale anche dopo un riavvio
