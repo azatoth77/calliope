@@ -1375,11 +1375,12 @@ class Config:
     # lavoro, guardia dei token senza strumenti, e i tempi solo come tetto di sicurezza largo)
     # e, se il profilo li scrive, modello e indirizzo dell'agente. Nomi e valori, con il calcolo
     # dalla velocità misurata, in PROFILI_AGENTE (in fondo a calliope/config.py). Quello di
-    # serie, «qwen3.6-35b-a3b-vllm», ha i valori di sempre (modello e indirizzo restano quelli
-    # dell'installazione: dgx.yaml o agenti_url). Le chiavi dei tetti scritte in
-    # calliope.locale.yaml o nell'ambiente vincono sul profilo; modello e indirizzo del profilo
-    # vincono sul file (non sull'ambiente). null = nessun profilo: valgono le singole chiavi.
-    # Per tornare indietro si cambia solo questa riga, poi `calliope riavvia`
+    # serie, «qwen3.6-35b-a3b-vllm», ha i valori di prima tranne il tempo massimo, 55 minuti dal
+    # 22/10 (scelta di chi amministra); modello e indirizzo restano quelli dell'installazione
+    # (dgx.yaml o agenti_url). Le chiavi dei tetti scritte in calliope.locale.yaml vincono sul
+    # profilo; modello e indirizzo del profilo vincono sul locale (l'avvio lo dice), non sulle
+    # loro variabili d'ambiente. null = nessun profilo: valgono le singole chiavi. Per tornare
+    # indietro si cambia solo questa riga, poi `calliope riavvia`
     agenti_profilo: str | None = (os.environ.get("CALLIOPE_AGENTI_PROFILO")
                                   or "qwen3.6-35b-a3b-vllm")
     # Contesto dell'agente in token. "auto" (05/10, fase 2b, calliope/contesto.py →
@@ -1422,11 +1423,14 @@ class Config:
     # conta: lo regge la finestra, comprimendo. Vicino a un tetto l'agente riceve una volta
     # l'avviso di chiudere con quello che ha; al tetto il lavoro si ferma e l'annuncio dice
     # perché, dove sono i file e come vanno i test. Dal 22/10 (#225) i minuti sono un tetto di
-    # sicurezza, dal profilo dell'agente: il budget è in token (agenti_token_lavoro). Il tempo
-    # passato ad aspettare la voce (l'arbitro, lo stream congelato dalla pausa di vLLM, la
-    # passata fermata e rifatta) e una risposta della persona non conta
+    # sicurezza, dal profilo dell'agente: il budget è in token (agenti_token_lavoro). Sono
+    # minuti di lavoro dell'agente: non contano l'attesa di una risposta della persona né il
+    # tempo in cui la voce occupava davvero (l'arbitro, la passata congelata dalla pausa di vLLM
+    # o fermata); all'orologio vero, voce compresa, il giro si ferma comunque al doppio. 55
+    # minuti dal 22/10, scelta di chi amministra (1,5 × 150 000 token / 70 token/s, così decide
+    # il budget in token; *[storico: 30 fino al 22/10]*)
     agenti_max_passi: int = 24
-    agenti_tempo_max_min: float = 30.0
+    agenti_tempo_max_min: float = 55.0
     # I token di un lavoro per tipo (22/10, #225; un tipo che manca usa «altro»): gli stessi
     # numeri del conto di prima, token al minuto per 30 minuti (06/10: codice ed estensioni
     # 5 000 al minuto, ricerche, documenti e altro 3 000). Non dipendono più dal tempo concesso:
@@ -1435,8 +1439,9 @@ class Config:
         "codice": 150000, "estensione": 150000, "ricerca": 90000, "documento": 90000,
         "altro": 90000})
     # Il conto di prima (06/10): token generati al minuto per agenti_tempo_max_min. Vuoto (di
-    # serie dal 22/10, #225) = il budget è agenti_token_lavoro; scritto nel locale vale com'era
-    # (per tipo, token al minuto × minuti), al posto di agenti_token_lavoro. Misure del 05/10
+    # serie dal 22/10, #225) = il budget è agenti_token_lavoro; scritto nel locale, all'avvio
+    # diventa un agenti_token_lavoro equivalente con i minuti di allora (quelli scritti nel
+    # locale, o 30), mai con quelli di un profilo, e l'avvio lo dice. Misure del 05/10
     # sulla DGX (docs/ricerche/2026-10-05-contesto-agenti.md §5): il codice genera 2 800–4 300
     # token al minuto, al più ~4 500 (74 token/s senza pause)
     agenti_token_minuto: dict[str, int] = field(default_factory=dict)
@@ -3076,27 +3081,33 @@ PROFILI_LLM: dict[str, dict] = {
 #   agenti_tempo_max_min          ≥ 1,5 × (token del lavoro più grande) / velocità
 #   agenti_minuti_senza_strumenti ≥ 1,75 × agenti_token_senza_strumenti / velocità
 #   agenti_accettazione_s, agenti_revisore_s = 90 s × 70 / velocità (90 s con il modello di serie)
-# (1,75 è il margine di oggi: 5 minuti contro i ~2,9 di 12 000 token a 70 token/s). La
+# (1,75 è il margine di prima: 5 minuti contro i ~2,9 di 12 000 token a 70 token/s). La
 # velocità è in token al secondo dell'orologio di un lavoro intero (generazione, prefill e
 # strumenti), non quella della sola generazione. Le chiavi sono campi di Config;
 # «velocita_token_s» e «velocita» sono note per il banco e le prove, non vanno in Config.
-# Le chiavi dei tetti scritte nel locale (o nell'ambiente) vincono sul profilo; agenti_url e
-# agenti_modello del profilo vincono sul file, perché la riga cambi davvero modello.
+# I tetti dei minuti sono minuti di lavoro dell'agente: senza il tempo in cui la voce occupava
+# davvero (l'attesa dell'arbitro, la passata congelata dalla pausa di vLLM o fermata), con
+# in più il tetto all'orologio vero di agenti/ciclo.py (OROLOGIO_VOLTE × il tempo massimo).
+# Le chiavi dei tetti scritte nel locale vincono sul profilo (nessuna ha una variabile
+# d'ambiente); agenti_url e agenti_modello del profilo vincono sul locale, perché la riga cambi
+# davvero modello, e l'avvio lo dice; le loro variabili d'ambiente vincono sul profilo. Un
+# profilo con agenti_url scavalca dgx.yaml per intero (calliope/agenti/impostazioni.py, carica):
+# tunnel, porte e anche scrittore_modello, che allora è il modello dell'agente.
 PROFILI_AGENTE: dict[str, dict] = {
     # Qwen3.6-35B-A3B NVFP4 su vLLM della DGX (container calliope-vllm, porta 8000), il modello
-    # di sempre: i valori sono quelli di prima del 22/10, identici (nessun cambiamento sulla
-    # DGX). Modello e indirizzo restano quelli dell'installazione (dgx.yaml o agenti_url).
+    # di sempre. Modello e indirizzo restano quelli dell'installazione (dgx.yaml o agenti_url).
     # Velocità misurata sui banchi della DGX (prove/manuali/banco_temperatura.py, righe.json di
     # ~/banchi: decisione-1020-2227, decisione-1022-0925, giri-1020-1018, giri2-1020-1753,
     # porte1-1020-1753, trisnudo-1020-2103, valori-1019-1552, tetto-1014-0344/0628,
     # valori-1014-1029): 124 lavori, token generati / minuti del lavoro, mediana 4 224 token al
     # minuto = 70,4 token/s (p10 3 737 = 62,3; massimo 4 531 = 75,5; il 05/10 una passata sola
     # 74 token/s). Con 70 token/s: 12 000 token senza strumenti = 2,9 minuti (la guardia dei 5
-    # minuti non scatta prima di quella dei token); 90 000 token di una ricerca = 21 minuti
-    # (prima dei 30). Eccezione voluta alla regola qui sopra: 150 000 token di codice = 36
-    # minuti, quindi per codice ed estensioni il tetto dei 30 minuti arriva prima del budget
-    # (a ~126 000 token), come prima del 22/10; allargarlo (45 minuti) è una scelta di chi
-    # amministra, non fatta qui per non cambiare il comportamento della DGX
+    # minuti non scatta prima di quella dei token). Tempo massimo dalla regola, scelta di chi
+    # amministra del 22/10 (commento su #225): 1,5 × 150 000 / 70 = 3 214 s = 53,6 → 55 minuti,
+    # così decide il budget in token anche per codice ed estensioni. *[storico: 30 minuti fino
+    # al 22/10, che per il codice arrivavano prima del budget, a ~126 000 token]* Gli altri
+    # valori sono quelli di prima del 22/10. Cosa cambia sulla DGX con il profilo di serie: il
+    # tempo massimo (55 invece di 30) e il tempo del giro, che non conta più la voce
     "qwen3.6-35b-a3b-vllm": {
         "velocita_token_s": 70.0, "velocita": "misurata",
         "agenti_max_passi": 24, "agenti_token_passata": 16384,
@@ -3104,37 +3115,41 @@ PROFILI_AGENTE: dict[str, dict] = {
         "agenti_token_lavoro": {"codice": 150000, "estensione": 150000, "ricerca": 90000,
                                 "documento": 90000, "altro": 90000},
         "agenti_token_senza_strumenti": 12000,
-        "agenti_tempo_max_min": 30.0, "agenti_minuti_senza_strumenti": 5.0,
+        "agenti_tempo_max_min": 55.0, "agenti_minuti_senza_strumenti": 5.0,
         "agenti_accettazione_s": 90.0, "agenti_revisore_s": 90.0,
     },
     # Un denso da ~27B in NVFP4 sullo stesso vLLM dell'agente (porta 8000, con
     # --served-model-name denso-27b): esempio per #175, da verificare prima dell'uso. Velocità
-    # STIMATA, non misurata: dalla banda della Spark (~273 GB/s, ~15 GB di pesi letti a ogni
-    # token) 12–15 token/s di generazione; ~11 misurati per i densi da 27–31B
-    # (docs/ricerche/2026-10-02-llm-per-spark.md); prefill ~800 token/s contro ~4 600. Si usa
-    # 12. Tempi dalla regola: 1,5 × 150 000 / 12 = 18 750 s = 312,5 → 315 minuti;
-    # 1,75 × 12 000 / 12 = 1 750 s = 29,2 → 30 minuti; 90 × 70 / 12 = 525 s. Con i 5 minuti
-    # del modello di serie la guardia scatterebbe dentro una passata normale (12 000 token =
-    # 16,7 minuti). Budget in token uguali al modello di serie
+    # STIMATA, non misurata, del lavoro intero: dalla banda della Spark (~273 GB/s, ~15 GB di
+    # pesi letti a ogni token) 12–15 token/s di generazione (~11 misurati per i densi da 27–31B,
+    # docs/ricerche/2026-10-02-llm-per-spark.md), e il prefill ~800 token/s contro ~4 600
+    # dell'A3B. Con le passate dei banchi dell'A3B (mediana 1 343 token generati e ~12 900 di
+    # contesto a passata, lavoro.json): 1 343 / 12 = 112 s di generazione più 12 900 / 800 =
+    # 16 s di prefill (senza la cache dei prefissi), cioè ~10,5 token/s del lavoro: si usa 10
+    # (prima revisione della PR #234, P5; *[storico: 12, la sola generazione, fino ad allora]*).
+    # Tempi dalla regola: 1,5 × 150 000 / 10 = 22 500 s = 375 minuti; 1,75 × 12 000 / 10 =
+    # 2 100 s = 35 minuti; 90 × 70 / 10 = 630 s. Con i 5 minuti del modello di serie la guardia
+    # scatterebbe dentro una passata normale (12 000 token = 20 minuti). Budget in token uguali
+    # al modello di serie
     "denso-27b-vllm": {
-        "velocita_token_s": 12.0, "velocita": "stimata",
+        "velocita_token_s": 10.0, "velocita": "stimata",
         "agenti_url": "http://127.0.0.1:8000/v1", "agenti_modello": "denso-27b",
         "agenti_max_passi": 24, "agenti_token_passata": 16384,
         "agenti_ragionamento_passata": 8192,
         "agenti_token_lavoro": {"codice": 150000, "estensione": 150000, "ricerca": 90000,
                                 "documento": 90000, "altro": 90000},
         "agenti_token_senza_strumenti": 12000,
-        "agenti_tempo_max_min": 315.0, "agenti_minuti_senza_strumenti": 30.0,
-        "agenti_accettazione_s": 525.0, "agenti_revisore_s": 525.0,
+        "agenti_tempo_max_min": 375.0, "agenti_minuti_senza_strumenti": 35.0,
+        "agenti_accettazione_s": 630.0, "agenti_revisore_s": 630.0,
     },
     # Qwen3-Coder-Next (80B totali, ~3B attivi, contesto 256K) sullo stesso vLLM dell'agente
     # (porta 8000, --served-model-name qwen3-coder-next, --tool-call-parser qwen3_coder): il
     # primo candidato di #175, da verificare su Hugging Face prima di scaricare. Addestrato
-    # senza thinking: agenti_think false. Velocità STIMATA: gli attivi sono quelli dell'A3B, i
-    # pesi totali più del doppio (cache ed esperti più sparsi): 60 token/s, sotto i 70 misurati
-    # dell'A3B. Tempi dalla regola: 1,5 × 150 000 / 60 = 3 750 s = 62,5 → 65 minuti;
-    # 1,75 × 12 000 / 60 = 350 s = 5,8 → 6 minuti; 90 × 70 / 60 = 105 s. Budget in token
-    # uguali al modello di serie
+    # senza thinking: agenti_think false. Velocità STIMATA del lavoro intero: gli attivi sono
+    # quelli dell'A3B (prefill simile), i pesi totali più del doppio (cache ed esperti più
+    # sparsi): 60 token/s, sotto i 70 misurati dell'A3B. Tempi dalla regola: 1,5 × 150 000 / 60
+    # = 3 750 s = 62,5 → 65 minuti; 1,75 × 12 000 / 60 = 350 s = 5,8 → 6 minuti;
+    # 90 × 70 / 60 = 105 s. Budget in token uguali al modello di serie
     "qwen3-coder-next-vllm": {
         "velocita_token_s": 60.0, "velocita": "stimata",
         "agenti_url": "http://127.0.0.1:8000/v1", "agenti_modello": "qwen3-coder-next",
@@ -3156,9 +3171,9 @@ _PROFILO_AGENTE_VINCE = frozenset(("agenti_url", "agenti_modello"))
 
 def apply_agenti_profile(cfg: "Config", log: bool = False):
     """Applica a `cfg` il profilo agenti_profilo (PROFILI_AGENTE, 22/10, #225). I tetti scritti
-    in calliope.locale.yaml o nell'ambiente restano (sovrascrivono il profilo); modello e
-    indirizzo del profilo vincono sul file, non sull'ambiente. Un nome sconosciuto si segnala e
-    lascia le chiavi come sono: Calliope parte lo stesso."""
+    in calliope.locale.yaml restano (sovrascrivono il profilo); modello e indirizzo del profilo
+    vincono sul locale (e l'avvio lo dice), non sulle loro variabili d'ambiente. Un nome
+    sconosciuto si segnala e lascia le chiavi come sono: Calliope parte lo stesso."""
     nome = getattr(cfg, "agenti_profilo", None)
     if not nome:
         return
@@ -3170,7 +3185,7 @@ def apply_agenti_profile(cfg: "Config", log: bool = False):
               + f". Profili: {', '.join(PROFILI_AGENTE)}")
         return
     locali = getattr(cfg, "_impostate_locale", set())
-    tenute = []
+    tenute, sostituite = [], []
     for key, value in prof.items():
         if key in _NOTE_PROFILO_AGENTE:
             continue
@@ -3178,14 +3193,47 @@ def apply_agenti_profile(cfg: "Config", log: bool = False):
         if (env and env in os.environ) or (key in locali and key not in _PROFILO_AGENTE_VINCE):
             tenute.append(key)
             continue
+        if key in locali and getattr(cfg, key, None) != value:
+            sostituite.append(key)
         setattr(cfg, key, list(value) if isinstance(value, list) else
                 dict(value) if isinstance(value, dict) else value)
     cfg._agenti_tenute = tenute
-    if log and (nome != "qwen3.6-35b-a3b-vllm" or tenute):
+    if log and (nome != "qwen3.6-35b-a3b-vllm" or tenute or sostituite):
         _warn(f"Agente: profilo «{nome}» (velocità {prof.get('velocita', '')} "
               f"{prof.get('velocita_token_s', '?'):g} token/s, {cfg.agenti_max_passi} passate, "
               f"tempo di sicurezza {cfg.agenti_tempo_max_min:g} minuti"
-              + (f"; dal file: {', '.join(tenute)}" if tenute else "") + ")")
+              + (f"; dal file: {', '.join(tenute)}" if tenute else "")
+              + (f"; del file sostituite dal profilo: {', '.join(sostituite)}"
+                 if sostituite else "") + ")")
+
+
+def converti_token_minuto(cfg: "Config", log: bool = False):
+    """`agenti_token_minuto` scritto nel locale (il conto di prima del 22/10: token al minuto per
+    i minuti) diventa un `agenti_token_lavoro` equivalente, con i minuti di allora: quelli scritti
+    nel locale, o i 30 di prima; mai i minuti di un profilo (prima revisione della PR #234, P2:
+    con il denso sarebbero stati 5 000 × 315 = 1 575 000 token). L'avvio lo dice. Dopo, il
+    campo è vuoto: il ciclo conta solo agenti_token_lavoro."""
+    per = dict(getattr(cfg, "agenti_token_minuto", None) or {})
+    if not per:
+        return
+    locali = getattr(cfg, "_impostate_locale", set())
+    minuti = float(cfg.agenti_tempo_max_min) if "agenti_tempo_max_min" in locali else 30.0
+    vecchi = dict(cfg.agenti_token_lavoro or {})
+    nuovi = dict(vecchi)
+    for tipo, v in per.items():
+        try:
+            nuovi[str(tipo)] = int(float(v) * minuti)
+        except (TypeError, ValueError):
+            _warn(f"agenti_token_minuto: «{tipo}: {v!r}» non è un numero: lo ignoro")
+    cfg.agenti_token_lavoro = nuovi
+    cfg.agenti_token_minuto = {}
+    tenute = list(getattr(cfg, "_agenti_tenute", []) or [])
+    cfg._agenti_tenute = tenute + ["agenti_token_minuto"]
+    if log:
+        _warn("Agente: agenti_token_minuto dal file convertito in agenti_token_lavoro "
+              f"(× {minuti:g} minuti): "
+              + ", ".join(f"{k} {v}" for k, v in sorted(nuovi.items()) if vecchi.get(k) != v)
+              + ". Il budget del profilo per quei tipi non vale: per tornarci togli la chiave")
 
 
 def velocita_agente(cfg) -> tuple[float | None, str]:
@@ -4221,6 +4269,7 @@ def load_config(path: str | None = None) -> Config:
         apply_llm_profile(cfg, log=True)
     if cfg.agenti_profilo:
         apply_agenti_profile(cfg, log=True)
+    converti_token_minuto(cfg, log=True)
     check_reti(cfg)
     return cfg
 

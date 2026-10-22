@@ -226,7 +226,7 @@ un profilo di `PROFILI_AGENTE` (calliope/config.py: modello, indirizzo e tetti t
 velocità), come la riga `agenti_profilo` del locale; senza, quello della configurazione. I tetti
 in token sono gli stessi per tutti i profili, quindi due modelli si confrontano a parità di
 budget: cambia solo il tetto di tempo, che è di sicurezza. `--minuti` vuoto (di serie dal 22/10;
-prima 20) = il tempo del profilo (30 minuti con quello di serie, 315 con il denso da 27B). La
+prima 20) = il tempo del profilo (55 minuti con quello di serie, 375 con il denso da 27B). La
 riga di ogni lavoro ha `profilo`, `velocita_profilo` (token/s scritti nel profilo, misurati o
 stimati) e `token_s` (token generati / secondi del lavoro); la tabella e `riepilogo.json`
 (`per_riuscito`) danno token, minuti e token/s per lavoro riuscito, per variante.
@@ -1290,8 +1290,8 @@ def secco_giri(tmp: Path) -> int:
         c3.agenti_profilo = "denso-27b-vllm"
         apply_agenti_profile(c3)
         b3 = dividi_budget(c3, 1)
-        verifica("senza --minuti il tempo del profilo (denso: 315 minuti), token uguali",
-                 b3["minuti_totali"] == 315.0 and b3["token_lavoro"] == Config().agenti_token_lavoro
+        verifica("senza --minuti il tempo del profilo (denso: 375 minuti), token uguali",
+                 b3["minuti_totali"] == 375.0 and b3["token_lavoro"] == Config().agenti_token_lavoro
                  and b3["profilo"] == "denso-27b-vllm", str(b3))
         pr = per_riuscito([
             {"variante": "v", "riuscito": True, "token": 1000, "minuti": 2.0, "token_s": 8.3},

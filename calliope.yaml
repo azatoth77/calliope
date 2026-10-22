@@ -1783,11 +1783,12 @@ agenti:
   # lavoro, guardia dei token senza strumenti, e i tempi solo come tetto di sicurezza largo)
   # e, se il profilo li scrive, modello e indirizzo dell'agente. Nomi e valori, con il calcolo
   # dalla velocità misurata, in PROFILI_AGENTE (in fondo a calliope/config.py). Quello di
-  # serie, «qwen3.6-35b-a3b-vllm», ha i valori di sempre (modello e indirizzo restano quelli
-  # dell'installazione: dgx.yaml o agenti_url). Le chiavi dei tetti scritte in
-  # calliope.locale.yaml o nell'ambiente vincono sul profilo; modello e indirizzo del profilo
-  # vincono sul file (non sull'ambiente). null = nessun profilo: valgono le singole chiavi.
-  # Per tornare indietro si cambia solo questa riga, poi `calliope riavvia`
+  # serie, «qwen3.6-35b-a3b-vllm», ha i valori di prima tranne il tempo massimo, 55 minuti dal
+  # 22/10 (scelta di chi amministra); modello e indirizzo restano quelli dell'installazione
+  # (dgx.yaml o agenti_url). Le chiavi dei tetti scritte in calliope.locale.yaml vincono sul
+  # profilo; modello e indirizzo del profilo vincono sul locale (l'avvio lo dice), non sulle
+  # loro variabili d'ambiente. null = nessun profilo: valgono le singole chiavi. Per tornare
+  # indietro si cambia solo questa riga, poi `calliope riavvia`
   # (variabile d'ambiente CALLIOPE_AGENTI_PROFILO, che vince su questo file)
   agenti_profilo: qwen3.6-35b-a3b-vllm
   # Contesto dell'agente in token. "auto" (05/10, fase 2b, calliope/contesto.py →
@@ -1830,11 +1831,14 @@ agenti:
   # conta: lo regge la finestra, comprimendo. Vicino a un tetto l'agente riceve una volta
   # l'avviso di chiudere con quello che ha; al tetto il lavoro si ferma e l'annuncio dice
   # perché, dove sono i file e come vanno i test. Dal 22/10 (#225) i minuti sono un tetto di
-  # sicurezza, dal profilo dell'agente: il budget è in token (agenti_token_lavoro). Il tempo
-  # passato ad aspettare la voce (l'arbitro, lo stream congelato dalla pausa di vLLM, la
-  # passata fermata e rifatta) e una risposta della persona non conta
+  # sicurezza, dal profilo dell'agente: il budget è in token (agenti_token_lavoro). Sono
+  # minuti di lavoro dell'agente: non contano l'attesa di una risposta della persona né il
+  # tempo in cui la voce occupava davvero (l'arbitro, la passata congelata dalla pausa di vLLM
+  # o fermata); all'orologio vero, voce compresa, il giro si ferma comunque al doppio. 55
+  # minuti dal 22/10, scelta di chi amministra (1,5 × 150 000 token / 70 token/s, così decide
+  # il budget in token; *[storico: 30 fino al 22/10]*)
   agenti_max_passi: 24
-  agenti_tempo_max_min: 30.0
+  agenti_tempo_max_min: 55.0
   # I token di un lavoro per tipo (22/10, #225; un tipo che manca usa «altro»): gli stessi
   # numeri del conto di prima, token al minuto per 30 minuti (06/10: codice ed estensioni
   # 5 000 al minuto, ricerche, documenti e altro 3 000). Non dipendono più dal tempo concesso:
@@ -1846,8 +1850,9 @@ agenti:
     documento: 90000
     altro: 90000
   # Il conto di prima (06/10): token generati al minuto per agenti_tempo_max_min. Vuoto (di
-  # serie dal 22/10, #225) = il budget è agenti_token_lavoro; scritto nel locale vale com'era
-  # (per tipo, token al minuto × minuti), al posto di agenti_token_lavoro. Misure del 05/10
+  # serie dal 22/10, #225) = il budget è agenti_token_lavoro; scritto nel locale, all'avvio
+  # diventa un agenti_token_lavoro equivalente con i minuti di allora (quelli scritti nel
+  # locale, o 30), mai con quelli di un profilo, e l'avvio lo dice. Misure del 05/10
   # sulla DGX (docs/ricerche/2026-10-05-contesto-agenti.md §5): il codice genera 2 800–4 300
   # token al minuto, al più ~4 500 (74 token/s senza pause)
   agenti_token_minuto: {}

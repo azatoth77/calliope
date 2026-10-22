@@ -585,7 +585,10 @@ class Avanzamento:
         trascorso = 0.0
         if lav.inizio:
             fine = lav.fine or (lav.attesa_dal if lav.stato == "in_attesa" else None) or ora
-            trascorso = max(0.0, fine - lav.inizio - lav.attesa_s)
+            # Senza la voce (22/10, prima revisione della PR #234, P6): i minuti che contano
+            # per il tetto (Agente.trascorso), non quelli in cui la voce occupava
+            trascorso = max(0.0, fine - lav.inizio - lav.attesa_s
+                            - float(getattr(lav, "attesa_voce_s", 0) or 0))
         av = {"passo": lav.passo if lav.passo not in _PASSI_MUTI else "",
               "pausa": bool(pausa and corre),
               "passi": [{"ora": round(t, 1), "testo": p} for t, p in sg.passi],

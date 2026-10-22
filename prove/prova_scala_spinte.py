@@ -528,10 +528,12 @@ def prova_attesa_voce(tmp: Path):
                  "tolta una volta, P7)", any("senza strumenti" in x for x in log), str(log[-3:]))
         lav, ris, log, cli = gira(tmp, "interrotta", ["Ci penso.", "Ci penso."] + lavoro,
                                   prepara=interrotta)
+        # Dal 22/10 (#225, P1 della prima revisione della PR #234) la passata fermata va in
+        # `rifatte_s` (fuori dalla sola guardia), e in `attesa_voce_s` solo la voce vera
         verifica("due passate fermate per la voce dopo 200 s, poi rifatte: niente guardia (M4)",
                  ris.get("esito") == "fatto" and lav.cedimenti >= 2
                  and not any("senza strumenti" in x for x in log)
-                 and lav.attesa_voce_s >= 400, str(ris)[:200] + str(log[-3:]))
+                 and lav.rifatte_s >= 400, str(ris)[:200] + str(log[-3:]))
     finally:
         C.time = vero_time
 

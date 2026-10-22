@@ -576,19 +576,20 @@ verifica("tetto raggiunto: l'annuncio dice i test (1 su 2)",
          item and "ne passano 1 su 2" in item["messaggio"], str(item and item["messaggio"]))
 svc.agente.max_passi = cfg.agenti_max_passi = 24
 
-# Tetto dei token per tipo (06/10): token al minuto × minuti, al più agenti_max_token
+# Tetto dei token per tipo (06/10; dal 22/10, #225, in token: agenti_token_lavoro, al più
+# agenti_max_token; i token al minuto li converte la Config, prova_agenti_tetti_profilo)
 from calliope.agenti.ciclo import Lavoro as _Lav  # noqa: E402
 _ag = svc.agente
-_prima = (_ag.max_token, dict(_ag.token_minuto), _ag.tempo_max_s)
-_ag.max_token, _ag.token_minuto, _ag.tempo_max_s = 0, {"codice": 5000, "altro": 2000}, 1800
-verifica("tetto dei token per tipo: codice 5000/min × 30 min, ricerca come «altro»",
+_prima = (_ag.max_token, dict(_ag.token_lavoro), _ag.tempo_max_s)
+_ag.max_token, _ag.token_lavoro, _ag.tempo_max_s = 0, {"codice": 150000, "altro": 60000}, 1800
+verifica("tetto dei token per tipo: codice 150 000, ricerca come «altro»",
          _ag.tetto_token(_Lav("t", "codice", "x")) == 150000
          and _ag.tetto_token(_Lav("t", "ricerca", "x")) == 60000)
 _ag.max_token = 100000
 verifica("agenti_max_token vince se è più basso",
          _ag.tetto_token(_Lav("t", "codice", "x")) == 100000
          and _ag.tetto_token(_Lav("t", "ricerca", "x")) == 60000)
-_ag.max_token, _ag.token_minuto, _ag.tempo_max_s = _prima
+_ag.max_token, _ag.token_lavoro, _ag.tempo_max_s = _prima
 
 # Un dato della persona (verifica sulla DGX del 04/10: «la tariffa al chilometro che usa la
 # mia azienda» → 0,21 €/km inventato 2 volte su 5): il prompt dice di chiederlo prima del

@@ -5545,7 +5545,7 @@ velocità misurata sulla DGX, scritta nel commento del profilo.
 | `agenti_token_passata`, `agenti_ragionamento_passata` | 16 384, 8 192 | `Agente._generazione`, `passata` (thinking_token_budget), `ContestoLavoro` | dal profilo (uguali per tutti) |
 | `agenti_token_minuto` × `agenti_tempo_max_min` | 5 000 × 30 = 150 000 per codice ed estensioni, 3 000 × 30 = 90 000 per gli altri | `Agente.tetto_token` | `agenti_token_lavoro` per tipo, gli stessi numeri, che non seguono più i minuti; `agenti_token_minuto` (di serie vuoto) scritto nel locale fa il conto di prima |
 | `agenti_max_token` | 0 | `tetto_token` | invariato (massimo comune) |
-| `agenti_tempo_max_min` | 30 | `_tetti`, `_avviso_fine` (85 %), `_resta_tempo` (90 %), «Hai un altro giro (… minuti)», la frase del «continua», la scheda | dal profilo, tetto di sicurezza; senza l'attesa della voce |
+| `agenti_tempo_max_min` | 30 | `_tetti`, `_avviso_fine` (85 %), `_resta_tempo` (90 %), «Hai un altro giro (… minuti)», la frase del «continua», la scheda | dal profilo, tetto di sicurezza; senza l'attesa della voce; 55 di serie dalla prima revisione della PR #234 (sotto) |
 | `agenti_token_senza_strumenti` | 12 000 | la guardia del ragionamento a vuoto in `_codice` | dal profilo (uguale per tutti) |
 | `agenti_minuti_senza_strumenti` | 5 | la stessa guardia, a tempo | dal profilo, tetto di sicurezza della guardia (già senza la voce dal #224, ora anche lo stream congelato) |
 | `agenti_accettazione_s`, `agenti_revisore_s` | 90, 90 | l'analisi prima del codice (`servizio.py`), il revisore (`revisore.py`) | dal profilo, scalati sulla velocità |
@@ -5562,8 +5562,8 @@ senza strumenti ≥ 1,75 × 12 000 / velocità (1,75 è il margine di oggi), acc
 
 | Profilo | Velocità | Modello e indirizzo | Tempo massimo | Minuti senza strumenti | Accettazione, revisore |
 |---|---|---|---|---|---|
-| `qwen3.6-35b-a3b-vllm` (di serie) | **70 token/s, misurata** | quelli dell'installazione (dgx.yaml o `agenti_url`) | 30 | 5 | 90 s |
-| `denso-27b-vllm` (esempio per #175) | 12 token/s, stimata (banda ~273 GB/s, ~15 GB di pesi; ~11 misurati per i densi da 27–31B il 02/10) | `http://127.0.0.1:8000/v1`, `denso-27b` | 315 (1,5 × 150 000 / 12 = 312,5) | 30 (1,75 × 12 000 / 12 = 29,2) | 525 s |
+| `qwen3.6-35b-a3b-vllm` (di serie) | **70 token/s, misurata** | quelli dell'installazione (dgx.yaml o `agenti_url`) | 55 (1,5 × 150 000 / 70 = 53,6; *[storico: 30 fino alla prima revisione]*) | 5 | 90 s |
+| `denso-27b-vllm` (esempio per #175) | 10 token/s del lavoro intero, stimata (generazione 12 dalla banda, ~273 GB/s e ~15 GB di pesi, più il prefill a ~800 token/s; *[storico: 12, la sola generazione, fino alla prima revisione]*) | `http://127.0.0.1:8000/v1`, `denso-27b` | 375 (22 500 s; *[storico: 315]*) | 35 (2 100 s; *[storico: 30]*) | 630 s (*[storico: 525]*) |
 | `qwen3-coder-next-vllm` (#175) | 60 token/s, stimata (gli attivi dell'A3B, il doppio dei pesi) | `http://127.0.0.1:8000/v1`, `qwen3-coder-next`; `agenti_think: false` | 65 (62,5) | 6 (5,8) | 105 s |
 
 **La velocità misurata dell'A3B** dai banchi della DGX, letti in sola lettura (le `righe.json` di
@@ -5579,16 +5579,20 @@ token e 11,6 minuti. Per passata la mediana è 1 343 token e 20 secondi (p90 2 5
 estensioni i 30 minuti arrivano prima del budget (a ~126 000 token), come prima del 22/10. Il
 criterio «nessun cambiamento sulla DGX» lo tiene così; allargarlo (45 minuti) è una scelta di chi
 amministra. Nei banchi il lavoro più lungo è durato 18,6 minuti: il tetto delle 24 passate arriva
-quasi sempre prima.
+quasi sempre prima. *[storico: così fino alla prima revisione della PR #234; poi chi amministra ha
+scelto 55 minuti, senza eccezioni, sotto]*
 
 **Come si sceglie**: una riga nel locale, `agenti_profilo: denso-27b-vllm`, e `calliope riavvia`;
-si torna indietro cambiando la riga. Le chiavi dei tetti scritte nel locale (o nell'ambiente)
+si torna indietro cambiando la riga. Le chiavi dei tetti scritte nel locale (*[storico: «o
+nell'ambiente» fino alla prima revisione: nessuna chiave dei tetti ha una variabile d'ambiente]*)
 vincono sul profilo e l'avvio le elenca («dal file: …»); `agenti_url` e `agenti_modello` del
 profilo vincono sul locale, perché la riga cambi davvero modello, ma non sull'ambiente; un nome
 sconosciuto si segnala con il più vicino e non cambia niente; `agenti_profilo: null` lascia le
 chiavi singole. Sulla DGX il locale non ha chiavi dei tetti (tabella «Interruttori sulla DGX» di
 [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)): con il profilo di serie i valori sono quelli di
-prima, e il file locale non va toccato.
+prima, e il file locale non va toccato. *[storico: così fino alla prima revisione della PR #234;
+la tabella riporta solo le chiavi a modi, vero/falso e liste, quindi non lo dimostra, e con la
+scelta di chi amministra il tempo massimo di serie cambia: sotto]*
 
 **Il tempo della voce non conta** (n. 26 di #224 completato). L'attesa dell'arbitro e la passata
 fermata per la voce andavano già in `attesa_voce_s`; con la pausa di vLLM (`agenti_pausa_vllm`)
@@ -5596,7 +5600,8 @@ lo stream resta aperto e congelato, e quel tempo restava dell'agente. Ora l'arbi
 secondi di voce occupata (`Arbitro.occupata_s`: il turno e la ripresa dopo, la tenuta massima
 se la voce non dice «libera») e la passata ne aggiunge la differenza a `attesa_voce_s`. Esce dalla
 guardia dei minuti senza strumenti e, dal 22/10, anche dal tempo del giro (`Agente.trascorso`,
-con `attesa_voce0` al «continua»).
+con `attesa_voce0` al «continua»). *[storico: la passata fermata contata tutta come voce fino alla
+prima revisione della PR #234, sotto]*
 
 **Il banco** (`prove/manuali/banco_temperatura.py`): `--agenti-profilo NOME` sceglie il profilo
 in memoria; `--minuti` vuoto (di serie, prima 20) vale il tempo del profilo; con `--giri N`
@@ -5623,6 +5628,65 @@ token o non scrive il profilo.
 
 **Cosa resta**: la velocità dei due profili d'esempio è stimata e va misurata con il banco quando
 il modello è sulla DGX (#175), poi scritta nel commento come «misurata»; l'eccezione dei 30 minuti
-dell'A3B per il codice (sopra) è da decidere; `agenti_analisi_s` e `agenti_risultato_s` restano a
+dell'A3B per il codice (sopra) è da decidere (*[storico: decisa dopo la prima revisione, 55
+minuti]*); `agenti_analisi_s` e `agenti_risultato_s` restano a
 tempo perché li aspetta la persona (con un modello lento l'analisi della richiesta salterà più
 spesso).
+
+**Dopo la prima revisione della PR #234 (22/10).**
+
+- **Il tempo massimo resta un tetto** (P1). Senza la pausa di vLLM (`PausaServer` assente, il
+  ripiego del turno, un container partito senza `PAUSA=1`) la passata fermata per la voce andava
+  tutta in `attesa_voce_s`, che dalla PR esce dal tempo del giro: con una voce a ogni passata
+  passate, token e tempo restavano fermi e il lavoro restava vivo all'infinito (riprodotto dal
+  revisore: 15 passate rifatte, trascorso 0,01 s). Adesso della passata fermata è della voce solo
+  la parte in cui la voce occupava davvero (la differenza di `occupata_s`, come per la passata
+  congelata); il resto, generato e perso, va in `Lavoro.rifatte_s`, che esce solo dalla guardia
+  dei minuti senza strumenti (la regola di #224). In più due tetti che non dipendono dal conto
+  della voce: all'orologio vero il giro si ferma a `OROLOGIO_VOLTE` (2) × il tempo massimo, voce e
+  revisore compresi (l'attesa di una risposta della persona no; `Agente.orologio`), e la stessa
+  passata fermata dalla voce si rifà al più `RIFATTE_MAX` (10) volte. Tutti e due chiudono con il
+  tipo «tempo», quindi in uno sviluppo sono una tappa.
+- **`agenti_token_minuto` nel locale** (P2). Prima vinceva in silenzio su `agenti_token_lavoro` e
+  si moltiplicava per i minuti del profilo (con il denso 5 000 × 315 = 1 575 000 token). Adesso
+  all'avvio (`converti_token_minuto`) diventa un `agenti_token_lavoro` equivalente con i minuti di
+  allora, quelli scritti nel locale o i 30 di prima, mai quelli di un profilo; i tipi che non
+  scrive restano del profilo; il campo si svuota, e l'avvio lo dice («agenti_token_minuto dal file
+  convertito in agenti_token_lavoro (× 30 minuti): codice 150000. Il budget del profilo per quei
+  tipi non vale: per tornarci togli la chiave»). Il ciclo non moltiplica più niente per i minuti.
+- **Il tempo massimo di serie a 55 minuti** (P3, P4, scelta di chi amministra del 22/10,
+  commento su #225): 1,5 × 150 000 / 70 = 53,6 → 55, così il budget in token decide anche per
+  codice ed estensioni, e tutti i profili hanno le stesse fermate per lo stesso lavoro. **Cosa
+  cambia sulla DGX con il profilo di serie** (la chiave non è nel locale, quindi è un valore di
+  serie nuovo, non una riga della tabella «Interruttori sulla DGX»): il tempo massimo di un
+  lavoro (55 minuti di lavoro dell'agente invece di 30 all'orologio meno l'attesa della persona),
+  e il tempo del giro che non conta più la voce vera (l'attesa dell'arbitro e la voce durante una
+  passata congelata o fermata). Il resto è uguale. Prima del deploy chi amministra controlla che
+  il locale della DGX non abbia chiavi dei tetti: `grep -n '^ *agenti_' ~/calliope/calliope.locale.yaml`
+  (una chiave dei tetti trovata vince sul profilo e l'avvio la dice in «dal file: …»).
+- **Il denso a 10 token/s** (P5): la regola vuole la velocità del lavoro intero, e per il denso il
+  prefill pesa (~800 token/s): con le passate dei banchi (1 343 token generati e ~12 900 di
+  contesto) 112 s di generazione e 16 s di prefill, ~10,5 token/s. Tempi: 375 minuti, 35 senza
+  strumenti, 630 s per accettazione e revisore. Resta una stima.
+- **Piccole cose** (P6): nessuna frase sulle variabili d'ambiente dei tetti (non ce ne sono); le
+  frasi del «continua» dicono «un altro giro di lavoro» e non il tetto di sicurezza come durata
+  («un altro giro di 6 ore»), e all'agente «Hai un altro giro di lavoro (24 passate).»; l'avvio
+  dice quando il profilo sostituisce `agenti_url` o `agenti_modello` del locale («del file
+  sostituite dal profilo: …»); accanto ai profili è scritto che un profilo con `agenti_url`
+  scavalca dgx.yaml per intero (tunnel, porte e `scrittore_modello`); la scheda toglie la voce dai
+  minuti, come il tetto.
+- **Le prove**: `prova_agenti_tetti_profilo` ha il ripiego senza pausa (passate di 0,3 s fermate
+  dalla voce: il lavoro si ferma al tempo massimo, la voce vera ~0,25 s a passata, la generazione
+  persa in `rifatte_s`), quasi tutta voce (il tetto all'orologio), il massimo delle rifatte, la
+  tenuta massima nel conto della voce (al più la tenuta, e il turno dopo è un periodo nuovo), la
+  conversione di `agenti_token_minuto` (× 30 con il profilo lento, × 20 con i minuti nel locale),
+  le sostituite all'avvio (contrario: lo stesso indirizzo), la frase del «continua» e la scheda.
+  `prova_scala_spinte` (M4) guarda `rifatte_s` invece di `attesa_voce_s`, con un arbitro che non
+  conta la voce. `prova_agenti` prova il tetto per tipo con `agenti_token_lavoro`.
+- **Mutazioni**: 24, tutte cadono: le 13 di prima (il profilo di serie a 30 minuti invece di 45),
+  la passata fermata tutta nella voce, la voce della passata fermata contata due volte, niente
+  tetto all'orologio, niente massimo delle rifatte, `agenti_token_minuto` non convertito o
+  convertito con i minuti del profilo, l'avvio senza le sostituite, il «continua» con la durata,
+  la scheda con la voce, e le due sopravvissute alla revisione (`_occupata` che non chiude il
+  periodo alla tenuta, `occupata_s` senza il taglio alla tenuta).
+
