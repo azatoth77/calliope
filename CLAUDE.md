@@ -222,8 +222,12 @@ protetto; primo download di Whisper su Windows con `WinError 1314` → riavviare
   nella sua area (poi `python -m prove --leggimi`: l'elenco di `LEGGIMI.md` si genera, dal 16/10);
   i passi manuali in `prove/manuali/`. Comandi del runner: vedi la sezione
   «Runner» di [`prove/LEGGIMI.md`](prove/LEGGIMI.md).
+- **Rami delle epic** (dal 22/10): ogni issue ha il suo ramo e la sua PR verso il ramo dell'epic
+  (`epic-<N>-<nome>`, «Refs #N»), con le revisioni e le sole prove relative; l'epic va su main a
+  tappe, con una PR che chiude le issue che contiene («Closes #N»), quando un gruppo è pronto o
+  prima di installare sulla DGX; dopo ogni tappa main si unisce nei rami delle epic aperte.
 - L'hook lancia `python -m prove --hook --staged` (livelli 1 e 2, ~15–60 s). **Prima
-  dell'unione** `python -m prove --completo` (~8 min, con `voices/`, `models/speaker/`,
+  dell'unione su main** (la PR di tappa) `python -m prove --completo` (~8 min, con `voices/`, `models/speaker/`,
   `wakeword/modelli/`, `biblioteca/` presenti) e, per la tua area, le prove col modello.
   Mai `--no-verify`. Una prova saltata esce con 77 e il riepilogo la conta a parte.
 - Mai chiudere processi per nome o per pezzi di riga di comando: sullo stesso portatile
