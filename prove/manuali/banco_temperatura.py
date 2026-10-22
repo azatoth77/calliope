@@ -143,8 +143,9 @@ combinazione e caso, e `riepilogo.json` nella cartella d'uscita.
 **Giri** (`--giri N`, 13/10; predefinito 1 = un lavoro solo, come prima). Con N > 1 lo stesso
 budget di un lavoro si divide in N giri uguali: `agenti_max_passi` (24) diventa
 round(24 / N) passate per giro (24 / 2 = 12; il banco stampa il conto e il totale), il tetto di
-tempo `--minuti` diventa minuti / N per giro, e con esso il tetto dei token (token al minuto
-per i minuti del giro; anche `agenti_max_token`, se acceso, diviso per N). Così un lavoro a
+tempo `--minuti` diventa minuti / N per giro, e il budget dei token per tipo
+(`agenti_token_lavoro`, dal 22/10; prima i token al minuto seguivano i minuti) diviso per N,
+come `agenti_max_token`, se acceso. Così un lavoro a
 giri ha lo stesso budget totale di passate, tempo e token di un lavoro con un giro solo, e il
 confronto misura solo l'effetto della ripartenza. Al tetto di un giro il lavoro si ferma alla
 **tappa** della modalità sviluppo (`lav.tappe`, `_tappa` in agenti/ciclo.py: il contesto
@@ -219,6 +220,16 @@ sviluppo (`SviluppoBanco`, con i requisiti del caso: gli esempi di accettazione 
 così al tetto o alla tappa il codice può chiudere il lavoro da sé; con `--accettazione no`
 «saltata» e i giocatori del caso, come prima. Dal 20/10 una tappa con lo stato consegnabile si
 chiude «fatto» (`consegna_al_tetto` «tappa»); `tappa_no` nella riga dice perché no.
+
+**Il profilo dell'agente** (22/10, #225, per #175): `--agenti-profilo NOME` sceglie in memoria
+un profilo di `PROFILI_AGENTE` (calliope/config.py: modello, indirizzo e tetti tarati sulla
+velocità), come la riga `agenti_profilo` del locale; senza, quello della configurazione. I tetti
+in token sono gli stessi per tutti i profili, quindi due modelli si confrontano a parità di
+budget: cambia solo il tetto di tempo, che è di sicurezza. `--minuti` vuoto (di serie dal 22/10;
+prima 20) = il tempo del profilo (55 minuti con quello di serie, 375 con il denso da 27B). La
+riga di ogni lavoro ha `profilo`, `velocita_profilo` (token/s scritti nel profilo, misurati o
+stimati) e `token_s` (token generati / secondi del lavoro); la tabella e `riepilogo.json`
+(`per_riuscito`) danno token, minuti e token/s per lavoro riuscito, per variante.
 
 Durata: un lavoro dura 3–15 minuti; con i valori predefiniti 2 × 2 × 2 × 3 = 24 lavori, da 2 a
 4 ore. Per una prima idea: --ripetizioni 1 --casi porte,convertitore (8 lavori).
@@ -1268,6 +1279,27 @@ def secco_giri(tmp: Path) -> int:
         verifica("arrotondato: 24 passate in 5 giri = 5 per giro (25 in tutto), 4 minuti",
                  b2["passate_giro"] == 5 and b2["passate_totali"] == 25
                  and c2.agenti_tempo_max_min == 4.0, str(b2))
+        # Dal 22/10 (#225) i token per tipo si dividono anche loro (prima seguivano i minuti),
+        # e senza --minuti vale il tempo del profilo dell'agente
+        verifica("i token per lavoro divisi per giro: 150 000 di codice in 2 giri = 75 000",
+                 b["token_lavoro"]["codice"] == 150000 and b["token_giro"]["codice"] == 75000
+                 and svc.agente.tetto_token(SimpleNamespace(tipo="codice")) == 75000
+                 and svc.agente.tetto_token(SimpleNamespace(tipo="ricerca")) == 45000, str(b))
+        from calliope.config import apply_agenti_profile
+        c3 = Config()
+        c3.agenti_profilo = "denso-27b-vllm"
+        apply_agenti_profile(c3)
+        b3 = dividi_budget(c3, 1)
+        verifica("senza --minuti il tempo del profilo (denso: 375 minuti), token uguali",
+                 b3["minuti_totali"] == 375.0 and b3["token_lavoro"] == Config().agenti_token_lavoro
+                 and b3["profilo"] == "denso-27b-vllm", str(b3))
+        pr = per_riuscito([
+            {"variante": "v", "riuscito": True, "token": 1000, "minuti": 2.0, "token_s": 8.3},
+            {"variante": "v", "riuscito": True, "token": 3000, "minuti": 4.0, "token_s": 12.5},
+            {"variante": "v", "riuscito": False, "token": 99999, "minuti": 30.0, "token_s": 55}])
+        verifica("per lavoro riuscito: mediane di token, minuti e token/s, i falliti fuori",
+                 pr["v"] == {"riusciti": 2, "token_med": 2000, "minuti_med": 3.0,
+                             "token_s_med": 10.4, "token_tot": 4000, "minuti_tot": 6.0}, str(pr))
         # 1. Giro 1 al tetto (3 passate sbagliate) → tappa; giro 2: giusta e consegna
         fake.copione = [scrivi("a - b"), scrivi("a * b"), scrivi("b - a"), scrivi("a + b"),
                         consegna]
@@ -1302,6 +1334,10 @@ def secco_giri(tmp: Path) -> int:
                  b["passate_giro"] == 6 and r["esito"] == "limite" and r["giri"] == 1
                  and r["passate"] == 6 and r["sbloccato"] is None
                  and colonna_giri([r]) == "-", f"{r['esito']} {r['per_giro']}")
+        verifica("la riga dice il profilo dell'agente, la sua velocità e i token al secondo",
+                 r["profilo"] == "qwen3.6-35b-a3b-vllm" and r["velocita_profilo"] == 70.0
+                 and isinstance(r["token_s"], float), str({k: r.get(k) for k in (
+                     "profilo", "velocita_profilo", "token_s")}))
         # 4. Il tris nudo (20/10, #198): il JavaScript dei programmi acceso in memoria solo per
         # il caso, con la Config di serie che non l'ha; il caso dopo torna com'era
         fine = {"tool_calls": [{"name": "consegna", "arguments": {
@@ -1722,21 +1758,46 @@ def aspetta(svc, lav, limite_s: float):
     return None
 
 
-def dividi_budget(cfg, giri: int, minuti: float) -> dict:
+def dividi_budget(cfg, giri: int, minuti: float | None = None) -> dict:
     """Il budget di un lavoro diviso in `giri` giri uguali, solo in memoria (13/10): passate
     arrotondate (24 / 2 = 12; 24 / 5 = 5, 25 in tutto: il conto lo stampa main), minuti / giri
-    per giro (il tetto dei token segue i minuti; agenti_max_token, se acceso, diviso anche
-    lui). Con giri = 1 tutto come prima."""
+    per giro e, dal 22/10 (#225), i token per tipo di lavoro (agenti_token_lavoro) / giri;
+    agenti_max_token, se acceso, diviso anche lui. `minuti` None = il tempo del profilo
+    dell'agente (agenti_tempo_max_min). Con giri = 1 tutto come prima."""
     giri = max(1, int(giri))
     passate = int(cfg.agenti_max_passi)
     per_giro = max(1, int(passate / giri + 0.5))
+    if minuti is None:
+        minuti = float(cfg.agenti_tempo_max_min)
     cfg.agenti_max_passi = per_giro
     cfg.agenti_tempo_max_min = float(minuti) / giri
+    token = dict(getattr(cfg, "agenti_token_lavoro", None) or {})
+    cfg.agenti_token_lavoro = {k: max(1, int(int(v) / giri + 0.5)) for k, v in token.items()}
     if int(getattr(cfg, "agenti_max_token", 0) or 0) > 0:
         cfg.agenti_max_token = max(1, int(cfg.agenti_max_token / giri + 0.5))
     return {"giri": giri, "passate_lavoro": passate, "passate_giro": per_giro,
             "passate_totali": per_giro * giri, "minuti_giro": round(float(minuti) / giri, 2),
-            "minuti_totali": float(minuti)}
+            "minuti_totali": float(minuti), "token_lavoro": token,
+            "token_giro": dict(cfg.agenti_token_lavoro),
+            "profilo": getattr(cfg, "agenti_profilo", None)}
+
+
+def per_riuscito(righe: list[dict]) -> dict:
+    """Token, minuti e token al secondo per lavoro riuscito, per variante (22/10, #225): le
+    mediane e i totali, per confrontare due profili dell'agente a parità di budget."""
+    out = {}
+    for v in sorted({r["variante"] for r in righe}):
+        rr = [r for r in righe if r["variante"] == v and r.get("riuscito")]
+        if not rr:
+            out[v] = {"riusciti": 0}
+            continue
+        out[v] = {"riusciti": len(rr),
+                  "token_med": statistics.median([r["token"] for r in rr]),
+                  "minuti_med": statistics.median([r["minuti"] for r in rr]),
+                  "token_s_med": statistics.median([r.get("token_s") or 0 for r in rr]),
+                  "token_tot": sum(r["token"] for r in rr),
+                  "minuti_tot": round(sum(r["minuti"] for r in rr), 2)}
+    return out
 
 
 class SviluppoBanco:
@@ -1780,6 +1841,7 @@ def senza_sviluppo(svc):
 def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
               giri: int = 1) -> dict:
     from calliope.agenti.ciclo import segnali_giro
+    from calliope.config import velocita_agente
     from calliope.agenti.sandbox import Sandbox
     lav = svc.nuovo(caso["tipo"], caso["compito"], "banco", "Ottavio", "amministra",
                     vincoli=vincoli_correzione(caso) if caso.get("correzione") else "")
@@ -1904,6 +1966,11 @@ def un_lavoro(svc, cfg, uscita: Path, nome: str, caso: dict, etichetta: str,
             "test_apri_gioco": test_apri_gioco(finali, lav),
             "passate": lav.passi, "token": lav.token,
             "ragionamento": lav.ragionamento, "minuti": round(minuti, 2),
+            # Il profilo dell'agente e la velocità (22/10, #225): quella scritta nel profilo e
+            # quella del lavoro (token generati / secondi)
+            "profilo": getattr(cfg, "agenti_profilo", None),
+            "velocita_profilo": velocita_agente(cfg)[0],
+            "token_s": round(lav.token / (minuti * 60), 1) if minuti > 0 else None,
             "ripetizioni": seg.get("ripetizioni", 0), "senza_novita": seg.get("senza_novita", 0),
             "a_vuoto": seg.get("a_vuoto", False), "test_agente": ris.get("test"),
             "riproduzione": (getattr(lav, "riproduzione", None) or {}).get("stato"),
@@ -2008,11 +2075,15 @@ def tabella(righe: list[dict]):
     if any(int(r.get("giri_max") or 1) > 1 for r in righe):
         print("giri: accettazioni verdi per giro (giro 1 + giro 2 …) e sN = sbloccati dopo la "
               "ripartenza")
+    pr = per_riuscito(righe)
     for v in sorted({r["variante"] for r in righe}):
         rr = [r for r in righe if r["variante"] == v]
+        p = pr.get(v) or {}
         print(f"TOTALE {v}: {sum(r['riuscito'] for r in rr)}/{len(rr)} riusciti, "
               f"token in tutto {sum(r['token'] for r in rr)}, "
-              f"minuti in tutto {sum(r['minuti'] for r in rr):.1f}")
+              f"minuti in tutto {sum(r['minuti'] for r in rr):.1f}"
+              + (f"; per lavoro riuscito token {p['token_med']:g}, minuti {p['minuti_med']:g}, "
+                 f"{p['token_s_med']:g} token/s (mediane)" if p.get("riusciti") else ""))
 
 
 def main(argv) -> int:
@@ -2032,8 +2103,12 @@ def main(argv) -> int:
                     "(agenti_accettazione, 13/10): come nella Config, accesa o spenta")
     ap.add_argument("--ripetizioni", type=int, default=2)
     ap.add_argument("--casi", default="porte,convertitore,programma,tris2")
-    ap.add_argument("--minuti", type=float, default=20.0, help="tetto di tempo per lavoro "
-                    "(con --giri N diviso per N: lo stesso tempo in tutto)")
+    ap.add_argument("--minuti", type=float, default=None, help="tetto di tempo per lavoro "
+                    "(con --giri N diviso per N: lo stesso tempo in tutto); vuoto = quello del "
+                    "profilo dell'agente (dal 22/10; prima 20)")
+    ap.add_argument("--agenti-profilo", help="il profilo dell'agente (PROFILI_AGENTE di "
+                    "calliope/config.py: modello, indirizzo e tetti), solo in memoria; vuoto = "
+                    "quello della configurazione (22/10, #225)")
     ap.add_argument("--giri", type=int, default=1, help="giri per lavoro: le passate e il "
                     "tempo divisi in N giri uguali, con la tappa e «continua» tra un giro e "
                     "l'altro (1 = come prima)")
@@ -2044,11 +2119,30 @@ def main(argv) -> int:
     if args.giri < 1:
         ap.error("--giri vuole un numero da 1 in su")
     from calliope.agenti import Lavori, carica
-    from calliope.config import load_config
+    from calliope.config import (PROFILI_AGENTE, apply_agenti_profile, load_config,
+                                 velocita_agente)
     cfg = load_config()
     cfg.agenti_conferma = "mai"
+    if args.agenti_profilo:
+        if args.agenti_profilo not in PROFILI_AGENTE:
+            ap.error(f"profilo dell'agente sconosciuto: {args.agenti_profilo} (profili: "
+                     f"{', '.join(PROFILI_AGENTE)})")
+        # Solo in memoria, prima del servizio: l'agente legge i tetti quando nasce. Un
+        # agenti_token_minuto del locale, già convertito all'avvio, qui lo sostituisce il budget
+        # del profilo (seconda revisione della PR #234, Q6): il banco lo dice
+        convertito = "agenti_token_minuto" in (getattr(cfg, "_agenti_tenute", None) or [])
+        cfg.agenti_profilo = args.agenti_profilo
+        apply_agenti_profile(cfg, log=True)
+        if convertito:
+            print("Attenzione: agenti_token_minuto del locale (convertito all'avvio) non vale nel "
+                  f"banco: i token per lavoro sono quelli del profilo {args.agenti_profilo} "
+                  f"({cfg.agenti_token_lavoro})", flush=True)
     # Prima di creare il servizio: l'agente legge passate e tempo da cfg quando nasce
     budget = dividi_budget(cfg, args.giri, args.minuti)
+    print(f"Profilo dell'agente: {cfg.agenti_profilo or 'nessuno'} "
+          f"(velocità {velocita_agente(cfg)[1] or '?'} {velocita_agente(cfg)[0] or '?'} token/s); "
+          f"token per lavoro {budget['token_lavoro']}, tempo di sicurezza "
+          f"{budget['minuti_totali']:g} minuti", flush=True)
     if args.giri > 1:
         print(f"Giri: {budget['passate_lavoro']} passate in {args.giri} giri = "
               f"{budget['passate_giro']} per giro ({budget['passate_totali']} in tutto), "
@@ -2137,6 +2231,9 @@ def main(argv) -> int:
         "presence": ["config" if p is CONFIG else p for p in presenze],
         "presence_config": vecchie[1], "accettazione": bool(cfg.agenti_accettazione),
         "ripetizioni": args.ripetizioni, "casi": scelti, "giri": args.giri, "budget": budget,
+        # Il profilo dell'agente e i numeri per lavoro riuscito (22/10, #225)
+        "profilo": cfg.agenti_profilo, "velocita_profilo": list(velocita_agente(cfg)),
+        "per_riuscito": per_riuscito(righe),
         "minuti": round((time.time() - t0) / 60, 1), "righe": righe}
     (uscita / "riepilogo.json").write_text(json.dumps(riepilogo, ensure_ascii=False, indent=1),
                                            encoding="utf-8")

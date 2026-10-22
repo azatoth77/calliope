@@ -1940,6 +1940,15 @@ class Sviluppi:
             perche = {"passate": "ha finito le passate del giro", "tempo": "è finito il tempo "
                       "del giro", "token": "ha finito i token del giro", **PERCHE_TAPPA}.get(
                 r.get("tipo_limite"), "è arrivato al limite del giro")
+            # Il tempo per la voce o all'orologio (seconda revisione della PR #234, Q3): il perché
+            # vero, non «è finito il tempo del giro»
+            tp = (getattr(lav, "segnali", None) or {}).get("tempo_perche") \
+                if isinstance(getattr(lav, "segnali", None), dict) else None
+            if (r.get("tipo_limite") == "tempo" and isinstance(tp, dict)
+                    and tp.get("giro") == int(getattr(lav, "giro", 1) or 1)):
+                from .agenti.ciclo import MOTIVO_OROLOGIO, MOTIVO_RIFATTE
+                perche = {"voce": MOTIVO_RIFATTE, "orologio": MOTIVO_OROLOGIO}.get(
+                    tp.get("perche"), perche)
             seg = segnali_detti(r)
             return ("Il lavoro è fermo a una tappa: " if voce else "è fermo a una tappa: ") \
                 + perche + (f"; segnali di giro a vuoto: {', '.join(seg)}" if seg else "") + "."

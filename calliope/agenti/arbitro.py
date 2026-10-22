@@ -193,6 +193,13 @@ class Arbitro:
         self.turni = 0
         self.cessioni = 0                   # stream chiusi per dare la precedenza alla voce
         self.attese_s = 0.0                 # tempo passato dall'agente ad aspettare
+        # I periodi di voce occupata (attiva più la ripresa dopo, 22/10, #225): i secondi
+        # chiusi e il periodo in corso (inizio, fine o None se la voce non ha ancora detto
+        # «libera»). Li legge `occupata_s`: con la pausa di vLLM lo stream dell'agente resta
+        # aperto e congelato, e quel tempo non è dell'agente
+        self._occ_tot = 0.0
+        self._occ_dal: float | None = None
+        self._occ_fine: float | None = None
         # Pausa del server (vLLM in modalità sviluppo)
         self.pausa = pausa if self.condiviso else None
         self._voluta = False                # il server dovrebbe essere in pausa
@@ -386,6 +393,7 @@ class Arbitro:
             if not self._attiva:
                 self._dal = time.monotonic()
                 self.turni += 1
+                self._apri_periodo(self._dal)
             self._attiva = True
             usa = self._pausa_usabile()
             if usa:
@@ -412,6 +420,7 @@ class Arbitro:
                 return                       # già libera: niente pausa in più
             self._attiva = False
             self._fino = time.monotonic() + (self.ripresa_s if ripresa_s is None else ripresa_s)
+            self._occ_fine = self._fino
             self._cv.notify_all()
 
     # ── lato agente ──
@@ -419,7 +428,34 @@ class Arbitro:
         now = time.monotonic()
         if self._attiva and now - self._dal > self.tenuta_max_s:
             self._attiva = False             # nessuno ha detto «libera»: si riparte
+            self._occ_fine = self._dal + self.tenuta_max_s
         return self._attiva or now < self._fino
+
+    def _apri_periodo(self, ora: float):
+        """Un turno della voce comincia: dentro la ripresa di quello di prima il periodo
+        continua, altrimenti quello di prima si chiude nel conto e se ne apre uno nuovo."""
+        if self._occ_dal is not None and self._occ_fine is not None and ora >= self._occ_fine:
+            self._occ_tot += max(0.0, self._occ_fine - self._occ_dal)
+            self._occ_dal = None
+        if self._occ_dal is None:
+            self._occ_dal = ora
+        self._occ_fine = None
+
+    def occupata_s(self) -> float:
+        """I secondi in cui la voce ha avuto la precedenza (turno e ripresa dopo), da quando
+        l'arbitro c'è (22/10, #225): la differenza fra due letture è il tempo della voce in
+        mezzo, che il ciclo toglie dalle guardie a tempo dell'agente. 0 se non condiviso."""
+        if not self.condiviso:
+            return 0.0
+        with self._cv:
+            now = time.monotonic()
+            tot = self._occ_tot
+            if self._occ_dal is not None:
+                fine = self._occ_fine
+                if fine is None:
+                    fine = min(now, self._dal + self.tenuta_max_s)
+                tot += max(0.0, min(fine, now) - self._occ_dal)
+            return tot
 
     def in_pausa(self) -> bool:
         """L'agente sta aspettando la voce (o la ripresa dopo): per la scheda «in pausa»
@@ -449,9 +485,10 @@ class Arbitro:
                 return False
             return not (self._voluta and self._copre(url))
 
-    def attendi(self, annulla: threading.Event | None = None) -> float:
+    def attendi(self, annulla: threading.Event | None = None, fino: float | None = None) -> float:
         """Aspetta che la voce sia libera (solo se condiviso). Restituisce i secondi
-        aspettati."""
+        aspettati. `fino` (monotonic, 22/10, seconda revisione della PR #234): oltre, si smette
+        di aspettare anche con la voce occupata (il tetto all'orologio del lavoro)."""
         if not self.condiviso:
             return 0.0
         t0 = time.monotonic()
@@ -459,7 +496,9 @@ class Arbitro:
             while self._occupata():
                 if annulla is not None and annulla.is_set():
                     break
-                self._cv.wait(0.1)
+                if fino is not None and time.monotonic() >= fino:
+                    break
+                self._cv.wait(0.1 if fino is None else max(0.001, min(0.1, fino - time.monotonic())))
         waited = time.monotonic() - t0
         self.attese_s += waited
         return waited

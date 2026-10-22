@@ -729,6 +729,8 @@ class Lavori:
             lav.giro = int(getattr(lav, "giro", 1) or 1) + 1
             lav.passi0, lav.token0 = lav.passi, lav.token
             lav.attesa0, lav.giro_inizio = lav.attesa_s, ora
+            # L'attesa della voce del giro di prima resta fuori dal tempo di questo (#225)
+            lav.attesa_voce0 = float(getattr(lav, "attesa_voce_s", 0) or 0)
             lav.avvisato = False
             uguali = giri_uguali(lav)
             if isinstance(lav.segnali, dict):
@@ -753,12 +755,12 @@ class Lavori:
         self._salva_stato()
         if uguali and not nota:
             return (f"D'accordo: faccio consegnare all'agente quello che funziona già di "
-                    f"«{titolo_detto(lav.titolo)}», con un altro giro di "
-                    f"{_durata(self.agente.tempo_max_s)}"
+                    f"«{titolo_detto(lav.titolo)}», con un altro giro di lavoro"
                     + (", appena finisce il lavoro in corso" if occupato else "")
                     + ". Ti avviso quando è pronto.")
-        return (f"Continuo «{titolo_detto(lav.titolo)}»: un altro giro di "
-                f"{_durata(self.agente.tempo_max_s)}"
+        # Il tempo massimo è un tetto di sicurezza, non la durata del giro (22/10, prima
+        # revisione della PR #234, P6: con il denso sarebbe stato «un altro giro di 6 ore»)
+        return (f"Continuo «{titolo_detto(lav.titolo)}»: un altro giro di lavoro"
                 + (" con la tua indicazione" if nota else "")
                 + (", appena finisce il lavoro in corso" if occupato else "")
                 + ". Ti avviso quando è pronto.")

@@ -220,7 +220,16 @@ Ogni passo è una issue e una PR, con il suo criterio sul banco. L'ordine segue 
    tetti nel profilo dell'agente (come `llm_profilo` per la voce, una riga per cambiare modello)
    o calcolati dalla velocità misurata delle prime passate; le guardie a tempo diventano a token.
    Criterio: lo stesso lavoro con due profili ha lo stesso budget in token, e il banco riporta
-   tempo e token per lavoro riuscito.
+   tempo e token per lavoro riuscito. **Stato (22/10, #225, PR verso `epic-86-harness`)**: fatto
+   con i tetti scritti nel profilo (scelta di chi amministra): `agenti_profilo` e
+   `PROFILI_AGENTE`, quello di serie con i valori di prima tranne il tempo massimo, 55 minuti
+   (scelta di chi amministra dopo la prima revisione della PR #234; velocità misurata dell'A3B
+   70 token/s, 124 lavori dei banchi), due d'esempio con la velocità stimata del lavoro intero
+   (denso da 27B, 10; Qwen3-Coder-Next, 60); i budget in token uguali per tutti, i tempi solo
+   di sicurezza e senza il tempo in cui la voce occupava davvero, più un tetto all'orologio vero
+   (2 × il tempo massimo); il banco con `--agenti-profilo` e i numeri per lavoro riuscito. Resta da
+   misurare la velocità vera dei modelli di #175 ([agenti-estensioni](../aree/agenti-estensioni.md),
+   voce del 22/10).
 
 Da verificare sulla DGX prima del passo 2: quali `top_p` e `top_k` usa davvero vLLM (Calliope
 manda solo temperatura e `presence_penalty`); se `tool_choice: "required"` convive con il parser
