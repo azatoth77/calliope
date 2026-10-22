@@ -2657,3 +2657,61 @@ scelto come rischio noto, scritto nella 0032 con il rimedio. Prove nuove in
 `_stanza_turno` e `_stanza_esito` (valutazione accesa con la zona grigia, e spenta con la voce di
 casa), il banco che salta il tratto, conoscente con `--persona` e «dimentica», la revoca e il
 contrario del consenso mai chiesto. Tutte falliscono col codice prima della correzione.
+
+## Da ospite a voce riconosciuta: il cambio nei dati del turno (22/10, issue #171, ramo `issue-171-ospite-riconosciuto`)
+
+**Caso vero (18/10 pomeriggio, telefono in auto).** Le prime due frasi di chi amministra non sono
+riconosciute (ospite); dalla terza la voce lo riconosce e il registro ha il suo nome, ma il modello
+continua: «Il sistema dice che sei un ospite… chiedi a chi gestisce la casa». Ha smesso solo a «chi
+sono e quali sono i miei hobby?».
+
+**Cosa succede nel codice** (letto il 22/10 su main 950b877):
+- le due frasi da ospite: la voce sopra soglia ma non netta sul secondo profilo (voci di famiglia
+  al telefono, #73) o sotto la zona grigia vale nessuno (`Ciclo._confronta_voce`); la conversazione
+  è quella anonima del satellite, `ospite:<corsia>` (`RegistroConversazioni.scegli`, ultimo ramo);
+- la terza, riconosciuta dalla voce: `scegli` dà la conversazione **della persona**
+  (`persona:<id>`), un'altra; le frasi da ospite e le risposte restano nell'anonima. Dove la
+  persona finisce nella stessa conversazione anonima (frase breve, zona grigia, continuità con la
+  sua conversazione presa da un altro satellite), `Brain._check_conversation` la chiude (owner
+  `None` → id), tranne in compagnia senza voci sconosciute, dove resta condivisa (13/10) e le frasi
+  hanno l'etichetta `_chi` «voce non riconosciuta» nella nota del gruppo;
+- cosa il modello vede ancora delle frasi da ospite: con la stanza nei dati del turno
+  (`stanza_contesto`, acceso sulla DGX dal 14/10) il primo pezzo della conversazione nuova
+  (riapertura, fino all'inizio dell'ultimo scambio) porta le righe «voce non riconosciuta →
+  Calliope: …» e «Calliope: …» delle risposte all'ospite (`stanza/contesto.etichetta`;
+  `gia_nella_storia` toglie solo le frasi di questa conversazione); in compagnia la storia stessa;
+- i dati del turno nuovi dicevano solo «persona: Carlo, riconosciuta dalla voce.»: niente sul
+  cambio. Con le righe di prima marcate «non riconosciuta» e Calliope che parlava a un ospite, il
+  modello ha continuato la parte. La ricostruzione dalla stanza è la più probabile per il 18/10
+  (da confermare sul registro dei turni della DGX, regola `stanza_contesto` nei turni dopo il
+  riconoscimento).
+
+**La correzione: un dato del turno, una volta.** `Brain._voce_ora_riconosciuta` (in
+`stream_reply`, dopo `_inizio_conversazione`): se il turno di prima su questo Brain era di un
+ospite (voce non riconosciuta e nessun conoscente), nello stesso luogo ed entro
+`storia_inattiva_s`, e adesso parla una persona riconosciuta, i dati del turno aggiungono dopo chi
+parla «Ora la voce è riconosciuta: parla Carlo. Le frasi di prima qui erano di una voce non
+riconosciuta, trattata da ospite (forse la stessa persona): ciò che hai detto allora all'ospite non
+vale per chi parla adesso.» (regola `voce_ora_riconosciuta`). Il turno dopo non la ripete (il
+segno è del turno, qualunque sia). Interruttore `voce_ora_riconosciuta` (sezione `chi_parla`,
+acceso di serie). Permessi e livello non cambiano: seguono la voce del turno.
+- **Cache del prefisso (#95)**: la riga sta nei dati del turno, che sono già dopo la storia e
+  cambiano a ogni turno (l'ora); mai nella storia, quindi niente da riavvolgere oltre ciò che
+  sparisce comunque. ~60 token una volta, dentro `dati_turno_tetto_token`.
+- **Le frasi da ospite** restano dove sono e sono già marcate: nella stanza «voce non
+  riconosciuta», nella conversazione condivisa `_chi` e la nota del gruppo; nella conversazione
+  della persona non ci sono. Nessuna etichetta nuova nel testo (la storia resta uguale byte per
+  byte).
+- **Il verso inverso** (una persona, poi un ospite nella conversazione condivisa) non ha la riga:
+  «persona: un ospite» basta, e una riga «prima parlava Carlo» direbbe a un ospite chi c'era (la
+  nota del gruppo lo dice già, solo in compagnia senza voci sconosciute). Da riguardare se il
+  modello tratta da Carlo l'ospite che segue.
+- Non coperti: un conoscente dopo l'ospite (resta un ospite, niente riga); con un Brain solo che
+  segue il satellite attivo il luogo decide «qui» (senza luogo vale il Brain).
+
+**Prova** `prova_ospite_riconosciuto` (livello 1, ~1 s, modello finto): due frasi da ospite e poi
+Carlo con le conversazioni per persona e nella conversazione condivisa; contrari: riconosciuto
+dall'inizio, quarto turno, ospite troppo vecchio, altro luogo, conoscente, ospite dopo Carlo,
+interruttore spento. Su main: 2 errori e un'eccezione. **Da verificare sulla DGX** (chi
+amministra, telefono in auto): la prima risposta dopo il riconoscimento usa il nome e non parla di
+ospite.
