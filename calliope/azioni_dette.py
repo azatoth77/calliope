@@ -29,7 +29,10 @@ Dal registro dei turni (calliope/turnlog.py), solo le risposte del modello (`esi
   in attivo `azione_non_fatta` (trattenuta), `azione_non_fatta_onesta` (la frase onesta dopo la
   seconda dichiarazione), e quante volte il tool è arrivato dopo la spinta;
 - gli **esempi**: le ultime frasi dette o che il seguito avrebbe trattenuto (ora e frase, dal
-  testo della risposta già nel registro), da rileggere per i falsi positivi.
+  testo della risposta già nel registro), da rileggere per i falsi positivi. Solo dei turni di
+  chi amministra senza un minore vicino o una voce incerta (revisione della PR #220): mai le
+  risposte ai minori, agli ospiti e agli altri familiari, che restano nei soli conteggi
+  (`esempi_non_mostrati`).
 
 Solo lettura, nessun modello. In `calliope stato --turni` (e `--json`, chiave `azioni_dette`).
 """
@@ -50,6 +53,14 @@ def _frase_di(testo: str, cerca) -> str:
     return ""
 
 
+def _mostrabile(t: dict) -> bool:
+    """Il testo di questo turno si può mostrare fra gli esempi? Solo chi amministra, senza un
+    minore vicino né una voce incerta, e non una risposta riservata."""
+    voce = t.get("voce") if isinstance(t.get("voce"), dict) else {}
+    return (t.get("livello") == "amministra" and not t.get("riservato")
+            and not voce.get("minore_vicino") and not voce.get("incerta"))
+
+
 def _vuoto() -> dict:
     return {"risposte": 0,
             "dichiarate": {"scatti": 0, "dette": 0, "trattenute": 0, "incerte": 0,
@@ -57,13 +68,14 @@ def _vuoto() -> dict:
             "promesse": {"scatti": 0, "dette": 0, "senza_testo": 0},
             "senza_scatto": {"dichiarate": 0, "promesse": 0},
             "seguito": {"ombra": 0, "attivo": 0, "onesta": 0, "tool_dopo": 0},
-            "esempi": []}
+            "esempi": [], "esempi_non_mostrati": 0}
 
 
 def riassunto(turni) -> dict:
-    from .brain import ACTION_PROMISE, is_claim
+    from .brain import ACTION_PROMISE, dichiara_azione, is_claim
     r = _vuoto()
     esempi = []
+    nascosti = [0]
     for t in turni or ():
         if not isinstance(t, dict) or t.get("esito") != "risposta":
             continue
@@ -73,20 +85,30 @@ def riassunto(turni) -> dict:
         tool = [x for x in t.get("tool") or () if isinstance(x, dict)]
         riuscito = any(x.get("ok") for x in tool)
         quando = str(t.get("inizio") or "")[:16].replace("T", " ")
+        mostra = _mostrabile(t)
+
+        def aggiungi(quando, tipo, frase, mostra=mostra):
+            if not frase:
+                return
+            if mostra:
+                esempi.append((quando, tipo, frase))
+            else:
+                nascosti[0] += 1
+
         d = r["dichiarate"]
         if "spinta_dichiarata" in regole:
             d["scatti"] += 1
             if "dichiarata_detta" in regole:
                 d["dette"] += 1
                 if risposta:
-                    esempi.append((quando, "detta", _frase_di(risposta, is_claim)))
+                    aggiungi(quando, "detta", _frase_di(risposta, is_claim))
             elif "dichiarata_trattenuta" in regole:
                 d["trattenute"] += 1
             elif risposta is None:
                 d["senza_testo"] += 1
             elif is_claim(risposta) and not riuscito:
                 d["dette"] += 1
-                esempi.append((quando, "detta", _frase_di(risposta, is_claim)))
+                aggiungi(quando, "detta", _frase_di(risposta, is_claim))
             elif is_claim(risposta):
                 d["incerte"] += 1
             else:
@@ -98,29 +120,31 @@ def riassunto(turni) -> dict:
                 p["senza_testo"] += 1
             else:
                 p["dette"] += 1
-                esempi.append((quando, "promessa",
-                               _frase_di(risposta, lambda f: bool(ACTION_PROMISE.search(f)))))
+                aggiungi(quando, "promessa",
+                         _frase_di(risposta, lambda f: bool(ACTION_PROMISE.search(f))))
         if (not tool and risposta and not {"spinta_dichiarata", "spinta_promessa"} & regole):
-            if is_claim(risposta):
+            if dichiara_azione(risposta, nuove=True):
                 r["senza_scatto"]["dichiarate"] += 1
-                esempi.append((quando, "senza scatto", _frase_di(risposta, is_claim)))
+                aggiungi(quando, "senza scatto",
+                         _frase_di(risposta, lambda f: dichiara_azione(f, nuove=True)))
             elif ACTION_PROMISE.search(risposta) and not risposta.rstrip().endswith("?"):
                 r["senza_scatto"]["promesse"] += 1
-                esempi.append((quando, "promessa senza scatto",
-                               _frase_di(risposta, lambda f: bool(ACTION_PROMISE.search(f)))))
+                aggiungi(quando, "promessa senza scatto",
+                         _frase_di(risposta, lambda f: bool(ACTION_PROMISE.search(f))))
         s = r["seguito"]
         if "azione_non_fatta_ombra" in regole:
             s["ombra"] += 1
             if risposta and "dichiarata_detta" not in regole:
-                esempi.append((quando, "ombra", _frase_di(risposta, is_claim)))
+                aggiungi(quando, "ombra",
+                         _frase_di(risposta, lambda f: dichiara_azione(f, nuove=True)))
         if "azione_non_fatta" in regole:
             s["attivo"] += 1
             if riuscito:
                 s["tool_dopo"] += 1
         if "azione_non_fatta_onesta" in regole:
             s["onesta"] += 1
-    r["esempi"] = [{"quando": q, "tipo": k, "frase": f[:120]} for q, k, f in esempi if f
-                   ][-ESEMPI:]
+    r["esempi"] = [{"quando": q, "tipo": k, "frase": f[:120]} for q, k, f in esempi][-ESEMPI:]
+    r["esempi_non_mostrati"] = nascosti[0]
     return r
 
 
@@ -145,4 +169,7 @@ def testo(r: dict) -> str:
     if r.get("esempi"):
         righe.append("    ultime frasi da rileggere:")
         righe += [f"      {e['quando']} [{e['tipo']}] «{e['frase']}»" for e in r["esempi"]]
+    if r.get("esempi_non_mostrati"):
+        righe.append(f"    frasi di minori, ospiti e familiari non mostrate: "
+                     f"{r['esempi_non_mostrati']} (solo nei conteggi)")
     return "\n".join(righe)

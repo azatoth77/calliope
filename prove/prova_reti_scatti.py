@@ -255,6 +255,8 @@ azioni = [
     t("18", "15:10:00", ["spinta_dichiarata"], esito="interrotto"),
     t("18", "15:11:00", [], tool=CASA, risposta="Ho acceso la luce."),
 ]
+for x in azioni:
+    x["livello"] = "amministra"
 r = A.riassunto(azioni)
 verifica("azioni: risposte contate (non le altre uscite)", r["risposte"] == 14, r["risposte"])
 verifica("azioni: dichiarate dette, trattenute, incerte, senza testo",
@@ -277,6 +279,22 @@ verifica("azioni: la sezione di calliope stato --turni",
          and "spinta_promessa 2" in tx and "avrebbe trattenuto 1" in tx
          and "ultime frasi da rileggere" in tx, tx)
 verifica("azioni: senza risposte", "nessuna risposta" in A.testo(A.riassunto([])))
+# Mai il testo delle risposte ai minori, agli ospiti e agli altri familiari (revisione della PR
+# #220, P6): solo i conteggi
+FRASE_MINORE = "Segno fatto, allora: hai preso quattro in matematica."
+privati = []
+for lv, voce in (("familiare", None), ("ospite", None),
+                 ("amministra", {"nome": "Ada", "minore_vicino": "p-teo"}),
+                 ("amministra", {"nome": "Ada", "incerta": ["Ada", "Teo"]})):
+    x = t("18", "16:00:00", [], risposta=FRASE_MINORE)
+    x["livello"] = lv
+    if voce:
+        x["voce"] = voce
+    privati.append(x)
+rp = A.riassunto(privati)
+verifica("azioni: minori, ospiti, familiari e voci incerte solo contati, mai la frase",
+         (rp["senza_scatto"]["dichiarate"], rp["esempi"], rp["esempi_non_mostrati"],
+          "quattro" in A.testo(rp)) == (4, [], 4, False), rp)
 src = (RADICE / "calliope" / "stato.py").read_text(encoding="utf-8")
 verifica("azioni: calliope stato --turni, testo e JSON",
          "azioni_dette.testo(azioni_r)" in src and '"azioni_dette": azioni_r' in src

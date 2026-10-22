@@ -513,21 +513,58 @@ for testo, atteso in [
 verifica("senza ricordi la stessa frase è una dichiarazione",
          is_claim("Ho memorizzato che il tuo numero preferito è 47.", []), True)
 # 22/10, issue #170 (DGX 18/10): «Segno fatto…» al nome e «mi metto al lavoro…» al gioco, senza
-# nessun tool; con i contrari (il nome «segno», il condizionale, la domanda, la negazione, la
-# battuta delle frasi pronte)
+# nessun tool. Forme chiuse in più (brain.AZIONE_NUOVA) solo con `voce_azione_non_fatta` acceso:
+# in spento la rete è quella di prima, parola per parola (revisione della PR #220, P1). Contrari:
+# condizionale, imperativo od offerta prima del verbo, un oggetto dopo «segno / annoto /
+# memorizzo», il nome «segno», il condizionale dopo, la domanda, la battuta delle frasi pronte
+from calliope.brain import dichiara_azione  # noqa: E402
 for testo, atteso in [("Segno fatto, allora: d'ora in poi ti chiamerò così.", True),
                       ("Allora mi metto al lavoro… ti faccio sapere.", True),
-                      ("Segno.", True), ("Segno il tuo nome.", True), ("Annoto tutto.", True),
+                      ("Segno.", True), ("Annoto tutto.", True), ("Memorizzo.", True),
                       ("Va bene, mi metto all'opera.", True),
+                      ("Certo! Allora mi metto al lavoro.", True),
+                      ("Certo, volentieri! Dimmi le regole e mi metto al lavoro.", False),
+                      ("Se vuoi, mi metto al lavoro.", False),
+                      ("Quando sei pronto, dimmelo e mi metto all'opera.", False),
+                      ("Dammi i dettagli e mi metto subito all'opera.", False),
+                      ("Memorizzo la tua risposta e passiamo alla prossima domanda.", False),
+                      ("Segno: Leone. Elemento: fuoco.", False),
+                      ("Annoto una cosa: hai ragione.", False),
+                      ("Memorizzo meglio con le rime.", False),
+                      ("Segno un punto per te.", False), ("Segno il tuo nome.", False),
                       ("Il segno zodiacale è l'ariete.", False),
                       ("Segno zodiacale: ariete.", False), ("Segno che sei stanco.", False),
-                      ("Il mio segno è il leone.", False), ("Segno fatto?", False),
-                      ("Se vuoi, lo segno.", False), ("Mi metto al lavoro?", False),
+                      ("Segno fatto?", False), ("Se vuoi, lo segno.", False),
+                      ("Mi metto al lavoro?", False),
                       ("Quando mi metto al lavoro, mi concentro.", False),
                       ("Non mi metto al lavoro adesso.", False),
                       ("Mi metto al lavoro appena mi dici di sì.", False),
                       ("Perfetto, me lo segno tra i successi.", False)]:
-    verifica(f"azione dichiarata «{testo[:45]}» (#170)", is_claim(testo), atteso)
+    verifica(f"azione dichiarata, forme nuove «{testo[:45]}» (#170)",
+             dichiara_azione(testo, nuove=True), atteso)
+for testo in ("Segno fatto, allora: d'ora in poi ti chiamerò così.",
+              "Allora mi metto al lavoro… ti faccio sapere.", "Segno.",
+              "Va bene, mi metto all'opera."):
+    verifica(f"in spento la rete di prima: «{testo[:45]}» non è una dichiarazione",
+             (is_claim(testo), dichiara_azione(testo)), (False, False))
+# Dopo la prima frase (revisione della PR #220, P2): le forme che la rete guarda solo in testa
+# alla risposta («Fatto…», «Apro…», «Chiudo…», «Alzo…», «Accendo…») non valgono a ogni inizio
+# di frase; le dichiarazioni vere sì
+for testo, atteso in [("Chiudo con una curiosità: i delfini dormono con mezzo cervello.", False),
+                      ("Apro una parentesi: è interessante.", False),
+                      ("Fatto curioso: le api ballano.", False),
+                      ("Alzo le mani, hai vinto tu.", False),
+                      ("Accendo la fantasia e ti racconto una storia.", False),
+                      ("Segno un punto per te.", False),
+                      ("Ho acceso la luce in taverna.", True), ("Timer avviato.", True),
+                      ("Allora mi metto subito al lavoro, ti faccio sapere.", True),
+                      ("Segno fatto, allora.", True)]:
+    verifica(f"dopo la prima frase «{testo[:45]}»",
+             dichiara_azione(testo, dopo=True, nuove=True), atteso)
+verifica("in testa alla risposta «Chiudo con una curiosità» resta com'era (rete di prima)",
+         is_claim("Chiudo con una curiosità: i delfini dormono con mezzo cervello."),
+         __import__("calliope.brain", fromlist=["x"]).ACTION_CLAIM.search(
+             "Chiudo con una curiosità: i delfini dormono con mezzo cervello.") is not None)
 
 # ── la dichiarazione dopo la prima frase (22/10, issue #170, `voce_azione_non_fatta`) ──
 # brain.ClaimHold con `seguito`: «attivo» trattiene dalla frase che dichiara (la prima resta
@@ -579,6 +616,29 @@ verifica("contrario attivo: il ricordo di un'azione vera si dice",
          ("".join(usciti), h.held), ("".join(RICORDO), ""))
 usciti, h = seguito("attivo", ["Va bene, ci penso io con calma.", " Lo accendo?"])
 verifica("contrario attivo: la domanda si dice", h.held, "")
+# P2: dopo una prima frase, una frase che comincia con «Chiudo…» o «Fatto…» non si trattiene
+CURIOSITA = ["Che bella idea, Ada! Ci penso un attimo.", " Chiudo con una curiosità: i delfini",
+             " dormono con mezzo cervello.", " Fatto curioso: le api ballano."]
+usciti, h = seguito("attivo", CURIOSITA)
+verifica("contrario attivo: «Chiudo con una curiosità», «Fatto curioso» si dicono",
+         ("".join(usciti), h.held), ("".join(CURIOSITA), ""))
+usciti, h = seguito("ombra", CURIOSITA)
+verifica("contrario ombra: niente da contare", h.ombra, "")
+# L'ombra conta esattamente ciò che l'attivo tratterrebbe: forme nuove in prima frase comprese,
+# e il ricordo che il seguito rende tale
+for pezzi, azioni in ((GIOCO, ()), (NORMALE, ()), (RICORDO, fatta), (CURIOSITA, ()),
+                      (["Segno fatto, allora: d'ora in poi ti chiamerò così."], ()),
+                      (["Va bene, ci penso io con calma.", " Lo accendo?"], ())):
+    _, attivo = seguito("attivo", pezzi, azioni)
+    usciti, ombra = seguito("ombra", pezzi, azioni)
+    verifica(f"ombra uguale all'attivo, e la voce invariata: «{pezzi[0][:30]}…»",
+             (ombra.ombra, "".join(usciti)), (attivo.held.strip(), "".join(pezzi)))
+_, h = seguito("ombra", ["Ho acceso le luci in taverna."])
+verifica("ombra: trattenuta già dalla rete di prima, niente da contare", (h.held, h.ombra),
+         ("Ho acceso le luci in taverna.", ""))
+_, h = seguito("ombra", ["Segno fatto, allora: d'ora in poi ti chiamerò così."])
+verifica("ombra: la forma nuova in prima frase non cambia la voce ma si conta",
+         (h.held, h.ombra), ("", "Segno fatto, allora: d'ora in poi ti chiamerò così."))
 
 # ── rinomina: la domanda detta a parole dal modello vale come proposta (04/10, 26B) ──
 from calliope.tools.builtin import domanda_rinomina  # noqa: E402

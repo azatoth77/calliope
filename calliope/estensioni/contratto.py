@@ -114,6 +114,20 @@ IMPOSSIBILI = {
                 "codice deterministico"),
 }
 
+# Le stesse voci in due o tre parole, per la riga dei dati del turno della voce (22/10, issue
+# #170, brain.LIMITI_EST_MSG): «oggi a un'estensione mancano …». Una voce nuova senza la forma
+# breve compare con la sua descrizione intera (impossibili_brevi), e una prova lo segnala
+IMPOSSIBILI_BREVE = {
+    "email": "email e messaggi", "telefono": "telefono", "file_persona": "file del PC",
+    "rete_locale": "dispositivi di casa", "orari_fissi": "lavori a orario",
+    "pacchetti": "pacchetti", "memoria": "ricordi e archivio",
+    "microfono_camera": "microfono e webcam", "altri_tool": "altri tool", "credenziali": "login",
+    "javascript": "pagine in JavaScript", "modello": "IA",
+}
+# Per un gioco: None = la voce lì non va detta (un gioco vive sugli schermi e ha i suoi comandi a
+# voce, gioco_voce.py: «microfono e webcam» farebbe dire che non si può)
+_IMPOSSIBILI_BREVE_GIOCO = {"pacchetti": "librerie esterne", "microfono_camera": None}
+
 CAPACITA_IDS = tuple(DA_SOLA) + tuple(PORTA) + tuple(IMPOSSIBILI)
 
 _TUTTI = {"legge": {"casa": True, "liste": True, "agenda": True, "dati": True},
@@ -340,6 +354,21 @@ def impossibili(gioco: bool = False) -> dict:
     lo strumento piano (agenti/ciclo.py), così il piano dice le stesse cose del contratto."""
     voci = {k: (_IMPOSSIBILI_GIOCO.get(k, v) if gioco else v) for k, v in IMPOSSIBILI.items()}
     return {k: v for k, v in voci.items() if v}
+
+
+def impossibili_brevi(gioco: bool = False) -> list[str]:
+    """Le voci degli impossibili in forma breve, nell'ordine di `impossibili(gioco)` (22/10,
+    issue #170): segue il contratto, e una voce senza forma breve vale con la sua descrizione."""
+    out = []
+    for k, (cosa, _) in impossibili(gioco).items():
+        if gioco and k in _IMPOSSIBILI_BREVE_GIOCO:
+            breve = _IMPOSSIBILI_BREVE_GIOCO[k]
+            if breve is None:
+                continue
+        else:
+            breve = IMPOSSIBILI_BREVE.get(k) or cosa
+        out.append(breve)
+    return out
 
 
 def voci_piano(gioco: bool = False) -> tuple:
