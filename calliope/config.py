@@ -3076,9 +3076,12 @@ RETI: dict[str, Rete] = {
         "«fammene un PDF»: il lavoro dell'agente appena detto (LAVORO_MSG)", MODELLO,
         "dati del turno: «Ho metto un pdf.» dopo il risultato cercava i PDF del PC (07/10)"),
     "estensione_nominata": Rete(
-        "un'estensione nominata nella frase: il suo tool e cosa fa (EST_NOMINATA_MSG)", MODELLO,
+        "un'estensione nominata nella frase: il suo tool e cosa fa (EST_NOMINATA_MSG); dal "
+        "22/10 cosa un'estensione o un gioco non può fare, quando se ne parla (LIMITI_EST_MSG)",
+        MODELLO,
         "dati del turno: «invoca l'estensione meteo per città su Bergamo» tre volte, e sempre "
-        "web_cerca (26B, 07/10)"),
+        "web_cerca (26B, 07/10); l'estensione della posta spiegata per dieci minuti e poi "
+        "rifiutata per il login (DGX, 18/10, #170)"),
     "modalita_sviluppo": Rete(
         "lo sviluppo aperto di chi parla: fase e cosa fare (SVILUPPO_MSG), la riga del fuori "
         "tema in coda, il promemoria degli sviluppi sospesi", MODELLO,

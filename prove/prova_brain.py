@@ -404,6 +404,72 @@ def prova_azione_non_fatta():
              ("mi metto" in detto, len(b.backend.visti)), (True, 1))
 
 
+def prova_limiti_estensioni():
+    """22/10, issue #170: quando si parla di un'estensione o di un gioco da fare, nei dati del
+    turno cosa oggi non può fare, ricavato dagli impossibili del contratto (caso vero della DGX
+    del 18/10: l'estensione della posta spiegata per dieci minuti, poi rifiutata per il login)."""
+    from calliope.estensioni import contratto
+
+    def con_sviluppo(b):
+        vero = b.tools.get
+        b.tools.get = lambda n: object() if n == "sviluppo_apri" else vero(n)
+        return b
+
+    def righe(b, i=-1):
+        return [m["content"] for m in b.backend.visti[i] if m["role"] == "system"
+                and "oggi un" in m["content"] and "non può" in m["content"]]
+
+    b = con_sviluppo(brain_finto([[("text", "Si può fare.")]] * 4))
+    "".join(b.stream_reply("Mi fai un'estensione che legge la mia posta?", "amministra"))
+    r = righe(b)
+    verifica("limiti: una riga nei dati del turno", len(r), 1)
+    verifica("limiti: login e lavori a orario, dagli impossibili",
+             bool(r) and "utente e password" in r[0] and "orari fissi" in r[0]
+             and "un'estensione non può" in r[0], True)
+    verifica("limiti: le parentesi lunghe tolte, le brevi restano",
+             bool(r) and "router" not in r[0] and "(login)" in r[0], True)
+    verifica("limiti: non nel prompt di sistema (il prefisso resta in cache, #95)",
+             "orari fissi" in b.backend.visti[-1][0]["content"], False)
+    verifica("limiti: regola nel registro", "estensioni_limiti_turno" in b.rules_fired(), True)
+    # Il turno dopo senza la parola resta (la conversazione ne parla ancora); due dopo no
+    "".join(b.stream_reply("E come mi autentico?", "amministra"))
+    verifica("limiti: anche al turno subito dopo", len(righe(b)), 1)
+    "".join(b.stream_reply("Che ore sono?", "amministra"))
+    verifica("contrario: due turni dopo non c'è più", righe(b), [])
+    # La riga segue il contratto (decisione 0033: gli impossibili diventeranno concedibili)
+    salvati = dict(contratto.IMPOSSIBILI)
+    try:
+        contratto.IMPOSSIBILI.pop("credenziali")
+        contratto.IMPOSSIBILI["prova"] = ("volare sulla luna", "nessuna")
+        b = con_sviluppo(brain_finto([[("text", "Si può fare.")]]))
+        "".join(b.stream_reply("Sviluppa un'estensione per la posta.", "amministra"))
+        r = righe(b)
+        verifica("limiti: seguono gli impossibili del contratto, mai scritti a mano",
+                 bool(r) and "volare sulla luna" in r[0] and "utente e password" not in r[0],
+                 True)
+    finally:
+        contratto.IMPOSSIBILI.clear()
+        contratto.IMPOSSIBILI.update(salvati)
+    # Un gioco: le voci dette per un gioco
+    b = con_sviluppo(brain_finto([[("text", "Bello!")]]))
+    "".join(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
+    r = righe(b)
+    verifica("limiti: per un gioco le voci del gioco",
+             bool(r) and "un gioco non può" in r[0] and "dentro il gioco" in r[0]
+             and "JavaScript nel browser" not in r[0], True)
+    # Contrari: si parla d'altro; senza sviluppo_apri (nessun agente); rete spenta
+    b = con_sviluppo(brain_finto([[("text", "Sono le dieci.")]]))
+    "".join(b.stream_reply("Che ore sono?", "amministra"))
+    verifica("contrario: si parla d'altro, niente riga", righe(b), [])
+    b = brain_finto([[("text", "Si può fare.")]])
+    "".join(b.stream_reply("Mi fai un'estensione per la posta?", "amministra"))
+    verifica("contrario: senza sviluppo_apri niente riga", righe(b), [])
+    b = con_sviluppo(brain_finto([[("text", "Si può fare.")]]))
+    b.cfg.llm_reti_spente = ["estensione_nominata"]
+    "".join(b.stream_reply("Mi fai un'estensione per la posta?", "amministra"))
+    verifica("contrario: rete estensione_nominata spenta, niente riga", righe(b), [])
+
+
 def prova_dichiarata_nota():
     # 12/10 sera, caso vero in auto (nomi di fantasia): dopo un falso allarme chi amministra dice
     # «Ma io sono Carlo, non sono in pericolo e non sono un bambino»; il modello risponde due
@@ -1374,6 +1440,7 @@ prova_promessa()
 prova_promessa_domanda()
 prova_dichiarata()
 prova_azione_non_fatta()
+prova_limiti_estensioni()
 prova_dichiarata_nota()
 prova_ricordo()
 prova_riferimento()

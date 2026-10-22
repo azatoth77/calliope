@@ -1159,6 +1159,18 @@ EST_CAMBIATA_S = 1800.0        # «è cambiata da poco»: approvata da al più m
 # Una frase che parla di estensioni (08/10): l'elenco vero nei dati del turno (regola
 # `estensioni_elenco_turno`, nella rete `estensione_nominata`)
 PARLA_ESTENSIONI = re.compile(r"(?<![a-zà-ù])estension[ei]", re.I)
+# Cosa un'estensione o un gioco oggi non può fare, nei dati del turno quando se ne parla (22/10,
+# issue #170; caso vero della DGX del 18/10: per dieci minuti il modello ha spiegato come fare
+# l'estensione della posta e come autenticarsi, poi sviluppo_apri l'ha rifiutata, perché login e
+# lavori a orario sono impossibili). La riga si ricava dagli impossibili del contratto
+# (estensioni/contratto.impossibili), mai scritta qui: con la decisione 0033 diventeranno
+# capacità concedibili (#203–#217) e la riga le segue da sola. Un contesto: decide il modello
+PARLA_SVILUPPO = re.compile(r"(?<![a-zà-ù])(?:estension[ei]|svilupp|gioc(?:o|hi)\b|giochin)",
+                            re.I)
+PARLA_GIOCO = re.compile(r"(?<![a-zà-ù])(?:gioc(?:o|hi)\b|giochin)", re.I)
+LIMITI_EST_MSG = ("Dati del turno, se si parla di {chi} da fare: oggi {chi} non può {cosa}. Se "
+                  "la richiesta ha bisogno di una di queste cose, dillo subito, prima di "
+                  "spiegare come farlo o di proporlo.")
 EST_ELENCO_MSG = ("Dati del turno: le estensioni che ci sono adesso, tutte: {elenco}. Per "
                   "domande su quali o quante ce ne sono rispondi da qui, mai a memoria; per "
                   "cambiarle, estensione_gestisci.")
@@ -4421,6 +4433,44 @@ class Brain:
             print(f"   [SVILUPPO] dati del turno: {type(e).__name__}: {e}", flush=True)
         return None
 
+    def _limiti_estensioni(self, testo: str) -> str | None:
+        """LIMITI_EST_MSG quando si parla di un'estensione o di un gioco da fare (22/10, issue
+        #170), o None: la frase ne parla, è aperto uno sviluppo di un'estensione o di un gioco,
+        oppure ne parlava la frase del turno prima (come l'elenco delle estensioni). Solo con
+        sviluppo_apri registrato. Le voci sono quelle del contratto (impossibili), senza le
+        parentesi lunghe, e per un gioco quelle dette per un gioco."""
+        if not self._net("estensione_nominata") or self.tools.get("sviluppo_apri") is None:
+            return None
+        turno = int(getattr(self, "turn_number", 0) or 0)
+        sv = None
+        try:
+            svs, chi = self._sviluppi(), self._speaker_key()
+            sv = svs.corrente(chi) if svs is not None and chi is not None else None
+        except Exception:  # noqa: BLE001 — sono solo dati del turno
+            sv = None
+        if sv is not None and getattr(sv, "tipo", "estensione") != "estensione":
+            sv = None                        # un programma: gli impossibili non valgono
+        detto = bool(PARLA_SVILUPPO.search(testo or ""))
+        prima = getattr(self, "_limiti_est_turno", None)
+        if detto or sv is not None:
+            gioco = (bool(PARLA_GIOCO.search(testo or "")) if detto and not sv
+                     else bool(getattr(sv, "gioco", False)))
+            self._limiti_est_turno = (turno, gioco)
+        elif isinstance(prima, tuple) and prima[0] == turno - 1:
+            gioco = prima[1]
+        else:
+            return None
+        try:
+            from .estensioni.contratto import impossibili
+            voci = [re.sub(r"\s*\([^)]{15,}\)", "", cosa).strip()
+                    for cosa, _ in impossibili(gioco).values()]
+        except Exception:  # noqa: BLE001 — sono solo dati del turno
+            return None
+        if not voci:
+            return None
+        return LIMITI_EST_MSG.format(chi="un gioco" if gioco else "un'estensione",
+                                     cosa="; ".join(voci))
+
     def _sviluppo_coda(self, user_text: str | None, level: str) -> str | None:
         """La frase da aggiungere in coda alla risposta, o None (08/10, modalità sviluppo):
         - una volta al giorno, a chi amministra, gli sviluppi sospesi;
@@ -4967,6 +5017,12 @@ class Brain:
         if sv_msg:
             memory = memory + blocco("sviluppo", [{"role": "system", "content": sv_msg}])
             self._rule("sviluppo_modalita")
+        # Cosa un'estensione o un gioco non può fare, quando se ne parla (22/10, issue #170):
+        # nei dati del turno, non nel prompt di sistema (il prefisso resta in cache, #95)
+        limiti = self._limiti_estensioni(user_text) if user_text else None
+        if limiti:
+            memory = memory + blocco("estensioni_limiti", [{"role": "system", "content": limiti}])
+            self._rule("estensioni_limiti_turno")
         # La domanda che riprende quella di prima dopo una risposta lunga (15/10, rete
         # domanda_insistita, calliope/ripetizione.py; caso vero in auto: «Ma quali sono questi
         # risultati? Lo hai capito?» → la stessa risposta di prima): una frase condizionale nei
