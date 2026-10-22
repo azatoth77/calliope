@@ -744,6 +744,8 @@ def prova_programma(tmp: Path, iso):
     (piccolo / "somma.py").write_text("print(3 + 5)\n", encoding="utf-8")
     sv.cartella = str(piccolo)
     svs.passa(sv, "collaudo")
+    # Provato una volta (22/10, #223: senza nessuna prova la revisione chiede prima)
+    sv.collaudi.append({"quando": time.time(), "dati": "3 e 5", "ok": True, "esito": "8"})
     out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, turno=3)
     verifica("contrario: programma piccolo → «Va bene così?», niente proposta",
              detta(out).endswith("Va bene così?") and "estensione" not in detta(out), detta(out))

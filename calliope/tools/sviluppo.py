@@ -1553,6 +1553,11 @@ def _avanti(ctx, svs, sv, prof) -> dict:
     if sv.fase == "collaudo":
         return _revisione(ctx, svs, sv)
     if sv.fase in ("revisione", "attivazione"):
+        # Nessuna prova della versione (22/10, #223): l'attivazione (o la chiusura di un
+        # programma) come la revisione
+        porta = _porta_prove(ctx, svs, sv)
+        if porta is not None:
+            return porta
         if sv.tipo == "programma":
             svs.chiudi(sv, "consegnato")
             note_rule(ctx, "sviluppo_chiuso")
@@ -1635,15 +1640,117 @@ def _completa(ctx, svs, sv, prof) -> dict:
     return out
 
 
+# ── la revisione senza nessuna prova (22/10, issue #223, n. 10 del § 3.1 della ricerca del
+# 19/10, docs/ricerche/2026-10-19-solidita-harness-sviluppo.md) ──
+# Prima, senza collaudo, la revisione segnava la regola e diceva «l'hai saltato», poi andava
+# avanti; e con gli esempi di accettazione «non_fatta» (l'analisi prima del codice non riuscita,
+# agenti/servizio.py) il lavoro arrivava alla revisione e all'attivazione senza nessuna prova.
+# Adesso revisione e attivazione vogliono almeno una prova della versione di adesso (un
+# collaudo, un'anteprima di un gioco o gli esempi eseguiti alla fine del lavoro), oppure il sì
+# di chi amministra alla domanda che lo dice: la proposta in sospeso di sempre verso
+# sviluppo_passo avanti, e il sì letto come per le altre proposte (politica.accettata, la frase
+# di sfida, politica.consenso). Vincolo di permesso su un'azione già scelta (principio 10),
+# regole `sviluppo_senza_prove_chiesto` e `sviluppo_senza_prove_confermato`
+DOMANDA_SENZA_PROVE = "Vado avanti lo stesso?"
+
+
+def _chiave_prove(sv) -> str:
+    """La versione di adesso: il sì vale per lei, non per quella dopo."""
+    return f"{sv.versione}|{sv.lavoro or ''}"
+
+
+def _esempi_eseguiti(svs, sv) -> bool:
+    """Gli esempi di accettazione sono stati eseguiti alla fine del lavoro della versione
+    (agenti/servizio._esito_accettazione: `passano` vero o falso). Senza il lavoro (dopo un
+    riavvio) il segno che hanno lasciato sui requisiti (Sviluppi.segna_provati)."""
+    lav = svs._lavoro(sv.lavoro)
+    if lav is not None:
+        a = getattr(lav, "accettazione", None)
+        r = (getattr(lav, "risultato", None) or {}).get("accettazione")
+        return any(isinstance(x, dict) and isinstance(x.get("passano"), bool) for x in (a, r))
+    return any(isinstance(r, dict) and isinstance(r.get("provato"), bool)
+               for r in sv.requisiti or ())
+
+
+def _prove_della_versione(sv) -> tuple[list, list]:
+    """(collaudi, anteprime) della versione di adesso."""
+    anteprime = [c for c in sv.collaudi if c.get("anteprima")]
+    collaudi = [c for c in sv.collaudi if not c.get("anteprima")
+                and (sv.versione is None or c.get("versione") in (None, sv.versione))]
+    return collaudi, anteprime
+
+
+def _senza_prove_si(ctx, sv) -> bool:
+    """Questa chiamata è il sì alla domanda «Vado avanti lo stesso?» per questa versione: la
+    proposta in sospeso per chi parla è di sviluppo_passo con quella domanda, e la persona
+    acconsente (la politica l'ha già accettata, la frase di sfida, un consenso). Il modello che
+    richiama avanti non basta, come per agenda_annulla (tools/builtin._si_alla_domanda)."""
+    if (sv.senza_prove or {}).get("chiesta") != _chiave_prove(sv):
+        return False
+    if getattr(ctx, "tool_in_sospeso", None) != "sviluppo_passo":
+        return False
+    from .. import politica
+    t = getattr(ctx, "politica", None)
+    domanda = str(getattr(t, "domanda_sospeso", "") or "")
+    if domanda and domanda != DOMANDA_SENZA_PROVE:
+        return False
+    testo = str(getattr(t, "testo", "") or getattr(ctx, "user_text", "") or "")
+    return (politica.accettata(ctx) or bool(getattr(t, "sfida", False))
+            or politica.consenso(testo))
+
+
+def _porta_prove(ctx, svs, sv) -> dict | None:
+    """None se si può andare avanti (alla revisione o all'attivazione), o la domanda che dice
+    alla persona che non c'è nessuna prova."""
+    collaudi, anteprime = _prove_della_versione(sv)
+    if collaudi or anteprime or _esempi_eseguiti(svs, sv):
+        return None
+    chiave = _chiave_prove(sv)
+    sp = dict(sv.senza_prove or {})
+    if sp.get("confermata") == chiave:
+        return None
+    if _senza_prove_si(ctx, sv):
+        note_rule(ctx, "sviluppo_senza_prove_confermato")
+        sv.senza_prove = {**sp, "confermata": chiave, "quando": time.time()}
+        svs.tocca(sv)
+        return None
+    note_rule(ctx, "sviluppo_senza_prove_chiesto")
+    sv.senza_prove = {"chiesta": chiave, "quando": time.time()}
+    svs.tocca(sv)
+    if svs.e_gioco(sv):
+        mai = "non l'hai visto in prova sullo schermo"
+    elif sv.tipo == "programma":
+        mai = "non l'hai provato"
+    else:
+        mai = "non l'hai provata"
+    frase = (f"Non c'è nessuna prova: {mai} e gli esempi non sono stati eseguiti. "
+             f"{DOMANDA_SENZA_PROVE}")
+    return _final(frase, ok=False, fatto="NIENTE ancora: è una domanda, non sono andata avanti",
+                  in_sospeso={"domanda": DOMANDA_SENZA_PROVE,
+                              "cosa": "andare avanti senza nessuna prova",
+                              "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}})
+
+
+def _con_senza_prove(svs, sv, detto_coll: str) -> str:
+    """Le prove dette dalla revisione: dopo il sì senza prove lo dice al posto di «Il collaudo
+    l'hai saltato…»; e i test indeboliti dall'agente dalla loro prima esecuzione (22/10, #223,
+    agenti/fotografia_test.py), detti dal codice."""
+    c, a = _prove_della_versione(sv)
+    if not (c or a) and (sv.senza_prove or {}).get("confermata") == _chiave_prove(sv):
+        detto_coll = "Nessuna prova: hai scelto di andare avanti lo stesso."
+    from ..agenti.fotografia_test import frase_voce
+    lav = svs._lavoro(sv.lavoro)
+    deboli = frase_voce((getattr(lav, "risultato", None) or {}).get("test_indeboliti"))
+    return f"{detto_coll} {deboli}" if deboli else detto_coll
+
+
 def _revisione(ctx, svs, sv) -> dict:
     """Dal collaudo alla revisione: permessi, rete, analisi del codice, test, collaudi e
     differenze, detti in breve e per intero sulla scheda."""
     from ..sviluppo import conto_collaudi, misura_programma
-    # Le anteprime di un gioco (11/10) non sono prove «riuscite»: l'ha visto la persona
-    anteprime = [c for c in sv.collaudi if c.get("anteprima")]
-    # Le prove di questa versione (12/10): quelle delle versioni di prima non dicono niente di lei
-    collaudi = [c for c in sv.collaudi if not c.get("anteprima")
-                and (sv.versione is None or c.get("versione") in (None, sv.versione))]
+    # Le anteprime di un gioco (11/10) non sono prove «riuscite»: l'ha visto la persona. Le
+    # prove di questa versione (12/10): quelle delle versioni di prima non dicono niente di lei
+    collaudi, anteprime = _prove_della_versione(sv)
     # Le risposte buone separate da ciò che è girato senza trovare niente (12/10, caso vero:
     # «Prove: 16, 15 riuscite» con sette «non trovato»); il collaudo saltato si dice (caso vero
     # dell'11/10 16:26: niente prove e «tutto sembra in ordine» detto dal modello)
@@ -1672,6 +1779,12 @@ def _revisione(ctx, svs, sv) -> dict:
         rev = est.revisione(sv.estensione) if est is not None and sv.estensione else None
         if rev is None:
             return _no(ctx, "Non c'è una versione da rivedere: forse è già stata approvata.")
+        # Nessuna prova (22/10, #223): prima la domanda; una versione che non si può approvare
+        # si rivede comunque (lo dice e chiede cosa correggere)
+        porta = _porta_prove(ctx, svs, sv) if rev["approvabile"] else None
+        if porta is not None:
+            return porta
+        detto_coll = _con_senza_prove(svs, sv, detto_coll)
         sv.revisione = rev["testo"] + f"\n- {detto_coll}"
         fumo = ""
         if svs.e_gioco(sv):
@@ -1707,7 +1820,12 @@ def _revisione(ctx, svs, sv) -> dict:
                       in_sospeso={"domanda": "Vuoi attivarla?",
                                   "cosa": f"attivare «{sv.titolo}»", "tool": "sviluppo_passo",
                                   "argomenti": {"azione": "avanti"}})
-    # Un programma: file, righe, test, prove; e se è grande, la proposta di un'estensione
+    # Un programma: file, righe, test, prove; e se è grande, la proposta di un'estensione.
+    # Nessuna prova (22/10, #223): prima la domanda
+    porta = _porta_prove(ctx, svs, sv)
+    if porta is not None:
+        return porta
+    detto_coll = _con_senza_prove(svs, sv, detto_coll)
     misura = misura_programma(sv.cartella)
     lav = svs._lavoro(sv.lavoro)
     test = ((getattr(lav, "risultato", None) or {}).get("test") if lav is not None else None) \

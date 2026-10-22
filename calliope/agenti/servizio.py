@@ -2161,6 +2161,12 @@ class Lavori:
         tolti = frase_test_tolti((lav.risultato or {}).get("test_tolti"))
         if tolti:
             msg = msg.rstrip() + " " + tolti
+        # I test indeboliti dalla prima esecuzione (22/10, #223, agenti/fotografia_test.py),
+        # detti dal codice e senza nomi di file
+        from .fotografia_test import frase_voce
+        deboli = frase_voce((lav.risultato or {}).get("test_indeboliti"))
+        if deboli:
+            msg = msg.rstrip() + " " + deboli
         # Gli esempi di accettazione tolti dal revisore (20/10, #190), detti nel rapporto
         from .revisore import frase_esempi_tolti
         r = lav.risultato or {}

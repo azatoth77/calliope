@@ -354,6 +354,11 @@ class Sviluppo:
     # L'ultimo giro fermo prima di consegnare (A5): {lavoro, cartella, perche (fermato, tappa,
     # attesa, limite, errore, scaduto), domanda, quando}. «Rifallo» riparte dai suoi file
     giro: dict = field(default_factory=dict)
+    # ── la revisione senza nessuna prova (22/10, issue #223) ──
+    # Revisione e attivazione vogliono almeno una prova della versione (collaudo, anteprima o
+    # esempi eseguiti), oppure il sì di chi amministra alla domanda che dice che non ce n'è:
+    # {chiesta, confermata (la chiave della versione: «versione|lavoro»), quando}
+    senza_prove: dict = field(default_factory=dict)
 
     def fasi(self) -> tuple[str, ...]:
         return FASI_PROGRAMMA if self.tipo == "programma" else FASI_ESTENSIONE
@@ -1009,6 +1014,11 @@ class Sviluppi:
             tolti = frase_test_tolti((getattr(lav, "risultato", None) or {}).get("test_tolti"))
             if tolti:
                 item["messaggio"] = str(item["messaggio"]).rstrip() + " " + tolti
+            # I test indeboliti dalla prima esecuzione (22/10, #223), detti dal codice
+            from .agenti.fotografia_test import frase_voce
+            deboli = frase_voce((getattr(lav, "risultato", None) or {}).get("test_indeboliti"))
+            if deboli:
+                item["messaggio"] = str(item["messaggio"]).rstrip() + " " + deboli
             if non_riprodotto:
                 # «Non sono riuscita a riprodurre il problema» (decisione del 12/10, domanda 3
                 # della ricerca 2026-10-12-flusso-agente-fasi): non è «pronto», e la risposta

@@ -139,6 +139,9 @@ def proposta_gioco(tmp, agente, compito=COMPITO):
 def consegna(svc, est, sv, test=None):
     lav = svc.lavori[-1]
     n = candidata(est, lav.id)
+    # Gli esempi di accettazione eseguiti alla fine del lavoro (22/10, #223): una prova della
+    # versione; senza nessuna prova la revisione chiede prima «Vado avanti lo stesso?»
+    lav.accettazione = {"stato": "pronta", "passano": True, "rossi": []}
     return svc.finisci(lav, "fatto", estensione={"nome": "meteo_citta", "versione": n},
                        test=test or {"eseguiti": 4, "falliti": 0},
                        messaggio="ho preparato il gioco.")
@@ -431,6 +434,7 @@ def prova_contrari(tmp: Path):
     lav = svc.nuovo("codice", sv.specifica, "u1", "Dario", "amministra")
     svc.avvia(lav)
     svs.avviato(lav)
+    lav.accettazione = {"stato": "pronta", "passano": True, "rossi": []}   # #223: una prova
     svc.finisci(lav, "fatto", cartella=str(cart))
     out = chiama(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, 3, "Avanti.")
     f = detta(out)
