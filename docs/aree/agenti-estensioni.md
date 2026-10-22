@@ -4276,7 +4276,8 @@ rispetto a main.
   fila (N3). Il motivo, ora che non sono più per forza «di fila», è «la sua uscita si è fermata N
   volte al tetto dei token della passata senza una chiamata eseguita in mezzo». A voce, alla
   tappa: «l'uscita dell'agente si è fermata più volte al tetto dei token della passata, senza una
-  chiamata eseguita in mezzo».
+  chiamata eseguita in mezzo». *[storico: la frase a voce fino alla seconda revisione della PR
+  #219, 22/10, sotto]*
 - **Prove** (`prova_strumenti_onesti`, sezione 7, livello 2): F diventa «limite» «troncata» alla
   settima passata (quattro troncate e tre prose); in uno sviluppo è tappa, con la storia ben
   formata. I contrari: una chiamata eseguita in mezzo le azzera e il lavoro finisce «fatto»; il
@@ -4305,7 +4306,8 @@ rispetto a main.
   quello con la quota, come su main. Resta un caso non coperto: llama.cpp senza conto esatto e
   con un ragionamento vero oltre il budget. Lì la regola dice «troncata», e il lavoro si ferma
   alla quarta col motivo delle troncate invece che alla seconda soglia. Il caso è raro, perché
-  l'agente sulla DGX gira su vLLM.
+  l'agente sulla DGX gira su vLLM. *[storico: «decide quello con la quota» e «il caso non
+  coperto» fino alla seconda revisione della PR #219, 22/10, sotto]*
 - **Il giro a vuoto non azzera più le troncate.** Il tetto suo (`RIPETIZIONI_MAX`) è di fila, e
   una troncata azzera `giri_vuoti`. Così troncate alternate a giri a vuoto arrivavano al tetto dei
   token dopo 19 passate. R6 è riscritta come `tronca_prosa`: tre troncate, un giro a vuoto e una
@@ -4348,6 +4350,51 @@ consegna rifiutata saltata da `estrattivo` non toccano il ciclo del codice, che 
 `USCITA_TRONCATA` e `USCITA_TRONCATA_TESTO`. Prove: le sezioni 7 e 8 di `prova_strumenti_onesti`
 verdi, ciascuna col suo testo. Con il testo «di fila» per tutti e due cadono il tetto del codice
 e F; con il testo «senza una chiamata eseguita» per tutti e due cade il tetto della ricerca.
+
+**Dopo la seconda revisione della PR #219 (22/10).**
+- **Col conto esatto decide il residuo, non la quota.** Dopo la prima revisione, col conto esatto
+  di vLLM (`reasoning_tokens`) V1 tornava come su main. 8 192 di ragionamento su 16 384 è una quota
+  di 0,5, e la passata finiva nella guardia con 8 192 token di uscita trattenuta. La correzione
+  funzionava quindi solo se vLLM non riempie il conto, cosa ancora da misurare (V3). Ora, col
+  conto esatto e il contenuto vuoto, la passata è una troncata se `eval - ragionamento >
+  BUDGET_MARGINE` (1 024), con il budget e senza. La quota 0,4 era pensata per la stima
+  grossolana dai caratteri; col conto esatto l'uscita si conosce. E (16 374 su 16 384) resta
+  ragionamento, e così il contrario di P1 (llama.cpp col conto e il budget ignorato). Un conto 0
+  con un ragionamento scritto non vale e si tratta come assente: è un server che non riempie i
+  dettagli, e senza questa cautela ogni E diventava una troncata.
+- **Senza il conto esatto, la regola del budget ha un controllo.** Si applica solo se la stima dai
+  caratteri non supera `RAGIONAMENTO_BUDGET_MAX` = 1,5 volte il budget. Un budget applicato
+  tiene il ragionamento vero sotto il budget. La stima a 3 caratteri per token lo gonfia al più di
+  un terzo, perché il testo ha 3–4 caratteri per token, mentre il codice, a ~2,5, lo sgonfia; 1,5
+  lascia ancora un margine. Oltre quella soglia il budget non è stato applicato (llama.cpp e
+  Ollama su /v1 ignorano il campo senza rifiutarlo), e decide la quota come prima. Il solo
+  ragionamento lungo, 54 000 caratteri cioè 18 000 token stimati, chiude di nuovo alla seconda
+  soglia con «ha ragionato», senza ricevere tre volte «scrivi il file in pezzi». Resta scoperta la
+  fascia fra 1,33 e 1,5 volte il budget con il budget ignorato e il solo ragionamento: è stretta,
+  e fuori dalla DGX.
+- **Le prove di `eseguita` nei rami di piano e chiedi_permesso**, entrambe con `piano=True`:
+  - troncate alternate a un piano con una voce sconosciuta, o a chiedi_permesso prima del piano
+    (esiti non ok), si azzerano e il lavoro non finisce «troncata»;
+  - troncate alternate a uno scrivi_file rifiutato con «prima chiama piano» finiscono «troncata»
+    alla settima passata.
+
+  La lettura ripetuta nella stessa passata non ha una prova sua, perché la prima lettura ha già
+  azzerato il conto.
+- **La frase della tappa a voce, senza gergo**: «l'agente ha scritto più volte risposte troppo
+  lunghe, interrotte a metà, senza fare un passo avanti». Il motivo per l'agente resta tecnico
+  (`troncate_motivo`). La prova chiama `frase_tappa` sul risultato della tappa F e controlla che
+  non ci siano «token», «chiamata», «max_tokens» e «passata».
+- **Ogni correzione ha la sua prova.** Ho rifatto le mutazioni, una per volta:
+
+  | Correzione tolta | Prove che cadono |
+  |---|---|
+  | la quota col conto esatto | V1 col conto e i bordi |
+  | il conto 0 creduto | i bordi |
+  | la regola del budget senza la soglia della stima | Q2 e i bordi |
+  | `eseguita` tolta da piano | Q3 piano |
+  | `eseguita` tolta da chiedi_permesso | Q3 chiedi_permesso |
+  | `eseguita` spostata prima della lettura e del «prima chiama piano» | Q3 «prima chiama piano» |
+  | la frase della tappa di prima | Q4 |
 
 ## Il contratto dei giochi e un prompt per tipo (19/10, issue #186, ramo `issue-186-contratto-giochi`)
 

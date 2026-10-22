@@ -877,16 +877,24 @@ TRONCATE_MAX = 3
 # stima dai caratteri: TOKEN_CARATTERI per token, grossolana, per questo la quota è bassa) è
 # ragionamento troncato e vale la guardia dei token senza strumenti, come prima; altrimenti
 # l'uscita c'era ma il parser dei tool l'ha trattenuta (Ollama con una chiamata a metà)
-# Con il budget del ragionamento mandato e non rifiutato (vLLM, `budget` nell'uscita del client:
-# 21/10, #191) e senza il conto esatto del motore (`ragionamento`), una passata che ha generato
-# più di budget + BUDGET_MARGINE token è uscita trattenuta, qualunque sia la stima dai caratteri
-# (sulla DGX il budget di serie è 8 192 su 16 384, quota 0,5, sopra RAGIONAMENTO_QUOTA). Il conto
-# esatto, quando c'è, decide lui (prima revisione della PR #219): «non rifiutato» non vuol dire
-# applicato (llama.cpp ignora i campi che non conosce)
+# Il conto esatto del motore (vLLM: `ragionamento`, da reasoning_tokens) decide col residuo, non
+# con la quota pensata per la stima grossolana (seconda revisione della PR #219, #191): oltre
+# BUDGET_MARGINE token generati fuori dal ragionamento, col contenuto vuoto, l'uscita c'era e
+# l'ha trattenuta il parser (V1: 8 192 di ragionamento su 16 384). Un conto 0 con un ragionamento
+# scritto non vale (un server che non riempie i dettagli): come assente.
+# Senza il conto esatto, col budget mandato e non rifiutato (`budget` nell'uscita del client, 21/10)
+# una passata oltre budget + BUDGET_MARGINE token è uscita trattenuta, ma solo se la stima dai
+# caratteri non supera RAGIONAMENTO_BUDGET_MAX volte il budget. Un budget applicato tiene il
+# ragionamento vero sotto il budget, e la stima a TOKEN_CARATTERI = 3 caratteri per token lo
+# gonfia al più di un terzo (il testo ha 3–4 caratteri per token; il codice, ~2,5, lo sgonfia):
+# 1,5 lascia ancora un margine. Oltre, il budget non è stato applicato (llama.cpp e Ollama su /v1
+# ignorano il campo senza rifiutarlo) e decide la quota, come prima: il solo ragionamento lungo
+# resta nella guardia invece di ricevere «scrivi il file in pezzi»
 TRONCATA_TESTO_MIN = 20
 RAGIONAMENTO_QUOTA = 0.4
 TOKEN_CARATTERI = 3
 BUDGET_MARGINE = 1024
+RAGIONAMENTO_BUDGET_MAX = 1.5
 
 
 def troncate_motivo(n: int, di_fila: bool = True) -> str:
@@ -911,11 +919,16 @@ def troncata_nell_uscita(out: dict) -> bool:
     if gen <= 0:
         return False
     r = out.get("ragionamento")
+    pensiero = str(out.get("thinking") or "")
+    if r is not None and int(r or 0) == 0 and pensiero.strip():
+        r = None                          # il conto 0 smentito dal ragionamento scritto
+    if r is not None:
+        return gen - int(r) > BUDGET_MARGINE
+    stima = len(pensiero) / TOKEN_CARATTERI
     budget = int(out.get("budget") or 0)
-    if (r is None and budget > 0 and not out.get("budget_tolto")
-            and gen > budget + BUDGET_MARGINE):
+    if (budget > 0 and not out.get("budget_tolto") and gen > budget + BUDGET_MARGINE
+            and stima <= RAGIONAMENTO_BUDGET_MAX * budget):
         return True
-    stima = int(r) if r is not None else len(out.get("thinking") or "") / TOKEN_CARATTERI
     return stima < RAGIONAMENTO_QUOTA * gen
 # La risposta a una passata senza chiamate con lo stato consegnabile (19/10, #180): un fatto,
 # non una consegna. Prima il testo dopo una spinta valeva come «fatto» («Hai ragione, correggo

@@ -104,7 +104,8 @@ NUOVE = ("agente_stato_gia_visto", "agente_uscita_troncata", "agente_test_invari
          "agente_strumento_sconosciuto", "agente_dopo_consegna")
 
 
-def gira(tmp, nome, passate, max_passi=14, tappe=False, lav=None, sb=None, controlla=None):
+def gira(tmp, nome, passate, max_passi=14, tappe=False, lav=None, sb=None, controlla=None,
+         piano=False):
     """Agente.codice con il copione: (lavoro, risultato o {"eccezione"…}, log, copione, sandbox)."""
     from calliope.agenti.ciclo import Lavoro
     cli = Copione(passate)
@@ -116,7 +117,7 @@ def gira(tmp, nome, passate, max_passi=14, tappe=False, lav=None, sb=None, contr
         lav = Lavoro(nome, "codice", "una funzione che somma")
         lav.tappe = tappe
     try:
-        ris = ag.codice(lav, sb, controlla=controlla)
+        ris = ag.codice(lav, sb, controlla=controlla, piano=piano)
     except Exception as e:  # noqa: BLE001 — Limite
         ris = {"eccezione": type(e).__name__, "tipo": getattr(e, "tipo", ""), "motivo": str(e)}
     return lav, ris, log, cli, sb
@@ -699,6 +700,14 @@ def prova_revisioni(tmp: Path):
     verifica("…in uno sviluppo la tappa «troncata», la storia ben formata",
              ris.get("esito") == "tappa" and ris.get("tipo_limite") == "troncata"
              and _storia_ben_formata(lav), str(ris)[:200])
+    # Q4 (seconda revisione della PR #219): la tappa detta a voce, senza gergo
+    from types import SimpleNamespace
+    from calliope.agenti.servizio import PERCHE_TAPPA, frase_tappa
+    f = frase_tappa(SimpleNamespace(risultato=ris, segnali={}), "La somma")
+    verifica("Q4: la tappa «troncata» a voce, breve e senza gergo",
+             "risposte troppo lunghe, interrotte a metà" in f
+             and not any(g in f for g in ("token", "chiamata", "max_tokens", "passata")),
+             f[:300])
     # Contrario: una chiamata eseguita in mezzo azzera le troncate (tre, la chiamata, tre)
     lav, ris, log, cli, sb = gira(tmp, "revF3", [vuota, "Ci penso.", vuota, "Ci penso.", vuota,
                                                  [scrivi("note.txt", "x")], vuota, "Ci penso.",
@@ -742,7 +751,36 @@ def prova_revisioni(tmp: Path):
              ris.get("eccezione") == "Limite" and "ha ragionato per" in ris.get("motivo", "")
              and len(cli.corpi) == 2 and "agente_uscita_troncata" not in regole(lav),
              str(ris)[:200])
+    # Q1 (seconda revisione della PR #219): col conto esatto decide il residuo. V1 col conto di
+    # vLLM (8 192 su 16 384) è una troncata, con il budget e senza
+    v1_conto = {"content": "", "ragionamento": 8192, "budget": 8192, "fine": "length",
+                "eval": PIENA}
+    lav, ris, log, cli, sb = gira(tmp, "revV1conto", [dict(v1_conto) for _ in range(3)] + LAVORO)
+    verifica("Q1: V1 col conto esatto di vLLM → troncata, «fatto»",
+             ris.get("esito") == "fatto" and regole(lav).get("agente_uscita_troncata") == 3
+             and not any("token senza strumenti" in x for x in log), str(ris)[:200])
+    # Q2: senza conto e col budget ignorato (llama.cpp), il solo ragionamento lungo: la stima
+    # (54 000 caratteri, 18 000 token) è oltre 1,5 volte il budget, decide la quota come E
+    q2 = {"content": "", "thinking": "x" * 54000, "budget": 8192, "fine": "length",
+          "eval": PIENA}
+    lav, ris, log, cli, sb = gira(tmp, "revQ2", [dict(q2) for _ in range(30)], max_passi=24)
+    verifica("Q2: budget ignorato e solo ragionamento lungo → come E, niente «scrivi in pezzi»",
+             ris.get("eccezione") == "Limite" and "ha ragionato per" in ris.get("motivo", "")
+             and len(cli.corpi) == 2 and "agente_uscita_troncata" not in regole(lav),
+             str(ris)[:200])
     t = C.troncata_nell_uscita
+    soglia = int(C.RAGIONAMENTO_BUDGET_MAX * 8192 * C.TOKEN_CARATTERI)
+    verifica("Q1 e Q2: i bordi col conto esatto, il conto 0 e la stima oltre il budget",
+             t(v1_conto) and t(dict(v1_conto, budget=0)) and t(dict(v1_conto, budget_tolto=True))
+             and t(dict(v1_conto, ragionamento=PIENA - C.BUDGET_MARGINE - 1))
+             and not t(dict(v1_conto, ragionamento=PIENA - C.BUDGET_MARGINE))
+             and not t(dict(v1_conto, ragionamento=PIENA - 10))
+             # il conto 0 smentito dal ragionamento scritto: vale la stima (E con Ollama)
+             and not t(dict(q2, ragionamento=0, budget=0))
+             and t(dict(v1_conto, ragionamento=0))
+             # la stima fino a 1,5 volte il budget sì, oltre no
+             and t(dict(q2, thinking="x" * soglia)) and not t(dict(q2, thinking="x" * (soglia + 3)))
+             and not t(q2), "")
     verifica("V1: i bordi di troncata_nell_uscita",
              t(v1) and not t(dict(v1, eval=8192 + C.BUDGET_MARGINE))
              and t(dict(v1, eval=8192 + C.BUDGET_MARGINE + 1))
@@ -824,6 +862,24 @@ def prova_revisioni(tmp: Path):
     # Troncate alternate a giri a vuoto: prima il tetto dei token dopo 19 passate
     lav, ris, log, cli, sb = gira(tmp, "revR6c", [dict(vuota), dict(vuoto)] * 20, max_passi=40)
     verifica("R6: troncate e giri a vuoto alternati → «troncata» alla settima passata",
+             ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
+             and len(cli.corpi) == 7, str(ris)[:200] + f" passate {len(cli.corpi)}")
+    # Q3 (seconda revisione della PR #219): piano e chiedi_permesso sono chiamate eseguite anche
+    # con un esito non ok (il codice le ha guardate e ha risposto); il «prima chiama piano» no
+    piano_no = {"name": "piano", "arguments": {"capacita_necessarie": ["inesistente"],
+                                               "fattibile": True, "motivo": "x"}}
+    permesso_no = {"name": "chiedi_permesso", "arguments": {"cosa": "x", "motivo": "y"}}
+    for tag, c in (("piano", piano_no), ("chiedi_permesso", permesso_no)):
+        lav, ris, log, cli, sb = gira(tmp, "revQ3" + tag, [dict(vuota), [c]] * 5, max_passi=40,
+                                      piano=True)
+        verifica(f"Q3: troncate alternate a {tag} (esito non ok): azzerano, niente «troncata»",
+                 ris.get("tipo") != "troncata"
+                 and regole(lav).get("agente_uscita_troncata") == 5,
+                 str(ris)[:200] + str(regole(lav)))
+    lav, ris, log, cli, sb = gira(tmp, "revQ3prima", [dict(vuota), [scrivi("programma.py",
+                                                                        GIUSTO)]] * 6,
+                                  max_passi=40, piano=True)
+    verifica("Q3: troncate e scrivi_file rifiutato con «prima chiama piano» → «troncata»",
              ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
              and len(cli.corpi) == 7, str(ris)[:200] + f" passate {len(cli.corpi)}")
     # P3 (revisione della PR #219): una chiamata che non parte (strumento sconosciuto, argomenti
