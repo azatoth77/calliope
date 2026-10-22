@@ -41,14 +41,26 @@ VERBI_DESCRIZIONE = frozenset((
 MAX_COSA_FA = 120
 MAX_DESCRIZIONE_INPUT = 80
 # Le parole che non stanno in una descrizione: chi legge è il modello, e queste servono solo a
-# dargli ordini (a chi si rivolge, quando, con quale priorità) o a parlare d'altro
+# dargli ordini (a chi si rivolge, quando, con quale priorità) o a parlare d'altro. Una parola
+# intera, maiuscole o minuscole; «*» è il resto della parola («utent*»: utente, utenti). Dal
+# 22/10 (#228, § 3.5 n. 34) l'elenco è anche nel contratto (`parole_vietate_dette`), dalla
+# stessa costante
+PAROLE_VIETATE = (
+    "assistent*", "modello linguistic*", "modelli linguistic*", "modello di linguaggio*",
+    "modelli di linguaggio*", "calliope", "utent*", "istruzion*", "prompt", "sistema", "tool",
+    "funzion*", "sempre", "mai", "prima di", "dopo aver", "dopo che", "ogni volta", "quando",
+    "invece", "anziché", "obbligat*", "important*", "deve*", "devi*", "devo*", "dovr*", "non",
+    "ignor*", "chiama*", "usa", "usare", "usala", "usalo", "rispond*", "esegu*", "segui*",
+    "ricordati", "priorit*", "richiesta", "richieste", "qualsiasi", "chiunque", "consenso",
+    "conferm*", "password", "segret*", "tu", "ti", "te", "tuo", "tua", "voi", "vostr*")
 _VIETATE = re.compile(
-    r"(?<![a-zà-ù])(assistent\w*|modell[oi] (linguistic|di linguaggio)\w*|calliope|utent\w*|"
-    r"istruzion\w*|prompt|sistema|tool|funzion\w*|sempre|mai|prima di|dopo (aver|che)|"
-    r"ogni volta|quando|invece|anziché|obbligat\w*|important\w*|dev[eio]\w*|dovr\w*|non|"
-    r"ignor\w*|chiama\w*|usa|usare|usala|usalo|rispond\w*|esegu\w*|segui\w*|ricordati|"
-    r"priorit\w*|richiest[ae]|qualsiasi|chiunque|consenso|conferm\w*|password|segret\w*|"
-    r"tu|ti|te|tuo|tua|voi|vostr\w*)(?![a-zà-ù])", re.I)
+    r"(?<![a-zà-ù])(" + "|".join(re.escape(p).replace(r"\*", r"\w*") for p in PAROLE_VIETATE)
+    + r")(?![a-zà-ù])", re.I)
+
+
+def parole_vietate_dette() -> str:
+    """L'elenco per il contratto: «assistent…, modello linguistic…, calliope, …»."""
+    return ", ".join(p.replace("*", "…") for p in PAROLE_VIETATE)
 # Niente simboli da codice, indirizzi, citazioni, elenchi o più frasi
 _SIMBOLI = re.compile(r"[_:;!?«»\"“”`<>{}\[\]|*#@\\/=+\n\t]|https?|www\.|\.(?!\d)\s*\S")
 
@@ -105,25 +117,37 @@ def cosa_fa(d: dict) -> str:
 def controlla_testi(m: dict, nomi_tool=()) -> str | None:
     """Tutto il testo del manifesto che il modello leggerà (titolo, descrizione, input): il
     motivo per cui non va, o None. Si usa alla consegna, all'approvazione e a ogni avvio."""
+    tutti = controlla_testi_tutti(m, nomi_tool, mancanti=True)
+    return tutti[0] if tutti else None
+
+
+def controlla_testi_tutti(m: dict, nomi_tool=(), mancanti: bool = False) -> list[str]:
+    """I motivi di tutti i testi che non vanno, uno per testo (22/10, #228: `valida` li dice
+    in una volta). `mancanti`: anche un titolo o una descrizione che non c'è («è vuota»);
+    `valida` no, perché un campo che manca ha già il suo errore."""
     nomi = [n for n in nomi_tool or () if n != PREFISSO_TOOL + str(m.get("nome") or "")]
-    r = controlla_testo(m.get("descrizione"), nomi)
-    if r:
-        return f"la descrizione {r}"
-    r = controlla_testo(m.get("titolo"), nomi, 40, verbo=False)
-    if r:
-        return f"il titolo {r}"
+    out = []
+    if mancanti or m.get("descrizione") is not None:
+        r = controlla_testo(m.get("descrizione"), nomi)
+        if r:
+            out.append(f"la descrizione {r}")
+    if mancanti or m.get("titolo") is not None:
+        r = controlla_testo(m.get("titolo"), nomi, 40, verbo=False)
+        if r:
+            out.append(f"il titolo {r}")
     for nome, p in ((m.get("input") or {}).get("properties") or {}).items():
         if p.get("description"):
             r = controlla_testo(p["description"], nomi, MAX_DESCRIZIONE_INPUT, verbo=False)
             if r:
-                return f"la descrizione di «{nome}» {r}"
+                out.append(f"la descrizione di «{nome}» {r}")
         for v in p.get("enum") or ():
             # I valori («km/h», «celsius»): niente parole d'ordine né nomi di funzioni
             t = str(v)
             m_ = _VIETATE.search(t)
             if len(t) > 40 or m_ or t.lower() in {n.lower() for n in nomi}:
-                return f"un valore di «{nome}» non va: «{t[:40]}»"
-    return None
+                out.append(f"un valore di «{nome}» non va: «{t[:40]}»")
+                break
+    return out
 
 
 def descrizione_tool(m: dict) -> str:
@@ -466,55 +490,89 @@ def permessi_nuovi(vecchio: dict | None, nuovo: dict) -> list[str]:
             if k not in prima]
 
 
+def _consiglio_testo(motivo: str) -> str:
+    """Il motivo di un testo che il modello legge, con il consiglio che c'entra (22/10, #228):
+    su «cosa_fa» solo per la descrizione, che si compone da lì; per il titolo e gli input solo
+    che è un testo per il modello."""
+    testo = motivo[:1].upper() + motivo[1:]
+    if motivo.startswith("la descrizione ") and not motivo.startswith("la descrizione di «"):
+        return testo + (" (è il testo che il modello legge: «cosa_fa» è un verbo e un oggetto "
+                        "breve, come «Dice» e «la temperatura di una stanza»)")
+    return testo + " (è un testo che il modello legge)"
+
+
 def valida(d, tempo_max_s: float = 30.0, memoria_max_mb: int = 512, nomi_tool=()) -> dict:
-    """Il manifesto normalizzato, o ManifestoNonValido."""
+    """Il manifesto normalizzato, o ManifestoNonValido. Dal 22/10 (#228, § 3.5 n. 34 della
+    ricerca del 19/10) con tutti gli errori in una volta, in `errori` e nel messaggio (prima si
+    fermava al primo: tre difetti, tre giri dell'agente); con un errore solo il messaggio è
+    quello di prima."""
     if not isinstance(d, dict):
         raise ManifestoNonValido("il manifesto deve essere un oggetto JSON")
+    errori: list[str] = []
+
+    def prova(f, *a):
+        try:
+            return f(*a)
+        except ManifestoNonValido as e:
+            errori.append(str(e))
+            return None
     nome = d.get("nome")
     if not isinstance(nome, str) or not NOME.match(nome):
-        raise ManifestoNonValido(f"«nome» {json.dumps(nome, ensure_ascii=False)[:40]} non va: "
-                                 "minuscole, cifre e trattini bassi, da 3 a 31 caratteri, "
-                                 "prima una lettera")
-    titolo = _testo(d, "titolo", 60)
+        errori.append(f"«nome» {json.dumps(nome, ensure_ascii=False)[:40]} non va: minuscole, "
+                      "cifre e trattini bassi, da 3 a 31 caratteri, prima una lettera")
+    titolo = prova(_testo, d, "titolo", 60)
     # La descrizione va nel tool che il modello legge a ogni turno: è un canale per dargli
     # istruzioni. Dal 06/10 la compone il codice (cosa_fa) e passa il controllo dei testi
-    descr = cosa_fa(d)
+    descr = prova(cosa_fa, d)
     livello = d.get("livello") or "familiare"
     if livello not in LIVELLI:
-        raise ManifestoNonValido(f"«livello» «{str(livello)[:30]}» non va: uno tra "
-                                 f"{', '.join(LIVELLI)}")
+        errori.append(f"«livello» «{str(livello)[:30]}» non va: uno tra {', '.join(LIVELLI)}")
     lim = d.get("limiti") or {}
+    tempo, mem = 10.0, 256
     if not isinstance(lim, dict):
-        raise ManifestoNonValido("«limiti» deve essere un oggetto")
-    try:
-        tempo = float(lim.get("tempo_s", 10))
-        mem = int(lim.get("memoria_mb", 256))
-    except (TypeError, ValueError):
-        raise ManifestoNonValido("«limiti»: numeri") from None
-    if not (1 <= tempo <= tempo_max_s):
-        raise ManifestoNonValido(f"«limiti.tempo_s»: da 1 a {tempo_max_s:g}")
-    if not (64 <= mem <= memoria_max_mb):
-        raise ManifestoNonValido(f"«limiti.memoria_mb»: da 64 a {memoria_max_mb}")
-    out = {"nome": nome, "titolo": titolo, "descrizione": descr,
-           "input": _input(d.get("input")), "permessi": _permessi(d.get("permessi")),
-           "livello": livello, "limiti": {"tempo_s": tempo, "memoria_mb": mem}}
-    # La scheda interattiva (05/10, scheda.py): un gioco nel browser degli schermi
+        errori.append("«limiti» deve essere un oggetto")
+    else:
+        try:
+            tempo = float(lim.get("tempo_s", 10))
+            mem = int(lim.get("memoria_mb", 256))
+        except (TypeError, ValueError):
+            errori.append("«limiti»: numeri")
+        else:
+            if not (1 <= tempo <= tempo_max_s):
+                errori.append(f"«limiti.tempo_s»: da 1 a {tempo_max_s:g}")
+            if not (64 <= mem <= memoria_max_mb):
+                errori.append(f"«limiti.memoria_mb»: da 64 a {memoria_max_mb}")
+    schema = prova(_input, d.get("input"))
+    permessi = prova(_permessi, d.get("permessi"))
+    out = {"nome": nome, "titolo": titolo, "descrizione": descr, "input": schema,
+           "permessi": permessi, "livello": livello, "limiti": {"tempo_s": tempo,
+                                                                 "memoria_mb": mem}}
+    # La scheda interattiva (05/10, scheda.py): un gioco nel browser degli schermi. Con i
+    # permessi sbagliati non si controlla (dipende da loro): l'errore dei permessi c'è già
     from .scheda import SchedaNonValida, e_gioco_puro, normalizza
-    try:
-        sch = normalizza(d.get("scheda"), out["permessi"])
-    except SchedaNonValida as e:
-        raise ManifestoNonValido(str(e)) from None
-    if sch is not None:
-        out["scheda"] = sch
-        # Un gioco puro lo usano tutti, anche gli ospiti e sugli schermi di stanza (decisione
-        # 4 del 05/10): niente dati di casa, niente rete, niente tool
-        if e_gioco_puro(out):
-            out["livello"] = "ospite"
-    motivo = controlla_testi(out, nomi_tool)
-    if motivo:
-        raise ManifestoNonValido(motivo[:1].upper() + motivo[1:] + " (è il testo che il modello "
-                                 "legge: «cosa_fa» è un verbo e un oggetto breve, come «Dice» e "
-                                 "«la temperatura di una stanza»)")
+    if permessi is not None:
+        try:
+            sch = normalizza(d.get("scheda"), permessi)
+        except SchedaNonValida as e:
+            errori.append(str(e))
+        else:
+            if sch is not None:
+                out["scheda"] = sch
+                # Un gioco puro lo usano tutti, anche gli ospiti e sugli schermi di stanza
+                # (decisione 4 del 05/10): niente dati di casa, niente rete, niente tool
+                if e_gioco_puro(out):
+                    out["livello"] = "ospite"
+    # I testi che il modello legge: tutti quelli che ci sono (un testo mancante ha già il suo
+    # errore)
+    errori += [_consiglio_testo(m) for m in controlla_testi_tutti(out, nomi_tool)]
+    if errori:
+        if len(errori) == 1:
+            e = ManifestoNonValido(errori[0])
+        else:
+            e = ManifestoNonValido(f"il manifesto ha {len(errori)} errori: " + "; ".join(
+                f"{i}) {x}" for i, x in enumerate(errori, 1)))
+        e.errori = errori
+        raise e
     return out
 
 
