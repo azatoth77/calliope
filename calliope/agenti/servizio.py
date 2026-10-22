@@ -2156,9 +2156,9 @@ class Lavori:
                     self.log(f"[AGENTI] scheda non inviata: {e}")
         who = f"{lav.persona_nome}, " if lav.persona_nome else ""
         msg = who + text if who else text[0].upper() + text[1:]
-        # I test spariti dall'ultima tappa (revisione della PR #179, #174) e quelli indeboliti
-        # dalla prima esecuzione (22/10, #223, agenti/fotografia_test.py), detti dal codice con
-        # un solo «Attenzione» e senza nomi di file
+        # I test spariti dall'ultima tappa (revisione della PR #179, #174) e il fatto neutro
+        # sugli stessi test di questo lavoro (22/10, #223, agenti/fotografia_test.py), detti dal
+        # codice
         from .fotografia_test import avvisi_voce
         avvisi = avvisi_voce(lav.risultato)
         if avvisi:

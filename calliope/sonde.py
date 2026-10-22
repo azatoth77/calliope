@@ -589,59 +589,43 @@ def _esito_testo(r: dict) -> str:
 
 
 # Il motivo detto all'agente (e sulla scheda) per un esito vuoto; regola ricollaudo_esito_vuoto
-MOTIVO_VUOTO = ("un «non trovato», ma il caso della persona chiedeva un dato: se il dato non "
-                "esiste davvero, dillo nel riassunto della consegna")
-# Una frase che dice solo di non aver trovato niente, in testa (revisione della PR #232: «Mi
-# dispiace, nessuna fiera a Borgo Alto.», «Nessun evento trovato…», «Non trovo nessun luogo…»)
-_VUOTO_TESTA = re.compile(
-    r"^\W*(?:(?:mi\s+dispiace|purtroppo|spiacente|ahimè|ops)\W+)*(?:"
-    r"non\s+(?:(?:l['’]\s*)?ho\s+|è\s+stat[oa]\s+|sono\s+(?:stat[ie]\s+|riuscit[oa]\s+a\s+)|"
-    r"riesco\s+a\s+)?trov|"
-    r"nessun[oa]?\s|non\s+(?:c['’]è|ci\s+sono|esist))", re.I)
+MOTIVO_VUOTO = ("risultati vuoti e nessuna frase, ma il caso della persona chiedeva un dato: se "
+                "il dato non esiste davvero, dillo in da_dire e nel riassunto della consegna")
+# I campi di testo per chi parla: una frase, anche negativa, è un dato (seconda revisione della
+# PR #232: «Nessuna allerta…», «Non c'è traffico», «Non ho risultati…» li giudicano il modello e
+# la persona, principio 10)
+_CAMPI_FRASE = ("da_dire", "messaggio", "testo", "risposta")
 
 
-def _testo_con_dati(testo: str, argomenti) -> bool:
-    """La frase porta un dato oltre al «non trovato»: un numero che non viene dagli argomenti,
-    o qualcosa dopo i due punti («Non ho trovato pioggia: sereno, 21 gradi.»)."""
-    t = str(testo or "")
-    for v in (argomenti or {}).values() if isinstance(argomenti, dict) else ():
-        if isinstance(v, (str, int, float)) and str(v).strip():
-            t = t.replace(str(v), " ")
-    if re.search(r"\d", t):
+def _vuoto(v) -> bool:
+    if v is None or v == "" or v == [] or v == {}:
         return True
-    _, due, dopo = t.partition(":")
-    return bool(due) and len(re.findall(r"[\wà-ù]+", dopo)) >= 2
+    if isinstance(v, (list, dict)):
+        return all(_vuoto(x) for x in (v.values() if isinstance(v, dict) else v))
+    return False
 
 
-def esito_vuoto(ris, argomenti=None) -> bool:
-    """Il risultato dice solo di non aver trovato niente (§ 9.3, 22/10, #223): il tipo
-    «vuoto» del collaudo (tools/sviluppo.tipo_collaudo) o una frase sola che lo dice in testa,
-    senza un dato accanto."""
-    from .tools.sviluppo import tipo_collaudo
-    testo, solo_testo = "", False
+def esito_vuoto(ris) -> bool:
+    """Il risultato è vuoto **per struttura** (§ 9.3, 22/10, #223; dalla seconda revisione della
+    PR #232 niente parole): nessuna frase per chi parla e i risultati vuoti, o «trovato»: false
+    senza una frase. Una frase, qualunque cosa dica, non è mai vuota."""
     if isinstance(ris, str):
-        testo, solo_testo = ris, True
-    elif isinstance(ris, dict):
-        testo = str(ris.get("da_dire") or ris.get("messaggio") or "")
-        altri = [k for k, v in ris.items() if k not in ("da_dire", "messaggio")
-                 and v not in (None, "", [], {}, False)]
-        solo_testo = bool(testo) and not altri
-    if solo_testo and _testo_con_dati(testo, argomenti):
+        return not ris.strip()
+    if isinstance(ris, list):
+        return _vuoto(ris)
+    if not isinstance(ris, dict):
         return False
-    if tipo_collaudo({"risultati": ris}, ris, argomenti or None) == "vuoto":
+    if any(isinstance(ris.get(k), str) and ris[k].strip() for k in _CAMPI_FRASE):
+        return False
+    if ris.get("trovato") is False or ris.get("trovata") is False:
         return True
-    m = _VUOTO_TESTA.search(testo.strip()) if solo_testo else None
-    if m is None:
-        return False
-    # Una frase sola, senza un seguito dopo una virgola («Nessuna pioggia, sereno» è pieno)
-    prima = re.split(r"[.!?…]", testo.strip()[m.end():])[0]
-    return not re.search(r"[,;:]", prima)
+    return all(_vuoto(v) for v in ris.values())
 
 
 def va(caso: dict, r: dict) -> tuple[bool, str]:
     """(il caso adesso va?, perché no). Con la regola del collaudo (fermata con un errore, un
-    campo d'errore, nessun risultato) e in più: un esito vuoto quando il caso chiedeva un dato
-    (22/10, #223), lo stesso risultato che la persona aveva già giudicato sbagliato, una
+    campo d'errore, nessun risultato) e in più: risultati vuoti senza nessuna frase quando prima il
+    caso dava un dato o un errore (22/10, #223), lo stesso risultato che la persona aveva già giudicato sbagliato, una
     richiesta rifiutata dalla porta o con l'avviso della doppia codifica."""
     if not r.get("ok"):
         return False, f"si è fermata: {r.get('errore') or r.get('stato')}"
@@ -657,14 +641,12 @@ def va(caso: dict, r: dict) -> tuple[bool, str]:
         if riga.get("avviso"):
             return False, "una richiesta con l'avviso della porta"
     # Un esito vuoto non è una risposta (22/10, issue #223, n. 5 del § 3.1 della ricerca del
-    # 19/10): il caso della persona («fiera di Borgo Alto») prima si fermava con un errore, la
-    # versione nuova dice «Non ho trovato…» e il ricollaudo passava senza che avesse risposto.
-    # Lo stesso tipo del collaudo (tools/sviluppo.tipo_collaudo: «vuoto» per un «non trovato»
-    # senza dati accanto, risultati vuoti, «trovato»: false). Vale quando il caso chiedeva un
-    # dato: prima un errore o un «non trovato»; con una risposta giudicata sbagliata dalla
-    # persona il «non trovato» può essere proprio la correzione (contrario nella prova)
+    # 19/10): il caso della persona prima dava un dato o si fermava con un errore, e la versione
+    # nuova restituisce risultati vuoti senza dire niente. Solo per struttura (`esito_vuoto`):
+    # una frase negativa («Non ho trovato la fiera», «Nessuna allerta») è un dato, e il suo
+    # giudizio è del modello e della persona (seconda revisione della PR #232, principio 10)
     from .sviluppo import tipo_collaudo as tipo_salvato
-    if tipo_salvato(caso) != "risposta" and esito_vuoto(ris, caso.get("argomenti")):
+    if tipo_salvato(caso) in ("risposta", "errore", "errore_dichiarato") and esito_vuoto(ris):
         return False, MOTIVO_VUOTO
     nuovo = _esito_testo(r)
     if caso.get("giudizio") or caso.get("ok"):

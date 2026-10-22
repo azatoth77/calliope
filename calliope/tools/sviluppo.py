@@ -1660,16 +1660,11 @@ def _chiave_prove(sv) -> str:
 
 
 def _esempi_eseguiti(svs, sv) -> bool:
-    """Gli esempi di accettazione sono stati eseguiti alla fine del lavoro della versione
-    (agenti/servizio._esito_accettazione: `passano` vero o falso). Senza il lavoro (dopo un
-    riavvio) il segno che hanno lasciato sui requisiti (Sviluppi.segna_provati)."""
-    lav = svs._lavoro(sv.lavoro)
-    if lav is not None:
-        a = getattr(lav, "accettazione", None)
-        r = (getattr(lav, "risultato", None) or {}).get("accettazione")
-        return any(isinstance(x, dict) and isinstance(x.get("passano"), bool) for x in (a, r))
-    return any(isinstance(r, dict) and isinstance(r.get("provato"), bool)
-               for r in sv.requisiti or ())
+    """Gli esempi di accettazione della versione di adesso sono stati eseguiti alla fine del suo
+    lavoro: la chiave «versione|lavoro» salvata nello sviluppo da Sviluppi.lavoro_finito (seconda
+    revisione della PR #232: il segno `provato` sui requisiti restava da una versione di prima ed
+    è ereditato da uno sviluppo nuovo; dopo un riavvio il lavoro non è in memoria)."""
+    return bool(sv.esempi_eseguiti) and sv.esempi_eseguiti == _chiave_prove(sv)
 
 
 def _della_versione(sv, c: dict) -> bool:
@@ -1690,16 +1685,21 @@ def _esempi_scritti(svs, sv) -> bool:
     return isinstance(a, dict) and a.get("stato") == "pronta"
 
 
-def porta_approvazione(ctx, svs, nome: str) -> dict | None:
-    """La stessa porta per estensione_gestisci approva (revisione della PR #232: dentro uno
+def porta_approvazione(ctx, svs, nome: str, candidata=None) -> dict | None:
+    """La stessa porta per estensione_gestisci approva (revisioni della PR #232: dentro uno
     sviluppo il modello può rispondere ad «attivala» con quel tool, e per un gioco puro con la
-    voce sicura l'approvazione salta anche la frase di sfida). None se non c'è uno sviluppo
-    aperto su quell'estensione o se una prova c'è (o il sì è stato detto)."""
+    voce sicura l'approvazione salta anche la frase di sfida). Vale per lo sviluppo più recente
+    dell'estensione che non è concluso (aperto o sospeso), e per quello chiuso se la versione da
+    attivare viene da lì. None se non c'è, se una prova c'è o se il sì è stato detto."""
     if svs is None:
         return None
-    for sv in list(getattr(svs, "sviluppi", None) or ()):
-        if sv.stato == "aperta" and sv.estensione == nome and sv.tipo == "estensione":
-            return _porta_prove(ctx, svs, sv)
+    for sv in reversed(list(getattr(svs, "sviluppi", None) or ())):
+        if sv.estensione != nome or sv.tipo != "estensione":
+            continue
+        if sv.stato in ("aperta", "sospesa") or (
+                candidata is not None and sv.versione == candidata):
+            return _porta_prove(ctx, svs, sv, "estensione_gestisci",
+                                {"azione": "approva", "nome": nome})
     return None
 
 
@@ -1718,7 +1718,9 @@ def _senza_prove_si(ctx, sv) -> bool:
     richiama avanti non basta, come per agenda_annulla (tools/builtin._si_alla_domanda)."""
     if (sv.senza_prove or {}).get("chiesta") != _chiave_prove(sv):
         return False
-    if getattr(ctx, "tool_in_sospeso", None) != "sviluppo_passo":
+    # La domanda può essere nata da sviluppo_passo o da estensione_gestisci approva, e il
+    # modello può rispondere con l'uno o con l'altro: vale la domanda, non il tool
+    if getattr(ctx, "tool_in_sospeso", None) not in ("sviluppo_passo", "estensione_gestisci"):
         return False
     from .. import politica
     t = getattr(ctx, "politica", None)
@@ -1730,7 +1732,8 @@ def _senza_prove_si(ctx, sv) -> bool:
             or politica.consenso(testo))
 
 
-def _porta_prove(ctx, svs, sv) -> dict | None:
+def _porta_prove(ctx, svs, sv, tool: str = "sviluppo_passo",
+                 argomenti: dict | None = None) -> dict | None:
     """None se si può andare avanti (alla revisione o all'attivazione), o la domanda che dice
     alla persona che non c'è nessuna prova."""
     collaudi, anteprime = _prove_della_versione(sv)
@@ -1761,20 +1764,30 @@ def _porta_prove(ctx, svs, sv) -> dict | None:
     return _final(frase, ok=False, fatto="NIENTE ancora: è una domanda, non sono andata avanti",
                   in_sospeso={"domanda": DOMANDA_SENZA_PROVE,
                               "cosa": "andare avanti senza nessuna prova",
-                              "tool": "sviluppo_passo", "argomenti": {"azione": "avanti"}})
+                              "tool": tool, "argomenti": argomenti or {"azione": "avanti"}})
 
 
 def _con_senza_prove(svs, sv, detto_coll: str) -> str:
     """Le prove dette dalla revisione: dopo il sì senza prove lo dice al posto di «Il collaudo
-    l'hai saltato…»; e i test indeboliti dall'agente dalla loro prima esecuzione (22/10, #223,
-    agenti/fotografia_test.py), detti dal codice."""
+    l'hai saltato…»; e il fatto neutro sugli stessi test dell'agente, quando è senza ambiguità
+    (22/10, #223, agenti/fotografia_test.frase_voce: un test che adesso non controlla niente o è
+    saltato). Mai un sospetto a voce: i conti cambiati vanno sulla scheda (`_riga_test`)."""
     c, a = _prove_della_versione(sv)
     if not (c or a) and (sv.senza_prove or {}).get("confermata") == _chiave_prove(sv):
         detto_coll = "Nessuna prova: hai scelto di andare avanti lo stesso."
     from ..agenti.fotografia_test import frase_voce
     lav = svs._lavoro(sv.lavoro)
-    deboli = frase_voce((getattr(lav, "risultato", None) or {}).get("test_indeboliti"))
-    return f"{detto_coll} {deboli}" if deboli else detto_coll
+    fatto = frase_voce((getattr(lav, "risultato", None) or {}).get("test_segnali"))
+    return f"{detto_coll} {fatto}" if fatto else detto_coll
+
+
+def _riga_test(svs, sv) -> str:
+    """La riga neutra per la scheda: i test cambiati rispetto alla prima esecuzione ("" se
+    niente). Possono venire da una riscrittura onesta o da una modifica chiesta: non è un'accusa."""
+    from ..agenti.fotografia_test import riga_scheda
+    lav = svs._lavoro(sv.lavoro)
+    riga = riga_scheda((getattr(lav, "risultato", None) or {}).get("test_cambiati"))
+    return f"\n- {riga}" if riga else ""
 
 
 def _revisione(ctx, svs, sv) -> dict:
@@ -1823,7 +1836,7 @@ def _revisione(ctx, svs, sv) -> dict:
         note_rule(ctx, "sviluppo_revisione_manca")
     if sv.tipo == "estensione":
         detto_coll = _con_senza_prove(svs, sv, detto_coll)
-        sv.revisione = rev["testo"] + f"\n- {detto_coll}"
+        sv.revisione = rev["testo"] + f"\n- {detto_coll}" + _riga_test(svs, sv)
         fumo = ""
         if svs.e_gioco(sv):
             # La prova di fumo è un test di avvio, non delle regole (11/10)
@@ -1874,7 +1887,7 @@ def _revisione(ctx, svs, sv) -> dict:
              f"righe.{t} {detto_coll}" + (f" {confronto}" if confronto else "")
              + " Il codice è sullo schermo, se ce l'hai.")
     sv.revisione = (f"- File di codice: {misura['file']}\n- Righe: {misura['righe']}\n"
-                    f"- {t.strip() or 'Test: nessuno'}\n- {detto_coll}")
+                    f"- {t.strip() or 'Test: nessuno'}\n- {detto_coll}" + _riga_test(svs, sv))
     svs.passa(sv, "revisione", "avanti dal collaudo")
     note_rule(ctx, "sviluppo_revisione")
     soglia = int(getattr(ctx.cfg, "sviluppo_programma_righe", 150) or 150)

@@ -5017,6 +5017,8 @@ Verifica del 22/10 dei buchi della ricerca del 19/10
   saltare la porta. Per un gioco puro con la voce sicura saltava anche la frase di sfida.
   Adesso `Estensioni._approva` passa da `tools/sviluppo.porta_approvazione` quando c'è uno
   sviluppo aperto sull'estensione, prima della sfida e prima della strada senza sfida.
+  *[storico: «solo con lo sviluppo aperto, prima del permesso e dei test» fino alla seconda
+  revisione, sotto]*
 - **N. 10, la domanda per prima.** La porta sta in testa a `_revisione`. Prima veniva dopo il
   confronto con la richiesta, che può durare `sviluppo_verifica_voce_s`, e la regola
   `sviluppo_revisione_senza_collaudo` si contava due volte. «Gli esempi non sono stati
@@ -5042,6 +5044,8 @@ Verifica del 22/10 dei buchi della ricerca del 19/10
     come `t.skip()`/`t.todo()`, o come opzione `{ skip: … }` di una chiamata `test`. I
     sottotest `t.test(…)` contano come test. I commenti si tolgono rispettando le stringhe
     («"a//b"» resta).
+  *[storico: «a voce i test tolti, i salti e i controlli banali» vero fino alla seconda revisione
+  della PR #232, sotto: a voce solo il fatto neutro su uno stesso test]*
 - **N. 7, le frasi.** Niente più «dalla prima prova», che si confondeva con il collaudo: la
   frase dice «da quando ha eseguito i test la prima volta». Con i test tolti dall'ultima tappa
   c'è un solo «Attenzione» (`fotografia_test.avvisi_voce`) e lo stesso test non si conta due
@@ -5056,6 +5060,8 @@ Verifica del 22/10 dei buchi della ricerca del 19/10
   - Non è vuota «Non ho trovato pioggia: sereno, 21 gradi.», anche con il solo `da_dire`: ha
     un numero o qualcosa dopo i due punti. Non lo è nemmeno «Nessuna pioggia, cielo sereno».
   - La regola `ricollaudo_esito_vuoto` si scrive in `sonde.esito_caso`.
+  *[storico: il riconoscimento delle frasi vuote vero fino alla seconda revisione della PR #232,
+  sotto: «vuoto» solo per struttura]*
 - **Le mutazioni sopravvissute alla prima revisione** (M1–M9) adesso hanno ognuna la sua prova:
   - il controllo della domanda e quello di `tool_in_sospeso`;
   - i collaudi di ogni versione;
@@ -5069,3 +5075,62 @@ Verifica del 22/10 dei buchi della ricerca del 19/10
   prima sono riscritte sul codice nuovo. La prova conta 101 controlli.
 - **Prova cambiata:** `prova_sviluppo_giro4` approvava con `estensione_gestisci`, dentro lo
   sviluppo e senza nessuna prova. Adesso ha un collaudo prima.
+
+**Dopo la seconda revisione della PR #232 (22/10).** Due correzioni di principio: le euristiche
+sul testo davano ancora falsi positivi.
+- **N. 7, la fotografia parte dai test dell'agente.** I file di partenza messi dal codice (i test
+  del gioco d'esempio dello scheletro) non entrano: un file di test entra quando l'agente lo
+  scrive (`segnali["test_scritti"]`) e poi i test girano. In una correzione la fotografia ha i
+  test della versione di prima. Una modifica chiesta dalla persona («togli le previsioni») non
+  li ha: i test di una funzione tolta non diventano un sospetto.
+- **N. 7, niente accuse a voce.** A voce, nell'annuncio e nella revisione, va solo un fatto
+  neutro, e solo per un segnale senza ambiguità su uno **stesso test** (stesso nome, nello
+  stesso file o spostato): prima controllava qualcosa e ora non controlla niente
+  (`assertTrue(True)`, `return` in testa, `if False`), o prima girava e ora ha un salto vero
+  (`fotografia_test.segnali`, «Sui test dell'agente: il test «…» adesso non controlla
+  niente.»). Mai «indeboliti».
+  - Tutto il resto resta un fatto per l'agente (`test_cambiati` nel risultato di
+    `esegui_test`, regola `agente_test_cambiati`) e una riga neutra sulla scheda della
+    revisione («Test cambiati rispetto alla prima esecuzione: …»): test tolti, uniti,
+    divisi, spostati, conti delle asserzioni.
+  - Restano fuori dalla voce, e sono contrari della prova, le riscritture della seconda
+    revisione: un file diviso o spostato in `tests/`, tre test uniti con un ciclo e `subTest`
+    o in un ciclo JavaScript su una tabella, il test di determinismo con lo stesso seme, la
+    promessa restituita in JavaScript, `p.skip()` di una partita, `t.skip()` di un turno che
+    non è il contesto del test, una funzione tolta con i suoi test.
+  - In Python il salto vale solo per `self.skipTest`, `pytest.skip` e i decoratori di
+    `unittest` e `pytest.mark`. In JavaScript `t.skip()` vale solo sul parametro della
+    callback del test, e il `return` in testa solo nudo (`return;`).
+  - Le chiavi del rapporto ora sono `test_cambiati` e `test_segnali`. Le regole sono
+    `agente_test_cambiati` e `agente_test_cambiato_scritto`, che sostituiscono le
+    `*_indebolit*` di prima.
+- **N. 5, il ricollaudo senza frasi.** «Vuoto» solo per struttura: nessuna frase per chi
+  parla e i risultati vuoti, o «trovato»: false senza una frase, quando prima il caso dava un
+  dato o un errore. Una frase negativa è un dato e la giudicano il modello e la persona
+  (principio 10): «Nessuna allerta…», «Non c'è traffico», «Non ho risultati…», ma anche «Non ho
+  trovato la fiera». Il motivo all'agente dice di scrivere in `da_dire` che il dato non c'è.
+  *[storico: il criterio della issue «un «non ho trovato» bocciato» vale fino a questa
+  revisione]*
+- **N. 10, la porta per ogni sviluppo non concluso.** `porta_approvazione` guarda lo sviluppo
+  più recente dell'estensione: se è aperto o sospeso, o se è chiuso con la versione da
+  attivare, passa dalla porta. La domanda resta in sospeso verso `estensione_gestisci
+  approva`, e il sì vale per l'uno o per l'altro tool.
+  - In `_approva` la porta sta dopo permesso, codice e test, subito prima della frase di sfida
+    e della strada senza sfida di un gioco puro. Un familiare che non può approvare riceve il
+    rifiuto di sempre, e i test rossi «non si può approvare», senza la domanda prima.
+- **N. 10, gli esempi eseguiti dopo un riavvio.** È la chiave «versione|lavoro» salvata nello
+  sviluppo (`Sviluppo.esempi_eseguiti`, da `Sviluppi.lavoro_finito`), non il segno `provato`
+  dei requisiti. Quel segno restava da una versione di prima ed è ereditato da uno sviluppo
+  nuovo.
+- **Minori:** `*.spec.js` è un file di test; `t.assert.*` di `node:test` conta come asserzione;
+  `{ skip: false }` non è un salto.
+- **Mutazioni:** 23, una o più per ogni correzione, e cadono tutte. Fra queste ci sono le
+  sopravvissute alla seconda revisione:
+  - Mf, il segno «provato» dei requisiti;
+  - Mo, la chiave `chiesta`;
+  - Mh, `{ skip: false }`;
+  - Mp, lo sviluppo chiuso con ogni versione.
+
+  Mu non c'è più, perché `_testo_con_dati` è stato tolto. Il gioco puro con la voce sicura non
+  ha una prova sua: la porta sta prima di quella strada, e la mutazione Q4 lo copre per la
+  frase di sfida. La prova conta 129 controlli.

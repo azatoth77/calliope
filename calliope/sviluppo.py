@@ -359,6 +359,9 @@ class Sviluppo:
     # esempi eseguiti), oppure il sì di chi amministra alla domanda che dice che non ce n'è:
     # {chiesta, confermata (la chiave della versione: «versione|lavoro»), quando}
     senza_prove: dict = field(default_factory=dict)
+    # La chiave «versione|lavoro» della versione i cui esempi di accettazione sono stati eseguiti
+    # alla fine del lavoro (seconda revisione della PR #232): vale anche dopo un riavvio
+    esempi_eseguiti: str = ""
 
     def fasi(self) -> tuple[str, ...]:
         return FASI_PROGRAMMA if self.tipo == "programma" else FASI_ESTENSIONE
@@ -1008,9 +1011,13 @@ class Sviluppi:
                        + (": correzione senza cambi al codice" if uguale else
                           ": correzione senza un test che riproduce il problema"
                           if non_riprodotto else ""))
+            # Gli esempi eseguiti alla fine di questo lavoro (#223): la chiave della versione
+            acc = getattr(lav, "accettazione", None)
+            if isinstance(acc, dict) and isinstance(acc.get("passano"), bool):
+                sv.esempi_eseguiti = f"{sv.versione}|{sv.lavoro or ''}"
             item["messaggio"] = self.frase_pronto(sv, lav, altro)
-            # I test spariti dall'ultima tappa (revisione della PR #179) e quelli indeboliti dalla
-            # prima esecuzione (22/10, #223), detti dal codice con un solo «Attenzione»
+            # I test spariti dall'ultima tappa (revisione della PR #179) e il fatto neutro sugli
+            # stessi test di questo lavoro (22/10, #223), detti dal codice
             from .agenti.fotografia_test import avvisi_voce
             avvisi = avvisi_voce(getattr(lav, "risultato", None))
             if avvisi:

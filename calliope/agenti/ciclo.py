@@ -1900,15 +1900,22 @@ class Agente:
                             novita = True
                         # Un file di test che perde test o asserzioni, o guadagna un salto
                         # (22/10, #223, n. 7): detto subito, nel risultato
+                        from .fotografia_test import e_file_di_test, normale
+                        if e_file_di_test(p):
+                            # Un file di test scritto dall'agente: entra nella fotografia alla
+                            # sua prima esecuzione (seconda revisione della PR #232)
+                            scr = seg.setdefault("test_scritti", [])
+                            if normale(p) not in scr:
+                                scr.append(normale(p))
                         if test_prima is not None:
                             from . import fotografia_test as ft
                             debole = ft.nota_scrittura(str(result.get("percorso") or p),
                                                        test_prima, dopo)
                             if debole:
                                 from ..sonde import nota as nota_regola
-                                nota_regola(lav, "agente_test_indebolito_scritto", self.log,
+                                nota_regola(lav, "agente_test_cambiato_scritto", self.log,
                                             p[:80])
-                                result = {**result, "test_indebolito": debole}
+                                result = {**result, "test_cambiato": debole}
                         # Lo stato già visto detto all'agente (19/10, #185), nel risultato: la
                         # cartella (o il file) com'era N passate fa, con i test di allora
                         imp = impronte[1] if impronte else impronta_cartella(sandbox, lav,
@@ -1937,10 +1944,10 @@ class Agente:
                             # esecuzione; poi test, asserzioni e salti confrontati con lei.
                             # Un'esecuzione di un file solo fotografa e confronta quel file
                             # (revisione della PR #232: chi lancia un file alla volta)
-                            debole = self._test_indeboliti(lav, sandbox, seg,
-                                                           args.get("percorso") or None)
+                            debole = self._test_cambiati(lav, sandbox, seg,
+                                                         args.get("percorso") or None)
                             if debole:
-                                result = {**result, "test_indeboliti": debole}
+                                result = {**result, "test_cambiati": debole}
                         for regola in regole_avvisi(result.get("uscita")):
                             # Gli avvisi della prova di fumo (20/10, #197): ognuno con la sua
                             # regola, una volta per lavoro
@@ -2081,13 +2088,13 @@ class Agente:
             from ..sonde import nota as nota_regola
             nota_regola(lav, "agente_test_tolti", self.log,
                         ", ".join(tolti["nomi"])[:120] or f"{tolti['meno']} in meno")
-        # I test indeboliti dalla prima esecuzione (22/10, #223, n. 7): nel rapporto
-        indeboliti = self._cambi_test(lav, sandbox, seg) if test is not None else []
+        # I test cambiati dalla prima esecuzione (22/10, #223, n. 7): nel rapporto
+        rapporto_test = self._rapporto_test(lav, sandbox, seg) if test is not None else {}
         # Gli esempi di accettazione tolti dal revisore (20/10, #190): nel rapporto e sulla scheda
         tolti_rev = list((getattr(lav, "accettazione", None) or {}).get("tolti_revisore") or [])
         return {"esito": esito if esito in ("fatto", "mancano_dati", "impossibile") else "fatto",
                 **({"test_tolti": tolti} if tolti else {}),
-                **({"test_indeboliti": indeboliti} if indeboliti else {}),
+                **rapporto_test,
                 **({"esempi_tolti": tolti_rev} if tolti_rev else {}),
                 "riassunto": str(consegna.get("riassunto") or ""),
                 "domanda": str(consegna.get("domanda") or ""),
@@ -2448,10 +2455,10 @@ class Agente:
             from ..sonde import nota as nota_regola
             nota_regola(lav, "agente_giri_uguali", self.log, f"{uguali} tappe")
         tolti_rev = list((getattr(lav, "accettazione", None) or {}).get("tolti_revisore") or [])
-        # I test indeboliti dalla prima esecuzione (22/10, #223): anche nel rapporto della tappa
-        indeboliti = self._cambi_test(lav, sandbox, seg) if isinstance(test, dict) else []
+        # I test cambiati dalla prima esecuzione (22/10, #223): anche nel rapporto della tappa
+        rapporto_test = self._rapporto_test(lav, sandbox, seg) if isinstance(test, dict) else {}
         return {"esito": "tappa", "tipo_limite": e.tipo, "motivo": str(e),
-                **({"test_indeboliti": indeboliti} if indeboliti else {}),
+                **rapporto_test,
                 "giri_uguali": uguali,
                 # anche quelli di _consegna_alla_tappa, prima, nello stesso giro
                 **({"revisore": {"fatti": list(seg.get("revisore_fatti") or []),
@@ -2631,40 +2638,50 @@ class Agente:
         except Exception:  # noqa: BLE001 — nel dubbio niente spinta
             return False
 
-    def _cambi_test(self, lav: Lavoro, sandbox, seg: dict, solo=None) -> list[dict]:
-        """La fotografia dei test aggiornata (la prima volta con i file iniziali del lavoro) e i
-        cambi che indeboliscono rispetto a lei (agenti/fotografia_test.py). `solo`: il file di
-        un'esecuzione parziale, l'unico che entra nella fotografia e si confronta. Mai
-        un'eccezione."""
+    def _cambi_test(self, lav: Lavoro, sandbox, seg: dict, solo=None) -> tuple[list, list]:
+        """(cambi, segnali) rispetto alla fotografia dei test (agenti/fotografia_test.py),
+        aggiornata prima: i file di test scritti dall'agente (`segnali["test_scritti"]`) alla
+        loro prima esecuzione e, in una correzione, i test della versione di prima. I file di
+        partenza messi dal codice (lo scheletro di un gioco) non entrano finché l'agente non li
+        scrive (seconda revisione della PR #232). `solo`: il file di un'esecuzione parziale.
+        Mai un'eccezione."""
         from . import fotografia_test as ft
         try:
             ora = ft.misura_cartella(sandbox)
+            iniziali = (getattr(lav, "file_iniziali", None)
+                        if getattr(lav, "correzione", False) else None)
+            scritti = list(seg.get("test_scritti") or [])
             if solo is not None:
                 solo = ft.normale(solo)
-                foto = ft.aggiorna(seg, {k: v for k, v in ora.items() if k == solo},
-                                   getattr(lav, "file_iniziali", None))
-                return ft.confronta(foto, ora, solo)
-            foto = ft.aggiorna(seg, ora, getattr(lav, "file_iniziali", None))
-            return ft.confronta(foto, ora)
+                scritti = [x for x in scritti if ft.normale(x) == solo]
+            foto = ft.aggiorna(seg, ora, iniziali, scritti)
+            return ft.confronta(foto, ora, solo), ft.segnali(foto, ora, solo)
         except Exception as e:  # noqa: BLE001 — una misura non ferma il lavoro
             self.log(f"[AGENTI] {lav.id}: fotografia dei test non fatta: {e}")
-            return []
+            return [], []
 
-    def _test_indeboliti(self, lav: Lavoro, sandbox, seg: dict, solo=None) -> str:
-        """Il fatto per il risultato di esegui_test, "" se i test non sono più deboli della
-        fotografia. La regola `agente_test_indeboliti` una volta per ogni stato diverso."""
-        cambi = self._cambi_test(lav, sandbox, seg, solo)
+    def _test_cambiati(self, lav: Lavoro, sandbox, seg: dict, solo=None) -> str:
+        """Il fatto per il risultato di esegui_test, "" se i test non sono cambiati rispetto
+        alla fotografia. La regola `agente_test_cambiati` una volta per ogni stato diverso."""
+        cambi, _ = self._cambi_test(lav, sandbox, seg, solo)
         if not cambi:
             return ""
         from . import fotografia_test as ft
         chiave = sorted((c["file"], c["test_meno"], c["asserzioni_meno"], c["skip_piu"],
                          c["banali_piu"]) for c in cambi)
-        if seg.get("indeboliti_detti") != [list(x) for x in chiave]:
-            seg["indeboliti_detti"] = [list(x) for x in chiave]
+        if seg.get("cambiati_detti") != [list(x) for x in chiave]:
+            seg["cambiati_detti"] = [list(x) for x in chiave]
             from ..sonde import nota as nota_regola
-            nota_regola(lav, "agente_test_indeboliti", self.log,
+            nota_regola(lav, "agente_test_cambiati", self.log,
                         ", ".join(c["file"] for c in cambi)[:120])
         return ft.fatto_per_agente(cambi)
+
+    def _rapporto_test(self, lav: Lavoro, sandbox, seg: dict) -> dict:
+        """Per il rapporto della consegna e della tappa: i cambi (scheda) e i segnali senza
+        ambiguità (voce)."""
+        cambi, sig = self._cambi_test(lav, sandbox, seg)
+        return {**({"test_cambiati": cambi} if cambi else {}),
+                **({"test_segnali": sig} if sig else {})}
 
     @staticmethod
     def _ha_test(sandbox) -> bool:
