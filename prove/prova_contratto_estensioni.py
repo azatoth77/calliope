@@ -82,8 +82,8 @@ def prova_finta():
              f.rete_leggi("https://api.esempio.it/cerca?q=x") == RISPOSTA)
     tipo, msg = alza(lambda: f.casa_stato("temperatura in camera"))
     verifica("un'azione non dichiarata è un errore del test, con lo scope da dichiarare",
-             tipo == "ErroreDelTest" and msg.startswith("è il test: l'azione «casa_stato» non "
-                                                        "è nel manifesto")
+             tipo == "ErroreDelTest" and msg.startswith("è il manifesto: l'azione «casa_stato» "
+                                                        "non è dichiarata")
              and "legge.casa" in msg and "chiedi_permesso" in msg, msg)
     verifica("…e resta in errori_test", f.errori_test and f.errori_test[-1] == msg)
     tipo, msg = alza(lambda: f.rete_leggi("https://altro.it/x"))
@@ -522,6 +522,18 @@ TEMPERATURA = '''def esegui(dati, calliope):
         return {"da_dire": "Non lo so.", "trovato": False}
     return {"da_dire": t["testo"]}
 '''
+INGHIOTTE = '''def esegui(dati, calliope):
+    try:
+        calliope.lista_aggiungi("spesa", ["latte"])
+    except:  # noqa: E722
+        pass
+    return {"da_dire": "Fatto.", "trovato": False}
+'''
+DICE_STANZA = '''def esegui(dati, calliope):
+    stanza = str(dati.get("stanza") or "")
+    t = calliope.casa_stato("temperatura in " + stanza)
+    return {"da_dire": f"In {stanza}: " + (t["testo"] or "nessun dato") + "."}
+'''
 RISCRITTO = '''import unittest
 from calliope_estensione import chiama
 
@@ -565,16 +577,18 @@ def prova_chiama():
         '["risultato"], 2000', '["da_dire"], "20 gradi"').replace(
         'chiama({"valore": 2})', 'chiama({}, risposte={"casa_stato": {"testo": "20 gradi"}})'))
     r = sb.test()
-    verifica("un'azione non dichiarata nel manifesto: il test fallisce con «è il test»",
-             not r["passano"] and "ErroreDelTest: è il test: l'azione «casa_stato»" in r["uscita"],
+    verifica("un'azione non dichiarata nel manifesto: il test fallisce con «è il manifesto»",
+             not r["passano"] and "ErroreDelTest: è il manifesto: l'azione «casa_stato»"
+             in r["uscita"],
              r["uscita"][-400:])
     from calliope.agenti import diagnosi
     f = diagnosi.fallimenti(r["uscita"])
-    verifica("la diagnosi riconosce ErroreDelTest: «è il test» nei fallimenti in breve",
-             f and "ErroreDelTest: è il test: l'azione «casa_stato»" in f[0]["errore"]
-             and "è il test" in diagnosi.da_uscita(r["uscita"]), str(f))
-    verifica("…e il punto da guardare è il test, non estensione.py",
-             f and f[0]["dove"].startswith("test_estensione.py:"), str(f and f[0]["dove"]))
+    verifica("la diagnosi riconosce ErroreDelTest: «è il manifesto» nei fallimenti in breve",
+             f and "ErroreDelTest: è il manifesto: l'azione «casa_stato»" in f[0]["errore"]
+             and "è il manifesto" in diagnosi.da_uscita(r["uscita"]), str(f))
+    verifica("…e il punto è la riga di estensione.py che chiama l'azione (Q1)",
+             f and f[0]["dove"].startswith("estensione.py:") and "test_estensione.py" in
+             f[0]["dove"], str(f and f[0]["dove"]))
     from calliope.agenti import riproduzione as rip
     verifica("riproduzione: un'azione non dichiarata sulla versione di prima vale (può essere "
              "il difetto)", f and not rip.strutturale(f[0]), str(f))
@@ -588,7 +602,40 @@ def prova_chiama():
     f = diagnosi.fallimenti(r["uscita"])
     verifica("riproduzione: una lettura che il test nuovo non ha preparato è di struttura",
              f and "non ha una risposta preparata" in f[0]["errore"] and rip.strutturale(f[0])
-             and rip.solo_struttura(r["uscita"]), str(f))
+             and rip.solo_struttura(r["uscita"])
+             and rip.solo_struttura(r["uscita"], "calliope.casa_stato(\"camera\")"), str(f))
+    verifica("…per la lettura il punto da guardare è il test",
+             f and f[0]["dove"].startswith("test_estensione.py:"), str(f and f[0]["dove"]))
+    verifica("riproduzione: se la versione nuova non chiama più quella lettura è il difetto (Q2)",
+             f and rip.solo_struttura(r["uscita"], "calliope.agenda_elenca()") is None, str(f))
+
+    # Q2: la riproduzione vera (controlla) con la lettura tolta dalla correzione
+    from types import SimpleNamespace
+    from calliope.estensioni.servizio import runtime_testo
+    manif = json.dumps({"permessi": {"legge": {"liste": True, "agenda": True}}})
+    prima = {"estensione.py": "def esegui(dati, calliope):\n"
+             "    return {'da_dire': str(calliope.lista_leggi('spesa')['voci'])}\n",
+             "manifesto.json": manif}
+    test_nuovo = ("import unittest\nfrom calliope_estensione import chiama\n\n\n"
+                  "class Prove(unittest.TestCase):\n    def test_agenda(self):\n"
+                  "        out = chiama({}, risposte={'agenda_elenca': {'voci': [], 'numero': 0}})\n"
+                  "        self.assertIn('Niente', out['da_dire'])\n")
+    for nome, nuovo, atteso in (
+            ("tolta", "def esegui(dati, calliope):\n    calliope.agenda_elenca()\n"
+                      "    return {'da_dire': 'Niente in agenda.'}\n", "riprodotto"),
+            ("ancora", "def esegui(dati, calliope):\n    calliope.lista_leggi('spesa')\n"
+                       "    calliope.agenda_elenca()\n    return {'da_dire': 'Niente.'}\n",
+             "struttura")):
+        sb = sandbox(f"riproduzione-{nome}")
+        sb.scrivi("calliope_estensione.py", runtime_testo())
+        sb.sola_lettura |= {"calliope_estensione.py"}
+        sb.scrivi("manifesto.json", manif)
+        sb.scrivi("estensione.py", nuovo)
+        sb.scrivi("test_agenda.py", test_nuovo)
+        lav = SimpleNamespace(id=f"r-{nome}", file_iniziali=dict(prima), segnali={})
+        esito = rip.controlla(lav, sb, log=lambda *_: None)
+        verifica(f"riproduzione vera: la lettura {nome} nella versione nuova → {atteso} (Q2)",
+                 esito.get("stato") == atteso, str(esito)[:300])
 
     # P4: il test di partenza così com'è con un'estensione che legge subito
     sb = sandbox("partenza-legge")
@@ -615,10 +662,33 @@ def prova_chiama():
              str(r["esito"]) + r["uscita"][-400:])
     sb.scrivi("manifesto.json", json.dumps({"permessi": {}}))
     r = sb.test(acc.FILE)
-    verifica("accettazione: un'azione non dichiarata resta «è il test», senza chiedere di "
-             "cambiare il file in sola lettura", not r["passano"] and "è il test: l'azione "
+    verifica("accettazione: un'azione non dichiarata resta «è il manifesto», senza chiedere di "
+             "cambiare il file in sola lettura", not r["passano"] and "è il manifesto: l'azione "
              "«casa_stato»" in r["uscita"] and "negate" not in r["uscita"]
              and "risposte=" not in r["uscita"], r["uscita"][-400:])
+    f = diagnosi.fallimenti(r["uscita"])
+    verifica("…e il punto indicato non è test_accettazione.py, in sola lettura (Q1)",
+             f and f[0]["dove"].startswith("estensione.py:"), str(f and f[0]["dove"]))
+    # Q4: un «except:» nudo nell'estensione non fa passare l'esempio
+    sb.scrivi("manifesto.json", json.dumps({"permessi": {"legge": {"casa": True}}}))
+    sb.scrivi("estensione.py", INGHIOTTE)
+    r = sb.test(acc.FILE)
+    verifica("accettazione: l'errore inghiottito da un «except:» nudo si rialza (Q4)",
+             not r["passano"] and "è il manifesto: l'azione «lista_aggiungi»" in r["uscita"],
+             r["uscita"][-400:])
+    # Q5: un riconosciuto su un'estensione che legge, senza «trovato»
+    an = {"esempi": [], "riconosciuti": [{"requisito": 1, "input": "stanza",
+                                         "valore": "soggiorno", "dati": {"stanza": "soggiorno"}}],
+          "campo_numero": "risultato"}
+    sb.scrivi("estensione.py", DICE_STANZA)
+    sb.scrivi(acc.FILE, acc.test_python(an))
+    r = sb.test(acc.FILE)
+    verifica("accettazione: il riconosciuto su un'estensione che legge passa con le letture "
+             "vuote (Q5)", r["passano"] and r["esito"]["eseguiti"] >= 1,
+             str(r["esito"]) + r["uscita"][-400:])
+    verifica("il prompt degli esempi dice che le letture sono vuote e la rete non risponde (Q3)",
+             "le letture (casa, liste, agenda) rispondono vuote e la rete non risponde"
+             in acc.SISTEMA_ESEMPI)
 
 
 def prova_manifesto_nel_ciclo():

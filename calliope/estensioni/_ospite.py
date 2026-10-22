@@ -30,7 +30,8 @@ codifica («Borgo%2BAlto»: quote_plus e poi urlencode) non la rifiuta: la scriv
 
 Dal 22/10 (issue #228, § 3.5 n. 33 e 36 della ricerca del 19/10 sulla solidità dell'agente)
 CalliopeFinta si costruisce dal manifesto della cartella: un'azione che il manifesto non
-dichiara, e una lettura senza risposta preparata, sono un `ErroreDelTest` («è il test: …»)
+dichiara, e una lettura senza risposta preparata, sono un `ErroreDelTest` («è il manifesto: …»
+e «è il test: …», seconda revisione della PR #231)
 invece di un `{"ok": True}` che faceva uscire un KeyError in estensione.py. E `chiama(dati,
 risposte=…, negate=…)`, che i test usano, sta qui (in sola lettura) e non più nel file di test
 che l'agente può riscrivere.
@@ -586,7 +587,8 @@ class CalliopeFinta(Calliope):
                 # chiamata, non il sorgente del messaggio (in sola lettura chiederebbe cose
                 # che lì non si fanno)
                 testo = (
-                    f"è il test: i «permessi» di manifesto.json non sono validi ({invalidi}), "
+                    f"è il manifesto: i «permessi» di manifesto.json non sono validi "
+                    f"({invalidi}), "
                     f"e con permessi così «{azione}» alla porta di Calliope non passa, come "
                     "nessun'altra azione. Correggi il manifesto: la consegna dice tutti gli "
                     "errori")
@@ -595,7 +597,7 @@ class CalliopeFinta(Calliope):
             if motivo:
                 scope = _SCOPE_AZIONE.get(azione, "")
                 testo = (
-                    f"è il test: l'azione «{azione}» non è nel manifesto"
+                    f"è il manifesto: l'azione «{azione}» non è dichiarata"
                     + ("" if motivo == "non dichiarata" else f" ({motivo})") + ", e con "
                     "questo manifesto la porta di Calliope non la lascerebbe passare. "
                     "Dichiarala in «permessi» del manifesto"

@@ -32,8 +32,11 @@ _FRAME_PY = re.compile(r'^\s*File "([^"]+)", line (\d+)(?:, in (\S+))?', re.M)
 _ECCEZIONE = re.compile(r"^((?:[A-Za-z_][\w.]*\.)?[A-Z]\w*(?:Error|Exception|Exit|Interrupt|"
                         r"Warning)|(?:[A-Za-z_][\w.]*\.)?Errore(?:DelTest|Calliope)|"
                         r"AssertionError|StopIteration|KeyboardInterrupt)(?::\s?(.*))?$")
-# Un errore del test (CalliopeFinta): il punto da guardare è il test, non l'estensione
-_DEL_TEST = re.compile(r"^(?:[A-Za-z_][\w.]*\.)?ErroreDelTest\b")
+# Una lettura che il test non ha preparato (CalliopeFinta, «è il test: …»): il punto da
+# guardare è il test, non l'estensione. «è il manifesto: …» (l'azione non dichiarata, i permessi
+# non validi) no: lì conta la riga di estensione.py che chiama l'azione (seconda revisione della
+# PR #231; il test può essere test_accettazione.py, in sola lettura)
+_DEL_TEST = re.compile(r"^(?:[A-Za-z_][\w.]*\.)?ErroreDelTest: è il test:")
 _IMPORT_PY = re.compile(r"^ERRORE nell'import di (\S+?):?\s*$", re.M)
 _TRACEBACK = "Traceback (most recent call last):"
 # Le cartelle della libreria e del runner: i frame lì dentro non dicono dove correggere

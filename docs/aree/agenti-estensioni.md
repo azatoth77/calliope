@@ -5029,7 +5029,8 @@ partenza, `chiama` tolta dal runtime. Passano anche `prova_estensioni`, `prova_e
 senza risposta, ora fallisce. È voluto: Calliope l'avrebbe negata, o la risposta non c'era. Una
 modifica lo vede al primo esegui_test, con il messaggio che dice cosa fare. Gli esempi di
 accettazione (`accettazione.py`) usano `CalliopeFinta()` e quindi seguono anche loro il
-manifesto. Le parole vietate costano circa 185 token a ogni passata del prompt delle estensioni.
+manifesto. *[storico: `CalliopeFinta()` fino alla prima revisione della PR #231, 22/10;
+poi `letture="vuote"` e, dalla seconda, `_esegui` che rialza l'errore inghiottito: sotto]* Le parole vietate costano circa 185 token a ogni passata del prompt delle estensioni.
 
 **Dopo la prima revisione della PR #231 (22/10).**
 - **Letture vuote per i test che l'agente non prepara** (P1, P4). `CalliopeFinta(letture="vuote")`
@@ -5076,3 +5077,23 @@ manifesto. Le parole vietate costano circa 185 token a ogni passata del prompt d
   accettazione che legge, `_con_manifesto` con quattro errori. **Mutazioni**: le 24 nuove (P1–P8)
   e le 13 di prima, tutte prese. P9 (l'elenco delle parole più corto) non è fatto: da rimisurare
   in token veri sulla DGX.
+
+**Dopo la seconda revisione della PR #231 (22/10).**
+- **«è il manifesto:» e «è il test:»** (Q1). L'azione non dichiarata e i permessi non validi
+  dicono «è il manifesto: …», e il punto da guardare è quello di prima (`_dove_py`: la riga di
+  estensione.py che chiama l'azione ← il test). «è il test: …» resta solo per la lettura senza
+  risposta preparata, dove il punto è il test. Così un esempio di accettazione non indica più
+  test_accettazione.py, che è in sola lettura.
+- **La riproduzione e la lettura tolta** (Q2). Una lettura non preparata sulla versione di prima è
+  di struttura solo se la versione nuova la chiama ancora (`calliope.<azione>(` nel codice): se la
+  correzione l'ha tolta, è proprio il difetto («mi legge la lista quando chiedo l'agenda»), e vale
+  come riproduzione. Il controllo è sul testo del codice: una chiamata scritta in un altro modo
+  (`getattr`) non si vede.
+- **Gli esempi** (Q3, Q4). `SISTEMA_ESEMPI` dice che negli esempi le letture rispondono vuote e la
+  rete non risponde, e che gli esempi non dipendono da dati letti. Gli esempi passano da `_esegui`,
+  che rialza il primo `ErroreDelTest` registrato: con un `except:` nudo nell'estensione l'esempio
+  non passa più a vuoto.
+- **Prove**: il «dove» per i due casi, anche negli esempi di accettazione; la riproduzione vera
+  (`controlla`) con la lettura tolta (riprodotto) e rimasta (struttura); l'errore inghiottito
+  negli esempi; un riconosciuto su un'estensione che legge, che senza `letture="vuote"` cade (Q5).
+  Mutazioni: 7 nuove, tutte prese; quelle di prima ancora prese.

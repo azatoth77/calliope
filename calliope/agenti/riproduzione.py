@@ -88,13 +88,25 @@ def strutturale(f: dict) -> bool:
     return bool(_NOME.search(errore)) and _nasce_nel_test(f.get("dove"))
 
 
-def solo_struttura(uscita: str) -> dict | None:
+_NON_PREPARATA = re.compile(r"ErroreDelTest: è il test: «(\w+)» non ha una risposta preparata")
+
+
+def _lettura_tolta(f: dict, codice_ora) -> bool:
+    """Il fallimento è una lettura non preparata che la versione nuova non chiama più (seconda
+    revisione della PR #231: «mi legge la lista quando chiedo l'agenda», la correzione toglie
+    lista_leggi e il test prepara solo agenda_elenca): allora è il difetto, non la struttura."""
+    m = _NON_PREPARATA.search(str(f.get("errore") or ""))
+    return bool(m) and codice_ora is not None and f"{m.group(1)}(" not in codice_ora
+
+
+def solo_struttura(uscita: str, codice_ora: str | None = None) -> dict | None:
     """Il primo fallimento, se **tutti** quelli dell'uscita sono di struttura; None se almeno
     uno è un'asserzione o un errore mentre il codice gira, o se non se ne riconosce nessuno
     (nel dubbio la riproduzione vale, come prima)."""
     from .diagnosi import fallimenti
     fall = fallimenti(uscita)
-    if not fall or not all(strutturale(f) for f in fall):
+    if not fall or not all(strutturale(f) and not _lettura_tolta(f, codice_ora)
+                           for f in fall):
         return None
     return fall[0]
 
@@ -209,7 +221,7 @@ def controlla(lav, sandbox, log=print) -> dict:
     uscita = str(r.get("uscita") or "")[-1500:]
     if r.get("passano"):
         return {"stato": "passa_prima", "test": nuovi, "uscita": uscita}
-    primo = solo_struttura(str(r.get("uscita") or ""))
+    primo = solo_struttura(str(r.get("uscita") or ""), "\n".join(codice(ora).values()))
     if primo is not None:
         from ..sonde import nota
         nota(lav, "agente_riproduzione_asserzione", log,
