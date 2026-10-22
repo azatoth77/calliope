@@ -265,8 +265,9 @@ def prova_ciclo(tmp: Path):
                  "nuovi" in s["frasi"] and s["a_vuoto"], str(s))
         s = segnali_giro(SimpleNamespace(segnali={"senza_novita": 5, "senza_progressi": 6}), 8)
         verifica("4. …e senza nessuna novità «senza cambiare i file né l'esito dei test», una "
-                 "frase sola", s["frasi"] == ["5 passate senza cambiare i file né l'esito dei "
-                                              "test"], str(s))
+                 "frase sola (dal 22/10 un conto di fila, e lo dice)",
+                 s["frasi"] == ["5 passate di fila senza cambiare i file né l'esito dei test"],
+                 str(s))
         verifica("4. contrario: «senza file né test nuovi» non si dice più",
                  not any("senza file né test nuovi" in f for f in s["frasi"]))
         s = segnali_giro(SimpleNamespace(segnali={"senza_novita": 1, "senza_progressi": 2}), 8)

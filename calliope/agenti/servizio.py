@@ -350,7 +350,21 @@ PERCHE_TAPPA = {"consegna_rossa": "l'agente ha consegnato, ma la consegna non va
                 # A voce, senza gergo (seconda revisione della PR #219); il motivo tecnico
                 # resta nel «limite» per l'agente (`troncate_motivo`)
                 "troncata": "l'agente ha scritto più volte risposte troppo lunghe, interrotte "
-                            "a metà, senza fare un passo avanti"}
+                            "a metà, senza fare un passo avanti",
+                # 22/10 (#224, n. 26): prima chiudevano lo sviluppo come «limite»
+                "vuoto": "l'agente ripeteva lo stesso ragionamento senza fare un passo avanti",
+                "ragionamento": "l'agente ha ragionato a lungo senza scrivere né provare il "
+                                "codice"}
+# Il segnale di giro a vuoto che la tappa «vuoto» dice già nel perché (22/10, #224)
+_GIA_DETTO = {"vuoto": "stesso ragionamento"}
+
+
+def segnali_detti(r: dict) -> list:
+    """Le frasi dei segnali di giro a vuoto di una tappa, senza quella che il perché della tappa
+    dice già (la tappa «vuoto» e «ha ripetuto lo stesso ragionamento»)."""
+    seg = list((r.get("segnali") or {}).get("frasi") or [])
+    gia = _GIA_DETTO.get(r.get("tipo_limite"))
+    return [f for f in seg if not (gia and gia in f)]
 
 
 def frase_tappa(lav, titolo: str) -> str:
@@ -386,7 +400,7 @@ def frase_tappa(lav, titolo: str) -> str:
     manca = [m for m in manca if m]
     if manca:
         parti.append("Manca: " + "; ".join(manca) + ".")
-    seg = (r.get("segnali") or {}).get("frasi") or []
+    seg = segnali_detti(r)
     if seg:
         parti.append("Attenzione, sembra girare a vuoto: " + ", ".join(seg) + ".")
     # La domanda del revisore a contesto pulito per la persona (20/10, #190), con il rapporto

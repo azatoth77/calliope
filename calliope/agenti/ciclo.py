@@ -41,6 +41,7 @@ from dataclasses import dataclass, field
 
 from ..testi import APRI_GIOCO_C_E
 from ..tools import dialogo
+from . import spinte as sp
 from .arbitro import _interrompi
 from .remoto import ErroreOllama, Interrotto
 
@@ -83,38 +84,15 @@ def _migliaia(n: int) -> str:
 
 # L'avviso di chiusura (06/10): una volta per lavoro, quando restano poche passate, poco tempo
 # o pochi token. Prima un lavoro arrivava al tetto a metà di una passata e finiva «fermato»
-# senza consegna né riassunto
-AVVISO_FINE = {
-    # Senza numeri e senza «sta per finire» (12/10 sera, ricerca 2026-10-12-flusso-agente-fasi
-    # § 5.1: il budget come azione, non come conto alla rovescia). Con il conto alla rovescia
-    # l'agente ne ragionava e lo riferiva («il lavoro si è fermato perché stava per finire le sue
-    # passate», ridetto a voce da sviluppo_chiedi alle 11:11 e alle 12:06 come diagnosi)
-    "codice": ("Adesso chiudi: non cominciare cose nuove, sistema quello che hai, rifai "
-               "esegui_test se hai cambiato il codice e chiama consegna con un riassunto onesto "
-               "di cosa funziona e cosa manca."),
-    # Un lavoro di uno sviluppo: il tetto è una tappa, non la fine. Con «consegna» l'agente
-    # consegnava a metà o ragionava se consegnare (il gioco delle porte: tre lavori fermati per
-    # il ragionamento ripetuto o per «15 passate senza novità»)
-    "tappa": ("Adesso fai il passo concreto più utile (scrivi o correggi un file, esegui_test), "
-              "senza ragionare sul tempo o sulle passate: il lavoro continua da qui con i tuoi "
-              "file. Se è finito e i test passano, chiama consegna con ciò che funziona e cosa "
-              "manca; altrimenti non consegnare a metà e scrivi in una riga cosa resta da fare."),
-    "ricerca": ("Adesso chiudi: non fare altre ricerche, chiama consegna con la relazione su "
-                "quello che hai trovato (quello che non hai trovato dillo, non inventarlo)."),
-    # L'ultimo esegui_test era verde e da allora nessun file è cambiato (13/10, banco della
-    # temperatura sulla DGX: in 4 lavori su 7 codice giusto e test verdi, ma nessuna consegna
-    # nemmeno dopo l'avviso, e il lavoro è finito «limite» al tetto delle passate)
-    "verde": ("I tuoi test passano: chiama consegna adesso, con un riassunto onesto di cosa "
-              "funziona e cosa manca. Non riscrivere i file che funzionano."),
-    "verde_tappa": ("I tuoi test passano: se il lavoro è finito chiama consegna adesso; "
-                    "altrimenti fai il passo concreto più utile e scrivi in una riga cosa resta "
-                    "da fare. Non riscrivere i file che funzionano."),
-}
+# senza consegna né riassunto. Dal 22/10 (#224) i testi sono della scala (spinte.fine): il
+# fatto e i passi ammessi, senza numeri (12/10 sera) e senza «Adesso chiudi», «senza ragionare
+# sul tempo», «Non riscrivere i file che funzionano» (storici)
+AVVISO_FINE = {t: sp.fine(t).testo for t in ("codice", "tappa", "ricerca", "verde",
+                                              "verde_tappa")}
 
 # La spinta dopo il primo esegui_test tutto verde, con i file che il lavoro chiede (13/10,
 # stesso banco): una volta per lavoro; la consegna resta una scelta dell'agente
-SPINTA_CONSEGNA = ("I tuoi test passano: se il lavoro è finito chiama consegna ora; altrimenti "
-                   "scrivi in una riga cosa manca e continua con il prossimo strumento.")
+SPINTA_CONSEGNA = sp.consegna().testo
 
 
 @dataclass
@@ -165,6 +143,9 @@ class Lavoro:
     risposta: str | None = None       # la risposta arrivata, da dare all'agente alla ripresa
     attesa_dal: float | None = None   # da quando aspetta (time.time)
     attesa_s: float = 0.0             # secondi passati ad aspettare: non contano nel tetto
+    # I secondi passati ad aspettare la voce (l'arbitro, o lo stream fermato per lei: 22/10,
+    # #224): escono dalla guardia dei minuti senza strumenti, come quelli del revisore
+    attesa_voce_s: float = 0.0
     contesto: dict = field(default_factory=dict)  # lo stato del ciclo, per riprendere
     sandbox: object = None            # la sandbox del codice, conservata durante l'attesa
     cartella: str | None = None       # la cartella dei risultati, la stessa alla ripresa
@@ -408,11 +389,13 @@ def _fuori_piano(sandbox, stato_piano: dict) -> str | None:
             + ". Se servono davvero chiama chiedi_permesso (con lo scope), altrimenti toglili")
 
 
-# Passate fermate di fila per giro a vuoto (ripetizioni.py) prima di chiudere il lavoro
+# Passate fermate di fila per giro a vuoto (ripetizioni.py) prima di chiudere il lavoro (in uno
+# sviluppo, dal 22/10, la tappa «vuoto»)
 RIPETIZIONI_MAX = 3
 # Le tappe dai tetti del giro che con lo stato consegnabile si chiudono «fatto» (20/10, #192:
-# `Agente._consegna_alla_tappa`)
-TAPPA_CONSEGNABILE = ("passate", "tempo", "token", "troncata")
+# `Agente._consegna_alla_tappa`); dal 22/10 (#224) anche il giro a vuoto («vuoto») e il
+# ragionamento senza strumenti («ragionamento»), che prima chiudevano lo sviluppo «limite»
+TAPPA_CONSEGNABILE = ("passate", "tempo", "token", "troncata", "vuoto", "ragionamento")
 # Riscritture intere dello stesso file, di fila con lo stesso errore, prima della spinta
 # (11/10: gioco.js di 730 righe riscritto nove volte). Solo i file lunghi: un test di venti
 # righe si riscrive prima di correggerlo
@@ -441,9 +424,7 @@ def nota_riscrittura(prima: str | None, dopo: str, nome: str) -> str:
                    if op != "equal")
     if cambiate == 0 or cambiate > max(3, RISCRITTURA_NOTA_QUOTA * len(a)):
         return ""
-    return (f"Hai riscritto {nome.rsplit('/', 1)[-1]} intero ({len(a)} righe) per cambiarne "
-            f"{cambiate}: per correggere un pezzo usa modifica_file (vecchio → nuovo), è più "
-            "veloce e il resto del file non si tocca.")
+    return sp.nota_riscrittura(nome.rsplit('/', 1)[-1], len(a), cambiate).testo
 
 
 # Un apriGioco o un creaCaso definito in un test JavaScript (20/10, issue #192): una funzione,
@@ -579,31 +560,6 @@ def _aggiungi_spinta(messages: list, testo: str) -> None:
         messages[-1] = dict(messages[-1], content=f"{messages[-1]['content']}\n\n{testo}")
     else:
         messages.append({"role": "user", "content": testo})
-
-
-def _spinta_ripetizioni(messages: list, frase, errore: dict | None = None) -> None:
-    """La spinta dopo una passata fermata per giro a vuoto; con l'ultimo errore noto (11/10)
-    dice quale punto correggere."""
-    from .ripetizioni import spinta
-    _aggiungi_spinta(messages, spinta(frase if isinstance(frase, str) else "", errore))
-
-
-def _vuoto_spinta(token: int, nomi=None) -> str:
-    """La spinta dopo il ragionamento a vuoto. `nomi`: gli strumenti offerti nella passata
-    (20/10, seconda revisione della PR #188: a un gioco scarica_esempio non si dà, a un
-    programma nemmeno piano, e la spinta li proponeva lo stesso). None: com'era."""
-    nomi = None if nomi is None else set(nomi)
-
-    def c(n):
-        return nomi is None or n in nomi
-    scelte = [x for x, ok in (("piano (se non l'hai ancora chiamato)", c("piano")),
-                              ("scarica_esempio", c("scarica_esempio")),
-                              ("scrivi_file", c("scrivi_file"))) if ok]
-    elenco = (", ".join(scelte[:-1]) + " o " + scelte[-1]) if len(scelte) > 1 else         (scelte[0] if scelte else "uno degli strumenti")
-    return (f"Stai ragionando da {token} token senza usare gli strumenti. Smetti di pensare "
-            f"e agisci adesso con una chiamata di funzione: {elenco}. Se il compito non si può "
-            "fare, chiama " + ("piano con fattibile=false, oppure " if c("piano") else "")
-            + "consegna con esito impossibile.")
 
 
 def strumenti_codice(linguaggi=()) -> list:
@@ -941,11 +897,11 @@ def troncata_nell_uscita(out: dict) -> bool:
 # La risposta a una passata senza chiamate con lo stato consegnabile (19/10, #180): un fatto,
 # non una consegna. Prima il testo dopo una spinta valeva come «fatto» («Hai ragione, correggo
 # il test» chiudeva il lavoro)
-PROSA_FATTUALE = ("Nessuno strumento chiamato in questa passata: il testo da solo non chiude il "
-                  "lavoro. I file sono quelli dell'ultimo esegui_test, che passava. Se hai "
-                  "finito chiama consegna; altrimenti chiama lo strumento del prossimo passo.")
-SPINTA_STRUMENTI = ("Usa gli strumenti con chiamate di funzione vere: scrivi i file con "
-                    "scrivi_file, prova con esegui_test, e alla fine chiama consegna.")
+PROSA_FATTUALE = sp.prosa_consegnabile().testo
+# Dal 22/10 (#224) nella forma della scala. *[storico: «Usa gli strumenti con chiamate di
+# funzione vere: scrivi i file con scrivi_file, prova con esegui_test, e alla fine chiama
+# consegna.»]*
+SPINTA_STRUMENTI = sp.prosa().testo
 
 
 def nota_valore_non_ammesso(lav, nome: str, errore: dict, args, log=None) -> bool:
@@ -1095,6 +1051,9 @@ class Agente:
                 raise Annullato()
             if waited > 0.05:
                 lav.cedimenti += 1
+            # L'attesa della voce non è tempo dell'agente (22/10, #224): fuori dalla guardia dei
+            # minuti senza strumenti
+            lav.attesa_voce_s += max(0.0, float(waited or 0))
             ctx = self.num_ctx()
             gen = num_predict or self._generazione(ctx, messages, tools, contesto)
             body = {"model": modello or self.imp.modello, "messages": messages,
@@ -1167,6 +1126,8 @@ class Agente:
                 if lav.annulla.is_set():
                     raise Annullato() from None
                 lav.cedimenti += 1
+                # La passata fermata per la voce si rifà: il suo tempo è della voce (#224)
+                lav.attesa_voce_s += time.monotonic() - t_passata
                 continue                 # la voce aveva la precedenza: si rifà il passo
             except GiroAVuoto:
                 out = self._giro_a_vuoto(lav, rip, t_passata, servizio)
@@ -1192,7 +1153,8 @@ class Agente:
     def _giro_a_vuoto(self, lav: Lavoro, rip, t0: float, servizio: bool) -> dict:
         """La passata fermata dal rilevatore delle ripetizioni: i token stimati dai caratteri
         (lo stream chiuso non porta l'usage), il segnale per la tappa, la regola nel log e il
-        passo sulla scheda. Chi chiama aggiunge la spinta (ripetizioni.spinta)."""
+        passo sulla scheda. Chi chiama propone la spinta (spinte.ripetizioni) e la scala la dice
+        (dal 22/10, #224: anche l'evento «spinta» della scheda, quando esce)."""
         stima = int((rip.caratteri if rip is not None else 0) / 3.5)
         if not servizio:
             lav.passi += 1
@@ -1211,7 +1173,6 @@ class Agente:
                  f"«{frase[:80]}»")
         lav.nota("flusso", tipo="esito", testo="l'agente girava a vuoto (ripeteva lo stesso "
                                                "ragionamento): l'ho fermato")
-        lav.nota("spinta", motivo="ragionamento ripetuto", regola="agente_ragionamento_ripetuto")
         lav.nota("passata_fine")
         return {"content": "", "thinking": "", "tool_calls": [], "eval": stima, "prompt": 0,
                 "s": round(time.monotonic() - t0, 2), "giro_a_vuoto": frase or True}
@@ -1258,11 +1219,13 @@ class Agente:
             raise Limite(f"sono passati i {self.tempo_max_s / 60:.0f} minuti del lavoro",
                          tipo="tempo")
 
-    def _avviso_fine(self, lav: Lavoro, messages: list, tipo: str = "codice"):
+    def _avviso_fine(self, lav: Lavoro, tipo: str = "codice") -> "sp.Spinta | None":
         """Una volta per lavoro, vicino a un tetto (le ultime 2 passate, l'85 % dei token o del
-        tempo): il messaggio che chiede all'agente di chiudere con quello che ha."""
+        tempo): la spinta che chiede all'agente di chiudere con quello che ha, da proporre alla
+        scala (22/10, #224). `lav.avvisato` lo segna `_dici`, quando esce: lasciata per una
+        spinta più alta, torna alla passata dopo."""
         if lav.avvisato:
-            return
+            return None
         tetto = self.tetto_token(lav)
         trascorso = self.trascorso(lav)
         if self.passi_giro(lav) + 2 >= self.max_passi:
@@ -1273,8 +1236,7 @@ class Agente:
             cosa = (f"il suo tempo (restano {max(1, round((self.tempo_max_s - trascorso) / 60))}"
                     " minuti)")
         else:
-            return
-        lav.avvisato = True
+            return None
         seg = getattr(lav, "segnali", None)
         verde = (tipo == "codice" and isinstance(seg, dict)
                  and seg.get("test_verde") is True)
@@ -1284,14 +1246,48 @@ class Agente:
             # L'ultimo esegui_test era verde e niente è cambiato dopo (13/10): consegna
             tipo = "verde_tappa" if tipo == "tappa" else "verde"
             cosa += ", con i test verdi"
-        # Il perché resta nel log, non nel messaggio all'agente (niente conto alla rovescia)
-        testo = AVVISO_FINE.get(tipo, AVVISO_FINE["codice"])
-        self.log(f"[AGENTI] {lav.id}: avviso di chiusura ({cosa})")
-        lav.nota("spinta", motivo="vicino ai tetti del lavoro")
-        if messages and messages[-1].get("role") == "user":
-            messages[-1] = dict(messages[-1], content=f"{messages[-1]['content']}\n\n{testo}")
-        else:
-            messages.append({"role": "user", "content": testo})
+        # Il perché resta nel log, non nel messaggio all'agente (niente conto alla rovescia); una
+        # volta sola anche se l'avviso è lasciato (P5 della prima revisione della PR #233)
+        if isinstance(seg, dict) and not seg.get("avviso_fine_log"):
+            seg["avviso_fine_log"] = True
+            self.log(f"[AGENTI] {lav.id}: avviso di chiusura ({cosa})")
+        return sp.fine(tipo)
+
+    def _dici(self, lav: Lavoro, messages: list, scala: "sp.Scala") -> "sp.Spinta | None":
+        """Al più una spinta per passata (22/10, #224, spinte.py): la più alta della scala, in
+        coda all'ultimo messaggio «user» o in uno nuovo; la sua regola nel registro (se non la
+        conta già il rilevatore), il conto delle spinte dette e lasciate nei segnali, l'evento
+        sulla scheda. Delle lasciate si dicono i fatti, non i passi: quelle «una volta per lavoro»
+        tornano intere. I fatti a parte (`Scala.fatto`) arrivano sempre, anche senza spinte (la
+        scala ordina solo i consigli, mai i fatti: prima revisione della PR #233)."""
+        seg = lav.segnali if isinstance(lav.segnali, dict) else {}
+        lav.segnali = seg
+        testo, s, lasciate = scala.messaggio(seg.get("spinte_lasciate"))
+        if not testo:
+            return None
+        if s is None:
+            _aggiungi_spinta(messages, testo)       # solo fatti
+            return None
+        g = s.gradino
+        if g.registra:
+            from ..sonde import nota as nota_regola
+            nota_regola(lav, g.nome)
+        dette = seg.setdefault("spinte", {})
+        dette[g.nome] = int(dette.get(g.nome, 0)) + 1
+        if lasciate:
+            lasc = seg.setdefault("spinte_lasciate", {})
+            for x in lasciate:
+                lasc[x.nome] = int(lasc.get(x.nome, 0)) + 1
+        self.log(f"[AGENTI] {lav.id}: spinta {g.nome}"
+                 + (f" (lasciate: {', '.join(x.nome for x in lasciate)})" if lasciate else ""))
+        lav.nota("spinta", motivo=g.motivo, regola=g.nome)
+        _aggiungi_spinta(messages, testo)
+        if s.nome == "agente_avviso_fine":
+            lav.avvisato = True
+            seg.pop("avviso_fine_log", None)        # il giro dopo lo scrive di nuovo
+        elif s.nome == "agente_spinta_consegna":
+            seg["spinta_consegna"] = True
+        return s
 
     # ── chiamate scritte come testo ──
     @staticmethod
@@ -1478,6 +1474,9 @@ class Agente:
         seg.setdefault("scritture", {})
         seg.setdefault("errori_test", [])
         seg.setdefault("senza_novita", 0)
+        # L'avviso proposto e mai detto nel giro di prima va nel log di questo (Q2)
+        if not lav.avvisato:
+            seg.pop("avviso_fine_log", None)
         # Le riscritture intere di fila per file (11/10): si azzerano quando l'errore cambia,
         # quando i test passano o con una correzione mirata (modifica_file)
         fila = seg.setdefault("riscritture_fila", {})
@@ -1516,6 +1515,9 @@ class Agente:
         # I secondi del revisore (20/10, #190, revisione della PR #202) non sono dell'agente:
         # `trascorso` li toglie dal tempo del giro, e qui escono dalla guardia senza strumenti
         rev_s = float(seg.get("revisore_s") or 0.0)
+        # La scala delle spinte (22/10, #224, spinte.py): ogni spinta si propone dove nasce, e
+        # prima della passata dopo ne esce al più una
+        scala = sp.Scala()
         while consegna is None:
             if float(seg.get("revisore_s") or 0.0) > rev_s:
                 vuoto_t0 += float(seg["revisore_s"]) - rev_s
@@ -1537,10 +1539,12 @@ class Agente:
                 elif self._esempi_ok(lav) is None:
                     strumenti = strumenti + [SCARICA_ESEMPIO]
             gc.imposta_finestra(self.num_ctx())
-            self._avviso_fine(lav, messages, "codice")
+            scala.proponi(self._avviso_fine(lav, "codice"))
+            self._dici(lav, messages, scala)
             gc.prima_della_passata(messages, strumenti, elenco_file=sandbox.elenca,
                                    diario_modello=self._diario_modello(lav))
             t_passata = time.monotonic()
+            voce_s = lav.attesa_voce_s
             try:
                 out = self.passata(lav, messages, tools=strumenti, contesto=gc)
             except Limite as e:
@@ -1567,12 +1571,28 @@ class Agente:
                 # Fermato dal tetto: cosa è stato fatto (il diario o l'ultima cosa detta)
                 raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)},
                              tipo=e.tipo) from None
+            # L'attesa della voce durante la passata esce dalla guardia dei minuti (22/10, #224)
+            vuoto_t0 += lav.attesa_voce_s - voce_s
             if out.get("giro_a_vuoto"):
                 # Il ragionamento ripeteva la stessa frase (08/10 sera): la spinta, e alla
                 # terza passata fermata di fila il lavoro si chiude con il motivo
                 giri_vuoti += 1
                 # Le troncate restano (21/10, revisione della PR #219): il giro a vuoto non è una
                 # chiamata eseguita. *[storico: azzerate qui dalla terza revisione della PR #187]*
+                if giri_vuoti >= RIPETIZIONI_MAX and getattr(lav, "tappe", False):
+                    # In uno sviluppo una tappa col tipo suo (22/10, #224, n. 26): prima il
+                    # lavoro finiva «limite» come fuori, e lo sviluppo si chiudeva. Con lo stato
+                    # consegnabile e un controllo indipendente verde si consegna, come alle
+                    # tappe dei tetti (#192)
+                    e = Limite("ha ripetuto lo stesso ragionamento in "
+                               f"{giri_vuoti} passate di fila senza decidere", tipo="vuoto")
+                    chiusura = self._consegna_alla_tappa(lav, sandbox, e, controlla, piano,
+                                                         stato_piano)
+                    if chiusura is not None:
+                        consegna = chiusura
+                        break
+                    return self._tappa(lav, sandbox, gc, messages, e, spinte, scritti,
+                                       rimandi, stato_piano, piano, rifiuti)
                 if giri_vuoti >= RIPETIZIONI_MAX:
                     e = Limite("ha ripetuto lo stesso ragionamento in "
                                f"{giri_vuoti} passate di fila senza decidere", tipo="a_vuoto")
@@ -1585,7 +1605,9 @@ class Agente:
                         break
                     raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)},
                                  tipo="a_vuoto")
-                _spinta_ripetizioni(messages, out["giro_a_vuoto"], seg.get("ultimo_errore"))
+                scala.proponi(sp.ripetizioni(out["giro_a_vuoto"], seg.get("ultimo_errore"),
+                                             prima_il_piano=bool(piano and stato_piano is None),
+                                             tappe=bool(getattr(lav, "tappe", False))))
                 continue
             giri_vuoti = 0
             novita = False
@@ -1631,9 +1653,10 @@ class Agente:
                 # di fila sì, riparte. Il limite è TRONCATE_MAX
                 from ..sonde import nota as nota_regola
                 nota_regola(lav, "agente_uscita_troncata", self.log, "senza chiamate")
-                vuoto_t0 += time.monotonic() - t_passata
+                # (senza l'attesa della voce, già tolta sopra: P7 della prima revisione)
+                vuoto_t0 += time.monotonic() - t_passata - (lav.attesa_voce_s - voce_s)
                 prosa_fila = 0
-                messages.append({"role": "user", "content": USCITA_TRONCATA_TESTO})
+                scala.proponi(sp.troncata("codice"))
                 continue
             if calls:
                 vuoto_tok, vuoto_t0, vuote = 0, time.monotonic(), 0
@@ -1646,11 +1669,21 @@ class Agente:
                     self.log(f"[AGENTI] {lav.id}: {vuoto_tok} token senza strumenti "
                              f"({vuote}ª volta)")
                     if vuote >= 2:
-                        raise Limite(f"ha ragionato per {vuoto_tok} token senza usare gli "
-                                     "strumenti: non sapeva come procedere")
-                    lav.nota("spinta", motivo="ragionamento senza strumenti")
-                    messages.append({"role": "user", "content": _vuoto_spinta(
-                        vuoto_tok, [t["function"]["name"] for t in strumenti])})
+                        e = Limite(f"ha ragionato per {vuoto_tok} token senza usare gli "
+                                   "strumenti: non sapeva come procedere", tipo="ragionamento")
+                        if not getattr(lav, "tappe", False):
+                            raise Limite(str(e))        # fuori da uno sviluppo, come prima
+                        # In uno sviluppo una tappa col tipo suo (22/10, #224, n. 26), come il
+                        # giro a vuoto
+                        chiusura = self._consegna_alla_tappa(lav, sandbox, e, controlla, piano,
+                                                             stato_piano)
+                        if chiusura is not None:
+                            consegna = chiusura
+                            break
+                        return self._tappa(lav, sandbox, gc, messages, e, spinte, scritti,
+                                           rimandi, stato_piano, piano, rifiuti)
+                    scala.proponi(sp.senza_strumenti(
+                        vuoto_tok, [t["function"]["name"] for t in strumenti]))
                     continue
             if not calls:
                 # Una passata senza chiamate non è mai una consegna (19/10, #180). Prima, dopo
@@ -1670,9 +1703,7 @@ class Agente:
                               and self._pronto_da_consegnare(lav, sandbox, piano, stato_piano,
                                                              consegnabile))
                 if pronto and prosa_fila == 1:
-                    lav.nota("spinta", motivo="nessuno strumento chiamato",
-                             regola="agente_prosa_non_consegna")
-                    messages.append({"role": "user", "content": PROSA_FATTUALE})
+                    scala.proponi(sp.prosa_consegnabile())
                     continue
                 if pronto and prosa_fila == 2:
                     chiusura = self._consegna_dalla_prosa(lav, sandbox, controlla, piano,
@@ -1694,8 +1725,11 @@ class Agente:
                                  tipo="prosa")
                 # I fatti del revisore dopo la prosa (20/10, #190): il lavoro continua qui
                 ora = seg.pop("revisore_fatti_ora", None) or []
-                messages.append({"role": "user", "content": SPINTA_STRUMENTI
-                                 + ("\n\n" + " ".join(ora) if ora else "")})
+                # I fatti non competono nella scala (P1 della prima revisione della PR #233):
+                # tolti dai segnali, arrivano anche se la prosa è lasciata
+                scala.proponi(sp.prosa(bool(getattr(lav, "tappe", False)),
+                                       prima_il_piano=bool(piano and stato_piano is None)))
+                scala.fatto(" ".join(ora))
                 continue
             letture = set()
             rossa = None              # la consegna rossa che ferma il lavoro (19/10, #180)
@@ -1883,6 +1917,12 @@ class Agente:
                                   if name in ("scrivi_file", "modifica_file") else None)
                     result = self._strumento(lav, sandbox, name, args, consegnabile)
                     impronte = result.pop("_impronte", None) if isinstance(result, dict) else None
+                    if name == "leggi_file" and lettura_nuova(
+                            seg, str(args.get("percorso") or ""),
+                            lav.letture.get(str(args.get("percorso") or ""))):
+                        # Un contenuto mai letto in questo lavoro (22/10, #224): per le passate
+                        # senza novità di fila leggere file nuovi non è girare a vuoto
+                        novita = True
                     if impronte:
                         imp_prima = impronte[0]
                     if name in ("scrivi_file", "modifica_file") and result.get("ok") \
@@ -1892,8 +1932,7 @@ class Agente:
                         # Il controllo della consegna subito (14/10 sera, banco L8)
                         errore_m = manifesto_non_valido(sandbox)
                         if errore_m:
-                            result = {**result, "avviso": f"manifesto.json così la consegna lo "
-                                                          f"rifiuta: {errore_m}. Correggilo ora."}
+                            result = {**result, "avviso": sp.nota_manifesto(errore_m).testo}
                     if name in ("scrivi_file", "modifica_file") and result.get("ok"):
                         seg["test_verde"] = None        # i file sono cambiati dopo i test
                         scritti += 1
@@ -2035,33 +2074,32 @@ class Agente:
                 raise Limite(rossa[0], {"riassunto": _fatto_finora(gc, messages),
                                         "errore_consegna": rossa[1]}, tipo="consegna_rossa")
             if not novita and consegna is None:
+                # Di fila (22/10, #224, n. 27): la fila riparte con una novità. Prima era un
+                # totale del giro, detto a voce come se fosse di fila, e non agiva mai nel giro;
+                # ora al gradino (SENZA_NOVITA_FILA) la spinta, una volta per fila
                 seg["senza_novita"] = int(seg.get("senza_novita", 0)) + 1
+                if seg["senza_novita"] == sp.SENZA_NOVITA_FILA:
+                    scala.proponi(sp.senza_novita(seg["senza_novita"], seg.get("ultimo_errore"),
+                                                  tappe=bool(getattr(lav, "tappe", False))))
+            elif novita:
+                seg["senza_novita"] = 0
             if (consegna is None and seg.get("test_verde") is True
                     and not seg.get("spinta_consegna")
                     and self._pronto_da_consegnare(lav, sandbox, piano, stato_piano)):
                 # I test passano e i file chiesti ci sono (13/10): una volta per lavoro la
-                # spinta a consegnare o a dire cosa manca; la consegna resta dell'agente
-                seg["spinta_consegna"] = True
-                from ..sonde import nota as nota_regola
-                nota_regola(lav, "agente_spinta_consegna")
-                self.log(f"[AGENTI] {lav.id}: i test passano, spinta a consegnare "
-                         "(regola agente_spinta_consegna)")
-                lav.nota("spinta", motivo="i test passano", regola="agente_spinta_consegna")
-                _aggiungi_spinta(messages, SPINTA_CONSEGNA)
+                # spinta a consegnare o a dire cosa manca; la consegna resta dell'agente. Il
+                # segno «detta» lo mette la scala solo se esce (22/10, #224)
+                scala.proponi(sp.consegna())
             # Lo stesso file lungo riscritto per intero più volte di fila con lo stesso errore
             # (11/10, giro vero: gioco.js di 730 righe, nove volte): la spinta con l'ultimo
             # errore, e la fila riparte
             for p, n in list(fila.items()):
                 if n >= RISCRITTURE_MAX and consegna is None:
-                    from .ripetizioni import spinta_riscritture
-                    from ..sonde import nota as nota_regola
-                    nota_regola(lav, "agente_riscrittura_ripetuta")   # 19/10, #9: il banco
-                    self.log(f"[AGENTI] {lav.id}: {p} riscritto per intero {n} volte di fila "
-                             "(regola agente_riscrittura_ripetuta)")
-                    lav.nota("spinta", motivo="riscrive il file intero",
-                             regola="agente_riscrittura_ripetuta")
-                    _aggiungi_spinta(messages, spinta_riscritture(
-                        p.rsplit("/", 1)[-1], n, seg.get("ultimo_errore")))
+                    # La regola (19/10, #9: il banco) la conta la scala quando la spinta esce, e
+                    # il suo log la dice (seconda revisione della PR #233: qui niente «regola»)
+                    self.log(f"[AGENTI] {lav.id}: {p} riscritto per intero {n} volte di fila")
+                    scala.proponi(sp.riscritture(p.rsplit("/", 1)[-1], n,
+                                                 seg.get("ultimo_errore")))
                     fila[p] = 0
                     break
         # Il contesto resta per una ripresa (domanda a metà lavoro): il servizio lo butta se
@@ -2141,8 +2179,9 @@ class Agente:
         la tappa non porterebbe niente di più. Dal 20/10 (#192, decisione di chi amministra)
         anche a una tappa di un tetto del giro (`tappa`, `_consegna_alla_tappa`): lo stesso
         controllo indipendente, e il no non ferma niente (la tappa resta com'è). Mai
-        un'eccezione."""
-        if e.tipo not in ("passate", "tempo", "token", "a_vuoto", "prosa", "troncata") or (
+        un'eccezione. Dal 22/10 (#224) «vuoto» e «ragionamento», solo alla tappa."""
+        if e.tipo not in ("passate", "tempo", "token", "a_vuoto", "prosa", "troncata", "vuoto",
+                          "ragionamento") or (
                 getattr(lav, "tappe", False) and e.tipo != "prosa" and not tappa):
             return None
         a = getattr(lav, "accettazione", None) or {}
@@ -2850,11 +2889,9 @@ class Agente:
                         f"{rel[:60]}, {quando(inversa[0], lav.passi)}")
             cart = seg.get("cartelle") if isinstance(seg.get("cartelle"), dict) else {}
             test = (cart.get(inversa[3]) or {}).get("test") if len(inversa) > 3 else None
-            return {"ok": False, "errore": "questa modifica rimette esattamente il testo che la "
-                    f"tua modifica_file di {quando(inversa[0], lav.passi)} aveva tolto, e non "
-                    "l'ho fatta" + (f"; prima di quella modifica esegui_test dava: {test}"
-                                    if test else "")
-                    + ". Se vuoi davvero tornare a com'era, riscrivi il file con scrivi_file"}
+            # Dal 22/10 (#224) senza «riscrivi il file con scrivi_file», contro le altre spinte
+            return {"ok": False, "errore": sp.nota_modifica_inversa(
+                quando(inversa[0], lav.passi), test or "").testo}
         r = sandbox.scrivi(rel, testo.replace(vecchio, nuovo, 1))
         if r.get("ok"):
             riga = testo[:testo.index(vecchio)].count("\n") + 1
@@ -3189,10 +3226,9 @@ class Agente:
             if letto and volte >= 3:
                 from ..sonde import nota as nota_regola
                 nota_regola(lav, "agente_rilettura", self.log, f"{rel[:60]}, {volte} volte")
-                out["nota"] = (f"hai letto questo file {volte} volte senza cambiarlo: il "
-                               "contenuto è qui, non rileggerlo né rileggere gli altri file. "
-                               "Scrivi adesso la versione corretta con scrivi_file ed esegui "
-                               "i test")
+                # Dal 22/10 (#224) senza «scrivi la versione corretta con scrivi_file»,
+                # contro «usa modifica_file» delle altre spinte
+                out["nota"] = sp.nota_rilettura(volte, bool(getattr(lav, "tappe", False))).testo
         return out
 
     def _diario_modello(self, lav: Lavoro):
@@ -3383,6 +3419,7 @@ class Agente:
         gc = ContestoLavoro(self.cfg, self.num_ctx(), PassiMemoria(), log=self.log)
         lav.gestore = gc
         troncate_fila = 0         # passate di fila con l'uscita troncata (21/10, #189)
+        scala = sp.Scala()        # al più una spinta per passata (22/10, #224)
         tagliata = ""             # l'ultima relazione tagliata a max_tokens (revisione PR #218)
 
         def parziale_troncate() -> dict:
@@ -3400,7 +3437,8 @@ class Agente:
                 tools.insert(len(tools) - 1, RILEGGI)
                 nomi.add("leggi_file")
             gc.imposta_finestra(self.num_ctx())
-            self._avviso_fine(lav, messages, "ricerca")
+            scala.proponi(self._avviso_fine(lav, "ricerca"))
+            self._dici(lav, messages, scala)
             gc.prima_della_passata(messages, tools, diario_modello=self._diario_modello(lav))
             try:
                 out = self.passata(lav, messages, tools=tools, contesto=gc)
@@ -3413,7 +3451,7 @@ class Agente:
                 if int((lav.segnali or {}).get("ripetizioni", 0)) >= RIPETIZIONI_MAX:
                     raise Limite("ha ripetuto lo stesso ragionamento senza decidere",
                                  {"riassunto": _fatto_finora(gc, messages)})
-                _spinta_ripetizioni(messages, out["giro_a_vuoto"])
+                scala.proponi(sp.ripetizioni(out["giro_a_vuoto"], nomi=nomi, ricerca=True))
                 continue
             # Le chiamate arrivate a metà (21/10, #189, come nel codice da #185): i client le
             # segnano in `rotti`. Prima gli argomenti diventavano {} e l'agente riceveva «manca
@@ -3444,8 +3482,7 @@ class Agente:
                     from ..sonde import nota as nota_regola
                     nota_regola(lav, "agente_uscita_troncata", self.log, "senza chiamate")
                     # Il testo a metà o il solo ragionamento fermato: il consiglio del caso vero
-                    messages.append({"role": "user", "content": USCITA_TRONCATA_TESTO_RICERCA
-                                     if testo else USCITA_TRONCATA_PENSIERO})
+                    scala.proponi(sp.troncata("ricerca_testo" if testo else "pensiero"))
                     continue
                 # Senza consegna il testo è la relazione: il riassunto ne è l'inizio, senza
                 # Markdown (07/10: «# Titolo» finiva tra le frasi dette)
@@ -3661,31 +3698,24 @@ def novita_file(seg: dict, percorso: str, contenuto: str | None) -> bool:
 # Le note sono fatti, nel risultato dello strumento che le riguarda: mai un messaggio a parte, e
 # mai riscrivendo i messaggi vecchi (la cache dei prefissi resta). Ognuna col suo nome nel registro
 
-# Il fatto e il consiglio separati (21/10, #189): il fatto è lo stesso nel codice e nella
-# ricerca, il consiglio è del ciclo (i file in pezzi più corti, la relazione più breve)
-TRONCATA_CHIAMATA = ("la tua uscita è stata troncata (fermata a max_tokens): questa chiamata è "
-                     "arrivata a metà e non l'ho eseguita.")
-TRONCATA_TESTO = ("La tua uscita è stata troncata (fermata a max_tokens) prima di una chiamata "
-                  "completa.")
-USCITA_TRONCATA = (TRONCATA_CHIAMATA + " Scrivi il file in pezzi più corti, oppure cambia solo le "
-                   "righe che servono con modifica_file")
+# Il fatto e i passi separati (21/10, #189): il fatto è lo stesso nel codice e nella ricerca,
+# i passi sono del ciclo (i file in pezzi più corti, la relazione più breve). Dal 22/10 (#224)
+# nella forma della scala (spinte.troncata, spinte.nota_troncata). *[storico: «Ragiona meno e
+# chiama lo strumento del prossimo passo», «Rifalla intera, con argomenti brevi e meno
+# ragionamento prima»]*
+TRONCATA_CHIAMATA = sp.TRONCATA_CHIAMATA
+TRONCATA_TESTO = sp.TRONCATA_TESTO
+USCITA_TRONCATA = sp.nota_troncata("codice").testo
 # Una passata fermata a max_tokens senza chiamate: al posto della spinta di sempre
-USCITA_TRONCATA_TESTO = (TRONCATA_TESTO + " Scrivi il file in pezzi più corti, oppure cambia solo "
-                         "le righe che servono con modifica_file.")
+USCITA_TRONCATA_TESTO = sp.troncata("codice").testo
 # Nella ricerca (21/10, #189): la chiamata a metà è quasi sempre una consegna con la relazione
 # lunga, e il testo a metà senza chiamate non è una relazione
-USCITA_TRONCATA_RICERCA = (TRONCATA_CHIAMATA + " Rifai la consegna più corta: una relazione più "
-                           "breve, con i fatti essenziali e le fonti")
-# Un altro strumento a metà (prima revisione della PR #218): il consiglio della relazione lì
-# non c'entra
-USCITA_TRONCATA_STRUMENTO = (TRONCATA_CHIAMATA + " Rifalla intera, con argomenti brevi e meno "
-                             "ragionamento prima")
-USCITA_TRONCATA_TESTO_RICERCA = (TRONCATA_TESTO + " Un testo a metà non è una relazione: chiama "
-                                 "consegna con una relazione più breve, con i fatti essenziali e "
-                                 "le fonti.")
+USCITA_TRONCATA_RICERCA = sp.nota_troncata("ricerca").testo
+# Un altro strumento a metà (prima revisione della PR #218)
+USCITA_TRONCATA_STRUMENTO = sp.nota_troncata("strumento").testo
+USCITA_TRONCATA_TESTO_RICERCA = sp.troncata("ricerca_testo").testo
 # Fermato il solo ragionamento, senza testo (prima revisione della PR #218)
-USCITA_TRONCATA_PENSIERO = (TRONCATA_TESTO + " Ragiona meno e chiama lo strumento del prossimo "
-                            "passo, o consegna.")
+USCITA_TRONCATA_PENSIERO = sp.troncata("pensiero").testo
 # Il testo del risultato parziale quando la ricerca si ferma per le troncate (prima revisione della
 # PR #218): l'ultima relazione tagliata non si perde, ma si dice che è tagliata
 RELAZIONE_TAGLIATA = ("Relazione incompleta: l'agente si è fermato al tetto dei token della "
@@ -3802,6 +3832,25 @@ def nota_stato_gia_visto(seg: dict, percorso: str, dopo: str | None, impronta: s
         seg["file_visti"] = visti
     segna_cartella(seg, impronta, passo)
     return nota
+
+
+def lettura_nuova(seg: dict, rel: str, dopo) -> bool:
+    """leggi_file ha letto un contenuto mai letto in questo lavoro (22/10, #224; prima revisione
+    della PR #233): un'impronta del file mai vista, o un pezzo che le letture di quella impronta
+    non coprivano. Un file tornato a un contenuto già letto (A, B, A con le riletture) non è una
+    novità. `dopo`: `lav.letture[rel]` dopo la lettura ([impronta, volte, pezzi])."""
+    if not isinstance(dopo, list) or len(dopo) < 3 or not isinstance(seg, dict):
+        return False
+    viste = seg.get("letture_viste") if isinstance(seg.get("letture_viste"), dict) else {}
+    del_file = viste.get(rel) if isinstance(viste.get(rel), dict) else {}
+    prima = _unisci(list(del_file.get(dopo[0]) or []))
+    ora = _unisci(prima + [list(x) for x in dopo[2]])
+    del_file[dopo[0]] = ora
+    while len(del_file) > STATI_MAX:
+        del_file.pop(next(iter(del_file)))
+    viste[rel] = del_file
+    seg["letture_viste"] = viste
+    return ora != prima
 
 
 def _unisci(intervalli: list) -> list:
@@ -3971,7 +4020,8 @@ def segnali_giro(lav, max_passi: int) -> dict:
     numeri dei test diversi), dal 18/10 (#174) anche le esecuzioni dei test senza un test verde
     in più (non le passate: chi scrive file nuovi con i test verdi sta lavorando); con
     le frasi da dire, che dicono quello che è successo davvero (prima «21 passate senza file né
-    test nuovi» mentre l'agente i file li cambiava con modifica_file)."""
+    test nuovi» mentre l'agente i file li cambiava con modifica_file). Dal 22/10 (#224) le
+    passate senza novità sono un conto di fila, e la frase lo dice («di fila»)."""
     seg = getattr(lav, "segnali", None) or {}
     riscritti = sorted(((p, n) for p, n in (seg.get("scritture") or {}).items() if n >= 3),
                        key=lambda x: -x[1])
@@ -3994,7 +4044,7 @@ def segnali_giro(lav, max_passi: int) -> dict:
     if stesso:
         frasi.append(f"i test falliscono {n_stesso} volte di fila con lo stesso errore")
     if vuote >= soglia:
-        frasi.append(f"{vuote} passate senza cambiare i file né l'esito dei test")
+        frasi.append(f"{vuote} passate di fila senza cambiare i file né l'esito dei test")
     elif fermi >= soglia:
         frasi.append(f"ha rifatto i test {fermi} volte senza farne passare di nuovi")
     ripetute = int(seg.get("ripetizioni") or 0)

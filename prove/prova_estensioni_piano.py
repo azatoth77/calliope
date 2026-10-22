@@ -302,8 +302,9 @@ def prova_vuoto():
     cfg.agenti_token_senza_strumenti = 12000
     ris, lav, sb, cli, dt = esegui([{"testo": "", "eval": 7000}, {"testo": "", "eval": 7000},
                                     {"testo": "", "eval": 3000}], "vuoto", cfg)
+    # Dal 22/10 (#224) il testo della scala: il fatto («nessuna chiamata») e i passi
     spinte = [m["content"] for m in cli.visti[-1]["messages"] if m["role"] == "user"
-              and "senza usare gli strumenti" in m["content"]]
+              and "non è partita nessuna chiamata di funzione" in m["content"]]
     verifica("alla soglia una spinta («chiama piano o scarica_esempio o scrivi_file»)",
              len(spinte) == 1 and "piano" in spinte[0] and "scrivi_file" in spinte[0], "")
     verifica("alla seconda: chiusura con il motivo, senza consumare altro",

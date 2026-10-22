@@ -539,17 +539,17 @@ def prova_avviso_giro():
                             passi_giro=lambda lav: 22, max_passi=24, token_giro=lambda lav: 10,
                             tempo_max_s=1800, log=lambda *a: None)
     m = [{"role": "user", "content": "compito"}]
-    Agente._avviso_fine(finto, Lav(True), m)
-    testo = m[-1]["content"]
-    verifica("sviluppo: un'azione («il passo concreto», «non consegnare a metà»), niente conto "
-             "alla rovescia né «sta per finire»",
-             "passo concreto" in testo and "non consegnare a metà" in testo
+    # Dal 22/10 (#224) l'avviso è una spinta della scala: il fatto e i passi ammessi
+    testo = Agente._avviso_fine(finto, Lav(True)).testo
+    verifica("sviluppo: i passi («il lavoro continua da qui», «a metà, una riga su cosa resta»), "
+             "niente conto alla rovescia né «sta per finire»",
+             "continua da qui" in testo and "a metà, una riga su cosa resta" in testo
+             and "Passi possibili" in testo
              and "sta per finire" not in testo and "2" not in testo, testo)
-    m = [{"role": "user", "content": "compito"}]
-    Agente._avviso_fine(finto, Lav(False), m)
-    verifica("contrario: fuori da uno sviluppo «Adesso chiudi… chiama consegna», anche lì senza "
-             "numeri", "Adesso chiudi" in m[-1]["content"] and "chiama consegna" in m[-1]["content"]
-             and "sta per finire" not in m[-1]["content"], m[-1]["content"])
+    testo = Agente._avviso_fine(finto, Lav(False)).testo
+    verifica("contrario: fuori da uno sviluppo «il momento di chiudere… consegna», anche lì senza "
+             "numeri", "il momento di chiudere" in testo and "consegna" in testo
+             and "sta per finire" not in testo, testo)
 
 
 def main():

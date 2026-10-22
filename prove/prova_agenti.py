@@ -566,9 +566,10 @@ item = fine(svc, lav)
 verifica("tetto dei passi: fermato e detto", item and item["esito"] == "limite"
          and "ho fermato" in item["messaggio"] and lav.passi == 3, str(item and item["messaggio"]))
 # 06/10: vicino al tetto l'agente riceve una volta l'avviso di chiudere; fermato, l'annuncio
-# dice anche come vanno i test (rifatti dal programma)
+# dice anche come vanno i test (rifatti dal programma). Dal 22/10 (#224) il testo è della scala
+from calliope.agenti.ciclo import AVVISO_FINE, SPINTA_STRUMENTI  # noqa: E402
 _avvisi = [m for r in fake.richieste for m in r.get("messages", [])
-           if m.get("role") == "user" and "Adesso chiudi" in str(m.get("content"))]
+           if m.get("role") == "user" and AVVISO_FINE["codice"] in str(m.get("content"))]
 verifica("tetto vicino: avviso di chiusura all'agente (una volta)",
          _avvisi and len({str(m["content"]) for m in _avvisi}) == 1, str(len(_avvisi)))
 verifica("tetto raggiunto: l'annuncio dice i test (1 su 2)",
@@ -660,7 +661,7 @@ lav = svc.nuovo("codice", "Scrivi la funzione doppio con un test, senza consegna
 avvia(svc, lav)
 item = fine(svc, lav)
 _usr = [m for m in fake.richieste[-1]["messages"] if m.get("role") == "user"
-        and "Usa gli strumenti con chiamate di funzione vere" in str(m.get("content"))] \
+        and SPINTA_STRUMENTI in str(m.get("content"))] \
     if fake.richieste else []
 verifica("finito senza consegna e test rossi: il testo non consegna, la spinta, poi i test "
          "passano", len(_usr) == 2 and item is not None and "Il test passa." in item["messaggio"]

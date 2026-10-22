@@ -300,10 +300,10 @@ class _ClienteFinto:
 def prova_ripetizioni():
     print("— 5. il giro a vuoto nel ragionamento")
     from calliope.agenti.arbitro import Arbitro
-    from calliope.agenti.ciclo import (Agente, Lavoro, RIPETIZIONI_MAX, _spinta_ripetizioni,
-                                       segnali_giro)
+    from calliope.agenti import spinte as sp
+    from calliope.agenti.ciclo import Agente, Lavoro, RIPETIZIONI_MAX, segnali_giro
     from calliope.agenti.remoto_openai import traduci_corpo
-    from calliope.agenti.ripetizioni import Ripetizioni, spinta
+    from calliope.agenti.ripetizioni import Ripetizioni
     from calliope.config import Config
 
     rip = Ripetizioni(8)
@@ -361,17 +361,24 @@ def prova_ripetizioni():
              and lav.segnali.get("regole") == {"agente_ragionamento_ripetuto": 1}
              and any("agente_ragionamento_ripetuto" in x for x in log)
              and any(ev == "flusso" and "girava a vuoto" in d.get("testo", "")
-                     for ev, d in eventi)
-             and any(ev == "spinta" and d.get("regola") == "agente_ragionamento_ripetuto"
                      for ev, d in eventi), f"{log} {eventi[-3:]}")
-    _spinta_ripetizioni(msgs, out["giro_a_vuoto"])
-    verifica("…la spinta in coda al messaggio della persona (mai due «user» di fila)",
-             len(msgs) == 2 and "stai ripetendo lo stesso ragionamento" in msgs[-1]["content"]
-             and "chiama uno strumento" in msgs[-1]["content"], msgs[-1]["content"][-300:])
+    # Dal 22/10 (#224) la spinta la dice la scala (Agente._dici), con l'evento sulla scheda
+    scala = sp.Scala()
+    scala.proponi(sp.ripetizioni(out["giro_a_vuoto"]))
+    ag._dici(lav, msgs, scala)
+    verifica("…la spinta in coda al messaggio della persona (mai due «user» di fila), l'evento "
+             "sulla scheda e la regola contata una volta sola",
+             len(msgs) == 2 and "ripeteva la stessa frase" in msgs[-1]["content"]
+             and "Passi possibili" in msgs[-1]["content"]
+             and any(ev == "spinta" and d.get("regola") == "agente_ragionamento_ripetuto"
+                     for ev, d in eventi)
+             and lav.segnali.get("regole") == {"agente_ragionamento_ripetuto": 1},
+             msgs[-1]["content"][-300:])
     msgs.append({"role": "tool", "tool_name": "leggi_file", "content": "{}"})
-    _spinta_ripetizioni(msgs, "")
+    scala.proponi(sp.ripetizioni(""))
+    ag._dici(lav, msgs, scala)
     verifica("…dopo il risultato di uno strumento, un messaggio nuovo",
-             msgs[-1]["role"] == "user" and msgs[-1]["content"] == spinta(""))
+             msgs[-1]["role"] == "user" and msgs[-1]["content"] == sp.ripetizioni("").testo)
     seg = segnali_giro(lav, 24)
     verifica("…e alla tappa «sembra girare a vuoto: ha ripetuto lo stesso ragionamento»",
              seg["a_vuoto"] and any("ripetuto lo stesso ragionamento" in f for f in seg["frasi"]),

@@ -807,7 +807,8 @@ def prova_revisioni(tmp: Path):
         ut = [str(m.get("content")) for m in lav.contesto.get("messages", [])
               if m.get("role") == "user"]
         verifica("J2: una troncata e una prosa: nessuna spinta «stai ragionando»",
-                 ris.get("esito") == "fatto" and not any("Stai ragionando" in u for u in ut),
+                 ris.get("esito") == "fatto"
+                 and not any("non è partita nessuna chiamata" in u for u in ut),
                  str(ut)[-300:])
         lav, ris, log, cli, sb = gira(tmp, "revJ3", ["Ci penso."] * 4, max_passi=8)
         verifica("contrario J: la prosa vera, 120 s a passata, fa ancora scattare la guardia",
