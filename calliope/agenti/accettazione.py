@@ -866,7 +866,7 @@ def _norm(testo):
 def _prova(self, caso):
     dati = caso["dati"]
     detto = f"R{caso['requisito']}, con i dati {json.dumps(dati, ensure_ascii=False)}"
-    out = esegui(dict(dati), CalliopeFinta())
+    out = esegui(dict(dati), CalliopeFinta(letture="vuote"))
     self.assertIsInstance(out, dict, f"{detto}: esegui deve restituire un dict")
     if caso.get("numero") is not None:
         valore = out.get(CAMPO)
@@ -893,7 +893,7 @@ def _riconosce(self, caso):
     dati = caso["dati"]
     detto = (f"R{caso['requisito']}: la richiesta nomina «{caso['valore']}» per "
              f"«{caso['input']}»; con i dati {json.dumps(dati, ensure_ascii=False)}")
-    out = esegui(dict(dati), CalliopeFinta())
+    out = esegui(dict(dati), CalliopeFinta(letture="vuote"))
     self.assertIsInstance(out, dict, f"{detto}: esegui deve restituire un dict")
     self.assertTrue(str(out.get("da_dire") or "").strip(), f"{detto}: manca la frase da_dire")
     self.assertIsNot(out.get("trovato"), False,

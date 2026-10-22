@@ -316,8 +316,9 @@ from calliope_estensione import CalliopeFinta, ErroreCalliope, chiama  # noqa: F
 
 class Prove(unittest.TestCase):
     def test_risponde_sempre_con_una_frase(self):
-        # Senza input l'estensione risponde con una frase (che cosa le serve), mai un'eccezione
-        out = chiama({})
+        # Senza input l'estensione risponde con una frase (che cosa le serve), mai un'eccezione;
+        # le letture senza risposta preparata rispondono vuote, la rete non risponde
+        out = chiama({}, letture="vuote")
         self.assertIsInstance(out, dict)
         self.assertTrue(str(out.get("da_dire") or "").strip())
 
