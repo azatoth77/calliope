@@ -521,16 +521,26 @@ ERRORE = {"test": "prova di fumo del gioco", "errore": "tocco (click) su <button
 
 def prova_spinte():
     sezione("3a. la spinta con l'ultimo errore")
-    from calliope.agenti.ripetizioni import spinta, spinta_riscritture
+    # Dal 22/10 (#224) i testi sono della scala (spinte.py): il fatto e i passi ammessi, senza
+    # «Ti ho fermato… Non ripensarci» né «non riscrivere»
+    from calliope.agenti import spinte as sp
+
+    def spinta(frase, errore=None):
+        return sp.ripetizioni(frase, errore).testo
+
+    def spinta_riscritture(p, n, errore=None):
+        return sp.riscritture(p, n, errore).testo
     s = spinta("La soluzione più semplice è riscrivere tutto", ERRORE)
-    verifica("dopo un giro a vuoto: l'ultimo errore, il punto, «correggi solo quello»",
-             "stai ripetendo lo stesso ragionamento" in s and "l'ultimo errore è" in s.lower()
+    verifica("dopo un giro a vuoto: l'ultimo errore, il punto, modifica_file su quel punto",
+             "ripeteva la stessa frase" in s and "l'ultimo errore è" in s.lower()
              and "Devi inserire da 1 a 4 giocatori" in s and "logica.js:4" in s
              and "leggi_file con percorso «logica.js» e riga 4" in s
-             and "correggi solo quello con modifica_file" in s
-             and "non riscrivere il file intero" in s, s)
-    verifica("contrario: senza errore noto la spinta di prima",
-             spinta("x") == spinta("x", None) and "chiama uno strumento" in spinta("x"))
+             and "modifica_file su quel punto" in s
+             and "riscrivere" not in s.replace("riscrivere tutto", "")
+             and "Ti ho fermato" not in s, s)
+    verifica("contrario: senza errore noto i passi generici",
+             spinta("x") == spinta("x", None) and "Passi possibili: leggi_file" in spinta("x")
+             and "esegui_test" in spinta("x"))
     s = spinta_riscritture("gioco.js", 3, ERRORE)
     verifica("dopo tre riscritture: lo dice e porta al punto",
              "Hai riscritto gioco.js per intero 3 volte" in s and "logica.js:4" in s
@@ -618,9 +628,9 @@ def prova_ciclo(tmp: Path):
                      for ev, d in eventi)
              and (lav.segnali.get("regole") or {}).get("agente_riscrittura_ripetuta", 0) >= 1,
              f"{log[-3:]} {lav.segnali.get('regole')}")
-    rip = next((u for u in utenti if "stai ripetendo lo stesso ragionamento" in u), "")
+    rip = next((u for u in utenti if "ripeteva la stessa frase" in u), "")
     verifica("giro a vuoto con un errore noto: la spinta concreta",
-             "AssertionError: -1 != 5" in rip and "non riscrivere il file intero" in rip,
+             "AssertionError: -1 != 5" in rip and "modifica_file su quel punto" in rip,
              rip[:400])
     tool = [m for m in msgs if m.get("role") == "tool"]
     letto = next((json.loads(m["content"]) for m in tool
