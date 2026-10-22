@@ -1888,6 +1888,14 @@ class Config:
     # frasi della persona hanno il nome nei dati del turno, i permessi restano per frase (regola
     # `compagnia_anonima_continua`). Con una voce sconosciuta di mezzo si chiude come prima
     compagnia_anonima_condivisa: bool = True
+    # Da ospite a voce riconosciuta (22/10, issue #171; caso vero del 18/10 dal telefono in auto:
+    # le prime due frasi di chi amministra prese per un ospite, dalla terza riconosciuto, e il
+    # modello continuava a dirgli «il sistema dice che sei un ospite»). Al primo turno di una
+    # persona riconosciuta dopo una frase da ospite qui (stesso Brain e luogo, entro
+    # `storia_inattiva_s`) i dati del turno lo dicono una volta: «Ora la voce è riconosciuta:
+    # parla Ada. …» (regola `voce_ora_riconosciuta`). Un dato del turno, non una regola sul
+    # testo; permessi e livello seguono la voce del turno come sempre
+    voce_ora_riconosciuta: bool = True
     # In compagnia una frase senza il nome giudicata «non rivolta a Calliope» (anche col giudizio
     # in ombra) non passa dal rilevatore di pericolo: le chiacchiere non si giudicano in diretta
     # (decisione 0029, risposta 4 di chi amministra; regola `pericolo_non_rivolta`). Il
@@ -3303,7 +3311,8 @@ SEZIONI: dict[str, list[str]] = {
                   "compagnia_gruppo_lungo_s", "compagnia_nome_obbligatorio",
                   "compagnia_rivolta", "compagnia_rivolta_modello",
                   "compagnia_rivolta_timeout_s", "compagnia_azioni_col_nome",
-                  "compagnia_anonima_condivisa", "compagnia_pericolo_solo_rivolte",
+                  "compagnia_anonima_condivisa", "voce_ora_riconosciuta",
+                  "compagnia_pericolo_solo_rivolte",
                   "compagnia_da_stanza",
                   "speaker_enroll_phrases", "speaker_enroll_min_s", "speaker_enroll_timeout_s",
                   "speaker_adapt_threshold",
