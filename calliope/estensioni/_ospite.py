@@ -207,7 +207,7 @@ def permesso_mancante(azione, argomenti, permessi):
         if rete["pubblica"] or host in rete["host"] or any(f["host"] == host
                                                             for f in sc["invia"]):
             return ""
-        return f"l'host «{host}» non è in «rete.host» (e «rete.pubblica» non c'è)"
+        return f"l'host «{host}» non è in «rete.host», e «rete.pubblica» non c'è"
     if not (rete["post"] or any(f["metodo"] == "POST" for f in sc["invia"])):
         return "non dichiarata"
     if schema not in ("http", "https") or not host:

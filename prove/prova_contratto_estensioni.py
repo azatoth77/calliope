@@ -183,6 +183,9 @@ MANIFESTI = [
     {"scrive": {"casa": ["cucina"]}},
     {"scrive": {"casa": True, "schermi": True}},
     {"legge": {"liste": ["spesa"]}},
+    # I nomi come li scrive l'agente: la porta li normalizza (liste.list_key, host minuscoli)
+    {"legge": {"liste": ["La lista della spesa"]}, "scrive": {"liste": ["Regali "]}},
+    {"rete": {"host": ["API.Esempio.it"]}},
     {"legge": {"liste": ["cose da fare"]}, "scrive": {"liste": True}},
     {"scrive": {"liste": ["regali"]}},
     {"legge": {"agenda": True}},
