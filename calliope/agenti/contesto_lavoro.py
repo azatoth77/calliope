@@ -570,6 +570,10 @@ def estrattivo(vecchi: list, prima: dict | None) -> dict:
                     elif isinstance(res, dict) and res.get("codice") not in (None, 0):
                         esito = f" (codice d'uscita {res.get('codice')})"
                     fatto.append(f"{nome} {cosa}".strip() + esito)
+                elif nome == "consegna" and not ok:
+                    # Una consegna rifiutata non è fatta (seconda revisione della PR #218: «fatto:
+                    # consegna; consegna; …» dopo quattro consegne tagliate)
+                    continue
                 elif nome:
                     fatto.append(nome)
     return {"piano": prima["piano"],

@@ -478,7 +478,8 @@ connettore sia nel passo 5 sia nel 7 e criteri non misurabili («l'attrito delle
 Ogni passo ha il suo interruttore, **spento di serie**, e un criterio scritto prima di accenderlo
 ([0019](../decisioni/0019-ombra-prima-di-accendere.md)). Chi lo accende sulla DGX aggiorna la tabella
 «Interruttori sulla DGX» di [setup-dgx](../aree/setup-dgx.md#interruttori-sulla-dgx). Una issue per
-passo, aperta dopo l'approvazione del piano. I nomi delle chiavi sono proposte.
+passo, aperta dopo l'approvazione del piano (21/10: #203–#208 per i passi 0–5, #53 per il 6, #209–#211
+per il 7a, #212 per il 7b, #213–#217 per il 7c). I nomi delle chiavi sono proposte.
 
 **La misura che manca, creata dal passo 0.** Oggi nessuna vista conta le domande delle estensioni.
 Il passo 0 aggiunge a `calliope stato --concessioni` le **conferme ogni 100 esecuzioni**, contate

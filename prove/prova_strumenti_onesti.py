@@ -20,7 +20,12 @@ che ciò che il codice sa arrivi nel risultato dello strumento, come fatto:
    nulla (agente_modifica_nulla) e quella inversa di una precedente (agente_modifica_inversa)
    rifiutate; contrario: una modifica diversa accettata;
 6. lo strumento sconosciuto con l'elenco (agente_strumento_sconosciuto) e le chiamate dopo la
-   consegna con la loro risposta (agente_dopo_consegna); contrario: la consegna da sola.
+   consegna con la loro risposta (agente_dopo_consegna); contrario: la consegna da sola;
+7. i casi delle tre revisioni della PR #187;
+8. le stesse regole nel ciclo della ricerca (21/10, #189): lo strumento sconosciuto, la consegna
+   seguita da una web_leggi (la consegna vale, la lettura no, detta), la chiamata e la consegna a
+   metà contro l'argomento davvero mancante, la relazione fermata a max_tokens contro quella
+   intera, il tetto delle troncate di fila.
 
     python prove\\prova_strumenti_onesti.py
 """
@@ -882,6 +887,266 @@ def prova_revisioni(tmp: Path):
     verifica("il fatto della troncata è quello di sempre", "max_tokens" in USCITA_TRONCATA_TESTO)
 
 
+# ═══════════════ 8. gli strumenti onesti nel ciclo della ricerca (21/10, #189) ═══════════════
+
+class _Biblioteca:
+    def __init__(self):
+        self.domande = []
+
+    def cerca(self, domanda):
+        from types import SimpleNamespace
+        self.domande.append(domanda)
+        return [SimpleNamespace(titolo="Borgo", fonte="wikipedia", testo="Il borgo è antico.")]
+
+
+class _Web:
+    pronta = True
+    URL = "https://esempio.invalid/borgo"
+
+    def __init__(self):
+        self.lette = []
+
+    def cerca(self, domanda, n=6):
+        from types import SimpleNamespace
+        return {"ok": True, "risultati": [SimpleNamespace(
+            titolo="Il borgo", sito="esempio.invalid", url=self.URL, testo="Antico.", data=None)]}
+
+    def leggi(self, url):
+        self.lette.append(url)
+        return {"ok": True, "sito": "esempio.invalid", "url": url, "titolo": "Il borgo",
+                "testo": "Il borgo fu fondato nel Trecento."}
+
+
+def ricerca(passate):
+    """Agente.ricerca con il copione, la biblioteca e la rete finte: (lavoro, risultato o
+    {"eccezione"…}, copione, web, esiti) con gli esiti di tutti gli strumenti, anche quelli
+    dell'ultima passata (che non tornano all'agente)."""
+    from calliope.agenti.ciclo import Lavoro
+    cli = Copione(passate)
+    ag = G.agente(cli, [])
+    ag.biblioteca, ag.web = _Biblioteca(), _Web()
+    lav = Lavoro("R", "ricerca", "la storia del borgo")
+    esiti = []
+    lav.osservatore = lambda _l, ev, d: esiti.append(d) if ev == "esito" else None
+    try:
+        ris = ag.ricerca(lav)
+    except Exception as e:  # noqa: BLE001 — Limite
+        ris = {"eccezione": type(e).__name__, "tipo": getattr(e, "tipo", ""), "motivo": str(e),
+               "parziale": dict(getattr(e, "parziale", None) or {})}
+    return lav, ris, cli, ag.web, esiti
+
+
+def _ben_formata_corpo(msgs) -> bool:
+    """La storia mandata al modello (revisione della PR #218): ogni messaggio dell'agente con N
+    chiamate ha dopo di sé N messaggi tool, con i nomi delle chiamate e nello stesso ordine."""
+    for i, m in enumerate(msgs):
+        chiamate = m.get("tool_calls") or [] if m.get("role") == "assistant" else []
+        if not chiamate:
+            continue
+        dopo = msgs[i + 1:i + 1 + len(chiamate)]
+        if [x.get("role") for x in dopo] != ["tool"] * len(chiamate) or \
+                [x.get("tool_name") for x in dopo] != [c["function"]["name"] for c in chiamate]:
+            return False
+    return True
+
+
+def _tool_nel_corpo(cli, nome) -> list:
+    """I risultati dello strumento `nome` nell'ultima richiesta mandata al modello."""
+    return [json.loads(m["content"]) for m in (cli.corpi[-1] if cli.corpi else [])
+            if m.get("role") == "tool" and m.get("tool_name") == nome
+            and m["content"].lstrip().startswith("{")]
+
+
+def _consegna_r(testo="Il borgo è antico.", riassunto="Il borgo è antico."):
+    return {"name": "consegna", "arguments": {"testo": testo, "riassunto": riassunto}}
+
+
+def prova_ricerca():
+    sezione("8. gli strumenti onesti nel ciclo della ricerca (#189)")
+    from calliope.agenti.ciclo import (RELAZIONE_TAGLIATA, TRONCATE_MAX, USCITA_TRONCATA_PENSIERO,
+                                       USCITA_TRONCATA_RICERCA, USCITA_TRONCATA_STRUMENTO,
+                                       USCITA_TRONCATA_TESTO_RICERCA)
+    cerca = {"name": "web_cerca", "arguments": {"domanda": "storia del borgo"}}
+    leggi = {"name": "web_leggi", "arguments": {"url": _Web.URL}}
+
+    # Lo strumento sconosciuto: l'elenco c'era già, ora anche la regola
+    lav, ris, cli, web, esiti = ricerca([[{"name": "cancella_file", "arguments": {}}],
+                                         [_consegna_r()]])
+    sc = esiti[0] if esiti else {}
+    sc = sc.get("esito") or {}
+    verifica("ricerca, lo strumento che non c'è: l'elenco dei veri e la regola",
+             sc.get("ok") is False and "cancella_file" in sc.get("errore", "")
+             and "web_cerca" in sc.get("cosa_fare", "")
+             and regole(lav).get("agente_strumento_sconosciuto") == 1
+             and ris.get("esito") == "fatto", str(sc) + str(regole(lav)))
+
+    # La consegna prima di una web_leggi: la consegna vale (come nel codice, #185), la lettura
+    # non si esegue e ha la regola. Sugli schermi niente, come nel codice (revisione della PR
+    # #218: l'esito senza la riga della sua chiamata finiva sotto la chiamata di prima)
+    lav, ris, cli, web, esiti = ricerca([[cerca], [_consegna_r(), leggi]])
+    dopo = [e for e in esiti if e.get("nome") == "web_leggi"]
+    verifica("ricerca, consegna seguita da web_leggi: consegnata, la lettura non eseguita e detta",
+             ris.get("esito") == "fatto" and ris.get("testo") == "Il borgo è antico."
+             and not web.lette and not dopo
+             and regole(lav).get("agente_dopo_consegna") == 1, str(esiti) + str(regole(lav)))
+    lav, ris, cli, web, esiti = ricerca([[cerca], [leggi], [_consegna_r()]])
+    verifica("contrario: la lettura prima della consegna si esegue, nessuna regola",
+             ris.get("esito") == "fatto" and web.lette == [_Web.URL]
+             and not any(r in regole(lav) for r in NUOVE), str(regole(lav)))
+
+    # La chiamata a metà contro l'argomento davvero mancante
+    lav, ris, cli, web, esiti = ricerca([
+        {"tool_calls": [{"name": "biblioteca_cerca", "arguments": {}}], "rotti": [0],
+         "fine": "length"},
+        [{"name": "biblioteca_cerca", "arguments": {}}],
+        [_consegna_r()]])
+    # Sui messaggi tool mandati al modello, non solo sugli schermi (revisione della PR #218)
+    bib = _tool_nel_corpo(cli, "biblioteca_cerca")
+    t = bib[0] if bib else {}
+    verifica("ricerca, la chiamata a metà: non eseguita, «troncata», non «manca domanda»",
+             t.get("errore") == USCITA_TRONCATA_STRUMENTO and "domanda" not in str(t)
+             and "relazione" not in str(t)
+             and not cli.passate and regole(lav).get("agente_uscita_troncata") == 1, str(t))
+    m = bib[1] if len(bib) > 1 else {}
+    verifica("contrario: l'argomento davvero mancante dice cosa manca",
+             "domanda" in str(m) and "troncata" not in str(m), str(m)[:300])
+    # La consegna a metà non chiude con la relazione vuota
+    lav, ris, cli, web, esiti = ricerca([
+        {"tool_calls": [{"name": "consegna", "arguments": {}}], "rotti": [0], "fine": "length"},
+        [_consegna_r("Relazione più breve.")]])
+    cons = _tool_nel_corpo(cli, "consegna")
+    verifica("ricerca, la consegna a metà: non chiude, la seconda sì",
+             ris.get("testo") == "Relazione più breve." and len(cli.corpi) == 2
+             and [c.get("errore") for c in cons] == [USCITA_TRONCATA_RICERCA]
+             and regole(lav).get("agente_uscita_troncata") == 1, str(ris)[:200] + str(cons))
+
+    # La relazione troncata contro quella intera
+    lav, ris, cli, web, esiti = ricerca([
+        {"content": "# Il borgo\nIl borgo fu fondato nel", "fine": "length"},
+        "Il borgo fu fondato nel Trecento."])
+    utenti = [x["content"] for x in cli.corpi[-1] if x.get("role") == "user"] if cli.corpi else []
+    verifica("ricerca, la relazione fermata a max_tokens: il fatto e si continua",
+             ris.get("testo") == "Il borgo fu fondato nel Trecento." and len(cli.corpi) == 2
+             and USCITA_TRONCATA_TESTO_RICERCA in utenti
+             and regole(lav).get("agente_uscita_troncata") == 1, str(ris)[:200] + str(utenti))
+    # Il solo ragionamento fermato, col testo vuoto: non è «un testo a metà» (revisione PR #218)
+    lav, ris, cli, web, esiti = ricerca([
+        {"content": "", "thinking": "Devo cercare la storia del borgo. " * 20, "fine": "length"},
+        "Il borgo fu fondato nel Trecento."])
+    utenti = [x["content"] for x in cli.corpi[-1] if x.get("role") == "user"] if cli.corpi else []
+    verifica("ricerca, il solo ragionamento fermato: il fatto senza «testo a metà», si continua",
+             ris.get("testo") == "Il borgo fu fondato nel Trecento."
+             and USCITA_TRONCATA_PENSIERO in utenti and USCITA_TRONCATA_TESTO_RICERCA not in utenti,
+             str(ris)[:200] + str(utenti))
+    lav, ris, cli, web, esiti = ricerca([{"content": "Il borgo fu fondato nel Trecento.",
+                                          "fine": "stop"}])
+    verifica("contrario: la relazione intera senza consegna resta la relazione",
+             ris.get("testo") == "Il borgo fu fondato nel Trecento." and len(cli.corpi) == 1
+             and not any(r in regole(lav) for r in NUOVE), str(ris)[:200])
+    # Il tetto delle troncate di fila, con il motivo suo
+    a_meta = {"content": "Il borgo fu fondato nel", "fine": "length"}
+    lav, ris, cli, web, esiti = ricerca([dict(a_meta) for _ in range(8)])
+    verifica("ricerca, oltre TRONCATE_MAX troncate di fila: «limite» col motivo suo",
+             ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
+             and f"fermata {TRONCATE_MAX + 1} volte di fila" in ris.get("motivo", "")
+             and len(cli.corpi) == TRONCATE_MAX + 1, str(ris)[:200])
+    # L'ultima relazione tagliata resta nel parziale, detta come tagliata (revisione PR #218)
+    par = ris.get("parziale") or {}
+    verifica("…e l'ultima relazione tagliata nel risultato, detta come tagliata",
+             "relazione_tagliata" not in par
+             and str(par.get("testo", "")).startswith(RELAZIONE_TAGLIATA)
+             and "Il borgo fu fondato nel" in par.get("testo", ""),
+             str(par)[:300])
+    # Le chiamate tutte rotte, due per passata: ognuna ha la sua risposta nella storia mandata al
+    # modello (revisione della PR #218), e nel parziale nessuna relazione inventata
+    rotta = {"tool_calls": [{"name": "biblioteca_cerca", "arguments": {}},
+                            {"name": "web_leggi", "arguments": {}}], "rotti": [0, 1],
+             "fine": "length"}
+    lav, ris, cli, web, esiti = ricerca([dict(rotta) for _ in range(8)])
+    corpo = cli.corpi[-1] if cli.corpi else []
+    verifica("…anche con le chiamate tutte rotte, ognuna con la sua risposta",
+             ris.get("eccezione") == "Limite" and ris.get("tipo") == "troncata"
+             and len(cli.corpi) == TRONCATE_MAX + 1 and _ben_formata_corpo(corpo)
+             and sum(1 for m in corpo if m.get("role") == "tool") == 2 * TRONCATE_MAX
+             and len(esiti) == 2 * (TRONCATE_MAX + 1), str(ris)[:200] + f" esiti {len(esiti)}")
+    verifica("contrario: senza testo tagliato il parziale non ha una relazione",
+             "testo" not in (ris.get("parziale") or {}), str(ris)[:300])
+    # La consegna fermata a max_tokens col testo che si legge (seconda revisione della PR #218:
+    # vLLM la segna rotta anche col JSON leggibile): la relazione fino al taglio non si perde,
+    # e le consegne rifiutate non sono fra le cose fatte
+    tagliata = {"tool_calls": [{"name": "consegna", "arguments": {
+        "testo": "# Il borgo\nIl borgo fu fondato nel Trecento e poi"}}], "rotti": [0],
+        "fine": "length"}
+    lav, ris, cli, web, esiti = ricerca([[cerca]] + [dict(tagliata) for _ in range(8)])
+    par = ris.get("parziale") or {}
+    verifica("ricerca, quattro consegne tagliate: «limite» col testo della consegna nel parziale",
+             ris.get("tipo") == "troncata" and str(par.get("testo", "")).startswith(
+                 RELAZIONE_TAGLIATA) and "fondato nel Trecento e poi" in par.get("testo", "")
+             and len(cli.corpi) == TRONCATE_MAX + 2, str(ris)[:300])
+    verifica("…e nel riassunto le cose fatte, senza le consegne rifiutate",
+             "web_cerca" in par.get("riassunto", "") and "consegna" not in par.get("riassunto", ""),
+             str(par.get("riassunto")))
+    from calliope.agenti.contesto_lavoro import estrattivo
+    d = estrattivo([{"role": "assistant", "content": "", "tool_calls": [
+        {"function": {"name": "consegna", "arguments": {"riassunto": "Fatto."}}}]},
+        {"role": "tool", "tool_name": "consegna", "content": json.dumps({"ok": True})}], None)
+    verifica("contrario: la consegna accettata resta fra le cose fatte", d["fatto"] == ["consegna"],
+             str(d["fatto"]))
+    # La consegna buona e poi una chiamata rotta: è «dopo la consegna», non «troncata» (seconda
+    # revisione della PR #218: l'ordine dei due controlli, come nel codice)
+    lav, ris, cli, web, esiti = ricerca([[cerca], {"tool_calls": [
+        _consegna_r(), {"name": "web_leggi", "arguments": {}}], "rotti": [1], "fine": "length"}])
+    verifica("ricerca, consegna buona e una chiamata rotta dopo: consegnata, «dopo la consegna»",
+             ris.get("esito") == "fatto" and regole(lav).get("agente_dopo_consegna") == 1
+             and "agente_uscita_troncata" not in regole(lav)
+             and not [e for e in esiti if e.get("nome") == "web_leggi"], str(regole(lav)))
+
+    # A voce (seconda revisione della PR #218): la ricerca fermata non ha un file nella cartella
+    # Lavori, e la relazione tagliata si offre
+    from calliope.agenti.ciclo import Lavoro
+    from calliope.agenti.servizio import RICERCA_INCOMPLETA, Lavori
+    from types import SimpleNamespace
+    s = SimpleNamespace(female=True, in_tappa=lambda lv: False)
+    motivo = "ho dovuto fermarlo: " + "la sua uscita si è fermata 4 volte di fila"
+    lv = Lavoro("R1", "ricerca", "la storia del borgo", titolo="La storia del borgo")
+    lv.stato = "errore"
+    lv.risultato = {"esito": "limite", "motivo": motivo, "riassunto": "fatto: web_cerca",
+                    "testo": RELAZIONE_TAGLIATA + "\n\nIl borgo fu fondato nel"}
+    f = Lavori.frase_finale(s, lv)
+    verifica("a voce: la ricerca fermata con la relazione tagliata la offre, senza «cartella»",
+             f.endswith(RICERCA_INCOMPLETA) and "cartella" not in f and "fermata 4 volte" in f, f)
+    lv.risultato = {"esito": "limite", "motivo": motivo, "riassunto": "fatto: web_cerca"}
+    f = Lavori.frase_finale(s, lv)
+    verifica("contrario: senza relazione tagliata niente offerta, e nemmeno la «cartella»",
+             RICERCA_INCOMPLETA not in f and "cartella" not in f, f)
+    lc = Lavoro("C1", "codice", "una funzione", titolo="La somma")
+    lc.stato = "errore"
+    lc.risultato = {"esito": "limite", "motivo": motivo, "file": ["somma.py"]}
+    f = Lavori.frase_finale(s, lc)
+    verifica("contrario: il codice fermato ha i file nella cartella Lavori, come prima",
+             "cartella Lavori" in f and RICERCA_INCOMPLETA not in f, f)
+    # Il giro a vuoto azzera le troncate di fila (revisione della PR #218): qui il conto è davvero
+    # di fila. Nel codice dal 21/10 (#191, R6 della sezione 7) non le azzera più
+    vuoto = {"giro_a_vuoto": "penso penso"}
+    lav, ris, cli, web, esiti = ricerca([dict(a_meta) for _ in range(TRONCATE_MAX)]
+                                        + [vuoto, dict(a_meta), [_consegna_r()]])
+    verifica("ricerca, tre troncate, un giro a vuoto, una troncata: non è la quarta di fila",
+             ris.get("esito") == "fatto" and ris.get("testo") == "Il borgo è antico.",
+             str(ris)[:200])
+    # Chiamate rotte e buone nella stessa passata: non «di fila», come M nel codice
+    misto = {"tool_calls": [{"name": "biblioteca_cerca", "arguments": {"domanda": "borgo"}},
+                            {"name": "web_leggi", "arguments": {}}], "rotti": [1],
+             "fine": "length"}
+    lav, ris, cli, web, esiti = ricerca([dict(misto) for _ in range(TRONCATE_MAX + 3)]
+                                        + [[_consegna_r()]])
+    verifica("ricerca, una chiamata buona e una rotta per passata: il lavoro avanza, «fatto»",
+             ris.get("esito") == "fatto" and len(cli.corpi) == TRONCATE_MAX + 4
+             and sum(1 for e in esiti if e.get("nome") == "biblioteca_cerca")
+             == TRONCATE_MAX + 3 and _ben_formata_corpo(cli.corpi[-1])
+             and regole(lav).get("agente_uscita_troncata") == TRONCATE_MAX + 3,
+             str(ris)[:200] + str(regole(lav)))
+
+
 def main():
     tmp = Path(tempfile.mkdtemp(prefix="calliope-onesti-"))
     os.environ.setdefault("CALLIOPE_CONFIG_LOCALE", str(tmp / "nessuno.yaml"))
@@ -893,6 +1158,7 @@ def main():
         prova_modifica(tmp / "modifica")
         prova_sconosciuto(tmp / "sconosciuto")
         prova_revisioni(tmp / "revisioni")
+        prova_ricerca()
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
     print("\nTutto bene." if not errori else f"\n{errori} errori.")
