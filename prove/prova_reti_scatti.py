@@ -13,7 +13,8 @@ contano, ultima volta, esito dopo lo scatto (bene, ripiego, giri esauriti, ripet
 interrotta dalla stessa persona entro 90 s, con i contrari: un'altra persona, troppo tardi,
 senza parole), tool riuscito, aiuto usato, MAI SCATTATA con e senza pochi turni, spenta; le
 reti spente adesso dal profilo e nel locale; TurnLog che scrive `reti_spente` anche vuota;
-la sezione di `calliope stato --reti` in testo e JSON. ~1 s.
+la sezione di `calliope stato --reti` in testo e JSON; le azioni dichiarate o promesse senza tool
+e quante arrivano alla voce (22/10, #170, calliope/azioni_dette.py, `calliope stato --turni`). ~1 s.
 """
 
 import contextlib
@@ -218,6 +219,68 @@ try:
     verifica("l'aiuto di calliope stato nomina --reti", "--reti" in (stato.__doc__ or ""))
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
+
+# ── 5. le azioni dichiarate o promesse e quante arrivano alla voce (22/10, issue #170,
+# calliope/azioni_dette.py, `calliope stato --turni`) ──
+from calliope import azioni_dette as A  # noqa: E402
+CASA = [{"nome": "casa_comando", "ok": True}]
+azioni = [
+    # dal 22/10, con le regole: detta (seguito in ombra), trattenuta e poi il tool
+    t("22", "10:00:00", ["spinta_dichiarata", "dichiarata_detta", "azione_non_fatta_ombra"],
+      testo="Sviluppa un tris.", tool=[{"nome": "ora_attuale", "ok": True}],
+      risposta="Che bella idea! Allora mi metto subito al lavoro. Sono le dieci."),
+    t("22", "10:01:00", ["spinta_dichiarata", "dichiarata_trattenuta"], tool=CASA,
+      risposta="Ho acceso la luce in taverna."),
+    # attivo: trattenuta dopo la prima frase, poi la frase onesta
+    t("22", "10:02:00", ["spinta_dichiarata", "dichiarata_trattenuta", "azione_non_fatta",
+                         "azione_non_fatta_onesta"],
+      risposta="Che bella idea! Scusa, mi sono sbagliata: non l'ho ancora fatto."),
+    # registri di prima: detta (senza tool riuscito), incerta (tool riuscito), trattenuta,
+    # senza testo
+    t("18", "15:00:00", ["spinta_dichiarata"],
+      risposta="Che bella idea! Allora mi metto subito al lavoro, ti faccio sapere."),
+    t("18", "15:01:00", ["spinta_dichiarata"], tool=CASA, risposta="Ho acceso la luce."),
+    t("18", "15:02:00", ["spinta_dichiarata"], tool=CASA, risposta="Ecco, è accesa."),
+    t("18", "15:03:00", ["spinta_dichiarata"], risposta=None),
+    # promessa (sempre detta) e promessa senza testo
+    t("18", "15:04:00", ["spinta_promessa"], risposta="Ora controllo il file.", profilo=P4),
+    t("18", "15:05:00", ["spinta_promessa"], risposta=None, profilo=P4),
+    # senza nessuna rete scattata: il caso vero del nome e una promessa col 26B
+    t("18", "15:06:00", [], testo="Per adesso sono Ada.",
+      risposta="Segno fatto, allora: d'ora in poi ti chiamerò così."),
+    t("18", "15:07:00", [], risposta="Va bene, adesso controllo il calendario."),
+    # contrari: una risposta normale, una domanda di consenso, un'altra uscita, con un tool
+    t("18", "15:08:00", [], risposta="Sono le dieci e un quarto."),
+    t("18", "15:09:00", [], risposta="Si chiama Compiti. Lo apro?"),
+    t("18", "15:10:00", ["spinta_dichiarata"], esito="interrotto"),
+    t("18", "15:11:00", [], tool=CASA, risposta="Ho acceso la luce."),
+]
+r = A.riassunto(azioni)
+verifica("azioni: risposte contate (non le altre uscite)", r["risposte"] == 14, r["risposte"])
+verifica("azioni: dichiarate dette, trattenute, incerte, senza testo",
+         r["dichiarate"] == {"scatti": 7, "dette": 2, "trattenute": 3, "incerte": 1,
+                             "senza_testo": 1}, r["dichiarate"])
+verifica("azioni: promesse tutte alla voce", r["promesse"] == {"scatti": 2, "dette": 1,
+                                                               "senza_testo": 1}, r["promesse"])
+verifica("azioni: senza scatto (il nome del 18/10, la promessa col 26B), non le contrarie",
+         r["senza_scatto"] == {"dichiarate": 1, "promesse": 1}, r["senza_scatto"])
+verifica("azioni: il seguito in ombra e in attivo",
+         r["seguito"] == {"ombra": 1, "attivo": 1, "onesta": 1, "tool_dopo": 0}, r["seguito"])
+frasi_es = [e["frase"] for e in r["esempi"]]
+verifica("azioni: gli esempi sono le frasi, non le risposte intere",
+         "Allora mi metto subito al lavoro." in frasi_es
+         and "Segno fatto, allora: d'ora in poi ti chiamerò così." in frasi_es
+         and len(r["esempi"]) <= A.ESEMPI, frasi_es)
+tx = A.testo(r)
+verifica("azioni: la sezione di calliope stato --turni",
+         "spinta_dichiarata 7 (alla voce 2, trattenute 3, incerte 1, senza testo 1)" in tx
+         and "spinta_promessa 2" in tx and "avrebbe trattenuto 1" in tx
+         and "ultime frasi da rileggere" in tx, tx)
+verifica("azioni: senza risposte", "nessuna risposta" in A.testo(A.riassunto([])))
+src = (RADICE / "calliope" / "stato.py").read_text(encoding="utf-8")
+verifica("azioni: calliope stato --turni, testo e JSON",
+         "azioni_dette.testo(azioni_r)" in src and '"azioni_dette": azioni_r' in src
+         and "azioni_dette.py" in (stato.__doc__ or ""))
 
 print()
 print("Tutto bene." if not errori else f"{errori} errori.")

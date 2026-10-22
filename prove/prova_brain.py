@@ -218,7 +218,8 @@ def prova_dichiarata():
     # Senza la frase trattenuta davanti: con lei il modello la ripeteva (misura del 01/10)
     verifica("dichiarata: la spinta segue la domanda, la frase non si mostra",
              [m["role"] for m in b.backend.visti[1][-2:]], ["user", "system"])
-    verifica("dichiarata: regola nel registro", b.rules_fired(), ["spinta_dichiarata"])
+    verifica("dichiarata: regola nel registro (trattenuta, 22/10)", b.rules_fired(),
+             ["spinta_dichiarata", "dichiarata_trattenuta"])
     # Già detta (non all'inizio): spinta, e se il tool arriva la frase esce dalla storia
     b = brain_finto([
         [("text", "Certo! Te lo dico subito, un momento solo. Ho acceso le luci in taverna.")],
@@ -314,7 +315,7 @@ def prova_azione_non_fatta():
     verifica("attivo: regole nel registro",
              [r for r in b.rules_fired() if r.startswith(("azione_non_fatta", "spinta_dich",
                                                           "dichiarata_"))],
-             ["spinta_dichiarata", "azione_non_fatta"])
+             ["spinta_dichiarata", "dichiarata_trattenuta", "azione_non_fatta"])
     verifica("attivo: nella storia la prima frase, non la dichiarazione",
              (any(prima in (m.get("content") or "") for m in b.history),
               any("mi metto" in (m.get("content") or "") for m in b.history)), (True, False))
@@ -502,12 +503,13 @@ def prova_ricordo():
     # uguale all'azione vecchia (come «TAVERNA» → «Ho acceso le luci in taverna», 01/10)
     b = brain_finto([[("text", frase)], [("text", "Non ci sono riuscita.")]])
     "".join(b.stream_reply("Accendi taverna.", "amministra"))
-    verifica("stessa frase senza azioni prima: spinta", b.rules_fired(), ["spinta_dichiarata"])
+    verifica("stessa frase senza azioni prima: spinta", b.rules_fired(),
+             ["spinta_dichiarata", "dichiarata_trattenuta"])
     b = brain_finto([[("text", "Ho spento Taverna.")], [("text", "Non ci sono riuscita.")]])
     b.history = _storia_taverna()
     "".join(b.stream_reply("Spegni Taverna.", "amministra"))
     verifica("dichiarazione nuda uguale all'azione vecchia: spinta", b.rules_fired(),
-             ["spinta_dichiarata"])
+             ["spinta_dichiarata", "dichiarata_trattenuta"])
 
 
 def prova_riferimento():

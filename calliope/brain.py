@@ -5390,6 +5390,8 @@ class Brain:
                 # nella storia, il modello la rivede solo con la spinta e decide
                 nudged = True
                 self._rule("spinta_dichiarata")
+                # Non detta (22/10, issue #170): la misura la distingue da `dichiarata_detta`
+                self._rule("dichiarata_trattenuta")
                 if self._held_seguito:
                     # Dopo la prima frase (`voce_azione_non_fatta: attivo`): la prima parte è
                     # detta, il resto no
