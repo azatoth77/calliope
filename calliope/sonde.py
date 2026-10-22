@@ -588,11 +588,15 @@ def _esito_testo(r: dict) -> str:
     return str(r.get("errore") or r.get("stato") or "")[:200]
 
 
+# Il motivo detto all'agente (e sulla scheda) per un esito vuoto; regola ricollaudo_esito_vuoto
+MOTIVO_VUOTO = "un «non trovato», ma il caso della persona chiedeva un dato"
+
+
 def va(caso: dict, r: dict) -> tuple[bool, str]:
     """(il caso adesso va?, perché no). Con la regola del collaudo (fermata con un errore, un
-    campo d'errore, nessun risultato) e in più: lo stesso risultato che la persona aveva già
-    giudicato sbagliato, una richiesta rifiutata dalla porta o con l'avviso della doppia
-    codifica."""
+    campo d'errore, nessun risultato) e in più: un esito vuoto quando il caso chiedeva un dato
+    (22/10, #223), lo stesso risultato che la persona aveva già giudicato sbagliato, una
+    richiesta rifiutata dalla porta o con l'avviso della doppia codifica."""
     if not r.get("ok"):
         return False, f"si è fermata: {r.get('errore') or r.get('stato')}"
     ris = r.get("risultato")
@@ -606,6 +610,18 @@ def va(caso: dict, r: dict) -> tuple[bool, str]:
             return False, "una richiesta rifiutata dalla porta"
         if riga.get("avviso"):
             return False, "una richiesta con l'avviso della porta"
+    # Un esito vuoto non è una risposta (22/10, issue #223, n. 5 del § 3.1 della ricerca del
+    # 19/10): il caso della persona («fiera di Borgo Alto») prima si fermava con un errore, la
+    # versione nuova dice «Non ho trovato…» e il ricollaudo passava senza che avesse risposto.
+    # Lo stesso tipo del collaudo (tools/sviluppo.tipo_collaudo: «vuoto» per un «non trovato»
+    # senza dati accanto, risultati vuoti, «trovato»: false). Vale quando il caso chiedeva un
+    # dato: prima un errore o un «non trovato»; con una risposta giudicata sbagliata dalla
+    # persona il «non trovato» può essere proprio la correzione (contrario nella prova)
+    from .sviluppo import tipo_collaudo as tipo_salvato
+    from .tools.sviluppo import tipo_collaudo
+    if tipo_salvato(caso) != "risposta" and tipo_collaudo(
+            {"risultati": ris}, ris, caso.get("argomenti") or None) == "vuoto":
+        return False, MOTIVO_VUOTO
     nuovo = _esito_testo(r)
     if caso.get("giudizio") or caso.get("ok"):
         vecchio = str(caso.get("esito") or "")
@@ -707,6 +723,8 @@ def ricollaudo(cfg, est, svs, sv, lav, sandbox, log=print, resta_tempo=None) -> 
                     return None
                 break
             ok, motivo = va(c, r)
+            if motivo == MOTIVO_VUOTO:
+                nota(lav, "ricollaudo_esito_vuoto", log, detto(c))
             esiti.append({"caso": c, "r": r, "va": ok, "motivo": motivo})
     except OSError as e:
         nota(lav, "ricollaudo_saltato", log, f"file: {e}"[:80])
