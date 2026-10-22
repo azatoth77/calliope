@@ -4961,9 +4961,9 @@ contraddicono o rimproverano, la radice delle passate di scuse senza modifiche.
   uno nuovo. Le altre sono lasciate, contate in `segnali["spinte_lasciate"]` e non dette. L'avviso
   di chiusura e la spinta a consegnare si segnano dette solo quando escono, quindi tornano alla
   passata dopo. Prima l'avviso finiva in coda alla spinta delle riscritture, nello stesso
-  messaggio. L'ordine, dall'alto: la troncata (la chiamata non è partita: se non lo sa, l'agente
-  crede di aver scritto il file), l'avviso di chiusura (una volta per lavoro, vicino al tetto),
-  il giro a vuoto, le riscritture, il ragionamento senza strumenti, le passate senza novità, la
+  messaggio. L'ordine, dall'alto: l'avviso di chiusura (una volta per lavoro, vicino al tetto;
+  *[storico: sotto la troncata fino alla prima revisione, sotto]*), la troncata (la chiamata non
+  è partita: se non lo sa, l'agente crede di aver scritto il file), il giro a vuoto, le riscritture, il ragionamento senza strumenti, le passate senza novità, la
   prosa con lo stato consegnabile, la prosa, la spinta a consegnare. Le superate non si tolgono
   dalla storia, per la cache dei prefissi.
 - **Le regole**: `agente_avviso_fine`, `agente_spinta_strumenti`,
@@ -4976,7 +4976,7 @@ contraddicono o rimproverano, la radice delle passate di scuse senza modifiche.
   «ragionamento». Prima chiudevano lo sviluppo «limite». Con lo stato consegnabile e un controllo
   indipendente verde si consegna alla tappa, come per i tetti (#192, `TAPPA_CONSEGNABILE`). A
   voce: «l'agente ripeteva lo stesso ragionamento senza fare un passo avanti» e «l'agente ha
-  ragionato a lungo senza usare gli strumenti» (`PERCHE_TAPPA`). Il segnale «ha ripetuto lo stesso
+  ragionato a lungo senza scrivere né provare il codice» (`PERCHE_TAPPA`; *[storico: «senza usare gli strumenti» fino alla prima revisione]*). Il segnale «ha ripetuto lo stesso
   ragionamento» non si ripete dopo il perché della tappa «vuoto» (`segnali_detti`). Fuori da uno
   sviluppo resta il «limite» di prima.
 - **L'attesa della voce** (n. 26): i secondi dell'arbitro e della passata fermata per la voce
@@ -5032,3 +5032,42 @@ e `_2`, `prova_contesto_agenti`, `prova_sviluppo_v2`, `prova_revisione_onesta` e
 riferimento; quante volte una spinta è lasciata (`spinte_lasciate`) e quante tappe «vuoto» e
 «ragionamento»; se la sesta passata di fila senza novità è la soglia giusta. Cambiare i testi
 cambia il comportamento del modello: va visto sul banco.
+
+**Dopo la prima revisione della PR #233 (22/10).**
+- **La scala ordina solo le spinte (i consigli), mai i fatti.** È il principio, scritto anche in
+  testa a `spinte.py`. Una spinta ha un `fatto` e i suoi `passi`. Della spinta lasciata si
+  lasciano solo i passi: il fatto arriva lo stesso, prima della spinta che esce. Così, con
+  l'avviso di chiusura, arrivano anche «la tua uscita è stata troncata» e «l'ultimo errore è X in
+  f:r». I fatti che non sono spinte (i fatti del revisore «ora» di #190) vanno alla scala con
+  `Scala.fatto` e arrivano sempre, anche senza una spinta. Prima erano attaccati alla spinta
+  della prosa: lasciata quella per l'avviso, si perdevano, ed erano già tolti dai segnali (P1).
+  Le spinte «una volta per lavoro» lasciate non ripetono il fatto, perché tornano intere.
+- **L'avviso di chiusura è in cima alla scala** (P5). Prima, sotto la troncata, due troncate
+  nelle ultime passate non lo facevano mai uscire. Una spinta «una volta» lasciata
+  `LASCIATE_MAX` = 2 volte passa davanti alle altre. Il log dell'avviso si scrive una volta per
+  giro.
+- **`lettura_nuova` vuol dire «mai letto in questo lavoro»** (P2): conta l'impronta del
+  contenuto e i pezzi letti, in `segnali["letture_viste"]`. Prima bastava un contenuto diverso
+  dall'ultima lettura, e l'oscillazione A, B, A, B con le riletture faceva ripartire la fila a
+  ogni passata: il gradino non arrivava mai.
+- **I passi sono quelli del lavoro** (P3, P4). Nella ricerca il giro a vuoto propone gli
+  strumenti di ricerca offerti e la relazione, mai scrivi_file né esegui_test. In uno sviluppo
+  la consegna fra i passi ha sempre la stessa condizione: «consegna con cosa funziona e cosa
+  manca, se il lavoro è finito». L'avviso della tappa esclude la consegna senza condizione, e
+  `incompatibili` lo vede. La prova controlla le coppie per contesto, perché fuori da uno
+  sviluppo l'avviso della tappa non c'è.
+- **La passata troncata** toglie l'attesa della voce una volta sola (P7).
+- **A voce, senza gergo** (P8): «l'agente ha ragionato a lungo senza scrivere né provare il
+  codice».
+- **Prove nuove in `prova_scala_spinte`**:
+  - i fatti del revisore contro l'avviso, e il fatto senza spinta;
+  - i fatti delle lasciate;
+  - la promozione della spinta a consegnare e il log dell'avviso una volta;
+  - nel ciclo, la spinta a consegnare lasciata dall'avviso che torna (M11) e il giro a vuoto
+    della ricerca;
+  - la tappa «vuoto» consegnata d'ufficio con gli esempi verdi, e il contrario con gli esempi
+    rossi (M8);
+  - la passata fermata per la voce e rifatta (M4), la troncata con la voce;
+  - tredici passate senza novità con una spinta sola (M9) e l'oscillazione con le riletture (P2).
+- **Mutazioni**: 23, e tutte fanno cadere la prova. Le dodici di prima, poi M4, M8, M9, M11 e
+  una per ognuno dei punti P1, P2, P3, P4, P5 (tre), P7 e P8.
