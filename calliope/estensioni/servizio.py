@@ -921,6 +921,14 @@ class Estensioni:
         if len(attive) >= self.max_attive:
             return _final(f"Ho già {len(attive)} estensioni attive, il massimo: disattivane "
                           f"una prima.", ok=False, fatto=NIENTE)
+        # Dentro uno sviluppo dell'estensione non concluso (o chiuso con questa versione)
+        # l'approvazione passa dalla porta delle prove (22/10, #223, revisioni della PR #232:
+        # tools/sviluppo.porta_approvazione): dopo permesso, codice e test, subito prima della
+        # frase di sfida e della strada senza sfida di un gioco puro
+        from ..tools.sviluppo import porta_approvazione
+        porta = porta_approvazione(ctx, getattr(self, "sviluppi", None), nome, n)
+        if porta is not None:
+            return porta
         if not da_familiare or not self._voce_sicura(ctx):
             prima = self.archivio.manifesto(nome) if voce.get("attiva") else None
             sfida = self._sfida(ctx, {"azione": "approva", "nome": nome},
