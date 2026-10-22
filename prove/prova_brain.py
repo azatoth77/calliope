@@ -357,18 +357,49 @@ def prova_azione_non_fatta():
     detto = "".join(b.stream_reply("Accendi la luce in taverna", "amministra"))
     verifica("contrario: trattenuta la prima frase e poi vuota, il ripiego di prima",
              detto, "Non ci sono riuscita: puoi ripetere la richiesta?")
-    # La frase d'attesa (P5): il silenzio dopo la frase detta oltre `tool_correzione_avviso_s`
-    from calliope.tools import dialogo as _dialogo
-    for soglia, attesa in ((0.0, True), (60.0, False)):
+    # La frase d'attesa (P5, Q8): neutra, solo quando il silenzio dalla fine stimata dell'audio
+    # già detto supera `tool_correzione_avviso_s`; mentre Calliope parla ancora, niente
+    from calliope.brain import ATTESA_NEUTRA
+    for silenzio, soglia, attesa in ((5.0, 2.0, True), (1.0, 2.0, False), (-3.0, 0.0, False)):
         b = brain_finto([risposta, chiamata, [("text", "Sono le dieci.")]])
         b.cfg.voce_azione_non_fatta = "attivo"
         b.cfg.tool_correzione_avviso_s = soglia
+        b._silenzio_dopo_voce = lambda s=silenzio: s
         annunci = []
         b.on_tool_start = annunci.append
         "".join(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
-        verifica(f"attivo: frase d'attesa {'sì' if attesa else 'no'} con la soglia a {soglia} s",
-                 (bool(annunci) and annunci[0] in _dialogo.FRASI_CORREZIONE,
+        verifica(f"attivo: frase d'attesa {'sì' if attesa else 'no'} con {silenzio} s di silenzio "
+                 f"e la soglia a {soglia} s",
+                 (bool(annunci) and annunci[0] in ATTESA_NEUTRA,
                   "azione_non_fatta_attesa" in b.rules_fired()), (attesa, attesa))
+    verifica("la frase d'attesa non parla di errori",
+             [f for f in ATTESA_NEUTRA if re.search(r"riprov|sistem|errore|scus", f, re.I)], [])
+    import time as _time
+    b = brain_finto([])
+    verifica("silenzio senza voce detta: 0", b._silenzio_dopo_voce(), 0.0)
+    b._voce_t0, b._voce_car = _time.perf_counter(), 150      # 10 s di voce appena cominciata
+    verifica("mentre parla ancora il silenzio è negativo", b._silenzio_dopo_voce() < -9, True)
+    b._voce_t0, b._voce_car = _time.perf_counter() - 10, 30   # 2 s di voce, 10 s fa
+    verifica("dopo la fine stimata dell'audio, il silenzio vero",
+             7.5 < b._silenzio_dopo_voce() < 8.5, True)
+    # Q7: la prima frase trattenuta, poi la seconda passata con una frase detta e la dichiarazione
+    # nel seguito: la frase onesta, non il ripiego
+    b = brain_finto([[("text", "Ho acceso la luce in taverna.")],
+                     [("text", "Certo, Ada, ci provo subito volentieri. "),
+                      ("text", "Ho acceso la luce in taverna.")]])
+    b.cfg.voce_azione_non_fatta = "attivo"
+    detto = "".join(b.stream_reply("Accendi la luce in taverna.", "amministra"))
+    verifica("Q7: trattenuta la prima frase e poi il seguito: la frase onesta",
+             (detto.startswith("Certo, Ada"), detto.endswith(onesta),
+              "Non ci sono riuscita" in detto), (True, True, False))
+    # Q7: una nota dichiarata nel seguito e la seconda passata vuota: la frase della nota
+    b = brain_finto([[("text", "Va bene, ci penso io con calma. "),
+                      ("text", "Ho salvato che ti chiami Leo.")], [("text", "")]])
+    b.cfg.voce_azione_non_fatta = "attivo"
+    detto = "".join(b.stream_reply("Mi chiamo Leo.", "amministra"))
+    nota = frasi.CATALOGO["onesta.non_salvato"].base
+    verifica("Q7: una nota nel seguito e la passata vuota: onesta.non_salvato",
+             (detto.startswith("Va bene"), detto.endswith(nota)), (True, True))
 
     # «Segno fatto» (il nome, 18/10) dopo una prima frase, in attivo: non si dice
     b = brain_finto([[("text", "Piacere di conoscerti, Ada, è un bel nome davvero. Segno "
@@ -467,11 +498,14 @@ def prova_limiti_estensioni():
         def promemoria_giorno(self, chi):
             return None
 
-    def con_sviluppo(b, sv=None):
+    def con_sviluppo(b, sv=None, minore=False):
+        # I permessi veri di sviluppo_apri (Q5): levels=FAMILY, cioè familiare e amministra
+        from calliope.testi import FAMILY
         vero_get, vero_allowed = b.tools.get, b.tools.allowed
         b.tools.get = lambda n: object() if n == "sviluppo_apri" else vero_get(n)
-        b.tools.allowed = (lambda n, lv: lv == "amministra" if n == "sviluppo_apri"
+        b.tools.allowed = (lambda n, lv: lv in FAMILY if n == "sviluppo_apri"
                            else vero_allowed(n, lv))
+        b.parla_minore = lambda: minore
         if sv is not None:
             b.tool_ctx.lavori = type("L", (), {"sviluppi": SviluppiFinti(sv)})()
             b.tool_ctx.speaker_ctx.current_speaker = "Ada"
@@ -489,8 +523,8 @@ def prova_limiti_estensioni():
     verifica("limiti: login e lavori a orario, dagli impossibili brevi, con «invece»",
              bool(r) and "login" in r[0] and "lavori a orario" in r[0] and "oggi" in r[0]
              and "invece" in r[0] and "un'estensione" in r[0], True)
-    verifica("limiti: corta (≤ 80 token stimati)",
-             bool(r) and len(r[0]) / CHARS_PER_TOKEN <= 80, True)
+    verifica("limiti: corta (≤ 110 token stimati, con ciò che invece c'è)",
+             bool(r) and len(r[0]) / CHARS_PER_TOKEN <= 110, True)
     verifica("limiti: non nel prompt di sistema (il prefisso resta in cache, #95)",
              "lavori a orario" in b.backend.visti[-1][0]["content"], False)
     verifica("limiti: regola nel registro", "estensioni_limiti_turno" in b.rules_fired(), True)
@@ -515,6 +549,23 @@ def prova_limiti_estensioni():
         contratto.IMPOSSIBILI.update(salvati)
     verifica("ogni impossibile ha la sua forma breve",
              sorted(set(contratto.IMPOSSIBILI) - set(contratto.IMPOSSIBILI_BREVE)), [])
+    # Q1: ciò che manca non nomina ciò che la porta ha (casa, liste, agenda, timer, schermo)
+    for gioco in (False, True):
+        mancano = " ".join(contratto.impossibili_brevi(gioco)).lower()
+        verifica(f"Q1: le voci brevi {'del gioco ' if gioco else ''}non nominano la porta",
+                 [x for x in ("casa", "lista", "liste", "agenda", "timer", "schermo", "tool",
+                              "dispositivi") if x in mancano], [])
+    verifica("Q1: ciò che invece c'è viene dalla porta (ogni area di PORTA)",
+             all(contratto.AREE_BREVI.get(a, a) in contratto.porta_brevi()
+                 for m in contratto.PORTA for a in contratto._aree(contratto.PORTA[m][1])), True)
+    b = con_sviluppo(brain_finto([[("text", "Si può fare.")]]))
+    "".join(b.stream_reply("Fammi un'estensione che spegne le luci quando dico buonanotte.",
+                           "amministra"))
+    r = righe(b)
+    manca = r[0].split("mancano", 1)[1].split(";", 1)[0] if r else ""
+    verifica("Q1: per le luci della buonanotte la riga non dice che la casa manca",
+             (bool(r), "casa" in manca or "dispositivi" in manca,
+              bool(r) and "casa (Home Assistant)" in r[0].split(";", 1)[1]), (True, False, True))
     # Un gioco: le voci del gioco, senza microfono e schermo (i comandi a voce li dichiara lui)
     b = con_sviluppo(brain_finto([[("text", "Bello!")]]))
     "".join(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
@@ -525,7 +576,7 @@ def prova_limiti_estensioni():
     # Uno sviluppo aperto: estensione e gioco sì, un programma no (anche con la parola)
     b = con_sviluppo(brain_finto([[("text", "Va bene.")]]), SvFinto(gioco=True))
     "".join(b.stream_reply("Aggiungi il punteggio.", "amministra"))
-    verifica("limiti: con lo sviluppo aperto di un gioco",
+    verifica("limiti: con lo sviluppo aperto di un gioco (e senza la schermata del PC)",
              [x for x in righe(b) if "a un gioco" in x] != [], True)
     b = con_sviluppo(brain_finto([[("text", "Va bene.")]]), SvFinto(tipo="programma"))
     "".join(b.stream_reply("Aggiungi la lettura dei file.", "amministra"))
@@ -536,19 +587,52 @@ def prova_limiti_estensioni():
     # Falsi ingressi: la parola senza l'intenzione di farne uno
     for frase in ("Mi spieghi lo sviluppo sostenibile?", "Giochi a calcio?",
                   "Come funziona il gioco del lotto?", "Mi metto in gioco.",
-                  "Facciamo un gioco?", "Quali estensioni ci sono?"):
+                  "Facciamo un gioco?", "Quali estensioni ci sono?",
+                  # Q4: un altro significato di «estensione», un elenco, il gioco raccontato
+                  "Creami un file con estensione docx.",
+                  "Scrivi il documento e salvalo con l'estensione pdf.",
+                  "Mi serve l'estensione della garanzia del frigorifero.",
+                  "Scrivi una lettera per chiedere l'estensione del congedo.",
+                  "Prepara la domanda di estensione del contratto d'affitto.",
+                  "Voglio sapere quante estensioni ci sono.", "Fai vedere le estensioni.",
+                  "Vorrei capire meglio cosa sono le estensioni.",
+                  "Scrivimi le regole del gioco dell'oca.",
+                  "Inventa una storia sul gioco del nascondino.",
+                  "Prepara la lista dei giochi da portare in vacanza.",
+                  "Quali programmi e giochi ci sono sul PC?",
+                  "Il programma di stasera è un gioco a quiz.",
+                  "Prepara una estensione del contratto d'affitto per Bruno.",
+                  "Creami una estensione docx del file.",
+                  "Inventami una storia sul gioco del nascondino.",
+                  "Preparami la lista dei giochi da portare in vacanza."):
         b = con_sviluppo(brain_finto([[("text", "Certo.")]]))
         "".join(b.stream_reply(frase, "amministra"))
         verifica(f"contrario: «{frase}» niente riga", righe(b), [])
     verifica("le intenzioni riconosciute",
              [bool(INTENZIONE_EST.search(x) or INTENZIONE_GIOCO.search(x)) for x in (
-                 "Vorrei un'estensione per il meteo.", "Crea un giochino per Ada.",
+                 "Vorrei creare un'estensione per il meteo.", "Crea un giochino per Ada.",
                  "Sviluppo sostenibile e giochi olimpici.")], [True, True, False])
-    # Il livello: chi non può aprire uno sviluppo non la riceve
-    for lv in ("familiare", "ospite"):
-        b = con_sviluppo(brain_finto([[("text", "Si può fare.")]]))
-        "".join(b.stream_reply("Mi fai un'estensione per la posta?", lv))
-        verifica(f"contrario: livello {lv} senza sviluppo_apri, niente riga", righe(b), [])
+    # Il livello (Q5, i permessi veri): un'estensione solo chi amministra; un gioco anche un
+    # familiare adulto; mai un ospite né un minore
+    for lv, frase, minore, attesa in (
+            ("familiare", "Mi fai un'estensione per la posta?", False, False),
+            ("ospite", "Mi fai un'estensione per la posta?", False, False),
+            ("familiare", "Sviluppa un gioco del tris.", False, True),
+            ("familiare", "Sviluppa un gioco del tris.", True, False),
+            ("ospite", "Sviluppa un gioco del tris.", False, False)):
+        b = con_sviluppo(brain_finto([[("text", "Si può fare.")]]), minore=minore)
+        "".join(b.stream_reply(frase, lv))
+        verifica(f"livello {lv}{' minore' if minore else ''}, «{frase[:25]}»: "
+                 f"{'la riga' if attesa else 'niente riga'}", bool(righe(b)), attesa)
+    # Q6: il turno dopo è della stessa conversazione, non del Brain condiviso
+    from calliope.conversazione import Conversazione
+    b = con_sviluppo(brain_finto([[("text", "Si può fare.")]] * 2))
+    "".join(b.stream_reply("Sviluppa un'estensione per la posta.", "amministra"))
+    altra = Conversazione()
+    altra.turn_number = b.conv.turn_number           # un'altra persona allo stesso punto
+    b.conv = altra
+    "".join(b.stream_reply("E il meteo di domani?", "amministra"))
+    verifica("Q6: un'altra conversazione al turno dopo non riceve la riga", righe(b), [])
     # Il tetto dei dati del turno (#95): oltre, la riga non entra
     b = con_sviluppo(brain_finto([[("text", "Si può fare.")]]))
     b.cfg.dati_turno_tetto_token = 60

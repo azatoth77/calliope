@@ -520,7 +520,21 @@ verifica("senza ricordi la stessa frase è una dichiarazione",
 from calliope.brain import dichiara_azione  # noqa: E402
 for testo, atteso in [("Segno fatto, allora: d'ora in poi ti chiamerò così.", True),
                       ("Allora mi metto al lavoro… ti faccio sapere.", True),
-                      ("Segno.", True), ("Annoto tutto.", True), ("Memorizzo.", True),
+                      ("Annoto tutto.", True), ("Memorizzo subito.", True),
+                      # Q2 (seconda revisione della PR #220): «ti avviso quando» non è un
+                      # condizionale, è la promessa del caso di #170
+                      ("Certo! Mi metto al lavoro e ti avviso quando è pronto.", True),
+                      # …e i contrari: l'offerta dopo, i giochi a voce, gli elenchi, il verbo
+                      # da solo
+                      ("Mi metto al lavoro, ma prima dimmi le regole.", False),
+                      ("Mi metto al lavoro, a meno che tu non preferisca aspettare.", False),
+                      ("Mi metto al lavoro quando mi dici di sì.", False),
+                      ("Quattro, sette, due. Memorizzo! Ora tocca a te.", False),
+                      ("Risposta esatta! Segno, un punto per te.", False),
+                      ("Bravissima! Segno! Siamo tre a due.", False),
+                      ("Memorizzo, ripeto, ripasso: è il metodo migliore per studiare.", False),
+                      ("Segno, disegno e colore sono le basi del fumetto.", False),
+                      ("Segno.", False), ("Memorizzo.", False),
                       ("Va bene, mi metto all'opera.", True),
                       ("Certo! Allora mi metto al lavoro.", True),
                       ("Certo, volentieri! Dimmi le regole e mi metto al lavoro.", False),
@@ -560,6 +574,14 @@ for testo, atteso in [("Chiudo con una curiosità: i delfini dormono con mezzo c
                       ("Allora mi metto subito al lavoro, ti faccio sapere.", True),
                       ("Segno fatto, allora.", True)]:
     verifica(f"dopo la prima frase «{testo[:45]}»",
+             dichiara_azione(testo, dopo=True, nuove=True), atteso)
+# Q2: un dialogo fra virgolette (le fiabe) non è Calliope; un titolo fra virgolette non
+# toglie la dichiarazione
+for testo, atteso in [("«Mi metto subito al lavoro!» disse Geppetto, e prese il legno.", False),
+                      ("«Segno fatto!» gridò il capitano.", False),
+                      ("Ho aperto il documento «Disdetta Palestra.docx».", True),
+                      ("Ho detto «ciao» e ho acceso la luce.", True)]:
+    verifica(f"dopo la prima frase, le virgolette «{testo[:40]}»",
              dichiara_azione(testo, dopo=True, nuove=True), atteso)
 verifica("in testa alla risposta «Chiudo con una curiosità» resta com'era (rete di prima)",
          is_claim("Chiudo con una curiosità: i delfini dormono con mezzo cervello."),
@@ -633,6 +655,40 @@ for pezzi, azioni in ((GIOCO, ()), (NORMALE, ()), (RICORDO, fatta), (CURIOSITA, 
     usciti, ombra = seguito("ombra", pezzi, azioni)
     verifica(f"ombra uguale all'attivo, e la voce invariata: «{pezzi[0][:30]}…»",
              (ombra.ombra, "".join(usciti)), (attivo.held.strip(), "".join(pezzi)))
+# Q3 (seconda revisione della PR #220): un banco a secco di fiabe, giochi a voce e quiz, i turni
+# dei bambini dove la rilettura dell'ombra non vede le frasi (P6). In attivo nessuna si trattiene
+BANCO_BAMBINI = [
+    "C'era una volta un vecchio falegname di nome Geppetto. «Mi metto subito al lavoro!» disse, "
+    "e prese un pezzo di legno. Lo segò, lo lisciò e gli diede la forma di un burattino.",
+    "Il lupo bussò alla porta. «Apro io!» disse la nonna. Ma era il lupo, e la nonna scappò.",
+    "Ecco il gioco del memory, Ada. Quattro, sette, due. Memorizzo! Ora tocca a te.",
+    "Risposta esatta! Segno, un punto per te. Prossima domanda: qual è la capitale della Francia?",
+    "Bravissima! Segno! Siamo tre a due. Vuoi continuare?",
+    "Facciamo il gioco delle parole. Io dico mela, tu dici una parola che comincia con la a.",
+    "Che bella idea, Ada! Ci penso un attimo. Chiudo con una curiosità: i delfini dormono con "
+    "mezzo cervello.",
+    "Ti racconto una storia. Fatto curioso: le api ballano per dirsi dove sono i fiori.",
+    "Hai vinto tu! Alzo le mani, sei bravissimo a questo gioco.",
+    "Ripassiamo le tabelline. Memorizzo, ripeto, ripasso: è il metodo migliore per studiare.",
+    "Il cavaliere disse: «Ho acceso il fuoco per la notte», e si addormentò sotto le stelle.",
+]
+trattenute = []
+for testo in BANCO_BAMBINI:
+    _, h = seguito("attivo", [testo[i:i + 4] for i in range(0, len(testo), 4)])
+    if h.held:
+        trattenute.append((testo[:40], h.held[:40]))
+verifica(f"banco dei bambini: nessuna delle {len(BANCO_BAMBINI)} frasi trattenuta in attivo",
+         trattenute, [])
+
+# M18 (seconda revisione): il ricontrollo nel flush del seguito. Una frase lunga tagliata al «; »
+# dichiara nel primo pezzo, ma la frase intera è il ricordo di un'azione vera: si dice tutta
+LUNGA = ["Va bene, ci penso io con calma. ",
+         "Ho spento Taverna come mi avevi chiesto e adesso in casa è tutto spento, anche la "
+         "cucina, il bagno e il corridoio; ",
+         "quindi se intendi riaccenderla posso farlo subito, basta dirmelo."]
+usciti, h = seguito("attivo", LUNGA, fatta)
+verifica("M18: il seguito ricontrolla a fine risposta, il ricordo si dice tutto",
+         ("".join(usciti), h.held, usciti[2]), ("".join(LUNGA), "", ""))
 _, h = seguito("ombra", ["Ho acceso le luci in taverna."])
 verifica("ombra: trattenuta già dalla rete di prima, niente da contare", (h.held, h.ombra),
          ("Ho acceso le luci in taverna.", ""))

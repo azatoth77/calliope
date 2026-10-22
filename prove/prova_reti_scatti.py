@@ -49,7 +49,7 @@ verifica("ogni rete del modello ha il suo posto nel codice", modello == set(R.DO
 verifica("NEL_CODICE_DAL solo per reti vere", set(R.NEL_CODICE_DAL) <= modello)
 codice = "".join(p.read_text(encoding="utf-8") for p in (RADICE / "calliope").rglob("*.py")
                  if p.name != "reti_scatti.py")
-tutte = [(rete, r) for d in (R.REGOLE_RETE, R.SEGUITI, R.ESITO_CATTIVO)
+tutte = [(rete, r) for d in (R.REGOLE_RETE, R.SEGUITI, R.ESITO_CATTIVO, R.NON_SCATTI)
          for rete, regole in d.items() for r in regole]
 assenti = [r for _, r in tutte if f'"{r}"' not in codice]
 verifica("ogni regola elencata è scritta nel codice", not assenti, f"{assenti}")
@@ -295,6 +295,21 @@ rp = A.riassunto(privati)
 verifica("azioni: minori, ospiti, familiari e voci incerte solo contati, mai la frase",
          (rp["senza_scatto"]["dichiarate"], rp["esempi"], rp["esempi_non_mostrati"],
           "quattro" in A.testo(rp)) == (4, [], 4, False), rp)
+# `volte` conta gli scatti, non le regole di misura che li accompagnano; la riga dei limiti
+# rimasta fuori per il tetto non è uno scatto (seconda revisione della PR #220, Q9)
+rv = R.riassunto([
+    t("22", "11:00:00", ["spinta_dichiarata", "dichiarata_trattenuta", "azione_non_fatta",
+                         "azione_non_fatta_attesa"], spente=[]),
+    t("22", "11:01:00", ["spinta_dichiarata", "dichiarata_detta", "dichiarata_taciuta"],
+      spente=[]),
+    t("22", "11:02:00", ["estensioni_limiti_tetto"], spente=[]),
+    t("22", "11:03:00", ["estensioni_limiti_turno"], spente=[])], cfg)
+sd = rv["profili"][P26]["reti"]["spinta_dichiarata"]
+en = rv["profili"][P26]["reti"]["estensione_nominata"]
+verifica("Q9: volte senza le regole che accompagnano (1 + 2, non 7)",
+         (sd["scatti"], sd["volte"]) == (2, 3), sd)
+verifica("Q9: la riga oltre il tetto non è uno scatto, contata a parte",
+         (en["scatti"], en["non_entrate"], en["bene"]) == (1, 1, 1), en)
 src = (RADICE / "calliope" / "stato.py").read_text(encoding="utf-8")
 verifica("azioni: calliope stato --turni, testo e JSON",
          "azioni_dette.testo(azioni_r)" in src and '"azioni_dette": azioni_r' in src
