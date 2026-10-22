@@ -349,6 +349,18 @@ llm:
   # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
   # Vuoto = tutte accese (o quelle del profilo).
   llm_reti_spente: []
+  # L'azione dichiarata e non fatta dopo la prima frase (22/10, issue #170, brain.ClaimHold):
+  # la rete spinta_dichiarata trattiene la prima frase che dichiara un'azione senza nessun tool
+  # nel turno, ma una dichiarazione più avanti («Che bella idea! Allora mi metto subito al
+  # lavoro…», DGX 18/10) arrivava alla voce e la spinta partiva a frase detta. «attivo»: la
+  # rete resta in prova frase per frase anche dopo la prima (nessuna attesa in più: il TTS
+  # aspetta comunque la fine della frase), la frase che dichiara e il resto non si dicono, il
+  # modello riceve la spinta e, se dichiara di nuovo senza tool, si dice la frase onesta
+  # (`onesta.non_fatto`; regole `azione_non_fatta`, `azione_non_fatta_onesta`). «ombra» (di
+  # serie): la voce non cambia e nel registro dei turni c'è `azione_non_fatta_ombra` (avrebbe
+  # trattenuto), da rileggere con `calliope stato --turni` prima di «attivo» (il rischio è
+  # trattenere una frase giusta). «spento»: niente. Con spinta_dichiarata spenta non fa niente
+  voce_azione_non_fatta: ombra
   # La frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py; roadmap 3.12):
   # sulla DGX un turno con un tool ha la prima frase ~0,9 s dopo uno senza (2,71 contro 1,77 s
   # il 14/10), quasi tutta la seconda passata del modello che rimette in parole il risultato.

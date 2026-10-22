@@ -288,6 +288,121 @@ def prova_dichiarata():
              (detto, len(b.backend.visti)), ("Il file che ho creato si chiama Compiti Matteo.pdf.", 1))
 
 
+def prova_azione_non_fatta():
+    """22/10, issue #170 (`voce_azione_non_fatta`): una dichiarazione dopo la prima frase, senza
+    nessun tool nel turno. Caso vero della DGX del 18/10 riscritto: «allora mi metto al lavoro…
+    ti faccio sapere» a «sviluppa un gioco del tris», e nessuno sviluppo aperto."""
+    from calliope import frasi
+    from calliope.brain import is_claim
+    falsa = "Allora mi metto subito al lavoro, ti faccio sapere."
+    prima = "Che bella idea, un tris sullo schermo del soggiorno!"
+    risposta = [("text", prima + " "), ("text", falsa)]
+    chiamata = [("calls", [{"id": "call_0", "name": "ora_attuale", "arguments": {}}])]
+
+    # attivo: la prima frase si dice, la dichiarazione no; spinta e il tool
+    b = brain_finto([risposta, chiamata, [("text", "Sono le dieci.")]])
+    b.cfg.voce_azione_non_fatta = "attivo"
+    pezzi = list(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
+    detto = "".join(pezzi)
+    verifica("attivo: la dichiarazione dopo la prima frase non arriva alla voce",
+             ("mi metto" in detto, detto.startswith(prima)), (False, True))
+    verifica("attivo: la prima frase esce prima della fine della risposta (streaming)",
+             pezzi[0].strip(), prima)
+    verifica("attivo: spinta e poi il tool",
+             (b.last_tools[0]["nome"] if b.last_tools else None, len(b.backend.visti)),
+             ("ora_attuale", 3))
+    verifica("attivo: regole nel registro",
+             [r for r in b.rules_fired() if r.startswith(("azione_non_fatta", "spinta_dich",
+                                                          "dichiarata_"))],
+             ["spinta_dichiarata", "azione_non_fatta"])
+    verifica("attivo: nella storia la prima frase, non la dichiarazione",
+             (any(prima in (m.get("content") or "") for m in b.history),
+              any("mi metto" in (m.get("content") or "") for m in b.history)), (True, False))
+
+    # attivo, dichiarata di nuovo dopo la spinta: la frase onesta, non il ripiego
+    b = brain_finto([risposta, [("text", "Va bene, mi metto subito al lavoro.")]])
+    b.cfg.voce_azione_non_fatta = "attivo"
+    detto = "".join(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
+    onesta = frasi.CATALOGO["onesta.non_fatto"].base
+    verifica("attivo, due volte: la frase onesta dopo la prima frase",
+             (detto.startswith(prima), detto.endswith(onesta), "mi metto" in detto,
+              "Non ci sono riuscita" in detto), (True, True, False, False))
+    verifica("attivo, due volte: regola azione_non_fatta_onesta, niente ripiego",
+             ("azione_non_fatta_onesta" in b.rules_fired(),
+              "dichiarata_taciuta" in b.rules_fired()), (True, False))
+    tutte = [f for t in frasi.TONI_FRASI for br in (False, True)
+             for f in frasi.CATALOGO["onesta.non_fatto"].forme(t, br)]
+    verifica("nessuna variante di onesta.non_fatto dichiara un'azione",
+             [f for f in tutte if is_claim(f)], [])
+
+    # «Segno fatto» (il nome, 18/10) dopo una prima frase, in attivo: non si dice
+    b = brain_finto([[("text", "Piacere di conoscerti, Ada, è un bel nome davvero. Segno "
+                               "fatto, allora: d'ora in poi ti chiamerò così.")],
+                     [("text", "Va bene, Ada.")]])
+    b.cfg.voce_azione_non_fatta = "attivo"
+    detto = "".join(b.stream_reply("Per adesso sono Ada.", "amministra"))
+    verifica("attivo: «Segno fatto…» dopo la prima frase non si dice",
+             ("Segno" in detto, detto.startswith("Piacere")), (False, True))
+
+    # Contrario: con il tool nella stessa passata la frase si dice
+    b = brain_finto([risposta + chiamata, [("text", "Sono le dieci.")]])
+    b.cfg.voce_azione_non_fatta = "attivo"
+    detto = "".join(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
+    verifica("contrario attivo: col tool nella passata la dichiarazione si dice",
+             ("mi metto" in detto, "azione_non_fatta" in b.rules_fired()), (True, False))
+    # Contrario: con un'azione vera già fatta nel turno la rete non guarda
+    import json as _json
+    b = brain_finto([[("calls", [{"id": "c0", "name": "timer_imposta",
+                                  "arguments": {"durata": "5 minuti"}}])],
+                     [("text", "Ecco, è tutto pronto per la pasta. Ho impostato il timer di "
+                               "cinque minuti.")]])
+    b.cfg.voce_azione_non_fatta = "attivo"
+    b.tools.call = lambda *a, **k: _json.dumps({"ok": True, "conferma": "Timer avviato."})
+    detto = "".join(b.stream_reply("Metti un timer di 5 minuti", "amministra"))
+    verifica("contrario attivo: dopo un tool d'azione riuscito la frase si dice",
+             ("Ho impostato" in detto, len(b.backend.visti)), (True, 2))
+    # Contrario: una frase che non dichiara un'azione si dice
+    normale = ("Che bella idea, un tris sullo schermo del soggiorno! Vuoi che lo prepari "
+               "adesso? Ci vuole qualche minuto.")
+    b = brain_finto([[("text", normale)]])
+    b.cfg.voce_azione_non_fatta = "attivo"
+    detto = "".join(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
+    verifica("contrario attivo: nessuna dichiarazione, tutto detto, una passata",
+             (detto, len(b.backend.visti), [r for r in b.rules_fired()
+                                            if "azione" in r or "dichiar" in r]),
+             (normale, 1, []))
+
+    # ombra (di serie): la voce non cambia, il registro dice «avrebbe trattenuto»
+    b = brain_finto([risposta, chiamata, [("text", "Sono le dieci.")]])
+    verifica("di serie è ombra", b.cfg.voce_azione_non_fatta, "ombra")
+    detto = "".join(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
+    verifica("ombra: la voce come prima (la frase detta, poi la spinta)",
+             ("mi metto" in detto, "dichiarata_detta" in b.rules_fired(),
+              "azione_non_fatta_ombra" in b.rules_fired(), "azione_non_fatta" in b.rules_fired()),
+             (True, True, True, False))
+    b = brain_finto([[("text", normale)]])
+    "".join(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
+    verifica("ombra: senza dichiarazione niente nel registro",
+             "azione_non_fatta_ombra" in b.rules_fired(), False)
+    b = brain_finto([risposta + chiamata, [("text", "Sono le dieci.")]])
+    "".join(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
+    verifica("ombra: col tool nella passata non avrebbe trattenuto",
+             "azione_non_fatta_ombra" in b.rules_fired(), False)
+
+    # spento: come prima, e senza la rete spinta_dichiarata nemmeno in attivo
+    b = brain_finto([risposta, chiamata, [("text", "Sono le dieci.")]])
+    b.cfg.voce_azione_non_fatta = "spento"
+    detto = "".join(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
+    verifica("spento: la frase detta, niente ombra",
+             ("mi metto" in detto, "azione_non_fatta_ombra" in b.rules_fired()), (True, False))
+    b = brain_finto([risposta])
+    b.cfg.voce_azione_non_fatta = "attivo"
+    b.cfg.llm_reti_spente = ["spinta_dichiarata"]
+    detto = "".join(b.stream_reply("Sviluppa un gioco del tris.", "amministra"))
+    verifica("attivo con spinta_dichiarata spenta: niente da trattenere",
+             ("mi metto" in detto, len(b.backend.visti)), (True, 1))
+
+
 def prova_dichiarata_nota():
     # 12/10 sera, caso vero in auto (nomi di fantasia): dopo un falso allarme chi amministra dice
     # «Ma io sono Carlo, non sono in pericolo e non sono un bambino»; il modello risponde due
@@ -1256,6 +1371,7 @@ prova_ciclo()
 prova_promessa()
 prova_promessa_domanda()
 prova_dichiarata()
+prova_azione_non_fatta()
 prova_dichiarata_nota()
 prova_ricordo()
 prova_riferimento()

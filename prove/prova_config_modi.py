@@ -100,6 +100,8 @@ CASI = {
     "fine_turno": ("ombra", "Ombra", ("attivo", "attiva"), ["accesa", "sì"]),
     "ricerca_pertinenza": ("spenta", "Spenta", ("attivo", "attiva"), ["accesa", "sì"]),
     "system1_dopo_tool": ("ombra", "Ombra", ("attiva", "attivo"), ["acceso", "sì"]),
+    # 22/10, issue #170: la dichiarazione dopo la prima frase
+    "voce_azione_non_fatta": ("attivo", "Attivo", ("attiva", "attivo"), ["acceso", "sì"]),
     "stanza_lenta_blocchi": ("ombra", " Ombra", ("attiva", "attivo"), ["acceso", "sì"]),
     "arbitro_memoria": ("ombra", "Ombra", ("spenta", "spento"), ["attivo", "acceso", "sì"]),
     "stanza_lenta_ritrascrivi": ("no", "AUTO", None, ["acceso", "forse"]),

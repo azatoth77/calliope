@@ -373,6 +373,18 @@ class Config:
     # segnala all'avvio. Quelle del profilo (llm_profilo) si aggiungono a queste.
     # Vuoto = tutte accese (o quelle del profilo).
     llm_reti_spente: list[str] = field(default_factory=list)
+    # L'azione dichiarata e non fatta dopo la prima frase (22/10, issue #170, brain.ClaimHold):
+    # la rete spinta_dichiarata trattiene la prima frase che dichiara un'azione senza nessun tool
+    # nel turno, ma una dichiarazione più avanti («Che bella idea! Allora mi metto subito al
+    # lavoro…», DGX 18/10) arrivava alla voce e la spinta partiva a frase detta. «attivo»: la
+    # rete resta in prova frase per frase anche dopo la prima (nessuna attesa in più: il TTS
+    # aspetta comunque la fine della frase), la frase che dichiara e il resto non si dicono, il
+    # modello riceve la spinta e, se dichiara di nuovo senza tool, si dice la frase onesta
+    # (`onesta.non_fatto`; regole `azione_non_fatta`, `azione_non_fatta_onesta`). «ombra» (di
+    # serie): la voce non cambia e nel registro dei turni c'è `azione_non_fatta_ombra` (avrebbe
+    # trattenuto), da rileggere con `calliope stato --turni` prima di «attivo» (il rischio è
+    # trattenere una frase giusta). «spento»: niente. Con spinta_dichiarata spenta non fa niente
+    voce_azione_non_fatta: str = "ombra"
     # La frase dopo il tool, System 1 (15/10, calliope/system1/dopo_tool.py; roadmap 3.12):
     # sulla DGX un turno con un tool ha la prima frase ~0,9 s dopo uno senza (2,71 contro 1,77 s
     # il 14/10), quasi tutta la seconda passata del modello che rimette in parole il risultato.
@@ -3278,7 +3290,8 @@ SEZIONI: dict[str, list[str]] = {
             "intento_valido_s", "politica_per_valore", "dialogo_interprete",
             "uscita_controllo",
             "storia_inattiva_s", "dati_stabili_in_storia", "dati_turno_tetto_token",
-            "llm_reti_spente", "system1_dopo_tool", "system1_dopo_tool_parole_max"],
+            "llm_reti_spente", "voce_azione_non_fatta", "system1_dopo_tool",
+            "system1_dopo_tool_parole_max"],
     "stt": ["whisper_model", "whisper_cartella", "whisper_beam_size", "whisper_hotwords", "whisper_device",
             "whisper_compute_type", "language", "stt_motore", "stt_url", "stt_modello",
             "stt_timeout_s", "stt_correzione", "stt_correzione_soglia", "stt_correzione_motore",
@@ -3893,6 +3906,8 @@ _arbitro_memoria_valido = _modi("arbitro_memoria", ("spento", "ombra"), falso="s
 _si_no_auto_valido = _modi("stanza_lenta_ritrascrivi", ("auto", "si", "no"), sinonimi=_SI_NO,
                            falso="no", vero="si")
 _dopo_tool_valido = _modi("system1_dopo_tool", ("spento", "ombra", "attivo"), falso="spento")
+_azione_non_fatta_valida = _modi("voce_azione_non_fatta", ("spento", "ombra", "attivo"),
+                                 falso="spento")
 _pertinenza_valida = _modi("ricerca_pertinenza", ("spenta", "ombra", "attiva"), falso="spenta")
 _fine_turno_valido = _modi("fine_turno", ("spenta", "ombra", "attiva"), falso="spenta")
 _tts_dispositivo_valido = _modi("tts_dispositivo", ("auto", "cpu", "cuda"))
@@ -3982,6 +3997,7 @@ VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valid
               "fine_turno": _fine_turno_valido,
               "ricerca_pertinenza": _pertinenza_valida,
                "system1_dopo_tool": _dopo_tool_valido,
+               "voce_azione_non_fatta": _azione_non_fatta_valida,
                "stanza_lenta_ritrascrivi": _si_no_auto_valido,
                "stanza_lenta_blocchi": _blocchi_valido,
                "arbitro_memoria": _arbitro_memoria_valido, **_MODI_NUOVI}

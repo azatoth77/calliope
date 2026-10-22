@@ -512,6 +512,73 @@ for testo, atteso in [
              atteso)
 verifica("senza ricordi la stessa frase è una dichiarazione",
          is_claim("Ho memorizzato che il tuo numero preferito è 47.", []), True)
+# 22/10, issue #170 (DGX 18/10): «Segno fatto…» al nome e «mi metto al lavoro…» al gioco, senza
+# nessun tool; con i contrari (il nome «segno», il condizionale, la domanda, la negazione, la
+# battuta delle frasi pronte)
+for testo, atteso in [("Segno fatto, allora: d'ora in poi ti chiamerò così.", True),
+                      ("Allora mi metto al lavoro… ti faccio sapere.", True),
+                      ("Segno.", True), ("Segno il tuo nome.", True), ("Annoto tutto.", True),
+                      ("Va bene, mi metto all'opera.", True),
+                      ("Il segno zodiacale è l'ariete.", False),
+                      ("Segno zodiacale: ariete.", False), ("Segno che sei stanco.", False),
+                      ("Il mio segno è il leone.", False), ("Segno fatto?", False),
+                      ("Se vuoi, lo segno.", False), ("Mi metto al lavoro?", False),
+                      ("Quando mi metto al lavoro, mi concentro.", False),
+                      ("Non mi metto al lavoro adesso.", False),
+                      ("Mi metto al lavoro appena mi dici di sì.", False),
+                      ("Perfetto, me lo segno tra i successi.", False)]:
+    verifica(f"azione dichiarata «{testo[:45]}» (#170)", is_claim(testo), atteso)
+
+# ── la dichiarazione dopo la prima frase (22/10, issue #170, `voce_azione_non_fatta`) ──
+# brain.ClaimHold con `seguito`: «attivo» trattiene dalla frase che dichiara (la prima resta
+# detta, ed esce appena finita: lo streaming frase per frase), «ombra» non trattiene niente e
+# ricorda la frase. Regole `azione_non_fatta` e `azione_non_fatta_ombra`
+from calliope.brain import ClaimHold  # noqa: E402
+
+
+def seguito(modo, pezzi, azioni=()):
+    h = ClaimHold(True, list(azioni), seguito=modo)
+    usciti = [h.feed(p) for p in pezzi]
+    usciti.append(h.flush())
+    return usciti, h
+
+
+GIOCO = ["Che bella idea, un tris ", "sullo schermo!", " Allora mi metto", " subito al lavoro,",
+         " ti faccio sapere."]
+usciti, h = seguito("attivo", GIOCO)
+# (la fine della frase si vede con lo spazio dopo il punto, come in tts.split_sentences)
+verifica("seguito attivo: la prima frase esce appena finita",
+         [u for u in usciti[:3]], ["", "", "Che bella idea, un tris sullo schermo! "])
+verifica("seguito attivo: la dichiarazione trattenuta",
+         ("".join(usciti), h.held, h.da_seguito, h.kind),
+         ("Che bella idea, un tris sullo schermo! ",
+          "Allora mi metto subito al lavoro, ti faccio sapere.", True, "claim"))
+usciti, h = seguito("ombra", GIOCO)
+verifica("seguito ombra: tutto detto, subito dopo la prima frase, e la frase ricordata",
+         ("".join(usciti), usciti[3], h.held, h.ombra),
+         ("".join(GIOCO), " subito al lavoro,", "", "Allora mi metto subito al lavoro, ti faccio "
+          "sapere."))
+usciti, h = seguito("spento", GIOCO)
+verifica("seguito spento: come prima", ("".join(usciti), h.held, h.ombra),
+         ("".join(GIOCO), "", ""))
+# contrari: nessuna dichiarazione dopo la prima, la dichiarazione è un ricordo, una domanda
+NORMALE = ["Che bella idea, un tris sullo schermo!", " Vuoi che lo prepari adesso?",
+           " Ci vuole qualche minuto."]
+usciti, h = seguito("attivo", NORMALE)
+verifica("contrario attivo: niente da trattenere, frase per frase",
+         ("".join(usciti), h.held, usciti[1:3]),
+         ("".join(NORMALE), "", ["Che bella idea, un tris sullo schermo! ",
+                                 "Vuoi che lo prepari adesso? "]))
+usciti, h = seguito("ombra", NORMALE)
+verifica("contrario ombra: niente da ricordare", h.ombra, "")
+fatta = ["calliope, chiudi taverna. casa_comando spegni taverna ho spento taverna."]
+RICORDO = ["Va bene, ci penso io con calma.", " Ho spento Taverna, quindi se intendi riaccenderla,",
+           " posso farlo."]
+usciti, h = seguito("attivo", RICORDO, fatta)
+verifica("contrario attivo: il ricordo di un'azione vera si dice",
+         ("".join(usciti), h.held), ("".join(RICORDO), ""))
+usciti, h = seguito("attivo", ["Va bene, ci penso io con calma.", " Lo accendo?"])
+verifica("contrario attivo: la domanda si dice", h.held, "")
 
 # ── rinomina: la domanda detta a parole dal modello vale come proposta (04/10, 26B) ──
 from calliope.tools.builtin import domanda_rinomina  # noqa: E402

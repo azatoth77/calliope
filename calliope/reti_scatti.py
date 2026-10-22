@@ -47,6 +47,7 @@ REGOLE_RETE: dict[str, tuple[str, ...]] = {
     "spinta_promessa": ("spinta_promessa",),
     "spinta_richiesta": ("spinta_richiesta", "richiesta_trattenuta"),
     "spinta_dichiarata": ("spinta_dichiarata", "dichiarata_taciuta", "dichiarata_onesta",
+                          "dichiarata_detta", "azione_non_fatta", "azione_non_fatta_onesta",
                           "dichiarata_tool_fallito"),
     "riferimento_casa": ("riferimento_casa",),
     "riferimento_agenda": ("riferimento_agenda",),

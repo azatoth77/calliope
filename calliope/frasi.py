@@ -448,6 +448,35 @@ _v("onesta.non_salvato_ospite", "onesta", "Scusa, ho capito, ma non ho salvato n
     "essenziale": ("Capito, scusa: non ho salvato niente.",),
     "computer_di_bordo": ("Ricevuto. Dato non salvato.",),
 })
+# Al posto di un'azione dichiarata due volte senza nessun tool dopo una prima frase già detta
+# (22/10, issue #170, `voce_azione_non_fatta: attivo`; caso vero della DGX del 18/10: «allora
+# mi metto al lavoro… ti faccio sapere» senza nessuno sviluppo aperto). Onesta come
+# `onesta.non_salvato`: non dice di averla fatta e non promette niente (brain,
+# `azione_non_fatta_onesta`)
+_v("onesta.non_fatto", "onesta",
+   "Scusa, mi sono sbagliata: non l'ho ancora fatto. Se vuoi, chiedimelo di nuovo.", toni={
+       "normale": ("Scusa, mi sono sbagliata: non l'ho ancora fatto. Se vuoi, chiedimelo di "
+                   "nuovo.",
+                   "Scusa, in realtà non l'ho ancora fatto: se ti serve, chiedimelo di nuovo."),
+       "formale": ("Mi scusi, mi sono espressa male: non l'ho ancora fatto. Se desidera, me lo "
+                   "chieda di nuovo.",
+                   "Mi scusi, in realtà non l'ho ancora fatto: se le serve, me lo richieda."),
+       "amichevole": ("Scusa, mi sono sbagliata: non l'ho ancora fatto! Se vuoi, chiedimelo di "
+                      "nuovo.",
+                      "Ops, scusa: in realtà non l'ho ancora fatto. Se ti va, chiedimelo di "
+                      "nuovo."),
+       "ironico": ("Scusa, per onestà: non l'ho ancora fatto. Se vuoi, chiedimelo di nuovo.",
+                   "Correggo me stessa: non l'ho ancora fatto. Se vuoi, richiedimelo."),
+       "essenziale": ("Scusa: non l'ho ancora fatto.",),
+       "computer_di_bordo": ("Correzione: azione non eseguita. Per eseguirla, ripeti il "
+                             "comando.",),
+   },
+   breve={
+       "normale": ("Scusa: non l'ho fatto.",),
+       "formale": ("Mi scusi: non l'ho fatto.",),
+       "amichevole": ("Scusa! Non l'ho fatto.",),
+       "ironico": ("Per onestà: non l'ho fatto.",),
+   })
 
 # La frase d'attesa della ricerca nella conversazione della stanza (14/10, passo 4,
 # tools/stanza.stanza_cerca): solo quando la ricerca aspetta righe ancora in coda oltre
