@@ -46,14 +46,12 @@ PASSI = {
     "scrivi_pezzi": "scrivi_file in pezzi più corti",
     "modifica_righe": "modifica_file sulle sole righe che servono",
     "test": "esegui_test",
-    "test_se_cambiato": "esegui_test se il codice è cambiato",
     "consegna": "consegna con cosa funziona e cosa manca",
     "consegna_se_finito": "consegna, se il lavoro è finito",
     "resta": "una riga su cosa resta da fare",
     "prossimo": "lo strumento del prossimo passo",
     "piano": "piano (se non l'hai ancora chiamato)",
     "scarica_esempio": "scarica_esempio",
-    "piano_no": "piano con fattibile=false, se il compito non si può fare",
     "impossibile": "consegna con esito impossibile, se il compito non si può fare",
     "relazione": "consegna con la relazione su ciò che hai trovato, e ciò che non hai trovato "
                  "detto come tale",
@@ -118,7 +116,15 @@ def passi_detti(passi) -> str:
     detti = [t if t else PASSI[k] for k, t in passi]
     if not detti:
         return ""
-    elenco = detti[0] if len(detti) == 1 else ", ".join(detti[:-1]) + " o " + detti[-1]
+    if len(detti) == 1:
+        elenco = detti[0]
+    elif any("," in d for d in detti):
+        # Un passo con la sua condizione («consegna, se il lavoro è finito»): punto e virgola
+        # «oppure, se il compito non si può fare, …»
+        virgola = "," if re.match(r"(?:se|con) ", detti[-1]) else ""
+        elenco = "; ".join(detti[:-1]) + f"; oppure{virgola} " + detti[-1]
+    else:
+        elenco = ", ".join(detti[:-1]) + " o " + detti[-1]
     return f"Passi possibili: {elenco}."
 
 
@@ -210,7 +216,9 @@ def senza_strumenti(token: int, nomi=None) -> Spinta:
         return nomi is None or n in nomi
     passi = [p for p, ok in (("piano", c("piano")), ("scarica_esempio", c("scarica_esempio")),
                              ("scrivi", c("scrivi_file"))) if ok]
-    passi += (["piano_no"] if c("piano") else []) + ["impossibile"]
+    passi.append(("impossibile", "se il compito non si può fare, "
+                  + ("piano con fattibile=false o " if c("piano") else "")
+                  + "consegna con esito impossibile"))
     quanti = f"{int(token):,}".replace(",", ".")
     return _fai("agente_ragionamento_senza_strumenti",
                 f"Da {quanti} token non è partita nessuna chiamata di funzione: il "
@@ -241,8 +249,8 @@ def consegna() -> Spinta:
     lavoro, la consegna resta dell'agente."""
     return _fai("agente_spinta_consegna",
                 "I tuoi test passano e i file che il lavoro chiede ci sono.",
-                ["consegna_se_finito", ("resta", "altrimenti una riga su cosa manca e il "
-                                                 "prossimo strumento")])
+                ["consegna_se_finito", ("resta", "una riga su cosa manca e il prossimo "
+                                                 "strumento, se non lo è")])
 
 
 # L'avviso di chiusura (06/10), senza numeri (12/10 sera, ricerca 2026-10-12-flusso-agente-fasi
@@ -268,11 +276,11 @@ def fine(tipo: str = "codice") -> Spinta:
                     ["consegna"], esclusi=("riscrivi",))
     if tipo == "verde_tappa":
         return _fai(n, "I tuoi test passano e i file non sono cambiati da allora.",
-                    ["consegna_se_finito", ("resta", "altrimenti il prossimo passo e una riga "
-                                                     "su cosa resta da fare")],
+                    ["consegna_se_finito", ("resta", "il prossimo passo e una riga su cosa "
+                                                     "resta da fare, se non lo è")],
                     esclusi=("riscrivi",))
-    return _fai(n, "È il momento di chiudere il lavoro con quello che c'è.",
-                ["test_se_cambiato", "consegna"])
+    return _fai(n, "È il momento di chiudere il lavoro con quello che c'è; con il codice "
+                   "cambiato dall'ultimo esegui_test, prima i test.", ["test", "consegna"])
 
 
 # Il conto di fila delle passate senza novità (22/10, #224, n. 27): al gradino la spinta, una
