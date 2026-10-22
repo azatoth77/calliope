@@ -27,6 +27,14 @@ Come la porta vera, rifiuta un indirizzo con spazi o caratteri non codificati (0
 parametri si scrivono con urllib.parse.urlencode o quote, mai a mano. Una possibile doppia
 codifica («Borgo%2BAlto»: quote_plus e poi urlencode) non la rifiuta: la scrive in
 `avvisi` e su stderr.
+
+Dal 22/10 (issue #228, § 3.5 n. 33 e 36 della ricerca del 19/10 sulla solidità dell'agente)
+CalliopeFinta si costruisce dal manifesto della cartella: un'azione che il manifesto non
+dichiara, e una lettura senza risposta preparata, sono un `ErroreDelTest` («è il manifesto: …»
+e «è il test: …», seconda revisione della PR #231)
+invece di un `{"ok": True}` che faceva uscire un KeyError in estensione.py. E `chiama(dati,
+risposte=…, negate=…)`, che i test usano, sta qui (in sola lettura) e non più nel file di test
+che l'agente può riscrivere.
 """
 
 import json
@@ -36,6 +44,294 @@ import sys
 
 class ErroreCalliope(Exception):
     """Calliope non ha fatto quello che l'estensione chiedeva: il messaggio dice perché."""
+
+
+class ErroreDelTest(BaseException):
+    """Lo alza CalliopeFinta quando a non andare è il test o il manifesto, non l'estensione:
+    un'azione che il manifesto non dichiara (con quel manifesto la porta non la lascerebbe
+    passare) o una lettura senza risposta preparata. Non è un'Exception apposta (come SystemExit): un «except Exception»
+    dell'estensione non lo nasconde dietro un da_dire di ripiego, e unittest lo conta come
+    errore del test con il suo messaggio."""
+
+
+# I permessi del manifesto visti da CalliopeFinta (22/10, #228): la stessa regola di
+# guardrail.valuta_porta per il permesso e lo scope di ogni azione (le stanze, le liste, gli host,
+# lo schema dell'indirizzo), copiata perché questo file non importa Calliope;
+# prova_contratto_estensioni controlla che dicano lo stesso su una griglia di manifesti e che lo
+# scope suggerito sia quello del contratto (contratto.PORTA). La fonte resta una sola: i permessi
+# del manifesto come li legge la porta (con le concessioni della decisione 0033 cambiano lì, e la
+# prova lo dice). Ciò che dipende dall'esecuzione (quote, flussi dopo una lettura di dati di
+# casa, conferme della persona) lo controlla solo la porta vera, al collaudo.
+_SCOPE_AZIONE = {
+    "casa_stato": "legge.casa", "casa_comando": "scrive.casa", "lista_leggi": "legge.liste",
+    "lista_aggiungi": "scrive.liste", "lista_togli": "scrive.liste",
+    "agenda_elenca": "legge.agenda", "timer_imposta": "scrive.agenda",
+    "schermo_mostra": "scrive.schermi", "dati_leggi": "scrive.dati", "dati_scrivi": "scrive.dati",
+    "dati_elenca": "scrive.dati", "dati_cancella": "scrive.dati",
+    "rete_leggi": "rete.pubblica o rete.host", "rete_invia": "rete.host con rete.post",
+}
+# Le azioni che restituiscono dati: senza una risposta preparata il test non può sapere cosa
+# risponderebbe Calliope. Le altre (comandi, voci aggiunte o tolte, timer, schermo) riescono
+# con {"ok": True}, come la porta quando l'azione va
+_LETTURE_CON_RISPOSTA = ("casa_stato", "lista_leggi", "agenda_elenca", "rete_leggi",
+                         "rete_invia")
+# Le letture senza risposta con `letture="vuote"` (prima revisione della PR #231): la forma
+# della porta senza niente dentro; la rete alza ErroreCalliope (nessuna risposta)
+LETTURE_VUOTE = {"casa_stato": {"testo": "", "entita": []},
+                 "lista_leggi": {"ok": True, "lista": "spesa", "voci": [], "numero": 0},
+                 "agenda_elenca": {"voci": [], "numero": 0}}
+# Come calliope/liste._LIST_WORDS (list_key): «la lista della spesa» → «spesa»
+_PAROLE_LISTA = (r"\b(la|nella|alla|dalla|sulla)?\s*lista\b|^\s*(della|delle|dei|degli|"
+                 r"del|dello|di|per|la|le|il|i)\s+")
+
+
+def _lista(nome):
+    import re
+    n = (str(nome or "")).lower().strip(" .,!?")
+    for _ in range(3):
+        n = re.sub(_PAROLE_LISTA, " ", n, flags=re.I).strip()
+    return re.sub(r"\s+", " ", n) or "spesa"
+
+
+def _host(url):
+    from urllib.parse import urlsplit
+    try:
+        return (urlsplit(str(url or "")).hostname or "").rstrip(".").lower()
+    except ValueError:
+        return ""
+
+
+def _nomi_scope(v, lista=False):
+    """Come manifesto._nomi, ma senza mai rifiutare: true → ["*"], un elenco → i nomi."""
+    if isinstance(v, dict):
+        v = v.get("stanze", v.get("nomi", v.get("liste")))
+    if v is True:
+        return ["*"]
+    if not v:
+        return []
+    if isinstance(v, str):
+        v = [v]
+    if not isinstance(v, (list, tuple)):
+        return []
+    out = []
+    for x in v:
+        s = " ".join(str(x).split()).strip().lower()
+        out.append("*" if s == "*" else (_lista(s) if lista else s))
+    return ["*"] if "*" in out else out
+
+
+def permessi_scope(p):
+    """I permessi del manifesto nella forma a scope (come manifesto.normalizza_permessi, anche
+    dal formato del 04/10), senza i controlli di forma: quelli sono in motivo_permessi."""
+    p = p if isinstance(p, dict) else {}
+    if not ({"legge", "scrive", "invia"} & set(p)) and not isinstance(p.get("rete"), dict):
+        def lv(sez, voce):
+            v = p.get(sez) or []
+            return voce in (v if isinstance(v, list) else [v])
+        hosts = p.get("rete") if isinstance(p.get("rete"), list) else []
+        p = {"legge": {"casa": lv("casa", "leggi"), "liste": lv("liste", "leggi"),
+                       "agenda": lv("agenda", "leggi"), "dati": bool(p.get("dati"))},
+             "scrive": {"casa": lv("casa", "comanda"), "liste": lv("liste", "scrivi"),
+                        "agenda": lv("agenda", "scrivi"), "dati": bool(p.get("dati")),
+                        "schermi": bool(p.get("schermi"))},
+             "rete": {"pubblica": False, "host": hosts, "post": bool(p.get("rete_invia"))},
+             "invia": []}
+    le = p.get("legge") if isinstance(p.get("legge"), dict) else {}
+    sc = p.get("scrive") if isinstance(p.get("scrive"), dict) else {}
+    r = p.get("rete") or {}
+    if isinstance(r, list):
+        r = {"host": r}
+    if not isinstance(r, dict):
+        r = {}
+    hosts = r.get("host") if isinstance(r.get("host"), list) else []
+    invia = []
+    for f in p.get("invia") if isinstance(p.get("invia"), list) else ():
+        if isinstance(f, dict):
+            invia.append({"dati": str(f.get("dati") or "").strip().lower(),
+                          "host": str(f.get("host") or "").strip().lower().rstrip("."),
+                          "metodo": str(f.get("metodo") or "GET").upper()})
+    return {"legge": {"casa": _nomi_scope(le.get("casa")),
+                      "liste": _nomi_scope(le.get("liste"), True),
+                      "agenda": bool(le.get("agenda")), "dati": bool(le.get("dati"))},
+            "scrive": {"casa": _nomi_scope(sc.get("casa")),
+                       "liste": _nomi_scope(sc.get("liste"), True),
+                       "agenda": bool(sc.get("agenda")), "dati": bool(sc.get("dati")),
+                       "schermi": bool(sc.get("schermi"))},
+            "rete": {"pubblica": bool(r.get("pubblica")),
+                     "host": [str(h).strip().lower().rstrip(".") for h in hosts],
+                     "post": bool(r.get("post"))},
+            "invia": invia}
+
+
+# Come manifesto.HOST e manifesto._host: solo nomi pubblici
+_HOST_OK = r"^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$"
+_HOST_NO = (".local", ".lan", ".home", ".internal", ".localdomain", ".intranet", ".corp",
+            ".localhost", ".test", ".invalid", ".example", ".arpa")
+
+
+def _host_non_valido(h):
+    import re
+    h = str(h).strip().lower().rstrip(".")
+    return "" if re.match(_HOST_OK, h) and not h.endswith(_HOST_NO) else f"host non valido «{h}»"
+
+
+def _nomi_non_validi(v, cosa):
+    if isinstance(v, dict):
+        v = v.get("stanze", v.get("nomi", v.get("liste")))
+    if v is True or not v:
+        return ""
+    if isinstance(v, str):
+        v = [v]
+    if not isinstance(v, list) or len(v) > 10:
+        return f"«{cosa}»: true oppure un elenco di al più 10 nomi"
+    for x in v:
+        s = " ".join(str(x).split()).strip()
+        if not s or len(s) > 40:
+            return f"«{cosa}»: nome non valido"
+    return ""
+
+
+def motivo_permessi(p):
+    """"" se i «permessi» passano manifesto.normalizza_permessi, se no il motivo (22/10, prima
+    revisione della PR #231): con permessi così la porta non dà niente
+    (guardrail._scope → nessun permesso), e la Calliope finta nemmeno."""
+    p = p or {}
+    if not isinstance(p, dict):
+        return "«permessi» deve essere un oggetto"
+    if not ({"legge", "scrive", "invia"} & set(p)) and not isinstance(p.get("rete"), dict):
+        # Il formato del 04/10 (manifesto._vecchio_formato)
+        noti = {"casa": ("leggi", "comanda"), "liste": ("leggi", "scrivi"),
+                "agenda": ("leggi", "scrivi")}
+        altri = [k for k in p if k not in set(noti) | {"schermi", "dati", "rete", "rete_invia"}]
+        if altri:
+            return f"permesso sconosciuto: {', '.join(map(str, altri))}"
+        for sez, ammessi in noti.items():
+            v = p.get(sez) or []
+            if isinstance(v, str):
+                v = [v]
+            if not isinstance(v, list) or any(x not in ammessi for x in v):
+                return f"«permessi.{sez}»: solo {', '.join(ammessi)}"
+        hosts = p.get("rete") or []
+        if not isinstance(hosts, list):
+            return "«permessi.rete»: un elenco di host"
+        if p.get("rete_invia") and not hosts:
+            return "«permessi.rete_invia» senza host in «permessi.rete»"
+        p = {"rete": {"host": hosts}}
+    altri = [k for k in p if k not in ("legge", "scrive", "rete", "invia")]
+    if altri:
+        return f"permesso sconosciuto: {', '.join(map(str, altri))}"
+    le, sc = p.get("legge") or {}, p.get("scrive") or {}
+    if not isinstance(le, dict) or not isinstance(sc, dict):
+        return "«legge» e «scrive» sono oggetti"
+    for sez, d, noti in (("legge", le, ("casa", "liste", "agenda", "dati")),
+                         ("scrive", sc, ("casa", "liste", "agenda", "dati", "schermi"))):
+        altri = [k for k in d if k not in noti]
+        if altri:
+            return f"«{sez}»: sconosciuto {', '.join(map(str, altri))}"
+        for k in ("casa", "liste"):
+            m = _nomi_non_validi(d.get(k), f"{sez}.{k}")
+            if m:
+                return m
+    r = p.get("rete") or {}
+    if isinstance(r, list):
+        r = {"host": r}
+    if not isinstance(r, dict) or any(k not in ("pubblica", "host", "post") for k in r):
+        return "«rete»: pubblica, host, post"
+    hosts = r.get("host") or []
+    if not isinstance(hosts, list) or len(hosts) > 5:
+        return "«rete.host»: un elenco di al più 5 host"
+    for h in hosts:
+        if _host_non_valido(h):
+            return _host_non_valido(h)
+    if r.get("post") and not hosts:
+        return "«rete.post» senza host in «rete.host»"
+    flussi = p.get("invia") or []
+    if not isinstance(flussi, list) or len(flussi) > 6:
+        return "«invia»: un elenco di al più 6 flussi"
+    legge = permessi_scope({"legge": le})["legge"]
+    for f in flussi:
+        if not isinstance(f, dict) or any(k not in ("dati", "host", "metodo") for k in f):
+            return "«invia»: ogni flusso è {dati, host, metodo}"
+        dati = str(f.get("dati") or "").strip().lower()
+        cat, _, nome = dati.partition(":")
+        if cat not in ("casa", "agenda", "liste") or (nome and cat != "liste"):
+            return f"«invia.dati» non valido: «{dati}»"
+        if not legge[cat] or (nome and "*" not in legge["liste"]
+                              and _lista(nome) not in legge["liste"]):
+            return f"«invia»: il flusso di «{dati}» vuole il permesso di leggerli in «legge»"
+        if str(f.get("metodo") or "GET").upper() not in ("GET", "POST"):
+            return "«invia.metodo»: GET o POST"
+        if _host_non_valido(f.get("host") or ""):
+            return _host_non_valido(f.get("host") or "")
+    return ""
+
+
+def _stanza_ok(nomi, testo):
+    if "*" in nomi:
+        return True
+    t = " " + " ".join(str(testo or "").lower().split()) + " "
+    return any(f" {n} " in t or f"'{n} " in t for n in nomi)
+
+
+def permesso_mancante(azione, argomenti, permessi):
+    """"" se il manifesto con questi `permessi` lascia passare l'azione con questi argomenti
+    alla porta (permesso e scope, come guardrail.valuta_porta); se no il motivo in parole."""
+    a = argomenti or {}
+    invalidi = motivo_permessi(permessi)
+    if invalidi:
+        return f"i permessi del manifesto non sono validi ({invalidi}): così non vale nessuno"
+    sc = permessi_scope(permessi)
+    le, scr, rete = sc["legge"], sc["scrive"], sc["rete"]
+    if azione in ("casa_stato", "casa_comando"):
+        nomi = le["casa"] if azione == "casa_stato" else scr["casa"]
+        if not nomi:
+            return "non dichiarata"
+        testo = a.get("cosa") if azione == "casa_stato" else a.get("comando")
+        if not _stanza_ok(nomi, testo):
+            return f"fuori dallo scope: solo le stanze {', '.join(nomi)}"
+        return ""
+    if azione in ("lista_leggi", "lista_aggiungi", "lista_togli"):
+        nomi = le["liste"] if azione == "lista_leggi" else scr["liste"]
+        if not nomi:
+            return "non dichiarata"
+        lista = _lista(a.get("lista") or "spesa")
+        if "*" not in nomi and lista not in nomi:
+            return f"fuori dallo scope: la lista «{lista}» (il manifesto ha {', '.join(nomi)})"
+        return ""
+    if azione in ("agenda_elenca", "timer_imposta", "schermo_mostra"):
+        ok = {"agenda_elenca": le["agenda"], "timer_imposta": scr["agenda"],
+              "schermo_mostra": scr["schermi"]}[azione]
+        return "" if ok else "non dichiarata"
+    if azione in ("dati_leggi", "dati_elenca"):
+        return "" if le["dati"] or scr["dati"] else "non dichiarata"
+    if azione in ("dati_scrivi", "dati_cancella"):
+        return "" if scr["dati"] else "non dichiarata"
+    if azione not in ("rete_leggi", "rete_invia"):
+        return "non è un'azione che Calliope offre"
+    url = str(a.get("url") or "").strip()
+    host = _host(url)
+    schema = url.split(":", 1)[0].lower() if ":" in url else ""
+    if azione == "rete_leggi":
+        if not (rete["pubblica"] or rete["host"] or sc["invia"]):
+            return "non dichiarata"
+        if schema not in ("http", "https") or not host:
+            return "solo indirizzi http o https"
+        if rete["pubblica"] or host in rete["host"] or any(f["host"] == host
+                                                            for f in sc["invia"]):
+            return ""
+        return f"l'host «{host}» non è in «rete.host», e «rete.pubblica» non c'è"
+    if not (rete["post"] or any(f["metodo"] == "POST" for f in sc["invia"])):
+        return "non dichiarata"
+    if schema not in ("http", "https") or not host:
+        return "solo indirizzi http o https"
+    hosts = set(rete["host"]) | {f["host"] for f in sc["invia"] if f["metodo"] == "POST"}
+    if host not in hosts or (host in rete["host"] and not rete["post"]
+                             and not any(f["host"] == host and f["metodo"] == "POST"
+                                         for f in sc["invia"])):
+        return f"l'invio verso «{host}» non è nel manifesto"
+    if schema != "https":
+        return "gli invii solo in https"
+    return ""
 
 
 # La stessa regola di calliope/web/pagina.url_non_codificato (questo file non importa
@@ -189,14 +485,30 @@ class Calliope:
 
 class CalliopeFinta(Calliope):
     """Per i test: `risposte` = {azione: risultato o funzione(argomenti)}; `negate` = azioni
-    che alzano ErroreCalliope. `richieste` registra ogni (azione, argomenti)."""
+    che alzano ErroreCalliope. `richieste` registra ogni (azione, argomenti).
 
-    def __init__(self, risposte=None, negate=(), esempi_veri=True):
+    Dal 22/10 (#228) segue il manifesto: `manifesto` è il dict del manifesto, o None per
+    manifesto.json della cartella dove girano i test (senza il file nessun controllo), o False
+    per nessun controllo. Un'azione che i permessi non lasciano passare (`permesso_mancante`) e
+    una lettura senza risposta preparata alzano ErroreDelTest; i messaggi restano anche in
+    `errori_test`, così `chiama` li rialza se l'estensione li ha inghiottiti.
+
+    `letture="vuote"` (22/10, prima revisione della PR #231): una lettura senza risposta
+    preparata risponde vuota (`LETTURE_VUOTE`: lo stato della casa senza niente, una lista e
+    un'agenda vuote) e la rete alza ErroreCalliope come un servizio che non risponde. È per i
+    test che l'agente non prepara: gli esempi di accettazione, in sola lettura, e il primo test
+    di partenza (`chiama({})`). Il controllo dei permessi resta."""
+
+    def __init__(self, risposte=None, negate=(), esempi_veri=True, manifesto=None,
+                 letture="preparate"):
         self.risposte = dict(risposte or {})
+        self.letture = "vuote" if letture == "vuote" else "preparate"
         self.negate = set(negate)
         self.richieste = []
         self.avvisi = []
+        self.errori_test = []
         self.dati = {}
+        self.permessi = self._permessi_del_manifesto(manifesto)
         # Le risposte vere dei collaudi (08/10 notte): per un indirizzo registrato in
         # esempi_veri/indice.json risponde quella, non la risposta preparata dal test (un test
         # che «trova» ciò che il servizio vero non trova fallisce). `vere`: gli indirizzi così
@@ -204,6 +516,31 @@ class CalliopeFinta(Calliope):
         self.vere = []
         self._indice = None
         super().__init__(self._finta)
+
+    def _permessi_del_manifesto(self, manifesto):
+        """I «permessi» da seguire, o None (nessun controllo)."""
+        if manifesto is False:
+            return None
+        if manifesto is None:
+            try:
+                with open(os.path.join(os.getcwd(), "manifesto.json"), encoding="utf-8") as f:
+                    manifesto = json.load(f)
+            except FileNotFoundError:
+                return None
+            except (OSError, ValueError) as e:
+                # Un manifesto che non si legge lo dice la consegna; qui solo l'avviso
+                self.avvisi.append(f"manifesto.json non si legge ({e}): niente controllo dei "
+                                   "permessi")
+                print(f"AVVISO di CalliopeFinta: {self.avvisi[-1]}", file=sys.stderr)
+                return None
+        if not isinstance(manifesto, dict):
+            return None
+        p = manifesto.get("permessi")
+        return {} if p is None else p
+
+    def _errore_test(self, testo):
+        self.errori_test.append(testo)
+        raise ErroreDelTest(testo)
 
     def _risposta_vera(self, url):
         """{stato, tipo, testo} della risposta vera registrata per questo indirizzo, o None.
@@ -242,6 +579,34 @@ class CalliopeFinta(Calliope):
         self.richieste.append((azione, argomenti))
         if azione in self.negate:
             raise ErroreCalliope(f"{azione}: negato (finto)")
+        if self.permessi is not None:
+            invalidi = motivo_permessi(self.permessi)
+            if invalidi:
+                # Come la porta: con permessi che non si leggono non vale nessun permesso. Il
+                # testo si compone prima della chiamata: nel traceback c'è solo la riga della
+                # chiamata, non il sorgente del messaggio (in sola lettura chiederebbe cose
+                # che lì non si fanno)
+                testo = (
+                    f"è il manifesto: i «permessi» di manifesto.json non sono validi "
+                    f"({invalidi}), "
+                    f"e con permessi così «{azione}» alla porta di Calliope non passa, come "
+                    "nessun'altra azione. Correggi il manifesto: la consegna dice tutti gli "
+                    "errori")
+                self._errore_test(testo)
+            motivo = permesso_mancante(azione, argomenti, self.permessi)
+            if motivo:
+                scope = _SCOPE_AZIONE.get(azione, "")
+                testo = (
+                    f"è il manifesto: l'azione «{azione}» non è dichiarata"
+                    + ("" if motivo == "non dichiarata" else f" ({motivo})") + ", e con "
+                    "questo manifesto la porta di Calliope non la lascerebbe passare. "
+                    "Dichiarala in «permessi» del manifesto"
+                    + (f" ({scope}, come nel §2 del contratto)" if scope else "")
+                    + ", chiedendola con chiedi_permesso se il contratto non la dà da sola, "
+                    "oppure non chiamarla"
+                    + ("" if self.letture == "vuote" else
+                       ". Per provare il caso «negato» c'è negate=[…]"))
+                self._errore_test(testo)
         if azione in ("rete_leggi", "rete_invia"):
             # Come la porta vera: un URL scritto a mano con spazi o accenti non parte
             rotto = url_non_codificato(argomenti.get("url"))
@@ -271,8 +636,56 @@ class CalliopeFinta(Calliope):
         if azione == "dati_cancella":
             self.dati.pop(argomenti["nome"], None)
             return {"ok": True}
-        r = self.risposte.get(azione, {"ok": True})
+        if azione not in self.risposte:
+            if azione in _LETTURE_CON_RISPOSTA and self.letture == "vuote":
+                if azione.startswith("rete_"):
+                    raise ErroreCalliope("rete: nessuna risposta (Calliope finta, letture "
+                                         "vuote: nel test il servizio non risponde)")
+                vuota = json.loads(json.dumps(LETTURE_VUOTE[azione]))
+                if azione == "lista_leggi":
+                    vuota["lista"] = _lista(argomenti.get("lista") or "spesa")
+                return vuota
+            if azione in _LETTURE_CON_RISPOSTA:
+                forma = {"casa_stato": '{"testo": "...", "entita": [...]}',
+                         "lista_leggi": '{"voci": [...]}',
+                         "agenda_elenca": '{"voci": [...], "numero": 0}'}.get(
+                    azione, '{"stato": 200, "tipo": "application/json", "testo": "..."}')
+                testo = (
+                    f"è il test: «{azione}» non ha una risposta preparata, e senza non si sa "
+                    f"cosa direbbe Calliope. Passala con risposte={{\"{azione}\": {forma}}} "
+                    f"(o una funzione degli argomenti), oppure negate=[\"{azione}\"] per il "
+                    "caso d'errore")
+                self._errore_test(testo)
+            return {"ok": True}
+        r = self.risposte[azione]
         return r(argomenti) if callable(r) else r
+
+
+def chiama(dati=None, risposte=None, negate=(), calliope=None, manifesto=None,
+           letture="preparate"):
+    """esegui(dati, calliope) dell'estensione della cartella (estensione.py) con una Calliope
+    finta: risposte = {azione: risultato} (per esempio {"rete_leggi": {"stato": 200, "tipo":
+    "text/html", "testo": "..."}}), negate = le azioni che alzano ErroreCalliope (per esempio
+    ["rete_leggi"]). `calliope`: una CalliopeFinta già fatta, per guardarne poi `richieste`
+    (risposte e negate le si aggiungono). `letture="vuote"`: le letture senza risposta
+    rispondono vuote (CalliopeFinta). Un ErroreDelTest che l'estensione ha inghiottito si
+    rialza qui. Sta in calliope_estensione, in sola lettura (22/10, #228): nel file di test,
+    riscritto con esegui(dati), tornava il bug del 13/10 (manca l'argomento «calliope»)."""
+    if os.getcwd() not in sys.path:
+        sys.path.insert(0, os.getcwd())
+    import estensione  # noqa: PLC0415 — l'estensione della cartella dove girano i test
+    finta = calliope
+    if finta is None:
+        finta = CalliopeFinta(risposte=risposte, negate=list(negate), manifesto=manifesto,
+                              letture=letture)
+    else:
+        finta.risposte.update(risposte or {})
+        finta.negate |= set(negate)
+    prima = len(finta.errori_test)
+    out = estensione.esegui(dict(dati or {}), finta)
+    if len(finta.errori_test) > prima:
+        raise ErroreDelTest(finta.errori_test[prima])
+    return out
 
 
 # ─────────────────────────── server (dentro il container) ───────────────────────────
