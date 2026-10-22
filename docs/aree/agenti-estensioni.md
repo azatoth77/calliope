@@ -4458,7 +4458,8 @@ cambiare, non da scrivere; senza l'analisi (un gioco fuori da uno sviluppo) i gi
 e il manifesto va cambiato a mano dall'agente. I giochi già fatti non cambiano (niente
 migrazioni). Se l'agente consegna un gioco con il nome segnaposto la consegna lo rimanda una
 volta in più. Il punto 7 della issue (CalliopeFinta che dice «nessuna risposta preparata»,
-`valida` con tutti gli errori, `chiama` in sola lettura) resta aperto.
+`valida` con tutti gli errori, `chiama` in sola lettura) resta aperto. *[storico: «resta aperto»
+fino al 22/10, #228, voce in fondo]*
 
 **Dopo la revisione della PR #188 (20/10).**
 - **Si esegue solo ciò che la passata offre** (`Agente.codice`): uno strumento chiamato ma non
@@ -4938,3 +4939,94 @@ ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costant
 - Ogni correzione ha la sua mutazione, e tutte fanno cadere la prova. Le mutazioni: il testo
   della consegna rotta non tenuto, i due controlli invertiti, le consegne rifiutate fra le fatte,
   la frase finale di prima, la cartella e «incompleta» in `lavoro_risultato`.
+
+## Il contratto delle estensioni Python: la Calliope finta dal manifesto, tutti gli errori, `chiama` in sola lettura (22/10, issue #228, ramo `issue-228-contratto-estensioni`)
+
+**Il caso** (verifica del 22/10 dell'analisi del 19/10,
+`docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.5, n. 33, 34 e 36: il «punto 7» di
+#186). Tre buchi del contratto delle estensioni Python, tutti nei test dell'agente:
+- **n. 33**: `CalliopeFinta` rispondeva `{"ok": True}` a un'azione senza risposta preparata
+  (`_ospite.py:274`), così un `r["testo"]` usciva come KeyError in estensione.py e l'agente
+  correggeva il codice giusto; e nessuno confrontava le chiamate `calliope.*` con i permessi del
+  manifesto: un test verde con un'azione che Calliope avrebbe negato sempre;
+- **n. 34**: `manifesto.valida` si fermava al primo errore (tre difetti, tre giri), le parole
+  vietate nei testi (`_VIETATE`) non erano dette da nessuna parte, e il consiglio su «cosa_fa»
+  compariva anche per un titolo o la descrizione di un input;
+- **n. 36**: `chiama` stava in test_estensione.py, che l'agente può riscrivere: riscritto con
+  `esegui(dati)` tornava il bug del 13/10 (`esegui() missing 1 required positional argument`).
+
+**Cosa cambia.**
+1. **CalliopeFinta dal manifesto** (`estensioni/_ospite.py`). Di serie legge manifesto.json
+   della cartella dove girano i test (senza il file nessun controllo; `manifesto=` un dict, o
+   `False` per niente). Un'azione che i permessi non lasciano passare è un **`ErroreDelTest`**:
+   «è il test: l'azione «casa_stato» non è nel manifesto, e Calliope la negherebbe sempre.
+   Dichiarala in «permessi» del manifesto (legge.casa, come nel §2 del contratto), chiedendola
+   con chiedi_permesso se il contratto non la dà da sola, oppure non chiamarla. Per provare il
+   caso «negato» c'è negate=[…]». Si controllano il permesso e lo scope: stanze, liste (con le
+   parole di `liste.list_key`), host, schema dell'indirizzo, invii. Quote, flussi dopo una
+   lettura di dati di casa e conferme dipendono dall'esecuzione: li controlla solo la porta vera,
+   al collaudo. Una **lettura senza risposta preparata** (`casa_stato`, `lista_leggi`,
+   `agenda_elenca`, `rete_leggi`, `rete_invia`) è un ErroreDelTest con la forma della risposta
+   da passare; le scritture riescono con `{"ok": True}` come prima, e i dati propri restano
+   simulati. `negate=[…]` resta un `ErroreCalliope`, il caso «negato» del test.
+   - **`ErroreDelTest` non è un'Exception** (è una `BaseException`, come SystemExit): un `except
+     Exception` dell'estensione non lo trasforma in un da_dire di ripiego, e unittest lo conta
+     come errore con il suo messaggio. I messaggi restano in `errori_test`, e `chiama` rialza il
+     primo anche se l'estensione l'ha inghiottito con `except BaseException`.
+   - **La fonte dei permessi è una sola.** Il runtime non importa Calliope, quindi la regola è
+     copiata in `permesso_mancante` e `permessi_scope`, come si fa già per gli URL. La prova la
+     confronta con `guardrail.valuta_porta` su 21 manifesti per 25 richieste: CalliopeFinta nega
+     ciò che la porta vieta per permesso o scope, e solo quello. Controlla anche che lo scope
+     detto nell'errore sia quello di `contratto.PORTA` e le parole delle liste quelle di
+     `liste._LIST_WORDS`. Con le concessioni della decisione
+     [0033](../decisioni/0033-capacita-concesse-e-revocabili.md) (#203–#217) le regole
+     cambieranno nella porta: la prova dirà dove la finta va riallineata.
+   - Un manifesto.json che non si legge non ferma i test: c'è solo un avviso, l'errore lo dice la
+     consegna.
+2. **`chiama` in `calliope_estensione.py`**, in sola lettura come il resto del runtime:
+   `chiama(dati, risposte=…, negate=…, calliope=…, manifesto=…)` importa estensione.py dalla
+   cartella e passa una CalliopeFinta (con `calliope=` una già fatta, per guardarne le
+   `richieste`). Il test di partenza (`scheletri.TEST_ESTENSIONE`) la importa e non la definisce
+   più. Riscritto senza `chiama`, basta l'import e i test passano ancora. Scheletro e prompt
+   dicono da dove viene e che la finta segue manifesto.json. I test delle modifiche, con la loro
+   `chiama` locale, non cambiano.
+3. **`valida` con tutti gli errori** (`estensioni/manifesto.py`). Nome, titolo, cosa_fa,
+   livello, limiti, input, permessi, scheda (solo con i permessi validi, perché dipende da loro) e
+   i testi per il modello finiscono tutti in un messaggio, «il manifesto ha 3 errori: 1) …; 2) …;
+   3) …», e in `ManifestoNonValido.errori`. Con un errore solo il messaggio è quello di prima. I
+   testi si controllano tutti (`controlla_testi_tutti`); `controlla_testi`, per approvazione e
+   avvio, resta il primo motivo. Un campo che manca non ha il doppione «è vuota». Il consiglio
+   ««cosa_fa» è un verbo e un oggetto breve…» compare solo per la descrizione, che si compone da
+   cosa_fa; titolo e input dicono «(è un testo che il modello legge)».
+4. **Le parole vietate nel contratto.** `PAROLE_VIETATE` è l'elenco, con «*» per il resto della
+   parola. Da lì si costruiscono la regex del controllo (`_VIETATE`, uguale a quella di prima su
+   200 000 frasi a caso) e la riga del §3 del contratto delle estensioni
+   (`parole_vietate_dette`). La riga c'è solo per le estensioni, non per i giochi, che hanno un
+   manifesto di partenza già valido.
+
+**I caratteri.** Contratto delle estensioni 7 953 → 8 592 (+639, circa 185 token con il
+rapporto 3,47 di Qwen3.6, da rimisurare sulla DGX). La soglia di `prova_estensioni_piano` passa
+da 8 000 a 8 800. Il prompt intero dell'estensione è circa 15 600 → 16 384. Lo scheletro
+dell'estensione è 1 596, sotto il tetto di 1 600 di `prova_agente_guida`.
+
+**Prove**: `prova_contratto_estensioni` (nuova, livello 1, ~3 s), con i contrari: negate,
+scritture, dati propri, niente manifesto, `manifesto=False`, manifesto illeggibile, formato del
+04/10, un difetto solo, titolo e input senza consiglio, parole che contengono una vietata. Nella
+sandbox con il docker finto: il test di partenza verde; test_estensione.py riscritto senza
+`chiama` verde; l'azione non dichiarata rossa con «ErroreDelTest: è il test» nell'uscita; la
+stessa azione dichiarata verde. **Mutazioni** (13, tutte prese): finta senza controllo,
+lettura senza risposta che riesce, ErroreDelTest come Exception, `chiama` che non rialza, host
+e stanza non controllati, nomi delle liste non normalizzati, `valida` al primo errore, testi al
+primo, consiglio su cosa_fa ovunque, riga del contratto tolta, `chiama` di nuovo nel test di
+partenza, `chiama` tolta dal runtime. Passano anche `prova_estensioni`, `prova_estensioni_piano`,
+`prova_agente_guida`, `prova_diagnosi_collaudi`, `prova_sviluppo_giro3` e `_giro5`,
+`prova_revisore`, `prova_fasi_agente` e `_2`, `prova_porte_consegna`, `prova_apri_gioco_tappa`,
+`prova_giochi`, `prova_estensioni_attacchi`, `prova_politica`, `prova_agenti` e
+`banco_temperatura.py --secco`. I giochi in JavaScript non usano `chiama` (né `fumo_js.mjs`, né
+`test_js.mjs`, né il motore).
+
+**Rischi.** Un test di una versione di prima che chiama un'azione non dichiarata, o una lettura
+senza risposta, ora fallisce. È voluto: Calliope l'avrebbe negata, o la risposta non c'era. Una
+modifica lo vede al primo esegui_test, con il messaggio che dice cosa fare. Gli esempi di
+accettazione (`accettazione.py`) usano `CalliopeFinta()` e quindi seguono anche loro il
+manifesto. Le parole vietate costano circa 185 token a ogni passata del prompt delle estensioni.
