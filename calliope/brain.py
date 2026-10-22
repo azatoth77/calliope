@@ -166,6 +166,10 @@ SVILUPPO_NUDGE = ("Non hai chiamato nessun tool, ma c'è una domanda dello svilu
 PROMISE_NUDGE = ("Non hai chiamato nessun tool. Chiama adesso il tool giusto con gli "
                  "argomenti presi dalla domanda (bastano le parole dette), senza ripetere la "
                  "frase e senza chiedere altro.")
+# La frase d'attesa dopo una frase trattenuta dal seguito (22/10, issue #170; seconda revisione
+# della PR #220, Q8): neutra, non «ci riprovo» (chi ascolta non ha sentito nessun errore). Le
+# stesse frasi d'attesa dei tool (l'annuncio di sviluppo_apri e della biblioteca)
+ATTESA_NEUTRA = ("Un attimo.", "Vediamo.")
 # Il ripiego quando non si riesce a rispondere (atto «ripeti» del registro degli eventi)
 RIPETI_FRASE = "Non ci sono riuscita: puoi ripetere la richiesta?"
 
@@ -805,6 +809,55 @@ class FraseTolta:
         return f[d:]
 
 
+# ───────────── L'AZIONE DICHIARATA DOPO LA PRIMA FRASE (22/10, issue #170) ─────────────
+# Casi veri della DGX del 18/10, senza nessun tool: «Segno fatto, allora: d'ora in poi ti
+# chiamerò così» e «allora mi metto al lavoro… ti faccio sapere». Due forme chiuse in più, solo
+# con `voce_azione_non_fatta` acceso (in spento la rete è quella di prima, parola per parola):
+# la frase **comincia** con la forma, davanti solo una parola di raccordo («Allora», «Va
+# bene», «Certo»), e la forma è tutta lì. Niente condizionale, imperativo o offerta prima
+# («Dimmi le regole e mi metto al lavoro», «Se vuoi, mi metto al lavoro», «Quando sei pronto…
+# mi metto all'opera»), niente oggetto dopo «segno / annoto / memorizzo» («Segno: Leone.»,
+# «Annoto una cosa: …», «Memorizzo la tua risposta e passiamo…», «Segno un punto per te»),
+# niente condizionale dopo («…appena mi dici di sì»), niente domanda
+# Seconda revisione della PR #220 (Q2): «segno / annoto / memorizzo» solo con «fatto», «subito»
+# o «tutto» (da soli sono i giochi a voce: «Memorizzo! Ora tocca a te.», «Segno, un punto per
+# te.», e gli elenchi: «Memorizzo, ripeto, ripasso…»); niente «ma prima…», «a meno che…» dopo
+# «mi metto al lavoro»; «quando» e «appena» dopo «ti avviso» non sono un condizionale («Mi metto
+# al lavoro e ti avviso quando è pronto» resta una promessa); le parole fra virgolette sono un
+# dialogo, non Calliope («Mi metto subito al lavoro!» disse Geppetto)
+_RACCORDO = (r"(?:(?:ok|okay|certo|va bene|perfetto|d['’]accordo|ricevuto|bene|benissimo|"
+             r"ottimo|allora|sì|si|fatto)\W+)*")
+AZIONE_NUOVA = re.compile(
+    r"(?:^|[.!?]\s+)\W*" + _RACCORDO
+    + r"(?:mi metto\s+(?:(?:subito|ora|adesso)\s+)?(?:al lavoro|all['’]opera|a lavorarci)\b"
+    r"(?![^.!?]*\b(?:se|finché|dopo che|ma prima|però prima|a meno che|purché|salvo che)\b)"
+    r"(?![^.!?]*(?<!avviso )(?<!avviserò )(?<!dico )(?<!sapere )\b(?:quando|appena)\b)"
+    r"|(?:segno|annoto|memorizzo)\s+(?:fatto|subito|tutto)(?=\s*(?:[.!;…]|,\s|$)))"
+    r"(?![^.!?]*\?)", re.I)
+# Le parole fra virgolette (un dialogo in una fiaba, un titolo): tolte prima di giudicare
+_VIRGOLETTE = re.compile(r"«[^»]*(?:»|$)|“[^”]*(?:”|$)|\"[^\"]*(?:\"|$)")
+# Una frase dopo la prima si giudica come dentro la risposta intera: le forme che la rete
+# guarda solo in testa alla risposta («Fatto…», «Apro…», «Chiudo…», «Alzo…») lì non valgono
+# («Chiudo con una curiosità», «Apro una parentesi», «Fatto curioso», «Alzo le mani»)
+_DENTRO = "x. "
+
+
+def azione_nuova(frase: str) -> bool:
+    """La frase ha una delle forme chiuse di AZIONE_NUOVA, fuori dalle virgolette?"""
+    return bool(AZIONE_NUOVA.search(_VIRGOLETTE.sub(" ", frase or "")))
+
+
+def dichiara_azione(frase: str, actions=(), dopo: bool = False, nuove: bool = False) -> bool:
+    """La frase dichiara un'azione? La rete di sempre (is_claim); `dopo`: la frase non è la
+    prima della risposta (le forme di testa non valgono, e le parole fra virgolette sono un
+    dialogo: non si guardano); `nuove`: anche AZIONE_NUOVA, solo con `voce_azione_non_fatta`
+    acceso."""
+    testo = _VIRGOLETTE.sub(" ", frase or "") if dopo else frase
+    if is_claim((_DENTRO + testo) if dopo else testo, actions):
+        return True
+    return bool(nuove and azione_nuova(frase))
+
+
 class ClaimHold:
     """Trattiene il primo pezzo della risposta, quello che il TTS direbbe per primo (frase
     di almeno 25 caratteri, come split_sentences), finché non si sa se dichiara un'azione
@@ -820,11 +873,22 @@ class ClaimHold:
     detti (revisione della PR #139: prima del correttivo la rete passava al primo pezzo).
 
     `non_so` (05/10): trattiene allo stesso modo un «non ho informazioni…» dopo una
-    compressione (NON_SO); `kind` dice quale dei due ("claim" o "non_so")."""
+    compressione (NON_SO); `kind` dice quale dei due ("claim" o "non_so").
+
+    `seguito` (22/10, issue #170, `voce_azione_non_fatta`): le dichiarazioni anche dopo la
+    prima frase («Che bella idea! Allora mi metto subito al lavoro…»), che prima si
+    vedevano solo a risposta detta. «attivo»: dopo la prima frase la rete resta in prova
+    frase per frase (i pezzi tagliati come tts.split_sentences, nessuna attesa in più: il TTS
+    aspetta comunque la fine della frase) e da quella che dichiara si trattiene il resto
+    (`da_seguito`); valgono anche le forme di AZIONE_NUOVA, prima frase compresa. «ombra»: la
+    rete è quella di prima e il testo passa com'è; accanto gira una copia in «attivo» sullo
+    stesso testo, e in `ombra` resta ciò che lei avrebbe trattenuto (e questa no): l'ombra
+    conta esattamente ciò che l'attivo tratterrebbe."""
 
     def __init__(self, active: bool, actions=(), non_so: bool = False, rinuncia=None,
                  fallito: bool = False, ripetuta: str | None = None,
-                 ripetuta_soglia: float | None = None, pausa_oltre: int = PAUSA_OLTRE):
+                 ripetuta_soglia: float | None = None, pausa_oltre: int = PAUSA_OLTRE,
+                 seguito: str = "spento"):
         # Il primo pezzo può finire a un «; » di una frase lunga, come in tts.split_sentences
         # (17/10, issue #132): senza, la risposta delle notizie unita dai «;» restava qui
         # intera fino all'ultimo token
@@ -847,6 +911,31 @@ class ClaimHold:
         self.detto = 0           # nella frase in corso, i pezzi fin qui già lasciati passare
         self.held = ""
         self.actions = list(actions)
+        seguito = str(seguito or "spento").strip().lower()
+        self.seguito = seguito if active and seguito in ("ombra", "attivo") else "spento"
+        self.nuove = self.seguito == "attivo"      # le forme di AZIONE_NUOVA
+        self.da_seguito = False  # trattenuta da una frase dopo la prima (seguito «attivo»)
+        self.ombra = ""          # «ombra»: ciò che l'attivo avrebbe trattenuto
+        self._copia = (ClaimHold(active, actions, non_so=non_so, rinuncia=rinuncia,
+                                 fallito=fallito, ripetuta=ripetuta,
+                                 ripetuta_soglia=ripetuta_soglia, pausa_oltre=pausa_oltre,
+                                 seguito="attivo") if self.seguito == "ombra" else None)
+
+    def _dichiara(self, text: str) -> str | None:
+        """Una frase dopo la prima dichiara un'azione? "claim", "fallito" (dopo soli tool
+        falliti) o None. Solo le dichiarazioni: la risposta ripetuta, il «non so» e la rinuncia
+        guardano la prima frase."""
+        if dichiara_azione(text, self.actions, dopo=True, nuove=self.nuove):
+            return "claim"
+        if self.fallito and FAILED_CLAIM.search(text):
+            return "fallito"
+        return None
+
+    def _claim(self, text: str) -> bool:
+        kind = self._dichiara(text)
+        if kind:
+            self.kind = kind
+        return kind is not None
 
     def _match(self, text: str, intera: bool = False) -> bool:
         if self.ripetuta:
@@ -855,7 +944,10 @@ class ClaimHold:
                                                    self.ripetuta_soglia or SOGLIA):
                 self.kind = "ripetuta"
                 return True
-        if self.claims and is_claim(text, self.actions):
+        # In attivo le parole fra virgolette (un dialogo) non contano nemmeno in prima frase
+        frase = _VIRGOLETTE.sub(" ", text) if self.nuove else text
+        if self.claims and (is_claim(frase, self.actions)
+                            or (self.nuove and azione_nuova(text))):
             self.kind = "claim"
             return True
         if self.claims and self.fallito and FAILED_CLAIM.search(text):
@@ -870,6 +962,8 @@ class ClaimHold:
         return False
 
     def feed(self, text: str) -> str:
+        if self._copia is not None:
+            self._copia.feed(text)
         if self.state == "pass" or not text:
             return text
         self.buf += text
@@ -883,7 +977,9 @@ class ClaimHold:
             cut, al_pv = taglio
             # Sempre la frase da capo, coi pezzi già detti davanti (revisione della PR #139:
             # una dichiarazione nella seconda clausola sfuggiva)
-            if self._match(self.buf[:cut].strip()):
+            frase = self.buf[:cut].strip()
+            if self._match(frase) if self.state == "probe" else self._claim(frase):
+                self.da_seguito = self.state == "seguito"
                 self.state = "hold"
                 return out
             if al_pv:
@@ -891,23 +987,35 @@ class ClaimHold:
                 out += self.buf[self.detto:cut]
                 self.detto = cut
                 continue
+            if self.seguito == "attivo":
+                # La frase si dice, la prossima resta in prova (22/10, issue #170)
+                self.state = "seguito"
+                out += self.buf[self.detto:cut]
+                self.buf, self.detto = self.buf[cut:], 0
+                continue
             self.state = "pass"
             out += self.buf[self.detto:]
             self.buf, self.detto = "", 0
             return out
 
     def flush(self) -> str:
+        if self._copia is not None:
+            self._copia.flush()
         if self.state == "probe" and self._match(self.buf.strip(), intera=True):
             self.state = "hold"
-        if self.state == "hold" and not self._match(self.buf.strip(), intera=True):
+        elif self.state == "seguito" and self._claim(self.buf.strip()):
+            self.state, self.da_seguito = "hold", True
+        if self.state == "hold" and not (self._claim(self.buf.strip()) if self.da_seguito
+                                         else self._match(self.buf.strip(), intera=True)):
             self.state = "pass"            # il seguito ne fa un ricordo
+            self.da_seguito = False
         resto = self.buf[self.detto:]      # i pezzi prima di `detto` sono già detti
         self.buf, self.detto = "", 0
         if self.state == "hold":
             self.held = resto
-            return ""
-        return resto
-
+        if self._copia is not None and self._copia.held.strip() and not self.held.strip():
+            self.ombra = self._copia.held.strip()
+        return "" if self.state == "hold" else resto
 
 # Domanda sui comandi stessi di Calliope (03/10): lì il nome di un tool nella risposta è una
 # spiegazione («Che comando hai per le luci?» → «Ho il comando casa_comando, che…», caso vero
@@ -1080,6 +1188,34 @@ EST_CAMBIATA_S = 1800.0        # «è cambiata da poco»: approvata da al più m
 # Una frase che parla di estensioni (08/10): l'elenco vero nei dati del turno (regola
 # `estensioni_elenco_turno`, nella rete `estensione_nominata`)
 PARLA_ESTENSIONI = re.compile(r"(?<![a-zà-ù])estension[ei]", re.I)
+# Cosa un'estensione o un gioco oggi non può fare, nei dati del turno quando se ne parla (22/10,
+# issue #170; caso vero della DGX del 18/10: per dieci minuti il modello ha spiegato come fare
+# l'estensione della posta e come autenticarsi, poi sviluppo_apri l'ha rifiutata, perché login e
+# lavori a orario sono impossibili). La riga si ricava dagli impossibili del contratto
+# (estensioni/contratto.impossibili), mai scritta qui: con la decisione 0033 diventeranno
+# capacità concedibili (#203–#217) e la riga le segue da sola. Un contesto: decide il modello
+# L'ingresso è l'intenzione di farne uno, non la parola: un verbo del fare (in forma di verbo:
+# «sviluppa», «creami», «programmare», mai «lo sviluppo», «il programma») e subito dopo
+# «un'estensione» / «un gioco» (seconda revisione della PR #220, Q4). Non «lo sviluppo
+# sostenibile», «giochi a calcio?», «facciamo un gioco?» (giocare), «quante estensioni ci sono»,
+# «fai vedere le estensioni» (un elenco), «un file con estensione docx», «l'estensione della
+# garanzia / del congedo» (un altro significato), «le regole del gioco dell'oca», «una storia sul
+# gioco», «la lista dei giochi», e mai un programma («sviluppa un programma che legge i file»)
+_FARE = (r"(?:svilupp(?:a|ami|amelo|are|arla|arlo|iamo|ate|eresti|erai|i)"
+         r"|cre(?:a|ami|are|iamo|eresti)|programm(?:ami|are|iamo|eresti)"
+         r"|costru(?:isci|iscimi|ire|iamo)|realizz(?:a|ami|are|iamo)"
+         r"|progett(?:a|ami|are|iamo)|invent(?:ami|are)|prepar(?:ami|are)"
+         r"|(?:mi\s+)?fa(?:i|resti|mmi))\b")
+_UN = r"(?:un|uno|una|un['’]|un\s+altro|un['’]altra|una\s+nuova|un\s+nuovo)\s*"
+INTENZIONE_EST = re.compile(
+    r"(?<![a-zà-ù])" + _FARE + r"(?:\s+\S+){0,2}?\s+" + _UN + r"(?:nuova\s+)?estensione\b"
+    r"(?!\s+(?:del|della|dello|dei|delle|di|d['’]|docx?|pdf|xlsx?|txt|jpe?g|png|csv)\b)",
+    re.I)
+INTENZIONE_GIOCO = re.compile(
+    r"(?<![a-zà-ù])" + _FARE + r"(?:\s+\S+){0,2}?\s+" + _UN
+    + r"(?:nuovo\s+)?(?:gioco|giochino|videogioco)\b", re.I)
+LIMITI_EST_MSG = ("Dati del turno: oggi a {chi} mancano {voci}; ha invece, tramite Calliope, "
+                  "{porta}. Se serve ciò che manca, dillo e proponi cosa fare invece.")
 EST_ELENCO_MSG = ("Dati del turno: le estensioni che ci sono adesso, tutte: {elenco}. Per "
                   "domande su quali o quante ce ne sono rispondi da qui, mai a memoria; per "
                   "cambiarle, estensione_gestisci.")
@@ -2441,8 +2577,9 @@ class Brain:
         hold = ClaimHold(hold_claims and self._net("spinta_dichiarata"), actions,
                          non_so=hold_non_so, rinuncia=hold_rinuncia, fallito=hold_fallito,
                          ripetuta=hold_ripetuta, ripetuta_soglia=hold_ripetuta_soglia,
-                         pausa_oltre=pausa)
+                         pausa_oltre=pausa, seguito=self._azione_non_fatta())
         self._held_kind = None
+        self._held_seguito = False
         self.mentions_tool("")                       # prepara _tool_re
         names = ToolNameHold(self._tool_re, hold_names and self._net("chiamata_in_mezzo"))
         # La risposta che gira in tondo (14/10, calliope/ciclo_ripetuto.py): subito dopo il
@@ -2468,6 +2605,8 @@ class Brain:
                 continue
             piece = names.feed(hold.feed(guard.feed(qui.feed(echo.feed(capito.feed(
                 ciclo.feed(think.feed(payload))))))))
+            if piece and not hold_request:
+                self._voce_detta(piece)
             if capito.capito is not None:
                 # Prima delle chiamate di questa passata (arrivano a stream finito)
                 self._applica_capito(capito.capito)
@@ -2547,6 +2686,13 @@ class Brain:
             named = ""
         held = hold.held.strip()
         self._held_kind = hold.kind if held else None
+        # Trattenuta da una frase dopo la prima (22/10, issue #170, `voce_azione_non_fatta`)
+        self._held_seguito = bool(held and hold.da_seguito)
+        if hold.ombra and not calls and not hold_request:
+            # In ombra la voce non cambia: solo «avrebbe trattenuto», nel registro dei turni
+            self._rule("azione_non_fatta_ombra")
+            print(f"   [TOOL] (ombra) azione dichiarata senza tool dopo la prima frase, "
+                  f"l'avrei trattenuta: «{self.cita_in_console(hold.ombra)}»", flush=True)
         # I pezzi di una frase lunga già detti prima che ClaimHold trattenesse il resto (17/10,
         # seconda revisione della PR #139): _reply li mette nella storia prima della spinta,
         # così il modello non li ripete da capo
@@ -2697,6 +2843,12 @@ class Brain:
         (`tts_spezza_streaming`, testi.taglio_voce, 17/10, issue #132)."""
         v = getattr(getattr(self, "cfg", None), "tts_spezza_streaming", PAUSA_OLTRE)
         return v if isinstance(v, int) and not isinstance(v, bool) else PAUSA_OLTRE
+
+    def _azione_non_fatta(self) -> str:
+        """Il modo di `voce_azione_non_fatta` (22/10, issue #170): «spento», «ombra» o
+        «attivo». Con la rete `spinta_dichiarata` spenta non c'è niente da trattenere."""
+        m = str(getattr(self.cfg, "voce_azione_non_fatta", "spento") or "spento").strip().lower()
+        return m if m in ("ombra", "attivo") and self._net("spinta_dichiarata") else "spento"
 
     def _net(self, name: str) -> bool:
         """La rete o spinta `name` è accesa? (Config.llm_reti_spente, di solito dal profilo
@@ -4328,6 +4480,84 @@ class Brain:
             print(f"   [SVILUPPO] dati del turno: {type(e).__name__}: {e}", flush=True)
         return None
 
+    def _voce_detta(self, piece: str):
+        """Un pezzo andato alla voce (22/10, issue #170, Q8): quando è partito il primo della
+        risposta e quanti caratteri, per stimare la fine dell'audio."""
+        if self.__dict__.get("_voce_t0") is None:
+            self._voce_t0 = time.perf_counter()
+            self._voce_car = 0
+        self._voce_car = int(self.__dict__.get("_voce_car") or 0) + len(piece or "")
+
+    def _silenzio_dopo_voce(self) -> float:
+        """I secondi di silenzio dalla fine stimata dell'audio già detto in questa risposta: dal
+        primo pezzo, i caratteri detti alla velocità di parlato della taratura (taratura_voce,
+        15 caratteri al secondo di serie). Negativo mentre Calliope parla ancora; 0 se non ha
+        detto niente."""
+        t0 = self.__dict__.get("_voce_t0")
+        if t0 is None:
+            return 0.0
+        from .taratura_voce import PREDEFINITI
+        vel = float(PREDEFINITI.get("parlato_car_s") or 15.0)
+        return time.perf_counter() - (t0 + int(self.__dict__.get("_voce_car") or 0) / vel)
+
+    def _limiti_estensioni(self, testo: str, level: str) -> str | None:
+        """LIMITI_EST_MSG quando si parla davvero di fare un'estensione o un gioco (22/10, issue
+        #170), o None: la frase lo chiede (INTENZIONE_EST, INTENZIONE_GIOCO), è aperto lo
+        sviluppo di un'estensione o di un gioco (non di un programma), oppure lo chiedeva la
+        frase del turno prima nella stessa conversazione (seconda revisione della PR #220, Q6).
+        Solo per chi può aprirlo davvero (Q5, i permessi di sviluppo_apri e di
+        tools/agenti._permesso): un'estensione chi amministra, un gioco anche un familiare
+        adulto; mai un ospite né un minore. Le voci sono quelle brevi del contratto
+        (impossibili_brevi) con ciò che invece c'è (porta_brevi), per un gioco quelle che lì
+        valgono."""
+        if not self._net("estensione_nominata") or self.tools.get("sviluppo_apri") is None:
+            return None
+        allowed = getattr(self.tools, "allowed", None)
+        if callable(allowed) and not allowed("sviluppo_apri", level):
+            return None
+        conv = self._c()
+        turno = int(getattr(conv, "turn_number", 0) or 0)
+        sv = None
+        try:
+            svs, chi = self._sviluppi(), self._speaker_key()
+            sv = svs.corrente(chi) if svs is not None and chi is not None else None
+        except Exception:  # noqa: BLE001 — sono solo dati del turno
+            sv = None
+        if sv is not None and getattr(sv, "tipo", "estensione") != "estensione":
+            sv = None                        # un programma: gli impossibili non valgono
+        est = bool(INTENZIONE_EST.search(testo or ""))
+        gioco_detto = bool(INTENZIONE_GIOCO.search(testo or ""))
+        prima = getattr(conv, "_limiti_est_turno", None)
+        if sv is not None:
+            gioco = bool(getattr(sv, "gioco", False))
+        elif est or gioco_detto:
+            gioco = gioco_detto and not est
+        elif isinstance(prima, tuple) and prima[0] == turno - 1:
+            gioco = prima[1]
+        else:
+            return None
+        # Chi può aprirlo: un'estensione solo chi amministra; un gioco anche un familiare
+        # adulto; mai un minore (nel dubbio, minore)
+        if level != "amministra" and (not gioco or level != "familiare" or self.parla_minore()):
+            return None
+        if sv is not None or est or gioco_detto:
+            try:
+                conv._limiti_est_turno = (turno, gioco)
+            except AttributeError:
+                pass
+        try:
+            from .estensioni.contratto import impossibili_brevi, porta_brevi
+            voci, porta = impossibili_brevi(gioco), porta_brevi(gioco)
+        except Exception:  # noqa: BLE001 — sono solo dati del turno
+            return None
+        if not voci:
+            return None
+
+        def elenco(xs):
+            return ", ".join(xs[:-1]) + (" e " if len(xs) > 1 else "") + xs[-1]
+        return LIMITI_EST_MSG.format(chi="un gioco" if gioco else "un'estensione",
+                                     voci=elenco(voci), porta=elenco(porta) if porta else "poco")
+
     def _sviluppo_coda(self, user_text: str | None, level: str) -> str | None:
         """La frase da aggiungere in coda alla risposta, o None (08/10, modalità sviluppo):
         - una volta al giorno, a chi amministra, gli sviluppi sospesi;
@@ -4874,6 +5104,20 @@ class Brain:
         if sv_msg:
             memory = memory + blocco("sviluppo", [{"role": "system", "content": sv_msg}])
             self._rule("sviluppo_modalita")
+        # Cosa un'estensione o un gioco non può fare, quando se ne parla (22/10, issue #170):
+        # nei dati del turno, non nel prompt di sistema (il prefisso resta in cache, #95)
+        # Dentro il tetto dei dati del turno (#95): oltre, la riga non entra (regola
+        # `estensioni_limiti_tetto`), e il modello lo scopre da sviluppo_apri come prima
+        limiti = self._limiti_estensioni(user_text, level) if user_text else None
+        if limiti:
+            tetto_l = int(getattr(self.cfg, "dati_turno_tetto_token", 0) or 0)
+            gia = sum(len(str(m.get("content") or "")) for m in memory) + len(user_text)
+            if tetto_l > 0 and (gia + len(limiti)) / CHARS_PER_TOKEN > tetto_l:
+                self._rule("estensioni_limiti_tetto")
+            else:
+                memory = memory + blocco("estensioni_limiti",
+                                         [{"role": "system", "content": limiti}])
+                self._rule("estensioni_limiti_turno")
         # La domanda che riprende quella di prima dopo una risposta lunga (15/10, rete
         # domanda_insistita, calliope/ripetizione.py; caso vero in auto: «Ma quali sono questi
         # risultati? Lo hai capito?» → la stessa risposta di prima): una frase condizionale nei
@@ -4963,6 +5207,10 @@ class Brain:
         actions = self._recent_actions(start) + [FACT_PREFIX + f.lower()
                                                  for f in self._remembered_facts()]
         spoke = announced = nudged = retried_empty = nudged_fallito = False
+        # La spinta è partita da una dichiarazione dopo la prima frase (22/10, issue #170)
+        seguito_preso = False
+        self._voce_t0, self._voce_car = None, 0    # la voce detta in questa risposta (Q8)
+        trattenuta_seguito = ""   # la frase trattenuta dal seguito (per la frase onesta giusta)
         # La risposta di prima (09/10, rete risposta_ripetuta): una uguale si trattiene, una volta
         from .ripetizione import (RIPETUTA_NUDGE, RIPETUTA_NUDGE_INSISTE, SOGLIA_INSISTE,
                                   risposta_precedente)
@@ -5276,6 +5524,17 @@ class Brain:
                     self.history.append({"role": "assistant", "content": said})
                     yield self._marca(said, "atto", "onesta")
                     return
+                if seguito_preso or self._held_seguito:
+                    # La prima parte è già detta e il resto dichiarava un'azione due volte senza
+                    # tool (22/10, issue #170): la frase onesta, non «puoi ripetere la richiesta?»
+                    # Anche quando la prima volta era la prima frase e questa volta il seguito
+                    # (seconda revisione della PR #220, Q7)
+                    from . import frasi
+                    self._rule("azione_non_fatta_onesta")
+                    said = frasi.scegli("onesta.non_fatto")
+                    self.history.append({"role": "assistant", "content": said})
+                    yield self._marca(said, "atto", "onesta")
+                    return
                 self._rule("dichiarata_taciuta")
                 said = RIPETI_FRASE
                 self.history.append({"role": "assistant", "content": said})
@@ -5286,6 +5545,26 @@ class Brain:
                 # nella storia, il modello la rivede solo con la spinta e decide
                 nudged = True
                 self._rule("spinta_dichiarata")
+                # Non detta (22/10, issue #170): la misura la distingue da `dichiarata_detta`
+                self._rule("dichiarata_trattenuta")
+                if self._held_seguito:
+                    # Dopo la prima frase (`voce_azione_non_fatta: attivo`): la prima parte è
+                    # detta, il resto no
+                    seguito_preso = True
+                    trattenuta_seguito = held
+                    self._rule("azione_non_fatta")
+                    # Il resto della risposta è stato generato senza dirlo: se il silenzio dopo
+                    # la frase detta dura già oltre `tool_correzione_avviso_s`, una frase
+                    # d'attesa neutra copre la seconda passata, fuori dalla storia, una volta per
+                    # risposta. Il silenzio si conta dalla fine stimata dell'audio già detto
+                    # (seconda revisione della PR #220, Q8): mentre Calliope parla, niente
+                    on_tool_start = getattr(self, "on_tool_start", None)
+                    if on_tool_start and not announced and (
+                            self._silenzio_dopo_voce()
+                            > float(getattr(self.cfg, "tool_correzione_avviso_s", 2.0) or 0)):
+                        on_tool_start(random.choice(ATTESA_NEUTRA))
+                        announced = True
+                        self._rule("azione_non_fatta_attesa")
                 print(f"   [TOOL] azione dichiarata senza tool, non la dico: «{self.cita_in_console(held)}»",
                       flush=True)
                 # La frase trattenuta non si mostra: con lei davanti il modello la ripeteva
@@ -5337,6 +5616,9 @@ class Brain:
                         nudged = True
                         if claimed:
                             claim_at = len(self.history) - 1
+                            # La frase falsa è già alla voce (22/10, issue #170: la misura di
+                            # quante arrivano a chi ascolta, `calliope stato --turni`)
+                            self._rule("dichiarata_detta")
                         self._rule("spinta_dichiarata" if claimed else "spinta_promessa"
                                    if promised else "spinta_richiesta")
                         tail = [{"role": "system",
@@ -5352,6 +5634,19 @@ class Brain:
                         in self.last_rules and claim_at is None:
                     # Dopo la spinta il modello non ha detto niente e non ha fatto niente:
                     # meglio una frase vera del silenzio (la dichiarazione falsa non si dice)
+                    if seguito_preso:
+                        # Dopo una prima frase già detta (22/10, issue #170): la frase onesta,
+                        # non «puoi ripetere la richiesta?». Per una nota sola quella della nota
+                        # (Q7)
+                        from . import frasi
+                        said = frasi.scegli(
+                            ("onesta.non_salvato_ospite" if level == "ospite"
+                             else "onesta.non_salvato") if solo_note(trattenuta_seguito)
+                            else "onesta.non_fatto")
+                        self._rule("azione_non_fatta_onesta")
+                        assistant["content"] = said
+                        yield self._marca(said, "atto", "onesta")
+                        return
                     assistant["content"] = RIPETI_FRASE
                     yield self._marca(RIPETI_FRASE, "atto", "ripeti")
                     return

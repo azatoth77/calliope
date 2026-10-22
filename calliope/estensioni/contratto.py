@@ -114,6 +114,29 @@ IMPOSSIBILI = {
                 "codice deterministico"),
 }
 
+# Le stesse voci in due o tre parole, per la riga dei dati del turno della voce (22/10, issue
+# #170, brain.LIMITI_EST_MSG): «oggi a un'estensione mancano …». Una voce nuova senza la forma
+# breve compare con la sua descrizione intera (impossibili_brevi), e una prova lo segnala
+IMPOSSIBILI_BREVE = {
+    "email": "email e SMS", "telefono": "telefono", "file_persona": "file del PC",
+    # Non «la casa»: i dispositivi di Home Assistant ci sono (casa_stato, casa_comando: seconda
+    # revisione della PR #220, Q1); manca il collegamento diretto al resto della rete
+    "rete_locale": "router e NAS", "orari_fissi": "lavori a orario",
+    "pacchetti": "pacchetti", "memoria": "ricordi",
+    "microfono_camera": "microfono e webcam del PC",
+    # Non «altri tool»: liste, agenda e timer sono metodi della porta
+    "altri_tool": "altre estensioni", "credenziali": "login",
+    "javascript": "siti in JavaScript", "modello": "IA",
+}
+# Per un gioco: None = la voce lì non va detta (un gioco vive sugli schermi e ha i suoi comandi a
+# voce, gioco_voce.py: «microfono» farebbe dire che non si può)
+_IMPOSSIBILI_BREVE_GIOCO = {"pacchetti": "librerie esterne", "microfono_camera": None}
+# Ciò che invece c'è, per aree della porta (lo scope del manifesto di ogni metodo di PORTA): la
+# riga della voce lo dice accanto a ciò che manca (Q1). Un'area nuova della porta senza nome qui
+# compare col suo nome di scope
+AREE_BREVI = {"casa": "casa (Home Assistant)", "liste": "liste", "agenda": "timer e agenda",
+              "schermi": "schermo", "dati": "dati suoi", "rete": "pagine web pubbliche"}
+
 CAPACITA_IDS = tuple(DA_SOLA) + tuple(PORTA) + tuple(IMPOSSIBILI)
 
 _TUTTI = {"legge": {"casa": True, "liste": True, "agenda": True, "dati": True},
@@ -340,6 +363,49 @@ def impossibili(gioco: bool = False) -> dict:
     lo strumento piano (agenti/ciclo.py), così il piano dice le stesse cose del contratto."""
     voci = {k: (_IMPOSSIBILI_GIOCO.get(k, v) if gioco else v) for k, v in IMPOSSIBILI.items()}
     return {k: v for k, v in voci.items() if v}
+
+
+def impossibili_brevi(gioco: bool = False) -> list[str]:
+    """Le voci degli impossibili in forma breve, nell'ordine di `impossibili(gioco)` (22/10,
+    issue #170): segue il contratto, e una voce senza forma breve vale con la sua descrizione."""
+    out = []
+    for k, (cosa, _) in impossibili(gioco).items():
+        if gioco and k in _IMPOSSIBILI_BREVE_GIOCO:
+            breve = _IMPOSSIBILI_BREVE_GIOCO[k]
+            if breve is None:
+                continue
+        else:
+            breve = IMPOSSIBILI_BREVE.get(k) or cosa
+        out.append(breve)
+    return out
+
+
+def _aree(scope: dict) -> list[str]:
+    """Le aree di uno scope della porta: {"legge": {"casa": …}} → ["casa"], {"rete": …} → ["rete"]."""
+    out = []
+    for k, v in (scope or {}).items():
+        if k in ("legge", "scrive") and isinstance(v, dict):
+            out += list(v)
+        else:
+            out.append(k)
+    return out
+
+
+def porta_brevi(gioco: bool = False) -> list[str]:
+    """Le aree della porta stretta in forma breve, nell'ordine di PORTA (22/10, issue #170,
+    seconda revisione della PR #220): ciò che un'estensione (o il riquadro di un gioco, solo i
+    metodi di scheda.AZIONI) ha tramite Calliope."""
+    metodi = list(PORTA)
+    if gioco:
+        from .scheda import AZIONI
+        metodi = [m for m in metodi if m in AZIONI]
+    out = []
+    for m in metodi:
+        for area in _aree(PORTA[m][1]):
+            breve = AREE_BREVI.get(area, area)
+            if breve not in out:
+                out.append(breve)
+    return out
 
 
 def voci_piano(gioco: bool = False) -> tuple:

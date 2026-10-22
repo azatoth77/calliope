@@ -448,6 +448,28 @@ _v("onesta.non_salvato_ospite", "onesta", "Scusa, ho capito, ma non ho salvato n
     "essenziale": ("Capito, scusa: non ho salvato niente.",),
     "computer_di_bordo": ("Ricevuto. Dato non salvato.",),
 })
+# Al posto di un'azione dichiarata due volte senza nessun tool dopo una prima frase già detta
+# (22/10, issue #170, `voce_azione_non_fatta: attivo`; caso vero della DGX del 18/10: «allora
+# mi metto al lavoro… ti faccio sapere» senza nessuno sviluppo aperto). Chi ascolta non ha
+# sentito la dichiarazione (non si è detta): niente «mi sono sbagliata» né «l'ho», e niente
+# «chiedimelo di nuovo» dopo due passate senza tool. Breve e onesta su ciò che è vero: non è
+# partito niente. Non dice di averla fatta e non promette niente (brain,
+# `azione_non_fatta_onesta`)
+_v("onesta.non_fatto", "onesta", "Per ora, però, non ho avviato niente.", toni={
+    "normale": ("Per ora, però, non ho avviato niente.", "Però, per adesso, non è partito niente."),
+    "formale": ("Per ora, tuttavia, non ho avviato nulla.",
+                "Tuttavia, per il momento, non è partito nulla."),
+    "amichevole": ("Per ora, però, non ho avviato niente!", "Però, per adesso, non è partito niente!"),
+    "ironico": ("Per onestà: finora non ho avviato niente.",
+                "A dirla tutta, per ora non è partito niente."),
+    "essenziale": ("Non ho avviato niente.",),
+    "computer_di_bordo": ("Nessuna azione avviata.",),
+}, breve={
+    "normale": ("Non ho avviato niente.",),
+    "formale": ("Non ho avviato nulla.",),
+    "amichevole": ("Non è partito niente!",),
+    "ironico": ("Per onestà: niente avviato.",),
+})
 
 # La frase d'attesa della ricerca nella conversazione della stanza (14/10, passo 4,
 # tools/stanza.stanza_cerca): solo quando la ricerca aspetta righe ancora in coda oltre

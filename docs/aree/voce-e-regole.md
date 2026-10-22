@@ -2117,11 +2117,11 @@ Profili (`PROFILI_LLM`): `gemma4-e4b-ollama` e `qwen3.6-35b-vllm` le tengono tut
 | `chiamata_in_mezzo` | `chiamata_in_mezzo`, `spinta_nome_tool`, `nome_tool_ripetuto` | brain.py, ToolNameHold | ≤ 06/10 |
 | `spinta_promessa` | `spinta_promessa` | brain.py, ACTION_PROMISE (spenta nel 26B) | ≤ 06/10 |
 | `spinta_richiesta` | `spinta_richiesta`, `richiesta_trattenuta` | brain.py, TOOL_REQUEST (spenta nel 26B) | ≤ 06/10 |
-| `spinta_dichiarata` | `spinta_dichiarata`, `dichiarata_taciuta`, `dichiarata_onesta`, `dichiarata_tool_fallito` | brain.py, ClaimHold, ACTION_CLAIM | ≤ 06/10 |
+| `spinta_dichiarata` | `spinta_dichiarata`, `dichiarata_taciuta`, `dichiarata_onesta`, `dichiarata_tool_fallito`; dal 22/10 `dichiarata_detta`, `dichiarata_trattenuta`, `azione_non_fatta`, `azione_non_fatta_onesta`, `azione_non_fatta_attesa` | brain.py, ClaimHold, ACTION_CLAIM, AZIONE_NUOVA | ≤ 06/10 |
 | `riferimento_casa` | `riferimento_casa` | brain.py, REFERENCE_MSG | ≤ 06/10 |
 | `riferimento_agenda` | `riferimento_agenda` | brain.py, AGENDA_MSG | ≤ 06/10 |
 | `riferimento_lavoro` | `riferimento_lavoro` | brain.py, LAVORO_MSG | 07/10 |
-| `estensione_nominata` | `estensione_nominata`, `estensioni_elenco_turno` | brain.py, EST_NOMINATA_MSG | 08/10 |
+| `estensione_nominata` | `estensione_nominata`, `estensioni_elenco_turno`; dal 22/10 `estensioni_limiti_turno` (e `estensioni_limiti_tetto`, contata a parte: non è uno scatto) | brain.py, EST_NOMINATA_MSG, LIMITI_EST_MSG | 08/10 |
 | `modalita_sviluppo` | `sviluppo_modalita`, `sviluppo_riga_fuori_tema`, `sviluppo_promemoria_giorno` | brain.py, SVILUPPO_MSG e la riga in coda | 08/10 |
 | `conferma_al_posto_del_vuoto` | `conferma_al_posto_del_vuoto`, `vuoto_ripiego` | brain.py, risposta vuota | ≤ 06/10 |
 | `vuoto_seconda_passata` | `vuoto_seconda_passata` | brain.py, EMPTY_NUDGE | ≤ 06/10 |
@@ -2688,3 +2688,224 @@ i due turni del 16/10 si vedono accanto a «0 su N». Un annuncio interrotto fra
 (`rec` None, va nel riporto) non scrive il campo `interrotta`: altrimenti `_somma` lo avrebbe
 unito al turno dopo, che sarebbe risultato «interrotto» con `fra_turni: 1`; il suo passo 0 resta
 nel riporto come prima.
+
+## L'azione dichiarata e non fatta dopo la prima frase, e i limiti delle estensioni (22/10, issue #170, ramo `issue-170-azioni-non-fatte`)
+
+**Casi veri** (DGX, 18/10 pomeriggio). A «per adesso sono Ada» il modello ha risposto «Segno fatto,
+allora: d'ora in poi ti chiamerò così», senza nessun tool. A «sviluppa un gioco del tris» ha
+risposto «allora mi metto al lavoro… ti faccio sapere», e al turno dopo «allora metto in moto i
+motori», senza tool e senza nessuno sviluppo aperto. Per dieci minuti ha spiegato come fare
+l'estensione della posta e come autenticarsi, poi `sviluppo_apri` l'ha rifiutata, perché login e
+lavori a orario sono impossibili per un'estensione.
+
+**Perché la rete non bastava.** `ClaimHold` trattiene solo la **prima** frase della risposta,
+quella che il TTS dice per prima: lì non costa latenza, perché la voce aspetta comunque la fine
+della frase. Una dichiarazione più avanti («Che bella idea! Allora mi metto subito al lavoro…»)
+passava, e la spinta partiva solo a risposta detta (il ramo «Azione dichiarata più avanti nella
+risposta, già detta»). «Segno fatto» e «mi metto al lavoro» senza l'avverbio non erano nemmeno
+riconosciuti.
+
+**La regola** (`voce_azione_non_fatta`: `spento` | `ombra` | `attivo`, di serie `ombra`). È una
+correzione della forma di una scelta già fatta dal modello, quella di rispondere senza tool
+(principio 10). Con `spinta_dichiarata` spenta la regola non fa niente. **In spento e in ombra
+la rete e la voce sono quelle di prima, parola per parola**: `ACTION_CLAIM` non cambia.
+
+- **Le forme chiuse in più**, solo in attivo (`brain.AZIONE_NUOVA`, `brain.dichiara_azione`):
+  - «Segno / Annoto / Memorizzo» **con** «fatto», «subito» o «tutto» dopo (da soli sono i giochi
+    a voce e gli elenchi: «Memorizzo! Ora tocca a te.», «Segno, un punto per te.», «Memorizzo,
+    ripeto, ripasso…»);
+  - «Mi metto al lavoro / all'opera / a lavorarci», anche senza «subito».
+
+  La frase deve **cominciare** con la forma: davanti ci può stare solo una parola di raccordo
+  («Allora», «Va bene», «Certo»). Restano fuori, coi contrari in `prova_testo`:
+  - il condizionale, l'imperativo o l'offerta prima del verbo: «Dimmi le regole e mi metto al
+    lavoro», «Se vuoi, mi metto al lavoro», «Quando sei pronto, dimmelo e mi metto all'opera»,
+    «Dammi i dettagli e…»;
+  - un oggetto o un due punti dopo «segno»: «Segno: Leone.», «Annoto una cosa: …», «Memorizzo la
+    tua risposta e passiamo…», «Segno un punto per te», «Segno il tuo nome»;
+  - il condizionale o l'offerta dopo («…appena mi dici di sì», «…ma prima dimmi le regole», «…a
+    meno che tu non preferisca aspettare») e la domanda. «Quando» e «appena» dopo «ti avviso» non
+    sono un condizionale: «Mi metto al lavoro e ti avviso quando è pronto» resta una promessa;
+  - le parole fra virgolette: un dialogo in una fiaba («Mi metto subito al lavoro!» disse
+    Geppetto) non è Calliope. In attivo vale per tutte le frasi, prima compresa; un titolo fra
+    virgolette non toglie la dichiarazione («Ho aperto il documento «Disdetta.docx»»).
+
+  «Metto in moto i motori» resta fuori: è un modo di dire.
+- **Dopo la prima frase** valgono le stesse regole della risposta intera: le forme che la rete
+  guarda solo in testa alla risposta («Fatto…», «Apro…», «Chiudo…», «Alzo…», «Accendo…») non
+  valgono a ogni inizio di frase. Per questo «Chiudo con una curiosità», «Apro una parentesi»,
+  «Fatto curioso», «Alzo le mani» e «Accendo la fantasia» si dicono (`dichiara_azione(…,
+  dopo=True)`). Le dichiarazioni vere invece si prendono: «Ho acceso…», «Timer avviato.».
+- **Lo streaming.** Ho scelto la strada che costa meno: niente buffer della risposta intera
+  (quello di `hold_request` costa tutta la generazione) e niente seconda richiesta al modello per
+  giudicare. `ClaimHold`, dopo la prima frase, resta in prova frase per frase con gli stessi
+  tagli del TTS (`testi.taglio_voce`, minimo 25 caratteri, i pezzi al «; » come per la prima
+  frase). Ogni frase esce appena finita, cioè quando il TTS l'avrebbe comunque cominciata, e la
+  frase dopo si sintetizza mentre la prima suona: per le frasi che non scattano non c'è latenza
+  in più.
+  - Quando scatta c'è un silenzio: dalla frase trattenuta alla fine della generazione, più la
+    seconda passata. Se il silenzio dopo la fine **stimata dell'audio** già detto (dal primo
+    pezzo, i caratteri detti alla velocità di parlato della taratura, 15 caratteri al secondo
+    di serie: `Brain._silenzio_dopo_voce`) supera `tool_correzione_avviso_s` (2 s), si dice una
+    frase d'attesa neutra, «Un attimo.» o «Vediamo.» (`ATTESA_NEUTRA`, le stesse degli annunci
+    dei tool: non «ci riprovo», chi ascolta non ha sentito nessun errore), una volta per risposta
+    e fuori dalla storia (regola `azione_non_fatta_attesa`). Mentre Calliope parla ancora,
+    niente.
+  - Questo silenzio va misurato in attivo.
+- **In attivo** si trattengono la frase che dichiara e il resto (`da_seguito`). La parte già
+  detta entra nella storia, come per i pezzi al «; » della PR #139. Poi vale il percorso della
+  rete: `CLAIM_NUDGE`, una volta, regole `spinta_dichiarata` e `azione_non_fatta`.
+  - Se dopo la spinta il modello dichiara di nuovo senza tool (anche quando la prima volta era
+    la prima frase e questa volta il seguito), oppure non dice niente, si dice la frase pronta
+    nuova `onesta.non_fatto`, regola `azione_non_fatta_onesta`, al posto di «Non ci sono
+    riuscita: puoi ripetere la richiesta?». Se la frase trattenuta era una nota sola e la seconda
+    passata è vuota, `onesta.non_salvato` (o quella dell'ospite).
+  - La frase è «Per ora, però, non ho avviato niente.», con varianti per tono e forma breve.
+    Chi ascolta non ha sentito la dichiarazione, quindi la frase non dice «mi sono sbagliata» né
+    «l'ho»; e non dice «chiedimelo di nuovo», perché viene dopo due passate senza tool.
+  - Una nota sola resta `onesta.non_salvato`, come dal 12/10.
+  - Se il tool arriva nella stessa passata, la frase si dice, come per la prima frase.
+- **In ombra** il testo passa com'è: la voce e la rete sono quelle di prima. Accanto gira una
+  copia di `ClaimHold` in attivo sullo stesso testo, e nel registro dei turni
+  `azione_non_fatta_ombra` dice «avrebbe trattenuto» quando la copia trattiene e la rete di prima
+  no. Comprese le forme nuove in prima frase, e solo senza chiamate nella passata e senza
+  `hold_request`. Così l'ombra conta **esattamente** ciò che l'attivo tratterrebbe: c'è una prova
+  che lo confronta su più risposte. La riga della console dice la frase.
+
+**La misura** (`calliope/azioni_dette.py`, sezione in `calliope stato --turni`, chiave
+`azioni_dette` nel JSON). La misura vera sulla DGX è ancora da fare: oggi la DGX non si
+raggiunge.
+- Per `spinta_dichiarata` conta gli scatti e quante frasi false sono arrivate alla voce. Dal
+  22/10 le regole nuove lo dicono: `dichiarata_detta` (la spinta del ramo «già detta») e
+  `dichiarata_trattenuta` (trattenuta). Nei registri di prima si guarda la risposta detta: c'è
+  una dichiarazione e nessun tool è riuscito? Allora «detta». Se un tool è riuscito dopo la
+  spinta, la frase vera e quella falsa non si distinguono: «incerta».
+- Per `spinta_promessa` sono tutte alla voce: la spinta parte sempre a frase detta. È spenta
+  nei profili del 26B.
+- Conta anche le risposte senza nessun tool che hanno la forma (anche quelle nuove) ma nessuna
+  rete scattata. È una stima: i ricordi «ho salvato che…» qui non si distinguono.
+- Conta il seguito in ombra e in attivo, e mostra le ultime sei frasi da rileggere.
+- Le frasi mostrate sono **solo dei turni di chi amministra**, senza un minore vicino, senza una
+  voce incerta e senza risposte riservate. Le risposte ai minori, agli ospiti e agli altri
+  familiari restano nei soli conteggi (`esempi_non_mostrati`, revisione della PR #220): è la
+  prima sezione di `stato --turni` che mostra testo del registro.
+
+Sulla DGX: `calliope stato --turni --giorni 7` (oppure `--json` e la chiave `azioni_dette`).
+
+**Prima di «attivo».** Il rischio è trattenere una frase giusta. Da rileggere sulla DGX, per una
+settimana d'ombra, le frasi `[ombra]` della sezione. Ognuna che non dichiara un'azione falsa è
+un falso positivo.
+
+**I limiti delle estensioni nel contesto** (`Brain._limiti_estensioni`, `LIMITI_EST_MSG`, rete
+`estensione_nominata`, regola `estensioni_limiti_turno`).
+- **Quando entra.** Solo quando si parla davvero di fare un'estensione o un gioco:
+  - è aperto lo sviluppo di un'estensione o di un gioco;
+  - oppure la frase lo chiede (`INTENZIONE_EST`, `INTENZIONE_GIOCO`): un verbo del fare **in
+    forma di verbo** («sviluppa», «creami», «mi fai», «programmare»; non «lo sviluppo», «il
+    programma», «vorrei», «mi serve») e subito dopo «un'estensione» o «un gioco» con l'articolo;
+  - oppure lo chiedeva il turno subito prima **nella stessa conversazione** (lo stato sta in
+    `Conversazione`, non nel `Brain` condiviso: seconda revisione della PR #220, Q6).
+- **Quando no.** «Lo sviluppo sostenibile», «giochi a calcio?», «facciamo un gioco?» (giocare),
+  «quante estensioni ci sono», «fai vedere le estensioni» (un elenco), «un file con estensione
+  docx», «l'estensione della garanzia / del congedo / del contratto» (un altro significato), «le
+  regole del gioco dell'oca», «una storia sul gioco», «la lista dei giochi», «quali programmi e
+  giochi ci sono». Mai per un programma, né aperto né chiesto.
+- **Per chi.** Segue i permessi veri (Q5). `sviluppo_apri` è di livello familiare, ma
+  un'estensione la apre solo chi amministra (`tools/agenti._permesso`), e un gioco anche un
+  familiare adulto (`_permesso_gioco`). Quindi la riga di un'estensione arriva solo a chi
+  amministra; quella di un gioco anche a un familiare, mai a un minore (nel dubbio, minore:
+  `parla_minore`) né a un ospite. *[storico: «non agli ospiti e ai familiari» fino alla seconda
+  revisione della PR #220]*
+- **Cosa dice.** «Dati del turno: oggi a un'estensione mancano email e SMS, telefono, file del
+  PC, router e NAS, lavori a orario, pacchetti, ricordi, microfono e webcam del PC, altre
+  estensioni, login, siti in JavaScript e IA; ha invece, tramite Calliope, casa (Home
+  Assistant), liste, timer e agenda, schermo, dati suoi e pagine web pubbliche. Se serve ciò che
+  manca, dillo e proponi cosa fare invece.». Dice «oggi» e invita a un'alternativa, non a un
+  rifiuto secco (decisione 0033). Ciò che manca non nomina ciò che la porta ha: «dispositivi di
+  casa» per `rete_locale` diceva il contrario del contratto, che permette Home Assistant (Q1,
+  «un'estensione che spegne le luci quando dico buonanotte» si può fare), e «altri tool» faceva
+  pensare che mancassero anche liste e timer. *[storico: «dispositivi di casa» e «altri tool»
+  fino alla seconda revisione della PR #220]*
+- **Da dove vengono le voci.** Ciò che manca viene dalla forma breve degli impossibili del
+  contratto (`contratto.IMPOSSIBILI_BREVE`, `impossibili_brevi()`): una voce nuova senza la forma
+  breve compare con la sua descrizione intera, e una prova lo segnala. Ciò che invece c'è viene
+  dalle aree degli scope della porta (`PORTA`, `porta_brevi()`, nomi in `AREE_BREVI`). Con la
+  decisione 0033 (#203–#217) la riga segue il contratto da sola.
+- **Per un gioco.** Ci sono solo le voci che lì valgono: niente microfono e webcam (un gioco
+  vive sugli schermi e ha i suoi comandi a voce, `gioco_voce.py`), niente JavaScript, «librerie
+  esterne» al posto di «pacchetti»; e fra ciò che c'è solo i metodi del riquadro
+  (`scheda.AZIONI`).
+- **Quanto costa.** 365 caratteri, circa 104 token stimati (gioco circa 91): più dei ~80 della
+  prima revisione, per la mezza frase di ciò che c'è. Sta nei dati del turno e non nel prompt di
+  sistema, così il prefisso resta in cache (#95). Se con lei i dati del turno supererebbero
+  `dati_turno_tetto_token`, non entra (regola `estensioni_limiti_tetto`, che in `calliope stato
+  --reti` non conta come scatto ma a parte, `non_entrate`).
+
+**Seconda revisione della PR #220** (22/10).
+- **Q3: il banco dei bambini.** Ho scelto un banco a secco invece del conteggio per livello
+  nell'ombra. Il registro dei turni non dice se chi parla è un minore (c'è solo il livello,
+  familiare anche per un bambino); e il banco funziona subito, senza aspettare una settimana di
+  dati della DGX.
+  - In `prova_testo` ci sono 11 risposte da fiabe, giochi a voce e quiz, date a pezzi di 4
+    caratteri: in attivo nessuna si trattiene.
+  - Le fiabe sono quelle col dialogo fra virgolette (Geppetto, il lupo, il cavaliere). I giochi
+    sono «Memorizzo!», «Segno, un punto per te», «Siamo tre a due». Poi «Chiudo con una
+    curiosità», «Fatto curioso» e il ripasso delle tabelline.
+- **Q9.** In `calliope stato --reti`, `volte` conta gli scatti, non le regole di misura che li
+  accompagnano (`ACCOMPAGNANO`: `dichiarata_detta`, `dichiarata_trattenuta`, `azione_non_fatta`,
+  `azione_non_fatta_attesa`).
+- **M18.** La prova del ricontrollo nel flush del seguito c'è adesso. Una frase lunga è tagliata
+  al «; », dichiara nel primo pezzo, e la frase intera è il ricordo di un'azione vera: si dice
+  tutta.
+
+**Prove** (a secco):
+- `prova_testo`:
+  - le forme nuove coi contrari della revisione;
+  - in spento le stesse frasi non sono dichiarazioni;
+  - dopo la prima frase, le forme di testa coi contrari;
+  - `ClaimHold` col seguito in attivo, in ombra e spento, frase per frase. La prima frase esce
+    appena finita;
+  - l'ombra uguale all'attivo su sei risposte;
+  - contrari: niente da trattenere, il ricordo di un'azione vera, una domanda, «Chiudo con una
+    curiosità».
+- `prova_brain`, `prova_azione_non_fatta`:
+  - in attivo il caso del tris non arriva alla voce; poi spinta e tool;
+  - due volte di fila, o la seconda passata vuota: la frase onesta. Contrario: con la prima frase
+    trattenuta resta il ripiego di prima;
+  - la frase d'attesa sì e no secondo la soglia;
+  - «Segno fatto» dopo una prima frase;
+  - la frase onesta senza «sbagliata», «l'ho», «di nuovo»;
+  - contrari: col tool nella passata la frase si dice; dopo un tool d'azione riuscito; una frase
+    che non dichiara;
+  - in ombra la voce non cambia e c'è la regola; spento, o `spinta_dichiarata` spenta: niente.
+- `prova_brain`, `prova_limiti_estensioni`:
+  - la riga, al massimo 80 token, il turno dopo sì e due dopo no;
+  - il contratto cambiato cambia la riga; ogni impossibile ha la sua forma breve;
+  - il gioco senza microfono; lo sviluppo aperto di un gioco;
+  - contrari: lo sviluppo aperto di un programma e la richiesta di un programma, i sei falsi
+    ingressi, i livelli familiare e ospite, il tetto, senza `sviluppo_apri`, rete spenta.
+- `prova_reti_scatti`, sezione 5: la misura su un registro finto, coi registri di prima e di
+  dopo; minori, ospiti, familiari e voci incerte solo contati.
+- `prova_config_modi`: il campo a modi.
+- **Mutazioni**: 30 mutazioni, una per correzione delle due revisioni della PR #220. Tutte fanno
+  cadere una prova. Quella di «vorrei / mi serve» come verbi del fare l'ho tolta: l'articolo
+  obbligatorio e le esclusioni la coprono già, e non cambia niente. Le mutazioni della prima
+  revisione:
+  - forme nuove sempre accese; senza il condizionale dopo; raccordo libero; oggetto dopo «segno»;
+  - forme di testa dopo la prima frase; ombra anche quando la rete di prima trattiene;
+  - programma aperto; senza il livello; senza il tetto; «sviluppo» come nome; microfono nel
+    gioco;
+  - la frase onesta di prima; senza il ramo della passata vuota; senza la frase d'attesa;
+  - il testo di tutti in `stato --turni`.
+  - della seconda revisione:
+    - Q1: «dispositivi di casa» e «altri tool» fra ciò che manca; senza ciò che invece c'è;
+    - Q2: senza «ma prima / a meno che»; «ti avviso quando» come condizionale; il verbo da solo;
+      le virgolette che contano;
+    - Q3: il dialogo in prima frase in attivo;
+    - Q4: «estensione» con un altro significato; il gioco senza l'articolo;
+    - Q5: un'estensione anche per un familiare; un gioco anche per un minore;
+    - Q6: il turno dopo sul `Brain`;
+    - Q7: il seguito di questa passata; la nota nella passata vuota;
+    - Q8: la frase d'attesa di correzione; il silenzio da quando il testo passa;
+    - Q9: `volte` con le regole che accompagnano; la riga oltre il tetto come scatto;
+    - M18: il flush del seguito senza il ricontrollo.

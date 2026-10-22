@@ -46,7 +46,11 @@ il prossimo passo (registro delle capacità, calliope/capacita.py).
                                               (calliope/system1/dopo_tool.py, 15/10);
                                               notizie: quota dai giornali e da internet,
                                               vuote e perché, rifiuti ai minori, per giorno
-                                              (calliope/notizie/misura.py, 16/10)
+                                              (calliope/notizie/misura.py, 16/10); azioni
+                                              dichiarate o promesse senza tool: scatti di
+                                              spinta_dichiarata e spinta_promessa, quante
+                                              frasi alla voce, il seguito in ombra
+                                              (calliope/azioni_dette.py, 22/10)
     python -m calliope.stato --reti [--giorni N] [--json]
                                               le reti del modello per profilo (15/10, E11,
                                               calliope/reti_scatti.py): scatti, risposte
@@ -513,6 +517,9 @@ def main(argv=None) -> int:
         # modello, e in ombra la seconda passata risparmiabile
         from .system1 import dopo_tool as dopo_tool_s1
         dopo_tool_r = dopo_tool_s1.riassunto(turni)
+        # Le azioni dichiarate o promesse senza tool e quante arrivano alla voce (22/10, #170)
+        from . import azioni_dette
+        azioni_r = azioni_dette.riassunto(turni)
         # Le frasi pronte ripetute (12/10, calliope/frasi.py, fase 0)
         from . import frasi
         pronte = frasi.riassunto(turni)
@@ -555,6 +562,7 @@ def main(argv=None) -> int:
                               "scelta_tool": scelta,
                               "si_breve": si_r,
                               "dopo_tool": dopo_tool_r,
+                              "azioni_dette": azioni_r,
                               "frasi_pronte": pronte,
                               "pertinenza_ricerche": pert_r,
                               "notizie": notizie_r,
@@ -587,6 +595,8 @@ def main(argv=None) -> int:
             print(scelta_tool.testo(scelta))
             print()
             print(dopo_tool_s1.testo(dopo_tool_r))
+            print()
+            print(azioni_dette.testo(azioni_r))
             print()
             print(frasi.testo(pronte))
             print()

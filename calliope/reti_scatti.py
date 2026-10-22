@@ -47,11 +47,14 @@ REGOLE_RETE: dict[str, tuple[str, ...]] = {
     "spinta_promessa": ("spinta_promessa",),
     "spinta_richiesta": ("spinta_richiesta", "richiesta_trattenuta"),
     "spinta_dichiarata": ("spinta_dichiarata", "dichiarata_taciuta", "dichiarata_onesta",
+                          "dichiarata_detta", "dichiarata_trattenuta", "azione_non_fatta",
+                          "azione_non_fatta_onesta", "azione_non_fatta_attesa",
                           "dichiarata_tool_fallito"),
     "riferimento_casa": ("riferimento_casa",),
     "riferimento_agenda": ("riferimento_agenda",),
     "riferimento_lavoro": ("riferimento_lavoro",),
-    "estensione_nominata": ("estensione_nominata", "estensioni_elenco_turno"),
+    "estensione_nominata": ("estensione_nominata", "estensioni_elenco_turno",
+                            "estensioni_limiti_turno"),
     "modalita_sviluppo": ("sviluppo_modalita", "sviluppo_riga_fuori_tema",
                           "sviluppo_promemoria_giorno"),
     "conferma_al_posto_del_vuoto": ("conferma_al_posto_del_vuoto", "vuoto_ripiego"),
@@ -74,6 +77,17 @@ REGOLE_RETE: dict[str, tuple[str, ...]] = {
     "risposta_ripetuta": ("spinta_ripetuta",),
     "domanda_insistita": ("domanda_insistita",),
     "ciclo_ripetuto": ("ciclo_ripetuto",),
+}
+
+# Regole che accompagnano sempre un'altra regola della stessa rete nello stesso scatto (22/10,
+# issue #170: la misura di `spinta_dichiarata`): contano fra le regole, non in `volte`
+ACCOMPAGNANO = frozenset({"dichiarata_detta", "dichiarata_trattenuta", "azione_non_fatta",
+                          "azione_non_fatta_attesa"})
+# rete → regole che dicono che la rete **non** è entrata (22/10: la riga dei limiti delle
+# estensioni oltre il tetto dei dati del turno): non sono scatti, si contano a parte
+# (`non_entrate`)
+NON_SCATTI: dict[str, tuple[str, ...]] = {
+    "estensione_nominata": ("estensioni_limiti_tetto",),
 }
 
 # rete → regole che dicono che il suo aiuto è stato usato (anche in un turno dopo)
@@ -198,7 +212,7 @@ def _vuota() -> dict:
     return {"scatti": 0, "volte": 0, "osservati": 0, "ultima": None, "bene": 0,
             "dubbi": {"ripiego": 0, "esito": 0, "ripetuta": 0, "interrotta": 0},
             "senza_parole": 0, "tool_riuscito": 0, "seguiti": 0, "regole": {},
-            "spenta_turni": 0}
+            "spenta_turni": 0, "non_entrate": 0}
 
 
 def riassunto(turni: list[dict], cfg=None) -> dict:
@@ -225,12 +239,14 @@ def riassunto(turni: list[dict], cfg=None) -> dict:
         giorno = str(t.get("inizio") or "")[:10]
         for rete in reti:
             mie = [r for r in regole if r in REGOLE_RETE.get(rete, ())]
+            fuori = [r for r in regole if r in NON_SCATTI.get(rete, ())]
             seguiti = [r for r in regole if r in SEGUITI.get(rete, ())]
             nato = NEL_CODICE_DAL.get(rete, "")
-            if not mie and not seguiti and (not risposta or (nato and giorno and giorno < nato)):
+            if not mie and not seguiti and not fuori and (not risposta or (nato and giorno and giorno < nato)):
                 continue
             d = p["reti"].setdefault(rete, _vuota())
             d["seguiti"] += len(seguiti)
+            d["non_entrate"] += len(fuori)
             on = accesa(t, rete) or bool(mie)
             if risposta and not (nato and giorno and giorno < nato):
                 if on:
@@ -240,7 +256,7 @@ def riassunto(turni: list[dict], cfg=None) -> dict:
             if not mie:
                 continue
             d["scatti"] += 1
-            d["volte"] += len(mie)
+            d["volte"] += len([r for r in mie if r not in ACCOMPAGNANO])
             for r in mie:
                 d["regole"][r] = d["regole"].get(r, 0) + 1
             if str(t.get("inizio") or "") > str(d["ultima"] or ""):
