@@ -285,9 +285,9 @@ def esegui(dati, calliope):
     if not dati_sito.get("risultati"):
         return {"da_dire": f"Non ho trovato {citta}.", "trovato": False}
     return {"da_dire": f"A {citta} ci sono {dati_sito['risultati'][0]['gradi']} gradi."}
-test_estensione.py — C'È GIÀ nella cartella: chiama(dati, risposte=…, negate=…) chiama \
-esegui(dati, calliope) con la Calliope finta già pronta, e un primo test. Non riscriverlo: \
-aggiungi i tuoi casi nella classe Prove con modifica_file, così:
+test_estensione.py — C'È GIÀ, con un primo test: chiama(dati, risposte=…, negate=…) di \
+calliope_estensione esegue esegui(dati, calliope) con la Calliope finta, che segue \
+manifesto.json. Non riscriverlo: aggiungi i tuoi casi nella classe Prove con modifica_file, così:
     def test_trovata(self):
         out = chiama({"citta": "Borgo Alto"}, risposte={"rete_leggi": {"stato": 200,
                      "tipo": "application/json", "testo": json.dumps({"risultati": [{"gradi": 18}]})}})
@@ -300,24 +300,18 @@ Un test che fallisce dice l'asserzione e file:riga: correggi quel punto con modi
 # Il file di test di partenza di un'estensione (13/10, banco della temperatura sulla DGX: in un
 # lavoro 41 test su 41 in errore con «esegui() missing 1 required positional argument:
 # 'calliope'», e le passate spese a sistemare i test invece del codice). Va nella cartella del
-# lavoro prima della prima passata (`prepara_estensione`), modificabile: la firma giusta, la
-# Calliope finta pronta in `chiama` e un test che passa con qualunque estensione che risponde.
+# lavoro prima della prima passata (`prepara_estensione`), modificabile: la Calliope finta pronta
+# in `chiama` e un test che passa con qualunque estensione che risponde. Dal 22/10 (#228, § 3.5
+# n. 36 della ricerca del 19/10) `chiama` sta in calliope_estensione.py, in sola lettura: il file
+# di test riscritto (con esegui(dati) a mano) non riporta più il bug del 13/10.
 # Gli esempi nei commenti sono neutri: niente casi del banco
-TEST_ESTENSIONE = '''"""I test dell'estensione (unittest). La firma è esegui(dati, calliope): «dati» è il
-dict degli input del manifesto, «calliope» la Calliope finta (CalliopeFinta), che risponde al
-posto di quella vera. Usa chiama(): la Calliope finta è già pronta."""
+TEST_ESTENSIONE = '''"""I test dell'estensione (unittest). chiama(dati, risposte=…, negate=…) esegue
+esegui(dati, calliope) di estensione.py con la Calliope finta (CalliopeFinta), che risponde al
+posto di quella vera e segue i permessi di manifesto.json: sta in calliope_estensione, non qui."""
 import json  # noqa: F401 — per le risposte della rete nei test
 import unittest
 
-from calliope_estensione import CalliopeFinta, ErroreCalliope  # noqa: F401
-from estensione import esegui
-
-
-def chiama(dati, risposte=None, negate=()):
-    """esegui(dati, calliope) con una Calliope finta: risposte = {azione: risultato} (per
-    esempio {"rete_leggi": {"stato": 200, "tipo": "text/html", "testo": "..."}}), negate = le
-    azioni che alzano ErroreCalliope (per esempio ["rete_leggi"])."""
-    return esegui(dict(dati), CalliopeFinta(risposte=risposte or {}, negate=list(negate)))
+from calliope_estensione import CalliopeFinta, ErroreCalliope, chiama  # noqa: F401
 
 
 class Prove(unittest.TestCase):
