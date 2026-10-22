@@ -2127,9 +2127,16 @@ def main(argv) -> int:
         if args.agenti_profilo not in PROFILI_AGENTE:
             ap.error(f"profilo dell'agente sconosciuto: {args.agenti_profilo} (profili: "
                      f"{', '.join(PROFILI_AGENTE)})")
-        # Solo in memoria, prima del servizio: l'agente legge i tetti quando nasce
+        # Solo in memoria, prima del servizio: l'agente legge i tetti quando nasce. Un
+        # agenti_token_minuto del locale, già convertito all'avvio, qui lo sostituisce il budget
+        # del profilo (seconda revisione della PR #234, Q6): il banco lo dice
+        convertito = "agenti_token_minuto" in (getattr(cfg, "_agenti_tenute", None) or [])
         cfg.agenti_profilo = args.agenti_profilo
         apply_agenti_profile(cfg, log=True)
+        if convertito:
+            print("Attenzione: agenti_token_minuto del locale (convertito all'avvio) non vale nel "
+                  f"banco: i token per lavoro sono quelli del profilo {args.agenti_profilo} "
+                  f"({cfg.agenti_token_lavoro})", flush=True)
     # Prima di creare il servizio: l'agente legge passate e tempo da cfg quando nasce
     budget = dividi_budget(cfg, args.giri, args.minuti)
     print(f"Profilo dell'agente: {cfg.agenti_profilo or 'nessuno'} "

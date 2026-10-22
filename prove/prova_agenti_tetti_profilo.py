@@ -516,25 +516,30 @@ class Ripiego:
         raise AssertionError("controlla doveva fermare lo stream")
 
 
-def ripiego(nome, gen_s, prima_s, voce_s, minuti):
+def ripiego(nome, gen_s, prima_s, voce_s, minuti, tappe=False, cli=None, arb=None,
+            max_passi=None):
     import threading
     cfg = Config()
     cfg.agenti_accettazione = False
     cfg.agenti_revisore = "spento"
     cfg.agenti_tempo_max_min = minuti
-    arb = Arbitro(True, ripresa_s=0.0)
-    cli = Ripiego(arb, gen_s, prima_s, voce_s)
+    if max_passi:
+        cfg.agenti_max_passi = max_passi
+    arb = arb or Arbitro(True, ripresa_s=0.0)
+    cli = cli or Ripiego(arb, gen_s, prima_s, voce_s)
     ag = Agente(cfg, SimpleNamespace(modello="m"), cli, arb, log=lambda *a: None)
     sb = Sandbox(TMP / nome, 30, 512, isolamento=Isolamento("processo", "prova"))
     lav = Lavoro(nome, "codice", "scrivi")
+    lav.tappe = tappe
     lav.inizio = time.time()
     # Un lavoro che non si ferma da sé (la mutazione) lo ferma la prova
     guardia = threading.Timer(12.0, lav.annulla.set)
     guardia.start()
     t0 = time.monotonic()
     try:
-        ag.codice(lav, sb)
-        fine = "consegnato"
+        ris = ag.codice(lav, sb)
+        fine = (f"tappa {ris.get('tipo_limite')}: {ris.get('motivo')}"
+                if ris.get("esito") == "tappa" else "consegnato")
     except Limite as e:
         fine = str(e)
     except Exception as e:  # noqa: BLE001 — Annullato
@@ -562,12 +567,169 @@ def prova_ripiego():
     # all'orologio vero il giro si ferma al doppio del tempo massimo
     fine, giri, lav, dt = ripiego("orologio", 0.02, 0.15, 0.3, 1 / 60)
     verifica("quasi tutta voce: il tetto all'orologio vero (2 × 1 s, voce compresa) ferma il "
-             "lavoro", "all'orologio" in fine and dt < 4, f"{fine} dopo {giri} passate, {dt:.1f} s")
+             "lavoro, con la frase per la persona (Q3)", fine == ciclo.MOTIVO_OROLOGIO and dt < 4,
+             f"{fine} dopo {giri} passate, {dt:.1f} s")
     # 3. Il massimo delle rifatte: con tempi larghi la stessa passata al più 10 volte
     fine, giri, lav, dt = ripiego("rifatte", 0.01, 0.01, 0.02, 10.0)
-    verifica("la stessa passata fermata dalla voce al più 10 volte, poi il lavoro si ferma",
-             "fermato la stessa passata 10 volte" in fine and giri == 10,
+    verifica("la stessa passata fermata dalla voce al più 10 volte, poi il lavoro si ferma, "
+             "con la frase per la persona (Q3)", fine == ciclo.MOTIVO_RIFATTE and giri == 10,
              f"{fine} dopo {giri} passate")
+    verifica("le frasi per la persona senza parole interne («passata», «la voce», "
+             "«orologio»)", not any(p in m for m in (ciclo.MOTIVO_RIFATTE, ciclo.MOTIVO_OROLOGIO)
+                                    for p in ("passata", "la voce", "orologio")))
+    # 4. Le rifatte si contano per passata (Q5): 6 fermate per passata, due passate riuscite,
+    # e il lavoro arriva al tetto delle passate, non a quello delle rifatte
+    class SeiPerPassata(Ripiego):
+        def chat(self, body, controlla=None, **kw):
+            self.giri += 1
+            if self.giri % 7:
+                self.arb.voce_occupata()
+                self.arb.voce_libera(0.0)
+                raise ciclo.Interrotto()
+            return {"content": "", "eval": 10, "prompt": 10, "tool_calls": [
+                {"name": "scrivi_file", "arguments": {"percorso": f"m{self.giri}.py",
+                                                      "contenuto": "X = 1\n"}}]}
+    arb = Arbitro(True, ripresa_s=0.0)
+    fine, giri, lav, dt = ripiego("rifatte-passata", 0, 0, 0, 10.0, arb=arb,
+                                  cli=SeiPerPassata(arb, 0, 0, 0), max_passi=2)
+    verifica("le rifatte per passata: 6 a passata in due passate (12 in tutto) non fermano il "
+             "lavoro, che arriva al tetto delle passate", "passate" in fine and giri == 14,
+             f"{fine} dopo {giri}")
+    # 5. In uno sviluppo i due tetti sono una tappa «tempo» (Q2), con il perché vero (Q3)
+    for nome, args, perche, motivo in (
+            ("tappa-orologio", (0.02, 0.15, 0.3, 1 / 60), "orologio", ciclo.MOTIVO_OROLOGIO),
+            ("tappa-rifatte", (0.01, 0.01, 0.02, 10.0), "voce", ciclo.MOTIVO_RIFATTE)):
+        fine, giri, lav, dt = ripiego(nome, *args, tappe=True)
+        tp = (lav.segnali or {}).get("tempo_perche") or {}
+        verifica(f"in uno sviluppo il tetto ({perche}) è una tappa «tempo»",
+                 fine.startswith("tappa tempo") and tp.get("perche") == perche
+                 and tp.get("giro") == 1, f"{fine} {tp}")
+        from calliope.sviluppo import Sviluppi
+        lav.stato = "in_attesa"
+        lav.risultato = {"esito": "tappa", "tipo_limite": "tempo"}
+        finto = SimpleNamespace(lavoro_attivo=lambda sv: False, _lavoro=lambda i, lav=lav: lav)
+        sv = SimpleNamespace(fase="sviluppo", lavoro=lav.id, nota="")
+        frase = Sviluppi.motivo_arresto(finto, sv, voce=True)
+        verifica(f"…e a voce il perché vero ({perche}), non «è finito il tempo del giro»",
+                 motivo in frase and "tempo del giro" not in frase, frase)
+    lav.risultato = {"esito": "tappa", "tipo_limite": "tempo"}
+    lav.giro = 2
+    frase = Sviluppi.motivo_arresto(finto, sv, voce=True)
+    verifica("contrario: il perché di un giro di prima non vale (al giro 2 «tempo del giro»)",
+             "tempo del giro" in frase, frase)
+
+
+def prova_attesa_scadenza():
+    sezione("l'attesa della voce ha la scadenza dell'orologio; il diario; l'avviso")
+    # Q1: la voce occupata per 3 s, tempo massimo 1 s (orologio 2 s): l'attesa smette a 2 s e
+    # nessuna passata parte
+    import threading
+    arb = Arbitro(True, ripresa_s=0.0)
+
+    class Pronto:
+        giri = 0
+
+        def chat(self, body, controlla=None, **kw):
+            Pronto.giri += 1
+            return {"content": "", "eval": 10, "prompt": 10, "tool_calls": []}
+    arb.voce_occupata()
+    threading.Timer(3.0, lambda: arb.voce_libera(0.0)).start()
+    fine, giri, lav, dt = ripiego("scadenza", 0, 0, 0, 1 / 60, cli=Pronto(), arb=arb)
+    verifica("la voce occupata oltre l'orologio: l'attesa smette alla scadenza e nessuna passata "
+             "parte (Q1)", fine == ciclo.MOTIVO_OROLOGIO and Pronto.giri == 0 and dt < 2.7,
+             f"{fine} passate {Pronto.giri}, {dt:.1f} s")
+    time.sleep(1.2)
+    arb2 = Arbitro(True, ripresa_s=0.0)
+    arb2.voce_occupata()
+    t0 = time.monotonic()
+    w = arb2.attendi(None, fino=time.monotonic() + 0.2)
+    verifica("Arbitro.attendi con la scadenza: smette anche con la voce occupata",
+             0.15 <= w <= 0.4 and time.monotonic() - t0 < 0.5, f"{w:.2f}")
+    arb2.voce_libera(0.0)
+    # Q2: il diario con il tetto «tempo» torna estrattivo; un altro tetto passa oltre
+    cfg = Config()
+    ag = Agente(cfg, SimpleNamespace(modello="m"), SimpleNamespace(), Arbitro(False, 0),
+                log=lambda *a: None)
+    lav = Lavoro("d", "codice", "x")
+    lav.inizio = time.time()
+    scrivi = ag._diario_modello(lav)
+
+    def tempo(*a, **k):
+        raise Limite(ciclo.MOTIVO_RIFATTE, tipo="tempo")
+    ag.passata = tempo
+    verifica("il diario fermato dal tetto «tempo» torna estrattivo (None, Q2)",
+             scrivi("passi", None) is None and lav.passo != "riordina gli appunti del lavoro")
+
+    def token(*a, **k):
+        raise Limite("token finiti", tipo="token")
+    ag.passata = token
+    try:
+        scrivi("passi", None)
+        alzato = False
+    except Limite:
+        alzato = True
+    verifica("contrario: il tetto dei token nel diario passa oltre, come prima", alzato)
+    # Q4: l'avviso di chiusura vicino al tetto all'orologio
+    cfg = Config()
+    cfg.agenti_tempo_max_min = 1.0              # orologio a 120 s
+    ag = Agente(cfg, SimpleNamespace(modello="m"), SimpleNamespace(), Arbitro(False, 0),
+                log=lambda *a: None)
+    vicino = Lavoro("a", "codice", "x")
+    vicino.inizio, vicino.attesa_voce_s = time.time() - 108, 100.0   # trascorso 8 s
+    lontano = Lavoro("b", "codice", "x")
+    lontano.inizio, lontano.attesa_voce_s = time.time() - 60, 55.0
+    verifica("l'avviso di chiusura all'85 % del tetto all'orologio (Q4; contrario: a metà)",
+             ag._avviso_fine(vicino) is not None and ag._avviso_fine(lontano) is None)
+    quasi = Lavoro("q", "codice", "x")
+    quasi.inizio, quasi.attesa_voce_s = time.time() - 115, 110.0
+    verifica("…e vicino al tetto all'orologio niente più diario dal modello (_resta_tempo; "
+             "contrario: a metà)", not ag._resta_tempo(quasi) and ag._resta_tempo(lontano))
+    # Q5: l'orologio senza l'attesa della persona, e dal giro
+    lav = Lavoro("o", "codice", "x")
+    lav.inizio, lav.attesa_s, lav.attesa0 = time.time() - 1000, 600.0, 0.0
+    o1 = Agente.orologio(lav)
+    lav.giro_inizio, lav.attesa0 = time.time() - 100, 600.0
+    o2 = Agente.orologio(lav)
+    verifica("l'orologio non conta l'attesa di una risposta della persona (1000 − 600) e "
+             "riparte dal giro nuovo (100)", 398 <= o1 <= 402 and 98 <= o2 <= 102,
+             f"{o1:.0f} {o2:.0f}")
+    lav.attesa_voce_s = 5000.0
+    try:
+        ag._tetti(lav)
+        fermo = False
+    except Limite:
+        fermo = True
+    verifica("…e un giro nuovo dopo un lavoro lungo non si ferma subito (contrario dell'orologio "
+             "dall'inizio)", not fermo)
+
+
+def prova_frase_giro():
+    sezione("la frase all'agente al giro nuovo: le passate, non i minuti")
+    cfg = Config()
+    cfg.agenti_accettazione = False
+    cfg.agenti_revisore = "spento"
+    cfg.agenti_max_passi = 2
+    o = Orologio()
+    copione = [scrivi(i, 100) for i in range(6)]
+    cli = Modello(copione, 70.0, o)
+    ag = Agente(cfg, SimpleNamespace(modello="m"), cli, Arbitro(False, 0), log=lambda *a: None)
+    sb = Sandbox(TMP / "frase-giro", 30, 512, isolamento=Isolamento("processo", "prova"))
+    lav = Lavoro("fg", "codice", "scrivi i moduli")
+    lav.tappe, lav.inizio = True, time.time()
+    ris = ag.codice(lav, sb)
+    lav.passi0, lav.token0, lav.giro, lav.giro_inizio = lav.passi, lav.token, 2, time.time()
+    lav.risposta, lav.avvisato = "continua", False
+    try:
+        ag.codice(lav, sb)
+    except Limite:
+        pass
+    testi = [m.get("content") or "" for b in cli.visti for m in b.get("messages", [])
+             if m.get("role") == "user"]
+    verifica("al giro nuovo «Hai un altro giro di lavoro (2 passate).», senza i minuti (P6)",
+             ris.get("esito") == "tappa"
+             and any("Hai un altro giro di lavoro (2 passate). Riprendi" in t for t in testi)
+             and not any("minuti). Riprendi" in t for t in testi),
+             str([t[:80] for t in testi if "altro giro" in t]))
 
 
 def prova_scheda():
@@ -593,6 +755,8 @@ if __name__ == "__main__":
     prova_secco()
     prova_voce()
     prova_ripiego()
+    prova_attesa_scadenza()
+    prova_frase_giro()
     prova_scheda()
     print("\n" + ("TUTTO OK" if not errori else f"{errori} ERRORI"))
     sys.exit(1 if errori else 0)

@@ -75,6 +75,20 @@ def _occupata_s(f) -> float | None:
 OROLOGIO_VOLTE = 2.0
 # La stessa passata fermata per la voce e rifatta al più tante volte, poi il lavoro si ferma
 RIFATTE_MAX = 10
+# Il motivo dei due tetti, a voce (seconda revisione della PR #234, Q3: niente «passata» né
+# «la voce» in terza persona; il dettaglio tecnico resta nel log). In uno sviluppo li dice il
+# perché della tappa (sviluppo.motivo_arresto, `segnali["tempo_perche"]`)
+MOTIVO_RIFATTE = ("mi sono dovuta fermare troppe volte per parlare con voi e il lavoro non "
+                  "andava avanti")
+MOTIVO_OROLOGIO = "ci ha messo troppo, contando anche le pause per parlare con voi"
+
+
+def _perche_tempo(lav, perche: str):
+    """Segna nel giro perché il tetto «tempo» è scattato («voce» o «orologio»): il perché vero
+    della tappa in uno sviluppo (Q3 della seconda revisione della PR #234)."""
+    seg = lav.segnali if isinstance(getattr(lav, "segnali", None), dict) else {}
+    lav.segnali = seg
+    seg["tempo_perche"] = {"giro": int(getattr(lav, "giro", 1) or 1), "perche": perche}
 
 
 class GiroAVuoto(Exception):
@@ -987,6 +1001,11 @@ class Agente:
         # Funzione(lavoro, strumento, sandbox) chiamata prima di ogni strumento: il banco
         # prove/prova_lavori.py la usa per fotografare il codice al primo tentativo
         self.on_strumento = None
+        # L'arbitro sa attendere con una scadenza (`fino`)? Quelli finti delle prove no
+        try:
+            self._attendi_fino = "fino" in inspect.signature(arbitro.attendi).parameters
+        except (TypeError, ValueError, AttributeError):
+            self._attendi_fino = False
         # Il cliente sa mandare anche il ragionamento e gli argomenti a pezzi (su_flusso)?
         # I clienti finti di altre prove no: allora solo il testo
         try:
@@ -1080,14 +1099,31 @@ class Agente:
                                  "del lavoro", tipo="token")
             else:
                 self._tetti(lav)
-            waited = self.arbitro.attendi(lav.annulla)
+            # L'attesa della voce ha una scadenza, il tetto all'orologio del giro (Q1 della
+            # seconda revisione della PR #234: voci a meno della ripresa l'una dall'altra la
+            # tenevano senza fine), e dopo un'attesa i tetti si guardano di nuovo: nessuna
+            # passata parte oltre l'orologio. Dentro una passata (anche congelata dalla pausa di
+            # vLLM) il tetto si guarda alla passata dopo
+            resta = None if servizio else self._resta_orologio(lav)
+            if resta is not None and self._attendi_fino:
+                waited = self.arbitro.attendi(lav.annulla,
+                                              fino=time.monotonic() + max(0.0, resta))
+            else:
+                waited = self.arbitro.attendi(lav.annulla)
             if lav.annulla.is_set():
                 raise Annullato()
+            if waited > 0 and not servizio:
+                lav.attesa_voce_s += max(0.0, float(waited or 0))
+                waited_contato = True
+                self._tetti(lav)
+            else:
+                waited_contato = False
             if waited > 0.05:
                 lav.cedimenti += 1
             # L'attesa della voce non è tempo dell'agente (22/10, #224): fuori dalla guardia dei
-            # minuti senza strumenti
-            lav.attesa_voce_s += max(0.0, float(waited or 0))
+            # minuti senza strumenti (contata sopra prima di guardare i tetti)
+            if not waited_contato:
+                lav.attesa_voce_s += max(0.0, float(waited or 0))
             ctx = self.num_ctx()
             gen = num_predict or self._generazione(ctx, messages, tools, contesto)
             body = {"model": modello or self.imp.modello, "messages": messages,
@@ -1178,8 +1214,8 @@ class Agente:
                 if rifatte >= RIFATTE_MAX:
                     self.log(f"[AGENTI] {lav.id}: la voce ha fermato la stessa passata "
                              f"{rifatte} volte: il lavoro si ferma")
-                    raise Limite(f"la voce ha fermato la stessa passata {rifatte} volte",
-                                 tipo="tempo")
+                    _perche_tempo(lav, "voce")
+                    raise Limite(MOTIVO_RIFATTE, tipo="tempo")
                 continue                 # la voce aveva la precedenza: si rifà il passo
             except GiroAVuoto:
                 out = self._giro_a_vuoto(lav, rip, t_passata, servizio)
@@ -1288,8 +1324,17 @@ class Agente:
             raise Limite(f"sono passati i {self.tempo_max_s / 60:.0f} minuti del lavoro",
                          tipo="tempo")
         if lav.inizio and self.orologio(lav) > OROLOGIO_VOLTE * self.tempo_max_s:
-            raise Limite(f"sono passati {OROLOGIO_VOLTE * self.tempo_max_s / 60:.0f} minuti "
-                         "all'orologio, con la voce", tipo="tempo")
+            self.log(f"[AGENTI] {lav.id}: passati {OROLOGIO_VOLTE * self.tempo_max_s / 60:.0f} "
+                     "minuti all'orologio, voce compresa: il lavoro si ferma")
+            _perche_tempo(lav, "orologio")
+            raise Limite(MOTIVO_OROLOGIO, tipo="tempo")
+
+    def _resta_orologio(self, lav: Lavoro) -> float | None:
+        """I secondi che restano al tetto all'orologio del giro (None senza l'inizio): la
+        scadenza dell'attesa della voce (Q1 della seconda revisione della PR #234)."""
+        if not lav.inizio:
+            return None
+        return OROLOGIO_VOLTE * self.tempo_max_s - self.orologio(lav)
 
     def _avviso_fine(self, lav: Lavoro, tipo: str = "codice") -> "sp.Spinta | None":
         """Una volta per lavoro, vicino a un tetto (le ultime 2 passate, l'85 % dei token o del
@@ -1307,6 +1352,9 @@ class Agente:
         elif trascorso >= 0.85 * self.tempo_max_s:
             cosa = (f"il suo tempo (restano {max(1, round((self.tempo_max_s - trascorso) / 60))}"
                     " minuti)")
+        elif lav.inizio and self.orologio(lav) >= 0.85 * OROLOGIO_VOLTE * self.tempo_max_s:
+            # Vicino al tetto all'orologio (Q4 della seconda revisione della PR #234)
+            cosa = "il suo tempo all'orologio, con le pause per la voce"
         else:
             return None
         seg = getattr(lav, "segnali", None)
@@ -2735,6 +2783,8 @@ class Agente:
             return False
         if lav.inizio and self.trascorso(lav) > self.tempo_max_s * 0.9:
             return False
+        if lav.inizio and self.orologio(lav) > OROLOGIO_VOLTE * self.tempo_max_s * 0.9:
+            return False
         return True
 
     @staticmethod
@@ -3327,7 +3377,15 @@ class Agente:
                     servizio=True)
                 dati = json.loads(out.get("content") or "{}")
                 return dati if isinstance(dati, dict) and dati.get("fatto") else None
-            except (Annullato, Limite):
+            except Limite as e:
+                if e.tipo == "tempo":
+                    # Le rifatte per la voce nel diario (Q2 della seconda revisione della PR
+                    # #234): il diario estrattivo, e il tetto lo dice la passata del lavoro, dentro
+                    # il suo `try` (tappa in uno sviluppo)
+                    self.log(f"[AGENTI] {lav.id}: diario dal modello fermato ({e}): estrattivo")
+                    return None
+                raise
+            except Annullato:
                 raise
             except Exception as e:  # noqa: BLE001 — resta il diario estrattivo
                 self.log(f"[AGENTI] {lav.id}: diario dal modello non riuscito "

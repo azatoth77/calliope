@@ -1834,9 +1834,11 @@ agenti:
   # sicurezza, dal profilo dell'agente: il budget è in token (agenti_token_lavoro). Sono
   # minuti di lavoro dell'agente: non contano l'attesa di una risposta della persona né il
   # tempo in cui la voce occupava davvero (l'arbitro, la passata congelata dalla pausa di vLLM
-  # o fermata); all'orologio vero, voce compresa, il giro si ferma comunque al doppio. 55
-  # minuti dal 22/10, scelta di chi amministra (1,5 × 150 000 token / 70 token/s, così decide
-  # il budget in token; *[storico: 30 fino al 22/10]*)
+  # o fermata); all'orologio vero, voce compresa, il giro si ferma al doppio, guardato prima
+  # di ogni passata e alla scadenza di ogni attesa della voce (dentro una passata, anche
+  # congelata, alla passata dopo). 55 minuti dal 22/10, scelta di chi amministra
+  # (1,5 × 150 000 token / 70 token/s, così decide il budget in token; *[storico: 30 fino al
+  # 22/10]*)
   agenti_max_passi: 24
   agenti_tempo_max_min: 55.0
   # I token di un lavoro per tipo (22/10, #225; un tipo che manca usa «altro»): gli stessi

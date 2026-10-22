@@ -5610,7 +5610,9 @@ la tabella e `riepilogo.json` (`per_riuscito`) danno token, minuti e token/s per
 Un confronto per #175: `--agenti-profilo denso-27b-vllm` (dopo aver avviato quel modello) contro
 lo stesso comando senza.
 
-**Le prove**: `prova_agenti_tetti_profilo.py` (nuova, livello 1). A secco, su un orologio finto
+**Le prove** (*[storico: questo paragrafo e il seguente sono della prima versione della PR;
+livello 2, profilo lento a 10 token/s, 55 minuti di serie e 38 mutazioni dalle revisioni, sotto]*):
+`prova_agenti_tetti_profilo.py` (nuova, livello 1). A secco, su un orologio finto
 che avanza dei token generati diviso la velocità, lo stesso lavoro con il profilo veloce (70) e
 con quello lento (12) si ferma allo stesso punto: il ragionamento senza strumenti alla terza
 passata con 17 000 token, il budget dei token (60 000 per tutti e due) alla decima passata, le 24
@@ -5646,7 +5648,8 @@ spesso).
   della voce: all'orologio vero il giro si ferma a `OROLOGIO_VOLTE` (2) × il tempo massimo, voce e
   revisore compresi (l'attesa di una risposta della persona no; `Agente.orologio`), e la stessa
   passata fermata dalla voce si rifà al più `RIFATTE_MAX` (10) volte. Tutti e due chiudono con il
-  tipo «tempo», quindi in uno sviluppo sono una tappa.
+  tipo «tempo», quindi in uno sviluppo sono una tappa (*[storico: non nel diario né nella ricerca
+  fino alla seconda revisione, sotto]*).
 - **`agenti_token_minuto` nel locale** (P2). Prima vinceva in silenzio su `agenti_token_lavoro` e
   si moltiplicava per i minuti del profilo (con il denso 5 000 × 315 = 1 575 000 token). Adesso
   all'avvio (`converti_token_minuto`) diventa un `agenti_token_lavoro` equivalente con i minuti di
@@ -5690,3 +5693,34 @@ spesso).
   la scheda con la voce, e le due sopravvissute alla revisione (`_occupata` che non chiude il
   periodo alla tenuta, `occupata_s` senza il taglio alla tenuta).
 
+**Dopo la seconda revisione della PR #234 (22/10).**
+
+- **L'orologio anche nell'attesa** (Q1). `_tetti` si guardava prima di `arbitro.attendi`, e
+  l'attesa non aveva un tetto: voci a meno della ripresa l'una dall'altra la tenevano senza fine,
+  e poi la passata partiva oltre l'orologio. Adesso `Arbitro.attendi` ha una scadenza (`fino`,
+  il tetto all'orologio del giro: `Agente._resta_orologio`) e dopo un'attesa i tetti si guardano
+  di nuovo: nessuna passata parte oltre l'orologio. Dentro una passata, anche congelata dalla
+  pausa di vLLM, il tetto si guarda alla passata dopo: il commento di `agenti_tempo_max_min` lo
+  dice.
+- **Il tetto «tempo» nel diario** (Q2): le rifatte nella passata del diario (fuori dal `try` del
+  ciclo) chiudevano uno sviluppo «errore»; adesso il diario fermato dal tetto «tempo» torna
+  estrattivo, e il tetto lo dice la passata del lavoro, dentro il suo `try` (tappa). Vale per il
+  codice e per la ricerca, che usano lo stesso diario.
+- **Le frasi per la persona** (Q3): «mi sono dovuta fermare troppe volte per parlare con voi e il
+  lavoro non andava avanti» (`MOTIVO_RIFATTE`) e «ci ha messo troppo, contando anche le pause per
+  parlare con voi» (`MOTIVO_OROLOGIO`); il dettaglio tecnico resta nel log. In uno sviluppo la
+  tappa dice lo stesso perché (`segnali["tempo_perche"]` del giro, `Sviluppi.motivo_arresto`) e
+  non «è finito il tempo del giro».
+- **L'avviso di chiusura all'orologio** (Q4): all'85 % del tetto all'orologio, e oltre il 90 %
+  niente più diario dal modello (`_resta_tempo`).
+- **Il banco** (Q6): con `--agenti-profilo` dice quando il budget del profilo sostituisce un
+  `agenti_token_minuto` del locale già convertito.
+- **Le prove**: l'attesa con la voce occupata oltre l'orologio (smette alla scadenza, nessuna
+  passata parte), `attendi` con la scadenza, il diario (tetto «tempo» estrattivo; contrario: il
+  tetto dei token passa oltre), l'avviso e `_resta_tempo` all'orologio (contrario: a metà),
+  l'orologio senza l'attesa della persona e dal giro nuovo (contrario: un giro nuovo dopo un
+  lavoro lungo non si ferma), le rifatte per passata (6 a passata in due passate arrivano al
+  tetto delle passate), i due tetti come tappa «tempo» in uno sviluppo con il perché vero a voce
+  (contrario: il perché di un giro di prima), le frasi senza parole interne, la frase all'agente
+  al giro nuovo «Hai un altro giro di lavoro (2 passate).».
+- **Mutazioni**: 14 nuove (Q1 ×3, Q2, Q3 ×2, Q4 ×2, Q5 ×6), tutte cadono; con le 24 di prima, 38.

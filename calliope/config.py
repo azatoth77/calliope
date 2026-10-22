@@ -1426,9 +1426,11 @@ class Config:
     # sicurezza, dal profilo dell'agente: il budget è in token (agenti_token_lavoro). Sono
     # minuti di lavoro dell'agente: non contano l'attesa di una risposta della persona né il
     # tempo in cui la voce occupava davvero (l'arbitro, la passata congelata dalla pausa di vLLM
-    # o fermata); all'orologio vero, voce compresa, il giro si ferma comunque al doppio. 55
-    # minuti dal 22/10, scelta di chi amministra (1,5 × 150 000 token / 70 token/s, così decide
-    # il budget in token; *[storico: 30 fino al 22/10]*)
+    # o fermata); all'orologio vero, voce compresa, il giro si ferma al doppio, guardato prima
+    # di ogni passata e alla scadenza di ogni attesa della voce (dentro una passata, anche
+    # congelata, alla passata dopo). 55 minuti dal 22/10, scelta di chi amministra
+    # (1,5 × 150 000 token / 70 token/s, così decide il budget in token; *[storico: 30 fino al
+    # 22/10]*)
     agenti_max_passi: int = 24
     agenti_tempo_max_min: float = 55.0
     # I token di un lavoro per tipo (22/10, #225; un tipo che manca usa «altro»): gli stessi
@@ -3087,7 +3089,9 @@ PROFILI_LLM: dict[str, dict] = {
 # «velocita_token_s» e «velocita» sono note per il banco e le prove, non vanno in Config.
 # I tetti dei minuti sono minuti di lavoro dell'agente: senza il tempo in cui la voce occupava
 # davvero (l'attesa dell'arbitro, la passata congelata dalla pausa di vLLM o fermata), con
-# in più il tetto all'orologio vero di agenti/ciclo.py (OROLOGIO_VOLTE × il tempo massimo).
+# in più il tetto all'orologio vero di agenti/ciclo.py (OROLOGIO_VOLTE × il tempo massimo,
+# guardato prima di ogni passata e alla scadenza di un'attesa della voce, non dentro una
+# passata).
 # Le chiavi dei tetti scritte nel locale vincono sul profilo (nessuna ha una variabile
 # d'ambiente); agenti_url e agenti_modello del profilo vincono sul locale, perché la riga cambi
 # davvero modello, e l'avvio lo dice; le loro variabili d'ambiente vincono sul profilo. Un

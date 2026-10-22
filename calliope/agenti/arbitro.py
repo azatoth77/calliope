@@ -485,9 +485,10 @@ class Arbitro:
                 return False
             return not (self._voluta and self._copre(url))
 
-    def attendi(self, annulla: threading.Event | None = None) -> float:
+    def attendi(self, annulla: threading.Event | None = None, fino: float | None = None) -> float:
         """Aspetta che la voce sia libera (solo se condiviso). Restituisce i secondi
-        aspettati."""
+        aspettati. `fino` (monotonic, 22/10, seconda revisione della PR #234): oltre, si smette
+        di aspettare anche con la voce occupata (il tetto all'orologio del lavoro)."""
         if not self.condiviso:
             return 0.0
         t0 = time.monotonic()
@@ -495,7 +496,9 @@ class Arbitro:
             while self._occupata():
                 if annulla is not None and annulla.is_set():
                     break
-                self._cv.wait(0.1)
+                if fino is not None and time.monotonic() >= fino:
+                    break
+                self._cv.wait(0.1 if fino is None else max(0.001, min(0.1, fino - time.monotonic())))
         waited = time.monotonic() - t0
         self.attese_s += waited
         return waited
