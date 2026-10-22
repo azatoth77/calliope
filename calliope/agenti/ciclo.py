@@ -18,8 +18,10 @@ conversazione) e l'agente lo fa con il modello grande, in secondo piano:
 - **altro**: una passata sola con il ragionamento, risultato in un file di testo.
 
 Tetti per lavoro: `agenti_max_passi` passate, i token generati (il ragionamento si conta
-anche a parte: per tipo `agenti_token_minuto` × `agenti_tempo_max_min`, al più
-`agenti_max_token`; 06/10) e `agenti_tempo_max_min` minuti. Vicino a un tetto l'agente riceve
+anche a parte: per tipo `agenti_token_lavoro`, al più `agenti_max_token`; dal 22/10, #225, non
+più token al minuto × minuti, che resta solo se `agenti_token_minuto` è scritto) e
+`agenti_tempo_max_min` minuti, un tetto di sicurezza largo senza il tempo d'attesa della voce
+(i valori vengono dal profilo dell'agente, `agenti_profilo`). Vicino a un tetto l'agente riceve
 una volta l'avviso di chiudere (`AVVISO_FINE`); un lavoro fermato dal tetto si chiude con il
 motivo, i file e l'esito dei test (`Limite.parziale`); dal 13/10 sera, con gli esempi di
 accettazione e i test rieseguiti tutti verdi, come consegnato (`_consegna_al_tetto`; dal 14/10
@@ -52,6 +54,18 @@ _OSSERVATI = frozenset(("passo", "stato"))
 
 class Annullato(Exception):
     pass
+
+
+def _occupata_s(f) -> float | None:
+    """I secondi di voce occupata dell'arbitro fino a ora (`Arbitro.occupata_s`, 22/10, #225);
+    None con un arbitro che non li conta (quelli finti delle prove)."""
+    if not callable(f):
+        return None
+    try:
+        v = f()
+    except Exception:  # noqa: BLE001 — mai una passata persa per una misura
+        return None
+    return float(v) if isinstance(v, (int, float)) and not isinstance(v, bool) else None
 
 
 class GiroAVuoto(Exception):
@@ -146,6 +160,8 @@ class Lavoro:
     # I secondi passati ad aspettare la voce (l'arbitro, o lo stream fermato per lei: 22/10,
     # #224): escono dalla guardia dei minuti senza strumenti, come quelli del revisore
     attesa_voce_s: float = 0.0
+    # …e quelli all'inizio del giro (22/10, #225): fuori anche dal tempo del giro
+    attesa_voce0: float = 0.0
     contesto: dict = field(default_factory=dict)  # lo stato del ciclo, per riprendere
     sandbox: object = None            # la sandbox del codice, conservata durante l'attesa
     cartella: str | None = None       # la cartella dei risultati, la stessa alla ripresa
@@ -949,6 +965,9 @@ class Agente:
         # Tetto dei token (06/10): per tipo di lavoro, token al minuto per i minuti del lavoro;
         # agenti_max_token (se > 0) è il massimo per tutti
         self.max_token = int(getattr(cfg, "agenti_max_token", 0) or 0)
+        # Dal 22/10 (#225) i token per tipo di lavoro (agenti_token_lavoro, dal profilo
+        # dell'agente); il conto di prima (token al minuto × minuti) solo se è scritto
+        self.token_lavoro = dict(getattr(cfg, "agenti_token_lavoro", None) or {})
         self.token_minuto = dict(getattr(cfg, "agenti_token_minuto", None) or {})
         self.tempo_max_s = float(getattr(cfg, "agenti_tempo_max_min", 30.0)) * 60
         # Funzione(lavoro, strumento, sandbox) chiamata prima di ogni strumento: il banco
@@ -1120,6 +1139,10 @@ class Agente:
             chiave = self.arbitro.registra_stream(
                 lambda: _interrompi(self.cliente, tid), url)
             t_passata = time.monotonic()
+            # La voce occupata durante la passata (22/10, #225): con la pausa di vLLM lo stream
+            # resta aperto e congelato, e quel tempo è della voce, non dell'agente
+            occ = getattr(self.arbitro, "occupata_s", None)
+            occ0 = _occupata_s(occ)
             try:
                 out = self.cliente.chat(body, controlla=controlla, **kw)
             except Interrotto:
@@ -1133,6 +1156,8 @@ class Agente:
                 out = self._giro_a_vuoto(lav, rip, t_passata, servizio)
             finally:
                 self.arbitro.togli_stream(chiave)
+            if occ0 is not None:
+                lav.attesa_voce_s += max(0.0, (_occupata_s(occ) or occ0) - occ0)
             if out.get("giro_a_vuoto"):
                 return out
             if out.get("budget_tolto"):
@@ -1188,20 +1213,30 @@ class Agente:
     @staticmethod
     def trascorso(lav: Lavoro) -> float:
         """I secondi di lavoro del giro (l'attesa di una risposta non conta, né dal 20/10 le
-        passate del revisore a contesto pulito, #190)."""
+        passate del revisore a contesto pulito, #190, né dal 22/10 l'attesa della voce, #225)."""
         inizio = getattr(lav, "giro_inizio", None) or lav.inizio
         if not inizio:
             return 0.0
         from .revisore import secondi_giro
+        voce = (float(getattr(lav, "attesa_voce_s", 0) or 0)
+                - float(getattr(lav, "attesa_voce0", 0) or 0))
         return (time.time() - inizio - (lav.attesa_s - float(getattr(lav, "attesa0", 0) or 0))
-                - secondi_giro(lav))
+                - secondi_giro(lav) - max(0.0, voce))
 
     def tetto_token(self, lav: Lavoro | None = None) -> int:
-        """I token che un lavoro di quel tipo può generare: agenti_token_minuto del tipo (o di
-        «altro») per agenti_tempo_max_min, al più agenti_max_token se è un numero > 0."""
+        """I token che un lavoro di quel tipo può generare: agenti_token_lavoro del tipo (o di
+        «altro»; 22/10, #225), al più agenti_max_token se è un numero > 0. Con
+        agenti_token_minuto scritto, il conto di prima: token al minuto del tipo per
+        agenti_tempo_max_min."""
         tipo = getattr(lav, "tipo", None) or "codice"
-        per = self.token_minuto.get(tipo, self.token_minuto.get("altro", 0))
-        t = int(float(per or 0) * self.tempo_max_s / 60)
+        if self.token_minuto:
+            per = self.token_minuto.get(tipo, self.token_minuto.get("altro", 0))
+            t = int(float(per or 0) * self.tempo_max_s / 60)
+        else:
+            try:
+                t = int(self.token_lavoro.get(tipo, self.token_lavoro.get("altro", 0)) or 0)
+            except (TypeError, ValueError):
+                t = 0
         if self.max_token > 0:
             t = min(t, self.max_token) if t > 0 else self.max_token
         return t if t > 0 else 60000

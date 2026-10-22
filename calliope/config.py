@@ -1370,6 +1370,18 @@ class Config:
     # Il modello dell'agente. Vuoto = agente_modello del file della DGX (con agenti_url:
     # llm_model, lo stesso della voce)
     agenti_modello: str | None = os.environ.get("CALLIOPE_AGENTI_MODELLO") or None
+    # Profilo dell'agente (22/10, #225, come llm_profilo per la voce): UNA riga che sceglie i
+    # tetti del lavoro tarati sulla velocità di quel modello (passate, token per passata e per
+    # lavoro, guardia dei token senza strumenti, e i tempi solo come tetto di sicurezza largo)
+    # e, se il profilo li scrive, modello e indirizzo dell'agente. Nomi e valori, con il calcolo
+    # dalla velocità misurata, in PROFILI_AGENTE (in fondo a calliope/config.py). Quello di
+    # serie, «qwen3.6-35b-a3b-vllm», ha i valori di sempre (modello e indirizzo restano quelli
+    # dell'installazione: dgx.yaml o agenti_url). Le chiavi dei tetti scritte in
+    # calliope.locale.yaml o nell'ambiente vincono sul profilo; modello e indirizzo del profilo
+    # vincono sul file (non sull'ambiente). null = nessun profilo: valgono le singole chiavi.
+    # Per tornare indietro si cambia solo questa riga, poi `calliope riavvia`
+    agenti_profilo: str | None = (os.environ.get("CALLIOPE_AGENTI_PROFILO")
+                                  or "qwen3.6-35b-a3b-vllm")
     # Contesto dell'agente in token. "auto" (05/10, fase 2b, calliope/contesto.py →
     # finestra_agenti): con vLLM il minimo tra max_model_len e i token della cache (/metrics)
     # divisi per agenti_contesti_paralleli; con un Ollama remoto il massimo del modello ma al
@@ -1382,7 +1394,9 @@ class Config:
     agenti_contesti_paralleli: int = 2
     # Tetti di una passata: token generati (ragionamento compreso; è anche lo spazio tenuto
     # libero nella finestra) e token di ragionamento (con vLLM thinking_token_budget: finito il
-    # budget il modello chiude il ragionamento e risponde; con Ollama conta solo il primo)
+    # budget il modello chiude il ragionamento e risponde; con Ollama conta solo il primo).
+    # Dal 22/10 (#225) i tetti dell'agente vengono dal profilo (agenti_profilo): questi sono i
+    # valori di quello di serie, e una chiave scritta nel locale vince sul profilo
     agenti_token_passata: int = 16384
     agenti_ragionamento_passata: int = 8192
     # Contesto del lavoro (05/10, calliope/agenti/contesto_lavoro.py): oltre questa frazione
@@ -1407,25 +1421,33 @@ class Config:
     # conta anche a parte: token_ragionamento in lavoro.json), minuti. Il contesto qui non
     # conta: lo regge la finestra, comprimendo. Vicino a un tetto l'agente riceve una volta
     # l'avviso di chiudere con quello che ha; al tetto il lavoro si ferma e l'annuncio dice
-    # perché, dove sono i file e come vanno i test
+    # perché, dove sono i file e come vanno i test. Dal 22/10 (#225) i minuti sono un tetto di
+    # sicurezza, dal profilo dell'agente: il budget è in token (agenti_token_lavoro). Il tempo
+    # passato ad aspettare la voce (l'arbitro, lo stream congelato dalla pausa di vLLM, la
+    # passata fermata e rifatta) e una risposta della persona non conta
     agenti_max_passi: int = 24
     agenti_tempo_max_min: float = 30.0
-    # Il tetto dei token è per tipo di lavoro (06/10): token generati al minuto per
-    # agenti_tempo_max_min, così cresce con il tempo concesso (prima 60 000 per tutti: un lavoro
-    # di codice ne usa ~4 000 al minuto e si fermava al quindicesimo). Misure sulla DGX con
-    # qwen3.6 su vLLM (docs/ricerche/2026-10-05-contesto-agenti.md §5): il codice genera
-    # 2 800–4 300 token al minuto, al più ~4 500 (74 token/s senza pause), quindi lì conta il
-    # tempo; ricerche e documenti 1 700–3 600 nei loro pochi minuti, e una ricerca che genera a
-    # vuoto si ferma a ~20 minuti invece di 30. Un tipo che manca usa «altro»
-    agenti_token_minuto: dict[str, int] = field(default_factory=lambda: {
-        "codice": 5000, "estensione": 5000, "ricerca": 3000, "documento": 3000,
-        "altro": 3000})
+    # I token di un lavoro per tipo (22/10, #225; un tipo che manca usa «altro»): gli stessi
+    # numeri del conto di prima, token al minuto per 30 minuti (06/10: codice ed estensioni
+    # 5 000 al minuto, ricerche, documenti e altro 3 000). Non dipendono più dal tempo concesso:
+    # con un modello più lento il lavoro ha lo stesso budget, solo più minuti
+    agenti_token_lavoro: dict[str, int] = field(default_factory=lambda: {
+        "codice": 150000, "estensione": 150000, "ricerca": 90000, "documento": 90000,
+        "altro": 90000})
+    # Il conto di prima (06/10): token generati al minuto per agenti_tempo_max_min. Vuoto (di
+    # serie dal 22/10, #225) = il budget è agenti_token_lavoro; scritto nel locale vale com'era
+    # (per tipo, token al minuto × minuti), al posto di agenti_token_lavoro. Misure del 05/10
+    # sulla DGX (docs/ricerche/2026-10-05-contesto-agenti.md §5): il codice genera 2 800–4 300
+    # token al minuto, al più ~4 500 (74 token/s senza pause)
+    agenti_token_minuto: dict[str, int] = field(default_factory=dict)
     # Massimo dei token di un lavoro per tutti i tipi, sopra il conto qui sopra. 0 = nessuno
     agenti_max_token: int = 0
     # Guardia contro il ragionamento a vuoto (05/10: il lavoro L1 del 04/10 ha pensato 66 000
-    # token senza usare uno strumento): dopo tanti token o minuti di fila senza strumenti una
-    # spinta («chiama piano, scarica_esempio o scrivi_file»), alla seconda il lavoro si chiude
-    # con il motivo (si conta tra una passata e l'altra: una passata ha già il suo tetto)
+    # token senza usare uno strumento): dopo tanti token di fila senza strumenti una spinta
+    # («chiama piano, scarica_esempio o scrivi_file»), alla seconda il lavoro si chiude con il
+    # motivo (si conta tra una passata e l'altra: una passata ha già il suo tetto). I minuti
+    # (dal 22/10 dal profilo, #225) sono il tetto di sicurezza della stessa guardia, senza il
+    # tempo d'attesa della voce: con il modello di serie 12 000 token sono ~2,9 minuti
     agenti_token_senza_strumenti: int = 12000
     agenti_minuti_senza_strumenti: float = 5.0
     # Giro a vuoto nel ragionamento (08/10 sera, calliope/agenti/ripetizioni.py: qwen3.6 ha
@@ -1652,7 +1674,8 @@ class Config:
     # si eseguono con gli altri test); per un lavoro nuovo trova le contraddizioni e fa al
     # più due domande (il lavoro aspetta la risposta, come le domande a metà lavoro); i
     # requisiti che si giudicano solo guardando restano «da guardare tu» alla revisione.
-    # false = come prima. Secondi al più per la passata
+    # false = come prima. Secondi al più per la passata (dal 22/10 dal profilo dell'agente,
+    # #225: un modello più lento ne ha di più)
     agenti_accettazione: bool = True
     agenti_accettazione_s: float = 90.0
     # Dal 17/10 (#10) anche per i programmi a riga di comando: l'analisi dichiara il file e come
@@ -1677,7 +1700,8 @@ class Config:
     # lavoro (rapporto e scheda di revisione), il codice sbagliato è un fatto per l'agente;
     # «ombra»: il verdetto solo nel registro e nella riga del banco, all'agente niente, e gli
     # esempi rossi bloccano come prima; «spento»: come prima. Secondi al più per passata
-    # (misurati 35–50), token di ragionamento, passate al più per giro
+    # (misurati 35–50; dal 22/10 dal profilo dell'agente, #225), token di ragionamento,
+    # passate al più per giro
     agenti_revisore: str = "ombra"
     agenti_revisore_s: float = 90.0
     agenti_revisore_ragionamento: int = 4096
@@ -2313,6 +2337,9 @@ class Config:
         # Il profilo dall'ambiente (CALLIOPE_LLM_PROFILO) vale anche per Config() delle prove
         if self.llm_profilo:
             apply_llm_profile(self)
+        # Il profilo dell'agente (22/10, #225), anche quello dall'ambiente
+        if self.agenti_profilo:
+            apply_agenti_profile(self)
 
     @property
     def wake_names(self) -> list[str]:
@@ -3040,6 +3067,136 @@ PROFILI_LLM: dict[str, dict] = {
 }
 
 
+# ─────────────────────────── PROFILI DEL MODELLO DELL'AGENTE ───────────────────────────
+# agenti_profilo (22/10, #225, passo 7 di docs/ricerche/2026-10-19-solidita-harness-sviluppo.md):
+# una riga sceglie il modello dell'agente con i tetti adatti alla sua velocità, così il
+# confronto fra due modelli (#175) misura la qualità e non il tempo. I budget sono in token e
+# sono gli stessi per tutti i profili (lo stesso lavoro, le stesse fermate); cambiano solo i
+# tempi, che sono tetti di sicurezza larghi, calcolati dalla velocità con la regola:
+#   agenti_tempo_max_min          ≥ 1,5 × (token del lavoro più grande) / velocità
+#   agenti_minuti_senza_strumenti ≥ 1,75 × agenti_token_senza_strumenti / velocità
+#   agenti_accettazione_s, agenti_revisore_s = 90 s × 70 / velocità (90 s con il modello di serie)
+# (1,75 è il margine di oggi: 5 minuti contro i ~2,9 di 12 000 token a 70 token/s). La
+# velocità è in token al secondo dell'orologio di un lavoro intero (generazione, prefill e
+# strumenti), non quella della sola generazione. Le chiavi sono campi di Config;
+# «velocita_token_s» e «velocita» sono note per il banco e le prove, non vanno in Config.
+# Le chiavi dei tetti scritte nel locale (o nell'ambiente) vincono sul profilo; agenti_url e
+# agenti_modello del profilo vincono sul file, perché la riga cambi davvero modello.
+PROFILI_AGENTE: dict[str, dict] = {
+    # Qwen3.6-35B-A3B NVFP4 su vLLM della DGX (container calliope-vllm, porta 8000), il modello
+    # di sempre: i valori sono quelli di prima del 22/10, identici (nessun cambiamento sulla
+    # DGX). Modello e indirizzo restano quelli dell'installazione (dgx.yaml o agenti_url).
+    # Velocità misurata sui banchi della DGX (prove/manuali/banco_temperatura.py, righe.json di
+    # ~/banchi: decisione-1020-2227, decisione-1022-0925, giri-1020-1018, giri2-1020-1753,
+    # porte1-1020-1753, trisnudo-1020-2103, valori-1019-1552, tetto-1014-0344/0628,
+    # valori-1014-1029): 124 lavori, token generati / minuti del lavoro, mediana 4 224 token al
+    # minuto = 70,4 token/s (p10 3 737 = 62,3; massimo 4 531 = 75,5; il 05/10 una passata sola
+    # 74 token/s). Con 70 token/s: 12 000 token senza strumenti = 2,9 minuti (la guardia dei 5
+    # minuti non scatta prima di quella dei token); 90 000 token di una ricerca = 21 minuti
+    # (prima dei 30). Eccezione voluta alla regola qui sopra: 150 000 token di codice = 36
+    # minuti, quindi per codice ed estensioni il tetto dei 30 minuti arriva prima del budget
+    # (a ~126 000 token), come prima del 22/10; allargarlo (45 minuti) è una scelta di chi
+    # amministra, non fatta qui per non cambiare il comportamento della DGX
+    "qwen3.6-35b-a3b-vllm": {
+        "velocita_token_s": 70.0, "velocita": "misurata",
+        "agenti_max_passi": 24, "agenti_token_passata": 16384,
+        "agenti_ragionamento_passata": 8192,
+        "agenti_token_lavoro": {"codice": 150000, "estensione": 150000, "ricerca": 90000,
+                                "documento": 90000, "altro": 90000},
+        "agenti_token_senza_strumenti": 12000,
+        "agenti_tempo_max_min": 30.0, "agenti_minuti_senza_strumenti": 5.0,
+        "agenti_accettazione_s": 90.0, "agenti_revisore_s": 90.0,
+    },
+    # Un denso da ~27B in NVFP4 sullo stesso vLLM dell'agente (porta 8000, con
+    # --served-model-name denso-27b): esempio per #175, da verificare prima dell'uso. Velocità
+    # STIMATA, non misurata: dalla banda della Spark (~273 GB/s, ~15 GB di pesi letti a ogni
+    # token) 12–15 token/s di generazione; ~11 misurati per i densi da 27–31B
+    # (docs/ricerche/2026-10-02-llm-per-spark.md); prefill ~800 token/s contro ~4 600. Si usa
+    # 12. Tempi dalla regola: 1,5 × 150 000 / 12 = 18 750 s = 312,5 → 315 minuti;
+    # 1,75 × 12 000 / 12 = 1 750 s = 29,2 → 30 minuti; 90 × 70 / 12 = 525 s. Con i 5 minuti
+    # del modello di serie la guardia scatterebbe dentro una passata normale (12 000 token =
+    # 16,7 minuti). Budget in token uguali al modello di serie
+    "denso-27b-vllm": {
+        "velocita_token_s": 12.0, "velocita": "stimata",
+        "agenti_url": "http://127.0.0.1:8000/v1", "agenti_modello": "denso-27b",
+        "agenti_max_passi": 24, "agenti_token_passata": 16384,
+        "agenti_ragionamento_passata": 8192,
+        "agenti_token_lavoro": {"codice": 150000, "estensione": 150000, "ricerca": 90000,
+                                "documento": 90000, "altro": 90000},
+        "agenti_token_senza_strumenti": 12000,
+        "agenti_tempo_max_min": 315.0, "agenti_minuti_senza_strumenti": 30.0,
+        "agenti_accettazione_s": 525.0, "agenti_revisore_s": 525.0,
+    },
+    # Qwen3-Coder-Next (80B totali, ~3B attivi, contesto 256K) sullo stesso vLLM dell'agente
+    # (porta 8000, --served-model-name qwen3-coder-next, --tool-call-parser qwen3_coder): il
+    # primo candidato di #175, da verificare su Hugging Face prima di scaricare. Addestrato
+    # senza thinking: agenti_think false. Velocità STIMATA: gli attivi sono quelli dell'A3B, i
+    # pesi totali più del doppio (cache ed esperti più sparsi): 60 token/s, sotto i 70 misurati
+    # dell'A3B. Tempi dalla regola: 1,5 × 150 000 / 60 = 3 750 s = 62,5 → 65 minuti;
+    # 1,75 × 12 000 / 60 = 350 s = 5,8 → 6 minuti; 90 × 70 / 60 = 105 s. Budget in token
+    # uguali al modello di serie
+    "qwen3-coder-next-vllm": {
+        "velocita_token_s": 60.0, "velocita": "stimata",
+        "agenti_url": "http://127.0.0.1:8000/v1", "agenti_modello": "qwen3-coder-next",
+        "agenti_think": False,
+        "agenti_max_passi": 24, "agenti_token_passata": 16384,
+        "agenti_ragionamento_passata": 8192,
+        "agenti_token_lavoro": {"codice": 150000, "estensione": 150000, "ricerca": 90000,
+                                "documento": 90000, "altro": 90000},
+        "agenti_token_senza_strumenti": 12000,
+        "agenti_tempo_max_min": 65.0, "agenti_minuti_senza_strumenti": 6.0,
+        "agenti_accettazione_s": 105.0, "agenti_revisore_s": 105.0,
+    },
+}
+# Le chiavi di un profilo dell'agente che non sono campi di Config (note per banco e prove)
+_NOTE_PROFILO_AGENTE = frozenset(("velocita_token_s", "velocita"))
+# Le chiavi del profilo che vincono anche sul file locale: senza, la riga non cambierebbe modello
+_PROFILO_AGENTE_VINCE = frozenset(("agenti_url", "agenti_modello"))
+
+
+def apply_agenti_profile(cfg: "Config", log: bool = False):
+    """Applica a `cfg` il profilo agenti_profilo (PROFILI_AGENTE, 22/10, #225). I tetti scritti
+    in calliope.locale.yaml o nell'ambiente restano (sovrascrivono il profilo); modello e
+    indirizzo del profilo vincono sul file, non sull'ambiente. Un nome sconosciuto si segnala e
+    lascia le chiavi come sono: Calliope parte lo stesso."""
+    nome = getattr(cfg, "agenti_profilo", None)
+    if not nome:
+        return
+    prof = PROFILI_AGENTE.get(str(nome))
+    if prof is None:
+        close = difflib.get_close_matches(str(nome), list(PROFILI_AGENTE), n=1)
+        _warn(f"Profilo dell'agente «{nome}» sconosciuto: uso le chiavi agenti_*"
+              + (f" (forse «{close[0]}»?)" if close else "")
+              + f". Profili: {', '.join(PROFILI_AGENTE)}")
+        return
+    locali = getattr(cfg, "_impostate_locale", set())
+    tenute = []
+    for key, value in prof.items():
+        if key in _NOTE_PROFILO_AGENTE:
+            continue
+        env = ENV_OVERRIDES.get(key)
+        if (env and env in os.environ) or (key in locali and key not in _PROFILO_AGENTE_VINCE):
+            tenute.append(key)
+            continue
+        setattr(cfg, key, list(value) if isinstance(value, list) else
+                dict(value) if isinstance(value, dict) else value)
+    cfg._agenti_tenute = tenute
+    if log and (nome != "qwen3.6-35b-a3b-vllm" or tenute):
+        _warn(f"Agente: profilo «{nome}» (velocità {prof.get('velocita', '')} "
+              f"{prof.get('velocita_token_s', '?'):g} token/s, {cfg.agenti_max_passi} passate, "
+              f"tempo di sicurezza {cfg.agenti_tempo_max_min:g} minuti"
+              + (f"; dal file: {', '.join(tenute)}" if tenute else "") + ")")
+
+
+def velocita_agente(cfg) -> tuple[float | None, str]:
+    """La velocità del profilo dell'agente in uso (token/s) e se è misurata o stimata: per il
+    banco. (None, "") senza profilo."""
+    prof = PROFILI_AGENTE.get(str(getattr(cfg, "agenti_profilo", None) or ""))
+    if not prof:
+        return None, ""
+    return prof.get("velocita_token_s"), str(prof.get("velocita") or "")
+
+
 # Le reti e le spinte sul testo (03/10): Brain (brain.py) e main.py le leggono con
 # Config.rete. Prima main.py non passava da qui e un refuso nell'elenco lasciava la rete accesa
 # senza avviso.
@@ -3441,10 +3598,11 @@ SEZIONI: dict[str, list[str]] = {
                   "satellite_schermo", "satellite_schermo_personale", "satellite_esecutore",
                   "satellite_aggiornamenti"],
     "agenti": ["agenti_enabled", "agenti_config_file", "agenti_url", "agenti_modello",
-               "agenti_num_ctx", "agenti_contesti_paralleli", "agenti_token_passata",
+               "agenti_profilo", "agenti_num_ctx", "agenti_contesti_paralleli", "agenti_token_passata",
                "agenti_ragionamento_passata", "agenti_soglia_file", "agenti_passi_intatti",
                "agenti_think", "agenti_temperatura", "agenti_max_passi",
-               "agenti_tempo_max_min", "agenti_token_minuto", "agenti_max_token",
+               "agenti_tempo_max_min", "agenti_token_lavoro", "agenti_token_minuto",
+               "agenti_max_token",
                "agenti_token_senza_strumenti",
                "agenti_minuti_senza_strumenti", "agenti_ripetizioni_max",
                "agenti_presence_penalty", "agenti_max_token_documento",
@@ -3534,6 +3692,7 @@ ENV_OVERRIDES: dict[str, str] = {
     "agenti_config_file": "CALLIOPE_AGENTI_CONFIG",
     "agenti_url": "CALLIOPE_AGENTI_URL",
     "agenti_modello": "CALLIOPE_AGENTI_MODELLO",
+    "agenti_profilo": "CALLIOPE_AGENTI_PROFILO",
     "audio_modo": "CALLIOPE_AUDIO_MODO",
     "satellite_server": "CALLIOPE_SATELLITE_SERVER",
     "satellite_microfono": "CALLIOPE_SATELLITE_MICROFONO",
@@ -4060,6 +4219,8 @@ def load_config(path: str | None = None) -> Config:
     check_tono(cfg)
     if cfg.llm_profilo:
         apply_llm_profile(cfg, log=True)
+    if cfg.agenti_profilo:
+        apply_agenti_profile(cfg, log=True)
     check_reti(cfg)
     return cfg
 

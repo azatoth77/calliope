@@ -1,0 +1,458 @@
+"""I tetti dell'agente per profilo (22/10/2026, issue #225, passo 7 di
+docs/ricerche/2026-10-19-solidita-harness-sviluppo.md), a secco con un agente finto.
+
+- i profili (`PROFILI_AGENTE`, `agenti_profilo`): quello di serie ha esattamente i valori di
+  prima del 22/10 (nessun cambiamento sulla DGX); tutti i profili hanno gli stessi budget in
+  token; i tempi degli altri profili rispettano la regola scritta (tetti di sicurezza larghi
+  rispetto alla velocità); le chiavi sono campi di Config;
+- la configurazione: la riga del locale sceglie il profilo; un tetto scritto nel locale vince
+  sul profilo, modello e indirizzo del profilo vincono sul locale ma non sull'ambiente; un nome
+  sconosciuto si segnala e non cambia niente; senza profilo valgono le chiavi singole;
+- il budget dei token per tipo (`agenti_token_lavoro`) non segue più i minuti; il conto di
+  prima (`agenti_token_minuto` scritto) vale com'era, e `agenti_max_token` resta il massimo;
+- la prova a secco del criterio: lo stesso lavoro finto con il profilo veloce (70 token/s) e
+  con quello lento (12 token/s), su un orologio finto che avanza dei token generati diviso la
+  velocità: stesso budget in token, stesse fermate (ragionamento senza strumenti alla stessa
+  passata, budget dei token alla stessa passata); contrari: il modello lento con i tempi del
+  profilo veloce si ferma prima, per il tempo;
+- il tempo della voce non conta: i secondi di voce occupata dell'arbitro (`occupata_s`) durante
+  una passata congelata dalla pausa di vLLM vanno in `attesa_voce_s`, fuori dalla guardia dei
+  minuti senza strumenti e dal tempo del giro.
+"""
+
+import os
+import sys
+import tempfile
+import time
+from pathlib import Path
+from types import SimpleNamespace
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+from calliope import config as C  # noqa: E402
+from calliope.agenti import ciclo  # noqa: E402
+from calliope.agenti.arbitro import Arbitro  # noqa: E402
+from calliope.agenti.ciclo import Agente, Lavoro, Limite  # noqa: E402
+from calliope.agenti.sandbox import Isolamento, Sandbox  # noqa: E402
+from calliope.config import Config  # noqa: E402
+
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except (AttributeError, ValueError):
+    pass
+TMP = Path(tempfile.mkdtemp(prefix="calliope-tetti-profilo-"))
+errori = 0
+T0 = time.perf_counter()
+SERIE, LENTO = "qwen3.6-35b-a3b-vllm", "denso-27b-vllm"
+
+
+def sezione(nome):
+    print(f"— {nome}  [{time.perf_counter() - T0:.1f}s]", flush=True)
+
+
+def verifica(nome, ok, dettaglio=""):
+    global errori
+    errori += not ok
+    print(f"{'ok ' if ok else 'ERR'} {nome}" + (f"  {dettaglio}" if dettaglio else ""), flush=True)
+
+
+# ═══════════════════════════ i profili ═══════════════════════════
+
+def prova_profili():
+    sezione("i profili: quello di serie uguale a prima, budget in token uguali, tempi larghi")
+    # I valori di prima del 22/10, scritti qui a mano: il profilo di serie deve riprodurli
+    prima = {"agenti_max_passi": 24, "agenti_token_passata": 16384,
+             "agenti_ragionamento_passata": 8192, "agenti_token_senza_strumenti": 12000,
+             "agenti_tempo_max_min": 30.0, "agenti_minuti_senza_strumenti": 5.0,
+             "agenti_accettazione_s": 90.0, "agenti_revisore_s": 90.0,
+             # 5 000 al minuto per codice ed estensioni, 3 000 per gli altri, × 30 minuti
+             "agenti_token_lavoro": {"codice": 150000, "estensione": 150000,
+                                     "ricerca": 90000, "documento": 90000, "altro": 90000}}
+    serie = C.PROFILI_AGENTE[SERIE]
+    verifica("di serie il profilo è quello dell'A3B", Config().agenti_profilo == SERIE)
+    verifica("il profilo di serie ha i valori di prima del 22/10, nessuno in più o in meno",
+             {k: v for k, v in serie.items() if k not in C._NOTE_PROFILO_AGENTE} == prima,
+             str(serie))
+    nudo = Config()
+    nudo.agenti_profilo = None
+    da_campi = {f.name: (f.default_factory() if f.default_factory is not C.MISSING
+                         else f.default) for f in C.fields(Config)}
+    verifica("…e sono anche i predefiniti della dataclass (con il profilo o senza, uguale)",
+             all(da_campi[k] == v for k, v in prima.items()),
+             str({k: da_campi[k] for k in prima if da_campi[k] != prima[k]}))
+    verifica("il profilo di serie non tocca modello e indirizzo (dgx.yaml o agenti_url)",
+             "agenti_url" not in serie and "agenti_modello" not in serie)
+    nomi = {f.name for f in C.fields(Config)}
+    for nome, p in C.PROFILI_AGENTE.items():
+        chiavi = set(p) - C._NOTE_PROFILO_AGENTE
+        verifica(f"{nome}: le chiavi sono campi di Config", chiavi <= nomi, str(chiavi - nomi))
+        verifica(f"{nome}: stessi budget in token del profilo di serie",
+                 all(p[k] == serie[k] for k in ("agenti_token_lavoro", "agenti_max_passi",
+                                                "agenti_token_passata",
+                                                "agenti_ragionamento_passata",
+                                                "agenti_token_senza_strumenti")))
+        v = float(p["velocita_token_s"])
+        verifica(f"{nome}: la velocità è detta misurata o stimata",
+                 p.get("velocita") in ("misurata", "stimata") and v > 0)
+        senza = p["agenti_minuti_senza_strumenti"] * 60
+        verifica(f"{nome}: la guardia dei minuti senza strumenti è larga (≥ 1,75 volte i "
+                 f"token della guardia alla sua velocità)",
+                 senza >= 1.75 * p["agenti_token_senza_strumenti"] / v - 1e-6,
+                 f"{senza:.0f} s contro {1.75 * p['agenti_token_senza_strumenti'] / v:.0f}")
+        sec = 90.0 * 70.0 / v
+        verifica(f"{nome}: accettazione e revisore hanno i secondi della loro velocità",
+                 p["agenti_accettazione_s"] >= sec - 1e-6 and p["agenti_revisore_s"] >= sec - 1e-6)
+        if nome == SERIE:
+            continue
+        tetto = max(p["agenti_token_lavoro"].values())
+        verifica(f"{nome}: il tempo massimo è largo (≥ 1,5 volte il lavoro più grande alla sua "
+                 "velocità)", p["agenti_tempo_max_min"] * 60 >= 1.5 * tetto / v - 1e-6,
+                 f"{p['agenti_tempo_max_min']} min contro {1.5 * tetto / v / 60:.1f}")
+    # L'eccezione scritta del profilo di serie (il tempo prima del budget del codice): se cambia,
+    # il commento del profilo va riscritto
+    verifica("profilo di serie: per il codice 30 minuti arrivano prima dei 150 000 token "
+             "(eccezione scritta nel commento)",
+             serie["agenti_tempo_max_min"] * 60 * serie["velocita_token_s"] < 150000)
+
+
+# ═══════════════════════════ la configurazione ═══════════════════════════
+
+def carica(base: str, locale: str = "", env: dict | None = None):
+    d = Path(tempfile.mkdtemp(dir=TMP))
+    (d / "calliope.yaml").write_text(base, encoding="utf-8")
+    (d / "locale.yaml").write_text(locale, encoding="utf-8")
+    vecchie = {k: os.environ.get(k) for k in
+               ["CALLIOPE_CONFIG_LOCALE", "CALLIOPE_AGENTI_URL", "CALLIOPE_AGENTI_PROFILO",
+                *(env or {})]}
+    os.environ["CALLIOPE_CONFIG_LOCALE"] = str(d / "locale.yaml")
+    os.environ.pop("CALLIOPE_AGENTI_URL", None)
+    os.environ.pop("CALLIOPE_AGENTI_PROFILO", None)
+    os.environ.update(env or {})
+    avvisi = []
+    w = C._warn
+    C._warn = avvisi.append
+    try:
+        return C.load_config(str(d / "calliope.yaml")), avvisi
+    finally:
+        C._warn = w
+        for k, v in vecchie.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+def prova_configurazione():
+    sezione("la configurazione: una riga del locale, le chiavi singole vincono, l'ambiente")
+    esempio = C.example_yaml()
+    cfg, _ = carica(esempio)
+    verifica("con calliope.yaml uguale all'esempio: il profilo di serie, valori di prima",
+             cfg.agenti_profilo == SERIE and cfg.agenti_tempo_max_min == 30.0
+             and cfg.agenti_token_lavoro["codice"] == 150000 and not cfg.agenti_token_minuto
+             and cfg.agenti_url is None and cfg.agenti_modello is None)
+    cfg, avvisi = carica(esempio, "agenti:\n  agenti_profilo: denso-27b-vllm\n")
+    verifica("una riga del locale sceglie il profilo lento: modello, indirizzo e tempi insieme",
+             cfg.agenti_modello == "denso-27b" and cfg.agenti_url == "http://127.0.0.1:8000/v1"
+             and cfg.agenti_tempo_max_min == 315.0 and cfg.agenti_minuti_senza_strumenti == 30.0
+             and cfg.agenti_revisore_s == 525.0
+             and cfg.agenti_token_lavoro == Config().agenti_token_lavoro,
+             str((cfg.agenti_modello, cfg.agenti_url, cfg.agenti_tempo_max_min)))
+    verifica("…e lo dice all'avvio", any("profilo «denso-27b-vllm»" in a for a in avvisi),
+             str(avvisi[-3:]))
+    cfg, avvisi = carica(esempio, "agenti:\n  agenti_profilo: denso-27b-vllm\n"
+                                  "  agenti_max_passi: 10\n  agenti_minuti_senza_strumenti: 45\n"
+                                  "  agenti_url: http://127.0.0.1:8100/v1\n"
+                                  "  agenti_modello: altro\n")
+    verifica("un tetto scritto nel locale vince sul profilo (passate 10, guardia 45 minuti), "
+             "gli altri dal profilo", cfg.agenti_max_passi == 10
+             and cfg.agenti_minuti_senza_strumenti == 45.0 and cfg.agenti_tempo_max_min == 315.0,
+             str((cfg.agenti_max_passi, cfg.agenti_minuti_senza_strumenti)))
+    verifica("modello e indirizzo del profilo vincono sul locale (la riga cambia modello)",
+             cfg.agenti_modello == "denso-27b" and cfg.agenti_url == "http://127.0.0.1:8000/v1")
+    verifica("…e l'avvio dice quali tetti vengono dal file",
+             any("dal file: agenti_max_passi, agenti_minuti_senza_strumenti" in a
+                 for a in avvisi), str(avvisi[-2:]))
+    # L'ambiente si legge quando calliope.config si importa: in un processo nuovo
+    import subprocess
+    env = dict(os.environ, CALLIOPE_AGENTI_PROFILO="qwen3-coder-next-vllm",
+               CALLIOPE_AGENTI_URL="http://127.0.0.1:9999/v1", PYTHONUTF8="1")
+    out = subprocess.run(
+        [sys.executable, "-c", "from calliope.config import Config; c = Config(); "
+         "print(c.agenti_profilo, c.agenti_url, c.agenti_modello, c.agenti_think, "
+         "c.agenti_tempo_max_min)"], env=env, capture_output=True, text=True, timeout=60,
+        cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__)))).stdout.split()
+    verifica("CALLIOPE_AGENTI_PROFILO sceglie il profilo (Coder-Next: modello, senza thinking, "
+             "65 minuti), CALLIOPE_AGENTI_URL vince anche sul profilo",
+             out == ["qwen3-coder-next-vllm", "http://127.0.0.1:9999/v1", "qwen3-coder-next",
+                     "False", "65.0"], str(out))
+    cfg, avvisi = carica(esempio, "agenti:\n  agenti_profilo: denso27\n")
+    verifica("un nome sconosciuto si segnala (con il più vicino) e non cambia niente",
+             cfg.agenti_tempo_max_min == 30.0 and cfg.agenti_url is None
+             and any("sconosciuto" in a and "denso-27b-vllm" in a for a in avvisi),
+             str(avvisi[-2:]))
+    cfg, _ = carica(esempio, "agenti:\n  agenti_profilo: null\n  agenti_tempo_max_min: 12\n")
+    verifica("senza profilo valgono le chiavi singole", cfg.agenti_profilo is None
+             and cfg.agenti_tempo_max_min == 12.0 and cfg.agenti_max_passi == 24)
+
+
+# ═══════════════════════════ il budget dei token ═══════════════════════════
+
+def prova_budget():
+    sezione("il budget dei token per tipo non segue più i minuti; il conto di prima scritto")
+    cfg = Config()
+    ag = Agente(cfg, SimpleNamespace(modello="m"), SimpleNamespace(), Arbitro(False, 0),
+                log=lambda *a: None)
+    t = {tipo: ag.tetto_token(Lavoro("t", tipo, "x"))
+         for tipo in ("codice", "estensione", "ricerca", "documento", "altro", "strano")}
+    verifica("di serie: 150 000 per codice ed estensioni, 90 000 per gli altri (un tipo che "
+             "manca come «altro»)", t == {"codice": 150000, "estensione": 150000,
+                                         "ricerca": 90000, "documento": 90000, "altro": 90000,
+                                         "strano": 90000}, str(t))
+    cfg.agenti_tempo_max_min = 315.0
+    ag = Agente(cfg, SimpleNamespace(modello="m"), SimpleNamespace(), Arbitro(False, 0),
+                log=lambda *a: None)
+    verifica("con più minuti il budget resta lo stesso (prima: 5 000 × 315 = 1 575 000)",
+             ag.tetto_token(Lavoro("t", "codice", "x")) == 150000)
+    cfg = Config()
+    cfg.agenti_token_minuto = {"codice": 5000, "altro": 2000}
+    cfg.agenti_tempo_max_min = 20.0
+    ag = Agente(cfg, SimpleNamespace(modello="m"), SimpleNamespace(), Arbitro(False, 0),
+                log=lambda *a: None)
+    verifica("agenti_token_minuto scritto: il conto di prima (5 000 × 20 minuti)",
+             ag.tetto_token(Lavoro("t", "codice", "x")) == 100000
+             and ag.tetto_token(Lavoro("t", "ricerca", "x")) == 40000)
+    cfg = Config()
+    cfg.agenti_max_token = 60000
+    ag = Agente(cfg, SimpleNamespace(modello="m"), SimpleNamespace(), Arbitro(False, 0),
+                log=lambda *a: None)
+    verifica("agenti_max_token resta il massimo per tutti",
+             ag.tetto_token(Lavoro("t", "codice", "x")) == 60000
+             and ag.tetto_token(Lavoro("t", "ricerca", "x")) == 60000)
+
+
+# ═══════════════════════════ la prova a secco del criterio ═══════════════════════════
+
+class Orologio:
+    """L'orologio finto del ciclo: avanza solo quando il modello finto genera (token / velocità
+    del modello) e quando qualcuno dorme."""
+
+    def __init__(self):
+        self.t = 1_000_000.0
+
+    def time(self):
+        return self.t
+
+    def monotonic(self):
+        return self.t
+
+    def perf_counter(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += max(0.0, float(s))
+
+
+class Modello:
+    """Il modello finto: un copione di passate; ogni passata «dura» eval / velocità secondi
+    sull'orologio finto (più un secondo di prefill)."""
+
+    def __init__(self, copione, velocita: float, orologio: Orologio):
+        self.copione = list(copione)
+        self.v = float(velocita)
+        self.o = orologio
+        self.visti = []
+
+    def chat(self, body, controlla=None, **kw):
+        self.visti.append(body)
+        p = self.copione.pop(0) if self.copione else {"testo": "", "eval": 10}
+        ev = int(p.get("eval", 10))
+        self.o.sleep(1.0 + ev / self.v)
+        return {"content": p.get("testo", ""), "eval": ev, "prompt": 10,
+                "tool_calls": [{"name": n, "arguments": a} for n, a in p.get("chiamate", ())]}
+
+
+def con_profilo(nome: str, **sopra) -> Config:
+    cfg = Config()
+    cfg.agenti_profilo = nome
+    C.apply_agenti_profile(cfg)
+    cfg.agenti_accettazione = False
+    cfg.agenti_revisore = "spento"
+    for k, v in sopra.items():
+        setattr(cfg, k, v)
+    return cfg
+
+
+def lavora(cfg: Config, velocita: float, copione, nome: str):
+    """Il lavoro finto di codice con `cfg`, il modello a `velocita` token/s sull'orologio finto.
+    → (esito o tipo del limite, passate, token, minuti dell'orologio)."""
+    o = Orologio()
+    vero = ciclo.time
+    ciclo.time = o
+    try:
+        cli = Modello(copione, velocita, o)
+        ag = Agente(cfg, SimpleNamespace(modello="m"), cli, Arbitro(False, 0), log=lambda *a: None)
+        sb = Sandbox(TMP / nome, 30, 512, isolamento=Isolamento("processo", "prova"))
+        lav = Lavoro(nome, "codice", "scrivi i moduli")
+        lav.inizio = o.time()
+        try:
+            ris = ag.codice(lav, sb)
+            fine = ris.get("esito")
+        except Limite as e:
+            # La guardia senza strumenti chiude fuori da uno sviluppo senza il tipo (come prima
+            # del 22/10): la si riconosce dal motivo
+            fine = e.tipo or ("ragionamento" if "senza usare gli strumenti" in str(e)
+                              else "limite")
+        return fine, lav.passi, lav.token, round((o.t - 1_000_000.0) / 60, 1)
+    finally:
+        ciclo.time = vero
+
+
+def scrivi(i: int, ev: int) -> dict:
+    return {"eval": ev, "chiamate": [("scrivi_file", {
+        "percorso": f"modulo{i}.py", "contenuto": f"VALORE = {i}\n"})]}
+
+
+def prova_secco():
+    sezione("a secco: lo stesso lavoro con il profilo veloce e con quello lento")
+    serie, lento = C.PROFILI_AGENTE[SERIE], C.PROFILI_AGENTE[LENTO]
+    vs, vl = serie["velocita_token_s"], lento["velocita_token_s"]
+    # 1. Il ragionamento a vuoto: 7 000 token senza strumenti a passata. La guardia dei token
+    # (12 000) dà la spinta alla seconda e chiude alla terza, con tutti e due
+    vuoto = [{"eval": 7000}, {"eval": 7000}, {"eval": 3000}]
+    a = lavora(con_profilo(SERIE), vs, vuoto, "vuoto-veloce")
+    b = lavora(con_profilo(LENTO), vl, vuoto, "vuoto-lento")
+    verifica("ragionamento a vuoto: la stessa fermata (guardia dei token, terza passata, "
+             "17 000 token) a 70 e a 12 token/s",
+             a[:3] == b[:3] == ("ragionamento", 3, 17000) and b[3] > a[3], f"{a} {b}")
+    c = lavora(con_profilo(LENTO, agenti_minuti_senza_strumenti=5.0), vl, vuoto, "vuoto-contrario")
+    verifica("contrario: il modello lento con i 5 minuti del profilo veloce si ferma prima, "
+             "per il tempo (seconda passata, 14 000 token)", c[:3] == ("ragionamento", 2, 14000),
+             str(c))
+    # 2. Il budget dei token: 6 000 token a passata con una chiamata, tetto di 60 000 per tutti
+    # e due (agenti_max_token). Fermata alla stessa passata, per i token
+    lungo = [scrivi(i, 6000) for i in range(20)]
+    a = lavora(con_profilo(SERIE, agenti_max_token=60000), vs, lungo, "token-veloce")
+    b = lavora(con_profilo(LENTO, agenti_max_token=60000), vl, lungo, "token-lento")
+    verifica("budget dei token: la stessa fermata (tetto dei token, 10 passate, 60 000 token)",
+             a[:3] == b[:3] == ("token", 10, 60000), f"{a} {b}")
+    verifica("…il lento ci mette più minuti, sotto il suo tetto di sicurezza (315)",
+             a[3] < 30 and 30 < b[3] < 315, f"{a[3]} {b[3]} minuti")
+    c = lavora(con_profilo(LENTO, agenti_max_token=60000, agenti_tempo_max_min=30.0), vl, lungo,
+               "token-contrario")
+    verifica("contrario: con i 30 minuti del profilo veloce il lento si ferma per il tempo, "
+             "con meno token", c[0] == "tempo" and c[2] < 60000, str(c))
+    # 3. Le passate: 24 per tutti e due
+    corto = [scrivi(i, 500) for i in range(30)]
+    a = lavora(con_profilo(SERIE), vs, corto, "passate-veloce")
+    b = lavora(con_profilo(LENTO), vl, corto, "passate-lento")
+    verifica("tetto delle passate: la stessa fermata (24 passate, 12 000 token)",
+             a[:3] == b[:3] == ("passate", 24, 12000), f"{a} {b}")
+
+
+# ═══════════════════════════ il tempo della voce ═══════════════════════════
+
+def prova_voce():
+    sezione("il tempo della voce non conta: arbitro, stream congelato, tempo del giro")
+    arb = Arbitro(True, ripresa_s=0.0)
+    verifica("arbitro nuovo: 0 secondi di voce", arb.occupata_s() == 0.0)
+    arb.voce_occupata()
+    time.sleep(0.15)
+    a = arb.occupata_s()
+    arb.voce_libera(0.1)
+    time.sleep(0.4)
+    b = arb.occupata_s()
+    time.sleep(0.15)
+    b2 = arb.occupata_s()
+    verifica("i secondi della voce: il turno in corso e la ripresa dopo (0,15 + 0,1), poi fermi",
+             0.12 <= a <= 0.3 and 0.22 <= b <= 0.4 and abs(b2 - b) < 0.02,
+             f"{a:.2f} {b:.2f} {b2:.2f}")
+    arb.voce_occupata()
+    time.sleep(0.05)
+    arb.voce_libera(0.0)
+    c = arb.occupata_s()
+    verifica("un secondo turno si somma", 0.05 <= c - b <= 0.3, f"{c - b:.2f}")
+    verifica("non condiviso: sempre 0", Arbitro(False, 0).occupata_s() == 0.0)
+
+    class Congelato:
+        """Il modello che resta congelato dalla pausa di vLLM mentre parla la voce: lo stream non
+        si chiude (niente controlla), la voce occupa 0,3 s della passata."""
+
+        def __init__(self, arb, n):
+            self.arb, self.n = arb, n
+
+        def chat(self, body, controlla=None, **kw):
+            self.n -= 1
+            self.arb.voce_occupata()
+            time.sleep(0.3)
+            self.arb.voce_libera(0.0)
+            return {"content": "", "eval": 10, "prompt": 10, "tool_calls": []}
+
+    def con_voce(conta: bool):
+        cfg = Config()
+        cfg.agenti_accettazione = False
+        cfg.agenti_revisore = "spento"
+        # 0,25 s di guardia: ogni passata ne dura 0,3, tutta della voce
+        cfg.agenti_minuti_senza_strumenti = 0.25 / 60
+        arb = Arbitro(True, ripresa_s=0.0)
+        if not conta:
+            arb.occupata_s = lambda: 0.0          # la mutazione: il conto della voce spento
+        ag = Agente(cfg, SimpleNamespace(modello="m"), Congelato(arb, 3), arb,
+                    log=lambda *a: None)
+        sb = Sandbox(TMP / f"voce-{conta}", 30, 512, isolamento=Isolamento("processo", "prova"))
+        lav = Lavoro(f"voce-{conta}", "codice", "scrivi")
+        lav.inizio = time.time()
+        segnali = {}
+        try:
+            ag.codice(lav, sb)
+        except Limite as e:
+            segnali["limite"] = e.tipo
+        except IndexError:
+            pass
+        return lav, segnali, ag
+    lav, seg, ag = con_voce(True)
+    verifica("passate congelate dalla voce: i secondi in attesa_voce_s",
+             lav.attesa_voce_s >= 0.6, f"{lav.attesa_voce_s:.2f}")
+    verifica("…e la guardia dei minuti senza strumenti non scatta per la voce (nessuna "
+             "spinta «senza strumenti»)",
+             not (lav.segnali.get("regole") or {}).get("agente_ragionamento_senza_strumenti")
+             and seg.get("limite") != "ragionamento", str(lav.segnali.get("regole")))
+    verifica("…e il tempo del giro non conta la voce",
+             ag.trascorso(lav) < time.time() - lav.inizio - 0.5,
+             f"{ag.trascorso(lav):.2f} contro {time.time() - lav.inizio:.2f}")
+    lav2, seg2, _ = con_voce(False)
+    verifica("contrario (senza il conto della voce): la guardia scatta per il tempo della voce",
+             (lav2.segnali.get("regole") or {}).get("agente_ragionamento_senza_strumenti")
+             or seg2.get("limite") == "ragionamento", str((lav2.segnali.get("regole"), seg2)))
+    # Il giro nuovo di uno sviluppo: la voce del giro di prima resta fuori (attesa_voce0)
+    lav3 = Lavoro("g", "codice", "x")
+    lav3.inizio = time.time() - 100
+    lav3.attesa_voce_s, lav3.attesa_voce0 = 40.0, 0.0
+    t1 = Agente.trascorso(lav3)
+    lav3.attesa_voce0 = 40.0
+    t2 = Agente.trascorso(lav3)
+    verifica("il tempo del giro toglie solo la voce del giro (attesa_voce0)",
+             59 <= t1 <= 61 and 99 <= t2 <= 101, f"{t1:.1f} {t2:.1f}")
+    # «continua» (Lavori.continua) apre il giro nuovo con la voce di prima già fuori
+    import queue
+    import threading
+    from calliope.agenti.servizio import Lavori
+    finto = SimpleNamespace(_lock=threading.Lock(), in_tappa=lambda lav: True, corrente=None,
+                            log=lambda *a: None, _coda=queue.Queue(), _salva_stato=lambda: None,
+                            agente=SimpleNamespace(tempo_max_s=1800))
+    lav4 = Lavoro("c", "codice", "x")
+    lav4.inizio, lav4.attesa_voce_s, lav4.segnali = time.time() - 500, 120.0, {}
+    Lavori.continua(finto, lav4)
+    verifica("«continua»: il giro nuovo parte con la voce del giro di prima fuori",
+             lav4.attesa_voce0 == 120.0 and -1 < Agente.trascorso(lav4) < 2,
+             f"{lav4.attesa_voce0} {Agente.trascorso(lav4):.1f}")
+
+
+if __name__ == "__main__":
+    prova_profili()
+    prova_configurazione()
+    prova_budget()
+    prova_secco()
+    prova_voce()
+    print("\n" + ("TUTTO OK" if not errori else f"{errori} ERRORI"))
+    sys.exit(1 if errori else 0)

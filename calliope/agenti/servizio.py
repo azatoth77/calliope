@@ -729,6 +729,8 @@ class Lavori:
             lav.giro = int(getattr(lav, "giro", 1) or 1) + 1
             lav.passi0, lav.token0 = lav.passi, lav.token
             lav.attesa0, lav.giro_inizio = lav.attesa_s, ora
+            # L'attesa della voce del giro di prima resta fuori dal tempo di questo (#225)
+            lav.attesa_voce0 = float(getattr(lav, "attesa_voce_s", 0) or 0)
             lav.avvisato = False
             uguali = giri_uguali(lav)
             if isinstance(lav.segnali, dict):
