@@ -4938,3 +4938,97 @@ ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costant
 - Ogni correzione ha la sua mutazione, e tutte fanno cadere la prova. Le mutazioni: il testo
   della consegna rotta non tenuto, i due controlli invertiti, le consegne rifiutate fra le fatte,
   la frase finale di prima, la cartella e «incompleta» in `lavoro_risultato`.
+
+## La scala delle spinte: toni di fatto, il vuoto come tappa (22/10, issue #224, ramo `issue-224-scala-spinte`)
+
+La verifica del 22/10 dell'analisi del 19/10 (`docs/ricerche/2026-10-19-solidita-harness-sviluppo.md`
+§ 3.4) aveva lasciato aperti i n. 23, 24 e 26, e il 27 a metà. Sono i messaggi dell'harness che si
+contraddicono o rimproverano, la radice delle passate di scuse senza modifiche.
+
+- **Un'unica sorgente** (`calliope/agenti/spinte.py`). Ogni spinta è un gradino con un nome, che
+  è la sua regola nel registro (`GRADINI`), e un posto nella scala. Anche le note nei risultati
+  degli strumenti (la rilettura, la riscrittura piccola, la modifica inversa, l'uscita troncata,
+  il manifesto) stanno lì. `ripetizioni.py` resta il rilevatore; le sue funzioni delle spinte sono
+  storiche.
+- **Una forma sola**: il fatto, poi «Passi possibili: …», con i passi presi da un vocabolario
+  chiuso (`PASSI`). Niente giudizi, niente divieti, niente imperativi sul pensiero. Ogni testo
+  dichiara anche i passi che il suo fatto esclude (`esclusi`: «riscrivi» il file intero,
+  «rileggi» lo stesso file, «ricerche» a fine lavoro), che non sono mai detti e che nessun testo
+  ammette. Due testi sono incompatibili se uno ammette ciò che l'altro esclude: la prova li genera
+  tutti (29) e nessuna coppia lo è.
+- **Al più una spinta per passata** (`Scala`, `Agente._dici`). Le spinte si propongono dove
+  nascono, e prima della passata dopo esce la più alta, in coda all'ultimo messaggio «user» o in
+  uno nuovo. Le altre sono lasciate, contate in `segnali["spinte_lasciate"]` e non dette. L'avviso
+  di chiusura e la spinta a consegnare si segnano dette solo quando escono, quindi tornano alla
+  passata dopo. Prima l'avviso finiva in coda alla spinta delle riscritture, nello stesso
+  messaggio. L'ordine, dall'alto: la troncata (la chiamata non è partita: se non lo sa, l'agente
+  crede di aver scritto il file), l'avviso di chiusura (una volta per lavoro, vicino al tetto),
+  il giro a vuoto, le riscritture, il ragionamento senza strumenti, le passate senza novità, la
+  prosa con lo stato consegnabile, la prosa, la spinta a consegnare. Le superate non si tolgono
+  dalla storia, per la cache dei prefissi.
+- **Le regole**: `agente_avviso_fine`, `agente_spinta_strumenti`,
+  `agente_ragionamento_senza_strumenti` e `agente_senza_novita` sono nuove; la riscrittura
+  ripetuta e la spinta a consegnare si contano quando escono. Il giro a vuoto, la troncata e la
+  prosa consegnabile le conta già il rilevatore, una volta. L'evento «spinta» della scheda esce
+  con la spinta.
+- **Il vuoto e il ragionamento come tappe** (n. 26). In uno sviluppo tre giri a vuoto di fila
+  sono la tappa «vuoto», e il ragionamento senza strumenti per la seconda volta è la tappa
+  «ragionamento». Prima chiudevano lo sviluppo «limite». Con lo stato consegnabile e un controllo
+  indipendente verde si consegna alla tappa, come per i tetti (#192, `TAPPA_CONSEGNABILE`). A
+  voce: «l'agente ripeteva lo stesso ragionamento senza fare un passo avanti» e «l'agente ha
+  ragionato a lungo senza usare gli strumenti» (`PERCHE_TAPPA`). Il segnale «ha ripetuto lo stesso
+  ragionamento» non si ripete dopo il perché della tappa «vuoto» (`segnali_detti`). Fuori da uno
+  sviluppo resta il «limite» di prima.
+- **L'attesa della voce** (n. 26): i secondi dell'arbitro e della passata fermata per la voce
+  vanno in `Lavoro.attesa_voce_s` ed escono dalla guardia dei minuti senza strumenti, come il
+  revisore e le troncate. Restano dentro il tetto dei minuti del giro: da decidere a parte.
+- **Le passate senza novità di fila** (n. 27). `senza_novita` riparte con una novità. Leggere un
+  pezzo di file mai letto è una novità (`lettura_nuova`): esplorare non è girare a vuoto (senza,
+  `prova_contesto_agenti` superava la finestra con una spinta in più). Alla sesta passata di fila
+  (`SENZA_NOVITA_FILA`) la spinta `agente_senza_novita`, una per fila, con l'ultimo errore. A
+  voce «N passate di fila senza cambiare i file né l'esito dei test». `senza_progressi` resta un
+  conto per la voce, senza gradino.
+
+| Dove | Prima (fino al 21/10) | Adesso |
+|---|---|---|
+| Giro a vuoto | «Ti ho fermato: stai ripetendo lo stesso ragionamento («…»). Non ripensarci: decidi adesso e chiama uno strumento (…). Se sei incerto tra due strade, scegli la più semplice e provala con un test.» | «La passata si è fermata: il ragionamento ripeteva la stessa frase («…») e nessuno strumento è partito. Passi possibili: leggi_file, scrivi_file, esegui_test o consegna con cosa funziona e cosa manca.» |
+| Giro a vuoto con l'errore | «…Non ripensarci: L'ultimo errore è X in f:r. Adesso leggi quel punto (…) e correggi solo quello con modifica_file; non riscrivere il file intero.» | «…L'ultimo errore è X in f:r. Passi possibili: leggi_file con percorso «f» e riga r, modifica_file su quel punto o esegui_test.» |
+| Riscritture | «Hai riscritto X per intero N volte e i test falliscono ancora allo stesso modo: riscriverlo non serve. …» | «Hai riscritto X per intero N volte e i test falliscono ancora con lo stesso errore. [L'ultimo errore…] Passi possibili: leggi_file …, modifica_file su quel punto o esegui_test.» |
+| Ragionamento senza strumenti | «Stai ragionando da N token senza usare gli strumenti. Smetti di pensare e agisci adesso con una chiamata di funzione: … Se il compito non si può fare, chiama …» | «Da N token non è partita nessuna chiamata di funzione: il ragionamento da solo non cambia i file. Passi possibili: …; oppure, se il compito non si può fare, piano con fattibile=false o consegna con esito impossibile.» |
+| Prosa | «Usa gli strumenti con chiamate di funzione vere: scrivi i file con scrivi_file, prova con esegui_test, e alla fine chiama consegna.» | «Nessuno strumento chiamato in questa passata: il testo non scrive file e non esegue test, servono chiamate di funzione vere. Passi possibili: scrivi_file o modifica_file, esegui_test o consegna …» |
+| Prosa consegnabile | «… Se hai finito chiama consegna; altrimenti chiama lo strumento del prossimo passo.» | «… Passi possibili: consegna, se il lavoro è finito; oppure lo strumento del prossimo passo.» |
+| Spinta a consegnare | «I tuoi test passano: se il lavoro è finito chiama consegna ora; altrimenti scrivi in una riga cosa manca e continua …» | «I tuoi test passano e i file che il lavoro chiede ci sono. Passi possibili: consegna, se il lavoro è finito; oppure una riga su cosa manca e il prossimo strumento, se non lo è.» |
+| Avviso (codice) | «Adesso chiudi: non cominciare cose nuove, sistema quello che hai, rifai esegui_test … e chiama consegna con un riassunto onesto …» | «È il momento di chiudere il lavoro con quello che c'è; con il codice cambiato dall'ultimo esegui_test, prima i test. Passi possibili: esegui_test o consegna …» |
+| Avviso (tappa) | «Adesso fai il passo concreto più utile (…), senza ragionare sul tempo o sulle passate: … altrimenti non consegnare a metà …» | «Il lavoro continua da qui con i tuoi file, anche dopo questo giro. Passi possibili: scrivi_file o modifica_file; esegui_test; consegna …, se il lavoro è finito e i test passano; oppure, con il lavoro a metà, una riga su cosa resta da fare.» |
+| Avviso (ricerca) | «Adesso chiudi: non fare altre ricerche, chiama consegna … (quello che non hai trovato dillo, non inventarlo).» | «È il momento di chiudere la ricerca con quello che c'è. Passi possibili: consegna con la relazione su ciò che hai trovato, e ciò che non hai trovato detto come tale.» |
+| Avviso (verde, verde_tappa) | «I tuoi test passano: chiama consegna adesso, con un riassunto onesto … Non riscrivere i file che funzionano.» | «I tuoi test passano e i file non sono cambiati da allora. Passi possibili: consegna …» (nella tappa: «…; oppure il prossimo passo e una riga su cosa resta da fare, se non lo è.») |
+| Troncata (pensiero) | «… Ragiona meno e chiama lo strumento del prossimo passo, o consegna.» | «… Passi possibili: lo strumento del prossimo passo o consegna.» |
+| Troncata (altro strumento) | «… Rifalla intera, con argomenti brevi e meno ragionamento prima» | «… Passi possibili: la stessa chiamata intera, con argomenti più brevi.» |
+| Troncata (codice, ricerca) | «… Scrivi il file in pezzi più corti, oppure …» / «Rifai la consegna più corta …» | lo stesso fatto, «Passi possibili: scrivi_file in pezzi più corti o modifica_file sulle sole righe che servono.» / «… consegna con una relazione più breve …» |
+| Nota della rilettura | «… non rileggerlo né rileggere gli altri file. Scrivi adesso la versione corretta con scrivi_file ed esegui i test» | «hai letto questo file N volte senza cambiarlo: il contenuto è qui. Passi possibili: modifica_file sul punto da cambiare, esegui_test o consegna …» |
+| Modifica inversa | «… Se vuoi davvero tornare a com'era, riscrivi il file con scrivi_file» | «… Passi possibili: modifica_file su un altro punto o esegui_test.» |
+| Riscrittura piccola | «…: per correggere un pezzo usa modifica_file (vecchio → nuovo), è più veloce …» | «Hai riscritto X intero (N righe) per cambiarne M. Passi possibili: modifica_file (vecchio → nuovo) per un pezzo, che lascia com'è il resto del file.» |
+| Manifesto | «manifesto.json così la consegna lo rifiuta: X. Correggilo ora.» | «… Passi possibili: modifica_file su manifesto.json.» |
+| Senza novità (nuova) | — | «Le ultime 6 passate non hanno cambiato i file né l'esito dei test: …. [L'ultimo errore…] Passi possibili: …» |
+
+Restano come prima l'apertura del giro dopo una tappa («Hai un altro giro di lavoro…») e
+`CONSEGNA_DOPO_GIRI` (sono il compito del giro, non spinte), gli errori degli strumenti e i
+rimandi della consegna (#180).
+
+**Prove.** `prova_scala_spinte` (nuova, livello 2, ~16 s): il vocabolario, il tono, la scala,
+le tappe, l'attesa della voce, le passate di fila, con i contrari. Ogni correzione ha la sua
+mutazione, e tutte e 12 la fanno cadere: le lasciate dette anche, la nota della rilettura di
+prima, il tono di prima, l'ordine della scala, il giro a vuoto e il ragionamento «limite» in uno
+sviluppo, il perché della tappa tolto, l'attesa della voce nella guardia, `senza_novita` come
+totale, senza il suo gradino, l'avviso segnato detto da lasciato, la lettura nuova che non conta.
+Aggiornate alle forme nuove, senza togliere ciò che controllavano: `prova_agente_guida`,
+`prova_sviluppo_giro5` (la spinta e l'evento ora da `_dici`), `prova_giro_porte`, `prova_agenti`,
+`prova_estensioni_piano`, `prova_strumenti_onesti`, `prova_agente_giri_uguali` («di fila»).
+Verdi anche `prova_porte_consegna`, `prova_revisore`, `prova_giro_chiusura`, `prova_fasi_agente`
+e `_2`, `prova_contesto_agenti`, `prova_sviluppo_v2`, `prova_revisione_onesta` e
+`banco_temperatura.py --secco`.
+
+**Da misurare sulla DGX** (con la misura del lotto): le passate di scuse senza modifiche contro il
+riferimento; quante volte una spinta è lasciata (`spinte_lasciate`) e quante tappe «vuoto» e
+«ragionamento»; se la sesta passata di fila senza novità è la soglia giusta. Cambiare i testi
+cambia il comportamento del modello: va visto sul banco.
