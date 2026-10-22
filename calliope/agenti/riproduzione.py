@@ -54,9 +54,13 @@ NON_RIPRODOTTO = ("uguale", "nessun_test", "passa_prima", "struttura")
 # I fallimenti che non dicono niente del comportamento (19/10, #180): l'import, la sintassi, un
 # nome o un argomento che nella versione di prima non c'erano. Python dal tipo dell'eccezione
 # (diagnosi.fallimenti), JavaScript dal tipo che test_js.mjs mette in testa al messaggio
+# Dal 22/10 (prima revisione della PR #231) anche la lettura che il test nuovo non ha
+# preparato (CalliopeFinta: «è il test: «X» non ha una risposta preparata»): un difetto del
+# test, non il problema segnalato. L'azione non dichiarata invece sì può essere il difetto
 _STRUTTURA = re.compile(r"^(?:\w+\.)*(?:ImportError|ModuleNotFoundError|SyntaxError|"
                         r"IndentationError|TabError)\b|Cannot find module|does not provide an "
-                        r"export named")
+                        r"export named|^(?:\w+\.)*ErroreDelTest: è il test: «\w+» non ha una "
+                        r"risposta preparata")
 # …e quelli di un nome o di una firma che mancano: struttura solo se nascono nel test (il test
 # chiama ciò che prima non c'era); nati nel codice di prima sono spesso proprio il difetto
 # segnalato (revisione della PR #183: il ReferenceError di logica.js, «x.map is not a

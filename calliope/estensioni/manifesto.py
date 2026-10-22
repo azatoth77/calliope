@@ -490,6 +490,13 @@ def permessi_nuovi(vecchio: dict | None, nuovo: dict) -> list[str]:
             if k not in prima]
 
 
+MAX_ERRORE_DETTO = 260
+
+
+def _accorcia(testo: str, n: int = MAX_ERRORE_DETTO) -> str:
+    return testo if len(testo) <= n else testo[: n - 1].rstrip(" ,") + "…"
+
+
 def _consiglio_testo(motivo: str) -> str:
     """Il motivo di un testo che il modello legge, con il consiglio che c'entra (22/10, #228):
     su «cosa_fa» solo per la descrizione, che si compone da lì; per il titolo e gli input solo
@@ -548,14 +555,16 @@ def valida(d, tempo_max_s: float = 30.0, memoria_max_mb: int = 512, nomi_tool=()
            "permessi": permessi, "livello": livello, "limiti": {"tempo_s": tempo,
                                                                  "memoria_mb": mem}}
     # La scheda interattiva (05/10, scheda.py): un gioco nel browser degli schermi. Con i
-    # permessi sbagliati non si controlla (dipende da loro): l'errore dei permessi c'è già
+    # permessi sbagliati si controlla lo stesso, senza il confronto delle azioni con gli scope
+    # (normalizza con permessi None): i suoi errori arrivano insieme a quello dei permessi
+    # (prima revisione della PR #231)
     from .scheda import SchedaNonValida, e_gioco_puro, normalizza
-    if permessi is not None:
-        try:
-            sch = normalizza(d.get("scheda"), permessi)
-        except SchedaNonValida as e:
-            errori.append(str(e))
-        else:
+    try:
+        sch = normalizza(d.get("scheda"), permessi)
+    except SchedaNonValida as e:
+        errori.append(str(e))
+    else:
+        if permessi is not None:
             if sch is not None:
                 out["scheda"] = sch
                 # Un gioco puro lo usano tutti, anche gli ospiti e sugli schermi di stanza
@@ -569,8 +578,10 @@ def valida(d, tempo_max_s: float = 30.0, memoria_max_mb: int = 512, nomi_tool=()
         if len(errori) == 1:
             e = ManifestoNonValido(errori[0])
         else:
+            # Ognuno accorciato (l'elenco dei verbi è di circa 560 caratteri): nel messaggio
+            # ci stanno tutti, interi restano in `errori`
             e = ManifestoNonValido(f"il manifesto ha {len(errori)} errori: " + "; ".join(
-                f"{i}) {x}" for i, x in enumerate(errori, 1)))
+                f"{i}) {_accorcia(x)}" for i, x in enumerate(errori, 1)))
         e.errori = errori
         raise e
     return out

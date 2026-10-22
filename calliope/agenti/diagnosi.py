@@ -27,8 +27,13 @@ MAX_TESTO = 900             # caratteri del testo intero
 _BLOCCO_PY = re.compile(r"^(FAIL|ERROR): (.+?)\s*$", re.M)
 _SEPARATORE = re.compile(r"^(?:=|-){20,}\s*$", re.M)
 _FRAME_PY = re.compile(r'^\s*File "([^"]+)", line (\d+)(?:, in (\S+))?', re.M)
+# Anche le eccezioni del runtime delle estensioni (22/10, prima revisione della PR #231):
+# «calliope_estensione.ErroreDelTest: è il test: …» e «…ErroreCalliope: …»
 _ECCEZIONE = re.compile(r"^((?:[A-Za-z_][\w.]*\.)?[A-Z]\w*(?:Error|Exception|Exit|Interrupt|"
-                        r"Warning)|AssertionError|StopIteration|KeyboardInterrupt)(?::\s?(.*))?$")
+                        r"Warning)|(?:[A-Za-z_][\w.]*\.)?Errore(?:DelTest|Calliope)|"
+                        r"AssertionError|StopIteration|KeyboardInterrupt)(?::\s?(.*))?$")
+# Un errore del test (CalliopeFinta): il punto da guardare è il test, non l'estensione
+_DEL_TEST = re.compile(r"^(?:[A-Za-z_][\w.]*\.)?ErroreDelTest\b")
 _IMPORT_PY = re.compile(r"^ERRORE nell'import di (\S+?):?\s*$", re.M)
 _TRACEBACK = "Traceback (most recent call last):"
 # Le cartelle della libreria e del runner: i frame lì dentro non dicono dove correggere
@@ -83,6 +88,12 @@ def _dove_py(testo: str) -> str:
     return interno
 
 
+def _dove_test(testo: str) -> str:
+    """Il frame più esterno nel codice dell'agente: il test (per un ErroreDelTest)."""
+    fr = _frame_suoi(testo)
+    return fr[0] if fr else ""
+
+
 def _eccezione_py(testo: str) -> str:
     """L'ultima riga d'eccezione di un traceback («AssertionError: 2 != 3»), con le righe che
     la seguono se l'asserzione è su più righe (assertEqual di liste e dizionari)."""
@@ -113,8 +124,9 @@ def _python(uscita: str) -> list[dict]:
             # «unittest.case.FunctionTestCase (test_d)» e sotto «test_x.py::test_d»
             sotto = re.search(r"^\s*(\S+::\S+)\s*$", corpo, re.M)
             nome = sotto.group(1) if sotto else m.group(2).rsplit("(", 1)[-1].rstrip(")")
-        out.append({"test": nome, "errore": _eccezione_py(corpo) or m.group(1),
-                    "dove": _dove_py(corpo)})
+        errore = _eccezione_py(corpo) or m.group(1)
+        out.append({"test": nome, "errore": errore, "dove": _dove_test(corpo)
+                    if _DEL_TEST.match(errore) else _dove_py(corpo)})
     for m in _IMPORT_PY.finditer(uscita):
         corpo = uscita[m.end():m.end() + 4000]
         k = corpo.find("\n\n")
