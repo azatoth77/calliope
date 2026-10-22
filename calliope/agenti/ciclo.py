@@ -469,6 +469,11 @@ def nota_motore_finto(finti: list[tuple[str, str]]) -> str:
             f"usa quello che c'è ({APRI_GIOCO_C_E}).")
 
 
+# Il tetto del messaggio del manifesto nell'esito di esegui_test: tutti gli errori di valida,
+# ognuno al più manifesto.MAX_ERRORE_DETTO caratteri
+MAX_ERRORI_MANIFESTO = 3000
+
+
 def manifesto_non_valido(sandbox) -> str | None:
     """Il motivo per cui manifesto.json non passerebbe il controllo della consegna
     (estensioni/manifesto.valida, lo stesso di controlla_consegna), o None (anche senza
@@ -479,7 +484,9 @@ def manifesto_non_valido(sandbox) -> str | None:
         from ..estensioni.manifesto import valida
         valida(json.loads(sandbox.leggi("manifesto.json", 50_000)))
     except ValueError as e:                # anche ManifestoNonValido e il JSON rotto
-        return str(e)[:400]
+        # Tutti gli errori del manifesto arrivano (22/10, prima revisione della PR #231: con
+        # 400 caratteri restava il primo); ognuno è già accorciato da valida
+        return str(e)[:MAX_ERRORI_MANIFESTO]
     except Exception:  # noqa: BLE001 — nel dubbio lo dice la consegna
         return None
     return None
@@ -502,7 +509,8 @@ def _con_manifesto(r: dict, sandbox, consegnabile=None) -> dict:
             errore = consegnabile(sandbox)
         except Exception:  # noqa: BLE001 — nel dubbio lo dice la consegna
             errore = None
-        riga = (f"FALLITO controllo della consegna: {str(errore)[:400]} (è il controllo che fa "
+        riga = (f"FALLITO controllo della consegna: {str(errore)[:MAX_ERRORI_MANIFESTO]} (è il "
+                "controllo che fa "
                 "consegna: correggi quello che dice, non i test)\n") if errore else ""
     else:
         errore = manifesto_non_valido(sandbox)
@@ -1900,6 +1908,8 @@ class Agente:
                     # _modifica, prima e dopo, e qui si riusa (`_impronte`, mai all'agente)
                     imp_prima = (impronta_cartella(sandbox, lav, self.log)
                                  if name == "scrivi_file" else None)
+                    test_prima = (_testo_test(sandbox, args.get("percorso"))
+                                  if name in ("scrivi_file", "modifica_file") else None)
                     result = self._strumento(lav, sandbox, name, args, consegnabile)
                     impronte = result.pop("_impronte", None) if isinstance(result, dict) else None
                     if name == "leggi_file" and lettura_nuova(
@@ -1930,6 +1940,24 @@ class Agente:
                         dopo = _contenuto_dopo(sandbox, p, name, args)
                         if novita_file(seg, p, dopo):
                             novita = True
+                        # Un file di test che perde test o asserzioni, o guadagna un salto
+                        # (22/10, #223, n. 7): detto subito, nel risultato
+                        from .fotografia_test import e_file_di_test, normale
+                        if e_file_di_test(p):
+                            # Un file di test scritto dall'agente: entra nella fotografia alla
+                            # sua prima esecuzione (seconda revisione della PR #232)
+                            scr = seg.setdefault("test_scritti", [])
+                            if normale(p) not in scr:
+                                scr.append(normale(p))
+                        if test_prima is not None:
+                            from . import fotografia_test as ft
+                            debole = ft.nota_scrittura(str(result.get("percorso") or p),
+                                                       test_prima, dopo)
+                            if debole:
+                                from ..sonde import nota as nota_regola
+                                nota_regola(lav, "agente_test_cambiato_scritto", self.log,
+                                            p[:80])
+                                result = {**result, "test_cambiato": debole}
                         # Lo stato già visto detto all'agente (19/10, #185), nel risultato: la
                         # cartella (o il file) com'era N passate fa, con i test di allora
                         imp = impronte[1] if impronte else impronta_cartella(sandbox, lav,
@@ -1953,6 +1981,15 @@ class Agente:
                         else:
                             fila.pop(p, None)       # una correzione mirata: si riparte
                     elif name == "esegui_test":
+                        if isinstance(result.get("esito"), dict):
+                            # La fotografia dei test (22/10, #223, n. 7): alla prima
+                            # esecuzione; poi test, asserzioni e salti confrontati con lei.
+                            # Un'esecuzione di un file solo fotografa e confronta quel file
+                            # (revisione della PR #232: chi lancia un file alla volta)
+                            debole = self._test_cambiati(lav, sandbox, seg,
+                                                         args.get("percorso") or None)
+                            if debole:
+                                result = {**result, "test_cambiati": debole}
                         for regola in regole_avvisi(result.get("uscita")):
                             # Gli avvisi della prova di fumo (20/10, #197): ognuno con la sua
                             # regola, una volta per lavoro
@@ -2094,10 +2131,13 @@ class Agente:
             from ..sonde import nota as nota_regola
             nota_regola(lav, "agente_test_tolti", self.log,
                         ", ".join(tolti["nomi"])[:120] or f"{tolti['meno']} in meno")
+        # I test cambiati dalla prima esecuzione (22/10, #223, n. 7): nel rapporto
+        rapporto_test = self._rapporto_test(lav, sandbox, seg) if test is not None else {}
         # Gli esempi di accettazione tolti dal revisore (20/10, #190): nel rapporto e sulla scheda
         tolti_rev = list((getattr(lav, "accettazione", None) or {}).get("tolti_revisore") or [])
         return {"esito": esito if esito in ("fatto", "mancano_dati", "impossibile") else "fatto",
                 **({"test_tolti": tolti} if tolti else {}),
+                **rapporto_test,
                 **({"esempi_tolti": tolti_rev} if tolti_rev else {}),
                 "riassunto": str(consegna.get("riassunto") or ""),
                 "domanda": str(consegna.get("domanda") or ""),
@@ -2459,7 +2499,10 @@ class Agente:
             from ..sonde import nota as nota_regola
             nota_regola(lav, "agente_giri_uguali", self.log, f"{uguali} tappe")
         tolti_rev = list((getattr(lav, "accettazione", None) or {}).get("tolti_revisore") or [])
+        # I test cambiati dalla prima esecuzione (22/10, #223): anche nel rapporto della tappa
+        rapporto_test = self._rapporto_test(lav, sandbox, seg) if isinstance(test, dict) else {}
         return {"esito": "tappa", "tipo_limite": e.tipo, "motivo": str(e),
+                **rapporto_test,
                 "giri_uguali": uguali,
                 # anche quelli di _consegna_alla_tappa, prima, nello stesso giro
                 **({"revisore": {"fatti": list(seg.get("revisore_fatti") or []),
@@ -2638,6 +2681,51 @@ class Agente:
             return any(not NON_CODICE.search(f["percorso"]) for f in sandbox.elenca())
         except Exception:  # noqa: BLE001 — nel dubbio niente spinta
             return False
+
+    def _cambi_test(self, lav: Lavoro, sandbox, seg: dict, solo=None) -> tuple[list, list]:
+        """(cambi, segnali) rispetto alla fotografia dei test (agenti/fotografia_test.py),
+        aggiornata prima: i file di test scritti dall'agente (`segnali["test_scritti"]`) alla
+        loro prima esecuzione e, in una correzione, i test della versione di prima. I file di
+        partenza messi dal codice (lo scheletro di un gioco) non entrano finché l'agente non li
+        scrive (seconda revisione della PR #232). `solo`: il file di un'esecuzione parziale.
+        Mai un'eccezione."""
+        from . import fotografia_test as ft
+        try:
+            ora = ft.misura_cartella(sandbox)
+            iniziali = (getattr(lav, "file_iniziali", None)
+                        if getattr(lav, "correzione", False) else None)
+            scritti = list(seg.get("test_scritti") or [])
+            if solo is not None:
+                solo = ft.normale(solo)
+                scritti = [x for x in scritti if ft.normale(x) == solo]
+            foto = ft.aggiorna(seg, ora, iniziali, scritti)
+            return ft.confronta(foto, ora, solo), ft.segnali(foto, ora, solo)
+        except Exception as e:  # noqa: BLE001 — una misura non ferma il lavoro
+            self.log(f"[AGENTI] {lav.id}: fotografia dei test non fatta: {e}")
+            return [], []
+
+    def _test_cambiati(self, lav: Lavoro, sandbox, seg: dict, solo=None) -> str:
+        """Il fatto per il risultato di esegui_test, "" se i test non sono cambiati rispetto
+        alla fotografia. La regola `agente_test_cambiati` una volta per ogni stato diverso."""
+        cambi, _ = self._cambi_test(lav, sandbox, seg, solo)
+        if not cambi:
+            return ""
+        from . import fotografia_test as ft
+        chiave = sorted((c["file"], c["test_meno"], c["asserzioni_meno"], c["skip_piu"],
+                         c["banali_piu"]) for c in cambi)
+        if seg.get("cambiati_detti") != [list(x) for x in chiave]:
+            seg["cambiati_detti"] = [list(x) for x in chiave]
+            from ..sonde import nota as nota_regola
+            nota_regola(lav, "agente_test_cambiati", self.log,
+                        ", ".join(c["file"] for c in cambi)[:120])
+        return ft.fatto_per_agente(cambi)
+
+    def _rapporto_test(self, lav: Lavoro, sandbox, seg: dict) -> dict:
+        """Per il rapporto della consegna e della tappa: i cambi (scheda) e i segnali senza
+        ambiguità (voce)."""
+        cambi, sig = self._cambi_test(lav, sandbox, seg)
+        return {**({"test_cambiati": cambi} if cambi else {}),
+                **({"test_segnali": sig} if sig else {})}
 
     @staticmethod
     def _ha_test(sandbox) -> bool:
@@ -3563,6 +3651,18 @@ def firma_errore(res) -> str:
         return forma(falliti[0])
     cand = [r for r in righe if re.search(r"(Error|Exception|assert|FAILED|errore)", r)]
     return forma((cand or righe or [""])[-1])
+
+
+def _testo_test(sandbox, percorso) -> str | None:
+    """Il testo di un file di test dell'agente prima di scriverlo (22/10, #223); None se non è
+    un file di test o non c'è ancora."""
+    from .fotografia_test import e_file_di_test
+    if not e_file_di_test(str(percorso or "")):
+        return None
+    try:
+        return sandbox.leggi(percorso, 2_000_000)
+    except Exception:  # noqa: BLE001 — un file nuovo
+        return None
 
 
 def _contenuto_dopo(sandbox, percorso: str, nome: str, args: dict) -> str | None:

@@ -140,6 +140,19 @@ def prova_vocabolario():
         C.USCITA_TRONCATA_TESTO, C.USCITA_TRONCATA_RICERCA, C.USCITA_TRONCATA_STRUMENTO,
         C.USCITA_TRONCATA_TESTO_RICERCA, C.USCITA_TRONCATA_PENSIERO,
         C.nota_riscrittura("a = 1\n" * 40, "a = 1\n" * 39 + "a = 2\n", "a.py")]
+    # I fatti della fotografia dei test (#232) nei risultati degli strumenti: fatti, non spinte,
+    # ma con lo stesso tono (unione con epic-86-harness)
+    from calliope.agenti import fotografia_test as ft
+    due = ("import unittest\n\n\nclass P(unittest.TestCase):\n    def test_a(self):\n"
+           "        self.assertEqual(1 + 1, 2)\n\n    def test_b(self):\n"
+           "        self.assertEqual(2 + 2, 4)\n")
+    uno = due.split("\n\n    def test_b")[0] + "\n"
+    foto = [ft.fatto_per_agente([{"file": "test_a.py", "tolto": False, "test_meno": 1,
+                                  "asserzioni_meno": 1, "skip_piu": 0, "banali_piu": 0}]),
+            ft.nota_scrittura("test_a.py", due, uno)]
+    verifica("i fatti della fotografia dei test (#232) ci sono, da controllare col tono",
+             all(foto), str(foto))
+    testi += foto
     brutti = [(t[:60], vietate(t)) for t in testi if vietate(t)]
     verifica("nessun testo con le parole di rimprovero o gli imperativi sul pensiero",
              not brutti, str(brutti))

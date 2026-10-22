@@ -253,8 +253,16 @@ def prova_collaudo_gioco(tmp: Path):
     a3, svc3, studio3 = ambiente(tmp / "senza_prova")
     sv3, _, _, _ = al_collaudo(a3, svc3)
     out = a3.chiama("sviluppo_passo", {"azione": "avanti"}, "Dario", schermo=studio3, turno=5)
-    verifica("contrario: un gioco approvato senza averlo visto → la revisione lo dice",
-             "Il collaudo l'hai saltato: non l'hai visto in prova sullo schermo" in detta(out)
+    # Dal 22/10 (#223) senza nessuna prova prima la ragione e la domanda, poi al sì la revisione
+    verifica("contrario: un gioco approvato senza averlo visto → prima lo dice e chiede",
+             "Non c'è nessuna prova: non l'hai visto in prova sullo schermo" in detta(out)
+             and detta(out).endswith("Vado avanti lo stesso?")
+             and "sviluppo_senza_prove_chiesto" in (a3.ctx.regole or []), detta(out))
+    a3.ctx.tool_in_sospeso, a3.ctx.user_text = "sviluppo_passo", "Sì."
+    out = a3.chiama("sviluppo_passo", {"azione": "avanti"}, "Dario", schermo=studio3, turno=6)
+    a3.ctx.tool_in_sospeso, a3.ctx.user_text = None, ""
+    verifica("…al sì la revisione lo dice", sv3.fase == "revisione"
+             and "Nessuna prova: hai scelto di andare avanti lo stesso." in detta(out)
              and "sviluppo_revisione_senza_collaudo" in (a3.ctx.regole or []), detta(out))
 
 

@@ -188,8 +188,16 @@ def prova_flusso(tmp: Path):
     # 3. revisione senza collaudo (11/10 16:26)
     out = a.chiama("sviluppo_passo", {"azione": "avanti"}, "Dario", schermo=studio, turno=6)
     f = detta(out)
-    verifica("16:26: collaudo saltato → la revisione del tool lo dice, nessun «in ordine»",
-             "Il collaudo l'hai saltato" in f and "in ordine" not in f
+    # Dal 22/10 (#223) senza nessuna prova la revisione non parte: prima la ragione e la domanda
+    verifica("16:26: nessuna prova → prima la ragione e la domanda, nessun «in ordine»",
+             f.startswith("Non c'è nessuna prova:") and f.endswith("Vado avanti lo stesso?")
+             and "in ordine" not in f and "sviluppo_senza_prove_chiesto" in a.ctx.regole, f)
+    a.ctx.tool_in_sospeso, a.ctx.user_text = "sviluppo_passo", "Sì, vai avanti."
+    out = a.chiama("sviluppo_passo", {"azione": "avanti"}, "Dario", schermo=studio, turno=7)
+    a.ctx.tool_in_sospeso, a.ctx.user_text = None, ""
+    f = detta(out)
+    verifica("…al sì la revisione del tool lo dice, nessun «in ordine»",
+             "Nessuna prova: hai scelto di andare avanti lo stesso." in f and "in ordine" not in f
              and "sviluppo_revisione_senza_collaudo" in a.ctx.regole, f)
 
     # 5. sviluppo_chiedi con la correzione

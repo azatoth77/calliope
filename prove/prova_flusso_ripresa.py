@@ -556,6 +556,8 @@ def prova_m7(tmp, iso):
     contesto = svs._file_contesto(sv)
     contesto.parent.mkdir(parents=True, exist_ok=True)
     contesto.write_text("{}", encoding="utf-8")
+    # Provato una volta (22/10, #223: senza nessuna prova la revisione chiede prima)
+    sv.collaudi.append({"quando": time.time(), "dati": "3 e 5", "ok": True, "esito": "8"})
     turno(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, 2, "Va bene, andiamo avanti.")
     r = turno(reg, ctx, "sviluppo_passo", {"azione": "avanti"}, 3, "Sì.")
     verifica("«va bene così» alla revisione: chiuso, e la frase dice che si può riaprire",

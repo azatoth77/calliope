@@ -354,6 +354,15 @@ class Sviluppo:
     # L'ultimo giro fermo prima di consegnare (A5): {lavoro, cartella, perche (fermato, tappa,
     # attesa, limite, errore, scaduto), domanda, quando}. «Rifallo» riparte dai suoi file
     giro: dict = field(default_factory=dict)
+    # ── la revisione senza nessuna prova (22/10, issue #223) ──
+    # Revisione e attivazione vogliono almeno una prova della versione (collaudo, anteprima o
+    # esempi eseguiti), oppure il sì alla domanda che dice che non ce n'è, di chi può approvare
+    # (chi amministra; per un gioco puro anche un familiare adulto, regola del 05/10):
+    # {chiesta, confermata (la chiave della versione: «versione|lavoro»), quando, chi}
+    senza_prove: dict = field(default_factory=dict)
+    # La chiave «versione|lavoro» della versione i cui esempi di accettazione sono stati eseguiti
+    # alla fine del lavoro (seconda revisione della PR #232): vale anche dopo un riavvio
+    esempi_eseguiti: str = ""
 
     def fasi(self) -> tuple[str, ...]:
         return FASI_PROGRAMMA if self.tipo == "programma" else FASI_ESTENSIONE
@@ -1003,12 +1012,17 @@ class Sviluppi:
                        + (": correzione senza cambi al codice" if uguale else
                           ": correzione senza un test che riproduce il problema"
                           if non_riprodotto else ""))
+            # Gli esempi eseguiti alla fine di questo lavoro (#223): la chiave della versione
+            acc = getattr(lav, "accettazione", None)
+            if isinstance(acc, dict) and isinstance(acc.get("passano"), bool):
+                sv.esempi_eseguiti = f"{sv.versione}|{sv.lavoro or ''}"
             item["messaggio"] = self.frase_pronto(sv, lav, altro)
-            # I test spariti dall'ultima tappa, detti dal codice (revisione della PR #179)
-            from .agenti.ciclo import frase_test_tolti
-            tolti = frase_test_tolti((getattr(lav, "risultato", None) or {}).get("test_tolti"))
-            if tolti:
-                item["messaggio"] = str(item["messaggio"]).rstrip() + " " + tolti
+            # I test spariti dall'ultima tappa (revisione della PR #179) e il fatto neutro sugli
+            # stessi test di questo lavoro (22/10, #223), detti dal codice
+            from .agenti.fotografia_test import avvisi_voce
+            avvisi = avvisi_voce(getattr(lav, "risultato", None))
+            if avvisi:
+                item["messaggio"] = str(item["messaggio"]).rstrip() + " " + avvisi
             if non_riprodotto:
                 # «Non sono riuscita a riprodurre il problema» (decisione del 12/10, domanda 3
                 # della ricerca 2026-10-12-flusso-agente-fasi): non è «pronto», e la risposta
@@ -2528,7 +2542,7 @@ class Sviluppi:
         cercava la causa nel codice)."""
         c = {"quando": time.time(), "dati": str(dati or "")[:120], "ok": bool(ok),
              "esito": re.sub(r"\s+", " ", str(esito or "")).strip()[:200],
-             "versione": sv.versione}
+             "versione": sv.versione, "lavoro": sv.lavoro}
         # Il tipo (12/10): risposta, «non trovato», errore dell'estensione, fermata
         c["tipo"] = tipo if tipo in TIPI_COLLAUDO else ("risposta" if ok else "errore")
         if anteprima:

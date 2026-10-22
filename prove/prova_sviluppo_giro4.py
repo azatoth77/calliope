@@ -371,6 +371,11 @@ def prova_titolo(tmp, iso):
              "ora si chiama" not in rev["frase"] and "«Meteocittà»" in rev["frase"], rev["frase"])
     verifica("…sulla scheda il titolo proposto dall'agente, e come cambiarlo",
              "l'agente proponeva «Meteo città»" in rev["testo"], rev["testo"][:400])
+    # Provata una volta (22/10, #223: dentro uno sviluppo senza nessuna prova l'approvazione
+    # chiede prima «Vado avanti lo stesso?»)
+    sv = svc.sviluppi.corrente("u1")
+    sv.collaudi.append({"quando": 1.0, "dati": "Bergamo", "ok": True, "esito": "sereno",
+                        "versione": sv.versione})
     ctx.speaker_ctx.sfida_superata = True
     out = est.gestisci(ctx, "approva", "meteo_codificato")
     verifica("approvata: «Fatto: «Meteocittà» è attiva»",

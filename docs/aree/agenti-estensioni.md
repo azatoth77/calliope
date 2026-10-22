@@ -4458,7 +4458,8 @@ cambiare, non da scrivere; senza l'analisi (un gioco fuori da uno sviluppo) i gi
 e il manifesto va cambiato a mano dall'agente. I giochi già fatti non cambiano (niente
 migrazioni). Se l'agente consegna un gioco con il nome segnaposto la consegna lo rimanda una
 volta in più. Il punto 7 della issue (CalliopeFinta che dice «nessuna risposta preparata»,
-`valida` con tutti gli errori, `chiama` in sola lettura) resta aperto.
+`valida` con tutti gli errori, `chiama` in sola lettura) resta aperto. *[storico: «resta aperto»
+fino al 22/10, #228, voce in fondo]*
 
 **Dopo la revisione della PR #188 (20/10).**
 - **Si esegue solo ciò che la passata offre** (`Agente.codice`): uno strumento chiamato ma non
@@ -4939,6 +4940,425 @@ ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costant
   della consegna rotta non tenuto, i due controlli invertiti, le consegne rifiutate fra le fatte,
   la frase finale di prima, la cartella e «incompleta» in `lavoro_risultato`.
 
+## Le porte residue: ricollaudo pieno, revisione senza prove, test indeboliti (22/10, issue #223, ramo `issue-223-porte-residue`)
+
+Verifica del 22/10 dei buchi della ricerca del 19/10
+([`2026-10-19-solidita-harness-sviluppo.md`](../ricerche/2026-10-19-solidita-harness-sviluppo.md)
+§ 3.1): restavano aperti i n. 5, 10 e 7, porte che si aprivano senza una prova vera.
+
+- **Ricollaudo pieno (n. 5, `sonde.va`).** Prima bocciava solo un errore o lo stesso esito di
+  prima. Il caso della persona («fiera di Borgo Alto») che prima si fermava con un errore e adesso
+  risponde «Non ho trovato…» passava, anche se non aveva risposto. Adesso un esito vuoto non va
+  quando il caso chiedeva un dato, cioè quando prima si era fermato o non aveva trovato niente.
+  «Vuoto» è lo stesso tipo del collaudo (`tools/sviluppo.tipo_collaudo`): «non trovato» senza
+  dati accanto, risultati vuoti, «trovato»: false. Il motivo va all'agente e sulla scheda
+  (`MOTIVO_VUOTO`), la regola è `ricollaudo_esito_vuoto`. Una risposta piena che la persona aveva
+  giudicato sbagliata e che adesso dice «non trovato» va: può essere proprio la correzione (la
+  fiera che non esiste). «Non ho trovato pioggia» con temperatura e cielo resta pieno.
+- **Revisione e attivazione senza nessuna prova (n. 10, `tools/sviluppo._porta_prove`).** Prima,
+  senza collaudo, la revisione segnava `sviluppo_revisione_senza_collaudo`, diceva «l'hai
+  saltato» e andava avanti. Con gli esempi «non_fatta» (l'analisi prima del codice non riuscita)
+  il lavoro arrivava alla revisione e all'attivazione senza nessuna prova. Adesso serve almeno
+  una prova della versione di adesso: un collaudo, un'anteprima di un gioco, oppure gli esempi
+  eseguiti alla fine del lavoro (`passano` vero o falso; dopo un riavvio il segno `provato` sui
+  requisiti). Senza, «avanti» dice la ragione e chiede, per esempio: «Non c'è nessuna prova: non
+  l'hai provata e gli esempi non sono stati eseguiti. Vado avanti lo stesso?». Nessun meccanismo
+  nuovo: è la proposta in sospeso di sempre verso `sviluppo_passo` avanti. Il sì si legge come
+  per le altre proposte (`politica.accettata`, la frase di sfida, `politica.consenso`), e solo
+  con `tool_in_sospeso` e quella domanda. Il modello che richiama avanti da solo, o un «no»,
+  ripetono la domanda. Il sì vale per quella versione (`Sviluppo.senza_prove`, la chiave
+  «versione|lavoro»): una versione nuova chiede di nuovo. La revisione lo dice («Nessuna prova:
+  hai scelto di andare avanti lo stesso.»). Le regole sono `sviluppo_senza_prove_chiesto` e
+  `sviluppo_senza_prove_confermato`. La stessa porta c'è all'attivazione e alla chiusura di un
+  programma. Una versione che non si può approvare si rivede comunque, senza la domanda.
+- **Test indeboliti (n. 7, `agenti/fotografia_test.py`).** `test_tolti` confronta solo con
+  l'ultima tappa. Al giro 1, prima di ogni tappa, un `assertEqual` cambiato in
+  `assertTrue(True)`, o uno `skipTest` aggiunto, non si vedeva. Adesso una misura senza eseguire
+  niente (`ast` per Python, il testo per JavaScript) conta per ogni file di test i test, i loro
+  nomi, le asserzioni vere e i salti. Un'asserzione con soli valori scritti (`assertTrue(True)`,
+  `assertEqual(1, 1)`, `assert True`, `assert.ok(true)`) non conta. Sono salti `skipTest`,
+  `@unittest.skip…`, `expectedFailure`, `test.skip`, `{ skip: true }`. La fotografia si prende
+  alla prima esecuzione intera di `esegui_test` (con i file iniziali di una correzione, che parte
+  dai test di prima), e un file nuovo entra quando compare. A ogni esecuzione si confronta:
+  - test in meno, asserzioni in meno e salti in più diventano un fatto nel risultato
+    (`test_indeboliti`, regola `agente_test_indeboliti`);
+  - `scrivi_file` e `modifica_file` su un file di test che perde controlli hanno la nota subito
+    (`test_indebolito`, regola `agente_test_indebolito_scritto`);
+  - alla consegna e alla tappa i cambi vanno nel rapporto (`test_indeboliti`), e la voce lo dice
+    senza nomi di file, nell'annuncio e nella revisione dello sviluppo («Attenzione: dalla prima
+    prova l'agente ha indebolito i suoi test: un controllo in meno e un test saltato.»).
+  Il conto è per numero di test e di asserzioni, non per nomi: un test rinominato, uno aggiunto
+  o le asserzioni spostate da un test all'altro non dicono niente. Restano fuori gli esempi di
+  Calliope in sola lettura e le cartelle nascoste.
+- **Prove cambiate.** Sei prove andavano alla revisione senza nessuna prova: `prova_sviluppo`
+  (il programma piccolo), `prova_flusso_ripresa` (M7), `prova_revisione_onesta` (la consegna del
+  gioco e il programma), `prova_voce_onesta` (il caso delle 16:26), `prova_giro_halloween` (il
+  gioco senza anteprima), e `prova_giro_porte` per la consegna condivisa. Dove la prova parla
+  d'altro ha adesso una prova della versione (un collaudo o gli esempi eseguiti). Dove parla
+  proprio della revisione senza collaudo (16:26, il gioco mai visto) controlla prima la domanda,
+  poi il sì e la revisione.
+- Prova: `prova_porte_residue`, a secco con il docker finto e l'agente finto, con i contrari di
+  ogni porta (53 controlli). Ogni correzione ha la sua mutazione, e la prova cade con tutte e
+  14: il «non trovato» nel ricollaudo; per il n. 10 la porta alla revisione, all'attivazione e
+  del programma, il sì del solo modello, il sì che vale per ogni versione, gli esempi eseguiti
+  non contati; per il n. 7 le asserzioni con soli valori scritti contate, i salti Python, il
+  fatto di `esegui_test`, la nota di scrittura, i file iniziali, il rapporto della consegna e il
+  conto per nomi invece che per numero.
+- **Resta**: `estensione_gestisci` con `approva` detto direttamente non passa da
+  `sviluppo_passo`. Ha la frase di sfida e i test verdi, ma non la porta delle prove. *[storico:
+  vero fino alla prima revisione della PR #232, sotto: ora la porta c'è anche lì]*
+
+**Dopo la prima revisione della PR #232 (22/10).**
+- **N. 10, le prove della versione di adesso.** Anche le anteprime sono filtrate per versione:
+  un gioco visto alla versione 1 non è visto alla 2. Per un programma, che non ha versioni,
+  conta il lavoro. Il collaudo salva `lavoro`, e quelli del programma di prima della
+  correzione non valgono più.
+- **N. 10, `estensione_gestisci approva` dentro lo sviluppo.** `sviluppo.passo_interno` lo
+  tratta come un passo, quindi il modello poteva rispondere ad «attivala» con quel tool e
+  saltare la porta. Per un gioco puro con la voce sicura saltava anche la frase di sfida.
+  Adesso `Estensioni._approva` passa da `tools/sviluppo.porta_approvazione` quando c'è uno
+  sviluppo aperto sull'estensione, prima della sfida e prima della strada senza sfida.
+  *[storico: «solo con lo sviluppo aperto, prima del permesso e dei test» fino alla seconda
+  revisione, sotto]*
+- **N. 10, la domanda per prima.** La porta sta in testa a `_revisione`. Prima veniva dopo il
+  confronto con la richiesta, che può durare `sviluppo_verifica_voce_s`, e la regola
+  `sviluppo_revisione_senza_collaudo` si contava due volte. «Gli esempi non sono stati
+  eseguiti» si dice solo se erano stati scritti; senza esempi la frase dice «non ci sono
+  esempi».
+- **N. 10, il sì sicuro, provato con la politica del turno vera.** Non vale come sì senza
+  prove un «sì» detto per «Lo chiudo?» o per «Vuoi attivarla?». Non vale nemmeno «Sì,
+  attivala.» senza nessuna proposta in sospeso, come dopo un riavvio.
+- **N. 7, niente accuse false a voce.** Le misure della revisione mostravano che riscritture
+  oneste finivano a voce come «indebolito». Erano i cicli, `subTest`, `parametrize`, i cicli
+  JavaScript e gli oggetti con `skip:`/`todo:` di un gioco o di una lista.
+  - A voce e nella revisione vanno solo tre segnali, che non hanno una spiegazione onesta:
+    - un test tolto senza un sostituto;
+    - un salto vero del runner;
+    - un controllo che non controlla niente: soli valori scritti, `True or …`, lo stesso
+      valore ai due lati, dopo un `return`, sotto `if False`, dentro un try che ingoia
+      l'AssertionError (Python con `ast`; in JavaScript il `return` in testa al test e
+      `if (false)`).
+  - Le asserzioni calate restano un fatto per l'agente, che le può spiegare nel riassunto.
+  - Un ciclo su valori scritti conta tante asserzioni quante sono le voci, e un
+    `parametrize` tanti test quanti sono i casi.
+  - In JavaScript un salto conta solo come `test.skip`/`it.skip`/`describe.skip` (o `.todo`),
+    come `t.skip()`/`t.todo()`, o come opzione `{ skip: … }` di una chiamata `test`. I
+    sottotest `t.test(…)` contano come test. I commenti si tolgono rispettando le stringhe
+    («"a//b"» resta).
+  *[storico: «a voce i test tolti, i salti e i controlli banali» vero fino alla seconda revisione
+  della PR #232, sotto: a voce solo il fatto neutro su uno stesso test]*
+- **N. 7, le frasi.** Niente più «dalla prima prova», che si confondeva con il collaudo: la
+  frase dice «da quando ha eseguito i test la prima volta». Con i test tolti dall'ultima tappa
+  c'è un solo «Attenzione» (`fotografia_test.avvisi_voce`) e lo stesso test non si conta due
+  volte.
+- **N. 7, un file alla volta.** Anche un'esecuzione parziale di `esegui_test` fotografa il suo
+  file e lo confronta.
+- **N. 5, il ricollaudo.** Il motivo all'agente aggiunge «se il dato non esiste davvero, dillo
+  nel riassunto della consegna»: un «Non trovo nessun luogo chiamato…» può essere la
+  correzione onesta, e lo dice l'agente, non il codice.
+  - Sono vuote anche «Mi dispiace, nessuna fiera…», «Nessun evento trovato…» e «Purtroppo non
+    sono riuscita a trovare…»: una frase sola, in testa e senza un seguito (`esito_vuoto`).
+  - Non è vuota «Non ho trovato pioggia: sereno, 21 gradi.», anche con il solo `da_dire`: ha
+    un numero o qualcosa dopo i due punti. Non lo è nemmeno «Nessuna pioggia, cielo sereno».
+  - La regola `ricollaudo_esito_vuoto` si scrive in `sonde.esito_caso`.
+  *[storico: il riconoscimento delle frasi vuote vero fino alla seconda revisione della PR #232,
+  sotto: «vuoto» solo per struttura]*
+- **Le mutazioni sopravvissute alla prima revisione** (M1–M9) adesso hanno ognuna la sua prova:
+  - il controllo della domanda e quello di `tool_in_sospeso`;
+  - i collaudi di ogni versione;
+  - la frase nell'annuncio dei lavori, in quello dello sviluppo e nella revisione;
+  - il rapporto della tappa;
+  - la regola del ricollaudo;
+  - la sola lettura in `misura_cartella`.
+
+  In tutto la prova ha 39 mutazioni, e cadono tutte. Oltre alle 9 qui sopra, ce n'è almeno una
+  per ognuna delle correzioni di questa revisione (P1, P2, P5, P6, P7, P8, P9, P10), e le 14 di
+  prima sono riscritte sul codice nuovo. La prova conta 101 controlli.
+- **Prova cambiata:** `prova_sviluppo_giro4` approvava con `estensione_gestisci`, dentro lo
+  sviluppo e senza nessuna prova. Adesso ha un collaudo prima.
+
+**Dopo la seconda revisione della PR #232 (22/10).** Due correzioni di principio: le euristiche
+sul testo davano ancora falsi positivi.
+- **N. 7, la fotografia parte dai test dell'agente.** I file di partenza messi dal codice (i test
+  del gioco d'esempio dello scheletro) non entrano: un file di test entra quando l'agente lo
+  scrive (`segnali["test_scritti"]`) e poi i test girano. In una correzione la fotografia ha i
+  test della versione di prima. Una modifica chiesta dalla persona («togli le previsioni») non
+  li ha: i test di una funzione tolta non diventano un sospetto.
+- **N. 7, niente accuse a voce.** A voce, nell'annuncio e nella revisione, va solo un fatto
+  neutro, e solo per un segnale senza ambiguità su uno **stesso test** (stesso nome, nello
+  stesso file o spostato): prima controllava qualcosa e ora non controlla niente
+  (`assertTrue(True)`, `return` in testa, `if False`), o prima girava e ora ha un salto vero
+  (`fotografia_test.segnali`, «Sui test dell'agente: il test «…» adesso non controlla
+  niente.»). Mai «indeboliti».
+  - Tutto il resto resta un fatto per l'agente (`test_cambiati` nel risultato di
+    `esegui_test`, regola `agente_test_cambiati`) e una riga neutra sulla scheda della
+    revisione («Test cambiati rispetto alla prima esecuzione: …»): test tolti, uniti,
+    divisi, spostati, conti delle asserzioni.
+  - Restano fuori dalla voce, e sono contrari della prova, le riscritture della seconda
+    revisione: un file diviso o spostato in `tests/`, tre test uniti con un ciclo e `subTest`
+    o in un ciclo JavaScript su una tabella, il test di determinismo con lo stesso seme, la
+    promessa restituita in JavaScript, `p.skip()` di una partita, `t.skip()` di un turno che
+    non è il contesto del test, una funzione tolta con i suoi test.
+  - In Python il salto vale solo per `self.skipTest`, `pytest.skip` e i decoratori di
+    `unittest` e `pytest.mark`. In JavaScript `t.skip()` vale solo sul parametro della
+    callback del test, e il `return` in testa solo nudo (`return;`).
+  - Le chiavi del rapporto ora sono `test_cambiati` e `test_segnali`. Le regole sono
+    `agente_test_cambiati` e `agente_test_cambiato_scritto`, che sostituiscono le
+    `*_indebolit*` di prima.
+- **N. 5, il ricollaudo senza frasi.** «Vuoto» solo per struttura: nessuna frase per chi
+  parla e i risultati vuoti, o «trovato»: false senza una frase, quando prima il caso dava un
+  dato o un errore. Una frase negativa è un dato e la giudicano il modello e la persona
+  (principio 10): «Nessuna allerta…», «Non c'è traffico», «Non ho risultati…», ma anche «Non ho
+  trovato la fiera». Il motivo all'agente dice di scrivere in `da_dire` che il dato non c'è.
+  *[storico: il criterio della issue «un «non ho trovato» bocciato» vale fino a questa
+  revisione]*
+- **N. 10, la porta per ogni sviluppo non concluso.** `porta_approvazione` guarda lo sviluppo
+  più recente dell'estensione: se è aperto o sospeso, o se è chiuso con la versione da
+  attivare, passa dalla porta. La domanda resta in sospeso verso `estensione_gestisci
+  approva`, e il sì vale per l'uno o per l'altro tool.
+  - In `_approva` la porta sta dopo permesso, codice e test, subito prima della frase di sfida
+    e della strada senza sfida di un gioco puro. Un familiare che non può approvare riceve il
+    rifiuto di sempre, e i test rossi «non si può approvare», senza la domanda prima.
+- **N. 10, gli esempi eseguiti dopo un riavvio.** È la chiave «versione|lavoro» salvata nello
+  sviluppo (`Sviluppo.esempi_eseguiti`, da `Sviluppi.lavoro_finito`), non il segno `provato`
+  dei requisiti. Quel segno restava da una versione di prima ed è ereditato da uno sviluppo
+  nuovo.
+- **Minori:** `*.spec.js` è un file di test; `t.assert.*` di `node:test` conta come asserzione;
+  `{ skip: false }` non è un salto.
+- **Mutazioni:** 23, una o più per ogni correzione, e cadono tutte. Fra queste ci sono le
+  sopravvissute alla seconda revisione:
+  - Mf, il segno «provato» dei requisiti;
+  - Mo, la chiave `chiesta`;
+  - Mh, `{ skip: false }`;
+  - Mp, lo sviluppo chiuso con ogni versione.
+
+  Mu non c'è più, perché `_testo_con_dati` è stato tolto. Il gioco puro con la voce sicura non
+  ha una prova sua: la porta sta prima di quella strada, e la mutazione Q4 lo copre per la
+  frase di sfida. La prova conta 129 controlli.
+
+**Dopo la terza revisione della PR #232 (22/10).**
+- **N. 5, una scelta di principio scritta come tale.** Il caso che aveva motivato il n. 5 adesso
+  **va**: prima un errore, poi la frase «Non ho trovato la fiera di Borgo Alto.».
+  - È una frase, quindi un dato detto, e se sia giusta lo giudicano il modello e la persona,
+    non una regola sul testo (principio 10).
+  - Il criterio della issue («il ricollaudo «non ho trovato» bocciato») resta storico.
+  - Il ricollaudo boccia solo ciò che si vede dalla struttura: nessuna frase, e nessun campo
+    con un dato vero.
+- **N. 5, la struttura guarda la sostanza** (`sonde._e_dato`). *[storico: superato dalla quarta revisione, sotto: zeri, booleani, indirizzi e l'eco su un'altra chiave davano falsi «non va»]* Non sono un dato:
+  - l'eco degli argomenti del caso (la stessa idea di `argomenti_incerti._ha_dati`);
+  - i contatori a zero, i sì/no, i `None`;
+  - i metadati della ricerca: fonte, url, aggiornato, query…
+
+  Quindi `{"luogo": "Borgo Alto", "eventi": []}`, `{"citta": …, "risultati": None}`,
+  `{"eventi": [], "totale": 0}` e `{"eventi": [], "fonte": …}` dopo un errore non vanno.
+  Contrari: un evento nella lista, un campo con una data, un totale diverso da zero.
+- **N. 10, il gioco puro e il sì da `estensione_gestisci` hanno la loro prova.**
+  - Un familiare adulto con la voce riconosciuta e nessuna prova riceve la domanda, non
+    «Fatto». È la strada senza sfida.
+  - Il suo sì, raccolto da `estensione_gestisci`, attiva il gioco.
+- **N. 10, chi dà il sì.** Vale la regola del 05/10 sui giochi puri: il familiare adulto che può
+  attivare un gioco puro può dare anche il sì «senza prove». Il commento non dice più «il sì di
+  chi amministra». `Sviluppo.senza_prove` salva `chi`, e la revisione lo dice senza
+  attribuirlo a chi parla («Nessuna prova: Bianca ha scelto di andare avanti senza prove.»).
+- **N. 7, i casi residui del fatto a voce.**
+  - Lo stesso test si abbina per file e per nome. Uno spostamento vale solo se il nome
+    compare in un solo altro file, dove prima non c'era: `test_base` ripetuto fra file diversi
+    non dà più un falso «adesso non controlla niente».
+  - A voce valgono solo i salti senza condizione. Non contano `@skipIf`, `@skipUnless`,
+    `pytest.mark.skipif`, `xfail` con la condizione, `self.skipTest` sotto un `if`,
+    `{ skip: !process.env.X }` e `t.skip()` dentro un `if`: restano nei conti per l'agente.
+  - Il nome Python si dice leggibile (principio 5): `test_somma_zero` diventa «somma zero»,
+    un nome che non lascia niente diventa «un test». I nomi JavaScript sono già frasi.
+- **Mutazioni:** 15, e cadono tutte:
+  - Mg (la porta saltata per il gioco puro) e Mtool (il sì solo da `sviluppo_passo`);
+  - per il ricollaudo: l'eco, gli zeri, i metadati, `None`;
+  - per la fotografia: l'abbinamento per nome su tutti i file, lo spostamento ignorato, i
+    quattro salti condizionali presi per certi, i nomi tecnici a voce;
+  - per il sì del familiare: «hai scelto» detto a chiunque, e `chi` non salvato.
+
+  La prova conta 150 controlli.
+
+**Dopo la quarta revisione della PR #232 (22/10): il vuoto con una regola stretta.** Ogni
+allargamento aveva dato falsi positivi. Nella terza revisione zeri, booleani, `indirizzo` e
+`url` non contavano come dato, e il ricollaudo bocciava risposte piene come
+`{"citta": "Bergamo", "temperatura": 0}`, `{"aperta": False}` o l'indirizzo chiesto.
+- **Vuoto (`sonde.esito_vuoto`)**: nessuna frase per chi parla, almeno una raccolta vuota (lista
+  o dizionario vuoti, anche annidati) o un `None`, e nessun altro campo con un valore. Fanno
+  eccezione:
+  - l'eco di un argomento **sulla stessa chiave** e con lo stesso valore (`luogo` → `luogo`,
+    non `capoluogo`);
+  - accanto alla raccolta vuota, e solo lì, i contatori a zero (`totale`, `numero`, `count`…) e
+    i metadati della ricerca (`fonte`, `aggiornato`, `query`…).
+- Zeri, booleani, `indirizzo`, `url` e `link`, da soli o accanto ad altri campi, sono il dato.
+- `«trovato»: false` senza una frase resta vuoto: è il segno esplicito del risultato.
+- **Prova**: restano vuoti i casi della Q8 (con l'argomento sulla stessa chiave). Sono contrari
+  tutte le 11 risposte piene della Q12, più tre: lo zero, il booleano e l'indirizzo accanto a
+  una lista vuota. Sono contrari anche un contatore a zero da solo, e la risposta uguale
+  all'argomento su un'altra chiave accanto a una lista vuota.
+- **Falso negativo noto, lasciato com'è**: l'eco dentro una lista di un'altra chiave
+  (`{"luoghi": ["Borgo Alto"], "eventi": []}`) conta come dato, e quel ricollaudo va.
+- **Mutazioni**: 6, e cadono tutte: l'eco su ogni chiave, zeri e booleani di ogni campo,
+  indirizzo e url come metadati, contatori e metadati anche senza una raccolta vuota, niente
+  eco, `None` non vuoto. La prova conta 168 controlli.
+
+## Il contratto delle estensioni Python: la Calliope finta dal manifesto, tutti gli errori, `chiama` in sola lettura (22/10, issue #228, ramo `issue-228-contratto-estensioni`)
+
+**Il caso** (verifica del 22/10 dell'analisi del 19/10,
+`docs/ricerche/2026-10-19-solidita-harness-sviluppo.md` § 3.5, n. 33, 34 e 36: il «punto 7» di
+#186). Tre buchi del contratto delle estensioni Python, tutti nei test dell'agente:
+- **n. 33**: `CalliopeFinta` rispondeva `{"ok": True}` a un'azione senza risposta preparata
+  (`_ospite.py:274`), così un `r["testo"]` usciva come KeyError in estensione.py e l'agente
+  correggeva il codice giusto; e nessuno confrontava le chiamate `calliope.*` con i permessi del
+  manifesto: un test verde con un'azione che Calliope avrebbe negato sempre;
+- **n. 34**: `manifesto.valida` si fermava al primo errore (tre difetti, tre giri), le parole
+  vietate nei testi (`_VIETATE`) non erano dette da nessuna parte, e il consiglio su «cosa_fa»
+  compariva anche per un titolo o la descrizione di un input;
+- **n. 36**: `chiama` stava in test_estensione.py, che l'agente può riscrivere: riscritto con
+  `esegui(dati)` tornava il bug del 13/10 (`esegui() missing 1 required positional argument`).
+
+**Cosa cambia.**
+1. **CalliopeFinta dal manifesto** (`estensioni/_ospite.py`). Di serie legge manifesto.json
+   della cartella dove girano i test (senza il file nessun controllo; `manifesto=` un dict, o
+   `False` per niente). Un'azione che i permessi non lasciano passare è un **`ErroreDelTest`**:
+   «è il test: l'azione «casa_stato» non è nel manifesto, e Calliope la negherebbe sempre. *[storico: così fino alla prima revisione della PR #231, 22/10, sotto]*
+   Dichiarala in «permessi» del manifesto (legge.casa, come nel §2 del contratto), chiedendola
+   con chiedi_permesso se il contratto non la dà da sola, oppure non chiamarla. Per provare il
+   caso «negato» c'è negate=[…]». Si controllano il permesso e lo scope: stanze, liste (con le
+   parole di `liste.list_key`), host, schema dell'indirizzo, invii. Quote, flussi dopo una
+   lettura di dati di casa e conferme dipendono dall'esecuzione: li controlla solo la porta vera,
+   al collaudo. Una **lettura senza risposta preparata** (`casa_stato`, `lista_leggi`,
+   `agenda_elenca`, `rete_leggi`, `rete_invia`) è un ErroreDelTest con la forma della risposta
+   da passare; le scritture riescono con `{"ok": True}` come prima, e i dati propri restano
+   simulati. `negate=[…]` resta un `ErroreCalliope`, il caso «negato» del test.
+   - **`ErroreDelTest` non è un'Exception** (è una `BaseException`, come SystemExit): un `except
+     Exception` dell'estensione non lo trasforma in un da_dire di ripiego, e unittest lo conta
+     come errore con il suo messaggio. I messaggi restano in `errori_test`, e `chiama` rialza il
+     primo anche se l'estensione l'ha inghiottito con `except BaseException`.
+   - **La fonte dei permessi è una sola.** Il runtime non importa Calliope, quindi la regola è
+     copiata in `permesso_mancante` e `permessi_scope`, come si fa già per gli URL. La prova la
+     confronta con `guardrail.valuta_porta` su 21 manifesti per 25 richieste: CalliopeFinta nega
+     ciò che la porta vieta per permesso o scope, e solo quello. Controlla anche che lo scope
+     detto nell'errore sia quello di `contratto.PORTA` e le parole delle liste quelle di
+     `liste._LIST_WORDS`. Con le concessioni della decisione
+     [0033](../decisioni/0033-capacita-concesse-e-revocabili.md) (#203–#217) le regole
+     cambieranno nella porta: la prova dirà dove la finta va riallineata.
+   - Un manifesto.json che non si legge non ferma i test: c'è solo un avviso, l'errore lo dice la
+     consegna.
+2. **`chiama` in `calliope_estensione.py`**, in sola lettura come il resto del runtime:
+   `chiama(dati, risposte=…, negate=…, calliope=…, manifesto=…)` importa estensione.py dalla
+   cartella e passa una CalliopeFinta (con `calliope=` una già fatta, per guardarne le
+   `richieste`). Il test di partenza (`scheletri.TEST_ESTENSIONE`) la importa e non la definisce
+   più. Riscritto senza `chiama`, basta l'import e i test passano ancora. Scheletro e prompt
+   dicono da dove viene e che la finta segue manifesto.json. I test delle modifiche, con la loro
+   `chiama` locale, non cambiano.
+3. **`valida` con tutti gli errori** (`estensioni/manifesto.py`). Nome, titolo, cosa_fa,
+   livello, limiti, input, permessi, scheda (solo con i permessi validi, perché dipende da loro) e
+   i testi per il modello finiscono tutti in un messaggio, «il manifesto ha 3 errori: 1) …; 2) …;
+   3) …», e in `ManifestoNonValido.errori`. Con un errore solo il messaggio è quello di prima. I
+   testi si controllano tutti (`controlla_testi_tutti`); `controlla_testi`, per approvazione e
+   avvio, resta il primo motivo. Un campo che manca non ha il doppione «è vuota». Il consiglio
+   ««cosa_fa» è un verbo e un oggetto breve…» compare solo per la descrizione, che si compone da
+   cosa_fa; titolo e input dicono «(è un testo che il modello legge)».
+4. **Le parole vietate nel contratto.** `PAROLE_VIETATE` è l'elenco, con «*» per il resto della
+   parola. Da lì si costruiscono la regex del controllo (`_VIETATE`, uguale a quella di prima su
+   200 000 frasi a caso) e la riga del §3 del contratto delle estensioni
+   (`parole_vietate_dette`). La riga c'è solo per le estensioni, non per i giochi, che hanno un
+   manifesto di partenza già valido.
+
+**I caratteri.** Contratto delle estensioni 7 953 → 8 592 (+639, circa 185 token con il
+rapporto 3,47 di Qwen3.6, da rimisurare sulla DGX). La soglia di `prova_estensioni_piano` passa
+da 8 000 a 8 800. Il prompt intero dell'estensione è circa 15 600 → 16 384. Lo scheletro
+dell'estensione è 1 596, sotto il tetto di 1 600 di `prova_agente_guida`.
+
+**Prove**: `prova_contratto_estensioni` (nuova, livello 1, ~3 s), con i contrari: negate,
+scritture, dati propri, niente manifesto, `manifesto=False`, manifesto illeggibile, formato del
+04/10, un difetto solo, titolo e input senza consiglio, parole che contengono una vietata. Nella
+sandbox con il docker finto: il test di partenza verde; test_estensione.py riscritto senza
+`chiama` verde; l'azione non dichiarata rossa con «ErroreDelTest: è il test» nell'uscita; la
+stessa azione dichiarata verde. **Mutazioni** (13, tutte prese): finta senza controllo,
+lettura senza risposta che riesce, ErroreDelTest come Exception, `chiama` che non rialza, host
+e stanza non controllati, nomi delle liste non normalizzati, `valida` al primo errore, testi al
+primo, consiglio su cosa_fa ovunque, riga del contratto tolta, `chiama` di nuovo nel test di
+partenza, `chiama` tolta dal runtime. Passano anche `prova_estensioni`, `prova_estensioni_piano`,
+`prova_agente_guida`, `prova_diagnosi_collaudi`, `prova_sviluppo_giro3` e `_giro5`,
+`prova_revisore`, `prova_fasi_agente` e `_2`, `prova_porte_consegna`, `prova_apri_gioco_tappa`,
+`prova_giochi`, `prova_estensioni_attacchi`, `prova_politica`, `prova_agenti` e
+`banco_temperatura.py --secco`. I giochi in JavaScript non usano `chiama` (né `fumo_js.mjs`, né
+`test_js.mjs`, né il motore).
+
+**Rischi.** Un test di una versione di prima che chiama un'azione non dichiarata, o una lettura
+senza risposta, ora fallisce. È voluto: Calliope l'avrebbe negata, o la risposta non c'era. Una
+modifica lo vede al primo esegui_test, con il messaggio che dice cosa fare. Gli esempi di
+accettazione (`accettazione.py`) usano `CalliopeFinta()` e quindi seguono anche loro il
+manifesto. *[storico: `CalliopeFinta()` fino alla prima revisione della PR #231, 22/10;
+poi `letture="vuote"` e, dalla seconda, `_esegui` che rialza l'errore inghiottito: sotto]* Le parole vietate costano circa 185 token a ogni passata del prompt delle estensioni.
+
+**Dopo la prima revisione della PR #231 (22/10).**
+- **Letture vuote per i test che l'agente non prepara** (P1, P4). `CalliopeFinta(letture="vuote")`
+  risponde a una lettura senza risposta preparata con la forma vuota della porta
+  (`LETTURE_VUOTE`: casa `{"testo": "", "entita": []}`, lista e agenda con `voci: []`), mentre la
+  rete alza `ErroreCalliope` come un servizio che non risponde. Il controllo dei permessi resta.
+  La usano gli esempi di accettazione (`accettazione.py`, in sola lettura): prima ogni esempio di
+  un'estensione che legge cadeva con «passala con risposte=…», un consiglio impossibile in un
+  file che non si cambia. Ora l'esempio «trovato: false» di un'estensione che legge la casa passa
+  come su main. La usa anche il primo test di partenza (`chiama({}, letture="vuote")`), che passa
+  con un'estensione che legge subito. In questa modalità il messaggio non suggerisce `negate`. Il
+  testo si compone prima della chiamata, così il traceback non mostra il sorgente con i consigli.
+- **La diagnosi riconosce `ErroreDelTest` e `ErroreCalliope`** (P2, `agenti/diagnosi.py`). «è il
+  test: …» arriva nei fallimenti in breve, nella firma e nella spinta. Per un ErroreDelTest il
+  punto è il frame più esterno, cioè il test, e non estensione.py.
+- **Tutti gli errori del manifesto arrivano** (P3). Le righe «FALLITO manifesto.json» e «FALLITO
+  controllo della consegna» (`ciclo.py`) prima tagliavano a 400 caratteri e ora a
+  `MAX_ERRORI_MANIFESTO` (3 000). Nel messaggio di più errori ognuno è accorciato a 260 caratteri
+  (`manifesto.MAX_ERRORE_DETTO`: l'elenco dei verbi ne aveva circa 560), mentre in `errori`
+  restano interi. Con quattro errori (verbo «fornisce», `tempo_s` 99, «tool» nel titolo, «utente»
+  in un input) la riga è di 656 caratteri e li ha tutti.
+- **Un manifesto con i permessi non validi non dà niente** (P5). `motivo_permessi` copia i
+  controlli di `normalizza_permessi`: chiavi sconosciute, elenchi oltre 10, nomi oltre 40, host
+  di casa o più di 5, post senza host, flussi senza il permesso di leggerli, il formato del
+  04/10. Con permessi così la finta alza un ErroreDelTest («i «permessi» di manifesto.json non
+  sono validi (…). Correggi il manifesto»), come la porta, che con `_scope` non concede niente.
+  Anche un manifesto senza «permessi» non dà niente, come alla porta. Restano fuori, e li
+  controlla solo la porta vera: i flussi dopo una lettura di dati di casa, le quote e le conferme.
+- **Il confronto con la porta anche a caso** (P6). Un generatore con seme fisso (228) esplora la
+  forma di `normalizza_permessi`, anche non valida e con campi nuovi come «concessioni»: 1 500
+  manifesti (308 validi) per 6 richieste ciascuno, e nessuna differenza, né sulla validità né
+  sulla decisione. Il messaggio non dice più «Calliope la negherebbe sempre», che con le
+  concessioni della 0033 diventerà falso, ma «con questo manifesto la porta di Calliope non la
+  lascerebbe passare».
+- **La riproduzione** (P8, `riproduzione.py`). Un «non ha una risposta preparata» sulla versione
+  di prima è di struttura: il test nuovo non è preparato, non è il problema riprodotto.
+  L'azione non dichiarata invece vale, perché può essere proprio il difetto.
+- **La scheda si controlla anche con i permessi sbagliati** (dalla mutazione sopravvissuta di P7),
+  senza il confronto delle azioni con gli scope: i suoi errori arrivano con quello dei permessi.
+- **Prove** (P7): in `prova_contratto_estensioni` anche la stanza dopo l'apostrofo, agenda_elenca e
+  rete_invia senza risposta, lo scope di rete_invia, due input con valori sbagliati, «limiti»
+  non oggetto e non numeri, la scheda con i permessi sbagliati. Nella sandbox: diagnosi e
+  riproduzione dell'uscita vera, il test di partenza con un'estensione che legge, l'esempio di
+  accettazione che legge, `_con_manifesto` con quattro errori. **Mutazioni**: le 24 nuove (P1–P8)
+  e le 13 di prima, tutte prese. P9 (l'elenco delle parole più corto) non è fatto: da rimisurare
+  in token veri sulla DGX.
+
+**Dopo la seconda revisione della PR #231 (22/10).**
+- **«è il manifesto:» e «è il test:»** (Q1). L'azione non dichiarata e i permessi non validi
+  dicono «è il manifesto: …», e il punto da guardare è quello di prima (`_dove_py`: la riga di
+  estensione.py che chiama l'azione ← il test). «è il test: …» resta solo per la lettura senza
+  risposta preparata, dove il punto è il test. Così un esempio di accettazione non indica più
+  test_accettazione.py, che è in sola lettura.
+- **La riproduzione e la lettura tolta** (Q2). Una lettura non preparata sulla versione di prima è
+  di struttura solo se la versione nuova la chiama ancora (`calliope.<azione>(` nel codice): se la
+  correzione l'ha tolta, è proprio il difetto («mi legge la lista quando chiedo l'agenda»), e vale
+  come riproduzione. Il controllo è sul testo del codice: una chiamata scritta in un altro modo
+  (`getattr`) non si vede.
+- **Gli esempi** (Q3, Q4). `SISTEMA_ESEMPI` dice che negli esempi le letture rispondono vuote e la
+  rete non risponde, e che gli esempi non dipendono da dati letti. Gli esempi passano da `_esegui`,
+  che rialza il primo `ErroreDelTest` registrato: con un `except:` nudo nell'estensione l'esempio
+  non passa più a vuoto.
+- **Prove**: il «dove» per i due casi, anche negli esempi di accettazione; la riproduzione vera
+  (`controlla`) con la lettura tolta (riprodotto) e rimasta (struttura); l'errore inghiottito
+  negli esempi; un riconosciuto su un'estensione che legge, che senza `letture="vuote"` cade (Q5).
+  Mutazioni: 7 nuove, tutte prese; quelle di prima ancora prese.
+
 ## La scala delle spinte: toni di fatto, il vuoto come tappa (22/10, issue #224, ramo `issue-224-scala-spinte`)
 
 La verifica del 22/10 dell'analisi del 19/10 (`docs/ricerche/2026-10-19-solidita-harness-sviluppo.md`
@@ -5071,3 +5491,13 @@ cambia il comportamento del modello: va visto sul banco.
   - tredici passate senza novità con una spinta sola (M9) e l'oscillazione con le riletture (P2).
 - **Mutazioni**: 23, e tutte fanno cadere la prova. Le dodici di prima, poi M4, M8, M9, M11 e
   una per ognuno dei punti P1, P2, P3, P4, P5 (tre), P7 e P8.
+
+**Dopo l'unione con `epic-86-harness` (22/10, #232 e #231).** Le note della fotografia dei
+test di #232 (`test_cambiato` nel risultato di scrivi_file e modifica_file, `test_cambiati` in
+quello di esegui_test, regola `agente_test_cambiati`) sono fatti, e restano nel risultato dello
+strumento che li produce. Non sono spinte e non entrano nella scala, quindi nessuna spinta più
+alta le può lasciare (il principio sopra). La prova lo controlla sui loro testi: nessuna parola
+vietata, mai un messaggio «user» con due «Passi possibili». La lettura nuova (dopo
+`self._strumento`, su `lav.letture`) e la fotografia (`test_prima` prima di `self._strumento`,
+`segnali["test_scritti"]`) guardano cose diverse e stanno insieme: la prima conta le novità per
+la fila, la seconda i test indeboliti.

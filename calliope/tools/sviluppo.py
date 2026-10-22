@@ -1553,6 +1553,11 @@ def _avanti(ctx, svs, sv, prof) -> dict:
     if sv.fase == "collaudo":
         return _revisione(ctx, svs, sv)
     if sv.fase in ("revisione", "attivazione"):
+        # Nessuna prova della versione (22/10, #223): l'attivazione (o la chiusura di un
+        # programma) come la revisione
+        porta = _porta_prove(ctx, svs, sv)
+        if porta is not None:
+            return porta
         if sv.tipo == "programma":
             svs.chiudi(sv, "consegnato")
             note_rule(ctx, "sviluppo_chiuso")
@@ -1635,15 +1640,187 @@ def _completa(ctx, svs, sv, prof) -> dict:
     return out
 
 
+# ── la revisione senza nessuna prova (22/10, issue #223, n. 10 del § 3.1 della ricerca del
+# 19/10, docs/ricerche/2026-10-19-solidita-harness-sviluppo.md) ──
+# Prima, senza collaudo, la revisione segnava la regola e diceva «l'hai saltato», poi andava
+# avanti; e con gli esempi di accettazione «non_fatta» (l'analisi prima del codice non riuscita,
+# agenti/servizio.py) il lavoro arrivava alla revisione e all'attivazione senza nessuna prova.
+# Adesso revisione e attivazione vogliono almeno una prova della versione di adesso (un
+# collaudo, un'anteprima di un gioco o gli esempi eseguiti alla fine del lavoro), oppure il sì
+# alla domanda che lo dice di chi può approvare (chi amministra; per un gioco puro anche un
+# familiare adulto con la voce riconosciuta, la regola del 05/10: terza revisione della PR #232),
+# e la revisione dice chi l'ha dato. La proposta in sospeso di sempre verso
+# sviluppo_passo avanti, e il sì letto come per le altre proposte (politica.accettata, la frase
+# di sfida, politica.consenso). Vincolo di permesso su un'azione già scelta (principio 10),
+# regole `sviluppo_senza_prove_chiesto` e `sviluppo_senza_prove_confermato`
+DOMANDA_SENZA_PROVE = "Vado avanti lo stesso?"
+
+
+def _chiave_prove(sv) -> str:
+    """La versione di adesso: il sì vale per lei, non per quella dopo."""
+    return f"{sv.versione}|{sv.lavoro or ''}"
+
+
+def _esempi_eseguiti(svs, sv) -> bool:
+    """Gli esempi di accettazione della versione di adesso sono stati eseguiti alla fine del suo
+    lavoro: la chiave «versione|lavoro» salvata nello sviluppo da Sviluppi.lavoro_finito (seconda
+    revisione della PR #232: il segno `provato` sui requisiti restava da una versione di prima ed
+    è ereditato da uno sviluppo nuovo; dopo un riavvio il lavoro non è in memoria)."""
+    return bool(sv.esempi_eseguiti) and sv.esempi_eseguiti == _chiave_prove(sv)
+
+
+def _della_versione(sv, c: dict) -> bool:
+    """Il collaudo (o l'anteprima) è della versione di adesso: la stessa versione candidata
+    di un'estensione; per un programma (senza versioni) lo stesso lavoro dell'agente, se il
+    collaudo lo dice (dal 22/10: prima della correzione il programma era un altro). I collaudi
+    di prima, senza versione o senza lavoro, valgono come prima."""
+    if sv.versione is not None:
+        return c.get("versione") in (None, sv.versione)
+    return c.get("lavoro") in (None, sv.lavoro)
+
+
+def _esempi_scritti(svs, sv) -> bool:
+    """Gli esempi di accettazione del lavoro della versione sono stati scritti (l'analisi
+    prima del codice «pronta»), anche se poi non sono stati eseguiti."""
+    lav = svs._lavoro(sv.lavoro)
+    a = getattr(lav, "accettazione", None) if lav is not None else None
+    return isinstance(a, dict) and a.get("stato") == "pronta"
+
+
+def porta_approvazione(ctx, svs, nome: str, candidata=None) -> dict | None:
+    """La stessa porta per estensione_gestisci approva (revisioni della PR #232: dentro uno
+    sviluppo il modello può rispondere ad «attivala» con quel tool, e per un gioco puro con la
+    voce sicura l'approvazione salta anche la frase di sfida). Vale per lo sviluppo più recente
+    dell'estensione che non è concluso (aperto o sospeso), e per quello chiuso se la versione da
+    attivare viene da lì. None se non c'è, se una prova c'è o se il sì è stato detto."""
+    if svs is None:
+        return None
+    for sv in reversed(list(getattr(svs, "sviluppi", None) or ())):
+        if sv.estensione != nome or sv.tipo != "estensione":
+            continue
+        if sv.stato in ("aperta", "sospesa") or (
+                candidata is not None and sv.versione == candidata):
+            return _porta_prove(ctx, svs, sv, "estensione_gestisci",
+                                {"azione": "approva", "nome": nome})
+    return None
+
+
+def _prove_della_versione(sv) -> tuple[list, list]:
+    """(collaudi, anteprime) della versione di adesso (revisione della PR #232: anche le
+    anteprime, un gioco visto alla versione 1 non è visto alla 2)."""
+    anteprime = [c for c in sv.collaudi if c.get("anteprima") and _della_versione(sv, c)]
+    collaudi = [c for c in sv.collaudi if not c.get("anteprima") and _della_versione(sv, c)]
+    return collaudi, anteprime
+
+
+def _senza_prove_si(ctx, sv) -> bool:
+    """Questa chiamata è il sì alla domanda «Vado avanti lo stesso?» per questa versione: la
+    proposta in sospeso per chi parla è di sviluppo_passo con quella domanda, e la persona
+    acconsente (la politica l'ha già accettata, la frase di sfida, un consenso). Il modello che
+    richiama avanti non basta, come per agenda_annulla (tools/builtin._si_alla_domanda)."""
+    if (sv.senza_prove or {}).get("chiesta") != _chiave_prove(sv):
+        return False
+    # La domanda può essere nata da sviluppo_passo o da estensione_gestisci approva, e il
+    # modello può rispondere con l'uno o con l'altro: vale la domanda, non il tool
+    if getattr(ctx, "tool_in_sospeso", None) not in ("sviluppo_passo", "estensione_gestisci"):
+        return False
+    from .. import politica
+    t = getattr(ctx, "politica", None)
+    domanda = str(getattr(t, "domanda_sospeso", "") or "")
+    if domanda and domanda != DOMANDA_SENZA_PROVE:
+        return False
+    testo = str(getattr(t, "testo", "") or getattr(ctx, "user_text", "") or "")
+    return (politica.accettata(ctx) or bool(getattr(t, "sfida", False))
+            or politica.consenso(testo))
+
+
+def _porta_prove(ctx, svs, sv, tool: str = "sviluppo_passo",
+                 argomenti: dict | None = None) -> dict | None:
+    """None se si può andare avanti (alla revisione o all'attivazione), o la domanda che dice
+    alla persona che non c'è nessuna prova."""
+    collaudi, anteprime = _prove_della_versione(sv)
+    if collaudi or anteprime or _esempi_eseguiti(svs, sv):
+        return None
+    chiave = _chiave_prove(sv)
+    sp = dict(sv.senza_prove or {})
+    if sp.get("confermata") == chiave:
+        return None
+    if _senza_prove_si(ctx, sv):
+        note_rule(ctx, "sviluppo_senza_prove_confermato")
+        chi = str(getattr(getattr(ctx, "speaker_ctx", None), "current_speaker", "") or "")
+        sv.senza_prove = {**sp, "confermata": chiave, "quando": time.time(), "chi": chi}
+        svs.tocca(sv)
+        return None
+    note_rule(ctx, "sviluppo_senza_prove_chiesto")
+    sv.senza_prove = {"chiesta": chiave, "quando": time.time()}
+    svs.tocca(sv)
+    if svs.e_gioco(sv):
+        mai = "non l'hai visto in prova sullo schermo"
+    elif sv.tipo == "programma":
+        mai = "non l'hai provato"
+    else:
+        mai = "non l'hai provata"
+    # Gli esempi si dicono «non eseguiti» solo se c'erano (revisione della PR #232)
+    esempi = ("gli esempi non sono stati eseguiti" if _esempi_scritti(svs, sv)
+              else "non ci sono esempi")
+    frase = f"Non c'è nessuna prova: {mai} e {esempi}. {DOMANDA_SENZA_PROVE}"
+    return _final(frase, ok=False, fatto="NIENTE ancora: è una domanda, non sono andata avanti",
+                  in_sospeso={"domanda": DOMANDA_SENZA_PROVE,
+                              "cosa": "andare avanti senza nessuna prova",
+                              "tool": tool, "argomenti": argomenti or {"azione": "avanti"}})
+
+
+def _con_senza_prove(svs, sv, detto_coll: str, ctx=None) -> str:
+    """Le prove dette dalla revisione: dopo il sì senza prove lo dice al posto di «Il collaudo
+    l'hai saltato…»; e il fatto neutro sugli stessi test dell'agente, quando è senza ambiguità
+    (22/10, #223, agenti/fotografia_test.frase_voce: un test che adesso non controlla niente o è
+    saltato). Mai un sospetto a voce: i conti cambiati vanno sulla scheda (`_riga_test`)."""
+    c, a = _prove_della_versione(sv)
+    sp = sv.senza_prove or {}
+    if not (c or a) and sp.get("confermata") == _chiave_prove(sv):
+        # Chi ha scelto (terza revisione della PR #232): per un gioco puro può essere un
+        # familiare adulto, e non va attribuito a chi parla adesso
+        adesso = str(getattr(getattr(ctx, "speaker_ctx", None), "current_speaker", "") or "")
+        chi = str(sp.get("chi") or "")
+        detto_coll = ("Nessuna prova: hai scelto di andare avanti lo stesso." if not chi
+                      or chi == adesso else
+                      f"Nessuna prova: {chi} ha scelto di andare avanti senza prove.")
+    from ..agenti.fotografia_test import frase_voce
+    lav = svs._lavoro(sv.lavoro)
+    fatto = frase_voce((getattr(lav, "risultato", None) or {}).get("test_segnali"))
+    return f"{detto_coll} {fatto}" if fatto else detto_coll
+
+
+def _riga_test(svs, sv) -> str:
+    """La riga neutra per la scheda: i test cambiati rispetto alla prima esecuzione ("" se
+    niente). Possono venire da una riscrittura onesta o da una modifica chiesta: non è un'accusa."""
+    from ..agenti.fotografia_test import riga_scheda
+    lav = svs._lavoro(sv.lavoro)
+    riga = riga_scheda((getattr(lav, "risultato", None) or {}).get("test_cambiati"))
+    return f"\n- {riga}" if riga else ""
+
+
 def _revisione(ctx, svs, sv) -> dict:
     """Dal collaudo alla revisione: permessi, rete, analisi del codice, test, collaudi e
     differenze, detti in breve e per intero sulla scheda."""
     from ..sviluppo import conto_collaudi, misura_programma
-    # Le anteprime di un gioco (11/10) non sono prove «riuscite»: l'ha visto la persona
-    anteprime = [c for c in sv.collaudi if c.get("anteprima")]
-    # Le prove di questa versione (12/10): quelle delle versioni di prima non dicono niente di lei
-    collaudi = [c for c in sv.collaudi if not c.get("anteprima")
-                and (sv.versione is None or c.get("versione") in (None, sv.versione))]
+    # Nessuna prova (22/10, #223): la domanda prima di tutto il resto (revisione della PR #232:
+    # il confronto con la richiesta può durare sviluppo_verifica_voce_s, e la regola della
+    # revisione senza collaudo si contava due volte). Una versione che non si può approvare si
+    # rivede comunque: lo dice e chiede cosa correggere
+    rev = None
+    if sv.tipo == "estensione":
+        est = getattr(ctx, "estensioni", None)
+        rev = est.revisione(sv.estensione) if est is not None and sv.estensione else None
+        if rev is None:
+            return _no(ctx, "Non c'è una versione da rivedere: forse è già stata approvata.")
+    if rev is None or rev["approvabile"]:
+        porta = _porta_prove(ctx, svs, sv)
+        if porta is not None:
+            return porta
+    # Le anteprime di un gioco (11/10) non sono prove «riuscite»: l'ha visto la persona. Le
+    # prove di questa versione (12/10): quelle delle versioni di prima non dicono niente di lei
+    collaudi, anteprime = _prove_della_versione(sv)
     # Le risposte buone separate da ciò che è girato senza trovare niente (12/10, caso vero:
     # «Prove: 16, 15 riuscite» con sette «non trovato»); il collaudo saltato si dice (caso vero
     # dell'11/10 16:26: niente prove e «tutto sembra in ordine» detto dal modello)
@@ -1668,11 +1845,8 @@ def _revisione(ctx, svs, sv) -> dict:
     if manca:
         note_rule(ctx, "sviluppo_revisione_manca")
     if sv.tipo == "estensione":
-        est = getattr(ctx, "estensioni", None)
-        rev = est.revisione(sv.estensione) if est is not None and sv.estensione else None
-        if rev is None:
-            return _no(ctx, "Non c'è una versione da rivedere: forse è già stata approvata.")
-        sv.revisione = rev["testo"] + f"\n- {detto_coll}"
+        detto_coll = _con_senza_prove(svs, sv, detto_coll, ctx)
+        sv.revisione = rev["testo"] + f"\n- {detto_coll}" + _riga_test(svs, sv)
         fumo = ""
         if svs.e_gioco(sv):
             # La prova di fumo è un test di avvio, non delle regole (11/10)
@@ -1708,6 +1882,7 @@ def _revisione(ctx, svs, sv) -> dict:
                                   "cosa": f"attivare «{sv.titolo}»", "tool": "sviluppo_passo",
                                   "argomenti": {"azione": "avanti"}})
     # Un programma: file, righe, test, prove; e se è grande, la proposta di un'estensione
+    detto_coll = _con_senza_prove(svs, sv, detto_coll, ctx)
     misura = misura_programma(sv.cartella)
     lav = svs._lavoro(sv.lavoro)
     test = ((getattr(lav, "risultato", None) or {}).get("test") if lav is not None else None) \
@@ -1722,7 +1897,7 @@ def _revisione(ctx, svs, sv) -> dict:
              f"righe.{t} {detto_coll}" + (f" {confronto}" if confronto else "")
              + " Il codice è sullo schermo, se ce l'hai.")
     sv.revisione = (f"- File di codice: {misura['file']}\n- Righe: {misura['righe']}\n"
-                    f"- {t.strip() or 'Test: nessuno'}\n- {detto_coll}")
+                    f"- {t.strip() or 'Test: nessuno'}\n- {detto_coll}" + _riga_test(svs, sv))
     svs.passa(sv, "revisione", "avanti dal collaudo")
     note_rule(ctx, "sviluppo_revisione")
     soglia = int(getattr(ctx.cfg, "sviluppo_programma_righe", 150) or 150)

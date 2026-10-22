@@ -588,11 +588,79 @@ def _esito_testo(r: dict) -> str:
     return str(r.get("errore") or r.get("stato") or "")[:200]
 
 
+# Il motivo detto all'agente (e sulla scheda) per un esito vuoto; regola ricollaudo_esito_vuoto
+MOTIVO_VUOTO = ("risultati vuoti e nessuna frase, ma il caso della persona chiedeva un dato: se "
+                "il dato non esiste davvero, dillo in da_dire e nel riassunto della consegna")
+# I campi di testo per chi parla: una frase, anche negativa, è un dato (seconda revisione della
+# PR #232: «Nessuna allerta…», «Non c'è traffico», «Non ho risultati…» li giudicano il modello e
+# la persona, principio 10)
+_CAMPI_FRASE = ("da_dire", "messaggio", "testo", "risposta")
+
+
+# Accanto a una raccolta vuota, e solo lì (quarta revisione della PR #232: la regola è
+# stretta, perché ogni allargamento ha dato falsi positivi), non tolgono il «vuoto» i
+# contatori a zero e i metadati della ricerca. Da soli, o accanto ad altri campi, zeri,
+# booleani, indirizzi e url sono il dato («temperatura: 0», «aperta: false», l'indirizzo
+# chiesto)
+_CONTATORI = frozenset({"totale", "numero", "count", "conteggio", "trovati", "n"})
+_METADATI = frozenset({"fonte", "fonti", "source", "aggiornato", "aggiornamento", "query",
+                       "ricerca", "timestamp", "data_ricerca"})
+
+
+def _vuoto(v) -> bool:
+    if v is None or v == "" or v == [] or v == {}:
+        return True
+    if isinstance(v, (list, dict)):
+        return all(_vuoto(x) for x in (v.values() if isinstance(v, dict) else v))
+    return False
+
+
+def _eco(chiave: str, v, argomenti) -> bool:
+    """Il campo ripete l'argomento del caso **sulla stessa chiave** e con lo stesso valore
+    (`luogo` → `luogo`; non `capoluogo` con lo stesso valore, che è la risposta)."""
+    from .argomenti_incerti import chiave as norm
+    if not isinstance(argomenti, dict) or chiave not in argomenti or not isinstance(v, str):
+        return False
+    x = argomenti.get(chiave)
+    return isinstance(x, str) and bool(norm(x)) and norm(x) == norm(v)
+
+
+def esito_vuoto(ris, argomenti=None) -> bool:
+    """Il risultato è vuoto **per struttura** (§ 9.3, 22/10, #223; dalla seconda revisione della
+    PR #232 niente parole, dalla quarta una regola stretta): nessuna frase per chi parla, almeno
+    una raccolta vuota (lista o dizionario vuoti, anche annidati) o un `None`, e nessun altro
+    campo con un valore, a parte l'eco di un argomento sulla stessa chiave e, accanto a quella
+    raccolta, i contatori a zero e i metadati della ricerca. Oppure «trovato»: false senza una
+    frase. Una frase, qualunque cosa dica, non è mai vuota: è un dato detto, e lo giudicano il
+    modello e la persona (principio 10). Resta un falso negativo voluto: l'eco dentro una lista
+    di un'altra chiave (`{"luoghi": ["Borgo Alto"], "eventi": []}`) conta come dato."""
+    if isinstance(ris, str):
+        return not ris.strip()
+    if isinstance(ris, list):
+        return _vuoto(ris)
+    if not isinstance(ris, dict):
+        return False
+    if any(isinstance(ris.get(k), str) and ris[k].strip() for k in _CAMPI_FRASE):
+        return False
+    if ris.get("trovato") is False or ris.get("trovata") is False:
+        return True
+    vuote, altri = [], []
+    for k, v in ris.items():
+        if _vuoto(v) or (isinstance(v, dict) and esito_vuoto(v, argomenti)):
+            vuote.append(k)
+        elif not _eco(k, v, argomenti):
+            altri.append((str(k).strip().lower(), v))
+    if not vuote:
+        return False
+    return all((k in _CONTATORI and isinstance(v, (int, float)) and not isinstance(v, bool)
+                and v == 0) or k in _METADATI for k, v in altri)
+
+
 def va(caso: dict, r: dict) -> tuple[bool, str]:
     """(il caso adesso va?, perché no). Con la regola del collaudo (fermata con un errore, un
-    campo d'errore, nessun risultato) e in più: lo stesso risultato che la persona aveva già
-    giudicato sbagliato, una richiesta rifiutata dalla porta o con l'avviso della doppia
-    codifica."""
+    campo d'errore, nessun risultato) e in più: risultati vuoti senza nessuna frase quando prima il
+    caso dava un dato o un errore (22/10, #223), lo stesso risultato che la persona aveva già giudicato sbagliato, una
+    richiesta rifiutata dalla porta o con l'avviso della doppia codifica."""
     if not r.get("ok"):
         return False, f"si è fermata: {r.get('errore') or r.get('stato')}"
     ris = r.get("risultato")
@@ -606,12 +674,29 @@ def va(caso: dict, r: dict) -> tuple[bool, str]:
             return False, "una richiesta rifiutata dalla porta"
         if riga.get("avviso"):
             return False, "una richiesta con l'avviso della porta"
+    # Un esito vuoto non è una risposta (22/10, issue #223, n. 5 del § 3.1 della ricerca del
+    # 19/10): il caso della persona prima dava un dato o si fermava con un errore, e la versione
+    # nuova restituisce risultati vuoti senza dire niente. Solo per struttura (`esito_vuoto`):
+    # una frase negativa («Non ho trovato la fiera», «Nessuna allerta») è un dato, e il suo
+    # giudizio è del modello e della persona (seconda revisione della PR #232, principio 10)
+    from .sviluppo import tipo_collaudo as tipo_salvato
+    if tipo_salvato(caso) in ("risposta", "errore", "errore_dichiarato") and esito_vuoto(
+            ris, caso.get("argomenti")):
+        return False, MOTIVO_VUOTO
     nuovo = _esito_testo(r)
     if caso.get("giudizio") or caso.get("ok"):
         vecchio = str(caso.get("esito") or "")
         if vecchio and _compatto(vecchio) == _compatto(nuovo):
             return False, "lo stesso risultato che la persona aveva detto sbagliato"
     return True, ""
+
+
+def esito_caso(lav, caso: dict, r: dict, log=None) -> tuple[bool, str]:
+    """`va` con le sue regole nel registro del lavoro (ricollaudo_esito_vuoto)."""
+    ok, motivo = va(caso, r)
+    if motivo == MOTIVO_VUOTO:
+        nota(lav, "ricollaudo_esito_vuoto", log, detto(caso))
+    return ok, motivo
 
 
 def _file_della_consegna(sandbox) -> dict[str, bytes]:
@@ -706,7 +791,7 @@ def ricollaudo(cfg, est, svs, sv, lav, sandbox, log=print, resta_tempo=None) -> 
                 if not esiti:
                     return None
                 break
-            ok, motivo = va(c, r)
+            ok, motivo = esito_caso(lav, c, r, log)
             esiti.append({"caso": c, "r": r, "va": ok, "motivo": motivo})
     except OSError as e:
         nota(lav, "ricollaudo_saltato", log, f"file: {e}"[:80])

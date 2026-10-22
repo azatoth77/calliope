@@ -168,7 +168,9 @@ def prova_contratto():
              and "VIETATA" in ct.classe_detta("rete_leggi"))
     verifica("i tetti del codice nel testo", f"{gr.MAX_RETE} di rete" in t
              and f"{gr.MAX_COMANDI_CASA} comandi" in t, "")
-    verifica("breve: meno di 8000 caratteri", len(t) < 8000, f"{len(t)} caratteri")
+    # 8 800 dal 22/10 (#228): l'elenco delle parole vietate nei testi del manifesto, circa 650
+    # caratteri (~190 token), prima 7 953
+    verifica("breve: meno di 8800 caratteri", len(t) < 8800, f"{len(t)} caratteri")
     p = sistema_estensione(Config())
     verifica("nel prompt, con il primo passo obbligatorio", "CONTRATTO DELLE CAPACITÀ" in p
              and "PRIMO PASSO, OBBLIGATORIO" in p and "piano(" in p)
