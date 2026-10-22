@@ -4189,7 +4189,8 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
 - Il ciclo della ricerca ha la sua issue (#189). Riletto, è meno grave di quanto detto nella PR:
   lo strumento sconosciuto ha già `ok: False` con l'elenco, e manca solo il nome della regola. La
   consegna fa `return` subito, e le chiamate dopo di essa non si eseguono e restano senza
-  risposta. Non legge `rotti` e prende per relazione anche una passata troncata.
+  risposta. Non legge `rotti` e prende per relazione anche una passata troncata. *[storico:
+  vero fino al 21/10, corretto da #189 nella voce «Gli strumenti onesti nella ricerca»]*
 
 **Dopo la seconda revisione della PR #187 (20/10).**
 - **Il solo ragionamento troncato non è un'uscita troncata.** Il fatto «troncata» vale solo
@@ -4700,3 +4701,93 @@ interruttori di [setup-dgx](setup-dgx.md#interruttori-sulla-dgx).
   come giudicati: restano per la passata dopo.
 - L'esito dei test tenuto per il revisore (`Agente._ultimi_test`) c'è solo se è rosso e si butta
   alla fine di `codice`. Lo schema per esempio non ha più «test» due volte fra gli obbligatori.
+
+## Gli strumenti onesti nella ricerca (21/10, issue #189, ramo `issue-189-ricerca-onesta`)
+
+#185 aveva portato i fatti del codice all'agente solo in `Agente.codice`. Ora valgono anche nel
+ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costanti.
+
+- **Lo strumento sconosciuto** aveva già `ok: False` con l'elenco (`cosa_fare`). Ora scrive anche
+  la regola `agente_strumento_sconosciuto` nel registro.
+- **Le chiamate dopo la consegna** nella stessa passata. Prima la `consegna` faceva `return`
+  subito, e le chiamate dopo non avevano risposta. Si è scelta **la stessa semantica del codice
+  (#185)**: le chiamate si leggono in ordine, la consegna vale e quelle dopo non si eseguono.
+  Ognuna ha la sua risposta, «non eseguita: il lavoro era già consegnato» (`DOPO_CONSEGNA`), e
+  la regola `agente_dopo_consegna`. Una `consegna` messa prima di una `web_leggi` chiude quindi
+  il lavoro senza la lettura, ma non più in silenzio: la regola e l'esito sono nel registro e
+  sugli schermi. Non si è scelto di rifiutare la consegna per eseguire prima la lettura: nel
+  codice la consegna vale lo stesso, e una regola diversa per ciclo sarebbe da spiegare
+  all'agente. Se la regola scatta spesso sul banco, si ripensa per tutti e due i cicli.
+  *[storico: «e sugli schermi» vero fino alla prima revisione della PR #218, sotto: ora sugli
+  schermi non va niente]*
+- **L'uscita troncata.** Il ciclo legge `out["rotti"]` e `out["fine"]` dei client come il codice.
+  Una chiamata arrivata a metà non si esegue, e il risultato dice «troncata (fermata a
+  max_tokens)» e non «manca domanda». Lo stesso vale per una `consegna` a metà, che prima
+  chiudeva il lavoro con la relazione vuota. La regola è `agente_uscita_troncata`.
+- **La passata senza chiamate fermata a max_tokens** (`fine == "length"`) non è più una
+  relazione: è una relazione tagliata a metà. L'agente riceve il fatto e il lavoro continua. Nel
+  codice il solo ragionamento troncato resta nella guardia dei token senza strumenti
+  (`troncata_nell_uscita`). La ricerca quella guardia non ce l'ha, e un testo vuoto non è
+  comunque una relazione: qui vale ogni «length» senza chiamate.
+- **Il tetto delle troncate di fila** è lo stesso del codice (`TRONCATE_MAX` = 3): alla quarta
+  arriva «limite» di tipo «troncata», con il riassunto di ciò che si è fatto, dopo che ogni
+  chiamata ha avuto la sua risposta. Il giro a vuoto azzera il conto.
+- **Le costanti** ora hanno il fatto separato dal consiglio: `TRONCATA_CHIAMATA` e
+  `TRONCATA_TESTO` sono il fatto, comune ai due cicli. `USCITA_TRONCATA` e `USCITA_TRONCATA_TESTO`
+  (codice: «scrivi il file in pezzi più corti») hanno il testo di prima, parola per parola.
+  `USCITA_TRONCATA_RICERCA` e `USCITA_TRONCATA_TESTO_RICERCA` consigliano una relazione più breve.
+  Il motivo del «limite» si scrive in un posto solo, `troncate_motivo`.
+- Prova: la sezione 8 di `prova_strumenti_onesti`, a secco con la biblioteca e la rete finte.
+  Copre lo strumento sconosciuto, la consegna seguita da web_leggi, la chiamata e la consegna a
+  metà, la relazione fermata a max_tokens e il tetto. I contrari sono l'argomento davvero
+  mancante, la lettura prima della consegna e la relazione intera.
+
+**Dopo la prima revisione della PR #218 (21/10).**
+- **Due rami difesi da una prova.** Il giro a vuoto azzera le troncate di fila (come R6 nel
+  codice). Una passata con una chiamata buona e una rotta non conta «di fila» (come M). Ognuno ha
+  il suo copione nella sezione 8. Togliendo l'azzeramento, o contando «di fila» con
+  `len(troncate) > 0`, la prova cade: l'ho verificato con le due mutazioni.
+- **«Ognuna con la sua risposta»** si controlla sulla storia mandata al modello (i corpi delle
+  richieste del client finto): N chiamate, N messaggi `tool` con gli stessi nomi nello stesso
+  ordine. Prima la prova guardava solo gli eventi degli schermi.
+- **Dopo la consegna sugli schermi non va più niente**, come nel ciclo del codice. Prima andava
+  l'esito «non eseguita» senza la riga della sua chiamata, e finiva sotto la chiamata della
+  passata prima. Restano la regola e la risposta nella storia. Nella ricerca quella risposta non
+  arriva mai al modello, perché la consegna chiude il lavoro.
+- **Il consiglio è quello del caso vero.**
+  - La consegna a metà riceve `USCITA_TRONCATA_RICERCA` (una relazione più breve).
+  - Un altro strumento a metà (biblioteca_cerca, web_leggi, grafo_*) riceve
+    `USCITA_TRONCATA_STRUMENTO`: «rifalla intera, con argomenti brevi e meno ragionamento prima».
+  - Senza chiamate, un testo a metà riceve `USCITA_TRONCATA_TESTO_RICERCA`.
+  - Il solo ragionamento fermato, col testo vuoto, riceve `USCITA_TRONCATA_PENSIERO`: «ragiona
+    meno e chiama lo strumento del prossimo passo, o consegna».
+- **Al «limite» per le troncate l'ultima relazione tagliata non si perde.** Se c'era un testo, va
+  nel parziale come `testo`, preceduto da `RELAZIONE_TAGLIATA` («Relazione incompleta: …tagliato a
+  metà»), con `relazione_tagliata: true`. Così si rilegge con lavoro_risultato. Senza testo
+  tagliato il parziale non inventa niente. Resta da contare sul banco quante ricerche arrivano al
+  tetto «troncata»: per chi aspettava una relazione lunga è un cambiamento. *[storico: vero solo
+  per il testo senza chiamate e con `relazione_tagliata` fino alla seconda revisione della PR
+  #218, sotto]*
+
+**Dopo la seconda revisione della PR #218 (21/10).**
+- **La consegna tagliata tiene la sua relazione.** È il caso più comune: su vLLM una consegna
+  fermata a max_tokens è segnata rotta anche quando il JSON si legge (`remoto_openai.py`), e
+  `testo` ha la relazione fino al taglio. Ora quel testo diventa l'ultima relazione tagliata, e
+  al «limite» va nel parziale come quella senza chiamate. `relazione_tagliata` è tolto: non lo
+  leggeva nessuno e dopo un riavvio si perdeva. Vale il prefisso `RELAZIONE_TAGLIATA` del testo,
+  che resta in `lavoro.json` (`relazione_incompleta`).
+- **L'ordine dei controlli ha la sua prova.** Una consegna buona e poi una chiamata rotta nella
+  stessa passata danno «dopo la consegna», non «troncata».
+- **Dopo il «limite» la voce dice cosa c'è davvero.**
+  - Le consegne rifiutate non sono più fra le cose fatte del riassunto (`estrattivo`: prima
+    «fatto: consegna; consegna; …»). Vale anche per il diario del codice, dove una consegna
+    rifiutata non era fatta nemmeno prima.
+  - La frase finale di una ricerca fermata non dice più «nella cartella Lavori», perché non c'è
+    un file. Con la relazione tagliata aggiunge «C'è una relazione incompleta: se vuoi te la
+    leggo.» (`RICERCA_INCOMPLETA`).
+  - `lavoro_risultato` su una ricerca fermata non dice la cartella. Con la relazione tagliata la
+    riassume dal testo, anche quando il riassunto salvato è lungo, e dice «La relazione è
+    incompleta: l'agente si è fermato prima di finirla.» (`RELAZIONE_INCOMPLETA_VOCE`).
+- Ogni correzione ha la sua mutazione, e tutte fanno cadere la prova. Le mutazioni: il testo
+  della consegna rotta non tenuto, i due controlli invertiti, le consegne rifiutate fra le fatte,
+  la frase finale di prima, la cartella e «incompleta» in `lavoro_risultato`.

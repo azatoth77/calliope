@@ -902,6 +902,11 @@ def _lavori_rispondi(ctx: ToolContext, lavoro: str = "", risposta: str = "") -> 
 MODI_RISULTATO = ("riassunto", "leggi", "mostra", "pdf", "word")
 
 
+# La relazione tagliata di una ricerca fermata, detta per quello che è (seconda revisione della
+# PR #218)
+RELAZIONE_INCOMPLETA_VOCE = "La relazione è incompleta: l'agente si è fermato prima di finirla."
+
+
 def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto") -> dict:
     """Il risultato di un lavoro finito (07/10, agenti/risultato.py): riassunto a voce, più
     dettaglio col modello dell'agente, il testo intero sullo schermo personale."""
@@ -962,8 +967,17 @@ def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto
                                         getattr(ctx, "user_text", ""), card, sender)
         except Exception:  # noqa: BLE001 — lo schermo non ferma la voce
             sullo_schermo = False
+    # Una ricerca fermata non ha un file (seconda revisione della PR #218): niente «cartella
+    # Lavori», e la relazione tagliata detta come incompleta
+    from ..agenti.ciclo import relazione_incompleta
+    rl = lav.risultato or {}
+    fermata = lav.stato == "errore" and lav.tipo not in ("codice", "estensione") \
+        and not rl.get("file")
+    incompleta = relazione_incompleta(testo)
     dove = ("Il testo intero è sul tuo schermo." if sullo_schermo
-            else "Il testo intero è nella cartella Lavori dei Documenti.")
+            else "" if fermata else "Il testo intero è nella cartella Lavori dei Documenti.")
+    if incompleta:
+        dove = (dove + " " + RELAZIONE_INCOMPLETA_VOCE).strip()
     if modo == "mostra" and sullo_schermo:
         note_rule(ctx, "risultato_mostra")
         return _final(f"Te l'ho mandato sullo schermo: «{titolo}».", fatto="mostrato sullo "
@@ -981,7 +995,7 @@ def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto
     gia = _gia_detto(ctx, salvato)
     if gia:
         note_rule(ctx, "risultato_gia_detto")
-    if testo and (modo != "riassunto" or len(salvato) < 80 or gia):
+    if testo and (modo != "riassunto" or len(salvato) < 80 or gia or incompleta):
         detta, esito = ar.riassunto_voce(
             svc, lav, testo, getattr(ctx, "user_text", "") or "",
             frasi="da quattro a sei" if modo == "leggi" else "due o tre",
@@ -993,13 +1007,13 @@ def _risultato_lavoro(ctx: ToolContext, lavoro: str = "", modo: str = "riassunto
             note_rule(ctx, "risultato_ripiego")
             getattr(svc, "log", print)(f"[AGENTI] riassunto di {lav.id} per la voce: {esito}")
     if not sintesi:
-        return _final(f"«{titolo}» è finito, ma l'agente non ha lasciato un riassunto. {dove}",
-                      fatto="niente riassunto", lavoro=lav.id)
+        return _final(f"«{titolo}» è finito, ma l'agente non ha lasciato un riassunto. {dove}"
+                      .rstrip(), fatto="niente riassunto", lavoro=lav.id)
     pre = "Non vedo un tuo schermo, quindi te lo dico: " if modo == "mostra" else ""
     frase = f"{pre}«{titolo}»: {sintesi.rstrip()}"
     if not frase.endswith((".", "!", "?")):
         frase += "."
-    frase += " " + dove
+    frase += (" " + dove) if dove else ""
     if come == "salvato" and testo and modo == "riassunto":
         from ..riferire import FRASE_PIU_DETTAGLI
         frase += " " + FRASE_PIU_DETTAGLI
