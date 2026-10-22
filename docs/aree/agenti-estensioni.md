@@ -4938,3 +4938,70 @@ ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costant
 - Ogni correzione ha la sua mutazione, e tutte fanno cadere la prova. Le mutazioni: il testo
   della consegna rotta non tenuto, i due controlli invertiti, le consegne rifiutate fra le fatte,
   la frase finale di prima, la cartella e «incompleta» in `lavoro_risultato`.
+
+## Le porte residue: ricollaudo pieno, revisione senza prove, test indeboliti (22/10, issue #223, ramo `issue-223-porte-residue`)
+
+Verifica del 22/10 dei buchi della ricerca del 19/10
+([`2026-10-19-solidita-harness-sviluppo.md`](../ricerche/2026-10-19-solidita-harness-sviluppo.md)
+§ 3.1): restavano aperti i n. 5, 10 e 7, porte che si aprivano senza una prova vera.
+
+- **Ricollaudo pieno (n. 5, `sonde.va`).** Prima bocciava solo un errore o lo stesso esito di
+  prima. Il caso della persona («fiera di Borgo Alto») che prima si fermava con un errore e adesso
+  risponde «Non ho trovato…» passava, anche se non aveva risposto. Adesso un esito vuoto non va
+  quando il caso chiedeva un dato, cioè quando prima si era fermato o non aveva trovato niente.
+  «Vuoto» è lo stesso tipo del collaudo (`tools/sviluppo.tipo_collaudo`): «non trovato» senza
+  dati accanto, risultati vuoti, «trovato»: false. Il motivo va all'agente e sulla scheda
+  (`MOTIVO_VUOTO`), la regola è `ricollaudo_esito_vuoto`. Una risposta piena che la persona aveva
+  giudicato sbagliata e che adesso dice «non trovato» va: può essere proprio la correzione (la
+  fiera che non esiste). «Non ho trovato pioggia» con temperatura e cielo resta pieno.
+- **Revisione e attivazione senza nessuna prova (n. 10, `tools/sviluppo._porta_prove`).** Prima,
+  senza collaudo, la revisione segnava `sviluppo_revisione_senza_collaudo`, diceva «l'hai
+  saltato» e andava avanti. Con gli esempi «non_fatta» (l'analisi prima del codice non riuscita)
+  il lavoro arrivava alla revisione e all'attivazione senza nessuna prova. Adesso serve almeno
+  una prova della versione di adesso: un collaudo, un'anteprima di un gioco, oppure gli esempi
+  eseguiti alla fine del lavoro (`passano` vero o falso; dopo un riavvio il segno `provato` sui
+  requisiti). Senza, «avanti» dice la ragione e chiede, per esempio: «Non c'è nessuna prova: non
+  l'hai provata e gli esempi non sono stati eseguiti. Vado avanti lo stesso?». Nessun meccanismo
+  nuovo: è la proposta in sospeso di sempre verso `sviluppo_passo` avanti. Il sì si legge come
+  per le altre proposte (`politica.accettata`, la frase di sfida, `politica.consenso`), e solo
+  con `tool_in_sospeso` e quella domanda. Il modello che richiama avanti da solo, o un «no»,
+  ripetono la domanda. Il sì vale per quella versione (`Sviluppo.senza_prove`, la chiave
+  «versione|lavoro»): una versione nuova chiede di nuovo. La revisione lo dice («Nessuna prova:
+  hai scelto di andare avanti lo stesso.»). Le regole sono `sviluppo_senza_prove_chiesto` e
+  `sviluppo_senza_prove_confermato`. La stessa porta c'è all'attivazione e alla chiusura di un
+  programma. Una versione che non si può approvare si rivede comunque, senza la domanda.
+- **Test indeboliti (n. 7, `agenti/fotografia_test.py`).** `test_tolti` confronta solo con
+  l'ultima tappa. Al giro 1, prima di ogni tappa, un `assertEqual` cambiato in
+  `assertTrue(True)`, o uno `skipTest` aggiunto, non si vedeva. Adesso una misura senza eseguire
+  niente (`ast` per Python, il testo per JavaScript) conta per ogni file di test i test, i loro
+  nomi, le asserzioni vere e i salti. Un'asserzione con soli valori scritti (`assertTrue(True)`,
+  `assertEqual(1, 1)`, `assert True`, `assert.ok(true)`) non conta. Sono salti `skipTest`,
+  `@unittest.skip…`, `expectedFailure`, `test.skip`, `{ skip: true }`. La fotografia si prende
+  alla prima esecuzione intera di `esegui_test` (con i file iniziali di una correzione, che parte
+  dai test di prima), e un file nuovo entra quando compare. A ogni esecuzione si confronta:
+  - test in meno, asserzioni in meno e salti in più diventano un fatto nel risultato
+    (`test_indeboliti`, regola `agente_test_indeboliti`);
+  - `scrivi_file` e `modifica_file` su un file di test che perde controlli hanno la nota subito
+    (`test_indebolito`, regola `agente_test_indebolito_scritto`);
+  - alla consegna e alla tappa i cambi vanno nel rapporto (`test_indeboliti`), e la voce lo dice
+    senza nomi di file, nell'annuncio e nella revisione dello sviluppo («Attenzione: dalla prima
+    prova l'agente ha indebolito i suoi test: un controllo in meno e un test saltato.»).
+  Il conto è per numero di test e di asserzioni, non per nomi: un test rinominato, uno aggiunto
+  o le asserzioni spostate da un test all'altro non dicono niente. Restano fuori gli esempi di
+  Calliope in sola lettura e le cartelle nascoste.
+- **Prove cambiate.** Sei prove andavano alla revisione senza nessuna prova: `prova_sviluppo`
+  (il programma piccolo), `prova_flusso_ripresa` (M7), `prova_revisione_onesta` (la consegna del
+  gioco e il programma), `prova_voce_onesta` (il caso delle 16:26), `prova_giro_halloween` (il
+  gioco senza anteprima), e `prova_giro_porte` per la consegna condivisa. Dove la prova parla
+  d'altro ha adesso una prova della versione (un collaudo o gli esempi eseguiti). Dove parla
+  proprio della revisione senza collaudo (16:26, il gioco mai visto) controlla prima la domanda,
+  poi il sì e la revisione.
+- Prova: `prova_porte_residue`, a secco con il docker finto e l'agente finto, con i contrari di
+  ogni porta (53 controlli). Ogni correzione ha la sua mutazione, e la prova cade con tutte e
+  14: il «non trovato» nel ricollaudo; per il n. 10 la porta alla revisione, all'attivazione e
+  del programma, il sì del solo modello, il sì che vale per ogni versione, gli esempi eseguiti
+  non contati; per il n. 7 le asserzioni con soli valori scritti contate, i salti Python, il
+  fatto di `esegui_test`, la nota di scrittura, i file iniziali, il rapporto della consegna e il
+  conto per nomi invece che per numero.
+- **Resta**: `estensione_gestisci` con `approva` detto direttamente non passa da
+  `sviluppo_passo`. Ha la frase di sfida e i test verdi, ma non la porta delle prove.
