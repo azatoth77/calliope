@@ -4959,7 +4959,7 @@ ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costant
 1. **CalliopeFinta dal manifesto** (`estensioni/_ospite.py`). Di serie legge manifesto.json
    della cartella dove girano i test (senza il file nessun controllo; `manifesto=` un dict, o
    `False` per niente). Un'azione che i permessi non lasciano passare è un **`ErroreDelTest`**:
-   «è il test: l'azione «casa_stato» non è nel manifesto, e Calliope la negherebbe sempre.
+   «è il test: l'azione «casa_stato» non è nel manifesto, e Calliope la negherebbe sempre. *[storico: così fino alla prima revisione della PR #231, 22/10, sotto]*
    Dichiarala in «permessi» del manifesto (legge.casa, come nel §2 del contratto), chiedendola
    con chiedi_permesso se il contratto non la dà da sola, oppure non chiamarla. Per provare il
    caso «negato» c'è negate=[…]». Si controllano il permesso e lo scope: stanze, liste (con le
@@ -5030,3 +5030,49 @@ senza risposta, ora fallisce. È voluto: Calliope l'avrebbe negata, o la rispost
 modifica lo vede al primo esegui_test, con il messaggio che dice cosa fare. Gli esempi di
 accettazione (`accettazione.py`) usano `CalliopeFinta()` e quindi seguono anche loro il
 manifesto. Le parole vietate costano circa 185 token a ogni passata del prompt delle estensioni.
+
+**Dopo la prima revisione della PR #231 (22/10).**
+- **Letture vuote per i test che l'agente non prepara** (P1, P4). `CalliopeFinta(letture="vuote")`
+  risponde a una lettura senza risposta preparata con la forma vuota della porta
+  (`LETTURE_VUOTE`: casa `{"testo": "", "entita": []}`, lista e agenda con `voci: []`), mentre la
+  rete alza `ErroreCalliope` come un servizio che non risponde. Il controllo dei permessi resta.
+  La usano gli esempi di accettazione (`accettazione.py`, in sola lettura): prima ogni esempio di
+  un'estensione che legge cadeva con «passala con risposte=…», un consiglio impossibile in un
+  file che non si cambia. Ora l'esempio «trovato: false» di un'estensione che legge la casa passa
+  come su main. La usa anche il primo test di partenza (`chiama({}, letture="vuote")`), che passa
+  con un'estensione che legge subito. In questa modalità il messaggio non suggerisce `negate`. Il
+  testo si compone prima della chiamata, così il traceback non mostra il sorgente con i consigli.
+- **La diagnosi riconosce `ErroreDelTest` e `ErroreCalliope`** (P2, `agenti/diagnosi.py`). «è il
+  test: …» arriva nei fallimenti in breve, nella firma e nella spinta. Per un ErroreDelTest il
+  punto è il frame più esterno, cioè il test, e non estensione.py.
+- **Tutti gli errori del manifesto arrivano** (P3). Le righe «FALLITO manifesto.json» e «FALLITO
+  controllo della consegna» (`ciclo.py`) prima tagliavano a 400 caratteri e ora a
+  `MAX_ERRORI_MANIFESTO` (3 000). Nel messaggio di più errori ognuno è accorciato a 260 caratteri
+  (`manifesto.MAX_ERRORE_DETTO`: l'elenco dei verbi ne aveva circa 560), mentre in `errori`
+  restano interi. Con quattro errori (verbo «fornisce», `tempo_s` 99, «tool» nel titolo, «utente»
+  in un input) la riga è di 656 caratteri e li ha tutti.
+- **Un manifesto con i permessi non validi non dà niente** (P5). `motivo_permessi` copia i
+  controlli di `normalizza_permessi`: chiavi sconosciute, elenchi oltre 10, nomi oltre 40, host
+  di casa o più di 5, post senza host, flussi senza il permesso di leggerli, il formato del
+  04/10. Con permessi così la finta alza un ErroreDelTest («i «permessi» di manifesto.json non
+  sono validi (…). Correggi il manifesto»), come la porta, che con `_scope` non concede niente.
+  Anche un manifesto senza «permessi» non dà niente, come alla porta. Restano fuori, e li
+  controlla solo la porta vera: i flussi dopo una lettura di dati di casa, le quote e le conferme.
+- **Il confronto con la porta anche a caso** (P6). Un generatore con seme fisso (228) esplora la
+  forma di `normalizza_permessi`, anche non valida e con campi nuovi come «concessioni»: 1 500
+  manifesti (308 validi) per 6 richieste ciascuno, e nessuna differenza, né sulla validità né
+  sulla decisione. Il messaggio non dice più «Calliope la negherebbe sempre», che con le
+  concessioni della 0033 diventerà falso, ma «con questo manifesto la porta di Calliope non la
+  lascerebbe passare».
+- **La riproduzione** (P8, `riproduzione.py`). Un «non ha una risposta preparata» sulla versione
+  di prima è di struttura: il test nuovo non è preparato, non è il problema riprodotto.
+  L'azione non dichiarata invece vale, perché può essere proprio il difetto.
+- **La scheda si controlla anche con i permessi sbagliati** (dalla mutazione sopravvissuta di P7),
+  senza il confronto delle azioni con gli scope: i suoi errori arrivano con quello dei permessi.
+- **Prove** (P7): in `prova_contratto_estensioni` anche la stanza dopo l'apostrofo, agenda_elenca e
+  rete_invia senza risposta, lo scope di rete_invia, due input con valori sbagliati, «limiti»
+  non oggetto e non numeri, la scheda con i permessi sbagliati. Nella sandbox: diagnosi e
+  riproduzione dell'uscita vera, il test di partenza con un'estensione che legge, l'esempio di
+  accettazione che legge, `_con_manifesto` con quattro errori. **Mutazioni**: le 24 nuove (P1–P8)
+  e le 13 di prima, tutte prese. P9 (l'elenco delle parole più corto) non è fatto: da rimisurare
+  in token veri sulla DGX.
