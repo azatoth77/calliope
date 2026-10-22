@@ -295,6 +295,47 @@ def prova_stanza():
              and ctx_mod.etichetta(ultima) == "Calliope", str(ultima.get("per")))
 
 
+def prova_esito_ciclo():
+    """Il giro vero di `Ciclo._stanza_esito` (seconda revisione della PR #221, Q2): la risposta a
+    un conoscente porta `per.conoscente` e resta «Calliope»; quella a un ospite è «Calliope →
+    voce non riconosciuta»."""
+    import types
+    from types import SimpleNamespace
+
+    import prova_stanza_storia as PS
+    from calliope.ciclo import Ciclo
+    from calliope.stanza import contesto as ctx_mod
+    cfg = PS.cfg_base(stanza_contesto_in_storia=True)
+    st = PS.nuova_stanza(cfg, sat=1, nome="auto")
+    f = SimpleNamespace()
+    f.s = SimpleNamespace(stanza=st, registry=PS.Voci(), cfg=cfg)
+    f.rec = {"voce": {"nome": None, "modo": None}}
+    f.speaker_ctx = SimpleNamespace(sfida=None, conoscente=None)
+    f.listener = SimpleNamespace(started_at=time.monotonic() - 2.0,
+                                 ended_at=time.monotonic() - 0.5)
+    f._stanza_dove = lambda: (1, None)
+    f.brain = SimpleNamespace(rules_fired=lambda: [], redact=lambda x: x)
+    f._ripulisci_per_registro = types.MethodType(Ciclo._ripulisci_per_registro, f)
+
+    def esito(testo, detto):
+        t = SimpleNamespace(text=testo, scritto=None, said=[detto], non_rivolta=False,
+                            stanza_seq=None, stanza_esito_fatto=False)
+        Ciclo._stanza_turno(f, t)
+        Ciclo._stanza_esito(f, t, {**f.rec, "esito": "risposta", "testo": testo,
+                                   "regole": []})
+        return [r for r in st.registro(1).righe() if r.get("chi") == "calliope"][-1]
+    f.speaker_ctx.conoscente = {"id": "k1", "nome": "Gino Neri", "nota": "collega di Carlo",
+                                "modo": "voce"}
+    r = esito("Mi senti?", "Ti sento bene, Gino.")
+    verifica("ciclo: la risposta a un conoscente porta per.conoscente e resta «Calliope»",
+             (r.get("per") or {}).get("conoscente") == "k1"
+             and ctx_mod.etichetta(r) == "Calliope", str(r.get("per")))
+    f.speaker_ctx.conoscente = None
+    r = esito("Che tempo fa?", "Domani sole.")
+    verifica("ciclo: la risposta a un ospite è «Calliope → voce non riconosciuta»",
+             ctx_mod.etichetta(r) == "Calliope → voce non riconosciuta", str(r.get("per")))
+
+
 def prova_contrari():
     from calliope.brain import VOCE_ORA_MAX_S
     # La frase da ospite è troppo vecchia (oltre storia_inattiva_s)
@@ -368,6 +409,28 @@ def prova_contrari():
     carlo(chi)
     turno("Aggiungi il latte.")
     verifica("contrario: Carlo dopo un conoscente → nessuna riga", CAMBIO not in dati(b))
+    # In compagnia con voci sconosciute (seconda revisione): l'ospite può essere un'altra persona
+    for quando in ("al turno da ospite", "al turno di Carlo"):
+        b, chi, tel, turno = con_corsie()
+        ospite(chi)
+        chi.compagnia = chi.compagnia_sconosciute = quando == "al turno da ospite"
+        turno("Mi chiamo Gino, sono allergico alle noci.")
+        carlo(chi)
+        chi.compagnia = chi.compagnia_sconosciute = quando == "al turno di Carlo"
+        turno("E allora prenota tu.")
+        verifica(f"contrario: compagnia con voci sconosciute {quando} → nessuna riga",
+                 "Ora la voce è riconosciuta" not in dati(b) and b.conv.chiave
+                 == "persona:carlo-id", dati(b)[:200])
+    b, chi, tel, turno = con_corsie()
+    ospite(chi)
+    chi.compagnia, chi.compagnia_sconosciute = True, False
+    turno("Che tempo fa domani?")
+    carlo(chi)
+    chi.compagnia = False
+    turno("Aggiungi il latte.")
+    verifica("…in compagnia senza voci sconosciute (conversazione di Carlo) la riga c'è, senza "
+             "«forse la stessa persona»", CAMBIO in dati(b) and "forse" not in dati(b),
+             dati(b)[:300])
     # Interruttore spento
     b, chi, tel, turno = con_corsie()
     b.cfg.voce_ora_riconosciuta = False
@@ -382,7 +445,7 @@ def prova_contrari():
 if __name__ == "__main__":
     t0 = time.monotonic()
     for f in (prova_corsie, prova_alternanza_corsie, prova_condivisa, prova_solo_voce,
-              prova_stanza, prova_contrari):
+              prova_stanza, prova_esito_ciclo, prova_contrari):
         try:
             f()
         except Exception as e:  # noqa: BLE001 — un'eccezione è un errore, le altre parti girano

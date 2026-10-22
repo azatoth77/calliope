@@ -2688,11 +2688,12 @@ sono e quali sono i miei hobby?».
 
 **La correzione: un dato del turno, una volta.** `Brain._voce_ora_riconosciuta` (in
 `stream_reply`, dopo `_inizio_conversazione`): se il turno di prima su questo Brain era di un
-ospite (voce non riconosciuta e nessun conoscente), nello stesso luogo ed entro
-`storia_inattiva_s`, e adesso parla una persona riconosciuta, i dati del turno aggiungono dopo chi
+ospite (voce non riconosciuta e nessun conoscente), nello stesso luogo *[storico: dalla
+revisione la stessa corsia, il luogo solo col Brain unico]* ed entro `storia_inattiva_s`, e adesso parla una persona riconosciuta, i dati del turno aggiungono dopo chi
 parla «Ora la voce è riconosciuta: parla Carlo. Le frasi di prima qui erano di una voce non
 riconosciuta, trattata da ospite (forse la stessa persona): ciò che hai detto allora all'ospite non
-vale per chi parla adesso.» (regola `voce_ora_riconosciuta`). Il turno dopo non la ripete (il
+vale per chi parla adesso.» (regola `voce_ora_riconosciuta`; *[storico: «(forse la stessa persona)»
+tolto nella seconda revisione]*). Il turno dopo non la ripete (il
 segno è del turno, qualunque sia; *[storico: dopo la revisione, una volta per conversazione, solo
 con la voce e per corsia, vedi sotto]*). Interruttore `voce_ora_riconosciuta` (sezione `chi_parla`,
 acceso di serie). Permessi e livello non cambiano: seguono la voce del turno.
@@ -2709,7 +2710,8 @@ acceso di serie). Permessi e livello non cambiano: seguono la voce del turno.
   nota del gruppo lo dice già, solo in compagnia senza voci sconosciute). Da riguardare se il
   modello tratta da Carlo l'ospite che segue.
 - Non coperti: un conoscente dopo l'ospite (resta un ospite, niente riga); con un Brain solo che
-  segue il satellite attivo il luogo decide «qui» (senza luogo vale il Brain).
+  segue il satellite attivo il luogo decide «qui» (senza luogo vale il Brain) *[storico: dalla
+  revisione un Brain per satellite confronta la corsia, il luogo vale solo col Brain unico]*.
 
 **Prova** `prova_ospite_riconosciuto` (livello 1, ~1 s, modello finto): due frasi da ospite e poi
 Carlo con le conversazioni per persona e nella conversazione condivisa; contrari: riconosciuto
@@ -2752,6 +2754,20 @@ alta voce.
 (`_voce_prima` è in memoria; le etichette della stanza sì, finché la riga è nel registro in
 memoria); la riga di Calliope a un ospite letta dalla tenuta su disco resta «Calliope»; il giro
 del ciclo che scrive `per.conoscente` non ha una prova sua (la prova chiama `Stanza.detto`).
-Mutazioni (script fuori dal repository): cadono tutte, tranne «sicurezza grigia come nessuna»,
-equivalente (una risposta alla zona grigia ha sempre la persona).
+Mutazioni (script fuori dal repository): ne cadono 8 su 9; sopravvive «sicurezza grigia come
+nessuna», equivalente (una risposta alla zona grigia ha sempre la persona). Seconda revisione:
+16 mutazioni, 13 cadono; le tre sopravvissute erano le due righe del ciclo che scrivono
+`per.conoscente` (adesso provate dal giro di `Ciclo._stanza_esito`, sotto) e i controlli
+`not persona` e `sicurezza == "nessuna"` di `risposta_a_ospite`, equivalenti fra loro (il ciclo
+scrive «nessuna» solo senza nome).
+
+**Seconda revisione (22/10).** Niente riga in compagnia con voci sconosciute, al turno da ospite o
+a quello riconosciuto: l'ospite può essere davvero un'altra persona lì (un collega in auto che dice
+«sono allergico alle noci»), e la riga spingerebbe il modello ad attribuire a chi parla le sue
+parole. Per lo stesso motivo il testo non dice più «forse la stessa persona». Il giro di
+`Ciclo._stanza_esito` con un conoscente (risposta «Calliope», `per.conoscente` nel registro) e con
+un ospite («Calliope → voce non riconosciuta») è in `prova_ospite_riconosciuto`. Da tenere presente:
+l'etichetta nuova arriva anche a `stanza_cerca`, al giudizio «rivolta» (in ombra: l'ingresso non è
+più quello misurato il 09/10, da rileggere prima di accenderlo) e al riassunto della corsia lenta;
+il guardiano a posteriori ha la sua etichetta e resta «Calliope».
 

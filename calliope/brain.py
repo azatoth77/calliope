@@ -1171,13 +1171,14 @@ TURN_CONTEXT_MSG = ("Dati del turno (non ripeterli nella risposta se non te li c
 # amministra prese per un ospite, dalla terza riconosciuto, e il modello continuava a dirgli «il
 # sistema dice che sei un ospite» (le frasi di prima, nella stanza o nella conversazione condivisa,
 # erano di una «voce non riconosciuta», e niente diceva che adesso era cambiato). Un dato, non un
-# ordine: «forse la stessa persona» perché non si sa (poteva essere davvero un ospite)
+# ordine
 # Le frasi da ospite «di prima» valgono al più per questi secondi, anche con storia_inattiva_s 0
 VOCE_ORA_MAX_S = 600.0
+# Senza «forse la stessa persona» (seconda revisione della PR #221): il modello poteva attribuire
+# a chi parla adesso le parole di un ospite vero
 VOCE_RICONOSCIUTA_MSG = ("Ora la voce è riconosciuta: parla {nome}. Le frasi di prima qui erano "
-                         "di una voce non riconosciuta, trattata da ospite (forse la stessa "
-                         "persona): ciò che hai detto allora all'ospite non vale per chi parla "
-                         "adesso.")
+                         "di una voce non riconosciuta, trattata da ospite: ciò che hai detto "
+                         "allora all'ospite non vale per chi parla adesso.")
 
 # Parole incerte della trascrizione (07/10, stt_incerte_al_modello, variante B del confronto
 # in docs/aree/stt-tts.md): le parole che Whisper ha scritto con probabilità sotto
@@ -4533,7 +4534,10 @@ class Brain:
             alternanza;
           - la stessa corsia (`Brain.satellite`, un Brain per satellite); con il Brain solo che
             segue il satellite attivo, il luogo;
-          - entro `storia_inattiva_s`, e comunque entro `VOCE_ORA_MAX_S` (anche con 0).
+          - entro `storia_inattiva_s`, e comunque entro `VOCE_ORA_MAX_S` (anche con 0);
+          - mai in compagnia con voci sconosciute, al turno da ospite o a questo (seconda
+            revisione): l'ospite di prima può essere davvero un'altra persona lì vicino, e la riga
+            spingerebbe il modello ad attribuire a chi parla le sue parole (memoria, preferenze).
         Solo in memoria: dopo un riavvio fra le due frasi la riga non c'è. Il verso inverso (una
         persona, poi un ospite) non ha la riga: «persona: un ospite» basta, e il nome di chi
         parlava prima non va detto a un ospite. Un dato del turno, mai una regola: permessi e
@@ -4544,12 +4548,16 @@ class Brain:
         ora = time.monotonic()
         dove = self.__dict__.get("satellite") or ("luogo", getattr(self._c(), "luogo", None))
         prima = self.__dict__.get("_voce_prima")
-        self._voce_prima = (ospite, ora, dove)
+        estranei = bool(getattr(sc, "compagnia", False)
+                        and getattr(sc, "compagnia_sconosciute", False))
+        self._voce_prima = (ospite, ora, dove, estranei)
         if not nome or not isinstance(prima, tuple) or not prima[0]:
             return None
         if not getattr(self.cfg, "voce_ora_riconosciuta", True):
             return None
         if getattr(sc, "identified_by", None) not in (None, "voce"):
+            return None
+        if estranei or (len(prima) > 3 and prima[3]):
             return None
         conv = self._c()
         if getattr(conv, "condivisa", False) or getattr(conv, "voce_ora_detta", False):

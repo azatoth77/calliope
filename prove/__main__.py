@@ -551,6 +551,7 @@ LEGAMI = [
     ("calliope/corsie.py", ["prova_ospite_riconosciuto.py"]),
     ("calliope/stanza/", ["prova_ospite_riconosciuto.py"]),
     ("calliope/conversazione.py", ["prova_ospite_riconosciuto.py"]),
+    ("calliope/ciclo.py", ["prova_ospite_riconosciuto.py"]),
     # L'ospite dove un minore ha parlato da poco (16/10, issue #102)
     ("calliope/ciclo.py", ["prova_minore_ospite.py"]),
     ("calliope/brain.py", ["prova_minore_ospite.py"]),
