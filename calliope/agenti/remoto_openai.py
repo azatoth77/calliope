@@ -26,7 +26,8 @@ Traduzione del corpo:
 - `thinking_budget` (05/10, il tetto del ragionamento di una passata) →
   `thinking_token_budget` di vLLM (verificato con vLLM 0.29.0 e qwen3.6, parser «qwen3»:
   finito il budget il modello chiude il ragionamento e risponde). Un server che non lo
-  conosce lo rifiuta una volta e poi non lo riceve più.
+  conosce lo rifiuta una volta e poi non lo riceve più. Il budget mandato e accettato torna
+  in `budget` (21/10, #191); quello rifiutato no, e c'è `budget_tolto`.
 
 I token: `usage.completion_tokens` (ragionamento compreso) e, con vLLM,
 `usage.completion_tokens_details.reasoning_tokens` → `ragionamento`.
@@ -220,7 +221,12 @@ class ClienteOpenAI:
         if model in self.senza_budget:
             req.pop("thinking_token_budget", None)
         try:
-            return self._chat(req, su_pezzo, controlla, su_flusso)
+            out = self._chat(req, su_pezzo, controlla, su_flusso)
+            if req.get("thinking_token_budget"):
+                # Il budget applicato dal server (21/10, #191): oltre, il ragionamento non va, e
+                # il ciclo sa che i token in più sono uscita (`troncata_nell_uscita`)
+                out["budget"] = int(req["thinking_token_budget"])
+            return out
         except ErroreOllama as e:
             msg = str(e).lower()
             if ("thinking_token_budget" in req and e.codice == "motore_errore"

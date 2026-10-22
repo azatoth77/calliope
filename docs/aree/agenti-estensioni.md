@@ -4205,7 +4205,7 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
   chiamate rotte; dalla terza revisione solo le passate con tutte le chiamate rotte) il lavoro si ferma col motivo «la sua uscita si è fermata N volte di fila al
   tetto dei token della passata», `tipo` «troncata»: tappa in uno sviluppo (`PERCHE_TAPPA`, a voce
   «l'uscita dell'agente si è fermata più volte di fila al tetto dei token della passata»), fuori
-  «limite».
+  «limite». *[storico: «di fila» e i due motivi fino al 21/10, #191, sotto]*
 - **Con vLLM e «length» l'ultima chiamata è di nuovo rotta**, anche col JSON che si legge. A fine
   stream vLLM manda gli argomenti già chiusi dal parser con la stringa a metà: un file, un `nuovo` di
   modifica_file o un riassunto della consegna a metà scritti in silenzio costano più di una passata
@@ -4234,7 +4234,8 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
 - **Fuori da uno sviluppo il «limite» «troncata» passa da `_consegna_al_tetto`**, come gli altri
   tetti. Con gli esempi di accettazione verdi il codice consegna, `consegna_al_tetto` «troncata», e
   a voce «non ha consegnato», come per `a_vuoto` e `prosa`.
-- Un giro a vuoto azzera le troncate di fila. Il banco (#9) ha `troncata` tra i tipi del limite.
+- Un giro a vuoto azzera le troncate di fila. *[storico: fino alla revisione della PR #219, 21/10,
+  sotto]* Il banco (#9) ha `troncata` tra i tipi del limite.
 - **I casi dei copioni delle tre revisioni sono nella prova** (`prova_strumenti_onesti`, sezione
   7), con il nome che avevano e con i contrari:
   - A ed L1: l'uscita trattenuta;
@@ -4249,6 +4250,151 @@ di una volta senza la nota. Nel log `agente_stato_gia_visto`, `agente_uscita_tro
   - B, C, D, G e H: la modifica inversa e il già visto.
 
   Ogni tornata di correzioni aveva rotto un caso di quella prima.
+
+**I due bordi della quarta revisione della PR #187 (21/10, issue #191, ramo
+`issue-191-troncate`).** La quarta revisione aveva lasciato fuori due casi limite, non regressioni
+rispetto a main.
+- **V1, vLLM con il budget del ragionamento applicato.** Sulla DGX il budget di serie è 8 192 su
+  16 384 token di passata, una quota di 0,5, sopra `RAGIONAMENTO_QUOTA` = 0,4. Una passata
+  «length» col contenuto vuoto e senza chiamate finiva quindi nella guardia dei token senza
+  strumenti («ha ragionato per 32 768 token»). Eppure, col budget applicato, il ragionamento non
+  può superarlo: il resto è uscita, trattenuta dal parser dei tool. Ora il client di vLLM mette
+  in `budget` il `thinking_token_budget` che ha mandato e il server ha accettato. Quello rifiutato
+  (`budget_tolto`) non c'è, e con Ollama neppure, perché lì il budget non si applica. In
+  `troncata_nell_uscita`, con `eval > budget + BUDGET_MARGINE` (1 024) la passata è una troncata,
+  qualunque sia la quota. Il caso E (il solo ragionamento) resta com'era: col budget tolto, o con
+  Ollama, decide ancora la quota. *[storico: «qualunque sia la quota» e «accettato» fino alla
+  revisione della PR #219, sotto]*
+- **F, troncate a contenuto vuoto alternate a prosa.** Le troncate si azzerano solo con una
+  chiamata eseguita: una passata con chiamate non tutte rotte, anche quella letta dal testo. La
+  prosa e il ragionamento troncato in mezzo non le azzerano più. Prima una serie come «troncata,
+  "Va bene, divido il file", troncata…» arrivava al tetto dei token o dei 30 minuti: sulla DGX
+  dopo ~5 troncate, fino a ~20 minuti in più, con un motivo («token», «tempo») che non parlava
+  delle troncate. Ora alla quarta il lavoro si ferma col motivo suo. Il giro a vuoto le azzera
+  ancora (R6), perché ha un tetto suo (`RIPETIZIONI_MAX`). *[storico: il giro a vuoto e «una
+  passata con chiamate non tutte rotte» fino alla revisione della PR #219, sotto]* La troncata azzera ancora la prosa di
+  fila (N3). Il motivo, ora che non sono più per forza «di fila», è «la sua uscita si è fermata N
+  volte al tetto dei token della passata senza una chiamata eseguita in mezzo». A voce, alla
+  tappa: «l'uscita dell'agente si è fermata più volte al tetto dei token della passata, senza una
+  chiamata eseguita in mezzo». *[storico: la frase a voce fino alla seconda revisione della PR
+  #219, 22/10, sotto]*
+- **Prove** (`prova_strumenti_onesti`, sezione 7, livello 2): F diventa «limite» «troncata» alla
+  settima passata (quattro troncate e tre prose); in uno sviluppo è tappa, con la storia ben
+  formata. I contrari: una chiamata eseguita in mezzo le azzera e il lavoro finisce «fatto»; il
+  ragionamento troncato in mezzo non le azzera. Poi V1 (tre passate col budget, «fatto») e il suo
+  contrario, E col budget tolto, che chiude alla seconda soglia come prima. Infine i bordi di
+  `troncata_nell_uscita` (budget + 1 024 no, + 1 025 sì, budget tolto, budget 0, «stop», E senza
+  budget). Nella sezione 2, `budget` nell'uscita del client vLLM, assente dopo il rifiuto e con
+  Ollama. `tronca_prosa` (N3) ha ora quattro prose e tre troncate. Ho tolto a mano ciascuna delle
+  due correzioni e la prova è caduta sui casi suoi (V1 e i bordi; F, F in uno sviluppo e il
+  ragionamento in mezzo).
+- **Da misurare sulla DGX** (la DGX non era raggiungibile il 21/10): come il parser `qwen3_xml`
+  chiude uno stream fermato a max_tokens a metà di una chiamata, cioè se manda gli argomenti a
+  pezzi (finiscono in `rotti`) o li trattiene (contenuto vuoto, il caso V1). La prova: max_tokens
+  piccolo e uno scrivi_file lungo. Da guardare anche se vLLM riempie
+  `completion_tokens_details.reasoning_tokens` (caso V3 della revisione). Il criterio di
+  chiusura di #191 è parziale finché questa misura non è scritta qui.
+
+**Dopo la revisione della PR #219 (21/10).**
+- **Il conto esatto del ragionamento vince sul budget.** `budget` dice solo che il server non ha
+  rifiutato `thinking_token_budget`, non che l'ha applicato: llama.cpp, dato come motore «openai»
+  accanto a vLLM, ignora i campi che non conosce. Col conto del motore (`ragionamento`) presente,
+  per esempio 16 374 su 16 384 con un budget di 8 192, la regola del budget faceva della passata
+  una troncata, e il caso E finiva «la sua uscita si è fermata 4 volte…» invece di «ha ragionato
+  per 32 768 token». Ora la regola del budget vale solo quando `ragionamento` manca, cioè quando
+  vLLM non riempie `reasoning_tokens` e resta la stima dai caratteri. Se il conto c'è, decide
+  quello con la quota, come su main. Resta un caso non coperto: llama.cpp senza conto esatto e
+  con un ragionamento vero oltre il budget. Lì la regola dice «troncata», e il lavoro si ferma
+  alla quarta col motivo delle troncate invece che alla seconda soglia. Il caso è raro, perché
+  l'agente sulla DGX gira su vLLM. *[storico: «decide quello con la quota» e «il caso non
+  coperto» fino alla seconda revisione della PR #219, 22/10, sotto]*
+- **Il giro a vuoto non azzera più le troncate.** Il tetto suo (`RIPETIZIONI_MAX`) è di fila, e
+  una troncata azzera `giri_vuoti`. Così troncate alternate a giri a vuoto arrivavano al tetto dei
+  token dopo 19 passate. R6 è riscritta come `tronca_prosa`: tre troncate, un giro a vuoto e una
+  troncata fanno la quarta, «limite» «troncata». Il contrario: dopo il giro a vuoto una chiamata
+  eseguita fa ripartire il conto, e il lavoro finisce «fatto».
+- **«Chiamata eseguita» vuol dire partita davvero.** Prima azzerava qualunque passata con
+  chiamate non tutte rotte. Non azzerano più uno strumento sconosciuto o non offerto, gli
+  argomenti contro lo schema, la lettura ripetuta nella stessa passata, le chiamate dopo la
+  consegna e il «prima chiama piano». Azzerano piano, chiedi_permesso, consegna e gli strumenti
+  della sandbox, anche quando l'esito è un errore. L'azzeramento è ora dopo il giro sulle chiamate
+  (`eseguita` in `Agente.codice`).
+- **Prove** (sezione 7):
+  - il contrario di V1, P1: budget, 16 374 di ragionamento esatto, come E;
+  - V1 con la sola stima dai caratteri;
+  - nei bordi, il budget col conto esatto, sopra e sotto la quota;
+  - R6, il suo contrario e le troncate alternate ai giri a vuoto («troncata» alla settima
+    passata);
+  - P3 con uno strumento sconosciuto e con gli argomenti mancanti.
+
+  Ho tolto a mano ogni correzione, una per volta, e ognuna fa cadere la sua prova:
+  - la regola del budget fa cadere V1 e i bordi;
+  - la condizione su `ragionamento` fa cadere P1 e i bordi;
+  - `budget_tolto` fa cadere i bordi;
+  - l'azzeramento sul giro a vuoto fa cadere R6 e i giri alternati;
+  - l'azzeramento con qualunque chiamata fa cadere P3 e N;
+  - la prosa che azzera fa cadere F e P3;
+  - senza nessun azzeramento cadono i contrari di F e di R6.
+- **Con la PR #218** (la ricerca, `troncate_motivo()`): la ricerca azzera le troncate a ogni
+  passata non troncata, quindi conta davvero «di fila», e il codice dice invece «senza una
+  chiamata eseguita in mezzo». Sono due testi, da tenere distinti quando si unisce main.
+  *[storico: «da tenere distinti» fino all'unione di main del 22/10, sotto]*
+
+**Unione di main con #218 (22/10).** `troncate_motivo(n, di_fila=True)` ha i due testi. La
+ricerca lo chiama senza parametro, e il suo conto resta «di fila»: ogni passata non troncata lo
+azzera, anche il giro a vuoto. Il codice lo chiama con `di_fila=False`: «senza una chiamata eseguita
+in mezzo». I due cicli non condividono il conto né la nozione di chiamata eseguita. `eseguita`
+(P3) vale solo nel ciclo del codice, mentre la ricerca azzera con qualunque chiamata non rotta. I
+consigli nuovi della ricerca (`USCITA_TRONCATA_STRUMENTO`, `USCITA_TRONCATA_PENSIERO`) e la
+consegna rifiutata saltata da `estrattivo` non toccano il ciclo del codice, che usa ancora
+`USCITA_TRONCATA` e `USCITA_TRONCATA_TESTO`. Prove: le sezioni 7 e 8 di `prova_strumenti_onesti`
+verdi, ciascuna col suo testo. Con il testo «di fila» per tutti e due cadono il tetto del codice
+e F; con il testo «senza una chiamata eseguita» per tutti e due cade il tetto della ricerca.
+
+**Dopo la seconda revisione della PR #219 (22/10).**
+- **Col conto esatto decide il residuo, non la quota.** Dopo la prima revisione, col conto esatto
+  di vLLM (`reasoning_tokens`) V1 tornava come su main. 8 192 di ragionamento su 16 384 è una quota
+  di 0,5, e la passata finiva nella guardia con 8 192 token di uscita trattenuta. La correzione
+  funzionava quindi solo se vLLM non riempie il conto, cosa ancora da misurare (V3). Ora, col
+  conto esatto e il contenuto vuoto, la passata è una troncata se `eval - ragionamento >
+  BUDGET_MARGINE` (1 024), con il budget e senza. La quota 0,4 era pensata per la stima
+  grossolana dai caratteri; col conto esatto l'uscita si conosce. E (16 374 su 16 384) resta
+  ragionamento, e così il contrario di P1 (llama.cpp col conto e il budget ignorato). Un conto 0
+  con un ragionamento scritto non vale e si tratta come assente: è un server che non riempie i
+  dettagli, e senza questa cautela ogni E diventava una troncata.
+- **Senza il conto esatto, la regola del budget ha un controllo.** Si applica solo se la stima dai
+  caratteri non supera `RAGIONAMENTO_BUDGET_MAX` = 1,5 volte il budget. Un budget applicato
+  tiene il ragionamento vero sotto il budget. La stima a 3 caratteri per token lo gonfia al più di
+  un terzo, perché il testo ha 3–4 caratteri per token, mentre il codice, a ~2,5, lo sgonfia; 1,5
+  lascia ancora un margine. Oltre quella soglia il budget non è stato applicato (llama.cpp e
+  Ollama su /v1 ignorano il campo senza rifiutarlo), e decide la quota come prima. Il solo
+  ragionamento lungo, 54 000 caratteri cioè 18 000 token stimati, chiude di nuovo alla seconda
+  soglia con «ha ragionato», senza ricevere tre volte «scrivi il file in pezzi». Resta scoperta la
+  fascia fra 1,33 e 1,5 volte il budget con il budget ignorato e il solo ragionamento: è stretta,
+  e fuori dalla DGX.
+- **Le prove di `eseguita` nei rami di piano e chiedi_permesso**, entrambe con `piano=True`:
+  - troncate alternate a un piano con una voce sconosciuta, o a chiedi_permesso prima del piano
+    (esiti non ok), si azzerano e il lavoro non finisce «troncata»;
+  - troncate alternate a uno scrivi_file rifiutato con «prima chiama piano» finiscono «troncata»
+    alla settima passata.
+
+  La lettura ripetuta nella stessa passata non ha una prova sua, perché la prima lettura ha già
+  azzerato il conto.
+- **La frase della tappa a voce, senza gergo**: «l'agente ha scritto più volte risposte troppo
+  lunghe, interrotte a metà, senza fare un passo avanti». Il motivo per l'agente resta tecnico
+  (`troncate_motivo`). La prova chiama `frase_tappa` sul risultato della tappa F e controlla che
+  non ci siano «token», «chiamata», «max_tokens» e «passata».
+- **Ogni correzione ha la sua prova.** Ho rifatto le mutazioni, una per volta:
+
+  | Correzione tolta | Prove che cadono |
+  |---|---|
+  | la quota col conto esatto | V1 col conto e i bordi |
+  | il conto 0 creduto | i bordi |
+  | la regola del budget senza la soglia della stima | Q2 e i bordi |
+  | `eseguita` tolta da piano | Q3 piano |
+  | `eseguita` tolta da chiedi_permesso | Q3 chiedi_permesso |
+  | `eseguita` spostata prima della lettura e del «prima chiama piano» | Q3 «prima chiama piano» |
+  | la frase della tappa di prima | Q4 |
 
 ## Il contratto dei giochi e un prompt per tipo (19/10, issue #186, ramo `issue-186-contratto-giochi`)
 
@@ -4744,7 +4890,8 @@ ciclo della ricerca (`Agente.ricerca`), con le stesse regole e le stesse costant
 
 **Dopo la prima revisione della PR #218 (21/10).**
 - **Due rami difesi da una prova.** Il giro a vuoto azzera le troncate di fila (come R6 nel
-  codice). Una passata con una chiamata buona e una rotta non conta «di fila» (come M). Ognuno ha
+  codice; *[storico: nel codice non più dal 22/10, #191, dove il conto è «senza una chiamata
+  eseguita in mezzo»]*). Una passata con una chiamata buona e una rotta non conta «di fila» (come M). Ognuno ha
   il suo copione nella sezione 8. Togliendo l'azzeramento, o contando «di fila» con
   `len(troncate) > 0`, la prova cade: l'ho verificato con le due mutazioni.
 - **«Ognuna con la sua risposta»** si controlla sulla storia mandata al modello (i corpi delle

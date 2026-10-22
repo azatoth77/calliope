@@ -867,8 +867,9 @@ RIFIUTI_MAX = 3
 # Le passate di fila senza nessuna chiamata dopo le quali il lavoro si ferma (19/10, #180):
 # tappa in uno sviluppo, «limite» fuori
 PROSA_MAX = 3
-# Le passate di fila con l'uscita troncata a max_tokens (revisione della PR #187, #185): oltre,
-# tappa in uno sviluppo o «limite», con il motivo suo invece del tetto dei token
+# Le passate con l'uscita troncata a max_tokens senza una chiamata eseguita in mezzo (revisione
+# della PR #187, #185; dal 21/10, #191, la prosa in mezzo non le azzera): oltre, tappa in uno
+# sviluppo o «limite», con il motivo suo invece del tetto dei token
 TRONCATE_MAX = 3
 # Una passata fermata a max_tokens senza chiamate (terza revisione della PR #187): con un testo
 # di almeno TRONCATA_TESTO_MIN caratteri la troncatura è nell'uscita; col contenuto vuoto decide
@@ -876,14 +877,35 @@ TRONCATE_MAX = 3
 # stima dai caratteri: TOKEN_CARATTERI per token, grossolana, per questo la quota è bassa) è
 # ragionamento troncato e vale la guardia dei token senza strumenti, come prima; altrimenti
 # l'uscita c'era ma il parser dei tool l'ha trattenuta (Ollama con una chiamata a metà)
+# Il conto esatto del motore (vLLM: `ragionamento`, da reasoning_tokens) decide col residuo, non
+# con la quota pensata per la stima grossolana (seconda revisione della PR #219, #191): oltre
+# BUDGET_MARGINE token generati fuori dal ragionamento, col contenuto vuoto, l'uscita c'era e
+# l'ha trattenuta il parser (V1: 8 192 di ragionamento su 16 384). Un conto 0 con un ragionamento
+# scritto non vale (un server che non riempie i dettagli): come assente.
+# Senza il conto esatto, col budget mandato e non rifiutato (`budget` nell'uscita del client, 21/10)
+# una passata oltre budget + BUDGET_MARGINE token è uscita trattenuta, ma solo se la stima dai
+# caratteri non supera RAGIONAMENTO_BUDGET_MAX volte il budget. Un budget applicato tiene il
+# ragionamento vero sotto il budget, e la stima a TOKEN_CARATTERI = 3 caratteri per token lo
+# gonfia al più di un terzo (il testo ha 3–4 caratteri per token; il codice, ~2,5, lo sgonfia):
+# 1,5 lascia ancora un margine. Oltre, il budget non è stato applicato (llama.cpp e Ollama su /v1
+# ignorano il campo senza rifiutarlo) e decide la quota, come prima: il solo ragionamento lungo
+# resta nella guardia invece di ricevere «scrivi il file in pezzi»
 TRONCATA_TESTO_MIN = 20
 RAGIONAMENTO_QUOTA = 0.4
 TOKEN_CARATTERI = 3
+BUDGET_MARGINE = 1024
+RAGIONAMENTO_BUDGET_MAX = 1.5
 
 
-def troncate_motivo(n: int) -> str:
-    """Il motivo del «limite» oltre TRONCATE_MAX troncate di fila, nel codice e nella ricerca."""
-    return f"la sua uscita si è fermata {n} volte di fila al tetto dei token della passata"
+def troncate_motivo(n: int, di_fila: bool = True) -> str:
+    """Il motivo del «limite» oltre TRONCATE_MAX troncate (PR #218). Due testi, perché i due
+    conti sono diversi: la ricerca le azzera a ogni passata non troncata, ed è davvero «di fila»;
+    il codice solo con una chiamata eseguita (21/10, #191: `di_fila=False`), e in mezzo ci
+    possono essere prosa, ragionamento troncato e giri a vuoto."""
+    if di_fila:
+        return f"la sua uscita si è fermata {n} volte di fila al tetto dei token della passata"
+    return (f"la sua uscita si è fermata {n} volte al tetto dei token della passata senza una "
+            "chiamata eseguita in mezzo")
 
 
 def troncata_nell_uscita(out: dict) -> bool:
@@ -897,7 +919,16 @@ def troncata_nell_uscita(out: dict) -> bool:
     if gen <= 0:
         return False
     r = out.get("ragionamento")
-    stima = int(r) if r is not None else len(out.get("thinking") or "") / TOKEN_CARATTERI
+    pensiero = str(out.get("thinking") or "")
+    if r is not None and int(r or 0) == 0 and pensiero.strip():
+        r = None                          # il conto 0 smentito dal ragionamento scritto
+    if r is not None:
+        return gen - int(r) > BUDGET_MARGINE
+    stima = len(pensiero) / TOKEN_CARATTERI
+    budget = int(out.get("budget") or 0)
+    if (budget > 0 and not out.get("budget_tolto") and gen > budget + BUDGET_MARGINE
+            and stima <= RAGIONAMENTO_BUDGET_MAX * budget):
+        return True
     return stima < RAGIONAMENTO_QUOTA * gen
 # La risposta a una passata senza chiamate con lo stato consegnabile (19/10, #180): un fatto,
 # non una consegna. Prima il testo dopo una spinta valeva come «fatto» («Hai ragione, correggo
@@ -1452,13 +1483,16 @@ class Agente:
         # Le passate di fila senza chiamate (19/10, #180) e il controllo della consegna senza
         # effetti, lo stesso dentro esegui_test (`Lavori._controlla_estensione`)
         prosa_fila = 0
-        troncate_fila = 0         # passate di fila con l'uscita troncata (revisione della PR #187)
+        # Le passate con l'uscita troncata senza una chiamata eseguita in mezzo (revisione della
+        # PR #187; #191)
+        troncate_fila = 0
 
         def troppe_troncate():
-            """Oltre TRONCATE_MAX troncate di fila: tappa in uno sviluppo; fuori, come gli altri
-            tetti, prima i controlli di una consegna (`_consegna_al_tetto`), poi «limite».
+            """Oltre TRONCATE_MAX troncate senza una chiamata eseguita: tappa in uno sviluppo;
+            fuori, come gli altri tetti, prima i controlli di una consegna
+            (`_consegna_al_tetto`), poi «limite».
             ("tappa", risultato) o ("consegna", chiusura)."""
-            e = Limite(troncate_motivo(troncate_fila), tipo="troncata")
+            e = Limite(troncate_motivo(troncate_fila, di_fila=False), tipo="troncata")
             if getattr(lav, "tappe", False):
                 chiusura = self._consegna_alla_tappa(lav, sandbox, e, controlla, piano,
                                                      stato_piano)
@@ -1529,7 +1563,8 @@ class Agente:
                 # Il ragionamento ripeteva la stessa frase (08/10 sera): la spinta, e alla
                 # terza passata fermata di fila il lavoro si chiude con il motivo
                 giri_vuoti += 1
-                troncate_fila = 0       # non più «di fila» (terza revisione della PR #187)
+                # Le troncate restano (21/10, revisione della PR #219): il giro a vuoto non è una
+                # chiamata eseguita. *[storico: azzerate qui dalla terza revisione della PR #187]*
                 if giri_vuoti >= RIPETIZIONI_MAX:
                     e = Limite("ha ripetuto lo stesso ragionamento in "
                                f"{giri_vuoti} passate di fila senza decidere", tipo="a_vuoto")
@@ -1563,10 +1598,16 @@ class Agente:
             # si è eseguita l'agente va avanti, e la passata non conta «di fila»), o una passata
             # senza chiamate fermata a max_tokens che non è di solo ragionamento
             # (`troncata_nell_uscita`). Il solo ragionamento troncato resta nella guardia dei token
-            # senza strumenti, come prima
+            # senza strumenti, come prima. Le troncate si azzerano solo con una chiamata eseguita
+            # (21/10, #191): la prosa, il ragionamento troncato e il giro a vuoto in mezzo non le
+            # azzerano più (troncate a contenuto vuoto alternate a «Va bene, divido il file», o a
+            # giri a vuoto, arrivavano al tetto dei token o dei 30 minuti), e nemmeno una chiamata
+            # che non parte (strumento sconosciuto, argomenti sbagliati: revisione della PR #219).
+            # L'azzeramento è dopo il giro sulle chiamate (`eseguita`)
             nell_uscita = (len(troncate) >= len(calls) > 0 if calls
                            else troncata and troncata_nell_uscita(out))
-            troncate_fila = troncate_fila + 1 if nell_uscita else 0
+            if nell_uscita:
+                troncate_fila += 1
             if nell_uscita and not calls:
                 if troncate_fila > TRONCATE_MAX:
                     fine = troppe_troncate()
@@ -1651,6 +1692,7 @@ class Agente:
             letture = set()
             rossa = None              # la consegna rossa che ferma il lavoro (19/10, #180)
             nomi_strumenti = [(t.get("function") or {}).get("name") for t in strumenti]
+            eseguita = False      # almeno una chiamata partita davvero (#191)
             for i_call, c in enumerate(calls):
                 name, args = c["name"], c.get("arguments") or {}
                 if consegna is not None or rossa is not None:
@@ -1731,6 +1773,7 @@ class Agente:
                         continue
                     letture.add(chiave)
                 if piano and name == "piano":
+                    eseguita = True
                     result, chiusura = self._piano(lav, sandbox, args, stato_piano)
                     if result.get("ok"):
                         stato_piano = result.pop("_stato")
@@ -1741,6 +1784,7 @@ class Agente:
                     lav.nota("esito", nome=name, esito=result)
                     continue
                 if piano and name == "chiedi_permesso":
+                    eseguita = True
                     result, chiusura = self._chiedi_permesso(lav, args, stato_piano)
                     if chiusura is not None:
                         consegna = chiusura
@@ -1756,6 +1800,7 @@ class Agente:
                          "fattibile, motivo): è il primo passo obbligatorio"},
                         ensure_ascii=False)})
                     continue
+                eseguita = True
                 if name == "consegna":
                     fatto = esito_fatto(args)
                     errore = (controlla(sandbox) if controlla is not None and fatto else None)
@@ -1930,6 +1975,8 @@ class Agente:
                 messages.append({"role": "tool", "tool_name": name,
                                  "content": gc.risultato(name, result)})
                 lav.nota("esito", nome=name, esito=result)
+            if eseguita:
+                troncate_fila = 0
             if rossa is None and consegna is None and calls and troncate_fila > TRONCATE_MAX:
                 # Le passate con le chiamate tutte rotte (terza revisione della PR #187): il tetto
                 # dopo il giro sulle chiamate, così ognuna ha la sua risposta nella storia
@@ -3272,7 +3319,9 @@ class Agente:
             except Limite as e:
                 raise Limite(str(e), {"riassunto": _fatto_finora(gc, messages)}) from None
             if out.get("giro_a_vuoto"):
-                troncate_fila = 0       # non più «di fila», come nel codice
+                # Non più «di fila»: qui il conto è davvero di fila (`troncate_motivo`). Il codice
+                # dal 21/10 (#191) non azzera sul giro a vuoto, solo con una chiamata eseguita
+                troncate_fila = 0
                 if int((lav.segnali or {}).get("ripetizioni", 0)) >= RIPETIZIONI_MAX:
                     raise Limite("ha ripetuto lo stesso ragionamento senza decidere",
                                  {"riassunto": _fatto_finora(gc, messages)})
