@@ -116,6 +116,50 @@ def prova_finta():
     verifica("il formato del 04/10 dei permessi vale come alla porta",
              vecchio.casa_stato("camera") == {"testo": "20 gradi"}
              and alza(lambda: vecchio.casa_comando("accendi"))[0] == "ErroreDelTest")
+    rotti = F(manifesto={"permessi": {"legge": {"casa": True}, "foto": True}},
+              risposte={"casa_stato": {"testo": "t"}})
+    tipo, msg = alza(lambda: rotti.casa_stato("camera"))
+    verifica("permessi non validi: la finta non dà niente, come la porta, e dice di correggere "
+             "il manifesto", tipo == "ErroreDelTest" and "non sono validi" in msg
+             and "permesso sconosciuto: foto" in msg and "Correggi il manifesto" in msg, msg)
+    flusso = F(manifesto={"permessi": {"rete": {"host": ["api.esempio.it"]}, "invia": [
+        {"dati": "casa", "host": "api.esempio.it"}]}}, risposte={"rete_leggi": RISPOSTA})
+    verifica("contrario della porta: un flusso senza il permesso di leggerli non vale",
+             alza(lambda: flusso.rete_leggi("https://api.esempio.it/x"))[0] == "ErroreDelTest")
+    apo = F(manifesto={"permessi": {"scrive": {"casa": ["ingresso"]}}})
+    verifica("la stanza dopo l'apostrofo («dell'ingresso») è nello scope",
+             apo.casa_comando("apri la porta dell'ingresso") == {"ok": True})
+    for az, chiamata in (("agenda_elenca", lambda f: f.agenda_elenca()),
+                         ("rete_invia", lambda f: f.rete_invia("https://api.esempio.it/o", {}))):
+        g = F(manifesto={"permessi": {"legge": {"agenda": True}, "rete": {
+            "host": ["api.esempio.it"], "post": True}}})
+        tipo, msg = alza(lambda: chiamata(g))
+        verifica(f"{az} senza risposta preparata è un errore del test", tipo == "ErroreDelTest"
+                 and "non ha una risposta preparata" in msg, f"{tipo}: {msg}")
+    tipo, msg = alza(lambda: F(manifesto={"permessi": {}}).rete_invia("https://a.it/x", {}))
+    verifica("rete_invia non dichiarata: lo scope detto è rete.host con rete.post",
+             "rete.host con rete.post" in msg, msg)
+    tipo, msg = alza(lambda: F(manifesto={"permessi": {}}).casa_stato("camera"))
+    verifica("il messaggio non dice più «la negherebbe sempre» (decisione 0033)",
+             "sempre" not in msg and "con questo manifesto" in msg, msg)
+    # Letture vuote (P1 e P4): gli esempi di accettazione e il primo test di partenza
+    v = F(manifesto={"permessi": {"legge": {"casa": True, "liste": True, "agenda": True},
+                                  "rete": {"pubblica": True}}}, letture="vuote")
+    verifica("letture vuote: la casa senza niente, la lista e l'agenda vuote",
+             v.casa_stato("camera") == {"testo": "", "entita": []}
+             and v.lista_leggi("la lista della spesa")["voci"] == []
+             and v.lista_leggi("regali")["lista"] == "regali"
+             and v.agenda_elenca() == {"voci": [], "numero": 0})
+    tipo, msg = alza(lambda: v.rete_leggi("https://www.altro.it/x"))
+    verifica("letture vuote: la rete è un ErroreCalliope (il servizio non risponde)",
+             tipo == "ErroreCalliope" and "nessuna risposta" in msg, f"{tipo}: {msg}")
+    tipo, msg = alza(lambda: v.casa_comando("accendi"))
+    verifica("letture vuote: il controllo dei permessi resta, senza il consiglio di negate "
+             "(il test può essere in sola lettura)", tipo == "ErroreDelTest"
+             and "negate" not in msg, msg)
+    verifica("letture vuote: una risposta preparata vale ancora",
+             F(letture="vuote", manifesto=False, risposte={"casa_stato": {"testo": "20"}})
+             .casa_stato("x") == {"testo": "20"})
     senza = F(manifesto={"nome": "x"}, risposte={"casa_stato": {"testo": "t"}})
     verifica("un manifesto senza «permessi» non dà niente, come alla porta",
              alza(lambda: senza.casa_stato("camera"))[0] == "ErroreDelTest")
@@ -263,6 +307,102 @@ def prova_stessa_regola():
                       "regali", "")))
 
 
+# Il generatore a caso (prima revisione della PR #231, P6): la forma di normalizza_permessi,
+# anche non valida (chiavi sconosciute, elenchi lunghi, host di casa, flussi senza lettura,
+# il formato del 04/10), con un seme fisso. Una regola nuova della porta o un campo nuovo che
+# la griglia non ha li trova qui
+_STANZE = ["camera", "cucina", "Salotto", "ingresso", "x" * 41, ""]
+_LISTE = ["spesa", "La lista della spesa", "regali", "Cose da fare", "*"]
+_HOST = ["api.esempio.it", "API.Esempio.it.", "api.prezzi.it", "casa.local", "x", 5,
+         "www.altro.it"]
+
+
+def _nomi_a_caso(rnd, nomi):
+    return rnd.choice([True, False, None, rnd.choice(nomi), 3,
+                       rnd.sample(nomi, rnd.randint(1, 3)), [rnd.choice(nomi)] * 11,
+                       {"stanze": rnd.sample(nomi, 2)}])
+
+
+def permessi_a_caso(rnd):
+    if rnd.random() < 0.15:
+        p = {"casa": rnd.choice([["leggi"], ["comanda"], ["leggi", "comanda"], "leggi", ["x"]]),
+             "liste": rnd.choice([[], ["leggi"], ["scrivi"], ["leggi", "scrivi"]]),
+             "rete": rnd.choice([[], ["api.esempio.it"], ["casa.local"], ["a.it"] * 6]),
+             "rete_invia": rnd.random() < 0.4, "schermi": rnd.random() < 0.5,
+             "dati": rnd.random() < 0.5}
+        if rnd.random() < 0.1:
+            p["altro"] = True
+        return p
+    p = {}
+    if rnd.random() < 0.7:
+        p["legge"] = {k: (_nomi_a_caso(rnd, _STANZE if k == "casa" else _LISTE)
+                          if k in ("casa", "liste") else rnd.random() < 0.5)
+                      for k in rnd.sample(["casa", "liste", "agenda", "dati"], rnd.randint(0, 4))}
+    if rnd.random() < 0.7:
+        p["scrive"] = {k: (_nomi_a_caso(rnd, _STANZE if k == "casa" else _LISTE)
+                           if k in ("casa", "liste") else rnd.random() < 0.5)
+                       for k in rnd.sample(["casa", "liste", "agenda", "dati", "schermi"],
+                                           rnd.randint(0, 5))}
+    if rnd.random() < 0.6:
+        p["rete"] = rnd.choice([
+            {"pubblica": rnd.random() < 0.4, "host": rnd.sample(_HOST, rnd.randint(0, 2)),
+             "post": rnd.random() < 0.4},
+            {"host": ["a.it"] * 6}, rnd.sample(_HOST[:3], 1), "x", {"porta": 80}])
+    if rnd.random() < 0.4:
+        p["invia"] = [{"dati": rnd.choice(["casa", "agenda", "liste", "liste:spesa",
+                                            "liste:regali", "foto", "casa:x"]),
+                       "host": rnd.choice(_HOST), "metodo": rnd.choice(["GET", "POST", "PUT"])}
+                      for _ in range(rnd.randint(1, 2))]
+    if rnd.random() < 0.05:
+        p["concessioni"] = {}
+    if rnd.random() < 0.05:
+        p.setdefault("legge", {})["foto"] = True
+    return p
+
+
+RICHIESTE_CASO = RICHIESTE + [
+    ("casa_comando", {"comando": "apri la porta dell'ingresso"}),
+    ("casa_stato", {"cosa": "luci del salotto"}),
+    ("rete_leggi", {"url": "https://API.esempio.it/x"}),
+    ("rete_invia", {"url": "https://api.prezzi.it/ordini", "dati": {"a": 1}}),
+]
+
+
+def prova_a_caso():
+    sezione("1c. la stessa regola della porta, a caso con un seme fisso")
+    import random
+    rnd = random.Random(228)
+    diversi, n, validi = [], 0, 0
+    for _ in range(1500):
+        perm = permessi_a_caso(rnd)
+        try:
+            mf.normalizza_permessi(perm)
+            validi += 1
+        except mf.ManifestoNonValido:
+            pass
+        verifica_valido = (not _ospite.motivo_permessi(perm)) == _valido(perm)
+        if not verifica_valido:
+            diversi.append(("validità", perm))
+        for azione, args in rnd.sample(RICHIESTE_CASO, 6):
+            n += 1
+            v = gr.valuta_porta(azione, args, perm, gr.StatoEsecuzione())
+            porta_nega = v.classe == gr.VIETATA and v.regola in REGOLE_PERMESSO
+            if porta_nega != bool(_ospite.permesso_mancante(azione, args, perm)):
+                diversi.append((perm, azione, args, v.regola))
+    verifica(f"a caso: CalliopeFinta nega quello che la porta vieta, anche con i manifesti non "
+             f"validi ({n} richieste, {validi} manifesti validi su 1500)", not diversi,
+             str(diversi[:2]))
+    verifica("…e ci sono manifesti dei due tipi", 200 < validi < 1300, str(validi))
+
+
+def _valido(perm):
+    try:
+        mf.normalizza_permessi(perm)
+        return True
+    except mf.ManifestoNonValido:
+        return False
+
+
 # ═══════════════════════════ 2. valida con tutti gli errori ═══════════════════════════
 
 BUONO = {"nome": "meteo_domani", "titolo": "Meteo di domani",
@@ -316,6 +456,29 @@ def prova_valida():
                               titolo=None))
     verifica("un campo che manca ha il suo errore, senza un doppione dal controllo dei testi",
              len(lista) == 2 and "«titolo»" in lista[0] and "cosa_fa.verbo" in lista[1], msg)
+    msg, lista = _errore(dict(BUONO, input={"type": "object", "properties": {
+        "a": {"type": "string", "enum": ["sempre", "ok"]},
+        "b": {"type": "string", "enum": ["usa tool", "ok"]}}}))
+    verifica("i valori di due input sbagliati: due errori", len(lista) == 2
+             and "«a»" in lista[0] and "«b»" in lista[1], msg)
+    msg, lista = _errore(dict(BUONO, limiti=[1], livello="x"))
+    verifica("«limiti» che non è un oggetto, con un altro errore", len(lista) == 2
+             and "«limiti» deve essere un oggetto" in msg, msg)
+    msg, lista = _errore(dict(BUONO, limiti={"tempo_s": "dieci"}, livello="x"))
+    verifica("«limiti»: numeri, con un altro errore", len(lista) == 2 and "«limiti»: numeri" in msg,
+             msg)
+    from calliope.agenti.scheletri import file_gioco
+    gioco = json.loads(file_gioco(1, 2, "Le porte magiche")["manifesto.json"])
+    verifica("il manifesto del gioco di partenza passa", _errore(gioco)[0] is None,
+             str(_errore(gioco)[0]))
+    msg, lista = _errore(dict(gioco, permessi={"legge": {"foto": True}}))
+    verifica("con i permessi sbagliati e la scheda giusta: un errore solo, senza crash",
+             len(lista) == 1 and "foto" in msg, msg)
+    rotta = dict(gioco, permessi={"legge": {"foto": True}},
+                 scheda=dict(gioco["scheda"], tipo="film"))
+    msg, lista = _errore(rotta)
+    verifica("con i permessi sbagliati la scheda si controlla lo stesso: i due errori insieme",
+             len(lista) == 2 and "foto" in msg and "tipo" in lista[1], msg)
     verifica("controlla_testi resta il primo motivo",
              mf.controlla_testi(mf.valida(BUONO)) is None
              and mf.controlla_testi({"descrizione": "Dice il meteo.", "titolo": ""})
@@ -340,6 +503,23 @@ CONVERTITORE = '''def esegui(dati, calliope):
 '''
 CON_CASA = '''def esegui(dati, calliope):
     t = calliope.casa_stato("temperatura in camera")
+    return {"da_dire": t["testo"]}
+'''
+LEGGE_SUBITO = '''from calliope_estensione import ErroreCalliope
+
+
+def esegui(dati, calliope):
+    stato = calliope.casa_stato("temperatura in camera")
+    try:
+        calliope.rete_leggi("https://www.esempio-meteo.it/oggi")
+    except ErroreCalliope:
+        pass
+    return {"da_dire": stato.get("testo") or "Non lo so."}
+'''
+TEMPERATURA = '''def esegui(dati, calliope):
+    t = calliope.casa_stato("temperatura in " + str(dati.get("stanza") or "camera"))
+    if not t.get("testo"):
+        return {"da_dire": "Non lo so.", "trovato": False}
     return {"da_dire": t["testo"]}
 '''
 RISCRITTO = '''import unittest
@@ -388,16 +568,92 @@ def prova_chiama():
     verifica("un'azione non dichiarata nel manifesto: il test fallisce con «è il test»",
              not r["passano"] and "ErroreDelTest: è il test: l'azione «casa_stato»" in r["uscita"],
              r["uscita"][-400:])
+    from calliope.agenti import diagnosi
+    f = diagnosi.fallimenti(r["uscita"])
+    verifica("la diagnosi riconosce ErroreDelTest: «è il test» nei fallimenti in breve",
+             f and "ErroreDelTest: è il test: l'azione «casa_stato»" in f[0]["errore"]
+             and "è il test" in diagnosi.da_uscita(r["uscita"]), str(f))
+    verifica("…e il punto da guardare è il test, non estensione.py",
+             f and f[0]["dove"].startswith("test_estensione.py:"), str(f and f[0]["dove"]))
+    from calliope.agenti import riproduzione as rip
+    verifica("riproduzione: un'azione non dichiarata sulla versione di prima vale (può essere "
+             "il difetto)", f and not rip.strutturale(f[0]), str(f))
     sb.scrivi("manifesto.json", json.dumps({"permessi": {"legge": {"casa": True}}}))
     r = sb.test()
     verifica("contrario: dichiarata nel manifesto, il test passa", r["passano"],
              r["uscita"][-300:])
+    sb.scrivi("test_estensione.py", RISCRITTO.replace(
+        '["risultato"], 2000', '["da_dire"], "x"').replace('chiama({"valore": 2})', 'chiama({})'))
+    r = sb.test()
+    f = diagnosi.fallimenti(r["uscita"])
+    verifica("riproduzione: una lettura che il test nuovo non ha preparato è di struttura",
+             f and "non ha una risposta preparata" in f[0]["errore"] and rip.strutturale(f[0])
+             and rip.solo_struttura(r["uscita"]), str(f))
+
+    # P4: il test di partenza così com'è con un'estensione che legge subito
+    sb = sandbox("partenza-legge")
+    prepara_estensione(sb)
+    sb.scrivi("manifesto.json", json.dumps({"permessi": {"legge": {"casa": True},
+                                                         "rete": {"pubblica": True}}}))
+    sb.scrivi("estensione.py", LEGGE_SUBITO)
+    r = sb.test()
+    verifica("il test di partenza passa con un'estensione che legge subito (letture vuote)",
+             r["passano"] and r["esito"]["eseguiti"] == 1, str(r["esito"]) + r["uscita"][-300:])
+
+    # P1: un esempio di accettazione su un'estensione che legge
+    from calliope.agenti import accettazione as acc
+    an = {"esempi": [{"requisito": 1, "dati": {}, "trovato": False}], "riconosciuti": [],
+          "campo_numero": "risultato"}
+    sb = sandbox("accettazione-legge")
+    prepara_estensione(sb)
+    sb.scrivi("manifesto.json", json.dumps({"permessi": {"legge": {"casa": True}}}))
+    sb.scrivi("estensione.py", TEMPERATURA)
+    sb.scrivi(acc.FILE, acc.test_python(an))
+    r = sb.test(acc.FILE)
+    verifica("accettazione: l'esempio «trovato: false» su un'estensione che legge la casa passa "
+             "(come su main)", r["passano"] and r["esito"]["eseguiti"] >= 1,
+             str(r["esito"]) + r["uscita"][-400:])
+    sb.scrivi("manifesto.json", json.dumps({"permessi": {}}))
+    r = sb.test(acc.FILE)
+    verifica("accettazione: un'azione non dichiarata resta «è il test», senza chiedere di "
+             "cambiare il file in sola lettura", not r["passano"] and "è il test: l'azione "
+             "«casa_stato»" in r["uscita"] and "negate" not in r["uscita"]
+             and "risposte=" not in r["uscita"], r["uscita"][-400:])
+
+
+def prova_manifesto_nel_ciclo():
+    """P3: tutti gli errori del manifesto arrivano nella riga «FALLITO manifesto.json»."""
+    sezione("3b. gli errori del manifesto nel ciclo, interi")
+    from calliope.agenti import ciclo
+    sb = sandbox("manifesto-quattro")
+    m = dict(BUONO, titolo="Meteo del tool", cosa_fa={"verbo": "fornisce", "oggetto": "il meteo"},
+             limiti={"tempo_s": 99},
+             input={"type": "object", "properties": {"citta": {
+                 "type": "string", "description": "la città dell'utente"}}})
+    sb.scrivi("manifesto.json", json.dumps(m))
+    r = ciclo._con_manifesto({"passano": True, "esito": {"eseguiti": 1, "falliti": 0},
+                              "uscita": ""}, sb)
+    riga = r["uscita"].splitlines()[0]
+    verifica("quattro errori, tutti nella riga FALLITO manifesto.json",
+             not r["passano"] and "4 errori" in riga and "1) «cosa_fa.verbo» «fornisce»" in riga
+             and "2) «limiti.tempo_s»" in riga and "3) Il titolo contiene «tool»" in riga
+             and "4) La descrizione di «citta» contiene «utente»" in riga
+             and riga.endswith("(è il controllo della consegna: correggi il manifesto, non i "
+                               "test)"), riga)
+    verifica("…l'elenco dei verbi accorciato nel messaggio, intero in «errori»",
+             "…" in riga.split("2)")[0] and len(riga) < 1600, str(len(riga)))
+    r = ciclo._con_manifesto({"passano": True, "esito": {"eseguiti": 1, "falliti": 0},
+                              "uscita": ""}, sb, consegnabile=lambda s: ciclo.manifesto_non_valido(s))
+    verifica("anche col controllo della consegna", "4) La descrizione di «citta»" in
+             r["uscita"].splitlines()[0], r["uscita"][:200])
 
 
 if __name__ == "__main__":
     prova_finta()
     prova_stessa_regola()
+    prova_a_caso()
     prova_valida()
     prova_chiama()
+    prova_manifesto_nel_ciclo()
     print("\nTutto bene." if not errori else f"\n{errori} errori.")
     sys.exit(1 if errori else 0)
