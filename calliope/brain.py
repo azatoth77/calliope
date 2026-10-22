@@ -1172,6 +1172,8 @@ TURN_CONTEXT_MSG = ("Dati del turno (non ripeterli nella risposta se non te li c
 # sistema dice che sei un ospite» (le frasi di prima, nella stanza o nella conversazione condivisa,
 # erano di una «voce non riconosciuta», e niente diceva che adesso era cambiato). Un dato, non un
 # ordine: «forse la stessa persona» perché non si sa (poteva essere davvero un ospite)
+# Le frasi da ospite «di prima» valgono al più per questi secondi, anche con storia_inattiva_s 0
+VOCE_ORA_MAX_S = 600.0
 VOCE_RICONOSCIUTA_MSG = ("Ora la voce è riconosciuta: parla {nome}. Le frasi di prima qui erano "
                          "di una voce non riconosciuta, trattata da ospite (forse la stessa "
                          "persona): ciò che hai detto allora all'ospite non vale per chi parla "
@@ -4512,35 +4514,51 @@ class Brain:
                 "adesso.")
 
     def _voce_ora_riconosciuta(self) -> str | None:
-        """Il nome di chi parla se è il primo turno di una persona riconosciuta dopo una frase da
-        ospite (voce non riconosciuta, nessun conoscente) su questo Brain (22/10, issue #171).
+        """Il nome di chi parla se è il primo turno di una persona riconosciuta **dalla voce** dopo
+        una frase da ospite (voce non riconosciuta, nessun conoscente) sulla stessa corsia (22/10,
+        issue #171).
 
         Le conversazioni sono una per persona (corsie.py): la frase riconosciuta va nella
-        conversazione della persona, senza le frasi da ospite, ma il modello le vede ancora
-        marcate «voce non riconosciuta» nelle righe della stanza (stanza/contesto.py, etichetta) o,
-        in compagnia, nella conversazione anonima condivisa (_nota_gruppo); e niente diceva che
-        adesso la voce era cambiata. Solo nello stesso luogo (con un Brain solo che segue il
-        satellite attivo, un altro satellite è un'altra stanza) ed entro `storia_inattiva_s` (0:
-        sempre). Il turno da ospite resta segnato fino al turno dopo, qualunque sia: la riga non
-        si ripete. Il verso inverso (una persona, poi un ospite) non ha la riga: «persona: un
-        ospite» basta, e il nome di chi parlava prima non va detto a un ospite. Un dato del
-        turno, mai una regola: permessi e livello restano della voce del turno."""
+        conversazione della persona, senza le frasi da ospite, ma con la stanza nei dati del turno
+        il modello vede ancora lo scambio di prima: «voce non riconosciuta → Calliope» e, dal
+        22/10, «Calliope → voce non riconosciuta» (stanza/contesto.etichetta); niente diceva che
+        adesso la voce era cambiata. Condizioni (revisione della PR #221):
+          - solo con la voce (`identified_by` None o «voce»): non per la zona grigia, la
+            continuità, il profilo più protetto, il minore vicino, lo schermo, un'estensione, dove
+            il nome è una scelta prudente del codice e la riga lo darebbe per certo;
+          - mai nella conversazione anonima condivisa in compagnia: lì la frase «ospite» è di una
+            delle persone presenti, e la nota del gruppo dice che ciò che Calliope ha detto
+            l'hanno sentito tutte;
+          - al più una volta per conversazione (`Conversazione.voce_ora_detta`), non a ogni
+            alternanza;
+          - la stessa corsia (`Brain.satellite`, un Brain per satellite); con il Brain solo che
+            segue il satellite attivo, il luogo;
+          - entro `storia_inattiva_s`, e comunque entro `VOCE_ORA_MAX_S` (anche con 0).
+        Solo in memoria: dopo un riavvio fra le due frasi la riga non c'è. Il verso inverso (una
+        persona, poi un ospite) non ha la riga: «persona: un ospite» basta, e il nome di chi
+        parlava prima non va detto a un ospite. Un dato del turno, mai una regola: permessi e
+        livello restano della voce del turno."""
         sc = getattr(self.tool_ctx, "speaker_ctx", None)
         nome = getattr(sc, "current_speaker", None) or None
         ospite = nome is None and self._speaker_key() is None
         ora = time.monotonic()
-        luogo = getattr(self._c(), "luogo", None)
+        dove = self.__dict__.get("satellite") or ("luogo", getattr(self._c(), "luogo", None))
         prima = self.__dict__.get("_voce_prima")
-        self._voce_prima = (ospite, ora, luogo)
+        self._voce_prima = (ospite, ora, dove)
         if not nome or not isinstance(prima, tuple) or not prima[0]:
             return None
         if not getattr(self.cfg, "voce_ora_riconosciuta", True):
             return None
+        if getattr(sc, "identified_by", None) not in (None, "voce"):
+            return None
+        conv = self._c()
+        if getattr(conv, "condivisa", False) or getattr(conv, "voce_ora_detta", False):
+            return None
         idle = float(getattr(self.cfg, "storia_inattiva_s", 0) or 0)
-        if idle > 0 and ora - float(prima[1]) > idle:
+        finestra = min(idle, VOCE_ORA_MAX_S) if idle > 0 else VOCE_ORA_MAX_S
+        if ora - float(prima[1]) > finestra or prima[2] != dove:
             return None
-        if prima[2] != luogo:
-            return None
+        conv.voce_ora_detta = True
         return str(nome)
 
     def _seal_private(self, start: int):

@@ -1891,10 +1891,13 @@ class Config:
     # Da ospite a voce riconosciuta (22/10, issue #171; caso vero del 18/10 dal telefono in auto:
     # le prime due frasi di chi amministra prese per un ospite, dalla terza riconosciuto, e il
     # modello continuava a dirgli «il sistema dice che sei un ospite»). Al primo turno di una
-    # persona riconosciuta dopo una frase da ospite qui (stesso Brain e luogo, entro
-    # `storia_inattiva_s`) i dati del turno lo dicono una volta: «Ora la voce è riconosciuta:
-    # parla Ada. …» (regola `voce_ora_riconosciuta`). Un dato del turno, non una regola sul
-    # testo; permessi e livello seguono la voce del turno come sempre
+    # persona riconosciuta dalla voce dopo una frase da ospite sulla stessa corsia (entro
+    # `storia_inattiva_s`, al più 10 minuti) i dati del turno lo dicono una volta per
+    # conversazione: «Ora la voce è riconosciuta: parla Ada. …» (regola `voce_ora_riconosciuta`);
+    # mai nella conversazione condivisa in compagnia. Un dato del turno, non una regola sul
+    # testo; permessi e livello seguono la voce del turno come sempre. Accesa di serie senza
+    # ombra: è un contesto del turno che non esegue né ferma azioni, fuori dal metodo della
+    # decisione 0019 nel suo «percorso corto» del 10/10
     voce_ora_riconosciuta: bool = True
     # In compagnia una frase senza il nome giudicata «non rivolta a Calliope» (anche col giudizio
     # in ombra) non passa dal rilevatore di pericolo: le chiacchiere non si giudicano in diretta

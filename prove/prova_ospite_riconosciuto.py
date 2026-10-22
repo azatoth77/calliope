@@ -4,21 +4,30 @@ Prova a secco: da ospite a voce riconosciuta sullo stesso satellite (22/10/2026,
 Caso vero del 18/10 (qui con nomi di fantasia: Carlo amministra, Luca è il minore): dal telefono
 in auto le prime due frasi di chi amministra non sono riconosciute (ospite); dalla terza la voce
 lo riconosce, ma il modello continua a dirgli «il sistema dice che sei un ospite». I dati del
-turno della terza dicevano solo «persona: Carlo, riconosciuta dalla voce», senza il cambio.
+turno della terza dicevano solo «persona: Carlo, riconosciuta dalla voce», senza il cambio, e con
+la stanza nei dati del turno le risposte date all'ospite entravano nella conversazione di Carlo
+come «Calliope: …», senza dire a chi erano rivolte.
 
 - Con le conversazioni per persona (calliope/corsie.py, il flusso vero dei satelliti): due frasi
   da ospite nella conversazione anonima del satellite, poi Carlo riconosciuto dalla voce nella
-  sua conversazione → i dati del turno della terza dicono il cambio, una volta (regola
-  `voce_ora_riconosciuta`); la quarta no. Le frasi da ospite restano nella conversazione
-  anonima, fuori da quella di Carlo.
-- Nella conversazione anonima condivisa in compagnia (passo 0 della decisione 0029): due frasi
-  da ospite, poi Carlo nella stessa conversazione → il cambio e le frasi di prima marcate
-  «voce non riconosciuta» (nota del gruppo).
+  sua conversazione → i dati del turno della terza dicono il cambio (regola
+  `voce_ora_riconosciuta`); la quarta no, e nemmeno un'altra alternanza ospite → Carlo (una volta
+  per conversazione). Le frasi da ospite restano nella conversazione anonima.
+- Con la stanza accesa (`stanza_contesto`, `stanza_contesto_in_storia`: la causa del caso vero):
+  le risposte all'ospite arrivano come «Calliope → voce non riconosciuta: …» e restano così al
+  turno dopo (nella storia, in sola aggiunta, uguali byte per byte); la risposta a Carlo resta
+  «Calliope: …»; il cambio è detto al terzo turno.
+- Revisione della PR #221: nella conversazione anonima condivisa in compagnia nessuna riga (anche
+  alternando); solo con la voce (non zona grigia, profilo più protetto, schermo, estensione); la
+  corsia (un Brain per satellite) e non il luogo del satellite attivo; al più `VOCE_ORA_MAX_S`
+  anche con `storia_inattiva_s: 0`.
 - Contrari: Carlo riconosciuto dall'inizio (nessuna riga in più); la frase da ospite oltre
-  `storia_inattiva_s`; un altro luogo; un conoscente dopo l'ospite; un ospite dopo Carlo (il
-  verso inverso non ha la riga).
+  `storia_inattiva_s`; un altro luogo; un conoscente dopo l'ospite e Carlo dopo il conoscente; un
+  ospite dopo Carlo (il verso inverso non ha la riga); l'etichetta senza `per`, per un conoscente
+  e per la zona grigia; interruttore spento.
 
-La prima e la seconda verifica falliscono su main (950b877).
+Su main (950b877) falliscono il cambio con le corsie, il cambio e le risposte marcate con la
+stanza, le corsie contro il luogo; con un'eccezione sui segni che main non ha.
 """
 
 import os
@@ -59,6 +68,7 @@ class Prof:
 
 
 class Voci:
+    """Carlo amministra; Luca è il minore del profilo più protetto (prova_solo_voce)."""
     def get(self, n):
         return {"Carlo": Prof("carlo-id", "Carlo"), "Luca": Prof("luca-id", "Luca")}.get(n)
 
@@ -72,9 +82,9 @@ class Chi:
     conoscente = None
 
 
-def brain_finto(chiave="ospite:sat:tel"):
+def brain_finto(chiave="ospite:sat:tel", cfg=None):
     from calliope.tools.builtin import build_registry
-    cfg = Config()
+    cfg = cfg or Config()
     b = Brain.__new__(Brain)
     b.cfg, b.tools, b.history = cfg, build_registry(), []
     b.conv = Conversazione(chiave)
@@ -104,11 +114,12 @@ def di(b, testo, chi):
     return "".join(b.stream_reply(testo, chi.current_level))
 
 
-def con_corsie():
+def con_corsie(b=None, chi=None, sat="tel"):
     """Il flusso vero dei satelliti: una conversazione per persona, una anonima per satellite."""
-    b, chi = brain_finto()
+    if b is None:
+        b, chi = brain_finto()
     reg = corsie.RegistroConversazioni(b.cfg)
-    tel = corsie.Corsia("sat:tel", satellite_id="tel", nome="telefono", registro=reg)
+    tel = corsie.Corsia(f"sat:{sat}", satellite_id=sat, nome="telefono", registro=reg)
 
     def turno(testo):
         nome = chi.current_speaker
@@ -161,28 +172,131 @@ def prova_corsie():
                  "Se ti chiedono l'ora")[0], dati(b)[:300])
 
 
+def prova_alternanza_corsie():
+    """Al più una volta per conversazione: ospite, Carlo, ospite, Carlo sullo stesso satellite."""
+    b, chi, tel, turno = con_corsie()
+    visti = []
+    for i, testo in enumerate(("Che tempo fa?", "Aggiungi il latte.", "Chi sei?", "E il pane.")):
+        (carlo if i % 2 else ospite)(chi)
+        turno(testo)
+        visti.append(CAMBIO in dati(b))
+    verifica("ospite, Carlo, ospite, Carlo: la riga una volta sola nella conversazione di Carlo",
+             visti == [False, True, False, False], str(visti))
+
+
 def prova_condivisa():
-    """La conversazione anonima condivisa in compagnia (13/10, passo 0 della decisione 0029)."""
+    """La conversazione anonima condivisa in compagnia (13/10, passo 0 della decisione 0029): la
+    frase «ospite» è di una delle persone presenti; niente riga, anche alternando (revisione
+    della PR #221, P1)."""
     b, chi = brain_finto()
     chi.compagnia = True
+    for n in range(3):
+        ospite(chi)
+        di(b, f"Ci fermiamo a fare benzina? ({n})", chi)
+        carlo(chi, "voce")
+        di(b, f"Sì, alla prossima. ({n})", chi)
+        verifica(f"in compagnia, conversazione condivisa, alternanza {n + 1}: niente riga",
+                 CAMBIO not in dati(b) and "voce_ora_riconosciuta" not in b.last_rules
+                 and "compagnia_anonima_continua" in b.last_rules, dati(b)[-300:])
+    verifica("…le frasi di prima marcate come di una voce non riconosciuta (nota del gruppo)",
+             "dalla più vecchia: voce non riconosciuta, Carlo" in dati(b), dati(b)[-400:])
+
+
+def prova_solo_voce():
+    """Solo con la voce (revisione della PR #221, P2): il nome scelto dal codice per prudenza o
+    da uno schermo non è «la voce riconosciuta»."""
+    for how, nome, caso in (("conversazione", "Carlo", "zona grigia o continuità"),
+                            ("conversazione", "Luca", "profilo più protetto (minore)"),
+                            ("schermo", "Carlo", "scritto da uno schermo"),
+                            ("estensione", "Carlo", "un'estensione")):
+        b, chi = brain_finto()
+        ospite(chi)
+        di(b, "Che tempo fa?", chi)
+        chi.current_speaker, chi.current_level, chi.identified_by = nome, "familiare", how
+        di(b, "Aggiungi il latte.", chi)
+        verifica(f"contrario: {caso} (identified_by «{how}») → nessuna riga",
+                 "Ora la voce è riconosciuta" not in dati(b)
+                 and "voce_ora_riconosciuta" not in b.last_rules, dati(b)[:200])
+    b, chi = brain_finto()
     ospite(chi)
-    di(b, "Hai preso il caricabatterie?", chi)
-    di(b, "Ci fermiamo a fare benzina?", chi)
-    carlo(chi, "conversazione")
-    di(b, "Allora fermiamoci alla prossima.", chi)
-    d3 = dati(b)
-    verifica("in compagnia, nella conversazione condivisa: il cambio nei dati del turno",
-             CAMBIO in d3 and "compagnia_anonima_continua" in b.last_rules
-             and len([m for m in b.history if m["role"] == "user"]) == 3, d3[-500:])
-    verifica("…e le frasi di prima marcate come di una voce non riconosciuta",
-             "dalla più vecchia: voce non riconosciuta, voce non riconosciuta" in d3
-             and [m.get("_chi") for m in b.history if m["role"] == "user"]
-             == ["voce non riconosciuta", "voce non riconosciuta", "Carlo"], d3[-500:])
-    di(b, "Grazie.", chi)
-    verifica("…la riga non si ripete al quarto turno", CAMBIO not in dati(b))
+    di(b, "Che tempo fa?", chi)
+    carlo(chi, None)
+    di(b, "Aggiungi il latte.", chi)
+    verifica("…con identified_by None (la voce, come in _turn_context) la riga c'è",
+             CAMBIO in dati(b))
+
+
+def prova_stanza():
+    """La causa del caso vero: con la stanza nei dati del turno, in sola aggiunta nella storia, le
+    risposte all'ospite entravano nella conversazione di Carlo come «Calliope: …»."""
+    import prova_stanza_storia as PS
+    from calliope.stanza import contesto as ctx_mod
+    cfg = PS.cfg_base(stanza_contesto_in_storia=True)
+    st = PS.nuova_stanza(cfg, sat=1, nome="auto")
+    b, chi = brain_finto(cfg=cfg)
+    b.tool_ctx = type("T", (), {"speaker_ctx": chi, "speakers": PS.Voci(), "stanza": st})()
+    reg = corsie.RegistroConversazioni(cfg)
+    tel = corsie.Corsia("sat:1", satellite_id=1, nome="telefono", registro=reg)
+    t0 = time.time() - 120
+    risposte = ["Il sistema dice che sei un ospite.",
+                "Per aggiornare le impostazioni chiedi a chi gestisce la casa."]
+
+    def turno(testo, inizio, risposta=None):
+        nome = chi.current_speaker
+        who = ({"chi": "persona:carlo-id", "persona": "carlo-id", "nome": "Carlo",
+                "sicurezza": "voce"} if nome else {"chi": "ignoto", "sicurezza": "nessuna"})
+        seq = st.turno_testo(1, None, testo, who, inizio=inizio, fine=inizio + 2)
+        tel.turno(b, nome, chi.identified_by, True, testo,
+                  persona_id="carlo-id" if nome else None)
+        b.stanza_turno = ctx_mod.costruisci(st, 1, cfg, inizio, seq_turno=seq)
+        di(b, testo, chi)
+        if risposta:
+            # Come Ciclo._stanza_esito: a chi rispondeva
+            st.detto(1, risposta, inizio=inizio + 3, fine=inizio + 6,
+                     per={"persona": "carlo-id" if nome else None,
+                          "sicurezza": "voce" if nome else "nessuna"})
+
+    def richiesta() -> str:
+        return "\n".join(str(m.get("content") or "") for m in b.backend.visti[-1])
+    ospite(chi)
+    turno("Aggiungi il latte alla lista.", t0, risposte[0])
+    turno("Perché no?", t0 + 20, risposte[1])
+    carlo(chi)
+    turno("Aggiungi il latte alla lista della spesa.", t0 + 40, "Fatto, ho aggiunto il latte.")
+    r3 = richiesta()
+    verifica("stanza: davanti al modello le risposte di prima sono date all'ospite",
+             f"Calliope → voce non riconosciuta: {risposte[0]}" in r3
+             and f"Calliope → voce non riconosciuta: {risposte[1]}" in r3
+             and "voce non riconosciuta → Calliope: Perché no?" in r3, r3[-1500:])
+    verifica("stanza: …e il cambio è detto al terzo turno", CAMBIO in dati(b), dati(b)[-300:])
+    turno("E anche il pane.", t0 + 60)
+    r4 = richiesta()
+    verifica("stanza: al quarto turno le risposte all'ospite restano marcate (nella storia), il "
+             "cambio non si ripete, la risposta a Carlo resta «Calliope: …»",
+             f"Calliope → voce non riconosciuta: {risposte[0]}" in r4 and CAMBIO not in dati(b)
+             and "Calliope: Fatto, ho aggiunto il latte." in r4, r4[-1500:])
+    pezzi = [m.get("content") for m in b.backend.visti[-2]
+             if "fonte: stanza" in str(m.get("content"))]
+    verifica("stanza: i pezzi del terzo turno uguali byte per byte al quarto (cache)",
+             bool(pezzi) and all(p in [m.get("content") for m in b.backend.visti[-1]]
+                                 for p in pezzi))
+    # Contrari dell'etichetta: senza `per` (righe di prima del 22/10), conoscente, zona grigia
+    verifica("contrario: una riga di Calliope senza «per», a un conoscente o alla zona grigia "
+             "resta «Calliope»",
+             ctx_mod.etichetta({"chi": "calliope"}) == "Calliope"
+             and ctx_mod.etichetta({"chi": "calliope", "per": {
+                 "persona": None, "sicurezza": "nessuna", "conoscente": "k1"}}) == "Calliope"
+             and ctx_mod.etichetta({"chi": "calliope", "per": {
+                 "persona": "carlo-id", "sicurezza": "grigia"}}) == "Calliope")
+    st.detto(1, "Ciao Gino.", per={"persona": None, "sicurezza": "nessuna", "conoscente": "k1"})
+    ultima = st.registro(1).righe()[-1]
+    verifica("contrario: la risposta a un conoscente resta «Calliope» (il segno arriva al "
+             "registro)", (ultima.get("per") or {}).get("conoscente") == "k1"
+             and ctx_mod.etichetta(ultima) == "Calliope", str(ultima.get("per")))
 
 
 def prova_contrari():
+    from calliope.brain import VOCE_ORA_MAX_S
     # La frase da ospite è troppo vecchia (oltre storia_inattiva_s)
     b, chi, tel, turno = con_corsie()
     ospite(chi)
@@ -193,7 +307,18 @@ def prova_contrari():
     turno("Aggiungi il latte.")
     verifica("contrario: la frase da ospite oltre storia_inattiva_s → nessuna riga",
              CAMBIO not in dati(b))
-    # Un altro luogo (un altro satellite con lo stesso Brain)
+    # storia_inattiva_s 0: comunque al più VOCE_ORA_MAX_S
+    b, chi, tel, turno = con_corsie()
+    b.cfg.storia_inattiva_s = 0
+    ospite(chi)
+    turno("Che tempo fa domani?")
+    prima = b._voce_prima
+    b._voce_prima = (prima[0], prima[1] - VOCE_ORA_MAX_S - 5, prima[2])
+    carlo(chi)
+    turno("Aggiungi il latte.")
+    verifica("contrario: storia_inattiva_s 0 e l'ospite oltre VOCE_ORA_MAX_S → nessuna riga",
+             CAMBIO not in dati(b))
+    # Un altro luogo (il Brain solo che segue il satellite attivo)
     b, chi, tel, turno = con_corsie()
     luogo = ["cucina"]
     b.luogo_fn = lambda: luogo[0]
@@ -202,8 +327,8 @@ def prova_contrari():
     luogo[0] = "studio"
     carlo(chi)
     turno("Aggiungi il latte.")
-    verifica("contrario: l'ospite era in un altro luogo → nessuna riga", CAMBIO not in dati(b))
-    # Lo stesso luogo: la riga c'è
+    verifica("contrario: Brain solo, l'ospite era in un altro luogo → nessuna riga",
+             CAMBIO not in dati(b))
     b, chi, tel, turno = con_corsie()
     b.luogo_fn = lambda: "cucina"
     ospite(chi)
@@ -211,6 +336,26 @@ def prova_contrari():
     carlo(chi)
     turno("Aggiungi il latte.")
     verifica("…nello stesso luogo sì", CAMBIO in dati(b))
+    # Un Brain per satellite: conta la corsia, non il luogo del satellite attivo (P4)
+    b, chi, tel, turno = con_corsie()
+    b.satellite = "sat:tel"
+    luogo = ["cucina"]
+    b.luogo_fn = lambda: luogo[0]
+    ospite(chi)
+    turno("Che tempo fa domani?")
+    luogo[0] = "studio"            # il satellite attivo è un altro, in un'altra stanza
+    carlo(chi)
+    turno("Aggiungi il latte.")
+    verifica("un Brain per satellite: conta la corsia, non il luogo del satellite attivo",
+             CAMBIO in dati(b))
+    b, chi, tel, turno = con_corsie()
+    b.satellite = "sat:tel"
+    ospite(chi)
+    turno("Che tempo fa domani?")
+    b.satellite = "sat:cucina"
+    carlo(chi)
+    turno("Aggiungi il latte.")
+    verifica("contrario: un'altra corsia → nessuna riga", CAMBIO not in dati(b))
     # Un conoscente dopo l'ospite: resta un ospite (livello), niente riga
     b, chi, tel, turno = con_corsie()
     ospite(chi)
@@ -219,6 +364,10 @@ def prova_contrari():
     di(b, "Mi senti?", chi)
     verifica("contrario: un conoscente dopo l'ospite → nessuna riga",
              "Ora la voce è riconosciuta" not in dati(b))
+    # …e Carlo dopo il conoscente: il turno di prima non era di un ospite
+    carlo(chi)
+    turno("Aggiungi il latte.")
+    verifica("contrario: Carlo dopo un conoscente → nessuna riga", CAMBIO not in dati(b))
     # Interruttore spento
     b, chi, tel, turno = con_corsie()
     b.cfg.voce_ora_riconosciuta = False
@@ -232,8 +381,12 @@ def prova_contrari():
 
 if __name__ == "__main__":
     t0 = time.monotonic()
-    prova_corsie()
-    prova_condivisa()
-    prova_contrari()
+    for f in (prova_corsie, prova_alternanza_corsie, prova_condivisa, prova_solo_voce,
+              prova_stanza, prova_contrari):
+        try:
+            f()
+        except Exception as e:  # noqa: BLE001 — un'eccezione è un errore, le altre parti girano
+            errori += 1
+            print(f"ERR {f.__name__}: eccezione {type(e).__name__}: {e}", flush=True)
     print(f"\n{errori} errori ({time.monotonic() - t0:.1f} s)")
     sys.exit(1 if errori else 0)
