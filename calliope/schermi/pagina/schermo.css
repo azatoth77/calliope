@@ -984,7 +984,8 @@ body.con-sezioni #cronologia { display: none; }
 /* le schede affiancate quando c'è posto, alte quanto serve (la sezione scorre) */
 .pc-centro .elenco { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr)); gap: 1rem; align-items: start; }
 .pc-centro .elenco:empty { display: none; }
-.pc-centro .elenco > .scheda { flex: none; max-height: 70vh; padding: 1rem 1.3rem; animation: none; }
+/* (non sul gioco a tutta la finestra: lì valgono le regole della modalità gioco) */
+.pc-centro .elenco > .scheda:not(.modo-gioco) { flex: none; max-height: 70vh; padding: 1rem 1.3rem; animation: none; }
 .pc-centro .elenco > .scheda.tipo-gioco, .pc-centro .elenco > .scheda.scheda-gioco,
 .pc-centro .elenco > .scheda.tipo-esercizio, .pc-centro .elenco > .scheda.tipo-modulo { max-height: none; }
 .pc-centro .elenco > .scheda h1.titolo { font-size: 1.4rem; }
@@ -998,6 +999,9 @@ body.con-sezioni #cronologia { display: none; }
 .pc-centro .rimando-car .apri-rimando { grid-column: 2; grid-row: 1 / span 2; min-height: 2.75rem; padding: 0 1rem; font: inherit;
   border-radius: 0.7rem; border: 1px solid var(--bordo); background: var(--pannello-2); color: var(--testo); cursor: pointer; }
 .pc-centro [data-posto="adesso/aspetta"] > .scheda { border-color: var(--accento); background: var(--accento-fondo); }
+/* il pulsante «Conversazione» della testa non serve: la conversazione ha la sua colonna */
+body.con-sezioni #chat-apri { display: none; }
+.pc-pulisci { align-self: flex-start; min-height: 2.75rem; padding: 0 1rem; margin-top: 0.6rem; }
 .pc-righe { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 1rem; font-size: 1.05rem; }
 .pc-righe dt { color: var(--tenue); }
 .pc-righe dd { margin: 0; overflow-wrap: anywhere; }

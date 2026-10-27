@@ -926,6 +926,20 @@ progetto vale per tablet e TV personali) e **«Parla» sul PC subito**.
   (Ctrl+Spazio) resta un'issue a parte.
 - **Trascinare un file** sulla pagina c'era già (05/10) e vale su tutta la pagina: il file arriva
   nella casella sotto la conversazione.
+- **Dalla revisione della PR #255**:
+  - la frase cominciata nella finestra di «Parla» vale come il nome (`woke`, punteggio 1, come il
+    tocco del telefono): prima il server la scartava come «risveglio scartato»;
+  - mentre Calliope parla, «Parla» la ferma: il satellite chiude la veglia con «interruzione»
+    (motivo «tocco»);
+  - la conversazione a destra viene dalla pagina (`schedaChat`, evento «chatturni»), non dalla
+    cronologia, che tiene al più 6 schede: prima si svuotava alla settima;
+  - il «Cruscotto» della testa porta in Io, dove sta la sua scheda;
+  - «Pulisci le mie schede» è in Io (c'era solo nella fila, che con le sezioni non c'è);
+  - una scheda nuova lascia la vista dello sviluppo come faceva la scheda grande (timer, lavori,
+    «Torna allo sviluppo»);
+  - il gioco a tutta la finestra non prende le regole della scheda nell'elenco;
+  - sotto i 1100 px la conversazione aperta sopra la pagina è un dialogo, e chiusa rende il fuoco
+    al suo pulsante.
 - **Si torna indietro** con `schermi_sezioni: false` (nel file locale): lo schermo personale del PC
   riprende la scheda grande e la fila, come gli schermi di stanza; il telefono resta a sezioni. Le
   prove del contenuto delle schede sulla pagina del PC (Markdown, cassetto, esercizi, moduli,

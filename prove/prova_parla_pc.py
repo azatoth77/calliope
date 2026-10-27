@@ -16,7 +16,11 @@ personale chiede al server di far ascoltare senza il nome il satellite legato a 
    sessione, 429 oltre 20 al minuto.
 4. **Il satellite** (`Satellite._comando`): «tocco» allunga la finestra senza il nome del Listener
    (`sveglio_fino`, tra 1 e 30 s) e suona l'inizio; il Listener usa la più lontana tra
-   `awake_until` e `sveglio_fino` in tutti e tre i punti in cui decide se la frase è per Calliope.
+   `awake_until` e `sveglio_fino` in tutti e tre i punti in cui decide se la frase è per Calliope,
+   e una frase cominciata nella finestra vale come il nome (`woke`, punteggio 1: il server non la
+   scarta, come il tocco del telefono; revisione della PR #255). Mentre Calliope parla il tocco
+   ferma la voce e la veglia finisce con «interruzione» (motivo «tocco») invece di
+   «veglia_finita»; senza tocco resta «veglia_finita».
 
     python prove/prova_parla_pc.py
 """
@@ -168,9 +172,32 @@ def satellite():
              5.5 <= resto <= 6.5 and finto.suonati == ["inizio"], f"{resto:.2f} {finto.suonati}")
     Client._comando(finto, {"tipo": "tocco", "secondi": 999})
     verifica("satellite: al più 30 s", finto.listener.sveglio_fino - time.monotonic() <= 30.0)
+    # Mentre Calliope parla: la voce si ferma, la veglia finisce con «interruzione»
+    fermate = []
+    finto2 = types.SimpleNamespace(listener=types.SimpleNamespace(sveglio_fino=0.0), traccia=[],
+                                   player=types.SimpleNamespace(ferma=lambda *a: fermate.append(1), saying_name=None),
+                                   _stop_veglia=threading.Event(), _veglia_id=41, _suona=lambda t: None)
+    Client._comando(finto2, {"tipo": "tocco", "secondi": 6})
+    verifica("satellite: il tocco mentre Calliope parla ferma la voce e la veglia",
+             fermate == [1] and finto2._stop_veglia.is_set() and finto2._toccata == 41)
+    mandati = []
+    finto2.listener.watch_for_name = lambda *a, **k: None
+    finto2.wake = object()
+    finto2._manda = lambda **k: mandati.append(k)
+    Client._veglia(finto2, {"id": 41})
+    verifica("satellite: la veglia finisce con «interruzione» (motivo «tocco»)",
+             mandati == [{"tipo": "interruzione", "id": 41, "motivo": "tocco"}], json.dumps(mandati))
+    mandati.clear()
+    Client._veglia(finto2, {"id": 42})
+    verifica("satellite: senza tocco resta «veglia_finita»", mandati == [{"tipo": "veglia_finita", "id": 42}],
+             json.dumps(mandati))
     src = (RADICE / "calliope" / "audio.py").read_text(encoding="utf-8")
+    verifica("Listener: la frase cominciata nella finestra di «Parla» vale come il nome",
+             re.search(r"self\.started_at <= self\.sveglio_fino\):\s*\n\s*self\.woke, self\.wake_score = True, 1\.0", src)
+             is not None)
     usi = len(re.findall(r"max\(awake_until, self\.sveglio_fino\)", src))
-    vecchi = len(re.findall(r"started_at (?:<=|>) awake_until\b", src))
+    # l'unico confronto con awake_until da solo è quello della finestra di «Parla» stessa
+    vecchi = len(re.findall(r"started_at (?:<=|>) awake_until\b(?!\s*\n\s*and self\.started_at <= self\.sveglio_fino)", src))
     verifica("Listener: la finestra più lontana nei tre punti in cui decide, nessun confronto vecchio",
              usi == 3 and vecchi == 0 and "self.sveglio_fino = 0.0" in src, f"{usi} {vecchi}")
 

@@ -37,7 +37,8 @@
   // arrivano turni nuovi (resta in fondo solo se chi legge era in fondo)
   function disegnaChat() {
     const posto = $("pc-chat");
-    const c = (sch() ? sch().cronologia() : []).find((x) => x.tipo === "chat");
+    // Dalla pagina, non dalla cronologia: lì la conversazione esce dopo 6 schede (revisione #255)
+    const c = sch() && sch().schedaChat ? sch().schedaChat() : null;
     if (!c) {
       const p = document.createElement("p");
       p.className = "pc-nota pc-chat-vuota";
@@ -73,8 +74,6 @@
     if (!SEZ) { crea(); SEZ.avvia(); }
     spostaScrivi();
     SEZ.sincronizza(null);
-    // La conversazione si apre da sola nella sua colonna (c'è solo sugli schermi personali)
-    if (sch() && sch().haChat() && !sch().cronologia().some((x) => x.tipo === "chat")) sch().chat();
     disegnaChat();
   }
 
@@ -88,6 +87,8 @@
     if (!SEZ) return;
     SEZ.sincronizza(null);
     if (c.tipo === "chat") { disegnaChat(); return; }
+    // Il cruscotto aperto dal suo pulsante nella testa sta in Io: ci si va (revisione #255)
+    if (c.tipo === "cruscotto") { SEZ.vaiA(SEZ.chiaveDi(c)); return; }
     // Un gioco o gli esercizi che Calliope apre si usano subito: la loro sezione si apre da sola
     if (SEZ.apriSeServe(c)) return;
     if (performance.now() - SEZ.car.toccato > SEZ.opzioni.manoMs) SEZ.mostraIn(SEZ.chiaveDi(c), SEZ.vis.sezione);
@@ -114,11 +115,36 @@
     }
   }
 
-  // Sotto i 1100 px la conversazione si apre e si chiude col suo pulsante
+  // «Pulisci le mie schede» (08/10): due tocchi, come sul telefono; c'era solo nella fila in
+  // basso, che con le sezioni non c'è (revisione #255)
+  let pulisciArmato = 0;
+  async function pulisci() {
+    const b = $("pc-pulisci"), esito = $("pc-pulisci-esito");
+    if (Date.now() >= pulisciArmato) {
+      pulisciArmato = Date.now() + 4000;
+      metti(b, "Clicca di nuovo per pulire");
+      setTimeout(() => { if (Date.now() >= pulisciArmato) metti(b, "Pulisci le mie schede"); }, 4100);
+      return;
+    }
+    pulisciArmato = 0;
+    b.disabled = true;
+    const r = sch() ? await sch().pulisci() : { ok: false };
+    b.disabled = false;
+    metti(b, "Pulisci le mie schede");
+    metti(esito, r.ok ? (r.frase || "Schede tolte.") : (r.errore || "Non ci sono riuscita: riprova."));
+  }
+
+  // Sotto i 1100 px la conversazione si apre e si chiude col suo pulsante, sopra la pagina come
+  // un dialogo; chiusa, il fuoco torna al pulsante
   function conversazione(aperta) {
+    const prima = document.body.classList.contains("conv-aperta");
     document.body.classList.toggle("conv-aperta", aperta);
     $("pc-conv-apri").setAttribute("aria-expanded", aperta ? "true" : "false");
+    const sopra = getComputedStyle($("pc-conv")).position === "fixed";
+    if (sopra && aperta) { $("pc-conv").setAttribute("role", "dialog"); $("pc-conv").setAttribute("aria-modal", "true"); }
+    else { $("pc-conv").removeAttribute("role"); $("pc-conv").removeAttribute("aria-modal"); }
     if (aperta) { const ch = $("pc-conv-chiudi"); if (ch) ch.focus({ preventScroll: true }); }
+    else if (prima) { try { $("pc-conv-apri").focus({ preventScroll: true }); } catch (e) { /* niente */ } }
   }
 
   document.addEventListener("calliope:pc", (ev) => suPc(ev.detail));
@@ -127,17 +153,15 @@
   document.addEventListener("calliope:nascoste", (ev) => { if (SEZ) SEZ.applicaNascoste(ev.detail); });
   document.addEventListener("calliope:aspetto", (ev) => window.CalliopeSezioni.disegnaAccenti(ev.detail, $("accenti"), $("io-aspetto")));
   document.addEventListener("calliope:scrivi", () => requestAnimationFrame(spostaScrivi));
-  // La conversazione disponibile (anche dopo l'accesso): si apre nella sua colonna
-  document.addEventListener("calliope:chat", (ev) => {
-    if (!SEZ || !(ev.detail || {}).attiva) return;
-    if (sch() && !sch().cronologia().some((x) => x.tipo === "chat")) sch().chat();
-    disegnaChat();
-  });
+  // La conversazione disponibile o con turni nuovi: nella sua colonna
+  document.addEventListener("calliope:chat", () => { if (SEZ) disegnaChat(); });
+  document.addEventListener("calliope:chatturni", () => { if (SEZ) disegnaChat(); });
   // Un gioco chiuso esce subito da Adesso
   document.addEventListener("calliope:gioco", (ev) => { if (SEZ && !(ev.detail || {}).partita) requestAnimationFrame(() => SEZ.disponi()); });
 
   document.addEventListener("DOMContentLoaded", () => {
     $("pc-parla").addEventListener("click", parla);
+    $("pc-pulisci").addEventListener("click", pulisci);
     $("accenti").addEventListener("click", (ev) => window.CalliopeSezioni.suAccento(ev, $("accento-esito")));
     $("pc-conv-apri").addEventListener("click", () => conversazione(!document.body.classList.contains("conv-aperta")));
     $("pc-conv-chiudi").addEventListener("click", () => conversazione(false));

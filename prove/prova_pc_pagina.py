@@ -20,6 +20,9 @@ schermi e dei satelliti veri su 127.0.0.1, un satellite finto legato allo scherm
   pulsante, che la apre sopra la pagina; Esc la chiude), 700×900 (la barra in basso): la pagina
   non scorre, parti che non si sovrappongono, niente testo fuori dai contenitori della barra e
   della voce, contrasto AA, clic ≥ 44 px;
+- con la configurazione di serie (revisione della PR #255): la conversazione a destra con i turni
+  dell'archivio resta anche dopo otto schede e prende i turni nuovi; il «Cruscotto» della testa
+  porta in Io con la scheda; «Pulisci le mie schede» in Io con due clic;
 - nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> gli screenshot.
 """
 
@@ -121,7 +124,17 @@ MISURA = r"""(() => {
 
 
 def avvia_server():
-    cfg, srv, hub, web = PTS.avvia(TMP / "server")
+    # Quello del cruscotto (chi amministra, il cruscotto vero) con le sezioni accese, com'è di
+    # serie, e l'archivio delle conversazioni per la colonna a destra
+    import prova_cruscotto_pagina as PCP
+    from calliope.conversazioni import ArchivioConversazioni
+    PCP.TMP = TMP
+    cfg, srv, hub, web = PCP.avvia()
+    cfg.schermi_sezioni = True
+    arch_conv = ArchivioConversazioni(TMP / "conversazioni.db", giorni=30, avvia=False, log=lambda m: None)
+    hub.chat_fonte = arch_conv
+    arch_conv.su_turni[:] = [hub.chat_nuovi]
+    hub.arch_conv = arch_conv
     pc = CollFinto(5, "studio")
     srv.collegati.append(pc)
     arch = hub.archivio
@@ -207,6 +220,8 @@ def personale(exe, srv, hub, web, pc, t_pc):
         ok = aspetta(lambda: "appunti.txt" in (p.valuta("(document.querySelector('#pc-conv .allegato-info')||{}).textContent") or ""), 3)
         verifica("un file trascinato sulla pagina arriva nella casella", bool(ok))
         hub.conversazioni.chiudi()
+        conversazione_a_destra(p, hub)
+        cruscotto_e_pulisci(p, hub)
         # Le disposizioni
         for w, h, cosa in ((1440, 900, "tre colonne"), (1100, 800, "tre colonne"), (1000, 760, "conversazione dietro il pulsante"),
                            (700, 900, "barra in basso")):
@@ -240,6 +255,51 @@ def personale(exe, srv, hub, web, pc, t_pc):
         verifica("schermo personale: nessun errore JS né CSP", not errori, "; ".join(errori)[:300])
     finally:
         p.chiudi()
+
+
+def turno(domanda, risposta, t):
+    return [{"role": "user", "content": domanda, "_turno": {"t": t, "luogo": "Studio", "canale": "voce"}},
+            {"role": "assistant", "content": risposta}]
+
+
+def conversazione_a_destra(p, hub):
+    """La conversazione resta nella sua colonna anche quando dalla cronologia (al più 6 schede)
+    escono le schede vecchie, e prende i turni nuovi."""
+    from calliope.conversazione import Conversazione, turni
+    from calliope.schermi import Mittente, schede
+    dario = Mittente(persona="dario", nome="Dario", livello="amministra", certo=True)
+    conv = Conversazione("persona:dario")
+    conv.luogo = "studio"
+    t0 = time.time() - 120
+    hub.arch_conv.archivia(conv, turni(turno("Che ore sono?", "Sono le sei.", t0)), "dario", "Dario", ospite=False)
+    conta = "document.querySelectorAll('#pc-chat .conv-turno').length"
+    ok = aspetta(lambda: (p.valuta(conta) or 0) >= 1, 8)
+    verifica("conversazione: i turni dell'archivio nella colonna a destra", bool(ok), str(p.valuta(conta)))
+    for i in range(8):
+        hub.invia(schede.calcolo(f"{i} + 1", str(i + 1)), dario)
+        time.sleep(0.08)
+    time.sleep(0.5)
+    verifica("conversazione: resta a destra dopo otto schede", (p.valuta(conta) or 0) >= 1, str(p.valuta(conta)))
+    hub.arch_conv.archivia(conv, turni(turno("Che ore sono?", "Sono le sei.", t0) + turno("E domani?", "Domani piove.", t0 + 30)),
+                           "dario", "Dario", ospite=False)
+    ok = aspetta(lambda: (p.valuta(conta) or 0) >= 2, 8)
+    verifica("conversazione: prende i turni nuovi", bool(ok), str(p.valuta(conta)))
+
+
+def cruscotto_e_pulisci(p, hub):
+    P = "window.calliopePC"
+    ok = aspetta(lambda: p.valuta("!!document.getElementById('cruscotto-apri')"), 8)
+    clic(p, "#cruscotto-apri")
+    ok2 = aspetta(lambda: (p.valuta(f"{P}.stato()") or {}).get("sezione") == "io"
+                  and p.valuta("!!document.querySelector('#sez-io .tipo-cruscotto')"), 10)
+    verifica("cruscotto: il pulsante della testa porta in Io, con la scheda", bool(ok) and bool(ok2))
+    verifica("pulisci: «Pulisci le mie schede» in Io", p.valuta("!document.getElementById('pc-pulisci').hidden"))
+    clic(p, "#pc-pulisci")
+    aspetta(lambda: "nuovo" in (p.valuta("document.getElementById('pc-pulisci').textContent") or ""), 2)
+    clic(p, "#pc-pulisci")
+    ok = aspetta(lambda: (p.valuta("document.getElementById('pc-pulisci-esito').textContent") or "") != "", 6)
+    verifica("pulisci: due clic, l'esito detto", bool(ok), p.valuta("document.getElementById('pc-pulisci-esito').textContent"))
+    p.valuta(f"{P}.vai('#/adesso'); 1")
 
 
 def main() -> int:

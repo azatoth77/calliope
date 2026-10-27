@@ -385,6 +385,11 @@ class Listener:
                         misura.frame_voce = 1        # il frame che ha fatto partire la frase
                         self.started_at = time.monotonic() - len(preroll) * frame_ms / 1000
                         self.woke, self.wake_score = False, 0.0
+                        # Cominciata nella finestra di «Parla» (27/10): vale come il nome, come
+                        # il tocco del telefono, così il server non la scarta (revisione #255)
+                        if (wake is not None and self.started_at > awake_until
+                                and self.started_at <= self.sveglio_fino):
+                            self.woke, self.wake_score = True, 1.0
                     continue
 
                 speech.append(frame)

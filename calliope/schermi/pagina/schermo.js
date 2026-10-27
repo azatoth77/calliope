@@ -298,6 +298,8 @@
     chiudiPartita(p) { if (p) chiudiGiocoDaTe(String(p)); },
     // L'accento (27/10): quello in uso e la scelta da Io › Aspetto del telefono
     aspetto() { return S.aspetto || null; },
+    // La conversazione per la colonna del PC personale, fuori dalla cronologia (27/10)
+    schedaChat() { return S.chatOk ? schedaChat() : null; },
     // «Parla» sul PC personale (27/10, passo 1b): il satellite legato a questo schermo ascolta
     // senza il nome
     async parla() {
@@ -693,7 +695,15 @@
     if (CAROSELLO) { emetti("mostra", { scheda: c, segnale }); return; }
     // Con le sezioni la scheda va nella sua sezione; il centro torna alle sezioni (lascia la
     // vista dello sviluppo, che sta in #principale sopra di loro)
-    if (S.sezioni) { $("principale").replaceChildren(); emetti("mostra", { scheda: c, segnale }); return; }
+    if (S.sezioni) {
+      $("principale").replaceChildren();
+      document.body.classList.remove("in-vista-sviluppo");
+      emetti("mostra", { scheda: c, segnale });
+      aggiornaTimer();
+      aggiornaLavori();
+      segnaTorna();
+      return;
+    }
     const m = $("principale");
     const vecchia = m.querySelector(":scope > article.scheda");
     const nuova = costruisci(c);
@@ -1701,6 +1711,9 @@
 
   // La scheda già aperta (nella cronologia, mostrata o nel carosello) prende i turni nuovi
   function aggiornaChat() {
+    // Il PC personale a sezioni (27/10) la tiene sempre nella sua colonna, anche quando esce
+    // dalla cronologia (al più 6 schede): i turni nuovi arrivano lì comunque (revisione #255)
+    if (S.sezioni && S.chatOk) emetti("chatturni", { scheda: schedaChat() });
     if (!chatAperta()) return;
     const c = Object.assign(schedaChat(), { sposta: false });
     aggiungiCronologia(c);

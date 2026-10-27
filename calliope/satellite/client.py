@@ -857,6 +857,13 @@ class Satellite:
             # ascolta senza il nome, come «Parla» del telefono; il suono d'inizio lo dice
             secondi = max(1.0, min(30.0, float(m.get("secondi") or 8.0)))
             self.listener.sveglio_fino = time.monotonic() + secondi
+            # Mentre Calliope parla il tocco la interrompe, come sul telefono: la voce si ferma
+            # subito e la veglia finisce con «interruzione» (revisione della PR #255)
+            wid = getattr(self, "_veglia_id", None)
+            if wid is not None:
+                self._toccata = wid
+                self.player.ferma()
+                self._stop_veglia.set()
             self._suona("inizio")
         elif t == "veglia":
             self._avvia(self._veglia, m)
@@ -984,6 +991,7 @@ class Satellite:
 
     def _veglia(self, m: dict):
         wid = m["id"]
+        self._veglia_id = wid               # «tocco» mentre Calliope parla la interrompe (27/10)
         voice_ok = None
         if m.get("livello_b"):
             def voice_ok(audio, wid=wid):
@@ -1005,8 +1013,14 @@ class Satellite:
             self.player.ferma()
             self._seed = seed
             self._manda(tipo="interruzione", id=wid, motivo="nome sentito")
+        elif getattr(self, "_toccata", None) == wid:
+            # «Parla» dalla pagina mentre Calliope parlava (27/10): come il tocco del telefono
+            self._toccata = None
+            self._manda(tipo="interruzione", id=wid, motivo="tocco")
         else:
             self._manda(tipo="veglia_finita", id=wid)
+        if getattr(self, "_veglia_id", None) == wid:
+            self._veglia_id = None
 
     # ── aggiornamenti (aggiorna.py) ──
     QUIETE_S = 20.0                     # niente voce né frasi da tanto: si può riavviare
