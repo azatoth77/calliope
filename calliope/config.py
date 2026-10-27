@@ -919,6 +919,14 @@ class Config:
     schermi_scritto: bool = True
     # Anche dagli schermi di stanza (non personali): lì chi scrive conta come un ospite
     schermi_scritto_stanza: bool = False
+    # «Parla» sulla pagina dello schermo personale di un PC satellite (27/10, passo 1b del
+    # telefono a sezioni): per quanti secondi il satellite ascolta senza il nome, come «Parla»
+    # del telefono; la frase cominciata in tempo arriva intera
+    schermi_parla_s: float = 8.0
+    # Lo schermo personale sulla pagina degli schermi (il PC che fa da satellite) a sezioni come
+    # il telefono (27/10, passo 1b): false lo riporta alla scheda grande e alla fila di prima,
+    # come gli schermi di stanza. Il telefono è a sezioni comunque
+    schermi_sezioni: bool = True
     # Caratteri al massimo di un testo scritto, e invii al minuto per schermo (testo e moduli)
     schermi_scritto_max: int = 500
     schermi_scritto_al_minuto: int = 12
@@ -3393,7 +3401,7 @@ SEZIONI: dict[str, list[str]] = {
                 "schermi_cronologia_cartella", "schermi_cronologia_giorni",
                 "schermi_cronologia_max", "schermi_cronologia_mb", "schermi_chat_turni",
                 "schermi_nomi", "schermi_tls_cert", "schermi_tls_chiave",
-                "schermi_senza_tls", "schermi_scritto", "schermi_scritto_stanza",
+                "schermi_senza_tls", "schermi_scritto", "schermi_scritto_stanza", "schermi_parla_s", "schermi_sezioni",
                 "schermi_scritto_max", "schermi_scritto_al_minuto", "schermi_moduli_s",
                 "schermi_scarica_s",
                 "telefono_enabled", "telefono_web"],

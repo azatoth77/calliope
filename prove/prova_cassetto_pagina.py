@@ -183,6 +183,9 @@ def main() -> int:
     cfg = Config()
     cfg.config_dir = str(TMP)
     cfg.memory_db = str(TMP / "memoria.db")
+    # Il contenuto delle schede sulla pagina del PC si prova con la vista di prima (la scheda
+    # grande): la disposizione a sezioni dello schermo personale la prova prova_pc_pagina (27/10)
+    cfg.schermi_sezioni = False
     hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db), log=lambda m: None)
     web = ServerSchermi(hub, "127.0.0.1", PTP.porta_libera(), attesa_porta_s=5).avvia()
     hub.server = web

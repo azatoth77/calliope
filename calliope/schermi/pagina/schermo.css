@@ -910,3 +910,142 @@ body.in-vista-sviluppo #cronologia { display: none; }     /* «Vista normale» r
 .trascrizione-avviso summary { cursor: pointer; font-weight: 600; }
 .trascrizione-avviso p { margin: 0.4rem 0; }
 .trascrizione-avviso p.segnale { border-left: 0.3rem solid currentColor; padding-left: 0.6rem; }
+
+/* ───────────────── lo schermo personale del PC a sezioni (27/10, passo 1b) ─────────────────
+   docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md § 3.6. Solo sugli schermi personali
+   (body.con-sezioni, da schermo.js dopo l'accesso): a sinistra le sezioni e la voce con «Parla»,
+   al centro la sezione (la vista dello sviluppo di #principale sopra), a destra la conversazione.
+   Sotto i 1100 px la conversazione dietro un pulsante; sotto i 760 px la barra in basso. */
+/* Sul PC il testo ha la misura di una pagina da leggere da vicino, non quella della TV */
+html:has(> body.con-sezioni) { font-size: 16px; }
+body.con-sezioni {
+  grid-template-columns: 13.5rem minmax(0, 1fr) minmax(19rem, 27rem);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "barra testa conv" "barra centro conv" "voce centro conv";
+}
+body.con-sezioni #testa { grid-area: testa; grid-row: auto; padding: 0.7rem 1.6rem 0.2rem; }
+body.con-sezioni #principale { grid-area: centro; grid-row: auto; z-index: 2; background: var(--sfondo); }
+body.con-sezioni #principale:empty { display: none; }
+body.con-sezioni #cronologia { display: none; }
+.pc-barra[hidden], .pc-voce[hidden], .pc-centro[hidden], .pc-conv[hidden] { display: none; }
+
+/* le sezioni, in colonna a sinistra */
+.pc-barra {
+  grid-area: barra; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 0.3rem;
+  padding: 1rem 0.7rem; border-right: 1px solid var(--bordo); background: #0b0d10; min-height: 0; overflow-y: auto;
+}
+.pc-barra a {
+  position: relative; display: flex; align-items: center; gap: 0.75rem; min-height: 2.9rem; padding: 0 0.8rem;
+  border-radius: 0.7rem; color: var(--tenue); text-decoration: none; font-size: 1.05rem;
+}
+.pc-barra a:hover { color: var(--testo); background: var(--pannello); }
+.pc-barra a[aria-current="page"] { color: var(--accento); background: var(--accento-tenue); font-weight: 650; }
+.pc-barra a[hidden] { display: none; }
+.pc-barra a:focus-visible { outline: 3px solid var(--accento); outline-offset: -3px; }
+.icona-sez svg { display: block; width: 1.45rem; height: 1.45rem; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; }
+.pc-barra .novita { margin-left: auto; min-width: 1.3rem; height: 1.3rem; padding: 0 0.35rem; box-sizing: border-box;
+  border-radius: 0.7rem; background: var(--accento); color: var(--su-accento); font-size: 0.8rem; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; }
+.pc-barra .novita[hidden] { display: none; }
+
+/* la voce in fondo alla colonna delle sezioni: lo stato e «Parla» */
+.pc-voce { grid-area: voce; display: flex; flex-direction: column; gap: 0.6rem; padding: 0.8rem 0.7rem 1rem;
+  border-right: 1px solid var(--bordo); border-top: 1px solid var(--bordo); background: #0b0d10; }
+.pc-voce .voce { margin: 0; padding: 0.45rem 0.8rem; font-size: 1.05rem; border-radius: 0.9rem; column-gap: 0.6rem;
+  grid-template-columns: auto minmax(0, 1fr) auto; }
+.pc-voce .voce .forma { transform: scale(0.6); transform-origin: left center; margin-right: -0.6rem; }
+.pc-parla {
+  font: inherit; font-size: 1.15rem; font-weight: 700; min-height: 3.2rem; padding: 0.3rem 1rem; border-radius: 0.9rem;
+  border: 2px solid var(--v-ascolta); background: #0b1a12; color: var(--testo); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+}
+.pc-parla[hidden] { display: none; }
+.pc-parla .parla-icona { width: 1.1rem; height: 1.1rem; border-radius: 50%; border: 0.18rem solid var(--v-ascolta); box-sizing: border-box; }
+.pc-parla.in-corso { background: #1a4a2f; }
+.pc-parla.in-corso .parla-icona { background: currentColor; border-color: currentColor; }
+.pc-parla:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+.pc-nota { margin: 0; color: var(--tenue); font-size: 0.95rem; }
+.pc-nota:empty { display: none; }
+
+/* il centro: titolo della sezione e la sezione che scorre */
+.pc-centro { grid-area: centro; min-height: 0; display: flex; flex-direction: column; padding: 0 1.6rem 1rem; }
+.pc-testa { display: flex; align-items: center; gap: 1rem; min-height: 3rem; }
+.pc-testa .sez-titolo { flex: 1; margin: 0; font-size: 1.8rem; line-height: 1.3; }
+.pc-conv-apri { display: none; }
+.pc-centro .sezioni { position: relative; flex: 1; min-height: 0; }
+.pc-centro .sezione { position: absolute; inset: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.8rem;
+  padding: 0.2rem 0.2rem 1rem; scrollbar-width: thin; }
+.pc-centro .sezione[hidden] { display: none; }
+.pc-centro h2.gruppo { margin: 0.6rem 0 0; font-size: 0.85rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--tenue); font-weight: 650; }
+.pc-centro h2.gruppo[hidden], .pc-centro .raccolta[hidden], .pc-centro .raccolta[data-nascosta], .pc-centro .vuoto-sez[hidden] { display: none; }
+.pc-centro .raccolta { display: flex; flex-direction: column; gap: 0.8rem; }
+/* le schede affiancate quando c'è posto, alte quanto serve (la sezione scorre) */
+.pc-centro .elenco { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr)); gap: 1rem; align-items: start; }
+.pc-centro .elenco:empty { display: none; }
+.pc-centro .elenco > .scheda { flex: none; max-height: 70vh; padding: 1rem 1.3rem; animation: none; }
+.pc-centro .elenco > .scheda.tipo-gioco, .pc-centro .elenco > .scheda.scheda-gioco,
+.pc-centro .elenco > .scheda.tipo-esercizio, .pc-centro .elenco > .scheda.tipo-modulo { max-height: none; }
+.pc-centro .elenco > .scheda h1.titolo { font-size: 1.4rem; }
+.pc-centro .vuoto-sez { margin: 0.6rem 0 0; color: var(--tenue); font-size: 1.1rem; line-height: 1.45; max-width: 46rem; }
+.pc-centro .etichetta { flex-wrap: wrap; row-gap: 0.35rem; }
+.pc-centro .etichetta .quando { margin-left: auto; color: var(--tenue); letter-spacing: 0.02em; font-weight: 500; }
+.pc-centro .etichetta .tasto-intero { white-space: nowrap; }
+/* il rimando in Adesso: tipo, titolo e «Apri» */
+.pc-centro .rimando-car { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.1rem 1rem; cursor: pointer; }
+.pc-centro .rimando-car h1.titolo { margin: 0; }
+.pc-centro .rimando-car .apri-rimando { grid-column: 2; grid-row: 1 / span 2; min-height: 2.75rem; padding: 0 1rem; font: inherit;
+  border-radius: 0.7rem; border: 1px solid var(--bordo); background: var(--pannello-2); color: var(--testo); cursor: pointer; }
+.pc-centro [data-posto="adesso/aspetta"] > .scheda { border-color: var(--accento); background: var(--accento-fondo); }
+.pc-righe { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 1rem; font-size: 1.05rem; }
+.pc-righe dt { color: var(--tenue); }
+.pc-righe dd { margin: 0; overflow-wrap: anywhere; }
+
+/* la conversazione, sempre aperta a destra */
+.pc-conv { grid-area: conv; grid-row: 1 / -1; min-height: 0; display: flex; flex-direction: column; gap: 0.6rem;
+  padding: 0.8rem 1rem 1rem; border-left: 1px solid var(--bordo); background: #0b0d10; }
+.pc-conv-testa { display: flex; align-items: center; gap: 0.8rem; }
+.pc-conv-testa h2 { flex: 1; margin: 0; font-size: 1.15rem; color: var(--tenue); font-weight: 650; }
+.pc-conv-chiudi { display: none; }
+.pc-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pc-chat > .scheda { flex: 1; min-height: 0; padding: 0.8rem 1rem; animation: none; }
+.pc-scrivi #scrivi { margin: 0; padding: 0; }
+
+/* Io › Aspetto: una scelta per accento, col nome scritto; quella in uso col bordo pieno (27/10,
+   comune al telefono e al PC) */
+/* Io › Aspetto (27/10): una scelta per accento, col nome scritto; quella in uso col bordo pieno */
+.accenti { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.accenti[hidden], #io-aspetto[hidden] { display: none; }
+.accento-esito:empty { margin: 0; }
+.accento-scelta {
+  font: inherit; font-size: 1.05rem; min-height: 3rem; padding: 0.3rem 0.9rem; border-radius: 1.5rem;
+  display: inline-flex; align-items: center; gap: 0.55rem; cursor: pointer;
+  border: 2px solid var(--bordo); background: var(--pannello); color: var(--testo);
+}
+.accento-scelta .tinta { width: 1.3rem; height: 1.3rem; border-radius: 50%; flex: none; }
+.accento-scelta[aria-pressed="true"] { border-color: var(--accento); font-weight: 700; }
+.accento-scelta[aria-pressed="true"]::after { content: "✓"; color: var(--accento); }
+.accento-scelta:focus-visible { outline: 3px solid var(--v-pensa); outline-offset: 2px; }
+
+/* sotto i 1100 px: la conversazione dietro il suo pulsante, sopra la pagina */
+@media (max-width: 1099px) {
+  body.con-sezioni { grid-template-columns: 12rem minmax(0, 1fr); grid-template-areas: "barra testa" "barra centro" "voce centro"; }
+  .pc-conv-apri { display: inline-flex; min-height: 2.75rem; align-items: center; }
+  .pc-conv { position: fixed; inset: 0 0 0 auto; width: min(28rem, 100%); z-index: 20; box-shadow: -1rem 0 2rem #000a; }
+  body.con-sezioni:not(.conv-aperta) .pc-conv { display: none; }
+  .pc-conv-chiudi { display: inline-flex; min-height: 2.75rem; align-items: center; }
+}
+/* sotto i 760 px: come il telefono, la barra in basso */
+@media (max-width: 759px) {
+  body.con-sezioni { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "testa" "centro" "voce" "barra"; }
+  .pc-barra { grid-row: auto; flex-direction: row; justify-content: space-around; padding: 0.2rem; border-right: 0;
+    border-top: 1px solid var(--bordo); overflow: visible; }
+  .pc-barra a { flex-direction: column; gap: 0.15rem; padding: 0.3rem 0.2rem; font-size: 0.72rem; min-height: 3.5rem;
+    flex: 1 1 auto; justify-content: center; white-space: nowrap; }
+  .pc-barra .novita { position: absolute; top: 0.2rem; left: calc(50% + 0.4rem); margin: 0; }
+  .pc-voce { border-right: 0; flex-direction: row; align-items: center; }
+  .pc-voce .voce { flex: 1; }
+  .pc-centro { padding: 0 1rem 0.6rem; }
+}

@@ -57,6 +57,9 @@ def main() -> int:
         return SALTATA
     cfg = Config()
     cfg.memory_db = str(TMP / "scritto.db")
+    # Il contenuto delle schede sulla pagina del PC si prova con la vista di prima (la scheda
+    # grande): la disposizione a sezioni dello schermo personale la prova prova_pc_pagina (27/10)
+    cfg.schermi_sezioni = False
     cfg.config_dir = str(TMP)
     port = porta_libera()
     hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db))

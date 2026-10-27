@@ -14,8 +14,12 @@
   // esce come evento sul documento («calliope:schede», «calliope:mostra», «calliope:scrivi»,
   // «calliope:scritto») e le schede si costruiscono con window.calliopeSchermo.costruisci
   const CAROSELLO = document.body.dataset.carosello === "1";
+  // Sezioni (27/10, passo 1b): la pagina degli schermi su uno schermo personale (il PC che fa da
+  // satellite) ha le sezioni come il telefono (pc.js e sezioni.js): stessi eventi del carosello.
+  // Gli schermi di stanza restano come prima (decisione del 27/10 sera)
+  const CON_SEZIONI = document.body.dataset.sezioni === "1";
   function emetti(nome, dati) {
-    if (!CAROSELLO) return;
+    if (!CAROSELLO && !S.sezioni) return;
     try { document.dispatchEvent(new CustomEvent("calliope:" + nome, { detail: dati || {} })); }
     catch (e) { console.error(e); }
   }
@@ -91,6 +95,8 @@
     // server lo dice all'accesso, nel benvenuto e con l'evento «scrittura»
     scrittura: { attiva: false, testo: "Di' «Calliope» per scrivermi." },
     capace: false, personale: false, parola: "Calliope",
+    // Le sezioni sullo schermo personale della pagina degli schermi (27/10, passo 1b)
+    sezioni: false,
     // Il proprietario di questo schermo personale amministra (06/10: il cruscotto)
     amministra: false,
     // Quello che si sta scrivendo nei moduli, per id del modulo: resta se la scheda si
@@ -292,6 +298,15 @@
     chiudiPartita(p) { if (p) chiudiGiocoDaTe(String(p)); },
     // L'accento (27/10): quello in uso e la scelta da Io › Aspetto del telefono
     aspetto() { return S.aspetto || null; },
+    // «Parla» sul PC personale (27/10, passo 1b): il satellite legato a questo schermo ascolta
+    // senza il nome
+    async parla() {
+      let r;
+      try { r = await postSessione("/api/parla", {}); }
+      catch (e) { return { ok: false, errore: "Calliope non risponde: riprova tra poco." }; }
+      return { ok: r.status === 200, secondi: r.dati.secondi || 0, errore: r.dati.errore || MESSAGGI[r.status] || "" };
+    },
+    sezioni() { return !!S.sezioni; },
     scegliAccento(nome) { return scegliAccento(nome); },
   };
 
@@ -324,6 +339,11 @@
     S.tentativi = 0;
     S.sessione = r.dati.sessione;
     S.scarto = r.dati.ora_server * 1000 - Date.now();
+    // Le sezioni solo sullo schermo personale, e solo sulla pagina che le ha (non sul telefono:
+    // lì è il carosello di telefono.js)
+    S.sezioni = CON_SEZIONI && !INCORPORATA && !!r.dati.personale && r.dati.sezioni !== false;
+    document.body.classList.toggle("con-sezioni", S.sezioni);
+    emetti("pc", { attiva: S.sezioni, parla: !!r.dati.parla, luogo: r.dati.stanza || "", nome: r.dati.nome || "" });
     if (r.dati.scrittura) S.scrittura = r.dati.scrittura;
     casellaScrivi(!!r.dati.scrivi, !!r.dati.personale);
     impostaAmministra(!!r.dati.amministra);
@@ -671,6 +691,9 @@
     S.corrente = c;
     S.vista = "scheda";
     if (CAROSELLO) { emetti("mostra", { scheda: c, segnale }); return; }
+    // Con le sezioni la scheda va nella sua sezione; il centro torna alle sezioni (lascia la
+    // vista dello sviluppo, che sta in #principale sopra di loro)
+    if (S.sezioni) { $("principale").replaceChildren(); emetti("mostra", { scheda: c, segnale }); return; }
     const m = $("principale");
     const vecchia = m.querySelector(":scope > article.scheda");
     const nuova = costruisci(c);
@@ -2815,9 +2838,11 @@
           esito.textContent = r ? (r.dati.errore || MESSAGGI[r.status] || "Non è andato.") : "Calliope non risponde.";
         }
       });
+      // Il posto della pagina (lo strato del telefono, la colonna della conversazione del PC
+      // personale), se si vede; altrimenti in fondo, sotto la cronologia
       const posto = $("scrivi-posto");
       const dopo = $("cronologia");
-      if (posto) posto.append(f);
+      if (posto && (INCORPORATA || !posto.closest("[hidden]"))) posto.append(f);
       else if (dopo && dopo.parentNode) dopo.after(f); else document.body.append(f);
     }
     $("scrivi-foto").hidden = !personale;
@@ -3516,7 +3541,7 @@
     S.vista = "inattiva";
     const m = $("principale");
     if (m) m.replaceChildren();
-    if (CAROSELLO) { emetti("schede", {}); return; }
+    if (CAROSELLO || S.sezioni) { emetti("schede", {}); return; }
     if (INCORPORATA) { disegnaCronologia(); return; }   // niente orologio grande
     const box = el("section", "inattiva");
     box.append(el("div", "ora", ""));

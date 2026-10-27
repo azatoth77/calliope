@@ -75,6 +75,10 @@ import numpy as np
 # tetto (`taglio_zona_s`, `pausa_breve_ms`, `tetto_duro_s`); `stanza_fine` può avere la chiusura
 # «pausa_breve» (micro-pausa vicino al tetto) e `durante_voce` (gli id delle frasi di Calliope
 # che suonavano, 0 per un segnale senza testo). Un satellite o un server di prima li ignora.
+# Sempre nella versione 3 (27/10, «Parla» sul PC personale): il server manda `tocco` (secondi)
+# quando si tocca «Parla» sulla pagina dello schermo personale legato al satellite; il satellite
+# ascolta senza il nome per quei secondi (Listener.sveglio_fino) e suona l'inizio. Un satellite
+# vecchio lo ignora.
 VERSIONE = 3
 VERSIONI = (1, 2, 3)                   # quelle che il server accetta
 PERCORSO_AUDIO = "/satellite"          # connessione con il token

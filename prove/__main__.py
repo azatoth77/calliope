@@ -231,6 +231,8 @@ A_SECCO = [
     ("prova_telefono_pagina.py", [], "telefono nel browser vero: wake word e VAD come in Python, niente audio senza il nome, voce e barge-in"),
     # ~12 s: abbinamento del telefono che riprende dopo la pagina sospesa (iOS); con Edge o
     # Chromium anche nel browser vero, senza si fa solo la parte a secco
+    ("prova_parla_pc.py", [], "«Parla» sul PC personale (27/10, passo 1b): il satellite legato prende il posto e riceve «tocco», /api/accedi e /api/parla sul server vero (solo schermo personale legato, 403, 409, 401, 429), il satellite allunga la finestra senza il nome (al più 30 s) e il Listener usa la più lontana"),
+    ("prova_pc_pagina.py", [], "schermo personale del PC a sezioni nella pagina vera (27/10, passo 1b): stanza invariata, smistamento di sezioni.js, barra e indietro, «Parla» fino al satellite, casella a destra e file trascinato, tre colonne a 1440 e 1100, conversazione dietro il pulsante a 1000, barra in basso a 700, contrasto e clic, nessun errore JS né CSP"),
     ("prova_aspetto.py", [], "aspetto dei satelliti personali (27/10, passo 1c): accenti con contrasto AA e il lilla di serie anche nei CSS, sezioni nascoste per età (12 anni, il giorno dei 13, senza data), la preferenza salvata e tolta con «svuota», /api/accedi e /api/aspetto sul server vero (personale sì, stanza no, evento a tutte le pagine della persona)"),
     ("prova_sezioni.py", [], "telefono a sezioni (27/10): SEZIONE_DI_TIPO uguale in schede.py e schermo.js, ogni tipo con la sua casa e il suo elenco, la sezione scritta dal server (anche nella scheda dello sviluppo), la regola «viva» per tipo e il router sul frammento (con node)"),
     ("prova_telefono_abbina.py", [], "telefono: abbinamento che riprende (ripresa segreta, token una volta sola, niente orfani), sessione che riprende al ritorno in primo piano"),
@@ -448,6 +450,7 @@ LIVELLO_3 = {
     "prova_esercizi_pagina.py", "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
     "prova_compagnia_pagina.py", "prova_frase_lunga_voce.py", "prova_stanza_voce.py",
     "prova_cdp_orfani.py", "prova_gioco_stato_pagina.py", "prova_fine_turno_voce.py",
+    "prova_pc_pagina.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è

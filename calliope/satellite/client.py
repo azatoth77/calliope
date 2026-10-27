@@ -852,6 +852,12 @@ class Satellite:
         elif t == "sveglia":
             if m.get("id") == self._id_corrente:
                 self._wakeup.set()
+        elif t == "tocco":
+            # «Parla» dalla pagina dello schermo personale (27/10): per qualche secondo si
+            # ascolta senza il nome, come «Parla» del telefono; il suono d'inizio lo dice
+            secondi = max(1.0, min(30.0, float(m.get("secondi") or 8.0)))
+            self.listener.sveglio_fino = time.monotonic() + secondi
+            self._suona("inizio")
         elif t == "veglia":
             self._avvia(self._veglia, m)
         elif t == "fine_veglia":

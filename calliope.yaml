@@ -1302,6 +1302,14 @@ schermi:
   schermi_scritto: true
   # Anche dagli schermi di stanza (non personali): lì chi scrive conta come un ospite
   schermi_scritto_stanza: false
+  # «Parla» sulla pagina dello schermo personale di un PC satellite (27/10, passo 1b del
+  # telefono a sezioni): per quanti secondi il satellite ascolta senza il nome, come «Parla»
+  # del telefono; la frase cominciata in tempo arriva intera
+  schermi_parla_s: 8.0
+  # Lo schermo personale sulla pagina degli schermi (il PC che fa da satellite) a sezioni come
+  # il telefono (27/10, passo 1b): false lo riporta alla scheda grande e alla fila di prima,
+  # come gli schermi di stanza. Il telefono è a sezioni comunque
+  schermi_sezioni: true
   # Caratteri al massimo di un testo scritto, e invii al minuto per schermo (testo e moduli)
   schermi_scritto_max: 500
   schermi_scritto_al_minuto: 12

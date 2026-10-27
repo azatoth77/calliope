@@ -394,44 +394,9 @@ function suMostra(c) {
   if (performance.now() - car.toccato > opzioniVista.manoMs) mostraIn(k, vis.sezione);
 }
 
-// Io › Aspetto (27/10): le scelte dell'accento dal server, quella in uso segnata; un tocco la
-// salva per la persona e vale su tutti i suoi satelliti personali
-function disegnaAccenti(a) {
-  const box = $("accenti");
-  const scelte = (a && Array.isArray(a.scelte)) ? a.scelte : [];
-  box.hidden = !scelte.length;
-  $("io-aspetto").hidden = !scelte.length;
-  if (!scelte.length) return;
-  const firma = scelte.map((x) => x.id).join(",");
-  if (box.dataset.firma !== firma) {
-    box.replaceChildren();
-    for (const x of scelte) {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "accento-scelta";
-      b.dataset.accento = String(x.id);
-      const tinta = document.createElement("span");
-      tinta.className = "tinta";
-      tinta.setAttribute("aria-hidden", "true");
-      if (/^#[0-9a-f]{6}$/i.test(String(x.colore))) tinta.style.background = x.colore;
-      const nome = document.createElement("span");
-      nome.textContent = String(x.nome || x.id);
-      b.append(tinta, nome);
-      box.append(b);
-    }
-    box.dataset.firma = firma;
-  }
-  for (const b of box.querySelectorAll(".accento-scelta")) attr(b, "aria-pressed", b.dataset.accento === a.accento ? "true" : "false");
-}
-
-async function suAccento(ev) {
-  const b = ev.target.closest && ev.target.closest(".accento-scelta");
-  if (!b || !sch()) return;
-  const esito = $("accento-esito");
-  const r = await sch().scegliAccento(b.dataset.accento);
-  // La regione resta nel DOM (role="status": VoiceOver legge i cambi di una regione già lì)
-  metti(esito, r.ok ? "" : (r.errore || "Non ci sono riuscita: riprova."));
-}
+// Io › Aspetto (27/10): il disegno e il tocco sono in ../sezioni.js, comuni col PC
+function disegnaAccenti(a) { window.CalliopeSezioni.disegnaAccenti(a, $("accenti"), $("io-aspetto")); }
+function suAccento(ev) { return window.CalliopeSezioni.suAccento(ev, $("accento-esito")); }
 
 // La modalità In auto (decisione del 27/10: a mano): «In auto» in Adesso e in Io, «Esci» la chiude
 function segnaModo() {

@@ -137,6 +137,8 @@
     // Dove va ogni scheda: [posto nella sua sezione, posto in Adesso o null]
     function postiDi(k, ultima) {
       const c = car.schede[k];
+      // Una scheda che la pagina mostra altrove (la conversazione nella colonna a destra del PC)
+      if (opz.escludi && opz.escludi(k, c)) return [null, null];
       const casa = sezioneDi(c);
       let adesso = null;
       if (k === ultima) adesso = "adesso/risposta";
@@ -396,5 +398,42 @@
     };
   }
 
-  window.CalliopeSezioni = { crea, TITOLI_SEZIONE };
+  // Io › Aspetto (27/10): le scelte dell'accento dal server, quella in uso segnata; un tocco la
+  // salva per la persona e vale su tutti i suoi satelliti personali. Comune al telefono e al PC
+  function disegnaAccenti(a, box, titolo) {
+    const scelte = (a && Array.isArray(a.scelte)) ? a.scelte : [];
+    box.hidden = !scelte.length;
+    if (titolo) titolo.hidden = !scelte.length;
+    if (!scelte.length) return;
+    const firma = scelte.map((x) => x.id).join(",");
+    if (box.dataset.firma !== firma) {
+      box.replaceChildren();
+      for (const x of scelte) {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "accento-scelta";
+        b.dataset.accento = String(x.id);
+        const tinta = document.createElement("span");
+        tinta.className = "tinta";
+        tinta.setAttribute("aria-hidden", "true");
+        if (/^#[0-9a-f]{6}$/i.test(String(x.colore))) tinta.style.background = x.colore;
+        const nome = document.createElement("span");
+        nome.textContent = String(x.nome || x.id);
+        b.append(tinta, nome);
+        box.append(b);
+      }
+      box.dataset.firma = firma;
+    }
+    for (const b of box.querySelectorAll(".accento-scelta")) attr(b, "aria-pressed", b.dataset.accento === a.accento ? "true" : "false");
+  }
+
+  async function suAccento(ev, esito) {
+    const b = ev.target.closest && ev.target.closest(".accento-scelta");
+    if (!b || !sch()) return;
+    const r = await sch().scegliAccento(b.dataset.accento);
+    // La regione resta nel DOM (role="status": VoiceOver legge i cambi di una regione già lì)
+    metti(esito, r.ok ? "" : (r.errore || "Non ci sono riuscita: riprova."));
+  }
+
+  window.CalliopeSezioni = { crea, TITOLI_SEZIONE, disegnaAccenti, suAccento };
 })();
