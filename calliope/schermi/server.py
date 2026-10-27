@@ -7,7 +7,8 @@ e uvicorn 0.54.0 sono `py3-none-any`, come le loro dipendenze (anyio, h11, click
 nessun codice nativo nuovo (principio 4).
 
 Indirizzi:
-  GET  /                         la pagina (kiosk), con i suoi /schermo.css e /schermo.js
+  GET  /                         la pagina (kiosk), con i suoi /schermo.css e /schermo.js (e
+                                 /sezioni.js, le sezioni degli schermi personali: 27/10)
   POST /api/abbinamento          pagina senza token: {codice, richiesta, scade}
   POST /api/abbinamento/stato    «Authorization: Bearer <richiesta>» → attesa | abbinato | scaduto
   POST /api/accedi               «Authorization: Bearer <token>» → {sessione, nome, stanza…}
@@ -225,7 +226,10 @@ def crea_app(hub: Schermi) -> Starlette:
                       # Si scrive solo durante una conversazione a voce (05/10)
                       "scrittura": hub.stato_scrittura(s),
                       # L'accento e le sezioni nascoste a un minore (27/10, aspetto.py)
-                      "aspetto": hub.aspetto_di(s), "nascoste": hub.nascoste_di(s)})
+                      "aspetto": hub.aspetto_di(s), "nascoste": hub.nascoste_di(s),
+                      # «Parla» e le sezioni sul PC personale (27/10, passo 1b)
+                      "parla": hub.parla_possibile(s),
+                      "sezioni": bool(getattr(hub.cfg, "schermi_sezioni", True))})
 
     def in_arresto():
         # Durante l'arresto (ServerSchermi.ferma) niente flussi nuovi: una pagina che si
@@ -900,6 +904,33 @@ def crea_app(hub: Schermi) -> Starlette:
         stato = int(out.pop("_stato", 200))
         return _json(out, stato)
 
+    # ── «Parla» sul PC personale (27/10, passo 1b) ──
+    tocchi_parla: dict[int, list[float]] = {}
+
+    async def parla_api(request: Request):
+        """«Parla» sulla pagina dello schermo personale di un PC satellite: il suo satellite
+        ascolta senza il nome. Sessione in un'intestazione, solo in HTTPS fuori da questo
+        computer (la pagina del satellite passa dal ponte su 127.0.0.1), al più 20 al minuto."""
+        client = request.client.host if request.client else ""
+        if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
+            return _json({"errore": "solo in HTTPS"}, 403)
+        sess = request.headers.get("x-calliope-sessione", "")
+        with lock:
+            sid = sessioni.get(sess) if sess else None
+        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        if schermo is None:
+            return _json({"errore": "sessione non valida"}, 401)
+        ora = time.monotonic()
+        with lock:
+            fatti = [t for t in tocchi_parla.get(schermo["id"], []) if ora - t < 60.0]
+            if len(fatti) >= 20:
+                tocchi_parla[schermo["id"]] = fatti
+                return _json({"errore": "troppi tocchi: aspetta un momento"}, 429)
+            tocchi_parla[schermo["id"]] = fatti + [ora]
+        out = await asyncio.to_thread(hub.parla, schermo)
+        stato = int(out.pop("_stato", 200))
+        return _json(out, stato)
+
     # ── esercizi (08/10, calliope/esercizi/sessione.py) ──
     risposte_es: dict[int, list[float]] = {}
 
@@ -939,6 +970,9 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/", file("index.html", "text/html; charset=utf-8")),
         Route("/schermo.css", file("schermo.css", "text/css; charset=utf-8")),
         Route("/schermo.js", file("schermo.js", "text/javascript; charset=utf-8")),
+        # Le sezioni degli schermi personali (27/10), del telefono e del PC
+        Route("/sezioni.js", file("sezioni.js", "text/javascript; charset=utf-8")),
+        Route("/pc.js", file("pc.js", "text/javascript; charset=utf-8")),
         Route("/api/abbinamento", nuovo_abbinamento, methods=["POST"]),
         Route("/api/abbinamento/stato", stato_abbinamento, methods=["POST"]),
         Route("/api/accedi", accedi, methods=["POST"]),
@@ -959,6 +993,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/gioco", gioco_api, methods=["POST"]),
         Route("/api/esercizio", esercizio, methods=["POST"]),
         Route("/api/aspetto", aspetto_api, methods=["POST"]),
+        Route("/api/parla", parla_api, methods=["POST"]),
         *telefono.rotte(hub),
         # /satellite: il comando per far diventare satellite un PC nuovo (03/10)
         *satellite_web.rotte(hub),

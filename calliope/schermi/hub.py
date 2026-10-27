@@ -635,6 +635,23 @@ class Schermi:
                 prof = None
         return A.nascoste(prof)
 
+    def parla_possibile(self, schermo: dict | None) -> bool:
+        """«Parla» sulla pagina (27/10, passo 1b): uno schermo personale legato a un satellite
+        (il PC che fa da satellite) e il server dei satelliti acceso."""
+        s = schermo or {}
+        return bool(s.get("proprietario") and s.get("satellite") and self.satelliti is not None
+                    and hasattr(self.satelliti, "tocca"))
+
+    def parla(self, schermo: dict) -> dict:
+        """«Parla» dalla pagina: il satellite legato allo schermo ascolta senza il nome.
+        {ok} o {errore, _stato}."""
+        if not self.parla_possibile(schermo):
+            return {"errore": "«Parla» c'è solo sullo schermo personale di un PC satellite", "_stato": 403}
+        secondi = float(getattr(self.cfg, "schermi_parla_s", 8.0) or 8.0)
+        if not self.satelliti.tocca(int(schermo["satellite"]), secondi):
+            return {"errore": "Il satellite di questo PC non è collegato.", "_stato": 409}
+        return {"ok": True, "secondi": secondi}
+
     def scegli_accento(self, schermo: dict, accento: str) -> dict:
         """L'accento scelto da uno schermo personale: salvato per il proprietario e mandato a
         tutte le sue pagine aperte (evento «aspetto»), così vale subito su ogni suo satellite

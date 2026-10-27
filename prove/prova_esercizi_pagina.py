@@ -78,6 +78,9 @@ def avvia():
     from calliope.schermi.server import ServerSchermi
     cfg = Config()
     cfg.config_dir = str(TMP)
+    # Il contenuto delle schede sulla pagina del PC si prova con la vista di prima (la scheda
+    # grande): la disposizione a sezioni dello schermo personale la prova prova_pc_pagina (27/10)
+    cfg.schermi_sezioni = False
     cfg.memory_db = str(TMP / "memoria.db")
     cfg.turn_log_dir = str(TMP / "registro")
     cfg.satellite_porta = 0

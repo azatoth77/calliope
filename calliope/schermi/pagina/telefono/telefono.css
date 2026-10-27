@@ -355,19 +355,7 @@ button.grande:focus-visible, .link:focus-visible, .strato a:focus-visible {
 .telefono .piccolo-bottone { min-height: 3.2rem; }
 
 /* Io: quello che era il menu delle impostazioni */
-/* Io › Aspetto (27/10): una scelta per accento, col nome scritto; quella in uso col bordo pieno */
-.accenti { display: flex; flex-wrap: wrap; gap: 0.6rem; }
-.accenti[hidden], #io-aspetto[hidden] { display: none; }
-.accento-esito:empty { margin: 0; }
-.accento-scelta {
-  font: inherit; font-size: 1.05rem; min-height: 3rem; padding: 0.3rem 0.9rem; border-radius: 1.5rem;
-  display: inline-flex; align-items: center; gap: 0.55rem; cursor: pointer;
-  border: 2px solid var(--bordo); background: var(--pannello); color: var(--testo);
-}
-.accento-scelta .tinta { width: 1.3rem; height: 1.3rem; border-radius: 50%; flex: none; }
-.accento-scelta[aria-pressed="true"] { border-color: var(--accento); font-weight: 700; }
-.accento-scelta[aria-pressed="true"]::after { content: "✓"; color: var(--accento); }
-.accento-scelta:focus-visible { outline: 3px solid var(--v-pensa); outline-offset: 2px; }
+/* Io › Aspetto: in schermo.css, comune col PC (27/10, passo 1b) */
 .menu-riga { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 0.8rem; color: var(--tenue); font-size: 1rem; }
 .menu-riga dt { color: var(--tenue); }
 .menu-riga dd { margin: 0; color: var(--testo); min-width: 0; overflow-wrap: anywhere; }

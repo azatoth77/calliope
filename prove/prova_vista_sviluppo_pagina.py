@@ -269,14 +269,16 @@ def pc(exe, srv, hub, web, svs, lavori):
                  rie[:400])
         # ── vista normale, schermo intero, torna allo sviluppo ──
         clic(p, "#principale [data-svil-esci]")
+        # Con le sezioni (di serie) la scheda del lavoro torna in Adesso, e la vista lascia il centro
         ok = aspetta(lambda: p.valuta("!document.body.classList.contains('in-vista-sviluppo') && "
-                                      "!!document.querySelector('#principale .tipo-lavoro')"), 5)
-        verifica("«Vista normale»: la scheda del lavoro", bool(ok))
+                                      "!document.querySelector('#principale > *') && "
+                                      "!!document.querySelector('#sez-adesso .tipo-lavoro')"), 5)
+        verifica("«Vista normale»: la scheda del lavoro in Adesso", bool(ok))
         verifica("nella scheda normale il codice non si vede",
-                 p.valuta("!document.querySelector('#principale .flusso-chat') && "
-                          "!document.querySelector('#principale pre.anteprima')"))
+                 p.valuta("!document.querySelector('#sezioni .flusso-chat') && "
+                          "!document.querySelector('#sezioni pre.anteprima')"))
         verifica("«Torna allo sviluppo» nella testa", p.valuta("!document.getElementById('torna-svil').hidden"))
-        clic(p, "#principale [data-intero]")
+        clic(p, "#sez-adesso .tipo-lavoro [data-intero]")
         ok = aspetta(lambda: p.valuta("!document.getElementById('strato-intero').hidden && "
                                       "!!document.querySelector('#intero-posto .due-colonne .flusso-chat')"), 5)
         verifica("«Schermo intero» del lavoro: lo strato con le due colonne e il flusso", bool(ok))
@@ -337,7 +339,8 @@ def pc(exe, srv, hub, web, svs, lavori):
         # ── chiusura ──
         svs.chiudi(sv, "uscita")
         ok = aspetta(lambda: p.valuta("!document.body.classList.contains('in-vista-sviluppo') && "
-                                      "(document.querySelector('#principale .svil-chiuso') || {}).textContent"), 5)
+                                      "!document.querySelector('#principale > *') && "
+                                      "(document.querySelector('#sezioni .svil-chiuso') || {}).textContent"), 5)
         verifica("sviluppo chiuso: lo schermo esce dalla vista", bool(ok), ok)
         verifica("…e «Torna allo sviluppo» sparisce", p.valuta("document.getElementById('torna-svil').hidden"))
         # Lo schema chiaro del sistema: la pagina resta scura (ha un tema solo), leggibile
@@ -456,6 +459,9 @@ def main() -> int:
     from calliope.sviluppo import Sviluppi
     try:
         cfg, srv, hub, web = PCP.avvia()
+        # La vista dello sviluppo è la funzione principale dello schermo del PC: si prova con le
+        # sezioni accese, com'è di serie (seconda revisione della PR #255)
+        cfg.schermi_sezioni = True
         lavori = SimpleNamespace(lavori=[])
         svs = Sviluppi(cfg, TMP, lavori=lavori, log=lambda m: None)
         svs.schermi = hub

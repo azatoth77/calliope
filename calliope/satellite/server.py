@@ -778,6 +778,17 @@ class ServerSatelliti:
                  + (f" (al posto di {prima.satellite['nome']})" if prima is not None else ""))
         return True
 
+    def tocca(self, sat_id, secondi: float = 8.0) -> bool:
+        """«Parla» dalla pagina dello schermo personale legato al satellite `sat_id` (27/10,
+        passo 1b): il satellite prende il posto (come il telefono che tocca «Parla») e ascolta
+        senza il nome per `secondi` («tocco»). False se il satellite non è collegato."""
+        with self._cond:
+            coll = next((c for c in reversed(self.collegati) if c.satellite.get("id") == sat_id
+                         and not c.chiuso.is_set()), None)
+        if coll is None or not self.prendi(coll):
+            return False
+        return coll.invia(tipo="tocco", secondi=float(secondi))
+
     def lascia(self, coll: Collegamento) -> bool:
         """Il satellite restituisce il posto all'ultimo degli altri collegati e pronti; se non
         ce ne sono resta attivo (qualcuno deve pur sentire gli annunci). Tutti insieme: non

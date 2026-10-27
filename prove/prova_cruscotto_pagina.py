@@ -95,6 +95,9 @@ def avvia():
     cfg.memory_db = str(TMP / "memoria.db")
     cfg.turn_log_dir = str(TMP / "registro")
     cfg.estensioni_cartella = str(TMP / "estensioni")
+    # Il contenuto delle schede sulla pagina del PC si prova con la vista di prima (la scheda
+    # grande): la disposizione a sezioni dello schermo personale la prova prova_pc_pagina (27/10)
+    cfg.schermi_sezioni = False
     cfg.satellite_porta = 0
     cfg.audio_modo = "satellite"
     cfg.telefono_web = str(TMP / "web")

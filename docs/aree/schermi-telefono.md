@@ -2,7 +2,7 @@
 
 *Schede sugli schermi, abbinamento, visibilità, scrivere invece di parlare, telefono come satellite (PWA), rispondi dove ti ho chiesto. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 27/10.** Il telefono è **a sezioni** (passo 1 del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md), sezione in fondo): Adesso, Conversazione, Le mie cose, Casa e Io con la barra in basso, la voce sopra la barra, ogni scheda nella sua sezione e quelle vive anche in Adesso; il menu è diventato Io, la vista da guida del 04/10 la modalità «In auto», a mano. Dal 27/10 (passo 1c) l'accento è **lilla di serie** su tutto, con l'accento personale in Io › Aspetto, e sul telefono di un minore Casa è nascosta sotto i 13 anni. Restano i passi 1b e 2–10 del progetto (PC personale, Le mie cose con le pagine per tipo, Studio). *Stato al 18/10 (storico):* come al 14/10 (sotto), più: chi è quale giocatore e «Gira il telefono» sugli schermi (15/10, [giochi](giochi.md)); la foto mandata dallo schermo che aspetta la domanda anche se in mezzo parla un'altra voce (16/10, #96, [immagini-allegati](immagini-allegati.md)); l'inoltro del satellite tolto (16/10, #61): fuori casa il telefono raggiunge la DGX con la sua VPN ([satelliti](satelliti.md), [`prove/manuali/telefono.md`](../../prove/manuali/telefono.md)). Le prove manuali stanno in `prove/manuali/` dal 06/10. *Stato al 14/10 (storico):* come al 09/10 (sotto), più: la **modalità gioco** a tutta la finestra con il pallino della voce e la variante «collaudo» (11/10), il palco fisso dei giochi (14/10, [giochi](giochi.md)); la **stanza** sugli schermi (13/10): il segno «Ascolto la stanza» o la pausa, l'interruttore «Ascolto la stanza» del telefono (acceso di serie), la sezione «Stanza (in ombra)» del cruscotto con soli numeri; dal 14/10 la scheda «avviso» del tutore con «Leggi cosa si è detto» e «Scarica l'audio», solo sul suo schermo personale ([minori](minori.md)). Restano da provare sul vero l'iPhone e lo scaricamento dalla PWA.
+**Stato al 27/10.** Il telefono è **a sezioni** (passo 1 del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md), sezione in fondo): Adesso, Conversazione, Le mie cose, Casa e Io con la barra in basso, la voce sopra la barra, ogni scheda nella sua sezione e quelle vive anche in Adesso; il menu è diventato Io, la vista da guida del 04/10 la modalità «In auto», a mano. Dal 27/10 (passo 1c) l'accento è **lilla di serie** su tutto, con l'accento personale in Io › Aspetto, e sul telefono di un minore Casa è nascosta sotto i 13 anni. Dal 27/10 sera (passo 1b) anche lo **schermo personale del PC** è a sezioni, in colonne, con «Parla»; gli schermi di stanza restano com'erano. Restano i passi 2–10 del progetto (Le mie cose con le pagine per tipo, Conversazione con le schede dentro, Studio). *Stato al 18/10 (storico):* come al 14/10 (sotto), più: chi è quale giocatore e «Gira il telefono» sugli schermi (15/10, [giochi](giochi.md)); la foto mandata dallo schermo che aspetta la domanda anche se in mezzo parla un'altra voce (16/10, #96, [immagini-allegati](immagini-allegati.md)); l'inoltro del satellite tolto (16/10, #61): fuori casa il telefono raggiunge la DGX con la sua VPN ([satelliti](satelliti.md), [`prove/manuali/telefono.md`](../../prove/manuali/telefono.md)). Le prove manuali stanno in `prove/manuali/` dal 06/10. *Stato al 14/10 (storico):* come al 09/10 (sotto), più: la **modalità gioco** a tutta la finestra con il pallino della voce e la variante «collaudo» (11/10), il palco fisso dei giochi (14/10, [giochi](giochi.md)); la **stanza** sugli schermi (13/10): il segno «Ascolto la stanza» o la pausa, l'interruttore «Ascolto la stanza» del telefono (acceso di serie), la sezione «Stanza (in ombra)» del cruscotto con soli numeri; dal 14/10 la scheda «avviso» del tutore con «Leggi cosa si è detto» e «Scarica l'audio», solo sul suo schermo personale ([minori](minori.md)). Restano da provare sul vero l'iPhone e lo scaricamento dalla PWA.
 
 *Stato al 09/10 (storico): schermi e telefono come dal 06/10 (scheda a schermo intero, cruscotto in sola lettura), più il lettore Markdown e «Scarica» (07/10), la scheda degli esercizi e del cassetto, la vista dello sviluppo con il flusso dell'agente e la cronologia delle schede per persona con la scheda «Conversazione» (08/10), il segno della compagnia (09/10). Restano da provare sul vero l'iPhone (audio, schermo acceso, auto) e lo scaricamento dalla PWA.*
 
@@ -892,3 +892,60 @@ Prove: `prova_aspetto` (nuova, livello 1); `prova_sezioni` (router con una sezio
 `prova_telefono_schermo` (Io › Aspetto: le scelte, un tocco su «Rosa» cambia l'accento e la barra
 e lo salva; le sezioni nascoste e tolte). Le misure di contrasto di tutte le prove nella pagina
 vera girano con il lilla. Da provare sul vero: il lilla sull'iPhone e sulla TV.
+
+## Lo schermo personale del PC a sezioni, con «Parla» (27/10 sera, issue #239, ramo `issue-239-pc`)
+
+Passo 1b del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md)
+(§ 3.6). Decisioni di chi amministra del 27/10 sera: **le sezioni solo sugli schermi personali**
+(TV e tablet di stanza restano con la scheda grande, l'orologio e la fila; la decisione 6 del
+progetto vale per tablet e TV personali) e **«Parla» sul PC subito**.
+
+- **Un modulo solo per le sezioni**: `pagina/sezioni.js` (`CalliopeSezioni.crea`) con lo
+  smistamento, la regola delle schede vive in Adesso, i rimandi, le novità, il router sul frammento
+  e le sezioni nascoste. Lo usano il telefono (`telefono.js` passa le sue parti: la scheda con
+  «Espandi», gli strati, la vista dello sviluppo) e il PC (`pc.js`). Anche Io › Aspetto
+  (`disegnaAccenti`, `suAccento`) è lì, e i suoi stili in `schermo.css`.
+- **Solo sullo schermo personale**: `schermo.js` accende `S.sezioni` dopo `/api/accedi` se lo
+  schermo è personale e la pagina le ha (`data-sezioni` sul body di `index.html`); allora emette gli
+  stessi eventi del carosello del telefono (`calliope:schede`, `mostra`, `pc`…), non disegna la
+  scheda grande né la fila, e `pc.js` mostra la struttura nascosta in `index.html`. Le viste di
+  prima restano: la scheda a schermo intero (strato sopra la pagina), la vista dello sviluppo (in
+  `#principale`, sopra la sezione), la modalità gioco.
+- **Disposizione**: a sinistra le sezioni e in fondo la voce (lo stato `#voce` e «Parla»), al
+  centro la sezione con le schede affiancate quando c'è posto, a destra la conversazione (la scheda
+  «chat», fuori dalle sezioni con `escludi`) con la casella per scrivere (`#scrivi-posto`). Sotto i
+  1100 px la conversazione è dietro il suo pulsante e si apre sopra la pagina (Esc la chiude);
+  sotto i 760 px la barra va in basso, come sul telefono. Sullo schermo personale il testo ha la
+  misura di una pagina da leggere da vicino (16 px), non quella della TV (2,4vmin).
+- **«Parla»** (`POST /api/parla`): solo da uno schermo personale legato a un satellite
+  (`ArchivioSchermi.lega_satellite`); `ServerSatelliti.tocca` fa prendere il posto al satellite
+  (come il telefono che tocca «Parla») e gli manda «tocco» coi secondi di `schermi_parla_s` (8 di
+  serie); il satellite allunga `Listener.sveglio_fino` e suona l'inizio, e il Listener ascolta
+  senza il nome fino alla più lontana tra `awake_until` e `sveglio_fino`. Al più 20 al minuto; 409
+  se il satellite è scollegato. Un satellite vecchio ignora «tocco». Il tasto da tenere premuto
+  (Ctrl+Spazio) resta un'issue a parte.
+- **Trascinare un file** sulla pagina c'era già (05/10) e vale su tutta la pagina: il file arriva
+  nella casella sotto la conversazione.
+- **Dalla revisione della PR #255**:
+  - la frase cominciata nella finestra di «Parla» vale come il nome (`woke`, punteggio 1, come il
+    tocco del telefono): prima il server la scartava come «risveglio scartato»;
+  - mentre Calliope parla, «Parla» la ferma: il satellite chiude la veglia con «interruzione»
+    (motivo «tocco»);
+  - la conversazione a destra viene dalla pagina (`schedaChat`, evento «chatturni»), non dalla
+    cronologia, che tiene al più 6 schede: prima si svuotava alla settima;
+  - il «Cruscotto» della testa porta in Io, dove sta la sua scheda;
+  - «Pulisci le mie schede» è in Io (c'era solo nella fila, che con le sezioni non c'è);
+  - una scheda nuova lascia la vista dello sviluppo come faceva la scheda grande (timer, lavori,
+    «Torna allo sviluppo»);
+  - il gioco a tutta la finestra non prende le regole della scheda nell'elenco;
+  - sotto i 1100 px la conversazione aperta sopra la pagina è un dialogo, e chiusa rende il fuoco
+    al suo pulsante.
+- **Si torna indietro** con `schermi_sezioni: false` (nel file locale): lo schermo personale del PC
+  riprende la scheda grande e la fila, come gli schermi di stanza; il telefono resta a sezioni. Le
+  prove del contenuto delle schede sulla pagina del PC (Markdown, cassetto, esercizi, moduli,
+  cruscotto, cronologia, vista dello sviluppo) girano con la chiave spenta; la disposizione a
+  sezioni la prova `prova_pc_pagina`.
+
+Prove: `prova_parla_pc` (nuova, livello 1), `prova_pc_pagina` (nuova, livello 3), `prova_sezioni`
+(il router in `sezioni.js`, il telefono che lo usa); le prove del telefono invariate. Da provare sul
+vero: il portatile come satellite (la pagina in Edge, «Parla» con il microfono vero).
