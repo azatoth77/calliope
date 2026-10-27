@@ -707,6 +707,9 @@ MISURA = r"""(() => {
     fuori, bassi, tocchi, H, W, auto, inVista,
     spazio: br.height, parla: document.getElementById('parla').getBoundingClientRect().height,
     voce: document.querySelector('#tel-voce .voce-testo').textContent,
+    // quante righe prende lo stato (27/10, iPhone: andava a capo a ogni sillaba)
+    voceRighe: (() => { const v = document.querySelector('#tel-voce .voce-testo'); const r = document.createRange();
+      r.selectNodeContents(v); return new Set([...r.getClientRects()].map((q) => Math.round(q.top))).size; })(),
     dove: document.getElementById('tel-dove').hidden ? '' : document.getElementById('tel-dove').textContent,
     sezione: window.calliopeTelefono.sezioni().sezione,
   };
@@ -786,6 +789,7 @@ def misure(t, etichetta):
                  not m.get("bassi") and min(m.get("tocchi") or [0]) >= minimo,
                  f"{m.get('bassi')} {[round(x) for x in m.get('tocchi') or []]}")
         verifica(f"{d}: la sezione ha spazio (≥ 120 px)", m.get("spazio", 0) >= 120, f"{m.get('spazio', 0):.0f} px")
+        verifica(f"{d}: lo stato della voce su al più due righe", m.get("voceRighe", 9) <= 2, str(m.get("voceRighe")))
         return m
 
     alti = {}
@@ -814,6 +818,19 @@ def misure(t, etichetta):
             m = misura(f"{etichetta} {w}×{h} {sez}", "Microfono spento", 44)
             foto(t, f"telefono-{etichetta}-{nome_d}-{sez}.png")
         t.v(f"{T}.vai('#/adesso'); 1")
+    # Un font più largo (27/10: sull'iPhone il font di sistema è più largo di Segoe UI e
+    # «Conversazione» usciva dalla sua voce della barra): Verdana, nelle sezioni, ai due telefoni
+    t.v("document.documentElement.style.setProperty('font-family', 'Verdana, sans-serif'); "
+        "document.body.style.fontFamily = 'Verdana, sans-serif'; 1")
+    spento()
+    for w, h, nome_d in DIMENSIONI[:2]:
+        dimensione(t, w, h)
+        for sez in ("adesso", "conversazione", "cose", "io"):
+            t.v(f"{T}.vai('#/{sez}'); 1")
+            misura(f"{etichetta} {w}×{h} {sez} col font largo", "Microfono spento", 44)
+            foto(t, f"telefono-{etichetta}-{nome_d}-{sez}-font-largo.png")
+    t.v("document.documentElement.style.removeProperty('font-family'); document.body.style.fontFamily = ''; 1")
+    t.v(f"{T}.vai('#/adesso'); 1")
     mic(False)
     t.p._chiama("Emulation.clearDeviceMetricsOverride")
 
