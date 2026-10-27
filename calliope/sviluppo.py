@@ -2452,6 +2452,7 @@ class Sviluppi:
                                          chiave=f"sviluppo:{sv.id}",
                                          stato=sv.fase if sv.stato == "aperta" else sv.stato)
         card["tipo"] = "sviluppo"
+        card["sezione"] = schede.sezione_di("sviluppo")
         card["sviluppo"] = self.dati_vista(sv)
         return card
 

@@ -26,8 +26,52 @@
     risposta: "Risposta", foto: "Foto", allegato: "File", gioco: "Gioco",
     cruscotto: "Cruscotto", cassetto: "Cassetto", esercizio: "Esercizi",
     esercizi_riepilogo: "Esercizi", sviluppo: "Sviluppo", chat: "Conversazione",
-    conoscente: "Voce nuova",
+    conoscente: "Voce nuova", avviso: "Avviso",
   };
+  // Il telefono a sezioni (27/10, docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md, 3.2):
+  // la casa fissa di ogni tipo, «sezione» o «sezione/raccolta». La stessa tabella è in
+  // calliope/schermi/schede.py, che la scrive nella scheda (`sezione`): vale quella del server,
+  // questa serve per le schede che non la portano (prove/prova_sezioni.py le confronta)
+  const SEZIONE_DI_TIPO = {
+    risposta: "conversazione", calcolo: "conversazione", biblioteca: "conversazione",
+    web: "conversazione", testo: "conversazione", chat: "conversazione",
+    timer: "cose/agenda", promemoria: "cose/agenda", lista: "cose/liste",
+    lavoro: "cose/lavori", esecuzione: "cose/lavori", sviluppo: "cose/lavori",
+    documento: "cose/documenti", foto: "cose/cassetto", allegato: "cose/cassetto",
+    cassetto: "cose/cassetto", modulo: "cose", gioco: "cose/giochi",
+    esercizio: "cose/studio", esercizi_riepilogo: "cose/studio",
+    casa: "casa", conoscente: "casa", avviso: "casa", cruscotto: "io",
+  };
+  const SEZIONI = ["adesso", "conversazione", "cose", "casa", "io"];
+  function sezioneDi(c) {
+    const s = String((c && (c.sezione || SEZIONE_DI_TIPO[c.tipo])) || "conversazione");
+    return SEZIONI.includes(s.split("/")[0]) ? s : "conversazione";
+  }
+  // Quanto resta «appena cambiata» in Adesso una lista, un documento, la casa
+  const RECENTE_S = 120;
+  // Una scheda viva compare anche in Adesso (3.2): il timer corre, il lavoro non è finito, il
+  // modulo è da compilare, il promemoria scade entro un'ora. `ora` in secondi (epoch);
+  // `chiusa(partita)`: il gioco è chiuso su questa pagina (✕, finito: la scheda del server non
+  // cambia)
+  function viva(c, ora, chiusa) {
+    if (!c) return false;
+    const t = ora === undefined ? Date.now() / 1000 : ora;
+    const recente = (Number(c.creata) || 0) > t - RECENTE_S;
+    switch (c.tipo) {
+      case "timer": return (c.timer || []).some((x) => (!x.stato || x.stato === "attivo") && x.fine > t);
+      case "promemoria": return (c.voci || []).some((v) => v.ts > t && v.ts <= t + 3600);
+      case "lavoro": return ["in_coda", "in_corso", "in_attesa"].includes(c.stato);
+      case "esecuzione": return c.stato === "in_corso";
+      case "sviluppo": return !!(c.sviluppo && c.sviluppo.stato === "aperta");
+      case "modulo": return c.stato === "aperto";
+      case "gioco": return c.stato !== "chiuso" && !(chiusa && chiusa(c.partita));
+      case "esercizio": return c.stato === "aperta" || c.stato === "pausa";
+      case "conoscente": return !!c.aperta;
+      case "avviso": return true;               // finché non è visto (lo tiene il telefono)
+      case "lista": case "documento": case "casa": return recente;
+      default: return false;
+    }
+  }
   // Il programma di un lavoro mentre gira (04/10, calliope/agenti/esecuzione.py)
   const STATI_ESECUZIONE = {
     in_corso: "in esecuzione", fatto: "finito", errore: "finito con un errore",
@@ -228,10 +272,11 @@
     cronologia() { return S.cronologia.slice(); },
     corrente() { return S.corrente; },
     aggiorna() { aggiornaTimer(); aggiornaLavori(); },
-    // Il cruscotto di chi amministra (06/10): il menu del telefono lo apre nel carosello
+    // Il cruscotto di chi amministra (06/10): sul telefono si apre da Io (27/10)
     cruscotto() { return apriCruscotto(); },
     amministra() { return S.amministra; },
-    // La scheda «Conversazione» e «Pulisci le mie schede» (08/10): il menu del telefono
+    // La scheda «Conversazione» e «Pulisci le mie schede» (08/10): sul telefono in
+    // Conversazione e in Io (27/10)
     chat() { return apriChat(); },
     haChat() { return S.chatOk; },
     pulisci() { return pulisciSchede(); },
@@ -240,7 +285,11 @@
     voceGioco(stato) { voceGioco(stato); },
     gioco() { return { partita: GIOCO.attivo, schermoIntero: !!document.fullscreenElement, voce: GIOCO.voce }; },
     chiudiGioco() { if (GIOCO.attivo) chiudiGiocoDaTe(GIOCO.attivo); },
-    NOMI_TIPO,
+    NOMI_TIPO, SEZIONE_DI_TIPO, SEZIONI, sezioneDi,
+    viva(c, ora) { return viva(c, ora, (p) => !!(GIOCHI_CHIUSI[p] || CHIUSI_DA_TE[p])); },
+    // Un gioco da chiudere senza mostrarlo (il telefono in auto, 27/10): il riquadro si toglie e
+    // il server smette di ascoltare i suoi comandi a voce
+    chiudiPartita(p) { if (p) chiudiGiocoDaTe(String(p)); },
   };
 
   // Nuovo accesso con il token, finché non riesce. Le sessioni del server sono in memoria:
@@ -500,7 +549,9 @@
       S.cronologia.push(c);              // in cima, come l'ultima arrivata
       while (S.cronologia.length > Math.max(S.max, 2)) S.cronologia.shift();
     }
-    emetti("schede", { scheda: c, spostata: !(i >= 0 && c.sposta === false && !ordine) });
+    // `ripresa`: la cronologia rimandata dal server al (ri)collegamento, già vista (il telefono
+    // non la conta come novità, 27/10)
+    emetti("schede", { scheda: c, spostata: !(i >= 0 && c.sposta === false && !ordine), ripresa: !!ordine });
     disegnaCronologia();
   }
 
@@ -1649,7 +1700,7 @@
     }
   }
 
-  // Il pulsante «Conversazione» nella testa (non nel telefono: lì è nel menu)
+  // Il pulsante «Conversazione» nella testa (non nel telefono: lì è nella sua sezione)
   function segnaChat() {
     if (CAROSELLO || INCORPORATA) return;
     let b = $("chat-apri");

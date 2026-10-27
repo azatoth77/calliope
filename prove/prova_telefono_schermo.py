@@ -21,21 +21,24 @@ una riuscita non serve più; i tocchi sono veri (Input.dispatchMouseEvent: gesto
   spento a mano → blocco tolto, indicatore nascosto; opzione «tengo acceso lo schermo» spenta →
   blocco tolto e avviso; riaccesa → richiesto;
 - senza l'API: il microfono si accende lo stesso e l'avviso c'è;
-- la vista (dal 04/10 la pagina è sempre quella che era la vista da guida): fondo nero, nessuna
-  animazione, niente vista normale né «Vista da guida»/«Esci», l'ultima risposta nel carosello,
-  «Parla» ridotto col microfono acceso, avviso dello schermo in alto;
-- carosello: 4 schede (lista, timer, programma, documento), la più recente per prima e in
-  vista, puntini; un aggiornamento resta al suo posto (stesso elemento, vista invariata); la
-  risposta subito dopo una scheda non la copre, un turno senza schede mostra la risposta; chi
-  scorre a mano non viene spostato; il timer conta;
+- la vista (dal 27/10 a sezioni, docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md): fondo
+  nero, nessuna animazione, niente menu né carosello, l'ultima risposta in Adesso, «Parla» ridotto
+  col microfono acceso, avviso dello schermo in alto; Io dalla barra (schermo acceso, gesto
+  indietro);
+- sezioni: 4 schede (lista, timer, programma, documento) nelle loro raccolte di Le mie cose e,
+  vive, anche in Adesso, la più recente per prima; un aggiornamento resta al suo posto (stesso
+  elemento); il timer scaduto esce da Adesso e resta in Agenda; il calcolo è l'ultima risposta
+  (Conversazione e Adesso); novità sulla barra solo per ciò che non si vede, tolte guardando;
+  router sul frammento (barra, #/cose/lavori, indirizzo sconosciuto → Adesso, gesto indietro);
+  «In auto» a mano (niente barra, salvata) ed «Esci»;
 - modulo da compilare: si apre da solo nel suo strato, controlli mentre si scrive, «Invia»,
-  scheda «Compila» nel carosello; «Scrivi» apre la casella col fuoco, la frase arriva e lo
-  strato si chiude; il menu ha prova del microfono, schermo acceso, certificato, «dimentica»;
-- misure a 375×812, 320×568, 812×375 con 0 e 4+ schede, microfono spento, «Penso…», acceso:
-  tutto in uno schermo, niente testo fuori dai contenitori, schede dentro il carosello,
-  contrasto AA, tocchi ≥ 64 px, col microfono acceso «Parla» più basso e il carosello più alto;
-  modulo, menu e casella aperti: niente di lato, tasti ≥ 64 px (CALLIOPE_FOTO=<cartella> per gli
-  screenshot);
+  «Compila» in Adesso sotto «Aspetta te»; «Scrivi» apre la casella col fuoco, la frase arriva e
+  lo strato si chiude; Io ha prova del microfono, schermo acceso, certificato, «dimentica»;
+- misure a 375×812, 320×568, 812×375 con 0 e 6 schede, microfono spento, «Penso…», acceso, in
+  ogni sezione e in auto: tutto in uno schermo (la sezione scorre da sé), niente testo fuori dai
+  contenitori, schede dentro la sezione, contrasto AA, tocchi ≥ 44 px (≥ 64 in auto), in auto col
+  microfono acceso «Parla» più basso e la risposta più alta; modulo e casella aperti: niente di
+  lato, tasti ≥ 64 px (CALLIOPE_FOTO=<cartella> per gli screenshot);
 - nessun errore JavaScript né violazione della CSP. ~25 s.
 """
 
@@ -157,7 +160,7 @@ class Tel:
     def tocca_sel(self, sel):
         """Un tocco vero (gesto del browser) al centro del primo elemento del selettore."""
         r = self.v(f"(() => {{ const e = document.querySelector({json.dumps(sel)});"
-                   f" if (!e.closest('#vista')) e.scrollIntoView({{block: 'center'}});"
+                   f" if (!e.closest('#vista') || e.closest('.sezione')) e.scrollIntoView({{block: 'nearest'}});"
                    f" const b = e.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }})()")
         for t in ("mousePressed", "mouseReleased"):
             self.p._chiama("Input.dispatchMouseEvent", {"type": t, "x": r[0], "y": r[1],
@@ -296,8 +299,9 @@ def scenari(t: Tel, srv):
     # 6. opzione «tengo acceso lo schermo» spenta e riaccesa
     t.tocca("microfono")
     aspetta(lambda: t.mic() and t.schermo().get("stato") == "acceso", 5)
-    t.tocca("menu-apri")
-    verifica("menu: si apre dall'icona in alto", bool(aspetta(lambda: t.v("!document.getElementById('menu').hidden"), 2)))
+    t.tocca_sel('#barra a[data-sezione="io"]')
+    verifica("Io: si apre dalla barra (#/io)", bool(aspetta(lambda: t.v(
+        "location.hash === '#/io' && !document.getElementById('sez-io').hidden"), 2)))
     t.tocca("schermo-tieni")
     ok = aspetta(lambda: t.wl().get("n") == 0 and not t.schermo().get("tieni"), 3)
     ind = t.indicatore()
@@ -307,10 +311,12 @@ def scenari(t: Tel, srv):
     t.tocca("schermo-tieni")
     ok = aspetta(lambda: t.wl().get("n") == 1 and t.schermo().get("stato") == "acceso", 3)
     verifica("opzione riaccesa: schermo di nuovo tenuto acceso", bool(ok))
-    t.tocca("menu-chiudi")
-    verifica("menu: «Chiudi» lo chiude", bool(aspetta(lambda: t.v("document.getElementById('menu').hidden"), 2)))
+    t.v("history.back(); 1")
+    verifica("Io: il gesto indietro torna ad Adesso", bool(aspetta(lambda: t.v(
+        "location.hash === '#/adesso' && document.getElementById('sez-io').hidden"
+        " && !document.getElementById('sez-adesso').hidden"), 2)))
 
-    # 7. la vista (04/10: è sempre quella che era la vista da guida)
+    # 7. la vista (27/10: a sezioni; la vista da guida è la modalità In auto)
     t.v(f"{T}.comando({{tipo: 'frase', turno: 7, id: 70, testo: 'Sono le 18:42.', rate: 22050, byte: 0}});"
         f"{T}.comando({{tipo: 'frase', turno: 7, id: 71, testo: 'Domani piove.', rate: 22050, byte: 0}}); 1")
     g = t.v("""(() => {
@@ -324,17 +330,18 @@ def scenari(t: Tel, srv):
       return {
         sfondo: cs(vista).backgroundColor, body: cs(document.body).backgroundColor, anim,
         risposta: document.getElementById('risposta-testo').textContent,
-        vecchi: ['guida', 'guida-apri', 'guida-esci', 'voce-tel', 'principale', 'cronologia'].filter((id) => document.getElementById(id)),
+        vecchi: ['guida', 'guida-apri', 'guida-esci', 'voce-tel', 'principale', 'cronologia', 'menu', 'menu-apri',
+                 'carosello', 'binario', 'punti'].filter((id) => document.getElementById(id)),
         parla: document.getElementById('parla').getBoundingClientRect().height,
         mic: document.getElementById('microfono').getAttribute('aria-checked'),
         acceso: vista.classList.contains('mic-acceso'),
       };
     })()""") or {}
-    verifica("vista: fondo nero, niente vista normale né «Vista da guida»/«Esci»",
+    verifica("vista: fondo nero, niente vista normale, menu né carosello",
              g.get("sfondo") == "rgb(0, 0, 0)" and g.get("body") == "rgb(0, 0, 0)" and g.get("vecchi") == [],
              json.dumps(g.get("vecchi")))
     verifica("vista: nessuna animazione (anche nello stato «ascolto»)", g.get("anim") == [], json.dumps(g.get("anim")))
-    verifica("vista: l'ultima risposta intera nel carosello (le frasi del turno)",
+    verifica("vista: l'ultima risposta intera in Adesso (le frasi del turno)",
              g.get("risposta") == "Sono le 18:42. Domani piove.", g.get("risposta"))
     verifica("vista: microfono acceso segnato, «Parla» ridotto (≤ 76 px)",
              g.get("mic") == "true" and g.get("acceso") and g.get("parla", 999) <= 76, f"{g.get('parla')}")
@@ -373,9 +380,9 @@ def tutti(hub, scheda):
     return [hub.invia_a(s["id"], scheda) for s in hub.abbinati()]
 
 
-def carosello(t: Tel, hub):
-    """Le schede nel carosello: la più recente per prima, aggiornate al loro posto, chi scorre
-    a mano non viene spostato, la risposta dopo una scheda non la copre."""
+def sezioni(t: Tel, hub):
+    """Le schede nelle sezioni (27/10): ognuna nella sua raccolta, quelle vive anche in Adesso,
+    aggiornate al loro posto; l'ultima risposta; le novità sulla barra; il router; In auto."""
     T = "window.calliopeTelefono"
     ok = aspetta(lambda: hub.collegati(), 10)
     verifica("schede: il telefono è collegato anche come schermo", bool(ok))
@@ -383,65 +390,99 @@ def carosello(t: Tel, hub):
     for k in ("lista", "timer", "esecuzione", "documento"):
         tutti(hub, S[k])
         time.sleep(0.15)
-    ok = aspetta(lambda: len((t.v(f"{T}.carosello()") or {}).get("ordine", [])) == 5, 5)
-    c = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: risposta e 4 schede, la più recente per prima e in vista",
-             bool(ok) and c.get("ordine", [""])[0] == "documento:5" and c.get("vista") == "documento:5",
-             json.dumps(c))
-    punti = t.v("document.querySelectorAll('#punti i').length")
-    verifica("carosello: indicatore di posizione (5 puntini, uno segnato)", punti == 5
-             and t.v("document.querySelectorAll('#punti i.qui').length") == 1, str(punti))
-    # aggiornamento al suo posto: stesso elemento, stessa posizione, vista invariata, niente segno
-    t.v("window.__el = document.querySelector('#binario [data-chiave=\"esecuzione:7\"]'); 1")
+    chiavi = ["documento:5", "esecuzione:7", S["timer"]["chiave"], "lista:spesa"]
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("adesso/corso") == chiavi, 5)
+    c = t.v(f"{T}.sezioni()") or {}
+    p = c.get("posti", {})
+    verifica("sezioni: ogni scheda nella sua raccolta di Le mie cose (liste, agenda, lavori, documenti)",
+             p.get("cose/liste") == ["lista:spesa"] and p.get("cose/agenda") == [S["timer"]["chiave"]]
+             and p.get("cose/lavori") == ["esecuzione:7"] and p.get("cose/documenti") == ["documento:5"],
+             json.dumps(p)[:300])
+    verifica("sezioni: le quattro vive anche in Adesso, la più recente per prima",
+             bool(ok) and c.get("sezione") == "adesso", json.dumps(p.get("adesso/corso")))
+    verifica("sezioni: niente novità per ciò che si vede già in Adesso", c.get("novita", {}).get("cose") == 0,
+             json.dumps(c.get("novita")))
+    gruppi = t.v("[...document.querySelectorAll('#sez-cose .raccolta')].filter((r) => !r.hidden)"
+                 ".map((r) => r.dataset.raccolta)") or []
+    verifica("sezioni: in Le mie cose solo le raccolte con qualcosa", gruppi == ["liste", "agenda", "lavori", "documenti"],
+             json.dumps(gruppi))
+    # aggiornamento al suo posto: stesso elemento in Le mie cose e in Adesso, ordine uguale
+    t.v("window.__el = document.querySelector('#sez-cose [data-chiave=\"esecuzione:7\"]');"
+        " window.__el2 = document.querySelector('#sez-adesso [data-chiave=\"esecuzione:7\"]'); 1")
     from calliope.schermi import schede
     righe = [{"tipo": "out", "testo": f"riga {i}\n"} for i in range(20)]
     tutti(hub, schede.esecuzione("Conta le parole", "conta.py", "python", "in_corso", [], righe, 0, None,
                                  time.time() - 5, 5.0, 60, ident=7, sposta=False))
-    ok = aspetta(lambda: t.v("(document.querySelector('#binario [data-chiave=\"esecuzione:7\"] pre')||{}).textContent||''")
+    ok = aspetta(lambda: t.v("(document.querySelector('#sez-cose [data-chiave=\"esecuzione:7\"] pre')||{}).textContent||''")
                  .count("riga") == 20, 5)
-    c2 = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: scheda aggiornata al suo posto (stesso elemento, ordine e vista uguali)",
-             bool(ok) and t.v("window.__el === document.querySelector('#binario [data-chiave=\"esecuzione:7\"]')")
-             and c2.get("ordine") == c.get("ordine") and c2.get("vista") == "documento:5", json.dumps(c2))
-    # la risposta del turno arriva subito dopo la scheda: resta la scheda
-    t.v(f"{T}.comando({{tipo: 'frase', turno: 30, id: 300, testo: 'Ecco la disdetta.', rate: 22050, byte: 0}}); 1")
-    c3 = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: la risposta va in testa ma la scheda appena mostrata resta in vista",
-             c3.get("ordine", [""])[0] == "__risposta" and c3.get("vista") == "documento:5", json.dumps(c3))
-    # turno nuovo senza schede: si vede la risposta
-    t.v(f"{T}.opzioniCarosello.schedaMs = 0; {T}.comando({{tipo: 'frase', turno: 31, id: 310, testo: 'Sono le sette.', rate: 22050, byte: 0}}); 1")
-    c4 = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: turno nuovo senza schede → la risposta in vista", c4.get("vista") == "__risposta", json.dumps(c4))
-    # scorrimento a mano (come un dito): poi una scheda nuova non la sposta
-    t.v("(() => { const b = document.getElementById('binario'); b.dispatchEvent(new PointerEvent('pointerdown'));"
-        " const p = [...b.children].filter((e) => !e.hidden); b.scrollTo({left: p[3].offsetLeft - p[0].offsetLeft, behavior: 'instant'}); })(); 1")
-    ok = aspetta(lambda: (t.v(f"{T}.carosello()") or {}).get("vista") == c4["ordine"][3], 2)
-    tutti(hub, schede.calcolo("17 × 6", "102"))
-    aspetta(lambda: len((t.v(f"{T}.carosello()") or {}).get("ordine", [])) == 6, 5)
-    c5 = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: chi scorre a mano non viene spostato da una scheda nuova",
-             bool(ok) and c5.get("vista") == c4["ordine"][3] and len(c5.get("ordine", [])) == 6, json.dumps(c5))
-    t.v(f"{T}.opzioniCarosello.manoMs = 0; 1")
-    tutti(hub, schede.calcolo("2 + 2", "4"))
-    # Si aspetta lo stato finale (06/10): la condizione di prima («vista» con un trattino)
-    # era già vera con la vista vecchia, e sotto carico la verifica guardava troppo presto
-    def mostrata():
-        c = t.v(f"{T}.carosello()") or {}
-        return (c.get("vista") == (c.get("ordine") or [""])[0]
-                and c.get("vista") != "__risposta" and len(c.get("ordine", [])) == 7)
-    ok = aspetta(mostrata, 15)
-    c6 = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: passato il tempo, la scheda nuova si mostra (al più 7 cose)",
-             c6.get("vista") == c6.get("ordine", [""])[0] and c6.get("vista") != "__risposta"
-             and len(c6.get("ordine", [])) == 7, json.dumps(c6))
-    t.v(f"{T}.opzioniCarosello.manoMs = 10000; {T}.opzioniCarosello.schedaMs = 12000; 1")
-    timer = t.v("(document.querySelector('#binario .tipo-timer .resto')||{}).textContent||''") or ""
-    verifica("carosello: il timer conta anche nel carosello", ":" in timer, timer)
+    c2 = t.v(f"{T}.sezioni()") or {}
+    verifica("sezioni: scheda aggiornata al suo posto (stessi elementi, stesso ordine)",
+             bool(ok) and t.v("window.__el === document.querySelector('#sez-cose [data-chiave=\"esecuzione:7\"]')"
+                              " && window.__el2 === document.querySelector('#sez-adesso [data-chiave=\"esecuzione:7\"]')")
+             and c2.get("posti", {}).get("adesso/corso") == chiavi, json.dumps(c2.get("posti", {}).get("adesso/corso")))
+    timer = t.v("(document.querySelector('#sez-adesso .tipo-timer .resto')||{}).textContent||''") or ""
+    verifica("sezioni: il timer conta in Adesso", ":" in timer, timer)
+    # il timer scaduto non è più vivo: esce da Adesso, resta in Agenda
+    scaduto = dict(schede.timer({"id": 4, "label": "per la pasta", "due": time.time() - 1}, "scaduto"),
+                   chiave=S["timer"]["chiave"])
+    tutti(hub, scaduto)
+    ok = aspetta(lambda: S["timer"]["chiave"] not in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("adesso/corso", []), 5)
+    c3 = t.v(f"{T}.sezioni()") or {}
+    verifica("sezioni: il timer scaduto esce da Adesso e resta in Agenda",
+             bool(ok) and c3.get("posti", {}).get("cose/agenda") == [S["timer"]["chiave"]], json.dumps(c3.get("posti"))[:300])
+    # la risposta del turno e il calcolo: l'ultima risposta in Adesso, il calcolo anche in Conversazione
+    t.v(f"{T}.comando({{tipo: 'frase', turno: 30, id: 300, testo: 'Fa 102.', rate: 22050, byte: 0}}); 1")
+    calc = schede.calcolo("17 × 6", "102")
+    tutti(hub, calc)
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("adesso/risposta") == [calc["id"]], 5)
+    c4 = t.v(f"{T}.sezioni()") or {}
+    verifica("sezioni: il calcolo è l'ultima risposta (in Adesso sotto il testo) e sta in Conversazione",
+             bool(ok) and c4.get("posti", {}).get("conversazione") == [calc["id"]]
+             and t.v("document.getElementById('risposta-testo').textContent") == "Fa 102.", json.dumps(c4.get("posti"))[:300])
+    # le novità: una scheda della conversazione arrivata mentre si guarda Io; guardando si tolgono
+    t.tocca_sel('#barra a[data-sezione="io"]')
+    aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("sezione") == "io", 2)
+    tutti(hub, schede.testo("Da leggere", "Un testo da leggere con calma.", schede.PUBBLICA))
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("novita", {}).get("conversazione") == 1, 5)
+    segno = t.v("(() => { const b = document.querySelector('#barra a[data-sezione=\"conversazione\"] .novita');"
+                " return !b.hidden && b.textContent; })()")
+    verifica("novità: il pallino col numero su Conversazione", bool(ok) and segno == "1", str(segno))
+    t.tocca_sel('#barra a[data-sezione="conversazione"]')
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("novita", {}).get("conversazione") == 0
+                 and t.v("document.querySelector('#barra a[data-sezione=\"conversazione\"] .novita').hidden"), 3)
+    verifica("novità: guardando la sezione si tolgono", bool(ok))
+    # il router: un indirizzo per raccolta, uno sconosciuto torna ad Adesso, il gesto indietro
+    t.v(f"{T}.vai('#/cose/lavori'); 1")
+    ok = aspetta(lambda: t.v("location.hash === '#/cose/lavori' && !document.getElementById('sez-cose').hidden"), 2)
+    verifica("router: #/cose/lavori apre Le mie cose", bool(ok))
+    t.v("history.back(); 1")
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("sezione") == "conversazione", 2)
+    verifica("router: il gesto indietro torna alla sezione di prima", bool(ok))
+    t.v("location.hash = '#/boh'; 1")
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("sezione") == "adesso", 2)
+    verifica("router: un indirizzo sconosciuto è Adesso", bool(ok))
+    t.v(f"{T}.vai('#/adesso'); 1")
+    titolo = t.v("document.getElementById('sez-titolo').textContent")
+    verifica("router: il titolo è quello della sezione", titolo == "Adesso", titolo)
+    # In auto: a mano, niente barra, salvata; «Esci» torna ad Adesso
+    t.tocca("auto-apri")
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("modo") == "auto", 2)
+    a = t.v("({barra: getComputedStyle(document.getElementById('barra')).display,"
+            " salvata: localStorage.getItem('calliope.telefono.auto'),"
+            " esci: !document.getElementById('auto-esci').hidden,"
+            " altre: [...document.querySelectorAll('#sezioni .pagina-car')].filter((e) => e.getClientRects().length && e.id !== 'risposta').length})") or {}
+    verifica("In auto: a mano, niente barra né schede, solo la risposta; salvata",
+             bool(ok) and a.get("barra") == "none" and a.get("salvata") == "1" and a.get("esci") and a.get("altre") == 0,
+             json.dumps(a))
+    t.tocca("auto-esci")
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("modo") == "sezioni"
+                 and t.v("localStorage.getItem('calliope.telefono.auto')") is None, 2)
+    verifica("In auto: «Esci» torna alle sezioni", bool(ok))
 
 
 def modulo_e_scrivi(t: Tel, hub):
     """Il modulo da compilare si apre da solo in uno strato; la casella per scrivere si apre
-    da «Scrivi»; il menu ha tutto il resto."""
+    da «Scrivi»; Io ha tutto il resto."""
     from calliope.schermi import Mittente
     from calliope.schermi.moduli import campo
     T = "window.calliopeTelefono"
@@ -453,8 +494,9 @@ def modulo_e_scrivi(t: Tel, hub):
     ok = aspetta(lambda: t.v("!document.getElementById('strato-modulo').hidden"
                              " && document.querySelectorAll('#strato-modulo .campo-modulo').length === 2"), 5)
     verifica("modulo: arriva e si apre da solo nel suo strato", res.get("mostrato") and bool(ok), json.dumps(res)[:120])
-    verifica("modulo: nel carosello c'è la sua scheda con «Compila»",
-             bool(t.v("!!document.querySelector('#binario .modulo-car .apri-modulo')")))
+    verifica("modulo: in Adesso sotto «Aspetta te» c'è la sua scheda con «Compila»",
+             bool(t.v("!!document.querySelector('#sez-adesso [data-posto=\"adesso/aspetta\"] .modulo-car .apri-modulo')"
+                      " && !document.querySelector('#sez-adesso h2[data-gruppo=\"aspetta\"]').hidden")))
     return ricevuti, spec
 
 
@@ -511,23 +553,24 @@ def compila(t: Tel, hub, foto_cb=None):
     ok = aspetta(lambda: t.v("document.getElementById('scrivi-testo').disabled"
                              " && document.getElementById('scrivi-apri').classList.contains('spento')"), 3)
     verifica("conversazione chiusa: casella spenta di nuovo", bool(ok))
-    # il menu: tutto il resto
-    t.tocca("menu-apri")
-    m = t.v("""(() => { const m = document.getElementById('menu'); const q = (s) => m.querySelector(s);
+    # Io: tutto il resto
+    t.tocca_sel('#barra a[data-sezione="io"]')
+    aspetta(lambda: t.v("!document.getElementById('sez-io').hidden"), 2)
+    m = t.v("""(() => { const m = document.getElementById('sez-io'); const q = (s) => m.querySelector(s);
       return {aperto: !m.hidden, diag: !!q('#diag-prova'), tieni: !!q('#schermo-tieni'), ca: !!q('#link-ca'),
-              dimentica: !!q('#dimentica'), stato: (q('#tel-collegamento-testo')||{}).textContent,
+              dimentica: !!q('#dimentica'), auto: !!q('#auto-io'), stato: (q('#tel-collegamento-testo')||{}).textContent,
               schede: (q('#stato-testo')||{}).textContent}; })()""") or {}
-    verifica("menu: prova del microfono, schermo acceso, certificato, dimentica, collegamento",
-             m.get("aperto") and m.get("diag") and m.get("tieni") and m.get("ca") and m.get("dimentica")
+    verifica("Io: prova del microfono, schermo acceso, In auto, certificato, dimentica, collegamento",
+             m.get("aperto") and m.get("diag") and m.get("tieni") and m.get("ca") and m.get("dimentica") and m.get("auto")
              and m.get("stato") == "collegata" and m.get("schede") == "collegato", json.dumps(m))
-    t.p._chiama("Input.dispatchKeyEvent", {"type": "keyDown", "key": "Escape", "code": "Escape", "windowsVirtualKeyCode": 27})
-    t.p._chiama("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Escape", "code": "Escape", "windowsVirtualKeyCode": 27})
-    verifica("menu: Esc lo chiude", bool(aspetta(lambda: t.v("document.getElementById('menu').hidden"), 2)))
+    t.tocca_sel('#barra a[data-sezione="adesso"]')
+    verifica("Io: la barra torna ad Adesso", bool(aspetta(lambda: t.v("document.getElementById('sez-io').hidden"), 2)))
 
 
-# Misure della vista (04/10): per ogni dimensione e stato niente scorrimento, nessun testo fuori
-# dal suo contenitore, parti che non si sovrappongono, schede dentro il carosello, tocchi ≥ 64 px,
-# contrasto AA. Con CALLIOPE_FOTO=<cartella> salva anche gli screenshot.
+# Misure della vista (04/10, a sezioni dal 27/10): per ogni dimensione, stato e sezione la pagina
+# non scorre (scorre la sezione), nessun testo fuori dal suo contenitore, parti che non si
+# sovrappongono, schede dentro la sezione, tocchi ≥ 44 px (≥ 64 in auto), contrasto AA. Con
+# CALLIOPE_FOTO=<cartella> salva anche gli screenshot.
 DIMENSIONI = [(375, 812, "iphone13mini"), (320, 568, "piccolo"), (812, 375, "orizzontale")]
 RISPOSTA_LUNGA = ("Va bene, allora il file resta salvato nella cartella dei documenti del portatile, "
                   "con il nome che mi hai detto prima. Quando vuoi lo apro, oppure lo mando sullo schermo "
@@ -541,10 +584,13 @@ MISURA = r"""(() => {
   const vis = (e) => e && !e.hidden && e.getClientRects().length > 0;
   const nome = (e) => e.id || e.className || e.tagName;
   const dentro = (r, c) => r.left >= c.left - 1 && r.right <= c.right + 1 && r.top >= c.top - 1 && r.bottom <= c.bottom + 1;
+  // il testo solo per i lettori (ritagliato a 1 px: la parola sotto un'icona) non si vede
+  const nascosto = (n) => { for (let e = n.parentElement; e; e = e.parentElement) {
+    const cs = getComputedStyle(e); if (cs.clip !== 'auto' && cs.position === 'absolute') return true; } return false; };
   const testiDentro = (e, r, solo_x) => {
     const w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT);
     for (let n = w.nextNode(); n; n = w.nextNode()) {
-      if (!n.textContent.trim()) continue;
+      if (!n.textContent.trim() || nascosto(n)) continue;
       const rg = document.createRange(); rg.selectNodeContents(n);
       for (const q of rg.getClientRects()) {
         const ok = solo_x ? q.left >= r.left - 1 && q.right <= r.right + 1 : dentro(q, r);
@@ -552,27 +598,29 @@ MISURA = r"""(() => {
       }
     }
   };
+  const auto = g.dataset.modo === 'auto';
   // contenitori il cui testo deve starci tutto
-  const scatole = ['tel-voce', 'tel-dove', 'avviso-tel', 'schermo-avviso', 'parla', 'microfono', 'scrivi-apri', 'menu-apri']
-    .map((id) => document.getElementById(id)).filter(vis);
+  const scatole = ['tel-voce', 'tel-dove', 'avviso-tel', 'schermo-avviso', 'parla', 'microfono', 'scrivi-apri',
+    'foto-apri', 'auto-apri', 'auto-esci', 'sez-titolo'].map((id) => document.getElementById(id))
+    .concat([...document.querySelectorAll('#barra a')]).filter(vis);
   for (const e of scatole) {
     if (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1) fuori.push(nome(e) + ' trabocca');
     const r = e.getBoundingClientRect();
     if (!dentro(r, gr)) fuori.push(nome(e) + ' fuori dalla vista');
     testiDentro(e, r, false);
   }
-  // le schede: dentro il carosello, niente testo fuori di lato (in verticale scorrono dentro di sé)
-  const bin = document.getElementById('binario'), br = bin.getBoundingClientRect();
-  const pagine = [...bin.children].filter(vis);
-  const quiPagina = pagine.find((p) => Math.abs(p.getBoundingClientRect().left - br.left) < 2);
-  if (!quiPagina) fuori.push('nessuna scheda allineata al carosello');
+  // le schede: dentro la sezione di lato, niente testo fuori di lato (in verticale scorre la sezione)
+  const sez = [...document.querySelectorAll('#sezioni .sezione')].find(vis);
+  const br = sez.getBoundingClientRect();
+  const pagine = [...sez.querySelectorAll('.pagina-car')].filter(vis);
+  const inVista = [];
   for (const p of pagine) {
     const r = p.getBoundingClientRect();
-    if (r.top < br.top - 1 || r.bottom > br.bottom + 1) fuori.push(p.dataset.chiave + ' esce dal carosello in altezza');
+    if (r.left < br.left - 1 || r.right > br.right + 1) fuori.push(p.dataset.chiave + ' esce dalla sezione di lato');
     if (p.scrollWidth > p.clientWidth + 1) fuori.push(p.dataset.chiave + ' trabocca di lato');
-    if (p === quiPagina) testiDentro(p, r, true);
+    if (r.bottom > br.top && r.top < br.bottom) { inVista.push(p.dataset.chiave); testiDentro(p, r, true); }
   }
-  const aree = ['.vista-testa', '#carosello', '#parla', '.vista-fondo']
+  const aree = ['.vista-testa', '#sezioni', '.voce-riga', '#barra']
     .map((s) => g.querySelector(s)).filter(vis).map((e) => [nome(e), e.getBoundingClientRect()]);
   for (let i = 0; i < aree.length; i++) {
     if (!dentro(aree[i][1], {left: 0, top: 0, right: W, bottom: H})) fuori.push(aree[i][0] + ' fuori dallo schermo');
@@ -590,25 +638,26 @@ MISURA = r"""(() => {
     while (b && (bg = getComputedStyle(b).backgroundColor) === 'rgba(0, 0, 0, 0)') b = b.parentElement;
     const l1 = lum(cs.color), l2 = lum(b ? bg : 'rgb(0, 0, 0)');
     return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
-  // ogni elemento con del testo proprio, nella vista e nella scheda in vista
+  // ogni elemento con del testo proprio che si vede (nella sezione: dentro il suo riquadro)
   const conTesto = [...g.querySelectorAll('*')].filter(vis).filter((e) =>
     [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())
-    && (!e.closest('#binario') || (quiPagina && quiPagina.contains(e))));
+    && (!e.closest('.sezione') || (() => { const r = e.getBoundingClientRect(); return r.bottom > br.top && r.top < br.bottom; })()));
   const bassi = conTesto.map((e) => [nome(e), contrasto(e)]).filter(([, c]) => c < 4.5)
     .map(([n, c]) => n + ' ' + c.toFixed(2));
-  const tocchi = ['parla', 'microfono', 'scrivi-apri', 'menu-apri'].map((id) => document.getElementById(id)).filter(vis)
+  const tocchi = ['parla', 'microfono', 'scrivi-apri', 'foto-apri', 'auto-apri', 'auto-esci'].map((id) => document.getElementById(id))
+    .concat([...document.querySelectorAll('#barra a')]).filter(vis)
     .map((e) => e.getBoundingClientRect()).map((r) => Math.min(r.width, r.height));
   return {
     scorre: se.scrollHeight > H + 1 || se.scrollWidth > W + 1 || g.scrollHeight > g.clientHeight + 1,
-    fuori, bassi, tocchi, H, W,
-    carosello: br.height, parla: document.getElementById('parla').getBoundingClientRect().height,
+    fuori, bassi, tocchi, H, W, auto, inVista,
+    spazio: br.height, parla: document.getElementById('parla').getBoundingClientRect().height,
     voce: document.querySelector('#tel-voce .voce-testo').textContent,
     dove: document.getElementById('tel-dove').hidden ? '' : document.getElementById('tel-dove').textContent,
-    vista: window.calliopeTelefono.carosello().vista,
+    sezione: window.calliopeTelefono.sezioni().sezione,
   };
 })()"""
 
-# Gli strati (modulo, menu, scrivi): lo strato scorre da sé, i suoi tasti ≥ 64 px, niente di lato
+# Gli strati (modulo, scrivi): lo strato scorre da sé, i suoi tasti ≥ 64 px, niente di lato
 MISURA_STRATO = r"""((id) => {
   const s = document.getElementById(id), W = innerWidth;
   const vis = (e) => e && !e.hidden && e.getClientRects().length > 0;
@@ -639,12 +688,11 @@ def dimensione(t, w, h):
     # 0,2 s fissi non bastavano sotto carico)
     aspetta(lambda: t.v(f"innerWidth === {w} && innerHeight === {h}"), 5, 0.05)
     t.v("new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(() => ok(1))))")
-    t.v("window.calliopeTelefono.vaiA(window.calliopeTelefono.carosello().vista); 1")
 
 
 def misure(t, etichetta):
-    """La vista nelle tre dimensioni, col microfono spento (il posto è dello studio), mentre
-    pensa e col microfono acceso."""
+    """La vista nelle tre dimensioni: in Adesso e in auto col microfono spento (il posto è dello
+    studio), mentre pensa e col microfono acceso; le altre sezioni col microfono spento."""
     T = "window.calliopeTelefono"
     t.v(f"{T}.comando({{tipo: 'frase', turno: {40 + len(etichetta)}, id: 400, testo: {json.dumps(RISPOSTA_LUNGA)}, rate: 22050, byte: 0}}); 1")
 
@@ -670,58 +718,74 @@ def misure(t, etichetta):
         ("pensa", pensa, "Penso…", ""),
         ("acceso", acceso, "Dormo · di' «Calliope»", ""),
     ]
+
+    def misura(d, parola, minimo):
+        ok = aspetta(lambda: (t.v(MISURA) or {}).get("voce") == parola, 2)
+        time.sleep(0.35)                     # la dissolvenza si decide al giro dopo
+        m = t.v(MISURA) or {}
+        verifica(f"{d}: tutto in uno schermo, la pagina non scorre",
+                 bool(ok) and not m.get("scorre"), f"{m.get('W')}×{m.get('H')}")
+        verifica(f"{d}: nessun testo fuori dai contenitori, parti separate, schede nella sezione",
+                 not m.get("fuori"), "; ".join(m.get("fuori", []))[:240])
+        verifica(f"{d}: contrasto AA e tocchi ≥ {minimo} px",
+                 not m.get("bassi") and min(m.get("tocchi") or [0]) >= minimo,
+                 f"{m.get('bassi')} {[round(x) for x in m.get('tocchi') or []]}")
+        verifica(f"{d}: la sezione ha spazio (≥ 120 px)", m.get("spazio", 0) >= 120, f"{m.get('spazio', 0):.0f} px")
+        return m
+
     alti = {}
     for w, h, nome_d in DIMENSIONI:
         dimensione(t, w, h)
-        for nome_s, fai, parola, dove in stati:
-            fai()
-            ok = aspetta(lambda: (t.v(MISURA) or {}).get("voce") == parola, 2)
-            time.sleep(0.35)                     # la dissolvenza si decide al giro dopo
-            m = t.v(MISURA) or {}
-            foto(t, f"telefono-{etichetta}-{nome_d}-{nome_s}.png")
-            d = f"{etichetta} {w}×{h} «{parola}»"
-            verifica(f"{d}: tutto in uno schermo, niente scorrimento",
-                     bool(ok) and not m.get("scorre"), f"{m.get('W')}×{m.get('H')}")
-            verifica(f"{d}: nessun testo fuori dai contenitori, parti separate, schede nel carosello",
-                     not m.get("fuori"), "; ".join(m.get("fuori", []))[:240])
-            verifica(f"{d}: contrasto AA e tocchi ≥ 64 px",
-                     not m.get("bassi") and min(m.get("tocchi") or [0]) >= 64,
-                     f"{m.get('bassi')} {[round(x) for x in m.get('tocchi') or []]}")
-            if dove:
-                verifica(f"{d}: il microfono di un altro satellite in una riga piccola",
-                         dove in m.get("dove", ""), m.get("dove"))
-            verifica(f"{d}: il carosello ha spazio (≥ 120 px)", m.get("carosello", 0) >= 120,
-                     f"{m.get('carosello', 0):.0f} px")
-            alti[(nome_d, nome_s)] = (m.get("parla", 0), m.get("carosello", 0))
-        if h > w:
-            p_sp, c_sp = alti[(nome_d, "spento")]
-            p_ac, c_ac = alti[(nome_d, "acceso")]
-            verifica(f"{etichetta} {w}×{h}: col microfono acceso «Parla» più basso e il carosello più alto",
-                     p_ac < p_sp and c_ac > c_sp, f"Parla {p_sp:.0f} → {p_ac:.0f}, carosello {c_sp:.0f} → {c_ac:.0f}")
+        for modo in ("sezioni", "auto"):
+            t.v(f"{T}.impostaAuto({'true' if modo == 'auto' else 'false'}); 1")
+            for nome_s, fai, parola, dove in stati:
+                fai()
+                d = f"{etichetta} {w}×{h} {'in auto' if modo == 'auto' else 'Adesso'} «{parola}»"
+                m = misura(d, parola, 64 if modo == "auto" else 44)
+                foto(t, f"telefono-{etichetta}-{nome_d}-{modo}-{nome_s}.png")
+                if dove:
+                    verifica(f"{d}: il microfono di un altro satellite in una riga piccola",
+                             dove in m.get("dove", ""), m.get("dove"))
+                alti[(nome_d, modo, nome_s)] = (m.get("parla", 0), m.get("spazio", 0))
+            if h > w and modo == "auto":
+                p_sp, c_sp = alti[(nome_d, modo, "spento")]
+                p_ac, c_ac = alti[(nome_d, modo, "acceso")]
+                verifica(f"{etichetta} {w}×{h} in auto: col microfono acceso «Parla» più basso e la risposta più alta",
+                         p_ac < p_sp and c_ac > c_sp, f"Parla {p_sp:.0f} → {p_ac:.0f}, risposta {c_sp:.0f} → {c_ac:.0f}")
+        t.v(f"{T}.impostaAuto(false); 1")
+        spento()
+        for sez in ("conversazione", "cose", "casa", "io"):
+            t.v(f"{T}.vai('#/{sez}'); 1")
+            m = misura(f"{etichetta} {w}×{h} {sez}", "Microfono spento", 44)
+            foto(t, f"telefono-{etichetta}-{nome_d}-{sez}.png")
+        t.v(f"{T}.vai('#/adesso'); 1")
     mic(False)
     t.p._chiama("Emulation.clearDeviceMetricsOverride")
 
 
 def una_per_una(t):
-    """Ogni scheda del carosello in vista, una alla volta, a 375×812 e 320×568: dentro il
-    carosello, niente testo fuori di lato, contrasto AA (le foto: una per tipo)."""
+    """Ogni scheda nella sua sezione, portata in vista, a 375×812 e 320×568: dentro la sezione,
+    niente testo fuori di lato, contrasto AA (le foto: una per tipo)."""
     T = "window.calliopeTelefono"
     for w, h, nome_d in DIMENSIONI[:2]:
         dimensione(t, w, h)
-        for k in (t.v(f"{T}.carosello()") or {}).get("ordine", []):
+        posti = (t.v(f"{T}.sezioni()") or {}).get("posti", {})
+        chiavi = [k for p, ks in posti.items() if not p.startswith("adesso") for k in ks]
+        for k in chiavi:
             t.v(f"{T}.vaiA({json.dumps(k)}); 1")
             time.sleep(0.3)
             m = t.v(MISURA) or {}
             tipo = k.split(":")[0].strip("_")
             foto(t, f"telefono-scheda-{nome_d}-{tipo}.png")
-            verifica(f"{nome_d} scheda {tipo}: in vista, dentro il carosello, testo dentro, contrasto AA",
-                     m.get("vista") == k and not m.get("fuori") and not m.get("bassi") and not m.get("scorre"),
-                     f"{m.get('vista')} {m.get('fuori')} {m.get('bassi')}"[:240])
+            verifica(f"{nome_d} scheda {tipo}: in vista nella sua sezione, testo dentro, contrasto AA",
+                     k in m.get("inVista", []) and not m.get("fuori") and not m.get("bassi") and not m.get("scorre"),
+                     f"{m.get('sezione')} {m.get('inVista')} {m.get('fuori')} {m.get('bassi')}"[:240])
+        t.v(f"{T}.vai('#/adesso'); 1")
     t.p._chiama("Emulation.clearDeviceMetricsOverride")
 
 
 def misure_strati(t, hub, spec):
-    """Modulo aperto, menu aperto e casella per scrivere, nelle tre dimensioni."""
+    """Modulo aperto e casella per scrivere, nelle tre dimensioni (Io è una sezione: misure)."""
     from calliope.schermi import Mittente
     T = "window.calliopeTelefono"
     dario = Mittente(persona="dario", nome="Dario", livello="amministra", certo=True)
@@ -729,14 +793,12 @@ def misure_strati(t, hub, spec):
     aspetta(lambda: t.v("!document.getElementById('strato-modulo').hidden"), 5)
     for w, h, nome_d in DIMENSIONI:
         dimensione(t, w, h)
-        for id_, apri in (("strato-modulo", None), ("menu", "menu-apri"), ("strato-scrivi", "scrivi-apri")):
+        for id_, apri in (("strato-modulo", None), ("strato-scrivi", "scrivi-apri")):
             if apri:
                 t.v(f"{T}.apriStrato({json.dumps(id_)}); document.activeElement.blur(); 1")
             else:
-                t.v(f"{T}.apriModulo({T}.carosello().modulo || [...document.querySelectorAll('#binario .modulo-car')]"
+                t.v(f"{T}.apriModulo({T}.sezioni().modulo || [...document.querySelectorAll('#sezioni .modulo-car')]"
                     f".map((e) => e.dataset.chiave)[0]); document.activeElement.blur(); 1")
-            if id_ == "menu":
-                t.v("document.getElementById('diag-tel').open = false; 1")
             time.sleep(0.2)
             m = t.v(f"({MISURA_STRATO})({json.dumps(id_)})") or {}
             foto(t, f"telefono-{nome_d}-{id_}.png")
@@ -811,6 +873,8 @@ def gioco(t: Tel, hub):
              bool(m.get("chiudi")) and m["chiudi"][2] >= 44 and m["chiudi"][1] < 80 and m.get("libero"),
              json.dumps(m.get("chiudi")))
     verifica("modalità gioco: il microfono resta acceso entrando", mic_prima and t.mic())
+    verifica("modalità gioco: la scheda sta in Le mie cose › Giochi (aperta da sola)",
+             t.v("location.hash === '#/cose/giochi' && !!document.querySelector('#sez-cose [data-posto=\"cose/giochi\"] article.scheda-gioco')"))
     # il pallino segue lo stato di questo telefono
     t.v(f"{T}.st.pensa = true; {T}.st.attivo = true; 1")
     ok = aspetta(lambda: "pensa" in voce(), 2)
@@ -828,10 +892,10 @@ def gioco(t: Tel, hub):
     t.v(f"{T}.st.forza = false; 1")
     t.v(f"if ({T}.st.reg) {T}.st.reg.finisci = true; 1")
     time.sleep(0.5)
-    # ✕ chiude: la scheda torna nel carosello con «Riapri», il microfono resta
+    # ✕ chiude: la scheda resta in Giochi con «Riapri», il microfono resta
     t.tocca_sel("article.modo-gioco .gioco-chiudi")
     ok = aspetta(lambda: not (t.v(G) or {}).get("partita"), 3)
-    stato = t.v("(() => { const a = document.querySelector('#binario article.scheda-gioco');"
+    stato = t.v("(() => { const a = document.querySelector('#sez-cose article.scheda-gioco');"
                 " return {riquadro: !!(a && a.querySelector('iframe')), riapri: !!(a && a.querySelector('.gioco-riapri')),"
                 " fissa: !!a && getComputedStyle(a).position === 'fixed',"
                 " body: document.body.classList.contains('in-modo-gioco')}; })()") or {}
@@ -839,8 +903,11 @@ def gioco(t: Tel, hub):
              bool(ok) and not stato.get("riquadro") and stato.get("riapri") and not stato.get("fissa")
              and not stato.get("body"), json.dumps(stato))
     verifica("✕: il microfono resta acceso", t.mic() == mic_prima)
+    ok = aspetta(lambda: "gioco:finta1" not in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("adesso/corso", []), 3)
+    verifica("✕: il gioco chiuso esce da Adesso e resta in Giochi", bool(ok)
+             and "gioco:finta1" in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("cose/giochi", []))
     t.v(f"{T}.vaiA('gioco:finta1'); 1")
-    t.tocca_sel("#binario article.scheda-gioco .gioco-riapri")
+    t.tocca_sel("#sez-cose article.scheda-gioco .gioco-riapri")
     ok = aspetta(lambda: (t.v(G) or {}).get("partita") == "finta1", 3)
     m = t.v(MISURA_GIOCO) or {}
     verifica("«Riapri»: di nuovo a tutta la finestra", bool(ok) and pieno(m), json.dumps(m.get("articolo")))
@@ -877,6 +944,12 @@ def senza_api(t: Tel):
     ok = aspetta(lambda: t.v(f"!!{T} && {T}.st.collegato"), 15)
     verifica("senza l'API: pagina ricaricata e collegata", bool(ok)
              and t.v("'wakeLock' in navigator") is False)
+    # La cronologia ripresa al ricollegamento non è una novità (revisione della PR #252)
+    aspetta(lambda: len([k for ks in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).values() for k in ks]) > 3, 5)
+    time.sleep(0.5)
+    nov = (t.v(f"{T}.sezioni()") or {}).get("novita", {})
+    verifica("ricaricata: le schede riprese dal server non accendono novità", nov and not any(nov.values()),
+             json.dumps(nov))
     t.modelli_finti()
     # il modulo ancora aperto sul server si riapre da solo con la pagina: lo si chiude
     aspetta(lambda: t.v("!document.getElementById('strato-modulo').hidden"), 3)
@@ -923,7 +996,7 @@ def main() -> int:
             time.sleep(0.5)
             scenari(t, srv)
             misure(t, "0schede")
-            carosello(t, hub)
+            sezioni(t, hub)
             misure(t, "schede")
             una_per_una(t)
             _, spec = modulo_e_scrivi(t, hub)

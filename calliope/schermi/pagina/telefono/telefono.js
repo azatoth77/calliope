@@ -90,10 +90,11 @@ const RITMO_TOLLERANZA = 0.06;      // ±6 % tra l'orologio del contesto e quell
 const RITMO_FINESTRA_MS = 2500;
 
 // ───────────────────────────── interfaccia ─────────────────────────────
-// Dal 04/10 la pagina è una vista sola, quella che era la «vista da guida»: stato di questo
-// telefono, il carosello (risposta e schede), «Parla», «Microfono» e «Scrivi». Il resto
-// (impostazioni, «Prova il microfono», certificato, abbinamento) sta nel menu o compare
-// quando serve (il modulo da compilare, la casella per scrivere).
+// Dal 27/10 la pagina ha cinque sezioni (Adesso, Conversazione, Le mie cose, Casa, Io) con la
+// barra in basso, e sopra la barra la voce: stato di questo telefono, «Microfono», «Parla»,
+// «Scrivi». Impostazioni, «Prova il microfono» e certificato stanno in Io; il modulo da
+// compilare e la casella per scrivere sono strati che compaiono quando servono. La vista unica
+// del 04/10 (la «vista da guida») è la modalità «In auto».
 function statoTel(cls, testo) {
   for (const [id, idt] of [["tel-stato", "tel-stato-testo"], ["tel-collegamento", "tel-collegamento-testo"]]) {
     const e = $(id);
@@ -195,7 +196,7 @@ function statoSchermo() {
   return ["avvisa", PUO_SPEGNERSI + (m ? ": " + m : "") + "."];
 }
 
-// Nel menu l'indicatore discreto; nella vista solo l'avviso, quando lo schermo può spegnersi
+// In Io l'indicatore discreto; nella vista solo l'avviso, quando lo schermo può spegnersi
 function disegnaSchermo() {
   const r = statoSchermo();
   const box = $("schermo-stato");
@@ -220,41 +221,59 @@ function impostaTieni(v) {
   disegnaSchermo();
 }
 
-// ───────────────────────────── carosello (04/10) ─────────────────────────────
-// La risposta e le schede (lista, timer, programma, documento, risposta scritta…) una per
-// volta, la più recente per prima, scorrendo di lato (scroll-snap, niente librerie). Le schede
-// le tiene schermo.js (sessione, cronologia, disegno): qui si mettono in fila. Una scheda
-// aggiornata (stessa chiave) si allinea al suo posto, senza ricostruirla né spostarla; una
-// scheda nuova, o mandata di nuovo («sposta»), va in testa e si mostra. La risposta di un
-// turno nuovo va in testa e si mostra, a meno che Calliope abbia appena mostrato una scheda
-// (che di solito è proprio il contenuto della risposta): allora resta la scheda. Chi scorre
-// a mano non viene spostato per un po'.
+// ───────────────────────────── sezioni (27/10) ─────────────────────────────
+// docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md, passo 1: al posto del carosello cinque
+// sezioni (Adesso, Conversazione, Le mie cose, Casa, Io) con la barra in basso e la voce sopra.
+// Le schede le tiene schermo.js (sessione, cronologia, disegno); qui si smistano: ognuna va
+// nella sua sezione (`sezione` dal server, o SEZIONE_DI_TIPO), la più recente per prima, e
+// quelle vive (il timer corre, il lavoro non è finito, il modulo è da compilare: `viva`)
+// compaiono anche in Adesso. Una scheda aggiornata (stessa chiave) si allinea al suo posto,
+// senza ricostruirla né spostarla. Ogni vista ha il suo indirizzo nel frammento (#/cose/liste),
+// e il gesto indietro torna alla vista di prima. La vista unica di prima resta come modalità
+// «In auto», che si accende a mano (decisione del 27/10): stato grande, l'ultima risposta,
+// «Parla» e il microfono, niente barra.
 const RISPOSTA = "__risposta";
 const car = {
   seq: { [RISPOSTA]: 0 },   // chiave → ordine (più grande = più recente)
   n: 0,
   schede: {},               // chiave → dati della scheda
-  ordine: [RISPOSTA],       // le chiavi mostrate, la più recente per prima
-  vista: RISPOSTA,          // la chiave che si sta guardando
-  atteso: null,             // dove deve arrivare lo scorrimento chiesto da qui (vaiA)
+  el: {},                   // chiave → {casa, adesso}: l'elemento nella sua sezione e quello in Adesso
   toccato: -1e9,            // ultimo scorrimento a mano (performance.now)
-  mostrataDa: -1e9,         // ultima scheda mostrata da Calliope
   modulo: null,             // chiave del modulo aperto nello strato
   moduloFirma: "",
   intera: null,             // chiave della scheda aperta a schermo intero (06/10)
   svil: null,               // lo sviluppo aperto già mostrato nella sua vista (08/10)
+  aperte: new Set(),        // giochi ed esercizi già aperti da Calliope (non si riaprono a ogni mossa)
+  novita: { conversazione: new Set(), cose: new Set(), casa: new Set() },
+  visti: new Set(),         // gli avvisi già guardati (non restano più in Adesso)
 };
+const CHIAVE_AUTO = "calliope.telefono.auto";              // "1": la modalità In auto
+const CHIAVE_VISTI = "calliope.telefono.visti";
+const vis = { sezione: "adesso", percorso: ["adesso"], modo: leggi(CHIAVE_AUTO) === "1" ? "auto" : "sezioni" };
+const TITOLI_SEZIONE = { adesso: "Adesso", conversazione: "Conversazione", cose: "Le mie cose", casa: "Casa", io: "Io" };
 // Le schede che hanno sempre «Espandi» (le altre solo se non ci stanno): sul telefono il
 // cruscotto, il codice di un lavoro, un documento o l'uscita di un programma non si leggono
-// nel riquadro del carosello (06/10, iPhone 13 mini)
+// nel riquadro (06/10, iPhone 13 mini)
 const TIPI_LUNGHI = new Set(["cruscotto", "lavoro", "documento", "esecuzione", "biblioteca", "web", "allegato", "sviluppo", "chat"]);
 // Queste non si aprono a schermo intero: il modulo ha il suo strato, il gioco il suo riquadro
 const TIPI_SENZA_INTERA = new Set(["modulo", "gioco"]);
-const opzioniCarosello = { manoMs: 10000, schedaMs: 12000 };
+// In Adesso non si copiano (un gioco o un esercizio aperti due volte, con due stati): un rimando
+// con «Apri», che porta alla scheda nella sua sezione
+const TIPI_RIMANDO = new Set(["gioco", "esercizio", "esercizi_riepilogo", "sviluppo", "cassetto", "chat",
+  "conoscente"]);
+// Questi, quando Calliope li mostra, aprono la loro sezione: si usano con le mani
+const TIPI_APRONO = new Set(["gioco", "esercizio"]);
+// In Adesso sotto «Aspetta te» invece che «In corso»
+const ASPETTA_TE = (c) => c.tipo === "modulo" || c.tipo === "conoscente" || c.tipo === "avviso"
+  || (c.tipo === "lavoro" && c.stato === "in_attesa");
+const opzioniVista = { manoMs: 10000, recenteS: 600 };
 const fmtOra = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" });
 const sch = () => window.calliopeSchermo;
 
+try { for (const k of JSON.parse(leggi(CHIAVE_VISTI) || "[]")) car.visti.add(String(k)); } catch (e) { /* niente */ }
+
 function chiaveDi(c) { return c.chiave || c.id; }
+function sezioneDi(c) { return sch() ? sch().sezioneDi(c) : "conversazione"; }
 
 // L'ultima risposta (le frasi di un turno, in ordine), al più ~300 caratteri: la coda
 function ricordaFrase(turno, testo) {
@@ -266,8 +285,6 @@ function ricordaFrase(turno, testo) {
   if (nuovo) {
     car.seq[RISPOSTA] = ++car.n;
     disponi();
-    const ora = performance.now();
-    if (ora - car.toccato > opzioniCarosello.manoMs && ora - car.mostrataDa > opzioniCarosello.schedaMs) vaiA(RISPOSTA);
   }
   disegnaRisposta();
   if (car.intera === RISPOSTA) disegnaIntera();
@@ -277,13 +294,23 @@ function disegnaRisposta() {
   const r = $("risposta-testo");
   if (!r) return;
   const vuota = !st.risposta.testo;
-  metti(r, vuota ? "Di' «Calliope» o tocca «Parla»: le risposte e le schede compaiono qui." : st.risposta.testo);
+  metti(r, vuota ? "Di' «Calliope» o tocca «Parla»: le risposte compaiono qui, le schede nelle sezioni in basso." : st.risposta.testo);
   r.classList.toggle("vuota", vuota);
   const et = $("risposta").querySelector(".etichetta");
   metti(et, vuota ? "Calliope" : "Risposta · " + fmtOra.format(new Date(st.risposta.ora || Date.now())));
 }
 
-// La scheda per il carosello: quella di schermo.js, con l'ora; il modulo come riassunto con
+function etichettaOra(s, c) {
+  const et = s.querySelector(".etichetta");
+  if (et && c.creata && !et.querySelector(".quando")) {
+    const q = document.createElement("span");
+    q.className = "quando";
+    q.textContent = fmtOra.format(new Date(c.creata * 1000));
+    et.append(q);
+  }
+}
+
+// La scheda in un elenco: quella di schermo.js, con l'ora; il modulo come riassunto con
 // «Compila» (il modulo vero si apre nel suo strato, che ha posto per la tastiera)
 function costruisciPagina(c) {
   let s;
@@ -325,13 +352,7 @@ function costruisciPagina(c) {
   }
   s.classList.add("pagina-car");
   s.setAttribute("aria-roledescription", "scheda");
-  const et = s.querySelector(".etichetta");
-  if (et && c.creata) {
-    const q = document.createElement("span");
-    q.className = "quando";
-    q.textContent = fmtOra.format(new Date(c.creata * 1000));
-    et.append(q);
-  }
+  etichettaOra(s, c);
   // «Espandi» (06/10): in fondo alla scheda, sotto la dissolvenza; visibile sulle schede
   // lunghe (classe «lunga», da segnaTagli)
   if (!TIPI_SENZA_INTERA.has(c.tipo)) {
@@ -345,58 +366,137 @@ function costruisciPagina(c) {
   return s;
 }
 
-// La fila: le chiavi in ordine di tempo; la risposta vuota solo se non c'è nient'altro
-function disponi() {
-  const bin = $("binario");
-  const chiavi = Object.keys(car.schede);
-  const conRisposta = !!st.risposta.testo || !chiavi.length;
-  const ordine = (conRisposta ? [RISPOSTA] : []).concat(chiavi)
-    .sort((a, b) => (car.seq[b] || 0) - (car.seq[a] || 0));
-  const prima = car.vista;
-  const r = $("risposta");
-  r.hidden = !conRisposta;
-  // In fila solo dove serve: spostare un elemento ne azzera lo scorrimento interno
-  ordine.forEach((k, i) => {
-    const e = k === RISPOSTA ? r : bin.querySelector(':scope > [data-chiave="' + CSS.escape(k) + '"]');
-    if (e && bin.children[i] !== e) bin.insertBefore(e, bin.children[i] || null);
-  });
-  if (!conRisposta && r.parentNode === bin) bin.append(r);   // nascosta, in fondo
-  car.ordine = ordine;
-  disegnaPunti();
-  if (ordine.includes(prima)) vaiA(prima); else vaiA(ordine[0]);
+// In Adesso, per i tipi che non si copiano: tipo, titolo e «Apri»
+function costruisciRimando(c) {
+  const s = document.createElement("article");
+  s.className = "scheda pagina-car rimando-car tipo-" + c.tipo;
+  s.dataset.chiave = chiaveDi(c);
+  s.dataset.rimando = "1";
+  s.setAttribute("aria-roledescription", "scheda");
+  const et = document.createElement("div");
+  et.className = "etichetta";
+  et.textContent = sch().NOMI_TIPO[c.tipo] || c.tipo;
+  const h = document.createElement("h1");
+  h.className = "titolo";
+  h.textContent = c.titolo || "";
+  const b = document.createElement("button");
+  b.type = "button";
+  b.className = "tasto apri-rimando";
+  b.textContent = "Apri";
+  b.setAttribute("aria-label", "Apri in " + TITOLI_SEZIONE[sezioneDi(c).split("/")[0]] + ": " + (c.titolo || et.textContent));
+  s.append(et, h, b);
+  etichettaOra(s, c);
+  return s;
 }
 
-// Le schede di schermo.js nel binario: nuove, aggiornate al loro posto, tolte
+// Costruisce o allinea al suo posto l'elemento di una scheda (stessi nodi, stesso scorrimento)
+function aggiornaElemento(el, c, vecchia, rimando) {
+  const nuova = rimando ? costruisciRimando(c) : costruisciPagina(c);
+  if (!el) { sch().ripristinaSegui(nuova, null); return nuova; }
+  if (vecchia && vecchia.tipo === c.tipo && c.tipo !== "esercizio") {
+    const seguite = sch().misuraSegui(el);
+    sch().allinea(el, nuova);
+    sch().ripristinaSegui(el, seguite);
+    return el;
+  }
+  el.replaceWith(nuova);
+  sch().ripristinaSegui(nuova, null);
+  return nuova;
+}
+
+// L'ultima scheda della conversazione (biblioteca, internet, un calcolo…) è l'ultima risposta:
+// sta in Adesso sotto il testo, finché è recente
+function ultimaConversazione() {
+  let best = null;
+  for (const [k, c] of Object.entries(car.schede)) {
+    if (c.tipo === "chat" || sezioneDi(c).split("/")[0] !== "conversazione") continue;
+    if (!best || (car.seq[k] || 0) > (car.seq[best] || 0)) best = k;
+  }
+  if (!best) return null;
+  const c = car.schede[best];
+  return (Number(c.creata) || 0) > Date.now() / 1000 - opzioniVista.recenteS ? best : null;
+}
+
+// Dove va ogni scheda: [posto nella sua sezione, posto in Adesso o null]
+function postiDi(k, ultima) {
+  const c = car.schede[k];
+  const casa = sezioneDi(c);
+  let adesso = null;
+  if (k === ultima) adesso = "adesso/risposta";
+  else if (sch().viva(c) && !(c.tipo === "avviso" && car.visti.has(k))) adesso = ASPETTA_TE(c) ? "adesso/aspetta" : "adesso/corso";
+  return [casa, adesso];
+}
+
+function posto(nome) {
+  return document.querySelector('#sezioni [data-posto="' + CSS.escape(nome) + '"]')
+    || document.querySelector('#sezioni [data-posto="' + CSS.escape(nome.split("/")[0]) + '"]');
+}
+
+// Mette ogni elemento nel suo elenco, il più recente per primo; nasconde i gruppi vuoti
+function disponi() {
+  const ultima = ultimaConversazione();
+  const elenchi = new Map();
+  for (const k of Object.keys(car.schede)) {
+    const [casa, adesso] = postiDi(k, ultima);
+    const e = car.el[k] || (car.el[k] = { casa: null, adesso: null });
+    for (const [chi, dove] of [["casa", casa], ["adesso", adesso]]) {
+      const box = dove ? posto(dove) : null;
+      if (!box) {
+        if (e[chi]) { e[chi].remove(); e[chi] = null; }
+        continue;
+      }
+      if (!e[chi]) e[chi] = aggiornaElemento(null, car.schede[k], null, chi === "adesso" && TIPI_RIMANDO.has(car.schede[k].tipo));
+      if (!elenchi.has(box)) elenchi.set(box, []);
+      elenchi.get(box).push([car.seq[k] || 0, e[chi]]);
+    }
+  }
+  for (const box of document.querySelectorAll("#sezioni [data-posto]")) {
+    const fila = (elenchi.get(box) || []).sort((a, b) => b[0] - a[0]).map((x) => x[1]);
+    // In fila solo dove serve: spostare un elemento ne azzera lo scorrimento interno
+    fila.forEach((el, i) => { if (box.children[i] !== el) box.insertBefore(el, box.children[i] || null); });
+    for (const x of [...box.children]) if (!fila.includes(x)) x.remove();
+    const r = box.closest(".raccolta");
+    if (r) r.hidden = !fila.length;
+    const g = box.previousElementSibling;
+    if (g && g.matches("h2.gruppo[data-gruppo]")) g.hidden = !fila.length;
+  }
+  for (const s of document.querySelectorAll("#sezioni .sezione")) {
+    const v = s.querySelector(".vuoto-sez");
+    if (v) v.hidden = !!s.querySelector("[data-posto] > *");
+  }
+  disegnaNovita();
+  segnaTagli();
+}
+
+// Le schede di schermo.js nelle sezioni: nuove, aggiornate al loro posto, tolte
 function sincronizza(det) {
-  const bin = $("binario");
   const lista = sch() ? sch().cronologia() : [];
   const viste = new Set();
-  if (det && det.scheda && det.spostata) car.seq[chiaveDi(det.scheda)] = ++car.n;
+  const spostata = det && det.scheda && det.spostata ? chiaveDi(det.scheda) : null;
+  // La scheda appena arrivata dal flusso, non quella della cronologia ripresa al (ri)collegamento
+  const arrivata = det && det.scheda && !det.ripresa ? chiaveDi(det.scheda) : null;
+  if (spostata) car.seq[spostata] = ++car.n;
   for (const c of lista) {
     const k = chiaveDi(c);
     viste.add(k);
-    if (!(k in car.seq)) car.seq[k] = ++car.n;
+    const nuova = !(k in car.seq);
+    if (nuova) car.seq[k] = ++car.n;
     const vecchia = car.schede[k];
     car.schede[k] = c;
-    const el = bin.querySelector(':scope > [data-chiave="' + CSS.escape(k) + '"]');
-    if (el && vecchia === c) continue;
-    const nuova = costruisciPagina(c);
-    if (el && vecchia && vecchia.tipo === c.tipo && c.tipo !== "esercizio") {
-      const seguite = sch().misuraSegui(el);
-      sch().allinea(el, nuova);
-      sch().ripristinaSegui(el, seguite);
-    } else if (el) {
-      el.replaceWith(nuova);
-    } else {
-      bin.append(nuova);
-      sch().ripristinaSegui(nuova, null);
+    // Una novità sulla sezione (il pallino nella barra) se arriva mentre si guarda altrove
+    if (k === arrivata && (nuova || k === spostata)) segnaNovita(k, c);
+    const e = car.el[k];
+    if (e && vecchia !== c) {
+      for (const chi of ["casa", "adesso"]) {
+        if (e[chi]) e[chi] = aggiornaElemento(e[chi], c, vecchia, chi === "adesso" && TIPI_RIMANDO.has(c.tipo));
+      }
     }
-    if (car.modulo === k) aggiornaModulo(c);
-    if (car.intera === k) disegnaIntera();
+    if (vecchia !== c && car.modulo === k) aggiornaModulo(c);
+    if (vecchia !== c && car.intera === k) disegnaIntera();
   }
   // La vista dello sviluppo (08/10): a schermo intero quando uno sviluppo si apre (se non c'è
-  // un altro strato aperto: il menu, lo scritto, un modulo), chiusa quando si chiude o si
-  // sospende; aperta, si ridisegna anche quando cambia il suo lavoro (il flusso, i tetti)
+  // un altro strato aperto: lo scritto, un modulo), chiusa quando si chiude o si sospende;
+  // aperta, si ridisegna anche quando cambia il suo lavoro (il flusso, i tetti)
   const d = det && det.scheda;
   if (d && d.tipo === "sviluppo") {
     const k = chiaveDi(d);
@@ -414,8 +514,9 @@ function sincronizza(det) {
   for (const k of Object.keys(car.schede)) {
     if (viste.has(k)) continue;
     delete car.schede[k];
-    const el = bin.querySelector(':scope > [data-chiave="' + CSS.escape(k) + '"]');
-    if (el) el.remove();
+    const e = car.el[k];
+    if (e) { for (const x of [e.casa, e.adesso]) if (x) x.remove(); delete car.el[k]; }
+    for (const s of Object.values(car.novita)) s.delete(k);
     // Tolta da chi la guarda (il «Chiudi» del cruscotto) o da Calliope (revoca, non amministra
     // più): lo strato si chiude. Uscita dalla cronologia perché ne sono arrivate altre: resta
     // aperta con l'ultimo contenuto (una scheda nuova non chiude quella che si sta leggendo)
@@ -423,65 +524,175 @@ function sincronizza(det) {
   }
   if (sch()) sch().aggiorna();          // timer e tempi dei lavori subito, non al giro dopo
   disponi();
-  segnaTagli();                         // «Espandi» subito (allinea toglie le classi messe qui)
 }
 
+// Non è una novità ciò che si vede già: la sezione aperta, o Adesso quando la scheda è lì
+function segnaNovita(k, c) {
+  const s = sezioneDi(c).split("/")[0];
+  if (!(s in car.novita) || (s === vis.sezione && vis.modo === "sezioni")) return;
+  if (vis.sezione === "adesso" && postiDi(k, ultimaConversazione())[1]) return;
+  car.novita[s].add(k);
+}
+
+function disegnaNovita() {
+  for (const a of document.querySelectorAll("#barra a[data-sezione]")) {
+    const s = a.dataset.sezione;
+    const n = car.novita[s] ? car.novita[s].size : 0;
+    const b = a.querySelector(".novita");
+    if (!b) continue;
+    b.hidden = !n;
+    metti(b, n ? String(n) : "");
+    attr(a, "aria-label", TITOLI_SEZIONE[s] + (n ? ", " + n + " novità" : ""));
+  }
+}
+
+// Calliope mostra una scheda: il modulo si apre nel suo strato; in Adesso la scheda viva va in
+// vista (se chi guarda non sta scorrendo); altrove resta il pallino sulla sua sezione
 function suMostra(c) {
   const k = chiaveDi(c);
-  car.mostrataDa = performance.now();
   sincronizza(null);
   if (c.tipo === "modulo" && c.stato === "aperto") apriModulo(k);
-  if (performance.now() - car.toccato > opzioniCarosello.manoMs) vaiA(k);
+  // Un gioco o gli esercizi che Calliope apre si usano subito: la loro sezione si apre da sola
+  // (il gioco va a tutta la finestra, 11/10: schermo.js ci entra appena dopo, e una scheda in
+  // una sezione nascosta non la prende)
+  if (TIPI_APRONO.has(c.tipo) && sch().viva(c)) {
+    // In auto niente giochi: il riquadro non si vedrebbe ma ascolterebbe i comandi a voce
+    if (vis.modo === "auto") {
+      if (c.tipo === "gioco") setTimeout(() => sch().chiudiPartita(c.partita), 0);
+      return;
+    }
+    // Una volta sola: una mossa o una risposta nuova non riporta qui chi è andato altrove
+    if (car.aperte.has(k)) return;
+    car.aperte.add(k);
+    const p = sezioneDi(c);
+    if (vis.sezione !== p.split("/")[0]) vai("#/" + p);
+    mostraIn(k, vis.sezione);
+    return;
+  }
+  if (TIPI_APRONO.has(c.tipo)) car.aperte.delete(k);
+  if (performance.now() - car.toccato > opzioniVista.manoMs) mostraIn(k, vis.sezione);
 }
 
-function pagine() { return [...$("binario").children].filter((e) => !e.hidden); }
+// Porta in vista l'elemento di una scheda nella sezione indicata, se c'è
+function mostraIn(k, sezione) {
+  const e = car.el[k];
+  const el = e && (sezione === "adesso" ? e.adesso : (e.casa && e.casa.closest('.sezione[data-sezione="' + sezione + '"]') ? e.casa : null));
+  if (!el || el.closest("[hidden]")) return false;
+  try { el.scrollIntoView({ block: "nearest", behavior: "instant" }); } catch (e2) { el.scrollIntoView(); }
+  return true;
+}
 
+// Apre la sezione di una scheda e la mostra (il «Apri» di un rimando, il server domani)
 function vaiA(k) {
-  const bin = $("binario");
-  const i = car.ordine.indexOf(k);
-  if (i < 0) return;
-  car.vista = k;
-  const el = pagine()[i];
-  if (el) {
-    const x = el.offsetLeft - pagine()[0].offsetLeft;
-    car.atteso = x;
-    if (Math.abs(bin.scrollLeft - x) > 1) bin.scrollTo({ left: x, behavior: "instant" });
-  }
-  disegnaPunti();
+  const c = car.schede[k];
+  if (!c) return false;
+  const p = sezioneDi(c);
+  vai("#/" + p);
+  requestAnimationFrame(() => mostraIn(k, p.split("/")[0]));
+  return true;
 }
 
-// Quale pagina si vede, dallo scorrimento
-function suScorri() {
-  const bin = $("binario");
-  const p = pagine();
-  if (!p.length) return;
-  // Uno scorrimento che non è quello chiesto da vaiA è di chi guarda: per un po' non lo si sposta
-  if (car.atteso === null || Math.abs(bin.scrollLeft - car.atteso) > 2) { car.toccato = performance.now(); car.atteso = null; }
-  const passo = p.length > 1 ? p[1].offsetLeft - p[0].offsetLeft : bin.clientWidth;
-  const i = Math.max(0, Math.min(p.length - 1, Math.round(bin.scrollLeft / Math.max(1, passo))));
-  if (car.ordine[i] && car.ordine[i] !== car.vista) {
-    car.vista = car.ordine[i];
-    disegnaPunti();
-  }
+// ── router sul frammento: #/adesso, #/conversazione, #/cose/liste, #/casa, #/io ──
+function percorsoDa(hash) {
+  const parti = String(hash || "").replace(/^#\/?/, "").split("/").filter(Boolean).map((x) => decodeURIComponent(x));
+  if (!parti.length || !(parti[0] in TITOLI_SEZIONE)) return ["adesso"];
+  return parti;
 }
 
-function disegnaPunti() {
-  const box = $("punti");
-  const n = car.ordine.length;
-  const i = Math.max(0, car.ordine.indexOf(car.vista));
-  if (box.querySelectorAll("i").length !== n) {
-    box.querySelectorAll("i").forEach((x) => x.remove());
-    for (let j = 0; j < n; j++) box.append(document.createElement("i"));
+function vai(hash, sostituisci) {
+  const p = percorsoDa(hash);
+  const nuovo = "#/" + p.map(encodeURIComponent).join("/");
+  // Con la scheda a schermo intero aperta la sua voce nella cronologia del browser si
+  // sostituisce (resterebbe una voce morta prima della sezione nuova)
+  let sua = false;
+  if (!$("strato-scheda").hidden) {
+    sua = !!(history.state && history.state.calliopeStrato === "scheda");
+    chiudiStrato("strato-scheda");
+    if (sua) sostituisci = true;
   }
-  box.querySelectorAll("i").forEach((x, j) => { x.className = j === i ? "qui" : ""; x.setAttribute("aria-hidden", "true"); });
-  box.classList.toggle("nascosti", n < 2);
-  const c = car.schede[car.vista];
-  const nome = car.vista === RISPOSTA ? "risposta" : (c && (sch().NOMI_TIPO[c.tipo] || c.tipo) || "scheda").toLowerCase();
-  metti($("punti-testo"), n < 2 ? "" : nome + ", " + (i + 1) + " di " + n);
+  if (location.hash === nuovo) { applicaPercorso(); return; }
+  try {
+    // Lo stato della scheda chiusa non passa alla sezione nuova (il gesto indietro dopo non la
+    // riconoscerebbe come sua: seconda revisione della PR #252)
+    if (sostituisci) history.replaceState(sua ? null : history.state, "", nuovo);
+    else history.pushState(null, "", nuovo);
+  } catch (e) { location.hash = nuovo; return; }
+  applicaPercorso();
+}
+
+function applicaPercorso() {
+  const p = percorsoDa(location.hash);
+  const prima = vis.sezione;
+  vis.percorso = p;
+  vis.sezione = p[0];
+  const v = $("vista");
+  if (v.dataset.sezione !== vis.sezione) v.dataset.sezione = vis.sezione;
+  for (const s of document.querySelectorAll("#sezioni .sezione")) {
+    s.hidden = vis.modo === "auto" ? s.dataset.sezione !== "adesso" : s.dataset.sezione !== vis.sezione;
+  }
+  metti($("sez-titolo"), vis.modo === "auto" ? "In auto" : TITOLI_SEZIONE[vis.sezione]);
+  for (const a of document.querySelectorAll("#barra a[data-sezione]")) {
+    if (a.dataset.sezione === vis.sezione) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  }
+  // Il gesto indietro durante un gioco (la sua scheda sta in Le mie cose) lo chiude, come ✕
+  if (vis.sezione !== "cose" && sch() && sch().gioco && sch().gioco().partita) sch().chiudiGioco();
+  // Guardare la sezione toglie le sue novità; in Casa gli avvisi diventano visti
+  if (vis.modo === "sezioni" && car.novita[vis.sezione]) car.novita[vis.sezione].clear();
+  if (vis.modo === "sezioni" && vis.sezione === "casa") segnaVisti();
+  // #/cose/liste: la raccolta in vista; un percorso più lungo (#/cose/liste/lista:spesa) la scheda
+  if (p.length > 1 && vis.modo === "sezioni") {
+    requestAnimationFrame(() => {
+      const chiave = p.slice(2).join("/");
+      if (chiave && mostraIn(chiave, vis.sezione)) return;
+      const r = document.querySelector('#sez-' + vis.sezione + ' [data-raccolta="' + CSS.escape(p[1]) + '"]');
+      if (r && !r.hidden) r.scrollIntoView({ block: "start", behavior: "instant" });
+    });
+  } else if (prima !== vis.sezione) {
+    const s = $("sez-" + vis.sezione);
+    if (s) s.scrollTop = 0;
+  }
+  disponi();
+}
+
+function segnaVisti() {
+  let cambia = false;
+  for (const [k, c] of Object.entries(car.schede)) {
+    if (c.tipo === "avviso" && !car.visti.has(k)) { car.visti.add(k); cambia = true; }
+  }
+  if (!cambia) return;
+  scrivi(CHIAVE_VISTI, JSON.stringify([...car.visti].slice(-100)));
+}
+
+// La modalità In auto (decisione del 27/10: a mano): «In auto» in Adesso e in Io, «Esci» la chiude
+function segnaModo() {
+  const acceso = vis.modo === "auto";
+  $("vista").dataset.modo = vis.modo;
+  $("auto-segno").hidden = !acceso;
+  $("auto-esci").hidden = !acceso;
+  $("auto-apri").hidden = acceso;
+}
+
+function impostaAuto(acceso) {
+  vis.modo = acceso ? "auto" : "sezioni";
+  scrivi(CHIAVE_AUTO, acceso ? "1" : null);
+  segnaModo();
+  if (acceso) { for (const s of STRATI) { if (s === "strato-scheda") chiudiIntera(); else chiudiStrato(s); } }
+  if (!acceso && vis.sezione !== "adesso") vai("#/adesso");
+  else applicaPercorso();
+}
+
+// All'avvio: l'indirizzo com'è (una sezione sconosciuta diventa Adesso) e il modo salvato
+function avviaVista() {
+  const p = percorsoDa(location.hash);
+  try { history.replaceState(history.state, "", "#/" + p.map(encodeURIComponent).join("/")); } catch (e) { /* niente */ }
+  segnaModo();
+  applicaPercorso();
 }
 
 // La dissolvenza in fondo solo dove il testo non ci sta; «Espandi» dove non ci sta (in alto o
 // di lato) e sulle schede lunghe per tipo
+function pagine() { return [...document.querySelectorAll("#sezioni .pagina-car")].filter((e) => !e.closest("[hidden]")); }
+
 function segnaTagli() {
   const r = $("risposta-testo");
   if (r) {
@@ -490,6 +701,7 @@ function segnaTagli() {
     $("risposta").classList.toggle("lunga", !!st.risposta.testo && r.scrollHeight > r.clientHeight + 1);
   }
   for (const e of pagine()) {
+    if (e.dataset.rimando) continue;
     const corpo = e.querySelector(":scope > .corpo");
     if (!corpo) continue;
     e.classList.toggle("taglia", corpo.scrollHeight > corpo.clientHeight + 1
@@ -501,13 +713,23 @@ function segnaTagli() {
   }
 }
 
+// Le schede vive cambiano col tempo (il timer finisce, il promemoria si avvicina): ogni 5 s si
+// ricontrolla dove stanno, e si ridispone solo se qualcosa è cambiato
+let firmaVive = "";
+setInterval(() => {
+  if (!sch() || !sch().viva) return;
+  const ultima = ultimaConversazione();
+  const f = Object.keys(car.schede).map((k) => k + ":" + postiDi(k, ultima)[1]).join("|");
+  if (f !== firmaVive) { firmaVive = f; disponi(); }
+}, 5000);
+
 // ───────────────────────────── una scheda a schermo intero (06/10) ─────────────────────────────
-// Sul telefono il riquadro del carosello è piccolo: il cruscotto, il codice di un lavoro, un
+// Sul telefono il riquadro di una scheda è piccolo: il cruscotto, il codice di un lavoro, un
 // documento non si leggevano. Un tocco sulla scheda (o «Espandi») la apre in uno strato sopra
 // la vista, con il testo grande, le tabelle e il codice che scorrono di lato nel loro riquadro.
 // La scheda aperta si aggiorna al suo posto (stessa chiave: il cruscotto ogni 30 s, un lavoro in
-// diretta) senza perdere il punto in cui si legge; le schede nuove vanno nel carosello. Si chiude
-// con «Chiudi», Esc o il gesto indietro (una voce nella cronologia del browser).
+// diretta) senza perdere il punto in cui si legge. Si chiude con «Chiudi», Esc o il gesto
+// indietro (una voce nella cronologia del browser, con lo stesso indirizzo della sezione).
 function costruisciIntera(k) {
   let s;
   if (k === RISPOSTA) {
@@ -582,13 +804,15 @@ function chiudiIntera() {
   if (history.state && history.state.calliopeStrato === "scheda") { try { history.back(); } catch (e) { /* niente */ } }
 }
 
-// Un tocco su una scheda del carosello la apre (non sui suoi pulsanti, né sulla risposta, che
-// ha «Espandi» quando è lunga, né su modulo e gioco)
-function suToccoCarosello(ev) {
+// Un tocco su una scheda la apre (non sui suoi pulsanti, né sulla risposta, che ha «Espandi»
+// quando è lunga, né su modulo e gioco); «Apri» di un rimando porta alla sua sezione
+function suToccoScheda(ev) {
   const t = ev.target;
   if (!t.closest) return;
-  const pag = t.closest("#binario > [data-chiave]");
+  const pag = t.closest("#sezioni [data-chiave]");
   if (!pag) return;
+  if (t.closest(".apri-modulo")) { apriModulo(pag.dataset.chiave); return; }
+  if (pag.dataset.rimando) { if (t.closest(".apri-rimando") || !t.closest("button, a")) vaiA(pag.dataset.chiave); return; }
   if (t.closest(".espandi")) { apriIntera(pag.dataset.chiave); return; }
   if (pag.dataset.chiave === RISPOSTA) return;
   if (t.closest("button, a, input, textarea, select, summary, label, iframe")) return;
@@ -597,9 +821,9 @@ function suToccoCarosello(ev) {
   apriIntera(pag.dataset.chiave);
 }
 
-// ───────────────────────────── strati: menu, modulo, scrivi ─────────────────────────────
+// ───────────────────────────── strati: modulo, scrivi ─────────────────────────────
 let ritornoFuoco = null;
-const STRATI = ["strato-scheda", "strato-modulo", "strato-scrivi", "menu"];
+const STRATI = ["strato-scheda", "strato-modulo", "strato-scrivi"];
 function apriStrato(id, fuoco) {
   for (const s of STRATI) {
     if (s === id || $(s).hidden) continue;
@@ -653,11 +877,11 @@ function aggiornaModulo(c) {
 function suScrivi(det) {
   const b = $("scrivi-apri");
   b.hidden = !det.attiva;
-  b.closest(".vista-fondo").classList.toggle("solo-mic", !det.attiva);
   // «Allega» (foto o file, 05/10): solo da un telefono personale (il server rifiuta le altre)
   const f = $("foto-apri");
   f.hidden = !(det.attiva && det.personale);
-  b.closest(".vista-fondo").classList.toggle("con-foto", !f.hidden);
+  b.closest(".voce-riga").classList.toggle("con-scrivi", !b.hidden);
+  b.closest(".voce-riga").classList.toggle("con-foto", !f.hidden);
   if (!det.attiva) chiudiStrato("strato-scrivi");
   // Senza una conversazione a voce (05/10) il tasto resta, attenuato: apre la casella spenta,
   // che dice la parola da dire; tutto si riaccende da solo appena la conversazione comincia
@@ -1800,9 +2024,14 @@ async function avvio() {
   const bs = $("stanza-tieni");
   if (bs) bs.addEventListener("click", () => impostaStanza(!st.stanza.voluta));
   aggiornaStanza();
-  // Menu, modulo e casella per scrivere: strati sopra la vista (Esc li chiude)
-  $("menu-apri").addEventListener("click", () => apriStrato("menu"));
-  $("menu-chiudi").addEventListener("click", () => chiudiStrato("menu"));
+  // Le sezioni: il frammento dice quale (#/cose/liste), il gesto indietro torna a quella di prima;
+  // «In auto» a mano, «Esci» torna ad Adesso
+  window.addEventListener("hashchange", applicaPercorso);
+  $("auto-apri").addEventListener("click", () => impostaAuto(true));
+  $("auto-io").addEventListener("click", () => impostaAuto(true));
+  $("auto-esci").addEventListener("click", () => impostaAuto(false));
+  $("sezioni").addEventListener("scroll", () => { car.toccato = performance.now(); }, { capture: true, passive: true });
+  // Modulo e casella per scrivere: strati sopra la vista (Esc li chiude)
   $("modulo-chiudi").addEventListener("click", () => chiudiStrato("strato-modulo"));
   $("scrivi-apri").addEventListener("click", apriScrivi);
   $("foto-apri").addEventListener("click", apriFoto);
@@ -1817,7 +2046,9 @@ async function avvio() {
   });
   // La scheda a schermo intero: «Chiudi» e il gesto indietro (la voce messa da apriIntera)
   $("intera-chiudi").addEventListener("click", chiudiIntera);
-  window.addEventListener("popstate", () => { if (!$("strato-scheda").hidden) chiudiStrato("strato-scheda"); });
+  window.addEventListener("popstate", (ev) => {
+    if (!$("strato-scheda").hidden && !(ev.state && ev.state.calliopeStrato === "scheda")) chiudiStrato("strato-scheda");
+  });
   // Un avviso si toglie toccandolo (quello dello schermo no: il tocco lo riprova)
   $("avviso-tel").addEventListener("click", () => avviso(""));
   // Il carosello: le schede di schermo.js, chi scorre a mano, «Compila» di un modulo
@@ -1830,10 +2061,10 @@ async function avvio() {
     st.compagnia = d.attiva ? String(d.testo || "In compagnia: chiamami per nome") : "";
     disegna();
   });
-  // La modalità gioco (11/10): il gioco copre il carosello; uscendo, il carosello torna sulla
-  // scheda che si guardava (lo scorrimento con una scheda fissa non vale)
+  // La modalità gioco (11/10): il gioco copre la pagina; uscendo, le dissolvenze si rifanno e
+  // un gioco chiuso esce subito da Adesso (non è più vivo)
   document.addEventListener("calliope:gioco", (ev) => {
-    if (!(ev.detail || {}).partita) requestAnimationFrame(() => { vaiA(car.vista); segnaTagli(); });
+    if (!(ev.detail || {}).partita) requestAnimationFrame(() => { disponi(); });
   });
   // Il pallino della voce sopra il gioco è anche «Parla»: tocca e parla, tieni premuto per
   // parlare a lungo (come preparaPulsante, ma per delega: schermo.js ridisegna il pallino)
@@ -1864,20 +2095,21 @@ async function avvio() {
       try { i.setSelectionRange(testo.length, testo.length); } catch (e) { /* niente */ }
     }
   });
-  // Il cruscotto di chi amministra (06/10): la voce del menu solo se il proprietario di questo
-  // telefono amministra (lo ricontrolla il server); la scheda va nel carosello
-  document.addEventListener("calliope:amministra", (ev) => { $("cruscotto-tel").hidden = !ev.detail.attiva; });
-  // Dal menu il cruscotto si apre subito a schermo intero (resta anche nel carosello)
+  // Il cruscotto di chi amministra (06/10): in Io solo se il proprietario di questo telefono
+  // amministra (lo ricontrolla il server); la scheda resta in Io
+  document.addEventListener("calliope:amministra", (ev) => {
+    $("cruscotto-tel").hidden = !ev.detail.attiva;
+    $("io-amministra").hidden = !ev.detail.attiva;
+  });
+  // Il cruscotto si apre subito a schermo intero
   $("cruscotto-tel").addEventListener("click", async () => {
-    chiudiStrato("menu");
     if (sch() && await sch().cruscotto()) apriIntera("cruscotto");
   });
-  // La conversazione (08/10): dal menu a schermo intero, e resta nel carosello; «Pulisci le mie
+  // La conversazione (08/10): da Conversazione a schermo intero, e resta lì; «Pulisci le mie
   // schede» con due tocchi (le schede non tornano). Solo su un telefono personale
   document.addEventListener("calliope:chat", (ev) => { $("chat-tel").hidden = !ev.detail.attiva; });
   document.addEventListener("calliope:scrivi", (ev) => { $("pulisci-tel").hidden = !(ev.detail && ev.detail.personale); });
   $("chat-tel").addEventListener("click", () => {
-    chiudiStrato("menu");
     if (sch() && sch().chat()) apriIntera("chat");
   });
   let pulisciArmato = 0;
@@ -1897,14 +2129,8 @@ async function avvio() {
     esito.hidden = false;
     esito.textContent = r.ok ? (r.frase || "Schede tolte.") : (r.errore || "Non ci sono riuscita: riprova.");
   });
-  const bin = $("binario");
-  bin.addEventListener("scroll", suScorri, { passive: true });
-  bin.addEventListener("click", (ev) => {
-    const b = ev.target.closest && ev.target.closest(".apri-modulo");
-    if (b) { apriModulo(b.closest("[data-chiave]").dataset.chiave); return; }
-    suToccoCarosello(ev);
-  });
-  window.addEventListener("resize", () => vaiA(car.vista));
+  $("sezioni").addEventListener("click", suToccoScheda);
+  avviaVista();
   // Ogni tocco, se il browser aveva tolto lo schermo acceso, lo richiede con il gesto in corso
   document.addEventListener("pointerdown", () => { st.tocco = performance.now(); schermo.riprova(); }, true);
   $("dimentica").addEventListener("click", () => {
@@ -1958,8 +2184,16 @@ window.calliopeTelefono = {
   }),
   impostaStanza, stanzaAscolto: stanza,
   impostaMic, tocca, diagnostica, opzioniMic, mic,
-  schermo, comando, opzioniCarosello, apriStrato, chiudiStrato, apriModulo, vaiA, apriIntera, chiudiIntera,
-  carosello: () => ({ ordine: car.ordine.slice(), vista: car.vista, modulo: car.modulo, intera: car.intera }),
+  schermo, comando, opzioniVista, apriStrato, chiudiStrato, apriModulo, vaiA, vai, impostaAuto, apriIntera, chiudiIntera,
+  // Dove sta ogni scheda (per le prove): la sezione guardata, il modo, le chiavi per elenco
+  sezioni: () => {
+    const posti = {};
+    for (const b of document.querySelectorAll("#sezioni [data-posto]")) posti[b.dataset.posto] = [...b.children].map((e) => e.dataset.chiave);
+    const novita = {};
+    for (const [k, v] of Object.entries(car.novita)) novita[k] = v.size;
+    return { sezione: vis.sezione, percorso: vis.percorso.slice(), modo: vis.modo, posti, novita,
+      modulo: car.modulo, intera: car.intera };
+  },
   schermoStato: () => ({ stato: schermo.stato, motivo: schermo.motivo, voluto: schermo.voluto,
     richieste: schermo.richieste, cadute: schermo.cadute, info: schermo.info,
     indicatore: statoSchermo(), tieni: st.tieni }),

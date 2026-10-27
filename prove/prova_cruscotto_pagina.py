@@ -12,7 +12,7 @@ schermi e dei satelliti veri su 127.0.0.1, registro dei turni finto.
   la toglie; nessun testo di persone nella pagina;
 - schermo personale di un familiare e schermo di stanza: niente pulsante, e la scheda non si
   apre nemmeno chiamandola a mano;
-- telefono di chi amministra: la voce del menu c'è, apre la scheda nel carosello (in vista);
+- telefono di chi amministra: la voce in Io c'è, apre il cruscotto a schermo intero (e resta in Io);
   telefono di un familiare: niente voce;
 - la ricerca web (09/10, calliope/web/motore.py, con SearXNG e docker finti): con il motore la
   sezione «Ricerca web (SearXNG)» e i pulsanti «Controlla» e «Aggiorna»; il primo tocco chiede
@@ -271,19 +271,19 @@ def telefono(exe, srv, web, proprietario, admin):
         time.sleep(0.5)
         voce = p.valuta("!document.getElementById('cruscotto-tel').hidden")
         if not admin:
-            verifica("telefono di un familiare: nessuna voce «cruscotto» nel menu", voce is False, voce)
+            verifica("telefono di un familiare: nessuna voce «cruscotto» in Io", voce is False, voce)
             return
-        verifica("telefono di chi amministra: la voce del menu c'è", voce is True, voce)
-        tocca(p, "#menu-apri")
-        aspetta(lambda: p.valuta("!document.getElementById('menu').hidden"), 3)
-        foto(p, "cruscotto-telefono-menu.png", 390, 844, mobile=True)
+        verifica("telefono di chi amministra: la voce in Io c'è, sotto «Amministra»", voce is True
+                 and p.valuta("!document.getElementById('io-amministra').hidden"), voce)
+        tocca(p, '#barra a[data-sezione="io"]')
+        aspetta(lambda: p.valuta("!document.getElementById('sez-io').hidden"), 3)
+        foto(p, "cruscotto-telefono-io.png", 390, 844, mobile=True)
         tocca(p, "#cruscotto-tel")
-        ok = aspetta(lambda: p.valuta("!!document.querySelector('#binario .tipo-cruscotto .cr-sezione')"), 10)
-        verifica("il cruscotto si apre nel carosello", bool(ok))
-        verifica("il menu si chiude", p.valuta("document.getElementById('menu').hidden"))
-        vista = p.valuta("window.calliopeTelefono.carosello().vista")
-        verifica("ed è la scheda in vista", vista == "cruscotto", vista)
-        fuori = p.valuta("(() => { const s = document.querySelector('#binario .tipo-cruscotto');"
+        ok = aspetta(lambda: p.valuta("!!document.querySelector('#intera-posto .tipo-cruscotto .cr-sezione')"), 10)
+        verifica("il cruscotto si apre a schermo intero", bool(ok))
+        verifica("e resta in Io", p.valuta("!!document.querySelector('#sez-io .tipo-cruscotto')"))
+        p.valuta("window.calliopeTelefono.chiudiIntera(); 1")
+        fuori = p.valuta("(() => { const s = document.querySelector('#sez-io .tipo-cruscotto');"
                          " const c = s.querySelector('.corpo'); return c.scrollWidth > c.clientWidth + 1; })()")
         verifica("niente testo che esce di lato", fuori is False, fuori)
         time.sleep(0.3)

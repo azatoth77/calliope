@@ -2,7 +2,7 @@
 
 *Schede sugli schermi, abbinamento, visibilità, scrivere invece di parlare, telefono come satellite (PWA), rispondi dove ti ho chiesto. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 18/10.** Come al 14/10 (sotto), più: chi è quale giocatore e «Gira il telefono» sugli schermi (15/10, [giochi](giochi.md)); la foto mandata dallo schermo che aspetta la domanda anche se in mezzo parla un'altra voce (16/10, #96, [immagini-allegati](immagini-allegati.md)); l'inoltro del satellite tolto (16/10, #61): fuori casa il telefono raggiunge la DGX con la sua VPN ([satelliti](satelliti.md), [`prove/manuali/telefono.md`](../../prove/manuali/telefono.md)). Le prove manuali stanno in `prove/manuali/` dal 06/10. *Stato al 14/10 (storico):* come al 09/10 (sotto), più: la **modalità gioco** a tutta la finestra con il pallino della voce e la variante «collaudo» (11/10), il palco fisso dei giochi (14/10, [giochi](giochi.md)); la **stanza** sugli schermi (13/10): il segno «Ascolto la stanza» o la pausa, l'interruttore «Ascolto la stanza» del telefono (acceso di serie), la sezione «Stanza (in ombra)» del cruscotto con soli numeri; dal 14/10 la scheda «avviso» del tutore con «Leggi cosa si è detto» e «Scarica l'audio», solo sul suo schermo personale ([minori](minori.md)). Restano da provare sul vero l'iPhone e lo scaricamento dalla PWA.
+**Stato al 27/10.** Il telefono è **a sezioni** (passo 1 del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md), sezione in fondo): Adesso, Conversazione, Le mie cose, Casa e Io con la barra in basso, la voce sopra la barra, ogni scheda nella sua sezione e quelle vive anche in Adesso; il menu è diventato Io, la vista da guida del 04/10 la modalità «In auto», a mano. Restano i passi 1b–10 del progetto (PC personale, accento lilla, sezioni per età, Le mie cose con le pagine per tipo, Studio). *Stato al 18/10 (storico):* come al 14/10 (sotto), più: chi è quale giocatore e «Gira il telefono» sugli schermi (15/10, [giochi](giochi.md)); la foto mandata dallo schermo che aspetta la domanda anche se in mezzo parla un'altra voce (16/10, #96, [immagini-allegati](immagini-allegati.md)); l'inoltro del satellite tolto (16/10, #61): fuori casa il telefono raggiunge la DGX con la sua VPN ([satelliti](satelliti.md), [`prove/manuali/telefono.md`](../../prove/manuali/telefono.md)). Le prove manuali stanno in `prove/manuali/` dal 06/10. *Stato al 14/10 (storico):* come al 09/10 (sotto), più: la **modalità gioco** a tutta la finestra con il pallino della voce e la variante «collaudo» (11/10), il palco fisso dei giochi (14/10, [giochi](giochi.md)); la **stanza** sugli schermi (13/10): il segno «Ascolto la stanza» o la pausa, l'interruttore «Ascolto la stanza» del telefono (acceso di serie), la sezione «Stanza (in ombra)» del cruscotto con soli numeri; dal 14/10 la scheda «avviso» del tutore con «Leggi cosa si è detto» e «Scarica l'audio», solo sul suo schermo personale ([minori](minori.md)). Restano da provare sul vero l'iPhone e lo scaricamento dalla PWA.
 
 *Stato al 09/10 (storico): schermi e telefono come dal 06/10 (scheda a schermo intero, cruscotto in sola lettura), più il lettore Markdown e «Scarica» (07/10), la scheda degli esercizi e del cassetto, la vista dello sviluppo con il flusso dell'agente e la cronologia delle schede per persona con la scheda «Conversazione» (08/10), il segno della compagnia (09/10). Restano da provare sul vero l'iPhone (audio, schermo acceso, auto) e lo scaricamento dalla PWA.*
 
@@ -11,12 +11,12 @@
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Schermi (schede su PC, tablet, TV) | Starlette + uvicorn senza extra (puro Python) in un thread, SSE verso una pagina kiosk locale; abbinamento a codice in SQLite (stesso file della memoria) | `calliope/schermi/` → `Schermi` (`hub.py`: destinatari, visibilità, consegna), `ArchivioSchermi` (`archivio.py`), `schede.py`, `ServerSchermi` (`server.py`), `pagina/`, `load_schermi`; HTTPS in rete `tls.py`, ponte TLS del satellite `ponte.py`; schede degli esercizi (POST `/api/esercizio`, area [minori](minori.md)) e del cassetto (POST `/api/cassetto`, area [immagini-allegati](immagini-allegati.md)), dall'08/10; segno della compagnia `Schermi.voce(compagnia=…)` (09/10); segno della stanza `Schermi.stanza_segno`, `stanza_per` (13/10); porte occupate dopo un riavvio `calliope/porte.py` → `socket_in_ascolto` (02/10); tool in `calliope/tools/schermi.py`; terminale `python -m calliope.schermi` |
-| Telefono (satellite nel browser, PWA, dal 03/10) | stessa porta degli schermi: WebSocket di uvicorn con `websockets` sans-I/O e lo stesso protocollo dei satelliti; nel browser onnxruntime-web 1.30 in WebAssembly (Silero VAD e wake word), AudioWorklet, Web Audio, Screen Wake Lock API; CA di casa con `openssl` | `calliope/schermi/telefono.py` → `rotte`, `PonteWs`, `stato`; «Prova il microfono» `telefono_diagnostica.py`; `calliope/schermi/pagina/telefono/` (`telefono.js`, `voce.js`, `microfono.js`, `schermo-acceso.js` (`SchermoAcceso`, `diagnosi`: schermo acceso, dal 04/10), `sw.js`, manifest; una vista sola col carosello delle schede, dal 04/10: `sincronizza`, `disponi`, `vaiA`, strati menu/modulo/scrivi e, dal 06/10, la scheda a schermo intero (`apriIntera`, `disegnaIntera`, `chiudiIntera`); schede da `schermo.js` con `data-carosello` ed eventi `calliope:*`); `ServerSatelliti.prendi` / `lascia` / `per_pc`; `tls.certificato_telefono`; terminale `python -m calliope.schermi --certificato` |
+| Telefono (satellite nel browser, PWA, dal 03/10) | stessa porta degli schermi: WebSocket di uvicorn con `websockets` sans-I/O e lo stesso protocollo dei satelliti; nel browser onnxruntime-web 1.30 in WebAssembly (Silero VAD e wake word), AudioWorklet, Web Audio, Screen Wake Lock API; CA di casa con `openssl` | `calliope/schermi/telefono.py` → `rotte`, `PonteWs`, `stato`; «Prova il microfono» `telefono_diagnostica.py`; `calliope/schermi/pagina/telefono/` (`telefono.js`, `voce.js`, `microfono.js`, `schermo-acceso.js` (`SchermoAcceso`, `diagnosi`: schermo acceso, dal 04/10), `sw.js`, manifest; dal 27/10 cinque sezioni con la barra (`sincronizza` smista per sezione, `disponi`, `vaiA`, router `vai`/`applicaPercorso`, `impostaAuto`; *storico: dal 04/10 una vista sola col carosello*), strati modulo/scrivi (il menu è la sezione Io dal 27/10) e, dal 06/10, la scheda a schermo intero (`apriIntera`, `disegnaIntera`, `chiudiIntera`); schede da `schermo.js` con `data-carosello` ed eventi `calliope:*`); `ServerSatelliti.prendi` / `lascia` / `per_pc`; `tls.certificato_telefono`; terminale `python -m calliope.schermi --certificato` |
 | Scrivere invece di parlare (moduli e casella sugli schermi personali, dal 03/10) | POST `/api/scrivi` e `/api/modulo` del server degli schermi (sessione in un'intestazione, JSON, solo HTTPS in rete); controlli dei codici in Python e in JS (`schermo.js`, condiviso col telefono); dal 05/10 solo durante una conversazione a voce | `calliope/schermi/moduli.py` → `Moduli`, `Ingresso`, `controlla_campo`, `offri`, `completa`, `oscura`; `Ufficio.completa_modulo` / `rubrica_da_modulo`; `tools/spec.serve_la_voce`; ciclo in `main.py` (`scritto`); `calliope/schermi/conversazione.py` → `scrittura_consentita`, `Conversazioni`; `Schermi.scrittura_consentita` (il punto unico, anche per le foto) |
-| Cruscotto di chi amministra (fase 1, sola lettura, dal 06/10) | — (solo libreria standard: registro dei turni, SQLite in sola lettura, `indice.json` delle estensioni) | `calliope/schermi/cruscotto.py` → `Cruscotto` (`amministra`, `dati`), `LettoreTurni`, `versione_in_uso`, `tipo_errore`; GET `/api/cruscotto` (`server.py`); `Schermi.cruscotto`; scheda locale `cruscotto` in `schermo.js` (`apriCruscotto`, `impostaAmministra`), voce del menu del telefono; `latenza.leggi_file` |
+| Cruscotto di chi amministra (fase 1, sola lettura, dal 06/10) | — (solo libreria standard: registro dei turni, SQLite in sola lettura, `indice.json` delle estensioni) | `calliope/schermi/cruscotto.py` → `Cruscotto` (`amministra`, `dati`), `LettoreTurni`, `versione_in_uso`, `tipo_errore`; GET `/api/cruscotto` (`server.py`); `Schermi.cruscotto`; scheda locale `cruscotto` in `schermo.js` (`apriCruscotto`, `impostaAmministra`), voce di Io del telefono (dal 27/10; prima del menu); `latenza.leggi_file` |
 | Lettore Markdown e «Scarica» nella scheda del documento (07/10) | scritto in proprio in `schermo.js` (createElement e textContent, mai innerHTML); conversione con fpdf2 e python-docx sul server | `schermo.js` → `leggiMarkdown`, `mdBlocchi`, `mdInLinea`, `pulsantiScarica`; `calliope/schermi/scarica.py` → `Scaricamenti` (`registra`, `gettone`, `prendi`), `converti`; POST `/api/scarica` e GET `/scarica/<gettone>` (`server.py`); `Schermi.scaricamenti`, `hub.pubblica`; `schede.documento_markdown`; `schermi_scarica_s` |
 | Vista dello sviluppo, lavoro in diretta a schermo intero, flusso dell'agente (08/10) | scritto in proprio in `schermo.js` (createElement e textContent); niente librerie | `schermo.js` → `assorbiFlusso`, `chatFlusso`, `colonnaFlusso`, `disegnaAvanzamento`, `misuraSegui`, `ripristinaSegui`, `vistaSviluppo`, `disegnaVista`, `comandiSviluppo`, `apriInteroPC`, `disegnaInteroPC`; `telefono.js` → `sincronizza` (apre e chiude la vista); `hub.per_storia`, `hub.registra_scaricabili`; `scarica.converti` (`markdown_file`); `calliope/agenti/avanzamento.py` → `Avanzamento`, `_Argomenti`, `esito_breve`, `chiamata_breve`; `calliope/sviluppo.py` → `Sviluppi.dati_vista`, `agli_schermi`, `riepilogo_lavoro`, `totali` |
-| Cronologia delle schede per persona e scheda «Conversazione» (08/10) | solo libreria standard: un file JSON per persona (scrittura atomica da un thread), l'archivio delle conversazioni in SQLite | `calliope/schermi/cronologia.py` → `CronologiaSchede` (`aggiungi`, `ultime`, `pulisci`), `rivedi`, `lavoro_finale`; `hub.py` → `Schermi.ripresa`, `collega(ripresa=…)`, `pulisci_schede`, `chat_per`, `chat_nuovi`, `chat_dimenticata`, `registra_chat`, `ricostruttori`; `carica_cronologia`, `cartella_cronologia` (`schermi/__init__.py`); POST `/api/schede` (`server.py`); `conversazioni.py` → `ArchivioConversazioni.chat`, `chat_markdown`, `su_turni`, `su_dimentica`, `voce_chat`; `conversazione.turni` (`_turno`, `senza_sfida`); `Ciclo._archivia_turno`, `_luogo_turno`; `Brain.archivia_turni`; tool `schede_pulisci`; `schermo.js` → `DISEGNA.chat`, `impostaChat`, `chatDalServer`, `apriChat`, `pulisciSchede`, `pulisciLocale`; telefono: «La nostra conversazione» e «Pulisci le mie schede» nel menu |
+| Cronologia delle schede per persona e scheda «Conversazione» (08/10) | solo libreria standard: un file JSON per persona (scrittura atomica da un thread), l'archivio delle conversazioni in SQLite | `calliope/schermi/cronologia.py` → `CronologiaSchede` (`aggiungi`, `ultime`, `pulisci`), `rivedi`, `lavoro_finale`; `hub.py` → `Schermi.ripresa`, `collega(ripresa=…)`, `pulisci_schede`, `chat_per`, `chat_nuovi`, `chat_dimenticata`, `registra_chat`, `ricostruttori`; `carica_cronologia`, `cartella_cronologia` (`schermi/__init__.py`); POST `/api/schede` (`server.py`); `conversazioni.py` → `ArchivioConversazioni.chat`, `chat_markdown`, `su_turni`, `su_dimentica`, `voce_chat`; `conversazione.turni` (`_turno`, `senza_sfida`); `Ciclo._archivia_turno`, `_luogo_turno`; `Brain.archivia_turni`; tool `schede_pulisci`; `schermo.js` → `DISEGNA.chat`, `impostaChat`, `chatDalServer`, `apriChat`, `pulisciSchede`, `pulisciLocale`; telefono: «La nostra conversazione» in Conversazione e «Pulisci le mie schede» in Io (dal 27/10; prima nel menu) |
 | Rispondi dove ti ho chiesto | — (prestito del satellite attivo, origine del turno) | `calliope/rispondi.py` → `Instradamento`; `ServerSatelliti.presta` / `restituisci` / `per_schermo`; `Schermi.origine_corrente`, `invia_a`, `Mittente.schermo`; `Speaker.muto` |
 
 ## Problemi noti
@@ -795,3 +795,64 @@ Passo 1 della conversazione di stanza ([stt-tts](stt-tts.md), decisione
 Prove: `prove/prova_stanza.py` (il segno dal server) e `prove/prova_stanza_voce.py` (livello 3: il
 telefono nel browser vero con il microfono finto: righe senza byte ai comandi, segno, interruttore
 spento).
+
+## Il telefono a sezioni (27/10, ramo `telefono-sezioni-passo1`)
+
+Passo 1 del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md)
+(capitoli 3 e 7, decisioni del capitolo 8; tavole nel canvas privato di chi amministra). Le schede
+(`DISEGNA.*`) non cambiano; nel server cambia solo la sezione nelle schede.
+
+- **Cinque sezioni** con la barra in basso (`#barra`): Adesso, Conversazione, Le mie cose, Casa, Io.
+  Ogni sezione è un elenco verticale che scorre da sé (la pagina no); il carosello, i pallini e il
+  menu delle impostazioni non ci sono più.
+- **Dove va ogni scheda**: `SEZIONE_DI_TIPO` in `schermo.js` (accanto a `NOMI_TIPO`) e in
+  `schede.py`, uguali (`prova_sezioni` le confronta): «sezione» o «sezione/raccolta» (`cose/liste`,
+  `cose/agenda`, `cose/lavori`, `cose/documenti`, `cose/cassetto`, `cose/giochi`, `cose/studio`; il
+  modulo in `cose`, sotto «Da scrivere»). `schede.nuova` la scrive nella scheda (`sezione`), e vale
+  quella del server; le schede che non passano da `nuova` (chat, cruscotto) prendono quella della
+  tabella. La scheda dello sviluppo nasce come documento in Markdown e cambia tipo: la sezione si
+  riscrive lì (`sviluppo.py`), se no finiva in Documenti.
+- **Adesso**: «Aspetta te» (modulo da compilare, voce nuova, avviso del tutore finché non si guarda
+  Casa, lavoro che aspetta una risposta), «In corso» (le altre schede vive), «Ultima risposta» (il
+  testo del turno e l'ultima scheda della conversazione se ha meno di 10 minuti). Una scheda è viva
+  per la regola `viva(c)` di `schermo.js`: timer che corre, promemoria entro un'ora, lavoro in coda,
+  in corso o in attesa, programma in corso, sviluppo aperto, modulo aperto, gioco non chiuso (né qui
+  con ✕), esercizi
+  aperti o in pausa, voce nuova aperta; lista, documento e casa per due minuti dopo un cambiamento. Si
+  ricontrolla ogni 5 s (il timer che finisce esce da Adesso e resta in Agenda). Gioco, esercizi,
+  sviluppo, cassetto, chat e voce nuova in Adesso sono un **rimando** con «Apri» (due copie di un
+  gioco o di un esercizio avrebbero due stati, quelle della voce nuova due moduli con gli stessi
+  id); le altre sono la stessa scheda, allineata al suo posto in tutti e due gli elenchi.
+- **Gioco ed esercizi** che Calliope mostra aprono la loro raccolta da soli (`TIPI_APRONO`): il gioco
+  entra nella modalità a tutta la finestra solo se la sua scheda è visibile. Una volta sola per
+  scheda: una mossa o una risposta nuova non riporta lì chi è andato altrove. Il gesto indietro
+  durante un gioco lo chiude, come ✕; in auto un gioco che arriva si chiude subito (il riquadro
+  nascosto ascolterebbe i comandi a voce senza il nome).
+- **Novità**: il pallino col numero sulla sezione per una scheda arrivata mentre si guarda altrove
+  (non se si vede già in Adesso); guardando la sezione si toglie. Solo in memoria. La cronologia
+  rimandata dal server a ogni (ri)collegamento non conta (`ripresa` nell'evento «schede»: la
+  revisione della PR #252 aveva trovato le novità accese a ogni ricaricamento).
+- **Router sul frammento**: `#/adesso`, `#/conversazione`, `#/cose/liste`, `#/casa`, `#/io`; un
+  indirizzo sconosciuto è Adesso; il gesto indietro torna alla sezione di prima (`hashchange`); la
+  scheda a schermo intero tiene la sua voce nella cronologia con lo stesso indirizzo (`popstate`).
+  `#/cose/liste/<chiave>` porta in vista la scheda.
+- **La voce sopra la barra**: in Adesso e in Conversazione stato, «Microfono», «Parla» largo,
+  «Scrivi» e «Allega»; nelle altre sezioni una riga sola (stato, «Microfono», «Parla»). Gli stessi
+  `statoVista`, `impostaMic`, `tocca` di prima. Sotto i 360 px «Allega» resta nella casella di
+  «Scrivi» e la barra è più fitta («Conversazione» in grassetto a 320 px non ci stava).
+- **Io** al posto del menu: collegamento, schermo acceso, ascolto della stanza, «In auto», aiuto e
+  prova del microfono, cruscotto (sotto «Amministra», solo a chi amministra), «Pulisci le mie
+  schede», certificato, «Dimentica il telefono». «La nostra conversazione» è in Conversazione.
+- **In auto** (decisione 1 del 27/10: a mano): «In auto» in Adesso e in Io; niente barra né schede,
+  stato grande, l'ultima risposta in caratteri grandi, «Parla» alto un quinto dello schermo
+  (`clamp(4.75rem, 20dvh, 10.5rem)`, più basso col microfono acceso), «Microfono» con la parola,
+  tocchi ≥ 64 px; «Esci» torna ad Adesso. Resta dopo un ricaricamento (`localStorage`
+  `calliope.telefono.auto`). Fuori dall'auto i tocchi sono ≥ 44 px (come nelle tavole).
+
+Prove: `prova_sezioni` (nuova, livello 1: tabelle, sezione dal server, regola «viva» e router con
+node); `prova_telefono_schermo` riscritta per le sezioni (smistamento, schede vive, timer scaduto,
+ultima risposta, novità, router, Io, In auto; misure di ogni sezione e di «In auto» a 375×812,
+320×568 e 812×375); adattate `prova_cronologia_pagina`, `prova_cruscotto_pagina`,
+`prova_esercizi_pagina`, `prova_markdown_pagina`, `prova_scheda_intera`,
+`prova_vista_sviluppo_pagina`. Da provare sul vero: l'iPhone (barra e zona sicura in basso, gesto
+indietro nella PWA), «In auto» guidando.
