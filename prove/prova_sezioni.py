@@ -11,7 +11,8 @@ cruscotto); le due tabelle devono restare uguali.
 2. **Il server**: `schede.nuova` scrive la sezione (lista, timer, documento, calcolo, casa,
    conoscente, cruscotto); un tipo sconosciuto va nella conversazione; la scheda dello
    sviluppo (un documento in Markdown diventato «sviluppo») sta in Lavori, non in Documenti.
-3. **La regola «viva»** (schermo.js, con node): il timer che corre sì, scaduto o annullato no; il
+3. **La regola «viva»** (schermo.js, con node): il gioco chiuso su questa pagina (✕) no, un altro
+   gioco sì; il timer che corre sì, scaduto o annullato no; il
    promemoria entro un'ora sì, fra due ore no; il lavoro in coda, in corso o in attesa sì, finito
    no; il programma in corso; lo sviluppo aperto; il modulo aperto sì, inviato no; il gioco non
    chiuso; gli esercizi aperti o in pausa, finiti no; la voce nuova aperta; lista, documento e
@@ -19,7 +20,9 @@ cruscotto); le due tabelle devono restare uguali.
    non vive). `sezioneDi`: vale la sezione del server; una sezione inventata va nella
    conversazione.
 4. **Il router** (telefono.js `percorsoDa`, con node): #/cose/liste, il frammento vuoto e uno
-   sconosciuto (Adesso), la chiave di una scheda con i due punti nel percorso.
+   sconosciuto (Adesso), la chiave di una scheda con i due punti nel percorso. In Adesso le
+   schede con uno stato o dei campi (gioco, esercizi, sviluppo, cassetto, chat, voce nuova) sono
+   solo un rimando.
 
     python prove/prova_sezioni.py
 """
@@ -124,6 +127,8 @@ const casi = [
   ["modulo inviato", {tipo: "modulo", stato: "inviato"}, false],
   ["gioco aperto", {tipo: "gioco"}, true],
   ["gioco chiuso", {tipo: "gioco", stato: "chiuso"}, false],
+  ["gioco chiuso su questa pagina (✕)", {tipo: "gioco", partita: "p1"}, false, (p) => p === "p1"],
+  ["un altro gioco aperto", {tipo: "gioco", partita: "p2"}, true, (p) => p === "p1"],
   ["esercizi aperti", {tipo: "esercizio", stato: "aperta"}, true],
   ["esercizi in pausa", {tipo: "esercizio", stato: "pausa"}, true],
   ["esercizi finiti", {tipo: "esercizio", stato: "finita"}, false],
@@ -136,7 +141,7 @@ const casi = [
   ["calcolo appena fatto", {tipo: "calcolo", creata: ora - 5}, false],
   ["risposta appena data", {tipo: "risposta", creata: ora - 5}, false],
 ];
-const out = casi.map(([n, c, atteso]) => [n, viva(c, ora) === atteso]);
+const out = casi.map(([n, c, atteso, chiusa]) => [n, viva(c, ora, chiusa) === atteso]);
 const sez = [
   ["sezione del server", sezioneDi({tipo: "testo", sezione: "cose/documenti"}) === "cose/documenti"],
   ["sezione dalla tabella", sezioneDi({tipo: "lista"}) === "cose/liste"],
@@ -188,6 +193,12 @@ def router():
     verifica("router: percorsoDa di telefono.js gira da solo in node", out is not None, err)
     for h, ok in out or []:
         verifica(f"router: «{h}»", ok)
+    # In Adesso un rimando, mai una seconda copia, per le schede con uno stato o dei campi
+    m = re.search(r"const TIPI_RIMANDO = new Set\(\[(.*?)\]\)", js, re.S)
+    rimandi = set(re.findall(r'"(\w+)"', m.group(1))) if m else set()
+    verifica("rimandi: gioco, esercizi, sviluppo, cassetto, chat e voce nuova in Adesso solo come rimando",
+             {"gioco", "esercizio", "esercizi_riepilogo", "sviluppo", "cassetto", "chat", "conoscente"} <= rimandi,
+             str(sorted(rimandi)))
 
 
 def main() -> int:

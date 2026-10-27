@@ -243,7 +243,7 @@ const car = {
   moduloFirma: "",
   intera: null,             // chiave della scheda aperta a schermo intero (06/10)
   svil: null,               // lo sviluppo aperto già mostrato nella sua vista (08/10)
-  pronte: false,            // la prima cronologia è arrivata: da qui le schede nuove fanno novità
+  aperte: new Set(),        // giochi ed esercizi già aperti da Calliope (non si riaprono a ogni mossa)
   novita: { conversazione: new Set(), cose: new Set(), casa: new Set() },
   visti: new Set(),         // gli avvisi già guardati (non restano più in Adesso)
 };
@@ -259,7 +259,8 @@ const TIPI_LUNGHI = new Set(["cruscotto", "lavoro", "documento", "esecuzione", "
 const TIPI_SENZA_INTERA = new Set(["modulo", "gioco"]);
 // In Adesso non si copiano (un gioco o un esercizio aperti due volte, con due stati): un rimando
 // con «Apri», che porta alla scheda nella sua sezione
-const TIPI_RIMANDO = new Set(["gioco", "esercizio", "esercizi_riepilogo", "sviluppo", "cassetto", "chat"]);
+const TIPI_RIMANDO = new Set(["gioco", "esercizio", "esercizi_riepilogo", "sviluppo", "cassetto", "chat",
+  "conoscente"]);
 // Questi, quando Calliope li mostra, aprono la loro sezione: si usano con le mani
 const TIPI_APRONO = new Set(["gioco", "esercizio"]);
 // In Adesso sotto «Aspetta te» invece che «In corso»
@@ -472,6 +473,8 @@ function sincronizza(det) {
   const lista = sch() ? sch().cronologia() : [];
   const viste = new Set();
   const spostata = det && det.scheda && det.spostata ? chiaveDi(det.scheda) : null;
+  // La scheda appena arrivata dal flusso, non quella della cronologia ripresa al (ri)collegamento
+  const arrivata = det && det.scheda && !det.ripresa ? chiaveDi(det.scheda) : null;
   if (spostata) car.seq[spostata] = ++car.n;
   for (const c of lista) {
     const k = chiaveDi(c);
@@ -481,7 +484,7 @@ function sincronizza(det) {
     const vecchia = car.schede[k];
     car.schede[k] = c;
     // Una novità sulla sezione (il pallino nella barra) se arriva mentre si guarda altrove
-    if (car.pronte && (nuova || k === spostata)) segnaNovita(k, c);
+    if (k === arrivata && (nuova || k === spostata)) segnaNovita(k, c);
     const e = car.el[k];
     if (e && vecchia !== c) {
       for (const chi of ["casa", "adesso"]) {
@@ -491,7 +494,6 @@ function sincronizza(det) {
     if (vecchia !== c && car.modulo === k) aggiornaModulo(c);
     if (vecchia !== c && car.intera === k) disegnaIntera();
   }
-  car.pronte = true;
   // La vista dello sviluppo (08/10): a schermo intero quando uno sviluppo si apre (se non c'è
   // un altro strato aperto: lo scritto, un modulo), chiusa quando si chiude o si sospende;
   // aperta, si ridisegna anche quando cambia il suo lavoro (il flusso, i tetti)
@@ -540,7 +542,7 @@ function disegnaNovita() {
     if (!b) continue;
     b.hidden = !n;
     metti(b, n ? String(n) : "");
-    attr(a, "aria-label", TITOLI_SEZIONE[s] + (n ? ", " + n + (n === 1 ? " novità" : " novità") : ""));
+    attr(a, "aria-label", TITOLI_SEZIONE[s] + (n ? ", " + n + " novità" : ""));
   }
 }
 
@@ -553,12 +555,21 @@ function suMostra(c) {
   // Un gioco o gli esercizi che Calliope apre si usano subito: la loro sezione si apre da sola
   // (il gioco va a tutta la finestra, 11/10: schermo.js ci entra appena dopo, e una scheda in
   // una sezione nascosta non la prende)
-  if (TIPI_APRONO.has(c.tipo) && sch().viva(c) && vis.modo === "sezioni") {
+  if (TIPI_APRONO.has(c.tipo) && sch().viva(c)) {
+    // In auto niente giochi: il riquadro non si vedrebbe ma ascolterebbe i comandi a voce
+    if (vis.modo === "auto") {
+      if (c.tipo === "gioco") setTimeout(() => sch().chiudiPartita(c.partita), 0);
+      return;
+    }
+    // Una volta sola: una mossa o una risposta nuova non riporta qui chi è andato altrove
+    if (car.aperte.has(k)) return;
+    car.aperte.add(k);
     const p = sezioneDi(c);
     if (vis.sezione !== p.split("/")[0]) vai("#/" + p);
     mostraIn(k, vis.sezione);
     return;
   }
+  if (TIPI_APRONO.has(c.tipo)) car.aperte.delete(k);
   if (performance.now() - car.toccato > opzioniVista.manoMs) mostraIn(k, vis.sezione);
 }
 
@@ -591,6 +602,13 @@ function percorsoDa(hash) {
 function vai(hash, sostituisci) {
   const p = percorsoDa(hash);
   const nuovo = "#/" + p.map(encodeURIComponent).join("/");
+  // Con la scheda a schermo intero aperta la sua voce nella cronologia del browser si
+  // sostituisce (resterebbe una voce morta prima della sezione nuova)
+  if (!$("strato-scheda").hidden) {
+    const sua = history.state && history.state.calliopeStrato === "scheda";
+    chiudiStrato("strato-scheda");
+    if (sua) sostituisci = true;
+  }
   if (location.hash === nuovo) { applicaPercorso(); return; }
   try {
     if (sostituisci) history.replaceState(history.state, "", nuovo);
@@ -609,7 +627,7 @@ function applicaPercorso() {
   for (const s of document.querySelectorAll("#sezioni .sezione")) {
     s.hidden = vis.modo === "auto" ? s.dataset.sezione !== "adesso" : s.dataset.sezione !== vis.sezione;
   }
-  metti($("sez-titolo"), vis.modo === "auto" ? "" : TITOLI_SEZIONE[vis.sezione]);
+  metti($("sez-titolo"), vis.modo === "auto" ? "In auto" : TITOLI_SEZIONE[vis.sezione]);
   for (const a of document.querySelectorAll("#barra a[data-sezione]")) {
     if (a.dataset.sezione === vis.sezione) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   }
@@ -2040,9 +2058,10 @@ async function avvio() {
     st.compagnia = d.attiva ? String(d.testo || "In compagnia: chiamami per nome") : "";
     disegna();
   });
-  // La modalità gioco (11/10): il gioco copre la pagina; uscendo, le dissolvenze si rifanno
+  // La modalità gioco (11/10): il gioco copre la pagina; uscendo, le dissolvenze si rifanno e
+  // un gioco chiuso esce subito da Adesso (non è più vivo)
   document.addEventListener("calliope:gioco", (ev) => {
-    if (!(ev.detail || {}).partita) requestAnimationFrame(segnaTagli);
+    if (!(ev.detail || {}).partita) requestAnimationFrame(() => { disponi(); });
   });
   // Il pallino della voce sopra il gioco è anche «Parla»: tocca e parla, tieni premuto per
   // parlare a lungo (come preparaPulsante, ma per delega: schermo.js ridisegna il pallino)

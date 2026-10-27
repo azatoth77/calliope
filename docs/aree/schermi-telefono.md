@@ -816,17 +816,22 @@ Passo 1 del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-1
   Casa, lavoro che aspetta una risposta), «In corso» (le altre schede vive), «Ultima risposta» (il
   testo del turno e l'ultima scheda della conversazione se ha meno di 10 minuti). Una scheda è viva
   per la regola `viva(c)` di `schermo.js`: timer che corre, promemoria entro un'ora, lavoro in coda,
-  in corso o in attesa, programma in corso, sviluppo aperto, modulo aperto, gioco non chiuso, esercizi
+  in corso o in attesa, programma in corso, sviluppo aperto, modulo aperto, gioco non chiuso (né qui
+  con ✕), esercizi
   aperti o in pausa, voce nuova aperta; lista, documento e casa per due minuti dopo un cambiamento. Si
   ricontrolla ogni 5 s (il timer che finisce esce da Adesso e resta in Agenda). Gioco, esercizi,
-  sviluppo, cassetto e chat in Adesso sono un **rimando** con «Apri» (due copie di un gioco o di un
-  esercizio avrebbero due stati); le altre sono la stessa scheda, allineata al suo posto in tutti e
-  due gli elenchi.
+  sviluppo, cassetto, chat e voce nuova in Adesso sono un **rimando** con «Apri» (due copie di un
+  gioco o di un esercizio avrebbero due stati, quelle della voce nuova due moduli con gli stessi
+  id); le altre sono la stessa scheda, allineata al suo posto in tutti e due gli elenchi.
 - **Gioco ed esercizi** che Calliope mostra aprono la loro raccolta da soli (`TIPI_APRONO`): il gioco
-  entra nella modalità a tutta la finestra solo se la sua scheda è visibile. Il gesto indietro
-  durante un gioco lo chiude, come ✕.
+  entra nella modalità a tutta la finestra solo se la sua scheda è visibile. Una volta sola per
+  scheda: una mossa o una risposta nuova non riporta lì chi è andato altrove. Il gesto indietro
+  durante un gioco lo chiude, come ✕; in auto un gioco che arriva si chiude subito (il riquadro
+  nascosto ascolterebbe i comandi a voce senza il nome).
 - **Novità**: il pallino col numero sulla sezione per una scheda arrivata mentre si guarda altrove
-  (non se si vede già in Adesso); guardando la sezione si toglie. Solo in memoria.
+  (non se si vede già in Adesso); guardando la sezione si toglie. Solo in memoria. La cronologia
+  rimandata dal server a ogni (ri)collegamento non conta (`ripresa` nell'evento «schede»: la
+  revisione della PR #252 aveva trovato le novità accese a ogni ricaricamento).
 - **Router sul frammento**: `#/adesso`, `#/conversazione`, `#/cose/liste`, `#/casa`, `#/io`; un
   indirizzo sconosciuto è Adesso; il gesto indietro torna alla sezione di prima (`hashchange`); la
   scheda a schermo intero tiene la sua voce nella cronologia con lo stesso indirizzo (`popstate`).

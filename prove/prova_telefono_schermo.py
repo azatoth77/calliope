@@ -903,6 +903,9 @@ def gioco(t: Tel, hub):
              bool(ok) and not stato.get("riquadro") and stato.get("riapri") and not stato.get("fissa")
              and not stato.get("body"), json.dumps(stato))
     verifica("✕: il microfono resta acceso", t.mic() == mic_prima)
+    ok = aspetta(lambda: "gioco:finta1" not in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("adesso/corso", []), 3)
+    verifica("✕: il gioco chiuso esce da Adesso e resta in Giochi", bool(ok)
+             and "gioco:finta1" in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("cose/giochi", []))
     t.v(f"{T}.vaiA('gioco:finta1'); 1")
     t.tocca_sel("#sez-cose article.scheda-gioco .gioco-riapri")
     ok = aspetta(lambda: (t.v(G) or {}).get("partita") == "finta1", 3)
@@ -941,6 +944,12 @@ def senza_api(t: Tel):
     ok = aspetta(lambda: t.v(f"!!{T} && {T}.st.collegato"), 15)
     verifica("senza l'API: pagina ricaricata e collegata", bool(ok)
              and t.v("'wakeLock' in navigator") is False)
+    # La cronologia ripresa al ricollegamento non è una novità (revisione della PR #252)
+    aspetta(lambda: len([k for ks in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).values() for k in ks]) > 3, 5)
+    time.sleep(0.5)
+    nov = (t.v(f"{T}.sezioni()") or {}).get("novita", {})
+    verifica("ricaricata: le schede riprese dal server non accendono novità", nov and not any(nov.values()),
+             json.dumps(nov))
     t.modelli_finti()
     # il modulo ancora aperto sul server si riapre da solo con la pagina: lo si chiude
     aspetta(lambda: t.v("!document.getElementById('strato-modulo').hidden"), 3)

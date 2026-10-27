@@ -50,8 +50,10 @@
   // Quanto resta «appena cambiata» in Adesso una lista, un documento, la casa
   const RECENTE_S = 120;
   // Una scheda viva compare anche in Adesso (3.2): il timer corre, il lavoro non è finito, il
-  // modulo è da compilare, il promemoria scade entro un'ora. `ora` in secondi (epoch)
-  function viva(c, ora) {
+  // modulo è da compilare, il promemoria scade entro un'ora. `ora` in secondi (epoch);
+  // `chiusa(partita)`: il gioco è chiuso su questa pagina (✕, finito: la scheda del server non
+  // cambia)
+  function viva(c, ora, chiusa) {
     if (!c) return false;
     const t = ora === undefined ? Date.now() / 1000 : ora;
     const recente = (Number(c.creata) || 0) > t - RECENTE_S;
@@ -62,7 +64,7 @@
       case "esecuzione": return c.stato === "in_corso";
       case "sviluppo": return !!(c.sviluppo && c.sviluppo.stato === "aperta");
       case "modulo": return c.stato === "aperto";
-      case "gioco": return c.stato !== "chiuso";
+      case "gioco": return c.stato !== "chiuso" && !(chiusa && chiusa(c.partita));
       case "esercizio": return c.stato === "aperta" || c.stato === "pausa";
       case "conoscente": return !!c.aperta;
       case "avviso": return true;               // finché non è visto (lo tiene il telefono)
@@ -270,10 +272,11 @@
     cronologia() { return S.cronologia.slice(); },
     corrente() { return S.corrente; },
     aggiorna() { aggiornaTimer(); aggiornaLavori(); },
-    // Il cruscotto di chi amministra (06/10): il menu del telefono lo apre nel carosello
+    // Il cruscotto di chi amministra (06/10): sul telefono si apre da Io (27/10)
     cruscotto() { return apriCruscotto(); },
     amministra() { return S.amministra; },
-    // La scheda «Conversazione» e «Pulisci le mie schede» (08/10): il menu del telefono
+    // La scheda «Conversazione» e «Pulisci le mie schede» (08/10): sul telefono in
+    // Conversazione e in Io (27/10)
     chat() { return apriChat(); },
     haChat() { return S.chatOk; },
     pulisci() { return pulisciSchede(); },
@@ -282,7 +285,11 @@
     voceGioco(stato) { voceGioco(stato); },
     gioco() { return { partita: GIOCO.attivo, schermoIntero: !!document.fullscreenElement, voce: GIOCO.voce }; },
     chiudiGioco() { if (GIOCO.attivo) chiudiGiocoDaTe(GIOCO.attivo); },
-    NOMI_TIPO, SEZIONE_DI_TIPO, SEZIONI, sezioneDi, viva,
+    NOMI_TIPO, SEZIONE_DI_TIPO, SEZIONI, sezioneDi,
+    viva(c, ora) { return viva(c, ora, (p) => !!(GIOCHI_CHIUSI[p] || CHIUSI_DA_TE[p])); },
+    // Un gioco da chiudere senza mostrarlo (il telefono in auto, 27/10): il riquadro si toglie e
+    // il server smette di ascoltare i suoi comandi a voce
+    chiudiPartita(p) { if (p) chiudiGiocoDaTe(String(p)); },
   };
 
   // Nuovo accesso con il token, finché non riesce. Le sessioni del server sono in memoria:
@@ -542,7 +549,9 @@
       S.cronologia.push(c);              // in cima, come l'ultima arrivata
       while (S.cronologia.length > Math.max(S.max, 2)) S.cronologia.shift();
     }
-    emetti("schede", { scheda: c, spostata: !(i >= 0 && c.sposta === false && !ordine) });
+    // `ripresa`: la cronologia rimandata dal server al (ri)collegamento, già vista (il telefono
+    // non la conta come novità, 27/10)
+    emetti("schede", { scheda: c, spostata: !(i >= 0 && c.sposta === false && !ordine), ripresa: !!ordine });
     disegnaCronologia();
   }
 
@@ -1691,7 +1700,7 @@
     }
   }
 
-  // Il pulsante «Conversazione» nella testa (non nel telefono: lì è nel menu)
+  // Il pulsante «Conversazione» nella testa (non nel telefono: lì è nella sua sezione)
   function segnaChat() {
     if (CAROSELLO || INCORPORATA) return;
     let b = $("chat-apri");
