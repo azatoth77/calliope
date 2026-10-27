@@ -1714,11 +1714,13 @@
     // Il PC personale a sezioni (27/10) la tiene sempre nella sua colonna, anche quando esce
     // dalla cronologia (al più 6 schede): i turni nuovi arrivano lì comunque (revisione #255)
     if (S.sezioni && S.chatOk) emetti("chatturni", { scheda: schedaChat() });
+    // Lo strato a schermo intero aperto sulla conversazione prende i turni nuovi anche quando la
+    // conversazione non è nella cronologia (il PC a sezioni: terza revisione della PR #255)
+    if (S.intera === CHAT && !CAROSELLO) setTimeout(disegnaInteroPC, 0);
     if (!chatAperta()) return;
     const c = Object.assign(schedaChat(), { sposta: false });
     aggiungiCronologia(c);
     if (S.corrente && chiaveDi(S.corrente) === CHAT) ridisegna(c);
-    if (S.intera === CHAT && !CAROSELLO) setTimeout(disegnaInteroPC, 0);
   }
 
   function apriChat() {
