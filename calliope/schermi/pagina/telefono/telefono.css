@@ -7,9 +7,11 @@
 :root {
   color-scheme: dark;
   --sfondo: #000; --pannello: #0d0d0d; --pannello-2: #171717; --bordo: #3a3a3a;
-  --testo: #c9c3b8; --tenue: #a19b91; --accento: #cfa760; --accento-tenue: rgba(207, 167, 96, 0.12);
+  --testo: #c9c3b8; --tenue: #a19b91;
+  /* l'accento: lilla di serie (schermo.css), quello scelto dal proprietario da applicaAspetto */
+  --accento-tenue: rgba(var(--accento-rgb), 0.12);
   --ok: #62b888; --allarme: #d9876c;
-  --v-dorme: #a3a9b6; --v-ascolta: #62b888; --v-pensa: #cfa760; --v-parla: #84aede; --v-spento: #b3ada3;
+  --v-dorme: #a3a9b6; --v-ascolta: #62b888; --v-pensa: var(--accento); --v-parla: #84aede; --v-spento: #b3ada3;
   --g: clamp(0.55rem, 2vmin, 0.9rem);                  /* spazio tra le parti */
 }
 
@@ -65,6 +67,7 @@ body.telefono {
   color: var(--tenue); font-weight: 650; }
 .sezione h2.gruppo[hidden], .raccolta[hidden], .vuoto-sez[hidden] { display: none; }
 .raccolta { display: flex; flex-direction: column; gap: 0.6rem; }
+.raccolta[data-nascosta] { display: none; }
 .elenco { display: flex; flex-direction: column; gap: 0.6rem; }
 .elenco:empty { display: none; }
 .vuoto-sez { margin: 0.4rem 0 0; color: var(--tenue); font-size: 1.05rem; line-height: 1.45; }
@@ -133,7 +136,7 @@ body.telefono {
 .telefono .rimando-car h1.titolo { grid-column: 1; margin: 0; }
 .rimando-car .apri-rimando { grid-column: 2; grid-row: 1 / span 2; min-height: 2.75rem; font-size: 1rem; border-width: 1px; }
 /* ciò che aspetta te: il bordo d'accento */
-.telefono [data-posto="adesso/aspetta"] > .pagina-car { border-color: var(--accento); background: #17140d; }
+.telefono [data-posto="adesso/aspetta"] > .pagina-car { border-color: var(--accento); background: var(--accento-fondo); }
 
 /* le schede sul telefono: più piccole che su una TV */
 .telefono .timer { grid-template-columns: 1fr; gap: 0.6rem; }
@@ -253,7 +256,7 @@ button.grande:focus-visible, .link:focus-visible, .strato a:focus-visible {
 
 /* ── la barra delle cinque sezioni ── */
 .barra {
-  grid-area: barra; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-area: barra; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
   margin: 0 calc(-1 * max(1rem, env(safe-area-inset-right))) 0 calc(-1 * max(1rem, env(safe-area-inset-left)));
   padding: 0 max(0.2rem, env(safe-area-inset-right)) env(safe-area-inset-bottom) max(0.2rem, env(safe-area-inset-left));
   border-top: 1px solid #262626; background: #060606;
@@ -263,13 +266,14 @@ button.grande:focus-visible, .link:focus-visible, .strato a:focus-visible {
   justify-content: center; gap: 0.15rem; text-decoration: none; color: var(--tenue); font-size: 0.66rem; line-height: 1.1;
   text-align: center; white-space: nowrap; letter-spacing: -0.01em;
 }
+.barra a[hidden] { display: none; }
 .barra a[aria-current="page"] { color: var(--accento); font-weight: 700; }
 .barra a:focus-visible { outline: 3px solid var(--v-pensa); outline-offset: -3px; border-radius: 0.6rem; }
 .icona-sez svg { display: block; width: 1.45rem; height: 1.45rem; fill: none; stroke: currentColor; stroke-width: 1.8;
   stroke-linecap: round; stroke-linejoin: round; }
 /* il pallino delle novità, col numero (non solo il colore) */
 .barra .novita { position: absolute; top: 0.35rem; left: calc(50% + 0.45rem); min-width: 1.05rem; height: 1.05rem;
-  padding: 0 0.25rem; box-sizing: border-box; border-radius: 0.6rem; background: var(--accento); color: #1a1408;
+  padding: 0 0.25rem; box-sizing: border-box; border-radius: 0.6rem; background: var(--accento); color: var(--su-accento);
   font-size: 0.68rem; font-weight: 800; display: flex; align-items: center; justify-content: center; }
 .barra .novita[hidden] { display: none; }
 
@@ -345,6 +349,18 @@ button.grande:focus-visible, .link:focus-visible, .strato a:focus-visible {
 .telefono .piccolo-bottone { min-height: 3.2rem; }
 
 /* Io: quello che era il menu delle impostazioni */
+/* Io › Aspetto (27/10): una scelta per accento, col nome scritto; quella in uso col bordo pieno */
+.accenti { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.accenti[hidden], #io-aspetto[hidden] { display: none; }
+.accento-scelta {
+  font: inherit; font-size: 1.05rem; min-height: 3rem; padding: 0.3rem 0.9rem; border-radius: 1.5rem;
+  display: inline-flex; align-items: center; gap: 0.55rem; cursor: pointer;
+  border: 2px solid var(--bordo); background: var(--pannello); color: var(--testo);
+}
+.accento-scelta .tinta { width: 1.3rem; height: 1.3rem; border-radius: 50%; flex: none; }
+.accento-scelta[aria-pressed="true"] { border-color: var(--accento); font-weight: 700; }
+.accento-scelta[aria-pressed="true"]::after { content: "✓"; color: var(--accento); }
+.accento-scelta:focus-visible { outline: 3px solid var(--v-pensa); outline-offset: 2px; }
 .menu-riga { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 0.8rem; color: var(--tenue); font-size: 1rem; }
 .menu-riga dt { color: var(--tenue); }
 .menu-riga dd { margin: 0; color: var(--testo); min-width: 0; overflow-wrap: anywhere; }

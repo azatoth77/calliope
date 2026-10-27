@@ -223,7 +223,9 @@ def crea_app(hub: Schermi) -> Starlette:
                       # mostra il pulsante; /api/cruscotto lo ricontrolla a ogni richiesta
                       "amministra": bool(cr is not None and cr.amministra(s)),
                       # Si scrive solo durante una conversazione a voce (05/10)
-                      "scrittura": hub.stato_scrittura(s)})
+                      "scrittura": hub.stato_scrittura(s),
+                      # L'accento e le sezioni nascoste a un minore (27/10, aspetto.py)
+                      "aspetto": hub.aspetto_di(s), "nascoste": hub.nascoste_di(s)})
 
     def in_arresto():
         # Durante l'arresto (ServerSchermi.ferma) niente flussi nuovi: una pagina che si
@@ -868,6 +870,27 @@ def crea_app(hub: Schermi) -> Starlette:
         stato = int(out.pop("_stato", 200)) if isinstance(out, dict) else 500
         return _json(out, stato)
 
+    # ── l'aspetto (27/10, aspetto.py) ──
+    async def aspetto_api(request: Request):
+        """L'accento scelto in Io › Aspetto: sessione in un'intestazione, JSON {accento}, solo
+        in HTTPS fuori da questo computer, solo da uno schermo personale."""
+        client = request.client.host if request.client else ""
+        if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
+            return _json({"errore": "solo in HTTPS"}, 403)
+        sess = request.headers.get("x-calliope-sessione", "")
+        with lock:
+            sid = sessioni.get(sess) if sess else None
+        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        if schermo is None:
+            return _json({"errore": "sessione non valida"}, 401)
+        dati, errore = await corpo_json(request, 512)
+        if errore is not None:
+            return errore
+        scelta = str((dati or {}).get("accento") or "") if isinstance(dati, dict) else ""
+        out = await asyncio.to_thread(hub.scegli_accento, schermo, scelta)
+        stato = int(out.pop("_stato", 200))
+        return _json(out, stato)
+
     # ── esercizi (08/10, calliope/esercizi/sessione.py) ──
     risposte_es: dict[int, list[float]] = {}
 
@@ -926,6 +949,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/gioco/{gettone}", gioco_documento),
         Route("/api/gioco", gioco_api, methods=["POST"]),
         Route("/api/esercizio", esercizio, methods=["POST"]),
+        Route("/api/aspetto", aspetto_api, methods=["POST"]),
         *telefono.rotte(hub),
         # /satellite: il comando per far diventare satellite un PC nuovo (03/10)
         *satellite_web.rotte(hub),

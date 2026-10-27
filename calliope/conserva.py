@@ -725,6 +725,9 @@ TABELLE_MEMORIA = (("esercizi_tentativi", "persona", "giorno"),
                    ("esercizi_preferenze", "persona", "aggiornato"),
                    # «A che punto siete» e la classe (12/10 sera): come le preferenze
                    ("esercizi_punto", "persona", "aggiornato"))
+# Le preferenze che non scadono col tempo ma vanno via con i dati della persona (27/10):
+# (tabella, colonna della persona). L'accento scelto in Io › Aspetto (schermi/aspetto.py)
+TABELLE_PREFERENZE = (("aspetto_preferenze", "persona"),)
 
 
 class Conservazione:
@@ -1200,6 +1203,13 @@ class Conservazione:
             return 0
         try:
             db.execute("PRAGMA secure_delete = ON")
+            if tutto or persona_id is not None:
+                for tabella, chi in TABELLE_PREFERENZE:
+                    sql = f"DELETE FROM {tabella}" + ("" if tutto else f" WHERE {chi} = ?")
+                    try:
+                        n += db.execute(sql, () if tutto else (str(persona_id),)).rowcount or 0
+                    except sqlite3.OperationalError:
+                        continue                  # la tabella non c'è
             for tabella, chi, quando in TABELLE_MEMORIA:
                 if tutto:
                     sql, arg = f"DELETE FROM {tabella}", ()

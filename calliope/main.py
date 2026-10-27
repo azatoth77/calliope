@@ -475,6 +475,9 @@ class Avvio:
             # schermi personali di chi amministra; lavori e satelliti letti al momento
             from .schermi.cruscotto import Cruscotto
             schermi.cruscotto = Cruscotto(cfg, schermi, servizi=s)
+            # Il profilo del proprietario di uno schermo personale (27/10, schermi/aspetto.py:
+            # le sezioni nascoste a un minore), letto a ogni accesso
+            schermi.profilo = lambda pid: s.registry.by_id(pid) if s.registry is not None else None
         if schermi is not None and s.satelliti is not None:
             # Le schede vanno agli schermi della stanza del satellite che ascolta, e il
             # satellite può aprire la pagina con un token suo (calliope/satellite/server.py)
