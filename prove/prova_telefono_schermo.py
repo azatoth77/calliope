@@ -490,6 +490,10 @@ def aspetto(t: Tel, hub):
     l'accento (variabile CSS, scelta segnata), salvata per la persona."""
     T = "window.calliopeTelefono"
     t.tocca_sel('#barra a[data-sezione="io"]')
+    # Io visibile prima di toccare «Rosa» (revisione della PR #254: con Io ancora nascosta il tocco
+    # finiva su (0, 0) e la prova cadeva a caso)
+    aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("sezione") == "io"
+            and t.v("!document.getElementById('sez-io').hidden"), 3)
     ok = aspetta(lambda: t.v("document.querySelectorAll('#accenti .accento-scelta').length") >= 3, 3)
     a = t.v("({accento: " + ACCENTO + ", segnata: (document.querySelector('#accenti [aria-pressed=\"true\"]')||{dataset: {}}).dataset.accento || '',"
             " nomi: [...document.querySelectorAll('#accenti .accento-scelta')].map((b) => b.textContent)})") or {}
@@ -707,6 +711,9 @@ MISURA = r"""(() => {
     fuori, bassi, tocchi, H, W, auto, inVista,
     spazio: br.height, parla: document.getElementById('parla').getBoundingClientRect().height,
     voce: document.querySelector('#tel-voce .voce-testo').textContent,
+    // quante righe prende lo stato (27/10, iPhone: andava a capo a ogni sillaba)
+    voceRighe: (() => { const v = document.querySelector('#tel-voce .voce-testo'); const r = document.createRange();
+      r.selectNodeContents(v); return new Set([...r.getClientRects()].map((q) => Math.round(q.top))).size; })(),
     dove: document.getElementById('tel-dove').hidden ? '' : document.getElementById('tel-dove').textContent,
     sezione: window.calliopeTelefono.sezioni().sezione,
   };
@@ -786,6 +793,7 @@ def misure(t, etichetta):
                  not m.get("bassi") and min(m.get("tocchi") or [0]) >= minimo,
                  f"{m.get('bassi')} {[round(x) for x in m.get('tocchi') or []]}")
         verifica(f"{d}: la sezione ha spazio (≥ 120 px)", m.get("spazio", 0) >= 120, f"{m.get('spazio', 0):.0f} px")
+        verifica(f"{d}: lo stato della voce su al più due righe", m.get("voceRighe", 9) <= 2, str(m.get("voceRighe")))
         return m
 
     alti = {}
@@ -814,6 +822,26 @@ def misure(t, etichetta):
             m = misura(f"{etichetta} {w}×{h} {sez}", "Microfono spento", 44)
             foto(t, f"telefono-{etichetta}-{nome_d}-{sez}.png")
         t.v(f"{T}.vai('#/adesso'); 1")
+    # Un font più largo (27/10: sull'iPhone il font di sistema è più largo di Segoe UI e
+    # «Conversazione» usciva dalla sua voce della barra): Verdana, nelle sezioni, ai due telefoni
+    t.v("document.documentElement.style.setProperty('font-family', 'Verdana, sans-serif'); "
+        "document.body.style.fontFamily = 'Verdana, sans-serif'; 1")
+    spento()
+    for w, h, nome_d in DIMENSIONI[:2]:
+        dimensione(t, w, h)
+        largo = t.v("getComputedStyle(document.body).fontFamily")
+        verifica(f"{w}×{h}: il font largo è applicato", "Verdana" in (largo or ""), largo)
+        for sez in ("adesso", "conversazione", "cose", "io"):
+            t.v(f"{T}.vai('#/{sez}'); 1")
+            spento()
+            misura(f"{etichetta} {w}×{h} {sez} col font largo", "Microfono spento", 44)
+            foto(t, f"telefono-{etichetta}-{nome_d}-{sez}-font-largo.png")
+            # la frase vista sull'iPhone: «Dormo · di' «Calliope»» col microfono acceso
+            acceso()
+            misura(f"{etichetta} {w}×{h} {sez} col font largo e «Dormo»", "Dormo · di' «Calliope»", 44)
+    t.v("document.documentElement.style.removeProperty('font-family'); document.body.style.fontFamily = ''; 1")
+    spento()
+    t.v(f"{T}.vai('#/adesso'); 1")
     mic(False)
     t.p._chiama("Emulation.clearDeviceMetricsOverride")
 
