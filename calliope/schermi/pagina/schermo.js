@@ -3365,7 +3365,10 @@
   }
   function disegnaInteroPC() {
     if (!S.intera) return;
-    const c = schedaDi(S.intera) || (S.corrente && chiaveDi(S.corrente) === S.intera ? S.corrente : null);
+    // La conversazione del PC personale a sezioni sta nella sua colonna, non nella cronologia
+    // (27/10, seconda revisione della PR #255)
+    const c = schedaDi(S.intera) || (S.corrente && chiaveDi(S.corrente) === S.intera ? S.corrente : null)
+      || (S.intera === CHAT && S.chatOk ? schedaChat() : null);
     if (!c) return;                       // uscita dalla cronologia: resta l'ultimo contenuto
     const st = stratoInteroPC();
     $("intero-titolo").textContent = c.titolo || NOMI_TIPO[c.tipo] || "Scheda";

@@ -20,9 +20,10 @@ schermi e dei satelliti veri su 127.0.0.1, un satellite finto legato allo scherm
   pulsante, che la apre sopra la pagina; Esc la chiude), 700×900 (la barra in basso): la pagina
   non scorre, parti che non si sovrappongono, niente testo fuori dai contenitori della barra e
   della voce, contrasto AA, clic ≥ 44 px;
-- con la configurazione di serie (revisione della PR #255): la conversazione a destra con i turni
+- con la configurazione di serie (revisioni della PR #255): la conversazione a destra con i turni
   dell'archivio resta anche dopo otto schede e prende i turni nuovi; il «Cruscotto» della testa
-  porta in Io con la scheda; «Pulisci le mie schede» in Io con due clic;
+  porta in Io con la scheda, e il suo ridisegno periodico non ci riporta; «Schermo intero» della
+  conversazione apre lo strato coi turni; «Pulisci le mie schede» in Io con due clic;
 - nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> gli screenshot.
 """
 
@@ -284,6 +285,12 @@ def conversazione_a_destra(p, hub):
                            "dario", "Dario", ospite=False)
     ok = aspetta(lambda: (p.valuta(conta) or 0) >= 2, 8)
     verifica("conversazione: prende i turni nuovi", bool(ok), str(p.valuta(conta)))
+    # «Schermo intero» della conversazione: lo strato con i turni (seconda revisione della #255)
+    clic(p, "#pc-chat [data-intero]")
+    ok = aspetta(lambda: p.valuta("!!document.getElementById('strato-intero') && !document.getElementById('strato-intero').hidden"
+                                  " && document.querySelectorAll('#intero-posto .conv-turno').length >= 2"), 3)
+    verifica("conversazione: «Schermo intero» apre lo strato con i turni", bool(ok))
+    p.valuta("document.getElementById('intero-chiudi').click(); 1")
 
 
 def cruscotto_e_pulisci(p, hub):
@@ -293,6 +300,15 @@ def cruscotto_e_pulisci(p, hub):
     ok2 = aspetta(lambda: (p.valuta(f"{P}.stato()") or {}).get("sezione") == "io"
                   and p.valuta("!!document.querySelector('#sez-io .tipo-cruscotto')"), 10)
     verifica("cruscotto: il pulsante della testa porta in Io, con la scheda", bool(ok) and bool(ok2))
+    # Il ridisegno periodico (ogni 30 s, «mostra» con segnale false) non riporta in Io
+    p.valuta(f"{P}.vai('#/cose'); 1")
+    aspetta(lambda: (p.valuta(f"{P}.stato()") or {}).get("sezione") == "cose", 2)
+    p.valuta("(() => { const c = window.calliopeSchermo.cronologia().find((x) => x.tipo === 'cruscotto');"
+             " document.dispatchEvent(new CustomEvent('calliope:mostra', {detail: {scheda: c, segnale: false}})); return 1; })()")
+    time.sleep(0.4)
+    verifica("cruscotto: il ridisegno periodico non riporta la pagina in Io",
+             (p.valuta(f"{P}.stato()") or {}).get("sezione") == "cose")
+    p.valuta(f"{P}.vai('#/io'); 1")
     verifica("pulisci: «Pulisci le mie schede» in Io", p.valuta("!document.getElementById('pc-pulisci').hidden"))
     clic(p, "#pc-pulisci")
     aspetta(lambda: "nuovo" in (p.valuta("document.getElementById('pc-pulisci').textContent") or ""), 2)

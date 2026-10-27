@@ -83,12 +83,15 @@
     if (f && f.parentElement !== $("scrivi-posto")) $("scrivi-posto").append(f);
   }
 
-  function suMostra(c) {
+  // `segnale` false: la stessa scheda ridisegnata (il cruscotto ogni 30 s), non aperta adesso
+  function suMostra(c, segnale) {
     if (!SEZ) return;
     SEZ.sincronizza(null);
     if (c.tipo === "chat") { disegnaChat(); return; }
     // Il cruscotto aperto dal suo pulsante nella testa sta in Io: ci si va (revisione #255)
-    if (c.tipo === "cruscotto") { SEZ.vaiA(SEZ.chiaveDi(c)); return; }
+    // Solo quando si apre: il ridisegno ogni 30 s non deve riportare la pagina in Io (seconda
+    // revisione della PR #255)
+    if (c.tipo === "cruscotto") { if (segnale !== false) SEZ.vaiA(SEZ.chiaveDi(c)); return; }
     // Un gioco o gli esercizi che Calliope apre si usano subito: la loro sezione si apre da sola
     if (SEZ.apriSeServe(c)) return;
     if (performance.now() - SEZ.car.toccato > SEZ.opzioni.manoMs) SEZ.mostraIn(SEZ.chiaveDi(c), SEZ.vis.sezione);
@@ -149,7 +152,7 @@
 
   document.addEventListener("calliope:pc", (ev) => suPc(ev.detail));
   document.addEventListener("calliope:schede", (ev) => { if (SEZ) SEZ.sincronizza(ev.detail); });
-  document.addEventListener("calliope:mostra", (ev) => { if (ev.detail && ev.detail.scheda) suMostra(ev.detail.scheda); });
+  document.addEventListener("calliope:mostra", (ev) => { if (ev.detail && ev.detail.scheda) suMostra(ev.detail.scheda, ev.detail.segnale); });
   document.addEventListener("calliope:nascoste", (ev) => { if (SEZ) SEZ.applicaNascoste(ev.detail); });
   document.addEventListener("calliope:aspetto", (ev) => window.CalliopeSezioni.disegnaAccenti(ev.detail, $("accenti"), $("io-aspetto")));
   document.addEventListener("calliope:scrivi", () => requestAnimationFrame(spostaScrivi));
