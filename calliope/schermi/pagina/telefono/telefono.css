@@ -163,7 +163,7 @@ body.telefono {
 .modulo-car .apri-modulo { margin-top: 0.6rem; }
 
 /* ── la voce, sopra la barra: in Adesso e in Conversazione stato, Microfono, Parla largo,
-   Scrivi e Allega; altrove una riga sola (stato, Microfono, Parla); in auto «Parla» alto ── */
+   Scrivi e Allega; altrove più bassa (lo stato piccolo sopra Microfono e Parla); in auto «Parla» alto ── */
 .voce-riga {
   grid-area: voce; min-width: 0; display: grid; gap: 0.5rem var(--g); align-items: center;
   grid-template-columns: auto minmax(0, 1fr);

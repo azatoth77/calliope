@@ -837,9 +837,14 @@ Passo 1 del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-1
   scheda a schermo intero tiene la sua voce nella cronologia con lo stesso indirizzo (`popstate`).
   `#/cose/liste/<chiave>` porta in vista la scheda.
 - **La voce sopra la barra**: in Adesso e in Conversazione stato, «Microfono», «Parla» largo,
-  «Scrivi» e «Allega»; nelle altre sezioni una riga sola (stato, «Microfono», «Parla»). Gli stessi
+  «Scrivi» e «Allega»; nelle altre sezioni più bassa: lo stato piccolo su una riga sua, sopra
+  «Microfono» e «Parla» (dal 27/10 sera, dopo la prova sull'iPhone; *storico: fino ad allora una
+  riga sola, stato, «Microfono», «Parla», e lo stato andava a capo a ogni sillaba*). Gli stessi
   `statoVista`, `impostaMic`, `tocca` di prima. Sotto i 360 px «Allega» resta nella casella di
-  «Scrivi» e la barra è più fitta («Conversazione» in grassetto a 320 px non ci stava).
+  «Scrivi» e la barra è più fitta («Conversazione» in grassetto a 320 px non ci stava). Le voci
+  della barra sono larghe quanto il loro nome (dal 27/10 sera: in colonne uguali, col font di
+  sistema dell'iPhone, più largo di Segoe UI, «Conversazione» usciva dalla sua); le misure di
+  `prova_telefono_schermo` si ripetono con un font largo (Verdana).
 - **Io** al posto del menu: collegamento, schermo acceso, ascolto della stanza, «In auto», aiuto e
   prova del microfono, cruscotto (sotto «Amministra», solo a chi amministra), «Pulisci le mie
   schede», certificato, «Dimentica il telefono». «La nostra conversazione» è in Conversazione.

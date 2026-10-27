@@ -490,6 +490,10 @@ def aspetto(t: Tel, hub):
     l'accento (variabile CSS, scelta segnata), salvata per la persona."""
     T = "window.calliopeTelefono"
     t.tocca_sel('#barra a[data-sezione="io"]')
+    # Io visibile prima di toccare «Rosa» (revisione della PR #254: con Io ancora nascosta il tocco
+    # finiva su (0, 0) e la prova cadeva a caso)
+    aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("sezione") == "io"
+            and t.v("!document.getElementById('sez-io').hidden"), 3)
     ok = aspetta(lambda: t.v("document.querySelectorAll('#accenti .accento-scelta').length") >= 3, 3)
     a = t.v("({accento: " + ACCENTO + ", segnata: (document.querySelector('#accenti [aria-pressed=\"true\"]')||{dataset: {}}).dataset.accento || '',"
             " nomi: [...document.querySelectorAll('#accenti .accento-scelta')].map((b) => b.textContent)})") or {}
@@ -825,11 +829,18 @@ def misure(t, etichetta):
     spento()
     for w, h, nome_d in DIMENSIONI[:2]:
         dimensione(t, w, h)
+        largo = t.v("getComputedStyle(document.body).fontFamily")
+        verifica(f"{w}×{h}: il font largo è applicato", "Verdana" in (largo or ""), largo)
         for sez in ("adesso", "conversazione", "cose", "io"):
             t.v(f"{T}.vai('#/{sez}'); 1")
+            spento()
             misura(f"{etichetta} {w}×{h} {sez} col font largo", "Microfono spento", 44)
             foto(t, f"telefono-{etichetta}-{nome_d}-{sez}-font-largo.png")
+            # la frase vista sull'iPhone: «Dormo · di' «Calliope»» col microfono acceso
+            acceso()
+            misura(f"{etichetta} {w}×{h} {sez} col font largo e «Dormo»", "Dormo · di' «Calliope»", 44)
     t.v("document.documentElement.style.removeProperty('font-family'); document.body.style.fontFamily = ''; 1")
+    spento()
     t.v(f"{T}.vai('#/adesso'); 1")
     mic(False)
     t.p._chiama("Emulation.clearDeviceMetricsOverride")
