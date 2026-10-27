@@ -604,14 +604,17 @@ function vai(hash, sostituisci) {
   const nuovo = "#/" + p.map(encodeURIComponent).join("/");
   // Con la scheda a schermo intero aperta la sua voce nella cronologia del browser si
   // sostituisce (resterebbe una voce morta prima della sezione nuova)
+  let sua = false;
   if (!$("strato-scheda").hidden) {
-    const sua = history.state && history.state.calliopeStrato === "scheda";
+    sua = !!(history.state && history.state.calliopeStrato === "scheda");
     chiudiStrato("strato-scheda");
     if (sua) sostituisci = true;
   }
   if (location.hash === nuovo) { applicaPercorso(); return; }
   try {
-    if (sostituisci) history.replaceState(history.state, "", nuovo);
+    // Lo stato della scheda chiusa non passa alla sezione nuova (il gesto indietro dopo non la
+    // riconoscerebbe come sua: seconda revisione della PR #252)
+    if (sostituisci) history.replaceState(sua ? null : history.state, "", nuovo);
     else history.pushState(null, "", nuovo);
   } catch (e) { location.hash = nuovo; return; }
   applicaPercorso();
