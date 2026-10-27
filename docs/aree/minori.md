@@ -1391,7 +1391,8 @@ eventi (resta nel registro dei turni e nella copia `ospite = 2`).
 
 Sul satellite personale di un minore (decisione 2 del 27/10, progetto
 [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md) § 3.1):
-la sezione Casa è nascosta sotto i 13 anni (e senza data di nascita), la raccolta Ufficio a ogni
+la sezione Casa è nascosta sotto i 13 anni (senza data di nascita vale la fascia: Casa solo per
+«adolescenti»), la raccolta Ufficio a ogni
 età. Lo decide il server dal profilo a ogni accesso (`schermi/aspetto.nascoste`); la pagina non
 decide sull'età. Nascondere non cambia i permessi. Dettagli in
 [schermi-telefono](schermi-telefono.md#accento-lilla-accento-personale-e-sezioni-per-età-2710-issue-240-ramo-issue-240-aspetto).

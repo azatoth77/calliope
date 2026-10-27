@@ -719,7 +719,7 @@ async function suAccento(ev) {
   if (!b || !sch()) return;
   const esito = $("accento-esito");
   const r = await sch().scegliAccento(b.dataset.accento);
-  esito.hidden = r.ok;
+  // La regione resta nel DOM (role="status": VoiceOver legge i cambi di una regione già lì)
   metti(esito, r.ok ? "" : (r.errore || "Non ci sono riuscita: riprova."));
 }
 

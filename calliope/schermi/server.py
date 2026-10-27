@@ -871,6 +871,8 @@ def crea_app(hub: Schermi) -> Starlette:
         return _json(out, stato)
 
     # ── l'aspetto (27/10, aspetto.py) ──
+    scelte_aspetto: dict[int, list[float]] = {}
+
     async def aspetto_api(request: Request):
         """L'accento scelto in Io › Aspetto: sessione in un'intestazione, JSON {accento}, solo
         in HTTPS fuori da questo computer, solo da uno schermo personale."""
@@ -883,6 +885,13 @@ def crea_app(hub: Schermi) -> Starlette:
         schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
         if schermo is None:
             return _json({"errore": "sessione non valida"}, 401)
+        ora = time.monotonic()
+        with lock:
+            fatti = [t for t in scelte_aspetto.get(schermo["id"], []) if ora - t < 60.0]
+            if len(fatti) >= 10:
+                scelte_aspetto[schermo["id"]] = fatti
+                return _json({"errore": "troppi tocchi: aspetta un momento"}, 429)
+            scelte_aspetto[schermo["id"]] = fatti + [ora]
         dati, errore = await corpo_json(request, 512)
         if errore is not None:
             return errore

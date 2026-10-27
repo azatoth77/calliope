@@ -8,14 +8,16 @@ docs/aree/schermi-telefono.md).
    dell'accento sul fondo tinto. Il lilla di serie dei CSS (schermo.css) è quello della tabella.
 2. **Sezioni per età** (`aspetto.nascoste`): un adulto niente; un minore di 12 anni Casa e Ufficio;
    il giorno del tredicesimo compleanno solo Ufficio (il giorno prima ancora Casa); un minore senza
-   data di nascita (fascia scritta a mano) Casa e Ufficio; nessun profilo niente.
+   data di nascita vale la fascia scritta a mano («bambini» e «ragazzi» Casa e Ufficio,
+   «adolescenti» solo Ufficio); nessun profilo niente.
 3. **La preferenza** (`PreferenzeAspetto`): di serie il lilla; salvata, resta dopo la riapertura;
    un accento sconosciuto non si salva; «svuota» della persona (conserva) la toglie, quella di
    un'altra persona resta.
 4. **Il server** (server degli schermi vero su 127.0.0.1): `/api/accedi` dà l'accento (con le
    scelte solo sugli schermi personali; uno schermo di stanza resta lilla) e le sezioni nascoste
    dal profilo del proprietario, letto a ogni accesso; `/api/aspetto` sceglie da uno schermo
-   personale (403 da quello di stanza, 400 per un accento sconosciuto, 401 senza sessione) e
+   personale (403 da quello di stanza, 400 per un accento sconosciuto, 401 senza sessione, 429
+   oltre 10 scelte al minuto) e
    manda l'evento «aspetto» a tutte le pagine della persona, non a quelle degli altri.
 
     python prove/prova_aspetto.py
@@ -105,7 +107,9 @@ def eta():
         ("il giorno prima dei 13", Profilo("c", "Ciro", "2013-10-28"), ["casa"], ["ufficio"]),
         ("il giorno dei 13", Profilo("d", "Dora", "2013-10-27"), [], ["ufficio"]),
         ("17 anni", Profilo("e", "Elio", "2009-01-01"), [], ["ufficio"]),
-        ("senza data, fascia a mano", Profilo("f", "Fede", None, "bambini"), ["casa"], ["ufficio"]),
+        ("senza data, fascia «bambini»", Profilo("f", "Fede", None, "bambini"), ["casa"], ["ufficio"]),
+        ("senza data, fascia «ragazzi» (11–13: nel dubbio no)", Profilo("g", "Gaia", None, "ragazzi"), ["casa"], ["ufficio"]),
+        ("senza data, fascia «adolescenti» (14–17: Casa sì)", Profilo("h", "Ivo", None, "adolescenti"), [], ["ufficio"]),
     ]
     for nome, prof, sez, racc in casi:
         n = A.nascoste(prof, oggi)
@@ -222,6 +226,9 @@ def server():
                  st == 400 and hub.aspetto.accento("dario") == "rosa", f"{st} {r}")
         st, r = chiedi(port, "/api/aspetto", sessione="inventata", corpo={"accento": "oro"})
         verifica("aspetto: senza sessione no (401)", st == 401, str(st))
+        codici = [chiedi(port, "/api/aspetto", sessione=sess, corpo={"accento": "oro"})[0] for _ in range(10)]
+        verifica("aspetto: al più 10 scelte al minuto per schermo (poi 429)", 429 in codici
+                 and codici.index(429) >= 7, str(codici))
         # Il profilo letto a ogni accesso: Bice compie 13 anni (nascita spostata)
         profili["bice"].nascita = "2013-01-01"
         st, b2 = chiedi(port, "/api/accedi", token=t_bice)

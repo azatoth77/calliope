@@ -878,7 +878,8 @@ Passo 1c del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-
   (`conserva.TABELLE_PREFERENZE`, «svuota»).
 - **Sezioni per età**: `/api/accedi` dà `nascoste` dal profilo del proprietario, riletto a ogni
   accesso (`Schermi.profilo`, da `main.py`): a un minore la raccolta Ufficio sempre (nasce col
-  passo 2), Casa sotto i 13 anni o senza data di nascita. Il telefono toglie la voce dalla barra,
+  passo 2), Casa sotto i 13 anni; senza data di nascita vale la fascia scritta a mano (Casa solo per
+  «adolescenti», 14–17; per «ragazzi», 11–13, nel dubbio no). Il telefono toglie la voce dalla barra,
   `#/casa` porta ad Adesso e una scheda di una sezione nascosta va in Conversazione: niente
   sparisce. Nascondere non toglie e non aggiunge permessi (restano in `ToolRegistry.call`).
 

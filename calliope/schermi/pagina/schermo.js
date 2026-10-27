@@ -2334,7 +2334,9 @@
   // Io › Aspetto: l'accento scelto vale su tutti gli schermi personali della persona (il
   // server lo manda anche alle altre sue pagine aperte)
   async function scegliAccento(nome) {
-    const r = await postSessione("/api/aspetto", { accento: String(nome || "") });
+    let r;
+    try { r = await postSessione("/api/aspetto", { accento: String(nome || "") }); }
+    catch (e) { return { ok: false, errore: "Calliope non risponde: riprova tra poco." }; }
     if (r.status === 200 && r.dati.aspetto) applicaAspetto(r.dati.aspetto);
     return { ok: r.status === 200, errore: r.dati.errore || MESSAGGI[r.status] || "" };
   }

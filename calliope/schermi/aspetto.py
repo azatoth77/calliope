@@ -55,9 +55,13 @@ def nascoste(prof, oggi: datetime.date | None = None) -> dict:
         return out
     out["raccolte"].append("ufficio")
     anni = minori.eta(getattr(prof, "nascita", None), oggi)
-    # Senza data di nascita (la fascia scritta a mano) l'età non si sa: Casa nascosta, come
-    # per i più piccoli, finché non c'è la data
-    if anni is None or anni < ETA_CASA:
+    # Senza data di nascita vale la fascia scritta a mano: «adolescenti» (14–17) ha 13 anni o più
+    # e vede Casa; «ragazzi» (11–13) potrebbe averne 11 o 12, e nel dubbio Casa resta nascosta
+    # (revisione della PR #253)
+    if anni is None:
+        if minori.fascia(prof, oggi) != "adolescenti":
+            out["sezioni"].append("casa")
+    elif anni < ETA_CASA:
         out["sezioni"].append("casa")
     return out
 
