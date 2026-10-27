@@ -7,7 +7,8 @@ e uvicorn 0.54.0 sono `py3-none-any`, come le loro dipendenze (anyio, h11, click
 nessun codice nativo nuovo (principio 4).
 
 Indirizzi:
-  GET  /                         la pagina (kiosk), con i suoi /schermo.css e /schermo.js
+  GET  /                         la pagina (kiosk), con i suoi /schermo.css e /schermo.js (e
+                                 /sezioni.js, le sezioni degli schermi personali: 27/10)
   POST /api/abbinamento          pagina senza token: {codice, richiesta, scade}
   POST /api/abbinamento/stato    «Authorization: Bearer <richiesta>» → attesa | abbinato | scaduto
   POST /api/accedi               «Authorization: Bearer <token>» → {sessione, nome, stanza…}
@@ -939,6 +940,8 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/", file("index.html", "text/html; charset=utf-8")),
         Route("/schermo.css", file("schermo.css", "text/css; charset=utf-8")),
         Route("/schermo.js", file("schermo.js", "text/javascript; charset=utf-8")),
+        # Le sezioni degli schermi personali (27/10), del telefono e del PC
+        Route("/sezioni.js", file("sezioni.js", "text/javascript; charset=utf-8")),
         Route("/api/abbinamento", nuovo_abbinamento, methods=["POST"]),
         Route("/api/abbinamento/stato", stato_abbinamento, methods=["POST"]),
         Route("/api/accedi", accedi, methods=["POST"]),

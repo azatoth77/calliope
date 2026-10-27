@@ -19,7 +19,7 @@ cruscotto); le due tabelle devono restare uguali.
    casa appena cambiati sì, dopo due minuti no; risposta e calcolo mai (sono l'ultima risposta,
    non vive). `sezioneDi`: vale la sezione del server; una sezione inventata va nella
    conversazione.
-4. **Il router** (telefono.js `percorsoDa`, con node): #/cose/liste, il frammento vuoto e uno
+4. **Il router** (sezioni.js `percorsoDa`, comune a telefono e PC dal passo 1b, con node): #/cose/liste, il frammento vuoto e uno
    sconosciuto (Adesso), la chiave di una scheda con i due punti nel percorso; una sezione
    nascosta sul telefono di un minore (passo 1c) è Adesso. In Adesso le schede con uno stato o
    dei campi (gioco, esercizi, sviluppo, cassetto, chat, voce nuova) sono solo un rimando.
@@ -192,11 +192,16 @@ def viva():
 
 
 def router():
-    js = (PAGINA / "telefono" / "telefono.js").read_text(encoding="utf-8")
+    # Dal passo 1b il router sta in sezioni.js, comune al telefono e al PC personale
+    js = (PAGINA / "sezioni.js").read_text(encoding="utf-8")
     titoli = re.search(r"const TITOLI_SEZIONE = \{.*?\};", js).group(0)
-    m = re.search(r"function percorsoDa\(hash\) \{.*?\n\}\n", js, re.S)
+    m = re.search(r"    function percorsoDa\(hash\) \{.*?\n    \}\n", js, re.S)
     out, err = node(titoli + "\n" + m.group(0) + PROVA_ROUTER)
-    verifica("router: percorsoDa di telefono.js gira da solo in node", out is not None, err)
+    verifica("router: percorsoDa di sezioni.js gira da solo in node", out is not None, err)
+    tel = (PAGINA / "telefono" / "telefono.js").read_text(encoding="utf-8")
+    verifica("router: il telefono usa sezioni.js, senza un router suo",
+             "CalliopeSezioni.crea(" in tel and "function percorsoDa" not in tel
+             and '<script src="/sezioni.js"' in (PAGINA / "telefono" / "index.html").read_text(encoding="utf-8"))
     for h, ok in out or []:
         verifica(f"router: «{h}»", ok)
     # In Adesso un rimando, mai una seconda copia, per le schede con uno stato o dei campi
