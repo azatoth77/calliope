@@ -38,6 +38,9 @@ decide chi costruisce la scheda, qui: il modello non la sceglie.
 
 Le schede sono piccole (testi tagliati): passano su SSE a ogni schermo della stanza.
 
+Sezione (27/10, `sezione`): dove la scheda sta sul telefono a sezioni (`SEZIONE_DI_TIPO`); la
+pagina non decide altro che dove mostrarla.
+
 Le chiavi che cominciano con «_» restano sul server (hub.py le toglie prima di mandare la
 scheda e di metterla nella cronologia): `_scarica` è la sorgente intera del documento per il
 pulsante «Scarica» (schermi/scarica.py), il Markdown o il JSON a blocchi.
@@ -68,6 +71,28 @@ _MAX_TESTO = 4000
 _MAX_USCITA = 12_000
 
 
+# Il telefono a sezioni (27/10, docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md, 3.2): la
+# casa fissa di ogni tipo sul satellite personale, «sezione» o «sezione/raccolta», scritta nella
+# scheda (`sezione`). La stessa tabella è in pagina/schermo.js per le schede che non passano da
+# `nuova` (chat, cruscotto, sviluppo): prove/prova_sezioni.py le confronta. Un tipo che manca va
+# nella conversazione
+SEZIONI = ("adesso", "conversazione", "cose", "casa", "io")
+SEZIONE_DI_TIPO = {
+    "risposta": "conversazione", "calcolo": "conversazione", "biblioteca": "conversazione",
+    "web": "conversazione", "testo": "conversazione", "chat": "conversazione",
+    "timer": "cose/agenda", "promemoria": "cose/agenda", "lista": "cose/liste",
+    "lavoro": "cose/lavori", "esecuzione": "cose/lavori", "sviluppo": "cose/lavori",
+    "documento": "cose/documenti", "foto": "cose/cassetto", "allegato": "cose/cassetto",
+    "cassetto": "cose/cassetto", "modulo": "cose", "gioco": "cose/giochi",
+    "esercizio": "cose/studio", "esercizi_riepilogo": "cose/studio",
+    "casa": "casa", "conoscente": "casa", "avviso": "casa", "cruscotto": "io",
+}
+
+
+def sezione_di(tipo: str) -> str:
+    return SEZIONE_DI_TIPO.get(tipo, "conversazione")
+
+
 def _taglia(testo, n: int) -> str:
     t = re.sub(r"\s+", " ", str(testo or "")).strip()
     return t if len(t) <= n else t[:n - 1].rstrip() + "…"
@@ -79,7 +104,7 @@ def nuova(tipo: str, titolo: str, visibilita: str, durata_s: float | None = DURA
         raise ValueError(f"visibilità sconosciuta: {visibilita}")
     now = time.time()
     return {"id": uuid.uuid4().hex[:12], "tipo": tipo, "titolo": _taglia(titolo, 120),
-            "visibilita": visibilita, "creata": now,
+            "visibilita": visibilita, "creata": now, "sezione": sezione_di(tipo),
             "scade": (now + durata_s) if durata_s else None,
             **({"chiave": str(chiave)} if chiave else {}),
             **({} if sposta else {"sposta": False}), **dati}

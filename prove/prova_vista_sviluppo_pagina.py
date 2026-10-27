@@ -26,7 +26,7 @@ Schermo del computer (1280×800 e 1920×1080):
   «Prova con…» la mette nella casella; nessun pulsante per approvare o attivare;
 - sviluppo chiuso: lo schermo esce dalla vista; uno schermo di un'altra persona non cambia.
 Telefono (375×812): la vista si apre a schermo intero da sola, in una colonna, con testo ≥ 16 px
-e niente di lato; il carosello resta; chiusa con «Chiudi», un tocco sulla scheda la riapre; il
+e niente di lato; la scheda resta in Le mie cose; chiusa con «Chiudi», un tocco sulla scheda la riapre; il
 lavoro a schermo intero con il flusso; sviluppo chiuso: lo strato si chiude.
 Nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> gli screenshot.
 """
@@ -374,9 +374,9 @@ def telefono(exe, srv, hub, web, svs, lavori):
         hub._rinfresca()
         sv = svs.apri("dario", "Dario", "estensione", "Un'estensione per le maree", "maree")
         k = f"sviluppo:{sv.id}"
-        ok = aspetta(lambda: p.valuta(f"{T}.carosello().intera") == k, 8)
+        ok = aspetta(lambda: p.valuta(f"{T}.sezioni().intera") == k, 8)
         verifica("sviluppo aperto: il telefono apre la vista a schermo intero da solo", bool(ok),
-                 p.valuta(f"{T}.carosello()"))
+                 p.valuta(f"{T}.sezioni()"))
         a = Agente(svs, hub, "L2")
         agenti.append(a)
         lavori.lavori.append(a.lav)
@@ -405,16 +405,17 @@ def telefono(exe, srv, hub, web, svs, lavori):
         foto(p, "telefono-vista-sotto-375x812.png")
         PSI.tocca(p, "#intera-chiudi")
         ok = aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 3)
-        car = p.valuta(f"{T}.carosello()") or {}
-        verifica("«Chiudi»: torna il carosello, con la scheda dello sviluppo e quella del lavoro",
-                 bool(ok) and k in car.get("ordine", []) and "lavoro:L2" in car.get("ordine", []),
+        car = (p.valuta(f"{T}.sezioni()") or {}).get("posti", {})
+        verifica("«Chiudi»: in Le mie cose › Lavori la scheda dello sviluppo e quella del lavoro",
+                 bool(ok) and k in car.get("cose/lavori", []) and "lavoro:L2" in car.get("cose/lavori", []),
                  json.dumps(car))
-        verifica("nel carosello il codice non si vede",
-                 p.valuta("!document.querySelector('#binario .flusso-chat')"))
+        verifica("nelle sezioni il codice non si vede",
+                 p.valuta("!document.querySelector('#sezioni .flusso-chat')"))
         p.valuta(f"{T}.vaiA('lavoro:L2'); 1")
+        aspetta(lambda: p.valuta("!document.getElementById('sez-cose').hidden"), 2)
         time.sleep(0.2)
-        PSI.tocca(p, "#binario [data-chiave=\"lavoro:L2\"] h1.titolo")
-        ok = aspetta(lambda: p.valuta(f"{T}.carosello().intera") == "lavoro:L2"
+        PSI.tocca(p, "#sez-cose [data-chiave=\"lavoro:L2\"] h1.titolo")
+        ok = aspetta(lambda: p.valuta(f"{T}.sezioni().intera") == "lavoro:L2"
                      and (testo_pagina(p, "#intera-posto") or "") == a.atteso, 5)
         verifica("telefono: il lavoro a schermo intero, con il flusso", bool(ok))
         PSI.misura_strato(p, "lavoro con il flusso", "375×812")
@@ -423,8 +424,8 @@ def telefono(exe, srv, hub, web, svs, lavori):
         aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 3)
         p.valuta(f"{T}.vaiA({json.dumps(k)}); 1")
         time.sleep(0.2)
-        PSI.tocca(p, f"#binario [data-chiave=\"{k}\"] .svil-titolo")
-        ok = aspetta(lambda: p.valuta(f"{T}.carosello().intera") == k, 3)
+        PSI.tocca(p, f"#sez-cose [data-chiave=\"{k}\"] .svil-titolo")
+        ok = aspetta(lambda: p.valuta(f"{T}.sezioni().intera") == k, 3)
         verifica("un tocco sulla scheda dello sviluppo riapre la vista", bool(ok))
         svs.chiudi(sv, "uscita")
         ok = aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 5)

@@ -13,7 +13,7 @@ satelliti veri su 127.0.0.1, secondo parere finto.
   scheda finita con il conto;
 - italiano: le scelte come pulsanti, il tocco risponde;
 - la risposta attesa non è mai nel DOM né nei dati della scheda;
-- telefono della stessa bambina: la scheda nel carosello, il campo e «Rispondi» funzionano,
+- telefono della stessa bambina: la scheda in Le mie cose › Studio (aperta da sola), il campo e «Rispondi» funzionano,
   niente testo che esce di lato;
 - nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> salva gli
   screenshot (pagina 1280×800, telefono 390×844). ~25 s.
@@ -207,20 +207,21 @@ def telefono(exe, srv, web, es, bianca):
                                  ".className.includes('ok')"), 10)
         es.inizia(bianca, "bambini", 9, "matematica", "moltiplicazioni", "", mittente(bianca))
         s = es.sessione(bianca.id)
-        dom = aspetta(lambda: p.valuta("(document.querySelector('#binario .tipo-esercizio .domanda-esercizio') "
+        dom = aspetta(lambda: p.valuta("(document.querySelector('#sez-cose .tipo-esercizio .domanda-esercizio') "
                                        "|| {}).textContent"), 10)
-        verifica("telefono: la scheda nel carosello con la domanda", dom == s.es.testo, dom)
+        verifica("telefono: la scheda con la domanda in Le mie cose › Studio, aperta da sola", dom == s.es.testo
+                 and p.valuta("location.hash === '#/cose/studio' && !document.getElementById('sez-cose').hidden"), dom)
         time.sleep(0.4)
         foto(p, "esercizi-telefono.png", 390, 844, mobile=True)
         prima = s.es.firma
-        p.valuta("(() => { const i = document.querySelector('#binario .tipo-esercizio input');"
+        p.valuta("(() => { const i = document.querySelector('#sez-cose .tipo-esercizio input');"
                  f" i.value = {json.dumps(frazione_scritta(s.es.risposta))}; return 1; }})()")
-        tocca(p, "#binario .tipo-esercizio .risposta-esercizio button")
+        tocca(p, "#sez-cose .tipo-esercizio .risposta-esercizio button")
         ok = aspetta(lambda: es.sessione(bianca.id).es.firma != prima, 8)
         verifica("telefono: «Rispondi» con la risposta giusta → esercizio nuovo", bool(ok))
-        ok = aspetta(lambda: p.valuta("!!document.querySelector('#binario .tipo-esercizio .esito-esercizio.giusta')"), 8)
+        ok = aspetta(lambda: p.valuta("!!document.querySelector('#sez-cose .tipo-esercizio .esito-esercizio.giusta')"), 8)
         verifica("telefono: esito «giusta» nella scheda", bool(ok))
-        fuori = p.valuta("(() => { const s = document.querySelector('#binario .tipo-esercizio');"
+        fuori = p.valuta("(() => { const s = document.querySelector('#sez-cose .tipo-esercizio');"
                          " const c = s.querySelector('.corpo'); return c.scrollWidth > c.clientWidth + 1; })()")
         verifica("telefono: niente testo che esce di lato", fuori is False, fuori)
         foto(p, "esercizi-telefono-giusta.png", 390, 844, mobile=True)

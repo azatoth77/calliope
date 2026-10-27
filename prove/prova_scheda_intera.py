@@ -3,20 +3,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 """Una scheda a schermo intero sul telefono (06/10/2026: dall'iPhone 13 mini il cruscotto e le
-schede lunghe del carosello non si leggevano, e non c'era modo di aprirle più grandi).
+schede lunghe del carosello non si leggevano, e non c'era modo di aprirle più grandi; dal 27/10
+le schede stanno nelle sezioni).
 
 Nel browser vero (Edge o Chromium senza finestra, DevTools; senza si salta), server degli
 schermi e dei satelliti veri su 127.0.0.1, telefono di chi amministra già abbinato, cruscotto
 con il registro dei turni finto (come `prova_cruscotto_pagina`).
 - «Espandi» sulle schede lunghe (lavoro con il codice, documento con una tabella larga), non su
   un timer; un tocco sulla scheda o su «Espandi» la apre in uno strato sopra la vista;
-- il cruscotto dal menu si apre direttamente a schermo intero (e resta nel carosello);
+- il cruscotto da Io si apre direttamente a schermo intero (e resta in Io);
 - nello strato: testo ≥ 16 px, contrasto AA, codice e tabelle che scorrono di lato nel loro
   riquadro e mai la pagina, «Chiudi» in alto e ≥ 64 px, strato alto quanto lo schermo, nessuna
   animazione; a 375×812, 320×568 e 812×375;
 - lo strato scorre in verticale; un aggiornamento con la stessa chiave («Aggiorna» del
   cruscotto, il lavoro in diretta) lo ridisegna al suo posto (stesso elemento) senza perdere lo
-  scorrimento; una scheda nuova va nel carosello e lo strato resta;
+  scorrimento; una scheda nuova va nella sua sezione e lo strato resta;
 - chiusura con «Chiudi», Esc e il gesto indietro (history.back); il «Chiudi» del cruscotto
   dentro lo strato è nascosto (resta quello dello strato);
 - col microfono acceso «Chiudi» è un tocco e poi «Parla» è lì;
@@ -68,8 +69,10 @@ def dimensione(p, w, h):
 
 
 def tocca(p, sel):
-    """Un tocco vero (gesto del browser) al centro dell'elemento, senza scorrere la pagina."""
+    """Un tocco vero (gesto del browser) al centro dell'elemento, senza scorrere la pagina (la
+    sezione del telefono sì: scorre da sé, 27/10)."""
     r = p.valuta(f"(() => {{ const e = document.querySelector({json.dumps(sel)}); if (!e) return null;"
+                 f" if (e.closest('.sezione')) e.scrollIntoView({{block: 'nearest'}});"
                  f" const b = e.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }})()")
     if not r:
         return False
@@ -183,29 +186,29 @@ def prova(exe, srv, hub, web):
         for s in (timer, doc, lavoro):
             tutti(hub, s)
             time.sleep(0.15)
-        ok = aspetta(lambda: len((p.valuta(f"{T}.carosello()") or {}).get("ordine", [])) >= 3, 5)
-        verifica("le tre schede nel carosello", bool(ok), json.dumps(p.valuta(f"{T}.carosello()")))
+        p.valuta(f"{T}.vai('#/cose'); 1")
+        ok = aspetta(lambda: p.valuta("document.querySelectorAll('#sez-cose .pagina-car[data-chiave]').length") == 3, 5)
+        verifica("le tre schede in Le mie cose", bool(ok), json.dumps(p.valuta(f"{T}.sezioni()")))
         time.sleep(0.4)                                      # segnaTagli (ogni 250 ms)
-        esp = p.valuta("Object.fromEntries([...document.querySelectorAll('#binario > [data-chiave]')]"
+        esp = p.valuta("Object.fromEntries([...document.querySelectorAll('#sez-cose .pagina-car[data-chiave]')]"
                        ".map(e => [e.dataset.chiave, !!e.querySelector('.espandi') && "
                        "getComputedStyle(e.querySelector('.espandi')).display !== 'none']))") or {}
         verifica("«Espandi» sul lavoro e sul documento, non sul timer",
                  esp.get("lavoro:11") is True and esp.get("documento:12") is True
                  and esp.get(timer["chiave"]) is False, json.dumps(esp))
-        h = p.valuta("document.querySelector('#binario [data-chiave=\"lavoro:11\"] .espandi').getBoundingClientRect().height")
+        h = p.valuta("document.querySelector('#sez-cose [data-chiave=\"lavoro:11\"] .espandi').getBoundingClientRect().height")
         verifica("«Espandi» si tocca bene (≥ 44 px)", (h or 0) >= 44, h)
-        foto(p, "carosello-espandi-375x812.png")
+        foto(p, "sezione-espandi-375x812.png")
 
-        # ── il cruscotto dal menu: subito a schermo intero ──
-        tocca(p, "#menu-apri")
-        aspetta(lambda: p.valuta("!document.getElementById('menu').hidden"), 3)
+        # ── il cruscotto da Io: subito a schermo intero ──
+        tocca(p, '#barra a[data-sezione="io"]')
+        aspetta(lambda: p.valuta("!document.getElementById('sez-io').hidden"), 3)
         tocca(p, "#cruscotto-tel")
         ok = aspetta(lambda: p.valuta("!document.getElementById('strato-scheda').hidden && "
                                       "!!document.querySelector('#intera-posto .tipo-cruscotto .cr-sezione')"), 10)
-        verifica("cruscotto dal menu: si apre direttamente a schermo intero", bool(ok))
-        verifica("il menu si chiude e il cruscotto resta anche nel carosello",
-                 p.valuta("document.getElementById('menu').hidden && "
-                          "!!document.querySelector('#binario .tipo-cruscotto')"))
+        verifica("cruscotto da Io: si apre direttamente a schermo intero", bool(ok))
+        verifica("il cruscotto resta anche in Io",
+                 p.valuta("!!document.querySelector('#sez-io .tipo-cruscotto')"))
         verifica("nello strato c'è solo «Aggiorna» del cruscotto (il suo «Chiudi» è quello dello strato)",
                  p.valuta("[...document.querySelectorAll('#intera-posto [data-cruscotto]')]"
                           ".filter(b => getComputedStyle(b).display !== 'none').map(b => b.textContent)") == ["Aggiorna"])
@@ -227,27 +230,28 @@ def prova(exe, srv, hub, web):
                         " window.__cr === document.getElementById('intera-posto').firstElementChild]") or [0, False]
         verifica("aggiornamento del cruscotto: al suo posto (stesso elemento), scorrimento conservato",
                  bool(ok) and dopo[1] and abs(dopo[0] - sc) <= 2, json.dumps(dopo))
-        # una scheda nuova: va nel carosello, lo strato resta
+        # una scheda nuova: va nella sua sezione, lo strato resta
         from calliope.schermi import schede
         tutti(hub, schede.calcolo("17 × 6", "102"))
-        ok = aspetta(lambda: len((p.valuta(f"{T}.carosello()") or {}).get("ordine", [])) >= 5, 5)
-        c = p.valuta(f"{T}.carosello()") or {}
-        verifica("una scheda nuova va nel carosello e lo strato resta aperto sul cruscotto",
+        ok = aspetta(lambda: p.valuta("!!document.querySelector('#sez-conversazione .tipo-calcolo')"), 5)
+        c = p.valuta(f"{T}.sezioni()") or {}
+        verifica("una scheda nuova va in Conversazione e lo strato resta aperto sul cruscotto",
                  bool(ok) and c.get("intera") == "cruscotto"
                  and p.valuta("!document.getElementById('strato-scheda').hidden"), json.dumps(c))
         tocca(p, "#intera-chiudi")
         ok = aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 3)
         verifica("«Chiudi»: lo strato si chiude", bool(ok)
-                 and p.valuta(f"{T}.carosello().intera") is None)
+                 and p.valuta(f"{T}.sezioni().intera") is None)
         aspetta(lambda: p.valuta("!(history.state && history.state.calliopeStrato)"), 2)
         verifica("«Chiudi» toglie anche la voce nella cronologia del browser",
                  p.valuta("!(history.state && history.state.calliopeStrato)"))
 
         # ── il lavoro con il codice lungo: un tocco sulla scheda ──
         p.valuta(f"{T}.vaiA('lavoro:11'); 1")
+        aspetta(lambda: p.valuta("!document.getElementById('sez-cose').hidden"), 2)
         time.sleep(0.2)
-        tocca(p, "#binario [data-chiave=\"lavoro:11\"] .riassunto-lavoro")
-        ok = aspetta(lambda: p.valuta(f"{T}.carosello().intera") == "lavoro:11", 3)
+        tocca(p, "#sez-cose [data-chiave=\"lavoro:11\"] .riassunto-lavoro")
+        ok = aspetta(lambda: p.valuta(f"{T}.sezioni().intera") == "lavoro:11", 3)
         verifica("un tocco sulla scheda del lavoro la apre a schermo intero", bool(ok))
         di_lato = p.valuta("(() => { const pre = document.querySelector('#intera-posto pre.codice');"
                            " return [pre.scrollWidth > pre.clientWidth + 1, getComputedStyle(pre).overflowX]; })()")
@@ -275,8 +279,8 @@ def prova(exe, srv, hub, web):
         # ── il documento con «Espandi», poi il gesto indietro ──
         p.valuta(f"{T}.vaiA('documento:12'); 1")
         time.sleep(0.2)
-        tocca(p, "#binario [data-chiave=\"documento:12\"] .espandi")
-        ok = aspetta(lambda: p.valuta(f"{T}.carosello().intera") == "documento:12", 3)
+        tocca(p, "#sez-cose [data-chiave=\"documento:12\"] .espandi")
+        ok = aspetta(lambda: p.valuta(f"{T}.sezioni().intera") == "documento:12", 3)
         verifica("«Espandi» apre il documento a schermo intero", bool(ok))
         tab = p.valuta("(() => { const t = document.querySelector('#intera-posto table');"
                        " return [t.scrollWidth > t.clientWidth + 1, getComputedStyle(t).overflowX]; })()")

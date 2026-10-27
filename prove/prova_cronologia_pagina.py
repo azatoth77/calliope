@@ -16,7 +16,7 @@ archivio delle conversazioni in una cartella temporanea.
 - lo schermo di stanza non ha né il pulsante né le schede delle persone;
 - «Pulisci» con due tocchi: le schede spariscono da tutti gli schermi personali di Dario;
 - un altro riavvio con uno sviluppo aperto: lo schermo rientra subito nella vista dello sviluppo;
-- telefono di Dario: «La nostra conversazione» nel menu la apre a schermo intero, in una colonna
+- telefono di Dario: «La nostra conversazione» in Conversazione la apre a schermo intero, in una colonna
   senza testo che esce di lato; «Pulisci le mie schede» c'è;
 - nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> salva gli
   screenshot. ~40 s.
@@ -325,17 +325,19 @@ def telefono(exe, amb):
         ok = aspetta(lambda: p.valuta("!!window.calliopeTelefono && window.calliopeTelefono.st.collegato"), 15)
         verifica("telefono di Dario: collegato", bool(ok))
         ok = aspetta(lambda: p.valuta("!document.getElementById('chat-tel').hidden"), 10)
-        verifica("telefono personale: «La nostra conversazione» e «Pulisci le mie schede» nel menu",
-                 bool(ok) and p.valuta("!document.getElementById('pulisci-tel').hidden"))
-        tocca(p, "#menu-apri")
-        aspetta(lambda: p.valuta("!document.getElementById('menu').hidden"), 3)
-        foto(p, "conversazione-telefono-menu.png", 390, 844, mobile=True)
+        verifica("telefono personale: «La nostra conversazione» in Conversazione e «Pulisci le mie schede» in Io",
+                 bool(ok) and p.valuta("!document.getElementById('pulisci-tel').hidden"
+                                       " && !!document.querySelector('#sez-conversazione #chat-tel')"
+                                       " && !!document.querySelector('#sez-io #pulisci-tel')"))
+        tocca(p, '#barra a[data-sezione="conversazione"]')
+        aspetta(lambda: p.valuta("!document.getElementById('sez-conversazione').hidden"), 3)
+        foto(p, "conversazione-telefono-sezione.png", 390, 844, mobile=True)
         tocca(p, "#chat-tel")
         ok = aspetta(lambda: p.valuta("document.querySelectorAll('#intera-posto .conv-turno').length") == 4, 10)
-        verifica("dal menu la conversazione si apre a schermo intero, con i turni", bool(ok),
+        verifica("da Conversazione la conversazione si apre a schermo intero, con i turni", bool(ok),
                  p.valuta("document.querySelectorAll('#intera-posto .conv-turno').length"))
-        verifica("…e c'è anche nel carosello",
-                 p.valuta("!!document.querySelector('#binario .tipo-chat')"))
+        verifica("…e resta in Conversazione",
+                 p.valuta("!!document.querySelector('#sez-conversazione .tipo-chat')"))
         fuori = p.valuta("(() => { const s = document.querySelector('#intera-posto .conv-chat');"
                          " return s.scrollWidth > s.clientWidth + 1; })()")
         verifica("in una colonna, niente testo che esce di lato", fuori is False, fuori)
