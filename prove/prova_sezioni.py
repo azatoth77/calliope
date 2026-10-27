@@ -20,9 +20,9 @@ cruscotto); le due tabelle devono restare uguali.
    non vive). `sezioneDi`: vale la sezione del server; una sezione inventata va nella
    conversazione.
 4. **Il router** (telefono.js `percorsoDa`, con node): #/cose/liste, il frammento vuoto e uno
-   sconosciuto (Adesso), la chiave di una scheda con i due punti nel percorso. In Adesso le
-   schede con uno stato o dei campi (gioco, esercizi, sviluppo, cassetto, chat, voce nuova) sono
-   solo un rimando.
+   sconosciuto (Adesso), la chiave di una scheda con i due punti nel percorso; una sezione
+   nascosta sul telefono di un minore (passo 1c) è Adesso. In Adesso le schede con uno stato o
+   dei campi (gioco, esercizi, sviluppo, cassetto, chat, voce nuova) sono solo un rimando.
 
     python prove/prova_sezioni.py
 """
@@ -152,6 +152,7 @@ console.log(JSON.stringify(out.concat(sez)));
 """
 
 PROVA_ROUTER = r"""
+const vis = { nascoste: { sezioni: [], raccolte: [] } };
 const casi = [
   ["#/cose/liste", ["cose", "liste"]],
   ["", ["adesso"]],
@@ -161,7 +162,12 @@ const casi = [
   ["#/cose/liste/lista%3Aspesa", ["cose", "liste", "lista:spesa"]],
   ["#cose", ["cose"]],
 ];
-console.log(JSON.stringify(casi.map(([h, atteso]) => [h, JSON.stringify(percorsoDa(h)) === JSON.stringify(atteso)])));
+const out = casi.map(([h, atteso]) => [h, JSON.stringify(percorsoDa(h)) === JSON.stringify(atteso)]);
+// Sul telefono di un minore (27/10, passo 1c): una sezione nascosta è Adesso
+vis.nascoste.sezioni = ["casa"];
+out.push(["#/casa nascosta", JSON.stringify(percorsoDa("#/casa")) === JSON.stringify(["adesso"])]);
+out.push(["#/cose con Casa nascosta", JSON.stringify(percorsoDa("#/cose")) === JSON.stringify(["cose"])]);
+console.log(JSON.stringify(out));
 """
 
 

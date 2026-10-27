@@ -231,6 +231,7 @@ A_SECCO = [
     ("prova_telefono_pagina.py", [], "telefono nel browser vero: wake word e VAD come in Python, niente audio senza il nome, voce e barge-in"),
     # ~12 s: abbinamento del telefono che riprende dopo la pagina sospesa (iOS); con Edge o
     # Chromium anche nel browser vero, senza si fa solo la parte a secco
+    ("prova_aspetto.py", [], "aspetto dei satelliti personali (27/10, passo 1c): accenti con contrasto AA e il lilla di serie anche nei CSS, sezioni nascoste per età (12 anni, il giorno dei 13, senza data), la preferenza salvata e tolta con «svuota», /api/accedi e /api/aspetto sul server vero (personale sì, stanza no, evento a tutte le pagine della persona)"),
     ("prova_sezioni.py", [], "telefono a sezioni (27/10): SEZIONE_DI_TIPO uguale in schede.py e schermo.js, ogni tipo con la sua casa e il suo elenco, la sezione scritta dal server (anche nella scheda dello sviluppo), la regola «viva» per tipo e il router sul frammento (con node)"),
     ("prova_telefono_abbina.py", [], "telefono: abbinamento che riprende (ripresa segreta, token una volta sola, niente orfani), sessione che riprende al ritorno in primo piano"),
     # ~70 s: diagnostica e microfono del telefono; con Edge o Chromium e una voce di Piper anche

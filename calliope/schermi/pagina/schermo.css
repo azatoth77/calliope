@@ -6,14 +6,22 @@
   --bordo: #2a2f3a;
   --testo: #ece8df;
   --tenue: #9aa1ad;
-  --accento: #e2b45a;
-  --accento-tenue: rgba(226, 180, 90, 0.14);
+  /* L'accento (27/10, calliope/schermi/aspetto.py): lilla di serie su tutto; su uno schermo
+     personale la pagina mette quello scelto dal proprietario (applicaAspetto in schermo.js) */
+  --accento: #b9a3e3;
+  --accento-chiaro: #cdbcf0;
+  --accento-bordo: #5b4a80;
+  --accento-selezione: #2a2140;
+  --accento-fondo: #15111f;
+  --su-accento: #1a1226;
+  --accento-rgb: 185, 163, 227;
+  --accento-tenue: rgba(var(--accento-rgb), 0.14);
   --ok: #82c99f;
   --allarme: #f0896a;
   /* Stato della voce: colore e forma insieme (mai solo il colore) */
   --v-dorme: #8b93a3;
   --v-ascolta: #6fd39a;
-  --v-pensa: #e2b45a;
+  --v-pensa: var(--accento);
   --v-parla: #7fb4f5;
   --raggio: 0.9rem;
   color-scheme: dark;
@@ -497,7 +505,7 @@ pre.uscita-esecuzione .omessi, pre.uscita-esecuzione .vuoto { color: var(--tenue
   padding: 0.4rem 1.1rem;
 }
 .piccolo-bottone { background: transparent; color: var(--accento); justify-self: start; font-size: 0.95rem; }
-.invia-modulo, .scrivi button { background: var(--accento); color: #16130e; font-weight: 600; font-size: 1.1rem; }
+.invia-modulo, .scrivi button { background: var(--accento); color: var(--su-accento); font-weight: 600; font-size: 1.1rem; }
 .invia-modulo:disabled, .scrivi button:disabled { opacity: 0.55; cursor: default; }
 .piede-modulo { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .esito-modulo { margin: 0; color: var(--tenue); }

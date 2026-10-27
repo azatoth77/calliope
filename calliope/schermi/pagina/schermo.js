@@ -290,6 +290,9 @@
     // Un gioco da chiudere senza mostrarlo (il telefono in auto, 27/10): il riquadro si toglie e
     // il server smette di ascoltare i suoi comandi a voce
     chiudiPartita(p) { if (p) chiudiGiocoDaTe(String(p)); },
+    // L'accento (27/10): quello in uso e la scelta da Io › Aspetto del telefono
+    aspetto() { return S.aspetto || null; },
+    scegliAccento(nome) { return scegliAccento(nome); },
   };
 
   // Nuovo accesso con il token, finché non riesce. Le sessioni del server sono in memoria:
@@ -324,6 +327,8 @@
     if (r.dati.scrittura) S.scrittura = r.dati.scrittura;
     casellaScrivi(!!r.dati.scrivi, !!r.dati.personale);
     impostaAmministra(!!r.dati.amministra);
+    applicaAspetto(r.dati.aspetto);
+    emetti("nascoste", r.dati.nascoste || {});
     if (!CAROSELLO) $("luogo").textContent = r.dati.stanza || "Calliope";
     document.title = "Calliope · " + (r.dati.stanza || "schermo");
     collegaEventi();
@@ -425,6 +430,7 @@
     es.addEventListener("voce", (ev) => { vivo(); mostraVoce(JSON.parse(ev.data)); });
     es.addEventListener("stanza", (ev) => { vivo(); mostraStanza(JSON.parse(ev.data)); });
     es.addEventListener("scrittura", (ev) => { vivo(); applicaScrittura(JSON.parse(ev.data)); });
+    es.addEventListener("aspetto", (ev) => { vivo(); applicaAspetto(JSON.parse(ev.data)); });
     es.addEventListener("contesto", (ev) => { vivo(); mostraContesto(JSON.parse(ev.data)); });
     es.addEventListener("gioco", (ev) => { vivo(); daServerGioco(JSON.parse(ev.data)); });
     es.addEventListener("chat", (ev) => { vivo(); chatDalServer(JSON.parse(ev.data)); });
@@ -2304,6 +2310,36 @@
   }
   // Codici di lunghezza nota: l'errore si vede appena si arriva in fondo, senza aspettare
   const LUNGHEZZA = { codice_fiscale: 16, partita_iva: 11, cap: 5, codice_destinatario: 7 };
+
+  // ─── l'aspetto (27/10, calliope/schermi/aspetto.py) ───
+  // I colori dell'accento vengono dal server: quello scelto dal proprietario sugli schermi
+  // personali, il lilla di serie altrove (è anche nei CSS). Solo colori nella forma attesa: le
+  // variabili non prendono altro
+  const VARIABILI_ACCENTO = {
+    accento: "--accento", chiaro: "--accento-chiaro", bordo: "--accento-bordo",
+    selezione: "--accento-selezione", fondo: "--accento-fondo", su: "--su-accento",
+  };
+  function applicaAspetto(a) {
+    if (!a || !a.colori) return;
+    const st = document.documentElement.style;
+    for (const [k, v] of Object.entries(VARIABILI_ACCENTO)) {
+      const c = a.colori[k];
+      if (typeof c === "string" && /^#[0-9a-f]{6}$/i.test(c)) st.setProperty(v, c);
+    }
+    const rgb = a.colori.tenue;
+    if (typeof rgb === "string" && /^\d{1,3}, \d{1,3}, \d{1,3}$/.test(rgb)) st.setProperty("--accento-rgb", rgb);
+    S.aspetto = a;
+    emetti("aspetto", a);
+  }
+  // Io › Aspetto: l'accento scelto vale su tutti gli schermi personali della persona (il
+  // server lo manda anche alle altre sue pagine aperte)
+  async function scegliAccento(nome) {
+    let r;
+    try { r = await postSessione("/api/aspetto", { accento: String(nome || "") }); }
+    catch (e) { return { ok: false, errore: "Calliope non risponde: riprova tra poco." }; }
+    if (r.status === 200 && r.dati.aspetto) applicaAspetto(r.dati.aspetto);
+    return { ok: r.status === 200, errore: r.dati.errore || MESSAGGI[r.status] || "" };
+  }
 
   async function postSessione(url, dati) {
     const r = await fetch(url, {

@@ -253,6 +253,16 @@ class Schermi:
         # Il cruscotto di chi amministra (06/10, cruscotto.py: sola lettura), da main.py;
         # None = niente pulsante e /api/cruscotto risponde 404
         self.cruscotto = None
+        # L'aspetto dei satelliti personali (27/10, aspetto.py): l'accento scelto per persona e
+        # le sezioni nascoste a un minore. `profilo`: id → profilo della persona (da main.py,
+        # letto a ogni accesso); None = nessuna sezione nascosta
+        self.profilo = None
+        self.aspetto = None
+        try:
+            from .aspetto import PreferenzeAspetto
+            self.aspetto = PreferenzeAspetto(archivio.path)
+        except Exception as e:  # noqa: BLE001 — senza la tabella resta l'accento di serie
+            log(f"   [SCHERMI] preferenze dell'aspetto non disponibili: {type(e).__name__}")
         # «Scarica» nella scheda del documento (07/10, scarica.py): le schede scaricabili
         # arrivate a ogni schermo personale e i gettoni degli indirizzi
         self.scaricamenti = Scaricamenti(cfg)
@@ -603,6 +613,48 @@ class Schermi:
             for c in self._conn.get(sid, []):
                 n += c.consegna((tipo, msg))
         return n
+
+    # ── l'aspetto dei satelliti personali (27/10, aspetto.py) ──
+    def aspetto_di(self, schermo: dict | None) -> dict:
+        """L'accento per la pagina: quello scelto dal proprietario di uno schermo personale, il
+        lilla di serie sugli schermi condivisi; con le scelte solo sugli schermi personali."""
+        from . import aspetto as A
+        persona = (schermo or {}).get("proprietario")
+        nome = self.aspetto.accento(persona) if self.aspetto is not None and persona else A.DI_SERIE
+        return A.per_pagina(nome, bool(persona))
+
+    def nascoste_di(self, schermo: dict | None) -> dict:
+        """Sezioni e raccolte da non mostrare: dal profilo del proprietario, letto adesso."""
+        from . import aspetto as A
+        persona = (schermo or {}).get("proprietario")
+        prof = None
+        if persona and self.profilo is not None:
+            try:
+                prof = self.profilo(persona)
+            except Exception:  # noqa: BLE001 — un profilo illeggibile: niente da nascondere
+                prof = None
+        return A.nascoste(prof)
+
+    def scegli_accento(self, schermo: dict, accento: str) -> dict:
+        """L'accento scelto da uno schermo personale: salvato per il proprietario e mandato a
+        tutte le sue pagine aperte (evento «aspetto»), così vale subito su ogni suo satellite
+        personale. {ok, aspetto} o {errore, _stato}."""
+        from . import aspetto as A
+        persona = (schermo or {}).get("proprietario")
+        if not persona:
+            return {"errore": "l'accento si sceglie da uno schermo personale", "_stato": 403}
+        if accento not in A.ACCENTI:
+            return {"errore": "accento sconosciuto", "_stato": 400}
+        if self.aspetto is None or not self.aspetto.salva(persona, accento):
+            return {"errore": "non ho potuto salvarlo", "_stato": 500}
+        dati = A.per_pagina(accento, True)
+        msg = json.dumps(dati, ensure_ascii=False)
+        with self._lock:
+            conns = [c for lst in self._conn.values() for c in lst
+                     if c.schermo.get("proprietario") == persona]
+        for c in conns:
+            c.consegna(("aspetto", msg))
+        return {"ok": True, "aspetto": dati}
 
     def schermo(self, sid) -> dict | None:
         return next((s for s in self.abbinati() if s["id"] == sid), None)

@@ -2,7 +2,7 @@
 
 *Schede sugli schermi, abbinamento, visibilità, scrivere invece di parlare, telefono come satellite (PWA), rispondi dove ti ho chiesto. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 27/10.** Il telefono è **a sezioni** (passo 1 del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md), sezione in fondo): Adesso, Conversazione, Le mie cose, Casa e Io con la barra in basso, la voce sopra la barra, ogni scheda nella sua sezione e quelle vive anche in Adesso; il menu è diventato Io, la vista da guida del 04/10 la modalità «In auto», a mano. Restano i passi 1b–10 del progetto (PC personale, accento lilla, sezioni per età, Le mie cose con le pagine per tipo, Studio). *Stato al 18/10 (storico):* come al 14/10 (sotto), più: chi è quale giocatore e «Gira il telefono» sugli schermi (15/10, [giochi](giochi.md)); la foto mandata dallo schermo che aspetta la domanda anche se in mezzo parla un'altra voce (16/10, #96, [immagini-allegati](immagini-allegati.md)); l'inoltro del satellite tolto (16/10, #61): fuori casa il telefono raggiunge la DGX con la sua VPN ([satelliti](satelliti.md), [`prove/manuali/telefono.md`](../../prove/manuali/telefono.md)). Le prove manuali stanno in `prove/manuali/` dal 06/10. *Stato al 14/10 (storico):* come al 09/10 (sotto), più: la **modalità gioco** a tutta la finestra con il pallino della voce e la variante «collaudo» (11/10), il palco fisso dei giochi (14/10, [giochi](giochi.md)); la **stanza** sugli schermi (13/10): il segno «Ascolto la stanza» o la pausa, l'interruttore «Ascolto la stanza» del telefono (acceso di serie), la sezione «Stanza (in ombra)» del cruscotto con soli numeri; dal 14/10 la scheda «avviso» del tutore con «Leggi cosa si è detto» e «Scarica l'audio», solo sul suo schermo personale ([minori](minori.md)). Restano da provare sul vero l'iPhone e lo scaricamento dalla PWA.
+**Stato al 27/10.** Il telefono è **a sezioni** (passo 1 del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md), sezione in fondo): Adesso, Conversazione, Le mie cose, Casa e Io con la barra in basso, la voce sopra la barra, ogni scheda nella sua sezione e quelle vive anche in Adesso; il menu è diventato Io, la vista da guida del 04/10 la modalità «In auto», a mano. Dal 27/10 (passo 1c) l'accento è **lilla di serie** su tutto, con l'accento personale in Io › Aspetto, e sul telefono di un minore Casa è nascosta sotto i 13 anni. Restano i passi 1b e 2–10 del progetto (PC personale, Le mie cose con le pagine per tipo, Studio). *Stato al 18/10 (storico):* come al 14/10 (sotto), più: chi è quale giocatore e «Gira il telefono» sugli schermi (15/10, [giochi](giochi.md)); la foto mandata dallo schermo che aspetta la domanda anche se in mezzo parla un'altra voce (16/10, #96, [immagini-allegati](immagini-allegati.md)); l'inoltro del satellite tolto (16/10, #61): fuori casa il telefono raggiunge la DGX con la sua VPN ([satelliti](satelliti.md), [`prove/manuali/telefono.md`](../../prove/manuali/telefono.md)). Le prove manuali stanno in `prove/manuali/` dal 06/10. *Stato al 14/10 (storico):* come al 09/10 (sotto), più: la **modalità gioco** a tutta la finestra con il pallino della voce e la variante «collaudo» (11/10), il palco fisso dei giochi (14/10, [giochi](giochi.md)); la **stanza** sugli schermi (13/10): il segno «Ascolto la stanza» o la pausa, l'interruttore «Ascolto la stanza» del telefono (acceso di serie), la sezione «Stanza (in ombra)» del cruscotto con soli numeri; dal 14/10 la scheda «avviso» del tutore con «Leggi cosa si è detto» e «Scarica l'audio», solo sul suo schermo personale ([minori](minori.md)). Restano da provare sul vero l'iPhone e lo scaricamento dalla PWA.
 
 *Stato al 09/10 (storico): schermi e telefono come dal 06/10 (scheda a schermo intero, cruscotto in sola lettura), più il lettore Markdown e «Scarica» (07/10), la scheda degli esercizi e del cassetto, la vista dello sviluppo con il flusso dell'agente e la cronologia delle schede per persona con la scheda «Conversazione» (08/10), il segno della compagnia (09/10). Restano da provare sul vero l'iPhone (audio, schermo acceso, auto) e lo scaricamento dalla PWA.*
 
@@ -856,3 +856,34 @@ ultima risposta, novità, router, Io, In auto; misure di ogni sezione e di «In 
 `prova_esercizi_pagina`, `prova_markdown_pagina`, `prova_scheda_intera`,
 `prova_vista_sviluppo_pagina`. Da provare sul vero: l'iPhone (barra e zona sicura in basso, gesto
 indietro nella PWA), «In auto» guidando.
+
+## Accento lilla, accento personale e sezioni per età (27/10, issue #240, ramo `issue-240-aspetto`)
+
+Passo 1c del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md)
+(§ 2.1 e § 3.1, decisioni 2 e 8 del 27/10).
+
+- **Lilla di serie** su telefono, PC e schermi condivisi: `--accento` `#b9a3e3` e la sua famiglia
+  in `schermo.css` (`--accento-chiaro`, `--accento-bordo`, `--accento-selezione`,
+  `--accento-fondo`, `--su-accento`, `--accento-rgb` per `--accento-tenue`); «ci penso»
+  (`--v-pensa`) segue l'accento. I colori scritti a mano che seguivano l'oro (testo sopra
+  l'accento, fondo di «Aspetta te», numero delle novità) sono diventati variabili. *Storico: fino
+  al 27/10 oro, `#e2b45a` sugli schermi e `#cfa760` sul telefono.*
+- **Accento personale** (`calliope/schermi/aspetto.py`): le scelte sono in `ACCENTI` (lilla, oro,
+  rosa), ognuna controllata per il contrasto AA in `prova_aspetto`; la pagina riceve i colori dal
+  server e li mette nelle variabili solo se hanno la forma `#rrggbb` (`applicaAspetto` in
+  `schermo.js`). La scelta si fa in **Io › Aspetto** del telefono (`POST /api/aspetto`, solo da
+  uno schermo personale), si salva per persona in `memoria.db` (`aspetto_preferenze`) e arriva
+  subito a tutte le pagine aperte della persona (evento SSE «aspetto»), PC personale compreso;
+  gli schermi condivisi restano lilla. Non scade col tempo; va via con i dati della persona
+  (`conserva.TABELLE_PREFERENZE`, «svuota»).
+- **Sezioni per età**: `/api/accedi` dà `nascoste` dal profilo del proprietario, riletto a ogni
+  accesso (`Schermi.profilo`, da `main.py`): a un minore la raccolta Ufficio sempre (nasce col
+  passo 2), Casa sotto i 13 anni; senza data di nascita vale la fascia scritta a mano (Casa solo per
+  «adolescenti», 14–17; per «ragazzi», 11–13, nel dubbio no). Il telefono toglie la voce dalla barra,
+  `#/casa` porta ad Adesso e una scheda di una sezione nascosta va in Conversazione: niente
+  sparisce. Nascondere non toglie e non aggiunge permessi (restano in `ToolRegistry.call`).
+
+Prove: `prova_aspetto` (nuova, livello 1); `prova_sezioni` (router con una sezione nascosta);
+`prova_telefono_schermo` (Io › Aspetto: le scelte, un tocco su «Rosa» cambia l'accento e la barra
+e lo salva; le sezioni nascoste e tolte). Le misure di contrasto di tutte le prove nella pagina
+vera girano con il lilla. Da provare sul vero: il lilla sull'iPhone e sulla TV.

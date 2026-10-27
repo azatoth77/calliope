@@ -478,6 +478,61 @@ def sezioni(t: Tel, hub):
     ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("modo") == "sezioni"
                  and t.v("localStorage.getItem('calliope.telefono.auto')") is None, 2)
     verifica("In auto: «Esci» torna alle sezioni", bool(ok))
+    aspetto(t, hub)
+    nascoste(t, hub)
+
+
+ACCENTO = "getComputedStyle(document.documentElement).getPropertyValue('--accento').trim()"
+
+
+def aspetto(t: Tel, hub):
+    """Io › Aspetto (27/10, passo 1c): lilla di serie, le scelte dal server, un tocco cambia
+    l'accento (variabile CSS, scelta segnata), salvata per la persona."""
+    T = "window.calliopeTelefono"
+    t.tocca_sel('#barra a[data-sezione="io"]')
+    ok = aspetta(lambda: t.v("document.querySelectorAll('#accenti .accento-scelta').length") >= 3, 3)
+    a = t.v("({accento: " + ACCENTO + ", segnata: (document.querySelector('#accenti [aria-pressed=\"true\"]')||{dataset: {}}).dataset.accento || '',"
+            " nomi: [...document.querySelectorAll('#accenti .accento-scelta')].map((b) => b.textContent)})") or {}
+    verifica("Aspetto: in Io le scelte con il nome, il lilla di serie segnato",
+             bool(ok) and a.get("accento") == "#b9a3e3" and a.get("segnata") == "lilla"
+             and "Lilla" in (a.get("nomi") or []), json.dumps(a))
+    t.tocca_sel('#accenti [data-accento="rosa"]')
+    ok = aspetta(lambda: t.v(ACCENTO) == "#e8a6c8"
+                 and t.v("document.querySelector('#accenti [data-accento=\"rosa\"]').getAttribute('aria-pressed')") == "true", 3)
+    verifica("Aspetto: un tocco su «Rosa» cambia l'accento della pagina e lo segna", bool(ok),
+             f"{t.v(ACCENTO)} esito «{t.v('document.getElementById(\"accento-esito\").textContent')}»"
+             f" {t.v('JSON.stringify(window.calliopeSchermo.aspetto())')[:120]}")
+    verifica("Aspetto: salvato per la persona sul server", hub.aspetto.accento("dario") == "rosa",
+             hub.aspetto.accento("dario"))
+    barra = t.v("getComputedStyle(document.querySelector('#barra a[aria-current]')).color")
+    verifica("Aspetto: la sezione aperta nella barra col nuovo accento", barra == "rgb(232, 166, 200)", barra)
+    t.tocca_sel('#accenti [data-accento="lilla"]')
+    aspetta(lambda: t.v(ACCENTO) == "#b9a3e3", 3)
+    t.v(f"{T}.vai('#/adesso'); 1")
+
+
+def nascoste(t: Tel, hub):
+    """Le sezioni nascoste sul telefono di un minore (27/10, passo 1c): la barra perde Casa,
+    #/casa porta ad Adesso, una scheda della casa va in Conversazione; tolte, tutto torna."""
+    T = "window.calliopeTelefono"
+    from calliope.schermi import schede
+    evento = "document.dispatchEvent(new CustomEvent('calliope:nascoste', {detail: %s})); 1"
+    t.v(evento % json.dumps({"sezioni": ["casa"], "raccolte": ["ufficio"]}))
+    tutti(hub, schede.nuova("casa", "Cucina", schede.CASA, chiave="casa:cucina",
+                            righe=[{"nome": "Luce cucina", "stato": "accesa", "acceso": True}]))
+    ok = aspetta(lambda: "casa:cucina" in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("conversazione", []), 5)
+    n = t.v("({casa: getComputedStyle(document.querySelector('#barra a[data-sezione=\"casa\"]')).display,"
+            " voci: [...document.querySelectorAll('#barra a')].filter((a) => getComputedStyle(a).display !== 'none').length})") or {}
+    verifica("minore: niente Casa nella barra (4 voci), la scheda della casa in Conversazione",
+             bool(ok) and n.get("casa") == "none" and n.get("voci") == 4, json.dumps(n))
+    t.v("location.hash = '#/casa'; 1")
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("sezione") == "adesso", 2)
+    verifica("minore: #/casa porta ad Adesso", bool(ok))
+    t.v(evento % json.dumps({"sezioni": [], "raccolte": []}))
+    ok = aspetta(lambda: "casa:cucina" in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("casa", []), 3)
+    verifica("tolte le sezioni nascoste: Casa torna, con la sua scheda", bool(ok)
+             and t.v("document.querySelectorAll('#barra a').length") == 5
+             and t.v("getComputedStyle(document.querySelector('#barra a[data-sezione=\"casa\"]')).display") != "none")
 
 
 def modulo_e_scrivi(t: Tel, hub):

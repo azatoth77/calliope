@@ -249,7 +249,9 @@ const car = {
 };
 const CHIAVE_AUTO = "calliope.telefono.auto";              // "1": la modalità In auto
 const CHIAVE_VISTI = "calliope.telefono.visti";
-const vis = { sezione: "adesso", percorso: ["adesso"], modo: leggi(CHIAVE_AUTO) === "1" ? "auto" : "sezioni" };
+const vis = { sezione: "adesso", percorso: ["adesso"], modo: leggi(CHIAVE_AUTO) === "1" ? "auto" : "sezioni",
+  // Sul telefono di un minore (27/10, decisione 2): sezioni e raccolte da non mostrare, dal server
+  nascoste: { sezioni: [], raccolte: [] } };
 const TITOLI_SEZIONE = { adesso: "Adesso", conversazione: "Conversazione", cose: "Le mie cose", casa: "Casa", io: "Io" };
 // Le schede che hanno sempre «Espandi» (le altre solo se non ci stanno): sul telefono il
 // cruscotto, il codice di un lavoro, un documento o l'uscita di un programma non si leggono
@@ -273,7 +275,12 @@ const sch = () => window.calliopeSchermo;
 try { for (const k of JSON.parse(leggi(CHIAVE_VISTI) || "[]")) car.visti.add(String(k)); } catch (e) { /* niente */ }
 
 function chiaveDi(c) { return c.chiave || c.id; }
-function sezioneDi(c) { return sch() ? sch().sezioneDi(c) : "conversazione"; }
+// Una scheda di una sezione o di una raccolta nascosta va nella conversazione: niente sparisce
+function sezioneDi(c) {
+  const s = sch() ? sch().sezioneDi(c) : "conversazione";
+  const [sez, racc] = s.split("/");
+  return vis.nascoste.sezioni.includes(sez) || (racc && vis.nascoste.raccolte.includes(racc)) ? "conversazione" : s;
+}
 
 // L'ultima risposta (le frasi di un turno, in ordine), al più ~300 caratteri: la coda
 function ricordaFrase(turno, testo) {
@@ -595,7 +602,7 @@ function vaiA(k) {
 // ── router sul frammento: #/adesso, #/conversazione, #/cose/liste, #/casa, #/io ──
 function percorsoDa(hash) {
   const parti = String(hash || "").replace(/^#\/?/, "").split("/").filter(Boolean).map((x) => decodeURIComponent(x));
-  if (!parti.length || !(parti[0] in TITOLI_SEZIONE)) return ["adesso"];
+  if (!parti.length || !(parti[0] in TITOLI_SEZIONE) || vis.nascoste.sezioni.includes(parti[0])) return ["adesso"];
   return parti;
 }
 
@@ -661,6 +668,59 @@ function segnaVisti() {
   }
   if (!cambia) return;
   scrivi(CHIAVE_VISTI, JSON.stringify([...car.visti].slice(-100)));
+}
+
+// Le sezioni nascoste sul telefono di un minore (27/10: Casa sotto i 13 anni, Ufficio sempre):
+// le dice il server a ogni accesso; la barra perde la voce e le schede vanno in Conversazione
+function applicaNascoste(n) {
+  const sezioni = (Array.isArray(n && n.sezioni) ? n.sezioni : []).filter((x) => x in TITOLI_SEZIONE && x !== "adesso");
+  const raccolte = (Array.isArray(n && n.raccolte) ? n.raccolte : []).map(String);
+  vis.nascoste = { sezioni, raccolte };
+  for (const a of document.querySelectorAll("#barra a[data-sezione]")) a.hidden = sezioni.includes(a.dataset.sezione);
+  for (const r of document.querySelectorAll("#sez-cose .raccolta[data-raccolta]")) {
+    if (raccolte.includes(r.dataset.raccolta)) r.dataset.nascosta = "1"; else delete r.dataset.nascosta;
+  }
+  if (sezioni.includes(vis.sezione)) vai("#/adesso", true);
+  else applicaPercorso();
+}
+
+// Io › Aspetto (27/10): le scelte dell'accento dal server, quella in uso segnata; un tocco la
+// salva per la persona e vale su tutti i suoi satelliti personali
+function disegnaAccenti(a) {
+  const box = $("accenti");
+  const scelte = (a && Array.isArray(a.scelte)) ? a.scelte : [];
+  box.hidden = !scelte.length;
+  $("io-aspetto").hidden = !scelte.length;
+  if (!scelte.length) return;
+  const firma = scelte.map((x) => x.id).join(",");
+  if (box.dataset.firma !== firma) {
+    box.replaceChildren();
+    for (const x of scelte) {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "accento-scelta";
+      b.dataset.accento = String(x.id);
+      const tinta = document.createElement("span");
+      tinta.className = "tinta";
+      tinta.setAttribute("aria-hidden", "true");
+      if (/^#[0-9a-f]{6}$/i.test(String(x.colore))) tinta.style.background = x.colore;
+      const nome = document.createElement("span");
+      nome.textContent = String(x.nome || x.id);
+      b.append(tinta, nome);
+      box.append(b);
+    }
+    box.dataset.firma = firma;
+  }
+  for (const b of box.querySelectorAll(".accento-scelta")) attr(b, "aria-pressed", b.dataset.accento === a.accento ? "true" : "false");
+}
+
+async function suAccento(ev) {
+  const b = ev.target.closest && ev.target.closest(".accento-scelta");
+  if (!b || !sch()) return;
+  const esito = $("accento-esito");
+  const r = await sch().scegliAccento(b.dataset.accento);
+  // La regione resta nel DOM (role="status": VoiceOver legge i cambi di una regione già lì)
+  metti(esito, r.ok ? "" : (r.errore || "Non ci sono riuscita: riprova."));
 }
 
 // La modalità In auto (decisione del 27/10: a mano): «In auto» in Adesso e in Io, «Esci» la chiude
@@ -2027,6 +2087,10 @@ async function avvio() {
   // Le sezioni: il frammento dice quale (#/cose/liste), il gesto indietro torna a quella di prima;
   // «In auto» a mano, «Esci» torna ad Adesso
   window.addEventListener("hashchange", applicaPercorso);
+  // L'accento e le sezioni nascoste (27/10): da schermo.js, all'accesso e quando cambiano
+  document.addEventListener("calliope:aspetto", (ev) => disegnaAccenti(ev.detail));
+  document.addEventListener("calliope:nascoste", (ev) => applicaNascoste(ev.detail));
+  $("accenti").addEventListener("click", suAccento);
   $("auto-apri").addEventListener("click", () => impostaAuto(true));
   $("auto-io").addEventListener("click", () => impostaAuto(true));
   $("auto-esci").addEventListener("click", () => impostaAuto(false));
@@ -2192,6 +2256,7 @@ window.calliopeTelefono = {
     const novita = {};
     for (const [k, v] of Object.entries(car.novita)) novita[k] = v.size;
     return { sezione: vis.sezione, percorso: vis.percorso.slice(), modo: vis.modo, posti, novita,
+      nascoste: { sezioni: vis.nascoste.sezioni.slice(), raccolte: vis.nascoste.raccolte.slice() },
       modulo: car.modulo, intera: car.intera };
   },
   schermoStato: () => ({ stato: schermo.stato, motivo: schermo.motivo, voluto: schermo.voluto,
