@@ -840,6 +840,17 @@ def pagine_2c(t: Tel, hub, cartella: Path):
     ok = aspetta(lambda: "confronta gli orari" in (t.v(f"{sel_l1} && {sel_l1}.textContent") or ""), 5)
     verifica("pagina Lavori: la scheda in diretta che arriva si allinea al suo posto (stesso elemento)",
              bool(ok) and t.v(f"{sel_l1}.__segno") == "x" and t.v(f"{S}.pagina") == ["lavoro:L1", "lavoro:L2"])
+    # Una raffica di schede della raccolta che la pagina non ha: una rilettura sola (revisione PR #267)
+    t.v("(() => { const s = window.calliopeSchermo, f = s.raccolte; window.__letture = 0;"
+        " s.raccolte = (d) => { if (d && d.raccolta) window.__letture++; return f(d); }; })(); 1")
+    for i in range(6):
+        tutti(hub, schede.esecuzione("orari dei treni", "main.py", "Python", "fatto", [], [], 0, 0,
+                                     inizio=ora - 5, trascorso_s=1, max_s=60, ident=f"L1-{i}"))
+    aspetta(lambda: (t.v("window.__letture") or 0) >= 1, 12)
+    time.sleep(2.0)
+    letture = t.v("window.__letture")
+    verifica("pagina Lavori: una raffica di schede la rilegge una volta sola (al più una ogni 10 s)",
+             letture == 1 and t.v(f"{S}.pagina") == ["lavoro:L1", "lavoro:L2"], str(letture))
     # Cassetto
     t.v(f"{T}.vai('#/cose'); 1")
     t.tocca_sel('#tessere [data-tessera="cassetto"]')

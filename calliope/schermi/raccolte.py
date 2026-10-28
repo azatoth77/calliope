@@ -364,23 +364,70 @@ def _lavoro_vivo(lv) -> dict:
                          (lv.domanda or "") if lv.stato == "in_attesa" else "", ident=lv.id)
 
 
-def _lavoro_finito(svc, lv) -> dict | None:
+# Le schede finali dei lavori finiti in memoria, già costruite (revisione della PR #267): la pagina
+# si rilegge ogni 60 s, e `Lavori.scheda` rilegge dal disco fino a 8 file interi per lavoro. La
+# chiave cambia se cambia il lavoro (stato, fine) o la sua cartella (un file nuovo, «fammene un PDF»)
+_FINITI: dict = {}
+_FINITI_MAX = 64
+
+
+def _impronta_finito(lv) -> tuple:
+    import os
+    c = (getattr(lv, "risultato", None) or {}).get("cartella") or ""
+    try:
+        m = os.stat(c).st_mtime if c else 0.0
+    except OSError:
+        m = -1.0
+    return (id(lv), str(lv.id), str(lv.stato), getattr(lv, "fine", None), str(c), m)
+
+
+def _estensione_da_approvare(hub, r: dict) -> bool:
+    """Il lavoro ha consegnato una versione di un'estensione ancora da approvare (la candidata
+    dell'archivio). Senza le estensioni, nel dubbio no: la scheda di revisione è per decidere a
+    voce, e si chiede di nuovo a Calliope."""
+    e = r.get("estensione") or {}
+    est = _fonte(hub, "estensioni")
+    arch = getattr(est, "archivio", None) if est is not None else None
+    if arch is None or not e.get("nome"):
+        return False
+    try:
+        voce = arch.voce(e["nome"]) or {}
+        ver = arch.versione(e["nome"], e.get("versione")) or {}
+    except Exception:  # noqa: BLE001
+        return False
+    return voce.get("candidata") == e.get("versione") and ver.get("stato") == "da_approvare"
+
+
+def _lavoro_finito(hub, svc, lv) -> dict | None:
     """La scheda finale di un lavoro finito: quella che Calliope manda alla fine
-    (`Lavori.scheda`: il codice, il documento, il testo); dopo un riavvio (dalla cartella dei
-    risultati) quella del lavoro col riassunto salvato, con la chiave della cartella (gli id
-    ricominciano)."""
+    (`Lavori.scheda`: il codice, il documento, il testo), tenuta in `_FINITI`; dopo un riavvio
+    (dalla cartella dei risultati) quella del lavoro col riassunto salvato, con la chiave della
+    cartella (gli id ricominciano). Un'estensione non più da approvare (approvata, rifiutata,
+    sostituita) ha la scheda breve, non quella di revisione «Estensione da approvare»."""
     from pathlib import Path
     from . import schede
     from ..agenti import risultato as ar
-    if not getattr(lv, "dal_disco", False):
-        try:
-            c = svc.scheda(lv)
-        except Exception:  # noqa: BLE001 — un file sparito: la scheda breve
-            c = None
+    r = getattr(lv, "risultato", None) or {}
+    revisione = bool(r.get("estensione"))
+    if not getattr(lv, "dal_disco", False) and (not revisione or _estensione_da_approvare(hub, r)):
+        k = _impronta_finito(lv)
+        c = _FINITI.get(k)
+        if c is None:
+            try:
+                c = svc.scheda(lv)
+            except Exception:  # noqa: BLE001 — un file sparito: la scheda breve
+                c = None
+            if c:
+                if len(_FINITI) >= _FINITI_MAX:
+                    _FINITI.pop(next(iter(_FINITI)))
+                _FINITI[k] = c
         if c:
-            return c
-    cartella = Path((lv.risultato or {}).get("cartella") or "").name
-    return schede.lavoro(lv.titolo, lv.tipo, lv.stato, ar.riassunto_salvato(lv), (), None, cartella,
+            return dict(c)
+    cartella = Path(r.get("cartella") or "").name
+    riassunto = ar.riassunto_salvato(lv)
+    if revisione and not riassunto:
+        riassunto = "Estensione consegnata: la sua revisione è già decisa."
+    return schede.lavoro(lv.titolo, lv.tipo, lv.stato, riassunto, (), None, cartella,
                          "", ident=ar.chiave(lv))
 
 
@@ -390,8 +437,10 @@ def _pagina_lavori(hub, prof) -> dict:
     scheda in diretta dalla cronologia, con il passo e il flusso; altrimenti quella breve), i
     suoi programmi (`esecuzione`) e i lavori finiti più recenti, anche di prima di un riavvio.
     Solo della persona, come le schede che arrivano ai suoi schermi; la nota è la frase di
-    `lavoro_stato` a voce (`Lavori.stato(persona, tutti)`: chi amministra sente anche i lavori
-    degli altri, solo titolo e stato)."""
+    `lavoro_stato` sui soli lavori della persona (`Lavori.stato(persona, tutti=False)`), anche per
+    chi amministra: dallo schermo lo scritto vale al più «familiare», e il cruscotto non dà i titoli
+    degli altri (revisione della PR #267: prima la nota dava a chi amministra il titolo e la domanda
+    dell'agente di un lavoro di un'altra persona, e copriva la sua)."""
     svc = _servizio_lavori(hub)
     if svc is None:
         return {"schede": [], "nota": "Qui non ci sono lavori affidati a un agente."}
@@ -421,11 +470,11 @@ def _pagina_lavori(hub, prof) -> dict:
     except Exception:  # noqa: BLE001 — la cartella dei risultati illeggibile: solo la memoria
         finiti = []
     for lv in finiti:
-        c = _lavoro_finito(svc, lv)
+        c = _lavoro_finito(hub, svc, lv)
         if c:
             out.append(c)
     try:
-        nota = svc.stato(prof.id, tutti=bool(getattr(prof, "admin", False)))
+        nota = svc.stato(prof.id, tutti=False)
     except Exception:  # noqa: BLE001
         nota = ""
     return {"schede": out, "nota": nota}
@@ -438,8 +487,9 @@ NOTA_CASSETTO = ("Tengo i file {giorni} giorni. Quello che c'è scritto dentro p
 def _pagina_cassetto(hub, prof) -> dict:
     """La pagina Cassetto (28/10, passo 2c, #258): tutti i file della persona (la scheda
     `cassetto` di sempre, con Tieni, Elimina e Tieni ancora che vanno a POST /api/cassetto come
-    prima), poi quelli di ogni ragazzo di cui è tutore (come a voce: «Tieni» li mette nella
-    cartella del tutore, e i tasti vogliono una conversazione a voce, controllata dal server).
+    prima), poi quelli di ogni ragazzo di cui è tutore (come a voce), in sola lettura: dallo
+    schermo i tasti sui file del figlio danno sempre «parlami prima a voce» (il server vuole una
+    conversazione verificata dalla voce), quindi non ci sono, e la scheda dice di chiederlo a voce.
     Chiave `cassetto:…:pagina`: la scheda che il server manda dopo un tasto (i soli file della
     scheda aperta a voce, o quelli in scadenza) non sostituisce quella della pagina, che si
     rilegge."""
@@ -449,15 +499,18 @@ def _pagina_cassetto(hub, prof) -> dict:
         return {"schede": [], "nota": "Il cassetto dei file non è attivo: i file restano solo per la "
                                       "conversazione in cui li mandi."}
 
-    def scheda(persona, titolo, tieni):
-        c = cas.scheda(persona, cas.elenco(persona), titolo=titolo, tieni=tieni)
+    def scheda(persona, titolo, tieni, sola_lettura=False):
+        c = cas.scheda(persona, cas.elenco(persona), titolo=titolo, tieni=tieni and not sola_lettura)
         c["chiave"] = f"{c.get('chiave') or 'cassetto:' + persona}:pagina"
         c["vuoto"] = "Il cassetto è vuoto."
+        if sola_lettura:
+            c["sola_lettura"] = True
+            c["nota"] = "Per tenerli o eliminarli chiedimelo a voce."
         return c
 
     out = [scheda(prof.id, "Il tuo cassetto", not minori.e_minore(prof))]
     for figlio in _figli(hub, cas, prof):
-        out.append(scheda(figlio.id, f"I file di {figlio.name}", True))
+        out.append(scheda(figlio.id, f"I file di {figlio.name}", True, sola_lettura=True))
     return {"schede": out, "nota": NOTA_CASSETTO.format(giorni=_giorni(cas))}
 
 
@@ -473,7 +526,7 @@ def _pagina_giochi(hub, prof, schermo: dict | None) -> dict:
         return {"schede": [], "nota": "I giochi sugli schermi sono spenti."}
     giochi = _giochi_di_casa(hub, prof)
     qui = (schermo or {}).get("id")
-    partite = [_partita(hub, p, qui) for p in
+    partite = [_partita(hub, p, qui, prof.id) for p in
                sorted(_partite_di(hub, prof), key=lambda x: -float(getattr(x, "ultimo", 0) or 0))]
     out = []
     if partite:
@@ -498,19 +551,23 @@ def _pagina_giochi(hub, prof, schermo: dict | None) -> dict:
     return {"schede": out}
 
 
-def _partita(hub, p, qui) -> dict:
+def _partita(hub, p, qui, persona) -> dict:
     """Una partita aperta per la scheda `giochi`: titolo, schermi, a chi tocca e i punti (i nomi
-    sono quelli già controllati dall'istantanea: macchina.valida_istantanea)."""
+    sono quelli già controllati dall'istantanea: macchina.valida_istantanea). L'istantanea è quella
+    del posto della persona (su questo schermo, se c'è), o del posto che tiene la partita con un
+    motore solo: in una partita condivisa con la tela ogni riquadro ha il suo motore, e quella di
+    un altro schermo direbbe altro (revisione della PR #267)."""
     posti = list(getattr(p, "posti", {}).items())
     dove = []
     for sid, _ in posti:
         s = (hub.schermo(sid) if hasattr(hub, "schermo") else None) or {}
         dove.append(str(s.get("nome") or "uno schermo"))
     ist = None
+    suoi = [(sid, x) for sid, x in posti if getattr(x, "persona", None) == persona]
+    suo = next((x for sid, x in suoi if sid == qui), None) or (suoi[0][1] if suoi else None)
     try:
-        tiene = p.tiene(posti[0][1]) if posti else None
-        ist = getattr(tiene, "istantanea", None) or next(
-            (x.istantanea for _, x in posti if getattr(x, "istantanea", None)), None)
+        if suo is not None:
+            ist = getattr(p.tiene(suo), "istantanea", None) or getattr(suo, "istantanea", None)
     except Exception:  # noqa: BLE001
         ist = None
     gs = list((ist or {}).get("giocatori") or [])

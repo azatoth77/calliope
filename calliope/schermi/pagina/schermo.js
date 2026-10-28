@@ -1571,13 +1571,17 @@
     }
     const ids = voci.map((v) => v.id).filter((i) => Number.isInteger(i));
     const giorni = Number.isInteger(c.giorni) ? c.giorni : 7;
+    // In sola lettura (28/10, #267: i file del figlio nella pagina del tutore) niente tasti
+    const tasti = c.sola_lettura !== true;
     const tutti = el("div", "cassetto-tutti");
-    tutti.append(bottoneCassetto("Elimina tutti", "elimina", ids, "conferma"));
-    if (voci.some((v) => v.tieni)) {
-      tutti.append(bottoneCassetto("Tieni tutti", "tieni", ids.filter((i, k) => voci[k].tieni)));
+    if (tasti) {
+      tutti.append(bottoneCassetto("Elimina tutti", "elimina", ids, "conferma"));
+      if (voci.some((v) => v.tieni)) {
+        tutti.append(bottoneCassetto("Tieni tutti", "tieni", ids.filter((i, k) => voci[k].tieni)));
+      }
+      tutti.append(el("span", "esito-cassetto", ""));
+      corpo.append(tutti);
     }
-    tutti.append(el("span", "esito-cassetto", ""));
-    corpo.append(tutti);
     const car = el("div", "cassetto-carosello");
     voci.forEach((v) => {
       if (!Number.isInteger(v.id)) return;
@@ -1596,11 +1600,13 @@
       f.append(el("p", "sotto", [v.tipo, v.dimensione].filter(Boolean).join(" · ")));
       f.append(el("p", "sotto", "Arrivato " + [v.arrivato, v.da].filter(Boolean).join(" ")));
       if (v.scade) f.append(el("p", "cassetto-scade", "Scade " + v.scade));
-      const p = el("div", "cassetto-pulsanti");
-      if (v.tieni) p.append(bottoneCassetto("Tieni", "tieni", [v.id]));
-      p.append(bottoneCassetto("Elimina", "elimina", [v.id]));
-      p.append(bottoneCassetto("Tieni ancora " + giorni + " giorni", "ancora", [v.id]));
-      f.append(p);
+      if (tasti) {
+        const p = el("div", "cassetto-pulsanti");
+        if (v.tieni) p.append(bottoneCassetto("Tieni", "tieni", [v.id]));
+        p.append(bottoneCassetto("Elimina", "elimina", [v.id]));
+        p.append(bottoneCassetto("Tieni ancora " + giorni + " giorni", "ancora", [v.id]));
+        f.append(p);
+      }
       car.append(f);
     });
     corpo.append(car);

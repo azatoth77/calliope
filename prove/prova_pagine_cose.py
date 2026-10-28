@@ -198,8 +198,10 @@ def lavori():
     verifica("lavori: niente di Bianca nella pagina di Dario",
              not any("orto" in str(c.get("titolo")) or "poesia" in str(c.get("titolo")) or c.get("chiave") == "sviluppo:S3"
                      for c in sc))
-    verifica("lavori: la nota è la frase della voce; chi amministra sente anche i lavori degli altri",
-             "di Bianca" in p.get("nota", "") and "orto sul balcone" in p.get("nota", ""), p.get("nota"))
+    verifica("lavori: la nota è la frase della voce sui suoi lavori, con la sua domanda",
+             "lettera al condominio" in p.get("nota", "") and "tono" in p.get("nota", ""), p.get("nota"))
+    verifica("lavori: chi amministra non vede né il titolo né la domanda del lavoro di Bianca (revisione PR #267)",
+             not any(x in p.get("nota", "") for x in ("orto", "vasi", "Bianca")), p.get("nota"))
     pb = raccolte.pagina(hub, BIANCA, "lavori")
     cb = [c.get("chiave") for c in pb.get("schede") or []]
     verifica("lavori: Bianca vede i suoi (sviluppo, domanda, programma, finito), niente di Dario",
@@ -210,11 +212,56 @@ def lavori():
     pl = raccolte.pagina(hub, LIA, "lavori")
     verifica("lavori: un minore senza lavori: pagina vuota, la frase della voce",
              pl.get("schede") == [] and pl.get("nota"), json.dumps(pl))
+    letture = []
+    vera = svc.scheda
+    svc.scheda = lambda lv: (letture.append(lv.id), vera(lv))[1]
+    raccolte._FINITI.clear()
+    raccolte.pagina(hub, DARIO, "lavori")
+    raccolte.pagina(hub, DARIO, "lavori")
+    verifica("lavori: la scheda finale si costruisce una volta, non a ogni rilettura della pagina",
+             letture == ["L4"], str(letture))
+    fatto.fine = ora - 700                       # il lavoro cambia: si ricostruisce
+    raccolte.pagina(hub, DARIO, "lavori")
+    verifica("lavori: un lavoro cambiato ricostruisce la sua scheda", letture == ["L4", "L4"], str(letture))
+    svc.scheda = vera
     t = {x["id"]: x for x in raccolte.tessere(hub, DARIO)}
     verifica("lavori: la tessera conta anche gli sviluppi", t["lavori"]["conto"] == 6
              and "2 sviluppi" in t["lavori"]["stato"] and t["lavori"]["pagina"] is True, json.dumps(t["lavori"]))
+    estensioni(cfg)
     cron.close()
     return svc
+
+
+class ArchivioEst:
+    def __init__(self, stato, candidata):
+        self.stato, self.candidata = stato, candidata
+
+    def voce(self, nome):
+        return {"stato": "attiva", "candidata": self.candidata}
+
+    def versione(self, nome, n=None):
+        return {"stato": self.stato}
+
+
+def estensioni(cfg):
+    """Un lavoro di estensione finito: la scheda di revisione solo se la versione è ancora la
+    candidata da approvare; approvata, la scheda breve (revisione della PR #267)."""
+    ora = time.time()
+    est = lavoro("L9", DARIO, "fatto", "meteo in cucina", tipo="estensione", creato=ora - 300, fine=ora - 200,
+                 risultato={"riassunto": "L'estensione del meteo.", "estensione": {
+                     "nome": "meteo", "versione": 2, "scheda_testo": "Cosa fa: dice il meteo."}})
+    svc = servizio_lavori(cfg, [est])
+    arch = ArchivioEst("da_approvare", 2)
+    hub = types.SimpleNamespace(servizi=types.SimpleNamespace(lavori=svc, estensioni=types.SimpleNamespace(archivio=arch)),
+                                tool_ctx=None)
+    c = next((x for x in raccolte.pagina(hub, DARIO, "lavori").get("schede") or [] if x.get("chiave") == "lavoro:L9" or "meteo" in str(x.get("titolo"))), {})
+    verifica("lavori: l'estensione ancora da approvare ha la scheda di revisione",
+             c.get("tipo") == "testo" and "da approvare" in c.get("titolo", ""), json.dumps(c)[:200])
+    arch.stato, arch.candidata = "approvata", None
+    c = next((x for x in raccolte.pagina(hub, DARIO, "lavori").get("schede") or [] if x.get("chiave") == "lavoro:L9" or "meteo" in str(x.get("titolo"))), {})
+    verifica("lavori: l'estensione già approvata non dice più «da approvare»",
+             c.get("tipo") == "lavoro" and "approvare" not in json.dumps(c, ensure_ascii=False)
+             and "meteo" in c.get("riassunto", ""), json.dumps(c, ensure_ascii=False)[:200])
 
 
 # ─────────────────────────── 2. Cassetto ───────────────────────────
@@ -244,8 +291,12 @@ def cassetto():
     pag(BIANCA)
     pag(LIA)
     cas.scheda = vera
-    verifica("cassetto: «Tieni» per l'adulto e per la tutrice sui file del figlio, non per il minore",
-             chiesti == [("bianca", True), ("lia", True), ("lia", False)], str(chiesti))
+    verifica("cassetto: «Tieni» per l'adulto, non sui file del figlio (sola lettura) né per il minore",
+             chiesti == [("bianca", True), ("lia", False), ("lia", False)], str(chiesti))
+    _, s = pag(BIANCA)
+    verifica("cassetto: i file del figlio in sola lettura, con la nota di chiederlo a voce (revisione PR #267)",
+             s["I file di Lia"].get("sola_lettura") is True and "a voce" in s["I file di Lia"].get("nota", "")
+             and not s["Il tuo cassetto"].get("sola_lettura"), json.dumps(s["I file di Lia"])[:200])
     verifica("cassetto: la nota dei 7 giorni e del dato", "7 giorni" in p.get("nota", "") and "dato" in p.get("nota", ""),
              p.get("nota"))
     _, s = pag(DARIO)
@@ -306,6 +357,9 @@ def giochi():
     p.posti[9] = Posto(9, Mittente(persona="lia", nome="Lia", livello="familiare", certo=True), True)
     p.posti[7].istantanea = {"n": 3, "fase": "turno", "tocca": 1, "turno": 2, "esito": None, "comandi": [],
                              "giocatori": [{"nome": "Dario", "punti": 2}, {"nome": "Lia", "punti": 3}]}
+    # Il riquadro di Lia ha il suo motore (una partita con la tela): un'altra istantanea
+    p.posti[9].istantanea = {"n": 5, "fase": "turno", "tocca": 0, "turno": 3, "esito": None, "comandi": [],
+                             "giocatori": [{"nome": "Lia", "punti": 4}]}
     altra = Partita("dama", 1, manifesto("dama", "Dama"), Mittente(persona="bianca", nome="Bianca", livello="familiare"))
     altra.posti[11] = Posto(11, Mittente(persona="bianca", nome="Bianca", livello="familiare", certo=True), False)
     nomi = {7: "telefono di Dario", 9: "salotto", 11: "cucina"}
@@ -350,6 +404,9 @@ def giochi():
                  [g["titolo"] for g in s["giochi:casa:lia"]["giochi"]] == ["Tris"]
                  and "sblocca" in s["giochi:casa:lia"].get("nota", "")
                  and [x["titolo"] for x in s["giochi:partite:lia"]["partite"]] == ["Tris"], json.dumps(s)[:400])
+        pl = s["giochi:partite:lia"]["partite"][0]
+        verifica("giochi: a chi tocca e i punti dal posto della persona, non dal primo (revisione PR #267)",
+                 pl["tocca"] == "Lia" and pl["punti"] == [{"nome": "Lia", "punti": 4}], json.dumps(pl))
         t = {x["id"]: x for x in raccolte.tessere(hub, LIA)}
         verifica("giochi: la tessera conta gli stessi giochi della pagina",
                  t["giochi"]["conto"] == 1 and "1 partita aperta" in t["giochi"]["stato"] and t["giochi"]["pagina"] is True,

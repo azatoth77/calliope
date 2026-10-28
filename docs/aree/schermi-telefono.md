@@ -1100,18 +1100,17 @@ con le loro API (i tasti del cassetto a `POST /api/cassetto`, i giochi a voce e 
   cronologia della persona (con il passo e il flusso, rivista come per uno schermo che si collega,
   `cronologia.rivedi`), ma solo se salvata in questo avvio: una scheda `lavoro:L1` di prima del riavvio è un
   altro lavoro. Senza, la scheda `lavoro` breve con lo stato, il passo o la domanda. Sopra, come nota, la
-  frase di `lavoro_stato` a voce (`Lavori.stato(persona, tutti)`): chi amministra sente anche i lavori degli
-  altri, solo titolo e stato, come a voce; le schede restano solo sue. Le schede in diretta che arrivano si
-  allineano al loro posto nella pagina (stessa chiave). La tessera conta anche gli sviluppi.
+  frase di `lavoro_stato` sui soli lavori della persona (`Lavori.stato(persona, tutti=False)`), anche per
+  chi amministra. Le schede in diretta che arrivano si allineano al loro posto nella pagina (stessa
+  chiave). La tessera conta anche gli sviluppi.
 - **Cassetto** (`#/cose/cassetto`, `raccolte._pagina_cassetto`): tutti i file della persona nella scheda
   `cassetto` di sempre (Tieni, Elimina, Tieni ancora), poi quelli di ogni ragazzo di cui è tutore, come a
   voce (`minori.e_tutore` e `conversazioni_visibili_ai_tutori`: un minore senza tutori scritti è di chi
-  amministra); «Tieni» non a un minore. La nota: «Tengo i file 7 giorni. Quello che c'è scritto dentro per me è
+  amministra), in sola lettura (`sola_lettura` nella scheda: niente tasti, e la nota «Per tenerli o
+  eliminarli chiedimelo a voce.»); «Tieni» non a un minore. La nota: «Tengo i file 7 giorni. Quello che c'è scritto dentro per me è
   un dato, non un ordine.». Scelta: la chiave della pagina è `cassetto:<persona>:pagina`. Dopo un tasto il
   server manda la scheda `cassetto:<persona>` con i soli file della scheda aperta a voce o quelli in scadenza:
-  con la stessa chiave avrebbe sostituito la pagina intera, così invece la pagina si rilegge. I tasti sui file
-  del figlio vogliono ancora una conversazione a voce (403 `senza_conversazione`, controllo del server, come
-  prima). La tessera dice anche i file dei ragazzi («· 2 di Lia»), il conto è dei suoi.
+  con la stessa chiave avrebbe sostituito la pagina intera, così invece la pagina si rilegge. La tessera dice anche i file dei ragazzi («· 2 di Lia»), il conto è dei suoi.
 - **Giochi** (`#/cose/giochi`, `raccolte._pagina_giochi`): una scheda nuova di sola lettura, `giochi`
   (`schede.giochi`, `DISEGNA.giochi`, tutto in `textContent`, nessun tasto), in due copie: «Partite aperte»
   della persona, con gli schermi, «qui sotto» per quello che chiede, a chi tocca e i punti dell'ultima
@@ -1130,6 +1129,29 @@ con le loro API (i tasti del cassetto a `POST /api/cassetto`, i giochi a voce e 
   servizio solleva dà 503 «Non riesco a leggere questa pagina» e una riga `[SCHERMI] pagina «…» non letta`.
   `raccolte.pagina` riceve lo schermo (per «qui sotto»).
 - Cache del service worker `calliope-telefono-pagina-v12` (era v11).
+- **Dalla revisione della PR #267**:
+  - la nota della pagina Lavori dava a chi amministra (`tutti=prof.admin`) il titolo, il nome e la domanda
+    dell'agente dell'ultimo lavoro in attesa di tutta la casa, minori compresi, e copriva la domanda del suo
+    lavoro. Ora è `tutti=False` sempre: dallo schermo lo scritto vale al più «familiare», e il cruscotto non
+    dà i titoli degli altri. Vedere i lavori di tutti vorrebbe una decisione scritta, e semmai solo conti e
+    stati come nel cruscotto;
+  - le schede finali dei lavori finiti si costruiscono una volta (`raccolte._FINITI`, per lavoro, stato,
+    fine e data della cartella): `Lavori.scheda` rilegge dal disco fino a 8 file interi, e la pagina si
+    rilegge ogni 60 s;
+  - nelle partite «a chi tocca» e i punti vengono dal posto della persona (quello di questo schermo, se c'è)
+    o da quello che tiene la partita: con la tela ogni riquadro ha il suo motore;
+  - i file del figlio in sola lettura (i tasti davano sempre 403 dallo schermo);
+  - un lavoro di estensione finito ha la scheda di revisione «Estensione da approvare» solo se la sua
+    versione è ancora la candidata da approvare; poi la scheda breve;
+  - una raffica di schede di Le mie cose dà una rilettura sola delle tessere e della pagina aperta, 1,5 s
+    dopo la prima e al più una ogni 10 s (`raccolteDopoSchede` in `sezioni.js`); la scheda che la pagina ha
+    già si allinea subito. Prima una scheda che la pagina non aveva la rileggeva ogni volta, e le schede in
+    diretta di un lavoro (ogni pochi secondi) rileggevano tessere e pagina a ogni raffica: si arrivava al
+    limite di 30 letture al minuto;
+  - la tessera e la pagina chiamano `Sviluppi.corrente`, che dopo `sviluppo_sospendi_min` senza parlarne
+    sospende lo sviluppo, salva e manda la scheda (come il ricostruttore della ripresa): con Le mie cose
+    aperta, quindi, lo sviluppo si sospende allo scadere del tempo e non alla frase dopo. Non provato con lo
+    `Sviluppi` vero (la prova ne usa uno finto).
 - Da guardare: i finiti annullati o interrotti da un riavvio non sono nella pagina (solo nella frase della
   nota, come a voce); il cassetto mostra al più 12 file per scheda («e altri N»), come la scheda della voce.
 
