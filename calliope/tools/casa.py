@@ -525,8 +525,10 @@ def _casa_integrazione(ctx: ToolContext, per_iscritto=False, formato: str = "") 
     text = diag["prossimo_passo"]
     extra = {}
     if str(per_iscritto).strip().lower() in ("true", "1", "sì", "si", "yes"):
-        written = _scrivi_guida(ctx, diag, formato)
+        written, scheda = _scrivi_guida(ctx, diag, formato)
         text = written if written else text
+        if scheda:
+            extra["scheda"] = scheda
         if text.endswith("La apro?"):
             # «sì» al turno dopo: decide il modello, con l'azione proposta davanti (Brain)
             extra["in_sospeso"] = {"domanda": "La apro?", "cosa": "la guida appena scritta",
@@ -534,12 +536,13 @@ def _casa_integrazione(ctx: ToolContext, per_iscritto=False, formato: str = "") 
     return _final(text, ok=True, stato=diag["stato"], codice=diag["codice"], **extra)
 
 
-def _scrivi_guida(ctx: ToolContext, diag: dict, formato: str) -> str:
-    """La guida completa in PDF o Word, con il testo fisso di casa/guida.py: niente LLM."""
+def _scrivi_guida(ctx: ToolContext, diag: dict, formato: str) -> tuple[str, dict | None]:
+    """La guida completa in PDF o Word, con il testo fisso di casa/guida.py: niente LLM.
+    (frase, scheda per gli schermi o None)."""
     svc = getattr(ctx, "documenti", None)
     if svc is None:
         return ("Non posso preparare documenti, quindi te lo dico a voce: " +
-                diag["prossimo_passo"])
+                diag["prossimo_passo"]), None
     fmt = str(formato or "").strip().lower()
     fmt = {"documento": "word", "docx": "word"}.get(fmt, fmt)
     if fmt not in svc.formati:
@@ -550,13 +553,27 @@ def _scrivi_guida(ctx: ToolContext, diag: dict, formato: str) -> str:
     prof = ctx.speakers.get(name) if name and ctx.speakers else None
     try:
         r = svc.scrivi_fisso(prof.id if prof else "amministra", fmt,
-                             guida_scritta(diag, getattr(ctx.cfg, "casa_url", None)))
+                             guida_scritta(diag, getattr(ctx.cfg, "casa_url", None)),
+                             owner_name=name or "")
     except Exception as e:  # noqa: BLE001
         print(f"   [CASA] guida scritta non riuscita: {e}", flush=True)
-        return "Non sono riuscita a preparare la guida scritta. " + diag["prossimo_passo"]
+        return "Non sono riuscita a preparare la guida scritta. " + diag["prossimo_passo"], None
     kind = {"pdf": "in PDF", "word": "in Word"}.get(fmt, "")
+    if r.get("sul_server"):
+        # Rimasta sul server (un telefono non riceve documenti, 28/10, #277): come
+        # documento_crea, la scheda con «Scarica» se lo schermo personale è aperto, la pagina
+        # Documenti se è abbinato ma chiuso; senza schermo personale la frase di sempre
+        from .documenti import _su_pagina, _su_scheda
+        if _su_scheda(ctx):
+            note_rule(ctx, "documento_sulla_scheda")
+            return (f"Ti ho preparato la guida {kind}. È sulla scheda del tuo schermo: per averla "
+                    "tocca «Scarica».", r.get("scheda"))
+        if _su_pagina(ctx):
+            note_rule(ctx, "documento_sulla_pagina")
+            return (f"Ti ho preparato la guida {kind}. La trovi in Le mie cose, alla voce "
+                    "Documenti: per averla tocca «Scarica».", None)
     return (f"Ti ho preparato la guida {kind} {r['dove']}." + (" La apro?" if r["apribile"]
-                                                               else ""))
+                                                               else "")), None
 
 
 # ─────────────────────────── registro ───────────────────────────

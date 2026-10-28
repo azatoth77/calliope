@@ -124,7 +124,8 @@ def tessere():
     lavori = Lav(lavori=[Lav(persona="dario", stato="in_corso", creato=ora - 100, inizio=ora - 90, fine=None),
                          Lav(persona="dario", stato="fatto", creato=ora - 900, inizio=ora - 890, fine=ora - 800),
                          Lav(persona="bianca", stato="in_attesa", creato=ora, inizio=ora, fine=None)])
-    cassetto = types.SimpleNamespace(elenco=lambda p: [{"arrivato": ora - 5}] if p == "dario" else [])
+    cassetto = types.SimpleNamespace(elenco=lambda p: [{"arrivato": ora - 5}] if p == "dario" else [],
+                                     giorni=7.0, giorni_foto=60.0)
     numeri = types.SimpleNamespace(elenco=lambda anno=None: [{"stato": "emesso"}, {"stato": "annullato"}])
     hub = types.SimpleNamespace(
         servizi=types.SimpleNamespace(liste=liste, agenda=agenda, lavori=lavori, documenti=Rotto(),
@@ -141,6 +142,14 @@ def tessere():
     verifica("tessere: lavori solo della persona", t["lavori"]["conto"] == 2
              and t["lavori"]["stato"] == "1 in corso · 1 finito", json.dumps(t["lavori"]))
     verifica("tessere: cassetto", t["cassetto"]["conto"] == 1, json.dumps(t["cassetto"]))
+    # 28/10, #277: con la decisione 0034 le foto si tengono 60 giorni, la tessera lo dice
+    verifica("tessere: il cassetto dice il vero, «file 7 giorni · foto 60»",
+             t["cassetto"]["stato"] == "1 file · file 7 giorni · foto 60", t["cassetto"]["stato"])
+    from calliope.schermi import raccolte as R
+    verifica("…e senza la tenuta delle foto «tengo 7 giorni»; la nota della pagina con tutti e due",
+             R._tenuta(types.SimpleNamespace(giorni=7.0, giorni_foto=None)) == "tengo 7 giorni"
+             and R._nota_cassetto(cassetto).startswith("Tengo i file 7 giorni e le foto 60."),
+             R._nota_cassetto(cassetto))
     verifica("tessere: un servizio che solleva → «non disponibile», detto nel registro",
              t["documenti"]["conto"] is None and t["documenti"]["stato"] == "non disponibile"
              and any("documenti" in m for m in log), json.dumps(t["documenti"]))

@@ -16,6 +16,7 @@ c'è openssl), guida scritta, prompt. Alla fine: il token non compare mai nell'o
 
 import io
 import json
+from types import SimpleNamespace
 import time
 from pathlib import Path
 
@@ -536,7 +537,58 @@ try:
     rr = chiama(reg, contesto(c, be, "Bianca", "familiare", documenti=svc), "casa_integrazione",
                 {"per_iscritto": True}, "familiare")
     verifica("guida scritta: non per i familiari", len(list((Path(TMP) / "Documenti").iterdir())) == 1)
+    verifica("guida consegnata al PC: fuori dall'archivio dei documenti, niente scheda",
+             svc.archive.conta() == 0 and "scheda" not in rr)
     svc.close()
+
+    # Rimasta sul server (28/10, #277, caso vero sull'iPhone: «Ti ho preparato la guida in PDF sul
+    # server, perché il satellite collegato non riceve documenti», e la guida non si ritrovava):
+    # come documento_crea, la scheda con «Scarica» o la pagina Documenti
+    class SulServer:
+        def __init__(self, cartella):
+            self.locale = LocalDelivery(cartella)
+
+        def where(self):
+            return "sul portatile"
+
+        def deliver(self, stem, ext, data, replace=None, mtime=None):
+            d = self.locale.deliver(stem, ext, data, replace=replace, mtime=mtime)
+            return {**d, "dove": "sul server, perché il satellite collegato non riceve documenti",
+                    "remoto": False}
+
+    class Hub:
+        def __init__(self, aperto, abbinato):
+            self.aperto, self.abbinato = aperto, abbinato
+
+        def mittente(self, ctx):
+            return SimpleNamespace(persona="dario", certo=True)
+
+        def personale_collegato(self, m):
+            return self.aperto
+
+        def personale_abbinato(self, m):
+            return self.abbinato
+
+    for aperto, abbinato, attesa, con_scheda in (
+            (True, True, "È sulla scheda del tuo schermo: per averla tocca «Scarica».", True),
+            (False, True, "La trovi in Le mie cose, alla voce Documenti: per averla tocca «Scarica».", False),
+            (False, False, "sul server, perché il satellite collegato non riceve documenti", False)):
+        svc = Documenti(c, str(Path(TMP) / f"doc-srv-{aperto}{abbinato}.db"), writer=NoWriter(),
+                        delivery=SulServer(Path(TMP) / f"Srv-{aperto}{abbinato}"))
+        cx = contesto(c, be, "Dario", "amministra", documenti=svc)
+        cx.schermi = Hub(aperto, abbinato)
+        rr = chiama(reg, cx, "casa_integrazione", {"per_iscritto": True}, "amministra")
+        voci = svc.archive.recenti_di_tutti()
+        doc_ok = len(voci) == 1 and voci[0]["nome_file"].endswith((".pdf", ".docx"))
+        verifica(f"guida rimasta sul server (schermo aperto {aperto}, abbinato {abbinato}): la frase vera",
+                 attesa in rr["conferma"] and rr["conferma"].startswith("Ti ho preparato la guida"),
+                 rr["conferma"])
+        verifica(f"…nell'archivio dei documenti, quindi nella pagina Documenti con «Scarica»",
+                 doc_ok, [v.get("nome_file") for v in voci])
+        verifica(f"…la scheda con «Scarica» {'c' if con_scheda else 'non c'}'è",
+                 bool(rr.get("scheda")) == con_scheda
+                 and (not con_scheda or rr["scheda"].get("tipo") == "documento"), str(rr.get("scheda"))[:120])
+        svc.close()
 except ImportError as e:
     print(f"SALTATA IN PARTE: guida scritta: {e}")
 

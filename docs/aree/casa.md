@@ -127,7 +127,14 @@ Da fare a mano: le aree delle luci «Soggiorno» e «Cucina» (fondo del documen
     `prossimo_passo`, `dettagli`, pronta per un registro delle capacità). Dettagli solo a
     chi amministra; ai familiari «chiedi a chi amministra». Con `per_iscritto` prepara la
     guida in PDF o Word dal testo fisso di `casa/guida.py` (`Documenti.scrivi_fisso`, niente
-    LLM). Il token non si detta mai: Calliope dice dove incollarlo.
+    LLM). Il token non si detta mai: Calliope dice dove incollarlo. Dal 28/10 (#277, caso vero
+    sull'iPhone: «Ti ho preparato la guida in PDF sul server, perché il satellite collegato non
+    riceve documenti», e la guida non si ritrovava) la guida rimasta sul server entra
+    nell'archivio dei documenti di chi l'ha chiesta e la frase è quella di `documento_crea`:
+    «È sulla scheda del tuo schermo: per averla tocca «Scarica».» con lo schermo personale
+    aperto (la scheda parte), «La trovi in Le mie cose, alla voce Documenti…» con lo schermo
+    abbinato ma chiuso, quella di prima senza schermo personale. Consegnata al PC resta fuori
+    dall'archivio, come prima. Dettagli in [schermi-telefono](schermi-telefono.md).
   - **Frasi d'errore di HA** (01/10, `calliope/casa/errori.py`): «Mi dispiace, nell'area
     Taverna il dominio light non è stato esposto.» diventa «In taverna non posso comandare
     nessuna luce: non è esposta ad Assist in Home Assistant.». I 29 modelli sono la copia

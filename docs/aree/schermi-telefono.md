@@ -1603,3 +1603,81 @@ risposta del suo turno e aperta a schermo intero. Da provare sul vero: lo scontr
     dove non può portare i byte né una funzione per calcolarla dopo (pochi millisecondi per foto).
   - «Elimina» del cassetto toglie la foto, non la miniatura nel turno: resta fino ai 60 giorni o a
     «dimentica», e il dettaglio dice «Non c'è più: è stata eliminata dal cassetto.».
+
+## Il layout compatto per gli schermi piccoli (28/10, issue #277, ramo `issue-277-telefono-compatto`)
+
+Caso vero del 28/10, 12:54, iPhone 13 mini nella PWA, epic #251. Dalle schermate la pagina era larga
+**320 px**, non 375: Allega mancava (sotto i 360 px resta nella casella di «Scrivi») e le misure delle parti
+tornano solo a 320. È quasi certamente lo **«Zoom schermo»** di iOS (Impostazioni › Schermo e luminosità), che sul mini dà una
+finestra di 320×693 e ingrandisce tutto del 17 %: da qui il «testo grande». Non è il testo dinamico di iOS
+(la pagina usa px sulla radice, 17 px, e iOS nella PWA non lo applica) né `text-size-adjust`, che ora è
+comunque fermato al 100 % (in orizzontale Safari ingrandiva il testo da solo).
+
+- **Quando**: in verticale sotto i 390 px di larghezza o i 720 di altezza (media query in `telefono.css`):
+  iPhone mini, SE, mini con lo zoom, Android piccoli. Non a 390×844 né più grandi, non in orizzontale, mai
+  in auto (lì contano i bersagli grandi).
+- **La voce su una riga.** Scelta: lo stato entra in «Parla», che diventa a due righe piccole (la parola
+  breve, «Parla», «Tocca per finire», «Interrompi», e sotto lo stato, «Microfono spento», «di' «Calliope»»,
+  «Penso…», «Parlo», «Ti ascolto»); bordo e icona di «Parla» restano quelli di sempre. La riga grande dello
+  stato resta nel DOM come `role="status"` ritagliata a 1 px: VoiceOver legge i cambi come prima, e lo stato
+  piccolo in «Parla» è `aria-hidden` (non lo legge due volte). Il suggerimento «Tocca «Parla» per parlare»
+  (`data-ovvio`) non si mostra ed è la descrizione di «Parla» (`aria-describedby`); le altre righe piccole (il
+  microfono su un altro satellite, la compagnia, la stanza) restano sopra i pulsanti, perché dicono qualcosa
+  che non si vede. **Scartato** il ritorno alla voce grande quando ascolta, pensa o parla: la sezione sopra
+  salterebbe di 50–70 px a ogni turno, proprio mentre si legge la risposta; il colore del bordo e lo stato
+  in «Parla» bastano. Microfono, Scrivi e Allega 2,75rem (46,75 px); in flex, così un pulsante nascosto non
+  lascia una colonna vuota.
+- **La barra** più bassa (2,9rem, icone 1,2rem, etichette 0,62rem), la zona sicura in fondo come prima.
+- **Titolo della sezione** 1,2rem (era 1,55rem); spazi tra le parti e padding delle schede più stretti.
+- **I filtri della Conversazione** in una riga sola che scorre di lato (non va mai a capo), «Cerca» come lente
+  (il testo resta per i lettori); solo sul telefono, il PC non cambia.
+- **Le tessere di Le mie cose** più fitte: il conto accanto al nome quando c'è posto, se no sotto (in flex che
+  va a capo: in griglia, col testo ingrandito, il nome si spezzava a metà parola, «Agend a»).
+- *Trovato nella prova*: a 375 px nella Conversazione, con quattro pulsanti, «Parla» andava a capo a metà
+  parola («Parl a»). Nel compatto non succede più.
+- **Misure** (Chromium, senza zona sicura; voce e barra insieme sull'altezza, con la riga piccola del
+  microfono su un altro satellite al posto del suggerimento, come nelle schermate):
+
+  | | prima | dopo | dopo, senza riga piccola |
+  |---|---|---|---|
+  | 375×812 (13 mini) | 27,5 % | 15,7 % | 12,9 % |
+  | 375×667 (SE) | 33,5 % | 19,2 % | 15,7 % |
+  | 320×693 (13 mini con lo zoom) | 32,2 % | 18,4 % | 15,1 % |
+  | 320×568 | 39,3 % | 22,5 % | 18,4 % |
+
+  La conversazione nella sua sezione da 311 a 464 px a 375×812, da 223 a 279 a 320×568. Col testo ingrandito
+  del 20 % (radice a 20 px) voce e barra restano sotto il 30 %, nulla esce né si taglia, i filtri scorrono di
+  lato a 320 px.
+- **La tessera Cassetto** dice «file 7 giorni · foto 60» (decisione [0034](../decisioni/0034-miniature-nella-conversazione.md),
+  `immagini_tenuta_giorni`; con `immagini_tenuta` spenta «tengo 7 giorni» come prima), la nota della pagina
+  «Tengo i file 7 giorni e le foto 60.» (`raccolte._tenuta`, `_nota_cassetto`). *Storico: fino al 28/10
+  «tengo 7 giorni» anche per le foto.*
+- **La frase del PDF** nella stessa schermata («Ti ho preparato la guida in PDF sul server, perché il satellite
+  collegato non riceve documenti») non era un turno di prima del passo 2d: veniva dalla guida della casa
+  (`casa_integrazione` con `per_iscritto`, `Documenti.scrivi_fisso`), una strada che il 2d non aveva toccato,
+  e la guida non entrava nell'archivio, quindi non si ritrovava nemmeno in Documenti. Ora, rimasta sul
+  server, entra nell'archivio di chi l'ha chiesta e la frase è come quella di `documento_crea` (scheda con
+  «Scarica», pagina Documenti, o quella di sempre senza schermo personale): [casa](casa.md). `documento_crea`,
+  `frase_pagina` e `personale_abbinato` erano già giusti.
+- Cache del service worker `calliope-telefono-pagina-v17` (era v16).
+
+Prove: `prova_telefono_schermo` (anche 375×667 e 320×693; in verticale il compatto, la voce su una riga coi
+pulsanti allineati e lo stato in «Parla» su al più due righe, voce e barra sotto il 25 %, col testo
+ingrandito sotto il 30 %, in auto niente compatto, le tessere senza parole spezzate né testo che trabocca);
+`prova_cronologia_pagina` (i filtri su una riga e «Cerca» come lente a 375×812, 375×667, 320×568, 320×693 e
+col testo ingrandito, il titolo più piccolo); `prova_sezioni` (la media query a secco: dove vale e dove no,
+niente regole per l'auto, tocchi ≥ 44 px, la riga dello stato per i lettori); `prova_raccolte` (la tessera
+Cassetto); `prova_casa_ha` (la guida rimasta sul server con le tre frasi e nell'archivio). Da provare sul
+vero: l'iPhone 13 mini con e senza lo «Zoom schermo», e VoiceOver su «Parla».
+
+## Tolte le schede degli esercizi; la tessera Studio «arriva presto» (28/10, issue #279, ramo `issue-279-via-esercizi`)
+
+Con il vecchio processo degli esercizi (decisione [0035](../decisioni/0035-studio.md), area
+[minori](minori.md)) escono dagli schermi `POST /api/esercizio`, `hub.esercizi`, i tipi
+`esercizio` ed `esercizi_riepilogo` (`DISEGNA`, `NOMI_TIPO`, `SEZIONE_DI_TIPO` in `schede.py` e in
+`schermo.js`, la regola «viva», `TIPI_RIMANDO` e `TIPI_APRONO` di `sezioni.js`, gli stili in
+`schermo.css` e `telefono.css`), la ripresa degli esercizi chiusi nella cronologia e «esercizio» di
+`schermo_mostra`. La tessera Studio di Le mie cose resta al suo posto, senza conto («—») e con lo
+stato «arriva presto»; la pagina dice «presto» come le altre non ancora fatte, fino al passo 4.5
+(#284). Cache del service worker `calliope-telefono-pagina-v18` (era v17). Prove: `prova_raccolte`,
+`prova_sezioni`, `prova_cronologia_schede`, `prova_telefono_schermo` (la tessera nella pagina vera).

@@ -163,7 +163,8 @@
     </section>
   </div>
 
-  <!-- La voce, sempre sopra la barra: grande in Adesso e in Conversazione, più bassa altrove -->
+  <!-- La voce, sempre sopra la barra: grande in Adesso e in Conversazione, più bassa altrove;
+       su una riga sola sugli schermi bassi o stretti (28/10, #277) -->
   <section class="voce-riga" aria-label="Voce">
     <div id="tel-voce" class="voce dorme" role="status" aria-live="polite">
       <span class="forma" aria-hidden="true"><i></i><i></i><i></i></span>
@@ -173,8 +174,10 @@
     <button id="microfono" type="button" class="tasto mic" role="switch" aria-checked="false" aria-label="Microfono">
       <span class="mic-icona" aria-hidden="true"></span><span class="mic-testo"><span>Microfono</span> <b id="mic-stato">spento</b></span>
     </button>
-    <button id="parla" type="button" class="parla">
-      <span class="parla-icona" aria-hidden="true"></span><span class="parla-testo">Parla</span>
+    <!-- Nel layout compatto (28/10, #277) la voce sta su una riga: la parola breve e lo stato
+         piccolo dentro «Parla»; il suggerimento («Tocca «Parla» per parlare») ne è la descrizione -->
+    <button id="parla" type="button" class="parla" aria-describedby="tel-dove">
+      <span class="parla-icona" aria-hidden="true"></span><span class="parla-parole"><span class="parla-testo">Parla</span><span class="parla-breve">Parla</span><span class="parla-stato" aria-hidden="true"></span></span>
     </button>
     <button id="scrivi-apri" type="button" class="tasto scrivi-apri" aria-haspopup="dialog" aria-controls="strato-scrivi" aria-label="Scrivi a Calliope" hidden>
       <span class="tastiera-icona" aria-hidden="true"><i></i><i></i></span><span class="tasto-parola">Scrivi</span>
