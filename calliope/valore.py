@@ -213,6 +213,13 @@ def _sviluppo(a: dict) -> int:
     return E3                                # avanti, rifai, completa (11/10): riparte un lavoro
 
 
+def _cassetto(a: dict) -> int:
+    # 28/10 sera (decisione di chi amministra, seguito della #301): eliminare dal cassetto non si
+    # disfa (E3: per iscritto vuole la voce); tenere e tenere ancora restano E2
+    az = pol._s(a, "azione").lower()
+    return E3 if az in ("elimina", "cancella", "butta") else E2
+
+
 def _ricorda(a: dict) -> int:
     # D3: per tutti E2; personale E2 anche lui, ma senza parole dal dato si esegue come oggi
     # (fatto_detto o ancorata): la differenza la fanno le etichette
@@ -224,7 +231,7 @@ EFFETTI: dict[str, object] = {
     "pc_volume": E1, "pc_luminosita": E1, "pc_media": E1, "pc_apri_file": E1,
     "timer_imposta": E1, "promemoria_imposta": E1, "cambia_voce": E1, "documento_crea": E1,
     "documento_modifica": E1, "pc_blocca": E1, "immagine_archivia": E1,
-    "allegato_archivia": E1, "cassetto_gestisci": E2,
+    "allegato_archivia": E1, "cassetto_gestisci": _cassetto,
     # E2: resta, altri lo vedono o cambia le risposte future
     "lista_aggiungi": E2, "lista_togli": E2, "ricorda": _ricorda, "dimentica": E2,
     "citta_casa_salva": E2,

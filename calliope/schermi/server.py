@@ -119,6 +119,8 @@ from .hub import Schermi, pubblica, registra_pagina, registra_scaricabili
 
 PAGINA = Path(__file__).resolve().parent / "pagina"
 PING_S = 15.0
+# Eliminare dal cassetto si fa a voce (28/10 sera, seguito della #301)
+CASSETTO_VOCE = "Per eliminarlo dimmelo a voce, con una frase intera."
 
 _SICUREZZA = {
     "X-Content-Type-Options": "nosniff",
@@ -766,6 +768,11 @@ def crea_app(hub: Schermi) -> Starlette:
                     return {"ok": False, "_stato": 403, "codice": "senza_conversazione",
                             "errore": "Per i file di un ragazzo parlami prima a voce: "
                                       "di' «Calliope» e poi tocca di nuovo."}
+            # Eliminare dal cassetto si fa a voce (28/10 sera, seguito della #301): dalla scheda
+            # restano «Tieni» e «Tieni ancora»; un «elimina» arrivato lo stesso si ferma qui
+            if str(dati.get("azione") or "").strip().lower() == "elimina":
+                return {"ok": False, "_stato": 403, "codice": "serve_voce",
+                        "errore": CASSETTO_VOCE}
             # «Tieni» di un tutore va nella SUA cartella dell'archivio (il ragazzo i documenti
             # di casa non li vede): come cassetto_gestisci a voce
             out = cas.da_pagina(padrone, str(dati.get("azione") or ""), ids,

@@ -15,7 +15,9 @@ copione di prova_stati_buchi), senza nessuna conversazione a voce aperta:
 - il modulo dallo schermo personale senza conversazione resta rifiutato (canale «modulo»);
 - foto e file da un minore fuori orario: rifiutati, niente attesa (revisione della PR #304);
 - le irreversibili si confermano a voce: `conversazioni_dimentica` scritto, poi «sì» scritto, non
-  si esegue mai (regola `scritto_irreversibile_voce`).
+  si esegue mai (regola `scritto_irreversibile_voce`); dal 28/10 sera `pc_apri_app` passa
+  (`SCRITTO_AMMESSI`), `programma_esegui`, `lavoro_affida` con codice e le estensioni senza effetto
+  no, ed eliminare dal cassetto (scritto e tocco) si fa a voce.
 
 Nomi e dati di fantasia, niente rete né modelli.
 
@@ -192,6 +194,35 @@ def main() -> int:
              and irreversibile_scritto(scr_ctx, spec_d, "conversazioni_dimentica", {}) is not None
              and irreversibile_scritto(scr_ctx, b.tools.get("lavoro_annulla"), "lavoro_annulla", {}) is not None
              and irreversibile_scritto(scr_ctx, b.tools.get("lista_togli"), "lista_togli", {"cose": "latte"}) is None)
+
+    # Seguito della #301 (decisioni del 28/10 sera): aprire un programma sul PC si può per
+    # iscritto; eseguire codice, i lavori con codice e le estensioni senza effetto dichiarato no;
+    # eliminare dal cassetto si fa a voce (scritto e tocco), tenerlo no
+    from calliope.tools.spec import SCRITTO_AMMESSI
+    toc_ctx = types.SimpleNamespace(speaker_ctx=types.SimpleNamespace(identified_by="schermo"), regole=[])
+    g = lambda ctx, nome, args: irreversibile_scritto(ctx, b.tools.get(nome), nome, args)  # noqa: E731
+    verifica("scritto: pc_apri_app passa, con il suo perché in SCRITTO_AMMESSI",
+             g(scr_ctx, "pc_apri_app", {"app": "calcolatrice"}) is None and SCRITTO_AMMESSI.get("pc_apri_app"))
+    verifica("contrario: programma_esegui, lavoro_affida con codice e un'estensione senza effetto, solo a voce",
+             g(scr_ctx, "programma_esegui", {}) is not None
+             and g(scr_ctx, "lavoro_affida", {"tipo": "codice", "compito": "x"}) is not None
+             and irreversibile_scritto(scr_ctx, None, "est_meteo_aggiorna", {}) is not None
+             and g(scr_ctx, "lavoro_affida", {"tipo": "ricerca", "compito": "x"}) is None)
+    verifica("cassetto: elimina scritto e toccato solo a voce; tieni e ancora no; a voce passa",
+             g(scr_ctx, "cassetto_gestisci", {"azione": "elimina", "quale": "ieri"}) is not None
+             and g(toc_ctx, "cassetto_gestisci", {"azione": "cancella", "quale": "ieri"}) is not None
+             and g(scr_ctx, "cassetto_gestisci", {"azione": "tieni", "quale": "ieri"}) is None
+             and g(scr_ctx, "cassetto_gestisci", {"azione": "ancora", "quale": "ieri"}) is None
+             and g(voce_ctx, "cassetto_gestisci", {"azione": "elimina", "quale": "ieri"}) is None)
+    from calliope.tools.builtin import build_registry
+    b.tools.register(build_registry(allegati=True, cassetto=True).get("cassetto_gestisci"))
+    b.backend.copione.append([("calls", [{"id": "c-cas", "name": "cassetto_gestisci",
+                                         "arguments": {"azione": "elimina", "quale": "ieri"}}])])
+    scritto(c, 2, "bianca", "Elimina il file che ti ho mandato ieri.")
+    r = turni[-1]
+    verifica("«Elimina il file di ieri» scritto: non si esegue, «… a voce, con una frase intera»",
+             "scritto_irreversibile_voce" in (r.get("regole") or [])
+             and "a voce, con una frase intera" in (r.get("risposta") or ""), json.dumps(r, ensure_ascii=False)[:300])
 
     # L'ospite: lo schermo di stanza senza una conversazione nella sua stanza
     n = len(b.backend.visti)

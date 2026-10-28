@@ -158,15 +158,25 @@ def serve_la_voce(ctx, tool: str, argomenti: dict | None, cosa: str,
 # Le azioni irreversibili si confermano a voce (decisione di chi amministra del 28/10, dopo la
 # revisione della PR #304): dallo schermo personale si scrive tutto il resto, ma ciò che non si
 # disfa (classe d'effetto E3 o più in valore.py, o politica.IRREVERSIBILI) vuole la voce, e il
-# «sì» scritto non basta: il tool richiamato dallo scritto torna qui
-SCRITTO_IRREVERSIBILE = "Questa la confermo solo a voce: dimmelo."
+# «sì» scritto non basta: il tool richiamato dallo scritto torna qui. La frase dice «con una frase
+# intera» (seconda revisione della PR #304): un «Sì.» detto subito dopo uno scritto, sotto
+# speaker_min_voice_s, eredita lo schermo come chi parla, e «dimmelo a voce» a chi ha appena
+# parlato non si capiva
+SCRITTO_IRREVERSIBILE = "Questa la confermo solo a voce, con una frase intera."
+# Le eccezioni, una per una col loro perché (decisione di chi amministra del 28/10 sera): E3 per
+# la tabella, ma per iscritto vanno bene
+SCRITTO_AMMESSI = {
+    # aprire un programma sul PC: si chiude subito, non cancella e non manda niente fuori casa
+    # (eseguire codice, programma_esegui e i lavori con codice, resta a voce)
+    "pc_apri_app": "si chiude subito, non cancella e non manda niente",
+}
 
 
 def irreversibile_scritto(ctx, spec, name: str, argomenti: dict | None) -> dict | None:
     """Il risultato da dare se la richiesta è scritta (o toccata) da uno schermo personale e
     l'azione non si disfa: niente esecuzione, l'azione in sospeso per la conferma a voce. None
     altrimenti."""
-    if not scritto(ctx):
+    if not scritto(ctx) or name in SCRITTO_AMMESSI:
         return None
     from .. import politica, valore
     args = dict(argomenti or {})
