@@ -8,6 +8,11 @@ import { SchermoAcceso } from "./schermo-acceso.js";
 
 // Versione 3 (13/10): l'ascolto della stanza (calliope/satellite/protocollo.py)
 const VERSIONE = 3;
+// La versione di questa pagina, nei log del server (28/10, #291): uguale alla cache di sw.js
+// (prova_telefono_consapevole le confronta). Una costante della pagina che gira, non la cache
+// più alta (revisione della PR #294: durante un aggiornamento è quella nuova), e pronta già al
+// primo «ciao»
+const PAGINA_VERSIONE = "calliope-telefono-pagina-v19";
 const CHIAVE_TOKEN = "calliope.telefono.token";
 const CHIAVE_NOME = "calliope.telefono.nome";
 const CHIAVE_MIC = "calliope.telefono.microfono";
@@ -940,7 +945,8 @@ function connetti(ripresa) {
   st.sostituito = false;
   ws.onopen = () => {
     ws.send(JSON.stringify({ tipo: "ciao", versione: VERSIONE, token: st.token, primo: false,
-      nome: "telefono", esecutore: null, modalita: true, stanza: true }));
+      nome: "telefono", esecutore: null, modalita: true, stanza: true,
+      pagina: PAGINA_VERSIONE }));
   };
   ws.onmessage = (ev) => {
     if (ws !== st.ws) return;
@@ -1914,6 +1920,11 @@ async function avvio() {
     if (!(c.chiave && vaiA(c.chiave))) vai("#/" + sezioneDi(c));
   });
   document.addEventListener("calliope:scrivi", (ev) => { $("pulisci-tel").hidden = !(ev.detail && ev.detail.personale); });
+  // Calliope apre una pagina di Le mie cose (28/10, #289): solo un nome di raccolta, mai un indirizzo
+  document.addEventListener("calliope:pagina", (ev) => {
+    const p = ev.detail && ev.detail.pagina;
+    if (typeof p === "string" && /^[a-z]{1,20}$/.test(p)) vai("#/cose/" + p);
+  });
   let pulisciArmato = 0;
   $("pulisci-tel").addEventListener("click", async () => {
     const b = $("pulisci-tel"), esito = $("pulisci-esito");

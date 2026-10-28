@@ -2957,6 +2957,9 @@ class Brain:
         # Il dispositivo da cui si parla (16/10, issue #100, calliope/dispositivo.py): dal ciclo
         # come attributo, vale una risposta sola; nei dati del turno (_turn_context)
         self._dispositivo_turno = self.__dict__.pop("dispositivo_turno", None)
+        self.last_dispositivo = None        # per il registro dei turni (28/10, #288)
+        if getattr(self, "tool_ctx", None) is not None:   # per i tool: dispositivo.proprio
+            self.tool_ctx.dispositivo = self._dispositivo_turno   # (revisione della PR #294)
         # Le righe della stanza davanti al modello in questa risposta (14/10 sera, _stanza_prepara)
         self._stanza_visibili, self._stanza_ancore, self.last_stanza_storia = [], {}, None
         # I dati fissi davanti al modello in questa risposta (16/10, _dati_prepara) e quanto
@@ -4955,6 +4958,9 @@ class Brain:
         # Cosa c'è e cosa no in questa installazione (registro delle capacità): stabile, cambia
         # solo dopo un'installazione, così il prefisso resta in cache
         abilities = testo_prompt(getattr(self.tool_ctx, "capacita", None), names)
+        # Lo schermo personale a sezioni (28/10, #288): il telefono, o il PC personale
+        sezioni = bool(getattr(self.cfg, "telefono_enabled", False)
+                       or getattr(self.cfg, "schermi_sezioni", False))
         system = [{"role": "system",
                    "content": self.cfg.prompt_for(biblioteca=has_library, pc=pc_tools,
                                                   documenti="documento_crea" in names,
@@ -4966,6 +4972,7 @@ class Brain:
                                                   web="web_cerca" in names,
                                                   notizie="notizie" in names,
                                                   stanza="stanza_cerca" in names,
+                                                  sezioni=sezioni,
                                                   estensioni=any(n.startswith("est_")
                                                                  for n in names),
                                                   meteo_casa="meteo_leggi" in names,
@@ -6157,10 +6164,16 @@ class Brain:
         # Il dispositivo da cui si parla e il PC raggiungibile da lì (16/10, issue #100): dal
         # telefono Calliope diceva di essere un computer e prometteva la webcam
         # (revisione della PR #119: «collegato» solo se pc_guarda lo userebbe per chi parla)
+        # Dal 28/10 (#288) anche lo schermo personale di chi parla: aperto, chiuso o assente
         disp_t = getattr(self, "_dispositivo_turno", None)
+        cerca = getattr(getattr(self, "tools", None), "get", None)
+        sch = dispositivo.schermo_di(self.tool_ctx, cerca is not None and cerca(
+            "modello_compila") is not None) if disp_t else None
+        self.last_dispositivo = ({"canale": disp_t.get("canale"),
+                                  "schermo": (sch or {}).get("stato")} if disp_t else None)
         disp = dispositivo.nota(disp_t, dispositivo.pc_raggiungibile(
             getattr(self.tool_ctx, "pc", None)), dispositivo.pc_per_chi(self.tool_ctx)
-            is not None) if disp_t else ""
+            is not None, sch) if disp_t else ""
         if disp:
             who += " " + disp
         return [{"role": "system", "content": TURN_CONTEXT_MSG.format(

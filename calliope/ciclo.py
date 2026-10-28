@@ -1786,6 +1786,9 @@ class Ciclo:
     def _tocco(self, t):
         scritto, brain, s = t.scritto, self.brain, self.s
         ctx = self.tool_ctx
+        # Nessun dispositivo dell'ultimo turno a voce nel tocco (seconda revisione della PR #294)
+        if ctx is not None:
+            ctx.dispositivo = None
         # Quello che legge ToolRegistry.call (nel ciclo vero è lo stesso di self.speaker_ctx)
         sc = getattr(ctx, "speaker_ctx", None) or self.speaker_ctx
         tool = str(scritto.get("tool") or "")
@@ -2935,7 +2938,17 @@ class Ciclo:
         calliope/dispositivo.py): letto adesso, non all'avvio (un satellite va e viene)."""
         from . import dispositivo
         if t.scritto is not None:
-            return dispositivo.descrivi(dispositivo.SCRITTO)
+            # Dallo schermo personale (il telefono o il PC, 28/10, #288): lo schermo a sezioni
+            # «di»: di chi è lo schermo (revisione della PR #294, dispositivo.proprio)
+            di = None
+            try:
+                hub = getattr(self.s, "schermi", None)
+                sid = (t.scritto or {}).get("schermo_id")
+                di = ((hub.schermo(sid) or {}).get("proprietario")
+                      if hub is not None and sid is not None else None)
+            except Exception:  # noqa: BLE001 — nel dubbio uno schermo qualunque
+                di = None
+            return dispositivo.descrivi(dispositivo.SCRITTO, personale=bool(di), di=di)
         L, sat = self.listener, self.s.satelliti
         if not getattr(L, "remoto", False) or sat is None:
             return dispositivo.descrivi(dispositivo.LOCALE)
@@ -2947,7 +2960,11 @@ class Ciclo:
             coll = (ultima[0] if ultima else
                     sat.per_id(sid) if sid is not None else sat.attivo_pronto())
             canale = getattr(coll, "canale", None) or getattr(L, "canale", None)
-            return dispositivo.descrivi(canale, getattr(coll, "esecutore", None) is not None)
+            # Di chi è il satellite (il telefono di una persona, abbinato come personale):
+            # nella zona grigia lo schermo personale da cui parla resta il suo (PR #294)
+            di = (getattr(coll, "satellite", None) or {}).get("proprietario")
+            return dispositivo.descrivi(canale, getattr(coll, "esecutore", None) is not None,
+                                        di=di if isinstance(di, str) else None)
         except Exception:  # noqa: BLE001 — il dispositivo non ferma la voce
             return None
 
@@ -4865,6 +4882,11 @@ class Ciclo:
         df = getattr(brain, "last_dati_fissi", None)
         if isinstance(df, dict) and df:
             self.rec["dati_fissi"] = dict(df)
+        # Il dispositivo del turno e lo schermo personale di chi parla (28/10, #288): fino ad
+        # allora i turni a voce dal telefono non dicevano da dove venivano
+        di = getattr(brain, "last_dispositivo", None)
+        if isinstance(di, dict) and di.get("canale"):
+            self.rec["dispositivo"] = {k: v for k, v in di.items() if v is not None}
         # Le righe della stanza nella storia (14/10 sera, `stanza_contesto_in_storia`): quante
         # nuove in questo turno e quante davanti al modello, solo numeri
         st_s = getattr(brain, "last_stanza_storia", None)

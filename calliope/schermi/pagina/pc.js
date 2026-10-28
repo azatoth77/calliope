@@ -173,6 +173,11 @@
     if (!SEZ || !c) return;
     if (!(c.chiave && SEZ.vaiA(c.chiave))) SEZ.vai("#/" + SEZ.sezioneDi(c));
   });
+  // Calliope apre una pagina di Le mie cose (28/10, #289): solo un nome di raccolta, mai un indirizzo
+  document.addEventListener("calliope:pagina", (ev) => {
+    const p = ev.detail && ev.detail.pagina;
+    if (SEZ && typeof p === "string" && /^[a-z]{1,20}$/.test(p)) SEZ.vai("#/cose/" + p);
+  });
   // Un gioco chiuso esce subito da Adesso
   document.addEventListener("calliope:gioco", (ev) => { if (SEZ && !(ev.detail || {}).partita) requestAnimationFrame(() => SEZ.disponi()); });
 

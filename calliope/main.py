@@ -523,6 +523,9 @@ class Avvio:
             atexit.register(lavori.close)        # chiude il tunnel anche su un'uscita brusca
             # Il risultato consegnato al portatile si offre ad «aprilo» (07/10)
             lavori.pcs = self.pcs
+            # Gli schermi personali di chi ha chiesto il lavoro, decisi alla consegna (revisione
+            # della PR #294: anche per i lavori rifatti o ripresi dopo un riavvio)
+            lavori.schermi = s.schermi
             # La vista dello sviluppo (08/10): a ogni fase la scheda va agli schermi personali
             # di chi sviluppa
             if s.schermi is not None and getattr(lavori, "sviluppi", None) is not None:

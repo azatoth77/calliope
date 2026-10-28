@@ -553,7 +553,7 @@ try:
 
         def deliver(self, stem, ext, data, replace=None, mtime=None):
             d = self.locale.deliver(stem, ext, data, replace=replace, mtime=mtime)
-            return {**d, "dove": "sul server, perché il satellite collegato non riceve documenti",
+            return {**d, "dove": "tra i miei documenti, perché il portatile non è collegato",
                     "remoto": False}
 
     class Hub:
@@ -572,7 +572,7 @@ try:
     for aperto, abbinato, attesa, con_scheda in (
             (True, True, "È sulla scheda del tuo schermo: per averla tocca «Scarica».", True),
             (False, True, "La trovi in Le mie cose, alla voce Documenti: per averla tocca «Scarica».", False),
-            (False, False, "sul server, perché il satellite collegato non riceve documenti", False)):
+            (False, False, "tra i miei documenti, perché il portatile non è collegato", False)):
         svc = Documenti(c, str(Path(TMP) / f"doc-srv-{aperto}{abbinato}.db"), writer=NoWriter(),
                         delivery=SulServer(Path(TMP) / f"Srv-{aperto}{abbinato}"))
         cx = contesto(c, be, "Dario", "amministra", documenti=svc)
@@ -581,7 +581,8 @@ try:
         voci = svc.archive.recenti_di_tutti()
         doc_ok = len(voci) == 1 and voci[0]["nome_file"].endswith((".pdf", ".docx"))
         verifica(f"guida rimasta sul server (schermo aperto {aperto}, abbinato {abbinato}): la frase vera",
-                 attesa in rr["conferma"] and rr["conferma"].startswith("Ti ho preparato la guida"),
+                 attesa in rr["conferma"] and rr["conferma"].startswith("Ti ho preparato la guida")
+                 and "server" not in rr["conferma"] and "satellite" not in rr["conferma"],
                  rr["conferma"])
         verifica(f"…nell'archivio dei documenti, quindi nella pagina Documenti con «Scarica»",
                  doc_ok, [v.get("nome_file") for v in voci])

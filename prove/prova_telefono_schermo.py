@@ -1011,6 +1011,31 @@ def pagina_ufficio(t: Tel, hub, cartella: Path):
     t.v(f"{T}.vai('#/adesso'); 1")
 
 
+def pagina_da_calliope(t: Tel, hub):
+    """schermo_mostra con cosa=pagina (28/10, #289): l'evento «pagina» del server porta il telefono
+    vero su #/cose/<pagina>, con la pagina disegnata; un nome fuori forma non sposta niente, e
+    l'evento per un'altra persona non arriva."""
+    import json as _j
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    t.v(f"{T}.vai('#/adesso'); 1")
+    n = hub.apri_pagina("dario", "documenti")
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/documenti" and t.v(f"{S}.vistaCose") == "pagina", 5)
+    verifica("schermo_mostra pagina: il telefono va su #/cose/documenti e mostra la pagina",
+             n >= 1 and bool(ok), (n, t.v("location.hash"), t.v(f"{S}.vistaCose")))
+    hub.apri_pagina("dario", "liste")
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/liste", 5)
+    verifica("schermo_mostra pagina: poi su #/cose/liste", bool(ok), t.v("location.hash"))
+    hub._a_personali("dario", "pagina", _j.dumps({"pagina": "../io"}))
+    hub._a_personali("dario", "pagina", "non json")
+    time.sleep(0.5)
+    verifica("contrario: una pagina fuori forma (o un JSON rotto) non sposta niente",
+             t.v("location.hash") == "#/cose/liste", t.v("location.hash"))
+    verifica("contrario: la pagina per un'altra persona non arriva",
+             hub.apri_pagina("bianca", "documenti") == 0 and t.v("location.hash") == "#/cose/liste")
+    t.v(f"{T}.vai('#/adesso'); 1")
+
+
 def modulo_e_scrivi(t: Tel, hub):
     """Il modulo da compilare si apre da solo in uno strato; la casella per scrivere si apre
     da «Scrivi»; Io ha tutto il resto."""
@@ -1702,6 +1727,7 @@ def main() -> int:
             pagine_2c(t, hub, TMP / "server")
             pagina_documenti(t, hub, TMP / "documenti")
             pagina_ufficio(t, hub, TMP / "ufficio")
+            pagina_da_calliope(t, hub)
             misure(t, "schede")
             una_per_una(t)
             _, spec = modulo_e_scrivi(t, hub)

@@ -481,6 +481,8 @@
     es.addEventListener("scrittura", (ev) => { vivo(); applicaScrittura(JSON.parse(ev.data)); });
     es.addEventListener("aspetto", (ev) => { vivo(); applicaAspetto(JSON.parse(ev.data)); });
     es.addEventListener("tocco", (ev) => { vivo(); esitoTocco(JSON.parse(ev.data)); });
+    // Calliope apre una pagina di Le mie cose (28/10, #289: schermo_mostra con cosa=pagina)
+    es.addEventListener("pagina", (ev) => { vivo(); let d = {}; try { d = JSON.parse(ev.data); } catch (e) { return; } emetti("pagina", d); });
     es.addEventListener("contesto", (ev) => { vivo(); mostraContesto(JSON.parse(ev.data)); });
     es.addEventListener("gioco", (ev) => { vivo(); daServerGioco(JSON.parse(ev.data)); });
     es.addEventListener("chat", (ev) => { vivo(); chatDalServer(JSON.parse(ev.data)); });

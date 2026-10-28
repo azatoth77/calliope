@@ -15,16 +15,144 @@ Qui due cose, lette al turno (mai all'avvio: un satellite va e viene):
 
 `nota` mette insieme le due in una riga corta per i dati del turno (TURN_CONTEXT_MSG), stabile
 tra i turni dallo stesso satellite. Un dato, non un ordine: decide il modello (principio 10).
+
+Dal 28/10 (issue #288) anche lo **schermo personale** di chi parla (`schermo_di`): aperto, chiuso
+o assente, e le sezioni che lì non ci sono (Casa per età, Ufficio per chi non amministra). Due
+casi veri dalla DGX del 28/10, dal telefono: «Apri lo schermo dei documenti su questo
+dispositivo» → «non posso aprire uno schermo perché non è un computer», e «la scheda documenti
+del tab Le mie cose» → «non ho una scheda Le mie cose su questo dispositivo». La nota diceva
+«il telefono, non un computer» e «niente webcam né schermo del computer», e il modello ne
+deduceva che il telefono non ha uno schermo. Ora il «niente» vale per la webcam e la schermata
+del computer; com'è fatto lo schermo personale (sezioni e pagine) lo dice il prompt di sistema,
+che resta uguale fra i turni (Config.prompt_for, `sezioni`).
 """
 
 TELEFONO, SATELLITE, LOCALE, SCRITTO = "telefono", "satellite", "locale", "scritto"
 
 
-def descrivi(canale: str | None, pc_qui: bool = False) -> dict | None:
-    """Il dispositivo di questa frase: {"canale", "pc_qui"}; None se il canale non si sa."""
+# Lo schermo personale di chi parla (28/10, #288), per la nota e per il registro dei turni.
+# OSPITE: chi parla non è riconosciuto; INCERTO: zona grigia (frase breve, conferma dentro la
+# conversazione, un minore vicino…) da un dispositivo che non è suo (revisione della PR #294)
+APERTO, CHIUSO, NESSUNO, OSPITE, INCERTO = "aperto", "chiuso", "nessuno", "ospite", "incerto"
+
+
+def descrivi(canale: str | None, pc_qui: bool = False, personale: bool = False,
+             di: str | None = None) -> dict | None:
+    """Il dispositivo di questa frase: {"canale", "pc_qui"} (con "personale": True per lo scritto
+    da uno schermo personale, 28/10; con "di": l'id della persona di cui è il dispositivo, il
+    telefono o lo schermo personale da cui si parla, revisione della PR #294); None se il canale
+    non si sa."""
     if canale not in (TELEFONO, SATELLITE, LOCALE, SCRITTO):
         return None
-    return {"canale": canale, "pc_qui": bool(pc_qui)}
+    out = {"canale": canale, "pc_qui": bool(pc_qui)}
+    if personale and canale == SCRITTO:
+        out["personale"] = True
+    if di:
+        out["di"] = str(di)
+    return out
+
+
+def proprio(ctx, m=None) -> bool:
+    """La frase arriva da un dispositivo personale (il telefono, lo schermo personale) della
+    persona della conversazione: anche nella zona grigia, lo schermo personale da cui parla è il
+    suo (revisione della PR #294, come `_proprio_grigio` e `risultato_schermo_proprio`). Mai per
+    un ospite. `m`: il mittente, se già preso."""
+    disp = getattr(ctx, "dispositivo", None)
+    di = disp.get("di") if isinstance(disp, dict) else None
+    if not di:
+        return False
+    # Con un minore possibile mai (seconda revisione della PR #294): la voce incerta fra il
+    # proprietario e un minore (`voce_proprietario`, `minore_piu_protetto`: incerta,
+    # minore_incerto) e il minore vicino a chi amministra (`minore_vicino`) valgono la prudenza,
+    # anche dal telefono del proprietario: chi lo tiene in mano può essere il minore
+    sc = getattr(ctx, "speaker_ctx", None)
+    if any(getattr(sc, k, None) for k in ("minore_incerto", "incerta", "minore_vicino")):
+        return False
+    if m is None:
+        hub = getattr(ctx, "schermi", None)
+        if hub is None:
+            return False
+        try:
+            m = hub.mittente(ctx)
+        except Exception:  # noqa: BLE001
+            return False
+    return bool(getattr(m, "persona", None)) and m.persona == di
+
+
+def schermo_di(ctx, ufficio: bool = False) -> dict | None:
+    """Lo schermo personale di chi parla (28/10, #288): {"stato", "nascoste": [nomi delle
+    sezioni e delle pagine che lì non ci sono]}; None senza schermi.
+
+    Aperto: un suo schermo personale ha la pagina aperta adesso; chiuso: ne ha uno abbinato;
+    nessuno: è riconosciuto e non ne ha; ospite: chi parla non è riconosciuto; incerto: zona
+    grigia da un dispositivo non suo (dal suo telefono vale come riconosciuto: `proprio`).
+    Revisione della PR #294: fino ad allora ospite e zona grigia davano «nessuno», e dal proprio
+    telefono aperto la nota diceva «chi parla non ha uno schermo personale».
+    `ufficio`: c'è l'Ufficio in questa installazione (il tool modello_compila): allora si dice
+    se per chi parla non c'è. Solo lo stato che il server ha già, nessuna chiamata di rete."""
+    hub = getattr(ctx, "schermi", None)
+    if hub is None or not hasattr(hub, "abbinati"):
+        return None
+    try:
+        m = hub.mittente(ctx)
+        if not getattr(m, "persona", None):
+            return {"stato": OSPITE, "nascoste": []}
+        if not getattr(m, "certo", False) and not proprio(ctx, m):
+            return {"stato": INCERTO, "nascoste": []}
+        suoi = [s for s in hub.abbinati() if s.get("proprietario") == m.persona]
+        if not suoi:
+            return {"stato": NESSUNO, "nascoste": []}
+        aperto = any(hub.collegato(s["id"]) for s in suoi)
+        return {"stato": APERTO if aperto else CHIUSO, "nascoste": nascoste_di(ctx, ufficio)}
+    except Exception:  # noqa: BLE001 — nel dubbio la nota non parla dello schermo
+        return None
+
+
+def nascoste_di(ctx, ufficio: bool = False) -> list[str]:
+    """Le sezioni e le pagine che sullo schermo personale di chi parla non ci sono: Casa per
+    età (schermi/aspetto.nascoste), Ufficio per chi non amministra (solo con l'ufficio)."""
+    sc = getattr(ctx, "speaker_ctx", None)
+    name = getattr(sc, "current_speaker", None)
+    speakers = getattr(ctx, "speakers", None)
+    prof = speakers.get(name) if (name and speakers is not None) else None
+    if prof is None:
+        return []
+    from .schermi.aspetto import nascoste as nascoste_aspetto
+    n = nascoste_aspetto(prof)
+    out = []
+    if "casa" in n["sezioni"]:
+        out.append("Casa")
+    if ufficio and ("ufficio" in n["raccolte"] or not getattr(prof, "admin", False)):
+        out.append("Ufficio")
+    return out
+
+
+def _via(nascoste) -> str:
+    via = [str(x) for x in nascoste or ()]
+    if not via:
+        return ""
+    return (f"lì non c'è {via[0]}" if len(via) == 1
+            else f"lì non ci sono {', '.join(via[:-1])} e {via[-1]}")
+
+
+def _nota_schermo(schermo: dict | None) -> str:
+    """Il pezzo della nota sullo schermo personale di chi parla, "" senza schermi. Sempre una
+    frase vera: nella zona grigia non si nega lo schermo, si dice perché non lo si usa."""
+    if not isinstance(schermo, dict):
+        return ""
+    stato = schermo.get("stato")
+    if stato == NESSUNO:
+        return "chi parla non ha uno schermo personale"
+    if stato == OSPITE:
+        return "chi parla non è riconosciuto dalla voce, quindi niente schermo personale"
+    if stato == INCERTO:
+        return ("non sono sicura di chi parla, quindi non uso uno schermo personale da qui")
+    if stato not in (APERTO, CHIUSO):
+        return ""
+    out = ("lo schermo personale di chi parla è aperto adesso" if stato == APERTO
+           else "lo schermo personale di chi parla è chiuso adesso")
+    via = _via(schermo.get("nascoste"))
+    return out + (f" e {via}" if via else "")
 
 
 def pc_raggiungibile(pcs, cap: str | None = None) -> str | None:
@@ -62,32 +190,51 @@ def pc_per_chi(ctx, cap: str | None = None) -> str | None:
         return None
 
 
-def nota(disp: dict | None, pc: str | None, per_chi: bool = True) -> str:
+def nota(disp: dict | None, pc: str | None, per_chi: bool = True,
+         schermo: dict | None = None) -> str:
     """La riga dei dati del turno, "" senza dispositivo. `pc`: il nome del PC raggiungibile
     (pc_raggiungibile), come nel prompt (cfg.pc_nome), o None; `per_chi`: pc_guarda lo
-    userebbe per chi parla (pc_per_chi)."""
+    userebbe per chi parla (pc_per_chi); `schermo`: lo schermo personale di chi parla
+    (schermo_di, 28/10), o None senza schermi."""
     if not isinstance(disp, dict):
         return ""
     canale = disp.get("canale")
     if canale == LOCALE or (canale == SATELLITE and disp.get("pc_qui")):
         if pc and per_chi:
-            return f"dispositivo: il {pc}, un computer."
-        if pc:
-            return (f"dispositivo: il {pc}, un computer; la sua webcam e il suo schermo non "
-                    f"sono per chi parla adesso.")
-        return ("dispositivo: un computer che non comandi, quindi niente webcam né schermo "
-                "del computer.")
+            parti = [f"il {pc}, un computer"]
+        elif pc:
+            parti = [f"il {pc}, un computer", "la sua webcam e il suo schermo non sono per chi "
+                                              "parla adesso"]
+        else:
+            parti = ["un computer che non comandi, quindi niente webcam né schermata del "
+                     "computer"]
+        sch = _nota_schermo(schermo)
+        if sch:
+            parti.insert(1, sch)
+        return "dispositivo: " + "; ".join(parti) + "."
     # Lo scritto può venire anche dal browser del portatile (revisione della PR #119): lì
-    # «non un computer» sarebbe falso
-    dove = {TELEFONO: "il telefono, non un computer",
-            SATELLITE: "un satellite vocale (microfono e cassa), non un computer",
-            SCRITTO: "uno schermo, per scritto"}.get(canale)
+    # «non un computer» sarebbe falso. Dallo schermo personale (il telefono o il PC, 28/10):
+    # lo schermo a sezioni, e la riga sullo schermo aperto non serve
+    if canale == SCRITTO and disp.get("personale"):
+        # Anche qui le sezioni nascoste (revisione della PR #294: un bambino che scrive dal
+        # telefono non aveva la riga «lì non c'è Casa»)
+        dove = "lo schermo personale a sezioni di chi parla, per scritto"
+        sch = _via((schermo or {}).get("nascoste")) if isinstance(schermo, dict) else ""
+    else:
+        dove = {TELEFONO: "il telefono, non un computer",
+                SATELLITE: "un satellite vocale (microfono e cassa), non un computer",
+                SCRITTO: "uno schermo, per scritto"}.get(canale)
+        sch = _nota_schermo(schermo)
     if dove is None:
         return ""
+    parti = [dove] + ([sch] if sch else [])
+    # «niente schermo» valeva anche per il telefono (28/10, #288): il niente è della webcam e
+    # della schermata del computer, non dello schermo da cui si parla
     if pc and per_chi:
-        return f"dispositivo: {dove}; il {pc} è collegato a parte."
-    if pc:
-        return (f"dispositivo: {dove}; webcam e schermo del {pc} non sono per chi parla "
-                f"adesso.")
-    return (f"dispositivo: {dove}; nessun computer collegato, quindi niente webcam né "
-            f"schermo del computer.")
+        parti.append(f"il {pc} è collegato a parte")
+    elif pc:
+        parti.append(f"webcam e schermata del {pc} non sono per chi parla adesso")
+    else:
+        parti.append("nessun computer collegato, quindi niente webcam né schermata del "
+                     "computer")
+    return "dispositivo: " + "; ".join(parti) + "."

@@ -1681,3 +1681,143 @@ Con il vecchio processo degli esercizi (decisione [0035](../decisioni/0035-studi
 stato «arriva presto»; la pagina dice «presto» come le altre non ancora fatte, fino al passo 4.5
 (#284). Cache del service worker `calliope-telefono-pagina-v18` (era v17). Prove: `prova_raccolte`,
 `prova_sezioni`, `prova_cronologia_schede`, `prova_telefono_schermo` (la tessera nella pagina vera).
+
+## Il modello sa del telefono a sezioni (28/10, issue #288, #289, #290 e #291, ramo `issue-288-telefono-consapevole`)
+
+Casi veri della DGX del 28/10 (versione 0fbda07), dal telefono, epic #251: alle **13:53** «Apri lo schermo
+dei documenti su questo dispositivo.» → «non posso aprire uno schermo perché non è un computer», con l'offerta
+del portatile, che non era collegato; alle **13:54** «la scheda documenti del tab Le mie cose» → «non ho una
+scheda Le mie cose su questo dispositivo». **Cause**: la nota del dispositivo diceva «il telefono, non un
+computer» e «niente webcam né schermo del computer», e il modello ne deduceva che il telefono non ha uno
+schermo; «Le mie cose» compariva solo dentro le frasi dei tool; `schermo_mostra` parlava di «uno schermo di
+casa» e non sapeva aprire una pagina. Lo scopo comune delle quattro issue: allineare quello che Calliope dice
+con quello che il telefono e lo schermo personale fanno davvero.
+
+- **#288, dove va il pezzo fisso.** Scelta: nel **prompt di sistema** (`Config._frase_sezioni`, con
+  `prompt_for(…, sezioni=True)` quando ci sono `schermo_mostra` e il telefono o `schermi_sezioni`), uguale per
+  tutti e fra i turni, così la cache del prefisso (#95) non si perde: cambia solo con la configurazione o con
+  l'Ufficio installato, e allora `_scalda_se_cambiato` scalda il prefisso nuovo una volta. Dice le sezioni
+  (Adesso, Conversazione, Le mie cose, Casa, Io), le pagine di Le mie cose (Liste, Agenda, Lavori e programmi,
+  Cassetto, Documenti, Giochi; «e, solo per chi amministra, Ufficio» solo con l'ufficio; Studio no, la pagina
+  non c'è ancora), Casa nascosta sotto i 13 anni (`aspetto.ETA_CASA`), cosa si fa dallo schermo (scrivere e
+  allegare dentro una conversazione cominciata a voce, la spunta delle liste, «+1 minuto» e «Ferma» dei timer),
+  la tenuta delle foto (60 giorni, gli altri file 7, per sempre con «archiviala», decisione
+  [0034](../decisioni/0034-miniature-nella-conversazione.md); con `immagini_tenuta` spenta i giorni del cassetto)
+  e quando chiamare `schermo_mostra` con `cosa=pagina`. **Scartato** nei dati del turno: lì si rilegge a ogni
+  turno (220 token in più per ogni richiesta), e nella storia come i dati fissi sarebbe da rifare a ogni
+  cambio di persona. Ciò che dipende da chi parla resta nella **nota del dispositivo** (dati del turno).
+- **La nota del dispositivo** (`dispositivo.schermo_di`, `nota`): lo schermo personale di chi parla «aperto
+  adesso», «chiuso adesso» o «chi parla non ha uno schermo personale» (ospiti e zona grigia mai, come
+  `personale_abbinato`) *[storico: così fino alla revisione della PR #294, sotto]*, e «e lì non c'è Casa» o «Ufficio» (sotto i 13 anni, per chi non amministra, solo con
+  l'ufficio installato). Il «niente» vale per la webcam e la **schermata del computer**, non per lo schermo.
+  Lo scritto dallo schermo personale (il telefono o il PC: `Ciclo._dispositivo_turno` guarda il proprietario
+  dello schermo) è «lo schermo personale a sezioni di chi parla, per scritto». Testo del caso delle 13:53:
+  «dispositivo: il telefono, non un computer; lo schermo personale di chi parla è aperto adesso; nessun
+  computer collegato, quindi niente webcam né schermata del computer.» *[storico: fino al 28/10 «…; nessun
+  computer collegato, quindi niente webcam né schermo del computer.»]*
+- **Il registro dei turni** ha il campo `dispositivo` (`{"canale": "telefono", "schermo": "aperto"}`, da
+  `Brain.last_dispositivo`): fino al 28/10 i turni a voce dal telefono non dicevano da dove venivano. Il campo
+  `canale` resta com'era (scritto, tocco).
+- **Token** (stima a 3,5 caratteri per token, come `Brain`): il paragrafo del prompt 757 caratteri, ~216 token
+  con l'Ufficio (721 e ~206 senza), una volta nel prefisso; lo schema di `schermo_mostra` +293 caratteri
+  (~85 token), nel prefisso anche lui; `documento_crea` +8 caratteri; la nota del dispositivo +~15 token per
+  turno (aperto o chiuso, ~12 senza schermo personale), +~6 con una sezione nascosta. In tutto ~300 token nel
+  prefisso, letti una volta per conversazione (poi in cache), e ~15 per turno. Il prefisso resta uguale fra lo schermo aperto e chiuso, fra chi amministra, un familiare e una
+  bambina (`prova_telefono_consapevole`). Da misurare sulla DGX: i token veri del 26B e la prima frase.
+- **#289, `schermo_mostra` con `cosa=pagina`** (`pagina`: documenti, liste, agenda, lavori, cassetto, giochi,
+  ufficio; le forme «lavori e programmi», «lista», «gioco»… si riconducono, principio 10). Lo schermo personale
+  aperto di chi parla riceve l'evento SSE «pagina» col solo nome (`Schermi.apri_pagina`, che rifiuta ciò che
+  non è un nome di lettere) e va su `#/cose/<pagina>` (`telefono.js` e `pc.js`, «calliope:pagina», un nome di
+  1–20 lettere minuscole, mai un indirizzo). Frasi: «Ecco, sul tuo schermo c'è Le mie cose, alla voce
+  Documenti.» (regola `schermo_pagina`); chiuso «Lo trovi in Le mie cose, alla voce Documenti, quando apri il
+  tuo schermo.» (`schermo_pagina_chiuso`); senza schermo personale, ospite e zona grigia un rifiuto. Le pagine
+  come `raccolte.visibili`: l'Ufficio solo per chi amministra e mai a un minore. La descrizione dice «su uno
+  schermo, anche il telefono di chi parla». **Politica**: `schermo_mostra` era già di classe sicura e resta tale
+  (cambia solo la vista, è reversibile); non è un tocco della pagina, quindi niente in `TOCCABILI`.
+- **#290, le frasi.** Senza «server» né «satellite», che a chi ascolta non dicono niente: la consegna rimasta in
+  casa dice «tra i miei documenti, perché il portatile non è collegato» o «… perché il portatile non
+  riceve file» *[storico: fino alla revisione della PR #294 «… perché il dispositivo da cui mi parli
+  non riceve file», falso dal telefono, che riceve i file con «Scarica»]* (`RemoteDelivery._sul_server`); la guida della casa senza schermo personale ripiega su
+  quella. I **lavori dell'agente** rimasti in casa (`Lavori._dove_in_casa`) usano la stessa scelta dei
+  documenti: con uno schermo personale abbinato di chi l'ha chiesto (aperto o chiuso, `Lavoro.ha_pagina`, presa
+  alla delega in `tools/agenti._schermo` *[storico: dalla revisione della PR #294 decisa alla consegna, sotto]*) «in Le mie cose, alla voce Lavori e programmi», dove il risultato ha
+  «Scarica»; senza, «tra i miei file, nella cartella Lavori, perché …». `documento_crea` «lo consegna a chi
+  parla» invece di «lo salva sul PC». *[storico: fino al 28/10 «sul server, perché il satellite collegato non
+  riceve documenti» e «sul server, nella cartella Lavori, perché …»]*
+- **#291, le versioni nei log.** La riga «[SATELLITE] collegato» dice «protocollo N» (dal «ciao») e, per il
+  telefono, «pagina calliope-telefono-pagina-v19»: la pagina legge il nome della cache del service worker in
+  uso (`caches.keys()`) e lo manda nel «ciao»; il server lo tiene solo se ha quella forma. Prima apertura o
+  certificato non fidato: niente pagina nella riga. *[storico: così fino alla revisione della PR #294; da allora
+  la costante `PAGINA_VERSIONE` di `telefono.js`, sotto]*
+- Cache del service worker `calliope-telefono-pagina-v19` (era v18: la v18 era della #279 e di questo ramo insieme, unite nello stesso giorno).
+
+Prove: `prova_telefono_consapevole` (nuova, livello 1: la nota, il prompt e la stima, i due casi del 28/10 nel
+Brain con il modello finto, il prefisso, `cosa=pagina` con permessi ed età, le frasi in tre casi, le versioni
+sul server vero); `prova_telefono_schermo` (l'evento «pagina» porta il telefono vero su `#/cose/documenti` e poi
+`#/cose/liste`, un nome fuori forma o il JSON rotto no, la pagina d'altri no); adattate `prova_documenti`,
+`prova_pagina_documenti`, `prova_casa_ha`, `prova_esecutore`, `prova_markdown` per le frasi nuove. Col modello,
+sulla DGX: `prova_schermi_ollama`, `prova_documenti_ollama`, `prova_immagini_ollama` (la nota del dispositivo)
+e il banco di regressione; i due casi del 28/10 detti dal telefono sono da provare sul vero (la prova a secco
+controlla cosa arriva al modello, non cosa sceglie).
+
+**Dalla revisione della PR #294** (28/10 sera, esito «da correggere»):
+
+- **Zona grigia.** `schermo_di` dava «nessuno» con `mittente.certo` falso, e dal suo telefono aperto la nota
+  diceva «chi parla non ha uno schermo personale»: la zona grigia (frase breve, conferma dentro la
+  conversazione, continuità, minore vicino) al telefono, in auto, è frequente. Ora il dispositivo porta
+  «di» (`descrivi(…, di=)`: il proprietario del satellite personale, o dello schermo da cui si scrive;
+  `Ciclo._dispositivo_turno`), il Brain lo mette in `tool_ctx.dispositivo`, e `dispositivo.proprio` dice se
+  il dispositivo è della persona della conversazione. Dal suo telefono vale come riconosciuto (aperto o
+  chiuso, come `_proprio_grigio` e `risultato_schermo_proprio`); da un altro dispositivo la nota dice «non
+  sono sicura di chi parla, quindi non uso uno schermo personale da qui»; a un ospite «chi parla non è
+  riconosciuto dalla voce, quindi niente schermo personale». «chi parla non ha uno schermo personale»
+  resta solo per chi è riconosciuto e non ne ha. `cosa=pagina` dalla zona grigia si apre dal proprio
+  telefono (regola `schermo_pagina_proprio`); altrimenti «Non sono sicura di chi parla, quindi da qui non
+  apro uno schermo personale: chiedimelo dal tuo telefono, o con una frase più lunga.», senza «chiamami per
+  nome». Il documento della zona grigia dal proprio telefono dice la pagina Documenti (`_su_pagina`).
+- **Il motivo detto sul PC.** «il dispositivo da cui mi parli non riceve file» era falso dal telefono e, per
+  i lavori, indicava il satellite attivo quando il lavoro finisce: ora «il portatile non è collegato» o «il
+  portatile non riceve file» (`RemoteDelivery`, `Lavori._consegna_risultato`).
+- **Lavori dopo un riavvio.** `ha_pagina` si prendeva alla delega, e mancava ai lavori rifatti insieme
+  (`_rifai_interrotti`, `insieme[1:]`) e a quelli ripresi da disco (`ripresa.ricostruisci`). Ora
+  `Lavori._ha_pagina` decide alla consegna da `lav.persona` con gli abbinati (`Lavori.schermi`, messo da
+  `main.py`); `Lavoro.ha_pagina` resta solo per le prove. **Lavori e programmi mostra gli ultimi
+  `LAVORI_FINITI_PAGINA` (6)**: `ris["dove_cartella"]` tiene la cartella e `Lavori.dove_detto` la dice al posto
+  di «in Le mie cose…» se il lavoro non è più fra quelli (`frase_finale`, «fammene un PDF»). Scartato «Mostra
+  altri» nella pagina: la frase si dice quasi sempre a lavoro appena finito, quando è il primo.
+- **Il prompt segue gli interruttori**: il telefono con `telefono_enabled`, il PC con `schermi_sezioni`, lo
+  scritto con `schermi_scritto`, foto e file con `immagini_enabled` e `allegati_enabled`, il Cassetto e la
+  tenuta con `cassetto_enabled`, «archiviala» con `archivio_enabled`; senza telefono né PC a sezioni nessun
+  paragrafo. Resta uguale fra i turni: cambia solo con la configurazione.
+- **Ufficio e Cassetto coerenti col prompt**: `cosa=pagina` non apre l'Ufficio senza l'ufficio installato
+  (`ctx.ufficio`), né il Cassetto con `cassetto_enabled` spento.
+- **`cosa` fuori elenco con `pagina` piena**: un errore («per una pagina di Le mie cose serve cosa=pagina»),
+  non la pagina.
+- **La versione della pagina** è una costante di `telefono.js` (`PAGINA_VERSIONE`), uguale alla cache di
+  `sw.js` (la prova le confronta), mandata già nel primo «ciao». *[storico: fino alla revisione il nome
+  della cache più alta da `caches.keys()`, che durante un aggiornamento è quella nuova, e il primo «ciao»
+  poteva partire senza]*
+- **Lo scritto dallo schermo personale** dice anche le sezioni nascoste («lì non c'è Casa»).
+- **Politica**: `prova_politica` fissa `cosa=pagina` come sicura, anche dopo un dato non fidato
+  (`DOPO_DATO`) e alla porta stretta con lo scope `schermi`; un'estensione comunque non apre pagine (la
+  porta passa solo titolo e testo).
+- **Col modello**: `prova_schermi_ollama` ha i due casi del 28/10 dal telefono di Dario e i contrari, da
+  lanciare sulla DGX.
+- Unita l'epic con la #292 (`2fb73694`): il service worker passa alla **v19** (le due PR portavano la stessa
+  riga alla v18, e git non lo segnala).
+
+**Dalla seconda revisione della PR #294** (28/10 sera):
+
+- **Un minore possibile dal telefono di chi amministra.** Nel caso `voce_proprietario` (voce incerta fra
+  Dario e Ada sul telefono di Dario, vale Dario dalla conversazione) `dispositivo.proprio` diceva sì: la nota
+  «aperto» e `cosa=pagina` apriva anche `#/cose/ufficio`. Ora `proprio` è falso con `speaker_ctx.minore_incerto`,
+  `incerta` o `minore_vicino`: anche col minore vicino, dove la voce è di Dario, vince la prudenza (chi tiene
+  il telefono può essere il minore). La nota dice «non sono sicura di chi parla» e nessuna pagina si apre.
+- **L'Ufficio col livello del turno**: solo con «amministra», non con `prof.admin`. Dallo schermo e dalla zona
+  grigia il livello è al più «familiare»: dal suo telefono Dario apre l'Ufficio solo con la voce riconosciuta
+  in quella frase e il livello di chi amministra; con una frase breve, o col minore vicino, no (la frase lo
+  dice: «Sul tuo schermo la pagina Ufficio non c'è.», o «non sono sicura di chi parla»).
+- **Il tocco** azzera `tool_ctx.dispositivo` (`Ciclo._tocco`): i tool del canale «tocco» non vedono il
+  dispositivo dell'ultimo turno a voce.
+- **Lo schermo revocato dopo la consegna**: `Lavori.dove_detto` ricontrolla gli abbinati di chi ha chiesto il
+  lavoro; senza, la cartella.
