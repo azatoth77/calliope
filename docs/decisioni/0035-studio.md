@@ -32,10 +32,12 @@ di esercizi è da tenere. Molte delle cose fatte erano meri test senza scopo». 
 disegna dal § 5 del progetto e dalle tavole del canvas, non dal codice di prima. Calliope non è in
 produzione: niente compatibilità e niente migrazione dei dati vecchi. Le tabelle dismesse
 (`esercizi_*` e `compiti_giorno`, con domande, risposte e note dei ragazzi) **si tolgono da sole**
-all'avvio, una volta, con `DROP TABLE IF EXISTS` (`conserva.togli_tabelle_dismesse`, chiamata da
-`memory.Memory` all'apertura di `memoria.db`, con una riga nel registro): sulla DGX al primo
-aggiornamento, senza passi a mano (revisione della PR #292; *storico: la prima stesura diceva «si
-lasciano o si tolgono a mano una volta»*). Se allo Studio servirà un indice del
+a ogni apertura di `memoria.db`, se ci sono (`conserva.togli_tabelle_dismesse`, chiamata da
+`memory.Memory`; un SELECT su `sqlite_master`, poi il `DROP` in una transazione, con una riga nel
+registro solo quando toglie qualcosa): sulla DGX al primo aggiornamento, senza passi a mano, e di
+nuovo dopo un ritorno a una versione di prima che le avesse ricreate (revisioni della PR #292 e
+della PR di correzione; *storico: la prima stesura diceva «si lasciano o si tolgono a mano una
+volta», la seconda «una volta sola» col segno «dismesse» in `meta_schema`, tolto*). Se allo Studio servirà un indice del
 programma, lo si progetta da capo dopo il passo 8.
 
 Le cinque risposte di chi amministra alle domande dell'analisi (28/10):
@@ -112,7 +114,7 @@ il passo 4.5.
   casa, anche gli adulti e anche senza minori in casa (lo Studio è di tutti, punto 5); prima, senza
   il servizio degli esercizi, diceva «non disponibile».
 - Le tabelle `esercizi_*` dalla conservazione, e le tabelle stesse da `memoria.db` all'avvio
-  (`esercizi_*` e `compiti_giorno`, una volta sola); le otto prove degli esercizi.
+  (`esercizi_*` e `compiti_giorno`, a ogni apertura se ci sono); le otto prove degli esercizi.
 
 Restano, perché li usa altro: tutori, preset, orari, avvisi ai tutori, guardiano, la chiave
 `compiti: guida | libero` del preset (anche per `nota_documento`). Si sono spostati
