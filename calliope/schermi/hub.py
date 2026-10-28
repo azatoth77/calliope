@@ -334,6 +334,11 @@ class Schermi:
             return rows
         rows = self.archivio.elenco()
         self._cache = (time.monotonic(), self.archivio.versione, rows)
+        sc = getattr(self, "scaricamenti", None)
+        if sc is not None:
+            # Gli schermi revocati (anche da terminale) perdono le voci di «Scarica» (seconda
+            # revisione della PR #268, #260)
+            sc.tieni_solo(s["id"] for s in rows)
         return rows
 
     def _rinfresca(self):
@@ -969,6 +974,9 @@ class Schermi:
                 for c in self._conn.get(sid, []):
                     c.consegna(("revocato", "{}"))
                 self._storia.pop(sid, None)
+        sc = getattr(self, "scaricamenti", None)
+        if sc is not None:
+            sc.dimentica(sids)              # «Scarica» non vale più da qui (#260)
 
     def chiudi_tutte(self):
         """Arresto: ogni flusso SSE finisce da sé (le pagine si ricollegheranno), così uvicorn

@@ -746,15 +746,20 @@ def _scheda_documento(arch, r: dict, gruppo: str, di: str = "") -> dict | None:
     return c
 
 
+def _file_visibile(hub, prof, arch, doc_id: int):
+    """Il file vero di un documento dell'archivio, se la persona com'è adesso può vederlo."""
+    ora = _profilo_ora(hub, prof)
+    chi = _chi_archivio(ora) if ora is not None else None
+    if chi is None or arch.documento_visibile(chi, doc_id) is None:
+        return None
+    return arch.file_di(doc_id)
+
+
 def _leggi_file(hub, prof, arch, doc_id: int):
     """La funzione che «Scarica» chiama al clic (scarica.converti): i permessi rifatti adesso,
     sul profilo com'è adesso, poi i byte del file vero dentro la cartella dell'archivio."""
     def leggi():
-        ora = _profilo_ora(hub, prof)
-        chi = _chi_archivio(ora) if ora is not None else None
-        if chi is None or arch.documento_visibile(chi, doc_id) is None:
-            return None
-        p = arch.file_di(doc_id)
+        p = _file_visibile(hub, prof, arch, doc_id)
         if p is None:
             return None
         try:
@@ -762,6 +767,15 @@ def _leggi_file(hub, prof, arch, doc_id: int):
         except OSError:
             return None
     return leggi
+
+
+def _estensione_file(hub, prof, arch, doc_id: int):
+    """L'estensione del file che `_leggi_file` leggerà, senza leggerlo: il nome in «Scaricato: …»
+    uguale a quello del file salvato (seconda revisione della PR #268, #260)."""
+    def estensione():
+        p = _file_visibile(hub, prof, arch, doc_id)
+        return p.suffix.lstrip(".").lower() if p is not None else None
+    return estensione
 
 
 def _di_chi(arch, d: dict, nomi_nodi: dict) -> str:
@@ -833,6 +847,7 @@ def _schede_archivio(hub, prof, arch, docs: list, chiave: str, titolo: str = "",
             if ok:
                 sorgenti.append({"chiave": ck, "formati": ["originale"],
                                  "sorgente": {"file_fn": _leggi_file(hub, prof, arch, d["id"]),
+                                              "estensione_fn": _estensione_file(hub, prof, arch, d["id"]),
                                               "titolo": Path(nome_file).stem or nome, "estensione": ext}})
         altri = len(tutti) - len(voci)
         nota = (nota_fn() if nota_fn else "") or (f"E altri {altri}: chiedimeli a voce." if altri > 0 else "")
@@ -912,31 +927,61 @@ def cerca(hub, prof, raccolta: str, testo: str, log=print) -> dict:
         return {"errore": "Non riesco a cercare adesso: riprova tra poco.", "_stato": 503}
 
 
-def _cerca_documenti(hub, prof, t: str) -> dict:
-    from pathlib import Path
-    from ..provenienza import parole
+def _punti_titolo(utili: list, titolo: str) -> float:
+    """La pertinenza di un titolo per la ricerca (dalla revisione della PR #268, #260): una parola
+    cercata uguale a una del titolo vale 1, una che ne è l'inizio (almeno 3 lettere: «fatt» →
+    «fattura») mezzo punto. Parole corte comprese («CV», «Tre re»): basta che non siano vuote."""
+    from ..archivio import normalizza as nz
+    sue = set(nz.piatto(titolo).split())
+    punti = 0.0
+    for w in utili:
+        if w in sue:
+            punti += 1.0
+        elif len(w) >= 3 and any(x.startswith(w) for x in sue):
+            punti += 0.5
+    return punti
+
+
+def _parole_utili(t: str) -> list:
+    """Le parole della ricerca che non sono vuote («di», «è», una lettera sola), senza doppioni,
+    nell'ordine dette (come `Archivio.cerca`)."""
     from ..archivio import normalizza as nz
     from ..archivio.servizio import _VUOTE
     out = []
+    for w in nz.piatto(t).split():
+        if w not in _VUOTE and len(w) > 1 and w not in out:
+            out.append(w)
+    return out
+
+
+def _cerca_documenti(hub, prof, t: str) -> dict:
+    from pathlib import Path
+    out = []
     # Solo parole vere (revisione della PR #268): con «di», «è» o una lettera sola l'archivio non
-    # filtra e darebbe i più recenti come «trovati»
-    utili = [w for w in nz.piatto(t).split() if w not in _VUOTE and len(w) > 1]
+    # filtra e darebbe i più recenti come «trovati». Dalla seconda revisione (#260) anche le parole
+    # corte che non sono vuote («CV», «Tre re»): prima il titolo si confrontava solo sulle parole
+    # di 4 lettere o più (`provenienza.parole`) e un titolo fatto di parole corte non si trovava
+    utili = _parole_utili(t)
     if not utili:
         return {"schede": [], "nota": "Non c'è niente da cercare: scrivi una parola più lunga."}
-    mie = {w for w in parole(t) if len(w) > 1}
     admin = bool(getattr(prof, "admin", False))
     doc = _servizio_documenti(hub)
     trovati = 0
-    if doc is not None and _documenti_ammessi(prof) and mie:
+    if doc is not None and _documenti_ammessi(prof):
         righe = (doc.recenti_di_tutti(CERCA_TRA) if admin and hasattr(doc, "recenti_di_tutti")
                  else doc.recenti(prof.id, CERCA_TRA))
         nomi = _nomi_persone(hub)
-        for r in righe:
+        # Per pertinenza, poi dal più recente (seconda revisione della PR #268): prima si fermava
+        # ai primi 20 dal più recente, e con una parola comune il documento cercato restava fuori
+        candidati = []
+        for i, r in enumerate(righe):
             if not admin and r.get("owner") != prof.id:
                 continue                        # mai di un altro, qualunque cosa dia il servizio
-            sue = parole(str(r.get("titolo") or "")) | parole(Path(str(r.get("nome_file") or "")).stem)
-            if not (mie & sue):
-                continue
+            punti = _punti_titolo(utili, f"{r.get('titolo') or ''} {Path(str(r.get('nome_file') or '')).stem}")
+            if punti > 0:
+                candidati.append((-punti, i, r))
+        candidati.sort(key=lambda x: (x[0], x[1]))
+        for _, _, r in candidati:
             nome = "" if r.get("owner") == prof.id else (nomi.get(r.get("owner")) or r.get("owner_name") or "")
             c = _scheda_documento(doc, r, "Fatti da Calliope", nome)
             if c:
