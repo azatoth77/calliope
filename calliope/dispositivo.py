@@ -61,6 +61,13 @@ def proprio(ctx, m=None) -> bool:
     di = disp.get("di") if isinstance(disp, dict) else None
     if not di:
         return False
+    # Con un minore possibile mai (seconda revisione della PR #294): la voce incerta fra il
+    # proprietario e un minore (`voce_proprietario`, `minore_piu_protetto`: incerta,
+    # minore_incerto) e il minore vicino a chi amministra (`minore_vicino`) valgono la prudenza,
+    # anche dal telefono del proprietario: chi lo tiene in mano può essere il minore
+    sc = getattr(ctx, "speaker_ctx", None)
+    if any(getattr(sc, k, None) for k in ("minore_incerto", "incerta", "minore_vicino")):
+        return False
     if m is None:
         hub = getattr(ctx, "schermi", None)
         if hub is None:

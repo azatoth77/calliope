@@ -1950,13 +1950,16 @@ class Lavori:
             ris.pop("dove_cartella", None)
 
     def dove_detto(self, lav: Lavoro, ris: dict | None = None) -> str | None:
-        """`ris["dove"]`, ma «in Le mie cose…» solo se il lavoro è ancora fra gli ultimi che la
-        pagina Lavori e programmi mostra (LAVORI_FINITI_PAGINA, revisione della PR #294);
-        altrimenti la cartella."""
+        """`ris["dove"]`, ma «in Le mie cose…» solo se chi l'ha chiesto ha ancora uno schermo
+        personale abbinato e il lavoro è ancora fra gli ultimi che la pagina Lavori e programmi
+        mostra (LAVORI_FINITI_PAGINA, revisioni della PR #294); altrimenti la cartella."""
         r = ris if ris is not None else (lav.risultato or {})
         dove = r.get("dove")
         if dove != PAGINA_LAVORI or not r.get("dove_cartella"):
             return dove
+        # Lo schermo revocato dopo la consegna (seconda revisione della PR #294): niente pagina
+        if not self._ha_pagina(lav):
+            return r["dove_cartella"]
         try:
             from ..schermi.raccolte import LAVORI_FINITI_PAGINA
             from .risultato import recenti

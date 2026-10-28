@@ -1786,6 +1786,9 @@ class Ciclo:
     def _tocco(self, t):
         scritto, brain, s = t.scritto, self.brain, self.s
         ctx = self.tool_ctx
+        # Nessun dispositivo dell'ultimo turno a voce nel tocco (seconda revisione della PR #294)
+        if ctx is not None:
+            ctx.dispositivo = None
         # Quello che legge ToolRegistry.call (nel ciclo vero è lo stesso di self.speaker_ctx)
         sc = getattr(ctx, "speaker_ctx", None) or self.speaker_ctx
         tool = str(scritto.get("tool") or "")

@@ -1747,7 +1747,8 @@ con quello che il telefono e lo schermo personale fanno davvero.
 - **#291, le versioni nei log.** La riga «[SATELLITE] collegato» dice «protocollo N» (dal «ciao») e, per il
   telefono, «pagina calliope-telefono-pagina-v19»: la pagina legge il nome della cache del service worker in
   uso (`caches.keys()`) e lo manda nel «ciao»; il server lo tiene solo se ha quella forma. Prima apertura o
-  certificato non fidato: niente pagina nella riga.
+  certificato non fidato: niente pagina nella riga. *[storico: così fino alla revisione della PR #294; da allora
+  la costante `PAGINA_VERSIONE` di `telefono.js`, sotto]*
 - Cache del service worker `calliope-telefono-pagina-v19` (era v18: la v18 era della #279 e di questo ramo insieme, unite nello stesso giorno).
 
 Prove: `prova_telefono_consapevole` (nuova, livello 1: la nota, il prompt e la stima, i due casi del 28/10 nel
@@ -1804,3 +1805,19 @@ controlla cosa arriva al modello, non cosa sceglie).
   lanciare sulla DGX.
 - Unita l'epic con la #292 (`2fb73694`): il service worker passa alla **v19** (le due PR portavano la stessa
   riga alla v18, e git non lo segnala).
+
+**Dalla seconda revisione della PR #294** (28/10 sera):
+
+- **Un minore possibile dal telefono di chi amministra.** Nel caso `voce_proprietario` (voce incerta fra
+  Dario e Ada sul telefono di Dario, vale Dario dalla conversazione) `dispositivo.proprio` diceva sì: la nota
+  «aperto» e `cosa=pagina` apriva anche `#/cose/ufficio`. Ora `proprio` è falso con `speaker_ctx.minore_incerto`,
+  `incerta` o `minore_vicino`: anche col minore vicino, dove la voce è di Dario, vince la prudenza (chi tiene
+  il telefono può essere il minore). La nota dice «non sono sicura di chi parla» e nessuna pagina si apre.
+- **L'Ufficio col livello del turno**: solo con «amministra», non con `prof.admin`. Dallo schermo e dalla zona
+  grigia il livello è al più «familiare»: dal suo telefono Dario apre l'Ufficio solo con la voce riconosciuta
+  in quella frase e il livello di chi amministra; con una frase breve, o col minore vicino, no (la frase lo
+  dice: «Sul tuo schermo la pagina Ufficio non c'è.», o «non sono sicura di chi parla»).
+- **Il tocco** azzera `tool_ctx.dispositivo` (`Ciclo._tocco`): i tool del canale «tocco» non vedono il
+  dispositivo dell'ultimo turno a voce.
+- **Lo schermo revocato dopo la consegna**: `Lavori.dove_detto` ricontrolla gli abbinati di chi ha chiesto il
+  lavoro; senza, la cartella.

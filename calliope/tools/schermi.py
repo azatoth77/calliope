@@ -281,6 +281,10 @@ def _apri_pagina(ctx: ToolContext, hub, pagina: str) -> dict:
     cfg = getattr(ctx, "cfg", None)
     spenta = ((p == "ufficio" and getattr(ctx, "ufficio", None) is None)
               or (p == "cassetto" and not getattr(cfg, "cassetto_enabled", True)))
+    # L'Ufficio col livello vero del turno, «amministra» (seconda revisione della PR #294): non
+    # basta il profilo, perché nella zona grigia e dallo schermo il livello è al più «familiare»
+    if p == "ufficio" and _level(ctx) != "amministra":
+        spenta = True
     if p not in visibili(prof) or spenta:
         return _final(f"Sul tuo schermo la pagina {nomi[p]} non c'è.", ok=False, fatto=NIENTE)
     apri = getattr(hub, "apri_pagina", None)

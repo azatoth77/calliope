@@ -80,9 +80,26 @@ class Speakers:
 
 
 class SC:
-    def __init__(self, nome="Dario", livello="amministra", come="voce", sessione=False):
+    def __init__(self, nome="Dario", livello="amministra", come="voce", sessione=False, **dubbi):
         self.current_speaker, self.current_level = nome, livello
         self.identified_by, self.from_session, self.sfida = come, sessione, None
+        # I segni del ciclo per la voce incerta con un minore (ciclo.py, voce_proprietario,
+        # minore_piu_protetto, amministra_minore_vicino)
+        self.minore_incerto = dubbi.get("minore_incerto")
+        self.incerta = dubbi.get("incerta")
+        self.minore_vicino = dubbi.get("minore_vicino")
+
+
+# Seconda revisione della PR #294: dal telefono di Dario con un minore possibile
+def VOCE_PROPRIETARIO():
+    """voce incerta fra Dario e Ada, vale Dario dalla sua conversazione (ciclo.py)."""
+    return SC("Dario", "familiare", come="conversazione", sessione=True,
+              minore_incerto="Ada", incerta=("Dario", "Ada"))
+
+
+def MINORE_VICINO():
+    """la voce è di Dario, ma Ada ha parlato vicino da poco: familiare, dalla conversazione."""
+    return SC("Dario", "familiare", come="voce", sessione=True, minore_vicino="Ada")
 
 
 class Hub:
@@ -168,9 +185,7 @@ def prova_nota():
     # La zona grigia (revisione della PR #294): frase breve, conferma dentro la conversazione,
     # un minore vicino. Mai «non ha uno schermo personale»
     for come, sc in (("frase breve", SC(come="breve", sessione=True)),
-                     ("conversazione", SC(come="conversazione", sessione=True)),
-                     ("minore vicino (resta Dario, dalla conversazione)",
-                      SC(come="minore_vicino", sessione=True))):
+                     ("conversazione", SC(come="conversazione", sessione=True))):
         s = dispositivo.schermo_di(contesto(aperto, sc, disp=TEL_DARIO))
         n = dispositivo.nota(TEL_DARIO, None, True, s)
         verifica(f"zona grigia ({come}) dal suo telefono: lo schermo aperto, vero",
@@ -182,9 +197,17 @@ def prova_nota():
                  s["stato"] == "incerto" and "non sono sicura di chi parla" in n
                  and "non ha uno schermo personale" not in n, n)
     s = dispositivo.schermo_di(contesto(aperto, SC("Ada", "familiare", come="minore_piu_protetto",
-                                                   sessione=True), disp=TEL_DARIO))
+                                                   sessione=True, minore_incerto="Ada",
+                                                   incerta=("Dario", "Ada")), disp=TEL_DARIO))
     verifica("zona grigia col minore dal telefono di Dario: incerto (il telefono non è di Ada)",
              s["stato"] == "incerto", s)
+    for nome, sc in (("voce_proprietario, incerta fra Dario e Ada", VOCE_PROPRIETARIO()),
+                     ("minore vicino a Dario", MINORE_VICINO())):
+        s = dispositivo.schermo_di(contesto(aperto, sc, disp=TEL_DARIO))
+        n = dispositivo.nota(TEL_DARIO, None, True, s)
+        verifica(f"dal telefono di Dario, {nome}: «non sono sicura di chi parla», mai «aperto»",
+                 s["stato"] == "incerto" and "non sono sicura di chi parla" in n
+                 and "aperto adesso" not in n, n)
     verifica("contrario: senza schermi nessuna riga sullo schermo",
              dispositivo.schermo_di(contesto(None, SC())) is None
              and dispositivo.nota(tel, None, True, None) == "dispositivo: il telefono, non un computer; "
@@ -352,6 +375,9 @@ def prova_prompt():
     # Il registro dei turni: il campo dispositivo dal Brain (Ciclo copia last_dispositivo)
     from calliope.ciclo import Ciclo
     src = Path(sys.modules[Ciclo.__module__].__file__).read_text(encoding="utf-8")
+    i = src.index("    def _tocco(self, t):")
+    verifica("tocco: nessun dispositivo dell'ultimo turno a voce (tool_ctx.dispositivo azzerato)",
+             "ctx.dispositivo = None" in src[i:i + 900])
     verifica("registro dei turni: il ciclo scrive il campo «dispositivo»",
              'self.rec["dispositivo"]' in src and "last_dispositivo" in src)
 
@@ -401,7 +427,7 @@ def prova_pagina():
              not r.get("ok") and len(h.pagine) == n and "per nome" not in r["risposta_finale"]
              and "non sono sicura" in r["risposta_finale"].lower(), r)
     # Zona grigia dal suo telefono (revisione della PR #294): la pagina si apre, sul suo schermo
-    for come in ("breve", "conversazione", "minore_vicino"):
+    for come in ("breve", "conversazione"):
         r, ctx = call({"cosa": "pagina", "pagina": "documenti"}, h, SC(come=come, sessione=True),
                       disp=TEL_DARIO)
         verifica(f"zona grigia ({come}) dal telefono di Dario: Documenti sul suo schermo",
@@ -412,6 +438,27 @@ def prova_pagina():
                 SC("Ada", "familiare", come="minore_piu_protetto", sessione=True), disp=TEL_DARIO)
     verifica("zona grigia col minore dal telefono di Dario: niente si sposta (né il suo, né quello di Ada)",
              not r.get("ok") and len(h.pagine) == n, r)
+    for nome, sc in (("voce_proprietario, incerta fra Dario e Ada", VOCE_PROPRIETARIO()),
+                     ("minore vicino a Dario", MINORE_VICINO())):
+        for pagina in ("documenti", "ufficio"):
+            r, _ = call({"cosa": "pagina", "pagina": pagina}, h, sc, disp=TEL_DARIO, ufficio=object())
+            verifica(f"dal telefono di Dario, {nome}: {pagina} non si apre",
+                     not r.get("ok") and len(h.pagine) == n and "non sono sicura" in r["risposta_finale"].lower(),
+                     r)
+    # L'Ufficio col livello vero del turno: dal suo telefono nella zona grigia (familiare) no;
+    # con la voce riconosciuta e il livello di chi amministra sì
+    r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC("Dario", "familiare", come="breve",
+                sessione=True), disp=TEL_DARIO, ufficio=object())
+    verifica("Ufficio dal suo telefono nella zona grigia (livello familiare): non si apre",
+             not r.get("ok") and len(h.pagine) == n, r)
+    r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC("Dario", "familiare"), ufficio=object())
+    verifica("Ufficio a chi amministra con la voce certa ma il livello familiare del turno: non si apre",
+             not r.get("ok") and len(h.pagine) == n, r)
+    r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC("Dario", "amministra"), disp=TEL_DARIO,
+                ufficio=object())
+    verifica("Ufficio dal suo telefono con la voce certa e il livello amministra: si apre",
+             r.get("ok") and h.pagine[-1] == ("dario", "ufficio"), r)
+    n = len(h.pagine)
     r, ctx = call({"cosa": "pagina", "pagina": "documenti"}, Hub(abbinati=[(1, "dario")]),
                   SC(come="breve", sessione=True), disp=TEL_DARIO)
     verifica("zona grigia dal suo telefono, schermo chiuso: «Lo trovi in Le mie cose…», non «non ne hai uno»",
@@ -547,6 +594,10 @@ def prova_frasi():
         AR.recenti = lambda svc_, persona, nome=None, n=3: [lav]
         verifica("frase: il lavoro fra gli ultimi della pagina → «in Le mie cose…»",
                  svc.dove_detto(lav, ris) == PAG, svc.dove_detto(lav, ris))
+        svc.schermi = Hub()
+        verifica("frase: lo schermo revocato dopo la consegna → la cartella",
+                 svc.dove_detto(lav, ris).startswith("tra i miei file"), svc.dove_detto(lav, ris))
+        svc.schermi = Hub(abbinati=[(1, "dario")])
         AR.recenti = lambda svc_, persona, nome=None, n=3: []
         verifica("frase: il lavoro non più fra gli ultimi sei → la cartella, non «Lo trovi in Le mie cose»",
                  svc.dove_detto(lav, ris).startswith("tra i miei file"), svc.dove_detto(lav, ris))
