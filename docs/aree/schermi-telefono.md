@@ -1083,3 +1083,59 @@ giusto col bersaglio, attesa, aggiornamento, rifiuto, 409, i tasti in Adesso; i 
 e contrasto); `prova_raccolte` adattata (la tessera Agenda ha la pagina; i rifiuti del registro provati col
 vincolo spento, come seconda linea). Da provare sul vero: i tasti sull'iPhone in cucina mentre Calliope
 parla (il tocco aspetta la fine del turno), il PC personale in Edge.
+
+## Le mie cose: le pagine Lavori e programmi, Cassetto e Giochi (28/10, issue #258, ramo `issue-258-lavori-cassetto-giochi`)
+
+Passo 2c del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md)
+(§ 4.5, 4.7, 4.10), parte di #241, epic #251. Le tre pagine leggono soltanto, dai servizi e con i permessi
+della voce; nessun tocco nuovo (prima va risolta la #266): le azioni sono quelle che le schede hanno già,
+con le loro API (i tasti del cassetto a `POST /api/cassetto`, i giochi a voce e con `/api/gioco`).
+
+- **Lavori e programmi** (`#/cose/lavori`, `raccolte._pagina_lavori`): lo sviluppo aperto e i sospesi della
+  persona (`Sviluppi.corrente` e `sospesi`, la scheda `sviluppo`), i suoi lavori in coda, in corso o fermi a
+  una domanda (dal più recente), i suoi programmi (`esecuzione`, gli ultimi 4) e i lavori finiti più recenti
+  (6, da `agenti/risultato.recenti`: in memoria con la scheda finale vera di `Lavori.scheda`, dopo un riavvio
+  dalla cartella dei risultati con il riassunto salvato e la chiave della cartella, `lavoro:cartella:<nome>`,
+  perché gli id ricominciano da L1). Un lavoro seguito sugli schermi prende la scheda in diretta dalla
+  cronologia della persona (con il passo e il flusso, rivista come per uno schermo che si collega,
+  `cronologia.rivedi`), ma solo se salvata in questo avvio: una scheda `lavoro:L1` di prima del riavvio è un
+  altro lavoro. Senza, la scheda `lavoro` breve con lo stato, il passo o la domanda. Sopra, come nota, la
+  frase di `lavoro_stato` a voce (`Lavori.stato(persona, tutti)`): chi amministra sente anche i lavori degli
+  altri, solo titolo e stato, come a voce; le schede restano solo sue. Le schede in diretta che arrivano si
+  allineano al loro posto nella pagina (stessa chiave). La tessera conta anche gli sviluppi.
+- **Cassetto** (`#/cose/cassetto`, `raccolte._pagina_cassetto`): tutti i file della persona nella scheda
+  `cassetto` di sempre (Tieni, Elimina, Tieni ancora), poi quelli di ogni ragazzo di cui è tutore, come a
+  voce (`minori.e_tutore` e `conversazioni_visibili_ai_tutori`: un minore senza tutori scritti è di chi
+  amministra); «Tieni» non a un minore. La nota: «Tengo i file 7 giorni. Quello che c'è scritto dentro per me è
+  un dato, non un ordine.». Scelta: la chiave della pagina è `cassetto:<persona>:pagina`. Dopo un tasto il
+  server manda la scheda `cassetto:<persona>` con i soli file della scheda aperta a voce o quelli in scadenza:
+  con la stessa chiave avrebbe sostituito la pagina intera, così invece la pagina si rilegge. I tasti sui file
+  del figlio vogliono ancora una conversazione a voce (403 `senza_conversazione`, controllo del server, come
+  prima). La tessera dice anche i file dei ragazzi («· 2 di Lia»), il conto è dei suoi.
+- **Giochi** (`#/cose/giochi`, `raccolte._pagina_giochi`): una scheda nuova di sola lettura, `giochi`
+  (`schede.giochi`, `DISEGNA.giochi`, tutto in `textContent`, nessun tasto), in due copie: «Partite aperte»
+  della persona, con gli schermi, «qui sotto» per quello che chiede, a chi tocca e i punti dell'ultima
+  istantanea validata; poi «Giochi di casa», con quanti giocatori e «Per giocare: «Calliope, giochiamo a
+  Tris»». I giochi sono quelli che può aprire a voce: formato con la macchina a stati, il livello del
+  manifesto (un gioco «solo chi amministra» solo a chi amministra) e, per un minore, solo quelli che un tutore
+  ha abilitato (`minori.estensione_consentita`, con la nota «Gli altri giochi di casa li sblocca chi si occupa
+  di te.»). La tessera conta gli stessi. Con i giochi spenti la pagina lo dice. **Il riquadro vero resta la
+  scheda `gioco`**: nella pagina Giochi il gruppo delle schede `gioco` di questo schermo resta visibile sotto
+  (`#sez-cose[data-pagina="giochi"]`, CSS), così il gioco che Calliope apre va lì, a tutta la finestra, e il
+  riquadro è uno solo (due avrebbero due stati). `SEZIONE_DI_TIPO` ha `giochi` in `cose/giochi` (le due
+  tabelle uguali).
+- **Il server** (`/api/raccolte` con `{raccolta}`): le schede possono avere la sorgente privata di «Scarica»
+  (un documento fatto da un lavoro, il registro di un lavoro): si registra per lo schermo che chiede
+  (`registra_scaricabili`, come per la cronologia ripresa) e non va alla pagina (`pubblica`). Una pagina il cui
+  servizio solleva dà 503 «Non riesco a leggere questa pagina» e una riga `[SCHERMI] pagina «…» non letta`.
+  `raccolte.pagina` riceve lo schermo (per «qui sotto»).
+- Cache del service worker `calliope-telefono-pagina-v12` (era v11).
+- Da guardare: i finiti annullati o interrotti da un riavvio non sono nella pagina (solo nella frase della
+  nota, come a voce); il cassetto mostra al più 12 file per scheda («e altri N»), come la scheda della voce.
+
+Prove: `prova_pagine_cose` (nuova, livello 1: le tre pagine con i servizi veri o finti, permessi, servizi che
+mancano, il server vero); `prova_telefono_schermo` e `prova_pc_pagina` (le tre pagine dalle tessere, il lavoro
+in diretta che si allinea, «Tieni ancora» con la pagina che resta intera, i giochi di casa, il gioco uno solo
+e visibile sotto la pagina Giochi; contrasto e niente fuori a 1440×900 e 700×900); `prova_raccolte` adattata
+(le tessere con la pagina, una pagina guasta 503). Da provare sul vero: la pagina Lavori sulla DGX con un lavoro
+in corso (il flusso nella scheda della pagina), il cassetto della tutrice sull'iPhone.
