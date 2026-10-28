@@ -1441,3 +1441,28 @@ intero e gesto indietro, rimando, filtri, ricerca ostile, misure a 375×812 e 32
 `prova_pc_pagina` (la colonna a destra: schede piccole, copia nello strato, Ieri, ricerca, clic ≥ 44 px).
 Da provare sul vero: lo spazio della conversazione sull'iPhone con la tastiera aperta nella ricerca, e i
 filtri con la conversazione vera della DGX (molti turni con schede).
+- **Dalla revisione della PR #271** (sullo stesso ramo):
+  - *Bloccante: il riservato passava dalla scheda del turno dopo.* «Cosa dice il contratto?»
+    (`archivio_cerca`, riservato) e poi «scrivimelo sullo schermo» (`schermo_mostra` con `cosa` risposta)
+    mettevano il canone nel `meta` del secondo turno per 60 giorni. Ora una scheda si lega solo se il suo
+    contenuto è conservabile quanto il turno: `Brain._invia_schede` segna `_riservata` (resta sul server)
+    ogni scheda mandata in una risposta con un tool riservato (`last_private`: archivio, rubrica, ufficio,
+    `stanza_cerca`, `conversazione_cerca`), e `hub.ultima` la ricorda col segno (`cosa` ultima);
+    `schermo_mostra` segna le schede che ripetono la risposta di prima quando quella era riservata (`cosa`
+    risposta e testo, da `risposta_precedente["riservata"]`); `per_conversazione` le scarta.
+  - *Bloccante: la stima dei token.* `_tokens` non conta più `_schede` (le copie non arrivano al modello):
+    un turno con un documento passava da 27 a 5 849 token stimati e la storia si tagliava prima.
+  - *Foto e file del turno* non si legano (`manda_schede` segna `_conv` False): partono prima che la frase
+    entri nella storia, e finivano sul turno di prima, magari d'un'altra persona.
+  - *Peso verso le pagine*: copie al più 8 kB (erano 16), e intere solo negli ultimi 12 turni con schede
+    (`alleggerisci`, nel benvenuto e in `/api/conversazione`); prima arrivano leggere (tipo, titolo, chiave,
+    sezione), senza anteprima, e il dettaglio si chiede al tocco (`POST /api/conversazione` con
+    `{turno, indice}`, solo dai turni del proprietario).
+  - «com'era il 3 novembre alle …» quando la copia non è di oggi; il calcolo non passa da `oscura` (un
+    risultato di dieci cifre diventava «******»), solo dai segreti del turno; `avviso` non è fra i rimandi
+    (gli avvisi ai tutori non si legano mai); un turno arrivato dal vivo mentre si aspettava un filtro entra
+    se lo passa.
+  - *Dati d'altri nelle copie*: la lista e la casa sono dati della famiglia e restano 60 giorni
+    nell'archivio di chi ha fatto la domanda; la «dimentica» di un altro familiare non le tocca (è la scelta
+    dell'analisi della #242: la persona ha visto quella scheda nella sua conversazione). Dalla copia del
+    timer si toglie chi l'ha messo (`chi`).

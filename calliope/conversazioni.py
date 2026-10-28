@@ -534,7 +534,32 @@ class ArchivioConversazioni:
             v = voce_chat(r[0], r[1], r[2], r[3], meta, r[5], azioni)
             if v is not None:
                 out.append(v)
-        return out
+        return alleggerisci(out)
+
+    def chat_scheda(self, persona: str | None, turno: int, indice: int) -> dict | None:
+        """La copia intera di una scheda del turno `turno` di `persona` (mai degli ospiti), per il
+        dettaglio di una scheda piccola leggera (revisione della PR #271). None se il turno non è
+        suo, non c'è più o non ha quella scheda."""
+        if not persona:
+            return None
+        dove = self._dove(persona)
+        if dove is not self:
+            return dove.chat_scheda(persona, turno, indice)
+        dal = time.time() - self.giorni * 86400 if self.giorni > 0 else 0.0
+        with self.lock:
+            r = self.db.execute(
+                "SELECT t.meta FROM turni t JOIN conversazioni c ON c.id = t.conv WHERE t.id = ? "
+                "AND c.persona = ? AND c.ospite = 0 AND t.quando >= ?",
+                (int(turno), str(persona), dal)).fetchone()
+        try:
+            meta = json.loads(r[0]) if r and r[0] else {}
+        except ValueError:
+            meta = {}
+        sch = meta.get("schede") if isinstance(meta, dict) else None
+        if not isinstance(sch, list) or not 0 <= int(indice) < len(sch):
+            return None
+        c = sch[int(indice)]
+        return c if isinstance(c, dict) and c.get("tipo") else None
 
     def chat_filtra(self, persona: str | None, *, dal: float | None = None,
                     al: float | None = None, solo_schede: bool = False, testo: str = "",
@@ -594,7 +619,7 @@ class ArchivioConversazioni:
             v = voce_chat(r[0], r[1], r[2], r[3], meta, r[5], azioni)
             if v is not None and (not solo_schede or v.get("schede")):
                 out.append(v)
-        return {"turni": out, "parole": len(parole), "troppi": troppi}
+        return {"turni": alleggerisci(out), "parole": len(parole), "troppi": troppi}
 
     def chat_markdown(self, persona: str | None, n: int = 2000) -> str:
         """La trascrizione in Markdown («Scarica» della scheda), giorno per giorno."""
@@ -1240,6 +1265,26 @@ def voce_chat(ident, quando, domanda, risposta, meta, luogo_conv, azioni=()) -> 
     if schede:
         out["schede"] = schede[:4]
     return out
+
+
+# Le copie intere delle schede vanno alle pagine solo per gli ultimi turni che ne hanno
+# (revisione della PR #271: il benvenuto portava fino a 80 turni × 4 copie); prima, una scheda
+# leggera (tipo, titolo, chiave, sezione) e il dettaglio si chiede al tocco
+CHAT_COPIE_PIENE = 12
+_LEGGERA = ("tipo", "titolo", "sezione", "id", "chiave", "creata", "rimando")
+
+
+def alleggerisci(turni: list[dict], piene: int = CHAT_COPIE_PIENE) -> list[dict]:
+    """`turni` (dal più vecchio) con le copie delle schede leggere tranne negli ultimi `piene`
+    turni che hanno schede. I turni non si cambiano: se serve, una copia del dizionario."""
+    con = [i for i, t in enumerate(turni) if t.get("schede")]
+    for i in con[:max(0, len(con) - piene)]:
+        t = dict(turni[i])
+        t["schede"] = [x if x.get("rimando") else
+                       {**{k: x[k] for k in _LEGGERA if k in x}, "leggera": True}
+                       for x in t["schede"]]
+        turni[i] = t
+    return turni
 
 
 # I canali di un turno nella Conversazione (28/10, #242): detto, scritto, un tocco sullo schermo

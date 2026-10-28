@@ -543,10 +543,12 @@ def vuota() -> dict:
 #     della pagina; la voce nuova ha le parole di un ospite; archivio e ufficio sono riservati).
 CONV_COPIA = frozenset({"biblioteca", "web", "calcolo", "testo", "lista", "timer", "promemoria",
                         "casa", "documento"})
+# (Non `avviso`: gli avvisi ai tutori passano da hub.invia diretto e non si legano mai)
 CONV_RIMANDO = frozenset({"lavoro", "esecuzione", "sviluppo", "gioco", "giochi", "esercizio",
-                          "esercizi_riepilogo", "cassetto", "foto", "allegato", "modulo",
-                          "avviso"})
-CONV_SCHEDA_MAX = 16_000          # byte del JSON di una copia
+                          "esercizi_riepilogo", "cassetto", "foto", "allegato", "modulo"})
+# Byte del JSON di una copia (revisione della PR #271: era 16 000; le copie vanno alle pagine
+# con la conversazione)
+CONV_SCHEDA_MAX = 8_000
 CONV_SCHEDE_TURNO = 4             # schede al più per turno
 # Mai nella copia: la sorgente di «Scarica» resta sul server e non vale per una copia vecchia;
 # la scadenza non conta più (la copia è del turno); `sposta` è dell'invio
@@ -558,6 +560,11 @@ def per_conversazione(scheda) -> dict | None:
     disegna senza spunta né tasti: quei tocchi varrebbero sullo stato di oggi), un `rimando`, o
     None. Sempre senza le chiavi «_» (restano sul server)."""
     if not isinstance(scheda, dict):
+        return None
+    # Il contenuto non è conservabile quanto il turno (revisione della PR #271): mandata in una
+    # risposta con un tool riservato, o che ne ripete una (`_riservata`); le miniature di foto e
+    # file del turno, che partono prima della frase (`_conv` False)
+    if scheda.get("_riservata") or scheda.get("_conv") is False:
         return None
     tipo = str(scheda.get("tipo") or "")
     if tipo not in CONV_COPIA and tipo not in CONV_RIMANDO:
@@ -574,6 +581,10 @@ def per_conversazione(scheda) -> dict | None:
         copia = {k: v for k, v in scheda.items()
                  if not str(k).startswith("_") and k not in _CONV_FUORI}
         copia.update(base, storica=True)
+        if tipo == "timer" and isinstance(copia.get("timer"), list):
+            # Chi l'ha messo è un dato d'un'altra persona: nella copia no (revisione della PR #271)
+            copia["timer"] = [{k: v for k, v in t.items() if k != "chi"} if isinstance(t, dict)
+                              else t for t in copia["timer"]]
         try:
             peso = len(json.dumps(copia, ensure_ascii=False, default=str).encode("utf-8"))
         except (TypeError, ValueError):

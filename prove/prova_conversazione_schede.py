@@ -22,7 +22,11 @@ issue #242, passo 3 di docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md).
 - `POST /api/conversazione` sul server vero: lo schermo personale vede solo i turni del suo
   proprietario (il tutore non vede quelli del ragazzo, il ragazzo non vede quelli del tutore), lo
   schermo di stanza 403, senza sessione 401, dati non validi 400, le ricerche oltre 20 al minuto 429
-  con Retry-After.
+  con Retry-After;
+- dalla revisione della PR #271: una risposta riservata non arriva nell'archivio da una scheda
+  (il caso del contratto, e `schermo_mostra` con risposta, testo e ultima), la stima dei token
+  non conta le copie, le copie leggere oltre gli ultimi turni e il dettaglio al tocco (solo dai
+  propri turni), foto e file mai legati, il calcolo senza oscura, il timer senza «chi».
 
 Tutto in una cartella temporanea. ~3 s.
 """
@@ -350,6 +354,165 @@ def prova_server(arch):
     c.close()
 
 
+# ─────────────────────────── 6. dalla revisione della PR #271 ───────────────────────────
+class HubUltima(HubFinto):
+    """Come HubFinto, e ricorda l'ultima scheda (lo stesso oggetto, come hub.ricorda)."""
+
+    def __init__(self):
+        super().__init__()
+        self._ultima = None
+
+    def invia(self, card, sender):
+        self._ultima = card
+        return super().invia(card, sender)
+
+    def ultima(self, sender):
+        return self._ultima
+
+
+def prova_riservato():
+    """Bloccante 1: una risposta riservata non arriva nell'archivio passando da una scheda."""
+    from calliope.brain import Brain
+    from calliope.conversazione import turni
+    from calliope.tools import schermi as TS
+    hub = HubUltima()
+    # Turno 1: «cosa dice il contratto?» → archivio_cerca (riservato): la scheda di quel turno ha il
+    # segno e non si lega
+    storia = [{"role": "user", "content": "Cosa dice il contratto d'affitto?", "_turno": {"t": 1.0}}]
+    b = brain_finto(storia)
+    b.last_private = True
+    doc = schede.documento({"blocchi": [{"tipo": "paragrafo", "testo": "Canone 850 euro, scade il 31/12."}]},
+                           "pdf", "contratto.pdf")
+    Brain._invia_schede(b, hub, [doc], DARIO)
+    verifica("una scheda mandata in una risposta con un tool riservato non resta col turno",
+             doc.get("_riservata") is True and "_schede" not in storia[0], storia[0])
+    storia += [{"role": "tool", "name": "archivio_cerca", "content": "{}"},
+               {"role": "assistant", "content": "Il contratto scade il 31/12, canone 850 euro, IBAN IT60X0542811101000000123456."}]
+    # Turno 2: «scrivimelo sullo schermo» con ogni `cosa` che ripete la risposta di prima
+    ctx = SimpleNamespace(speaker_ctx=SimpleNamespace(current_speaker=None, current_level="familiare"),
+                          speakers=None, risposta_precedente={"testo": storia[-1]["content"],
+                                                              "tool": ["archivio_cerca"], "riservata": True})
+    casi = {}
+    for cosa, testo in (("risposta", ""), ("testo", "Canone 850 euro, scade il 31/12."), ("ultima", "")):
+        card, err = TS._scheda_per(ctx, cosa, "", hub, DARIO, testo)
+        casi[cosa] = (card or {}).get("_riservata") is True and schede.per_conversazione(card) is None
+    verifica("«scrivimelo sullo schermo» dopo una risposta riservata: risposta, testo e ultima col segno, mai copiate",
+             all(casi.values()), casi)
+    # Il turno 2 dentro Brain e poi nell'archivio: niente canone
+    storia.append({"role": "user", "content": "Scrivimelo sullo schermo", "_turno": {"t": 2.0}})
+    b.last_private = False
+    card, _ = TS._scheda_per(ctx, "risposta", "", hub, DARIO)
+    Brain._invia_schede(b, hub, [card], DARIO)
+    storia.append({"role": "assistant", "content": "Fatto, è sullo schermo."})
+    tt = turni(storia, frozenset({"archivio_cerca"}))
+    verifica("il caso del contratto: nell'archivio né canone né IBAN, in nessun turno",
+             "850" not in json.dumps(tt, ensure_ascii=False) and not any((t.get("meta") or {}).get("schede") for t in tt), tt)
+    # Le altre risposte riservate (stanza_cerca, conversazione_cerca) passano da last_private come
+    # archivio_cerca; una risposta di prima non riservata sì
+    ctx.risposta_precedente = {"testo": "Domani sole.", "tool": ["meteo_leggi"], "riservata": False}
+    card, _ = TS._scheda_per(ctx, "risposta", "", hub, DARIO)
+    verifica("…e una risposta non riservata si copia", schede.per_conversazione(card) is not None)
+    import re
+    rr = {}
+    for nome, file in (("stanza_cerca", "stanza.py"), ("conversazione_cerca", "conversazioni.py")):
+        src = (Path(__file__).resolve().parent.parent / "calliope" / "tools" / file).read_text(encoding="utf-8")
+        i = src.find(f'name="{nome}"') if f'name="{nome}"' in src else src.find(f'"{nome}"')
+        rr[nome] = i >= 0 and bool(re.search(r"riservato=True", src[i:i + 3000]))
+    verifica("stanza_cerca e conversazione_cerca sono riservati (passano da last_private)", all(rr.values()), rr)
+
+
+def prova_peso():
+    """Bloccante 2 e il peso verso le pagine."""
+    from calliope.brain import Brain, _tokens
+    from calliope.conversazioni import CHAT_COPIE_PIENE, alleggerisci
+    msg = {"role": "user", "content": "Mostrami la relazione"}
+    prima = _tokens([msg, {"role": "assistant", "content": "Eccola."}])
+    grosso = {**schede.documento_markdown("Relazione", "parola " * 1000, chiave="lavoro:L1")}
+    b = brain_finto([msg])
+    Brain._invia_schede(b, HubFinto(), [grosso, schede.calcolo("1+1", "2")], DARIO)
+    dopo = _tokens([msg, {"role": "assistant", "content": "Eccola."}])
+    verifica("la stima dei token resta quella di prima con le schede legate",
+             "_schede" in msg and prima == dopo, (prima, dopo))
+    turni_ = [{"id": i, "quando": float(i), "domanda": "d", "risposta": "r", "canale": "voce", "luogo": "",
+               "schede": [{"tipo": "calcolo", "titolo": "Calcolo", "espressione": "1+1", "risultato": "2", "id": f"c{i}"}]}
+              for i in range(CHAT_COPIE_PIENE + 3)]
+    alleggerisci(turni_)
+    verifica("alle pagine le copie intere solo negli ultimi turni con schede, prima leggere",
+             all(t["schede"][0].get("leggera") and "risultato" not in t["schede"][0] for t in turni_[:3])
+             and all("risultato" in t["schede"][0] for t in turni_[3:]), [t["schede"][0] for t in turni_[:4]])
+    # Foto e file del turno: mai legati (partono prima della frase della persona)
+    s = [{"role": "user", "content": "la frase di prima"}]
+    bf = brain_finto(s)
+    bf._send_cards = lambda cards, tool: Brain._invia_schede(bf, HubFinto(), cards, DARIO)
+    foto = {"tipo": "foto", "titolo": "Foto", "src": "data:image/jpeg;base64,AA"}
+    Brain.manda_schede(bf, [foto], "foto")
+    verifica("le miniature di foto e file non si legano al turno di prima", "_schede" not in s[0], s[0])
+    # Il calcolo senza oscura, il timer senza «chi»
+    from calliope.conversazione import turni
+    calc = schede.per_conversazione(schede.calcolo("123456789 × 1000", "123456789000"))
+    tim = schede.per_conversazione(schede.timer({"id": 1, "label": "pasta", "due": time.time() + 60,
+                                                 "created": time.time(), "owner_name": "Bianca"}))
+    tt = turni([{"role": "user", "content": "quanto fa?", "_schede": [calc, tim]}, {"role": "assistant", "content": "Fa così."}])
+    sc = tt[0]["meta"]["schede"]
+    verifica("il risultato di un calcolo grande resta (oscura non lo nasconde)",
+             sc[0]["risultato"] == "123456789000", sc[0])
+    verifica("la copia del timer senza chi l'ha messo", "chi" not in sc[1]["timer"][0], sc[1])
+    verifica("avviso non è fra i rimandi", schede.per_conversazione({"tipo": "avviso", "titolo": "x"}) is None)
+
+
+def prova_dettaglio(arch):
+    """Il dettaglio di una scheda leggera: solo dai turni del proprietario."""
+    from calliope.conversazione import Conversazione, turni
+    c = Conversazione("persona:dario")
+    msg = []
+    for i in range(14):
+        msg += [{"role": "user", "content": f"conto {i}", "_turno": {"t": time.time() - 3000 + i},
+                 "_schede": [schede.per_conversazione(schede.calcolo(f"{i}+1", str(i + 1)))]},
+                {"role": "assistant", "content": str(i + 1)}]
+    arch.archivia(c, turni(msg), "dario", "Dario", ospite=False)
+    ch = arch.chat("dario")
+    leggere = [t for t in ch if t.get("schede") and t["schede"][0].get("leggera")]
+    verifica("benvenuto: le schede dei turni vecchi leggere", len(leggere) >= 2, len(leggere))
+    t0 = leggere[0]
+    piena = arch.chat_scheda("dario", t0["id"], 0)
+    verifica("il dettaglio dà la copia intera del suo turno",
+             piena and piena["tipo"] == t0["schede"][0]["tipo"] and piena.get("storica")
+             and not piena.get("leggera") and len(piena) > len(t0["schede"][0]), piena)
+    verifica("…mai da un turno d'un'altra persona", arch.chat_scheda("bianca", t0["id"], 0) is None
+             and arch.chat_scheda("dario", t0["id"], 3) is None)
+    return t0["id"], t0["schede"][0]["tipo"]
+
+
+def prova_dettaglio_server(arch, tid_tipo):
+    tid, tipo = tid_tipo
+    from calliope.schermi.server import ServerSchermi
+    hub = Schermi(cfg_prova(), ArchivioSchermi(str(TMP / "dettaglio.db")), log=lambda m: None)
+    hub.chat_fonte = arch
+    srv = ServerSchermi(hub, "127.0.0.1", 0, attesa_porta_s=5).avvia()
+    hub.server = srv
+    c = httpx.Client(base_url=f"http://127.0.0.1:{srv.port}", timeout=5)
+    _, tok_d = hub.archivio.crea_con_token("studio", proprietario="dario", proprietario_nome="Dario")
+    _, tok_b = hub.archivio.crea_con_token("camera", proprietario="bianca", proprietario_nome="Bianca")
+    _, tok_s = hub.archivio.crea_con_token("cucina")
+    hub._rinfresca()
+
+    def h(t):
+        return {"X-Calliope-Sessione": c.post("/api/accedi", headers={"Authorization": f"Bearer {t}"}).json()["sessione"]}
+    r = c.post("/api/conversazione", headers=h(tok_d), json={"turno": tid, "indice": 0})
+    verifica("/api/conversazione {turno, indice}: la copia intera dallo schermo di Dario",
+             r.status_code == 200 and r.json()["scheda"]["tipo"] == tipo, r.text[:200])
+    r = c.post("/api/conversazione", headers=h(tok_b), json={"turno": tid, "indice": 0})
+    verifica("…dallo schermo di Bianca 404", r.status_code == 404, r.status_code)
+    r = c.post("/api/conversazione", headers=h(tok_s), json={"turno": tid, "indice": 0})
+    verifica("…da uno schermo di stanza 403", r.status_code == 403, r.status_code)
+    stati = [c.post("/api/conversazione", headers=h(tok_d), json=x).status_code
+             for x in ({"turno": "1", "indice": 0}, {"turno": tid, "indice": 9}, {"turno": True, "indice": 0})]
+    verifica("…dati non validi 400", stati == [400, 400, 400], stati)
+    srv.ferma()
+    hub.archivio.close()
+    c.close()
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -363,6 +526,10 @@ def main() -> int:
         arch = archivio_pieno()
         prova_filtri(arch)
         prova_server(arch)
+        prova_riservato()
+        prova_peso()
+        tid = prova_dettaglio(arch)
+        prova_dettaglio_server(arch, tid)
         arch.close()
     finally:
         shutil.rmtree(TMP, ignore_errors=True)

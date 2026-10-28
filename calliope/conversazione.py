@@ -339,6 +339,14 @@ def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = No
             cur["azioni"].append({"tool": nome, "ok": ok, **({"tipo": tipo} if tipo else {}),
                                   **({"detto": oscura(detto)[:300]} if detto
                                      and nome not in riservati else {})})
+    def solo_segreti(x: str) -> str:
+        if redact is not None:
+            try:
+                return redact(x)
+            except Exception:  # noqa: BLE001
+                pass
+        return x
+
     def pulito(x: str) -> str:
         x = oscura(x)
         if redact is not None:
@@ -369,7 +377,11 @@ def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = No
             if t["riservato"]:
                 t["meta"].pop("schede", None)
             else:
-                t["meta"]["schede"] = [_schede_pulite(x, pulito) for x in sch]
+                # Un calcolo è del codice: oscura nasconderebbe un risultato di dieci cifre
+                # (revisione della PR #271); i segreti del turno sì
+                t["meta"]["schede"] = [_schede_pulite(x, solo_segreti if isinstance(x, dict)
+                                                      and x.get("tipo") == "calcolo" else pulito)
+                                       for x in sch]
             if not t["meta"]:
                 t.pop("meta", None)
     return [t for t in out if t["domanda"] or t["risposta"] or t["azioni"]]

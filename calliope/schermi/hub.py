@@ -556,6 +556,24 @@ class Schermi:
             nota = "Ci sono altri turni prima: restringi la ricerca per vederli."
         return {"turni": turni, "nota": nota}
 
+    def chat_scheda(self, schermo: dict | None, turno, indice) -> dict:
+        """Il dettaglio di una scheda piccola leggera (revisione della PR #271): la copia intera,
+        solo dai turni del proprietario dello schermo personale. {"scheda"} o {"_stato", "errore"}."""
+        persona = (schermo or {}).get("proprietario")
+        fonte = self.chat_fonte
+        if not persona:
+            return {"_stato": 403, "errore": "solo da uno schermo personale"}
+        if fonte is None or self._n_chat() <= 0 or not hasattr(fonte, "chat_scheda"):
+            return {"_stato": 404, "errore": "La conversazione non c'è su questo Calliope."}
+        try:
+            c = fonte.chat_scheda(persona, int(turno), int(indice))
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[SCHERMI] scheda della conversazione non letta: {type(e).__name__}")
+            c = None
+        if c is None:
+            return {"_stato": 404, "errore": "Questa scheda non c'è più."}
+        return {"scheda": c}
+
     def registra_chat(self, sid: int, persona):
         """«Scarica» della trascrizione in Markdown, per uno schermo personale del proprietario:
         il testo si fa al tocco, dall'archivio di quel momento."""

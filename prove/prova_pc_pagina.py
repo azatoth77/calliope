@@ -460,6 +460,22 @@ def conversazione_schede_pc(p, hub):
     verifica("PC: la ricerca trova il turno di Dario, non quello di Bianca", bool(ok), domande())
     clic_c(f"{C} .chat-cerca-via")
     aspetta(lambda: len(domande()) >= 4, 5)
+    # Dalla revisione della PR #271: oltre gli ultimi turni con schede le copie arrivano leggere, e il
+    # dettaglio si chiede al tocco (la pagina ricaricata riceve il benvenuto con le leggere)
+    msg = []
+    for i in range(13):
+        msg += turno(f"Quanto fa {i} + 1?", str(i + 1), time.time() - 600 + i)
+        msg[-2]["_schede"] = [schede.per_conversazione(schede.calcolo(f"{i} + 1", str(i + 1)))]
+    hub.arch_conv.archivia(Conversazione("persona:dario"), turni(msg), "dario", "Dario", ospite=False)
+    p._chiama("Page.reload")
+    ok = aspetta(lambda: (p.valuta(f"document.querySelectorAll('{C} .scheda-piccola').length") or 0) >= 15, 15)
+    leggere = p.valuta(f"[...document.querySelectorAll('{C} .scheda-piccola')].filter(e => !e.querySelector('.piccola-anteprima') && !e.classList.contains('rimando')).length")
+    verifica("PC: le schede dei turni vecchi arrivano leggere, senza anteprima", bool(ok) and (leggere or 0) >= 1, leggere)
+    clic_c(f"{C} .scheda-piccola:not(.rimando):not(:has(.piccola-anteprima)) .piccola-apri")
+    ok = aspetta(lambda: p.valuta("!!document.getElementById('strato-intero') && !document.getElementById('strato-intero').hidden"
+                                  " && !!document.querySelector('#intero-posto .scheda')"), 5)
+    verifica("PC: un tocco sulla scheda leggera chiede il dettaglio e lo apre", bool(ok))
+    p.valuta("document.getElementById('intero-chiudi').click(); 1")
 
 
 def cruscotto_e_pulisci(p, hub):

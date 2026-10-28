@@ -222,6 +222,7 @@
   }
   const fmtOra = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" });
   const fmtData = new Intl.DateTimeFormat("it-IT", { weekday: "long", day: "numeric", month: "long" });
+  const fmtGiornoBreve = new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "long" });
 
   function leggiToken() {
     // Kiosk di Edge (InPrivate): il token arriva nell'URL dopo «#t=» e non resta nella barra
@@ -680,7 +681,13 @@
     if (c.visibilita === "personale") et.append(el("span", "badge personale", "personale"));
     if (c.fonte) et.append(el("span", "badge", c.fonte));
     // Una copia dalla conversazione (28/10, #242): com'era allora, non lo stato di adesso
-    if (c.storica && c.creata) et.append(el("span", "badge storica", "com'era alle " + fmtOra.format(new Date(c.creata * 1000))));
+    if (c.storica && c.creata) {
+      // Con il giorno quando non è di oggi (revisione della PR #271: una copia di settimane fa
+      // sembrava di oggi)
+      const d = new Date(c.creata * 1000), oggi = new Date(ora());
+      const giorno = d.toDateString() === oggi.toDateString() ? "" : fmtGiornoBreve.format(d) + " ";
+      et.append(el("span", "badge storica", "com'era " + giorno + "alle " + fmtOra.format(d)));
+    }
     if (c.formato && c.tipo !== "sviluppo") et.append(el("span", "badge", c.formato.toUpperCase()));
     if (!CAROSELLO && !opz.intera && TIPI_INTERA_PC.has(c.tipo)) {
       const b = el("button", "piccolo-bottone tasto-intero", "Schermo intero");
@@ -2030,6 +2037,10 @@
     v.attesa = false;
     if (r.status === 200 && Array.isArray(r.dati.turni)) {
       v.turni = r.dati.turni.filter(turnoValido).sort((a, b) => a.id - b.id);
+      // Un turno arrivato dal vivo mentre si aspettava la risposta (revisione della PR #271)
+      const gia = new Set(v.turni.map((x) => x.id));
+      const ultimo = v.turni.length ? v.turni[v.turni.length - 1].id : 0;
+      for (const x of S.chat) if (x.id > ultimo && !gia.has(x.id) && passaFiltro(x)) v.turni.push(x);
       v.nota = typeof r.dati.nota === "string" ? r.dati.nota : "";
     } else {
       v.turni = v.turni || [];
@@ -2077,7 +2088,7 @@
     b.append(fr);
     b.setAttribute("aria-label", (c.rimando ? "Vai a " : "Apri ") + nome + (c.titolo ? ": " + c.titolo : ""));
     box.append(b);
-    if (!c.rimando) {
+    if (!c.rimando && !c.leggera) {
       const ant = el("div", "piccola-anteprima");
       ant.setAttribute("inert", "");
       ant.setAttribute("aria-hidden", "true");
@@ -2091,18 +2102,32 @@
     }
     return box;
   }
-  function apriPiccola(rif) {
+  async function apriPiccola(rif) {
     const [tid, i] = String(rif || "").split(":").map(Number);
     const t = trovaTurno(tid);
-    const c = t && Array.isArray(t.schede) ? t.schede[i] : null;
+    let c = t && Array.isArray(t.schede) ? t.schede[i] : null;
     if (!c || typeof c !== "object") return false;
     if (c.rimando) { emetti("vai", { scheda: c }); return true; }
+    if (c.leggera) {
+      // Una scheda di un turno vecchio arriva leggera (revisione della PR #271): la copia intera
+      // si chiede al tocco, solo dai turni del proprietario di questo schermo
+      let r;
+      try { r = await postSessione("/api/conversazione", { turno: tid, indice: i }); }
+      catch (e) { r = { status: 0, dati: {} }; }
+      if (r.status !== 200 || !r.dati.scheda || typeof r.dati.scheda !== "object") {
+        S.chatVista.nota = String((r.dati && r.dati.errore) || MESSAGGI[r.status] || "Non riesco ad aprire la scheda adesso: riprova tra poco.");
+        aggiornaChat();
+        return false;
+      }
+      c = r.dati.scheda;
+    }
     // La copia del turno, con una chiave sua: la scheda viva con la stessa chiave (la lista di
     // adesso) resta un'altra cosa
     const copia = Object.assign({}, c, { chiave: "chat:" + tid + ":" + i, scade: null, storica: true });
     if (CAROSELLO) { emetti("intera", { scheda: copia }); return true; }
-    S.schedeChat = { [copia.chiave]: copia };
+    // Si torna alla conversazione a schermo intero se era lì (anche passando da un'altra copia)
     if (!S.schedeChat[S.intera]) S.interaTorna = S.intera === CHAT ? CHAT : null;
+    S.schedeChat = { [copia.chiave]: copia };
     apriInteroPC(copia.chiave);
     return true;
   }
