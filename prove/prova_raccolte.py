@@ -147,9 +147,9 @@ def tessere():
              and any("documenti" in m for m in log), json.dumps(t["documenti"]))
     verifica("tessere: un servizio che manca → «non disponibile»", t["giochi"]["stato"] == "non disponibile")
     verifica("tessere: ufficio con i documenti emessi dell'anno", t["ufficio"]["conto"] == 1
-             and t["ufficio"]["pagina"] is False, json.dumps(t["ufficio"]))
+             and t["ufficio"]["pagina"] is True, json.dumps(t["ufficio"]))
     verifica("tessere: le pagine non ancora fatte dicono «presto» (pagina False)",
-             [k for k, v in t.items() if v["pagina"]] == ["liste", "agenda", "lavori", "cassetto", "documenti", "giochi"])
+             [k for k, v in t.items() if v["pagina"]] == ["liste", "agenda", "lavori", "cassetto", "documenti", "giochi", "ufficio"])
     tb = [x["id"] for x in raccolte.tessere(hub, BIANCA, log.append)]
     verifica("tessere: niente Ufficio a chi non amministra", "ufficio" not in tb and len(tb) == 7, str(tb))
     tl = {x["id"]: x for x in raccolte.tessere(hub, LIA, log.append)}

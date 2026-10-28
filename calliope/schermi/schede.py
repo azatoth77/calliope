@@ -83,7 +83,8 @@ SEZIONE_DI_TIPO = {
     "web": "conversazione", "testo": "conversazione", "chat": "conversazione",
     "timer": "cose/agenda", "promemoria": "cose/agenda", "lista": "cose/liste",
     "lavoro": "cose/lavori", "esecuzione": "cose/lavori", "sviluppo": "cose/lavori",
-    "documento": "cose/documenti", "archivio": "cose/documenti", "foto": "cose/cassetto", "allegato": "cose/cassetto",
+    "documento": "cose/documenti", "archivio": "cose/documenti", "ufficio": "cose/ufficio",
+    "foto": "cose/cassetto", "allegato": "cose/cassetto",
     "cassetto": "cose/cassetto", "modulo": "cose", "gioco": "cose/giochi", "giochi": "cose/giochi",
     "esercizio": "cose/studio", "esercizi_riepilogo": "cose/studio",
     "casa": "casa", "conoscente": "casa", "avviso": "casa", "cruscotto": "io",
@@ -473,6 +474,24 @@ def archivio(chiave: str, titolo: str, voci=(), nota: str = "", vuoto: str = "")
                     "importo": _taglia(v.get("importo"), 40), "di": _taglia(v.get("di"), 60),
                     "chiave": _taglia(v.get("chiave"), 80), "estensione": _taglia(v.get("estensione"), 8)})
     return nuova("archivio", titolo, PERSONALE, durata_s=None, chiave=chiave, voci=out,
+                 nota=_taglia(nota, 300), vuoto=_taglia(vuoto, 200))
+
+
+def ufficio(chiave: str, titolo: str, voci=(), nota: str = "", vuoto: str = "") -> dict:
+    """Un gruppo della pagina Ufficio di Le mie cose (28/10, passo 2e, #260, schermi/raccolte.py),
+    solo per chi amministra: i documenti di una serie (fatture, preventivi, DDT) o la rubrica. Una
+    riga per voce con il nome, i dettagli (data, cliente, importo; o tipo, partita IVA, luogo,
+    recapiti), lo stato (emesso, annullato col motivo; di casa o solo sua), `annullato` e i file da
+    scaricare (`file`: chiave ed estensione, al più 3). Solo testo: nomi e recapiti dei clienti sono
+    dati non fidati. Le sorgenti di «Scarica» stanno in `_scarica_voci` e restano sul server."""
+    out = []
+    for v in list(voci or ())[:_MAX_VOCI]:
+        file = [{"chiave": _taglia(f.get("chiave"), 80), "estensione": _taglia(f.get("estensione"), 8)}
+                for f in list(v.get("file") or ())[:3] if isinstance(f, dict) and f.get("chiave")]
+        out.append({"nome": _taglia(v.get("nome"), 160),
+                    "dettagli": [_taglia(d, 120) for d in list(v.get("dettagli") or ())[:6] if d],
+                    "stato": _taglia(v.get("stato"), 200), "annullato": bool(v.get("annullato")), "file": file})
+    return nuova("ufficio", titolo, PERSONALE, durata_s=None, chiave=chiave, voci=out,
                  nota=_taglia(nota, 300), vuoto=_taglia(vuoto, 200))
 
 

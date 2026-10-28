@@ -614,9 +614,18 @@ class Ufficio:
 
         try:
             if m.serie:
+                # Il totale entra nei dati del numero (28/10, passo 2e, #260): la pagina Ufficio
+                # degli schermi lo mostra senza rifare i conti (che dipendono dall'emittente di
+                # quel giorno). I numeri emessi prima non l'hanno: la pagina non lo inventa
+                salvati = {k: v for k, v in dati.items()}
+                tot = (doc or {}).get("totali") or {}
+                if tot.get("totale") is not None:
+                    salvati["_totale"] = tot["totale"]
+                    if tot.get("ritenuta"):
+                        salvati["_da_pagare"] = tot.get("da_pagare")
                 numero, _ = self.numeri.emetti(m.serie, data, prepara, owner, owner_name,
                                                m.nome, (doc or {}).get("oggetto") or m.titolo,
-                                               conti.serializza({k: v for k, v in dati.items()}))
+                                               conti.serializza(salvati))
                 info["numero"] = numero
             else:
                 prepara(None, None)

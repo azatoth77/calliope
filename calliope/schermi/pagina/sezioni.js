@@ -352,8 +352,13 @@
     // al gruppo delle schede di quella raccolta.
     const racc = { tessere: [], timer: null, aperta: null, richiesta: 0, daTessere: false, rinfresca: null, rinfrescata: 0,
       cerca: "" };
-    // Le pagine con la ricerca (28/10, passo 2d: i Documenti, POST /api/raccolte/cerca)
-    const CON_RICERCA = new Set(["documenti"]);
+    // Le pagine con la ricerca (28/10, passo 2d: i Documenti; 2e: l'Ufficio, POST
+    // /api/raccolte/cerca; le stesse di raccolte.CON_RICERCA), con il suggerimento della casella
+    const CON_RICERCA = new Set(["documenti", "ufficio"]);
+    const SUGGERIMENTO_RICERCA = {
+      documenti: ["Cerca nei documenti", "Cerca: bolletta, garanzia, lettera…"],
+      ufficio: ["Cerca nell'ufficio", "Cerca: cliente, numero, comune…"],
+    };
     const CHIAVE_RACC = opz.chiaveRaccolte || "calliope.raccolte.viste";
     function vistePrima() {
       try {
@@ -528,6 +533,8 @@
       const si = !!racc.aperta && CON_RICERCA.has(racc.aperta);
       f.hidden = !si;
       const i = $("pagina-cerca-testo"), via = $("pagina-cerca-via");
+      const sugg = SUGGERIMENTO_RICERCA[racc.aperta];
+      if (i && sugg) { i.setAttribute("aria-label", sugg[0]); i.placeholder = sugg[1]; }
       if (i && !racc.cerca) i.value = "";
       if (via) via.hidden = !racc.cerca;
     }

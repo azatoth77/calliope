@@ -19,7 +19,8 @@ fa al primo GET (in un thread) e resta nel gettone per le richieste dopo.
 I tipi sono solo quelli fatti da qui (md, pdf, docx, xlsx) e, dal 28/10 (passo 2d, #259), il
 file **originale** di un documento dell'archivio di casa, solo dei tipi che l'archivio legge
 (PDF, immagini, docx, txt: `ORIGINALI`), letto al clic con i permessi rifatti adesso
-(`file_fn`, costruita da schermi/raccolte.py): niente eseguibili. Il Markdown va
+(`file_fn`, costruita da schermi/raccolte.py): niente eseguibili. Dal passo 2e (#260) anche i file
+generati dall'ufficio (PDF, XML della FatturaPA, Word, PowerPoint) per chi amministra. Il Markdown va
 come text/markdown con nosniff; ogni risposta ha una CSP «sandbox», così un file aperto nel
 browser invece che salvato non esegue niente.
 """
@@ -49,6 +50,10 @@ ORIGINALI = {
     "webp": "image/webp", "tif": "image/tiff", "tiff": "image/tiff", "bmp": "image/bmp",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "txt": "text/plain; charset=utf-8",
+    # I file dell'ufficio (28/10, passo 2e, #260: pagina Ufficio, solo chi amministra): l'XML
+    # della FatturaPA da caricare a mano e i modelli PowerPoint. L'XML come allegato, con nosniff e
+    # la CSP «sandbox» come tutti: aperto nel browser non esegue niente
+    "xml": "application/xml", "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 MAX_VOCI = 400           # schede scaricabili ricordate **per schermo** (le più recenti; dal 28/10,
                          # #259, anche una per riga dell'archivio di casa nella pagina Documenti;

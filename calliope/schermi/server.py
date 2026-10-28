@@ -65,7 +65,7 @@ Indirizzi:
                                  proprietario, solo da uno schermo personale, 30 al minuto
   POST /api/raccolte/cerca       «X-Calliope-Sessione», {raccolta, testo} → {schede, nota}: la
                                  ricerca in una pagina di «Le mie cose» (28/10, raccolte.cerca:
-                                 i Documenti), in sola lettura, coi permessi della pagina; solo
+                                 i Documenti; l'Ufficio solo a chi amministra), in sola lettura, coi permessi della pagina; solo
                                  da uno schermo personale, 20 al minuto
   POST /api/tocco                «X-Calliope-Sessione», {tocco, …}: un tocco che cambia qualcosa
                                  (28/10, tocchi.py: la spunta della lista, «+1 minuto» e «Ferma»
