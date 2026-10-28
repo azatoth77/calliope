@@ -1073,7 +1073,9 @@ Passo 2b del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-
     schermo del tocco e agli altri schermi personali della persona anche con le schede automatiche
     spente (`Ciclo._scheda_pubblica_del_tocco`). Prima solo lo schermo del tocco: la TV della cucina
     continuava il conto di un timer fermato e diceva «Finito» un minuto prima. Le schede di casa e
-    personali (la lista) restano solo allo schermo del tocco, come deciso nella PR #261;
+    personali (la lista) restano solo allo schermo del tocco, come deciso nella PR #261 *[storico
+    per «dove va quando lo stesso tool parte dalla voce» fino al 28/10 sera: ora `Schermi.aggiorna`,
+    sezione «Le schede del tocco»]*;
   - una corsia nuova nasce col contesto dei tool pulito (`main.contesto_corsia`): niente bersaglio,
     proposta in sospeso, «sì» già dato o gioco della corsia principale;
   - un tocco del timer senza bersaglio è rifiutato (`Tocco.bersaglio`, regola `tocco_senza_bersaglio`).
@@ -1478,6 +1480,68 @@ filtri con la conversazione vera della DGX (molti turni con schede).
     («fammi un documento con questi dati» due turni dopo, o `cosa` testo con un turno non riservato in
     mezzo) non è segnata, e la sua copia resta. È lo stesso limite della risposta del modello in quel turno,
     che si archivia in chiaro: il segno vale per il turno riservato e per quello subito dopo.
+
+## Le schede del tocco: livello, stanza, conversazione (28/10 sera, issue #266, ramo `issue-266-toccabili`)
+
+Le note della revisione della PR #265 (commento della #258), insieme all'elenco dei tool toccabili
+([sicurezza-politica](sicurezza-politica.md)):
+
+- **Livello del mittente**: la scheda pubblica del timer dopo «+1 minuto» o «Ferma» parte da `hub.invia`
+  con il mittente del tocco, che aveva sempre «familiare» scritto nel codice. Ora ha il livello con cui il
+  tool è stato chiamato: quello vero del proprietario, limitato come lo scritto da uno schermo personale
+  (`current_level`: chi amministra vale «familiare»). Oggi il valore è lo stesso; cambia se cambia il
+  tetto dello scritto.
+- **Dove va la scheda aggiornata** (`Schermi.aggiorna`, dalla revisione della PR #270), provato con
+  l'hub vero (`Schermi` con l'archivio su disco) e due stanze, cucina e salotto. Una scheda che c'è già
+  (stessa `chiave`) si aggiorna sugli schermi a cui era andata, più quelli personali di chi tocca e lo
+  schermo del tocco, anche con le schede automatiche spente. Il caso vero: il timer messo a voce in
+  cucina e fermato dal telefono, abbinato con `--stanza telefono`. Prima l'aggiornamento seguiva la
+  «stanza» telefono: la TV della cucina restava indietro e poi diceva «Finito», e la scheda arrivava
+  anche al telefono di un altro familiare abbinato con la stessa «stanza». L'hub tiene una traccia
+  leggera in memoria (`_dove`: chiave → schermi, al più 512 chiavi). Una scheda mai vista, per esempio
+  dopo un riavvio, va come a voce: senza la stanza dello schermo va alla predefinita (`schermi_stanza`),
+  senza quella a tutti, con la sua stanza va a quella. Uno schermo personale di un'altra persona la
+  riceve solo se è lo stesso schermo che l'aveva già.
+- **Il numero degli schermi si riusa** (seconda revisione della PR #270). La tabella ha `id INTEGER
+  PRIMARY KEY` senza AUTOINCREMENT, e la revoca cancella la riga: dopo una revoca il prossimo schermo
+  abbinato prende il numero più alto appena tolto. Una revoca fatta da terminale (`python -m
+  calliope.schermi --revoca`, un altro processo) lasciava nell'hub la traccia `_dove`, la cronologia
+  `_storia` e le pagine collegate col numero vecchio. Così «Ferma» dal telefono di Dario arrivava al PC
+  nuovo di Bianca, e al collegamento il telefono nuovo di Bianca riceveva la scheda personale di Dario
+  (questo secondo difetto c'era già prima della PR). Ora lo schermo si riconosce dal numero e
+  dall'istante dell'abbinamento (`creato`); lo schema della tabella non cambia, quindi gli schermi già
+  abbinati sulla DGX valgono.
+  - **Rilettura dell'elenco.** Ogni volta che `abbinati()` lo rilegge, per i numeri che non ci sono più
+    o il cui `creato` è cambiato toglie la cronologia, la traccia, le voci di «Scarica» e i posti nelle
+    partite. Le pagine collegate dello schermo di prima ricevono «revocato».
+  - **Sessioni.** Le sessioni del server tengono (numero, `creato`): la sessione di una pagina vecchia
+    non vale per lo schermo nuovo. Se l'elenco in memoria non torna, il server lo rilegge una volta
+    (`_schermo_sessione`). Anche il flusso controlla `creato` (`valido(sid, creato)`).
+  - **Limite.** Come prima, una revoca da terminale arriva al processo di Calliope al più dopo i 5 s
+    della cache dell'elenco, o subito al primo accesso dello schermo nuovo. In quei secondi lo schermo
+    revocato vale ancora per sé, ma mai come lo schermo nuovo.
+  - **Non toccati.** I contatori delle richieste per schermo del cruscotto e dello scritto (`_richieste`,
+    `invii`): un numero riusato eredita al più il conteggio di un minuto.
+- **`conv_archivio`** segue la conversazione del tocco: `Brain.contesto_conversazione` (lo stesso codice
+  dell'inizio di una risposta) dopo `Corsia.turno` e dopo `record_tocco`, e anche per il modulo dallo
+  schermo (`_modulo_dallo_schermo`). Prima restava quello della conversazione di prima fino alla risposta
+  dopo.
+- **Le schede della pagina Agenda sul telefono piccolo**: `una_per_una` misurava le schede delle sezioni.
+  Ora porta in vista una per una, a 375×812 e 320×568, anche quelle che il server dà alla pagina (il
+  promemoria di domani compreso). Per ognuna controlla che stia dentro la sezione, che non ci sia testo
+  di lato né tagliato in basso, e il contrasto AA.
+- Dalla revisione della PR #270, anche:
+  - «+1 minuto» su un timer già finito ma non ancora suonato non lo allunga («Questo timer è già finito:
+    suona fra un attimo, non lo allungo.»);
+  - la spunta di «tutto.» (o «Tutti!») vale come «tutto» per `lista_togli`, quindi è 422 e non svuota
+    la lista;
+  - `TOCCHI` e `TOCCABILI` non si cambiano a runtime (`MappingProxyType`).
+
+Prove: `prova_agenda_pagina` (l'hub vero con due stanze; il timer della cucina fermato dal telefono; le
+schede mai viste; la traccia col tetto e gli schermi revocati; il livello del mittente; `conv_archivio`
+per tocco e modulo; il timer finito; `TOCCHI` immutabile; il numero riusato dopo una revoca da un secondo `ArchivioSchermi`: «Ferma», il collegamento, la pagina vecchia e la sessione del server); `prova_raccolte` («tutto.»);
+`prova_telefono_schermo` (la pagina Agenda a due dimensioni, col contrasto e il testo tagliato per
+scheda).
 
 ## La miniatura della foto accanto alla frase nella Conversazione (29/10, issue #272, ramo `issue-272-miniatura-foto`)
 

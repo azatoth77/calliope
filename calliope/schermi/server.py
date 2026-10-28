@@ -203,7 +203,28 @@ LETTURE_AL_MINUTO = 60          # /api/raccolte per schermo (era 30 fino alla re
 
 def crea_app(hub: Schermi) -> Starlette:
     """L'app Starlette per questo hub. Le sessioni SSE vivono qui (in memoria)."""
-    sessioni: dict[str, int] = {}
+    sessioni: dict[str, tuple] = {}
+
+    def _schermo_sessione(sess):
+        """(numero, schermo) della sessione, o (numero, None). La sessione vale solo per lo schermo
+        con cui è nata: il numero si riusa dopo una revoca, anche da terminale (#266, seconda
+        revisione della PR #270), e una pagina vecchia non diventa lo schermo nuovo. Se l'elenco
+        in memoria non torna, lo si rilegge una volta; una sessione di uno schermo che non c'è
+        più si toglie."""
+        with lock:
+            v = sessioni.get(sess) if sess else None
+        if not v:
+            return None, None
+        sid, creato = v
+        for rileggi in (False, True):
+            if rileggi:
+                hub._rinfresca()
+            s = next((s for s in hub.abbinati() if s["id"] == sid), None)
+            if s is not None and s.get("creato") == creato:
+                return sid, s
+        with lock:
+            sessioni.pop(sess, None)
+        return sid, None
     lock = threading.Lock()
 
     def file(nome: str, tipo: str):
@@ -240,7 +261,7 @@ def crea_app(hub: Schermi) -> Starlette:
             # è aperta; le sessioni orfane si tolgono oltre un tetto
             if len(sessioni) > 200:
                 sessioni.clear()
-            sessioni[sess] = s["id"]
+            sessioni[sess] = (s["id"], s.get("creato"))   # l'identità, non solo il numero (#266)
         hub.archivio.segna_visto(s["id"])
         personale = bool(s.get("proprietario"))
         # La casella «scrivi invece di parlare» (03/10): sugli schermi personali, e su quelli
@@ -272,9 +293,7 @@ def crea_app(hub: Schermi) -> Starlette:
             return PlainTextResponse("in arresto", status_code=503,
                                      headers={"Cache-Control": "no-store", **_SICUREZZA})
         sess = request.query_params.get("sessione", "")
-        with lock:
-            sid = sessioni.get(sess)
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             # 401: EventSource si ferma e la pagina rifà l'accesso (o torna ad abbinarsi)
             return PlainTextResponse("sessione non valida", status_code=401,
@@ -323,7 +342,7 @@ def crea_app(hub: Schermi) -> Starlette:
                     try:
                         tipo, dati = await asyncio.wait_for(conn.coda.get(), PING_S)
                     except asyncio.TimeoutError:
-                        if not hub.valido(schermo["id"]):     # revocato da terminale
+                        if not hub.valido(schermo["id"], schermo.get("creato")):  # revocato o riusato
                             tipo, dati = "revocato", "{}"
                         else:
                             # Un evento vero e non un commento: la pagina lo vede e capisce
@@ -335,7 +354,7 @@ def crea_app(hub: Schermi) -> Starlette:
                     yield f"event: {tipo}\ndata: {dati}\n\n"
                     if tipo == "revocato":
                         with lock:
-                            for k in [k for k, v in sessioni.items() if v == schermo["id"]]:
+                            for k in [k for k, v in sessioni.items() if v[0] == schermo["id"]]:
                                 sessioni.pop(k, None)
                         return
             finally:
@@ -366,9 +385,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return None, _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return None, _json({"errore": "sessione non valida"}, 401)
         n = max(1, int(getattr(hub.cfg, "schermi_scritto_al_minuto", 12)))
@@ -588,9 +605,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return _json({"errore": "sessione non valida"}, 401)
         if not cr.amministra(schermo):
@@ -616,9 +631,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return _json({"errore": "sessione non valida"}, 401)
         if not cr.amministra(schermo):
@@ -648,9 +661,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return _json({"errore": "sessione non valida"}, 401)
         dati, errore = await corpo_json(request, 2048)
@@ -705,9 +716,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return _json({"errore": "sessione non valida"}, 401)
         persona = schermo.get("proprietario")
@@ -799,9 +808,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return _json({"errore": "sessione non valida"}, 401)
         persona = str(schermo.get("proprietario") or "")
@@ -840,9 +847,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return _json({"errore": "sessione non valida"}, 401)
         persona = schermo.get("proprietario")
@@ -891,9 +896,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return _json({"errore": "sessione non valida"}, 401)
         massimo = int(getattr(hub.cfg, "giochi_messaggio_max", 4096) or 4096) + 1024
@@ -914,9 +917,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return _json({"errore": "sessione non valida"}, 401)
         ora = time.monotonic()
@@ -945,9 +946,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return _json({"errore": "sessione non valida"}, 401)
         ora = time.monotonic()
@@ -974,9 +973,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return None, _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return None, _json({"errore": "sessione non valida"}, 401)
         if not schermo.get("proprietario"):
@@ -1162,9 +1159,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return _json({"errore": "solo in HTTPS"}, 403)
         sess = request.headers.get("x-calliope-sessione", "")
-        with lock:
-            sid = sessioni.get(sess) if sess else None
-        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        sid, schermo = _schermo_sessione(sess)
         if schermo is None:
             return _json({"errore": "sessione non valida"}, 401)
         ora = time.monotonic()

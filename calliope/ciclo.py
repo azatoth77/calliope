@@ -1726,6 +1726,8 @@ class Ciclo:
         self.voce("pensa")
         # Il modulo è della conversazione della persona (06/10, corsie.py)
         self.corsia.turno(brain, None, "schermo", True, persona_id=scritto.get("persona"))
+        if hasattr(brain, "contesto_conversazione"):
+            brain.contesto_conversazione()    # conv_archivio della sua conversazione (#266)
         esito = completa_modulo(self.s.schermi, scritto, brain, getattr(brain, "turn_number", 0))
         self.rec = {"inizio": datetime.datetime.now().isoformat(timespec="milliseconds"),
                     **esito["rec"]}
@@ -1832,6 +1834,10 @@ class Ciclo:
             return _FINE
         # Il tocco è della conversazione della persona (come il modulo, corsie.py)
         self.corsia.turno(brain, prof.name, "schermo", True, persona_id=prof.id)
+        # La conversazione della persona anche nel contesto dei tool (#266): resta, come
+        # `brain.conv`, fino al turno dopo
+        if hasattr(brain, "contesto_conversazione"):
+            brain.contesto_conversazione()
         segni = {k: getattr(sc, k, None) for k in self._SEGNI_TOCCO if hasattr(sc, k)}
         prima_ctx = {k: getattr(ctx, k, None) for k in self._CTX_TOCCO}
         regole: list = []
@@ -1865,6 +1871,8 @@ class Ciclo:
                 conferma = str(res.get("conferma") or res.get("risposta_finale")
                                or "Fatto.").strip()
                 brain.record_tocco(descr, tool, args, grezzo, conferma)
+                if hasattr(brain, "contesto_conversazione"):
+                    brain.contesto_conversazione()    # scaduta, si è chiusa: la nuova
                 # La stessa conferma negli eventi, senza voce: storia e proiezione uguali
                 self.uscita.muta(conferma, "tocco_esito", dopo_chiamate=1)
         finally:
@@ -1887,13 +1895,13 @@ class Ciclo:
         if ok:
             t.text = descr
             self._meta_turno = {"t": round(inizio.timestamp(), 3), "canale": "tocco"}
-            self._schede_del_tocco(res, scritto)
+            self._schede_del_tocco(res, scritto, livello)
         frase = str(res.get("risposta_finale") or res.get("conferma") or res.get("errore")
                     or "").strip()
         self._esito_tocco(scritto, ok, frase if not ok else "")
         return _FINE
 
-    def _schede_del_tocco(self, res: dict, scritto: dict):
+    def _schede_del_tocco(self, res: dict, scritto: dict, livello: str | None = None):
         """Le schede del risultato (la lista aggiornata) allo schermo del tocco, e solo a lui
         (revisione della PR #261): la spunta aspetta lì l'aggiornamento, anche con le schede
         automatiche spente; chi spunta al supermercato non fa comparire la spesa sulla TV."""
@@ -1904,14 +1912,15 @@ class Ciclo:
             for c in (card if isinstance(card, list) else [card]):
                 try:
                     if c.get("visibilita") == schede_foto.PUBBLICA:
-                        self._scheda_pubblica_del_tocco(hub, sid, c, scritto)
+                        self._scheda_pubblica_del_tocco(hub, sid, c, scritto, livello)
                     else:
                         hub.invia_a(sid, c)
                 except Exception as e:  # noqa: BLE001 — lo schermo non ferma il ciclo
                     print(f"   [SCHERMI] scheda del tocco non inviata: {type(e).__name__}",
                           flush=True)
 
-    def _scheda_pubblica_del_tocco(self, hub, sid, card: dict, scritto: dict):
+    def _scheda_pubblica_del_tocco(self, hub, sid, card: dict, scritto: dict,
+                                   livello: str | None = None):
         """Una scheda pubblica del risultato (il timer di casa dopo «+1 minuto» o «Ferma»,
         revisione della PR #265): è già sulla TV della cucina e sugli altri schermi, che
         resterebbero indietro (il conto di un timer fermato, «Finito» un minuto prima). Va dove va
@@ -1919,13 +1928,25 @@ class Ciclo:
         pubblica, dalla stanza dello schermo del tocco), e in più allo schermo del tocco e agli
         altri schermi personali della persona, anche con le schede automatiche spente. Le schede
         di casa e personali (la lista) restano solo allo schermo del tocco (revisione della PR
-        #261: la spesa spuntata al supermercato non va sulla TV)."""
+        #261: la spesa spuntata al supermercato non va sulla TV).
+
+        Il mittente ha il livello con cui il tool è stato chiamato (#266): quello vero del
+        proprietario, limitato come lo scritto da uno schermo personale (`current_level`: chi
+        amministra vale «familiare»). Con l'hub vero (`Schermi.aggiorna`, #266) l'aggiornamento va
+        agli schermi che hanno già la scheda con la stessa chiave, più quelli di chi tocca; una
+        scheda mai vista va come a voce (senza la stanza dello schermo vale la predefinita, senza
+        quella tutti), mai agli schermi personali di altre persone."""
         from .schermi import Mittente
         persona = scritto.get("persona")
         prof = self.s.registry.by_id(persona) if persona else None
-        mitt = Mittente(persona=persona, nome=getattr(prof, "name", None),
-                        livello="familiare" if prof else "ospite", certo=bool(prof),
-                        stanza=scritto.get("stanza"), schermo=sid)
+        mitt = Mittente(persona=persona if prof else None, nome=getattr(prof, "name", None),
+                        livello=(livello or "ospite") if prof else "ospite", certo=bool(prof),
+                        stanza=scritto.get("stanza") or None, schermo=sid)
+        if callable(getattr(hub, "aggiorna", None)):
+            # Dove la scheda c'è già (#266, revisione della PR #270: il timer messo in cucina e
+            # fermato dal telefono, la cui «stanza» è «telefono»), più gli schermi di chi tocca
+            hub.aggiorna(card, mitt)
+            return
         r = hub.invia(card, mitt) or {}
         fatti = set(r.get("destinatari") or ())
         abbinati = hub.abbinati() if callable(getattr(hub, "abbinati", None)) else []

@@ -39,7 +39,7 @@ import asyncio
 import json
 import threading
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass
 
 from . import conversazione as conv_mod
@@ -213,6 +213,13 @@ class Schermi:
         self._lock = threading.RLock()
         self._conn: dict[int, list[_Connessione]] = {}
         self._storia: dict[int, deque] = {}
+        # Dove è andata ogni scheda con una `chiave` (#266, revisione della PR #270): chiave →
+        # schermi, solo in memoria e con un tetto (`_DOVE_MAX`, le più vecchie escono). Serve a
+        # mandare l'aggiornamento di un tocco dove la scheda c'è (`aggiorna`)
+        self._dove: "OrderedDict[str, set[int]]" = OrderedDict()
+        # Numero → istante dell'abbinamento, dall'ultimo elenco letto (#266): un numero riusato
+        # da un altro schermo si riconosce (`_identita_cambiate`)
+        self._identita: dict[int, float] = {}
         self._ultime: dict[str, dict] = {}
         self._cache: tuple[float, int, list[dict]] = (0.0, -1, [])
         self.url = ""                       # lo imposta il server quando parte
@@ -355,22 +362,76 @@ class Schermi:
         ver = self.archivio.versione
         rows = self.archivio.elenco()
         self._cache = (time.monotonic(), ver, rows)
+        via = self._identita_cambiate(rows)
         sc = getattr(self, "scaricamenti", None)
         if sc is not None:
             # Gli schermi revocati (anche da terminale) perdono le voci di «Scarica» (seconda
-            # revisione della PR #268, #260)
+            # revisione della PR #268, #260); anche quelli col numero riusato (#266)
             sc.tieni_solo(s["id"] for s in rows)
+            if via:
+                sc.dimentica(via)
+        if via:
+            self._schermi_via(via)
         return rows
 
     def _rinfresca(self):
         self._cache = (0.0, -1, [])
 
+    @staticmethod
+    def identita(schermo: dict | None):
+        """Chi è uno schermo: il numero da solo non basta, perché la tabella lo riusa dopo una
+        revoca (`INTEGER PRIMARY KEY` senza AUTOINCREMENT). Con l'istante dell'abbinamento sì
+        (#266, seconda revisione della PR #270)."""
+        return (schermo.get("id"), schermo.get("creato")) if schermo else None
+
+    def _identita_cambiate(self, rows: list[dict]) -> set[int]:
+        """I numeri degli schermi che non ci sono più o che sono di un altro schermo da quando
+        l'hub ha letto l'elenco l'ultima volta: anche per le revoche e gli abbinamenti fatti da
+        terminale, in un altro processo."""
+        ora = {s["id"]: s.get("creato") for s in rows}
+        with self._lock:
+            prima, self._identita = self._identita, ora
+            via = {sid for sid, creato in prima.items() if sid not in ora or ora[sid] != creato}
+            # Ciò che c'è in memoria per un numero che non è (più) nell'elenco
+            via |= {sid for sid in set(self._storia) | set(self._conn) if sid not in ora}
+        return via
+
+    def _schermi_via(self, via: set[int]):
+        """Uno schermo revocato o col numero riusato lascia tutto ciò che l'hub tiene per quel
+        numero (#266, seconda revisione della PR #270: la scheda personale di Dario andava al
+        telefono nuovo di Bianca al collegamento, «Ferma» al suo PC nuovo): la cronologia, la
+        traccia delle schede, le pagine ancora collegate dello schermo di prima (ricevono
+        «revocato») e i posti nelle partite. Il nuovo schermo con lo stesso numero riparte vuoto."""
+        with self._lock:
+            for sid in via:
+                self._storia.pop(sid, None)
+                vive = []
+                for c in self._conn.get(sid, []):
+                    if self.identita(c.schermo) == (sid, self._identita.get(sid, object())):
+                        vive.append(c)                  # già del nuovo schermo
+                    else:
+                        c.consegna(("revocato", "{}"))
+                if vive:
+                    self._conn[sid] = vive
+                else:
+                    self._conn.pop(sid, None)
+            self._dimentica_dove(via)
+        giochi = getattr(self, "giochi", None)
+        if giochi is not None and callable(getattr(giochi, "schermi_via", None)):
+            try:
+                giochi.schermi_via(via)
+            except Exception as e:  # noqa: BLE001 — una partita non ferma gli schermi
+                self.log(f"[SCHERMI] posti dei giochi non tolti: {type(e).__name__}: {e}")
+
     def collegati(self) -> list[dict]:
         with self._lock:
             return [c[0].schermo for c in self._conn.values() if c]
 
-    def valido(self, sid: int) -> bool:
-        return any(s["id"] == sid for s in self.abbinati())
+    def valido(self, sid: int, creato=None) -> bool:
+        """Lo schermo c'è ancora; con `creato`, è proprio quello (non un altro col numero
+        riusato, #266)."""
+        return any(s["id"] == sid and (creato is None or s.get("creato") == creato)
+                   for s in self.abbinati())
 
     # ── connessioni (dal server) ──
     def collega(self, schermo: dict, loop, locale: bool = False, ripresa=None
@@ -467,6 +528,7 @@ class Schermi:
         sids = [s["id"] for s in self.abbinati() if s.get("proprietario") == persona]
         with self._lock:
             self._ultime.pop(persona, None)
+            self._dimentica_dove(set(sids))
             for sid in sids:
                 n = max(n, len(self._storia.pop(sid, ()) or ()))
                 for c in self._conn.get(sid, []):
@@ -832,6 +894,10 @@ class Schermi:
         h = list(self._storia.get(sid, ()))
         k = scheda.get("chiave")
         if k:
+            self._dove.setdefault(k, set()).add(sid)
+            self._dove.move_to_end(k)
+            while len(self._dove) > self._DOVE_MAX:
+                self._dove.popitem(last=False)
             i = next((j for j, x in enumerate(h) if x.get("chiave") == k), None)
             if i is not None and scheda.get("sposta") is False:
                 h[i] = scheda
@@ -844,6 +910,41 @@ class Schermi:
     def storia(self, sid: int) -> list[dict]:
         with self._lock:
             return list(self._storia.get(sid, ()))
+
+    _DOVE_MAX = 512
+
+    def dove(self, chiave) -> set[int]:
+        """Gli schermi a cui è andata la scheda con questa chiave (da quando Calliope è accesa)."""
+        with self._lock:
+            return set(self._dove.get(chiave, ())) if chiave else set()
+
+    def _dimentica_dove(self, sids):
+        for v in self._dove.values():
+            v.difference_update(sids)
+
+    def aggiorna(self, scheda: dict, mittente: Mittente) -> dict:
+        """L'aggiornamento di una scheda dopo un tocco (#266, revisione della PR #270: il timer
+        messo a voce in cucina e fermato dal telefono restava indietro sulla TV, e arrivava al
+        telefono di un altro familiare con la stessa «stanza»). Va agli schermi a cui la scheda con
+        la stessa `chiave` era già andata, più quelli personali di chi tocca e lo schermo del tocco,
+        anche con le schede automatiche spente. Una scheda mai vista qui (Calliope riaccesa) va dove
+        andrebbe a voce, senza gli schermi personali di altre persone. {"schermi": [nomi]}."""
+        tutti = self.abbinati()
+        per_id = {s["id"]: s for s in tutti}
+        gia = [i for i in self.dove(scheda.get("chiave")) if i in per_id]
+        if not gia and self.automatiche:
+            stanza = mittente.stanza or self.stanza_predefinita or None
+            d, _ = _destinatari(scheda.get("visibilita", PERSONALE), mittente, tutti, stanza)
+            gia = [s["id"] for s in d
+                   if not s.get("proprietario") or s.get("proprietario") == mittente.persona]
+        mie = [s["id"] for s in tutti
+               if mittente.persona and s.get("proprietario") == mittente.persona]
+        dest = list(dict.fromkeys(([mittente.schermo] if mittente.schermo in per_id else [])
+                                  + mie + gia))
+        self.ricorda(scheda, mittente)
+        for sid in dest:
+            self.invia_a(sid, scheda)
+        return {"schermi": [per_id[i]["nome"] for i in dest]}
 
     # ── stato della voce ──
     _DORME = {"stato": "dorme", "fino": None}
@@ -1080,6 +1181,7 @@ class Schermi:
                 for c in self._conn.get(sid, []):
                     c.consegna(("revocato", "{}"))
                 self._storia.pop(sid, None)
+            self._dimentica_dove(set(sids))
         sc = getattr(self, "scaricamenti", None)
         if sc is not None:
             sc.dimentica(sids)              # «Scarica» non vale più da qui (#260)
