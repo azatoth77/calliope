@@ -20,7 +20,9 @@ docs/aree/schermi-telefono.md).
    nella storia del modello, la scheda aggiornata allo schermo del tocco, nessuna frase detta;
    i segni di chi parlava prima tornano com'erano; chi amministra con un tool che vuole la voce,
    un familiare con un tool di chi amministra e un minore con un tool dell'ufficio rifiutati, con
-   l'evento «tocco» d'errore e niente nella storia; un minore spunta la lista; con il registro
+   l'evento «tocco» d'errore e niente nella storia (dal 28/10 col vincolo dei tocchi spento: la
+   seconda linea dopo `tocchi.non_ammesso`, provato in prova_agenda_pagina); un minore spunta la
+   lista; con il registro
    degli eventi in ombra la descrizione è un `detto_persona` col canale «tocco».
 
 Nomi e dati di fantasia, niente rete né modelli.
@@ -147,7 +149,7 @@ def tessere():
     verifica("tessere: ufficio con i documenti emessi dell'anno", t["ufficio"]["conto"] == 1
              and t["ufficio"]["pagina"] is False, json.dumps(t["ufficio"]))
     verifica("tessere: le pagine non ancora fatte dicono «presto» (pagina False)",
-             [k for k, v in t.items() if v["pagina"]] == ["liste"])
+             [k for k, v in t.items() if v["pagina"]] == ["liste", "agenda"])
     tb = [x["id"] for x in raccolte.tessere(hub, BIANCA, log.append)]
     verifica("tessere: niente Ufficio a chi non amministra", "ufficio" not in tb and len(tb) == 7, str(tb))
     tl = {x["id"]: x for x in raccolte.tessere(hub, LIA, log.append)}
@@ -163,7 +165,7 @@ def tessere():
              [c.get("tipo") for c in sc] == ["lista", "lista"]
              and {c.get("chiave") for c in sc} == {"lista:spesa", "lista:cose da fare"}
              and any(v["testo"] == "latte" for c in sc for v in c["voci"]), json.dumps(p)[:300])
-    p = raccolte.pagina(hub, DARIO, "agenda")
+    p = raccolte.pagina(hub, DARIO, "lavori")
     verifica("pagina: una raccolta senza pagina dice «presto»", p.get("schede") == [] and "presto" in p.get("nota", ""))
     p = raccolte.pagina(hub, BIANCA, "ufficio")
     verifica("pagina: l'Ufficio a chi non amministra 404", p.get("_stato") == 404)
@@ -475,6 +477,18 @@ def ciclo():
 
     base = {"tipo": "tocco", "descrizione": "(prova)", "tocco": "spunta_lista", "schermo": "telefono",
             "schermo_id": 7, "arrivato": time.time()}
+    # La seconda linea: con il vincolo dei tocchi spento (#262, provato in prova_agenda_pagina),
+    # i permessi di ToolRegistry.call fermano lo stesso i tool sbagliati
+    vincolo = tocchi.non_ammesso
+    tocchi.non_ammesso = lambda scritto, spec=None: None
+    try:
+        _rifiuti_del_registro(rifiuto, base)
+    finally:
+        tocchi.non_ammesso = vincolo
+    _dopo_i_rifiuti(b, c, sc, liste, turni, voce, hub, rifiuto)
+
+
+def _rifiuti_del_registro(rifiuto, base):
     rifiuto("ciclo: chi amministra, con un tool che vuole la sua voce: rifiutato perché serve la voce",
             {**base, "persona": "dario", "tool": "registra_utente", "argomenti": {"nome": "Ugo"}},
             lambda r, ev: r.get("livello") == "familiare" and r["tool"][0].get("ok") is False
@@ -486,6 +500,11 @@ def ciclo():
             {**base, "persona": "lia", "tool": "anagrafica_cerca", "argomenti": {}},
             lambda r, ev: (r.get("voce") or {}).get("nome") == "Lia"
             and "minore_ufficio" in (r.get("regole") or []) and r["tool"][0].get("ok") is False)
+
+
+def _dopo_i_rifiuti(b, c, sc, liste, turni, voce, hub, rifiuto):
+    base = {"tipo": "tocco", "descrizione": "(prova)", "tocco": "spunta_lista", "schermo": "telefono",
+            "schermo_id": 7, "arrivato": time.time()}
     # Fuori dagli orari decisi dai tutori: il tocco di un minore non cambia niente
     import calliope.ciclo as ciclo_mod
     vero = ciclo_mod.minori.fuori_orario

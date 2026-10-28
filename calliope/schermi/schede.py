@@ -6,8 +6,9 @@ pagina (pagina/schermo.js) la disegna con `textContent`, mai come HTML. Tipi:
 
   lista       voci della lista, con quelle appena aggiunte in evidenza           casa
   timer       timer della casa con la fine (epoch): il conto alla rovescia è
-              nella pagina                                                        pubblica
-  promemoria  promemoria e appuntamenti di una persona                            personale
+              nella pagina; chi l'ha messo (28/10)                                pubblica
+  promemoria  promemoria e appuntamenti di una persona, tutti o di un giorno
+              della pagina Agenda (28/10: oggi, domani, in settimana)             personale
   biblioteca  voce, fonte, passaggio usato e un testo più lungo da leggere        pubblica
   documento   anteprima del documento appena creato o cambiato (dal suo JSON), o il
               testo in Markdown di un lavoro dell'agente (07/10: `markdown`, letto dalla
@@ -154,6 +155,9 @@ def timer(item: dict, stato: str = "attivo", quando: float | None = None) -> dic
     now = time.time()
     etichetta = _taglia(item["label"], 60)
     voce = {"etichetta": etichetta, "fine": item["due"]}
+    if item.get("owner_name"):
+        # Chi l'ha messo (28/10, #257): la pagina lo scrive solo sugli schermi personali
+        voce["chi"] = _taglia(item["owner_name"], 40)
     if stato != "attivo":
         ora = datetime.datetime.fromtimestamp(quando or now).strftime("%H:%M")
         voce.update(stato=stato, nota=f"{stato} alle {ora}")
@@ -190,6 +194,33 @@ def promemoria(agenda, persona: str, nome: str | None = None) -> dict:
                          "ts": it["due"], "tipo": it["kind"]})
     titolo = f"Agenda di {nome}" if nome else "Agenda"
     return nuova("promemoria", titolo, PERSONALE, chiave=f"agenda:{persona}", voci=voci[:30])
+
+
+_GIORNI = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")
+# La vista per giorno della pagina Agenda (28/10, #257, agenda.per_giorno): titolo e frase del
+# vuoto di ogni giorno
+GIORNI_AGENDA = (("oggi", "Oggi", "Niente oggi."), ("domani", "Domani", "Niente domani."),
+                 ("settimana", "In settimana", "Niente nei prossimi giorni."))
+
+
+def giorno(persona: str, quale: str, voci: list[dict], dopo: int = 0) -> dict:
+    """Promemoria e appuntamenti di una persona per un giorno della vista (`GIORNI_AGENDA`):
+    una scheda `promemoria` (lo stesso disegno), personale, con la sua identità
+    `agenda:<persona>:<giorno>` (non sostituisce quella di tutta l'agenda). Oggi e domani con
+    la sola ora; in settimana con il giorno («gio 30/10 alle 9:00»). `dopo`: quante voci oltre
+    la settimana (solo nell'ultima)."""
+    titolo, vuoto = next((t, v) for k, t, v in GIORNI_AGENDA if k == quale)
+    righe = []
+    for it in voci[:30]:
+        d = datetime.datetime.fromtimestamp(it["due"])
+        ora = f"alle {d.strftime('%H:%M')}"
+        righe.append({"testo": _taglia(it["label"], 80), "ts": it["due"], "tipo": it["kind"],
+                      "quando": ora if quale != "settimana"
+                      else f"{_GIORNI[d.weekday()]} {d.strftime('%d/%m')} {ora}"})
+    altro = {"altre": dopo} if dopo else {}
+    return nuova("promemoria", titolo, PERSONALE, durata_s=None,
+                 chiave=f"agenda:{persona}:{quale}", voci=righe, vuoto=vuoto,
+                 giorno=quale, **altro)
 
 
 # ─────────────────────────── biblioteca ───────────────────────────

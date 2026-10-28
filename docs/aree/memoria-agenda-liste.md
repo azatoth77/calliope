@@ -301,3 +301,24 @@ risposta dice gli anni e chiede di salvare la data due volte (una per tool). Pro
 `prove/prova_eta_utenti.py`, che fallisce col codice di main. Col 26B, sezione delle date in 5
 giri con la correzione: **40/40**, e le due volte che ha scelto `ricorda` ha detto gli anni.
 Prima, sui 3 giri: 23/24.
+
+## La vista per giorno dell'agenda (28/10, issue #257, ramo `issue-257-agenda`)
+
+Per la pagina Agenda del telefono a sezioni ([schermi-telefono](schermi-telefono.md)) l'agenda ha una vista
+per giorno lato server: `agenda.per_giorno(voci, ora)`, pura, e `Agenda.giorni(owner)`. Dalle voci di
+`items(owner)` (tutti i timer, che sono della casa, e i promemoria e gli appuntamenti della persona) dà
+`{timer, oggi, domani, settimana, dopo}`: i timer a parte (hanno il loro conto alla rovescia), promemoria e
+appuntamenti per il giorno in cui scadono, «in settimana» da dopodomani al sesto giorno da oggi, e `dopo`
+quanti oltre. Fuori gli avvisi interni e le voci già scadute che il thread non ha ancora tolto. Il giorno
+si decide sulla data locale della scadenza, non contando 86400 secondi: una voce a mezzanotte in punto è
+di domani, e il cambio dell'ora legale non sposta niente. Chi ha messo un timer (`owner_name`) va nella
+scheda; per promemoria e appuntamenti è sempre la persona. La tessera Agenda conta con la stessa vista
+(timer e cose di oggi).
+
+I tasti del timer della pagina («+1 minuto» e «Ferma») passano da `timer_imposta` e `agenda_annulla` con il
+bersaglio scelto dal codice (`ToolContext.tocco_bersaglio`): con due timer senza nome `Agenda.find`
+ripiegava sull'ultimo messo. Con il bersaglio il tool cambia quel timer, e se nel frattempo è suonato
+risponde «non c'è più» invece di avviarne uno nuovo.
+
+Prova: `prove/prova_agenda_pagina.py` (i bordi di mezzanotte, il sesto e il settimo giorno, l'ora legale;
+il timer toccato fra due senza nome).

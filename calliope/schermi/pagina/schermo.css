@@ -1105,6 +1105,17 @@ button.spunta[aria-checked="true"] .testo-voce { text-decoration: line-through; 
 .esito-tocco { margin: 0.4rem 0 0; color: var(--tenue); font-size: 1rem; }
 .esito-tocco.errore { color: var(--allarme); }
 .esito-tocco:empty { margin: 0; }
+/* I tasti del timer (28/10, #257): «+1 minuto» e «Ferma», almeno 44 px; chi l'ha messo */
+.timer .chi { color: var(--tenue); font-size: 1rem; }
+.tasti-timer { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.6rem; }
+button.tasto-timer {
+  min-height: 2.75rem; min-width: 2.75rem; box-sizing: border-box; padding: 0.3rem 1.1rem;
+  font: inherit; font-size: 1.05rem; color: var(--testo); background: var(--pannello);
+  border: 1px solid var(--bordo); border-radius: 0.8rem; cursor: pointer;
+}
+button.tasto-timer:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+button.tasto-timer[aria-busy="true"] { cursor: progress; border-style: dashed; }
+button.tasto-timer.in-attesa { border-color: var(--accento); }
 /* Sul PC personale più tessere per riga, e la lista in una colonna sola come sul telefono */
 .pc-centro .tessere { grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr)); gap: 0.8rem; }
 .pc-centro ul.voci.spunte { columns: 1; font-size: 1.3rem; }

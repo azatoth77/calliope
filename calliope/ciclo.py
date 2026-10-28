@@ -57,6 +57,7 @@ from .tools.dialogo import FRASI_CORREZIONE
 from .config import Config, DEEPEN_WORDS, SEARCH_PROMISE
 from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, FOTO_PERSA, Immagine
 from .schermi import schede as schede_foto
+from .schermi import tocchi
 from .schermi.moduli import annuncio_lavoro, completa as completa_modulo, oscura, oscura_tutto
 from .speaker_id import estimate_gender
 from .suoni import FINE, INIZIO
@@ -1751,9 +1752,13 @@ class Ciclo:
                        "breve_impronta_ok": False, "compagnia": False,
                        "compagnia_sconosciute": False, "senza_nome": False}
     # Il contesto dei tool che Brain imposta a ogni chiamata: per il tocco senza la politica del
-    # turno (ferma solo i tool vietati) e con la descrizione al posto della frase
+    # turno (ferma solo i tool vietati) e con la descrizione al posto della frase. Anche ciò che
+    # resta del turno a voce di prima (#262): la proposta in sospeso, il «sì» già dato e il gioco
+    # che aspetta un comando non valgono per il tocco; il bersaglio (il timer toccato, #257) vale
+    # solo per lui. Si rimettono com'erano dopo
     _CTX_TOCCO = ("politica", "user_text", "regole", "politica_esito", "strumenti",
-                  "errore_registro")
+                  "errore_registro", "tool_in_sospeso", "politica_accettata", "gioco_turno",
+                  "tocco_bersaglio")
 
     def _tocco_dallo_schermo(self, t):
         """Un tocco che cambia qualcosa dallo schermo personale (28/10, schermi/tocchi.py: la
@@ -1805,6 +1810,26 @@ class Ciclo:
                         "regole": ["minore_fuori_orario"]}
             self._esito_tocco(scritto, False, minori.frase_fuori_orario(prof, orario))
             return _FINE
+        # Il vincolo dei tocchi (#262, schermi/tocchi.py): solo il tool dichiarato per quel
+        # tocco, di una classe nota e reversibile; di nuovo qui, con lo ToolSpec del registro
+        spec = s.tools.get(tool) if hasattr(s.tools, "get") else None
+        motivo = tocchi.non_ammesso(scritto, spec)
+        if motivo:
+            print(f"   [SCHERMI] tocco non ammesso: {motivo}", flush=True)
+            self.rec = {**base, "esito": "rifiutato", "voce": voce, "testo": descr,
+                        "motivo": f"non ammesso: {motivo}"[:200], "tocco": scritto.get("tocco"),
+                        "regole": ["tocco_non_ammesso"]}
+            self._esito_tocco(scritto, False, "Questo non si fa toccando lo schermo: "
+                                              "chiedimelo a voce.")
+            return _FINE
+        if tocchi.senza_bersaglio(scritto):
+            # Un tocco del timer senza il timer toccato (revisione della PR #265): il tool
+            # sceglierebbe dal testo, senza la politica del turno
+            self.rec = {**base, "esito": "rifiutato", "voce": voce, "testo": descr,
+                        "motivo": "senza bersaglio", "tocco": scritto.get("tocco"),
+                        "regole": ["tocco_senza_bersaglio"]}
+            self._esito_tocco(scritto, False, "Non so quale timer: riprova dalla scheda.")
+            return _FINE
         # Il tocco è della conversazione della persona (come il modulo, corsie.py)
         self.corsia.turno(brain, prof.name, "schermo", True, persona_id=prof.id)
         segni = {k: getattr(sc, k, None) for k in self._SEGNI_TOCCO if hasattr(sc, k)}
@@ -1816,9 +1841,13 @@ class Ciclo:
                 setattr(sc, k, self._AZZERATI_TOCCO.get(k))
             sc.current_speaker, sc.identified_by = prof.name, "schermo"
             livello = sc.current_level
+            bersaglio = scritto.get("bersaglio")
             for k, v in (("politica", None), ("user_text", descr), ("regole", regole),
                          ("politica_esito", None), ("strumenti", s.tools),
-                         ("errore_registro", False)):
+                         ("errore_registro", False), ("tool_in_sospeso", None),
+                         ("politica_accettata", False), ("gioco_turno", None),
+                         ("tocco_bersaglio", dict(bersaglio) if isinstance(bersaglio, dict)
+                          else None)):
                 try:
                     setattr(ctx, k, v)
                 except AttributeError:
@@ -1846,7 +1875,6 @@ class Ciclo:
                     setattr(ctx, k, v)
                 except AttributeError:
                     pass
-        spec = s.tools.get(tool) if hasattr(s.tools, "get") else None
         riga = {"nome": tool, "argomenti": oscura_tutto(args), "ok": ok,
                 "azione": getattr(spec, "risk", "azione") != "lettura"}
         self.rec = {**base, "esito": "tocco" if ok else "rifiutato", "livello": livello,
@@ -1875,10 +1903,38 @@ class Ciclo:
         for card in [c for c in (res.get("scheda"), res.get("schede")) if c]:
             for c in (card if isinstance(card, list) else [card]):
                 try:
-                    hub.invia_a(sid, c)
+                    if c.get("visibilita") == schede_foto.PUBBLICA:
+                        self._scheda_pubblica_del_tocco(hub, sid, c, scritto)
+                    else:
+                        hub.invia_a(sid, c)
                 except Exception as e:  # noqa: BLE001 — lo schermo non ferma il ciclo
                     print(f"   [SCHERMI] scheda del tocco non inviata: {type(e).__name__}",
                           flush=True)
+
+    def _scheda_pubblica_del_tocco(self, hub, sid, card: dict, scritto: dict):
+        """Una scheda pubblica del risultato (il timer di casa dopo «+1 minuto» o «Ferma»,
+        revisione della PR #265): è già sulla TV della cucina e sugli altri schermi, che
+        resterebbero indietro (il conto di un timer fermato, «Finito» un minuto prima). Va dove va
+        quando lo stesso tool parte dalla voce (`hub.invia`, le regole di sempre della scheda
+        pubblica, dalla stanza dello schermo del tocco), e in più allo schermo del tocco e agli
+        altri schermi personali della persona, anche con le schede automatiche spente. Le schede
+        di casa e personali (la lista) restano solo allo schermo del tocco (revisione della PR
+        #261: la spesa spuntata al supermercato non va sulla TV)."""
+        from .schermi import Mittente
+        persona = scritto.get("persona")
+        prof = self.s.registry.by_id(persona) if persona else None
+        mitt = Mittente(persona=persona, nome=getattr(prof, "name", None),
+                        livello="familiare" if prof else "ospite", certo=bool(prof),
+                        stanza=scritto.get("stanza"), schermo=sid)
+        r = hub.invia(card, mitt) or {}
+        fatti = set(r.get("destinatari") or ())
+        abbinati = hub.abbinati() if callable(getattr(hub, "abbinati", None)) else []
+        nomi = {s.get("id"): s.get("nome") for s in abbinati}
+        mie = [sid] + [s.get("id") for s in abbinati
+                       if persona and s.get("proprietario") == persona and s.get("id") != sid]
+        for i in mie:
+            if i not in nomi or nomi[i] not in fatti:
+                hub.invia_a(i, card)
 
     def _esito_tocco(self, scritto: dict, ok: bool, errore: str):
         """L'esito del tocco alla pagina che l'ha mandato (evento SSE «tocco»): la spunta in

@@ -1811,3 +1811,53 @@ conferma breve, sfida superata…) si azzerano per il tocco e si rimettono dopo.
 conversazione a voce (decisione di chi amministra del 28/10), solo da uno schermo personale. Dalla
 revisione della PR #261 valgono anche gli orari dei tutori: fuori orario il tocco di un minore è rifiutato
 (`minori.fuori_orario` in `_tocco_dallo_schermo`, perché la fase `_fuori_orario` del giro viene dopo).
+
+## Il vincolo dei tocchi: solo tool di classe nota e reversibili (28/10, issue #262 e #257, ramo `issue-257-agenda`)
+
+Nota 9 della revisione della PR #261: il tocco gira senza la politica del turno, quindi un tocco futuro su
+un tool irreversibile o distruttivo avrebbe saltato la domanda della politica senza che nessuno se ne
+accorgesse. Ora ogni tocco dell'elenco chiuso dichiara il suo tool (`schermi/tocchi.Tocco(tool, prepara)`)
+e `tocchi.ammesso` lo accetta solo se, con la classificazione che c'è già:
+
+1. il tool ha una classe nella tabella di Calliope (`politica.CLASSI`): mai un tool registrato a runtime
+   (estensioni) o senza classe, che vale «pericoloso»;
+2. la classe è «azione» (per definizione della politica: cambia lo stato di Calliope in modo reversibile
+   e della persona) o «sicuro» senza una fonte non fidata (il risultato del tocco va nella storia del
+   modello senza busta, `Brain.record_tocco`);
+3. l'effetto (`valore.effetto`, con gli argomenti) è al più E2: E3 è «esce di casa, esegue codice o non si
+   disfa», E4 fiducia e sicurezza fisica;
+4. il tool non è in `politica.IRREVERSIBILI`.
+
+Il controllo è in tre punti: **all'import** di `tocchi.py` (`controlla`: un tocco nuovo su un tool non
+ammesso solleva `RuntimeError`, quindi Calliope non parte e le prove cadono), **in `prepara`** (il tool
+restituito dev'essere quello dichiarato e ammesso con gli argomenti veri, altrimenti 403) e **nel ciclo**
+prima di `ToolRegistry.call` (`tocchi.non_ammesso` con lo `ToolSpec` del registro: un `ToolSpec.classe`
+che declassa il tool lo rende non ammesso; il tool dev'essere quello del tocco). Nel ciclo il rifiuto non
+chiama il tool, scrive `esito` «rifiutato», la regola `tocco_non_ammesso` e il motivo nel registro dei
+turni, e alla pagina «Questo non si fa toccando lo schermo: chiedimelo a voce.».
+
+Oggi i tocchi sono `spunta_lista` (`lista_togli`, azione, E2), `timer_piu` (`timer_imposta`, azione, E1) e
+`timer_ferma` (`agenda_annulla`, azione, E2). **Criterio scritto per «Ferma»**: è ammesso perché la
+politica classifica `agenda_annulla` come azione reversibile (E2), e fermare un timer di casa si disfa
+con una frase («rimetti il timer di 3 minuti»), come annullarlo a voce; dal tocco si ferma sempre un timer
+solo, quello toccato (`ToolContext.tocco_bersaglio`), mai «tutti» (`agenda_annulla` con il bersaglio non
+passa da `is_cancel_all` né dalla domanda «Annullo tutti e 3?»).
+
+**Il contesto del turno di prima** (#262): `Ciclo._tocco` azzerava già i segni di chi parlava
+(`speaker_ctx`, compreso il satellite da cui parlava) e politica, frase e regole del contesto dei tool. Ora
+azzera anche, e rimette dopo, `tool_in_sospeso` (la proposta in sospeso del turno a voce: per
+`agenda_annulla` con «tutti» contava come il «sì» alla domanda), `politica_accettata` (il «sì» già dato) e
+`gioco_turno`, e imposta solo per il tocco `tocco_bersaglio`. Dalla revisione della PR #265 un
+tocco del timer senza bersaglio è rifiutato nel ciclo (`Tocco.bersaglio`, regola
+`tocco_senza_bersaglio`: il tool sceglierebbe dal testo, e `agenda_annulla` potrebbe annullare «tutti»)
+e in `prepara` (403), e una corsia nuova nasce senza questi campi (`main.contesto_corsia`).
+Limite noto: il vincolo vale quanto le tabelle. Oggi ammette 46 tool su 80 di `politica.CLASSI`, fra cui
+`dimentica` e `pc_guarda`: «azione» non vuol dire «nessun danno se toccato per sbaglio», e `TOCCHI`
+resta un elenco chiuso da rivedere a ogni tocco nuovo. La stanza nel contesto dei tool è il servizio
+della conversazione di stanza, non un dato del turno, e nessun tool ammesso la legge: non si tocca.
+
+Prova: `prove/prova_agenda_pagina.py` (un tool pericoloso, senza classe, che legge dati non fidati,
+irreversibile, con effetto E3, declassato dal `ToolSpec`; l'import che si ferma; `prepara` e il ciclo che
+rifiutano senza chiamare il tool; il contesto azzerato durante la chiamata e rimesso dopo).
+`prova_raccolte` prova i rifiuti di `ToolRegistry.call` (voce di chi amministra, livello, minore) col
+vincolo spento, come seconda linea.

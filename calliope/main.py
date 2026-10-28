@@ -1239,6 +1239,21 @@ class Avvio:
             self.s.satelliti.ferma()
 
 
+def contesto_corsia(base, speaker_ctx, speaker):
+    """Il contesto dei tool di una corsia nuova (un satellite che si collega): i servizi di
+    `base` (la corsia principale), chi parla e la voce suoi, e niente di ciò che vale per un
+    turno solo. `crea` gira nel thread delle corsie, anche mentre il ciclo principale è dentro
+    un tocco o una risposta (revisione della PR #265): la proposta in sospeso, il «sì» già dato,
+    il gioco che aspetta un comando e il timer toccato non passano alla corsia nuova."""
+    return dataclasses.replace(base, speaker_ctx=speaker_ctx, speaker=speaker, storia=[],
+                               risposta_precedente={}, regole=[], immagini_viste=[], turno=0,
+                               tool_in_sospeso=None, user_text="", immagini=None,
+                               allegati=None, politica=None, politica_accettata=False,
+                               gioco_turno=None, tocco_bersaglio=None, si_breve=[],
+                               errore_registro=False, scheda_risultato=None,
+                               lavoro_turno=None, attesa=None)
+
+
 class Corsie:
     """Tutti i satelliti insieme (06/10, calliope/corsie.py): ogni satellite che si collega per
     la prima volta ha la sua corsia, un thread con il suo `Ciclo` (calliope/ciclo.py) e i suoi
@@ -1322,10 +1337,7 @@ class Corsie:
         lst.on_speech_start, lst.on_speech_end = a.parlato   # lo stato della voce: Ciclo
         sp = a.speaker.gemello(UscitaRemota(self.satelliti, sat_id=sid))
         sc = SpeakerContext(a.s.registry)
-        tc = dataclasses.replace(a.tool_ctx, speaker_ctx=sc, speaker=sp, storia=[],
-                                 risposta_precedente={}, regole=[], immagini_viste=[], turno=0,
-                                 tool_in_sospeso=None, user_text="", immagini=None,
-                                 allegati=None, politica=None)
+        tc = contesto_corsia(a.tool_ctx, sc, sp)
         b = Brain(cfg, a.s.tools, tc)
         for k in ("archivio_conv", "compressore", "luogo_fn", "prefix_tokens", "last_context"):
             setattr(b, k, getattr(brain, k, None))

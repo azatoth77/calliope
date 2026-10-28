@@ -26,6 +26,7 @@ schermi e dei satelliti veri su 127.0.0.1, un satellite finto legato allo scherm
   conversazione apre lo strato coi turni; «Pulisci le mie schede» in Io con due clic;
 - Le mie cose (28/10, passo 2a): le tessere coi conti, più di due per riga; la pagina Liste dalla
   tessera; la spunta manda il tocco giusto; contrasto e clic ≥ 44 px a 1440×900 e 700×900;
+  la pagina Agenda (28/10, passo 2b) con «+1 minuto» e «Ferma» che mandano il tocco giusto;
 - nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> gli screenshot.
 """
 
@@ -103,7 +104,7 @@ MISURA = r"""(() => {
         fuori.push(aree[i][0] + ' sopra ' + aree[j][0]);
     }
   }
-  const scatole = [...document.querySelectorAll('#barra a, #pc-parla, #pc-conv-apri, #sez-titolo, #tessere .tessera, #pc button.spunta, #pagina-indietro')].filter(vis);
+  const scatole = [...document.querySelectorAll('#barra a, #pc-parla, #pc-conv-apri, #sez-titolo, #tessere .tessera, #pc button.spunta, #pc button.tasto-timer, #pagina-indietro')].filter(vis);
   for (const e of scatole) if (e.scrollWidth > e.clientWidth + 1) fuori.push(nome(e) + ' trabocca');
   const clic = scatole.filter((e) => e.id !== 'sez-titolo').map((e) => { const r = e.getBoundingClientRect(); return [nome(e), Math.round(Math.min(r.width, r.height))]; })
     .filter(([, m]) => m < 44);
@@ -300,12 +301,53 @@ def raccolte_pc(p, hub):
                  not m.get("bassi") and not m.get("clic") and not m.get("fuori") and not m.get("scorre"),
                  json.dumps([m.get("bassi"), m.get("clic"), m.get("fuori")])[:240])
     dimensione(p, 1440, 900)
+    agenda_pc(p, hub, S)
     p.valuta("history.back(); 1")
     ok = aspetta(lambda: p.valuta("location.hash") == "#/cose" and p.valuta(f"{S}.vistaCose") == "tessere", 3)
     m = p.valuta(MISURA) or {}
     verifica("PC: il gesto indietro torna alle tessere; contrasto e clic delle tessere",
              bool(ok) and not m.get("bassi") and not m.get("clic"), json.dumps([m.get("bassi"), m.get("clic")])[:240])
     p.valuta(f"{P}.vai('#/adesso'); 1")
+
+
+def agenda_pc(p, hub, S):
+    """La pagina Agenda sul PC personale (28/10, passo 2b, #257): dalla tessera (passando dalle
+    tessere), il timer di casa con «+1 minuto» e «Ferma» che mandano il tocco giusto; clic ≥ 44 px
+    e contrasto AA a 1440×900 e 700×900."""
+    from calliope.schermi import schede
+    P = "window.calliopePC"
+    agenda = hub.tool_ctx.agenda
+    timer = next(it for it in agenda.items("dario") if it["kind"] == "timer")
+    chiave = schede.chiave_timer(timer)
+    p.valuta("history.back(); 1")
+    aspetta(lambda: p.valuta("location.hash") == "#/cose", 3)
+    clic(p, '#tessere [data-tessera="agenda"]')
+    ok = aspetta(lambda: p.valuta("location.hash") == "#/cose/agenda" and p.valuta(f"{S}.vistaCose") == "pagina"
+                 and (p.valuta(f"{S}.pagina") or [None])[0] == chiave, 5)
+    tasti = p.valuta("[...document.querySelectorAll('#pagina-schede button.tasto-timer')].map((b) => b.dataset.tocco)") or []
+    verifica("PC: la pagina Agenda dalla tessera, con i tasti del timer",
+             bool(ok) and tasti == ["timer_piu", "timer_ferma"]
+             and "messo da Bianca" in (p.valuta("document.querySelector('#pagina-schede .scheda').textContent") or ""),
+             json.dumps([p.valuta(f"{S}.pagina"), tasti]))
+    while hub.ingresso.prendi() is not None:
+        pass
+    clic(p, '#pagina-schede button.tasto-timer[data-tocco="timer_ferma"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    verifica("PC: «Ferma» manda il tocco giusto (agenda_annulla su quel timer, a nome di Dario)",
+             bool(ok) and item.get("tocco") == "timer_ferma" and item.get("tool") == "agenda_annulla"
+             and item.get("bersaglio") == {"timer": timer["id"], "chiave": chiave} and item.get("persona") == "dario",
+             json.dumps(item, ensure_ascii=False)[:300])
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "timer_ferma", "ok": True, "pagina": item.get("pagina")})
+    for w, h in ((1440, 900), (700, 900)):
+        dimensione(p, w, h)
+        time.sleep(0.3)
+        m = p.valuta(MISURA) or {}
+        foto(p, f"pc-{w}x{h}-agenda.png")
+        verifica(f"PC {w}×{h} pagina Agenda: contrasto AA, clic ≥ 44 px, niente fuori",
+                 not m.get("bassi") and not m.get("clic") and not m.get("fuori") and not m.get("scorre"),
+                 json.dumps([m.get("bassi"), m.get("clic"), m.get("fuori")])[:240])
+    dimensione(p, 1440, 900)
 
 
 def turno(domanda, risposta, t):
