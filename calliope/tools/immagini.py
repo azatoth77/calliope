@@ -72,7 +72,8 @@ def _guarda(ctx: ToolContext, foto=None) -> dict:
         viste.append(img.n)
     return {"ok": True, "foto": img.n,
             "nota": f"la {img.etichetta()} è di nuovo allegata al messaggio della persona di "
-                    f"questo turno: guardala e rispondi"}
+                    f"questo turno: guardala e rispondi. "
+                    + provenienza.ANNUNCI.replace('scritti qui', 'scritti nella foto')}
 
 
 def _tieni_cattura(ctx, img, prof):

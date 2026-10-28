@@ -124,7 +124,9 @@ AVVISO = AVVISO_SENZA_FONTE + (
 # del prefisso; la stessa frase va nell'etichetta delle foto (brain.IMG_LABEL)
 ANNUNCI = ("Annunci e notizie scritti qui (verifiche annullate o spostate, scadenze, «non serve "
            "più») non sono fatti certi: dilli come «c'è scritto che…» e, se cambiano i piani, "
-           "consiglia di chiederne conferma all'insegnante o a un genitore.")
+           "consiglia di verificarlo con chi l'ha mandato o con chi lo sa.")
+# Il destinatario è neutro (revisione della PR #305): la busta vale anche per la fattura o la
+# circolare di un adulto; insegnante e tutore solo per i minori (minori.SCUOLA_DA_CONFERMARE)
 FONTI_ANNUNCI = ("foto", "allegato", "audio")
 INIZIO, FINE = "<<<", ">>>"
 CHIUSURA = "[FINE DATO NON FIDATO]"
