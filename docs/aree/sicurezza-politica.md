@@ -1921,8 +1921,18 @@ Cosa resta uguale, ed è la difesa:
 - **il livello**: lo scritto vale come il proprietario con `identified_by` «schermo», quindi al più
   «familiare» (`SpeakerContext.current_level`); chi amministra non vale mai «amministra» scrivendo;
 - **ciò che vuole la voce** resta rifiutato (`tools/spec.serve_la_voce`, regola `scritto_serve_voce`:
-  installazioni, fatture e Ufficio, schermi personali, la registrazione di una voce) e la politica per
-  valore lascia eseguire dallo scritto solo E0–E2;
+  installazioni, fatture e Ufficio, schermi personali, la registrazione di una voce);
+- **le azioni irreversibili si confermano a voce** (decisione di chi amministra del 28/10, dopo la
+  revisione della PR #304): ciò che ha una classe d'effetto E3 o più in `valore.py` (`EFFETTI`: tra gli altri
+  `conversazioni_dimentica`, `programma_esegui`, `pc_apri_app`, `estensione_gestisci`, `dati_conservati`,
+  `conoscenti`, i tool delle estensioni senza effetto dichiarato) o che è in `politica.IRREVERSIBILI`
+  (`lavoro_annulla`, «ferma» e «chiudi» di `sviluppo_passo`) scritto o toccato dallo schermo personale non
+  si esegue: Calliope risponde «Questa la confermo solo a voce: dimmelo.» con l'azione in sospeso per la
+  conferma a voce (`tools/spec.irreversibile_scritto` in `ToolRegistry.call`, dopo livello e minori e prima
+  della politica; regola `scritto_irreversibile_voce`). Il «sì» scritto richiama il tool, che torna lì: non
+  basta mai. *[storico: la prima versione di questa voce diceva «la politica per valore lascia eseguire
+  dallo scritto solo E0–E2», e non era vero: la revisione della PR #304 ha eseguito `conversazioni_dimentica`
+  dicendo «cancella tutte le nostre conversazioni» e poi «sì» per iscritto]*;
 - **i minori**: il loro livello e il loro preset (`minori.permesso`), gli orari dei tutori (`_fuori_orario`,
   rifiutato con la frase degli orari, il modello non vede il testo);
 - **la politica del turno** di sempre: lo scritto passa dal modello e da `ToolRegistry.call` come una frase
@@ -1931,10 +1941,31 @@ Cosa resta uguale, ed è la difesa:
 Restano legati alla conversazione a voce i **moduli** (l'invio di un modulo: nasce da una richiesta a voce,
 spesso dell'Ufficio, e si chiude quando la conversazione finisce), gli **schermi di stanza**
 (`schermi_scritto_stanza`, chi scrive vale come ospite: serve una conversazione nella stanza) e i **file di un
-ragazzo** toccati dal tutore nel Cassetto. Il rischio che si accetta è quello del tocco: chi ha in mano il
-telefono sbloccato di un altro scrive a suo nome, al più come familiare.
+ragazzo** toccati dal tutore nel Cassetto. Il rischio che si accetta: chi ha in mano il telefono sbloccato
+di un altro scrive a suo nome, al più come familiare, e fa ciò che si disfa. Non è il rischio del tocco,
+che ha un elenco chiuso di tool reversibili: lo scritto arriva a tutti i tool dei familiari, per questo le
+irreversibili vogliono la voce. *[storico: fino alla revisione della PR #304 «il rischio che si accetta è
+quello del tocco»]*
+
+Dalla stessa revisione:
+
+- **La conversazione della persona.** Lo scritto e il tocco («schermo» con un `persona_id`) prendono la
+  conversazione della persona, creata se non c'è (`corsie.RegistroConversazioni.scegli`). Prima, senza una
+  conversazione già aperta (dopo un riavvio, o per chi non aveva ancora parlato), finivano nell'anonima della
+  corsia, quella degli ospiti: il modello vedeva la storia dell'ospite e l'ospite dopo trovava ciò che si era
+  scritto. Valeva anche per il tocco del #261.
+- **Foto e file di un minore fuori orario** (`Ciclo._file_fuori_orario`, prima di
+  `_foto_dallo_schermo` e `_allegato_dallo_schermo`): senza testo, rifiutati con la frase degli orari (regola
+  `minore_fuori_orario`), niente cassetto né attesa della domanda; con il testo il file si toglie e la frase
+  segue `_fuori_orario`, col guardiano per chi è in pericolo.
+- **La risposta solo scritta** dalla modalità scrittura del telefono (`solo_scritto` nell'invio,
+  `Instradamento.inizio_scritto` → «muta»): Calliope non la dice e non apre la finestra d'ascolto, così una
+  frase breve detta subito dopo non eredita lo schermo come chi parla. Gli avvisi (il timer, il pericolo)
+  suonano come sempre.
 
 Prove: `prova_scritto_senza_voce` (nuova: il ciclo vero senza conversazione a voce, il familiare al modello,
 chi amministra «familiare», `registra_utente` scritto rifiutato, un minore fuori orario rifiutato e dentro
-gli orari col suo livello, l'ospite dallo schermo di stanza e il modulo rifiutati); `prova_scritto_conversazione`,
+gli orari col suo livello, foto e file di un minore fuori orario rifiutati, `conversazioni_dimentica` scritto e
+poi «sì» scritto mai eseguito, l'ospite dallo schermo di stanza e il modulo rifiutati); `prova_corsie` (dopo un
+riavvio Dario scrive dopo un ospite su `sat:cucina`: due conversazioni separate); `prova_scritto_conversazione`,
 `prova_scritto`, `prova_immagini`, `prova_allegati`, `prova_scritto_calliope` adattate.

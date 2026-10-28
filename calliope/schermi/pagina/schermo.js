@@ -279,6 +279,8 @@
     token() { return leggiToken(); },
     // I nomi di questo schermo: il telefono aggiunge quello del suo satellite (28/10, #301)
     nomiPropri(lista) { nomiPropri(lista); },
+    // La modalità scrittura del telefono (28/10): le risposte a ciò che si manda sono solo scritte
+    soloScritto(v) { S.soloScritto = !!v; },
     // Il pulsante «Foto» del telefono (05/10): apre la scelta della foto nello stesso tocco
     foto() { const x = $("scrivi-foto-file"); if (x && S.fotoAmmessa && S.scrittura.attiva) { x.click(); return true; } return false; },
     dimentica() { chiudiEventi(); salvaToken(null); S.sessione = null; },
@@ -3194,13 +3196,14 @@
     }
     return null;
   }
-  async function postFile(file, testo) {
+  async function postFile(file, testo, solo) {
     const r = await fetch("/api/allegato", {
       method: "POST", cache: "no-store", body: file,
       headers: { "Content-Type": "application/octet-stream", "X-Calliope-Sessione": S.sessione || "",
                  "X-Calliope-Nome": encodeURIComponent(file.name || "file"),
                  "X-Calliope-Testo": encodeURIComponent(testo || ""),
-                 "X-Calliope-Fonte": INCORPORATA ? "telefono" : "schermo" },
+                 "X-Calliope-Fonte": INCORPORATA ? "telefono" : "schermo",
+                 "X-Calliope-Solo-Scritto": solo ? "1" : "0" },
     });
     let d = {};
     try { d = await r.json(); } catch (e) { /* vuota */ }
@@ -3278,7 +3281,7 @@
       togli.append(icona("togli-icona", "togli"), el("span", "togli-testo", "Togli"));
       ante.append(mini, info, togli);
       // Una riga sola che cresce fino a cinque righe mentre si scrive (vuota, una riga: Chrome
-      // conta nell'altezza anche il segnaposto)
+      // conta nell'altezza anche il segnaposto, che non deve allungarla)
       const cresci = () => {
         i.style.height = "";
         if (!i.value) { segna(); return; }
@@ -3286,16 +3289,31 @@
         if (i.scrollHeight > i.clientHeight + 1) i.style.height = Math.ceil(alto + 2) + "px";
       };
       // Il segnaposto: quello breve se il lungo non ci sta su una riga (la casella stretta del
-      // telefono a 320 px)
+      // telefono a 320 px). Si misura la larghezza del testo col font della casella (revisione
+      // della PR #304: l'altezza col segnaposto la conta Chrome, WebKit forse no)
+      const misura = document.createElement("canvas").getContext("2d");
+      const largo = (testo) => {
+        const cs = getComputedStyle(i);
+        if (!misura) return 0;
+        misura.font = cs.font || (cs.fontWeight + " " + cs.fontSize + " " + cs.fontFamily);
+        return misura.measureText(testo).width;
+      };
+      const spazioTesto = () => {
+        const cs = getComputedStyle(i);
+        return i.clientWidth - parseFloat(cs.paddingLeft || "0") - parseFloat(cs.paddingRight || "0");
+      };
       const segna = (testo) => {
         if (testo !== undefined) i.dataset.segno = testo;
         const lungo = i.dataset.segno || "";
-        if (i.placeholder !== lungo) i.placeholder = lungo;
-        if (i.value || !i.clientHeight) return;
-        for (const corto of [SEGNO_BREVE[lungo], "Scrivi…"]) {
-          if (!corto || i.scrollHeight <= i.clientHeight + 1) break;
-          i.placeholder = corto;
+        let scelto = lungo;
+        const w = i.clientWidth ? spazioTesto() : 0;
+        if (w > 0) {
+          for (const corto of [SEGNO_BREVE[lungo], "Scrivi…"]) {
+            if (!corto || largo(scelto) <= w) break;
+            scelto = corto;
+          }
         }
+        if (i.placeholder !== scelto) i.placeholder = scelto;
       };
       S.segnaScrivi = segna;
       if (typeof ResizeObserver === "function") new ResizeObserver(() => segna()).observe(i);
@@ -3394,10 +3412,12 @@
         if (allegato) dire("Mando il file…");
         let r;
         try {
-          r = foto ? await postSessione("/api/immagine", { immagine: foto.url, testo,
+          // Dalla modalità scrittura del telefono la risposta è solo scritta (S.soloScritto)
+          const solo = !!S.soloScritto;
+          r = foto ? await postSessione("/api/immagine", { immagine: foto.url, testo, solo_scritto: solo,
                                                            fonte: INCORPORATA ? "telefono" : "schermo" })
-            : allegato ? await postFile(allegato, testo)
-              : await postSessione("/api/scrivi", { testo });
+            : allegato ? await postFile(allegato, testo, solo)
+              : await postSessione("/api/scrivi", { testo, solo_scritto: solo });
         } catch (e) { r = null; }
         f.classList.remove("in-invio");
         if (r && r.dati && r.dati.codice === "senza_conversazione") {

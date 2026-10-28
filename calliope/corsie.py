@@ -277,8 +277,8 @@ class RegistroConversazioni:
             persona, nuova o ripresa da un altro satellite;
           - frase breve o zona grigia: continua la conversazione di chi ha parlato su
             **questo** satellite nella sua finestra di ascolto; altrimenti anonima;
-          - scritto da uno schermo personale («schermo»): la conversazione della persona se
-            c'è, altrimenti anonima;
+          - scritto o tocco da uno schermo personale («schermo»): la conversazione della
+            persona, creata se non c'è (28/10, #301: prima, senza, l'anonima degli ospiti);
           - frase cortissima per continuità («continuita», 08/10, ciclo._per_continuita: la
             persona riconosciuta dalla voce da poco su **questo** satellite): la sua
             conversazione se è l'ultima di questo satellite o se non ce n'è una (nuova, con la
@@ -304,9 +304,10 @@ class RegistroConversazioni:
                 if c is None or corsia.conv is c:
                     return self._di(chiave), "continuita"
             elif persona_id and how == "schermo":
-                c = self._conv.get(self.chiave_persona(persona_id))
-                if c is not None:
-                    return c, "schermo"
+                # Dal 28/10 (#301) lo scritto e il tocco dallo schermo personale valgono anche
+                # senza aver parlato: la conversazione della persona si crea qui (con la ripresa
+                # dopo un riavvio). Prima finiva nell'anonima della corsia, quella degli ospiti
+                return self._di(self.chiave_persona(persona_id)), "schermo"
             return self._di(self.chiave_ospite(corsia.chiave)), "anonima"
 
     def di_persona(self, persona_id, crea: bool = False) -> Conversazione | None:

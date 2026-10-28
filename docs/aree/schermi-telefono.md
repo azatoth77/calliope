@@ -1930,3 +1930,23 @@ adattate `prova_telefono_schermo`, `prova_pc_pagina` (la casella accesa senza av
 `prova_telefono_consapevole`. Da provare sul vero: l'iPhone 13 mini con e senza lo «Zoom schermo» (la
 tastiera vera, la barra che si nasconde, il gesto per chiudere la tastiera), un Android con Chrome recente e
 uno vecchio, VoiceOver sulla casella e su «ti ascolto…».
+- **Dalla revisione della PR #304** (e decisioni di chi amministra del 28/10 dopo la revisione):
+  - *In modalità scrittura la risposta è solo scritta.* La pagina manda `solo_scritto` (`/api/scrivi`,
+    `/api/immagine`, l'intestazione `X-Calliope-Solo-Scritto` di `/api/allegato`) e
+    `Instradamento.inizio_scritto` risponde «muta»: la risposta compare nella chat, Calliope non la dice e non
+    si apre la finestra d'ascolto. Torna a parlare con «Torna alla voce» o quando si dice «Calliope»; gli
+    avvisi (il timer che suona, il pericolo) suonano come sempre. Dal PC la risposta resta quella di prima.
+  - *Le irreversibili si confermano a voce*: «Questa la confermo solo a voce: dimmelo.», anche al «sì»
+    scritto ([sicurezza-politica](sicurezza-politica.md)).
+  - *La conversazione della persona* anche senza averne una aperta (prima lo scritto e il tocco finivano
+    nell'anonima degli ospiti della corsia) e *foto e file di un minore fuori orario* rifiutati:
+    [sicurezza-politica](sicurezza-politica.md).
+  - *«Torna alla voce» non interrompe Calliope mentre parla*: scrivendo le risposte sono solo scritte, quindi
+    ciò che suona è un avviso, che un tocco per cambiare modo non deve zittire; cambia modo e basta, e per
+    interromperla c'è «Parla» («Interrompi e parla»). Se Calliope non parla, l'ascolto parte subito come prima.
+  - *`#conv-ora` è sempre `role="status"`* (nell'HTML); scrivendo cade solo l'`aria-hidden`, prima del testo,
+    così la prima frase («Calliope sta scrivendo…») si legge.
+  - *Il segnaposto breve* si sceglie misurando la larghezza del testo col font della casella
+    (`canvas.measureText`), non più l'altezza col segnaposto, che WebKit può non contare.
+  - Il limite di Chrome per Android prima della 108 è scritto nella guida
+    ([installazione](../installazione.md#e-telefono)).

@@ -720,6 +720,9 @@ function impostaScrittura(v) {
   if (v) vista.dataset.scrittura = "1"; else delete vista.dataset.scrittura;
   $("scrivi-posto").hidden = !v;
   attr($("scrivi-apri"), "aria-pressed", v ? "true" : "false");
+  // Scrivendo la risposta è solo scritta (decisione del 28/10 dopo la revisione della PR #304):
+  // Calliope torna a parlare con «Torna alla voce» o quando si dice il suo nome
+  if (sch() && sch().soloScritto) sch().soloScritto(v);
   if (!v) {
     const i = $("scrivi-testo");
     if (i && document.activeElement === i) i.blur();
@@ -741,12 +744,15 @@ function entraScrittura() {
   return vis.scrittura;
 }
 
-// «Torna alla voce» fa partire subito l'ascolto, come «Parla» (risposta 1 del 28/10)
+// «Torna alla voce» fa partire subito l'ascolto, come «Parla» (risposta 1 del 28/10). Se Calliope
+// sta parlando non la interrompe (revisione della PR #304): scrivendo le risposte sono solo
+// scritte, quindi ciò che suona è un avviso (il timer, un pericolo) che un tocco per cambiare modo
+// non deve zittire; per interromperla c'è «Parla», che subito dopo dice «Interrompi e parla»
 function tornaAllaVoce() {
   impostaScrittura(false);
   const p = $("parla");
   if (p) { try { p.focus({ preventScroll: true }); } catch (e) { /* niente */ } }
-  if (st.collegato) tocca();
+  if (st.collegato && !player.inCorso()) tocca();
 }
 
 // La lente in alto nella Conversazione (a voce e scrivendo, come nelle tavole): apre e chiude i
@@ -814,12 +820,13 @@ function disegnaOra() {
   if (parola === "Ti ascolto") t = "ti ascolto…";
   else if (st.attesaScritto) t = "Calliope sta scrivendo…";
   else if (cls === "pensa") t = "Calliope sta rispondendo…";
+  // Scrivendo la riga della voce non c'è: lo stato si legge da qui; a voce lo dice già lei.
+  // role="status" resta sempre (nell'HTML): una regione già nel DOM, che VoiceOver legge, e
+  // l'aria-hidden cambia prima del testo, così la prima frase scrivendo si sente
+  if (vis.scrittura) o.removeAttribute("aria-hidden"); else attr(o, "aria-hidden", "true");
   metti(o.querySelector(".conv-ora-testo"), t);
   attr(o, "data-vuoto", t ? "0" : "1");
   attr(o, "data-ascolto", parola === "Ti ascolto" ? "1" : "0");
-  // Scrivendo la riga della voce non c'è: lo stato si legge da qui; a voce lo dice già lei
-  if (vis.scrittura) { attr(o, "role", "status"); o.removeAttribute("aria-hidden"); }
-  else { o.removeAttribute("role"); attr(o, "aria-hidden", "true"); }
 }
 
 // ───────────────────────────── rete ─────────────────────────────

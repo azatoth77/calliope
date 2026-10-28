@@ -37,9 +37,14 @@ un corridoio non diventa una tastiera per chiunque sia in rete.
 La casella, le foto e i file (`CANALI_LIBERI`) valgono anche senza aver parlato, come il tocco
 (schermi/tocchi.py): al più «familiare» (`identified_by` «schermo», SpeakerContext), con gli
 orari e il livello di un minore, e niente di ciò che vuole la voce (tools/spec.serve_la_voce:
-installazioni, fatture, Ufficio, schermi personali, voci). Il rischio di chi ha in mano il
-telefono di un altro è quello del tocco: lo schermo personale è abbinato a una persona e le
-azioni che contano chiedono la voce. Restano legati alla conversazione a voce i **moduli** (un
+installazioni, fatture, Ufficio, schermi personali, voci). **Le azioni irreversibili si
+confermano a voce** (decisione del 28/10 dopo la revisione della PR #304): E3 o più in valore.py
+o in politica.IRREVERSIBILI (`conversazioni_dimentica`, cancellare, mandare fuori casa) non si
+fanno per iscritto, nemmeno col «sì» scritto (tools/spec.irreversibile_scritto). Il rischio di chi
+ha in mano il telefono sbloccato di un altro non è quello del tocco (il tocco ha un elenco chiuso
+di tool reversibili, lo scritto arriva a tutti i tool dei familiari): resta tutto ciò che si
+disfa, al più come familiare. *Storico: fino alla revisione della PR #304 qui si leggeva «il
+rischio è quello del tocco».* Restano legati alla conversazione a voce i **moduli** (un
 modulo nasce da una richiesta a voce e si chiude quando la conversazione finisce), gli
 **schermi di stanza** e i file di un ragazzo toccati dal tutore (server.py). *Storico: dal 05/10
 al 28/10 anche la casella, le foto e i file dello schermo personale valevano solo dentro una

@@ -732,6 +732,11 @@ def scrittura_tel(p, amb):
     verifica("inviato senza conversazione a voce: in coda come scritto, a nome di Dario",
              bool(item) and item.get("tipo") == "scritto" and item.get("persona") == "dario"
              and item.get("testo") == "E il 15% di 240?", str(item)[:200])
+    verifica("scrivendo, la risposta è solo scritta: l'invio porta solo_scritto (revisione della PR #304)",
+             bool(item) and item.get("solo_scritto") is True, str(item)[:200])
+    verifica("«ti ascolto…» e «Calliope sta scrivendo…» in una regione role=\"status\" che c'è sempre",
+             p.valuta("document.getElementById('conv-ora').getAttribute('role') === 'status'"
+                      " && !document.getElementById('conv-ora').hasAttribute('aria-hidden')"))
     ok = aspetta(lambda: p.valuta("document.getElementById('scrivi-testo').value === ''"
                                   " && document.querySelector('#conv-ora .conv-ora-testo').textContent === 'Calliope sta scrivendo…'"), 3)
     verifica("dopo l'invio: la casella vuota e «Calliope sta scrivendo…» in fondo", bool(ok),
@@ -767,7 +772,8 @@ def scrittura_tel(p, amb):
     item = aspetta(lambda: hub.ingresso.prendi(), 8)
     verifica("inviato con l'allegato: in coda la foto con la domanda, senza conversazione a voce",
              bool(item) and item.get("tipo") == "immagine" and item.get("testo") == "Aggiungi queste alla spesa"
-             and item.get("persona") == "dario", str({k: v for k, v in (item or {}).items() if k != "immagine"})[:200])
+             and item.get("persona") == "dario" and item.get("solo_scritto") is True,
+             str({k: v for k, v in (item or {}).items() if k != "immagine"})[:200])
     ok = aspetta(lambda: p.valuta("document.getElementById('scrivi-anteprima').hidden"
                                   " && document.getElementById('scrivi-invia').disabled"), 3)
     verifica("…e l'anteprima se ne va, Invia torna spento", bool(ok))
@@ -824,6 +830,19 @@ def scrittura_tel(p, amb):
     verifica("contrario: senza un campo col fuoco la parte visibile più bassa non è la tastiera", bool(ok))
     p.valuta(f"({TASTIERA})(0)")
 
+    # Torna alla voce mentre Calliope parla (un avviso): cambia modo ma non la interrompe
+    p.valuta("(() => { const T = window.calliopeTelefono; T.__inCorso = T.player.inCorso;"
+             " T.player.inCorso = () => true; return 1; })()")
+    tocca(p, "#scrivi-voce")
+    time.sleep(0.4)
+    verifica("«Torna alla voce» mentre Calliope parla: la voce torna, ma niente interruzione né ascolto",
+             p.valuta("!document.getElementById('vista').dataset.scrittura"
+                      " && !window.calliopeTelefono.st.reg && !window.calliopeTelefono.st.forza"
+                      " && document.getElementById('conv-ora').getAttribute('role') === 'status'"
+                      " && document.getElementById('conv-ora').getAttribute('aria-hidden') === 'true'"))
+    p.valuta("(() => { const T = window.calliopeTelefono; T.player.inCorso = T.__inCorso; return 1; })()")
+    p.valuta("window.calliopeTelefono.entraScrittura(); 1")
+    aspetta(lambda: p.valuta("document.getElementById('vista').dataset.scrittura === '1'"), 2)
     # Torna alla voce: la riga della voce e l'ascolto subito
     tocca(p, "#scrivi-voce")
     ok = aspetta(lambda: p.valuta("!document.getElementById('vista').dataset.scrittura"

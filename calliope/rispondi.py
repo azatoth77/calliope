@@ -125,6 +125,15 @@ class Instradamento:
         self._scritto = {"satellite": coll.satellite.get("id") if coll is not None else None,
                          "schermo": sid, "stanza": (coll.stanza or stanza) if coll else stanza}
         self._turno = dict(self._scritto)
+        # Dalla modalità scrittura del telefono (28/10, dopo la revisione della PR #304): la
+        # risposta è solo scritta, e nessuna finestra d'ascolto si apre. Gli avvisi (il timer che
+        # suona, il pericolo) non passano di qui e suonano come sempre
+        if item.get("solo_scritto"):
+            voce = self._voce()
+            if voce is not None:
+                voce.muto = True
+            self._awake_prima = awake_until
+            return "muta"
         if coll is not None and self.satelliti.presta(coll):
             return "satellite"
         if self._stessa_stanza(sid, stanza):

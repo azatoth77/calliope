@@ -214,12 +214,18 @@ def main() -> int:
                a.json().get("scrittura", {}).get("attiva") is True
                and a.json().get("scrittura", {}).get("moduli") is False,
                str(a.json().get("scrittura")))
+            # Dalla modalità scrittura del telefono (solo_scritto): la risposta è solo scritta,
+            # non si sente e non apre la finestra d'ascolto (revisione della PR #304: con la
+            # finestra aperta la frase detta subito dopo, sotto speaker_min_voice_s, valeva come
+            # lo schermo e la conversazione a voce non si apriva)
             t_prima = time.monotonic()
+            n_ric = len(ollama.richieste)
             rr = c.post("/api/scrivi", headers={"X-Calliope-Sessione": sess},
-                        json={"testo": "Calliope, che ore sono?"})
+                        json={"testo": "Calliope, che ore sono?", "solo_scritto": True})
             ok("scritto senza conversazione: 200 (28/10, #301)", rr.status_code == 200, rr.text)
-            aspetta(lambda: casse.voce_dopo(t_prima) is not None, 20)
-            aspetta(zitta, 20)
+            ok("…arriva al modello", aspetta(lambda: len(ollama.richieste) > n_ric, 20))
+            time.sleep(2.0)
+            ok("…e in modalità scrittura la risposta non si sente", casse.voce_dopo(t_prima) is None)
             # Chi amministra parla al satellite: riconosciuto dalla voce, la conversazione c'è
             stt.risposta = DOMANDA
             fine = _di(sat, scena, frasi, DOMANDA)

@@ -12,7 +12,10 @@ copione di prova_stati_buchi), senza nessuna conversazione a voce aperta:
 - un minore fuori dagli orari dei tutori: rifiutato con la frase degli orari, il modello non lo
   vede; dentro gli orari passa, col suo livello;
 - l'ospite: lo schermo di stanza senza una conversazione nella sua stanza resta rifiutato;
-- il modulo dallo schermo personale senza conversazione resta rifiutato (canale «modulo»).
+- il modulo dallo schermo personale senza conversazione resta rifiutato (canale «modulo»);
+- foto e file da un minore fuori orario: rifiutati, niente attesa (revisione della PR #304);
+- le irreversibili si confermano a voce: `conversazioni_dimentica` scritto, poi «sì» scritto, non
+  si esegue mai (regola `scritto_irreversibile_voce`).
 
 Nomi e dati di fantasia, niente rete né modelli.
 
@@ -132,6 +135,63 @@ def main() -> int:
              r.get("esito") not in ("rifiutato", "fuori_orario") and len(b.backend.visti) > n
              and r.get("livello") in ("familiare", "minore", "ospite")
              and (r.get("voce") or {}).get("nome") == "Lia", json.dumps(r, ensure_ascii=False)[:300])
+
+    # Foto e file da un minore fuori orario (revisione della PR #304): niente attesa né cassetto
+    import base64  # noqa: F401
+    import immagini_finte as F
+    from calliope.immagini import Immagine
+    ciclo_mod.minori.fuori_orario = lambda prof, adesso=None: ("21:00-07:00" if getattr(prof, "id", "") == "lia"
+                                                               else vero(prof, adesso))
+    try:
+        n = len(b.backend.visti)
+        pr.tocca(c, {"tipo": "immagine", "immagine": Immagine(F.jpeg(F.foto()), 10, 10, persona="lia"),
+                     "testo": "", "persona": "lia", "schermo": "schermo 3", "stanza": "camera",
+                     "schermo_id": 3, "arrivato": time.time()})
+        r = turni[-1]
+        verifica("contrario: una foto senza testo da un minore fuori orario, rifiutata con la regola degli orari",
+                 r.get("esito") == "fuori_orario" and "minore_fuori_orario" in (r.get("regole") or [])
+                 and c.s.foto_attesa.prendi("lia") == [] and len(b.backend.visti) == n
+                 and "7:00" in (r.get("risposta") or ""), json.dumps(r, ensure_ascii=False, default=str)[:300])
+        pr.tocca(c, {"tipo": "allegato", "allegato": object(), "testo": "Leggimi questo file",
+                     "persona": "lia", "schermo": "schermo 3", "stanza": "camera", "schermo_id": 3,
+                     "arrivato": time.time()})
+        r = turni[-1]
+        verifica("contrario: un file con la domanda da un minore fuori orario: il file via, la frase rifiutata dagli orari",
+                 r.get("esito") == "fuori_orario" and "minore_fuori_orario" in (r.get("regole") or [])
+                 and c.s.foto_attesa.prendi("lia") == [] and len(b.backend.visti) == n,
+                 json.dumps(r, ensure_ascii=False, default=str)[:300])
+    finally:
+        ciclo_mod.minori.fuori_orario = vero
+
+    # Le irreversibili si confermano a voce (decisione del 28/10 dopo la revisione della PR #304):
+    # «cancella tutte le nostre conversazioni» scritto, poi «sì» scritto: non passa mai
+    from calliope.tools.conversazioni import conversazioni_specs
+    from calliope.tools.spec import SCRITTO_IRREVERSIBILE, irreversibile_scritto
+    chiamate = []
+    for spec in conversazioni_specs():
+        if spec.name == "conversazioni_dimentica":
+            vera = spec.func
+            spec.func = lambda ctx, **a: chiamate.append(a) or vera(ctx, **a)
+            b.tools.register(spec)
+    for frase in ("Cancella tutte le nostre conversazioni.", "Sì, cancellale tutte."):
+        b.backend.copione.append([("calls", [{"id": "c-dim", "name": "conversazioni_dimentica", "arguments": {}}])])
+        scritto(c, 2, "bianca", frase)
+        r = turni[-1]
+        tool = (r.get("tool") or [{}])[0]
+        verifica(f"contrario: «{frase}» scritto: conversazioni_dimentica non si esegue, si conferma solo a voce",
+                 not chiamate and tool.get("nome") == "conversazioni_dimentica" and tool.get("ok") is False
+                 and "scritto_irreversibile_voce" in (r.get("regole") or [])
+                 and SCRITTO_IRREVERSIBILE in (r.get("risposta") or ""), json.dumps(r, ensure_ascii=False)[:400])
+    # A voce la stessa chiamata passa il cancello (poi la politica di sempre)
+    import types
+    voce_ctx = types.SimpleNamespace(speaker_ctx=types.SimpleNamespace(identified_by="voce"), regole=[])
+    scr_ctx = types.SimpleNamespace(speaker_ctx=types.SimpleNamespace(identified_by="schermo"), regole=[])
+    spec_d = b.tools.get("conversazioni_dimentica")
+    verifica("a voce il cancello delle irreversibili non scatta; scritto sì, anche per lavoro_annulla (IRREVERSIBILI); lista_togli (E2) no",
+             irreversibile_scritto(voce_ctx, spec_d, "conversazioni_dimentica", {}) is None
+             and irreversibile_scritto(scr_ctx, spec_d, "conversazioni_dimentica", {}) is not None
+             and irreversibile_scritto(scr_ctx, b.tools.get("lavoro_annulla"), "lavoro_annulla", {}) is not None
+             and irreversibile_scritto(scr_ctx, b.tools.get("lista_togli"), "lista_togli", {"cose": "latte"}) is None)
 
     # L'ospite: lo schermo di stanza senza una conversazione nella sua stanza
     n = len(b.backend.visti)

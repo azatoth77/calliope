@@ -155,6 +155,37 @@ def serve_la_voce(ctx, tool: str, argomenti: dict | None, cosa: str,
                            "argomenti": dict(argomenti or {})}}
 
 
+# Le azioni irreversibili si confermano a voce (decisione di chi amministra del 28/10, dopo la
+# revisione della PR #304): dallo schermo personale si scrive tutto il resto, ma ciò che non si
+# disfa (classe d'effetto E3 o più in valore.py, o politica.IRREVERSIBILI) vuole la voce, e il
+# «sì» scritto non basta: il tool richiamato dallo scritto torna qui
+SCRITTO_IRREVERSIBILE = "Questa la confermo solo a voce: dimmelo."
+
+
+def irreversibile_scritto(ctx, spec, name: str, argomenti: dict | None) -> dict | None:
+    """Il risultato da dare se la richiesta è scritta (o toccata) da uno schermo personale e
+    l'azione non si disfa: niente esecuzione, l'azione in sospeso per la conferma a voce. None
+    altrimenti."""
+    if not scritto(ctx):
+        return None
+    from .. import politica, valore
+    args = dict(argomenti or {})
+    try:
+        e = valore.effetto(name, args, spec)
+    except Exception:  # noqa: BLE001 — nel dubbio, irreversibile
+        e = valore.E3
+    azioni = politica.IRREVERSIBILI.get(name, False)
+    irrev = azioni is not False and (azioni is None
+                                    or politica._s(args, "azione").lower() in azioni)
+    if e < valore.E3 and not irrev:
+        return None
+    note_rule(ctx, "scritto_irreversibile_voce")
+    return {"ok": False, "fatto": "NIENTE: l'azione NON è stata eseguita: si conferma solo a voce",
+            "conferma": SCRITTO_IRREVERSIBILE, "risposta_finale": SCRITTO_IRREVERSIBILE,
+            "in_sospeso": {"domanda": "Me lo dici a voce?", "cosa": "questa richiesta",
+                           "tool": name, "argomenti": args}}
+
+
 @dataclass
 class ToolSpec:
     name: str

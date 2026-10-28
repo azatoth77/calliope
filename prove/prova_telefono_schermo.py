@@ -568,7 +568,10 @@ def prepara_raccolte(cfg, hub, cartella: Path):
     from calliope.agenda import Agenda
     agenda = Agenda(str(cartella / "agenda.db"))
     agenda.add("timer", "per la pasta", time.time() + 900, owner="bianca", owner_name="Bianca")
-    agenda.add("promemoria", "chiamare il fabbro", time.time() + 86400 * 1.2, owner="dario", owner_name="Dario")
+    # Domani a mezzogiorno (28/10: «adesso + 1,2 giorni» dopo le 19:12 cadeva dopodomani, «In settimana»)
+    import datetime as _dt
+    domani = (_dt.datetime.now() + _dt.timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
+    agenda.add("promemoria", "chiamare il fabbro", domani.timestamp(), owner="dario", owner_name="Dario")
     hub.tool_ctx = ToolContext(cfg=cfg, speakers=None, speaker_ctx=None, speaker=None, liste=liste,
                                agenda=agenda)
     return liste
