@@ -102,7 +102,17 @@ def _su_pagina(ctx) -> bool:
     if vero is None:
         return False
     try:
-        return bool(vero(hub.mittente(ctx)))
+        m = hub.mittente(ctx)
+        if vero(m):
+            return True
+        # Zona grigia dal proprio telefono (revisione della PR #294): il documento della
+        # persona della conversazione sta nella sua pagina Documenti, e il telefono da cui
+        # parla è suo
+        from ..dispositivo import proprio
+        if getattr(m, "persona", None) and proprio(ctx, m):
+            m.certo = True
+            return bool(vero(m))
+        return False
     except Exception:  # noqa: BLE001 — nel dubbio, la frase di sempre
         return False
 

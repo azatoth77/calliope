@@ -156,10 +156,6 @@ def _schermo(ctx, lav):
         return
     sender = hub.mittente(ctx)
     lav.on_scheda = lambda card: hub.invia(card, sender)
-    # Il risultato rimasto in casa si ritrova nella pagina Lavori e programmi (28/10, #290)
-    abbinato = getattr(hub, "personale_abbinato", None)
-    if abbinato is not None:
-        lav.ha_pagina = lambda: bool(abbinato(sender))
     # L'avanzamento in diretta (agenti/avanzamento.py) solo con le schede automatiche accese
     lav.segui_schermi = bool(getattr(hub, "automatiche", True))
 

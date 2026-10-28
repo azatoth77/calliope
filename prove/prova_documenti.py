@@ -462,7 +462,7 @@ class SulServer(LocalDelivery):
 
     def deliver(self, *a, **k):
         d = super().deliver(*a, **k)
-        d["dove"] = "tra i miei documenti, perché il dispositivo da cui mi parli non riceve file"   # consegna.RemoteDelivery dal 28/10 (#290)
+        d["dove"] = "tra i miei documenti, perché il portatile non è collegato"   # consegna.RemoteDelivery dal 28/10 (#290)
         d["remoto"] = False
         return d
 

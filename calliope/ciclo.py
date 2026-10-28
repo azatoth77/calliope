@@ -2936,15 +2936,16 @@ class Ciclo:
         from . import dispositivo
         if t.scritto is not None:
             # Dallo schermo personale (il telefono o il PC, 28/10, #288): lo schermo a sezioni
-            personale = False
+            # «di»: di chi è lo schermo (revisione della PR #294, dispositivo.proprio)
+            di = None
             try:
                 hub = getattr(self.s, "schermi", None)
                 sid = (t.scritto or {}).get("schermo_id")
-                personale = bool(hub is not None and sid is not None
-                                 and (hub.schermo(sid) or {}).get("proprietario"))
+                di = ((hub.schermo(sid) or {}).get("proprietario")
+                      if hub is not None and sid is not None else None)
             except Exception:  # noqa: BLE001 — nel dubbio uno schermo qualunque
-                personale = False
-            return dispositivo.descrivi(dispositivo.SCRITTO, personale=personale)
+                di = None
+            return dispositivo.descrivi(dispositivo.SCRITTO, personale=bool(di), di=di)
         L, sat = self.listener, self.s.satelliti
         if not getattr(L, "remoto", False) or sat is None:
             return dispositivo.descrivi(dispositivo.LOCALE)
@@ -2956,7 +2957,11 @@ class Ciclo:
             coll = (ultima[0] if ultima else
                     sat.per_id(sid) if sid is not None else sat.attivo_pronto())
             canale = getattr(coll, "canale", None) or getattr(L, "canale", None)
-            return dispositivo.descrivi(canale, getattr(coll, "esecutore", None) is not None)
+            # Di chi è il satellite (il telefono di una persona, abbinato come personale):
+            # nella zona grigia lo schermo personale da cui parla resta il suo (PR #294)
+            di = (getattr(coll, "satellite", None) or {}).get("proprietario")
+            return dispositivo.descrivi(canale, getattr(coll, "esecutore", None) is not None,
+                                        di=di if isinstance(di, str) else None)
         except Exception:  # noqa: BLE001 — il dispositivo non ferma la voce
             return None
 

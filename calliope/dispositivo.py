@@ -30,27 +30,57 @@ che resta uguale fra i turni (Config.prompt_for, `sezioni`).
 TELEFONO, SATELLITE, LOCALE, SCRITTO = "telefono", "satellite", "locale", "scritto"
 
 
-# Lo schermo personale di chi parla (28/10, #288), per la nota e per il registro dei turni
-APERTO, CHIUSO, NESSUNO = "aperto", "chiuso", "nessuno"
+# Lo schermo personale di chi parla (28/10, #288), per la nota e per il registro dei turni.
+# OSPITE: chi parla non è riconosciuto; INCERTO: zona grigia (frase breve, conferma dentro la
+# conversazione, un minore vicino…) da un dispositivo che non è suo (revisione della PR #294)
+APERTO, CHIUSO, NESSUNO, OSPITE, INCERTO = "aperto", "chiuso", "nessuno", "ospite", "incerto"
 
 
-def descrivi(canale: str | None, pc_qui: bool = False, personale: bool = False) -> dict | None:
+def descrivi(canale: str | None, pc_qui: bool = False, personale: bool = False,
+             di: str | None = None) -> dict | None:
     """Il dispositivo di questa frase: {"canale", "pc_qui"} (con "personale": True per lo scritto
-    da uno schermo personale, 28/10); None se il canale non si sa."""
+    da uno schermo personale, 28/10; con "di": l'id della persona di cui è il dispositivo, il
+    telefono o lo schermo personale da cui si parla, revisione della PR #294); None se il canale
+    non si sa."""
     if canale not in (TELEFONO, SATELLITE, LOCALE, SCRITTO):
         return None
     out = {"canale": canale, "pc_qui": bool(pc_qui)}
     if personale and canale == SCRITTO:
         out["personale"] = True
+    if di:
+        out["di"] = str(di)
     return out
 
 
+def proprio(ctx, m=None) -> bool:
+    """La frase arriva da un dispositivo personale (il telefono, lo schermo personale) della
+    persona della conversazione: anche nella zona grigia, lo schermo personale da cui parla è il
+    suo (revisione della PR #294, come `_proprio_grigio` e `risultato_schermo_proprio`). Mai per
+    un ospite. `m`: il mittente, se già preso."""
+    disp = getattr(ctx, "dispositivo", None)
+    di = disp.get("di") if isinstance(disp, dict) else None
+    if not di:
+        return False
+    if m is None:
+        hub = getattr(ctx, "schermi", None)
+        if hub is None:
+            return False
+        try:
+            m = hub.mittente(ctx)
+        except Exception:  # noqa: BLE001
+            return False
+    return bool(getattr(m, "persona", None)) and m.persona == di
+
+
 def schermo_di(ctx, ufficio: bool = False) -> dict | None:
-    """Lo schermo personale di chi parla (28/10, #288): {"stato": aperto | chiuso | nessuno,
-    "nascoste": [nomi delle sezioni e delle pagine che lì non ci sono]}; None senza schermi.
+    """Lo schermo personale di chi parla (28/10, #288): {"stato", "nascoste": [nomi delle
+    sezioni e delle pagine che lì non ci sono]}; None senza schermi.
 
     Aperto: un suo schermo personale ha la pagina aperta adesso; chiuso: ne ha uno abbinato;
-    nessuno: non ne ha (gli ospiti e la zona grigia mai, come `Schermi.personale_abbinato`).
+    nessuno: è riconosciuto e non ne ha; ospite: chi parla non è riconosciuto; incerto: zona
+    grigia da un dispositivo non suo (dal suo telefono vale come riconosciuto: `proprio`).
+    Revisione della PR #294: fino ad allora ospite e zona grigia davano «nessuno», e dal proprio
+    telefono aperto la nota diceva «chi parla non ha uno schermo personale».
     `ufficio`: c'è l'Ufficio in questa installazione (il tool modello_compila): allora si dice
     se per chi parla non c'è. Solo lo stato che il server ha già, nessuna chiamata di rete."""
     hub = getattr(ctx, "schermi", None)
@@ -58,45 +88,64 @@ def schermo_di(ctx, ufficio: bool = False) -> dict | None:
         return None
     try:
         m = hub.mittente(ctx)
-        if not getattr(m, "certo", False) or not getattr(m, "persona", None):
-            return {"stato": NESSUNO, "nascoste": []}
+        if not getattr(m, "persona", None):
+            return {"stato": OSPITE, "nascoste": []}
+        if not getattr(m, "certo", False) and not proprio(ctx, m):
+            return {"stato": INCERTO, "nascoste": []}
         suoi = [s for s in hub.abbinati() if s.get("proprietario") == m.persona]
         if not suoi:
             return {"stato": NESSUNO, "nascoste": []}
         aperto = any(hub.collegato(s["id"]) for s in suoi)
-        nascoste = []
-        sc = getattr(ctx, "speaker_ctx", None)
-        name = getattr(sc, "current_speaker", None)
-        speakers = getattr(ctx, "speakers", None)
-        prof = speakers.get(name) if (name and speakers is not None) else None
-        if prof is not None:
-            from .schermi.aspetto import nascoste as nascoste_di
-            n = nascoste_di(prof)
-            if "casa" in n["sezioni"]:
-                nascoste.append("Casa")
-            if ufficio and ("ufficio" in n["raccolte"] or not getattr(prof, "admin", False)):
-                nascoste.append("Ufficio")
-        return {"stato": APERTO if aperto else CHIUSO, "nascoste": nascoste}
+        return {"stato": APERTO if aperto else CHIUSO, "nascoste": nascoste_di(ctx, ufficio)}
     except Exception:  # noqa: BLE001 — nel dubbio la nota non parla dello schermo
         return None
 
 
+def nascoste_di(ctx, ufficio: bool = False) -> list[str]:
+    """Le sezioni e le pagine che sullo schermo personale di chi parla non ci sono: Casa per
+    età (schermi/aspetto.nascoste), Ufficio per chi non amministra (solo con l'ufficio)."""
+    sc = getattr(ctx, "speaker_ctx", None)
+    name = getattr(sc, "current_speaker", None)
+    speakers = getattr(ctx, "speakers", None)
+    prof = speakers.get(name) if (name and speakers is not None) else None
+    if prof is None:
+        return []
+    from .schermi.aspetto import nascoste as nascoste_aspetto
+    n = nascoste_aspetto(prof)
+    out = []
+    if "casa" in n["sezioni"]:
+        out.append("Casa")
+    if ufficio and ("ufficio" in n["raccolte"] or not getattr(prof, "admin", False)):
+        out.append("Ufficio")
+    return out
+
+
+def _via(nascoste) -> str:
+    via = [str(x) for x in nascoste or ()]
+    if not via:
+        return ""
+    return (f"lì non c'è {via[0]}" if len(via) == 1
+            else f"lì non ci sono {', '.join(via[:-1])} e {via[-1]}")
+
+
 def _nota_schermo(schermo: dict | None) -> str:
-    """Il pezzo della nota sullo schermo personale di chi parla, "" senza schermi."""
+    """Il pezzo della nota sullo schermo personale di chi parla, "" senza schermi. Sempre una
+    frase vera: nella zona grigia non si nega lo schermo, si dice perché non lo si usa."""
     if not isinstance(schermo, dict):
         return ""
     stato = schermo.get("stato")
     if stato == NESSUNO:
         return "chi parla non ha uno schermo personale"
+    if stato == OSPITE:
+        return "chi parla non è riconosciuto dalla voce, quindi niente schermo personale"
+    if stato == INCERTO:
+        return ("non sono sicura di chi parla, quindi non uso uno schermo personale da qui")
     if stato not in (APERTO, CHIUSO):
         return ""
     out = ("lo schermo personale di chi parla è aperto adesso" if stato == APERTO
            else "lo schermo personale di chi parla è chiuso adesso")
-    via = [str(x) for x in schermo.get("nascoste") or ()]
-    if via:
-        out += (f" e lì non c'è {via[0]}" if len(via) == 1
-                else f" e lì non ci sono {', '.join(via[:-1])} e {via[-1]}")
-    return out
+    via = _via(schermo.get("nascoste"))
+    return out + (f" e {via}" if via else "")
 
 
 def pc_raggiungibile(pcs, cap: str | None = None) -> str | None:
@@ -160,7 +209,10 @@ def nota(disp: dict | None, pc: str | None, per_chi: bool = True,
     # «non un computer» sarebbe falso. Dallo schermo personale (il telefono o il PC, 28/10):
     # lo schermo a sezioni, e la riga sullo schermo aperto non serve
     if canale == SCRITTO and disp.get("personale"):
-        dove, sch = "lo schermo personale a sezioni di chi parla, per scritto", ""
+        # Anche qui le sezioni nascoste (revisione della PR #294: un bambino che scrive dal
+        # telefono non aveva la riga «lì non c'è Casa»)
+        dove = "lo schermo personale a sezioni di chi parla, per scritto"
+        sch = _via((schermo or {}).get("nascoste")) if isinstance(schermo, dict) else ""
     else:
         dove = {TELEFONO: "il telefono, non un computer",
                 SATELLITE: "un satellite vocale (microfono e cassa), non un computer",

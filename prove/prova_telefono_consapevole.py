@@ -124,9 +124,16 @@ class Hub:
         return {"schermi": [], "destinatari": [], "motivo": "nessuno_schermo"}
 
 
-def contesto(hub, sc, cfg=None):
+def contesto(hub, sc, cfg=None, disp=None, ufficio=None):
     cfg = cfg or Config()
-    return ToolContext(cfg=cfg, speakers=Speakers(), speaker_ctx=sc, speaker=None, schermi=hub)
+    ctx = ToolContext(cfg=cfg, speakers=Speakers(), speaker_ctx=sc, speaker=None, schermi=hub,
+                      ufficio=ufficio)
+    ctx.dispositivo = disp          # come Brain a ogni turno (revisione della PR #294)
+    return ctx
+
+
+# Il telefono di Dario (satellite personale, «di» = il suo id), da cui parla anche nella zona grigia
+TEL_DARIO = dispositivo.descrivi("telefono", di="dario")
 
 
 # ─────────────────────────── 1. #288: la nota e il prompt ───────────────────────────
@@ -153,10 +160,31 @@ def prova_nota():
     verifica("nessuno schermo abbinato: «chi parla non ha uno schermo personale»",
              s["stato"] == "nessuno" and "chi parla non ha uno schermo personale" in n, n)
     s = dispositivo.schermo_di(contesto(aperto, SC(None, "ospite", None)))
-    verifica("contrario: un ospite non ha schermo personale (anche col telefono di Dario aperto)",
-             s["stato"] == "nessuno", s)
-    s = dispositivo.schermo_di(contesto(aperto, SC(come="conversazione", sessione=True)))
-    verifica("contrario: zona grigia, nessuno schermo personale", s["stato"] == "nessuno", s)
+    n = dispositivo.nota(tel, None, True, s)
+    verifica("contrario: un ospite (anche col telefono di Dario aperto): «non è riconosciuto», "
+             "mai «non ha uno schermo personale»",
+             s["stato"] == "ospite" and "non è riconosciuto dalla voce" in n
+             and "non ha uno schermo personale" not in n, n)
+    # La zona grigia (revisione della PR #294): frase breve, conferma dentro la conversazione,
+    # un minore vicino. Mai «non ha uno schermo personale»
+    for come, sc in (("frase breve", SC(come="breve", sessione=True)),
+                     ("conversazione", SC(come="conversazione", sessione=True)),
+                     ("minore vicino (resta Dario, dalla conversazione)",
+                      SC(come="minore_vicino", sessione=True))):
+        s = dispositivo.schermo_di(contesto(aperto, sc, disp=TEL_DARIO))
+        n = dispositivo.nota(TEL_DARIO, None, True, s)
+        verifica(f"zona grigia ({come}) dal suo telefono: lo schermo aperto, vero",
+                 s["stato"] == "aperto" and "aperto adesso" in n and "non ha uno schermo" not in n, n)
+        s = dispositivo.schermo_di(contesto(aperto, sc, disp=tel))
+        n = dispositivo.nota(tel, None, True, s)
+        verifica(f"zona grigia ({come}) da un telefono non suo: «non sono sicura di chi parla», "
+                 f"mai «non ha uno schermo personale»",
+                 s["stato"] == "incerto" and "non sono sicura di chi parla" in n
+                 and "non ha uno schermo personale" not in n, n)
+    s = dispositivo.schermo_di(contesto(aperto, SC("Ada", "familiare", come="minore_piu_protetto",
+                                                   sessione=True), disp=TEL_DARIO))
+    verifica("zona grigia col minore dal telefono di Dario: incerto (il telefono non è di Ada)",
+             s["stato"] == "incerto", s)
     verifica("contrario: senza schermi nessuna riga sullo schermo",
              dispositivo.schermo_di(contesto(None, SC())) is None
              and dispositivo.nota(tel, None, True, None) == "dispositivo: il telefono, non un computer; "
@@ -176,6 +204,10 @@ def prova_nota():
     verifica("una bambina di 10 anni: «lì non ci sono Casa e Ufficio»",
              s["nascoste"] == ["Casa", "Ufficio"] and "lì non ci sono Casa e Ufficio" in n, n)
     # Lo scritto dallo schermo personale (il PC o il telefono)
+    n2 = dispositivo.nota(dispositivo.descrivi("scritto", personale=True), "portatile", True,
+                          {"stato": "aperto", "nascoste": ["Casa", "Ufficio"]})
+    verifica("scritto dallo schermo personale di una bambina: anche lì «lì non ci sono Casa e Ufficio»",
+             "per scritto; lì non ci sono Casa e Ufficio;" in n2, n2)
     n = dispositivo.nota(dispositivo.descrivi("scritto", personale=True), "portatile", True,
                          {"stato": "aperto", "nascoste": []})
     verifica("scritto dallo schermo personale: «lo schermo personale a sezioni di chi parla, per scritto»",
@@ -192,7 +224,15 @@ def prova_nota():
     finto = types.SimpleNamespace(s=types.SimpleNamespace(schermi=h, satelliti=None), listener=None,
                                   corsia=types.SimpleNamespace(satellite_id=None))
     d = Ciclo._dispositivo_turno(finto, types.SimpleNamespace(scritto={"tipo": "scritto", "schermo_id": 1}))
-    verifica("ciclo: scritto dallo schermo personale → personale", d and d.get("personale") is True, d)
+    verifica("ciclo: scritto dallo schermo personale → personale, di Dario",
+             d and d.get("personale") is True and d.get("di") == "dario", d)
+    sat = types.SimpleNamespace(per_id=lambda sid: types.SimpleNamespace(
+        canale="telefono", esecutore=None, satellite={"proprietario": "dario"}))
+    finto_t = types.SimpleNamespace(s=types.SimpleNamespace(schermi=h, satelliti=sat),
+                                    listener=types.SimpleNamespace(remoto=True, canale="telefono"),
+                                    corsia=types.SimpleNamespace(satellite_id=4))
+    d = Ciclo._dispositivo_turno(finto_t, types.SimpleNamespace(scritto=None))
+    verifica("ciclo: dal telefono personale di Dario → «di» dario", d and d.get("di") == "dario", d)
     h2 = Hub()
     h2._abb = [{"id": 9, "proprietario": None}]
     finto.s.schermi = h2
@@ -245,6 +285,21 @@ def prova_prompt():
     cfg2.immagini_tenuta = False
     verifica("con immagini_tenuta spenta: foto e file per i giorni del cassetto",
              "foto e file restano nel Cassetto 7 giorni" in cfg2._frase_sezioni(False), cfg2._frase_sezioni(False))
+    # Gli interruttori veri (revisione della PR #294): niente promesse di ciò che è spento
+    for chiave, via in (("schermi_scritto", "si scrive"), ("immagini_enabled", "si allegano foto"),
+                        ("allegati_enabled", " e file"), ("cassetto_enabled", "Cassetto"),
+                        ("schermi_sezioni", "sul PC"), ("telefono_enabled", "il telefono"),
+                        ("archivio_enabled", "«archiviala»")):
+        c3 = Config()
+        setattr(c3, chiave, False)
+        t3 = c3._frase_sezioni(False)
+        verifica(f"prompt con {chiave} spento: niente «{via.strip()}»", via not in t3 and t3.endswith(
+            "lo dicono i dati del turno. "), t3)
+    c3 = Config()
+    c3.telefono_enabled = c3.schermi_sezioni = False
+    verifica("senza telefono né PC a sezioni: nessun paragrafo", c3._frase_sezioni(True) == "")
+    verifica("prompt stabile: due configurazioni uguali, lo stesso testo",
+             Config()._frase_sezioni(True) == Config()._frase_sezioni(True))
     tok = round(len(cfg._frase_sezioni(True)) / CHARS_PER_TOKEN)
     print(f"     (paragrafo: {len(cfg._frase_sezioni(True))} caratteri, ~{tok} token stimati a "
           f"{CHARS_PER_TOKEN} caratteri per token)")
@@ -307,8 +362,8 @@ def prova_pagina():
     print("── 2. #289: schermo_mostra con cosa=pagina ──")
     reg = build_registry(schermi=True)
 
-    def call(args, hub, sc, livello=None):
-        ctx = contesto(hub, sc)
+    def call(args, hub, sc, livello=None, disp=None, ufficio=None, cfg=None):
+        ctx = contesto(hub, sc, cfg=cfg, disp=disp, ufficio=ufficio)
         ctx.regole = []
         r = json.loads(reg.call("schermo_mostra", args, ctx, livello or sc.current_level))
         return r, ctx
@@ -323,13 +378,17 @@ def prova_pagina():
                           ("cassetto", "cassetto"), ("giochi", "giochi")):
         r, _ = call({"cosa": "pagina", "pagina": detto}, h, SC())
         verifica(f"la pagina «{detto}» → #/cose/{attesa}", h.pagine[-1] == ("dario", attesa), (h.pagine[-1:], r))
+    n0 = len(h.pagine)
     r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC())
-    verifica("Ufficio: chi amministra sì", h.pagine[-1] == ("dario", "ufficio"), r)
+    verifica("Ufficio non installato: nemmeno chi amministra (come il prompt, che non lo nomina)",
+             not r.get("ok") and len(h.pagine) == n0, r)
+    r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC(), ufficio=object())
+    verifica("Ufficio installato: chi amministra sì", h.pagine[-1] == ("dario", "ufficio"), r)
     n = len(h.pagine)
-    r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC("Bianca", "familiare"))
+    r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC("Bianca", "familiare"), ufficio=object())
     verifica("Ufficio: un familiare no, e niente si sposta", not r.get("ok") and len(h.pagine) == n
              and "non c'è" in r["risposta_finale"], r)
-    r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC("Ada", "familiare"))
+    r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC("Ada", "familiare"), ufficio=object())
     verifica("Ufficio: una bambina no", not r.get("ok") and len(h.pagine) == n, r)
     r, _ = call({"cosa": "pagina", "pagina": "documenti"}, h, SC("Ada", "familiare"))
     verifica("una bambina: Documenti sì (la pagina c'è anche per lei)", h.pagine[-1] == ("ada", "documenti"), r)
@@ -338,7 +397,32 @@ def prova_pagina():
     verifica("ospite: niente, solo per chi è riconosciuto dalla voce", not r.get("ok") and len(h.pagine) == n
              and "riconosco dalla voce" in r["risposta_finale"], r)
     r, _ = call({"cosa": "pagina", "pagina": "documenti"}, h, SC(come="conversazione", sessione=True))
-    verifica("zona grigia: niente", not r.get("ok") and len(h.pagine) == n, r)
+    verifica("zona grigia da un dispositivo non suo: niente, e senza «chiamami per nome»",
+             not r.get("ok") and len(h.pagine) == n and "per nome" not in r["risposta_finale"]
+             and "non sono sicura" in r["risposta_finale"].lower(), r)
+    # Zona grigia dal suo telefono (revisione della PR #294): la pagina si apre, sul suo schermo
+    for come in ("breve", "conversazione", "minore_vicino"):
+        r, ctx = call({"cosa": "pagina", "pagina": "documenti"}, h, SC(come=come, sessione=True),
+                      disp=TEL_DARIO)
+        verifica(f"zona grigia ({come}) dal telefono di Dario: Documenti sul suo schermo",
+                 r.get("ok") and h.pagine[-1] == ("dario", "documenti")
+                 and "schermo_pagina_proprio" in ctx.regole, r)
+    n = len(h.pagine)
+    r, _ = call({"cosa": "pagina", "pagina": "documenti"}, h,
+                SC("Ada", "familiare", come="minore_piu_protetto", sessione=True), disp=TEL_DARIO)
+    verifica("zona grigia col minore dal telefono di Dario: niente si sposta (né il suo, né quello di Ada)",
+             not r.get("ok") and len(h.pagine) == n, r)
+    r, ctx = call({"cosa": "pagina", "pagina": "documenti"}, Hub(abbinati=[(1, "dario")]),
+                  SC(come="breve", sessione=True), disp=TEL_DARIO)
+    verifica("zona grigia dal suo telefono, schermo chiuso: «Lo trovi in Le mie cose…», non «non ne hai uno»",
+             r["risposta_finale"].startswith("Lo trovi in Le mie cose"), r)
+    cfg_spento = Config()
+    cfg_spento.cassetto_enabled = False
+    r, _ = call({"cosa": "pagina", "pagina": "cassetto"}, h, SC(), cfg=cfg_spento)
+    verifica("Cassetto spento: la pagina non c'è", not r.get("ok") and len(h.pagine) == n, r)
+    r, _ = call({"cosa": "agendina", "pagina": "liste"}, h, SC())
+    verifica("cosa fuori elenco con la pagina scritta: errore, niente si apre",
+             not r.get("ok") and len(h.pagine) == n and "cosa=pagina" in r["risposta_finale"], r)
     r, ctx = call({"cosa": "pagina", "pagina": "documenti"}, Hub(abbinati=[(1, "dario")]), SC())
     verifica("chiuso: «Lo trovi in Le mie cose, alla voce Documenti», niente mandato",
              r["risposta_finale"].startswith("Lo trovi in Le mie cose, alla voce Documenti")
@@ -381,7 +465,6 @@ def prova_frasi():
     from calliope.agenti.ciclo import Lavoro
     from calliope.agenti.servizio import Lavori
     from calliope.documenti.consegna import LocalDelivery, RemoteDelivery
-    from calliope.tools.agenti import _schermo
 
     class SrvSenzaFile:
         def __init__(self, c):
@@ -396,36 +479,79 @@ def prova_frasi():
              d["dove"] == "tra i miei documenti, perché il portatile non è collegato", d["dove"])
     tel = types.SimpleNamespace(esecutore=None)
     d = RemoteDelivery(SrvSenzaFile(tel), LocalDelivery(TMP / "riserva"), "portatile").deliver("B", "pdf", b"%PDF")
-    verifica("consegna dal telefono: senza «server» né «satellite»",
-             "server" not in d["dove"] and "satellite" not in d["dove"] and "non riceve file" in d["dove"], d["dove"])
+    verifica("consegna dal telefono: il motivo sul PC, vero da qualunque dispositivo (niente «da cui mi parli»)",
+             d["dove"] == "tra i miei documenti, perché il portatile non è collegato", d["dove"])
+    d = RemoteDelivery(SrvSenzaFile(types.SimpleNamespace(esecutore={"file": False})),
+                       LocalDelivery(TMP / "riserva"), "portatile").deliver("C", "pdf", b"%PDF")
+    verifica("consegna a un PC che non riceve file: «il portatile non riceve file»",
+             d["dove"] == "tra i miei documenti, perché il portatile non riceve file", d["dove"])
 
-    # I lavori dell'agente: la scelta dei documenti (schermo aperto, chiuso, assente)
-    def finto_lav(hub, sc):
-        lav = Lavoro("l1", "ricerca", "le api", persona="dario", persona_nome="Dario", titolo="Le api")
-        _schermo(contesto(hub, sc), lav)
-        return lav
+    # Il documento nella zona grigia (revisione della PR #294): dal suo telefono la pagina Documenti
+    from calliope.tools.documenti import _su_pagina
+    chiuso = Hub(abbinati=[(1, "dario")])
+    verifica("documento, zona grigia dal suo telefono: «in Le mie cose, alla voce Documenti»",
+             _su_pagina(contesto(chiuso, SC(come="breve", sessione=True), disp=TEL_DARIO)))
+    verifica("documento, zona grigia da un telefono non suo: la frase di sempre",
+             not _su_pagina(contesto(chiuso, SC(come="breve", sessione=True),
+                                     disp=dispositivo.descrivi("telefono"))))
+
+    # I lavori dell'agente: la scelta dei documenti, decisa alla consegna da `lav.persona`
+    # (revisione della PR #294), anche per un lavoro ripreso da disco dopo un riavvio
+    import threading
+    from calliope.agenti import ripresa
+    import calliope.agenti.risultato as AR
     dest = TMP / "lavoro"
     dest.mkdir(exist_ok=True)
     (dest / "risultato.md").write_text("# Le api", encoding="utf-8")
-    for nome, hub, attesa in (
-            ("aperto", Hub(abbinati=[(1, "dario")], aperti=[1]), "in Le mie cose, alla voce Lavori e programmi"),
-            ("chiuso", Hub(abbinati=[(1, "dario")]), "in Le mie cose, alla voce Lavori e programmi"),
-            ("assente", Hub(), "tra i miei file, nella cartella Lavori, perché il dispositivo da cui mi parli "
-                                "non riceve file")):
-        hub.automatiche = True
-        lav = finto_lav(hub, SC())
-        self = types.SimpleNamespace(consegna=types.SimpleNamespace(nome="portatile", server=SrvSenzaFile(tel)),
-                                     log=lambda m: None, _dove_in_casa=Lavori._dove_in_casa)
+
+    def servizio(hub, server):
+        svc = Lavori.__new__(Lavori)
+        svc.consegna = types.SimpleNamespace(nome="portatile", server=server)
+        svc.log, svc.schermi, svc.lavori, svc._lock = (lambda m: None), hub, [], threading.Lock()
+        return svc
+
+    def ripreso():
+        lav0 = Lavoro("l1", "ricerca", "le api", persona="dario", persona_nome="Dario", titolo="Le api")
+        return ripresa.ricostruisci(ripresa.voce(lav0, time.time()), Lavoro)
+    PAG = "in Le mie cose, alla voce Lavori e programmi"
+    for nome, hub, server, attesa in (
+            ("aperto, dal telefono", Hub(abbinati=[(1, "dario")], aperti=[1]), SrvSenzaFile(tel), PAG),
+            ("chiuso", Hub(abbinati=[(1, "dario")]), SrvSenzaFile(None), PAG),
+            ("assente, dal telefono", Hub(), SrvSenzaFile(tel),
+             "tra i miei file, nella cartella Lavori, perché il portatile non è collegato"),
+            ("assente, PC senza file", Hub(), SrvSenzaFile(types.SimpleNamespace(esecutore={"file": False})),
+             "tra i miei file, nella cartella Lavori, perché il portatile non riceve file")):
+        lav = ripreso()
         ris = {"file": ["risultato.md"]}
-        Lavori._consegna_risultato(self, lav, ris, dest)
-        verifica(f"lavoro rimasto in casa, schermo {nome}: «{attesa}»", ris.get("dove") == attesa
-                 and "server" not in ris["dove"] and "satellite" not in ris["dove"], ris.get("dove"))
-    lav = finto_lav(Hub(abbinati=[(1, "dario")]), SC(None, "ospite", None))
-    verifica("lavoro di un ospite: la cartella (niente pagina)",
-             Lavori._dove_in_casa(lav, "x").startswith("tra i miei file"))
-    rotto = Lavoro("l2", "ricerca", "x")
+        Lavori._consegna_risultato(servizio(hub, server), lav, ris, dest)
+        verifica(f"lavoro ripreso dopo un riavvio, schermo {nome}: «{attesa}»", ris.get("dove") == attesa
+                 and "server" not in ris["dove"] and "satellite" not in ris["dove"]
+                 and "da cui mi parli" not in ris["dove"], ris.get("dove"))
+    lav = Lavoro("l3", "ricerca", "x", persona=None)
+    svc = servizio(Hub(abbinati=[(1, "dario")]), SrvSenzaFile(None))
+    ris = {}
+    svc._dove_in_casa(lav, ris, "x")
+    verifica("lavoro senza persona: la cartella (niente pagina)", ris["dove"].startswith("tra i miei file"))
+    rotto = Lavoro("l2", "ricerca", "x", persona="dario")
     rotto.ha_pagina = lambda: 1 / 0
-    verifica("contrario: ha_pagina guasta → la cartella", Lavori._dove_in_casa(rotto, "x").startswith("tra i miei file"))
+    ris = {}
+    svc._dove_in_casa(rotto, ris, "x")
+    verifica("contrario: ha_pagina guasta → la cartella", ris["dove"].startswith("tra i miei file"))
+    # Lavori e programmi mostra gli ultimi LAVORI_FINITI_PAGINA: fuori da lì, la cartella
+    lav = ripreso()
+    lav.stato = "fatto"
+    ris = {}
+    svc._dove_in_casa(lav, ris, "il portatile non è collegato")
+    prima = AR.recenti
+    try:
+        AR.recenti = lambda svc_, persona, nome=None, n=3: [lav]
+        verifica("frase: il lavoro fra gli ultimi della pagina → «in Le mie cose…»",
+                 svc.dove_detto(lav, ris) == PAG, svc.dove_detto(lav, ris))
+        AR.recenti = lambda svc_, persona, nome=None, n=3: []
+        verifica("frase: il lavoro non più fra gli ultimi sei → la cartella, non «Lo trovi in Le mie cose»",
+                 svc.dove_detto(lav, ris).startswith("tra i miei file"), svc.dove_detto(lav, ris))
+    finally:
+        AR.recenti = prima
     from calliope.tools.documenti import documenti_specs
     spec = next(s for s in documenti_specs(["word", "pdf"]) if s.name == "documento_crea")
     verifica("documento_crea: «lo consegna a chi parla», non «lo salva sul PC»",
@@ -482,9 +608,11 @@ def prova_versioni():
         arch.close()
     js = (Path(__file__).resolve().parent.parent / "calliope/schermi/pagina/telefono/telefono.js").read_text(encoding="utf-8")
     sw = (Path(__file__).resolve().parent.parent / "calliope/schermi/pagina/telefono/sw.js").read_text(encoding="utf-8")
-    verifica("il telefono manda nel «ciao» la cache del service worker (calliope-telefono-pagina-vN)",
-             "pagina: st.pagina" in js and "calliope-telefono-pagina-v" in js
-             and re.search(r'const CACHE = "calliope-telefono-pagina-v\d+";', sw) is not None)
+    cost = re.search(r'const PAGINA_VERSIONE = "(calliope-telefono-pagina-v\d+)";', js)
+    cache = re.search(r'const CACHE = "(calliope-telefono-pagina-v\d+)";', sw)
+    verifica("il telefono manda nel primo «ciao» la versione della pagina che gira, uguale alla cache di sw.js",
+             cost and cache and cost.group(1) == cache.group(1) and "pagina: PAGINA_VERSIONE" in js
+             and "caches.keys" not in js, (cost and cost.group(1), cache and cache.group(1)))
 
 
 import re  # noqa: E402 — usato in prova_versioni

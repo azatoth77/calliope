@@ -553,7 +553,7 @@ try:
 
         def deliver(self, stem, ext, data, replace=None, mtime=None):
             d = self.locale.deliver(stem, ext, data, replace=replace, mtime=mtime)
-            return {**d, "dove": "tra i miei documenti, perché il dispositivo da cui mi parli non riceve file",
+            return {**d, "dove": "tra i miei documenti, perché il portatile non è collegato",
                     "remoto": False}
 
     class Hub:
@@ -572,7 +572,7 @@ try:
     for aperto, abbinato, attesa, con_scheda in (
             (True, True, "È sulla scheda del tuo schermo: per averla tocca «Scarica».", True),
             (False, True, "La trovi in Le mie cose, alla voce Documenti: per averla tocca «Scarica».", False),
-            (False, False, "tra i miei documenti, perché il dispositivo da cui mi parli non riceve file", False)):
+            (False, False, "tra i miei documenti, perché il portatile non è collegato", False)):
         svc = Documenti(c, str(Path(TMP) / f"doc-srv-{aperto}{abbinato}.db"), writer=NoWriter(),
                         delivery=SulServer(Path(TMP) / f"Srv-{aperto}{abbinato}"))
         cx = contesto(c, be, "Dario", "amministra", documenti=svc)

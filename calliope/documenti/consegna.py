@@ -198,8 +198,12 @@ class RemoteDelivery:
         from ..pc.remoto import per_pc
         c = per_pc(self.server)
         if c is None or not (getattr(c, "esecutore", None) or {}).get("file"):
-            perche = (f"il {self.nome} non è collegato" if c is None else
-                      "il dispositivo da cui mi parli non riceve file")
+            # Il motivo detto sul PC, vero da qualunque dispositivo si parli (revisione della
+            # PR #294: dal telefono «il dispositivo da cui mi parli non riceve file» era falso,
+            # il telefono riceve i file con «Scarica»)
+            perche = (f"il {self.nome} non è collegato"
+                      if c is None or getattr(c, "esecutore", None) is None
+                      else f"il {self.nome} non riceve file")
             return self._sul_server(stem, ext, data, replace, mtime, perche)
         sostituisci = replace if replace and str(replace).startswith(self.RIF) else None
         attesa = self.timeout_s + len(data) / (self.velocita_mb_s * 1024 * 1024)

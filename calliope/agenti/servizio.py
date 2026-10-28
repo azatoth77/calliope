@@ -449,6 +449,10 @@ RISPOSTA_MSG = ("Domanda in sospeso: hai appena chiesto, per il lavoro «{titolo
                 "parla d'altro, fai quello che chiede.")
 
 
+# Dove si ritrova il risultato di un lavoro con lo schermo personale (28/10, #290)
+PAGINA_LAVORI = "in Le mie cose, alla voce Lavori e programmi"
+
+
 class ErroreInput(Exception):
     """Il file della persona non è arrivato o non si legge: il lavoro non parte."""
 
@@ -547,6 +551,9 @@ class Lavori:
         self.esecuzioni = Esecuzioni(self, log=log)
         self._offerte: dict[str, dict] = {}
         self.estensioni = None      # Estensioni (calliope/estensioni/): le versioni da approvare
+        # Gli schermi (calliope/schermi/hub.py), messi da main.py: il risultato rimasto in casa si
+        # ritrova in Le mie cose › Lavori e programmi di chi l'ha chiesto (28/10, #290)
+        self.schermi = None
         # La modalità sviluppo (08/10, calliope/sviluppo.py): la crea load_agenti; None = niente
         self.sviluppi = None
         # L'analisi della richiesta prima della proposta (06/10, richiesta.Analizzatore): la
@@ -946,8 +953,14 @@ class Lavori:
             if d.get("remoto") is False:
                 # Rimasto in casa (28/10, #290): la pagina Lavori e programmi, o la cartella
                 perche = str(d.get("dove") or "").split("perché ", 1)[-1]
-                dove.add(self._dove_in_casa(lav, perche) if perche else
-                         (d.get("dove") or self.consegna.where()))
+                if perche:
+                    tmp = {}
+                    self._dove_in_casa(lav, tmp, perche)
+                    dove.add(tmp["dove"])
+                    if tmp.get("dove_cartella"):
+                        ris["dove_cartella"] = tmp["dove_cartella"]
+                else:
+                    dove.add(d.get("dove") or self.consegna.where())
                 continue
             dove.add(d.get("dove") or self.consegna.where())
         if dove:
@@ -1874,16 +1887,18 @@ class Lavori:
         nome_pc = getattr(self.consegna, "nome", "portatile")
         c = per_pc(getattr(self.consegna, "server", None))
         if c is None or not (getattr(c, "esecutore", None) or {}).get("file"):
-            ris["dove"] = self._dove_in_casa(lav, f"il {nome_pc} non è collegato"
-                                             if c is None else
-                                             "il dispositivo da cui mi parli non riceve file")
+            # Il motivo sul PC (revisione della PR #294): «il dispositivo da cui mi parli» era il
+            # satellite attivo quando il lavoro finisce, non quello di chi l'ha chiesto
+            self._dove_in_casa(lav, ris, f"il {nome_pc} non è collegato"
+                               if c is None or getattr(c, "esecutore", None) is None
+                               else f"il {nome_pc} non riceve file")
             return
         try:
             d = self.consegna.deliver(safe_filename(titolo_file(lav.titolo)), ext, p.read_bytes())
         except Exception as e:  # noqa: BLE001 — il file resta comunque nella cartella del lavoro
             self.log(f"[AGENTI] {lav.id}: consegna al {nome_pc} non riuscita: "
                      f"{type(e).__name__}: {e}")
-            ris["dove"] = self._dove_in_casa(lav, f"il {nome_pc} non l'ha ricevuto")
+            self._dove_in_casa(lav, ris, f"il {nome_pc} non l'ha ricevuto")
             return
         if not d.get("remoto"):
             # RemoteDelivery l'ha lasciato nella cartella di riserva sul server: qui c'è già
@@ -1894,7 +1909,7 @@ class Lavori:
                 pass
             perche = (str(d.get("dove") or "").split("perché ", 1)[-1]
                       or f"il {nome_pc} non ha risposto")
-            ris["dove"] = self._dove_in_casa(lav, perche)
+            self._dove_in_casa(lav, ris, perche)
             return
         ris["consegnati_pc"] = [d["nome_file"]]
         ris["dove"] = self.consegna.where()
@@ -1902,20 +1917,56 @@ class Lavori:
         if d.get("apri") and self._offri(lav, d["apri"], ext):
             ris["apribile"] = True
 
-    @staticmethod
-    def _dove_in_casa(lav: Lavoro, perche: str) -> str:
+    def _ha_pagina(self, lav: Lavoro) -> bool:
+        """Chi ha chiesto il lavoro ha uno schermo personale abbinato (il telefono, il PC
+        personale): deciso alla consegna da `lav.persona` (revisione della PR #294: con una
+        funzione presa alla delega i lavori rifatti o ripresi dopo un riavvio non l'avevano).
+        `lav.ha_pagina`, se c'è, vale prima (le prove)."""
+        f = getattr(lav, "ha_pagina", None)
+        try:
+            if callable(f):
+                return bool(f())
+            persona = getattr(lav, "persona", None)
+            hub = getattr(self, "schermi", None)
+            if not persona or hub is None:
+                return False
+            return any(s.get("proprietario") == persona for s in hub.abbinati())
+        except Exception:  # noqa: BLE001 — nel dubbio la cartella
+            return False
+
+    def _dove_in_casa(self, lav: Lavoro, ris: dict, perche: str):
         """Dove sta il risultato rimasto nella cartella del lavoro, detto a voce (28/10, issue
         #290): con uno schermo personale di chi l'ha chiesto, la pagina Lavori e programmi (lì
         c'è con «Scarica»); senza, la cartella e il perché, senza «server» né «satellite», che a
-        chi ascolta non dicono niente. *Storico: fino al 28/10 «sul server, nella cartella Lavori,
-        perché il satellite collegato non riceve documenti».*"""
+        chi ascolta non dicono niente. In `ris["dove"]`, e la cartella anche in
+        `ris["dove_cartella"]`: `dove_detto` la usa se il lavoro non è più fra quelli che la
+        pagina mostra. *Storico: fino al 28/10 «sul server, nella cartella Lavori, perché il
+        satellite collegato non riceve documenti».*"""
+        cartella = f"tra i miei file, nella cartella Lavori, perché {perche}"
+        if self._ha_pagina(lav):
+            ris["dove"], ris["dove_cartella"] = PAGINA_LAVORI, cartella
+        else:
+            ris["dove"] = cartella
+            ris.pop("dove_cartella", None)
+
+    def dove_detto(self, lav: Lavoro, ris: dict | None = None) -> str | None:
+        """`ris["dove"]`, ma «in Le mie cose…» solo se il lavoro è ancora fra gli ultimi che la
+        pagina Lavori e programmi mostra (LAVORI_FINITI_PAGINA, revisione della PR #294);
+        altrimenti la cartella."""
+        r = ris if ris is not None else (lav.risultato or {})
+        dove = r.get("dove")
+        if dove != PAGINA_LAVORI or not r.get("dove_cartella"):
+            return dove
         try:
-            pagina = bool(lav.ha_pagina()) if callable(getattr(lav, "ha_pagina", None)) else False
+            from ..schermi.raccolte import LAVORI_FINITI_PAGINA
+            from .risultato import recenti
+            if lav.stato not in ("fatto", "errore", "mancano_dati", "scaduto"):
+                return dove                 # appena consegnato: è il primo della pagina
+            ids = [lv.id for lv in recenti(self, lav.persona, lav.persona_nome,
+                                           LAVORI_FINITI_PAGINA)]
+            return dove if lav.id in ids else r["dove_cartella"]
         except Exception:  # noqa: BLE001 — nel dubbio la cartella
-            pagina = False
-        if pagina:
-            return "in Le mie cose, alla voce Lavori e programmi"
-        return f"tra i miei file, nella cartella Lavori, perché {perche}"
+            return r["dove_cartella"]
 
     def _offri(self, lav: Lavoro, percorso: str, ext: str) -> bool:
         """Il file appena consegnato diventa l'«ultima ricerca» di chi ha chiesto il lavoro:
@@ -1976,6 +2027,8 @@ class Lavori:
     # ─────────────────────────── annuncio e scheda ───────────────────────────
     def frase_finale(self, lav: Lavoro) -> str:
         r = lav.risultato
+        if isinstance(r, dict) and r.get("dove_cartella"):
+            r = {**r, "dove": self.dove_detto(lav, r)}    # PR #294: la pagina mostra gli ultimi
         titolo = titolo_detto(lav.titolo)     # niente nomi di file né parentesi a voce
         riuscita = "riuscita" if self.female else "riuscito"
         dove = "nella cartella Lavori dei Documenti"

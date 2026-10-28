@@ -267,9 +267,21 @@ def _apri_pagina(ctx: ToolContext, hub, pagina: str) -> dict:
         return _final("Le mie cose c'è solo sullo schermo personale di chi riconosco dalla voce.",
                       ok=False, fatto=NIENTE)
     if not getattr(sender, "certo", False):
-        return _final("Non ho riconosciuto bene la tua voce: ripetilo dopo avermi chiamata per "
-                      "nome.", ok=False, fatto=NIENTE)
-    if p not in visibili(prof):
+        # Zona grigia (revisione della PR #294): dal suo telefono, o dal suo schermo personale,
+        # la pagina si apre lo stesso: è reversibile, sul suo schermo, con le sue cose (come
+        # `_proprio_grigio`); da un altro dispositivo no, senza dire «chiamami per nome»
+        from ..dispositivo import proprio
+        if not proprio(ctx, sender):
+            return _final("Non sono sicura di chi parla, quindi da qui non apro uno schermo "
+                          "personale: chiedimelo dal tuo telefono, o con una frase più lunga.",
+                          ok=False, fatto=NIENTE)
+        sender.certo = True                 # solo per questa chiamata, come _proprio_grigio
+        note_rule(ctx, "schermo_pagina_proprio")
+    # L'Ufficio c'è solo con l'ufficio installato, come nel prompt (revisione della PR #294)
+    cfg = getattr(ctx, "cfg", None)
+    spenta = ((p == "ufficio" and getattr(ctx, "ufficio", None) is None)
+              or (p == "cassetto" and not getattr(cfg, "cassetto_enabled", True)))
+    if p not in visibili(prof) or spenta:
         return _final(f"Sul tuo schermo la pagina {nomi[p]} non c'è.", ok=False, fatto=NIENTE)
     apri = getattr(hub, "apri_pagina", None)
     n = apri(sender.persona, p) if apri is not None else 0
@@ -293,9 +305,13 @@ def _schermo_mostra(ctx: ToolContext, cosa: str = "ultima", lista: str = "",
         return _final("Gli schermi non sono attivi in questa installazione.", ok=False,
                       fatto=NIENTE)
     cosa = str(cosa or "ultima").strip().lower()
-    if cosa == "pagina" or (cosa not in COSE and str(pagina or "").strip()):
-        # Con la pagina scritta e `cosa` fuori elenco vale la pagina (forma della scelta)
-        return _apri_pagina(ctx, hub, pagina or cosa)
+    if cosa == "pagina":
+        return _apri_pagina(ctx, hub, pagina)
+    if cosa not in COSE and cosa not in ("agenda", "appuntamenti") and str(pagina or "").strip():
+        # `cosa` fuori elenco con la pagina scritta: un errore, non una pagina aperta a caso
+        # (revisione della PR #294: cosa="agenda", pagina="liste" apriva le Liste)
+        return _final("Non so cosa mostrare: per una pagina di Le mie cose serve cosa=pagina.",
+                      ok=False, fatto=NIENTE)
     if cosa in ("agenda", "appuntamenti"):          # sinonimi dello stesso valore
         cosa = "promemoria"
     if cosa not in COSE:

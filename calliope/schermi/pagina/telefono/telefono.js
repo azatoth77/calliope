@@ -8,6 +8,11 @@ import { SchermoAcceso } from "./schermo-acceso.js";
 
 // Versione 3 (13/10): l'ascolto della stanza (calliope/satellite/protocollo.py)
 const VERSIONE = 3;
+// La versione di questa pagina, nei log del server (28/10, #291): uguale alla cache di sw.js
+// (prova_telefono_consapevole le confronta). Una costante della pagina che gira, non la cache
+// più alta (revisione della PR #294: durante un aggiornamento è quella nuova), e pronta già al
+// primo «ciao»
+const PAGINA_VERSIONE = "calliope-telefono-pagina-v19";
 const CHIAVE_TOKEN = "calliope.telefono.token";
 const CHIAVE_NOME = "calliope.telefono.nome";
 const CHIAVE_MIC = "calliope.telefono.microfono";
@@ -31,7 +36,6 @@ const aspetta = (ms) => new Promise((ok) => setTimeout(ok, ms));
 const st = {
   ws: null, token: leggi(CHIAVE_TOKEN), collegato: false, attivo: false, altro: null,
   satellite: {}, tentativi: 0, sostituito: false,
-  pagina: null,          // la versione della cache del service worker, per i log (28/10, #291)
   mic: false,            // «microfono acceso» (vivavoce, con la wake word)
   micVoluto: leggi(CHIAVE_MIC) === "1",
   L: null,               // richiesta di ascolto del server {id, wake, fino, sveglia}
@@ -942,7 +946,7 @@ function connetti(ripresa) {
   ws.onopen = () => {
     ws.send(JSON.stringify({ tipo: "ciao", versione: VERSIONE, token: st.token, primo: false,
       nome: "telefono", esecutore: null, modalita: true, stanza: true,
-      ...(st.pagina ? { pagina: st.pagina } : {}) }));
+      pagina: PAGINA_VERSIONE }));
   };
   ws.onmessage = (ev) => {
     if (ws !== st.ws) return;
@@ -1797,20 +1801,6 @@ window.addEventListener("pageshow", (ev) => {
 });
 
 // ───────────────────────────── avvio ─────────────────────────────
-// La versione della pagina nei log del server (28/10, #291): il nome della cache del service
-// worker in uso («calliope-telefono-pagina-v19»), detto nel «ciao»; senza cache (certificato non
-// fidato, prima apertura) niente
-function versionePagina() {
-  try {
-    if (!("caches" in window)) return;
-    caches.keys().then((k) => {
-      const v = k.filter((n) => /^calliope-telefono-pagina-v\d{1,4}$/.test(n))
-        .sort((a, b) => Number(a.split("-v").pop()) - Number(b.split("-v").pop())).pop();
-      if (v) st.pagina = v;
-    }).catch(() => { /* niente */ });
-  } catch (e) { /* niente */ }
-}
-
 async function avvio() {
   if (!window.isSecureContext) {
     avviso("Il microfono vuole una pagina sicura (https): apri l'indirizzo https:// di Calliope.");
@@ -1821,7 +1811,6 @@ async function avvio() {
       // parte: la pagina funziona lo stesso, ma non si apre senza rete
     });
   }
-  versionePagina();
   $("tel-chiedi").addEventListener("click", chiediCodice);
   $("microfono").addEventListener("click", () => impostaMicDaTocco(!st.mic));
   $("schermo-tieni").addEventListener("click", () => impostaTieni(!st.tieni));

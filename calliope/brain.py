@@ -2958,6 +2958,8 @@ class Brain:
         # come attributo, vale una risposta sola; nei dati del turno (_turn_context)
         self._dispositivo_turno = self.__dict__.pop("dispositivo_turno", None)
         self.last_dispositivo = None        # per il registro dei turni (28/10, #288)
+        if getattr(self, "tool_ctx", None) is not None:   # per i tool: dispositivo.proprio
+            self.tool_ctx.dispositivo = self._dispositivo_turno   # (revisione della PR #294)
         # Le righe della stanza davanti al modello in questa risposta (14/10 sera, _stanza_prepara)
         self._stanza_visibili, self._stanza_ancore, self.last_stanza_storia = [], {}, None
         # I dati fissi davanti al modello in questa risposta (16/10, _dati_prepara) e quanto

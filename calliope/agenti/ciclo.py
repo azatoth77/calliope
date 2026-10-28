@@ -156,8 +156,9 @@ class Lavoro:
     letture: dict = field(default_factory=dict)   # percorso → [impronta, volte, pezzi letti]
     risultato: dict = field(default_factory=dict)
     on_scheda: object = None          # funzione(scheda) degli schermi, presa alla delega
-    # Chi l'ha chiesto ha uno schermo personale abbinato (28/10, #290): il risultato rimasto in
-    # casa si ritrova in Le mie cose › Lavori e programmi. Funzione() -> bool, presa alla delega
+    # Solo per le prove: funzione() -> bool al posto di Lavori._ha_pagina, che decide alla
+    # consegna da `persona` se il risultato si ritrova in Le mie cose › Lavori e programmi
+    # (28/10, #290; revisione della PR #294: presa alla delega mancava ai lavori ripresi)
     ha_pagina: object = None
     cedimenti: int = 0                # volte che ha ceduto la GPU alla voce
     # File da mettere nella sandbox prima di cominciare ({percorso: testo}): lo script da

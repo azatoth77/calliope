@@ -435,7 +435,7 @@ def annuncio():
     class SulServer(LocalDelivery):     # come consegna.RemoteDelivery._sul_server
         def deliver(self, *a, **k):
             d = super().deliver(*a, **k)
-            d["dove"], d["remoto"] = "tra i miei documenti, perché il dispositivo da cui mi parli non riceve file", False
+            d["dove"], d["remoto"] = "tra i miei documenti, perché il portatile non è collegato", False
             return d
     cfg = Config()
     cfg.documenti_attesa_s = 0.0
