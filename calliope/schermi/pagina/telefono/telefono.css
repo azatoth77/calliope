@@ -15,7 +15,7 @@
   --g: clamp(0.55rem, 2vmin, 0.9rem);                  /* spazio tra le parti */
 }
 
-html { font-size: 17px; background: #000; }
+html { font-size: 17px; background: #000; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
 
 body.telefono {
   display: block; height: auto; min-height: 100vh; min-height: 100dvh; overflow: auto;
@@ -183,16 +183,18 @@ body.telefono {
 }
 .voce-riga .tasto { min-width: 3.6rem; min-height: 3.6rem; padding: 0.3rem 0.8rem; }
 /* nelle altre sezioni più bassa: lo stato su una riga sua, piccolo, poi Microfono e Parla
-   (27/10, iPhone: accanto ai pulsanti «Dormo · di' «Calliope»» andava a capo a ogni sillaba) */
-.vista[data-modo="sezioni"]:not([data-sezione="adesso"]):not([data-sezione="conversazione"]) .voce-riga {
+   (27/10, iPhone: accanto ai pulsanti «Dormo · di' «Calliope»» andava a capo a ogni sillaba).
+   Con :where (28/10, #277) il peso è quello di «.vista[data-modo] .voce-riga»: il layout compatto,
+   più sotto, vince su queste regole */
+.vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga {
   row-gap: 0.35rem; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "stato stato" "dove dove" "mic parla";
 }
-.vista[data-modo="sezioni"]:not([data-sezione="adesso"]):not([data-sezione="conversazione"]) .voce-riga :is(.scrivi-apri, .foto-apri) { display: none; }
-.vista[data-modo="sezioni"]:not([data-sezione="adesso"]):not([data-sezione="conversazione"]) .voce-riga .voce { font-size: 1.05rem; padding-bottom: 0.25rem; gap: 0.45rem; }
-.vista[data-modo="sezioni"]:not([data-sezione="adesso"]):not([data-sezione="conversazione"]) .voce-riga .voce .forma { width: 1.4rem; height: 1.4rem; }
-.vista[data-modo="sezioni"]:not([data-sezione="adesso"]):not([data-sezione="conversazione"]) .voce-riga .vista-dove { font-size: 0.9rem; }
-.vista[data-modo="sezioni"]:not([data-sezione="adesso"]):not([data-sezione="conversazione"]) .voce-riga :is(.parla, .tasto) { min-height: 3.2rem; }
-.vista[data-modo="sezioni"]:not([data-sezione="adesso"]):not([data-sezione="conversazione"]) .voce-riga .parla { padding: 0.2rem 1.1rem; font-size: 1.15rem; }
+.vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga :is(.scrivi-apri, .foto-apri) { display: none; }
+.vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga .voce { font-size: 1.05rem; padding-bottom: 0.25rem; gap: 0.45rem; }
+.vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga .voce .forma { width: 1.4rem; height: 1.4rem; }
+.vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga .vista-dove { font-size: 0.9rem; }
+.vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga :is(.parla, .tasto) { min-height: 3.2rem; }
+.vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga .parla { padding: 0.2rem 1.1rem; font-size: 1.15rem; }
 
 /* «Parla»: largo; in auto alto un quinto dello schermo */
 .parla {
@@ -208,7 +210,9 @@ body.telefono {
   flex: none; width: 1.2em; height: 1.2em; border-radius: 50%; box-sizing: border-box;
   border: 0.18em solid var(--v-ascolta);
 }
+.parla-parole { min-width: 0; display: flex; flex-direction: column; align-items: center; }
 .parla-testo { min-width: 0; }
+.parla-breve, .parla-stato { display: none; }       /* solo nel layout compatto */
 .parla.in-corso { background: #1a4a2f; border-color: var(--v-ascolta); color: #fff; }
 .parla.in-corso .parla-icona { background: currentColor; border-color: currentColor; }
 .parla.parla-calliope { border-color: var(--v-parla); background: #0a1422; }
@@ -291,6 +295,85 @@ button.grande:focus-visible, .link:focus-visible, .strato a:focus-visible {
   .barra { padding-left: 0; padding-right: 0; }
   .barra a { font-size: 0.58rem; letter-spacing: -0.02em; }
   .barra a[aria-current="page"] { font-weight: 600; }       /* «Conversazione» in grassetto non ci sta */
+}
+
+/* ── Il layout compatto, sugli schermi bassi o stretti (28/10, #277) ──
+   Sull'iPhone 13 mini (375×812, e 320×693 con lo «Zoom schermo» di iOS, che era il caso vero) la
+   voce prendeva tre righe (stato con la linea, «Tocca «Parla» per parlare», i pulsanti) e con la
+   barra quasi metà dello schermo; i filtri della Conversazione andavano su due righe. Qui, in
+   verticale sotto i 390 px di larghezza o i 720 di altezza (iPhone mini e SE, Android piccoli):
+   - la voce su una riga sola: lo stato entra in «Parla» (la parola breve sopra, lo stato piccolo
+     sotto), il colore del bordo e l'icona restano; la riga grande dello stato resta per i lettori
+     (role="status", ritagliata a 1 px); il suggerimento di sempre sparisce ed è la descrizione di
+     «Parla» (aria-describedby); le altre righe piccole (il microfono su un altro satellite, la
+     compagnia, la stanza) restano sopra i pulsanti. Anche quando ascolta, pensa o parla la riga
+     non cresce: la sezione non salta mentre Calliope parla;
+   - la barra più bassa, icone ed etichette piccole, la zona sicura in fondo com'era;
+   - titolo della sezione più piccolo; filtri della Conversazione in una riga che scorre di lato,
+     «Cerca» come lente; tessere di Le mie cose più fitte, col conto accanto al nome.
+   Tocchi ≥ 44 px (2,75rem = 46,75 px), contrasto AA come prima. «In auto» non cambia: lì contano i
+   bersagli grandi. Le misure in prova_telefono_schermo, prova_cronologia_pagina e prova_sezioni. */
+@media (orientation: portrait) and (max-width: 389px), (orientation: portrait) and (max-height: 719px) {
+  .vista[data-modo="sezioni"] { gap: 0.45rem; }
+  .vista[data-modo="sezioni"] .riga-titolo { min-height: 0; gap: 0.5rem; }
+  .vista[data-modo="sezioni"] .sez-titolo { font-size: 1.2rem; line-height: 1.25; }
+  .vista[data-modo="sezioni"] .vista-avviso { font-size: 0.9rem; }
+  .vista[data-modo="sezioni"] .sezione { gap: 0.45rem; }
+  .telefono .vista[data-modo="sezioni"] .pagina-car { padding: 0.6rem 0.8rem; }
+
+  /* la voce: una riga, in flex (gli elementi nascosti non lasciano colonne vuote) */
+  .vista[data-modo="sezioni"] .voce-riga { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0.3rem 0.45rem; }
+  .vista[data-modo="sezioni"] .voce-riga .voce {
+    position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; border: 0;
+    overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .vista[data-modo="sezioni"] .voce-riga .vista-dove { flex: 1 0 100%; font-size: 0.85rem; line-height: 1.25; }
+  .vista[data-modo="sezioni"] .voce-riga .vista-dove[data-ovvio="1"] { display: none; }
+  .vista[data-modo="sezioni"] .voce-riga .tasto {
+    flex: none; min-width: 2.75rem; min-height: 2.75rem; padding: 0.15rem 0.55rem; border-radius: 0.85rem;
+  }
+  .vista[data-modo="sezioni"] .voce-riga .parla {
+    flex: 1 1 0; min-width: 0; min-height: 2.75rem; padding: 0.15rem 0.6rem; gap: 0.45em;
+    font-size: 1.1rem; border-width: 2px; border-radius: 0.85rem;
+  }
+  .vista[data-modo="sezioni"] .voce-riga .parla-icona { width: 1em; height: 1em; }
+  .vista[data-modo="sezioni"] .voce-riga .parla-testo { display: none; }
+  .vista[data-modo="sezioni"] .voce-riga .parla-breve { display: block; line-height: 1.1; }
+  .vista[data-modo="sezioni"] .voce-riga .parla-stato {
+    display: block; font-size: 0.72rem; font-weight: 600; line-height: 1.2; color: inherit; text-align: center;
+  }
+
+  /* la barra: più bassa (≥ 44 px), la zona sicura sotto resta quella del padding */
+  .vista[data-modo="sezioni"] .barra a { min-height: 2.9rem; gap: 0.1rem; font-size: 0.62rem; }
+  .vista[data-modo="sezioni"] .icona-sez svg { width: 1.2rem; height: 1.2rem; }
+  .vista[data-modo="sezioni"] .barra .novita { top: 0.15rem; }
+
+  /* i filtri della Conversazione: una riga che scorre di lato, «Cerca» come lente */
+  .telefono .chat-filtri { gap: 0.35rem; margin-bottom: 0.4rem; }
+  .telefono .chat-chips { flex-wrap: nowrap; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .telefono .chat-chips::-webkit-scrollbar { display: none; }
+  .telefono .chat-chips .chat-chip { flex: none; font-size: 0.85rem; padding: 0.2rem 0.65rem; white-space: nowrap; }
+  .telefono .chat-chips .chat-cerca-apri { font-size: 0; position: relative; width: 2.75rem; padding: 0; }
+  .telefono .chat-chips .chat-cerca-apri::before {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 0.8rem; height: 0.8rem; margin: -0.6rem 0 0 -0.6rem;
+    border: 0.14rem solid currentColor; border-radius: 50%;
+  }
+  .telefono .chat-chips .chat-cerca-apri::after {
+    content: ""; position: absolute; left: 50%; top: 50%; width: 0.45rem; height: 0.14rem; margin: 0.3rem 0 0 0.12rem;
+    background: currentColor; border-radius: 0.1rem; transform: rotate(45deg);
+  }
+
+  /* Le mie cose: tessere più fitte, il conto accanto al nome quando c'è posto (se no sotto:
+     in flex che va a capo; in griglia il nome si spezzava a metà parola, «Agend a») */
+  .telefono .tessere { gap: 0.45rem; }
+  .telefono .tessera {
+    flex-direction: row; flex-wrap: wrap; align-items: baseline; align-content: flex-start;
+    gap: 0.1rem 0.45rem; min-height: 3.6rem; padding: 0.5rem 0.65rem;
+  }
+  .telefono .tessera-testa { flex: 1 1 auto; min-width: 0; }
+  .telefono .tessera-nome { font-size: 0.95rem; overflow-wrap: break-word; }
+  .telefono .tessera-conto { flex: none; margin-left: auto; font-size: 1.25rem; }
+  .telefono .tessera-stato { flex: 1 0 100%; font-size: 0.82rem; }
 }
 
 /* ── In auto: niente barra, solo l'ultima risposta grande, «Parla» alto, il microfono ── */

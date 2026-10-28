@@ -383,17 +383,32 @@ class Documenti:
                 **({"in_sospeso": in_sospeso(ask.strip(), f"{name} «{doc['titolo']}»")}
                    if can_open else {})}
 
-    def scrivi_fisso(self, owner: str, formato: str, doc: dict) -> dict:
+    def scrivi_fisso(self, owner: str, formato: str, doc: dict, owner_name: str = "") -> dict:
         """Un documento con il testo già pronto nel codice (la guida per collegare la casa):
-        niente LLM, stessa validazione, stesso file e stessa consegna. Non entra
-        nell'archivio delle modifiche. {"ok", "nome_file", "dove", "apribile"}."""
+        niente LLM, stessa validazione, stesso file e stessa consegna.
+        {"ok", "nome_file", "dove", "apribile", "sul_server"}; rimasto sul server anche
+        "documento" e "scheda".
+
+        Rimasto sul server perché il satellite non riceve documenti (un telefono), entra
+        nell'archivio di `owner` come un documento fatto da Calliope (28/10, #277: sull'iPhone
+        «Ti ho preparato la guida in PDF sul server, perché il satellite collegato non riceve
+        documenti», e la guida non si ritrovava da nessuna parte): la pagina Documenti la mostra
+        con «Scarica», e chi chiede la guida riceve la scheda. *Storico: fino al 28/10 non
+        entrava mai nell'archivio.* Consegnata al PC resta fuori, come prima."""
         doc = validate(formato, doc)
         data = render(formato, doc, self.fonts)
         ext = ESTENSIONI[formato]
         d = self.delivery.deliver(safe_filename(doc["titolo"]), ext, data)
-        return {"ok": True, "nome_file": d["nome_file"],
-                "dove": d.get("dove") or self.delivery.where(),
-                "apribile": self._offer(owner, d, doc["titolo"], ext)}
+        out = {"ok": True, "nome_file": d["nome_file"],
+               "dove": d.get("dove") or self.delivery.where(),
+               "apribile": self._offer(owner, d, doc["titolo"], ext),
+               "sul_server": d.get("remoto") is False}
+        if out["sul_server"]:
+            doc_id = self.archive.add(owner, owner_name or owner, formato, doc["titolo"], d["rif"],
+                                      d["nome_file"], doc, d.get("mtime"), doc["titolo"])
+            out["documento"] = doc_id
+            out["scheda"] = _scheda(doc, formato, d["nome_file"], ident=doc_id)
+        return out
 
     def _offer(self, owner: str, delivered: dict, title: str, ext: str) -> bool:
         """Il file appena scritto diventa l'«ultima ricerca» della persona sul PC:

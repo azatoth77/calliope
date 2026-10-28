@@ -46,11 +46,14 @@ una riuscita non serve più; i tocchi sono veri (Input.dispatchMouseEvent: gesto
 - modulo da compilare: si apre da solo nel suo strato, controlli mentre si scrive, «Invia»,
   «Compila» in Adesso sotto «Aspetta te»; «Scrivi» apre la casella col fuoco, la frase arriva e
   lo strato si chiude; Io ha prova del microfono, schermo acceso, certificato, «dimentica»;
-- misure a 375×812, 320×568, 812×375 con 0 e 6 schede, microfono spento, «Penso…», acceso, in
+- misure a 375×812, 320×568, 812×375, 375×667 e 320×693 (iPhone 13 mini con lo «Zoom schermo»,
+  28/10) con 0 e 6 schede, microfono spento, «Penso…», acceso, in
   ogni sezione e in auto: tutto in uno schermo (la sezione scorre da sé), niente testo fuori dai
   contenitori, schede dentro la sezione, contrasto AA, tocchi ≥ 44 px (≥ 64 in auto), in auto col
   microfono acceso «Parla» più basso e la risposta più alta; modulo e casella aperti: niente di
-  lato, tasti ≥ 64 px (CALLIOPE_FOTO=<cartella> per gli screenshot);
+  lato, tasti ≥ 64 px (CALLIOPE_FOTO=<cartella> per gli screenshot); il layout compatto in
+  verticale (28/10, #277): la voce su una riga con lo stato in «Parla», voce e barra sotto il 25 %
+  dell'altezza (30 % col testo ingrandito del 20 %), le tessere senza parole spezzate; in auto no;
 - nessun errore JavaScript né violazione della CSP. ~25 s.
 """
 
@@ -1093,7 +1096,12 @@ def compila(t: Tel, hub, foto_cb=None):
 # non scorre (scorre la sezione), nessun testo fuori dal suo contenitore, parti che non si
 # sovrappongono, schede dentro la sezione, tocchi ≥ 44 px (≥ 64 in auto), contrasto AA. Con
 # CALLIOPE_FOTO=<cartella> salva anche gli screenshot.
-DIMENSIONI = [(375, 812, "iphone13mini"), (320, 568, "piccolo"), (812, 375, "orizzontale")]
+# 28/10 (#277): anche l'iPhone SE (375×667) e l'iPhone 13 mini con lo «Zoom schermo» di iOS
+# (320×693, il caso vero delle schermate di Dario), dove vale il layout compatto
+DIMENSIONI = [(375, 812, "iphone13mini"), (320, 568, "piccolo"), (812, 375, "orizzontale"),
+              (375, 667, "se"), (320, 693, "mini-zoom")]
+# Il compatto (28/10, #277): la voce e la barra insieme al più un quarto dell'altezza
+FISSI_MAX = 0.25
 RISPOSTA_LUNGA = ("Va bene, allora il file resta salvato nella cartella dei documenti del portatile, "
                   "con il nome che mi hai detto prima. Quando vuoi lo apro, oppure lo mando sullo schermo "
                   "dello studio. Fammi sapere se hai bisogno di altro, anche più tardi.")
@@ -1125,7 +1133,9 @@ MISURA = r"""(() => {
   const scatole = ['tel-voce', 'tel-dove', 'avviso-tel', 'schermo-avviso', 'parla', 'microfono', 'scrivi-apri',
     'foto-apri', 'auto-apri', 'auto-esci', 'sez-titolo'].map((id) => document.getElementById(id))
     .concat([...document.querySelectorAll('#barra a')]).filter(vis);
-  for (const e of scatole) {
+  // ritagliata a 1 px per i lettori (28/10, #277: la riga dello stato nel layout compatto)
+  const ritagliata = (e) => { const cs = getComputedStyle(e); return cs.position === 'absolute' && cs.clip !== 'auto'; };
+  for (const e of scatole.filter((x) => !ritagliata(x))) {
     if (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1) fuori.push(nome(e) + ' trabocca');
     const r = e.getBoundingClientRect();
     if (!dentro(r, gr)) fuori.push(nome(e) + ' fuori dalla vista');
@@ -1141,6 +1151,13 @@ MISURA = r"""(() => {
     if (r.left < br.left - 1 || r.right > br.right + 1) fuori.push(p.dataset.chiave + ' esce dalla sezione di lato');
     if (p.scrollWidth > p.clientWidth + 1) fuori.push(p.dataset.chiave + ' trabocca di lato');
     if (r.bottom > br.top && r.top < br.bottom) { inVista.push(p.dataset.chiave); testiDentro(p, r, true); }
+  }
+  // le tessere di Le mie cose (28/10, #277): niente parola spezzata a metà (più righe che parole)
+  for (const e of [...document.querySelectorAll('#tessere .tessera-nome, #tessere .tessera-stato')].filter(vis)) {
+    const righe = Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight));
+    if (righe > e.textContent.trim().split(/\s+/).length) fuori.push('tessera: «' + e.textContent.trim().slice(0, 20) + '» spezzata');
+    const t = e.closest('.tessera');
+    if (t.scrollWidth > t.clientWidth + 1 || t.scrollHeight > t.clientHeight + 1) fuori.push('tessera ' + t.dataset.tessera + ' trabocca');
   }
   const aree = ['.vista-testa', '#sezioni', '.voce-riga', '#barra']
     .map((s) => g.querySelector(s)).filter(vis).map((e) => [nome(e), e.getBoundingClientRect()]);
@@ -1169,13 +1186,24 @@ MISURA = r"""(() => {
   const tocchi = ['parla', 'microfono', 'scrivi-apri', 'foto-apri', 'auto-apri', 'auto-esci'].map((id) => document.getElementById(id))
     .concat([...document.querySelectorAll('#barra a, #tessere .tessera, #sezioni button.spunta, #pagina-indietro')]).filter(vis)
     .map((e) => e.getBoundingClientRect()).map((r) => Math.min(r.width, r.height));
+  // Il layout compatto (28/10, #277): lo stato dentro «Parla», i pulsanti su una riga, quanto
+  // prendono la voce e la barra insieme
+  const compatto = ritagliata(document.getElementById('tel-voce'));
+  const vr = document.querySelector('.voce-riga').getBoundingClientRect();
+  const pulsanti = ['microfono', 'parla', 'scrivi-apri', 'foto-apri'].map((id) => document.getElementById(id)).filter(vis)
+    .map((e) => e.getBoundingClientRect());
+  const unaRiga = pulsanti.every((r) => Math.abs(r.top - pulsanti[0].top) <= 2 && Math.abs(r.bottom - pulsanti[0].bottom) <= 2);
+  const righe = (el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
   return {
     scorre: se.scrollHeight > H + 1 || se.scrollWidth > W + 1 || g.scrollHeight > g.clientHeight + 1,
-    fuori, bassi, tocchi, H, W, auto, inVista,
+    fuori, bassi, tocchi, H, W, auto, inVista, compatto, unaRiga,
+    fissi: (H - vr.top) / H,
+    stato: compatto ? document.querySelector('#parla .parla-stato').textContent : '',
+    statoRighe: compatto ? righe(document.querySelector('#parla .parla-stato')) : 0,
     spazio: br.height, parla: document.getElementById('parla').getBoundingClientRect().height,
     voce: document.querySelector('#tel-voce .voce-testo').textContent,
     // quante righe prende lo stato (27/10, iPhone: andava a capo a ogni sillaba)
-    voceRighe: (() => { const v = document.querySelector('#tel-voce .voce-testo'); const r = document.createRange();
+    voceRighe: compatto ? 1 : (() => { const v = document.querySelector('#tel-voce .voce-testo'); const r = document.createRange();
       r.selectNodeContents(v); return new Set([...r.getClientRects()].map((q) => Math.round(q.top))).size; })(),
     dove: document.getElementById('tel-dove').hidden ? '' : document.getElementById('tel-dove').textContent,
     sezione: window.calliopeTelefono.sezioni().sezione,
@@ -1244,7 +1272,7 @@ def misure(t, etichetta):
         ("acceso", acceso, "Dormo · di' «Calliope»", ""),
     ]
 
-    def misura(d, parola, minimo):
+    def misura(d, parola, minimo, fissi_max=FISSI_MAX):
         ok = aspetta(lambda: (t.v(MISURA) or {}).get("voce") == parola, 2)
         time.sleep(0.35)                     # la dissolvenza si decide al giro dopo
         m = t.v(MISURA) or {}
@@ -1257,6 +1285,15 @@ def misure(t, etichetta):
                  f"{m.get('bassi')} {[round(x) for x in m.get('tocchi') or []]}")
         verifica(f"{d}: la sezione ha spazio (≥ 120 px)", m.get("spazio", 0) >= 120, f"{m.get('spazio', 0):.0f} px")
         verifica(f"{d}: lo stato della voce su al più due righe", m.get("voceRighe", 9) <= 2, str(m.get("voceRighe")))
+        if m.get("H", 0) > m.get("W", 0) and not m.get("auto"):
+            # Il layout compatto (28/10, #277): in verticale su questi telefoni
+            verifica(f"{d}: layout compatto, la voce su una riga (i pulsanti allineati, lo stato in «Parla»)",
+                     m.get("compatto") and m.get("unaRiga") and m.get("stato")
+                     and m.get("statoRighe", 9) <= 2, f"{m.get('stato')!r}, {m.get('statoRighe')} righe")
+            verifica(f"{d}: voce e barra insieme sotto il {fissi_max:.0%} dell'altezza",
+                     m.get("fissi", 1) < fissi_max, f"{m.get('fissi', 1):.1%}")
+        elif m.get("auto"):
+            verifica(f"{d}: in auto niente layout compatto (bersagli grandi)", not m.get("compatto"))
         return m
 
     alti = {}
@@ -1303,6 +1340,19 @@ def misure(t, etichetta):
             acceso()
             misura(f"{etichetta} {w}×{h} {sez} col font largo e «Dormo»", "Dormo · di' «Calliope»", 44)
     t.v("document.documentElement.style.removeProperty('font-family'); document.body.style.fontFamily = ''; 1")
+    # Il testo ingrandito (28/10, #277): la base della pagina da 17 a 20 px (+18 %), nel compatto
+    t.v("document.documentElement.style.fontSize = '20px'; 1")
+    for w, h, nome_d in (DIMENSIONI[0], DIMENSIONI[1], DIMENSIONI[4]):
+        dimensione(t, w, h)
+        for sez in ("adesso", "conversazione", "cose", "io"):
+            t.v(f"{T}.vai('#/{sez}'); 1")
+            spento()
+            # col testo più grande anche la voce e la barra crescono (sono in rem): al più il 30 %
+            misura(f"{etichetta} {w}×{h} {sez} col testo ingrandito", "Microfono spento", 44, 0.30)
+            foto(t, f"telefono-{etichetta}-{nome_d}-{sez}-testo-grande.png")
+            acceso()
+            misura(f"{etichetta} {w}×{h} {sez} col testo ingrandito e «Dormo»", "Dormo · di' «Calliope»", 44, 0.30)
+    t.v("document.documentElement.style.fontSize = ''; 1")
     spento()
     t.v(f"{T}.vai('#/adesso'); 1")
     mic(False)

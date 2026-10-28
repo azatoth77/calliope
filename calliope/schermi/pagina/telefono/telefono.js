@@ -135,14 +135,23 @@ function voceLocale() {
 
 // Lo stato in alto riguarda QUESTO telefono (04/10: in auto «In ascolto su «studio»» col
 // microfono del telefono spento confondeva): [classe, parola grande, riga piccola sotto]
+const SUGGERIMENTO = "Tocca «Parla» per parlare";
 function statoVista(cls) {
   const dove = st.altro ? "Il microfono attivo è su «" + st.altro + "»" : "";
   if (!st.collegato) return ["spento", "Non collegata", "Riprovo da sola"];
   if (cls === "parla") return ["parla", "Parlo", ""];
   if (cls === "pensa") return ["pensa", "Penso…", ""];
   if (cls === "ascolta" && (st.reg || st.mic || (st.corsa && st.corsa.parla))) return ["ascolta", "Ti ascolto", ""];
-  if (!st.mic && !st.reg) return ["spento", "Microfono spento", dove || "Tocca «Parla» per parlare"];
+  if (!st.mic && !st.reg) return ["spento", "Microfono spento", dove || SUGGERIMENTO];
   return ["dorme", TESTI.dorme, st.attivo ? "" : dove];
+}
+
+// Lo stato breve dentro «Parla» nel layout compatto (28/10, #277: sull'iPhone 13 mini la voce
+// prendeva tre righe): la parola grande diventa più corta, quella che si capisce già dal
+// microfono sbarrato o verde resta lì
+function statoBreve(parola) {
+  if (parola === TESTI.dorme) return "di' «Calliope»";
+  return parola;
 }
 
 function disegna() {
@@ -158,10 +167,15 @@ function disegna() {
   const d = $("tel-dove");
   d.hidden = !sotto;
   metti(d, sotto);
+  // Il suggerimento di sempre: nel compatto non si mostra (resta la descrizione di «Parla»)
+  attr(d, "data-ovvio", sotto === SUGGERIMENTO ? "1" : "0");
   $("vista").classList.toggle("mic-acceso", st.mic);
   const b = $("parla");
   metti(b.querySelector(".parla-testo"), st.reg ? "Ti ascolto · tocca per finire"
     : cls === "parla" ? "Interrompi e parla" : "Parla");
+  metti(b.querySelector(".parla-breve"), st.reg ? "Tocca per finire" : cls === "parla" ? "Interrompi" : "Parla");
+  metti(b.querySelector(".parla-stato"), statoBreve(parola));
+  attr(b, "data-stato", gc);
   b.disabled = !st.collegato;
   b.classList.toggle("in-corso", !!st.reg || st.forza || (cls === "ascolta" && !!st.corsa && st.corsa.parla));
   b.classList.toggle("parla-calliope", cls === "parla" && !st.reg);

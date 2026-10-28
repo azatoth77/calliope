@@ -20,7 +20,9 @@ archivio delle conversazioni in una cartella temporanea.
   (a voce, scritto, con un tocco), il tocco come gesto, le schede piccole dentro la risposta che
   aprono la copia del turno a schermo intero (senza spunta) e il rimando che porta alla sezione;
   Oggi, Ieri, Solo schede e la ricerca (anche con testo ostile, che resta testo); niente fuori di
-  lato, contrasto AA e tocchi ≥ 44 px a 375×812 e 320×568; «Pulisci le mie schede» c'è;
+  lato, contrasto AA e tocchi ≥ 44 px a 375×812, 375×667, 320×568 e 320×693 e col testo ingrandito
+  (28/10, #277: i filtri su una riga, «Cerca» come lente, il titolo più piccolo); «Pulisci le mie
+  schede» c'è;
 - nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> salva gli
   screenshot. ~40 s.
 """
@@ -370,10 +372,18 @@ MISURA_CONV = r"""((sel) => {
   const br = box.getBoundingClientRect();
   const log = box.querySelector('.conv-chat'), lr = log ? log.getBoundingClientRect() : br;
   const fuori = [];
-  for (const e of [...box.querySelectorAll('*')].filter(vis)) {
+  // i filtri sono una riga che scorre di lato nel layout compatto (28/10, #277): conta la riga, non
+  // i filtri fuori dalla sua vista
+  for (const e of [...box.querySelectorAll('*')].filter(vis).filter((x) => !x.parentElement.closest('.chat-chips'))) {
     const r = e.getBoundingClientRect();
     if (r.width && (r.left < br.left - 1 || r.right > br.right + 1)) fuori.push(nome(e) + ' esce di lato');
   }
+  const chips = [...box.querySelectorAll('.chat-chips > .chat-chip')].filter(vis).map((e) => e.getBoundingClientRect());
+  const riga = box.querySelector('.chat-chips');
+  const chipsRiga = chips.every((r) => Math.abs(r.top - chips[0].top) <= 1);
+  const chipsScorre = !!riga && riga.scrollWidth > riga.clientWidth + 1;
+  const cercaIcona = (() => { const c = box.querySelector('.chat-cerca-apri'); return !!c && parseFloat(getComputedStyle(c).fontSize) === 0
+    && c.textContent === 'Cerca'; })();
   if (br.left < -1 || br.right > W + 1) fuori.push('la conversazione esce dallo schermo');
   if (log && log.scrollWidth > log.clientWidth + 1) fuori.push('la conversazione scorre di lato');
   const lum = (c) => { const m = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((v) => v / 255)
@@ -392,7 +402,9 @@ MISURA_CONV = r"""((sel) => {
   const tocchi = [...box.querySelectorAll('.chat-chip, .chat-cerca input, .piccola-apri, button[data-scarica]')].filter(vis)
     .map((e) => { const r = e.getBoundingClientRect(); return [nome(e), Math.round(Math.min(r.width, r.height))]; }).filter(([, m]) => m < 44);
   const se = document.scrollingElement;
-  return {fuori: fuori.slice(0, 6), bassi, tocchi, scorre: se.scrollWidth > W + 1, altezza: Math.round(lr.height)};
+  return {fuori: fuori.slice(0, 6), bassi, tocchi, scorre: se.scrollWidth > W + 1, altezza: Math.round(lr.height),
+          chipsRiga, chipsScorre, cercaIcona, filtri: chips.length,
+          titolo: parseFloat(getComputedStyle(document.getElementById('sez-titolo')).fontSize) / parseFloat(getComputedStyle(document.documentElement).fontSize)};
 })"""
 
 
@@ -500,18 +512,28 @@ def conversazione_tel(p, amb):
     aspetta(lambda: len(domande()) == 8, 5)
     verifica("«Tutto» svuota anche la casella",
              p.valuta(f"document.querySelector('{T} .chat-cerca input').value") == "")
-    # Le misure
-    for w, h in ((375, 812), (320, 568)):
+    # Le misure (28/10, #277: anche l'iPhone SE, l'iPhone 13 mini con lo «Zoom schermo» di iOS e il
+    # testo ingrandito; nel layout compatto i filtri su una riga e «Cerca» come lente)
+    for w, h, grande in ((375, 812, False), (375, 667, False), (320, 568, False), (320, 693, False),
+                         (375, 812, True), (320, 568, True)):
+        p.valuta(f"document.documentElement.style.fontSize = {json.dumps('20px' if grande else '')}; 1")
         p._chiama("Emulation.setDeviceMetricsOverride", {"width": w, "height": h, "deviceScaleFactor": 2, "mobile": True})
-        aspetta(lambda: p.valuta(f"innerWidth === {w}"), 5)
+        aspetta(lambda: p.valuta(f"innerWidth === {w} && innerHeight === {h}"), 5)
         time.sleep(0.4)
-        foto(p, f"conversazione-telefono-{w}x{h}.png", w, h, mobile=True)
+        w_h = f"{w}x{h}" + ("-testo-grande" if grande else "")
+        foto(p, f"conversazione-telefono-{w_h}.png", w, h, mobile=True)
         m = p.valuta(f"({MISURA_CONV})({json.dumps(T)})") or {}
-        verifica(f"{w}×{h}: niente fuori di lato, la pagina non scorre di lato", not m.get("fuori") and not m.get("scorre"),
+        d = f"{w}×{h}{' col testo ingrandito' if grande else ''}"
+        verifica(f"{d}: i filtri su una riga sola (scorrono di lato se non ci stanno), «Cerca» come lente",
+                 m.get("chipsRiga") and m.get("filtri", 0) >= 4 and m.get("cercaIcona"),
+                 json.dumps({k: m.get(k) for k in ("chipsRiga", "chipsScorre", "filtri", "cercaIcona")}))
+        verifica(f"{d}: il titolo della sezione più piccolo (≤ 1,25rem)", (m.get("titolo") or 9) <= 1.25, m.get("titolo"))
+        verifica(f"{d}: niente fuori di lato, la pagina non scorre di lato", not m.get("fuori") and not m.get("scorre"),
                  json.dumps(m.get("fuori")))
-        verifica(f"{w}×{h}: contrasto AA e tocchi ≥ 44 px", not m.get("bassi") and not m.get("tocchi"),
+        verifica(f"{d}: contrasto AA e tocchi ≥ 44 px", not m.get("bassi") and not m.get("tocchi"),
                  json.dumps([m.get("bassi"), m.get("tocchi")]))
-        verifica(f"{w}×{h}: la conversazione ha posto per i turni", (m.get("altezza") or 0) >= 190, m.get("altezza"))
+        verifica(f"{d}: la conversazione ha posto per i turni", (m.get("altezza") or 0) >= 190, m.get("altezza"))
+    p.valuta("document.documentElement.style.fontSize = ''; 1")
     # La casella resta spenta fuori da una conversazione a voce
     stato = p.valuta("({spento: document.getElementById('scrivi-apri').classList.contains('spento'),"
                      " visibile: !document.getElementById('scrivi-apri').hidden})") or {}

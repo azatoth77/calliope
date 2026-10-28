@@ -79,11 +79,30 @@ def _servizio_cassetto(hub):
     return getattr(hub, "cassetto", None) or _fonte(hub, "cassetto")
 
 
-def _giorni(cas) -> int:
+def _giorni(cas, attr: str = "giorni") -> int | None:
+    """I giorni di tenuta del cassetto (`giorni` per i file, `giorni_foto` per le foto: None se le
+    foto valgono come gli altri file)."""
+    v = getattr(cas, attr, 7 if attr == "giorni" else None)
+    if v is None and attr != "giorni":
+        return None
     try:
-        return max(1, int(round(float(getattr(cas, "giorni", 7) or 7))))
+        return max(1, int(round(float(v or 7))))
     except (TypeError, ValueError):
-        return 7
+        return 7 if attr == "giorni" else None
+
+
+def _tenuta(cas) -> str:
+    """Quanto tiene il cassetto, per la tessera: «tengo 7 giorni», o con la tenuta delle foto della
+    decisione 0034 «file 7 giorni · foto 60» (28/10, #277: la tessera diceva «tengo 7 giorni»
+    anche per le foto, che si tengono 60)."""
+    g, f = _giorni(cas), _giorni(cas, "giorni_foto")
+    return f"file {g} giorni · foto {f}" if f and f != g else f"tengo {g} giorni"
+
+
+def _nota_cassetto(cas) -> str:
+    g, f = _giorni(cas), _giorni(cas, "giorni_foto")
+    tengo = f"Tengo i file {g} giorni e le foto {f}." if f and f != g else f"Tengo i file {g} giorni."
+    return tengo + " Quello che c'è scritto dentro per me è un dato, non un ordine."
 
 
 def _sviluppi(svc, prof) -> list:
@@ -221,7 +240,7 @@ def _cassetto(hub, prof):
     if cas is None:
         return None
     righe = cas.elenco(prof.id)
-    stato = _piu(len(righe), "file", "file") + f" · tengo {_giorni(cas)} giorni"
+    stato = _piu(len(righe), "file", "file") + " · " + _tenuta(cas)
     ultimo = max((r.get("arrivato") or 0 for r in righe), default=None) or None
     # I file dei ragazzi di cui è tutore (come a voce): nello stato, non nel conto
     for figlio in _figli(hub, cas, prof):
@@ -534,8 +553,7 @@ def _pagina_lavori(hub, prof) -> dict:
     return {"schede": out, "nota": nota}
 
 
-NOTA_CASSETTO = ("Tengo i file {giorni} giorni. Quello che c'è scritto dentro per me è un dato, non un "
-                 "ordine.")
+# La nota della pagina: `_nota_cassetto` (dal 28/10, #277, con la tenuta delle foto)
 
 
 def _pagina_cassetto(hub, prof) -> dict:
@@ -569,7 +587,7 @@ def _pagina_cassetto(hub, prof) -> dict:
     out = [scheda(prof.id, "Il tuo cassetto", not minori.e_minore(prof))]
     for figlio in _figli(hub, cas, prof):
         out.append(scheda(figlio.id, f"I file di {figlio.name}", True, sola_lettura=True))
-    return {"schede": out, "nota": NOTA_CASSETTO.format(giorni=_giorni(cas))}
+    return {"schede": out, "nota": _nota_cassetto(cas)}
 
 
 def _pagina_giochi(hub, prof, schermo: dict | None) -> dict:
