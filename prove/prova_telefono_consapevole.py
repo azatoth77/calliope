@@ -449,11 +449,22 @@ def prova_pagina():
     # con la voce riconosciuta e il livello di chi amministra sì
     r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC("Dario", "familiare", come="breve",
                 sessione=True), disp=TEL_DARIO, ufficio=object())
-    verifica("Ufficio dal suo telefono nella zona grigia (livello familiare): non si apre",
-             not r.get("ok") and len(h.pagine) == n, r)
-    r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC("Dario", "familiare"), ufficio=object())
-    verifica("Ufficio a chi amministra con la voce certa ma il livello familiare del turno: non si apre",
-             not r.get("ok") and len(h.pagine) == n, r)
+    UFF_VOCE = "L'Ufficio lo apro solo quando riconosco bene la tua voce: chiedimelo con una frase intera."
+    verifica("Ufficio dal suo telefono nella zona grigia (livello familiare): non si apre, e la frase "
+             "dice la voce, non «non c'è» (#299)",
+             not r.get("ok") and len(h.pagine) == n and r["risposta_finale"] == UFF_VOCE, r)
+    r, ctx = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC("Dario", "familiare"), ufficio=object())
+    verifica("Ufficio a chi amministra con la voce certa ma il livello familiare del turno: non si apre, "
+             "la frase della voce e la regola schermo_ufficio_voce (#299)",
+             not r.get("ok") and len(h.pagine) == n and r["risposta_finale"] == UFF_VOCE
+             and "schermo_ufficio_voce" in ctx.regole, r)
+    # Contrari (#299): «non c'è» resta per chi davvero non ce l'ha
+    for nome, sc, uff in (("un familiare", SC("Bianca", "familiare"), object()),
+                          ("una bambina", SC("Ada", "familiare"), object()),
+                          ("chi amministra senza l'ufficio installato", SC("Dario", "familiare"), None)):
+        r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, sc, ufficio=uff)
+        verifica(f"Ufficio a {nome}: «Sul tuo schermo la pagina Ufficio non c'è.», mai la frase della voce",
+                 r["risposta_finale"] == "Sul tuo schermo la pagina Ufficio non c'è.", r)
     r, _ = call({"cosa": "pagina", "pagina": "ufficio"}, h, SC("Dario", "amministra"), disp=TEL_DARIO,
                 ufficio=object())
     verifica("Ufficio dal suo telefono con la voce certa e il livello amministra: si apre",
