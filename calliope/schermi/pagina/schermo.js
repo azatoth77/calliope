@@ -1537,7 +1537,7 @@
       else if (typeof c.src === "string" && c.src.startsWith("data:image/jpeg;base64,")) img.src = c.src;
       corpo.append(img);
       if (c.didascalia) corpo.append(el("p", "didascalia", c.didascalia));
-      // Lo stato della foto tenuta (29/10, decisione 0034), nel dettaglio dalla Conversazione
+      // Lo stato della foto tenuta (28/10, decisione 0034), nel dettaglio dalla Conversazione
       const riga = rigaFoto(c);
       if (riga) {
         const p = el("p", "stato-foto stato-foto-" + c.statoFoto, riga);
@@ -2140,7 +2140,7 @@
       c = r.dati.scheda;
     }
     if (c.tipo === "foto" && Number.isInteger(c.cassetto)) {
-      // La foto tenuta (29/10, decisione 0034): finché c'è, il dettaglio mostra la foto intera
+      // La foto tenuta (28/10, decisione 0034): finché c'è, il dettaglio mostra la foto intera
       // e quanto resta; poi «Archiviata.» o «Non c'è più»
       let r;
       try { r = await postSessione("/api/conversazione", { foto: c.cassetto }); }

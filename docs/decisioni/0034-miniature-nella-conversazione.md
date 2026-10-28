@@ -2,7 +2,7 @@
 
 - **Stato**: accettata (28/10/2026, decisione di chi amministra, confermata dopo la domanda
   esplicita sulle catture di webcam e schermo e allargata la sera stessa alla foto intera), fatta il
-  29/10 sul ramo `issue-272-miniatura-foto` (issue #272, PR #273). Cambia la regola «le foto solo in
+  28/10 sul ramo `issue-272-miniatura-foto` (issue #272, PR #273). Cambia la regola «le foto solo in
   memoria, su disco solo con «archiviala»» (`calliope/immagini.py`, dal 05/10) e, per le foto, i 7
   giorni del cassetto (`cassetto_giorni`, dall'08/10).
 - **Area**: [immagini-allegati](../aree/immagini-allegati.md), [schermi-telefono](../aree/schermi-telefono.md),
@@ -39,7 +39,7 @@ una foto è persa perché non è stata archiviata.
 4. **«archiviala» la tiene per sempre**, nei documenti personali dell'archivio di casa: anche una foto
    di giorni prima, finché la sua copia c'è («archivia la foto di martedì», `immagine_archivia` con
    `quale`). Solo con la voce riconosciuta o dallo schermo personale, anche sulla foto di questa
-   conversazione (decisione di chi amministra del 29/10, dopo la seconda revisione della PR #273):
+   conversazione (decisione di chi amministra del 28/10, dopo la seconda revisione della PR #273):
    dalla zona grigia, dalla frase breve o da un ospite il rifiuto generico del cassetto. **Cambia un
    comportamento in vigore dal 05/10**, quando «archiviala» sulla foto della conversazione bastava che
    ci fosse la persona della conversazione. Archiviata, la foto non scade più e non va via con «dimentica» (è stata tenuta di

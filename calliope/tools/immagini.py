@@ -13,7 +13,7 @@ I tool delle foto (05/10/2026, calliope/immagini.py, docs/ricerche/2026-10-05-im
 - `immagine_archivia(foto)`: «archiviala»: l'unico modo in cui una foto finisce su disco,
   nella cartella personale dell'archivio dei documenti di casa (calliope/archivio/), che la
   legge con l'OCR al giro dopo, per sempre; anche una foto di giorni prima ancora tenuta
-  (`quale`: «la foto di martedì»). Dal 29/10 (decisione 0034) ogni foto di una persona di casa,
+  (`quale`: «la foto di martedì»). Dal 28/10 (decisione 0034) ogni foto di una persona di casa,
   anche le catture di `pc_guarda`, si tiene intera nel suo cassetto 60 giorni
   (`immagini_tenuta_giorni`) e la miniatura resta col turno nella Conversazione (*storico, fino al
   28/10: «l'unico modo in cui una foto finisce su disco»*).
@@ -75,7 +75,7 @@ def _guarda(ctx: ToolContext, foto=None) -> dict:
 
 
 def _tieni_cattura(ctx, img, prof):
-    """La cattura di webcam e schermo nel cassetto di chi l'ha chiesta (29/10, decisione 0034):
+    """La cattura di webcam e schermo nel cassetto di chi l'ha chiesta (28/10, decisione 0034):
     `immagini_tenuta_giorni`, poi via; «archiviala» la tiene per sempre. Solo con la voce
     riconosciuta (pc_guarda lo controlla prima) e la tenuta accesa."""
     cas = getattr(ctx, "cassetto", None)
@@ -124,7 +124,7 @@ def _archivia(ctx: ToolContext, foto=None, quale: str | None = None) -> dict:
     cas = getattr(ctx, "cassetto", None)
     # «archiviala» tiene una foto per sempre: anche sulla foto di questa conversazione vale solo
     # con la voce riconosciuta o dallo schermo personale, mai dalla zona grigia, dalla frase breve
-    # o da un ospite (decisione di chi amministra del 29/10, nella 0034: cambia il comportamento
+    # o da un ospite (decisione di chi amministra del 28/10, nella 0034: cambia il comportamento
     # in vigore dal 05/10, quando bastava chi era nella conversazione), con il rifiuto generico
     # del cassetto
     rifiuto = _rifiuto_identita(ctx)

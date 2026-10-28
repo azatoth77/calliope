@@ -488,7 +488,7 @@ def prova_peso():
     bf._send_cards = lambda cards, tool: Brain._invia_schede(bf, HubFinto(), cards, DARIO)
     foto = {"tipo": "foto", "titolo": "Foto", "src": "data:image/jpeg;base64,AA"}
     Brain.manda_schede(bf, [foto], "foto")
-    verifica("le miniature di foto e file non si legano al turno di prima (dal 29/10 aspettano la frase: #272)",
+    verifica("le miniature di foto e file non si legano al turno di prima (dal 28/10 aspettano la frase: #272)",
              "_schede" not in s[0], s[0])
     # Il calcolo senza oscura, il timer senza «chi»
     from calliope.conversazione import turni
@@ -556,7 +556,7 @@ def prova_dettaglio_server(arch, tid_tipo):
     c.close()
 
 
-# ─────────────────────────── 7. foto e file nella Conversazione (29/10, #272) ───────────────────────────
+# ─────────────────────────── 7. foto e file nella Conversazione (28/10, #272) ───────────────────────────
 def jpeg_vero(w=1280, h=960):
     """Una foto da telefono, con dettagli (una tinta unita si comprime troppo)."""
     import io
@@ -712,7 +712,7 @@ def prova_foto():
     verifica("una risposta riservata prima non tiene fuori la foto di questo turno", len(msg7.get("_schede", [])) == 1)
 
 
-# ─────────────────────────── 8. la foto tenuta (29/10, decisione 0034) ───────────────────────────
+# ─────────────────────────── 8. la foto tenuta (28/10, decisione 0034) ───────────────────────────
 class Orologio:
     def __init__(self):
         self.t = time.time()
@@ -800,7 +800,7 @@ def prova_foto_tenute():
     fid3 = cas3.metti_foto(img3, "dario")
     ctx3 = ctx_foto(cas3, dario)
     ctx3.immagini = SimpleNamespace(prendi=lambda n: img3, numeri=lambda: [1])
-    # Senza `quale`, sulla foto di questa conversazione (decisione del 29/10, cambia il 05/10):
+    # Senza `quale`, sulla foto di questa conversazione (decisione del 28/10, cambia il 05/10):
     # zona grigia, frase breve e ospite col rifiuto generico; con la voce come prima
     for modo in ("conversazione", "breve"):
         cx = ctx_foto(cas3, dario, modo)
