@@ -16,8 +16,11 @@ archivio delle conversazioni in una cartella temporanea.
 - lo schermo di stanza non ha né il pulsante né le schede delle persone;
 - «Pulisci» con due tocchi: le schede spariscono da tutti gli schermi personali di Dario;
 - un altro riavvio con uno sviluppo aperto: lo schermo rientra subito nella vista dello sviluppo;
-- telefono di Dario: «La nostra conversazione» in Conversazione la apre a schermo intero, in una colonna
-  senza testo che esce di lato; «Pulisci le mie schede» c'è;
+- telefono di Dario: la conversazione dentro la sezione Conversazione (28/10, #242): ora e canale
+  (a voce, scritto, con un tocco), il tocco come gesto, le schede piccole dentro la risposta che
+  aprono la copia del turno a schermo intero (senza spunta) e il rimando che porta alla sezione;
+  Oggi, Ieri, Solo schede e la ricerca (anche con testo ostile, che resta testo); niente fuori di
+  lato, contrasto AA e tocchi ≥ 44 px a 375×812 e 320×568; «Pulisci le mie schede» c'è;
 - nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> salva gli
   screenshot. ~40 s.
 """
@@ -327,33 +330,186 @@ def telefono(exe, amb):
         time.sleep(0.5)
         ok = aspetta(lambda: p.valuta("!!window.calliopeTelefono && window.calliopeTelefono.st.collegato"), 15)
         verifica("telefono di Dario: collegato", bool(ok))
-        ok = aspetta(lambda: p.valuta("!document.getElementById('chat-tel').hidden"), 10)
-        verifica("telefono personale: «La nostra conversazione» in Conversazione e «Pulisci le mie schede» in Io",
+        ok = aspetta(lambda: p.valuta("!document.getElementById('conv-tel').hidden"
+                                      " && !!document.querySelector('#conv-tel .tipo-chat')"), 10)
+        verifica("telefono personale: la conversazione dentro la sezione Conversazione e «Pulisci le mie schede» in Io",
                  bool(ok) and p.valuta("!document.getElementById('pulisci-tel').hidden"
-                                       " && !!document.querySelector('#sez-conversazione #chat-tel')"
+                                       " && !!document.querySelector('#sez-conversazione #conv-tel .tipo-chat')"
                                        " && !!document.querySelector('#sez-io #pulisci-tel')"))
         tocca(p, '#barra a[data-sezione="conversazione"]')
         aspetta(lambda: p.valuta("!document.getElementById('sez-conversazione').hidden"), 3)
+        ok = aspetta(lambda: p.valuta("document.querySelectorAll('#conv-tel .conv-turno').length") == 4, 10)
+        verifica("in Conversazione i turni, senza aprire niente", bool(ok),
+                 p.valuta("document.querySelectorAll('#conv-tel .conv-turno').length"))
+        fondo = aspetta(lambda: p.valuta("(() => { const b = document.querySelector('#conv-tel .conv-chat');"
+                                         " return b.scrollHeight - b.scrollTop - b.clientHeight < 30; })()"), 3)
+        verifica("…con l'ultimo turno in vista (disegnata mentre la sezione era nascosta)", bool(fondo))
         foto(p, "conversazione-telefono-sezione.png", 390, 844, mobile=True)
-        tocca(p, "#chat-tel")
-        ok = aspetta(lambda: p.valuta("document.querySelectorAll('#intera-posto .conv-turno').length") == 4, 10)
-        verifica("da Conversazione la conversazione si apre a schermo intero, con i turni", bool(ok),
-                 p.valuta("document.querySelectorAll('#intera-posto .conv-turno').length"))
-        verifica("…e resta in Conversazione",
-                 p.valuta("!!document.querySelector('#sez-conversazione .tipo-chat')"))
-        fuori = p.valuta("(() => { const s = document.querySelector('#intera-posto .conv-chat');"
-                         " return s.scrollWidth > s.clientWidth + 1; })()")
-        verifica("in una colonna, niente testo che esce di lato", fuori is False, fuori)
-        larghe = p.valuta("(() => { const b = document.querySelector('#intera-posto .conv-chat')"
-                          ".getBoundingClientRect(); return b.width <= window.innerWidth; })()")
-        verifica("la conversazione sta nella larghezza del telefono", larghe is True, larghe)
-        time.sleep(0.4)
-        foto(p, "conversazione-telefono.png", 390, 844, mobile=True)
+        conversazione_tel(p, amb)
         e = errori_js(p)
         verifica("telefono: nessun errore JavaScript né violazione della CSP", not e,
                  "; ".join(e)[:300])
     finally:
         p.chiudi()
+
+
+# Le misure della conversazione nella sua sezione (28/10, #242): niente fuori di lato (in
+# verticale scorre la conversazione), contrasto AA del testo visibile, tocchi ≥ 44 px
+MISURA_CONV = r"""((sel) => {
+  const box = document.querySelector(sel);
+  const W = innerWidth, H = innerHeight;
+  const vis = (e) => e && !e.closest('[hidden]') && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden';
+  const nome = (e) => (e.className && typeof e.className === 'string' ? e.className : e.tagName).slice(0, 40);
+  const br = box.getBoundingClientRect();
+  const log = box.querySelector('.conv-chat'), lr = log ? log.getBoundingClientRect() : br;
+  const fuori = [];
+  for (const e of [...box.querySelectorAll('*')].filter(vis)) {
+    const r = e.getBoundingClientRect();
+    if (r.width && (r.left < br.left - 1 || r.right > br.right + 1)) fuori.push(nome(e) + ' esce di lato');
+  }
+  if (br.left < -1 || br.right > W + 1) fuori.push('la conversazione esce dallo schermo');
+  if (log && log.scrollWidth > log.clientWidth + 1) fuori.push('la conversazione scorre di lato');
+  const lum = (c) => { const m = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((v) => v / 255)
+    .map((v) => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+  const alfa = (c) => { const m = c.match(/[\d.]+/g); return m.length > 3 ? Number(m[3]) : 1; };
+  const contrasto = (e) => { const cs = getComputedStyle(e); let b = e, bg = 'rgba(0, 0, 0, 0)';
+    while (b && alfa(bg = getComputedStyle(b).backgroundColor) < 0.5) b = b.parentElement;
+    const l1 = lum(cs.color), l2 = lum(b ? bg : 'rgb(0, 0, 0)'); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
+  const inVista = (e) => { const r = e.getBoundingClientRect();
+    return e.closest('.conv-chat') ? r.bottom > Math.max(0, lr.top) && r.top < Math.min(H, lr.bottom) : r.bottom > 0 && r.top < H; };
+  const bassi = [...box.querySelectorAll('*')].filter(vis).filter((e) => !e.closest('.piccola-anteprima'))
+    .filter((e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())).filter(inVista)
+    .map((e) => [nome(e) + ' «' + e.textContent.trim().slice(0, 14) + '»', contrasto(e)]).filter(([, c]) => c < 4.5)
+    .map(([n, c]) => n + ' ' + c.toFixed(2)).slice(0, 6);
+  const tocchi = [...box.querySelectorAll('.chat-chip, .chat-cerca input, .piccola-apri, button[data-scarica]')].filter(vis)
+    .map((e) => { const r = e.getBoundingClientRect(); return [nome(e), Math.round(Math.min(r.width, r.height))]; }).filter(([, m]) => m < 44);
+  const se = document.scrollingElement;
+  return {fuori: fuori.slice(0, 6), bassi, tocchi, scorre: se.scrollWidth > W + 1, altezza: Math.round(lr.height)};
+})"""
+
+
+def conversazione_tel(p, amb):
+    """La conversazione del telefono (28/10, #242): canali, schede piccole, filtri, ricerca, misure."""
+    from calliope.conversazione import Conversazione, turni
+    from calliope.schermi import schede
+    T = "#conv-tel"
+    ieri = time.time() - 86400
+    manzoni = schede.biblioteca("Quando è nato Manzoni?", [SimpleNamespace(titolo="Alessandro Manzoni", fonte="Wikipedia",
+                                                                         testo="Alessandro Manzoni nacque a Milano il 7 marzo 1785.")])
+    lista = schede.lista("spesa", ["latte", "pane", "uova"], aggiunti=["pane"])
+    lavoro = schede.lavoro("Riepilogo delle bollette", "testo", "in_corso", "sto leggendo i PDF", ident="L7")
+    m_bib = turno("Quando è nato Manzoni?", "Il 7 marzo 1785, a Milano.", "Cucina", t=ieri)
+    m_bib[0]["_schede"] = [schede.per_conversazione(manzoni)]
+    m_lista = turno("Aggiungi pane alla lista della spesa", "Fatto, l'ho aggiunto.", "Telefono", "scritto")
+    m_lista[0]["_schede"] = [schede.per_conversazione(lista), schede.per_conversazione(lavoro)]
+    m_tocco = turno("(Ho tolto «uova» dalla lista della spesa toccando lo schermo.)", "Fatto.", "", "tocco")
+    m_ostile = turno("Scrivi <img src=x onerror=alert(1)> e <b>grassetto</b>", "Ecco: <i>testo</i>.", "Cucina")
+    conv = Conversazione("persona:dario")
+    amb.arch.archivia(conv, turni(m_bib + m_lista + m_tocco + m_ostile), "dario", "Dario", ospite=False)
+    conta = f"document.querySelectorAll('{T} .conv-turno').length"
+    ok = aspetta(lambda: p.valuta(conta) == 8, 10)
+    verifica("i turni nuovi arrivano in diretta nella sezione", bool(ok), p.valuta(conta))
+    meta = p.valuta(f"[...document.querySelectorAll('{T} .conv-meta')].map(e => e.textContent).slice(-3)") or []
+    verifica("ora e canale: «scritto», «con un tocco», «a voce»",
+             len(meta) == 3 and meta[0].endswith("Telefono · scritto") and meta[1].endswith("con un tocco")
+             and meta[2].endswith("Cucina, a voce") and ":" in meta[0], meta)
+    gesto = p.valuta(f"(document.querySelector('{T} .canale-tocco .conv-gesto') || {{}}).textContent")
+    verifica("il tocco è un gesto al centro, senza le parentesi, non una bolla «Tu»",
+             gesto == "Ho tolto «uova» dalla lista della spesa toccando lo schermo."
+             and not p.valuta(f"!!document.querySelector('{T} .canale-tocco .conv-tu')"), gesto)
+    verifica("testo ostile nei turni: resta testo, nessun elemento creato",
+             p.valuta(f"!document.querySelector('{T} .conv-turni img, {T} .conv-turni b, {T} .conv-turni i')"
+                      f" && document.querySelector('{T}').textContent.includes('<img src=x onerror=alert(1)>')"))
+    piccole = p.valuta(f"[...document.querySelectorAll('{T} .scheda-piccola')].map(e => [e.querySelector('.piccola-tipo').textContent,"
+                       f" e.querySelector('.piccola-titolo').textContent, e.classList.contains('rimando'), !!e.querySelector('.piccola-anteprima[inert]')])") or []
+    verifica("le schede piccole dentro le risposte: tipo, titolo, anteprima inerte; il lavoro è un rimando",
+             piccole == [["Biblioteca", manzoni["titolo"], False, True], ["Lista", "Lista della spesa", False, True],
+                         ["Lavoro", "Riepilogo delle bollette", True, False]], piccole)
+    verifica("l'anteprima della lista senza spunta (è la lista di allora)",
+             p.valuta(f"!document.querySelector('{T} .scheda-piccola button.spunta')"
+                      f" && document.querySelector('{T} .scheda-piccola.tipo-lista .piccola-anteprima').textContent.includes('pane')"))
+    # Un tocco sulla scheda piccola: la copia del turno a schermo intero, senza spunta
+    tocca(p, f"{T} .scheda-piccola.tipo-lista .piccola-apri")
+    ok = aspetta(lambda: p.valuta("!document.getElementById('strato-scheda').hidden"
+                                  " && !!document.querySelector('#intera-posto .tipo-lista')"), 5)
+    verifica("un tocco sulla scheda piccola apre la scheda intera com'era allora",
+             bool(ok) and p.valuta("document.getElementById('intera-titolo').textContent") == "Lista della spesa"
+             and p.valuta("[...document.querySelectorAll('#intera-posto .voci li')].map(e => e.textContent).join(',')")
+             == "latte,pane,uova" and not p.valuta("!!document.querySelector('#intera-posto button.spunta')"),
+             p.valuta("document.getElementById('intera-titolo').textContent"))
+    foto(p, "conversazione-telefono-scheda.png", 390, 844, mobile=True)
+    p.valuta("history.back(); 1")
+    ok = aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 3)
+    verifica("il gesto indietro chiude la scheda e torna alla conversazione",
+             bool(ok) and p.valuta("!document.getElementById('sez-conversazione').hidden"))
+    # Il rimando: porta alla sua sezione
+    tocca(p, f"{T} .scheda-piccola.rimando .piccola-apri")
+    ok = aspetta(lambda: p.valuta("location.hash").startswith("#/cose/lavori"), 3)
+    verifica("il rimando del lavoro porta a Le mie cose › Lavori", bool(ok), p.valuta("location.hash"))
+    tocca(p, '#barra a[data-sezione="conversazione"]')
+    aspetta(lambda: p.valuta("!document.getElementById('sez-conversazione').hidden"), 3)
+
+    # I filtri
+    def domande():
+        return p.valuta(f"[...document.querySelectorAll('{T} .conv-turno')].map(t => (t.querySelector('.conv-tu .conv-x, .conv-gesto') || {{}}).textContent || '')") or []
+    tocca(p, f"{T} [data-chat-filtro='ieri']")
+    ok = aspetta(lambda: domande() == ["Quando è nato Manzoni?"], 5)
+    verifica("Ieri: solo il turno di ieri, il filtro segnato",
+             bool(ok) and p.valuta(f"document.querySelector('{T} [data-chat-filtro=ieri]').getAttribute('aria-pressed')") == "true",
+             domande())
+    tocca(p, f"{T} [data-chat-filtro='oggi']")
+    ok = aspetta(lambda: len(domande()) == 7 and "Quando è nato Manzoni?" not in domande(), 5)
+    verifica("Oggi al posto di Ieri: i turni di oggi", bool(ok), domande())
+    tocca(p, f"{T} [data-chat-filtro='schede']")
+    ok = aspetta(lambda: domande() == ["Aggiungi pane alla lista della spesa"], 5)
+    verifica("Oggi e Solo schede: il turno con le schede", bool(ok), domande())
+    foto(p, "conversazione-telefono-schede.png", 390, 844, mobile=True)
+    tocca(p, f"{T} .chat-cerca-via")
+    ok = aspetta(lambda: len(domande()) == 8, 5)
+    verifica("«Tutto» toglie i filtri", bool(ok) and p.valuta(f"document.querySelectorAll('{T} [aria-pressed=true]').length") == 0,
+             domande())
+
+    # La ricerca, anche con testo ostile
+    def cerca(testo):
+        p.valuta(f"(() => {{ const i = document.querySelector('{T} .chat-cerca input'); i.value = {json.dumps(testo)};"
+                 f" i.form.requestSubmit(); return 1; }})()")
+    verifica("la casella della ricerca è chiusa finché non si tocca «Cerca»",
+             p.valuta(f"document.querySelector('{T} .chat-cerca').hidden"))
+    tocca(p, f"{T} .chat-cerca-apri")
+    ok = aspetta(lambda: p.valuta(f"!document.querySelector('{T} .chat-cerca').hidden"
+                                  f" && document.activeElement === document.querySelector('{T} .chat-cerca input')"), 3)
+    verifica("«Cerca» apre la casella col cursore dentro", bool(ok))
+    cerca("manzoni")
+    ok = aspetta(lambda: domande() == ["Quando è nato Manzoni?"], 5)
+    verifica("cerca: trova il turno di ieri per parola", bool(ok), domande())
+    cerca('"><img src=x onerror=alert(2)> OR NEAR(')
+    ok = aspetta(lambda: domande() == [] and "Nessun turno" in (p.valuta(f"document.querySelector('{T} .chat-esito').textContent") or ""), 5)
+    verifica("cerca con testo ostile: nessun turno, lo dice, niente elementi nuovi",
+             bool(ok) and not p.valuta("!!document.querySelector('#conv-tel img')"),
+             p.valuta(f"document.querySelector('{T} .chat-esito').textContent"))
+    foto(p, "conversazione-telefono-cerca.png", 390, 844, mobile=True)
+    tocca(p, f"{T} .chat-cerca-via")
+    aspetta(lambda: len(domande()) == 8, 5)
+    verifica("«Tutto» svuota anche la casella",
+             p.valuta(f"document.querySelector('{T} .chat-cerca input').value") == "")
+    # Le misure
+    for w, h in ((375, 812), (320, 568)):
+        p._chiama("Emulation.setDeviceMetricsOverride", {"width": w, "height": h, "deviceScaleFactor": 2, "mobile": True})
+        aspetta(lambda: p.valuta(f"innerWidth === {w}"), 5)
+        time.sleep(0.4)
+        foto(p, f"conversazione-telefono-{w}x{h}.png", w, h, mobile=True)
+        m = p.valuta(f"({MISURA_CONV})({json.dumps(T)})") or {}
+        verifica(f"{w}×{h}: niente fuori di lato, la pagina non scorre di lato", not m.get("fuori") and not m.get("scorre"),
+                 json.dumps(m.get("fuori")))
+        verifica(f"{w}×{h}: contrasto AA e tocchi ≥ 44 px", not m.get("bassi") and not m.get("tocchi"),
+                 json.dumps([m.get("bassi"), m.get("tocchi")]))
+        verifica(f"{w}×{h}: la conversazione ha posto per i turni", (m.get("altezza") or 0) >= 190, m.get("altezza"))
+    # La casella resta spenta fuori da una conversazione a voce
+    stato = p.valuta("({spento: document.getElementById('scrivi-apri').classList.contains('spento'),"
+                     " visibile: !document.getElementById('scrivi-apri').hidden})") or {}
+    verifica("Scrivi resta spento in Conversazione senza una conversazione a voce",
+             stato.get("spento") is True or stato.get("visibile") is False, stato)
 
 
 def main() -> int:

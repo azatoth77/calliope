@@ -119,6 +119,13 @@
     // La scheda «Conversazione» (08/10, solo schermi personali): i turni della persona
     // dall'archivio (benvenuto ed evento «chat»), per id; chatOk: il server la dà
     chat: [], chatOk: false, chatMax: 80, chatGiorni: 0,
+    // I filtri e la ricerca della Conversazione (28/10, #242): senza filtri la vista è quella viva
+    // (S.chat); con un filtro i turni vengono dal server (POST /api/conversazione) e un turno nuovo
+    // entra solo se passa il filtro. `n` scarta le risposte vecchie
+    chatVista: { giorno: "", schede: false, testo: "", turni: null, nota: "", attesa: false, n: 0, cercaAperta: false },
+    // La scheda piccola aperta a schermo intero dalla conversazione, per chiave (sul PC), e la
+    // vista a cui tornare quando si chiude
+    schedeChat: {}, interaTorna: null,
     // «Pulisci»: il primo tocco arma il secondo per qualche secondo
     pulisciArmato: 0,
   };
@@ -672,6 +679,8 @@
     const et = el("div", "etichetta", NOMI_TIPO[c.tipo] || c.tipo);
     if (c.visibilita === "personale") et.append(el("span", "badge personale", "personale"));
     if (c.fonte) et.append(el("span", "badge", c.fonte));
+    // Una copia dalla conversazione (28/10, #242): com'era allora, non lo stato di adesso
+    if (c.storica && c.creata) et.append(el("span", "badge storica", "com'era alle " + fmtOra.format(new Date(c.creata * 1000))));
     if (c.formato && c.tipo !== "sviluppo") et.append(el("span", "badge", c.formato.toUpperCase()));
     if (!CAROSELLO && !opz.intera && TIPI_INTERA_PC.has(c.tipo)) {
       const b = el("button", "piccolo-bottone tasto-intero", "Schermo intero");
@@ -1341,7 +1350,7 @@
   const DISEGNA = {
     lista(c, corpo) {
       if (!c.voci || !c.voci.length) { corpo.append(el("p", "vuoto", "La lista è vuota.")); }
-      else if (spuntabile() && c.lista) {
+      else if (spuntabile() && c.lista && !c.storica) {
         // La spunta (28/10, passo 2a: schermi/tocchi.py): solo sugli schermi personali con le
         // sezioni, toccare vale come dire «ho preso il latte»
         corpo.append(vociDaSpuntare(c));
@@ -1352,7 +1361,7 @@
       }
       if (c.altre) corpo.append(el("p", "nota", "e altre " + c.altre));
       if (c.tolti && c.tolti.length) corpo.append(el("p", "nota", "Tolto: " + c.tolti.join(", ")));
-      if (spuntabile() && c.lista) {
+      if (spuntabile() && c.lista && !c.storica) {
         // Sempre nel DOM: VoiceOver legge i cambi di una regione role="status" già lì
         const es = el("p", "esito-tocco", "");
         es.setAttribute("role", "status");
@@ -1363,7 +1372,8 @@
       if (!c.timer || !c.timer.length) { corpo.append(el("p", "vuoto", "Nessun timer attivo.")); return; }
       const g = el("div", "timer");
       // I tasti (28/10, #257): sugli schermi personali con le sezioni, una scheda con un timer solo
-      const tasti = spuntabile() && !!c.chiave && c.timer.length === 1;
+      // Una copia vecchia dalla conversazione (28/10, #242, `storica`): niente tasti né conto
+      const tasti = spuntabile() && !c.storica && !!c.chiave && c.timer.length === 1;
       let conTasti = false;
       c.timer.forEach((t) => {
         const r = el("div", "riga" + (c.timer.length === 1 ? " solo" : ""));
@@ -1374,6 +1384,11 @@
           // Annullato o scaduto: la stessa scheda con lo stato e l'ora, niente conto
           r.classList.add("finito");
           r.append(el("div", "resto", t.nota || t.stato));
+          g.append(r);
+          return;
+        }
+        if (c.storica) {
+          r.append(el("div", "resto storico", "alle " + fmtOra.format(new Date(Number(t.fine) * 1000))));
           g.append(r);
           return;
         }
@@ -1972,7 +1987,124 @@
     }
     S.chat.sort((a, b) => a.id - b.id);
     potaChat();
+    const v = S.chatVista;
+    if (d.reset) { v.turni = null; v.giorno = ""; v.schede = false; v.testo = ""; v.nota = ""; v.n++; svuotaCercaChat(); }
+    else if (v.turni) {
+      // Con un filtro: il turno nuovo entra se lo passa (oggi, solo schede); mai in una ricerca
+      const gia = new Set(v.turni.map((t) => t.id));
+      for (const t of (Array.isArray(d.turni) ? d.turni : [])) {
+        if (turnoValido(t) && !gia.has(t.id) && passaFiltro(t)) { v.turni.push(t); v.nota = ""; }
+      }
+    }
     aggiornaChat();
+  }
+
+  // ── i filtri e la ricerca della Conversazione (28/10, #242) ──
+  function giornoDi(ms) { const d = new Date(ms); return d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate(); }
+  function passaFiltro(t) {
+    const v = S.chatVista;
+    if (v.testo || v.giorno === "ieri") return false;
+    if (v.giorno === "oggi" && giornoDi(t.quando * 1000) !== giornoDi(ora())) return false;
+    if (v.schede && !(Array.isArray(t.schede) && t.schede.length)) return false;
+    return true;
+  }
+  function filtroAcceso() { const v = S.chatVista; return !!(v.giorno || v.schede || v.testo); }
+  function turniChat() { return S.chatVista.turni || S.chat; }
+  function trovaTurno(id) {
+    return turniChat().find((t) => t.id === id) || S.chat.find((t) => t.id === id) || null;
+  }
+  async function filtraChat() {
+    const v = S.chatVista;
+    const n = ++v.n;
+    if (!filtroAcceso()) {
+      v.turni = null; v.nota = ""; v.attesa = false;
+      aggiornaChat();
+      return;
+    }
+    v.attesa = true;
+    aggiornaChat();
+    let r;
+    try { r = await postSessione("/api/conversazione", { giorno: v.giorno || null, schede: v.schede, testo: v.testo }); }
+    catch (e) { r = { status: 0, dati: {} }; }
+    if (n !== v.n) return;
+    v.attesa = false;
+    if (r.status === 200 && Array.isArray(r.dati.turni)) {
+      v.turni = r.dati.turni.filter(turnoValido).sort((a, b) => a.id - b.id);
+      v.nota = typeof r.dati.nota === "string" ? r.dati.nota : "";
+    } else {
+      v.turni = v.turni || [];
+      v.nota = String((r.dati && r.dati.errore) || MESSAGGI[r.status] || "Non riesco a leggere la conversazione adesso: riprova tra poco.");
+    }
+    aggiornaChat();
+  }
+  // Oggi e Ieri si escludono (un secondo tocco toglie il filtro); Solo schede si somma
+  function suFiltroChat(quale) {
+    const v = S.chatVista;
+    if (quale === "schede") v.schede = !v.schede;
+    else if (quale === "oggi" || quale === "ieri") v.giorno = v.giorno === quale ? "" : quale;
+    else if (quale === "tutto") { v.giorno = ""; v.schede = false; v.testo = ""; v.cercaAperta = false; svuotaCercaChat(); }
+    else if (quale === "cerca") {
+      // Il tasto apre la casella (e ci mette il cursore); chiusa, la ricerca si toglie
+      v.cercaAperta = !(v.cercaAperta || v.testo);
+      if (v.cercaAperta) {
+        aggiornaChat();
+        requestAnimationFrame(() => {
+          const i = [...document.querySelectorAll(".chat-cerca input")].find((x) => x.getClientRects().length);
+          if (i) { try { i.focus({ preventScroll: true }); } catch (e) { i.focus(); } }
+        });
+        return;
+      }
+      if (!v.testo) { aggiornaChat(); return; }
+      v.testo = "";
+      svuotaCercaChat();
+    }
+    filtraChat();
+  }
+  function svuotaCercaChat() { document.querySelectorAll(".chat-cerca input").forEach((i) => { i.value = ""; }); }
+
+  // La scheda piccola dentro la risposta: tipo e titolo in un pulsante, sotto un'anteprima della
+  // scheda vera (DISEGNA del suo tipo con `compatta`), inerte e tagliata dal CSS. Un rimando (un
+  // lavoro, un gioco: cose vive) ha solo il pulsante e porta alla scheda nella sua sezione
+  function costruisciPiccola(c, tid, i) {
+    const box = el("div", "scheda-piccola tipo-" + c.tipo + (c.rimando ? " rimando" : ""));
+    box.dataset.chatScheda = tid + ":" + i;
+    const b = el("button", "piccola-apri");
+    b.type = "button";
+    const nome = NOMI_TIPO[c.tipo] || String(c.tipo);
+    b.append(el("span", "piccola-tipo", nome), el("span", "piccola-titolo", c.titolo || ""));
+    const fr = el("span", "piccola-freccia", "›");
+    fr.setAttribute("aria-hidden", "true");
+    b.append(fr);
+    b.setAttribute("aria-label", (c.rimando ? "Vai a " : "Apri ") + nome + (c.titolo ? ": " + c.titolo : ""));
+    box.append(b);
+    if (!c.rimando) {
+      const ant = el("div", "piccola-anteprima");
+      ant.setAttribute("inert", "");
+      ant.setAttribute("aria-hidden", "true");
+      const finta = el("div", "scheda-mini tipo-" + c.tipo);
+      const corpo = el("div", "corpo");
+      try { (DISEGNA[c.tipo] || DISEGNA.testo)(c, corpo, finta, { compatta: true }); }
+      catch (e) { corpo.replaceChildren(); }
+      finta.append(corpo);
+      ant.append(finta);
+      box.append(ant);
+    }
+    return box;
+  }
+  function apriPiccola(rif) {
+    const [tid, i] = String(rif || "").split(":").map(Number);
+    const t = trovaTurno(tid);
+    const c = t && Array.isArray(t.schede) ? t.schede[i] : null;
+    if (!c || typeof c !== "object") return false;
+    if (c.rimando) { emetti("vai", { scheda: c }); return true; }
+    // La copia del turno, con una chiave sua: la scheda viva con la stessa chiave (la lista di
+    // adesso) resta un'altra cosa
+    const copia = Object.assign({}, c, { chiave: "chat:" + tid + ":" + i, scade: null, storica: true });
+    if (CAROSELLO) { emetti("intera", { scheda: copia }); return true; }
+    S.schedeChat = { [copia.chiave]: copia };
+    if (!S.schedeChat[S.intera]) S.interaTorna = S.intera === CHAT ? CHAT : null;
+    apriInteroPC(copia.chiave);
+    return true;
   }
 
   function schedaChat() {
@@ -1985,7 +2117,8 @@
   function aggiornaChat() {
     // Il PC personale a sezioni (27/10) la tiene sempre nella sua colonna, anche quando esce
     // dalla cronologia (al più 6 schede): i turni nuovi arrivano lì comunque (revisione #255)
-    if (S.sezioni && S.chatOk) emetti("chatturni", { scheda: schedaChat() });
+    // Il telefono la tiene nella sezione Conversazione (28/10, #242)
+    if ((S.sezioni || CAROSELLO) && S.chatOk) emetti("chatturni", { scheda: schedaChat() });
     // Lo strato a schermo intero aperto sulla conversazione prende i turni nuovi anche quando la
     // conversazione non è nella cronologia (il PC a sezioni: terza revisione della PR #255)
     if (S.intera === CHAT && !CAROSELLO) setTimeout(disegnaInteroPC, 0);
@@ -2032,34 +2165,109 @@
     if (b) b.hidden = !S.chatOk;
   }
 
+  // I canali di un turno (28/10, #242): detto, scritto, un tocco sullo schermo, un modulo inviato
+  const CANALI = { voce: "a voce", scritto: "scritto", tocco: "con un tocco", modulo: "modulo" };
+  const FILTRI_CHAT = [["oggi", "Oggi"], ["ieri", "Ieri"], ["schede", "Solo schede"]];
+  function testaChat() {
+    const v = S.chatVista;
+    const t = el("div", "chat-filtri");
+    const f = el("div", "chat-chips");
+    f.setAttribute("role", "group");
+    f.setAttribute("aria-label", "Filtri della conversazione");
+    for (const [id, nome] of FILTRI_CHAT) {
+      const b = el("button", "chat-chip", nome);
+      b.type = "button";
+      b.dataset.chatFiltro = id;
+      b.setAttribute("aria-pressed", (id === "schede" ? v.schede : v.giorno === id) ? "true" : "false");
+      f.append(b);
+    }
+    // La ricerca si apre col suo tasto (sul telefono lo spazio è dei turni); resta aperta con un
+    // testo cercato. «Tutto» toglie filtri e ricerca
+    const aperta = v.cercaAperta || !!v.testo;
+    const apri = el("button", "chat-chip chat-cerca-apri", "Cerca");
+    apri.type = "button";
+    apri.dataset.chatFiltro = "cerca";
+    apri.setAttribute("aria-expanded", aperta ? "true" : "false");
+    const via = el("button", "chat-chip chat-cerca-via", "Tutto");
+    via.type = "button";
+    via.dataset.chatFiltro = "tutto";
+    via.setAttribute("aria-label", "Togli i filtri e la ricerca");
+    via.hidden = !filtroAcceso();
+    f.append(apri);
+    const form = el("form", "chat-cerca");
+    form.setAttribute("role", "search");
+    form.hidden = !aperta;
+    const inp = el("input");
+    inp.type = "search";
+    inp.name = "testo";
+    inp.maxLength = 120;
+    inp.autocomplete = "off";
+    inp.setAttribute("enterkeyhint", "search");
+    inp.setAttribute("aria-label", "Cerca nella conversazione");
+    inp.placeholder = "Cerca nella conversazione…";
+    inp.value = v.testo;
+    const vai = el("button", "chat-chip chat-cerca-vai", "Vai");
+    vai.type = "submit";
+    vai.setAttribute("aria-label", "Cerca");
+    form.append(inp, vai);
+    t.append(f, form);
+    // Sempre nel DOM: VoiceOver legge i cambi di una regione role="status" già lì
+    // L'esito (sempre nel DOM: VoiceOver legge i cambi di una regione role="status" già lì) e,
+    // con un filtro, «Tutto» accanto
+    const riga = el("div", "chat-stato");
+    // Senza una nota del server, che cosa si sta guardando: «Ieri, solo schede: 2 turni»
+    let detto = v.attesa ? "Cerco…" : v.nota;
+    if (!detto && filtroAcceso() && v.turni) {
+      const cosa = [v.giorno === "oggi" ? "Oggi" : v.giorno === "ieri" ? "Ieri" : "", v.schede ? "solo schede" : "",
+        v.testo ? "«" + v.testo + "»" : ""].filter(Boolean).join(", ");
+      detto = cosa.charAt(0).toUpperCase() + cosa.slice(1) + ": " + v.turni.length + (v.turni.length === 1 ? " turno" : " turni");
+    }
+    const es = el("p", "chat-esito", detto);
+    es.setAttribute("role", "status");
+    riga.append(es, via);
+    riga.hidden = !filtroAcceso() && !es.textContent;
+    t.append(riga);
+    return t;
+  }
+
   DISEGNA.chat = function (c, corpo, s, opz) {
     s.classList.add("scheda-chat");
-    corpo.append(pulsantiScarica(c));
-    const turni = Array.isArray(c.turni) ? c.turni : [];
+    corpo.append(testaChat());
+    const v = S.chatVista;
+    // Con un filtro i turni del server; senza, quelli della scheda (la vista viva)
+    const turni = v.turni || (Array.isArray(c.turni) ? c.turni : []);
     const box = el("div", "flusso-chat conv-chat");
     box.dataset.segui = "1";
     box.setAttribute("role", "log");
     box.setAttribute("aria-label", "La nostra conversazione");
     box.tabIndex = 0;
     const lista = el("div", "conv-turni");
-    if (!turni.length) lista.append(el("p", "fl-vuoto", "Ancora niente: quello che ci diciamo compare qui."));
+    if (!turni.length && !v.turni) lista.append(el("p", "fl-vuoto", "Ancora niente: quello che ci diciamo compare qui."));
     let giorno = "";
     turni.forEach((t) => {
       const d = new Date(t.quando * 1000);
       const g = fmtGiorno.format(d);
       if (g !== giorno) { giorno = g; lista.append(el("div", "conv-giorno", g)); }
-      const r = el("div", "conv-turno");
+      const canale = CANALI[t.canale] ? t.canale : "voce";
+      const r = el("div", "conv-turno canale-" + canale);
       r.dataset.turno = String(t.id);
-      r.append(el("div", "conv-meta", [fmtOra.format(d), t.luogo, t.canale === "scritto" ? "scritto" : ""]
-        .filter(Boolean).join(" · ")));
-      if (t.domanda) {
+      // «10:40 · cucina, a voce», «10:44 · scritto», «10:50 · con un tocco»
+      const dove = [t.luogo, CANALI[canale]].filter(Boolean).join(canale === "scritto" ? " · " : ", ");
+      r.append(el("div", "conv-meta", fmtOra.format(d) + " · " + dove));
+      if (t.domanda && (canale === "tocco" || canale === "modulo")) {
+        // Un gesto sullo schermo, non una frase: al centro, senza le parentesi della storia
+        r.append(el("div", "conv-gesto", String(t.domanda).replace(/^\(([\s\S]*)\)$/, "$1")));
+      } else if (t.domanda) {
         const tu = el("div", "conv-tu");
         tu.append(el("div", "conv-chi", "Tu"), el("div", "conv-x", t.domanda));
         r.append(tu);
       }
-      if (t.risposta) {
+      const schede = Array.isArray(t.schede) ? t.schede.filter((x) => x && typeof x === "object" && typeof x.tipo === "string") : [];
+      if (t.risposta || schede.length) {
         const ca = el("div", "conv-calliope");
-        ca.append(el("div", "conv-chi", "Calliope"), el("div", "conv-x", t.risposta));
+        ca.append(el("div", "conv-chi", "Calliope"));
+        if (t.risposta) ca.append(el("div", "conv-x", t.risposta));
+        schede.forEach((x) => ca.append(costruisciPiccola(x, t.id, t.schede.indexOf(x))));
         r.append(ca);
       }
       lista.append(r);
@@ -2070,8 +2278,29 @@
     giu.dataset.flussoFondo = "1";
     box.append(giu);
     corpo.append(box);
+    // «Scarica Markdown» sotto i turni (28/10, #242: sopra c'erano i filtri e lo spazio dei turni)
+    corpo.append(pulsantiScarica(c));
     if (opz && opz.intera) s.classList.add("chat-intera");
   };
+
+  // I filtri, la ricerca e le schede piccole: un ascoltatore solo per tutte le copie della scheda
+  // (la colonna del PC, la sezione del telefono, lo schermo intero)
+  document.addEventListener("click", (ev) => {
+    const t = ev.target;
+    if (!t || !t.closest) return;
+    const f = t.closest("[data-chat-filtro]");
+    if (f) { suFiltroChat(f.dataset.chatFiltro); return; }
+    const p = t.closest(".scheda-piccola[data-chat-scheda]");
+    if (p) apriPiccola(p.dataset.chatScheda);
+  });
+  document.addEventListener("submit", (ev) => {
+    const form = ev.target;
+    if (!form || !form.classList || !form.classList.contains("chat-cerca")) return;
+    ev.preventDefault();
+    const inp = form.querySelector("input");
+    S.chatVista.testo = String(inp ? inp.value : "").trim().slice(0, 120);
+    filtraChat();
+  });
 
   // ─── «Pulisci le mie schede» (08/10, POST /api/schede) ───
   // Il server toglie le schede del proprietario da disco e dai suoi schermi (evento «pulisci»);
@@ -3644,7 +3873,7 @@
     // La conversazione del PC personale a sezioni sta nella sua colonna, non nella cronologia
     // (27/10, seconda revisione della PR #255)
     const c = schedaDi(S.intera) || (S.corrente && chiaveDi(S.corrente) === S.intera ? S.corrente : null)
-      || (S.intera === CHAT && S.chatOk ? schedaChat() : null);
+      || (S.intera === CHAT && S.chatOk ? schedaChat() : null) || S.schedeChat[S.intera] || null;
     if (!c) return;                       // uscita dalla cronologia: resta l'ultimo contenuto
     const st = stratoInteroPC();
     $("intero-titolo").textContent = c.titolo || NOMI_TIPO[c.tipo] || "Scheda";
@@ -3669,6 +3898,10 @@
     if (!prima) { const ch = $("intero-chiudi"); if (ch) ch.focus({ preventScroll: true }); }
   }
   function chiudiInteroPC() {
+    // La scheda piccola aperta dalla conversazione a schermo intero: si torna lì (28/10, #242)
+    const torna = S.intera && S.schedeChat[S.intera] ? S.interaTorna : null;
+    S.interaTorna = null;
+    if (torna && S.chatOk) { S.intera = torna; disegnaInteroPC(); return; }
     S.intera = null;
     const st = $("strato-intero");
     if (st) { st.hidden = true; $("intero-posto").replaceChildren(); }

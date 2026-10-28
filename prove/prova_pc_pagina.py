@@ -24,6 +24,8 @@ schermi e dei satelliti veri su 127.0.0.1, un satellite finto legato allo scherm
   dell'archivio resta anche dopo otto schede e prende i turni nuovi; il «Cruscotto» della testa
   porta in Io con la scheda, e il suo ridisegno periodico non ci riporta; «Schermo intero» della
   conversazione apre lo strato coi turni; «Pulisci le mie schede» in Io con due clic;
+- la conversazione con le schede dentro (28/10, #242): le schede piccole, il tocco come gesto, la
+  copia nello strato senza spunta, Ieri e la ricerca con testo ostile, mai i turni di un'altra persona;
 - Le mie cose (28/10, passo 2a): le tessere coi conti, più di due per riga; la pagina Liste dalla
   tessera; la spunta manda il tocco giusto; contrasto e clic ≥ 44 px a 1440×900 e 700×900;
   la pagina Agenda (28/10, passo 2b) con «+1 minuto» e «Ferma» che mandano il tocco giusto; le
@@ -105,7 +107,7 @@ MISURA = r"""(() => {
         fuori.push(aree[i][0] + ' sopra ' + aree[j][0]);
     }
   }
-  const scatole = [...document.querySelectorAll('#barra a, #pc-parla, #pc-conv-apri, #sez-titolo, #tessere .tessera, #pc button.spunta, #pc button.tasto-timer, #pagina-indietro')].filter(vis);
+  const scatole = [...document.querySelectorAll('#barra a, #pc-parla, #pc-conv-apri, #sez-titolo, #tessere .tessera, #pc button.spunta, #pc button.tasto-timer, #pagina-indietro, #pc-chat .chat-chip, #pc-chat .piccola-apri')].filter(vis);
   for (const e of scatole) if (e.scrollWidth > e.clientWidth + 1) fuori.push(nome(e) + ' trabocca');
   const clic = scatole.filter((e) => e.id !== 'sez-titolo').map((e) => { const r = e.getBoundingClientRect(); return [nome(e), Math.round(Math.min(r.width, r.height))]; })
     .filter(([, m]) => m < 44);
@@ -229,6 +231,7 @@ def personale(exe, srv, hub, web, pc, t_pc):
         verifica("un file trascinato sulla pagina arriva nella casella", bool(ok))
         hub.conversazioni.chiudi()
         conversazione_a_destra(p, hub)
+        conversazione_schede_pc(p, hub)
         cruscotto_e_pulisci(p, hub)
         # Le disposizioni
         for w, h, cosa in ((1440, 900, "tre colonne"), (1100, 800, "tre colonne"), (1000, 760, "conversazione dietro il pulsante"),
@@ -387,6 +390,76 @@ def conversazione_a_destra(p, hub):
                                   " && document.querySelectorAll('#intero-posto .conv-turno').length >= 2"), 3)
     verifica("conversazione: «Schermo intero» apre lo strato con i turni", bool(ok))
     p.valuta("document.getElementById('intero-chiudi').click(); 1")
+
+
+def conversazione_schede_pc(p, hub):
+    """La conversazione con le schede dentro e i filtri sul PC (28/10, #242): il canale, la scheda
+    piccola che apre la copia del turno nello strato (com'era, senza spunta), Ieri e la ricerca con
+    testo ostile, solo i turni di Dario."""
+    from types import SimpleNamespace
+    from calliope.conversazione import Conversazione, turni
+    from calliope.schermi import schede
+    C = "#pc-chat"
+
+    def clic_c(sel):
+        p.valuta(f"(() => {{ const e = document.querySelector({json.dumps(sel)}); if (e) e.scrollIntoView({{block: 'center'}}); return 1; }})()")
+        return clic(p, sel)
+    ieri = time.time() - 86400
+    bib = schede.biblioteca("Quando è nato Manzoni?", [SimpleNamespace(titolo="Alessandro Manzoni", fonte="Wikipedia",
+                                                                       testo="Nacque a Milano il 7 marzo 1785.")])
+    lista = schede.lista("spesa", ["latte", "pane"])
+    m1 = turno("Quando è nato Manzoni?", "Il 7 marzo 1785.", ieri)
+    m1[0]["_schede"] = [schede.per_conversazione(bib)]
+    m2 = [{"role": "user", "content": "(Ho tolto «uova» dalla lista della spesa toccando lo schermo.)",
+           "_turno": {"t": time.time() - 30, "canale": "tocco"}, "_schede": [schede.per_conversazione(lista)]},
+          {"role": "assistant", "content": "Fatto."}]
+    m3 = turno("Cerca <script>alert(1)</script>", "Non trovo <b>niente</b>.", time.time() - 20)
+    hub.arch_conv.archivia(Conversazione("persona:dario"), turni(m1 + m2 + m3), "dario", "Dario", ospite=False)
+    hub.arch_conv.archivia(Conversazione("persona:bianca"), turni(turno("Manzoni di Bianca", "Sì.", ieri)),
+                           "bianca", "Bianca", ospite=False)
+    ok = aspetta(lambda: p.valuta(f"document.querySelectorAll('{C} .scheda-piccola').length") == 2, 8)
+    verifica("PC: le schede piccole dentro le risposte, nella colonna a destra", bool(ok),
+             p.valuta(f"document.querySelectorAll('{C} .scheda-piccola').length"))
+    meta = p.valuta(f"(document.querySelector('{C} .canale-tocco .conv-meta') || {{}}).textContent") or ""
+    verifica("PC: il tocco con l'ora e «con un tocco», come gesto",
+             meta.endswith("con un tocco") and p.valuta(f"!!document.querySelector('{C} .canale-tocco .conv-gesto')"), meta)
+    verifica("PC: il testo ostile resta testo",
+             p.valuta(f"!document.querySelector('{C} .conv-turni script, {C} .conv-turni b')"
+                      f" && document.querySelector('{C}').textContent.includes('<script>alert(1)</script>')"))
+    clic_c(f"{C} .scheda-piccola.tipo-lista .piccola-apri")
+    ok = aspetta(lambda: p.valuta("!!document.getElementById('strato-intero') && !document.getElementById('strato-intero').hidden"
+                                  " && !!document.querySelector('#intero-posto .tipo-lista')"), 4)
+    verifica("PC: la scheda piccola apre la scheda intera com'era, senza spunta",
+             bool(ok) and not p.valuta("!!document.querySelector('#intero-posto button.spunta')")
+             and "com'era alle" in (p.valuta("document.querySelector('#intero-posto .etichetta').textContent") or ""),
+             p.valuta("(document.querySelector('#intero-posto .etichetta') || {}).textContent"))
+    foto(p, "pc-1440x900-scheda-piccola.png")
+    p.valuta("document.getElementById('intero-chiudi').click(); 1")
+    ok = aspetta(lambda: p.valuta("document.getElementById('strato-intero').hidden"), 2)
+    verifica("PC: «Chiudi» torna alla pagina", bool(ok))
+
+    def domande():
+        return p.valuta(f"[...document.querySelectorAll('{C} .conv-turno')].map(t => (t.querySelector('.conv-tu .conv-x, .conv-gesto') || {{}}).textContent || '')") or []
+    clic_c(f"{C} [data-chat-filtro='ieri']")
+    ok = aspetta(lambda: domande() == ["Quando è nato Manzoni?"], 5)
+    verifica("PC: Ieri dal server, solo i turni di Dario", bool(ok), domande())
+    esito = p.valuta(f"document.querySelector('{C} .chat-esito').textContent") or ""
+    verifica("PC: l'esito dice cosa si guarda", esito.startswith("Ieri: 1 turno"), esito)
+    foto(p, "pc-1440x900-ieri.png")
+    clic_c(f"{C} .chat-cerca-via")
+    clic_c(f"{C} .chat-cerca-apri")
+    aspetta(lambda: p.valuta(f"!document.querySelector('{C} .chat-cerca').hidden"), 2)
+    p.valuta(f"(() => {{ const i = document.querySelector('{C} .chat-cerca input'); i.value = '<img src=x onerror=alert(3)>';"
+             f" i.form.requestSubmit(); return 1; }})()")
+    ok = aspetta(lambda: domande() == [] and "Nessun turno" in (p.valuta(f"document.querySelector('{C} .chat-esito').textContent") or ""), 5)
+    verifica("PC: la ricerca con testo ostile non trova niente e non crea elementi",
+             bool(ok) and not p.valuta(f"!!document.querySelector('{C} img')"))
+    p.valuta(f"(() => {{ const i = document.querySelector('{C} .chat-cerca input'); i.value = 'Manzoni';"
+             f" i.form.requestSubmit(); return 1; }})()")
+    ok = aspetta(lambda: domande() == ["Quando è nato Manzoni?"], 5)
+    verifica("PC: la ricerca trova il turno di Dario, non quello di Bianca", bool(ok), domande())
+    clic_c(f"{C} .chat-cerca-via")
+    aspetta(lambda: len(domande()) >= 4, 5)
 
 
 def cruscotto_e_pulisci(p, hub):
