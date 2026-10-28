@@ -91,9 +91,14 @@
     token: null, sessione: null, es: null, scarto: 0, corrente: null,
     cronologia: [], vista: "avvio", abbinamento: null, giri: 0,
     voce: null, voceTotale: 0,
-    // Si può scrivere adesso? (05/10) Solo durante una conversazione cominciata a voce: il
-    // server lo dice all'accesso, nel benvenuto e con l'evento «scrittura»
-    scrittura: { attiva: false, testo: "Di' «Calliope» per scrivermi." },
+    // Si può scrivere adesso? (05/10) Il server lo dice all'accesso, nel benvenuto e con
+    // l'evento «scrittura». Dal 28/10 (#301) `attiva` (casella, foto, file) dallo schermo
+    // personale è sempre vera; `moduli` (l'invio di un modulo) solo durante una conversazione
+    // cominciata a voce
+    scrittura: { attiva: false, moduli: false, testo: "Di' «Calliope» per scrivermi.", testoModuli: "Di' «Calliope» per mandarmi il modulo." },
+    // Il nome di questo schermo (e del satellite che lo porta, dal telefono): nella Conversazione
+    // il posto di un turno detto o scritto da qui non si ripete (28/10, #301)
+    nomiPropri: [],
     capace: false, personale: false, parola: "Calliope",
     // Le sezioni sullo schermo personale della pagina degli schermi (27/10, passo 1b)
     sezioni: false,
@@ -272,6 +277,8 @@
       if (!S.ricollego) accedi();
     },
     token() { return leggiToken(); },
+    // I nomi di questo schermo: il telefono aggiunge quello del suo satellite (28/10, #301)
+    nomiPropri(lista) { nomiPropri(lista); },
     // Il pulsante «Foto» del telefono (05/10): apre la scelta della foto nello stesso tocco
     foto() { const x = $("scrivi-foto-file"); if (x && S.fotoAmmessa && S.scrittura.attiva) { x.click(); return true; } return false; },
     dimentica() { chiudiEventi(); salvaToken(null); S.sessione = null; },
@@ -373,7 +380,8 @@
     S.sezioni = CON_SEZIONI && !INCORPORATA && !!r.dati.personale && r.dati.sezioni !== false;
     document.body.classList.toggle("con-sezioni", S.sezioni);
     emetti("pc", { attiva: S.sezioni, parla: !!r.dati.parla, luogo: r.dati.stanza || "", nome: r.dati.nome || "" });
-    if (r.dati.scrittura) S.scrittura = r.dati.scrittura;
+    if (r.dati.scrittura) leggiScrittura(r.dati.scrittura);
+    if (r.dati.nome) nomiPropri([r.dati.nome]);
     casellaScrivi(!!r.dati.scrivi, !!r.dati.personale);
     impostaAmministra(!!r.dati.amministra);
     applicaAspetto(r.dati.aspetto);
@@ -2242,6 +2250,18 @@
     }
   }
 
+  // Il posto di un turno è questo schermo (o il satellite che lo porta)?
+  const normaNome = (x) => String(x || "").trim().toLocaleLowerCase("it-IT");
+  function luogoProprio(luogo) { return !!luogo && S.nomiPropri.includes(normaNome(luogo)); }
+  function nomiPropri(lista) {
+    let cambiati = false;
+    for (const x of lista || []) {
+      const n = normaNome(x);
+      if (n && !S.nomiPropri.includes(n)) { S.nomiPropri.push(n); cambiati = true; }
+    }
+    if (cambiati && S.chatOk) aggiornaChat();
+  }
+
   // I canali di un turno (28/10, #242): detto, scritto, un tocco sullo schermo, un modulo inviato
   const CANALI = { voce: "a voce", scritto: "scritto", tocco: "con un tocco", modulo: "modulo" };
   const FILTRI_CHAT = [["oggi", "Oggi"], ["ieri", "Ieri"], ["schede", "Solo schede"]];
@@ -2328,8 +2348,10 @@
       const canale = CANALI[t.canale] ? t.canale : "voce";
       const r = el("div", "conv-turno canale-" + canale);
       r.dataset.turno = String(t.id);
-      // «10:40 · cucina, a voce», «10:44 · scritto», «10:50 · con un tocco»
-      const dove = [t.luogo, CANALI[canale]].filter(Boolean).join(canale === "scritto" ? " · " : ", ");
+      // «10:40 · cucina, a voce», «10:44 · scritto», «10:50 · con un tocco»; il posto solo se
+      // non è questo schermo (28/10, #301: «10:46 · a voce» detto dal telefono che si guarda)
+      const luogo = luogoProprio(t.luogo) ? "" : t.luogo;
+      const dove = [luogo, CANALI[canale]].filter(Boolean).join(canale === "scritto" ? " · " : ", ");
       r.append(el("div", "conv-meta", fmtOra.format(d) + " · " + dove));
       if (t.domanda && (canale === "tocco" || canale === "modulo")) {
         // Un gesto sullo schermo, non una frase: al centro, senza le parentesi della storia
@@ -3031,13 +3053,13 @@
       }
       const valori = {};
       campi.forEach(({ x, box }) => { valori[x.nome] = leggiCampo(box, x); });
-      if (!S.scrittura.attiva) { statoModulo(f); return; }
+      if (!S.scrittura.moduli) { statoModulo(f); return; }
       invia.disabled = true;
       esito.textContent = "Invio…";
       let r;
       try { r = await postSessione("/api/modulo", { modulo: c.modulo, valori }); }
       catch (e) { r = null; }
-      invia.disabled = !S.scrittura.attiva;
+      invia.disabled = !S.scrittura.moduli;
       if (r && r.status === 200) {
         delete S.bozze[c.modulo];
         f.querySelectorAll("input, textarea, select, button").forEach((i) => { i.disabled = true; });
@@ -3051,7 +3073,7 @@
         return;
       }
       if (r && r.dati && r.dati.codice === "senza_conversazione") {
-        applicaScrittura({ attiva: false, testo: r.dati.errore });
+        applicaScrittura({ moduli: false, testo_moduli: r.dati.errore });
         return;
       }
       esito.textContent = r ? (r.dati.errore || MESSAGGI[r.status] || "Non è andato: riprova.")
@@ -3064,44 +3086,57 @@
   // Senza una conversazione cominciata a voce la casella e «Invia» dei moduli sono spenti,
   // con «Di' «Calliope» per scrivermi»; si riaccendono da soli all'evento «scrittura». I campi
   // dei moduli restano scrivibili (la bozza non si perde): si spegne solo l'invio
-  function notaScrittura(dentro, prima) {
+  // Dal 28/10 (#301) la casella dello schermo personale è sempre accesa: la nota resta per i moduli
+  // e per gli schermi di stanza
+  function notaScrittura(dentro, prima, attiva, testo) {
     let n = dentro.querySelector(":scope > .nota-scrittura");
     if (!n) {
       n = el("p", "nota-scrittura");
       n.setAttribute("role", "status");
       if (prima) dentro.insertBefore(n, prima); else dentro.append(n);
     }
-    n.textContent = S.scrittura.attiva ? "" : (S.scrittura.testo || "Di' «Calliope» per scrivermi.");
-    n.hidden = !!S.scrittura.attiva;
+    n.textContent = attiva ? "" : (testo || "Di' «Calliope» per scrivermi.");
+    n.hidden = !!attiva;
   }
 
   function statoModulo(f) {
     if (f.classList.contains("inviato")) return;
     const b = f.querySelector(".invia-modulo");
-    if (b) b.disabled = !S.scrittura.attiva;
-    f.classList.toggle("spento", !S.scrittura.attiva);
-    notaScrittura(f, f.querySelector(".piede-modulo"));
+    const ok = !!S.scrittura.moduli;
+    if (b) b.disabled = !ok;
+    f.classList.toggle("spento", !ok);
+    notaScrittura(f, f.querySelector(".piede-modulo"), ok, S.scrittura.testoModuli);
+  }
+
+  // Lo stato dal server (o una parte: un 403 dice solo quella che si è spenta)
+  function leggiScrittura(st) {
+    st = st || {};
+    const prima = S.scrittura || {};
+    S.scrittura = {
+      attiva: "attiva" in st ? !!st.attiva : !!prima.attiva,
+      moduli: "moduli" in st ? !!st.moduli : !!prima.moduli,
+      testo: "testo" in st ? String(st.testo || "") : (prima.testo || ""),
+      testoModuli: "testo_moduli" in st ? String(st.testo_moduli || "") : (prima.testoModuli || ""),
+    };
   }
 
   function applicaScrittura(st) {
-    S.scrittura = { attiva: !!(st && st.attiva), testo: (st && st.testo) || "" };
+    leggiScrittura(st);
     document.querySelectorAll("form.modulo").forEach(statoModulo);
     document.querySelectorAll(".comandi-svil [data-svil-invia], .comandi-svil [data-svil-scrivi]")
       .forEach((b) => { b.disabled = !S.scrittura.attiva; });
     const f = $("scrivi");
     if (f) {
       const i = $("scrivi-testo");
-      const b = f.querySelector("button");
-      i.disabled = b.disabled = !S.scrittura.attiva;
+      i.disabled = !S.scrittura.attiva;
       // La foto come la casella: «Foto» spento, e una foto pronta e non mandata si toglie
       const bf = $("scrivi-foto");
       if (bf) bf.disabled = !S.scrittura.attiva;
       if (!S.scrittura.attiva && (S.foto || S.file) && S.togliFoto) S.togliFoto();
+      if (S.prontoScrivi) S.prontoScrivi();
       f.classList.toggle("spento", !S.scrittura.attiva);
-      i.placeholder = !S.scrittura.attiva ? "Di' «" + S.parola + "» per scrivermi"
-        : S.personale ? "Scrivi a Calliope invece di parlare…"
-          : "Scrivi a Calliope (da qui vale come un ospite)…";
-      notaScrittura(f);
+      if (!S.foto && !S.file && S.segnaScrivi) S.segnaScrivi(segnaposto());
+      notaScrittura(f, null, S.scrittura.attiva, S.scrittura.testo);
     }
     emetti("scrivi", { attiva: S.capace, personale: S.personale, abilitata: S.scrittura.attiva,
       testo: S.scrittura.testo, parola: S.parola });
@@ -3173,7 +3208,23 @@
   }
 
   // La casella «scrivi invece di parlare»: sotto le schede, sugli schermi personali (e su
-  // quelli di stanza se la configurazione lo vuole: lì chi scrive conta come ospite)
+  // quelli di stanza se la configurazione lo vuole: lì chi scrive conta come ospite).
+  // Dal 28/10 (#301) è una riga: Allega, il testo su più righe e Invia (sul telefono anche
+  // «Torna alla voce», messo da telefono.js), sopra l'anteprima di ciò che si allega. Il testo a
+  // 16 px almeno, perché iOS non ingrandisca la pagina; Invio manda, Maiusc+Invio va a capo; Invia
+  // è spento con la casella vuota
+  // Le icone dal <template id="icone"> della pagina (niente HTML scritto qui); senza, uno spazio vuoto
+  function icona(cls, nome) {
+    const t = $("icone");
+    const s = t && t.content ? t.content.querySelector('[data-icona="' + nome + '"]') : null;
+    const x = s ? s.cloneNode(true) : el("span");
+    x.setAttribute("aria-hidden", "true");
+    x.setAttribute("class", cls);
+    return x;
+  }
+  window.calliopeIcona = icona;
+  const SEGNO_BREVE = { "Scrivi a Calliope…": "Scrivi…", "Cosa vuoi sapere di questa foto?": "Cosa vuoi sapere?",
+    "Cosa vuoi sapere di questo file?": "Cosa vuoi sapere?" };
   function casellaScrivi(attiva, personale) {
     let f = $("scrivi");
     S.capace = !!attiva;
@@ -3188,14 +3239,19 @@
       f = el("form", "scrivi");
       f.id = "scrivi";
       f.noValidate = true;
-      const i = el("input");
-      i.type = "text";
+      f.setAttribute("aria-label", "Scrivi a Calliope");
+      const i = el("textarea");
       i.id = "scrivi-testo";
+      i.rows = 1;
       i.maxLength = 500;
       i.autocomplete = "off";
-      i.setAttribute("aria-label", "Scrivi a Calliope");
-      const b = el("button", "", "Invia");
+      i.setAttribute("enterkeyhint", "send");
+      i.setAttribute("aria-label", "Messaggio per Calliope");
+      const b = el("button", "scrivi-invia");
       b.type = "submit";
+      b.id = "scrivi-invia";
+      b.setAttribute("aria-label", "Invia");
+      b.append(icona("invia-icona", "invia"), el("span", "invia-testo", "Invia"));
       const esito = el("span", "esito-scrivi");
       esito.setAttribute("role", "status");
       // «Allega» (05/10): input nascosto senza «accept» (su iOS e Android offre fotocamera,
@@ -3205,58 +3261,101 @@
       file.type = "file";
       file.id = "scrivi-foto-file";
       file.hidden = true;
-      const bf = el("button", "foto-apri", "Allega");
+      const bf = el("button", "foto-apri");
       bf.type = "button";
       bf.id = "scrivi-foto";
       bf.setAttribute("aria-label", "Allega una foto o un file per Calliope");
+      bf.append(icona("allega-icona", "graffetta"), el("span", "allega-testo", "Allega"));
       const ante = el("div", "foto-anteprima");
       ante.id = "scrivi-anteprima";
       ante.hidden = true;
       const mini = el("img");
       mini.alt = "La foto da mandare";
       const info = el("span", "allegato-info");
-      info.hidden = true;
-      const togli = el("button", "piccolo-bottone", "Togli");
+      const togli = el("button", "piccolo-bottone togli-allegato");
       togli.type = "button";
+      togli.setAttribute("aria-label", "Togli la foto o il file");
+      togli.append(icona("togli-icona", "togli"), el("span", "togli-testo", "Togli"));
       ante.append(mini, info, togli);
+      // Una riga sola che cresce fino a cinque righe mentre si scrive (vuota, una riga: Chrome
+      // conta nell'altezza anche il segnaposto)
+      const cresci = () => {
+        i.style.height = "";
+        if (!i.value) { segna(); return; }
+        const alto = Math.min(i.scrollHeight, parseFloat(getComputedStyle(i).lineHeight || "20") * 5 + 24);
+        if (i.scrollHeight > i.clientHeight + 1) i.style.height = Math.ceil(alto + 2) + "px";
+      };
+      // Il segnaposto: quello breve se il lungo non ci sta su una riga (la casella stretta del
+      // telefono a 320 px)
+      const segna = (testo) => {
+        if (testo !== undefined) i.dataset.segno = testo;
+        const lungo = i.dataset.segno || "";
+        if (i.placeholder !== lungo) i.placeholder = lungo;
+        if (i.value || !i.clientHeight) return;
+        for (const corto of [SEGNO_BREVE[lungo], "Scrivi…"]) {
+          if (!corto || i.scrollHeight <= i.clientHeight + 1) break;
+          i.placeholder = corto;
+        }
+      };
+      S.segnaScrivi = segna;
+      if (typeof ResizeObserver === "function") new ResizeObserver(() => segna()).observe(i);
+      const dire = (testo, errore) => { esito.textContent = testo; esito.classList.toggle("errore", !!errore); };
+      const pronto = () => {
+        b.disabled = !S.scrittura.attiva || (!i.value.trim() && !S.foto && !S.file);
+        f.classList.toggle("con-allegato", !ante.hidden);
+      };
+      S.prontoScrivi = pronto;
       const via = () => {
-        S.foto = null; S.file = null; ante.hidden = true; info.hidden = true;
+        S.foto = null; S.file = null; ante.hidden = true;
         mini.hidden = false; mini.removeAttribute("src");
+        info.textContent = "";
+        pronto();
       };
       S.togliFoto = via;
       const metti = async (fl) => {
         if (!fl || !S.fotoAmmessa) return;
-        // Solo durante una conversazione a voce (05/10), come la casella
-        if (!S.scrittura.attiva) { esito.textContent = S.scrittura.testo || "Di' «" + S.parola + "» per scrivermi."; return; }
+        // Come la casella: dallo schermo personale sempre (28/10, #301)
+        if (!S.scrittura.attiva) { dire(S.scrittura.testo || "Di' «" + S.parola + "» per scrivermi.", true); return; }
         via();
-        if (fl.size > FILE_MAX_BYTE) { esito.textContent = "Il file è troppo grande (al massimo 25 MB)."; return; }
+        if (fl.size > FILE_MAX_BYTE) { dire("Il file è troppo grande (al massimo 25 MB).", true); return; }
         if (eFoto(fl)) {
-          esito.textContent = "Preparo la foto…";
+          dire("Preparo la foto…");
           try {
             S.foto = await leggiFoto(fl);
             mini.src = S.foto.url;
+            info.textContent = "Foto allegata · " + dimensione(fl.size);
+            togli.setAttribute("aria-label", "Togli la foto");
             ante.hidden = false;
-            esito.textContent = "Scrivi cosa vuoi sapere (o dimmelo a voce) e premi Invia.";
-            i.placeholder = "Cosa vuoi sapere di questa foto?";
+            dire("Foto allegata: scrivi cosa vuoi sapere (o dimmelo a voce) e premi Invia.");
+            segna("Cosa vuoi sapere di questa foto?");
+            pronto();
             i.focus();
           } catch (e) {
             via();
-            esito.textContent = e.message;
+            dire(e.message, true);
           }
           return;
         }
         S.file = fl;
         mini.hidden = true;
         info.textContent = (fl.name || "file") + " · " + dimensione(fl.size);
-        info.hidden = false;
+        togli.setAttribute("aria-label", "Togli il file");
         ante.hidden = false;
-        esito.textContent = "Scrivi cosa vuoi sapere (o dimmelo a voce) e premi Invia.";
-        i.placeholder = "Cosa vuoi sapere di questo file?";
+        dire("File allegato: scrivi cosa vuoi sapere (o dimmelo a voce) e premi Invia.");
+        segna("Cosa vuoi sapere di questo file?");
+        pronto();
         i.focus();
       };
       bf.addEventListener("click", () => file.click());
       file.addEventListener("change", () => { const fl = file.files && file.files[0]; file.value = ""; metti(fl); });
-      togli.addEventListener("click", () => { via(); esito.textContent = ""; });
+      togli.addEventListener("click", () => { via(); dire(""); segna(segnaposto()); i.focus(); });
+      i.addEventListener("input", () => { cresci(); pronto(); });
+      // Invio manda, Maiusc+Invio va a capo (non mentre si compone una parola con l'IME)
+      i.addEventListener("keydown", (ev) => {
+        if (ev.key !== "Enter" || ev.shiftKey || ev.isComposing) return;
+        ev.preventDefault();
+        if (typeof f.requestSubmit === "function") f.requestSubmit(); else f.dispatchEvent(new Event("submit", { cancelable: true }));
+      });
       // Trascina e rilascia e incolla, su tutta la pagina
       document.addEventListener("dragover", (ev) => {
         if (!S.fotoAmmessa || !ev.dataTransfer || !Array.from(ev.dataTransfer.types || []).includes("Files")) return;
@@ -3280,16 +3379,19 @@
         ev.preventDefault();
         metti(fl);
       });
-      // Invia resta il primo pulsante del modulo (le prove e chi lo cerca con «#scrivi
-      // button»); l'anteprima va sopra con l'«order» del CSS
-      f.append(i, b, bf, esito, ante, file);
+      // L'ordine è quello in cui si legge e si tocca: l'anteprima sopra, poi Allega, il testo,
+      // Invia (sul telefono telefono.js mette «Torna alla voce» per primo); l'esito sotto
+      const nota = el("span", "nota-invio", "Invio per mandare, Maiusc+Invio per andare a capo · trascina qui un file");
+      nota.setAttribute("aria-hidden", "true");
+      f.append(ante, bf, i, b, nota, esito, file);
       f.addEventListener("submit", async (ev) => {
         ev.preventDefault();
         const testo = i.value.trim();
         const foto = S.foto, allegato = S.file;
-        if ((!testo && !foto && !allegato) || !S.scrittura.attiva) return;
+        if ((!testo && !foto && !allegato) || !S.scrittura.attiva || f.classList.contains("in-invio")) return;
+        f.classList.add("in-invio");
         b.disabled = true;
-        if (allegato) esito.textContent = "Mando il file…";
+        if (allegato) dire("Mando il file…");
         let r;
         try {
           r = foto ? await postSessione("/api/immagine", { immagine: foto.url, testo,
@@ -3297,25 +3399,28 @@
             : allegato ? await postFile(allegato, testo)
               : await postSessione("/api/scrivi", { testo });
         } catch (e) { r = null; }
-        b.disabled = !S.scrittura.attiva;
+        f.classList.remove("in-invio");
         if (r && r.dati && r.dati.codice === "senza_conversazione") {
           applicaScrittura({ attiva: false, testo: r.dati.errore });
           return;
         }
         if (r && r.status === 200) {
           i.value = "";
-          if (foto || allegato) { via(); i.placeholder = "Scrivi a Calliope invece di parlare…"; }
-          esito.textContent = (foto || allegato) && !testo
+          if (foto || allegato) via();
+          i.dataset.segno = segnaposto();
+          cresci();
+          dire((foto || allegato) && !testo
             ? (foto ? "Foto inviata" : "File inviato") + ": dimmi o scrivi cosa vuoi sapere."
-            : "Inviato: ti rispondo qui.";
-          emetti("scritto", {});
+            : "Inviato: ti rispondo qui.");
+          emetti("scritto", { testo, foto: !!foto, file: !!allegato });
           setTimeout(() => { if (esito.textContent.startsWith("Inviato")) esito.textContent = ""; }, 5000);
         } else {
-          esito.textContent = r ? (r.dati.errore || MESSAGGI[r.status] || "Non è andato.") : "Calliope non risponde.";
+          dire(r ? (r.dati.errore || MESSAGGI[r.status] || "Non è andato.") : "Calliope non risponde.", true);
         }
+        pronto();
       });
-      // Il posto della pagina (lo strato del telefono, la colonna della conversazione del PC
-      // personale), se si vede; altrimenti in fondo, sotto la cronologia
+      // Il posto della pagina (la Conversazione del telefono, la colonna della conversazione del
+      // PC personale), se si vede; altrimenti in fondo, sotto la cronologia
       const posto = $("scrivi-posto");
       const dopo = $("cronologia");
       if (posto && (INCORPORATA || !posto.closest("[hidden]"))) posto.append(f);
@@ -3325,7 +3430,10 @@
     f.hidden = false;
     applicaScrittura(S.scrittura);
   }
-
+  function segnaposto() {
+    return !S.scrittura.attiva ? "Di' «" + S.parola + "» per scrivermi"
+      : S.personale ? "Scrivi a Calliope…" : "Scrivi a Calliope (da qui vale come un ospite)…";
+  }
   // ─── l'avanzamento di un lavoro dell'agente (03/10) ───
   function durata(s) {
     s = Math.max(0, Math.floor(s));

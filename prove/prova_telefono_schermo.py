@@ -1069,19 +1069,18 @@ def compila(t: Tel, hub, foto_cb=None):
     if foto_cb:
         foto_cb()
     t.v("document.activeElement.blur(); 1")
-    # Senza conversazione a voce (05/10): «Invia» spento, con la parola da dire; «Scrivi» attenuato
+    # Senza conversazione a voce (05/10): «Invia» del modulo spento, con la parola da dire; dal
+    # 28/10 (#301) «Scrivi» resta acceso (dallo schermo personale si scrive sempre)
     spento = t.v("(() => { const b = document.querySelector('#strato-modulo .invia-modulo');"
                  " const n = document.querySelector('#strato-modulo .nota-scrittura');"
                  " return b.disabled && n && !n.hidden && n.textContent.includes('Calliope')"
-                 " && document.getElementById('scrivi-apri').classList.contains('spento')"
-                 " && document.getElementById('foto-apri').classList.contains('spento'); })()")
-    verifica("senza conversazione: «Invia» del modulo spento, «Di' «Calliope»…», «Scrivi» e «Foto» attenuati",
+                 " && !document.getElementById('scrivi-apri').classList.contains('spento'); })()")
+    verifica("senza conversazione: «Invia» del modulo spento con «Di' «Calliope»…», «Scrivi» acceso (28/10, #301)",
              bool(spento))
     hub.conversazioni.voce("dario", "voce", stanza="telefono")      # Dario parla a Calliope
     ok = aspetta(lambda: t.v("!document.querySelector('#strato-modulo .invia-modulo').disabled"
-                             " && document.querySelector('#strato-modulo .nota-scrittura').hidden"
-                             " && !document.getElementById('scrivi-apri').classList.contains('spento')"), 3)
-    verifica("conversazione cominciata: i comandi si riaccendono da soli (evento «scrittura»)", bool(ok))
+                             " && document.querySelector('#strato-modulo .nota-scrittura').hidden"), 3)
+    verifica("conversazione cominciata: «Invia» del modulo si riaccende da solo (evento «scrittura»)", bool(ok))
     t.tocca_sel("#strato-modulo .invia-modulo")
     ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
     item = hub.ingresso.prendi() if ok else {}
@@ -1090,25 +1089,32 @@ def compila(t: Tel, hub, foto_cb=None):
     t.tocca("modulo-chiudi")
     ok = aspetta(lambda: t.v("document.getElementById('strato-modulo').hidden"), 2)
     verifica("modulo: «Chiudi» torna alla vista", bool(ok))
-    # la casella per scrivere
+    # la casella per scrivere: dal 28/10 (#301) nella Conversazione, al posto della riga della voce
     ok = aspetta(lambda: t.v("!document.getElementById('scrivi-apri').hidden"), 5)
     verifica("scrivi: «Scrivi» c'è in fondo (telefono personale)", bool(ok))
     t.tocca("scrivi-apri")
-    ok = aspetta(lambda: t.v("!document.getElementById('strato-scrivi').hidden"
+    ok = aspetta(lambda: t.v("document.getElementById('vista').dataset.scrittura === '1'"
+                             " && !document.getElementById('sez-conversazione').hidden"
                              " && document.activeElement === document.getElementById('scrivi-testo')"), 2)
-    verifica("scrivi: si apre con la casella pronta (fuoco nel campo)", bool(ok))
+    verifica("scrivi: la Conversazione in modalità scrittura, con la casella pronta (fuoco nel campo)", bool(ok))
     scrivi("#scrivi-testo", "Calliope, che ore sono?")
-    t.tocca_sel("#scrivi button")
+    t.tocca_sel("#scrivi-invia")
     ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
     item = hub.ingresso.prendi() if ok else {}
     verifica("scrivi: la frase arriva in coda come scritta", bool(ok) and item.get("tipo") == "scritto"
              and item.get("testo") == "Calliope, che ore sono?", str(item)[:160])
-    ok = aspetta(lambda: t.v("document.getElementById('strato-scrivi').hidden"), 3)
-    verifica("scrivi: inviata, lo strato si chiude da solo", bool(ok))
+    ok = aspetta(lambda: t.v("document.getElementById('scrivi-testo').value === ''"
+                             " && document.getElementById('vista').dataset.scrittura === '1'"), 3)
+    verifica("scrivi: inviata, la casella si svuota e la modalità scrittura resta", bool(ok))
     hub.conversazioni.chiudi()                                      # «esci»
-    ok = aspetta(lambda: t.v("document.getElementById('scrivi-testo').disabled"
-                             " && document.getElementById('scrivi-apri').classList.contains('spento')"), 3)
-    verifica("conversazione chiusa: casella spenta di nuovo", bool(ok))
+    time.sleep(0.3)
+    verifica("conversazione chiusa: la casella resta accesa (28/10, #301)",
+             t.v("!document.getElementById('scrivi-testo').disabled"
+                 " && !document.getElementById('scrivi-apri').classList.contains('spento')"))
+    t.tocca("scrivi-voce")
+    aspetta(lambda: t.v("!document.getElementById('vista').dataset.scrittura"), 2)
+    t.v("(() => { const r = window.calliopeTelefono.st.reg; if (r) r.finisci = true; return 1; })()")
+    aspetta(lambda: t.v("!window.calliopeTelefono.st.reg"), 5)
     # Io: tutto il resto
     t.tocca_sel('#barra a[data-sezione="io"]')
     aspetta(lambda: t.v("!document.getElementById('sez-io').hidden"), 2)
@@ -1162,7 +1168,7 @@ MISURA = r"""(() => {
   const auto = g.dataset.modo === 'auto';
   // contenitori il cui testo deve starci tutto
   const scatole = ['tel-voce', 'tel-dove', 'avviso-tel', 'schermo-avviso', 'parla', 'microfono', 'scrivi-apri',
-    'foto-apri', 'auto-apri', 'auto-esci', 'sez-titolo'].map((id) => document.getElementById(id))
+    'auto-apri', 'auto-esci', 'sez-titolo'].map((id) => document.getElementById(id))
     .concat([...document.querySelectorAll('#barra a')]).filter(vis);
   // ritagliata a 1 px per i lettori (28/10, #277: la riga dello stato nel layout compatto)
   const ritagliata = (e) => { const cs = getComputedStyle(e); return cs.position === 'absolute' && cs.clip !== 'auto'; };
@@ -1214,14 +1220,14 @@ MISURA = r"""(() => {
     && (!e.closest('.sezione') || (() => { const r = e.getBoundingClientRect(); return r.bottom > br.top && r.top < br.bottom; })()));
   const bassi = conTesto.map((e) => [nome(e), contrasto(e)]).filter(([, c]) => c < 4.5)
     .map(([n, c]) => n + ' ' + c.toFixed(2));
-  const tocchi = ['parla', 'microfono', 'scrivi-apri', 'foto-apri', 'auto-apri', 'auto-esci'].map((id) => document.getElementById(id))
+  const tocchi = ['parla', 'microfono', 'scrivi-apri', 'auto-apri', 'auto-esci', 'conv-lente'].map((id) => document.getElementById(id))
     .concat([...document.querySelectorAll('#barra a, #tessere .tessera, #sezioni button.spunta, #pagina-indietro')]).filter(vis)
     .map((e) => e.getBoundingClientRect()).map((r) => Math.min(r.width, r.height));
   // Il layout compatto (28/10, #277): lo stato dentro «Parla», i pulsanti su una riga, quanto
   // prendono la voce e la barra insieme
   const compatto = ritagliata(document.getElementById('tel-voce'));
   const vr = document.querySelector('.voce-riga').getBoundingClientRect();
-  const pulsanti = ['microfono', 'parla', 'scrivi-apri', 'foto-apri'].map((id) => document.getElementById(id)).filter(vis)
+  const pulsanti = ['microfono', 'parla', 'scrivi-apri'].map((id) => document.getElementById(id)).filter(vis)
     .map((e) => e.getBoundingClientRect());
   const unaRiga = pulsanti.every((r) => Math.abs(r.top - pulsanti[0].top) <= 2 && Math.abs(r.bottom - pulsanti[0].bottom) <= 2);
   const righe = (el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
@@ -1505,7 +1511,8 @@ def _schede_della_pagina(t, nome_d: str, raccolta: str):
 
 
 def misure_strati(t, hub, spec):
-    """Modulo aperto e casella per scrivere, nelle tre dimensioni (Io è una sezione: misure)."""
+    """Il modulo aperto nelle tre dimensioni (Io è una sezione: misure). La casella per scrivere non è
+    più uno strato (28/10, #301): la misura prova_cronologia_pagina, nella Conversazione."""
     from calliope.schermi import Mittente
     T = "window.calliopeTelefono"
     dario = Mittente(persona="dario", nome="Dario", livello="amministra", certo=True)
@@ -1513,7 +1520,7 @@ def misure_strati(t, hub, spec):
     aspetta(lambda: t.v("!document.getElementById('strato-modulo').hidden"), 5)
     for w, h, nome_d in DIMENSIONI:
         dimensione(t, w, h)
-        for id_, apri in (("strato-modulo", None), ("strato-scrivi", "scrivi-apri")):
+        for id_, apri in (("strato-modulo", None),):
             if apri:
                 t.v(f"{T}.apriStrato({json.dumps(id_)}); document.activeElement.blur(); 1")
             else:

@@ -398,10 +398,10 @@ def prova_server():
         registro = []
         hub.registro_turni = registro.append
         r = post(mio, {"immagine": url, "testo": "Cosa c'è qui?", "fonte": "telefono"})
-        verifica("foto senza conversazione a voce: 403, niente in coda, regola nel registro",
-                 r.status_code == 403 and r.json().get("codice") == "senza_conversazione"
-                 and hub.ingresso.vuoto() and registro and registro[-1]["canale"] == "immagine"
-                 and registro[-1]["regole"] == ["scritto_senza_conversazione"], r.text)
+        item = hub.ingresso.prendi()
+        verifica("foto senza conversazione a voce: dal 28/10 (#301) 200 e in coda, nessun rifiuto",
+                 r.status_code == 200 and item and item["tipo"] == "immagine"
+                 and item["persona"] == "dario" and not registro, r.text)
         # Una foto in attesa della domanda decade quando la conversazione finisce
         att = InAttesa(60)
         hub.su_fine_conversazione.append(att.fine_conversazione)

@@ -189,7 +189,8 @@ A_SECCO = [
     ("prova_schermi_pagina.py", [], "pagina degli schermi in un browser vero: si ricollega da sola dopo un riavvio"),
     ("prova_cdp_orfani.py", [], "browser delle prove nel job object della prova (14/10): la prova che muore senza chiudi() non lascia processi msedge con il suo profilo, contrario senza job, chiudi() di sempre"),
     # ~10 s: server degli schermi vero su 127.0.0.1, ufficio con l'estrazione finta
-    ("prova_scritto_conversazione.py", [], "scrivere solo durante una conversazione a voce: regola pura, voce che apre e rinnova, breve e scritto che non rinnovano, altra persona e ospite che chiudono, server con evento «scrittura», 403 senza_conversazione e regola nel registro, modulo chiuso a metà"),
+    ("prova_scritto_conversazione.py", [], "la conversazione a voce e lo scritto: regola pura, voce che apre e rinnova, breve e scritto che non rinnovano, altra persona e ospite che chiudono; dal 28/10 (#301) casella, foto e file dello schermo personale sempre, moduli e schermi di stanza ancora in conversazione (evento «scrittura» con `moduli`, 403 senza_conversazione e regola nel registro), modulo chiuso a metà"),
+    ("prova_scritto_senza_voce.py", [], "scritto dallo schermo personale senza aver parlato (28/10, #301) nel ciclo vero: familiare al modello, chi amministra al più familiare, ciò che vuole la voce rifiutato, minore fuori orario rifiutato e dentro gli orari col suo livello, ospite dallo schermo di stanza e modulo rifiutati"),
     ("prova_scritto.py", [], "scrivere invece di parlare: controlli dei codici, moduli dei tool con il server vero, valori al tool senza il modello, permessi, canale, registro"),
     # ~15 s: modulo e casella nella pagina vera (Edge o Chromium senza finestra); senza si salta
     ("prova_rispondi.py", [], "rispondi dove ti ho chiesto: scritto dal telefono con lo studio attivo, schermo senza audio, schermo_mostra, follow-up, annunci"),

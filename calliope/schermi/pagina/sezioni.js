@@ -342,6 +342,8 @@
       }
       disponi();
       raccolteVista();
+      // Il telefono chiude la modalità scrittura uscendo dalla Conversazione (28/10, #301)
+      if (opz.dopoPercorso) opz.dopoPercorso(prima);
     }
 
     // ── le tessere e le pagine di «Le mie cose» (28/10, passo 2a: POST /api/raccolte) ──

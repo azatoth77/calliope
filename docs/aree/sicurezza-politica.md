@@ -1907,3 +1907,34 @@ sole condizioni ammetterebbero, rifiutato all'import e nel ciclo; un'«azione» 
 nella tabella, nel `ToolSpec` e con `non_fidato`; un toccabile solo per chi amministra; gli errori
 dell'elenco); `prova_raccolte` (col vincolo acceso e lo `ToolSpec` del registro, la spunta su un
 `lista_togli` non fidato o solo per chi amministra rifiutata senza toglierla).
+## Lo scritto dallo schermo personale senza aver parlato (28/10, issue #301, ramo `issue-301-scrivere-in-conversazione`)
+
+Decisione di chi amministra del 28/10 (opzione 2 della #301): dallo schermo personale **si scrive sempre**,
+come si tocca. Cade il vincolo del 05/10 «scritto solo dentro una conversazione cominciata a voce» per la
+casella, le foto e i file dello schermo personale (`conversazione.scritto_libero`, `CANALI_LIBERI`;
+`Schermi.scritto_consentito`, nel server e di nuovo nel ciclo, `_prendi_scritto`). *Storico: dal 05/10 al
+28/10 senza una conversazione a voce del proprietario la casella rispondeva 403 `senza_conversazione`
+(regola `scritto_senza_conversazione`).*
+
+Cosa resta uguale, ed è la difesa:
+
+- **il livello**: lo scritto vale come il proprietario con `identified_by` «schermo», quindi al più
+  «familiare» (`SpeakerContext.current_level`); chi amministra non vale mai «amministra» scrivendo;
+- **ciò che vuole la voce** resta rifiutato (`tools/spec.serve_la_voce`, regola `scritto_serve_voce`:
+  installazioni, fatture e Ufficio, schermi personali, la registrazione di una voce) e la politica per
+  valore lascia eseguire dallo scritto solo E0–E2;
+- **i minori**: il loro livello e il loro preset (`minori.permesso`), gli orari dei tutori (`_fuori_orario`,
+  rifiutato con la frase degli orari, il modello non vede il testo);
+- **la politica del turno** di sempre: lo scritto passa dal modello e da `ToolRegistry.call` come una frase
+  detta (a differenza del tocco, che ha l'elenco chiuso dei toccabili).
+
+Restano legati alla conversazione a voce i **moduli** (l'invio di un modulo: nasce da una richiesta a voce,
+spesso dell'Ufficio, e si chiude quando la conversazione finisce), gli **schermi di stanza**
+(`schermi_scritto_stanza`, chi scrive vale come ospite: serve una conversazione nella stanza) e i **file di un
+ragazzo** toccati dal tutore nel Cassetto. Il rischio che si accetta è quello del tocco: chi ha in mano il
+telefono sbloccato di un altro scrive a suo nome, al più come familiare.
+
+Prove: `prova_scritto_senza_voce` (nuova: il ciclo vero senza conversazione a voce, il familiare al modello,
+chi amministra «familiare», `registra_utente` scritto rifiutato, un minore fuori orario rifiutato e dentro
+gli orari col suo livello, l'ospite dallo schermo di stanza e il modulo rifiutati); `prova_scritto_conversazione`,
+`prova_scritto`, `prova_immagini`, `prova_allegati`, `prova_scritto_calliope` adattate.

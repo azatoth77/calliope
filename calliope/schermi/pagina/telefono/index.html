@@ -2,7 +2,9 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- interactive-widget (28/10, #301): su Android la tastiera non ridimensiona la pagina, come su iOS;
+     la parte visibile la misura telefono.js (visualViewport), così il layout compatto non scatta -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual">
 <meta name="color-scheme" content="dark">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#000000">
@@ -50,6 +52,10 @@
       <span id="auto-segno" class="auto-segno" hidden><span class="auto-icona" aria-hidden="true"></span>In auto</span>
       <button id="auto-apri" type="button" class="tasto tasto-piccolo auto-apri">In auto</button>
       <button id="auto-esci" type="button" class="tasto tasto-piccolo auto-esci" hidden>Esci</button>
+      <!-- Scrivendo nella Conversazione (28/10, #301) i filtri stanno dietro la lente -->
+      <button id="conv-lente" type="button" class="tasto tasto-piccolo conv-lente" aria-label="Cerca e filtra la conversazione" aria-expanded="false" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
+      </button>
     </div>
     <p id="avviso-tel" class="vista-avviso" role="alert" hidden></p>
     <p id="schermo-avviso" class="vista-avviso" role="alert" hidden></p>
@@ -75,6 +81,8 @@
       <!-- La conversazione (08/10; dal 28/10, #242, dentro la sezione con le schede piccole, i
            filtri e la ricerca): solo su un telefono personale -->
       <div id="conv-tel" class="conv-tel" hidden></div>
+      <!-- «ti ascolto…» mentre si parla, «Calliope sta scrivendo…» dopo l'invio (28/10, #301) -->
+      <div id="conv-ora" class="conv-ora" data-vuoto="1"><span class="conv-ora-punti" aria-hidden="true"><i></i><i></i><i></i></span><span class="conv-ora-testo"></span></div>
       <h2 class="gruppo" data-gruppo="altre-conv" hidden>Altre schede</h2>
       <div class="elenco" data-posto="conversazione"></div>
       <p class="vuoto-sez">Le risposte con una scheda (biblioteca, internet, calcoli, testi da leggere) restano qui.</p>
@@ -179,14 +187,15 @@
     <button id="parla" type="button" class="parla" aria-describedby="tel-dove">
       <span class="parla-icona" aria-hidden="true"></span><span class="parla-parole"><span class="parla-testo">Parla</span><span class="parla-breve">Parla</span><span class="parla-stato" aria-hidden="true"></span></span>
     </button>
-    <button id="scrivi-apri" type="button" class="tasto scrivi-apri" aria-haspopup="dialog" aria-controls="strato-scrivi" aria-label="Scrivi a Calliope" hidden>
+    <!-- Scrivi (28/10, #301): la Conversazione in modalità scrittura, nella stessa schermata -->
+    <button id="scrivi-apri" type="button" class="tasto scrivi-apri" aria-label="Scrivi a Calliope" aria-pressed="false" hidden>
       <span class="tastiera-icona" aria-hidden="true"><i></i><i></i></span><span class="tasto-parola">Scrivi</span>
     </button>
-    <!-- Allega (05/10): fotocamera, libreria o un file del telefono, poi la domanda scritta o detta -->
-    <button id="foto-apri" type="button" class="tasto foto-apri" aria-label="Allega una foto o un file per Calliope" hidden>
-      <span class="foto-icona" aria-hidden="true"></span><span class="tasto-parola">Allega</span>
-    </button>
   </section>
+
+  <!-- Scrivendo, la riga della voce diventa la casella di schermo.js (#scrivi): «Torna alla voce»,
+       Allega, il testo e Invia; Allega c'è solo qui (28/10, #301) -->
+  <div id="scrivi-posto" class="scrivi-riga" hidden></div>
 
   <nav id="barra" class="barra" aria-label="Sezioni">
     <a href="#/adesso" data-sezione="adesso"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span><span>Adesso</span></a>
@@ -196,16 +205,6 @@
     <a href="#/io" data-sezione="io"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></span><span>Io</span></a>
   </nav>
 </main>
-
-<!-- Scrivere a Calliope: la casella di schermo.js finisce qui (#scrivi-posto) -->
-<section id="strato-scrivi" class="strato strato-alto" role="dialog" aria-modal="true" aria-labelledby="scrivi-titolo" hidden>
-  <div class="strato-testa">
-    <h2 id="scrivi-titolo">Scrivi a Calliope</h2>
-    <button id="scrivi-chiudi" type="button" class="tasto chiudi">Chiudi</button>
-  </div>
-  <div id="scrivi-posto"></div>
-  <p class="strato-nota">La risposta arriva in Adesso.</p>
-</section>
 
 <!-- Una scheda a schermo intero (06/10): un tocco sulla scheda o «Espandi»; si aggiorna al suo
      posto, si chiude con «Chiudi», Esc o il gesto indietro -->
@@ -225,6 +224,15 @@
   </div>
   <div id="modulo-posto" class="modulo-posto"></div>
 </section>
+
+<!-- Le icone della casella per scrivere (28/10, #301): schermo.js e telefono.js le copiano da qui
+     (niente HTML scritto dal codice, niente indirizzi nel JS) -->
+<template id="icone">
+  <svg data-icona="graffetta" viewBox="0 0 24 24"><path d="M20 11l-8 8a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a2 2 0 0 1-3-3l7-7"/></svg>
+  <svg data-icona="invia" viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg>
+  <svg data-icona="togli" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  <svg data-icona="microfono" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+</template>
 
 <noscript><p class="avviso">Questa pagina ha bisogno di JavaScript.</p></noscript>
 </body>

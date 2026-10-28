@@ -1539,8 +1539,13 @@ class Ciclo:
             t.scritto = scritto
             return None
         # Di nuovo qui (05/10): la conversazione può essere finita mentre il testo
-        # aspettava in coda («esci» detto un attimo prima). Niente al ciclo
-        ok, motivo = schermi.scrittura_consentita(schermi.schermo(scritto.get("schermo_id")))
+        # aspettava in coda («esci» detto un attimo prima). Niente al ciclo. Dal 28/10 (#301)
+        # dallo schermo personale la casella, le foto e i file valgono sempre (al più
+        # familiare, con gli orari di un minore: _fuori_orario); i moduli no
+        schermo = schermi.schermo(scritto.get("schermo_id"))
+        consentito = getattr(schermi, "scritto_consentito", None)
+        ok, motivo = (consentito(schermo, scritto.get("tipo") or "scritto") if consentito
+                      else schermi.scrittura_consentita(schermo))
         if not ok:
             print(f"   [SCHERMI] scritto dallo schermo «{scritto.get('schermo')}» "
                   f"scartato: nessuna conversazione ({motivo})", flush=True)

@@ -2743,8 +2743,10 @@ class Config:
                   if on(k)]
         fa = []
         if on("schermi_scritto"):
+            # Dal 28/10 (#301) anche senza aver parlato, al più come familiare (storico: fino ad
+            # allora «in una conversazione cominciata a voce»)
             fa.append("si scrive" + (f" e si allegano {' e '.join(allega)}" if allega else "")
-                      + " in una conversazione cominciata a voce")
+                      + " anche senza aver parlato (ciò che vuole la voce si chiede a voce)")
         fa.append("si spuntano le liste e si danno «+1 minuto» e «Ferma» ai timer")
         testo += "Da lì " + ", ".join(fa) + "; "
         if cassetto and allega:

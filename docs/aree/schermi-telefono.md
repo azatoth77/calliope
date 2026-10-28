@@ -12,7 +12,7 @@
 |---|---|---|
 | Schermi (schede su PC, tablet, TV) | Starlette + uvicorn senza extra (puro Python) in un thread, SSE verso una pagina kiosk locale; abbinamento a codice in SQLite (stesso file della memoria) | `calliope/schermi/` → `Schermi` (`hub.py`: destinatari, visibilità, consegna), `ArchivioSchermi` (`archivio.py`), `schede.py`, `ServerSchermi` (`server.py`), `pagina/`, `load_schermi`; HTTPS in rete `tls.py`, ponte TLS del satellite `ponte.py`; scheda del cassetto (POST `/api/cassetto`, area [immagini-allegati](immagini-allegati.md)), dall'08/10 (*storico: fino al 28/10 anche le schede degli esercizi, POST «/api/esercizio», tolte con la #279*); segno della compagnia `Schermi.voce(compagnia=…)` (09/10); segno della stanza `Schermi.stanza_segno`, `stanza_per` (13/10); porte occupate dopo un riavvio `calliope/porte.py` → `socket_in_ascolto` (02/10); tool in `calliope/tools/schermi.py`; terminale `python -m calliope.schermi` |
 | Telefono (satellite nel browser, PWA, dal 03/10) | stessa porta degli schermi: WebSocket di uvicorn con `websockets` sans-I/O e lo stesso protocollo dei satelliti; nel browser onnxruntime-web 1.30 in WebAssembly (Silero VAD e wake word), AudioWorklet, Web Audio, Screen Wake Lock API; CA di casa con `openssl` | `calliope/schermi/telefono.py` → `rotte`, `PonteWs`, `stato`; «Prova il microfono» `telefono_diagnostica.py`; `calliope/schermi/pagina/telefono/` (`telefono.js`, `voce.js`, `microfono.js`, `schermo-acceso.js` (`SchermoAcceso`, `diagnosi`: schermo acceso, dal 04/10), `sw.js`, manifest; dal 27/10 cinque sezioni con la barra (`sincronizza` smista per sezione, `disponi`, `vaiA`, router `vai`/`applicaPercorso`, `impostaAuto`; *storico: dal 04/10 una vista sola col carosello*), strati modulo/scrivi (il menu è la sezione Io dal 27/10) e, dal 06/10, la scheda a schermo intero (`apriIntera`, `disegnaIntera`, `chiudiIntera`); schede da `schermo.js` con `data-carosello` ed eventi `calliope:*`); `ServerSatelliti.prendi` / `lascia` / `per_pc`; `tls.certificato_telefono`; terminale `python -m calliope.schermi --certificato` |
-| Scrivere invece di parlare (moduli e casella sugli schermi personali, dal 03/10) | POST `/api/scrivi` e `/api/modulo` del server degli schermi (sessione in un'intestazione, JSON, solo HTTPS in rete); controlli dei codici in Python e in JS (`schermo.js`, condiviso col telefono); dal 05/10 solo durante una conversazione a voce | `calliope/schermi/moduli.py` → `Moduli`, `Ingresso`, `controlla_campo`, `offri`, `completa`, `oscura`; `Ufficio.completa_modulo` / `rubrica_da_modulo`; `tools/spec.serve_la_voce`; ciclo in `main.py` (`scritto`); `calliope/schermi/conversazione.py` → `scrittura_consentita`, `Conversazioni`; `Schermi.scrittura_consentita` (il punto unico, anche per le foto) |
+| Scrivere invece di parlare (moduli e casella sugli schermi personali, dal 03/10) | POST `/api/scrivi` e `/api/modulo` del server degli schermi (sessione in un'intestazione, JSON, solo HTTPS in rete); controlli dei codici in Python e in JS (`schermo.js`, condiviso col telefono); dal 05/10 solo durante una conversazione a voce; dal 28/10 (#301) dallo schermo personale casella, foto e file sempre, i moduli ancora in conversazione | `calliope/schermi/moduli.py` → `Moduli`, `Ingresso`, `controlla_campo`, `offri`, `completa`, `oscura`; `Ufficio.completa_modulo` / `rubrica_da_modulo`; `tools/spec.serve_la_voce`; ciclo in `main.py` (`scritto`); `calliope/schermi/conversazione.py` → `scrittura_consentita`, `Conversazioni`; `Schermi.scrittura_consentita` (il punto unico, anche per le foto) |
 | Cruscotto di chi amministra (fase 1, sola lettura, dal 06/10) | — (solo libreria standard: registro dei turni, SQLite in sola lettura, `indice.json` delle estensioni) | `calliope/schermi/cruscotto.py` → `Cruscotto` (`amministra`, `dati`), `LettoreTurni`, `versione_in_uso`, `tipo_errore`; GET `/api/cruscotto` (`server.py`); `Schermi.cruscotto`; scheda locale `cruscotto` in `schermo.js` (`apriCruscotto`, `impostaAmministra`), voce di Io del telefono (dal 27/10; prima del menu); `latenza.leggi_file` |
 | Lettore Markdown e «Scarica» nella scheda del documento (07/10) | scritto in proprio in `schermo.js` (createElement e textContent, mai innerHTML); conversione con fpdf2 e python-docx sul server | `schermo.js` → `leggiMarkdown`, `mdBlocchi`, `mdInLinea`, `pulsantiScarica`; `calliope/schermi/scarica.py` → `Scaricamenti` (`registra`, `gettone`, `prendi`), `converti`; POST `/api/scarica` e GET `/scarica/<gettone>` (`server.py`); `Schermi.scaricamenti`, `hub.pubblica`; `schede.documento_markdown`; `schermi_scarica_s` |
 | Vista dello sviluppo, lavoro in diretta a schermo intero, flusso dell'agente (08/10) | scritto in proprio in `schermo.js` (createElement e textContent); niente librerie | `schermo.js` → `assorbiFlusso`, `chatFlusso`, `colonnaFlusso`, `disegnaAvanzamento`, `misuraSegui`, `ripristinaSegui`, `vistaSviluppo`, `disegnaVista`, `comandiSviluppo`, `apriInteroPC`, `disegnaInteroPC`; `telefono.js` → `sincronizza` (apre e chiude la vista); `hub.per_storia`, `hub.registra_scaricabili`; `scarica.converti` (`markdown_file`); `calliope/agenti/avanzamento.py` → `Avanzamento`, `_Argomenti`, `esito_breve`, `chiamata_breve`; `calliope/sviluppo.py` → `Sviluppi.dati_vista`, `agli_schermi`, `riepilogo_lavoro`, `totali` |
@@ -42,6 +42,9 @@
   finisce; la domanda di un lavoro annunciata a conversazione chiusa dice «oppure chiamarmi e
   scrivere». Funzione pura con la conversazione come argomento, `Conversazioni` per chiave
   (oggi una, fase 3 una per satellite). Con lo speaker id spento non si scrive mai.
+  *[storico dal 28/10 per lo schermo personale: casella, foto e file valgono anche senza aver parlato,
+  al più «familiare» (#301, «Scrivere nella Conversazione», più sotto); la regola resta per i moduli e
+  per gli schermi di stanza]*
 
 - **Scrivere invece di parlare** (03/10, `calliope/schermi/moduli.py`, prove
   `prova_scritto*.py`): quando un tool chiede dati tipizzati (campi mancanti di
@@ -573,7 +576,8 @@ finestra, computer e telefono, ~40 s).
   aperto), in una colonna: riepilogo, flusso, sezioni, comandi; «Chiudi» torna al carosello, un
   tocco sulla scheda la riapre. Sviluppo chiuso o sospeso: si esce dalla vista.
 - **Comandi a tocco** solo innocui, come frasi scritte (`/api/scrivi`, quindi solo durante una
-  conversazione cominciata a voce, e con la politica di sempre): «A che punto siamo?», «Prova
+  conversazione cominciata a voce, e con la politica di sempre; *[storico: dal 28/10, #301, dallo schermo
+  personale anche senza aver parlato]*): «A che punto siamo?», «Prova
   con…» e «Chiedi all'agente…» (la frase da finire nella casella dello scritto), «Riprendi lo
   sviluppo» (sospeso), «Vista normale». Testi fissi della pagina, mai testo della scheda.
   Approvare e attivare restano a voce con la frase di sfida: nessun pulsante, e la vista lo dice.
@@ -1432,7 +1436,8 @@ Passo 3 del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-1
   solo le schede di conversazione che i turni non mostrano già (non le risposte scritte, non le schede dentro
   un turno: `fuoriDaCasa` di `sezioni.js`); in Adesso restano come prima. Sul PC la colonna a destra è la
   stessa scheda. La casella per scrivere resta quella di prima (`scrittura_consentita`): spenta fuori da una
-  conversazione cominciata a voce.
+  conversazione cominciata a voce. *[storico: dal 28/10, #301, la casella sta nella Conversazione al posto
+  della riga della voce ed è sempre accesa sullo schermo personale]*
 - Tutto in `textContent` (provato con `<img onerror>`, `<script>` e `<b>` nei turni e nella ricerca); CSP
   invariata. Cache del service worker `calliope-telefono-pagina-v15` (era v14).
 - **Limiti**: con `eventi: attivo` (passo 3, acceso a mano; sulla DGX è in ombra) l'archivio lo scrive l'ombra
@@ -1700,7 +1705,8 @@ con quello che il telefono e lo schermo personale fanno davvero.
   (Adesso, Conversazione, Le mie cose, Casa, Io), le pagine di Le mie cose (Liste, Agenda, Lavori e programmi,
   Cassetto, Documenti, Giochi; «e, solo per chi amministra, Ufficio» solo con l'ufficio; Studio no, la pagina
   non c'è ancora), Casa nascosta sotto i 13 anni (`aspetto.ETA_CASA`), cosa si fa dallo schermo (scrivere e
-  allegare dentro una conversazione cominciata a voce, la spunta delle liste, «+1 minuto» e «Ferma» dei timer),
+  allegare dentro una conversazione cominciata a voce *[storico: dal 28/10, #301, «anche senza aver
+  parlato»]*, la spunta delle liste, «+1 minuto» e «Ferma» dei timer),
   la tenuta delle foto (60 giorni, gli altri file 7, per sempre con «archiviala», decisione
   [0034](../decisioni/0034-miniature-nella-conversazione.md); con `immagini_tenuta` spenta i giorni del cassetto)
   e quando chiamare `schermo_mostra` con `cosa=pagina`. **Scartato** nei dati del turno: lì si rilegge a ogni
@@ -1844,3 +1850,83 @@ Note della terza revisione della PR #294, decise da chi amministra il 28/10.
 Prove: `prova_telefono_consapevole` (la frase della voce a chi amministra nella zona grigia e con la voce certa
 ma il livello «familiare», e la regola; i contrari con «non c'è» per un familiare, una bambina e senza
 l'ufficio installato).
+
+## Scrivere nella Conversazione, anche senza aver parlato (28/10, issue #301, ramo `issue-301-scrivere-in-conversazione`)
+
+Decisioni di chi amministra del 28/10 nella #301 (epic #251); tavole del canvas del telefono, riga «Scrivere
+nella Conversazione (28/10)»: ScriviVoce, ScriviTastiera, ScriviMentre, ScriviInviato, ScriviRitorno,
+ScriviMiniVoce, ScriviMiniTastiera e PcConversazione.
+
+- **La pagina apposta non c'è più** (`#strato-scrivi` tolto, con «Allega» nella riga della voce). Il tocco
+  sulla tastiera porta alla **Conversazione in modalità scrittura**, nella stessa schermata (`entraScrittura`
+  in `telefono.js`: la sezione, la casella e il cursore nello stesso tocco, perché iOS apre la tastiera solo
+  dentro il gesto). La riga della voce diventa la casella di `schermo.js` (`#scrivi` dentro `#scrivi-posto`):
+  «Torna alla voce» (il microfono) a sinistra, Allega (solo qui: risposta 3), il testo su più righe
+  (`textarea` che cresce fino a cinque righe, a `max(16px, 0,95rem)` perché iOS non ingrandisca la pagina) e
+  Invia, spento con la casella vuota; sopra, l'anteprima di ciò che si allega (la miniatura, «Foto allegata ·
+  1,2 MB», ✕ per toglierla). Invio manda, Maiusc+Invio va a capo. Nel layout compatto (#277) Invia è
+  un'icona e il segnaposto lungo, se non ci sta su una riga, diventa breve («Scrivi…»). L'esito («Inviato: ti
+  rispondo qui.») resta per i lettori; si vede solo un errore.
+- **Torna alla voce** fa partire subito l'ascolto (`tocca`, come «Parla»: risposta 1). La modalità resta
+  finché non si tocca il microfono; uscendo dalla Conversazione si chiude (`dopoPercorso`, un'opzione nuova
+  di `sezioni.js`: risposta 4); la wake word resta accesa (risposta 2: la modalità non tocca il microfono).
+  **In auto** la tastiera non c'è: niente tasto, niente casella.
+- **La tastiera di sistema** (anche il punto 1 della #287). `interactive-widget=resizes-visual` nel viewport:
+  Chrome su Android, come Safari su iOS, non ridimensiona più la pagina quando si apre la tastiera, quindi la
+  media query del compatto (sull'altezza della finestra) non scatta. La parte visibile la dice
+  `visualViewport`: con un campo di testo col fuoco e la parte visibile più bassa di 120 px della finestra, la
+  vista si stringe a quella parte (`--alto-visibile`, `--su-visibile`, classe `tastiera`) e **la barra delle
+  sezioni si nasconde, solo finché la tastiera è aperta**. Vale per ogni campo (anche le ricerche della
+  Conversazione e di Le mie cose). *Limite*: Chrome per Android prima della 108 ignora `interactive-widget`, e
+  lì il compatto può ancora accendersi con la tastiera.
+- **La Conversazione come una chat**, a voce e scrivendo (le tavole ScriviVoce e ScriviRitorno la disegnano
+  così anche a voce, e passare da un modo all'altro non sposta niente): le bolle sul nero, «Tu» e «Calliope»
+  solo per i lettori, sotto la bolla della persona l'ora e il canale («10:47 · scritto», «10:46 · a voce»: il
+  posto solo se non è questo schermo o il satellite che lo porta, `nomiPropri` di `schermo.js`, risposta 6),
+  le schede come un **rimando di una riga** (44 px) dentro la bolla di Calliope che apre il dettaglio (la foto
+  resta con la sua miniatura, #272), i **filtri dietro la lente** in alto (`#conv-lente`; un filtro acceso
+  resta detto nella riga sotto, con «Tutto»). Scrivendo, in più, niente «Altre schede» né «Scarica Markdown»:
+  solo chat. Solo nella sezione del telefono: a schermo intero e sul PC la conversazione resta quella del
+  #242. *[storico: fino al 28/10 nella sezione «Tu» e «Calliope» sopra le bolle, l'anteprima delle schede
+  piccole e i filtri sempre in vista]*
+- **«ti ascolto…»** in fondo alla chat mentre si parla (risposta 5: poi il turno arriva come bolla «a voce»),
+  «Calliope sta scrivendo…» dopo un invio finché non arriva il turno (al più 30 s), «Calliope sta
+  rispondendo…» mentre pensa (`#conv-ora`; è `role="status"` solo scrivendo: a voce lo dice già la riga della
+  voce).
+- **Si scrive sempre dallo schermo personale** (opzione 2 della #301, come il tocco):
+  `conversazione.scritto_libero` e `Schermi.scritto_consentito(schermo, canale)` lasciano passare casella,
+  foto e file (`CANALI_LIBERI`) dello schermo personale senza aver parlato, in `/api/scrivi`, `/api/immagine`
+  e `/api/allegato`, e di nuovo nel ciclo (`_prendi_scritto`). Il livello è quello di sempre per lo scritto
+  (`identified_by` «schermo»: al più «familiare»); un minore ha il suo livello, il suo preset e i suoi orari
+  (`_fuori_orario`); ciò che vuole la voce resta rifiutato (`serve_la_voce`); niente Ufficio, che vuole
+  «amministra» ([sicurezza-politica](sicurezza-politica.md)). **Restano legati alla conversazione a voce** i
+  moduli (nascono da una richiesta a voce e si chiudono quando la conversazione finisce: lo stato `scrittura`
+  ha ora `moduli` e `testo_moduli` accanto ad `attiva`, e l'invio di un modulo si spegne da solo), gli schermi
+  di stanza (`schermi_scritto_stanza`) e i file di un ragazzo toccati dal tutore. *Storico: dal 05/10 al 28/10
+  anche la casella, le foto e i file dello schermo personale valevano solo dentro una conversazione cominciata
+  a voce («Scrivere solo in conversazione», in cima).*
+- **Il modello**: il paragrafo delle sezioni (`Config._frase_sezioni`) dice «si scrive e si allegano foto e
+  file anche senza aver parlato (ciò che vuole la voce si chiede a voce)», la nota del dispositivo (#288)
+  «lo schermo personale a sezioni di chi parla, per scritto, anche senza aver parlato». *[storico: fino al
+  28/10 «in una conversazione cominciata a voce» nel prompt, e la nota senza la coda]*
+- **Sul PC** la casella è sempre in fondo alla colonna della Conversazione (risposta 7), ora accesa anche
+  senza aver parlato e disegnata come nella tavola PcConversazione: il testo su più righe sopra, poi Allega,
+  «Invio per mandare, Maiusc+Invio per andare a capo · trascina qui un file» e Invia. Il resto della colonna
+  non cambia.
+- Cache del service worker `calliope-telefono-pagina-v20` (era v19), uguale a `PAGINA_VERSIONE`.
+
+Prove: `prova_cronologia_pagina` (nuova parte «scrivere» sul telefono: il tocco sulla tastiera, la riga
+nell'ordine giusto, Invia spento e acceso, solo chat e la lente, l'invio senza conversazione a voce in coda
+a nome del proprietario, «Calliope sta scrivendo…», l'invio con una foto e l'anteprima; a 390×844 e 320×693,
+anche col testo ingrandito, il testo a 16 px, niente fuori di lato, contrasto AA anche del segnaposto, tocchi
+≥ 44 px, Invia icona solo nel compatto; la tastiera simulata con un `visualViewport` finto che nasconde la
+barra, tiene la casella sopra la tastiera e non fa scattare il compatto, e il contrario senza un campo col
+fuoco; «Torna alla voce» con l'ascolto che parte e «ti ascolto…»; l'uscita dalla sezione e l'auto; i filtri
+dietro la lente nella parte del #242); `prova_sezioni` (a secco: `interactive-widget`, la pagina apposta
+tolta, la barra solo con la tastiera, i 16 px, niente casella in auto, il compatto che non guarda la
+tastiera); `prova_scritto_senza_voce` (nuova, il ciclo vero: [sicurezza-politica](sicurezza-politica.md));
+adattate `prova_telefono_schermo`, `prova_pc_pagina` (la casella accesa senza aver parlato e Invio che manda), `prova_scritto_pagina` (anche Invio e Maiusc+Invio), `prova_immagini_pagina`, `prova_vista_sviluppo_pagina` (i comandi dello sviluppo accesi senza conversazione),
+`prova_scritto_conversazione`, `prova_scritto`, `prova_immagini`, `prova_allegati`, `prova_scritto_calliope`,
+`prova_telefono_consapevole`. Da provare sul vero: l'iPhone 13 mini con e senza lo «Zoom schermo» (la
+tastiera vera, la barra che si nasconde, il gesto per chiudere la tastiera), un Android con Chrome recente e
+uno vecchio, VoiceOver sulla casella e su «ti ascolto…».

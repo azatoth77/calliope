@@ -271,7 +271,7 @@ def crea_app(hub: Schermi) -> Starlette:
                       # Il cruscotto di chi amministra (06/10): solo per decidere se la pagina
                       # mostra il pulsante; /api/cruscotto lo ricontrolla a ogni richiesta
                       "amministra": bool(cr is not None and cr.amministra(s)),
-                      # Si scrive solo durante una conversazione a voce (05/10)
+                      # Si scrive? (05/10; dal 28/10, #301, dallo schermo personale sempre)
                       "scrittura": hub.stato_scrittura(s),
                       # L'accento e le sezioni nascoste a un minore (27/10, aspetto.py)
                       "aspetto": hub.aspetto_di(s), "nascoste": hub.nascoste_di(s),
@@ -326,7 +326,7 @@ def crea_app(hub: Schermi) -> Starlette:
                              "voce": hub.voce_per(conn),
                              # La stanza ascolta? (13/10, conversazione di stanza)
                              "stanza": hub.stanza_per(conn),
-                             # Si può scrivere adesso? (05/10: solo in conversazione)
+                             # Si può scrivere adesso? (dal 28/10, #301: moduli a parte)
                              "scrittura": hub.stato_scrittura_per(conn),
                              # Uso del contesto dell'ultima risposta (schermi personali)
                              "contesto": hub.contesto_per(schermo),
@@ -373,9 +373,10 @@ def crea_app(hub: Schermi) -> Starlette:
 
     def scrivibile(request: Request, canale: str = "scritto"):
         """(schermo, None) se la richiesta può scrivere; altrimenti (None, risposta). Il
-        punto da cui passa ogni ingresso dalla pagina (testo, moduli, domani le immagini):
-        sessione, HTTPS, limite al minuto e, dal 05/10, la conversazione a voce
-        (`Schermi.scrittura_consentita`)."""
+        punto da cui passa ogni ingresso dalla pagina (testo, moduli, foto, file): sessione,
+        HTTPS, limite al minuto e, dal 05/10, la conversazione a voce; dal 28/10 (#301) dallo
+        schermo personale la casella, le foto e i file valgono sempre, i moduli no
+        (`Schermi.scritto_consentito`)."""
         if not getattr(hub.cfg, "schermi_scritto", True):
             return None, _json({"errore": "scrittura spenta"}, 403)
         client = request.client.host if request.client else ""
@@ -397,13 +398,13 @@ def crea_app(hub: Schermi) -> Starlette:
         if not schermo.get("proprietario") and not getattr(hub.cfg, "schermi_scritto_stanza",
                                                            False):
             return None, _json({"errore": "da questo schermo non si scrive"}, 403)
-        # Solo durante una conversazione cominciata a voce (05/10): chi ha in mano lo schermo
-        # non scrive a nome del proprietario se lui non sta parlando con Calliope. Dopo il
-        # limite al minuto, così i rifiuti nel registro dei turni restano pochi
-        ok, motivo = hub.scrittura_consentita(schermo)
+        # La conversazione a voce (05/10): dal 28/10 (#301) solo per i moduli e gli schermi di
+        # stanza; dallo schermo personale si scrive sempre, al più come familiare (il tocco
+        # lo stesso). Dopo il limite al minuto, così i rifiuti nel registro restano pochi
+        ok, motivo = hub.scritto_consentito(schermo, canale)
         if not ok:
             hub.rifiuta_scritto(schermo, motivo, canale)
-            return None, _json({"errore": hub.testo_senza_conversazione(),
+            return None, _json({"errore": hub.testo_senza_conversazione(canale),
                                 "codice": "senza_conversazione", "motivo": motivo}, 403)
         return schermo, None
 
@@ -483,7 +484,7 @@ def crea_app(hub: Schermi) -> Starlette:
         il testo scritto. Mai su disco."""
         if not getattr(hub.cfg, "immagini_enabled", True):
             return _json({"errore": "foto spente"}, 403)
-        # Anche le foto solo durante una conversazione a voce (05/10, conversazione.py)
+        # Le foto come la casella: dallo schermo personale sempre (28/10, #301)
         schermo, errore = scrivibile(request, "immagine")
         if errore is not None:
             return errore
