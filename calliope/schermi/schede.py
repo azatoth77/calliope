@@ -83,7 +83,7 @@ SEZIONE_DI_TIPO = {
     "web": "conversazione", "testo": "conversazione", "chat": "conversazione",
     "timer": "cose/agenda", "promemoria": "cose/agenda", "lista": "cose/liste",
     "lavoro": "cose/lavori", "esecuzione": "cose/lavori", "sviluppo": "cose/lavori",
-    "documento": "cose/documenti", "foto": "cose/cassetto", "allegato": "cose/cassetto",
+    "documento": "cose/documenti", "archivio": "cose/documenti", "foto": "cose/cassetto", "allegato": "cose/cassetto",
     "cassetto": "cose/cassetto", "modulo": "cose", "gioco": "cose/giochi", "giochi": "cose/giochi",
     "esercizio": "cose/studio", "esercizi_riepilogo": "cose/studio",
     "casa": "casa", "conoscente": "casa", "avviso": "casa", "cruscotto": "io",
@@ -457,6 +457,22 @@ def giochi(chiave: str, titolo: str, giochi=(), partite=(), nota: str = "", vuot
                            "punti": [{"nome": _taglia(x.get("nome"), 30), "punti": num(x.get("punti"))}
                                      for x in list(p.get("punti") or ())[:8]]}
                           for p in list(partite or ())[:12]],
+                 nota=_taglia(nota, 300), vuoto=_taglia(vuoto, 200))
+
+
+def archivio(chiave: str, titolo: str, voci=(), nota: str = "", vuoto: str = "") -> dict:
+    """Un gruppo di documenti dell'archivio di casa nella pagina Documenti di Le mie cose (28/10,
+    passo 2d, #259, schermi/raccolte.py): una riga per documento con nome, data, importo, di chi è
+    (`di`, solo nella pagina di chi amministra) e «Scarica» del file originale (`chiave` della
+    riga, `estensione`). Solo testo: il nome viene dai dati estratti dal documento, un dato non
+    fidato. Le sorgenti di «Scarica» stanno in `_scarica_voci` e restano sul server. Personale:
+    è la pagina di chi la guarda."""
+    out = []
+    for v in list(voci or ())[:_MAX_VOCI]:
+        out.append({"nome": _taglia(v.get("nome"), 160), "data": _taglia(v.get("data"), 40),
+                    "importo": _taglia(v.get("importo"), 40), "di": _taglia(v.get("di"), 60),
+                    "chiave": _taglia(v.get("chiave"), 80), "estensione": _taglia(v.get("estensione"), 8)})
+    return nuova("archivio", titolo, PERSONALE, durata_s=None, chiave=chiave, voci=out,
                  nota=_taglia(nota, 300), vuoto=_taglia(vuoto, 200))
 
 

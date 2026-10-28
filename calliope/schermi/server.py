@@ -63,6 +63,10 @@ Indirizzi:
                                  stato, ultimo cambiamento), {raccolta} → {schede, nota?} della
                                  sua pagina (28/10, raccolte.py): letti dai servizi per il
                                  proprietario, solo da uno schermo personale, 30 al minuto
+  POST /api/raccolte/cerca       «X-Calliope-Sessione», {raccolta, testo} → {schede, nota}: la
+                                 ricerca in una pagina di «Le mie cose» (28/10, raccolte.cerca:
+                                 i Documenti), in sola lettura, coi permessi della pagina; solo
+                                 da uno schermo personale, 20 al minuto
   POST /api/tocco                «X-Calliope-Sessione», {tocco, …}: un tocco che cambia qualcosa
                                  (28/10, tocchi.py: la spunta della lista, «+1 minuto» e «Ferma»
                                  sul timer), solo da uno schermo
@@ -999,13 +1003,17 @@ def crea_app(hub: Schermi) -> Starlette:
             out = await asyncio.to_thread(raccolte.tessere, hub, prof, hub.log)
             return _json({"tessere": out})
         out = await asyncio.to_thread(raccolte.pagina, hub, prof, str(quale)[:40], schermo, hub.log)
+        return schede_della_pagina(out, schermo)
+
+    def schede_della_pagina(out: dict, schermo: dict):
+        """La risposta di una pagina o di una ricerca: le chiavi private di «Scarica» (un
+        documento, il registro di un lavoro, i file dell'archivio: 28/10, #258 e #259) restano
+        sul server, registrate per questo schermo come per la cronologia ripresa."""
         stato = int(out.pop("_stato", 200))
         if isinstance(out.get("schede"), list):
-            # Le chiavi private di «Scarica» (un documento, il registro di un lavoro: 28/10, #258)
-            # restano sul server, registrate per questo schermo come per la cronologia ripresa
             pubbliche = []
             for c in out["schede"]:
-                if "_scarica" in c or "_registro" in c:
+                if any(k in c for k in ("_scarica", "_registro", "_scarica_voci")):
                     try:
                         registra_scaricabili(hub.scaricamenti, schermo["id"], c, schermo["proprietario"])
                     except Exception as e:  # noqa: BLE001 — «Scarica» non ferma la pagina
@@ -1013,6 +1021,29 @@ def crea_app(hub: Schermi) -> Starlette:
                 pubbliche.append(pubblica(c))
             out["schede"] = pubbliche
         return _json(out, stato)
+
+    ricerche_racc: dict[int, list[float]] = {}
+
+    async def cerca_api(request: Request):
+        """La ricerca in una pagina di «Le mie cose» (28/10, passo 2d, #259: i Documenti), in
+        sola lettura: {raccolta, testo} → {schede, nota}. Solo da uno schermo personale, 20 al
+        minuto, con i permessi della pagina (raccolte.cerca). Il testo cercato non va nel
+        registro: i documenti di casa sono dati personali (come i tool `riservati`)."""
+        from . import raccolte
+        schermo, errore = schermo_personale(request, ricerche_racc, 20)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 1024)
+        if errore is not None:
+            return errore
+        if not isinstance(dati, dict) or not isinstance(dati.get("testo"), str)                 or not isinstance(dati.get("raccolta"), str):
+            return _json({"errore": "dati non validi"}, 400)
+        prof = profilo_di(schermo)
+        if prof is None:
+            return _json({"errore": "non so di chi è questo schermo"}, 403)
+        out = await asyncio.to_thread(raccolte.cerca, hub, prof, dati["raccolta"][:40],
+                                      dati["testo"], hub.log)
+        return schede_della_pagina(out, schermo)
 
     async def tocco_api(request: Request):
         """Un tocco che cambia qualcosa (la spunta, i tasti del timer): controllato qui contro lo
@@ -1112,6 +1143,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/aspetto", aspetto_api, methods=["POST"]),
         Route("/api/parla", parla_api, methods=["POST"]),
         Route("/api/raccolte", raccolte_api, methods=["POST"]),
+        Route("/api/raccolte/cerca", cerca_api, methods=["POST"]),
         Route("/api/tocco", tocco_api, methods=["POST"]),
         *telefono.rotte(hub),
         # /satellite: il comando per far diventare satellite un PC nuovo (03/10)

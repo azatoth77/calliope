@@ -75,6 +75,10 @@ def _schermo_dopo(ctx: ToolContext, job):
         return
     sender = hub.mittente(ctx)
     job.on_scheda = lambda card: hub.invia(card, sender)
+    # Senza schermi aperti a fine lavoro, la pagina Documenti di uno schermo abbinato (28/10, #259)
+    abbinato = getattr(hub, "personale_abbinato", None)
+    if abbinato is not None:
+        job.ha_pagina = lambda: bool(abbinato(sender))
 
 
 def _su_scheda(ctx) -> bool:
@@ -82,6 +86,19 @@ def _su_scheda(ctx) -> bool:
     con «Scarica» (schermi/hub.py)."""
     hub = getattr(ctx, "schermi", None)
     vero = getattr(hub, "personale_collegato", None)
+    if vero is None:
+        return False
+    try:
+        return bool(vero(hub.mittente(ctx)))
+    except Exception:  # noqa: BLE001 — nel dubbio, la frase di sempre
+        return False
+
+
+def _su_pagina(ctx) -> bool:
+    """Chi parla ha uno schermo personale abbinato, anche chiuso (28/10, #259): il documento
+    rimasto sul server si ritrova in Le mie cose › Documenti, con «Scarica»."""
+    hub = getattr(ctx, "schermi", None)
+    vero = getattr(hub, "personale_abbinato", None)
     if vero is None:
         return False
     try:
@@ -104,7 +121,12 @@ def _spoken(res: dict, ctx: ToolContext | None = None) -> dict:
         # «Scarica» (09/10)
         note_rule(ctx, "documento_sulla_scheda")
         text = res["frase_scheda"]
-    drop = {"frase", "annuncio", "frase_scheda", "annuncio_scheda"} | (
+    elif res.get("frase_pagina") and _su_pagina(ctx):
+        # Rimasto sul server, schermo personale abbinato ma chiuso: la pagina Documenti (28/10)
+        note_rule(ctx, "documento_sulla_pagina")
+        text = res["frase_pagina"]
+    drop = {"frase", "annuncio", "frase_scheda", "annuncio_scheda", "frase_pagina",
+            "annuncio_pagina"} | (
         {"scheda"} if getattr(ctx, "schermi", None) is None else set())
     out = {k: v for k, v in res.items() if k not in drop}
     if text:
@@ -265,6 +287,21 @@ def _documento_leggi(ctx: ToolContext, documento: str = "", modo: str = "riassun
     frasi = "da quattro a sei" if modo == "leggi" else "due o tre"
     pre = ("Non vedo un tuo schermo aperto, quindi diglielo a voce. "
            if modo == "mostra" else "")
+    if modo == "mostra" and _su_pagina(ctx):
+        # Lo schermo personale è abbinato ma chiuso (28/10, #259): il documento c'è nella pagina.
+        # La pagina mostra gli ultimi `DOCUMENTI_PAGINA`; uno più vecchio si trova con «Cerca»
+        # (revisione della PR #268: la frase deve essere vera)
+        from ..schermi.raccolte import DOCUMENTI_PAGINA
+        note_rule(ctx, "documento_sulla_pagina")
+        try:
+            in_pagina = any(r.get("id") == doc["id"]
+                            for r in svc.archive.recenti(prof.id, DOCUMENTI_PAGINA))
+        except Exception:  # noqa: BLE001
+            in_pagina = False
+        dove = ("in Le mie cose, alla voce Documenti" if in_pagina else
+                f"in Le mie cose, alla voce Documenti, cercando «{titolo}»")
+        pre = (f"Il suo schermo non è aperto: diglielo a voce, e aggiungi che lo trova {dove}, "
+               "con «Scarica». ")
     return {"ok": True, "documento": doc["id"], "titolo": titolo, "formato": formato,
             "contenuto": testo[:CONTENUTO_MAX], "tagliato": len(testo) > CONTENUTO_MAX,
             **({"sullo_schermo": True} if sullo_schermo else {}),

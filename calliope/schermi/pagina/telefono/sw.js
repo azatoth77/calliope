@@ -5,7 +5,7 @@
 // schede non passano mai di qui.
 "use strict";
 
-const CACHE = "calliope-telefono-pagina-v12";
+const CACHE = "calliope-telefono-pagina-v13";
 const PAGINA = [
   "/telefono/", "/telefono/telefono.js", "/telefono/voce.js", "/telefono/microfono.js",
   "/telefono/schermo-acceso.js",

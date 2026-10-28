@@ -350,7 +350,10 @@
     // (dai servizi: anche ciò che non è passato da questo schermo), disegnate da schermo.js; il
     // gesto indietro torna alle tessere. Le altre tessere dicono «presto» e portano, come prima,
     // al gruppo delle schede di quella raccolta.
-    const racc = { tessere: [], timer: null, aperta: null, richiesta: 0, daTessere: false, rinfresca: null, rinfrescata: 0 };
+    const racc = { tessere: [], timer: null, aperta: null, richiesta: 0, daTessere: false, rinfresca: null, rinfrescata: 0,
+      cerca: "" };
+    // Le pagine con la ricerca (28/10, passo 2d: i Documenti, POST /api/raccolte/cerca)
+    const CON_RICERCA = new Set(["documenti"]);
     const CHIAVE_RACC = opz.chiaveRaccolte || "calliope.raccolte.viste";
     function vistePrima() {
       try {
@@ -462,8 +465,10 @@
       disegnaTessere();
       if (racc.aperta !== id) {
         racc.aperta = id;
+        racc.cerca = "";
         metti($("pagina-titolo"), String(t.nome || id));
         $("pagina-schede").replaceChildren();
+        disegnaRicerca();
         caricaPagina(id);
       } else requestAnimationFrame(scorriAllaScheda);
     }
@@ -479,27 +484,69 @@
     }
     async function caricaPagina(id) {
       const n = ++racc.richiesta;
-      const r = await sch().raccolte({ raccolta: id });
-      if (n !== racc.richiesta || racc.aperta !== id) return;
+      const cercato = CON_RICERCA.has(id) ? racc.cerca : "";
+      const r = cercato && sch().cerca ? await sch().cerca({ raccolta: id, testo: cercato })
+        : await sch().raccolte({ raccolta: id });
+      if (n !== racc.richiesta || racc.aperta !== id || (CON_RICERCA.has(id) ? racc.cerca : "") !== cercato) return;
       const box = $("pagina-schede"), nota = $("pagina-nota");
       if (!r.ok) {
-        metti($("pagina-esito"), String(r.dati.errore || "Non riesco a leggere questa pagina: riprova tra poco."));
+        metti($("pagina-esito"), String(r.dati.errore || (cercato ? "Non riesco a cercare adesso: riprova tra poco."
+          : "Non riesco a leggere questa pagina: riprova tra poco.")));
         return;
       }
       metti($("pagina-esito"), "");
       const schede = Array.isArray(r.dati.schede) ? r.dati.schede.filter((c) => c && typeof c === "object") : [];
-      const vecchie = new Map([...box.children].map((e) => [e.dataset.chiave, e]));
-      const nuove = schede.map((c) => {
+      const vecchie = new Map([...box.children].filter((e) => e.dataset.chiave).map((e) => [e.dataset.chiave, e]));
+      const nuove = [];
+      let gruppo = "";
+      for (const c of schede) {
+        // Il titolo del gruppo sopra la sua prima scheda (28/10, #259: «Fatti da Calliope per te»,
+        // «Archivio di casa», «Lavori di …» per chi amministra): solo testo
+        const g = typeof c.gruppo === "string" ? c.gruppo : "";
+        if (g && g !== gruppo) {
+          const h = document.createElement("h3");
+          h.className = "gruppo-pagina";
+          h.textContent = g;
+          nuove.push(h);
+        }
+        gruppo = g;
         const e = vecchie.get(String(chiaveDi(c)));
         const s = costruisciScheda(c);
-        if (e) { sch().allinea(e, s); return e; }
-        return s;
-      });
+        if (e) { sch().allinea(e, s); nuove.push(e); } else nuove.push(s);
+      }
       box.replaceChildren(...nuove);
       const testo = r.dati.nota ? String(r.dati.nota) : (schede.length ? "" : "Niente qui, per ora.");
       metti(nota, testo);
       nota.hidden = !testo;
       scorriAllaScheda();
+    }
+    // La casella della ricerca (28/10, #259): solo nelle pagine che la hanno; il testo resta
+    // nella pagina finché la si cambia o si tocca «Tutti»; le riletture rifanno la ricerca
+    function disegnaRicerca() {
+      const f = $("pagina-cerca");
+      if (!f) return;
+      const si = !!racc.aperta && CON_RICERCA.has(racc.aperta);
+      f.hidden = !si;
+      const i = $("pagina-cerca-testo"), via = $("pagina-cerca-via");
+      if (i && !racc.cerca) i.value = "";
+      if (via) via.hidden = !racc.cerca;
+    }
+    const formCerca = $("pagina-cerca");
+    if (formCerca) {
+      formCerca.addEventListener("submit", (ev) => {
+        ev.preventDefault();
+        if (!racc.aperta || !CON_RICERCA.has(racc.aperta)) return;
+        const i = $("pagina-cerca-testo");
+        racc.cerca = String(i ? i.value : "").trim().slice(0, 120);
+        disegnaRicerca();
+        caricaPagina(racc.aperta);
+      });
+      const via = $("pagina-cerca-via");
+      if (via) via.addEventListener("click", () => {
+        racc.cerca = "";
+        disegnaRicerca();
+        if (racc.aperta) caricaPagina(racc.aperta);
+      });
     }
     // Una scheda arrivata (la lista aggiornata da un tocco o a voce): nella pagina aperta si
     // allinea al suo posto; le tessere (e la pagina aperta, che così prende anche le schede che non
@@ -531,6 +578,11 @@
       if (racc.daTessere) { racc.daTessere = false; history.back(); return; }
       vai("#/cose", true);
     }
+    // Un tasto del cassetto riuscito (2d, seconda revisione della PR #267): la pagina Cassetto
+    // aperta si rilegge subito, fuori dall'attesa delle schede
+    document.addEventListener("calliope:cassetto", () => {
+      if (racc.aperta === "cassetto" && sch() && sch().raccolte) caricaPagina("cassetto");
+    });
     const indietro = $("pagina-indietro");
     if (indietro) indietro.addEventListener("click", tornaAlleTessere);
 
@@ -593,9 +645,11 @@
         for (const [k, v] of Object.entries(car.novita)) novita[k] = v.size;
         const tessere = [...document.querySelectorAll("#tessere .tessera")].map((a) => ({ id: a.dataset.tessera,
           conto: a.querySelector(".tessera-conto").textContent, novita: !a.querySelector(".tessera-pallino").hidden }));
-        const pagina = [...document.querySelectorAll("#pagina-schede > *")].map((e) => e.dataset.chiave);
+        const pagina = [...document.querySelectorAll("#pagina-schede > :not(.gruppo-pagina)")].map((e) => e.dataset.chiave);
+        const gruppi = [...document.querySelectorAll("#pagina-schede > .gruppo-pagina")].map((e) => e.textContent);
         const sc = $("sez-cose");
-        return { sezione: vis.sezione, percorso: vis.percorso.slice(), modo: vis.modo, posti, novita, tessere, pagina,
+        return { sezione: vis.sezione, percorso: vis.percorso.slice(), modo: vis.modo, posti, novita, tessere, pagina, gruppi,
+          cerca: racc.cerca,
           vistaCose: sc ? sc.dataset.vista || null : null,
           nascoste: { sezioni: vis.nascoste.sezioni.slice(), raccolte: vis.nascoste.raccolte.slice() } };
       },

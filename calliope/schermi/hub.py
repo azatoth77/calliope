@@ -149,6 +149,12 @@ def registra_scaricabili(scaricamenti, sid: int, scheda: dict, persona: str):
     sotto la chiave `registro:<id>`, la stessa che la pagina chiede)."""
     if "_scarica" in scheda:
         scaricamenti.registra(sid, scheda, persona)
+    # Una voce per riga (28/10, #259: la scheda `archivio` della pagina Documenti, un file per
+    # riga): [{chiave, sorgente, formati}], ognuna sotto la sua chiave
+    for v in scheda.get("_scarica_voci") or ():
+        if isinstance(v, dict) and v.get("chiave") and isinstance(v.get("sorgente"), dict):
+            scaricamenti.registra(sid, {"chiave": v["chiave"], "_scarica": v["sorgente"],
+                                        "scarica": list(v.get("formati") or ())}, persona)
     reg = scheda.get("registro")
     if isinstance(scheda.get("_registro"), dict) and isinstance(reg, dict) and reg.get("chiave"):
         scaricamenti.registra(sid, {"chiave": reg["chiave"], "_scarica": scheda["_registro"],
@@ -696,6 +702,15 @@ class Schermi:
         dest, _ = destinatari(PERSONALE, mittente, self.abbinati(), stanza)
         return any(s.get("proprietario") == mittente.persona and self.collegato(s["id"])
                    for s in dest)
+
+    def personale_abbinato(self, mittente: Mittente) -> bool:
+        """`mittente` ha uno schermo personale abbinato (il telefono, il PC personale), anche
+        con la pagina chiusa: un suo documento rimasto sul server si ritrova da lì, in Le mie
+        cose › Documenti, con «Scarica» (28/10, passo 2d, #259). Solo con l'identità decisa
+        dalla voce, come `personale_collegato`."""
+        if not mittente.certo or not mittente.persona:
+            return False
+        return any(s.get("proprietario") == mittente.persona for s in self.abbinati())
 
     def _in_storia(self, sid: int, scheda: dict):
         """La scheda nella cronologia dello schermo (con il lock). Con una `chiave` già

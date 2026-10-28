@@ -16,7 +16,10 @@ secondi (180) e per poche richieste, legato allo schermo. Senza intestazioni per
 browser lo salva da sé (sul telefono negli scaricamenti), e senza sessione nell'URL. Il file si
 fa al primo GET (in un thread) e resta nel gettone per le richieste dopo.
 
-I tipi sono solo quelli fatti da qui (md, pdf, docx, xlsx): niente eseguibili. Il Markdown va
+I tipi sono solo quelli fatti da qui (md, pdf, docx, xlsx) e, dal 28/10 (passo 2d, #259), il
+file **originale** di un documento dell'archivio di casa, solo dei tipi che l'archivio legge
+(PDF, immagini, docx, txt: `ORIGINALI`), letto al clic con i permessi rifatti adesso
+(`file_fn`, costruita da schermi/raccolte.py): niente eseguibili. Il Markdown va
 come text/markdown con nosniff; ogni risposta ha una CSP «sandbox», così un file aperto nel
 browser invece che salvato non esegue niente.
 """
@@ -36,8 +39,21 @@ FORMATI = {
     "excel": ("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
     # L'audio di un avviso di pericolo (14/10, minori.Avvisi.scheda_di): dal cassetto del tutore
     "audio": ("wav", "audio/wav"),
+    # Il file originale dell'archivio di casa (28/10, #259): estensione e tipo da `ORIGINALI`
+    "originale": ("", "application/octet-stream"),
 }
-MAX_VOCI = 64            # schede scaricabili ricordate (le più recenti)
+# I file dell'archivio di casa che si scaricano così come sono (le estensioni che l'archivio
+# legge, archivio/testo.ESTENSIONI), con il tipo giusto per Safari su iPhone
+ORIGINALI = {
+    "pdf": "application/pdf", "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+    "webp": "image/webp", "tif": "image/tiff", "tiff": "image/tiff", "bmp": "image/bmp",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "txt": "text/plain; charset=utf-8",
+}
+MAX_VOCI = 400           # schede scaricabili ricordate **per schermo** (le più recenti; dal 28/10,
+                         # #259, anche una per riga dell'archivio di casa nella pagina Documenti;
+                         # per schermo dalla revisione della PR #268: con un tetto unico la pagina
+                         # riletta su uno schermo toglieva le voci degli altri, e «Scarica» dava 404)
 MAX_GETTONI = 64
 USI = 3                  # richieste per gettone (un download che riprova, l'anteprima di iOS)
 AL_MINUTO = 20           # gettoni al minuto per schermo
@@ -77,6 +93,14 @@ def converti(sorgente: dict, formato: str, font=None, persona=None, avvisi=None)
     from ..documenti.render import available_formats, render
     if formato not in FORMATI:
         raise Rifiuto(400, "formato non ammesso")
+    if formato == "originale" or "file_fn" in sorgente:
+        # Il file dell'archivio di casa (28/10, #259): la funzione rifà i permessi e lo legge
+        if formato != "originale" or not callable(sorgente.get("file_fn")):
+            raise Rifiuto(400, "formato non disponibile per questo documento")
+        letto = sorgente["file_fn"]()
+        if letto is None:
+            raise Rifiuto(404, "il file non c'è più, o non è più tuo da vedere")
+        return bytes(letto[0] if isinstance(letto, tuple) else letto)
     if formato == "audio" or "avviso_audio" in sorgente:
         # L'audio di un avviso (14/10): solo da una scheda che ce l'ha, letto al clic dal cassetto
         if formato != "audio" or not sorgente.get("avviso_audio"):
@@ -116,15 +140,37 @@ def converti(sorgente: dict, formato: str, font=None, persona=None, avvisi=None)
     return render(formato, doc, font)
 
 
-def nome_file(titolo: str, formato: str) -> str:
+def estensione(formato: str, sorgente: dict | None = None) -> str:
+    """L'estensione del file: quella del formato o, per l'originale, quella del file vero (solo
+    fra `ORIGINALI`; altrimenti «bin»)."""
+    if formato == "originale":
+        e = str((sorgente or {}).get("estensione") or "").lower().lstrip(".")
+        return e if e in ORIGINALI else "bin"
+    return FORMATI[formato][0]
+
+
+def tipo_mime(formato: str, sorgente: dict | None = None) -> str:
+    if formato == "originale":
+        return ORIGINALI.get(estensione(formato, sorgente), "application/octet-stream")
+    return FORMATI[formato][1]
+
+
+def nome_file(titolo: str, formato: str, sorgente: dict | None = None) -> str:
+    """Il nome del file salvato: il titolo senza i caratteri vietati, in forma NFC (28/10, #259:
+    le lettere accentate composte, come le scrive iOS, non «a» più l'accento a parte)."""
+    import unicodedata
     from ..documenti.formato import safe_filename
-    return f"{safe_filename(titolo)}.{FORMATI[formato][0]}"
+    nome = unicodedata.normalize("NFC", safe_filename(titolo))
+    return f"{nome}.{estensione(formato, sorgente)}"
 
 
 def disposizione(nome: str) -> str:
     """Content-Disposition per il salvataggio: un nome ASCII di riserva e quello vero in
-    UTF-8 (RFC 6266)."""
-    ascii_ = "".join(c if 32 <= ord(c) < 127 and c not in '"\\;' else "_" for c in nome)
+    UTF-8 (RFC 6266). Il nome di riserva toglie gli accenti invece di metterci «_» (28/10, #259:
+    «Città» → «Citta»), per chi non legge `filename*`."""
+    import unicodedata
+    piatto = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode("ascii") or "file"
+    ascii_ = "".join(c if 32 <= ord(c) < 127 and c not in '"\\;' else "_" for c in piatto)
     return f"attachment; filename=\"{ascii_}\"; filename*=UTF-8''{quote(nome, safe='')}"
 
 
@@ -135,7 +181,7 @@ class Scaricamenti:
     def __init__(self, cfg):
         self.cfg = cfg
         self._lock = threading.Lock()
-        self._voci: OrderedDict = OrderedDict()      # (sid, chiave) → voce
+        self._voci: dict[int, OrderedDict] = {}      # sid → (chiave → voce), MAX_VOCI ciascuno
         self._gettoni: OrderedDict = OrderedDict()   # gettone → dati
         self._richieste: dict[int, list[float]] = {}
         # Gli avvisi dei tutori (minori.Avvisi) per l'audio di un avviso; None = quelli del
@@ -153,18 +199,19 @@ class Scaricamenti:
         if not isinstance(sorgente, dict) or not chiave or not persona:
             return
         with self._lock:
-            self._voci.pop((sid, chiave), None)
-            self._voci[(sid, chiave)] = {"sorgente": sorgente, "persona": persona,
-                                         "formati": tuple(scheda.get("scarica") or ()),
-                                         "solo_persona": bool(sorgente.get("solo_persona")),
-                                         "titolo": str(sorgente.get("titolo") or
-                                                       scheda.get("titolo") or "Documento")}
-            while len(self._voci) > MAX_VOCI:
-                self._voci.popitem(last=False)
+            per = self._voci.setdefault(sid, OrderedDict())
+            per.pop(chiave, None)
+            per[chiave] = {"sorgente": sorgente, "persona": persona,
+                           "formati": tuple(scheda.get("scarica") or ()),
+                           "solo_persona": bool(sorgente.get("solo_persona")),
+                           "titolo": str(sorgente.get("titolo") or scheda.get("titolo") or "Documento")}
+            while len(per) > MAX_VOCI:
+                per.popitem(last=False)
 
     def voce(self, sid: int, chiave: str) -> dict | None:
         with self._lock:
-            return self._voci.get((sid, chiave))
+            per = self._voci.get(sid)
+            return per.get(chiave) if per is not None else None
 
     def gettone(self, schermo: dict, chiave: str, formato: str, amministra: bool = False) -> dict:
         """{"url", "nome", "scade"} per lo schermo che chiede; Rifiuto altrimenti."""
@@ -184,6 +231,8 @@ class Scaricamenti:
             raise Rifiuto(403, "il documento è di un'altra persona")
         if v["formati"] and formato not in v["formati"]:
             raise Rifiuto(400, "formato non disponibile per questo documento")
+        if (formato == "originale") != callable(v["sorgente"].get("file_fn")):
+            raise Rifiuto(400, "formato non disponibile per questo documento")
         ora = time.monotonic()
         with self._lock:
             fatti = [t for t in self._richieste.get(sid, []) if ora - t < 60.0]
@@ -194,7 +243,8 @@ class Scaricamenti:
             g = secrets.token_urlsafe(24)
             self._gettoni[g] = {"sid": sid, "sorgente": v["sorgente"], "formato": formato,
                                 "persona": proprietario,
-                                "nome": nome_file(v["titolo"], formato), "usi": 0,
+                                "nome": nome_file(v["titolo"], formato, v["sorgente"]),
+                                "tipo": tipo_mime(formato, v["sorgente"]), "usi": 0,
                                 "scade": ora + self.durata_s, "dati": None,
                                 "lock": threading.Lock()}
             while len(self._gettoni) > MAX_GETTONI:
@@ -214,9 +264,27 @@ class Scaricamenti:
             g["usi"] += 1
         if valido is not None and not valido(g["sid"]):
             raise Rifiuto(404, "schermo non più abbinato")
+        if g["formato"] == "originale":
+            return self._originale(g)
         with g["lock"]:
             if g["dati"] is None:
                 g["dati"] = converti(g["sorgente"], g["formato"],
                                      getattr(self.cfg, "documenti_font", None),
                                      persona=g.get("persona"), avvisi=self.avvisi)
-        return g["nome"], FORMATI[g["formato"]][1], g["dati"]
+        return g["nome"], g["tipo"], g["dati"]
+
+    @staticmethod
+    def _originale(g: dict) -> tuple[str, str, bytes]:
+        """Il file dell'archivio di casa (revisione della PR #268): riletto dal disco a ogni uso
+        (il gettone non tiene in memoria fino a `archivio_max_mb` per 180 s), e nome e tipo
+        dall'estensione del file letto davvero (`file_fn` → (byte, estensione)), non da quella
+        del documento: con più copie il primo file buono può essere un altro."""
+        letto = g["sorgente"]["file_fn"]()
+        if letto is None:
+            raise Rifiuto(404, "il file non c'è più, o non è più tuo da vedere")
+        dati, ext = letto if isinstance(letto, tuple) else (letto, g["sorgente"].get("estensione"))
+        sorgente = {**g["sorgente"], "estensione": ext}
+        if estensione("originale", sorgente) == "bin":
+            raise Rifiuto(404, "questo file non si scarica da qui")
+        nome = nome_file(str(g["sorgente"].get("titolo") or "Documento"), "originale", sorgente)
+        return nome, tipo_mime("originale", sorgente), bytes(dati)

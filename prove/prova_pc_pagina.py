@@ -304,6 +304,7 @@ def raccolte_pc(p, hub):
     dimensione(p, 1440, 900)
     agenda_pc(p, hub, S)
     pagine_2c_pc(p, hub, S)
+    pagina_documenti_pc(p, hub, S)
     p.valuta("history.back(); 1")
     ok = aspetta(lambda: p.valuta("location.hash") == "#/cose" and p.valuta(f"{S}.vistaCose") == "tessere", 3)
     m = p.valuta(MISURA) or {}
@@ -452,6 +453,38 @@ def pagine_2c_pc(p, hub, S):
                      json.dumps([m.get("bassi"), m.get("fuori")])[:240])
         dimensione(p, 1440, 900)
     cas.close()
+
+
+def pagina_documenti_pc(p, hub, S):
+    """La pagina Documenti sul PC personale (28/10, passo 2d, #259): dalla tessera, i gruppi e la
+    ricerca; contrasto AA, clic ≥ 44 px e niente fuori a 1440×900 e 700×900."""
+    import prova_pagina_documenti as ppd
+    P = "window.calliopePC"
+    ppd.prepara(TMP / "documenti", hub.tool_ctx)
+    p.valuta(f"{P}.vai('#/cose'); 1")
+    p.valuta(f"{P}.aggiornaRaccolte && {P}.aggiornaRaccolte(); 1")
+    aspetta(lambda: any(x.get("id") == "documenti" and x.get("conto") == "1" for x in p.valuta(f"{S}.tessere") or []), 5)
+    clic(p, '#tessere [data-tessera="documenti"]')
+    ok = aspetta(lambda: p.valuta("location.hash") == "#/cose/documenti" and len(p.valuta(f"{S}.pagina") or []) == 9, 5)
+    gruppi = p.valuta(f"{S}.gruppi") or []
+    verifica("PC: la pagina Documenti dalla tessera, coi gruppi e l'archivio di casa",
+             bool(ok) and gruppi[:1] == ["Fatti da Calliope per te"] and gruppi[-1:] == ["Archivio di casa"], json.dumps(gruppi))
+    for w, h in ((1440, 900), (700, 900)):
+        dimensione(p, w, h)
+        time.sleep(0.3)
+        m = p.valuta(MISURA) or {}
+        foto(p, f"pc-{w}x{h}-documenti.png")
+        verifica(f"PC {w}×{h} pagina Documenti: contrasto AA, clic ≥ 44 px, niente fuori",
+                 not m.get("bassi") and not m.get("clic") and not m.get("fuori") and not m.get("scorre"),
+                 json.dumps([m.get("bassi"), m.get("clic"), m.get("fuori")])[:240])
+    dimensione(p, 1440, 900)
+    p.valuta("document.getElementById('pagina-cerca-testo').value = 'bolletta';"
+             " document.getElementById('pagina-cerca').requestSubmit(); 1")
+    ok = aspetta(lambda: p.valuta(f"{S}.cerca") == "bolletta" and len(p.valuta(f"{S}.pagina") or []) == 1, 5)
+    verifica("PC: la ricerca nella pagina Documenti", bool(ok), json.dumps(p.valuta(f"{S}.pagina")))
+    clic(p, "#pagina-cerca-via")
+    ok = aspetta(lambda: len(p.valuta(f"{S}.pagina") or []) == 9, 5)
+    verifica("PC: «Tutti» torna alla pagina intera", bool(ok))
 
 
 def main() -> int:
