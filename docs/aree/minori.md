@@ -1446,9 +1446,13 @@ vecchio processo di esercizi è da tenere. Molte delle cose fatte erano meri tes
 - **La tessera Studio** di Le mie cose resta al suo posto e dice «arriva presto», senza conto, fino
   al passo 4.5 (#284); la vedono tutti, anche gli adulti.
 - **Le tabelle dismesse** (`esercizi_*` e `compiti_giorno`) si tolgono da sole all'apertura di
-  `memoria.db`, una volta sola, con la riga «[CONSERVA] tabelle dismesse tolte…» nel registro
-  (`conserva.togli_tabelle_dismesse`, modulo «dismesse» in `meta_schema`; revisione della PR #292).
-  Sulla DGX al primo aggiornamento.
+  `memoria.db`, a ogni apertura se ci sono, con la riga «[CONSERVA] tabelle dismesse tolte…» nel
+  registro solo quando toglie qualcosa (`conserva.togli_tabelle_dismesse`; revisione della PR
+  #292). Sulla DGX al primo aggiornamento, e di nuovo dopo un ritorno indietro che le ricrea. Il
+  `DROP` è in una transazione (un errore la annulla e non la lascia aperta, anche in
+  `memory.Memory`), `secure_delete` acceso solo per il `DROP`. *[storico: dal primo giro al
+  secondo, il 28/10, «una volta sola» col segno «dismesse» in `meta_schema`, che una versione 2
+  futura avrebbe potuto rendere «più nuova» e mettere la memoria in sola lettura; tolto]*
 - **Prove**: in `prova_minori` una bambina che dice «fammi tu il compito» in un turno di `Brain` col
   modello finto riceve la regola nei dati del turno, e tra gli strumenti non ci sono né
   `compiti_aiuto` né `esercizi`; `calcola` dà il risultato anche a lei; contrari: la stessa frase di
@@ -1456,7 +1460,9 @@ vecchio processo di esercizi è da tenere. Molte delle cose fatte erano meri tes
   compiti di Bianca in un turno di `Brain` non manda la scheda «Calcolo» e il modello riceve il
   risultato (contrari: Dario e Sara ricevono la scheda); gli avvisi ai tutori provati direttamente
   (un avviso «gioco» ai due tutori: scheda personale, annuncio, detto una volta). In `prova_conserva`
-  un db con le tabelle vecchie: dopo l'apertura non ci sono più, una volta sola.
+  un db con le tabelle vecchie: dopo l'apertura non ci sono più; un'apertura senza tabelle non scrive
+  righe; il ritorno indietro simulato le ricrea e si tolgono di nuovo; un errore a metà non lascia la
+  transazione aperta, né in `memory.Memory`; `secure_delete` torna com'era.
 - **Conti**: i 75 schemi in un'installazione con tutti i servizi non cambiano (i due tool tolti
   erano fra quelli che dipendono dall'installazione); il registro con tutto acceso passa da 86 a 84
   (`build_registry` da 79 a 77, contati il 28/10); le capacità restano 19, le aree di «cosa sai
