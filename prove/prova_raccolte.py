@@ -276,6 +276,11 @@ def server():
         hub.tool_ctx = None
         st, _ = chiedi(port, "/api/tocco", sess, corpo={"tocco": "spunta_lista", "lista": "spesa", "voce": "uova"})
         verifica("server: senza il contesto dei tool 503", st == 503, str(st))
+        hub.tool_ctx = ToolContext(cfg=cfg, speakers=reg, speaker_ctx=None, speaker=None, liste=liste)
+        codici_t = [chiedi(port, "/api/tocco", sess, corpo={"tocco": "spunta_lista", "lista": "spesa",
+                                                          "voce": "nulla"})[0] for _ in range(30)]
+        verifica("server: oltre 30 tocchi al minuto 429", codici_t[-1] == 429 and 409 in codici_t,
+                 str(codici_t[-3:]))
     finally:
         srv.ferma()
         liste.db.close()
@@ -283,19 +288,49 @@ def server():
 
 # ─────────────────────────── 4. il ciclo ───────────────────────────
 class HubFinto:
-    """Gli schermi per il ciclo: le schede inviate e gli eventi «tocco»."""
+    """Gli schermi per il ciclo: l'ingresso vero, le schede inviate a uno schermo, gli eventi
+    «tocco»; `scrittura_consentita` dice «nessuna conversazione» e conta le chiamate (il tocco
+    non deve chiederla: decisione 1 del 28/10)."""
 
     def __init__(self):
-        self.inviate, self.eventi = [], []
-        self.ingresso = types.SimpleNamespace(prendi=lambda: None, vuoto=lambda: True)
+        from calliope.schermi.moduli import Ingresso
+        self.inviate, self.a_tutti, self.eventi, self.consentita = [], [], [], 0
+        self.ingresso = Ingresso()
 
-    def invia(self, scheda, mittente):
-        self.inviate.append((scheda, mittente))
-        return {"schermi": ["telefono"], "motivo": None}
+    def invia(self, scheda, mittente):                  # agli schermi di casa: mai per un tocco
+        self.a_tutti.append((scheda, mittente))
+        return {"schermi": ["salotto"], "motivo": None}
+
+    def invia_a(self, sid, scheda):
+        self.inviate.append((sid, scheda))
+        return True
 
     def evento_a(self, sid, tipo, dati):
         self.eventi.append((sid, tipo, dati))
         return 1
+
+    def scrittura_consentita(self, schermo):
+        self.consentita += 1
+        return False, "nessuna_conversazione"
+
+    def schermo(self, sid):
+        return {"id": sid, "proprietario": "bianca"}
+
+
+class Archivio:
+    """L'archivio delle conversazioni di Brain: la conversazione corrente salvata su «disco»."""
+
+    def __init__(self):
+        self.salvate = []
+
+    def salva_corrente(self, conv):
+        self.salvate.append([dict(m) for m in conv.history])
+
+    def archivia(self, *a, **k):
+        pass
+
+    def chiudi(self, *a, **k):
+        pass
 
 
 def prepara_ciclo(modo="spento"):
@@ -306,6 +341,7 @@ def prepara_ciclo(modo="spento"):
     b.cfg.speaker_id_enabled = False
     b.cfg.debug_audio_dir = None
     b.cfg.uscita_controllo = False
+    b.archivio_conv = Archivio()
     sc = SpeakerContext(reg)
     liste = Liste(str(TMP / f"liste-ciclo-{modo}.db"))
     liste.add("spesa", ["latte", "uova", "pane"], "Bianca")
@@ -330,21 +366,18 @@ def prepara_ciclo(modo="spento"):
     srv.barge_in, srv.wake = True, object()
     annunci = types.SimpleNamespace(agenda=queue.Queue(), documenti=queue.Queue(),
                                     installazioni=None, lavori=None, estensioni=None)
-    c = Ciclo(srv, corsie.Corsia("locale"), pc.Ascolto(), voce, sc, b, b.tool_ctx, annunci, None, threading.Event())
     hub = HubFinto()
+    c = Ciclo(srv, corsie.Corsia("locale"), pc.Ascolto(), voce, sc, b, b.tool_ctx, annunci,
+              hub.ingresso, threading.Event())
     c.s.schermi = b.tool_ctx.schermi = hub
     return b, c, sc, liste, turni, voce, hub, registri
 
 
 def tocca(c, item):
-    """Un giro del ciclo con il tocco già preso dall'ingresso, e il turno nel registro."""
-    def prendi(t):
-        t.scritto = dict(item)
-    c._prendi_scritto = prendi
-    try:
-        c.giro()
-    finally:
-        del c._prendi_scritto
+    """Un giro del ciclo con il tocco nell'ingresso (come lo mette /api/tocco), passando da
+    `_prendi_scritto` e senza conversazione a voce; poi il turno nel registro."""
+    assert c.s.schermi.ingresso.metti(dict(item))
+    c.giro()
     if c.rec is not None:
         c._scrivi_turno(c.rec)
         c.rec = None
@@ -355,10 +388,19 @@ def voce_tocco(persona, voce="latte", sid=7):
                        types.SimpleNamespace(liste=CORRENTE["liste"]))
     return {"tipo": "tocco", "tool": p["tool"], "argomenti": p["argomenti"], "descrizione": p["descrizione"],
             "tocco": "spunta_lista", "persona": persona, "schermo": "telefono", "stanza": None,
-            "schermo_id": sid, "arrivato": time.time()}
+            "schermo_id": sid, "arrivato": time.time(), "pagina": {"lista": "spesa", "voce": voce}}
 
 
 CORRENTE = {}
+
+
+def ruoli(storia):
+    return [m.get("role") for m in storia]
+
+
+def due_user(storia) -> bool:
+    r = ruoli(storia)
+    return any(a == b == "user" for a, b in zip(r, r[1:]))
 
 
 def ciclo():
@@ -369,6 +411,8 @@ def ciclo():
     sc.compagnia, sc.conferma_breve = True, True
     tocca(c, voce_tocco("bianca"))
     r = turni[-1] if turni else {}
+    verifica("ciclo: il tocco passa da _prendi_scritto senza chiedere la conversazione a voce",
+             hub.consentita == 0 and r.get("esito") == "tocco", f"{hub.consentita} {r.get('esito')}")
     verifica("ciclo: la voce è tolta davvero dalla lista", liste.read("spesa")[1] == ["uova", "pane"],
              str(liste.read("spesa")))
     verifica("ciclo: il registro dei turni con esito e canale «tocco», chi tocca e il tool",
@@ -376,23 +420,45 @@ def ciclo():
              and (r.get("voce") or {}).get("nome") == "Bianca" and (r.get("voce") or {}).get("modo") == "schermo"
              and (r.get("tool") or [{}])[0].get("nome") == "lista_togli" and r["tool"][0].get("ok") is True
              and r["tool"][0].get("azione") is True and "latte" in (r.get("testo") or ""), json.dumps(r, ensure_ascii=False)[:400])
-    storia = [m for m in b.history if m.get("role") == "user"]
-    verifica("ciclo: la descrizione nella storia del modello come frase della persona",
-             storia and storia[-1]["content"] == "(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)",
-             str(storia[-1:]))
+    coda = b.history[-3:]
+    verifica("ciclo: nella storia il turno con la sua chiamata (frase, lista_togli, esito)",
+             ruoli(coda) == ["user", "assistant", "tool"]
+             and coda[0]["content"] == "(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)"
+             and coda[1]["tool_calls"][0]["name"] == "lista_togli"
+             and coda[1]["tool_calls"][0]["arguments"] == {"cose": "latte", "lista": "spesa"}
+             and json.loads(coda[2]["content"]).get("ok") is True, json.dumps(coda, ensure_ascii=False)[:400])
+    verifica("ciclo: la conversazione salvata con il tocco (resta dopo un riavvio)",
+             b.archivio_conv.salvate and b.archivio_conv.salvate[-1][-3:] == [dict(m) for m in coda])
+    verifica("ciclo: il tocco vale come ultimo turno (la conversazione non scade alla frase dopo)",
+             time.monotonic() - (getattr(b, "last_turn_at", None) or 0) < 5)
     verifica("ciclo: nessuna frase detta (chi tocca può essere al supermercato)", voce.detto == [], str(voce.detto))
-    inv = [s for s, m in hub.inviate if s.get("tipo") == "lista"]
-    verifica("ciclo: la lista aggiornata allo schermo del tocco, a nome di chi tocca",
-             inv and [v["testo"] for v in inv[-1]["voci"]] == ["uova", "pane"]
-             and hub.inviate[-1][1].schermo == 7 and hub.inviate[-1][1].persona == "bianca"
-             and hub.inviate[-1][1].certo, str(hub.inviate[-1:])[:300])
-    verifica("ciclo: l'evento «tocco» riuscito allo schermo",
-             hub.eventi and hub.eventi[-1][:2] == (7, "tocco") and hub.eventi[-1][2].get("ok") is True)
+    inv = [s for sid, s in hub.inviate if s.get("tipo") == "lista" and sid == 7]
+    verifica("ciclo: la lista aggiornata solo allo schermo del tocco (anche con le schede automatiche "
+             "spente; mai alla TV di casa)",
+             inv and [v["testo"] for v in inv[-1]["voci"]] == ["uova", "pane"] and not hub.a_tutti,
+             str(hub.inviate[-1:])[:300])
+    verifica("ciclo: l'evento «tocco» riuscito allo schermo, con ciò che la pagina aveva toccato",
+             hub.eventi and hub.eventi[-1][:2] == (7, "tocco") and hub.eventi[-1][2].get("ok") is True
+             and hub.eventi[-1][2].get("pagina") == {"lista": "spesa", "voce": "latte"})
     verifica("ciclo: i segni di chi parlava prima tornano com'erano",
              sc.current_speaker == "Dario" and sc.identified_by == "voce" and sc.compagnia is True
              and sc.conferma_breve is True, f"{sc.current_speaker} {sc.identified_by} {sc.compagnia}")
     verifica("ciclo: il contesto dei tool torna com'era (niente frase del tocco)",
              getattr(b.tool_ctx, "user_text", "") == "" and getattr(b.tool_ctx, "politica", None) is None)
+    # Due tocchi di fila: mai due messaggi della persona uno dopo l'altro
+    tocca(c, voce_tocco("bianca", "uova"))
+    verifica("ciclo: due tocchi di fila, mai due messaggi della persona uno dopo l'altro",
+             not due_user(b.history) and ruoli(b.history[-6:]) == ["user", "assistant", "tool"] * 2,
+             str(ruoli(b.history)))
+    liste.add("spesa", ["latte", "uova"], "Bianca")
+    # Una conversazione ferma da troppo: si chiude prima del tocco, come prima di una risposta
+    b.cfg.storia_inattiva_s = 60
+    b.last_turn_at = time.monotonic() - 3600
+    vecchia = len(b.history)
+    tocca(c, voce_tocco("bianca", "latte"))
+    verifica("ciclo: la conversazione scaduta si chiude prima; il tocco apre la nuova",
+             vecchia >= 6 and ruoli(b.history) == ["user", "assistant", "tool"], str(ruoli(b.history)))
+    b.cfg.storia_inattiva_s = 0
 
     def rifiuto(nome, item, attesa):
         n_storia, n_ev = len(b.history), len(hub.eventi)
@@ -401,30 +467,59 @@ def ciclo():
         r = turni[-1]
         ev = hub.eventi[-1][2] if len(hub.eventi) > n_ev else {}
         verifica(nome, r.get("esito") == "rifiutato" and r.get("canale") == "tocco"
-                 and r["tool"][0].get("ok") is False and attesa(r)
-                 and ev.get("ok") is False and ev.get("errore")
+                 and attesa(r, ev) and ev.get("ok") is False and ev.get("errore")
                  and len(b.history) == n_storia and liste.read("spesa")[1] == prima and voce.detto == [],
                  json.dumps({"rec": r, "ev": ev}, ensure_ascii=False)[:500])
 
     base = {"tipo": "tocco", "descrizione": "(prova)", "tocco": "spunta_lista", "schermo": "telefono",
             "schermo_id": 7, "arrivato": time.time()}
-    rifiuto("ciclo: chi amministra, con un tool che vuole la sua voce, rifiutato con l'errore allo schermo",
+    rifiuto("ciclo: chi amministra, con un tool che vuole la sua voce: rifiutato perché serve la voce",
             {**base, "persona": "dario", "tool": "registra_utente", "argomenti": {"nome": "Ugo"}},
-            lambda r: r.get("livello") == "familiare")
+            lambda r, ev: r.get("livello") == "familiare" and r["tool"][0].get("ok") is False
+            and "scritto_serve_voce" in (r.get("regole") or []) and "voce" in ev.get("errore", ""))
     rifiuto("ciclo: un familiare con un tool di chi amministra, rifiutato (permesso_livello)",
             {**base, "persona": "bianca", "tool": "registra_utente", "argomenti": {"nome": "Ugo"}},
-            lambda r: "permesso_livello" in (r.get("regole") or []))
-    rifiuto("ciclo: un minore con un tool dell'ufficio, rifiutato dal suo preset",
+            lambda r, ev: "permesso_livello" in (r.get("regole") or []) and r["tool"][0].get("ok") is False)
+    rifiuto("ciclo: un minore con un tool dell'ufficio, rifiutato dal suo preset (minore_ufficio)",
             {**base, "persona": "lia", "tool": "anagrafica_cerca", "argomenti": {}},
-            lambda r: (r.get("voce") or {}).get("nome") == "Lia")
+            lambda r, ev: (r.get("voce") or {}).get("nome") == "Lia"
+            and "minore_ufficio" in (r.get("regole") or []) and r["tool"][0].get("ok") is False)
+    # Fuori dagli orari decisi dai tutori: il tocco di un minore non cambia niente
+    import calliope.ciclo as ciclo_mod
+    vero = ciclo_mod.minori.fuori_orario
+    ciclo_mod.minori.fuori_orario = lambda prof, adesso=None: ("21:00-07:00" if getattr(prof, "id", "") == "lia"
+                                                               else vero(prof, adesso))
+    try:
+        rifiuto("ciclo: un minore fuori dagli orari dei tutori, rifiutato con la frase degli orari",
+                voce_tocco("lia", "pane"),
+                lambda r, ev: r.get("motivo") == "fuori_orario" and "minore_fuori_orario" in (r.get("regole") or [])
+                and "7:00" in ev.get("errore", ""))
+        tocca(c, voce_tocco("bianca", "pane"))
+        verifica("ciclo: gli orari valgono solo per il minore (un adulto spunta)",
+                 turni[-1].get("esito") == "tocco" and "pane" not in liste.read("spesa")[1])
+    finally:
+        ciclo_mod.minori.fuori_orario = vero
+    liste.add("spesa", ["pane"], "Bianca")
     tocca(c, {**base, "persona": "ugo", "tool": "lista_togli", "argomenti": {"cose": "uova"}})
     r = turni[-1]
     verifica("ciclo: lo schermo di una persona che non c'è più, niente a nome di nessuno",
              r.get("esito") == "rifiutato" and "uova" in liste.read("spesa")[1]
              and hub.eventi[-1][2].get("ok") is False, json.dumps(r)[:300])
+    # Un'eccezione dentro il tocco: la pagina riceve comunque l'esito d'errore
+    rotto = c.s.tools.call
+    c.s.tools.call = lambda *a, **k: (_ for _ in ()).throw(RuntimeError("guasto"))
+    try:
+        n = len(hub.eventi)
+        tocca(c, voce_tocco("bianca", "uova"))
+    finally:
+        c.s.tools.call = rotto
+    verifica("ciclo: un'eccezione nel tocco manda comunque l'esito d'errore alla pagina",
+             len(hub.eventi) > n and hub.eventi[-1][2].get("ok") is False and hub.eventi[-1][2].get("errore")
+             and turni[-1].get("esito") == "rifiutato" and "tocco_errore" in turni[-1].get("regole", [])
+             and sc.current_speaker == "Dario", json.dumps(turni[-1])[:300])
     tocca(c, voce_tocco("lia", "uova"))
     verifica("ciclo: un minore spunta la lista (i tool delle liste sono per la famiglia)",
-             turni[-1].get("esito") == "tocco" and liste.read("spesa")[1] == ["pane"],
+             turni[-1].get("esito") == "tocco" and "uova" not in liste.read("spesa")[1],
              json.dumps(turni[-1], ensure_ascii=False)[:300])
     liste.db.close()
 
@@ -432,13 +527,32 @@ def ciclo():
 def ciclo_eventi():
     b, c, sc, liste, turni, voce, hub, registri = prepara_ciclo("ombra")
     CORRENTE["liste"] = liste
+    sc.current_speaker, sc.identified_by = "Dario", "voce"
     tocca(c, voce_tocco("bianca"))
     r = turni[-1] if turni else {}
     eventi = list(registri.della_corsia(b.conv.chiave).eventi())
     dp = [e.dati for e in eventi if e.tipo == "detto_persona"]
-    verifica("eventi: il tocco è un detto_persona col canale «tocco» e la descrizione",
-             r.get("esito") == "tocco" and dp and dp[-1].get("canale") == "tocco"
+    verifica("eventi: il tocco è un detto_persona col canale «tocco», la descrizione e come «schermo»",
+             r.get("esito") == "tocco" and dp and dp[-1].get("canale") == "tocco" and dp[-1].get("come") == "schermo"
              and "latte" in dp[-1].get("testo", ""), json.dumps(dp, ensure_ascii=False)[:300])
+    chiamate = [e.dati for e in eventi if e.tipo == "chiamata_tool"]
+    verifica("eventi: anche la chiamata di lista_togli negli eventi",
+             any(x.get("nome") == "lista_togli" for x in chiamate), json.dumps(chiamate, ensure_ascii=False)[:300])
+    from calliope.eventi import proiezioni
+    vista = proiezioni.turni(eventi)
+    msgs = [{k: v for k, v in m.items() if k in ("role", "content")}
+            | ({"tool": [x["name"] for x in m["tool_calls"]]} if m.get("tool_calls") else {})
+            for m in proiezioni.messaggi(vista)]
+    storia = [{k: v for k, v in m.items() if k in ("role", "content")}
+              | ({"tool": [x["name"] for x in m["tool_calls"]]} if m.get("tool_calls") else {})
+              for m in b.history]
+    verifica("eventi: la proiezione dà la stessa storia di Brain (con eventi: attivo è quella)",
+             [m["role"] for m in msgs] == [m["role"] for m in storia] and msgs[0] == storia[0]
+             and msgs[1].get("tool") == storia[1].get("tool") == ["lista_togli"],
+             json.dumps([msgs, storia], ensure_ascii=False)[:500])
+    ombra = r.get("eventi_ombra") or {}
+    verifica("eventi: l'ombra non vede differenze nel turno del tocco", not (ombra.get("differenze") or {}),
+             json.dumps(ombra, ensure_ascii=False)[:300])
     from calliope.eventi.tipi import CANALI_PERSONA
     verifica("eventi: «tocco» tra i canali della persona", "tocco" in CANALI_PERSONA)
     registri.disco.db.close()

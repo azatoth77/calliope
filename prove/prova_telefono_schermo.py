@@ -644,6 +644,27 @@ def raccolte(t: Tel, hub, liste):
                              " && b.closest('.scheda').querySelector('.esito-tocco').textContent.includes('non c\\'è più'); })()"), 5)
     verifica("spunta: una voce che non c'è più (409) torna com'era, col motivo", bool(ok) and hub.ingresso.vuoto(),
              t.v("document.querySelector('#pagina-schede .esito-tocco').textContent"))
+    # Riuscito senza la lista aggiornata (SSE perso, schede automatiche spente in un hub vecchio):
+    # la voce resta spuntata e non si ritocca, invece di tornare libera
+    sel = lambda v: f"document.querySelector('#pagina-schede button.spunta[data-voce=\"{v}\"]')"  # noqa: E731
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="pomodori"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "spunta_lista", "ok": True, "pagina": item.get("pagina")})
+    ok = aspetta(lambda: t.v(f"{sel('pomodori')}.getAttribute('aria-disabled') === 'true'"
+                             f" && {sel('pomodori')}.getAttribute('aria-checked') === 'true'"
+                             f" && !{sel('pomodori')}.hasAttribute('aria-busy')"), 5)
+    verifica("spunta: riuscita senza la lista nuova, la voce resta spuntata (non torna libera)", bool(ok))
+    # Nessun esito (il ciclo non risponde): l'attesa scade da sola, con un timer vero
+    t.v("window.calliopeSchermo.spunta.attesaMs = 1500; 1")
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="caffè"]')
+    aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    hub.ingresso.prendi()
+    ok = aspetta(lambda: t.v(f"{sel('caffè')}.getAttribute('aria-checked') === 'false'"
+                             f" && {sel('caffè')}.closest('.scheda').querySelector('.esito-tocco').textContent.includes('risposta')"), 5)
+    verifica("spunta: senza esito l'attesa scade da sola e lo dice accanto", bool(ok),
+             t.v(f"{sel('caffè')}.closest('.scheda').querySelector('.esito-tocco').textContent"))
+    t.v("window.calliopeSchermo.spunta.attesaMs = 30000; 1")
     # Il gesto indietro torna alle tessere; una tessera senza pagina porta al suo gruppo
     t.v("history.back(); 1")
     ok = aspetta(lambda: t.v("location.hash") == "#/cose" and t.v(f"{S}.vistaCose") == "tessere"

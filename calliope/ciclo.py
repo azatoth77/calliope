@@ -1759,10 +1759,24 @@ class Ciclo:
         """Un tocco che cambia qualcosa dallo schermo personale (28/10, schermi/tocchi.py: la
         spunta della lista). Vale come una frase del proprietario dello schermo: passa da
         `ToolRegistry.call` col suo livello e `identified_by` «schermo» (i tool che vogliono la
-        voce restano rifiutati), entra nella sua conversazione come un turno (la descrizione
-        nella storia del modello, il registro dei turni con `esito` «tocco», l'evento con il
-        canale «tocco»). Niente frase detta né suoni: chi tocca può essere al supermercato. Un
-        rifiuto o un errore va solo allo schermo, con l'evento SSE «tocco»."""
+        voce restano rifiutati), entra nella sua conversazione come un turno con la sua chiamata
+        (`Brain.record_tocco`), nel registro dei turni con `esito` «tocco» e negli eventi con il
+        canale «tocco». Niente frase detta né suoni: chi tocca può essere al supermercato. Un
+        rifiuto o un errore va solo allo schermo, con l'evento SSE «tocco»: sempre, anche se
+        qui qualcosa si rompe (revisione della PR #261: la spunta restava in attesa)."""
+        scritto = t.scritto
+        try:
+            return self._tocco(t)
+        except Exception as e:  # noqa: BLE001 — la pagina deve sapere com'è andata
+            print(f"   [SCHERMI] tocco non riuscito: {type(e).__name__}: {e}", flush=True)
+            inizio = datetime.datetime.fromtimestamp(scritto.get("arrivato") or time.time())
+            self.rec = {"inizio": inizio.isoformat(timespec="milliseconds"), "canale": "tocco",
+                        "esito": "rifiutato", "schermo": scritto.get("schermo"),
+                        "motivo": f"errore: {type(e).__name__}", "regole": ["tocco_errore"]}
+            self._esito_tocco(scritto, False, "")
+            return _FINE
+
+    def _tocco(self, t):
         scritto, brain, s = t.scritto, self.brain, self.s
         ctx = self.tool_ctx
         # Quello che legge ToolRegistry.call (nel ciclo vero è lo stesso di self.speaker_ctx)
@@ -1780,11 +1794,23 @@ class Ciclo:
                         "motivo": "proprietario sconosciuto", "regole": ["tocco_senza_persona"]}
             self._esito_tocco(scritto, False, "Non so di chi è questo schermo.")
             return _FINE
+        voce = {"nome": prof.name, "modo": "schermo", "schermo": scritto.get("schermo"),
+                "id": prof.id}
+        # Gli orari dei tutori (revisione della PR #261): fuori orario un minore non cambia
+        # niente nemmeno toccando, come a voce e scrivendo (fase _fuori_orario)
+        orario = minori.fuori_orario(prof)
+        if orario:
+            self.rec = {**base, "esito": "rifiutato", "voce": voce, "testo": descr,
+                        "motivo": "fuori_orario", "tocco": scritto.get("tocco"),
+                        "regole": ["minore_fuori_orario"]}
+            self._esito_tocco(scritto, False, minori.frase_fuori_orario(prof, orario))
+            return _FINE
         # Il tocco è della conversazione della persona (come il modulo, corsie.py)
         self.corsia.turno(brain, prof.name, "schermo", True, persona_id=prof.id)
         segni = {k: getattr(sc, k, None) for k in self._SEGNI_TOCCO if hasattr(sc, k)}
         prima_ctx = {k: getattr(ctx, k, None) for k in self._CTX_TOCCO}
         regole: list = []
+        ok, res, livello = False, {}, None
         try:
             for k in segni:
                 setattr(sc, k, self._AZZERATI_TOCCO.get(k))
@@ -1798,6 +1824,16 @@ class Ciclo:
                 except AttributeError:
                     pass
             grezzo = s.tools.call(tool, args, ctx, livello)
+            try:
+                res = json.loads(grezzo)
+            except (TypeError, ValueError):
+                res = {"ok": False, "errore": "risposta del tool illeggibile"}
+            res = res if isinstance(res, dict) else {"ok": True}
+            ok = res.get("ok") is not False
+            if ok and hasattr(brain, "record_tocco"):
+                # Nella conversazione con la sua chiamata, con chi tocca ancora come chi parla
+                # (la conversazione è sua: scaduta o d'altri si chiude prima)
+                brain.record_tocco(descr, tool, args, grezzo)
         finally:
             for k, v in segni.items():
                 setattr(sc, k, v)
@@ -1806,15 +1842,7 @@ class Ciclo:
                     setattr(ctx, k, v)
                 except AttributeError:
                     pass
-        try:
-            res = json.loads(grezzo)
-        except (TypeError, ValueError):
-            res = {"ok": False, "errore": "risposta del tool illeggibile"}
-        res = res if isinstance(res, dict) else {"ok": True}
-        ok = res.get("ok") is not False
         spec = s.tools.get(tool) if hasattr(s.tools, "get") else None
-        voce = {"nome": prof.name, "modo": "schermo", "schermo": scritto.get("schermo"),
-                "id": prof.id}
         riga = {"nome": tool, "argomenti": oscura_tutto(args), "ok": ok,
                 "azione": getattr(spec, "risk", "azione") != "lettura"}
         self.rec = {**base, "esito": "tocco" if ok else "rifiutato", "livello": livello,
@@ -1826,33 +1854,24 @@ class Ciclo:
               f"{tool} → {'fatto' if ok else 'no'}", flush=True)
         if ok:
             t.text = descr
-            # Nella storia del modello: «(Ho tolto «latte» dalla lista della spesa toccando lo
-            # schermo.)», così «rimettilo» detto dopo sa di che cosa si parla. Con il registro
-            # degli eventi acceso (passo 3) è il detto_persona dell'ombra (canale «tocco»)
-            attivo = getattr(brain, "eventi_attivo", None)
-            hist = getattr(brain, "history", None)
-            if not (callable(attivo) and attivo()) and isinstance(hist, list):
-                hist.append({"role": "user", "content": descr})
             self._meta_turno = {"t": round(inizio.timestamp(), 3), "canale": "tocco"}
-            self._schede_del_tocco(res, prof, livello, scritto)
+            self._schede_del_tocco(res, scritto)
         frase = str(res.get("risposta_finale") or res.get("conferma") or res.get("errore")
                     or "").strip()
         self._esito_tocco(scritto, ok, frase if not ok else "")
         return _FINE
 
-    def _schede_del_tocco(self, res: dict, prof, livello: str, scritto: dict):
-        """Le schede del risultato (la lista aggiornata) agli schermi, con lo schermo del tocco
-        per primo: è lì che la spunta aspetta l'aggiornamento."""
-        hub = self.s.schermi
-        if hub is None:
+    def _schede_del_tocco(self, res: dict, scritto: dict):
+        """Le schede del risultato (la lista aggiornata) allo schermo del tocco, e solo a lui
+        (revisione della PR #261): la spunta aspetta lì l'aggiornamento, anche con le schede
+        automatiche spente; chi spunta al supermercato non fa comparire la spesa sulla TV."""
+        hub, sid = self.s.schermi, scritto.get("schermo_id")
+        if hub is None or sid is None:
             return
-        from .schermi.hub import Mittente
-        mitt = Mittente(persona=prof.id, nome=prof.name, livello=livello, certo=True,
-                        stanza=scritto.get("stanza"), schermo=scritto.get("schermo_id"))
         for card in [c for c in (res.get("scheda"), res.get("schede")) if c]:
             for c in (card if isinstance(card, list) else [card]):
                 try:
-                    hub.invia(c, mitt)
+                    hub.invia_a(sid, c)
                 except Exception as e:  # noqa: BLE001 — lo schermo non ferma il ciclo
                     print(f"   [SCHERMI] scheda del tocco non inviata: {type(e).__name__}",
                           flush=True)

@@ -658,7 +658,10 @@ class Ombra:
                        + [k for k in ("stanza", "dati") if k in segni])
                 persona = add(
                     "detto_persona", testo=testo, canale=canale,
-                    come=getattr(sc, "identified_by", None),
+                    # Il tocco (28/10): chi parlava prima è già rimesso al suo posto quando
+                    # l'ombra scrive, il modo vero è nel registro del turno
+                    come=("schermo" if canale == "tocco"
+                          else getattr(sc, "identified_by", None)),
                     satellite=sat, sfida=bool(getattr(getattr(self.c, "brain", None),
                                                       "last_sfida", False)
                                               and esito == "risposta"),
