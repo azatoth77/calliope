@@ -19,9 +19,11 @@ Decisioni di Dario del 05/10:
   codice** (`permesso`, chiamato da `ToolRegistry.call` a ogni esecuzione, come i livelli).
 - **Voce incerta tra un bambino e un altro profilo** (`piu_protetto`): vale il profilo più
   protetto, mai un adulto.
-- **Compiti** (`Compiti`, tool `compiti_aiuto`): mai la soluzione, domande guida e indizi; dopo
-  5 tentativi sbagliati sullo stesso esercizio si spiega, dicendo che i tutori vengono avvisati,
-  e si avvisano davvero. `calcola` in modalità compiti non dà il risultato.
+- **Compiti** (`compiti: guida` del preset): per i compiti di scuola mai la soluzione intera,
+  domande guida e indizi, come regola nei dati del turno (`dato_turno`). *[storico: fino al
+  28/10 c'erano anche `Compiti` e il tool `compiti_aiuto` (5 tentativi sullo stesso esercizio,
+  poi la spiegazione e l'avviso ai tutori, `calcola` senza il risultato); tolti con gli
+  esercizi, #279, decisione 0035, senza conteggio né avviso]*
 - **Avvisi ai tutori** (`Avvisi`): un canale solo; scheda personale sugli schermi del tutore
   subito, annuncio con il segnale quando il tutore parla a Calliope. Nel registro solo
   l'argomento, mai le frasi del minore.
@@ -43,7 +45,6 @@ il suo nome nel registro dei turni e ha i casi contrari in prove/prova_minori.py
 from __future__ import annotations
 
 import datetime
-import difflib
 import json
 import re
 import threading
@@ -168,8 +169,8 @@ def piu_protetta(*fasce: str | None) -> str | None:
 # - casa: "luci_stanza" (solo le luci della sua stanza, `stanza`) | "luci_tapparelle" |
 #   "senza_clima" (come un familiare, senza riscaldamento e clima) | "familiare"
 # - pc, acquisti: "no" | "si";   documenti: "no" | "scuola" | "si"
-# - compiti: "guida" (mai la soluzione; dopo `minori_compiti_tentativi` si spiega e si
-#   avvisano i tutori) | "libero" (solo 14–17, se il tutore lo sceglie)
+# - compiti: "guida" (mai la soluzione intera: domande guida e indizi, come regola nei dati
+#   del turno) | "libero" (solo 14–17, se il tutore lo sceglie)
 # - orari: fasce in cui Calliope non risponde, ["21:00-07:30", …]; di partenza nessuna: le
 #   decidono i tutori
 PRESET: dict[str, dict] = {
@@ -207,9 +208,10 @@ VALORI: dict[str, tuple] = {
 # avvisi (non ha tutori), la protezione sì
 OSPITE = {"guardiano": "moderato"}
 
-# Compiti «libero» solo da 14 anni: sotto, per decisione di Dario, la soluzione non si dà mai
-# prima dei 5 tentativi. Dai 14 il tutore può scegliere (motivo nel rapporto: a quell'età serve
-# anche controllare uno svolgimento intero, e l'art. 8 del GDPR riconosce già un'autonomia)
+# Compiti «libero» solo da 14 anni: sotto, per decisione di Dario, la soluzione intera non si
+# dà mai (fino al 28/10 «prima dei 5 tentativi» di `compiti_aiuto`, tolto con la #279). Dai
+# 14 il tutore può scegliere (motivo nel rapporto: a quell'età serve anche controllare uno
+# svolgimento intero, e l'art. 8 del GDPR riconosce già un'autonomia)
 COMPITI_LIBERO_DA = "adolescenti"
 
 
@@ -334,12 +336,12 @@ class Regole:
 
 # Il servizio del processo (lo prepara main.py con `prepara`): le funzioni qui sotto lo usano
 # per leggere i ritocchi. Senza (prove, terminale) valgono i preset.
-_SERVIZIO: dict = {"regole": None, "avvisi": None, "compiti": None, "cfg": None,
+_SERVIZIO: dict = {"regole": None, "avvisi": None, "cfg": None,
                    "gioco": None, "richieste": None}
 
 
 def prepara(cfg, schermi=None, registry=None, log=print) -> dict:
-    """Apre regole, avvisi e compiti sul file della memoria. Da main.py all'avvio."""
+    """Apre regole e avvisi sul file della memoria. Da main.py all'avvio."""
     path = getattr(cfg, "memory_db", "memoria.db")
     _SERVIZIO["cfg"] = cfg
     _SERVIZIO["regole"] = Regole(path)
@@ -347,7 +349,6 @@ def prepara(cfg, schermi=None, registry=None, log=print) -> dict:
     # L'anello dell'audio per gli avvisi di pericolo (14/10 sera, `avvisi_audio`: di serie no)
     from . import avvisi_audio
     avvisi_audio.prepara(cfg)
-    _SERVIZIO["compiti"] = Compiti(cfg)
     # Tempo di gioco e richieste ai tutori (05/10, giochi): stesso file
     _SERVIZIO["gioco"] = TempoGioco(path)
     _SERVIZIO["richieste"] = Richieste(path, cfg, registry=registry, log=log)
@@ -440,12 +441,6 @@ def avvisi() -> "Avvisi | None":
     return _SERVIZIO.get("avvisi")
 
 
-def compiti() -> "Compiti":
-    if _SERVIZIO.get("compiti") is None:
-        _SERVIZIO["compiti"] = Compiti(_SERVIZIO.get("cfg"))
-    return _SERVIZIO["compiti"]
-
-
 def preset(prof, oggi: datetime.date | None = None, reg: Regole | None = None) -> dict | None:
     """Il preset in vigore per il profilo (fascia + ritocchi), o None per un adulto."""
     cfg = _SERVIZIO.get("cfg")
@@ -471,6 +466,15 @@ def preset(prof, oggi: datetime.date | None = None, reg: Regole | None = None) -
 
 
 # ─────────────────────────── chi parla ───────────────────────────
+
+def compiti_guidati(ctx) -> bool:
+    """Chi parla è un minore con i compiti guidati (`compiti: guida`, 28/10, #279): `calcola`
+    dà il risultato al modello, che gli serve per controllare la risposta, ma niente scheda
+    «Calcolo» sullo schermo (la regola dice «nemmeno il risultato di un conto»)."""
+    prof = profilo(ctx)
+    p = preset(prof) if prof is not None else None
+    return p is not None and p.get("compiti") == "guida"
+
 
 def profilo(ctx):
     """Il profilo di chi parla per la prudenza dei minori (o None: ospite). Una frase rimasta
@@ -569,6 +573,12 @@ def frase_fuori_orario(prof, orario: str) -> str:
 
 # ─────────────────────────── dato del turno ───────────────────────────
 
+# La regola dei compiti guidati nel dato del turno (28/10, #279): «mai la soluzione intera».
+# Vale anche per i conti: `calcola` dà il risultato, che serve a controllare la sua risposta
+REGOLA_COMPITI = ("compiti: guida (per i compiti di scuola mai la soluzione intera, nemmeno il "
+                  "risultato di un conto: domande guida e indizi, e controlli la sua risposta)")
+
+
 def dato_turno(prof, cfg=None) -> str:
     """Il preset come dato su chi parla, dentro i dati del turno (Brain._turn_context): come il
     tono, un dato e non un ordine (misura del 04/10: gli ordini nel contesto toglievano le
@@ -589,41 +599,10 @@ def dato_turno(prof, cfg=None) -> str:
     parti = [f"minorenne, {chi}: {tono}",
              "argomenti difficili (morte, guerra, droghe, corpo) spiegati adatti alla sua età, "
              "niente contenuti per adulti"]
+    # Compiti guidati (28/10, #279, decisione 0035, domanda 2): resta solo la regola, senza
+    # conteggio dei tentativi né avviso ai tutori; `calcola` dà sempre il risultato
     if p.get("compiti") == "guida":
-        parti.append("compiti: guida (per i compiti di scuola mai la soluzione: domande "
-                     "guida e indizi, con compiti_aiuto)")
-        # L'esercizio aperto (banco del 05/10: dopo la prima risposta il 26B controllava da sé
-        # i tentativi senza richiamare compiti_aiuto, e i 5 tentativi non si contavano mai)
-        aperto = compiti().aperto(getattr(prof, "id", ""))
-        if aperto is not None:
-            parti.append(f"esercizio aperto: «{aperto['testo']}», risposte sbagliate "
-                         f"{aperto['tentativi']} su {compiti().massimo} (ogni risposta che "
-                         f"dice va controllata con compiti_aiuto)")
-    # Gli esercizi di Calliope in corso (08/10, calliope/esercizi/): come l'esercizio aperto dei
-    # compiti, ogni risposta va al tool (la corregge il programma)
-    try:
-        from .esercizi import sessione as _es
-        srv = _es.servizio()
-        st = srv.stato(getattr(prof, "id", "")) if srv is not None else None
-    except Exception:  # noqa: BLE001 — il dato del turno non deve rompersi
-        st = None
-    if st is not None and st.get("attesa_punto"):
-        parti.append(f"esercizi ({st['materia']}, {st['argomento']}): hai chiesto a che punto "
-                     f"sono a scuola; la risposta va a esercizi con azione=a_che_punto "
-                     f"(argomento, entro, riporto), se non lo sa azione=continua")
-    elif st is not None and st.get("pausa"):
-        parti.append(f"esercizi in pausa ({st['materia']}, {st['argomento']}): per riprendere "
-                     f"esercizi con azione=continua, per cambiare azione=inizia")
-    elif st is not None and st.get("aperta"):
-        parti.append(f"interrogazione in corso ({st['argomento']}): domanda aperta "
-                     f"«{st['domanda']}» (la risposta va a esercizi con azione=rispondi, le sue "
-                     f"parole esatte, giudizio e sicurezza; le domande le fa solo il programma)")
-    elif st is not None:
-        parti.append(f"esercizi in corso ({st['materia']}, {st['argomento']}): domanda "
-                     f"«{st['domanda']}» (ogni risposta che dice va passata a esercizi con "
-                     f"azione=rispondi e le sue parole esatte; aiuto, salta, segnala, pausa, "
-                     f"fine; preferenze per cambiare il modo; le domande le fa solo il "
-                     f"programma)")
+        parti.append(REGOLA_COMPITI)
     return "; ".join(parti)
 
 
@@ -969,78 +948,6 @@ def impronta_da_rifare(prof, oggi: datetime.date | None = None, soglia: float = 
     return None
 
 
-# ─────────────────────────── compiti ───────────────────────────
-
-class Compiti:
-    """Gli esercizi di un minore nella conversazione e i suoi tentativi (per id del profilo),
-    in memoria: un esercizio vale 2 ore. Dopo `minori_compiti_tentativi` risposte sbagliate
-    sullo stesso esercizio la soluzione si può spiegare, e i tutori vengono avvisati."""
-
-    DURATA_S = 2 * 3600
-    ATTIVA_S = 30 * 60            # «modalità compiti»: un esercizio aperto da meno di così
-
-    def __init__(self, cfg=None):
-        self.cfg = cfg
-        self._lock = threading.Lock()
-        self._esercizi: dict[str, list[dict]] = {}
-
-    @property
-    def massimo(self) -> int:
-        return int(getattr(self.cfg, "minori_compiti_tentativi", 5) or 5)
-
-    def _pulisci(self, persona: str):
-        ora = time.time()
-        self._esercizi[persona] = [e for e in self._esercizi.get(persona, [])
-                                   if ora - e["quando"] < self.DURATA_S]
-
-    def trova(self, persona: str, esercizio: str, espressione: str = "") -> dict | None:
-        key = _norm(esercizio)
-        expr = re.sub(r"\s+", "", espressione or "")
-        with self._lock:
-            self._pulisci(persona)
-            best, score = None, 0.0
-            for e in self._esercizi.get(persona, []):
-                if expr and e.get("espressione") == expr:
-                    return e
-                s = difflib.SequenceMatcher(None, key, e["chiave"]).ratio()
-                if s > score:
-                    best, score = e, s
-            return best if score >= 0.72 else None
-
-    def apri(self, persona: str, esercizio: str, espressione: str = "") -> dict:
-        e = self.trova(persona, esercizio, espressione)
-        if e is not None:
-            if espressione and not e.get("espressione"):
-                e["espressione"] = re.sub(r"\s+", "", espressione)
-            e["quando"] = time.time()
-            return e
-        e = {"testo": str(esercizio or "").strip()[:120], "chiave": _norm(esercizio),
-             "espressione": re.sub(r"\s+", "", espressione or ""), "tentativi": 0,
-             "risolto": False, "spiegato": False, "quando": time.time(), "avvisato": False}
-        with self._lock:
-            self._esercizi.setdefault(persona, []).append(e)
-        return e
-
-    def attiva(self, persona: str) -> bool:
-        """C'è un esercizio aperto e non risolto da poco (modalità compiti)."""
-        ora = time.time()
-        with self._lock:
-            return any(not e["risolto"] and not e["spiegato"] and ora - e["quando"] < self.ATTIVA_S
-                       for e in self._esercizi.get(persona, []))
-
-    def aperto(self, persona: str) -> dict | None:
-        """L'ultimo esercizio aperto e non risolto (modalità compiti), o None."""
-        ora = time.time()
-        with self._lock:
-            aperti = [e for e in self._esercizi.get(persona, []) if not e["risolto"]
-                      and not e["spiegato"] and ora - e["quando"] < self.ATTIVA_S]
-        return max(aperti, key=lambda e: e["quando"]) if aperti else None
-
-    def chiudi(self, persona: str):
-        with self._lock:
-            self._esercizi.pop(persona, None)
-
-
 # ─────────────────────────── avvisi ai tutori ───────────────────────────
 
 # Gli avvisi di pericolo: solo questi hanno trascrizione e audio sulla scheda del tutore (14/10)
@@ -1118,8 +1025,9 @@ class Avvisi:
     """Il canale unico verso i tutori: un avviso per tutore in memoria.db (tabella
     `avvisi_tutori`), scheda personale subito sugli schermi del tutore, annuncio con il
     segnale alla prima frase del tutore riconosciuta dalla voce (main.py, `da_dire`). Nel
-    testo solo l'argomento («ha parlato di farsi del male»), mai le frasi del minore. I
-    compiti finiscono anche nel riepilogo del giorno (`riepilogo`).
+    testo solo l'argomento («ha parlato di farsi del male»), mai le frasi del minore.
+    *[storico: fino al 28/10 i compiti finivano anche nel riepilogo del giorno, tabella
+    `compiti_giorno`; tolto con `compiti_aiuto`, #279]*
 
     Dal 14/10 (ramo `avvisi-data`) ogni avviso ha la sua **origine** in parole semplici
     (`origine`: «da una frase detta a me al telefono», «dalla rilettura della conversazione in
@@ -1155,10 +1063,6 @@ class Avvisi:
                        "testo TEXT NOT NULL, urgente INTEGER NOT NULL DEFAULT 0, "
                        "creato TEXT NOT NULL, detto TEXT)")
             db.execute("CREATE INDEX IF NOT EXISTS avvisi_tutori_t ON avvisi_tutori(tutore, detto)")
-            db.execute("CREATE TABLE IF NOT EXISTS compiti_giorno (minore TEXT NOT NULL, "
-                       "giorno TEXT NOT NULL, argomento TEXT NOT NULL, aiuti INTEGER NOT NULL "
-                       "DEFAULT 0, soluzioni INTEGER NOT NULL DEFAULT 0, "
-                       "PRIMARY KEY (minore, giorno, argomento))")
 
         def v2(db):
             # 14/10: origine, riferimento, come è stato consegnato, segnato falso
@@ -1714,32 +1618,6 @@ class Avvisi:
             out += f" E altri {altri}: li trovi sul tuo schermo."
         return out
 
-    def compito(self, minore, argomento: str, soluzione: bool = False):
-        giorno = datetime.date.today().isoformat()
-        arg = str(argomento or "").strip()[:80] or "compiti"
-        with self._lock:
-            self.db.execute("INSERT INTO compiti_giorno (minore, giorno, argomento, aiuti, "
-                            "soluzioni) VALUES (?, ?, ?, 1, ?) ON CONFLICT(minore, giorno, "
-                            "argomento) DO UPDATE SET aiuti = aiuti + 1, soluzioni = soluzioni "
-                            "+ excluded.soluzioni", (minore.id, giorno, arg, int(soluzione)))
-            self.db.commit()
-
-    def riepilogo(self, minore, giorno: datetime.date | None = None) -> str:
-        g = (giorno or datetime.date.today()).isoformat()
-        with self._lock:
-            rows = self.db.execute("SELECT argomento, aiuti, soluzioni FROM compiti_giorno "
-                                   "WHERE minore = ? AND giorno = ? ORDER BY aiuti DESC",
-                                   (minore.id, g)).fetchall()
-        if not rows:
-            return f"Oggi {minore.name} non mi ha chiesto aiuto per i compiti."
-        args = [r[0] for r in rows[:4]]
-        sol = sum(r[2] for r in rows)
-        out = f"Oggi {minore.name} ha chiesto aiuto su: {', '.join(args)}."
-        if sol:
-            out += (f" Per {'un esercizio' if sol == 1 else f'{sol} esercizi'} gli ho spiegato "
-                    f"la soluzione dopo 5 tentativi.")
-        return out
-
     def close(self):
         try:
             self.db.close()
@@ -2078,7 +1956,6 @@ def _main(argv: list[str]) -> int:
        python -m calliope.minori --imposta Bianca internet=no [orari=21:00-07:30] …
        python -m calliope.minori --estensione Bianca meteo [--togli]
        python -m calliope.minori --autorizza Bianca agenti 60
-       python -m calliope.minori --riepilogo Bianca
        python -m calliope.minori --preset              i preset delle fasce"""
     import sys
     sys.stdout.reconfigure(encoding="utf-8")
@@ -2145,13 +2022,6 @@ def _main(argv: list[str]) -> int:
             return 1
         reg.autorizza(p.id, argv[i + 2], float(argv[i + 3]), "terminale")
         print(f"{p.name}: «{argv[i + 2]}» autorizzato per {argv[i + 3]} minuti")
-        return 0
-    if "--riepilogo" in argv:
-        i = argv.index("--riepilogo")
-        p = trova(argv[i + 1]) if len(argv) > i + 1 else None
-        if p is None:
-            return uso()
-        print(Avvisi(cfg.memory_db).riepilogo(p))
         return 0
     minori_ = [p for p in prof if e_minore(p)]
     if not minori_:

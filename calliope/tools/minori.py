@@ -1,20 +1,15 @@
 """
 I tool dei minori (05/10/2026, calliope/minori.py, docs/ricerche/2026-10-05-minori.md).
 
-- compiti_aiuto(esercizio, espressione, risposta, giusta): per un minore con i compiti
-  guidati registra l'esercizio e conta i tentativi; controlla i conti con il valutatore di
-  `calcola` e non dice mai la soluzione prima di `minori_compiti_tentativi` risposte
-  sbagliate. Allora la soluzione si può spiegare, Calliope dice che lo dirà ai tutori e i
-  tutori ricevono l'avviso (minori.Avvisi).
+- *[storico: `compiti_aiuto`, che contava i tentativi di un esercizio e nascondeva il
+  risultato di `calcola`, fino al 28/10; tolto con gli esercizi, #279, decisione 0035: per i
+  compiti resta la regola «mai la soluzione intera» nei dati del turno]*
 - minore_gestisci(nome, azione, valore): il preset di un minore. Leggerlo può anche il minore
   stesso; cambiarlo (preset, orari, estensioni, autorizzazioni a tempo, data di nascita,
   tutori) solo un suo tutore o chi amministra, riconosciuto dalla voce nella frase.
 """
 
 from __future__ import annotations
-
-import ast
-import math
 
 from .. import minori as M
 from ..conferme import serve_conferma
@@ -26,193 +21,10 @@ def _final(text: str, **extra) -> dict:
     return {"ok": True, **extra, "conferma": text, "risposta_finale": text}
 
 
-def _valuta(espressione: str):
-    """Il valore di un'espressione con il valutatore sicuro di calcola; None se non va."""
-    from .builtin import _eval_node
-    expr = (espressione or "").strip().replace("×", "*").replace("÷", "/").replace("^", "**")
-    expr = expr.replace(":", "/")
-    import re
-    expr = re.sub(r"(?<=\d),(?=\d)", ".", expr)
-    if not expr or len(expr) > 200:
-        return None
-    try:
-        v = _eval_node(ast.parse(expr, mode="eval"))
-    except Exception:  # noqa: BLE001
-        return None
-    return v if isinstance(v, (int, float)) and math.isfinite(v) else None
-
-
-def _numero(testo) -> float | None:
-    """Un numero detto dal ragazzo: «5/4», «1,25», «uno virgola venticinque» no (cifre)."""
-    import re
-    t = str(testo or "").strip().replace(",", ".")
-    m = re.search(r"-?\d+(?:\.\d+)?(?:\s*/\s*\d+)?", t)
-    if not m:
-        return None
-    s = m.group(0).replace(" ", "")
-    if "/" in s:
-        a, b = s.split("/")
-        return float(a) / float(b) if float(b) else None
-    return float(s)
-
-
-# L'esercizio in corso come azione in sospeso (Brain.set_pending con «messaggio»): il testo
-# arriva subito prima della frase del ragazzo, dove il modello lo legge di sicuro. Banco del
-# 05/10: con il solo dato del turno gemma4 e4b non richiamava mai compiti_aiuto sulle
-# risposte (0 su 8), giudicandole da sé e arrivando a dire la soluzione
-COMPITI_MSG = ("Compiti in corso, messaggio di sistema: stai aiutando con l'esercizio «{e}» "
-               "senza dare la soluzione. Se in questa frase dice un risultato o una risposta, "
-               "chiama subito compiti_aiuto con esercizio={ej}{expr} e risposta (come l'ha "
-               "detta), senza dire tu se è giusta. Se parla d'altro, rispondi normalmente.")
-
-
-def _in_corso(e: dict, out: dict) -> dict:
-    import json as _json
-    expr = f", espressione={_json.dumps(e['espressione'])}" if e.get("espressione") else ""
-    out["in_sospeso"] = {"tool": "compiti_aiuto", "argomenti": {"esercizio": e["testo"]},
-                         "domanda": "?", "cosa": "l'esercizio",
-                         "messaggio": COMPITI_MSG.format(e=e["testo"], ej=_json.dumps(
-                             e["testo"], ensure_ascii=False), expr=expr)}
-    return out
-
-
-def _esercizio_nuovo(esercizio: str, espressione: str, detta: str, aperto: dict) -> bool:
-    """La chiamata porta un esercizio diverso da quello aperto (e non la risposta detta)?"""
-    import re
-    expr = re.sub(r"\s+", "", str(espressione or ""))
-    if expr and expr != aperto.get("espressione") and re.search(r"[-+*/x×:^]", expr[1:]):
-        v, n = _valuta(expr), _numero(detta)
-        return not (v is not None and n is not None and abs(v - n) < 1e-9)
-    t = str(esercizio or "").strip()
-    if t and not expr:
-        from ..minori import _norm
-        nt = _norm(t)
-        return (nt != _norm(detta) and nt != aperto.get("chiave")
-                and bool(re.search(r"[-+*/×:]|\b(?:per|più|meno|diviso)\b", nt))
-                and _numero(nt) != _numero(detta))
-    return False
-
-
-def _compiti_aiuto(ctx: ToolContext, esercizio: str = "", espressione: str = "",
-                   risposta: str = "", giusta=None) -> dict:
-    prof = M.profilo(ctx)
-    p = M.preset(prof) if prof is not None else None
-    if p is None or p.get("compiti") != "guida":
-        return {"ok": False, "fatto": "non serve: chi parla non ha i compiti guidati",
-                "cosa_fare": "rispondi normalmente, con i tool di sempre"}
-    comp = M.compiti()
-    detta = str(risposta or "").strip()
-    aperto = comp.aperto(prof.id)
-    # Una risposta del ragazzo mentre c'è un esercizio aperto: va a quello, a meno che il
-    # modello non porti un esercizio nuovo vero (un'espressione con un'operazione, diversa
-    # dalla risposta). Banco del 05/10 sulla DGX: il 26B passava la risposta come esercizio
-    # ed espressione («1», «2/3»), che diventavano esercizi nuovi «risolti»
-    if detta and aperto is not None and not _esercizio_nuovo(esercizio, espressione, detta, aperto):
-        note_rule(ctx, "compiti_stesso_esercizio")
-        e = aperto
-    else:
-        esercizio = str(esercizio or "").strip() or str(espressione or "").strip()
-        if not esercizio:
-            return {"ok": False, "errore": "manca l'esercizio",
-                    "cosa_fare": "chiedi in breve qual è l'esercizio"}
-        e = comp.apri(prof.id, esercizio, espressione)
-    massimo = comp.massimo
-    av = M.avvisi()
-    if av is not None and e["tentativi"] == 0 and not e.get("contato"):
-        e["contato"] = True
-        try:
-            av.compito(prof, e["testo"])
-        except Exception:  # noqa: BLE001
-            pass
-    note_rule(ctx, "compiti_guida")
-    if not detta:
-        return _in_corso(e, {"ok": True, "esercizio": e["testo"], "tentativi": e["tentativi"],
-                             "massimo": massimo,
-                             "cosa_fare": "Non dire la soluzione. Fai una domanda guida o dai un "
-                                          "indizio sul primo passo, poi chiedigli quanto gli "
-                                          "viene."})
-    corretta = None
-    if e.get("espressione"):
-        v, n = _valuta(e["espressione"]), _numero(detta)
-        if v is not None and n is not None:
-            corretta = abs(v - n) <= 1e-6 * max(1.0, abs(v))
-    # Con un'espressione decide il conto del programma, non il «giusta» del modello
-    if corretta is None and giusta is not None and not e.get("espressione"):
-        corretta = giusta is True or str(giusta).strip().lower() in ("true", "sì", "si", "1")
-    if corretta:
-        e["risolto"] = True
-        return {"ok": True, "giusta": True, "esercizio": e["testo"],
-                "cosa_fare": "È giusta: diglielo e fagli i complimenti, poi spiega in breve "
-                             "perché."}
-    if corretta is None:
-        return _in_corso(e, {"ok": True, "giusta": None, "esercizio": e["testo"],
-                             "cosa_fare": "Controlla tu la sua risposta senza dire la soluzione; "
-                                          "se è sbagliata richiama compiti_aiuto con "
-                                          "giusta=false."})
-    e["tentativi"] += 1
-    if e["tentativi"] < massimo:
-        return _in_corso(e, {"ok": True, "giusta": False, "tentativi": e["tentativi"],
-                             "massimo": massimo,
-                             "cosa_fare": "Non è giusta. NON dire la soluzione né il risultato: "
-                                          "digli con gentilezza che non è ancora giusta e dai un "
-                                          "indizio diverso dal precedente, o una domanda "
-                                          "guida."})
-    # Dopo il massimo: si spiega, e i tutori lo sanno davvero
-    e["spiegato"] = True
-    if av is not None and not e.get("avvisato"):
-        e["avvisato"] = True
-        try:
-            av.compito(prof, e["testo"], soluzione=True)
-            av.manda(prof, "compiti", f"{prof.name} ha provato {massimo} volte l'esercizio "
-                                      f"«{e['testo']}» senza riuscirci: gli ho spiegato la "
-                                      f"soluzione. Forse puoi aiutarlo a ripassarlo.",
-                     registry=getattr(ctx, "speakers", None))
-        except Exception as ex:  # noqa: BLE001
-            print(f"   [MINORI] avviso non mandato: {type(ex).__name__}", flush=True)
-    note_rule(ctx, "compiti_soluzione")
-    chi_t = [u.name for u in M.tutori(prof, getattr(ctx, "speakers", None)) if u.name]
-    a_chi = (" e ".join(("ad " if n[:1].lower() in "aeiou" else "a ") + n for n in chi_t[:2])
-             or "a un adulto")
-    o = "a" if getattr(prof, "gender", None) == "f" else "o"
-    frase = (f"Hai provato {massimo} volte e ti sei impegnat{o}: adesso ti spiego la soluzione, "
-             f"e lo dico anche {a_chi}, così " + ("possono" if len(chi_t) > 1 else "può")
-             + " aiutarti meglio.")
-    out = {"ok": True, "giusta": False, "soluzione_permessa": True, "da_dire_prima": frase,
-           "cosa_fare": "Di' prima la frase da_dire_prima così com'è, poi spiega la soluzione "
-                        "passo per passo, in modo semplice."}
-    if e.get("espressione"):
-        v = _valuta(e["espressione"])
-        if v is not None:
-            from .builtin import _to_say
-            out["soluzione"] = _to_say(v)
-    return out
-
-
-def calcola_in_compiti(ctx, espressione: str) -> dict | None:
-    """`calcola` per un minore con un esercizio aperto (modalità compiti): il risultato non si
-    dà; l'espressione diventa l'esercizio da controllare con la sua risposta. None = calcola
-    come sempre."""
-    prof = M.profilo(ctx)
-    p = M.preset(prof) if prof is not None else None
-    if p is None or p.get("compiti") != "guida":
-        return None
-    comp = M.compiti()
-    if not comp.attiva(prof.id):
-        return None
-    note_rule(ctx, "compiti_calcola")
-    e = comp.apri(prof.id, espressione, espressione)
-    if e.get("spiegato"):
-        return None
-    return {"ok": True, "modalita_compiti": True, "esercizio": e["testo"],
-            "risultato": "nascosto: è un compito",
-            "cosa_fare": "Siamo nei compiti: non dire il risultato. Chiedigli quanto gli viene e "
-                         "controlla la sua risposta con compiti_aiuto (espressione e risposta)."}
-
-
 # ─────────────────────────── minore_gestisci ───────────────────────────
 
 AZIONI = ["stato", "imposta", "orari", "abilita_estensione", "togli_estensione", "autorizza",
-          "nascita", "tutori", "riepilogo_compiti", "tempo_extra", "richieste",
+          "nascita", "tutori", "tempo_extra", "richieste",
           "approva_richiesta", "nega_richiesta", "avvisi"]
 
 
@@ -428,25 +240,6 @@ def _minore_gestisci(ctx: ToolContext, nome: str = "", azione: str = "stato",
             frase += f", oggi ne restano {M.minuti_detti(max(0, resta) / 60)}"
         frase += "."
         return _final(frase)
-    if azione == "riepilogo_compiti":
-        if not tutore:
-            return _final("Il riepilogo dei compiti lo può sentire solo un tutore.", ok=False,
-                          fatto=NIENTE)
-        av = M.avvisi()
-        frase = (av.riepilogo(minore) if av is not None else
-                 "Il riepilogo dei compiti qui non c'è.")
-        # Con gli esercizi del giorno (08/10, calliope/esercizi/): solo la frase, il dettaglio
-        # con esercizi azione=riepilogo
-        from ..esercizi import sessione as _S
-        srv = _S.servizio()
-        if srv is not None:
-            try:
-                r = srv.registro.riepilogo(minore.id, minore.name)
-                if r["righe"]:
-                    frase += " " + r["frase"]
-            except Exception:  # noqa: BLE001 — il riepilogo dei compiti resta
-                pass
-        return _final(frase)
     # Cambiare: solo un tutore o chi amministra, riconosciuto dalla voce in questa frase
     if not tutore:
         note_rule(ctx, "minore_gestisci_permesso")
@@ -577,20 +370,6 @@ def minori_specs() -> list[ToolSpec]:
                 "required": ["cosa"]},
             func=_richiesta_tutore, risk="azione", levels=FAMILY),
         ToolSpec(
-            name="compiti_aiuto",
-            description=("Solo se nei dati del turno c'è «compiti: guida» e chi parla chiede "
-                         "aiuto per un compito di scuola: registra l'esercizio e controlla la "
-                         "sua risposta, senza mai dargli la soluzione prima che il tool lo "
-                         "permetta. Richiamalo a ogni risposta che dice (con risposta), anche "
-                         "nei turni dopo. esercizio: in breve; espressione: per i conti, come per "
-                         "calcola; risposta: quella detta da lui; giusta: per gli esercizi senza "
-                         "conti, true o false secondo te."),
-            parameters={"type": "object", "properties": {
-                "esercizio": {"type": "string"}, "espressione": {"type": "string"},
-                "risposta": {"type": "string"}, "giusta": {"type": "boolean"}},
-                "required": ["esercizio"]},
-            func=_compiti_aiuto, risk="lettura", levels=FAMILY),
-        ToolSpec(
             name="minore_gestisci",
             description=("Per gli adulti: le regole di un figlio o di un ragazzo di casa "
                          "(se chi parla è un ragazzo e chiede un permesso per sé, è "
@@ -601,18 +380,11 @@ def minori_specs() -> list[ToolSpec]:
                          "o togli_estensione; autorizza (valore «agenti 60»: per un'ora); "
                          "tempo_extra (oggi può giocare di più: valore «30»); richieste, "
                          "approva_richiesta o nega_richiesta (valore «R3»); nascita; tutori; "
-                         "riepilogo_compiti; avvisi («cos'era quell'avviso?»: quelli che ti ho "
+                         "avvisi («cos'era quell'avviso?»: quelli che ti ho "
                          "consegnato, con data e origine). nome: di chi."),
             parameters={"type": "object", "properties": {
                 "nome": {"type": "string"},
                 "azione": {"type": "string", "enum": AZIONI},
                 "valore": {"type": "string"}}, "required": ["azione"]},
             func=_minore_gestisci, risk="azione", levels=FAMILY),
-        # Esercizi generati da Calliope (08/10, calliope/esercizi/, tools/esercizi.py)
-        _esercizi_spec(),
     ]
-
-
-def _esercizi_spec() -> ToolSpec:
-    from .esercizi import esercizi_spec
-    return esercizi_spec()

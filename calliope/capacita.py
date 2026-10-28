@@ -156,7 +156,7 @@ DEFINIZIONI: dict[str, Definizione] = {
 # lungo che la persona l'ha interrotta). A voce si dicono solo le grandi aree; il dettaglio di
 # un'area lo si chiede («cosa sai fare con la casa?», parametro `area` del tool, scelto dal
 # modello da un elenco chiuso). Le aree raggruppano le capacità del registro qui sopra e i
-# tool che non hanno una capacità loro (ora e conti, foto, sviluppo, esercizi): un'area c'è
+# tool che non hanno una capacità loro (ora e conti, foto, sviluppo): un'area c'è
 # se una sua capacità è attiva o se uno dei suoi tool è registrato per chi parla.
 
 @dataclass(frozen=True)
@@ -198,10 +198,6 @@ AREE: dict[str, Area] = {
     "persone": Area("le persone", "Con le persone", "Voce e persone", ("chi_parla", "voce"),
                     (("ricorda", "ricordare cose di te"),
                      ("registra_utente", "imparare a riconoscere una persona nuova"))),
-    "esercizi": Area("i compiti", "Con i compiti", "Esercizi e compiti", (),
-                     (("esercizi", "preparare esercizi di matematica, italiano, logica, fisica e "
-                                   "chimica"),
-                      ("compiti_aiuto", "aiutare con i compiti"))),
 }
 
 

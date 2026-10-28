@@ -220,7 +220,7 @@ class ToolRegistry:
         sa completare da sola (`web_cerca({'tipo': 'notizie'})`), un valore fuori dai valori
         ammessi o del tipo sbagliato, un argomento che la funzione non conosce. Gli
         obbligatori con un valore predefinito nella funzione restano ai tool, che li
-        completano (la proposta in sospeso di lavoro_affida, l'esercizio di compiti_aiuto)."""
+        completano (la proposta in sospeso di lavoro_affida)."""
         spec = self._tools.get(name)
         if spec is None:
             conv = nome_con_azione(name)

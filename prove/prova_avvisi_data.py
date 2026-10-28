@@ -314,11 +314,11 @@ def main():
              f"{frase!r} {regole}")
     # Ieri sera, non urgente: la data, nessun «non più urgente»
     pulisci()
-    metti("compiti", "Luca ha provato 5 volte l'esercizio.", "2026-10-13T19:02:00",
+    metti("gioco", "Luca ha chiesto mezz'ora di gioco in più.", "2026-10-13T19:02:00",
           urgente=False, origine="")
     detto, regole = turno("Carlo", "Novità per me?")
     verifica("non urgente di ieri sera: la data, nessun «non più urgente»",
-             any(x.startswith("Ho un avviso per te, nato ieri sera alle 19:02: Luca ha provato")
+             any(x.startswith("Ho un avviso per te, nato ieri sera alle 19:02: Luca ha chiesto")
                  for x in detto) and "avviso_urgente_scaduto" not in regole, str(detto))
     # Urgente di 3 ore fa (sotto la soglia di 12): resta urgente, con la data
     pulisci()

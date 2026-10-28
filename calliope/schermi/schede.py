@@ -86,7 +86,6 @@ SEZIONE_DI_TIPO = {
     "documento": "cose/documenti", "archivio": "cose/documenti", "ufficio": "cose/ufficio",
     "foto": "cose/cassetto", "allegato": "cose/cassetto",
     "cassetto": "cose/cassetto", "modulo": "cose", "gioco": "cose/giochi", "giochi": "cose/giochi",
-    "esercizio": "cose/studio", "esercizi_riepilogo": "cose/studio",
     "casa": "casa", "conoscente": "casa", "avviso": "casa", "cruscotto": "io",
 }
 
@@ -557,8 +556,8 @@ def vuota() -> dict:
 CONV_COPIA = frozenset({"biblioteca", "web", "calcolo", "testo", "lista", "timer", "promemoria",
                         "casa", "documento"})
 # (Non `avviso`: gli avvisi ai tutori passano da hub.invia diretto e non si legano mai)
-CONV_RIMANDO = frozenset({"lavoro", "esecuzione", "sviluppo", "gioco", "giochi", "esercizio",
-                          "esercizi_riepilogo", "cassetto", "modulo"})
+CONV_RIMANDO = frozenset({"lavoro", "esecuzione", "sviluppo", "gioco", "giochi", "cassetto",
+                          "modulo"})
 # Le foto e i file della conversazione (28/10, #272): la foto con la sua miniatura piccola
 # (`_mini`, mai la miniatura dello schermo né il file), il file con nome, tipo e dimensione
 # (mai l'anteprima del testo né le note: sono il contenuto del file). Oltre il tetto, un rimando

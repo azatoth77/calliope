@@ -234,7 +234,7 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
         note_rule(ctx, "conservati_svuotati")
         return _final(f"Fatto: ho cancellato i dati conservati {di_chi}.", **r)
     domanda = (f"Cancello i dati conservati {di_chi}: testi dei turni, conversazioni "
-               "archiviate, eventi, registrazioni della voce, esercizi e richieste ai tutori"
+               "archiviate, eventi, registrazioni della voce, richieste ai tutori"
                + (", conversazione della stanza" if _stanza(cons, None) is not None else "")
                + (", impronte della voce imparate sui satelliti"
                   if _imp_sat.modo(getattr(cons, "cfg", None)) != _imp_sat.SPENTO else "")

@@ -518,6 +518,8 @@ Il banco (`prove/prova_regressione.py`, gemma4 e4b locale, 2 giri) era 166/174 i
 
 ## Rete `spinta_esercizi` (08/10, ramo `esercizi-pilota`)
 
+*[storico: la rete è tolta il 28/10 con gli esercizi (#279, decisione [0035](../decisioni/0035-studio.md)); resta come storia.]*
+
 Con un esercizio in sospeso (tool `esercizi`, calliope/esercizi/) una risposta del modello senza
 il tool si trattiene e il modello riceve una spinta (`ESERCIZI_NUDGE`), una volta; poi la sua
 risposta si dice. Caso: col 4B, a «Verbo.» la risposta era «Perfetto! Prossima: …» copiata
@@ -2133,7 +2135,7 @@ Profili (`PROFILI_LLM`): `gemma4-e4b-ollama` e `qwen3.6-35b-vllm` le tengono tut
 | `spinta_stanza` | `spinta_stanza`, `stanza_dopo_ricerca_vuota` | brain.py, STANZA_NOTA | 14/10 |
 | `spinta_rinuncia` | `spinta_rinuncia` | brain.py, RINUNCIA_NUDGE | ≤ 06/10 |
 | `spinta_sviluppo` | `spinta_sviluppo`, `sviluppo_testo_taciuto` | brain.py, SVILUPPO_NUDGE | 12/10 |
-| `spinta_esercizi` | `spinta_esercizi`, `esercizi_domanda_inventata`, `esercizi_promessa_taciuta` | brain.py, ESERCIZI_NUDGE | 08/10 |
+| ~~`spinta_esercizi`~~ | `spinta_esercizi`, `esercizi_domanda_inventata`, `esercizi_promessa_taciuta` | *storico: tolta il 28/10 con gli esercizi, #279* | 08/10 |
 | `scrivo_qui_a_voce` | `scrivo_qui_tolto` | brain.py, FraseTolta(SCRIVO_QUI) | 12/10 |
 | `argomento_forse` | `argomento_forse` (aiuto usato: `argomento_forse_usato`) | brain.py, argomenti_incerti.py | 08/10 |
 | `correzione_tool` | `correzione_tool`, `correzione_avviso` (esito cattivo: `correzioni_esaurite`) | brain.py, CORREZIONE_NUDGE | 09/10 |

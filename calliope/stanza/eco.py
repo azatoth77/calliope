@@ -35,7 +35,7 @@ l'impronta (similitudine alla frase stessa p50 0,38), le persone stanno fino a 0
 che parla sopra l'eco fino a 0,56: un taglio lì butterebbe le persone. Si rimisura con l'eco vera
 (prove/manuali/misura_eco_stanza.py).
 
-Solo libreria standard (più `esercizi.numeri.in_lettere`, puro Python).
+Solo libreria standard (più `calliope.numeri.in_lettere`, puro Python).
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ def _lettere(n: str) -> str:
     if v > 999_999:
         return n
     try:
-        from ..esercizi.numeri import in_lettere
+        from ..numeri import in_lettere
         return _senza_accenti(in_lettere(v))
     except Exception:  # noqa: BLE001 — senza la conversione resta la cifra
         return n

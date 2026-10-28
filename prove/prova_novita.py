@@ -313,9 +313,10 @@ r = chiama("familiare", {"area": "ricerca"})
 verifica("area ricerca, familiare: senza il perché, «chiedi a chi amministra»",
          "Wikipedia" not in r["risposta_finale"] and "chiedi a chi amministra" in
          r["risposta_finale"], r["risposta_finale"])
-r = chiama("amministra", {"area": "esercizi"})
-verifica("contrario: area senza tool (esercizi senza minori) → non posso",
-         r["risposta_finale"] == "Con i compiti in questa installazione non posso aiutarti.",
+# Fino al 28/10 il contrario era l'area «esercizi» senza minori (tolta con la #279)
+r = chiama("amministra", {"area": "foto"})
+verifica("contrario: area senza tool (foto e file senza immagini né allegati) → non posso",
+         r["risposta_finale"] == "Con le foto in questa installazione non posso aiutarti.",
          r["risposta_finale"])
 r = chiama("amministra", {"area": "lavori"})
 verifica("area lavori: agenti e sviluppo dai tool", "affidare a un agente" in

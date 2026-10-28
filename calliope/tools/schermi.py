@@ -46,8 +46,8 @@ def _io(persona) -> bool:
 
 # «promemoria» e non «agenda»: con «agenda» il modello sceglieva timer per «fammi vedere i
 # miei promemoria sullo schermo» (prova del 02/10)
-COSE = ("ultima", "risposta", "testo", "esercizio", "lista", "timer", "promemoria", "documento",
-        "casa", "niente")
+COSE = ("ultima", "risposta", "testo", "lista", "timer", "promemoria", "documento", "casa",
+        "niente")
 TESTO_MAX = 4000
 # I tool che toccano cose personali: la loro risposta, riletta sullo schermo, è personale
 _PERSONALI = {"promemoria_imposta", "appuntamento_aggiungi", "appuntamenti_elenca",
@@ -93,19 +93,6 @@ def _dove(nomi: list[str]) -> str:
 
 # ─────────────────────────── schermo_mostra ───────────────────────────
 
-def _esercizio_aperto(ctx, prof):
-    """La scheda dell'esercizio in corso di chi parla (calliope/esercizi/), o None."""
-    if prof is None:
-        return None
-    try:
-        from ..esercizi import sessione as S
-        srv = S.servizio()
-        s = srv.sessione(prof.id) if srv is not None else None
-        return srv.scheda(s) if s is not None else None
-    except Exception:  # noqa: BLE001 — lo schermo non si ferma per gli esercizi
-        return None
-
-
 def _segna_riservata(card: dict, ctx) -> dict:
     """Una scheda che ripete la risposta di prima (`cosa` risposta, o un testo scritto dal
     modello subito dopo) quando quella veniva da un tool riservato: il segno `_riservata` (resta
@@ -121,15 +108,6 @@ def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender, testo: str
     prof = _person(ctx)
     if cosa == "niente":
         return schede.vuota(), ""
-    # Con gli esercizi aperti «scrivimelo sullo schermo» è l'esercizio di adesso (12/10, DGX:
-    # il problema non arrivava sullo schermo); la scheda è quella degli esercizi, personale
-    if cosa in ("esercizio", "ultima", "risposta"):
-        card = _esercizio_aperto(ctx, prof)
-        if card is not None:
-            note_rule(ctx, "schermo_esercizio")
-            return card, ""
-        if cosa == "esercizio":
-            return None, "Non abbiamo esercizi aperti da mostrare."
     if cosa == "testo":
         # Un testo scelto dal modello (12/10): un problema, una poesia, i passaggi di un conto.
         # Visibilità come la risposta di prima (di casa per una persona riconosciuta)
@@ -716,8 +694,7 @@ def schermi_specs() -> list[ToolSpec]:
                          "«metti la lista sullo schermo», «togli dallo schermo», «chiudi il gioco». cosa: "
                          "ultima (quello di cui si parla adesso), risposta (il testo della "
                          "tua ultima risposta), testo (un testo che scrivi tu in testo=: un "
-                         "problema, i passaggi di un conto, una poesia), esercizio (l'esercizio "
-                         "in corso), lista, timer, promemoria (i promemoria, gli "
+                         "problema, i passaggi di un conto, una poesia), lista, timer, promemoria (i promemoria, gli "
                          "appuntamenti e l'agenda di chi parla: «mettimi sullo schermo i miei "
                          "appuntamenti»), documento (l'ultimo preparato), casa (luci e "
                          "temperature), niente (pulisci lo schermo, chiude anche un gioco). lista: il nome della "

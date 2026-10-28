@@ -14,7 +14,8 @@ ogni volta che cambiava chi parla il prefisso del prompt cambiava, e Ollama dove
 ## Decisione
 
 - Dal 03/10 il modello vede **tutti gli schemi, uguali per ogni livello** (72 sulla DGX al 09/10,
-  più `esercizi` solo con un minore in casa). Prompt di sistema e schemi formano un prefisso
+  più `esercizi` solo con un minore in casa; *[storico: `esercizi` tolto il 28/10, #279, decisione
+  [0035](0035-studio.md); il principio vale uguale per i due tool dei minori che restano]*). Prompt di sistema e schemi formano un prefisso
   identico byte per byte per tutti (una prova a secco lo controlla).
 - **Il permesso lo decide solo il codice**, a ogni esecuzione, in `ToolRegistry.call`: un tool non
   ammesso torna con `ok: false`, «NIENTE: l'azione NON è stata eseguita» e una frase pronta che il

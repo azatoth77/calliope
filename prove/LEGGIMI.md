@@ -127,16 +127,17 @@ agenti sullo stesso portatile; le cause e le misure):
   Regola: una prova che non ripete la frase usa una sintesi deterministica; chi la ripete (come
   `prova_satellite`) usa le varianti con il rumore.
 - **`time.monotonic()` piccolo dopo l'avvio.** Scrivere 0.0 per «tanto tempo fa» vale solo
-  se il computer è acceso da più della soglia: `prova_esercizi_programma` (10 minuti),
-  `prova_contesto_agenti` (10 minuti) e `prova_meteo_casa` (5 minuti) cadevano nella prima suite
-  dopo un riavvio. Si scrive `prove.orologio.fa(secondi)`, e il contrario gira con
+  se il computer è acceso da più della soglia: `prova_contesto_agenti` (10 minuti) e
+  `prova_meteo_casa` (5 minuti) cadevano nella prima suite dopo un riavvio (*storico: anche una
+  prova degli esercizi, tolta il 28/10 con la #279*). Si scrive `prove.orologio.fa(secondi)`, e il contrario gira con
   `appena_acceso(modulo)` (il `time` di quel modulo vede un computer acceso da 5 s). Il codice
   era giusto: le sentinelle sono `None` o `-1e9`.
 - **L'ora del giorno** (18/10, #151). Una scena scritta «ore prima di adesso» e controllata
   con un formato fisso cade a certe ore. `prova_stanza_cerca` voleva «HH:MM», e fra mezzanotte
   e le 3 le righe di tre ore prima diventavano «ieri 23:42»: l'hook fermava ogni commit di
-  notte. `prova_esercizi` usava la pausa «00:00-23:59» per dire «sempre fuori orario», ma la
-  fine non è compresa e nel minuto 23:59 non lo era. Regola: la scena gira a un'ora nota con
+  notte. Una pausa «00:00-23:59» per dire «sempre fuori orario» non basta, perché la fine non è
+  compresa e nel minuto 23:59 non lo era (*storico: era una prova degli esercizi, tolta il 28/10
+  con la #279*). Regola: la scena gira a un'ora nota con
   `prove.orologio.ora_del_giorno(12, 0)`, che sposta `time.time()` del processo, e le ore della
   notte si provano apposta, ognuna con la sua forma attesa. Una fascia «sempre» si scrive con
   due fasce che coprono il giorno. Ricognizione del 18/10: le 186 prove dei livelli 1 e 2 con
@@ -214,7 +215,9 @@ ascolto (come le altre prove di un `--completo`).
   (6 su 6 verdi prima e dopo). «Durata giusta» (14/10 14:54 e 15:02): il microfono finto a 44,1 kHz
   di Chromium perde audio sotto carico (ritmo 0,923 e 0,942) mentre la catena di Calliope (16 kHz
   contro contesto) torna al centesimo: l'orologio ora con 0,15 (i guasti cercati sono ×1,5 e ×2).
-- **`prova_esercizi_voce` (7 cadute del 14/10): la prova, né il codice né il carico.** «Quanto fa
+- *[storico: la prova è tolta il 28/10 con gli esercizi, #279; la lezione resta: si cerca il
+  numero intero, non un pezzo di testo]* **`prova_esercizi_voce` (7 cadute del 14/10): la prova,
+  né il codice né il carico.** «Quanto fa
   443 più 353?» contiene «3 più 3», e la verifica «la domanda inventata (3 più 3) non si dice»
   cercava il pezzo di testo: con i numeri a caso cadeva una volta su ~45 (3 su 130 nelle misure di
   prima). Ora il numero intero (`(?<!\d)3 più 3(?!\d)`, lo stesso per «125 più 87»): **90 su 90**
@@ -285,7 +288,7 @@ voci.)*
 - **Memoria, agenda, liste, calcoli** ([elenco](elenco.md#memoria-agenda-liste-calcoli), [area](../docs/aree/memoria-agenda-liste.md)): `prova_tempi.py`, `prova_agenda.py`, `prova_agenda_tutto.py`, `prova_liste.py`, `prova_casa.py`, `prova_date_ricordi_ollama.py`, `prova_calcola.py`, `prova_memoria.py`
 - **Contesto e conversazione** ([elenco](elenco.md#contesto-e-conversazione), [area](../docs/aree/contesto-conversazione.md)): `prova_contesto.py`, `prova_conversazioni.py`, `prova_ricominciamo_ollama.py`, `prova_argomenti_ollama.py`, `misura_argomenti.py`, `prova_conversazioni_ollama.py`, `prova_ollama_carico.py`, `prova_eventi.py`, `prova_eventi_ciclo.py`, `prova_eventi_disco.py`, `prova_eventi_attivo.py`, `prova_dati_fissi.py`, `prova_ospite_riconosciuto.py`, `manuali/banco_cache_swa.py`, `manuali/banco_dati_fissi.py`, `manuali/misura_cache_prefisso.py`, `prova_eventi_guardia.py`, `prova_uscita_unica.py`, `prova_conserva.py`, `prova_conserva_valutazione.py`, `prova_banco_rotazione.py`, `prova_mulaw.py`, `prova_scelta_tool.py`, `prova_ciclo.py`, `prova_stati_buchi.py`, `prova_nome_da_solo.py`, `prova_corsie.py`, `prova_ctx.py`, `prova_numctx.py`, `prova_prompt_conversazione.py`, `misura_contesto.py`, `misura_conversazioni.py`, `misura_corsie.py`, `manuali/banco_stanza_contesto.py`, `manuali/banco_stanza_storia.py`, `manuali/banco_stanza_cerca.py`
 - **Sicurezza, politica, conferme** ([elenco](elenco.md#sicurezza-politica-conferme), [area](../docs/aree/sicurezza-politica.md)): `prova_sicurezza.py`, `prova_politica.py`, `prova_conferma_unica.py`, `prova_dopo_annunci.py`, `prova_risultati.py`, `prova_conferme.py`, `prova_valore.py`, `prova_valore_dettato.py`, `prova_intento_no.py`, `prova_stato_dialogo.py`, `prova_attrito.py`, `prova_si_breve.py`, `prova_documento_proprio.py`, `misura_quarantena.py`, `misura_riferire.py`, `prova_risultato_pdf_ollama.py`, `misura_scalda_modalita.py`, `prova_risultati_ollama.py`, `prova_intento_no_ollama.py`, `prova_dialogo_ollama.py`, `prova_conferma_unica_ollama.py`, `prova_politica_ollama.py`, `misura_conferma_breve.py`, `misura_sfida.py`
-- **Minori** ([elenco](elenco.md#minori), [area](../docs/aree/minori.md)): `prova_eta_utenti.py`, `prova_minori.py`, `prova_esercizi.py`, `prova_esercizi_pagina.py`, `prova_esercizi_ollama.py`, `prova_esercizi_programma_ollama.py`, `prova_materie.py`, `prova_esercizi_voce.py`, `prova_programma.py`, `prova_esercizi_programma.py`, `prova_minori_pericolo.py`, `prova_console_minori.py`, `prova_minori_cancelli.py`, `prova_minore_ospite.py`, `prova_avvisi_data.py`, `prova_avvisi_audio.py`, `misura_cancelli.py`, `prova_minori_ollama.py`, `misura_guardiano.py`
+- **Minori** ([elenco](elenco.md#minori), [area](../docs/aree/minori.md)): `prova_eta_utenti.py`, `prova_minori.py`, `prova_minori_pericolo.py`, `prova_console_minori.py`, `prova_minori_cancelli.py`, `prova_minore_ospite.py`, `prova_avvisi_data.py`, `prova_avvisi_audio.py`, `misura_cancelli.py`, `prova_minori_ollama.py`, `misura_guardiano.py`
 - **Casa (Home Assistant)** ([elenco](elenco.md#casa-home-assistant), [area](../docs/aree/casa.md)): `prova_casa_ha.py`, `prova_meteo_casa.py`, `prova_meteo_casa_ollama.py`, `prova_citta_casa_ollama.py`, `prova_casa_nomi.py`, `prova_casa_ha_ollama.py`, `sonda_ha.py`
 - **PC a voce** ([elenco](elenco.md#pc-a-voce), [area](../docs/aree/pc.md)): `prova_pc.py`, `prova_pc_ollama.py`
 - **Documenti, ufficio, archivio** ([elenco](elenco.md#documenti-ufficio-archivio), [area](../docs/aree/documenti-ufficio.md)): `prova_documenti.py`, `prova_documenti_ollama.py`, `prova_markdown.py`, `prova_ufficio.py`, `prova_ufficio_ollama.py`, `prova_archivio.py`, `archivio_misura_ocr.py`, `archivio_misura.py`, `prova_archivio_ollama.py`

@@ -118,7 +118,7 @@ def prova_ciclo():
     # Il registro dei turni (13/10): dalla lista in memoria di Brain, con gli argomenti veri;
     # con la chiave ARGOMENTI_REGISTRO quelli per il disco (dal 16/10 nessuno la mette: il
     # meccanismo resta); la lista in memoria non cambia
-    vero = {"nome": "esercizi", "argomenti": {"azione": "piu_difficile"}, "ok": True,
+    vero = {"nome": "lista_aggiungi", "argomenti": {"azione": "piu_difficile"}, "ok": True,
             ARGOMENTI_REGISTRO: {"azione": "…"}}
     adulto = {"nome": "ricorda", "argomenti": {"fatto": SEGRETO}, "ok": True}
     cervello.last_tools = [vero, adulto]

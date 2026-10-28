@@ -1278,33 +1278,23 @@ try:
     cons.conversazioni = None
     arch.close()
 
-    # ───────── esercizi e richieste ai tutori (12/10 sera) ─────────
-    # La stessa tenuta di turni e voce (turn_log_days), alla prima rotazione anche quelli di
-    # prima; svuotati con la persona e con tutto
-    from calliope.esercizi.registro import Registro as RegistroEsercizi
+    # ───────── richieste ai tutori (12/10 sera) ─────────
+    # La stessa tenuta di turni e voce (turn_log_days), alla prima rotazione anche quelle di
+    # prima; svuotate con la persona e con tutto. Fino al 28/10 anche le tabelle degli esercizi
+    # (tolti, #279)
     from calliope.minori import Richieste
-    RegistroEsercizi(cfg.memory_db).db.close()
     Richieste(cfg.memory_db, cfg, log=lambda m: None).db.close()
     import sqlite3
 
     def riempi():
         db = sqlite3.connect(cfg.memory_db)
-        db.execute("DELETE FROM esercizi_tentativi")
         db.execute("DELETE FROM richieste_tutori")
-        db.execute("DELETE FROM esercizi_segnalazioni")
         for chi in ("p-min", "p-min2"):
             for fa in (59, 60, 61):
                 g = datetime.date.today() - datetime.timedelta(days=fa)
-                db.execute("INSERT INTO esercizi_tentativi (persona, giorno, quando, materia, "
-                           "argomento, esercizio, domanda, attesa, data, esito) VALUES "
-                           "(?, ?, ?, 'matematica', 'tabelline', 'f', '7 per 8', '56', '54', "
-                           "'sbagliata')", (chi, g.isoformat(), f"{g.isoformat()}T10:00:00"))
                 db.execute("INSERT INTO richieste_tutori (minore, tipo, oggetto, creata, "
                            "creata_ts) VALUES (?, 'gioco', 'il gioco dei pirati', ?, ?)",
                            (chi, f"{g.isoformat()}T10:00:00", time.time() - fa * 86400))
-                db.execute("INSERT INTO esercizi_segnalazioni (persona, quando, esercizio, "
-                           "nota) VALUES (?, ?, 'f', 'secondo me è sbagliato')",
-                           (chi, f"{g.isoformat()}T10:00:00"))
         db.commit()
         db.close()
 
@@ -1322,21 +1312,21 @@ try:
               for fa in (59, 60, 61)}
     r = cons.ruota()
     rimaste = righe()
-    verifica("rotazione: esercizi, segnalazioni e richieste di 61 giorni fa via, 59 e 60 restano",
-             giorno[61] not in rimaste and rimaste.count(giorno[59]) == 6
-             and rimaste.count(giorno[60]) == 6 and r.get("memoria") == 6, f"{r} {rimaste}")
+    verifica("rotazione: richieste di 61 giorni fa via, 59 e 60 restano",
+             giorno[61] not in rimaste and rimaste.count(giorno[59]) == 2
+             and rimaste.count(giorno[60]) == 2 and r.get("memoria") == 2, f"{r} {rimaste}")
     cons.giorni = 30
     verifica("tenuta: è turn_log_days (con 30 via anche quelli di 59 giorni)",
-             cons.ruota().get("memoria") == 12 and righe() == [])
+             cons.ruota().get("memoria") == 4 and righe() == [])
     cons.giorni = 60
     riempi()
     r = cons.svuota("p-min", "Leo")
-    verifica("svuota una persona: anche i suoi esercizi e le sue richieste ai tutori",
-             r["esercizi_richieste"] == 9 and righe("p-min") == [] and len(righe("p-min2")) == 9,
+    verifica("svuota una persona: anche le sue richieste ai tutori",
+             r["richieste"] == 3 and righe("p-min") == [] and len(righe("p-min2")) == 3,
              str(r))
-    verifica("svuota, contrario: quelli degli altri restano", len(righe("p-min2")) == 9)
+    verifica("svuota, contrario: quelle degli altri restano", len(righe("p-min2")) == 3)
     r = cons.svuota()
-    verifica("svuota tutto: anche esercizi e richieste", r["esercizi_richieste"] == 9
+    verifica("svuota tutto: anche le richieste", r["richieste"] == 3
              and righe() == [], str(r))
     cfg_senza = SimpleNamespace(memory_db=str(tmp / "non-esiste.db"), turn_log_dir=None,
                                 turn_log_days=60)
@@ -1344,6 +1334,42 @@ try:
              C.Conservazione(cfg_senza, reg, log=lambda m: None)._memoria(
                  limite=datetime.date.today()) == 0
              and not (tmp / "non-esiste.db").exists())
+
+    # ───────── tabelle dismesse (28/10, revisione della PR #292) ─────────
+    # Un memoria.db di prima della #279, con le tabelle degli esercizi e dei compiti e le righe
+    # dei ragazzi: all'apertura della memoria (come all'avvio) non ci sono più, una volta sola,
+    # con la riga nel registro; le altre tabelle restano
+    from calliope.memory import Memory
+    vecchio = tmp / "memoria-vecchia.db"
+    db = sqlite3.connect(vecchio)
+    for t in C.TABELLE_DISMESSE:
+        db.execute(f"CREATE TABLE {t} (persona TEXT, testo TEXT)")
+        db.execute(f"INSERT INTO {t} (persona, testo) VALUES ('p-min', 'sette per otto: 54')")
+    db.execute("CREATE TABLE meta_schema (modulo TEXT PRIMARY KEY, versione INTEGER NOT NULL)")
+    db.execute("INSERT INTO meta_schema (modulo, versione) VALUES ('esercizi', 3)")
+    db.execute("CREATE TABLE richieste_tutori (minore TEXT, creata TEXT)")
+    db.commit()
+    db.close()
+    import contextlib
+    import io
+    uscita = io.StringIO()
+    with contextlib.redirect_stdout(uscita):
+        Memory(str(vecchio)).db.close()
+    db = sqlite3.connect(vecchio)
+    nomi = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    moduli = {r[0] for r in db.execute("SELECT modulo FROM meta_schema")}
+    db.close()
+    verifica("tabelle dismesse: dopo l'avvio non ci sono più, la riga nel registro",
+             not (set(C.TABELLE_DISMESSE) & nomi) and "tabelle dismesse tolte" in uscita.getvalue()
+             and "esercizi_tentativi" in uscita.getvalue(), f"{sorted(nomi)} {uscita.getvalue()!r}")
+    verifica("tabelle dismesse: le altre restano, la versione «esercizi» via, «dismesse» segnata",
+             {"richieste_tutori", "facts"} <= nomi and "esercizi" not in moduli
+             and "dismesse" in moduli, f"{sorted(nomi)} {sorted(moduli)}")
+    uscita = io.StringIO()
+    with contextlib.redirect_stdout(uscita):
+        Memory(str(vecchio)).db.close()
+    verifica("tabelle dismesse: una volta sola (alla seconda apertura nessuna riga)",
+             "tabelle dismesse" not in uscita.getvalue(), uscita.getvalue())
 
     # ───────── da terminale ─────────
     cart = tmp / "dati"

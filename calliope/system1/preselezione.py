@@ -99,7 +99,7 @@ FAMIGLIE = {
     "schermi": ("schermo_mostra", "schermo_gestisci", "schede_pulisci"),
     "dialogo": ("conversazione_nuova", "conversazione_cerca", "conversazioni_dimentica",
                 "argomento", "proposta_rispondi"),
-    "minori": ("richiesta_tutore", "compiti_aiuto", "minore_gestisci", "esercizi"),
+    "minori": ("richiesta_tutore", "minore_gestisci"),
     "calliope": ("calliope_stato", "installa_proponi", "installa_avvia", "installa_gestisci",
                  "dati_conservati"),
     "stanza": ("stanza_pausa", "stanza_cerca", "conoscenti", "conoscente_livello"),
