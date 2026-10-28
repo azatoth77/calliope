@@ -655,15 +655,27 @@ def raccolte(t: Tel, hub, liste):
                              f" && {sel('pomodori')}.getAttribute('aria-checked') === 'true'"
                              f" && !{sel('pomodori')}.hasAttribute('aria-busy')"), 5)
     verifica("spunta: riuscita senza la lista nuova, la voce resta spuntata (non torna libera)", bool(ok))
-    # Nessun esito (il ciclo non risponde): l'attesa scade da sola, con un timer vero
+    # Una lista più recente che contiene ancora la voce («rimettilo» a voce): si tocca di nuovo
+    tutti(hub, schede.lista("spesa", liste.read("spesa")[1]))
+    ok = aspetta(lambda: t.v(f"{sel('pomodori')}.getAttribute('aria-checked') === 'false'"
+                             f" && !{sel('pomodori')}.hasAttribute('aria-disabled')"), 5)
+    verifica("spunta: la voce rimessa in una lista nuova si tocca di nuovo", bool(ok))
+    # Nessun esito entro l'attesa (un turno a voce in corso): la pagina lo dice com'è, e un
+    # secondo tocco della stessa voce non rimanda niente
     t.v("window.calliopeSchermo.spunta.attesaMs = 1500; 1")
     t.tocca_sel('#pagina-schede button.spunta[data-voce="caffè"]')
     aspetta(lambda: not hub.ingresso.vuoto(), 5)
-    hub.ingresso.prendi()
-    ok = aspetta(lambda: t.v(f"{sel('caffè')}.getAttribute('aria-checked') === 'false'"
-                             f" && {sel('caffè')}.closest('.scheda').querySelector('.esito-tocco').textContent.includes('risposta')"), 5)
-    verifica("spunta: senza esito l'attesa scade da sola e lo dice accanto", bool(ok),
-             t.v(f"{sel('caffè')}.closest('.scheda').querySelector('.esito-tocco').textContent"))
+    item = hub.ingresso.prendi() or {}
+    esito = f"{sel('caffè')}.closest('.scheda').querySelector('.esito-tocco').textContent"
+    ok = aspetta(lambda: "occupata" in (t.v(esito) or "") and t.v(f"{sel('caffè')}.getAttribute('aria-checked')") == "true", 5)
+    verifica("spunta: senza esito la pagina dice che Calliope è occupata (il tocco è in coda)", bool(ok), t.v(esito))
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="caffè"]')
+    time.sleep(0.5)
+    verifica("spunta: un secondo tocco della stessa voce non rimanda il tocco", hub.ingresso.vuoto()
+             and "occupata" in (t.v(esito) or ""))
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "spunta_lista", "ok": True, "pagina": item.get("pagina")})
+    ok = aspetta(lambda: t.v(f"{sel('caffè')}.getAttribute('aria-disabled')") == "true" and t.v(esito) == "", 5)
+    verifica("spunta: l'esito che arriva dopo chiude l'attesa", bool(ok))
     t.v("window.calliopeSchermo.spunta.attesaMs = 30000; 1")
     # Il gesto indietro torna alle tessere; una tessera senza pagina porta al suo gruppo
     t.v("history.back(); 1")

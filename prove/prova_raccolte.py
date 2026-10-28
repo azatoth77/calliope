@@ -420,15 +420,17 @@ def ciclo():
              and (r.get("voce") or {}).get("nome") == "Bianca" and (r.get("voce") or {}).get("modo") == "schermo"
              and (r.get("tool") or [{}])[0].get("nome") == "lista_togli" and r["tool"][0].get("ok") is True
              and r["tool"][0].get("azione") is True and "latte" in (r.get("testo") or ""), json.dumps(r, ensure_ascii=False)[:400])
-    coda = b.history[-3:]
-    verifica("ciclo: nella storia il turno con la sua chiamata (frase, lista_togli, esito)",
-             ruoli(coda) == ["user", "assistant", "tool"]
+    coda = b.history[-4:]
+    verifica("ciclo: nella storia il turno con la sua chiamata (frase, lista_togli, esito, conferma di Calliope)",
+             ruoli(coda) == ["user", "assistant", "tool", "assistant"]
+             and coda[3]["content"] == "Ho tolto latte dalla lista della spesa." and not coda[3].get("tool_calls")
              and coda[0]["content"] == "(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)"
              and coda[1]["tool_calls"][0]["name"] == "lista_togli"
              and coda[1]["tool_calls"][0]["arguments"] == {"cose": "latte", "lista": "spesa"}
              and json.loads(coda[2]["content"]).get("ok") is True, json.dumps(coda, ensure_ascii=False)[:400])
     verifica("ciclo: la conversazione salvata con il tocco (resta dopo un riavvio)",
-             b.archivio_conv.salvate and b.archivio_conv.salvate[-1][-3:] == [dict(m) for m in coda])
+             b.archivio_conv.salvate and b.archivio_conv.salvate[-1][-4:] == [dict(m) for m in coda])
+    verifica("ciclo: dopo il tocco l'ultimo messaggio della storia è di Calliope", b.history[-1]["role"] == "assistant")
     verifica("ciclo: il tocco vale come ultimo turno (la conversazione non scade alla frase dopo)",
              time.monotonic() - (getattr(b, "last_turn_at", None) or 0) < 5)
     verifica("ciclo: nessuna frase detta (chi tocca può essere al supermercato)", voce.detto == [], str(voce.detto))
@@ -448,7 +450,7 @@ def ciclo():
     # Due tocchi di fila: mai due messaggi della persona uno dopo l'altro
     tocca(c, voce_tocco("bianca", "uova"))
     verifica("ciclo: due tocchi di fila, mai due messaggi della persona uno dopo l'altro",
-             not due_user(b.history) and ruoli(b.history[-6:]) == ["user", "assistant", "tool"] * 2,
+             not due_user(b.history) and ruoli(b.history[-8:]) == ["user", "assistant", "tool", "assistant"] * 2,
              str(ruoli(b.history)))
     liste.add("spesa", ["latte", "uova"], "Bianca")
     # Una conversazione ferma da troppo: si chiude prima del tocco, come prima di una risposta
@@ -457,7 +459,7 @@ def ciclo():
     vecchia = len(b.history)
     tocca(c, voce_tocco("bianca", "latte"))
     verifica("ciclo: la conversazione scaduta si chiude prima; il tocco apre la nuova",
-             vecchia >= 6 and ruoli(b.history) == ["user", "assistant", "tool"], str(ruoli(b.history)))
+             vecchia >= 8 and ruoli(b.history) == ["user", "assistant", "tool", "assistant"], str(ruoli(b.history)))
     b.cfg.storia_inattiva_s = 0
 
     def rifiuto(nome, item, attesa):
@@ -546,12 +548,18 @@ def ciclo_eventi():
     storia = [{k: v for k, v in m.items() if k in ("role", "content")}
               | ({"tool": [x["name"] for x in m["tool_calls"]]} if m.get("tool_calls") else {})
               for m in b.history]
-    verifica("eventi: la proiezione dà la stessa storia di Brain (con eventi: attivo è quella)",
-             [m["role"] for m in msgs] == [m["role"] for m in storia] and msgs[0] == storia[0]
-             and msgs[1].get("tool") == storia[1].get("tool") == ["lista_togli"],
-             json.dumps([msgs, storia], ensure_ascii=False)[:500])
+    verifica("eventi: la proiezione dà la stessa storia di Brain, conferma di Calliope compresa",
+             [m["role"] for m in msgs] == [m["role"] for m in storia] == ["user", "assistant", "tool", "assistant"]
+             and msgs[0] == storia[0] and msgs[1].get("tool") == storia[1].get("tool") == ["lista_togli"]
+             and msgs[3] == storia[3] == {"role": "assistant", "content": "Ho tolto latte dalla lista della spesa."},
+             json.dumps([msgs, storia], ensure_ascii=False)[:600])
+    muti = [e.dati for e in eventi if e.tipo == "detto_calliope" and e.dati.get("atto") == "tocco_esito"]
+    verifica("eventi: la conferma è un detto_calliope col canale «muta», mai detto a voce",
+             muti and muti[-1].get("canale") == "muta" and voce.detto == [], json.dumps(muti, ensure_ascii=False)[:300])
     ombra = r.get("eventi_ombra") or {}
-    verifica("eventi: l'ombra non vede differenze nel turno del tocco", not (ombra.get("differenze") or {}),
+    from calliope.eventi.misura import DICHIARATI
+    verifica("eventi: l'ombra non vede differenze nel turno del tocco (solo «canale_scritto», dichiarato: "
+             "la conferma è muta)", not set(ombra.get("differenze") or {}) - DICHIARATI,
              json.dumps(ombra, ensure_ascii=False)[:300])
     from calliope.eventi.tipi import CANALI_PERSONA
     verifica("eventi: «tocco» tra i canali della persona", "tocco" in CANALI_PERSONA)

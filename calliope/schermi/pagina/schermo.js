@@ -1123,19 +1123,24 @@
   // Sugli schermi personali con le sezioni (il telefono e il PC personale) ogni voce è un tasto
   // «checkbox»: il tocco va al server, che lo passa al ciclo della voce come una frase del
   // proprietario (ToolRegistry.call). La voce resta segnata in attesa finché arriva l'esito
-  // (evento SSE «tocco») o la lista aggiornata (la scheda che manda il tool); riuscita resta
-  // spuntata («Tolto.») finché la lista aggiornata non la toglie; un errore la rimette com'era e
-  // si dice accanto, nella regione role="status" della scheda. Senza esito entro
-  // SPUNTA.attesaMs (SSE ricollegato, il ciclo che non risponde) l'attesa scade da sola, con un
-  // timer vero (revisione della PR #261).
-  const SPUNTE = new Map();          // lista e voce → ms: le voci toccate in attesa
-  const TOLTE = new Map();           // lista e voce → ms: tolte, in attesa della lista nuova
-  const SPUNTA = { attesaMs: 30000 };
+  // (evento SSE «tocco») o la lista aggiornata (la scheda che manda il tool); riuscita senza la
+  // lista nuova resta spuntata finché una lista la toglie o la rimette; un errore la rimette
+  // com'era e si dice accanto, nella regione role="status" della scheda. Senza esito entro
+  // SPUNTA.attesaMs il tocco è ancora nella coda del ciclo (un turno a voce in corso): la pagina
+  // lo dice com'è e non lo rimanda (revisioni della PR #261).
+  const SPUNTE = new Map();          // lista e voce → ms: tocchi mandati, esito non ancora arrivato
+  const TOLTE = new Map();           // lista e voce → {t, srv}: tolte, la lista nuova non è arrivata
+  const SPUNTA = { attesaMs: 30000, tettoMs: 600000 };
+  const OCCUPATA = "Calliope è occupata: la spunta arriva appena finisce.";
   function spuntabile() { return !!(S.personale && (S.sezioni || CAROSELLO)); }
   function chiaveSpunta(lista, voce) { return String(lista) + "\n" + String(voce); }
-  function recente(m, lista, voce) {
-    const t = m.get(chiaveSpunta(lista, voce));
-    return t !== undefined && Date.now() - t < SPUNTA.attesaMs;
+  function mandata(lista, voce) {
+    const t = SPUNTE.get(chiaveSpunta(lista, voce));
+    return t !== undefined && Date.now() - t < SPUNTA.tettoMs;
+  }
+  function tolta(lista, voce) {
+    const x = TOLTE.get(chiaveSpunta(lista, voce));
+    return !!x && Date.now() - x.t < SPUNTA.attesaMs;
   }
   function vociDaSpuntare(c) {
     const ul = el("ul", "voci spunte");
@@ -1143,13 +1148,17 @@
     const presenti = new Set();
     c.voci.forEach((v) => {
       presenti.add(String(v.testo));
+      // Una lista più recente dell'esito che la contiene ancora: la voce è stata rimessa
+      // («rimettilo» a voce), e si tocca di nuovo
+      const k = chiaveSpunta(c.lista, v.testo), x = TOLTE.get(k);
+      if (x && Number(c.creata) > x.srv) TOLTE.delete(k);
       const li = el("li", v.nuova ? "nuova" : "");
       const b = el("button", "spunta");
       b.type = "button";
       b.setAttribute("role", "checkbox");
       b.dataset.lista = String(c.lista);
       b.dataset.voce = String(v.testo);
-      statoSpunta(b, recente(TOLTE, c.lista, v.testo) ? "tolta" : recente(SPUNTE, c.lista, v.testo) ? "attesa" : "libera");
+      statoSpunta(b, tolta(c.lista, v.testo) ? "tolta" : mandata(c.lista, v.testo) ? "attesa" : "libera");
       const casella = el("span", "casella");
       casella.setAttribute("aria-hidden", "true");
       b.append(casella, el("span", "testo-voce", v.testo));
@@ -1172,13 +1181,15 @@
     if (stato === "attesa") b.setAttribute("aria-busy", "true"); else b.removeAttribute("aria-busy");
     if (stato === "tolta") b.setAttribute("aria-disabled", "true"); else b.removeAttribute("aria-disabled");
   }
+  // Restituisce quanti tasti di quella voce ci sono adesso nella pagina
   function segnaSpunta(lista, voce, stato, testo, errore) {
     const carte = new Set();
+    let n = 0;
     for (const b of document.querySelectorAll("button.spunta")) {
       if (b.dataset.lista !== lista) continue;
       const card = b.closest(".scheda");
       if (card) carte.add(card);
-      if (b.dataset.voce === voce) statoSpunta(b, stato);
+      if (b.dataset.voce === voce) { statoSpunta(b, stato); n++; }
     }
     for (const card of carte) {
       const es = card.querySelector(".esito-tocco");
@@ -1187,18 +1198,24 @@
       // L'attesa in tono tenue, un errore nel colore dell'allarme
       es.classList.toggle("errore", !!errore);
     }
+    return n;
   }
   document.addEventListener("click", async (ev) => {
     const b = ev.target.closest && ev.target.closest("button.spunta");
-    if (!b || b.getAttribute("aria-checked") === "true") return;
+    if (!b) return;
     const lista = b.dataset.lista, voce = b.dataset.voce;
-    const k = chiaveSpunta(lista, voce), t0 = Date.now();
+    const k = chiaveSpunta(lista, voce);
+    if (mandata(lista, voce)) {
+      // Il primo tocco aspetta ancora nella coda del ciclo: un altro direbbe «non c'è»
+      segnaSpunta(lista, voce, "attesa", OCCUPATA, false);
+      return;
+    }
+    if (b.getAttribute("aria-checked") === "true") return;
+    const t0 = Date.now();
     SPUNTE.set(k, t0);
     segnaSpunta(lista, voce, "attesa", "Tolgo «" + voce + "»…", false);
     setTimeout(() => {
-      if (SPUNTE.get(k) !== t0) return;
-      SPUNTE.delete(k);
-      segnaSpunta(lista, voce, "libera", "Non ho ancora avuto risposta: riprova tra poco.", true);
+      if (SPUNTE.get(k) === t0) segnaSpunta(lista, voce, "attesa", OCCUPATA, false);
     }, SPUNTA.attesaMs);
     let r;
     try { r = await postSessione("/api/tocco", { tocco: "spunta_lista", lista, voce }); }
@@ -1207,9 +1224,10 @@
     SPUNTE.delete(k);
     segnaSpunta(lista, voce, "libera", String(r.dati.errore || MESSAGGI[r.status] || "Calliope non risponde: riprova tra poco."), true);
   });
-  // L'esito dal ciclo (evento «tocco»): riuscito, la voce resta spuntata finché la lista nuova
-  // non la toglie (anche se la lista aggiornata non è arrivata); rifiutato (permesso, orari, una
-  // voce sparita nel frattempo) la voce torna com'era con il motivo accanto
+  // L'esito dal ciclo (evento «tocco»): riuscito, se la voce è ancora nella pagina (la lista
+  // aggiornata non è arrivata) resta spuntata finché una lista nuova non la toglie o la rimette;
+  // rifiutato (permesso, orari, una voce sparita nel frattempo) la voce torna com'era con il
+  // motivo accanto
   function esitoTocco(d) {
     if (!d || d.tocco !== "spunta_lista") return;
     const p = d.pagina || {};
@@ -1217,8 +1235,7 @@
     const k = chiaveSpunta(lista, voce);
     SPUNTE.delete(k);
     if (d.ok) {
-      TOLTE.set(k, Date.now());
-      segnaSpunta(lista, voce, "tolta", "", false);
+      if (segnaSpunta(lista, voce, "tolta", "", false)) TOLTE.set(k, { t: Date.now(), srv: ora() / 1000 });
     } else {
       segnaSpunta(lista, voce, "libera", String(d.errore || "Non ci sono riuscita: riprova."), true);
     }

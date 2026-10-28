@@ -1833,7 +1833,11 @@ class Ciclo:
             if ok and hasattr(brain, "record_tocco"):
                 # Nella conversazione con la sua chiamata, con chi tocca ancora come chi parla
                 # (la conversazione è sua: scaduta o d'altri si chiude prima)
-                brain.record_tocco(descr, tool, args, grezzo)
+                conferma = str(res.get("conferma") or res.get("risposta_finale")
+                               or "Fatto.").strip()
+                brain.record_tocco(descr, tool, args, grezzo, conferma)
+                # La stessa conferma negli eventi, senza voce: storia e proiezione uguali
+                self.uscita.muta(conferma, "tocco_esito", dopo_chiamate=1)
         finally:
             for k, v in segni.items():
                 setattr(sc, k, v)

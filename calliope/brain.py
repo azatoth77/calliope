@@ -6402,11 +6402,12 @@ class Brain:
                              "content": "Va bene, mi fermo. (argomento chiuso)"})
         self.salva_conversazione()
 
-    def record_tocco(self, testo: str, nome: str, argomenti: dict, risultato: str):
+    def record_tocco(self, testo: str, nome: str, argomenti: dict, risultato: str,
+                     conferma: str = "Fatto."):
         """Un tocco dallo schermo personale riuscito (28/10, schermi/tocchi.py: la spunta della
         lista) nella conversazione della persona, come un turno con la sua chiamata: la frase
-        («(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)»), la chiamata del tool
-        e il suo esito. Così «rimettilo» detto dopo sa che cosa è stato fatto, e la frase dopo
+        («(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)»), la chiamata del tool,
+        il suo esito e la conferma di Calliope (`conferma`, non detta). Così «rimettilo» detto dopo sa che cosa è stato fatto, e la frase dopo
         non è un secondo messaggio della persona di fila (revisione della PR #261).
 
         Come una risposta: la conversazione scaduta o di un'altra persona si chiude prima, il
@@ -6422,6 +6423,9 @@ class Brain:
         self.history.append({"role": "assistant", "content": "", "tool_calls": [call]})
         self.history.append({"role": "tool", "tool_call_id": call["id"], "name": nome,
                              "content": risultato})
+        # Il turno chiude con Calliope, come _sfida_reply e record_stop (seconda revisione della
+        # PR #261): la conferma del tool, non detta (negli eventi un detto_calliope «muta»)
+        self.history.append({"role": "assistant", "content": conferma or "Fatto."})
         self.salva_conversazione()
 
     def record_courtesy(self, user_text: str, reply: str):

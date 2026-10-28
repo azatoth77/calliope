@@ -1009,9 +1009,13 @@ conversazione a voce (a differenza dello scritto), e **l'Ufficio solo a chi ammi
     orari (`minori.fuori_orario`, come per la voce e lo scritto);
   - la lista aggiornata va solo allo schermo del tocco (`invia_a`), anche con le schede automatiche
     spente; la TV di casa non mostra la spesa spuntata al supermercato;
-  - riuscita senza la lista nuova, la voce resta spuntata e non si ritocca (`aria-disabled`).
-    Senza un esito entro 30 s (`calliopeSchermo.spunta.attesaMs`) un timer vero rimette la voce com'era
-    con «Non ho ancora avuto risposta». Un'eccezione nel ciclo manda comunque l'esito d'errore;
+  - riuscita senza la lista nuova, la voce resta spuntata e non si ritocca (`aria-disabled`), finché una
+    lista più recente non la toglie o la rimette («rimettilo» a voce: si tocca di nuovo). Senza un esito
+    entro 30 s (`calliopeSchermo.spunta.attesaMs`) un timer vero lo dice com'è: «Calliope è occupata: la
+    spunta arriva appena finisce» (il tocco è ancora nella coda del ciclo), e un altro tocco della stessa
+    voce non rimanda niente. Un'eccezione nel ciclo manda comunque l'esito d'errore (seconda revisione);
+  - nella storia il turno del tocco chiude con la conferma di Calliope, non detta (`detto_calliope`
+    «muta» negli eventi);
   - limite noto: `Liste.ultimo_cambio` tiene in memoria l'ora dell'ultima voce tolta, quindi dopo un
     riavvio il pallino si accende solo per le aggiunte.
 

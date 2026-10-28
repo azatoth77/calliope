@@ -143,14 +143,15 @@ def atti_nel_codice() -> dict[str, list[str]]:
             nome = f.attr if isinstance(f, ast.Attribute) else f.id if isinstance(
                 f, ast.Name) else ""
             arg = None
-            if nome in ("di", "di_e_aspetta", "announce") and len(n.args) >= 2:
+            # muta (28/10): la frase che entra nella conversazione senza la voce (il tocco)
+            if nome in ("di", "di_e_aspetta", "announce", "muta") and len(n.args) >= 2:
                 arg = n.args[1]
             elif nome == "_marca" and len(n.args) >= 3:
                 arg = n.args[2]
             for k in n.keywords:
-                if k.arg == "atto" and nome in ("di", "di_e_aspetta", "announce", "_marca"):
+                if k.arg == "atto" and nome in ("di", "di_e_aspetta", "announce", "_marca", "muta"):
                     arg = k.value
-            if nome in ("di", "di_e_aspetta", "announce", "_marca") and arg is not None:
+            if nome in ("di", "di_e_aspetta", "announce", "_marca", "muta") and arg is not None:
                 for a in _costanti(arg):
                     usati.setdefault(a, []).append(f"{rel}:{n.lineno}")
         # Le tuple (autore, atto) restituite da Ciclo._autore
