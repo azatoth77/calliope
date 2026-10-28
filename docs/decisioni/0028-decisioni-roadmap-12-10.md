@@ -29,7 +29,9 @@ valgono per più aree; quelle di una sola voce sono nella coda di [`roadmap.md`]
    dei tutori; gli ospiti restano fuori.]* Oggi niente di questo è nel codice: gli eventi ruotano a 7 giorni
    (`eventi_giorni`) e l'audio si salva solo per il debug.
 2. **Un piano unico della memoria (T4).** Prima di aggiungere un modello sulla DGX (immagini,
-   secondo parere per lo studio, giudice di sicurezza, revisione notturna) si scrive il suo posto in
+   secondo parere per lo studio *[storico: quello degli esercizi, tolti il 28/10 con lo Studio
+   rifatto da capo, #279, decisione [0035](0035-studio.md)]*, giudice di sicurezza, revisione
+   notturna) si scrive il suo posto in
    un budget unico, quello di `calliope stato --piano`. Un modello entra solo dentro il budget.
 3. **Il profilo ridotto da 8 GB è un vincolo di progetto (V7, E11).** La proposta di toglierlo è
    stata **ribaltata**: Calliope deve poter girare anche in forma ridotta, senza tutte le funzioni,
@@ -81,7 +83,8 @@ decisione propria.
   dati possibile: serve il codice della conservazione (cartella privata, durata, esclusione di
   minori e ospiti, comando per svuotare), e i dati restano fuori dal repository pubblico.
 - `calliope stato --piano` diventa il posto dove si scrive il budget di memoria; immagini (circa
-  16 GB stabili da liberare) e secondo parere con il modello dell'agente aspettano quel budget.
+  16 GB stabili da liberare) e secondo parere con il modello dell'agente aspettano quel budget
+  (*[storico: il secondo parere era quello degli esercizi, tolti il 28/10, #279]*).
 - Il profilo ridotto va progettato davvero: oggi in roadmap era una riga «non definita». Ogni lavoro
   nuovo dice cosa fa nel profilo ridotto; le prove col modello girano anche sul profilo piccolo.
 - Musica e mappe non aspettano la DGX in casa; la musica si progetta dopo la rilettura della ricerca

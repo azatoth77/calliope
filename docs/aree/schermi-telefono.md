@@ -454,6 +454,10 @@ risultato del lavoro appena annunciato (che non sta in quell'archivio).
 
 ## Scheda degli esercizi (08/10, ramo `esercizi-pilota`)
 
+*[storico: le schede `esercizio` ed `esercizi_riepilogo`, il loro disegno e `POST /api/esercizio` sono
+tolti il 28/10 con gli esercizi (#279, decisione [0035](../decisioni/0035-studio.md)); la tessera Studio di Le mie cose resta e dice
+«arriva presto», senza conto, fino al passo 4.5 (#284).]*
+
 Tipo `esercizio` (personale, chiave `esercizi:<persona>`) e `esercizi_riepilogo` (per i tutori),
 disegnati in `schermo.js` (`DISEGNA.esercizio`, `DISEGNA.esercizi_riepilogo`): domanda grande,
 campo per scrivere o pulsanti delle scelte, esito, «Un indizio», «Salta», «Secondo me è

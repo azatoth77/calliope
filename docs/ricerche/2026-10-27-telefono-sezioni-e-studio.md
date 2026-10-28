@@ -395,7 +395,9 @@ soluzioni; conti e correzioni dal codice; giudizio a parole senza voto; il progr
 della classe e del periodo; «a che punto siete»; la pagina del libro chiesta se manca; il tutore che
 vede; orari e tempo; l'audio che non si salva; i materiali caricati come dati non fidati.
 
-**Cosa c'è già nel codice**: il tool `esercizi` con le azioni `inizia`, `interroga`, `rispondi`,
+*[storico: il paragrafo qui sotto descrive il codice al 27/10; il 28/10 il vecchio processo degli
+esercizi è tolto per intero (#279) e lo Studio si rifà da capo, decisione
+[0035](../decisioni/0035-studio.md).]* **Cosa c'era nel codice**: il tool `esercizi` con le azioni `inizia`, `interroga`, `rispondi`,
 `aiuto`, `salta`, `ripeti`, `segnala`, `soluzione`, `pausa`, `riepilogo`, `a_che_punto`,
 `argomenti`; il registro `esercizi_tentativi` (persona, materia, argomento, esercizio, esito,
 suggerimenti, secondi, canale), `esercizi_punto` («a che punto siete»), `esercizi_banco`,
@@ -476,7 +478,7 @@ il tutore.
   correzione con la spiegazione e, se sbagliata, il rimando al paragrafo.
 - **Foto di un problema**: la stessa schermata, partendo da una foto; la soluzione resta a passi
   guidati.
-- **Codice di oggi**: è il tool `esercizi` (`inizia`, `rispondi`, `aiuto`, `salta`) e la scheda
+- **Codice di oggi** (*storico: tolto il 28/10, #279*): è il tool `esercizi` (`inizia`, `rispondi`, `aiuto`, `salta`) e la scheda
   `esercizio`. **Nuovo**: domande generate dai materiali della verifica per le materie non
   calcolabili, con la riga di origine e il secondo parere del modello dell'agente (S2 della
   roadmap) prima di essere proposte. **Decisione del 27/10**: all'inizio il secondo parere basta,
@@ -518,7 +520,7 @@ il tutore.
 - **Mostra**: le domande e le risposte come una conversazione; «Cosa cerco nella risposta» con i
   criteri spuntati man mano; «Rispondi», «Basta così»; «alla fine un giudizio a parole; la voce non
   la tengo».
-- **Codice di oggi**: è `esercizi azione=interroga` con i criteri di `programma/interrogazioni.yaml`.
+- **Codice di oggi** (*storico: tolto il 28/10, #279*): è `esercizi azione=interroga` con i criteri di `programma/interrogazioni.yaml`.
   **Nuovo**: criteri tratti dai materiali della verifica, mostrati mentre si risponde; l'ascolto
   lungo senza nome (#50) serve qui.
 
@@ -528,7 +530,7 @@ il tutore.
   esercizi giusti; la verifica (piano seguito, padronanza e com'era, argomenti deboli); «Da guardare
   tu» (interrogazione col giudizio incerto, esercizi a campione, argomenti tratti dai materiali);
   Regole (orari, «Soluzioni intere: mai»); «Vedi come la vede Sofia».
-- **Codice di oggi**: `esercizi azione=riepilogo`, gli esercizi a campione (`esercizi_campione`),
+- **Codice di oggi** (*storico: tolto il 28/10, #279*): `esercizi azione=riepilogo`, gli esercizi a campione (`esercizi_campione`),
   le segnalazioni.
 
 #### Studio 10 · Mappa concettuale [StudioMappa]
@@ -772,6 +774,9 @@ Ogni passo si prova da solo; quelli dello studio passano dall'ombra.
 4. **Studio, base.** Verifica, materiali (fotocamera multipagina, controllo e ordine, lettura come
    lavoro, conferma degli argomenti), piano a giorni, la home dello Studio, il canale «tocco» e la
    vista aperta nei dati del turno (capitolo 0); le attività sono quelle di oggi (`esercizi`).
+   *[storico: superato il 28/10; gli esercizi sono tolti (#279) e l'attività del giorno è «leggi le
+   pagine X–Y» del piano, con le carte (#246) subito dopo il passo 4, decisione
+   [0035](../decisioni/0035-studio.md).]*
 4b. **Resoconto delle sessioni e riepilogo della verifica** come proiezioni dei tentativi e degli
    eventi.
 5. **Padronanza in ombra**, poi mostrata.

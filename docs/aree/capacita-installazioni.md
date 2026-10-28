@@ -416,7 +416,8 @@ registro delle versioni» (falso: c'è CHANGELOG.md) e «il mio codice risiede�
 diversi server» (falso: gira in locale). Tre cambiamenti:
 
 - **Aree.** `capacita.AREE` raggruppa le capacità del registro e i tool senza capacità propria
-  (ora e conti, foto e file, sviluppo, esercizi) in 11 aree; `capacita.aree(registro,
+  (ora e conti, foto e file, sviluppo, esercizi) in 11 aree (*storico: dal 28/10 10, tolta l'area
+  «i compiti» con gli esercizi e `compiti_aiuto`, #279*); `capacita.aree(registro,
   tool_names)` dice quali ci sono per chi parla (una capacità attiva o un suo tool ammesso a
   quel livello, da `ToolRegistry.schemas_for`). «Cosa sai fare?» dice solo i nomi brevi («la
   casa, l'agenda, le ricerche, i documenti, il computer…», senza «e» né virgole dentro un

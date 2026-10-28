@@ -118,7 +118,7 @@ Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
   ([agenti-estensioni](aree/agenti-estensioni.md)).
 - **Esercizi** (12/10): logica, fisica e chimica con le unità dette e lette; l'indice del programma
   ministeriale (Indicazioni 2012 e 2025) come limite stretto per classe e periodo, «a che punto
-  siete», interrogazioni come modalità degli esercizi ([minori](aree/minori.md)).
+  siete», interrogazioni come modalità degli esercizi ([minori](aree/minori.md)). *[storico: tolti il 28/10 con lo Studio rifatto da capo, #279, decisione [0035](decisioni/0035-studio.md)]*
 
 ### Fatto dal 07/10 al 09/10 (storico)
 
@@ -131,7 +131,7 @@ Dettagli in [`../CHANGELOG.md`](../CHANGELOG.md) e nei documenti d'area.
   sviluppo sugli schermi ([agenti-estensioni](aree/agenti-estensioni.md),
   [schermi-telefono](aree/schermi-telefono.md)).
 - **Modulo studio, primo passo**: esercizi generati e corretti dal programma, matematica e
-  italiano ([minori](aree/minori.md)); minori: segnali di pericolo poco chiari a due cancelli.
+  italiano ([minori](aree/minori.md)) *[storico: tolti il 28/10 con lo Studio rifatto da capo, #279, decisione [0035](decisioni/0035-studio.md)]*; minori: segnali di pericolo poco chiari a due cancelli.
 - **Taratura della macchina**, fasi 0–2: inventario, catalogo, `calliope stato --piano` in sola
   lettura ([capacita-installazioni](aree/capacita-installazioni.md)); voce: prima frase a pezzi,
   taratura di Piper, Piper sulla GPU.
@@ -446,6 +446,13 @@ voce raccontava male gli esiti, i comandi del flusso si perdevano.
 
 ### 4. Studio, immagini, sicurezza, estensioni (S1–S13)
 
+*[storico per S1–S5: il 28/10 lo Studio si rifà da capo (decisione [0035](decisioni/0035-studio.md),
+epic #251, passo 4 nella #243) e il vecchio processo degli esercizi è tolto (#279), con le materie
+calcolabili, l'indice del programma e l'interrogazione come modalità degli esercizi. Le voci S1–S5
+qui sotto restano come storia; il piano dello Studio è nel progetto
+[`ricerche/2026-10-27-telefono-sezioni-e-studio.md`](ricerche/2026-10-27-telefono-sezioni-e-studio.md)
+e nelle issue #243–#250, #278, #280–#285.]*
+
 1. **Materie calcolabili** (S1): logica, fisica e chimica con i numeri, con lo stesso schema della
    matematica ([`ricerche/2026-10-08-esercizi.md`](ricerche/2026-10-08-esercizi.md)). **Fatta il
    12/10** (ramo `materie-calcolabili`): logica (sequenze, insiemi, vero o falso), fisica
@@ -595,7 +602,8 @@ Le voci passate nella coda del 12/10 stanno lassù; qui restano le altre.
 - Ponte MCP verso Home Assistant, biblioteca, musica (le estensioni usano già la cornice stdio).
 - Recupero dei tool con bge-m3 solo oltre 40–50 tool: oggi i tool sono 65 schemi *[09/10: 72,
   più `esercizi` con un minore in casa]* *[14/10: 75 con tutti i servizi, più quelli che dipendono
-  dall'installazione: minori, stanza, conoscenti, meteo]* e la scelta regge; da rimisurare se la qualità scende.
+  dall'installazione: minori, stanza, conoscenti, meteo]* *[28/10: ancora 75; i tool dei minori
+  scendono da quattro a due, tolti `compiti_aiuto` ed `esercizi`, #279]* e la scelta regge; da rimisurare se la qualità scende.
   *[16/10: superata dalla misura della preselezione (ricerca del 15/10, § 7): un sottoinsieme che
   cambia rompe la cache del prefisso e gli embedding fanno peggio sul banco.]*
 - Casa: conferme a secondo fattore per i domini delicati; direzione opposta (HA che usa

@@ -9,7 +9,7 @@ L'analisi delle regole del 09/10 ([0008](0008-regole-deterministiche-solo-in-for
 mostrato che lo stato del dialogo esiste ma è sparso: tre contenitori con vite diverse (la
 conversazione per persona, il contesto per satellite, la risposta in corso) e una decina di stati
 paralleli nei servizi (offerte dei lavori, delle installazioni, proposta dello sviluppo, cancelli dei
-minori, esercizi). Domande come «c'è una proposta aperta?», «è la stessa persona?», «questo sì
+minori, esercizi; *[storico: gli esercizi tolti il 28/10, #279, decisione [0035](0035-studio.md)]*). Domande come «c'è una proposta aperta?», «è la stessa persona?», «questo sì
 basta?» hanno da tre a sette risposte. Dal codice e dal registro (1437 turni, 02–09/10) escono dieci
 stati che rischiano di non essere gestiti: per esempio una proposta persa da uno stop detto mentre
 Calliope la sta facendo, o un «no» a una domanda dell'agente che lascia il lavoro ad aspettare due ore.
