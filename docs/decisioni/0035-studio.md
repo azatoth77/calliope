@@ -30,8 +30,12 @@ amministra è venuta prima delle domande.
 **Premessa: niente del vecchio.** Testuale, di chi amministra (28/10): «niente del vecchio processo
 di esercizi è da tenere. Molte delle cose fatte erano meri test senza scopo». Lo Studio si
 disegna dal § 5 del progetto e dalle tavole del canvas, non dal codice di prima. Calliope non è in
-produzione: niente compatibilità e niente migrazione dei dati vecchi (le righe `esercizi_*` in
-`memoria.db` si lasciano o si tolgono a mano una volta). Se allo Studio servirà un indice del
+produzione: niente compatibilità e niente migrazione dei dati vecchi. Le tabelle dismesse
+(`esercizi_*` e `compiti_giorno`, con domande, risposte e note dei ragazzi) **si tolgono da sole**
+all'avvio, una volta, con `DROP TABLE IF EXISTS` (`conserva.togli_tabelle_dismesse`, chiamata da
+`memory.Memory` all'apertura di `memoria.db`, con una riga nel registro): sulla DGX al primo
+aggiornamento, senza passi a mano (revisione della PR #292; *storico: la prima stesura diceva «si
+lasciano o si tolgono a mano una volta»*). Se allo Studio servirà un indice del
 programma, lo si progetta da capo dopo il passo 8.
 
 Le cinque risposte di chi amministra alle domande dell'analisi (28/10):
@@ -40,7 +44,10 @@ Le cinque risposte di chi amministra alle domande dell'analisi (28/10):
    carte col ripasso dilazionato (#246) si anticipano subito dopo il passo 4.
 2. **`compiti_aiuto` si toglie ora.** Nei dati del turno di un minore con i compiti guidati
    (`compiti: guida` del preset) resta solo la regola «mai la soluzione intera», senza conteggio
-   dei tentativi né avviso ai tutori. `calcola` dà sempre il risultato. L'esercizio guidato e la
+   dei tentativi né avviso ai tutori. `calcola` dà sempre il risultato **al modello**, che gli
+   serve per controllare la risposta del ragazzo; a un minore con `compiti: guida` la scheda
+   «Calcolo» non va sullo schermo (revisione della PR #292: la regola dice «nemmeno il risultato
+   di un conto», e varrebbe a voce ma non sul telefono). L'esercizio guidato e la
    «Foto di un problema» si disegnano da capo nello Studio, nella issue #278.
 3. **Le foto delle pagine** si fanno sempre dallo schermo personale, dentro gli orari, come i
    tocchi, anche fuori da una conversazione cominciata a voce.
@@ -101,8 +108,11 @@ il passo 4.5.
   compiti» di «cosa sai fare?», le voci nella politica e nella preselezione.
 - Negli schermi `POST /api/esercizio`, le schede `esercizio` ed `esercizi_riepilogo` e il loro
   disegno, «esercizio» di `schermo_mostra`. La tessera Studio di Le mie cose resta al suo posto e
-  dice «arriva presto», senza conto, finché il passo 4.5 non la rifà.
-- Le tabelle `esercizi_*` dalla conservazione e le otto prove degli esercizi.
+  dice «arriva presto», senza conto, finché il passo 4.5 non la rifà. La vedono tutte le persone di
+  casa, anche gli adulti e anche senza minori in casa (lo Studio è di tutti, punto 5); prima, senza
+  il servizio degli esercizi, diceva «non disponibile».
+- Le tabelle `esercizi_*` dalla conservazione, e le tabelle stesse da `memoria.db` all'avvio
+  (`esercizi_*` e `compiti_giorno`, una volta sola); le otto prove degli esercizi.
 
 Restano, perché li usa altro: tutori, preset, orari, avvisi ai tutori, guardiano, la chiave
 `compiti: guida | libero` del preset (anche per `nota_documento`). Si sono spostati

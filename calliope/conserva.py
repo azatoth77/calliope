@@ -723,6 +723,38 @@ TABELLE_MEMORIA = (("richieste_tutori", "minore", "creata"),)
 # Le preferenze che non scadono col tempo ma vanno via con i dati della persona (27/10):
 # (tabella, colonna della persona). L'accento scelto in Io › Aspetto (schermi/aspetto.py)
 TABELLE_PREFERENZE = (("aspetto_preferenze", "persona"),)
+# Le tabelle dismesse di memoria.db (28/10, revisione della PR #292): quelle degli esercizi e il
+# riepilogo dei compiti, tolti con la #279. Avevano domande, risposte e note dei ragazzi, e
+# nessuno le ruota né le svuota più: si tolgono da sole, una volta, all'apertura della memoria
+# (`togli_tabelle_dismesse`, da memory.Memory), con una riga nel registro
+TABELLE_DISMESSE = ("esercizi_tentativi", "esercizi_segnalazioni", "esercizi_preferenze",
+                    "esercizi_punto", "esercizi_banco", "compiti_giorno")
+
+
+def togli_tabelle_dismesse(db, log=print) -> list[str]:
+    """`DROP TABLE IF EXISTS` delle TABELLE_DISMESSE, una volta sola (modulo «dismesse» in
+    `meta_schema`: un modulo nuovo, che una versione di prima non conosce e quindi non la
+    mette in sola lettura). Toglie anche la versione dello schema «esercizi». Le tabelle tolte,
+    per la riga nel registro; [] se non c'era niente o era già fatto."""
+    from .persistenza import prepara_schema
+    tolte: list[str] = []
+
+    def v1(d):
+        nomi = {r[0] for r in d.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        d.execute("PRAGMA secure_delete = ON")
+        for t in TABELLE_DISMESSE:
+            if t in nomi:
+                tolte.append(t)
+            d.execute(f"DROP TABLE IF EXISTS {t}")
+        if "meta_schema" in nomi:
+            d.execute("DELETE FROM meta_schema WHERE modulo = 'esercizi'")
+
+    prepara_schema(db, "dismesse", [v1])
+    if tolte:
+        log(f"[CONSERVA] tabelle dismesse tolte da memoria.db (esercizi e compiti, #279): "
+            f"{', '.join(tolte)}")
+    return tolte
+
 
 
 class Conservazione:

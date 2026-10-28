@@ -1335,6 +1335,42 @@ try:
                  limite=datetime.date.today()) == 0
              and not (tmp / "non-esiste.db").exists())
 
+    # ───────── tabelle dismesse (28/10, revisione della PR #292) ─────────
+    # Un memoria.db di prima della #279, con le tabelle degli esercizi e dei compiti e le righe
+    # dei ragazzi: all'apertura della memoria (come all'avvio) non ci sono più, una volta sola,
+    # con la riga nel registro; le altre tabelle restano
+    from calliope.memory import Memory
+    vecchio = tmp / "memoria-vecchia.db"
+    db = sqlite3.connect(vecchio)
+    for t in C.TABELLE_DISMESSE:
+        db.execute(f"CREATE TABLE {t} (persona TEXT, testo TEXT)")
+        db.execute(f"INSERT INTO {t} (persona, testo) VALUES ('p-min', 'sette per otto: 54')")
+    db.execute("CREATE TABLE meta_schema (modulo TEXT PRIMARY KEY, versione INTEGER NOT NULL)")
+    db.execute("INSERT INTO meta_schema (modulo, versione) VALUES ('esercizi', 3)")
+    db.execute("CREATE TABLE richieste_tutori (minore TEXT, creata TEXT)")
+    db.commit()
+    db.close()
+    import contextlib
+    import io
+    uscita = io.StringIO()
+    with contextlib.redirect_stdout(uscita):
+        Memory(str(vecchio)).db.close()
+    db = sqlite3.connect(vecchio)
+    nomi = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    moduli = {r[0] for r in db.execute("SELECT modulo FROM meta_schema")}
+    db.close()
+    verifica("tabelle dismesse: dopo l'avvio non ci sono più, la riga nel registro",
+             not (set(C.TABELLE_DISMESSE) & nomi) and "tabelle dismesse tolte" in uscita.getvalue()
+             and "esercizi_tentativi" in uscita.getvalue(), f"{sorted(nomi)} {uscita.getvalue()!r}")
+    verifica("tabelle dismesse: le altre restano, la versione «esercizi» via, «dismesse» segnata",
+             {"richieste_tutori", "facts"} <= nomi and "esercizi" not in moduli
+             and "dismesse" in moduli, f"{sorted(nomi)} {sorted(moduli)}")
+    uscita = io.StringIO()
+    with contextlib.redirect_stdout(uscita):
+        Memory(str(vecchio)).db.close()
+    verifica("tabelle dismesse: una volta sola (alla seconda apertura nessuna riga)",
+             "tabelle dismesse" not in uscita.getvalue(), uscita.getvalue())
+
     # ───────── da terminale ─────────
     cart = tmp / "dati"
     cart.mkdir()

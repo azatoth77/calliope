@@ -1438,14 +1438,25 @@ vecchio processo di esercizi è da tenere. Molte delle cose fatte erano meri tes
 - **I compiti di un minore** (domanda 2): nei dati del turno, con `compiti: guida`, la sola regola
   `minori.REGOLA_COMPITI` («per i compiti di scuola mai la soluzione intera, nemmeno il risultato
   di un conto: domande guida e indizi, e controlli la sua risposta»), senza conteggio dei tentativi
-  né avviso ai tutori. `calcola` dà sempre il risultato: serve a controllare la risposta, e la
-  regola dice di non dirlo. L'esercizio guidato e la «Foto di un problema» si rifanno nella #278.
+  né avviso ai tutori. `calcola` dà sempre il risultato al modello: serve a controllare la
+  risposta, e la regola dice di non dirlo. Dalla revisione della PR #292 a un minore con
+  `compiti: guida` la scheda «Calcolo» non va sullo schermo (`minori.compiti_guidati`, regola
+  `minore_calcolo_senza_scheda`): prima la regola valeva a voce, ma sul telefono compariva «3/4+1/2
+  = 1,25». L'esercizio guidato e la «Foto di un problema» si rifanno nella #278.
 - **La tessera Studio** di Le mie cose resta al suo posto e dice «arriva presto», senza conto, fino
-  al passo 4.5 (#284).
+  al passo 4.5 (#284); la vedono tutti, anche gli adulti.
+- **Le tabelle dismesse** (`esercizi_*` e `compiti_giorno`) si tolgono da sole all'apertura di
+  `memoria.db`, una volta sola, con la riga «[CONSERVA] tabelle dismesse tolte…» nel registro
+  (`conserva.togli_tabelle_dismesse`, modulo «dismesse» in `meta_schema`; revisione della PR #292).
+  Sulla DGX al primo aggiornamento.
 - **Prove**: in `prova_minori` una bambina che dice «fammi tu il compito» in un turno di `Brain` col
   modello finto riceve la regola nei dati del turno, e tra gli strumenti non ci sono né
   `compiti_aiuto` né `esercizi`; `calcola` dà il risultato anche a lei; contrari: la stessa frase di
-  un adulto e di un'adolescente coi compiti liberi, senza la regola.
+  un adulto e di un'adolescente coi compiti liberi, senza la regola. Dalla revisione: il conto per i
+  compiti di Bianca in un turno di `Brain` non manda la scheda «Calcolo» e il modello riceve il
+  risultato (contrari: Dario e Sara ricevono la scheda); gli avvisi ai tutori provati direttamente
+  (un avviso «gioco» ai due tutori: scheda personale, annuncio, detto una volta). In `prova_conserva`
+  un db con le tabelle vecchie: dopo l'apertura non ci sono più, una volta sola.
 - **Conti**: i 75 schemi in un'installazione con tutti i servizi non cambiano (i due tool tolti
   erano fra quelli che dipendono dall'installazione); il registro con tutto acceso passa da 86 a 84
   (`build_registry` da 79 a 77, contati il 28/10); le capacità restano 19, le aree di «cosa sai

@@ -757,6 +757,12 @@ def _calcola(ctx: ToolContext, espressione: str) -> dict:
         return {"ok": False, "errore": "risultato non finito"}
     out = {"ok": True, "espressione": expr, "risultato": _format_it(value),
            "da_dire": _to_say(value)}
+    # Un minore coi compiti guidati (28/10, revisione della PR #292): il risultato al modello
+    # sì, la scheda «Calcolo» sullo schermo no (vincolo di prudenza, principio 10)
+    from .. import minori as _minori
+    if _minori.compiti_guidati(ctx):
+        note_rule(ctx, "minore_calcolo_senza_scheda")
+        return out
     return _con_scheda(out, ctx, lambda: schede.calcolo(expr, out["risultato"]))
 
 

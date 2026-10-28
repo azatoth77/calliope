@@ -569,7 +569,9 @@ LEGAMI = [
     ("calliope/tools/allegati.py", ["prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/cassetto.py", ["prova_cassetto.py"]),
     ("calliope/tools/minori.py", ["prova_minori.py", "prova_giochi.py"]),
-    # Funzioni spostate dagli esercizi tolti (28/10, #279)
+    # Funzioni spostate dagli esercizi tolti (28/10, #279); le tabelle dismesse tolte
+    # all'apertura della memoria (revisione della PR #292)
+    ("calliope/memory.py", ["prova_conserva.py"]),
     ("calliope/numeri.py", ["prova_stanza_eco.py"]),
     ("calliope/pronuncia.py", ["prova_pronuncia.py"]),
     ("calliope/speaker_id.py", ["prova_voci_famiglia.py", "prova_conferme.py"]),

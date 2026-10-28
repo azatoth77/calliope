@@ -127,16 +127,17 @@ agenti sullo stesso portatile; le cause e le misure):
   Regola: una prova che non ripete la frase usa una sintesi deterministica; chi la ripete (come
   `prova_satellite`) usa le varianti con il rumore.
 - **`time.monotonic()` piccolo dopo l'avvio.** Scrivere 0.0 per «tanto tempo fa» vale solo
-  se il computer è acceso da più della soglia: `prova_esercizi_programma` (10 minuti),
-  `prova_contesto_agenti` (10 minuti) e `prova_meteo_casa` (5 minuti) cadevano nella prima suite
-  dopo un riavvio. Si scrive `prove.orologio.fa(secondi)`, e il contrario gira con
+  se il computer è acceso da più della soglia: `prova_contesto_agenti` (10 minuti) e
+  `prova_meteo_casa` (5 minuti) cadevano nella prima suite dopo un riavvio (*storico: anche una
+  prova degli esercizi, tolta il 28/10 con la #279*). Si scrive `prove.orologio.fa(secondi)`, e il contrario gira con
   `appena_acceso(modulo)` (il `time` di quel modulo vede un computer acceso da 5 s). Il codice
   era giusto: le sentinelle sono `None` o `-1e9`.
 - **L'ora del giorno** (18/10, #151). Una scena scritta «ore prima di adesso» e controllata
   con un formato fisso cade a certe ore. `prova_stanza_cerca` voleva «HH:MM», e fra mezzanotte
   e le 3 le righe di tre ore prima diventavano «ieri 23:42»: l'hook fermava ogni commit di
-  notte. `prova_esercizi` usava la pausa «00:00-23:59» per dire «sempre fuori orario», ma la
-  fine non è compresa e nel minuto 23:59 non lo era. Regola: la scena gira a un'ora nota con
+  notte. Una pausa «00:00-23:59» per dire «sempre fuori orario» non basta, perché la fine non è
+  compresa e nel minuto 23:59 non lo era (*storico: era una prova degli esercizi, tolta il 28/10
+  con la #279*). Regola: la scena gira a un'ora nota con
   `prove.orologio.ora_del_giorno(12, 0)`, che sposta `time.time()` del processo, e le ore della
   notte si provano apposta, ognuna con la sua forma attesa. Una fascia «sempre» si scrive con
   due fasce che coprono il giorno. Ricognizione del 18/10: le 186 prove dei livelli 1 e 2 con
@@ -214,7 +215,9 @@ ascolto (come le altre prove di un `--completo`).
   (6 su 6 verdi prima e dopo). «Durata giusta» (14/10 14:54 e 15:02): il microfono finto a 44,1 kHz
   di Chromium perde audio sotto carico (ritmo 0,923 e 0,942) mentre la catena di Calliope (16 kHz
   contro contesto) torna al centesimo: l'orologio ora con 0,15 (i guasti cercati sono ×1,5 e ×2).
-- **`prova_esercizi_voce` (7 cadute del 14/10): la prova, né il codice né il carico.** «Quanto fa
+- *[storico: la prova è tolta il 28/10 con gli esercizi, #279; la lezione resta: si cerca il
+  numero intero, non un pezzo di testo]* **`prova_esercizi_voce` (7 cadute del 14/10): la prova,
+  né il codice né il carico.** «Quanto fa
   443 più 353?» contiene «3 più 3», e la verifica «la domanda inventata (3 più 3) non si dice»
   cercava il pezzo di testo: con i numeri a caso cadeva una volta su ~45 (3 su 130 nelle misure di
   prima). Ora il numero intero (`(?<!\d)3 più 3(?!\d)`, lo stesso per «125 più 87»): **90 su 90**

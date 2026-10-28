@@ -467,6 +467,15 @@ def preset(prof, oggi: datetime.date | None = None, reg: Regole | None = None) -
 
 # ─────────────────────────── chi parla ───────────────────────────
 
+def compiti_guidati(ctx) -> bool:
+    """Chi parla è un minore con i compiti guidati (`compiti: guida`, 28/10, #279): `calcola`
+    dà il risultato al modello, che gli serve per controllare la risposta, ma niente scheda
+    «Calcolo» sullo schermo (la regola dice «nemmeno il risultato di un conto»)."""
+    prof = profilo(ctx)
+    p = preset(prof) if prof is not None else None
+    return p is not None and p.get("compiti") == "guida"
+
+
 def profilo(ctx):
     """Il profilo di chi parla per la prudenza dei minori (o None: ospite). Una frase rimasta
     del proprietario di un satellite personale ma incerta con un minore (09/10, regola

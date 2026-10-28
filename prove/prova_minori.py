@@ -465,6 +465,79 @@ verifica("calcola per Bianca (compiti guidati): il risultato, niente «modalità
          and "nascosto" not in json.dumps(out, ensure_ascii=False), str(out))
 out, _ = chiama("calcola", {"espressione": "3/4+1/2"}, "Dario")
 verifica("contrario: calcola per Dario, lo stesso risultato", out.get("risultato") == "1,25")
+# La scheda «Calcolo» (revisione della PR #292): a un minore coi compiti guidati il risultato
+# arriva al modello, che controlla la sua risposta, ma niente scheda sullo schermo
+class _BackendConto:
+    def __init__(self):
+        self.visti, self.n = [], 0
+
+    def stream(self, messages, tools):
+        self.visti.append([dict(m) for m in messages])
+        self.n += 1
+        if self.n == 1:
+            yield ("calls", [{"id": "c1", "name": "calcola",
+                              "arguments": {"espressione": "3/4+1/2"}}])
+        else:
+            yield ("text", "Prova tu: quanto ti viene?")
+
+
+def turno_conto(chi: str):
+    HUB.schede.clear()
+    bc = Brain.__new__(Brain)
+    bc.cfg, bc.tools, bc.history = cfg, TOOLS, []
+    bc.tool_ctx = ctx_di(chi)
+    bc.tool_ctx.schermi = HUB
+    bc.backend = _BackendConto()
+    "".join(bc.stream_reply("Quanto fa tre quarti più un mezzo? È per i compiti.",
+                            bc.tool_ctx.speaker_ctx.current_level))
+    al_modello = " ".join(str(m.get("content") or "") for m in bc.backend.visti[-1]
+                          if m.get("role") == "tool")
+    calcoli = [sc for sc, _ in HUB.schede if sc.get("tipo") == "calcolo"]
+    return al_modello, calcoli, bc
+
+
+al_modello, calcoli, bc = turno_conto("Bianca")
+verifica("conto per i compiti di Bianca: nessuna scheda «Calcolo» agli schermi",
+         calcoli == [] and "minore_calcolo_senza_scheda" in (bc.rules_fired() or ()),
+         str(calcoli))
+verifica("…e il modello riceve il risultato per controllare la sua risposta", "1,25" in al_modello,
+         al_modello[:300])
+def calcola_con_schermi(chi):
+    c = ctx_di(chi)
+    c.schermi = HUB
+    return json.loads(TOOLS.call("calcola", {"espressione": "3/4+1/2"}, c,
+                                 c.speaker_ctx.current_level))
+
+
+out = calcola_con_schermi("Bianca")
+verifica("calcola per Bianca con gli schermi: niente «scheda» nel risultato, il risultato sì",
+         "scheda" not in out and out.get("risultato") == "1,25", str(out))
+verifica("contrario: calcola per Dario con gli schermi porta la scheda",
+         "scheda" in calcola_con_schermi("Dario"))
+al_modello, calcoli, _ = turno_conto("Dario")
+verifica("contrario: lo stesso conto di Dario manda la scheda «Calcolo» col risultato",
+         len(calcoli) == 1 and "1,25" in json.dumps(calcoli[0], ensure_ascii=False)
+         and "1,25" in al_modello, str(calcoli)[:300])
+_, calcoli, _ = turno_conto("Sara")
+verifica("contrario: Sara coi compiti liberi riceve la scheda", len(calcoli) == 1, str(calcoli)[:200])
+# Gli avvisi ai tutori (fino al 28/10 provati attraverso compiti_aiuto; revisione della PR #292):
+# un avviso di un tipo che c'è ancora, «gioco», ai due tutori di Bianca
+HUB.schede.clear()
+av = M.avvisi()
+n = av.manda(BIANCA, "gioco", "Bianca ha chiesto di giocare ai pirati dopo cena.", registry=REG)
+verifica("avviso ai tutori: a Dario e a Elena", n == 2
+         and len(av.da_dire(DARIO.id, segna=False)) == 1
+         and len(av.da_dire(ELENA.id, segna=False)) == 1, str(n))
+verifica("avviso ai tutori: la scheda personale a tutti e due",
+         sorted(m.persona for sc, m in HUB.schede if sc.get("visibilita") == "personale")
+         == ["dario-id", "elena-id"], str([(sc.get("tipo"), getattr(m, "persona", None))
+                                           for sc, m in HUB.schede]))
+frase = av.frase(av.da_dire(DARIO.id))
+verifica("annuncio al tutore con l'argomento e il nome", "pirati" in frase and "Bianca" in frase,
+         frase)
+verifica("detto una volta sola", av.da_dire(DARIO.id) == [])
+av.da_dire(ELENA.id)
+HUB.schede.clear()
 verifica("tema: la nota per la scaletta", "scaletta" in M.nota_documento(ctx_di("Bianca")))
 verifica("contrario: nessuna nota per Dario", M.nota_documento(ctx_di("Dario")) == "")
 
