@@ -1026,3 +1026,50 @@ pagina Liste, la spunta fino all'ingresso, attesa, aggiornamento, rifiuto, 409; 
 «‹ Le mie cose» nelle misure dei tocchi e del contrasto). Da provare sul vero: la spunta sull'iPhone al
 supermercato (la rete lenta: l'attesa dura quanto il giro del ciclo, che aspetta la fine del turno a voce
 in corso), il PC personale in Edge.
+
+## Le mie cose: la pagina Agenda e i tasti del timer (28/10, issue #257, ramo `issue-257-agenda`)
+
+Passo 2b del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md)
+(§ 4.1 e § 4.6), parte di #241, epic #251, insieme alla #262 (il vincolo dei tocchi:
+[sicurezza-politica](sicurezza-politica.md)). Analisi con file e righe nell'issue #257.
+
+- **La pagina Agenda** (`#/cose/agenda`, `POST /api/raccolte` con `{raccolta: "agenda"}`,
+  `raccolte._pagina_agenda`): una scheda `timer` per ogni timer di casa ancora da suonare, in ordine di
+  scadenza, poi tre schede `promemoria` «Oggi», «Domani», «In settimana» con i promemoria e gli
+  appuntamenti della persona (chiavi `agenda:<persona>:<giorno>`, così non sostituiscono la scheda di tutta
+  l'agenda). La vista per giorno è lato server, `agenda.per_giorno` ([memoria-agenda-liste](memoria-agenda-liste.md));
+  la tessera usa la stessa. Le schede sono quelle che esistono: `DISEGNA.promemoria` impara la frase del
+  vuoto («Niente oggi.») e «e altre N più avanti», `schede.timer` porta chi l'ha messo (`chi`, da
+  `owner_name`; un timer di un ospite non ce l'ha), che la pagina scrive («messo da Bianca») solo sugli
+  schermi personali. Tutto in `textContent`.
+- **I tasti del timer** («+1 minuto» e «Ferma»): nella scheda del timer, solo sugli schermi personali con
+  le sezioni (telefono e PC personale), in Adesso e nella pagina Agenda, su una scheda con un timer solo e
+  ancora attivo. Alti e larghi almeno 44 px, con il nome del timer nell'etichetta per chi non vede
+  («Aggiungi un minuto al timer per la pasta»). La pagina manda `{tocco: "timer_piu" | "timer_ferma",
+  chiave}` con la chiave della scheda (`timer:<id>-<creazione>`); `tocchi.prepara` controlla che il timer
+  ci sia ancora, sia un timer (di casa: gli altri tipi dell'agenda sono personali) e abbia la stessa
+  identità (409 «Questo timer non c'è più: è già suonato o è stato fermato.»). Nel ciclo diventano
+  `timer_imposta` con `cambia` «aggiungi» e «1 minuto», e `agenda_annulla`, con il **bersaglio** nel
+  contesto dei tool (`ToolContext.tocco_bersaglio`, lo imposta solo il ciclo): i due tool cambiano quel
+  timer invece di sceglierlo dal testo. Senza, con due timer senza nome («di 5 minuti», «di 10 minuti»)
+  `Agenda.find` ripiega sull'ultimo messo, e «+1 minuto» toccato sul primo cambiava il secondo. Se il
+  timer suona mentre il tocco aspetta nella coda del ciclo, il tool risponde «non c'è più» e non avvia un
+  timer nuovo al suo posto (a voce, con `cambia` e nessun timer da cambiare, lo avvia e lo dice).
+- **Attesa ed errori** come nella spunta: `aria-busy` sui due tasti, quello toccato col bordo
+  dell'accento, «Aggiungo un minuto…» o «Fermo il timer…» nella regione `role="status"` della scheda; la
+  scheda aggiornata (stessa chiave: «+1 minuto» allunga il conto, «Ferma» la fa diventare «annullato
+  alle …») arriva allo schermo del tocco prima dell'esito, che chiude l'attesa; un rifiuto o un errore
+  HTTP libera i tasti e dice il motivo accanto; senza esito entro 30 s «Calliope è occupata: il timer
+  cambia appena finisce», e un altro tocco su quel timer non parte.
+- Scelta: una raccolta con la pagina mostra ciò che dà il server. Un timer finito (o una scheda che il
+  server non ha più) non è nella pagina Agenda, e «Apri» da Adesso porta alla pagina senza quella scheda;
+  prima il timer scaduto restava nel gruppo Agenda di Le mie cose, ora nascosto sotto la pagina.
+- Cache del service worker `calliope-telefono-pagina-v11` (era v10).
+
+Prove: `prova_agenda_pagina` (nuova, livello 1: il vincolo, la vista per giorno ai bordi, i tasti in
+`prepara`, il ciclo con un `ToolRegistry` vero e l'`Agenda` su disco, il server vero);
+`prova_telefono_schermo` e `prova_pc_pagina` (la pagina Agenda dalla tessera, i tasti che mandano il tocco
+giusto col bersaglio, attesa, aggiornamento, rifiuto, 409, i tasti in Adesso; i tasti nelle misure di clic
+e contrasto); `prova_raccolte` adattata (la tessera Agenda ha la pagina; i rifiuti del registro provati col
+vincolo spento, come seconda linea). Da provare sul vero: i tasti sull'iPhone in cucina mentre Calliope
+parla (il tocco aspetta la fine del turno), il PC personale in Edge.
