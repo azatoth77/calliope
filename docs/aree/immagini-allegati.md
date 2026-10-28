@@ -537,3 +537,11 @@ torna agli schermi del tutore. Prove in `prova_cassetto.py` (`prova_tutore_pagin
 conversazione, zona grigia, frase breve no; verificato sì; ragazzo di 15 anni no; un altro adulto
 verificato no; file di persone diverse 409; dopo «esci» di nuovo no; «Tieni» nella cartella del
 tutore, anche a voce).
+
+## La miniatura nella Conversazione degli schermi (29/10, issue #272)
+
+La foto mandata o chiesta (telefono, schermo, webcam, cattura dello schermo) compare nella Conversazione
+degli schermi personali accanto alla frase della persona, con una miniatura piccola sua (144 px, dentro
+gli 8 kB, mai il file), legata al turno giusto solo con l'identità certa e mai a un'altra persona; i file
+con nome, tipo e dimensione. Tenuta e «dimentica» del turno. Quello che vede il modello (`immagini_storia`)
+non cambia. Dettagli in [schermi-telefono](schermi-telefono.md).

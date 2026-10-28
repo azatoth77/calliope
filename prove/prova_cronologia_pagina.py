@@ -510,6 +510,28 @@ def conversazione_tel(p, amb):
                      " visibile: !document.getElementById('scrivi-apri').hidden})") or {}
     verifica("Scrivi resta spento in Conversazione senza una conversazione a voce",
              stato.get("spento") is True or stato.get("visibile") is False, stato)
+    # La miniatura della foto accanto alla frase (29/10, #272): la copia piccola del turno
+    import io
+    from PIL import Image
+    from calliope.immagini import Immagine
+    buf = io.BytesIO()
+    Image.new("RGB", (1200, 900), (180, 120, 60)).save(buf, "JPEG", quality=85)
+    img = Immagine(buf.getvalue(), 1200, 900, fonte="telefono", persona="dario", n=1)
+    m_foto = turno("Quanto ho speso in tutto?", "14,10 euro in tutto.", "Telefono", "scritto")
+    m_foto[0]["_schede"] = [schede.per_conversazione(schede.foto(img))]
+    amb.arch.archivia(Conversazione("persona:dario"), turni(m_foto), "dario", "Dario", ospite=False)
+    sel = f"{T} .scheda-piccola.tipo-foto .piccola-anteprima img"
+    ok = aspetta(lambda: p.valuta(f"(() => {{ const i = document.querySelector('{sel}'); return !!i && i.complete && i.naturalWidth > 0; }})()"), 8)
+    verifica("la miniatura della foto nella risposta del suo turno, caricata",
+             bool(ok) and p.valuta(f"document.querySelector('{T} .conv-turno:last-child .scheda-piccola.tipo-foto') !== null"),
+             p.valuta(f"document.querySelectorAll('{T} .scheda-piccola').length"))
+    tocca(p, f"{T} .scheda-piccola.tipo-foto .piccola-apri")
+    ok = aspetta(lambda: p.valuta("!document.getElementById('strato-scheda').hidden"
+                                  " && !!document.querySelector('#intera-posto .tipo-foto img')"), 5)
+    verifica("…e un tocco apre la miniatura a schermo intero", bool(ok))
+    foto(p, "conversazione-telefono-foto.png", 390, 844, mobile=True)
+    p.valuta("history.back(); 1")
+    aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 3)
 
 
 def main() -> int:

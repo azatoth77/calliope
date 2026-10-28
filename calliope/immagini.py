@@ -127,13 +127,14 @@ def prepara(dati: bytes, lato_max: int = 1280, max_byte: int = 12_000_000,
     return buf.getvalue(), im.width, im.height
 
 
-def miniatura(jpeg: bytes, lato: int = 360) -> str:
-    """La miniatura come data URL (per la scheda sullo schermo): JPEG piccolo."""
+def miniatura(jpeg: bytes, lato: int = 360, qualita: int = 70) -> str:
+    """La miniatura come data URL (per la scheda sullo schermo): JPEG piccolo. Più piccola
+    (`lato`, `qualita`) per la copia nella Conversazione (29/10, #272)."""
     from PIL import Image
     im = Image.open(io.BytesIO(jpeg))
     im.thumbnail((lato, lato))
     buf = io.BytesIO()
-    im.convert("RGB").save(buf, "JPEG", quality=70)
+    im.convert("RGB").save(buf, "JPEG", quality=qualita)
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 

@@ -1478,3 +1478,35 @@ filtri con la conversazione vera della DGX (molti turni con schede).
     («fammi un documento con questi dati» due turni dopo, o `cosa` testo con un turno non riservato in
     mezzo) non è segnata, e la sua copia resta. È lo stesso limite della risposta del modello in quel turno,
     che si archivia in chiaro: il segno vale per il turno riservato e per quello subito dopo.
+
+## La miniatura della foto accanto alla frase nella Conversazione (29/10, issue #272, ramo `issue-272-miniatura-foto`)
+
+Decisione di Dario del 28/10, dopo la revisione della PR #271 (che le aveva tolte: `_conv` False).
+
+- **Legatura al turno giusto**: le miniature di foto e file partono (`Brain.manda_schede`, da
+  `Ciclo._rispondi`) prima che la frase della persona entri nella storia. Restano in attesa (`_attesa`) e
+  `Brain._lega_in_attesa`, chiamata quando il messaggio della persona entra in `_reply`, le lega a quel
+  messaggio. Scelta invece del legame per id della foto: nessun cambio in `ciclo.py`, e la regola è la stessa
+  per foto, file e pagine scansionate.
+- **Quando non si legano**: con l'identità incerta (zona grigia, ospite) non entrano nemmeno in attesa; se
+  quando entra la frase parla un'altra persona (`hub.mittente` di adesso, solo certo) si buttano; dopo
+  `ATTESA_SCHEDE_S` (30 s) senza la frase (un errore, un'altra corsia ha risposto: ogni corsia ha il suo
+  Brain) pure; un turno riservato le perde in `conversazione.turni` come le altre schede. Il segno
+  `_riservata` di `last_private` non vale per loro (è ancora quello della risposta di prima). Una miniatura
+  che parte dopo la frase (le trattenute di un minore) va alla frase di questo turno.
+- **Le catture** chieste a voce (webcam, schermo: `pc_guarda`, `immagine_guarda`) sono schede del tool,
+  dentro la risposta, e si legano come le altre al messaggio di chi le ha chieste.
+- **Dati**: la copia della foto ha una miniatura sua, più piccola di quella dello schermo (`_mini`, lato
+  144 px, JPEG qualità 55, fatta in `schede.foto` e tenuta sul server), mai la miniatura dello schermo né il
+  file; oltre gli 8 kB di `CONV_SCHEDA_MAX` resta il solo rimando, senza i byte. Il file ha nome, tipo e
+  dimensione, mai l'anteprima del testo né le note. Stessa tenuta (60 giorni) e stessa «dimentica» del turno.
+- **La pagina**: la foto è una scheda piccola come le altre, con la miniatura nell'anteprima e a schermo
+  intero (`DISEGNA.foto`, solo un data URL JPEG). Quello che vede il modello (`immagini_storia`) non cambia:
+  le copie non arrivano al modello e non contano nella stima dei token.
+
+Prove: in `prova_conversazione_schede` la copia della foto dentro il tetto e senza la miniatura dello
+schermo, la miniatura troppo grande che diventa rimando, il file senza anteprima; la foto mandata con la
+frase e quella mandata prima (in attesa), una miniatura che parte dopo la frase, la cattura della webcam
+chiesta a voce, il cambio di persona in mezzo, la frase di molto dopo, l'identità incerta, il turno
+riservato, una risposta riservata prima; in `prova_cronologia_pagina` la miniatura caricata nella
+risposta del suo turno e aperta a schermo intero. Da provare sul vero: lo scontrino dal telefono.

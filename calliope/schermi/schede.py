@@ -510,9 +510,16 @@ def foto(img, didascalia: str = "") -> dict:
     """La miniatura (data URL JPEG, ~20 kB) di una foto della conversazione: solo agli schermi
     personali di chi parla. Resta solo nella cronologia in memoria degli schermi."""
     from ..immagini import FONTI, miniatura
+    try:
+        # La miniatura piccola per la Conversazione (29/10, #272): resta sul server finché
+        # per_conversazione la mette nella copia del turno (sotto CONV_SCHEDA_MAX)
+        mini = miniatura(img.jpeg, lato=CONV_FOTO_LATO, qualita=CONV_FOTO_QUALITA)
+    except Exception:  # noqa: BLE001 — senza, la copia è un rimando
+        mini = ""
     return nuova("foto", f"Foto {img.n}", PERSONALE, chiave=f"foto:{id(img)}",
                  src=miniatura(img.jpeg), fonte=FONTI.get(img.fonte, img.fonte),
-                 lato=max(img.larghezza, img.altezza), didascalia=_taglia(didascalia, 200))
+                 lato=max(img.larghezza, img.altezza), didascalia=_taglia(didascalia, 200),
+                 _mini=mini)
 
 
 def allegato(att) -> dict:
@@ -545,7 +552,13 @@ CONV_COPIA = frozenset({"biblioteca", "web", "calcolo", "testo", "lista", "timer
                         "casa", "documento"})
 # (Non `avviso`: gli avvisi ai tutori passano da hub.invia diretto e non si legano mai)
 CONV_RIMANDO = frozenset({"lavoro", "esecuzione", "sviluppo", "gioco", "giochi", "esercizio",
-                          "esercizi_riepilogo", "cassetto", "foto", "allegato", "modulo"})
+                          "esercizi_riepilogo", "cassetto", "modulo"})
+# Le foto e i file della conversazione (29/10, #272): la foto con la sua miniatura piccola
+# (`_mini`, mai la miniatura dello schermo né il file), il file con nome, tipo e dimensione
+# (mai l'anteprima del testo né le note: sono il contenuto del file). Oltre il tetto, un rimando
+CONV_FOTO_LATO = 144
+CONV_FOTO_QUALITA = 55
+CONV_FILE = ("nome", "tipo_file", "categoria", "dimensione")
 # Byte del JSON di una copia (revisione della PR #271: era 16 000; le copie vanno alle pagine
 # con la conversazione)
 CONV_SCHEDA_MAX = 8_000
@@ -567,7 +580,7 @@ def per_conversazione(scheda) -> dict | None:
     if scheda.get("_riservata") or scheda.get("_conv") is False:
         return None
     tipo = str(scheda.get("tipo") or "")
-    if tipo not in CONV_COPIA and tipo not in CONV_RIMANDO:
+    if tipo not in CONV_COPIA and tipo not in CONV_RIMANDO and tipo not in ("foto", "allegato"):
         return None
     base = {"tipo": tipo, "titolo": _taglia(scheda.get("titolo") or "", 120),
             "sezione": str(scheda.get("sezione") or sezione_di(tipo))}
@@ -576,6 +589,18 @@ def per_conversazione(scheda) -> dict | None:
             base[k] = scheda[k][:120]
     if isinstance(scheda.get("creata"), (int, float)):
         base["creata"] = round(float(scheda["creata"]), 3)
+    if tipo in ("foto", "allegato"):
+        import json
+        if tipo == "foto":
+            mini = scheda.get("_mini")
+            copia = ({**base, "src": mini, "storica": True,
+                      **{k: scheda[k] for k in ("fonte", "didascalia") if scheda.get(k)}}
+                     if isinstance(mini, str) and mini.startswith("data:image/jpeg;base64,") else None)
+        else:
+            copia = {**base, "storica": True, **{k: scheda[k] for k in CONV_FILE if scheda.get(k)}}
+        if copia is not None and len(json.dumps(copia, ensure_ascii=False)) <= CONV_SCHEDA_MAX:
+            return copia
+        return {**base, "rimando": True}
     if tipo in CONV_COPIA:
         import json
         copia = {k: v for k, v in scheda.items()

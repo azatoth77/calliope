@@ -97,7 +97,10 @@ def prova_per_conversazione():
 def brain_finto(storia):
     from calliope.brain import Brain
     b = SimpleNamespace(history=storia, last_schede_mandate=[], _rule=lambda n: None)
-    b.lega_scheda_al_turno = lambda c: Brain.lega_scheda_al_turno(b, c)
+    b.lega_scheda_al_turno = lambda c, m=None: Brain.lega_scheda_al_turno(b, c, m)
+    b.ATTESA_SCHEDE_S = Brain.ATTESA_SCHEDE_S
+    b._in_attesa = lambda c, p: Brain._in_attesa(b, c, p)
+    b._lega_in_attesa = lambda m: Brain._lega_in_attesa(b, m)
     return b
 
 
@@ -485,7 +488,8 @@ def prova_peso():
     bf._send_cards = lambda cards, tool: Brain._invia_schede(bf, HubFinto(), cards, DARIO)
     foto = {"tipo": "foto", "titolo": "Foto", "src": "data:image/jpeg;base64,AA"}
     Brain.manda_schede(bf, [foto], "foto")
-    verifica("le miniature di foto e file non si legano al turno di prima", "_schede" not in s[0], s[0])
+    verifica("le miniature di foto e file non si legano al turno di prima (dal 29/10 aspettano la frase: #272)",
+             "_schede" not in s[0], s[0])
     # Il calcolo senza oscura, il timer senza «chi»
     from calliope.conversazione import turni
     calc = schede.per_conversazione(schede.calcolo("123456789 × 1000", "123456789000"))
@@ -552,6 +556,150 @@ def prova_dettaglio_server(arch, tid_tipo):
     c.close()
 
 
+# ─────────────────────────── 7. foto e file nella Conversazione (29/10, #272) ───────────────────────────
+def jpeg_vero(w=1280, h=960):
+    """Una foto da telefono, con dettagli (una tinta unita si comprime troppo)."""
+    import io
+    import random
+    from PIL import Image
+    random.seed(7)
+    im = Image.new("RGB", (w, h))
+    px = im.load()
+    for y in range(0, h, 4):
+        for x in range(0, w, 4):
+            c = (random.randrange(256), (x * 3) % 256, (y * 5) % 256)
+            for dy in range(4):
+                for dx in range(4):
+                    px[x + dx, y + dy] = c
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=85)
+    return buf.getvalue()
+
+
+class HubMittente(HubFinto):
+    """Come HubFinto, con chi parla adesso (hub.mittente del contesto dei tool)."""
+
+    def __init__(self, chi):
+        super().__init__()
+        self.chi = chi
+
+    def mittente(self, ctx):
+        return self.chi
+
+
+def brain_foto(storia, hub):
+    from calliope.brain import Brain
+    b = brain_finto(storia)
+    b.tool_ctx = SimpleNamespace(schermi=hub)
+    b.ATTESA_SCHEDE_S = Brain.ATTESA_SCHEDE_S
+    b._in_attesa = lambda c, p: Brain._in_attesa(b, c, p)
+    b._lega_in_attesa = lambda m: Brain._lega_in_attesa(b, m)
+    b._send_cards = lambda cards, tool: Brain._invia_schede(b, hub, cards, hub.chi)
+    return b
+
+
+def prova_foto():
+    from calliope.brain import Brain
+    from calliope.conversazione import turni
+    from calliope.immagini import Immagine
+    jpeg = jpeg_vero()
+    img = Immagine(jpeg, 1280, 960, fonte="telefono", persona="dario", n=1)
+    card = schede.foto(img, "lo scontrino")
+    copia = schede.per_conversazione(card)
+    peso = len(json.dumps(copia, ensure_ascii=False))
+    verifica("foto: la copia con la miniatura piccola, dentro gli 8 kB, mai la miniatura dello schermo né il file",
+             copia and copia.get("storica") and copia["src"].startswith("data:image/jpeg;base64,")
+             and copia["src"] != card["src"] and peso <= schede.CONV_SCHEDA_MAX and "_mini" not in copia
+             and len(card["src"]) > len(copia["src"]), (peso, len(card["src"])))
+    grossa = {**card, "_mini": "data:image/jpeg;base64," + "A" * 9000}
+    r = schede.per_conversazione(grossa)
+    verifica("foto: una miniatura oltre il tetto diventa il solo rimando, senza i byte",
+             r and r.get("rimando") and "src" not in r, r)
+    from calliope.allegati import Allegato  # noqa: F401 — la scheda del file si costruisce a mano
+    fil = schede.nuova("allegato", "File 1", schede.PERSONALE, chiave="allegato:1", nome="bolletta.pdf",
+                       tipo_file="PDF", categoria="documento", dimensione="120 kB",
+                       note=["3 pagine"], anteprima="Importo da pagare 84,20 euro")
+    r = schede.per_conversazione(fil)
+    verifica("file: nome, tipo e dimensione, mai l'anteprima del testo né le note",
+             r and r.get("nome") == "bolletta.pdf" and "anteprima" not in r and "note" not in r, r)
+
+    # 1. La foto mandata con la frase: la miniatura parte prima, si lega alla frase quando entra
+    hub = HubMittente(DARIO)
+    storia = [{"role": "user", "content": "la frase di prima"}, {"role": "assistant", "content": "ok"}]
+    b = brain_foto(storia, hub)
+    Brain.manda_schede(b, [schede.foto(img)], "foto")
+    msg = {"role": "user", "content": "Quanto ho speso in tutto?"}
+    storia.append(msg)
+    Brain._lega_in_attesa(b, msg)
+    verifica("foto con la frase: legata alla frase di questo turno, non a quella di prima",
+             "_schede" not in storia[0] and [x["tipo"] for x in msg.get("_schede", [])] == ["foto"]
+             and msg["_schede"][0].get("src", "").startswith("data:image/jpeg"), msg.get("_schede"))
+    # 2. La foto mandata prima della frase (in attesa per immagini_attesa_s): il ciclo la mette nel
+    # turno della frase dopo (Ciclo._foto_e_file) e la miniatura parte con quel turno, come la 1
+    storia2 = [{"role": "user", "content": "di prima"}]
+    b2 = brain_foto(storia2, HubMittente(DARIO))
+    img2 = Immagine(jpeg, 1280, 960, fonte="telefono", persona="dario", arrivata=time.time() - 40, n=2)
+    Brain.manda_schede(b2, [schede.foto(img2)], "foto")
+    msg2 = {"role": "user", "content": "Cosa c'è in questa foto?"}
+    storia2.append(msg2)
+    Brain._lega_in_attesa(b2, msg2)
+    verifica("foto mandata prima della frase: legata alla frase che la usa",
+             "_schede" not in storia2[0] and len(msg2.get("_schede", [])) == 1)
+    # …e una scheda in attesa che parte quando la frase è già entrata (le trattenute di un minore)
+    Brain._invia_schede(b2, b2.tool_ctx.schermi, [{**schede.foto(Immagine(jpeg, 1280, 960, persona="dario", n=4)), "_attesa": True}], DARIO)
+    verifica("…una miniatura che parte dopo la frase va alla stessa frase", len(msg2.get("_schede", [])) == 2)
+    # 3. La cattura della webcam chiesta a voce: la scheda del tool, dentro la risposta
+    storia3 = [{"role": "user", "content": "Guarda dalla webcam"}]
+    b3 = brain_foto(storia3, HubMittente(DARIO))
+    cam = Immagine(jpeg, 1280, 960, fonte="webcam", persona="dario", n=3)
+    Brain._invia_schede(b3, b3.tool_ctx.schermi, [schede.foto(cam)], DARIO)
+    verifica("cattura della webcam chiesta a voce: legata alla frase che l'ha chiesta",
+             [x["tipo"] for x in storia3[0].get("_schede", [])] == ["foto"])
+    # 4. Cambio di persona in mezzo: la miniatura di Dario non va alla frase di Bianca
+    storia4 = [{"role": "user", "content": "di Dario"}]
+    hub4 = HubMittente(DARIO)
+    b4 = brain_foto(storia4, hub4)
+    Brain.manda_schede(b4, [schede.foto(img)], "foto")
+    hub4.chi = Mittente("bianca", "Bianca", "familiare", True)
+    msg4 = {"role": "user", "content": "Sono Bianca"}
+    storia4.append(msg4)
+    Brain._lega_in_attesa(b4, msg4)
+    verifica("cambio di chi parla in mezzo: la miniatura non va all'altra persona, e si butta",
+             "_schede" not in msg4 and "_schede" not in storia4[0] and not b4.__dict__.get("_schede_attesa"))
+    # …né a una frase che arriva troppo tardi (un'altra corsia ha risposto)
+    storia4b = [{"role": "user", "content": "di prima"}]
+    b4b = brain_foto(storia4b, HubMittente(DARIO))
+    Brain.manda_schede(b4b, [schede.foto(img)], "foto")
+    b4b.__dict__["_schede_attesa"] = [(time.monotonic() - 120, "dario", x[2]) for x in b4b.__dict__["_schede_attesa"]]
+    msg4b = {"role": "user", "content": "molto dopo"}
+    storia4b.append(msg4b)
+    Brain._lega_in_attesa(b4b, msg4b)
+    verifica("…né a una frase di molto dopo", "_schede" not in msg4b)
+    # 5. Identità incerta: niente
+    storia5 = [{"role": "user", "content": "di prima"}]
+    hub5 = HubMittente(GRIGIA)
+    b5 = brain_foto(storia5, hub5)
+    Brain.manda_schede(b5, [schede.foto(img)], "foto")
+    msg5 = {"role": "user", "content": "frase dalla zona grigia"}
+    storia5.append(msg5)
+    Brain._lega_in_attesa(b5, msg5)
+    verifica("identità incerta: la miniatura non si lega", "_schede" not in msg5 and not hub5.inviate[0].get("_riservata"))
+    # 6. Turno riservato: la foto legata sparisce con le schede del turno
+    msg6 = {"role": "user", "content": "Leggi il contratto in foto", "_schede": [schede.per_conversazione(schede.foto(img))]}
+    tt = turni([msg6, {"role": "tool", "name": "archivio_cerca", "content": "{}"},
+                {"role": "assistant", "content": "Canone 850."}], frozenset({"archivio_cerca"}))
+    verifica("turno riservato: la miniatura non resta nell'archivio", "schede" not in (tt[0].get("meta") or {}), tt[0])
+    # La risposta di prima riservata non tiene fuori la foto di adesso (last_private è ancora quello)
+    storia7 = [{"role": "user", "content": "di prima"}]
+    b7 = brain_foto(storia7, HubMittente(DARIO))
+    b7.last_private = True
+    Brain.manda_schede(b7, [schede.foto(img)], "foto")
+    msg7 = {"role": "user", "content": "e questa?"}
+    storia7.append(msg7)
+    Brain._lega_in_attesa(b7, msg7)
+    verifica("una risposta riservata prima non tiene fuori la foto di questo turno", len(msg7.get("_schede", [])) == 1)
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -568,6 +716,7 @@ def main() -> int:
         prova_server(arch)
         prova_riservato()
         prova_peso()
+        prova_foto()
         tid = prova_dettaglio(arch)
         prova_dettaglio_server(arch, tid)
         arch.close()
