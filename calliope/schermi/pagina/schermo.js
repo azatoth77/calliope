@@ -1640,6 +1640,9 @@
       let d = {};
       try { d = await r.json(); } catch (e) { /* niente */ }
       dire(r.status === 200 ? (d.frase || "Fatto.") : (d.errore || ("Non ci sono riuscita (" + r.status + ").")));
+      // La pagina Cassetto aperta si rilegge subito (2d, seconda revisione della PR #267: prima
+      // aspettava la raffica delle schede o il giro dei 60 s)
+      if (r.status === 200) emetti("cassetto", { azione: b.dataset.cassetto });
     } catch (e) {
       dire("Calliope non risponde: riprova.");
     } finally {
@@ -1711,6 +1714,9 @@
       let d = {};
       try { d = await r.json(); } catch (e) { /* niente */ }
       dire(r.status === 200 ? (d.frase || "Fatto.") : (d.errore || ("Non ci sono riuscita (" + r.status + ").")));
+      // La pagina Cassetto aperta si rilegge subito (2d, seconda revisione della PR #267: prima
+      // aspettava la raffica delle schede o il giro dei 60 s)
+      if (r.status === 200) emetti("cassetto", { azione: b.dataset.cassetto });
     } catch (e) {
       dire("Calliope non risponde: riprova.");
     } finally {

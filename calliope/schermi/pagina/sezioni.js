@@ -531,6 +531,11 @@
       if (racc.daTessere) { racc.daTessere = false; history.back(); return; }
       vai("#/cose", true);
     }
+    // Un tasto del cassetto riuscito (2d, seconda revisione della PR #267): la pagina Cassetto
+    // aperta si rilegge subito, fuori dall'attesa delle schede
+    document.addEventListener("calliope:cassetto", () => {
+      if (racc.aperta === "cassetto" && sch() && sch().raccolte) caricaPagina("cassetto");
+    });
     const indietro = $("pagina-indietro");
     if (indietro) indietro.addEventListener("click", tornaAlleTessere);
 

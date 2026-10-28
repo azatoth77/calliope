@@ -23,6 +23,7 @@ loro API e i loro controlli.
 """
 
 import datetime
+import threading
 
 TESSERE = (("liste", "Liste"), ("agenda", "Agenda"), ("lavori", "Lavori e programmi"),
            ("cassetto", "Cassetto"), ("documenti", "Documenti"), ("giochi", "Giochi"),
@@ -367,18 +368,33 @@ def _lavoro_vivo(lv) -> dict:
 # Le schede finali dei lavori finiti in memoria, già costruite (revisione della PR #267): la pagina
 # si rilegge ogni 60 s, e `Lavori.scheda` rilegge dal disco fino a 8 file interi per lavoro. La
 # chiave cambia se cambia il lavoro (stato, fine) o la sua cartella (un file nuovo, «fammene un PDF»)
+# (dal 2d, seconda revisione della PR #267: con un lock, perché due letture insieme potevano
+# togliere la stessa voce e la pagina dava 503; e la chiave guarda i file, non solo la cartella)
 _FINITI: dict = {}
 _FINITI_MAX = 64
+_FINITI_LOCK = threading.Lock()
 
 
 def _impronta_finito(lv) -> tuple:
+    """La chiave della scheda tenuta: il lavoro, la cartella e la data e la dimensione di ogni
+    file che `Lavori.scheda` legge (i primi 8 del risultato). La data della cartella da sola non
+    cambia quando un file viene riscritto con lo stesso nome."""
     import os
-    c = (getattr(lv, "risultato", None) or {}).get("cartella") or ""
+    r = getattr(lv, "risultato", None) or {}
+    c = r.get("cartella") or ""
     try:
-        m = os.stat(c).st_mtime if c else 0.0
+        m = os.stat(c).st_mtime_ns if c else 0
     except OSError:
-        m = -1.0
-    return (id(lv), str(lv.id), str(lv.stato), getattr(lv, "fine", None), str(c), m)
+        m = -1
+    nomi = tuple(str(n) for n in (r.get("file") or [])[:8])
+    file = []
+    for n in nomi:
+        try:
+            st = os.stat(os.path.join(c, n)) if c else None
+            file.append((n, st.st_mtime_ns, st.st_size) if st else (n, 0, 0))
+        except OSError:
+            file.append((n, -1, -1))
+    return (id(lv), str(lv.id), str(lv.stato), getattr(lv, "fine", None), str(c), m, tuple(file))
 
 
 def _estensione_da_approvare(hub, r: dict) -> bool:
@@ -411,16 +427,18 @@ def _lavoro_finito(hub, svc, lv) -> dict | None:
     revisione = bool(r.get("estensione"))
     if not getattr(lv, "dal_disco", False) and (not revisione or _estensione_da_approvare(hub, r)):
         k = _impronta_finito(lv)
-        c = _FINITI.get(k)
+        with _FINITI_LOCK:
+            c = _FINITI.get(k)
         if c is None:
             try:
-                c = svc.scheda(lv)
+                c = svc.scheda(lv)         # fuori dal lock: legge i file dal disco
             except Exception:  # noqa: BLE001 — un file sparito: la scheda breve
                 c = None
             if c:
-                if len(_FINITI) >= _FINITI_MAX:
-                    _FINITI.pop(next(iter(_FINITI)))
-                _FINITI[k] = c
+                with _FINITI_LOCK:
+                    while len(_FINITI) >= _FINITI_MAX:
+                        _FINITI.pop(next(iter(_FINITI)))
+                    _FINITI[k] = c
         if c:
             return dict(c)
     cartella = Path(r.get("cartella") or "").name
@@ -500,12 +518,16 @@ def _pagina_cassetto(hub, prof) -> dict:
                                       "conversazione in cui li mandi."}
 
     def scheda(persona, titolo, tieni, sola_lettura=False):
-        c = cas.scheda(persona, cas.elenco(persona), titolo=titolo, tieni=tieni and not sola_lettura)
+        righe = cas.elenco(persona)
+        c = cas.scheda(persona, righe, titolo=titolo, tieni=tieni and not sola_lettura)
         c["chiave"] = f"{c.get('chiave') or 'cassetto:' + persona}:pagina"
         c["vuoto"] = "Il cassetto è vuoto."
         if sola_lettura:
             c["sola_lettura"] = True
-            c["nota"] = "Per tenerli o eliminarli chiedimelo a voce."
+            # Solo con dei file (2d, seconda revisione della PR #267): la scheda mostra la nota
+            # al posto di «vuoto», e un cassetto vuoto diceva «chiedimelo a voce»
+            if righe:
+                c["nota"] = "Per tenerli o eliminarli chiedimelo a voce."
         return c
 
     out = [scheda(prof.id, "Il tuo cassetto", not minori.e_minore(prof))]

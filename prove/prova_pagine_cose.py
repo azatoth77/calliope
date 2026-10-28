@@ -322,7 +322,74 @@ def cassetto():
     _, s = pag(vuota)
     verifica("cassetto: vuoto, con la frase del vuoto", s["Il tuo cassetto"]["voci"] == []
              and s["Il tuo cassetto"]["vuoto"] == "Il cassetto è vuoto.")
+    # Il cassetto vuoto di un figlio (2d, seconda revisione della PR #267): senza la nota «chiedimelo
+    # a voce», che la scheda mostrava al posto di «Il cassetto è vuoto.»
+    teo = Profilo("teo", "Teo", nascita="2017-09-09", tutori=["bianca"])
+    cas.registry.users["Teo"] = teo
+    try:
+        _, s = pag(BIANCA)
+        c = s.get("I file di Teo") or {}
+        verifica("cassetto: il cassetto vuoto del figlio dice «Il cassetto è vuoto.», non «chiedimelo a voce»",
+                 c.get("voci") == [] and not c.get("nota") and c.get("vuoto") == "Il cassetto è vuoto."
+                 and c.get("sola_lettura") is True and "a voce" in s["I file di Lia"].get("nota", ""),
+                 json.dumps(c, ensure_ascii=False)[:200])
+    finally:
+        del cas.registry.users["Teo"]
     return cas
+
+
+# ─────────────────────────── 1b. le schede tenute dei lavori finiti ───────────────────────────
+def finiti_tenuti():
+    """La cache delle schede finali (2d, seconda revisione della PR #267): un file riscritto con lo
+    stesso nome ricostruisce la scheda anche se la data della cartella non cambia, e due letture
+    insieme non sollevano (il lock su `_FINITI`)."""
+    cfg = Config()
+    d = TMP / "risultati-codice" / "contatore"
+    d.mkdir(parents=True)
+    f = d / "main.py"
+    f.write_text("print('uno')\n", encoding="utf-8")
+    ora = time.time()
+    lv = lavoro("L7", DARIO, "fatto", "contatore", tipo="codice", creato=ora - 100, fine=ora - 50,
+                risultato={"cartella": str(d), "file": ["main.py"], "riassunto": "Un contatore."})
+    svc = servizio_lavori(cfg, [lv])
+    hub = types.SimpleNamespace(servizi=types.SimpleNamespace(lavori=svc), tool_ctx=None)
+    raccolte._FINITI.clear()
+    c1 = raccolte._lavoro_finito(hub, svc, lv)
+    cart = os.stat(d)
+    f.write_text("print('due, più lungo')\n", encoding="utf-8")
+    os.utime(f, ns=(cart.st_atime_ns, cart.st_mtime_ns + 5_000_000_000))
+    os.utime(d, ns=(cart.st_atime_ns, cart.st_mtime_ns))       # la cartella com'era
+    c2 = raccolte._lavoro_finito(hub, svc, lv)
+    testo = lambda c: json.dumps(c, ensure_ascii=False)        # noqa: E731
+    verifica("lavori: un file riscritto con lo stesso nome ricostruisce la scheda (la data dei file, non della cartella)",
+             "uno" in testo(c1) and "due, più lungo" in testo(c2) and os.stat(d).st_mtime_ns == cart.st_mtime_ns,
+             testo(c2)[:200])
+    # Due letture insieme con la cache piena: niente eccezioni né voci oltre il tetto
+    prima = raccolte._FINITI_MAX
+    raccolte._FINITI_MAX = 3
+    voci = [lavoro(f"M{i}", DARIO, "fatto", f"ricerca {i}", creato=ora - 10 * i, fine=ora - 5 * i,
+                   risultato={"markdown": True, "testo": f"# R{i}", "riassunto": "r"}) for i in range(12)]
+    svc2 = servizio_lavori(cfg, voci)
+    errori = []
+
+    def legge():
+        try:
+            for _ in range(40):
+                for x in voci:
+                    raccolte._lavoro_finito(hub, svc2, x)
+        except Exception as e:  # noqa: BLE001
+            errori.append(repr(e))
+    try:
+        fili = [threading.Thread(target=legge) for _ in range(6)]
+        for x in fili:
+            x.start()
+        for x in fili:
+            x.join(60)
+        verifica("lavori: letture insieme sulla cache delle schede finite senza errori (il lock su _FINITI)",
+                 not errori and len(raccolte._FINITI) <= 3, str(errori[:2]))
+    finally:
+        raccolte._FINITI_MAX = prima
+        raccolte._FINITI.clear()
 
 
 # ─────────────────────────── 3. Giochi ───────────────────────────
@@ -496,6 +563,7 @@ def main():
     try:
         print("— 1. Lavori e programmi")
         svc = lavori()
+        finiti_tenuti()
         print("— 2. Cassetto")
         cas = cassetto()
         print("— 3. Giochi")

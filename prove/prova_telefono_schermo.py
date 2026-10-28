@@ -861,7 +861,16 @@ def pagine_2c(t: Tel, hub, cartella: Path):
     verifica("pagina Cassetto: i file della persona, la nota dei giorni e del dato",
              bool(ok) and "scontrino.txt" in testo and "7 giorni" in nota and "dato" in nota, f"{testo[:120]} {nota}")
     prima = cas.prendi("dario", fid)["scade"]
+    # Dopo il tasto riuscito la pagina si rilegge subito (2d, seconda revisione della PR #267): una
+    # lettura della pagina Cassetto entro 1 s dall'esito, prima dell'attesa delle schede (≥ 1,5 s)
+    t.v("(() => { const s = window.calliopeSchermo, f = s.raccolte; window.__tempi = []; window.__esito = 0;"
+        " document.addEventListener('calliope:cassetto', () => { window.__esito = Date.now(); });"
+        " s.raccolte = (d) => { if (d && d.raccolta === 'cassetto') window.__tempi.push(Date.now()); return f(d); }; })(); 1")
     t.tocca_sel('#pagina-schede button[data-cassetto="ancora"]')
+    ok_subito = aspetta(lambda: t.v("window.__esito > 0 && window.__tempi.some((x) => x >= window.__esito"
+                                    " && x - window.__esito < 1000)"), 5)
+    verifica("pagina Cassetto: dopo un tasto riuscito la pagina si rilegge subito", bool(ok_subito),
+             json.dumps(t.v("[window.__esito, window.__tempi]")))
     ok = aspetta(lambda: (cas.prendi("dario", fid) or {}).get("scade", 0) > prima, 5)
     time.sleep(0.6)
     ok2 = aspetta(lambda: t.v(f"{S}.pagina") == ["cassetto:dario:pagina"]
