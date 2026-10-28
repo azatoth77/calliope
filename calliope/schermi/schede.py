@@ -84,7 +84,7 @@ SEZIONE_DI_TIPO = {
     "timer": "cose/agenda", "promemoria": "cose/agenda", "lista": "cose/liste",
     "lavoro": "cose/lavori", "esecuzione": "cose/lavori", "sviluppo": "cose/lavori",
     "documento": "cose/documenti", "foto": "cose/cassetto", "allegato": "cose/cassetto",
-    "cassetto": "cose/cassetto", "modulo": "cose", "gioco": "cose/giochi",
+    "cassetto": "cose/cassetto", "modulo": "cose", "gioco": "cose/giochi", "giochi": "cose/giochi",
     "esercizio": "cose/studio", "esercizi_riepilogo": "cose/studio",
     "casa": "casa", "conoscente": "casa", "avviso": "casa", "cruscotto": "io",
 }
@@ -436,6 +436,28 @@ def esecuzione(titolo: str, programma: str, linguaggio: str, stato: str, dati, r
                  dal=round(inizio, 3) if stato == "in_corso" else None,
                  trascorso_s=round(float(trascorso_s or 0), 2), max_s=round(float(max_s or 0)),
                  file=_taglia(file, 120), ora_server=ora_server or time.time())
+
+
+def giochi(chiave: str, titolo: str, giochi=(), partite=(), nota: str = "", vuoto: str = "") -> dict:
+    """Le partite aperte e i giochi di casa nella pagina Giochi di Le mie cose (28/10, passo 2c,
+    #258, schermi/raccolte.py): solo testo, nessun tasto (un gioco si apre a voce, e il riquadro
+    vero è la scheda `gioco`). `giochi`: [{titolo, descrizione, giocatori, dire}]; `partite`:
+    [{titolo, dove, qui, prova, tocca, punti: [{nome, punti}], esito}]. Personale: è la pagina
+    di chi la guarda."""
+    def num(x):
+        return x if isinstance(x, (int, float)) and not isinstance(x, bool) else 0
+    return nuova("giochi", titolo, PERSONALE, durata_s=None, chiave=chiave,
+                 giochi=[{"titolo": _taglia(g.get("titolo"), 60), "descrizione": _taglia(g.get("descrizione"), 200),
+                          "giocatori": _taglia(g.get("giocatori"), 40), "dire": _taglia(g.get("dire"), 100)}
+                         for g in list(giochi or ())[:_MAX_VOCI]],
+                 partite=[{"titolo": _taglia(p.get("titolo"), 60),
+                           "dove": [_taglia(d, 60) for d in list(p.get("dove") or ())[:8]],
+                           "qui": bool(p.get("qui")), "prova": bool(p.get("prova")),
+                           "tocca": _taglia(p.get("tocca"), 30), "esito": _taglia(p.get("esito"), 160),
+                           "punti": [{"nome": _taglia(x.get("nome"), 30), "punti": num(x.get("punti"))}
+                                     for x in list(p.get("punti") or ())[:8]]}
+                          for p in list(partite or ())[:12]],
+                 nota=_taglia(nota, 300), vuoto=_taglia(vuoto, 200))
 
 
 def testo(titolo: str, contenuto: str, visibilita: str) -> dict:

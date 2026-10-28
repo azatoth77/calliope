@@ -39,6 +39,10 @@ una riuscita non serve più; i tocchi sono veri (Input.dispatchMouseEvent: gesto
   domani, in settimana); «+1 minuto» e «Ferma» mandano il tocco giusto col bersaglio, restano in
   attesa, la scheda aggiornata e l'esito la chiudono, un rifiuto o un 409 lo dice accanto; i tasti
   anche in Adesso;
+- Lavori e programmi, Cassetto e Giochi (28/10, passo 2c, #258): le pagine dalle tessere coi servizi,
+  il lavoro in diretta che si allinea nella pagina, «Tieni ancora» del cassetto come prima con la
+  pagina che resta intera, i giochi di casa; il gioco che arriva resta uno solo, visibile sotto la
+  pagina Giochi;
 - modulo da compilare: si apre da solo nel suo strato, controlli mentre si scrive, «Invia»,
   «Compila» in Adesso sotto «Aspetta te»; «Scrivi» apre la casella col fuoco, la frase arriva e
   lo strato si chiude; Io ha prova del microfono, schermo acceso, certificato, «dimentica»;
@@ -582,9 +586,9 @@ def raccolte(t: Tel, hub, liste):
              and t.v("document.getElementById('sez-cose').firstElementChild.id === 'tessere'"), json.dumps(tes)[:300])
     verifica("raccolte: la tessera Liste col conto vero, senza pallino alla prima visita",
              tes.get("liste", {}).get("conto") == "1" and not tes.get("liste", {}).get("novita"), json.dumps(tes.get("liste")))
-    stato = t.v("document.querySelector('#tessere [data-tessera=\"lavori\"] .tessera-stato').textContent")
+    stato = t.v("document.querySelector('#tessere [data-tessera=\"documenti\"] .tessera-stato').textContent")
     verifica("raccolte: un servizio che manca dice «non disponibile» e la pagina «presto»",
-             tes.get("lavori", {}).get("conto") == "—" and "non disponibile" in stato and "presto" in stato, stato)
+             tes.get("documenti", {}).get("conto") == "—" and "non disponibile" in stato and "presto" in stato, stato)
     colonne = t.v("getComputedStyle(document.getElementById('tessere')).gridTemplateColumns.split(' ').length")
     verifica("raccolte: due colonne sul telefono", colonne == 2, str(colonne))
     # Un cambiamento della lista dopo la visita: il pallino
@@ -692,8 +696,8 @@ def raccolte(t: Tel, hub, liste):
     ok = aspetta(lambda: t.v("location.hash") == "#/cose" and t.v(f"{S}.vistaCose") == "tessere"
                  and t.v("getComputedStyle(document.getElementById('tessere')).display") != "none", 3)
     verifica("pagina Liste: il gesto indietro torna alle tessere", bool(ok))
-    t.tocca_sel('#tessere [data-tessera="lavori"]')
-    ok = aspetta(lambda: t.v("location.hash") == "#/cose/lavori" and t.v(f"{S}.vistaCose") == "tessere", 3)
+    t.tocca_sel('#tessere [data-tessera="documenti"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/documenti" and t.v(f"{S}.vistaCose") == "tessere", 3)
     verifica("raccolte: una tessera senza pagina resta sulle tessere e porta al suo gruppo", bool(ok))
     # Una scheda della lista da Adesso («Apri») porta alla pagina, con la scheda in vista
     t.v(f"{T}.vaiA('lista:spesa'); 1")
@@ -786,6 +790,94 @@ def agenda_pagina(t: Tel, hub):
     ok = aspetta(lambda: t.v("[...document.querySelectorAll('#sez-adesso button.tasto-timer')]"
                              f".filter((b) => b.dataset.chiave === {json.dumps(c['chiave'])}).length") == 2, 5)
     verifica("tasti del timer: anche sulla scheda del timer in Adesso", bool(ok))
+
+
+def pagine_2c(t: Tel, hub, cartella: Path):
+    """Lavori e programmi, Cassetto e Giochi (28/10, passo 2c, #258): dalla tessera, le schede dai
+    servizi; il lavoro in diretta che arriva si allinea al suo posto nella pagina; il tasto del
+    cassetto va come prima e la pagina resta coi file di tutti (la scheda che manda il server dopo
+    il tasto non la sostituisce); i giochi di casa con «Calliope, giochiamo a…»."""
+    import types
+    from calliope.cassetto import Cassetto
+    from calliope.config import Config
+    from calliope.schermi import schede
+    import prova_pagine_cose as ppc
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    cfg = Config()
+    cfg.agenti_risultati = str(cartella / "risultati")
+    ora = time.time()
+    corso = ppc.lavoro("L1", ppc.DARIO, "in_corso", "orari dei treni", creato=ora - 60, passo="legge le pagine")
+    fatto = ppc.lavoro("L2", ppc.DARIO, "fatto", "ricetta del pane", creato=ora - 900, fine=ora - 800,
+                       risultato={"markdown": True, "testo": "# Pane\n\nFarina e acqua.", "riassunto": "Farina e acqua."})
+    hub.tool_ctx.lavori = ppc.servizio_lavori(cfg, [corso, fatto])
+    cas = Cassetto(str(cartella / "cassetto.db"), str(cartella / "cassetto"), log=lambda m: None)
+    fid = cas.metti("dario", b"scontrino del ferramenta", "scontrino.txt", "testo", fonte="telefono")
+    hub.cassetto = cas
+    hub.tool_ctx.estensioni = types.SimpleNamespace(archivio=ppc.Archivio(
+        [ppc.manifesto("tris", "Tris"), ppc.manifesto("cassaforte", "La cassaforte", livello="amministra")]))
+    t.v(f"{T}.vai('#/cose'); 1")
+    t.v(f"{T}.aggiornaRaccolte(); 1")
+    ok = aspetta(lambda: {x["id"]: x["conto"] for x in t.v(f"{S}.tessere") or []}.get("lavori") == "2", 5)
+    stati = t.v("[...document.querySelectorAll('#tessere .tessera')].filter((a) => ['lavori', 'cassetto', 'giochi']"
+                ".includes(a.dataset.tessera)).map((a) => a.querySelector('.tessera-stato').textContent)") or []
+    verifica("pagine 2c: le tessere Lavori, Cassetto e Giochi coi conti e la pagina (niente «presto»)",
+             bool(ok) and len(stati) == 3 and not any("presto" in x for x in stati), json.dumps(stati))
+    # Lavori e programmi
+    t.tocca_sel('#tessere [data-tessera="lavori"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/lavori" and t.v(f"{S}.pagina") == ["lavoro:L1", "lavoro:L2"], 5)
+    nota = t.v("document.getElementById('pagina-nota').hidden ? '' : document.getElementById('pagina-nota').textContent") or ""
+    verifica("pagina Lavori: il lavoro in corso e quello finito dal servizio, con la frase della voce sopra",
+             bool(ok) and "orari dei treni" in nota and t.v("document.getElementById('pagina-titolo').textContent")
+             == "Lavori e programmi", f"{t.v(f'{S}.pagina')} {nota}")
+    testi = t.v("[...document.querySelectorAll('#pagina-schede .scheda')].map((s) => s.textContent)") or []
+    verifica("pagina Lavori: il passo del lavoro in corso e il testo del finito",
+             len(testi) == 2 and "legge le pagine" in testi[0] and "Farina" in testi[1], json.dumps(testi)[:300])
+    sel_l1 = "document.querySelector('#pagina-schede [data-chiave=\"lavoro:L1\"]')"
+    t.v(f"{sel_l1}.__segno = 'x'; 1")
+    tutti(hub, schede.lavoro_avanzamento("orari dei treni", "ricerca", "in_corso",
+                                         {"passo": "confronta gli orari", "passi": []}, ident="L1"))
+    ok = aspetta(lambda: "confronta gli orari" in (t.v(f"{sel_l1} && {sel_l1}.textContent") or ""), 5)
+    verifica("pagina Lavori: la scheda in diretta che arriva si allinea al suo posto (stesso elemento)",
+             bool(ok) and t.v(f"{sel_l1}.__segno") == "x" and t.v(f"{S}.pagina") == ["lavoro:L1", "lavoro:L2"])
+    # Una raffica di schede della raccolta che la pagina non ha: una rilettura sola (revisione PR #267)
+    t.v("(() => { const s = window.calliopeSchermo, f = s.raccolte; window.__letture = 0;"
+        " s.raccolte = (d) => { if (d && d.raccolta) window.__letture++; return f(d); }; })(); 1")
+    for i in range(6):
+        tutti(hub, schede.esecuzione("orari dei treni", "main.py", "Python", "fatto", [], [], 0, 0,
+                                     inizio=ora - 5, trascorso_s=1, max_s=60, ident=f"L1-{i}"))
+    aspetta(lambda: (t.v("window.__letture") or 0) >= 1, 12)
+    time.sleep(2.0)
+    letture = t.v("window.__letture")
+    verifica("pagina Lavori: una raffica di schede la rilegge una volta sola (al più una ogni 10 s)",
+             letture == 1 and t.v(f"{S}.pagina") == ["lavoro:L1", "lavoro:L2"], str(letture))
+    # Cassetto
+    t.v(f"{T}.vai('#/cose'); 1")
+    t.tocca_sel('#tessere [data-tessera="cassetto"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/cassetto" and t.v(f"{S}.pagina") == ["cassetto:dario:pagina"], 5)
+    prima_scheda = "document.querySelector('#pagina-schede .scheda')"
+    testo = t.v(f"{prima_scheda} && {prima_scheda}.textContent") or ""
+    nota = t.v("document.getElementById('pagina-nota').textContent") or ""
+    verifica("pagina Cassetto: i file della persona, la nota dei giorni e del dato",
+             bool(ok) and "scontrino.txt" in testo and "7 giorni" in nota and "dato" in nota, f"{testo[:120]} {nota}")
+    prima = cas.prendi("dario", fid)["scade"]
+    t.tocca_sel('#pagina-schede button[data-cassetto="ancora"]')
+    ok = aspetta(lambda: (cas.prendi("dario", fid) or {}).get("scade", 0) > prima, 5)
+    time.sleep(0.6)
+    ok2 = aspetta(lambda: t.v(f"{S}.pagina") == ["cassetto:dario:pagina"]
+                  and "scontrino.txt" in (t.v(f"{prima_scheda} && {prima_scheda}.textContent") or ""), 5)
+    verifica("pagina Cassetto: «Tieni ancora» va come prima, e la pagina resta coi suoi file", bool(ok) and bool(ok2),
+             json.dumps(t.v(f"{S}.pagina")))
+    # Giochi
+    t.v(f"{T}.vai('#/cose'); 1")
+    t.tocca_sel('#tessere [data-tessera="giochi"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/giochi" and t.v(f"{S}.pagina") == ["giochi:casa:dario"], 5)
+    testo = t.v(f"{prima_scheda} && {prima_scheda}.textContent") or ""
+    verifica("pagina Giochi: i giochi di casa (anche quello di chi amministra) e come si aprono a voce",
+             bool(ok) and "La cassaforte" in testo and "Tris" in testo and "«Calliope, giochiamo a Tris»" in testo
+             and t.v("document.getElementById('sez-cose').dataset.pagina") == "giochi", testo[:200])
+    t.v(f"{T}.vai('#/adesso'); 1")
+    cas.close()
 
 
 def modulo_e_scrivi(t: Tel, hub):
@@ -1216,6 +1308,10 @@ def gioco(t: Tel, hub):
     verifica("modalità gioco: il microfono resta acceso entrando", mic_prima and t.mic())
     verifica("modalità gioco: la scheda sta in Le mie cose › Giochi (aperta da sola)",
              t.v("location.hash === '#/cose/giochi' && !!document.querySelector('#sez-cose [data-posto=\"cose/giochi\"] article.scheda-gioco')"))
+    verifica("modalità gioco: con la pagina Giochi aperta il riquadro è quello del gruppo, visibile, uno solo (#258)",
+             t.v("document.getElementById('sez-cose').dataset.vista === 'pagina'"
+                 " && document.querySelector('#sez-cose [data-posto=\"cose/giochi\"] article.scheda-gioco').getClientRects().length > 0"
+                 " && document.querySelectorAll('iframe.riquadro-gioco').length === 1"))
     # il pallino segue lo stato di questo telefono
     t.v(f"{T}.st.pensa = true; {T}.st.attivo = true; 1")
     ok = aspetta(lambda: "pensa" in voce(), 2)
@@ -1341,6 +1437,7 @@ def main() -> int:
             sezioni(t, hub)
             raccolte(t, hub, liste)
             agenda_pagina(t, hub)
+            pagine_2c(t, hub, TMP / "server")
             misure(t, "schede")
             una_per_una(t)
             _, spec = modulo_e_scrivi(t, hub)

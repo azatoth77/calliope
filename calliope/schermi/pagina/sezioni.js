@@ -52,7 +52,7 @@
       // Sul satellite di un minore (27/10, decisione 2): sezioni e raccolte da non mostrare, dal server
       nascoste: { sezioni: [], raccolte: [] },
     };
-    const opzioni = { manoMs: 10000, recenteS: 600 };
+    const opzioni = { manoMs: 10000, recenteS: 600, rinfrescaMs: 1500, rinfrescaMinMs: 10000 };
     try { for (const k of JSON.parse(leggi(opz.chiaveVisti) || "[]")) car.visti.add(String(k)); } catch (e) { /* niente */ }
 
     function chiaveDi(c) { return c.chiave || c.id; }
@@ -350,7 +350,7 @@
     // (dai servizi: anche ciò che non è passato da questo schermo), disegnate da schermo.js; il
     // gesto indietro torna alle tessere. Le altre tessere dicono «presto» e portano, come prima,
     // al gruppo delle schede di quella raccolta.
-    const racc = { tessere: [], timer: null, aperta: null, richiesta: 0, daTessere: false, rinfresca: null };
+    const racc = { tessere: [], timer: null, aperta: null, richiesta: 0, daTessere: false, rinfresca: null, rinfrescata: 0 };
     const CHIAVE_RACC = opz.chiaveRaccolte || "calliope.raccolte.viste";
     function vistePrima() {
       try {
@@ -449,6 +449,12 @@
       const pagina = !!(t && t.pagina && !vis.nascoste.raccolte.includes(id));
       const vista = pagina ? "pagina" : "tessere";
       if (sez.dataset.vista !== vista) sez.dataset.vista = vista;
+      // Quale pagina (28/10, #258): in Giochi il gruppo delle schede «gioco» di questo schermo resta
+      // visibile sotto la pagina (il riquadro è uno solo, e un gioco che arriva ci si apre)
+      const qualePagina = pagina ? id : "";
+      if ((sez.dataset.pagina || "") !== qualePagina) {
+        if (qualePagina) sez.dataset.pagina = qualePagina; else delete sez.dataset.pagina;
+      }
       pag.hidden = !pagina;
       box.hidden = pagina || !box.children.length;
       if (!pagina) { racc.aperta = null; return; }
@@ -465,7 +471,10 @@
     function scorriAllaScheda() {
       const chiave = vis.percorso.slice(2).join("/");
       const box = $("pagina-schede");
-      const el = chiave && box ? [...box.children].find((e) => e.dataset.chiave === chiave) : null;
+      let el = chiave && box ? [...box.children].find((e) => e.dataset.chiave === chiave) : null;
+      // Una scheda del gruppo che resta sotto la pagina (il gioco in Giochi)
+      const casa = chiave && car.el[chiave] ? car.el[chiave].casa : null;
+      if (!el && casa && casa.closest("#sez-cose") && casa.getClientRects().length) el = casa;
       if (el) { try { el.scrollIntoView({ block: "nearest", behavior: "instant" }); } catch (e) { el.scrollIntoView(); } }
     }
     async function caricaPagina(id) {
@@ -493,7 +502,10 @@
       scorriAllaScheda();
     }
     // Una scheda arrivata (la lista aggiornata da un tocco o a voce): nella pagina aperta si
-    // allinea al suo posto, e le tessere si rileggono poco dopo (una volta per raffica)
+    // allinea al suo posto; le tessere (e la pagina aperta, che così prende anche le schede che non
+    // aveva) si rileggono poco dopo, una volta per raffica e al più una ogni `rinfrescaMinMs`
+    // (revisione della PR #267: le schede in diretta di un lavoro arrivano ogni pochi secondi, e una
+    // raffica di programmi rileggeva la pagina per ogni scheda, fino al limite di 30 letture al minuto)
     function raccolteDopoSchede(det) {
       if (!$("tessere") || vis.sezione !== "cose") return;
       const c = det && det.scheda;
@@ -503,12 +515,17 @@
           const box = $("pagina-schede");
           const e = [...box.children].find((x) => x.dataset.chiave === String(chiaveDi(c)));
           if (e) sch().allinea(e, costruisciScheda(c));
-          else caricaPagina(racc.aperta);
         }
         if (sez.split("/")[0] !== "cose") return;
       } else if (racc.tessere.length) return;
       // Le tessere poco dopo; anche la prima volta, se si è entrati prima della sessione
-      if (!racc.rinfresca) racc.rinfresca = setTimeout(() => { racc.rinfresca = null; aggiornaRaccolte(); }, 1500);
+      if (racc.rinfresca) return;
+      const attesa = Math.max(opzioni.rinfrescaMs, opzioni.rinfrescaMinMs - (Date.now() - racc.rinfrescata));
+      racc.rinfresca = setTimeout(() => {
+        racc.rinfresca = null;
+        racc.rinfrescata = Date.now();
+        aggiornaRaccolte();
+      }, attesa);
     }
     function tornaAlleTessere() {
       if (racc.daTessere) { racc.daTessere = false; history.back(); return; }
