@@ -18,19 +18,27 @@ il tipo di tocco e i dati che servono, che qui si controllano contro lo stato ve
 **Il vincolo** (#262, nota 9 della revisione della PR #261). Il tocco gira senza la politica del
 turno (non c'è una frase da cui possa venire un dato non fidato, e gli argomenti li scrive il
 codice): la politica ferma solo i tool vietati. Perciò un tocco può chiamare solo un tool
-(`ammesso`):
+(`ammesso`) dell'elenco in positivo `TOCCABILI` (#266), ognuno con la riga che dice perché è
+sicuro, reversibile e senza danno se toccato per sbaglio, e mai uno di `ESCLUSI` (`dimentica`,
+le catture, la rubrica, la richiesta al tutore, la risposta all'agente e ciò che vuole la voce).
+Le tabelle della politica da sole ne ammettevano 46 su 80. Come difesa in più restano le
+condizioni di prima (`_condizioni`):
 
 1. con una classe nella tabella di Calliope (`politica.CLASSI`): mai un tool registrato a
    runtime o senza classe, che vale «pericoloso»;
 2. di classe «azione» (per definizione della politica: cambia lo stato di Calliope in modo
-   reversibile e della persona) o «sicuro» senza una fonte non fidata (il risultato del tocco va
-   nella storia del modello senza busta);
-3. con un effetto (`valore.effetto`) al più E2: E3 è «esce di casa, esegue codice o non si
+   reversibile e della persona) o «sicuro»;
+3. senza una fonte non fidata, per tutte e due le classi (#266: il risultato del tocco va nella
+   storia del modello senza busta);
+4. con un effetto (`valore.effetto`) al più E2: E3 è «esce di casa, esegue codice o non si
    disfa», E4 fiducia e sicurezza fisica;
-4. fuori da `politica.IRREVERSIBILI`.
+5. fuori da `politica.IRREVERSIBILI`;
+6. con lo `ToolSpec` del registro, aperto ai familiari (un tool solo per chi amministra vuole la
+   sua voce).
 
 Si controlla tre volte: all'import di questo modulo (`controlla`: un tocco nuovo su un tool non
-ammesso ferma l'avvio e le prove), in `prepara` (con gli argomenti veri) e nel ciclo prima di
+ammesso, un toccabile che è anche escluso o che non passa le condizioni ferma l'avvio e le
+prove), in `prepara` (con gli argomenti veri) e nel ciclo prima di
 `ToolRegistry.call` (`non_ammesso`, con lo `ToolSpec` del registro, e il tool dev'essere quello
 dichiarato per quel tocco).
 
@@ -79,31 +87,113 @@ class Tocco:
     bersaglio: bool = False
 
 
-# ─────────────────────────── il vincolo (#262) ───────────────────────────
+# ─────────────────────────── il vincolo (#262, #266) ───────────────────────────
 
-def ammesso(tool: str, argomenti: dict | None = None, spec=None) -> str | None:
-    """None se un tocco può chiamare `tool` con questi argomenti; altrimenti il motivo."""
+@dataclass(frozen=True)
+class Toccabile:
+    """Un tool che un tocco può chiamare: perché è sicuro, reversibile e senza danno se toccato
+    per sbaglio, e se il tocco deve dire su che cosa agisce (`Tocco.bersaglio`)."""
+    perche: str
+    bersaglio: bool = False
+
+
+# L'elenco in positivo (#266, revisione della PR #265): le tabelle della politica da sole
+# ammettevano 46 tool su 80, `dimentica`, `pc_guarda` e `anagrafica_salva` compresi. Un tool
+# entra qui solo con la sua riga; un tocco su un tool che non c'è ferma l'import (l'avvio e le
+# prove). Le condizioni della politica (`_condizioni`) restano, come difesa in più
+TOCCABILI: dict[str, Toccabile] = {
+    "lista_togli": Toccabile(
+        "la spunta di una voce che c'è adesso nella lista (controllata in `prepara`, una cosa sola, "
+        "mai «tutto»): si rimette con «aggiungi il latte», resta in casa, e per sbaglio costa una "
+        "voce da riscrivere"),
+    "timer_imposta": Toccabile(
+        "«+1 minuto» sul timer toccato, che c'è ancora: allunga un timer di casa di un minuto, si "
+        "ferma con «Ferma» o a voce, e per sbaglio costa un minuto in più", bersaglio=True),
+    "agenda_annulla": Toccabile(
+        "«Ferma» sul timer toccato e solo su lui (il bersaglio, mai «tutti» né un promemoria): si "
+        "rimette a voce, la scheda lo mostra subito fermato, e per sbaglio costa un timer da "
+        "rimettere (criterio scritto del 28/10, #257)", bersaglio=True),
+}
+
+# Gli esclusi in modo esplicito (#266): ammessi dalle sole tabelle della politica, o vicini a
+# un tocco che verrà, ma con un danno se toccati per sbaglio, o che vogliono la voce. Un tool non
+# può essere in tutti e due gli elenchi (controllato all'import)
+ESCLUSI: dict[str, str] = {
+    "dimentica": "cancella un ricordo: non si rimette uguale, e un tocco per sbaglio lo perde",
+    "conversazioni_dimentica": "cancella conversazioni dall'archivio: non si disfa",
+    "pc_guarda": "cattura dello schermo o foto con la webcam: guarda nella stanza o nel PC",
+    "immagine_guarda": "guarda una foto (anche una cattura): il risultato entra nella storia",
+    "anagrafica_salva": "scrive nella rubrica dell'ufficio dati di altre persone",
+    "anagrafica_cerca": "legge la rubrica dell'ufficio: dati di altre persone nella storia",
+    "richiesta_tutore": "manda una richiesta al tutore: un messaggio a un'altra persona",
+    "lavoro_rispondi": "risponde all'agente al lavoro: la risposta cambia ciò che costruisce",
+    "lavoro_annulla": "ferma un lavoro dell'agente: non si riprende da dove era",
+    "cambia_voce": "cambia la modalità di Calliope per tutti: vuole la voce",
+    "citta_casa_salva": "cambia la città della casa per tutti",
+    "registra_utente": "aggiunge una persona: vuole la voce di chi amministra",
+    "minore_gestisci": "cambia i permessi di un minore: vuole la voce del tutore",
+    "conoscenti": "salva o toglie le voci di fuori casa: vuole la voce di chi amministra",
+    "conoscente_livello": "cambia il livello di un conoscente: vuole la voce di chi amministra",
+    "installa_proponi": "propone un'installazione: vuole la voce di chi amministra",
+    "installa_avvia": "installa dal catalogo: esce di casa e vuole la voce",
+    "installa_gestisci": "annulla o cambia un'installazione: vuole la voce",
+    "modello_compila": "compila un documento dell'ufficio: vuole la voce",
+    "sviluppo_apri": "apre la modalità sviluppo: vuole la voce di chi amministra",
+}
+
+
+def _condizioni(tool: str, argomenti: dict | None = None, spec=None) -> str | None:
+    """Le condizioni della politica (#262), dopo l'elenco: None se passano; altrimenti il
+    motivo. La fonte non fidata vale per ogni classe (#266): il risultato del tocco va nella
+    storia del modello senza busta, anche quello di un'«azione»."""
     from .. import politica, valore
     if tool not in politica.CLASSI:
         return f"«{tool}» non ha una classe nella tabella della politica"
     cl = politica.classe_di(tool, spec)
-    if cl.classe == politica.SICURO:
-        if politica.fonte_di(tool, spec):
-            return f"«{tool}» legge dati non fidati"
-    elif cl.classe != politica.AZIONE:
+    if cl.classe not in (politica.SICURO, politica.AZIONE):
         return f"«{tool}» è di classe «{cl.classe}», non reversibile"
+    if politica.fonte_di(tool, spec):
+        return f"«{tool}» legge dati non fidati"
     if valore.effetto(tool, dict(argomenti or {}), spec) > valore.E2:
         return f"«{tool}» ha un effetto che non si disfa (oltre E2)"
     if tool in politica.IRREVERSIBILI:
         return f"«{tool}» è tra le azioni irreversibili"
+    # Con lo ToolSpec del registro (il ciclo): un tool che i familiari non possono usare vuole
+    # la voce di chi amministra; per i minori e gli altri livelli decide ToolRegistry.call
+    livelli = getattr(spec, "levels", None)
+    if livelli is not None and "familiare" not in livelli:
+        return f"«{tool}» non è per i familiari: vuole la voce di chi amministra"
     return None
 
 
-def controlla(elenco=None) -> list[str]:
-    """I tocchi dell'elenco (di serie `TOCCHI`) il cui tool non è ammesso: [«tocco: motivo»]."""
+def ammesso(tool: str, argomenti: dict | None = None, spec=None) -> str | None:
+    """None se un tocco può chiamare `tool` con questi argomenti; altrimenti il motivo:
+    escluso, fuori dall'elenco `TOCCABILI`, o una condizione della politica che non passa."""
+    if tool in ESCLUSI:
+        return f"«{tool}» è escluso dai tocchi: {ESCLUSI[tool]}"
+    if tool not in TOCCABILI:
+        return f"«{tool}» non è nell'elenco dei tool toccabili"
+    return _condizioni(tool, argomenti, spec)
+
+
+def controlla(elenco=None, toccabili=None) -> list[str]:
+    """Gli errori dell'elenco dei tocchi (di serie `TOCCHI`) e di `TOCCABILI`: un tocco su un
+    tool non ammesso, un tool che vuole il bersaglio in un tocco che non ce l'ha, un toccabile
+    escluso o che non passa le condizioni. [«nome: motivo»]."""
     errori = []
+    tocc = TOCCABILI if toccabili is None else toccabili
+    for nome in sorted(set(tocc) & set(ESCLUSI)):
+        errori.append(f"{nome}: è sia toccabile sia escluso")
+    for nome in tocc:
+        motivo = _condizioni(nome)
+        if motivo:
+            errori.append(f"{nome}: {motivo}")
     for nome, t in (TOCCHI if elenco is None else elenco).items():
-        motivo = ammesso(t.tool)
+        motivo = (f"«{t.tool}» è escluso dai tocchi: {ESCLUSI[t.tool]}" if t.tool in ESCLUSI
+                  else f"«{t.tool}» non è nell'elenco dei tool toccabili" if t.tool not in tocc
+                  else _condizioni(t.tool))
+        if not motivo and tocc[t.tool].bersaglio and not t.bersaglio:
+            motivo = f"«{t.tool}» si tocca solo con un bersaglio"
         if motivo:
             errori.append(f"{nome}: {motivo}")
     return errori

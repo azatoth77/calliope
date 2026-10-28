@@ -558,6 +558,28 @@ def _dopo_i_rifiuti(b, c, sc, liste, turni, voce, hub, rifiuto):
              len(hub.eventi) > n and hub.eventi[-1][2].get("ok") is False and hub.eventi[-1][2].get("errore")
              and turni[-1].get("esito") == "rifiutato" and "tocco_errore" in turni[-1].get("regole", [])
              and sc.current_speaker == "Dario", json.dumps(turni[-1])[:300])
+    # Il vincolo nel ciclo con lo ToolSpec del registro (#266): un'«azione» il cui risultato è un
+    # dato non fidato non si tocca (entrerebbe nella storia senza busta); e un tool solo per chi
+    # amministra vuole la voce. Il tool non si chiama nemmeno
+    spec = c.s.tools.get("lista_togli")
+    for nome, campo, valore_prova, parola in (("con un risultato non fidato", "non_fidato", True, "non fidati"),
+                                              ("solo per chi amministra", "levels", frozenset({"amministra"}),
+                                               "voce")):
+        prima_v = getattr(spec, campo)
+        setattr(spec, campo, valore_prova)
+        try:
+            n_storia = len(b.history)
+            tocca(c, voce_tocco("bianca", "uova"))
+        finally:
+            setattr(spec, campo, prima_v)
+        r = turni[-1]
+        verifica(f"ciclo: la spunta su un lista_togli {nome} rifiutata dal vincolo, senza toglierla",
+                 r.get("regole") == ["tocco_non_ammesso"] and parola in (r.get("motivo") or "")
+                 and "uova" in liste.read("spesa")[1] and len(b.history) == n_storia,
+                 json.dumps(r, ensure_ascii=False)[:300])
+    verifica("vincolo: la spunta chiama un tool dell'elenco con il suo perché; l'aggiunta (il suo contrario) no",
+             "lista_togli" in tocchi.TOCCABILI and tocchi.TOCCABILI["lista_togli"].perche
+             and "toccabili" in (tocchi.ammesso("lista_aggiungi") or ""))
     tocca(c, voce_tocco("lia", "uova"))
     verifica("ciclo: un minore spunta la lista (i tool delle liste sono per la famiglia)",
              turni[-1].get("esito") == "tocco" and "uova" not in liste.read("spesa")[1],

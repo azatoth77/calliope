@@ -28,6 +28,7 @@ Nomi e dati di fantasia, niente rete né modelli.
     python prove/prova_agenda_pagina.py
 """
 
+import dataclasses
 import datetime
 import json
 import os
@@ -76,11 +77,48 @@ def vincolo():
              politica.classe_di("agenda_annulla").classe == politica.AZIONE
              and valore.effetto("agenda_annulla", {}) == valore.E2
              and tocchi.ammesso("agenda_annulla", {"cosa": "il timer di 5 minuti"}) is None)
+    # L'elenco in positivo (#266): solo i toccabili, ognuno con la sua riga
+    ammessi = sorted(n for n in politica.CLASSI if tocchi.ammesso(n) is None)
+    verifica("vincolo: fra i tool della politica passano solo i toccabili (prima 46 su 80)",
+             ammessi == sorted(tocchi.TOCCABILI) == ["agenda_annulla", "lista_togli", "timer_imposta"],
+             str(ammessi))
+    verifica("vincolo: ogni toccabile ha la riga che dice perché, e i tasti del timer vogliono il bersaglio",
+             all(len(t.perche) > 40 for t in tocchi.TOCCABILI.values())
+             and tocchi.TOCCABILI["timer_imposta"].bersaglio and tocchi.TOCCABILI["agenda_annulla"].bersaglio
+             and not tocchi.TOCCABILI["lista_togli"].bersaglio)
+    larghi = [n for n in politica.CLASSI if tocchi._condizioni(n) is None and n not in tocchi.TOCCABILI]
+    verifica("vincolo: i tool che le sole condizioni ammetterebbero sono fuori dall'elenco",
+             len(larghi) >= 40 and all("toccabili" in (tocchi.ammesso(n) or "") or "escluso" in (tocchi.ammesso(n) or "")
+                                       for n in larghi), str(len(larghi)))
+    # Gli esclusi in modo esplicito: le condizioni da sole ne lascerebbero passare molti
+    obbligati = ("dimentica", "pc_guarda", "anagrafica_salva", "anagrafica_cerca", "richiesta_tutore",
+                 "lavoro_rispondi", "registra_utente", "cambia_voce", "installa_proponi", "modello_compila",
+                 "sviluppo_apri", "conoscenti", "conoscente_livello", "minore_gestisci")
+    for tool in obbligati:
+        m = tocchi.ammesso(tool) or ""
+        verifica(f"vincolo: «{tool}» escluso in modo esplicito, con il motivo",
+                 tool in tocchi.ESCLUSI and m.startswith(f"«{tool}» è escluso dai tocchi:"), m)
+    verifica("vincolo: dimentica, pc_guarda, anagrafica_salva e richiesta_tutore passerebbero le sole condizioni",
+             all(tocchi._condizioni(n) is None for n in ("dimentica", "pc_guarda", "anagrafica_salva",
+                                                         "richiesta_tutore", "lavoro_rispondi")))
+    verifica("vincolo: ogni escluso è un tool vero della politica (niente nomi sbagliati)",
+             all(n in politica.CLASSI for n in tocchi.ESCLUSI), str([n for n in tocchi.ESCLUSI if n not in politica.CLASSI]))
+    verifica("vincolo: un tool sia toccabile sia escluso è un errore dell'elenco",
+             "dimentica: è sia toccabile sia escluso" in tocchi.controlla(
+                 toccabili={**tocchi.TOCCABILI, "dimentica": tocchi.Toccabile("prova")}))
+    verifica("vincolo: un toccabile che non passa le condizioni è un errore dell'elenco",
+             any(e.startswith("casa_comando:") and "pericoloso" in e for e in tocchi.controlla(
+                 toccabili={**tocchi.TOCCABILI, "casa_comando": tocchi.Toccabile("prova")})))
+    verifica("vincolo: un tocco senza bersaglio su un tool che lo vuole è un errore dell'elenco",
+             tocchi.controlla({"x": tocchi.Tocco("agenda_annulla", None)})
+             == ["x: «agenda_annulla» si tocca solo con un bersaglio"])
+    # Le condizioni di prima, come difesa in più (con il tool messo per prova fra i toccabili)
     casi = {"casa_comando": "pericoloso", "tool_inventato": "classe", "web_cerca": "non fidati",
             "lavoro_annulla": "irreversibili", "registra_utente": "pericoloso"}
     for tool, parola in casi.items():
-        m = tocchi.ammesso(tool) or ""
-        verifica(f"vincolo: «{tool}» non ammesso ({parola})", parola in m, m)
+        m = tocchi._condizioni(tool) or ""
+        verifica(f"vincolo: le condizioni rifiutano «{tool}» ({parola})", parola in m, m)
+        verifica(f"vincolo: «{tool}» non ammesso dall'elenco", tocchi.ammesso(tool) is not None)
     vero = valore.EFFETTI["lista_togli"]
     valore.EFFETTI["lista_togli"] = valore.E3
     try:
@@ -92,6 +130,26 @@ def vincolo():
                     classe="pericoloso")
     m = tocchi.ammesso("lista_togli", spec=spec) or ""
     verifica("vincolo: un ToolSpec che declassa il tool lo rende non ammesso", "pericoloso" in m, m)
+    # La fonte non fidata anche per un'«azione» (#266): il risultato va nella storia senza busta
+    for nome, sp in (("fonte", ToolSpec(name="lista_togli", description="", parameters={}, func=lambda ctx: {},
+                                        risk="azione", classe="azione", fonte="web")),
+                     ("non_fidato", ToolSpec(name="lista_togli", description="", parameters={}, func=lambda ctx: {},
+                                             risk="azione", non_fidato=True))):
+        m = tocchi.ammesso("lista_togli", spec=sp) or ""
+        verifica(f"vincolo: un'«azione» con una fonte non fidata ({nome}) non ammessa",
+                 politica.classe_di("lista_togli", sp).classe == politica.AZIONE and "non fidati" in m, m)
+    vera = politica.CLASSI["timer_imposta"]
+    politica.CLASSI["timer_imposta"] = dataclasses.replace(vera, fonte="web")
+    try:
+        m = tocchi.ammesso("timer_imposta") or ""
+    finally:
+        politica.CLASSI["timer_imposta"] = vera
+    verifica("vincolo: un'«azione» della tabella con una fonte non fidata non ammessa", "non fidati" in m, m)
+    # Con lo ToolSpec del registro: un tool solo per chi amministra vuole la sua voce
+    sp = ToolSpec(name="lista_togli", description="", parameters={}, func=lambda ctx: {},
+                  risk="azione", levels=frozenset({"amministra"}))
+    m = tocchi.ammesso("lista_togli", spec=sp) or ""
+    verifica("vincolo: un toccabile che il registro dà solo a chi amministra non ammesso", "voce" in m, m)
     # Un tocco nuovo su un tool non ammesso: il modulo non si importa (l'avvio si ferma)
     src = Path(tocchi.__file__).read_text(encoding="utf-8")
     cattivo = src.replace('Tocco("agenda_annulla", _timer_ferma', 'Tocco("casa_comando", _timer_ferma')
@@ -104,8 +162,20 @@ def vincolo():
         errore = str(e)
     verifica("vincolo: un tocco su un tool non ammesso ferma l'import del modulo",
              cattivo != src and "timer_ferma" in errore and "casa_comando" in errore, errore)
-    verifica("vincolo: controlla() su un elenco con un tool non classificato",
-             tocchi.controlla({"x": tocchi.Tocco("boh", None)}) == ["x: «boh» non ha una classe nella tabella della politica"])
+    # Un tool nuovo che le condizioni ammetterebbero ma che non è fra i toccabili, ed escluso (#266)
+    for tool, parola in (("lista_aggiungi", "toccabili"), ("dimentica", "escluso")):
+        cattivo = src.replace('Tocco("lista_togli", _spunta_lista)', f'Tocco("{tool}", _spunta_lista)')
+        mod = types.ModuleType("calliope.schermi._tocchi_prova")
+        mod.__package__ = "calliope.schermi"
+        errore = ""
+        try:
+            exec(compile(cattivo, "tocchi_prova.py", "exec"), mod.__dict__)
+        except RuntimeError as e:
+            errore = str(e)
+        verifica(f"vincolo: un tocco nuovo su «{tool}» ({parola}) ferma l'import del modulo",
+                 cattivo != src and "spunta_lista" in errore and parola in errore, errore)
+    verifica("vincolo: controlla() su un elenco con un tool fuori dall'elenco",
+             tocchi.controlla({"x": tocchi.Tocco("boh", None)}) == ["x: «boh» non è nell'elenco dei tool toccabili"])
     # prepara: un tocco che restituisce un altro tool è rifiutato
     vero = tocchi.TOCCHI["spunta_lista"]
     tocchi.TOCCHI["spunta_lista"] = tocchi.Tocco("lista_togli", lambda d, f: {
@@ -361,11 +431,30 @@ def ciclo():
                      r.get("esito") == "rifiutato" and r.get("regole") == ["tocco_non_ammesso"]
                      and not chiamati and len(b.history) == n_storia and ev.get("ok") is False
                      and "a voce" in ev.get("errore", ""), json.dumps({"r": r, "ev": ev}, ensure_ascii=False)[:300])
-        verifica("ciclo: il motivo del vincolo nel registro (classe pericolosa)",
-                 any("pericoloso" in (t.get("motivo") or "") for t in turni[-4:]))
+        verifica("ciclo: il motivo del vincolo nel registro (escluso dai tocchi)",
+                 any("escluso dai tocchi" in (t.get("motivo") or "") for t in turni[-4:]))
+        # Ogni escluso (#266), anche se un tocco lo dichiarasse: rifiutato nel ciclo senza chiamarlo
+        for tool in sorted(tocchi.ESCLUSI):
+            tocchi.TOCCHI["prova_escluso"] = tocchi.Tocco(tool, None)
+            n_storia = len(b.history)
+            pr.tocca(c, {"tipo": "tocco", "descrizione": "(prova)", "persona": "bianca", "schermo": "telefono",
+                         "schermo_id": 7, "arrivato": time.time(), "tocco": "prova_escluso", "tool": tool,
+                         "argomenti": {}})
+            r = turni[-1]
+            verifica(f"ciclo: «{tool}» escluso, rifiutato dal vincolo senza chiamarlo",
+                     r.get("regole") == ["tocco_non_ammesso"] and "escluso" in (r.get("motivo") or "")
+                     and not chiamati and len(b.history) == n_storia, json.dumps(r, ensure_ascii=False)[:200])
+        # Un tool fuori dall'elenco che le condizioni ammetterebbero (lista_aggiungi)
+        tocchi.TOCCHI["prova_escluso"] = tocchi.Tocco("lista_aggiungi", None)
+        pr.tocca(c, {"tipo": "tocco", "descrizione": "(prova)", "persona": "bianca", "schermo": "telefono",
+                     "schermo_id": 7, "arrivato": time.time(), "tocco": "prova_escluso", "tool": "lista_aggiungi",
+                     "argomenti": {"cose": "latte"}})
+        verifica("ciclo: un tool fuori dall'elenco dei toccabili rifiutato senza chiamarlo",
+                 "toccabili" in (turni[-1].get("motivo") or "") and not chiamati, json.dumps(turni[-1])[:200])
     finally:
         c.s.tools.call = vero
         tocchi.TOCCHI.pop("prova_pericolosa", None)
+        tocchi.TOCCHI.pop("prova_escluso", None)
     liste.db.close()
     a.db.close()
 
