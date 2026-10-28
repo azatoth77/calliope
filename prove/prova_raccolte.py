@@ -197,6 +197,15 @@ def prepara_tocchi():
     verifica("tocchi: una voce che lista_togli dividerebbe 422", r.get("_stato") == 422, json.dumps(r))
     r = tocchi.prepara({"tocco": "spunta_lista", "lista": "spesa", "voce": "tutto"}, fonti)
     verifica("tocchi: una voce che svuoterebbe la lista 422", r.get("_stato") == 422, json.dumps(r))
+    # «Tutto» con la punteggiatura (#266, revisione della PR #270): lista_togli la toglie
+    # (split_items) e svuoterebbe la lista; la voce è proprio nella lista, quindi non è un 409
+    for lista, forma in (("casa", "tutto."), ("regali", "Tutti!"), ("ferramenta", "tutto quanto?")):
+        liste.add(lista, [forma, "colla"], "Dario")
+        voci = liste.read(lista)[1]
+        r = tocchi.prepara({"tocco": "spunta_lista", "lista": lista, "voce": forma}, fonti)
+        verifica(f"tocchi: «{forma}» (c'è nella lista) svuoterebbe la lista: 422, mai lista_togli",
+                 forma in voci and r.get("_stato") == 422 and "tool" not in r,
+                 f"{voci} {json.dumps(r, ensure_ascii=False)}")
     r = tocchi.prepara({"tocco": "spunta_lista", "lista": "la lista della spesa", "voce": " latte "}, fonti)
     verifica("tocchi: la spunta → lista_togli con la voce e la lista",
              r.get("tool") == "lista_togli" and r.get("argomenti") == {"cose": "latte", "lista": "spesa"}
@@ -558,6 +567,28 @@ def _dopo_i_rifiuti(b, c, sc, liste, turni, voce, hub, rifiuto):
              len(hub.eventi) > n and hub.eventi[-1][2].get("ok") is False and hub.eventi[-1][2].get("errore")
              and turni[-1].get("esito") == "rifiutato" and "tocco_errore" in turni[-1].get("regole", [])
              and sc.current_speaker == "Dario", json.dumps(turni[-1])[:300])
+    # Il vincolo nel ciclo con lo ToolSpec del registro (#266): un'«azione» il cui risultato è un
+    # dato non fidato non si tocca (entrerebbe nella storia senza busta); e un tool solo per chi
+    # amministra vuole la voce. Il tool non si chiama nemmeno
+    spec = c.s.tools.get("lista_togli")
+    for nome, campo, valore_prova, parola in (("con un risultato non fidato", "non_fidato", True, "non fidati"),
+                                              ("solo per chi amministra", "levels", frozenset({"amministra"}),
+                                               "voce")):
+        prima_v = getattr(spec, campo)
+        setattr(spec, campo, valore_prova)
+        try:
+            n_storia = len(b.history)
+            tocca(c, voce_tocco("bianca", "uova"))
+        finally:
+            setattr(spec, campo, prima_v)
+        r = turni[-1]
+        verifica(f"ciclo: la spunta su un lista_togli {nome} rifiutata dal vincolo, senza toglierla",
+                 r.get("regole") == ["tocco_non_ammesso"] and parola in (r.get("motivo") or "")
+                 and "uova" in liste.read("spesa")[1] and len(b.history) == n_storia,
+                 json.dumps(r, ensure_ascii=False)[:300])
+    verifica("vincolo: la spunta chiama un tool dell'elenco con il suo perché; l'aggiunta (il suo contrario) no",
+             "lista_togli" in tocchi.TOCCABILI and tocchi.TOCCABILI["lista_togli"].perche
+             and "toccabili" in (tocchi.ammesso("lista_aggiungi") or ""))
     tocca(c, voce_tocco("lia", "uova"))
     verifica("ciclo: un minore spunta la lista (i tool delle liste sono per la famiglia)",
              turni[-1].get("esito") == "tocco" and "uova" not in liste.read("spesa")[1],

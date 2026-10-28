@@ -836,6 +836,24 @@ class Giochi:
         self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati_m})
         return {"ok": True}
 
+    def schermi_via(self, sids):
+        """Schermi revocati o col numero riusato da un altro schermo (#266, seconda revisione
+        della PR #270, `Schermi._schermi_via`): i loro posti e le loro schede escono dalle
+        partite, così lo schermo nuovo con lo stesso numero non riceve la partita di un altro.
+        Chi teneva la partita condivisa la passa a un altro schermo aperto."""
+        sids = set(sids)
+        with self._lock:
+            for p in list(self.partite.values()):
+                for sid in sids & set(p.posti):
+                    posto = p.posti[sid]
+                    posto.aperto = False
+                    self._passa_la_partita(p, posto)
+                    p.posti.pop(sid, None)
+                    if p.autorevole == sid:
+                        p.autorevole = None
+                for sid in sids:
+                    p.carte.pop(sid, None)
+
     def _passa_la_partita(self, p: Partita, posto: Posto):
         """Lo schermo che teneva la partita condivisa si è chiuso: la tiene un altro schermo
         aperto, che riparte dall'ultimo stato (evento «autorevole»)."""

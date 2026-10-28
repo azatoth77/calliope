@@ -1335,8 +1335,92 @@ def una_per_una(t):
             verifica(f"{nome_d} scheda {tipo}: in vista nella sua sezione, testo dentro, contrasto AA",
                      k in m.get("inVista", []) and not m.get("fuori") and not m.get("bassi") and not m.get("scorre"),
                      f"{m.get('sezione')} {m.get('inVista')} {m.get('fuori')} {m.get('bassi')}"[:240])
+        _schede_della_pagina(t, nome_d, "agenda")
         t.v(f"{T}.vai('#/adesso'); 1")
     t.p._chiama("Emulation.clearDeviceMetricsOverride")
+
+
+# Le schede di una pagina di raccolta (#266, nota della revisione della PR #265: le schede
+# `promemoria` dell'Agenda erano misurate a una dimensione sola): ognuna portata in vista, dentro
+# la sezione di lato, niente testo fuori di lato
+MISURA_PAGINA = r"""((i) => {
+  const s = [...document.querySelectorAll('#pagina-schede .scheda')][i];
+  if (!s) return null;
+  s.scrollIntoView({block: 'nearest'});
+  const sez = [...document.querySelectorAll('#sezioni .sezione')].find((e) => e.getClientRects().length > 0);
+  const br = sez.getBoundingClientRect(), r = s.getBoundingClientRect();
+  const fuori = [];
+  if (r.left < br.left - 1 || r.right > br.right + 1) fuori.push('esce dalla sezione di lato');
+  if (s.scrollWidth > s.clientWidth + 1) fuori.push('trabocca di lato');
+  const w = document.createTreeWalker(s, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    if (!n.textContent.trim()) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    for (const q of rg.getClientRects())
+      if (q.width && (q.left < r.left - 1 || q.right > r.right + 1)) fuori.push('«' + n.textContent.trim().slice(0, 20) + '» esce');
+  }
+  // il testo tagliato in basso (revisione della PR #270): fuori dalla scheda in verticale, o in un
+  // contenitore che nasconde ciò che trabocca; il testo solo per i lettori (ritagliato) non conta
+  const nascosto = (e) => { for (let x = e; x && x !== s.parentElement; x = x.parentElement) {
+    const cs = getComputedStyle(x); if (cs.clip !== 'auto' && cs.position === 'absolute') return true; } return false; };
+  const tagliati = [];
+  const w2 = document.createTreeWalker(s, NodeFilter.SHOW_TEXT);
+  for (let n = w2.nextNode(); n; n = w2.nextNode()) {
+    if (!n.textContent.trim() || nascosto(n.parentElement)) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    for (const q of rg.getClientRects())
+      if (q.height && (q.bottom > r.bottom + 1 || q.top < r.top - 1)) tagliati.push('«' + n.textContent.trim().slice(0, 20) + '» fuori in verticale');
+  }
+  for (const e of [s, ...s.querySelectorAll('*')]) {
+    if (!e.getClientRects().length || nascosto(e)) continue;
+    const cs = getComputedStyle(e);
+    if (/(hidden|clip)/.test(cs.overflowY) && e.textContent.trim() && e.scrollHeight > e.clientHeight + 1)
+      tagliati.push((e.className || e.tagName) + ' taglia il testo in basso');
+  }
+  // il contrasto di ogni testo della scheda (non solo di ciò che è in vista con le altre)
+  const lum = (c) => { const m = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((v) => v / 255)
+    .map((v) => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+  const contrasto = (e) => { const cs = getComputedStyle(e);
+    let b = e, bg = 'rgba(0, 0, 0, 0)';
+    while (b && (bg = getComputedStyle(b).backgroundColor) === 'rgba(0, 0, 0, 0)') b = b.parentElement;
+    const l1 = lum(cs.color), l2 = lum(b ? bg : 'rgb(0, 0, 0)');
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
+  const bassi = [s, ...s.querySelectorAll('*')].filter((e) => e.getClientRects().length && !nascosto(e)
+    && [...e.childNodes].some((x) => x.nodeType === 3 && x.textContent.trim()))
+    .map((e) => [e.className || e.tagName, contrasto(e)]).filter(([, c]) => c < 4.5).map(([n, c]) => n + ' ' + c.toFixed(2));
+  return {tipo: s.dataset.tipo || [...s.classList].join(' '), testo: s.textContent.slice(0, 200), fuori,
+          tagliati, bassi, inVista: r.bottom > br.top && r.top < br.bottom};
+})"""
+
+
+def _schede_della_pagina(t, nome_d: str, raccolta: str):
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    t.v(f"{T}.vai('#/cose/{raccolta}'); 1")
+    if not aspetta(lambda: t.v(f"{S}.vistaCose") == "pagina" and t.v(f"{S}.pagina"), 5):
+        verifica(f"{nome_d} pagina {raccolta}: si apre", False, str(t.v("location.hash")))
+        return
+    n = t.v("document.querySelectorAll('#pagina-schede .scheda').length") or 0
+    misure = []
+    for i in range(n):
+        m = t.v(f"({MISURA_PAGINA})({i})") or {}
+        time.sleep(0.1)
+        misure.append(m)
+    foto(t, f"telefono-pagina-{nome_d}-{raccolta}.png")
+    testi = " ".join(m.get("testo", "") for m in misure)
+    verifica(f"{nome_d} pagina {raccolta}: ogni scheda (il promemoria compreso) in vista, dentro la sezione, "
+             f"niente testo di lato",
+             n >= 2 and "fabbro" in testi and all(m.get("inVista") and not m.get("fuori") for m in misure),
+             json.dumps(misure, ensure_ascii=False)[:300])
+    verifica(f"{nome_d} pagina {raccolta}: in ogni scheda niente testo tagliato in basso",
+             all(not m.get("tagliati") for m in misure),
+             json.dumps([[m.get("tipo"), m.get("tagliati")] for m in misure if m.get("tagliati")], ensure_ascii=False)[:300])
+    verifica(f"{nome_d} pagina {raccolta}: contrasto AA in ogni scheda",
+             all(not m.get("bassi") for m in misure),
+             json.dumps([[m.get("tipo"), m.get("bassi")] for m in misure if m.get("bassi")], ensure_ascii=False)[:300])
+    m = t.v(MISURA) or {}
+    verifica(f"{nome_d} pagina {raccolta}: contrasto AA", not m.get("bassi"), str(m.get("bassi"))[:200])
 
 
 def misure_strati(t, hub, spec):

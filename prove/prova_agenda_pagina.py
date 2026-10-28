@@ -2,7 +2,10 @@
 passo 2b di docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md, issue #257 e #262 di #241;
 aree docs/aree/schermi-telefono.md, sicurezza-politica.md e memoria-agenda-liste.md).
 
-1. **Il vincolo dei tocchi** (`schermi/tocchi.py`, #262): i tocchi dell'elenco sono ammessi; un
+1. **Il vincolo dei tocchi** (`schermi/tocchi.py`, #262 e #266): passano solo i `TOCCABILI`,
+   ognuno col suo perché; gli `ESCLUSI` (dimentica, catture, rubrica, richiesta al tutore,
+   risposta all'agente, ciò che vuole la voce) rifiutati col motivo; un'«azione» con una fonte non
+   fidata e un tool solo per chi amministra no; come difesa in più, un
    tool pericoloso, senza classe, che legge dati non fidati, irreversibile, con un effetto oltre
    E2 o declassato dal suo `ToolSpec` no; un tocco nuovo su un tool non ammesso ferma l'import
    del modulo (l'avvio); `prepara` rifiuta un tocco che chiama un altro tool (403); il ciclo
@@ -19,7 +22,11 @@ aree docs/aree/schermi-telefono.md, sicurezza-politica.md e memoria-agenda-liste
 4. **Il ciclo** con un `ToolRegistry` vero e l'`Agenda` su disco: «+1 minuto» e «Ferma» cambiano
    il timer toccato e non l'ultimo messo (due timer senza nome), registro dei turni, storia che
    chiude con Calliope, la scheda aggiornata allo schermo del tocco, l'evento «tocco»; il timer
-   suonato nel frattempo: rifiuto con il motivo e nessun timer nuovo.
+   suonato nel frattempo: rifiuto con il motivo e nessun timer nuovo; ogni escluso e un tool
+   fuori dall'elenco rifiutati senza chiamarli (#266). Con l'hub vero e due stanze (#266): lo
+   schermo senza stanza manda il timer alla stanza predefinita, senza quella a tutti, con la sua
+   stanza a quella; il mittente col livello vero limitato come lo scritto; `conv_archivio` della
+   conversazione del tocco.
 5. **Il server** vero su 127.0.0.1: la pagina Agenda da `/api/raccolte`, il tocco del timer
    nell'ingresso con il bersaglio e la chiave, 409 per un timer che non c'è, oltre 30 tocchi 429.
 
@@ -28,6 +35,7 @@ Nomi e dati di fantasia, niente rete né modelli.
     python prove/prova_agenda_pagina.py
 """
 
+import dataclasses
 import datetime
 import json
 import os
@@ -63,12 +71,32 @@ def verifica(nome, ok, dettaglio=""):
         ERRORI.append(nome)
 
 
+ORIGINALI = tocchi.TOCCHI
+
+
+def metti_tocco(nome, t):
+    """Un tocco di prova: `TOCCHI` è immutabile (#266), si rimpiazza tutto il dizionario."""
+    tocchi.TOCCHI = types.MappingProxyType({**dict(tocchi.TOCCHI), nome: t})
+
+
+def rimetti_tocchi():
+    tocchi.TOCCHI = ORIGINALI
+
+
 def agenda_nuova(nome):
     return Agenda(str(TMP / f"{nome}.db"))
 
 
 # ─────────────────────────── 1. il vincolo dei tocchi ───────────────────────────
 def vincolo():
+    # Immutabili a runtime (#266, revisione della PR #270)
+    for nome, m in (("TOCCHI", ORIGINALI), ("TOCCABILI", tocchi.TOCCABILI), ("ESCLUSI", tocchi.ESCLUSI)):
+        try:
+            m["prova"] = None
+            fermo = False
+        except TypeError:
+            fermo = True
+        verifica(f"vincolo: {nome} non si cambia a runtime", fermo and "prova" not in m)
     verifica("vincolo: i tocchi dell'elenco sono ammessi (anche all'import)",
              tocchi.controlla() == [] and tocchi._ERRORI == []
              and {t.tool for t in tocchi.TOCCHI.values()} == {"lista_togli", "timer_imposta", "agenda_annulla"})
@@ -76,11 +104,48 @@ def vincolo():
              politica.classe_di("agenda_annulla").classe == politica.AZIONE
              and valore.effetto("agenda_annulla", {}) == valore.E2
              and tocchi.ammesso("agenda_annulla", {"cosa": "il timer di 5 minuti"}) is None)
+    # L'elenco in positivo (#266): solo i toccabili, ognuno con la sua riga
+    ammessi = sorted(n for n in politica.CLASSI if tocchi.ammesso(n) is None)
+    verifica("vincolo: fra i tool della politica passano solo i toccabili (prima 46 su 80)",
+             ammessi == sorted(tocchi.TOCCABILI) == ["agenda_annulla", "lista_togli", "timer_imposta"],
+             str(ammessi))
+    verifica("vincolo: ogni toccabile ha la riga che dice perché, e i tasti del timer vogliono il bersaglio",
+             all(len(t.perche) > 40 for t in tocchi.TOCCABILI.values())
+             and tocchi.TOCCABILI["timer_imposta"].bersaglio and tocchi.TOCCABILI["agenda_annulla"].bersaglio
+             and not tocchi.TOCCABILI["lista_togli"].bersaglio)
+    larghi = [n for n in politica.CLASSI if tocchi._condizioni(n) is None and n not in tocchi.TOCCABILI]
+    verifica("vincolo: i tool che le sole condizioni ammetterebbero sono fuori dall'elenco",
+             len(larghi) >= 40 and all("toccabili" in (tocchi.ammesso(n) or "") or "escluso" in (tocchi.ammesso(n) or "")
+                                       for n in larghi), str(len(larghi)))
+    # Gli esclusi in modo esplicito: le condizioni da sole ne lascerebbero passare molti
+    obbligati = ("dimentica", "pc_guarda", "anagrafica_salva", "anagrafica_cerca", "richiesta_tutore",
+                 "lavoro_rispondi", "registra_utente", "cambia_voce", "installa_proponi", "modello_compila",
+                 "sviluppo_apri", "conoscenti", "conoscente_livello", "minore_gestisci")
+    for tool in obbligati:
+        m = tocchi.ammesso(tool) or ""
+        verifica(f"vincolo: «{tool}» escluso in modo esplicito, con il motivo",
+                 tool in tocchi.ESCLUSI and m.startswith(f"«{tool}» è escluso dai tocchi:"), m)
+    verifica("vincolo: dimentica, pc_guarda, anagrafica_salva e richiesta_tutore passerebbero le sole condizioni",
+             all(tocchi._condizioni(n) is None for n in ("dimentica", "pc_guarda", "anagrafica_salva",
+                                                         "richiesta_tutore", "lavoro_rispondi")))
+    verifica("vincolo: ogni escluso è un tool vero della politica (niente nomi sbagliati)",
+             all(n in politica.CLASSI for n in tocchi.ESCLUSI), str([n for n in tocchi.ESCLUSI if n not in politica.CLASSI]))
+    verifica("vincolo: un tool sia toccabile sia escluso è un errore dell'elenco",
+             "dimentica: è sia toccabile sia escluso" in tocchi.controlla(
+                 toccabili={**tocchi.TOCCABILI, "dimentica": tocchi.Toccabile("prova")}))
+    verifica("vincolo: un toccabile che non passa le condizioni è un errore dell'elenco",
+             any(e.startswith("casa_comando:") and "pericoloso" in e for e in tocchi.controlla(
+                 toccabili={**tocchi.TOCCABILI, "casa_comando": tocchi.Toccabile("prova")})))
+    verifica("vincolo: un tocco senza bersaglio su un tool che lo vuole è un errore dell'elenco",
+             tocchi.controlla({"x": tocchi.Tocco("agenda_annulla", None)})
+             == ["x: «agenda_annulla» si tocca solo con un bersaglio"])
+    # Le condizioni di prima, come difesa in più (con il tool messo per prova fra i toccabili)
     casi = {"casa_comando": "pericoloso", "tool_inventato": "classe", "web_cerca": "non fidati",
             "lavoro_annulla": "irreversibili", "registra_utente": "pericoloso"}
     for tool, parola in casi.items():
-        m = tocchi.ammesso(tool) or ""
-        verifica(f"vincolo: «{tool}» non ammesso ({parola})", parola in m, m)
+        m = tocchi._condizioni(tool) or ""
+        verifica(f"vincolo: le condizioni rifiutano «{tool}» ({parola})", parola in m, m)
+        verifica(f"vincolo: «{tool}» non ammesso dall'elenco", tocchi.ammesso(tool) is not None)
     vero = valore.EFFETTI["lista_togli"]
     valore.EFFETTI["lista_togli"] = valore.E3
     try:
@@ -92,6 +157,26 @@ def vincolo():
                     classe="pericoloso")
     m = tocchi.ammesso("lista_togli", spec=spec) or ""
     verifica("vincolo: un ToolSpec che declassa il tool lo rende non ammesso", "pericoloso" in m, m)
+    # La fonte non fidata anche per un'«azione» (#266): il risultato va nella storia senza busta
+    for nome, sp in (("fonte", ToolSpec(name="lista_togli", description="", parameters={}, func=lambda ctx: {},
+                                        risk="azione", classe="azione", fonte="web")),
+                     ("non_fidato", ToolSpec(name="lista_togli", description="", parameters={}, func=lambda ctx: {},
+                                             risk="azione", non_fidato=True))):
+        m = tocchi.ammesso("lista_togli", spec=sp) or ""
+        verifica(f"vincolo: un'«azione» con una fonte non fidata ({nome}) non ammessa",
+                 politica.classe_di("lista_togli", sp).classe == politica.AZIONE and "non fidati" in m, m)
+    vera = politica.CLASSI["timer_imposta"]
+    politica.CLASSI["timer_imposta"] = dataclasses.replace(vera, fonte="web")
+    try:
+        m = tocchi.ammesso("timer_imposta") or ""
+    finally:
+        politica.CLASSI["timer_imposta"] = vera
+    verifica("vincolo: un'«azione» della tabella con una fonte non fidata non ammessa", "non fidati" in m, m)
+    # Con lo ToolSpec del registro: un tool solo per chi amministra vuole la sua voce
+    sp = ToolSpec(name="lista_togli", description="", parameters={}, func=lambda ctx: {},
+                  risk="azione", levels=frozenset({"amministra"}))
+    m = tocchi.ammesso("lista_togli", spec=sp) or ""
+    verifica("vincolo: un toccabile che il registro dà solo a chi amministra non ammesso", "voce" in m, m)
     # Un tocco nuovo su un tool non ammesso: il modulo non si importa (l'avvio si ferma)
     src = Path(tocchi.__file__).read_text(encoding="utf-8")
     cattivo = src.replace('Tocco("agenda_annulla", _timer_ferma', 'Tocco("casa_comando", _timer_ferma')
@@ -104,16 +189,27 @@ def vincolo():
         errore = str(e)
     verifica("vincolo: un tocco su un tool non ammesso ferma l'import del modulo",
              cattivo != src and "timer_ferma" in errore and "casa_comando" in errore, errore)
-    verifica("vincolo: controlla() su un elenco con un tool non classificato",
-             tocchi.controlla({"x": tocchi.Tocco("boh", None)}) == ["x: «boh» non ha una classe nella tabella della politica"])
+    # Un tool nuovo che le condizioni ammetterebbero ma che non è fra i toccabili, ed escluso (#266)
+    for tool, parola in (("lista_aggiungi", "toccabili"), ("dimentica", "escluso")):
+        cattivo = src.replace('Tocco("lista_togli", _spunta_lista)', f'Tocco("{tool}", _spunta_lista)')
+        mod = types.ModuleType("calliope.schermi._tocchi_prova")
+        mod.__package__ = "calliope.schermi"
+        errore = ""
+        try:
+            exec(compile(cattivo, "tocchi_prova.py", "exec"), mod.__dict__)
+        except RuntimeError as e:
+            errore = str(e)
+        verifica(f"vincolo: un tocco nuovo su «{tool}» ({parola}) ferma l'import del modulo",
+                 cattivo != src and "spunta_lista" in errore and parola in errore, errore)
+    verifica("vincolo: controlla() su un elenco con un tool fuori dall'elenco",
+             tocchi.controlla({"x": tocchi.Tocco("boh", None)}) == ["x: «boh» non è nell'elenco dei tool toccabili"])
     # prepara: un tocco che restituisce un altro tool è rifiutato
-    vero = tocchi.TOCCHI["spunta_lista"]
-    tocchi.TOCCHI["spunta_lista"] = tocchi.Tocco("lista_togli", lambda d, f: {
-        "tool": "casa_comando", "argomenti": {}, "descrizione": "(prova)"})
+    metti_tocco("spunta_lista", tocchi.Tocco("lista_togli", lambda d, f: {
+        "tool": "casa_comando", "argomenti": {}, "descrizione": "(prova)"}))
     try:
         r = tocchi.prepara({"tocco": "spunta_lista"}, None)
     finally:
-        tocchi.TOCCHI["spunta_lista"] = vero
+        rimetti_tocchi()
     verifica("vincolo: prepara rifiuta un tocco che chiama un altro tool (403)",
              r.get("_stato") == 403 and "casa_comando" in r.get("motivo", ""), json.dumps(r, ensure_ascii=False))
     verifica("vincolo: non_ammesso per un tocco sconosciuto e per un tool diverso dal suo",
@@ -338,11 +434,57 @@ def ciclo():
              r.get("esito") == "rifiutato" and "non c'è più" in r.get("motivo", "")
              and len(a.items()) == prima == 0 and ev.get("ok") is False and "non c'è più" in ev.get("errore", "")
              and len(b.history) == n_storia, json.dumps({"r": r, "ev": ev}, ensure_ascii=False)[:400])
+    # Finito ma non ancora suonato mentre il tocco aspetta (#266, revisione della PR #270):
+    # «+1 minuto» non lo allunga, suona come doveva
+    t3 = a.add("timer", "di 3 minuti", time.time() + 180, owner="dario", owner_name="Dario")
+    prep = tocchi.prepara({"tocco": "timer_piu", "chiave": schede.chiave_timer(a.get(t3))}, fonti)
+    # Il tool da solo, col bersaglio del tocco: deciso. Il timer non si tocca nel database (il
+    # thread dell'agenda lo farebbe suonare): per il tool l'orologio è oltre la fine
+    import calliope.tools.builtin as builtin_mod
+    vero_time = builtin_mod.time
+
+    class Dopo:
+        def __getattr__(self, nome):
+            return getattr(vero_time, nome)
+
+        @staticmethod
+        def time():
+            return vero_time.time() + 400
+    due_prima = a.get(t3)["due"]
+    ctx.tocco_bersaglio = prep["bersaglio"]
+    sc.current_speaker, sc.identified_by = "Bianca", "schermo"
+    builtin_mod.time = Dopo()
+    try:
+        diretto = json.loads(c.s.tools.call("timer_imposta", prep["argomenti"], ctx, "familiare"))
+    finally:
+        builtin_mod.time = vero_time
+        ctx.tocco_bersaglio = None
+        sc.current_speaker, sc.identified_by = "Dario", "voce"
+    verifica("tool: «+1 minuto» su un timer finito e non ancora suonato non lo allunga, con la frase",
+             diretto.get("ok") is False and "già finito" in diretto.get("risposta_finale", "")
+             and a.get(t3) is not None and abs(a.get(t3)["due"] - due_prima) < 0.01,
+             json.dumps(diretto, ensure_ascii=False)[:300])
+    finito = time.time() - 1
+    a.db.execute("UPDATE agenda SET due = ? WHERE id = ?", (finito, t3))
+    a.db.commit()
+    n_storia = len(b.history)
+    pr.tocca(c, scritto(prep, "timer_piu"))
+    r, ev = turni[-1], hub.eventi[-1][2]
+    # Nel ciclo il timer può anche suonare prima del tocco (lo controlla il giro): allora «non c'è
+    # più»; in tutti e due i casi non si allunga e non nasce un timer nuovo
+    verifica("ciclo: «+1 minuto» su un timer finito e non ancora suonato: rifiutato, non allungato",
+             r.get("esito") == "rifiutato"
+             and ("già finito" in r.get("motivo", "") or "non c'è più" in r.get("motivo", ""))
+             and (a.get(t3) is None or abs(a.get(t3)["due"] - finito) < 0.01) and len(a.items()) <= 1
+             and ev.get("ok") is False and len(b.history) == n_storia,
+             json.dumps({"motivo": r.get("motivo"), "ev": ev, "voci": len(a.items()), "t3": a.get(t3),
+                         "finito": finito}, ensure_ascii=False, default=str)[:600])
+    a.cancel_ids({t3})
     # Il vincolo nel ciclo: un tool non ammesso non si chiama nemmeno
     chiamati = []
     c.s.tools.call = lambda *x, **k: chiamati.append(x) or "{}"
     # Un tocco nell'elenco su un tool non ammesso (come se l'import non l'avesse fermato)
-    tocchi.TOCCHI["prova_pericolosa"] = tocchi.Tocco("registra_utente", None)
+    metti_tocco("prova_pericolosa", tocchi.Tocco("registra_utente", None))
     try:
         for nome, item in (("un tool pericoloso dichiarato da un tocco", {
                                 "tocco": "prova_pericolosa", "tool": "registra_utente", "argomenti": {"nome": "Ugo"}}),
@@ -361,11 +503,29 @@ def ciclo():
                      r.get("esito") == "rifiutato" and r.get("regole") == ["tocco_non_ammesso"]
                      and not chiamati and len(b.history) == n_storia and ev.get("ok") is False
                      and "a voce" in ev.get("errore", ""), json.dumps({"r": r, "ev": ev}, ensure_ascii=False)[:300])
-        verifica("ciclo: il motivo del vincolo nel registro (classe pericolosa)",
-                 any("pericoloso" in (t.get("motivo") or "") for t in turni[-4:]))
+        verifica("ciclo: il motivo del vincolo nel registro (escluso dai tocchi)",
+                 any("escluso dai tocchi" in (t.get("motivo") or "") for t in turni[-4:]))
+        # Ogni escluso (#266), anche se un tocco lo dichiarasse: rifiutato nel ciclo senza chiamarlo
+        for tool in sorted(tocchi.ESCLUSI):
+            metti_tocco("prova_escluso", tocchi.Tocco(tool, None))
+            n_storia = len(b.history)
+            pr.tocca(c, {"tipo": "tocco", "descrizione": "(prova)", "persona": "bianca", "schermo": "telefono",
+                         "schermo_id": 7, "arrivato": time.time(), "tocco": "prova_escluso", "tool": tool,
+                         "argomenti": {}})
+            r = turni[-1]
+            verifica(f"ciclo: «{tool}» escluso, rifiutato dal vincolo senza chiamarlo",
+                     r.get("regole") == ["tocco_non_ammesso"] and "escluso" in (r.get("motivo") or "")
+                     and not chiamati and len(b.history) == n_storia, json.dumps(r, ensure_ascii=False)[:200])
+        # Un tool fuori dall'elenco che le condizioni ammetterebbero (lista_aggiungi)
+        metti_tocco("prova_escluso", tocchi.Tocco("lista_aggiungi", None))
+        pr.tocca(c, {"tipo": "tocco", "descrizione": "(prova)", "persona": "bianca", "schermo": "telefono",
+                     "schermo_id": 7, "arrivato": time.time(), "tocco": "prova_escluso", "tool": "lista_aggiungi",
+                     "argomenti": {"cose": "latte"}})
+        verifica("ciclo: un tool fuori dall'elenco dei toccabili rifiutato senza chiamarlo",
+                 "toccabili" in (turni[-1].get("motivo") or "") and not chiamati, json.dumps(turni[-1])[:200])
     finally:
         c.s.tools.call = vero
-        tocchi.TOCCHI.pop("prova_pericolosa", None)
+        rimetti_tocchi()
     liste.db.close()
     a.db.close()
 
@@ -390,13 +550,12 @@ def senza_bersaglio_e_corsia():
                      and len(hub.eventi) > n_ev and hub.eventi[-1][2].get("ok") is False, json.dumps(r)[:200])
     finally:
         c.s.tools.call = vero
-    vero = tocchi.TOCCHI["timer_ferma"]
-    tocchi.TOCCHI["timer_ferma"] = tocchi.Tocco("agenda_annulla", lambda d, f: {
-        "tool": "agenda_annulla", "argomenti": {"cosa": "il timer"}, "descrizione": "(prova)"}, bersaglio=True)
+    metti_tocco("timer_ferma", tocchi.Tocco("agenda_annulla", lambda d, f: {
+        "tool": "agenda_annulla", "argomenti": {"cosa": "il timer"}, "descrizione": "(prova)"}, bersaglio=True))
     try:
         r = tocchi.prepara({"tocco": "timer_ferma"}, None)
     finally:
-        tocchi.TOCCHI["timer_ferma"] = vero
+        rimetti_tocchi()
     verifica("bersaglio: prepara rifiuta un tocco del timer che ha perso il bersaglio (403)",
              r.get("_stato") == 403 and r.get("motivo") == "senza bersaglio", json.dumps(r, ensure_ascii=False))
     # Una corsia nuova nasce pulita, anche se si collega mentre il ciclo è dentro un tocco
@@ -418,6 +577,284 @@ def senza_bersaglio_e_corsia():
                      getattr(nuovo, k) in (None, False, "", []), repr(getattr(nuovo, k))[:80])
     liste.db.close()
     a.db.close()
+
+
+class CicloFinto:
+    """Il ciclo del server per una connessione: ciò che le arriva, senza asyncio."""
+
+    def __init__(self):
+        self.arrivati = []
+
+    def call_soon_threadsafe(self, f, item):
+        self.arrivati.append(item)
+
+
+def numero_riusato():
+    """Gli id degli schermi si riusano (#266, seconda revisione della PR #270): la tabella ha
+    `INTEGER PRIMARY KEY` senza AUTOINCREMENT e la revoca cancella la riga. Una revoca e un
+    abbinamento fatti da terminale (un secondo `ArchivioSchermi`, come `python -m calliope.schermi`)
+    danno il numero dello schermo tolto a uno schermo nuovo di un'altra persona: né «Ferma» né il
+    collegamento gli mandano niente dello schermo di prima, e la pagina vecchia riceve «revocato»."""
+    from calliope.schermi import Mittente
+    b, c, sc, liste, turni, voce, finto, _ = pr.prepara_ciclo()
+    cfg = Config()
+    cfg.config_dir = str(TMP)
+    cfg.memory_db = str(TMP / "memoria-riuso.db")
+    cfg.schermi_stanza = "cucina"
+    hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db), log=lambda m: None)
+    hub.profilo = c.s.registry.by_id
+    terminale = ArchivioSchermi(cfg.memory_db)          # un altro processo, sullo stesso file
+    giochi_via = []
+    hub.giochi = types.SimpleNamespace(schermi_via=lambda v: giochi_via.append(set(v)))
+    tel_b, _ = hub.archivio.crea_con_token("telefono", proprietario="bianca", proprietario_nome="Bianca")
+    tel_d, _ = hub.archivio.crea_con_token("telefono", proprietario="dario", proprietario_nome="Dario")
+    cucina, _ = hub.archivio.crea_con_token("cucina")
+    hub._rinfresca()
+    c.s.schermi = b.tool_ctx.schermi = hub
+    c.ingresso = hub.ingresso
+    a = agenda_nuova("riuso")
+    b.tool_ctx.agenda = a
+    fonti = types.SimpleNamespace(agenda=a)
+    sc.current_speaker, sc.identified_by = "Bianca", "voce"
+
+    def con(sid, k):
+        return [s for s in hub.storia(sid) if s.get("chiave") == k]
+
+    def ferma(k, sid):
+        item = scritto(tocchi.prepara({"tocco": "timer_ferma", "chiave": k}, fonti), "timer_ferma",
+                       persona="dario", sid=sid)
+        item["stanza"] = "telefono"
+        pr.tocca(c, item)
+        return turni[-1]
+
+    try:
+        # 1. La cucina revocata da terminale, il PC nuovo di Bianca col suo numero; «Ferma» con
+        #    l'elenco in memoria ancora vecchio (i 5 s della cache) e con l'elenco riletto
+        for giro, riletto in (("con l'elenco in memoria vecchio", False), ("con l'elenco riletto", True)):
+            tid = a.add("timer", f"della pasta {giro}", time.time() + 300, owner="dario", owner_name="Dario")
+            k = schede.chiave_timer(a.get(tid))
+            ultimo = max(s["id"] for s in hub.abbinati())
+            stanza_tv = next(s for s in hub.abbinati() if s["id"] == ultimo and not s.get("proprietario"))["stanza"]
+            hub.invia(schede.timer(a.get(tid)), Mittente(persona="dario", nome="Dario", livello="amministra",
+                                                         certo=True, stanza=stanza_tv))
+            verifica(f"riuso ({giro}): il timer messo a voce è sulla TV, l'ultimo numero",
+                     hub.dove(k) == {ultimo}, str(hub.dove(k)))
+            assert terminale.revoca(ultimo)
+            nuovo, _ = terminale.crea_con_token("studio", proprietario="bianca", proprietario_nome="Bianca")
+            verifica(f"riuso ({giro}): il PC nuovo di Bianca riprende il numero della TV revocata",
+                     nuovo["id"] == ultimo, f"{nuovo['id']} {ultimo}")
+            if riletto:
+                hub._rinfresca()
+            r = ferma(k, tel_d["id"])
+            # Il PC nuovo si collega: il server rilegge l'elenco se la sessione non torna (_schermo_sessione)
+            hub._rinfresca()
+            riga = next(s for s in hub.abbinati() if s["id"] == ultimo)
+            loop = CicloFinto()
+            conn, storia = hub.collega(riga, loop)
+            verifica(f"riuso ({giro}): «Ferma» dal telefono di Dario non arriva al PC nuovo di Bianca",
+                     r.get("esito") == "tocco" and not con(ultimo, k) and not [x for x in storia if x.get("chiave") == k]
+                     and ultimo not in hub.dove(k), f"{r.get('esito')} {hub.dove(k)} {[x.get('chiave') for x in storia]}")
+            hub.scollega(conn)
+            # Lo schermo nuovo diventa la TV per il giro dopo (stanza, non personale)
+            assert terminale.revoca(ultimo)
+            terminale.crea_con_token(f"cucina{2 if riletto else 1}")
+            hub._rinfresca()
+            hub.abbinati()
+        # 2. La scheda personale di Dario in memoria sul suo telefono, la pagina vecchia aperta;
+        #    il telefono revocato da terminale e quello nuovo di Bianca col suo numero
+        tel_d2, _ = hub.archivio.crea_con_token("telefono", proprietario="dario", proprietario_nome="Dario")
+        hub._rinfresca()
+        sid = tel_d2["id"]
+        assert sid == max(s["id"] for s in hub.abbinati())
+        riga_d = next(s for s in hub.abbinati() if s["id"] == sid)
+        hub.invia_a(sid, {"tipo": "testo", "chiave": "nota:privata", "visibilita": "personale",
+                          "testo": "di Dario"})
+        loop_vecchio = CicloFinto()
+        vecchia, _ = hub.collega(riga_d, loop_vecchio)
+        assert terminale.revoca(sid)
+        nuovo, _ = terminale.crea_con_token("telefono", proprietario="bianca", proprietario_nome="Bianca")
+        verifica("riuso: il telefono nuovo di Bianca riprende il numero di quello di Dario", nuovo["id"] == sid)
+        hub._rinfresca()
+        riga_b = next(s for s in hub.abbinati() if s["id"] == sid)
+        loop = CicloFinto()
+        conn, storia = hub.collega(riga_b, loop)
+        verifica("riuso: al collegamento il telefono nuovo di Bianca non riceve la scheda personale di Dario",
+                 riga_b["proprietario"] == "bianca" and not [x for x in storia if x.get("chiave") == "nota:privata"],
+                 str([x.get("chiave") for x in storia]))
+        verifica("riuso: la pagina vecchia del telefono di Dario riceve «revocato» e non è più collegata",
+                 ("revocato", "{}") in loop_vecchio.arrivati and vecchia not in hub._conn.get(sid, [])
+                 and conn in hub._conn.get(sid, []), str(loop_vecchio.arrivati))
+        hub.invia_a(sid, {"tipo": "testo", "chiave": "nota:bianca", "visibilita": "personale", "testo": "di Bianca"})
+        verifica("riuso: ciò che va al telefono nuovo arriva solo alla sua pagina, non a quella vecchia di Dario",
+                 not [x for x in loop_vecchio.arrivati if "nota:bianca" in str(x)]
+                 and [x for x in loop.arrivati if "nota:bianca" in str(x)])
+        verifica("riuso: valido() col momento dell'abbinamento distingue lo schermo di prima",
+                 hub.valido(sid) and hub.valido(sid, riga_b["creato"]) and not hub.valido(sid, riga_d["creato"]))
+        verifica("riuso: anche i giochi tolgono i posti del numero riusato (Giochi.schermi_via)",
+                 any(sid in v for v in giochi_via), str(giochi_via))
+        hub.scollega(conn)
+    finally:
+        liste.db.close()
+        a.db.close()
+
+
+def hub_vero():
+    """La scheda pubblica del timer con l'hub vero e due stanze (#266, nota 3 della revisione
+    della PR #265, e revisione della PR #270). Una scheda che c'è già (stessa chiave) si aggiorna
+    dove era andata, più gli schermi di chi tocca: il timer messo a voce in cucina e fermato dal
+    telefono (la cui stanza è «telefono») arriva alla TV della cucina e non al telefono di un altro
+    familiare. Una scheda mai vista va come a voce: stanza predefinita, senza quella tutti, con la
+    stanza dello schermo a quella; mai agli schermi personali di altre persone. Il mittente col
+    livello vero, limitato come lo scritto. La traccia chiave → schermi ha un tetto e dimentica gli
+    schermi revocati."""
+    from calliope.schermi import Mittente
+    b, c, sc, liste, turni, voce, finto, _ = pr.prepara_ciclo()
+    cfg = Config()
+    cfg.config_dir = str(TMP)
+    cfg.memory_db = str(TMP / "memoria-hub.db")
+    cfg.schermi_stanza = "cucina"
+    hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db), log=lambda m: None)
+    hub.profilo = c.s.registry.by_id
+    cucina, _ = hub.archivio.crea_con_token("cucina")
+    salotto, _ = hub.archivio.crea_con_token("salotto")
+    tel, _ = hub.archivio.crea_con_token("telefono", proprietario="dario", proprietario_nome="Dario")
+    pc_d, _ = hub.archivio.crea_con_token("studio", proprietario="dario", proprietario_nome="Dario")
+    tel_b, _ = hub.archivio.crea_con_token("telefono", proprietario="bianca", proprietario_nome="Bianca")
+    hub._rinfresca()
+    c.s.schermi = b.tool_ctx.schermi = hub
+    c.ingresso = hub.ingresso
+    mittenti = []
+    vero_aggiorna = hub.aggiorna
+
+    def spia(scheda, mittente):
+        mittenti.append(mittente)
+        return vero_aggiorna(scheda, mittente)
+    hub.aggiorna = spia
+    a = agenda_nuova("hub-vero")
+    b.tool_ctx.agenda = a
+    fonti = types.SimpleNamespace(agenda=a)
+
+    def con(sid, k):
+        return [s for s in hub.storia(sid) if s.get("chiave") == k]
+
+    def nuovo_timer(nome):
+        tid = a.add("timer", nome, time.time() + 300, owner="dario", owner_name="Dario")
+        return tid, schede.chiave_timer(a.get(tid))
+
+    def tocca_timer(k, stanza, tocco="timer_piu"):
+        item = scritto(tocchi.prepara({"tocco": tocco, "chiave": k}, fonti), tocco,
+                       persona="dario", sid=tel["id"])
+        item["stanza"] = stanza
+        n = len(mittenti)
+        pr.tocca(c, item)
+        return turni[-1], mittenti[n:]
+
+    def giro(stanza, nome):
+        _, k = nuovo_timer(nome)
+        r, m = tocca_timer(k, stanza)
+        return k, r, m
+
+    try:
+        sc.current_speaker, sc.identified_by = "Bianca", "voce"
+        # Il caso vero: il timer messo a voce in cucina, poi fermato dal telefono (stanza «telefono»)
+        tid, k = nuovo_timer("della pasta")
+        hub.invia(schede.timer(a.get(tid)), Mittente(persona="dario", nome="Dario", livello="amministra",
+                                                     certo=True, stanza="cucina"))
+        verifica("hub vero: il timer messo a voce in cucina è sulla TV della cucina, non sui telefoni",
+                 con(cucina["id"], k) and not con(tel["id"], k) and not con(tel_b["id"], k)
+                 and hub.dove(k) == {cucina["id"]}, str(hub.dove(k)))
+        r, m = tocca_timer(k, "telefono", "timer_ferma")
+        fermata = [s for s in con(cucina["id"], k) if s.get("stato") == "annullato"]
+        verifica("hub vero: «Ferma» dal telefono aggiorna la TV della cucina, dove la scheda c'era",
+                 r.get("esito") == "tocco" and fermata and a.get(tid) is None,
+                 json.dumps(r, ensure_ascii=False)[:200])
+        verifica("hub vero: e gli schermi di chi tocca, non il telefono di Bianca con la stessa «stanza» "
+                 "né il salotto, che non l'avevano",
+                 con(tel["id"], k) and con(pc_d["id"], k) and not con(tel_b["id"], k) and not con(salotto["id"], k))
+        verifica("hub vero: il mittente col livello vero limitato come lo scritto (chi amministra: familiare)",
+                 m and m[-1].livello == "familiare" and m[-1].persona == "dario" and m[-1].certo
+                 and m[-1].stanza == "telefono" and m[-1].schermo == tel["id"], str(m))
+        verifica("hub vero: chi tocca non ha preso il livello di chi parlava a voce prima",
+                 r.get("livello") == "familiare" and sc.current_speaker == "Bianca")
+        # Una scheda mai vista (Calliope riaccesa dopo che il timer era stato messo): come a voce
+        k, r, m = giro(None, "di 5 minuti")
+        verifica("hub vero: una scheda mai vista, senza la stanza dello schermo, va alla stanza predefinita "
+                 "(cucina), non al salotto", r.get("esito") == "tocco" and con(cucina["id"], k)
+                 and not con(salotto["id"], k), f"{len(con(cucina['id'], k))} {len(con(salotto['id'], k))}")
+        verifica("hub vero: e agli schermi personali di chi tocca, non a quelli di un'altra persona",
+                 con(tel["id"], k) and con(pc_d["id"], k) and not con(tel_b["id"], k))
+        cfg.schermi_stanza = ""
+        k, r, m = giro(None, "di 7 minuti")
+        verifica("hub vero: senza stanza predefinita a tutti gli schermi di stanza, non al telefono di Bianca",
+                 r.get("esito") == "tocco" and con(cucina["id"], k) and con(salotto["id"], k)
+                 and not con(tel_b["id"], k), f"{r.get('esito')} {hub.dove(k)}")
+        cfg.schermi_stanza = "cucina"
+        k, r, m = giro("salotto", "di 9 minuti")
+        verifica("hub vero: con la stanza dello schermo il timer va a quella stanza (salotto), non alla cucina",
+                 r.get("esito") == "tocco" and con(salotto["id"], k) and not con(cucina["id"], k)
+                 and con(tel["id"], k), f"{r.get('esito')}")
+        k, r, m = giro("telefono", "di 11 minuti")
+        verifica("hub vero: dalla «stanza» telefono una scheda mai vista non va al telefono di Bianca",
+                 r.get("esito") == "tocco" and con(tel["id"], k) and not con(tel_b["id"], k), str(hub.dove(k)))
+        # La traccia: un tetto, e uno schermo revocato non c'è più
+        hub._DOVE_MAX = 3
+        for n in range(5):
+            hub.invia_a(salotto["id"], {"tipo": "testo", "testo": "x", "chiave": f"prova:{n}"})
+        verifica("hub vero: la traccia chiave → schermi ha un tetto (le più vecchie escono)",
+                 len(hub._dove) == 3 and not hub.dove("prova:0") and hub.dove("prova:4") == {salotto["id"]},
+                 str(list(hub._dove)))
+        hub.avvisa_revoca([salotto["id"]])
+        verifica("hub vero: uno schermo revocato esce dalla traccia", not hub.dove("prova:4"))
+    finally:
+        liste.db.close()
+        a.db.close()
+
+
+def conv_archivio():
+    """`conv_archivio` segue la conversazione del tocco e del modulo (#266, nota 4 della revisione
+    della PR #265 e revisione della PR #270): dopo è quella della persona, non quella di prima."""
+    b, c, sc, liste, turni, voce, hub, _ = pr.prepara_ciclo()
+    pr.CORRENTE["liste"] = liste
+    b.tool_ctx.conv_archivio = "conversazione-di-prima"
+    visti = []
+    vero = c.s.tools.call
+
+    def spia(nome, args, cx, livello):
+        visti.append(getattr(cx, "conv_archivio", None))
+        return vero(nome, args, cx, livello)
+    c.s.tools.call = spia
+    try:
+        pr.tocca(c, pr.voce_tocco("bianca"))
+    finally:
+        c.s.tools.call = vero
+    attesa = getattr(b.conv, "id_archivio", None)
+    verifica("conv_archivio: il tool del tocco vede la conversazione della persona, non quella di prima",
+             turni[-1].get("esito") == "tocco" and visti and visti[0] != "conversazione-di-prima"
+             and visti[0] == attesa, f"{visti} {attesa!r}")
+    verifica("conv_archivio: e resta quella dopo il tocco, come la conversazione di Brain",
+             b.tool_ctx.conv_archivio == getattr(b.conv, "id_archivio", None) != "conversazione-di-prima")
+    # Il modulo dallo schermo: il tool che l'aveva chiesto vede la conversazione della persona
+    import calliope.ciclo as ciclo_mod
+
+    class Fermo(Exception):
+        pass
+
+    def completa(hub_, scritto_, brain, n):
+        visti.append(("modulo", brain.tool_ctx.conv_archivio, getattr(brain.conv, "id_archivio", None)))
+        raise Fermo
+    vera = ciclo_mod.completa_modulo
+    ciclo_mod.completa_modulo = completa
+    b.tool_ctx.conv_archivio = "conversazione-di-prima"
+    try:
+        c._modulo_dallo_schermo(types.SimpleNamespace(scritto={"tipo": "modulo", "persona": "dario"}))
+    except Fermo:
+        pass
+    finally:
+        ciclo_mod.completa_modulo = vera
+    m = [v for v in visti if isinstance(v, tuple)]
+    verifica("conv_archivio: anche il modulo dallo schermo vede la conversazione della persona",
+             m and m[-1][1] != "conversazione-di-prima" and m[-1][1] == m[-1][2], str(m))
+    liste.db.close()
 
 
 # ─────────────────────────── 5. il server ───────────────────────────
@@ -457,6 +894,24 @@ def server():
         codici = [pr.chiedi(port, "/api/tocco", sess, corpo={"tocco": "timer_piu",
                                                             "chiave": "timer:999-1"})[0] for _ in range(30)]
         verifica("server: oltre 30 tocchi al minuto 429", codici[-1] == 429 and 409 in codici, str(codici[-3:]))
+        # Il numero riusato (#266, seconda revisione della PR #270): il telefono di Bianca revocato
+        # da terminale e uno nuovo di Dario col suo numero; la sessione della pagina vecchia non
+        # diventa lo schermo nuovo, quella nuova sì
+        terminale = ArchivioSchermi(cfg.memory_db)
+        vecchio = hub.archivio.per_token(tok)
+        assert terminale.revoca(vecchio["id"])
+        nuovo, tok_d = terminale.crea_con_token("telefono", proprietario="dario", proprietario_nome="Dario")
+        # Riletto l'elenco (al più 5 s dopo una revoca da terminale, come prima di questa correzione)
+        hub._rinfresca()
+        st, d = pr.chiedi(port, "/api/raccolte", sess, corpo={"raccolta": "agenda"})
+        verifica("server: la sessione del telefono revocato non vale per lo schermo nuovo col suo numero",
+                 nuovo["id"] == vecchio["id"] and st == 401, f"{nuovo['id']} {vecchio['id']} {st} {d}")
+        sess_d = pr.chiedi(port, "/api/accedi", token=tok_d)[1].get("sessione")
+        st, d = pr.chiedi(port, "/api/raccolte", sess_d, corpo={"raccolta": "agenda"})
+        verifica("server: la sessione del telefono nuovo vale subito (l'elenco in memoria si rilegge)",
+                 st == 200, f"{st} {d}")
+        st, _ = pr.chiedi(port, "/api/raccolte", sess, corpo={"raccolta": "agenda"})
+        verifica("server: e la sessione vecchia resta tolta", st == 401, str(st))
     finally:
         srv.ferma()
         a.db.close()
@@ -473,6 +928,9 @@ def main():
         print("— 4. il ciclo")
         ciclo()
         senza_bersaglio_e_corsia()
+        hub_vero()
+        numero_riusato()
+        conv_archivio()
         print("— 5. il server")
         server()
     finally:
