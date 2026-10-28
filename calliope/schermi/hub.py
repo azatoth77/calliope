@@ -217,6 +217,9 @@ class Schermi:
         # schermi, solo in memoria e con un tetto (`_DOVE_MAX`, le più vecchie escono). Serve a
         # mandare l'aggiornamento di un tocco dove la scheda c'è (`aggiorna`)
         self._dove: "OrderedDict[str, set[int]]" = OrderedDict()
+        # Numero → istante dell'abbinamento, dall'ultimo elenco letto (#266): un numero riusato
+        # da un altro schermo si riconosce (`_identita_cambiate`)
+        self._identita: dict[int, float] = {}
         self._ultime: dict[str, dict] = {}
         self._cache: tuple[float, int, list[dict]] = (0.0, -1, [])
         self.url = ""                       # lo imposta il server quando parte
@@ -359,22 +362,76 @@ class Schermi:
         ver = self.archivio.versione
         rows = self.archivio.elenco()
         self._cache = (time.monotonic(), ver, rows)
+        via = self._identita_cambiate(rows)
         sc = getattr(self, "scaricamenti", None)
         if sc is not None:
             # Gli schermi revocati (anche da terminale) perdono le voci di «Scarica» (seconda
-            # revisione della PR #268, #260)
+            # revisione della PR #268, #260); anche quelli col numero riusato (#266)
             sc.tieni_solo(s["id"] for s in rows)
+            if via:
+                sc.dimentica(via)
+        if via:
+            self._schermi_via(via)
         return rows
 
     def _rinfresca(self):
         self._cache = (0.0, -1, [])
 
+    @staticmethod
+    def identita(schermo: dict | None):
+        """Chi è uno schermo: il numero da solo non basta, perché la tabella lo riusa dopo una
+        revoca (`INTEGER PRIMARY KEY` senza AUTOINCREMENT). Con l'istante dell'abbinamento sì
+        (#266, seconda revisione della PR #270)."""
+        return (schermo.get("id"), schermo.get("creato")) if schermo else None
+
+    def _identita_cambiate(self, rows: list[dict]) -> set[int]:
+        """I numeri degli schermi che non ci sono più o che sono di un altro schermo da quando
+        l'hub ha letto l'elenco l'ultima volta: anche per le revoche e gli abbinamenti fatti da
+        terminale, in un altro processo."""
+        ora = {s["id"]: s.get("creato") for s in rows}
+        with self._lock:
+            prima, self._identita = self._identita, ora
+            via = {sid for sid, creato in prima.items() if sid not in ora or ora[sid] != creato}
+            # Ciò che c'è in memoria per un numero che non è (più) nell'elenco
+            via |= {sid for sid in set(self._storia) | set(self._conn) if sid not in ora}
+        return via
+
+    def _schermi_via(self, via: set[int]):
+        """Uno schermo revocato o col numero riusato lascia tutto ciò che l'hub tiene per quel
+        numero (#266, seconda revisione della PR #270: la scheda personale di Dario andava al
+        telefono nuovo di Bianca al collegamento, «Ferma» al suo PC nuovo): la cronologia, la
+        traccia delle schede, le pagine ancora collegate dello schermo di prima (ricevono
+        «revocato») e i posti nelle partite. Il nuovo schermo con lo stesso numero riparte vuoto."""
+        with self._lock:
+            for sid in via:
+                self._storia.pop(sid, None)
+                vive = []
+                for c in self._conn.get(sid, []):
+                    if self.identita(c.schermo) == (sid, self._identita.get(sid, object())):
+                        vive.append(c)                  # già del nuovo schermo
+                    else:
+                        c.consegna(("revocato", "{}"))
+                if vive:
+                    self._conn[sid] = vive
+                else:
+                    self._conn.pop(sid, None)
+            self._dimentica_dove(via)
+        giochi = getattr(self, "giochi", None)
+        if giochi is not None and callable(getattr(giochi, "schermi_via", None)):
+            try:
+                giochi.schermi_via(via)
+            except Exception as e:  # noqa: BLE001 — una partita non ferma gli schermi
+                self.log(f"[SCHERMI] posti dei giochi non tolti: {type(e).__name__}: {e}")
+
     def collegati(self) -> list[dict]:
         with self._lock:
             return [c[0].schermo for c in self._conn.values() if c]
 
-    def valido(self, sid: int) -> bool:
-        return any(s["id"] == sid for s in self.abbinati())
+    def valido(self, sid: int, creato=None) -> bool:
+        """Lo schermo c'è ancora; con `creato`, è proprio quello (non un altro col numero
+        riusato, #266)."""
+        return any(s["id"] == sid and (creato is None or s.get("creato") == creato)
+                   for s in self.abbinati())
 
     # ── connessioni (dal server) ──
     def collega(self, schermo: dict, loop, locale: bool = False, ripresa=None

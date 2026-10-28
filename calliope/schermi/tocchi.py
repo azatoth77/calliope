@@ -120,7 +120,7 @@ TOCCABILI: Mapping[str, Toccabile] = MappingProxyType({
 # Gli esclusi in modo esplicito (#266): ammessi dalle sole tabelle della politica, o vicini a
 # un tocco che verrà, ma con un danno se toccati per sbaglio, o che vogliono la voce. Un tool non
 # può essere in tutti e due gli elenchi (controllato all'import)
-ESCLUSI: dict[str, str] = {
+ESCLUSI: Mapping[str, str] = MappingProxyType({
     "dimentica": "cancella un ricordo: non si rimette uguale, e un tocco per sbaglio lo perde",
     "conversazioni_dimentica": "cancella conversazioni dall'archivio: non si disfa",
     "pc_guarda": "cattura dello schermo o foto con la webcam: guarda nella stanza o nel PC",
@@ -141,7 +141,7 @@ ESCLUSI: dict[str, str] = {
     "installa_gestisci": "annulla o cambia un'installazione: vuole la voce",
     "modello_compila": "compila un documento dell'ufficio: vuole la voce",
     "sviluppo_apri": "apre la modalità sviluppo: vuole la voce di chi amministra",
-}
+})
 
 
 def _condizioni(tool: str, argomenti: dict | None = None, spec=None) -> str | None:

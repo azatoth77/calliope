@@ -90,7 +90,7 @@ def agenda_nuova(nome):
 # ─────────────────────────── 1. il vincolo dei tocchi ───────────────────────────
 def vincolo():
     # Immutabili a runtime (#266, revisione della PR #270)
-    for nome, m in (("TOCCHI", ORIGINALI), ("TOCCABILI", tocchi.TOCCABILI)):
+    for nome, m in (("TOCCHI", ORIGINALI), ("TOCCABILI", tocchi.TOCCABILI), ("ESCLUSI", tocchi.ESCLUSI)):
         try:
             m["prova"] = None
             fermo = False
@@ -438,21 +438,35 @@ def ciclo():
     # «+1 minuto» non lo allunga, suona come doveva
     t3 = a.add("timer", "di 3 minuti", time.time() + 180, owner="dario", owner_name="Dario")
     prep = tocchi.prepara({"tocco": "timer_piu", "chiave": schede.chiave_timer(a.get(t3))}, fonti)
-    finito = time.time() - 1
-    a.db.execute("UPDATE agenda SET due = ? WHERE id = ?", (finito, t3))
-    a.db.commit()
-    # Il tool da solo, col bersaglio del tocco: deciso, senza aspettare il ciclo
+    # Il tool da solo, col bersaglio del tocco: deciso. Il timer non si tocca nel database (il
+    # thread dell'agenda lo farebbe suonare): per il tool l'orologio è oltre la fine
+    import calliope.tools.builtin as builtin_mod
+    vero_time = builtin_mod.time
+
+    class Dopo:
+        def __getattr__(self, nome):
+            return getattr(vero_time, nome)
+
+        @staticmethod
+        def time():
+            return vero_time.time() + 400
+    due_prima = a.get(t3)["due"]
     ctx.tocco_bersaglio = prep["bersaglio"]
     sc.current_speaker, sc.identified_by = "Bianca", "schermo"
+    builtin_mod.time = Dopo()
     try:
         diretto = json.loads(c.s.tools.call("timer_imposta", prep["argomenti"], ctx, "familiare"))
     finally:
+        builtin_mod.time = vero_time
         ctx.tocco_bersaglio = None
         sc.current_speaker, sc.identified_by = "Dario", "voce"
     verifica("tool: «+1 minuto» su un timer finito e non ancora suonato non lo allunga, con la frase",
              diretto.get("ok") is False and "già finito" in diretto.get("risposta_finale", "")
-             and a.get(t3) is not None and abs(a.get(t3)["due"] - finito) < 0.01,
+             and a.get(t3) is not None and abs(a.get(t3)["due"] - due_prima) < 0.01,
              json.dumps(diretto, ensure_ascii=False)[:300])
+    finito = time.time() - 1
+    a.db.execute("UPDATE agenda SET due = ? WHERE id = ?", (finito, t3))
+    a.db.commit()
     n_storia = len(b.history)
     pr.tocca(c, scritto(prep, "timer_piu"))
     r, ev = turni[-1], hub.eventi[-1][2]
@@ -563,6 +577,125 @@ def senza_bersaglio_e_corsia():
                      getattr(nuovo, k) in (None, False, "", []), repr(getattr(nuovo, k))[:80])
     liste.db.close()
     a.db.close()
+
+
+class CicloFinto:
+    """Il ciclo del server per una connessione: ciò che le arriva, senza asyncio."""
+
+    def __init__(self):
+        self.arrivati = []
+
+    def call_soon_threadsafe(self, f, item):
+        self.arrivati.append(item)
+
+
+def numero_riusato():
+    """Gli id degli schermi si riusano (#266, seconda revisione della PR #270): la tabella ha
+    `INTEGER PRIMARY KEY` senza AUTOINCREMENT e la revoca cancella la riga. Una revoca e un
+    abbinamento fatti da terminale (un secondo `ArchivioSchermi`, come `python -m calliope.schermi`)
+    danno il numero dello schermo tolto a uno schermo nuovo di un'altra persona: né «Ferma» né il
+    collegamento gli mandano niente dello schermo di prima, e la pagina vecchia riceve «revocato»."""
+    from calliope.schermi import Mittente
+    b, c, sc, liste, turni, voce, finto, _ = pr.prepara_ciclo()
+    cfg = Config()
+    cfg.config_dir = str(TMP)
+    cfg.memory_db = str(TMP / "memoria-riuso.db")
+    cfg.schermi_stanza = "cucina"
+    hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db), log=lambda m: None)
+    hub.profilo = c.s.registry.by_id
+    terminale = ArchivioSchermi(cfg.memory_db)          # un altro processo, sullo stesso file
+    giochi_via = []
+    hub.giochi = types.SimpleNamespace(schermi_via=lambda v: giochi_via.append(set(v)))
+    tel_b, _ = hub.archivio.crea_con_token("telefono", proprietario="bianca", proprietario_nome="Bianca")
+    tel_d, _ = hub.archivio.crea_con_token("telefono", proprietario="dario", proprietario_nome="Dario")
+    cucina, _ = hub.archivio.crea_con_token("cucina")
+    hub._rinfresca()
+    c.s.schermi = b.tool_ctx.schermi = hub
+    c.ingresso = hub.ingresso
+    a = agenda_nuova("riuso")
+    b.tool_ctx.agenda = a
+    fonti = types.SimpleNamespace(agenda=a)
+    sc.current_speaker, sc.identified_by = "Bianca", "voce"
+
+    def con(sid, k):
+        return [s for s in hub.storia(sid) if s.get("chiave") == k]
+
+    def ferma(k, sid):
+        item = scritto(tocchi.prepara({"tocco": "timer_ferma", "chiave": k}, fonti), "timer_ferma",
+                       persona="dario", sid=sid)
+        item["stanza"] = "telefono"
+        pr.tocca(c, item)
+        return turni[-1]
+
+    try:
+        # 1. La cucina revocata da terminale, il PC nuovo di Bianca col suo numero; «Ferma» con
+        #    l'elenco in memoria ancora vecchio (i 5 s della cache) e con l'elenco riletto
+        for giro, riletto in (("con l'elenco in memoria vecchio", False), ("con l'elenco riletto", True)):
+            tid = a.add("timer", f"della pasta {giro}", time.time() + 300, owner="dario", owner_name="Dario")
+            k = schede.chiave_timer(a.get(tid))
+            ultimo = max(s["id"] for s in hub.abbinati())
+            stanza_tv = next(s for s in hub.abbinati() if s["id"] == ultimo and not s.get("proprietario"))["stanza"]
+            hub.invia(schede.timer(a.get(tid)), Mittente(persona="dario", nome="Dario", livello="amministra",
+                                                         certo=True, stanza=stanza_tv))
+            verifica(f"riuso ({giro}): il timer messo a voce è sulla TV, l'ultimo numero",
+                     hub.dove(k) == {ultimo}, str(hub.dove(k)))
+            assert terminale.revoca(ultimo)
+            nuovo, _ = terminale.crea_con_token("studio", proprietario="bianca", proprietario_nome="Bianca")
+            verifica(f"riuso ({giro}): il PC nuovo di Bianca riprende il numero della TV revocata",
+                     nuovo["id"] == ultimo, f"{nuovo['id']} {ultimo}")
+            if riletto:
+                hub._rinfresca()
+            r = ferma(k, tel_d["id"])
+            # Il PC nuovo si collega: il server rilegge l'elenco se la sessione non torna (_schermo_sessione)
+            hub._rinfresca()
+            riga = next(s for s in hub.abbinati() if s["id"] == ultimo)
+            loop = CicloFinto()
+            conn, storia = hub.collega(riga, loop)
+            verifica(f"riuso ({giro}): «Ferma» dal telefono di Dario non arriva al PC nuovo di Bianca",
+                     r.get("esito") == "tocco" and not con(ultimo, k) and not [x for x in storia if x.get("chiave") == k]
+                     and ultimo not in hub.dove(k), f"{r.get('esito')} {hub.dove(k)} {[x.get('chiave') for x in storia]}")
+            hub.scollega(conn)
+            # Lo schermo nuovo diventa la TV per il giro dopo (stanza, non personale)
+            assert terminale.revoca(ultimo)
+            terminale.crea_con_token(f"cucina{2 if riletto else 1}")
+            hub._rinfresca()
+            hub.abbinati()
+        # 2. La scheda personale di Dario in memoria sul suo telefono, la pagina vecchia aperta;
+        #    il telefono revocato da terminale e quello nuovo di Bianca col suo numero
+        tel_d2, _ = hub.archivio.crea_con_token("telefono", proprietario="dario", proprietario_nome="Dario")
+        hub._rinfresca()
+        sid = tel_d2["id"]
+        assert sid == max(s["id"] for s in hub.abbinati())
+        riga_d = next(s for s in hub.abbinati() if s["id"] == sid)
+        hub.invia_a(sid, {"tipo": "testo", "chiave": "nota:privata", "visibilita": "personale",
+                          "testo": "di Dario"})
+        loop_vecchio = CicloFinto()
+        vecchia, _ = hub.collega(riga_d, loop_vecchio)
+        assert terminale.revoca(sid)
+        nuovo, _ = terminale.crea_con_token("telefono", proprietario="bianca", proprietario_nome="Bianca")
+        verifica("riuso: il telefono nuovo di Bianca riprende il numero di quello di Dario", nuovo["id"] == sid)
+        hub._rinfresca()
+        riga_b = next(s for s in hub.abbinati() if s["id"] == sid)
+        loop = CicloFinto()
+        conn, storia = hub.collega(riga_b, loop)
+        verifica("riuso: al collegamento il telefono nuovo di Bianca non riceve la scheda personale di Dario",
+                 riga_b["proprietario"] == "bianca" and not [x for x in storia if x.get("chiave") == "nota:privata"],
+                 str([x.get("chiave") for x in storia]))
+        verifica("riuso: la pagina vecchia del telefono di Dario riceve «revocato» e non è più collegata",
+                 ("revocato", "{}") in loop_vecchio.arrivati and vecchia not in hub._conn.get(sid, [])
+                 and conn in hub._conn.get(sid, []), str(loop_vecchio.arrivati))
+        hub.invia_a(sid, {"tipo": "testo", "chiave": "nota:bianca", "visibilita": "personale", "testo": "di Bianca"})
+        verifica("riuso: ciò che va al telefono nuovo arriva solo alla sua pagina, non a quella vecchia di Dario",
+                 not [x for x in loop_vecchio.arrivati if "nota:bianca" in str(x)]
+                 and [x for x in loop.arrivati if "nota:bianca" in str(x)])
+        verifica("riuso: valido() col momento dell'abbinamento distingue lo schermo di prima",
+                 hub.valido(sid) and hub.valido(sid, riga_b["creato"]) and not hub.valido(sid, riga_d["creato"]))
+        verifica("riuso: anche i giochi tolgono i posti del numero riusato (Giochi.schermi_via)",
+                 any(sid in v for v in giochi_via), str(giochi_via))
+        hub.scollega(conn)
+    finally:
+        liste.db.close()
+        a.db.close()
 
 
 def hub_vero():
@@ -761,6 +894,24 @@ def server():
         codici = [pr.chiedi(port, "/api/tocco", sess, corpo={"tocco": "timer_piu",
                                                             "chiave": "timer:999-1"})[0] for _ in range(30)]
         verifica("server: oltre 30 tocchi al minuto 429", codici[-1] == 429 and 409 in codici, str(codici[-3:]))
+        # Il numero riusato (#266, seconda revisione della PR #270): il telefono di Bianca revocato
+        # da terminale e uno nuovo di Dario col suo numero; la sessione della pagina vecchia non
+        # diventa lo schermo nuovo, quella nuova sì
+        terminale = ArchivioSchermi(cfg.memory_db)
+        vecchio = hub.archivio.per_token(tok)
+        assert terminale.revoca(vecchio["id"])
+        nuovo, tok_d = terminale.crea_con_token("telefono", proprietario="dario", proprietario_nome="Dario")
+        # Riletto l'elenco (al più 5 s dopo una revoca da terminale, come prima di questa correzione)
+        hub._rinfresca()
+        st, d = pr.chiedi(port, "/api/raccolte", sess, corpo={"raccolta": "agenda"})
+        verifica("server: la sessione del telefono revocato non vale per lo schermo nuovo col suo numero",
+                 nuovo["id"] == vecchio["id"] and st == 401, f"{nuovo['id']} {vecchio['id']} {st} {d}")
+        sess_d = pr.chiedi(port, "/api/accedi", token=tok_d)[1].get("sessione")
+        st, d = pr.chiedi(port, "/api/raccolte", sess_d, corpo={"raccolta": "agenda"})
+        verifica("server: la sessione del telefono nuovo vale subito (l'elenco in memoria si rilegge)",
+                 st == 200, f"{st} {d}")
+        st, _ = pr.chiedi(port, "/api/raccolte", sess, corpo={"raccolta": "agenda"})
+        verifica("server: e la sessione vecchia resta tolta", st == 401, str(st))
     finally:
         srv.ferma()
         a.db.close()
@@ -778,6 +929,7 @@ def main():
         ciclo()
         senza_bersaglio_e_corsia()
         hub_vero()
+        numero_riusato()
         conv_archivio()
         print("— 5. il server")
         server()
