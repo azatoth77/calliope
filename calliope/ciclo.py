@@ -2935,7 +2935,16 @@ class Ciclo:
         calliope/dispositivo.py): letto adesso, non all'avvio (un satellite va e viene)."""
         from . import dispositivo
         if t.scritto is not None:
-            return dispositivo.descrivi(dispositivo.SCRITTO)
+            # Dallo schermo personale (il telefono o il PC, 28/10, #288): lo schermo a sezioni
+            personale = False
+            try:
+                hub = getattr(self.s, "schermi", None)
+                sid = (t.scritto or {}).get("schermo_id")
+                personale = bool(hub is not None and sid is not None
+                                 and (hub.schermo(sid) or {}).get("proprietario"))
+            except Exception:  # noqa: BLE001 — nel dubbio uno schermo qualunque
+                personale = False
+            return dispositivo.descrivi(dispositivo.SCRITTO, personale=personale)
         L, sat = self.listener, self.s.satelliti
         if not getattr(L, "remoto", False) or sat is None:
             return dispositivo.descrivi(dispositivo.LOCALE)
@@ -4865,6 +4874,11 @@ class Ciclo:
         df = getattr(brain, "last_dati_fissi", None)
         if isinstance(df, dict) and df:
             self.rec["dati_fissi"] = dict(df)
+        # Il dispositivo del turno e lo schermo personale di chi parla (28/10, #288): fino ad
+        # allora i turni a voce dal telefono non dicevano da dove venivano
+        di = getattr(brain, "last_dispositivo", None)
+        if isinstance(di, dict) and di.get("canale"):
+            self.rec["dispositivo"] = {k: v for k, v in di.items() if v is not None}
         # Le righe della stanza nella storia (14/10 sera, `stanza_contesto_in_storia`): quante
         # nuove in questo turno e quante davanti al modello, solo numeri
         st_s = getattr(brain, "last_stanza_storia", None)

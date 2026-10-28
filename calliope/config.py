@@ -2390,8 +2390,18 @@ class Config:
                    archivio: bool = False, ufficio: bool = False, web: bool = False,
                    estensioni: bool = False, meteo_casa: bool = False,
                    citta: str | None = None, citta_salva: bool = False,
-                   notizie: bool = False, stanza: bool = False) -> str:
+                   notizie: bool = False, stanza: bool = False,
+                   sezioni: bool = False) -> str:
         """Prompt di sistema, senza il nome dell'interlocutore: lo dà il tool chi_parla.
+
+        `sezioni` (28/10, issue #288): ci sono gli schermi personali a sezioni (il telefono, o il
+        PC personale con `schermi_sezioni`). Allora un paragrafo dice com'è fatto lo schermo
+        personale: le sezioni, le pagine di Le mie cose (l'Ufficio solo per chi amministra, Casa
+        non per i più piccoli), cosa si fa da lì e quanto restano le foto (decisione 0034). È
+        uguale per tutti e fra i turni: il prefisso resta in cache; se lo schermo di chi parla è
+        aperto, e cosa lì non c'è per lui, lo dice la nota del dispositivo nei dati del turno
+        (dispositivo.nota). Casi veri del 28/10: dal telefono «non posso aprire uno schermo
+        perché non è un computer» e «non ho una scheda Le mie cose».
 
         `biblioteca`: se il tool biblioteca_cerca c'è. Nominare un tool che non esiste è
         dannoso: il 26/09, senza file ZIM, il modello chiamava biblioteca_cerca, riceveva
@@ -2669,6 +2679,8 @@ class Config:
                      + ("; quando te lo dice, chiama citta_casa_salva con la città e "
                         "rispondi alla richiesta per quella città" if citta_salva else "")
                      + ". ")
+        if sezioni and schermi:
+            news += self._frase_sezioni(ufficio)
         return (
             f"Sei {self.name}, {role} vocale che gira in locale. {self.persona} "
             f"Parli di te al {grammar}. Dai del {tone['registro']} a chi ti parla; non ne "
@@ -2738,6 +2750,32 @@ class Config:
             + (f" {capacita}" if capacita else "")
             + self._frase_modalita()
         )
+
+    def _frase_sezioni(self, ufficio: bool) -> str:
+        """Lo schermo personale a sezioni nel prompt di sistema (28/10, issue #288): uguale per
+        tutti e fra i turni (il prefisso resta in cache), cambia solo con la configurazione o con
+        l'Ufficio installato. Le pagine sono quelle di schermi/raccolte.PAGINE (Studio arriva
+        dopo); le sezioni nascoste per età come schermi/aspetto.nascoste."""
+        try:
+            from .schermi.aspetto import ETA_CASA
+        except Exception:  # noqa: BLE001 — il valore di serie
+            ETA_CASA = 13
+        if getattr(self, "immagini_tenuta", True):
+            foto = (f"le foto restano nel Cassetto {_giorni(self.immagini_tenuta_giorni)} giorni "
+                    f"(gli altri file {_giorni(self.cassetto_giorni)})")
+        else:
+            foto = f"foto e file restano nel Cassetto {_giorni(self.cassetto_giorni)} giorni"
+        return ("Chi è di casa può avere uno schermo personale (il telefono o la pagina di "
+                "Calliope sul PC) con le sezioni Adesso, Conversazione, Le mie cose, Casa e Io; "
+                "in Le mie cose ci sono Liste, Agenda, Lavori e programmi, Cassetto, Documenti, "
+                "Giochi"
+                + (" e, solo per chi amministra, Ufficio" if ufficio else "")
+                + f"; Casa non c'è sotto i {ETA_CASA} anni. Da lì si scrive e si allegano foto e "
+                "file in una conversazione cominciata a voce, si spuntano le liste e si danno "
+                f"«+1 minuto» e «Ferma» ai timer; {foto}, per sempre con «archiviala». Per "
+                "portare lo schermo aperto di chi parla su una di queste pagine chiama "
+                "schermo_mostra con cosa=pagina; se è chiuso di' dove trovarla («in Le mie cose, "
+                "alla voce Documenti»); se è aperto lo dicono i dati del turno. ")
 
     def _frase_modalita(self) -> str:
         """La modalità accesa, in fondo al prompt (05/10): cosa fa davvero, così a «non sento
@@ -2823,6 +2861,15 @@ def nome_tono(nome: str | None) -> str | None:
             return t
     close = difflib.get_close_matches(k, list(candidati), n=1, cutoff=0.8)
     return candidati[close[0]] if close else None
+
+
+def _giorni(n) -> str:
+    """Un numero di giorni detto a voce: 60.0 → «60», 1.5 → «1,5»."""
+    try:
+        x = float(n)
+    except (TypeError, ValueError):
+        return str(n)
+    return str(int(x)) if x == int(x) else f"{x:g}".replace(".", ",")
 
 
 def tono_di(nome: str | None) -> dict[str, str]:
