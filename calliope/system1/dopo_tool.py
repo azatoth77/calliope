@@ -22,8 +22,8 @@ in sospeso, un nome incerto), un tool che non è nell'elenco chiuso (`COPERTI`: 
 dati da riassumere, come una ricerca, non ci sono; la lista e l'agenda lette solo fino a due
 voci, dal 16/10), testo del modello già detto, una persona minore, un tono che il codice non sa
 fare, segnali di struttura del turno (proposta aperta, spinte, giri di correzione, dati del turno
-in più, foto, sviluppo ed esercizi), e la frase della persona con più richieste, lunga, o con una
-domanda quando il tool è un'azione. I controlli sulla frase della persona guardano solo la forma
+in più, foto e sviluppo; fino al 28/10 anche gli esercizi, tolti con la #279), e la frase della
+persona con più richieste, lunga, o con una domanda quando il tool è un'azione. I controlli sulla frase della persona guardano solo la forma
 (quante frasi, quante parole, il punto di domanda) e mandano al modello; l'unica eccezione
 (16/10, issue #103) è una frase d'apertura in forma chiusa e per intero («Perfetto.», «Allora,
 iniziamo con un calcolo.»), che non conta come una richiesta in più. In «attivo» la regola scrive il suo

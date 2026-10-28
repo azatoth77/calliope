@@ -435,7 +435,7 @@ function suMostra(c) {
     setTimeout(() => sch().chiudiPartita(c.partita), 0);
     return;
   }
-  // Un gioco o gli esercizi che Calliope apre si usano subito: la loro sezione si apre da sola
+  // Un gioco che Calliope apre si usa subito: la sua sezione si apre da sola
   if (vis.modo === "sezioni" && SEZ.apriSeServe(c)) return;
   if (performance.now() - car.toccato > opzioniVista.manoMs) mostraIn(k, vis.sezione);
 }

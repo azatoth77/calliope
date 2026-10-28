@@ -204,7 +204,7 @@ def prova_forma_e_contrari():
     r = json.loads(reg.call("prova_forma", {"modo": "uno", "testo": "  "}, ctx_vuoto()))
     verifica("obbligatorio vuoto con un altro argomento: errore", strutturato(r)
              and r["campo"] == "testo", str(r))
-    # Obbligatori con un valore predefinito nella funzione (lavoro_affida, compiti_aiuto)
+    # Obbligatori con un valore predefinito nella funzione (lavoro_affida)
     completo = ToolSpec(name="prova_completa", description="",
                         parameters={"type": "object", "properties": {
                             "compito": {"type": "string"}, "proposta": {"type": "string"}},

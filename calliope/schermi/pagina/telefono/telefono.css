@@ -111,11 +111,11 @@ body.telefono {
   background: var(--pannello); border: 1px solid var(--bordo); border-radius: var(--raggio);
   padding: 0.8rem 1rem;
 }
-/* quelle con comandi dentro (un gioco, gli esercizi, il cassetto, una voce nuova) alte quanto vogliono */
-.telefono .pagina-car.tipo-gioco, .telefono .pagina-car.scheda-gioco, .telefono .pagina-car.tipo-esercizio,
+/* quelle con comandi dentro (un gioco, il cassetto, una voce nuova) alte quanto vogliono */
+.telefono .pagina-car.tipo-gioco, .telefono .pagina-car.scheda-gioco,
 .telefono .pagina-car.tipo-cassetto, .telefono .pagina-car.tipo-conoscente, .telefono .modulo-car { max-height: none; }
 .telefono .pagina-car > .corpo { flex: 1 1 auto; min-height: 0; overflow: hidden; overflow-wrap: anywhere; }
-.telefono .pagina-car.tipo-gioco > .corpo, .telefono .pagina-car.tipo-esercizio > .corpo,
+.telefono .pagina-car.tipo-gioco > .corpo,
 .telefono .pagina-car.tipo-cassetto > .corpo, .telefono .pagina-car.tipo-conoscente > .corpo { overflow: visible; }
 /* una scheda più lunga dello spazio si taglia con la dissolvenza in fondo */
 .pagina-car.taglia > .corpo, .risposta-car.taglia .risposta-testo {

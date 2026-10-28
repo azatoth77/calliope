@@ -734,10 +734,11 @@ class Avvio:
         s.eventi.riprendi(float(getattr(cfg, "storia_inattiva_s", 0) or 0))
 
     def attiva_minori(self) -> bool:
-        """I tool compiti_aiuto e minore_gestisci solo con un minore in casa: True se li ha
-        appena registrati."""
+        """I tool richiesta_tutore e minore_gestisci solo con un minore in casa: True se li ha
+        appena registrati. *[storico: fino al 28/10 anche compiti_aiuto ed esercizi, tolti con
+        la #279]*"""
         tools, registry = self.s.tools, self.s.registry
-        if tools.get("compiti_aiuto") is not None or not any(
+        if tools.get("minore_gestisci") is not None or not any(
                 minori.e_minore(p) for p in getattr(registry, "users", {}).values()):
             return False
         from .tools.minori import minori_specs
@@ -747,7 +748,7 @@ class Avvio:
 
     def _minori_e_guardiano(self):
         cfg, s = self.cfg, self.s
-        # Minori (05/10, calliope/minori.py): regole per persona, compiti, avvisi ai tutori
+        # Minori (05/10, calliope/minori.py): regole per persona, avvisi ai tutori
         # (stesso file della memoria)
         minori.prepara(cfg, schermi=s.schermi, registry=s.registry)
         # Gli avvisi di pericolo (14/10 sera): l'audio nel cassetto del tutore, la trascrizione
@@ -777,16 +778,6 @@ class Avvio:
             except Exception as e:  # noqa: BLE001 — Calliope parte lo stesso
                 print(f"[MINORI] segnali dei cancelli non ripresi: {type(e).__name__}: {e}",
                       flush=True)
-        # Esercizi generati da Calliope (08/10, calliope/esercizi/): stesso file della memoria;
-        # la scheda risponde da /api/esercizio (schermi/server.py)
-        try:
-            from .esercizi import sessione as esercizi
-            srv = esercizi.prepara(cfg, schermi=s.schermi, biblioteca=s.biblioteca,
-                                    registry=s.registry)
-            if s.schermi is not None:
-                s.schermi.esercizi = srv
-        except Exception as e:  # noqa: BLE001 — senza esercizi Calliope parte lo stesso
-            print(f"[ESERCIZI] non disponibili: {type(e).__name__}: {e}", flush=True)
         s.attiva_minori = self.attiva_minori
         self.attiva_minori()
         # Il guardiano (calliope/guardiano.py): domanda e frasi della risposta per minori e

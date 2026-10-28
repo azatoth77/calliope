@@ -15,12 +15,11 @@
 
 (function () {
   const TITOLI_SEZIONE = { adesso: "Adesso", conversazione: "Conversazione", cose: "Le mie cose", casa: "Casa", io: "Io" };
-  // In Adesso non si copiano (un gioco o un esercizio aperti due volte, con due stati; la voce
-  // nuova ha i suoi campi): un rimando con «Apri», che porta alla scheda nella sua sezione
-  const TIPI_RIMANDO = new Set(["gioco", "esercizio", "esercizi_riepilogo", "sviluppo", "cassetto", "chat",
-    "conoscente"]);
+  // In Adesso non si copiano (un gioco aperto due volte, con due stati; la voce nuova ha i suoi
+  // campi): un rimando con «Apri», che porta alla scheda nella sua sezione
+  const TIPI_RIMANDO = new Set(["gioco", "sviluppo", "cassetto", "chat", "conoscente"]);
   // Questi, quando Calliope li mostra, aprono la loro sezione: si usano con le mani
-  const TIPI_APRONO = new Set(["gioco", "esercizio"]);
+  const TIPI_APRONO = new Set(["gioco"]);
   // In Adesso sotto «Aspetta te» invece che «In corso»
   const ASPETTA_TE = (c) => c.tipo === "modulo" || c.tipo === "conoscente" || c.tipo === "avviso"
     || (c.tipo === "lavoro" && c.stato === "in_attesa");
@@ -42,7 +41,7 @@
       schede: {},               // chiave → dati della scheda
       el: {},                   // chiave → {casa, adesso}: l'elemento nella sua sezione e quello in Adesso
       toccato: -1e9,            // ultimo scorrimento a mano (performance.now)
-      aperte: new Set(),        // giochi ed esercizi già aperti da Calliope (non si riaprono a ogni mossa)
+      aperte: new Set(),        // giochi già aperti da Calliope (non si riaprono a ogni mossa)
       novita: { conversazione: new Set(), cose: new Set(), casa: new Set() },
       visti: new Set(),         // gli avvisi già guardati (non restano più in Adesso)
     };
@@ -110,7 +109,7 @@
     function aggiornaElemento(el, c, vecchia, rimando) {
       const nuova = rimando ? costruisciRimando(c) : costruisciScheda(c);
       if (!el) { sch().ripristinaSegui(nuova, null); return nuova; }
-      if (vecchia && vecchia.tipo === c.tipo && c.tipo !== "esercizio") {
+      if (vecchia && vecchia.tipo === c.tipo) {
         const seguite = sch().misuraSegui(el);
         sch().allinea(el, nuova);
         sch().ripristinaSegui(el, seguite);
@@ -248,7 +247,7 @@
       }
     }
 
-    // Un gioco o gli esercizi che Calliope apre si usano subito: la loro sezione si apre da sola,
+    // Un gioco che Calliope apre si usa subito: la sua sezione si apre da sola,
     // una volta sola per scheda (il gioco va a tutta la finestra, 11/10: schermo.js ci entra
     // appena dopo, e una scheda in una sezione nascosta non la prende). true se se ne è occupato
     function apriSeServe(c) {

@@ -539,7 +539,7 @@ def conversazioni_specs() -> list[ToolSpec]:
                 "parli o chiedi conferma, di' così, mai che verrà cancellato. Cancellare è "
                 "un'altra cosa (conversazioni_dimentica, dimentica). "
                 "NON chiamarlo quando vuole ricominciare una cosa precisa (il collaudo, un "
-                "gioco, un esercizio, un timer, una lista: per quelle c'è il loro strumento) né "
+                "gioco, un timer, una lista: per quelle c'è il loro strumento) né "
                 "quando vuole riprendere o continuare («ricominciamo da dove eravamo», "
                 "«riprendiamo il discorso»): è il contrario, la conversazione serve. Se invece "
                 "chiede di ripartire da zero, chiamalo: non dire che ricominciate senza "

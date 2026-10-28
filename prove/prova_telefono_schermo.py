@@ -587,8 +587,9 @@ def raccolte(t: Tel, hub, liste):
     verifica("raccolte: la tessera Liste col conto vero, senza pallino alla prima visita",
              tes.get("liste", {}).get("conto") == "1" and not tes.get("liste", {}).get("novita"), json.dumps(tes.get("liste")))
     stato = t.v("document.querySelector('#tessere [data-tessera=\"studio\"] .tessera-stato').textContent")
-    verifica("raccolte: un servizio che manca dice «non disponibile» e la pagina «presto»",
-             tes.get("studio", {}).get("conto") == "—" and "non disponibile" in stato and "presto" in stato, stato)
+    # Lo Studio rifatto da capo (28/10, #279): la tessera dice «arriva presto», senza conto
+    verifica("raccolte: lo Studio senza conto dice «arriva presto» e la pagina «presto»",
+             tes.get("studio", {}).get("conto") == "—" and "arriva presto" in stato and "pagina presto" in stato, stato)
     colonne = t.v("getComputedStyle(document.getElementById('tessere')).gridTemplateColumns.split(' ').length")
     verifica("raccolte: due colonne sul telefono", colonne == 2, str(colonne))
     # Un cambiamento della lista dopo la visita: il pallino

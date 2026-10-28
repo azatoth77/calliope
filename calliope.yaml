@@ -788,9 +788,6 @@ minori:
   # per ciò che vuole chi amministra serve una frase più chiara (la frase di sfida), regola
   # `amministra_minore_vicino`
   minori_margine_amministra: 0.12
-  # Compiti: risposte sbagliate sullo stesso esercizio prima di spiegare la soluzione (e
-  # avvisare i tutori). Decisione del 05/10: 5
-  minori_compiti_tentativi: 5
   # Ogni quanti mesi ricordare ai tutori di rifare l'impronta di un minore: sotto i 14 anni e
   # dai 14 (la voce dei bambini cambia in fretta); anche prima se il riconoscimento cala
   minori_impronta_mesi:
@@ -878,41 +875,6 @@ minori:
   avvisi_audio_contesto_s: 20.0
   # Giorni dopo cui l'audio (nel cassetto) e la trascrizione di un avviso si cancellano
   avvisi_audio_giorni: 30.0
-  # Esercizi generati da Calliope (08/10, calliope/esercizi/, docs/ricerche/
-  # 2026-10-08-esercizi.md): matematica e italiano per i ragazzi di casa, a voce e sulla
-  # scheda, con la correzione nel codice e il registro dei tentativi per i tutori; dal 12/10
-  # anche logica, fisica e chimica (calcolabili, unità di misura in calliope/unita.py)
-  esercizi_enabled: true
-  # Il secondo modello che risolve da solo gli esercizi d'italiano (se non concorda,
-  # l'esercizio si scarta). Vuoto = il modello della voce sullo stesso Ollama; sulla DGX si
-  # può scegliere un modello più forte. Su Ollama (API nativa, output strutturato)
-  esercizi_verifica_modello: ''
-  esercizi_verifica_url: ''
-  esercizi_verifica_timeout_s: 20.0
-  # Esercizi d'italiano senza il secondo parere quando il modello non risponde (solo lessico e
-  # Wikizionario). false = in quel caso niente esercizi d'italiano
-  esercizi_senza_secondo_parere: false
-  # Esercizi d'italiano controllati in anticipo per livello, in secondo piano
-  esercizi_pronti: 3
-  # Esercizi a campione nel riepilogo per i tutori (da controllare al posto della revisione)
-  esercizi_campione: 3
-  # Esercizi di un blocco prima della proposta «Facciamo una pausa o cambiamo?», detta dal
-  # codice (12/10, caso vero: tabelline senza pause finché la bambina non ha detto «basta,
-  # sono stanca»). Più corto per la primaria bassa (prima, seconda e terza elementare); chi
-  # vuole blocchi diversi lo dice a voce («blocchi più corti») e resta salvato per persona
-  esercizi_blocco_piccoli: 5
-  esercizi_blocco: 10
-  # Tappe del percorso «a tappe» (una tappa = un blocco), attivato a voce
-  esercizi_tappe: 3
-  # «A che punto siete?» (12/10 sera, decisione di Dario: si chiede spesso, non una volta
-  # all'anno): a inizio sessione, per un minore, una domanda breve detta dal codice se
-  # l'informazione su quella materia manca o ha più di tanti giorni; a metà sessione al più
-  # una volta, se sbaglia molte risposte di fila o le fa tutte giuste al primo colpo. La
-  # risposta stringe o sposta il limite del programma dentro l'anno. 0 = mai chiedere
-  esercizi_punto_giorni: 14
-  # Domande di un'interrogazione simulata («interrogami sulle addizioni»): aperte dagli
-  # obiettivi dell'indice e conti corretti dal codice
-  esercizi_interroga_domande: 5
   # Il modello guardiano (calliope/guardiano.py): giudica la domanda e ogni frase della
   # risposta prima della voce, solo per minori e ospiti. Su Ollama (lo stesso della voce se
   # guardiano_url è vuoto: llm_native_url). Scelta con prove/misura_guardiano.py (rapporto

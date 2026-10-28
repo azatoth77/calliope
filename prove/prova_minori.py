@@ -10,9 +10,9 @@ docs/ricerche/2026-10-05-minori.md): niente modelli, niente Ollama.
 - orari di pausa (anche a cavallo della mezzanotte), dato del turno (adulti: niente);
 - voce incerta: il profilo più protetto, mai un adulto;
 - ricordi sensibili di un minore, voci e risultati per adulti, casa per fascia;
-- compiti: mai la soluzione, 5 tentativi, poi spiegazione e avviso vero ai tutori; calcola
-  in modalità compiti; la scaletta per un tema;
-- avvisi ai tutori: scheda personale, annuncio, riepilogo dei compiti;
+- compiti: dal 28/10 (#279) la sola regola «mai la soluzione intera» nei dati del turno, anche
+  con «fammi tu il compito», e calcola col risultato; la scaletta per un tema;
+- avvisi ai tutori: scheda personale, annuncio;
 - guardiano (finto): frasi buone, frase vietata fermata, pericolo sulla domanda con la
   protezione, guasto per un minore e per un ospite, storia corretta;
 - guardiano che non tace (Q3, 06/10): rilevatore guasto, scaduto o spento, guardiano guasto
@@ -404,56 +404,67 @@ verifica("ricorda di Bianca: niente dati sanitari", out.get("ok") is False and
          "ricordo_minore_sensibile" in ctx.regole)
 
 # ─────────────────────────── compiti ───────────────────────────
+# Dal 28/10 (#279, decisione 0035, domanda 2) i compiti guidati sono solo una regola nei dati
+# del turno, «mai la soluzione intera», senza conteggio né avviso; `calcola` dà sempre il
+# risultato. *[storico: fino al 28/10 qui c'erano le prove di compiti_aiuto (5 tentativi, la
+# spiegazione, l'avviso ai tutori, il riepilogo) e di calcola «nascosto: è un compito»]*
 print("── compiti ──")
-M.compiti().chiudi(BIANCA.id)
-out, ctx = chiama("compiti_aiuto", {"esercizio": "3/4 + 1/2", "espressione": "3/4+1/2"}, "Bianca")
-verifica("esercizio registrato, niente soluzione", out.get("tentativi") == 0 and "1.25" not in
-         json.dumps(out) and "1,25" not in json.dumps(out))
+verifica("il tool compiti_aiuto non c'è più (né esercizi)",
+         TOOLS.get("compiti_aiuto") is None and TOOLS.get("esercizi") is None)
+t = M.dato_turno(BIANCA)
+verifica("dato del turno di Bianca: la regola «mai la soluzione intera»",
+         M.REGOLA_COMPITI in t and "mai la soluzione intera" in t, t)
+verifica("la regola è sola: niente esercizio aperto, tentativi né compiti_aiuto",
+         "compiti_aiuto" not in t and "tentativ" not in t and "esercizio aperto" not in t, t)
+verifica("contrario: Sara con i compiti liberi non ha la regola",
+         M.preset(SARA)["compiti"] == "libero" and M.REGOLA_COMPITI not in M.dato_turno(SARA))
+verifica("contrario: Dario non ha la regola", M.REGOLA_COMPITI not in M.dato_turno(DARIO))
+
+
+class _BackendCompiti:
+    """Il modello finto: tiene i messaggi e gli schemi che riceve, risponde con una frase."""
+
+    def __init__(self):
+        self.visti, self.schemi = [], []
+
+    def stream(self, messages, tools):
+        self.visti.append([dict(m) for m in messages])
+        self.schemi.append([s.get("function", {}).get("name") for s in (tools or [])])
+        yield ("text", "Proviamo insieme: quanto fa sette per otto secondo te?")
+
+
+def turno_compiti(chi: str, frase: str):
+    bc = Brain.__new__(Brain)
+    bc.cfg, bc.tools, bc.history = cfg, TOOLS, []
+    bc.tool_ctx = ctx_di(chi)
+    bc.backend = _BackendCompiti()
+    livello = bc.tool_ctx.speaker_ctx.current_level
+    detto = "".join(bc.stream_reply(frase, livello))
+    sistema = " ".join(str(m.get("content") or "") for m in bc.backend.visti[0]
+                       if m.get("role") == "system")
+    return detto, sistema, bc.backend.schemi[0]
+
+
+FAMMI = "Calliope, fammi tu il compito di matematica: scrivimi tutte le soluzioni."
+detto, sistema, schemi = turno_compiti("Bianca", FAMMI)
+verifica("«fammi tu il compito» di Bianca: nei dati del turno la regola",
+         M.REGOLA_COMPITI in sistema, sistema[-600:])
+verifica("…e tra gli strumenti nessun compiti_aiuto né esercizi",
+         "compiti_aiuto" not in schemi and "esercizi" not in schemi and "calcola" in schemi,
+         str(schemi))
+_, sistema, _ = turno_compiti("Dario", FAMMI)
+verifica("contrario: la stessa frase di Dario, nessuna regola dei compiti",
+         M.REGOLA_COMPITI not in sistema and "minorenne" not in sistema)
+_, sistema, _ = turno_compiti("Sara", FAMMI)
+verifica("contrario: Sara (16 anni, compiti liberi), nessuna regola dei compiti",
+         M.REGOLA_COMPITI not in sistema and "minorenne" in sistema)
+# calcola: il risultato c'è sempre, anche per un minore con i compiti guidati
 out, ctx = chiama("calcola", {"espressione": "3/4+1/2"}, "Bianca")
-verifica("calcola nei compiti: niente risultato", out.get("modalita_compiti") is True and
-         "1,25" not in json.dumps(out), str(out))
+verifica("calcola per Bianca (compiti guidati): il risultato, niente «modalità compiti»",
+         out.get("risultato") == "1,25" and "modalita_compiti" not in out
+         and "nascosto" not in json.dumps(out, ensure_ascii=False), str(out))
 out, _ = chiama("calcola", {"espressione": "3/4+1/2"}, "Dario")
-verifica("contrario: calcola per Dario dà il risultato", out.get("risultato") == "1,25")
-out, _ = chiama("compiti_aiuto", {"esercizio": "3/4+1/2", "espressione": "3/4+1/2",
-                                  "risposta": "5/4"}, "Bianca")
-verifica("risposta giusta (5/4 = 1,25) riconosciuta", out.get("giusta") is True)
-M.compiti().chiudi(BIANCA.id)
-av = M.avvisi()
-HUB.schede.clear()
-for i in range(1, 6):
-    out, ctx = chiama("compiti_aiuto", {"esercizio": "7 per 8", "espressione": "7*8",
-                                        "risposta": str(50 + i)}, "Bianca")
-    if i < 5:
-        verifica(f"tentativo {i} sbagliato: niente soluzione", out.get("giusta") is False
-                 and "soluzione" not in out and out.get("tentativi") == i)
-verifica("al quinto: soluzione permessa, la frase dice che lo dirà ai tutori",
-         out.get("soluzione_permessa") and out.get("soluzione") == "56"
-         and "Dario" in out.get("da_dire_prima", "") and "compiti_soluzione" in ctx.regole, str(out))
-verifica("e l'avviso c'è davvero, per Dario e per Elena",
-         len(av.da_dire(DARIO.id, segna=False)) == 1 and len(av.da_dire(ELENA.id, segna=False)) == 1)
-verifica("scheda personale ai tutori", sorted(m.persona for s, m in HUB.schede
-                                                if s.get("visibilita") == "personale")
-         == ["dario-id", "elena-id"])
-frase = av.frase(av.da_dire(DARIO.id))
-verifica("annuncio al tutore con l'argomento, senza parole del minore",
-         "7 per 8" in frase and "Bianca" in frase, frase)
-verifica("detto una volta sola", av.da_dire(DARIO.id) == [])
-verifica("riepilogo dei compiti", "7 per 8" in av.riepilogo(BIANCA), av.riepilogo(BIANCA))
-# Il modello passa la risposta come esercizio ed espressione (banco del 05/10 sulla DGX)
-M.compiti().chiudi(BIANCA.id)
-chiama("compiti_aiuto", {"esercizio": "tre quarti più un mezzo", "espressione": "3/4+1/2"}, "Bianca")
-out, ctx = chiama("compiti_aiuto", {"espressione": "1", "risposta": "1", "giusta": True}, "Bianca")
-verifica("risposta passata come espressione: è un tentativo sbagliato dell'esercizio aperto",
-         out.get("giusta") is False and out.get("tentativi") == 1
-         and "compiti_stesso_esercizio" in ctx.regole, str(out))
-out, ctx = chiama("compiti_aiuto", {"esercizio": "2/3", "risposta": "2/3", "giusta": True}, "Bianca")
-verifica("e il «giusta» del modello non vale contro il conto", out.get("giusta") is False
-         and out.get("tentativi") == 2, str(out))
-out, ctx = chiama("compiti_aiuto", {"esercizio": "7 per 3", "espressione": "7*3"}, "Bianca")
-verifica("contrario: un esercizio nuovo vero si apre", out.get("tentativi") == 0
-         and out.get("esercizio") == "7 per 3", str(out))
-out, ctx = chiama("compiti_aiuto", {"esercizio": "x"}, "Dario")
-verifica("contrario: compiti_aiuto per un adulto non fa niente", out.get("ok") is False)
+verifica("contrario: calcola per Dario, lo stesso risultato", out.get("risultato") == "1,25")
 verifica("tema: la nota per la scaletta", "scaletta" in M.nota_documento(ctx_di("Bianca")))
 verifica("contrario: nessuna nota per Dario", M.nota_documento(ctx_di("Dario")) == "")
 

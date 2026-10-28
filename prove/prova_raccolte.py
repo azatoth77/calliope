@@ -126,11 +126,10 @@ def tessere():
                          Lav(persona="bianca", stato="in_attesa", creato=ora, inizio=ora, fine=None)])
     cassetto = types.SimpleNamespace(elenco=lambda p: [{"arrivato": ora - 5}] if p == "dario" else [])
     numeri = types.SimpleNamespace(elenco=lambda anno=None: [{"stato": "emesso"}, {"stato": "annullato"}])
-    esercizi = types.SimpleNamespace(sessione=lambda p: types.SimpleNamespace(aperta=True) if p == "lia" else None)
     hub = types.SimpleNamespace(
         servizi=types.SimpleNamespace(liste=liste, agenda=agenda, lavori=lavori, documenti=Rotto(),
                                       ufficio=types.SimpleNamespace(numeri=numeri), estensioni=None),
-        tool_ctx=None, cassetto=cassetto, giochi=None, esercizi=esercizi)
+        tool_ctx=None, cassetto=cassetto, giochi=None)
     log = []
     t = {x["id"]: x for x in raccolte.tessere(hub, DARIO, log.append)}
     verifica("tessere: otto per chi amministra, nell'ordine", list(t) == [k for k, _ in raccolte.TESSERE])
@@ -153,8 +152,11 @@ def tessere():
     tb = [x["id"] for x in raccolte.tessere(hub, BIANCA, log.append)]
     verifica("tessere: niente Ufficio a chi non amministra", "ufficio" not in tb and len(tb) == 7, str(tb))
     tl = {x["id"]: x for x in raccolte.tessere(hub, LIA, log.append)}
-    verifica("tessere: niente Ufficio a un minore; lo studio aperto",
-             "ufficio" not in tl and tl["studio"]["conto"] == 1, json.dumps(tl.get("studio")))
+    # Lo Studio rifatto da capo (28/10, #279): la tessera c'è, senza conto e «arriva presto»
+    verifica("tessere: niente Ufficio a un minore; lo Studio «arriva presto», senza conto",
+             "ufficio" not in tl and tl["studio"]["conto"] is None
+             and tl["studio"]["stato"] == "arriva presto" and tl["studio"]["pagina"] is False,
+             json.dumps(tl.get("studio")))
     admin_minore = Profilo("x", "Xeno", admin=True, nascita="2015-01-01")
     verifica("tessere: l'Ufficio mai a un minore, anche col segno di chi amministra",
              "ufficio" not in raccolte.visibili(admin_minore))
@@ -174,8 +176,9 @@ def tessere():
     p = raccolte.pagina(hub, BIANCA, "ufficio")
     verifica("pagina: l'Ufficio a chi non amministra 404", p.get("_stato") == 404)
     vuoto = types.SimpleNamespace(servizi=None, tool_ctx=None)
-    verifica("tessere: senza servizi tutte «non disponibile»",
-             all(x["stato"] == "non disponibile" for x in raccolte.tessere(vuoto, DARIO, lambda m: None)))
+    verifica("tessere: senza servizi tutte «non disponibile» (lo Studio «arriva presto», #279)",
+             all(x["stato"] == ("arriva presto" if x["id"] == "studio" else "non disponibile")
+                 for x in raccolte.tessere(vuoto, DARIO, lambda m: None)))
     liste.db.close()
 
 

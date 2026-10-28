@@ -94,22 +94,11 @@ A_SECCO = [
     ("prova_documento_proprio.py", [], "aprire il documento appena scritto con una foto di mezzo (07/10, giro 9, caso della DGX): documento proprio senza conferma a voce e i contrari, consenso ripetendo la richiesta e i contrari, un solo file e il numero 2, numero che non c'è detto al modello, sfida superata con il tool fallito, allegato_leggi fallito che non contamina"),
     ("prova_voci_famiglia.py", [], "voci di famiglia (07/10): margine tra primo e secondo profilo, chi amministra con un minore vicino, la frase che chiede chi parla, conferma breve con un'altra voce più vicina, i quattro casi veri con impronte sintetiche; continuità delle frasi cortissime (08/10) con i contrari; il proprietario del telefono (09/10, voce_proprietario): frasi incerte col minore restano sue, con i contrari (minore sicuro, satellite di stanza, finestra scaduta, compagnia)"),
     ("prova_impronte_satellite.py", [], "impronte della voce per satellite (15/10, calliope/impronte_satellite.py): apprendimento solo dalle frasi sicure (contrari: zona grigia, breve, voce corta, margine stretto, compagnia, incerta, minore vicino, continuità), seme dopo 3 frasi, deriva dall'arruolamento e dal seme, ripiego sul canale; spento come prima; ombra (decide quella di oggi, nel registro con e senza) e attivo (il caso del 15/10 in auto riconosciuto); simmetria col minore e protezioni sui punteggi nuovi; i casi del 07/10 di prova_voci_famiglia uguali in ombra e attivo; tenuta (speakers.json, modello diverso, nuova registrazione, rinomina, svuota dal processo e da terminale con la copia); conoscenti (apprendimento, riconoscimento, file, promozione e ritorno, dimentica); stato --turni; dal 18/10 (issue #159) gli scambi divisi fra base sicura e base incerta (contrario: contro una decisione dalla voce resta sicuro)"),
-    ("prova_minori.py", [], "minori (05/10): fasce, preset e permessi nel codice, orari, voce incerta, compiti e avvisi ai tutori, guardiano finto, registrazione con la sfida, privacy"),
+    ("prova_minori.py", [], "minori (05/10): fasce, preset e permessi nel codice, orari, voce incerta, compiti guidati come sola regola nei dati del turno anche con «fammi tu il compito» e calcola col risultato (28/10, #279), avvisi ai tutori, guardiano finto, registrazione con la sfida, privacy"),
     ("prova_controlli_regressione.py", [], "i controlli del banco di regressione a secco (17/10, #70): il ruolo dato come nome (domande e «ma Papà» errori, il rifiuto detto no) e la frase storpiata «Calliope di Michisono.» (il nome o una domanda di chiarimento, non la ricerca)"),
     ("prova_eta_utenti.py", [], "età e compleanni dai profili (07/10, DGX): data di oggi come nascita rifiutata, persona=io o un nome, giorni contati dal programma, privacy (chi amministra e i tutori), impronta della voce in elenca_utenti, rubrica distinta, tool *_cerca con argomenti obbligatori, parole di un ospite nel registro; la propria data di nascita nel profilo con ricorda e la data dai ricordi in data_calcola (07/10 pomeriggio)"),
-    # ~8 s: generatori su migliaia di semi, secondo parere finto, server degli schermi vero
-    ("prova_esercizi.py", [], "esercizi generati da Calliope (08/10): numeri detti, generatori di matematica (ricalcolo indipendente) e d'italiano (forme chiuse, lessico sul Wikizionario), secondo parere finto (buono, scartato, guasto, banco), flusso a voce (indizi, 5 errori con avviso ai tutori una volta, salta, soluzione, segnala, livelli, fine), permessi (ospite, adulto che non segue ragazzi, tutore, riepilogo), dato del turno, /api/esercizio sul server vero (schermo personale, fuori orario con la pausa che copre ogni minuto del giorno, limite, mai la risposta attesa)"),
-    # ~9 s: generatori di logica, fisica e chimica su migliaia di semi, tool e sessione veri
-    ("prova_materie.py", [], "materie calcolabili (12/10, S1: logica, fisica, chimica con lo schema della matematica): unità di misura lette come le scrive Whisper (simboli, nomi storpiati, numeri in lettere, decimali detti, «un chilo e mezzo», «mezz'ora») e dette per esteso, con i contrari; decimali e migliaia; 300 semi per argomento e livello con il ricalcolo indipendente, risposta giusta in ogni forma, senza unità con il promemoria, unità equivalente (non nelle conversioni), sbagliata e di un'altra grandezza rifiutate; il ricalcolo che prende gli errori (composizione, reazione non bilanciata o non minima, sequenza ambigua, risposte rovesciate); vero o falso letto; materia e argomento dal testo («logica» non è l'analisi logica); flusso dal tool con la scheda «misura», segnalazione e argomenti per età"),
-    # ~1 s: le correzioni del 12/10 (prova vera con una bambina, 26B sulla DGX)
-    ("prova_esercizi_voce.py", [], "esercizi dopo la prova vera del 12/10: il numero si ricava dalla frase (solo le forme parlate chiuse come «sedeci», «Prenta due» → 32 e «Suttanto salida» → 76 no, si chiede di ripetere), domande solo dal programma (risposta a una domanda inventata non giudicata; in Brain domanda inventata e «Segno tutto» non detti dopo la spinta, anche a sessione aperta senza l'azione in sospeso), blocchi da 5 e 10 con «Facciamo una pausa o cambiamo?», pausa e continua, punti e tappe contati dal codice, modo giocoso, preferenze salvate per persona (servizio nuovo, 60 giorni, svuota), indizi vuoti, schermo_mostra con un testo e l'esercizio, «te lo scrivo qui» tolto a voce"),
-    # ~1 s: l'indice del programma ministeriale (12/10, fase A)
-    ("prova_programma.py", [], "indice del programma ministeriale (12/10, calliope/esercizi/programma/): forma dei dati (fonti, id, traguardi, argomenti, classi, livelli, obiettivi della mappa), quali Indicazioni valgono per classe e anno scolastico (DM 221/2025 art. 1 e 5, casi al confine e contrari), anno scolastico e periodo da una data, il caso vero del 12/10 (terza a ottobre entro il 100), generatore_dentro della mappa rifatto sul generatore vero"),
-    # ~7 s: fase B dell'indice (12/10 sera): limite stretto, numeri, a che punto, interrogazioni
-    ("prova_esercizi_programma.py", [], "fase B dell'indice del programma (12/10 sera): generatori con «entro», cambio e operazioni ammesse, ogni voce della mappa dentro il suo limite; limite stretto per classe e periodo (terza a ottobre entro il 100 senza salire al 3, prima entro il 10 senza riporto), nessun livello adatto (frazioni in terza: lo dice e propone, contrario in quarta), oltre solo se chiesto (oltre, «tre cifre», piu_difficile) e solo per la sessione; numero da ripetere con frasi sempre diverse e col tono, lo schermo dopo due non capiti (contrari); «a che punto siete» a inizio sessione (contrari: appena detto, adulto, 0 giorni), mappato o foto della pagina, a metà sessione una volta, detto da un tutore (contrario: chi non lo segue), classe salvata e anno dopo, 60 giorni e svuota; interrogazioni dall'indice (aperte con giudizio e sicurezza, «da guardare» nel riepilogo e avviso, problema solo con «+») e dalla pagina, senza pagina la chiede"),
     # ~25 s: la pagina degli schermi e del telefono in Edge o Chromium senza finestra
     ("prova_vista_sviluppo_pagina.py", [], "vista dello sviluppo e lavoro in diretta nella pagina vera (08/10): fasi, due colonne, flusso che si accumula senza buchi né doppioni anche dopo una riconnessione, scorrimento e «In fondo», schermo intero sul computer, giro 2 e correzione, comandi a tocco innocui, uscita dalla vista, telefono in una colonna, nessun errore JS né CSP"),
-    ("prova_esercizi_pagina.py", [], "scheda degli esercizi nella pagina vera (08/10): domanda grande, risposta scritta sbagliata e giusta, indizio, segnalazione, fine, scelte d'italiano come pulsanti, risposta attesa mai nel DOM, telefono con la scheda in Le mie cose › Studio aperta da sola, nessun errore JS né CSP"),
     ("prova_minori_pericolo.py", [], "minore in pericolo con la frase spezzata (06/10, e2e): pezzi uniti per il guardiano, protezione senza barge-in con la sola voce e ripetuta se il nome la interrompe, avviso non ripetuto per lo stesso episodio, con i contrari"),
     ("prova_compagnia.py", [], "modalità compagnia (09/10): più voci vicino allo stesso satellite (profilo recente, gruppi tra ospiti, due profili) con i contrari (voce variabile, altro microfono, frasi brevi, finestra scaduta, altro satellite, stesso ospite, spenta), i due episodi veri della DGX in numeri, niente frase breve né continuità, voce non sicura per i due cancelli e l'avviso che lo dice, azioni con la voce nella frase, nome a ogni frase con una voce sconosciuta (il nome passa sempre), famiglia tutta riconosciuta, ombra senza effetti; giudizio «rivolta a Calliope» finto in ombra e acceso (silenzio, protezione sempre, guasto = rivolta, nessun tool, storia ripulita); calliope stato --turni; impronta non aggiornata in compagnia (12/10)"),
     ("prova_console_minori.py", [], "parole dei minori nel terminale e nel journal come quelle degli adulti (16/10, decisione 0031; dal 12/10 sera al 16/10 nascoste, conserva.console_riservata): la frase e la risposta in chiaro anche nel dubbio tra un adulto e un minore, nelle reti di Brain e negli argomenti dei tool; minori.parla_minore per la frase dopo il tool; contrario l'ospite («(una frase di un ospite)», «…»)"),
@@ -216,7 +205,7 @@ A_SECCO = [
     # ~6 s: cassetto in una cartella temporanea, Brain finto, server degli schermi vero
     ("prova_cassetto.py", [], "cassetto dei file per persona (08/10): entrata (foto, file, audio; mai programmi né ospiti), scadenza e «ho eliminato», revisione una volta al giorno, tieni/elimina/tieni ancora, tetto, minore e tutore, zona grigia, ritrovamento dopo un riavvio, contenuto in busta, /api/cassetto, ciclo finto"),
     # ~15 s: la scheda del cassetto in Edge o Chromium senza finestra; senza browser si salta
-    ("prova_cronologia_schede.py", [], "cronologia delle schede per persona e scheda «Conversazione» (08/10): salvataggio solo personale e certo, chiavi, tenuta e tetti, ripresa dopo un riavvio con le schede finali (lavoro interrotto, esercizi, sviluppo ricostruito, modulo e timer saltati), «Scarica» con un gettone nuovo, pulizia (tool, /api/schede, evento), conversazione dall'archivio (meta, sfida e codici tolti, in diretta solo ai propri schermi, dimentica, tenuta, Markdown), server vero"),
+    ("prova_cronologia_schede.py", [], "cronologia delle schede per persona e scheda «Conversazione» (08/10): salvataggio solo personale e certo, chiavi, tenuta e tetti, ripresa dopo un riavvio con le schede finali (lavoro interrotto, sviluppo ricostruito, modulo e timer saltati), «Scarica» con un gettone nuovo, pulizia (tool, /api/schede, evento), conversazione dall'archivio (meta, sfida e codici tolti, in diretta solo ai propri schermi, dimentica, tenuta, Markdown), server vero"),
     ("prova_compagnia_pagina.py", [], "segno della compagnia nella pagina vera (09/10): «In compagnia: chiamami per nome» sotto lo stato della voce dello schermo di stanza e sul telefono, resta addormentata, sparisce con una voce sola, mai in un'altra stanza, nessun errore JS né CSP"),
     ("prova_cronologia_pagina.py", [], "cronologia delle schede e conversazione nella pagina vera: riavvio del server, schermo nuovo che ritrova schede e chat, turno nuovo in fondo senza riscrivere, Scarica, stanza vuota, Pulisci con due tocchi, vista dello sviluppo dopo un riavvio, telefono con la conversazione nella sezione (schede piccole, filtri, ricerca, misure), nessun errore JS né CSP"),
     ("prova_cassetto_pagina.py", [], "scheda del cassetto nella pagina vera: carosello (miniatura, sigle), Tieni solo dove si può, Tieni ancora, Tieni, Elimina tutti con due tocchi, schermo di un'altra persona vuoto, nessun errore JS né CSP"),
@@ -323,9 +312,7 @@ CON_OLLAMA = [
     ("prova_chi_sei_ollama.py", ["1"], "chi sei, novità, versione e «cosa sai fare?» per aree con il modello (09/10): tool e argomenti giusti, niente invenzioni su di sé, contrari"),
     ("prova_personalita_ollama.py", ["1"], "tono di voce chiesto a voce (cambia_voce con tono, per_tutti) e tool dopo il cambio"),
     ("prova_modalita_ollama.py", ["1"], "modalità Star Trek chiesta a voce (cambia_voce con modalita), «non sento i suoni», tool dopo il cambio, i toni restano toni"),
-    ("prova_esercizi_ollama.py", ["--giri", "1"], "esercizi a voce con il modello (08/10): un giro di 10 esercizi per materia con risposte giuste, sbagliate, indizi e segnalazioni simulate; correzioni giuste, tool chiamato, tempi, secondo parere vero sugli esercizi d'italiano"),
-    ("prova_esercizi_programma_ollama.py", ["--giri", "1"], "fase B dell'indice col modello (12/10 sera, il 4B del profilo ridotto): inizio con «a che punto siete», a_che_punto mappato, risposta, piu_difficile, fuori programma e oltre, interrogazione con la domanda aperta giudicata, la pagina chiesta; turni giusti, tool, prima frase; soglia 0,75"),
-    ("prova_minori_ollama.py", ["--giri", "1"], "minori (05/10): richieste esplicite, aggiramenti, pericolo, compiti con 5 tentativi, tool, contrari per gli adulti, con il guardiano"),
+    ("prova_minori_ollama.py", ["--giri", "1"], "minori (05/10): richieste esplicite, aggiramenti, pericolo, compiti senza la soluzione intera (dal 28/10 solo la regola, #279), tool, contrari per gli adulti, con il guardiano"),
     ("prova_schermi_ollama.py", ["1"], "schermi a voce con il modello e il server vero; latenza"),
     ("prova_agenti_ollama.py", ["1"], "delega, stato e annullo a voce con il modello (agente finto)"),
     ("prova_archivio_ollama.py", ["1"], "documenti di casa a voce con il modello (archivio finto)"),
@@ -443,8 +430,6 @@ LIVELLO_2 = {
     "prova_frase_lunga.py",          # ~6 s (10/10)
     "prova_fine_turno.py",           # ~3 s (14/10)
     "prova_preselezione.py",         # ~4 s (15/10)
-    "prova_esercizi.py",             # 8 s (08/10)
-    "prova_materie.py",              # ~9 s (12/10)
     "prova_searxng_aggiorna.py",     # 5 s (09/10)
 }
 LIVELLO_3 = {
@@ -453,7 +438,7 @@ LIVELLO_3 = {
     "prova_telefono_audio.py", "prova_telefono_schermo.py", "prova_satellite.py",
     "prova_corsie_satelliti.py", "prova_installa_satellite.py", "prova_cruscotto_pagina.py",
     "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_cassetto_pagina.py",
-    "prova_esercizi_pagina.py", "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
+    "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
     "prova_compagnia_pagina.py", "prova_frase_lunga_voce.py", "prova_stanza_voce.py",
     "prova_cdp_orfani.py", "prova_gioco_stato_pagina.py", "prova_fine_turno_voce.py",
     "prova_pc_pagina.py",
@@ -583,14 +568,10 @@ LEGAMI = [
     ("calliope/tools/immagini.py", ["prova_immagini.py"]),
     ("calliope/tools/allegati.py", ["prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/cassetto.py", ["prova_cassetto.py"]),
-    ("calliope/tools/minori.py", ["prova_minori.py", "prova_giochi.py", "prova_esercizi.py"]),
-    # Esercizi (08/10): il pacchetto, il tool, la scheda e il dato del turno dei minori
-    ("calliope/esercizi/", ["prova_esercizi.py", "prova_materie.py"]),
-    ("calliope/tools/esercizi.py", ["prova_esercizi.py", "prova_materie.py"]),
-    # Materie calcolabili e unità di misura (12/10): anche la pronuncia dei simboli
-    ("calliope/unita.py", ["prova_materie.py", "prova_pronuncia.py"]),
-    ("calliope/minori.py", ["prova_esercizi.py"]),
-    ("calliope/schermi/", ["prova_esercizi.py"]),
+    ("calliope/tools/minori.py", ["prova_minori.py", "prova_giochi.py"]),
+    # Funzioni spostate dagli esercizi tolti (28/10, #279)
+    ("calliope/numeri.py", ["prova_stanza_eco.py"]),
+    ("calliope/pronuncia.py", ["prova_pronuncia.py"]),
     ("calliope/speaker_id.py", ["prova_voci_famiglia.py", "prova_conferme.py"]),
     # Il «sì» breve dei tutori (16/10, #108): breve_impronta_ok per dati_conservati (#114:
     # anche dal ciclo vero, con minori.piu_protetto, e da ToolRegistry.call)

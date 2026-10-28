@@ -268,13 +268,10 @@ def _giochi(hub, prof):
 
 
 def _studio(hub, prof):
-    es = getattr(hub, "esercizi", None)
-    if es is None:
-        return None
-    s = es.sessione(prof.id) if hasattr(es, "sessione") else None
-    if s is not None and getattr(s, "aperta", False):
-        return {"conto": 1, "stato": "esercizi in corso", "ultimo": None}
-    return {"conto": 0, "stato": "niente in corso", "ultimo": None}
+    # Lo Studio si rifà da capo (28/10, decisione 0035): la tessera resta al suo posto e dice
+    # «arriva presto» finché il passo 4.5 non la riscrive. *[storico: fino al 28/10 leggeva la
+    # sessione degli esercizi, tolti con la #279]*
+    return {"conto": None, "stato": "arriva presto", "ultimo": None}
 
 
 def _ufficio(hub, prof):
