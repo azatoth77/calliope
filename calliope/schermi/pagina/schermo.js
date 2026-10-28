@@ -30,7 +30,7 @@
     risposta: "Risposta", foto: "Foto", allegato: "File", gioco: "Gioco", giochi: "Giochi",
     cruscotto: "Cruscotto", cassetto: "Cassetto", esercizio: "Esercizi",
     esercizi_riepilogo: "Esercizi", sviluppo: "Sviluppo", chat: "Conversazione",
-    conoscente: "Voce nuova", avviso: "Avviso",
+    conoscente: "Voce nuova", avviso: "Avviso", archivio: "Archivio di casa",
   };
   // Il telefono a sezioni (27/10, docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md, 3.2):
   // la casa fissa di ogni tipo, «sezione» o «sezione/raccolta». La stessa tabella è in
@@ -41,7 +41,7 @@
     web: "conversazione", testo: "conversazione", chat: "conversazione",
     timer: "cose/agenda", promemoria: "cose/agenda", lista: "cose/liste",
     lavoro: "cose/lavori", esecuzione: "cose/lavori", sviluppo: "cose/lavori",
-    documento: "cose/documenti", foto: "cose/cassetto", allegato: "cose/cassetto",
+    documento: "cose/documenti", archivio: "cose/documenti", foto: "cose/cassetto", allegato: "cose/cassetto",
     cassetto: "cose/cassetto", modulo: "cose", gioco: "cose/giochi", giochi: "cose/giochi",
     esercizio: "cose/studio", esercizi_riepilogo: "cose/studio",
     casa: "casa", conoscente: "casa", avviso: "casa", cruscotto: "io",
@@ -85,6 +85,8 @@
     in_coda: "in coda", in_corso: "in corso", in_attesa: "aspetta la tua risposta",
     fatto: "finito", errore: "non riuscito", mancano_dati: "mancano dati",
     annullato: "annullato", scaduto: "chiuso senza risposta",
+    // Gli sviluppi degli altri nella pagina di chi amministra (28/10, #259)
+    aperta: "aperto", sospesa: "sospeso", fermato: "fermato",
   };
   const fmtOraSec = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const S = {
@@ -318,6 +320,14 @@
       if (!S.sessione) return { ok: false, status: 0, dati: {} };
       try {
         const r = await postSessione("/api/raccolte", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
+    // La ricerca di una pagina (28/10, passo 2d: i Documenti): {raccolta, testo} → {schede, nota}
+    async cerca(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const r = await postSessione("/api/raccolte/cerca", dati || {});
         return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
@@ -1406,7 +1416,8 @@
       if (c.altre && c.altre.length) corpo.append(el("p", "altre", "Anche: " + c.altre.join(", ")));
     },
     documento(c, corpo) {
-      const meta = el("p", "sotto", [c.file, c.cartella].filter(Boolean).join(" · "));
+      // `di`: di chi è, nella pagina Documenti di chi amministra (28/10, #259)
+      const meta = el("p", "sotto", [c.di ? "Di " + c.di : "", c.file, c.cartella].filter(Boolean).join(" · "));
       if (c.modifica) meta.textContent += " · cambiato: " + c.modifica;
       corpo.append(meta);
       if (Array.isArray(c.scarica) && c.scarica.length) corpo.append(pulsantiScarica(c));
@@ -1524,7 +1535,9 @@
         corpo.append(dueColonne(sx, colonnaFlusso(c)));
         return;
       }
-      const meta = el("p", "sotto", STATI_LAVORO[c.stato] || c.stato || "");
+      // `di`: il lavoro di un'altra persona nella pagina di chi amministra (28/10, #259)
+      const stato = c.di && c.stato === "in_attesa" ? "aspetta la risposta di " + c.di : (STATI_LAVORO[c.stato] || c.stato || "");
+      const meta = el("p", "sotto", (c.di ? "Di " + c.di + " · " : "") + stato);
       if (c.test) {
         const t = c.test, ko = (t.falliti || 0) + (t.errori || 0);
         meta.textContent += " · test: " + (ko ? ko + " non passano su " + Math.max(t.eseguiti, ko)
@@ -4149,6 +4162,42 @@
   // ─── Le partite aperte e i giochi di casa (28/10, passo 2c, #258: la pagina Giochi) ───
   // Solo testo, nessun tasto: un gioco si apre a voce, e il riquadro vero è la scheda «gioco»
   // (una copia sola: la pagina la mostra sotto). Tutto in textContent
+  // ─── L'archivio di casa nella pagina Documenti (28/10, passo 2d, #259, raccolte.py) ───
+  // Una riga per documento: nome, data, importo, di chi è, e «Scarica» del file originale (la
+  // chiave della riga; la sorgente resta sul server). Il nome viene dai dati estratti dal
+  // documento: un dato non fidato, solo testo (el → textContent), mai HTML
+  const NOMI_ORIGINALE = { pdf: "PDF", jpg: "foto", jpeg: "foto", png: "immagine", webp: "immagine", tif: "immagine",
+    tiff: "immagine", bmp: "immagine", docx: "Word", txt: "testo" };
+  DISEGNA.archivio = function (c, corpo, s) {
+    s.classList.add("scheda-archivio");
+    const voci = Array.isArray(c.voci) ? c.voci.filter((v) => v && typeof v === "object") : [];
+    if (!voci.length) {
+      corpo.append(el("p", "vuoto", c.vuoto || "Nessun documento."));
+      if (c.nota) corpo.append(el("p", "nota", c.nota));
+      return;
+    }
+    const ul = el("ul", "voci-archivio");
+    for (const v of voci) {
+      const li = el("li", "documento-archivio");
+      li.append(el("p", "nome-documento", String(v.nome || "Documento")));
+      const meta = [v.data, v.importo, v.di].map((x) => String(x || "")).filter(Boolean);
+      if (meta.length) li.append(el("p", "sotto", meta.join(" · ")));
+      const est = String(v.estensione || "").toLowerCase();
+      if (v.chiave && NOMI_ORIGINALE[est]) {
+        const box = el("div", "scarica");
+        const b = el("button", "piccolo-bottone tasto-scarica", "Scarica " + NOMI_ORIGINALE[est]);
+        b.type = "button";
+        b.dataset.scarica = "originale";
+        b.dataset.chiaveScheda = String(v.chiave);
+        box.append(b, el("span", "esito-scarica", ""));
+        li.append(box);
+      }
+      ul.append(li);
+    }
+    corpo.append(ul);
+    if (c.nota) corpo.append(el("p", "nota", c.nota));
+  };
+
   DISEGNA.giochi = function (c, corpo, s) {
     s.classList.add("scheda-giochi");
     const partite = Array.isArray(c.partite) ? c.partite.filter((p) => p && typeof p === "object") : [];

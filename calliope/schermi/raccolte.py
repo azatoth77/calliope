@@ -11,13 +11,18 @@ risponde dà una tessera senza conto, mai un errore alla pagina.
 Chi vede cosa (le regole sono le stesse della voce):
 - le liste sono di casa: tutte le persone di casa;
 - l'agenda: i timer di casa e i promemoria e gli appuntamenti della persona;
-- lavori, cassetto, documenti fatti da Calliope, studio: della persona;
+- lavori, cassetto, documenti fatti da Calliope, studio: della persona; dal 28/10 (passo 2d,
+  decisione di Dario) chi amministra vede nelle pagine Lavori e Documenti anche quelli degli
+  altri, e tutto l'archivio di casa;
+- l'archivio di casa (pagina Documenti): coi permessi della voce (`Archivio.puo_vedere`), mai ai
+  minori;
 - i giochi: quelli di casa;
 - l'ufficio (fatture, preventivi, DDT, rubrica): **solo chi amministra** (decisione del 28/10).
 
 `pagina(…)` dà le schede di una raccolta, costruite dai `schede.*` che esistono già (il disegno
 resta quello di `DISEGNA.*`): nel passo 2a le Liste, nel 2b l'Agenda (#257), nel 2c (#258) Lavori e
-programmi, Cassetto e Giochi; Documenti e Ufficio arrivano con i passi 2d–2e. Le pagine leggono
+programmi, Cassetto e Giochi, nel 2d (#259) i Documenti con la ricerca (`cerca`); l'Ufficio arriva
+col passo 2e. Le pagine leggono
 soltanto: le azioni sono quelle che le schede hanno già (i tasti del cassetto, i giochi), con le
 loro API e i loro controlli.
 """
@@ -29,8 +34,15 @@ TESSERE = (("liste", "Liste"), ("agenda", "Agenda"), ("lavori", "Lavori e progra
            ("cassetto", "Cassetto"), ("documenti", "Documenti"), ("giochi", "Giochi"),
            ("studio", "Studio"), ("ufficio", "Ufficio"))
 # Le pagine già fatte (le altre tessere dicono «presto»): passo 2a le Liste, 2b l'Agenda (#257),
-# 2c Lavori e programmi, Cassetto e Giochi (#258)
-PAGINE = ("liste", "agenda", "lavori", "cassetto", "giochi")
+# 2c Lavori e programmi, Cassetto e Giochi (#258), 2d i Documenti (#259)
+PAGINE = ("liste", "agenda", "lavori", "cassetto", "giochi", "documenti")
+# Nella pagina Documenti: i documenti fatti da Calliope per persona (le schede portano il testo
+# intero per «Leggi»), e le righe dell'archivio di casa per tipo
+DOCUMENTI_PAGINA = 8
+ARCHIVIO_PER_TIPO = 20
+# La ricerca: testo cercato al più così lungo, risultati al più tanti
+CERCA_MAX = 120
+CERCA_RISULTATI = 20
 # Nella pagina Lavori: i lavori finiti più recenti (memoria e, dopo un riavvio, la cartella dei
 # risultati) e i programmi; le schede del codice portano i file interi, quindi pochi
 LAVORI_FINITI_PAGINA = 6
@@ -215,18 +227,16 @@ def _cassetto(hub, prof):
 
 
 def _documenti(hub, prof):
-    doc = _fonte(hub, "documenti")
+    doc = _servizio_documenti(hub)
     if doc is None:
         return None
-    recenti = doc.recenti(prof.id, 50)
+    recenti = doc.recenti(prof.id, 50) if _documenti_ammessi(prof) else []
     formati = sorted({str(r.get("formato") or "").upper() for r in recenti if r.get("formato")})
     ultimo = None
     for r in recenti:
-        try:
-            t = datetime.datetime.fromisoformat(str(r.get("modificato"))).timestamp()
-        except (TypeError, ValueError):
-            continue
-        ultimo = max(ultimo or 0, t)
+        t = _quando_doc(r.get("modificato"))
+        if t:
+            ultimo = max(ultimo or 0, t)
     return {"conto": len(recenti), "stato": _piu(len(recenti), "documento", "documenti")
             + (" · " + ", ".join(formati[:3]) if formati else ""), "ultimo": ultimo}
 
@@ -302,6 +312,7 @@ def pagina(hub, prof, raccolta: str, schermo: dict | None = None, log=print) -> 
     if raccolta not in PAGINE:
         return {"schede": [], "nota": "Questa pagina arriva presto: intanto chiedilo a Calliope."}
     altre = {"agenda": lambda: _pagina_agenda(hub, prof), "lavori": lambda: _pagina_lavori(hub, prof),
+             "documenti": lambda: _pagina_documenti(hub, prof),
              "cassetto": lambda: _pagina_cassetto(hub, prof), "giochi": lambda: _pagina_giochi(hub, prof, schermo)}
     if raccolta in altre:
         try:
@@ -454,11 +465,13 @@ def _pagina_lavori(hub, prof) -> dict:
     persona (la scheda `sviluppo`), i suoi lavori in coda, in corso o fermi a una domanda (la
     scheda in diretta dalla cronologia, con il passo e il flusso; altrimenti quella breve), i
     suoi programmi (`esecuzione`) e i lavori finiti più recenti, anche di prima di un riavvio.
-    Solo della persona, come le schede che arrivano ai suoi schermi; la nota è la frase di
-    `lavoro_stato` sui soli lavori della persona (`Lavori.stato(persona, tutti=False)`), anche per
-    chi amministra: dallo schermo lo scritto vale al più «familiare», e il cruscotto non dà i titoli
-    degli altri (revisione della PR #267: prima la nota dava a chi amministra il titolo e la domanda
-    dell'agente di un lavoro di un'altra persona, e copriva la sua)."""
+    Della persona, come le schede che arrivano ai suoi schermi; per chi amministra, in coda, anche
+    quelli delle altre persone di casa con il loro nome (`_lavori_degli_altri`, decisione di Dario
+    del 28/10). La nota è la frase di `lavoro_stato` sui soli lavori della persona
+    (`Lavori.stato(persona, tutti=False)`), anche per chi amministra, così la sua domanda non
+    viene coperta da quelle degli altri. *[storico: dalla revisione della PR #267 al 28/10 chi
+    amministra non vedeva nella pagina né il titolo né la domanda dei lavori degli altri, perché
+    nessuno l'aveva deciso]*"""
     svc = _servizio_lavori(hub)
     if svc is None:
         return {"schede": [], "nota": "Qui non ci sono lavori affidati a un agente."}
@@ -491,6 +504,12 @@ def _pagina_lavori(hub, prof) -> dict:
         c = _lavoro_finito(hub, svc, lv)
         if c:
             out.append(c)
+    if getattr(prof, "admin", False):
+        # Chi amministra vede anche i lavori degli altri (decisione di Dario del 28/10), in coda
+        try:
+            out += _lavori_degli_altri(hub, svc, prof)
+        except Exception:  # noqa: BLE001 — i lavori degli altri non fermano i suoi
+            pass
     try:
         nota = svc.stato(prof.id, tutti=False)
     except Exception:  # noqa: BLE001
@@ -618,3 +637,351 @@ def _pagina_agenda(hub, prof) -> dict:
         out.append(schede.giorno(prof.id, quale, g[quale],
                                  dopo=g["dopo"] if quale == "settimana" else 0))
     return {"schede": out}
+
+
+# ─────────────────────────── 2d: Documenti (#259) ───────────────────────────
+
+# Come si chiama ogni tipo dell'archivio di casa nella pagina (archivio/tipi.py)
+TIPI_PAGINA = {"bolletta": "Bollette", "ricevuta": "Ricevute e fatture", "contratto": "Contratti",
+               "assicurazione": "Polizze", "garanzia": "Garanzie", "referto": "Referti",
+               "identita": "Documenti d'identità", "manuale": "Manuali", "altro": "Altri documenti"}
+
+
+def _servizio_documenti(hub):
+    """L'archivio dei documenti fatti da Calliope (`Documenti.archive`, documenti/servizio.py).
+    Fino al 2d la tessera chiamava `recenti` sul servizio `Documenti`, che non l'ha: con il
+    servizio vero la tessera diceva sempre «non disponibile»."""
+    d = _fonte(hub, "documenti")
+    if d is None:
+        return None
+    a = getattr(d, "archive", None)
+    if a is not None and hasattr(a, "recenti"):
+        return a
+    return d if hasattr(d, "recenti") else None
+
+
+def _quando_doc(v) -> float | None:
+    """`modificato` dell'archivio dei documenti: un tempo in secondi (o una data ISO)."""
+    if isinstance(v, (int, float)) and not isinstance(v, bool):
+        return float(v) or None
+    try:
+        return datetime.datetime.fromisoformat(str(v)).timestamp()
+    except (TypeError, ValueError):
+        return None
+
+
+def _documenti_ammessi(prof) -> bool:
+    """I documenti fatti da Calliope come a voce (`minori.permesso` su `documento_leggi`): un
+    minore col preset «documenti: no» non li ha."""
+    from .. import minori
+    try:
+        p = minori.preset(prof)
+    except Exception:  # noqa: BLE001 — nel dubbio, come un adulto senza preset
+        p = None
+    return p is None or p.get("documenti") != "no"
+
+
+def _chi_archivio(prof):
+    """Chi guarda l'archivio di casa dalla pagina. Come a voce per i familiari (`Chi`, livello
+    «familiare», mai la zona grigia: lo schermo personale è suo) e mai per un minore (i tool
+    dell'archivio sono di `minori._UFFICIO`). Chi amministra lo vede **tutto**, senza il filtro
+    dei documenti personali degli altri (decisione di Dario del 28/10): a voce invece resta
+    `puo_vedere` com'è (dallo schermo lo scritto vale al più «familiare»)."""
+    from .. import minori
+    from ..archivio import Chi
+    if not getattr(prof, "id", None) or minori.e_minore(prof):
+        return None
+    return Chi("amministra" if getattr(prof, "admin", False) else "familiare", prof.id,
+               getattr(prof, "name", None), False)
+
+
+def _profilo_ora(hub, prof):
+    """Il profilo com'è adesso nel registro (per i permessi rifatti al clic su «Scarica»); senza
+    registro quello della pagina."""
+    reg = _registro_persone(hub)
+    if reg is None or not hasattr(reg, "by_id"):
+        return prof
+    try:
+        return reg.by_id(prof.id)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _nomi_persone(hub) -> dict:
+    reg = _registro_persone(hub)
+    utenti = list((getattr(reg, "users", None) or {}).values()) if reg is not None else []
+    return {u.id: str(getattr(u, "name", "") or "") for u in utenti if getattr(u, "id", None)}
+
+
+def _scheda_documento(arch, r: dict, gruppo: str, di: str = "") -> dict | None:
+    """La scheda `documento` di sempre (anteprima per «Leggi», «Scarica» nei suoi formati) di un
+    documento fatto da Calliope, rifatta dal JSON dell'archivio: si scarica anche se il file è
+    finito sul portatile o è rimasto sul server."""
+    from . import schede
+    try:
+        d = arch.get(r["id"])
+        if not d:
+            return None
+        c = schede.documento(d["contenuto"], d["formato"], str(d.get("nome_file") or ""), ident=d["id"])
+    except Exception:  # noqa: BLE001 — un documento illeggibile si salta
+        return None
+    c["gruppo"] = gruppo
+    if di:
+        c["di"] = di
+    return c
+
+
+def _leggi_file(hub, prof, arch, doc_id: int):
+    """La funzione che «Scarica» chiama al clic (scarica.converti): i permessi rifatti adesso,
+    sul profilo com'è adesso, poi i byte del file vero dentro la cartella dell'archivio."""
+    def leggi():
+        ora = _profilo_ora(hub, prof)
+        chi = _chi_archivio(ora) if ora is not None else None
+        if chi is None or arch.documento_visibile(chi, doc_id) is None:
+            return None
+        p = arch.file_di(doc_id)
+        if p is None:
+            return None
+        try:
+            return p.read_bytes()
+        except OSError:
+            return None
+    return leggi
+
+
+def _di_chi(arch, d: dict, nomi_nodi: dict) -> str:
+    """Di chi è un documento dell'archivio: la persona della cartella, gli intestatari, o la
+    casa."""
+    a = d.get("attributi") or {}
+    cart = str(a.get("cartella") or "")
+    try:
+        profili = {n.casefold(): n for n in arch.profili()}
+    except Exception:  # noqa: BLE001
+        profili = {}
+    if cart and cart.casefold() in profili:
+        return f"Di {profili[cart.casefold()]}"
+    nomi = sorted({nomi_nodi[p] for p in d.get("persone") or () if p in nomi_nodi})
+    if nomi:
+        return "Di " + " e ".join(nomi[:2]) + (" e altri" if len(nomi) > 2 else "")
+    return "Di casa"
+
+
+def _nomi_nodi(arch, docs: list) -> dict:
+    ids = sorted({p for d in docs for p in d.get("persone") or ()})
+    out = {}
+    for i in range(0, len(ids), 500):
+        pezzo = ids[i:i + 500]
+        for r in arch.grafo.leggi(f"SELECT id, nome FROM nodi WHERE id IN ({','.join('?' * len(pezzo))})",
+                                  tuple(pezzo)):
+            out[r["id"]] = str(r["nome"] or "")
+    return out
+
+
+def _schede_archivio(hub, prof, arch, docs: list, chiave: str, titolo: str = "", per_tipo: bool = True,
+                     nota_fn=None) -> list:
+    """Le schede `archivio`: una per tipo (`per_tipo`, chiave `<chiave>:<tipo>`) o una sola
+    (`titolo`, `chiave`), con una riga per documento e «Scarica» del file originale (la
+    sorgente in `_scarica_voci`, che resta sul server)."""
+    from pathlib import Path
+    from ..archivio import normalizza as nz
+    from . import schede
+    from .scarica import ORIGINALI
+    nomi_nodi = _nomi_nodi(arch, docs)
+    gruppi: dict = {}
+    for d in docs:
+        k = ((d.get("attributi") or {}).get("tipo_doc") or "altro") if per_tipo else ""
+        gruppi.setdefault(k, []).append(d)
+    ordine = [t for t in TIPI_PAGINA if t in gruppi] + [t for t in gruppi if t not in TIPI_PAGINA]
+    out = []
+    for tipo in ordine:
+        tutti = gruppi[tipo]
+        voci, sorgenti = [], []
+        for d in tutti[:ARCHIVIO_PER_TIPO]:
+            a = d.get("attributi") or {}
+            nome_file = str(a.get("file") or "")
+            ext = Path(nome_file).suffix.lstrip(".").lower()
+            ok = ext in ORIGINALI
+            ck = f"archivio:file:{d['id']}"
+            try:
+                data = nz.data_detta(d["data"]) if d.get("data") else ""
+            except Exception:  # noqa: BLE001
+                data = str(d.get("data") or "")
+            try:
+                importo = nz.euro(d["totale"]) if d.get("totale") is not None else ""
+            except Exception:  # noqa: BLE001
+                importo = ""
+            nome = str(d.get("nome") or "Documento")
+            voci.append({"nome": nome[:1].upper() + nome[1:], "data": data, "importo": importo,
+                         "di": _di_chi(arch, d, nomi_nodi), "chiave": ck if ok else "",
+                         "estensione": ext if ok else ""})
+            if ok:
+                sorgenti.append({"chiave": ck, "formati": ["originale"],
+                                 "sorgente": {"file_fn": _leggi_file(hub, prof, arch, d["id"]),
+                                              "titolo": Path(nome_file).stem or nome, "estensione": ext}})
+        altri = len(tutti) - len(voci)
+        nota = (nota_fn() if nota_fn else "") or (f"E altri {altri}: chiedimeli a voce." if altri > 0 else "")
+        c = schede.archivio(f"{chiave}:{tipo}" if per_tipo else chiave,
+                            TIPI_PAGINA.get(tipo, "Altri documenti") if per_tipo else titolo, voci, nota=nota)
+        c["_scarica_voci"] = sorgenti
+        out.append(c)
+    return out
+
+
+def _pagina_documenti(hub, prof) -> dict:
+    """La pagina Documenti (28/10, passo 2d, #259): «Fatti da Calliope per te» (`Archive.recenti`,
+    la scheda `documento` con «Leggi» e «Scarica») e l'«Archivio di casa» per tipo (`Archivio.
+    documenti`, una scheda `archivio` per tipo con «Scarica» del file originale). Chi amministra
+    vede anche i documenti fatti per le altre persone di casa, minori compresi, e tutto l'archivio
+    (decisione di Dario del 28/10); ognuno dice di chi è. I familiari vedono i propri e l'archivio
+    coi permessi della voce; un minore i propri (se il suo preset li ammette) e niente archivio.
+    Ogni scheda ha `gruppo`: la pagina scrive il titolo del gruppo sopra la prima."""
+    out, note = [], []
+    admin = bool(getattr(prof, "admin", False))
+    doc = _servizio_documenti(hub)
+    if doc is None:
+        note.append("I documenti fatti da Calliope qui non ci sono.")
+    elif not _documenti_ammessi(prof):
+        note.append("Documenti e file per te non li preparo: chiedi a un adulto.")
+    else:
+        mie = [c for c in (_scheda_documento(doc, r, "Fatti da Calliope per te")
+                           for r in doc.recenti(prof.id, DOCUMENTI_PAGINA)) if c]
+        out += mie
+        if not mie:
+            note.append("Calliope non ha ancora preparato documenti per te: chiedimeli a voce.")
+        if admin and hasattr(doc, "recenti_di_tutti"):
+            nomi = _nomi_persone(hub)
+            altri: dict = {}
+            for r in doc.recenti_di_tutti(DOCUMENTI_PAGINA):
+                if r.get("owner") != prof.id:
+                    altri.setdefault(r.get("owner"), []).append(r)
+
+            def nome_di(o):
+                return nomi.get(o) or altri[o][0].get("owner_name") or "un'altra persona"
+            for owner in sorted(altri, key=lambda o: nome_di(o).casefold()):
+                nome = nome_di(owner)
+                out += [c for c in (_scheda_documento(doc, r, f"Fatti da Calliope per {nome}", nome)
+                                    for r in altri[owner]) if c]
+    arch = _fonte(hub, "archivio")
+    chi = _chi_archivio(prof)
+    if arch is not None and chi is not None:
+        docs = arch.documenti(chi)
+        schede_a = _schede_archivio(hub, prof, arch, docs, f"archivio:{prof.id}")
+        for c in schede_a:
+            c["gruppo"] = "Archivio di casa"
+        out += schede_a
+        if not docs:
+            note.append("Nell'archivio di casa non ci sono documenti che puoi vedere.")
+    elif arch is not None:
+        note.append("L'archivio dei documenti di casa per te no.")
+    return {"schede": out, "nota": " ".join(note)}
+
+
+def cerca(hub, prof, raccolta: str, testo: str, log=print) -> dict:
+    """La ricerca di una pagina (28/10, passo 2d, #259; oggi solo i Documenti): {schede, nota} o
+    {errore, _stato}. Gli stessi permessi della pagina: i documenti fatti da Calliope della
+    persona (di tutti per chi amministra) per parole del titolo, e l'archivio di casa con
+    `Archivio.cerca` e il `Chi` della pagina. Il testo cercato non va nel registro."""
+    if raccolta != "documenti" or raccolta not in visibili(prof):
+        return {"errore": "qui non si cerca", "_stato": 404}
+    t = " ".join(str(testo or "").split())[:CERCA_MAX]
+    if not t:
+        return {"schede": [], "nota": "Scrivi cosa cercare."}
+    try:
+        return _cerca_documenti(hub, prof, t)
+    except Exception as e:  # noqa: BLE001 — un servizio guasto: la pagina lo dice, il server resta
+        log(f"   [SCHERMI] ricerca nella pagina «{raccolta}» non riuscita: {type(e).__name__}")
+        return {"errore": "Non riesco a cercare adesso: riprova tra poco.", "_stato": 503}
+
+
+def _cerca_documenti(hub, prof, t: str) -> dict:
+    from pathlib import Path
+    from ..provenienza import parole
+    out = []
+    mie = {w for w in parole(t) if len(w) > 1}
+    admin = bool(getattr(prof, "admin", False))
+    doc = _servizio_documenti(hub)
+    trovati = 0
+    if doc is not None and _documenti_ammessi(prof) and mie:
+        righe = (doc.recenti_di_tutti(50) if admin and hasattr(doc, "recenti_di_tutti")
+                 else doc.recenti(prof.id, 50))
+        nomi = _nomi_persone(hub)
+        for r in righe:
+            if not admin and r.get("owner") != prof.id:
+                continue                        # mai di un altro, qualunque cosa dia il servizio
+            sue = parole(str(r.get("titolo") or "")) | parole(Path(str(r.get("nome_file") or "")).stem)
+            if not (mie & sue):
+                continue
+            nome = "" if r.get("owner") == prof.id else (nomi.get(r.get("owner")) or r.get("owner_name") or "")
+            c = _scheda_documento(doc, r, "Fatti da Calliope", nome)
+            if c:
+                out.append(c)
+                trovati += 1
+            if trovati >= CERCA_RISULTATI:
+                break
+    arch = _fonte(hub, "archivio")
+    chi = _chi_archivio(prof)
+    if arch is not None and chi is not None:
+        res = arch.cerca(chi, t, limite=CERCA_RISULTATI)
+        docs = list(res.get("documenti") or [])
+        if docs:
+            resto = int(res.get("totale") or 0) - len(docs)
+            sch = _schede_archivio(hub, prof, arch, docs, f"archivio:cerca:{prof.id}",
+                                   titolo="Trovati nell'archivio di casa", per_tipo=False,
+                                   nota_fn=lambda: f"E altri {resto}." if resto > 0 else "")
+            for c in sch:
+                c["gruppo"] = "Archivio di casa"
+            out += sch
+            trovati += len(docs)
+    nota = (f"Trovati {trovati} documenti." if trovati > 1 else "Trovato un documento." if trovati == 1
+            else "Non trovo documenti con queste parole.")
+    return {"schede": out, "nota": nota}
+
+
+# ─────────────────────── 2d: i lavori degli altri, per chi amministra ───────────────────────
+
+def _lavori_degli_altri(hub, svc, prof) -> list:
+    """Per chi amministra (decisione di Dario del 28/10, come per i documenti): in coda alla
+    pagina Lavori e programmi, per ogni altra persona di casa (minori compresi) i suoi sviluppi,
+    i lavori in coda, in corso o fermi a una domanda, i programmi e gli ultimi finiti, in schede
+    `lavoro` brevi con titolo, stato, domanda e `di` (il nome), sotto il gruppo «Lavori di …».
+    Chiavi `altrui:…`: le schede in diretta degli altri non arrivano a questo schermo, e nessuna
+    scheda mandata dopo sostituisce queste; la pagina si rilegge. Gli altri non le vedono mai."""
+    import types as _types
+    from . import schede
+    from ..agenti import risultato as ar
+    nomi = _nomi_persone(hub)
+    tutti = list(getattr(svc, "lavori", None) or [])
+    persone = (set(nomi) | {getattr(lv, "persona", None) for lv in tutti}) - {prof.id, None}
+    esec = getattr(svc, "esecuzioni", None)
+    programmi = [e for e in list(getattr(esec, "tutte", None) or [])
+                 if getattr(e, "persona", None) in persone]
+    out = []
+    for pid in sorted(persone, key=lambda p: (nomi.get(p) or str(p)).casefold()):
+        nome = nomi.get(pid) or next((getattr(lv, "persona_nome", "") for lv in tutti
+                                      if getattr(lv, "persona", None) == pid), "") or "un'altra persona"
+
+        def breve(titolo, tipo, stato, riassunto, domanda, chiave, nome=nome):
+            c = schede.lavoro(titolo, tipo, stato, riassunto, (), None, "", domanda)
+            c["chiave"], c["di"], c["gruppo"] = chiave, nome, f"Lavori di {nome}"
+            return c
+        for sv in _sviluppi(svc, _types.SimpleNamespace(id=pid))[:4]:
+            out.append(breve(f"Sviluppo: {getattr(sv, 'titolo', '') or 'programma'}", "sviluppo",
+                             str(getattr(sv, "stato", "") or ""), "", "", f"altrui:sviluppo:{sv.id}"))
+        suoi = [lv for lv in tutti if getattr(lv, "persona", None) == pid]
+        for lv in sorted((x for x in suoi if x.stato in _ATTIVI), key=lambda x: -float(x.creato or 0)):
+            passo = f"Adesso l'agente {lv.passo}." if lv.stato == "in_corso" and getattr(lv, "passo", "") else ""
+            out.append(breve(lv.titolo, lv.tipo, lv.stato, passo,
+                             (lv.domanda or "") if lv.stato == "in_attesa" else "", f"altrui:lavoro:{lv.id}"))
+        for e in [x for x in programmi if x.persona == pid][::-1][:2]:
+            titolo = (getattr(e, "titolo", None) or getattr(getattr(e, "lavoro", None), "titolo", "")
+                      or getattr(e, "programma", "") or "programma")
+            out.append(breve(f"Programma: {titolo}", "esecuzione", str(e.stato), "", "",
+                             f"altrui:esecuzione:{e.id}"))
+        try:
+            finiti = ar.recenti(svc, pid, nomi.get(pid), 3)
+        except Exception:  # noqa: BLE001 — la cartella dei risultati illeggibile: niente finiti
+            finiti = []
+        for lv in finiti:
+            out.append(breve(lv.titolo, lv.tipo, lv.stato, ar.riassunto_salvato(lv) or "", "",
+                             f"altrui:lavoro:{ar.chiave(lv)}"))
+    return out

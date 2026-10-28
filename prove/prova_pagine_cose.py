@@ -179,7 +179,10 @@ def lavori():
     chiavi = [c.get("chiave") for c in sc]
     verifica("lavori: sviluppi, in corso (più recente prima), programmi, finiti, nell'ordine",
              chiavi == ["sviluppo:S1", "sviluppo:S2", "lavoro:L3", "lavoro:L2", "lavoro:L1", "esecuzione:L4-1",
-                        "lavoro:L4", "lavoro:cartella:gechi-del-deserto"], json.dumps(chiavi))
+                        "lavoro:L4", "lavoro:cartella:gechi-del-deserto",
+                        # Chi amministra, in coda: i lavori degli altri (decisione di Dario del 28/10)
+                        "altrui:sviluppo:S3", "altrui:lavoro:L5", "altrui:esecuzione:L6-1", "altrui:lavoro:L6"],
+             json.dumps(chiavi))
     per = {c.get("chiave"): c for c in sc}
     verifica("lavori: il lavoro seguito sugli schermi con la scheda in diretta della cronologia",
              (per["lavoro:L2"].get("avanzamento") or {}).get("passo") == "scrive il secondo paragrafo",
@@ -195,17 +198,28 @@ def lavori():
     disco = per["lavoro:cartella:gechi-del-deserto"]
     verifica("lavori: il finito di prima del riavvio dalla cartella, col riassunto salvato",
              disco.get("tipo") == "lavoro" and "notte" in disco.get("riassunto", ""), json.dumps(disco)[:300])
-    verifica("lavori: niente di Bianca nella pagina di Dario",
+    suoi = [c for c in sc if not str(c.get("chiave")).startswith("altrui:")]
+    altrui = [c for c in sc if str(c.get("chiave")).startswith("altrui:")]
+    verifica("lavori: le schede di Dario senza niente di Bianca",
              not any("orto" in str(c.get("titolo")) or "poesia" in str(c.get("titolo")) or c.get("chiave") == "sviluppo:S3"
-                     for c in sc))
+                     for c in suoi))
+    verifica("lavori: chi amministra vede i lavori di Bianca, col nome, in una sezione a parte (decisione del 28/10)",
+             altrui and all(c.get("di") == "Bianca" and c.get("gruppo") == "Lavori di Bianca" and c.get("tipo") == "lavoro"
+                            for c in altrui)
+             and next(c for c in altrui if c["chiave"] == "altrui:lavoro:L5").get("domanda") == "Quanti vasi hai?"
+             and next(c for c in altrui if c["chiave"] == "altrui:lavoro:L5").get("stato") == "in_attesa"
+             and "orto" in next(c for c in altrui if c["chiave"] == "altrui:lavoro:L5").get("titolo", "")
+             and not any(c.get("gruppo") for c in suoi), json.dumps(altrui, ensure_ascii=False)[:400])
     verifica("lavori: la nota è la frase della voce sui suoi lavori, con la sua domanda",
              "lettera al condominio" in p.get("nota", "") and "tono" in p.get("nota", ""), p.get("nota"))
-    verifica("lavori: chi amministra non vede né il titolo né la domanda del lavoro di Bianca (revisione PR #267)",
+    verifica("lavori: la nota di chi amministra resta sua (senza il lavoro di Bianca, che non copre la sua domanda)",
              not any(x in p.get("nota", "") for x in ("orto", "vasi", "Bianca")), p.get("nota"))
     pb = raccolte.pagina(hub, BIANCA, "lavori")
     cb = [c.get("chiave") for c in pb.get("schede") or []]
     verifica("lavori: Bianca vede i suoi (sviluppo, domanda, programma, finito), niente di Dario",
              cb == ["sviluppo:S3", "lavoro:L5", "esecuzione:L6-1", "lavoro:L6"], json.dumps(cb))
+    verifica("lavori: un familiare non vede i lavori di Dario (niente sezione degli altri)",
+             not any(c.get("di") or c.get("gruppo") or "treni" in str(c.get("titolo")) for c in pb.get("schede") or []))
     verifica("lavori: la nota di chi non amministra non dice i lavori degli altri",
              "orari" not in pb.get("nota", "") and "fiume" not in pb.get("nota", "") and "vasi" in pb.get("nota", ""),
              pb.get("nota"))
@@ -227,6 +241,20 @@ def lavori():
     t = {x["id"]: x for x in raccolte.tessere(hub, DARIO)}
     verifica("lavori: la tessera conta anche gli sviluppi", t["lavori"]["conto"] == 6
              and "2 sviluppi" in t["lavori"]["stato"] and t["lavori"]["pagina"] is True, json.dumps(t["lavori"]))
+    # Il lavoro di un minore: chi amministra lo vede (decisione del 28/10), un altro adulto no,
+    # il minore solo il suo
+    compito = lavoro("L8", LIA, "in_attesa", "compito di storia", creato=ora - 5)
+    compito.domande = [["Quale secolo?", None]]
+    svc3 = servizio_lavori(cfg, [compito, lavoro("L9", DARIO, "in_corso", "orari", creato=ora)])
+    hub3 = types.SimpleNamespace(servizi=types.SimpleNamespace(lavori=svc3), tool_ctx=types.SimpleNamespace(speakers=Persone()))
+    d3 = {c.get("chiave"): c for c in raccolte.pagina(hub3, DARIO, "lavori").get("schede") or []}
+    verifica("lavori: chi amministra vede anche il lavoro di un minore, col nome e la domanda",
+             (d3.get("altrui:lavoro:L8") or {}).get("di") == "Lia" and d3["altrui:lavoro:L8"].get("domanda") == "Quale secolo?",
+             json.dumps(list(d3)))
+    b3 = [c.get("chiave") for c in raccolte.pagina(hub3, BIANCA, "lavori").get("schede") or []]
+    l3 = [c.get("chiave") for c in raccolte.pagina(hub3, LIA, "lavori").get("schede") or []]
+    verifica("lavori: un familiare (anche la tutrice) non vede i lavori di Dario né di Lia; Lia solo il suo",
+             b3 == [] and l3 == ["lavoro:L8"], f"{b3} {l3}")
     estensioni(cfg)
     cron.close()
     return svc

@@ -149,7 +149,7 @@ def tessere():
     verifica("tessere: ufficio con i documenti emessi dell'anno", t["ufficio"]["conto"] == 1
              and t["ufficio"]["pagina"] is False, json.dumps(t["ufficio"]))
     verifica("tessere: le pagine non ancora fatte dicono «presto» (pagina False)",
-             [k for k, v in t.items() if v["pagina"]] == ["liste", "agenda", "lavori", "cassetto", "giochi"])
+             [k for k, v in t.items() if v["pagina"]] == ["liste", "agenda", "lavori", "cassetto", "documenti", "giochi"])
     tb = [x["id"] for x in raccolte.tessere(hub, BIANCA, log.append)]
     verifica("tessere: niente Ufficio a chi non amministra", "ufficio" not in tb and len(tb) == 7, str(tb))
     tl = {x["id"]: x for x in raccolte.tessere(hub, LIA, log.append)}
@@ -165,7 +165,7 @@ def tessere():
              [c.get("tipo") for c in sc] == ["lista", "lista"]
              and {c.get("chiave") for c in sc} == {"lista:spesa", "lista:cose da fare"}
              and any(v["testo"] == "latte" for c in sc for v in c["voci"]), json.dumps(p)[:300])
-    p = raccolte.pagina(hub, DARIO, "documenti")
+    p = raccolte.pagina(hub, DARIO, "studio")
     verifica("pagina: una raccolta senza pagina dice «presto»", p.get("schede") == [] and "presto" in p.get("nota", ""))
     log = []
     p = raccolte.pagina(hub, DARIO, "lavori", log=log.append)

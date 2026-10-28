@@ -87,6 +87,12 @@
           <h2 id="pagina-titolo" class="pagina-titolo"></h2>
         </div>
         <p id="pagina-nota" class="pagina-nota" hidden></p>
+        <!-- La ricerca della pagina Documenti (28/10, passo 2d: POST /api/raccolte/cerca, sezioni.js) -->
+        <form id="pagina-cerca" class="pagina-cerca" role="search" hidden>
+          <input id="pagina-cerca-testo" type="search" aria-label="Cerca nei documenti" maxlength="120" autocomplete="off" enterkeyhint="search" placeholder="Cerca: bolletta, garanzia, lettera…">
+          <button type="submit" class="tasto pagina-cerca-vai">Cerca</button>
+          <button type="button" id="pagina-cerca-via" class="tasto pagina-cerca-via" hidden>Tutti</button>
+        </form>
         <div id="pagina-schede" class="elenco pagina-schede"></div>
         <p id="pagina-esito" class="pagina-esito" role="status"></p>
       </div>

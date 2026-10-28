@@ -1091,6 +1091,24 @@ ul.voci-giochi p { margin: 0.1rem 0 0; overflow-wrap: anywhere; }
 .pagina-titolo { margin: 0; font-size: 1.3rem; line-height: 1.25; color: var(--testo); }
 .pagina-nota { margin: 0; color: var(--tenue); font-size: 1.05rem; line-height: 1.45; }
 .pagina-esito { margin: 0; color: var(--allarme); font-size: 1rem; }
+/* La ricerca e i gruppi della pagina Documenti (28/10, passo 2d, #259) */
+.pagina-cerca { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.pagina-cerca[hidden], .pagina-cerca-via[hidden] { display: none; }
+.pagina-cerca input {
+  flex: 1 1 12rem; min-width: 0; min-height: 2.75rem; box-sizing: border-box; padding: 0.4rem 0.8rem;
+  font: inherit; font-size: 1rem; color: var(--testo); background: var(--pannello);
+  border: 1px solid var(--bordo); border-radius: 0.8rem;
+}
+.pagina-cerca input:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+.pagina-cerca .tasto {
+  font: inherit; font-size: 1rem; font-weight: 650; min-height: 2.75rem; min-width: 2.75rem; padding: 0.3rem 0.9rem;
+  border: 1px solid var(--bordo); border-radius: 0.8rem; background: var(--pannello); color: var(--testo); cursor: pointer;
+}
+.pagina-cerca .tasto:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+.gruppo-pagina { margin: 0.6rem 0 0; font-size: 1.05rem; line-height: 1.3; color: var(--tenue); font-weight: 650; }
+ul.voci-archivio { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+ul.voci-archivio .nome-documento { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
+ul.voci-archivio p { margin: 0.1rem 0 0; overflow-wrap: anywhere; }
 /* La spunta della lista (28/10, POST /api/tocco): ogni voce è un tasto «checkbox» */
 ul.voci.spunte li { padding: 0; }
 ul.voci.spunte li::before { display: none; }

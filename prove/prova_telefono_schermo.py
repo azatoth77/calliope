@@ -586,9 +586,9 @@ def raccolte(t: Tel, hub, liste):
              and t.v("document.getElementById('sez-cose').firstElementChild.id === 'tessere'"), json.dumps(tes)[:300])
     verifica("raccolte: la tessera Liste col conto vero, senza pallino alla prima visita",
              tes.get("liste", {}).get("conto") == "1" and not tes.get("liste", {}).get("novita"), json.dumps(tes.get("liste")))
-    stato = t.v("document.querySelector('#tessere [data-tessera=\"documenti\"] .tessera-stato').textContent")
+    stato = t.v("document.querySelector('#tessere [data-tessera=\"studio\"] .tessera-stato').textContent")
     verifica("raccolte: un servizio che manca dice «non disponibile» e la pagina «presto»",
-             tes.get("documenti", {}).get("conto") == "—" and "non disponibile" in stato and "presto" in stato, stato)
+             tes.get("studio", {}).get("conto") == "—" and "non disponibile" in stato and "presto" in stato, stato)
     colonne = t.v("getComputedStyle(document.getElementById('tessere')).gridTemplateColumns.split(' ').length")
     verifica("raccolte: due colonne sul telefono", colonne == 2, str(colonne))
     # Un cambiamento della lista dopo la visita: il pallino
@@ -696,8 +696,8 @@ def raccolte(t: Tel, hub, liste):
     ok = aspetta(lambda: t.v("location.hash") == "#/cose" and t.v(f"{S}.vistaCose") == "tessere"
                  and t.v("getComputedStyle(document.getElementById('tessere')).display") != "none", 3)
     verifica("pagina Liste: il gesto indietro torna alle tessere", bool(ok))
-    t.tocca_sel('#tessere [data-tessera="documenti"]')
-    ok = aspetta(lambda: t.v("location.hash") == "#/cose/documenti" and t.v(f"{S}.vistaCose") == "tessere", 3)
+    t.tocca_sel('#tessere [data-tessera="studio"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/studio" and t.v(f"{S}.vistaCose") == "tessere", 3)
     verifica("raccolte: una tessera senza pagina resta sulle tessere e porta al suo gruppo", bool(ok))
     # Una scheda della lista da Adesso («Apri») porta alla pagina, con la scheda in vista
     t.v(f"{T}.vaiA('lista:spesa'); 1")
@@ -862,12 +862,13 @@ def pagine_2c(t: Tel, hub, cartella: Path):
              bool(ok) and "scontrino.txt" in testo and "7 giorni" in nota and "dato" in nota, f"{testo[:120]} {nota}")
     prima = cas.prendi("dario", fid)["scade"]
     # Dopo il tasto riuscito la pagina si rilegge subito (2d, seconda revisione della PR #267): una
-    # lettura della pagina Cassetto entro 1 s dall'esito, prima dell'attesa delle schede (≥ 1,5 s)
+    # lettura della pagina Cassetto entro 1 s dall'esito, prima dell'attesa delle schede (≥ 1,5 s); la
+    # lettura parte nello stesso evento, prima di questo ascoltatore (registrato dopo): qualche ms prima
     t.v("(() => { const s = window.calliopeSchermo, f = s.raccolte; window.__tempi = []; window.__esito = 0;"
         " document.addEventListener('calliope:cassetto', () => { window.__esito = Date.now(); });"
         " s.raccolte = (d) => { if (d && d.raccolta === 'cassetto') window.__tempi.push(Date.now()); return f(d); }; })(); 1")
     t.tocca_sel('#pagina-schede button[data-cassetto="ancora"]')
-    ok_subito = aspetta(lambda: t.v("window.__esito > 0 && window.__tempi.some((x) => x >= window.__esito"
+    ok_subito = aspetta(lambda: t.v("window.__esito > 0 && window.__tempi.some((x) => x - window.__esito > -50"
                                     " && x - window.__esito < 1000)"), 5)
     verifica("pagina Cassetto: dopo un tasto riuscito la pagina si rilegge subito", bool(ok_subito),
              json.dumps(t.v("[window.__esito, window.__tempi]")))
@@ -887,6 +888,51 @@ def pagine_2c(t: Tel, hub, cartella: Path):
              and t.v("document.getElementById('sez-cose').dataset.pagina") == "giochi", testo[:200])
     t.v(f"{T}.vai('#/adesso'); 1")
     cas.close()
+
+
+def pagina_documenti(t: Tel, hub, cartella: Path):
+    """La pagina Documenti (28/10, passo 2d, #259): dalla tessera, i gruppi (i suoi, quelli di Bianca
+    per chi amministra, l'archivio di casa), il testo estratto ostile scritto come testo, «Scarica»
+    di una riga dell'archivio, la ricerca e «Tutti»."""
+    import prova_pagina_documenti as ppd
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    ppd.prepara(cartella, hub.tool_ctx)
+    t.v(f"{T}.vai('#/cose'); 1")
+    t.v(f"{T}.aggiornaRaccolte(); 1")
+    aspetta(lambda: any(x["id"] == "documenti" and x["conto"] == "1" for x in t.v(f"{S}.tessere") or []), 5)
+    t.tocca_sel('#tessere [data-tessera="documenti"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/documenti" and len(t.v(f"{S}.pagina") or []) == 9, 5)
+    gruppi = t.v(f"{S}.gruppi") or []
+    verifica("pagina Documenti: dalla tessera, i gruppi «per te», quelli degli altri (chi amministra) e l'archivio",
+             bool(ok) and gruppi[0] == "Fatti da Calliope per te" and "Fatti da Calliope per Bianca" in gruppi
+             and gruppi[-1] == "Archivio di casa", json.dumps(gruppi))
+    verifica("pagina Documenti: la casella della ricerca c'è",
+             t.v("!document.getElementById('pagina-cerca').hidden && document.getElementById('pagina-cerca-via').hidden"))
+    testo = t.v("document.getElementById('pagina-schede').textContent") or ""
+    verifica("pagina Documenti: il nome estratto ostile resta testo (nessun elemento img nato dal dato)",
+             "onerror" in testo and t.v("document.querySelectorAll('#pagina-schede img').length") == 0, testo[:200])
+    sel = "#pagina-schede .scheda-archivio button[data-scarica=\"originale\"]"
+    verifica("pagina Documenti: «Scarica» per ogni riga dell'archivio", (t.v(f"document.querySelectorAll('{sel}').length") or 0) == 5)
+    t.tocca_sel(sel)
+    ok = aspetta(lambda: "Scaricato" in (t.v(f"document.querySelector('{sel}').parentElement.querySelector('.esito-scarica').textContent") or ""), 5)
+    verifica("pagina Documenti: «Scarica» di una riga dà il file", bool(ok),
+             t.v(f"document.querySelector('{sel}').parentElement.querySelector('.esito-scarica').textContent"))
+    t.v("document.getElementById('pagina-cerca-testo').value = 'contratto affitto';"
+        " document.getElementById('pagina-cerca').requestSubmit(); 1")
+    ok = aspetta(lambda: t.v(f"{S}.cerca") == "contratto affitto" and len(t.v(f"{S}.pagina") or []) == 1
+                 and "contratto" in (t.v("document.getElementById('pagina-schede').textContent") or "").lower(), 5)
+    verifica("pagina Documenti: la ricerca mostra solo ciò che trova, e «Tutti» compare",
+             bool(ok) and not t.v("document.getElementById('pagina-cerca-via').hidden"), json.dumps(t.v(f"{S}.pagina")))
+    t.v("document.getElementById('pagina-cerca-testo').value = '<b>\"ciao\"</b>';"
+        " document.getElementById('pagina-cerca').requestSubmit(); 1")
+    ok = aspetta(lambda: "Non trovo" in (t.v("document.getElementById('pagina-nota').textContent") or ""), 5)
+    verifica("pagina Documenti: una ricerca con HTML risponde «Non trovo», senza errori", bool(ok)
+             and t.v("document.querySelectorAll('#pagina-schede b').length") == 0)
+    t.tocca_sel("#pagina-cerca-via")
+    ok = aspetta(lambda: t.v(f"{S}.cerca") == "" and len(t.v(f"{S}.pagina") or []) == 9, 5)
+    verifica("pagina Documenti: «Tutti» torna alla pagina intera", bool(ok))
+    t.v(f"{T}.vai('#/adesso'); 1")
 
 
 def modulo_e_scrivi(t: Tel, hub):
@@ -1447,6 +1493,7 @@ def main() -> int:
             raccolte(t, hub, liste)
             agenda_pagina(t, hub)
             pagine_2c(t, hub, TMP / "server")
+            pagina_documenti(t, hub, TMP / "documenti")
             misure(t, "schede")
             una_per_una(t)
             _, spec = modulo_e_scrivi(t, hub)
