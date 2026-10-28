@@ -587,6 +587,12 @@ SEMPRE se dico archiviala. Così uno ha tempo per pensare cosa fare».
   - *Bloccante*: «archiviala» con `quale` arrivava al cassetto anche dalla zona grigia. Ora ha le regole
     del cassetto (`tools/allegati._proprietario`: la voce riconosciuta o lo schermo personale, mai la zona
     grigia, la frase breve o un ospite), e il rifiuto non dice al modello nomi, date o fonti delle foto.
+  - *Anche senza `quale`* (decisione di chi amministra del 29/10, PR dopo la #273): «archiviala» sulla
+    foto di questa conversazione vale solo con la voce riconosciuta o dallo schermo personale
+    (`_rifiuto_identita`, le stesse frasi di `_proprietario`), anche senza il cassetto. **Cambia un
+    comportamento in vigore dal 05/10**: prima bastava la persona della conversazione, anche dalla zona
+    grigia o con la frase breve. *Storico: dal 05/10 al 29/10 «archiviala» chiedeva solo un profilo
+    (`current_speaker`).*
   - `stato_foto` risponde «persa» sia per un id che non c'è sia per la foto d'un'altra persona: da uno
     schermo non si capisce di chi è un id.
   - Se il browser ricarica la foto intera dopo i 180 s del gettone, la pagina ne chiede uno nuovo, una

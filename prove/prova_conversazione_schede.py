@@ -800,6 +800,28 @@ def prova_foto_tenute():
     fid3 = cas3.metti_foto(img3, "dario")
     ctx3 = ctx_foto(cas3, dario)
     ctx3.immagini = SimpleNamespace(prendi=lambda n: img3, numeri=lambda: [1])
+    # Senza `quale`, sulla foto di questa conversazione (decisione del 29/10, cambia il 05/10):
+    # zona grigia, frase breve e ospite col rifiuto generico; con la voce come prima
+    for modo in ("conversazione", "breve"):
+        cx = ctx_foto(cas3, dario, modo)
+        cx.immagini = ctx3.immagini
+        r = TI._archivia(cx, foto=-1)
+        verifica(f"«archiviala» sulla foto della conversazione dalla {modo}: rifiutato, niente archiviato",
+                 not r.get("ok") and "riconoscere bene la tua voce" in r["risposta_finale"]
+                 and cas3.stato_foto("dario", fid3)["stato"] == "tenuta"
+                 and not list(Path(cas3.archivio.cartella).rglob("*.jpg")), r)
+    cx = ctx_foto(cas3, None)
+    cx.immagini = ctx3.immagini
+    r = TI._archivia(cx, foto=-1)
+    verifica("…e da ospite", not r.get("ok") and "solo per chi riconosco" in r["risposta_finale"]
+             and not list(Path(cas3.archivio.cartella).rglob("*.jpg")), r)
+    cx = ctx_foto(cas3, dario, "schermo")
+    cx.immagini = ctx3.immagini
+    cx.cassetto = None
+    r = TI._archivia(cx, foto=-1)
+    verifica("…dallo schermo personale sì (anche senza cassetto, come prima)", r.get("ok"), r)
+    for f in Path(cas3.archivio.cartella).rglob("*.jpg"):
+        f.unlink()
     r = TI._archivia(ctx3, foto=-1)
     verifica("«archiviala» sulla foto della conversazione archivia la sua copia (stato «Archiviata.»)",
              r.get("ok") and cas3.stato_foto("dario", fid3) == {"stato": "archiviata"}, r)
