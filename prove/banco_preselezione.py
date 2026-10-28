@@ -157,10 +157,8 @@ f("Dimentica tutte le nostre conversazioni", "conversazioni_dimentica")
 f("Sì, fallo pure", "proposta_rispondi", prima="Apri il file del preventivo")
 f("No, lascia stare", "proposta_rispondi")
 f("Cambiamo discorso: parlami di Saturno", "argomento", "biblioteca_cerca")
-# ── minori, esercizi ──
+# ── minori ── (fino al 28/10 anche compiti_aiuto ed esercizi, tolti con la #279)
 f("Posso giocare a un gioco nuovo?", "richiesta_tutore")
-f("Aiutami con i compiti di matematica", "compiti_aiuto", "esercizi")
-f("Dammi degli esercizi sulle frazioni", "esercizi")
 f("Tobia può guardare la tele fino alle nove", "minore_gestisci")
 # ── Calliope, installazioni, dati ──
 f("Cosa sai fare?", "calliope_stato")

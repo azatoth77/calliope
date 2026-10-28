@@ -92,7 +92,7 @@ class StatoPersona:
     turno: int = 0
     proposta: Proposta | None = None
     sfida: dict | None = None        # {"tool", "stessa_persona", "stesso_tool"}
-    attivita: str | None = None      # sviluppo | esercizi
+    attivita: str | None = None      # sviluppo
     rifiuti: int = 0
     chiusa_da: str | None = None     # la proposta di prima, persa con la conversazione
 

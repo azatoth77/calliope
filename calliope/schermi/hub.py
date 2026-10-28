@@ -278,9 +278,6 @@ class Schermi:
         self._contesto: dict[str, dict] = {}
         # I giochi delle estensioni (05/10, giochi.py): lo imposta main.py con le estensioni
         self.giochi = None
-        # Gli esercizi (08/10, calliope/esercizi/sessione.py): la scheda risponde da
-        # /api/esercizio; lo imposta main.py
-        self.esercizi = None
         # Il cruscotto di chi amministra (06/10, cruscotto.py: sola lettura), da main.py;
         # None = niente pulsante e /api/cruscotto risponde 404
         self.cruscotto = None
@@ -909,6 +906,15 @@ class Schermi:
         if not mittente.certo or not mittente.persona:
             return False
         return any(s.get("proprietario") == mittente.persona for s in self.abbinati())
+
+    def apri_pagina(self, persona, pagina: str) -> int:
+        """Le pagine aperte degli schermi personali di `persona` vanno su `#/cose/<pagina>`
+        (28/10, issue #289, schermo_mostra con cosa=pagina): evento SSE «pagina». Quante
+        pagine l'hanno ricevuto. I permessi (chi, quale pagina) li controlla il tool; la pagina
+        mostra comunque solo ciò che il server le dà (/api/raccolte)."""
+        if not persona or not isinstance(pagina, str) or not pagina.isalpha():
+            return 0
+        return self._a_personali(persona, "pagina", json.dumps({"pagina": pagina}))
 
     def _in_storia(self, sid: int, scheda: dict):
         """La scheda nella cronologia dello schermo (con il lock). Con una `chiave` già

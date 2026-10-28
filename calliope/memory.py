@@ -111,6 +111,17 @@ class Memory:
         # le prossime si aggiungono in fondo all'elenco, solo colonne con NULL o un
         # predefinito. Dati di una versione più nuova: sola lettura
         self.scrivibile = prepara_schema(self.db, "memoria", [lambda db: None])
+        # Le tabelle degli esercizi e dei compiti tolte con la #279 (28/10): via a ogni apertura,
+        # se ci sono (conserva.togli_tabelle_dismesse)
+        if self.scrivibile:
+            from .conserva import togli_tabelle_dismesse
+            try:
+                togli_tabelle_dismesse(self.db, log=lambda m: print(m, flush=True))
+            except Exception as e:  # noqa: BLE001 — la memoria si apre lo stesso
+                if self.db.in_transaction:
+                    self.db.rollback()      # niente transazione aperta (blocca gli scrittori)
+                print(f"[CONSERVA] tabelle dismesse non tolte: {type(e).__name__}: {e}",
+                      flush=True)
 
     @staticmethod
     def _now() -> str:

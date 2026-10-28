@@ -733,11 +733,10 @@ _DATA_IN_CONTO = re.compile(r"\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}/\d{1,2}/\d{2,4
 
 def _calcola(ctx: ToolContext, espressione: str) -> dict:
     """Calcola un'espressione aritmetica in modo esatto."""
-    # Un minore nei compiti (05/10): il risultato non si dà, si controlla il suo
-    from .minori import calcola_in_compiti
-    compito = calcola_in_compiti(ctx, espressione or "")
-    if compito is not None:
-        return compito
+    # Per un minore il risultato si dà sempre (28/10, #279, decisione 0035): la regola «mai la
+    # soluzione intera» dei compiti guidati è nei dati del turno (minori.REGOLA_COMPITI).
+    # *[storico: dal 05/10 al 28/10, con un esercizio aperto di compiti_aiuto, «nascosto: è un
+    # compito»]*
     expr = (espressione or "").strip()
     # Scritture comuni del modello o del parlato: × ÷ ^ , decimale
     expr = expr.replace("×", "*").replace("÷", "/").replace("^", "**").replace(":", "/")
@@ -758,6 +757,12 @@ def _calcola(ctx: ToolContext, espressione: str) -> dict:
         return {"ok": False, "errore": "risultato non finito"}
     out = {"ok": True, "espressione": expr, "risultato": _format_it(value),
            "da_dire": _to_say(value)}
+    # Un minore coi compiti guidati (28/10, revisione della PR #292): il risultato al modello
+    # sì, la scheda «Calcolo» sullo schermo no (vincolo di prudenza, principio 10)
+    from .. import minori as _minori
+    if _minori.compiti_guidati(ctx):
+        note_rule(ctx, "minore_calcolo_senza_scheda")
+        return out
     return _con_scheda(out, ctx, lambda: schede.calcolo(expr, out["risultato"]))
 
 
@@ -2300,7 +2305,7 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
     allegato_archivia con l'archivio, e il parametro `allegato` di lavoro_affida.
     `cassetto` (08/10, calliope/cassetto.py): con gli allegati, il cassetto dei file per persona
     (allegato_leggi con `cassetto` e `minore`, prima `di`, cassetto_gestisci).
-    `minori_tool`: compiti_aiuto e minore_gestisci (calliope/tools/minori.py, 05/10), con
+    `minori_tool`: richiesta_tutore e minore_gestisci (calliope/tools/minori.py, 05/10), con
     almeno un profilo minorenne in casa (il prefisso degli altri non cambia finché non c'è).
     """
     reg = ToolRegistry()

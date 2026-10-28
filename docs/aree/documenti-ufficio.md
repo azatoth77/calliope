@@ -205,7 +205,7 @@ scaricano da lì in ogni momento (la pagina è in [schermi-telefono](schermi-tel
 cosa). *[storico: «ogni documento si ritrova in Le mie cose» fino alla revisione della PR #268; la pagina
 ne mostrava 8 e la ricerca guardava gli ultimi 50]* I limiti trovati e cosa se n'è fatto:
 
-- **La frase «sul server, perché il satellite collegato non riceve documenti»** con lo schermo personale
+- **La frase «sul server, perché il satellite collegato non riceve documenti»** *[storico: fino al 28/10; dal 28/10 (#290), senza schermo personale, «tra i miei documenti, perché il dispositivo da cui mi parli non riceve file»: [schermi-telefono](schermi-telefono.md)]* con lo schermo personale
   chiuso: con uno schermo personale abbinato (`Schermi.personale_abbinato`, identità decisa dalla voce)
   la frase è `frase_pagina`, «Lo trovi in Le mie cose, alla voce Documenti: per averlo tocca
   «Scarica».» (regola `documento_sulla_pagina`; il documento appena fatto è il primo della pagina; senza

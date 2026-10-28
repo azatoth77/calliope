@@ -714,20 +714,65 @@ def _ha_testo(rec: dict) -> bool:
 
 
 # Le tabelle di memoria.db con il testo dei ragazzi che scadono con la stessa tenuta (12/10
-# sera, decisione di Dario): (tabella, colonna della persona, colonna della data ISO). I
-# tentativi degli esercizi (domanda, risposta attesa e data, al più 60 caratteri: il dettaglio
-# dei tutori), le richieste ai tutori (con `oggetto`, ciò che il ragazzo ha chiesto) e le
-# segnalazioni degli esercizi (risposta data e nota del ragazzo; anche queste dal 12/10 sera)
-TABELLE_MEMORIA = (("esercizi_tentativi", "persona", "giorno"),
-                   ("richieste_tutori", "minore", "creata"),
-                   ("esercizi_segnalazioni", "persona", "quando"),
-                   # Le preferenze degli esercizi (12/10): 60 giorni dall'ultimo cambio
-                   ("esercizi_preferenze", "persona", "aggiornato"),
-                   # «A che punto siete» e la classe (12/10 sera): come le preferenze
-                   ("esercizi_punto", "persona", "aggiornato"))
+# sera, decisione di Dario): (tabella, colonna della persona, colonna della data ISO). Le
+# richieste ai tutori (con `oggetto`, ciò che il ragazzo ha chiesto). *[storico: fino al 28/10
+# anche le quattro tabelle degli esercizi (`esercizi_tentativi`, `_segnalazioni`,
+# `_preferenze`, `_punto`), tolte con gli esercizi, #279; le righe vecchie nel db non si
+# migrano]*
+TABELLE_MEMORIA = (("richieste_tutori", "minore", "creata"),)
 # Le preferenze che non scadono col tempo ma vanno via con i dati della persona (27/10):
 # (tabella, colonna della persona). L'accento scelto in Io › Aspetto (schermi/aspetto.py)
 TABELLE_PREFERENZE = (("aspetto_preferenze", "persona"),)
+# Le tabelle dismesse di memoria.db (28/10, revisione della PR #292): quelle degli esercizi e il
+# riepilogo dei compiti, tolti con la #279. Avevano domande, risposte e note dei ragazzi, e
+# nessuno le ruota né le svuota più: si tolgono da sole all'apertura della memoria
+# (`togli_tabelle_dismesse`, da memory.Memory), con una riga nel registro. Una tabella dismessa
+# in futuro si aggiunge qui
+TABELLE_DISMESSE = ("esercizi_tentativi", "esercizi_segnalazioni", "esercizi_preferenze",
+                    "esercizi_punto", "esercizi_banco", "compiti_giorno")
+# Le versioni di schema che vanno via con loro: «esercizi» (le sue tabelle) e «dismesse» (il segno
+# «una volta sola» del primo giro di questa pulizia, 28/10, che non si usa più)
+_MODULI_DISMESSI = ("esercizi", "dismesse")
+
+
+def togli_tabelle_dismesse(db, log=print) -> list[str]:
+    """`DROP TABLE` delle TABELLE_DISMESSE che ci sono, a ogni apertura (seconda revisione della
+    PR #292): costa un SELECT su `sqlite_master`, e se si torna a una versione di prima, che le
+    ricrea, al ritorno avanti si tolgono di nuovo. Nessun segno in `meta_schema`, quindi nessuna
+    versione «più nuova» che possa mettere la memoria in sola lettura. Toglie anche le versioni
+    di `_MODULI_DISMESSI`. Tutto in una transazione: un errore la annulla e non la lascia aperta.
+    `secure_delete` solo per il tempo del DROP, poi com'era. Le tabelle tolte, per la riga nel
+    registro (scritta solo se ne toglie qualcuna); [] se non c'era niente."""
+    nomi = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    tolte = [t for t in TABELLE_DISMESSE if t in nomi]
+    moduli = []
+    if "meta_schema" in nomi:
+        segni = ",".join("?" * len(_MODULI_DISMESSI))
+        moduli = [r[0] for r in db.execute(
+            f"SELECT modulo FROM meta_schema WHERE modulo IN ({segni})", _MODULI_DISMESSI)]
+    if not tolte and not moduli:
+        return []
+    if db.in_transaction:
+        db.commit()
+    prima = db.execute("PRAGMA secure_delete").fetchone()[0]
+    db.execute("PRAGMA secure_delete = ON")
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        for t in tolte:
+            db.execute(f"DROP TABLE IF EXISTS {t}")
+        for m in moduli:
+            db.execute("DELETE FROM meta_schema WHERE modulo = ?", (m,))
+        db.commit()
+    except Exception:
+        if db.in_transaction:
+            db.rollback()
+        raise
+    finally:
+        db.execute(f"PRAGMA secure_delete = {int(prima)}")
+    if tolte:
+        log(f"[CONSERVA] tabelle dismesse tolte da memoria.db (esercizi e compiti, #279): "
+            f"{', '.join(tolte)}")
+    return tolte
 
 
 class Conservazione:
@@ -1183,11 +1228,11 @@ class Conservazione:
                      f"{self.giorni} giorni")
         return n
 
-    # ── esercizi e richieste ai tutori (memoria.db) ──
+    # ── richieste ai tutori e preferenze (memoria.db) ──
     def _memoria(self, limite: datetime.date | None = None, persona_id=None,
                  tutto: bool = False) -> int:
         """Righe tolte da TABELLE_MEMORIA, con `secure_delete`: più vecchie di `limite`, di una
-        persona, o tutte. Una tabella che non c'è (esercizi mai usati) non conta; il file della
+        persona, o tutte. Una tabella che non c'è (mai usata) non conta; il file della
         memoria che non si apre non ferma niente."""
         path = getattr(self.cfg, "memory_db", None)
         if not path or not Path(path).exists():
@@ -1224,11 +1269,11 @@ class Conservazione:
                     continue                      # la tabella non c'è
             db.commit()
         except sqlite3.Error as e:
-            self.log(f"   [CONSERVA] esercizi e richieste non ripuliti: {type(e).__name__}")
+            self.log(f"   [CONSERVA] richieste ai tutori non ripulite: {type(e).__name__}")
         finally:
             db.close()
         if n and limite is not None and persona_id is None and not tutto:
-            self.log(f"   [CONSERVA] esercizi e richieste ai tutori oltre {self.giorni} giorni: "
+            self.log(f"   [CONSERVA] richieste ai tutori oltre {self.giorni} giorni: "
                      f"{n} righe tolte")
         return n
 
@@ -1254,14 +1299,13 @@ class Conservazione:
     def svuota(self, persona_id: str | None = None, nome: str | None = None) -> dict:
         """Tutto (persona_id None) o i dati di una persona: la voce, gli eventi su disco (con
         `secure_delete`), nel registro dei turni le parole (di tutti: i file interi) e, dal 12/10
-        sera, l'archivio delle conversazioni (anche le conversazioni in corso salvate) e i
-        tentativi degli esercizi e le richieste ai tutori (TABELLE_MEMORIA)."""
+        sera, l'archivio delle conversazioni (anche le conversazioni in corso salvate) e le
+        richieste ai tutori (TABELLE_MEMORIA; fino al 28/10 anche i tentativi degli esercizi)."""
         # Le righe della stanza di un conoscente (14/10 sera) hanno la chiave «conoscente:<id>»
         stanza_id = (f"conoscente:{persona_id}" if persona_id is not None
                      and self.conoscente(persona_id) is not None else persona_id)
         out = {"voce": 0, "eventi": 0, "turni": 0, "conversazioni": 0,
-               "esercizi_richieste": self._memoria(persona_id=persona_id,
-                                                   tutto=persona_id is None),
+               "richieste": self._memoria(persona_id=persona_id, tutto=persona_id is None),
                "stanza": self._svuota_stanza(stanza_id),
                "stanza_banco": self._svuota_banco(persona_id),
                "avvisi": self._svuota_avvisi(persona_id),
@@ -1612,7 +1656,7 @@ def main(argv=None) -> int:
             print(f"Dati conservati di {nome} cancellati: {r['voce']} registrazioni, "
                   f"{r['eventi']} eventi, parole tolte da {r['turni']} turni, "
                   f"{r['conversazioni']} conversazioni archiviate, "
-                  f"{r['esercizi_richieste']} tra esercizi e richieste ai tutori, "
+                  f"{r['richieste']} tra richieste ai tutori e preferenze, "
                   f"{r['stanza']} righe della stanza, {r['avvisi']} trascrizioni e audio di "
                   f"avvisi" + (f", {r['stanza_banco']} segmenti audio del banco della stanza"
                                if r.get("stanza_banco") else "")
@@ -1622,8 +1666,8 @@ def main(argv=None) -> int:
             r = c.svuota()
             print(f"Dati conservati cancellati: {r['voce']} registrazioni, {r['eventi']} eventi, "
                   f"{r['turni']} giorni del registro dei turni, {r['conversazioni']} "
-                  f"conversazioni archiviate, {r['esercizi_richieste']} tra esercizi e "
-                  f"richieste ai tutori, {r['stanza']} righe della stanza, {r['avvisi']} "
+                  f"conversazioni archiviate, {r['richieste']} tra richieste ai "
+                  f"tutori e preferenze, {r['stanza']} righe della stanza, {r['avvisi']} "
                   f"trascrizioni e audio di avvisi, {r.get('conoscenti', 0)} conoscenti"
                   + (f", {r['stanza_banco']} segmenti audio del banco della stanza"
                      if r.get("stanza_banco") else "")

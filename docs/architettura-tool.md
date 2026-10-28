@@ -6,8 +6,9 @@ Tenuto allineato al codice: tabella dei tool, `ToolSpec` e albero dei file rivis
 registro vero (`build_registry` in `tools/builtin.py` e ciò che `main.py` registra a parte): 86 tool
 in un registro con tutto acceso, più un `est_<nome>` per estensione attiva. In un'installazione con
 tutti i servizi il modello vede **75 schemi** uguali per ogni livello; si aggiungono `meteo_leggi`
-(entità meteo in Home Assistant), `immagine_guarda` (`immagini_storia: descrizione`), i quattro tool
-dei minori (un minore in casa), `stanza_pausa` e `stanza_cerca` (stanza accesa), `conoscenti` e
+(entità meteo in Home Assistant), `immagine_guarda` (`immagini_storia: descrizione`), i due tool
+dei minori (un minore in casa; *storico: quattro fino al 28/10, con `compiti_aiuto` ed `esercizi`,
+tolti con la #279: il registro con tutto acceso passa da 86 a 84, contati sul registro il 28/10*), `stanza_pausa` e `stanza_cerca` (stanza accesa), `conoscenti` e
 `conoscente_livello` (`stanza_conoscenti`); `argomento` prende il posto di `conversazione_nuova` con
 `eventi: attivo`. Nomi nuovi dall'08/10, i vecchi validi in `registry.NOMI_VECCHI`.
 (Storico: «72 schemi» il 09/10, «78» fino al 13/10.)*
@@ -67,7 +68,7 @@ calliope/                 # package: python -m calliope
 │   ├── notizie.py        # notizie (feed RSS scaricati in casa, 13/10)
 │   ├── immagini.py, allegati.py  # immagine_guarda, immagine_archivia, pc_guarda; allegato_leggi, allegato_archivia, cassetto_gestisci
 │   ├── archivio.py, ufficio.py   # archivio_cerca/scadenze/somma; modello_compila, anagrafica_cerca/salva
-│   ├── minori.py, esercizi.py    # richiesta_tutore, compiti_aiuto, minore_gestisci; esercizi (08/10)
+│   ├── minori.py         # richiesta_tutore, minore_gestisci (fino al 28/10 anche compiti_aiuto ed esercizi.py, #279)
 │   └── stato.py          # calliope_stato, installa_proponi, installa_avvia, installa_gestisci
 ├── pc/                   # capacità dei PC: PCExecutor (base.py), LocalWindowsExecutor (windows.py)
 ├── documenti/            # Word, Excel, PDF: formato.py (JSON e validazione), scrittore.py
@@ -90,7 +91,6 @@ calliope/                 # package: python -m calliope
 ├── web/                  # SearXNG (web_cerca) e il suo aggiornamento (motore.py)
 ├── estensioni/           # estensioni permanenti, guardrail, motore dei giochi
 ├── archivio/, ufficio/   # documenti di casa (grafo); modelli, rubrica, fatture
-├── esercizi/             # esercizi generati da Calliope e programma ministeriale
 ├── satellite/            # satelliti (WebSocket, TLS)
 ├── conserva.py           # dati conservati per le misure (12/10)
 ├── minori.py, guardiano.py, avvisi_audio.py  # minori, guardiano, audio degli avvisi (14/10)
@@ -254,9 +254,9 @@ registrati a runtime); «C'è» dice quando il tool è nel registro.
 | `cambia_voce` | familiare | azione | azione | sempre | cambia la voce di chi parla |
 | `rinomina_interlocutore` | familiare | azione | pericoloso | sempre | rinomina chi parla (prima propone, cambia al «sì»); un ruolo o una parentela come nome («Amministratore», «La Mamma», «Ospite») non si propone nemmeno (15/10, regola `rinomina_ruolo`) |
 | `registra_utente` | amministra (dal 05/10, con la frase di sfida) | azione | pericoloso | sempre | avvia l'arruolamento di una persona nuova con la data di nascita (o «maggiorenne») e i tutori; un minore ha il preset della sua fascia (`calliope/minori.py`) |
-| `compiti_aiuto` | familiare (solo con un minore in casa; agisce per i minori con i compiti guidati) | lettura | sicuro | un minore in casa | registra l'esercizio, controlla la risposta con il valutatore di `calcola`, mai la soluzione prima di 5 errori, poi l'avviso ai tutori |
-| `esercizi` | familiare (solo con un minore in casa; il codice: i minori per sé, i loro tutori e chi amministra, mai gli ospiti) | lettura | sicuro | un minore in casa | esercizi generati da Calliope (08/10, `calliope/esercizi/`): inizia, rispondi (corregge il codice), aiuto, salta, ripeti, segnala, soluzione, fine, argomenti, riepilogo. Dal 12/10 `materia` con i valori ammessi (matematica, italiano, logica, fisica, chimica) e `argomento` con la descrizione «con le sue parole»; risposte con l'unità di misura lette nel codice (`calliope/unita.py`); con una sessione aperta e l'azione omessa: «rispondi» se c'è la risposta, «ripeti» se l'argomento è lo stesso (regola `esercizi_azione_dedotta`) |
-| `minore_gestisci` | familiare (il codice: un tutore o chi amministra, dalla voce) | azione | pericoloso | un minore in casa | preset di un minore: stato, imposta, orari, estensioni, autorizzazione a tempo, nascita, tutori, riepilogo dei compiti; dal 14/10 `avvisi` («cos'era quell'avviso?»: gli avvisi di pericolo consegnati a chi parla, con data e origine) |
+| ~~`compiti_aiuto`~~ | *storico, tolto il 28/10 (#279, decisione [0035](decisioni/0035-studio.md)): restano la regola «mai la soluzione intera» nei dati del turno e `calcola` col risultato* | — | — | — | fino al 28/10: registrava l'esercizio, controllava la risposta con il valutatore di `calcola`, mai la soluzione prima di 5 errori, poi l'avviso ai tutori |
+| ~~`esercizi`~~ | *storico, tolto il 28/10 con tutto `calliope/esercizi/` (#279, decisione [0035](decisioni/0035-studio.md))* | — | — | — | fino al 28/10: esercizi generati da Calliope (08/10, `calliope/esercizi/`): inizia, rispondi (corregge il codice), aiuto, salta, ripeti, segnala, soluzione, fine, argomenti, riepilogo. Dal 12/10 `materia` con i valori ammessi (matematica, italiano, logica, fisica, chimica) e `argomento` con la descrizione «con le sue parole»; risposte con l'unità di misura lette nel codice (`calliope/unita.py`); con una sessione aperta e l'azione omessa: «rispondi» se c'è la risposta, «ripeti» se l'argomento è lo stesso (regola `esercizi_azione_dedotta`) |
+| `minore_gestisci` | familiare (il codice: un tutore o chi amministra, dalla voce) | azione | pericoloso | un minore in casa | preset di un minore: stato, imposta, orari, estensioni, autorizzazione a tempo, nascita, tutori (*storico: e il riepilogo dei compiti fino al 28/10, #279*); dal 14/10 `avvisi` («cos'era quell'avviso?»: gli avvisi di pericolo consegnati a chi parla, con data e origine) |
 | `ricorda` | familiare | azione | azione | sempre | salva un fatto su chi parla (memoria persistente, `memory.py`); con `per_tutti` è un fatto della casa (persona `casa`), visto da tutti i familiari |
 | `dimentica` | familiare | azione | azione | sempre | toglie un fatto (o «tutto»): prima tra quelli di chi parla, poi tra quelli della casa |
 | `lista_aggiungi` | familiare | azione | azione | sempre | aggiunge voci a una lista della casa (`liste.py`), senza doppioni; si annota chi le ha aggiunte |
@@ -428,8 +428,10 @@ I **minori** (05/10, [`ricerche/2026-10-05-minori.md`](ricerche/2026-10-05-minor
 livello `ToolRegistry.call` chiede a `minori.permesso` se il preset della fascia di chi parla
 permette il tool (internet, agenti, PC, documenti, ufficio, estensioni `est_<nome>`), con una
 frase pronta e una regola `minore_*`. `casa_comando` filtra le entità per fascia
-(`minori.casa_consentita`), `web_cerca` usa il SafeSearch della fascia, `calcola` non dà il
-risultato con un esercizio aperto. Il preset arriva al modello nei dati del turno; il guardiano
+(`minori.casa_consentita`), `web_cerca` usa il SafeSearch della fascia; `calcola` dà sempre il
+risultato (*storico: fino al 28/10 non lo dava con un esercizio aperto di `compiti_aiuto`, #279*).
+Il preset arriva al modello nei dati del turno, con la regola dei compiti guidati «mai la soluzione
+intera» (`minori.REGOLA_COMPITI`); il guardiano
 filtra le frasi in `main.py`, non nei tool.
 
 Il **saluto** («Ciao Dario») resta in Python: è deterministico e non costa un turno LLM.

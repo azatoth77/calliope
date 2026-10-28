@@ -2,7 +2,9 @@
 
 *Fasce d'età, preset, guardiano, compiti, avvisi ai tutori. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 18/10.** Dal 16/10 i minori di casa si conservano come gli adulti (decisione [0031](../decisioni/0031-conservazione-dei-minori.md), issue #104: turni, eventi, archivio e journal per 60 giorni, rileggibili dai tutori; la voce solo col consenso dei tutori, il «sì» breve dei tutori e la voce cancellata alla maggiore età, #108 e #114; sezioni in fondo); dal 16/10 l'ospite con la voce vicina a quella di un minore che ha parlato da poco riceve il modo di parlare della sua fascia (`minori_ospite_vicino`, #102). Dal 14/10 sera il guardiano a posteriori della stanza aspetta le righe di versione 2 della corsia lenta e non rigiudica una riga solo perché è stata riscritta (sottosezione «14/10 sera: il guardiano a posteriori e la corsia lenta»). Dal 17/10 nel cassetto di un minore letto da un tutore l'avviso «non presentare questi come suoi» (#58, [immagini-allegati](immagini-allegati.md)). *Storico al 14/10:* come al 09/10 (sotto), più: nessuna conservazione per i minori (12/10: le loro parole né nel registro dei turni né nel journal, esercizi e richieste che scadono con la conservazione; superato il 16/10); l'indice del programma ministeriale per gli esercizi (12/10 sera); le notizie solo di sport, tecnologia e ragazzi (13/10); il rilevatore solo sulle frasi rivolte a Calliope (13/10); dal 14/10 i tutori vedono conversazioni e cassetto del figlio a ogni età, il **guardiano a posteriori della stanza** (`stanza_guardia`, spento di serie; in ombra solo misure, `calliope stato --guardia`), gli avvisi con data e origine (`calliope stato --avvisi`, azione `avvisi` di `minore_gestisci`), la trascrizione (`avvisi_trascrizione`, accesa) e l'audio (`avvisi_audio`, spento) sulla scheda del tutore. Da confermare con Dario le scelte prudenti dei cancelli; da rimisurare sulla DGX col 26B.
+**Stato al 28/10.** Lo Studio si rifà da capo (decisione [0035](../decisioni/0035-studio.md), epic #251): il vecchio processo degli esercizi è tolto (#279), con `calliope/esercizi/` (anche l'indice del programma), `compiti_aiuto` e la scheda degli esercizi; per i compiti di un minore resta solo la regola «mai la soluzione intera» nei dati del turno, senza conteggio né avviso, e `calcola` dà sempre il risultato (sezione in fondo). Restano tutori, preset, orari, avvisi e guardiano. Il resto come al 18/10.
+
+*Stato al 18/10 (storico per gli esercizi e i compiti guidati, superati il 28/10):* Dal 16/10 i minori di casa si conservano come gli adulti (decisione [0031](../decisioni/0031-conservazione-dei-minori.md), issue #104: turni, eventi, archivio e journal per 60 giorni, rileggibili dai tutori; la voce solo col consenso dei tutori, il «sì» breve dei tutori e la voce cancellata alla maggiore età, #108 e #114; sezioni in fondo); dal 16/10 l'ospite con la voce vicina a quella di un minore che ha parlato da poco riceve il modo di parlare della sua fascia (`minori_ospite_vicino`, #102). Dal 14/10 sera il guardiano a posteriori della stanza aspetta le righe di versione 2 della corsia lenta e non rigiudica una riga solo perché è stata riscritta (sottosezione «14/10 sera: il guardiano a posteriori e la corsia lenta»). Dal 17/10 nel cassetto di un minore letto da un tutore l'avviso «non presentare questi come suoi» (#58, [immagini-allegati](immagini-allegati.md)). *Storico al 14/10:* come al 09/10 (sotto), più: nessuna conservazione per i minori (12/10: le loro parole né nel registro dei turni né nel journal, esercizi e richieste che scadono con la conservazione; superato il 16/10); l'indice del programma ministeriale per gli esercizi (12/10 sera); le notizie solo di sport, tecnologia e ragazzi (13/10); il rilevatore solo sulle frasi rivolte a Calliope (13/10); dal 14/10 i tutori vedono conversazioni e cassetto del figlio a ogni età, il **guardiano a posteriori della stanza** (`stanza_guardia`, spento di serie; in ombra solo misure, `calliope stato --guardia`), gli avvisi con data e origine (`calliope stato --avvisi`, azione `avvisi` di `minore_gestisci`), la trascrizione (`avvisi_trascrizione`, accesa) e l'audio (`avvisi_audio`, spento) sulla scheda del tutore. Da confermare con Dario le scelte prudenti dei cancelli; da rimisurare sulla DGX col 26B.
 
 *Stato al 09/10 (storico):* Profili dei minori con fasce, preset e tutori; guardiano (Llama Guard 3) su
 domanda e frasi, rilevatore di pericolo sulla domanda; compiti guidati; esercizi di matematica e italiano
@@ -16,12 +18,15 @@ Dario le scelte prudenti dei cancelli (fondo del documento); da rimisurare tutto
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Minori (fasce d'età, preset per fascia, permessi nel codice, orari, compiti, avvisi ai tutori; dal 05/10) | SQLite (stesso file della memoria: `minori_regole`, `avvisi_tutori`, `compiti_giorno`); guardiano Llama Guard 3 8B su Ollama + rilevatore di pericolo (gemma4 e4b, output strutturato) | `calliope/minori.py` → `fascia`, `preset`, `permesso` (da `ToolRegistry.call`), `dato_turno`, `fuori_orario`, `piu_protetto`, `Compiti`, `Avvisi`, `estensione_consentita`, `conversazioni_visibili_ai_tutori`; `calliope/guardiano.py` → `Guardiano`, `filtra` (in `main.py`), `correggi_storia`; tool `compiti_aiuto`, `minore_gestisci` (`calliope/tools/minori.py`); terminale `python -m calliope.minori`; banchi `prove/prova_minori_ollama.py`, `prove/misura_guardiano.py`; [`docs/ricerche/2026-10-05-minori.md`](../ricerche/2026-10-05-minori.md) |
-| Esercizi generati da Calliope (dal 08/10): matematica e italiano, a voce e sulla scheda, correzione nel codice, registro dei tentativi per i tutori | libreria standard; SQLite (stesso file della memoria: `esercizi_tentativi`, `esercizi_segnalazioni`, `esercizi_banco`); Wikizionario della biblioteca; secondo modello su Ollama | `calliope/esercizi/` → `matematica.genera`, `italiano.genera`, `numeri.leggi_valore`, `verifica.Wikizionario`, `verifica.SecondoParere`, `registro.Registro`, `sessione.Servizio`; tool `esercizi` (`calliope/tools/esercizi.py`); scheda `DISEGNA.esercizio` e `POST /api/esercizio`; rete `spinta_esercizi`; prove `prove/prova_esercizi.py`, `prove/prova_esercizi_pagina.py`, `prove/prova_esercizi_ollama.py`, `prove/prova_esercizi_voce.py`; indice del programma ministeriale `calliope/esercizi/programma/` (12/10, `prove/prova_programma.py`); fase B dal 12/10 sera: `programma.limite`, `varianti.py`, `Registro.punto` (tabella esercizi_punto), interrogazioni (`programma/interrogazioni.yaml`, `verifica.SecondoParere.giudica`), prove `prove/prova_esercizi_programma.py` e `prove/prova_esercizi_programma_ollama.py`; [`docs/ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md) |
-| Materie calcolabili (dal 12/10): logica, fisica e chimica con lo schema della matematica; unità di misura dette per esteso e lette dalle risposte come le scrive Whisper | libreria standard | `calliope/esercizi/` → `logica.py`, `fisica.py`, `chimica.py`, `misure.py` (risposte con l'unità), `modello.livello_da_classe`; `calliope/unita.py` → `UNITA`, `leggi_misura`, `misura_detta`, `SIMBOLI_DETTI` (anche per `pronuncia.Pronuncia`); prove `prove/prova_materie.py`, `prove/prova_esercizi_ollama.py --materie logica,fisica,chimica` e `--scelta` |
+| Minori (fasce d'età, preset per fascia, permessi nel codice, orari, compiti guidati come regola nei dati del turno, avvisi ai tutori; dal 05/10) | SQLite (stesso file della memoria: `minori_regole`, `avvisi_tutori`); guardiano Llama Guard 3 8B su Ollama + rilevatore di pericolo (gemma4 e4b, output strutturato) | `calliope/minori.py` → `fascia`, `preset`, `permesso` (da `ToolRegistry.call`), `dato_turno`, `fuori_orario`, `piu_protetto`, `REGOLA_COMPITI`, `Avvisi`, `estensione_consentita`, `conversazioni_visibili_ai_tutori`; `calliope/guardiano.py` → `Guardiano`, `filtra` (in `main.py`), `correggi_storia`; tool `minore_gestisci` e `richiesta_tutore` (`calliope/tools/minori.py`); terminale `python -m calliope.minori`; banchi `prove/prova_minori_ollama.py`, `prove/misura_guardiano.py`; [`docs/ricerche/2026-10-05-minori.md`](../ricerche/2026-10-05-minori.md) |
 | Pericolo poco chiaro verificato in due cancelli prima dell'avviso (dal 09/10); in compagnia la voce del minore non è mai sicura | stesso rilevatore (gemma4 e4b, output strutturato) per gravità e verifica | `calliope/cancelli.py` → `Cancelli`, `Segnale`, `RASSICURA`, `rassicura`, `testo_avviso`, `percorso` (segnali su disco dal 10/10); `calliope/guardiano.py` → `Guardiano.gravita`, `Guardiano.verifica`; `calliope/ciclo.py` → `Ciclo._decidi_pericolo`, `Ciclo._secondo_cancello`; prove `prove/prova_minori_cancelli.py`, misura `prove/misura_cancelli.py` |
 | Guardiano a posteriori della stanza (dal 14/10, passo 6 della conversazione di stanza, in ombra): le chiacchiere con un minore che parla o è presente, rilette dopo a blocchi; dal 14/10 sera riprese dal disco dopo un riavvio e giudicate col gioco aperto dichiarato | stesso rilevatore (gemma4 e4b, output strutturato con livello, categoria, contesto e righe) | `calliope/stanza/guardia.py` → `Guardia`, `GiudiceModello`, `PROMPT`, `GIOCO`; `calliope/stanza/tenuta.py` → diario della guardia; `calliope/schermi/giochi.py` → `Giochi.in_corso`; `riassunto`, `elenco`; `calliope/guardiano.py` → `Guardiano.chiedi_json`; `calliope/minori.py` → `Avvisi.solo_schermo`; `calliope stato --guardia`; prova `prove/prova_stanza_guardia.py`, banco `prove/manuali/banco_stanza_guardia.py` |
 | Audio degli avvisi di pericolo (dal 14/10, di serie spento: `avvisi_audio`) | libreria standard: anello in memoria (μ-law), WAV nel cassetto del tutore | `calliope/avvisi_audio.py` → `Anello`, `Pezzo`, `prepara`, `wav`; «Scarica l'audio» nella scheda dell'avviso; azione `avvisi` di `minore_gestisci` |
+
+*[storico: fino al 28/10 la tabella aveva anche le due righe qui sotto, tolte con il vecchio processo degli esercizi (#279, decisione [0035](../decisioni/0035-studio.md)): nel codice non c'è più niente di loro, salvo `SIMBOLI_DETTI` ora in `pronuncia.py` e `in_lettere` ora in `calliope/numeri.py`. Fino al 28/10 nella riga dei minori c'erano anche la classe `Compiti`, la tabella `compiti_giorno` e il tool `compiti_aiuto`.]*
+
+- *storico:* Esercizi generati da Calliope (dal 08/10): matematica e italiano, a voce e sulla scheda, correzione nel codice, registro dei tentativi per i tutori: libreria standard; SQLite (stesso file della memoria: `esercizi_tentativi`, `esercizi_segnalazioni`, `esercizi_banco`); Wikizionario della biblioteca; secondo modello su Ollama; `calliope/esercizi/` → `matematica.genera`, `italiano.genera`, `numeri.leggi_valore`, `verifica.Wikizionario`, `verifica.SecondoParere`, `registro.Registro`, `sessione.Servizio`; tool `esercizi` (`calliope/tools/esercizi.py`); scheda `DISEGNA.esercizio` e `POST /api/esercizio`; rete `spinta_esercizi`; prove `prove/prova_esercizi.py`, `prove/prova_esercizi_pagina.py`, `prove/prova_esercizi_ollama.py`, `prove/prova_esercizi_voce.py`; indice del programma ministeriale `calliope/esercizi/programma/` (12/10, `prove/prova_programma.py`); fase B dal 12/10 sera: `programma.limite`, `varianti.py`, `Registro.punto` (tabella esercizi_punto), interrogazioni (`programma/interrogazioni.yaml`, `verifica.SecondoParere.giudica`), prove `prove/prova_esercizi_programma.py` e `prove/prova_esercizi_programma_ollama.py`; [`docs/ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md)
+- *storico:* Materie calcolabili (dal 12/10): logica, fisica e chimica con lo schema della matematica; unità di misura dette per esteso e lette dalle risposte come le scrive Whisper: libreria standard; `calliope/esercizi/` → `logica.py`, `fisica.py`, `chimica.py`, `misure.py` (risposte con l'unità), `modello.livello_da_classe`; `calliope/unita.py` → `UNITA`, `leggi_misura`, `misura_detta`, `SIMBOLI_DETTI` (anche per `pronuncia.Pronuncia`); prove `prove/prova_materie.py`, `prove/prova_esercizi_ollama.py --materie logica,fisica,chimica` e `--scelta`
 
 ## Problemi noti
 
@@ -36,7 +41,8 @@ Dario le scelte prudenti dei cancelli (fondo del documento); da rimisurare tutto
   turno al modello e nel codice per i permessi; voce incerta = profilo più protetto; guardiano
   (Llama Guard 3 8B, 0 falsi su 33 frasi giuste, 12/14 vietate fermate) su domanda e frasi solo
   per minori e ospiti, rilevatore di pericolo (gemma4 e4b, 9/10, nessun falso) con protezione,
-  19696 e avviso ai tutori; compiti guidati, soluzione dopo 5 errori con avviso vero. Banco: 26B
+  19696 e avviso ai tutori; compiti guidati, soluzione dopo 5 errori con avviso vero (*storico:
+  dal 28/10 solo la regola nei dati del turno, #279*). Banco: 26B
   sulla DGX 48/48, 4B 45/48 (il 4B non conta i tentativi dei compiti); prima frase dei minori
   sulla DGX 1,36–1,48 s contro 0,89 senza guardiano, adulti invariati.
 
@@ -119,9 +125,13 @@ Studio online; API interne con sessione; niente riquadro. Proposta: esercizi **n
 dall'agente (scheda dei giochi, risposte controllate sul server, compiti guidati, revisione di un
 adulto), Kolibri solo come catalogo opzionale dopo una prova. Pilota e decisioni nel rapporto.
 *[Superato l'08/10: esercizi nativi generati al momento da Calliope, senza revisione obbligatoria;
-vedi «Esercizi generati da Calliope» qui sotto.]*
+vedi «Esercizi generati da Calliope» qui sotto.]* *[28/10: resta una ricerca; anche gli esercizi nativi
+sono tolti, e lo Studio si rifà da capo: decisione [0035](../decisioni/0035-studio.md).]*
 
 ## Emozioni dalla voce nell'interrogazione (ricerca del 07/10, nessun codice)
+
+*[28/10: resta una ricerca; l'interrogazione degli esercizi è tolta, l'interrogazione dai materiali è il
+passo 8 dello Studio (#248), decisione [0035](../decisioni/0035-studio.md).]*
 
 [`../ricerche/2026-10-07-emozioni-voce.md`](../ricerche/2026-10-07-emozioni-voce.md): modelli aperti
 in locale ci sono (emotion2vec+, audEERING dimensionale in ONNX), ma su parlato naturale, ragazzi e
@@ -162,6 +172,8 @@ amministra. Il minore va registrato di nuovo per canale quando c'è (stt-tts).
 
 ## Esercizi generati da Calliope (08/10, pilota)
 
+*[storico: il 28/10 il vecchio processo degli esercizi è stato tolto per lo Studio rifatto da capo (#279, decisione [0035](../decisioni/0035-studio.md)); questa sezione resta come storia, il codice che descrive non c'è più.]*
+
 Progetto, misure e cosa resta: [`../ricerche/2026-10-08-esercizi.md`](../ricerche/2026-10-08-esercizi.md).
 Decisioni di Dario del 07/10: esercizi nativi generati al momento, senza revisione obbligatoria
 (la «revisione di un adulto» della ricerca su Kolibri è superata); studio fuori dal tempo di
@@ -197,6 +209,8 @@ schermo; i tutori vedono il dettaglio dei tentativi anche dai 14 anni.
   prova d'uso con un ragazzo; misura col 26B e qwen3.6 sulla DGX.
 
 ## Materie calcolabili: logica, fisica e chimica (12/10, ramo `materie-calcolabili`)
+
+*[storico: il 28/10 il vecchio processo degli esercizi è stato tolto per lo Studio rifatto da capo (#279, decisione [0035](../decisioni/0035-studio.md)); questa sezione resta come storia, il codice che descrive non c'è più.]* *Di `calliope/unita.py` resta solo `SIMBOLI_DETTI`, in `calliope/pronuncia.py`.*
 
 S1 della [roadmap](../roadmap.md). Stesso schema della matematica: Calliope **genera** l'esercizio
 dalla soluzione con un seme e **calcola** la risposta nel codice; un ricalcolo **indipendente** la
@@ -448,6 +462,10 @@ prima pulizia. Dettagli in [contesto-conversazione](contesto-conversazione.md), 
 
 ## Esercizi e richieste ai tutori scadono con la conservazione (12/10 sera, ramo `correzioni-12-10`)
 
+*[storico per gli esercizi: dal 28/10 (#279) `conserva.TABELLE_MEMORIA` ha solo `richieste_tutori`;
+le tabelle `esercizi_*` sono fuori dalla conservazione e le righe vecchie non si migrano. Le richieste
+ai tutori scadono come scritto qui.]*
+
 Decisione di Dario del 12/10: i tentativi degli esercizi (`esercizi_tentativi`: domanda, risposta
 attesa e risposta del ragazzo fino a 60 caratteri, il dettaglio che vedono i tutori) e le richieste
 ai tutori (`richieste_tutori`, compreso `oggetto`, ciò che il ragazzo ha chiesto) non restano più
@@ -481,6 +499,8 @@ temporanea, `CALLIOPE_MEMORY_DB` per il terminale): «svuota tutto» non deve ma
 `memoria.db` di chi la lancia.
 
 ## Esercizi dopo la prova vera e indice del programma (12/10 sera, ramo `esercizi-programma`)
+
+*[storico: il 28/10 il vecchio processo degli esercizi è stato tolto per lo Studio rifatto da capo (#279, decisione [0035](../decisioni/0035-studio.md)); questa sezione resta come storia, il codice che descrive non c'è più.]*
 
 Prova di Dario del 12/10 pomeriggio sulla DGX (26B) con una bambina di terza e quarta
 elementare. Cosa non andava e cosa cambia (prova a secco `prova_esercizi_voce`):
@@ -549,6 +569,8 @@ solo dati: `calliope/esercizi/programma/` (`fonti.yaml`, `matematica.yaml`, `ita
   esercizi. *(Storico: fatta il 12/10 sera, sezione dopo.)*
 
 ## Fase B dell'indice: limite stretto, numeri, «a che punto siete», interrogazioni (12/10 sera, ramo `esercizi-programma-b`)
+
+*[storico: il 28/10 il vecchio processo degli esercizi è stato tolto per lo Studio rifatto da capo (#279, decisione [0035](../decisioni/0035-studio.md)); questa sezione resta come storia, il codice che descrive non c'è più.]* *Se allo Studio servirà un indice del programma, lo si progetta da capo dopo il passo 8.*
 
 Decisioni di Dario del 12/10 sera dopo la rilettura del programma per classe. Prove a secco
 `prova_esercizi_programma` (livello 1, ~7 s) e, col modello, `prova_esercizi_programma_ollama`.
@@ -1396,6 +1418,59 @@ la sezione Casa è nascosta sotto i 13 anni (senza data di nascita vale la fasci
 età. Lo decide il server dal profilo a ogni accesso (`schermi/aspetto.nascoste`); la pagina non
 decide sull'età. Nascondere non cambia i permessi. Dettagli in
 [schermi-telefono](schermi-telefono.md#accento-lilla-accento-personale-e-sezioni-per-età-2710-issue-240-ramo-issue-240-aspetto).
+
+## Tolti gli esercizi e `compiti_aiuto`: lo Studio da capo (28/10, issue #279, ramo `issue-279-via-esercizi`)
+
+Decisione di chi amministra del 28/10 (analisi del passo 4 nella #243, decisione [0035](../decisioni/0035-studio.md)): «niente del
+vecchio processo di esercizi è da tenere. Molte delle cose fatte erano meri test senza scopo».
+
+- **Tolti**: `calliope/esercizi/` intero (anche `programma/`), `calliope/tools/esercizi.py`,
+  `calliope/unita.py`; `compiti_aiuto` con la classe `Compiti`, il riepilogo dei compiti (tabella
+  `compiti_giorno`, azione `riepilogo_compiti` di `minore_gestisci`, `python -m calliope.minori
+  --riepilogo`) e `calcola` «nascosto: è un compito»; la rete `spinta_esercizi`; le chiavi
+  `esercizi_*` e `minori_compiti_tentativi`; l'area «i compiti» di «cosa sai fare?»; negli schermi
+  `POST /api/esercizio`, le schede `esercizio` ed `esercizi_riepilogo`, «esercizio» di
+  `schermo_mostra`; le tabelle `esercizi_*` dalla conservazione; otto prove.
+- **Spostati**: `SIMBOLI_DETTI` in `calliope/pronuncia.py` (le unità dopo un numero lette per
+  esteso da Piper), `in_lettere` in `calliope/numeri.py` (per `stanza/eco.py`).
+- **Restano**: tutori, preset, orari, avvisi, guardiano, la chiave `compiti: guida | libero` del
+  preset (anche per `nota_documento`).
+- **I compiti di un minore** (domanda 2): nei dati del turno, con `compiti: guida`, la sola regola
+  `minori.REGOLA_COMPITI` («per i compiti di scuola mai la soluzione intera, nemmeno il risultato
+  di un conto: domande guida e indizi, e controlli la sua risposta»), senza conteggio dei tentativi
+  né avviso ai tutori. `calcola` dà sempre il risultato al modello: serve a controllare la
+  risposta, e la regola dice di non dirlo. Dalla revisione della PR #292 a un minore con
+  `compiti: guida` la scheda «Calcolo» non va sullo schermo (`minori.compiti_guidati`, regola
+  `minore_calcolo_senza_scheda`): prima la regola valeva a voce, ma sul telefono compariva «3/4+1/2
+  = 1,25». L'esercizio guidato e la «Foto di un problema» si rifanno nella #278.
+- **La tessera Studio** di Le mie cose resta al suo posto e dice «arriva presto», senza conto, fino
+  al passo 4.5 (#284); la vedono tutti, anche gli adulti.
+- **Le tabelle dismesse** (`esercizi_*` e `compiti_giorno`) si tolgono da sole all'apertura di
+  `memoria.db`, a ogni apertura se ci sono, con la riga «[CONSERVA] tabelle dismesse tolte…» nel
+  registro solo quando toglie qualcosa (`conserva.togli_tabelle_dismesse`; revisione della PR
+  #292). Sulla DGX al primo aggiornamento, e di nuovo dopo un ritorno indietro che le ricrea. Il
+  `DROP` è in una transazione (un errore la annulla e non la lascia aperta, anche in
+  `memory.Memory`), `secure_delete` acceso solo per il `DROP`. *[storico: dal primo giro al
+  secondo, il 28/10, «una volta sola» col segno «dismesse» in `meta_schema`, che una versione 2
+  futura avrebbe potuto rendere «più nuova» e mettere la memoria in sola lettura; tolto]*
+- **Prove**: in `prova_minori` una bambina che dice «fammi tu il compito» in un turno di `Brain` col
+  modello finto riceve la regola nei dati del turno, e tra gli strumenti non ci sono né
+  `compiti_aiuto` né `esercizi`; `calcola` dà il risultato anche a lei; contrari: la stessa frase di
+  un adulto e di un'adolescente coi compiti liberi, senza la regola. Dalla revisione: il conto per i
+  compiti di Bianca in un turno di `Brain` non manda la scheda «Calcolo» e il modello riceve il
+  risultato (contrari: Dario e Sara ricevono la scheda); gli avvisi ai tutori provati direttamente
+  (un avviso «gioco» ai due tutori: scheda personale, annuncio, detto una volta). In `prova_conserva`
+  un db con le tabelle vecchie: dopo l'apertura non ci sono più; un'apertura senza tabelle non scrive
+  righe; il ritorno indietro simulato le ricrea e si tolgono di nuovo; un errore a metà non lascia la
+  transazione aperta, né in `memory.Memory`; `secure_delete` torna com'era.
+- **Conti**: i 75 schemi in un'installazione con tutti i servizi non cambiano (i due tool tolti
+  erano fra quelli che dipendono dall'installazione); il registro con tutto acceso passa da 86 a 84
+  (`build_registry` da 79 a 77, contati il 28/10); le capacità restano 19, le aree di «cosa sai
+  fare?» passano da 11 a 10.
+- **Da guardare**: la regola nei dati del turno non è misurata col modello vero dopo la
+  rimozione; `prova_minori_ollama` (gruppo «compiti», con «fammi tu il compito») va rigirata sulla
+  DGX col 26B. Prima i 5 tentativi li contava il codice; ora dire o no il risultato lo decide il
+  modello.
 
 ## Banco dello Studio: dai materiali alla verifica, con qwen3.6 (28/10, issue #293, ramo `issue-293-banco-studio`)
 

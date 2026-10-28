@@ -590,8 +590,14 @@ def raccolte(t: Tel, hub, liste):
     verifica("raccolte: la tessera Liste col conto vero, senza pallino alla prima visita",
              tes.get("liste", {}).get("conto") == "1" and not tes.get("liste", {}).get("novita"), json.dumps(tes.get("liste")))
     stato = t.v("document.querySelector('#tessere [data-tessera=\"studio\"] .tessera-stato').textContent")
-    verifica("raccolte: un servizio che manca dice «non disponibile» e la pagina «presto»",
-             tes.get("studio", {}).get("conto") == "—" and "non disponibile" in stato and "presto" in stato, stato)
+    # Lo Studio rifatto da capo (28/10, #279): la tessera dice «arriva presto», senza conto
+    verifica("raccolte: lo Studio senza conto dice «arriva presto» e la pagina «presto»",
+             tes.get("studio", {}).get("conto") == "—" and "arriva presto" in stato and "pagina presto" in stato, stato)
+    # Un servizio che manca (qui i giochi: nessun servizio delle estensioni) dice ancora «non
+    # disponibile», senza conto (fino al 28/10 l'esempio era lo Studio)
+    stato_g = t.v("document.querySelector('#tessere [data-tessera=\"giochi\"] .tessera-stato').textContent")
+    verifica("raccolte: un servizio che manca dice «non disponibile» (i giochi)",
+             tes.get("giochi", {}).get("conto") == "—" and "non disponibile" in (stato_g or ""), str(stato_g))
     colonne = t.v("getComputedStyle(document.getElementById('tessere')).gridTemplateColumns.split(' ').length")
     verifica("raccolte: due colonne sul telefono", colonne == 2, str(colonne))
     # Un cambiamento della lista dopo la visita: il pallino
@@ -1002,6 +1008,31 @@ def pagina_ufficio(t: Tel, hub, cartella: Path):
                  and len(t.v(f"{S}.pagina") or []) == 6, 6)
     verifica("pagina Ufficio: dopo Retry-After riprova da sola, una volta, e torna a posto", bool(ok),
              json.dumps([t.v("window.__volte"), t.v("document.getElementById('pagina-esito').textContent")]))
+    t.v(f"{T}.vai('#/adesso'); 1")
+
+
+def pagina_da_calliope(t: Tel, hub):
+    """schermo_mostra con cosa=pagina (28/10, #289): l'evento «pagina» del server porta il telefono
+    vero su #/cose/<pagina>, con la pagina disegnata; un nome fuori forma non sposta niente, e
+    l'evento per un'altra persona non arriva."""
+    import json as _j
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    t.v(f"{T}.vai('#/adesso'); 1")
+    n = hub.apri_pagina("dario", "documenti")
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/documenti" and t.v(f"{S}.vistaCose") == "pagina", 5)
+    verifica("schermo_mostra pagina: il telefono va su #/cose/documenti e mostra la pagina",
+             n >= 1 and bool(ok), (n, t.v("location.hash"), t.v(f"{S}.vistaCose")))
+    hub.apri_pagina("dario", "liste")
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/liste", 5)
+    verifica("schermo_mostra pagina: poi su #/cose/liste", bool(ok), t.v("location.hash"))
+    hub._a_personali("dario", "pagina", _j.dumps({"pagina": "../io"}))
+    hub._a_personali("dario", "pagina", "non json")
+    time.sleep(0.5)
+    verifica("contrario: una pagina fuori forma (o un JSON rotto) non sposta niente",
+             t.v("location.hash") == "#/cose/liste", t.v("location.hash"))
+    verifica("contrario: la pagina per un'altra persona non arriva",
+             hub.apri_pagina("bianca", "documenti") == 0 and t.v("location.hash") == "#/cose/liste")
     t.v(f"{T}.vai('#/adesso'); 1")
 
 
@@ -1696,6 +1727,7 @@ def main() -> int:
             pagine_2c(t, hub, TMP / "server")
             pagina_documenti(t, hub, TMP / "documenti")
             pagina_ufficio(t, hub, TMP / "ufficio")
+            pagina_da_calliope(t, hub)
             misure(t, "schede")
             una_per_una(t)
             _, spec = modulo_e_scrivi(t, hub)

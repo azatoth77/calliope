@@ -102,7 +102,17 @@ def _su_pagina(ctx) -> bool:
     if vero is None:
         return False
     try:
-        return bool(vero(hub.mittente(ctx)))
+        m = hub.mittente(ctx)
+        if vero(m):
+            return True
+        # Zona grigia dal proprio telefono (revisione della PR #294): il documento della
+        # persona della conversazione sta nella sua pagina Documenti, e il telefono da cui
+        # parla è suo
+        from ..dispositivo import proprio
+        if getattr(m, "persona", None) and proprio(ctx, m):
+            m.certo = True
+            return bool(vero(m))
+        return False
     except Exception:  # noqa: BLE001 — nel dubbio, la frase di sempre
         return False
 
@@ -330,7 +340,9 @@ def documenti_specs(formati, agenti: bool = False) -> list[ToolSpec]:
     return [
         ToolSpec(
             name="documento_crea",
-            description=(f"Crea un documento nuovo e lo salva sul PC: formato {kinds}. "
+            # «lo consegna a chi parla» (28/10, issue #290): dal telefono «lo salva sul PC» faceva
+            # dire che il documento era sul portatile, che non c'era
+            description=(f"Crea un documento nuovo e lo consegna a chi parla: formato {kinds}. "
                          f"richiesta: cosa deve contenere, con TUTTI i dati detti (nomi, "
                          f"cifre, date), come detti a voce: «lettera di disdetta della "
                          f"palestra», «spese di settembre: affitto 800, luce 90, gas 60, con "

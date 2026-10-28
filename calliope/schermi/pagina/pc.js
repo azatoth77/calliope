@@ -92,7 +92,7 @@
     // Solo quando si apre: il ridisegno ogni 30 s non deve riportare la pagina in Io (seconda
     // revisione della PR #255)
     if (c.tipo === "cruscotto") { if (segnale !== false) SEZ.vaiA(SEZ.chiaveDi(c)); return; }
-    // Un gioco o gli esercizi che Calliope apre si usano subito: la loro sezione si apre da sola
+    // Un gioco che Calliope apre si usa subito: la sua sezione si apre da sola
     if (SEZ.apriSeServe(c)) return;
     if (performance.now() - SEZ.car.toccato > SEZ.opzioni.manoMs) SEZ.mostraIn(SEZ.chiaveDi(c), SEZ.vis.sezione);
   }
@@ -172,6 +172,11 @@
     const c = ev.detail && ev.detail.scheda;
     if (!SEZ || !c) return;
     if (!(c.chiave && SEZ.vaiA(c.chiave))) SEZ.vai("#/" + SEZ.sezioneDi(c));
+  });
+  // Calliope apre una pagina di Le mie cose (28/10, #289): solo un nome di raccolta, mai un indirizzo
+  document.addEventListener("calliope:pagina", (ev) => {
+    const p = ev.detail && ev.detail.pagina;
+    if (SEZ && typeof p === "string" && /^[a-z]{1,20}$/.test(p)) SEZ.vai("#/cose/" + p);
   });
   // Un gioco chiuso esce subito da Adesso
   document.addEventListener("calliope:gioco", (ev) => { if (SEZ && !(ev.detail || {}).partita) requestAnimationFrame(() => SEZ.disponi()); });

@@ -34,9 +34,6 @@ Indirizzi:
   GET  /api/cruscotto            «X-Calliope-Sessione»: il cruscotto di chi amministra (06/10,
                                  cruscotto.py), solo da uno schermo personale il cui
                                  proprietario amministra; ?aggiorna=1 ricalcola. Sola lettura
-  POST /api/esercizio            «X-Calliope-Sessione», {azione, esercizio, risposta}: la
-                                 scheda degli esercizi (08/10, calliope/esercizi/), solo da uno
-                                 schermo personale con la sessione aperta; la correzione è qui
   POST /api/motore               «X-Calliope-Sessione», {azione: controlla|aggiorna, gettone?}:
                                  le azioni del cruscotto sulla ricerca web (09/10,
                                  cruscotto.py, web/motore.py): senza gettone lo dà (primo
@@ -1143,39 +1140,6 @@ def crea_app(hub: Schermi) -> Starlette:
             return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
         return _json({"ok": True, "in_coda": True})
 
-    # ── esercizi (08/10, calliope/esercizi/sessione.py) ──
-    risposte_es: dict[int, list[float]] = {}
-
-    async def esercizio(request: Request):
-        """Una risposta, un aiuto, un salto o una segnalazione dalla scheda degli esercizi:
-        sessione in un'intestazione, JSON, solo in HTTPS fuori da questo computer, al più 30
-        al minuto per schermo. Non serve una conversazione a voce (si risponde scrivendo, come
-        nei giochi si tocca); la sessione degli esercizi però nasce solo a voce. La risposta
-        attesa non lascia mai il server: la scheda riceve solo l'esito."""
-        srv = getattr(hub, "esercizi", None)
-        if srv is None:
-            return _json({"errore": "esercizi spenti"}, 403)
-        client = request.client.host if request.client else ""
-        if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
-            return _json({"errore": "solo in HTTPS"}, 403)
-        sess = request.headers.get("x-calliope-sessione", "")
-        sid, schermo = _schermo_sessione(sess)
-        if schermo is None:
-            return _json({"errore": "sessione non valida"}, 401)
-        ora = time.monotonic()
-        with lock:
-            fatti = [t for t in risposte_es.get(schermo["id"], []) if ora - t < 60.0]
-            if len(fatti) >= 30:
-                risposte_es[schermo["id"]] = fatti
-                return _json({"errore": "troppe risposte: aspetta un momento"}, 429)
-            risposte_es[schermo["id"]] = fatti + [ora]
-        dati, errore = await corpo_json(request, 2048)
-        if errore is not None:
-            return errore
-        out = await asyncio.to_thread(srv.da_scheda, schermo, dati)
-        stato = int(out.pop("_stato", 200)) if isinstance(out, dict) else 500
-        return _json(out, stato)
-
     app = Starlette(routes=[
         Route("/", file("index.html", "text/html; charset=utf-8")),
         Route("/schermo.css", file("schermo.css", "text/css; charset=utf-8")),
@@ -1201,7 +1165,6 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/schede", schede_api, methods=["POST"]),
         Route("/gioco/{gettone}", gioco_documento),
         Route("/api/gioco", gioco_api, methods=["POST"]),
-        Route("/api/esercizio", esercizio, methods=["POST"]),
         Route("/api/aspetto", aspetto_api, methods=["POST"]),
         Route("/api/parla", parla_api, methods=["POST"]),
         Route("/api/raccolte", raccolte_api, methods=["POST"]),

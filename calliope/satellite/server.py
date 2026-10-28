@@ -181,6 +181,7 @@ class Collegamento:
         self.inviati = 0                        # byte mandati (misure)
         self.ricevuti = 0
         self.versione = 1                       # protocollo detto nel «ciao»
+        self.pagina: str | None = None          # la versione della pagina del telefono (28/10)
         self.modalita = False                   # segue la modalità cambiata a voce (05/10)
         self.wake_presenti: set | None = None   # i classificatori che ha, se lo dice
         # L'esecutore del PC del satellite (versione 2, solo Windows): {"nome", "capacita",
@@ -1048,6 +1049,11 @@ class ServerSatelliti:
             ws.ping()                           # il satellite aspetta: la connessione resta viva
         coll = Collegamento(ws, sat, hash_token(token))
         coll.versione = int(d.get("versione") or 1)
+        # La versione della pagina del telefono (28/10, issue #291): la cache del service worker,
+        # solo nei log e solo se ha la forma attesa (è un dato del dispositivo)
+        pag = d.get("pagina")
+        coll.pagina = (pag if isinstance(pag, str)
+                       and re.fullmatch(r"calliope-telefono-pagina-v\d{1,4}", pag) else None)
         # Segue la modalità cambiata a voce senza riconnettersi (05/10), con i classificatori
         # della wake word che ha
         coll.modalita = d.get("modalita") is True
@@ -1097,6 +1103,9 @@ class ServerSatelliti:
             stanza.collegato(coll)
         ese = coll.esecutore
         self.log(f"   [SATELLITE] collegato: {sat['nome']} (stanza {sat['stanza']})"
+                 # Le versioni (28/10, #291): il protocollo del «ciao» e la pagina del telefono
+                 + f", protocollo {coll.versione}"
+                 + (f", pagina {coll.pagina}" if coll.pagina else "")
                  + (f", giro {coll.ws.latency * 1000:.0f} ms" if coll.ws.latency else "")
                  + ((", esecutore del PC: " + (", ".join(ese["capacita"]) or "nessuna capacità")
                      + (", documenti" if ese["file"] else "")) if ese else ""))
