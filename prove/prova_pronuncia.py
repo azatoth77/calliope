@@ -70,7 +70,7 @@ for t in CONTRARI:
     out = P.applica(t)
     verifica(f"invariata: {t!r}", out == t, out)
 
-# ── unità di misura dopo un numero (12/10, calliope/unita.py) ──
+# ── unità di misura dopo un numero (12/10; SIMBOLI_DETTI in calliope/pronuncia.py dal 28/10) ──
 UNITA_CASI = [
     ("Corre a 36 km/h.", "Corre a 36 chilometri all'ora."),
     ("Pesa 1 kg, anzi 1,5 kg.", "Pesa 1 chilogrammo, anzi 1,5 chilogrammi."),

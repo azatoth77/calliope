@@ -21,11 +21,12 @@ Vale solo per il testo che va al sintetizzatore (`tts.Speaker`): la storia del m
 registro dei turni e gli schermi vedono il testo com'è. La sintesi è sul server anche con i
 satelliti e il telefono, quindi la correzione vale anche lì.
 
-**Unità di misura** (12/10, `calliope/unita.py`): espeak legge i simboli lettera per lettera
+**Unità di misura** (12/10; fino al 28/10 in `calliope/unita.py`, degli esercizi tolti con la
+#279): espeak legge i simboli lettera per lettera
 («3 kg» → «tre kappagì», «2,5 m/s» → «… emme barra esse», «m/s²» → «… esse due», «°C» →
 «gradi ci»). Un simbolo **subito dopo un numero** («36 km/h», «9,8 m/s²», «1 kg») diventa il
 nome per esteso, accordato al numero («1 chilogrammo», «2,5 metri al secondo»):
-`unita.SIMBOLI_DETTI`, solo simboli che dopo una cifra non possono voler dire altro (niente
+`SIMBOLI_DETTI`, solo simboli che dopo una cifra non possono voler dire altro (niente
 «h», «s», «G» delle reti come «5G»); senza un numero davanti nulla cambia. «joule» lo legge
 «giòule»: nel lessico come «giùl».
 
@@ -82,9 +83,53 @@ _FILA_DOPO = re.compile(
 
 _PARENTESI = re.compile(r"\[\[|\]\]")
 
+# Simbolo scritto dopo un numero → parole (singolare, plurale). Solo simboli che in una frase
+# dopo una cifra non possono voler dire altro: niente «h», «s», «t», «u» da soli (ore e secondi
+# si scrivono per esteso), niente «G» maiuscola («5G», «3G» delle reti) e niente «K». Dal
+# 12/10 al 28/10 stava in `calliope/unita.py`, con le misure degli esercizi (tolti, #279).
+SIMBOLI_DETTI: dict[str, tuple[str, str]] = {
+    "km/h": ("chilometro all'ora", "chilometri all'ora"),
+    "m/s²": ("metro al secondo quadrato", "metri al secondo quadrato"),
+    "m/s2": ("metro al secondo quadrato", "metri al secondo quadrato"),
+    "m/s": ("metro al secondo", "metri al secondo"),
+    "km/s": ("chilometro al secondo", "chilometri al secondo"),
+    "g/cm³": ("grammo al centimetro cubo", "grammi al centimetro cubo"),
+    "g/cm3": ("grammo al centimetro cubo", "grammi al centimetro cubo"),
+    "kg/m³": ("chilogrammo al metro cubo", "chilogrammi al metro cubo"),
+    "kg/m3": ("chilogrammo al metro cubo", "chilogrammi al metro cubo"),
+    "g/mol": ("grammo per mole", "grammi per mole"),
+    "mol/L": ("mole al litro", "moli al litro"),
+    "mol/l": ("mole al litro", "moli al litro"),
+    "N/kg": ("newton al chilogrammo", "newton al chilogrammo"),
+    "g/L": ("grammo al litro", "grammi al litro"),
+    "m²": ("metro quadrato", "metri quadrati"),
+    "m³": ("metro cubo", "metri cubi"),
+    "cm²": ("centimetro quadrato", "centimetri quadrati"),
+    "cm³": ("centimetro cubo", "centimetri cubi"),
+    "km²": ("chilometro quadrato", "chilometri quadrati"),
+    "kWh": ("chilowattora", "chilowattora"),
+    "kW": ("chilowatt", "chilowatt"),
+    "kJ": ("chilojoule", "chilojoule"),
+    "kg": ("chilogrammo", "chilogrammi"),
+    "mg": ("milligrammo", "milligrammi"),
+    "km": ("chilometro", "chilometri"),
+    "cm": ("centimetro", "centimetri"),
+    "mm": ("millimetro", "millimetri"),
+    "ml": ("millilitro", "millilitri"),
+    "mL": ("millilitro", "millilitri"),
+    "mol": ("mole", "moli"),
+    "°C": ("grado", "gradi"),
+    "g": ("grammo", "grammi"),
+    "m": ("metro", "metri"),
+    "N": ("newton", "newton"),
+    "J": ("joule", "joule"),
+    "W": ("watt", "watt"),
+    "Pa": ("pascal", "pascal"),
+    "Hz": ("hertz", "hertz"),
+}
+
 
 def _regex_simboli() -> re.Pattern:
-    from .unita import SIMBOLI_DETTI
     alternative = "|".join(re.escape(k) for k in sorted(SIMBOLI_DETTI, key=len, reverse=True))
     # Un numero (con la virgola o il punto decimale), uno spazio al più, il simbolo intero
     return re.compile(rf"(?<![\w.,])(\d+(?:[.,]\d+)?)\s?({alternative})(?![\w/²³])")
@@ -96,7 +141,6 @@ _SIMBOLI = _regex_simboli()
 def unita_dette(text: str) -> str:
     """«36 km/h» → «36 chilometri all'ora», «1 kg» → «1 chilogrammo», «9,8 m/s²» → «9,8 metri
     al secondo quadrato». Solo dopo un numero; il resto del testo non cambia."""
-    from .unita import SIMBOLI_DETTI
 
     def sostituisci(m: re.Match) -> str:
         singolare, plurale = SIMBOLI_DETTI[m.group(2)]
