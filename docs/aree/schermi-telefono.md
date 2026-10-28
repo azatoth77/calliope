@@ -1498,10 +1498,30 @@ Le note della revisione della PR #265 (commento della #258), insieme all'elenco 
   cucina e fermato dal telefono, abbinato con `--stanza telefono`. Prima l'aggiornamento seguiva la
   «stanza» telefono: la TV della cucina restava indietro e poi diceva «Finito», e la scheda arrivava
   anche al telefono di un altro familiare abbinato con la stessa «stanza». L'hub tiene una traccia
-  leggera in memoria (`_dove`: chiave → schermi, al più 512 chiavi, toglie gli schermi revocati o
-  puliti). Una scheda mai vista, per esempio dopo un riavvio, va come a voce: senza la stanza dello
-  schermo va alla predefinita (`schermi_stanza`), senza quella a tutti, con la sua stanza va a quella.
-  Gli schermi personali di altre persone la ricevono solo se l'avevano già.
+  leggera in memoria (`_dove`: chiave → schermi, al più 512 chiavi). Una scheda mai vista, per esempio
+  dopo un riavvio, va come a voce: senza la stanza dello schermo va alla predefinita (`schermi_stanza`),
+  senza quella a tutti, con la sua stanza va a quella. Uno schermo personale di un'altra persona la
+  riceve solo se è lo stesso schermo che l'aveva già.
+- **Il numero degli schermi si riusa** (seconda revisione della PR #270). La tabella ha `id INTEGER
+  PRIMARY KEY` senza AUTOINCREMENT, e la revoca cancella la riga: dopo una revoca il prossimo schermo
+  abbinato prende il numero più alto appena tolto. Una revoca fatta da terminale (`python -m
+  calliope.schermi --revoca`, un altro processo) lasciava nell'hub la traccia `_dove`, la cronologia
+  `_storia` e le pagine collegate col numero vecchio. Così «Ferma» dal telefono di Dario arrivava al PC
+  nuovo di Bianca, e al collegamento il telefono nuovo di Bianca riceveva la scheda personale di Dario
+  (questo secondo difetto c'era già prima della PR). Ora lo schermo si riconosce dal numero e
+  dall'istante dell'abbinamento (`creato`); lo schema della tabella non cambia, quindi gli schermi già
+  abbinati sulla DGX valgono.
+  - **Rilettura dell'elenco.** Ogni volta che `abbinati()` lo rilegge, per i numeri che non ci sono più
+    o il cui `creato` è cambiato toglie la cronologia, la traccia, le voci di «Scarica» e i posti nelle
+    partite. Le pagine collegate dello schermo di prima ricevono «revocato».
+  - **Sessioni.** Le sessioni del server tengono (numero, `creato`): la sessione di una pagina vecchia
+    non vale per lo schermo nuovo. Se l'elenco in memoria non torna, il server lo rilegge una volta
+    (`_schermo_sessione`). Anche il flusso controlla `creato` (`valido(sid, creato)`).
+  - **Limite.** Come prima, una revoca da terminale arriva al processo di Calliope al più dopo i 5 s
+    della cache dell'elenco, o subito al primo accesso dello schermo nuovo. In quei secondi lo schermo
+    revocato vale ancora per sé, ma mai come lo schermo nuovo.
+  - **Non toccati.** I contatori delle richieste per schermo del cruscotto e dello scritto (`_richieste`,
+    `invii`): un numero riusato eredita al più il conteggio di un minuto.
 - **`conv_archivio`** segue la conversazione del tocco: `Brain.contesto_conversazione` (lo stesso codice
   dell'inizio di una risposta) dopo `Corsia.turno` e dopo `record_tocco`, e anche per il modulo dallo
   schermo (`_modulo_dallo_schermo`). Prima restava quello della conversazione di prima fino alla risposta
@@ -1519,6 +1539,6 @@ Le note della revisione della PR #265 (commento della #258), insieme all'elenco 
 
 Prove: `prova_agenda_pagina` (l'hub vero con due stanze; il timer della cucina fermato dal telefono; le
 schede mai viste; la traccia col tetto e gli schermi revocati; il livello del mittente; `conv_archivio`
-per tocco e modulo; il timer finito; `TOCCHI` immutabile); `prova_raccolte` («tutto.»);
+per tocco e modulo; il timer finito; `TOCCHI` immutabile; il numero riusato dopo una revoca da un secondo `ArchivioSchermi`: «Ferma», il collegamento, la pagina vecchia e la sessione del server); `prova_raccolte` («tutto.»);
 `prova_telefono_schermo` (la pagina Agenda a due dimensioni, col contrasto e il testo tagliato per
 scheda).
