@@ -67,7 +67,7 @@
       "verifica": "scienze",
       "passi": [
         {"tipo": "voce", "testo": "Calliope, ciao, sono Leo."},
-        {"tipo": "scrivi", "testo": "Giovedì 6 novembre ho la verifica di scienze sulla fotosintesi. Ti mando le pagine."},
+        {"tipo": "scrivi", "testo": "Giovedì 5 novembre ho la verifica di scienze sulla fotosintesi. Ti mando le pagine."},
         {"tipo": "foto", "immagine": "scienze/p140+p141-doppia.jpg", "testo": "Le prime due."},
         {"tipo": "foto", "immagine": "scienze/p142-bassa.jpg", "testo": ""},
         {"tipo": "foto", "immagine": "scienze/p143-storta.jpg", "testo": ""},

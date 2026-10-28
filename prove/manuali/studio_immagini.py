@@ -19,8 +19,11 @@ scrivono in grigio chiarissimo (testo quasi invisibile: istruzioni nascoste).
 **Font.** Solo font liberi già presenti nel sistema, mai nel repository. Stampa: DejaVu Sans e
 Serif (licenza Bitstream Vera, libera) o Liberation (SIL OFL). Pseudo-scritto: Purisa del pacchetto
 `fonts-thai-tlwg` (GPL con l'eccezione per i font) o Z003 di `fonts-urw-base35` (AGPL), presenti
-sulla DGX. Con `--font-mano` se ne sceglie un altro. Lo scritto a mano vero non si genera: si
-fotografa (vedi la cartella delle foto vere nel passo manuale).
+sulla DGX. Con `--font-stampa`, `--font-titolo` e `--font-mano` se ne sceglie un altro. Su
+Windows, senza quei font, valgono di ripiego quelli del sistema (Georgia, Arial, Ink Free): la
+loro licenza non è libera, quindi le immagini fatte così restano sul portatile e non si
+pubblicano (lo dice anche il programma). Lo scritto a mano vero non si genera: si fotografa (vedi
+la cartella delle foto vere nel passo manuale).
 
 Le immagini vanno in una cartella fuori dal repository (`--uscita`), con `manifest.json`: per ogni
 file la verifica, la variante, le pagine che contiene (nell'ordine da sinistra a destra) e se è
@@ -47,18 +50,27 @@ STAMPA = ["/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
           "/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf",
           "C:/Windows/Fonts/DejaVuSerif.ttf"]
 STAMPA_TITOLO = ["/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                 "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf"]
+                 "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
+                 "C:/Windows/Fonts/DejaVuSans-Bold.ttf"]
 MANO = ["/usr/share/fonts/truetype/tlwg/Purisa.ttf",
         "/usr/share/fonts/opentype/tlwg/Purisa.otf",
         "/usr/share/fonts/opentype/urw-base35/Z003-MediumItalic.otf"]
+# Ripiego di Windows, licenza non libera: solo per immagini che restano sul portatile
+RIPIEGO_WINDOWS = {"testo": "C:/Windows/Fonts/georgia.ttf",
+                   "titolo": "C:/Windows/Fonts/arialbd.ttf",
+                   "mano": "C:/Windows/Fonts/Inkfree.ttf"}
 
 LATO = (1240, 1754)          # A4 a 150 dpi
 
 
-def _font(candidati, misura, scelto=None):
+def _font(candidati, misura, scelto=None, ripiego=None, log=print):
     for p in ([scelto] if scelto else []) + candidati:
         if p and Path(p).is_file():
             return ImageFont.truetype(p, misura), p
+    if ripiego and Path(ripiego).is_file():
+        log(f"[immagini] ATTENZIONE: nessun font libero, uso {ripiego} del sistema (licenza non "
+            "libera): le immagini restano su questa macchina, non si pubblicano")
+        return ImageFont.truetype(ripiego, misura), ripiego
     raise SystemExit(f"nessun font libero trovato fra {candidati}: indicane uno con --font-*")
 
 
@@ -211,12 +223,12 @@ def libro_aperto(a: Image.Image, b: Image.Image, r) -> Image.Image:
 
 
 def genera(uscita: Path, materiali: Path = MATERIALI, varianti=VARIANTI, font_mano=None,
-           font_stampa=None, solo=None, log=print) -> list[dict]:
+           font_stampa=None, solo=None, log=print, font_titolo=None) -> list[dict]:
     uscita.mkdir(parents=True, exist_ok=True)
     fonts = {}
-    fonts["testo"], p_testo = _font(STAMPA, 30, font_stampa)
-    fonts["titolo"], p_tit = _font(STAMPA_TITOLO, 40)
-    fonts["mano"], p_mano = _font(MANO, 34, font_mano)
+    fonts["testo"], p_testo = _font(STAMPA, 30, font_stampa, RIPIEGO_WINDOWS["testo"], log)
+    fonts["titolo"], p_tit = _font(STAMPA_TITOLO, 40, font_titolo, RIPIEGO_WINDOWS["titolo"], log)
+    fonts["mano"], p_mano = _font(MANO, 34, font_mano, RIPIEGO_WINDOWS["mano"], log)
     log(f"[immagini] font: stampa {p_testo}, titoli {p_tit}, a mano {p_mano}")
     manifest = []
     for f in sorted(materiali.glob("*.json")):
@@ -284,13 +296,15 @@ def main(argv=None):
     ap.add_argument("--verifiche", default="", help="solo queste (storia,matematica,…)")
     ap.add_argument("--font-mano", default=None)
     ap.add_argument("--font-stampa", default=None)
+    ap.add_argument("--font-titolo", default=None)
     a = ap.parse_args(argv)
     uscita = a.uscita.expanduser().resolve()
     if str(uscita).startswith(str(QUI.parent.parent.resolve())) and "privato" not in uscita.parts:
         raise SystemExit("le immagini non vanno nel repository: scegli una cartella fuori "
                          "(o dentro privato/)")
     genera(uscita, a.materiali, tuple(v for v in a.varianti.split(",") if v), a.font_mano,
-           a.font_stampa, set(filter(None, a.verifiche.split(","))) or None)
+           a.font_stampa, set(filter(None, a.verifiche.split(","))) or None,
+           font_titolo=a.font_titolo)
 
 
 if __name__ == "__main__":

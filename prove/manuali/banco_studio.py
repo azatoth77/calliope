@@ -27,8 +27,10 @@ vere con la loro verità da `--foto-vere` (vedi il passo manuale).
 
 **Non disturbare** (`Guardia`): prima di ogni richiesta, vLLM senza richieste di altri in corso né
 in coda (`/metrics`), non in pausa (`/is_paused`: l'arbitro ferma vLLM quando parla la voce),
-nessun lavoro dell'agente toccato negli ultimi 15 minuti (`~/calliope/lavori`), nessun turno della
-Calliope vera negli ultimi 180 s (`~/calliope/registro/turni-*.jsonl`). Altrimenti aspetta. Una
+nessun lavoro dell'agente in coda o in corso (`lavori/in_corso.json` col `.bak` e il pid vivo,
+come `lavori_vivi` del gestore) né cartelle di lavoro toccate negli ultimi 15 minuti, nessun turno
+della Calliope vera negli ultimi 180 s (`registro/turni-*.jsonl`; cartella `--vera`, di serie
+`~/calliope`). Altrimenti aspetta. `--senza-guardia` si rifiuta con la Calliope vera attiva. Una
 richiesta alla volta, con un tetto (`--max-richieste`). Se vLLM non risponde più (il 28/10 alle
 13:49 UTC la prima richiesta con un'immagine dopo otto giorni di servizio ha fatto cadere il motore,
 EngineDeadError, e il container si è riavviato da solo in ~4 minuti; le richieste dopo, uguali,
@@ -189,6 +191,40 @@ class Fermati(Exception):
     pass
 
 
+def lavori_vivi(vera: Path) -> list[dict]:
+    """I lavori dell'agente in coda o in corso secondo Calliope (`lavori/in_corso.json`, o il suo
+    `.bak`), se il processo che ha scritto il file è ancora vivo: come `lavori_vivi` di
+    setup/linux/gestore.py. Un lavoro fra due passi (sandbox, test) non ha richieste a vLLM in
+    corso ma è vivo: il banco aspetta (revisione della PR #302)."""
+    f = vera / "lavori" / "in_corso.json"
+    dati = None
+    for p in (f, f.with_name(f.name + ".bak")):
+        try:
+            dati = json.loads(p.read_text(encoding="utf-8"))
+            break
+        except (OSError, ValueError):
+            continue
+    if not isinstance(dati, dict):
+        return []
+    pid = dati.get("pid")
+    if os.name == "posix" and isinstance(pid, int) and pid > 0:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return []
+        except PermissionError:
+            pass                                  # vivo, di un altro utente
+    return [r for r in dati.get("lavori") or []
+            if isinstance(r, dict) and r.get("stato") in ("in_coda", "in_corso")]
+
+
+def calliope_vera_attiva(vera: Path) -> bool:
+    """La Calliope vera su questa macchina: un turno negli ultimi 10 minuti o un lavoro vivo."""
+    reg = list((vera / "registro").glob("turni-*.jsonl"))
+    recente = bool(reg) and time.time() - max(f.stat().st_mtime for f in reg) < 600
+    return recente or bool(lavori_vivi(vera))
+
+
 class Guardia:
     """Aspetta che la DGX sia libera prima di ogni richiesta (vedi il docstring)."""
 
@@ -219,12 +255,17 @@ class Guardia:
                 return "vLLM in pausa (parla la voce)"
         except Exception:  # noqa: BLE001
             pass
+        vivi = lavori_vivi(self.vera)
+        if vivi:
+            return f"lavoro dell'agente {vivi[0].get('stato')} ({vivi[0].get('id') or '?'})"
         lav = self.vera / "lavori"
         if lav.is_dir():
+            # ripiego: una cartella di lavoro toccata da poco (anche dentro, al primo livello)
             ora = time.time()
             for d in lav.iterdir():
                 try:
-                    if ora - d.stat().st_mtime < 900:
+                    recenti = [d] + (list(d.iterdir()) if d.is_dir() else [])
+                    if any(ora - x.stat().st_mtime < 900 for x in recenti):
                         return f"lavoro dell'agente toccato da poco ({d.name})"
                 except OSError:
                     pass
@@ -1059,6 +1100,8 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--url", default="http://127.0.0.1:8000")
     ap.add_argument("--modello", default="qwen3.6-35b")
+    ap.add_argument("--vera", type=Path, default=Path("~/calliope"),
+                    help="cartella dei dati della Calliope vera (lavori, registro dei turni)")
     ap.add_argument("--materiali", type=Path, default=MATERIALI)
     ap.add_argument("--immagini", type=Path, help="cartella di studio_immagini.py")
     ap.add_argument("--foto-vere", type=Path, help="cartella con le foto vere e verita.json")
@@ -1078,7 +1121,8 @@ def main(argv=None):
                     help="da quale variante d'immagine vengono i testi letti per gli argomenti")
     ap.add_argument("--verifiche", default="")
     ap.add_argument("--max-richieste", type=int, default=400)
-    ap.add_argument("--senza-guardia", action="store_true", help="solo fuori dalla DGX di casa")
+    ap.add_argument("--senza-guardia", action="store_true",
+                    help="SOLO fuori dalla DGX di casa: rifiutato se la Calliope vera è attiva")
     a = ap.parse_args(argv)
     uscita = a.uscita.expanduser()
     uscita.mkdir(parents=True, exist_ok=True)
@@ -1105,8 +1149,17 @@ def main(argv=None):
     if a.foto_vere:
         immagini += carica_foto_vere(a.foto_vere, materiali)
     fasi = a.fasi.split(",")
-    cli = Cliente(a.url, a.modello, None, a.max_richieste, log)
+    cli = Cliente(a.url, a.modello, Guardia(None, a.vera.expanduser(), log), a.max_richieste,
+                  log)
     if a.senza_guardia:
+        # Mai sulla macchina della Calliope vera (revisione della PR #302): con un turno negli
+        # ultimi 10 minuti o un lavoro dell'agente vivo il banco si rifiuta
+        if calliope_vera_attiva(cli.guardia.vera):
+            log("[banco] RIFIUTO: --senza-guardia con la Calliope vera attiva su questa "
+                "macchina (turni recenti o un lavoro dell'agente vivo): lancia senza l'opzione")
+            return 2
+        log("[banco] ATTENZIONE: --senza-guardia, nessuna attesa per la voce e per l'agente. "
+            "Solo su una macchina senza la Calliope di casa.")
         cli.guardia.motivo = lambda: None
     riep = {"modello": a.modello, "giro": a.giro, "inizio": time.strftime("%Y-%m-%d %H:%M:%S")}
     righe_let = []

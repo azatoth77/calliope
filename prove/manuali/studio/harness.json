@@ -1,5 +1,5 @@
 {
- "nota": "Harness scelto dal banco dello Studio il 28/10/2026 (#293) per 4.3 (lettura) e 4.4 (argomenti), con qwen3.6-35b su vLLM 0.29 sulla DGX. Prompt e schemi sono quelli delle varianti L2_dett_testo e A1_testo_dett_guidata_busta di prove/manuali/banco_studio.py (scritto da quelle costanti). Misure e motivi in docs/aree/minori.md, «Banco dello Studio (28/10)».",
+ "nota": "Harness scelto dal banco dello Studio il 28/10/2026 (#293) per 4.3 (lettura) e 4.4 (argomenti), con qwen3.6-35b su vLLM 0.29 sulla DGX. Prompt e schemi sono quelli delle varianti L2_dett_testo e A1_testo_dett_guidata_busta di prove/manuali/banco_studio.py: uguali alle sue costanti, lo controlla prove/prova_studio_banco.py. Misure e motivi in docs/aree/minori.md, «Banco dello Studio (28/10)».",
  "modello": {
   "motore": "openai (vLLM)",
   "modello": "agente (agenti_modello / dgx.yaml)",
@@ -12,11 +12,12 @@
   "parametri": {
    "temperature": 0,
    "presence_penalty": 0,
-   "max_tokens": 2500,
+   "max_tokens": 3500,
    "chat_template_kwargs": {
     "enable_thinking": false
    }
   },
+  "max_tokens_nota": "3500 per foto, come nel banco; un tetto più basso non è misurato",
   "messaggi": [
    {
     "role": "system",
@@ -126,14 +127,14 @@
   "titolo": "al più 60 caratteri (lo schema), poi il filtro di forma di 4.4 e la busta nella descrizione dei tocchi"
  },
  "scartate": {
-  "thinking": "lettura: 17 errori su 35 (giro in tondo fino a max_tokens), 30 s a pagina; argomenti: richiamo 0,2–0,5 in 30 s",
+  "thinking": "lettura: 17 errori su 35 (giro in tondo fino a max_tokens), 30 s a pagina; argomenti: richiamo medio 0,51 (matematica 0,83, scienze 0,20, storia 0,50) in ~30 s",
   "json_guidato_lettura": "14 errori su 159 (JSON che gira in tondo), doppie 5/6",
   "tre_foto_per_richiesta": "27 errori su 71 (foto mancanti nel JSON)",
-  "lato_2000": "nessun guadagno (CER uguale), +10 % di token e di tempo",
-  "ritocco": "nessun guadagno",
-  "temperatura_0_6_presence_0_5": "numeri di pagina 37/51 invece di 51/52; argomenti di scienze 12 con precisione 0,42",
+  "lato_2000": "giro ridotto: CER medio 0,036 contro 0,062 della stessa lettura a 1600 px (L3), mediana 0 per tutte e due: la differenza sono le uscite rotte (2 contro 4); +20 % di token in ingresso e +10 % di tempo",
+  "ritocco": "giro ridotto: CER medio 0,063 contro 0,062 senza ritocco (L3), 4 uscite rotte come senza",
+  "temperatura_0_6_presence_0_5": "numeri di pagina 37/51 contro 51/52 della stessa lettura a temperatura 0 (L3, giro ridotto); argomenti di scienze 12 con precisione 0,42",
   "un_passo_dalle_immagini": "richiamo di storia 0,62 (argomenti accorpati), 10–13 s e ~16 000 token in ingresso",
-  "prompt_corto_lettura": "CER uguale ma niente capovolte, doppie, numeri e istruzioni"
+  "prompt_corto_lettura": "giro intero: CER medio 0,0066 contro 0,0054, e niente capovolte, doppie, numeri e istruzioni"
  },
  "conferma_della_persona": [
   "sempre: l'elenco degli argomenti (tenere, togliere, aggiungere) prima del piano",

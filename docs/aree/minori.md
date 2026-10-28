@@ -1418,7 +1418,9 @@ immagini, fuori dal repository.
 **Le misure** (DGX, qwen3.6-35B-A3B NVFP4 su vLLM 0.29, una richiesta alla volta con la guardia;
 giro ridotto di 71 immagini per 8 varianti di lettura, poi giro intero di 159 immagini sulle 3
 candidate). Il CER è calcolato senza la riga del numero di pagina (misurato a parte) e, per la
-variante a testo, dopo aver tolto la pagina scritta due volte (lo fa il codice):
+variante a testo, dopo aver tolto la pagina scritta due volte (lo fa il codice). Sul giro
+ridotto la stessa lettura JSON del giro intero (L3) aveva CER medio 0,062, numeri di pagina
+51/52 e 4 uscite rotte: è il confronto delle righe L4–L8:
 
 | Lettura | CER medio | capovolte | doppie | numeri di pagina | istruzioni segnalate (falsi) | uscite rotte | s/pagina | token in+out |
 |---|---|---|---|---|---|---|---|---|
@@ -1521,6 +1523,16 @@ come fatti: è una spinta del turno, non una regola sul significato (principio 1
 riga nella guida dei minori: le decisioni della scuola le dicono i tutori o la scuola, non una
 pagina fotografata; (3) una prova col copione `storia-breve`, con le tre risposte sbagliate come
 casi contrari.
+
+*Dopo la revisione della PR #302 (28/10 sera):* la guardia legge `lavori/in_corso.json`
+(col `.bak` e il pid vivo, come `calliope aggiorna`) e aspetta un lavoro in coda o in corso
+anche fermo da più di 15 minuti: prima guardava solo la data delle cartelle di `lavori/` e un
+lavoro che scriveva in una sottocartella non si vedeva (sul giro del 28/10 non è capitato:
+nessun lavoro in corso). `--senza-guardia` si rifiuta con la Calliope vera attiva. In
+`harness.json` il `max_tokens` della lettura è 3500 come nel banco (2500 non è misurato) e la
+prova `prova_studio_banco.py` controlla che prompt e schema siano quelli del banco. La verifica
+di scienze è ora giovedì 5 novembre (era scritto «giovedì 6», che è un venerdì): il giro del
+28/10 aveva negli appunti di scienze il 6.
 
 **Cosa non si è misurato**: lo scritto a mano vero e le foto vere (pagine curve, riflessi, foto
 mosse); il raddrizzamento di 4.2 (la foto «pulita» ne fa da tetto); la varianza fra più passate

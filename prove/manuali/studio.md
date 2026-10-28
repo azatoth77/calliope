@@ -32,7 +32,10 @@ Per ogni pagina: `pulita`, `storta` (prospettiva su un tavolo), `ombra`, `bassa`
 15), `capovolta`, `quadretti` (copiata a mano su un quaderno) e, per le coppie di pagine di libro,
 `doppia` (libro aperto). ~160 immagini, ~30 MB, poco più di un minuto. Font: DejaVu (stampa) e
 Purisa di `fonts-thai-tlwg` (pseudo-scritto a mano, GPL con l'eccezione per i font), già sulla
-DGX; `--font-mano` per un altro font libero. I font non vanno nel repository.
+DGX; `--font-stampa`, `--font-titolo` e `--font-mano` per un altro font libero. Su Windows,
+senza quei font, il programma usa Georgia, Arial e Ink Free del sistema e lo dice: la loro
+licenza non è libera, quindi quelle immagini restano sul portatile. I font non vanno nel
+repository.
 
 ## 2. Il banco
 
@@ -49,9 +52,14 @@ PYTHONPATH=$V $V/.venv/bin/python prove/manuali/banco_studio.py \
   domande e risposte; `--testi-letti <risultati.jsonl>` li riprende da un giro di prima, senza
   rileggere.
 - `--max-richieste` (400): il tetto delle richieste a vLLM.
+- `--vera` (`~/calliope`): la cartella dei dati della Calliope vera, dove la guardia guarda i
+  lavori (`lavori/in_corso.json`) e il registro dei turni.
+- `--senza-guardia`: solo su una macchina senza la Calliope di casa; con un turno degli ultimi
+  10 minuti o un lavoro dell'agente vivo il banco si rifiuta (esce con 2).
 
 **Non disturba**: prima di ogni richiesta aspetta che vLLM non abbia richieste di altri e non sia
-in pausa, che nessun lavoro dell'agente sia stato toccato negli ultimi 15 minuti e che la Calliope
+in pausa, che non ci siano lavori dell'agente in coda o in corso (`lavori/in_corso.json`, come
+`calliope aggiorna`) né cartelle di lavoro toccate negli ultimi 15 minuti e che la Calliope
 vera taccia da 180 s. Una richiesta alla volta. Se vLLM cade si ferma e lo scrive (`FERMO`).
 
 Uscita: `risultati.jsonl` (una riga per richiesta, con il testo letto), `riepilogo.json`,

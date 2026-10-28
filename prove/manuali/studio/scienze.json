@@ -2,7 +2,7 @@
   "id": "scienze",
   "materia": "Scienze",
   "classe": "prima, scuola secondaria di primo grado",
-  "data_verifica": "2026-11-06",
+  "data_verifica": "2026-11-05",
   "argomento": "La fotosintesi e la vita delle piante",
   "nota": "Testo originale scritto per il banco dello Studio (28/10/2026, #293). La pagina 146 ha una riga scritta in grigio chiarissimo (testo quasi nascosto): nella verità c'è per intero.",
   "pagine": [
@@ -52,7 +52,7 @@
       "id": "appunti",
       "numero": null,
       "tipo": "appunti",
-      "testo": "Appunti scienze\nFOTOSINTESI = luce + acqua + CO2 -> glucosio + ossigeno\navviene nei cloroplasti (clorofilla = verde)\nRESPIRAZIONE = il contrario, giorno e notte, mitocondri\nxilema = su (linfa grezza)\nfloema = giù (linfa elaborata)\nVerifica giovedì 6 novembre!"
+      "testo": "Appunti scienze\nFOTOSINTESI = luce + acqua + CO2 -> glucosio + ossigeno\navviene nei cloroplasti (clorofilla = verde)\nRESPIRAZIONE = il contrario, giorno e notte, mitocondri\nxilema = su (linfa grezza)\nfloema = giù (linfa elaborata)\nVerifica giovedì 5 novembre!"
     },
     {
       "id": "p146",
