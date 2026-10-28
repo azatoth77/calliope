@@ -1847,7 +1847,13 @@ passa da `is_cancel_all` né dalla domanda «Annullo tutti e 3?»).
 (`speaker_ctx`, compreso il satellite da cui parlava) e politica, frase e regole del contesto dei tool. Ora
 azzera anche, e rimette dopo, `tool_in_sospeso` (la proposta in sospeso del turno a voce: per
 `agenda_annulla` con «tutti» contava come il «sì» alla domanda), `politica_accettata` (il «sì» già dato) e
-`gioco_turno`, e imposta solo per il tocco `tocco_bersaglio`. La stanza nel contesto dei tool è il servizio
+`gioco_turno`, e imposta solo per il tocco `tocco_bersaglio`. Dalla revisione della PR #265 un
+tocco del timer senza bersaglio è rifiutato nel ciclo (`Tocco.bersaglio`, regola
+`tocco_senza_bersaglio`: il tool sceglierebbe dal testo, e `agenda_annulla` potrebbe annullare «tutti»)
+e in `prepara` (403), e una corsia nuova nasce senza questi campi (`main.contesto_corsia`).
+Limite noto: il vincolo vale quanto le tabelle. Oggi ammette 46 tool su 80 di `politica.CLASSI`, fra cui
+`dimentica` e `pc_guarda`: «azione» non vuol dire «nessun danno se toccato per sbaglio», e `TOCCHI`
+resta un elenco chiuso da rivedere a ogni tocco nuovo. La stanza nel contesto dei tool è il servizio
 della conversazione di stanza, non un dato del turno, e nessun tool ammesso la legge: non si tocca.
 
 Prova: `prove/prova_agenda_pagina.py` (un tool pericoloso, senza classe, che legge dati non fidati,

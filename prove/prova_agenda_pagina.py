@@ -94,7 +94,7 @@ def vincolo():
     verifica("vincolo: un ToolSpec che declassa il tool lo rende non ammesso", "pericoloso" in m, m)
     # Un tocco nuovo su un tool non ammesso: il modulo non si importa (l'avvio si ferma)
     src = Path(tocchi.__file__).read_text(encoding="utf-8")
-    cattivo = src.replace('Tocco("agenda_annulla", _timer_ferma)', 'Tocco("casa_comando", _timer_ferma)')
+    cattivo = src.replace('Tocco("agenda_annulla", _timer_ferma', 'Tocco("casa_comando", _timer_ferma')
     mod = types.ModuleType("calliope.schermi._tocchi_prova")
     mod.__package__ = "calliope.schermi"
     errore = ""
@@ -242,6 +242,17 @@ def scritto(prep, tocco, persona="bianca", sid=7):
 
 def ciclo():
     b, c, sc, liste, turni, voce, hub, _ = pr.prepara_ciclo()
+    # Gli schermi della casa (revisione della PR #265): il telefono del tocco, il PC di Bianca e
+    # la TV della cucina; `invia` raggiunge la cucina (con le automatiche spente nessuno)
+    hub.abbinati = lambda: [{"id": 7, "nome": "telefono", "proprietario": "bianca"},
+                            {"id": 8, "nome": "pc di bianca", "proprietario": "bianca"},
+                            {"id": 9, "nome": "cucina"}]
+    hub.automatiche = True
+
+    def invia(scheda, mittente, forza=False):
+        hub.a_tutti.append((scheda, mittente))
+        return {"destinatari": ["cucina"] if hub.automatiche else []}
+    hub.invia = invia
     a = agenda_nuova("ciclo")
     b.tool_ctx.agenda = a
     adesso = time.time()
@@ -287,8 +298,16 @@ def ciclo():
              and "aggiunto 1 minuto" in coda[3]["content"], json.dumps(coda, ensure_ascii=False)[:400])
     inv = [s for sid, s in hub.inviate if s.get("tipo") == "timer" and sid == 7]
     verifica("ciclo: la scheda del timer aggiornata allo schermo del tocco, con la stessa chiave",
-             inv and inv[-1]["chiave"] == k5 and abs(inv[-1]["timer"][0]["fine"] - (adesso + 360)) < 1
-             and not hub.a_tutti, str(hub.inviate[-1:])[:300])
+             inv and inv[-1]["chiave"] == k5 and abs(inv[-1]["timer"][0]["fine"] - (adesso + 360)) < 1,
+             str(hub.inviate[-1:])[:300])
+    casa = [(s, m) for s, m in hub.a_tutti if s.get("chiave") == k5]
+    verifica("ciclo: il timer aggiornato anche agli schermi della casa, come dalla voce (non resta indietro)",
+             len(casa) == 1 and casa[0][1].persona == "bianca" and casa[0][1].schermo == 7
+             and casa[0][1].stanza is None and abs(casa[0][0]["timer"][0]["fine"] - (adesso + 360)) < 1,
+             str(casa)[:300])
+    verifica("ciclo: e all'altro schermo personale della persona, una volta sola per schermo",
+             sorted(sid for sid, s in hub.inviate if s.get("chiave") == k5) == [7, 8], str(hub.inviate)[:300])
+    hub.automatiche = False
     verifica("ciclo: l'evento «tocco» riuscito con la chiave toccata, nessuna frase detta",
              hub.eventi[-1][:2] == (7, "tocco") and hub.eventi[-1][2].get("ok") is True
              and hub.eventi[-1][2].get("pagina") == {"chiave": k5} and voce.detto == [])
@@ -301,6 +320,10 @@ def ciclo():
     inv = [s for sid, s in hub.inviate if s.get("tipo") == "timer" and sid == 7]
     verifica("ciclo: la scheda del timer fermato diventa «annullato alle …»",
              inv[-1]["chiave"] == k5 and inv[-1]["stato"] == "annullato")
+    fermati = [sid for sid, s in hub.inviate if s.get("chiave") == k5 and s.get("stato") == "annullato"]
+    verifica("ciclo: con le schede automatiche spente il timer fermato arriva lo stesso agli schermi "
+             "della persona (la casa la decide l'hub)",
+             sorted(fermati) == [7, 8] and any(s.get("stato") == "annullato" for s, _ in hub.a_tutti), str(fermati))
     verifica("ciclo: la storia chiude con la conferma di Calliope, mai due messaggi della persona di fila",
              b.history[-1]["role"] == "assistant" and "Ho annullato il timer" in b.history[-1]["content"]
              and not pr.due_user(b.history), json.dumps(b.history[-1], ensure_ascii=False))
@@ -343,6 +366,56 @@ def ciclo():
     finally:
         c.s.tools.call = vero
         tocchi.TOCCHI.pop("prova_pericolosa", None)
+    liste.db.close()
+    a.db.close()
+
+
+def senza_bersaglio_e_corsia():
+    b, c, sc, liste, turni, voce, hub, _ = pr.prepara_ciclo()
+    a = agenda_nuova("bersaglio")
+    b.tool_ctx.agenda = a
+    tid = a.add("timer", "di 5 minuti", time.time() + 300)
+    chiamati = []
+    vero = c.s.tools.call
+    c.s.tools.call = lambda *x, **k: chiamati.append(x) or "{}"
+    try:
+        for bers in (None, {"timer": tid}, "timer:1-1"):
+            n_ev = len(hub.eventi)
+            pr.tocca(c, {"tipo": "tocco", "tool": "agenda_annulla", "argomenti": {"cosa": "tutti"},
+                         "descrizione": "(prova)", "tocco": "timer_ferma", "bersaglio": bers,
+                         "persona": "bianca", "schermo": "telefono", "schermo_id": 7, "arrivato": time.time()})
+            r = turni[-1]
+            verifica(f"bersaglio: un tocco del timer senza bersaglio valido ({bers!r}) rifiutato con la sua regola",
+                     r.get("regole") == ["tocco_senza_bersaglio"] and not chiamati and a.get(tid) is not None
+                     and len(hub.eventi) > n_ev and hub.eventi[-1][2].get("ok") is False, json.dumps(r)[:200])
+    finally:
+        c.s.tools.call = vero
+    vero = tocchi.TOCCHI["timer_ferma"]
+    tocchi.TOCCHI["timer_ferma"] = tocchi.Tocco("agenda_annulla", lambda d, f: {
+        "tool": "agenda_annulla", "argomenti": {"cosa": "il timer"}, "descrizione": "(prova)"}, bersaglio=True)
+    try:
+        r = tocchi.prepara({"tocco": "timer_ferma"}, None)
+    finally:
+        tocchi.TOCCHI["timer_ferma"] = vero
+    verifica("bersaglio: prepara rifiuta un tocco del timer che ha perso il bersaglio (403)",
+             r.get("_stato") == 403 and r.get("motivo") == "senza bersaglio", json.dumps(r, ensure_ascii=False))
+    # Una corsia nuova nasce pulita, anche se si collega mentre il ciclo è dentro un tocco
+    from calliope.main import contesto_corsia
+    ctx = b.tool_ctx
+    ctx.tool_in_sospeso, ctx.politica_accettata, ctx.gioco_turno = "agenda_annulla", True, {"partita": 1}
+    ctx.tocco_bersaglio, ctx.user_text, ctx.regole = {"timer": tid, "chiave": "x"}, "(prova)", ["r"]
+    nuovo = contesto_corsia(ctx, "sc", "sp")
+    sporchi = {k: getattr(nuovo, k) for k in ("tool_in_sospeso", "politica_accettata", "gioco_turno",
+                                              "tocco_bersaglio", "user_text", "regole", "politica",
+                                              "si_breve", "errore_registro")
+               if getattr(nuovo, k) not in (None, False, "", [])}
+    verifica("corsia: una corsia nuova nasce pulita (niente bersaglio, proposta, «sì» o gioco della principale)",
+             not sporchi and nuovo.agenda is a and nuovo.speaker_ctx == "sc" and nuovo.regole is not ctx.regole,
+             str(sporchi))
+    for k in c._CTX_TOCCO:
+        if hasattr(nuovo, k) and k not in ("strumenti",):
+            verifica(f"corsia: «{k}» del tocco non passa alla corsia nuova",
+                     getattr(nuovo, k) in (None, False, "", []), repr(getattr(nuovo, k))[:80])
     liste.db.close()
     a.db.close()
 
@@ -399,6 +472,7 @@ def main():
         tasti()
         print("— 4. il ciclo")
         ciclo()
+        senza_bersaglio_e_corsia()
         print("— 5. il server")
         server()
     finally:

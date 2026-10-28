@@ -1822,6 +1822,14 @@ class Ciclo:
             self._esito_tocco(scritto, False, "Questo non si fa toccando lo schermo: "
                                               "chiedimelo a voce.")
             return _FINE
+        if tocchi.senza_bersaglio(scritto):
+            # Un tocco del timer senza il timer toccato (revisione della PR #265): il tool
+            # sceglierebbe dal testo, senza la politica del turno
+            self.rec = {**base, "esito": "rifiutato", "voce": voce, "testo": descr,
+                        "motivo": "senza bersaglio", "tocco": scritto.get("tocco"),
+                        "regole": ["tocco_senza_bersaglio"]}
+            self._esito_tocco(scritto, False, "Non so quale timer: riprova dalla scheda.")
+            return _FINE
         # Il tocco è della conversazione della persona (come il modulo, corsie.py)
         self.corsia.turno(brain, prof.name, "schermo", True, persona_id=prof.id)
         segni = {k: getattr(sc, k, None) for k in self._SEGNI_TOCCO if hasattr(sc, k)}
@@ -1895,10 +1903,38 @@ class Ciclo:
         for card in [c for c in (res.get("scheda"), res.get("schede")) if c]:
             for c in (card if isinstance(card, list) else [card]):
                 try:
-                    hub.invia_a(sid, c)
+                    if c.get("visibilita") == schede_foto.PUBBLICA:
+                        self._scheda_pubblica_del_tocco(hub, sid, c, scritto)
+                    else:
+                        hub.invia_a(sid, c)
                 except Exception as e:  # noqa: BLE001 — lo schermo non ferma il ciclo
                     print(f"   [SCHERMI] scheda del tocco non inviata: {type(e).__name__}",
                           flush=True)
+
+    def _scheda_pubblica_del_tocco(self, hub, sid, card: dict, scritto: dict):
+        """Una scheda pubblica del risultato (il timer di casa dopo «+1 minuto» o «Ferma»,
+        revisione della PR #265): è già sulla TV della cucina e sugli altri schermi, che
+        resterebbero indietro (il conto di un timer fermato, «Finito» un minuto prima). Va dove va
+        quando lo stesso tool parte dalla voce (`hub.invia`, le regole di sempre della scheda
+        pubblica, dalla stanza dello schermo del tocco), e in più allo schermo del tocco e agli
+        altri schermi personali della persona, anche con le schede automatiche spente. Le schede
+        di casa e personali (la lista) restano solo allo schermo del tocco (revisione della PR
+        #261: la spesa spuntata al supermercato non va sulla TV)."""
+        from .schermi import Mittente
+        persona = scritto.get("persona")
+        prof = self.s.registry.by_id(persona) if persona else None
+        mitt = Mittente(persona=persona, nome=getattr(prof, "name", None),
+                        livello="familiare" if prof else "ospite", certo=bool(prof),
+                        stanza=scritto.get("stanza"), schermo=sid)
+        r = hub.invia(card, mitt) or {}
+        fatti = set(r.get("destinatari") or ())
+        abbinati = hub.abbinati() if callable(getattr(hub, "abbinati", None)) else []
+        nomi = {s.get("id"): s.get("nome") for s in abbinati}
+        mie = [sid] + [s.get("id") for s in abbinati
+                       if persona and s.get("proprietario") == persona and s.get("id") != sid]
+        for i in mie:
+            if i not in nomi or nomi[i] not in fatti:
+                hub.invia_a(i, card)
 
     def _esito_tocco(self, scritto: dict, ok: bool, errore: str):
         """L'esito del tocco alla pagina che l'ha mandato (evento SSE «tocco»): la spunta in

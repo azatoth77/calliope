@@ -73,6 +73,10 @@ class Tocco:
     funzione che dai dati della pagina e dallo stato vero fa gli argomenti."""
     tool: str
     prepara: Callable
+    # Il tocco agisce su un oggetto scelto dal codice (il timer toccato: ToolContext.tocco_bersaglio).
+    # Senza, il tool sceglierebbe dal testo, e agenda_annulla potrebbe annullare «tutti»
+    # (revisione della PR #265): il ciclo lo rifiuta (`senza_bersaglio`)
+    bersaglio: bool = False
 
 
 # ─────────────────────────── il vincolo (#262) ───────────────────────────
@@ -103,6 +107,15 @@ def controlla(elenco=None) -> list[str]:
         if motivo:
             errori.append(f"{nome}: {motivo}")
     return errori
+
+
+def senza_bersaglio(scritto: dict) -> bool:
+    """Il tocco vuole un bersaglio (`Tocco.bersaglio`) e non ce l'ha: il controllo del ciclo,
+    con la sua regola (`tocco_senza_bersaglio`)."""
+    t = TOCCHI.get(str((scritto or {}).get("tocco") or ""))
+    b = (scritto or {}).get("bersaglio")
+    return bool(t and t.bersaglio) and not (isinstance(b, dict) and b.get("timer") is not None
+                                            and b.get("chiave"))
 
 
 def non_ammesso(scritto: dict, spec=None) -> str | None:
@@ -196,8 +209,8 @@ def _timer_ferma(dati: dict, fonti) -> dict:
 
 
 TOCCHI = {"spunta_lista": Tocco("lista_togli", _spunta_lista),
-          "timer_piu": Tocco("timer_imposta", _timer_piu),
-          "timer_ferma": Tocco("agenda_annulla", _timer_ferma)}
+          "timer_piu": Tocco("timer_imposta", _timer_piu, bersaglio=True),
+          "timer_ferma": Tocco("agenda_annulla", _timer_ferma, bersaglio=True)}
 
 # All'avvio: un tocco su un tool non ammesso non arriva mai a girare
 _ERRORI = controlla()
@@ -218,6 +231,8 @@ def prepara(dati, fonti) -> dict:
         return out
     motivo = (f"chiama «{out.get('tool')}» invece di «{t.tool}»" if out.get("tool") != t.tool
               else ammesso(t.tool, out.get("argomenti")))
+    if not motivo and t.bersaglio and not isinstance(out.get("bersaglio"), dict):
+        motivo = "senza bersaglio"
     if motivo:
         return {"errore": "Questo tocco non è ammesso: chiedimelo a voce.", "_stato": 403,
                 "motivo": motivo}

@@ -1045,7 +1045,7 @@ Passo 2b del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-
 - **I tasti del timer** («+1 minuto» e «Ferma»): nella scheda del timer, solo sugli schermi personali con
   le sezioni (telefono e PC personale), in Adesso e nella pagina Agenda, su una scheda con un timer solo e
   ancora attivo. Alti e larghi almeno 44 px, con il nome del timer nell'etichetta per chi non vede
-  («Aggiungi un minuto al timer per la pasta»). La pagina manda `{tocco: "timer_piu" | "timer_ferma",
+  («+1 minuto al timer per la pasta»: comincia col testo visibile, WCAG 2.5.3). La pagina manda `{tocco: "timer_piu" | "timer_ferma",
   chiave}` con la chiave della scheda (`timer:<id>-<creazione>`); `tocchi.prepara` controlla che il timer
   ci sia ancora, sia un timer (di casa: gli altri tipi dell'agenda sono personali) e abbia la stessa
   identità (409 «Questo timer non c'è più: è già suonato o è stato fermato.»). Nel ciclo diventano
@@ -1065,6 +1065,16 @@ Passo 2b del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-
   server non ha più) non è nella pagina Agenda, e «Apri» da Adesso porta alla pagina senza quella scheda;
   prima il timer scaduto restava nel gruppo Agenda di Le mie cose, ora nascosto sotto la pagina.
 - Cache del service worker `calliope-telefono-pagina-v11` (era v10).
+- **Dalla revisione della PR #265**:
+  - la scheda pubblica del risultato di un tocco (il timer dopo «+1 minuto» o «Ferma») va dove va
+    quando lo stesso tool parte dalla voce (`hub.invia` dalla stanza dello schermo del tocco), più allo
+    schermo del tocco e agli altri schermi personali della persona anche con le schede automatiche
+    spente (`Ciclo._scheda_pubblica_del_tocco`). Prima solo lo schermo del tocco: la TV della cucina
+    continuava il conto di un timer fermato e diceva «Finito» un minuto prima. Le schede di casa e
+    personali (la lista) restano solo allo schermo del tocco, come deciso nella PR #261;
+  - una corsia nuova nasce col contesto dei tool pulito (`main.contesto_corsia`): niente bersaglio,
+    proposta in sospeso, «sì» già dato o gioco della corsia principale;
+  - un tocco del timer senza bersaglio è rifiutato (`Tocco.bersaglio`, regola `tocco_senza_bersaglio`).
 
 Prove: `prova_agenda_pagina` (nuova, livello 1: il vincolo, la vista per giorno ai bordi, i tasti in
 `prepara`, il ciclo con un `ToolRegistry` vero e l'`Agenda` su disco, il server vero);

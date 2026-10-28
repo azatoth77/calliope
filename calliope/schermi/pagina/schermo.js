@@ -1249,9 +1249,10 @@
   // «aggiungi» o agenda_annulla). La scheda aggiornata (stessa chiave) arriva prima dell'esito;
   // l'esito (evento «tocco») chiude l'attesa, un errore si dice accanto nella regione
   // role="status" della scheda. Come la spunta: senza esito entro SPUNTA.attesaMs lo dice, e
-  // finché il primo tocco aspetta nella coda del ciclo un altro non parte
+  // finché il primo tocco aspetta nella coda del ciclo un altro non parte. Il nome per chi non
+  // vede comincia col testo visibile (WCAG 2.5.3: «tocca +1 minuto» col controllo vocale)
   const TASTI_TIMER = {
-    timer_piu: { testo: "+1 minuto", nome: "Aggiungi un minuto al timer", attesa: "Aggiungo un minuto…" },
+    timer_piu: { testo: "+1 minuto", nome: "+1 minuto al timer", attesa: "Aggiungo un minuto…" },
     timer_ferma: { testo: "Ferma", nome: "Ferma il timer", attesa: "Fermo il timer…" },
   };
   const OCCUPATA_TIMER = "Calliope è occupata: il timer cambia appena finisce.";
