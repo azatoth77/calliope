@@ -22,7 +22,12 @@ docs/aree/schermi-telefono.md).
    scaricamento vero da `/scarica/<gettone>` per chi amministra (il documento di Bianca) e per
    Bianca (il suo referto), mai una riga dell'archivio di un altro.
 7. **L'annuncio** di un documento finito in secondo piano, rimasto sul server, con lo schermo
-   personale abbinato ma chiuso: «in Le mie cose, Documenti».
+   personale abbinato ma chiuso: «in Le mie cose, alla voce Documenti», senza dire «telefono».
+8. **Dalla revisione della PR #268**: la pagina con più di 8 documenti lo dice e la ricerca li trova
+   tutti (anche oltre i 50); la ricerca con sole parole vuote non elenca niente; le voci di «Scarica»
+   di uno schermo non tolgono quelle di un altro; il file originale riletto a ogni uso, con nome e
+   tipo dal file letto davvero; `Archivio.file_di` mai fuori dalla cartella (`..`, percorso assoluto,
+   giunzione NTFS) né oltre `archivio_max_mb`; la tessera di chi amministra dice «tuoi».
 
 Nomi e dati di fantasia, niente rete né modelli.
 
@@ -430,8 +435,8 @@ def annuncio():
     svc.wait(job, 0.0)                  # in secondo piano, come il tool dopo documenti_attesa_s
     job.event.wait(20)
     m = svc.done.get(timeout=20)["messaggio"]
-    verifica("annuncio: finito in secondo piano col telefono abbinato ma chiuso, «in Le mie cose, Documenti»",
-             "Le mie cose, Documenti" in m and "sul server" not in m, m)
+    verifica("annuncio: finito in secondo piano con lo schermo abbinato ma chiuso, «in Le mie cose, alla voce Documenti»",
+             "Le mie cose, alla voce Documenti" in m and "sul server" not in m and "telefono" not in m, m)
     job = svc.crea("dario", "Dario", "word", "lettera")
     job.ha_pagina = lambda: False
     svc.wait(job, 0.0)                  # in secondo piano, come il tool dopo documenti_attesa_s
@@ -439,6 +444,124 @@ def annuncio():
     m = svc.done.get(timeout=20)["messaggio"]
     verifica("annuncio: contrario, senza schermi abbinati la frase di sempre", "sul server" in m, m)
     svc.close()
+
+
+# ─────────────────────────── 8. dalla revisione della PR #268 ───────────────────────────
+def molti_documenti():
+    """La pagina mostra gli ultimi DOCUMENTI_PAGINA e lo dice; la ricerca li trova tutti, anche oltre
+    i 50 che guardava prima («lo trovi in Le mie cose» deve essere vero)."""
+    a = Archive(str(TMP / "molti.db"))
+    a.add("bianca", "Bianca", "word", "Verbale della gita al lago", "x", "Verbale della gita al lago.docx",
+          doc_word("Verbale della gita al lago", "Il lago."), None, "")
+    for i in range(60):
+        a.add("bianca", "Bianca", "word", f"Appunto numero {i}", "x", f"Appunto {i}.docx",
+              doc_word(f"Appunto numero {i}", "x"), None, "")
+    hub = types.SimpleNamespace(servizi=types.SimpleNamespace(documenti=types.SimpleNamespace(archive=a)),
+                                tool_ctx=types.SimpleNamespace(speakers=Persone()))
+    p = raccolte.pagina(hub, BIANCA, "documenti")
+    verifica("molti documenti: la pagina ne mostra gli ultimi 8 e dice che gli altri si trovano con «Cerca»",
+             len(titoli(p)) == raccolte.DOCUMENTI_PAGINA and "«Cerca»" in p.get("nota", ""), js(p.get("nota")))
+    q = raccolte.cerca(hub, BIANCA, "documenti", "verbale gita")
+    verifica("molti documenti: la ricerca trova il più vecchio, oltre i 50 più recenti",
+             titoli(q) == ["Verbale della gita al lago"], js(titoli(q)))
+    t = {x["id"]: x for x in raccolte.tessere(hub, BIANCA)}
+    verifica("molti documenti: la tessera conta tutti i suoi (non al più 50)", t["documenti"]["conto"] == 61,
+             js(t["documenti"]))
+
+
+def parole_vuote(hub):
+    for testo in ("di", "è a", "il la le", "x"):
+        q = raccolte.cerca(hub, DARIO, "documenti", testo)
+        verifica(f"cerca: solo parole vuote ({testo!r}) → niente da cercare, non i più recenti",
+                 q.get("schede") == [] and "niente da cercare" in q.get("nota", ""), js(q)[:200])
+
+
+def tessera_admin(hub):
+    t = {x["id"]: x for x in raccolte.tessere(hub, DARIO)}
+    verifica("tessera: per chi amministra il conto è dei suoi e lo stato dice «tuoi» e quanti degli altri",
+             t["documenti"]["conto"] == 1 and "1 documento tuo" in t["documenti"]["stato"]
+             and "3 degli altri" in t["documenti"]["stato"], js(t["documenti"]))
+
+
+def voci_per_schermo():
+    """Le voci di «Scarica» per schermo: la pagina riletta su uno schermo non toglie le voci
+    dell'altro (prima un tetto unico di 400 per tutti)."""
+    sc = scarica.Scaricamenti(Config())
+    sc.registra(7, {"chiave": "documento:1", "_scarica": {"documento": {}, "formato": "word"}, "scarica": ["md"]}, "dario")
+    for i in range(scarica.MAX_VOCI + 50):
+        sc.registra(8, {"chiave": f"archivio:file:{i}", "_scarica": {"file_fn": lambda: None}, "scarica": ["originale"]}, "dario")
+    verifica("scarica: le voci di uno schermo restano anche se un altro ne registra più del tetto",
+             sc.voce(7, "documento:1") is not None and sc.voce(8, "archivio:file:0") is None
+             and sc.voce(8, f"archivio:file:{scarica.MAX_VOCI + 49}") is not None)
+
+
+def originale_riletto():
+    """Il file originale: riletto a ogni uso (il gettone non tiene i byte), nome e tipo dal file letto
+    davvero (una copia .jpg di un documento il cui attributo dice .pdf)."""
+    sc = scarica.Scaricamenti(Config())
+    letture = []
+
+    def leggi():
+        letture.append(1)
+        return b"\xff\xd8 foto", "jpg"
+    sc.registra(7, {"chiave": "archivio:file:1", "scarica": ["originale"],
+                    "_scarica": {"file_fn": leggi, "titolo": "ricevuta città", "estensione": "pdf"}}, "bianca")
+    g = sc.gettone({"id": 7, "proprietario": "bianca"}, "archivio:file:1", "originale")
+    tok = g["url"].rsplit("/", 1)[1]
+    nome, tipo, dati = sc.prendi(tok)
+    sc.prendi(tok)
+    verifica("scarica: l'originale col nome e il tipo del file letto davvero, riletto a ogni uso e non tenuto nel gettone",
+             nome == "ricevuta città.jpg" and tipo == "image/jpeg" and dati.startswith(b"\xff\xd8")
+             and len(letture) == 2 and sc._gettoni[tok]["dati"] is None, f"{nome} {tipo} {len(letture)}")
+
+
+def file_di_fuori():
+    """`Archivio.file_di` non esce mai dalla cartella dell'archivio e non supera archivio_max_mb."""
+    import subprocess
+    cart = TMP / "archivio-file-di"
+    fuori = TMP / "fuori-file-di"
+    cart.mkdir(parents=True, exist_ok=True)
+    fuori.mkdir(parents=True, exist_ok=True)
+    (fuori / "segreto.pdf").write_bytes(b"%PDF segreto")
+    (cart / "buono.pdf").write_bytes(b"%PDF buono")
+    grafo = Grafo(str(TMP / "grafo-file-di.db"))
+    arch = Archivio(Config(), grafo, cart, log=lambda *a: None, profili=lambda: [])
+    dati = b"%PDF buono"
+    doc = arch.registra("buono.pdf", hashlib.sha256(dati).hexdigest(), lettura.Estratto("bolletta", "testo"),
+                        {"tipo": "bolletta", "scheda": {"categoria": "luce"}})
+    arch._segna("buono.pdf", "x", (cart / "buono.pdf").stat(), "ok", nodo=doc)
+    verifica("file_di: il file dentro la cartella sì", arch.file_di(doc) == (cart / "buono.pdf").resolve())
+
+    def con_percorso(per):
+        with grafo.transazione() as db:
+            db.execute("UPDATE file SET percorso = ? WHERE nodo = ?", (per, doc))
+        return arch.file_di(doc)
+    giunzione = cart / "giunzione"
+    fatta = False
+    if os.name == "nt":
+        try:
+            fatta = subprocess.run(["cmd", "/c", "mklink", "/J", str(giunzione), str(fuori)],
+                                   capture_output=True, timeout=20).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            fatta = False
+    casi = [("../fuori-file-di/segreto.pdf", "con «..»"), ("..\\fuori-file-di\\segreto.pdf", "con «..\\»"),
+            (str(fuori / "segreto.pdf"), "percorso assoluto")]
+    if fatta:
+        casi.append(("giunzione/segreto.pdf", "giunzione NTFS verso fuori"))
+    for per, come in casi:
+        verifica(f"file_di: mai fuori dalla cartella ({come})", con_percorso(per) is None)
+    if not fatta:
+        print("SALTATA IN PARTE: giunzione NTFS non creata qui (file_di fuori dalla cartella con una giunzione)")
+    con_percorso("buono.pdf")
+    arch.max_byte = 4
+    verifica("file_di: mai oltre archivio_max_mb", arch.file_di(doc) is None)
+    arch.max_byte = 50 * 1024 * 1024
+    verifica("file_di: e di nuovo sì col tetto normale", arch.file_di(doc) is not None)
+    if fatta:
+        try:
+            os.rmdir(giunzione)                 # toglie la giunzione, non la cartella a cui punta
+        except OSError:
+            pass
 
 
 def main():
@@ -458,6 +581,13 @@ def main():
         server(doc, arch)
         print("— 7. l'annuncio")
         annuncio()
+        print("— 8. dalla revisione della PR #268")
+        molti_documenti()
+        parole_vuote(hub)
+        tessera_admin(hub)
+        voci_per_schermo()
+        originale_riletto()
+        file_di_fuori()
         arch.grafo.close() if hasattr(arch.grafo, "close") else None
     finally:
         shutil.rmtree(TMP, ignore_errors=True)

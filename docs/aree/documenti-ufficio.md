@@ -199,17 +199,22 @@ chiesto dopo, 3/3 dalla conversazione senza un altro tool. Prove: `prova_documen
 
 Decisione di Dario del 28/10: *il telefono deve poter ricevere i documenti*. Prima un documento
 preparato per una persona collegata dal telefono restava «sul server» e si scaricava solo se lo schermo
-personale era aperto quando la scheda arrivava. Ora ogni documento si ritrova in Le mie cose › Documenti
-e si scarica da lì in ogni momento (la pagina è in [schermi-telefono](schermi-telefono.md), con chi vede
-cosa). I limiti trovati e cosa se n'è fatto:
+personale era aperto quando la scheda arrivava. Ora la pagina Le mie cose › Documenti mostra gli ultimi 8
+documenti della persona, e tutti gli altri si trovano con «Cerca» (la ricerca li guarda tutti), e si
+scaricano da lì in ogni momento (la pagina è in [schermi-telefono](schermi-telefono.md), con chi vede
+cosa). *[storico: «ogni documento si ritrova in Le mie cose» fino alla revisione della PR #268; la pagina
+ne mostrava 8 e la ricerca guardava gli ultimi 50]* I limiti trovati e cosa se n'è fatto:
 
 - **La frase «sul server, perché il satellite collegato non riceve documenti»** con lo schermo personale
   chiuso: con uno schermo personale abbinato (`Schermi.personale_abbinato`, identità decisa dalla voce)
-  la frase è `frase_pagina`, «Lo trovi sul tuo telefono in Le mie cose, Documenti: per averlo tocca
-  «Scarica».» (regola `documento_sulla_pagina`), e così l'annuncio se il documento finisce in secondo piano
+  la frase è `frase_pagina`, «Lo trovi in Le mie cose, alla voce Documenti: per averlo tocca
+  «Scarica».» (regola `documento_sulla_pagina`; il documento appena fatto è il primo della pagina; senza
+  «sul tuo telefono», che fino alla revisione della PR #268 diceva anche a chi ha solo il PC personale:
+  gli schermi non dicono di che tipo sono), e così l'annuncio se il documento finisce in secondo piano
   (`annuncio_pagina`, `job.ha_pagina` messo dal tool). Con lo schermo aperto resta `frase_scheda`; senza
   schermi personali, o consegnato davvero al portatile, la frase di sempre. `documento_leggi` con
-  «mostramelo» e lo schermo chiuso dice al modello di aggiungere dove lo trova.
+  «mostramelo» e lo schermo chiuso dice al modello di aggiungere dove lo trova: nella pagina se è fra gli
+  ultimi 8, altrimenti «cercando «titolo»» (revisione della PR #268: la frase deve essere vera).
 - **I documenti fatti da Calliope si scaricano sempre**: la pagina rifà la scheda dal JSON dell'archivio
   (`Archive.recenti`), quindi «Scarica» funziona anche per un file finito sul portatile o per un documento
   di prima di un riavvio. La tessera chiamava `recenti` sul servizio invece che sull'archivio: col servizio

@@ -43,6 +43,10 @@ ARCHIVIO_PER_TIPO = 20
 # La ricerca: testo cercato al più così lungo, risultati al più tanti
 CERCA_MAX = 120
 CERCA_RISULTATI = 20
+# La ricerca guarda tutti i documenti fatti da Calliope della persona (di tutti per chi amministra),
+# fino a questo tetto: la pagina ne mostra gli ultimi DOCUMENTI_PAGINA, gli altri si trovano così
+# (revisione della PR #268: «lo trovi in Le mie cose» deve essere vero)
+CERCA_TRA = 5000
 # Nella pagina Lavori: i lavori finiti più recenti (memoria e, dopo un riavvio, la cartella dei
 # risultati) e i programmi; le schede del codice portano i file interi, quindi pochi
 LAVORI_FINITI_PAGINA = 6
@@ -230,13 +234,24 @@ def _documenti(hub, prof):
     doc = _servizio_documenti(hub)
     if doc is None:
         return None
-    recenti = doc.recenti(prof.id, 50) if _documenti_ammessi(prof) else []
+    ammessi = _documenti_ammessi(prof)
+    recenti = doc.recenti(prof.id, 50) if ammessi else []
     formati = sorted({str(r.get("formato") or "").upper() for r in recenti if r.get("formato")})
     ultimo = None
     for r in recenti:
         t = _quando_doc(r.get("modificato"))
         if t:
             ultimo = max(ultimo or 0, t)
+    if ammessi and hasattr(doc, "conta"):
+        # Il conto vero (non al più 50); per chi amministra la pagina mostra anche quelli degli
+        # altri: lo stato dice «tuoi» e quanti degli altri (revisione della PR #268)
+        n = doc.conta(prof.id)
+        stato = _piu(n, "documento", "documenti")
+        if getattr(prof, "admin", False):
+            altri = doc.conta(None) - n
+            stato = _piu(n, "documento tuo", "documenti tuoi") + (f" · {altri} degli altri" if altri else "")
+        return {"conto": n, "stato": stato + (" · " + ", ".join(formati[:3]) if formati else ""),
+                "ultimo": ultimo}
     return {"conto": len(recenti), "stato": _piu(len(recenti), "documento", "documenti")
             + (" · " + ", ".join(formati[:3]) if formati else ""), "ultimo": ultimo}
 
@@ -743,7 +758,7 @@ def _leggi_file(hub, prof, arch, doc_id: int):
         if p is None:
             return None
         try:
-            return p.read_bytes()
+            return p.read_bytes(), p.suffix.lstrip(".").lower()
         except OSError:
             return None
     return leggi
@@ -786,11 +801,12 @@ def _schede_archivio(hub, prof, arch, docs: list, chiave: str, titolo: str = "",
     from ..archivio import normalizza as nz
     from . import schede
     from .scarica import ORIGINALI
-    nomi_nodi = _nomi_nodi(arch, docs)
     gruppi: dict = {}
     for d in docs:
         k = ((d.get("attributi") or {}).get("tipo_doc") or "altro") if per_tipo else ""
         gruppi.setdefault(k, []).append(d)
+    # I nomi delle persone solo per le righe mostrate (revisione della PR #268)
+    nomi_nodi = _nomi_nodi(arch, [d for g in gruppi.values() for d in g[:ARCHIVIO_PER_TIPO]])
     ordine = [t for t in TIPI_PAGINA if t in gruppi] + [t for t in gruppi if t not in TIPI_PAGINA]
     out = []
     for tipo in ordine:
@@ -848,6 +864,9 @@ def _pagina_documenti(hub, prof) -> dict:
         out += mie
         if not mie:
             note.append("Calliope non ha ancora preparato documenti per te: chiedimeli a voce.")
+        elif hasattr(doc, "conta") and doc.conta(prof.id) > DOCUMENTI_PAGINA:
+            # Gli altri ci sono, e si trovano con «Cerca» (la ricerca li guarda tutti)
+            note.append(f"Qui ci sono i tuoi ultimi {DOCUMENTI_PAGINA} documenti: gli altri li trovi con «Cerca».")
         if admin and hasattr(doc, "recenti_di_tutti"):
             nomi = _nomi_persone(hub)
             altri: dict = {}
@@ -896,14 +915,21 @@ def cerca(hub, prof, raccolta: str, testo: str, log=print) -> dict:
 def _cerca_documenti(hub, prof, t: str) -> dict:
     from pathlib import Path
     from ..provenienza import parole
+    from ..archivio import normalizza as nz
+    from ..archivio.servizio import _VUOTE
     out = []
+    # Solo parole vere (revisione della PR #268): con «di», «è» o una lettera sola l'archivio non
+    # filtra e darebbe i più recenti come «trovati»
+    utili = [w for w in nz.piatto(t).split() if w not in _VUOTE and len(w) > 1]
+    if not utili:
+        return {"schede": [], "nota": "Non c'è niente da cercare: scrivi una parola più lunga."}
     mie = {w for w in parole(t) if len(w) > 1}
     admin = bool(getattr(prof, "admin", False))
     doc = _servizio_documenti(hub)
     trovati = 0
     if doc is not None and _documenti_ammessi(prof) and mie:
-        righe = (doc.recenti_di_tutti(50) if admin and hasattr(doc, "recenti_di_tutti")
-                 else doc.recenti(prof.id, 50))
+        righe = (doc.recenti_di_tutti(CERCA_TRA) if admin and hasattr(doc, "recenti_di_tutti")
+                 else doc.recenti(prof.id, CERCA_TRA))
         nomi = _nomi_persone(hub)
         for r in righe:
             if not admin and r.get("owner") != prof.id:

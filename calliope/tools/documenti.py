@@ -288,10 +288,20 @@ def _documento_leggi(ctx: ToolContext, documento: str = "", modo: str = "riassun
     pre = ("Non vedo un tuo schermo aperto, quindi diglielo a voce. "
            if modo == "mostra" else "")
     if modo == "mostra" and _su_pagina(ctx):
-        # Lo schermo personale è abbinato ma chiuso (28/10, #259): il documento c'è nella pagina
+        # Lo schermo personale è abbinato ma chiuso (28/10, #259): il documento c'è nella pagina.
+        # La pagina mostra gli ultimi `DOCUMENTI_PAGINA`; uno più vecchio si trova con «Cerca»
+        # (revisione della PR #268: la frase deve essere vera)
+        from ..schermi.raccolte import DOCUMENTI_PAGINA
         note_rule(ctx, "documento_sulla_pagina")
-        pre = ("Il suo schermo non è aperto: diglielo a voce, e aggiungi che lo trova sul suo "
-               "telefono in Le mie cose, Documenti, con «Scarica». ")
+        try:
+            in_pagina = any(r.get("id") == doc["id"]
+                            for r in svc.archive.recenti(prof.id, DOCUMENTI_PAGINA))
+        except Exception:  # noqa: BLE001
+            in_pagina = False
+        dove = ("in Le mie cose, alla voce Documenti" if in_pagina else
+                f"in Le mie cose, alla voce Documenti, cercando «{titolo}»")
+        pre = (f"Il suo schermo non è aperto: diglielo a voce, e aggiungi che lo trova {dove}, "
+               "con «Scarica». ")
     return {"ok": True, "documento": doc["id"], "titolo": titolo, "formato": formato,
             "contenuto": testo[:CONTENUTO_MAX], "tagliato": len(testo) > CONTENUTO_MAX,
             **({"sullo_schermo": True} if sullo_schermo else {}),

@@ -561,7 +561,7 @@ def server(svc, cas):
         verifica("server: nessuna chiave privata va alla pagina",
                  not any(str(k).startswith("_") for c in d.get("schede") or [] for k in c), json.dumps(list(sc.get("lavoro:L4", {}))))
         verifica("server: «Scarica» del documento registrato per lo schermo che ha chiesto la pagina",
-                 (sid_d, "lavoro:L4") in hub.scaricamenti._voci)
+                 hub.scaricamenti.voce(sid_d, "lavoro:L4") is not None)
         st, d = pr.chiedi(port, "/api/raccolte", sess_b, corpo={"raccolta": "cassetto"})
         sc = {c.get("titolo"): c for c in d.get("schede") or []}
         verifica("server: la pagina Cassetto di Bianca, con i file di Lia",

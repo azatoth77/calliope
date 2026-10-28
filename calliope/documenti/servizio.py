@@ -107,6 +107,14 @@ class Archive:
                 "ORDER BY modificato DESC, id DESC LIMIT ?", (owner, max(1, int(n)))).fetchall()
         return [dict(zip(campi, r)) for r in rows]
 
+    def conta(self, owner=None) -> int:
+        """Quanti documenti ha `owner` (tutti con None): la tessera Documenti (28/10, #259)."""
+        with self._lock:
+            if owner is None:
+                return int(self.db.execute("SELECT COUNT(*) FROM documenti").fetchone()[0])
+            return int(self.db.execute("SELECT COUNT(*) FROM documenti WHERE owner = ?",
+                                       (owner,)).fetchone()[0])
+
     def recenti_di_tutti(self, n: int = 10) -> list[dict]:
         """Gli ultimi `n` documenti di ogni persona, dal più recente (senza il contenuto): la
         pagina Documenti di chi amministra (28/10, #259, decisione di Dario)."""
@@ -348,12 +356,14 @@ class Documenti:
                                     f"scheda del tuo schermo: per {lo} tocca «Scarica»."),
                 # Con uno schermo personale abbinato ma chiuso (28/10, #259): il documento si
                 # ritrova nella pagina Documenti, non «sul server» (lo sceglie il tool, o
-                # l'annuncio, con Schermi.personale_abbinato)
+                # l'annuncio, con Schermi.personale_abbinato). Appena fatto è il primo della
+                # pagina. Senza dire quale schermo: può essere il telefono o il PC personale, e
+                # gli schermi non dicono di che tipo sono (revisione della PR #268)
                 "frase_pagina": (f"Ho preparato {name} «{doc['titolo']}»: {what}. {la.capitalize()} "
-                                 f"trovi sul tuo telefono in Le mie cose, Documenti: per {lo} tocca "
+                                 f"trovi in Le mie cose, alla voce Documenti: per {lo} tocca "
                                  f"«Scarica»."),
                 "annuncio_pagina": (f"È {pronto} {name} «{doc['titolo']}»: {what}. {la.capitalize()} "
-                                    f"trovi sul tuo telefono in Le mie cose, Documenti: per {lo} "
+                                    f"trovi in Le mie cose, alla voce Documenti: per {lo} "
                                     f"tocca «Scarica».")}
         leggi = (" Per dire cosa contiene, riassumerlo o mostrarlo di nuovo: documento_leggi.")
         return {"ok": True, "documento": doc_id, "formato": formato, "titolo": doc["titolo"],

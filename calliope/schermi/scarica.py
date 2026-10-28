@@ -50,8 +50,10 @@ ORIGINALI = {
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "txt": "text/plain; charset=utf-8",
 }
-MAX_VOCI = 400           # schede scaricabili ricordate (le più recenti; dal 28/10, #259, anche
-                         # una per riga dell'archivio di casa nella pagina Documenti)
+MAX_VOCI = 400           # schede scaricabili ricordate **per schermo** (le più recenti; dal 28/10,
+                         # #259, anche una per riga dell'archivio di casa nella pagina Documenti;
+                         # per schermo dalla revisione della PR #268: con un tetto unico la pagina
+                         # riletta su uno schermo toglieva le voci degli altri, e «Scarica» dava 404)
 MAX_GETTONI = 64
 USI = 3                  # richieste per gettone (un download che riprova, l'anteprima di iOS)
 AL_MINUTO = 20           # gettoni al minuto per schermo
@@ -95,10 +97,10 @@ def converti(sorgente: dict, formato: str, font=None, persona=None, avvisi=None)
         # Il file dell'archivio di casa (28/10, #259): la funzione rifà i permessi e lo legge
         if formato != "originale" or not callable(sorgente.get("file_fn")):
             raise Rifiuto(400, "formato non disponibile per questo documento")
-        dati = sorgente["file_fn"]()
-        if dati is None:
+        letto = sorgente["file_fn"]()
+        if letto is None:
             raise Rifiuto(404, "il file non c'è più, o non è più tuo da vedere")
-        return bytes(dati)
+        return bytes(letto[0] if isinstance(letto, tuple) else letto)
     if formato == "audio" or "avviso_audio" in sorgente:
         # L'audio di un avviso (14/10): solo da una scheda che ce l'ha, letto al clic dal cassetto
         if formato != "audio" or not sorgente.get("avviso_audio"):
@@ -179,7 +181,7 @@ class Scaricamenti:
     def __init__(self, cfg):
         self.cfg = cfg
         self._lock = threading.Lock()
-        self._voci: OrderedDict = OrderedDict()      # (sid, chiave) → voce
+        self._voci: dict[int, OrderedDict] = {}      # sid → (chiave → voce), MAX_VOCI ciascuno
         self._gettoni: OrderedDict = OrderedDict()   # gettone → dati
         self._richieste: dict[int, list[float]] = {}
         # Gli avvisi dei tutori (minori.Avvisi) per l'audio di un avviso; None = quelli del
@@ -197,18 +199,19 @@ class Scaricamenti:
         if not isinstance(sorgente, dict) or not chiave or not persona:
             return
         with self._lock:
-            self._voci.pop((sid, chiave), None)
-            self._voci[(sid, chiave)] = {"sorgente": sorgente, "persona": persona,
-                                         "formati": tuple(scheda.get("scarica") or ()),
-                                         "solo_persona": bool(sorgente.get("solo_persona")),
-                                         "titolo": str(sorgente.get("titolo") or
-                                                       scheda.get("titolo") or "Documento")}
-            while len(self._voci) > MAX_VOCI:
-                self._voci.popitem(last=False)
+            per = self._voci.setdefault(sid, OrderedDict())
+            per.pop(chiave, None)
+            per[chiave] = {"sorgente": sorgente, "persona": persona,
+                           "formati": tuple(scheda.get("scarica") or ()),
+                           "solo_persona": bool(sorgente.get("solo_persona")),
+                           "titolo": str(sorgente.get("titolo") or scheda.get("titolo") or "Documento")}
+            while len(per) > MAX_VOCI:
+                per.popitem(last=False)
 
     def voce(self, sid: int, chiave: str) -> dict | None:
         with self._lock:
-            return self._voci.get((sid, chiave))
+            per = self._voci.get(sid)
+            return per.get(chiave) if per is not None else None
 
     def gettone(self, schermo: dict, chiave: str, formato: str, amministra: bool = False) -> dict:
         """{"url", "nome", "scade"} per lo schermo che chiede; Rifiuto altrimenti."""
@@ -261,9 +264,27 @@ class Scaricamenti:
             g["usi"] += 1
         if valido is not None and not valido(g["sid"]):
             raise Rifiuto(404, "schermo non più abbinato")
+        if g["formato"] == "originale":
+            return self._originale(g)
         with g["lock"]:
             if g["dati"] is None:
                 g["dati"] = converti(g["sorgente"], g["formato"],
                                      getattr(self.cfg, "documenti_font", None),
                                      persona=g.get("persona"), avvisi=self.avvisi)
         return g["nome"], g["tipo"], g["dati"]
+
+    @staticmethod
+    def _originale(g: dict) -> tuple[str, str, bytes]:
+        """Il file dell'archivio di casa (revisione della PR #268): riletto dal disco a ogni uso
+        (il gettone non tiene in memoria fino a `archivio_max_mb` per 180 s), e nome e tipo
+        dall'estensione del file letto davvero (`file_fn` → (byte, estensione)), non da quella
+        del documento: con più copie il primo file buono può essere un altro."""
+        letto = g["sorgente"]["file_fn"]()
+        if letto is None:
+            raise Rifiuto(404, "il file non c'è più, o non è più tuo da vedere")
+        dati, ext = letto if isinstance(letto, tuple) else (letto, g["sorgente"].get("estensione"))
+        sorgente = {**g["sorgente"], "estensione": ext}
+        if estensione("originale", sorgente) == "bin":
+            raise Rifiuto(404, "questo file non si scarica da qui")
+        nome = nome_file(str(g["sorgente"].get("titolo") or "Documento"), "originale", sorgente)
+        return nome, tipo_mime("originale", sorgente), bytes(dati)

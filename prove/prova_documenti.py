@@ -529,15 +529,30 @@ def prova_rilettura():
     r, ctx = chiama_s(reg, svc, cfg, "documento_crea", {"formato": "excel", "richiesta": "spese"},
                       "Dario", "fammi una tabella delle spese", Schermi(personale=(), abbinati=("dario-id",)))
     f = r.get("risposta_finale") or ""
-    verifica("sul server col telefono abbinato ma chiuso: «in Le mie cose, Documenti», non «sul server»",
-             "Le mie cose, Documenti" in f and "«Scarica»" in f and "sul server" not in f
+    verifica("sul server con lo schermo abbinato ma chiuso: «in Le mie cose, alla voce Documenti», non «sul server»"
+             " né «telefono» (può essere il PC personale)",
+             "Le mie cose, alla voce Documenti" in f and "«Scarica»" in f and "sul server" not in f
+             and "telefono" not in f
              and "documento_sulla_pagina" in ctx.regole
              and not {"frase_pagina", "annuncio_pagina"} & set(r), f)
     r, ctx = chiama_s(reg, svc, cfg, "documento_leggi", {"modo": "mostra"}, "Dario", "fammelo vedere",
                       Schermi(personale=(), abbinati=("dario-id",)))
-    verifica("«mostramelo» col telefono chiuso: a voce, e dice dove lo trova",
-             "Le mie cose, Documenti" in (r.get("cosa_fare") or "") and "documento_sulla_pagina" in ctx.regole,
-             r.get("cosa_fare"))
+    verifica("«mostramelo» con lo schermo chiuso: a voce, e dice dove lo trova (è fra gli ultimi della pagina)",
+             "Le mie cose, alla voce Documenti, con" in (r.get("cosa_fare") or "") and "cercando" not in r.get("cosa_fare", "")
+             and "documento_sulla_pagina" in ctx.regole, r.get("cosa_fare"))
+    # Un documento che non è più fra gli ultimi della pagina (revisione della PR #268): la frase dice di
+    # cercarlo, perché la pagina mostra gli ultimi DOCUMENTI_PAGINA
+    from calliope.schermi.raccolte import DOCUMENTI_PAGINA
+    for i in range(DOCUMENTI_PAGINA):
+        svc.archive.add("dario-id", "Dario", "word", f"Appunto numero {i}", "x", f"Appunto {i}.docx",
+                        {"titolo": f"Appunto numero {i}", "blocchi": [{"tipo": "paragrafo", "testo": "x"}]}, None, "")
+    r, ctx = chiama_s(reg, svc, cfg, "documento_leggi", {"modo": "mostra", "documento": "spese di settembre"},
+                      "Dario", "fammi vedere le spese di settembre", Schermi(personale=(), abbinati=("dario-id",)))
+    verifica("«mostramelo» di un documento più vecchio degli ultimi della pagina: dice di cercarlo per titolo",
+             "cercando «Spese di settembre»" in (r.get("cosa_fare") or ""), r.get("cosa_fare"))
+    with svc.archive._lock:                     # le prove dopo vogliono i documenti di prima
+        svc.archive.db.execute("DELETE FROM documenti WHERE titolo LIKE 'Appunto numero %'")
+        svc.archive.db.commit()
     cfg_l, svc_l = servizio("portatile")
     reg_l = build_registry(documenti=svc_l.formati)
     r, _ = chiama_s(reg_l, svc_l, cfg_l, "documento_crea", {"formato": "excel",

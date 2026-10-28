@@ -1177,7 +1177,9 @@ Passo 2d del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-
    senza il filtro dei personali altrui, i lavori, gli sviluppi e i programmi degli altri. Ognuno dice di chi
    è. Gli altri continuano a vedere solo i propri, coi permessi della voce; gli ospiti e i conoscenti mai
    niente. **A voce non cambia nulla**: `documento_leggi`, `lavoro_stato` e i permessi di `puo_vedere`
-   restano com'erano (dallo schermo lo scritto vale al più «familiare»).
+   restano com'erano (dallo schermo lo scritto vale al più «familiare»). Dario ha confermato in modo
+   esplicito (commento sulla #259, 28/10) che dalla pagina chi amministra vede **tutto, anche i documenti
+   sensibili degli altri** (referti, documenti d'identità).
 
 - **La pagina** (`#/cose/documenti`, `raccolte._pagina_documenti`), a gruppi (`gruppo` nella scheda: la
   pagina scrive il titolo sopra la prima scheda del gruppo, `h3.gruppo-pagina`, solo testo):
@@ -1212,7 +1214,8 @@ Passo 2d del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-
   permessi sul profilo com'è adesso (`Archivio.documento_visibile`) e legge il file dentro
   `archivio_cartella` (`Archivio.file_di`: mai fuori dalla cartella, mai oltre `archivio_max_mb`). Le
   sorgenti per riga stanno in `_scarica_voci` (`registra_scaricabili`), una chiave per riga
-  (`archivio:file:<id>`); le voci ricordate per «Scarica» passano da 64 a 400.
+  (`archivio:file:<id>`); le voci ricordate per «Scarica» passano da 64 a 400, **per schermo** (vedi la
+  revisione della PR #268 qui sotto).
 - **Lavori e programmi per chi amministra** (`raccolte._lavori_degli_altri`): in coda alla pagina, per ogni
   altra persona di casa (minori compresi) gli sviluppi, i lavori in coda, in corso o fermi a una domanda, i
   programmi (2) e gli ultimi 3 finiti, in schede `lavoro` brevi con titolo, stato, domanda («aspetta la
@@ -1247,3 +1250,32 @@ una riga, ricerca e «Tutti», contrasto e clic a 1440×900 e 700×900; la rilet
 cassetto); `prova_raccolte` adattata (la tessera Documenti ha la pagina; «presto» è lo Studio). Da provare
 sul vero: lo scaricamento nella PWA dell'iPhone (#59), la pagina con l'archivio vero della DGX (quanti
 documenti per tipo, il tempo della pagina).
+- **Dalla revisione della PR #268** (da unire, con note; tutte sistemate prima di unire):
+  - *La frase deve essere vera.* La pagina mostra gli ultimi 8 documenti della persona e, se ce ne sono di
+    più, lo dice («gli altri li trovi con «Cerca»»); la ricerca guarda tutti i documenti fatti da Calliope
+    della persona (di tutti per chi amministra; tetto `CERCA_TRA`, 5000), non più gli ultimi 50.
+    `documento_leggi` «mostra» con lo schermo chiuso dice «cercando «titolo»» se il documento non è fra gli
+    ultimi 8.
+  - *Né «telefono» né «PC»*: la frase dice «in Le mie cose, alla voce Documenti». Gli schermi abbinati non
+    hanno un tipo affidabile (nome e stanza li sceglie chi abbina), quindi niente deduzioni.
+  - *Voci di «Scarica» per schermo* (`Scaricamenti._voci`: schermo → voci, `MAX_VOCI` 400 ciascuno): prima il
+    tetto era unico, e la pagina riletta su uno schermo (fino a ~180 righe dell'archivio) toglieva le voci
+    dell'altro, che al clic davano 404.
+  - *Ricerca con sole parole vuote* («di», «è», una lettera): «Non c'è niente da cercare: scrivi una parola
+    più lunga.», non i 20 più recenti come «trovati».
+  - *Tessera Documenti*: il conto vero (`Archive.conta`, non al più 50); per chi amministra lo stato dice
+    «N documenti tuoi · M degli altri», e il conto resta dei suoi.
+  - *File originale*: nome e tipo dal file letto davvero (`file_fn` dà byte ed estensione), non
+    dall'attributo del documento (con più copie il primo file buono può essere un altro); riletto dal disco
+    a ogni uso del gettone, che non tiene più fino a `archivio_max_mb` in memoria per 180 s.
+  - *Peso della pagina*: i nomi delle persone (`_nomi_nodi`) solo per le righe mostrate.
+  - **Limiti noti** che restano: per costruire la pagina `Archivio.documenti(chi)` legge e filtra tutto
+    l'archivio a ogni lettura (i permessi si decidono in Python, quindi niente `LIMIT` in SQL per tipo), e chi
+    amministra riceve fino a 8 schede `documento` complete per persona; con un archivio di migliaia di
+    documenti va misurato sulla DGX. Le voci di «Scarica» di uno schermo revocato restano in memoria fino al
+    riavvio (poche: una per schermo abbinato).
+  - Prove nuove in `prova_pagina_documenti`: 61 documenti (la nota, la ricerca che trova il più vecchio, la
+    tessera che li conta tutti), sole parole vuote, la tessera di chi amministra, le voci di due schermi,
+    l'originale riletto col tipo vero, `Archivio.file_di` mai fuori dalla cartella (`..`, `..\`, percorso
+    assoluto, giunzione NTFS creata con `mklink /J`) né oltre `archivio_max_mb`; in `prova_documenti`
+    «mostramelo» di un documento più vecchio degli ultimi 8.
