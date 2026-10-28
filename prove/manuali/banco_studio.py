@@ -1071,7 +1071,8 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
                          f"capovolte {v['capovolte_dette']} (false {v['capovolte_false']}) doppie "
                          f"{v['doppie_separate']} numeri {v['numeri_giusti']} istruzioni "
                          f"{v['istruzioni_dette_ostili']} (falsi {v['istruzioni_falsi_allarmi']}) "
-                         f"inventate {v['righe_inventate']} doppioni {v.get('doppioni_tolti')} errori {v['errori']} | "
+                         f"inventate {v['righe_inventate']} doppioni {v.get('doppioni_tolti')} "
+                         f"errori {v['errori']} | "
                          f"{v['secondi_pagina']} s/pag, token {v['token_in_pagina']}+"
                          f"{v['token_out_pagina']}")
             righe.append(f"  {'':20} {per}")
