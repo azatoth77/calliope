@@ -1912,6 +1912,8 @@ window.calliopeTelefono = {
   schermo, comando, opzioniVista, apriStrato, chiudiStrato, apriModulo, vaiA, vai, impostaAuto, apriIntera, chiudiIntera,
   // Dove sta ogni scheda (per le prove): la sezione guardata, il modo, le chiavi per elenco
   sezioni: () => Object.assign(SEZ.stato(), { modulo: car.modulo, intera: car.intera }),
+  // Le tessere di Le mie cose rilette subito (28/10), senza aspettare il minuto
+  aggiornaRaccolte: () => SEZ.aggiornaRaccolte(),
   schermoStato: () => ({ stato: schermo.stato, motivo: schermo.motivo, voluto: schermo.voluto,
     richieste: schermo.richieste, cadute: schermo.cadute, info: schermo.info,
     indicatore: statoSchermo(), tieni: st.tieni }),

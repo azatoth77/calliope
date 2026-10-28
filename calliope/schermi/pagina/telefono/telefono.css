@@ -515,3 +515,9 @@ button.grande {
 
 /* «Pulisci le mie schede» (08/10): un tasto secondario, non come quelli che aprono qualcosa */
 button.grande.secondario { background: transparent; color: var(--accento); border: 2px solid var(--accento); }
+
+/* Le mie cose (28/10, passo 2a): «‹ Le mie cose» più basso degli altri tasti; nella pagina di una
+   raccolta le schede intere, senza «Espandi» (la lista si spunta tutta) */
+.tasto.pagina-indietro { min-height: 2.75rem; font-size: 1rem; border-width: 1px; padding: 0.3rem 0.9rem; flex: none; }
+.telefono .pagina-schede > .pagina-car { max-height: none; }
+.telefono .pagina-schede > .pagina-car > .corpo { overflow: visible; }

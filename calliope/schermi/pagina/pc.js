@@ -184,5 +184,7 @@
     vai: (h) => SEZ && SEZ.vai(h),
     vaiA: (k) => SEZ && SEZ.vaiA(k),
     chat: () => !!chatEl,
+    // Le tessere di Le mie cose rilette subito (28/10), senza aspettare il minuto
+    aggiornaRaccolte: () => SEZ && SEZ.aggiornaRaccolte(),
   };
 })();

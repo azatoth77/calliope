@@ -310,6 +310,15 @@
     },
     sezioni() { return !!S.sezioni; },
     scegliAccento(nome) { return scegliAccento(nome); },
+    // Le tessere e le pagine di «Le mie cose» (28/10, passo 2a): {} → {tessere}, {raccolta} →
+    // {schede, nota}
+    async raccolte(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const r = await postSessione("/api/raccolte", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
   };
 
   // Nuovo accesso con il token, finché non riesce. Le sessioni del server sono in memoria:
@@ -453,6 +462,7 @@
     es.addEventListener("stanza", (ev) => { vivo(); mostraStanza(JSON.parse(ev.data)); });
     es.addEventListener("scrittura", (ev) => { vivo(); applicaScrittura(JSON.parse(ev.data)); });
     es.addEventListener("aspetto", (ev) => { vivo(); applicaAspetto(JSON.parse(ev.data)); });
+    es.addEventListener("tocco", (ev) => { vivo(); esitoTocco(JSON.parse(ev.data)); });
     es.addEventListener("contesto", (ev) => { vivo(); mostraContesto(JSON.parse(ev.data)); });
     es.addEventListener("gioco", (ev) => { vivo(); daServerGioco(JSON.parse(ev.data)); });
     es.addEventListener("chat", (ev) => { vivo(); chatDalServer(JSON.parse(ev.data)); });
@@ -1107,16 +1117,110 @@
     }
   });
 
+  // ─── la spunta della lista (28/10, passo 2a: POST /api/tocco, schermi/tocchi.py) ───
+  // Sugli schermi personali con le sezioni (il telefono e il PC personale) ogni voce è un tasto
+  // «checkbox»: il tocco va al server, che lo passa al ciclo della voce come una frase del
+  // proprietario (ToolRegistry.call). La voce resta segnata in attesa finché arriva la lista
+  // aggiornata (la scheda che manda il tool) o l'esito (evento SSE «tocco»); un errore si dice
+  // accanto, nella regione role="status" della scheda.
+  const SPUNTE = new Map();          // lista e voce → ms: le voci toccate in attesa
+  const ATTESA_SPUNTA_MS = 30000;
+  function spuntabile() { return !!(S.personale && (S.sezioni || CAROSELLO)); }
+  function chiaveSpunta(lista, voce) { return String(lista) + "\n" + String(voce); }
+  function inAttesa(lista, voce) {
+    const t = SPUNTE.get(chiaveSpunta(lista, voce));
+    return t !== undefined && Date.now() - t < ATTESA_SPUNTA_MS;
+  }
+  function vociDaSpuntare(c) {
+    const ul = el("ul", "voci spunte");
+    ul.setAttribute("aria-label", "Voci: tocca quella che hai preso per toglierla");
+    const presenti = new Set();
+    c.voci.forEach((v) => {
+      presenti.add(String(v.testo));
+      const li = el("li", v.nuova ? "nuova" : "");
+      const b = el("button", "spunta");
+      b.type = "button";
+      b.setAttribute("role", "checkbox");
+      const attesa = inAttesa(c.lista, v.testo);
+      b.setAttribute("aria-checked", attesa ? "true" : "false");
+      if (attesa) { b.classList.add("in-attesa"); b.setAttribute("aria-busy", "true"); }
+      b.dataset.lista = String(c.lista);
+      b.dataset.voce = String(v.testo);
+      const casella = el("span", "casella");
+      casella.setAttribute("aria-hidden", "true");
+      b.append(casella, el("span", "testo-voce", v.testo));
+      li.append(b);
+      ul.append(li);
+    });
+    // Le voci toccate che non ci sono più (la lista aggiornata è arrivata): finita l'attesa
+    for (const k of [...SPUNTE.keys()]) {
+      const [l, v] = k.split("\n");
+      if (l === String(c.lista) && !presenti.has(v)) SPUNTE.delete(k);
+    }
+    return ul;
+  }
+  function segnaSpunta(lista, voce, attesa, testo) {
+    const carte = new Set();
+    for (const b of document.querySelectorAll("button.spunta")) {
+      if (b.dataset.lista !== lista) continue;
+      const card = b.closest(".scheda");
+      if (card) carte.add(card);
+      if (b.dataset.voce !== voce) continue;
+      b.setAttribute("aria-checked", attesa ? "true" : "false");
+      b.classList.toggle("in-attesa", attesa);
+      if (attesa) b.setAttribute("aria-busy", "true"); else b.removeAttribute("aria-busy");
+    }
+    for (const card of carte) {
+      const es = card.querySelector(".esito-tocco");
+      if (!es) continue;
+      if (es.textContent !== testo) es.textContent = testo;
+      // L'attesa in tono tenue, un errore nel colore dell'allarme
+      es.classList.toggle("errore", !attesa && !!testo);
+    }
+  }
+  document.addEventListener("click", async (ev) => {
+    const b = ev.target.closest && ev.target.closest("button.spunta");
+    if (!b || b.getAttribute("aria-checked") === "true") return;
+    const lista = b.dataset.lista, voce = b.dataset.voce;
+    SPUNTE.set(chiaveSpunta(lista, voce), Date.now());
+    segnaSpunta(lista, voce, true, "Tolgo «" + voce + "»…");
+    let r;
+    try { r = await postSessione("/api/tocco", { tocco: "spunta_lista", lista, voce }); }
+    catch (e) { r = { status: 0, dati: {} }; }
+    if (r.status === 200) return;            // l'esito arriva con la lista aggiornata
+    SPUNTE.delete(chiaveSpunta(lista, voce));
+    segnaSpunta(lista, voce, false, String(r.dati.errore || MESSAGGI[r.status] || "Calliope non risponde: riprova tra poco."));
+  });
+  // L'esito dal ciclo (evento «tocco»): riuscito, la lista aggiornata è già arrivata; rifiutato
+  // (permesso, una voce sparita nel frattempo) la voce torna com'era con il motivo accanto
+  function esitoTocco(d) {
+    if (!d || d.tocco !== "spunta_lista") return;
+    const p = d.pagina || {};
+    const lista = String(p.lista || ""), voce = String(p.voce || "");
+    SPUNTE.delete(chiaveSpunta(lista, voce));
+    segnaSpunta(lista, voce, false, d.ok ? "" : String(d.errore || "Non ci sono riuscita: riprova."));
+  }
+
   const DISEGNA = {
     lista(c, corpo) {
       if (!c.voci || !c.voci.length) { corpo.append(el("p", "vuoto", "La lista è vuota.")); }
-      else {
+      else if (spuntabile() && c.lista) {
+        // La spunta (28/10, passo 2a: schermi/tocchi.py): solo sugli schermi personali con le
+        // sezioni, toccare vale come dire «ho preso il latte»
+        corpo.append(vociDaSpuntare(c));
+      } else {
         const ul = el("ul", "voci");
         c.voci.forEach((v) => ul.append(el("li", v.nuova ? "nuova" : "", v.testo)));
         corpo.append(ul);
       }
       if (c.altre) corpo.append(el("p", "nota", "e altre " + c.altre));
       if (c.tolti && c.tolti.length) corpo.append(el("p", "nota", "Tolto: " + c.tolti.join(", ")));
+      if (spuntabile() && c.lista) {
+        // Sempre nel DOM: VoiceOver legge i cambi di una regione role="status" già lì
+        const es = el("p", "esito-tocco", "");
+        es.setAttribute("role", "status");
+        corpo.append(es);
+      }
     },
     timer(c, corpo) {
       if (!c.timer || !c.timer.length) { corpo.append(el("p", "vuoto", "Nessun timer attivo.")); return; }
