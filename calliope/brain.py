@@ -3021,16 +3021,7 @@ class Brain:
                 self.tool_ctx.turno = self.turn_number
             except AttributeError:
                 pass
-            # La conversazione in corso nell'archivio (08/10): il modo cronologico di
-            # conversazione_cerca la salta, perché è già qui nella storia
-            try:
-                self.tool_ctx.conv_archivio = getattr(self._c(), "id_archivio", None)
-                # Gli ultimi scambi della conversazione chiusa per una pausa sono nei dati
-                # (09/10): conversazione_cerca non risponde «non trovo niente» per lei
-                r0 = self._c().riassunto
-                self.tool_ctx.conv_coda = isinstance(r0, dict) and r0.get("tipo") == "coda"
-            except AttributeError:
-                pass
+            self.contesto_conversazione()
         self._offer = None        # azione proposta da un tool in questa risposta
         rules = getattr(self.tool_ctx, "regole", None)
         if isinstance(rules, list):
@@ -6401,6 +6392,23 @@ class Brain:
         self.history.append({"role": "assistant",
                              "content": "Va bene, mi fermo. (argomento chiuso)"})
         self.salva_conversazione()
+
+    def contesto_conversazione(self):
+        """La conversazione in corso nel contesto dei tool: a ogni risposta, e dopo un tocco
+        che ha cambiato corsia (#266, revisione della PR #265: `conv_archivio` restava quello
+        della conversazione di prima fino alla risposta dopo)."""
+        if self.tool_ctx is None:
+            return
+        # La conversazione in corso nell'archivio (08/10): il modo cronologico di
+        # conversazione_cerca la salta, perché è già qui nella storia
+        try:
+            self.tool_ctx.conv_archivio = getattr(self._c(), "id_archivio", None)
+            # Gli ultimi scambi della conversazione chiusa per una pausa sono nei dati
+            # (09/10): conversazione_cerca non risponde «non trovo niente» per lei
+            r0 = self._c().riassunto
+            self.tool_ctx.conv_coda = isinstance(r0, dict) and r0.get("tipo") == "coda"
+        except AttributeError:
+            pass
 
     def record_tocco(self, testo: str, nome: str, argomenti: dict, risultato: str,
                      conferma: str = "Fatto."):

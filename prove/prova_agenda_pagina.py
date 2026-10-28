@@ -2,7 +2,10 @@
 passo 2b di docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md, issue #257 e #262 di #241;
 aree docs/aree/schermi-telefono.md, sicurezza-politica.md e memoria-agenda-liste.md).
 
-1. **Il vincolo dei tocchi** (`schermi/tocchi.py`, #262): i tocchi dell'elenco sono ammessi; un
+1. **Il vincolo dei tocchi** (`schermi/tocchi.py`, #262 e #266): passano solo i `TOCCABILI`,
+   ognuno col suo perché; gli `ESCLUSI` (dimentica, catture, rubrica, richiesta al tutore,
+   risposta all'agente, ciò che vuole la voce) rifiutati col motivo; un'«azione» con una fonte non
+   fidata e un tool solo per chi amministra no; come difesa in più, un
    tool pericoloso, senza classe, che legge dati non fidati, irreversibile, con un effetto oltre
    E2 o declassato dal suo `ToolSpec` no; un tocco nuovo su un tool non ammesso ferma l'import
    del modulo (l'avvio); `prepara` rifiuta un tocco che chiama un altro tool (403); il ciclo
@@ -19,7 +22,11 @@ aree docs/aree/schermi-telefono.md, sicurezza-politica.md e memoria-agenda-liste
 4. **Il ciclo** con un `ToolRegistry` vero e l'`Agenda` su disco: «+1 minuto» e «Ferma» cambiano
    il timer toccato e non l'ultimo messo (due timer senza nome), registro dei turni, storia che
    chiude con Calliope, la scheda aggiornata allo schermo del tocco, l'evento «tocco»; il timer
-   suonato nel frattempo: rifiuto con il motivo e nessun timer nuovo.
+   suonato nel frattempo: rifiuto con il motivo e nessun timer nuovo; ogni escluso e un tool
+   fuori dall'elenco rifiutati senza chiamarli (#266). Con l'hub vero e due stanze (#266): lo
+   schermo senza stanza manda il timer alla stanza predefinita, senza quella a tutti, con la sua
+   stanza a quella; il mittente col livello vero limitato come lo scritto; `conv_archivio` della
+   conversazione del tocco.
 5. **Il server** vero su 127.0.0.1: la pagina Agenda da `/api/raccolte`, il tocco del timer
    nell'ingresso con il bersaglio e la chiave, 409 per un timer che non c'è, oltre 30 tocchi 429.
 
@@ -509,6 +516,105 @@ def senza_bersaglio_e_corsia():
     a.db.close()
 
 
+def hub_vero():
+    """La scheda pubblica del timer con l'hub vero e due stanze (#266, nota 3 della revisione
+    della PR #265): lo schermo senza stanza va alla stanza predefinita come a voce, e senza quella
+    a tutti; con la sua stanza, a quella. Il mittente col livello vero, limitato come lo scritto."""
+    b, c, sc, liste, turni, voce, finto, _ = pr.prepara_ciclo()
+    cfg = Config()
+    cfg.config_dir = str(TMP)
+    cfg.memory_db = str(TMP / "memoria-hub.db")
+    cfg.schermi_stanza = "cucina"
+    hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db), log=lambda m: None)
+    hub.profilo = c.s.registry.by_id
+    cucina, _ = hub.archivio.crea_con_token("cucina")
+    salotto, _ = hub.archivio.crea_con_token("salotto")
+    tel, _ = hub.archivio.crea_con_token("telefono", proprietario="dario", proprietario_nome="Dario")
+    pc_d, _ = hub.archivio.crea_con_token("studio", proprietario="dario", proprietario_nome="Dario")
+    tel_b, _ = hub.archivio.crea_con_token("telefono", proprietario="bianca", proprietario_nome="Bianca")
+    hub._rinfresca()
+    c.s.schermi = b.tool_ctx.schermi = hub
+    c.ingresso = hub.ingresso
+    mittenti = []
+    vero_invia = hub.invia
+
+    def spia(scheda, mittente, forza=False):
+        mittenti.append(mittente)
+        return vero_invia(scheda, mittente, forza)
+    hub.invia = spia
+    a = agenda_nuova("hub-vero")
+    b.tool_ctx.agenda = a
+    fonti = types.SimpleNamespace(agenda=a)
+
+    def con(sid, k):
+        return [s for s in hub.storia(sid) if s.get("chiave") == k]
+
+    def giro(stanza, nome):
+        tid = a.add("timer", nome, time.time() + 300, owner="dario", owner_name="Dario")
+        k = schede.chiave_timer(a.get(tid))
+        item = scritto(tocchi.prepara({"tocco": "timer_piu", "chiave": k}, fonti), "timer_piu",
+                       persona="dario", sid=tel["id"])
+        item["stanza"] = stanza
+        n = len(mittenti)
+        pr.tocca(c, item)
+        return k, turni[-1], mittenti[n:]
+
+    try:
+        sc.current_speaker, sc.identified_by = "Bianca", "voce"
+        k, r, m = giro(None, "di 5 minuti")
+        verifica("hub vero: il tocco del timer riuscito (Dario dal telefono)", r.get("esito") == "tocco",
+                 json.dumps(r, ensure_ascii=False)[:300])
+        verifica("hub vero: senza la stanza dello schermo il timer va alla stanza predefinita (cucina), "
+                 "non al salotto", con(cucina["id"], k) and not con(salotto["id"], k),
+                 f"{len(con(cucina['id'], k))} {len(con(salotto['id'], k))}")
+        verifica("hub vero: e agli schermi personali di chi tocca, non a quelli di un'altra persona",
+                 con(tel["id"], k) and con(pc_d["id"], k) and not con(tel_b["id"], k))
+        verifica("hub vero: il mittente col livello vero limitato come lo scritto (chi amministra: familiare)",
+                 m and m[-1].livello == "familiare" and m[-1].persona == "dario" and m[-1].certo
+                 and m[-1].stanza is None and m[-1].schermo == tel["id"], str(m))
+        verifica("hub vero: chi tocca non ha preso il livello di chi parlava a voce prima",
+                 r.get("livello") == "familiare" and sc.current_speaker == "Bianca")
+        cfg.schermi_stanza = ""
+        k, r, m = giro(None, "di 7 minuti")
+        verifica("hub vero: senza stanza predefinita il timer va a tutti gli schermi, come a voce",
+                 r.get("esito") == "tocco" and con(cucina["id"], k) and con(salotto["id"], k),
+                 f"{r.get('esito')}")
+        cfg.schermi_stanza = "cucina"
+        k, r, m = giro("salotto", "di 9 minuti")
+        verifica("hub vero: con la stanza dello schermo il timer va a quella stanza (salotto), non alla cucina",
+                 r.get("esito") == "tocco" and con(salotto["id"], k) and not con(cucina["id"], k)
+                 and con(tel["id"], k), f"{r.get('esito')}")
+    finally:
+        liste.db.close()
+        a.db.close()
+
+
+def conv_archivio():
+    """`conv_archivio` segue la conversazione del tocco (#266, nota 4 della revisione della PR
+    #265): dopo il tocco è quella della persona che ha toccato, non quella di prima."""
+    b, c, sc, liste, turni, voce, hub, _ = pr.prepara_ciclo()
+    pr.CORRENTE["liste"] = liste
+    b.tool_ctx.conv_archivio = "conversazione-di-prima"
+    visti = []
+    vero = c.s.tools.call
+
+    def spia(nome, args, cx, livello):
+        visti.append(getattr(cx, "conv_archivio", None))
+        return vero(nome, args, cx, livello)
+    c.s.tools.call = spia
+    try:
+        pr.tocca(c, pr.voce_tocco("bianca"))
+    finally:
+        c.s.tools.call = vero
+    attesa = getattr(b.conv, "id_archivio", None)
+    verifica("conv_archivio: il tool del tocco vede la conversazione della persona, non quella di prima",
+             turni[-1].get("esito") == "tocco" and visti and visti[0] != "conversazione-di-prima"
+             and visti[0] == attesa, f"{visti} {attesa!r}")
+    verifica("conv_archivio: e resta quella dopo il tocco, come la conversazione di Brain",
+             b.tool_ctx.conv_archivio == getattr(b.conv, "id_archivio", None) != "conversazione-di-prima")
+    liste.db.close()
+
+
 # ─────────────────────────── 5. il server ───────────────────────────
 def server():
     cfg = Config()
@@ -562,6 +668,8 @@ def main():
         print("— 4. il ciclo")
         ciclo()
         senza_bersaglio_e_corsia()
+        hub_vero()
+        conv_archivio()
         print("— 5. il server")
         server()
     finally:
