@@ -4046,6 +4046,9 @@ class Brain:
         """La risposta a una frase di sfida: la frase pronta, oppure il tool proposto eseguito
         con i suoi argomenti e la sua frase finale. Entra nella storia come un turno normale."""
         self.history.append({"role": "user", "content": user_text})
+        # Le miniature di foto e file di questo turno (#272), come in _reply (revisione della
+        # PR #273)
+        self._lega_in_attesa(self.history[-1])
         self._turn_text = user_text
         self.last_tools, self.last_secrets, self.last_private = [], [], False
         # La foto o il file erano del turno della richiesta: questa frase porta solo le
@@ -6593,8 +6596,9 @@ class Brain:
         return self._send_cards(cards, tool)
 
     # Quanto aspetta una miniatura il messaggio del suo turno (29/10, #272): la frase entra nella
-    # storia subito dopo (stessa risposta); oltre, il turno non è venuto (un errore, un'altra corsia)
-    ATTESA_SCHEDE_S = 30.0
+    # storia subito dopo, ma in mezzo c'è la coda delle risposte (`corsia.entra_llm`, revisione
+    # della PR #273: con 30 s una coda lunga la buttava); oltre, il turno non è venuto
+    ATTESA_SCHEDE_S = 300.0
 
     def _in_attesa(self, card: dict, persona: str):
         """Una miniatura mandata prima della frase del turno: se il messaggio di questo turno c'è
@@ -6604,10 +6608,20 @@ class Brain:
                 and self.history and self.history[-1] is cur[0]:
             self.lega_scheda_al_turno(card, cur[0])
             return
-        att = [x for x in self.__dict__.get("_schede_attesa") or ()
-               if time.monotonic() - x[0] <= self.ATTESA_SCHEDE_S]
+        prima = list(self.__dict__.get("_schede_attesa") or ())
+        att = [x for x in prima if time.monotonic() - x[0] <= self.ATTESA_SCHEDE_S]
+        Brain._buttate(len(prima) - len(att), "scadute")
         att.append((time.monotonic(), persona, card))
+        Brain._buttate(max(0, len(att) - 8), "troppe")
         self.__dict__["_schede_attesa"] = att[-8:]
+
+    @staticmethod
+    def _buttate(n: int, perche: str):
+        """Una riga nel registro quando si buttano miniature in attesa (revisione della PR #273):
+        quante e perché, mai che cosa né di chi."""
+        if n > 0:
+            print(f"   [SCHERMI] {n} miniatur{'a' if n == 1 else 'e'} di foto o file non "
+                  f"legat{'a' if n == 1 else 'e'} alla Conversazione: {perche}", flush=True)
 
     def _lega_in_attesa(self, msg: dict):
         """Il messaggio della persona entra nella storia: le miniature in attesa si legano lì, solo
@@ -6622,9 +6636,18 @@ class Brain:
         except Exception:  # noqa: BLE001
             persona = None
         self.__dict__["_msg_turno"] = (msg, persona, time.monotonic())
+        motivi: dict[str, int] = {}
         for t0, chi, card in att:
-            if persona and chi == persona and time.monotonic() - t0 <= self.ATTESA_SCHEDE_S:
+            if not persona:
+                motivi["identità incerta"] = motivi.get("identità incerta", 0) + 1
+            elif chi != persona:
+                motivi["parla un'altra persona"] = motivi.get("parla un'altra persona", 0) + 1
+            elif time.monotonic() - t0 > self.ATTESA_SCHEDE_S:
+                motivi["scadute"] = motivi.get("scadute", 0) + 1
+            else:
                 self.lega_scheda_al_turno(card, msg)
+        for perche, n in motivi.items():
+            Brain._buttate(n, perche)
 
     def rilascia_schede(self, ok: bool) -> int:
         """Fine dell'attesa delle schede trattenute (`trattieni_schede`): con ok partono, nel
@@ -6707,6 +6730,9 @@ class Brain:
                     self._in_attesa(card, sender.persona)
                 else:
                     self.lega_scheda_al_turno(card)
+            # Il segno vale per questo invio: hub.ricorda tiene lo stesso dizionario, e «mostrami
+            # l'ultima» in un turno dopo non deve rimetterla in attesa (revisione della PR #273)
+            card.pop("_attesa", None)
         return out
 
     def lega_scheda_al_turno(self, card: dict, msg: dict | None = None):

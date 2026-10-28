@@ -12,7 +12,9 @@ I tool delle foto (05/10/2026, calliope/immagini.py, docs/ricerche/2026-10-05-im
   foto di prima («e nella prima foto?»).
 - `immagine_archivia(foto)`: «archiviala»: l'unico modo in cui una foto finisce su disco,
   nella cartella personale dell'archivio dei documenti di casa (calliope/archivio/), che la
-  legge con l'OCR al giro dopo.
+  legge con l'OCR al giro dopo. Dal 29/10 (decisione 0034) la miniatura di 144 px di ogni foto,
+  anche delle catture di `pc_guarda`, resta col turno nella Conversazione per 60 giorni (*storico,
+  fino al 28/10: nemmeno la miniatura finiva su disco*).
 """
 
 import datetime

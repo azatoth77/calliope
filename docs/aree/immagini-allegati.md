@@ -28,7 +28,9 @@
   conversazione nel messaggio dove sono arrivate (`immagini_storia: messaggio`, scelto
   misurando contro la sola descrizione: 2/2 contro 0/2 su «quanto costano le uova?», 0,94 s
   contro 1,80 s al turno dopo), solo in memoria, mai nel registro (numero, fonte, lato, kB);
-  su disco solo con «archiviala» (cartella personale dell'archivio). Gemma 4 e4b: ~1 token
+  su disco solo con «archiviala» (cartella personale dell'archivio). *[storico: dal 29/10 la
+  miniatura di 144 px resta col turno 60 giorni, anche per webcam e schermate: decisione
+  [0034](../decisioni/0034-miniature-nella-conversazione.md); la foto resta in memoria]* Gemma 4 e4b: ~1 token
   ogni 2 250 pixel (~540 a 1280 px), prima frase con una foto nuova 1,1–1,3 s, +0,5 s al turno
   dopo. Testo nella foto = dato non fidato: il 4B tentava `casa_comando` da un foglio 6/6,
   `_guardia_immagini` lo ferma 6/6 (le pericolose chiedono sempre conferma finché c'è una foto
@@ -213,7 +215,8 @@ Col 26B la promessa del 15/10 non torna nemmeno su main, anche perché il motivo
 (73 controlli a secco) e `prove/prova_cassetto_pagina.py` (la scheda nel browser vero).*
 
 **Prima**: foto e file vivevano solo nella conversazione (in memoria); su disco solo con
-«archivialo». **Ora** ogni allegato di una persona riconosciuta (foto, file, audio) entra anche
+«archivialo» *[storico; dal 29/10 anche la miniatura col turno, decisione
+[0034](../decisioni/0034-miniature-nella-conversazione.md)]*. **Ora** ogni allegato di una persona riconosciuta (foto, file, audio) entra anche
 nel suo **cassetto** sulla macchina di Calliope (la DGX) e ci resta `cassetto_giorni` (7); a
 scadenza **si elimina** e Calliope lo dice la volta dopo («Ho eliminato 2 file che non avevi
 tenuto»). La vita nella conversazione non cambia: il cassetto serve a ritrovarli nei giorni dopo.
@@ -545,3 +548,11 @@ degli schermi personali accanto alla frase della persona, con una miniatura picc
 gli 8 kB, mai il file), legata al turno giusto solo con l'identità certa e mai a un'altra persona; i file
 con nome, tipo e dimensione. Tenuta e «dimentica» del turno. Quello che vede il modello (`immagini_storia`)
 non cambia. Dettagli in [schermi-telefono](schermi-telefono.md).
+
+- **Dalla revisione della PR #273**: la regola è scritta nella decisione
+  [0034](../decisioni/0034-miniature-nella-conversazione.md) (di chi amministra, 28/10): tutte le
+  miniature, comprese le **catture di webcam e schermo** (`pc_guarda`), restano su disco 60 giorni col
+  turno, sapendo che lì possono esserci schermate di posta e documenti e i volti di ospiti e minori. La
+  foto vera resta in memoria. *Storico: fino al 28/10 «mai su disco» valeva anche per la miniatura
+  (`immagini.py`, `tools/immagini.py`, `schede.foto`).* «Elimina» del cassetto toglie il file ma non la
+  miniatura del turno, che resta fino ai 60 giorni o a «dimentica».

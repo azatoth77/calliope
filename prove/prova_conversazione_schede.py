@@ -655,6 +655,18 @@ def prova_foto():
     Brain._invia_schede(b3, b3.tool_ctx.schermi, [schede.foto(cam)], DARIO)
     verifica("cattura della webcam chiesta a voce: legata alla frase che l'ha chiesta",
              [x["tipo"] for x in storia3[0].get("_schede", [])] == ["foto"])
+    # Decisione 0034 (28/10): anche webcam e schermate restano con la miniatura
+    shot = Immagine(jpeg, 1280, 960, fonte="screenshot", persona="dario", n=5)
+    Brain._invia_schede(b3, b3.tool_ctx.schermi, [schede.foto(shot)], DARIO)
+    fonti = [(x.get("fonte"), str(x.get("src", ""))[:23]) for x in storia3[0].get("_schede", [])]
+    verifica("webcam e schermata (decisione 0034): legate con la loro miniatura",
+             len(fonti) == 2 and all(f[1] == "data:image/jpeg;base64," for f in fonti), fonti)
+    # «mostrami l'ultima» dopo: la scheda ricordata non è più in attesa
+    s8 = [{"role": "user", "content": "di prima"}]
+    b8 = brain_foto(s8, HubMittente(DARIO))
+    c8 = schede.foto(Immagine(jpeg, 1280, 960, persona="dario", n=6))
+    Brain.manda_schede(b8, [c8], "foto")
+    verifica("il segno _attesa vale per un invio solo (hub.ricorda tiene lo stesso dizionario)", "_attesa" not in c8)
     # 4. Cambio di persona in mezzo: la miniatura di Dario non va alla frase di Bianca
     storia4 = [{"role": "user", "content": "di Dario"}]
     hub4 = HubMittente(DARIO)
@@ -670,7 +682,7 @@ def prova_foto():
     storia4b = [{"role": "user", "content": "di prima"}]
     b4b = brain_foto(storia4b, HubMittente(DARIO))
     Brain.manda_schede(b4b, [schede.foto(img)], "foto")
-    b4b.__dict__["_schede_attesa"] = [(time.monotonic() - 120, "dario", x[2]) for x in b4b.__dict__["_schede_attesa"]]
+    b4b.__dict__["_schede_attesa"] = [(time.monotonic() - 600, "dario", x[2]) for x in b4b.__dict__["_schede_attesa"]]
     msg4b = {"role": "user", "content": "molto dopo"}
     storia4b.append(msg4b)
     Brain._lega_in_attesa(b4b, msg4b)

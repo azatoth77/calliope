@@ -7,9 +7,12 @@ dall'esecutore su richiesta.
   Content-Type; niente SVG né formati con script), la dimensione e i pixel (bomba di
   decompressione), gira la foto secondo l'EXIF, la riduce (lato lungo `immagini_lato_max`) e
   la riscrive in JPEG: i metadati (posizione GPS, modello del telefono) non passano.
-- `Immagine`: una foto della conversazione, solo **in memoria**: mai su disco, mai nel
+- `Immagine`: una foto della conversazione, solo **in memoria**: la foto mai su disco, mai nel
   registro dei turni (dove resta solo il numero, la fonte e la dimensione). Si salva solo con
-  «archiviala» (tool immagine_archivia → cartella dell'archivio).
+  «archiviala» (tool immagine_archivia → cartella dell'archivio). Dal 29/10 (decisione 0034)
+  la sua **miniatura di 144 px** resta col turno nell'archivio delle conversazioni per 60 giorni,
+  anche per webcam e schermate (*storico, fino al 28/10: «mai su disco» valeva anche per la
+  miniatura*).
 - `Album`: le foto della conversazione, numerate (1, 2, 3…: «la prima», «l'ultima foto»);
   vive dentro Brain e si azzera con la conversazione (Brain.end_conversation).
 - `InAttesa`: una foto mandata senza domanda aspetta la frase dopo della stessa persona

@@ -508,7 +508,11 @@ def risposta(domanda: str, contenuto: str, visibilita: str, chiave: str | None =
 
 def foto(img, didascalia: str = "") -> dict:
     """La miniatura (data URL JPEG, ~20 kB) di una foto della conversazione: solo agli schermi
-    personali di chi parla. Resta solo nella cronologia in memoria degli schermi."""
+    personali di chi parla; resta nella cronologia in memoria degli schermi. Dal 29/10 (decisione
+    0034) una miniatura più piccola (`_mini`, 144 px) resta col turno nell'archivio delle
+    conversazioni per 60 giorni, anche per webcam e schermate (*storico, fino al 28/10: «resta solo
+    nella cronologia in memoria degli schermi»*). Si fa qui e non al momento della legatura: la
+    scheda passa dal JSON dei risultati dei tool, dove non può portare né i byte né una funzione."""
     from ..immagini import FONTI, miniatura
     try:
         # La miniatura piccola per la Conversazione (29/10, #272): resta sul server finché

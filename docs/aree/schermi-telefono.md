@@ -1500,6 +1500,8 @@ Decisione di Dario del 28/10, dopo la revisione della PR #271 (che le aveva tolt
   144 px, JPEG qualità 55, fatta in `schede.foto` e tenuta sul server), mai la miniatura dello schermo né il
   file; oltre gli 8 kB di `CONV_SCHEDA_MAX` resta il solo rimando, senza i byte. Il file ha nome, tipo e
   dimensione, mai l'anteprima del testo né le note. Stessa tenuta (60 giorni) e stessa «dimentica» del turno.
+  Vale anche per le catture di webcam e schermo: decisione [0034](../decisioni/0034-miniature-nella-conversazione.md)
+  (*storico: fino al 28/10 nessuna miniatura andava su disco*).
 - **La pagina**: la foto è una scheda piccola come le altre, con la miniatura nell'anteprima e a schermo
   intero (`DISEGNA.foto`, solo un data URL JPEG). Quello che vede il modello (`immagini_storia`) non cambia:
   le copie non arrivano al modello e non contano nella stima dei token.
@@ -1510,3 +1512,20 @@ frase e quella mandata prima (in attesa), una miniatura che parte dopo la frase,
 chiesta a voce, il cambio di persona in mezzo, la frase di molto dopo, l'identità incerta, il turno
 riservato, una risposta riservata prima; in `prova_cronologia_pagina` la miniatura caricata nella
 risposta del suo turno e aperta a schermo intero. Da provare sul vero: lo scontrino dal telefono.
+- **Dalla revisione della PR #273**:
+  - *Bloccante*: le catture di webcam e schermo finivano su disco contro la regola scritta. Chi amministra
+    ha deciso (28/10) che restano, come tutte le miniature: decisione
+    [0034](../decisioni/0034-miniature-nella-conversazione.md); le frasi vecchie di `immagini.py`,
+    `tools/immagini.py` e `schede.foto` sono segnate come storiche.
+  - *Il tetto dell'attesa* sale da 30 a 300 s (`ATTESA_SCHEDE_S`): fra la miniatura e la frase c'è la coda
+    delle risposte (`corsia.entra_llm`). Una miniatura buttata (scaduta, un'altra persona, identità
+    incerta, più di otto) scrive una riga nel registro, `[SCHERMI] … non legata alla Conversazione:
+    <motivo>`, senza dati.
+  - `_attesa` vale per un invio solo: si toglie dalla scheda dopo l'uso, così «mostrami l'ultima» (`hub.ricorda`
+    tiene lo stesso dizionario) non la rimette in attesa per il turno dopo; `_sfida_reply` lega le
+    miniature come `_reply`.
+  - La miniatura piccola resta calcolata in `schede.foto`: la scheda passa dal JSON dei risultati dei tool,
+    dove non può portare i byte né una funzione per calcolarla dopo (pochi millisecondi per foto).
+  - «Elimina» del cassetto toglie il file, non la miniatura nel turno: resta fino ai 60 giorni o a
+    «dimentica» (le chiavi delle foto valgono solo nello stesso avvio, quindi toglierla dai turni non è
+    semplice).
