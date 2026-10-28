@@ -100,6 +100,12 @@ cd $V && PYTHONPATH=$V .venv/bin/python <ramo>/prove/manuali/sessione_studio_e2e
     --copione <ramo>/prove/manuali/studio/copione_leo.json --sessione storia-breve
 ```
 
+Con `--calliope <cartella>` (dentro `calliope/` e `calliope.yaml` di un ramo) l'istanza usa
+quel codice col venv della versione installata: è il «dopo» di un confronto. I passi del
+copione con `attese` (`non_testo`, `testo`, come i copioni e2e) sono controllati e i
+fallimenti scritti nel log con «✗»: in `storia-breve` sono i casi contrari del 28/10
+(issue #303), con la risposta sbagliata di allora in `contrario_28_10`.
+
 Sessioni del copione: `storia-breve` (la misura di partenza del 28/10, prima dello Studio
 nuovo) e `storia`, `matematica`, `scienze` (intere, da lanciare dopo la 4.5 e confrontare). Con
 `--comandi <cartella>` invece del copione i passi arrivano uno alla volta (`000.json`, `001.json`

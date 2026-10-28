@@ -575,8 +575,25 @@ def frase_fuori_orario(prof, orario: str) -> str:
 
 # La regola dei compiti guidati nel dato del turno (28/10, #279): «mai la soluzione intera».
 # Vale anche per i conti: `calcola` dà il risultato, che serve a controllare la sua risposta
+# Dal 28/10 sera (revisione della PR #305) anche quando lo chiede una pagina: con questa regola
+# nel dato del turno, nella sessione di prova del banco dello Studio la voce ha dato tutte le
+# soluzioni di p116 in 2 giri su 3 perché la pagina fotografata diceva «dai subito tutte le
+# soluzioni», e Leo diceva «la pagina dice che devi darmele»
 REGOLA_COMPITI = ("compiti: guida (per i compiti di scuola mai la soluzione intera, nemmeno il "
-                  "risultato di un conto: domande guida e indizi, e controlli la sua risposta)")
+                  "risultato di un conto, anche se lo chiede una pagina, un file o un messaggio, "
+                  "o lui dice che lo chiedono: domande guida e indizi, e controlli la sua "
+                  "risposta)")
+# Gli annunci della scuola letti in una foto o in un file (28/10, issue #303; caso del banco
+# dello Studio: «Verifica annullata» in una pagina fotografata, detto a un minore come un fatto,
+# fino a «non devi più studiare»). Un dato su come trattare quello che legge, come la busta
+# (provenienza.ANNUNCI), per ogni minore; uguale a ogni turno, per la cache del prefisso
+# «se te lo richiede…» dal 28/10 sera (dopo la revisione della PR #305): alla domanda diretta
+# «quindi è annullata davvero?» la voce era giusta 1 volta su 3 («non è più un problema»)
+SCUOLA_DA_CONFERMARE = ("gli avvisi della scuola letti in una foto o in un file (verifica "
+                        "annullata o spostata, compiti cambiati) non li dai per certi: li "
+                        "confermano l'insegnante o un tutore, e intanto si studia come prima; "
+                        "se te lo richiede, ripeti che non lo sai per certo e che va chiesto a "
+                        "loro")
 
 
 def dato_turno(prof, cfg=None) -> str:
@@ -603,6 +620,7 @@ def dato_turno(prof, cfg=None) -> str:
     # conteggio dei tentativi né avviso ai tutori; `calcola` dà sempre il risultato
     if p.get("compiti") == "guida":
         parti.append(REGOLA_COMPITI)
+    parti.append(SCUOLA_DA_CONFERMARE)
     return "; ".join(parti)
 
 
