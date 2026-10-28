@@ -1543,7 +1543,7 @@ per tocco e modulo; il timer finito; `TOCCHI` immutabile; il numero riusato dopo
 `prova_telefono_schermo` (la pagina Agenda a due dimensioni, col contrasto e il testo tagliato per
 scheda).
 
-## La miniatura della foto accanto alla frase nella Conversazione (29/10, issue #272, ramo `issue-272-miniatura-foto`)
+## La miniatura della foto accanto alla frase nella Conversazione (28/10, issue #272, ramo `issue-272-miniatura-foto`)
 
 Decisione di Dario del 28/10, dopo la revisione della PR #271 (che le aveva tolte: `_conv` False).
 
@@ -1564,7 +1564,7 @@ Decisione di Dario del 28/10, dopo la revisione della PR #271 (che le aveva tolt
   144 px, JPEG qualità 55, fatta in `schede.foto` e tenuta sul server), mai la miniatura dello schermo né il
   file; oltre gli 8 kB di `CONV_SCHEDA_MAX` resta il solo rimando, senza i byte. Il file ha nome, tipo e
   dimensione, mai l'anteprima del testo né le note. Stessa tenuta (60 giorni) e stessa «dimentica» del turno.
-  Vale anche per le catture di webcam e schermo, e dal 29/10 la foto intera si tiene 60 giorni nel
+  Vale anche per le catture di webcam e schermo, e dal 28/10 la foto intera si tiene 60 giorni nel
   cassetto: decisione [0034](../decisioni/0034-miniature-nella-conversazione.md) (*storico: fino al 28/10
   nessuna foto né miniatura andava su disco*).
 - **La pagina**: la foto è una scheda piccola come le altre, con la miniatura nell'anteprima e a schermo

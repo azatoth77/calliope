@@ -1268,7 +1268,7 @@ class Conservazione:
                # Le impronte per satellite (15/10): imparate dall'uso, si tolgono con i dati
                # conservati; l'impronta della registrazione resta
                "impronte_satellite": self._svuota_impronte(persona_id),
-               # Le foto tenute con la Conversazione (29/10, decisione 0034): file e righe
+               # Le foto tenute con la Conversazione (28/10, decisione 0034): file e righe
                "foto": self._svuota_foto(persona_id)}
         arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)

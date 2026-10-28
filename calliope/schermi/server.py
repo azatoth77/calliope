@@ -1071,7 +1071,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if not isinstance(dati, dict):
             return _json({"errore": "dati non validi"}, 400)
         if "foto" in dati:
-            # La foto di una miniatura (29/10, decisione 0034): lo stato e, finché è tenuta, la
+            # La foto di una miniatura (28/10, decisione 0034): lo stato e, finché è tenuta, la
             # foto intera, solo dai propri schermi personali
             fid = dati.get("foto")
             if not isinstance(fid, int) or isinstance(fid, bool) or fid < 0:

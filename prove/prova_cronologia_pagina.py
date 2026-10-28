@@ -99,7 +99,7 @@ class Ambiente:
         self.arch = ArchivioConversazioni(TMP / "conversazioni.db", giorni=30, avvia=False,
                                           log=lambda m: None)
         self.svs = Sviluppi(cfg, TMP / "sviluppi", log=lambda m: None)
-        # Il cassetto delle foto tenute (29/10, decisione 0034)
+        # Il cassetto delle foto tenute (28/10, decisione 0034)
         from calliope.cassetto import Cassetto
         self.cassetto = Cassetto(str(TMP / "cassetto.db"), str(TMP / "cassetto"), giorni=7,
                                  giorni_foto=60, log=lambda m: None)
@@ -517,7 +517,7 @@ def conversazione_tel(p, amb):
                      " visibile: !document.getElementById('scrivi-apri').hidden})") or {}
     verifica("Scrivi resta spento in Conversazione senza una conversazione a voce",
              stato.get("spento") is True or stato.get("visibile") is False, stato)
-    # La miniatura della foto accanto alla frase (29/10, #272): la copia piccola del turno
+    # La miniatura della foto accanto alla frase (28/10, #272): la copia piccola del turno
     import io
     from PIL import Image
     from calliope.immagini import Immagine

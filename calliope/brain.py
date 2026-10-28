@@ -6595,7 +6595,7 @@ class Brain:
     def manda_schede(self, cards, tool: str) -> list[dict]:
         """Le schede agli schermi personali di chi parla, come quelle dei tool (le miniature
         delle foto e dei file del turno: calliope/ciclo.py). Partono prima che la frase della
-        persona entri nella storia (29/10, #272; *storico: dalla revisione della PR #271 al 28/10
+        persona entri nella storia (28/10, #272; *storico: dalla revisione della PR #271 al 28/10
         sera non si legavano mai*): restano in attesa (`_attesa`) e si legano al messaggio della
         persona di questo turno quando entra (`_lega_in_attesa`), mai a quello di prima."""
         for c in cards if isinstance(cards, list) else [cards]:
@@ -6603,7 +6603,7 @@ class Brain:
                 c["_attesa"] = True
         return self._send_cards(cards, tool)
 
-    # Quanto aspetta una miniatura il messaggio del suo turno (29/10, #272): la frase entra nella
+    # Quanto aspetta una miniatura il messaggio del suo turno (28/10, #272): la frase entra nella
     # storia subito dopo, ma in mezzo c'è la coda delle risposte (`corsia.entra_llm`, revisione
     # della PR #273: con 30 s una coda lunga la buttava); oltre, il turno non è venuto
     ATTESA_SCHEDE_S = 300.0
