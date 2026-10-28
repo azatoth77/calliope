@@ -11,8 +11,8 @@ vero su 127.0.0.1, cassetto in una cartella temporanea.
   può (non sullo zip), pulsanti di almeno 44 px;
 - «Tieni ancora 7 giorni» → la frase nella scheda e la scadenza spostata; «Tieni» sul PDF →
   nella cartella personale dell'archivio, la scheda aggiornata al suo posto senza quel file;
-  «Elimina» sulla foto; «Elimina tutti» al primo tocco chiede il secondo e non elimina, al
-  secondo sì, e la scheda resta con la frase;
+  dal 28/10 sera (seguito della #301) eliminare si fa a voce: niente «Elimina» né «Elimina
+  tutti», la nota «Per eliminare un file dimmelo a voce.» (il 403 del server: prova_cassetto);
 - lo schermo personale di Teodora non riceve niente, e i suoi file restano;
 - nessun errore JavaScript né violazione della CSP. ~15 s.
 """
@@ -51,6 +51,7 @@ STATO = f"""(() => {{
   }}));
   const bott = [...s.querySelectorAll('button')].map(b => b.getBoundingClientRect().height);
   return {{voci, tutti: [...s.querySelectorAll('.cassetto-tutti button')].map(b => b.textContent),
+          notaVoce: (s.querySelector('.nota-cassetto') || {{}}).textContent || '',
           esito: (s.querySelector('.esito-cassetto') || {{}}).textContent || '',
           nota: [...s.querySelectorAll('.corpo > p.sotto')].map(p => p.textContent),
           altezza: Math.min(...bott)}};
@@ -116,12 +117,13 @@ def prova(exe, hub, web, cas):
         verifica("nome, quando e da dove, scadenza", "bolletta luce.pdf" == pdf_v.get("nome")
                  and "Arrivato" in pdf_v.get("testo", "") and "dal telefono" in pdf_v.get(
                      "testo", "") and "Scade domani" in pdf_v.get("testo", ""), pdf_v)
-        verifica("«Tieni» solo dove si può (non sullo zip); Tieni ancora ed Elimina sempre",
-                 pdf_v.get("pulsanti") == ["Tieni", "Elimina", "Tieni ancora 7 giorni"]
-                 and zip_v.get("pulsanti") == ["Elimina", "Tieni ancora 7 giorni"],
+        verifica("«Tieni» solo dove si può (non sullo zip); Tieni ancora sempre; niente «Elimina» (28/10 sera)",
+                 pdf_v.get("pulsanti") == ["Tieni", "Tieni ancora 7 giorni"]
+                 and zip_v.get("pulsanti") == ["Tieni ancora 7 giorni"],
                  (pdf_v.get("pulsanti"), zip_v.get("pulsanti")))
-        verifica("in alto «Elimina tutti» e «Tieni tutti»",
-                 st.get("tutti") == ["Elimina tutti", "Tieni tutti"], st.get("tutti"))
+        verifica("in alto solo «Tieni tutti», e la nota: eliminare si fa a voce",
+                 st.get("tutti") == ["Tieni tutti"] and st.get("notaVoce") == "Per eliminare un file dimmelo a voce.",
+                 (st.get("tutti"), st.get("notaVoce")))
         verifica("pulsanti di almeno 44 px", (st.get("altezza") or 0) >= 44, st.get("altezza"))
         dario.pompa(1.2)
         PCP.foto(dario, "cassetto-1280x800.png")
@@ -141,19 +143,9 @@ def prova(exe, hub, web, cas):
         verifica("«Tieni» sul PDF: nella cartella personale dell'archivio, la scheda senza",
                  bool(ok) and len(salvati) == 1 and salvati[0].parent.name == "Dario"
                  and cas.prendi("dario", pdf) is None, (salvati, stato(dario).get("voci")))
-        # Elimina tutti: due tocchi
-        clic(dario, "Elimina tutti")
-        dario.pompa(0.3)
-        st = stato(dario)
-        verifica("«Elimina tutti» al primo tocco chiede il secondo e non elimina",
-                 "Tocca di nuovo per eliminarli tutti" in st.get("tutti", [])
-                 and len(cas.elenco("dario")) == 2, st.get("tutti"))
-        clic(dario, "Tocca di nuovo per eliminarli tutti")
-        ok = aspetta(lambda: stato(dario).get("voci") == [], 8)
-        st = stato(dario)
-        verifica("al secondo tocco: eliminati, la scheda resta con la frase",
-                 bool(ok) and not cas.elenco("dario") and cas.prendi("dario", f) is None
-                 and "Eliminati 2 file." in st.get("nota", []), st)
+        # Un «elimina» mandato a /api/cassetto è 403 (prova_cassetto, sul server): qui i file restano
+        verifica("nessun file eliminato dalla pagina", cas.prendi("dario", f) is not None
+                 and cas.prendi("dario", z) is not None)
         verifica("i file di Teodora restano", cas.prendi("teodora", a) is not None)
         for p, nome in ((dario, "Dario"), (teodora, "Teodora")):
             p.pompa(0.3)

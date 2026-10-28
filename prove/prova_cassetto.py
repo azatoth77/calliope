@@ -1114,13 +1114,15 @@ def prova_server():
         verifica("…e la scheda aggiornata sullo schermo personale (stessa chiave, due file)",
                  st and st[-1]["tipo"] == "cassetto" and len(st[-1]["voci"]) == 2
                  and st[-1]["chiave"].startswith("cassetto:"), st[-1:] and st[-1].get("voci"))
+        # Dal 28/10 sera (seguito della #301) eliminare dal cassetto si fa a voce: dai pulsanti 403
+        # con la frase, niente toccato (fino ad allora «elimina tutti» qui eliminava)
         r = post(mio, {"azione": "elimina", "id": [a, b]})
-        st = hub.storia(next(s["id"] for s in hub.abbinati() if s.get("proprietario") == "dario"))
-        verifica("/api/cassetto elimina tutti: la scheda resta con la frase, senza file",
-                 r.status_code == 200 and not cas.elenco("dario") and st[-1]["voci"] == []
-                 and st[-1]["nota"] == "Eliminati 2 file.", (r.text, st[-1:]))
+        verifica("/api/cassetto elimina: 403 serve_voce con «dimmelo a voce», i file restano",
+                 r.status_code == 403 and r.json().get("codice") == "serve_voce"
+                 and "a voce" in r.json().get("errore", "") and cas.prendi("dario", a) is not None
+                 and cas.prendi("dario", b) is not None, r.text)
         verifica("i file di Teodora restano", cas.prendi("teodora", c) is not None)
-        r = post(mio, {"azione": "elimina", "id": ["1; DROP TABLE"]})
+        r = post(mio, {"azione": "ancora", "id": ["1; DROP TABLE"]})
         verifica("/api/cassetto: id non numerici ignorati", r.status_code == 409)
     finally:
         srv.ferma()
@@ -1189,9 +1191,13 @@ def prova_tutore_pagina():
         verifica("«Tieni» del tutore: nella cartella del tutore (la figlia l'archivio non lo vede)",
                  r.status_code == 200 and [p.parent.name for p in tenuti] == ["Dario"]
                  and cas.prendi("bianca", b1) is None, (r.text, tenuti))
-        r = post(dario, {"azione": "elimina", "id": [c1]})
+        r = post(dario, {"azione": "ancora", "id": [c1]})
         verifica("tutore verificato, ragazzo di 15 anni: anche lui (14/10, ogni età)",
-                 r.status_code == 200 and cas.prendi("carlo", c1) is None, r.text)
+                 r.status_code == 200 and cas.prendi("carlo", c1) is not None, r.text)
+        r = post(dario, {"azione": "elimina", "id": [c1]})
+        verifica("…ma eliminare dai pulsanti no, nemmeno al tutore verificato: 403 serve_voce",
+                 r.status_code == 403 and r.json().get("codice") == "serve_voce"
+                 and cas.prendi("carlo", c1) is not None, r.text)
         r = post(dario, {"azione": "elimina", "id": [d1, b2]})
         verifica("file di persone diverse insieme: 409, niente toccato",
                  r.status_code == 409 and cas.prendi("dario", d1) is not None
@@ -1201,9 +1207,9 @@ def prova_tutore_pagina():
         verifica("un altro adulto verificato dalla voce, non tutore: 403",
                  r.status_code == 403 and cas.prendi("bianca", b2) is not None, r.text)
         hub.conversazioni.voce("dario", "voce")
-        r = post(dario, {"azione": "elimina", "id": [d1]})
-        verifica("i suoi file: come prima", r.status_code == 200
-                 and cas.prendi("dario", d1) is None, r.text)
+        r = post(dario, {"azione": "ancora", "id": [d1]})
+        verifica("i suoi file: come prima («Tieni ancora»)", r.status_code == 200
+                 and cas.prendi("dario", d1) is not None, r.text)
         hub.conversazioni.chiudi()
         r = post(dario, {"azione": "elimina", "id": [b2]})
         verifica("conversazione chiusa («esci»): di nuovo 403 per i file della figlia",

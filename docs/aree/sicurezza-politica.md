@@ -1969,3 +1969,40 @@ gli orari col suo livello, foto e file di un minore fuori orario rifiutati, `con
 poi «sì» scritto mai eseguito, l'ospite dallo schermo di stanza e il modulo rifiutati); `prova_corsie` (dopo un
 riavvio Dario scrive dopo un ospite su `sat:cucina`: due conversazioni separate); `prova_scritto_conversazione`,
 `prova_scritto`, `prova_immagini`, `prova_allegati`, `prova_scritto_calliope` adattate.
+
+## Lo scritto e le irreversibili: le eccezioni e il cassetto (28/10 sera, seguito della #301, ramo `issue-301-scritto-seguito`)
+
+Decisioni di chi amministra del 28/10 sera, sui due dubbi lasciati dalla PR #304 e dalla sua seconda revisione.
+
+- **Aprire un programma sul PC si fa anche per iscritto.** `pc_apri_app` è E3 nella tabella (`valore.EFFETTI`)
+  ma esce da `irreversibile_scritto` con un'eccezione esplicita e motivata (`tools/spec.SCRITTO_AMMESSI`: «si
+  chiude subito, non cancella e non manda niente»). Restano a voce eseguire codice (`programma_esegui`), i
+  lavori con codice (`lavoro_affida` con `tipo` codice o programma), il collaudo di uno sviluppo
+  (`sviluppo_collauda`) e le estensioni senza effetto dichiarato (E3 per difetto). Nella vista dello sviluppo
+  il pulsante «Prova con…» non c'è più (portava a «confermo solo a voce») e la nota dice «Provare, approvare e
+  attivare si fa a voce.» *[storico: fino al 28/10 sera «Prova con…» metteva la frase nella casella, e la nota
+  diceva «Approvare e attivare si fa a voce.»]*
+- **Eliminare dal cassetto si fa a voce.** `cassetto_gestisci` con `azione` elimina (o cancella, butta) è E3
+  (`valore._cassetto`; tieni e tieni ancora restano E2), quindi per iscritto e col tocco Calliope chiede la
+  voce. Anche il pulsante: dalla scheda del cassetto «Elimina» ed «Elimina tutti» sono tolti (restano «Tieni»,
+  «Tieni tutti» e «Tieni ancora», con la nota «Per eliminare un file dimmelo a voce.»), e un «elimina» mandato
+  comunque a `POST /api/cassetto` è 403 `serve_voce` con «Per eliminarlo dimmelo a voce, con una frase
+  intera.», senza toccare il file, anche al tutore verificato dalla voce. *[storico: fino al 28/10 sera E2 e i
+  due pulsanti, «Elimina tutti» con due tocchi]*
+  - **L'attrito a voce** (sonda col Brain vero, la politica per valore accesa, prima con E2 e poi con E3):
+    nessuno in più. «Elimina il file che ti ho mandato ieri.» con la voce riconosciuta si esegue subito come
+    prima (`valore_voce`, niente sfida); il «Sì.» breve alla domanda del tool («Nel tuo cassetto: vuoi che
+    elimini…?») non bastava già prima («Per i tuoi file devo riconoscere bene la tua voce: chiedimelo con una
+    frase intera.», un controllo del tool), e il «sì» detto con la voce riconosciuta elimina; dalla zona grigia
+    lo stesso rifiuto di prima. Nessuna frase di sfida nuova.
+- **La frase del cancello** è ora «Questa la confermo solo a voce, con una frase intera.» (era «… solo a voce:
+  dimmelo.»): sul PC, dove la risposta allo scritto si dice e apre la finestra d'ascolto, un «Sì.» detto subito
+  dopo, sotto `speaker_min_voice_s`, eredita lo schermo come chi parla, e «dimmelo a voce» a chi aveva appena
+  parlato non si capiva (nota della seconda revisione della PR #304).
+
+Prove: `prova_scritto_senza_voce` (`pc_apri_app` passa con il suo perché; `programma_esegui`, `lavoro_affida`
+con codice e un'estensione senza effetto no, `lavoro_affida` di ricerca sì; elimina dal cassetto scritto e
+toccato no, tieni e ancora sì, a voce sì; «Elimina il file di ieri» scritto nel ciclo vero con la frase nuova);
+`prova_cassetto` (`/api/cassetto` elimina 403 `serve_voce` anche al tutore verificato, i file restano);
+`prova_cassetto_pagina` (niente «Elimina» né «Elimina tutti», la nota); `prova_vista_sviluppo_pagina` (niente
+«Prova con…», la nota nuova, «Chiedi all'agente…» nella casella).

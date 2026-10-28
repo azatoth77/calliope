@@ -560,6 +560,7 @@ body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
 .scheda-allegato .anteprima-allegato { margin-top: 0.6rem; color: var(--tenue); white-space: pre-wrap; }
 /* Il cassetto dei file (08/10): un carosello orizzontale, una voce per file */
 .cassetto-tutti { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.8rem; }
+.nota-cassetto { color: var(--tenue); font-size: 0.95rem; flex-basis: 100%; }
 .esito-cassetto { color: var(--tenue); font-size: 1rem; }
 .cassetto-carosello {
   display: flex; gap: 0.8rem; overflow-x: auto; scroll-snap-type: x mandatory;

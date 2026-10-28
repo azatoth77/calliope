@@ -1614,9 +1614,11 @@
 
   // ─── Il cassetto dei file (08/10, calliope/cassetto.py) ───
   // Un carosello: anteprima (solo un data URL JPEG per le foto, altrimenti la sigla), nome,
-  // quando e da dove, scadenza; Tieni, Elimina, Tieni ancora; in alto Elimina tutti e Tieni
-  // tutti. Tutto come testo. I pulsanti vanno a /api/cassetto; la scheda aggiornata arriva dal
-  // server (stessa chiave). «Elimina tutti» vuole un secondo tocco
+  // quando e da dove, scadenza; Tieni e Tieni ancora; in alto Tieni tutti. Tutto come testo. I
+  // pulsanti vanno a /api/cassetto; la scheda aggiornata arriva dal server (stessa chiave).
+  // Eliminare si fa a voce (28/10 sera, seguito della #301: non si disfa, e dallo schermo
+  // personale di un altro non deve bastare un tocco): niente «Elimina» né «Elimina tutti», la
+  // nota lo dice. *Storico: fino al 28/10 sera «Elimina» e «Elimina tutti» (due tocchi)*
   function bottoneCassetto(testo, azione, ids, cls) {
     const b = el("button", "piccolo-bottone tasto-cassetto" + (cls ? " " + cls : ""), testo);
     b.type = "button";
@@ -1638,7 +1640,7 @@
     const tasti = c.sola_lettura !== true;
     const tutti = el("div", "cassetto-tutti");
     if (tasti) {
-      tutti.append(bottoneCassetto("Elimina tutti", "elimina", ids, "conferma"));
+      tutti.append(el("span", "nota-cassetto", "Per eliminare un file dimmelo a voce."));
       if (voci.some((v) => v.tieni)) {
         tutti.append(bottoneCassetto("Tieni tutti", "tieni", ids.filter((i, k) => voci[k].tieni)));
       }
@@ -1666,7 +1668,6 @@
       if (tasti) {
         const p = el("div", "cassetto-pulsanti");
         if (v.tieni) p.append(bottoneCassetto("Tieni", "tieni", [v.id]));
-        p.append(bottoneCassetto("Elimina", "elimina", [v.id]));
         p.append(bottoneCassetto("Tieni ancora " + giorni + " giorni", "ancora", [v.id]));
         f.append(p);
       }
@@ -3840,14 +3841,15 @@
     };
     if (v.stato === "aperta") {
       tasto("A che punto siamo?", "svilInvia", "A che punto è lo sviluppo?");
-      if (v.fase === "collaudo" || v.fase === "revisione") tasto("Prova con…", "svilScrivi", "Prova con ");
+      // «Prova con…» non c'è più (28/10 sera, seguito della #301): provare esegue codice (E3) e
+      // dallo schermo si conferma solo a voce
       if (v.fase !== "analisi") tasto("Chiedi all'agente…", "svilScrivi", "Perché ");
     } else if (v.stato === "sospesa" && /^S\d+$/.test(v.id || "")) {
       tasto("Riprendi lo sviluppo", "svilInvia", "Riprendiamo lo sviluppo " + v.id);
     }
     if (!CAROSELLO) tasto("Vista normale", "svilEsci", "1");
     const nota = el("p", "nota-svil", (attivo ? "" : "I comandi si accendono in una conversazione: di' «" + S.parola + "». ")
-      + "Approvare e attivare si fa a voce.");
+      + "Provare, approvare e attivare si fa a voce.");
     nota.setAttribute("role", "status");
     const box = el("div", "piede-svil");
     box.append(bar, nota);

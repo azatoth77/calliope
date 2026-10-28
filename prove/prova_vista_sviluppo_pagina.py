@@ -23,7 +23,7 @@ Schermo del computer (1280×800 e 1920×1080):
 - al giro 2 i tetti sono di 48 passate e 60 minuti; il riepilogo dice «correzione 1, riparte
   dalla versione provata» e i numeri dello sviluppo intero;
 - comandi: «A che punto siamo?» manda la frase come scritta (solo con la conversazione aperta),
-  «Prova con…» la mette nella casella; nessun pulsante per approvare o attivare;
+  «Chiedi all'agente…» la mette nella casella, «Prova con…» non c'è più (28/10 sera, si prova a voce); nessun pulsante per approvare o attivare;
 - sviluppo chiuso: lo schermo esce dalla vista; uno schermo di un'altra persona non cambia.
 Telefono (375×812): la vista si apre a schermo intero da sola, in una colonna, con testo ≥ 16 px
 e niente di lato; la scheda resta in Le mie cose; chiusa con «Chiudi», un tocco sulla scheda la riapre; il
@@ -329,14 +329,19 @@ def pc(exe, srv, hub, web, svs, lavori):
         verifica("con la conversazione aperta i comandi si accendono", bool(ok))
         while hub.ingresso.prendi() is not None:
             pass
+        # Dal 28/10 sera (seguito della #301): provare esegue codice (E3), dallo schermo solo a voce
+        verifica("niente «Prova con…» nel collaudo; la nota dice che provare, approvare e attivare si fa a voce",
+                 not p.valuta("!!document.querySelector(\"#principale [data-svil-scrivi='Prova con ']\")")
+                 and "Provare, approvare e attivare si fa a voce." in (p.valuta(
+                     "document.querySelector('#principale .nota-svil').textContent") or ""))
         clic(p, "#principale [data-svil-invia]")
         arr = aspetta(lambda: hub.ingresso.prendi(), 5)
         verifica("«A che punto siamo?» manda la frase come scritta",
                  bool(arr) and "A che punto è lo sviluppo?" in json.dumps(arr, ensure_ascii=False),
                  json.dumps(arr, ensure_ascii=False)[:200])
-        clic(p, "#principale [data-svil-scrivi='Prova con ']")
+        clic(p, "#principale [data-svil-scrivi='Perché ']")
         val = aspetta(lambda: p.valuta("document.getElementById('scrivi-testo').value"), 3)
-        verifica("«Prova con…»: la frase da finire nella casella dello scritto", val == "Prova con ", val)
+        verifica("«Chiedi all'agente…»: la frase da finire nella casella dello scritto", val == "Perché ", val)
         # ── chiusura ──
         svs.chiudi(sv, "uscita")
         ok = aspetta(lambda: p.valuta("!document.body.classList.contains('in-vista-sviluppo') && "
