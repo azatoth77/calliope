@@ -10,7 +10,7 @@
 
 | Stadio | Libreria | Dove |
 |---|---|---|
-| Schermi (schede su PC, tablet, TV) | Starlette + uvicorn senza extra (puro Python) in un thread, SSE verso una pagina kiosk locale; abbinamento a codice in SQLite (stesso file della memoria) | `calliope/schermi/` → `Schermi` (`hub.py`: destinatari, visibilità, consegna), `ArchivioSchermi` (`archivio.py`), `schede.py`, `ServerSchermi` (`server.py`), `pagina/`, `load_schermi`; HTTPS in rete `tls.py`, ponte TLS del satellite `ponte.py`; schede degli esercizi (POST `/api/esercizio`, area [minori](minori.md)) e del cassetto (POST `/api/cassetto`, area [immagini-allegati](immagini-allegati.md)), dall'08/10; segno della compagnia `Schermi.voce(compagnia=…)` (09/10); segno della stanza `Schermi.stanza_segno`, `stanza_per` (13/10); porte occupate dopo un riavvio `calliope/porte.py` → `socket_in_ascolto` (02/10); tool in `calliope/tools/schermi.py`; terminale `python -m calliope.schermi` |
+| Schermi (schede su PC, tablet, TV) | Starlette + uvicorn senza extra (puro Python) in un thread, SSE verso una pagina kiosk locale; abbinamento a codice in SQLite (stesso file della memoria) | `calliope/schermi/` → `Schermi` (`hub.py`: destinatari, visibilità, consegna), `ArchivioSchermi` (`archivio.py`), `schede.py`, `ServerSchermi` (`server.py`), `pagina/`, `load_schermi`; HTTPS in rete `tls.py`, ponte TLS del satellite `ponte.py`; scheda del cassetto (POST `/api/cassetto`, area [immagini-allegati](immagini-allegati.md)), dall'08/10 (*storico: fino al 28/10 anche le schede degli esercizi, POST «/api/esercizio», tolte con la #279*); segno della compagnia `Schermi.voce(compagnia=…)` (09/10); segno della stanza `Schermi.stanza_segno`, `stanza_per` (13/10); porte occupate dopo un riavvio `calliope/porte.py` → `socket_in_ascolto` (02/10); tool in `calliope/tools/schermi.py`; terminale `python -m calliope.schermi` |
 | Telefono (satellite nel browser, PWA, dal 03/10) | stessa porta degli schermi: WebSocket di uvicorn con `websockets` sans-I/O e lo stesso protocollo dei satelliti; nel browser onnxruntime-web 1.30 in WebAssembly (Silero VAD e wake word), AudioWorklet, Web Audio, Screen Wake Lock API; CA di casa con `openssl` | `calliope/schermi/telefono.py` → `rotte`, `PonteWs`, `stato`; «Prova il microfono» `telefono_diagnostica.py`; `calliope/schermi/pagina/telefono/` (`telefono.js`, `voce.js`, `microfono.js`, `schermo-acceso.js` (`SchermoAcceso`, `diagnosi`: schermo acceso, dal 04/10), `sw.js`, manifest; dal 27/10 cinque sezioni con la barra (`sincronizza` smista per sezione, `disponi`, `vaiA`, router `vai`/`applicaPercorso`, `impostaAuto`; *storico: dal 04/10 una vista sola col carosello*), strati modulo/scrivi (il menu è la sezione Io dal 27/10) e, dal 06/10, la scheda a schermo intero (`apriIntera`, `disegnaIntera`, `chiudiIntera`); schede da `schermo.js` con `data-carosello` ed eventi `calliope:*`); `ServerSatelliti.prendi` / `lascia` / `per_pc`; `tls.certificato_telefono`; terminale `python -m calliope.schermi --certificato` |
 | Scrivere invece di parlare (moduli e casella sugli schermi personali, dal 03/10) | POST `/api/scrivi` e `/api/modulo` del server degli schermi (sessione in un'intestazione, JSON, solo HTTPS in rete); controlli dei codici in Python e in JS (`schermo.js`, condiviso col telefono); dal 05/10 solo durante una conversazione a voce | `calliope/schermi/moduli.py` → `Moduli`, `Ingresso`, `controlla_campo`, `offri`, `completa`, `oscura`; `Ufficio.completa_modulo` / `rubrica_da_modulo`; `tools/spec.serve_la_voce`; ciclo in `main.py` (`scritto`); `calliope/schermi/conversazione.py` → `scrittura_consentita`, `Conversazioni`; `Schermi.scrittura_consentita` (il punto unico, anche per le foto) |
 | Cruscotto di chi amministra (fase 1, sola lettura, dal 06/10) | — (solo libreria standard: registro dei turni, SQLite in sola lettura, `indice.json` delle estensioni) | `calliope/schermi/cruscotto.py` → `Cruscotto` (`amministra`, `dati`), `LettoreTurni`, `versione_in_uso`, `tipo_errore`; GET `/api/cruscotto` (`server.py`); `Schermi.cruscotto`; scheda locale `cruscotto` in `schermo.js` (`apriCruscotto`, `impostaAmministra`), voce di Io del telefono (dal 27/10; prima del menu); `latenza.leggi_file` |
@@ -453,6 +453,10 @@ risultato del lavoro appena annunciato (che non sta in quell'archivio).
   risultato più recente, senza la regola.
 
 ## Scheda degli esercizi (08/10, ramo `esercizi-pilota`)
+
+*[storico: le schede `esercizio` ed `esercizi_riepilogo`, il loro disegno e `POST /api/esercizio` sono
+tolti il 28/10 con gli esercizi (#279, decisione [0035](../decisioni/0035-studio.md)); la tessera Studio di Le mie cose resta e dice
+«arriva presto», senza conto, fino al passo 4.5 (#284).]*
 
 Tipo `esercizio` (personale, chiave `esercizi:<persona>`) e `esercizi_riepilogo` (per i tutori),
 disegnati in `schermo.js` (`DISEGNA.esercizio`, `DISEGNA.esercizi_riepilogo`): domanda grande,
@@ -1666,6 +1670,18 @@ niente regole per l'auto, tocchi ≥ 44 px, la riga dello stato per i lettori); 
 Cassetto); `prova_casa_ha` (la guida rimasta sul server con le tre frasi e nell'archivio). Da provare sul
 vero: l'iPhone 13 mini con e senza lo «Zoom schermo», e VoiceOver su «Parla».
 
+## Tolte le schede degli esercizi; la tessera Studio «arriva presto» (28/10, issue #279, ramo `issue-279-via-esercizi`)
+
+Con il vecchio processo degli esercizi (decisione [0035](../decisioni/0035-studio.md), area
+[minori](minori.md)) escono dagli schermi `POST /api/esercizio`, `hub.esercizi`, i tipi
+`esercizio` ed `esercizi_riepilogo` (`DISEGNA`, `NOMI_TIPO`, `SEZIONE_DI_TIPO` in `schede.py` e in
+`schermo.js`, la regola «viva», `TIPI_RIMANDO` e `TIPI_APRONO` di `sezioni.js`, gli stili in
+`schermo.css` e `telefono.css`), la ripresa degli esercizi chiusi nella cronologia e «esercizio» di
+`schermo_mostra`. La tessera Studio di Le mie cose resta al suo posto, senza conto («—») e con lo
+stato «arriva presto»; la pagina dice «presto» come le altre non ancora fatte, fino al passo 4.5
+(#284). Cache del service worker `calliope-telefono-pagina-v18` (era v17). Prove: `prova_raccolte`,
+`prova_sezioni`, `prova_cronologia_schede`, `prova_telefono_schermo` (la tessera nella pagina vera).
+
 ## Il modello sa del telefono a sezioni (28/10, issue #288, #289, #290 e #291, ramo `issue-288-telefono-consapevole`)
 
 Casi veri della DGX del 28/10 (versione 0fbda07), dal telefono, epic #251: alle **13:53** «Apri lo schermo
@@ -1728,10 +1744,10 @@ con quello che il telefono e lo schermo personale fanno davvero.
   parla» invece di «lo salva sul PC». *[storico: fino al 28/10 «sul server, perché il satellite collegato non
   riceve documenti» e «sul server, nella cartella Lavori, perché …»]*
 - **#291, le versioni nei log.** La riga «[SATELLITE] collegato» dice «protocollo N» (dal «ciao») e, per il
-  telefono, «pagina calliope-telefono-pagina-v18»: la pagina legge il nome della cache del service worker in
+  telefono, «pagina calliope-telefono-pagina-v19»: la pagina legge il nome della cache del service worker in
   uso (`caches.keys()`) e lo manda nel «ciao»; il server lo tiene solo se ha quella forma. Prima apertura o
   certificato non fidato: niente pagina nella riga.
-- Cache del service worker `calliope-telefono-pagina-v18` (era v17).
+- Cache del service worker `calliope-telefono-pagina-v19` (era v18: la v18 era della #279 e di questo ramo insieme, unite nello stesso giorno).
 
 Prove: `prova_telefono_consapevole` (nuova, livello 1: la nota, il prompt e la stima, i due casi del 28/10 nel
 Brain con il modello finto, il prefisso, `cosa=pagina` con permessi ed età, le frasi in tre casi, le versioni

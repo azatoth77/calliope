@@ -23,7 +23,7 @@ partita viva) e il cruscotto (solo della pagina).
 Quando uno schermo personale si collega, `rivedi` (chiamata da hub.Schermi.ripresa) controlla
 ogni scheda contro lo stato vero: un modulo chiuso, un timer finito si saltano; l'avanzamento
 di un lavoro che non lavora più diventa la scheda finale («interrotto», «finito»), senza il
-flusso; gli esercizi chiusi diventano il loro riepilogo; uno sviluppo si ricostruisce da
+flusso; uno sviluppo si ricostruisce da
 `Sviluppi` (la vista dello sviluppo torna subito dopo un riavvio); il cassetto tiene solo i
 file che ci sono ancora; un programma che girava prima di un riavvio è fermato; un avviso di
 pericolo al tutore (14/10, rifiniture) tiene «Scarica l'audio» se il file del cassetto c'è ancora
@@ -398,25 +398,6 @@ def rivedi(hub, voce: dict, persona: str) -> dict | None:
             return svs.scheda(sv)
         except Exception:  # noqa: BLE001
             return None
-    if tipo == "esercizio":
-        srv = getattr(hub, "esercizi", None)
-        s = None
-        try:
-            s = srv.sessione(persona) if srv is not None else None
-        except Exception:  # noqa: BLE001
-            s = None
-        if s is not None and k == f"esercizi:{persona}":
-            try:
-                return srv.scheda(s)
-            except Exception:  # noqa: BLE001
-                pass
-        # Chiusi: il loro riepilogo, senza la domanda
-        for x in ("domanda", "scelte", "esercizio", "tipo_risposta", "campo"):
-            c.pop(x, None)
-        if c.get("stato") == "aperta":
-            c["stato"] = "finita"
-            c["esito"] = {"testo": "Esercizi chiusi."}
-        return c
     if tipo == "lavoro" and c.get("avanzamento") and c.get("stato") in ("in_coda", "in_corso",
                                                                        "in_attesa"):
         lv = _lavoro(hub, k.removeprefix("lavoro:"))

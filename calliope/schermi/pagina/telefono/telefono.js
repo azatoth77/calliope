@@ -450,7 +450,7 @@ function suMostra(c) {
     setTimeout(() => sch().chiudiPartita(c.partita), 0);
     return;
   }
-  // Un gioco o gli esercizi che Calliope apre si usano subito: la loro sezione si apre da sola
+  // Un gioco che Calliope apre si usa subito: la sua sezione si apre da sola
   if (vis.modo === "sezioni" && SEZ.apriSeServe(c)) return;
   if (performance.now() - car.toccato > opzioniVista.manoMs) mostraIn(k, vis.sezione);
 }
@@ -1798,7 +1798,7 @@ window.addEventListener("pageshow", (ev) => {
 
 // ───────────────────────────── avvio ─────────────────────────────
 // La versione della pagina nei log del server (28/10, #291): il nome della cache del service
-// worker in uso («calliope-telefono-pagina-v18»), detto nel «ciao»; senza cache (certificato non
+// worker in uso («calliope-telefono-pagina-v19»), detto nel «ciao»; senza cache (certificato non
 // fidato, prima apertura) niente
 function versionePagina() {
   try {

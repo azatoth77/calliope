@@ -15,14 +15,14 @@ cruscotto); le due tabelle devono restare uguali.
    gioco sì; il timer che corre sì, scaduto o annullato no; il
    promemoria entro un'ora sì, fra due ore no; il lavoro in coda, in corso o in attesa sì, finito
    no; il programma in corso; lo sviluppo aperto; il modulo aperto sì, inviato no; il gioco non
-   chiuso; gli esercizi aperti o in pausa, finiti no; la voce nuova aperta; lista, documento e
+   chiuso; la voce nuova aperta; lista, documento e
    casa appena cambiati sì, dopo due minuti no; risposta e calcolo mai (sono l'ultima risposta,
    non vive). `sezioneDi`: vale la sezione del server; una sezione inventata va nella
    conversazione.
 4. **Il router** (sezioni.js `percorsoDa`, comune a telefono e PC dal passo 1b, con node): #/cose/liste, il frammento vuoto e uno
    sconosciuto (Adesso), la chiave di una scheda con i due punti nel percorso; una sezione
    nascosta sul telefono di un minore (passo 1c) è Adesso. In Adesso le schede con uno stato o
-   dei campi (gioco, esercizi, sviluppo, cassetto, chat, voce nuova) sono solo un rimando.
+   dei campi (gioco, sviluppo, cassetto, chat, voce nuova) sono solo un rimando.
 5. **Il layout compatto** (28/10, #277, misurato nella pagina vera da prova_telefono_schermo e
    prova_cronologia_pagina): la media query di telefono.css vale in verticale a 375×812, 375×667,
    320×568 e 320×693 (iPhone 13 mini con lo «Zoom schermo»), non a 390×844 né a 412×915 né in
@@ -135,9 +135,6 @@ const casi = [
   ["gioco chiuso", {tipo: "gioco", stato: "chiuso"}, false],
   ["gioco chiuso su questa pagina (✕)", {tipo: "gioco", partita: "p1"}, false, (p) => p === "p1"],
   ["un altro gioco aperto", {tipo: "gioco", partita: "p2"}, true, (p) => p === "p1"],
-  ["esercizi aperti", {tipo: "esercizio", stato: "aperta"}, true],
-  ["esercizi in pausa", {tipo: "esercizio", stato: "pausa"}, true],
-  ["esercizi finiti", {tipo: "esercizio", stato: "finita"}, false],
   ["voce nuova aperta", {tipo: "conoscente", aperta: true}, true],
   ["voce nuova decisa", {tipo: "conoscente", aperta: false}, false],
   ["lista appena cambiata", {tipo: "lista", creata: ora - 30}, true],
@@ -213,8 +210,8 @@ def router():
     # In Adesso un rimando, mai una seconda copia, per le schede con uno stato o dei campi
     m = re.search(r"const TIPI_RIMANDO = new Set\(\[(.*?)\]\)", js, re.S)
     rimandi = set(re.findall(r'"(\w+)"', m.group(1))) if m else set()
-    verifica("rimandi: gioco, esercizi, sviluppo, cassetto, chat e voce nuova in Adesso solo come rimando",
-             {"gioco", "esercizio", "esercizi_riepilogo", "sviluppo", "cassetto", "chat", "conoscente"} <= rimandi,
+    verifica("rimandi: gioco, sviluppo, cassetto, chat e voce nuova in Adesso solo come rimando",
+             {"gioco", "sviluppo", "cassetto", "chat", "conoscente"} <= rimandi,
              str(sorted(rimandi)))
 
 

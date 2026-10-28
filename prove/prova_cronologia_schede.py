@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
   personale nuovo ritrova le ultime N schede in ordine, mai quelle di un'altra persona (né un
   minore quelle del tutore, né il tutore quelle del minore), mai uno schermo di stanza;
 - schede finali: modulo chiuso e timer finito saltati, avanzamento di un lavoro interrotto →
-  «interrotto» senza il flusso, esercizi chiusi → riepilogo, sviluppo ricostruito dallo stato
+  «interrotto» senza il flusso, sviluppo ricostruito dallo stato
   vero (anche se non era tra le ultime), programma che girava → fermato, cassetto con i soli
   file che ci sono ancora, chiavi delle foto di un avvio di prima che non si confondono;
 - «Scarica»: registrato di nuovo per lo schermo nuovo (gettone nuovo; quello di prima non vale);
@@ -217,9 +217,6 @@ def prova_ripresa():
                                 time.time(), 1.0, 60, ident="L7-1"), DARIO)
     hub.invia(schede.nuova("modulo", "Dati", schede.PERSONALE, modulo="m1", campi=[],
                            stato="aperto"), DARIO)
-    hub.invia(schede.nuova("esercizio", "Esercizi: frazioni", schede.PERSONALE,
-                           chiave="esercizi:dario", stato="aperta", domanda="1/2 + 1/4?",
-                           esercizio="x", fatti=3, giuste=2), DARIO)
     hub.invia(schede.nuova("cassetto", "I tuoi file", schede.PERSONALE, chiave="cassetto:dario",
                            voci=[{"id": 1, "nome": "a.pdf"}, {"id": 2, "nome": "b.pdf"}]), DARIO)
     hub.invia(schede.nuova("foto", "Foto 1", schede.PERSONALE, chiave="foto:12345"), DARIO)
@@ -248,7 +245,6 @@ def prova_ripresa():
     hub2.lavori = SimpleNamespace(lavori=[SimpleNamespace(id="L7", stato="interrotto")],
                                   sviluppi=svs)
     hub2.ricostruttori.append(lambda p: [svs.scheda(x) for x in [svs.corrente(p)] if x])
-    hub2.esercizi = SimpleNamespace(sessione=lambda p: None)
     hub2.cassetto = SimpleNamespace(proprietario=lambda i: "dario" if i == 2 else None)
     s_tel, _ = hub2.archivio.crea_con_token("telefono", proprietario="dario",
                                             proprietario_nome="Dario")
@@ -261,8 +257,7 @@ def prova_ripresa():
     st = pagina.storia
     tipi = [c["tipo"] for c in st]
     verifica("lo schermo personale nuovo ritrova le schede, in ordine, con lo sviluppo in fondo",
-             tipi == ["documento", "lavoro", "esecuzione", "esercizio", "cassetto", "foto",
-                      "sviluppo"], tipi)
+             tipi == ["documento", "lavoro", "esecuzione", "cassetto", "foto", "sviluppo"], tipi)
     verifica("mai le schede di un'altra persona (nemmeno del ragazzo di cui è tutore)",
              not any("Teo" in c.get("titolo", "") for c in st))
     verifica("niente chiavi private alla pagina", not any(k.startswith("_") for c in st
@@ -274,9 +269,6 @@ def prova_ripresa():
     es = next(c for c in st if c["tipo"] == "esecuzione")
     verifica("un programma che girava prima del riavvio: fermato",
              es["stato"] == "fermato" and es["dal"] is None)
-    ese = next(c for c in st if c["tipo"] == "esercizio")
-    verifica("esercizi chiusi: il riepilogo, senza la domanda",
-             ese["stato"] == "finita" and "domanda" not in ese and ese["fatti"] == 3)
     cas = next(c for c in st if c["tipo"] == "cassetto")
     verifica("cassetto: solo i file che ci sono ancora", [v["id"] for v in cas["voci"]] == [2])
     verifica("modulo chiuso e timer finito: saltati",

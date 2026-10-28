@@ -2005,9 +2005,6 @@ class Config:
     # per ciò che vuole chi amministra serve una frase più chiara (la frase di sfida), regola
     # `amministra_minore_vicino`
     minori_margine_amministra: float = 0.12
-    # Compiti: risposte sbagliate sullo stesso esercizio prima di spiegare la soluzione (e
-    # avvisare i tutori). Decisione del 05/10: 5
-    minori_compiti_tentativi: int = 5
     # Ogni quanti mesi ricordare ai tutori di rifare l'impronta di un minore: sotto i 14 anni e
     # dai 14 (la voce dei bambini cambia in fretta); anche prima se il riconoscimento cala
     minori_impronta_mesi: list = field(default_factory=lambda: [6, 12])
@@ -2089,41 +2086,6 @@ class Config:
     avvisi_audio_contesto_s: float = 20.0
     # Giorni dopo cui l'audio (nel cassetto) e la trascrizione di un avviso si cancellano
     avvisi_audio_giorni: float = 30.0
-    # Esercizi generati da Calliope (08/10, calliope/esercizi/, docs/ricerche/
-    # 2026-10-08-esercizi.md): matematica e italiano per i ragazzi di casa, a voce e sulla
-    # scheda, con la correzione nel codice e il registro dei tentativi per i tutori; dal 12/10
-    # anche logica, fisica e chimica (calcolabili, unità di misura in calliope/unita.py)
-    esercizi_enabled: bool = True
-    # Il secondo modello che risolve da solo gli esercizi d'italiano (se non concorda,
-    # l'esercizio si scarta). Vuoto = il modello della voce sullo stesso Ollama; sulla DGX si
-    # può scegliere un modello più forte. Su Ollama (API nativa, output strutturato)
-    esercizi_verifica_modello: str = ""
-    esercizi_verifica_url: str = ""
-    esercizi_verifica_timeout_s: float = 20.0
-    # Esercizi d'italiano senza il secondo parere quando il modello non risponde (solo lessico e
-    # Wikizionario). false = in quel caso niente esercizi d'italiano
-    esercizi_senza_secondo_parere: bool = False
-    # Esercizi d'italiano controllati in anticipo per livello, in secondo piano
-    esercizi_pronti: int = 3
-    # Esercizi a campione nel riepilogo per i tutori (da controllare al posto della revisione)
-    esercizi_campione: int = 3
-    # Esercizi di un blocco prima della proposta «Facciamo una pausa o cambiamo?», detta dal
-    # codice (12/10, caso vero: tabelline senza pause finché la bambina non ha detto «basta,
-    # sono stanca»). Più corto per la primaria bassa (prima, seconda e terza elementare); chi
-    # vuole blocchi diversi lo dice a voce («blocchi più corti») e resta salvato per persona
-    esercizi_blocco_piccoli: int = 5
-    esercizi_blocco: int = 10
-    # Tappe del percorso «a tappe» (una tappa = un blocco), attivato a voce
-    esercizi_tappe: int = 3
-    # «A che punto siete?» (12/10 sera, decisione di Dario: si chiede spesso, non una volta
-    # all'anno): a inizio sessione, per un minore, una domanda breve detta dal codice se
-    # l'informazione su quella materia manca o ha più di tanti giorni; a metà sessione al più
-    # una volta, se sbaglia molte risposte di fila o le fa tutte giuste al primo colpo. La
-    # risposta stringe o sposta il limite del programma dentro l'anno. 0 = mai chiedere
-    esercizi_punto_giorni: int = 14
-    # Domande di un'interrogazione simulata («interrogami sulle addizioni»): aperte dagli
-    # obiettivi dell'indice e conti corretti dal codice
-    esercizi_interroga_domande: int = 5
     # Il modello guardiano (calliope/guardiano.py): giudica la domanda e ogni frase della
     # risposta prima della voce, solo per minori e ospiti. Su Ollama (lo stesso della voce se
     # guardiano_url è vuoto: llm_native_url). Scelta con prove/misura_guardiano.py (rapporto
@@ -3201,13 +3163,6 @@ RETI: dict[str, Rete] = {
         "il 26B (spinta_promessa spenta) prometteva «faccio continuare l'agente… ti avviso» "
         "senza tool alla revisione (12/10, 12:20), e il testo prima del tool si attaccava alla "
         "frase del tool (11:13)"),
-    "spinta_esercizi": Rete(
-        "esercizio in sospeso o sessione aperta e risposta senza il tool esercizi: trattenuta, "
-        "spinta; dopo la spinta una domanda d'esercizio inventata non si dice (al suo posto "
-        "quella del programma) né la promessa di segnarsi una preferenza", MODELLO,
-        "il 4B copiava dalla storia «Perfetto! Prossima: …» correggendo da sé (08/10, 7 turni "
-        "d'italiano su 18): la correzione è del programma; il 26B inventava le domande "
-        "(«quanto fa 125 più 87?») e diceva «Segno tutto» senza salvare (12/10, DGX)"),
     "scrivo_qui_a_voce": Rete(
         "«te lo scrivo qui nella conversazione» a una persona che parla a voce: la frase si "
         "toglie", MODELLO,
@@ -3410,7 +3365,6 @@ SEZIONI: dict[str, list[str]] = {
                   "speaker_impronte_alpha", "speaker_impronte_deriva_arruolamento",
                   "speaker_impronte_deriva_seme", "speaker_impronte_max"],
     "minori": ["minori_enabled", "minori_margine_ambiguo", "minori_margine_amministra",
-               "minori_compiti_tentativi",
                "minori_impronta_mesi", "minori_gioco_minuti", "minori_richieste_giorni",
                "minori_avviso_ripetuto_s", "minori_pericolo_verifica",
                "minori_pericolo_attesa_s", "minori_pericolo_silenzio",
@@ -3420,11 +3374,6 @@ SEZIONI: dict[str, list[str]] = {
                "avvisi_contesto_ore",
                "avvisi_trascrizione", "avvisi_audio", "avvisi_audio_anello_min",
                "avvisi_audio_anello_mb", "avvisi_audio_contesto_s", "avvisi_audio_giorni",
-               "esercizi_enabled", "esercizi_verifica_modello", "esercizi_verifica_url",
-               "esercizi_verifica_timeout_s", "esercizi_senza_secondo_parere",
-               "esercizi_pronti", "esercizi_campione", "esercizi_blocco_piccoli",
-               "esercizi_blocco", "esercizi_tappe", "esercizi_punto_giorni",
-               "esercizi_interroga_domande",
                "guardiano_enabled", "guardiano_modello", "guardiano_url",
                "guardiano_timeout_s", "guardiano_se_guasto", "guardiano_keep_alive",
                "guardiano_num_ctx", "guardiano_ospiti", "guardiano_pericolo",
@@ -3787,10 +3736,6 @@ LIMITI: dict[str, tuple[float, float]] = {
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),
     "avvisi_audio_contesto_s": (0.0, 300.0), "avvisi_audio_giorni": (0.0, 365.0),
-    "esercizi_verifica_timeout_s": (0.5, 300.0), "esercizi_pronti": (0, 50),
-    "esercizi_campione": (0, 50), "esercizi_blocco_piccoli": (1, 50),
-    "esercizi_blocco": (1, 50), "esercizi_tappe": (1, 20),
-    "esercizi_punto_giorni": (0, 365), "esercizi_interroga_domande": (2, 15),
     "suoni_volume": (0.0, 1.0),
     "vad_threshold": (0.0, 1.0), "wake_consecutive": (1, 50), "turn_log_days": (1, 3650),
     "conserva_voce_mb": (0, 1_000_000),

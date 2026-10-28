@@ -250,9 +250,6 @@ CLASSI: dict[str, Classe] = {
     # le conversazioni passate di chi parla (calliope/conversazioni.py): parole sue e risposte
     # di Calliope, i risultati non fidati non si archiviano
     "conversazione_cerca": _c(S),
-    # minori (calliope/minori.py): il registro dei compiti è contabilità interna, senza effetti
-    # fuori (con la foto del compito di mezzo non deve chiedere a ogni risposta)
-    "compiti_aiuto": _c(S),
     # la risposta strutturata a una proposta (10/10, calliope/stato_dialogo.py): non fa niente
     # da sé; il «sì» diventa la chiamata del tool proposto, che passa da qui come sempre
     "proposta_rispondi": _c(S),
@@ -388,8 +385,7 @@ CLASSI: dict[str, Classe] = {
                                              if _s(a, "azione") == "promuovi" else
                                              f"tolga {_s(a, 'chi', 'qualcuno')} dalla famiglia")),
     "minore_gestisci": _c(P, sfida=True, chiave=("valore",),
-                          sola_lettura=("azione", frozenset({"stato", "riepilogo_compiti",
-                                                             "richieste"})),
+                          sola_lettura=("azione", frozenset({"stato", "richieste"})),
                           cosa=lambda a: f"cambi le regole di {_s(a, 'nome', 'un ragazzo')} "
                                          f"({_s(a, 'azione')})"),
     # la modalità sviluppo (08/10, calliope/sviluppo.py): «stato» legge; sospendere,

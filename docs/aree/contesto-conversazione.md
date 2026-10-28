@@ -1114,7 +1114,7 @@ certa, anche dei minori, mai degli ospiti: 7 giorni, al più 40 schede e 4 MB pe
 cassetto dei file (foto, file, audio di chi è riconosciuto, anche dei minori, visibili ai tutori
 sotto i 14 anni, dal 14/10 a ogni età, mai degli ospiti: 7 giorni, 500 MB per persona); i ricordi (`memoria.db`,
 `facts`, anche dei minori, per sempre, al più 50 per persona; degli ospiti niente); gli esercizi
-(`esercizi_tentativi`: domanda, risposta attesa e risposta del ragazzo fino a 60 caratteri, senza
+(*storico: tolti il 28/10, #279*) (`esercizi_tentativi`: domanda, risposta attesa e risposta del ragazzo fino a 60 caratteri, senza
 scadenza: è il dettaglio dei tutori); le richieste ai tutori (`richieste_tutori.oggetto`, senza
 scadenza della riga) *(storico per queste due: dal 12/10 sera scadono con `turn_log_days` e si
 svuotano con la persona, [minori](minori.md))*, gli avvisi ai tutori (solo l'argomento) e i compiti del giorno (argomento e

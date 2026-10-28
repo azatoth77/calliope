@@ -459,7 +459,7 @@ def prova_versioni():
     try:
         _, token = arch.crea_con_token("telefono")
         url = f"ws://127.0.0.1:{srv.port}{P.PERCORSO_AUDIO}"
-        for pagina in ("calliope-telefono-pagina-v18", "<script>v99</script>"):
+        for pagina in ("calliope-telefono-pagina-v19", "<script>v99</script>"):
             prima = sum("[SATELLITE] collegato" in r for r in righe)
             with connect(url, compression=None) as ws:
                 ws.send(P.testo(tipo="ciao", versione=P.VERSIONE, token=token, primo=False,
@@ -472,7 +472,7 @@ def prova_versioni():
             time.sleep(0.3)
         coll = [r for r in righe if "[SATELLITE] collegato" in r]
         verifica("riga «collegato»: protocollo e pagina del telefono",
-                 coll and f"protocollo {P.VERSIONE}" in coll[0] and "pagina calliope-telefono-pagina-v18" in coll[0],
+                 coll and f"protocollo {P.VERSIONE}" in coll[0] and "pagina calliope-telefono-pagina-v19" in coll[0],
                  coll[:1])
         verifica("contrario: una versione della pagina fuori forma non entra nei log",
                  len(coll) >= 2 and "script" not in coll[1] and "pagina " not in coll[1]

@@ -682,40 +682,6 @@ button.gioco-voce:focus-visible { outline: 3px solid var(--accento); outline-off
 .cr-conti .cr-nome { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cr-n { font-variant-numeric: tabular-nums; color: var(--accento); }
 
-/* Esercizi (08/10, calliope/esercizi/): la domanda grande, la risposta, l'esito */
-.domanda-esercizio { font-size: 1.8rem; line-height: 1.25; margin: 0.2rem 0 0.7rem; font-weight: 600; }
-.risposta-esercizio { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; max-width: 40rem; }
-.risposta-esercizio label { flex-basis: 100%; color: var(--tenue); font-size: 1rem; }
-.risposta-esercizio input {
-  font: inherit; font-size: 1.6rem; color: var(--testo); background: var(--pannello-2);
-  border: 1px solid var(--bordo); border-radius: 0.5rem; padding: 0.4rem 0.7rem;
-  min-height: 3rem; flex: 1 1 10rem; min-width: 0;
-}
-.risposta-esercizio input:focus-visible, .scelta-esercizio:focus-visible,
-.piede-esercizio button:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }
-.scelte-esercizio { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.scelta-esercizio {
-  font: inherit; font-size: 1.2rem; min-height: 2.9rem; padding: 0.4rem 1rem; cursor: pointer;
-  color: var(--testo); background: var(--pannello-2); border: 1px solid var(--bordo); border-radius: 0.5rem;
-}
-.scelta-esercizio:disabled { opacity: 0.55; cursor: default; }
-.esito-esercizio { font-size: 1.25rem; margin: 0.5rem 0; min-height: 1.4em; color: var(--tenue); }
-.esito-esercizio.giusta { color: var(--ok); }
-.esito-esercizio.giusta::before { content: "✓ "; }
-.esito-esercizio.sbagliata { color: var(--allarme); }
-.esito-esercizio.sbagliata::before { content: "✗ "; }
-.piede-esercizio { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
-@media (max-width: 40rem) {
-  /* Telefono: la scheda deve stare nel carosello senza «Espandi» */
-  .tipo-esercizio h1.titolo { font-size: 1.3rem; margin-bottom: 0.2rem; }
-  .domanda-esercizio { font-size: 1.35rem; margin-bottom: 0.4rem; }
-  .risposta-esercizio label { position: absolute; width: 1px; height: 1px; overflow: hidden;
-    clip: rect(0 0 0 0); white-space: nowrap; }
-  .risposta-esercizio input { font-size: 1.2rem; min-height: 2.75rem; }
-  .esito-esercizio { font-size: 1.05rem; margin: 0.35rem 0; }
-  .scelta-esercizio { font-size: 1.05rem; padding: 0.3rem 0.7rem; min-height: 2.75rem; }
-}
-
 /* ── a schermo intero sulla pagina degli schermi (08/10): lavoro, documento, programma ── */
 .tasto-intero { margin-left: auto; text-transform: none; letter-spacing: normal; font-weight: 600;
   min-height: 2.4rem; }
@@ -1042,7 +1008,7 @@ body.con-sezioni #cronologia { display: none; }
 /* (non sul gioco a tutta la finestra: lì valgono le regole della modalità gioco) */
 .pc-centro .elenco > .scheda:not(.modo-gioco) { flex: none; max-height: 70vh; padding: 1rem 1.3rem; animation: none; }
 .pc-centro .elenco > .scheda.tipo-gioco, .pc-centro .elenco > .scheda.scheda-gioco,
-.pc-centro .elenco > .scheda.tipo-esercizio, .pc-centro .elenco > .scheda.tipo-modulo { max-height: none; }
+.pc-centro .elenco > .scheda.tipo-modulo { max-height: none; }
 .pc-centro .elenco > .scheda h1.titolo { font-size: 1.4rem; }
 .pc-centro .vuoto-sez { margin: 0.6rem 0 0; color: var(--tenue); font-size: 1.1rem; line-height: 1.45; max-width: 46rem; }
 .pc-centro .etichetta { flex-wrap: wrap; row-gap: 0.35rem; }

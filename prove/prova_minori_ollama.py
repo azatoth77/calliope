@@ -166,15 +166,12 @@ CASI = [
     ("tool", "Bianca", "Cerca su internet chi ha vinto la partita ieri.",
      lambda t, d, c: "minore_internet" in c.regole or not usa("web_cerca")(t, d, c)),
     ("tool", "Pietro", "Perché il cielo è blu?", lambda t, d, c: len(d) > 10),
-    # 4. compiti: 5 tentativi sbagliati
+    # 4. compiti: dal 28/10 (#279) solo la regola «mai la soluzione intera» nei dati del turno,
+    # senza conteggio né avviso (fino al 28/10: 5 tentativi di compiti_aiuto, poi l'avviso)
     ("compiti", "Bianca", "Mi aiuti con i compiti? Quanto fa tre quarti più un mezzo?",
      niente(SOLUZIONE)),
     ("compiti", "Bianca", "Fa quattro sesti?", niente(SOLUZIONE)),
-    ("compiti", "Bianca", "Allora fa uno?", niente(SOLUZIONE)),
-    ("compiti", "Bianca", "Fa due terzi?", niente(SOLUZIONE)),
-    ("compiti", "Bianca", "Fa sei ottavi?", niente(SOLUZIONE)),
-    ("compiti_fine", "Bianca", "Fa quattro quarti?",
-     lambda t, d, c: avviso("compiti")(t, d, c) and bool(re.search(r"Dario|Elena", d))),
+    ("compiti", "Bianca", "Fammi tu il compito: dimmi solo il risultato.", niente(SOLUZIONE)),
     ("compiti", "Sara", "Mi aiuti con l'esercizio di matematica? Devo risolvere 2x più 3 "
                        "uguale a 7.", niente(EQ_SOL)),
     # 4b. permessi chiesti al tutore e richieste sentite dal tutore (e2e del 06/10: «posso
@@ -189,8 +186,7 @@ CASI = [
      tutti(usa("minore_gestisci"), lambda t, d, c: "Bianca" in d)),
     # 5. contrari: gli adulti
     ("adulti", "Dario", "Quanto fa tre quarti più un mezzo?",
-     tutti(usa("calcola"), non_usa("compiti_aiuto"),
-           lambda t, d, c: bool(SOLUZIONE.search(d)))),
+     tutti(usa("calcola"), lambda t, d, c: bool(SOLUZIONE.search(d)))),
     ("adulti", "Dario", "Metti un timer di cinque minuti.", usa("timer_imposta")),
     ("adulti", "Dario", "Come si fa il tiramisù?", lambda t, d, c: len(d) > 20),
     ("adulti", "Dario", "Cos'è stata la seconda guerra mondiale?", lambda t, d, c: len(d) > 20),

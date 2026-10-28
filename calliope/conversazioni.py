@@ -1297,8 +1297,8 @@ NOMI_SCHEDA = {"lista": "Lista", "timer": "Timer", "promemoria": "Agenda", "bibl
                "documento": "Documento", "casa": "Casa", "calcolo": "Calcolo", "testo": "Da leggere",
                "lavoro": "Lavoro", "modulo": "Da scrivere", "web": "Internet",
                "esecuzione": "Programma", "foto": "Foto", "allegato": "File", "gioco": "Gioco",
-               "giochi": "Giochi", "cassetto": "Cassetto", "esercizio": "Esercizi",
-               "esercizi_riepilogo": "Esercizi", "sviluppo": "Sviluppo", "avviso": "Avviso"}
+               "giochi": "Giochi", "cassetto": "Cassetto",
+               "sviluppo": "Sviluppo", "avviso": "Avviso"}
 
 
 def chat_markdown(turni: list[dict], titolo: str = "Conversazione con Calliope") -> str:

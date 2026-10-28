@@ -3413,8 +3413,6 @@ class Brain:
             stato = d["stato"]
             if "sviluppo_modalita" in regole:
                 stato.attivita = "sviluppo"
-            elif getattr(self, "turn_pending_tool", None) == "esercizi":
-                stato.attivita = "esercizi"
             d["offerte"] = int(getattr(self, "_offerte_risposta", 0) or 0)
             sc = getattr(self.tool_ctx, "speaker_ctx", None)
             pr = stato.proposta
@@ -5311,15 +5309,6 @@ class Brain:
         requested = (self._net("spinta_richiesta") and bool(TOOL_REQUEST.search(user_text))
                      and any(self.tools.allowed(n, level)
                              for n in ("pc_cerca_file", "pc_apri_file")))
-        # Esercizi in corso (08/10, calliope/esercizi/): la frase del ragazzo la corregge il
-        # programma. Il testo senza il tool non si dice: spinta, una volta (il 4B copiava dalla
-        # storia «Perfetto! Prossima: …» senza chiamare esercizi, 7 turni su 18)
-        # Dal 12/10 anche con la sessione aperta senza l'azione in sospeso (in pausa, o dopo
-        # una risposta d'altro): il 26B inventava le domande e diceva «Segno tutto»
-        esercizi = self._net("spinta_esercizi") and (
-            getattr(self, "turn_pending_tool", None) == "esercizi"
-            or self._esercizi_aperti())
-        esercizi_visto = False      # il testo dopo la spinta degli esercizi, già guardato
         # Una domanda dello sviluppo in sospeso (12/10 sera, caso vero delle 12:20: a «Vuoi
         # attivarla così com'è, o faccio continuare l'agente…?» «No, farlo continuare con quello
         # che manca.» → «faccio continuare l'agente… Ti avviso quando è pronto», senza nessun
@@ -5331,7 +5320,7 @@ class Brain:
         sviluppo_sosp = (self._net("spinta_sviluppo") and str(
             getattr(self, "turn_pending_tool", None) or "").startswith("sviluppo_"))
         richiesta_file = requested
-        requested = requested or esercizi or sviluppo_sosp
+        requested = requested or sviluppo_sosp
         self._testo_tenuto = ""
         # Una domanda sui comandi stessi («che comando hai per le luci?»): il nome di un tool
         # nella risposta è una spiegazione, non una chiamata mancata (ToolNameHold)
@@ -5399,8 +5388,7 @@ class Brain:
                 with_memory(system), schemas,
                 hold_claims=bool(schemas) and not self._acted(),
                 hold_request=(requested and not nudged and not self.last_tools)
-                or corr is not None
-                or (esercizi and nudged and not esercizi_visto and not self.last_tools),
+                or corr is not None,
                 actions=actions,
                 hold_names=bool(schemas) and not self.last_tools and not explaining,
                 hold_non_so=bool(archive_hold or ricerca_tool or stanza_hold)
@@ -5534,39 +5522,7 @@ class Brain:
                     self.history.append({"role": "assistant", "content": text})
                 tail = [{"role": "system", "content": PROMISE_NUDGE}]
                 continue
-            if held_req and not held and esercizi and nudged and not esercizi_visto:
-                # Dopo la spinta degli esercizi, ancora senza il tool (12/10, DGX col 26B): una
-                # domanda d'esercizio inventata non si dice, al suo posto la domanda vera del
-                # programma (esercizi ripeti, chiamato dal codice); la promessa di segnarsi una
-                # preferenza nemmeno. Il resto si dice com'è
-                esercizi_visto = True
-                from .esercizi.sessione import PROMESSA_FRASE, testo_del_modello
-                tipo = testo_del_modello(held_req)
-                if tipo == "domanda":
-                    self._rule("esercizi_domanda_inventata")
-                    print(f"   [TOOL] domanda d'esercizio inventata dal modello, non la dico: "
-                          f"«{self.cita_in_console(held_req)}»", flush=True)
-                    call = {"id": "call_esercizi_ripeti", "name": "esercizi",
-                            "arguments": {"azione": "ripeti"}}
-                    self.history.append({"role": "assistant", "content": "",
-                                         "tool_calls": [call]})
-                    content = self._run_tool(call, level)
-                    self.history.append({"role": "tool", "tool_call_id": call["id"],
-                                         "name": call["name"], "content": content})
-                    said = _final_text(content) or RIPETI_FRASE
-                    self.history.append({"role": "assistant", "content": said})
-                    yield self._marca(said, "esito", "risposta")
-                    return
-                if tipo == "promessa":
-                    self._rule("esercizi_promessa_taciuta")
-                    print(f"   [TOOL] promessa sugli esercizi senza tool, non la dico: "
-                          f"«{self.cita_in_console(held_req)}»", flush=True)
-                    self.history.append({"role": "assistant", "content": PROMESSA_FRASE})
-                    yield self._marca(PROMESSA_FRASE, "atto", "ripeti")
-                    return
-                yield held_req
-                held_req = ""
-            if (held_req and not held and sviluppo_sosp and not esercizi and not richiesta_file
+            if (held_req and not held and sviluppo_sosp and not richiesta_file
                     and not SVILUPPO_PROMESSA.search(held_req)):
                 # Una risposta a parole che non promette niente («siamo ancora all'analisi…»,
                 # una domanda d'altro): si dice com'è, senza spinta
@@ -5576,14 +5532,11 @@ class Brain:
                 # Frase detta al posto del tool («Non ho trovato alcun PDF…», 01/10): non si
                 # dice e non entra nella storia; il modello riceve la spinta e riprova
                 nudged = True
-                self._rule("spinta_esercizi" if esercizi else "spinta_sviluppo"
-                           if sviluppo_sosp else "richiesta_trattenuta")
-                print(f"   [TOOL] {'esercizio' if esercizi else 'risposta allo sviluppo' if sviluppo_sosp else 'richiesta di un file'} senza "
+                self._rule("spinta_sviluppo" if sviluppo_sosp else "richiesta_trattenuta")
+                print(f"   [TOOL] {'risposta allo sviluppo' if sviluppo_sosp else 'richiesta di un file'} senza "
                       f"tool, non dico: «{self.cita_in_console(held_req)}»", flush=True)
-                if esercizi:
-                    from .esercizi.sessione import ESERCIZI_NUDGE
-                tail = [{"role": "system", "content": ESERCIZI_NUDGE if esercizi
-                         else SVILUPPO_NUDGE if sviluppo_sosp else PROMISE_NUDGE}]
+                tail = [{"role": "system", "content": SVILUPPO_NUDGE if sviluppo_sosp
+                         else PROMISE_NUDGE}]
                 continue
             # Il testo tenuto per lo sviluppo non è ancora detto (lo dice o lo tace il tool)
             spoke = spoke or (bool(text) and not self._testo_tenuto)
@@ -5682,7 +5635,7 @@ class Brain:
                     # una lettura riuscita («Ho trovato… Lo apro?») non si spinge
                     promised = promised and not self.last_tools
                     # (la risposta allo sviluppo ha la sua spinta, sopra: qui no)
-                    requested_now = (richiesta_file or esercizi) and not self.last_tools
+                    requested_now = richiesta_file and not self.last_tools
                     # «Non posso creare un'estensione» con sviluppo_apri disponibile a chi
                     # parla (06/10, DGX: dopo un rifiuto rimasto nella storia): una spinta
                     # (politica.rinuncia); la frase, se poi il tool arriva, esce dalla storia
@@ -5892,7 +5845,7 @@ class Brain:
                     ("proposta_altrui", getattr(self, "_altrui_msg", None)),
                     ("spinta", nudged), ("correzione", correzioni),
                     ("contesto", context), ("foto", getattr(self, "_nuove_immagini", None)),
-                    ("insistenza", insistita), ("esercizi", esercizi),
+                    ("insistenza", insistita),
                     ("sviluppo", sviluppo_sosp), ("richiesta_file", richiesta_file),
                     ("argomento", frase_arg), ("offerta", self._offer),
                     ("riservato", getattr(self, "last_private", False)),
@@ -6025,14 +5978,6 @@ class Brain:
         reg.update(dopo_tool_s1.sostanza(m.get("frase") or "", testo))
         reg["domanda"] = "?" in testo
         reg["altro_tool"] = bool(m.get("altro_tool"))
-
-    def _esercizi_aperti(self) -> bool:
-        """Chi parla ha una sessione di esercizi aperta (calliope/esercizi/sessione.py)."""
-        try:
-            from .esercizi.sessione import aperta_di
-            return aperta_di(getattr(self, "tool_ctx", None))
-        except Exception:  # noqa: BLE001
-            return False
 
     def console_riservata(self) -> str | None:
         """«ospite» se le parole di questo turno non vanno nel terminale (sulla DGX il journal, che

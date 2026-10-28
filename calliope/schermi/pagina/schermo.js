@@ -28,8 +28,7 @@
     documento: "Documento", casa: "Casa", calcolo: "Calcolo", testo: "Da leggere",
     lavoro: "Lavoro", modulo: "Da scrivere", web: "Internet", esecuzione: "Programma",
     risposta: "Risposta", foto: "Foto", allegato: "File", gioco: "Gioco", giochi: "Giochi",
-    cruscotto: "Cruscotto", cassetto: "Cassetto", esercizio: "Esercizi",
-    esercizi_riepilogo: "Esercizi", sviluppo: "Sviluppo", chat: "Conversazione",
+    cruscotto: "Cruscotto", cassetto: "Cassetto", sviluppo: "Sviluppo", chat: "Conversazione",
     conoscente: "Voce nuova", avviso: "Avviso", archivio: "Archivio di casa", ufficio: "Ufficio",
   };
   // Il telefono a sezioni (27/10, docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md, 3.2):
@@ -44,7 +43,6 @@
     documento: "cose/documenti", archivio: "cose/documenti", ufficio: "cose/ufficio",
     foto: "cose/cassetto", allegato: "cose/cassetto",
     cassetto: "cose/cassetto", modulo: "cose", gioco: "cose/giochi", giochi: "cose/giochi",
-    esercizio: "cose/studio", esercizi_riepilogo: "cose/studio",
     casa: "casa", conoscente: "casa", avviso: "casa", cruscotto: "io",
   };
   const SEZIONI = ["adesso", "conversazione", "cose", "casa", "io"];
@@ -70,7 +68,6 @@
       case "sviluppo": return !!(c.sviluppo && c.sviluppo.stato === "aperta");
       case "modulo": return c.stato === "aperto";
       case "gioco": return c.stato !== "chiuso" && !(chiusa && chiusa(c.partita));
-      case "esercizio": return c.stato === "aperta" || c.stato === "pausa";
       case "conoscente": return !!c.aperta;
       case "avviso": return true;               // finché non è visto (lo tiene il telefono)
       case "lista": case "documento": case "casa": return recente;
@@ -749,7 +746,7 @@
     const vecchia = m.querySelector(":scope > article.scheda");
     const nuova = costruisci(c);
     if (vecchia && prima && chiaveDi(prima) === chiaveDi(c) && vecchia.dataset.chiave === chiaveDi(c)
-        && c.tipo !== "modulo" && c.tipo !== "esercizio" && prima.tipo === c.tipo) {
+        && c.tipo !== "modulo" && prima.tipo === c.tipo) {
       const seguite = misuraSegui(vecchia);
       // Il segno di prima resta com'è (togliere e rimettere la classe lo farebbe ripartire)
       if (vecchia.classList.contains("cambiata")) nuova.classList.add("cambiata");
@@ -2449,131 +2446,6 @@
     return !parte;
   }
 
-  // ─── esercizi (08/10, calliope/esercizi/) ───
-  // La domanda grande, il campo per scrivere (o i pulsanti delle scelte) e l'esito. La
-  // risposta giusta non arriva mai qui: la controlla il server (/api/esercizio). La scheda si
-  // ricostruisce intera a ogni aggiornamento (niente allinea: i gestori leggerebbero
-  // l'esercizio di prima); se si stava scrivendo, il campo nuovo riprende il fuoco
-  DISEGNA.esercizio = function (c, corpo) {
-    // L'argomento è già nel titolo: qui la classe e il numero dell'esercizio
-    // Punti e tappe (12/10) contati dal server, come le frasi
-    const dati = [c.classe, c.tappa ? "tappa " + c.tappa : "",
-      typeof c.punti === "number" ? c.punti + (c.punti === 1 ? " punto" : " punti") : ""]
-      .filter(Boolean).join(" · ");
-    corpo.append(el("p", "sotto", dati + (c.stato === "aperta" && c.domanda ? " · esercizio " + c.numero : "")));
-    const es = c.esito || {};
-    if (c.stato !== "aperta" || !c.domanda) {
-      corpo.append(el("p", "esito-esercizio", es.testo || (c.stato === "pausa" ? "In pausa." : "Esercizi finiti.")));
-      const f = c.fatti || 0, g = c.giuste || 0;
-      corpo.append(el("p", "nota", (f === 1 ? "1 esercizio" : f + " esercizi") + ", "
-        + (g === 0 ? "nessuno giusto" : g === 1 ? "1 giusto" : g + " giusti") + "."));
-      return;
-    }
-    corpo.append(el("p", "domanda-esercizio", c.domanda));
-    const esito = el("p", "esito-esercizio" + (es.giusta === true ? " giusta" : es.giusta === false ? " sbagliata" : ""), es.testo || "");
-    esito.setAttribute("role", "status");
-    esito.setAttribute("aria-live", "polite");
-    const bottoni = [];
-    const attivo = document.activeElement;
-    const fuoco = !!(attivo && attivo.closest && attivo.closest(".risposta-esercizio"));
-    const invia = async (azione, risposta) => {
-      bottoni.forEach((b) => { b.disabled = true; });
-      esito.className = "esito-esercizio";
-      esito.textContent = "…";
-      let r;
-      try { r = await postSessione("/api/esercizio", { azione, esercizio: c.esercizio, risposta: risposta || "" }); }
-      catch (e) { r = null; }
-      bottoni.forEach((b) => { b.disabled = false; });
-      if (r && r.dati && r.dati.scheda) {
-        aggiungiCronologia(r.dati.scheda);
-        mostra(r.dati.scheda);
-        if (r.status === 200) return;
-      }
-      esito.textContent = r ? (r.dati.errore || MESSAGGI[r.status] || "Non è andato: riprova.")
-        : "Calliope non risponde: riprova.";
-    };
-    if (Array.isArray(c.scelte) && c.scelte.length) {
-      const g = el("div", "scelte-esercizio");
-      c.scelte.forEach((x) => {
-        const b = el("button", "scelta-esercizio", x);
-        b.type = "button";
-        b.addEventListener("click", () => invia("rispondi", x));
-        bottoni.push(b);
-        g.append(b);
-      });
-      corpo.append(g);
-    } else {
-      const f = el("form", "risposta-esercizio");
-      f.noValidate = true;
-      const id = "es-" + String(c.esercizio || "x");
-      const lab = el("label", "", "La tua risposta");
-      lab.htmlFor = id;
-      const i = el("input");
-      i.id = id;
-      i.type = "text";
-      i.autocomplete = "off";
-      i.maxLength = 80;
-      i.setAttribute("autocapitalize", "off");
-      if (c.campo === "numero") i.placeholder = "per esempio 12, 3/4 o -2";
-      if (c.campo === "misura") i.placeholder = "per esempio 2,5 m/s o 18 g/mol";
-      const b = el("button", "invia-modulo", "Rispondi");
-      b.type = "submit";
-      bottoni.push(b);
-      f.append(lab, i, b);
-      f.addEventListener("submit", (ev) => {
-        ev.preventDefault();
-        const v = i.value.trim();
-        if (!v) { esito.textContent = "Scrivi la risposta."; i.focus(); return; }
-        invia("rispondi", v);
-      });
-      corpo.append(f);
-      if (fuoco) requestAnimationFrame(() => { if (i.isConnected) i.focus(); });
-    }
-    corpo.append(esito);
-    const piede = el("div", "piede-esercizio");
-    [["aiuto", "Un indizio"], ["salta", "Salta"], ["segnala", "Secondo me è sbagliato"],
-      ["fine", "Basta così"]].forEach(([a, t]) => {
-      const b = el("button", "piccolo-bottone", t);
-      b.type = "button";
-      b.dataset.azione = a;
-      b.addEventListener("click", () => invia(a, ""));
-      bottoni.push(b);
-      piede.append(b);
-    });
-    corpo.append(piede);
-    if (c.tentativi) corpo.append(el("p", "nota", "Risposte sbagliate: " + c.tentativi + " su " + c.massimo));
-  };
-
-  // Il riepilogo per i tutori: la frase, gli esercizi a campione da guardare, le segnalazioni
-  // e il dettaglio dei tentativi (decisione del 07/10: anche per gli adolescenti)
-  DISEGNA.esercizi_riepilogo = function (c, corpo) {
-    if (c.frase) corpo.append(el("p", "riassunto-lavoro", c.frase));
-    const tabella = (titolo, intest, righe) => {
-      if (!righe || !righe.length) return;
-      corpo.append(el("h2", "", titolo));
-      const box = el("div", "tabella-md");
-      const t = el("table");
-      const h = el("tr");
-      intest.forEach((x) => h.append(el("th", "", x)));
-      t.append(h);
-      righe.forEach((r) => {
-        const tr = el("tr");
-        r.forEach((x) => tr.append(el("td", "", x == null ? "" : x)));
-        t.append(tr);
-      });
-      box.append(t);
-      corpo.append(box);
-    };
-    const ESITI = { giusta: "giusta", sbagliata: "sbagliata", aiuto: "indizio", saltato: "saltato",
-      spiegato: "spiegato", scartato: "tolto" };
-    tabella("Segnalati come sbagliati", ["Domanda", "Risposta del programma", "Sua", "Ricontrollo"],
-      (c.segnalazioni || []).map((x) => [x.domanda, x.attesa, x.data, x.esito === "scartato" ? "tolto" : "torna"]));
-    tabella("Da controllare (a campione)", ["Domanda", "Risposta del programma"],
-      (c.campione || []).map((x) => [x.domanda, x.attesa]));
-    tabella("Tentativi", ["Ora", "Argomento", "Domanda", "Risposta", "Esito"],
-      (c.righe || []).map((x) => [x.quando, x.argomento, x.domanda, x.data, ESITI[x.esito] || x.esito]));
-  };
-
   const STATI_MOTORE = { buona: "va bene", degradata: "degradata", "giù": "non risponde", mai: "mai controllata" };
   const ESITI_MOTORE = { aggiornata: "aggiornata", tenuta: "tenuta la vecchia", indietro: "tornata indietro",
     ultima: "già all'ultima", rinviato: "rinviato", errore: "errore", occupato: "occupato" };
@@ -3883,8 +3755,8 @@
 
   // Una scheda arrivata mentre c'è uno sviluppo (pagina degli schermi): true se l'ha gestita
   // la vista. Lo sviluppo che si apre fa entrare nella vista, quello chiuso o sospeso fa
-  // uscire; con la vista attiva le altre schede vanno nella cronologia (un modulo, un gioco,
-  // un esercizio si mostrano: vogliono una risposta, e «Torna allo sviluppo» riporta qui)
+  // uscire; con la vista attiva le altre schede vanno nella cronologia (un modulo, un gioco si
+  // mostrano: vogliono una risposta, e «Torna allo sviluppo» riporta qui)
   function vistaSviluppo(c) {
     if (c.tipo === "sviluppo") {
       if (svilAperto(c)) {
@@ -3905,7 +3777,7 @@
     }
     if (!vistaAttiva()) return false;
     if (c.tipo === "vuota") return true;
-    if (["modulo", "gioco", "esercizio"].includes(c.tipo) && c.sposta !== false) return false;
+    if (["modulo", "gioco"].includes(c.tipo) && c.sposta !== false) return false;
     aggiungiCronologia(c);
     if (chiaveDi(c) === (S.svil.sviluppo || {}).lavoro) disegnaVista();
     return true;
