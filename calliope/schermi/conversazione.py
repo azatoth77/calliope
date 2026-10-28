@@ -33,6 +33,23 @@ qualcuno davanti), dal satellite della stanza o, con l'audio di questo computer,
 di `schermi_stanza` (vuota: le pagine aperte su questo computer). Un tablet sempre acceso in
 un corridoio non diventa una tastiera per chiunque sia in rete.
 
+**Dal 28/10 (#301, decisione di chi amministra): dallo schermo personale si scrive sempre.**
+La casella, le foto e i file (`CANALI_LIBERI`) valgono anche senza aver parlato, come il tocco
+(schermi/tocchi.py): al più «familiare» (`identified_by` «schermo», SpeakerContext), con gli
+orari e il livello di un minore, e niente di ciò che vuole la voce (tools/spec.serve_la_voce:
+installazioni, fatture, Ufficio, schermi personali, voci). **Le azioni irreversibili si
+confermano a voce** (decisione del 28/10 dopo la revisione della PR #304): E3 o più in valore.py
+o in politica.IRREVERSIBILI (`conversazioni_dimentica`, cancellare, mandare fuori casa) non si
+fanno per iscritto, nemmeno col «sì» scritto (tools/spec.irreversibile_scritto). Il rischio di chi
+ha in mano il telefono sbloccato di un altro non è quello del tocco (il tocco ha un elenco chiuso
+di tool reversibili, lo scritto arriva a tutti i tool dei familiari): resta tutto ciò che si
+disfa, al più come familiare. *Storico: fino alla revisione della PR #304 qui si leggeva «il
+rischio è quello del tocco».* Restano legati alla conversazione a voce i **moduli** (un
+modulo nasce da una richiesta a voce e si chiude quando la conversazione finisce), gli
+**schermi di stanza** e i file di un ragazzo toccati dal tutore (server.py). *Storico: dal 05/10
+al 28/10 anche la casella, le foto e i file dello schermo personale valevano solo dentro una
+conversazione cominciata a voce.*
+
 Fase 3 (una conversazione per satellite): la condizione è `scrittura_consentita(schermo,
 conversazione, …)`, una funzione pura con la conversazione come argomento; `Conversazioni`
 le tiene per chiave (oggi una sola, `None`: c'è una conversazione per tutta la casa, come in
@@ -45,6 +62,9 @@ import time
 from dataclasses import dataclass
 
 from .archivio import norm_stanza
+
+# I canali che dallo schermo personale non chiedono la conversazione a voce (28/10, #301)
+CANALI_LIBERI = ("scritto", "immagine", "allegato")
 
 # Motivi del rifiuto (nel registro dei turni e alla pagina): niente nomi né dati
 NESSUNA = "nessuna_conversazione"
@@ -103,6 +123,12 @@ def scrittura_consentita(schermo: dict, conv: Conversazione | None, *, ora: floa
         return (True, "") if conv.persona == proprietario else (False, ALTRA_PERSONA)
     ok = (stanza_ok or stessa_stanza)(schermo, conv)
     return (True, "") if ok else (False, ALTRA_STANZA)
+
+
+def scritto_libero(schermo: dict | None, canale: str) -> bool:
+    """Dallo schermo personale la casella, le foto e i file valgono senza aver parlato (28/10,
+    #301). Mai da uno schermo di stanza, mai per i moduli."""
+    return bool(schermo and schermo.get("proprietario")) and canale in CANALI_LIBERI
 
 
 class Conversazioni:

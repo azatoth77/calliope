@@ -252,10 +252,40 @@ def compatto():
              'attr(d, "data-ovvio"' in tel and 'querySelector(".parla-stato")' in tel)
 
 
+def scrittura():
+    """Scrivere nella Conversazione (28/10, #301), a secco: la tastiera non ridimensiona la pagina
+    (interactive-widget), la barra si nasconde solo con la tastiera aperta, la casella a 16 px, la
+    pagina apposta non c'è più, in auto niente casella."""
+    html = (PAGINA / "telefono" / "index.html").read_text(encoding="utf-8")
+    css = (PAGINA / "telefono" / "telefono.css").read_text(encoding="utf-8")
+    tel = (PAGINA / "telefono" / "telefono.js").read_text(encoding="utf-8")
+    verifica("scrittura: la tastiera non ridimensiona la pagina (interactive-widget=resizes-visual, #287)",
+             re.search(r'<meta name="viewport" content="[^"]*interactive-widget=resizes-visual', html) is not None)
+    verifica("scrittura: la pagina apposta e «Allega» nella riga della voce non ci sono più",
+             'id="strato-scrivi"' not in html and 'id="foto-apri"' not in html and "strato-scrivi" not in tel)
+    verifica("scrittura: la casella al posto della riga della voce, la barra nascosta solo con la tastiera",
+             'id="scrivi-posto" class="scrivi-riga"' in html
+             and re.search(r"\.vista\[data-scrittura\] \.voce-riga \{ display: none; \}", css) is not None
+             and re.search(r"\.vista\.tastiera \.barra \{ display: none; \}", css) is not None
+             and "visualViewport" in tel)
+    m = re.search(r"\.telefono \.scrivi textarea \{[^}]*font-size: max\(16px", css)
+    verifica("scrittura: il testo della casella mai sotto i 16 px (iOS non ingrandisce la pagina)", m is not None)
+    verifica("scrittura: in auto niente casella", '.vista[data-modo="auto"] .scrivi-riga' in css)
+    # le regole del compatto non guardano la tastiera: la media query resta su larghezza e altezza
+    i = css.index("@media (orientation: portrait) and (max-width: ")
+    i, prof, j = css.index("{", i) + 1, 1, css.index("{", i) + 1
+    while prof and j < len(css):
+        prof += {"{": 1, "}": -1}.get(css[j], 0)
+        j += 1
+    verifica("scrittura: il compatto non dipende dalla tastiera (nessuna regola .tastiera nel compatto)",
+             ".tastiera" not in css[i:j] and ".invia-icona" in css[i:j])
+
+
 def main() -> int:
     tabelle()
     server()
     compatto()
+    scrittura()
     if shutil.which("node"):
         viva()
         router()

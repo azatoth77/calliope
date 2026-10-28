@@ -599,9 +599,9 @@ def prova_server():
                 "X-Calliope-Nome": quote(nome), "X-Calliope-Testo": quote(testo),
                 "X-Calliope-Fonte": "telefono"})
         r = post(mio, A.pdf([A.BOLLETTA]))
-        verifica("file senza conversazione a voce: 403 senza_conversazione",
-                 r.status_code == 403 and r.json().get("codice") == "senza_conversazione"
-                 and hub.ingresso.vuoto())
+        item = hub.ingresso.prendi()
+        verifica("file senza conversazione a voce: dal 28/10 (#301) 200 e in coda",
+                 r.status_code == 200 and item and item["tipo"] == "allegato", r.text)
         hub.conversazioni.voce("dario", "voce")
         r = post(mio, A.pdf([A.BOLLETTA]), nome="../../Desktop/bolletta luce.pdf",
                  testo="Quanto devo pagare?")

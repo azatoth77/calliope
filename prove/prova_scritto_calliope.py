@@ -11,10 +11,11 @@ un satellite con microfono e casse finti, e uno schermo personale abbinato.
 - nel registro dei turni `canale: scritto`, chi parla dallo schermo («schermo»), livello al
   più familiare anche per chi amministra; un codice fiscale scritto non resta né nel
   registro né nel terminale;
-- dal 05/10 si scrive solo durante una conversazione a voce: prima che chi amministra parli
-  la casella risponde 403 (regola `scritto_senza_conversazione` nel registro), dopo una sua
+- dal 28/10 (#301) si scrive anche senza aver parlato (al più familiare): prima che chi
+  amministra parli la casella risponde 200 e i moduli restano spenti; dopo una sua
   frase riconosciuta dalla voce (impronta fatta con la stessa voce sintetica) passa, e dopo
-  «esci» (anche scritto) torna a 403.
+  «esci» (anche scritto) i moduli si spengono e la casella resta. *Storico: dal 05/10 al
+  28/10 prima di parlare e dopo «esci» la casella rispondeva 403.*
 
 Servono le voci di Piper (voices/it_IT-paola-medium.onnx), il modello di chi parla e i modelli
 della wake word, fuori da git: se mancano la prova si salta (esce con 0).
@@ -209,12 +210,22 @@ def main() -> int:
             a = c.post("/api/accedi", headers={"Authorization": f"Bearer {r['richiesta']}"})
             sess = a.json().get("sessione", "")
             ok("schermo personale: casella attiva", a.json().get("scrivi") is True)
-            ok("prima di parlare: scrittura spenta", a.json().get("scrittura", {}).get(
-                "attiva") is False, str(a.json().get("scrittura")))
+            ok("prima di parlare: casella accesa, moduli spenti (28/10, #301)",
+               a.json().get("scrittura", {}).get("attiva") is True
+               and a.json().get("scrittura", {}).get("moduli") is False,
+               str(a.json().get("scrittura")))
+            # Dalla modalità scrittura del telefono (solo_scritto): la risposta è solo scritta,
+            # non si sente e non apre la finestra d'ascolto (revisione della PR #304: con la
+            # finestra aperta la frase detta subito dopo, sotto speaker_min_voice_s, valeva come
+            # lo schermo e la conversazione a voce non si apriva)
+            t_prima = time.monotonic()
+            n_ric = len(ollama.richieste)
             rr = c.post("/api/scrivi", headers={"X-Calliope-Sessione": sess},
-                        json={"testo": "Calliope, che ore sono?"})
-            ok("scritto senza conversazione: 403", rr.status_code == 403
-               and rr.json().get("codice") == "senza_conversazione", rr.text)
+                        json={"testo": "Calliope, che ore sono?", "solo_scritto": True})
+            ok("scritto senza conversazione: 200 (28/10, #301)", rr.status_code == 200, rr.text)
+            ok("…arriva al modello", aspetta(lambda: len(ollama.richieste) > n_ric, 20))
+            time.sleep(2.0)
+            ok("…e in modalità scrittura la risposta non si sente", casse.voce_dopo(t_prima) is None)
             # Chi amministra parla al satellite: riconosciuto dalla voce, la conversazione c'è
             stt.risposta = DOMANDA
             fine = _di(sat, scena, frasi, DOMANDA)
@@ -254,13 +265,12 @@ def main() -> int:
             # Il turno si scrive quando la frase è finita di dire: si aspetta il secondo turno
             # scritto (04/10: con 1,5 s fissi nell'hook il registro a volte non l'aveva ancora)
             aspetta(lambda: sum(t.get("canale") == "scritto" and t.get("esito") != "rifiutato"
-                                for t in registro()) >= 2, 20)
+                                for t in registro()) >= 3, 20)
             turni = registro()
             scritti = [t for t in turni if t.get("canale") == "scritto"
                        and t.get("esito") != "rifiutato"]
-            ok("registro: lo scritto rifiutato prima di parlare, con la regola e senza il testo",
-               any(t.get("esito") == "rifiutato" and t.get("regole") ==
-                   ["scritto_senza_conversazione"] and "testo" not in t for t in turni))
+            ok("registro: nessuno scritto rifiutato, nemmeno prima di parlare (28/10, #301)",
+               not any(t.get("regole") == ["scritto_senza_conversazione"] for t in turni))
             ok("registro: la frase detta riconosciuta dalla voce", any(
                 (t.get("voce") or {}).get("modo") == "voce" and t.get("voce", {}).get("nome")
                 == "Prova" for t in turni), str([t.get("voce") for t in turni][:4]))
@@ -438,12 +448,13 @@ def main() -> int:
             rr = c.post("/api/scrivi", headers={"X-Calliope-Sessione": sess},
                         json={"testo": "Calliope, esci."})
             ok("«esci» scritto accettato", rr.status_code == 200, rr.text)
-            ok("«esci»: torna a dormire e la pagina riceve «scrittura» spenta", aspetta(
-                lambda: any(e == "scrittura" and not d.get("attiva")
+            ok("«esci»: torna a dormire e la pagina riceve «scrittura» coi moduli spenti", aspetta(
+                lambda: any(e == "scrittura" and d.get("moduli") is False and d.get("attiva")
                             for e, d in pagina.eventi[n_ev:]), 20))
+            aspetta(zitta, 20)
             rr = c.post("/api/scrivi", headers={"X-Calliope-Sessione": sess},
                         json={"testo": "ci sei?"})
-            ok("dopo «esci»: lo scritto torna a 403", rr.status_code == 403, rr.text)
+            ok("dopo «esci»: lo scritto vale ancora (28/10, #301)", rr.status_code == 200, rr.text)
         finally:
             sat.ferma()
             cal.ferma()

@@ -14,7 +14,7 @@ import json
 from .. import politica
 from ..conferme import admin_confermato, chiedi_conferma, e_admin, incerta_con_admin
 from . import dialogo
-from .spec import ToolSpec, ToolContext, note_rule, serve_la_voce
+from .spec import ToolSpec, ToolContext, irreversibile_scritto, note_rule, serve_la_voce
 from ..testi import NIENTE
 
 # Rifiuto per permessi, detto così com'è (risposta_finale): gentile, e senza un'altra
@@ -410,6 +410,13 @@ class ToolRegistry:
         # Politica unica (05/10, calliope/politica.py): classe del tool, azione chiesta in
         # questo turno, conversazione con dati non fidati, provenienza degli argomenti. Qui,
         # nell'esecutore: il modello non la scavalca e un canale nuovo non la dimentica
+        # Ciò che non si disfa, scritto o toccato dallo schermo personale: solo a voce (28/10,
+        # decisione dopo la revisione della PR #304). Qui, dopo livello e minori e prima della
+        # politica: nessuna domanda né «sì» scritto la fa passare
+        fermo = irreversibile_scritto(ctx, spec, name, arguments or {})
+        if fermo is not None:
+            print(f"   [POLITICA] {name}: scritto_irreversibile_voce", flush=True)
+            return json.dumps(fermo, ensure_ascii=False)
         fermo = politica.controlla(spec, name, arguments or {}, ctx)
         if fermo is not None:
             return json.dumps(fermo, ensure_ascii=False)

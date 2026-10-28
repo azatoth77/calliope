@@ -1539,8 +1539,13 @@ class Ciclo:
             t.scritto = scritto
             return None
         # Di nuovo qui (05/10): la conversazione può essere finita mentre il testo
-        # aspettava in coda («esci» detto un attimo prima). Niente al ciclo
-        ok, motivo = schermi.scrittura_consentita(schermi.schermo(scritto.get("schermo_id")))
+        # aspettava in coda («esci» detto un attimo prima). Niente al ciclo. Dal 28/10 (#301)
+        # dallo schermo personale la casella, le foto e i file valgono sempre (al più
+        # familiare, con gli orari di un minore: _fuori_orario); i moduli no
+        schermo = schermi.schermo(scritto.get("schermo_id"))
+        consentito = getattr(schermi, "scritto_consentito", None)
+        ok, motivo = (consentito(schermo, scritto.get("tipo") or "scritto") if consentito
+                      else schermi.scrittura_consentita(schermo))
         if not ok:
             print(f"   [SCHERMI] scritto dallo schermo «{scritto.get('schermo')}» "
                   f"scartato: nessuna conversazione ({motivo})", flush=True)
@@ -1563,6 +1568,11 @@ class Ciclo:
         """File, foto e moduli dagli schermi: con il testo sono una frase scritta, da soli
         aspettano la domanda (o vanno dritti al tool)."""
         tipo = (t.scritto or {}).get("tipo")
+        if tipo in ("allegato", "immagine"):
+            fuori = self._file_fuori_orario(t)
+            if fuori is not None:
+                return fuori
+            tipo = t.scritto.get("tipo")
         if tipo == "allegato":
             return self._allegato_dallo_schermo(t)
         if tipo == "immagine":
@@ -1572,6 +1582,31 @@ class Ciclo:
         if tipo == "tocco":
             return self._tocco_dallo_schermo(t)
         return None
+
+    def _file_fuori_orario(self, t):
+        """Gli orari dei tutori anche per le foto e i file (revisione della PR #304): dal 28/10
+        lo schermo personale manda senza aver parlato, e fuori orario un minore non lascia niente
+        nel cassetto né in attesa. Con il testo il file si toglie e la frase segue la strada di
+        sempre (_fuori_orario, col guardiano per chi è in pericolo); senza, il rifiuto con la
+        frase degli orari."""
+        scritto = t.scritto
+        prof = self.s.registry.by_id(scritto.get("persona")) if scritto.get("persona") else None
+        orario = minori.fuori_orario(prof) if prof is not None else None
+        if not orario:
+            return None
+        scritto.pop("immagine", None)
+        scritto.pop("allegato", None)
+        print(f"   [SCHERMI] file dallo schermo «{scritto.get('schermo')}» scartato: fuori "
+              f"dagli orari dei tutori", flush=True)
+        if (scritto.get("testo") or "").strip():
+            scritto["tipo"] = "scritto"
+            return None
+        self.rec = {"inizio": datetime.datetime.now().isoformat(timespec="milliseconds"),
+                    "esito": "fuori_orario", "canale": "scritto",
+                    "voce": {"nome": prof.name, "modo": "schermo", "schermo": scritto.get("schermo"),
+                             "id": prof.id},
+                    "motivo": "fuori_orario", "regole": ["minore_fuori_orario"]}
+        return self._senza_domanda(t, minori.frase_fuori_orario(prof, orario))
 
     def _senza_domanda(self, t, frase: str):
         """La frase detta (e scritta sullo schermo) per un file o una foto senza domanda."""

@@ -221,6 +221,22 @@ def personale(exe, srv, hub, web, pc, t_pc):
         # La casella per scrivere a destra; un file trascinato arriva nella casella
         verifica("la casella per scrivere sotto la conversazione, a destra",
                  p.valuta("!!document.querySelector('#pc-conv #scrivi')"))
+        # Dal 28/10 (#301): accesa anche senza aver parlato, il testo su più righe, Invio manda
+        verifica("la casella accesa anche senza aver parlato, su più righe, con la nota dell'Invio (28/10, #301)",
+                 p.valuta("!document.getElementById('scrivi-testo').disabled"
+                          " && document.getElementById('scrivi-testo').tagName === 'TEXTAREA'"
+                          " && document.querySelector('#pc-conv .nota-invio').textContent.includes('Maiusc+Invio')"
+                          " && document.getElementById('scrivi-invia').disabled"))
+        while hub.ingresso.prendi():
+            pass
+        p.valuta("(() => { const i = document.getElementById('scrivi-testo'); i.focus(); i.value = 'Che ore sono?';"
+                 " i.dispatchEvent(new Event('input', {bubbles: true}));"
+                 " i.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true, cancelable: true})); return 1; })()")
+        item = aspetta(lambda: hub.ingresso.prendi(), 5)
+        verifica("Invio manda la frase senza conversazione a voce, a nome del proprietario",
+                 bool(item) and item.get("tipo") == "scritto" and item.get("testo") == "Che ore sono?"
+                 and item.get("persona") == "dario", str(item)[:200])
+        foto(p, "pc-scrivere-1440x900.png")
         hub.conversazioni.voce("dario", "voce", stanza="studio")
         aspetta(lambda: not p.valuta("document.getElementById('scrivi-testo').disabled"), 3)
         p.valuta("""(() => { const dt = new DataTransfer();

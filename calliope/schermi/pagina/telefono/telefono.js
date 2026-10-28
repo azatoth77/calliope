@@ -12,7 +12,7 @@ const VERSIONE = 3;
 // (prova_telefono_consapevole le confronta). Una costante della pagina che gira, non la cache
 // più alta (revisione della PR #294: durante un aggiornamento è quella nuova), e pronta già al
 // primo «ciao»
-const PAGINA_VERSIONE = "calliope-telefono-pagina-v19";
+const PAGINA_VERSIONE = "calliope-telefono-pagina-v20";
 const CHIAVE_TOKEN = "calliope.telefono.token";
 const CHIAVE_NOME = "calliope.telefono.nome";
 const CHIAVE_MIC = "calliope.telefono.microfono";
@@ -188,6 +188,7 @@ function disegna() {
   metti($("mic-stato"), st.mic ? "acceso" : "spento");
   disegnaRisposta();
   segnaTagli();
+  disegnaOra();
   // Il pallino sopra un gioco (11/10, modalità gioco di schermo.js): lo stato di QUESTO telefono
   if (sch() && sch().voceGioco) sch().voceGioco(gc);
 }
@@ -277,6 +278,11 @@ const SEZ = window.CalliopeSezioni.crea({
     if (car.intera === k && (k === "cruscotto" || k === "chat" || !lista.length)) chiudiStrato("strato-scheda");
   },
   dopoDisponi: () => segnaTagli(),
+  // Uscendo dalla Conversazione la modalità scrittura si chiude (risposta 4 del 28/10, #301)
+  dopoPercorso: () => {
+    if (vis.sezione !== "conversazione") { impostaScrittura(false); delete $("vista").dataset.filtri; }
+    segnaLente();
+  },
   // Con la conversazione nella sezione (28/10, #242) l'elenco sotto tiene solo le schede che la
   // conversazione non mostra già: non le risposte scritte (sono il testo del turno), non le schede
   // dentro un turno; in Adesso restano come prima
@@ -330,6 +336,7 @@ function disegnaChatTel() {
   }
   // L'elenco sotto perde le schede che un turno nuovo mostra già
   disponi();
+  segnaLente();
 }
 
 // La conversazione disegnata mentre la sezione era nascosta non è scesa in fondo (nascosta, lo
@@ -476,7 +483,10 @@ function impostaAuto(acceso) {
   vis.modo = acceso ? "auto" : "sezioni";
   scrivi(CHIAVE_AUTO, acceso ? "1" : null);
   segnaModo();
-  if (acceso) { for (const s of STRATI) { if (s === "strato-scheda") chiudiIntera(); else chiudiStrato(s); } }
+  if (acceso) {
+    for (const s of STRATI) { if (s === "strato-scheda") chiudiIntera(); else chiudiStrato(s); }
+    impostaScrittura(false);           // in auto la tastiera non c'è (28/10, #301)
+  }
   if (!acceso && vis.sezione !== "adesso") vai("#/adesso");
   else applicaPercorso();
 }
@@ -616,7 +626,7 @@ function suToccoScheda(ev) {
 
 // ───────────────────────────── strati: modulo, scrivi ─────────────────────────────
 let ritornoFuoco = null;
-const STRATI = ["strato-scheda", "strato-modulo", "strato-scrivi"];
+const STRATI = ["strato-scheda", "strato-modulo"];
 function apriStrato(id, fuoco) {
   for (const s of STRATI) {
     if (s === id || $(s).hidden) continue;
@@ -670,40 +680,153 @@ function aggiornaModulo(c) {
 function suScrivi(det) {
   const b = $("scrivi-apri");
   b.hidden = !det.attiva;
-  // «Allega» (foto o file, 05/10): solo da un telefono personale (il server rifiuta le altre)
-  const f = $("foto-apri");
-  f.hidden = !(det.attiva && det.personale);
   b.closest(".voce-riga").classList.toggle("con-scrivi", !b.hidden);
-  b.closest(".voce-riga").classList.toggle("con-foto", !f.hidden);
-  if (!det.attiva) chiudiStrato("strato-scrivi");
-  // Senza una conversazione a voce (05/10) il tasto resta, attenuato: apre la casella spenta,
-  // che dice la parola da dire; tutto si riaccende da solo appena la conversazione comincia
+  if (!det.attiva) impostaScrittura(false);
+  else preparaRigaScrivi();
+  // Da uno schermo di stanza senza una conversazione a voce (05/10) il tasto resta, attenuato:
+  // apre la casella spenta, che dice la parola da dire. Dallo schermo personale si scrive sempre
+  // (28/10, #301)
   const spento = !!det.attiva && !det.abilitata;
   b.classList.toggle("spento", spento);
-  f.classList.toggle("spento", spento);           // «Foto» come «Scrivi»
-  if (spento) {
-    b.setAttribute("aria-disabled", "true");
-    b.title = "Di' «" + (det.parola || "Calliope") + "» per scrivermi";
+  if (spento) b.title = "Di' «" + (det.parola || "Calliope") + "» per scrivermi";
+  else b.removeAttribute("title");
+  segnaLente();
+}
+
+// ───────────────────────────── scrivere nella Conversazione (28/10, #301) ─────────────────────────────
+// Il tocco sulla tastiera porta alla Conversazione in modalità scrittura, nella stessa schermata: la
+// riga della voce diventa la casella («Torna alla voce», Allega, il testo, Invia), la conversazione è
+// solo chat (le schede un rimando di una riga), i filtri dietro la lente. Resta finché non si tocca il
+// microfono o si esce dalla Conversazione; la wake word resta accesa. In auto no
+vis.scrittura = false;
+function preparaRigaScrivi() {
+  const f = $("scrivi");
+  if (!f || $("scrivi-voce")) return;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.id = "scrivi-voce";
+  b.className = "scrivi-voce";
+  b.setAttribute("aria-label", "Torna alla voce");
+  if (window.calliopeIcona) b.append(window.calliopeIcona("voce-icona", "microfono"));
+  b.addEventListener("click", tornaAllaVoce);
+  f.insertBefore(b, $("scrivi-foto") || f.firstChild);
+}
+
+function impostaScrittura(v) {
+  v = !!v && vis.modo !== "auto" && !!$("scrivi") && !$("scrivi-apri").hidden;
+  const vista = $("vista");
+  if (vis.scrittura === v) return;
+  vis.scrittura = v;
+  if (v) vista.dataset.scrittura = "1"; else delete vista.dataset.scrittura;
+  $("scrivi-posto").hidden = !v;
+  attr($("scrivi-apri"), "aria-pressed", v ? "true" : "false");
+  // Scrivendo la risposta è solo scritta (decisione del 28/10 dopo la revisione della PR #304):
+  // Calliope torna a parlare con «Torna alla voce» o quando si dice il suo nome
+  if (sch() && sch().soloScritto) sch().soloScritto(v);
+  if (!v) {
+    const i = $("scrivi-testo");
+    if (i && document.activeElement === i) i.blur();
+  }
+  segnaLente();
+  misuraTastiera();
+  disegnaOra();
+  chatInFondo();
+}
+
+// Il tocco sulla tastiera: la Conversazione, la casella e il cursore nello stesso gesto (iOS apre la
+// tastiera solo dentro il tocco)
+function entraScrittura() {
+  if (!$("scrivi") || vis.modo === "auto") return false;
+  if (vis.sezione !== "conversazione") vai("#/conversazione");
+  impostaScrittura(true);
+  const i = $("scrivi-testo");
+  if (i && !i.disabled) { try { i.focus({ preventScroll: true }); } catch (e) { i.focus(); } }
+  return vis.scrittura;
+}
+
+// «Torna alla voce» fa partire subito l'ascolto, come «Parla» (risposta 1 del 28/10). Se Calliope
+// sta parlando non la interrompe (revisione della PR #304): scrivendo le risposte sono solo
+// scritte, quindi ciò che suona è un avviso (il timer, un pericolo) che un tocco per cambiare modo
+// non deve zittire; per interromperla c'è «Parla», che subito dopo dice «Interrompi e parla»
+function tornaAllaVoce() {
+  impostaScrittura(false);
+  const p = $("parla");
+  if (p) { try { p.focus({ preventScroll: true }); } catch (e) { /* niente */ } }
+  if (st.collegato && !player.inCorso()) tocca();
+}
+
+// La lente in alto nella Conversazione (a voce e scrivendo, come nelle tavole): apre e chiude i
+// filtri e la ricerca; un filtro acceso resta detto nella riga sotto («Ieri: 2 turni», «Tutto»)
+function segnaLente() {
+  const l = $("conv-lente");
+  if (!l) return;
+  l.hidden = !(vis.modo === "sezioni" && vis.sezione === "conversazione" && !!car.chatEl);
+  attr(l, "aria-expanded", $("vista").dataset.filtri ? "true" : "false");
+}
+function suLente() {
+  const vista = $("vista");
+  if (vista.dataset.filtri) delete vista.dataset.filtri; else vista.dataset.filtri = "1";
+  segnaLente();
+}
+
+// La tastiera di sistema (28/10, #301, e #287): con interactive-widget=resizes-visual né iOS né
+// Android ridimensionano la pagina, quindi il layout compatto (media query sull'altezza) non scatta;
+// la parte visibile la dice visualViewport. Con un campo di testo col fuoco e la parte visibile più
+// bassa di 120 px della finestra, la vista si stringe a quella parte e la barra delle sezioni si
+// nasconde; chiusa la tastiera, tutto torna com'era
+function campoDiTesto(e) {
+  return !!e && !!e.matches && e.matches("textarea, [contenteditable=''], [contenteditable='true'], input:not([type]), input[type='text'], input[type='search'], input[type='email'], input[type='number'], input[type='tel'], input[type='url']");
+}
+function misuraTastiera() {
+  const vv = window.visualViewport;
+  const vista = $("vista");
+  let aperta = false;
+  if (vv && campoDiTesto(document.activeElement)) {
+    const coperto = window.innerHeight - vv.height * (vv.scale || 1);
+    aperta = coperto > 120;
+  }
+  if (aperta) {
+    vista.style.setProperty("--alto-visibile", Math.round(vv.height) + "px");
+    vista.style.setProperty("--su-visibile", Math.round(vv.offsetTop || 0) + "px");
   } else {
-    b.removeAttribute("aria-disabled");
-    b.removeAttribute("title");
+    vista.style.removeProperty("--alto-visibile");
+    vista.style.removeProperty("--su-visibile");
+  }
+  if (st.tastiera !== aperta) {
+    st.tastiera = aperta;
+    vista.classList.toggle("tastiera", aperta);
+    if (aperta) chatInFondo();
   }
 }
-
-// «Allega»: la casella di scrittura si apre con la scelta del file, nello stesso tocco (iOS
-// apre fotocamera o libreria solo dentro il gesto); la domanda si scrive lì o si dice a voce
-function apriFoto() {
-  if (!$("scrivi")) return;
-  // Senza conversazione (05/10): si apre la casella spenta, che dice la parola da dire
-  if ($("foto-apri").classList.contains("spento")) { apriStrato("strato-scrivi", null); return; }
-  apriStrato("strato-scrivi", null);
-  const sc = window.calliopeSchermo;
-  if (!sc || !sc.foto || !sc.foto()) chiudiStrato("strato-scrivi");
+function ascoltaTastiera() {
+  const vv = window.visualViewport;
+  if (vv) { vv.addEventListener("resize", misuraTastiera); vv.addEventListener("scroll", misuraTastiera); }
+  window.addEventListener("resize", misuraTastiera);
+  document.addEventListener("focusin", misuraTastiera);
+  // Col fuoco che se ne va l'elemento attivo cambia dopo l'evento
+  document.addEventListener("focusout", () => setTimeout(misuraTastiera, 0));
 }
 
-function apriScrivi() {
-  if (!$("scrivi")) return;
-  apriStrato("strato-scrivi", "scrivi-testo");
+// «ti ascolto…» mentre si parla (risposta 5 del 28/10), «Calliope sta scrivendo…» dopo un invio
+// finché non arriva il turno, «Calliope sta rispondendo…» mentre pensa: in fondo alla chat
+st.attesaScritto = 0;
+function disegnaOra() {
+  const o = $("conv-ora");
+  if (!o) return;
+  const [cls] = voceLocale();
+  const [, parola] = statoVista(cls);
+  if (st.attesaScritto && (cls === "parla" || performance.now() - st.attesaScritto > 30000)) st.attesaScritto = 0;
+  let t = "";
+  if (parola === "Ti ascolto") t = "ti ascolto…";
+  else if (st.attesaScritto) t = "Calliope sta scrivendo…";
+  else if (cls === "pensa") t = "Calliope sta rispondendo…";
+  // Scrivendo la riga della voce non c'è: lo stato si legge da qui; a voce lo dice già lei.
+  // role="status" resta sempre (nell'HTML): una regione già nel DOM, che VoiceOver legge, e
+  // l'aria-hidden cambia prima del testo, così la prima frase scrivendo si sente
+  if (vis.scrittura) o.removeAttribute("aria-hidden"); else attr(o, "aria-hidden", "true");
+  metti(o.querySelector(".conv-ora-testo"), t);
+  attr(o, "data-vuoto", t ? "0" : "1");
+  attr(o, "data-ascolto", parola === "Ti ascolto" ? "1" : "0");
 }
 
 // ───────────────────────────── rete ─────────────────────────────
@@ -1084,6 +1207,8 @@ async function benvenuto(m) {
   st.tentativi = 0;
   player.nuovaSessione();
   metti($("luogo"), st.satellite.nome || "—");
+  // Nella Conversazione il posto di ciò che si è detto da qui non si ripete (28/10, #301)
+  if (sch() && sch().nomiPropri && st.satellite.nome) sch().nomiPropri([st.satellite.nome]);
   statoTel("ok", "collegata");
   manda({ tipo: "pronto", eco: null });
   st.stanza.server = m.stanza || null;
@@ -1829,9 +1954,10 @@ async function avvio() {
   $("auto-esci").addEventListener("click", () => impostaAuto(false));
   // Modulo e casella per scrivere: strati sopra la vista (Esc li chiude)
   $("modulo-chiudi").addEventListener("click", () => chiudiStrato("strato-modulo"));
-  $("scrivi-apri").addEventListener("click", apriScrivi);
-  $("foto-apri").addEventListener("click", apriFoto);
-  $("scrivi-chiudi").addEventListener("click", () => chiudiStrato("strato-scrivi"));
+  // Scrivere nella Conversazione (28/10, #301): la tastiera, la lente, la tastiera di sistema
+  $("scrivi-apri").addEventListener("click", entraScrittura);
+  $("conv-lente").addEventListener("click", suLente);
+  ascoltaTastiera();
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
     for (const s of STRATI) {
@@ -1879,12 +2005,12 @@ async function avvio() {
   };
   document.addEventListener("pointerup", giocoSu);
   document.addEventListener("pointercancel", giocoSu);
-  document.addEventListener("calliope:scritto", () => setTimeout(() => chiudiStrato("strato-scrivi"), 1200));
+  document.addEventListener("calliope:scritto", () => { st.attesaScritto = performance.now(); disegnaOra(); });
   // «Prova con…», «Chiedi all'agente…» della vista dello sviluppo (08/10): la frase da finire
   // nella casella dello scritto (lo strato dello sviluppo si chiude, e si riapre dalla scheda)
   document.addEventListener("calliope:prefill", (ev) => {
     const testo = String((ev.detail && ev.detail.testo) || "");
-    apriScrivi();
+    entraScrittura();
     const i = $("scrivi-testo");
     if (i && !i.disabled) {
       i.value = testo;
@@ -1905,7 +2031,8 @@ async function avvio() {
   // schede» con due tocchi (le schede non tornano). Solo su un telefono personale
   // Dal 28/10 (#242) la conversazione sta nella sezione, con le schede piccole, i filtri e la ricerca
   document.addEventListener("calliope:chat", () => disegnaChatTel());
-  document.addEventListener("calliope:chatturni", () => disegnaChatTel());
+  // Il turno arrivato toglie «Calliope sta scrivendo…»
+  document.addEventListener("calliope:chatturni", () => { disegnaChatTel(); st.attesaScritto = 0; disegnaOra(); segnaLente(); });
   // Una scheda piccola della conversazione: la copia del turno a schermo intero; un rimando porta
   // alla scheda nella sua sezione, o alla sezione se la scheda non c'è più
   document.addEventListener("calliope:intera", (ev) => {
@@ -1997,6 +2124,9 @@ window.calliopeTelefono = {
   }),
   impostaStanza, stanzaAscolto: stanza,
   impostaMic, tocca, diagnostica, opzioniMic, mic,
+  // Scrivere nella Conversazione (28/10, #301)
+  entraScrittura, impostaScrittura, tornaAllaVoce, misuraTastiera,
+  scrittura: () => ({ attiva: vis.scrittura, tastiera: !!st.tastiera, filtri: !!$("vista").dataset.filtri }),
   schermo, comando, opzioniVista, apriStrato, chiudiStrato, apriModulo, vaiA, vai, impostaAuto, apriIntera, chiudiIntera,
   // Dove sta ogni scheda (per le prove): la sezione guardata, il modo, le chiavi per elenco
   sezioni: () => Object.assign(SEZ.stato(), { modulo: car.modulo, intera: car.intera }),
