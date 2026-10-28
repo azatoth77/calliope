@@ -16,7 +16,10 @@ secondi (180) e per poche richieste, legato allo schermo. Senza intestazioni per
 browser lo salva da sé (sul telefono negli scaricamenti), e senza sessione nell'URL. Il file si
 fa al primo GET (in un thread) e resta nel gettone per le richieste dopo.
 
-I tipi sono solo quelli fatti da qui (md, pdf, docx, xlsx): niente eseguibili. Il Markdown va
+I tipi sono solo quelli fatti da qui (md, pdf, docx, xlsx) e, dal 28/10 (passo 2d, #259), il
+file **originale** di un documento dell'archivio di casa, solo dei tipi che l'archivio legge
+(PDF, immagini, docx, txt: `ORIGINALI`), letto al clic con i permessi rifatti adesso
+(`file_fn`, costruita da schermi/raccolte.py): niente eseguibili. Il Markdown va
 come text/markdown con nosniff; ogni risposta ha una CSP «sandbox», così un file aperto nel
 browser invece che salvato non esegue niente.
 """
@@ -36,8 +39,19 @@ FORMATI = {
     "excel": ("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
     # L'audio di un avviso di pericolo (14/10, minori.Avvisi.scheda_di): dal cassetto del tutore
     "audio": ("wav", "audio/wav"),
+    # Il file originale dell'archivio di casa (28/10, #259): estensione e tipo da `ORIGINALI`
+    "originale": ("", "application/octet-stream"),
 }
-MAX_VOCI = 64            # schede scaricabili ricordate (le più recenti)
+# I file dell'archivio di casa che si scaricano così come sono (le estensioni che l'archivio
+# legge, archivio/testo.ESTENSIONI), con il tipo giusto per Safari su iPhone
+ORIGINALI = {
+    "pdf": "application/pdf", "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+    "webp": "image/webp", "tif": "image/tiff", "tiff": "image/tiff", "bmp": "image/bmp",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "txt": "text/plain; charset=utf-8",
+}
+MAX_VOCI = 400           # schede scaricabili ricordate (le più recenti; dal 28/10, #259, anche
+                         # una per riga dell'archivio di casa nella pagina Documenti)
 MAX_GETTONI = 64
 USI = 3                  # richieste per gettone (un download che riprova, l'anteprima di iOS)
 AL_MINUTO = 20           # gettoni al minuto per schermo
@@ -77,6 +91,14 @@ def converti(sorgente: dict, formato: str, font=None, persona=None, avvisi=None)
     from ..documenti.render import available_formats, render
     if formato not in FORMATI:
         raise Rifiuto(400, "formato non ammesso")
+    if formato == "originale" or "file_fn" in sorgente:
+        # Il file dell'archivio di casa (28/10, #259): la funzione rifà i permessi e lo legge
+        if formato != "originale" or not callable(sorgente.get("file_fn")):
+            raise Rifiuto(400, "formato non disponibile per questo documento")
+        dati = sorgente["file_fn"]()
+        if dati is None:
+            raise Rifiuto(404, "il file non c'è più, o non è più tuo da vedere")
+        return bytes(dati)
     if formato == "audio" or "avviso_audio" in sorgente:
         # L'audio di un avviso (14/10): solo da una scheda che ce l'ha, letto al clic dal cassetto
         if formato != "audio" or not sorgente.get("avviso_audio"):
@@ -116,15 +138,37 @@ def converti(sorgente: dict, formato: str, font=None, persona=None, avvisi=None)
     return render(formato, doc, font)
 
 
-def nome_file(titolo: str, formato: str) -> str:
+def estensione(formato: str, sorgente: dict | None = None) -> str:
+    """L'estensione del file: quella del formato o, per l'originale, quella del file vero (solo
+    fra `ORIGINALI`; altrimenti «bin»)."""
+    if formato == "originale":
+        e = str((sorgente or {}).get("estensione") or "").lower().lstrip(".")
+        return e if e in ORIGINALI else "bin"
+    return FORMATI[formato][0]
+
+
+def tipo_mime(formato: str, sorgente: dict | None = None) -> str:
+    if formato == "originale":
+        return ORIGINALI.get(estensione(formato, sorgente), "application/octet-stream")
+    return FORMATI[formato][1]
+
+
+def nome_file(titolo: str, formato: str, sorgente: dict | None = None) -> str:
+    """Il nome del file salvato: il titolo senza i caratteri vietati, in forma NFC (28/10, #259:
+    le lettere accentate composte, come le scrive iOS, non «a» più l'accento a parte)."""
+    import unicodedata
     from ..documenti.formato import safe_filename
-    return f"{safe_filename(titolo)}.{FORMATI[formato][0]}"
+    nome = unicodedata.normalize("NFC", safe_filename(titolo))
+    return f"{nome}.{estensione(formato, sorgente)}"
 
 
 def disposizione(nome: str) -> str:
     """Content-Disposition per il salvataggio: un nome ASCII di riserva e quello vero in
-    UTF-8 (RFC 6266)."""
-    ascii_ = "".join(c if 32 <= ord(c) < 127 and c not in '"\\;' else "_" for c in nome)
+    UTF-8 (RFC 6266). Il nome di riserva toglie gli accenti invece di metterci «_» (28/10, #259:
+    «Città» → «Citta»), per chi non legge `filename*`."""
+    import unicodedata
+    piatto = unicodedata.normalize("NFKD", nome).encode("ascii", "ignore").decode("ascii") or "file"
+    ascii_ = "".join(c if 32 <= ord(c) < 127 and c not in '"\\;' else "_" for c in piatto)
     return f"attachment; filename=\"{ascii_}\"; filename*=UTF-8''{quote(nome, safe='')}"
 
 
@@ -184,6 +228,8 @@ class Scaricamenti:
             raise Rifiuto(403, "il documento è di un'altra persona")
         if v["formati"] and formato not in v["formati"]:
             raise Rifiuto(400, "formato non disponibile per questo documento")
+        if (formato == "originale") != callable(v["sorgente"].get("file_fn")):
+            raise Rifiuto(400, "formato non disponibile per questo documento")
         ora = time.monotonic()
         with self._lock:
             fatti = [t for t in self._richieste.get(sid, []) if ora - t < 60.0]
@@ -194,7 +240,8 @@ class Scaricamenti:
             g = secrets.token_urlsafe(24)
             self._gettoni[g] = {"sid": sid, "sorgente": v["sorgente"], "formato": formato,
                                 "persona": proprietario,
-                                "nome": nome_file(v["titolo"], formato), "usi": 0,
+                                "nome": nome_file(v["titolo"], formato, v["sorgente"]),
+                                "tipo": tipo_mime(formato, v["sorgente"]), "usi": 0,
                                 "scade": ora + self.durata_s, "dati": None,
                                 "lock": threading.Lock()}
             while len(self._gettoni) > MAX_GETTONI:
@@ -219,4 +266,4 @@ class Scaricamenti:
                 g["dati"] = converti(g["sorgente"], g["formato"],
                                      getattr(self.cfg, "documenti_font", None),
                                      persona=g.get("persona"), avvisi=self.avvisi)
-        return g["nome"], FORMATI[g["formato"]][1], g["dati"]
+        return g["nome"], g["tipo"], g["dati"]

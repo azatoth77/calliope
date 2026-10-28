@@ -470,8 +470,9 @@ class SulServer(LocalDelivery):
 class Schermi:
     """Schermi finti: `personale` = chi ha uno schermo personale aperto adesso."""
 
-    def __init__(self, personale=("dario-id",)):
+    def __init__(self, personale=("dario-id",), abbinati=()):
         self.personale = set(personale)
+        self.abbinati = set(abbinati) | self.personale     # anche con la pagina chiusa (28/10)
         self.inviate = []
 
     def mittente(self, ctx):
@@ -481,6 +482,9 @@ class Schermi:
 
     def personale_collegato(self, m):
         return m.persona in self.personale
+
+    def personale_abbinato(self, m):
+        return m.persona in self.abbinati
 
     def invia(self, card, m, forza=False):
         if m.persona in self.personale:
@@ -518,9 +522,22 @@ def prova_rilettura():
     verifica("cosa_fare nomina documento_leggi", "documento_leggi" in (r.get("cosa_fare") or ""))
     r, _ = chiama_s(reg, svc, cfg, "documento_crea", {"formato": "excel", "richiesta": "spese"},
                     "Dario", "fammi una tabella delle spese", Schermi(personale=()))
-    verifica("contrario: senza uno schermo personale aperto, la frase di sempre (sul server)",
+    verifica("contrario: senza uno schermo personale, la frase di sempre (sul server)",
              "sul server, perché il satellite" in (r.get("risposta_finale") or ""),
              r.get("risposta_finale"))
+    # Uno schermo personale abbinato ma chiuso (28/10, passo 2d, #259): la pagina Documenti
+    r, ctx = chiama_s(reg, svc, cfg, "documento_crea", {"formato": "excel", "richiesta": "spese"},
+                      "Dario", "fammi una tabella delle spese", Schermi(personale=(), abbinati=("dario-id",)))
+    f = r.get("risposta_finale") or ""
+    verifica("sul server col telefono abbinato ma chiuso: «in Le mie cose, Documenti», non «sul server»",
+             "Le mie cose, Documenti" in f and "«Scarica»" in f and "sul server" not in f
+             and "documento_sulla_pagina" in ctx.regole
+             and not {"frase_pagina", "annuncio_pagina"} & set(r), f)
+    r, ctx = chiama_s(reg, svc, cfg, "documento_leggi", {"modo": "mostra"}, "Dario", "fammelo vedere",
+                      Schermi(personale=(), abbinati=("dario-id",)))
+    verifica("«mostramelo» col telefono chiuso: a voce, e dice dove lo trova",
+             "Le mie cose, Documenti" in (r.get("cosa_fare") or "") and "documento_sulla_pagina" in ctx.regole,
+             r.get("cosa_fare"))
     cfg_l, svc_l = servizio("portatile")
     reg_l = build_registry(documenti=svc_l.formati)
     r, _ = chiama_s(reg_l, svc_l, cfg_l, "documento_crea", {"formato": "excel",
