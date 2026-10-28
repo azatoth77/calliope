@@ -31,6 +31,7 @@ const aspetta = (ms) => new Promise((ok) => setTimeout(ok, ms));
 const st = {
   ws: null, token: leggi(CHIAVE_TOKEN), collegato: false, attivo: false, altro: null,
   satellite: {}, tentativi: 0, sostituito: false,
+  pagina: null,          // la versione della cache del service worker, per i log (28/10, #291)
   mic: false,            // «microfono acceso» (vivavoce, con la wake word)
   micVoluto: leggi(CHIAVE_MIC) === "1",
   L: null,               // richiesta di ascolto del server {id, wake, fino, sveglia}
@@ -940,7 +941,8 @@ function connetti(ripresa) {
   st.sostituito = false;
   ws.onopen = () => {
     ws.send(JSON.stringify({ tipo: "ciao", versione: VERSIONE, token: st.token, primo: false,
-      nome: "telefono", esecutore: null, modalita: true, stanza: true }));
+      nome: "telefono", esecutore: null, modalita: true, stanza: true,
+      ...(st.pagina ? { pagina: st.pagina } : {}) }));
   };
   ws.onmessage = (ev) => {
     if (ws !== st.ws) return;
@@ -1795,6 +1797,20 @@ window.addEventListener("pageshow", (ev) => {
 });
 
 // ───────────────────────────── avvio ─────────────────────────────
+// La versione della pagina nei log del server (28/10, #291): il nome della cache del service
+// worker in uso («calliope-telefono-pagina-v18»), detto nel «ciao»; senza cache (certificato non
+// fidato, prima apertura) niente
+function versionePagina() {
+  try {
+    if (!("caches" in window)) return;
+    caches.keys().then((k) => {
+      const v = k.filter((n) => /^calliope-telefono-pagina-v\d{1,4}$/.test(n))
+        .sort((a, b) => Number(a.split("-v").pop()) - Number(b.split("-v").pop())).pop();
+      if (v) st.pagina = v;
+    }).catch(() => { /* niente */ });
+  } catch (e) { /* niente */ }
+}
+
 async function avvio() {
   if (!window.isSecureContext) {
     avviso("Il microfono vuole una pagina sicura (https): apri l'indirizzo https:// di Calliope.");
@@ -1805,6 +1821,7 @@ async function avvio() {
       // parte: la pagina funziona lo stesso, ma non si apre senza rete
     });
   }
+  versionePagina();
   $("tel-chiedi").addEventListener("click", chiediCodice);
   $("microfono").addEventListener("click", () => impostaMicDaTocco(!st.mic));
   $("schermo-tieni").addEventListener("click", () => impostaTieni(!st.tieni));
