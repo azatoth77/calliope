@@ -26,7 +26,9 @@ issue #242, passo 3 di docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md).
 - dalla revisione della PR #271: una risposta riservata non arriva nell'archivio da una scheda
   (il caso del contratto, e `schermo_mostra` con risposta, testo e ultima), la stima dei token
   non conta le copie, le copie leggere oltre gli ultimi turni e il dettaglio al tocco (solo dai
-  propri turni), foto e file mai legati, il calcolo senza oscura, il timer senza «chi».
+  propri turni), foto e file mai legati, il calcolo senza oscura, il timer senza «chi»; dalla
+  seconda, il modulo di un tool riservato (modello_compila, anagrafica_salva) che non lega le schede
+  e fa il turno riservato.
 
 Tutto in una cartella temporanea. ~3 s.
 """
@@ -219,6 +221,43 @@ def prova_modulo():
              and out["frase"] == "Pronta.", u)
     verifica("modulo: la scheda del risultato resta col turno",
              [x["tipo"] for x in u.get("_schede", [])] == ["documento"], u.get("_schede"))
+
+
+def prova_modulo_riservato():
+    """Seconda revisione della PR #271: un tool riservato completato col modulo (la fattura di
+    modello_compila, la rubrica di anagrafica_salva) non lega le sue schede, e il turno del modulo è
+    riservato nell'archivio."""
+    from calliope.conversazione import RISERVATA, turni
+    from calliope.schermi import moduli
+    riservati = {"modello_compila", "anagrafica_salva"}
+    for tool, titolo, frase in (("modello_compila", "Fattura per Rossi", "Ho preparato la fattura per Rossi: totale 1.220 euro."),
+                                ("anagrafica_salva", "Cliente Rossi", "Ho salvato Mario Rossi, via Verdi 3, Milano.")):
+        inviate = []
+        hub = SimpleNamespace(moduli=SimpleNamespace(chiudi=lambda m, nota, stato=None: None),
+                              invia=lambda c, mitt: inviate.append(c) or {})
+        doc = schede.documento({"blocchi": [{"tipo": "paragrafo", "testo": "Rossi Mario · 2 ore di consulenza · totale 1.220 euro"}]},
+                               "pdf", "fattura-rossi.pdf")
+        m = SimpleNamespace(stato="aperto", chiave="m2", livello="amministra", titolo=titolo, tool=tool,
+                            campi=[{"nome": "piva", "etichetta": "Partita IVA"}], mittente=DARIO,
+                            riprendi=lambda valori, turno, d=doc, f=frase: {"ok": True, "frase": f, "scheda": d})
+        storia = [{"role": "user", "content": f"Prepara {titolo.lower()}", "_turno": {"t": 1.0}},
+                  {"role": "assistant", "content": "Mi servono dei dati: li puoi scrivere sullo schermo."}]
+        brain = brain_finto(storia)
+        brain.pending = None
+        brain.eventi_attivo = lambda: False
+        brain.tools = SimpleNamespace(get=lambda n: SimpleNamespace(name=n, riservato=n in riservati))
+        brain.record_announcement = lambda *a, **k: storia.append({"role": "assistant", "content": a[0]})
+        moduli.completa(hub, {"_modulo": m, "valori": {"piva": "12345678901"}, "schermo": "Telefono di Dario",
+                              "arrivato": time.time()}, brain, 4)
+        u = storia[2] if len(storia) > 2 else {}
+        verifica(f"modulo di {tool} (riservato): la scheda col segno prima di partire, non legata al turno",
+                 inviate and inviate[0].get("_riservata") is True and "_schede" not in u
+                 and schede.per_conversazione(inviate[0]) is None, u)
+        tt = turni(storia)
+        testo = json.dumps(tt, ensure_ascii=False)
+        verifica(f"modulo di {tool}: il turno del modulo riservato nell'archivio, la frase non in chiaro",
+                 tt[-1]["riservato"] and tt[-1]["risposta"] == RISERVATA and "1.220" not in testo
+                 and "Verdi" not in testo and "schede" not in (tt[-1].get("meta") or {}), tt[-1])
 
 
 # ─────────────────────────── 4. filtri e ricerca ───────────────────────────
@@ -523,6 +562,7 @@ def main() -> int:
         prova_brain()
         prova_turni()
         prova_modulo()
+        prova_modulo_riservato()
         arch = archivio_pieno()
         prova_filtri(arch)
         prova_server(arch)

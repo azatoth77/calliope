@@ -1466,3 +1466,15 @@ filtri con la conversazione vera della DGX (molti turni con schede).
     nell'archivio di chi ha fatto la domanda; la «dimentica» di un altro familiare non le tocca (è la scelta
     dell'analisi della #242: la persona ha visto quella scheda nella sua conversazione). Dalla copia del
     timer si toglie chi l'ha messo (`chi`).
+- **Dalla seconda revisione della PR #271**:
+  - *Bloccante: il modulo.* Un tool riservato completato col modulo («prepara la fattura per Rossi» →
+    `modello_compila`, o `anagrafica_salva`) legava al turno del modulo l'anteprima `documento` con cliente,
+    voci e totali. Ora `moduli.completa` guarda lo spec del tool (`_tool_riservato`, nel dubbio sì): le
+    schede del risultato prendono `_riservata` prima di partire e non si legano, e il turno del modulo ha
+    `riservato` nel `_turno`, così nell'archivio la frase («Ho preparato la fattura… totale…») diventa
+    «(risposta con dati riservati: non archiviata)» come per la voce. *Storico: prima di questo la frase del
+    modulo si archiviava in chiaro, anche senza le schede.*
+  - *Limite*: una scheda di un altro tool che riporta il testo di un turno riservato qualche turno dopo
+    («fammi un documento con questi dati» due turni dopo, o `cosa` testo con un turno non riservato in
+    mezzo) non è segnata, e la sua copia resta. È lo stesso limite della risposta del modello in quel turno,
+    che si archivia in chiaro: il segno vale per il turno riservato e per quello subito dopo.

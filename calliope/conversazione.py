@@ -288,6 +288,10 @@ def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = No
                 info["schede"] = sch
             if info:
                 cur["meta"] = info
+            if meta.get("riservato"):
+                # Il turno di un modulo inviato per un tool riservato (seconda revisione della PR
+                # #271, schermi/moduli.completa): come un turno con quel tool
+                cur["riservato"] = True
             if meta.get("conserva") is False:
                 # Le parole di questo turno non restano (12/10 sera, conserva.testo_turno: zona
                 # grigia, dubbio con un minore): l'archivio su disco lo salta

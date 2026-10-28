@@ -517,6 +517,16 @@ def completa(hub, item: dict, brain, turno: int) -> dict:
                                      "riprova a voce."}
     frase = str(res.get("risposta_finale") or res.get("frase") or res.get("conferma")
                 or "").strip()
+    # Un tool riservato (la fattura di modello_compila, la rubrica di anagrafica_salva: dati di
+    # terzi) completato col modulo (seconda revisione della PR #271): le sue schede col segno
+    # `_riservata` prima di partire (non restano nella Conversazione, nemmeno da «mostrami
+    # l'ultima»), e il turno del modulo riservato nell'archivio, come per la voce
+    riservato = _tool_riservato(brain, getattr(m, "tool", None))
+    if riservato:
+        for card in [c for c in (res.get("scheda"), res.get("schede")) if c]:
+            for c in (card if isinstance(card, list) else [card]):
+                if isinstance(c, dict):
+                    c["_riservata"] = True
     # Le schede del risultato (il documento pronto…) vanno agli schermi di chi l'ha chiesto
     for card in [c for c in (res.get("scheda"), res.get("schede")) if c]:
         for c in (card if isinstance(card, list) else [card]):
@@ -542,12 +552,12 @@ def completa(hub, item: dict, brain, turno: int) -> dict:
             msg = {"role": "user", "content": f"(Ho scritto sullo schermo i dati per "
                                               f"«{m.titolo}»: {nomi}.)",
                    "_turno": {"t": round(float(item.get("arrivato") or time.time()), 3),
-                              "canale": "modulo",
+                              "canale": "modulo", **({"riservato": True} if riservato else {}),
                               **({"luogo": str(item["schermo"])[:60]} if item.get("schermo")
                                  else {})}}
             brain.history.append(msg)
             lega = getattr(brain, "lega_scheda_al_turno", None)
-            if callable(lega) and getattr(m.mittente, "certo", False):
+            if callable(lega) and getattr(m.mittente, "certo", False) and not riservato:
                 for card in [c for c in (res.get("scheda"), res.get("schede")) if c]:
                     for c in (card if isinstance(card, list) else [card]):
                         if isinstance(c, dict):
@@ -556,6 +566,25 @@ def completa(hub, item: dict, brain, turno: int) -> dict:
             brain.record_announcement(frase, res.get("in_sospeso"), fonte=None)
     return {"frase": frase, "rec": dict(rec, esito="modulo",
                                         ok=res.get("ok", True) is not False)}
+
+
+def _tool_riservato(brain, nome) -> bool:
+    """Il tool che aveva chiesto il modulo è riservato? (Dal registro dei tool, come
+    Brain._riservati.) Nel dubbio sì: le sue schede non restano e il turno è riservato."""
+    if not nome:
+        return False
+    tools = getattr(brain, "tools", None)
+    try:
+        spec = tools.get(nome) if tools is not None else None
+    except Exception:  # noqa: BLE001
+        return True
+    if spec is None:
+        riservati = getattr(brain, "_riservati", None)
+        try:
+            return bool(callable(riservati) and nome in riservati())
+        except Exception:  # noqa: BLE001
+            return True
+    return bool(getattr(spec, "riservato", False))
 
 
 def annuncio_lavoro(hub, item: dict, lavori, brain) -> str:

@@ -1085,7 +1085,8 @@ def crea_app(hub: Schermi) -> Starlette:
             stato = int(out.pop("_stato", 200))
             return _json(out, stato)
         giorno, schede, testo = dati.get("giorno"), dati.get("schede", False), dati.get("testo", "")
-        if giorno not in (None, "", "oggi", "ieri") or not isinstance(schede, bool)                 or not isinstance(testo, str):
+        if giorno not in (None, "", "oggi", "ieri") or not isinstance(schede, bool) \
+                or not isinstance(testo, str):
             return _json({"errore": "dati non validi"}, 400)
         testo = testo.strip()
         if testo:
