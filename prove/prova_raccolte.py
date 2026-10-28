@@ -147,9 +147,9 @@ def tessere():
              and any("documenti" in m for m in log), json.dumps(t["documenti"]))
     verifica("tessere: un servizio che manca → «non disponibile»", t["giochi"]["stato"] == "non disponibile")
     verifica("tessere: ufficio con i documenti emessi dell'anno", t["ufficio"]["conto"] == 1
-             and t["ufficio"]["pagina"] is False, json.dumps(t["ufficio"]))
+             and t["ufficio"]["pagina"] is True, json.dumps(t["ufficio"]))
     verifica("tessere: le pagine non ancora fatte dicono «presto» (pagina False)",
-             [k for k, v in t.items() if v["pagina"]] == ["liste", "agenda", "lavori", "cassetto", "documenti", "giochi"])
+             [k for k, v in t.items() if v["pagina"]] == ["liste", "agenda", "lavori", "cassetto", "documenti", "giochi", "ufficio"])
     tb = [x["id"] for x in raccolte.tessere(hub, BIANCA, log.append)]
     verifica("tessere: niente Ufficio a chi non amministra", "ufficio" not in tb and len(tb) == 7, str(tb))
     tl = {x["id"]: x for x in raccolte.tessere(hub, LIA, log.append)}
@@ -277,8 +277,24 @@ def server():
                  and item.get("schermo") == "telefono di bianca" and isinstance(item.get("schermo_id"), int)
                  and "latte" in item.get("descrizione", ""), f"{st} {d} {item}")
         verifica("server: il tocco non tocca la lista (la cambia il ciclo)", liste.read("spesa")[1] == ["latte", "uova"])
-        codici = [chiedi(port, "/api/raccolte", sess, corpo={})[0] for _ in range(30)]
-        verifica("server: oltre 30 letture al minuto 429", 429 in codici and codici[0] == 200, str(codici[-3:]))
+        # 60 letture al minuto (revisione della PR #269; erano 30), con la frase delle letture e
+        # Retry-After (la pagina riprova da sola)
+        risposte = [chiedi(port, "/api/raccolte", sess, corpo={}) for _ in range(60)]
+        codici = [st for st, _ in risposte]
+        verifica("server: fino a 60 letture al minuto, poi 429", codici[0] == 200 and 429 in codici
+                 and codici.index(429) >= 55, str(codici[-6:]))
+        ultima = risposte[-1][1]
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/raccolte", method="POST", data=b"{}",
+                                     headers={"Content-Type": "application/json", "X-Calliope-Sessione": sess})
+        try:
+            urllib.request.urlopen(req, timeout=20)
+            ra = None
+        except urllib.error.HTTPError as e:
+            ra = e.headers.get("Retry-After")
+        verifica("server: il 429 delle letture con la sua frase, Retry-After e riprova_s",
+                 ultima.get("errore") == "Troppe richieste in poco tempo: riprovo fra qualche secondo."
+                 and isinstance(ultima.get("riprova_s"), int) and 1 <= ultima["riprova_s"] <= 61
+                 and ra is not None and 1 <= int(ra) <= 61, f"{ultima} {ra}")
         hub.tool_ctx = None
         st, _ = chiedi(port, "/api/tocco", sess, corpo={"tocco": "spunta_lista", "lista": "spesa", "voce": "uova"})
         verifica("server: senza il contesto dei tool 503", st == 503, str(st))

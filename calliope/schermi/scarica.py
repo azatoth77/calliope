@@ -19,7 +19,8 @@ fa al primo GET (in un thread) e resta nel gettone per le richieste dopo.
 I tipi sono solo quelli fatti da qui (md, pdf, docx, xlsx) e, dal 28/10 (passo 2d, #259), il
 file **originale** di un documento dell'archivio di casa, solo dei tipi che l'archivio legge
 (PDF, immagini, docx, txt: `ORIGINALI`), letto al clic con i permessi rifatti adesso
-(`file_fn`, costruita da schermi/raccolte.py): niente eseguibili. Il Markdown va
+(`file_fn`, costruita da schermi/raccolte.py): niente eseguibili. Dal passo 2e (#260) anche i file
+generati dall'ufficio (PDF, XML della FatturaPA, Word, PowerPoint) per chi amministra. Il Markdown va
 come text/markdown con nosniff; ogni risposta ha una CSP «sandbox», così un file aperto nel
 browser invece che salvato non esegue niente.
 """
@@ -49,6 +50,10 @@ ORIGINALI = {
     "webp": "image/webp", "tif": "image/tiff", "tiff": "image/tiff", "bmp": "image/bmp",
     "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     "txt": "text/plain; charset=utf-8",
+    # I file dell'ufficio (28/10, passo 2e, #260: pagina Ufficio, solo chi amministra): l'XML
+    # della FatturaPA da caricare a mano e i modelli PowerPoint. L'XML come allegato, con nosniff e
+    # la CSP «sandbox» come tutti: aperto nel browser non esegue niente
+    "xml": "application/xml", "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
 }
 MAX_VOCI = 400           # schede scaricabili ricordate **per schermo** (le più recenti; dal 28/10,
                          # #259, anche una per riga dell'archivio di casa nella pagina Documenti;
@@ -208,6 +213,30 @@ class Scaricamenti:
             while len(per) > MAX_VOCI:
                 per.popitem(last=False)
 
+    def dimentica(self, sids) -> int:
+        """Gli schermi revocati (seconda revisione della PR #268, #260): via le loro voci di
+        «Scarica» (fino a MAX_VOCI ciascuno, con le sorgenti intere), i gettoni e il conto delle
+        richieste. Quante voci tolte."""
+        via = {s for s in sids}
+        tolte = 0
+        with self._lock:
+            for sid in via:
+                tolte += len(self._voci.pop(sid, None) or ())
+                self._richieste.pop(sid, None)
+            for g in [g for g, d in self._gettoni.items() if d.get("sid") in via]:
+                self._gettoni.pop(g, None)
+        return tolte
+
+    def tieni_solo(self, validi) -> int:
+        """Tiene le voci dei soli schermi `validi` (gli abbinati): chiamata da `Schermi.abbinati`
+        quando rilegge l'elenco, così anche uno schermo revocato da terminale (un altro
+        processo) perde le sue voci. Quante voci tolte."""
+        validi = set(validi)
+        with self._lock:
+            fuori = [sid for sid in set(self._voci) | set(self._richieste) if sid not in validi]
+            fuori += [d.get("sid") for d in self._gettoni.values() if d.get("sid") not in validi]
+        return self.dimentica(fuori) if fuori else 0
+
     def voce(self, sid: int, chiave: str) -> dict | None:
         with self._lock:
             per = self._voci.get(sid)
@@ -233,6 +262,19 @@ class Scaricamenti:
             raise Rifiuto(400, "formato non disponibile per questo documento")
         if (formato == "originale") != callable(v["sorgente"].get("file_fn")):
             raise Rifiuto(400, "formato non disponibile per questo documento")
+        sorgente = v["sorgente"]
+        if formato == "originale" and callable(sorgente.get("estensione_fn")):
+            # Il nome che la pagina scrive in «Scaricato: …» deve essere quello del file salvato
+            # (seconda revisione della PR #268, #260): con più copie di un documento il file
+            # vero può avere un'altra estensione da quella registrata. `estensione_fn` guarda il
+            # file che `file_fn` leggerà, senza leggerlo; None = non c'è più, o non è più suo
+            try:
+                ext = sorgente["estensione_fn"]()
+            except Exception:  # noqa: BLE001 — un archivio guasto: come un file sparito
+                ext = None
+            if not ext:
+                raise Rifiuto(404, "il file non c'è più, o non è più tuo da vedere")
+            sorgente = {**sorgente, "estensione": ext}
         ora = time.monotonic()
         with self._lock:
             fatti = [t for t in self._richieste.get(sid, []) if ora - t < 60.0]
@@ -241,10 +283,10 @@ class Scaricamenti:
                 raise Rifiuto(429, "troppi scaricamenti: aspetta un momento")
             self._richieste[sid] = fatti + [ora]
             g = secrets.token_urlsafe(24)
-            self._gettoni[g] = {"sid": sid, "sorgente": v["sorgente"], "formato": formato,
+            self._gettoni[g] = {"sid": sid, "sorgente": sorgente, "formato": formato,
                                 "persona": proprietario,
-                                "nome": nome_file(v["titolo"], formato, v["sorgente"]),
-                                "tipo": tipo_mime(formato, v["sorgente"]), "usi": 0,
+                                "nome": nome_file(v["titolo"], formato, sorgente),
+                                "tipo": tipo_mime(formato, sorgente), "usi": 0,
                                 "scade": ora + self.durata_s, "dati": None,
                                 "lock": threading.Lock()}
             while len(self._gettoni) > MAX_GETTONI:

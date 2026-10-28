@@ -28,6 +28,11 @@ docs/aree/schermi-telefono.md).
    di uno schermo non tolgono quelle di un altro; il file originale riletto a ogni uso, con nome e
    tipo dal file letto davvero; `Archivio.file_di` mai fuori dalla cartella (`..`, percorso assoluto,
    giunzione NTFS) né oltre `archivio_max_mb`; la tessera di chi amministra dice «tuoi».
+9. **Dalla seconda revisione della PR #268** (commento sulla #260): la ricerca trova i titoli fatti
+   di parole corte («CV», «Tre re») e ordina per pertinenza (il documento cercato non resta fuori dai
+   primi 20 dietro a quelli più recenti); il nome in «Scaricato: …» è quello del file salvato anche
+   quando la copia vera ha un'altra estensione; le voci di «Scarica» degli schermi revocati (dal
+   tool, e da terminale con un altro processo) se ne vanno.
 
 Nomi e dati di fantasia, niente rete né modelli.
 
@@ -321,10 +326,15 @@ def scaricamenti(hub, arch):
     (arch.cartella / "bolletta luce.tolta").rename(arch.cartella / "bolletta luce.pdf")
     verifica("scarica: il file tolto dalla cartella dopo la pagina, 404", ok)
     reg = hub.tool_ctx.speakers
-    via = reg.users.pop("Bianca")
     g = sc.gettone(schermo, bolletta["chiave"], "originale")
+    via = reg.users.pop("Bianca")
     try:
         sc.prendi(g["url"].rsplit("/", 1)[1])
+        ok = False
+    except scarica.Rifiuto as e:
+        ok = e.stato == 404
+    try:                                # e dal 2e già alla richiesta del gettone (estensione_fn)
+        sc.gettone(schermo, bolletta["chiave"], "originale")
         ok = False
     except scarica.Rifiuto as e:
         ok = e.stato == 404
@@ -474,6 +484,12 @@ def parole_vuote(hub):
         q = raccolte.cerca(hub, DARIO, "documenti", testo)
         verifica(f"cerca: solo parole vuote ({testo!r}) → niente da cercare, non i più recenti",
                  q.get("schede") == [] and "niente da cercare" in q.get("nota", ""), js(q)[:200])
+    # Una cifra sola (revisione della PR #269): l'archivio non la usa, e senza filtro dava i 20 più
+    # recenti come «trovati»; i documenti fatti da Calliope la confrontano (nessuno ha un «3» qui)
+    for testo in ("3", "di 3", "7 e"):
+        q = raccolte.cerca(hub, DARIO, "documenti", testo)
+        verifica(f"cerca: una cifra sola ({testo!r}) → niente dall'archivio, non i più recenti",
+                 not righe(q) and q.get("schede") == [] and "Trovat" not in q.get("nota", ""), js(q)[:200])
 
 
 def tessera_admin(hub):
@@ -564,6 +580,86 @@ def file_di_fuori():
             pass
 
 
+# ─────────────────────────── 9. dalla seconda revisione della PR #268 ───────────────────────────
+def ricerca_corta_e_pertinenza():
+    a = Archive(str(TMP / "corte.db"))
+    a.add("bianca", "Bianca", "word", "CV", "x", "CV.docx", doc_word("CV", "Esperienze."), None, "")
+    a.add("bianca", "Bianca", "word", "Tre re", "x", "Tre re.docx", doc_word("Tre re", "Una fiaba."), None, "")
+    a.add("bianca", "Bianca", "word", "Verbale 3", "x", "Verbale 3.docx", doc_word("Verbale 3", "Terzo."), None, "")
+    a.add("bianca", "Bianca", "word", "Lettera al comune di Lodi", "x", "Lettera al comune di Lodi.docx",
+          doc_word("Lettera al comune di Lodi", "Gentile sindaco."), None, "")
+    for i in range(30):                 # più recenti, con una parola in comune
+        a.add("bianca", "Bianca", "word", f"Lettera numero {i}", "x", f"Lettera {i}.docx",
+              doc_word(f"Lettera numero {i}", "x"), None, "")
+    hub = types.SimpleNamespace(servizi=types.SimpleNamespace(documenti=types.SimpleNamespace(archive=a)),
+                                tool_ctx=types.SimpleNamespace(speakers=Persone()))
+    q = raccolte.cerca(hub, BIANCA, "documenti", "CV")
+    verifica("cerca corta: «CV» trova il CV (prima solo parole di 4 lettere)", titoli(q) == ["CV"], js(titoli(q)))
+    q = raccolte.cerca(hub, BIANCA, "documenti", "tre re")
+    verifica("cerca corta: «tre re» trova «Tre re»", titoli(q)[:1] == ["Tre re"], js(titoli(q)))
+    q = raccolte.cerca(hub, BIANCA, "documenti", "lettera comune")
+    verifica("cerca: per pertinenza, la lettera al comune prima delle 30 più recenti (e dentro i primi 20)",
+             titoli(q)[:1] == ["Lettera al comune di Lodi"] and len(titoli(q)) == raccolte.CERCA_RISULTATI, js(titoli(q)[:3]))
+    q = raccolte.cerca(hub, BIANCA, "documenti", "lett")
+    verifica("cerca: l'inizio di una parola trova lo stesso (mezzo punto)", len(titoli(q)) == raccolte.CERCA_RISULTATI)
+    q = raccolte.cerca(hub, BIANCA, "documenti", "3")
+    verifica("cerca: la cifra sola trova i titoli che la hanno, uguale e non dentro un numero", set(titoli(q)) == {"Verbale 3", "Lettera numero 3"}, js(titoli(q)))
+    q = raccolte.cerca(hub, BIANCA, "documenti", "di il")
+    verifica("cerca corta: contrario, le parole vuote restano fuori", q.get("schede") == [] and "niente da cercare" in q.get("nota", ""))
+    q = raccolte.cerca(hub, TEO, "documenti", "CV")
+    verifica("cerca corta: contrario, un'altra persona non trova il CV di Bianca", titoli(q) == [], js(titoli(q)))
+    q = raccolte.cerca(hub, DARIO, "documenti", "CV")
+    verifica("cerca corta: chi amministra trova il CV di Bianca, col nome",
+             titoli(q) == ["CV"] and q["schede"][0].get("di") == "Bianca", js(titoli(q)))
+
+
+def nome_scaricato_uguale():
+    sc = scarica.Scaricamenti(Config())
+    sc.registra(7, {"chiave": "archivio:file:9", "scarica": ["originale"],
+                    "_scarica": {"file_fn": lambda: (b"JFIF foto", "jpg"), "estensione_fn": lambda: "jpg",
+                                 "titolo": "garanzia frigo", "estensione": "pdf"}}, "bianca")
+    g = sc.gettone({"id": 7, "proprietario": "bianca"}, "archivio:file:9", "originale")
+    nome, tipo, _ = sc.prendi(g["url"].rsplit("/", 1)[1])
+    verifica("scarica: il nome di «Scaricato: …» è quello del file salvato (la copia vera è .jpg)",
+             g["nome"] == nome == "garanzia frigo.jpg" and tipo == "image/jpeg", f"{g['nome']} {nome}")
+    sc.registra(7, {"chiave": "archivio:file:10", "scarica": ["originale"],
+                    "_scarica": {"file_fn": lambda: None, "estensione_fn": lambda: None, "titolo": "via"}}, "bianca")
+    try:
+        sc.gettone({"id": 7, "proprietario": "bianca"}, "archivio:file:10", "originale")
+        ok = False
+    except scarica.Rifiuto as e:
+        ok = e.stato == 404
+    verifica("scarica: il file non c'è più già alla richiesta del gettone: 404 subito", ok)
+
+
+def revocati(doc, arch):
+    cfg = Config()
+    cfg.config_dir = str(TMP)
+    cfg.memory_db = str(TMP / "memoria-revoca.db")
+    hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db), log=lambda m: None)
+    hub.archivio.crea_con_token("telefono", proprietario="bianca", proprietario_nome="Bianca")
+    hub.archivio.crea_con_token("studio", proprietario="dario", proprietario_nome="Dario Rossi")
+    hub._rinfresca()
+    ids = [s["id"] for s in hub.abbinati()]
+    a, b = ids[0], ids[1]
+    for sid, persona in ((a, "bianca"), (b, "dario")):
+        for i in range(5):
+            hub.scaricamenti.registra(sid, {"chiave": f"documento:{i}", "_scarica": {"documento": {}, "formato": "word"},
+                                            "scarica": ["md"]}, persona)
+    hub.scaricamenti.gettone({"id": a, "proprietario": "bianca"}, "documento:1", "md")
+    hub.revoca(a)
+    verifica("revoca: le voci di «Scarica» e i gettoni dello schermo revocato se ne vanno, quelle dell'altro restano",
+             hub.scaricamenti.voce(a, "documento:1") is None and hub.scaricamenti.voce(b, "documento:1") is not None
+             and not any(g["sid"] == a for g in hub.scaricamenti._gettoni.values()))
+    # Da terminale: un altro processo toglie lo schermo dal file; la cache si rilegge
+    altro = ArchivioSchermi(cfg.memory_db)
+    altro.revoca(b)
+    hub._rinfresca()
+    hub.abbinati()
+    verifica("revoca da terminale: alla rilettura degli abbinati anche quelle voci se ne vanno",
+             hub.scaricamenti.voce(b, "documento:1") is None and not hub.scaricamenti._voci)
+
+
 def main():
     try:
         doc = documenti_calliope()
@@ -588,6 +684,10 @@ def main():
         voci_per_schermo()
         originale_riletto()
         file_di_fuori()
+        print("— 9. dalla seconda revisione della PR #268")
+        ricerca_corta_e_pertinenza()
+        nome_scaricato_uguale()
+        revocati(doc, arch)
         arch.grafo.close() if hasattr(arch.grafo, "close") else None
     finally:
         shutil.rmtree(TMP, ignore_errors=True)

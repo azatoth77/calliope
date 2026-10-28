@@ -935,6 +935,73 @@ def pagina_documenti(t: Tel, hub, cartella: Path):
     t.v(f"{T}.vai('#/adesso'); 1")
 
 
+def pagina_ufficio(t: Tel, hub, cartella: Path):
+    """La pagina Ufficio (28/10, passo 2e, #260), di chi amministra: dalla tessera, i gruppi
+    (documenti dell'ufficio e rubrica), il nome ostile di un cliente e il motivo dell'annullo scritti
+    come testo, l'annullata segnata, «Scarica XML» col nome giusto, la ricerca e «Tutti», il 429 delle
+    letture che riprova da solo; niente fuori dalla vista."""
+    import prova_pagina_ufficio as ppu
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    ppu.prepara(cartella, hub.tool_ctx)
+    t.v(f"{T}.vai('#/cose'); 1")
+    t.v(f"{T}.aggiornaRaccolte(); 1")
+    aspetta(lambda: any(x["id"] == "ufficio" and x["conto"] == "6" for x in t.v(f"{S}.tessere") or []), 5)
+    t.tocca_sel('#tessere [data-tessera="ufficio"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/ufficio" and len(t.v(f"{S}.pagina") or []) == 6, 5)
+    gruppi = t.v(f"{S}.gruppi") or []
+    verifica("pagina Ufficio: dalla tessera, le serie e la rubrica nei loro gruppi",
+             bool(ok) and gruppi == ["Documenti dell'ufficio", "Rubrica"], json.dumps([gruppi, t.v(f"{S}.pagina")]))
+    verifica("pagina Ufficio: la casella della ricerca col suggerimento dell'ufficio",
+             t.v("!document.getElementById('pagina-cerca').hidden"
+                 " && document.getElementById('pagina-cerca-testo').placeholder.includes('cliente')"))
+    testo = t.v("document.getElementById('pagina-schede').textContent") or ""
+    verifica("pagina Ufficio: il nome ostile del cliente e il motivo restano testo (nessun img nato dal dato)",
+             testo.count("onerror") >= 3 and t.v("document.querySelectorAll('#pagina-schede img').length") == 0, testo[:200])
+    verifica("pagina Ufficio: la fattura annullata è segnata, con il motivo",
+             t.v("[...document.querySelectorAll('#pagina-schede li.annullata .stato-ufficio')]"
+                 ".some((e) => e.textContent.startsWith('Annullata: prova sbagliata'))"))
+    n = t.v("[...document.querySelectorAll('#pagina-schede .scheda-ufficio button[data-scarica]')]"
+            ".filter((b) => b.textContent === 'Scarica XML').length")
+    verifica("pagina Ufficio: «Scarica XML» per le fatture e la nota di credito", n == 3, str(n))
+    t.v("(() => { const b = [...document.querySelectorAll('#pagina-schede .scheda-ufficio button[data-scarica]')]"
+        ".find((x) => x.textContent === 'Scarica XML'); b.id = 'scarica-xml-prova'; })(); 1")
+    t.tocca("scarica-xml-prova")
+    esito = "document.getElementById('scarica-xml-prova').parentElement.querySelector('.esito-scarica').textContent"
+    ok = aspetta(lambda: "Scaricato" in (t.v(esito) or ""), 5)
+    verifica("pagina Ufficio: «Scarica XML» dà il file, col nome del file salvato", bool(ok)
+             and t.v(esito) == "Scaricato: Fattura 2.xml.", t.v(esito))
+    fuori = t.v("(() => { const w = document.documentElement.clientWidth; return [...document.querySelectorAll("
+                "'#pagina-schede .scheda-ufficio *')].filter((e) => { const r = e.getBoundingClientRect();"
+                " return r.width && (r.left < -1 || r.right > w + 1); }).length; })()")
+    verifica("pagina Ufficio: niente esce dalla vista (nomi lunghi, PEC, partite IVA)", fuori == 0, str(fuori))
+    t.v("document.getElementById('pagina-cerca-testo').value = 'Fittizia';"
+        " document.getElementById('pagina-cerca').requestSubmit(); 1")
+    ok = aspetta(lambda: t.v(f"{S}.cerca") == "Fittizia" and len(t.v(f"{S}.pagina") or []) == 2, 5)
+    verifica("pagina Ufficio: la ricerca per cliente, documenti e rubrica", bool(ok), json.dumps(t.v(f"{S}.pagina")))
+    # «Tutti» (fino alla revisione della PR #269 qui non si provava: con 30 letture al minuto la prova
+    # arrivava al 429). La casella è in cima alla pagina, che dopo «Scarica» è scorsa in basso
+    t.v("document.getElementById('pagina-cerca').scrollIntoView({block: 'center'}); 1")
+    t.tocca_sel("#pagina-cerca-via")
+    ok = aspetta(lambda: t.v(f"{S}.cerca") == "" and len(t.v(f"{S}.pagina") or []) == 6, 5)
+    verifica("pagina Ufficio: «Tutti» torna alla pagina intera", bool(ok),
+             json.dumps([t.v(f"{S}.cerca"), t.v(f"{S}.pagina"), t.v("document.getElementById('pagina-esito').textContent")]))
+    # Un 429 delle letture: la pagina resta com'era, lo dice e riprova da sola dopo Retry-After
+    t.v("(() => { const s = window.calliopeSchermo, f = s.raccolte; window.__volte = 0;"
+        " s.raccolte = async (d) => { if (d && d.raccolta === 'ufficio' && window.__volte++ === 0)"
+        " return { ok: false, status: 429, riprova: 1, dati: { errore: 'Troppe richieste in poco tempo: riprovo fra qualche secondo.' } };"
+        " return f(d); }; })(); 1")
+    t.v(f"{T}.aggiornaRaccolte(); 1")
+    ok = aspetta(lambda: "Troppe richieste" in (t.v("document.getElementById('pagina-esito').textContent") or ""), 5)
+    restano = len(t.v(f"{S}.pagina") or [])
+    verifica("pagina Ufficio: un 429 lo dice e la pagina resta piena", bool(ok) and restano == 6, str(restano))
+    ok = aspetta(lambda: t.v("window.__volte") >= 2 and t.v("document.getElementById('pagina-esito').textContent") == ""
+                 and len(t.v(f"{S}.pagina") or []) == 6, 6)
+    verifica("pagina Ufficio: dopo Retry-After riprova da sola, una volta, e torna a posto", bool(ok),
+             json.dumps([t.v("window.__volte"), t.v("document.getElementById('pagina-esito').textContent")]))
+    t.v(f"{T}.vai('#/adesso'); 1")
+
+
 def modulo_e_scrivi(t: Tel, hub):
     """Il modulo da compilare si apre da solo in uno strato; la casella per scrivere si apre
     da «Scrivi»; Io ha tutto il resto."""
@@ -1494,6 +1561,7 @@ def main() -> int:
             agenda_pagina(t, hub)
             pagine_2c(t, hub, TMP / "server")
             pagina_documenti(t, hub, TMP / "documenti")
+            pagina_ufficio(t, hub, TMP / "ufficio")
             misure(t, "schede")
             una_per_una(t)
             _, spec = modulo_e_scrivi(t, hub)

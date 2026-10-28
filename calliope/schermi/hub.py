@@ -161,6 +161,24 @@ def registra_scaricabili(scaricamenti, sid: int, scheda: dict, persona: str):
                                     "scarica": list(reg.get("formati") or ["md"])}, persona)
 
 
+def registra_pagina(scaricamenti, sid: int, schede: list, persona: str, log=None):
+    """«Scarica» di una pagina di Le mie cose (revisione della PR #269): le voci di uno schermo sono
+    al più `MAX_VOCI` e se ne va la più vecchia, quindi si registrano dall'ultima scheda alla prima
+    e dall'ultima riga alla prima: le prime della pagina (le fatture nell'Ufficio, i documenti più
+    recenti) sono le ultime a perdere «Scarica» se la pagina, o quelle aperte dopo, superano il
+    tetto."""
+    for c in reversed(list(schede or ())):
+        if not isinstance(c, dict) or not any(k in c for k in ("_scarica", "_registro", "_scarica_voci")):
+            continue
+        try:
+            voci = c.get("_scarica_voci")
+            registra_scaricabili(scaricamenti, sid, {**c, "_scarica_voci": list(reversed(voci))} if voci else c,
+                                 persona)
+        except Exception as e:  # noqa: BLE001 — «Scarica» non ferma la pagina
+            if log:
+                log(f"[SCHERMI] «Scarica» della pagina non registrato: {type(e).__name__}")
+
+
 class _Connessione:
     def __init__(self, schermo: dict, loop: asyncio.AbstractEventLoop, locale: bool = False):
         self.schermo = schermo
@@ -332,8 +350,16 @@ class Schermi:
         t, ver, rows = self._cache
         if ver == self.archivio.versione and time.monotonic() - t < 5.0:
             return rows
+        # La versione prima dell'elenco (revisione della PR #269): letta dopo, un abbinamento fatto
+        # nel mezzo lasciava per 5 s le righe vecchie con la versione nuova
+        ver = self.archivio.versione
         rows = self.archivio.elenco()
-        self._cache = (time.monotonic(), self.archivio.versione, rows)
+        self._cache = (time.monotonic(), ver, rows)
+        sc = getattr(self, "scaricamenti", None)
+        if sc is not None:
+            # Gli schermi revocati (anche da terminale) perdono le voci di «Scarica» (seconda
+            # revisione della PR #268, #260)
+            sc.tieni_solo(s["id"] for s in rows)
         return rows
 
     def _rinfresca(self):
@@ -969,6 +995,9 @@ class Schermi:
                 for c in self._conn.get(sid, []):
                     c.consegna(("revocato", "{}"))
                 self._storia.pop(sid, None)
+        sc = getattr(self, "scaricamenti", None)
+        if sc is not None:
+            sc.dimentica(sids)              # «Scarica» non vale più da qui (#260)
 
     def chiudi_tutte(self):
         """Arresto: ogni flusso SSE finisce da sé (le pagine si ricollegheranno), così uvicorn

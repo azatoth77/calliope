@@ -1272,10 +1272,104 @@ documenti per tipo, il tempo della pagina).
   - **Limiti noti** che restano: per costruire la pagina `Archivio.documenti(chi)` legge e filtra tutto
     l'archivio a ogni lettura (i permessi si decidono in Python, quindi niente `LIMIT` in SQL per tipo), e chi
     amministra riceve fino a 8 schede `documento` complete per persona; con un archivio di migliaia di
-    documenti va misurato sulla DGX. Le voci di «Scarica» di uno schermo revocato restano in memoria fino al
-    riavvio (poche: una per schermo abbinato).
+    documenti va misurato sulla DGX. *[storico, fino al 28/10 sera (passo 2e, #260): «Le voci di «Scarica»
+    di uno schermo revocato restano in memoria fino al riavvio»: ora se ne vanno, vedi la sezione qui sotto]*
   - Prove nuove in `prova_pagina_documenti`: 61 documenti (la nota, la ricerca che trova il più vecchio, la
     tessera che li conta tutti), sole parole vuote, la tessera di chi amministra, le voci di due schermi,
     l'originale riletto col tipo vero, `Archivio.file_di` mai fuori dalla cartella (`..`, `..\`, percorso
     assoluto, giunzione NTFS creata con `mklink /J`) né oltre `archivio_max_mb`; in `prova_documenti`
     «mostramelo» di un documento più vecchio degli ultimi 8.
+
+## Le mie cose: la pagina Ufficio, solo a chi amministra (28/10 sera, issue #260, ramo `issue-260-ufficio`)
+
+Passo 2e del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md)
+(§ 4.9), parte di #241, epic #251. Decisione del 28/10: **solo sugli schermi personali di chi amministra**.
+Nessun tocco nuovo (#266): la pagina legge e scarica soltanto; emettere, annullare e cambiare la rubrica si
+fa a voce, e l'invio allo SdI resta a mano.
+
+- **Primo commit, dalla seconda revisione della PR #268** (commento sulla #260):
+  - *La ricerca per titolo* dei documenti fatti da Calliope confrontava solo le parole di 4 lettere o più
+    (`provenienza.parole`) e si fermava ai primi 20 dal più recente: un titolo di parole corte («CV», «Tre
+    re») non si trovava mai, e con una parola comune il documento più vecchio restava fuori. Ora le parole
+    sono quelle che non sono vuote (`_parole_utili`: niente `_VUOTE` né lettere sole; una cifra sola sì,
+    «fattura 3»), e i risultati vanno per pertinenza (`_punti_titolo`: una parola uguale 1, l'inizio di una
+    parola di almeno 3 lettere 0,5), poi dal più recente.
+  - *Il nome in «Scaricato: …»* veniva dall'estensione registrata del documento, il file salvato da quella
+    del file letto davvero: con più copie potevano essere diversi. La sorgente ha ora `estensione_fn`, che
+    guarda il file che `file_fn` leggerà senza leggerlo, già alla richiesta del gettone (404 subito se non
+    c'è più o non è più visibile).
+  - *Gli schermi revocati*: `Scaricamenti.dimentica` (da `Schermi.avvisa_revoca`) e `tieni_solo` (a ogni
+    rilettura di `Schermi.abbinati`, anche dopo una revoca da terminale, cioè da un altro processo) tolgono le
+    voci di «Scarica», i gettoni e il conto delle richieste.
+- **La pagina** (`#/cose/ufficio`, `raccolte._pagina_ufficio`): 404 a tutti tranne chi amministra (come le
+  raccolte non visibili; mai a un minore, anche col segno di chi amministra), ricontrollato dentro la pagina
+  e la ricerca e non solo da `visibili`. A gruppi:
+  - «Documenti dell'ufficio»: una scheda nuova, `ufficio` (`schede.ufficio`, `DISEGNA.ufficio`), per serie
+    (Fatture, Note di credito, Preventivi, DDT, poi le serie dei modelli Word e PowerPoint), da
+    `Numeratore.elenco(con_dati=True)`, dalla più recente, al più 20 per serie («E altri N: cercali con
+    «Cerca».»). Per riga il numero («Fattura 12/2026»), data, cliente (il contatto della rubrica salvato nei
+    dati all'emissione), importo, lo stato («Emessa», «Annullata: motivo», «In preparazione») e «Scarica»
+    di ogni file generato (PDF di cortesia, XML della FatturaPA, Word, PowerPoint);
+  - «Rubrica»: `Rubrica.visibili` di chi guarda (quelli di casa e i suoi personali, non quelli personali
+    degli altri), per nome, al più 60, con tipo, partita IVA o codice fiscale, luogo, email, PEC, telefono e
+    «Di casa» o «Solo tua»;
+  - la nota «L'invio allo SdI lo fai tu, a mano: io preparo i file.»
+- **L'importo** è quello del programma: dal 28/10 `Ufficio._scrivi` salva nei dati del numero `_totale` (e
+  `_da_pagare` con la ritenuta). I numeri emessi prima non l'hanno e la pagina non lo rifà (i conti
+  dipendono dall'emittente e dalle aliquote di quel giorno): la riga resta senza importo. I DDT non ne hanno.
+- **I dati dei clienti sono dati non fidati** (detti a voce o scritti in un modulo, e il motivo
+  dell'annullo): solo testo, `textContent`, mai HTML (provato con un `<img onerror>` nel nome e nel motivo).
+- **«Scarica»** col formato `originale` del passo 2d; `ORIGINALI` ha anche `xml` (`application/xml`, come
+  allegato, con `nosniff` e la CSP `sandbox`) e `pptx`. Al clic, e già alla richiesta del gettone, la
+  sorgente rifà i controlli sul profilo com'è adesso (chi amministra ancora, non minore), rilegge il registro
+  dei numeri e serve solo un percorso che è ancora fra i file di quel numero, un file vero sotto i 50 MB. Il
+  percorso viene dal registro scritto da Calliope, mai da chi chiede. Chiavi
+  `ufficio:file:<serie>:<anno>:<numero>:<i>`.
+- **La ricerca** (`POST /api/raccolte/cerca` con `raccolta: "ufficio"`, `raccolte._cerca_ufficio`), con le
+  regole di quella dei Documenti: i documenti per tipo e numero (che contano il doppio: «fattura 1» è la
+  numero 1, non quella di un cliente con un «1» nel nome), cliente e titolo; i contatti per nome, comune,
+  partita IVA e codice fiscale; al più 20 per gruppo, per pertinenza e poi dal più recente. La casella ha il
+  suggerimento della pagina (`SUGGERIMENTO_RICERCA` in `sezioni.js`: «Cerca: cliente, numero, comune…»).
+- `SEZIONE_DI_TIPO` ha `ufficio` in `cose/ufficio` nei due posti, con il suo `data-posto` nelle due pagine;
+  `NOMI_TIPO` «Ufficio». Cache del service worker `calliope-telefono-pagina-v14` (era v13).
+- **Servizi**: senza l'ufficio la pagina dice «L'ufficio non è attivo qui» (come le altre pagine senza il
+  loro servizio); il registro dei numeri o la rubrica che sollevano danno 503, la tessera «non disponibile»,
+  e il testo cercato non va nel registro.
+
+Prove: `prova_pagina_ufficio` (nuova, livello 1: la pagina coi `Numeratore` e `Rubrica` veri, gli stati,
+l'importo e i numeri senza, più di 20 per serie, la rubrica di chi guarda; un familiare, un minore anche col
+segno di chi amministra e un ospite 404 su pagina e ricerca; la ricerca con parole corte, vuote e ostili;
+servizi che mancano o sollevano; «Scarica» di PDF e XML con nomi uguali, permessi al clic, file tolto o fuori
+dal registro; il server vero); in `prova_pagina_documenti` i tre punti della revisione; in `prova_ufficio` il
+totale nei dati del numero; `prova_telefono_schermo` e `prova_pc_pagina` (la pagina vera: gruppi, nome ostile
+e motivo come testo, l'annullata segnata, «Scarica XML» col nome del file salvato, niente fuori, ricerca,
+contrasto e clic a 1440×900 e 700×900); `prova_raccolte` adattata; `prova_sezioni` vuole il posto `cose/ufficio` nella pagina. Da provare sul
+vero: la pagina con le fatture vere della DGX e lo scaricamento dell'XML nella PWA dell'iPhone (#59).
+*[storico, fino alla revisione della PR #269: «Sul telefono «Tutti» non si prova nella pagina Ufficio: la
+prova arriva alle 30 letture al minuto»]*
+- **Dalla revisione della PR #269** (da correggere; tutto sistemato sullo stesso ramo):
+  - *Bloccante: la cifra sola.* «3» o «di 3» passavano `_parole_utili` (dal primo commit una cifra vale), ma
+    `Archivio.cerca` tiene solo le parole di 2 lettere o più: senza parole non filtrava, e la pagina
+    Documenti diceva «Trovati 20» coi documenti più recenti dell'archivio. Ora l'archivio si interroga solo
+    se c'è una parola che usa davvero; i documenti fatti da Calliope confrontano la cifra intera («3» trova
+    «Verbale 3», non «Verbale 13»).
+  - *Le letture di `/api/raccolte`* passano da 30 a 60 al minuto per schermo (`LETTURE_AL_MINUTO`): con 30
+    chi sfoglia le raccolte, più le riletture delle tessere (due per `aggiornaRaccolte`), arrivava al 429 e
+    la pagina restava vuota. La ricerca resta a 20 e i tocchi a 30.
+  - *Una frase per limite*: le letture «Troppe richieste in poco tempo: riprovo fra qualche secondo.», la
+    ricerca «Troppe ricerche in poco tempo…», i tocchi come prima; ogni 429 ha `Retry-After` e `riprova_s`
+    (i secondi finché si libera un posto).
+  - *La pagina riprova da sola*, una volta, dopo `Retry-After` (al più 60 s), e intanto resta com'era: una
+    rilettura della stessa pagina non tocca le schede; aprendo un'altra pagina quelle di prima restano nel
+    contenitore, nascoste e con `aria-busy`, finché arriva la prima risposta.
+  - *La chiave di «Scarica»* dei file dell'ufficio mai oltre gli 80 caratteri a cui `schede.ufficio` la
+    taglia (oltre, la serie diventa un'impronta): tagliata non era più quella registrata, e dava 404.
+  - *Precedenza in «Scarica»*: `hub.registra_pagina` registra le voci di una pagina dall'ultima scheda alla
+    prima e dall'ultima riga alla prima, così oltre `MAX_VOCI` le prime della pagina (le fatture, i documenti
+    più recenti) sono le ultime a perdere «Scarica».
+  - *La cache di `Schermi.abbinati`* legge la versione prima dell'elenco: letta dopo, un abbinamento fatto
+    nel mezzo lasciava per 5 s le righe vecchie con la versione nuova.
+  - Prove: in `prova_pagina_documenti` «3», «di 3» e «7 e» (niente dall'archivio) e «3» che trova i titoli
+    con la cifra; in `prova_raccolte` 60 letture, la frase e `Retry-After`; in `prova_pagina_ufficio` la
+    chiave di una serie lunghissima e la precedenza oltre il tetto; in `prova_telefono_schermo` «Tutti» nella
+    pagina Ufficio e un 429 finto che la pagina dice, senza svuotarsi, e riprova da sola.

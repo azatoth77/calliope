@@ -351,9 +351,14 @@
     // gesto indietro torna alle tessere. Le altre tessere dicono «presto» e portano, come prima,
     // al gruppo delle schede di quella raccolta.
     const racc = { tessere: [], timer: null, aperta: null, richiesta: 0, daTessere: false, rinfresca: null, rinfrescata: 0,
-      cerca: "" };
-    // Le pagine con la ricerca (28/10, passo 2d: i Documenti, POST /api/raccolte/cerca)
-    const CON_RICERCA = new Set(["documenti"]);
+      cerca: "", riprova: null };
+    // Le pagine con la ricerca (28/10, passo 2d: i Documenti; 2e: l'Ufficio, POST
+    // /api/raccolte/cerca; le stesse di raccolte.CON_RICERCA), con il suggerimento della casella
+    const CON_RICERCA = new Set(["documenti", "ufficio"]);
+    const SUGGERIMENTO_RICERCA = {
+      documenti: ["Cerca nei documenti", "Cerca: bolletta, garanzia, lettera…"],
+      ufficio: ["Cerca nell'ufficio", "Cerca: cliente, numero, comune…"],
+    };
     const CHIAVE_RACC = opz.chiaveRaccolte || "calliope.raccolte.viste";
     function vistePrima() {
       try {
@@ -467,7 +472,13 @@
         racc.aperta = id;
         racc.cerca = "";
         metti($("pagina-titolo"), String(t.nome || id));
-        $("pagina-schede").replaceChildren();
+        // Le schede dell'altra pagina restano finché arriva la risposta, ma nascoste e segnate
+        // «occupate» (revisione della PR #269: prima la pagina si svuotava subito, e un 429 la
+        // lasciava vuota); caricaPagina le sostituisce
+        const box = $("pagina-schede");
+        box.dataset.di = "";
+        box.hidden = true;
+        box.setAttribute("aria-busy", "true");
         disegnaRicerca();
         caricaPagina(id);
       } else requestAnimationFrame(scorriAllaScheda);
@@ -482,13 +493,31 @@
       if (!el && casa && casa.closest("#sez-cose") && casa.getClientRects().length) el = casa;
       if (el) { try { el.scrollIntoView({ block: "nearest", behavior: "instant" }); } catch (e) { el.scrollIntoView(); } }
     }
-    async function caricaPagina(id) {
+    async function caricaPagina(id, ripresa) {
       const n = ++racc.richiesta;
       const cercato = CON_RICERCA.has(id) ? racc.cerca : "";
       const r = cercato && sch().cerca ? await sch().cerca({ raccolta: id, testo: cercato })
         : await sch().raccolte({ raccolta: id });
       if (n !== racc.richiesta || racc.aperta !== id || (CON_RICERCA.has(id) ? racc.cerca : "") !== cercato) return;
       const box = $("pagina-schede"), nota = $("pagina-nota");
+      if (!r.ok && r.status === 429 && !ripresa) {
+        // Troppe letture (revisione della PR #269): lo dice e riprova da sola, una volta, dopo i
+        // secondi di Retry-After; intanto la pagina resta com'era
+        const s = Math.min(Math.max(Number(r.riprova || (r.dati && r.dati.riprova_s)) || 5, 1), 60);
+        metti($("pagina-esito"), String(r.dati.errore || "Troppe richieste in poco tempo: riprovo fra qualche secondo."));
+        clearTimeout(racc.riprova);
+        racc.riprova = setTimeout(() => {
+          if (racc.aperta === id && n === racc.richiesta) caricaPagina(id, true);
+        }, s * 1000);
+        return;
+      }
+      if (box.dataset.di !== id) {
+        // La prima risposta della pagina appena aperta (anche un errore): via le schede dell'altra
+        box.replaceChildren();
+        box.dataset.di = r.ok ? id : "";
+        box.hidden = false;
+        box.removeAttribute("aria-busy");
+      }
       if (!r.ok) {
         metti($("pagina-esito"), String(r.dati.errore || (cercato ? "Non riesco a cercare adesso: riprova tra poco."
           : "Non riesco a leggere questa pagina: riprova tra poco.")));
@@ -528,6 +557,8 @@
       const si = !!racc.aperta && CON_RICERCA.has(racc.aperta);
       f.hidden = !si;
       const i = $("pagina-cerca-testo"), via = $("pagina-cerca-via");
+      const sugg = SUGGERIMENTO_RICERCA[racc.aperta];
+      if (i && sugg) { i.setAttribute("aria-label", sugg[0]); i.placeholder = sugg[1]; }
       if (i && !racc.cerca) i.value = "";
       if (via) via.hidden = !racc.cerca;
     }

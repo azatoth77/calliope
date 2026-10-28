@@ -1109,6 +1109,9 @@ ul.voci-giochi p { margin: 0.1rem 0 0; overflow-wrap: anywhere; }
 ul.voci-archivio { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
 ul.voci-archivio .nome-documento { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
 ul.voci-archivio p { margin: 0.1rem 0 0; overflow-wrap: anywhere; }
+/* La pagina Ufficio (28/10, passo 2e, #260): lo stato sotto i dettagli, l'annullato più tenue */
+ul.voci-ufficio .stato-ufficio { color: var(--tenue); font-size: 0.95rem; }
+ul.voci-ufficio li.annullata .nome-documento { text-decoration: line-through; color: var(--tenue); }
 /* La spunta della lista (28/10, POST /api/tocco): ogni voce è un tasto «checkbox» */
 ul.voci.spunte li { padding: 0; }
 ul.voci.spunte li::before { display: none; }

@@ -21,8 +21,8 @@ Chi vede cosa (le regole sono le stesse della voce):
 
 `pagina(…)` dà le schede di una raccolta, costruite dai `schede.*` che esistono già (il disegno
 resta quello di `DISEGNA.*`): nel passo 2a le Liste, nel 2b l'Agenda (#257), nel 2c (#258) Lavori e
-programmi, Cassetto e Giochi, nel 2d (#259) i Documenti con la ricerca (`cerca`); l'Ufficio arriva
-col passo 2e. Le pagine leggono
+programmi, Cassetto e Giochi, nel 2d (#259) i Documenti con la ricerca (`cerca`), nel 2e (#260)
+l'Ufficio con la sua ricerca, solo a chi amministra. Le pagine leggono
 soltanto: le azioni sono quelle che le schede hanno già (i tasti del cassetto, i giochi), con le
 loro API e i loro controlli.
 """
@@ -34,8 +34,8 @@ TESSERE = (("liste", "Liste"), ("agenda", "Agenda"), ("lavori", "Lavori e progra
            ("cassetto", "Cassetto"), ("documenti", "Documenti"), ("giochi", "Giochi"),
            ("studio", "Studio"), ("ufficio", "Ufficio"))
 # Le pagine già fatte (le altre tessere dicono «presto»): passo 2a le Liste, 2b l'Agenda (#257),
-# 2c Lavori e programmi, Cassetto e Giochi (#258), 2d i Documenti (#259)
-PAGINE = ("liste", "agenda", "lavori", "cassetto", "giochi", "documenti")
+# 2c Lavori e programmi, Cassetto e Giochi (#258), 2d i Documenti (#259), 2e l'Ufficio (#260)
+PAGINE = ("liste", "agenda", "lavori", "cassetto", "giochi", "documenti", "ufficio")
 # Nella pagina Documenti: i documenti fatti da Calliope per persona (le schede portano il testo
 # intero per «Leggi»), e le righe dell'archivio di casa per tipo
 DOCUMENTI_PAGINA = 8
@@ -43,6 +43,8 @@ ARCHIVIO_PER_TIPO = 20
 # La ricerca: testo cercato al più così lungo, risultati al più tanti
 CERCA_MAX = 120
 CERCA_RISULTATI = 20
+# Le pagine con la ricerca (le stesse di CON_RICERCA in sezioni.js)
+CON_RICERCA = ("documenti", "ufficio")
 # La ricerca guarda tutti i documenti fatti da Calliope della persona (di tutti per chi amministra),
 # fino a questo tetto: la pagina ne mostra gli ultimi DOCUMENTI_PAGINA, gli altri si trovano così
 # (revisione della PR #268: «lo trovi in Le mie cose» deve essere vero)
@@ -327,7 +329,7 @@ def pagina(hub, prof, raccolta: str, schermo: dict | None = None, log=print) -> 
     if raccolta not in PAGINE:
         return {"schede": [], "nota": "Questa pagina arriva presto: intanto chiedilo a Calliope."}
     altre = {"agenda": lambda: _pagina_agenda(hub, prof), "lavori": lambda: _pagina_lavori(hub, prof),
-             "documenti": lambda: _pagina_documenti(hub, prof),
+             "documenti": lambda: _pagina_documenti(hub, prof), "ufficio": lambda: _pagina_ufficio(hub, prof),
              "cassetto": lambda: _pagina_cassetto(hub, prof), "giochi": lambda: _pagina_giochi(hub, prof, schermo)}
     if raccolta in altre:
         try:
@@ -746,15 +748,20 @@ def _scheda_documento(arch, r: dict, gruppo: str, di: str = "") -> dict | None:
     return c
 
 
+def _file_visibile(hub, prof, arch, doc_id: int):
+    """Il file vero di un documento dell'archivio, se la persona com'è adesso può vederlo."""
+    ora = _profilo_ora(hub, prof)
+    chi = _chi_archivio(ora) if ora is not None else None
+    if chi is None or arch.documento_visibile(chi, doc_id) is None:
+        return None
+    return arch.file_di(doc_id)
+
+
 def _leggi_file(hub, prof, arch, doc_id: int):
     """La funzione che «Scarica» chiama al clic (scarica.converti): i permessi rifatti adesso,
     sul profilo com'è adesso, poi i byte del file vero dentro la cartella dell'archivio."""
     def leggi():
-        ora = _profilo_ora(hub, prof)
-        chi = _chi_archivio(ora) if ora is not None else None
-        if chi is None or arch.documento_visibile(chi, doc_id) is None:
-            return None
-        p = arch.file_di(doc_id)
+        p = _file_visibile(hub, prof, arch, doc_id)
         if p is None:
             return None
         try:
@@ -762,6 +769,15 @@ def _leggi_file(hub, prof, arch, doc_id: int):
         except OSError:
             return None
     return leggi
+
+
+def _estensione_file(hub, prof, arch, doc_id: int):
+    """L'estensione del file che `_leggi_file` leggerà, senza leggerlo: il nome in «Scaricato: …»
+    uguale a quello del file salvato (seconda revisione della PR #268, #260)."""
+    def estensione():
+        p = _file_visibile(hub, prof, arch, doc_id)
+        return p.suffix.lstrip(".").lower() if p is not None else None
+    return estensione
 
 
 def _di_chi(arch, d: dict, nomi_nodi: dict) -> str:
@@ -833,6 +849,7 @@ def _schede_archivio(hub, prof, arch, docs: list, chiave: str, titolo: str = "",
             if ok:
                 sorgenti.append({"chiave": ck, "formati": ["originale"],
                                  "sorgente": {"file_fn": _leggi_file(hub, prof, arch, d["id"]),
+                                              "estensione_fn": _estensione_file(hub, prof, arch, d["id"]),
                                               "titolo": Path(nome_file).stem or nome, "estensione": ext}})
         altri = len(tutti) - len(voci)
         nota = (nota_fn() if nota_fn else "") or (f"E altri {altri}: chiedimeli a voce." if altri > 0 else "")
@@ -896,47 +913,77 @@ def _pagina_documenti(hub, prof) -> dict:
 
 
 def cerca(hub, prof, raccolta: str, testo: str, log=print) -> dict:
-    """La ricerca di una pagina (28/10, passo 2d, #259; oggi solo i Documenti): {schede, nota} o
+    """La ricerca di una pagina (28/10, passo 2d, #259: i Documenti; 2e, #260: l'Ufficio): {schede, nota} o
     {errore, _stato}. Gli stessi permessi della pagina: i documenti fatti da Calliope della
     persona (di tutti per chi amministra) per parole del titolo, e l'archivio di casa con
     `Archivio.cerca` e il `Chi` della pagina. Il testo cercato non va nel registro."""
-    if raccolta != "documenti" or raccolta not in visibili(prof):
+    if raccolta not in CON_RICERCA or raccolta not in visibili(prof):
         return {"errore": "qui non si cerca", "_stato": 404}
     t = " ".join(str(testo or "").split())[:CERCA_MAX]
     if not t:
         return {"schede": [], "nota": "Scrivi cosa cercare."}
     try:
-        return _cerca_documenti(hub, prof, t)
+        return (_cerca_ufficio if raccolta == "ufficio" else _cerca_documenti)(hub, prof, t)
     except Exception as e:  # noqa: BLE001 — un servizio guasto: la pagina lo dice, il server resta
         log(f"   [SCHERMI] ricerca nella pagina «{raccolta}» non riuscita: {type(e).__name__}")
         return {"errore": "Non riesco a cercare adesso: riprova tra poco.", "_stato": 503}
 
 
-def _cerca_documenti(hub, prof, t: str) -> dict:
-    from pathlib import Path
-    from ..provenienza import parole
+def _punti_titolo(utili: list, titolo: str) -> float:
+    """La pertinenza di un titolo per la ricerca (dalla revisione della PR #268, #260): una parola
+    cercata uguale a una del titolo vale 1, una che ne è l'inizio (almeno 3 lettere: «fatt» →
+    «fattura») mezzo punto. Parole corte comprese («CV», «Tre re»): basta che non siano vuote."""
+    from ..archivio import normalizza as nz
+    sue = set(nz.piatto(titolo).split())
+    punti = 0.0
+    for w in utili:
+        if w in sue:
+            punti += 1.0
+        elif len(w) >= 3 and any(x.startswith(w) for x in sue):
+            punti += 0.5
+    return punti
+
+
+def _parole_utili(t: str) -> list:
+    """Le parole della ricerca che non sono vuote («di», «è», una lettera sola), senza doppioni,
+    nell'ordine dette (come `Archivio.cerca`). Una cifra sola vale: «fattura 3»."""
     from ..archivio import normalizza as nz
     from ..archivio.servizio import _VUOTE
     out = []
+    for w in nz.piatto(t).split():
+        if w not in _VUOTE and (len(w) > 1 or w.isdigit()) and w not in out:
+            out.append(w)
+    return out
+
+
+def _cerca_documenti(hub, prof, t: str) -> dict:
+    from pathlib import Path
+    out = []
     # Solo parole vere (revisione della PR #268): con «di», «è» o una lettera sola l'archivio non
-    # filtra e darebbe i più recenti come «trovati»
-    utili = [w for w in nz.piatto(t).split() if w not in _VUOTE and len(w) > 1]
+    # filtra e darebbe i più recenti come «trovati». Dalla seconda revisione (#260) anche le parole
+    # corte che non sono vuote («CV», «Tre re»): prima il titolo si confrontava solo sulle parole
+    # di 4 lettere o più (`provenienza.parole`) e un titolo fatto di parole corte non si trovava
+    utili = _parole_utili(t)
     if not utili:
         return {"schede": [], "nota": "Non c'è niente da cercare: scrivi una parola più lunga."}
-    mie = {w for w in parole(t) if len(w) > 1}
     admin = bool(getattr(prof, "admin", False))
     doc = _servizio_documenti(hub)
     trovati = 0
-    if doc is not None and _documenti_ammessi(prof) and mie:
+    if doc is not None and _documenti_ammessi(prof):
         righe = (doc.recenti_di_tutti(CERCA_TRA) if admin and hasattr(doc, "recenti_di_tutti")
                  else doc.recenti(prof.id, CERCA_TRA))
         nomi = _nomi_persone(hub)
-        for r in righe:
+        # Per pertinenza, poi dal più recente (seconda revisione della PR #268): prima si fermava
+        # ai primi 20 dal più recente, e con una parola comune il documento cercato restava fuori
+        candidati = []
+        for i, r in enumerate(righe):
             if not admin and r.get("owner") != prof.id:
                 continue                        # mai di un altro, qualunque cosa dia il servizio
-            sue = parole(str(r.get("titolo") or "")) | parole(Path(str(r.get("nome_file") or "")).stem)
-            if not (mie & sue):
-                continue
+            punti = _punti_titolo(utili, f"{r.get('titolo') or ''} {Path(str(r.get('nome_file') or '')).stem}")
+            if punti > 0:
+                candidati.append((-punti, i, r))
+        candidati.sort(key=lambda x: (x[0], x[1]))
+        for _, _, r in candidati:
             nome = "" if r.get("owner") == prof.id else (nomi.get(r.get("owner")) or r.get("owner_name") or "")
             c = _scheda_documento(doc, r, "Fatti da Calliope", nome)
             if c:
@@ -946,7 +993,10 @@ def _cerca_documenti(hub, prof, t: str) -> dict:
                 break
     arch = _fonte(hub, "archivio")
     chi = _chi_archivio(prof)
-    if arch is not None and chi is not None:
+    # All'archivio solo con una parola che usa davvero (revisione della PR #269): `Archivio.cerca`
+    # tiene le parole di 2 lettere o più, e con la sola cifra («3», «di 3») non filtrava e dava i
+    # 20 documenti più recenti come «trovati»
+    if arch is not None and chi is not None and any(len(w) > 1 for w in utili):
         res = arch.cerca(chi, t, limite=CERCA_RISULTATI)
         docs = list(res.get("documenti") or [])
         if docs:
@@ -1011,3 +1061,306 @@ def _lavori_degli_altri(hub, svc, prof) -> list:
             out.append(breve(lv.titolo, lv.tipo, lv.stato, ar.riassunto_salvato(lv) or "", "",
                              f"altrui:lavoro:{ar.chiave(lv)}"))
     return out
+
+
+# ─────────────────────────── 2e: Ufficio, solo chi amministra (#260) ───────────────────────────
+
+# Le serie dell'ufficio nella pagina, in quest'ordine (ufficio/numerazione.FORMATI): il nome del
+# gruppo e quello di un documento; le serie dei modelli Word e PowerPoint vengono dopo
+SERIE_PAGINA = {"fatture": ("Fatture", "Fattura"), "note_credito": ("Note di credito", "Nota di credito"),
+                "preventivi": ("Preventivi", "Preventivo"), "ddt": ("DDT", "DDT")}
+UFFICIO_PER_SERIE = 20          # i numeri più recenti di ogni serie; gli altri con «Cerca»
+RUBRICA_PAGINA = 60             # i contatti nella pagina, per nome; gli altri con «Cerca»
+# I file di un documento dell'ufficio che si scaricano (il PDF, l'XML della FatturaPA, i modelli
+# Word e PowerPoint), al più tanti per riga e mai oltre questa dimensione
+UFFICIO_FILE = 3
+UFFICIO_MAX_BYTE = 50 * 1024 * 1024
+CHIAVE_MAX = 80                 # come il taglio della chiave in schede.ufficio
+
+
+def _servizio_ufficio(hub):
+    """Il servizio dell'ufficio (ufficio/servizio.Ufficio) con la numerazione, o None."""
+    uff = _fonte(hub, "ufficio")
+    if uff is None or getattr(uff, "numeri", None) is None:
+        return None
+    return uff
+
+
+def _ufficio_ammesso(prof) -> bool:
+    """Solo chi amministra (decisione del 28/10), mai un minore (come `visibili`)."""
+    from .. import minori
+    return bool(getattr(prof, "admin", False)) and not minori.e_minore(prof)
+
+
+def _cliente_di(dati: dict) -> str:
+    """Il cliente (o il destinatario) di un documento dell'ufficio: il contatto della rubrica
+    salvato nei dati all'emissione (`cliente`, o il primo campo anagrafica). Un dato non fidato:
+    la pagina lo scrive come testo."""
+    from ..ufficio.rubrica import nome_di
+    c = dati.get("cliente")
+    if not isinstance(c, dict):
+        c = next((v for v in dati.values() if isinstance(v, dict) and "nome_completo" in v), c)
+    if isinstance(c, dict):
+        return str(c.get("nome_completo") or nome_di(c))
+    return str(c or "")
+
+
+def _importo_di(dati: dict) -> str:
+    """Il totale salvato all'emissione (`_totale`, dal 28/10) all'italiana; niente per i numeri
+    emessi prima e per i DDT (nessun importo): la pagina non rifà i conti."""
+    from ..ufficio import conti
+    v = dati.get("_totale")
+    if v in (None, ""):
+        return ""
+    try:
+        out = conti.euro(conti.dec(v))
+        if dati.get("_da_pagare") not in (None, ""):
+            out += f", da pagare {conti.euro(conti.dec(dati['_da_pagare']))}"
+        return out
+    except Exception:  # noqa: BLE001 — un valore strano: niente importo
+        return ""
+
+
+def _data_doc(iso) -> str:
+    try:
+        return datetime.date.fromisoformat(str(iso)).strftime("%d/%m/%Y")
+    except (TypeError, ValueError):
+        return str(iso or "")
+
+
+def _nomi_serie(serie: str, modello: str = "") -> tuple[str, str]:
+    """(nome del gruppo, nome di un documento) di una serie."""
+    if serie in SERIE_PAGINA:
+        return SERIE_PAGINA[serie]
+    nome = str(modello or serie).replace("_", " ").strip() or "Documenti"
+    nome = nome[:1].upper() + nome[1:]
+    return nome, nome
+
+
+def _stato_doc(r: dict, femminile: bool) -> tuple[str, bool]:
+    """(stato detto, annullato): emesso, annullato col motivo, o in preparazione. L'invio allo SdI
+    resta a mano e non si registra: la pagina non dice mai «inviata»."""
+    from ..ufficio.numerazione import PRENOTATO
+    stato = str(r.get("stato") or "")
+    if stato == "annullato":
+        nota = " ".join(str(r.get("nota") or "").split())[:160]
+        return ("Annullata" if femminile else "Annullato") + (f": {nota}" if nota else ""), True
+    if stato == PRENOTATO:
+        return "In preparazione", False
+    return ("Emessa" if femminile else "Emesso"), False
+
+
+def _leggi_file_ufficio(hub, prof, uff, serie: str, anno: int, numero: int, percorso: str):
+    """Le funzioni che «Scarica» chiama (file_fn, estensione_fn): chi guarda è ancora chi
+    amministra (il profilo com'è adesso), il file è ancora uno di quelli registrati per quel
+    numero, è un file vero e non è troppo grande; poi i byte. Il percorso viene dal registro dei
+    numeri (scritto da Calliope all'emissione), mai da chi chiede."""
+    from pathlib import Path
+
+    def percorso_ok():
+        ora = _profilo_ora(hub, prof)
+        if ora is None or not _ufficio_ammesso(ora):
+            return None
+        try:
+            righe = uff.numeri.elenco(serie, anno)
+        except Exception:  # noqa: BLE001 — il registro illeggibile: niente file
+            return None
+        r = next((x for x in righe if x.get("numero") == numero), None)
+        if r is None or percorso not in [str(f) for f in r.get("file") or ()]:
+            return None
+        try:
+            p = Path(percorso)
+            if not p.is_file() or p.stat().st_size > UFFICIO_MAX_BYTE:
+                return None
+        except (OSError, ValueError):
+            return None
+        return p
+
+    def leggi():
+        p = percorso_ok()
+        if p is None:
+            return None
+        try:
+            return p.read_bytes(), p.suffix.lstrip(".").lower()
+        except OSError:
+            return None
+
+    def estensione():
+        p = percorso_ok()
+        return p.suffix.lstrip(".").lower() if p is not None else None
+    return leggi, estensione
+
+
+def _chiave_file(serie, anno, numero, i) -> str:
+    """La chiave di «Scarica» di un file dell'ufficio, al più CHIAVE_MAX caratteri: `schede.ufficio`
+    taglia la chiave a 80, e una chiave tagliata non sarebbe più quella registrata (404; revisione
+    della PR #269). Le serie dei modelli sono di 30 lettere al più (modelli.py), ma qui non ci si
+    conta: oltre il tetto la serie diventa un'impronta."""
+    import hashlib
+    ck = f"ufficio:file:{serie}:{anno}:{numero}:{i}"
+    if len(ck) > CHIAVE_MAX:
+        h = hashlib.sha256(str(serie).encode("utf-8")).hexdigest()[:12]
+        ck = f"ufficio:file:{h}:{anno}:{numero}:{i}"[:CHIAVE_MAX]
+    return ck
+
+
+def _voce_documento(hub, prof, uff, r: dict) -> tuple[dict, list]:
+    """Una riga della scheda `ufficio` per un numero, con le sorgenti di «Scarica»."""
+    from pathlib import Path
+    from .scarica import ORIGINALI
+    _, uno = _nomi_serie(r["serie"], r.get("modello") or "")
+    dati = r.get("dati") if isinstance(r.get("dati"), dict) else {}
+    stato, annullato = _stato_doc(r, uno.lower().startswith(("fattura", "nota")))
+    dettagli = [x for x in (_data_doc(r.get("data")), _cliente_di(dati), _importo_di(dati)) if x]
+    file, sorgenti = [], []
+    for i, f in enumerate([str(x) for x in r.get("file") or ()][:UFFICIO_FILE]):
+        ext = Path(f).suffix.lstrip(".").lower()
+        if ext not in ORIGINALI:
+            continue
+        ck = _chiave_file(r["serie"], r["anno"], r["numero"], i)
+        leggi, estensione = _leggi_file_ufficio(hub, prof, uff, r["serie"], int(r["anno"]), int(r["numero"]), f)
+        file.append({"chiave": ck, "estensione": ext})
+        sorgenti.append({"chiave": ck, "formati": ["originale"],
+                         "sorgente": {"file_fn": leggi, "estensione_fn": estensione,
+                                      "titolo": Path(f).stem or f"{uno} {r.get('testo') or ''}", "estensione": ext}})
+    voce = {"nome": f"{uno} {r.get('testo') or r.get('numero')}", "dettagli": dettagli, "stato": stato,
+            "annullato": annullato, "file": file}
+    return voce, sorgenti
+
+
+def _schede_numeri(hub, prof, uff, righe: list, chiave: str, per_serie: bool = True, titolo: str = "",
+                   nota_fn=None) -> list:
+    """Le schede `ufficio` dei documenti: una per serie (`per_serie`, i più recenti per primi, al
+    più UFFICIO_PER_SERIE) o una sola (`titolo`, per la ricerca)."""
+    from . import schede
+    gruppi: dict = {}
+    for r in righe:
+        gruppi.setdefault(r["serie"] if per_serie else "", []).append(r)
+    ordine = [k for k in SERIE_PAGINA if k in gruppi] + sorted(k for k in gruppi if k not in SERIE_PAGINA)
+    out = []
+    for serie in ordine:
+        tutte = gruppi[serie]
+        voci, sorgenti = [], []
+        for r in tutte[:UFFICIO_PER_SERIE]:
+            v, s = _voce_documento(hub, prof, uff, r)
+            voci.append(v)
+            sorgenti += s
+        altri = len(tutte) - len(voci)
+        nota = (nota_fn() if nota_fn else "") or (f"E altri {altri}: cercali con «Cerca»." if altri > 0 else "")
+        nome = _nomi_serie(serie, tutte[0].get("modello") or "")[0] if per_serie else titolo
+        c = schede.ufficio(f"{chiave}:{serie}" if per_serie else chiave, nome, voci, nota=nota)
+        c["gruppo"] = "Documenti dell'ufficio"
+        c["_scarica_voci"] = sorgenti
+        out.append(c)
+    return out
+
+
+def _voce_contatto(c: dict) -> dict:
+    """Una riga della rubrica: nome, tipo, partita IVA o codice fiscale, luogo, recapiti, e di chi
+    è (di casa o solo sua). Dati non fidati: la pagina li scrive come testo."""
+    from ..ufficio.rubrica import CASA
+    luogo = " ".join(str(x) for x in (c.get("cap"), c.get("comune")) if x)
+    if c.get("provincia") and luogo:
+        luogo += f" ({c['provincia']})"
+    codice = (f"P. IVA {c['partita_iva']}" if c.get("partita_iva")
+              else f"CF {c['codice_fiscale']}" if c.get("codice_fiscale") else "")
+    tipo = str(c.get("tipo") or "")
+    dettagli = [x for x in (tipo[:1].upper() + tipo[1:], codice, luogo, c.get("email"), c.get("pec"),
+                            c.get("telefono")) if x]
+    return {"nome": str(c.get("nome_completo") or "Senza nome"), "dettagli": [str(x) for x in dettagli],
+            "stato": "Di casa" if c.get("ambito") == CASA else "Solo tua", "annullato": False, "file": []}
+
+
+def _scheda_rubrica(contatti: list, chiave: str, titolo: str = "Rubrica", nota: str = "") -> dict:
+    from . import schede
+    c = schede.ufficio(chiave, titolo, [_voce_contatto(x) for x in contatti], nota=nota,
+                       vuoto="La rubrica è vuota: i contatti si aggiungono a voce.")
+    c["gruppo"] = "Rubrica"
+    return c
+
+
+def _numeri_recenti(uff) -> list:
+    """Tutti i numeri con i dati, dal più recente (quando è stato preso il numero; a parità anno e
+    numero all'indietro)."""
+    righe = uff.numeri.elenco(con_dati=True)
+    return sorted(righe, key=lambda r: (-float(r.get("creato") or 0), -int(r.get("anno") or 0),
+                                        -int(r.get("numero") or 0)))
+
+
+def _contatti(uff, prof) -> list | None:
+    rub = getattr(uff, "rubrica", None)
+    if rub is None:
+        return None
+    return sorted(rub.visibili(prof.id), key=lambda c: str(c.get("nome_completo") or "").casefold())
+
+
+def _pagina_ufficio(hub, prof) -> dict:
+    """La pagina Ufficio (28/10, passo 2e, #260; progetto § 4.9): solo sugli schermi personali di
+    chi amministra (decisione del 28/10; `visibili` la nasconde agli altri, e qui si ricontrolla).
+    Fatture, note di credito, preventivi e DDT (e le serie dei modelli) da `Numeratore.elenco`, una
+    scheda `ufficio` per serie: numero, data, cliente, importo, stato (emesso o annullato col
+    motivo) e «Scarica» dei file generati (PDF, XML della FatturaPA); poi la rubrica
+    (`Rubrica.visibili`: di casa e sua). In sola lettura: emettere, annullare e cambiare la rubrica
+    si fa a voce, e l'invio allo SdI resta a mano."""
+    if not _ufficio_ammesso(prof):
+        return {"errore": "raccolta sconosciuta", "_stato": 404}
+    uff = _servizio_ufficio(hub)
+    if uff is None:
+        return {"schede": [], "nota": "L'ufficio non è attivo qui: fatture, preventivi e DDT non ci sono."}
+    out = _schede_numeri(hub, prof, uff, _numeri_recenti(uff), f"ufficio:{prof.id}")
+    note = [] if out else ["Non ci sono ancora fatture, preventivi né DDT: si preparano a voce."]
+    contatti = _contatti(uff, prof)
+    if contatti is not None:
+        altri = len(contatti) - RUBRICA_PAGINA
+        out.append(_scheda_rubrica(contatti[:RUBRICA_PAGINA], f"ufficio:rubrica:{prof.id}",
+                                   nota=f"E altri {altri}: cercali con «Cerca»." if altri > 0 else ""))
+    note.append("L'invio allo SdI lo fai tu, a mano: io preparo i file.")
+    return {"schede": out, "nota": " ".join(note)}
+
+
+def _cerca_ufficio(hub, prof, t: str) -> dict:
+    """La ricerca nella pagina Ufficio, con le regole di quella dei Documenti: le parole che non
+    sono vuote, per pertinenza e poi dal più recente, al più CERCA_RISULTATI documenti e altrettanti
+    contatti. Un documento si trova per numero («12», «2026»), tipo, cliente e titolo; un contatto
+    per nome, comune, partita IVA o codice fiscale."""
+    if not _ufficio_ammesso(prof):
+        return {"errore": "qui non si cerca", "_stato": 404}
+    utili = _parole_utili(t)
+    if not utili:
+        return {"schede": [], "nota": "Non c'è niente da cercare: scrivi una parola più lunga."}
+    uff = _servizio_ufficio(hub)
+    if uff is None:
+        return {"schede": [], "nota": "L'ufficio non è attivo qui."}
+    candidati = []
+    for i, r in enumerate(_numeri_recenti(uff)):
+        _, uno = _nomi_serie(r["serie"], r.get("modello") or "")
+        dati = r.get("dati") if isinstance(r.get("dati"), dict) else {}
+        # Il tipo e il numero contano il doppio: «fattura 1» è la fattura numero 1, non quella di
+        # un cliente con un «1» nel nome
+        p = (2 * _punti_titolo(utili, f"{uno} {r.get('testo') or ''}")
+             + _punti_titolo(utili, f"{_cliente_di(dati)} {r.get('titolo') or ''}"))
+        if p > 0:
+            candidati.append((-p, i, r))
+    candidati.sort(key=lambda x: (x[0], x[1]))
+    numeri = [r for _, _, r in candidati[:CERCA_RISULTATI]]
+    out = []
+    if numeri:
+        resto = len(candidati) - len(numeri)
+        out += _schede_numeri(hub, prof, uff, numeri, f"ufficio:cerca:{prof.id}", per_serie=False,
+                              titolo="Trovati fra i documenti",
+                              nota_fn=lambda: f"E altri {resto}." if resto > 0 else "")
+    trovati = []
+    cand = []
+    for i, c in enumerate(_contatti(uff, prof) or []):
+        p = _punti_titolo(utili, " ".join(str(c.get(k) or "") for k in
+                                          ("nome_completo", "comune", "partita_iva", "codice_fiscale")))
+        if p > 0:
+            cand.append((-p, i, c))
+    cand.sort(key=lambda x: (x[0], x[1]))
+    trovati = [c for _, _, c in cand[:CERCA_RISULTATI]]
+    if trovati:
+        out.append(_scheda_rubrica(trovati, f"ufficio:rubrica:cerca:{prof.id}", "Trovati in rubrica"))
+    n = len(numeri) + len(trovati)
+    nota = (f"Trovati {n} risultati." if n > 1 else "Trovato un risultato." if n == 1
+            else "Non trovo documenti né contatti con queste parole.")
+    return {"schede": out, "nota": nota}

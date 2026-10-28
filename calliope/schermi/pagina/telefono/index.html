@@ -87,7 +87,7 @@
           <h2 id="pagina-titolo" class="pagina-titolo"></h2>
         </div>
         <p id="pagina-nota" class="pagina-nota" hidden></p>
-        <!-- La ricerca della pagina Documenti (28/10, passo 2d: POST /api/raccolte/cerca, sezioni.js) -->
+        <!-- La ricerca delle pagine Documenti e Ufficio (28/10, passi 2d e 2e: POST /api/raccolte/cerca, sezioni.js) -->
         <form id="pagina-cerca" class="pagina-cerca" role="search" hidden>
           <input id="pagina-cerca-testo" type="search" aria-label="Cerca nei documenti" maxlength="120" autocomplete="off" enterkeyhint="search" placeholder="Cerca: bolletta, garanzia, lettera…">
           <button type="submit" class="tasto pagina-cerca-vai">Cerca</button>
@@ -104,6 +104,7 @@
       <div class="raccolta" data-raccolta="cassetto" hidden><h2 class="gruppo">Cassetto</h2><div class="elenco" data-posto="cose/cassetto"></div></div>
       <div class="raccolta" data-raccolta="giochi" hidden><h2 class="gruppo">Giochi</h2><div class="elenco" data-posto="cose/giochi"></div></div>
       <div class="raccolta" data-raccolta="studio" hidden><h2 class="gruppo">Studio</h2><div class="elenco" data-posto="cose/studio"></div></div>
+      <div class="raccolta" data-raccolta="ufficio" hidden><h2 class="gruppo">Ufficio</h2><div class="elenco" data-posto="cose/ufficio"></div></div>
       <p class="vuoto-sez">Qui ritrovi le liste, l'agenda, i lavori, i documenti, i file e i giochi che Calliope ti ha mostrato.</p>
     </section>
 

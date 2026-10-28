@@ -30,7 +30,7 @@
     risposta: "Risposta", foto: "Foto", allegato: "File", gioco: "Gioco", giochi: "Giochi",
     cruscotto: "Cruscotto", cassetto: "Cassetto", esercizio: "Esercizi",
     esercizi_riepilogo: "Esercizi", sviluppo: "Sviluppo", chat: "Conversazione",
-    conoscente: "Voce nuova", avviso: "Avviso", archivio: "Archivio di casa",
+    conoscente: "Voce nuova", avviso: "Avviso", archivio: "Archivio di casa", ufficio: "Ufficio",
   };
   // Il telefono a sezioni (27/10, docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md, 3.2):
   // la casa fissa di ogni tipo, «sezione» o «sezione/raccolta». La stessa tabella è in
@@ -41,7 +41,8 @@
     web: "conversazione", testo: "conversazione", chat: "conversazione",
     timer: "cose/agenda", promemoria: "cose/agenda", lista: "cose/liste",
     lavoro: "cose/lavori", esecuzione: "cose/lavori", sviluppo: "cose/lavori",
-    documento: "cose/documenti", archivio: "cose/documenti", foto: "cose/cassetto", allegato: "cose/cassetto",
+    documento: "cose/documenti", archivio: "cose/documenti", ufficio: "cose/ufficio",
+    foto: "cose/cassetto", allegato: "cose/cassetto",
     cassetto: "cose/cassetto", modulo: "cose", gioco: "cose/giochi", giochi: "cose/giochi",
     esercizio: "cose/studio", esercizi_riepilogo: "cose/studio",
     casa: "casa", conoscente: "casa", avviso: "casa", cruscotto: "io",
@@ -320,7 +321,7 @@
       if (!S.sessione) return { ok: false, status: 0, dati: {} };
       try {
         const r = await postSessione("/api/raccolte", dati || {});
-        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {}, riprova: r.riprova };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
     // La ricerca di una pagina (28/10, passo 2d: i Documenti): {raccolta, testo} → {schede, nota}
@@ -328,7 +329,7 @@
       if (!S.sessione) return { ok: false, status: 0, dati: {} };
       try {
         const r = await postSessione("/api/raccolte/cerca", dati || {});
-        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {}, riprova: r.riprova };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
   };
@@ -2658,7 +2659,9 @@
     });
     let d = {};
     try { d = await r.json(); } catch (e) { /* vuota */ }
-    return { status: r.status, dati: d };
+    // I secondi di Retry-After di un 429 (revisione della PR #269: la pagina di Le mie cose riprova)
+    const ra = Number(r.headers && r.headers.get ? r.headers.get("Retry-After") : NaN);
+    return { status: r.status, dati: d, riprova: Number.isFinite(ra) && ra > 0 ? ra : 0 };
   }
 
   const MESSAGGI = {
@@ -4190,6 +4193,47 @@
         b.dataset.scarica = "originale";
         b.dataset.chiaveScheda = String(v.chiave);
         box.append(b, el("span", "esito-scarica", ""));
+        li.append(box);
+      }
+      ul.append(li);
+    }
+    corpo.append(ul);
+    if (c.nota) corpo.append(el("p", "nota", c.nota));
+  };
+
+  // ─── L'ufficio nella pagina Ufficio (28/10, passo 2e, #260, raccolte.py): solo chi amministra ───
+  // Una riga per documento (numero, data, cliente, importo, stato e «Scarica» di ogni file
+  // generato) o per contatto della rubrica (nome, dettagli, di casa o solo sua). Nomi e recapiti
+  // dei clienti sono dati non fidati: solo testo (el → textContent), mai HTML
+  const NOMI_UFFICIO = { pdf: "PDF", xml: "XML", docx: "Word", pptx: "PowerPoint" };
+  DISEGNA.ufficio = function (c, corpo, s) {
+    s.classList.add("scheda-ufficio");
+    const voci = Array.isArray(c.voci) ? c.voci.filter((v) => v && typeof v === "object") : [];
+    if (!voci.length) {
+      corpo.append(el("p", "vuoto", c.vuoto || "Niente qui, per ora."));
+      if (c.nota) corpo.append(el("p", "nota", c.nota));
+      return;
+    }
+    const ul = el("ul", "voci-archivio voci-ufficio");
+    for (const v of voci) {
+      const li = el("li", "documento-archivio voce-ufficio" + (v.annullato ? " annullata" : ""));
+      li.append(el("p", "nome-documento", String(v.nome || "Documento")));
+      const dett = (Array.isArray(v.dettagli) ? v.dettagli : []).map((x) => String(x || "")).filter(Boolean);
+      if (dett.length) li.append(el("p", "sotto", dett.join(" · ")));
+      if (v.stato) li.append(el("p", "stato-ufficio", String(v.stato)));
+      const file = (Array.isArray(v.file) ? v.file : []).filter((f) => f && f.chiave
+        && NOMI_UFFICIO[String(f.estensione || "").toLowerCase()]);
+      if (file.length) {
+        const box = el("div", "scarica");
+        for (const f of file) {
+          const b = el("button", "piccolo-bottone tasto-scarica",
+            "Scarica " + NOMI_UFFICIO[String(f.estensione).toLowerCase()]);
+          b.type = "button";
+          b.dataset.scarica = "originale";
+          b.dataset.chiaveScheda = String(f.chiave);
+          box.append(b);
+        }
+        box.append(el("span", "esito-scarica", ""));
         li.append(box);
       }
       ul.append(li);
