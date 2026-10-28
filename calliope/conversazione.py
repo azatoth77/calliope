@@ -280,8 +280,18 @@ def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = No
                    "_sfida": bool(meta.get("sfida")),
                    "_sfida_chiesta": bool(meta.get("sfida_chiesta"))}
             info = {k: str(meta[k])[:60] for k in ("luogo", "canale") if meta.get(k)}
+            # Le schede del turno (28/10, #242: Brain.lega_scheda_al_turno), per la
+            # Conversazione degli schermi: copie piccole o rimandi, già senza le chiavi «_»
+            sch = [x for x in (m.get("_schede") or ()) if isinstance(x, dict)][:4] \
+                if ruolo == "user" else []
+            if sch:
+                info["schede"] = sch
             if info:
                 cur["meta"] = info
+            if meta.get("riservato"):
+                # Il turno di un modulo inviato per un tool riservato (seconda revisione della PR
+                # #271, schermi/moduli.completa): come un turno con quel tool
+                cur["riservato"] = True
             if meta.get("conserva") is False:
                 # Le parole di questo turno non restano (12/10 sera, conserva.testo_turno: zona
                 # grigia, dubbio con un minore): l'archivio su disco lo salta
@@ -333,6 +343,14 @@ def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = No
             cur["azioni"].append({"tool": nome, "ok": ok, **({"tipo": tipo} if tipo else {}),
                                   **({"detto": oscura(detto)[:300]} if detto
                                      and nome not in riservati else {})})
+    def solo_segreti(x: str) -> str:
+        if redact is not None:
+            try:
+                return redact(x)
+            except Exception:  # noqa: BLE001
+                pass
+        return x
+
     def pulito(x: str) -> str:
         x = oscura(x)
         if redact is not None:
@@ -356,7 +374,38 @@ def turni(messaggi: list[dict], riservati=frozenset(), segreti: dict | None = No
             for a in t["azioni"]:
                 if a.get("detto"):
                     a["detto"] = pulito(a["detto"])
+        sch = (t.get("meta") or {}).get("schede")
+        if sch:
+            # Un turno riservato (documenti di casa, rubrica) non tiene le sue schede, come la
+            # risposta; le altre passano da `oscura` e dai segreti del turno come i testi
+            if t["riservato"]:
+                t["meta"].pop("schede", None)
+            else:
+                # Un calcolo è del codice: oscura nasconderebbe un risultato di dieci cifre
+                # (revisione della PR #271); i segreti del turno sì
+                t["meta"]["schede"] = [_schede_pulite(x, solo_segreti if isinstance(x, dict)
+                                                      and x.get("tipo") == "calcolo" else pulito)
+                                       for x in sch]
+            if not t["meta"]:
+                t.pop("meta", None)
     return [t for t in out if t["domanda"] or t["risposta"] or t["azioni"]]
+
+
+# Le chiavi d'identità di una scheda non passano da `oscura` (la chiave di un timer ha l'istante
+# di creazione: dieci cifre e più sembrerebbero un numero da nascondere)
+_SCHEDA_IDENTITA = frozenset({"id", "chiave", "tipo", "sezione", "visibilita", "lista"})
+
+
+def _schede_pulite(x, pulito, chiave: str | None = None):
+    """I testi di una scheda del turno passati da `pulito` (oscura e segreti), ricorsivo."""
+    if isinstance(x, dict):
+        return {k: (v if k in _SCHEDA_IDENTITA and chiave is None else
+                    _schede_pulite(v, pulito, k)) for k, v in x.items()}
+    if isinstance(x, list):
+        return [_schede_pulite(v, pulito, chiave) for v in x]
+    if isinstance(x, str):
+        return pulito(x)
+    return x
 
 
 def testo_turno(t: dict) -> str:

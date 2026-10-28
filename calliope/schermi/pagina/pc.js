@@ -146,7 +146,14 @@
     const sopra = getComputedStyle($("pc-conv")).position === "fixed";
     if (sopra && aperta) { $("pc-conv").setAttribute("role", "dialog"); $("pc-conv").setAttribute("aria-modal", "true"); }
     else { $("pc-conv").removeAttribute("role"); $("pc-conv").removeAttribute("aria-modal"); }
-    if (aperta) { const ch = $("pc-conv-chiudi"); if (ch) ch.focus({ preventScroll: true }); }
+    if (aperta) {
+      const ch = $("pc-conv-chiudi");
+      if (ch) ch.focus({ preventScroll: true });
+      // Chiusa, la conversazione non scendeva in fondo coi turni nuovi (28/10, #242)
+      if (chatEl) requestAnimationFrame(() => {
+        for (const b of chatEl.querySelectorAll("[data-segui]")) if (!b.classList.contains("staccato")) b.scrollTop = b.scrollHeight;
+      });
+    }
     else if (prima) { try { $("pc-conv-apri").focus({ preventScroll: true }); } catch (e) { /* niente */ } }
   }
 
@@ -159,6 +166,13 @@
   // La conversazione disponibile o con turni nuovi: nella sua colonna
   document.addEventListener("calliope:chat", () => { if (SEZ) disegnaChat(); });
   document.addEventListener("calliope:chatturni", () => { if (SEZ) disegnaChat(); });
+  // Il rimando di una scheda piccola della conversazione (28/10, #242: un lavoro, un gioco): la
+  // scheda nella sua sezione, o la sezione se la scheda non c'è più
+  document.addEventListener("calliope:vai", (ev) => {
+    const c = ev.detail && ev.detail.scheda;
+    if (!SEZ || !c) return;
+    if (!(c.chiave && SEZ.vaiA(c.chiave))) SEZ.vai("#/" + SEZ.sezioneDi(c));
+  });
   // Un gioco chiuso esce subito da Adesso
   document.addEventListener("calliope:gioco", (ev) => { if (SEZ && !(ev.detail || {}).partita) requestAnimationFrame(() => SEZ.disponi()); });
 

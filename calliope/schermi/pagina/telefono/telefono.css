@@ -521,3 +521,15 @@ button.grande.secondario { background: transparent; color: var(--accento); borde
 .tasto.pagina-indietro { min-height: 2.75rem; font-size: 1rem; border-width: 1px; padding: 0.3rem 0.9rem; flex: none; }
 .telefono .pagina-schede > .pagina-car { max-height: none; }
 .telefono .pagina-schede > .pagina-car > .corpo { overflow: visible; }
+
+/* La conversazione nella sua sezione (28/10, #242): prende lo spazio che resta (almeno 24rem) e
+   scorre da sé, in fondo il turno più recente; sotto, se ce ne sono, le altre schede. Il nome è
+   già il titolo della sezione */
+.conv-tel { flex: 1 0 0; min-height: min(24rem, 70dvh); display: flex; flex-direction: column; }
+.conv-tel[hidden], .conv-tel[hidden] ~ h2.gruppo[data-gruppo="altre-conv"] { display: none; }
+.conv-tel > .scheda { flex: 1; min-height: 0; padding: 0; border: 0; background: transparent; font-size: 1rem;
+  animation: none; overflow-wrap: anywhere; }
+.conv-tel > .scheda > .etichetta, .conv-tel > .scheda > h1.titolo { display: none; }
+.conv-tel .conv-chat { padding: 0.5rem 0.6rem 0.3rem; }
+.conv-tel .conv-tu, .conv-tel .conv-calliope { max-width: 92%; }
+.intera-posto .chat-chip, .intera-posto .chat-esito, .intera-posto .piccola-apri { font-size: 1rem; }

@@ -1257,9 +1257,20 @@ _OLD_TIME = {"nota": "ora di quel momento, ormai vecchia: per l'ora di adesso gu
 
 
 def _tokens(obj) -> int:
-    """Stima dei token di messaggi o schemi (JSON), dai caratteri."""
-    text = obj if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False)
+    """Stima dei token di messaggi o schemi (JSON), dai caratteri. Le copie delle schede legate al
+    turno (`_schede`, 28/10, #242) non arrivano al modello e non contano (revisione della PR #271:
+    un turno con un documento passava da 27 a 5 849 token stimati e la storia si tagliava prima)."""
+    text = obj if isinstance(obj, str) else json.dumps(_senza_schede(obj), ensure_ascii=False)
     return int(len(text) / CHARS_PER_TOKEN)
+
+
+def _senza_schede(obj):
+    """`obj` senza la chiave `_schede` dei messaggi (una lista di messaggi o un messaggio)."""
+    if isinstance(obj, dict):
+        return {k: v for k, v in obj.items() if k != "_schede"} if "_schede" in obj else obj
+    if isinstance(obj, list) and any(isinstance(m, dict) and "_schede" in m for m in obj):
+        return [_senza_schede(m) for m in obj]
+    return obj
 
 
 # Il costo stimato di una foto nella stima dei riletti (16/10, issue #95): Gemma 4 su Ollama ne
@@ -4972,7 +4983,11 @@ class Brain:
             self.tool_ctx.risposta_precedente = {
                 "testo": (last or {}).get("content") or "",
                 "tool": [t["nome"] for t in getattr(self, "last_tools", None) or ()
-                         if t.get("ok")]}
+                         if t.get("ok")],
+                # La risposta di prima veniva da un tool riservato (documenti di casa, rubrica,
+                # stanza, conversazioni passate): una scheda che la ripete non resta nella
+                # Conversazione (revisione della PR #271)
+                "riservata": bool(getattr(self, "last_private", False))}
         # La conversazione recente (senza i risultati dei tool), per i dati di un lavoro
         # delegato a un agente: «con i punti di cui abbiamo parlato» (calliope/agenti/)
         if self.tool_ctx is not None and hasattr(self.tool_ctx, "storia"):
@@ -6428,6 +6443,17 @@ class Brain:
         self.last_turn_at = time.monotonic()
         call = {"id": "call_tocco", "name": nome, "arguments": dict(argomenti or {})}
         self.history.append({"role": "user", "content": testo})
+        # La scheda del risultato (la lista aggiornata) resta col turno del tocco (28/10, #242):
+        # la Conversazione la mostra piccola. Chi tocca è il proprietario dello schermo personale
+        try:
+            res = json.loads(risultato) if isinstance(risultato, str) else {}
+        except (TypeError, ValueError):
+            res = {}
+        for card in [c for c in ((res or {}).get("scheda"), (res or {}).get("schede")) if c] \
+                if isinstance(res, dict) else ():
+            for c in (card if isinstance(card, list) else [card]):
+                if isinstance(c, dict):
+                    self.lega_scheda_al_turno(c)
         self.history.append({"role": "assistant", "content": "", "tool_calls": [call]})
         self.history.append({"role": "tool", "tool_call_id": call["id"], "name": nome,
                              "content": risultato})
@@ -6563,7 +6589,12 @@ class Brain:
 
     def manda_schede(self, cards, tool: str) -> list[dict]:
         """Le schede agli schermi personali di chi parla, come quelle dei tool (le miniature
-        delle foto e dei file del turno: calliope/ciclo.py)."""
+        delle foto e dei file del turno: calliope/ciclo.py). Non restano col turno nella
+        Conversazione (revisione della PR #271): partono prima che la frase della persona entri
+        nella storia, e si legherebbero al turno di prima, magari d'un'altra persona."""
+        for c in cards if isinstance(cards, list) else [cards]:
+            if isinstance(c, dict):
+                c["_conv"] = False
         return self._send_cards(cards, tool)
 
     def rilascia_schede(self, ok: bool) -> int:
@@ -6616,6 +6647,11 @@ class Brain:
         for card in cards if isinstance(cards, list) else [cards]:
             if not isinstance(card, dict):
                 continue
+            if getattr(self, "last_private", False):
+                # Mandata in una risposta con un tool riservato: il contenuto non è conservabile
+                # (revisione della PR #271). Il segno resta sul server (hub.ultima la ricorda con
+                # lui: «mostrami l'ultima» dopo non la porta nella Conversazione)
+                card["_riservata"] = True
             try:
                 r = hub.invia(card, sender)
             except Exception as e:  # noqa: BLE001 — lo schermo non deve mai fermare la voce
@@ -6633,7 +6669,31 @@ class Brain:
                 mandate.append({"tipo": card.get("tipo"), "chiave": card.get("chiave"),
                                 "titolo": str(titolo)[:120] if titolo else None,
                                 "schermi": len(r.get("schermi") or ())})
+            if getattr(sender, "certo", False) and getattr(sender, "persona", None) \
+                    and not card.get("_riservata"):
+                self.lega_scheda_al_turno(card)
         return out
+
+    def lega_scheda_al_turno(self, card: dict):
+        """La scheda mandata in questo turno resta col turno (28/10, #242): sul messaggio della
+        persona (`_schede`, come `_turno`), da dove `conversazione.turni` la porta nell'archivio
+        delle conversazioni e la Conversazione degli schermi personali la mostra piccola dentro la
+        risposta. Solo con l'identità certa (chi la chiama lo controlla); la stessa scheda
+        mandata di nuovo nello stesso turno sostituisce quella di prima."""
+        try:
+            from .schermi.schede import CONV_SCHEDE_TURNO, per_conversazione
+            piccola = per_conversazione(card)
+            if piccola is None:
+                return
+            for m in reversed(self.history):
+                if isinstance(m, dict) and m.get("role") == "user":
+                    lista = [x for x in (m.get("_schede") or ()) if isinstance(x, dict)
+                             and not ((piccola.get("chiave") and x.get("chiave") == piccola["chiave"])
+                                      or (piccola.get("id") and x.get("id") == piccola["id"]))]
+                    m["_schede"] = (lista + [piccola])[-CONV_SCHEDE_TURNO:]
+                    return
+        except Exception as e:  # noqa: BLE001 — la scheda nella conversazione non ferma la voce
+            print(f"   [SCHERMI] scheda non legata al turno: {type(e).__name__}", flush=True)
 
     def _nome_corretto(self, call: dict):
         """Un nome di tool storpiato dal modello («richesta_tutore», prova e2e del 06/10) che

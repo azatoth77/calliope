@@ -139,7 +139,9 @@
       const c = car.schede[k];
       // Una scheda che la pagina mostra altrove (la conversazione nella colonna a destra del PC)
       if (opz.escludi && opz.escludi(k, c)) return [null, null];
-      const casa = sezioneDi(c);
+      // Una scheda che la sua sezione mostra già altrove (28/10, #242: dentro un turno della
+      // conversazione sul telefono): non nell'elenco, ma in Adesso come prima
+      const casa = opz.fuoriDaCasa && opz.fuoriDaCasa(k, c) ? null : sezioneDi(c);
       let adesso = null;
       if (k === ultima) adesso = "adesso/risposta";
       else if (sch().viva(c) && !(c.tipo === "avviso" && car.visti.has(k))) adesso = ASPETTA_TE(c) ? "adesso/aspetta" : "adesso/corso";
@@ -181,7 +183,7 @@
       }
       for (const s of document.querySelectorAll("#sezioni .sezione")) {
         const v = s.querySelector(".vuoto-sez");
-        if (v) v.hidden = !!s.querySelector("[data-posto] > *, .tessere > *");
+        if (v) v.hidden = !!s.querySelector("[data-posto] > *, .tessere > *, .conv-tel:not([hidden]) > *");
       }
       disegnaNovita();
       if (opz.dopoDisponi) opz.dopoDisponi();

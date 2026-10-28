@@ -847,7 +847,9 @@ Passo 1 del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-1
   `prova_telefono_schermo` si ripetono con un font largo (Verdana).
 - **Io** al posto del menu: collegamento, schermo acceso, ascolto della stanza, «In auto», aiuto e
   prova del microfono, cruscotto (sotto «Amministra», solo a chi amministra), «Pulisci le mie
-  schede», certificato, «Dimentica il telefono». «La nostra conversazione» è in Conversazione.
+  schede», certificato, «Dimentica il telefono». «La nostra conversazione» è in Conversazione
+  *[storico: fino al 28/10 sera un pulsante che la apriva a schermo intero; dal 28/10 sera, #242, la
+  conversazione è dentro la sezione]*.
 - **In auto** (decisione 1 del 27/10: a mano): «In auto» in Adesso e in Io; niente barra né schede,
   stato grande, l'ultima risposta in caratteri grandi, «Parla» alto un quinto dello schermo
   (`clamp(4.75rem, 20dvh, 10.5rem)`, più basso col microfono acceso), «Microfono» con la parola,
@@ -1375,6 +1377,109 @@ prova arriva alle 30 letture al minuto»]*
     con la cifra; in `prova_raccolte` 60 letture, la frase e `Retry-After`; in `prova_pagina_ufficio` la
     chiave di una serie lunghissima e la precedenza oltre il tetto; in `prova_telefono_schermo` «Tutti» nella
     pagina Ufficio e un 429 finto che la pagina dice, senza svuotarsi, e riprova da sola.
+
+## La Conversazione con le schede dentro, i filtri e la ricerca (28/10 sera, issue #242, ramo `issue-242-conversazione`)
+
+Passo 3 del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md)
+(§ 4.2), epic #251. Analisi sul codice e alternative nel commento della #242. Nessun tocco nuovo (#266).
+
+- **Le schede restano col turno** (alternativa B dell'analisi): `Brain._invia_schede` lega ogni scheda
+  mandata in una risposta al messaggio della persona del turno (`_schede`, accanto a `_turno`), solo con
+  l'identità certa (mai la zona grigia né un ospite); la stessa scheda di nuovo nello stesso turno sostituisce
+  quella di prima, al più quattro. Anche la lista aggiornata da un tocco (`Brain.record_tocco`) e le schede
+  del risultato di un modulo. `conversazione.turni` le porta nel `meta` del turno archiviato: stessa tenuta,
+  stessa «dimentica», stessi permessi dell'archivio ([contesto-conversazione](contesto-conversazione.md)).
+  Scartata l'unione per tempo con la cronologia delle schede: lì ci sono solo le personali (biblioteca,
+  internet e calcolo sono pubbliche, la lista è di casa), e dopo 40 schede non resta niente.
+- **Cosa resta** (`schede.per_conversazione`): una copia `storica` per i tipi di contenuto (biblioteca,
+  internet, calcolo, testo, lista, timer, agenda, casa, documento), senza le chiavi «_», «Scarica» e
+  scadenza, sotto i 16 kB (`CONV_SCHEDA_MAX`); un rimando (tipo, titolo, chiave, sezione) per i tipi vivi o
+  pesanti (lavoro, programma, sviluppo, gioco, esercizi, cassetto, foto, file, modulo, avviso) e per una copia
+  oltre il tetto; niente per la risposta scritta (è il testo del turno), la chat, il cruscotto, la voce nuova
+  (parole di un ospite), archivio e ufficio (riservati). I testi passano da `oscura` come quelli del turno,
+  le chiavi no (quella di un timer ha l'istante di creazione); un turno riservato non tiene le sue schede.
+- **Il canale**: «a voce», «scritto», «con un tocco», «modulo» (`voce_chat`, `CANALI_CHAT`; uno sconosciuto
+  vale «voce»). Il modulo inviato entra nella storia con il suo `_turno` (canale «modulo», lo schermo), prima
+  si archiviava come detto a voce. Per il tocco e il modulo il luogo della conversazione (il satellite della
+  voce) non vale. Nella pagina il tocco e il modulo sono un gesto al centro, senza le parentesi della
+  storia, non una bolla «Tu». La trascrizione in Markdown ha il canale e, per turno, «*Scheda: Lista · …*».
+- **La scheda piccola** dentro la risposta (`costruisciPiccola` in `schermo.js`): un `<button>` con il tipo e
+  il titolo, sopra un'anteprima `inert` disegnata da `DISEGNA` del suo tipo con `compatta`, tagliata dal CSS.
+  Un tocco apre la copia del turno a schermo intero (sul telefono nel suo strato, sul PC in quello di
+  `apriInteroPC`, con una chiave sua: la lista di adesso resta un'altra scheda), segnata «com'era alle …»;
+  le copie `storica` non hanno la spunta né i tasti del timer (manderebbero un tocco sullo stato di oggi), e
+  il timer dice l'ora di fine invece del conto. Un rimando porta alla scheda nella sua sezione (`vaiA`) o, se
+  non c'è più, alla sezione (`#/cose/lavori`).
+- **Filtri e ricerca** dentro `DISEGNA.chat`, quindi uguali sul telefono, nella colonna del PC e a schermo
+  intero: «Oggi» e «Ieri» (si escludono; un secondo tocco toglie il filtro), «Solo schede» (si somma),
+  «Cerca» che apre la casella, «Tutto» che toglie filtri e ricerca, e una riga `role="status"` con l'esito
+  («Ieri: 2 turni», «Nessun turno con queste parole.»). Senza filtri la vista è quella viva di prima; con un
+  filtro i turni vengono da **`POST /api/conversazione`** (`Schermi.chat_filtrata` →
+  `ArchivioConversazioni.chat_filtra`), e un turno nuovo entra solo se passa il filtro (oggi, solo schede;
+  mai in una ricerca). Il server ha le regole delle raccolte: sessione, HTTPS fuori da questo computer, solo
+  uno schermo personale, **solo i turni del suo proprietario** (il tutore non vede quelli del ragazzo, il
+  ragazzo quelli del tutore, come la conversazione di prima), 60 letture e 20 ricerche al minuto con
+  `Retry-After`. I giorni secondo l'ora di questo computer; la ricerca solo per parole (FTS5, ogni parola tra
+  virgolette e per prefisso, tutte insieme): niente vettori, niente modello in più. Il testo cercato non va
+  nel registro.
+- **Sul telefono** la sezione Conversazione mostra la conversazione al posto del pulsante «La nostra
+  conversazione» (`#conv-tel`, `disegnaChatTel` in `telefono.js`; l'evento «chatturni» ora anche lì): prende
+  lo spazio che resta e scorre da sé, «Scarica Markdown» sotto i turni. L'elenco sotto («Altre schede») tiene
+  solo le schede di conversazione che i turni non mostrano già (non le risposte scritte, non le schede dentro
+  un turno: `fuoriDaCasa` di `sezioni.js`); in Adesso restano come prima. Sul PC la colonna a destra è la
+  stessa scheda. La casella per scrivere resta quella di prima (`scrittura_consentita`): spenta fuori da una
+  conversazione cominciata a voce.
+- Tutto in `textContent` (provato con `<img onerror>`, `<script>` e `<b>` nei turni e nella ricerca); CSP
+  invariata. Cache del service worker `calliope-telefono-pagina-v15` (era v14).
+- **Limiti**: con `eventi: attivo` (passo 3, acceso a mano; sulla DGX è in ombra) l'archivio lo scrive l'ombra
+  dalla proiezione, e lì le schede non ci sono ancora (l'evento `scheda_mandata` ha solo tipo, chiave e
+  titolo); i turni archiviati prima di oggi non hanno schede; «Oggi» senza ricerca legge al più 200 turni.
+
+Prove: `prova_conversazione_schede` (nuova, livello 1: la copia per tipo e il tetto, Brain che lega la scheda
+solo con l'identità certa e nel tocco, `turni` con oscura, riservato e `non_conservare`, i canali, il modulo,
+`chat_filtra` con nove testi ostili, `/api/conversazione` con persona sbagliata, tutore e ragazzo, stanza,
+401, 400, 413 e 429); `prova_cronologia_pagina` (il telefono: canali, gesto, schede piccole, copia a schermo
+intero e gesto indietro, rimando, filtri, ricerca ostile, misure a 375×812 e 320×568, Scrivi spento);
+`prova_pc_pagina` (la colonna a destra: schede piccole, copia nello strato, Ieri, ricerca, clic ≥ 44 px).
+Da provare sul vero: lo spazio della conversazione sull'iPhone con la tastiera aperta nella ricerca, e i
+filtri con la conversazione vera della DGX (molti turni con schede).
+- **Dalla revisione della PR #271** (sullo stesso ramo):
+  - *Bloccante: il riservato passava dalla scheda del turno dopo.* «Cosa dice il contratto?»
+    (`archivio_cerca`, riservato) e poi «scrivimelo sullo schermo» (`schermo_mostra` con `cosa` risposta)
+    mettevano il canone nel `meta` del secondo turno per 60 giorni. Ora una scheda si lega solo se il suo
+    contenuto è conservabile quanto il turno: `Brain._invia_schede` segna `_riservata` (resta sul server)
+    ogni scheda mandata in una risposta con un tool riservato (`last_private`: archivio, rubrica, ufficio,
+    `stanza_cerca`, `conversazione_cerca`), e `hub.ultima` la ricorda col segno (`cosa` ultima);
+    `schermo_mostra` segna le schede che ripetono la risposta di prima quando quella era riservata (`cosa`
+    risposta e testo, da `risposta_precedente["riservata"]`); `per_conversazione` le scarta.
+  - *Bloccante: la stima dei token.* `_tokens` non conta più `_schede` (le copie non arrivano al modello):
+    un turno con un documento passava da 27 a 5 849 token stimati e la storia si tagliava prima.
+  - *Foto e file del turno* non si legano (`manda_schede` segna `_conv` False): partono prima che la frase
+    entri nella storia, e finivano sul turno di prima, magari d'un'altra persona.
+  - *Peso verso le pagine*: copie al più 8 kB (erano 16), e intere solo negli ultimi 12 turni con schede
+    (`alleggerisci`, nel benvenuto e in `/api/conversazione`); prima arrivano leggere (tipo, titolo, chiave,
+    sezione), senza anteprima, e il dettaglio si chiede al tocco (`POST /api/conversazione` con
+    `{turno, indice}`, solo dai turni del proprietario).
+  - «com'era il 3 novembre alle …» quando la copia non è di oggi; il calcolo non passa da `oscura` (un
+    risultato di dieci cifre diventava «******»), solo dai segreti del turno; `avviso` non è fra i rimandi
+    (gli avvisi ai tutori non si legano mai); un turno arrivato dal vivo mentre si aspettava un filtro entra
+    se lo passa.
+  - *Dati d'altri nelle copie*: la lista e la casa sono dati della famiglia e restano 60 giorni
+    nell'archivio di chi ha fatto la domanda; la «dimentica» di un altro familiare non le tocca (è la scelta
+    dell'analisi della #242: la persona ha visto quella scheda nella sua conversazione). Dalla copia del
+    timer si toglie chi l'ha messo (`chi`).
+- **Dalla seconda revisione della PR #271**:
+  - *Bloccante: il modulo.* Un tool riservato completato col modulo («prepara la fattura per Rossi» →
+    `modello_compila`, o `anagrafica_salva`) legava al turno del modulo l'anteprima `documento` con cliente,
+    voci e totali. Ora `moduli.completa` guarda lo spec del tool (`_tool_riservato`, nel dubbio sì): le
+    schede del risultato prendono `_riservata` prima di partire e non si legano, e il turno del modulo ha
+    `riservato` nel `_turno`, così nell'archivio la frase («Ho preparato la fattura… totale…») diventa
+    «(risposta con dati riservati: non archiviata)» come per la voce. *Storico: prima di questo la frase del
+    modulo si archiviava in chiaro, anche senza le schede.*
+  - *Limite*: una scheda di un altro tool che riporta il testo di un turno riservato qualche turno dopo
+    («fammi un documento con questi dati» due turni dopo, o `cosa` testo con un turno non riservato in
+    mezzo) non è segnata, e la sua copia resta. È lo stesso limite della risposta del modello in quel turno,
+    che si archivia in chiaro: il segno vale per il turno riservato e per quello subito dopo.
 
 ## Le schede del tocco: livello, stanza, conversazione (28/10 sera, issue #266, ramo `issue-266-toccabili`)
 
