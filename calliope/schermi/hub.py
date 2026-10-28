@@ -910,6 +910,15 @@ class Schermi:
             return False
         return any(s.get("proprietario") == mittente.persona for s in self.abbinati())
 
+    def apri_pagina(self, persona, pagina: str) -> int:
+        """Le pagine aperte degli schermi personali di `persona` vanno su `#/cose/<pagina>`
+        (28/10, issue #289, schermo_mostra con cosa=pagina): evento SSE «pagina». Quante
+        pagine l'hanno ricevuto. I permessi (chi, quale pagina) li controlla il tool; la pagina
+        mostra comunque solo ciò che il server le dà (/api/raccolte)."""
+        if not persona or not isinstance(pagina, str) or not pagina.isalpha():
+            return 0
+        return self._a_personali(persona, "pagina", json.dumps({"pagina": pagina}))
+
     def _in_storia(self, sid: int, scheda: dict):
         """La scheda nella cronologia dello schermo (con il lock). Con una `chiave` già
         presente la sostituisce: in cima (di norma: è cambiata per un'azione o un evento) o

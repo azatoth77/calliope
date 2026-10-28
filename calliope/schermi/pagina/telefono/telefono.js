@@ -1914,6 +1914,11 @@ async function avvio() {
     if (!(c.chiave && vaiA(c.chiave))) vai("#/" + sezioneDi(c));
   });
   document.addEventListener("calliope:scrivi", (ev) => { $("pulisci-tel").hidden = !(ev.detail && ev.detail.personale); });
+  // Calliope apre una pagina di Le mie cose (28/10, #289): solo un nome di raccolta, mai un indirizzo
+  document.addEventListener("calliope:pagina", (ev) => {
+    const p = ev.detail && ev.detail.pagina;
+    if (typeof p === "string" && /^[a-z]{1,20}$/.test(p)) vai("#/cose/" + p);
+  });
   let pulisciArmato = 0;
   $("pulisci-tel").addEventListener("click", async () => {
     const b = $("pulisci-tel"), esito = $("pulisci-esito");
