@@ -988,9 +988,9 @@ conversazione a voce (a differenza dello scritto), e **l'Ufficio solo a chi ammi
   (`Ciclo._tocco_dallo_schermo`): `ToolRegistry.call` col livello del proprietario dello schermo e
   `identified_by` «schermo» (i tool che vogliono la voce restano rifiutati), senza la politica del
   turno; la descrizione («(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)») nella storia
-  del modello come frase della persona, il registro dei turni con `esito` e `canale` «tocco», l'evento
+  del modello con la chiamata del tool e il suo esito, il registro dei turni con `esito` e `canale` «tocco», l'evento
   `detto_persona` col canale «tocco». Niente frase detta né suoni (chi tocca può essere al supermercato);
-  la lista aggiornata arriva come scheda allo schermo del tocco per primo. Un rifiuto (permesso, minore,
+  la lista aggiornata arriva come scheda solo allo schermo del tocco. Un rifiuto (permesso, minore,
   voce sparita) va solo allo schermo (evento SSE «tocco», `esito` «rifiutato» nel registro), e niente
   nella storia. Sullo schermo di stanza non c'è (403).
 - **La spunta** (`DISEGNA.lista` in `schermo.js`, solo sugli schermi personali con le sezioni: telefono e
@@ -1000,6 +1000,20 @@ conversazione a voce (a differenza dello scritto), e **l'Ufficio solo a chi ammi
   accanto, nel colore dell'allarme. Tutto in `textContent`. Sulle TV e i tablet di stanza la lista resta
   com'era.
 - Cache del service worker `calliope-telefono-pagina-v10` (era v9).
+- **Dalla revisione della PR #261**:
+  - nella storia il tocco ha la sua chiamata: `Brain.record_tocco` scrive la frase, la chiamata del
+    tool e il suo esito, chiude prima la conversazione scaduta, segna l'ultimo turno e salva su disco.
+    Prima la riga si perdeva se la conversazione era ferma o dopo un riavvio, e con la frase dopo c'erano
+    due messaggi della persona di fila ([contesto-conversazione](contesto-conversazione.md));
+  - fuori dagli orari dei tutori il tocco di un minore è rifiutato, e la pagina mostra la frase degli
+    orari (`minori.fuori_orario`, come per la voce e lo scritto);
+  - la lista aggiornata va solo allo schermo del tocco (`invia_a`), anche con le schede automatiche
+    spente; la TV di casa non mostra la spesa spuntata al supermercato;
+  - riuscita senza la lista nuova, la voce resta spuntata e non si ritocca (`aria-disabled`).
+    Senza un esito entro 30 s (`calliopeSchermo.spunta.attesaMs`) un timer vero rimette la voce com'era
+    con «Non ho ancora avuto risposta». Un'eccezione nel ciclo manda comunque l'esito d'errore;
+  - limite noto: `Liste.ultimo_cambio` tiene in memoria l'ora dell'ultima voce tolta, quindi dopo un
+    riavvio il pallino si accende solo per le aggiunte.
 
 Prove: `prova_raccolte` (nuova, livello 1: tessere con servizi finti, pagina, `tocchi.prepara`, il
 server vero, il ciclo con un `ToolRegistry` vero e le `Liste` su disco, rifiuti per voce, livello e

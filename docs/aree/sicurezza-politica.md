@@ -1808,4 +1808,6 @@ voce di chi amministra risponde con `serve_la_voce`, e il tocco è rifiutato), c
 codice), perché non c'è una frase né dati non fidati. L'elenco dei tocchi è chiuso (`schermi/tocchi.TOCCHI`)
 e gli argomenti vengono dallo stato vero, non dalla pagina. I segni di chi parlava prima (compagnia,
 conferma breve, sfida superata…) si azzerano per il tocco e si rimettono dopo. Si fa anche fuori da una
-conversazione a voce (decisione di chi amministra del 28/10), solo da uno schermo personale.
+conversazione a voce (decisione di chi amministra del 28/10), solo da uno schermo personale. Dalla
+revisione della PR #261 valgono anche gli orari dei tutori: fuori orario il tocco di un minore è rifiutato
+(`minori.fuori_orario` in `_tocco_dallo_schermo`, perché la fase `_fuori_orario` del giro viene dopo).

@@ -2776,10 +2776,19 @@ il guardiano a posteriori ha la sua etichetta e resta «Calliope».
 
 Un tocco che cambia qualcosa dallo schermo personale (la spunta della lista, [schermi-telefono](schermi-telefono.md))
 entra nella conversazione della persona come un turno (decisione 10 del progetto del telefono a
-sezioni): `corsia.turno` con il suo id, la descrizione («(Ho tolto «latte» dalla lista della spesa
-toccando lo schermo.)») nella storia del modello come frase della persona, così «rimettilo» detto dopo
-sa di che cosa si parla; nel registro dei turni `esito` e `canale` «tocco» con il tool; nel registro
-degli eventi un `detto_persona` col canale «tocco» (`eventi/tipi.CANALI_PERSONA`, `ombra.ESITI_PERSONA`),
-che con `eventi: attivo` mette la descrizione nella storia dalla proiezione. Nessuna risposta di Calliope
-dopo (né detta né scritta): nella storia restano due frasi della persona di fila se poi parla a voce. Un
-tocco rifiutato non entra nella storia (`esito` «rifiutato», canale «tocco»).
+sezioni). `Brain.record_tocco` lo scrive come una risposta con un tool: prima chiude la conversazione
+scaduta o di un'altra persona (`_check_conversation`), poi scrive tre messaggi. Il primo è la frase della
+persona («(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)»). Il secondo è il messaggio
+di Calliope con la chiamata di `lista_togli` e i suoi argomenti, il terzo l'esito del tool. Infine
+segna `last_turn_at` e salva la conversazione (`salva_conversazione`). Così «rimettilo» detto dopo sa
+che cosa è stato fatto, e la frase dopo non è un secondo messaggio della persona di fila.
+
+Nel registro dei turni il tocco ha `esito` e `canale` «tocco», con il tool. Nel registro degli eventi
+c'è un `detto_persona` col canale «tocco» e `come` «schermo» (`eventi/tipi.CANALI_PERSONA`,
+`ombra.ESITI_PERSONA`), più `chiamata_tool` ed `esito_tool`, ricopiati dall'ombra dal turno vivo. La
+proiezione dà gli stessi messaggi della storia di Brain, quindi con `eventi: attivo` non cambia niente.
+Calliope non dice niente dopo, né a voce né per iscritto, quindi l'ultimo messaggio è l'esito del tool
+e la frase successiva della persona viene subito dopo un messaggio `tool`. Un tocco rifiutato non entra
+nella storia (`esito` «rifiutato», canale «tocco»). *[storico: fino alla revisione della PR #261 la riga
+andava in `brain.history` a mano, senza `last_turn_at` né salvataggio; con la frase dopo c'erano due
+messaggi della persona di fila]*
