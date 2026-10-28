@@ -6,7 +6,7 @@ Prima del cassetto foto e file vivevano solo nella conversazione (in memoria) e 
 disco solo con «archivialo». Ora ogni allegato di una persona riconosciuta (foto, file, audio)
 resta **7 giorni** (`cassetto_giorni`) nel suo cassetto sulla macchina di Calliope; a scadenza
 si elimina, e Calliope lo dice la volta dopo («Ho eliminato 2 file che non avevi tenuto»). Dal
-29/10 (decisione 0034) le foto restano **60 giorni** (`immagini_tenuta_giorni`), anche le catture
+28/10 (decisione 0034) le foto restano **60 giorni** (`immagini_tenuta_giorni`), anche le catture
 di webcam e schermo; la Conversazione degli schermi ne mostra lo stato (`stato_foto`), e
 «dimentica le nostre conversazioni» e `svuota` le tolgono (`dimentica_foto`).
 
@@ -197,7 +197,7 @@ class Cassetto:
         base = Path(cartella) if cartella else Path(self.db_path).resolve().parent / "cassetto"
         self.cartella = base
         self.giorni = max(0.01, float(giorni))
-        # Le foto (29/10, decisione 0034): `immagini_tenuta_giorni` (60) invece di `giorni`
+        # Le foto (28/10, decisione 0034): `immagini_tenuta_giorni` (60) invece di `giorni`
         self.giorni_foto = None if giorni_foto is None else max(0.01, float(giorni_foto))
         self.tetto = int(float(tetto_mb) * 1_000_000)
         self.avviso_giorni = max(0.0, float(avviso_giorni))
@@ -584,7 +584,7 @@ class Cassetto:
             self.log(f"   [CASSETTO] eliminati {len(scaduti)} file scaduti")
         return {p: len(v) for p, v in per.items()}
 
-    # ─────────────────────────── le foto della Conversazione (29/10, decisione 0034) ───────────────────────────
+    # ─────────────────────────── le foto della Conversazione (28/10, decisione 0034) ───────────────────────────
     def stato_foto(self, persona: str, fid) -> dict | None:
         """Lo stato della foto `fid` della persona, per il dettaglio della sua miniatura nella
         Conversazione: {"stato": "tenuta", "scade", "jpeg"} finché c'è, {"stato": "archiviata"},

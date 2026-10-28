@@ -13,7 +13,7 @@ I tool delle foto (05/10/2026, calliope/immagini.py, docs/ricerche/2026-10-05-im
 - `immagine_archivia(foto)`: «archiviala»: l'unico modo in cui una foto finisce su disco,
   nella cartella personale dell'archivio dei documenti di casa (calliope/archivio/), che la
   legge con l'OCR al giro dopo, per sempre; anche una foto di giorni prima ancora tenuta
-  (`quale`: «la foto di martedì»). Dal 29/10 (decisione 0034) ogni foto di una persona di casa,
+  (`quale`: «la foto di martedì»). Dal 28/10 (decisione 0034) ogni foto di una persona di casa,
   anche le catture di `pc_guarda`, si tiene intera nel suo cassetto 60 giorni
   (`immagini_tenuta_giorni`) e la miniatura resta col turno nella Conversazione (*storico, fino al
   28/10: «l'unico modo in cui una foto finisce su disco»*).
@@ -75,7 +75,7 @@ def _guarda(ctx: ToolContext, foto=None) -> dict:
 
 
 def _tieni_cattura(ctx, img, prof):
-    """La cattura di webcam e schermo nel cassetto di chi l'ha chiesta (29/10, decisione 0034):
+    """La cattura di webcam e schermo nel cassetto di chi l'ha chiesta (28/10, decisione 0034):
     `immagini_tenuta_giorni`, poi via; «archiviala» la tiene per sempre. Solo con la voce
     riconosciuta (pc_guarda lo controlla prima) e la tenuta accesa."""
     cas = getattr(ctx, "cassetto", None)
@@ -102,6 +102,19 @@ def _archivia_tenuta(ctx, prof, righe) -> dict:
                   "trovi con le altre carte.", foto=f"C{tenuti[0]['id']}")
 
 
+def _rifiuto_identita(ctx) -> dict | None:
+    """Il rifiuto di «archiviala» con l'identità incerta, come `allegati._proprietario` (le stesse
+    frasi, senza nomi né date delle foto), anche senza il cassetto; None se va bene."""
+    from .allegati import _CERTI, _persona
+    sc = getattr(ctx, "speaker_ctx", None)
+    if _persona(ctx) is None or getattr(sc, "current_level", "ospite") == "ospite":
+        return _final("Il cassetto dei file c'è solo per chi riconosco.", ok=False)
+    if getattr(sc, "identified_by", None) not in _CERTI:
+        return _final("Per i tuoi file devo riconoscere bene la tua voce: chiedimelo con una "
+                      "frase intera.", ok=False)
+    return None
+
+
 def _archivia(ctx: ToolContext, foto=None, quale: str | None = None) -> dict:
     album = _album(ctx)
     arch = getattr(ctx, "archivio", None)
@@ -109,6 +122,14 @@ def _archivia(ctx: ToolContext, foto=None, quale: str | None = None) -> dict:
         return _final("Non ho un archivio dei documenti configurato, quindi la foto non la "
                       "salvo.", ok=False)
     cas = getattr(ctx, "cassetto", None)
+    # «archiviala» tiene una foto per sempre: anche sulla foto di questa conversazione vale solo
+    # con la voce riconosciuta o dallo schermo personale, mai dalla zona grigia, dalla frase breve
+    # o da un ospite (decisione di chi amministra del 28/10, nella 0034: cambia il comportamento
+    # in vigore dal 05/10, quando bastava chi era nella conversazione), con il rifiuto generico
+    # del cassetto
+    rifiuto = _rifiuto_identita(ctx)
+    if rifiuto is not None:
+        return rifiuto
     if quale and cas is not None:
         # Una foto di giorni prima, tenuta (decisione 0034): «archivia la foto di martedì». Con
         # le regole del cassetto (seconda revisione della PR #273): la voce riconosciuta o lo

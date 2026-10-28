@@ -638,7 +638,7 @@ class Schermi:
 
     def chat_foto(self, schermo: dict | None, fid) -> dict:
         """Lo stato della foto di una miniatura della Conversazione e, finché è tenuta, la foto
-        intera (29/10, decisione 0034): solo dallo schermo personale del suo proprietario, e la
+        intera (28/10, decisione 0034): solo dallo schermo personale del suo proprietario, e la
         foto passa da «Scarica» (una voce per questo schermo, un gettone a tempo e per poche
         richieste, i permessi rifatti al GET; via con gli schermi revocati). {"stato", "scade"?,
         "url"?} o {"_stato", "errore"}."""

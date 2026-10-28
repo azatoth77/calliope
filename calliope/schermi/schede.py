@@ -508,7 +508,7 @@ def risposta(domanda: str, contenuto: str, visibilita: str, chiave: str | None =
 
 def foto(img, didascalia: str = "") -> dict:
     """La miniatura (data URL JPEG, ~20 kB) di una foto della conversazione: solo agli schermi
-    personali di chi parla; resta nella cronologia in memoria degli schermi. Dal 29/10 (decisione
+    personali di chi parla; resta nella cronologia in memoria degli schermi. Dal 28/10 (decisione
     0034) una miniatura più piccola (`_mini`, 144 px) resta col turno nell'archivio delle
     conversazioni per 60 giorni, anche per webcam e schermate, con l'id della foto intera tenuta
     nel cassetto (`_cassetto`) (*storico, fino al 28/10: «resta solo nella cronologia in memoria
@@ -516,7 +516,7 @@ def foto(img, didascalia: str = "") -> dict:
     scheda passa dal JSON dei risultati dei tool, dove non può portare né i byte né una funzione."""
     from ..immagini import FONTI, miniatura
     try:
-        # La miniatura piccola per la Conversazione (29/10, #272): resta sul server finché
+        # La miniatura piccola per la Conversazione (28/10, #272): resta sul server finché
         # per_conversazione la mette nella copia del turno (sotto CONV_SCHEDA_MAX)
         mini = miniatura(img.jpeg, lato=CONV_FOTO_LATO, qualita=CONV_FOTO_QUALITA)
     except Exception:  # noqa: BLE001 — senza, la copia è un rimando
@@ -559,7 +559,7 @@ CONV_COPIA = frozenset({"biblioteca", "web", "calcolo", "testo", "lista", "timer
 # (Non `avviso`: gli avvisi ai tutori passano da hub.invia diretto e non si legano mai)
 CONV_RIMANDO = frozenset({"lavoro", "esecuzione", "sviluppo", "gioco", "giochi", "esercizio",
                           "esercizi_riepilogo", "cassetto", "modulo"})
-# Le foto e i file della conversazione (29/10, #272): la foto con la sua miniatura piccola
+# Le foto e i file della conversazione (28/10, #272): la foto con la sua miniatura piccola
 # (`_mini`, mai la miniatura dello schermo né il file), il file con nome, tipo e dimensione
 # (mai l'anteprima del testo né le note: sono il contenuto del file). Oltre il tetto, un rimando
 CONV_FOTO_LATO = 144

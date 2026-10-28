@@ -632,7 +632,7 @@ class Avvio:
             atexit.register(cassetto.close)
             cassetto.archivio, cassetto.registry = self.archivio, s.registry
             schermi.cassetto = cassetto
-            # Le foto tenute con la Conversazione (29/10, decisione 0034) vanno via con
+            # Le foto tenute con la Conversazione (28/10, decisione 0034) vanno via con
             # «dimentica le nostre conversazioni» e con `svuota`
             if conv_arch is not None:
                 conv_arch.su_dimentica.append(cassetto.dimentica_foto)
