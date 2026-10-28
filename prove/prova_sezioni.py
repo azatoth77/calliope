@@ -23,6 +23,12 @@ cruscotto); le due tabelle devono restare uguali.
    sconosciuto (Adesso), la chiave di una scheda con i due punti nel percorso; una sezione
    nascosta sul telefono di un minore (passo 1c) è Adesso. In Adesso le schede con uno stato o
    dei campi (gioco, esercizi, sviluppo, cassetto, chat, voce nuova) sono solo un rimando.
+5. **Il layout compatto** (28/10, #277, misurato nella pagina vera da prova_telefono_schermo e
+   prova_cronologia_pagina): la media query di telefono.css vale in verticale a 375×812, 375×667,
+   320×568 e 320×693 (iPhone 13 mini con lo «Zoom schermo»), non a 390×844 né a 412×915 né in
+   orizzontale; dentro, niente regole per «In auto», tocchi ≥ 44 px anche col testo ingrandito del
+   20 % (in rem), la riga dello stato ritagliata per i lettori; «Parla» descritto dal suggerimento
+   e lo stato piccolo nascosto ai lettori (lo dice già la riga dello stato).
 
     python prove/prova_sezioni.py
 """
@@ -212,9 +218,47 @@ def router():
              str(sorted(rimandi)))
 
 
+def compatto():
+    css = (PAGINA / "telefono" / "telefono.css").read_text(encoding="utf-8")
+    m = re.search(r"@media \(orientation: portrait\) and \(max-width: (\d+)px\), "
+                  r"\(orientation: portrait\) and \(max-height: (\d+)px\) \{", css)
+    verifica("compatto: la media query in telefono.css", m is not None)
+    if not m:
+        return
+    larg, alt = int(m.group(1)), int(m.group(2))
+
+    def vale(w, h):
+        return h > w and (w <= larg or h <= alt)
+    for w, h, atteso in ((375, 812, True), (375, 667, True), (320, 568, True), (320, 693, True),
+                         (390, 844, False), (412, 915, False), (812, 375, False), (667, 375, False)):
+        verifica(f"compatto: a {w}×{h} {'sì' if atteso else 'no'}", vale(w, h) == atteso)
+    # il blocco, con le graffe bilanciate
+    i, prof = m.end(), 1
+    j = i
+    while prof and j < len(css):
+        prof += {"{": 1, "}": -1}.get(css[j], 0)
+        j += 1
+    blocco = css[i:j - 1]
+    verifica("compatto: niente regole per «In auto» (lì i bersagli grandi)", 'data-modo="auto"' not in blocco)
+    minimi = [float(x) for x in re.findall(r"min-(?:height|width): ([\d.]+)rem", blocco)]
+    # 44 px col testo di base (17 px) e col testo ingrandito del 20 % (i rem crescono con lui)
+    verifica("compatto: tocchi ≥ 44 px (min-height e min-width ≥ 2,6rem)",
+             minimi and min(minimi) * 17 >= 44, str(minimi))
+    verifica("compatto: la riga dello stato resta per i lettori, ritagliata",
+             re.search(r"\.voce-riga \.voce \{[^}]*clip: rect\(0 0 0 0\)", blocco) is not None)
+    html = (PAGINA / "telefono" / "index.html").read_text(encoding="utf-8")
+    verifica("compatto: «Parla» descritto dal suggerimento, lo stato piccolo nascosto ai lettori",
+             'id="parla" type="button" class="parla" aria-describedby="tel-dove"' in html
+             and 'class="parla-stato" aria-hidden="true"' in html)
+    tel = (PAGINA / "telefono" / "telefono.js").read_text(encoding="utf-8")
+    verifica("compatto: il suggerimento segnato «ovvio» e lo stato breve scritto in «Parla»",
+             'attr(d, "data-ovvio"' in tel and 'querySelector(".parla-stato")' in tel)
+
+
 def main() -> int:
     tabelle()
     server()
+    compatto()
     if shutil.which("node"):
         viva()
         router()
