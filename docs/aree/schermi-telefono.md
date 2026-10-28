@@ -1132,9 +1132,11 @@ con le loro API (i tasti del cassetto a `POST /api/cassetto`, i giochi a voce e 
 - **Dalla revisione della PR #267**:
   - la nota della pagina Lavori dava a chi amministra (`tutti=prof.admin`) il titolo, il nome e la domanda
     dell'agente dell'ultimo lavoro in attesa di tutta la casa, minori compresi, e copriva la domanda del suo
-    lavoro. Ora è `tutti=False` sempre: dallo schermo lo scritto vale al più «familiare», e il cruscotto non
-    dà i titoli degli altri. Vedere i lavori di tutti vorrebbe una decisione scritta, e semmai solo conti e
-    stati come nel cruscotto;
+    lavoro. Ora è `tutti=False` sempre (questo resta vero). *[storico, fino al 28/10 sera: «dallo schermo lo
+    scritto vale al più familiare, e il cruscotto non dà i titoli degli altri. Vedere i lavori di tutti
+    vorrebbe una decisione scritta, e semmai solo conti e stati come nel cruscotto». La decisione c'è (Dario,
+    28/10): chi amministra vede i lavori degli altri in una sezione a parte, vedi «La pagina Documenti» qui
+    sotto]*;
   - le schede finali dei lavori finiti si costruiscono una volta (`raccolte._FINITI`, per lavoro, stato,
     fine e data della cartella): `Lavori.scheda` rilegge dal disco fino a 8 file interi, e la pagina si
     rilegge ogni 60 s;
@@ -1161,3 +1163,87 @@ in diretta che si allinea, «Tieni ancora» con la pagina che resta intera, i gi
 e visibile sotto la pagina Giochi; contrasto e niente fuori a 1440×900 e 700×900); `prova_raccolte` adattata
 (le tessere con la pagina, una pagina guasta 503). Da provare sul vero: la pagina Lavori sulla DGX con un lavoro
 in corso (il flusso nella scheda della pagina), il cassetto della tutrice sull'iPhone.
+
+## Le mie cose: la pagina Documenti, i documenti sul telefono e chi amministra (28/10, issue #259, ramo `issue-259-documenti`)
+
+Passo 2d del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md)
+(§ 4.8), parte di #241, epic #251. Nessun tocco nuovo (#266): la pagina legge e scarica soltanto.
+
+**Decisioni di Dario (28/10, chi amministra).**
+1. *Il telefono deve poter ricevere i documenti*: con la pagina ogni documento si ritrova e si scarica in
+   ogni momento, non solo se lo schermo era aperto quando è arrivata la scheda.
+2. *Chi amministra vede anche i documenti e i lavori degli altri*, nelle pagine Documenti e Lavori e
+   programmi: i documenti fatti da Calliope per ogni persona di casa (minori compresi), l'archivio di casa
+   senza il filtro dei personali altrui, i lavori, gli sviluppi e i programmi degli altri. Ognuno dice di chi
+   è. Gli altri continuano a vedere solo i propri, coi permessi della voce; gli ospiti e i conoscenti mai
+   niente. **A voce non cambia nulla**: `documento_leggi`, `lavoro_stato` e i permessi di `puo_vedere`
+   restano com'erano (dallo schermo lo scritto vale al più «familiare»).
+
+- **La pagina** (`#/cose/documenti`, `raccolte._pagina_documenti`), a gruppi (`gruppo` nella scheda: la
+  pagina scrive il titolo sopra la prima scheda del gruppo, `h3.gruppo-pagina`, solo testo):
+  - «Fatti da Calliope per te»: gli ultimi 8 di `documenti/servizio.Archive.recenti`, nella scheda
+    `documento` di sempre rifatta dal JSON dell'archivio (anteprima da leggere, «Scarica» in MD, PDF, Word o
+    Excel col meccanismo `_scarica`): si scarica anche se il file è finito sul portatile o è rimasto sul
+    server. Un minore li vede come a voce (`documento_leggi`): con il preset «documenti: no» (fino a 10 anni)
+    no;
+  - per chi amministra, «Fatti da Calliope per Bianca» e così per ogni persona (`Archive.recenti_di_tutti`,
+    gli ultimi 8 per persona), con `di` («Di Bianca» nella scheda);
+  - «Archivio di casa»: una scheda nuova, `archivio` (`schede.archivio`, `DISEGNA.archivio`), una per tipo
+    (Bollette, Ricevute e fatture, Contratti, Polizze, Garanzie, Referti, Documenti d'identità, Manuali, Altri
+    documenti), una riga per documento con nome, data, importo, di chi è (la cartella della persona, gli
+    intestatari, o «Di casa») e «Scarica» del file originale; al più 20 righe per tipo («E altri N:
+    chiedimeli a voce.»). I permessi sono quelli della voce: `Chi("familiare", …)` con
+    `Archivio.documenti` (`puo_vedere`), mai la zona grigia (lo schermo personale è suo); per chi amministra
+    `Chi("amministra")`, cioè tutto (decisione 2); per un minore niente (i tool dell'archivio sono in
+    `minori._UFFICIO`), con la nota «L'archivio dei documenti di casa per te no.». `SEZIONE_DI_TIPO` ha
+    `archivio` in `cose/documenti` in tutti e due i posti, `NOMI_TIPO` «Archivio di casa»;
+  - il nome di un documento dell'archivio viene dai dati estratti (l'oggetto di una ricevuta entra nel
+    nome): è un dato non fidato, scritto con `textContent`, mai HTML (provato con un `<img onerror>`).
+- **La ricerca**: una casella nella pagina (`#pagina-cerca`, solo nelle pagine che la hanno, oggi i
+  Documenti) e `POST /api/raccolte/cerca` `{raccolta, testo}` → `{schede, nota}`, in sola lettura
+  (`raccolte.cerca`): i documenti fatti da Calliope per parole del titolo (della persona, di tutti per chi
+  amministra) e l'archivio con `Archivio.cerca` e lo stesso `Chi` della pagina. Solo da uno schermo
+  personale, 20 al minuto per schermo, al più 120 caratteri; il testo cercato non va nel registro (i
+  documenti di casa sono dati personali, come i tool `riservati`). La pagina tiene la ricerca finché la si
+  cambia o si tocca «Tutti»; le riletture rifanno la ricerca.
+- **«Scarica» per i file dell'archivio** (prima non c'era): il formato `originale` di `scarica.py`, solo
+  delle estensioni che l'archivio legge (`ORIGINALI`: PDF, immagini, docx, txt; un'altra diventerebbe
+  `.bin` con `application/octet-stream` e non si offre), con la sorgente `file_fn` che al clic rifà i
+  permessi sul profilo com'è adesso (`Archivio.documento_visibile`) e legge il file dentro
+  `archivio_cartella` (`Archivio.file_di`: mai fuori dalla cartella, mai oltre `archivio_max_mb`). Le
+  sorgenti per riga stanno in `_scarica_voci` (`registra_scaricabili`), una chiave per riga
+  (`archivio:file:<id>`); le voci ricordate per «Scarica» passano da 64 a 400.
+- **Lavori e programmi per chi amministra** (`raccolte._lavori_degli_altri`): in coda alla pagina, per ogni
+  altra persona di casa (minori compresi) gli sviluppi, i lavori in coda, in corso o fermi a una domanda, i
+  programmi (2) e gli ultimi 3 finiti, in schede `lavoro` brevi con titolo, stato, domanda («aspetta la
+  risposta di Bianca») e `di`, sotto «Lavori di Bianca». Chiavi `altrui:…`: le schede in diretta degli altri
+  non arrivano allo schermo di chi amministra, e nessuna scheda mandata dopo le sostituisce; la pagina si
+  rilegge. La nota resta `Lavori.stato(persona, tutti=False)`, così la sua domanda non viene coperta.
+- **La tessera Documenti col servizio vero**: chiamava `recenti` sul servizio `Documenti`, che non l'ha (è
+  di `Documenti.archive`), quindi sulla DGX diceva sempre «non disponibile» (le prove usavano un servizio
+  finto); e `modificato` è un tempo in secondi, non una data ISO, quindi l'ultimo cambiamento non si leggeva.
+- **Dalla seconda revisione della PR #267** (primo commit del passo): la pagina Cassetto si rilegge subito
+  dopo un tasto riuscito (evento `calliope:cassetto`: prima aspettava la raffica o i 60 s); un lock su
+  `_FINITI`; la chiave delle schede finite guarda data e dimensione dei file del risultato, non solo la
+  cartella (un file riscritto con lo stesso nome non la cambiava); il cassetto vuoto di un figlio dice «Il
+  cassetto è vuoto.» (la nota «chiedimelo a voce» solo con dei file).
+- Cache del service worker `calliope-telefono-pagina-v13` (era v12).
+- **iPhone, a secco** (#59 resta aperta): `Content-Disposition: attachment` con `filename*` in UTF-8 e un
+  nome di riserva ASCII senza accenti («referto citta.pdf», prima «referto citt_.pdf»), il nome in forma NFC,
+  i tipi giusti per Safari (`application/pdf`, `image/jpeg`, i tipi Office), `nosniff` e CSP `sandbox` come
+  prima; la pagina scarica con un `<a download>` sullo stesso indirizzo, e il gettone vale 3 richieste (il
+  download che riprova, l'anteprima di iOS). Da provare sull'iPhone vero nella PWA: che il file si salvi in
+  File e non apra una vista senza «indietro», il nome con gli accenti, il Markdown (`text/markdown`, che
+  Safari potrebbe mostrare invece di salvare).
+
+Prove: `prova_pagina_documenti` (nuova, livello 1: chi vede cosa per chi amministra, un familiare, un minore
+di 15 e uno di 10 anni; l'archivio coi permessi; la ricerca con testo ostile; servizi che mancano o
+sollevano; «Scarica» con nomi, tipi e permessi al clic; il server vero con la ricerca a 20 al minuto e lo
+scaricamento vero; l'annuncio col telefono abbinato ma chiuso); `prova_pagine_cose` (i lavori degli altri
+per chi amministra, minori compresi, mai a un familiare; la cache delle schede finite col lock e i file
+riscritti; il cassetto vuoto del figlio); `prova_documenti` (le frasi col telefono abbinato ma chiuso);
+`prova_telefono_schermo` e `prova_pc_pagina` (la pagina vera: gruppi, nome ostile come testo, «Scarica» di
+una riga, ricerca e «Tutti», contrasto e clic a 1440×900 e 700×900; la rilettura subito dopo un tasto del
+cassetto); `prova_raccolte` adattata (la tessera Documenti ha la pagina; «presto» è lo Studio). Da provare
+sul vero: lo scaricamento nella PWA dell'iPhone (#59), la pagina con l'archivio vero della DGX (quanti
+documenti per tipo, il tempo della pagina).

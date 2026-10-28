@@ -185,7 +185,7 @@ permessi per accedere ai file del server» (falso) e `pc_cerca_file` sul PC non 
   l'ha chiesto aperto (`Schermi.personale_collegato`): la frase dice «È sulla scheda del tuo
   schermo: per averlo tocca «Scarica».» (`frase_scheda`, regola `documento_sulla_scheda`), e
   così l'annuncio se finisce in secondo piano e la scheda arriva. Senza schermo, o consegnato
-  davvero al portatile, la frase di sempre.
+  davvero al portatile, la frase di sempre. *[storico: «senza schermo» valeva fino al 28/10; dal passo 2d (#259) con uno schermo personale abbinato ma chiuso la frase dice la pagina Documenti, vedi sotto]*
 - `lavoro_risultato` con un riferimento che non è un lavoro non ripiega più: vedi
   [agenti-estensioni](agenti-estensioni.md).
 
@@ -194,3 +194,35 @@ finto, 3 giri): la frase della scheda con «Scarica» 3/3; «Puoi raccontarmi co
 file?» → `documento_leggi` **3/3** con il contenuto giusto detto in due frasi; il riassunto
 chiesto dopo, 3/3 dalla conversazione senza un altro tool. Prove: `prova_documenti`
 (`prova_rilettura`).
+
+## I documenti sul telefono in ogni momento: la pagina Documenti (28/10, issue #259, ramo `issue-259-documenti`)
+
+Decisione di Dario del 28/10: *il telefono deve poter ricevere i documenti*. Prima un documento
+preparato per una persona collegata dal telefono restava «sul server» e si scaricava solo se lo schermo
+personale era aperto quando la scheda arrivava. Ora ogni documento si ritrova in Le mie cose › Documenti
+e si scarica da lì in ogni momento (la pagina è in [schermi-telefono](schermi-telefono.md), con chi vede
+cosa). I limiti trovati e cosa se n'è fatto:
+
+- **La frase «sul server, perché il satellite collegato non riceve documenti»** con lo schermo personale
+  chiuso: con uno schermo personale abbinato (`Schermi.personale_abbinato`, identità decisa dalla voce)
+  la frase è `frase_pagina`, «Lo trovi sul tuo telefono in Le mie cose, Documenti: per averlo tocca
+  «Scarica».» (regola `documento_sulla_pagina`), e così l'annuncio se il documento finisce in secondo piano
+  (`annuncio_pagina`, `job.ha_pagina` messo dal tool). Con lo schermo aperto resta `frase_scheda`; senza
+  schermi personali, o consegnato davvero al portatile, la frase di sempre. `documento_leggi` con
+  «mostramelo» e lo schermo chiuso dice al modello di aggiungere dove lo trova.
+- **I documenti fatti da Calliope si scaricano sempre**: la pagina rifà la scheda dal JSON dell'archivio
+  (`Archive.recenti`), quindi «Scarica» funziona anche per un file finito sul portatile o per un documento
+  di prima di un riavvio. La tessera chiamava `recenti` sul servizio invece che sull'archivio: col servizio
+  vero diceva sempre «non disponibile» (corretto).
+- **«Scarica» per i file dell'archivio di casa** non c'era: ora il file originale (PDF, foto, docx, txt),
+  con i permessi della pagina rifatti al clic (`Archivio.documento_visibile`, `Archivio.file_di` dentro
+  `archivio_cartella`). A voce l'archivio non cambia: i tool restano quelli, coi permessi di `puo_vedere`.
+- **Nomi e tipi per l'iPhone**: il nome di riserva di `Content-Disposition` toglie gli accenti invece di
+  metterci «_», il nome è in forma NFC, i file originali hanno il loro tipo (`application/pdf`,
+  `image/jpeg`…). Lo scaricamento dalla PWA sull'iPhone vero resta da provare (#59): in particolare il
+  Markdown (`text/markdown`), che Safari potrebbe aprire invece di salvare.
+- **Chi amministra** (seconda decisione di Dario del 28/10) vede nella pagina anche i documenti fatti per gli
+  altri, minori compresi, e tutto l'archivio di casa, ognuno con di chi è. A voce `documento_leggi` resta
+  dei soli documenti di chi parla, e l'archivio coi permessi di sempre.
+
+Prove: `prova_pagina_documenti`, `prova_documenti` (le frasi col telefono abbinato ma chiuso).
