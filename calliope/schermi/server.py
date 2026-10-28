@@ -64,7 +64,8 @@ Indirizzi:
                                  sua pagina (28/10, raccolte.py): letti dai servizi per il
                                  proprietario, solo da uno schermo personale, 30 al minuto
   POST /api/tocco                «X-Calliope-Sessione», {tocco, …}: un tocco che cambia qualcosa
-                                 (28/10, tocchi.py: la spunta della lista), solo da uno schermo
+                                 (28/10, tocchi.py: la spunta della lista, «+1 minuto» e «Ferma»
+                                 sul timer), solo da uno schermo
                                  personale, anche senza una conversazione a voce; controllato
                                  qui, poi al ciclo della voce che lo fa passare da
                                  ToolRegistry.call col livello del proprietario e lo mette nella
@@ -1001,7 +1002,7 @@ def crea_app(hub: Schermi) -> Starlette:
         return _json(out, int(out.pop("_stato", 200)))
 
     async def tocco_api(request: Request):
-        """Un tocco che cambia qualcosa (la spunta della lista): controllato qui contro lo
+        """Un tocco che cambia qualcosa (la spunta, i tasti del timer): controllato qui contro lo
         stato vero (tocchi.prepara), poi al ciclo della voce, che lo fa passare da
         ToolRegistry.call col livello del proprietario e lo mette nella conversazione."""
         from . import tocchi
@@ -1022,8 +1023,11 @@ def crea_app(hub: Schermi) -> Starlette:
                                    "tocco": str(dati.get("tocco")),
                                    # Ciò che la pagina ha toccato, per ritrovare il tasto con
                                    # l'esito (evento «tocco»): solo testi brevi
-                                   "pagina": {k: str(dati.get(k))[:120] for k in ("lista", "voce")
+                                   "pagina": {k: str(dati.get(k))[:120]
+                                              for k in ("lista", "voce", "chiave")
                                               if isinstance(dati.get(k), str)},
+                                   # Il timer toccato (#257): lo sceglie il codice, mai il modello
+                                   "bersaglio": out.get("bersaglio"),
                                    "persona": schermo.get("proprietario"),
                                    "schermo": schermo.get("nome"),
                                    "stanza": schermo.get("stanza"),

@@ -35,6 +35,10 @@ una riuscita non serve più; i tocchi sono veri (Input.dispatchMouseEvent: gesto
   colonne, il pallino dopo un cambiamento; la pagina Liste dalla tessera (schede del server al posto
   delle tessere, il gesto indietro); la spunta manda il tocco giusto all'ingresso, resta in attesa,
   si aggiorna con la lista del tool, un rifiuto (evento «tocco») o un 409 lo dice accanto;
+- l'Agenda (28/10, passo 2b): la pagina dalla tessera (timer di casa con chi l'ha messo, oggi,
+  domani, in settimana); «+1 minuto» e «Ferma» mandano il tocco giusto col bersaglio, restano in
+  attesa, la scheda aggiornata e l'esito la chiudono, un rifiuto o un 409 lo dice accanto; i tasti
+  anche in Adesso;
 - modulo da compilare: si apre da solo nel suo strato, controlli mentre si scrive, «Invia»,
   «Compila» in Adesso sotto «Aspetta te»; «Scrivi» apre la casella col fuoco, la frase arriva e
   lo strato si chiude; Io ha prova del microfono, schermo acceso, certificato, «dimentica»;
@@ -553,7 +557,13 @@ def prepara_raccolte(cfg, hub, cartella: Path):
     liste.add("spesa", ["latte", "uova", "pane", "pomodori", "caffè"], "Dario")
     hub.profilo = lambda pid: (types.SimpleNamespace(id="dario", name="Dario", admin=True, nascita=None, fascia=None)
                                if pid == "dario" else None)
-    hub.tool_ctx = ToolContext(cfg=cfg, speakers=None, speaker_ctx=None, speaker=None, liste=liste)
+    # L'agenda (28/10, passo 2b, #257): un timer di casa messo da Bianca e un promemoria di domani
+    from calliope.agenda import Agenda
+    agenda = Agenda(str(cartella / "agenda.db"))
+    agenda.add("timer", "per la pasta", time.time() + 900, owner="bianca", owner_name="Bianca")
+    agenda.add("promemoria", "chiamare il fabbro", time.time() + 86400 * 1.2, owner="dario", owner_name="Dario")
+    hub.tool_ctx = ToolContext(cfg=cfg, speakers=None, speaker_ctx=None, speaker=None, liste=liste,
+                               agenda=agenda)
     return liste
 
 
@@ -572,9 +582,9 @@ def raccolte(t: Tel, hub, liste):
              and t.v("document.getElementById('sez-cose').firstElementChild.id === 'tessere'"), json.dumps(tes)[:300])
     verifica("raccolte: la tessera Liste col conto vero, senza pallino alla prima visita",
              tes.get("liste", {}).get("conto") == "1" and not tes.get("liste", {}).get("novita"), json.dumps(tes.get("liste")))
-    stato = t.v("document.querySelector('#tessere [data-tessera=\"agenda\"] .tessera-stato').textContent")
+    stato = t.v("document.querySelector('#tessere [data-tessera=\"lavori\"] .tessera-stato').textContent")
     verifica("raccolte: un servizio che manca dice «non disponibile» e la pagina «presto»",
-             tes.get("agenda", {}).get("conto") == "—" and "non disponibile" in stato and "presto" in stato, stato)
+             tes.get("lavori", {}).get("conto") == "—" and "non disponibile" in stato and "presto" in stato, stato)
     colonne = t.v("getComputedStyle(document.getElementById('tessere')).gridTemplateColumns.split(' ').length")
     verifica("raccolte: due colonne sul telefono", colonne == 2, str(colonne))
     # Un cambiamento della lista dopo la visita: il pallino
@@ -682,14 +692,100 @@ def raccolte(t: Tel, hub, liste):
     ok = aspetta(lambda: t.v("location.hash") == "#/cose" and t.v(f"{S}.vistaCose") == "tessere"
                  and t.v("getComputedStyle(document.getElementById('tessere')).display") != "none", 3)
     verifica("pagina Liste: il gesto indietro torna alle tessere", bool(ok))
-    t.tocca_sel('#tessere [data-tessera="agenda"]')
-    ok = aspetta(lambda: t.v("location.hash") == "#/cose/agenda" and t.v(f"{S}.vistaCose") == "tessere", 3)
+    t.tocca_sel('#tessere [data-tessera="lavori"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/lavori" and t.v(f"{S}.vistaCose") == "tessere", 3)
     verifica("raccolte: una tessera senza pagina resta sulle tessere e porta al suo gruppo", bool(ok))
     # Una scheda della lista da Adesso («Apri») porta alla pagina, con la scheda in vista
     t.v(f"{T}.vaiA('lista:spesa'); 1")
     ok = aspetta(lambda: t.v("location.hash") == "#/cose/liste/lista%3Aspesa" and t.v(f"{S}.vistaCose") == "pagina", 3)
     verifica("raccolte: la scheda della lista porta alla pagina Liste", bool(ok), t.v("location.hash"))
     t.v(f"{T}.vai('#/adesso'); 1")
+
+
+def agenda_pagina(t: Tel, hub):
+    """La pagina Agenda e i tasti del timer (28/10, passo 2b, #257): dalla tessera, il timer di casa
+    con chi l'ha messo e i tre giorni; «+1 minuto» e «Ferma» mandano il tocco giusto, restano in
+    attesa, la scheda aggiornata e l'esito la chiudono, un rifiuto si dice accanto; i tasti anche
+    sulla scheda del timer in Adesso."""
+    from calliope.schermi import schede
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    agenda = hub.tool_ctx.agenda
+    timer = next(it for it in agenda.items("dario") if it["kind"] == "timer")
+    chiave = schede.chiave_timer(timer)
+    t.v(f"{T}.vai('#/cose'); 1")
+    aspetta(lambda: any(x["id"] == "agenda" for x in t.v(f"{S}.tessere") or []), 5)
+    t.tocca_sel('#tessere [data-tessera="agenda"]')
+    attese = [chiave, "agenda:dario:oggi", "agenda:dario:domani", "agenda:dario:settimana"]
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/agenda" and t.v(f"{S}.vistaCose") == "pagina"
+                 and t.v(f"{S}.pagina") == attese, 5)
+    verifica("pagina Agenda: dalla tessera, il timer di casa e i tre giorni dal server",
+             bool(ok) and t.v("document.getElementById('pagina-titolo').textContent") == "Agenda", str(t.v(f"{S}.pagina")))
+    testi = t.v("[...document.querySelectorAll('#pagina-schede .scheda')].map((s) => s.textContent)") or []
+    verifica("pagina Agenda: chi ha messo il timer, il promemoria di domani, il vuoto di oggi",
+             len(testi) == 4 and "messo da Bianca" in testi[0] and "chiamare il fabbro" in testi[2]
+             and "Niente oggi." in testi[1] and "Niente nei prossimi giorni." in testi[3], json.dumps(testi)[:400])
+    sel = "#pagina-schede button.tasto-timer"
+    tasti = t.v(f"[...document.querySelectorAll('{sel}')].map((b) => [b.dataset.tocco, b.textContent,"
+                " b.getAttribute('aria-label'), Math.round(b.getBoundingClientRect().height),"
+                " Math.round(b.getBoundingClientRect().width)])") or []
+    verifica("tasti del timer: «+1 minuto» e «Ferma», con il nome del timer per chi non vede, ≥ 44 px",
+             [x[:2] for x in tasti] == [["timer_piu", "+1 minuto"], ["timer_ferma", "Ferma"]]
+             and all("per la pasta" in x[2] and x[3] >= 44 and x[4] >= 44 for x in tasti), json.dumps(tasti))
+    verifica("tasti del timer: la regione per l'esito c'è già (role=status)",
+             t.v("!!document.querySelector('#pagina-schede .scheda .esito-tocco[role=\"status\"]')"))
+    while hub.ingresso.prendi() is not None:
+        pass
+    t.tocca_sel(f'{sel}[data-tocco="timer_piu"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    verifica("tasti del timer: «+1 minuto» manda il tocco giusto (timer_imposta aggiungi, quel timer)",
+             bool(ok) and item.get("tocco") == "timer_piu" and item.get("tool") == "timer_imposta"
+             and item.get("argomenti", {}).get("cambia") == "aggiungi"
+             and item.get("bersaglio") == {"timer": timer["id"], "chiave": chiave}
+             and item.get("pagina") == {"chiave": chiave} and item.get("persona") == "dario",
+             json.dumps(item, ensure_ascii=False)[:300])
+    stato = ("(() => { const b = [...document.querySelectorAll('" + sel + "')];"
+             " return {busy: b.map((x) => x.getAttribute('aria-busy')), attesa: b.map((x) => x.classList.contains('in-attesa')),"
+             " esito: (b[0] ? b[0].closest('.scheda').querySelector('.esito-tocco').textContent : null)}; })()")
+    v = t.v(stato) or {}
+    verifica("tasti del timer: in attesa, detto nella regione di stato",
+             v.get("busy") == ["true", "true"] and v.get("attesa") == [True, False]
+             and v.get("esito") == "Aggiungo un minuto…", json.dumps(v, ensure_ascii=False))
+    # Il ciclo (qui finto): il timer allungato, la scheda aggiornata e l'esito allo schermo
+    nuovo = agenda.reschedule(timer["id"], timer["due"] + 60)
+    tutti(hub, schede.timer(nuovo))
+    hub.evento_a(item["schermo_id"], "tocco", {"tocco": "timer_piu", "ok": True, "pagina": item["pagina"]})
+    ok = aspetta(lambda: (t.v(stato) or {}).get("busy") == [None, None] and (t.v(stato) or {}).get("esito") == ""
+                 and abs((t.v("Number(document.querySelector('#pagina-schede .timer .resto').dataset.fine)") or 0)
+                         - nuovo["due"] * 1000) < 2, 5)
+    verifica("tasti del timer: la scheda aggiornata (un minuto in più) e l'esito chiudono l'attesa", bool(ok),
+             json.dumps(t.v(stato)))
+    # «Ferma», rifiutato dal ciclo: i tasti tornano liberi col motivo accanto
+    t.tocca_sel(f'{sel}[data-tocco="timer_ferma"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    verifica("tasti del timer: «Ferma» manda agenda_annulla su quel timer",
+             bool(ok) and item.get("tool") == "agenda_annulla" and item.get("bersaglio", {}).get("chiave") == chiave)
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "timer_ferma", "ok": False, "pagina": item.get("pagina"),
+                                                    "errore": "Questo timer non c'è più: è già suonato o è stato fermato."})
+    ok = aspetta(lambda: (t.v(stato) or {}).get("busy") == [None, None]
+                 and "non c'è più" in ((t.v(stato) or {}).get("esito") or ""), 5)
+    verifica("tasti del timer: un rifiuto del ciclo libera i tasti e lo dice accanto", bool(ok), json.dumps(t.v(stato)))
+    # Un errore HTTP (il timer suonato prima di arrivare al server): 409 col motivo
+    agenda.cancel_ids({timer["id"]})
+    t.tocca_sel(f'{sel}[data-tocco="timer_piu"]')
+    ok = aspetta(lambda: "non c'è più" in ((t.v(stato) or {}).get("esito") or "")
+                 and (t.v(stato) or {}).get("busy") == [None, None], 5)
+    verifica("tasti del timer: un timer che non c'è più (409) lo dice, niente al ciclo", bool(ok) and hub.ingresso.vuoto())
+    # La scheda del timer in Adesso ha gli stessi tasti
+    tid = agenda.add("timer", "per le uova", time.time() + 600, owner="dario", owner_name="Dario")
+    c = schede.timer(agenda.get(tid))
+    tutti(hub, c)
+    t.v(f"{T}.vai('#/adesso'); 1")
+    ok = aspetta(lambda: t.v("[...document.querySelectorAll('#sez-adesso button.tasto-timer')]"
+                             f".filter((b) => b.dataset.chiave === {json.dumps(c['chiave'])}).length") == 2, 5)
+    verifica("tasti del timer: anche sulla scheda del timer in Adesso", bool(ok))
 
 
 def modulo_e_scrivi(t: Tel, hub):
@@ -1012,6 +1108,15 @@ def una_per_una(t):
             time.sleep(0.3)
             m = t.v(MISURA) or {}
             tipo = k.split(":")[0].strip("_")
+            sz = t.v(f"{T}.sezioni()") or {}
+            if (sz.get("vistaCose") == "pagina" and str(t.v("location.hash")).startswith("#/cose/")
+                    and k not in (sz.get("pagina") or [])):
+                # Una raccolta con la sua pagina (28/10: l'Agenda) mostra ciò che dà il server: un
+                # timer finito o mai stato nell'agenda non c'è più, e «Apri» porta alla pagina
+                verifica(f"{nome_d} scheda {tipo} che il server non ha più: «Apri» porta alla pagina della raccolta",
+                         not m.get("fuori") and not m.get("bassi"),
+                         f"{t.v('location.hash')} {m.get('fuori')} {m.get('bassi')}"[:240])
+                continue
             foto(t, f"telefono-scheda-{nome_d}-{tipo}.png")
             verifica(f"{nome_d} scheda {tipo}: in vista nella sua sezione, testo dentro, contrasto AA",
                      k in m.get("inVista", []) and not m.get("fuori") and not m.get("bassi") and not m.get("scorre"),
@@ -1235,6 +1340,7 @@ def main() -> int:
             misure(t, "0schede")
             sezioni(t, hub)
             raccolte(t, hub, liste)
+            agenda_pagina(t, hub)
             misure(t, "schede")
             una_per_una(t)
             _, spec = modulo_e_scrivi(t, hub)

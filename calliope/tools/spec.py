@@ -108,6 +108,12 @@ class ToolContext:
     # La conversazione di stanza (13/10, calliope/stanza/: Stanza), o None se spenta:
     # stanza_pausa e «dimentica»
     stanza: Any = None
+    # Il bersaglio di un tocco dallo schermo personale (28/10, #257, calliope/schermi/tocchi.py):
+    # {"timer": id, "chiave": identità della scheda} per «+1 minuto» e «Ferma». Lo imposta solo
+    # il ciclo per la durata del tocco, mai il modello: timer_imposta e agenda_annulla cambiano
+    # quel timer invece di sceglierlo dal testo (con due timer senza nome sceglierebbero l'ultimo
+    # messo). None = nessun tocco
+    tocco_bersaglio: Any = None
 
 
 

@@ -1229,6 +1229,7 @@
   // rifiutato (permesso, orari, una voce sparita nel frattempo) la voce torna com'era con il
   // motivo accanto
   function esitoTocco(d) {
+    if (d && d.tocco in TASTI_TIMER) { esitoTimer(d); return; }
     if (!d || d.tocco !== "spunta_lista") return;
     const p = d.pagina || {};
     const lista = String(p.lista || ""), voce = String(p.voce || "");
@@ -1239,6 +1240,90 @@
     } else {
       segnaSpunta(lista, voce, "libera", String(d.errore || "Non ci sono riuscita: riprova."), true);
     }
+  }
+
+  // ─── i tasti del timer (28/10, passo 2b, #257: «+1 minuto» e «Ferma», POST /api/tocco) ───
+  // Solo sugli schermi personali con le sezioni, in Adesso e nella pagina Agenda, su una scheda
+  // con un timer solo e ancora attivo. La pagina manda la chiave della scheda (timer:<id>-<creazione>):
+  // il server controlla che quel timer ci sia ancora e il ciclo cambia proprio lui (timer_imposta
+  // «aggiungi» o agenda_annulla). La scheda aggiornata (stessa chiave) arriva prima dell'esito;
+  // l'esito (evento «tocco») chiude l'attesa, un errore si dice accanto nella regione
+  // role="status" della scheda. Come la spunta: senza esito entro SPUNTA.attesaMs lo dice, e
+  // finché il primo tocco aspetta nella coda del ciclo un altro non parte
+  const TASTI_TIMER = {
+    timer_piu: { testo: "+1 minuto", nome: "Aggiungi un minuto al timer", attesa: "Aggiungo un minuto…" },
+    timer_ferma: { testo: "Ferma", nome: "Ferma il timer", attesa: "Fermo il timer…" },
+  };
+  const OCCUPATA_TIMER = "Calliope è occupata: il timer cambia appena finisce.";
+  const TIMER_MANDATI = new Map();   // chiave della scheda → {tocco, t}: esito non ancora arrivato
+  function timerMandato(chiave) {
+    const x = TIMER_MANDATI.get(String(chiave));
+    return x && Date.now() - x.t < SPUNTA.tettoMs ? x : null;
+  }
+  function tastiTimer(c, t) {
+    const box = el("div", "tasti-timer");
+    const m = timerMandato(c.chiave);
+    for (const [tocco, v] of Object.entries(TASTI_TIMER)) {
+      const b = el("button", "tasto-timer", v.testo);
+      b.type = "button";
+      b.dataset.tocco = tocco;
+      b.dataset.chiave = String(c.chiave);
+      b.setAttribute("aria-label", v.nome + (t.etichetta ? " " + t.etichetta : ""));
+      if (m) {
+        b.setAttribute("aria-busy", "true");
+        b.classList.toggle("in-attesa", m.tocco === tocco);
+      }
+      box.append(b);
+    }
+    return box;
+  }
+  // L'attesa o l'esito sui tasti di un timer (in ogni scheda dove c'è: Adesso e Agenda)
+  function segnaTimer(chiave, attesa, testo, errore) {
+    const carte = new Set();
+    const x = TIMER_MANDATI.get(String(chiave));
+    for (const b of document.querySelectorAll("button.tasto-timer")) {
+      if (b.dataset.chiave !== String(chiave)) continue;
+      const card = b.closest(".scheda");
+      if (card) carte.add(card);
+      if (attesa) b.setAttribute("aria-busy", "true"); else b.removeAttribute("aria-busy");
+      b.classList.toggle("in-attesa", !!(attesa && x && x.tocco === b.dataset.tocco));
+    }
+    for (const card of carte) {
+      const es = card.querySelector(".esito-tocco");
+      if (!es) continue;
+      if (es.textContent !== testo) es.textContent = testo;
+      es.classList.toggle("errore", !!errore);
+    }
+  }
+  document.addEventListener("click", async (ev) => {
+    const b = ev.target.closest && ev.target.closest("button.tasto-timer");
+    if (!b) return;
+    const chiave = b.dataset.chiave, tocco = b.dataset.tocco;
+    if (!(tocco in TASTI_TIMER)) return;
+    if (timerMandato(chiave)) { segnaTimer(chiave, true, OCCUPATA_TIMER, false); return; }
+    const t0 = Date.now();
+    TIMER_MANDATI.set(chiave, { tocco, t: t0 });
+    segnaTimer(chiave, true, TASTI_TIMER[tocco].attesa, false);
+    setTimeout(() => {
+      const x = TIMER_MANDATI.get(chiave);
+      if (x && x.t === t0) segnaTimer(chiave, true, OCCUPATA_TIMER, false);
+    }, SPUNTA.attesaMs);
+    let r;
+    try { r = await postSessione("/api/tocco", { tocco, chiave }); }
+    catch (e) { r = { status: 0, dati: {} }; }
+    const x = TIMER_MANDATI.get(chiave);
+    if (r.status === 200 || !x || x.t !== t0) return;      // l'esito arriva dal ciclo
+    TIMER_MANDATI.delete(chiave);
+    segnaTimer(chiave, false, String(r.dati.errore || MESSAGGI[r.status] || "Calliope non risponde: riprova tra poco."), true);
+  });
+  // L'esito dal ciclo: riuscito, la scheda aggiornata è già arrivata (o il timer è fermato e i
+  // tasti non ci sono più); rifiutato (il timer è suonato nel frattempo, gli orari dei tutori)
+  // i tasti tornano liberi con il motivo accanto
+  function esitoTimer(d) {
+    const chiave = String((d.pagina || {}).chiave || "");
+    TIMER_MANDATI.delete(chiave);
+    if (d.ok) segnaTimer(chiave, false, "", false);
+    else segnaTimer(chiave, false, String(d.errore || "Non ci sono riuscita: riprova."), true);
   }
 
   const DISEGNA = {
@@ -1265,9 +1350,14 @@
     timer(c, corpo) {
       if (!c.timer || !c.timer.length) { corpo.append(el("p", "vuoto", "Nessun timer attivo.")); return; }
       const g = el("div", "timer");
+      // I tasti (28/10, #257): sugli schermi personali con le sezioni, una scheda con un timer solo
+      const tasti = spuntabile() && !!c.chiave && c.timer.length === 1;
+      let conTasti = false;
       c.timer.forEach((t) => {
         const r = el("div", "riga" + (c.timer.length === 1 ? " solo" : ""));
         r.append(el("div", "nome", t.etichetta));
+        // Chi l'ha messo: solo sugli schermi personali (la TV di casa la vedono anche gli ospiti)
+        if (t.chi && spuntabile()) r.append(el("div", "chi", "messo da " + t.chi));
         if (t.stato && t.stato !== "attivo") {
           // Annullato o scaduto: la stessa scheda con lo stato e l'ora, niente conto
           r.classList.add("finito");
@@ -1278,20 +1368,31 @@
         const resto = el("div", "resto", "");
         resto.dataset.fine = String(t.fine * 1000);
         r.append(resto);
+        if (tasti) { r.append(tastiTimer(c, t)); conTasti = true; }
         g.append(r);
       });
       corpo.append(g);
+      if (conTasti) {
+        // Sempre nel DOM, come per la spunta: VoiceOver legge i cambi di una regione già lì
+        const es = el("p", "esito-tocco", "");
+        es.setAttribute("role", "status");
+        corpo.append(es);
+      }
     },
     promemoria(c, corpo) {
-      if (!c.voci || !c.voci.length) { corpo.append(el("p", "vuoto", "Niente in agenda.")); return; }
-      const g = el("div", "agenda");
-      c.voci.forEach((v) => {
-        const r = el("div", "riga");
-        r.append(el("div", "quando", v.quando));
-        r.append(el("div", "cosa", v.testo + (v.tipo === "appuntamento" ? "" : " (promemoria)")));
-        g.append(r);
-      });
-      corpo.append(g);
+      // Un giorno della pagina Agenda (28/10, #257) ha la sua frase del vuoto e le voci oltre
+      if (!c.voci || !c.voci.length) corpo.append(el("p", "vuoto", c.vuoto ? String(c.vuoto) : "Niente in agenda."));
+      else {
+        const g = el("div", "agenda");
+        c.voci.forEach((v) => {
+          const r = el("div", "riga");
+          r.append(el("div", "quando", v.quando));
+          r.append(el("div", "cosa", v.testo + (v.tipo === "appuntamento" ? "" : " (promemoria)")));
+          g.append(r);
+        });
+        corpo.append(g);
+      }
+      if (c.altre) corpo.append(el("p", "nota", "e altre " + c.altre + " più avanti"));
     },
     biblioteca(c, corpo) {
       if (c.domanda) corpo.append(el("p", "sotto", "«" + c.domanda + "»"));

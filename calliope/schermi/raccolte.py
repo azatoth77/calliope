@@ -16,17 +16,17 @@ Chi vede cosa (le regole sono le stesse della voce):
 - l'ufficio (fatture, preventivi, DDT, rubrica): **solo chi amministra** (decisione del 28/10).
 
 `pagina(…)` dà le schede di una raccolta, costruite dai `schede.*` che esistono già (il disegno
-resta quello di `DISEGNA.*`): nel passo 2a le Liste; le altre pagine arrivano con i passi 2b–2e.
+resta quello di `DISEGNA.*`): nel passo 2a le Liste, nel 2b l'Agenda (#257); le altre pagine
+arrivano con i passi 2c–2e.
 """
 
 import datetime
-import time
 
 TESSERE = (("liste", "Liste"), ("agenda", "Agenda"), ("lavori", "Lavori e programmi"),
            ("cassetto", "Cassetto"), ("documenti", "Documenti"), ("giochi", "Giochi"),
            ("studio", "Studio"), ("ufficio", "Ufficio"))
-# Le pagine già fatte (le altre tessere dicono «presto»): passo 2a
-PAGINE = ("liste",)
+# Le pagine già fatte (le altre tessere dicono «presto»): passo 2a le Liste, 2b l'Agenda (#257)
+PAGINE = ("liste", "agenda")
 
 
 def _fonte(hub, nome):
@@ -57,11 +57,10 @@ def _agenda(hub, prof):
     agenda = _fonte(hub, "agenda")
     if agenda is None:
         return None
-    ora = time.time()
-    oggi_fine = datetime.datetime.combine(datetime.date.today(), datetime.time.max).timestamp()
+    from ..agenda import per_giorno
     voci = list(agenda.items(prof.id))
-    timer = [v for v in voci if v.get("kind") == "timer" and v.get("due", 0) > ora]
-    oggi = [v for v in voci if v.get("kind") in ("promemoria", "appuntamento") and ora <= v.get("due", 0) <= oggi_fine]
+    g = per_giorno(voci)              # la stessa vista della pagina (28/10, #257)
+    timer, oggi = g["timer"], g["oggi"]
     pezzi = []
     if timer:
         pezzi.append(_piu(len(timer), "timer", "timer"))
@@ -183,12 +182,14 @@ def tessere(hub, prof, log=print) -> list[dict]:
 
 
 def pagina(hub, prof, raccolta: str) -> dict:
-    """Le schede di una raccolta: {schede} o {errore, _stato}. Passo 2a: le Liste."""
+    """Le schede di una raccolta: {schede} o {errore, _stato}. Le Liste (2a) e l'Agenda (2b)."""
     if raccolta not in visibili(prof):
         return {"errore": "raccolta sconosciuta", "_stato": 404}
     if raccolta not in PAGINE:
         return {"schede": [], "nota": "Questa pagina arriva presto: intanto chiedilo a Calliope."}
     from . import schede
+    if raccolta == "agenda":
+        return _pagina_agenda(hub, prof)
     if raccolta == "liste":
         liste = _fonte(hub, "liste")
         if liste is None:
@@ -199,3 +200,21 @@ def pagina(hub, prof, raccolta: str) -> dict:
             out.append(schede.lista(key, voci))
         return {"schede": out}
     return {"schede": []}
+
+
+def _pagina_agenda(hub, prof) -> dict:
+    """La pagina Agenda (28/10, passo 2b, #257): una scheda `timer` per ogni timer di casa ancora
+    da suonare (con chi l'ha messo; sugli schermi personali con «+1 minuto» e «Ferma»), poi i
+    promemoria e gli appuntamenti della persona per oggi, domani e in settimana
+    (`agenda.per_giorno`), tre schede `promemoria`."""
+    from . import schede
+    from ..agenda import per_giorno
+    agenda = _fonte(hub, "agenda")
+    if agenda is None:
+        return {"schede": [], "nota": "L'agenda non è disponibile."}
+    g = per_giorno(agenda.items(prof.id))
+    out = [schede.timer(it) for it in g["timer"][:12]]
+    for quale, _, _ in schede.GIORNI_AGENDA:
+        out.append(schede.giorno(prof.id, quale, g[quale],
+                                 dopo=g["dopo"] if quale == "settimana" else 0))
+    return {"schede": out}

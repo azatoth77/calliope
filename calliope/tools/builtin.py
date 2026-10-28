@@ -1058,11 +1058,38 @@ def _timer_auto_label(label: str) -> bool:
     return bool(re.fullmatch(r"di [\w ]+", label or "")) and bool(parse_duration(label))
 
 
+_TIMER_SPARITO = {"ok": False, "fatto": "NIENTE: il timer toccato non c'è più",
+                  "errore": "Questo timer non c'è più: è già suonato o è stato fermato.",
+                  "conferma": "Questo timer non c'è più: è già suonato o è stato fermato.",
+                  "risposta_finale": "Questo timer non c'è più: è già suonato o è stato fermato."}
+
+
+def _timer_toccato(ctx):
+    """Il timer toccato sullo schermo personale (28/10, #257: «+1 minuto» e «Ferma»), scelto dal
+    codice (`ToolContext.tocco_bersaglio`, lo imposta solo il ciclo) e non dal testo: False se la
+    chiamata non viene da un tocco; None se quel timer non c'è più (suonato, fermato, o un altro
+    con lo stesso id: l'identità della scheda ha anche l'istante di creazione)."""
+    b = getattr(ctx, "tocco_bersaglio", None)
+    if not isinstance(b, dict) or "timer" not in b:
+        return False
+    try:
+        it = ctx.agenda.get(int(b["timer"]))
+    except (TypeError, ValueError):
+        return None
+    if it is None or it.get("kind") != "timer" or schede.chiave_timer(it) != b.get("chiave"):
+        return None
+    return it
+
+
 def _timer_cambia(ctx, durata: str, nome: str, modo: str, prof) -> dict | None:
     """Cambia un timer già messo. None = nessun timer da cambiare (il chiamante ne avvia uno
     nuovo e lo dice)."""
     owner = prof.id if prof else None
-    item, _ = ctx.agenda.find("timer", nome, owner)
+    item = _timer_toccato(ctx)
+    if item is None:
+        return dict(_TIMER_SPARITO)          # un tocco su un timer suonato: niente timer nuovo
+    if item is False:
+        item, _ = ctx.agenda.find("timer", nome, owner)
     if item is None:
         return None
     now = time.time()
@@ -1389,7 +1416,15 @@ def _agenda_annulla(ctx: ToolContext, cosa: str) -> dict:
     prof = _person(ctx)
     owner = prof.id if prof else None
     gone = None
-    if is_cancel_all(cosa or ""):
+    toccato = _timer_toccato(ctx)
+    if toccato is None:
+        return dict(_TIMER_SPARITO)
+    if toccato:
+        # «Ferma» sulla scheda del timer (28/10, #257): quel timer e solo lui
+        gone = ctx.agenda.cancel_ids({toccato["id"]}, owner)
+        if not gone:
+            return dict(_TIMER_SPARITO)
+    elif is_cancel_all(cosa or ""):
         chosen = ctx.agenda.scegli(cosa or "", owner)
         if _da_confermare(chosen):
             proposte = getattr(ctx.agenda, "proposte_tutto", {})
@@ -1415,7 +1450,7 @@ def _agenda_annulla(ctx: ToolContext, cosa: str) -> dict:
                 return _annulla_tutto_chiede(ctx, chosen, cosa or "", owner)
     if gone is None:
         gone = ctx.agenda.cancel(cosa or "", owner)
-    if is_cancel_all(cosa or ""):
+    if is_cancel_all(cosa or "") and not toccato:
         note_rule(ctx, "agenda_tutto")
     if not gone:
         return _annulla_quale(ctx, cosa or "", prof)
