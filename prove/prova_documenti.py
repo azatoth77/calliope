@@ -462,7 +462,7 @@ class SulServer(LocalDelivery):
 
     def deliver(self, *a, **k):
         d = super().deliver(*a, **k)
-        d["dove"] = "sul server, perché il satellite collegato non riceve documenti"
+        d["dove"] = "tra i miei documenti, perché il dispositivo da cui mi parli non riceve file"   # consegna.RemoteDelivery dal 28/10 (#290)
         d["remoto"] = False
         return d
 
@@ -522,9 +522,9 @@ def prova_rilettura():
     verifica("cosa_fare nomina documento_leggi", "documento_leggi" in (r.get("cosa_fare") or ""))
     r, _ = chiama_s(reg, svc, cfg, "documento_crea", {"formato": "excel", "richiesta": "spese"},
                     "Dario", "fammi una tabella delle spese", Schermi(personale=()))
-    verifica("contrario: senza uno schermo personale, la frase di sempre (sul server)",
-             "sul server, perché il satellite" in (r.get("risposta_finale") or ""),
-             r.get("risposta_finale"))
+    f = r.get("risposta_finale") or ""
+    verifica("contrario: senza uno schermo personale, la frase di sempre, senza «server» né «satellite» (#290)",
+             "tra i miei documenti, perché" in f and "server" not in f and "satellite" not in f, f)
     # Uno schermo personale abbinato ma chiuso (28/10, passo 2d, #259): la pagina Documenti
     r, ctx = chiama_s(reg, svc, cfg, "documento_crea", {"formato": "excel", "richiesta": "spese"},
                       "Dario", "fammi una tabella delle spese", Schermi(personale=(), abbinati=("dario-id",)))

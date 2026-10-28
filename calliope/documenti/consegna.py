@@ -186,7 +186,9 @@ class RemoteDelivery:
         if replace and str(replace).startswith(self.RIF):
             replace, mtime = None, None     # la versione di prima sta sul satellite
         d = self.locale.deliver(stem, ext, data, replace=replace, mtime=mtime)
-        d["dove"] = f"sul server, perché {perche}"
+        # Senza «server» né «satellite» (28/10, issue #290): a chi ascolta non dicono niente.
+        # Con uno schermo personale la frase la sceglie il tool (Le mie cose › Documenti)
+        d["dove"] = f"tra i miei documenti, perché {perche}"
         d["remoto"] = False
         self.ultima = {"remoto": False, "motivo": perche}
         return d
@@ -197,7 +199,7 @@ class RemoteDelivery:
         c = per_pc(self.server)
         if c is None or not (getattr(c, "esecutore", None) or {}).get("file"):
             perche = (f"il {self.nome} non è collegato" if c is None else
-                      f"il satellite collegato non riceve documenti")
+                      "il dispositivo da cui mi parli non riceve file")
             return self._sul_server(stem, ext, data, replace, mtime, perche)
         sostituisci = replace if replace and str(replace).startswith(self.RIF) else None
         attesa = self.timeout_s + len(data) / (self.velocita_mb_s * 1024 * 1024)

@@ -435,7 +435,7 @@ def annuncio():
     class SulServer(LocalDelivery):     # come consegna.RemoteDelivery._sul_server
         def deliver(self, *a, **k):
             d = super().deliver(*a, **k)
-            d["dove"], d["remoto"] = "sul server, perché il satellite collegato non riceve documenti", False
+            d["dove"], d["remoto"] = "tra i miei documenti, perché il dispositivo da cui mi parli non riceve file", False
             return d
     cfg = Config()
     cfg.documenti_attesa_s = 0.0
@@ -452,7 +452,8 @@ def annuncio():
     svc.wait(job, 0.0)                  # in secondo piano, come il tool dopo documenti_attesa_s
     job.event.wait(20)
     m = svc.done.get(timeout=20)["messaggio"]
-    verifica("annuncio: contrario, senza schermi abbinati la frase di sempre", "sul server" in m, m)
+    verifica("annuncio: contrario, senza schermi abbinati la frase di sempre (senza «server», #290)",
+             "tra i miei documenti" in m and "server" not in m, m)
     svc.close()
 
 

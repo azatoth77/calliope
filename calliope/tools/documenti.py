@@ -330,7 +330,9 @@ def documenti_specs(formati, agenti: bool = False) -> list[ToolSpec]:
     return [
         ToolSpec(
             name="documento_crea",
-            description=(f"Crea un documento nuovo e lo salva sul PC: formato {kinds}. "
+            # «lo consegna a chi parla» (28/10, issue #290): dal telefono «lo salva sul PC» faceva
+            # dire che il documento era sul portatile, che non c'era
+            description=(f"Crea un documento nuovo e lo consegna a chi parla: formato {kinds}. "
                          f"richiesta: cosa deve contenere, con TUTTI i dati detti (nomi, "
                          f"cifre, date), come detti a voce: «lettera di disdetta della "
                          f"palestra», «spese di settembre: affitto 800, luce 90, gas 60, con "

@@ -186,9 +186,10 @@ def principale(tmp: Path):
            and "aggiornato" in r.get("errore", ""), r.get("errore"))
         dv = RemoteDelivery(srv, LocalDelivery(tmp / "server"), "portatile")
         d = dv.deliver("Vecchio", "pdf", b"%PDF-1.4 x")
-        ok("satellite vecchio: il documento resta sul server e lo si dice",
+        ok("satellite vecchio: il documento resta sul server e lo si dice (senza «server» né «satellite», #290)",
            not d.get("remoto") and (tmp / "server" / "Vecchio.pdf").is_file()
-           and "non riceve documenti" in d.get("dove", ""), d.get("dove"))
+           and "non riceve file" in d.get("dove", "") and "server" not in d.get("dove", "")
+           and "satellite" not in d.get("dove", ""), d.get("dove"))
     aspetta(lambda: srv.attivo is None, 3)
 
     # ── satellite nuovo davanti a un server vecchio: torna al protocollo 1 ──
@@ -445,7 +446,8 @@ def principale(tmp: Path):
     aspetta(lambda: srv.attivo is None, 5)
     res = svc.wait(svc.crea("bianca-id", "Bianca", "excel", "le spese"), 10)
     ok("nessun satellite: il file resta sul server, la frase lo dice, niente «Lo apro?»",
-       res and res.get("ok") and "sul server" in res.get("frase", "")
+       res and res.get("ok") and "tra i miei documenti" in res.get("frase", "")
+       and "server" not in res.get("frase", "")
        and "non è collegato" in res.get("frase", "") and "apro?" not in res.get("frase", ""),
        (res or {}).get("frase"))
     r = chiama(reg, pcs, "pc_volume", {"azione": "alza"})

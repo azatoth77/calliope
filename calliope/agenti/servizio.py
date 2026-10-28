@@ -943,6 +943,12 @@ class Lavori:
                 self.log(f"[AGENTI] {lav.id}: consegna non riuscita: {type(e).__name__}: {e}")
                 continue
             ris["consegnati"].append(d["nome_file"])
+            if d.get("remoto") is False:
+                # Rimasto in casa (28/10, #290): la pagina Lavori e programmi, o la cartella
+                perche = str(d.get("dove") or "").split("perché ", 1)[-1]
+                dove.add(self._dove_in_casa(lav, perche) if perche else
+                         (d.get("dove") or self.consegna.where()))
+                continue
             dove.add(d.get("dove") or self.consegna.where())
         if dove:
             ris["dove"] = sorted(dove)[0]
@@ -1868,15 +1874,16 @@ class Lavori:
         nome_pc = getattr(self.consegna, "nome", "portatile")
         c = per_pc(getattr(self.consegna, "server", None))
         if c is None or not (getattr(c, "esecutore", None) or {}).get("file"):
-            ris["dove"] = (f"sul server, nella cartella Lavori, perché il {nome_pc} non è "
-                           f"collegato")
+            ris["dove"] = self._dove_in_casa(lav, f"il {nome_pc} non è collegato"
+                                             if c is None else
+                                             "il dispositivo da cui mi parli non riceve file")
             return
         try:
             d = self.consegna.deliver(safe_filename(titolo_file(lav.titolo)), ext, p.read_bytes())
         except Exception as e:  # noqa: BLE001 — il file resta comunque nella cartella del lavoro
             self.log(f"[AGENTI] {lav.id}: consegna al {nome_pc} non riuscita: "
                      f"{type(e).__name__}: {e}")
-            ris["dove"] = f"sul server, nella cartella Lavori: il {nome_pc} non l'ha ricevuto"
+            ris["dove"] = self._dove_in_casa(lav, f"il {nome_pc} non l'ha ricevuto")
             return
         if not d.get("remoto"):
             # RemoteDelivery l'ha lasciato nella cartella di riserva sul server: qui c'è già
@@ -1885,14 +1892,30 @@ class Lavori:
                 Path(str(d.get("rif") or "")).unlink()
             except OSError:
                 pass
-            perche = str(d.get("dove") or "").split("perché ", 1)[-1] or "non ha risposto"
-            ris["dove"] = f"sul server, nella cartella Lavori, perché {perche}"
+            perche = (str(d.get("dove") or "").split("perché ", 1)[-1]
+                      or f"il {nome_pc} non ha risposto")
+            ris["dove"] = self._dove_in_casa(lav, perche)
             return
         ris["consegnati_pc"] = [d["nome_file"]]
         ris["dove"] = self.consegna.where()
         self.log(f"[AGENTI] {lav.id}: risultato consegnato al {nome_pc} ({d['nome_file']})")
         if d.get("apri") and self._offri(lav, d["apri"], ext):
             ris["apribile"] = True
+
+    @staticmethod
+    def _dove_in_casa(lav: Lavoro, perche: str) -> str:
+        """Dove sta il risultato rimasto nella cartella del lavoro, detto a voce (28/10, issue
+        #290): con uno schermo personale di chi l'ha chiesto, la pagina Lavori e programmi (lì
+        c'è con «Scarica»); senza, la cartella e il perché, senza «server» né «satellite», che a
+        chi ascolta non dicono niente. *Storico: fino al 28/10 «sul server, nella cartella Lavori,
+        perché il satellite collegato non riceve documenti».*"""
+        try:
+            pagina = bool(lav.ha_pagina()) if callable(getattr(lav, "ha_pagina", None)) else False
+        except Exception:  # noqa: BLE001 — nel dubbio la cartella
+            pagina = False
+        if pagina:
+            return "in Le mie cose, alla voce Lavori e programmi"
+        return f"tra i miei file, nella cartella Lavori, perché {perche}"
 
     def _offri(self, lav: Lavoro, percorso: str, ext: str) -> bool:
         """Il file appena consegnato diventa l'«ultima ricerca» di chi ha chiesto il lavoro:
