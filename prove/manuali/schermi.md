@@ -48,7 +48,7 @@ dell'abbinamento il codice è `******`.
 ## Prova manuale di «scrivere invece di parlare» (03/10)
 
 Con uno schermo personale (quello del satellite reso personale, o il telefono abbinato con
-`--personale`): in fondo alla pagina c'è la casella «Scrivi a Calliope invece di parlare…».
+`--personale`): in fondo alla pagina c'è la casella «Scrivi a Calliope…» (dal 28/10, #301, accesa anche senza aver parlato).
 1. Scrivere «che ore sono?» → risponde a voce dal satellite; nel terminale «✍ Scritto dallo
    schermo…»; nel registro `canale: scritto`.
 2. «Calliope, aggiungi in rubrica il cliente Verdi Srl, partita IVA 12345678904» → «… non

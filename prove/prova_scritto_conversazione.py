@@ -1,19 +1,24 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-"""Prova a secco: si scrive solo durante una conversazione a voce (05/10,
-calliope/schermi/conversazione.py).
+"""Prova a secco: la conversazione a voce e lo scritto (05/10, calliope/schermi/conversazione.py).
+Dal 28/10 (#301) dallo schermo personale la casella, le foto e i file valgono sempre (al più
+familiare, come il tocco); la conversazione a voce resta per i moduli e per gli schermi di stanza.
 
 - la regola pura `scrittura_consentita(schermo, conversazione)`: schermo personale del
   proprietario che parla, di un'altra persona, di un ospite, conversazione scaduta, schermo di
   stanza nella stessa stanza o in un'altra, audio di questo computer;
 - `Conversazioni.voce`: la voce apre e rinnova, la frase breve, la zona grigia e lo scritto
   della stessa persona non rinnovano, un'altra persona o un ospite chiudono, «esci» chiude;
-- il server vero (uvicorn su 127.0.0.1) con due pagine SSE: benvenuto con lo stato, evento
-  «scrittura» che accende e spegne, /api/scrivi e /api/modulo con e senza conversazione (403
-  `senza_conversazione`, niente al ciclo, regola `scritto_senza_conversazione` nel registro
-  senza il testo), modulo chiuso con una nota quando la conversazione scade a metà o parla
-  un'altra persona, schermo di stanza (`schermi_scritto_stanza`) con un ospite nella stanza.
+- `scritto_libero`: casella, foto e file dallo schermo personale sì, il modulo no, lo schermo
+  di stanza mai;
+- il server vero (uvicorn su 127.0.0.1) con tre pagine SSE: benvenuto con lo stato (casella
+  accesa sullo schermo personale, moduli spenti), evento «scrittura» che accende e spegne i
+  moduli, /api/scrivi e /api/immagine senza conversazione (200, anche da un'altra persona mentre
+  parla Dario), /api/modulo con e senza conversazione (403 `senza_conversazione`, niente al
+  ciclo, regola `scritto_senza_conversazione` nel registro senza il testo), modulo chiuso con una
+  nota quando la conversazione scade a metà o parla un'altra persona, schermo di stanza
+  (`schermi_scritto_stanza`) solo con un ospite nella stanza.
 """
 
 import json
@@ -89,6 +94,15 @@ def prova_regola():
     cfg.storia_inattiva_s = 0
     verifica("storia_inattiva_s spenta: lo scritto scade comunque (300 s)",
              C.durata(cfg) == 300.0)
+    # Dal 28/10 (#301): dallo schermo personale casella, foto e file senza conversazione
+    lib = C.scritto_libero
+    verifica("schermo personale: casella, foto e file liberi (28/10, #301)",
+             all(lib(dario, k) for k in ("scritto", "immagine", "allegato")))
+    verifica("caso contrario: il modulo vuole la conversazione", not lib(dario, "modulo"))
+    verifica("caso contrario: lo schermo di stanza mai", not any(
+        lib(sogg, k) for k in ("scritto", "immagine", "allegato", "modulo")))
+    verifica("caso contrario: niente schermo, un canale sconosciuto",
+             not lib(None, "scritto") and not lib(dario, "tocco?"))
 
 
 def prova_conversazioni():
@@ -177,11 +191,15 @@ def prova_server():
             return c.post("/api/scrivi", json={"testo": testo},
                           headers={"X-Calliope-Sessione": sess})
 
-        verifica("accesso: scrittura spenta e la frase da dire",
-                 studio["scrittura"]["attiva"] is False
-                 and "Calliope" in studio["scrittura"]["testo"])
-        verifica("benvenuto: scrittura spenta", aspetta(
-            lambda: (p_studio.scrittura() or {}).get("attiva") is False))
+        verifica("accesso: la casella accesa, i moduli spenti con la loro frase (28/10, #301)",
+                 studio["scrittura"]["attiva"] is True and studio["scrittura"]["moduli"] is False
+                 and "Calliope" in studio["scrittura"]["testo_moduli"]
+                 and not studio["scrittura"]["testo"], str(studio["scrittura"]))
+        verifica("benvenuto: casella accesa, moduli spenti", aspetta(
+            lambda: (p_studio.scrittura() or {}).get("attiva") is True
+            and (p_studio.scrittura() or {}).get("moduli") is False))
+        verifica("schermo di stanza: tutto spento, con la frase da dire",
+                 sogg["scrittura"]["attiva"] is False and "Calliope" in sogg["scrittura"]["testo"])
         import base64
         import immagini_finte as F
         foto = "data:image/jpeg;base64," + base64.b64encode(F.jpeg(F.foto())).decode()
@@ -190,11 +208,17 @@ def prova_server():
             return c.post("/api/immagine", json={"immagine": foto, "testo": "cos'è?"},
                           headers={"X-Calliope-Sessione": sess}, timeout=10)
         r = manda_foto(studio["sessione"])
-        verifica("foto senza conversazione: 403 senza_conversazione, regola con canale immagine",
-                 r.status_code == 403 and r.json()["codice"] == "senza_conversazione"
-                 and hub.ingresso.vuoto() and registro[-1]["canale"] == "immagine", r.text)
+        it = hub.ingresso.prendi()
+        verifica("foto senza conversazione: 200 e in coda (28/10, #301)", r.status_code == 200
+                 and it and it["tipo"] == "immagine" and it["persona"] == "dario-id", r.text)
         r = scrivi(studio["sessione"])
-        verifica("senza conversazione: 403 senza_conversazione, niente al ciclo",
+        it = hub.ingresso.prendi()
+        verifica("scritto senza conversazione: 200 e in coda, con la persona dello schermo",
+                 r.status_code == 200 and r.json()["come"] == "persona" and it
+                 and it["tipo"] == "scritto" and it["persona"] == "dario-id", r.text)
+        verifica("registro dei turni: nessun rifiuto", not registro, str(registro))
+        r = scrivi(sogg["sessione"])
+        verifica("caso contrario: lo schermo di stanza senza conversazione resta 403",
                  r.status_code == 403 and r.json()["codice"] == "senza_conversazione"
                  and hub.ingresso.vuoto(), r.text)
         verifica("registro dei turni: la regola, lo schermo, il motivo, mai il testo",
@@ -204,24 +228,25 @@ def prova_server():
 
         # Dario parla (riconosciuto dalla voce, dal satellite della cucina)
         hub.conversazioni.voce("dario-id", "voce", stanza="cucina")
-        verifica("Dario parla: evento «scrittura» acceso sul suo schermo", aspetta(
-            lambda: (p_studio.scrittura() or {}).get("attiva") is True))
-        verifica("caso contrario: lo schermo di Bianca resta spento",
-                 (p_bianca.scrittura() or {}).get("attiva") is False)
+        verifica("Dario parla: evento «scrittura» coi moduli accesi sul suo schermo", aspetta(
+            lambda: (p_studio.scrittura() or {}).get("moduli") is True))
+        verifica("caso contrario: sullo schermo di Bianca i moduli restano spenti, la casella no",
+                 (p_bianca.scrittura() or {}).get("moduli") is False
+                 and (p_bianca.scrittura() or {}).get("attiva") is True)
         verifica("caso contrario: lo schermo del soggiorno resta spento (Dario è in cucina)",
                  (p_sogg.scrittura() or {}).get("attiva") is False)
         r = scrivi(studio["sessione"])
         it = hub.ingresso.prendi()
         verifica("in conversazione: 200 e in coda", r.status_code == 200 and it
                  and it["persona"] == "dario-id", r.text)
-        verifica("Bianca che scrive mentre parla Dario: 403", scrivi(bianca["sessione"])
-                 .status_code == 403 and hub.ingresso.vuoto())
-        r = manda_foto(studio["sessione"])
+        r = scrivi(bianca["sessione"])
         it = hub.ingresso.prendi()
-        verifica("foto in conversazione: 200 e in coda", r.status_code == 200 and it
-                 and it["tipo"] == "immagine", r.text)
-        verifica("foto di Bianca mentre parla Dario: 403",
-                 manda_foto(bianca["sessione"]).status_code == 403 and hub.ingresso.vuoto())
+        verifica("Bianca che scrive mentre parla Dario: 200, a nome suo (28/10, #301)",
+                 r.status_code == 200 and it and it["persona"] == "bianca-id", r.text)
+        r = manda_foto(bianca["sessione"])
+        it = hub.ingresso.prendi()
+        verifica("foto di Bianca mentre parla Dario: 200, a nome suo",
+                 r.status_code == 200 and it and it["persona"] == "bianca-id", r.text)
 
         # Un modulo aperto durante la conversazione; la conversazione scade a metà
         dario = Mittente(persona="dario-id", nome="Dario", livello="amministra", certo=True)
@@ -239,8 +264,9 @@ def prova_server():
         res = hub.moduli.apri(spec, lambda v, t: None, dario, "prova", "amministra")
         # Un «sì» breve mezzo secondo dopo: se allungasse, la scadenza sarebbe a t0 + 1,3 s
         hub.conversazioni.voce("dario-id", "breve", ora=t0 + 0.5)
-        verifica("la conversazione scade da sola: evento «scrittura» spento", aspetta(
-            lambda: (p_studio.scrittura() or {}).get("attiva") is False, 3))
+        verifica("la conversazione scade da sola: evento «scrittura» coi moduli spenti", aspetta(
+            lambda: (p_studio.scrittura() or {}).get("moduli") is False, 3))
+        verifica("…e la casella resta accesa", (p_studio.scrittura() or {}).get("attiva") is True)
         trascorso = time.monotonic() - t0
         verifica("…dopo storia_inattiva_s (0,8 s) dalla voce, non dalla frase breve",
                  0.75 <= trascorso < 1.2, f"{trascorso:.2f} s")
@@ -249,27 +275,35 @@ def prova_server():
             for m in p_studio.moduli())) and not hub.moduli.aperti("dario-id"))
         r = c.post("/api/modulo", json={"modulo": res["id"], "valori": {"data": "2026-10-05"}},
                    headers={"X-Calliope-Sessione": studio["sessione"]})
-        verifica("modulo dopo la scadenza: 403", r.status_code == 403
-                 and r.json()["motivo"] == "scaduta", r.text)
+        verifica("modulo dopo la scadenza: 403, con la frase dei moduli", r.status_code == 403
+                 and r.json()["motivo"] == "scaduta" and "modulo" in r.json()["errore"], r.text)
+        verifica("…e nel registro col canale «modulo»", registro and registro[-1]["canale"] == "modulo"
+                 and registro[-1]["regole"] == ["scritto_senza_conversazione"], str(registro[-1:]))
 
         # Parla un'altra persona: lo scritto di Dario si spegne, quello di Bianca si accende
         hub.conversazioni.voce("dario-id", "voce", stanza="studio")
-        aspetta(lambda: (p_studio.scrittura() or {}).get("attiva") is True)
+        aspetta(lambda: (p_studio.scrittura() or {}).get("moduli") is True)
         res = hub.moduli.apri(spec, lambda v, t: None, dario, "prova", "amministra")
         hub.conversazioni.voce("bianca-id", "voce", stanza="camera")
-        verifica("parla Bianca: Dario spento, Bianca accesa", aspetta(
-            lambda: (p_studio.scrittura() or {}).get("attiva") is False
-            and (p_bianca.scrittura() or {}).get("attiva") is True))
+        verifica("parla Bianca: i moduli di Dario spenti, quelli di Bianca accesi", aspetta(
+            lambda: (p_studio.scrittura() or {}).get("moduli") is False
+            and (p_bianca.scrittura() or {}).get("moduli") is True))
         verifica("parla Bianca: il modulo di Dario si chiude", not hub.moduli.aperti("dario-id"))
-        verifica("Dario 403, Bianca 200", scrivi(studio["sessione"]).status_code == 403
+        r = c.post("/api/modulo", json={"modulo": res["id"], "valori": {"data": "2026-10-05"}},
+                   headers={"X-Calliope-Sessione": studio["sessione"]})
+        verifica("il modulo di Dario mentre parla Bianca: rifiutato", r.status_code in (403, 409)
+                 and hub.ingresso.vuoto(), r.text)
+        verifica("lo scritto di Dario e di Bianca: tutti e due 200",
+                 scrivi(studio["sessione"]).status_code == 200
                  and scrivi(bianca["sessione"]).status_code == 200)
+        hub.ingresso.prendi()
         hub.ingresso.prendi()
 
         # Un ospite nel soggiorno: lo schermo di stanza scrive (come ospite), quelli personali no
         hub.conversazioni.voce(None, None, stanza="soggiorno")
-        verifica("ospite nel soggiorno: schermo di stanza acceso, Bianca spenta", aspetta(
-            lambda: (p_sogg.scrittura() or {}).get("attiva") is True
-            and (p_bianca.scrittura() or {}).get("attiva") is False))
+        verifica("ospite nel soggiorno: schermo di stanza acceso, i moduli di Bianca spenti",
+                 aspetta(lambda: (p_sogg.scrittura() or {}).get("attiva") is True
+                         and (p_bianca.scrittura() or {}).get("moduli") is False))
         r = scrivi(sogg["sessione"])
         it = hub.ingresso.prendi()
         verifica("schermo di stanza in conversazione: 200 come ospite", r.status_code == 200

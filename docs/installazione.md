@@ -247,6 +247,12 @@ Home»; il codice mostrato si abbina come un satellite:
 anche `calliope.onnx` (wake word nel browser). Passi completi:
 [`../prove/manuali/telefono.md`](../prove/manuali/telefono.md).
 
+**Limite noto (28/10, #301).** Scrivendo nella Conversazione la barra delle sezioni si nasconde
+mentre è aperta la tastiera, e la pagina non cambia disposizione: lo chiede
+`interactive-widget=resizes-visual`. Chrome per Android prima della versione 108 lo ignora e
+ridimensiona la pagina con la tastiera, e lì il layout compatto può accendersi e spegnersi mentre
+si scrive. Si scrive lo stesso; per evitarlo basta aggiornare Chrome.
+
 ## F. Servizi facoltativi
 
 Ordine consigliato all'avvio della macchina: Ollama → `calliope-whisper` → vLLM (se usato) →

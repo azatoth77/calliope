@@ -471,7 +471,7 @@ pre.uscita-esecuzione .omessi, pre.uscita-esecuzione .vuoto { color: var(--tenue
 .modulo { display: grid; gap: 0.9rem; max-width: 46rem; }
 .campo-modulo { display: grid; gap: 0.3rem; }
 .campo-modulo label { color: var(--tenue); font-size: 1rem; }
-.modulo input, .modulo textarea, .modulo select, .scrivi input {
+.modulo input, .modulo textarea, .modulo select, .scrivi textarea {
   font: inherit;
   font-size: 1.15rem;
   color: var(--testo);
@@ -483,7 +483,7 @@ pre.uscita-esecuzione .omessi, pre.uscita-esecuzione .vuoto { color: var(--tenue
   width: 100%;
 }
 .modulo input:focus-visible, .modulo textarea:focus-visible, .modulo select:focus-visible,
-.scrivi input:focus-visible, .modulo button:focus-visible, .scrivi button:focus-visible {
+.scrivi textarea:focus-visible, .modulo button:focus-visible, .scrivi button:focus-visible {
   outline: 2px solid var(--accento);
   outline-offset: 2px;
 }
@@ -505,30 +505,48 @@ pre.uscita-esecuzione .omessi, pre.uscita-esecuzione .vuoto { color: var(--tenue
   padding: 0.4rem 1.1rem;
 }
 .piccolo-bottone { background: transparent; color: var(--accento); justify-self: start; font-size: 0.95rem; }
-.invia-modulo, .scrivi button { background: var(--accento); color: var(--su-accento); font-weight: 600; font-size: 1.1rem; }
-.invia-modulo:disabled, .scrivi button:disabled { opacity: 0.55; cursor: default; }
+.invia-modulo, .scrivi .scrivi-invia { background: var(--accento); color: var(--su-accento); font-weight: 600; font-size: 1.1rem; }
+.invia-modulo:disabled { opacity: 0.55; cursor: default; }
 .piede-modulo { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .esito-modulo { margin: 0; color: var(--tenue); }
 .modulo.inviato .esito-modulo { color: var(--ok); }
+/* La casella (dal 28/10, #301, come nella tavola PcConversazione): sopra l'anteprima di ciò che
+   si allega, il testo su più righe, sotto Allega, la nota e Invia (spento con la casella vuota) */
 .scrivi {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "ante ante ante" "testo testo testo" "allega nota invia" "esito esito esito";
   align-items: center;
   gap: 0.6rem;
   padding: 0.5rem 1.4rem 0.8rem;
 }
 .scrivi[hidden] { display: none; }
-.scrivi input { flex: 1 1 14rem; width: auto; }
-.esito-scrivi { color: var(--tenue); font-size: 0.95rem; flex-basis: 100%; }
-/* Senza conversazione a voce (05/10): casella e invio spenti, con la parola da dire */
-.nota-scrittura { color: var(--tenue); font-size: 1rem; flex-basis: 100%; margin: 0.4rem 0 0; }
-.scrivi.spento input, .modulo.spento .invia-modulo { opacity: 0.55; }
+.scrivi textarea {
+  grid-area: testo; resize: none; min-height: 3.5rem; max-height: 10rem; box-sizing: border-box;
+  line-height: 1.45; overflow-y: auto;
+}
+.scrivi textarea::placeholder { color: var(--tenue); opacity: 1; }
+.scrivi .scrivi-invia { grid-area: invia; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
+.scrivi .scrivi-invia:disabled { background: var(--pannello-2); color: var(--tenue); border-color: var(--pannello-2); cursor: default; }
+.scrivi svg { flex: none; width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; }
+.scrivi .invia-icona { display: none; }
+.nota-invio { grid-area: nota; color: var(--tenue); font-size: 0.85rem; min-width: 0; }
+@media (hover: none) { .nota-invio { visibility: hidden; } }
+.esito-scrivi { grid-area: esito; color: var(--tenue); font-size: 0.95rem; }
+/* Senza conversazione a voce (05/10): casella e invio spenti, con la parola da dire. Dal 28/10
+   (#301) sullo schermo personale solo i moduli; la casella resta così sugli schermi di stanza */
+.nota-scrittura { grid-column: 1 / -1; color: var(--tenue); font-size: 1rem; flex-basis: 100%; margin: 0.4rem 0 0; }
+.scrivi.spento textarea, .modulo.spento .invia-modulo { opacity: 0.55; }
 .esito-scrivi:empty { display: none; }
 /* Foto (05/10): pulsante, anteprima prima dell'invio, pagina mentre si trascina un file */
-.scrivi .foto-apri { background: transparent; color: var(--accento); border: 2px solid var(--accento); }
+.scrivi .foto-apri { grid-area: allega; justify-self: start; display: inline-flex; align-items: center; gap: 0.5rem;
+  background: var(--pannello); color: var(--testo); border: 1px solid var(--bordo); font-size: 0.95rem; }
 .scrivi .foto-apri[hidden] { display: none; }
 .scrivi .foto-apri:disabled { opacity: 0.55; cursor: default; }
-.foto-anteprima { display: flex; align-items: center; gap: 0.8rem; flex-basis: 100%; order: -1; }
+.scrivi .togli-allegato { display: inline-flex; align-items: center; gap: 0.4rem; flex: none; color: var(--testo);
+  border-color: var(--bordo); }
+.foto-anteprima { grid-area: ante; display: flex; align-items: center; gap: 0.8rem; flex-basis: 100%; order: -1; }
 .foto-anteprima[hidden] { display: none; }
 .foto-anteprima img { max-height: 7rem; max-width: 60%; border-radius: 0.4rem; }
 body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
@@ -537,6 +555,7 @@ body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
 /* Allegati (05/10): il nome del file nell'anteprima prima dell'invio, e la scheda */
 .foto-anteprima img[hidden], .allegato-info[hidden] { display: none; }
 .allegato-info { font-weight: 600; overflow-wrap: anywhere; flex: 1 1 auto; min-width: 0; }
+.allegato-info:empty { display: none; }
 .scheda-allegato .nome-allegato { font-weight: 650; overflow-wrap: anywhere; }
 .scheda-allegato .anteprima-allegato { margin-top: 0.6rem; color: var(--tenue); white-space: pre-wrap; }
 /* Il cassetto dei file (08/10): un carosello orizzontale, una voce per file */

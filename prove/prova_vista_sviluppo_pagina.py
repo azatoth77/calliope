@@ -316,8 +316,9 @@ def pc(exe, srv, hub, web, svs, lavori):
         verifica("nome dell'estensione e versione nella testa della vista",
                  "meteo_citta" in tit and "versione 2" in tit, tit)
         tasti = p.valuta("[...document.querySelectorAll('#principale .comandi-svil button')].map(b => [b.textContent, b.disabled])")
-        verifica("comandi senza conversazione: spenti (tranne «Vista normale»), nessuno per approvare",
-                 tasti and all(d for t, d in tasti if t != "Vista normale")
+        # Dal 28/10 (#301) dallo schermo personale si scrive sempre: i comandi (frasi scritte) accesi
+        verifica("comandi senza conversazione: accesi (28/10, #301), nessuno per approvare",
+                 tasti and all(not d for t, d in tasti)
                  and not any("pprov" in t or "ttiv" in t for t, _ in tasti), str(tasti))
         foto(p, "vista-collaudo-1280x800.png")
         finestra(p, 1920, 1080)

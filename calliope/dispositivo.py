@@ -218,7 +218,8 @@ def nota(disp: dict | None, pc: str | None, per_chi: bool = True,
     if canale == SCRITTO and disp.get("personale"):
         # Anche qui le sezioni nascoste (revisione della PR #294: un bambino che scrive dal
         # telefono non aveva la riga «lì non c'è Casa»)
-        dove = "lo schermo personale a sezioni di chi parla, per scritto"
+        # Dal 28/10 (#301) anche senza aver parlato prima: «parlami prima» non serve
+        dove = "lo schermo personale a sezioni di chi parla, per scritto, anche senza aver parlato"
         sch = _via((schermo or {}).get("nascoste")) if isinstance(schermo, dict) else ""
     else:
         dove = {TELEFONO: "il telefono, non un computer",

@@ -262,8 +262,9 @@ class Schermi:
         # principale, che la sveglia (ingresso.sveglia) fa guardare tra un turno e l'altro
         self.moduli = Moduli(self)
         self.ingresso = Ingresso()
-        # Scrivere solo durante una conversazione cominciata a voce (05/10, conversazione.py):
-        # il ciclo principale le aggiorna, le pagine si accendono e spengono da sole
+        # Le conversazioni cominciate a voce (05/10, conversazione.py): il ciclo principale le
+        # aggiorna, le pagine si accendono e spengono da sole. Dal 28/10 (#301) servono ai
+        # moduli e agli schermi di stanza: dallo schermo personale si scrive sempre
         self.conversazioni = Conversazioni(lambda: conv_mod.durata(self.cfg),
                                            on_cambio=self._scrittura_cambiata)
         self._scrittura_persone: set = set()
@@ -1249,19 +1250,36 @@ class Schermi:
             motivo = m
         return False, motivo
 
+    def scritto_consentito(self, schermo: dict | None, canale: str = "scritto") -> tuple[bool, str]:
+        """Il punto per ciò che arriva dalle pagine (28/10, #301): dallo schermo personale la
+        casella, le foto e i file valgono sempre (`conversazione.CANALI_LIBERI`, al più
+        familiare come il tocco); i moduli e gli schermi di stanza vogliono ancora la
+        conversazione a voce (`scrittura_consentita`)."""
+        if conv_mod.scritto_libero(schermo, canale):
+            return True, ""
+        return self.scrittura_consentita(schermo)
+
     def scrittura_persona(self, persona: str | None) -> bool:
         """La persona è in una conversazione attiva (i suoi schermi personali scrivono)."""
         return bool(persona) and any(c.persona == persona for c in self.conversazioni.attive())
 
-    def testo_senza_conversazione(self) -> str:
+    def testo_senza_conversazione(self, canale: str = "scritto") -> str:
         nome = (getattr(self.cfg, "wake_names", None) or ["Calliope"])[0]
+        if canale == "modulo":
+            # Dal 28/10 (#301) solo i moduli dello schermo personale vogliono la voce
+            return (f"Di' «{nome}» per mandarmi il modulo: i moduli valgono durante una "
+                    "conversazione a voce.")
         return f"Di' «{nome}» per scrivermi: scrivo solo durante una conversazione a voce."
 
     def stato_scrittura(self, schermo: dict) -> dict:
-        """Per la pagina: {"attiva", "motivo", "testo"} (nessun nome, nessun dato)."""
-        ok, motivo = self.scrittura_consentita(schermo)
-        return {"attiva": ok, "motivo": motivo,
-                "testo": "" if ok else self.testo_senza_conversazione()}
+        """Per la pagina: {"attiva", "moduli", "motivo", "testo", "testo_moduli"} (nessun nome,
+        nessun dato). `attiva`: la casella, le foto e i file (dallo schermo personale sempre,
+        dal 28/10, #301); `moduli`: l'invio dei moduli, solo durante una conversazione a voce."""
+        ok, motivo = self.scritto_consentito(schermo, "scritto")
+        mod, motivo_mod = self.scrittura_consentita(schermo)
+        return {"attiva": ok, "moduli": mod, "motivo": motivo or motivo_mod,
+                "testo": "" if ok else self.testo_senza_conversazione(),
+                "testo_moduli": "" if mod else self.testo_senza_conversazione("modulo")}
 
     def stato_scrittura_per(self, conn: _Connessione) -> dict:
         """Lo stato per una pagina che si (ri)collega: lo ricorda, così i cambi dopo partono

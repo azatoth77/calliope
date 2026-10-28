@@ -3,7 +3,8 @@
    di QUESTO telefono, «Microfono», «Parla», «Scrivi»); le schede stanno negli elenchi delle
    sezioni. La vista unica del 04/10 (la «vista da guida») è la modalità In auto, a mano.
    Fondo nero (OLED spento), colori smorzati ma sopra AA (≥ 4,5:1), niente animazioni, tocchi
-   ≥ 44 px (≥ 64 px in auto). Modulo da compilare e casella per scrivere sono strati sopra. */
+   ≥ 44 px (≥ 64 px in auto). Il modulo da compilare è uno strato sopra; la casella per scrivere
+   sta nella Conversazione al posto della riga della voce (28/10, #301). */
 :root {
   color-scheme: dark;
   --sfondo: #000; --pannello: #0d0d0d; --pannello-2: #171717; --bordo: #3a3a3a;
@@ -170,13 +171,11 @@ body.telefono {
   grid-template-areas: "stato stato" "dove dove" "mic parla";
 }
 .voce-riga.con-scrivi { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "stato stato stato" "dove dove dove" "mic parla scrivi"; }
-.voce-riga.con-scrivi.con-foto { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "stato stato stato stato" "dove dove dove dove" "mic parla scrivi foto"; }
 .voce-riga .voce { grid-area: stato; }
 .voce-riga .vista-dove { grid-area: dove; }
 .voce-riga .mic { grid-area: mic; }
 .voce-riga .parla { grid-area: parla; }
 .voce-riga .scrivi-apri { grid-area: scrivi; }
-.voce-riga .foto-apri { grid-area: foto; }
 /* Microfono, Scrivi e Allega: l'icona; la parola resta per i lettori (aria-label) */
 .voce-riga .mic-testo, .voce-riga .tasto-parola {
   position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
@@ -189,7 +188,7 @@ body.telefono {
 .vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga {
   row-gap: 0.35rem; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "stato stato" "dove dove" "mic parla";
 }
-.vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga :is(.scrivi-apri, .foto-apri) { display: none; }
+.vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga .scrivi-apri { display: none; }
 .vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga .voce { font-size: 1.05rem; padding-bottom: 0.25rem; gap: 0.45rem; }
 .vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga .voce .forma { width: 1.4rem; height: 1.4rem; }
 .vista[data-modo="sezioni"]:where(:not([data-sezione="adesso"]):not([data-sezione="conversazione"])) .voce-riga .vista-dove { font-size: 0.9rem; }
@@ -219,15 +218,6 @@ body.telefono {
 .parla.parla-calliope .parla-icona { border-color: var(--v-parla); }
 .parla:disabled { opacity: 0.45; }
 
-.foto-apri { white-space: nowrap; padding: 0.4rem 0.9rem; }
-/* Icona di «Allega» (05/10): una graffetta, due anelli arrotondati uno dentro l'altro, solo CSS */
-.foto-icona { width: 0.8rem; height: 1.5rem; border: 2px solid currentColor; border-radius: 0.4rem;
-  position: relative; flex: none; transform: rotate(35deg); }
-.foto-icona::after { content: ""; position: absolute; width: 0.3rem; height: 0.95rem; border: 2px solid currentColor;
-  border-bottom: none; border-radius: 0.3rem 0.3rem 0 0; left: 50%; top: 0.15rem; transform: translateX(-50%); }
-.telefono .scrivi .foto-anteprima img { max-height: 30vh; max-width: 100%; }
-.telefono .scrivi .foto-apri { flex: 1 1 100%; min-height: 4rem; font-size: 1.25rem; color: var(--testo); background: #0d0d0d; }
-.telefono .scrivi .foto-anteprima .piccolo-bottone { flex: 0 0 auto; min-height: 3rem; color: var(--testo); background: #0d0d0d; }
 .tasto {
   font: inherit; min-width: 0; min-height: 4.1rem; padding: 0.4rem 0.7rem; box-sizing: border-box;
   font-size: 1.15rem; font-weight: 650; line-height: 1.15; border-radius: 1rem;
@@ -237,7 +227,8 @@ body.telefono {
 }
 .tasto[hidden] { display: none; }
 .scrivi-apri { white-space: nowrap; padding: 0.4rem 0.9rem; }
-.scrivi-apri.spento, .foto-apri.spento { border-style: dashed; }
+.scrivi-apri.spento { border-style: dashed; }
+.scrivi-apri[aria-pressed="true"] { border-color: var(--accento); color: var(--accento-chiaro); }
 /* Microfono: icona, parola e colore insieme (acceso verde pieno, spento grigio sbarrato) */
 .mic { text-align: left; }
 .mic-testo { display: flex; flex-direction: column; min-width: 0; }
@@ -289,8 +280,6 @@ button.grande:focus-visible, .link:focus-visible, .strato a:focus-visible {
 
 /* Sui telefoni stretti (320 px): «Allega» resta nella casella di «Scrivi», la barra più fitta */
 @media (max-width: 359px) {
-  .voce-riga .foto-apri { display: none; }
-  .voce-riga.con-scrivi.con-foto { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "stato stato stato" "dove dove dove" "mic parla scrivi"; }
   .voce-riga .tasto { min-width: 3.2rem; padding: 0.2rem 0.6rem; }
   .barra { padding-left: 0; padding-right: 0; }
   .barra a { font-size: 0.58rem; letter-spacing: -0.02em; }
@@ -343,6 +332,14 @@ button.grande:focus-visible, .link:focus-visible, .strato a:focus-visible {
     display: block; font-size: 0.72rem; font-weight: 600; line-height: 1.2; color: inherit; text-align: center;
   }
 
+  /* la casella (28/10, #301, tavola ScriviMiniTastiera): Invia è un'icona, gli spazi più stretti */
+  .vista[data-modo="sezioni"] .scrivi { gap: 0.4rem 0.35rem; }
+  .vista[data-modo="sezioni"] .scrivi .scrivi-invia { width: 2.75rem; padding: 0; }
+  .vista[data-modo="sezioni"] .scrivi .invia-testo {
+    position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+  }
+  .vista[data-modo="sezioni"] .scrivi .invia-icona { display: block; }
+
   /* la barra: più bassa (≥ 44 px), la zona sicura sotto resta quella del padding */
   .vista[data-modo="sezioni"] .barra a { min-height: 2.9rem; gap: 0.1rem; font-size: 0.62rem; }
   .vista[data-modo="sezioni"] .icona-sez svg { width: 1.2rem; height: 1.2rem; }
@@ -385,7 +382,7 @@ button.grande:focus-visible, .link:focus-visible, .strato a:focus-visible {
 .telefono .vista[data-modo="auto"] #risposta { flex: 1 1 auto; max-height: none; justify-content: center; }
 .vista[data-modo="auto"] .risposta-testo { flex: 0 1 auto; font-size: clamp(1.4rem, 5.5vmin, 1.9rem); font-weight: 600; }
 .vista[data-modo="auto"] .voce-riga { grid-template-columns: minmax(0, 1fr); grid-template-areas: "stato" "dove" "parla" "mic"; }
-.vista[data-modo="auto"] .voce-riga :is(.scrivi-apri, .foto-apri) { display: none; }
+.vista[data-modo="auto"] .voce-riga .scrivi-apri, .vista[data-modo="auto"] .scrivi-riga { display: none; }
 .vista[data-modo="auto"] .voce-riga .voce { font-size: clamp(1.4rem, 4.5vmin + 0.4rem, 2rem); }
 .vista[data-modo="auto"] .parla { height: clamp(4.75rem, 20dvh, 10.5rem); font-size: clamp(1.7rem, 7vmin, 2.4rem); }
 .vista[data-modo="auto"].mic-acceso .parla { height: 4.25rem; font-size: clamp(1.25rem, 4.5vmin, 1.6rem); }
@@ -424,11 +421,105 @@ button.grande:focus-visible, .link:focus-visible, .strato a:focus-visible {
 .strato-nota { margin: 0; color: var(--tenue); font-size: 0.95rem; }
 .strato p { line-height: 1.45; }
 
-/* la casella per scrivere (di schermo.js) */
-.telefono .scrivi { padding: 0; gap: 0.7rem; }
-.telefono .scrivi input { flex: 1 1 100%; font-size: 1.25rem; min-height: 4rem; padding: 0.7rem 0.9rem; }
-.telefono .scrivi button { flex: 1 1 100%; min-height: 4rem; font-size: 1.25rem; color: #000; }
-.telefono .esito-scrivi { font-size: 1rem; }
+/* ── Scrivere nella Conversazione (28/10, #301; tavole ScriviTastiera, ScriviMentre, ScriviInviato,
+   ScriviMiniTastiera): la riga della voce diventa la casella di schermo.js, «Torna alla voce» a
+   sinistra, Allega, il testo su più righe (16 px: iOS non ingrandisce la pagina), Invia a destra,
+   spento con la casella vuota; l'anteprima di ciò che si allega sopra. Tocchi ≥ 44 px ── */
+.scrivi-riga { grid-area: voce; min-width: 0; }
+.scrivi-riga[hidden] { display: none; }
+.vista[data-scrittura] .voce-riga { display: none; }
+.telefono .scrivi {
+  padding: 0; gap: 0.5rem 0.4rem; align-items: end;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-areas: "ante ante ante ante" "voce allega testo invia" "esito esito esito esito";
+}
+.telefono .scrivi .nota-invio { display: none; }
+.telefono .scrivi :is(.scrivi-voce, .foto-apri, .scrivi-invia) {
+  height: 2.75rem; min-height: 2.75rem; min-width: 2.75rem; box-sizing: border-box; border-radius: 0.85rem;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.telefono .scrivi .scrivi-voce { grid-area: voce; padding: 0; border: 1px solid #2f5a43; background: #0b1a12; color: var(--v-ascolta); font: inherit; }
+.telefono .scrivi .scrivi-voce svg { width: 1.3rem; height: 1.3rem; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; }
+.telefono .scrivi .foto-apri { width: 2.75rem; padding: 0; border: 1px solid var(--bordo); background: var(--pannello); color: var(--testo); }
+.telefono .scrivi .allega-testo, .telefono .scrivi .togli-testo {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.telefono .scrivi textarea {
+  min-height: 2.75rem; max-height: 8.5rem; padding: 0.55rem 0.75rem; border-radius: 0.85rem;
+  font-size: max(16px, 0.95rem); line-height: 1.3; border: 2px solid var(--bordo); background: var(--pannello);
+}
+/* il fuoco è il bordo d'accento di 2 px (come nella tavola), non un secondo anello */
+.telefono .scrivi textarea:focus { border-color: var(--accento); }
+.telefono .scrivi textarea:focus-visible { outline: none; }
+.telefono .scrivi .scrivi-invia { padding: 0 0.9rem; font-size: 0.95rem; font-weight: 700; border: 0; }
+.telefono .scrivi .esito-scrivi { font-size: 0.85rem; }
+/* l'esito che non è un errore lo dice già la chat («Calliope sta scrivendo…»): resta per i lettori */
+.telefono .scrivi .esito-scrivi:not(.errore) {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.telefono .scrivi .nota-scrittura { font-size: 0.9rem; }
+.telefono .scrivi .foto-anteprima { gap: 0.6rem; }
+.telefono .scrivi .foto-anteprima img { width: 3.3rem; height: 3.3rem; object-fit: cover; max-width: none; max-height: none;
+  border-radius: 0.6rem; border: 1px dashed var(--accento); }
+.telefono .scrivi .allegato-info { font-weight: 500; font-size: 0.8rem; color: var(--tenue); }
+.telefono .scrivi .togli-allegato { width: 2.75rem; height: 2.75rem; min-height: 2.75rem; padding: 0; border-radius: 50%;
+  justify-content: center; background: var(--pannello); }
+
+/* La tastiera di sistema aperta (telefono.js, visualViewport): la vista è la parte visibile e la barra
+   delle sezioni si nasconde; il layout compatto resta quello di prima */
+.vista.tastiera { height: var(--alto-visibile, 100dvh); top: var(--su-visibile, 0); bottom: auto;
+  padding-bottom: 0.5rem; }
+.vista.tastiera .barra { display: none; }
+
+/* La Conversazione come una chat (28/10, #301; tavole ScriviVoce, ScriviTastiera, ScriviInviato e
+   ScriviRitorno): le bolle sul nero, sotto quelle della persona l'ora e il canale, le schede come un
+   rimando di una riga dentro la bolla di Calliope (la foto resta con la sua miniatura, #272), i filtri
+   dietro la lente in alto. Uguale a voce e scrivendo, così passare da una all'altra non sposta niente;
+   scrivendo, in più, niente «Altre schede» né «Scarica Markdown». Solo nella sezione del telefono:
+   a schermo intero e sul PC la conversazione resta quella di prima */
+.vista[data-scrittura] #sez-conversazione > :not(.conv-tel):not(.conv-ora) { display: none; }
+.vista[data-scrittura] .conv-tel { min-height: 0; }
+.vista[data-scrittura] .conv-tel .scarica { display: none; }
+.vista[data-modo="sezioni"]:not([data-filtri]) .conv-tel :is(.chat-chips, .chat-cerca) { display: none; }
+.vista[data-modo="sezioni"]:not([data-filtri]) .conv-tel .chat-filtri { margin: 0; }
+.vista[data-modo="sezioni"] .conv-tel .conv-chat { background: transparent; border: 0; border-radius: 0; padding: 0.2rem 0 0.3rem;
+  scrollbar-width: none; }
+.vista[data-modo="sezioni"] .conv-tel .conv-chat::-webkit-scrollbar { display: none; }
+.vista[data-modo="sezioni"] .conv-tel .conv-chi {
+  position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap;
+}
+.vista[data-modo="sezioni"] .conv-tel .conv-turno { gap: 0.25rem; }
+.vista[data-modo="sezioni"] .conv-tel .conv-meta { order: 1; align-self: flex-end; font-size: 0.75rem; }
+.vista[data-modo="sezioni"] .conv-tel :is(.canale-tocco, .canale-modulo) .conv-meta { align-self: center; }
+.vista[data-modo="sezioni"] .conv-tel .conv-calliope { order: 2; margin-top: 0.4rem; max-width: 86%; overflow: hidden;
+  border-radius: 1rem 1rem 1rem 0.25rem; }
+.vista[data-modo="sezioni"] .conv-tel .conv-tu { max-width: 80%; border-radius: 1rem 1rem 0.25rem 1rem; }
+.vista[data-modo="sezioni"] .conv-tel .scheda-piccola:not(.tipo-foto) .piccola-anteprima { display: none; }
+.vista[data-modo="sezioni"] .conv-tel .scheda-piccola { margin: 0 -0.8rem; border: 0; border-top: 1px solid var(--bordo);
+  border-radius: 0; background: transparent; }
+.vista[data-modo="sezioni"] .conv-tel .conv-x + .scheda-piccola { margin-top: 0.5rem; }
+.vista[data-modo="sezioni"] .conv-tel .scheda-piccola:last-child { margin-bottom: -0.5rem; }
+.vista[data-modo="sezioni"] .conv-tel .piccola-apri { min-height: 2.75rem; font-size: 0.82rem; }
+.conv-lente { display: none; }
+.vista[data-modo="sezioni"][data-sezione="conversazione"] .conv-lente:not([hidden]) {
+  display: flex; flex: none; width: 2.75rem; min-width: 2.75rem; padding: 0; border-radius: 50%;
+}
+.conv-lente[aria-expanded="true"] { border-color: var(--accento); }
+.conv-lente svg { width: 1.2rem; height: 1.2rem; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+/* «ti ascolto…», «Calliope sta scrivendo…»: una bolla piccola in fondo, che non c'è quando è vuota
+   (resta nel DOM: VoiceOver legge i cambi di una regione già lì) */
+.conv-ora { align-self: flex-start; display: flex; align-items: center; gap: 0.6rem; padding: 0.45rem 0.8rem;
+  border: 1px solid var(--bordo); border-radius: 1rem 1rem 1rem 0.25rem; background: var(--pannello);
+  color: var(--tenue); font-size: 0.85rem; }
+.conv-ora[data-vuoto="1"] { height: 0; padding: 0; border: 0; margin: -0.3rem 0 0; overflow: hidden; }
+.conv-ora[data-ascolto="1"] { align-self: flex-end; border-color: var(--v-ascolta); color: #b5dcc4;
+  border-radius: 1rem 1rem 0.25rem 1rem; }
+.conv-ora-punti { display: flex; gap: 0.25rem; }
+.conv-ora-punti i { width: 0.4rem; height: 0.4rem; border-radius: 50%; background: var(--accento); }
+.conv-ora-punti i:nth-child(2) { opacity: 0.7; }
+.conv-ora-punti i:nth-child(3) { opacity: 0.45; }
+.conv-ora[data-ascolto="1"] .conv-ora-punti i { background: var(--v-ascolta); }
 
 /* il modulo da compilare */
 .modulo-posto .scheda { padding: 0.9rem 1rem; }

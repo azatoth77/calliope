@@ -355,6 +355,7 @@ def telefono(exe, amb):
         verifica("…con l'ultimo turno in vista (disegnata mentre la sezione era nascosta)", bool(fondo))
         foto(p, "conversazione-telefono-sezione.png", 390, 844, mobile=True)
         conversazione_tel(p, amb)
+        scrittura_tel(p, amb)
         e = errori_js(p)
         verifica("telefono: nessun errore JavaScript né violazione della CSP", not e,
                  "; ".join(e)[:300])
@@ -469,7 +470,13 @@ def conversazione_tel(p, amb):
     tocca(p, '#barra a[data-sezione="conversazione"]')
     aspetta(lambda: p.valuta("!document.getElementById('sez-conversazione').hidden"), 3)
 
-    # I filtri
+    # I filtri, dietro la lente in alto (28/10, #301: come nelle tavole, a voce e scrivendo)
+    verifica("i filtri stanno dietro la lente: chiusi finché non la si tocca",
+             p.valuta(f"getComputedStyle(document.querySelector('{T} .chat-chips')).display === 'none'"
+                      " && !document.getElementById('conv-lente').hidden"))
+    tocca(p, "#conv-lente")
+    aspetta(lambda: p.valuta(f"getComputedStyle(document.querySelector('{T} .chat-chips')).display !== 'none'"), 3)
+
     def domande():
         return p.valuta(f"[...document.querySelectorAll('{T} .conv-turno')].map(t => (t.querySelector('.conv-tu .conv-x, .conv-gesto') || {{}}).textContent || '')") or []
     tocca(p, f"{T} [data-chat-filtro='ieri']")
@@ -534,11 +541,11 @@ def conversazione_tel(p, amb):
                  json.dumps([m.get("bassi"), m.get("tocchi")]))
         verifica(f"{d}: la conversazione ha posto per i turni", (m.get("altezza") or 0) >= 190, m.get("altezza"))
     p.valuta("document.documentElement.style.fontSize = ''; 1")
-    # La casella resta spenta fuori da una conversazione a voce
+    # Dal 28/10 (#301) Scrivi è acceso anche fuori da una conversazione a voce (prima restava spento)
     stato = p.valuta("({spento: document.getElementById('scrivi-apri').classList.contains('spento'),"
                      " visibile: !document.getElementById('scrivi-apri').hidden})") or {}
-    verifica("Scrivi resta spento in Conversazione senza una conversazione a voce",
-             stato.get("spento") is True or stato.get("visibile") is False, stato)
+    verifica("Scrivi acceso in Conversazione anche senza una conversazione a voce (28/10, #301)",
+             stato.get("spento") is False and stato.get("visibile") is True, stato)
     # La miniatura della foto accanto alla frase (28/10, #272): la copia piccola del turno
     import io
     from PIL import Image
@@ -582,6 +589,10 @@ def conversazione_tel(p, amb):
     attese = {"tenuta": "La tengo fino al ", "archiviata": "Archiviata.", "persa": "Non c'è più: non era stata archiviata."}
     for i, stato in enumerate(("tenuta", "archiviata", "persa")):
         sel = f"{T} .conv-turno:nth-last-child({3 - i}) .scheda-piccola.tipo-foto .piccola-apri"
+        # Prima in vista e fermo: lo scorrimento accende «In fondo» (staccato) e la pagina si
+        # ridispone dopo; un tocco a metà ridisposizione cadeva fuori (28/10, #301, a 390×844)
+        p.valuta(f"document.querySelector({json.dumps(sel)}).scrollIntoView({{block: 'center'}}); 1")
+        time.sleep(0.3)
         tocca(p, sel)
         ok = aspetta(lambda: p.valuta("!document.getElementById('strato-scheda').hidden"
                                       " && !!document.querySelector('#intera-posto .stato-foto')"), 5)
@@ -597,6 +608,272 @@ def conversazione_tel(p, amb):
                      p.valuta("!!document.querySelector('#intera-posto [data-chat-vai=\"cose/documenti\"]')"))
         p.valuta("history.back(); 1")
         aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 3)
+
+
+# Le misure della modalità scrittura (28/10, #301): i tocchi della casella e della conversazione, il
+# contrasto del testo visibile, niente fuori di lato, il testo a 16 px, la barra e il compatto
+MISURA_SCRIVI = r"""(() => {
+  const W = innerWidth, H = innerHeight;
+  const vis = (e) => e && !e.closest('[hidden]') && e.getClientRects().length > 0 && getComputedStyle(e).visibility !== 'hidden'
+    && getComputedStyle(e).display !== 'none';
+  const nome = (e) => (e.id ? '#' + e.id : (typeof e.className === 'string' && e.className ? e.className : e.tagName)).slice(0, 40);
+  const f = document.getElementById('scrivi');
+  const fr = f.getBoundingClientRect();
+  const fuori = [];
+  for (const e of [f, ...f.querySelectorAll('*')].filter(vis)) {
+    const r = e.getBoundingClientRect();
+    if (r.width && (r.left < -1 || r.right > W + 1)) fuori.push(nome(e) + ' esce di lato');
+  }
+  const lum = (c) => { const m = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((v) => v / 255)
+    .map((v) => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+  const alfa = (c) => { const m = c.match(/[\d.]+/g); return m.length > 3 ? Number(m[3]) : 1; };
+  const contrasto = (e, colore) => { let b = e, bg = 'rgba(0, 0, 0, 0)';
+    while (b && alfa(bg = getComputedStyle(b).backgroundColor) < 0.5) b = b.parentElement;
+    const l1 = lum(colore || getComputedStyle(e).color), l2 = lum(b ? bg : 'rgb(0, 0, 0)');
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
+  const testi = [...document.querySelectorAll('#scrivi *, #conv-tel *, #conv-ora *, .riga-titolo *')].filter(vis)
+    .filter((e) => !e.closest('.piccola-anteprima'))
+    .filter((e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()))
+    .filter((e) => { const r = e.getBoundingClientRect(); return r.bottom > 0 && r.top < H; });
+  const bassi = testi.map((e) => [nome(e) + ' «' + e.textContent.trim().slice(0, 14) + '»', contrasto(e)])
+    .filter(([, c]) => c < 4.5).map(([n, c]) => n + ' ' + c.toFixed(2)).slice(0, 6);
+  const t = document.getElementById('scrivi-testo');
+  // il segnaposto: il suo colore sul fondo della casella
+  const segno = contrasto(t, getComputedStyle(t, '::placeholder').color);
+  const tocchi = [...document.querySelectorAll('#scrivi button, #scrivi textarea, #conv-lente, #conv-tel .piccola-apri, #conv-tel .chat-chip')]
+    .filter(vis).map((e) => { const r = e.getBoundingClientRect(); return [nome(e), Math.round(Math.min(r.width, r.height))]; })
+    .filter(([, m]) => m < 44);
+  const barra = document.getElementById('barra');
+  const invia = document.getElementById('scrivi-invia');
+  const it = invia.querySelector('.invia-testo');
+  const v = document.getElementById('vista');
+  return {fuori: fuori.slice(0, 6), bassi, segno: Math.round(segno * 100) / 100, tocchi,
+          scorre: document.scrollingElement.scrollWidth > W + 1,
+          testoPx: parseFloat(getComputedStyle(t).fontSize),
+          barra: vis(barra), barraAlta: Math.round(barra.getBoundingClientRect().height),
+          casellaSotto: Math.round(fr.bottom), vistaAlta: Math.round(v.getBoundingClientRect().height),
+          inviaIcona: it.getBoundingClientRect().width <= 1 && vis(invia.querySelector('.invia-icona')),
+          inviaLargo: Math.round(invia.getBoundingClientRect().width),
+          titoloRem: parseFloat(getComputedStyle(document.getElementById('sez-titolo')).fontSize) / parseFloat(getComputedStyle(document.documentElement).fontSize),
+          vocePresente: vis(document.querySelector('.voce-riga')),
+          altre: vis(document.querySelector('#sez-conversazione [data-gruppo="altre-conv"]')),
+          chips: vis(document.querySelector('#conv-tel .chat-chips')),
+          lente: vis(document.getElementById('conv-lente')),
+          anteprime: [...document.querySelectorAll('#conv-tel .scheda-piccola:not(.tipo-foto) .piccola-anteprima')].filter(vis).length,
+          chat: Math.round((document.querySelector('#conv-tel .conv-chat') || {getBoundingClientRect: () => ({height: 0})}).getBoundingClientRect().height)};
+})()"""
+
+# La tastiera di sistema simulata: un visualViewport finto più basso della finestra (come su iOS, e
+# su Android con interactive-widget=resizes-visual), poi «resize»
+TASTIERA = r"""((alta) => {
+  if (alta) {
+    const finto = new EventTarget();
+    Object.assign(finto, {width: innerWidth, height: innerHeight - alta, offsetTop: 0, offsetLeft: 0, pageTop: 0, pageLeft: 0, scale: 1});
+    Object.defineProperty(window, 'visualViewport', {value: finto, configurable: true});
+  } else {
+    delete window.visualViewport;
+  }
+  window.dispatchEvent(new Event('resize'));
+  return 1;
+})"""
+
+
+def scrittura_tel(p, amb):
+    """Scrivere nella Conversazione (28/10, #301): il tocco sulla tastiera, la casella al posto della
+    voce, la chat sola, la lente, l'invio senza conversazione a voce, l'allegato, la tastiera di
+    sistema simulata, le misure, il ritorno alla voce, l'uscita dalla sezione e l'auto."""
+    hub = amb.hub
+    p.valuta("document.documentElement.style.fontSize = ''; 1")
+    p._chiama("Emulation.setDeviceMetricsOverride", {"width": 390, "height": 844, "deviceScaleFactor": 2, "mobile": True})
+    aspetta(lambda: p.valuta("innerWidth === 390 && innerHeight === 844"), 5)
+    while hub.ingresso.prendi():
+        pass
+    p.valuta("window.calliopeTelefono.vai('#/adesso'); 1")
+    aspetta(lambda: p.valuta("!document.getElementById('sez-adesso').hidden"), 3)
+    verifica("scrivere: «Scrivi» c'è e non è spento, anche senza una conversazione a voce (28/10, #301)",
+             p.valuta("!document.getElementById('scrivi-apri').hidden"
+                      " && !document.getElementById('scrivi-apri').classList.contains('spento')"
+                      " && !document.getElementById('scrivi-testo').disabled"))
+    verifica("scrivere: niente più la pagina apposta né «Allega» nella riga della voce",
+             p.valuta("!document.getElementById('strato-scrivi') && !document.getElementById('foto-apri')"))
+    tocca(p, "#scrivi-apri")
+    ok = aspetta(lambda: p.valuta("location.hash === '#/conversazione' && document.getElementById('vista').dataset.scrittura === '1'"
+                                  " && document.activeElement === document.getElementById('scrivi-testo')"), 3)
+    verifica("il tocco sulla tastiera: la Conversazione in modalità scrittura, col cursore nella casella", bool(ok),
+             p.valuta("[location.hash, document.getElementById('vista').dataset.scrittura, document.activeElement && document.activeElement.id]"))
+    ordine = p.valuta("[...document.querySelectorAll('#scrivi > :is(button, textarea)')].filter(e => e.getClientRects().length).map(e => e.id)")
+    verifica("la riga: «Torna alla voce», Allega, il testo, Invia (in quest'ordine)",
+             ordine == ["scrivi-voce", "scrivi-foto", "scrivi-testo", "scrivi-invia"], ordine)
+    verifica("Invia spento con la casella vuota",
+             p.valuta("document.getElementById('scrivi-invia').disabled"))
+    m = p.valuta(MISURA_SCRIVI) or {}
+    verifica("scrivendo: la riga della voce non c'è, la barra sì (la tastiera di sistema è chiusa)",
+             not m.get("vocePresente") and m.get("barra"), json.dumps({k: m.get(k) for k in ("vocePresente", "barra")}))
+    verifica("scrivendo: solo chat (niente «Altre schede», le schede un rimando di una riga), i filtri dietro la lente",
+             not m.get("altre") and not m.get("chips") and m.get("lente") and m.get("anteprime") == 0,
+             json.dumps({k: m.get(k) for k in ("altre", "chips", "lente", "anteprime")}))
+    tocca(p, "#conv-lente")
+    ok = aspetta(lambda: p.valuta("getComputedStyle(document.querySelector('#conv-tel .chat-chips')).display !== 'none'"
+                                  " && document.getElementById('conv-lente').getAttribute('aria-expanded') === 'true'"), 3)
+    verifica("la lente apre i filtri (Oggi, Ieri, Solo schede, Cerca)", bool(ok))
+    tocca(p, "#conv-lente")
+    aspetta(lambda: p.valuta("getComputedStyle(document.querySelector('#conv-tel .chat-chips')).display === 'none'"), 3)
+    meta = p.valuta("[...document.querySelectorAll('#conv-tel .conv-meta')].map(e => e.textContent).slice(-1)[0]") or ""
+    verifica("sotto la bolla l'ora e il canale; il posto solo se non è questo telefono",
+             "· " in meta and not meta.lower().startswith("telefono-dario"), meta)
+
+    # L'invio senza conversazione a voce
+    p.valuta("(() => { const i = document.getElementById('scrivi-testo'); i.focus(); i.value = 'E il 15% di 240?';"
+             " i.dispatchEvent(new Event('input', {bubbles: true})); return 1; })()")
+    verifica("Invia si accende col testo", p.valuta("!document.getElementById('scrivi-invia').disabled"))
+    tocca(p, "#scrivi-invia")
+    item = aspetta(lambda: hub.ingresso.prendi(), 5)
+    verifica("inviato senza conversazione a voce: in coda come scritto, a nome di Dario",
+             bool(item) and item.get("tipo") == "scritto" and item.get("persona") == "dario"
+             and item.get("testo") == "E il 15% di 240?", str(item)[:200])
+    verifica("scrivendo, la risposta è solo scritta: l'invio porta solo_scritto (revisione della PR #304)",
+             bool(item) and item.get("solo_scritto") is True, str(item)[:200])
+    verifica("«ti ascolto…» e «Calliope sta scrivendo…» in una regione role=\"status\" che c'è sempre",
+             p.valuta("document.getElementById('conv-ora').getAttribute('role') === 'status'"
+                      " && !document.getElementById('conv-ora').hasAttribute('aria-hidden')"))
+    ok = aspetta(lambda: p.valuta("document.getElementById('scrivi-testo').value === ''"
+                                  " && document.querySelector('#conv-ora .conv-ora-testo').textContent === 'Calliope sta scrivendo…'"), 3)
+    verifica("dopo l'invio: la casella vuota e «Calliope sta scrivendo…» in fondo", bool(ok),
+             p.valuta("document.querySelector('#conv-ora .conv-ora-testo').textContent"))
+
+    # L'invio con un allegato (una foto fatta qui, come dalla libreria)
+    p.valuta(r"""(async () => {
+      const c = document.createElement('canvas'); c.width = 400; c.height = 300;
+      const g = c.getContext('2d'); g.fillStyle = '#b48c3c'; g.fillRect(0, 0, 400, 300);
+      const blob = await new Promise((ok) => c.toBlob(ok, 'image/png'));
+      const dt = new DataTransfer(); dt.items.add(new File([blob], 'lista.png', {type: 'image/png'}));
+      const i = document.getElementById('scrivi-foto-file'); i.files = dt.files;
+      i.dispatchEvent(new Event('change', {bubbles: true})); return 1; })()""")
+    ok = aspetta(lambda: p.valuta("!document.getElementById('scrivi-anteprima').hidden"
+                                  " && document.querySelector('#scrivi .allegato-info').textContent.startsWith('Foto allegata')"), 5)
+    verifica("Allega: l'anteprima sopra la casella, «Foto allegata · …», Invia acceso anche senza testo",
+             bool(ok) and p.valuta("!document.getElementById('scrivi-invia').disabled"),
+             p.valuta("document.querySelector('#scrivi .allegato-info').textContent"))
+    for w, h in ((390, 844), (320, 693)):
+        p._chiama("Emulation.setDeviceMetricsOverride", {"width": w, "height": h, "deviceScaleFactor": 2, "mobile": True})
+        aspetta(lambda: p.valuta(f"innerWidth === {w} && innerHeight === {h}"), 5)
+        time.sleep(0.3)
+        foto(p, f"scrivere-allegato-{w}x{h}.png", w, h, mobile=True)
+        m = p.valuta(MISURA_SCRIVI) or {}
+        verifica(f"{w}×{h} con l'allegato: niente fuori di lato, tocchi ≥ 44 px, contrasto AA",
+                 not m.get("fuori") and not m.get("tocchi") and not m.get("bassi") and not m.get("scorre"),
+                 json.dumps({k: m.get(k) for k in ("fuori", "tocchi", "bassi")}))
+    p._chiama("Emulation.setDeviceMetricsOverride", {"width": 390, "height": 844, "deviceScaleFactor": 2, "mobile": True})
+    aspetta(lambda: p.valuta("innerWidth === 390"), 5)
+    p.valuta("(() => { const i = document.getElementById('scrivi-testo'); i.value = 'Aggiungi queste alla spesa';"
+             " i.dispatchEvent(new Event('input', {bubbles: true})); return 1; })()")
+    tocca(p, "#scrivi-invia")
+    item = aspetta(lambda: hub.ingresso.prendi(), 8)
+    verifica("inviato con l'allegato: in coda la foto con la domanda, senza conversazione a voce",
+             bool(item) and item.get("tipo") == "immagine" and item.get("testo") == "Aggiungi queste alla spesa"
+             and item.get("persona") == "dario" and item.get("solo_scritto") is True,
+             str({k: v for k, v in (item or {}).items() if k != "immagine"})[:200])
+    ok = aspetta(lambda: p.valuta("document.getElementById('scrivi-anteprima').hidden"
+                                  " && document.getElementById('scrivi-invia').disabled"), 3)
+    verifica("…e l'anteprima se ne va, Invia torna spento", bool(ok))
+
+    # Le misure a 390×844 e a 320×693, anche col testo ingrandito, con e senza la tastiera di sistema
+    for w, h, grande in ((390, 844, False), (320, 693, False), (390, 844, True), (320, 693, True)):
+        p.valuta(f"document.documentElement.style.fontSize = {json.dumps('20px' if grande else '')}; 1")
+        p._chiama("Emulation.setDeviceMetricsOverride", {"width": w, "height": h, "deviceScaleFactor": 2, "mobile": True})
+        aspetta(lambda: p.valuta(f"innerWidth === {w} && innerHeight === {h}"), 5)
+        time.sleep(0.3)
+        d = f"{w}×{h}{' col testo ingrandito' if grande else ''}"
+        if not grande:
+            foto(p, f"scrivere-{w}x{h}.png", w, h, mobile=True)
+        m = p.valuta(MISURA_SCRIVI) or {}
+        verifica(f"{d}: il testo della casella a 16 px almeno (iOS non ingrandisce la pagina)",
+                 (m.get("testoPx") or 0) >= 16, m.get("testoPx"))
+        verifica(f"{d}: niente fuori di lato, la pagina non scorre di lato", not m.get("fuori") and not m.get("scorre"),
+                 json.dumps(m.get("fuori")))
+        verifica(f"{d}: contrasto AA (anche il segnaposto) e tocchi ≥ 44 px",
+                 not m.get("bassi") and (m.get("segno") or 0) >= 4.5 and not m.get("tocchi"),
+                 json.dumps([m.get("bassi"), m.get("segno"), m.get("tocchi")]))
+        come = "è un'icona (layout compatto)" if w < 390 else "ha la parola"
+        verifica(f"{d}: Invia {come}",
+                 bool(m.get("inviaIcona")) == (w < 390), json.dumps({k: m.get(k) for k in ("inviaIcona", "inviaLargo")}))
+        verifica(f"{d}: la chat ha posto (≥ 190 px)", (m.get("chat") or 0) >= 190, m.get("chat"))
+        compatto = m.get("titoloRem")
+        # La tastiera di sistema: 291 px a 390, 240 a 320 (come nelle tavole)
+        alta = 291 if w >= 390 else 240
+        p.valuta("document.getElementById('scrivi-testo').focus(); 1")
+        p.valuta(f"({TASTIERA})({alta})")
+        ok = aspetta(lambda: p.valuta("document.getElementById('vista').classList.contains('tastiera')"), 3)
+        m2 = p.valuta(MISURA_SCRIVI) or {}
+        verifica(f"{d}, tastiera aperta: la barra si nasconde e la casella resta sopra la tastiera",
+                 bool(ok) and not m2.get("barra") and (m2.get("casellaSotto") or 9999) <= h - alta + 1
+                 and abs((m2.get("vistaAlta") or 0) - (h - alta)) <= 1,
+                 json.dumps({k: m2.get(k) for k in ("barra", "casellaSotto", "vistaAlta")}))
+        verifica(f"{d}, tastiera aperta: il layout compatto non scatta (#287)", m2.get("titoloRem") == compatto
+                 and bool(m2.get("inviaIcona")) == (w < 390), json.dumps([compatto, m2.get("titoloRem")]))
+        verifica(f"{d}, tastiera aperta: tocchi ≥ 44 px, niente fuori di lato, la chat ha ancora posto",
+                 not m2.get("tocchi") and not m2.get("fuori") and (m2.get("chat") or 0) >= 120,
+                 json.dumps([m2.get("tocchi"), m2.get("fuori"), m2.get("chat")]))
+        if not grande:
+            foto(p, f"scrivere-tastiera-{w}x{h}.png", w, h, mobile=True)
+        p.valuta(f"({TASTIERA})(0)")
+        ok = aspetta(lambda: p.valuta("!document.getElementById('vista').classList.contains('tastiera')"), 3)
+        m3 = p.valuta(MISURA_SCRIVI) or {}
+        verifica(f"{d}, tastiera chiusa: la barra torna", bool(ok) and m3.get("barra"), json.dumps(m3.get("barra")))
+    p.valuta("document.documentElement.style.fontSize = ''; 1")
+    p._chiama("Emulation.setDeviceMetricsOverride", {"width": 390, "height": 844, "deviceScaleFactor": 2, "mobile": True})
+    aspetta(lambda: p.valuta("innerWidth === 390"), 5)
+    # Il fuoco fuori dalla casella: la tastiera finta non conta più
+    p.valuta(f"document.getElementById('scrivi-testo').blur(); ({TASTIERA})(291)")
+    ok = aspetta(lambda: p.valuta("!document.getElementById('vista').classList.contains('tastiera')"), 2)
+    verifica("contrario: senza un campo col fuoco la parte visibile più bassa non è la tastiera", bool(ok))
+    p.valuta(f"({TASTIERA})(0)")
+
+    # Torna alla voce mentre Calliope parla (un avviso): cambia modo ma non la interrompe
+    p.valuta("(() => { const T = window.calliopeTelefono; T.__inCorso = T.player.inCorso;"
+             " T.player.inCorso = () => true; return 1; })()")
+    tocca(p, "#scrivi-voce")
+    time.sleep(0.4)
+    verifica("«Torna alla voce» mentre Calliope parla: la voce torna, ma niente interruzione né ascolto",
+             p.valuta("!document.getElementById('vista').dataset.scrittura"
+                      " && !window.calliopeTelefono.st.reg && !window.calliopeTelefono.st.forza"
+                      " && document.getElementById('conv-ora').getAttribute('role') === 'status'"
+                      " && document.getElementById('conv-ora').getAttribute('aria-hidden') === 'true'"))
+    p.valuta("(() => { const T = window.calliopeTelefono; T.player.inCorso = T.__inCorso; return 1; })()")
+    p.valuta("window.calliopeTelefono.entraScrittura(); 1")
+    aspetta(lambda: p.valuta("document.getElementById('vista').dataset.scrittura === '1'"), 2)
+    # Torna alla voce: la riga della voce e l'ascolto subito
+    tocca(p, "#scrivi-voce")
+    ok = aspetta(lambda: p.valuta("!document.getElementById('vista').dataset.scrittura"
+                                  " && getComputedStyle(document.querySelector('.voce-riga')).display !== 'none'"
+                                  " && document.getElementById('scrivi-posto').hidden"), 3)
+    verifica("«Torna alla voce»: la riga della voce al suo posto", bool(ok))
+    ascolta = aspetta(lambda: p.valuta("!!(window.calliopeTelefono.st.reg || window.calliopeTelefono.st.forza)"), 5)
+    verifica("…e l'ascolto parte subito, come «Parla»", bool(ascolta))
+    if ascolta:
+        ora = aspetta(lambda: p.valuta("document.querySelector('#conv-ora .conv-ora-testo').textContent") == "ti ascolto…", 3)
+        verifica("mentre si parla, in fondo alla chat «ti ascolto…»", bool(ora),
+                 p.valuta("document.querySelector('#conv-ora .conv-ora-testo').textContent"))
+        foto(p, "scrivere-ritorno-390x844.png", 390, 844, mobile=True)
+        p.valuta("(() => { const r = window.calliopeTelefono.st.reg; if (r) r.finisci = true; return 1; })()")
+        aspetta(lambda: p.valuta("!window.calliopeTelefono.st.reg"), 5)
+
+    # Uscendo dalla Conversazione la modalità scrittura si chiude; in auto la tastiera non c'è
+    p.valuta("window.calliopeTelefono.entraScrittura(); 1")
+    aspetta(lambda: p.valuta("document.getElementById('vista').dataset.scrittura === '1'"), 2)
+    tocca(p, '#barra a[data-sezione="adesso"]')
+    ok = aspetta(lambda: p.valuta("location.hash === '#/adesso' && !document.getElementById('vista').dataset.scrittura"
+                                  " && document.getElementById('scrivi-posto').hidden"), 3)
+    verifica("uscendo dalla Conversazione la modalità scrittura si chiude", bool(ok))
+    p.valuta("window.calliopeTelefono.impostaAuto(true); 1")
+    entra = p.valuta("window.calliopeTelefono.entraScrittura()")
+    verifica("in auto: niente tastiera, la modalità scrittura non si apre",
+             not entra and p.valuta("getComputedStyle(document.getElementById('scrivi-apri')).display === 'none'"
+                                    " && !document.getElementById('vista').dataset.scrittura"))
+    p.valuta("window.calliopeTelefono.impostaAuto(false); 1")
+    while hub.ingresso.prendi():
+        pass
 
 
 def main() -> int:

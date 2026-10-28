@@ -230,11 +230,11 @@ def prova_nota():
     n2 = dispositivo.nota(dispositivo.descrivi("scritto", personale=True), "portatile", True,
                           {"stato": "aperto", "nascoste": ["Casa", "Ufficio"]})
     verifica("scritto dallo schermo personale di una bambina: anche lì «lì non ci sono Casa e Ufficio»",
-             "per scritto; lì non ci sono Casa e Ufficio;" in n2, n2)
+             "per scritto, anche senza aver parlato; lì non ci sono Casa e Ufficio;" in n2, n2)
     n = dispositivo.nota(dispositivo.descrivi("scritto", personale=True), "portatile", True,
                          {"stato": "aperto", "nascoste": []})
-    verifica("scritto dallo schermo personale: «lo schermo personale a sezioni di chi parla, per scritto»",
-             n.startswith("dispositivo: lo schermo personale a sezioni di chi parla, per scritto;")
+    verifica("scritto dallo schermo personale: «lo schermo personale a sezioni di chi parla, per scritto, anche senza aver parlato» (28/10, #301)",
+             n.startswith("dispositivo: lo schermo personale a sezioni di chi parla, per scritto, anche senza aver parlato;")
              and "aperto adesso" not in n and "non un computer" not in n, n)
     verifica("scritto da uno schermo di stanza: come prima",
              dispositivo.descrivi("scritto") == {"canale": "scritto", "pc_qui": False})
@@ -296,10 +296,12 @@ def prova_prompt():
     verifica("prompt: il paragrafo c'è con gli schermi personali", paragrafo in con and paragrafo not in senza)
     verifica("prompt: sezioni, pagine, cosa si fa dallo schermo, foto per 60 giorni e «archiviala»",
              all(x in paragrafo for x in ("Adesso, Conversazione, Le mie cose, Casa e Io", "Lavori e programmi",
-                                          "Cassetto, Documenti, Giochi", "cominciata a voce", "spuntano le liste",
+                                          "Cassetto, Documenti, Giochi", "anche senza aver parlato", "spuntano le liste",
                                           "«+1 minuto» e «Ferma»", "60 giorni", "«archiviala»",
                                           "schermo_mostra con cosa=pagina",
                                           "«in Le mie cose, alla voce Documenti»", "sotto i 13 anni")), paragrafo)
+    verifica("contrario: niente più «in una conversazione cominciata a voce» (28/10, #301)",
+             "cominciata a voce" not in paragrafo, paragrafo)
     verifica("prompt: Ufficio solo con l'ufficio installato, e solo per chi amministra",
              "Ufficio" not in paragrafo and "e, solo per chi amministra, Ufficio" in cfg._frase_sezioni(True))
     verifica("contrario: senza schermi il paragrafo non c'è (anche con sezioni)",

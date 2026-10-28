@@ -153,9 +153,32 @@ def prova_scelta():
     c8, come = reg.scegli(b, "dario-id", "schermo", True)
     verifica("scritto dallo schermo personale con la conversazione aperta: la sua",
              c8 is c1 and come == "schermo", come)
+    # Dal 28/10 (#301): lo scritto e il tocco dallo schermo personale aprono la conversazione
+    # della persona, mai l'anonima degli ospiti (prima: «scritto senza una conversazione sua: anonima»)
+    ospite, _ = reg.scegli(b, None, None, True)
+    ospite.history.append({"role": "user", "content": "parole dell'ospite"})
     c9, come = reg.scegli(b, "bianca-id", "schermo", True)
-    verifica("scritto senza una conversazione sua: anonima (lo scritto non la apre)",
-             c9.chiave == "ospite:sat:2" and reg.di_persona("bianca-id") is None, c9.chiave)
+    verifica("scritto senza una conversazione sua, dopo un ospite sulla stessa corsia: la sua, nuova (28/10, #301)",
+             c9.chiave == "persona:bianca-id" and come == "schermo" and c9 is not ospite
+             and reg.di_persona("bianca-id") is c9 and not c9.history, (c9.chiave, come))
+    verifica("…e l'ospite tiene la sua, con la sua storia",
+             reg.scegli(b, None, None, True)[0] is ospite and ospite.history[-1]["content"] == "parole dell'ospite")
+    # Revisione della PR #304: dopo un riavvio (registro nuovo, nessuna conversazione di Dario) un
+    # ospite parla a sat:cucina, poi Dario scrive dallo schermo e tocca: le due restano separate
+    reg2 = corsie.RegistroConversazioni(cfg_prova())
+    cucina = corsie.Corsia("sat:cucina", 9, registro=reg2)
+    osp, _ = reg2.scegli(cucina, None, None, True)
+    cucina.conv = osp
+    osp.history.append({"role": "user", "content": "che tempo fa?"})
+    cd, come = reg2.scegli(cucina, "dario-id", "schermo", True)
+    verifica("dopo un riavvio, Dario scrive dopo un ospite su sat:cucina: la conversazione di Dario, non quella dell'ospite",
+             cd.chiave == "persona:dario-id" and cd is not osp and come == "schermo" and not cd.history,
+             (cd.chiave, come))
+    cucina.conv = cd
+    cd2, _ = reg2.scegli(cucina, "dario-id", "schermo", False)
+    osp2, _ = reg2.scegli(cucina, None, None, True)
+    verifica("…il tocco dopo va nella stessa di Dario, e l'ospite ritrova la sua con la sua storia",
+             cd2 is cd and osp2 is osp and [m["content"] for m in osp.history] == ["che tempo fa?"])
     o1, _ = reg.scegli(a, None, None, True)
     o2, _ = reg.scegli(b, None, None, True)
     verifica("ospiti: una conversazione per satellite, mai condivisa",

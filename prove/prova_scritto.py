@@ -13,7 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 - i valori arrivano al tool **senza il modello** (l'estrattore finto non viene chiamato), e
   Calliope li conferma; la risposta a voce chiude il modulo (scheda «hai risposto a voce»);
 - il canale pagina → server: sessione nell'intestazione, JSON, dimensione, invii al minuto,
-  un'altra persona, uno schermo di stanza, la sessione mancante, il testo scritto in coda;
+  un'altra persona, uno schermo di stanza, la sessione mancante, il testo scritto in coda (dal
+  28/10, #301, anche senza una conversazione a voce; i moduli no);
 - permessi: lo scritto vale come il proprietario dello schermo ma al più familiare; per
   installazioni, fatture, schermo personale e codice all'agente si chiede la voce (azione in
   sospeso); la stanza conta come ospite;
@@ -533,19 +534,20 @@ def prova_casella():
         sogg = nuovo_schermo(a.c, a.hub, "soggiorno")
         verifica("accesso: la casella c'è sullo schermo personale",
                  studio.get("scrivi") is True and sogg.get("scrivi") is False)
-        # Senza conversazione a voce (05/10): rifiutato, niente al ciclo, regola nel registro
+        # Senza conversazione a voce: dal 28/10 (#301) dallo schermo personale si scrive lo
+        # stesso (al più familiare, come il tocco); i moduli no. Fino al 28/10 qui era 403
         registro = []
         a.hub.registro_turni = registro.append
-        verifica("accesso senza conversazione: scrittura spenta, con la frase",
-                 studio.get("scrittura", {}).get("attiva") is False
-                 and "Calliope" in studio["scrittura"].get("testo", ""), str(studio))
+        verifica("accesso senza conversazione: casella accesa, moduli spenti con la loro frase",
+                 studio.get("scrittura", {}).get("attiva") is True
+                 and studio["scrittura"].get("moduli") is False
+                 and "Calliope" in studio["scrittura"].get("testo_moduli", ""), str(studio))
         r = a.invia(studio["sessione"], "/api/scrivi", {"testo": "che ore sono?"})
-        verifica("scritto senza conversazione: 403 senza_conversazione, niente in coda",
-                 r.status_code == 403 and r.json().get("codice") == "senza_conversazione"
-                 and a.hub.ingresso.vuoto(), r.text)
-        verifica("registro dei turni: regola scritto_senza_conversazione, senza il testo",
-                 registro and registro[-1]["regole"] == ["scritto_senza_conversazione"]
-                 and "ore" not in json.dumps(registro), str(registro))
+        item = a.hub.ingresso.prendi()
+        verifica("scritto senza conversazione: 200 e in coda, con la persona dello schermo",
+                 r.status_code == 200 and item and item["persona"] == "dario-id"
+                 and item["testo"] == "che ore sono?", r.text)
+        verifica("registro dei turni: nessun rifiuto", not registro, str(registro))
         a.parla("Dario")
         r = a.invia(studio["sessione"], "/api/scrivi", {"testo": "  il codice\x07 è\nRSS  "})
         item = a.hub.ingresso.prendi()

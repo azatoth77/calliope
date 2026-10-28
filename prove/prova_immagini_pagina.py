@@ -85,19 +85,19 @@ def main() -> int:
             5) is not None)
         verifica("input senza «accept» (foto o qualsiasi file, 05/10)", pagina.valuta(
             "document.getElementById('scrivi-foto-file').accept") == "")
-        # Senza conversazione a voce (05/10): «Foto» spento, una foto incollata non entra
-        verifica("senza conversazione: «Foto» spento", aspetta(lambda: pagina.valuta(
-            "document.getElementById('scrivi-foto').disabled"), 5) is not None)
+        # Senza conversazione a voce: dal 28/10 (#301) «Allega» acceso e la foto entra (fino al 28/10
+        # «Foto» era spento e la foto non entrava)
+        verifica("senza conversazione: «Allega» acceso (28/10, #301)", aspetta(lambda: pagina.valuta(
+            "!document.getElementById('scrivi-foto').disabled"), 5) is not None)
         pagina.valuta("(() => { const i = document.getElementById('scrivi-foto-file');"
                       " i.files = __dt(__file(300, 300, 'image/png', 'a.png')).files;"
                       " i.dispatchEvent(new Event('change', {bubbles: true})); })()")
-        verifica("senza conversazione: niente anteprima, la frase da dire", aspetta(
-            lambda: "Calliope" in (pagina.valuta(
-                "document.querySelector('.esito-scrivi').textContent") or ""), 5) is not None
-            and pagina.valuta("document.getElementById('scrivi-anteprima').hidden"))
+        verifica("senza conversazione: la foto entra nell'anteprima, Invia acceso", aspetta(
+            lambda: pagina.valuta("!document.getElementById('scrivi-anteprima').hidden"
+                                  " && !document.getElementById('scrivi-invia').disabled"), 5) is not None)
+        pagina.valuta("document.querySelector('#scrivi-anteprima button').click()")
+        aspetta(lambda: pagina.valuta("document.getElementById('scrivi-anteprima').hidden"), 3)
         hub.conversazioni.voce("dario-id", "voce")           # Dario parla a Calliope
-        verifica("conversazione: «Foto» si riaccende da solo", aspetta(lambda: not pagina.valuta(
-            "document.getElementById('scrivi-foto').disabled"), 5) is not None)
 
         def anteprima():
             return pagina.valuta("!document.getElementById('scrivi-anteprima').hidden && "
@@ -106,7 +106,7 @@ def main() -> int:
 
         def manda(testo):
             pagina.valuta(f"document.getElementById('scrivi-testo').value = {testo!r}; "
-                          "document.querySelector('#scrivi button[type=submit]').click()")
+                          "document.getElementById('scrivi-invia').click()")
             t = aspetta(lambda: not hub.ingresso.vuoto(), 8)
             return hub.ingresso.prendi() if t is not None else None
 
@@ -198,10 +198,11 @@ def main() -> int:
                       " i.dispatchEvent(new Event('change', {bubbles: true})); })()")
         aspetta(anteprima, 5)
         hub.conversazioni.chiudi()
-        verifica("conversazione chiusa: anteprima tolta e «Allega» spento", aspetta(
-            lambda: pagina.valuta("document.getElementById('scrivi-anteprima').hidden && "
-                                  "document.getElementById('scrivi-foto').disabled"), 5)
-            is not None and hub.ingresso.vuoto())
+        time.sleep(0.4)
+        verifica("conversazione chiusa: dal 28/10 (#301) l'anteprima resta e «Allega» acceso",
+                 pagina.valuta("!document.getElementById('scrivi-anteprima').hidden && "
+                               "!document.getElementById('scrivi-foto').disabled") and hub.ingresso.vuoto())
+        pagina.valuta("document.querySelector('#scrivi-anteprima button').click()")
         # 5. La scheda con la miniatura
         jpeg, w, h = prepara(F.jpeg(F.foto()), 1280)
         foto = Immagine(jpeg, w, h, fonte="telefono", persona="dario-id")
