@@ -197,6 +197,15 @@ def prepara_tocchi():
     verifica("tocchi: una voce che lista_togli dividerebbe 422", r.get("_stato") == 422, json.dumps(r))
     r = tocchi.prepara({"tocco": "spunta_lista", "lista": "spesa", "voce": "tutto"}, fonti)
     verifica("tocchi: una voce che svuoterebbe la lista 422", r.get("_stato") == 422, json.dumps(r))
+    # «Tutto» con la punteggiatura (#266, revisione della PR #270): lista_togli la toglie
+    # (split_items) e svuoterebbe la lista; la voce è proprio nella lista, quindi non è un 409
+    for lista, forma in (("casa", "tutto."), ("regali", "Tutti!"), ("ferramenta", "tutto quanto?")):
+        liste.add(lista, [forma, "colla"], "Dario")
+        voci = liste.read(lista)[1]
+        r = tocchi.prepara({"tocco": "spunta_lista", "lista": lista, "voce": forma}, fonti)
+        verifica(f"tocchi: «{forma}» (c'è nella lista) svuoterebbe la lista: 422, mai lista_togli",
+                 forma in voci and r.get("_stato") == 422 and "tool" not in r,
+                 f"{voci} {json.dumps(r, ensure_ascii=False)}")
     r = tocchi.prepara({"tocco": "spunta_lista", "lista": "la lista della spesa", "voce": " latte "}, fonti)
     verifica("tocchi: la spunta → lista_togli con la voce e la lista",
              r.get("tool") == "lista_togli" and r.get("argomenti") == {"cose": "latte", "lista": "spesa"}

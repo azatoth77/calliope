@@ -1726,6 +1726,8 @@ class Ciclo:
         self.voce("pensa")
         # Il modulo è della conversazione della persona (06/10, corsie.py)
         self.corsia.turno(brain, None, "schermo", True, persona_id=scritto.get("persona"))
+        if hasattr(brain, "contesto_conversazione"):
+            brain.contesto_conversazione()    # conv_archivio della sua conversazione (#266)
         esito = completa_modulo(self.s.schermi, scritto, brain, getattr(brain, "turn_number", 0))
         self.rec = {"inizio": datetime.datetime.now().isoformat(timespec="milliseconds"),
                     **esito["rec"]}
@@ -1930,14 +1932,21 @@ class Ciclo:
 
         Il mittente ha il livello con cui il tool è stato chiamato (#266): quello vero del
         proprietario, limitato come lo scritto da uno schermo personale (`current_level`: chi
-        amministra vale «familiare»). Senza la stanza dello schermo vale la stanza predefinita, e
-        senza quella tutti gli schermi, come a voce da un satellite senza stanza (`hub.invia`)."""
+        amministra vale «familiare»). Con l'hub vero (`Schermi.aggiorna`, #266) l'aggiornamento va
+        agli schermi che hanno già la scheda con la stessa chiave, più quelli di chi tocca; una
+        scheda mai vista va come a voce (senza la stanza dello schermo vale la predefinita, senza
+        quella tutti), mai agli schermi personali di altre persone."""
         from .schermi import Mittente
         persona = scritto.get("persona")
         prof = self.s.registry.by_id(persona) if persona else None
         mitt = Mittente(persona=persona if prof else None, nome=getattr(prof, "name", None),
                         livello=(livello or "ospite") if prof else "ospite", certo=bool(prof),
                         stanza=scritto.get("stanza") or None, schermo=sid)
+        if callable(getattr(hub, "aggiorna", None)):
+            # Dove la scheda c'è già (#266, revisione della PR #270: il timer messo in cucina e
+            # fermato dal telefono, la cui «stanza» è «telefono»), più gli schermi di chi tocca
+            hub.aggiorna(card, mitt)
+            return
         r = hub.invia(card, mitt) or {}
         fatti = set(r.get("destinatari") or ())
         abbinati = hub.abbinati() if callable(getattr(hub, "abbinati", None)) else []

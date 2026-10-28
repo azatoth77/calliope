@@ -1062,6 +1062,9 @@ _TIMER_SPARITO = {"ok": False, "fatto": "NIENTE: il timer toccato non c'è più"
                   "errore": "Questo timer non c'è più: è già suonato o è stato fermato.",
                   "conferma": "Questo timer non c'è più: è già suonato o è stato fermato.",
                   "risposta_finale": "Questo timer non c'è più: è già suonato o è stato fermato."}
+_FINITO_FRASE = "Questo timer è già finito: suona fra un attimo, non lo allungo."
+_TIMER_FINITO = {"ok": False, "fatto": "NIENTE: il timer toccato è già finito",
+                 "errore": _FINITO_FRASE, "conferma": _FINITO_FRASE, "risposta_finale": _FINITO_FRASE}
 
 
 def _timer_toccato(ctx):
@@ -1088,6 +1091,10 @@ def _timer_cambia(ctx, durata: str, nome: str, modo: str, prof) -> dict | None:
     item = _timer_toccato(ctx)
     if item is None:
         return dict(_TIMER_SPARITO)          # un tocco su un timer suonato: niente timer nuovo
+    if item and float(item.get("due") or 0) <= time.time():
+        # Finito ma non ancora suonato (#266, revisione della PR #270): «+1 minuto» non lo allunga,
+        # suona come doveva
+        return dict(_TIMER_FINITO)
     if item is False:
         item, _ = ctx.agenda.find("timer", nome, owner)
     if item is None:

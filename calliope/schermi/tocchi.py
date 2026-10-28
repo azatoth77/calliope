@@ -56,7 +56,9 @@ ammesso la legge.
 
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
+from types import MappingProxyType
 from typing import Callable
 
 from ..liste import say_list, split_items
@@ -101,7 +103,7 @@ class Toccabile:
 # ammettevano 46 tool su 80, `dimentica`, `pc_guarda` e `anagrafica_salva` compresi. Un tool
 # entra qui solo con la sua riga; un tocco su un tool che non c'è ferma l'import (l'avvio e le
 # prove). Le condizioni della politica (`_condizioni`) restano, come difesa in più
-TOCCABILI: dict[str, Toccabile] = {
+TOCCABILI: Mapping[str, Toccabile] = MappingProxyType({
     "lista_togli": Toccabile(
         "la spunta di una voce che c'è adesso nella lista (controllata in `prepara`, una cosa sola, "
         "mai «tutto»): si rimette con «aggiungi il latte», resta in casa, e per sbaglio costa una "
@@ -113,7 +115,7 @@ TOCCABILI: dict[str, Toccabile] = {
         "«Ferma» sul timer toccato e solo su lui (il bersaglio, mai «tutti» né un promemoria): si "
         "rimette a voce, la scheda lo mostra subito fermato, e per sbaglio costa un timer da "
         "rimettere (criterio scritto del 28/10, #257)", bersaglio=True),
-}
+})
 
 # Gli esclusi in modo esplicito (#266): ammessi dalle sole tabelle della politica, o vicini a
 # un tocco che verrà, ma con un danno se toccati per sbaglio, o che vogliono la voce. Un tool non
@@ -240,8 +242,10 @@ def _spunta_lista(dati: dict, fonti) -> dict:
     if voce not in voci:
         return {"errore": f"«{voce}» non c'è più nella lista.", "_stato": 409}
     # lista_togli divide le cose su virgole e «e» e svuota la lista con «tutto»: una voce così
-    # toglierebbe altro (o niente). Si chiede di dirlo a voce, dove il modello sceglie
-    if split_items(voce) != [voce.strip(" .!?")] or _TUTTO.fullmatch(voce):
+    # toglierebbe altro (o niente). Si chiede di dirlo a voce, dove il modello sceglie. «Tutto»
+    # come lo vede lista_togli: dopo split_items, senza la punteggiatura («tutto.», #266)
+    pezzi = split_items(voce)
+    if pezzi != [voce.strip(" .!?")] or any(_TUTTO.fullmatch(p) for p in pezzi + [voce]):
         return {"errore": "Questa voce si toglie a voce: dimmi che cosa togliere dalla lista.",
                 "_stato": 422}
     return {"tool": "lista_togli", "argomenti": {"cose": voce, "lista": key},
@@ -298,9 +302,11 @@ def _timer_ferma(dati: dict, fonti) -> dict:
             "descrizione": f"(Ho fermato {_detto(it)} toccando lo schermo.)"}
 
 
-TOCCHI = {"spunta_lista": Tocco("lista_togli", _spunta_lista),
-          "timer_piu": Tocco("timer_imposta", _timer_piu, bersaglio=True),
-          "timer_ferma": Tocco("agenda_annulla", _timer_ferma, bersaglio=True)}
+# Immutabile a runtime (#266, revisione della PR #270): un tocco nuovo si aggiunge qui nel codice,
+# dove lo vede il controllo dell'import, mai dopo
+TOCCHI = MappingProxyType({"spunta_lista": Tocco("lista_togli", _spunta_lista),
+                           "timer_piu": Tocco("timer_imposta", _timer_piu, bersaglio=True),
+                           "timer_ferma": Tocco("agenda_annulla", _timer_ferma, bersaglio=True)})
 
 # All'avvio: un tocco su un tool non ammesso non arriva mai a girare
 _ERRORI = controlla()
