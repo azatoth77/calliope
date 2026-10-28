@@ -596,10 +596,10 @@ class Cassetto:
             return None
         with self._lock:
             r = self._riga(fid)
-        if r is None:
+        # Un id che non c'è e la foto d'un'altra persona rispondono uguale (seconda revisione
+        # della PR #273): da uno schermo non si capisce di chi è un id
+        if r is None or r["persona"] != persona or r["categoria"] != "immagine":
             return {"stato": "persa"}
-        if r["persona"] != persona or r["categoria"] != "immagine":
-            return None
         if r["stato"] == "attivo":
             dati = self.byte(r)
             if dati is None:
@@ -665,8 +665,11 @@ class Cassetto:
         alla scadenza non ancora detti, e (una volta al giorno) quelli che scadono presto.
         {"eliminati": n, "in_scadenza": [righe], "revisione": bool}"""
         with self._lock:
+            # Le foto tenute in automatico (decisione 0034) scadono in silenzio: lo dice la
+            # Conversazione («Non c'è più»), non una frase al primo turno del giorno
             n = self._db.execute("SELECT COUNT(*) FROM cassetto_file WHERE persona = ? AND "
-                                 "stato = 'scaduto' AND detto = 0", (persona,)).fetchone()[0]
+                                 "stato = 'scaduto' AND detto = 0 AND categoria != 'immagine'",
+                                 (persona,)).fetchone()[0]
             oggi = datetime.datetime.fromtimestamp(self.ora()).date().isoformat()
             r = self._db.execute("SELECT giorno FROM cassetto_revisione WHERE persona = ?",
                                  (persona,)).fetchone()
@@ -694,6 +697,10 @@ class Cassetto:
             pezzi.append("Ho eliminato un file che non avevi tenuto." if n == 1 else
                          f"Ho eliminato {n} file che non avevi tenuto.")
         sc = info.get("in_scadenza") or []
+        if schermo:
+            # Con lo schermo personale aperto le foto in scadenza stanno solo nella scheda (seconda
+            # revisione della PR #273): con la tenuta di 60 giorni sarebbe una frase ogni giorno
+            sc = [r for r in sc if r.get("categoria") != "immagine"]
         if sc:
             ora = self.ora()
             g = sorted({quando(r["scade"], ora, con_ora=False) for r in sc},

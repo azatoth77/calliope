@@ -583,6 +583,23 @@ SEMPRE se dico archiviala. Così uno ha tempo per pensare cosa fare».
   riga: lo stato cambia, e la copia del turno è di quando è stata mandata.
 - **Il modello** vede come prima. «Elimina» del cassetto toglie la foto; la miniatura nel turno resta,
   col suo stato.
+- **Dalla seconda revisione della PR #273**:
+  - *Bloccante*: «archiviala» con `quale` arrivava al cassetto anche dalla zona grigia. Ora ha le regole
+    del cassetto (`tools/allegati._proprietario`: la voce riconosciuta o lo schermo personale, mai la zona
+    grigia, la frase breve o un ospite), e il rifiuto non dice al modello nomi, date o fonti delle foto.
+  - `stato_foto` risponde «persa» sia per un id che non c'è sia per la foto d'un'altra persona: da uno
+    schermo non si capisce di chi è un id.
+  - Se il browser ricarica la foto intera dopo i 180 s del gettone, la pagina ne chiede uno nuovo, una
+    volta (`rigettoneFoto`).
+  - «Dimentica le nostre conversazioni» lo dice: «Ho tolto anche le foto che tenevo; quelle che hai
+    archiviato restano nei tuoi documenti.»
+  - La revisione del cassetto: con lo schermo personale aperto le foto in scadenza stanno solo nella
+    scheda, e le foto scadute non si annunciano («Ho eliminato N file» conta gli altri file); senza
+    schermo la frase a voce resta com'era.
+  - *Limiti da misurare*: il tetto del cassetto (`cassetto_mb_persona`, 500 MB) è condiviso: con 60 giorni
+    le foto possono lasciare fuori gli altri file (oltre il tetto un file resta solo nella
+    conversazione, e Calliope lo dice); e con la tenuta di serie ogni giorno qualche foto è vicina alla
+    scadenza: da guardare nell'uso se la scheda della revisione diventa quotidiana.
 - Prove: `prova_conversazione_schede` (tenuta 60 giorni con l'orologio finto, «archiviala» su una foto di
   tre giorni prima e «Archiviata.» dopo mesi, sulla foto della conversazione e «la foto di oggi», ospite e
   identità incerta mai, la cattura chiesta a voce sì, «dimentica» solo le sue e `svuota` tutte, la foto

@@ -1528,7 +1528,12 @@
       s.classList.add("scheda-foto");
       const img = el("img");
       img.alt = c.titolo || "Foto";
-      if (typeof c.fotoIntera === "string" && /^\/scarica\/[A-Za-z0-9_-]{16,}$/.test(c.fotoIntera)) img.src = c.fotoIntera;
+      if (typeof c.fotoIntera === "string" && /^\/scarica\/[A-Za-z0-9_-]{16,}$/.test(c.fotoIntera)) {
+        img.src = c.fotoIntera;
+        // Il gettone vale 180 s e poche richieste: se il browser la ricarica dopo, se ne chiede uno
+        // nuovo, una volta (seconda revisione della PR #273)
+        if (Number.isInteger(c.cassetto)) img.addEventListener("error", () => rigettoneFoto(img, c.cassetto));
+      }
       else if (typeof c.src === "string" && c.src.startsWith("data:image/jpeg;base64,")) img.src = c.src;
       corpo.append(img);
       if (c.didascalia) corpo.append(el("p", "didascalia", c.didascalia));
@@ -2213,6 +2218,16 @@
       if (testa) testa.insertBefore(b, $("cruscotto-apri") || $("stato"));
     }
     if (b) b.hidden = !S.chatOk;
+  }
+
+  async function rigettoneFoto(img, fid) {
+    if (img.dataset.riprovata) return;
+    img.dataset.riprovata = "1";
+    let r;
+    try { r = await postSessione("/api/conversazione", { foto: fid }); }
+    catch (e) { return; }
+    const url = r.status === 200 && r.dati && typeof r.dati.url === "string" ? r.dati.url : "";
+    if (/^\/scarica\/[A-Za-z0-9_-]{16,}$/.test(url)) img.src = url;
   }
 
   // La riga dello stato di una foto tenuta (decisione 0034)

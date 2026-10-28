@@ -734,7 +734,8 @@ def ctx_foto(cas, prof, modo="voce"):
     return SimpleNamespace(cassetto=cas, archivio=cas.archivio, immagini=None, schermi=None,
                            cfg=SimpleNamespace(immagini_tenuta=True, immagini_lato_max=1280),
                            speaker_ctx=SimpleNamespace(current_speaker=getattr(prof, "name", None),
-                                                       identified_by=modo, from_session=False),
+                                                       identified_by=modo, from_session=False,
+                                                       current_level="familiare" if prof else "ospite"),
                            speakers={prof.name: prof} if prof else None)
 
 
@@ -766,13 +767,24 @@ def prova_foto_tenute():
     verifica("dopo 61 giorni non c'è più, e il file è tolto",
              cas.stato_foto("dario", fid) == {"stato": "persa"}
              and not list((TMP / "cassetto-t1").rglob("*.dat")))
-    verifica("la foto d'un'altra persona: niente", cas.stato_foto("bianca", fid) is None)
+    verifica("la foto d'un'altra persona risponde come un id che non c'è («persa»)",
+             cas.stato_foto("bianca", fid) == {"stato": "persa"} == cas.stato_foto("dario", 999))
     # 2. «archiviala» su una foto di tre giorni prima, ancora tenuta
     cas2 = cassetto_prova("t2")
     vecchia = Immagine(jpeg, 800, 600, persona="dario", n=1, arrivata=cas2.ora() - 3 * 86400)
     cas2.ora.t -= 3 * 86400
     fid2 = cas2.metti_foto(vecchia, "dario")
     cas2.ora.t += 3 * 86400
+    # Dalla zona grigia, con la frase breve o da ospite: rifiutato, senza dire niente delle foto
+    cas2.metti_foto(Immagine(jpeg, 800, 600, persona="dario", n=2), "dario")
+    for modo in ("conversazione", "breve"):
+        r = TI._archivia(ctx_foto(cas2, dario, modo), quale="oggi")
+        testo = json.dumps(r, ensure_ascii=False)
+        verifica(f"«archiviala» con quale dalla {modo}: rifiutato, la foto resta tenuta, niente nomi né date",
+                 not r.get("ok") and cas2.stato_foto("dario", fid2)["stato"] == "tenuta"
+                 and "Foto " not in testo and "C" + str(fid2) not in testo and "foto" not in r, r)
+    r = TI._archivia(ctx_foto(cas2, None), quale="oggi")
+    verifica("…e da ospite", not r.get("ok") and not list(Path(cas2.archivio.cartella).rglob("*.jpg")), r)
     r = TI._archivia(ctx_foto(cas2, dario), quale=f"C{fid2}")
     archiviate = list(Path(cas2.archivio.cartella).rglob("*.jpg"))
     verifica("«archiviala» su una foto di giorni prima: per sempre nei documenti",
@@ -860,7 +872,9 @@ def prova_foto_server():
     verifica("…scaduta: «persa», senza foto", r2.json() == {"stato": "persa"}, r2.text)
     cas.ora.t -= 61 * 86400
     r = c.post("/api/conversazione", headers=h(tok_b), json={"foto": fid})
-    verifica("…dallo schermo di Bianca 404, senza la foto", r.status_code == 404 and "src" not in r.text, r.status_code)
+    r9 = c.post("/api/conversazione", headers=h(tok_b), json={"foto": 99999})
+    verifica("…dallo schermo di Bianca «persa», senza foto, come un id che non c'è",
+             r.status_code == 200 and r.json() == {"stato": "persa"} == r9.json(), (r.status_code, r.text))
     r = c.post("/api/conversazione", headers=h(tok_s), json={"foto": fid})
     verifica("…da uno schermo di stanza 403", r.status_code == 403, r.status_code)
     r = c.post("/api/conversazione", headers={"X-Calliope-Sessione": "falsa"}, json={"foto": fid})
@@ -870,6 +884,46 @@ def prova_foto_server():
     srv.ferma()
     hub.archivio.close()
     c.close()
+
+
+def prova_foto_revisione():
+    """Seconda revisione della PR #273: la revisione del cassetto per le foto, «dimentica» detto."""
+    from calliope.immagini import Immagine
+    from calliope.tools import conversazioni as TC
+    cas = cassetto_prova("rev")
+    jpeg = jpeg_vero(400, 300)
+    cas.metti_foto(Immagine(jpeg, 400, 300, n=1), "dario")
+    cas.metti(  # un PDF che scade domani
+        "dario", b"%PDF-1.4 prova", "bolletta.pdf", "pdf", giorni=1)
+    cas.ora.t += 59 * 86400
+    info = cas.da_dire("dario")
+    con = cas.frase(info, True)
+    senza = cas.frase(info, False)
+    verifica("revisione con lo schermo aperto: la foto in scadenza solo nella scheda, a voce gli altri file",
+             len(info["in_scadenza"]) == 2 and con.startswith("Hai un file che scade") and "foto" not in con
+             and "Hai 2 file" in senza, (con, senza))
+    cas.ora.t += 2 * 86400
+    cas.pulisci()
+    info = cas.da_dire("dario")
+    verifica("le foto scadute non si annunciano, gli altri file sì",
+             info["eliminati"] == 1 and "un file" in cas.frase(info, True), (info, cas.frase(info, True)))
+    cas2 = cassetto_prova("rev2")
+    cas2.metti_foto(Immagine(jpeg, 400, 300, n=1), "dario")
+    cas2.ora.t += 59 * 86400
+    senza = cas2.frase(cas2.da_dire("dario"), False)
+    verifica("…senza schermo la foto in scadenza resta detta a voce", "una foto" in senza, senza)
+    # «dimentica» lo dice
+    from calliope.conversazioni import ArchivioConversazioni
+    arch = ArchivioConversazioni(TMP / "dim2.db", giorni=60, avvia=False, log=lambda m: None)
+    ctx = SimpleNamespace(conversazioni=arch, cassetto=cas2, turno=5, stanza=None,
+                          speaker_ctx=SimpleNamespace(current_speaker="Dario"),
+                          speakers={"Dario": SimpleNamespace(id="dario", name="Dario")})
+    TC._conversazioni_dimentica(ctx)
+    ctx.turno = 6
+    r = TC._conversazioni_dimentica(ctx)
+    verifica("«dimentica»: la risposta dice che le foto archiviate restano nei documenti",
+             r.get("ok", True) is not False and TC.FOTO_ARCHIVIATE_RESTANO in r["risposta_finale"], r)
+    arch.close()
 
 
 def main() -> int:
@@ -891,6 +945,7 @@ def main() -> int:
         prova_foto()
         prova_foto_tenute()
         prova_foto_server()
+        prova_foto_revisione()
         tid = prova_dettaglio(arch)
         prova_dettaglio_server(arch, tid)
         arch.close()

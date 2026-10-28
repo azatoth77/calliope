@@ -424,6 +424,8 @@ def _utili(risultati: list[dict]) -> list[dict]:
 DIMENTICA_DOMANDA = ("I ricordi che mi hai chiesto di tenere restano. Cancello tutte le nostre "
                      "conversazioni, anche quella di adesso?")
 DIMENTICATE_FRASE = "Fatto: ho cancellato le nostre conversazioni, anche quella di adesso."
+FOTO_ARCHIVIATE_RESTANO = ("Ho tolto anche le foto che tenevo; quelle che hai archiviato restano "
+                           "nei tuoi documenti.")
 
 
 def _conversazioni_dimentica(ctx: ToolContext) -> dict:
@@ -470,6 +472,10 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
         frase = (DIMENTICATE_FRASE if n else
                  "Fatto: non c'erano conversazioni archiviate, e quella di adesso l'ho "
                  "dimenticata.")
+        if getattr(ctx, "cassetto", None) is not None:
+            # Le foto tenute con la conversazione vanno via con lei, le archiviate no (decisione
+            # 0034, seconda revisione della PR #273)
+            frase += " " + FOTO_ARCHIVIATE_RESTANO
         return _final(frase, cancellate=n)
     proposte[persona] = turno
     domanda = DIMENTICA_DOMANDA

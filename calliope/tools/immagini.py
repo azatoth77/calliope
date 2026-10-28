@@ -108,11 +108,16 @@ def _archivia(ctx: ToolContext, foto=None, quale: str | None = None) -> dict:
     if arch is None or getattr(arch, "cartella", None) is None:
         return _final("Non ho un archivio dei documenti configurato, quindi la foto non la "
                       "salvo.", ok=False)
-    name0 = getattr(ctx.speaker_ctx, "current_speaker", None)
-    prof0 = ctx.speakers.get(name0) if name0 and ctx.speakers else None
     cas = getattr(ctx, "cassetto", None)
-    if quale and cas is not None and prof0 is not None:
-        # Una foto di giorni prima, tenuta (decisione 0034): «archivia la foto di martedì»
+    if quale and cas is not None:
+        # Una foto di giorni prima, tenuta (decisione 0034): «archivia la foto di martedì». Con
+        # le regole del cassetto (seconda revisione della PR #273): la voce riconosciuta o lo
+        # schermo personale, mai la zona grigia né la frase breve né un ospite; rifiutata senza
+        # dire al modello nomi, date o fonti delle foto
+        from .allegati import _proprietario
+        prof0, _chi, rifiuto = _proprietario(ctx)
+        if rifiuto is not None:
+            return rifiuto
         righe, _ = cas.cerca(prof0.id, str(quale))
         righe = [r for r in righe if r.get("categoria") == "immagine"]
         if len(righe) == 1:
