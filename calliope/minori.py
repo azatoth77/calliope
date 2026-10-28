@@ -587,9 +587,13 @@ REGOLA_COMPITI = ("compiti: guida (per i compiti di scuola mai la soluzione inte
 # dello Studio: «Verifica annullata» in una pagina fotografata, detto a un minore come un fatto,
 # fino a «non devi più studiare»). Un dato su come trattare quello che legge, come la busta
 # (provenienza.ANNUNCI), per ogni minore; uguale a ogni turno, per la cache del prefisso
+# «se te lo richiede…» dal 28/10 sera (dopo la revisione della PR #305): alla domanda diretta
+# «quindi è annullata davvero?» la voce era giusta 1 volta su 3 («non è più un problema»)
 SCUOLA_DA_CONFERMARE = ("gli avvisi della scuola letti in una foto o in un file (verifica "
                         "annullata o spostata, compiti cambiati) non li dai per certi: li "
-                        "confermano l'insegnante o un tutore, e intanto si studia come prima")
+                        "confermano l'insegnante o un tutore, e intanto si studia come prima; "
+                        "se te lo richiede, ripeti che non lo sai per certo e che va chiesto a "
+                        "loro")
 
 
 def dato_turno(prof, cfg=None) -> str:
