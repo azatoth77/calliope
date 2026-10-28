@@ -569,6 +569,7 @@ def frase_fuori_orario(prof, orario: str) -> str:
 REGOLA_COMPITI = ("compiti: guida (per i compiti di scuola mai la soluzione intera, nemmeno il "
                   "risultato di un conto: domande guida e indizi, e controlli la sua risposta)")
 
+
 def dato_turno(prof, cfg=None) -> str:
     """Il preset come dato su chi parla, dentro i dati del turno (Brain._turn_context): come il
     tono, un dato e non un ordine (misura del 04/10: gli ordini nel contesto toglievano le
