@@ -1528,9 +1528,27 @@
       s.classList.add("scheda-foto");
       const img = el("img");
       img.alt = c.titolo || "Foto";
-      if (typeof c.src === "string" && c.src.startsWith("data:image/jpeg;base64,")) img.src = c.src;
+      if (typeof c.fotoIntera === "string" && /^\/scarica\/[A-Za-z0-9_-]{16,}$/.test(c.fotoIntera)) {
+        img.src = c.fotoIntera;
+        // Il gettone vale 180 s e poche richieste: se il browser la ricarica dopo, se ne chiede uno
+        // nuovo, una volta (seconda revisione della PR #273)
+        if (Number.isInteger(c.cassetto)) img.addEventListener("error", () => rigettoneFoto(img, c.cassetto));
+      }
+      else if (typeof c.src === "string" && c.src.startsWith("data:image/jpeg;base64,")) img.src = c.src;
       corpo.append(img);
       if (c.didascalia) corpo.append(el("p", "didascalia", c.didascalia));
+      // Lo stato della foto tenuta (29/10, decisione 0034), nel dettaglio dalla Conversazione
+      const riga = rigaFoto(c);
+      if (riga) {
+        const p = el("p", "stato-foto stato-foto-" + c.statoFoto, riga);
+        if (c.statoFoto === "archiviata") {
+          const a = el("button", "piccolo-bottone vai-documenti", "Apri i tuoi documenti");
+          a.type = "button";
+          a.dataset.chatVai = "cose/documenti";
+          p.append(" ", a);
+        }
+        corpo.append(p);
+      }
     },
     // Un file allegato alla conversazione (05/10): nome, tipo, dimensione, note e l'inizio del
     // testo; tutto come testo (textContent), mai HTML del file
@@ -2121,6 +2139,18 @@
       }
       c = r.dati.scheda;
     }
+    if (c.tipo === "foto" && Number.isInteger(c.cassetto)) {
+      // La foto tenuta (29/10, decisione 0034): finché c'è, il dettaglio mostra la foto intera
+      // e quanto resta; poi «Archiviata.» o «Non c'è più»
+      let r;
+      try { r = await postSessione("/api/conversazione", { foto: c.cassetto }); }
+      catch (e) { r = { status: 0, dati: {} }; }
+      const d = r.status === 200 && r.dati ? r.dati : { stato: "sconosciuto" };
+      // La foto intera da «Scarica» (un gettone di questo schermo), mai un indirizzo d'altro
+      const url = typeof d.url === "string" && /^\/scarica\/[A-Za-z0-9_-]{16,}$/.test(d.url) ? d.url : null;
+      c = Object.assign({}, c, { statoFoto: String(d.stato || ""), scadeFoto: Number(d.scade) || 0 },
+        url ? { fotoIntera: url } : {});
+    }
     // La copia del turno, con una chiave sua: la scheda viva con la stessa chiave (la lista di
     // adesso) resta un'altra cosa
     const copia = Object.assign({}, c, { chiave: "chat:" + tid + ":" + i, scade: null, storica: true });
@@ -2188,6 +2218,29 @@
       if (testa) testa.insertBefore(b, $("cruscotto-apri") || $("stato"));
     }
     if (b) b.hidden = !S.chatOk;
+  }
+
+  async function rigettoneFoto(img, fid) {
+    if (img.dataset.riprovata) return;
+    img.dataset.riprovata = "1";
+    let r;
+    try { r = await postSessione("/api/conversazione", { foto: fid }); }
+    catch (e) { return; }
+    const url = r.status === 200 && r.dati && typeof r.dati.url === "string" ? r.dati.url : "";
+    if (/^\/scarica\/[A-Za-z0-9_-]{16,}$/.test(url)) img.src = url;
+  }
+
+  // La riga dello stato di una foto tenuta (decisione 0034)
+  const fmtGiornoMese = new Intl.DateTimeFormat("it-IT", { day: "numeric", month: "long" });
+  function rigaFoto(c) {
+    switch (c && c.statoFoto) {
+      case "tenuta": return "La tengo fino al " + fmtGiornoMese.format(new Date(c.scadeFoto * 1000))
+        + ": di' «archiviala» per tenerla sempre.";
+      case "archiviata": return "Archiviata.";
+      case "eliminata": return "Non c'è più: è stata eliminata dal cassetto.";
+      case "persa": return "Non c'è più: non era stata archiviata.";
+      default: return "";
+    }
   }
 
   // I canali di un turno (28/10, #242): detto, scritto, un tocco sullo schermo, un modulo inviato
@@ -2316,7 +2369,13 @@
     const f = t.closest("[data-chat-filtro]");
     if (f) { suFiltroChat(f.dataset.chatFiltro); return; }
     const p = t.closest(".scheda-piccola[data-chat-scheda]");
-    if (p) apriPiccola(p.dataset.chatScheda);
+    if (p) { apriPiccola(p.dataset.chatScheda); return; }
+    // «Apri i tuoi documenti» dal dettaglio di una foto archiviata
+    const v = t.closest("[data-chat-vai]");
+    if (v) {
+      if (!CAROSELLO && S.intera) chiudiInteroPC();
+      emetti("vai", { scheda: { sezione: v.dataset.chatVai } });
+    }
   });
   document.addEventListener("submit", (ev) => {
     const form = ev.target;

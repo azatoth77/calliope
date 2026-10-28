@@ -1542,3 +1542,60 @@ schede mai viste; la traccia col tetto e gli schermi revocati; il livello del mi
 per tocco e modulo; il timer finito; `TOCCHI` immutabile; il numero riusato dopo una revoca da un secondo `ArchivioSchermi`: «Ferma», il collegamento, la pagina vecchia e la sessione del server); `prova_raccolte` («tutto.»);
 `prova_telefono_schermo` (la pagina Agenda a due dimensioni, col contrasto e il testo tagliato per
 scheda).
+
+## La miniatura della foto accanto alla frase nella Conversazione (29/10, issue #272, ramo `issue-272-miniatura-foto`)
+
+Decisione di Dario del 28/10, dopo la revisione della PR #271 (che le aveva tolte: `_conv` False).
+
+- **Legatura al turno giusto**: le miniature di foto e file partono (`Brain.manda_schede`, da
+  `Ciclo._rispondi`) prima che la frase della persona entri nella storia. Restano in attesa (`_attesa`) e
+  `Brain._lega_in_attesa`, chiamata quando il messaggio della persona entra in `_reply`, le lega a quel
+  messaggio. Scelta invece del legame per id della foto: nessun cambio in `ciclo.py`, e la regola è la stessa
+  per foto, file e pagine scansionate.
+- **Quando non si legano**: con l'identità incerta (zona grigia, ospite) non entrano nemmeno in attesa; se
+  quando entra la frase parla un'altra persona (`hub.mittente` di adesso, solo certo) si buttano; dopo
+  `ATTESA_SCHEDE_S` (30 s) senza la frase (un errore, un'altra corsia ha risposto: ogni corsia ha il suo
+  Brain) pure; un turno riservato le perde in `conversazione.turni` come le altre schede. Il segno
+  `_riservata` di `last_private` non vale per loro (è ancora quello della risposta di prima). Una miniatura
+  che parte dopo la frase (le trattenute di un minore) va alla frase di questo turno.
+- **Le catture** chieste a voce (webcam, schermo: `pc_guarda`, `immagine_guarda`) sono schede del tool,
+  dentro la risposta, e si legano come le altre al messaggio di chi le ha chieste.
+- **Dati**: la copia della foto ha una miniatura sua, più piccola di quella dello schermo (`_mini`, lato
+  144 px, JPEG qualità 55, fatta in `schede.foto` e tenuta sul server), mai la miniatura dello schermo né il
+  file; oltre gli 8 kB di `CONV_SCHEDA_MAX` resta il solo rimando, senza i byte. Il file ha nome, tipo e
+  dimensione, mai l'anteprima del testo né le note. Stessa tenuta (60 giorni) e stessa «dimentica» del turno.
+  Vale anche per le catture di webcam e schermo, e dal 29/10 la foto intera si tiene 60 giorni nel
+  cassetto: decisione [0034](../decisioni/0034-miniature-nella-conversazione.md) (*storico: fino al 28/10
+  nessuna foto né miniatura andava su disco*).
+- **La pagina**: la foto è una scheda piccola come le altre, con la miniatura nell'anteprima e a schermo
+  intero (`DISEGNA.foto`, solo un data URL JPEG). Quello che vede il modello (`immagini_storia`) non cambia:
+  le copie non arrivano al modello e non contano nella stima dei token.
+
+Prove: in `prova_conversazione_schede` la copia della foto dentro il tetto e senza la miniatura dello
+schermo, la miniatura troppo grande che diventa rimando, il file senza anteprima; la foto mandata con la
+frase e quella mandata prima (in attesa), una miniatura che parte dopo la frase, la cattura della webcam
+chiesta a voce, il cambio di persona in mezzo, la frase di molto dopo, l'identità incerta, il turno
+riservato, una risposta riservata prima; in `prova_cronologia_pagina` la miniatura caricata nella
+risposta del suo turno e aperta a schermo intero. Da provare sul vero: lo scontrino dal telefono.
+- **Dalla revisione della PR #273**:
+  - *Bloccante*: le catture di webcam e schermo finivano su disco contro la regola scritta. Chi amministra
+    ha deciso (28/10) che restano, e la sera che si tiene la foto intera 60 giorni, per sempre con
+    «archiviala»: decisione [0034](../decisioni/0034-miniature-nella-conversazione.md); le frasi vecchie
+    di `immagini.py`, `tools/immagini.py` e `schede.foto` sono segnate come storiche.
+  - *Lo stato si vede*: il dettaglio di una miniatura di foto chiede al server (`POST /api/conversazione`
+    con `{foto}`, solo il proprietario dal suo schermo personale) lo stato e, finché c'è, la foto intera:
+    «La tengo fino al …: di' «archiviala» per tenerla sempre.», «Archiviata.» con «Apri i tuoi
+    documenti», «Non c'è più: non era stata archiviata.» (`rigaFoto` in `schermo.js`). Cache del
+    service worker `calliope-telefono-pagina-v16` (era v15). Dettagli in
+    [immagini-allegati](immagini-allegati.md).
+  - *Il tetto dell'attesa* sale da 30 a 300 s (`ATTESA_SCHEDE_S`): fra la miniatura e la frase c'è la coda
+    delle risposte (`corsia.entra_llm`). Una miniatura buttata (scaduta, un'altra persona, identità
+    incerta, più di otto) scrive una riga nel registro, `[SCHERMI] … non legata alla Conversazione:
+    <motivo>`, senza dati.
+  - `_attesa` vale per un invio solo: si toglie dalla scheda dopo l'uso, così «mostrami l'ultima» (`hub.ricorda`
+    tiene lo stesso dizionario) non la rimette in attesa per il turno dopo; `_sfida_reply` lega le
+    miniature come `_reply`.
+  - La miniatura piccola resta calcolata in `schede.foto`: la scheda passa dal JSON dei risultati dei tool,
+    dove non può portare i byte né una funzione per calcolarla dopo (pochi millisecondi per foto).
+  - «Elimina» del cassetto toglie la foto, non la miniatura nel turno: resta fino ai 60 giorni o a
+    «dimentica», e il dettaglio dice «Non c'è più: è stata eliminata dal cassetto.».

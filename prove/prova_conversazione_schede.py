@@ -97,7 +97,10 @@ def prova_per_conversazione():
 def brain_finto(storia):
     from calliope.brain import Brain
     b = SimpleNamespace(history=storia, last_schede_mandate=[], _rule=lambda n: None)
-    b.lega_scheda_al_turno = lambda c: Brain.lega_scheda_al_turno(b, c)
+    b.lega_scheda_al_turno = lambda c, m=None: Brain.lega_scheda_al_turno(b, c, m)
+    b.ATTESA_SCHEDE_S = Brain.ATTESA_SCHEDE_S
+    b._in_attesa = lambda c, p: Brain._in_attesa(b, c, p)
+    b._lega_in_attesa = lambda m: Brain._lega_in_attesa(b, m)
     return b
 
 
@@ -485,7 +488,8 @@ def prova_peso():
     bf._send_cards = lambda cards, tool: Brain._invia_schede(bf, HubFinto(), cards, DARIO)
     foto = {"tipo": "foto", "titolo": "Foto", "src": "data:image/jpeg;base64,AA"}
     Brain.manda_schede(bf, [foto], "foto")
-    verifica("le miniature di foto e file non si legano al turno di prima", "_schede" not in s[0], s[0])
+    verifica("le miniature di foto e file non si legano al turno di prima (dal 29/10 aspettano la frase: #272)",
+             "_schede" not in s[0], s[0])
     # Il calcolo senza oscura, il timer senza «chi»
     from calliope.conversazione import turni
     calc = schede.per_conversazione(schede.calcolo("123456789 × 1000", "123456789000"))
@@ -552,6 +556,376 @@ def prova_dettaglio_server(arch, tid_tipo):
     c.close()
 
 
+# ─────────────────────────── 7. foto e file nella Conversazione (29/10, #272) ───────────────────────────
+def jpeg_vero(w=1280, h=960):
+    """Una foto da telefono, con dettagli (una tinta unita si comprime troppo)."""
+    import io
+    import random
+    from PIL import Image
+    random.seed(7)
+    im = Image.new("RGB", (w, h))
+    px = im.load()
+    for y in range(0, h, 4):
+        for x in range(0, w, 4):
+            c = (random.randrange(256), (x * 3) % 256, (y * 5) % 256)
+            for dy in range(4):
+                for dx in range(4):
+                    px[x + dx, y + dy] = c
+    buf = io.BytesIO()
+    im.save(buf, "JPEG", quality=85)
+    return buf.getvalue()
+
+
+class HubMittente(HubFinto):
+    """Come HubFinto, con chi parla adesso (hub.mittente del contesto dei tool)."""
+
+    def __init__(self, chi):
+        super().__init__()
+        self.chi = chi
+
+    def mittente(self, ctx):
+        return self.chi
+
+
+def brain_foto(storia, hub):
+    from calliope.brain import Brain
+    b = brain_finto(storia)
+    b.tool_ctx = SimpleNamespace(schermi=hub)
+    b.ATTESA_SCHEDE_S = Brain.ATTESA_SCHEDE_S
+    b._in_attesa = lambda c, p: Brain._in_attesa(b, c, p)
+    b._lega_in_attesa = lambda m: Brain._lega_in_attesa(b, m)
+    b._send_cards = lambda cards, tool: Brain._invia_schede(b, hub, cards, hub.chi)
+    return b
+
+
+def prova_foto():
+    from calliope.brain import Brain
+    from calliope.conversazione import turni
+    from calliope.immagini import Immagine
+    jpeg = jpeg_vero()
+    img = Immagine(jpeg, 1280, 960, fonte="telefono", persona="dario", n=1)
+    card = schede.foto(img, "lo scontrino")
+    copia = schede.per_conversazione(card)
+    peso = len(json.dumps(copia, ensure_ascii=False))
+    verifica("foto: la copia con la miniatura piccola, dentro gli 8 kB, mai la miniatura dello schermo né il file",
+             copia and copia.get("storica") and copia["src"].startswith("data:image/jpeg;base64,")
+             and copia["src"] != card["src"] and peso <= schede.CONV_SCHEDA_MAX and "_mini" not in copia
+             and len(card["src"]) > len(copia["src"]), (peso, len(card["src"])))
+    grossa = {**card, "_mini": "data:image/jpeg;base64," + "A" * 9000}
+    r = schede.per_conversazione(grossa)
+    verifica("foto: una miniatura oltre il tetto diventa il solo rimando, senza i byte",
+             r and r.get("rimando") and "src" not in r, r)
+    from calliope.allegati import Allegato  # noqa: F401 — la scheda del file si costruisce a mano
+    fil = schede.nuova("allegato", "File 1", schede.PERSONALE, chiave="allegato:1", nome="bolletta.pdf",
+                       tipo_file="PDF", categoria="documento", dimensione="120 kB",
+                       note=["3 pagine"], anteprima="Importo da pagare 84,20 euro")
+    r = schede.per_conversazione(fil)
+    verifica("file: nome, tipo e dimensione, mai l'anteprima del testo né le note",
+             r and r.get("nome") == "bolletta.pdf" and "anteprima" not in r and "note" not in r, r)
+
+    # 1. La foto mandata con la frase: la miniatura parte prima, si lega alla frase quando entra
+    hub = HubMittente(DARIO)
+    storia = [{"role": "user", "content": "la frase di prima"}, {"role": "assistant", "content": "ok"}]
+    b = brain_foto(storia, hub)
+    Brain.manda_schede(b, [schede.foto(img)], "foto")
+    msg = {"role": "user", "content": "Quanto ho speso in tutto?"}
+    storia.append(msg)
+    Brain._lega_in_attesa(b, msg)
+    verifica("foto con la frase: legata alla frase di questo turno, non a quella di prima",
+             "_schede" not in storia[0] and [x["tipo"] for x in msg.get("_schede", [])] == ["foto"]
+             and msg["_schede"][0].get("src", "").startswith("data:image/jpeg"), msg.get("_schede"))
+    # 2. La foto mandata prima della frase (in attesa per immagini_attesa_s): il ciclo la mette nel
+    # turno della frase dopo (Ciclo._foto_e_file) e la miniatura parte con quel turno, come la 1
+    storia2 = [{"role": "user", "content": "di prima"}]
+    b2 = brain_foto(storia2, HubMittente(DARIO))
+    img2 = Immagine(jpeg, 1280, 960, fonte="telefono", persona="dario", arrivata=time.time() - 40, n=2)
+    Brain.manda_schede(b2, [schede.foto(img2)], "foto")
+    msg2 = {"role": "user", "content": "Cosa c'è in questa foto?"}
+    storia2.append(msg2)
+    Brain._lega_in_attesa(b2, msg2)
+    verifica("foto mandata prima della frase: legata alla frase che la usa",
+             "_schede" not in storia2[0] and len(msg2.get("_schede", [])) == 1)
+    # …e una scheda in attesa che parte quando la frase è già entrata (le trattenute di un minore)
+    Brain._invia_schede(b2, b2.tool_ctx.schermi, [{**schede.foto(Immagine(jpeg, 1280, 960, persona="dario", n=4)), "_attesa": True}], DARIO)
+    verifica("…una miniatura che parte dopo la frase va alla stessa frase", len(msg2.get("_schede", [])) == 2)
+    # 3. La cattura della webcam chiesta a voce: la scheda del tool, dentro la risposta
+    storia3 = [{"role": "user", "content": "Guarda dalla webcam"}]
+    b3 = brain_foto(storia3, HubMittente(DARIO))
+    cam = Immagine(jpeg, 1280, 960, fonte="webcam", persona="dario", n=3)
+    Brain._invia_schede(b3, b3.tool_ctx.schermi, [schede.foto(cam)], DARIO)
+    verifica("cattura della webcam chiesta a voce: legata alla frase che l'ha chiesta",
+             [x["tipo"] for x in storia3[0].get("_schede", [])] == ["foto"])
+    # Decisione 0034 (28/10): anche webcam e schermate restano con la miniatura
+    shot = Immagine(jpeg, 1280, 960, fonte="screenshot", persona="dario", n=5)
+    Brain._invia_schede(b3, b3.tool_ctx.schermi, [schede.foto(shot)], DARIO)
+    fonti = [(x.get("fonte"), str(x.get("src", ""))[:23]) for x in storia3[0].get("_schede", [])]
+    verifica("webcam e schermata (decisione 0034): legate con la loro miniatura",
+             len(fonti) == 2 and all(f[1] == "data:image/jpeg;base64," for f in fonti), fonti)
+    # «mostrami l'ultima» dopo: la scheda ricordata non è più in attesa
+    s8 = [{"role": "user", "content": "di prima"}]
+    b8 = brain_foto(s8, HubMittente(DARIO))
+    c8 = schede.foto(Immagine(jpeg, 1280, 960, persona="dario", n=6))
+    Brain.manda_schede(b8, [c8], "foto")
+    verifica("il segno _attesa vale per un invio solo (hub.ricorda tiene lo stesso dizionario)", "_attesa" not in c8)
+    # 4. Cambio di persona in mezzo: la miniatura di Dario non va alla frase di Bianca
+    storia4 = [{"role": "user", "content": "di Dario"}]
+    hub4 = HubMittente(DARIO)
+    b4 = brain_foto(storia4, hub4)
+    Brain.manda_schede(b4, [schede.foto(img)], "foto")
+    hub4.chi = Mittente("bianca", "Bianca", "familiare", True)
+    msg4 = {"role": "user", "content": "Sono Bianca"}
+    storia4.append(msg4)
+    Brain._lega_in_attesa(b4, msg4)
+    verifica("cambio di chi parla in mezzo: la miniatura non va all'altra persona, e si butta",
+             "_schede" not in msg4 and "_schede" not in storia4[0] and not b4.__dict__.get("_schede_attesa"))
+    # …né a una frase che arriva troppo tardi (un'altra corsia ha risposto)
+    storia4b = [{"role": "user", "content": "di prima"}]
+    b4b = brain_foto(storia4b, HubMittente(DARIO))
+    Brain.manda_schede(b4b, [schede.foto(img)], "foto")
+    b4b.__dict__["_schede_attesa"] = [(time.monotonic() - 600, "dario", x[2]) for x in b4b.__dict__["_schede_attesa"]]
+    msg4b = {"role": "user", "content": "molto dopo"}
+    storia4b.append(msg4b)
+    Brain._lega_in_attesa(b4b, msg4b)
+    verifica("…né a una frase di molto dopo", "_schede" not in msg4b)
+    # 5. Identità incerta: niente
+    storia5 = [{"role": "user", "content": "di prima"}]
+    hub5 = HubMittente(GRIGIA)
+    b5 = brain_foto(storia5, hub5)
+    Brain.manda_schede(b5, [schede.foto(img)], "foto")
+    msg5 = {"role": "user", "content": "frase dalla zona grigia"}
+    storia5.append(msg5)
+    Brain._lega_in_attesa(b5, msg5)
+    verifica("identità incerta: la miniatura non si lega", "_schede" not in msg5 and not hub5.inviate[0].get("_riservata"))
+    # 6. Turno riservato: la foto legata sparisce con le schede del turno
+    msg6 = {"role": "user", "content": "Leggi il contratto in foto", "_schede": [schede.per_conversazione(schede.foto(img))]}
+    tt = turni([msg6, {"role": "tool", "name": "archivio_cerca", "content": "{}"},
+                {"role": "assistant", "content": "Canone 850."}], frozenset({"archivio_cerca"}))
+    verifica("turno riservato: la miniatura non resta nell'archivio", "schede" not in (tt[0].get("meta") or {}), tt[0])
+    # La risposta di prima riservata non tiene fuori la foto di adesso (last_private è ancora quello)
+    storia7 = [{"role": "user", "content": "di prima"}]
+    b7 = brain_foto(storia7, HubMittente(DARIO))
+    b7.last_private = True
+    Brain.manda_schede(b7, [schede.foto(img)], "foto")
+    msg7 = {"role": "user", "content": "e questa?"}
+    storia7.append(msg7)
+    Brain._lega_in_attesa(b7, msg7)
+    verifica("una risposta riservata prima non tiene fuori la foto di questo turno", len(msg7.get("_schede", [])) == 1)
+
+
+# ─────────────────────────── 8. la foto tenuta (29/10, decisione 0034) ───────────────────────────
+class Orologio:
+    def __init__(self):
+        self.t = time.time()
+
+    def __call__(self):
+        return self.t
+
+
+def cassetto_prova(nome):
+    from calliope.cassetto import Cassetto
+    cas = Cassetto(str(TMP / f"{nome}.db"), str(TMP / f"cassetto-{nome}"), giorni=7, giorni_foto=60,
+                   log=lambda m: None)
+    cas.ora = Orologio()
+    cas.archivio = SimpleNamespace(cartella=str(TMP / f"archivio-{nome}"), sveglia=lambda: None)
+    return cas
+
+
+def ctx_foto(cas, prof, modo="voce"):
+    return SimpleNamespace(cassetto=cas, archivio=cas.archivio, immagini=None, schermi=None,
+                           cfg=SimpleNamespace(immagini_tenuta=True, immagini_lato_max=1280),
+                           speaker_ctx=SimpleNamespace(current_speaker=getattr(prof, "name", None),
+                                                       identified_by=modo, from_session=False,
+                                                       current_level="familiare" if prof else "ospite"),
+                           speakers={prof.name: prof} if prof else None)
+
+
+def prova_foto_tenute():
+    from calliope.config import Config
+    from calliope.cassetto import giorni_foto
+    from calliope.immagini import Immagine
+    from calliope.tools import immagini as TI
+    c = Config()
+    verifica("configurazione: la tenuta accesa di serie, 60 giorni; spenta come prima",
+             giorni_foto(c) == 60.0 and giorni_foto(SimpleNamespace(immagini_tenuta=False)) is None)
+    dario = SimpleNamespace(id="dario", name="Dario")
+    jpeg = jpeg_vero(800, 600)
+    # 1. Tenuta 60 giorni, poi via
+    cas = cassetto_prova("t1")
+    img = Immagine(jpeg, 800, 600, fonte="telefono", persona="dario", n=1)
+    fid = cas.metti_foto(img, "dario")
+    st = cas.stato_foto("dario", fid)
+    verifica("la foto intera tenuta 60 giorni, e la foto sa dov'è la sua copia",
+             img.cassetto == fid and st["stato"] == "tenuta" and st["jpeg"] == jpeg
+             and abs(st["scade"] - cas.ora() - 60 * 86400) < 5, {k: v for k, v in st.items() if k != "jpeg"})
+    copia = schede.per_conversazione(schede.foto(img))
+    verifica("la miniatura del turno porta l'id della copia", copia.get("cassetto") == fid, copia.get("cassetto"))
+    cas.ora.t += 59 * 86400
+    cas.pulisci()
+    verifica("dopo 59 giorni c'è ancora", cas.stato_foto("dario", fid)["stato"] == "tenuta")
+    cas.ora.t += 2 * 86400
+    cas.pulisci()
+    verifica("dopo 61 giorni non c'è più, e il file è tolto",
+             cas.stato_foto("dario", fid) == {"stato": "persa"}
+             and not list((TMP / "cassetto-t1").rglob("*.dat")))
+    verifica("la foto d'un'altra persona risponde come un id che non c'è («persa»)",
+             cas.stato_foto("bianca", fid) == {"stato": "persa"} == cas.stato_foto("dario", 999))
+    # 2. «archiviala» su una foto di tre giorni prima, ancora tenuta
+    cas2 = cassetto_prova("t2")
+    vecchia = Immagine(jpeg, 800, 600, persona="dario", n=1, arrivata=cas2.ora() - 3 * 86400)
+    cas2.ora.t -= 3 * 86400
+    fid2 = cas2.metti_foto(vecchia, "dario")
+    cas2.ora.t += 3 * 86400
+    # Dalla zona grigia, con la frase breve o da ospite: rifiutato, senza dire niente delle foto
+    cas2.metti_foto(Immagine(jpeg, 800, 600, persona="dario", n=2), "dario")
+    for modo in ("conversazione", "breve"):
+        r = TI._archivia(ctx_foto(cas2, dario, modo), quale="oggi")
+        testo = json.dumps(r, ensure_ascii=False)
+        verifica(f"«archiviala» con quale dalla {modo}: rifiutato, la foto resta tenuta, niente nomi né date",
+                 not r.get("ok") and cas2.stato_foto("dario", fid2)["stato"] == "tenuta"
+                 and "Foto " not in testo and "C" + str(fid2) not in testo and "foto" not in r, r)
+    r = TI._archivia(ctx_foto(cas2, None), quale="oggi")
+    verifica("…e da ospite", not r.get("ok") and not list(Path(cas2.archivio.cartella).rglob("*.jpg")), r)
+    r = TI._archivia(ctx_foto(cas2, dario), quale=f"C{fid2}")
+    archiviate = list(Path(cas2.archivio.cartella).rglob("*.jpg"))
+    verifica("«archiviala» su una foto di giorni prima: per sempre nei documenti",
+             r.get("ok") and len(archiviate) == 1 and cas2.stato_foto("dario", fid2) == {"stato": "archiviata"}, r)
+    cas2.ora.t += 120 * 86400
+    cas2.pulisci()
+    verifica("…e dopo mesi la Conversazione dice ancora «Archiviata.»",
+             cas2.stato_foto("dario", fid2) == {"stato": "archiviata"} and archiviate[0].exists())
+    # «archivia la foto di martedì» per giorno; l'ultima della conversazione con la sua copia
+    cas3 = cassetto_prova("t3")
+    album = SimpleNamespace(prendi=lambda n: img3, __len__=lambda: 1)
+    img3 = Immagine(jpeg, 800, 600, persona="dario", n=1)
+    fid3 = cas3.metti_foto(img3, "dario")
+    ctx3 = ctx_foto(cas3, dario)
+    ctx3.immagini = SimpleNamespace(prendi=lambda n: img3, numeri=lambda: [1])
+    r = TI._archivia(ctx3, foto=-1)
+    verifica("«archiviala» sulla foto della conversazione archivia la sua copia (stato «Archiviata.»)",
+             r.get("ok") and cas3.stato_foto("dario", fid3) == {"stato": "archiviata"}, r)
+    cas4 = cassetto_prova("t4")
+    cas4.metti_foto(Immagine(jpeg, 800, 600, persona="dario", n=1), "dario")
+    r = TI._archivia(ctx_foto(cas4, dario), quale="la foto di oggi")
+    verifica("«archivia la foto di oggi» la trova fra quelle tenute", r.get("ok"), r)
+    # 3. Un ospite non si tiene mai; 4. l'identità incerta nemmeno
+    cas5 = cassetto_prova("t5")
+    TI._tieni_cattura(ctx_foto(cas5, None), Immagine(jpeg, 800, 600, fonte="webcam", n=1), None)
+    verifica("un ospite: la cattura non si tiene", cas5.elenco("dario") == [] and not list((TMP / "cassetto-t5").rglob("*.dat")))
+    for modo in ("breve", "conversazione", "schermo"):
+        r = TI._pc_guarda(ctx_foto(cas5, dario, modo), "webcam")
+        verifica(f"identità incerta ({modo}): pc_guarda non cattura e non tiene niente",
+                 not r.get("ok") and cas5.elenco("dario") == [], r.get("risposta_finale"))
+    TI._tieni_cattura(ctx_foto(cas5, dario), Immagine(jpeg, 800, 600, fonte="screenshot", n=2), dario)
+    verifica("la cattura chiesta a voce si tiene (decisione 0034)",
+             [r["fonte"] for r in cas5.elenco("dario")] == ["screenshot"])
+    # 5. «dimentica» e svuota tolgono anche i file
+    from calliope.conserva import Conservazione
+    from calliope.conversazioni import ArchivioConversazioni
+    cas6 = cassetto_prova("t6")
+    a = cas6.metti_foto(Immagine(jpeg, 800, 600, n=1), "dario")
+    b = cas6.metti_foto(Immagine(jpeg, 800, 600, n=2), "bianca")
+    arch = ArchivioConversazioni(TMP / "dim.db", giorni=60, avvia=False, log=lambda m: None)
+    arch.su_dimentica.append(cas6.dimentica_foto)
+    arch.dimentica("dario")
+    verifica("«dimentica le nostre conversazioni» toglie anche le foto tenute (file e righe), solo sue",
+             cas6.stato_foto("dario", a) == {"stato": "persa"} and cas6.stato_foto("bianca", b)["stato"] == "tenuta"
+             and len(list((TMP / "cassetto-t6").rglob("*.dat"))) == 1)
+    arch.close()
+    finto = SimpleNamespace(cassetto=cas6, cfg=None, log=lambda m: None)
+    n = Conservazione._svuota_foto(finto, None)
+    verifica("`calliope conserva --svuota` toglie tutte le foto tenute",
+             n == 1 and not list((TMP / "cassetto-t6").rglob("*.dat")), n)
+    return cas
+
+
+def prova_foto_server():
+    """La foto intera e il suo stato dal dettaglio: solo il proprietario, dallo schermo personale."""
+    from calliope.immagini import Immagine
+    from calliope.schermi.server import ServerSchermi
+    cas = cassetto_prova("srv")
+    jpeg = jpeg_vero(800, 600)
+    fid = cas.metti_foto(Immagine(jpeg, 800, 600, n=1), "dario")
+    hub = Schermi(cfg_prova(), ArchivioSchermi(str(TMP / "foto-srv.db")), log=lambda m: None)
+    hub.cassetto = cas
+    srv = ServerSchermi(hub, "127.0.0.1", 0, attesa_porta_s=5).avvia()
+    hub.server = srv
+    c = httpx.Client(base_url=f"http://127.0.0.1:{srv.port}", timeout=5)
+    _, tok_d = hub.archivio.crea_con_token("studio", proprietario="dario", proprietario_nome="Dario")
+    _, tok_b = hub.archivio.crea_con_token("camera", proprietario="bianca", proprietario_nome="Bianca")
+    _, tok_s = hub.archivio.crea_con_token("cucina")
+    hub._rinfresca()
+
+    def h(t):
+        return {"X-Calliope-Sessione": c.post("/api/accedi", headers={"Authorization": f"Bearer {t}"}).json()["sessione"]}
+    import base64
+    r = c.post("/api/conversazione", headers=h(tok_d), json={"foto": fid})
+    d = r.json()
+    intera = c.get(d["url"]) if d.get("url") else None
+    verifica("{foto}: dallo schermo di Dario lo stato e la foto intera, da «Scarica» (un gettone)",
+             r.status_code == 200 and d["stato"] == "tenuta" and d.get("scade") and "src" not in d
+             and d["url"].startswith("/scarica/") and intera is not None and intera.content == jpeg,
+             {k: str(v)[:40] for k, v in d.items()})
+    verifica("…il gettone vale per poche richieste", [c.get(d["url"]).status_code for _ in range(3)][-1] != 200)
+    cas.ora.t += 61 * 86400
+    cas.pulisci()
+    r2 = c.post("/api/conversazione", headers=h(tok_d), json={"foto": fid})
+    verifica("…scaduta: «persa», senza foto", r2.json() == {"stato": "persa"}, r2.text)
+    cas.ora.t -= 61 * 86400
+    r = c.post("/api/conversazione", headers=h(tok_b), json={"foto": fid})
+    r9 = c.post("/api/conversazione", headers=h(tok_b), json={"foto": 99999})
+    verifica("…dallo schermo di Bianca «persa», senza foto, come un id che non c'è",
+             r.status_code == 200 and r.json() == {"stato": "persa"} == r9.json(), (r.status_code, r.text))
+    r = c.post("/api/conversazione", headers=h(tok_s), json={"foto": fid})
+    verifica("…da uno schermo di stanza 403", r.status_code == 403, r.status_code)
+    r = c.post("/api/conversazione", headers={"X-Calliope-Sessione": "falsa"}, json={"foto": fid})
+    verifica("…senza sessione 401", r.status_code == 401, r.status_code)
+    stati = [c.post("/api/conversazione", headers=h(tok_d), json={"foto": x}).status_code for x in ("1", True, -1)]
+    verifica("…dati non validi 400", stati == [400, 400, 400], stati)
+    srv.ferma()
+    hub.archivio.close()
+    c.close()
+
+
+def prova_foto_revisione():
+    """Seconda revisione della PR #273: la revisione del cassetto per le foto, «dimentica» detto."""
+    from calliope.immagini import Immagine
+    from calliope.tools import conversazioni as TC
+    cas = cassetto_prova("rev")
+    jpeg = jpeg_vero(400, 300)
+    cas.metti_foto(Immagine(jpeg, 400, 300, n=1), "dario")
+    cas.metti(  # un PDF che scade domani
+        "dario", b"%PDF-1.4 prova", "bolletta.pdf", "pdf", giorni=1)
+    cas.ora.t += 59 * 86400
+    info = cas.da_dire("dario")
+    con = cas.frase(info, True)
+    senza = cas.frase(info, False)
+    verifica("revisione con lo schermo aperto: la foto in scadenza solo nella scheda, a voce gli altri file",
+             len(info["in_scadenza"]) == 2 and con.startswith("Hai un file che scade") and "foto" not in con
+             and "Hai 2 file" in senza, (con, senza))
+    cas.ora.t += 2 * 86400
+    cas.pulisci()
+    info = cas.da_dire("dario")
+    verifica("le foto scadute non si annunciano, gli altri file sì",
+             info["eliminati"] == 1 and "un file" in cas.frase(info, True), (info, cas.frase(info, True)))
+    cas2 = cassetto_prova("rev2")
+    cas2.metti_foto(Immagine(jpeg, 400, 300, n=1), "dario")
+    cas2.ora.t += 59 * 86400
+    senza = cas2.frase(cas2.da_dire("dario"), False)
+    verifica("…senza schermo la foto in scadenza resta detta a voce", "una foto" in senza, senza)
+    # «dimentica» lo dice
+    from calliope.conversazioni import ArchivioConversazioni
+    arch = ArchivioConversazioni(TMP / "dim2.db", giorni=60, avvia=False, log=lambda m: None)
+    ctx = SimpleNamespace(conversazioni=arch, cassetto=cas2, turno=5, stanza=None,
+                          speaker_ctx=SimpleNamespace(current_speaker="Dario"),
+                          speakers={"Dario": SimpleNamespace(id="dario", name="Dario")})
+    TC._conversazioni_dimentica(ctx)
+    ctx.turno = 6
+    r = TC._conversazioni_dimentica(ctx)
+    verifica("«dimentica»: la risposta dice che le foto archiviate restano nei documenti",
+             r.get("ok", True) is not False and TC.FOTO_ARCHIVIATE_RESTANO in r["risposta_finale"], r)
+    arch.close()
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -568,6 +942,10 @@ def main() -> int:
         prova_server(arch)
         prova_riservato()
         prova_peso()
+        prova_foto()
+        prova_foto_tenute()
+        prova_foto_server()
+        prova_foto_revisione()
         tid = prova_dettaglio(arch)
         prova_dettaglio_server(arch, tid)
         arch.close()

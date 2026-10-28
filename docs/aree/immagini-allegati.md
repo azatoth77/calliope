@@ -28,7 +28,9 @@
   conversazione nel messaggio dove sono arrivate (`immagini_storia: messaggio`, scelto
   misurando contro la sola descrizione: 2/2 contro 0/2 su «quanto costano le uova?», 0,94 s
   contro 1,80 s al turno dopo), solo in memoria, mai nel registro (numero, fonte, lato, kB);
-  su disco solo con «archiviala» (cartella personale dell'archivio). Gemma 4 e4b: ~1 token
+  su disco solo con «archiviala» (cartella personale dell'archivio). *[storico: dal 29/10 la foto
+  intera si tiene 60 giorni e per sempre con «archiviala», anche per webcam e schermate: decisione
+  [0034](../decisioni/0034-miniature-nella-conversazione.md)]* Gemma 4 e4b: ~1 token
   ogni 2 250 pixel (~540 a 1280 px), prima frase con una foto nuova 1,1–1,3 s, +0,5 s al turno
   dopo. Testo nella foto = dato non fidato: il 4B tentava `casa_comando` da un foglio 6/6,
   `_guardia_immagini` lo ferma 6/6 (le pericolose chiedono sempre conferma finché c'è una foto
@@ -213,7 +215,8 @@ Col 26B la promessa del 15/10 non torna nemmeno su main, anche perché il motivo
 (73 controlli a secco) e `prove/prova_cassetto_pagina.py` (la scheda nel browser vero).*
 
 **Prima**: foto e file vivevano solo nella conversazione (in memoria); su disco solo con
-«archivialo». **Ora** ogni allegato di una persona riconosciuta (foto, file, audio) entra anche
+«archivialo» *[storico; dal 29/10 le foto restano nel cassetto 60 giorni, decisione
+[0034](../decisioni/0034-miniature-nella-conversazione.md)]*. **Ora** ogni allegato di una persona riconosciuta (foto, file, audio) entra anche
 nel suo **cassetto** sulla macchina di Calliope (la DGX) e ci resta `cassetto_giorni` (7); a
 scadenza **si elimina** e Calliope lo dice la volta dopo («Ho eliminato 2 file che non avevi
 tenuto»). La vita nella conversazione non cambia: il cassetto serve a ritrovarli nei giorni dopo.
@@ -537,3 +540,68 @@ torna agli schermi del tutore. Prove in `prova_cassetto.py` (`prova_tutore_pagin
 conversazione, zona grigia, frase breve no; verificato sì; ragazzo di 15 anni no; un altro adulto
 verificato no; file di persone diverse 409; dopo «esci» di nuovo no; «Tieni» nella cartella del
 tutore, anche a voce).
+
+## La miniatura nella Conversazione degli schermi (29/10, issue #272)
+
+La foto mandata o chiesta (telefono, schermo, webcam, cattura dello schermo) compare nella Conversazione
+degli schermi personali accanto alla frase della persona, con una miniatura piccola sua (144 px, dentro
+gli 8 kB, mai il file), legata al turno giusto solo con l'identità certa e mai a un'altra persona; i file
+con nome, tipo e dimensione. Tenuta e «dimentica» del turno. Quello che vede il modello (`immagini_storia`)
+non cambia. Dettagli in [schermi-telefono](schermi-telefono.md).
+
+- **Dalla revisione della PR #273**: la regola è nella decisione
+  [0034](../decisioni/0034-miniature-nella-conversazione.md) (di chi amministra, 28/10). *Storico, 28/10
+  pomeriggio: «solo la miniatura col turno, la foto vera resta in memoria».*
+
+## La foto tenuta 60 giorni, per sempre con «archiviala» (29/10, decisione 0034, issue #272)
+
+Decisione di chi amministra del 28/10 sera: «tengo sempre la copia 60 giorni di default e la tengo per
+SEMPRE se dico archiviala. Così uno ha tempo per pensare cosa fare».
+
+- **Il cassetto tiene le foto** `immagini_tenuta_giorni` (60) invece di `cassetto_giorni` (7):
+  `Cassetto(giorni_foto=…)`, `metti_foto` scrive anche l'id nella foto (`Immagine.cassetto`). Le foto
+  dagli schermi personali c'entravano già (`Ciclo._nel_cassetto`, del proprietario dello schermo); dal
+  29/10 anche le **catture di `pc_guarda`** (`_tieni_cattura`, solo con la voce riconosciuta in quella
+  frase: pc_guarda rifiuta prima la zona grigia, la frase breve e lo scritto). Mai gli ospiti (senza
+  profilo non c'è cassetto). `immagini_tenuta: false` torna a prima.
+- **«archiviala» per sempre**: `immagine_archivia` sulla foto della conversazione archivia la sua copia
+  (`cassetto.tieni`, nella cartella personale dei documenti: la riga diventa «tenuto»), e con `quale`
+  anche una foto di giorni prima ancora tenuta («la foto di martedì», «ieri», «C12», con `Cassetto.cerca`);
+  con più foto chiede quale. Le righe delle foto archiviate non si tolgono più dall'indice.
+- **«dimentica» e `svuota`**: `Cassetto.dimentica_foto` toglie file e righe delle foto della persona (o di
+  tutti); è in `ArchivioConversazioni.su_dimentica` (main.py) e in `Conservazione.svuota` («foto» nel
+  conto). Le archiviate restano nei documenti.
+- **Lo stato e la foto intera** nel dettaglio della miniatura della Conversazione: `POST /api/conversazione`
+  con `{foto}` (`Schermi.chat_foto` → `Cassetto.stato_foto`), solo dallo schermo personale del
+  proprietario (Bianca 404, stanza 403, senza sessione 401; la sessione è quella degli schermi,
+  `_schermo_sessione`, legata allo schermo con cui è nata). La foto intera passa da «Scarica»: una voce
+  `foto:C<id>` per quello schermo (via con gli schermi revocati), solo del proprietario
+  (`solo_persona`), un gettone a tempo per poche richieste e i permessi rifatti al GET
+  (`Cassetto.stato_foto`); la pagina la mostra da `/scarica/<gettone>`. Le righe: «La tengo fino al … di' «archiviala» per
+  tenerla sempre.» con la foto intera, «Archiviata.» col tasto «Apri i tuoi documenti», «Non c'è più: non
+  era stata archiviata.», «Non c'è più: è stata eliminata dal cassetto.». Sulla miniatura stessa nessuna
+  riga: lo stato cambia, e la copia del turno è di quando è stata mandata.
+- **Il modello** vede come prima. «Elimina» del cassetto toglie la foto; la miniatura nel turno resta,
+  col suo stato.
+- **Dalla seconda revisione della PR #273**:
+  - *Bloccante*: «archiviala» con `quale` arrivava al cassetto anche dalla zona grigia. Ora ha le regole
+    del cassetto (`tools/allegati._proprietario`: la voce riconosciuta o lo schermo personale, mai la zona
+    grigia, la frase breve o un ospite), e il rifiuto non dice al modello nomi, date o fonti delle foto.
+  - `stato_foto` risponde «persa» sia per un id che non c'è sia per la foto d'un'altra persona: da uno
+    schermo non si capisce di chi è un id.
+  - Se il browser ricarica la foto intera dopo i 180 s del gettone, la pagina ne chiede uno nuovo, una
+    volta (`rigettoneFoto`).
+  - «Dimentica le nostre conversazioni» lo dice: «Ho tolto anche le foto che tenevo; quelle che hai
+    archiviato restano nei tuoi documenti.»
+  - La revisione del cassetto: con lo schermo personale aperto le foto in scadenza stanno solo nella
+    scheda, e le foto scadute non si annunciano («Ho eliminato N file» conta gli altri file); senza
+    schermo la frase a voce resta com'era.
+  - *Limiti da misurare*: il tetto del cassetto (`cassetto_mb_persona`, 500 MB) è condiviso: con 60 giorni
+    le foto possono lasciare fuori gli altri file (oltre il tetto un file resta solo nella
+    conversazione, e Calliope lo dice); e con la tenuta di serie ogni giorno qualche foto è vicina alla
+    scadenza: da guardare nell'uso se la scheda della revisione diventa quotidiana.
+- Prove: `prova_conversazione_schede` (tenuta 60 giorni con l'orologio finto, «archiviala» su una foto di
+  tre giorni prima e «Archiviata.» dopo mesi, sulla foto della conversazione e «la foto di oggi», ospite e
+  identità incerta mai, la cattura chiesta a voce sì, «dimentica» solo le sue e `svuota` tutte, la foto
+  intera e i suoi permessi sul server vero); `prova_cronologia_pagina` (le tre righe nella pagina vera, la
+  foto intera da 1200 px nel dettaglio, il rimando ai documenti).

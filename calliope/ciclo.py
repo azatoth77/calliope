@@ -1701,7 +1701,7 @@ class Ciclo:
                 cas.manda_scheda(schermi, prof.id, cas.scheda(
                     prof.id, righe, tieni=not minori.e_minore(prof)))
                 cas.schede_aperte[prof.id] = {r["id"] for r in righe}
-            frasi.append(cas.frase(info, aperto))
+            frasi += [f for f in [cas.frase(info, aperto)] if f]   # solo foto: la scheda basta
             self.rule("cassetto_revisione" if info["in_scadenza"] else "cassetto_eliminati")
             if self.rec is not None:
                 self.rec["cassetto"] = {"eliminati": info["eliminati"],

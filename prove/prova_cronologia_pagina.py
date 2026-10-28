@@ -99,6 +99,11 @@ class Ambiente:
         self.arch = ArchivioConversazioni(TMP / "conversazioni.db", giorni=30, avvia=False,
                                           log=lambda m: None)
         self.svs = Sviluppi(cfg, TMP / "sviluppi", log=lambda m: None)
+        # Il cassetto delle foto tenute (29/10, decisione 0034)
+        from calliope.cassetto import Cassetto
+        self.cassetto = Cassetto(str(TMP / "cassetto.db"), str(TMP / "cassetto"), giorni=7,
+                                 giorni_foto=60, log=lambda m: None)
+        self.cassetto.archivio = SimpleNamespace(cartella=str(TMP / "archivio"), sveglia=lambda: None)
         self.porta = PTP.porta_libera()
         self.hub = self.web = None
         self.avvii = 0
@@ -113,6 +118,7 @@ class Ambiente:
         hub.cronologia = CronologiaSchede(TMP / "schede", log=lambda m: None,
                                           avvio=f"avvio{self.avvii}")
         hub.chat_fonte = self.arch
+        hub.cassetto = self.cassetto
         self.arch.su_turni[:] = [hub.chat_nuovi]
         self.arch.su_dimentica[:] = [hub.chat_dimenticata]
         svs = self.svs
@@ -139,6 +145,7 @@ class Ambiente:
         self.hub.archivio.close()
         self.srv.ferma()
         self.arch.close()
+        self.cassetto.close()
 
 
 def collegata(p, max_s=15):
@@ -510,6 +517,64 @@ def conversazione_tel(p, amb):
                      " visibile: !document.getElementById('scrivi-apri').hidden})") or {}
     verifica("Scrivi resta spento in Conversazione senza una conversazione a voce",
              stato.get("spento") is True or stato.get("visibile") is False, stato)
+    # La miniatura della foto accanto alla frase (29/10, #272): la copia piccola del turno
+    import io
+    from PIL import Image
+    from calliope.immagini import Immagine
+    buf = io.BytesIO()
+    Image.new("RGB", (1200, 900), (180, 120, 60)).save(buf, "JPEG", quality=85)
+    img = Immagine(buf.getvalue(), 1200, 900, fonte="telefono", persona="dario", n=1)
+    m_foto = turno("Quanto ho speso in tutto?", "14,10 euro in tutto.", "Telefono", "scritto")
+    m_foto[0]["_schede"] = [schede.per_conversazione(schede.foto(img))]
+    amb.arch.archivia(Conversazione("persona:dario"), turni(m_foto), "dario", "Dario", ospite=False)
+    sel = f"{T} .scheda-piccola.tipo-foto .piccola-anteprima img"
+    ok = aspetta(lambda: p.valuta(f"(() => {{ const i = document.querySelector('{sel}'); return !!i && i.complete && i.naturalWidth > 0; }})()"), 8)
+    verifica("la miniatura della foto nella risposta del suo turno, caricata",
+             bool(ok) and p.valuta(f"document.querySelector('{T} .conv-turno:last-child .scheda-piccola.tipo-foto') !== null"),
+             p.valuta(f"document.querySelectorAll('{T} .scheda-piccola').length"))
+    tocca(p, f"{T} .scheda-piccola.tipo-foto .piccola-apri")
+    ok = aspetta(lambda: p.valuta("!document.getElementById('strato-scheda').hidden"
+                                  " && !!document.querySelector('#intera-posto .tipo-foto img')"), 5)
+    verifica("…e un tocco apre la miniatura a schermo intero", bool(ok))
+    foto(p, "conversazione-telefono-foto.png", 390, 844, mobile=True)
+    p.valuta("history.back(); 1")
+    aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 3)
+    # Le foto tenute (decisione 0034): le tre righe di stato e la foto intera finché c'è
+    cas = amb.cassetto
+    righe = {}
+    msg = []
+    for stato in ("tenuta", "archiviata", "persa"):
+        im = Immagine(buf.getvalue(), 1200, 900, fonte="telefono", persona="dario", n=len(righe) + 2)
+        cas.metti_foto(im, "dario")
+        righe[stato] = im.cassetto
+        m = turno(f"Foto {stato}", f"Ecco la foto {stato}.", "Telefono", "scritto")
+        m[0]["_schede"] = [schede.per_conversazione(schede.foto(im))]
+        msg += m
+    cas.tieni("dario", [cas.prendi("dario", righe["archiviata"])], "Dario")
+    cas.ora = lambda: time.time() + 61 * 86400
+    r_persa = cas.prendi("dario", righe["persa"])
+    cas._chiudi([r_persa], "scaduto", detto=1)
+    cas.ora = time.time
+    amb.arch.archivia(Conversazione("persona:dario"), turni(msg), "dario", "Dario", ospite=False)
+    aspetta(lambda: (p.valuta(f"document.querySelectorAll('{T} .scheda-piccola.tipo-foto').length") or 0) >= 4, 8)
+    attese = {"tenuta": "La tengo fino al ", "archiviata": "Archiviata.", "persa": "Non c'è più: non era stata archiviata."}
+    for i, stato in enumerate(("tenuta", "archiviata", "persa")):
+        sel = f"{T} .conv-turno:nth-last-child({3 - i}) .scheda-piccola.tipo-foto .piccola-apri"
+        tocca(p, sel)
+        ok = aspetta(lambda: p.valuta("!document.getElementById('strato-scheda').hidden"
+                                      " && !!document.querySelector('#intera-posto .stato-foto')"), 5)
+        riga = p.valuta("(document.querySelector('#intera-posto .stato-foto') || {}).textContent") or ""
+        verifica(f"la foto {stato}: la sua riga nel dettaglio", bool(ok) and riga.startswith(attese[stato]), riga)
+        if stato == "tenuta":
+            larga = p.valuta("(document.querySelector('#intera-posto .tipo-foto img') || {}).naturalWidth")
+            verifica("…finché c'è, il dettaglio mostra la foto intera, non la miniatura", larga == 1200, larga)
+            verifica("…e dice di dire «archiviala»", "archiviala" in riga, riga)
+            foto(p, "conversazione-telefono-foto-tenuta.png", 390, 844, mobile=True)
+        if stato == "archiviata":
+            verifica("…con il rimando ai documenti",
+                     p.valuta("!!document.querySelector('#intera-posto [data-chat-vai=\"cose/documenti\"]')"))
+        p.valuta("history.back(); 1")
+        aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 3)
 
 
 def main() -> int:

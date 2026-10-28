@@ -4037,6 +4037,9 @@ class Brain:
         """La risposta a una frase di sfida: la frase pronta, oppure il tool proposto eseguito
         con i suoi argomenti e la sua frase finale. Entra nella storia come un turno normale."""
         self.history.append({"role": "user", "content": user_text})
+        # Le miniature di foto e file di questo turno (#272), come in _reply (revisione della
+        # PR #273)
+        self._lega_in_attesa(self.history[-1])
         self._turn_text = user_text
         self.last_tools, self.last_secrets, self.last_private = [], [], False
         # La foto o il file erano del turno della richiesta: questa frase porta solo le
@@ -5008,6 +5011,8 @@ class Brain:
                                      if isinstance(k_u, dict) and k_u.get("nome") else None)
                                  or "voce non riconosciuta")
             self.history.append(msg_u)
+            # Le miniature di foto e file di questo turno, mandate prima della frase (#272)
+            self._lega_in_attesa(msg_u)
             self._allega_dati()
             self._trim_history()
             if not Brain.eventi_attivo(self):
@@ -6589,13 +6594,68 @@ class Brain:
 
     def manda_schede(self, cards, tool: str) -> list[dict]:
         """Le schede agli schermi personali di chi parla, come quelle dei tool (le miniature
-        delle foto e dei file del turno: calliope/ciclo.py). Non restano col turno nella
-        Conversazione (revisione della PR #271): partono prima che la frase della persona entri
-        nella storia, e si legherebbero al turno di prima, magari d'un'altra persona."""
+        delle foto e dei file del turno: calliope/ciclo.py). Partono prima che la frase della
+        persona entri nella storia (29/10, #272; *storico: dalla revisione della PR #271 al 28/10
+        sera non si legavano mai*): restano in attesa (`_attesa`) e si legano al messaggio della
+        persona di questo turno quando entra (`_lega_in_attesa`), mai a quello di prima."""
         for c in cards if isinstance(cards, list) else [cards]:
             if isinstance(c, dict):
-                c["_conv"] = False
+                c["_attesa"] = True
         return self._send_cards(cards, tool)
+
+    # Quanto aspetta una miniatura il messaggio del suo turno (29/10, #272): la frase entra nella
+    # storia subito dopo, ma in mezzo c'è la coda delle risposte (`corsia.entra_llm`, revisione
+    # della PR #273: con 30 s una coda lunga la buttava); oltre, il turno non è venuto
+    ATTESA_SCHEDE_S = 300.0
+
+    def _in_attesa(self, card: dict, persona: str):
+        """Una miniatura mandata prima della frase del turno: se il messaggio di questo turno c'è
+        già (le schede trattenute per un minore partono dopo) si lega lì, altrimenti aspetta."""
+        cur = self.__dict__.get("_msg_turno")
+        if cur and cur[1] == persona and time.monotonic() - cur[2] <= self.ATTESA_SCHEDE_S \
+                and self.history and self.history[-1] is cur[0]:
+            self.lega_scheda_al_turno(card, cur[0])
+            return
+        prima = list(self.__dict__.get("_schede_attesa") or ())
+        att = [x for x in prima if time.monotonic() - x[0] <= self.ATTESA_SCHEDE_S]
+        Brain._buttate(len(prima) - len(att), "scadute")
+        att.append((time.monotonic(), persona, card))
+        Brain._buttate(max(0, len(att) - 8), "troppe")
+        self.__dict__["_schede_attesa"] = att[-8:]
+
+    @staticmethod
+    def _buttate(n: int, perche: str):
+        """Una riga nel registro quando si buttano miniature in attesa (revisione della PR #273):
+        quante e perché, mai che cosa né di chi."""
+        if n > 0:
+            print(f"   [SCHERMI] {n} miniatur{'a' if n == 1 else 'e'} di foto o file non "
+                  f"legat{'a' if n == 1 else 'e'} alla Conversazione: {perche}", flush=True)
+
+    def _lega_in_attesa(self, msg: dict):
+        """Il messaggio della persona entra nella storia: le miniature in attesa si legano lì, solo
+        se sono della stessa persona (chi parla adesso, con l'identità certa) e recenti. Le altre
+        si buttano: un cambio di chi parla o di corsia non le porta a un'altra persona."""
+        att = self.__dict__.pop("_schede_attesa", None) or []
+        hub = getattr(self.tool_ctx, "schermi", None)
+        persona = None
+        try:
+            m = hub.mittente(self.tool_ctx) if hub is not None else None
+            persona = m.persona if m is not None and m.certo else None
+        except Exception:  # noqa: BLE001
+            persona = None
+        self.__dict__["_msg_turno"] = (msg, persona, time.monotonic())
+        motivi: dict[str, int] = {}
+        for t0, chi, card in att:
+            if not persona:
+                motivi["identità incerta"] = motivi.get("identità incerta", 0) + 1
+            elif chi != persona:
+                motivi["parla un'altra persona"] = motivi.get("parla un'altra persona", 0) + 1
+            elif time.monotonic() - t0 > self.ATTESA_SCHEDE_S:
+                motivi["scadute"] = motivi.get("scadute", 0) + 1
+            else:
+                self.lega_scheda_al_turno(card, msg)
+        for perche, n in motivi.items():
+            Brain._buttate(n, perche)
 
     def rilascia_schede(self, ok: bool) -> int:
         """Fine dell'attesa delle schede trattenute (`trattieni_schede`): con ok partono, nel
@@ -6647,7 +6707,10 @@ class Brain:
         for card in cards if isinstance(cards, list) else [cards]:
             if not isinstance(card, dict):
                 continue
-            if getattr(self, "last_private", False):
+            if getattr(self, "last_private", False) and not card.get("_attesa"):
+                # (Non le miniature in attesa, #272: partono prima della risposta, e
+                # `last_private` è ancora quello della risposta di prima; un turno riservato
+                # perde comunque le sue schede in conversazione.turni)
                 # Mandata in una risposta con un tool riservato: il contenuto non è conservabile
                 # (revisione della PR #271). Il segno resta sul server (hub.ultima la ricorda con
                 # lui: «mostrami l'ultima» dopo non la porta nella Conversazione)
@@ -6671,10 +6734,16 @@ class Brain:
                                 "schermi": len(r.get("schermi") or ())})
             if getattr(sender, "certo", False) and getattr(sender, "persona", None) \
                     and not card.get("_riservata"):
-                self.lega_scheda_al_turno(card)
+                if card.get("_attesa"):
+                    self._in_attesa(card, sender.persona)
+                else:
+                    self.lega_scheda_al_turno(card)
+            # Il segno vale per questo invio: hub.ricorda tiene lo stesso dizionario, e «mostrami
+            # l'ultima» in un turno dopo non deve rimetterla in attesa (revisione della PR #273)
+            card.pop("_attesa", None)
         return out
 
-    def lega_scheda_al_turno(self, card: dict):
+    def lega_scheda_al_turno(self, card: dict, msg: dict | None = None):
         """La scheda mandata in questo turno resta col turno (28/10, #242): sul messaggio della
         persona (`_schede`, come `_turno`), da dove `conversazione.turni` la porta nell'archivio
         delle conversazioni e la Conversazione degli schermi personali la mostra piccola dentro la
@@ -6685,7 +6754,8 @@ class Brain:
             piccola = per_conversazione(card)
             if piccola is None:
                 return
-            for m in reversed(self.history):
+            # `msg`: il messaggio del turno della scheda (le miniature in attesa, #272)
+            for m in ([msg] if msg is not None else reversed(self.history)):
                 if isinstance(m, dict) and m.get("role") == "user":
                     lista = [x for x in (m.get("_schede") or ()) if isinstance(x, dict)
                              and not ((piccola.get("chiave") and x.get("chiave") == piccola["chiave"])

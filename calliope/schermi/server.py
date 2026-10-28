@@ -68,7 +68,8 @@ Indirizzi:
                                  i Documenti; l'Ufficio solo a chi amministra), in sola lettura, coi permessi della pagina; solo
                                  da uno schermo personale, 20 al minuto
   POST /api/conversazione        «X-Calliope-Sessione», {giorno?: oggi|ieri, schede?: bool,
-                                 testo?} → {turni, nota}, {turno, indice} → {scheda}: i
+                                 testo?} → {turni, nota}, {turno, indice} → {scheda},
+                                 {foto} → {stato, scade?, src?} (la foto tenuta, 0034): i
                                  filtri, la ricerca e il dettaglio di una scheda piccola della
                                  Conversazione (28/10, #242, hub.chat_filtrata), solo da uno
                                  schermo personale e solo i turni del suo proprietario; 60 letture
@@ -1069,6 +1070,18 @@ def crea_app(hub: Schermi) -> Starlette:
             return errore
         if not isinstance(dati, dict):
             return _json({"errore": "dati non validi"}, 400)
+        if "foto" in dati:
+            # La foto di una miniatura (29/10, decisione 0034): lo stato e, finché è tenuta, la
+            # foto intera, solo dai propri schermi personali
+            fid = dati.get("foto")
+            if not isinstance(fid, int) or isinstance(fid, bool) or fid < 0:
+                return _json({"errore": "dati non validi"}, 400)
+            schermo, errore = schermo_personale(request, letture_conv, LETTURE_AL_MINUTO, TROPPE_LETTURE)
+            if errore is not None:
+                return errore
+            out = await asyncio.to_thread(hub.chat_foto, schermo, fid)
+            stato = int(out.pop("_stato", 200))
+            return _json(out, stato)
         if "turno" in dati or "indice" in dati:
             # Il dettaglio di una scheda piccola leggera (revisione della PR #271)
             t, i = dati.get("turno"), dati.get("indice")

@@ -7,9 +7,13 @@ dall'esecutore su richiesta.
   Content-Type; niente SVG né formati con script), la dimensione e i pixel (bomba di
   decompressione), gira la foto secondo l'EXIF, la riduce (lato lungo `immagini_lato_max`) e
   la riscrive in JPEG: i metadati (posizione GPS, modello del telefono) non passano.
-- `Immagine`: una foto della conversazione, solo **in memoria**: mai su disco, mai nel
-  registro dei turni (dove resta solo il numero, la fonte e la dimensione). Si salva solo con
-  «archiviala» (tool immagine_archivia → cartella dell'archivio).
+- `Immagine`: una foto della conversazione, in memoria per il modello finché dura la
+  conversazione, mai nel registro dei turni (dove resta solo il numero, la fonte e la
+  dimensione). Dal 29/10 (decisione 0034) la foto intera di una persona di casa con l'identità
+  certa, catture di webcam e schermo comprese, si tiene nel suo cassetto `immagini_tenuta_giorni`
+  (60) giorni (`cassetto`: l'id della copia), e per sempre con «archiviala»; la sua miniatura di
+  144 px resta col turno nella Conversazione. *Storico, fino al 28/10: «solo in memoria: mai su
+  disco… Si salva solo con «archiviala»».*
 - `Album`: le foto della conversazione, numerate (1, 2, 3…: «la prima», «l'ultima foto»);
   vive dentro Brain e si azzera con la conversazione (Brain.end_conversation).
 - `InAttesa`: una foto mandata senza domanda aspetta la frase dopo della stessa persona
@@ -127,13 +131,14 @@ def prepara(dati: bytes, lato_max: int = 1280, max_byte: int = 12_000_000,
     return buf.getvalue(), im.width, im.height
 
 
-def miniatura(jpeg: bytes, lato: int = 360) -> str:
-    """La miniatura come data URL (per la scheda sullo schermo): JPEG piccolo."""
+def miniatura(jpeg: bytes, lato: int = 360, qualita: int = 70) -> str:
+    """La miniatura come data URL (per la scheda sullo schermo): JPEG piccolo. Più piccola
+    (`lato`, `qualita`) per la copia nella Conversazione (29/10, #272)."""
     from PIL import Image
     im = Image.open(io.BytesIO(jpeg))
     im.thumbnail((lato, lato))
     buf = io.BytesIO()
-    im.convert("RGB").save(buf, "JPEG", quality=70)
+    im.convert("RGB").save(buf, "JPEG", quality=qualita)
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
@@ -161,6 +166,9 @@ class Immagine:
     arrivata: float = field(default_factory=time.time)
     n: int = 0                       # numero nella conversazione (Album.aggiungi)
     descrizione: str = ""            # breve, fatta dal modello (Brain.descrivi_immagini)
+    # L'id della sua copia nel cassetto (29/10, decisione 0034): tenuta `immagini_tenuta_giorni`
+    # (60), per sempre con «archiviala»; None se non è tenuta (ospiti, tenuta spenta, cassetto pieno)
+    cassetto: int | None = None
 
     def b64(self) -> str:
         return base64.b64encode(self.jpeg).decode()
