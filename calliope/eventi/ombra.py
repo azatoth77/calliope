@@ -55,8 +55,10 @@ def modo(cfg) -> str:
 
 
 # Esiti del turno con la frase della persona nella conversazione (oggi entra nella storia)
+# Dal 28/10 anche il tocco dallo schermo personale (schermi/tocchi.py): la sua descrizione
+# («(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)») è un detto_persona
 ESITI_PERSONA = frozenset({"risposta", "interruzione", "cortesia", "protezione",
-                           "non_rivolta", "modulo"})
+                           "non_rivolta", "modulo", "tocco"})
 # Esiti che chiudono la conversazione: la frase e la chiusura vanno nel segmento che si chiude
 ESITI_CHIUSURA = frozenset({"dormi", "uscita", "nuova_conversazione"})
 FINESTRA_MAX = 400                  # frasi in memoria al più (un ciclo finto che non chiude mai)
@@ -640,6 +642,8 @@ class Ombra:
             sc = getattr(self.c, "speaker_ctx", None)
             canale = "scritto" if t is not None and getattr(t, "scritto", None) is not None \
                 else "voce"
+            if rec.get("canale") == "tocco":
+                canale = "tocco"
             if esito == "modulo":
                 persona = add("modulo_compilato", modulo=rec.get("modulo"),
                               campi=list(rec.get("campi") or ()))

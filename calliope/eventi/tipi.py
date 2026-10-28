@@ -182,7 +182,8 @@ def e_annuncio(atto) -> bool:
     return bool(v and v[1])
 # Canali di ciò che dice Calliope e di ciò che dice la persona
 CANALI_CALLIOPE = ("voce", "scritto", "muta")
-CANALI_PERSONA = ("voce", "scritto", "modulo")
+# «tocco» (28/10, schermi/tocchi.py): un tocco dallo schermo personale che cambia qualcosa
+CANALI_PERSONA = ("voce", "scritto", "modulo", "tocco")
 
 
 @dataclasses.dataclass(frozen=True)

@@ -257,6 +257,11 @@ class Schermi:
         # le sezioni nascoste a un minore. `profilo`: id → profilo della persona (da main.py,
         # letto a ogni accesso); None = nessuna sezione nascosta
         self.profilo = None
+        # Le raccolte di «Le mie cose» e i tocchi (28/10, raccolte.py e tocchi.py): i servizi
+        # della voce (ciclo.Servizi) e il contesto dei tool della corsia principale, da main.py.
+        # None = tessere «non disponibile» e /api/tocco risponde 503
+        self.servizi = None
+        self.tool_ctx = None
         self.aspetto = None
         try:
             from .aspetto import PreferenzeAspetto

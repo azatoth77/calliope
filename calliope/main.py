@@ -478,6 +478,8 @@ class Avvio:
             # Il profilo del proprietario di uno schermo personale (27/10, schermi/aspetto.py:
             # le sezioni nascoste a un minore), letto a ogni accesso
             schermi.profilo = lambda pid: s.registry.by_id(pid) if s.registry is not None else None
+            # Le tessere di «Le mie cose» (28/10, schermi/raccolte.py): i conti dai servizi
+            schermi.servizi = s
         if schermi is not None and s.satelliti is not None:
             # Le schede vanno agli schermi della stanza del satellite che ascolta, e il
             # satellite può aprire la pagina con un token suo (calliope/satellite/server.py)
@@ -675,6 +677,10 @@ class Avvio:
                                     web=web, notizie=s.notizie,
                                     conversazioni=conv_arch, modalita=self.modalita,
                                     cassetto=cassetto, stanza=s.stanza)
+        if schermi is not None:
+            # Le raccolte e i tocchi dello schermo personale (28/10, schermi/raccolte.py e
+            # tocchi.py): liste, lavori, documenti… dal contesto dei tool della corsia principale
+            schermi.tool_ctx = self.tool_ctx
         if s.stanza is not None:
             # stanza_pausa (13/10): «abbiamo ospiti», «metti in pausa la stanza», «ascolta di
             # nuovo la stanza», solo con la stanza accesa; stanza_cerca (14/10, passo 4) anche
