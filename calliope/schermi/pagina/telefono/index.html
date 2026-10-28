@@ -79,6 +79,17 @@
     </section>
 
     <section id="sez-cose" class="sezione" data-sezione="cose" aria-labelledby="sez-titolo" hidden>
+      <!-- Le tessere e le pagine delle raccolte (28/10, passo 2a: POST /api/raccolte, sezioni.js) -->
+      <nav id="tessere" class="tessere" aria-label="Le mie raccolte" hidden></nav>
+      <div id="pagina-racc" class="pagina-racc" hidden>
+        <div class="pagina-testa">
+          <button id="pagina-indietro" type="button" class="tasto pagina-indietro"><span aria-hidden="true">‹ </span>Le mie cose</button>
+          <h2 id="pagina-titolo" class="pagina-titolo"></h2>
+        </div>
+        <p id="pagina-nota" class="pagina-nota" hidden></p>
+        <div id="pagina-schede" class="elenco pagina-schede"></div>
+        <p id="pagina-esito" class="pagina-esito" role="status"></p>
+      </div>
       <div class="raccolta" data-raccolta="" hidden><h2 class="gruppo">Da scrivere</h2><div class="elenco" data-posto="cose"></div></div>
       <div class="raccolta" data-raccolta="liste" hidden><h2 class="gruppo">Liste</h2><div class="elenco" data-posto="cose/liste"></div></div>
       <div class="raccolta" data-raccolta="agenda" hidden><h2 class="gruppo">Agenda</h2><div class="elenco" data-posto="cose/agenda"></div></div>

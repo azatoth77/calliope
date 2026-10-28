@@ -59,7 +59,18 @@ Indirizzi:
   POST /api/schede               «X-Calliope-Sessione», {azione: pulisci}: «Pulisci le mie
                                  schede» (08/10, cronologia.py), solo da uno schermo personale
                                  e solo per le schede del suo proprietario
-  GET  /satellite               il comando per un PC nuovo come satellite (satellite/web.py)
+  POST /api/raccolte             «X-Calliope-Sessione», {} → {tessere} di «Le mie cose» (conto,
+                                 stato, ultimo cambiamento), {raccolta} → {schede, nota?} della
+                                 sua pagina (28/10, raccolte.py): letti dai servizi per il
+                                 proprietario, solo da uno schermo personale, 30 al minuto
+  POST /api/tocco                «X-Calliope-Sessione», {tocco, …}: un tocco che cambia qualcosa
+                                 (28/10, tocchi.py: la spunta della lista), solo da uno schermo
+                                 personale, anche senza una conversazione a voce; controllato
+                                 qui, poi al ciclo della voce che lo fa passare da
+                                 ToolRegistry.call col livello del proprietario e lo mette nella
+                                 conversazione → {ok, in_coda}; un rifiuto arriva poi con
+                                 l'evento SSE «tocco». 30 al minuto
+  GET  /satellite              il comando per un PC nuovo come satellite (satellite/web.py)
   /telefono/…                    la web app del telefono (telefono.py): pagina, modelli e il
                                  WebSocket del protocollo dei satelliti
 
@@ -931,6 +942,95 @@ def crea_app(hub: Schermi) -> Starlette:
         stato = int(out.pop("_stato", 200))
         return _json(out, stato)
 
+    # ── le raccolte di «Le mie cose» e i tocchi (28/10, raccolte.py e tocchi.py) ──
+    letture_racc: dict[int, list[float]] = {}
+    tocchi_fatti: dict[int, list[float]] = {}
+
+    def schermo_personale(request: Request, conti: dict, n: int):
+        """(schermo, None) per uno schermo personale con la sessione valida, in HTTPS fuori da
+        questo computer, sotto il limite di `n` richieste al minuto; altrimenti (None, risposta).
+        Non serve una conversazione a voce (decisione del 28/10)."""
+        client = request.client.host if request.client else ""
+        if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
+            return None, _json({"errore": "solo in HTTPS"}, 403)
+        sess = request.headers.get("x-calliope-sessione", "")
+        with lock:
+            sid = sessioni.get(sess) if sess else None
+        schermo = next((s for s in hub.abbinati() if s["id"] == sid), None) if sid else None
+        if schermo is None:
+            return None, _json({"errore": "sessione non valida"}, 401)
+        if not schermo.get("proprietario"):
+            return None, _json({"errore": "solo da uno schermo personale"}, 403)
+        ora = time.monotonic()
+        with lock:
+            fatti = [t for t in conti.get(schermo["id"], []) if ora - t < 60.0]
+            if len(fatti) >= n:
+                conti[schermo["id"]] = fatti
+                return None, _json({"errore": "troppi tocchi: aspetta un momento"}, 429)
+            conti[schermo["id"]] = fatti + [ora]
+        return schermo, None
+
+    def profilo_di(schermo: dict):
+        if hub.profilo is None:
+            return None
+        try:
+            return hub.profilo(schermo.get("proprietario"))
+        except Exception:  # noqa: BLE001 — un profilo illeggibile: niente raccolte
+            return None
+
+    async def raccolte_api(request: Request):
+        """Le tessere di «Le mie cose» ({} → {tessere}) o le schede di una raccolta
+        ({raccolta} → {schede, nota?}), lette dai servizi per il proprietario dello schermo."""
+        from . import raccolte
+        schermo, errore = schermo_personale(request, letture_racc, 30)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 512)
+        if errore is not None:
+            return errore
+        if not isinstance(dati, dict):
+            return _json({"errore": "dati non validi"}, 400)
+        prof = profilo_di(schermo)
+        if prof is None:
+            return _json({"errore": "non so di chi è questo schermo"}, 403)
+        quale = dati.get("raccolta")
+        if quale is None:
+            out = await asyncio.to_thread(raccolte.tessere, hub, prof, hub.log)
+            return _json({"tessere": out})
+        out = await asyncio.to_thread(raccolte.pagina, hub, prof, str(quale)[:40])
+        return _json(out, int(out.pop("_stato", 200)))
+
+    async def tocco_api(request: Request):
+        """Un tocco che cambia qualcosa (la spunta della lista): controllato qui contro lo
+        stato vero (tocchi.prepara), poi al ciclo della voce, che lo fa passare da
+        ToolRegistry.call col livello del proprietario e lo mette nella conversazione."""
+        from . import tocchi
+        schermo, errore = schermo_personale(request, tocchi_fatti, 30)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 1024)
+        if errore is not None:
+            return errore
+        if getattr(hub, "tool_ctx", None) is None:
+            return _json({"errore": "Calliope non è pronta: riprova tra poco."}, 503)
+        out = await asyncio.to_thread(tocchi.prepara, dati, hub.tool_ctx)
+        if "errore" in out:
+            return _json({"errore": out["errore"]}, int(out.get("_stato", 400)))
+        if not hub.ingresso.metti({"tipo": "tocco", "tool": out["tool"],
+                                   "argomenti": out["argomenti"],
+                                   "descrizione": out["descrizione"],
+                                   "tocco": str(dati.get("tocco")),
+                                   # Ciò che la pagina ha toccato, per ritrovare il tasto con
+                                   # l'esito (evento «tocco»): solo testi brevi
+                                   "pagina": {k: str(dati.get(k))[:120] for k in ("lista", "voce")
+                                              if isinstance(dati.get(k), str)},
+                                   "persona": schermo.get("proprietario"),
+                                   "schermo": schermo.get("nome"),
+                                   "stanza": schermo.get("stanza"),
+                                   "schermo_id": schermo.get("id"), "arrivato": time.time()}):
+            return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
+        return _json({"ok": True, "in_coda": True})
+
     # ── esercizi (08/10, calliope/esercizi/sessione.py) ──
     risposte_es: dict[int, list[float]] = {}
 
@@ -994,6 +1094,8 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/esercizio", esercizio, methods=["POST"]),
         Route("/api/aspetto", aspetto_api, methods=["POST"]),
         Route("/api/parla", parla_api, methods=["POST"]),
+        Route("/api/raccolte", raccolte_api, methods=["POST"]),
+        Route("/api/tocco", tocco_api, methods=["POST"]),
         *telefono.rotte(hub),
         # /satellite: il comando per far diventare satellite un PC nuovo (03/10)
         *satellite_web.rotte(hub),

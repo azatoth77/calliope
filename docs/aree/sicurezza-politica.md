@@ -1797,3 +1797,17 @@ quattro cose:
 - **Da guardare quando si accende**: le conferme delle estensioni ogni 100 esecuzioni (misura nuova
   del passo 0, `calliope stato --concessioni`), accanto all'attrito della voce di `calliope stato
   --turni`, che le estensioni non le conta.
+
+## Il tocco dallo schermo personale passa da `ToolRegistry.call` (28/10, issue #256, ramo `issue-256-raccolte`)
+
+Il canale «tocco» (passo 2a del telefono a sezioni: [schermi-telefono](schermi-telefono.md)) è la prima
+azione dalla pagina che passa dalla politica: `Ciclo._tocco_dallo_schermo` chiama `ToolRegistry.call` col
+livello del proprietario dello schermo e `identified_by` «schermo» (al più familiare: un tool che vuole la
+voce di chi amministra risponde con `serve_la_voce`, e il tocco è rifiutato), con i preset dei minori, e
+**senza la politica del turno** (`ctx.politica` None: ferma solo i tool vietati, come le chiamate del
+codice), perché non c'è una frase né dati non fidati. L'elenco dei tocchi è chiuso (`schermi/tocchi.TOCCHI`)
+e gli argomenti vengono dallo stato vero, non dalla pagina. I segni di chi parlava prima (compagnia,
+conferma breve, sfida superata…) si azzerano per il tocco e si rimettono dopo. Si fa anche fuori da una
+conversazione a voce (decisione di chi amministra del 28/10), solo da uno schermo personale. Dalla
+revisione della PR #261 valgono anche gli orari dei tutori: fuori orario il tocco di un minore è rifiutato
+(`minori.fuori_orario` in `_tocco_dallo_schermo`, perché la fase `_fuori_orario` del giro viene dopo).

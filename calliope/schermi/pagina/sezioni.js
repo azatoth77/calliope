@@ -181,7 +181,7 @@
       }
       for (const s of document.querySelectorAll("#sezioni .sezione")) {
         const v = s.querySelector(".vuoto-sez");
-        if (v) v.hidden = !!s.querySelector("[data-posto] > *");
+        if (v) v.hidden = !!s.querySelector("[data-posto] > *, .tessere > *");
       }
       disegnaNovita();
       if (opz.dopoDisponi) opz.dopoDisponi();
@@ -223,6 +223,7 @@
       }
       if (sch()) sch().aggiorna();          // timer e tempi dei lavori subito, non al giro dopo
       disponi();
+      raccolteDopoSchede(det);
     }
 
     // Non è una novità ciò che si vede già: la sezione aperta, o Adesso quando la scheda è lì
@@ -264,7 +265,8 @@
     function mostraIn(k, sezione) {
       const e = car.el[k];
       const el = e && (sezione === "adesso" ? e.adesso : (e.casa && e.casa.closest('.sezione[data-sezione="' + sezione + '"]') ? e.casa : null));
-      if (!el || el.closest("[hidden]")) return false;
+      // (anche nascosta dal CSS: il gruppo della raccolta sotto la sua pagina, dal 28/10)
+      if (!el || el.closest("[hidden]") || !el.getClientRects().length) return false;
       try { el.scrollIntoView({ block: "nearest", behavior: "instant" }); } catch (e2) { el.scrollIntoView(); }
       return true;
     }
@@ -274,6 +276,9 @@
       const c = car.schede[k];
       if (!c) return false;
       const p = sezioneDi(c);
+      // Una raccolta con la sua pagina (28/10: le Liste): la scheda sta lì, con il suo indirizzo
+      const t = p.split("/")[1] ? tessera(p.split("/")[1]) : null;
+      if (t && t.pagina) { vai("#/" + p + "/" + encodeURIComponent(k)); return true; }
       vai("#/" + p);
       requestAnimationFrame(() => mostraIn(k, p.split("/")[0]));
       return true;
@@ -335,7 +340,182 @@
         if (s) s.scrollTop = 0;
       }
       disponi();
+      raccolteVista();
     }
+
+    // ── le tessere e le pagine di «Le mie cose» (28/10, passo 2a: POST /api/raccolte) ──
+    // In cima a Le mie cose le tessere (conto, stato, il pallino se è cambiato qualcosa dopo
+    // l'ultima visita), lette dal server all'ingresso nella sezione e ogni 60 s mentre è aperta.
+    // Un tocco su una tessera con la sua pagina apre #/cose/<id>: le schede che dà il server
+    // (dai servizi: anche ciò che non è passato da questo schermo), disegnate da schermo.js; il
+    // gesto indietro torna alle tessere. Le altre tessere dicono «presto» e portano, come prima,
+    // al gruppo delle schede di quella raccolta.
+    const racc = { tessere: [], timer: null, aperta: null, richiesta: 0, daTessere: false, rinfresca: null };
+    const CHIAVE_RACC = opz.chiaveRaccolte || "calliope.raccolte.viste";
+    function vistePrima() {
+      try {
+        const v = JSON.parse(leggi(CHIAVE_RACC) || "{}");
+        return v && typeof v === "object" ? v : {};
+      } catch (e) { return {}; }
+    }
+    // L'ultima visita di una tessera è il suo «ultimo» di allora (l'ora del server: niente
+    // orologi diversi). Una tessera mai vista prende quello di adesso: niente pallini ovunque
+    // alla prima apertura
+    function segnaVista(t) {
+      const v = vistePrima();
+      if (v[t.id] === (Number(t.ultimo) || 0)) return;
+      v[t.id] = Number(t.ultimo) || 0;
+      scrivi(CHIAVE_RACC, JSON.stringify(v));
+    }
+    function nuovaTessera(id) {
+      const a = document.createElement("a");
+      a.className = "tessera";
+      a.dataset.tessera = id;
+      a.href = "#/cose/" + encodeURIComponent(id);
+      const testa = document.createElement("span");
+      testa.className = "tessera-testa";
+      const nome = document.createElement("span");
+      nome.className = "tessera-nome";
+      const pallino = document.createElement("span");
+      pallino.className = "tessera-pallino";
+      pallino.setAttribute("aria-hidden", "true");
+      testa.append(nome, pallino);
+      const conto = document.createElement("span");
+      conto.className = "tessera-conto";
+      const stato = document.createElement("span");
+      stato.className = "tessera-stato";
+      a.append(testa, conto, stato);
+      a.addEventListener("click", (ev) => {
+        ev.preventDefault();
+        racc.daTessere = true;
+        vai("#/cose/" + encodeURIComponent(id));
+      });
+      return a;
+    }
+    function disegnaTessere() {
+      const box = $("tessere");
+      if (!box) return;
+      const v = vistePrima();
+      let nuove = false;
+      const fila = [];
+      for (const t of racc.tessere) {
+        if (!t || typeof t.id !== "string" || vis.nascoste.raccolte.includes(t.id)) continue;
+        if (!(t.id in v)) { v[t.id] = Number(t.ultimo) || 0; nuove = true; }
+        const a = box.querySelector('[data-tessera="' + CSS.escape(t.id) + '"]') || nuovaTessera(t.id);
+        const novita = (Number(t.ultimo) || 0) > (Number(v[t.id]) || 0);
+        const conto = t.conto === null || t.conto === undefined ? "—" : String(t.conto);
+        const stato = String(t.stato || "") + (t.pagina ? "" : " · pagina presto");
+        const nome = String(t.nome || t.id);
+        metti(a.querySelector(".tessera-nome"), nome);
+        metti(a.querySelector(".tessera-conto"), conto);
+        metti(a.querySelector(".tessera-stato"), stato);
+        a.querySelector(".tessera-pallino").hidden = !novita;
+        a.classList.toggle("presto", !t.pagina);
+        attr(a, "aria-label", nome + ": " + (conto === "—" ? "" : conto + ", ") + stato + (novita ? ", novità" : ""));
+        fila.push(a);
+      }
+      if (nuove) scrivi(CHIAVE_RACC, JSON.stringify(v));
+      fila.forEach((a, i) => { if (box.children[i] !== a) box.insertBefore(a, box.children[i] || null); });
+      for (const x of [...box.children]) if (!fila.includes(x)) x.remove();
+    }
+    function tessera(id) { return racc.tessere.find((t) => t && t.id === id) || null; }
+    async function aggiornaRaccolte() {
+      if (!sch() || !sch().raccolte) return;
+      const prima = racc.aperta;
+      const r = await sch().raccolte({});
+      if (!r.ok || !Array.isArray(r.dati.tessere)) return;
+      racc.tessere = r.dati.tessere;
+      disegnaTessere();
+      raccolteVista();
+      if (prima && racc.aperta === prima) caricaPagina(prima);
+      disponi();
+    }
+    // La vista di Le mie cose secondo l'indirizzo: le tessere (#/cose) o la pagina (#/cose/liste)
+    function raccolteVista() {
+      const sez = $("sez-cose"), box = $("tessere"), pag = $("pagina-racc");
+      if (!sez || !box || !pag) return;
+      const dentro = vis.modo === "sezioni" && vis.sezione === "cose";
+      if (!dentro) {
+        if (racc.timer) { clearInterval(racc.timer); racc.timer = null; }
+        racc.aperta = null;
+        return;
+      }
+      if (!racc.timer) {
+        racc.timer = setInterval(aggiornaRaccolte, 60000);
+        aggiornaRaccolte();
+      }
+      const id = vis.percorso[1] || null;
+      const t = id ? tessera(id) : null;
+      const pagina = !!(t && t.pagina && !vis.nascoste.raccolte.includes(id));
+      const vista = pagina ? "pagina" : "tessere";
+      if (sez.dataset.vista !== vista) sez.dataset.vista = vista;
+      pag.hidden = !pagina;
+      box.hidden = pagina || !box.children.length;
+      if (!pagina) { racc.aperta = null; return; }
+      segnaVista(t);
+      disegnaTessere();
+      if (racc.aperta !== id) {
+        racc.aperta = id;
+        metti($("pagina-titolo"), String(t.nome || id));
+        $("pagina-schede").replaceChildren();
+        caricaPagina(id);
+      } else requestAnimationFrame(scorriAllaScheda);
+    }
+    // #/cose/liste/lista:spesa: la scheda in vista nella pagina
+    function scorriAllaScheda() {
+      const chiave = vis.percorso.slice(2).join("/");
+      const box = $("pagina-schede");
+      const el = chiave && box ? [...box.children].find((e) => e.dataset.chiave === chiave) : null;
+      if (el) { try { el.scrollIntoView({ block: "nearest", behavior: "instant" }); } catch (e) { el.scrollIntoView(); } }
+    }
+    async function caricaPagina(id) {
+      const n = ++racc.richiesta;
+      const r = await sch().raccolte({ raccolta: id });
+      if (n !== racc.richiesta || racc.aperta !== id) return;
+      const box = $("pagina-schede"), nota = $("pagina-nota");
+      if (!r.ok) {
+        metti($("pagina-esito"), String(r.dati.errore || "Non riesco a leggere questa pagina: riprova tra poco."));
+        return;
+      }
+      metti($("pagina-esito"), "");
+      const schede = Array.isArray(r.dati.schede) ? r.dati.schede.filter((c) => c && typeof c === "object") : [];
+      const vecchie = new Map([...box.children].map((e) => [e.dataset.chiave, e]));
+      const nuove = schede.map((c) => {
+        const e = vecchie.get(String(chiaveDi(c)));
+        const s = costruisciScheda(c);
+        if (e) { sch().allinea(e, s); return e; }
+        return s;
+      });
+      box.replaceChildren(...nuove);
+      const testo = r.dati.nota ? String(r.dati.nota) : (schede.length ? "" : "Niente qui, per ora.");
+      metti(nota, testo);
+      nota.hidden = !testo;
+      scorriAllaScheda();
+    }
+    // Una scheda arrivata (la lista aggiornata da un tocco o a voce): nella pagina aperta si
+    // allinea al suo posto, e le tessere si rileggono poco dopo (una volta per raffica)
+    function raccolteDopoSchede(det) {
+      if (!$("tessere") || vis.sezione !== "cose") return;
+      const c = det && det.scheda;
+      if (c) {
+        const sez = sezioneDi(c);
+        if (racc.aperta && sez === "cose/" + racc.aperta) {
+          const box = $("pagina-schede");
+          const e = [...box.children].find((x) => x.dataset.chiave === String(chiaveDi(c)));
+          if (e) sch().allinea(e, costruisciScheda(c));
+          else caricaPagina(racc.aperta);
+        }
+        if (sez.split("/")[0] !== "cose") return;
+      } else if (racc.tessere.length) return;
+      // Le tessere poco dopo; anche la prima volta, se si è entrati prima della sessione
+      if (!racc.rinfresca) racc.rinfresca = setTimeout(() => { racc.rinfresca = null; aggiornaRaccolte(); }, 1500);
+    }
+    function tornaAlleTessere() {
+      if (racc.daTessere) { racc.daTessere = false; history.back(); return; }
+      vai("#/cose", true);
+    }
+    const indietro = $("pagina-indietro");
+    if (indietro) indietro.addEventListener("click", tornaAlleTessere);
 
     function segnaVisti() {
       let cambia = false;
@@ -357,6 +537,7 @@
       for (const r of document.querySelectorAll("#sez-cose .raccolta[data-raccolta]")) {
         if (raccolte.includes(r.dataset.raccolta)) r.dataset.nascosta = "1"; else delete r.dataset.nascosta;
       }
+      disegnaTessere();
       if (sezioni.includes(vis.sezione)) vai("#/adesso", true);
       else applicaPercorso();
     }
@@ -386,13 +567,19 @@
       car, vis, opzioni, TITOLI_SEZIONE, TIPI_RIMANDO, TIPI_APRONO,
       chiaveDi, sezioneDi, etichettaOra, ultimaConversazione, postiDi, disponi, sincronizza,
       apriSeServe, mostraIn, vaiA, percorsoDa, vai, applicaPercorso, applicaNascoste, avvia,
+      aggiornaRaccolte, raccolte: () => ({ tessere: racc.tessere.slice(), aperta: racc.aperta }),
       // Per le prove: dove sta ogni scheda, la sezione guardata, le novità
       stato() {
         const posti = {};
         for (const b of document.querySelectorAll("#sezioni [data-posto]")) posti[b.dataset.posto] = [...b.children].map((e) => e.dataset.chiave);
         const novita = {};
         for (const [k, v] of Object.entries(car.novita)) novita[k] = v.size;
-        return { sezione: vis.sezione, percorso: vis.percorso.slice(), modo: vis.modo, posti, novita,
+        const tessere = [...document.querySelectorAll("#tessere .tessera")].map((a) => ({ id: a.dataset.tessera,
+          conto: a.querySelector(".tessera-conto").textContent, novita: !a.querySelector(".tessera-pallino").hidden }));
+        const pagina = [...document.querySelectorAll("#pagina-schede > *")].map((e) => e.dataset.chiave);
+        const sc = $("sez-cose");
+        return { sezione: vis.sezione, percorso: vis.percorso.slice(), modo: vis.modo, posti, novita, tessere, pagina,
+          vistaCose: sc ? sc.dataset.vista || null : null,
           nascoste: { sezioni: vis.nascoste.sezioni.slice(), raccolte: vis.nascoste.raccolte.slice() } };
       },
     };

@@ -153,6 +153,21 @@ class Uscita:
             sp.say(testo)
         return detto
 
+    def muta(self, testo: str, atto: str, autore: str = "esito",
+             dopo_chiamate: int | None = None) -> dict | None:
+        """Una frase di Calliope che entra nella conversazione senza andare alla voce (28/10,
+        il tocco dallo schermo: chi tocca può essere al supermercato). Per l'osservatore è un
+        pezzo suo, chiuso e «sentito» (canale «muta»), così la proiezione ha lo stesso messaggio
+        della storia di Brain; lo speaker non la riceve."""
+        if not isinstance(testo, str) or not testo.strip():
+            return None
+        detto = {"testo": testo, "atto": atto, "autore": autore, "canale": "muta",
+                 "pronta": False, "t": time.time(), "dopo_chiamate": dopo_chiamate,
+                 "fonte": None}
+        self._nota(("frase", detto))
+        self._nota(("fine", [testo], False))
+        return detto
+
     def di_e_aspetta(self, testo: str, atto: str, autore: str | None = None) -> bool:
         """Una frase fuori da una risposta, in un turno della voce suo, e l'attesa che sia
         finita. Con l'uscita di un satellite controlla che lui l'abbia detta per intero (le

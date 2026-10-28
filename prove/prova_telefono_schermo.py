@@ -31,6 +31,10 @@ una riuscita non serve più; i tocchi sono veri (Input.dispatchMouseEvent: gesto
   (Conversazione e Adesso); novità sulla barra solo per ciò che non si vede, tolte guardando;
   router sul frammento (barra, #/cose/lavori, indirizzo sconosciuto → Adesso, gesto indietro);
   «In auto» a mano (niente barra, salvata) ed «Esci»;
+- Le mie cose (28/10, passo 2a): otto tessere coi conti dai servizi (Ufficio per chi amministra), due
+  colonne, il pallino dopo un cambiamento; la pagina Liste dalla tessera (schede del server al posto
+  delle tessere, il gesto indietro); la spunta manda il tocco giusto all'ingresso, resta in attesa,
+  si aggiorna con la lista del tool, un rifiuto (evento «tocco») o un 409 lo dice accanto;
 - modulo da compilare: si apre da solo nel suo strato, controlli mentre si scrive, «Invia»,
   «Compila» in Adesso sotto «Aspetta te»; «Scrivi» apre la casella col fuoco, la frase arriva e
   lo strato si chiude; Io ha prova del microfono, schermo acceso, certificato, «dimentica»;
@@ -539,6 +543,155 @@ def nascoste(t: Tel, hub):
              and t.v("getComputedStyle(document.querySelector('#barra a[data-sezione=\"casa\"]')).display") != "none")
 
 
+def prepara_raccolte(cfg, hub, cartella: Path):
+    """Le tessere e la pagina Liste (28/10, passo 2a): le liste di casa su disco e il profilo di
+    chi ha il telefono (amministra: anche la tessera Ufficio); gli altri servizi mancano."""
+    import types
+    from calliope.liste import Liste
+    from calliope.tools.spec import ToolContext
+    liste = Liste(str(cartella / "liste.db"))
+    liste.add("spesa", ["latte", "uova", "pane", "pomodori", "caffè"], "Dario")
+    hub.profilo = lambda pid: (types.SimpleNamespace(id="dario", name="Dario", admin=True, nascita=None, fascia=None)
+                               if pid == "dario" else None)
+    hub.tool_ctx = ToolContext(cfg=cfg, speakers=None, speaker_ctx=None, speaker=None, liste=liste)
+    return liste
+
+
+def raccolte(t: Tel, hub, liste):
+    """Le mie cose (28/10, passo 2a): le tessere coi conti dai servizi e il pallino; la pagina
+    Liste dalla tessera (le schede dal server, il gesto indietro); la spunta manda il tocco giusto,
+    resta in attesa, si aggiorna con la lista che manda il tool, e un rifiuto si dice accanto."""
+    from calliope.schermi import schede
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    t.v(f"{T}.vai('#/cose'); 1")
+    ok = aspetta(lambda: len(t.v(f"{S}.tessere") or []) == 8, 5)
+    tes = {x["id"]: x for x in t.v(f"{S}.tessere") or []}
+    verifica("raccolte: otto tessere in cima a Le mie cose (Ufficio per chi amministra)",
+             bool(ok) and list(tes) == ["liste", "agenda", "lavori", "cassetto", "documenti", "giochi", "studio", "ufficio"]
+             and t.v("document.getElementById('sez-cose').firstElementChild.id === 'tessere'"), json.dumps(tes)[:300])
+    verifica("raccolte: la tessera Liste col conto vero, senza pallino alla prima visita",
+             tes.get("liste", {}).get("conto") == "1" and not tes.get("liste", {}).get("novita"), json.dumps(tes.get("liste")))
+    stato = t.v("document.querySelector('#tessere [data-tessera=\"agenda\"] .tessera-stato').textContent")
+    verifica("raccolte: un servizio che manca dice «non disponibile» e la pagina «presto»",
+             tes.get("agenda", {}).get("conto") == "—" and "non disponibile" in stato and "presto" in stato, stato)
+    colonne = t.v("getComputedStyle(document.getElementById('tessere')).gridTemplateColumns.split(' ').length")
+    verifica("raccolte: due colonne sul telefono", colonne == 2, str(colonne))
+    # Un cambiamento della lista dopo la visita: il pallino
+    time.sleep(1.1)                              # «created» ha i secondi interi
+    liste.add("spesa", ["burro"], "Bianca")
+    t.v(f"{T}.aggiornaRaccolte(); 1")
+    ok = aspetta(lambda: any(x["id"] == "liste" and x["novita"] for x in t.v(f"{S}.tessere") or []), 5)
+    etichetta = t.v("document.querySelector('#tessere [data-tessera=\"liste\"]').getAttribute('aria-label')") or ""
+    verifica("raccolte: il pallino sulla tessera cambiata, detto anche a chi non vede", bool(ok) and "novità" in etichetta,
+             etichetta)
+    # La pagina Liste dalla tessera
+    t.tocca_sel('#tessere [data-tessera="liste"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/liste" and t.v(f"{S}.vistaCose") == "pagina"
+                 and t.v(f"{S}.pagina") == ["lista:spesa"], 5)
+    v = t.v("({titolo: document.getElementById('pagina-titolo').textContent,"
+            " tessere: getComputedStyle(document.getElementById('tessere')).display,"
+            " gruppo: getComputedStyle(document.querySelector('#sez-cose .raccolta[data-raccolta=\"liste\"]')).display})") or {}
+    verifica("pagina Liste: dalla tessera, con la lista del server, al posto delle tessere e dei gruppi",
+             bool(ok) and v.get("titolo") == "Liste" and v.get("tessere") == "none" and v.get("gruppo") == "none",
+             json.dumps(v))
+    verifica("pagina Liste: guardata, il pallino si toglie",
+             not any(x["id"] == "liste" and x["novita"] for x in t.v(f"{S}.tessere") or []))
+    spunte = t.v("[...document.querySelectorAll('#pagina-schede button.spunta')].map((b) => [b.dataset.voce,"
+                 " b.getAttribute('role'), b.getAttribute('aria-checked'), Math.round(b.getBoundingClientRect().height)])") or []
+    verifica("spunta: ogni voce è un tasto «checkbox» non spuntato, alto ≥ 44 px",
+             [s[0] for s in spunte] == ["latte", "uova", "pane", "pomodori", "caffè", "burro"]
+             and all(s[1] == "checkbox" and s[2] == "false" and s[3] >= 44 for s in spunte), json.dumps(spunte))
+    verifica("spunta: la regione per l'esito c'è già (role=status)",
+             t.v("!!document.querySelector('#pagina-schede .esito-tocco[role=\"status\"]')"))
+    while hub.ingresso.prendi() is not None:
+        pass
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="latte"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    verifica("spunta: il tocco giusto nell'ingresso (lista_togli col latte, a nome di chi ha il telefono)",
+             bool(ok) and item.get("tipo") == "tocco" and item.get("tool") == "lista_togli"
+             and item.get("argomenti") == {"cose": "latte", "lista": "spesa"} and item.get("persona") == "dario"
+             and item.get("pagina") == {"lista": "spesa", "voce": "latte"}, json.dumps(item, ensure_ascii=False)[:300])
+    b = t.v("(() => { const b = document.querySelector('#pagina-schede button.spunta[data-voce=\"latte\"]');"
+            " return {c: b.getAttribute('aria-checked'), busy: b.getAttribute('aria-busy'),"
+            " esito: b.closest('.scheda').querySelector('.esito-tocco').textContent}; })()") or {}
+    verifica("spunta: la voce resta segnata in attesa, detto nella regione di stato",
+             b.get("c") == "true" and b.get("busy") == "true" and "latte" in (b.get("esito") or ""), json.dumps(b))
+    # Il ciclo (qui finto): la voce tolta, la lista aggiornata dal tool e l'esito allo schermo
+    liste.remove("spesa", ["latte"])
+    tutti(hub, schede.lista("spesa", liste.read("spesa")[1], tolti=["latte"]))
+    hub.evento_a(item["schermo_id"], "tocco", {"tocco": "spunta_lista", "ok": True, "pagina": item["pagina"]})
+    ok = aspetta(lambda: t.v("[...document.querySelectorAll('#pagina-schede button.spunta')].map((b) => b.dataset.voce)")
+                 == ["uova", "pane", "pomodori", "caffè", "burro"]
+                 and t.v("document.querySelector('#pagina-schede .esito-tocco').textContent") == "", 5)
+    verifica("spunta: la lista aggiornata dal tool sostituisce quella della pagina, al suo posto", bool(ok))
+    # Un rifiuto dal ciclo (evento «tocco»): la voce torna com'era, il motivo accanto
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="uova"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "spunta_lista", "ok": False,
+                                                    "errore": "Non hai il permesso per farlo.", "pagina": item.get("pagina")})
+    ok = aspetta(lambda: t.v("(() => { const b = document.querySelector('#pagina-schede button.spunta[data-voce=\"uova\"]');"
+                             " return b.getAttribute('aria-checked') === 'false' && !b.hasAttribute('aria-busy')"
+                             " && b.closest('.scheda').querySelector('.esito-tocco').textContent === 'Non hai il permesso per farlo.'; })()"), 5)
+    verifica("spunta: un rifiuto del ciclo la toglie e lo dice accanto", bool(ok))
+    # Un errore HTTP (la voce tolta nel frattempo da un'altra parte): 409 col motivo
+    liste.remove("spesa", ["pane"])
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="pane"]')
+    ok = aspetta(lambda: t.v("(() => { const b = document.querySelector('#pagina-schede button.spunta[data-voce=\"pane\"]');"
+                             " return b.getAttribute('aria-checked') === 'false'"
+                             " && b.closest('.scheda').querySelector('.esito-tocco').textContent.includes('non c\\'è più'); })()"), 5)
+    verifica("spunta: una voce che non c'è più (409) torna com'era, col motivo", bool(ok) and hub.ingresso.vuoto(),
+             t.v("document.querySelector('#pagina-schede .esito-tocco').textContent"))
+    # Riuscito senza la lista aggiornata (SSE perso, schede automatiche spente in un hub vecchio):
+    # la voce resta spuntata e non si ritocca, invece di tornare libera
+    sel = lambda v: f"document.querySelector('#pagina-schede button.spunta[data-voce=\"{v}\"]')"  # noqa: E731
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="pomodori"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "spunta_lista", "ok": True, "pagina": item.get("pagina")})
+    ok = aspetta(lambda: t.v(f"{sel('pomodori')}.getAttribute('aria-disabled') === 'true'"
+                             f" && {sel('pomodori')}.getAttribute('aria-checked') === 'true'"
+                             f" && !{sel('pomodori')}.hasAttribute('aria-busy')"), 5)
+    verifica("spunta: riuscita senza la lista nuova, la voce resta spuntata (non torna libera)", bool(ok))
+    # Una lista più recente che contiene ancora la voce («rimettilo» a voce): si tocca di nuovo
+    tutti(hub, schede.lista("spesa", liste.read("spesa")[1]))
+    ok = aspetta(lambda: t.v(f"{sel('pomodori')}.getAttribute('aria-checked') === 'false'"
+                             f" && !{sel('pomodori')}.hasAttribute('aria-disabled')"), 5)
+    verifica("spunta: la voce rimessa in una lista nuova si tocca di nuovo", bool(ok))
+    # Nessun esito entro l'attesa (un turno a voce in corso): la pagina lo dice com'è, e un
+    # secondo tocco della stessa voce non rimanda niente
+    t.v("window.calliopeSchermo.spunta.attesaMs = 1500; 1")
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="caffè"]')
+    aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    esito = f"{sel('caffè')}.closest('.scheda').querySelector('.esito-tocco').textContent"
+    ok = aspetta(lambda: "occupata" in (t.v(esito) or "") and t.v(f"{sel('caffè')}.getAttribute('aria-checked')") == "true", 5)
+    verifica("spunta: senza esito la pagina dice che Calliope è occupata (il tocco è in coda)", bool(ok), t.v(esito))
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="caffè"]')
+    time.sleep(0.5)
+    verifica("spunta: un secondo tocco della stessa voce non rimanda il tocco", hub.ingresso.vuoto()
+             and "occupata" in (t.v(esito) or ""))
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "spunta_lista", "ok": True, "pagina": item.get("pagina")})
+    ok = aspetta(lambda: t.v(f"{sel('caffè')}.getAttribute('aria-disabled')") == "true" and t.v(esito) == "", 5)
+    verifica("spunta: l'esito che arriva dopo chiude l'attesa", bool(ok))
+    t.v("window.calliopeSchermo.spunta.attesaMs = 30000; 1")
+    # Il gesto indietro torna alle tessere; una tessera senza pagina porta al suo gruppo
+    t.v("history.back(); 1")
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose" and t.v(f"{S}.vistaCose") == "tessere"
+                 and t.v("getComputedStyle(document.getElementById('tessere')).display") != "none", 3)
+    verifica("pagina Liste: il gesto indietro torna alle tessere", bool(ok))
+    t.tocca_sel('#tessere [data-tessera="agenda"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/agenda" and t.v(f"{S}.vistaCose") == "tessere", 3)
+    verifica("raccolte: una tessera senza pagina resta sulle tessere e porta al suo gruppo", bool(ok))
+    # Una scheda della lista da Adesso («Apri») porta alla pagina, con la scheda in vista
+    t.v(f"{T}.vaiA('lista:spesa'); 1")
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/liste/lista%3Aspesa" and t.v(f"{S}.vistaCose") == "pagina", 3)
+    verifica("raccolte: la scheda della lista porta alla pagina Liste", bool(ok), t.v("location.hash"))
+    t.v(f"{T}.vai('#/adesso'); 1")
+
+
 def modulo_e_scrivi(t: Tel, hub):
     """Il modulo da compilare si apre da solo in uno strato; la casella per scrivere si apre
     da «Scrivi»; Io ha tutto il resto."""
@@ -704,7 +857,7 @@ MISURA = r"""(() => {
   const bassi = conTesto.map((e) => [nome(e), contrasto(e)]).filter(([, c]) => c < 4.5)
     .map(([n, c]) => n + ' ' + c.toFixed(2));
   const tocchi = ['parla', 'microfono', 'scrivi-apri', 'foto-apri', 'auto-apri', 'auto-esci'].map((id) => document.getElementById(id))
-    .concat([...document.querySelectorAll('#barra a')]).filter(vis)
+    .concat([...document.querySelectorAll('#barra a, #tessere .tessera, #sezioni button.spunta, #pagina-indietro')]).filter(vis)
     .map((e) => e.getBoundingClientRect()).map((r) => Math.min(r.width, r.height));
   return {
     scorre: se.scrollHeight > H + 1 || se.scrollWidth > W + 1 || g.scrollHeight > g.clientHeight + 1,
@@ -1063,6 +1216,7 @@ def main() -> int:
             print("Nessun Edge né Chromium: prova saltata.")
             return SALTATA
         cfg, srv, hub, web = avvia(TMP / "server")
+        liste = prepara_raccolte(cfg, hub, TMP / "server")
         _, token = srv.archivio.crea_con_token("telefono", proprietario="dario",
                                                proprietario_nome="Dario")
         url = f"http://127.0.0.1:{web.port}/telefono/"
@@ -1080,6 +1234,7 @@ def main() -> int:
             scenari(t, srv)
             misure(t, "0schede")
             sezioni(t, hub)
+            raccolte(t, hub, liste)
             misure(t, "schede")
             una_per_una(t)
             _, spec = modulo_e_scrivi(t, hub)

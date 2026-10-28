@@ -6402,6 +6402,32 @@ class Brain:
                              "content": "Va bene, mi fermo. (argomento chiuso)"})
         self.salva_conversazione()
 
+    def record_tocco(self, testo: str, nome: str, argomenti: dict, risultato: str,
+                     conferma: str = "Fatto."):
+        """Un tocco dallo schermo personale riuscito (28/10, schermi/tocchi.py: la spunta della
+        lista) nella conversazione della persona, come un turno con la sua chiamata: la frase
+        («(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)»), la chiamata del tool,
+        il suo esito e la conferma di Calliope (`conferma`, non detta). Così «rimettilo» detto dopo sa che cosa è stato fatto, e la frase dopo
+        non è un secondo messaggio della persona di fila (revisione della PR #261).
+
+        Come una risposta: la conversazione scaduta o di un'altra persona si chiude prima, il
+        turno vale come ultimo (`last_turn_at`) e la conversazione va su disco. Anche con
+        `eventi: attivo`: è il turno vivo (dopo `vivo_da`), che l'ombra ricopia negli eventi
+        (detto_persona col canale «tocco», chiamata_tool, esito_tool), e la proiezione dopo
+        dà gli stessi messaggi."""
+        self._check_conversation()
+        self.dalla_proiezione()
+        self.last_turn_at = time.monotonic()
+        call = {"id": "call_tocco", "name": nome, "arguments": dict(argomenti or {})}
+        self.history.append({"role": "user", "content": testo})
+        self.history.append({"role": "assistant", "content": "", "tool_calls": [call]})
+        self.history.append({"role": "tool", "tool_call_id": call["id"], "name": nome,
+                             "content": risultato})
+        # Il turno chiude con Calliope, come _sfida_reply e record_stop (seconda revisione della
+        # PR #261): la conferma del tool, non detta (negli eventi un detto_calliope «muta»)
+        self.history.append({"role": "assistant", "content": conferma or "Fatto."})
+        self.salva_conversazione()
+
     def record_courtesy(self, user_text: str, reply: str):
         """«Grazie» → «Prego!» (05/10, calliope/cortesia.py): detto senza il modello, entra
         nella storia come scambio chiuso, così il modello non lo ripete né lo riprende."""

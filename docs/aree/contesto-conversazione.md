@@ -2771,3 +2771,28 @@ l'etichetta nuova arriva anche a `stanza_cerca`, al giudizio «rivolta» (in omb
 più quello misurato il 09/10, da rileggere prima di accenderlo) e al riassunto della corsia lenta;
 il guardiano a posteriori ha la sua etichetta e resta «Calliope».
 
+
+## Il tocco dallo schermo come turno della conversazione (28/10, issue #256, ramo `issue-256-raccolte`)
+
+Un tocco che cambia qualcosa dallo schermo personale (la spunta della lista, [schermi-telefono](schermi-telefono.md))
+entra nella conversazione della persona come un turno (decisione 10 del progetto del telefono a
+sezioni). `Brain.record_tocco` lo scrive come una risposta con un tool: prima chiude la conversazione
+scaduta o di un'altra persona (`_check_conversation`), poi scrive quattro messaggi. Il primo è la frase
+della persona («(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)»), il secondo il
+messaggio di Calliope con la chiamata di `lista_togli` e i suoi argomenti, il terzo l'esito del tool, il
+quarto la conferma del tool come messaggio di Calliope («Ho tolto latte dalla lista della spesa.»), non
+detta. Infine segna `last_turn_at` e salva la conversazione (`salva_conversazione`). Così «rimettilo»
+detto dopo sa che cosa è stato fatto, e il turno chiude con Calliope come `_sfida_reply` e `record_stop`
+(seconda revisione della PR #261: dopo un messaggio `tool` il template di Gemma 4 su vLLM poteva lasciare
+la frase della persona dentro il turno del modello).
+
+Nel registro dei turni il tocco ha `esito` e `canale` «tocco», con il tool. Nel registro degli eventi
+c'è un `detto_persona` col canale «tocco» e `come` «schermo» (`eventi/tipi.CANALI_PERSONA`,
+`ombra.ESITI_PERSONA`), più `chiamata_tool` ed `esito_tool`, ricopiati dall'ombra dal turno vivo, e la
+conferma come `detto_calliope` col canale «muta» e l'atto `tocco_esito` (`Uscita.muta`: l'osservatore la
+riceve come un pezzo sentito, la voce no). La proiezione dà gli stessi messaggi della storia di Brain,
+quindi con `eventi: attivo` non cambia niente; in ombra resta solo il motivo dichiarato
+`canale_scritto`. Un tocco rifiutato non entra nella storia (`esito` «rifiutato», canale «tocco»).
+*[storico: fino alla prima revisione della PR #261 la riga andava in `brain.history` a mano, senza
+`last_turn_at` né salvataggio, e con la frase dopo c'erano due messaggi della persona di fila; fino alla
+seconda il turno chiudeva con l'esito del tool]*

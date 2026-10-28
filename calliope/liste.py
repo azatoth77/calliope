@@ -14,6 +14,7 @@ import difflib
 import re
 import sqlite3
 import threading
+import time
 
 from .persistenza import apri_db, prepara_schema
 
@@ -137,7 +138,24 @@ class Liste:
                     else:
                         missing.append(it)
             self.db.commit()
+            if removed:
+                self._tolte_alle = time.time()
         return key, removed, missing
+
+    def ultimo_cambio(self) -> float | None:
+        """L'ultimo cambiamento delle liste (epoch), per il pallino della tessera Liste (28/10,
+        schermi/raccolte.py): l'ultima voce aggiunta, o l'ultima tolta da questo processo (le
+        voci tolte non lasciano traccia nel database)."""
+        with self._lock:
+            r = self.db.execute("SELECT MAX(created) FROM liste").fetchone()
+        t = None
+        if r and r[0]:
+            try:
+                t = datetime.datetime.fromisoformat(r[0]).timestamp()
+            except ValueError:
+                t = None
+        tolte = getattr(self, "_tolte_alle", None)
+        return max(x for x in (t, tolte) if x is not None) if (t or tolte) else None
 
     def names(self) -> list[str]:
         with self._lock:

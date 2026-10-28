@@ -24,6 +24,8 @@ schermi e dei satelliti veri su 127.0.0.1, un satellite finto legato allo scherm
   dell'archivio resta anche dopo otto schede e prende i turni nuovi; il «Cruscotto» della testa
   porta in Io con la scheda, e il suo ridisegno periodico non ci riporta; «Schermo intero» della
   conversazione apre lo strato coi turni; «Pulisci le mie schede» in Io con due clic;
+- Le mie cose (28/10, passo 2a): le tessere coi conti, più di due per riga; la pagina Liste dalla
+  tessera; la spunta manda il tocco giusto; contrasto e clic ≥ 44 px a 1440×900 e 700×900;
 - nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> gli screenshot.
 """
 
@@ -101,7 +103,7 @@ MISURA = r"""(() => {
         fuori.push(aree[i][0] + ' sopra ' + aree[j][0]);
     }
   }
-  const scatole = [...document.querySelectorAll('#barra a, #pc-parla, #pc-conv-apri, #sez-titolo')].filter(vis);
+  const scatole = [...document.querySelectorAll('#barra a, #pc-parla, #pc-conv-apri, #sez-titolo, #tessere .tessera, #pc button.spunta, #pagina-indietro')].filter(vis);
   for (const e of scatole) if (e.scrollWidth > e.clientWidth + 1) fuori.push(nome(e) + ' trabocca');
   const clic = scatole.filter((e) => e.id !== 'sez-titolo').map((e) => { const r = e.getBoundingClientRect(); return [nome(e), Math.round(Math.min(r.width, r.height))]; })
     .filter(([, m]) => m < 44);
@@ -141,6 +143,8 @@ def avvia_server():
     arch = hub.archivio
     s_pc, t_pc = arch.crea_con_token("studio", proprietario="dario", proprietario_nome="Dario")
     arch.lega_satellite(s_pc["id"], 5)
+    # Le tessere e la pagina Liste (28/10, passo 2a): le liste di casa e il profilo di Dario
+    PTS.prepara_raccolte(cfg, hub, TMP)
     _, t_stanza = arch.crea_con_token("cucina")
     hub._rinfresca()
     return cfg, srv, hub, web, pc, t_pc, t_stanza
@@ -200,6 +204,7 @@ def personale(exe, srv, hub, web, pc, t_pc):
         p.valuta("history.back(); 1")
         ok = aspetta(lambda: (p.valuta(f"{P}.stato()") or {}).get("sezione") == "adesso", 3)
         verifica("barra: il gesto indietro torna ad Adesso", bool(ok))
+        raccolte_pc(p, hub)
         foto(p, "pc-1440x900.png")
         # «Parla»: il satellite riceve «tocco»
         ok = aspetta(lambda: p.valuta("!document.getElementById('pc-parla').hidden"), 3)
@@ -256,6 +261,51 @@ def personale(exe, srv, hub, web, pc, t_pc):
         verifica("schermo personale: nessun errore JS né CSP", not errori, "; ".join(errori)[:300])
     finally:
         p.chiudi()
+
+
+def raccolte_pc(p, hub):
+    """Le mie cose sul PC personale (28/10, passo 2a): le tessere coi conti (più di due per riga),
+    la pagina Liste dalla tessera, la spunta che manda il tocco giusto, clic ≥ 44 px e contrasto
+    AA a 1440×900 e 700×900; il gesto indietro torna alle tessere."""
+    P = "window.calliopePC"
+    S = f"({P}.stato() || {{}})"
+    p.valuta(f"{P}.vai('#/cose'); 1")
+    ok = aspetta(lambda: len(p.valuta(f"{S}.tessere") or []) == 8, 5)
+    tes = {x["id"]: x for x in p.valuta(f"{S}.tessere") or []}
+    colonne = p.valuta("getComputedStyle(document.getElementById('tessere')).gridTemplateColumns.split(' ').length")
+    verifica("PC: otto tessere in cima a Le mie cose, coi conti, più di due per riga",
+             bool(ok) and tes.get("liste", {}).get("conto") == "1" and "ufficio" in tes and (colonne or 0) >= 3,
+             f"{colonne} {json.dumps(tes)[:200]}")
+    clic(p, '#tessere [data-tessera="liste"]')
+    ok = aspetta(lambda: p.valuta("location.hash") == "#/cose/liste" and p.valuta(f"{S}.vistaCose") == "pagina"
+                 and p.valuta(f"{S}.pagina") == ["lista:spesa"], 5)
+    spunte = p.valuta("[...document.querySelectorAll('#pagina-schede button.spunta')].map((b) => b.dataset.voce)") or []
+    verifica("PC: la pagina Liste dalla tessera, con le voci da spuntare",
+             bool(ok) and spunte[:2] == ["latte", "uova"], json.dumps(spunte))
+    while hub.ingresso.prendi() is not None:
+        pass
+    clic(p, '#pagina-schede button.spunta[data-voce="uova"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    verifica("PC: la spunta manda il tocco giusto (lista_togli con le uova, a nome di Dario)",
+             bool(ok) and item.get("tipo") == "tocco" and item.get("tool") == "lista_togli"
+             and item.get("argomenti") == {"cose": "uova", "lista": "spesa"} and item.get("persona") == "dario",
+             json.dumps(item, ensure_ascii=False)[:300])
+    for w, h in ((1440, 900), (700, 900)):
+        dimensione(p, w, h)
+        time.sleep(0.3)
+        m = p.valuta(MISURA) or {}
+        foto(p, f"pc-{w}x{h}-liste.png")
+        verifica(f"PC {w}×{h} pagina Liste: contrasto AA, clic ≥ 44 px, niente fuori",
+                 not m.get("bassi") and not m.get("clic") and not m.get("fuori") and not m.get("scorre"),
+                 json.dumps([m.get("bassi"), m.get("clic"), m.get("fuori")])[:240])
+    dimensione(p, 1440, 900)
+    p.valuta("history.back(); 1")
+    ok = aspetta(lambda: p.valuta("location.hash") == "#/cose" and p.valuta(f"{S}.vistaCose") == "tessere", 3)
+    m = p.valuta(MISURA) or {}
+    verifica("PC: il gesto indietro torna alle tessere; contrasto e clic delle tessere",
+             bool(ok) and not m.get("bassi") and not m.get("clic"), json.dumps([m.get("bassi"), m.get("clic")])[:240])
+    p.valuta(f"{P}.vai('#/adesso'); 1")
 
 
 def turno(domanda, risposta, t):

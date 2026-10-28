@@ -20,6 +20,7 @@ errore (così era nato il difetto dello stato della voce sugli schermi, P9). Qui
 import concurrent.futures
 import dataclasses
 import datetime
+import json
 import re
 import threading
 import time
@@ -1530,6 +1531,12 @@ class Ciclo:
         self.sveglia.clear()          # la sveglia era per questo: l'ascolto non gira a vuoto
         if not self.ingresso.vuoto():
             self.sveglia.set()
+        if scritto.get("tipo") == "tocco":
+            # Un tocco dallo schermo personale (28/10, schermi/tocchi.py): si fa sempre, anche
+            # senza una conversazione a voce (decisione di chi amministra del 28/10), e non ha
+            # una risposta da instradare
+            t.scritto = scritto
+            return None
         # Di nuovo qui (05/10): la conversazione può essere finita mentre il testo
         # aspettava in coda («esci» detto un attimo prima). Niente al ciclo
         ok, motivo = schermi.scrittura_consentita(schermi.schermo(scritto.get("schermo_id")))
@@ -1561,6 +1568,8 @@ class Ciclo:
             return self._foto_dallo_schermo(t)
         if tipo == "modulo":
             return self._modulo_dallo_schermo(t)
+        if tipo == "tocco":
+            return self._tocco_dallo_schermo(t)
         return None
 
     def _senza_domanda(self, t, frase: str):
@@ -1730,6 +1739,160 @@ class Ciclo:
             self.rec["risposta"] = oscura(esito["frase"])
         self.awake_until = time.monotonic() + self.s.cfg.followup_s
         return _FINE
+
+    # I segni di chi parla che valgono una frase (come in _chi_parla): per il tocco si azzerano,
+    # perché chi tocca è il proprietario dello schermo e non la voce del turno prima, e dopo si
+    # rimettono com'erano, così il tocco non cambia la conversazione a voce in corso
+    _SEGNI_TOCCO = ("current_speaker", "identified_by", "from_session", "conferma_breve",
+                    "sfida_superata", "breve_impronta_ok", "incerta", "minore_vicino",
+                    "minore_incerto", "compagnia", "compagnia_sconosciute", "senza_nome",
+                    "conoscente", "minore_ospite")
+    _AZZERATI_TOCCO = {"from_session": False, "conferma_breve": False, "sfida_superata": False,
+                       "breve_impronta_ok": False, "compagnia": False,
+                       "compagnia_sconosciute": False, "senza_nome": False}
+    # Il contesto dei tool che Brain imposta a ogni chiamata: per il tocco senza la politica del
+    # turno (ferma solo i tool vietati) e con la descrizione al posto della frase
+    _CTX_TOCCO = ("politica", "user_text", "regole", "politica_esito", "strumenti",
+                  "errore_registro")
+
+    def _tocco_dallo_schermo(self, t):
+        """Un tocco che cambia qualcosa dallo schermo personale (28/10, schermi/tocchi.py: la
+        spunta della lista). Vale come una frase del proprietario dello schermo: passa da
+        `ToolRegistry.call` col suo livello e `identified_by` «schermo» (i tool che vogliono la
+        voce restano rifiutati), entra nella sua conversazione come un turno con la sua chiamata
+        (`Brain.record_tocco`), nel registro dei turni con `esito` «tocco» e negli eventi con il
+        canale «tocco». Niente frase detta né suoni: chi tocca può essere al supermercato. Un
+        rifiuto o un errore va solo allo schermo, con l'evento SSE «tocco»: sempre, anche se
+        qui qualcosa si rompe (revisione della PR #261: la spunta restava in attesa)."""
+        scritto = t.scritto
+        try:
+            return self._tocco(t)
+        except Exception as e:  # noqa: BLE001 — la pagina deve sapere com'è andata
+            print(f"   [SCHERMI] tocco non riuscito: {type(e).__name__}: {e}", flush=True)
+            inizio = datetime.datetime.fromtimestamp(scritto.get("arrivato") or time.time())
+            self.rec = {"inizio": inizio.isoformat(timespec="milliseconds"), "canale": "tocco",
+                        "esito": "rifiutato", "schermo": scritto.get("schermo"),
+                        "motivo": f"errore: {type(e).__name__}", "regole": ["tocco_errore"]}
+            self._esito_tocco(scritto, False, "")
+            return _FINE
+
+    def _tocco(self, t):
+        scritto, brain, s = t.scritto, self.brain, self.s
+        ctx = self.tool_ctx
+        # Quello che legge ToolRegistry.call (nel ciclo vero è lo stesso di self.speaker_ctx)
+        sc = getattr(ctx, "speaker_ctx", None) or self.speaker_ctx
+        tool = str(scritto.get("tool") or "")
+        args = dict(scritto.get("argomenti") or {})
+        descr = str(scritto.get("descrizione") or "")
+        inizio = datetime.datetime.fromtimestamp(scritto.get("arrivato") or time.time())
+        prof = s.registry.by_id(scritto.get("persona")) if scritto.get("persona") else None
+        base = {"inizio": inizio.isoformat(timespec="milliseconds"), "canale": "tocco",
+                "durata_s": 0.0, "sveglia": False}
+        if prof is None:
+            # Lo schermo personale di una persona che non c'è più: niente a nome di nessuno
+            self.rec = {**base, "esito": "rifiutato", "schermo": scritto.get("schermo"),
+                        "motivo": "proprietario sconosciuto", "regole": ["tocco_senza_persona"]}
+            self._esito_tocco(scritto, False, "Non so di chi è questo schermo.")
+            return _FINE
+        voce = {"nome": prof.name, "modo": "schermo", "schermo": scritto.get("schermo"),
+                "id": prof.id}
+        # Gli orari dei tutori (revisione della PR #261): fuori orario un minore non cambia
+        # niente nemmeno toccando, come a voce e scrivendo (fase _fuori_orario)
+        orario = minori.fuori_orario(prof)
+        if orario:
+            self.rec = {**base, "esito": "rifiutato", "voce": voce, "testo": descr,
+                        "motivo": "fuori_orario", "tocco": scritto.get("tocco"),
+                        "regole": ["minore_fuori_orario"]}
+            self._esito_tocco(scritto, False, minori.frase_fuori_orario(prof, orario))
+            return _FINE
+        # Il tocco è della conversazione della persona (come il modulo, corsie.py)
+        self.corsia.turno(brain, prof.name, "schermo", True, persona_id=prof.id)
+        segni = {k: getattr(sc, k, None) for k in self._SEGNI_TOCCO if hasattr(sc, k)}
+        prima_ctx = {k: getattr(ctx, k, None) for k in self._CTX_TOCCO}
+        regole: list = []
+        ok, res, livello = False, {}, None
+        try:
+            for k in segni:
+                setattr(sc, k, self._AZZERATI_TOCCO.get(k))
+            sc.current_speaker, sc.identified_by = prof.name, "schermo"
+            livello = sc.current_level
+            for k, v in (("politica", None), ("user_text", descr), ("regole", regole),
+                         ("politica_esito", None), ("strumenti", s.tools),
+                         ("errore_registro", False)):
+                try:
+                    setattr(ctx, k, v)
+                except AttributeError:
+                    pass
+            grezzo = s.tools.call(tool, args, ctx, livello)
+            try:
+                res = json.loads(grezzo)
+            except (TypeError, ValueError):
+                res = {"ok": False, "errore": "risposta del tool illeggibile"}
+            res = res if isinstance(res, dict) else {"ok": True}
+            ok = res.get("ok") is not False
+            if ok and hasattr(brain, "record_tocco"):
+                # Nella conversazione con la sua chiamata, con chi tocca ancora come chi parla
+                # (la conversazione è sua: scaduta o d'altri si chiude prima)
+                conferma = str(res.get("conferma") or res.get("risposta_finale")
+                               or "Fatto.").strip()
+                brain.record_tocco(descr, tool, args, grezzo, conferma)
+                # La stessa conferma negli eventi, senza voce: storia e proiezione uguali
+                self.uscita.muta(conferma, "tocco_esito", dopo_chiamate=1)
+        finally:
+            for k, v in segni.items():
+                setattr(sc, k, v)
+            for k, v in prima_ctx.items():
+                try:
+                    setattr(ctx, k, v)
+                except AttributeError:
+                    pass
+        spec = s.tools.get(tool) if hasattr(s.tools, "get") else None
+        riga = {"nome": tool, "argomenti": oscura_tutto(args), "ok": ok,
+                "azione": getattr(spec, "risk", "azione") != "lettura"}
+        self.rec = {**base, "esito": "tocco" if ok else "rifiutato", "livello": livello,
+                    "voce": voce, "testo": descr, "tool": [riga],
+                    "tocco": scritto.get("tocco"), "regole": list(regole)}
+        if not ok:
+            self.rec["motivo"] = str(res.get("motivo") or res.get("errore") or "")[:200]
+        print(f"\n👆 Tocco dallo schermo «{scritto.get('schermo')}» di {prof.name}: "
+              f"{tool} → {'fatto' if ok else 'no'}", flush=True)
+        if ok:
+            t.text = descr
+            self._meta_turno = {"t": round(inizio.timestamp(), 3), "canale": "tocco"}
+            self._schede_del_tocco(res, scritto)
+        frase = str(res.get("risposta_finale") or res.get("conferma") or res.get("errore")
+                    or "").strip()
+        self._esito_tocco(scritto, ok, frase if not ok else "")
+        return _FINE
+
+    def _schede_del_tocco(self, res: dict, scritto: dict):
+        """Le schede del risultato (la lista aggiornata) allo schermo del tocco, e solo a lui
+        (revisione della PR #261): la spunta aspetta lì l'aggiornamento, anche con le schede
+        automatiche spente; chi spunta al supermercato non fa comparire la spesa sulla TV."""
+        hub, sid = self.s.schermi, scritto.get("schermo_id")
+        if hub is None or sid is None:
+            return
+        for card in [c for c in (res.get("scheda"), res.get("schede")) if c]:
+            for c in (card if isinstance(card, list) else [card]):
+                try:
+                    hub.invia_a(sid, c)
+                except Exception as e:  # noqa: BLE001 — lo schermo non ferma il ciclo
+                    print(f"   [SCHERMI] scheda del tocco non inviata: {type(e).__name__}",
+                          flush=True)
+
+    def _esito_tocco(self, scritto: dict, ok: bool, errore: str):
+        """L'esito del tocco alla pagina che l'ha mandato (evento SSE «tocco»): la spunta in
+        attesa si toglie, e un errore si dice accanto."""
+        hub, sid = self.s.schermi, scritto.get("schermo_id")
+        if hub is None or sid is None or not hasattr(hub, "evento_a"):
+            return
+        dati = {"tocco": scritto.get("tocco"), "ok": ok, "pagina": scritto.get("pagina") or {}}
+        if not ok:
+            dati["errore"] = errore or "Non ci sono riuscita: riprova o chiedimelo a voce."
+        try:
+            hub.evento_a(sid, "tocco", dati)
+        except Exception:  # noqa: BLE001 — lo schermo non ferma il ciclo
+            pass
 
     # ── fase 2: ascolto ──
     def _ascolta(self, t):
