@@ -25,6 +25,15 @@ import tempfile
 from pathlib import Path
 
 
+def senza_pc(c) -> bool:
+    """Nessun PC collegato a cui mandare un file (revisione della PR #294): nessun satellite, o
+    quello raggiunto è il telefono (canale «telefono», niente esecutore). Un satellite di un PC
+    senza i file (vecchio, o senza l'esecutore) è un PC che non li riceve."""
+    if c is None:
+        return True
+    return getattr(c, "canale", None) == "telefono" and getattr(c, "esecutore", None) is None
+
+
 def documents_folder() -> Path:
     """La cartella Documenti dell'utente, chiesta a Windows (known folder
     FOLDERID_Documents): segue lo spostamento su OneDrive o su un altro disco. Su Linux
@@ -201,8 +210,7 @@ class RemoteDelivery:
             # Il motivo detto sul PC, vero da qualunque dispositivo si parli (revisione della
             # PR #294: dal telefono «il dispositivo da cui mi parli non riceve file» era falso,
             # il telefono riceve i file con «Scarica»)
-            perche = (f"il {self.nome} non è collegato"
-                      if c is None or getattr(c, "esecutore", None) is None
+            perche = (f"il {self.nome} non è collegato" if senza_pc(c)
                       else f"il {self.nome} non riceve file")
             return self._sul_server(stem, ext, data, replace, mtime, perche)
         sostituisci = replace if replace and str(replace).startswith(self.RIF) else None

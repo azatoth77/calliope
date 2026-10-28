@@ -1889,8 +1889,8 @@ class Lavori:
         if c is None or not (getattr(c, "esecutore", None) or {}).get("file"):
             # Il motivo sul PC (revisione della PR #294): «il dispositivo da cui mi parli» era il
             # satellite attivo quando il lavoro finisce, non quello di chi l'ha chiesto
-            self._dove_in_casa(lav, ris, f"il {nome_pc} non è collegato"
-                               if c is None or getattr(c, "esecutore", None) is None
+            from ..documenti.consegna import senza_pc
+            self._dove_in_casa(lav, ris, f"il {nome_pc} non è collegato" if senza_pc(c)
                                else f"il {nome_pc} non riceve file")
             return
         try:

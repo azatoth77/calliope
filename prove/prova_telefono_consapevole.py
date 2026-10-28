@@ -477,7 +477,7 @@ def prova_frasi():
     d = RemoteDelivery(SrvSenzaFile(None), LocalDelivery(TMP / "riserva"), "portatile").deliver("A", "pdf", b"%PDF")
     verifica("consegna, portatile non collegato: «tra i miei documenti, perché il portatile non è collegato»",
              d["dove"] == "tra i miei documenti, perché il portatile non è collegato", d["dove"])
-    tel = types.SimpleNamespace(esecutore=None)
+    tel = types.SimpleNamespace(esecutore=None, canale="telefono")
     d = RemoteDelivery(SrvSenzaFile(tel), LocalDelivery(TMP / "riserva"), "portatile").deliver("B", "pdf", b"%PDF")
     verifica("consegna dal telefono: il motivo sul PC, vero da qualunque dispositivo (niente «da cui mi parli»)",
              d["dove"] == "tra i miei documenti, perché il portatile non è collegato", d["dove"])
