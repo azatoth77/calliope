@@ -299,7 +299,9 @@ def main(argv=None):
     ap.add_argument("--font-titolo", default=None)
     a = ap.parse_args(argv)
     uscita = a.uscita.expanduser().resolve()
-    if str(uscita).startswith(str(QUI.parent.parent.resolve())) and "privato" not in uscita.parts:
+    # dentro la cartella del repository (per percorso, non per prefisso: «/tmp/b303-immagini» non
+    # è dentro «/tmp/b303»), fuori da privato/
+    if uscita.is_relative_to(QUI.parent.parent.resolve()) and "privato" not in uscita.parts:
         raise SystemExit("le immagini non vanno nel repository: scegli una cartella fuori "
                          "(o dentro privato/)")
     genera(uscita, a.materiali, tuple(v for v in a.varianti.split(",") if v), a.font_mano,

@@ -140,6 +140,9 @@ def esegui_uno(run, cop, i, d, prec, immagini, uscita: Path):
     run.log(f"   {i}. Leo: {rec.get('detto')!r} → {rec.get('esito_passo')} "
             f"[{','.join(rec.get('tool') or [])}] {rec.get('lat_s')} s | "
             f"{(rec.get('risposta') or '')[:160]!r}")
+    # I casi contrari del copione (28/10 sera, issue #303): le attese non rispettate
+    for e in rec.get("errori") or []:
+        run.log(f"      ✗ {e}")
     if uscita:
         (uscita).write_text(json.dumps({k: rec.get(k) for k in (
             "detto", "risposta", "tool", "regole", "esito", "livello", "lat_s", "prima_frase_s",
@@ -161,9 +164,12 @@ def main(argv=None):
     ap.add_argument("--voce-leo", default=LEO.voce,
                     help="voce di Piper di Leo (il 28/10 «leonardo» non faceva scattare la wake "
                          "word)")
+    ap.add_argument("--calliope", default=None,
+                    help="cartella con calliope/ e calliope.yaml da provare (un ramo): l'istanza "
+                         "usa quel codice col venv della versione installata (lancia --codice-qui)")
     ap.add_argument("--tieni", action="store_true")
     a = ap.parse_args(argv)
-    a.codice, a.calliope, a.stt, a.telefono = None, None, None, 0.0
+    a.codice, a.stt, a.telefono = None, None, 0.0
     LEO.voce = a.voce_leo
     VO.PERSONE["Leo"] = LEO
     I.Istanza._abbina = _abbina_con_leo

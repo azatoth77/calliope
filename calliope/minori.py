@@ -577,6 +577,13 @@ def frase_fuori_orario(prof, orario: str) -> str:
 # Vale anche per i conti: `calcola` dà il risultato, che serve a controllare la sua risposta
 REGOLA_COMPITI = ("compiti: guida (per i compiti di scuola mai la soluzione intera, nemmeno il "
                   "risultato di un conto: domande guida e indizi, e controlli la sua risposta)")
+# Gli annunci della scuola letti in una foto o in un file (28/10, issue #303; caso del banco
+# dello Studio: «Verifica annullata» in una pagina fotografata, detto a un minore come un fatto,
+# fino a «non devi più studiare»). Un dato su come trattare quello che legge, come la busta
+# (provenienza.ANNUNCI), per ogni minore; uguale a ogni turno, per la cache del prefisso
+SCUOLA_DA_CONFERMARE = ("gli avvisi della scuola letti in una foto o in un file (verifica "
+                        "annullata o spostata, compiti cambiati) non li dai per certi: li "
+                        "confermano l'insegnante o un tutore, e intanto si studia come prima")
 
 
 def dato_turno(prof, cfg=None) -> str:
@@ -603,6 +610,7 @@ def dato_turno(prof, cfg=None) -> str:
     # conteggio dei tentativi né avviso ai tutori; `calcola` dà sempre il risultato
     if p.get("compiti") == "guida":
         parti.append(REGOLA_COMPITI)
+    parti.append(SCUOLA_DA_CONFERMARE)
     return "; ".join(parti)
 
 

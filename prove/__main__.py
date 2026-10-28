@@ -196,6 +196,7 @@ A_SECCO = [
     ("prova_rispondi.py", [], "rispondi dove ti ho chiesto: scritto dal telefono con lo studio attivo, schermo senza audio, schermo_mostra, follow-up, annunci"),
     ("prova_scritto_pagina.py", [], "moduli nel browser vero: errore della cifra di controllo mentre si scrive, invio, casella"),
     # ~5 s: Pillow, Brain con un backend finto, server degli schermi vero, PC finto
+    ("prova_annunci_foto.py", [], "gli annunci scritti in una foto o in un file arrivano al modello col dubbio (28/10, issue #303, caso del banco dello Studio): etichetta della foto e busta di file e audio con la frase sugli annunci, uguale a ogni turno; contrari web, estensione, agente, archivio; quarantena; dato del turno dei minori; caratteri aggiunti"),
     ("prova_immagini.py", [], "foto (05/10): controllo e riduzione dei byte, album della conversazione, foto nei messaggi, guardia sulle azioni, /api/immagine, pc_guarda e permessi, cattura dal satellite"),
     # ~3 s: Brain con un backend finto, esecutore remoto con un server dei satelliti finto
     ("prova_dispositivo.py", [], "il dispositivo da cui si parla (16/10, issue #100): la spinta di pc_guarda solo col PC raggiungibile e capace (telefono senza portatile no), la riga «dispositivo:» nei dati del turno per telefono, satellite, PC, scritto e locale, Ciclo._dispositivo_turno, i volti non si riconoscono nel prompt"),
