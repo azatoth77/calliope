@@ -67,6 +67,12 @@ Indirizzi:
                                  ricerca in una pagina di «Le mie cose» (28/10, raccolte.cerca:
                                  i Documenti; l'Ufficio solo a chi amministra), in sola lettura, coi permessi della pagina; solo
                                  da uno schermo personale, 20 al minuto
+  POST /api/conversazione        «X-Calliope-Sessione», {giorno?: oggi|ieri, schede?: bool,
+                                 testo?} → {turni, nota}, {turno, indice} → {scheda}: i
+                                 filtri, la ricerca e il dettaglio di una scheda piccola della
+                                 Conversazione (28/10, #242, hub.chat_filtrata), solo da uno
+                                 schermo personale e solo i turni del suo proprietario; 60 letture
+                                 e 20 ricerche al minuto; il testo cercato non va nel registro
   POST /api/tocco                «X-Calliope-Sessione», {tocco, …}: un tocco che cambia qualcosa
                                  (28/10, tocchi.py: la spunta della lista, «+1 minuto» e «Ferma»
                                  sul timer), solo da uno schermo
@@ -1042,7 +1048,8 @@ def crea_app(hub: Schermi) -> Starlette:
         dati, errore = await corpo_json(request, 1024)
         if errore is not None:
             return errore
-        if not isinstance(dati, dict) or not isinstance(dati.get("testo"), str)                 or not isinstance(dati.get("raccolta"), str):
+        if not isinstance(dati, dict) or not isinstance(dati.get("testo"), str) \
+                or not isinstance(dati.get("raccolta"), str):
             return _json({"errore": "dati non validi"}, 400)
         prof = profilo_di(schermo)
         if prof is None:
@@ -1050,6 +1057,47 @@ def crea_app(hub: Schermi) -> Starlette:
         out = await asyncio.to_thread(raccolte.cerca, hub, prof, dati["raccolta"][:40],
                                       dati["testo"], hub.log)
         return schede_della_pagina(out, schermo)
+
+    letture_conv: dict[int, list[float]] = {}
+    ricerche_conv: dict[int, list[float]] = {}
+
+    async def conversazione_api(request: Request):
+        """I filtri e la ricerca della Conversazione (28/10, #242): {giorno?, schede?, testo?} →
+        {turni, nota}. Solo da uno schermo personale (come la scheda «Conversazione» del
+        benvenuto) e solo i turni del suo proprietario; non serve una conversazione a voce (è una
+        lettura, come la cronologia). Una ricerca conta anche fra le ricerche (20 al minuto). Il
+        testo cercato non va nel registro: sono le parole della persona."""
+        dati, errore = await corpo_json(request, 1024)
+        if errore is not None:
+            return errore
+        if not isinstance(dati, dict):
+            return _json({"errore": "dati non validi"}, 400)
+        if "turno" in dati or "indice" in dati:
+            # Il dettaglio di una scheda piccola leggera (revisione della PR #271)
+            t, i = dati.get("turno"), dati.get("indice")
+            if not (isinstance(t, int) and isinstance(i, int)) or isinstance(t, bool) \
+                    or isinstance(i, bool) or t < 0 or not 0 <= i < 8:
+                return _json({"errore": "dati non validi"}, 400)
+            schermo, errore = schermo_personale(request, letture_conv, LETTURE_AL_MINUTO, TROPPE_LETTURE)
+            if errore is not None:
+                return errore
+            out = await asyncio.to_thread(hub.chat_scheda, schermo, t, i)
+            stato = int(out.pop("_stato", 200))
+            return _json(out, stato)
+        giorno, schede, testo = dati.get("giorno"), dati.get("schede", False), dati.get("testo", "")
+        if giorno not in (None, "", "oggi", "ieri") or not isinstance(schede, bool) \
+                or not isinstance(testo, str):
+            return _json({"errore": "dati non validi"}, 400)
+        testo = testo.strip()
+        if testo:
+            schermo, errore = schermo_personale(request, ricerche_conv, 20, TROPPE_RICERCHE)
+        else:
+            schermo, errore = schermo_personale(request, letture_conv, LETTURE_AL_MINUTO, TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        out = await asyncio.to_thread(hub.chat_filtrata, schermo, giorno or None, schede, testo)
+        stato = int(out.pop("_stato", 200))
+        return _json(out, stato)
 
     async def tocco_api(request: Request):
         """Un tocco che cambia qualcosa (la spunta, i tasti del timer): controllato qui contro lo
@@ -1150,6 +1198,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/parla", parla_api, methods=["POST"]),
         Route("/api/raccolte", raccolte_api, methods=["POST"]),
         Route("/api/raccolte/cerca", cerca_api, methods=["POST"]),
+        Route("/api/conversazione", conversazione_api, methods=["POST"]),
         Route("/api/tocco", tocco_api, methods=["POST"]),
         *telefono.rotte(hub),
         # /satellite: il comando per far diventare satellite un PC nuovo (03/10)

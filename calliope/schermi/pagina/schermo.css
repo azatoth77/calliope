@@ -901,6 +901,57 @@ body.in-vista-sviluppo #cronologia { display: none; }     /* «Vista normale» r
    barra sola); a schermo intero ha l'altezza del flusso dell'agente */
 .scheda-chat:not(.intera) > .corpo { display: flex; flex-direction: column; overflow: hidden; }
 .scheda-chat:not(.intera) .conv-chat { flex: 1; height: auto; min-height: 8rem; }
+/* I filtri e la ricerca (28/10, #242): Oggi, Ieri, Solo schede; la casella; l'esito in una riga.
+   Tocchi ≥ 44 px, testo AA sui pannelli (il tenue e l'accento: prova_aspetto) */
+.chat-filtri { display: flex; flex-direction: column; gap: 0.45rem; margin: 0 0 0.6rem; }
+.chat-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.chat-cerca { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; margin: 0; }
+.chat-cerca input {
+  flex: 1 1 10rem; min-width: 0; min-height: 2.75rem; box-sizing: border-box; padding: 0.4rem 0.8rem;
+  font: inherit; font-size: 1rem; color: var(--testo); background: var(--pannello);
+  border: 1px solid var(--bordo); border-radius: 0.8rem;
+}
+.chat-chip {
+  font: inherit; font-size: 0.92rem; font-weight: 600; min-height: 2.75rem; min-width: 2.75rem; padding: 0.2rem 0.75rem;
+  border: 1px solid var(--bordo); border-radius: 1.4rem; background: var(--pannello); color: var(--testo); cursor: pointer;
+}
+.chat-chip[aria-pressed="true"] { border-color: var(--accento); background: var(--accento-tenue); color: var(--accento-chiaro); }
+.chat-chip[hidden], .chat-cerca[hidden] { display: none; }
+.chat-chip[aria-expanded="true"] { border-color: var(--accento); }
+.scheda-chat .scarica { margin: 0.6rem 0 0; }
+.chat-chip:focus-visible, .chat-cerca input:focus-visible, .piccola-apri:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+.chat-stato { display: flex; align-items: center; gap: 0.6rem; }
+.chat-stato[hidden] { display: none; }
+.chat-esito { flex: 1; margin: 0; color: var(--tenue); font-size: 0.95rem; }
+/* il tocco e il modulo: un gesto al centro, non una bolla */
+.conv-gesto {
+  align-self: center; max-width: 92%; padding: 0.35rem 0.8rem; border-radius: 0.7rem; border: 1px dashed var(--bordo);
+  background: var(--pannello-2); color: var(--testo); font-size: 0.95rem; overflow-wrap: anywhere; text-align: center;
+}
+/* la scheda piccola dentro la risposta: il pulsante con tipo e titolo, sotto l'anteprima inerte */
+.scheda-piccola {
+  margin-top: 0.5rem; border: 1px solid var(--bordo); border-radius: 0.8rem; background: var(--sfondo);
+  overflow: hidden; cursor: pointer;
+}
+.piccola-apri {
+  display: flex; align-items: center; gap: 0.6rem; width: 100%; min-height: 2.75rem; box-sizing: border-box;
+  padding: 0.3rem 0.8rem; font: inherit; font-size: 0.95rem; text-align: left; cursor: pointer;
+  border: 0; background: transparent; color: var(--testo);
+}
+.piccola-tipo { flex: none; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accento); }
+.piccola-titolo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.piccola-freccia { flex: none; color: var(--tenue); font-size: 1.2rem; }
+.piccola-anteprima {
+  max-height: 5.2rem; overflow: hidden; padding: 0 0.8rem 0.4rem; font-size: 0.9rem; line-height: 1.35;
+  -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent);
+}
+/* l'anteprima è piccola qualunque sia la misura della scheda vera (la TV, il telefono) */
+.piccola-anteprima .corpo, .piccola-anteprima .corpo * { font-size: 0.9rem !important; line-height: 1.35 !important; }
+.piccola-anteprima .corpo > * { margin-top: 0; margin-bottom: 0.25rem; }
+.piccola-anteprima .timer .riga, .piccola-anteprima .casa .riga { padding: 0.2rem 0.5rem; }
+.piccola-anteprima .calcolo .risultato { font-size: 1.3rem; }
+.piccola-anteprima blockquote { margin: 0; padding-left: 0.5rem; }
+.resto.storico { color: var(--tenue); }
 
 /* Una voce nuova da salvare come conoscente (14/10): il pezzo di trascrizione e il modulo */
 .estratto-conoscente { margin: 0 0 0.3rem; padding-left: 0.8rem; border-left: 3px solid var(--bordo); color: var(--testo); overflow-wrap: anywhere; }

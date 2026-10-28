@@ -106,6 +106,16 @@ def _esercizio_aperto(ctx, prof):
         return None
 
 
+def _segna_riservata(card: dict, ctx) -> dict:
+    """Una scheda che ripete la risposta di prima (`cosa` risposta, o un testo scritto dal
+    modello subito dopo) quando quella veniva da un tool riservato: il segno `_riservata` (resta
+    sul server) la tiene fuori dalla Conversazione e dall'archivio (revisione della PR #271)."""
+    prev = getattr(ctx, "risposta_precedente", None) or {}
+    if prev.get("riservata"):
+        card["_riservata"] = True
+    return card
+
+
 def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender, testo: str = ""):
     """(scheda, frase d'errore): la scheda da mostrare per `cosa`, costruita dal codice."""
     prof = _person(ctx)
@@ -126,10 +136,12 @@ def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender, testo: str
         t = str(testo or "").strip()[:TESTO_MAX]
         if not t:
             return None, "Dimmi cosa vuoi che scriva sullo schermo."
-        return schede.testo("Da leggere", t, schede.CASA if prof else schede.PUBBLICA), ""
+        card = schede.testo("Da leggere", t, schede.CASA if prof else schede.PUBBLICA)
+        return _segna_riservata(card, ctx), ""
     if cosa == "ultima":
         card = hub.ultima(sender)
         if card is not None:
+            # Il segno `_riservata` (Brain._invia_schede) viaggia con la scheda ricordata
             return card, ""
         cosa = "risposta"                     # nessuna scheda: la risposta di prima
     if cosa == "risposta":
@@ -140,7 +152,7 @@ def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender, testo: str
         # Chi ha usato tool personali nella risposta di prima la rilegge solo sul suo schermo
         vis = (schede.PERSONALE if set(prev.get("tool") or ()) & _PERSONALI
                else schede.CASA if prof else schede.PUBBLICA)
-        return schede.testo("Ultima risposta", text, vis), ""
+        return _segna_riservata(schede.testo("Ultima risposta", text, vis), ctx), ""
     if cosa == "lista":
         if ctx.liste is None:
             return None, "Le liste non sono disponibili."

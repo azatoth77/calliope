@@ -258,6 +258,10 @@ const SEZ = window.CalliopeSezioni.crea({
     if (car.intera === k && (k === "cruscotto" || k === "chat" || !lista.length)) chiudiStrato("strato-scheda");
   },
   dopoDisponi: () => segnaTagli(),
+  // Con la conversazione nella sezione (28/10, #242) l'elenco sotto tiene solo le schede che la
+  // conversazione non mostra già: non le risposte scritte (sono il testo del turno), non le schede
+  // dentro un turno; in Adesso restano come prima
+  fuoriDaCasa: (k, c) => !!car.chatEl && (c.tipo === "risposta" || chatHaScheda(c)),
   // Con la scheda a schermo intero aperta la sua voce nella cronologia del browser si sostituisce
   primaDiVai() {
     if ($("strato-scheda").hidden) return false;
@@ -274,8 +278,50 @@ car.seq[RISPOSTA] = 0;
 car.modulo = null;              // chiave del modulo aperto nello strato
 car.moduloFirma = "";
 car.intera = null;              // chiave della scheda aperta a schermo intero (06/10)
+car.chatSchede = {};            // la scheda piccola della conversazione aperta a schermo intero (28/10)
+car.chatEl = null;              // la conversazione nella sua sezione (28/10, #242)
 car.svil = null;                // lo sviluppo aperto già mostrato nella sua vista (08/10)
 vis.modo = leggi(CHIAVE_AUTO) === "1" ? "auto" : "sezioni";
+
+// ───────────────────────────── la conversazione nella sua sezione (28/10, #242) ─────────────────────────────
+// La scheda «chat» di schermo.js (frasi con ora e canale, risposte con le schede piccole, filtri e
+// ricerca) dentro la sezione Conversazione, allineata al suo posto quando arrivano turni nuovi
+function chatHaScheda(c) {
+  const ch = sch() && sch().schedaChat ? sch().schedaChat() : null;
+  if (!ch || !c) return false;
+  return ch.turni.some((t) => Array.isArray(t.schede) && t.schede.some((x) => x && x.id && x.id === c.id));
+}
+function disegnaChatTel() {
+  const posto = $("conv-tel");
+  if (!posto || !sch()) return;
+  const c = sch().schedaChat ? sch().schedaChat() : null;
+  posto.hidden = !c;
+  if (!c) { posto.replaceChildren(); car.chatEl = null; disponi(); return; }
+  const nuova = sch().costruisci(c);
+  nuova.classList.add("conv-tel-scheda");
+  const prima = car.chatEl;
+  if (prima && prima.isConnected && prima.dataset.chiave === nuova.dataset.chiave) {
+    const seguite = sch().misuraSegui(prima);
+    sch().allinea(prima, nuova);
+    sch().ripristinaSegui(prima, seguite);
+  } else {
+    posto.replaceChildren(nuova);
+    car.chatEl = nuova;
+    sch().ripristinaSegui(nuova, null);
+  }
+  // L'elenco sotto perde le schede che un turno nuovo mostra già
+  disponi();
+}
+
+// La conversazione disegnata mentre la sezione era nascosta non è scesa in fondo (nascosta, lo
+// scorrimento non vale): entrando nella sezione va all'ultimo turno, se chi legge non era risalito
+function chatInFondo() {
+  if (vis.sezione !== "conversazione" || !car.chatEl) return;
+  requestAnimationFrame(() => {
+    for (const b of car.chatEl.querySelectorAll("[data-segui]")) if (!b.classList.contains("staccato")) b.scrollTop = b.scrollHeight;
+  });
+}
+window.addEventListener("hashchange", chatInFondo);
 
 // L'ultima risposta (le frasi di un turno, in ordine), al più ~300 caratteri: la coda
 function ricordaFrase(turno, testo) {
@@ -469,17 +515,20 @@ function costruisciIntera(k) {
     t.append(p);
     s.append(et, t);
   } else {
-    const c = car.schede[k];
+    const c = schedaIntera(k);
     if (!c) return null;
     s = sch().costruisci(c, { intera: true });
   }
-  s.dataset.tipo = k === RISPOSTA ? "risposta" : car.schede[k].tipo;
+  s.dataset.tipo = k === RISPOSTA ? "risposta" : schedaIntera(k).tipo;
   return s;
 }
 
+// La scheda di una sezione, o la copia di un turno aperta dalla conversazione (28/10, #242)
+function schedaIntera(k) { return car.schede[k] || car.chatSchede[k] || null; }
+
 function titoloIntera(k) {
   if (k === RISPOSTA) return "Risposta";
-  const c = car.schede[k];
+  const c = schedaIntera(k);
   return (c && (c.titolo || sch().NOMI_TIPO[c.tipo] || c.tipo)) || "Scheda";
 }
 
@@ -505,7 +554,7 @@ function disegnaIntera() {
 }
 
 function apriIntera(k) {
-  if (k !== RISPOSTA && (!car.schede[k] || TIPI_SENZA_INTERA.has(car.schede[k].tipo))) return false;
+  if (k !== RISPOSTA && (!schedaIntera(k) || TIPI_SENZA_INTERA.has(schedaIntera(k).tipo))) return false;
   if (k === RISPOSTA && !st.risposta.testo) return false;
   const gia = !$("strato-scheda").hidden;
   if (car.intera !== k) $("intera-posto").replaceChildren();
@@ -532,6 +581,8 @@ function chiudiIntera() {
 function suToccoScheda(ev) {
   const t = ev.target;
   if (!t.closest) return;
+  // La conversazione nella sua sezione (28/10, #242) ha i suoi tocchi: filtri, schede piccole
+  if (t.closest(".conv-tel")) return;
   const pag = t.closest("#sezioni [data-chiave]");
   if (!pag) return;
   if (t.closest(".apri-modulo")) { apriModulo(pag.dataset.chiave); return; }
@@ -564,7 +615,7 @@ function chiudiStrato(id) {
   if (s.hidden) return;
   s.hidden = true;
   if (id === "strato-modulo") { car.modulo = null; car.moduloFirma = ""; $("modulo-posto").replaceChildren(); }
-  if (id === "strato-scheda") { car.intera = null; $("intera-posto").replaceChildren(); }
+  if (id === "strato-scheda") { car.intera = null; car.chatSchede = {}; $("intera-posto").replaceChildren(); }
   const r = ritornoFuoco;
   ritornoFuoco = null;
   if (r && document.contains(r) && !r.closest("[hidden]")) { try { r.focus({ preventScroll: true }); } catch (e) { /* niente */ } }
@@ -1832,11 +1883,23 @@ async function avvio() {
   });
   // La conversazione (08/10): da Conversazione a schermo intero, e resta lì; «Pulisci le mie
   // schede» con due tocchi (le schede non tornano). Solo su un telefono personale
-  document.addEventListener("calliope:chat", (ev) => { $("chat-tel").hidden = !ev.detail.attiva; });
-  document.addEventListener("calliope:scrivi", (ev) => { $("pulisci-tel").hidden = !(ev.detail && ev.detail.personale); });
-  $("chat-tel").addEventListener("click", () => {
-    if (sch() && sch().chat()) apriIntera("chat");
+  // Dal 28/10 (#242) la conversazione sta nella sezione, con le schede piccole, i filtri e la ricerca
+  document.addEventListener("calliope:chat", () => disegnaChatTel());
+  document.addEventListener("calliope:chatturni", () => disegnaChatTel());
+  // Una scheda piccola della conversazione: la copia del turno a schermo intero; un rimando porta
+  // alla scheda nella sua sezione, o alla sezione se la scheda non c'è più
+  document.addEventListener("calliope:intera", (ev) => {
+    const c = ev.detail && ev.detail.scheda;
+    if (!c || !c.chiave) return;
+    car.chatSchede = { [c.chiave]: c };
+    apriIntera(c.chiave);
   });
+  document.addEventListener("calliope:vai", (ev) => {
+    const c = ev.detail && ev.detail.scheda;
+    if (!c) return;
+    if (!(c.chiave && vaiA(c.chiave))) vai("#/" + sezioneDi(c));
+  });
+  document.addEventListener("calliope:scrivi", (ev) => { $("pulisci-tel").hidden = !(ev.detail && ev.detail.personale); });
   let pulisciArmato = 0;
   $("pulisci-tel").addEventListener("click", async () => {
     const b = $("pulisci-tel"), esito = $("pulisci-esito");

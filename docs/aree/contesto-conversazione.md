@@ -2796,3 +2796,21 @@ quindi con `eventi: attivo` non cambia niente; in ombra resta solo il motivo dic
 *[storico: fino alla prima revisione della PR #261 la riga andava in `brain.history` a mano, senza
 `last_turn_at` né salvataggio, e con la frase dopo c'erano due messaggi della persona di fila; fino alla
 seconda il turno chiudeva con l'esito del tool]*
+
+## Le schede del turno nell'archivio, i canali e i filtri della Conversazione (28/10 sera, issue #242, ramo `issue-242-conversazione`)
+
+Per la Conversazione degli schermi con le schede dentro ([schermi-telefono](schermi-telefono.md)):
+
+- **Le schede mandate in un turno** vanno nel `meta` del turno archiviato (`schede`): `Brain._invia_schede`
+  le lega al messaggio della persona (`_schede`, solo con l'identità certa), `conversazione.turni` le porta
+  nell'archivio passate da `oscura` e dai segreti del turno (non le chiavi), e le toglie in un turno
+  riservato. Una copia piccola (`schede.per_conversazione`, al più 16 kB) o un rimando, al più quattro per
+  turno. Stessa tenuta e stessa «dimentica» dei turni; un turno `non_conservare` non va su disco con le sue
+  schede. Niente nell'indice FTS5: si cercano le parole del turno, non quelle delle schede.
+- **Il canale** del turno passa com'è (voce, scritto, tocco, modulo); prima `voce_chat` lo riduceva a voce o
+  scritto. Il modulo inviato ha ora il suo `_turno` (`moduli.completa`).
+- **`ArchivioConversazioni.chat_filtra`**: i turni di una persona fra due istanti, solo quelli con una
+  scheda, o con tutte le parole cercate (FTS5 per prefisso, senza vettori: mai un modello in più durante una
+  conversazione), al più 200 (60 con una ricerca). Mai i turni degli ospiti né di altre persone.
+- **Limite**: con `eventi: attivo` i turni li archivia l'ombra dalla proiezione, e le schede lì non ci sono
+  ancora.

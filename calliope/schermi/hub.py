@@ -514,6 +514,66 @@ class Schermi:
             turni = []
         return {"turni": turni, "max": n, "giorni": float(getattr(fonte, "giorni", 0) or 0)}
 
+    def chat_filtrata(self, schermo: dict | None, giorno: str | None = None,
+                      solo_schede: bool = False, testo: str = "", ora: float | None = None) -> dict:
+        """I filtri e la ricerca della Conversazione (28/10, #242) per uno schermo personale: i
+        turni del suo proprietario e di nessun altro (un tutore non vede quelli del ragazzo, né
+        il ragazzo quelli del tutore: come `chat_per`). `giorno` «oggi» o «ieri» (l'ora locale
+        di questo computer), `solo_schede`, `testo` (per parole). {"turni", "nota"}, o
+        {"_stato", "errore"}."""
+        persona = (schermo or {}).get("proprietario")
+        fonte = self.chat_fonte
+        if not persona:
+            return {"_stato": 403, "errore": "solo da uno schermo personale"}
+        if fonte is None or self._n_chat() <= 0 or not hasattr(fonte, "chat_filtra"):
+            return {"_stato": 404, "errore": "La conversazione non c'è su questo Calliope."}
+        dal = al = None
+        if giorno in ("oggi", "ieri"):
+            import datetime as _dt
+            oggi = _dt.datetime.fromtimestamp(time.time() if ora is None else ora).replace(
+                hour=0, minute=0, second=0, microsecond=0)
+            inizio = oggi if giorno == "oggi" else oggi - _dt.timedelta(days=1)
+            dal = inizio.timestamp()
+            al = (inizio + _dt.timedelta(days=1)).timestamp()
+        testo = " ".join(str(testo or "").split())[:120]
+        try:
+            r = fonte.chat_filtra(persona, dal=dal, al=al, solo_schede=bool(solo_schede),
+                                  testo=testo, n=200 if not testo else 60)
+        except Exception as e:  # noqa: BLE001 — la pagina dice che non riesce
+            self.log(f"[SCHERMI] conversazione non filtrata: {type(e).__name__}")
+            return {"_stato": 500, "errore": "Non riesco a leggere la conversazione adesso: riprova tra poco."}
+        turni = r.get("turni") or []
+        nota = ""
+        if testo and not r.get("parole"):
+            nota = "Scrivi almeno una parola da cercare."
+        elif not turni:
+            nota = ("Nessun turno con queste parole." if testo else
+                    "Nessuna scheda in questi turni." if solo_schede else
+                    "Oggi non ci siamo ancora detti niente." if giorno == "oggi" else
+                    "Ieri non ci siamo detti niente." if giorno == "ieri" else
+                    "Ancora niente qui.")
+        elif r.get("troppi"):
+            nota = "Ci sono altri turni prima: restringi la ricerca per vederli."
+        return {"turni": turni, "nota": nota}
+
+    def chat_scheda(self, schermo: dict | None, turno, indice) -> dict:
+        """Il dettaglio di una scheda piccola leggera (revisione della PR #271): la copia intera,
+        solo dai turni del proprietario dello schermo personale. {"scheda"} o {"_stato", "errore"}."""
+        persona = (schermo or {}).get("proprietario")
+        fonte = self.chat_fonte
+        if not persona:
+            return {"_stato": 403, "errore": "solo da uno schermo personale"}
+        if fonte is None or self._n_chat() <= 0 or not hasattr(fonte, "chat_scheda"):
+            return {"_stato": 404, "errore": "La conversazione non c'è su questo Calliope."}
+        try:
+            c = fonte.chat_scheda(persona, int(turno), int(indice))
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[SCHERMI] scheda della conversazione non letta: {type(e).__name__}")
+            c = None
+        if c is None:
+            return {"_stato": 404, "errore": "Questa scheda non c'è più."}
+        return {"scheda": c}
+
     def registra_chat(self, sid: int, persona):
         """«Scarica» della trascrizione in Markdown, per uno schermo personale del proprietario:
         il testo si fa al tocco, dall'archivio di quel momento."""
