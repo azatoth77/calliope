@@ -16,8 +16,10 @@ Chi vede cosa (le regole sono le stesse della voce):
 - l'ufficio (fatture, preventivi, DDT, rubrica): **solo chi amministra** (decisione del 28/10).
 
 `pagina(…)` dà le schede di una raccolta, costruite dai `schede.*` che esistono già (il disegno
-resta quello di `DISEGNA.*`): nel passo 2a le Liste, nel 2b l'Agenda (#257); le altre pagine
-arrivano con i passi 2c–2e.
+resta quello di `DISEGNA.*`): nel passo 2a le Liste, nel 2b l'Agenda (#257), nel 2c (#258) Lavori e
+programmi, Cassetto e Giochi; Documenti e Ufficio arrivano con i passi 2d–2e. Le pagine leggono
+soltanto: le azioni sono quelle che le schede hanno già (i tasti del cassetto, i giochi), con le
+loro API e i loro controlli.
 """
 
 import datetime
@@ -25,8 +27,14 @@ import datetime
 TESSERE = (("liste", "Liste"), ("agenda", "Agenda"), ("lavori", "Lavori e programmi"),
            ("cassetto", "Cassetto"), ("documenti", "Documenti"), ("giochi", "Giochi"),
            ("studio", "Studio"), ("ufficio", "Ufficio"))
-# Le pagine già fatte (le altre tessere dicono «presto»): passo 2a le Liste, 2b l'Agenda (#257)
-PAGINE = ("liste", "agenda")
+# Le pagine già fatte (le altre tessere dicono «presto»): passo 2a le Liste, 2b l'Agenda (#257),
+# 2c Lavori e programmi, Cassetto e Giochi (#258)
+PAGINE = ("liste", "agenda", "lavori", "cassetto", "giochi")
+# Nella pagina Lavori: i lavori finiti più recenti (memoria e, dopo un riavvio, la cartella dei
+# risultati) e i programmi; le schede del codice portano i file interi, quindi pochi
+LAVORI_FINITI_PAGINA = 6
+PROGRAMMI_PAGINA = 4
+_ATTIVI = ("in_coda", "in_corso", "in_attesa")
 
 
 def _fonte(hub, nome):
@@ -41,6 +49,109 @@ def _fonte(hub, nome):
 
 def _piu(n: int, una: str, tante: str) -> str:
     return f"{n} {una if n == 1 else tante}"
+
+
+def _servizio_lavori(hub):
+    """I lavori dell'agente: dai servizi, o quelli dati agli schermi da main.py."""
+    return _fonte(hub, "lavori") or getattr(hub, "lavori", None)
+
+
+def _servizio_cassetto(hub):
+    return getattr(hub, "cassetto", None) or _fonte(hub, "cassetto")
+
+
+def _giorni(cas) -> int:
+    try:
+        return max(1, int(round(float(getattr(cas, "giorni", 7) or 7))))
+    except (TypeError, ValueError):
+        return 7
+
+
+def _sviluppi(svc, prof) -> list:
+    """Gli sviluppi della persona da mostrare: quello aperto e i sospesi (come a voce:
+    `Sviluppi.corrente` e `sospesi`, solo i suoi)."""
+    svs = getattr(svc, "sviluppi", None)
+    if svs is None:
+        return []
+    try:
+        c = svs.corrente(prof.id)
+        return ([c] if c is not None else []) + [x for x in svs.sospesi(prof.id) if x is not c]
+    except Exception:  # noqa: BLE001 — uno sviluppo illeggibile non ferma la tessera
+        return []
+
+
+def _registro_persone(hub, cas=None):
+    reg = getattr(cas, "registry", None) if cas is not None else None
+    if reg is None:
+        ctx = getattr(hub, "tool_ctx", None)
+        reg = getattr(ctx, "speakers", None) if ctx is not None else None
+    return reg
+
+
+def _figli(hub, cas, prof) -> list:
+    """I minori di casa di cui `prof` è tutore e i cui file può vedere (come a voce:
+    `minori.e_tutore` e `conversazioni_visibili_ai_tutori`, tools/allegati._proprietario)."""
+    from .. import minori
+    reg = _registro_persone(hub, cas)
+    utenti = list((getattr(reg, "users", None) or {}).values()) if reg is not None else []
+    out = []
+    for u in utenti:
+        if getattr(u, "id", None) == prof.id:
+            continue
+        try:
+            if (minori.e_minore(u) and minori.e_tutore(prof, u)
+                    and minori.conversazioni_visibili_ai_tutori(u)):
+                out.append(u)
+        except Exception:  # noqa: BLE001 — un profilo strano non apre niente
+            continue
+    return sorted(out, key=lambda u: str(getattr(u, "name", "")))
+
+
+def _giochi_di_casa(hub, prof) -> list[tuple[str, dict]] | None:
+    """I giochi di casa che questa persona può aprire a voce, [(nome, manifesto)] in ordine di
+    titolo; None senza le estensioni. Come a voce: un gioco del formato di oggi (con la macchina
+    a stati), il livello del manifesto (un gioco «solo chi amministra» solo a chi amministra) e,
+    per un minore, solo quelli che un tutore ha abilitato (`minori.estensione_consentita`)."""
+    est = _fonte(hub, "estensioni")
+    arch = getattr(est, "archivio", None) if est is not None else None
+    if arch is None:
+        return None
+    from .. import minori
+    from ..estensioni import scheda as scheda_est
+    from ..testi import RANK
+    livello = "amministra" if getattr(prof, "admin", False) else "familiare"
+    minore = minori.e_minore(prof)
+    out = []
+    try:
+        attive = list(arch.attive())
+    except Exception:  # noqa: BLE001 — un indice illeggibile non ferma la pagina
+        attive = []
+    for v in attive:
+        try:
+            m = arch.manifesto(v["nome"])
+            if not scheda_est.ha_macchina(m):
+                continue
+            if RANK.get(m.get("livello") or "familiare", 1) > RANK.get(livello, 1):
+                continue
+            if minore and not minori.estensione_consentita(prof, v["nome"]):
+                continue
+        except Exception:  # noqa: BLE001 — un manifesto rotto si salta
+            continue
+        out.append((v["nome"], m))
+    return sorted(out, key=lambda x: str(x[1].get("titolo") or x[0]).casefold())
+
+
+def _partite_di(hub, prof) -> list:
+    """Le partite aperte in cui la persona ha un posto (in memoria, schermi/giochi.py)."""
+    g = getattr(hub, "giochi", None)
+    if g is None:
+        return []
+    try:
+        partite = list(getattr(g, "partite", {}).values())
+    except Exception:  # noqa: BLE001
+        return []
+    return [p for p in partite
+            if any(getattr(x, "persona", None) == prof.id for x in list(getattr(p, "posti", {}).values()))]
 
 
 def _liste(hub, prof):
@@ -70,27 +181,36 @@ def _agenda(hub, prof):
 
 
 def _lavori(hub, prof):
-    lavori = _fonte(hub, "lavori")
+    lavori = _servizio_lavori(hub)
     if lavori is None:
         return None
     mine = [lv for lv in list(getattr(lavori, "lavori", []) or []) if getattr(lv, "persona", None) == prof.id]
     corso = sum(1 for lv in mine if lv.stato in ("in_coda", "in_corso"))
     attesa = sum(1 for lv in mine if lv.stato == "in_attesa")
     fatti = sum(1 for lv in mine if lv.stato == "fatto")
+    svil = _sviluppi(lavori, prof)          # gli sviluppi aperti e sospesi (28/10, #258)
     pezzi = [p for p in (f"{corso} in corso" if corso else "", f"{attesa} aspetta te" if attesa else "",
-                         _piu(fatti, "finito", "finiti") if fatti else "") if p]
+                         _piu(fatti, "finito", "finiti") if fatti else "",
+                         _piu(len(svil), "sviluppo", "sviluppi") if svil else "") if p]
     ultimo = max((getattr(lv, "fine", None) or getattr(lv, "inizio", None) or getattr(lv, "creato", None) or 0
                   for lv in mine), default=None) or None
-    return {"conto": len(mine), "stato": " · ".join(pezzi) or "nessun lavoro", "ultimo": ultimo}
+    return {"conto": len(mine) + len(svil), "stato": " · ".join(pezzi) or "nessun lavoro", "ultimo": ultimo}
 
 
 def _cassetto(hub, prof):
-    cas = getattr(hub, "cassetto", None) or _fonte(hub, "cassetto")
+    cas = _servizio_cassetto(hub)
     if cas is None:
         return None
     righe = cas.elenco(prof.id)
-    return {"conto": len(righe), "stato": _piu(len(righe), "file", "file") + " · tengo 7 giorni",
-            "ultimo": max((r.get("arrivato") or 0 for r in righe), default=None) or None}
+    stato = _piu(len(righe), "file", "file") + f" · tengo {_giorni(cas)} giorni"
+    ultimo = max((r.get("arrivato") or 0 for r in righe), default=None) or None
+    # I file dei ragazzi di cui è tutore (come a voce): nello stato, non nel conto
+    for figlio in _figli(hub, cas, prof):
+        altri = cas.elenco(figlio.id)
+        if altri:
+            stato += f" · {len(altri)} di {figlio.name}"
+            ultimo = max([ultimo or 0] + [r.get("arrivato") or 0 for r in altri]) or None
+    return {"conto": len(righe), "stato": stato, "ultimo": ultimo}
 
 
 def _documenti(hub, prof):
@@ -111,20 +231,10 @@ def _documenti(hub, prof):
 
 
 def _giochi(hub, prof):
-    est = _fonte(hub, "estensioni")
-    arch = getattr(est, "archivio", None) if est is not None else None
-    if arch is None:
+    giochi = _giochi_di_casa(hub, prof)
+    if giochi is None:
         return None
-    try:
-        from ..estensioni import scheda as scheda_est
-        giochi = [v for v in arch.attive() if scheda_est.ha_macchina(arch.manifesto(v["nome"]))]
-    except Exception:  # noqa: BLE001 — un indice illeggibile non ferma la pagina
-        giochi = []
-    aperte = 0
-    g = getattr(hub, "giochi", None)
-    for p in list(getattr(g, "partite", {}).values()) if g is not None else ():
-        if any(getattr(x, "persona", None) == prof.id for x in getattr(p, "posti", {}).values()):
-            aperte += 1
+    aperte = len(_partite_di(hub, prof))
     stato = _piu(len(giochi), "gioco", "giochi") + (f" · {_piu(aperte, 'partita aperta', 'partite aperte')}" if aperte else "")
     return {"conto": len(giochi), "stato": stato, "ultimo": None}
 
@@ -181,15 +291,24 @@ def tessere(hub, prof, log=print) -> list[dict]:
     return out
 
 
-def pagina(hub, prof, raccolta: str) -> dict:
-    """Le schede di una raccolta: {schede} o {errore, _stato}. Le Liste (2a) e l'Agenda (2b)."""
+def pagina(hub, prof, raccolta: str, schermo: dict | None = None, log=print) -> dict:
+    """Le schede di una raccolta: {schede, nota?} o {errore, _stato}. Le Liste (2a), l'Agenda
+    (2b), Lavori e programmi, Cassetto e Giochi (2c). `schermo`: quello che chiede (la pagina
+    Giochi dice quale partita è su questo schermo). Le schede possono avere le chiavi private
+    di «Scarica» (`_scarica`, `_registro`): il server le registra per lo schermo e le toglie."""
     if raccolta not in visibili(prof):
         return {"errore": "raccolta sconosciuta", "_stato": 404}
     if raccolta not in PAGINE:
         return {"schede": [], "nota": "Questa pagina arriva presto: intanto chiedilo a Calliope."}
+    altre = {"agenda": lambda: _pagina_agenda(hub, prof), "lavori": lambda: _pagina_lavori(hub, prof),
+             "cassetto": lambda: _pagina_cassetto(hub, prof), "giochi": lambda: _pagina_giochi(hub, prof, schermo)}
+    if raccolta in altre:
+        try:
+            return altre[raccolta]()
+        except Exception as e:  # noqa: BLE001 — un servizio guasto: la pagina lo dice, il server resta
+            log(f"   [SCHERMI] pagina «{raccolta}» non letta: {type(e).__name__}")
+            return {"errore": "Non riesco a leggere questa pagina: riprova tra poco.", "_stato": 503}
     from . import schede
-    if raccolta == "agenda":
-        return _pagina_agenda(hub, prof)
     if raccolta == "liste":
         liste = _fonte(hub, "liste")
         if liste is None:
@@ -200,6 +319,208 @@ def pagina(hub, prof, raccolta: str) -> dict:
             out.append(schede.lista(key, voci))
         return {"schede": out}
     return {"schede": []}
+
+
+# ─────────────────────────── 2c: Lavori e programmi, Cassetto, Giochi (#258) ───────────────────────────
+
+def _cronologia(hub, persona: str, tipi: tuple) -> dict:
+    """Le schede di `tipi` nella cronologia della persona, salvate in questo avvio (dopo un
+    riavvio gli id dei lavori ricominciano da L1: una chiave vecchia sarebbe un altro lavoro),
+    riviste contro lo stato vero come per uno schermo che si collega (cronologia.rivedi); per
+    chiave."""
+    cron = getattr(hub, "cronologia", None)
+    if cron is None:
+        return {}
+    from .cronologia import rivedi
+    out = {}
+    try:
+        voci = list(cron.ultime(persona))
+    except Exception:  # noqa: BLE001 — la cronologia non ferma la pagina
+        return {}
+    for v in voci:
+        c = v.get("scheda") or {}
+        if c.get("tipo") not in tipi or v.get("avvio") != getattr(cron, "avvio", None):
+            continue
+        try:
+            r = rivedi(hub, v, persona)
+        except Exception:  # noqa: BLE001 — una scheda guasta si salta
+            r = None
+        if r and r.get("chiave"):
+            out[str(r["chiave"])] = r
+    return out
+
+
+def _lavoro_vivo(lv) -> dict:
+    """Un lavoro in coda, in corso o fermo a una domanda che non ha la scheda in diretta nella
+    cronologia (seguito senza schermi): la scheda `lavoro` con lo stato e il passo."""
+    from . import schede
+    if lv.stato == "in_attesa":
+        riassunto = "Aspetta una tua risposta: rispondi a voce."
+    elif lv.stato == "in_corso":
+        riassunto = f"Adesso l'agente {lv.passo}." if getattr(lv, "passo", "") else ""
+    else:
+        riassunto = "In coda: comincia appena può."
+    return schede.lavoro(lv.titolo, lv.tipo, lv.stato, riassunto, (), None, "",
+                         (lv.domanda or "") if lv.stato == "in_attesa" else "", ident=lv.id)
+
+
+def _lavoro_finito(svc, lv) -> dict | None:
+    """La scheda finale di un lavoro finito: quella che Calliope manda alla fine
+    (`Lavori.scheda`: il codice, il documento, il testo); dopo un riavvio (dalla cartella dei
+    risultati) quella del lavoro col riassunto salvato, con la chiave della cartella (gli id
+    ricominciano)."""
+    from pathlib import Path
+    from . import schede
+    from ..agenti import risultato as ar
+    if not getattr(lv, "dal_disco", False):
+        try:
+            c = svc.scheda(lv)
+        except Exception:  # noqa: BLE001 — un file sparito: la scheda breve
+            c = None
+        if c:
+            return c
+    cartella = Path((lv.risultato or {}).get("cartella") or "").name
+    return schede.lavoro(lv.titolo, lv.tipo, lv.stato, ar.riassunto_salvato(lv), (), None, cartella,
+                         "", ident=ar.chiave(lv))
+
+
+def _pagina_lavori(hub, prof) -> dict:
+    """La pagina Lavori e programmi (28/10, passo 2c, #258): gli sviluppi aperti e sospesi della
+    persona (la scheda `sviluppo`), i suoi lavori in coda, in corso o fermi a una domanda (la
+    scheda in diretta dalla cronologia, con il passo e il flusso; altrimenti quella breve), i
+    suoi programmi (`esecuzione`) e i lavori finiti più recenti, anche di prima di un riavvio.
+    Solo della persona, come le schede che arrivano ai suoi schermi; la nota è la frase di
+    `lavoro_stato` a voce (`Lavori.stato(persona, tutti)`: chi amministra sente anche i lavori
+    degli altri, solo titolo e stato)."""
+    svc = _servizio_lavori(hub)
+    if svc is None:
+        return {"schede": [], "nota": "Qui non ci sono lavori affidati a un agente."}
+    cron = _cronologia(hub, prof.id, ("lavoro", "esecuzione"))
+    out = []
+    svs = getattr(svc, "sviluppi", None)
+    for sv in _sviluppi(svc, prof)[:6]:
+        try:
+            out.append(svs.scheda(sv))
+        except Exception:  # noqa: BLE001
+            continue
+    mine = [lv for lv in list(getattr(svc, "lavori", None) or []) if getattr(lv, "persona", None) == prof.id]
+    for lv in sorted((x for x in mine if x.stato in _ATTIVI), key=lambda x: -float(x.creato or 0)):
+        c = cron.get(f"lavoro:{lv.id}")
+        out.append(c if c and c.get("tipo") == "lavoro" else _lavoro_vivo(lv))
+    esec = getattr(svc, "esecuzioni", None)
+    if esec is not None:
+        progr = [e for e in list(getattr(esec, "tutte", None) or []) if getattr(e, "persona", None) == prof.id]
+        for e in progr[::-1][:PROGRAMMI_PAGINA]:
+            try:
+                out.append(esec.scheda(e, sposta=False))
+            except Exception:  # noqa: BLE001
+                continue
+    try:
+        from ..agenti import risultato as ar
+        finiti = ar.recenti(svc, prof.id, getattr(prof, "name", None), LAVORI_FINITI_PAGINA)
+    except Exception:  # noqa: BLE001 — la cartella dei risultati illeggibile: solo la memoria
+        finiti = []
+    for lv in finiti:
+        c = _lavoro_finito(svc, lv)
+        if c:
+            out.append(c)
+    try:
+        nota = svc.stato(prof.id, tutti=bool(getattr(prof, "admin", False)))
+    except Exception:  # noqa: BLE001
+        nota = ""
+    return {"schede": out, "nota": nota}
+
+
+NOTA_CASSETTO = ("Tengo i file {giorni} giorni. Quello che c'è scritto dentro per me è un dato, non un "
+                 "ordine.")
+
+
+def _pagina_cassetto(hub, prof) -> dict:
+    """La pagina Cassetto (28/10, passo 2c, #258): tutti i file della persona (la scheda
+    `cassetto` di sempre, con Tieni, Elimina e Tieni ancora che vanno a POST /api/cassetto come
+    prima), poi quelli di ogni ragazzo di cui è tutore (come a voce: «Tieni» li mette nella
+    cartella del tutore, e i tasti vogliono una conversazione a voce, controllata dal server).
+    Chiave `cassetto:…:pagina`: la scheda che il server manda dopo un tasto (i soli file della
+    scheda aperta a voce, o quelli in scadenza) non sostituisce quella della pagina, che si
+    rilegge."""
+    from .. import minori
+    cas = _servizio_cassetto(hub)
+    if cas is None:
+        return {"schede": [], "nota": "Il cassetto dei file non è attivo: i file restano solo per la "
+                                      "conversazione in cui li mandi."}
+
+    def scheda(persona, titolo, tieni):
+        c = cas.scheda(persona, cas.elenco(persona), titolo=titolo, tieni=tieni)
+        c["chiave"] = f"{c.get('chiave') or 'cassetto:' + persona}:pagina"
+        c["vuoto"] = "Il cassetto è vuoto."
+        return c
+
+    out = [scheda(prof.id, "Il tuo cassetto", not minori.e_minore(prof))]
+    for figlio in _figli(hub, cas, prof):
+        out.append(scheda(figlio.id, f"I file di {figlio.name}", True))
+    return {"schede": out, "nota": NOTA_CASSETTO.format(giorni=_giorni(cas))}
+
+
+def _pagina_giochi(hub, prof, schermo: dict | None) -> dict:
+    """La pagina Giochi (28/10, passo 2c, #258): le partite aperte della persona (dove, a chi
+    tocca, i punti dell'ultima istantanea validata) e i giochi di casa che può aprire a voce,
+    in schede `giochi` di sola lettura. Il gioco vero resta la sua scheda `gioco`, che la
+    pagina mostra sotto (una copia sola del riquadro: due avrebbero due stati); un gioco si apre
+    e ci si unisce a voce, come prima."""
+    from . import schede
+    from .. import minori
+    if not getattr(getattr(hub, "cfg", None), "giochi_enabled", True):
+        return {"schede": [], "nota": "I giochi sugli schermi sono spenti."}
+    giochi = _giochi_di_casa(hub, prof)
+    qui = (schermo or {}).get("id")
+    partite = [_partita(hub, p, qui) for p in
+               sorted(_partite_di(hub, prof), key=lambda x: -float(getattr(x, "ultimo", 0) or 0))]
+    out = []
+    if partite:
+        out.append(schede.giochi(f"giochi:partite:{prof.id}", "Partite aperte", partite=partite))
+    if giochi is None:
+        return {"schede": out, "nota": "Le estensioni non sono attive: qui non ci sono giochi di casa."}
+    voci = []
+    for nome, m in giochi:
+        titolo = str(m.get("titolo") or nome)
+        g = (m.get("scheda") or {}).get("giocatori") or {}
+        try:
+            lo, hi = int(g.get("min", 1) or 1), int(g.get("max", 1) or 1)
+        except (TypeError, ValueError):
+            lo = hi = 1
+        voci.append({"titolo": titolo, "descrizione": str(m.get("descrizione") or ""),
+                     "giocatori": ("1 giocatore" if hi == lo == 1 else f"{lo} giocatori" if hi == lo
+                                   else f"da {lo} a {hi} giocatori"),
+                     "dire": f"«Calliope, giochiamo a {titolo}»"})
+    nota = "Gli altri giochi di casa li sblocca chi si occupa di te." if minori.e_minore(prof) else ""
+    out.append(schede.giochi(f"giochi:casa:{prof.id}", "Giochi di casa", giochi=voci, nota=nota,
+                             vuoto="In casa non ci sono ancora giochi: chiedi a Calliope di inventarne uno."))
+    return {"schede": out}
+
+
+def _partita(hub, p, qui) -> dict:
+    """Una partita aperta per la scheda `giochi`: titolo, schermi, a chi tocca e i punti (i nomi
+    sono quelli già controllati dall'istantanea: macchina.valida_istantanea)."""
+    posti = list(getattr(p, "posti", {}).items())
+    dove = []
+    for sid, _ in posti:
+        s = (hub.schermo(sid) if hasattr(hub, "schermo") else None) or {}
+        dove.append(str(s.get("nome") or "uno schermo"))
+    ist = None
+    try:
+        tiene = p.tiene(posti[0][1]) if posti else None
+        ist = getattr(tiene, "istantanea", None) or next(
+            (x.istantanea for _, x in posti if getattr(x, "istantanea", None)), None)
+    except Exception:  # noqa: BLE001
+        ist = None
+    gs = list((ist or {}).get("giocatori") or [])
+    tocca = (ist or {}).get("tocca")
+    return {"titolo": str(getattr(p, "titolo", "") or "Gioco"), "dove": dove,
+            "qui": qui is not None and any(sid == qui for sid, _ in posti),
+            "prova": bool(getattr(p, "prova", False)),
+            "tocca": gs[tocca]["nome"] if isinstance(tocca, int) and 0 <= tocca < len(gs) else "",
+            "punti": [{"nome": g.get("nome"), "punti": g.get("punti")} for g in gs],
+            "esito": str((ist or {}).get("esito") or "")}
 
 
 def _pagina_agenda(hub, prof) -> dict:

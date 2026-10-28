@@ -107,7 +107,7 @@ from starlette.routing import Route
 
 from ..satellite import web as satellite_web
 from . import telefono
-from .hub import Schermi
+from .hub import Schermi, pubblica, registra_scaricabili
 
 PAGINA = Path(__file__).resolve().parent / "pagina"
 PING_S = 15.0
@@ -998,8 +998,21 @@ def crea_app(hub: Schermi) -> Starlette:
         if quale is None:
             out = await asyncio.to_thread(raccolte.tessere, hub, prof, hub.log)
             return _json({"tessere": out})
-        out = await asyncio.to_thread(raccolte.pagina, hub, prof, str(quale)[:40])
-        return _json(out, int(out.pop("_stato", 200)))
+        out = await asyncio.to_thread(raccolte.pagina, hub, prof, str(quale)[:40], schermo, hub.log)
+        stato = int(out.pop("_stato", 200))
+        if isinstance(out.get("schede"), list):
+            # Le chiavi private di «Scarica» (un documento, il registro di un lavoro: 28/10, #258)
+            # restano sul server, registrate per questo schermo come per la cronologia ripresa
+            pubbliche = []
+            for c in out["schede"]:
+                if "_scarica" in c or "_registro" in c:
+                    try:
+                        registra_scaricabili(hub.scaricamenti, schermo["id"], c, schermo["proprietario"])
+                    except Exception as e:  # noqa: BLE001 — «Scarica» non ferma la pagina
+                        hub.log(f"[SCHERMI] «Scarica» della pagina non registrato: {type(e).__name__}")
+                pubbliche.append(pubblica(c))
+            out["schede"] = pubbliche
+        return _json(out, stato)
 
     async def tocco_api(request: Request):
         """Un tocco che cambia qualcosa (la spunta, i tasti del timer): controllato qui contro lo

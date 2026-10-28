@@ -449,6 +449,12 @@
       const pagina = !!(t && t.pagina && !vis.nascoste.raccolte.includes(id));
       const vista = pagina ? "pagina" : "tessere";
       if (sez.dataset.vista !== vista) sez.dataset.vista = vista;
+      // Quale pagina (28/10, #258): in Giochi il gruppo delle schede «gioco» di questo schermo resta
+      // visibile sotto la pagina (il riquadro è uno solo, e un gioco che arriva ci si apre)
+      const qualePagina = pagina ? id : "";
+      if ((sez.dataset.pagina || "") !== qualePagina) {
+        if (qualePagina) sez.dataset.pagina = qualePagina; else delete sez.dataset.pagina;
+      }
       pag.hidden = !pagina;
       box.hidden = pagina || !box.children.length;
       if (!pagina) { racc.aperta = null; return; }
@@ -465,7 +471,10 @@
     function scorriAllaScheda() {
       const chiave = vis.percorso.slice(2).join("/");
       const box = $("pagina-schede");
-      const el = chiave && box ? [...box.children].find((e) => e.dataset.chiave === chiave) : null;
+      let el = chiave && box ? [...box.children].find((e) => e.dataset.chiave === chiave) : null;
+      // Una scheda del gruppo che resta sotto la pagina (il gioco in Giochi)
+      const casa = chiave && car.el[chiave] ? car.el[chiave].casa : null;
+      if (!el && casa && casa.closest("#sez-cose") && casa.getClientRects().length) el = casa;
       if (el) { try { el.scrollIntoView({ block: "nearest", behavior: "instant" }); } catch (e) { el.scrollIntoView(); } }
     }
     async function caricaPagina(id) {

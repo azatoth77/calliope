@@ -26,7 +26,8 @@ schermi e dei satelliti veri su 127.0.0.1, un satellite finto legato allo scherm
   conversazione apre lo strato coi turni; «Pulisci le mie schede» in Io con due clic;
 - Le mie cose (28/10, passo 2a): le tessere coi conti, più di due per riga; la pagina Liste dalla
   tessera; la spunta manda il tocco giusto; contrasto e clic ≥ 44 px a 1440×900 e 700×900;
-  la pagina Agenda (28/10, passo 2b) con «+1 minuto» e «Ferma» che mandano il tocco giusto;
+  la pagina Agenda (28/10, passo 2b) con «+1 minuto» e «Ferma» che mandano il tocco giusto; le
+  pagine Lavori e programmi, Cassetto e Giochi (28/10, passo 2c) dai servizi, contrasto e niente fuori;
 - nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> gli screenshot.
 """
 
@@ -302,6 +303,7 @@ def raccolte_pc(p, hub):
                  json.dumps([m.get("bassi"), m.get("clic"), m.get("fuori")])[:240])
     dimensione(p, 1440, 900)
     agenda_pc(p, hub, S)
+    pagine_2c_pc(p, hub, S)
     p.valuta("history.back(); 1")
     ok = aspetta(lambda: p.valuta("location.hash") == "#/cose" and p.valuta(f"{S}.vistaCose") == "tessere", 3)
     m = p.valuta(MISURA) or {}
@@ -408,6 +410,48 @@ def cruscotto_e_pulisci(p, hub):
     ok = aspetta(lambda: (p.valuta("document.getElementById('pc-pulisci-esito').textContent") or "") != "", 6)
     verifica("pulisci: due clic, l'esito detto", bool(ok), p.valuta("document.getElementById('pc-pulisci-esito').textContent"))
     p.valuta(f"{P}.vai('#/adesso'); 1")
+
+
+def pagine_2c_pc(p, hub, S):
+    """Lavori e programmi, Cassetto e Giochi sul PC personale (28/10, passo 2c, #258): dalle
+    tessere, le schede dai servizi; contrasto AA e niente fuori a 1440×900 e 700×900."""
+    import types
+    from calliope.cassetto import Cassetto
+    from calliope.config import Config
+    import prova_pagine_cose as ppc
+    P = "window.calliopePC"
+    cartella = TMP / "pagine-2c"
+    cfg = Config()
+    cfg.agenti_risultati = str(cartella / "risultati")
+    ora = time.time()
+    hub.tool_ctx.lavori = ppc.servizio_lavori(cfg, [
+        ppc.lavoro("L1", ppc.DARIO, "in_corso", "orari dei treni", creato=ora - 60, passo="legge le pagine"),
+        ppc.lavoro("L2", ppc.DARIO, "fatto", "ricetta del pane", creato=ora - 900, fine=ora - 800,
+                   risultato={"markdown": True, "testo": "# Pane\n\nFarina e acqua.", "riassunto": "Farina e acqua."})])
+    cas = Cassetto(str(cartella / "cassetto.db"), str(cartella / "cassetto"), log=lambda m: None)
+    cas.metti("dario", b"scontrino del ferramenta", "scontrino.txt", "testo", fonte="telefono")
+    hub.cassetto = cas
+    hub.tool_ctx.estensioni = types.SimpleNamespace(archivio=ppc.Archivio([ppc.manifesto("tris", "Tris")]))
+    attese = {"lavori": ["lavoro:L1", "lavoro:L2"], "cassetto": ["cassetto:dario:pagina"], "giochi": ["giochi:casa:dario"]}
+    for quale, chiavi in attese.items():
+        p.valuta(f"{P}.vai('#/cose'); 1")
+        p.valuta(f"{P}.aggiornaRaccolte && {P}.aggiornaRaccolte(); 1")
+        aspetta(lambda: any(x.get("id") == quale and "presto" not in str(x.get("stato"))
+                            for x in p.valuta(f"{S}.tessere") or []), 5)
+        clic(p, f'#tessere [data-tessera="{quale}"]')
+        ok = aspetta(lambda: p.valuta("location.hash") == f"#/cose/{quale}" and p.valuta(f"{S}.pagina") == chiavi, 5)
+        verifica(f"PC: la pagina {quale} dalla tessera, con le schede dal servizio", bool(ok),
+                 json.dumps([p.valuta("location.hash"), p.valuta(f"{S}.pagina")]))
+        for w, h in ((1440, 900), (700, 900)):
+            dimensione(p, w, h)
+            time.sleep(0.3)
+            m = p.valuta(MISURA) or {}
+            foto(p, f"pc-{w}x{h}-{quale}.png")
+            verifica(f"PC {w}×{h} pagina {quale}: contrasto AA, niente fuori",
+                     not m.get("bassi") and not m.get("fuori") and not m.get("scorre"),
+                     json.dumps([m.get("bassi"), m.get("fuori")])[:240])
+        dimensione(p, 1440, 900)
+    cas.close()
 
 
 def main() -> int:

@@ -27,7 +27,7 @@
     lista: "Lista", timer: "Timer", promemoria: "Agenda", biblioteca: "Biblioteca",
     documento: "Documento", casa: "Casa", calcolo: "Calcolo", testo: "Da leggere",
     lavoro: "Lavoro", modulo: "Da scrivere", web: "Internet", esecuzione: "Programma",
-    risposta: "Risposta", foto: "Foto", allegato: "File", gioco: "Gioco",
+    risposta: "Risposta", foto: "Foto", allegato: "File", gioco: "Gioco", giochi: "Giochi",
     cruscotto: "Cruscotto", cassetto: "Cassetto", esercizio: "Esercizi",
     esercizi_riepilogo: "Esercizi", sviluppo: "Sviluppo", chat: "Conversazione",
     conoscente: "Voce nuova", avviso: "Avviso",
@@ -42,7 +42,7 @@
     timer: "cose/agenda", promemoria: "cose/agenda", lista: "cose/liste",
     lavoro: "cose/lavori", esecuzione: "cose/lavori", sviluppo: "cose/lavori",
     documento: "cose/documenti", foto: "cose/cassetto", allegato: "cose/cassetto",
-    cassetto: "cose/cassetto", modulo: "cose", gioco: "cose/giochi",
+    cassetto: "cose/cassetto", modulo: "cose", gioco: "cose/giochi", giochi: "cose/giochi",
     esercizio: "cose/studio", esercizi_riepilogo: "cose/studio",
     casa: "casa", conoscente: "casa", avviso: "casa", cruscotto: "io",
   };
@@ -4133,6 +4133,43 @@
     if (!document.fullscreenElement) GIOCO.fs = false;
     aggiornaModoGioco();
   });
+
+  // ─── Le partite aperte e i giochi di casa (28/10, passo 2c, #258: la pagina Giochi) ───
+  // Solo testo, nessun tasto: un gioco si apre a voce, e il riquadro vero è la scheda «gioco»
+  // (una copia sola: la pagina la mostra sotto). Tutto in textContent
+  DISEGNA.giochi = function (c, corpo, s) {
+    s.classList.add("scheda-giochi");
+    const partite = Array.isArray(c.partite) ? c.partite.filter((p) => p && typeof p === "object") : [];
+    const giochi = Array.isArray(c.giochi) ? c.giochi.filter((g) => g && typeof g === "object") : [];
+    if (c.nota) corpo.append(el("p", "sotto", c.nota));
+    if (!partite.length && !giochi.length) {
+      corpo.append(el("p", "vuoto", c.vuoto || "Niente qui, per ora."));
+      return;
+    }
+    const ul = el("ul", "voci-giochi");
+    for (const p of partite) {
+      const li = el("li", "partita");
+      li.append(el("p", "nome-gioco", String(p.titolo || "Gioco") + (p.prova ? " (prova)" : "")));
+      const dove = (Array.isArray(p.dove) ? p.dove : []).map(String).filter(Boolean);
+      li.append(el("p", "sotto", p.qui ? "Su questo schermo: è qui sotto."
+        : "Sullo schermo " + (dove.length ? dove.join(", ") : "di un'altra stanza") + "."));
+      const punti = (Array.isArray(p.punti) ? p.punti : []).filter((x) => x && x.nome)
+        .map((x) => String(x.nome) + " " + (Number(x.punti) || 0));
+      if (p.esito) li.append(el("p", "riassunto-lavoro", String(p.esito)));
+      else if (p.tocca) li.append(el("p", "riassunto-lavoro", "Tocca a " + String(p.tocca) + "."));
+      if (punti.length) li.append(el("p", "sotto", "Punti: " + punti.join(" · ")));
+      ul.append(li);
+    }
+    for (const g of giochi) {
+      const li = el("li", "gioco-casa");
+      li.append(el("p", "nome-gioco", String(g.titolo || "Gioco")));
+      const meta = [g.giocatori, g.descrizione].map((x) => String(x || "")).filter(Boolean);
+      if (meta.length) li.append(el("p", "sotto", meta.join(" · ")));
+      if (g.dire) li.append(el("p", "sotto dire-gioco", "Per giocare: " + String(g.dire)));
+      ul.append(li);
+    }
+    corpo.append(ul);
+  };
 
   DISEGNA.gioco = function (c, corpo, s) {
     s.classList.add("scheda-gioco");

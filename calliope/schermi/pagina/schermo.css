@@ -1073,6 +1073,14 @@ body.con-sezioni #chat-apri { display: none; }
 .tessera-stato { font-size: 0.9rem; line-height: 1.3; color: var(--tenue); overflow-wrap: anywhere; }
 /* La pagina di una raccolta prende il posto delle tessere e dei gruppi */
 #sez-cose[data-vista="pagina"] > .raccolta, #sez-cose[data-vista="pagina"] > .vuoto-sez { display: none; }
+/* …tranne in Giochi (28/10, #258): la scheda «gioco» di questo schermo resta sotto la pagina, una
+   copia sola del riquadro */
+#sez-cose[data-vista="pagina"][data-pagina="giochi"] > .raccolta[data-raccolta="giochi"]:not([hidden]):not([data-nascosta]) {
+  display: flex; flex-direction: column; gap: 0.6rem;
+}
+ul.voci-giochi { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+ul.voci-giochi .nome-gioco { margin: 0; font-weight: 650; font-size: 1.1em; }
+ul.voci-giochi p { margin: 0.1rem 0 0; overflow-wrap: anywhere; }
 .pagina-racc { display: flex; flex-direction: column; gap: 0.6rem; }
 .pagina-testa { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.9rem; }
 .pagina-indietro {
