@@ -231,3 +231,21 @@ ne mostrava 8 e la ricerca guardava gli ultimi 50]* I limiti trovati e cosa se n
   dei soli documenti di chi parla, e l'archivio coi permessi di sempre.
 
 Prove: `prova_pagina_documenti`, `prova_documenti` (le frasi col telefono abbinato ma chiuso).
+
+## L'ufficio sugli schermi: la pagina Ufficio di chi amministra (28/10 sera, issue #260, ramo `issue-260-ufficio`)
+
+Le mie cose › Ufficio, solo sugli schermi personali di chi amministra (decisione del 28/10; la pagina e chi la
+vede sono in [schermi-telefono](schermi-telefono.md)): fatture, note di credito, preventivi, DDT e le serie
+dei modelli da `Numeratore.elenco`, con numero, data, cliente, importo, stato (emesso o annullato col motivo)
+e «Scarica» del PDF e dell'XML; la rubrica da `Rubrica.visibili`; una ricerca. In sola lettura: a voce non
+cambia nulla, e l'invio allo SdI resta a mano (la pagina non dice mai «inviata»: nessuno lo registra).
+
+- **Il totale nei dati del numero**: `_scrivi` aggiunge `_totale` (e `_da_pagare` con la ritenuta) ai dati
+  salvati da `Numeratore.emetti`, dai conti del programma (`doc["totali"]`). I numeri emessi prima del 28/10
+  non l'hanno, e la pagina lascia la riga senza importo invece di rifare i conti, che dipendono
+  dall'emittente e dalle aliquote di quel giorno.
+- **`Numeratore.elenco(con_dati=True)`** dà anche `dati` (il JSON dell'emissione, col contatto della rubrica
+  com'era allora), `owner`, `creato` e `annullato`; senza il parametro l'elenco è quello di prima.
+- «Scarica» serve solo i file registrati per quel numero (`rif`), riletti al clic con i permessi rifatti.
+
+Prove: `prova_ufficio` (il totale, il da pagare e il cliente nei dati del numero), `prova_pagina_ufficio`.
