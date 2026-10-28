@@ -47,7 +47,7 @@ una foto è persa perché non è stata archiviata.
 6. **Lo stato si vede**: nel dettaglio della miniatura nella Conversazione una riga fra «La tengo fino
    al 27 dicembre: di' «archiviala» per tenerla sempre.», «Archiviata.» (con il rimando ai documenti) e
    «Non c'è più: non era stata archiviata.»; finché la foto c'è, il dettaglio mostra la foto intera,
-   con gli stessi controlli di «Scarica» (solo il proprietario, dal suo schermo personale).
+   da «Scarica» (solo il proprietario, dal suo schermo personale, un gettone a tempo).
 7. **Il modello vede come prima**: nella conversazione la foto resta nel suo messaggio
    (`immagini_storia`, `immagini_max_conversazione`); le copie e le miniature non gli arrivano.
 

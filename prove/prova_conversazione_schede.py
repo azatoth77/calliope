@@ -848,9 +848,17 @@ def prova_foto_server():
     import base64
     r = c.post("/api/conversazione", headers=h(tok_d), json={"foto": fid})
     d = r.json()
-    verifica("{foto}: dallo schermo di Dario lo stato e la foto intera",
-             r.status_code == 200 and d["stato"] == "tenuta" and d.get("scade")
-             and base64.b64decode(d["src"].split(",", 1)[1]) == jpeg, {k: str(v)[:40] for k, v in d.items()})
+    intera = c.get(d["url"]) if d.get("url") else None
+    verifica("{foto}: dallo schermo di Dario lo stato e la foto intera, da «Scarica» (un gettone)",
+             r.status_code == 200 and d["stato"] == "tenuta" and d.get("scade") and "src" not in d
+             and d["url"].startswith("/scarica/") and intera is not None and intera.content == jpeg,
+             {k: str(v)[:40] for k, v in d.items()})
+    verifica("…il gettone vale per poche richieste", [c.get(d["url"]).status_code for _ in range(3)][-1] != 200)
+    cas.ora.t += 61 * 86400
+    cas.pulisci()
+    r2 = c.post("/api/conversazione", headers=h(tok_d), json={"foto": fid})
+    verifica("…scaduta: «persa», senza foto", r2.json() == {"stato": "persa"}, r2.text)
+    cas.ora.t -= 61 * 86400
     r = c.post("/api/conversazione", headers=h(tok_b), json={"foto": fid})
     verifica("…dallo schermo di Bianca 404, senza la foto", r.status_code == 404 and "src" not in r.text, r.status_code)
     r = c.post("/api/conversazione", headers=h(tok_s), json={"foto": fid})

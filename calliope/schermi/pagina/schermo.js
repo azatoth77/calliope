@@ -1528,7 +1528,8 @@
       s.classList.add("scheda-foto");
       const img = el("img");
       img.alt = c.titolo || "Foto";
-      if (typeof c.src === "string" && c.src.startsWith("data:image/jpeg;base64,")) img.src = c.src;
+      if (typeof c.fotoIntera === "string" && /^\/scarica\/[A-Za-z0-9_-]{16,}$/.test(c.fotoIntera)) img.src = c.fotoIntera;
+      else if (typeof c.src === "string" && c.src.startsWith("data:image/jpeg;base64,")) img.src = c.src;
       corpo.append(img);
       if (c.didascalia) corpo.append(el("p", "didascalia", c.didascalia));
       // Lo stato della foto tenuta (29/10, decisione 0034), nel dettaglio dalla Conversazione
@@ -2140,9 +2141,10 @@
       try { r = await postSessione("/api/conversazione", { foto: c.cassetto }); }
       catch (e) { r = { status: 0, dati: {} }; }
       const d = r.status === 200 && r.dati ? r.dati : { stato: "sconosciuto" };
-      const src = typeof d.src === "string" && d.src.startsWith("data:image/jpeg;base64,") ? d.src : null;
+      // La foto intera da «Scarica» (un gettone di questo schermo), mai un indirizzo d'altro
+      const url = typeof d.url === "string" && /^\/scarica\/[A-Za-z0-9_-]{16,}$/.test(d.url) ? d.url : null;
       c = Object.assign({}, c, { statoFoto: String(d.stato || ""), scadeFoto: Number(d.scade) || 0 },
-        src ? { src } : {});
+        url ? { fotoIntera: url } : {});
     }
     // La copia del turno, con una chiave sua: la scheda viva con la stessa chiave (la lista di
     // adesso) resta un'altra cosa

@@ -573,7 +573,11 @@ SEMPRE se dico archiviala. Così uno ha tempo per pensare cosa fare».
   conto). Le archiviate restano nei documenti.
 - **Lo stato e la foto intera** nel dettaglio della miniatura della Conversazione: `POST /api/conversazione`
   con `{foto}` (`Schermi.chat_foto` → `Cassetto.stato_foto`), solo dallo schermo personale del
-  proprietario (Bianca 404, stanza 403, senza sessione 401): «La tengo fino al … di' «archiviala» per
+  proprietario (Bianca 404, stanza 403, senza sessione 401; la sessione è quella degli schermi,
+  `_schermo_sessione`, legata allo schermo con cui è nata). La foto intera passa da «Scarica»: una voce
+  `foto:C<id>` per quello schermo (via con gli schermi revocati), solo del proprietario
+  (`solo_persona`), un gettone a tempo per poche richieste e i permessi rifatti al GET
+  (`Cassetto.stato_foto`); la pagina la mostra da `/scarica/<gettone>`. Le righe: «La tengo fino al … di' «archiviala» per
   tenerla sempre.» con la foto intera, «Archiviata.» col tasto «Apri i tuoi documenti», «Non c'è più: non
   era stata archiviata.», «Non c'è più: è stata eliminata dal cassetto.». Sulla miniatura stessa nessuna
   riga: lo stato cambia, e la copia del turno è di quando è stata mandata.

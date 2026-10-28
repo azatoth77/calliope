@@ -638,8 +638,10 @@ class Schermi:
 
     def chat_foto(self, schermo: dict | None, fid) -> dict:
         """Lo stato della foto di una miniatura della Conversazione e, finché è tenuta, la foto
-        intera (29/10, decisione 0034): solo dallo schermo personale del suo proprietario, come
-        «Scarica». {"stato", "scade"?, "src"?} o {"_stato", "errore"}."""
+        intera (29/10, decisione 0034): solo dallo schermo personale del suo proprietario, e la
+        foto passa da «Scarica» (una voce per questo schermo, un gettone a tempo e per poche
+        richieste, i permessi rifatti al GET; via con gli schermi revocati). {"stato", "scade"?,
+        "url"?} o {"_stato", "errore"}."""
         persona = (schermo or {}).get("proprietario")
         if not persona:
             return {"_stato": 403, "errore": "solo da uno schermo personale"}
@@ -657,9 +659,32 @@ class Schermi:
         if st.get("scade"):
             out["scade"] = round(float(st["scade"]), 3)
         if st.get("jpeg"):
-            import base64
-            out["src"] = "data:image/jpeg;base64," + base64.b64encode(st["jpeg"]).decode()
+            out.update(self._foto_scaricabile(schermo, str(persona), int(fid)))
         return out
+
+    def _foto_scaricabile(self, schermo: dict, persona: str, fid: int) -> dict:
+        """La foto tenuta come voce di «Scarica» di questo schermo, e il suo gettone: {"url"} o {}."""
+        from .scarica import Rifiuto
+        cas = self.cassetto
+
+        def leggi():
+            st = cas.stato_foto(persona, fid)            # i permessi rifatti adesso
+            return (st["jpeg"], "jpg") if st and st.get("jpeg") else None
+
+        def estensione():
+            st = cas.stato_foto(persona, fid)
+            return "jpg" if st and st.get("stato") == "tenuta" else None
+        chiave = f"foto:C{fid}"
+        self.scaricamenti.registra(schermo["id"], {
+            "chiave": chiave, "scarica": ["originale"], "titolo": "Foto",
+            "_scarica": {"file_fn": leggi, "estensione_fn": estensione, "titolo": "Foto",
+                         "solo_persona": True}}, persona)
+        try:
+            g = self.scaricamenti.gettone(schermo, chiave, "originale")
+        except Rifiuto as e:
+            self.log(f"[SCHERMI] foto tenuta senza gettone: {getattr(e, 'stato', '')}")
+            return {}
+        return {"url": g["url"]}
 
     def registra_chat(self, sid: int, persona):
         """«Scarica» della trascrizione in Markdown, per uno schermo personale del proprietario:
