@@ -1335,41 +1335,114 @@ try:
                  limite=datetime.date.today()) == 0
              and not (tmp / "non-esiste.db").exists())
 
-    # ───────── tabelle dismesse (28/10, revisione della PR #292) ─────────
+    # ───────── tabelle dismesse (28/10, revisioni della PR #292) ─────────
     # Un memoria.db di prima della #279, con le tabelle degli esercizi e dei compiti e le righe
-    # dei ragazzi: all'apertura della memoria (come all'avvio) non ci sono più, una volta sola,
-    # con la riga nel registro; le altre tabelle restano
+    # dei ragazzi: all'apertura della memoria (come all'avvio) non ci sono più, con la riga nel
+    # registro; le altre tabelle restano. Si controlla a ogni apertura, senza segni in meta_schema
     from calliope.memory import Memory
-    vecchio = tmp / "memoria-vecchia.db"
-    db = sqlite3.connect(vecchio)
-    for t in C.TABELLE_DISMESSE:
-        db.execute(f"CREATE TABLE {t} (persona TEXT, testo TEXT)")
-        db.execute(f"INSERT INTO {t} (persona, testo) VALUES ('p-min', 'sette per otto: 54')")
-    db.execute("CREATE TABLE meta_schema (modulo TEXT PRIMARY KEY, versione INTEGER NOT NULL)")
-    db.execute("INSERT INTO meta_schema (modulo, versione) VALUES ('esercizi', 3)")
-    db.execute("CREATE TABLE richieste_tutori (minore TEXT, creata TEXT)")
-    db.commit()
-    db.close()
     import contextlib
     import io
-    uscita = io.StringIO()
-    with contextlib.redirect_stdout(uscita):
-        Memory(str(vecchio)).db.close()
-    db = sqlite3.connect(vecchio)
-    nomi = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
-    moduli = {r[0] for r in db.execute("SELECT modulo FROM meta_schema")}
-    db.close()
+    vecchio = tmp / "memoria-vecchia.db"
+
+    def versione_vecchia(segno_dismesse=False):
+        """Quello che scrive una versione di prima: le tabelle, le righe, la versione «esercizi»
+        (e, col primo giro di questa pulizia, il segno «dismesse»)."""
+        db = sqlite3.connect(vecchio)
+        db.execute("CREATE TABLE IF NOT EXISTS meta_schema (modulo TEXT PRIMARY KEY, "
+                   "versione INTEGER NOT NULL)")
+        for t in C.TABELLE_DISMESSE:
+            db.execute(f"CREATE TABLE IF NOT EXISTS {t} (persona TEXT, testo TEXT)")
+            db.execute(f"INSERT INTO {t} (persona, testo) VALUES ('p-min', 'sette per otto: 54')")
+        db.execute("INSERT OR REPLACE INTO meta_schema (modulo, versione) VALUES ('esercizi', 3)")
+        if segno_dismesse:
+            db.execute("INSERT OR REPLACE INTO meta_schema (modulo, versione) VALUES ('dismesse', 1)")
+        db.execute("CREATE TABLE IF NOT EXISTS richieste_tutori (minore TEXT, creata TEXT)")
+        db.commit()
+        db.close()
+
+    def apri():
+        uscita = io.StringIO()
+        with contextlib.redirect_stdout(uscita):
+            m = Memory(str(vecchio))
+        aperta, scrivibile = m.db.in_transaction, m.scrivibile
+        m.db.close()
+        db = sqlite3.connect(vecchio)
+        nomi = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+        moduli = {r[0] for r in db.execute("SELECT modulo FROM meta_schema")}
+        db.close()
+        return uscita.getvalue(), nomi, moduli, aperta, scrivibile
+
+    versione_vecchia()
+    log1, nomi, moduli, aperta, _ = apri()
     verifica("tabelle dismesse: dopo l'avvio non ci sono più, la riga nel registro",
-             not (set(C.TABELLE_DISMESSE) & nomi) and "tabelle dismesse tolte" in uscita.getvalue()
-             and "esercizi_tentativi" in uscita.getvalue(), f"{sorted(nomi)} {uscita.getvalue()!r}")
-    verifica("tabelle dismesse: le altre restano, la versione «esercizi» via, «dismesse» segnata",
-             {"richieste_tutori", "facts"} <= nomi and "esercizi" not in moduli
-             and "dismesse" in moduli, f"{sorted(nomi)} {sorted(moduli)}")
+             not (set(C.TABELLE_DISMESSE) & nomi) and "tabelle dismesse tolte" in log1
+             and "esercizi_tentativi" in log1 and not aperta, f"{sorted(nomi)} {log1!r}")
+    verifica("tabelle dismesse: le altre restano, la versione «esercizi» via, nessun segno nuovo",
+             {"richieste_tutori", "facts"} <= nomi and not ({"esercizi", "dismesse"} & moduli),
+             f"{sorted(nomi)} {sorted(moduli)}")
+    log2, nomi, _, _, _ = apri()
+    verifica("tabelle dismesse: un'apertura senza tabelle dismesse non scrive nessuna riga",
+             "tabelle dismesse" not in log2 and not (set(C.TABELLE_DISMESSE) & nomi), log2)
+    # Ritorno indietro: la versione di prima le ricrea (anche col segno «dismesse» del primo giro
+    # della pulizia), e al ritorno avanti si tolgono di nuovo
+    versione_vecchia(segno_dismesse=True)
+    log3, nomi, moduli, _, _ = apri()
+    verifica("tabelle dismesse: dopo un ritorno indietro che le ricrea si tolgono di nuovo",
+             not (set(C.TABELLE_DISMESSE) & nomi) and "tabelle dismesse tolte" in log3
+             and not ({"esercizi", "dismesse"} & moduli), f"{sorted(nomi)} {sorted(moduli)} {log3!r}")
+    # Un errore a metà: la transazione si annulla e non resta aperta, le tabelle restano com'erano
+    versione_vecchia()
+
+    class Guasta:
+        """Una connessione vera che si rompe a metà, sulla pulizia di meta_schema."""
+
+        def __init__(self, vera):
+            self.vera = vera
+
+        def execute(self, sql, *a):
+            if sql.startswith("DELETE FROM meta_schema"):
+                raise sqlite3.OperationalError("guasto finto")
+            return self.vera.execute(sql, *a)
+
+        def __getattr__(self, k):
+            return getattr(self.vera, k)
+
+    vera = sqlite3.connect(vecchio)
+    try:
+        C.togli_tabelle_dismesse(Guasta(vera), log=lambda m: None)
+        rotta = False
+    except sqlite3.OperationalError:
+        rotta = True
+    nomi = {r[0] for r in vera.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    sd = vera.execute("PRAGMA secure_delete").fetchone()[0]
+    verifica("tabelle dismesse: un errore a metà annulla tutto, la transazione non resta aperta",
+             rotta and not vera.in_transaction and set(C.TABELLE_DISMESSE) <= nomi,
+             f"{rotta} {vera.in_transaction} {sorted(nomi)}")
+    verifica("tabelle dismesse: secure_delete torna com'era anche dopo l'errore", sd == 0, str(sd))
+    vera.close()
+    # Nella memoria: un guasto dentro la pulizia non lascia la connessione in una transazione
+    vera_funzione = C.togli_tabelle_dismesse
+
+    def guasta(db, log=print):
+        db.execute("DELETE FROM richieste_tutori")
+        raise RuntimeError("guasto finto")
+
+    C.togli_tabelle_dismesse = guasta
+    try:
+        log4, _, _, aperta, scrivibile = apri()
+    finally:
+        C.togli_tabelle_dismesse = vera_funzione
+    verifica("tabelle dismesse: con la pulizia guasta la memoria si apre, scrivibile e senza "
+             "transazione aperta", scrivibile and not aperta and "non tolte" in log4, log4)
+    # Dopo il DROP secure_delete torna com'era sulla connessione della memoria
+    versione_vecchia()
     uscita = io.StringIO()
     with contextlib.redirect_stdout(uscita):
-        Memory(str(vecchio)).db.close()
-    verifica("tabelle dismesse: una volta sola (alla seconda apertura nessuna riga)",
-             "tabelle dismesse" not in uscita.getvalue(), uscita.getvalue())
+        m = Memory(str(vecchio))
+    verifica("tabelle dismesse: secure_delete spento dopo il DROP sulla connessione della memoria",
+             m.db.execute("PRAGMA secure_delete").fetchone()[0] == 0
+             and "tabelle dismesse tolte" in uscita.getvalue())
+    m.db.close()
 
     # ───────── da terminale ─────────
     cart = tmp / "dati"
