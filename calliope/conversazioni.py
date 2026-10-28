@@ -536,6 +536,66 @@ class ArchivioConversazioni:
                 out.append(v)
         return out
 
+    def chat_filtra(self, persona: str | None, *, dal: float | None = None,
+                    al: float | None = None, solo_schede: bool = False, testo: str = "",
+                    n: int = 200) -> dict:
+        """I turni di `persona` (mai degli ospiti) per i filtri e la ricerca della Conversazione
+        degli schermi personali (28/10, #242): fra `dal` e `al` (epoch), solo quelli con una
+        scheda, o con le parole di `testo` (tutte, per prefisso, nell'indice FTS5: niente
+        vettori, niente modello in più durante una conversazione). Dal più vecchio, al più `n`
+        (gli ultimi). {"turni": [voci di `voce_chat`], "parole": n, "troppi": bool}."""
+        if not persona or n <= 0:
+            return {"turni": [], "parole": 0, "troppi": False}
+        dove = self._dove(persona)
+        if dove is not self:
+            return dove.chat_filtra(persona, dal=dal, al=al, solo_schede=solo_schede,
+                                    testo=testo, n=n)
+        limite = time.time() - self.giorni * 86400 if self.giorni > 0 else 0.0
+        filtro = ["c.persona = ?", "c.ospite = 0", "t.quando >= ?"]
+        args: list = [str(persona), max(limite, float(dal) if dal is not None else limite)]
+        if al is not None:
+            filtro.append("t.quando < ?")
+            args.append(float(al))
+        if solo_schede:
+            # Il meta è JSON: la chiave «schede» con le virgolette non può stare dentro un valore
+            filtro.append("t.meta LIKE ?")
+            args.append('%"schede":%')
+        # Le parole come le cerca il tool (le stesse regole: niente operatori di FTS5, ogni
+        # parola tra virgolette, per prefisso); un testo senza parole non cerca niente
+        parole = [w.lower() for w in _PAROLA.findall(str(testo or "")[:200]) if len(w) > 1][:8]
+        cerca = bool(str(testo or "").strip())
+        if cerca and not parole:
+            return {"turni": [], "parole": 0, "troppi": False}
+        q = " AND ".join(f'"{w[:-1] if len(w) > 4 else w}"*' for w in parole)
+        with self.lock:
+            try:
+                if parole:
+                    righe = self.db.execute(
+                        "SELECT t.id, t.quando, t.domanda, t.risposta, t.meta, c.luogo, t.azioni "
+                        "FROM turni_fts f JOIN turni t ON t.id = f.rowid JOIN conversazioni c "
+                        f"ON c.id = t.conv WHERE turni_fts MATCH ? AND {' AND '.join(filtro)} "
+                        "ORDER BY t.id DESC LIMIT ?", [q, *args, int(n) + 1]).fetchall()
+                else:
+                    righe = self.db.execute(
+                        "SELECT t.id, t.quando, t.domanda, t.risposta, t.meta, c.luogo, t.azioni "
+                        "FROM turni t JOIN conversazioni c ON c.id = t.conv WHERE "
+                        f"{' AND '.join(filtro)} ORDER BY t.id DESC LIMIT ?",
+                        [*args, int(n) + 1]).fetchall()
+            except sqlite3.OperationalError:
+                righe = []
+        troppi = len(righe) > n
+        out = []
+        for r in reversed(righe[:n]):
+            try:
+                meta = json.loads(r[4]) if r[4] else None
+                azioni = json.loads(r[6] or "[]")
+            except ValueError:
+                meta, azioni = None, []
+            v = voce_chat(r[0], r[1], r[2], r[3], meta, r[5], azioni)
+            if v is not None and (not solo_schede or v.get("schede")):
+                out.append(v)
+        return {"turni": out, "parole": len(parole), "troppi": troppi}
+
     def chat_markdown(self, persona: str | None, n: int = 2000) -> str:
         """La trascrizione in Markdown («Scarica» della scheda), giorno per giorno."""
         return chat_markdown(self.chat(persona, n))
@@ -1167,12 +1227,33 @@ def voce_chat(ident, quando, domanda, risposta, meta, luogo_conv, azioni=()) -> 
     domanda = str(domanda or "")
     if not domanda.strip() and not risposta.strip():
         return None
-    luogo = str(meta.get("luogo") or luogo_conv or "")
+    canale = str(meta.get("canale") or "voce")
+    canale = canale if canale in CANALI_CHAT else "voce"
+    # Il tocco e il modulo vengono da uno schermo: il luogo della conversazione (il satellite
+    # della voce) non è il loro (28/10, #242); vale solo quello del turno, se c'è
+    luogo = str(meta.get("luogo") or (luogo_conv if canale in ("voce", "scritto") else "") or "")
     if luogo == "locale":
         luogo = "questo computer"
-    return {"id": int(ident), "quando": round(float(quando or 0), 3), "domanda": domanda,
-            "risposta": risposta, "luogo": luogo[:60],
-            "canale": "scritto" if meta.get("canale") == "scritto" else "voce"}
+    out = {"id": int(ident), "quando": round(float(quando or 0), 3), "domanda": domanda,
+           "risposta": risposta, "luogo": luogo[:60], "canale": canale}
+    schede = [x for x in (meta.get("schede") or ()) if isinstance(x, dict) and x.get("tipo")]
+    if schede:
+        out["schede"] = schede[:4]
+    return out
+
+
+# I canali di un turno nella Conversazione (28/10, #242): detto, scritto, un tocco sullo schermo
+# personale (schermi/tocchi.py), un modulo inviato (schermi/moduli.py)
+CANALI_CHAT = ("voce", "scritto", "tocco", "modulo")
+CANALI_TESTO = {"voce": "a voce", "scritto": "scritto", "tocco": "con un tocco",
+                "modulo": "modulo"}
+# I nomi dei tipi di scheda nella trascrizione (gli stessi di NOMI_TIPO in pagina/schermo.js)
+NOMI_SCHEDA = {"lista": "Lista", "timer": "Timer", "promemoria": "Agenda", "biblioteca": "Biblioteca",
+               "documento": "Documento", "casa": "Casa", "calcolo": "Calcolo", "testo": "Da leggere",
+               "lavoro": "Lavoro", "modulo": "Da scrivere", "web": "Internet",
+               "esecuzione": "Programma", "foto": "Foto", "allegato": "File", "gioco": "Gioco",
+               "giochi": "Giochi", "cassetto": "Cassetto", "esercizio": "Esercizi",
+               "esercizi_riepilogo": "Esercizi", "sviluppo": "Sviluppo", "avviso": "Avviso"}
 
 
 def chat_markdown(turni: list[dict], titolo: str = "Conversazione con Calliope") -> str:
@@ -1188,15 +1269,21 @@ def chat_markdown(turni: list[dict], titolo: str = "Conversazione con Calliope")
         if d.date() != giorno:
             giorno = d.date()
             righe += [f"## {giorni[d.weekday()]} {d.day} {MESI[d.month - 1]} {d.year}", ""]
+        canale = t.get("canale") if t.get("canale") in CANALI_TESTO else "voce"
         dove = " · ".join(x for x in (d.strftime("%H:%M"), t.get("luogo") or "",
-                                      "scritto" if t.get("canale") == "scritto" else "")
-                          if x)
+                                      CANALI_TESTO[canale]) if x)
         righe.append(f"**{dove}**")
         righe.append("")
         if t.get("domanda"):
             righe += [f"**Tu:** {t['domanda']}", ""]
         if t.get("risposta"):
             righe += [f"**Calliope:** {t['risposta']}", ""]
+        # Le schede del turno (28/10, #242): il tipo e il titolo, il contenuto resta sullo schermo
+        for x in t.get("schede") or ():
+            if isinstance(x, dict) and x.get("tipo"):
+                nome = NOMI_SCHEDA.get(str(x["tipo"]), str(x["tipo"]))
+                titolo = str(x.get("titolo") or "").strip()
+                righe += [f"*Scheda: {nome}{' · ' + titolo if titolo else ''}*", ""]
     return "\n".join(righe).rstrip() + "\n"
 
 

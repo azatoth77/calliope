@@ -530,3 +530,54 @@ def allegato(att) -> dict:
 def vuota() -> dict:
     """Torna all'orologio."""
     return nuova("vuota", "Orologio", PUBBLICA, durata_s=None)
+
+
+# ─────────────────────── le schede dentro la Conversazione (28/10, #242) ───────────────────────
+# Le schede mandate in un turno restano col turno nell'archivio delle conversazioni (stessa
+# tenuta, stessa «dimentica», mai degli ospiti): la Conversazione degli schermi personali le
+# mostra piccole dentro la risposta, e un tocco apre la scheda intera com'era allora.
+#   - una copia per i tipi di contenuto, sotto CONV_SCHEDA_MAX byte (oltre: un rimando);
+#   - un rimando (tipo, titolo, chiave, sezione) per i tipi vivi o pesanti: la pagina porta alla
+#     scheda nella sua sezione, se c'è ancora;
+#   - niente per le altre (la risposta scritta ripete il testo del turno; chat e cruscotto sono
+#     della pagina; la voce nuova ha le parole di un ospite; archivio e ufficio sono riservati).
+CONV_COPIA = frozenset({"biblioteca", "web", "calcolo", "testo", "lista", "timer", "promemoria",
+                        "casa", "documento"})
+CONV_RIMANDO = frozenset({"lavoro", "esecuzione", "sviluppo", "gioco", "giochi", "esercizio",
+                          "esercizi_riepilogo", "cassetto", "foto", "allegato", "modulo",
+                          "avviso"})
+CONV_SCHEDA_MAX = 16_000          # byte del JSON di una copia
+CONV_SCHEDE_TURNO = 4             # schede al più per turno
+# Mai nella copia: la sorgente di «Scarica» resta sul server e non vale per una copia vecchia;
+# la scadenza non conta più (la copia è del turno); `sposta` è dell'invio
+_CONV_FUORI = frozenset({"scarica", "scade", "sposta", "durata"})
+
+
+def per_conversazione(scheda) -> dict | None:
+    """La scheda come resta nel turno della Conversazione: una copia `storica` (la pagina la
+    disegna senza spunta né tasti: quei tocchi varrebbero sullo stato di oggi), un `rimando`, o
+    None. Sempre senza le chiavi «_» (restano sul server)."""
+    if not isinstance(scheda, dict):
+        return None
+    tipo = str(scheda.get("tipo") or "")
+    if tipo not in CONV_COPIA and tipo not in CONV_RIMANDO:
+        return None
+    base = {"tipo": tipo, "titolo": _taglia(scheda.get("titolo") or "", 120),
+            "sezione": str(scheda.get("sezione") or sezione_di(tipo))}
+    for k in ("id", "chiave"):
+        if isinstance(scheda.get(k), str) and scheda[k]:
+            base[k] = scheda[k][:120]
+    if isinstance(scheda.get("creata"), (int, float)):
+        base["creata"] = round(float(scheda["creata"]), 3)
+    if tipo in CONV_COPIA:
+        import json
+        copia = {k: v for k, v in scheda.items()
+                 if not str(k).startswith("_") and k not in _CONV_FUORI}
+        copia.update(base, storica=True)
+        try:
+            peso = len(json.dumps(copia, ensure_ascii=False, default=str).encode("utf-8"))
+        except (TypeError, ValueError):
+            peso = CONV_SCHEDA_MAX + 1
+        if peso <= CONV_SCHEDA_MAX:
+            return copia
+    return {**base, "rimando": True}

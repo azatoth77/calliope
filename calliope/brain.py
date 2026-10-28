@@ -6420,6 +6420,17 @@ class Brain:
         self.last_turn_at = time.monotonic()
         call = {"id": "call_tocco", "name": nome, "arguments": dict(argomenti or {})}
         self.history.append({"role": "user", "content": testo})
+        # La scheda del risultato (la lista aggiornata) resta col turno del tocco (28/10, #242):
+        # la Conversazione la mostra piccola. Chi tocca è il proprietario dello schermo personale
+        try:
+            res = json.loads(risultato) if isinstance(risultato, str) else {}
+        except (TypeError, ValueError):
+            res = {}
+        for card in [c for c in ((res or {}).get("scheda"), (res or {}).get("schede")) if c] \
+                if isinstance(res, dict) else ():
+            for c in (card if isinstance(card, list) else [card]):
+                if isinstance(c, dict):
+                    self.lega_scheda_al_turno(c)
         self.history.append({"role": "assistant", "content": "", "tool_calls": [call]})
         self.history.append({"role": "tool", "tool_call_id": call["id"], "name": nome,
                              "content": risultato})
@@ -6625,7 +6636,30 @@ class Brain:
                 mandate.append({"tipo": card.get("tipo"), "chiave": card.get("chiave"),
                                 "titolo": str(titolo)[:120] if titolo else None,
                                 "schermi": len(r.get("schermi") or ())})
+            if getattr(sender, "certo", False) and getattr(sender, "persona", None):
+                self.lega_scheda_al_turno(card)
         return out
+
+    def lega_scheda_al_turno(self, card: dict):
+        """La scheda mandata in questo turno resta col turno (28/10, #242): sul messaggio della
+        persona (`_schede`, come `_turno`), da dove `conversazione.turni` la porta nell'archivio
+        delle conversazioni e la Conversazione degli schermi personali la mostra piccola dentro la
+        risposta. Solo con l'identità certa (chi la chiama lo controlla); la stessa scheda
+        mandata di nuovo nello stesso turno sostituisce quella di prima."""
+        try:
+            from .schermi.schede import CONV_SCHEDE_TURNO, per_conversazione
+            piccola = per_conversazione(card)
+            if piccola is None:
+                return
+            for m in reversed(self.history):
+                if isinstance(m, dict) and m.get("role") == "user":
+                    lista = [x for x in (m.get("_schede") or ()) if isinstance(x, dict)
+                             and not ((piccola.get("chiave") and x.get("chiave") == piccola["chiave"])
+                                      or (piccola.get("id") and x.get("id") == piccola["id"]))]
+                    m["_schede"] = (lista + [piccola])[-CONV_SCHEDE_TURNO:]
+                    return
+        except Exception as e:  # noqa: BLE001 — la scheda nella conversazione non ferma la voce
+            print(f"   [SCHERMI] scheda non legata al turno: {type(e).__name__}", flush=True)
 
     def _nome_corretto(self, call: dict):
         """Un nome di tool storpiato dal modello («richesta_tutore», prova e2e del 06/10) che

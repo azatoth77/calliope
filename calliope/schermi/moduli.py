@@ -537,8 +537,21 @@ def completa(hub, item: dict, brain, turno: int) -> dict:
         attivo = getattr(brain, "eventi_attivo", None)
         if not (callable(attivo) and attivo()):
             # Con il registro degli eventi acceso (passo 3) è il modulo_compilato dell'ombra
-            brain.history.append({"role": "user", "content": f"(Ho scritto sullo schermo i "
-                                                            f"dati per «{m.titolo}»: {nomi}.)"})
+            # Con il canale e lo schermo (28/10, #242): la Conversazione lo mostra come un modulo
+            # inviato da lì, non come una frase detta; e le schede del risultato restano col turno
+            msg = {"role": "user", "content": f"(Ho scritto sullo schermo i dati per "
+                                              f"«{m.titolo}»: {nomi}.)",
+                   "_turno": {"t": round(float(item.get("arrivato") or time.time()), 3),
+                              "canale": "modulo",
+                              **({"luogo": str(item["schermo"])[:60]} if item.get("schermo")
+                                 else {})}}
+            brain.history.append(msg)
+            lega = getattr(brain, "lega_scheda_al_turno", None)
+            if callable(lega) and getattr(m.mittente, "certo", False):
+                for card in [c for c in (res.get("scheda"), res.get("schede")) if c]:
+                    for c in (card if isinstance(card, list) else [card]):
+                        if isinstance(c, dict):
+                            lega(c)
         if frase:
             brain.record_announcement(frase, res.get("in_sospeso"), fonte=None)
     return {"frase": frase, "rec": dict(rec, esito="modulo",
