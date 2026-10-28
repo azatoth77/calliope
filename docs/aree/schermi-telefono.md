@@ -1071,7 +1071,9 @@ Passo 2b del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-
     schermo del tocco e agli altri schermi personali della persona anche con le schede automatiche
     spente (`Ciclo._scheda_pubblica_del_tocco`). Prima solo lo schermo del tocco: la TV della cucina
     continuava il conto di un timer fermato e diceva «Finito» un minuto prima. Le schede di casa e
-    personali (la lista) restano solo allo schermo del tocco, come deciso nella PR #261;
+    personali (la lista) restano solo allo schermo del tocco, come deciso nella PR #261 *[storico
+    per «dove va quando lo stesso tool parte dalla voce» fino al 28/10 sera: ora `Schermi.aggiorna`,
+    sezione «Le schede del tocco»]*;
   - una corsia nuova nasce col contesto dei tool pulito (`main.contesto_corsia`): niente bersaglio,
     proposta in sospeso, «sì» già dato o gioco della corsia principale;
   - un tocco del timer senza bersaglio è rifiutato (`Tocco.bersaglio`, regola `tocco_senza_bersaglio`).
@@ -1384,19 +1386,34 @@ Le note della revisione della PR #265 (commento della #258), insieme all'elenco 
   tool è stato chiamato: quello vero del proprietario, limitato come lo scritto da uno schermo personale
   (`current_level`: chi amministra vale «familiare»). Oggi il valore è lo stesso; cambia se cambia il
   tetto dello scritto.
-- **La stanza**, provata con l'hub vero (`Schermi` con l'archivio su disco) e due stanze, cucina e
-  salotto, invece di un `invia` finto: senza la stanza dello schermo del tocco il timer va alla stanza
-  predefinita (`schermi_stanza`), senza quella a tutti gli schermi, come a voce da un satellite senza
-  stanza; con la sua stanza a quella; sempre agli schermi personali di chi tocca e mai a quelli di
-  un'altra persona. Il codice faceva già così (`hub.invia`: `mittente.stanza or stanza_predefinita`).
-  Da sapere: un telefono abbinato con `--stanza telefono` ha la stanza «telefono», e il timer toccato lì va
-  agli schermi di quella «stanza» (come una frase detta dal telefono), non alla cucina.
+- **Dove va la scheda aggiornata** (`Schermi.aggiorna`, dalla revisione della PR #270), provato con
+  l'hub vero (`Schermi` con l'archivio su disco) e due stanze, cucina e salotto. Una scheda che c'è già
+  (stessa `chiave`) si aggiorna sugli schermi a cui era andata, più quelli personali di chi tocca e lo
+  schermo del tocco, anche con le schede automatiche spente. Il caso vero: il timer messo a voce in
+  cucina e fermato dal telefono, abbinato con `--stanza telefono`. Prima l'aggiornamento seguiva la
+  «stanza» telefono: la TV della cucina restava indietro e poi diceva «Finito», e la scheda arrivava
+  anche al telefono di un altro familiare abbinato con la stessa «stanza». L'hub tiene una traccia
+  leggera in memoria (`_dove`: chiave → schermi, al più 512 chiavi, toglie gli schermi revocati o
+  puliti). Una scheda mai vista, per esempio dopo un riavvio, va come a voce: senza la stanza dello
+  schermo va alla predefinita (`schermi_stanza`), senza quella a tutti, con la sua stanza va a quella.
+  Gli schermi personali di altre persone la ricevono solo se l'avevano già.
 - **`conv_archivio`** segue la conversazione del tocco: `Brain.contesto_conversazione` (lo stesso codice
-  dell'inizio di una risposta) dopo `Corsia.turno` e dopo `record_tocco`. Prima restava quello della
-  conversazione di prima fino alla risposta dopo.
-- **Le schede della pagina Agenda sul telefono piccolo**: `una_per_una` misurava le schede delle sezioni;
-  quelle che il server dà alla pagina (il promemoria di domani compreso) ora sono portate in vista una per
-  una a 375×812 e 320×568, dentro la sezione di lato, senza testo di lato e col contrasto AA.
+  dell'inizio di una risposta) dopo `Corsia.turno` e dopo `record_tocco`, e anche per il modulo dallo
+  schermo (`_modulo_dallo_schermo`). Prima restava quello della conversazione di prima fino alla risposta
+  dopo.
+- **Le schede della pagina Agenda sul telefono piccolo**: `una_per_una` misurava le schede delle sezioni.
+  Ora porta in vista una per una, a 375×812 e 320×568, anche quelle che il server dà alla pagina (il
+  promemoria di domani compreso). Per ognuna controlla che stia dentro la sezione, che non ci sia testo
+  di lato né tagliato in basso, e il contrasto AA.
+- Dalla revisione della PR #270, anche:
+  - «+1 minuto» su un timer già finito ma non ancora suonato non lo allunga («Questo timer è già finito:
+    suona fra un attimo, non lo allungo.»);
+  - la spunta di «tutto.» (o «Tutti!») vale come «tutto» per `lista_togli`, quindi è 422 e non svuota
+    la lista;
+  - `TOCCHI` e `TOCCABILI` non si cambiano a runtime (`MappingProxyType`).
 
-Prove: `prova_agenda_pagina` (l'hub vero con due stanze e tre casi di stanza, il livello del mittente,
-`conv_archivio`), `prova_telefono_schermo` (la pagina Agenda a due dimensioni).
+Prove: `prova_agenda_pagina` (l'hub vero con due stanze; il timer della cucina fermato dal telefono; le
+schede mai viste; la traccia col tetto e gli schermi revocati; il livello del mittente; `conv_archivio`
+per tocco e modulo; il timer finito; `TOCCHI` immutabile); `prova_raccolte` («tutto.»);
+`prova_telefono_schermo` (la pagina Agenda a due dimensioni, col contrasto e il testo tagliato per
+scheda).
