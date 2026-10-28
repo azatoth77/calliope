@@ -437,6 +437,36 @@ def server(uff):
         srv.ferma()
 
 
+def chiavi_e_precedenza(hub, uff):
+    """Dalla revisione della PR #269: una chiave di «Scarica» mai oltre il taglio di schede.ufficio
+    (una serie lunghissima), e le fatture le ultime a perdere «Scarica» oltre MAX_VOCI."""
+    from calliope.schermi.hub import registra_pagina
+    numeri = uff.numeri
+    lunga = "serie_" + "x" * 90
+    numeri.emetti(lunga, datetime.date(ANNO, 1, 11), lambda n, t: {"file": [str(TMP / "lunga.pdf")]}, "dario",
+                  "Dario Rossi", lunga, "Lunga", {})
+    (TMP / "lunga.pdf").write_bytes(b"%PDF lunga")
+    p = raccolte.pagina(hub, DARIO, "ufficio")
+    c = next(x for x in p["schede"] if any(v["file"] for v in x["voci"]) and x["chiave"].endswith(lunga))
+    ck = c["voci"][0]["file"][0]["chiave"]
+    sc = scarica.Scaricamenti(Config())
+    registra_pagina(sc, 7, p["schede"], "dario")
+    g = sc.gettone({"id": 7, "proprietario": "dario"}, ck, "originale")
+    nome, _, dati = sc.prendi(g["url"].rsplit("/", 1)[1])
+    verifica("chiave lunga: al più 80 caratteri, uguale alla voce registrata, «Scarica» funziona",
+             len(ck) <= 80 and ck == (c.get("_scarica_voci") or [{}])[0].get("chiave") and dati.startswith(b"%PDF"), ck)
+    # Oltre MAX_VOCI: le prime schede (le fatture) e le prime righe restano, se ne vanno le ultime
+    finte = [{"chiave": f"coda:{i}", "_scarica_voci": [{"chiave": f"coda:{i}:{j}", "formati": ["originale"],
+                                                        "sorgente": {"file_fn": lambda: None}} for j in range(50)]}
+             for i in range(10)]
+    sc2 = scarica.Scaricamenti(Config())
+    registra_pagina(sc2, 9, p["schede"] + finte, "dario")
+    prima = voci(per_titolo(p)["Fatture"])[f"Fattura 3/{ANNO}"]["file"][0]["chiave"]
+    verifica("precedenza: oltre il tetto le fatture tengono «Scarica», se ne vanno le schede in fondo",
+             sc2.voce(9, prima) is not None and sc2.voce(9, "coda:0:0") is not None and sc2.voce(9, "coda:9:0") is None
+             and sc2.voce(9, "coda:9:49") is None and sc2.voce(9, "coda:7:0") is not None, str(len(sc2._voci[9])))
+
+
 def main():
     try:
         uff = ufficio_finto(TMP / "uff")
@@ -454,6 +484,8 @@ def main():
         scaricamenti(hub, uff)
         print("— 7. il server")
         server(uff)
+        print("— 8. dalla revisione della PR #269")
+        chiavi_e_precedenza(hub, uff)
     finally:
         shutil.rmtree(TMP, ignore_errors=True)
     print(f"\n{len(ERRORI)} errori" if ERRORI else "\ntutto ok")

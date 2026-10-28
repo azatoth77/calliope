@@ -1343,8 +1343,33 @@ servizi che mancano o sollevano; «Scarica» di PDF e XML con nomi uguali, perme
 dal registro; il server vero); in `prova_pagina_documenti` i tre punti della revisione; in `prova_ufficio` il
 totale nei dati del numero; `prova_telefono_schermo` e `prova_pc_pagina` (la pagina vera: gruppi, nome ostile
 e motivo come testo, l'annullata segnata, «Scarica XML» col nome del file salvato, niente fuori, ricerca,
-contrasto e clic a 1440×900 e 700×900); `prova_raccolte` adattata; `prova_sezioni` vuole il posto `cose/ufficio` nella pagina. Sul telefono «Tutti»
-non si prova nella pagina Ufficio: con le pagine Documenti e Ufficio di seguito la prova arriva alle 30
-letture al minuto per schermo di `/api/raccolte` (429 con la frase «troppi tocchi», da rivedere: sono
-letture). Da provare sul vero: la pagina con le fatture vere della DGX e lo scaricamento dell'XML nella PWA
-dell'iPhone (#59).
+contrasto e clic a 1440×900 e 700×900); `prova_raccolte` adattata; `prova_sezioni` vuole il posto `cose/ufficio` nella pagina. Da provare sul
+vero: la pagina con le fatture vere della DGX e lo scaricamento dell'XML nella PWA dell'iPhone (#59).
+*[storico, fino alla revisione della PR #269: «Sul telefono «Tutti» non si prova nella pagina Ufficio: la
+prova arriva alle 30 letture al minuto»]*
+- **Dalla revisione della PR #269** (da correggere; tutto sistemato sullo stesso ramo):
+  - *Bloccante: la cifra sola.* «3» o «di 3» passavano `_parole_utili` (dal primo commit una cifra vale), ma
+    `Archivio.cerca` tiene solo le parole di 2 lettere o più: senza parole non filtrava, e la pagina
+    Documenti diceva «Trovati 20» coi documenti più recenti dell'archivio. Ora l'archivio si interroga solo
+    se c'è una parola che usa davvero; i documenti fatti da Calliope confrontano la cifra intera («3» trova
+    «Verbale 3», non «Verbale 13»).
+  - *Le letture di `/api/raccolte`* passano da 30 a 60 al minuto per schermo (`LETTURE_AL_MINUTO`): con 30
+    chi sfoglia le raccolte, più le riletture delle tessere (due per `aggiornaRaccolte`), arrivava al 429 e
+    la pagina restava vuota. La ricerca resta a 20 e i tocchi a 30.
+  - *Una frase per limite*: le letture «Troppe richieste in poco tempo: riprovo fra qualche secondo.», la
+    ricerca «Troppe ricerche in poco tempo…», i tocchi come prima; ogni 429 ha `Retry-After` e `riprova_s`
+    (i secondi finché si libera un posto).
+  - *La pagina riprova da sola*, una volta, dopo `Retry-After` (al più 60 s), e intanto resta com'era: una
+    rilettura della stessa pagina non tocca le schede; aprendo un'altra pagina quelle di prima restano nel
+    contenitore, nascoste e con `aria-busy`, finché arriva la prima risposta.
+  - *La chiave di «Scarica»* dei file dell'ufficio mai oltre gli 80 caratteri a cui `schede.ufficio` la
+    taglia (oltre, la serie diventa un'impronta): tagliata non era più quella registrata, e dava 404.
+  - *Precedenza in «Scarica»*: `hub.registra_pagina` registra le voci di una pagina dall'ultima scheda alla
+    prima e dall'ultima riga alla prima, così oltre `MAX_VOCI` le prime della pagina (le fatture, i documenti
+    più recenti) sono le ultime a perdere «Scarica».
+  - *La cache di `Schermi.abbinati`* legge la versione prima dell'elenco: letta dopo, un abbinamento fatto
+    nel mezzo lasciava per 5 s le righe vecchie con la versione nuova.
+  - Prove: in `prova_pagina_documenti` «3», «di 3» e «7 e» (niente dall'archivio) e «3» che trova i titoli
+    con la cifra; in `prova_raccolte` 60 letture, la frase e `Retry-After`; in `prova_pagina_ufficio` la
+    chiave di una serie lunghissima e la precedenza oltre il tetto; in `prova_telefono_schermo` «Tutti» nella
+    pagina Ufficio e un 429 finto che la pagina dice, senza svuotarsi, e riprova da sola.

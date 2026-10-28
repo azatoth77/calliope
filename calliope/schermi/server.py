@@ -111,7 +111,7 @@ from starlette.routing import Route
 
 from ..satellite import web as satellite_web
 from . import telefono
-from .hub import Schermi, pubblica, registra_scaricabili
+from .hub import Schermi, pubblica, registra_pagina, registra_scaricabili
 
 PAGINA = Path(__file__).resolve().parent / "pagina"
 PING_S = 15.0
@@ -182,9 +182,16 @@ def _bearer(request: Request) -> str:
     return auth[7:].strip() if auth.lower().startswith("bearer ") else ""
 
 
-def _json(data, status: int = 200) -> JSONResponse:
+def _json(data, status: int = 200, headers: dict | None = None) -> JSONResponse:
     return JSONResponse(data, status_code=status, headers={"Cache-Control": "no-store",
-                                                           **_SICUREZZA})
+                                                           **_SICUREZZA, **(headers or {})})
+
+
+# La frase del 429 di ogni limite (revisione della PR #269: le letture dicevano «troppi tocchi»)
+TROPPI_TOCCHI = "troppi tocchi: aspetta un momento"
+TROPPE_LETTURE = "Troppe richieste in poco tempo: riprovo fra qualche secondo."
+TROPPE_RICERCHE = "Troppe ricerche in poco tempo: riprova fra qualche secondo."
+LETTURE_AL_MINUTO = 60          # /api/raccolte per schermo (era 30 fino alla revisione della PR #269)
 
 
 def crea_app(hub: Schermi) -> Starlette:
@@ -951,10 +958,11 @@ def crea_app(hub: Schermi) -> Starlette:
     letture_racc: dict[int, list[float]] = {}
     tocchi_fatti: dict[int, list[float]] = {}
 
-    def schermo_personale(request: Request, conti: dict, n: int):
+    def schermo_personale(request: Request, conti: dict, n: int, frase: str = TROPPI_TOCCHI):
         """(schermo, None) per uno schermo personale con la sessione valida, in HTTPS fuori da
         questo computer, sotto il limite di `n` richieste al minuto; altrimenti (None, risposta).
-        Non serve una conversazione a voce (decisione del 28/10)."""
+        Non serve una conversazione a voce (decisione del 28/10). Oltre il limite 429 con `frase`,
+        `Retry-After` e `riprova_s` (i secondi finché si libera un posto: la pagina riprova da sola)."""
         client = request.client.host if request.client else ""
         if request.url.scheme != "https" and client not in ("127.0.0.1", "::1"):
             return None, _json({"errore": "solo in HTTPS"}, 403)
@@ -971,7 +979,8 @@ def crea_app(hub: Schermi) -> Starlette:
             fatti = [t for t in conti.get(schermo["id"], []) if ora - t < 60.0]
             if len(fatti) >= n:
                 conti[schermo["id"]] = fatti
-                return None, _json({"errore": "troppi tocchi: aspetta un momento"}, 429)
+                attesa = max(1, int(60.0 - (ora - fatti[0])) + 1)
+                return None, _json({"errore": frase, "riprova_s": attesa}, 429, {"Retry-After": str(attesa)})
             conti[schermo["id"]] = fatti + [ora]
         return schermo, None
 
@@ -987,7 +996,9 @@ def crea_app(hub: Schermi) -> Starlette:
         """Le tessere di «Le mie cose» ({} → {tessere}) o le schede di una raccolta
         ({raccolta} → {schede, nota?}), lette dai servizi per il proprietario dello schermo."""
         from . import raccolte
-        schermo, errore = schermo_personale(request, letture_racc, 30)
+        # 60 letture al minuto (revisione della PR #269: con 30 chi sfoglia le raccolte, più le
+        # riletture delle tessere, arrivava al limite e la pagina restava vuota)
+        schermo, errore = schermo_personale(request, letture_racc, LETTURE_AL_MINUTO, TROPPE_LETTURE)
         if errore is not None:
             return errore
         dati, errore = await corpo_json(request, 512)
@@ -1011,15 +1022,10 @@ def crea_app(hub: Schermi) -> Starlette:
         sul server, registrate per questo schermo come per la cronologia ripresa."""
         stato = int(out.pop("_stato", 200))
         if isinstance(out.get("schede"), list):
-            pubbliche = []
-            for c in out["schede"]:
-                if any(k in c for k in ("_scarica", "_registro", "_scarica_voci")):
-                    try:
-                        registra_scaricabili(hub.scaricamenti, schermo["id"], c, schermo["proprietario"])
-                    except Exception as e:  # noqa: BLE001 — «Scarica» non ferma la pagina
-                        hub.log(f"[SCHERMI] «Scarica» della pagina non registrato: {type(e).__name__}")
-                pubbliche.append(pubblica(c))
-            out["schede"] = pubbliche
+            # Dall'ultima alla prima (registra_pagina): le prime della pagina perdono «Scarica» per
+            # ultime oltre il tetto delle voci per schermo
+            registra_pagina(hub.scaricamenti, schermo["id"], out["schede"], schermo["proprietario"], hub.log)
+            out["schede"] = [pubblica(c) for c in out["schede"]]
         return _json(out, stato)
 
     ricerche_racc: dict[int, list[float]] = {}
@@ -1030,7 +1036,7 @@ def crea_app(hub: Schermi) -> Starlette:
         minuto, con i permessi della pagina (raccolte.cerca). Il testo cercato non va nel
         registro: i documenti di casa sono dati personali (come i tool `riservati`)."""
         from . import raccolte
-        schermo, errore = schermo_personale(request, ricerche_racc, 20)
+        schermo, errore = schermo_personale(request, ricerche_racc, 20, TROPPE_RICERCHE)
         if errore is not None:
             return errore
         dati, errore = await corpo_json(request, 1024)

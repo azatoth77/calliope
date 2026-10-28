@@ -993,7 +993,10 @@ def _cerca_documenti(hub, prof, t: str) -> dict:
                 break
     arch = _fonte(hub, "archivio")
     chi = _chi_archivio(prof)
-    if arch is not None and chi is not None:
+    # All'archivio solo con una parola che usa davvero (revisione della PR #269): `Archivio.cerca`
+    # tiene le parole di 2 lettere o più, e con la sola cifra («3», «di 3») non filtrava e dava i
+    # 20 documenti più recenti come «trovati»
+    if arch is not None and chi is not None and any(len(w) > 1 for w in utili):
         res = arch.cerca(chi, t, limite=CERCA_RISULTATI)
         docs = list(res.get("documenti") or [])
         if docs:
@@ -1072,6 +1075,7 @@ RUBRICA_PAGINA = 60             # i contatti nella pagina, per nome; gli altri c
 # Word e PowerPoint), al più tanti per riga e mai oltre questa dimensione
 UFFICIO_FILE = 3
 UFFICIO_MAX_BYTE = 50 * 1024 * 1024
+CHIAVE_MAX = 80                 # come il taglio della chiave in schede.ufficio
 
 
 def _servizio_ufficio(hub):
@@ -1187,6 +1191,19 @@ def _leggi_file_ufficio(hub, prof, uff, serie: str, anno: int, numero: int, perc
     return leggi, estensione
 
 
+def _chiave_file(serie, anno, numero, i) -> str:
+    """La chiave di «Scarica» di un file dell'ufficio, al più CHIAVE_MAX caratteri: `schede.ufficio`
+    taglia la chiave a 80, e una chiave tagliata non sarebbe più quella registrata (404; revisione
+    della PR #269). Le serie dei modelli sono di 30 lettere al più (modelli.py), ma qui non ci si
+    conta: oltre il tetto la serie diventa un'impronta."""
+    import hashlib
+    ck = f"ufficio:file:{serie}:{anno}:{numero}:{i}"
+    if len(ck) > CHIAVE_MAX:
+        h = hashlib.sha256(str(serie).encode("utf-8")).hexdigest()[:12]
+        ck = f"ufficio:file:{h}:{anno}:{numero}:{i}"[:CHIAVE_MAX]
+    return ck
+
+
 def _voce_documento(hub, prof, uff, r: dict) -> tuple[dict, list]:
     """Una riga della scheda `ufficio` per un numero, con le sorgenti di «Scarica»."""
     from pathlib import Path
@@ -1200,7 +1217,7 @@ def _voce_documento(hub, prof, uff, r: dict) -> tuple[dict, list]:
         ext = Path(f).suffix.lstrip(".").lower()
         if ext not in ORIGINALI:
             continue
-        ck = f"ufficio:file:{r['serie']}:{r['anno']}:{r['numero']}:{i}"
+        ck = _chiave_file(r["serie"], r["anno"], r["numero"], i)
         leggi, estensione = _leggi_file_ufficio(hub, prof, uff, r["serie"], int(r["anno"]), int(r["numero"]), f)
         file.append({"chiave": ck, "estensione": ext})
         sorgenti.append({"chiave": ck, "formati": ["originale"],

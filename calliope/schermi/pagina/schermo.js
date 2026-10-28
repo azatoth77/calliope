@@ -321,7 +321,7 @@
       if (!S.sessione) return { ok: false, status: 0, dati: {} };
       try {
         const r = await postSessione("/api/raccolte", dati || {});
-        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {}, riprova: r.riprova };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
     // La ricerca di una pagina (28/10, passo 2d: i Documenti): {raccolta, testo} → {schede, nota}
@@ -329,7 +329,7 @@
       if (!S.sessione) return { ok: false, status: 0, dati: {} };
       try {
         const r = await postSessione("/api/raccolte/cerca", dati || {});
-        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {}, riprova: r.riprova };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
   };
@@ -2659,7 +2659,9 @@
     });
     let d = {};
     try { d = await r.json(); } catch (e) { /* vuota */ }
-    return { status: r.status, dati: d };
+    // I secondi di Retry-After di un 429 (revisione della PR #269: la pagina di Le mie cose riprova)
+    const ra = Number(r.headers && r.headers.get ? r.headers.get("Retry-After") : NaN);
+    return { status: r.status, dati: d, riprova: Number.isFinite(ra) && ra > 0 ? ra : 0 };
   }
 
   const MESSAGGI = {

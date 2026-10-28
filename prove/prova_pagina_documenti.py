@@ -484,6 +484,12 @@ def parole_vuote(hub):
         q = raccolte.cerca(hub, DARIO, "documenti", testo)
         verifica(f"cerca: solo parole vuote ({testo!r}) → niente da cercare, non i più recenti",
                  q.get("schede") == [] and "niente da cercare" in q.get("nota", ""), js(q)[:200])
+    # Una cifra sola (revisione della PR #269): l'archivio non la usa, e senza filtro dava i 20 più
+    # recenti come «trovati»; i documenti fatti da Calliope la confrontano (nessuno ha un «3» qui)
+    for testo in ("3", "di 3", "7 e"):
+        q = raccolte.cerca(hub, DARIO, "documenti", testo)
+        verifica(f"cerca: una cifra sola ({testo!r}) → niente dall'archivio, non i più recenti",
+                 not righe(q) and q.get("schede") == [] and "Trovat" not in q.get("nota", ""), js(q)[:200])
 
 
 def tessera_admin(hub):
@@ -579,6 +585,7 @@ def ricerca_corta_e_pertinenza():
     a = Archive(str(TMP / "corte.db"))
     a.add("bianca", "Bianca", "word", "CV", "x", "CV.docx", doc_word("CV", "Esperienze."), None, "")
     a.add("bianca", "Bianca", "word", "Tre re", "x", "Tre re.docx", doc_word("Tre re", "Una fiaba."), None, "")
+    a.add("bianca", "Bianca", "word", "Verbale 3", "x", "Verbale 3.docx", doc_word("Verbale 3", "Terzo."), None, "")
     a.add("bianca", "Bianca", "word", "Lettera al comune di Lodi", "x", "Lettera al comune di Lodi.docx",
           doc_word("Lettera al comune di Lodi", "Gentile sindaco."), None, "")
     for i in range(30):                 # più recenti, con una parola in comune
@@ -595,6 +602,8 @@ def ricerca_corta_e_pertinenza():
              titoli(q)[:1] == ["Lettera al comune di Lodi"] and len(titoli(q)) == raccolte.CERCA_RISULTATI, js(titoli(q)[:3]))
     q = raccolte.cerca(hub, BIANCA, "documenti", "lett")
     verifica("cerca: l'inizio di una parola trova lo stesso (mezzo punto)", len(titoli(q)) == raccolte.CERCA_RISULTATI)
+    q = raccolte.cerca(hub, BIANCA, "documenti", "3")
+    verifica("cerca: la cifra sola trova i titoli che la hanno, uguale e non dentro un numero", set(titoli(q)) == {"Verbale 3", "Lettera numero 3"}, js(titoli(q)))
     q = raccolte.cerca(hub, BIANCA, "documenti", "di il")
     verifica("cerca corta: contrario, le parole vuote restano fuori", q.get("schede") == [] and "niente da cercare" in q.get("nota", ""))
     q = raccolte.cerca(hub, TEO, "documenti", "CV")
