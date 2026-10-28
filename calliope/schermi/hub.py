@@ -574,6 +574,31 @@ class Schermi:
             return {"_stato": 404, "errore": "Questa scheda non c'è più."}
         return {"scheda": c}
 
+    def chat_foto(self, schermo: dict | None, fid) -> dict:
+        """Lo stato della foto di una miniatura della Conversazione e, finché è tenuta, la foto
+        intera (29/10, decisione 0034): solo dallo schermo personale del suo proprietario, come
+        «Scarica». {"stato", "scade"?, "src"?} o {"_stato", "errore"}."""
+        persona = (schermo or {}).get("proprietario")
+        if not persona:
+            return {"_stato": 403, "errore": "solo da uno schermo personale"}
+        cas = self.cassetto
+        if cas is None or not hasattr(cas, "stato_foto"):
+            return {"stato": "persa"}
+        try:
+            st = cas.stato_foto(str(persona), fid)
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[SCHERMI] foto della conversazione non letta: {type(e).__name__}")
+            return {"_stato": 500, "errore": "Non riesco a leggere la foto adesso: riprova tra poco."}
+        if st is None:
+            return {"_stato": 404, "errore": "Questa foto non c'è."}
+        out = {"stato": st["stato"]}
+        if st.get("scade"):
+            out["scade"] = round(float(st["scade"]), 3)
+        if st.get("jpeg"):
+            import base64
+            out["src"] = "data:image/jpeg;base64," + base64.b64encode(st["jpeg"]).decode()
+        return out
+
     def registra_chat(self, sid: int, persona):
         """«Scarica» della trascrizione in Markdown, per uno schermo personale del proprietario:
         il testo si fa al tocco, dall'archivio di quel momento."""

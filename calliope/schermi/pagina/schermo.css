@@ -952,6 +952,10 @@ body.in-vista-sviluppo #cronologia { display: none; }     /* «Vista normale» r
 .piccola-anteprima .calcolo .risultato { font-size: 1.3rem; }
 .piccola-anteprima blockquote { margin: 0; padding-left: 0.5rem; }
 .resto.storico { color: var(--tenue); }
+/* Lo stato della foto tenuta nel dettaglio (29/10, decisione 0034) */
+.stato-foto { margin: 0.6rem 0 0; color: var(--testo); font-size: 1rem; line-height: 1.4; }
+.stato-foto-persa, .stato-foto-eliminata { color: var(--tenue); }
+.vai-documenti { min-height: 2.75rem; margin-left: 0.3rem; }
 
 /* Una voce nuova da salvare come conoscente (14/10): il pezzo di trascrizione e il modulo */
 .estratto-conoscente { margin: 0 0 0.3rem; padding-left: 0.8rem; border-left: 3px solid var(--bordo); color: var(--testo); overflow-wrap: anywhere; }

@@ -1267,7 +1267,9 @@ class Conservazione:
                "avvisi": self._svuota_avvisi(persona_id),
                # Le impronte per satellite (15/10): imparate dall'uso, si tolgono con i dati
                # conservati; l'impronta della registrazione resta
-               "impronte_satellite": self._svuota_impronte(persona_id)}
+               "impronte_satellite": self._svuota_impronte(persona_id),
+               # Le foto tenute con la Conversazione (29/10, decisione 0034): file e righe
+               "foto": self._svuota_foto(persona_id)}
         arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)
         if persona_id is None:
@@ -1298,6 +1300,28 @@ class Conservazione:
             out["conversazioni"] = arch.dimentica(str(persona_id))
         out["eventi"] = self._svuota_eventi(f"persona:{persona_id}")
         return out
+
+    def _svuota_foto(self, persona_id) -> int:
+        """Le foto tenute nel cassetto (decisione 0034) di una persona o di tutti; quelle
+        archiviate restano nei documenti. Dal processo di Calliope il suo cassetto, da terminale
+        quello del file della memoria."""
+        cas, chiudi = getattr(self, "cassetto", None), False
+        try:
+            if cas is None:
+                db = str(getattr(self.cfg, "memory_db", "") or "")
+                if not db or not Path(db).exists():
+                    return 0
+                from .cassetto import load_cassetto
+                cas, chiudi = load_cassetto(self.cfg, log=lambda m: None), True
+                if cas is None:
+                    return 0
+            return cas.dimentica_foto(None if persona_id is None else str(persona_id))
+        except Exception as e:  # noqa: BLE001 — le foto non fermano lo svuotamento
+            self.log(f"   [CONSERVA] foto tenute non tolte: {type(e).__name__}")
+            return 0
+        finally:
+            if chiudi and cas is not None:
+                cas.close()
 
     def _svuota_impronte(self, persona_id) -> int:
         """Le impronte per satellite (15/10, calliope/impronte_satellite.py) di una persona o di

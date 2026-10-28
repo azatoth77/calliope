@@ -938,8 +938,9 @@ class Config:
     schermi_scarica_s: float = 180.0
     # Foto in ingresso (05/10, calliope/immagini.py, docs/ricerche/2026-10-05-immagini.md):
     # dal telefono e dagli schermi personali (pulsante «Foto», file, trascina, incolla), dalla
-    # webcam e dallo schermo del PC su richiesta (pc_guarda). Solo in memoria, legate alla
-    # conversazione; su disco solo con «archiviala». Spente: niente pulsante né tool
+    # webcam e dallo schermo del PC su richiesta (pc_guarda). Legate alla conversazione; dal
+    # 29/10 tenute 60 giorni (`immagini_tenuta`, decisione 0034) e per sempre con «archiviala».
+    # Spente: niente pulsante né tool
     immagini_enabled: bool = True
     # Il modello della voce vede le immagini? "auto" (Ollama: capacità «vision» di
     # /api/show; API OpenAI: sì), "si", "no". Gemma 4 (e4b e 26B) e qwen3.6 le vedono
@@ -965,6 +966,15 @@ class Config:
     # c'è più, chiedi di rimandarla», invece di una causa inventata dal modello (16/10, #96,
     # DGX 15/10). Oltre, il dato non vale più (la persona parla d'altro); 0 lo spegne
     immagini_persa_s: float = 600.0
+    # La foto intera si tiene (29/10, decisione 0034 di chi amministra): ogni foto mandata da una
+    # persona di casa con l'identità certa (minori compresi, decisione 0031) e ogni cattura di
+    # webcam e schermo chiesta a voce resta nel suo cassetto `immagini_tenuta_giorni` giorni (al
+    # posto di `cassetto_giorni`), con la miniatura nel turno della Conversazione; «archiviala»
+    # la tiene per sempre nei suoi documenti. Mai per gli ospiti. Va via con «dimentica le nostre
+    # conversazioni» e `calliope conserva --svuota`. Spenta: le foto come prima (cassetto per
+    # `cassetto_giorni`, le catture solo in memoria)
+    immagini_tenuta: bool = True
+    immagini_tenuta_giorni: float = 60.0
     # Allegati di qualsiasi tipo (05/10, calliope/allegati.py, docs/ricerche/2026-10-05-allegati.md):
     # dal pulsante «Allega» del telefono e degli schermi personali (scegli, trascina, incolla),
     # con la vita delle foto (la conversazione) e le stesse regole (solo durante una
@@ -3408,7 +3418,7 @@ SEZIONI: dict[str, list[str]] = {
     "immagini": ["immagini_enabled", "immagini_modello", "immagini_lato_max",
                  "immagini_pixel_per_token", "immagini_max_mb", "immagini_storia",
                  "immagini_max_conversazione", "immagini_attesa_s",
-                 "immagini_persa_s"],
+                 "immagini_persa_s", "immagini_tenuta", "immagini_tenuta_giorni"],
     "allegati": ["allegati_enabled", "allegati_max_mb", "allegati_memoria_mb",
                  "allegati_max_conversazione", "allegati_token_file", "allegati_token_totale",
                  "allegati_pdf_pagine", "allegati_pdf_pagine_immagini", "allegati_audio_max_s",

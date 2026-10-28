@@ -712,6 +712,158 @@ def prova_foto():
     verifica("una risposta riservata prima non tiene fuori la foto di questo turno", len(msg7.get("_schede", [])) == 1)
 
 
+# ─────────────────────────── 8. la foto tenuta (29/10, decisione 0034) ───────────────────────────
+class Orologio:
+    def __init__(self):
+        self.t = time.time()
+
+    def __call__(self):
+        return self.t
+
+
+def cassetto_prova(nome):
+    from calliope.cassetto import Cassetto
+    cas = Cassetto(str(TMP / f"{nome}.db"), str(TMP / f"cassetto-{nome}"), giorni=7, giorni_foto=60,
+                   log=lambda m: None)
+    cas.ora = Orologio()
+    cas.archivio = SimpleNamespace(cartella=str(TMP / f"archivio-{nome}"), sveglia=lambda: None)
+    return cas
+
+
+def ctx_foto(cas, prof, modo="voce"):
+    return SimpleNamespace(cassetto=cas, archivio=cas.archivio, immagini=None, schermi=None,
+                           cfg=SimpleNamespace(immagini_tenuta=True, immagini_lato_max=1280),
+                           speaker_ctx=SimpleNamespace(current_speaker=getattr(prof, "name", None),
+                                                       identified_by=modo, from_session=False),
+                           speakers={prof.name: prof} if prof else None)
+
+
+def prova_foto_tenute():
+    from calliope.config import Config
+    from calliope.cassetto import giorni_foto
+    from calliope.immagini import Immagine
+    from calliope.tools import immagini as TI
+    c = Config()
+    verifica("configurazione: la tenuta accesa di serie, 60 giorni; spenta come prima",
+             giorni_foto(c) == 60.0 and giorni_foto(SimpleNamespace(immagini_tenuta=False)) is None)
+    dario = SimpleNamespace(id="dario", name="Dario")
+    jpeg = jpeg_vero(800, 600)
+    # 1. Tenuta 60 giorni, poi via
+    cas = cassetto_prova("t1")
+    img = Immagine(jpeg, 800, 600, fonte="telefono", persona="dario", n=1)
+    fid = cas.metti_foto(img, "dario")
+    st = cas.stato_foto("dario", fid)
+    verifica("la foto intera tenuta 60 giorni, e la foto sa dov'è la sua copia",
+             img.cassetto == fid and st["stato"] == "tenuta" and st["jpeg"] == jpeg
+             and abs(st["scade"] - cas.ora() - 60 * 86400) < 5, {k: v for k, v in st.items() if k != "jpeg"})
+    copia = schede.per_conversazione(schede.foto(img))
+    verifica("la miniatura del turno porta l'id della copia", copia.get("cassetto") == fid, copia.get("cassetto"))
+    cas.ora.t += 59 * 86400
+    cas.pulisci()
+    verifica("dopo 59 giorni c'è ancora", cas.stato_foto("dario", fid)["stato"] == "tenuta")
+    cas.ora.t += 2 * 86400
+    cas.pulisci()
+    verifica("dopo 61 giorni non c'è più, e il file è tolto",
+             cas.stato_foto("dario", fid) == {"stato": "persa"}
+             and not list((TMP / "cassetto-t1").rglob("*.dat")))
+    verifica("la foto d'un'altra persona: niente", cas.stato_foto("bianca", fid) is None)
+    # 2. «archiviala» su una foto di tre giorni prima, ancora tenuta
+    cas2 = cassetto_prova("t2")
+    vecchia = Immagine(jpeg, 800, 600, persona="dario", n=1, arrivata=cas2.ora() - 3 * 86400)
+    cas2.ora.t -= 3 * 86400
+    fid2 = cas2.metti_foto(vecchia, "dario")
+    cas2.ora.t += 3 * 86400
+    r = TI._archivia(ctx_foto(cas2, dario), quale=f"C{fid2}")
+    archiviate = list(Path(cas2.archivio.cartella).rglob("*.jpg"))
+    verifica("«archiviala» su una foto di giorni prima: per sempre nei documenti",
+             r.get("ok") and len(archiviate) == 1 and cas2.stato_foto("dario", fid2) == {"stato": "archiviata"}, r)
+    cas2.ora.t += 120 * 86400
+    cas2.pulisci()
+    verifica("…e dopo mesi la Conversazione dice ancora «Archiviata.»",
+             cas2.stato_foto("dario", fid2) == {"stato": "archiviata"} and archiviate[0].exists())
+    # «archivia la foto di martedì» per giorno; l'ultima della conversazione con la sua copia
+    cas3 = cassetto_prova("t3")
+    album = SimpleNamespace(prendi=lambda n: img3, __len__=lambda: 1)
+    img3 = Immagine(jpeg, 800, 600, persona="dario", n=1)
+    fid3 = cas3.metti_foto(img3, "dario")
+    ctx3 = ctx_foto(cas3, dario)
+    ctx3.immagini = SimpleNamespace(prendi=lambda n: img3, numeri=lambda: [1])
+    r = TI._archivia(ctx3, foto=-1)
+    verifica("«archiviala» sulla foto della conversazione archivia la sua copia (stato «Archiviata.»)",
+             r.get("ok") and cas3.stato_foto("dario", fid3) == {"stato": "archiviata"}, r)
+    cas4 = cassetto_prova("t4")
+    cas4.metti_foto(Immagine(jpeg, 800, 600, persona="dario", n=1), "dario")
+    r = TI._archivia(ctx_foto(cas4, dario), quale="la foto di oggi")
+    verifica("«archivia la foto di oggi» la trova fra quelle tenute", r.get("ok"), r)
+    # 3. Un ospite non si tiene mai; 4. l'identità incerta nemmeno
+    cas5 = cassetto_prova("t5")
+    TI._tieni_cattura(ctx_foto(cas5, None), Immagine(jpeg, 800, 600, fonte="webcam", n=1), None)
+    verifica("un ospite: la cattura non si tiene", cas5.elenco("dario") == [] and not list((TMP / "cassetto-t5").rglob("*.dat")))
+    for modo in ("breve", "conversazione", "schermo"):
+        r = TI._pc_guarda(ctx_foto(cas5, dario, modo), "webcam")
+        verifica(f"identità incerta ({modo}): pc_guarda non cattura e non tiene niente",
+                 not r.get("ok") and cas5.elenco("dario") == [], r.get("risposta_finale"))
+    TI._tieni_cattura(ctx_foto(cas5, dario), Immagine(jpeg, 800, 600, fonte="screenshot", n=2), dario)
+    verifica("la cattura chiesta a voce si tiene (decisione 0034)",
+             [r["fonte"] for r in cas5.elenco("dario")] == ["screenshot"])
+    # 5. «dimentica» e svuota tolgono anche i file
+    from calliope.conserva import Conservazione
+    from calliope.conversazioni import ArchivioConversazioni
+    cas6 = cassetto_prova("t6")
+    a = cas6.metti_foto(Immagine(jpeg, 800, 600, n=1), "dario")
+    b = cas6.metti_foto(Immagine(jpeg, 800, 600, n=2), "bianca")
+    arch = ArchivioConversazioni(TMP / "dim.db", giorni=60, avvia=False, log=lambda m: None)
+    arch.su_dimentica.append(cas6.dimentica_foto)
+    arch.dimentica("dario")
+    verifica("«dimentica le nostre conversazioni» toglie anche le foto tenute (file e righe), solo sue",
+             cas6.stato_foto("dario", a) == {"stato": "persa"} and cas6.stato_foto("bianca", b)["stato"] == "tenuta"
+             and len(list((TMP / "cassetto-t6").rglob("*.dat"))) == 1)
+    arch.close()
+    finto = SimpleNamespace(cassetto=cas6, cfg=None, log=lambda m: None)
+    n = Conservazione._svuota_foto(finto, None)
+    verifica("`calliope conserva --svuota` toglie tutte le foto tenute",
+             n == 1 and not list((TMP / "cassetto-t6").rglob("*.dat")), n)
+    return cas
+
+
+def prova_foto_server():
+    """La foto intera e il suo stato dal dettaglio: solo il proprietario, dallo schermo personale."""
+    from calliope.immagini import Immagine
+    from calliope.schermi.server import ServerSchermi
+    cas = cassetto_prova("srv")
+    jpeg = jpeg_vero(800, 600)
+    fid = cas.metti_foto(Immagine(jpeg, 800, 600, n=1), "dario")
+    hub = Schermi(cfg_prova(), ArchivioSchermi(str(TMP / "foto-srv.db")), log=lambda m: None)
+    hub.cassetto = cas
+    srv = ServerSchermi(hub, "127.0.0.1", 0, attesa_porta_s=5).avvia()
+    hub.server = srv
+    c = httpx.Client(base_url=f"http://127.0.0.1:{srv.port}", timeout=5)
+    _, tok_d = hub.archivio.crea_con_token("studio", proprietario="dario", proprietario_nome="Dario")
+    _, tok_b = hub.archivio.crea_con_token("camera", proprietario="bianca", proprietario_nome="Bianca")
+    _, tok_s = hub.archivio.crea_con_token("cucina")
+    hub._rinfresca()
+
+    def h(t):
+        return {"X-Calliope-Sessione": c.post("/api/accedi", headers={"Authorization": f"Bearer {t}"}).json()["sessione"]}
+    import base64
+    r = c.post("/api/conversazione", headers=h(tok_d), json={"foto": fid})
+    d = r.json()
+    verifica("{foto}: dallo schermo di Dario lo stato e la foto intera",
+             r.status_code == 200 and d["stato"] == "tenuta" and d.get("scade")
+             and base64.b64decode(d["src"].split(",", 1)[1]) == jpeg, {k: str(v)[:40] for k, v in d.items()})
+    r = c.post("/api/conversazione", headers=h(tok_b), json={"foto": fid})
+    verifica("…dallo schermo di Bianca 404, senza la foto", r.status_code == 404 and "src" not in r.text, r.status_code)
+    r = c.post("/api/conversazione", headers=h(tok_s), json={"foto": fid})
+    verifica("…da uno schermo di stanza 403", r.status_code == 403, r.status_code)
+    r = c.post("/api/conversazione", headers={"X-Calliope-Sessione": "falsa"}, json={"foto": fid})
+    verifica("…senza sessione 401", r.status_code == 401, r.status_code)
+    stati = [c.post("/api/conversazione", headers=h(tok_d), json={"foto": x}).status_code for x in ("1", True, -1)]
+    verifica("…dati non validi 400", stati == [400, 400, 400], stati)
+    srv.ferma()
+    hub.archivio.close()
+    c.close()
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8")
@@ -729,6 +881,8 @@ def main() -> int:
         prova_riservato()
         prova_peso()
         prova_foto()
+        prova_foto_tenute()
+        prova_foto_server()
         tid = prova_dettaglio(arch)
         prova_dettaglio_server(arch, tid)
         arch.close()

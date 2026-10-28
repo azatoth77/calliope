@@ -99,7 +99,7 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "anagrafica_salva": {"azione": Z, "nome": B, "dati": C, "proposta": X},
     "conversazioni_dimentica": {},
     "pc_guarda": {"cosa": Z},
-    "immagine_archivia": {"foto": "indice:foto"},
+    "immagine_archivia": {"foto": "indice:foto", "quale": B},
     "allegato_archivia": {"allegato": "indice:allegato"},
     # 08/10, cassetto dei file: «quale» sceglie i file della persona, «minore» (prima «di», che
     # resta accettato: 17/10, #58) un ragazzo per il suo tutore

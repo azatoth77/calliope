@@ -5,7 +5,10 @@ docs/aree/immagini-allegati.md).
 Prima del cassetto foto e file vivevano solo nella conversazione (in memoria) e finivano su
 disco solo con «archivialo». Ora ogni allegato di una persona riconosciuta (foto, file, audio)
 resta **7 giorni** (`cassetto_giorni`) nel suo cassetto sulla macchina di Calliope; a scadenza
-si elimina, e Calliope lo dice la volta dopo («Ho eliminato 2 file che non avevi tenuto»).
+si elimina, e Calliope lo dice la volta dopo («Ho eliminato 2 file che non avevi tenuto»). Dal
+29/10 (decisione 0034) le foto restano **60 giorni** (`immagini_tenuta_giorni`), anche le catture
+di webcam e schermo; la Conversazione degli schermi ne mostra lo stato (`stato_foto`), e
+«dimentica le nostre conversazioni» e `svuota` le tolgono (`dimentica_foto`).
 
 - **Mai per gli ospiti** (senza profilo non c'è cassetto). Per i minori il cassetto lo vedono
   anche i tutori, come le conversazioni archiviate (`minori.conversazioni_visibili_ai_tutori`).
@@ -188,11 +191,14 @@ class Cassetto:
     server degli schermi e il thread della pulizia lo usano insieme)."""
 
     def __init__(self, db_path: str, cartella: str | None = None, giorni: float = 7.0,
-                 tetto_mb: float = 500.0, avviso_giorni: float = 2.0, log=print):
+                 tetto_mb: float = 500.0, avviso_giorni: float = 2.0, log=print,
+                 giorni_foto: float | None = None):
         self.db_path = str(db_path)
         base = Path(cartella) if cartella else Path(self.db_path).resolve().parent / "cassetto"
         self.cartella = base
         self.giorni = max(0.01, float(giorni))
+        # Le foto (29/10, decisione 0034): `immagini_tenuta_giorni` (60) invece di `giorni`
+        self.giorni_foto = None if giorni_foto is None else max(0.01, float(giorni_foto))
         self.tetto = int(float(tetto_mb) * 1_000_000)
         self.avviso_giorni = max(0.0, float(avviso_giorni))
         self.log = log
@@ -338,8 +344,15 @@ class Cassetto:
     def metti_foto(self, img, persona: str | None = None) -> int | None:
         """Una `immagini.Immagine`: il JPEG già ridotto e senza EXIF (niente posizione GPS)."""
         nome = f"Foto {datetime.datetime.fromtimestamp(img.arrivata):%Y-%m-%d %H.%M}.jpg"
-        return self.metti(persona or img.persona, img.jpeg, nome, "immagine", fonte=img.fonte,
-                          larghezza=img.larghezza, altezza=img.altezza)
+        fid = self.metti(persona or img.persona, img.jpeg, nome, "immagine", fonte=img.fonte,
+                         larghezza=img.larghezza, altezza=img.altezza, giorni=self.giorni_foto)
+        # La foto sa dov'è la sua copia (decisione 0034): la miniatura del turno lo porta, e
+        # «archiviala» la tiene per sempre da lì
+        try:
+            img.cassetto = fid
+        except AttributeError:
+            pass
+        return fid
 
     def aggiorna_testo(self, fid: int | None, testo: str):
         """La trascrizione di un audio, fatta dopo l'arrivo (al turno della domanda)."""
@@ -555,8 +568,11 @@ class Cassetto:
         for p, righe in per.items():
             self._registra("scaduto", righe, p)
         with self._lock, self._db:
+            # Le righe delle foto archiviate restano (pochi byte, senza file): la Conversazione
+            # dice «Archiviata.» anche dopo mesi, e non «Non c'è più» (decisione 0034)
             self._db.execute("DELETE FROM cassetto_file WHERE stato != 'attivo' AND detto = 1 "
-                             "AND chiuso < ?", (ora - RIGHE_CHIUSE_GIORNI * GIORNO_S,))
+                             "AND chiuso < ? AND NOT (categoria = 'immagine' AND stato = 'tenuto')",
+                             (ora - RIGHE_CHIUSE_GIORNI * GIORNO_S,))
         # File orfani sul disco (un arresto a metà scrittura): via i .tmp vecchi
         for tmp in self.cartella.glob("*/*.tmp"):
             try:
@@ -567,6 +583,62 @@ class Cassetto:
         if scaduti:
             self.log(f"   [CASSETTO] eliminati {len(scaduti)} file scaduti")
         return {p: len(v) for p, v in per.items()}
+
+    # ─────────────────────────── le foto della Conversazione (29/10, decisione 0034) ───────────────────────────
+    def stato_foto(self, persona: str, fid) -> dict | None:
+        """Lo stato della foto `fid` della persona, per il dettaglio della sua miniatura nella
+        Conversazione: {"stato": "tenuta", "scade", "jpeg"} finché c'è, {"stato": "archiviata"},
+        {"stato": "eliminata"}, {"stato": "persa"} (scaduta senza «archiviala», o sparita dal
+        disco). None se la foto non è della persona o non è una foto."""
+        try:
+            fid = int(str(fid).strip().lstrip("Cc"))
+        except (TypeError, ValueError):
+            return None
+        with self._lock:
+            r = self._riga(fid)
+        if r is None:
+            return {"stato": "persa"}
+        if r["persona"] != persona or r["categoria"] != "immagine":
+            return None
+        if r["stato"] == "attivo":
+            dati = self.byte(r)
+            if dati is None:
+                return {"stato": "persa"}
+            return {"stato": "tenuta", "scade": float(r["scade"]), "jpeg": dati}
+        if r["stato"] == "tenuto":
+            return {"stato": "archiviata"}
+        if r["stato"] == "eliminato":
+            return {"stato": "eliminata"}
+        return {"stato": "persa"}
+
+    def foto_attiva(self, persona: str, fid) -> dict | None:
+        """La riga della foto `fid` della persona ancora tenuta (per «archiviala»), o None."""
+        r = self.prendi(persona, fid)
+        return r if r is not None and r["categoria"] == "immagine" else None
+
+    def dimentica_foto(self, persona: str | None = None) -> int:
+        """«Dimentica le nostre conversazioni» (di `persona`) e `calliope conserva --svuota` (di
+        tutti, con None): le foto tenute con la Conversazione vanno via, file e righe (decisione
+        0034). Quelle archiviate restano nei documenti: sono state tenute di proposito."""
+        q = "SELECT * FROM cassetto_file WHERE categoria = 'immagine'"
+        args: list = []
+        if persona is not None:
+            q += " AND persona = ?"
+            args.append(str(persona))
+        with self._lock:
+            righe = [dict(r) for r in self._db.execute(q, args)]
+        attive = [r for r in righe if r["stato"] == "attivo"]
+        for r in attive:
+            try:
+                self._percorso(r).unlink(missing_ok=True)
+            except OSError as e:
+                self.log(f"   [CASSETTO] foto non tolta dal disco: {type(e).__name__}")
+        with self._lock, self._db:
+            for r in righe:
+                self._db.execute("DELETE FROM cassetto_file WHERE id = ?", (r["id"],))
+        if attive:
+            self._registra("dimenticato", attive, persona)
+        return len(attive)
 
     def avvia(self, intervallo_s: float = 3600.0):
         """La pulizia in un thread: subito e poi ogni `intervallo_s`."""
@@ -775,6 +847,14 @@ class Cassetto:
                 **({} if tenuti else {"errore": frase})}
 
 
+def giorni_foto(cfg) -> float | None:
+    """Quanto si tiene una foto (decisione 0034): `immagini_tenuta_giorni`, o None (come gli
+    altri file, `cassetto_giorni`) con `immagini_tenuta` spenta."""
+    if not getattr(cfg, "immagini_tenuta", True):
+        return None
+    return float(getattr(cfg, "immagini_tenuta_giorni", 60.0) or 60.0)
+
+
 def load_cassetto(cfg, log=print) -> Cassetto | None:
     """Il cassetto dalla configurazione, o None (spento, senza memoria, cartella non
     scrivibile: allora i file vivono solo nella conversazione, come prima del 08/10)."""
@@ -787,7 +867,7 @@ def load_cassetto(cfg, log=print) -> Cassetto | None:
                         giorni=float(getattr(cfg, "cassetto_giorni", 7.0)),
                         tetto_mb=float(getattr(cfg, "cassetto_mb_persona", 500.0)),
                         avviso_giorni=float(getattr(cfg, "cassetto_avviso_giorni", 2.0)),
-                        log=log)
+                        log=log, giorni_foto=giorni_foto(cfg))
     except Exception as e:  # noqa: BLE001 — senza cassetto Calliope parte uguale
         log(f"[CASSETTO] non disponibile: {type(e).__name__}: {e}")
         return None

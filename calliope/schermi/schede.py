@@ -510,8 +510,9 @@ def foto(img, didascalia: str = "") -> dict:
     """La miniatura (data URL JPEG, ~20 kB) di una foto della conversazione: solo agli schermi
     personali di chi parla; resta nella cronologia in memoria degli schermi. Dal 29/10 (decisione
     0034) una miniatura più piccola (`_mini`, 144 px) resta col turno nell'archivio delle
-    conversazioni per 60 giorni, anche per webcam e schermate (*storico, fino al 28/10: «resta solo
-    nella cronologia in memoria degli schermi»*). Si fa qui e non al momento della legatura: la
+    conversazioni per 60 giorni, anche per webcam e schermate, con l'id della foto intera tenuta
+    nel cassetto (`_cassetto`) (*storico, fino al 28/10: «resta solo nella cronologia in memoria
+    degli schermi»*). Si fa qui e non al momento della legatura: la
     scheda passa dal JSON dei risultati dei tool, dove non può portare né i byte né una funzione."""
     from ..immagini import FONTI, miniatura
     try:
@@ -523,7 +524,8 @@ def foto(img, didascalia: str = "") -> dict:
     return nuova("foto", f"Foto {img.n}", PERSONALE, chiave=f"foto:{id(img)}",
                  src=miniatura(img.jpeg), fonte=FONTI.get(img.fonte, img.fonte),
                  lato=max(img.larghezza, img.altezza), didascalia=_taglia(didascalia, 200),
-                 _mini=mini)
+                 _mini=mini, **({"_cassetto": img.cassetto}
+                                if isinstance(getattr(img, "cassetto", None), int) else {}))
 
 
 def allegato(att) -> dict:
@@ -598,7 +600,10 @@ def per_conversazione(scheda) -> dict | None:
         if tipo == "foto":
             mini = scheda.get("_mini")
             copia = ({**base, "src": mini, "storica": True,
-                      **{k: scheda[k] for k in ("fonte", "didascalia") if scheda.get(k)}}
+                      **{k: scheda[k] for k in ("fonte", "didascalia") if scheda.get(k)},
+                      # La foto intera tenuta (decisione 0034): il dettaglio la chiede al server
+                      **({"cassetto": scheda["_cassetto"]}
+                         if isinstance(scheda.get("_cassetto"), int) else {})}
                      if isinstance(mini, str) and mini.startswith("data:image/jpeg;base64,") else None)
         else:
             copia = {**base, "storica": True, **{k: scheda[k] for k in CONV_FILE if scheda.get(k)}}
