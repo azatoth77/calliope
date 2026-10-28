@@ -1821,3 +1821,26 @@ controlla cosa arriva al modello, non cosa sceglie).
   dispositivo dell'ultimo turno a voce.
 - **Lo schermo revocato dopo la consegna**: `Lavori.dove_detto` ricontrolla gli abbinati di chi ha chiesto il
   lavoro; senza, la cartella.
+
+## Due resti dopo la PR #294: la frase dell'Ufficio e la frase breve dal telefono (28/10, issue #299, ramo `issue-299-frase-ufficio`)
+
+Note della terza revisione della PR #294, decise da chi amministra il 28/10.
+
+- **La frase dell'Ufficio rifiutato per il livello** (`tools/schermi._apri_pagina`). A chi amministra, con il
+  livello del turno più basso di «amministra» (frase breve, zona grigia), ora: «L'Ufficio lo apro solo quando
+  riconosco bene la tua voce: chiedimelo con una frase intera.» (regola `schermo_ufficio_voce`). *[storico: fino
+  al 28/10 sera «Sul tuo schermo la pagina Ufficio non c'è.», falso, e il modello poteva ripetere «non hai
+  l'Ufficio»]* «Sul tuo schermo la pagina Ufficio non c'è.» resta solo per chi davvero non ce l'ha: i
+  familiari, i minori, e senza l'ufficio installato.
+- **Decisione di chi amministra (28/10): la frase breve dal suo telefono apre le pagine, l'Ufficio escluso.** Il
+  caso è quello di un minore che dice una frase breve subito dopo chi amministra, sul telefono di chi amministra
+  (anche per continuità, `minori.py`): vale chi amministra, senza nessun segno di minore, e le pagine diverse
+  dall'Ufficio si aprono. Il danno è solo spostare la vista del telefono che il minore ha già in mano, e
+  l'Ufficio resta chiuso perché vuole il livello «amministra» del turno. **Scartato**: `dispositivo.proprio`
+  solo con `identified_by == "voce"` quando in casa c'è un minore, che avrebbe tolto a chi amministra tutte le
+  pagine con una frase breve dal suo telefono. Restano chiusi i casi con un segno di minore (`minore_incerto`,
+  `incerta`, `minore_vicino`), come dalla seconda revisione della PR #294.
+
+Prove: `prova_telefono_consapevole` (la frase della voce a chi amministra nella zona grigia e con la voce certa
+ma il livello «familiare», e la regola; i contrari con «non c'è» per un familiare, una bambina e senza
+l'ufficio installato).

@@ -281,12 +281,17 @@ def _apri_pagina(ctx: ToolContext, hub, pagina: str) -> dict:
     cfg = getattr(ctx, "cfg", None)
     spenta = ((p == "ufficio" and getattr(ctx, "ufficio", None) is None)
               or (p == "cassetto" and not getattr(cfg, "cassetto_enabled", True)))
+    if p not in visibili(prof) or spenta:
+        return _final(f"Sul tuo schermo la pagina {nomi[p]} non c'è.", ok=False, fatto=NIENTE)
     # L'Ufficio col livello vero del turno, «amministra» (seconda revisione della PR #294): non
     # basta il profilo, perché nella zona grigia e dallo schermo il livello è al più «familiare»
     if p == "ufficio" and _level(ctx) != "amministra":
-        spenta = True
-    if p not in visibili(prof) or spenta:
-        return _final(f"Sul tuo schermo la pagina {nomi[p]} non c'è.", ok=False, fatto=NIENTE)
+        # Chi amministra, col livello del turno più basso (frase breve, zona grigia): l'Ufficio
+        # sul suo schermo c'è, quindi non «non c'è» (issue #299: il modello ripeteva «non hai
+        # l'Ufficio»). «Non c'è» resta per familiari, minori e ufficio non installato
+        note_rule(ctx, "schermo_ufficio_voce")
+        return _final("L'Ufficio lo apro solo quando riconosco bene la tua voce: chiedimelo con "
+                      "una frase intera.", ok=False, fatto=NIENTE)
     apri = getattr(hub, "apri_pagina", None)
     n = apri(sender.persona, p) if apri is not None else 0
     if n:
