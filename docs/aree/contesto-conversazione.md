@@ -2771,3 +2771,15 @@ l'etichetta nuova arriva anche a `stanza_cerca`, al giudizio «rivolta» (in omb
 più quello misurato il 09/10, da rileggere prima di accenderlo) e al riassunto della corsia lenta;
 il guardiano a posteriori ha la sua etichetta e resta «Calliope».
 
+
+## Il tocco dallo schermo come turno della conversazione (28/10, issue #256, ramo `issue-256-raccolte`)
+
+Un tocco che cambia qualcosa dallo schermo personale (la spunta della lista, [schermi-telefono](schermi-telefono.md))
+entra nella conversazione della persona come un turno (decisione 10 del progetto del telefono a
+sezioni): `corsia.turno` con il suo id, la descrizione («(Ho tolto «latte» dalla lista della spesa
+toccando lo schermo.)») nella storia del modello come frase della persona, così «rimettilo» detto dopo
+sa di che cosa si parla; nel registro dei turni `esito` e `canale` «tocco» con il tool; nel registro
+degli eventi un `detto_persona` col canale «tocco» (`eventi/tipi.CANALI_PERSONA`, `ombra.ESITI_PERSONA`),
+che con `eventi: attivo` mette la descrizione nella storia dalla proiezione. Nessuna risposta di Calliope
+dopo (né detta né scritta): nella storia restano due frasi della persona di fila se poi parla a voce. Un
+tocco rifiutato non entra nella storia (`esito` «rifiutato», canale «tocco»).

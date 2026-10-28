@@ -949,3 +949,62 @@ progetto vale per tablet e TV personali) e **«Parla» sul PC subito**.
 Prove: `prova_parla_pc` (nuova, livello 1), `prova_pc_pagina` (nuova, livello 3), `prova_sezioni`
 (il router in `sezioni.js`, il telefono che lo usa); le prove del telefono invariate. Da provare sul
 vero: il portatile come satellite (la pagina in Edge, «Parla» con il microfono vero).
+
+## Le mie cose: le tessere, la pagina Liste e il canale «tocco» (28/10, issue #256, ramo `issue-256-raccolte`)
+
+Passo 2a del progetto [`2026-10-27-telefono-sezioni-e-studio`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md)
+(§ 4.3–4.4), parte di #241 (analisi e decisioni lì), epic #251. Decisioni di chi amministra del 28/10:
+**i tocchi che cambiano qualcosa si fanno sempre dallo schermo personale**, anche fuori da una
+conversazione a voce (a differenza dello scritto), e **l'Ufficio solo a chi amministra**.
+
+- **Le tessere** (`calliope/schermi/raccolte.py`, `POST /api/raccolte` con `{}`): otto, in cima a Le mie
+  cose (Liste, Agenda, Lavori e programmi, Cassetto, Documenti, Giochi, Studio, Ufficio), con il conto,
+  lo stato in una riga e l'ora dell'ultimo cambiamento. Si leggono **dai servizi**, non dalla cronologia
+  delle schede (che tiene solo le schede personali: la lista è di casa, il timer è pubblico): le liste,
+  l'agenda (timer di casa e promemoria e appuntamenti della persona per oggi), i lavori, il cassetto, i
+  documenti fatti da Calliope, i giochi di casa, la sessione degli esercizi, i numeri dell'ufficio
+  dell'anno. Un servizio che manca o che solleva dà la tessera senza conto («non disponibile», nel
+  registro una riga `[SCHERMI] raccolta «…» non letta`), mai un errore alla pagina. L'Ufficio solo a chi
+  amministra e mai a un minore (anche le raccolte nascoste di `aspetto.nascoste`). I servizi arrivano
+  agli schermi da `main.py` (`Schermi.servizi`, `Schermi.tool_ctx` della corsia principale). La pagina le
+  chiede all'ingresso in Le mie cose e ogni 60 s mentre è aperta, e poco dopo una scheda di Le mie cose
+  arrivata; due colonne sul telefono, di più sul PC.
+- **Il pallino** sulla tessera se l'«ultimo» del server è più recente di quello visto all'ultima visita
+  (in `localStorage`, `calliope.raccolte.viste`, protetto da try): l'ora del server, niente orologi
+  diversi. Scelta: una tessera mai vista prende l'«ultimo» di adesso, così alla prima apertura non ci
+  sono pallini ovunque. Le voci tolte dalla lista non lasciano traccia nel database: `Liste.ultimo_cambio`
+  tiene in memoria l'ora dell'ultima tolta (dopo un riavvio vale solo l'ultima aggiunta).
+- **La pagina Liste** (`#/cose/liste`, `POST /api/raccolte` con `{raccolta: "liste"}`): tutte le liste di
+  casa con le schede `lista` che esistono già, disegnate da `calliopeSchermo.costruisci`; prende il posto
+  delle tessere e dei gruppi (`#sez-cose[data-vista="pagina"]`); il gesto indietro e «‹ Le mie cose»
+  tornano alle tessere. Una scheda della lista aperta da Adesso (`vaiA`) porta alla pagina con la scheda
+  in vista (`#/cose/liste/lista:spesa`). Le altre tessere dicono «pagina presto» e portano, come prima, al
+  gruppo delle schede di quella raccolta (lì restano il gioco e gli esercizi che si aprono da soli); le
+  loro pagine arrivano con i passi 2b–2e.
+- **Il canale «tocco»** (`calliope/schermi/tocchi.py`, `POST /api/tocco`): l'elenco dei tocchi è chiuso
+  (`TOCCHI`); la pagina manda solo il tipo e i dati che servono, controllati contro lo stato vero
+  (la voce deve esserci adesso: 409; una voce che `lista_togli` dividerebbe, «pane e burro», o che
+  svuoterebbe la lista, «tutto», 422 con «si toglie a voce»). Poi `hub.ingresso` → il ciclo
+  (`Ciclo._tocco_dallo_schermo`): `ToolRegistry.call` col livello del proprietario dello schermo e
+  `identified_by` «schermo» (i tool che vogliono la voce restano rifiutati), senza la politica del
+  turno; la descrizione («(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)») nella storia
+  del modello come frase della persona, il registro dei turni con `esito` e `canale` «tocco», l'evento
+  `detto_persona` col canale «tocco». Niente frase detta né suoni (chi tocca può essere al supermercato);
+  la lista aggiornata arriva come scheda allo schermo del tocco per primo. Un rifiuto (permesso, minore,
+  voce sparita) va solo allo schermo (evento SSE «tocco», `esito` «rifiutato» nel registro), e niente
+  nella storia. Sullo schermo di stanza non c'è (403).
+- **La spunta** (`DISEGNA.lista` in `schermo.js`, solo sugli schermi personali con le sezioni: telefono e
+  PC personale): ogni voce è un `<button role="checkbox">` alto almeno 44 px; dopo il tocco resta
+  segnata in attesa (`aria-busy`, «Tolgo «latte»…» nella regione `role="status"` della scheda) finché
+  arriva la lista aggiornata; un errore (risposta HTTP o evento «tocco») la rimette com'era e si dice
+  accanto, nel colore dell'allarme. Tutto in `textContent`. Sulle TV e i tablet di stanza la lista resta
+  com'era.
+- Cache del service worker `calliope-telefono-pagina-v10` (era v9).
+
+Prove: `prova_raccolte` (nuova, livello 1: tessere con servizi finti, pagina, `tocchi.prepara`, il
+server vero, il ciclo con un `ToolRegistry` vero e le `Liste` su disco, rifiuti per voce, livello e
+minore, gli eventi in ombra); `prova_telefono_schermo` e `prova_pc_pagina` (tessere coi conti, pallino,
+pagina Liste, la spunta fino all'ingresso, attesa, aggiornamento, rifiuto, 409; tessere, spunte e
+«‹ Le mie cose» nelle misure dei tocchi e del contrasto). Da provare sul vero: la spunta sull'iPhone al
+supermercato (la rete lenta: l'attesa dura quanto il giro del ciclo, che aspetta la fine del turno a voce
+in corso), il PC personale in Edge.
