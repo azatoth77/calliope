@@ -1851,8 +1851,9 @@ azzera anche, e rimette dopo, `tool_in_sospeso` (la proposta in sospeso del turn
 tocco del timer senza bersaglio è rifiutato nel ciclo (`Tocco.bersaglio`, regola
 `tocco_senza_bersaglio`: il tool sceglierebbe dal testo, e `agenda_annulla` potrebbe annullare «tutti»)
 e in `prepara` (403), e una corsia nuova nasce senza questi campi (`main.contesto_corsia`).
-Limite noto: il vincolo vale quanto le tabelle. Oggi ammette 46 tool su 80 di `politica.CLASSI`, fra cui
-`dimentica` e `pc_guarda`: «azione» non vuol dire «nessun danno se toccato per sbaglio», e `TOCCHI`
+*[storico: «Limite noto: il vincolo vale quanto le tabelle. Oggi ammette 46 tool su 80 di
+`politica.CLASSI`, fra cui `dimentica` e `pc_guarda`» fino al 28/10 sera: dal #266 l'elenco in positivo,
+sezione dopo]* «Azione» non vuol dire «nessun danno se toccato per sbaglio», e `TOCCHI`
 resta un elenco chiuso da rivedere a ogni tocco nuovo. La stanza nel contesto dei tool è il servizio
 della conversazione di stanza, non un dato del turno, e nessun tool ammesso la legge: non si tocca.
 
@@ -1861,3 +1862,48 @@ irreversibile, con effetto E3, declassato dal `ToolSpec`; l'import che si ferma;
 rifiutano senza chiamare il tool; il contesto azzerato durante la chiamata e rimesso dopo).
 `prova_raccolte` prova i rifiuti di `ToolRegistry.call` (voce di chi amministra, livello, minore) col
 vincolo spento, come seconda linea.
+
+## I tool toccabili: un elenco in positivo (28/10 sera, issue #266, ramo `issue-266-toccabili`)
+
+Dalla revisione della PR #265: il vincolo dei tocchi della sezione sopra ammetteva ogni tool «azione» o
+«sicuro» senza fonte fino a E2, cioè 46 tool su 80 di `politica.CLASSI`, compresi `dimentica`,
+`pc_guarda`, `anagrafica_salva`, `richiesta_tutore` e `lavoro_rispondi`. Le tabelle della politica
+dicono se un tool è reversibile, non se toccarlo per sbaglio fa danno. Adesso:
+
+- **`schermi/tocchi.TOCCABILI`**, l'elenco in positivo: un tool vi entra solo con la riga che dice perché
+  è sicuro, reversibile e senza danno se toccato per sbaglio (`Toccabile.perche`), e se il tocco deve
+  dire su che cosa agisce (`Toccabile.bersaglio`). Oggi ci sono solo i tool dei tocchi che esistono:
+  `lista_togli` (la spunta di una voce che c'è, una cosa sola e mai «tutto»: si rimette con «aggiungi il
+  latte»), `timer_imposta` («+1 minuto» sul timer toccato: costa un minuto) e `agenda_annulla` («Ferma»
+  sul timer toccato e solo su lui: si rimette a voce). Nessun tool dei passi futuri: «Riprendi» di un
+  lavoro non ha un tool suo (`lavoro_rispondi` cambia ciò che l'agente costruisce, ed è escluso). Un
+  insieme in `tocchi.py` invece di un campo della `ToolSpec`: l'elenco sta accanto ai tocchi,
+  si legge in un colpo solo e vale anche per i tool registrati altrove (estensioni comprese, che restano
+  fuori).
+- **`tocchi.ESCLUSI`**, gli esclusi in modo esplicito con il loro motivo: `dimentica`,
+  `conversazioni_dimentica`, `pc_guarda` (catture dello schermo e della webcam), `immagine_guarda`,
+  `anagrafica_salva`, `anagrafica_cerca`, `richiesta_tutore`, `lavoro_rispondi`, `lavoro_annulla`,
+  `citta_casa_salva` e ciò che vuole la voce (`cambia_voce`, `registra_utente`, `minore_gestisci`,
+  `conoscenti`, `conoscente_livello`, `installa_*`, `modello_compila`, `sviluppo_apri`). Un tool non può
+  essere in tutti e due.
+- Le **condizioni di prima** restano come difesa in più (`tocchi._condizioni`), con due cambi: la fonte
+  non fidata si controlla per ogni classe, anche per un'«azione» (il risultato del tocco va nella storia
+  senza busta: `fonte_di` dalla tabella, dal `ToolSpec` o da `non_fidato`); con lo `ToolSpec` del
+  registro, un tool che i familiari non possono usare è rifiutato (vuole la voce di chi amministra).
+- I controlli restano tre: **all'import** (`controlla`: un tocco su un tool escluso o fuori dall'elenco,
+  un toccabile anche escluso o che non passa le condizioni, un tocco senza il bersaglio che il toccabile
+  vuole fermano l'avvio e le prove), **in `prepara`** e **nel ciclo** (`non_ammesso`, con lo `ToolSpec`
+  del registro). Nel ciclo il rifiuto non chiama il tool e scrive il motivo nel registro dei turni
+  (`tocco_non_ammesso`).
+
+Sul **livello**: il tool del tocco era già chiamato col livello vero del proprietario limitato come lo
+scritto da uno schermo personale (`SpeakerContext.current_level` con `identified_by` «schermo»: chi
+amministra vale «familiare»); ora lo stesso livello va anche al mittente della scheda pubblica del timer,
+che prima era «familiare» scritto nel codice ([schermi-telefono](schermi-telefono.md)).
+
+Prove: `prova_agenda_pagina` (fra i tool della politica passano solo i tre toccabili; i quattordici esclusi
+obbligati con il motivo, anche dichiarati da un tocco nel ciclo, senza chiamarli; `lista_aggiungi`, che le
+sole condizioni ammetterebbero, rifiutato all'import e nel ciclo; un'«azione» con una fonte non fidata
+nella tabella, nel `ToolSpec` e con `non_fidato`; un toccabile solo per chi amministra; gli errori
+dell'elenco); `prova_raccolte` (col vincolo acceso e lo `ToolSpec` del registro, la spunta su un
+`lista_togli` non fidato o solo per chi amministra rifiutata senza toglierla).

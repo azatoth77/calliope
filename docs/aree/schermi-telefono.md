@@ -1373,3 +1373,30 @@ prova arriva alle 30 letture al minuto»]*
     con la cifra; in `prova_raccolte` 60 letture, la frase e `Retry-After`; in `prova_pagina_ufficio` la
     chiave di una serie lunghissima e la precedenza oltre il tetto; in `prova_telefono_schermo` «Tutti» nella
     pagina Ufficio e un 429 finto che la pagina dice, senza svuotarsi, e riprova da sola.
+
+## Le schede del tocco: livello, stanza, conversazione (28/10 sera, issue #266, ramo `issue-266-toccabili`)
+
+Le note della revisione della PR #265 (commento della #258), insieme all'elenco dei tool toccabili
+([sicurezza-politica](sicurezza-politica.md)):
+
+- **Livello del mittente**: la scheda pubblica del timer dopo «+1 minuto» o «Ferma» parte da `hub.invia`
+  con il mittente del tocco, che aveva sempre «familiare» scritto nel codice. Ora ha il livello con cui il
+  tool è stato chiamato: quello vero del proprietario, limitato come lo scritto da uno schermo personale
+  (`current_level`: chi amministra vale «familiare»). Oggi il valore è lo stesso; cambia se cambia il
+  tetto dello scritto.
+- **La stanza**, provata con l'hub vero (`Schermi` con l'archivio su disco) e due stanze, cucina e
+  salotto, invece di un `invia` finto: senza la stanza dello schermo del tocco il timer va alla stanza
+  predefinita (`schermi_stanza`), senza quella a tutti gli schermi, come a voce da un satellite senza
+  stanza; con la sua stanza a quella; sempre agli schermi personali di chi tocca e mai a quelli di
+  un'altra persona. Il codice faceva già così (`hub.invia`: `mittente.stanza or stanza_predefinita`).
+  Da sapere: un telefono abbinato con `--stanza telefono` ha la stanza «telefono», e il timer toccato lì va
+  agli schermi di quella «stanza» (come una frase detta dal telefono), non alla cucina.
+- **`conv_archivio`** segue la conversazione del tocco: `Brain.contesto_conversazione` (lo stesso codice
+  dell'inizio di una risposta) dopo `Corsia.turno` e dopo `record_tocco`. Prima restava quello della
+  conversazione di prima fino alla risposta dopo.
+- **Le schede della pagina Agenda sul telefono piccolo**: `una_per_una` misurava le schede delle sezioni;
+  quelle che il server dà alla pagina (il promemoria di domani compreso) ora sono portate in vista una per
+  una a 375×812 e 320×568, dentro la sezione di lato, senza testo di lato e col contrasto AA.
+
+Prove: `prova_agenda_pagina` (l'hub vero con due stanze e tre casi di stanza, il livello del mittente,
+`conv_archivio`), `prova_telefono_schermo` (la pagina Agenda a due dimensioni).
