@@ -1950,3 +1950,37 @@ uno vecchio, VoiceOver sulla casella e su «ti ascolto…».
     (`canvas.measureText`), non più l'altezza col segnaposto, che WebKit può non contare.
   - Il limite di Chrome per Android prima della 108 è scritto nella guida
     ([installazione](../installazione.md#e-telefono)).
+
+## Telefono compatto e cassetto: le note delle revisioni (29/10, issue #287 e #307, ramo `issue-307-287-pulizie`)
+
+Note non bloccanti della revisione della PR #286 (#287) e della PR #306 (#307), chiuse.
+
+- **La tastiera che accendeva il compatto** (punto 1 della #287): già fatto dalla PR #304 (#301) con
+  `interactive-widget=resizes-visual` nel viewport e la parte visibile misurata con `visualViewport`
+  (`misuraTastiera`): verificato nel codice e nelle prove (`prova_sezioni`, `prova_cronologia_pagina` con la
+  tastiera simulata che non fa scattare il compatto). Resta il limite di Chrome per Android prima della 108.
+- **Il suggerimento letto due volte.** `aria-describedby="tel-dove"` non è più fisso in `index.html`: lo mette
+  `descriviParla` (`telefono.js`) solo quando la riga piccola ha un testo ma non si vede (nel compatto, il
+  suggerimento di sempre segnato `data-ovvio`), e lo toglie altrimenti; si rifà a ogni disegno, al cambio del
+  compatto (`matchMedia` con la stessa media query del CSS, controllata da `prova_sezioni`) e al cambio di modo.
+  Fuori dal compatto, o quando la riga piccola si vede (il microfono su un altro satellite, la compagnia),
+  VoiceOver la legge una volta sola, nel suo posto. *[storico: dal 28/10 al 29/10 la descrizione era fissa]*
+- **Le etichette della barra a 0,62rem** (10,54 px) restano: è la misura delle etichette della barra di iOS
+  (10 pt), e a 320 px «Conversazione» ci sta col font largo e col testo ingrandito. La prova misura ora che non
+  scendano sotto i 10 px; resta da guardarle sull'iPhone 13 mini vero.
+- **Android e `text-size-adjust`.** Il testo fermo al 100 % vale solo su iOS (`@supports
+  (-webkit-touch-callout: none)`, che c'è solo in WebKit su iOS): lì serve perché Safari in orizzontale
+  ingrandiva il testo da solo; i Chrome per Android di prima, con `text-size-adjust`, perdevano il
+  «Ridimensionamento testo» delle impostazioni di accessibilità. *[storico: dal 28/10 al 29/10 per tutti]*
+- **Prove.** `prova_telefono_schermo` misura anche due telefoni grandi in verticale (390×844 e 412×915) dove
+  il compatto **non** deve scattare, col suggerimento visibile e «Parla» senza descrizione; nel compatto il
+  suggerimento nascosto è la descrizione. `prova_casa_ha` controlla di chi è la guida rimasta sul server
+  (l'id di chi l'ha chiesta), la pagina Documenti (c'è per Dario, non per un familiare) e la sorgente di
+  «Scarica» (`_scarica`: la guida intera, nel suo formato).
+- **Il proprietario di ripiego «amministra»** della guida scritta non c'è più: senza una persona riconosciuta
+  la guida non si scrive ([casa](casa.md)).
+- **Il cassetto** (#307): `bottoneCassetto` disegna solo «tieni» e «ancora», e il tocco su un pulsante d'altra
+  azione non chiama `/api/cassetto` e scrive «Per eliminare un file dimmelo a voce.»; tolto il secondo tocco
+  di «Elimina tutti», codice morto dal 28/10 sera, e la sua regola CSS. Tolto anche `emetti("cassetto")` dal gestore dei pulsanti dei conoscenti, copiato per sbaglio (revisione della PR #309). Il resto in
+  [sicurezza-politica](sicurezza-politica.md).
+- Cache del service worker `calliope-telefono-pagina-v21` (era v20), uguale a `PAGINA_VERSIONE`.

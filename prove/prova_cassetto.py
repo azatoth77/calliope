@@ -273,8 +273,17 @@ def prova_azioni():
              and cas.prendi("dario", x) is not None, out)
     out = cas.da_pagina("dario", "formatta", [x])
     verifica("da_pagina: azione sconosciuta rifiutata", not out["ok"])
-    out = cas.da_pagina("dario", "elimina", [x])
-    verifica("da_pagina: il proprietario elimina il suo", out["ok"]
+    # Eliminare dai pulsanti no, nemmeno il proprietario (29/10, #307: difesa in più dietro il 403
+    # del server), con gli alias del tool; a voce resta `esegui` (cassetto_gestisci)
+    for az in ("elimina", "Cancella", "butta"):
+        out = cas.da_pagina("dario", az, [x])
+        verifica(f"contrario: da_pagina «{az}» rifiutato anche al proprietario, il file resta",
+                 not out["ok"] and out.get("codice") == "serve_voce"
+                 and "a voce" in out.get("errore", "") and cas.prendi("dario", x) is not None, out)
+    out = cas.da_pagina("dario", "ancora", [x])
+    verifica("da_pagina: «ancora» del proprietario passa", out["ok"], out)
+    out = cas.esegui("dario", "elimina", [cas.prendi("dario", x)])
+    verifica("esegui (la strada della voce): il proprietario elimina il suo", out["ok"]
              and cas.prendi("dario", x) is None, out)
     cas.close()
     cas2.close()
@@ -1121,6 +1130,12 @@ def prova_server():
                  r.status_code == 403 and r.json().get("codice") == "serve_voce"
                  and "a voce" in r.json().get("errore", "") and cas.prendi("dario", a) is not None
                  and cas.prendi("dario", b) is not None, r.text)
+        # Gli alias del tool (29/10, #307): «cancella» e «butta» si fermano come «elimina»
+        for az in ("cancella", "Butta"):
+            r = post(mio, {"azione": az, "id": [a]})
+            verifica(f"/api/cassetto «{az}»: 403 serve_voce come «elimina», il file resta",
+                     r.status_code == 403 and r.json().get("codice") == "serve_voce"
+                     and cas.prendi("dario", a) is not None, r.text)
         verifica("i file di Teodora restano", cas.prendi("teodora", c) is not None)
         r = post(mio, {"azione": "ancora", "id": ["1; DROP TABLE"]})
         verifica("/api/cassetto: id non numerici ignorati", r.status_code == 409)

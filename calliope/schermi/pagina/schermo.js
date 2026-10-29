@@ -1619,7 +1619,11 @@
   // Eliminare si fa a voce (28/10 sera, seguito della #301: non si disfa, e dallo schermo
   // personale di un altro non deve bastare un tocco): niente «Elimina» né «Elimina tutti», la
   // nota lo dice. *Storico: fino al 28/10 sera «Elimina» e «Elimina tutti» (due tocchi)*
+  // Difesa in più (29/10, #307): un pulsante che non sia «tieni» o «ancora» non si disegna, e il
+  // tocco non lo manda (dietro c'è il 403 del server e il rifiuto di Cassetto.da_pagina)
+  const AZIONI_CASSETTO = ["tieni", "ancora"];
   function bottoneCassetto(testo, azione, ids, cls) {
+    if (!AZIONI_CASSETTO.includes(azione)) return document.createDocumentFragment();
     const b = el("button", "piccolo-bottone tasto-cassetto" + (cls ? " " + cls : ""), testo);
     b.type = "button";
     b.dataset.cassetto = azione;
@@ -1682,15 +1686,11 @@
     const s = b.closest("article.scheda");
     const esito = s && s.querySelector(".esito-cassetto");
     const dire = (t) => { if (esito) esito.textContent = t; };
-    if (!S.sessione) { dire("Non collegato: riprova tra poco."); return; }
-    if (b.classList.contains("conferma") && !b.dataset.armato) {
-      // Un secondo tocco entro 4 s: «Elimina tutti» non si disfa
-      b.dataset.armato = "1";
-      const prima = b.textContent;
-      b.textContent = "Tocca di nuovo per eliminarli tutti";
-      setTimeout(() => { delete b.dataset.armato; b.textContent = prima; }, 4000);
+    if (!AZIONI_CASSETTO.includes(b.dataset.cassetto)) {
+      dire("Per eliminare un file dimmelo a voce.");
       return;
     }
+    if (!S.sessione) { dire("Non collegato: riprova tra poco."); return; }
     const ids = (b.dataset.ids || "").split(",").map((x) => parseInt(x, 10)).filter(Number.isInteger);
     if (!ids.length) return;
     b.disabled = true;
@@ -1778,9 +1778,8 @@
       let d = {};
       try { d = await r.json(); } catch (e) { /* niente */ }
       dire(r.status === 200 ? (d.frase || "Fatto.") : (d.errore || ("Non ci sono riuscita (" + r.status + ").")));
-      // La pagina Cassetto aperta si rilegge subito (2d, seconda revisione della PR #267: prima
-      // aspettava la raffica delle schede o il giro dei 60 s)
-      if (r.status === 200) emetti("cassetto", { azione: b.dataset.cassetto });
+      // *Storico: fino al 29/10 qui c'era anche emetti("cassetto"), copiato dal gestore del
+      // cassetto (revisione della PR #309): rileggeva la pagina Cassetto dopo un conoscente*
     } catch (e) {
       dire("Calliope non risponde: riprova.");
     } finally {

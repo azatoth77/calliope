@@ -1140,6 +1140,9 @@ def compila(t: Tel, hub, foto_cb=None):
 # (320×693, il caso vero delle schermate di Dario), dove vale il layout compatto
 DIMENSIONI = [(375, 812, "iphone13mini"), (320, 568, "piccolo"), (812, 375, "orizzontale"),
               (375, 667, "se"), (320, 693, "mini-zoom")]
+# I telefoni grandi in verticale, dove il compatto NON scatta (29/10, #287): iPhone 13–15 e un
+# Android grande
+GRANDI = [(390, 844, "iphone13"), (412, 915, "android-grande")]
 # Il compatto (28/10, #277): la voce e la barra insieme al più un quarto dell'altezza
 FISSI_MAX = 0.25
 RISPOSTA_LUNGA = ("Va bene, allora il file resta salvato nella cartella dei documenti del portatile, "
@@ -1247,6 +1250,13 @@ MISURA = r"""(() => {
       r.selectNodeContents(v); return new Set([...r.getClientRects()].map((q) => Math.round(q.top))).size; })(),
     dove: document.getElementById('tel-dove').hidden ? '' : document.getElementById('tel-dove').textContent,
     sezione: window.calliopeTelefono.sezioni().sezione,
+    // «Parla» descritto dal suggerimento solo quando la riga non si vede (29/10, #287)
+    descritto: document.getElementById('parla').getAttribute('aria-describedby') || '',
+    doveNascosta: (() => { const d = document.getElementById('tel-dove');
+      return !d.hidden && !!d.textContent && getComputedStyle(d).display === 'none'; })(),
+    // le etichette della barra, in px (29/10, #287: 0,62rem nel compatto)
+    etichetta: Math.min(...[...document.querySelectorAll('#barra a')].filter(vis)
+      .map((a) => parseFloat(getComputedStyle(a).fontSize))),
   };
 })()"""
 
@@ -1312,7 +1322,12 @@ def misure(t, etichetta):
         ("acceso", acceso, "Dormo · di' «Calliope»", ""),
     ]
 
-    def misura(d, parola, minimo, fissi_max=FISSI_MAX):
+    def suggerimento():
+        # microfono spento e nessun altro satellite: la riga piccola è il suggerimento di sempre
+        mic(False)
+        t.v(f"{T}.st.attivo = false; {T}.st.altro = null; {T}.st.pensa = false; 1")
+
+    def misura(d, parola, minimo, fissi_max=FISSI_MAX, compatto=True):
         ok = aspetta(lambda: (t.v(MISURA) or {}).get("voce") == parola, 2)
         time.sleep(0.35)                     # la dissolvenza si decide al giro dopo
         m = t.v(MISURA) or {}
@@ -1325,7 +1340,18 @@ def misure(t, etichetta):
                  f"{m.get('bassi')} {[round(x) for x in m.get('tocchi') or []]}")
         verifica(f"{d}: la sezione ha spazio (≥ 120 px)", m.get("spazio", 0) >= 120, f"{m.get('spazio', 0):.0f} px")
         verifica(f"{d}: lo stato della voce su al più due righe", m.get("voceRighe", 9) <= 2, str(m.get("voceRighe")))
-        if m.get("H", 0) > m.get("W", 0) and not m.get("auto"):
+        verifica(f"{d}: «Parla» descritto dalla riga piccola solo quando non si vede (niente doppia lettura)",
+                 (m.get("descritto") == "tel-dove") == bool(m.get("doveNascosta")),
+                 f"descritto {m.get('descritto')!r}, nascosta {m.get('doveNascosta')}, «{m.get('dove')}»")
+        if not m.get("auto") and m.get("etichetta") is not None:
+            # le etichette della barra: 0,62rem nel compatto (~10,5 px), come i 10 pt della barra di iOS
+            verifica(f"{d}: le etichette della barra almeno 10 px", m.get("etichetta", 0) >= 10,
+                     f"{m.get('etichetta')} px")
+        if m.get("H", 0) > m.get("W", 0) and not m.get("auto") and not compatto:
+            # Un telefono grande in verticale (29/10, #287): il compatto NON scatta
+            verifica(f"{d}: telefono grande, niente layout compatto (la riga dello stato si vede)",
+                     not m.get("compatto"), f"{m.get('W')}×{m.get('H')}")
+        elif m.get("H", 0) > m.get("W", 0) and not m.get("auto"):
             # Il layout compatto (28/10, #277): in verticale su questi telefoni
             verifica(f"{d}: layout compatto, la voce su una riga (i pulsanti allineati, lo stato in «Parla»)",
                      m.get("compatto") and m.get("unaRiga") and m.get("stato")
@@ -1362,6 +1388,29 @@ def misure(t, etichetta):
             m = misura(f"{etichetta} {w}×{h} {sez}", "Microfono spento", 44)
             foto(t, f"telefono-{etichetta}-{nome_d}-{sez}.png")
         t.v(f"{T}.vai('#/adesso'); 1")
+        if h > w:
+            # Il suggerimento di sempre nel compatto: nascosto, e descrizione di «Parla» (#287)
+            suggerimento()
+            m = misura(f"{etichetta} {w}×{h} Adesso col suggerimento", "Microfono spento", 44)
+            verifica(f"{etichetta} {w}×{h}: il suggerimento nascosto è la descrizione di «Parla»",
+                     m.get("doveNascosta") and m.get("descritto") == "tel-dove", m.get("descritto"))
+    # I telefoni grandi in verticale (29/10, #287): il compatto non deve scattare, e «Parla» non è
+    # descritto dalla riga piccola, che si vede (VoiceOver la leggeva due volte)
+    for w, h, nome_d in GRANDI:
+        dimensione(t, w, h)
+        t.v(f"{T}.impostaAuto(false); 1")
+        for nome_s, fai, parola in (("suggerimento", suggerimento, "Microfono spento"),
+                                    ("spento", spento, "Microfono spento"),
+                                    ("acceso", acceso, "Dormo · di' «Calliope»")):
+            fai()
+            d = f"{etichetta} {w}×{h} Adesso «{parola}» ({nome_s})"
+            m = misura(d, parola, 44, compatto=False)
+            foto(t, f"telefono-{etichetta}-{nome_d}-{nome_s}.png")
+            if nome_s == "suggerimento":
+                verifica(f"{d}: il suggerimento si vede e «Parla» non ne è descritto",
+                         "Parla" in m.get("dove", "") and not m.get("doveNascosta") and not m.get("descritto"),
+                         f"«{m.get('dove')}» {m.get('descritto')!r}")
+        spento()
     # Un font più largo (27/10: sull'iPhone il font di sistema è più largo di Segoe UI e
     # «Conversazione» usciva dalla sua voce della barra): Verdana, nelle sezioni, ai due telefoni
     t.v("document.documentElement.style.setProperty('font-family', 'Verdana, sans-serif'); "

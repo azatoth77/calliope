@@ -62,6 +62,22 @@ _EST_LIBERE = {"opendocument": {"odt", "ods", "odp"},
 # Categorie che non entrano nel cassetto: i byte non ci sono (eseguibili) o non servono
 NON_IN_CASSETTO = frozenset({"eseguibile"})
 
+# Le azioni sui file e i loro sinonimi, una mappa sola (29/10, #307): la usano il tool
+# `cassetto_gestisci` (tools/allegati.py), la classe d'effetto (`valore._cassetto`: elimina è E3)
+# e /api/cassetto. Prima valore.py ripeteva a mano gli alias di «elimina», e un alias nuovo nel
+# tool sarebbe restato E2, cioè eseguibile per iscritto
+AZIONI = {"tieni": "tieni", "archivia": "tieni", "conserva": "tieni", "salva": "tieni",
+          "elimina": "elimina", "cancella": "elimina", "butta": "elimina",
+          "ancora": "ancora", "tieni_ancora": "ancora", "proroga": "ancora",
+          "rinnova": "ancora"}
+# I pulsanti della scheda: eliminare si fa a voce (28/10 sera, seguito della #301)
+AZIONI_PAGINA = frozenset({"tieni", "ancora"})
+
+
+def azione_canonica(azione) -> str | None:
+    """«Cancella», «butta» → «elimina»; «tieni ancora» → «ancora». None se non è un'azione."""
+    return AZIONI.get(str(azione or "").strip().lower().replace(" ", "_"))
+
 # Come si dice il tipo (a voce e sulla scheda)
 DETTO = {"immagine": "una foto", "pdf": "un PDF", "word": "un documento Word",
          "excel": "un foglio Excel", "powerpoint": "una presentazione",
@@ -799,9 +815,14 @@ class Cassetto:
         """Un pulsante della scheda (POST /api/cassetto, schermi/server.py): il proprietario
         dello schermo personale sui suoi file, o un suo tutore verificato dalla voce sui file
         del figlio (il server lo controlla; qui `persona` è il proprietario dei file e
-        `nome_persona` la cartella per «Tieni»). {ok, frase} o {ok: False, errore}."""
-        azione = str(azione or "").strip().lower()
-        if azione not in ("tieni", "elimina", "ancora"):
+        `nome_persona` la cartella per «Tieni»). {ok, frase} o {ok: False, errore}.
+        Eliminare dai pulsanti no (29/10, #307, difesa in più dietro il 403 del server): si fa a
+        voce, con `cassetto_gestisci`."""
+        azione = azione_canonica(azione)
+        if azione == "elimina":
+            return {"ok": False, "codice": "serve_voce",
+                    "errore": "Per eliminarlo dimmelo a voce, con una frase intera."}
+        if azione not in AZIONI_PAGINA:
             return {"ok": False, "errore": "azione sconosciuta"}
         if not isinstance(ids, list) or not ids or len(ids) > 50:
             return {"ok": False, "errore": "file non validi"}

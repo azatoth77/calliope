@@ -394,7 +394,8 @@ class Documenti:
         «Ti ho preparato la guida in PDF sul server, perché il satellite collegato non riceve
         documenti», e la guida non si ritrovava da nessuna parte): la pagina Documenti la mostra
         con «Scarica», e chi chiede la guida riceve la scheda. *Storico: fino al 28/10 non
-        entrava mai nell'archivio.* Consegnata al PC resta fuori, come prima."""
+        entrava mai nell'archivio.* Consegnata al PC resta fuori, come prima. Senza `owner` (un
+        id di persona) niente archivio (29/10, #287): un documento di nessuno non si ritrova."""
         doc = validate(formato, doc)
         data = render(formato, doc, self.fonts)
         ext = ESTENSIONI[formato]
@@ -403,7 +404,7 @@ class Documenti:
                "dove": d.get("dove") or self.delivery.where(),
                "apribile": self._offer(owner, d, doc["titolo"], ext),
                "sul_server": d.get("remoto") is False}
-        if out["sul_server"]:
+        if out["sul_server"] and str(owner or "").strip():
             doc_id = self.archive.add(owner, owner_name or owner, formato, doc["titolo"], d["rif"],
                                       d["nome_file"], doc, d.get("mtime"), doc["titolo"])
             out["documento"] = doc_id
