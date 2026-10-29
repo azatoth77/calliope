@@ -551,8 +551,15 @@ def _scrivi_guida(ctx: ToolContext, diag: dict, formato: str) -> tuple[str, dict
         fmt = next((f for f in ("pdf", "word") if f in svc.formati), "excel")
     name = getattr(ctx.speaker_ctx, "current_speaker", None)
     prof = ctx.speakers.get(name) if name and ctx.speakers else None
+    if prof is None or not getattr(prof, "id", None):
+        # Senza una persona riconosciuta la guida non si scrive (29/10, #287): il proprietario
+        # di ripiego «amministra» sarebbe finito nell'archivio dei documenti come una persona,
+        # e la pagina Documenti non l'avrebbe mostrata a nessuno. Con i livelli di oggi non
+        # succede (la guida scritta è di chi amministra, che ha sempre un profilo)
+        return ("Non so a chi dare la guida scritta, quindi te lo dico a voce: " +
+                diag["prossimo_passo"]), None
     try:
-        r = svc.scrivi_fisso(prof.id if prof else "amministra", fmt,
+        r = svc.scrivi_fisso(prof.id, fmt,
                              guida_scritta(diag, getattr(ctx.cfg, "casa_url", None)),
                              owner_name=name or "")
     except Exception as e:  # noqa: BLE001
