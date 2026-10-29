@@ -238,12 +238,23 @@ def _dati_conservati(ctx: ToolContext, azione: str = "", persona: str = "") -> d
                + (", conversazione della stanza" if _stanza(cons, None) is not None else "")
                + (", impronte della voce imparate sui satelliti"
                   if _imp_sat.modo(getattr(cons, "cfg", None)) != _imp_sat.SPENTO else "")
+               + (", le verifiche dello Studio" if _studio_c_e(cons) else "")
                + "? I ricordi restano.")
     return _final(domanda, ok=False,
                   in_sospeso={"domanda": domanda, "cosa": f"cancellare i dati conservati {di_chi}",
                               "tool": "dati_conservati",
                               "argomenti": {"azione": "svuota",
                                             **({"persona": bersaglio.name} if bersaglio else {})}})
+
+
+def _studio_c_e(cons) -> bool:
+    """Ci sono verifiche dello Studio da cancellare (29/10, #280)? Anche con lo Studio spento:
+    quelle di prima restano finché scadono."""
+    try:
+        from ..studio.dati import conta_file
+        return conta_file(getattr(getattr(cons, "cfg", None), "memory_db", None))["verifiche"] > 0
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _trova(ctx, nome: str):

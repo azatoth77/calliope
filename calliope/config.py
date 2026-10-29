@@ -2116,6 +2116,34 @@ class Config:
     guardiano_pericolo_modello: str = "gemma4:e4b-it-qat"
     guardiano_pericolo_url: str = ""
 
+    # Lo Studio (29/10, passo 4.1, issue #280, decisione 0035; calliope/studio/): verifiche con
+    # una data, materiali e pagine, argomenti e un piano a giorni calcolato dal codice, per tutte
+    # le persone di casa (i tutori vedono quello dei minori, gli ospiti mai). «spento» = niente
+    # Studio (i dati di prima scadono e si cancellano lo stesso); «ombra» = i dati si scrivono e
+    # il piano si calcola, ma niente arriva al modello né agli schermi: solo le misure nel
+    # registro; «attivo» = per il tool e le pagine dello Studio (passo 4.5, non ancora fatti)
+    studio_modo: str = "spento"
+    # Minuti di studio al giorno per una verifica (il tutore li ritocca per verifica); con più
+    # verifiche aperte negli stessi giorni si dividono
+    studio_minuti_giorno: int = 45
+    # Minuti per leggere e studiare una pagina: quante pagine stanno in un giorno
+    studio_minuti_pagina: int = 10
+    # La fascia del giorno in cui si studia: i minuti di un giorno sono quelli della fascia non
+    # coperti dagli orari di riposo di un minore (un giorno con gli orari che coprono tutta la
+    # fascia non ha studio). Oggi conta solo la parte della fascia che deve ancora venire
+    studio_fascia: str = "15:00-20:00"
+    # I giorni della settimana senza piano («domenica», «sabato»…): giorni senza scuola noti.
+    # Vuoto di serie; i singoli giorni liberi (vacanze, gite) si segnano per persona
+    studio_giorni_senza_piano: list[str] = field(default_factory=list)
+    # L'obiettivo di padronanza in % accanto alla data, di serie (spunto approvato il 28/10)
+    studio_obiettivo: int = 75
+    # Giorni dopo la data della verifica in cui restano pagine, testo letto, argomenti e piano
+    # (decisione 0035, punto 4); «archivia la verifica» la tiene per sempre
+    studio_tenuta_giorni: int = 60
+    # La cartella dello Studio per le immagini delle pagine (dal passo 4.2): nel 4.1 solo il
+    # posto da cui la tenuta e «dimentica» tolgono i file delle pagine
+    studio_cartella: str = "studio"
+
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
     # sa: meteo, notizie, risultati, orari, prezzi. Accesa se c'è web_searxng_url (sulla DGX
@@ -3403,6 +3431,9 @@ SEZIONI: dict[str, list[str]] = {
                "guardiano_timeout_s", "guardiano_se_guasto", "guardiano_keep_alive",
                "guardiano_num_ctx", "guardiano_ospiti", "guardiano_pericolo",
                "guardiano_pericolo_modello", "guardiano_pericolo_url"],
+    "studio": ["studio_modo", "studio_minuti_giorno", "studio_minuti_pagina", "studio_fascia",
+               "studio_giorni_senza_piano", "studio_obiettivo", "studio_tenuta_giorni",
+               "studio_cartella"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -3757,6 +3788,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "minori_avviso_privato_s": (0.0, 86_400.0),
     "minori_ospite_vicino_s": (0.0, 86_400.0),
     "minori_ospite_vicino_punteggio": (0.0, 1.0),
+    "studio_minuti_giorno": (0, 600), "studio_minuti_pagina": (1, 120),
+    "studio_obiettivo": (1, 100), "studio_tenuta_giorni": (1, 3650),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),
@@ -3990,6 +4023,8 @@ _MODI_NUOVI = {
     "agenti_conferma": _modi("agenti_conferma", ("costosi", "sempre", "mai")),
     # Il revisore (20/10, #190): il true di YAML è ambiguo fra «ombra» e «attivo», rifiutato
     "agenti_revisore": _modi("agenti_revisore", ("spento", "ombra", "attivo"), falso="spento"),
+    # Lo Studio (29/10, #280): il true di YAML è ambiguo fra «ombra» e «attivo», rifiutato
+    "studio_modo": _modi("studio_modo", ("spento", "ombra", "attivo"), falso="spento"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},
@@ -4039,8 +4074,19 @@ def _data_valida(value, dove: str = ""):
 _data_valida.prima_del_tipo = True
 
 
+def _fascia_studio_valida(value, dove: str = ""):
+    """`studio_fascia` (29/10, #280, revisione della PR #308): «HH:MM-HH:MM» nello stesso
+    giorno, l'inizio prima della fine. Scritta male è rifiutata con l'avviso e resta il valore
+    di prima, come le altre chiavi sbagliate."""
+    from .studio.piano import fascia_valida
+    if fascia_valida(value) is None:
+        raise ValueError("serve una fascia come «15:00-20:00», l'inizio prima della fine")
+    return str(value).strip()
+
+
 VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valido,
               "conserva_valutazione_fino": _data_valida,
+              "studio_fascia": _fascia_studio_valida,
               "tts_thread": _tts_thread_valido, "tts_dispositivo": _tts_dispositivo_valido,
               "agenti_num_ctx": _num_ctx_agenti_valido,
               "contesto_riassuntore": _riassuntore_valido,

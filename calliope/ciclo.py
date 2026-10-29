@@ -164,6 +164,9 @@ class Servizi:
     # tiene le parole e la voce; None = nessuna voce salvata e le parole come prima (prove)
     conserva: object = None
     attiva_minori: object = None         # () → True se ha registrato i tool dei minori
+    # Lo Studio (29/10, calliope/studio/, #280): None con `studio_modo: spento`; in ombra i dati
+    # si scrivono ma niente arriva al modello né agli schermi (Studio.per_modello/per_schermi)
+    studio: object = None
     # Cambiano a voce (modalità, main.applica_modalita) o da un'installazione
     wake: object = None
     suoni: object = None

@@ -159,3 +159,7 @@ voce_taratura.json
 # La fine del turno System 1 (14/10, calliope/system1/fine_turno.py): Smart Turn di Pipecat
 # (--installa modello_fine_turno, 8,7 MB)
 models/fine_turno/
+
+# Lo Studio (29/10, #280): le immagini delle pagine (dal passo 4.2), anche dei minori, nella
+# cartella di `studio_cartella` (di serie «studio» accanto al programma). Mai nel repository
+/studio/

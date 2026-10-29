@@ -905,6 +905,35 @@ minori:
   guardiano_pericolo_modello: gemma4:e4b-it-qat
   guardiano_pericolo_url: ''
 
+studio:
+  # Lo Studio (29/10, passo 4.1, issue #280, decisione 0035; calliope/studio/): verifiche con
+  # una data, materiali e pagine, argomenti e un piano a giorni calcolato dal codice, per tutte
+  # le persone di casa (i tutori vedono quello dei minori, gli ospiti mai). «spento» = niente
+  # Studio (i dati di prima scadono e si cancellano lo stesso); «ombra» = i dati si scrivono e
+  # il piano si calcola, ma niente arriva al modello né agli schermi: solo le misure nel
+  # registro; «attivo» = per il tool e le pagine dello Studio (passo 4.5, non ancora fatti)
+  studio_modo: spento
+  # Minuti di studio al giorno per una verifica (il tutore li ritocca per verifica); con più
+  # verifiche aperte negli stessi giorni si dividono
+  studio_minuti_giorno: 45
+  # Minuti per leggere e studiare una pagina: quante pagine stanno in un giorno
+  studio_minuti_pagina: 10
+  # La fascia del giorno in cui si studia: i minuti di un giorno sono quelli della fascia non
+  # coperti dagli orari di riposo di un minore (un giorno con gli orari che coprono tutta la
+  # fascia non ha studio). Oggi conta solo la parte della fascia che deve ancora venire
+  studio_fascia: 15:00-20:00
+  # I giorni della settimana senza piano («domenica», «sabato»…): giorni senza scuola noti.
+  # Vuoto di serie; i singoli giorni liberi (vacanze, gite) si segnano per persona
+  studio_giorni_senza_piano: []
+  # L'obiettivo di padronanza in % accanto alla data, di serie (spunto approvato il 28/10)
+  studio_obiettivo: 75
+  # Giorni dopo la data della verifica in cui restano pagine, testo letto, argomenti e piano
+  # (decisione 0035, punto 4); «archivia la verifica» la tiene per sempre
+  studio_tenuta_giorni: 60
+  # La cartella dello Studio per le immagini delle pagine (dal passo 4.2): nel 4.1 solo il
+  # posto da cui la tenuta e «dimentica» tolgono i file delle pagine
+  studio_cartella: studio
+
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri
   # fatti; degli ospiti non si salva nulla.

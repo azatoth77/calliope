@@ -4,7 +4,8 @@
   amministra la premessa «niente del vecchio» e le cinque risposte del 28/10 (sotto, punti 1–6).
   Il resto (dove si conservano le pagine, l'ombra con il banco, i tocchi nuovi) si completa con i
   passi 4.1–4.5 (#280–#284). Il passo 4.0 è fatto il 28/10 sul ramo `issue-279-via-esercizi`:
-  il vecchio processo degli esercizi è tolto.
+  il vecchio processo degli esercizi è tolto. Il passo 4.1 (dati e piano a giorni) è fatto il
+  29/10 sul ramo `issue-280-studio-dati-piano` (sezione «Dati e piano a giorni», sotto).
 - **Area**: [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -121,12 +122,50 @@ Restano, perché li usa altro: tutori, preset, orari, avvisi ai tutori, guardian
 `SIMBOLI_DETTI` in `calliope/pronuncia.py` e `in_lettere` in `calliope/numeri.py`, per il filtro
 dell'eco della stanza.
 
-## Da completare con i passi 4.1–4.5
+## Dati e piano a giorni (passo 4.1, #280, 29/10)
 
-- Dove si conservano le pagine (tabelle `studio_*` in `memoria.db`, la copia propria dello Studio
-  perché il cassetto tiene i file non foto 7 giorni) e come si applica il punto 4.
-- `studio: spento | ombra | attivo`, con l'ombra sul banco di pagine di fantasia prima di accenderlo
-  per un minore.
+8. **I dati stanno in `memoria.db`**, in sette tabelle `studio_*` con la versione in `meta_schema`
+   (modulo «studio»): verifiche (di chi è, per id del profilo; materia da un elenco fisso più
+   «altro», argomento, data, classe o livello, **obiettivo di padronanza in %**, di serie
+   `studio_obiettivo` 75, minuti al giorno, stato bozza → aperta → fatta o archiviata), materiali,
+   pagine (solo i riferimenti e, dal passo 4.3, il testo letto come dato non fidato), argomenti
+   (proposto, tenuto, tolto, aggiunto: qui la conferma è a mano, l'estrazione è del passo 4.4),
+   il piano a giorni, i giorni con minuti diversi di una persona, le misure vere della padronanza.
+   Lo Studio tiene la sua copia delle pagine nella sua cartella (`studio_cartella`), legata alla
+   verifica: il cassetto tiene i file non foto 7 giorni. Codice in `calliope/studio/`.
+9. **Il piano lo calcola il codice**, senza modello, deterministico (`studio/piano.py`): da oggi
+   al giorno prima della verifica; i minuti di ogni giorno sono quelli della fascia dello studio
+   (`studio_fascia`) non coperti dagli orari di riposo del minore, al più `studio_minuti_giorno`,
+   zero nei giorni senza scuola noti (`studio_giorni_senza_piano` e i giorni segnati per la
+   persona) e in quelli saltati, divisi fra più verifiche negli stessi giorni. L'attività del
+   giorno è «Leggi le pagine X–Y» (punto 1): le pagine degli argomenti tenuti, nell'ordine delle
+   pagine, in proporzione ai minuti; la vigilia (l'ultimo giorno libero, se sono almeno due) è
+   solo ripasso. Se le pagine non ci stanno nei giorni di studio si legge anche la vigilia e il
+   ripasso cade; se non ci stanno nemmeno così si distribuiscono lo stesso e il piano lo dice
+   (revisione della PR #308). Un giorno senza pagine nuove ripassa quelle lette. Si
+   ricalcola a ogni cambio e il primo giorno nuovo; i giorni fatti restano. Le **tappe** sono gli
+   argomenti, che si sbloccano uno dopo l'altro; accanto, i giorni che mancano; la **previsione**
+   per la verifica compare solo dopo almeno due misure vere (spunto approvato il 28/10, commento
+   nella #280).
+10. **Permessi** (punto 5): ognuno il suo; il tutore vede e cambia quello del suo minore; nessuno
+    quello di un altro adulto, nemmeno chi amministra; ospiti e conoscenti mai.
+11. **Tenuta** (punto 4): una verifica non archiviata si toglie con tutto ciò che è suo (pagine e
+    loro file, testo, argomenti, piano, misure) `studio_tenuta_giorni` (60) giorni dopo la sua
+    data, nella rotazione della conservazione; archiviata resta per sempre. «Dimentica le nostre
+    conversazioni» toglie lo Studio della persona **tranne le verifiche archiviate**, tenute di
+    proposito come le foto archiviate della [0034](0034-miniature-nella-conversazione.md), e la
+    domanda e la frase di «dimentica» lo dicono (deciso da chi amministra il 29/10). Anche i giorni
+    segnati di una persona scadono dopo `studio_tenuta_giorni`;
+    `calliope conserva --svuota` toglie tutto (`conserva.TABELLE_STUDIO`).
+12. **Interruttore** `studio_modo: spento | ombra | attivo`, spento di serie. In ombra i dati si
+    scrivono e il piano si calcola, ma niente arriva al modello né agli schermi: nel registro solo
+    le misure, senza nomi né titoli. «Attivo» serve dal passo 4.5.
+
+## Da completare con i passi 4.2–4.5
+
+- *[fatto il 29/10, passo 4.1: dove si conservano le pagine e come si applica il punto 4 (punti
+  8 e 11); `studio_modo` (punto 12). Resta l'ombra sul banco di pagine di fantasia prima di
+  accenderlo per un minore.]*
 - I tocchi nuovi e la bozza delle pagine (Sposta, Ruota, Ritaglia, Togli prima della lettura)
   fuori dalla conversazione: una lettura stretta della decisione 10 del progetto, da confermare.
 - Il modello che legge (qwen3.6 su vLLM, che cede alla voce) e cosa fa il portatile da 8 GB senza

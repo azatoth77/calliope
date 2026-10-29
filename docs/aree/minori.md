@@ -2,7 +2,9 @@
 
 *Fasce d'età, preset, guardiano, compiti, avvisi ai tutori. Documento d'area: nato il 06/10/2026 dividendo CLAUDE.md (proposta P7 di [`../ricerche/2026-10-06-analisi-complessiva.md`](../ricerche/2026-10-06-analisi-complessiva.md)). Chi lavora su quest'area aggiorna questo file; in CLAUDE.md al più una riga.*
 
-**Stato al 28/10.** Lo Studio si rifà da capo (decisione [0035](../decisioni/0035-studio.md), epic #251): il vecchio processo degli esercizi è tolto (#279), con `calliope/esercizi/` (anche l'indice del programma), `compiti_aiuto` e la scheda degli esercizi; per i compiti di un minore resta solo la regola «mai la soluzione intera» nei dati del turno, senza conteggio né avviso, e `calcola` dà sempre il risultato (sezione in fondo). Restano tutori, preset, orari, avvisi e guardiano. Il resto come al 18/10.
+**Stato al 29/10.** C'è `calliope/studio/` con i dati e il piano a giorni (passo 4.1, #280, sezione in fondo): verifiche, materiali e pagine (solo i riferimenti), argomenti con la conferma a mano, un piano calcolato dal codice con «Leggi le pagine X–Y», l'obiettivo di padronanza, le tappe e la previsione dopo due misure; permessi (il tutore vede quello del minore, nessuno quello degli altri adulti, ospiti mai), tenuta di 60 giorni dalla data della verifica, `studio_modo` spento di serie. Ancora niente tool, pagina né modello (passi 4.2–4.5).
+
+*Stato al 28/10:* Lo Studio si rifà da capo (decisione [0035](../decisioni/0035-studio.md), epic #251): il vecchio processo degli esercizi è tolto (#279), con `calliope/esercizi/` (anche l'indice del programma), `compiti_aiuto` e la scheda degli esercizi; per i compiti di un minore resta solo la regola «mai la soluzione intera» nei dati del turno, senza conteggio né avviso, e `calcola` dà sempre il risultato (sezione in fondo). Restano tutori, preset, orari, avvisi e guardiano. Il resto come al 18/10.
 
 *Stato al 18/10 (storico per gli esercizi e i compiti guidati, superati il 28/10):* Dal 16/10 i minori di casa si conservano come gli adulti (decisione [0031](../decisioni/0031-conservazione-dei-minori.md), issue #104: turni, eventi, archivio e journal per 60 giorni, rileggibili dai tutori; la voce solo col consenso dei tutori, il «sì» breve dei tutori e la voce cancellata alla maggiore età, #108 e #114; sezioni in fondo); dal 16/10 l'ospite con la voce vicina a quella di un minore che ha parlato da poco riceve il modo di parlare della sua fascia (`minori_ospite_vicino`, #102). Dal 14/10 sera il guardiano a posteriori della stanza aspetta le righe di versione 2 della corsia lenta e non rigiudica una riga solo perché è stata riscritta (sottosezione «14/10 sera: il guardiano a posteriori e la corsia lenta»). Dal 17/10 nel cassetto di un minore letto da un tutore l'avviso «non presentare questi come suoi» (#58, [immagini-allegati](immagini-allegati.md)). *Storico al 14/10:* come al 09/10 (sotto), più: nessuna conservazione per i minori (12/10: le loro parole né nel registro dei turni né nel journal, esercizi e richieste che scadono con la conservazione; superato il 16/10); l'indice del programma ministeriale per gli esercizi (12/10 sera); le notizie solo di sport, tecnologia e ragazzi (13/10); il rilevatore solo sulle frasi rivolte a Calliope (13/10); dal 14/10 i tutori vedono conversazioni e cassetto del figlio a ogni età, il **guardiano a posteriori della stanza** (`stanza_guardia`, spento di serie; in ombra solo misure, `calliope stato --guardia`), gli avvisi con data e origine (`calliope stato --avvisi`, azione `avvisi` di `minore_gestisci`), la trascrizione (`avvisi_trascrizione`, accesa) e l'audio (`avvisi_audio`, spento) sulla scheda del tutore. Da confermare con Dario le scelte prudenti dei cancelli; da rimisurare sulla DGX col 26B.
 
@@ -21,6 +23,7 @@ Dario le scelte prudenti dei cancelli (fondo del documento); da rimisurare tutto
 | Minori (fasce d'età, preset per fascia, permessi nel codice, orari, compiti guidati come regola nei dati del turno, avvisi ai tutori; dal 05/10) | SQLite (stesso file della memoria: `minori_regole`, `avvisi_tutori`); guardiano Llama Guard 3 8B su Ollama + rilevatore di pericolo (gemma4 e4b, output strutturato) | `calliope/minori.py` → `fascia`, `preset`, `permesso` (da `ToolRegistry.call`), `dato_turno`, `fuori_orario`, `piu_protetto`, `REGOLA_COMPITI`, `Avvisi`, `estensione_consentita`, `conversazioni_visibili_ai_tutori`; `calliope/guardiano.py` → `Guardiano`, `filtra` (in `main.py`), `correggi_storia`; tool `minore_gestisci` e `richiesta_tutore` (`calliope/tools/minori.py`); terminale `python -m calliope.minori`; banchi `prove/prova_minori_ollama.py`, `prove/misura_guardiano.py`; [`docs/ricerche/2026-10-05-minori.md`](../ricerche/2026-10-05-minori.md) |
 | Pericolo poco chiaro verificato in due cancelli prima dell'avviso (dal 09/10); in compagnia la voce del minore non è mai sicura | stesso rilevatore (gemma4 e4b, output strutturato) per gravità e verifica | `calliope/cancelli.py` → `Cancelli`, `Segnale`, `RASSICURA`, `rassicura`, `testo_avviso`, `percorso` (segnali su disco dal 10/10); `calliope/guardiano.py` → `Guardiano.gravita`, `Guardiano.verifica`; `calliope/ciclo.py` → `Ciclo._decidi_pericolo`, `Ciclo._secondo_cancello`; prove `prove/prova_minori_cancelli.py`, misura `prove/misura_cancelli.py` |
 | Guardiano a posteriori della stanza (dal 14/10, passo 6 della conversazione di stanza, in ombra): le chiacchiere con un minore che parla o è presente, rilette dopo a blocchi; dal 14/10 sera riprese dal disco dopo un riavvio e giudicate col gioco aperto dichiarato | stesso rilevatore (gemma4 e4b, output strutturato con livello, categoria, contesto e righe) | `calliope/stanza/guardia.py` → `Guardia`, `GiudiceModello`, `PROMPT`, `GIOCO`; `calliope/stanza/tenuta.py` → diario della guardia; `calliope/schermi/giochi.py` → `Giochi.in_corso`; `riassunto`, `elenco`; `calliope/guardiano.py` → `Guardiano.chiedi_json`; `calliope/minori.py` → `Avvisi.solo_schermo`; `calliope stato --guardia`; prova `prove/prova_stanza_guardia.py`, banco `prove/manuali/banco_stanza_guardia.py` |
+| Studio: verifiche, materiali e pagine, argomenti, piano a giorni deterministico, tenuta legata alla data della verifica (dal 29/10, passo 4.1, decisione [0035](../decisioni/0035-studio.md); `studio_modo`, spento di serie) | SQLite (stesso file della memoria: `studio_verifiche`, `studio_materiali`, `studio_pagine`, `studio_argomenti`, `studio_piano`, `studio_giorni`, `studio_misure`; modulo «studio» in `meta_schema`); libreria standard, niente modello | `calliope/studio/dati.py` → `Dati`, `cancella`, `cancella_file`; `calliope/studio/piano.py` → `calcola`, `minuti_liberi`, `descrivi_pagine`, `tappe`, `previsione`; `calliope/studio/servizio.py` → `Studio`, `permesso`, `prepara`, `NonPermesso`, `NonTrovata`; `calliope/conserva.py` → `TABELLE_STUDIO`; prova `prove/prova_studio_piano.py` |
 | Audio degli avvisi di pericolo (dal 14/10, di serie spento: `avvisi_audio`) | libreria standard: anello in memoria (μ-law), WAV nel cassetto del tutore | `calliope/avvisi_audio.py` → `Anello`, `Pezzo`, `prepara`, `wav`; «Scarica l'audio» nella scheda dell'avviso; azione `avvisi` di `minore_gestisci` |
 
 *[storico: fino al 28/10 la tabella aveva anche le due righe qui sotto, tolte con il vecchio processo degli esercizi (#279, decisione [0035](../decisioni/0035-studio.md)): nel codice non c'è più niente di loro, salvo `SIMBOLI_DETTI` ora in `pronuncia.py` e `in_lettere` ora in `calliope/numeri.py`. Fino al 28/10 nella riga dei minori c'erano anche la classe `Compiti`, la tabella `compiti_giorno` e il tool `compiti_aiuto`.]*
@@ -1688,3 +1691,140 @@ davvero?» sbagliati 3/3 e «la pagina dice di darmele» 1/3; dopo l'avviso (2 g
 dopo la revisione della PR #305 (3 giri) tutto giusto tranne «è annullata davvero?» 1/3; con
 «se te lo richiede» (3 giri) tutto giusto. Prima frase mediana
 1,40–1,52 s; contesto da 15 278 a 18 956–19 058 token.
+
+
+## Lo Studio: dati e piano a giorni (29/10, issue #280, ramo `issue-280-studio-dati-piano`)
+
+*Passo 4.1 dell'epic #251 (analisi nella #243), decisione [0035](../decisioni/0035-studio.md)
+aggiornata. Nessun tool, nessuna pagina, nessun modello: sono dei passi 4.2–4.5. C'è l'API
+interna che il passo 4.5 userà.*
+
+**Il pacchetto `calliope/studio/`.**
+- `dati.py`: sette tabelle in `memoria.db` con la versione in `meta_schema` (modulo «studio»,
+  `persistenza.prepara_schema`; con uno schema più nuovo la connessione resta in sola lettura).
+  `studio_verifiche` (di chi è, per id del profilo; materia, argomento, data, classe o livello,
+  obiettivo in %, minuti al giorno, stato bozza → aperta → fatta o archiviata, chi l'ha creata,
+  avvisi dell'ultimo piano), `studio_materiali` (origine foto, cassetto, file, biblioteca, mano;
+  titolo; riferimento), `studio_pagine` (ordine, numero letto, etichetta, stato, file nella
+  cartella dello Studio, testo letto e metodo: il testo è del passo 4.3 ed è un dato non fidato),
+  `studio_argomenti` (titolo, pagine citate, stato proposto, tenuto, tolto, aggiunto; ordine),
+  `studio_piano` (un giorno per riga), `studio_giorni` (minuti diversi per un giorno di una
+  persona: 0 per un giorno senza scuola o saltato), `studio_misure` (le misure vere della
+  padronanza, dal passo 5). `cancella` è il solo posto che cancella, con `secure_delete` e in
+  una transazione.
+- `piano.py`: il piano, puro. Si studia da oggi al giorno prima della verifica. I minuti di un
+  giorno sono quelli di `studio_fascia` (15:00–20:00) non coperti dagli orari di riposo del
+  minore (oggi solo la parte che deve ancora venire), al più `studio_minuti_giorno` (45), zero
+  nei giorni di `studio_giorni_senza_piano` e in quelli segnati per la persona, divisi in parti
+  uguali fra le verifiche aperte negli stessi giorni. Un giorno sotto `studio_minuti_pagina`
+  (10) non ha piano. Con almeno due giorni liberi l'ultimo è solo ripasso; le pagine degli
+  argomenti tenuti, nell'ordine delle pagine e una volta sola, vanno ai giorni di studio in
+  proporzione ai minuti (dopo il giorno i, ⌈n · capacità fin lì / capacità totale⌉ pagine:
+  nessun giorno oltre i suoi minuti quando ci stanno). Se non ci stanno si distribuiscono lo
+  stesso, col segno `oltre` e l'avviso `troppe_pagine`. Un giorno di studio senza pagine nuove
+  ripassa quelle lette. I giorni fatti restano e il ricalcolo distribuisce il resto. Le tappe
+  sono gli argomenti nell'ordine della loro prima pagina («fatta», «aperta», «chiusa»); la
+  previsione è la retta dei minimi quadrati sulle misure, portata alla data, fra 0 e 100, e
+  compare solo dopo due misure (spunto approvato il 28/10).
+- `servizio.py`: `Studio` con l'API (`crea_verifica`, `imposta`, `archivia`, `togli_verifica`,
+  `aggiungi_materiale`, `aggiungi_pagina`, `segna_pagina`, `aggiungi_argomento`,
+  `segna_argomento`, `conferma_argomenti`, `imposta_giorno`, `salta_oggi`, `giorno_fatto`,
+  `aggiungi_misura`, `piano`, `oggi`), i permessi e l'interruttore. Il piano si ricalcola a ogni
+  cambio e alla prima lettura di un giorno nuovo.
+
+**Un esempio** (la verifica di storia di fantasia del banco, Leo, giovedì 5/11; creata giovedì
+29/10 alle 10, 45 minuti al giorno, 10 per pagina, 10 argomenti confermati): le pagine sono 112,
+113, 114, 115, 116, gli appunti e 117 (l'indice non è di nessun argomento), sette in tutto. Sei
+giorni di studio dal 29/10 al 3/11 e il ripasso il 4/11: «Leggi le pagine 112–113.», «Leggi la
+pagina 114.», «Leggi la pagina 115.», «Leggi la pagina 116.», «Leggi «Appunti».», «Leggi la
+pagina 117.», poi «Ripassa le pagine 112–117 e «Appunti».». Il giorno dopo, col 29/10 fatto, le
+prime due tappe sono «fatte» e la terza «aperta»; con «non ce la faccio oggi» il 30/10 resta
+senza piano e le pagine passano ai giorni dopo; con la data spostata al 12/11 il ripasso va
+all'11/11.
+
+**Permessi** (risposta 5 del 28/10). Ognuno il suo; il tutore vede e cambia quello del suo
+minore (anche i minuti al giorno, e crea una verifica per lui); un minore senza tutori vale chi
+amministra, come in `minori.e_tutore`; nessuno vede quello di un altro adulto, nemmeno chi
+amministra; ospiti e conoscenti mai. Una verifica di un altro dà lo stesso rifiuto di una che
+non c'è.
+
+**Tenuta** (decisione 0035, punto 4). `Conservazione.ruota` toglie le verifiche non archiviate
+più di `studio_tenuta_giorni` (60) giorni dopo la loro data, con materiali, pagine, testo letto,
+argomenti, piano, misure e i file delle pagine dentro `studio_cartella` (un percorso fuori non si
+tocca); l'archiviata resta per sempre. «Dimentica le nostre conversazioni» (il gancio
+`su_dimentica` dell'archivio, in `main.py`) toglie lo Studio della persona tranne le verifiche
+archiviate, come le foto archiviate della 0034; `calliope conserva --svuota` toglie tutto,
+archiviate comprese (`TABELLE_STUDIO` in `conserva.py`), e la domanda di `dati_conservati` lo
+dice. Anche con lo Studio spento: i dati di prima scadono e si cancellano lo stesso.
+
+**Interruttore** `studio_modo: spento | ombra | attivo` (spento di serie; il true di YAML
+rifiutato). Spento: nessun servizio. Ombra: i dati si scrivono e il piano si calcola, ma
+`per_modello()` e `per_schermi()` sono falsi; nel registro solo le misure (piani, giorni,
+pagine, giorni oltre, avvisi), senza nomi, materie né titoli. Attivo: per il passo 4.5.
+
+**Prove.** `prove/prova_studio_piano.py` (livello 1, ~2 s): piano puro coi casi limite, schema,
+il piano dal servizio coi materiali di fantasia e l'orologio finto, permessi, tenuta, archivia,
+«dimentica», svuota e interruttore. In `prova_config_modi.py` il campo `studio_modo`.
+
+*[storico: «Da decidere» fino al 29/10: decisi da Dario il 29/10 (commento nella #280). Un
+giorno senza pagine nuove ripassa quelle lette; «dimentica» lascia le archiviate e `--svuota` le
+toglie; il «quadro» resta fuori finché non c'è un contenuto; fascia 15–20, 45 minuti al giorno e
+10 a pagina restano i valori di serie; i giorni senza scuola restano configurazione più giorni
+segnati, dal calendario della scuola più avanti (#298); al ricalcolo i giorni passati non fatti
+spariscono.]*
+
+### 29/10: correzioni dopo la revisione della PR #308
+
+*La revisione ha trovato tre punti bloccanti e dodici note. Dario ha deciso i sei dubbi il 29/10
+(commento nella #280). Tutto è nella stessa PR.*
+
+- **Dati di una versione più nuova.** Prima, dal giorno dopo, `piano()` e `oggi()` fallivano
+  perché il ricalcolo scriveva su una connessione `query_only`. Ora con i dati in sola lettura
+  il piano di oggi si calcola in memoria e non si salva: i giorni fatti vengono dal db, gli altri
+  dal calcolo (`Studio._piano_vivo`).
+- **`studio_giorni` scade.** Nella rotazione i giorni segnati («non ce la faccio oggi», senza
+  scuola, minuti diversi) più vecchi di `studio_tenuta_giorni` vanno via con lo stesso limite
+  delle verifiche; con «dimentica» e `--svuota` come prima.
+- **Numeri di pagina strani.** Il numero si legge con `isdecimal` e mai con un'eccezione
+  (`piano.numero_pagina`). Una sigla corta («IV», «12a») resta; un numero strano («²», «①»,
+  segni, testo lungo) vale come una pagina senza numero e il piano ha l'avviso
+  `numero_strano`. Un ricalcolo che fallisce lo stesso non ferma le altre verifiche della
+  persona né le letture: una riga nel registro e il conto `errori` nelle misure.
+- **Due materiali con la stessa pagina.** Quando le pagine numerate vengono da più materiali,
+  l'attività dice anche il titolo: «Leggi le pagine 12–13 di «Libro» e la pagina 12 di
+  «Quaderno».».
+- **Troppe pagine.** Scelta di questo passo: se le pagine non stanno nei giorni di studio, si
+  legge anche la vigilia e il ripasso cade (`senza_ripasso`). Solo se non stanno nemmeno così un
+  giorno va oltre i suoi minuti (`troppe_pagine`, `oltre`). Il motivo: ripassare pagine mai
+  lette non serve, e il piano non deve chiedere più minuti di quelli che ci sono quando può
+  evitarlo. Prima la vigilia restava di ripasso e il primo giorno andava oltre.
+- **Un giorno di solo ripasso** (meno pagine che giorni, decisione 1 di Dario) vale i minuti
+  delle pagine che ripassa, non tutto il giorno: non pesa come una vigilia.
+- **Una verifica aperta senza pagine** non divide più i minuti delle altre.
+- **Data spostata prima di un giorno fatto**: i giorni fatti dopo la nuova data escono dal
+  piano.
+- **Rollback in `ricalcola`**: un guasto a metà lascia il piano di prima, senza un `DELETE`
+  rimasto nella transazione.
+- **Stesso rifiuto**: `NonTrovata` ha un solo messaggio per verifica, materiale, pagina,
+  argomento e giorno, che sia di un altro o che non ci sia.
+- **Tutori non più in casa**: come `minori.tutori`, valgono i tutori scritti ancora nel registro
+  (`conserva.tutori_validi`); se non ce n'è più nessuno, chi amministra.
+- **Orari di riposo** letti con `minori._orari_validi` (anche una stringa sola, «21:00-07:30»),
+  come `fuori_orario`.
+- **`studio_fascia` sbagliata**: il caricamento della configurazione la rifiuta con l'avviso e
+  tiene il valore di prima, come le altre chiavi; una `Config` scritta a mano dà una riga nel
+  registro e la fascia di serie.
+- **«Dimentica» lo dice** (decisione 2 di Dario: resta dentro «dimentica» e lascia le
+  archiviate): se la persona ha verifiche non archiviate, la domanda aggiunge «Tolgo anche le
+  verifiche dello Studio, tranne quelle archiviate.» e la frase «Ho tolto anche le verifiche
+  dello Studio; quelle archiviate restano.» (`tools/conversazioni.py`). Un errore del gancio va
+  nel registro col suo nome.
+- **`.gitignore`**: `/studio/`, la cartella di serie di `studio_cartella`, dove dal 4.2 ci saranno
+  le foto delle pagine, anche dei minori.
+- **Zona grigia**: il docstring di `servizio.py` dice che dal passo 4.5 chi chiama passa `None`
+  per un ospite e per la zona grigia, come `_chi` di `tools/conversazioni.py`.
+
+Prove: `prova_studio_piano.py` passa da 104 a 135 controlli, con i casi nuovi di ogni punto
+(il giorno dopo in sola lettura, i giorni che scadono, «²», «①» e altri, i due materiali, la
+vigilia letta, il guasto a metà, la verifica senza pagine, il messaggio uguale, il tutore non più
+in casa, la fascia, la domanda di «dimentica»).
