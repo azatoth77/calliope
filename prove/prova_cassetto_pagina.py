@@ -143,6 +143,21 @@ def prova(exe, hub, web, cas):
         verifica("«Tieni» sul PDF: nella cartella personale dell'archivio, la scheda senza",
                  bool(ok) and len(salvati) == 1 and salvati[0].parent.name == "Dario"
                  and cas.prendi("dario", pdf) is None, (salvati, stato(dario).get("voci")))
+        # Difesa in più (29/10, #307): un pulsante «elimina» messo a mano nella scheda non parte
+        # nemmeno (il tocco non chiama /api/cassetto), e la scheda dice di farlo a voce
+        dario.valuta(
+            "(() => { window.__chiamate = []; const f0 = window.fetch; window.fetch = (u, o) => {"
+            " window.__chiamate.push(String(u) + ' ' + ((o && o.body) || '')); return f0(u, o); };"
+            f" const s = document.querySelector({json.dumps(SEL)});"
+            " const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Elimina';"
+            f" b.dataset.cassetto = 'elimina'; b.dataset.ids = '{f}';"
+            " s.querySelector('.cassetto-tutti').append(b); return 1; })()")
+        clic(dario, "Elimina")
+        ok = aspetta(lambda: stato(dario).get("esito", "") == "Per eliminare un file dimmelo a voce.", 5)
+        chiamate = dario.valuta("window.__chiamate.filter(c => c.includes('/api/cassetto'))") or []
+        verifica("contrario: un pulsante «elimina» messo a mano non chiama /api/cassetto, la nota dice «a voce»",
+                 bool(ok) and chiamate == [] and cas.prendi("dario", f) is not None,
+                 (stato(dario).get("esito"), chiamate))
         # Un «elimina» mandato a /api/cassetto è 403 (prova_cassetto, sul server): qui i file restano
         verifica("nessun file eliminato dalla pagina", cas.prendi("dario", f) is not None
                  and cas.prendi("dario", z) is not None)

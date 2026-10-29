@@ -761,6 +761,11 @@ class Config:
     # nome, mai il comando. Il comando è un programma nel PATH o registrato in Windows
     # (winword.exe), un protocollo (ms-settings:), un percorso completo, oppure «browser»
     # (il browser predefinito). Le voci non installate si tolgono all'avvio.
+    # Uno script (.bat, .cmd, .ps1, .vbs, .py, .sh…) o un comando che apre un interprete
+    # (cmd, powershell, python, un terminale) si apre a voce come le altre, ma per iscritto da
+    # uno schermo personale no: aprire un'app per iscritto è ammesso perché un programma «si
+    # chiude subito, non cancella e non manda niente», e uno script fa quello che ha dentro,
+    # come eseguire codice (29/10, #307; elenco in pc/base.py, e_script)
     pc_app: dict[str, str] = field(default_factory=lambda: {
         "calcolatrice": "calc.exe",
         "blocco note": "notepad.exe",

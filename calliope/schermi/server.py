@@ -769,8 +769,11 @@ def crea_app(hub: Schermi) -> Starlette:
                             "errore": "Per i file di un ragazzo parlami prima a voce: "
                                       "di' «Calliope» e poi tocca di nuovo."}
             # Eliminare dal cassetto si fa a voce (28/10 sera, seguito della #301): dalla scheda
-            # restano «Tieni» e «Tieni ancora»; un «elimina» arrivato lo stesso si ferma qui
-            if str(dati.get("azione") or "").strip().lower() == "elimina":
+            # restano «Tieni» e «Tieni ancora»; un «elimina» arrivato lo stesso si ferma qui, coi
+            # suoi sinonimi («cancella», «butta»: la mappa del tool, 29/10, #307). Dietro c'è la
+            # stessa difesa in Cassetto.da_pagina
+            from ..cassetto import azione_canonica
+            if azione_canonica(dati.get("azione")) == "elimina":
                 return {"ok": False, "_stato": 403, "codice": "serve_voce",
                         "errore": CASSETTO_VOCE}
             # «Tieni» di un tutore va nella SUA cartella dell'archivio (il ragazzo i documenti

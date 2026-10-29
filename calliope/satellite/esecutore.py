@@ -95,7 +95,12 @@ class EsecutoreSatellite:
         caps = self.pc.capacita() if self.pc is not None else []
         return {"nome": self.nome, "sistema": sys.platform, "capacita": caps,
                 "app": self.pc.app_disponibili() if self.pc is not None and "app" in caps
-                else [], "file": self.consegna is not None,
+                else [],
+                # Le voci del catalogo che sono script o interpreti, per nome (29/10, #307): il
+                # server non le apre per iscritto. Il comando resta qui
+                "app_script": self.pc.app_script() if self.pc is not None and "app" in caps
+                else [],
+                "file": self.consegna is not None,
                 # Sa mandare all'agente una copia di un file trovato con la ricerca
                 "invio": self.pc is not None and "ricerca" in caps}
 

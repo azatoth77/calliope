@@ -145,7 +145,13 @@ def pulisci_esecutore(d) -> dict | None:
     caps = [c for c in (d.get("capacita") or []) if c in CAPACITA]
     app = [str(a).strip().lower()[:40] for a in (d.get("app") or [])
            if isinstance(a, str) and a.strip()][:50]
-    return {"nome": str(d.get("nome") or "")[:40], "capacita": caps, "app": app,
+    out = {}
+    # Le app che sono script (29/10, #307): un satellite di prima non lo dice, e allora la
+    # chiave manca (RemotePCExecutor.app_e_script → «non si sa», per iscritto non si apre)
+    if isinstance(d.get("app_script"), list):
+        out["app_script"] = [str(a).strip().lower()[:40] for a in d["app_script"]
+                             if isinstance(a, str) and a.strip()][:50]
+    return {**out, "nome": str(d.get("nome") or "")[:40], "capacita": caps, "app": app,
             "file": bool(d.get("file")), "invio": bool(d.get("invio")),
             "sistema": str(d.get("sistema") or "")[:20]}
 

@@ -430,10 +430,9 @@ def _leggi_cassetto(ctx: ToolContext, quale, parte: str = "", di: str | None = N
 
 
 # ───────────────────────────── cassetto_gestisci ─────────────────────────────
-_AZIONI = {"tieni": "tieni", "archivia": "tieni", "conserva": "tieni", "salva": "tieni",
-           "elimina": "elimina", "cancella": "elimina", "butta": "elimina",
-           "ancora": "ancora", "tieni_ancora": "ancora", "proroga": "ancora",
-           "rinnova": "ancora"}
+# La mappa delle azioni e dei sinonimi sta in calliope/cassetto.py (29/10, #307): la stessa la
+# usa valore._cassetto per la classe d'effetto
+from ..cassetto import azione_canonica as _azione
 
 
 def _gestisci(ctx: ToolContext, azione: str = "", quale: str = "", minore: str | None = None,
@@ -452,7 +451,7 @@ def _gestisci(ctx: ToolContext, azione: str = "", quale: str = "", minore: str |
     if err:
         return err
     cas = ctx.cassetto
-    az = _AZIONI.get(str(azione or "").strip().lower().replace(" ", "_"))
+    az = _azione(azione)
     if az is None:
         return {"ok": False, "errore": "azione: tieni, elimina o ancora"}
     q = str(quale or "").strip()
@@ -562,7 +561,7 @@ def altra_persona_nella_frase(testo: str, args: dict, ctx, sempre: bool = False
     prima dicendo di chi è il cassetto (regola `politica_cassetto_altra_persona`, effetto
     reversibile: una domanda). Al «sì» parte solo la chiamata identica."""
     a = args or {}
-    az = _AZIONI.get(str(a.get("azione") or "").strip().lower(), "")
+    az = _azione(a.get("azione")) or ""
     if az not in ("elimina", "tieni"):
         return None
     chi = proprietario_della_chiamata(ctx, a)
@@ -593,7 +592,7 @@ def _classe_gestisci():
     from ..politica import AZIONE, Classe
 
     def cosa(a):
-        az = _AZIONI.get(str((a or {}).get("azione") or "").strip().lower(), "")
+        az = _azione((a or {}).get("azione")) or ""
         return {"tieni": "metta quei file tra i tuoi documenti",
                 "elimina": "elimini quei file dal cassetto",
                 "ancora": "tenga quei file ancora una settimana"}.get(az, "cambi il cassetto")

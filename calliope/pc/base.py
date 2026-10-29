@@ -23,6 +23,7 @@ ricerche di persone diverse.
 """
 
 import difflib
+import re
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -69,6 +70,45 @@ def modo_apertura(nome: str) -> str | None:
     if ext in ESTENSIONI_COME_TESTO:
         return "testo"
     return None
+
+
+# Le voci del catalogo `pc_app` che non sono un'app vera (29/10, #307, revisione della PR #306):
+# uno script, o un comando che apre un interprete (un terminale, PowerShell, Python). A voce si
+# aprono come le altre; per iscritto da uno schermo personale no, perché l'eccezione di
+# pc_apri_app («si chiude subito, non cancella e non manda niente», tools/spec.SCRITTO_AMMESSI)
+# per loro non vale: uno script fa quello che c'è scritto dentro
+ESTENSIONI_SCRIPT = frozenset((
+    "bat", "cmd", "ps1", "psm1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "py", "pyw",
+    "sh", "bash", "pl", "rb", "msc", "lnk", "reg"))
+INTERPRETI = frozenset((
+    "cmd", "powershell", "powershell_ise", "pwsh", "wt", "windowsterminal", "wsl", "bash", "sh",
+    "wscript", "cscript", "mshta", "python", "python3", "pythonw", "py", "pyw", "node", "perl",
+    "ruby", "rundll32", "regsvr32", "msiexec", "conhost"))
+
+
+def e_script(comando: str) -> bool:
+    """Il comando di una voce del catalogo è uno script o lancia un interprete? Si guardano
+    tutte le parti (anche fra virgolette): l'estensione di ognuna e il nome del primo programma.
+    «calc.exe», «ms-settings:», «browser» no; «backup.bat», «C:\\x\\pulisci.ps1»,
+    «powershell.exe», «cmd /c x» sì."""
+    c = str(comando or "").strip().strip('"').strip()
+    if not c:
+        return False
+    if c.lower() == "browser" or (c.endswith(":") and " " not in c):
+        return False                         # il browser predefinito, un protocollo
+    parti = [p.strip('"').strip() for p in re.findall(r'"[^"]*"|\S+', c)] or [c]
+    candidati = [c] + parti
+    for p in candidati:
+        if Path(p).suffix.lower().lstrip(".") in ESTENSIONI_SCRIPT:
+            return True
+    # Il programma: tutto il comando (un percorso con gli spazi senza virgolette) o la prima parte
+    for p in (c, parti[0]):
+        nome = Path(p.replace("\\", "/")).name.lower()
+        if nome.endswith(".exe"):
+            nome = nome[:-4]
+        if nome in INTERPRETI:
+            return True
+    return False
 
 
 def errore(msg: str, **extra) -> dict:
@@ -174,10 +214,30 @@ class PCExecutor(ABC):
 
     def descrizione(self) -> dict:
         """Ciò che l'esecutore dichiara di sé (all'abbinamento, domani via rete)."""
-        return {"nome": self.nome, "capacita": self.capacita(), "app": self.app_disponibili()}
+        return {"nome": self.nome, "capacita": self.capacita(), "app": self.app_disponibili(),
+                "app_script": self.app_script()}
 
     def app_disponibili(self) -> list[str]:
         return list(self._app)
+
+    def app_script(self) -> list[str]:
+        """Le voci del catalogo che sono script o interpreti (`e_script`): per iscritto non si
+        aprono (29/10, #307). Il satellite le annuncia nel «ciao» per nome, mai col comando."""
+        return [k for k, v in self._app.items() if e_script(v)]
+
+    def _chiave_app(self, app: str) -> str | None:
+        """La voce del catalogo che `apri_app` aprirebbe: il nome, o il più vicino."""
+        key = (app or "").strip().lower()
+        if key in self._app:
+            return key
+        close = difflib.get_close_matches(key, list(self._app), n=1, cutoff=0.8)
+        return close[0] if close else None
+
+    def app_e_script(self, app: str) -> bool | None:
+        """La voce che si aprirebbe è uno script? None se non si sa (l'esecutore remoto con un
+        satellite che non lo dice): chi chiede tratta None come sì."""
+        key = self._chiave_app(app)
+        return key is not None and e_script(self._app[key])
 
     def programmi_aperti(self) -> dict:
         if self.bloccato():
@@ -187,13 +247,10 @@ class PCExecutor(ABC):
     def apri_app(self, app: str) -> dict:
         if self.bloccato():
             return errore(BLOCCATO, bloccato=True)
-        key = (app or "").strip().lower()
-        if key not in self._app:
-            close = difflib.get_close_matches(key, list(self._app), n=1, cutoff=0.8)
-            if not close:
-                return errore(f"«{app}» non è tra le app che posso aprire",
-                              app_disponibili=self.app_disponibili())
-            key = close[0]
+        key = self._chiave_app(app)
+        if key is None:
+            return errore(f"«{app}» non è tra le app che posso aprire",
+                          app_disponibili=self.app_disponibili())
         self._avvia(self._app[key])
         return {"ok": True, "app": key}
 

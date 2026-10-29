@@ -131,3 +131,12 @@ domande (dettagli e correzioni della politica in
   si è aperta la versione nuova, ma la frase diceva il titolo senza «(2)».
 - **Documento proprio con una foto di mezzo**: si apre alla richiesta («volevo che tu aprissi il
   file»), senza la conferma a voce (`politica_documento_proprio`).
+
+## Gli script del catalogo `pc_app` (29/10, issue #307)
+
+Una voce del catalogo che è uno script (`.bat`, `.cmd`, `.ps1`, `.vbs`, `.py`, `.sh`…) o un comando che apre un
+interprete (`cmd`, `powershell`, `python`, un terminale) si apre a voce come le altre, ma per iscritto da uno
+schermo personale chiede la voce: l'eccezione di `pc_apri_app` vale solo per i programmi
+(`pc/base.e_script`, `PCExecutor.app_script` e `app_e_script`). Il satellite annuncia nel «ciao» i soli nomi delle
+voci script (`app_script`), mai i comandi; con un satellite di prima, per iscritto, si chiede sempre la voce.
+Il perché e le prove: [sicurezza-politica](sicurezza-politica.md).

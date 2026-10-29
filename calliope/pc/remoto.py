@@ -133,6 +133,21 @@ class RemotePCExecutor(PCExecutor):
             return list(self._app)
         return [a for a in self._app if a in sue]
 
+    def app_e_script(self, app: str) -> bool | None:
+        """Il comando sta sul satellite: lo dice lui nel «ciao» (`app_script`, 29/10, #307).
+        Senza satellite, o con uno di prima che non lo dice, None (non si sa)."""
+        key = self._chiave_app(app)
+        if key is None:
+            return False                     # non è nel catalogo: il tool lo dirà
+        try:
+            esec = self._coll().esecutore
+        except PCNonCollegato:
+            return None
+        script = esec.get("app_script") if isinstance(esec, dict) else None
+        if not isinstance(script, list):
+            return None
+        return key in script
+
     # ── schermo bloccato: qui un guasto non vale «bloccato» ──
     def bloccato(self) -> bool:
         """Come la classe base, ma senza satellite o con un tempo scaduto si solleva

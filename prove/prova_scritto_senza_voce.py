@@ -203,6 +203,47 @@ def main() -> int:
     g = lambda ctx, nome, args: irreversibile_scritto(ctx, b.tools.get(nome), nome, args)  # noqa: E731
     verifica("scritto: pc_apri_app passa, con il suo perché in SCRITTO_AMMESSI",
              g(scr_ctx, "pc_apri_app", {"app": "calcolatrice"}) is None and SCRITTO_AMMESSI.get("pc_apri_app"))
+    # Le voci di pc_app che sono script (29/10, #307): fuori dall'eccezione, per iscritto solo a voce
+    from prove.pc_finto import APP as APP_FINTE, FakePC
+    from calliope.pc.remoto import RemotePCExecutor
+    finto = FakePC(app={**APP_FINTE, "backup": r"C:\x\backup.bat", "terminale": "powershell.exe"})
+    pc_ctx = types.SimpleNamespace(speaker_ctx=types.SimpleNamespace(identified_by="schermo"), regole=[],
+                                   pc={"portatile": finto})
+    verifica("scritto: un'app vera del catalogo passa anche col PC vero dietro",
+             g(pc_ctx, "pc_apri_app", {"app": "calcolatrice"}) is None)
+    verifica("contrario: uno script o un interprete del catalogo, per iscritto, solo a voce (anche col nome vicino)",
+             g(pc_ctx, "pc_apri_app", {"app": "backup"}) is not None
+             and g(pc_ctx, "pc_apri_app", {"app": "Terminal"}) is not None
+             and "scritto_irreversibile_voce" in pc_ctx.regole
+             and g(voce_ctx, "pc_apri_app", {"app": "backup"}) is None)
+
+    class _Coll:
+        def __init__(self, esec):
+            self.esecutore = esec
+
+    class _Server:
+        def __init__(self, esec):
+            self.c = _Coll(esec) if esec is not None else None
+
+        def per_pc(self):
+            return self.c
+
+    def remoto(esec):
+        return types.SimpleNamespace(speaker_ctx=types.SimpleNamespace(identified_by="schermo"), regole=[],
+                                     pc={"portatile": RemotePCExecutor(_Server(esec), "portatile",
+                                                                       ["calcolatrice", "backup"])})
+    nuovo = {"capacita": ["app"], "app": ["calcolatrice", "backup"], "app_script": ["backup"]}
+    vecchio = {"capacita": ["app"], "app": ["calcolatrice", "backup"]}
+    verifica("satellite: lo script dichiarato nel «ciao» per iscritto solo a voce, l'app vera passa",
+             g(remoto(nuovo), "pc_apri_app", {"app": "backup"}) is not None
+             and g(remoto(nuovo), "pc_apri_app", {"app": "calcolatrice"}) is None)
+    verifica("contrario: un satellite di prima (senza app_script) o scollegato: nel dubbio a voce",
+             g(remoto(vecchio), "pc_apri_app", {"app": "calcolatrice"}) is not None
+             and g(remoto(None), "pc_apri_app", {"app": "calcolatrice"}) is not None)
+    from calliope.satellite.server import pulisci_esecutore
+    verifica("pulisci_esecutore: app_script tenuto se c'è, assente se il satellite non lo dice",
+             pulisci_esecutore(nuovo).get("app_script") == ["backup"]
+             and "app_script" not in pulisci_esecutore(vecchio))
     verifica("contrario: programma_esegui, lavoro_affida con codice e un'estensione senza effetto, solo a voce",
              g(scr_ctx, "programma_esegui", {}) is not None
              and g(scr_ctx, "lavoro_affida", {"tipo": "codice", "compito": "x"}) is not None

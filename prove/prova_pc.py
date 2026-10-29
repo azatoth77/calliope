@@ -216,6 +216,30 @@ pc.locked = True
 r = chiama(pc, "pc_apri_app", {"app": "calcolatrice"})
 verifica("schermo bloccato: apri_app rifiutato", rifiutato(r) and len(pc.azioni) == 2, str(r))
 
+# ── voci del catalogo che sono script (29/10, #307): per iscritto non si aprono ──
+from calliope.pc.base import e_script  # noqa: E402
+from prove.pc_finto import APP as APP_FINTE  # noqa: E402
+script_si = ("backup.bat", "pulisci.CMD", r"C:\Script\pulisci.ps1", "avvia.vbs", "giochi.py",
+             "/home/x/su.sh", "powershell.exe", "pwsh", "cmd.exe", "cmd /c dir", "python.exe",
+             r"C:\Program Files\PowerShell\7\pwsh.exe", r'"C:\Program Files\x\y.bat"', "wt.exe",
+             "wscript.exe", "mshta.exe")
+script_no = ("calc.exe", "notepad.exe", "ms-settings:", "browser", "winword.exe",
+             r"C:\Program Files\Mozilla Firefox\firefox.exe", "explorer.exe", "spotify:")
+verifica("e_script: script e interpreti riconosciuti",
+         all(e_script(c) for c in script_si), [c for c in script_si if not e_script(c)])
+verifica("contrario: e_script, le app vere e i protocolli no",
+         not any(e_script(c) for c in script_no), [c for c in script_no if e_script(c)])
+pc = FakePC(app={**APP_FINTE, "backup": r"C:\x\backup.bat", "terminale": "powershell.exe"})
+verifica("app_script: le sole voci script del catalogo, per nome",
+         sorted(pc.app_script()) == ["backup", "terminale"]
+         and pc.descrizione().get("app_script") == pc.app_script(), str(pc.app_script()))
+verifica("app_e_script: anche col nome vicino; un'app vera no; fuori catalogo no",
+         pc.app_e_script("Backup") is True and pc.app_e_script("terminal") is True
+         and pc.app_e_script("calcolatrice") is False and pc.app_e_script("truffaldino") is False)
+r = chiama(pc, "pc_apri_app", {"app": "backup"})
+verifica("a voce lo script del catalogo si apre come le altre", r.get("ok") is True
+         and pc.azioni[-1] == ("avvia", r"C:\x\backup.bat"), str(r))
+
 # ── blocco ──
 pc = FakePC()
 r = chiama(pc, "pc_blocca", {}, chi="Bianca")

@@ -583,7 +583,6 @@ body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
 .cassetto-voce .sotto { margin: 0; font-size: 0.95rem; }
 .cassetto-scade { color: var(--accento); margin: 0; font-size: 0.95rem; }
 .cassetto-pulsanti { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
-.tasto-cassetto.conferma[data-armato] { background: var(--allarme); color: #16130e; border-color: var(--allarme); }
 @media (max-width: 600px) {
   .riga-modulo { grid-template-columns: 1fr 1fr; }
   .riga-modulo input[data-k="descrizione"] { grid-column: 1 / -1; }
