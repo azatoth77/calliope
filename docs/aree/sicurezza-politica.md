@@ -2055,4 +2055,7 @@ cancella e butta); `prova_cassetto_pagina` (un pulsante «elimina» messo a mano
   l'esecutore che rifiuta col segno), `prova_esecutore` (il satellite vero che rifiuta l'«avvia» scritto di uno
   script anche se il «ciao» non lo dice, l'app vera che si apre), `prova_scritto_senza_voce` (il satellite senza
   il segno, il nome tagliato, l'elenco al tetto, il rifiuto che diventa «solo a voce»), `prova_valore` (le
-  distruttive del cassetto sono gli alias della mappa).
+  distruttive del cassetto sono gli alias della mappa).  - *Seconda revisione della PR #309* (PR di seguito, ramo `issue-307-ammessi-seguito`): per iscritto chiedono la
+    voce anche i nomi corti 8.3 (`~`), i percorsi di rete (`\`, `//`, WebDAV) e gli interpreti con un altro nome
+    (`pypy`, `ipython`, `jython`, `nodejs`, `python3.12t`, `python_d`, AutoHotkey, AutoIt3): [pc](pc.md). Prove in
+    `prova_pc`, a secco e sull'«avvia» scritto del satellite.

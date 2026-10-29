@@ -109,10 +109,15 @@ _EXE_NON_SCRITTO_NOMI = frozenset((
     "diskmgmt", "services", "taskschd", "perfmon", "certmgr", "wusa", "dism", "pnputil",
     "setx", "where", "xcopy", "robocopy", "curl", "wget", "ftp", "tftp", "ssh", "scp", "sftp",
     "winrm", "winrs", "psexec", "psexec64", "msra", "mstsc", "quickassist", "werfault"))
-# I nomi con la versione dentro: python3.12, pythonw3, pwsh7, java17…
+# I nomi con la versione o un suffisso dentro. Le famiglie larghe prendono qualunque coda
+# (python3.12t, python_d, pypy3, ipython3, nodejs, javaw, AutoHotkey64, AutoHotkeyU32,
+# AutoIt3_x64, Ahk2Exe: seconda revisione della PR #309; AutoHotkey senza argomenti esegue da solo
+# lo script di serie); le sigle brevi (py, lua, sh…) solo una versione, per non prendere nomi di
+# app che cominciano così
 _EXE_NON_SCRITTO_RE = re.compile(
-    r"(python|pythonw|py|pwsh|powershell|java|javaw|node|perl|ruby|php|lua|bash|ubuntu|debian)"
-    r"[\d._-]*")
+    r"(python|pypy|ipython|jython|pwsh|powershell|java|node|perl|ruby|php|bash|ubuntu|debian"
+    r"|autohotkey|autoit|ahk2exe|aut2exe)[\w.-]*"
+    r"|(py|pyw|lua|luajit|tcl|wish|sh|zsh|osascript)[\d._-]*")
 
 
 def nome_windows(percorso: str) -> str:
@@ -136,6 +141,11 @@ def ammessa_per_iscritto(comando: str) -> bool:
         return False
     if c.lower() == "browser":
         return True
+    # Seconda revisione della PR #309: un nome corto 8.3 («C:\\Python312\\PYTHON~1.EXE») nasconde
+    # il nome vero, e un percorso di rete (UNC «\\\\host\\share», WebDAV «\\\\host@SSL\\…», o «//»)
+    # cambia senza che chi amministra lo veda: non si sa, serve la voce
+    if "~" in c or c.startswith(("\\\\", "//", "\\/", "/\\")):
+        return False
     m = re.fullmatch(r"([A-Za-z][A-Za-z0-9.+-]+):([A-Za-z0-9/_.-]*)", c)
     if m and len(m.group(1)) > 1:            # un protocollo (una lettera sola è un'unità: «C:»)
         return m.group(1).lower() in PROTOCOLLI_SCRITTO
