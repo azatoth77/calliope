@@ -5,8 +5,10 @@
   Il resto (dove si conservano le pagine, l'ombra con il banco, i tocchi nuovi) si completa con i
   passi 4.1–4.5 (#280–#284). Il passo 4.0 è fatto il 28/10 sul ramo `issue-279-via-esercizi`:
   il vecchio processo degli esercizi è tolto. Il passo 4.1 (dati e piano a giorni) è fatto il
-  29/10 sul ramo `issue-280-studio-dati-piano` (sezione «Dati e piano a giorni», sotto).
-- **Area**: [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
+  29/10 sul ramo `issue-280-studio-dati-piano` (sezione «Dati e piano a giorni», sotto); il passo
+  4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
+  materiali», sotto).
+- **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
   [`docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md`](../ricerche/2026-10-27-telefono-sezioni-e-studio.md)
@@ -161,7 +163,22 @@ dell'eco della stanza.
     scrivono e il piano si calcola, ma niente arriva al modello né agli schermi: nel registro solo
     le misure, senza nomi né titoli. «Attivo» serve dal passo 4.5.
 
-## Da completare con i passi 4.2–4.5
+## Le pagine dei materiali (passo 4.2, #281, 29/10)
+
+13. **Le pagine arrivano da un endpoint loro**, `POST /api/studio/pagina`, solo dallo schermo
+    personale, dentro gli orari del minore, anche senza conversazione a voce (punto 3), e mai
+    nella conversazione né al modello: restano «da leggere» finché il passo 4.3 non le legge. Si
+    mandano nella verifica propria o, da tutore, in quella del minore; ospiti e conoscenti mai.
+    Con `studio_modo: spento` l'endpoint non accetta niente; in ombra solo chi amministra.
+14. **I bordi li trova il telefono, li decide il server**: un rilevatore scritto a mano in
+    JavaScript (niente OpenCV.js) e lo stesso in numpy sul server, che vale; senza bordi
+    plausibili la foto resta intera, con l'avviso. Il raddrizzamento è con Pillow (prospettiva) e
+    numpy, a 1600 px; i PDF si dividono con pypdfium2. Niente librerie native nuove (principio 4).
+15. **I file li nomina il server**, dentro `studio_cartella` (relativa: accanto alla memoria),
+    controllati quando si scrivono; vanno via con la verifica (punto 11), anche il PDF originale.
+    I materiali restano dati (punto 6): nessun testo letto qui.
+
+## Da completare con i passi 4.3–4.5
 
 - *[fatto il 29/10, passo 4.1: dove si conservano le pagine e come si applica il punto 4 (punti
   8 e 11); `studio_modo` (punto 12). Resta l'ombra sul banco di pagine di fantasia prima di

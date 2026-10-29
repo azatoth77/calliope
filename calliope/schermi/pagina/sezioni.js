@@ -354,7 +354,7 @@
     // gesto indietro torna alle tessere. Le altre tessere dicono «presto» e portano, come prima,
     // al gruppo delle schede di quella raccolta.
     const racc = { tessere: [], timer: null, aperta: null, richiesta: 0, daTessere: false, rinfresca: null, rinfrescata: 0,
-      cerca: "", riprova: null };
+      cerca: "", riprova: null, propria: null };
     // Le pagine con la ricerca (28/10, passo 2d: i Documenti; 2e: l'Ufficio, POST
     // /api/raccolte/cerca; le stesse di raccolte.CON_RICERCA), con il suggerimento della casella
     const CON_RICERCA = new Set(["documenti", "ufficio"]);
@@ -438,8 +438,23 @@
       racc.tessere = r.dati.tessere;
       disegnaTessere();
       raccolteVista();
-      if (prima && racc.aperta === prima) caricaPagina(prima);
+      if (prima && racc.aperta === prima && !racc.propria) caricaPagina(prima);
       disponi();
+    }
+    // Una pagina che si disegna da sé (29/10, #281: lo Studio, studio.js) al posto delle schede
+    // del server: {apri(), chiudi()} in window.CalliopePagine[id]
+    function paginaPropria(id) {
+      const p = window.CalliopePagine && Object.prototype.hasOwnProperty.call(window.CalliopePagine, id)
+        ? window.CalliopePagine[id] : null;
+      return p && typeof p.apri === "function" ? p : null;
+    }
+    function chiudiPropria() {
+      if (!racc.propria) return;
+      const p = racc.propria;
+      racc.propria = null;
+      const box = $("pagina-schede");
+      if (box) box.hidden = false;
+      try { p.chiudi(); } catch (e) { /* niente */ }
     }
     // La vista di Le mie cose secondo l'indirizzo: le tessere (#/cose) o la pagina (#/cose/liste)
     function raccolteVista() {
@@ -448,6 +463,7 @@
       const dentro = vis.modo === "sezioni" && vis.sezione === "cose";
       if (!dentro) {
         if (racc.timer) { clearInterval(racc.timer); racc.timer = null; }
+        chiudiPropria();
         racc.aperta = null;
         return;
       }
@@ -468,13 +484,29 @@
       }
       pag.hidden = !pagina;
       box.hidden = pagina || !box.children.length;
-      if (!pagina) { racc.aperta = null; return; }
+      if (!pagina) { chiudiPropria(); racc.aperta = null; return; }
       segnaVista(t);
       disegnaTessere();
       if (racc.aperta !== id) {
+        chiudiPropria();
         racc.aperta = id;
         racc.cerca = "";
         metti($("pagina-titolo"), String(t.nome || id));
+        const propria = paginaPropria(id);
+        if (propria) {
+          // Niente schede del server né ricerca: la pagina si disegna da sé
+          racc.propria = propria;
+          const sc = $("pagina-schede"), nota = $("pagina-nota");
+          sc.replaceChildren();
+          sc.dataset.di = "";
+          sc.hidden = true;
+          sc.removeAttribute("aria-busy");
+          nota.hidden = true;
+          metti($("pagina-esito"), "");
+          disegnaRicerca();
+          try { propria.apri(); } catch (e) { /* niente */ }
+          return;
+        }
         // Le schede dell'altra pagina restano finché arriva la risposta, ma nascoste e segnate
         // «occupate» (revisione della PR #269: prima la pagina si svuotava subito, e un 429 la
         // lasciava vuota); caricaPagina le sostituisce

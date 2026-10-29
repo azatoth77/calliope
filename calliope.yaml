@@ -930,9 +930,27 @@ studio:
   # Giorni dopo la data della verifica in cui restano pagine, testo letto, argomenti e piano
   # (decisione 0035, punto 4); «archivia la verifica» la tiene per sempre
   studio_tenuta_giorni: 60
-  # La cartella dello Studio per le immagini delle pagine (dal passo 4.2): nel 4.1 solo il
-  # posto da cui la tenuta e «dimentica» tolgono i file delle pagine
+  # La cartella dello Studio per le immagini delle pagine e i PDF dei materiali (dal passo 4.2,
+  # #281: studio/pagine/<verifica>/, nomi scelti dal server); relativa = accanto a memory_db,
+  # come il cassetto. La tenuta, «dimentica» e svuota ne tolgono i file con le verifiche
   studio_cartella: studio
+  # Le pagine dalla fotocamera e dai PDF (29/10, passo 4.2, #281, POST /api/studio/pagina): il
+  # lato lungo della pagina raddrizzata (l'harness della lettura del 28/10 legge a 1600 px)
+  studio_pagina_lato: 1600
+  # Una foto al più così grande (il telefono la manda in JPEG sotto i 3000 px)
+  studio_pagina_max_mb: 15.0
+  # Un PDF al più così grande e con al più tante pagine (oltre: rifiutato, mai tagliato)
+  studio_pdf_max_mb: 30.0
+  studio_pdf_max_pagine: 40
+  # Le pagine di una verifica al più (tutti i materiali insieme)
+  studio_pagine_max: 80
+  # Invii di pagine al minuto per schermo (un PDF conta uno)
+  studio_pagine_al_minuto: 40
+  # Sotto questa nitidezza (varianza del laplaciano a 1000 px, col contrasto normalizzato) la
+  # pagina ha l'avviso «sfocata». Misurata il 29/10 sulle foto di fantasia di
+  # prove/manuali/studio_immagini.py: nitide ≥ 234, sfocate di 3 px ≤ 132; da ritarare sulle
+  # foto vere
+  studio_nitidezza_min: 150.0
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

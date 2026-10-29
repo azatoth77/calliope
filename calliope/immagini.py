@@ -73,9 +73,12 @@ def tipo_dai_byte(dati: bytes) -> str | None:
     return None
 
 
-def prepara(dati: bytes, lato_max: int = 1280, max_byte: int = 12_000_000,
-            qualita: int = 85) -> tuple[bytes, int, int]:
-    """(jpeg, larghezza, altezza) pronti per il modello. Solleva ImmagineNonValida."""
+def apri(dati: bytes, lato_max: int = 1280, max_byte: int = 12_000_000):
+    """L'immagine decodificata, girata secondo l'EXIF e in RGB (PIL.Image), con gli stessi
+    controlli di `prepara` (tipo vero dai byte, dimensione, pixel, bomba di decompressione); i
+    JPEG grandi si decodificano già ridotti verso `lato_max` (la riduzione vera la fa chi
+    chiama). La usano `prepara` e le pagine dello Studio (29/10, calliope/studio/pagine.py), che
+    raddrizzano la foto prima di ridurla. Solleva ImmagineNonValida."""
     if not dati:
         raise ImmagineNonValida("immagine vuota")
     if len(dati) > max_byte:
@@ -116,16 +119,27 @@ def prepara(dati: bytes, lato_max: int = 1280, max_byte: int = 12_000_000,
                 im = fondo
             else:
                 im = im.convert("RGB")
-            if max(im.size) > lato_max:
-                k = lato_max / max(im.size)
-                im = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))),
-                               Image.LANCZOS)
-            buf = io.BytesIO()
-            im.save(buf, "JPEG", quality=qualita, optimize=True)   # senza EXIF
+            return im
     except ImmagineNonValida:
         raise
     except (Image.DecompressionBombWarning, Image.DecompressionBombError):
         raise ImmagineNonValida("immagine con troppi pixel") from None
+    except Exception as e:  # noqa: BLE001 - un file rovinato non deve far cadere nulla
+        raise ImmagineNonValida(f"immagine rovinata ({type(e).__name__})") from None
+
+
+def prepara(dati: bytes, lato_max: int = 1280, max_byte: int = 12_000_000,
+            qualita: int = 85) -> tuple[bytes, int, int]:
+    """(jpeg, larghezza, altezza) pronti per il modello. Solleva ImmagineNonValida."""
+    im = apri(dati, lato_max, max_byte)
+    from PIL import Image
+    try:
+        if max(im.size) > lato_max:
+            k = lato_max / max(im.size)
+            im = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))),
+                           Image.LANCZOS)
+        buf = io.BytesIO()
+        im.save(buf, "JPEG", quality=qualita, optimize=True)   # senza EXIF
     except Exception as e:  # noqa: BLE001 - un file rovinato non deve far cadere nulla
         raise ImmagineNonValida(f"immagine rovinata ({type(e).__name__})") from None
     return buf.getvalue(), im.width, im.height

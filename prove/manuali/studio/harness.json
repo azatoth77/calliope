@@ -1,5 +1,5 @@
 {
- "nota": "Harness scelto dal banco dello Studio il 28/10/2026 (#293) per 4.3 (lettura) e 4.4 (argomenti), con qwen3.6-35b su vLLM 0.29 sulla DGX. Prompt e schemi sono quelli delle varianti L2_dett_testo e A1_testo_dett_guidata_busta di prove/manuali/banco_studio.py: uguali alle sue costanti, lo controlla prove/prova_studio_banco.py. Misure e motivi in docs/aree/minori.md, «Banco dello Studio (28/10)».",
+ "nota": "Harness scelto dal banco dello Studio il 28/10/2026 (#293) per 4.3 (lettura) e 4.4 (argomenti), con qwen3.6-35b su vLLM 0.29 sulla DGX. Prompt e schemi sono quelli delle varianti L2_dett_testo e A1_testo_dett_guidata_busta di prove/manuali/banco_studio.py: uguali alle sue costanti, lo controlla prove/prova_studio_banco.py. Misure e motivi in docs/aree/studio.md, «Banco dello Studio (28/10)» (fino al 29/10 in docs/aree/minori.md).",
  "modello": {
   "motore": "openai (vLLM)",
   "modello": "agente (agenti_modello / dgx.yaml)",

@@ -1950,3 +1950,16 @@ uno vecchio, VoiceOver sulla casella e su «ti ascolto…».
     (`canvas.measureText`), non più l'altezza col segnaposto, che WebKit può non contare.
   - Il limite di Chrome per Android prima della 108 è scritto nella guida
     ([installazione](../installazione.md#e-telefono)).
+
+## La pagina dello Studio e la fotocamera del telefono (29/10, issue #281, ramo `issue-281-studio-pagine`)
+
+Il passo 4.2 dello Studio aggiunge al telefono la sua prima pagina che non è fatta di schede del
+server: Le mie cose › Studio, con lo Studio attivo (in ombra solo per chi amministra, «prova»),
+apre `schermi/pagina/studio.js` nel riquadro della pagina; `sezioni.js` la conosce come pagina che
+si disegna da sé (`window.CalliopePagine`, `apri` e `chiudi`) e non chiede schede né ricerca.
+`schermo.js` ha solo `calliopeSchermo.studio(blob, meta)` per le due API nuove, `POST
+/api/studio/verifiche` e `POST /api/studio/pagina`. La pagina del telefono chiede ora anche la
+fotocamera: `Permissions-Policy` con `camera=(self)` (prima `camera=()`), solo per `/telefono/`;
+service worker `calliope-telefono-pagina-v21` con `/bordi.js` e `/studio.js`. Le miniature sono
+canvas, non URL blob (la CSP del telefono li vieta per le immagini). Il resto, coi controlli del
+server e le misure, nell'area [studio](studio.md).
