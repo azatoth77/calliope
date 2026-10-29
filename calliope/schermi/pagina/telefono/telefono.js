@@ -12,7 +12,7 @@ const VERSIONE = 3;
 // (prova_telefono_consapevole le confronta). Una costante della pagina che gira, non la cache
 // più alta (revisione della PR #294: durante un aggiornamento è quella nuova), e pronta già al
 // primo «ciao»
-const PAGINA_VERSIONE = "calliope-telefono-pagina-v21";
+const PAGINA_VERSIONE = "calliope-telefono-pagina-v22";
 const CHIAVE_TOKEN = "calliope.telefono.token";
 const CHIAVE_NOME = "calliope.telefono.nome";
 const CHIAVE_MIC = "calliope.telefono.microfono";
@@ -174,6 +174,7 @@ function disegna() {
   metti(d, sotto);
   // Il suggerimento di sempre: nel compatto non si mostra (resta la descrizione di «Parla»)
   attr(d, "data-ovvio", sotto === SUGGERIMENTO ? "1" : "0");
+  descriviParla();
   $("vista").classList.toggle("mic-acceso", st.mic);
   const b = $("parla");
   metti(b.querySelector(".parla-testo"), st.reg ? "Ti ascolto · tocca per finire"
@@ -197,6 +198,26 @@ setInterval(disegna, 250);
 // Scrive solo se cambia: il giro ogni 250 ms non tocca il DOM per niente
 function metti(el, testo) { if (el && el.textContent !== testo) el.textContent = testo; }
 function attr(el, k, v) { if (el && el.getAttribute(k) !== v) el.setAttribute(k, v); }
+
+// «Parla» descritto dal suggerimento solo quando il suggerimento non si vede (29/10, #287): nel
+// compatto, dove «Tocca «Parla» per parlare» è nascosto (data-ovvio). Fuori dal compatto, o quando la
+// riga piccola si vede, la riga si legge già nel suo posto e VoiceOver la diceva due volte. Si
+// rifà a ogni disegno, al cambio del compatto (media query) e al cambio di modo (In auto)
+function descriviParla() {
+  const d = $("tel-dove"), b = $("parla");
+  if (!d || !b) return;
+  const nascosta = !d.hidden && !!d.textContent && getComputedStyle(d).display === "none";
+  if (nascosta) attr(b, "aria-describedby", "tel-dove");
+  else if (b.hasAttribute("aria-describedby")) b.removeAttribute("aria-describedby");
+}
+const COMPATTO = window.matchMedia
+  ? window.matchMedia("(orientation: portrait) and (max-width: 389px), (orientation: portrait) and (max-height: 719px)")
+  : null;
+if (COMPATTO) {
+  const cambia = () => descriviParla();
+  if (COMPATTO.addEventListener) COMPATTO.addEventListener("change", cambia);
+  else if (COMPATTO.addListener) COMPATTO.addListener(cambia);
+}
 
 // ───────────────────────────── schermo acceso (04/10) ─────────────────────────────
 // Una pagina web non ascolta a schermo spento (iOS la sospende): finché il microfono è acceso
@@ -477,6 +498,7 @@ function segnaModo() {
   $("auto-segno").hidden = !acceso;
   $("auto-esci").hidden = !acceso;
   $("auto-apri").hidden = acceso;
+  descriviParla();
 }
 
 function impostaAuto(acceso) {

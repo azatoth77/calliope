@@ -215,9 +215,11 @@ def _sviluppo(a: dict) -> int:
 
 def _cassetto(a: dict) -> int:
     # 28/10 sera (decisione di chi amministra, seguito della #301): eliminare dal cassetto non si
-    # disfa (E3: per iscritto vuole la voce); tenere e tenere ancora restano E2
-    az = pol._s(a, "azione").lower()
-    return E3 if az in ("elimina", "cancella", "butta") else E2
+    # disfa (E3: per iscritto vuole la voce); tenere e tenere ancora restano E2. Gli alias sono
+    # quelli del tool, dalla stessa mappa (29/10, #307): un sinonimo nuovo di «elimina» non resta
+    # E2
+    from .cassetto import azione_canonica
+    return E3 if azione_canonica(pol._s(a, "azione")) == "elimina" else E2
 
 
 def _ricorda(a: dict) -> int:

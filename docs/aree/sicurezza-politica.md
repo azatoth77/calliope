@@ -2006,3 +2006,56 @@ toccato no, tieni e ancora sì, a voce sì; «Elimina il file di ieri» scritto 
 `prova_cassetto` (`/api/cassetto` elimina 403 `serve_voce` anche al tutore verificato, i file restano);
 `prova_cassetto_pagina` (niente «Elimina» né «Elimina tutti», la nota); `prova_vista_sviluppo_pagina` (niente
 «Prova con…», la nota nuova, «Chiedi all'agente…» nella casella).
+
+## Lo scritto e il cassetto: i resti della PR #306 (29/10, issue #307, ramo `issue-307-287-pulizie`)
+
+Note non bloccanti della revisione della PR #306, chiuse.
+
+- **Gli script del catalogo `pc_app` non passano per iscritto.** *[storico: la regola qui sotto, un elenco di esclusioni, vale fino alla revisione della PR #309; ora è un elenco di ammessi, in fondo alla sezione]* L'eccezione di `pc_apri_app` («si chiude
+  subito, non cancella e non manda niente») vale per un programma, non per uno script: chi installa può mettere
+  nel catalogo un `.bat`, un `.ps1` o un comando che apre un interprete, e quello fa ciò che ha dentro, come
+  eseguire codice. `pc/base.e_script` riconosce le estensioni di script (`.bat`, `.cmd`, `.ps1`, `.vbs`, `.js`,
+  `.wsf`, `.hta`, `.py`, `.sh`, `.reg`, `.lnk` e simili, anche fra virgolette o dentro il comando) e i programmi
+  che sono interpreti (`cmd`, `powershell`, `pwsh`, `wt`, `wsl`, `bash`, `wscript`, `cscript`, `mshta`, `python`,
+  `py`, `node`, `rundll32`, `msiexec`…); `tools/spec.ammesso_per_iscritto` toglie l'eccezione quando l'app che si
+  aprirebbe (anche col nome vicino, come `apri_app`) è uno di questi, e allora vale il cancello di sempre
+  (`scritto_irreversibile_voce`). A voce niente cambia. Sul PC del satellite il comando resta sul portatile: il
+  satellite annuncia nel «ciao» i soli **nomi** delle voci script (`app_script`, tenuto da `pulisci_esecutore`);
+  un satellite di prima che non lo dice, o nessun satellite collegato, vale «non si sa» e per iscritto si chiede
+  la voce. Il commento di `pc_app` in `config.py` (e in `calliope.yaml`) lo spiega a chi scrive il catalogo.
+- **Una mappa sola per le azioni del cassetto.** Gli alias (`cancella`, `butta` → `elimina`; `archivia`,
+  `conserva`, `salva` → `tieni`; `proroga`, `rinnova`, `tieni ancora` → `ancora`) stanno in `cassetto.AZIONI`
+  con `azione_canonica`: li usano il tool `cassetto_gestisci`, `valore._cassetto` (prima ripeteva a mano i tre
+  nomi di elimina: un alias nuovo nel tool sarebbe restato E2, eseguibile per iscritto) e `POST /api/cassetto`,
+  che ora ferma con 403 `serve_voce` anche «cancella» e «butta».
+- **Difesa in più sui pulsanti.** `Cassetto.da_pagina` rifiuta «elimina» (e i suoi alias) con `serve_voce`
+  anche se il server lo lasciasse passare; nella pagina `bottoneCassetto` disegna solo «tieni» e «ancora», e il
+  tocco su un pulsante d'altra azione non chiama `/api/cassetto` e scrive «Per eliminare un file dimmelo a
+  voce.». Tolto il codice morto del secondo tocco di «Elimina tutti» (`schermo.js`) e la sua regola CSS.
+
+Prove: `prova_pc` (`e_script` sui casi e i contrari, `app_script` e `app_e_script` col nome vicino, lo script a
+voce si apre); `prova_scritto_senza_voce` (l'app vera passa, lo script e l'interprete per iscritto no, a voce sì;
+il satellite che dichiara `app_script`, quello di prima e quello scollegato; `pulisci_esecutore`);
+`prova_valore` (ogni alias di elimina della mappa è E3, gli altri E2, un alias aggiunto è subito E3);
+`prova_cassetto` (`da_pagina` rifiuta elimina, cancella e butta anche al proprietario; `/api/cassetto` 403 su
+cancella e butta); `prova_cassetto_pagina` (un pulsante «elimina» messo a mano non chiama il server).- **Dalla revisione della PR #309.**
+  - *Un elenco di ammessi, non di esclusioni.* Su Windows `_avvia` è ShellExecute: conta l'associazione del
+    tipo, e un elenco di esclusioni lasciava passare `.msi`, `.cpl`, `.scr`, `.jar`, `.url`, `.com`,
+    `backup.bat.`, `x.bat::$DATA`, `git-bash`, `java`, `wmic`, `regedit`, `mmc`, `control`… Per iscritto ora
+    passano solo `browser`, i protocolli noti e i `.exe` senza argomenti che non sono interpreti né strumenti
+    di sistema (`pc/base.ammessa_per_iscritto`, dopo `nome_windows`); un nome senza estensione e `%COMSPEC%`
+    valgono «non si sa». Dettagli e limite (un `.exe` che lancia uno script resta un'app): [pc](pc.md).
+  - *Il controllo lo fa chi ha il comando.* `apri_app(app, scritto=True)` e, sul satellite, l'«avvia» col
+    segno `scritto` rifiutano con `serve_voce`; il tool lo trasforma nella risposta del cancello con l'azione in
+    sospeso (`spec.solo_a_voce`). Il satellite lo dichiara (`avvia_scritto`): senza, «non si sa». Un nome di
+    `app_script` lungo quanto il taglio del «ciao» o l'elenco al tetto: «non si sa».
+  - *La terza copia degli alias* (`distruttiva` di `cassetto_gestisci`) ora si costruisce da `cassetto.AZIONI`.
+
+  Prove: `prova_pc` (tutti i casi della revisione, coi nomi normalizzati, e le voci di serie ammesse;
+  l'esecutore che rifiuta col segno), `prova_esecutore` (il satellite vero che rifiuta l'«avvia» scritto di uno
+  script anche se il «ciao» non lo dice, l'app vera che si apre), `prova_scritto_senza_voce` (il satellite senza
+  il segno, il nome tagliato, l'elenco al tetto, il rifiuto che diventa «solo a voce»), `prova_valore` (le
+  distruttive del cassetto sono gli alias della mappa).  - *Seconda revisione della PR #309* (PR di seguito, ramo `issue-307-ammessi-seguito`): per iscritto chiedono la
+    voce anche i nomi corti 8.3 (`~`), i percorsi di rete (`\`, `//`, WebDAV) e gli interpreti con un altro nome
+    (`pypy`, `ipython`, `jython`, `nodejs`, `python3.12t`, `python_d`, AutoHotkey, AutoIt3): [pc](pc.md). Prove in
+    `prova_pc`, a secco e sull'«avvia» scritto del satellite.

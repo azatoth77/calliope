@@ -62,6 +62,9 @@ RIF_FILE = "file:"
 # Le immagini delle pagine e i PDF stanno in `cartella/pagine/<id della verifica>/`, con un nome
 # scelto dal server (studio/pagine.py, `scrivi_file`)
 CARTELLA_PAGINE = "pagine"
+# Un file senza riga si toglie nella rotazione solo dopo un giorno (un invio in corso ha il file
+# scritto un attimo prima della riga)
+ORFANI_DOPO_S = 86400.0
 STATI_ARGOMENTO = ("proposto", "tenuto", "tolto", "aggiunto")
 # Gli argomenti su cui si fa il piano
 ARGOMENTI_DEL_PIANO = ("tenuto", "aggiunto")
@@ -276,9 +279,13 @@ def togli_file(file: list[str], cartella) -> int:
     return n
 
 
-def togli_orfani(cartella) -> int:
-    """Tutti i file sotto `cartella/pagine` (per `svuota` di tutti, dopo le righe: anche quelli
-    rimasti senza riga da un invio a metà). Mai fuori dalla cartella, mai seguendo un link."""
+def togli_orfani(cartella, conosciuti: set | None = None, piu_vecchi_di_s: float = 0.0) -> int:
+    """I file sotto `cartella/pagine` che nessuna riga cita: tutti per `svuota` di tutti (dopo le
+    righe); nella rotazione (revisione della PR #312) solo quelli non in `conosciuti` (percorsi
+    relativi alla cartella) e più vecchi di `piu_vecchi_di_s`: un crollo fra la scrittura e il
+    commit, o il ritorno di `calliope aggiorna` a un `memoria.db` di prima, non lasciano foto di
+    quaderni per sempre. Mai fuori dalla cartella, mai seguendo un link."""
+    import time
     if not cartella:
         return 0
     base = Path(cartella).resolve()
@@ -291,6 +298,10 @@ def togli_orfani(cartella) -> int:
             p = Path(dirpath) / nome
             try:
                 if p.is_symlink() or base not in p.resolve().parents:
+                    continue
+                if conosciuti is not None and p.relative_to(base).as_posix() in conosciuti:
+                    continue
+                if piu_vecchi_di_s and time.time() - p.stat().st_mtime < piu_vecchi_di_s:
                     continue
                 p.unlink()
                 n += 1
@@ -362,6 +373,15 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
     if tutto and cartella:
         # «svuota» di tutti: anche i file rimasti senza riga (un invio a metà)
         out["file"] += togli_orfani(cartella)
+    elif scadute_prima is not None and cartella:
+        # La rotazione: anche i file che nessuna riga cita, vecchi di più di un giorno
+        conosciuti = {r[0] for r in db.execute(
+            "SELECT file FROM studio_pagine WHERE file IS NOT NULL")}
+        conosciuti |= {r[0][len(RIF_FILE):] for r in db.execute(
+            "SELECT riferimento FROM studio_materiali WHERE riferimento LIKE ?",
+            (RIF_FILE + "%",))}
+        out["orfani"] = togli_orfani(cartella, conosciuti, ORFANI_DOPO_S)
+        out["file"] += out["orfani"]
     return out
 
 

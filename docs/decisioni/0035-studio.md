@@ -169,14 +169,24 @@ dell'eco della stanza.
     personale, dentro gli orari del minore, anche senza conversazione a voce (punto 3), e mai
     nella conversazione né al modello: restano «da leggere» finché il passo 4.3 non le legge. Si
     mandano nella verifica propria o, da tutore, in quella del minore; ospiti e conoscenti mai.
-    Con `studio_modo: spento` l'endpoint non accetta niente; in ombra solo chi amministra.
+    Con `studio_modo: spento` l'endpoint non accetta niente. **In ombra** lo schermo personale
+    di chi amministra vede lo Studio come prova (la tessera apre la pagina con la scritta «prova»
+    e l'endpoint accetta le sue pagine); nessun altro schermo. È diverso dal passo 4.1, dove in
+    ombra `per_schermi()` è falso per tutti: qui è la sola eccezione, per provare la pagina sulla
+    DGX senza che un minore la veda (revisione della PR #312).
 14. **I bordi li trova il telefono, li decide il server**: un rilevatore scritto a mano in
     JavaScript (niente OpenCV.js) e lo stesso in numpy sul server, che vale; senza bordi
     plausibili la foto resta intera, con l'avviso. Il raddrizzamento è con Pillow (prospettiva) e
     numpy, a 1600 px; i PDF si dividono con pypdfium2. Niente librerie native nuove (principio 4).
 15. **I file li nomina il server**, dentro `studio_cartella` (relativa: accanto alla memoria),
-    controllati quando si scrivono; vanno via con la verifica (punto 11), anche il PDF originale.
-    I materiali restano dati (punto 6): nessun testo letto qui.
+    controllati quando si scrivono; vanno via con la verifica (punto 11), anche la copia del PDF,
+    che si tiene rifatta con le sole pagine e senza i metadati del file arrivato; la rotazione
+    toglie anche i file che nessuna riga cita, dopo un giorno. I materiali restano dati (punto 6):
+    nessun testo letto qui.
+16. **Prima di `studio_modo: attivo`** serve il banco delle **30 foto vere** (pagine storte, in
+    ombra, sfocate, libro aperto, dalla galleria) per tarare le soglie dei bordi (`MURO`) e della
+    nitidezza (`studio_nitidezza_min`), oggi misurate solo sulle foto di fantasia di Pillow; il
+    criterio dell'analisi è al più 2 errori fra «sfocata» e «buona» (revisione della PR #312).
 
 ## Da completare con i passi 4.3–4.5
 

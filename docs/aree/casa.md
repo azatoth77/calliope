@@ -134,7 +134,11 @@ Da fare a mano: le aree delle luci «Soggiorno» e «Cucina» (fondo del documen
     «È sulla scheda del tuo schermo: per averla tocca «Scarica».» con lo schermo personale
     aperto (la scheda parte), «La trovi in Le mie cose, alla voce Documenti…» con lo schermo
     abbinato ma chiuso, quella di prima senza schermo personale. Consegnata al PC resta fuori
-    dall'archivio, come prima. Dettagli in [schermi-telefono](schermi-telefono.md).
+    dall'archivio, come prima. Dettagli in [schermi-telefono](schermi-telefono.md). Dal 29/10
+    (#287) senza una persona riconosciuta la guida scritta non si fa («Non so a chi dare la guida
+    scritta, quindi te lo dico a voce: …»): prima il proprietario di ripiego era «amministra», che
+    sarebbe finito nell'archivio come una persona; `scrivi_fisso` senza proprietario non tocca
+    l'archivio. *[storico: fino al 29/10 il ripiego «amministra»]*
   - **Frasi d'errore di HA** (01/10, `calliope/casa/errori.py`): «Mi dispiace, nell'area
     Taverna il dominio light non è stato esposto.» diventa «In taverna non posso comandare
     nessuna luce: non è esposta ad Assist in Home Assistant.». I 29 modelli sono la copia

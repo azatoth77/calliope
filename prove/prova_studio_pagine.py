@@ -272,11 +272,23 @@ def prova_raddrizza():
 
 # ─────────────────────────── 3. PDF ───────────────────────────
 
-def pdf_di(n: int, lato=(595, 842)) -> bytes:
+def pdf_di(n: int, lato=(595, 842), autore=False) -> bytes:
     pagine = [pagina_con_segni().resize(lato) for _ in range(n)]
     b = io.BytesIO()
-    pagine[0].save(b, "PDF", save_all=True, append_images=pagine[1:], resolution=72)
+    extra = {"author": "Mario Segreto", "title": "Compiti di Mario Segreto"} if autore else {}
+    pagine[0].save(b, "PDF", save_all=True, append_images=pagine[1:], resolution=72, **extra)
     return b.getvalue()
+
+
+def autore_pdf(dati: bytes) -> str:
+    """L'autore e il titolo scritti nel PDF (vuoto se non ci sono)."""
+    import pypdfium2 as pdfium
+    d = pdfium.PdfDocument(dati)
+    try:
+        m = d.get_metadata_dict()
+        return (m.get("Author") or "") + (m.get("Title") or "").replace("Compiti di Mario Segreto", "")
+    finally:
+        d.close()
 
 
 def pdf_a_mano(mediabox: str) -> bytes:
@@ -313,6 +325,25 @@ def prova_pdf():
             esito = f"ECCEZIONE {type(e).__name__}"
         verifica(f"PDF {nome}: rifiutato con un motivo", esito != "accettato"
                  and not esito.startswith("ECCEZIONE") and attesa in esito, esito)
+    import asyncio
+    out, pulito = asyncio.run(PG.dividi_pdf_a_parte(pdf_di(2, autore=True), 1600, 40, 150))
+    verifica("PDF nel sottoprocesso: due pagine e la copia pulita (senza l'autore)",
+             len(out) == 2 and max(out[0].larghezza, out[0].altezza) == 1600
+             and pulito and pulito.startswith(b"%PDF-") and autore_pdf(pulito) == ""
+             and autore_pdf(pdf_di(1, autore=True)) == "Mario Segreto")
+    try:
+        asyncio.run(PG.dividi_pdf_a_parte(pdf_di(3), 1600, 40, 150, tempo_pagina_s=0.001))
+        esito = "accettato"
+    except PG.PaginaNonValida as e:
+        esito = str(e)
+    verifica("PDF nel sottoprocesso: oltre il tempo per pagina il processo si ferma e il PDF è rifiutato",
+             "troppo pesante" in esito, esito)
+    try:
+        asyncio.run(PG.dividi_pdf_a_parte(b"%PDF-1.7\n" + os.urandom(500), 1600, 40, 150))
+        esito = "accettato"
+    except PG.PaginaNonValida as e:
+        esito = str(e)
+    verifica("PDF nel sottoprocesso: malformato rifiutato con il motivo del figlio", "rovinato" in esito, esito)
     try:
         from pypdf import PdfReader, PdfWriter
         w = PdfWriter()
@@ -440,8 +471,24 @@ def chiedi(port, percorso, sessione=None, token=None, corpo=None, byte=None, met
     except urllib.error.HTTPError as e:
         try:
             return e.code, json.loads(e.read().decode("utf-8") or "{}")
-        except ValueError:
+        except (ValueError, OSError):   # la connessione chiusa subito (sessione, schermo)
             return e.code, {}
+    except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError):
+        # /api/studio/pagina chiude subito senza leggere (sessione, schermo, Studio spento:
+        # revisione della PR #312): la stessa richiesta con le sole intestazioni dà il codice
+        import http.client
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=20)
+        c.putrequest("POST", percorso)
+        for k, v in {**h, "Content-Length": str(len(dati))}.items():
+            c.putheader(k, v)
+        c.endheaders()
+        r = c.getresponse()
+        try:
+            return r.status, json.loads(r.read().decode("utf-8") or "{}")
+        except (ValueError, OSError):
+            return r.status, {}
+        finally:
+            c.close()
 
 
 class Servizi:
@@ -556,6 +603,9 @@ def prova_server():
             s, d = chiedi(port, "/api/studio/pagina", sess["leo2"], byte=foto_b, meta={"verifica": vid})
             verifica("server: fuori orario il minore non manda pagine (403, con la frase)",
                      s == 403 and d.get("codice") == "fuori_orario", f"{s} {d}")
+            s, d = chiedi(port, "/api/studio/pagina", sess["leo2"], byte=foto_b, meta={"verifica": 9999})
+            verifica("server: gli orari prima della verifica (fuori orario anche una che non c'è dà 403)",
+                     s == 403 and d.get("codice") == "fuori_orario", f"{s} {d}")
             s, d = chiedi(port, "/api/studio/pagina", sess["andrea"], byte=foto_b, meta={"verifica": vid})
             verifica("server: fuori orario del minore il tutore sì", s == 200, f"{s} {d}")
         finally:
@@ -594,8 +644,9 @@ def prova_server():
             s = e.code
         except OSError:
             s = "chiusa"
-        verifica("limiti: un corpo a pezzi oltre il tetto → 413 (o la connessione chiusa)",
-                 s in (413, "chiusa"), f"{s}")
+        verifica("limiti: senza Content-Length (a pezzi) → 411 subito (o la connessione chiusa)",
+                 s in (411, "chiusa"), f"{s}")
+        prova_dos(port, sess, vid, foto_b)
         cfg.studio_pagina_max_mb, cfg.studio_pdf_max_mb = 15.0, 30.0
         s, d = chiedi(port, "/api/studio/pagina", sess["leo"], byte=foto_b, meta={"verifica": vid},
                       tipo="application/json")
@@ -633,7 +684,7 @@ def prova_server():
         except ImportError:
             pdf = False
         if pdf:
-            s, d = chiedi(port, "/api/studio/pagina", sess["leo"], byte=pdf_di(2),
+            s, d = chiedi(port, "/api/studio/pagina", sess["leo"], byte=pdf_di(2, autore=True),
                           meta={"verifica": vid, "nome": "../../etc/Capitolo 7.pdf"})
             mats = st.dati.tutti("SELECT * FROM studio_materiali WHERE verifica = ?", (vid,))
             m_pdf = next((m for m in mats if m["origine"] == "file"), {})
@@ -641,6 +692,10 @@ def prova_server():
                      s == 200 and len(d.get("pagine") or []) == 2 and m_pdf.get("titolo") == "Capitolo 7.pdf"
                      and str(m_pdf.get("riferimento") or "").startswith("file:pagine/")
                      and (D.cartella_di(cfg) / m_pdf["riferimento"][5:]).is_file(), f"{s} {d} {m_pdf}")
+            tenuto = (D.cartella_di(cfg) / m_pdf["riferimento"][5:]).read_bytes() if m_pdf else b""
+            verifica("PDF sul server: la copia tenuta è un PDF con le pagine, senza i metadati dell'originale",
+                     tenuto.startswith(b"%PDF-") and autore_pdf(tenuto) == ""
+                     and autore_pdf(pdf_di(1, autore=True)) == "Mario Segreto", autore_pdf(tenuto))
 
         # Pagine per verifica e invii al minuto
         cfg.studio_pagine_max = len(st.pagine(LEO, vid)) + 1
@@ -719,6 +774,25 @@ def prova_server():
         verifica("tenuta: 61 giorni dopo via la verifica, le immagini, il PDF e la cartella",
                  not any(p.exists() for p in f_leo) and not (D.cartella_di(cfg) / "pagine" / str(vid)).exists())
 
+        # Gli orfani nella rotazione: un file senza riga vecchio di due giorni via, uno appena
+        # scritto (un invio in corso) e quelli delle righe restano
+        vid_o = st.crea_verifica(BRUNO, "Storia", "2026-11-20")
+        chiedi(port, "/api/studio/pagina", sess["bruno"], byte=foto_b, meta={"verifica": vid_o})
+        f_o = file_di(vid_o)
+        vecchio = D.cartella_di(cfg) / "pagine" / "777" / "vecchio.jpg"
+        nuovo = D.cartella_di(cfg) / "pagine" / "777" / "nuovo.jpg"
+        vecchio.parent.mkdir(parents=True, exist_ok=True)
+        vecchio.write_bytes(b"x")
+        nuovo.write_bytes(b"x")
+        due_giorni = time.time() - 2 * 86400
+        os.utime(vecchio, (due_giorni, due_giorni))
+        r = cons._studio(scadute_prima=datetime.date(2026, 11, 6))
+        verifica("rotazione: l'orfano di due giorni via, quello appena scritto e le pagine vere restano",
+                 not vecchio.exists() and nuovo.exists() and f_o and all(p.is_file() for p in f_o)
+                 and r.get("orfani") == 1, f"{r}")
+        st.togli_verifica(BRUNO, vid_o)
+        nuovo.unlink()
+
         vid2 = st.crea_verifica(LEO, "Scienze", "2026-11-06")
         chiedi(port, "/api/studio/pagina", sess["leo"], byte=foto_b, meta={"verifica": vid2})
         f2 = file_di(vid2)
@@ -744,6 +818,82 @@ def prova_server():
     finally:
         srv.ferma()
         st.close()
+
+
+def prova_dos(port, sess, vid, foto_b):
+    """Revisione della PR #312: senza sessione niente si legge e la connessione si chiude subito;
+    un rifiuto dopo una sessione valida butta il corpo al più per STUDIO_SCARTA_S; un invio vero
+    troppo lento si ferma dopo STUDIO_LEGGI_S."""
+    import socket
+    from calliope.schermi import server as SRV
+
+    def manda(intestazioni: dict, corpo_iniziale: bytes = b"", lento: float = 0.0, durata: float = 0.0):
+        """(prima riga della risposta, secondi, chiusa?) mandando le intestazioni e poi, se
+        `lento`, un byte ogni `lento` secondi per al più `durata` secondi."""
+        sk = socket.create_connection(("127.0.0.1", port), timeout=30)
+        t0 = time.monotonic()
+        righe = "".join(f"{k}: {v}\r\n" for k, v in intestazioni.items())
+        sk.sendall(f"POST /api/studio/pagina HTTP/1.1\r\nHost: 127.0.0.1\r\n{righe}\r\n".encode()
+                   + corpo_iniziale)
+        risposta = b""
+        sk.settimeout(lento or 30)
+        fine = t0 + (durata or 30)
+        chiusa = False
+        while time.monotonic() < fine:
+            try:
+                pezzo = sk.recv(65536)
+            except socket.timeout:
+                if lento:
+                    try:
+                        sk.sendall(b"0")
+                    except OSError:
+                        chiusa = True
+                        break
+                continue
+            except OSError:
+                chiusa = True
+                break
+            if not pezzo:
+                chiusa = True
+                break
+            risposta += pezzo
+        sk.close()
+        return risposta.split(b"\r\n", 1)[0].decode("latin-1"), time.monotonic() - t0, chiusa
+
+    base = {"Content-Type": "application/octet-stream",
+            "X-Calliope-Studio": quote(json.dumps({"verifica": vid}))}
+    # Senza sessione, 20 MB dichiarati e solo 1 kB mandato: 401 subito e la connessione chiusa
+    riga, dt, chiusa = manda({**base, "Content-Length": "20000000"}, b"x" * 1000)
+    verifica("DoS: senza sessione e con un corpo grosso → 401 subito, niente letto, connessione chiusa",
+             " 401 " in riga and chiusa and dt < 5, f"{riga} {dt:.1f}s chiusa={chiusa}")
+    riga, dt, chiusa = manda({**base, "X-Calliope-Sessione": "inventata", "Content-Length": "5000"}, b"",
+                             lento=0.5, durata=8)
+    verifica("DoS: una sessione inventata con un invio lento → 401 subito, senza aspettare il corpo",
+             " 401 " in riga and dt < 5, f"{riga} {dt:.1f}s")
+    riga, dt, chiusa = manda({**base, "X-Calliope-Sessione": sess["leo"]}, b"")
+    verifica("DoS: senza Content-Length → 411 subito e la connessione chiusa",
+             " 411 " in riga and chiusa and dt < 5, f"{riga} {dt:.1f}s")
+    prima_s, prima_l = SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S
+    SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S = 1.5, 1.5
+    try:
+        # Un rifiuto dopo una sessione valida (la verifica che non c'è) con un invio lento: il corpo
+        # si butta al più per STUDIO_SCARTA_S, poi la risposta e la connessione chiusa
+        meta = quote(json.dumps({"verifica": 9999}))
+        riga, dt, chiusa = manda({**base, "X-Calliope-Studio": meta, "X-Calliope-Sessione": sess["leo"],
+                                  "Content-Length": "100000"}, b"", lento=0.3, durata=10)
+        verifica("DoS: un rifiuto con un invio lento si interrompe dopo il tempo massimo (404)",
+                 " 404 " in riga and dt < 6, f"{riga} {dt:.1f}s chiusa={chiusa}")
+        # Lo stesso rifiuto con il corpo tutto mandato: la frase arriva (il telefono la vede)
+        s, d = chiedi(port, "/api/studio/pagina", sess["leo"], byte=foto_b, meta={"verifica": 9999})
+        verifica("DoS: il rifiuto con il corpo intero arriva con la sua frase", s == 404 and d.get("errore"),
+                 f"{s} {d}")
+        # Un invio vero troppo lento: 408 dopo STUDIO_LEGGI_S
+        riga, dt, chiusa = manda({**base, "X-Calliope-Sessione": sess["leo"], "Content-Length": "100000"},
+                                 b"\xff\xd8\xff", lento=0.3, durata=10)
+        verifica("DoS: un invio vero troppo lento si ferma (408) dopo il tempo massimo",
+                 " 408 " in riga and dt < 6, f"{riga} {dt:.1f}s")
+    finally:
+        SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S = prima_s, prima_l
 
 
 def prova_schema():

@@ -16,7 +16,14 @@
   --g: clamp(0.55rem, 2vmin, 0.9rem);                  /* spazio tra le parti */
 }
 
-html { font-size: 17px; background: #000; -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+html { font-size: 17px; background: #000; }
+/* Il testo fermo al 100 % solo su iOS (29/10, #287): Safari in orizzontale lo ingrandiva da solo; su
+   Android i Chrome di prima (senza lo zoom della pagina che segue il carattere di sistema) con
+   text-size-adjust perdevano il «Ridimensionamento testo» delle impostazioni di accessibilità.
+   -webkit-touch-callout c'è solo in WebKit su iOS */
+@supports (-webkit-touch-callout: none) {
+  html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+}
 
 body.telefono {
   display: block; height: auto; min-height: 100vh; min-height: 100dvh; overflow: auto;

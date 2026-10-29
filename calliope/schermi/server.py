@@ -87,7 +87,9 @@ Indirizzi:
                                  angoli, o un PDF intero (29/10, #281, studio/pagine.py), nello
                                  Studio e mai nella conversazione; solo da uno schermo personale,
                                  dentro gli orari, anche senza conversazione a voce; con
-                                 `studio_modo: spento` niente (404), in ombra solo chi amministra
+                                 `studio_modo: spento` niente (404), in ombra solo chi amministra;
+                                 `Content-Length` obbligatorio (411); senza sessione la risposta
+                                 subito e la connessione chiusa, senza leggere il corpo (PR #312)
   GET  /satellite              il comando per un PC nuovo come satellite (satellite/web.py)
   /telefono/…                    la web app del telefono (telefono.py): pagina, modelli e il
                                  WebSocket del protocollo dei satelliti
@@ -208,6 +210,10 @@ TROPPE_LETTURE = "Troppe richieste in poco tempo: riprovo fra qualche secondo."
 TROPPE_RICERCHE = "Troppe ricerche in poco tempo: riprova fra qualche secondo."
 LETTURE_AL_MINUTO = 60          # /api/raccolte per schermo (era 30 fino alla revisione della PR #269)
 TROPPE_PAGINE = "Troppe pagine in poco tempo: aspetta un momento."
+# /api/studio/pagina (revisione della PR #312): il corpo di un rifiuto si butta al più per tanti
+# secondi; un invio vero si legge al più per tanti (15 MB in 2 minuti: ~1 Mbit/s)
+STUDIO_SCARTA_S = 12.0
+STUDIO_LEGGI_S = 120.0
 
 
 def crea_app(hub: Schermi) -> Starlette:
@@ -779,8 +785,11 @@ def crea_app(hub: Schermi) -> Starlette:
                             "errore": "Per i file di un ragazzo parlami prima a voce: "
                                       "di' «Calliope» e poi tocca di nuovo."}
             # Eliminare dal cassetto si fa a voce (28/10 sera, seguito della #301): dalla scheda
-            # restano «Tieni» e «Tieni ancora»; un «elimina» arrivato lo stesso si ferma qui
-            if str(dati.get("azione") or "").strip().lower() == "elimina":
+            # restano «Tieni» e «Tieni ancora»; un «elimina» arrivato lo stesso si ferma qui, coi
+            # suoi sinonimi («cancella», «butta»: la mappa del tool, 29/10, #307). Dietro c'è la
+            # stessa difesa in Cassetto.da_pagina
+            from ..cassetto import azione_canonica
+            if azione_canonica(dati.get("azione")) == "elimina":
                 return {"ok": False, "_stato": 403, "codice": "serve_voce",
                         "errore": CASSETTO_VOCE}
             # «Tieni» di un tutore va nella SUA cartella dell'archivio (il ragazzo i documenti
@@ -1230,27 +1239,23 @@ def crea_app(hub: Schermi) -> Starlette:
                 "nome": " ".join(nome.split())[:60] or None}
 
     async def studio_pagina(request: Request):
-        """Vedi `_studio_pagina`. Un rifiuto prima di leggere il corpo (sessione, permesso,
-        orari…) lo legge e lo butta, fino al tetto: il telefono che manda una foto di qualche MB
-        riceve la frase del rifiuto e non una connessione chiusa a metà."""
+        """Vedi `_studio_pagina`. Revisione della PR #312: senza una sessione valida, senza
+        `Content-Length` o con una lunghezza oltre il tetto la risposta arriva subito e la
+        connessione si chiude, senza leggere niente. Solo dopo una sessione valida e lo Studio
+        acceso un rifiuto (verifica, orari, pagine) legge e butta il corpo dichiarato, al più per
+        `STUDIO_SCARTA_S` secondi: il telefono che manda una foto di qualche MB riceve la frase
+        del rifiuto e non una connessione chiusa a metà, e un invio lento non tiene niente."""
         request.state.studio_letto = False
+        request.state.studio_scarta = False
         risposta = await _studio_pagina(request)
-        if not request.state.studio_letto:
-            mb = max(float(getattr(hub.cfg, "studio_pagina_max_mb", 15.0) or 15.0),
-                     float(getattr(hub.cfg, "studio_pdf_max_mb", 30.0) or 30.0))
-            try:
-                dichiarati = int(request.headers.get("content-length") or 0)
-            except ValueError:
-                dichiarati = 0
-            if dichiarati <= mb * 1_000_000:
-                letti = 0
-                try:
-                    async for pezzo in request.stream():
-                        letti += len(pezzo)
-                        if letti > mb * 1_000_000:
-                            break
-                except Exception:  # noqa: BLE001 — il client se n'è andato: niente da dire
+        if request.state.studio_scarta and not request.state.studio_letto:
+            async def scarta():
+                async for _pezzo in request.stream():
                     pass
+            try:
+                await asyncio.wait_for(scarta(), STUDIO_SCARTA_S)
+            except Exception:  # noqa: BLE001 — lento o andato via: si chiude e basta
+                risposta.headers["Connection"] = "close"
         return risposta
 
     async def _studio_pagina(request: Request):
@@ -1264,10 +1269,26 @@ def crea_app(hub: Schermi) -> Starlette:
         n = max(1, int(getattr(hub.cfg, "studio_pagine_al_minuto", 40) or 40))
         schermo, errore = schermo_personale(request, invii_studio, n, TROPPE_PAGINE)
         if errore is not None:
+            errore.headers["Connection"] = "close"
             return errore
+        mb_foto = float(getattr(hub.cfg, "studio_pagina_max_mb", 15.0) or 15.0)
+        mb_pdf = float(getattr(hub.cfg, "studio_pdf_max_mb", 30.0) or 30.0)
+        max_b = int(max(mb_foto, mb_pdf) * 1_000_000)
+        # La lunghezza dichiarata è obbligatoria (niente invii a pezzi) e sotto il tetto
+        try:
+            dichiarati = int(request.headers.get("content-length", ""))
+        except ValueError:
+            dichiarati = -1
+        if dichiarati < 0:
+            return _json({"errore": "serve la lunghezza del file"}, 411, {"Connection": "close"})
+        if dichiarati > max_b:
+            return _json({"errore": "file troppo grande"}, 413, {"Connection": "close"})
         st, prof, errore = studio_di(schermo)
         if errore is not None:
+            errore.headers["Connection"] = "close"
             return errore
+        # Da qui un rifiuto legge e butta il corpo dichiarato, con un tempo massimo
+        request.state.studio_scarta = True
         tipo = request.headers.get("content-type", "").split(";")[0].strip().lower()
         if tipo != "application/octet-stream":
             return _json({"errore": "serve application/octet-stream"}, 415)
@@ -1276,6 +1297,12 @@ def crea_app(hub: Schermi) -> Starlette:
             return _json({"errore": "dati dell'invio non validi"}, 400)
         from .. import minori
         from ..studio import NonPermesso, NonTrovata, TroppePagine, VerificaChiusa
+        # Gli orari dei tutori prima della verifica (revisione della PR #312): fuori orario un
+        # minore non manda pagine, come per i tocchi
+        orario = minori.fuori_orario(prof)
+        if orario:
+            return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                          "codice": "fuori_orario"}, 403)
         try:
             v = await asyncio.to_thread(st.verifica_per_pagine, prof, meta["verifica"])
         except (NonTrovata, NonPermesso):
@@ -1287,26 +1314,21 @@ def crea_app(hub: Schermi) -> Starlette:
         massimo = int(getattr(hub.cfg, "studio_pagine_max", 80) or 80)
         if v["n_pagine"] >= massimo:
             return _json({"errore": f"Questa verifica ha già {massimo} pagine."}, 413)
-        # Gli orari dei tutori: fuori orario un minore non manda pagine, come per i tocchi
-        orario = minori.fuori_orario(prof)
-        if orario:
-            return _json({"errore": minori.frase_fuori_orario(prof, orario),
-                          "codice": "fuori_orario"}, 403)
-        mb_foto = float(getattr(hub.cfg, "studio_pagina_max_mb", 15.0) or 15.0)
-        mb_pdf = float(getattr(hub.cfg, "studio_pdf_max_mb", 30.0) or 30.0)
-        max_b = int(max(mb_foto, mb_pdf) * 1_000_000)
-        troppo = _json({"errore": "file troppo grande"}, 413)
-        try:
-            if int(request.headers.get("content-length") or 0) > max_b:
-                return troppo
-        except ValueError:
-            return _json({"errore": "lunghezza non valida"}, 400)
+        troppo = _json({"errore": "file troppo grande"}, 413, {"Connection": "close"})
         corpo = bytearray()
         request.state.studio_letto = True
-        async for pezzo in request.stream():
-            corpo += pezzo
-            if len(corpo) > max_b:
+
+        async def leggi():
+            async for pezzo in request.stream():
+                corpo.extend(pezzo)
+                if len(corpo) > dichiarati:
+                    return False
+            return True
+        try:
+            if not await asyncio.wait_for(leggi(), STUDIO_LEGGI_S):
                 return troppo
+        except asyncio.TimeoutError:
+            return _json({"errore": "invio troppo lento: riprova"}, 408, {"Connection": "close"})
         dati = bytes(corpo)
         del corpo
         from ..immagini import tipo_dai_byte
@@ -1319,8 +1341,10 @@ def crea_app(hub: Schermi) -> Starlette:
                     return _json({"errore": f"PDF troppo grande (al massimo {mb_pdf:g} MB)"}, 413)
                 max_pag = min(int(getattr(hub.cfg, "studio_pdf_max_pagine", 40) or 40),
                               massimo - v["n_pagine"])
-                pronte = await asyncio.to_thread(PG.dividi_pdf, dati, lato, max_pag, soglia)
-                origine, originale = "file", dati
+                # In un sottoprocesso con un tetto di tempo per pagina (revisione della PR
+                # #312); si tiene la copia rifatta senza i metadati, non il file arrivato
+                pronte, originale = await PG.dividi_pdf_a_parte(dati, lato, max_pag, soglia)
+                origine = "file"
             elif tipo_dai_byte(dati) in ("jpeg", "png", "webp"):
                 if len(dati) > int(mb_foto * 1_000_000):
                     return _json({"errore": f"foto troppo grande (al massimo {mb_foto:g} MB)"},

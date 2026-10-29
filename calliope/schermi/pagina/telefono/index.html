@@ -213,8 +213,9 @@
       <span class="mic-icona" aria-hidden="true"></span><span class="mic-testo"><span>Microfono</span> <b id="mic-stato">spento</b></span>
     </button>
     <!-- Nel layout compatto (28/10, #277) la voce sta su una riga: la parola breve e lo stato
-         piccolo dentro «Parla»; il suggerimento («Tocca «Parla» per parlare») ne è la descrizione -->
-    <button id="parla" type="button" class="parla" aria-describedby="tel-dove">
+         piccolo dentro «Parla»; il suggerimento («Tocca «Parla» per parlare») ne è la descrizione,
+         solo quando non si vede (aria-describedby messo da telefono.js, descriviParla: 29/10, #287) -->
+    <button id="parla" type="button" class="parla">
       <span class="parla-icona" aria-hidden="true"></span><span class="parla-parole"><span class="parla-testo">Parla</span><span class="parla-breve">Parla</span><span class="parla-stato" aria-hidden="true"></span></span>
     </button>
     <!-- Scrivi (28/10, #301): la Conversazione in modalità scrittura, nella stessa schermata -->

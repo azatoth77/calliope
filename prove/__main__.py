@@ -387,7 +387,7 @@ def keep_alive_della_voce():
 # OBBLIGATORIO prima dell'unione su main.
 # Le durate tra parentesi sono del 06/10 sul portatile, nel gruppo parallelo.
 LIVELLO_2 = {
-    "prova_studio_pagine.py",        # ~20 s (29/10, #281: le foto di fantasia, node e il server)
+    "prova_studio_pagine.py",        # ~35 s (29/10, #281: le foto di fantasia, node e il server)
     "prova_casa_ha.py",              # 13 s
     "prova_sfida_esito.py",          # ~1 s (16/10, #94)
     "prova_risposta_sospeso.py",     # ~1 s (16/10, #98)

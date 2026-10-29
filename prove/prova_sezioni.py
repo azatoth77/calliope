@@ -244,10 +244,24 @@ def compatto():
     verifica("compatto: la riga dello stato resta per i lettori, ritagliata",
              re.search(r"\.voce-riga \.voce \{[^}]*clip: rect\(0 0 0 0\)", blocco) is not None)
     html = (PAGINA / "telefono" / "index.html").read_text(encoding="utf-8")
-    verifica("compatto: «Parla» descritto dal suggerimento, lo stato piccolo nascosto ai lettori",
-             'id="parla" type="button" class="parla" aria-describedby="tel-dove"' in html
-             and 'class="parla-stato" aria-hidden="true"' in html)
     tel = (PAGINA / "telefono" / "telefono.js").read_text(encoding="utf-8")
+    # «Parla» descritto dal suggerimento solo quando non si vede (29/10, #287: VoiceOver lo leggeva
+    # due volte): niente aria-describedby fisso nella pagina, lo mette descriviParla; la media query
+    # di telefono.js è quella del CSS
+    verifica("compatto: «Parla» descritto dal suggerimento solo quando è nascosto, lo stato piccolo nascosto ai lettori",
+             'id="parla" type="button" class="parla">' in html and 'aria-describedby="tel-dove"' not in html
+             and 'class="parla-stato" aria-hidden="true"' in html
+             and 'attr(b, "aria-describedby", "tel-dove")' in tel and 'removeAttribute("aria-describedby")' in tel)
+    mq = re.search(r'matchMedia\("([^"]+)"\)', tel)
+    verifica("compatto: la media query di telefono.js è uguale a quella del CSS",
+             mq is not None and css[m.start() + len("@media "):m.end() - 2] == mq.group(1),
+             mq.group(1) if mq else None)
+    # Il testo fermo al 100 % solo su iOS (29/10, #287): su Android i Chrome di prima perdevano il
+    # «Ridimensionamento testo»
+    senza_commenti = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    fuori_ios = re.sub(r"@supports \(-webkit-touch-callout: none\) \{[^{}]*\{[^{}]*\}\s*\}", "", senza_commenti)
+    verifica("text-size-adjust solo dentro @supports (-webkit-touch-callout: none), cioè solo su iOS",
+             "text-size-adjust" in css and "text-size-adjust" not in fuori_ios)
     verifica("compatto: il suggerimento segnato «ovvio» e lo stato breve scritto in «Parla»",
              'attr(d, "data-ovvio"' in tel and 'querySelector(".parla-stato")' in tel)
 

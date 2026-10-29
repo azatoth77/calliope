@@ -22,7 +22,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Stadio | Libreria | Dove |
 |---|---|---|
 | Studio: verifiche, materiali e pagine, argomenti, piano a giorni deterministico, tenuta legata alla data della verifica (dal 29/10, passo 4.1, decisione [0035](../decisioni/0035-studio.md); `studio_modo`, spento di serie) | SQLite (stesso file della memoria: `studio_verifiche`, `studio_materiali`, `studio_pagine`, `studio_argomenti`, `studio_piano`, `studio_giorni`, `studio_misure`; modulo «studio» in `meta_schema`); libreria standard, niente modello | `calliope/studio/dati.py` → `Dati`, `cancella`, `cancella_file`; `calliope/studio/piano.py` → `calcola`, `minuti_liberi`, `descrivi_pagine`, `tappe`, `previsione`; `calliope/studio/servizio.py` → `Studio`, `permesso`, `prepara`, `NonPermesso`, `NonTrovata`; `calliope/conserva.py` → `TABELLE_STUDIO`; prova `prove/prova_studio_piano.py` |
-| Pagine dei materiali: fotocamera e galleria sul telefono, bordi ricontrollati, raddrizzamento, nitidezza, PDF divisi in pagine, file nella cartella dello Studio (dal 29/10, passo 4.2, #281) | Pillow e numpy (niente librerie native nuove), pypdfium2 (extra `archivio`); nel browser JavaScript scritto a mano, niente OpenCV.js | `calliope/studio/pagine.py` → `rileva`, `scegli_bordi`, `plausibili`, `raddrizza`, `nitidezza`, `prepara_foto`, `dividi_pdf`, `scrivi_file`; `calliope/studio/servizio.py` → `Studio.verifica_per_pagine`, `Studio.verifiche_per_pagine`, `Studio.aggiungi_pronte`; `calliope/studio/dati.py` → `cartella_di`, `togli_orfani`; `calliope/schermi/server.py` → `POST /api/studio/pagina`, `POST /api/studio/verifiche`; `calliope/schermi/pagina/bordi.js`, `calliope/schermi/pagina/studio.js`; `calliope/immagini.py` → `apri`; prove `prove/prova_studio_pagine.py`, `prove/prova_studio_pagina_telefono.py` |
+| Pagine dei materiali: fotocamera e galleria sul telefono, bordi ricontrollati, raddrizzamento, nitidezza, PDF divisi in pagine, file nella cartella dello Studio (dal 29/10, passo 4.2, #281) | Pillow e numpy (niente librerie native nuove), pypdfium2 (extra `archivio`); nel browser JavaScript scritto a mano, niente OpenCV.js | `calliope/studio/pagine.py` → `rileva`, `scegli_bordi`, `plausibili`, `raddrizza`, `nitidezza`, `prepara_foto`, `dividi_pdf`, `dividi_pdf_a_parte`, `scrivi_file`; `calliope/studio/servizio.py` → `Studio.verifica_per_pagine`, `Studio.verifiche_per_pagine`, `Studio.aggiungi_pronte`; `calliope/studio/dati.py` → `cartella_di`, `togli_orfani`; `calliope/schermi/server.py` → `POST /api/studio/pagina`, `POST /api/studio/verifiche`; `calliope/schermi/pagina/bordi.js`, `calliope/schermi/pagina/studio.js`; `calliope/immagini.py` → `apri`; prove `prove/prova_studio_pagine.py`, `prove/prova_studio_pagina_telefono.py` |
 
 ## Problemi noti
 
@@ -30,6 +30,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   ritarare sulle foto vere (tavoli chiari, pagine curve del libro, luce di sera).
 - Su un tavolo bianco il rilevatore non trova il fondo e tiene la foto intera (senza avviso).
 - HEIC: solo convertito dal browser del telefono; un HEIC da un'altra strada è rifiutato.
+- Prima di `studio_modo: attivo`: il banco delle 30 foto vere (decisione 0035, punto 16).
 
 ## Le pagine dei materiali: fotocamera, bordi e PDF (29/10, issue #281, ramo `issue-281-studio-pagine`)
 
@@ -107,7 +108,9 @@ del 28/10: a 640 px numeri e formule si leggono male).
 `studio_pdf_max_pagine` (40) e non oltre le pagine che restano alla verifica, altrimenti rifiutato
 intero (mai tagliato). Rifiutati con un motivo: malformato, troncato, cifrato, senza pagine, con una
 pagina oltre i 200 pollici. Il PDF originale resta accanto alle pagine (`riferimento` «file:…» del
-materiale), per la lettura del testo senza OCR del passo 4.3.
+materiale), per la lettura del testo senza OCR del passo 4.3. *[storico: fino alla revisione
+della PR #312 il file arrivato com'era, coi suoi metadati, e la divisione in un thread del server;
+ora una copia rifatta e un sottoprocesso, sezione sotto]*
 
 **I file** stanno in `studio_cartella/pagine/<verifica>/<24 cifre esadecimali>.jpg|pdf`: il nome
 lo sceglie il server, nessun dato della persona arriva al percorso, il percorso si controlla
@@ -132,7 +135,7 @@ intera», «forse sfocata: rifalla»), i tasti «↑», «↓», «Rifai» (al s
 «Manda», una pagina alla volta nell'ordine scelto (le foto di un giro nello stesso materiale). Niente
 URL blob (la CSP del telefono non li ammette): miniature su canvas. La pagina del telefono ha la
 fotocamera nella `Permissions-Policy` (`camera=(self)`, prima `camera=()`); service worker
-`calliope-telefono-pagina-v21` con `bordi.js` e `studio.js`. Sul PC personale la tessera porta alla
+`calliope-telefono-pagina-v22` (la v21 era della #309) con `bordi.js` e `studio.js`. Sul PC personale la tessera porta alla
 nota della pagina: la vista del PC (PcMateriali) è da fare.
 
 **Non fatti, per dopo.** Ruota e Ritaglia a mano (Materiali 2), lo scatto automatico quando i bordi
@@ -143,6 +146,41 @@ Prove: `prova_studio_pagine.py` (a secco, ~20 s: bordi, `bordi.js` con node, rad
 file ostili, il server vero con i permessi e i limiti, la tenuta) e `prova_studio_pagina_telefono.py`
 (la pagina vera a 390×844 e 320×693 con la fotocamera finta). `prova_studio_piano.py` aggiornata
 alla versione 2 dello schema e alle cartelle vuote che si tolgono.
+
+### 29/10 sera: correzioni dopo la revisione della PR #312
+
+- **Il corpo di un rifiuto.** Prima si leggeva e buttava per ogni rifiuto, anche senza sessione e
+  senza un tempo massimo: chiunque raggiungesse la porta degli schermi poteva tenere aperte molte
+  connessioni mandando un byte al secondo. Ora senza una sessione valida di uno schermo personale,
+  con lo Studio spento, senza `Content-Length` (411) o con una lunghezza oltre il tetto (413) la
+  risposta arriva subito e la connessione si chiude, senza leggere niente. Solo dopo una sessione
+  valida e lo Studio acceso un rifiuto (orari, verifica, pagine) butta il corpo dichiarato, al più
+  per `STUDIO_SCARTA_S` (12 s); un invio vero si legge al più per `STUDIO_LEGGI_S` (120 s, ~1 Mbit/s
+  per 15 MB), poi 408.
+- **Gli orari prima della verifica**: il minore fuori orario riceve «è l'ora di riposare» e non il
+  404 o il 409 della verifica.
+- **I PDF in un sottoprocesso** (`pagine.dividi_pdf_a_parte`, `python -m calliope.studio.pagine
+  --pdf`): al più `PDF_TEMPO_PAGINA_S` (10 s) per aprire il file e per ogni pagina, poi il processo
+  si ferma e il PDF è rifiutato («troppo pesante da dividere»); il server lo aspetta con asyncio,
+  senza tenere un thread. Le pagine passano da una cartella temporanea tolta subito.
+- **La copia del PDF senza metadati**: non si tiene più il file arrivato ma uno rifatto con le sole
+  pagine (`import_pages` di pdfium), senza il dizionario Info né l'XMP (autore, titolo,
+  programma), col testo delle pagine per il 4.3.
+- **Gli orfani nella rotazione**: la rotazione giornaliera toglie anche i file sotto
+  `studio_cartella/pagine/` che nessuna riga cita e che hanno più di un giorno
+  (`dati.ORFANI_DOPO_S`): un crollo fra la scrittura e il commit, o il ritorno di `calliope
+  aggiorna` a un `memoria.db` di prima, non lasciano più foto di quaderni per sempre.
+- **Service worker `calliope-telefono-pagina-v22`**: la #309 aveva già portato la v21, e l'unione
+  con l'epic l'avrebbe riusata per una pagina diversa.
+- La 0035 dice ora che in ombra la pagina la vede solo chi amministra («prova», diverso dal 4.1) e
+  che prima di `attivo` serve il banco delle 30 foto vere (punti 13 e 16).
+
+Prove: `prova_studio_pagine.py` con i casi nuovi: senza sessione e 20 MB dichiarati 401 subito e
+connessione chiusa, sessione inventata con un invio lento 401 subito, senza `Content-Length` 411,
+un rifiuto con un invio lento interrotto dopo il tempo massimo, un invio vero lento 408; gli orari
+prima della verifica; il PDF nel sottoprocesso (pagine, copia senza l'autore, il tempo per pagina
+superato, il malformato); la copia tenuta sul server senza i metadati; la rotazione che toglie
+l'orfano di due giorni e lascia quello appena scritto.
 
 ## Banco dello Studio: dai materiali alla verifica, con qwen3.6 (28/10, issue #293, ramo `issue-293-banco-studio`)
 

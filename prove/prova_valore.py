@@ -330,6 +330,29 @@ def prova_tabelle():
              and valore.effetto("lavoro_affida", {"tipo": "codice"}) == 3)
     verifica("tabelle: elencare le estensioni è una lettura",
              valore.effetto("estensione_gestisci", {"azione": "elenca"}) == 0)
+    # Il cassetto (29/10, #307): gli alias di «elimina» sono quelli del tool, dalla stessa mappa
+    from calliope import cassetto as C
+    elimina = [k for k, v in C.AZIONI.items() if v == "elimina"]
+    verifica("tabelle: cassetto, ogni alias di «elimina» della mappa del tool è E3",
+             len(elimina) >= 3 and all(valore.effetto("cassetto_gestisci", {"azione": a}) == 3
+                                        for a in elimina + ["Cancella", " BUTTA "]), elimina)
+    verifica("contrario: cassetto, tieni, ancora e i loro alias restano E2",
+             all(valore.effetto("cassetto_gestisci", {"azione": k}) == 2
+                 for k, v in C.AZIONI.items() if v != "elimina")
+             and valore.effetto("cassetto_gestisci", {"azione": "tieni ancora"}) == 2)
+    vecchia = dict(C.AZIONI)
+    try:
+        C.AZIONI["sbarazzati"] = "elimina"           # un alias nuovo nel tool
+        verifica("tabelle: un alias nuovo di «elimina» aggiunto alla mappa è subito E3",
+                 valore.effetto("cassetto_gestisci", {"azione": "sbarazzati"}) == 3)
+        # …e distruttivo per la politica (revisione della PR #309: la terza copia a mano)
+        from calliope.tools.allegati import _classe_gestisci
+        verifica("politica: le azioni distruttive del cassetto sono gli alias di «elimina» della mappa",
+                 set(_classe_gestisci().distruttiva) == set(elimina) | {"sbarazzati"},
+                 sorted(_classe_gestisci().distruttiva))
+    finally:
+        C.AZIONI.clear()
+        C.AZIONI.update(vecchia)
 
 
 def _t(testo, esterni=INIEZIONE, fonte="web", persona_txt="", **k):

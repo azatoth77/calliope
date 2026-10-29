@@ -131,3 +131,41 @@ domande (dettagli e correzioni della politica in
   si è aperta la versione nuova, ma la frase diceva il titolo senza «(2)».
 - **Documento proprio con una foto di mezzo**: si apre alla richiesta («volevo che tu aprissi il
   file»), senza la conferma a voce (`politica_documento_proprio`).
+
+## Le app del catalogo `pc_app` per iscritto (29/10, issue #307; elenco di ammessi dalla revisione della PR #309)
+
+A voce si apre ogni voce del catalogo. Per iscritto, da uno schermo personale, si aprono senza voce **solo**
+(`pc/base.ammessa_per_iscritto`; `e_script` è il suo contrario):
+- `browser`;
+- un protocollo noto (`PROTOCOLLI_SCRITTO`: `ms-settings:`, `ms-photos:`, `spotify:`…);
+- un `.exe`, con o senza percorso e senza argomenti, che non sia un interprete, un terminale o uno strumento di
+  sistema (`cmd`, `powershell`, `pwsh`, `wt`, `wsl`, `ubuntu`, `git-bash`, `mintty`, `python3.12`, `java`,
+  `msbuild`, `wmic`, `regedit`, `mmc`, `control`, `rundll32`, `msiexec`…).
+
+Tutto il resto vuole la voce: script, installatori, collegamenti e ogni tipo che ShellExecute esegue (`.bat`,
+`.ps1`, `.msi`, `.cpl`, `.scr`, `.jar`, `.url`, `.com`, `.lnk`…), un nome senza estensione (ShellExecute lo
+cerca nel PATH: «aggiorna» può essere `aggiorna.cmd`), `%COMSPEC%` e le altre variabili, gli argomenti. Prima di
+guardare l'estensione il nome si normalizza come fa Windows (`nome_windows`: via i punti e gli spazi finali,
+`backup.bat.` → `backup.bat`), e uno stream (`x.bat::$DATA`, `calc.exe:x`) vale «non si sa». Le voci di serie
+(`calc.exe`, `notepad.exe`, `explorer.exe`, `ms-settings:`, `browser`, `winword.exe`, `excel.exe`) restano
+ammesse.
+
+Dalla seconda revisione della PR #309 valgono «non si sa» anche un nome corto 8.3 (un `~` nel comando:
+`PYTHON~1.EXE`, `POWERS~1.EXE`) e un percorso di rete (che comincia con `\\` o `//`: UNC, WebDAV con `@SSL`):
+il file cambia senza che chi amministra lo veda. L'esclusione prende anche gli interpreti con un altro nome o un
+suffisso: `pypy`, `ipython`, `jython`, `nodejs`, `python3.12t`, `python_d`, AutoHotkey in tutte le varianti
+(senza argomenti esegue da solo lo script di serie), AutoIt3, `Ahk2Exe`. Le sigle brevi (`py`, `lua`, `sh`)
+solo con una versione, così `pycharm64.exe` o `shotcut.exe` restano app.
+
+**Limite, scelto:** un `.exe` che dentro lancia uno script (un `.bat` impacchettato, un lanciatore) resta un'app
+anche per iscritto: lo decide chi scrive il catalogo.
+
+**Chi controlla.** Il cancello di `tools/spec` è il primo filtro (`app_e_script`); il controllo vero lo fa chi ha
+il comando: `PCExecutor.apri_app(app, scritto=True)` rifiuta con `serve_voce`, e sul PC del satellite l'«avvia»
+porta il segno `scritto: true` e lo rifiuta il satellite (`satellite/esecutore.py`), con la stessa regola. Il
+satellite lo dichiara nel «ciao» (`avvia_scritto`); uno di prima, che non conosce il segno, vale «non si sa» e
+per iscritto si chiede la voce. I nomi di `app_script` nel «ciao» sono tagliati a 40 caratteri e al più 50: un
+nome lungo quanto il taglio, o l'elenco al tetto, valgono «non si sa». Un rifiuto di chi ha il comando diventa la
+stessa risposta del cancello («Questa la confermo solo a voce, con una frase intera.»), con l'azione in sospeso.
+*[storico: dal 29/10 mattina alla revisione della PR #309 un elenco di esclusioni (script e interpreti) e il
+solo controllo del server sui nomi del «ciao»]* Il perché e le prove: [sicurezza-politica](sicurezza-politica.md).

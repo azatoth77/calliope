@@ -24,8 +24,10 @@ il controllo del server sulle foto e sui PDF che arrivano da `POST /api/studio/p
   ha l'avviso «piccola» (il banco del 28/10: numeri e formule a 640 px si leggono male).
 - **I PDF** si dividono in pagine con pypdfium2 (già nell'extra `archivio`, con le wheel per
   `win_arm64` e `manylinux aarch64`): al più `studio_pdf_max_pagine` pagine, ognuna disegnata
-  col lato lungo `studio_pagina_lato`. Il PDF originale resta accanto alle pagine, per la
-  lettura del testo senza OCR (passo 4.3). Il testo **non** si legge qui.
+  col lato lungo `studio_pagina_lato`, in un sottoprocesso con un tetto di tempo per pagina
+  (`dividi_pdf_a_parte`, revisione della PR #312). Accanto alle pagine resta una copia del PDF
+  rifatta con le sole pagine, senza i metadati del file arrivato, per la lettura del testo senza
+  OCR (passo 4.3). Il testo **non** si legge qui.
 - **I file** stanno in `studio_cartella/pagine/<id della verifica>/`, col nome scelto dal
   server (`scrivi_file`): nessun nome della persona arriva al disco; il percorso si controlla
   quando si scrive (niente `..`, niente link fuori dalla cartella), e il file si crea solo se non
@@ -453,25 +455,41 @@ def e_pdf(dati: bytes) -> bool:
 def dividi_pdf(dati: bytes, lato: int = 1600, max_pagine: int = 40,
                soglia_nitidezza: float = 60.0) -> list[Pronta]:
     """Le pagine di un PDF disegnate col lato lungo `lato`, al più `max_pagine` (oltre: rifiuto,
-    non un taglio silenzioso). Solleva PaginaNonValida."""
+    non un taglio silenzioso). Solleva PaginaNonValida. Nel processo che chiama: il server usa
+    `dividi_pdf_a_parte`, in un sottoprocesso con un tetto di tempo per pagina."""
+    return _dividi(dati, lato, max_pagine, soglia_nitidezza)[0]
+
+
+def _apri_pdf(dati: bytes):
     try:
         import pypdfium2 as pdfium
     except ImportError:
         raise PaginaNonValida("qui non so aprire i PDF (manca pypdfium2)") from None
     try:
-        pdf = pdfium.PdfDocument(dati)
+        return pdfium, pdfium.PdfDocument(dati)
     except pdfium.PdfiumError as e:
         if "password" in str(e).lower():
             raise PaginaNonValida("il PDF è protetto da una password") from None
         raise PaginaNonValida("il PDF è rovinato") from None
     except Exception:  # noqa: BLE001 - un file ostile non deve far cadere nulla
         raise PaginaNonValida("il PDF è rovinato") from None
+
+
+def _dividi(dati: bytes, lato: int, max_pagine: int, soglia_nitidezza: float,
+            avanti=None) -> tuple[list[Pronta], bytes | None]:
+    """(pagine, PDF pulito). Il PDF pulito ha le sole pagine, rifatte in un documento nuovo
+    (`import_pages`): senza il dizionario Info né i metadati XMP del file arrivato (autore,
+    programma, date), ma col testo delle pagine per la lettura del passo 4.3. `avanti(i, n)` dopo
+    l'apertura (i = -1) e dopo ogni pagina: il sottoprocesso lo dice al server."""
+    pdfium, pdf = _apri_pdf(dati)
     try:
         n = len(pdf)
         if n < 1:
             raise PaginaNonValida("il PDF non ha pagine")
         if n > max_pagine:
             raise PaginaNonValida(f"il PDF ha {n} pagine: al più {max_pagine}")
+        if avanti:
+            avanti(-1, n)
         out = []
         for i in range(n):
             pagina = pdf[i]
@@ -490,9 +508,115 @@ def dividi_pdf(dati: bytes, lato: int = 1600, max_pagine: int = 40,
             nit = nitidezza(img)
             out.append(Pronta(_jpeg(img), img.width, img.height, "pdf", None,
                               _avvisi(img, nit, soglia_nitidezza), round(nit, 1)))
-        return out
+            if avanti:
+                avanti(i, n)
+        pulito = None
+        try:
+            nuovo = pdfium.PdfDocument.new()
+            try:
+                nuovo.import_pages(pdf)
+                buf = io.BytesIO()
+                nuovo.save(buf)
+                pulito = buf.getvalue()
+            finally:
+                nuovo.close()
+        except Exception:  # noqa: BLE001 — senza la copia pulita non si tiene niente
+            pulito = None
+        return out, pulito
     finally:
         pdf.close()
+
+
+# Il tetto di tempo per aprire il PDF e per ogni pagina, nel sottoprocesso (revisione della PR
+# #312: una pagina vettoriale pesantissima non deve tenere occupato il server)
+PDF_TEMPO_PAGINA_S = 10.0
+
+
+async def dividi_pdf_a_parte(dati: bytes, lato: int = 1600, max_pagine: int = 40,
+                             soglia_nitidezza: float = 60.0,
+                             tempo_pagina_s: float = PDF_TEMPO_PAGINA_S):
+    """`_dividi` in un sottoprocesso (`python -m calliope.studio.pagine --pdf`), con al più
+    `tempo_pagina_s` per aprire il PDF e per ogni pagina: oltre, il processo si ferma e il PDF è
+    rifiutato. Nessun thread del server occupato: il processo si aspetta con asyncio. Le pagine
+    passano da una cartella temporanea, tolta subito dopo. (pagine, PDF pulito o None).
+    Solleva PaginaNonValida."""
+    import asyncio
+    import json
+    import shutil
+    import sys
+    import tempfile
+    cartella = Path(tempfile.mkdtemp(prefix="calliope-studio-pdf-"))
+    radice = Path(__file__).resolve().parent.parent.parent
+    proc = None
+    try:
+        (cartella / "ingresso.pdf").write_bytes(dati)
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "-m", "calliope.studio.pagine", "--pdf", str(cartella),
+            str(int(lato)), str(int(max_pagine)), str(float(soglia_nitidezza)), cwd=str(radice),
+            stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL)
+        n, fatte = None, 0
+        while True:
+            try:
+                riga = await asyncio.wait_for(proc.stdout.readline(), tempo_pagina_s)
+            except asyncio.TimeoutError:
+                raise PaginaNonValida("il PDF è troppo pesante da dividere" + (
+                    f" (pagina {fatte + 1})" if n else "")) from None
+            t = riga.decode("utf-8", "replace").strip()
+            if not t:
+                raise PaginaNonValida("il PDF non si divide")
+            if t.startswith("errore "):
+                raise PaginaNonValida(t[len("errore "):][:200])
+            if t.startswith("pagine "):
+                n = int(t.split()[1])
+            elif t.startswith("pagina "):
+                fatte += 1
+            elif t == "fine":
+                break
+        await asyncio.wait_for(proc.wait(), tempo_pagina_s)
+        meta = json.loads((cartella / "pagine.json").read_text(encoding="utf-8"))
+        out = [Pronta((cartella / f"p{i}.jpg").read_bytes(), m["larghezza"], m["altezza"],
+                      "pdf", None, list(m["avvisi"]), float(m["nitidezza"]))
+               for i, m in enumerate(meta)]
+        f = cartella / "pulito.pdf"
+        return out, (f.read_bytes() if f.exists() else None)
+    finally:
+        if proc is not None and proc.returncode is None:
+            try:
+                proc.kill()
+                await proc.wait()
+            except (ProcessLookupError, OSError):
+                pass
+        shutil.rmtree(cartella, ignore_errors=True)
+
+
+def _figlio_pdf(argv) -> int:
+    """Il sottoprocesso di `dividi_pdf_a_parte`: legge `ingresso.pdf`, scrive le pagine e il PDF
+    pulito nella stessa cartella, e dice ogni passo con una riga su stdout."""
+    import json
+    cartella, lato, max_pagine, soglia = Path(argv[0]), int(argv[1]), int(argv[2]), float(argv[3])
+
+    def avanti(i, n):
+        print(f"pagine {n}" if i < 0 else f"pagina {i + 1}", flush=True)
+    try:
+        pronte, pulito = _dividi((cartella / "ingresso.pdf").read_bytes(), lato, max_pagine,
+                                 soglia, avanti)
+    except PaginaNonValida as e:
+        print("errore " + " ".join(str(e).split()), flush=True)
+        return 2
+    except Exception as e:  # noqa: BLE001
+        print(f"errore il PDF non si divide ({type(e).__name__})", flush=True)
+        return 2
+    meta = []
+    for i, p in enumerate(pronte):
+        (cartella / f"p{i}.jpg").write_bytes(p.jpeg)
+        meta.append({"larghezza": p.larghezza, "altezza": p.altezza, "avvisi": p.avvisi,
+                     "nitidezza": p.nitidezza})
+    if pulito:
+        (cartella / "pulito.pdf").write_bytes(pulito)
+    (cartella / "pagine.json").write_text(json.dumps(meta), encoding="utf-8")
+    print("fine", flush=True)
+    return 0
 
 
 # ─────────────────────────── file su disco ───────────────────────────
@@ -519,3 +643,10 @@ def scrivi_file(cartella, verifica: int, dati: bytes, estensione: str) -> str:
     with open(reale / dest.name, "xb") as f:
         f.write(dati)
     return rel
+
+
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) == 6 and sys.argv[1] == "--pdf":
+        sys.exit(_figlio_pdf(sys.argv[2:]))
+    sys.exit(2)
