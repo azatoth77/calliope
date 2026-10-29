@@ -214,6 +214,8 @@ TROPPE_PAGINE = "Troppe pagine in poco tempo: aspetta un momento."
 # secondi; un invio vero si legge al più per tanti (15 MB in 2 minuti: ~1 Mbit/s)
 STUDIO_SCARTA_S = 12.0
 STUDIO_LEGGI_S = 120.0
+# PDF divisi insieme al più (ognuno è un sottoprocesso; seconda revisione della PR #312)
+STUDIO_PDF_INSIEME = 1
 
 
 def crea_app(hub: Schermi) -> Starlette:
@@ -1174,6 +1176,8 @@ def crea_app(hub: Schermi) -> Starlette:
 
     # ── lo Studio: le pagine dei materiali (29/10, passo 4.2, #281, calliope/studio/pagine.py) ──
     invii_studio: dict[int, list[float]] = {}
+    # I PDF che si stanno dividendo adesso (tutto nel ciclo di uvicorn: un contatore basta)
+    pdf_in_corso = [0]
     letture_studio: dict[int, list[float]] = {}
 
     def studio_di(schermo: dict):
@@ -1343,7 +1347,19 @@ def crea_app(hub: Schermi) -> Starlette:
                               massimo - v["n_pagine"])
                 # In un sottoprocesso con un tetto di tempo per pagina (revisione della PR
                 # #312); si tiene la copia rifatta senza i metadati, non il file arrivato
-                pronte, originale = await PG.dividi_pdf_a_parte(dati, lato, max_pag, soglia)
+                # Al più STUDIO_PDF_INSIEME divisioni insieme (seconda revisione della PR #312:
+                # dieci PDF insieme erano 20 processi e più di un GB); oltre, 429
+                if pdf_in_corso[0] >= STUDIO_PDF_INSIEME:
+                    return _json({"errore": "Sto già dividendo un PDF: riprova fra poco.",
+                                  "riprova_s": 5}, 429, {"Retry-After": "5"})
+                pdf_in_corso[0] += 1
+                try:
+                    from ..studio.dati import cartella_di, cartella_provvisori
+                    pronte, originale = await PG.dividi_pdf_a_parte(
+                        dati, lato, max_pag, soglia,
+                        provvisori=cartella_provvisori(cartella_di(hub.cfg)))
+                finally:
+                    pdf_in_corso[0] -= 1
                 origine = "file"
             elif tipo_dai_byte(dati) in ("jpeg", "png", "webp"):
                 if len(dati) > int(mb_foto * 1_000_000):

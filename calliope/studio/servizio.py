@@ -165,6 +165,11 @@ class Studio:
         # L'orologio (le prove lo fingono)
         self.adesso = adesso or datetime.datetime.now
         self.dati = D.Dati(cfg.memory_db)
+        # All'avvio nessun PDF si sta dividendo: via i provvisori di un crollo (PR #312)
+        try:
+            D.togli_provvisori(D.cartella_di(cfg))
+        except OSError:
+            pass
         # Le misure dell'ombra (e dell'attivo): solo conti, niente nomi né titoli
         self.misure = {"verifiche_create": 0, "piani": 0, "giorni_nei_piani": 0,
                        "pagine_nei_piani": 0, "giorni_oltre": 0, "avvisi": {}, "errori": 0,

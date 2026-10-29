@@ -65,6 +65,11 @@ CARTELLA_PAGINE = "pagine"
 # Un file senza riga si toglie nella rotazione solo dopo un giorno (un invio in corso ha il file
 # scritto un attimo prima della riga)
 ORFANI_DOPO_S = 86400.0
+# I provvisori della divisione dei PDF (seconda revisione della PR #312): dentro la cartella
+# dello Studio, non nella cartella temporanea di sistema; tolti dopo la divisione, all'avvio dello
+# Studio e, se un crollo li ha lasciati, dalla rotazione dopo un'ora
+CARTELLA_PROVVISORI = "tmp"
+PROVVISORI_DOPO_S = 3600.0
 STATI_ARGOMENTO = ("proposto", "tenuto", "tolto", "aggiunto")
 # Gli argomenti su cui si fa il piano
 ARGOMENTI_DEL_PIANO = ("tenuto", "aggiunto")
@@ -373,6 +378,15 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
     if tutto and cartella:
         # «svuota» di tutti: anche i file rimasti senza riga (un invio a metà)
         out["file"] += togli_orfani(cartella)
+        togli_provvisori(cartella)
+    elif scadute_prima is not None and cartella:
+        # La rotazione: anche i provvisori della divisione dei PDF rimasti da un crollo
+        out["provvisori"] = togli_provvisori(cartella, PROVVISORI_DOPO_S)
+    if scadute_prima is not None and cartella and versione_schema(db) > len(MIGRAZIONI):
+        # Uno schema dello Studio più nuovo di questa versione (seconda revisione della PR #312):
+        # i file li possono citare tabelle o colonne che qui non si conoscono, quindi nessun
+        # orfano si toglie (sola lettura, come prepara_schema)
+        out["orfani_saltati"] = True
     elif scadute_prima is not None and cartella:
         # La rotazione: anche i file che nessuna riga cita, vecchi di più di un giorno
         conosciuti = {r[0] for r in db.execute(
@@ -383,6 +397,46 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
         out["orfani"] = togli_orfani(cartella, conosciuti, ORFANI_DOPO_S)
         out["file"] += out["orfani"]
     return out
+
+
+def versione_schema(db: sqlite3.Connection) -> int:
+    """La versione dello schema «studio» scritta in `meta_schema` (0 se non c'è)."""
+    try:
+        r = db.execute("SELECT versione FROM meta_schema WHERE modulo = ?", (MODULO,)).fetchone()
+    except sqlite3.Error:
+        return 0
+    return int(r[0]) if r else 0
+
+
+def cartella_provvisori(cartella) -> Path | None:
+    """`cartella/tmp`: dove il sottoprocesso divide un PDF (pagine.dividi_pdf_a_parte)."""
+    return Path(cartella) / CARTELLA_PROVVISORI if cartella else None
+
+
+def togli_provvisori(cartella, piu_vecchi_di_s: float = 0.0) -> int:
+    """Le cartelle sotto `cartella/tmp` più vecchie di `piu_vecchi_di_s` (0: tutte, all'avvio
+    dello Studio): ciò che resta di una divisione interrotta da un crollo. Mai seguendo un link."""
+    import shutil
+    import time
+    tmp = cartella_provvisori(cartella)
+    if tmp is None or tmp.is_symlink() or not tmp.is_dir():
+        return 0
+    base = Path(cartella).resolve()
+    n = 0
+    for d in tmp.iterdir():
+        try:
+            if d.is_symlink() or base not in d.resolve().parents:
+                continue
+            if piu_vecchi_di_s and time.time() - d.stat().st_mtime < piu_vecchi_di_s:
+                continue
+            if d.is_dir():
+                shutil.rmtree(d, ignore_errors=True)
+            else:
+                d.unlink()
+            n += 1
+        except OSError:
+            continue
+    return n
 
 
 def cancella_file(path, log=print, **kw) -> dict:

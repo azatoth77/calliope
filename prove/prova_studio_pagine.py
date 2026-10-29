@@ -326,7 +326,11 @@ def prova_pdf():
         verifica(f"PDF {nome}: rifiutato con un motivo", esito != "accettato"
                  and not esito.startswith("ECCEZIONE") and attesa in esito, esito)
     import asyncio
-    out, pulito = asyncio.run(PG.dividi_pdf_a_parte(pdf_di(2, autore=True), 1600, 40, 150))
+    provv = TMP / "studio-provv" / "tmp"
+    out, pulito = asyncio.run(PG.dividi_pdf_a_parte(pdf_di(2, autore=True), 1600, 40, 150,
+                                                    provvisori=provv))
+    verifica("PDF nel sottoprocesso: i provvisori in studio_cartella/tmp, tolti dopo la divisione",
+             provv.is_dir() and not any(provv.iterdir()))
     verifica("PDF nel sottoprocesso: due pagine e la copia pulita (senza l'autore)",
              len(out) == 2 and max(out[0].larghezza, out[0].altezza) == 1600
              and pulito and pulito.startswith(b"%PDF-") and autore_pdf(pulito) == ""
@@ -697,6 +701,9 @@ def prova_server():
                      tenuto.startswith(b"%PDF-") and autore_pdf(tenuto) == ""
                      and autore_pdf(pdf_di(1, autore=True)) == "Mario Segreto", autore_pdf(tenuto))
 
+        if pdf:
+            prova_pdf_insieme(port, sess, vid)
+
         # Pagine per verifica e invii al minuto
         cfg.studio_pagine_max = len(st.pagine(LEO, vid)) + 1
         s, d = chiedi(port, "/api/studio/pagina", sess["leo"], byte=foto_b, meta={"verifica": vid})
@@ -896,6 +903,104 @@ def prova_dos(port, sess, vid, foto_b):
         SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S = prima_s, prima_l
 
 
+def prova_pdf_insieme(port, sess, vid):
+    """Al più un PDF diviso alla volta (seconda revisione della PR #312): con una divisione lenta
+    in corso, il secondo PDF riceve 429 con Retry-After; finita la prima, si riprova e va."""
+    import threading
+    try:
+        import pypdfium2  # noqa: F401
+    except ImportError:
+        print("SALTATA IN PARTE: i PDF insieme, pypdfium2 non c'è (extra «archivio»)")
+        return
+    vero = PG.dividi_pdf_a_parte
+    entrato = threading.Event()
+
+    async def lento(*a, **k):
+        import asyncio
+        entrato.set()
+        await asyncio.sleep(2.0)
+        return await vero(*a, **k)
+    PG.dividi_pdf_a_parte = lento
+    esiti = {}
+    try:
+        t = threading.Thread(target=lambda: esiti.__setitem__("primo", chiedi(
+            port, "/api/studio/pagina", sess["andrea"], byte=pdf_di(1), meta={"verifica": vid})))
+        t.start()
+        entrato.wait(20)
+        import http.client
+        b = pdf_di(1)
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=20)
+        c.request("POST", "/api/studio/pagina", body=b, headers={
+            "Content-Type": "application/octet-stream", "X-Calliope-Sessione": sess["leo"],
+            "X-Calliope-Studio": quote(json.dumps({"verifica": vid}))})
+        r = c.getresponse()
+        secondo = (r.status, r.getheader("Retry-After"), json.loads(r.read() or b"{}"))
+        c.close()
+        t.join(30)
+    finally:
+        PG.dividi_pdf_a_parte = vero
+    verifica("PDF insieme: con una divisione in corso il secondo PDF → 429 «riprova fra poco» con Retry-After",
+             secondo[0] == 429 and secondo[1] and "riprova" in secondo[2].get("errore", ""), str(secondo))
+    verifica("PDF insieme: il primo finisce bene", (esiti.get("primo") or (0,))[0] == 200, str(esiti)[:200])
+    s, d = chiedi(port, "/api/studio/pagina", sess["leo"], byte=pdf_di(1), meta={"verifica": vid})
+    verifica("PDF insieme: finita la prima divisione il secondo passa", s == 200, f"{s} {d}")
+
+
+def prova_orfani_schema_nuovo():
+    """Seconda revisione della PR #312: con lo schema «studio» di una versione più nuova la
+    rotazione non toglie orfani (un file citato solo da una tabella della v3 resta); con lo schema
+    di questa versione sì. I provvisori di un crollo vanno via (rotazione dopo un'ora, avvio)."""
+    import sqlite3
+    db_path = TMP / "schema-nuovo" / "memoria.db"
+    db_path.parent.mkdir()
+    c = Config()
+    c.memory_db = str(db_path)
+    c.studio_modo = "ombra"
+    c.studio_cartella = "studio"
+    st = S.Studio(c, registry=REG, log=lambda m: None)
+    vid = st.crea_verifica(BRUNO, "Storia", "2026-11-20")
+    mid = st.aggiungi_materiale(BRUNO, vid, "foto")
+    st.aggiungi_pagina(BRUNO, mid, file="pagine/1/citata.jpg", stato="da_leggere")
+    st.close()
+    base = D.cartella_di(c)
+    (base / "pagine" / "1").mkdir(parents=True)
+    file = {n: base / "pagine" / "1" / f"{n}.jpg" for n in ("citata", "della_v3", "orfano")}
+    vecchio = time.time() - 2 * 86400
+    for f in file.values():
+        f.write_bytes(b"x")
+        os.utime(f, (vecchio, vecchio))
+    db = sqlite3.connect(db_path)
+    db.execute("CREATE TABLE studio_carte_v3 (id INTEGER PRIMARY KEY, file TEXT)")
+    db.execute("INSERT INTO studio_carte_v3 (file) VALUES ('pagine/1/della_v3.jpg')")
+    db.execute("UPDATE meta_schema SET versione = 3 WHERE modulo = 'studio'")
+    db.commit()
+    db.close()
+    oggi = datetime.date(2026, 10, 30)
+    out = D.cancella_file(str(db_path), scadute_prima=oggi, cartella="studio")
+    verifica("orfani: con lo schema v3 la rotazione non toglie niente (il file della tabella nuova resta)",
+             all(f.exists() for f in file.values()) and out.get("orfani_saltati") is True, str(out))
+    db = sqlite3.connect(db_path)
+    db.execute("UPDATE meta_schema SET versione = ? WHERE modulo = 'studio'", (len(D.MIGRAZIONI),))
+    db.commit()
+    db.close()
+    out = D.cancella_file(str(db_path), scadute_prima=oggi, cartella="studio")
+    verifica("orfani: contrario, con lo schema di questa versione via i file che nessuna riga cita",
+             file["citata"].exists() and not file["orfano"].exists() and not file["della_v3"].exists()
+             and out.get("orfani") == 2, str(out))
+    # I provvisori: uno vecchio di due ore via con la rotazione, uno recente resta; all'avvio tutti
+    tmp = D.cartella_provvisori(base)
+    for n in ("pdf-vecchio", "pdf-recente"):
+        (tmp / n).mkdir(parents=True)
+        (tmp / n / "p0.jpg").write_bytes(b"x")
+    due_ore = time.time() - 7200
+    os.utime(tmp / "pdf-vecchio", (due_ore, due_ore))
+    D.cancella_file(str(db_path), scadute_prima=oggi, cartella="studio")
+    verifica("provvisori: la rotazione toglie quelli di un crollo (più di un'ora), non quelli in corso",
+             not (tmp / "pdf-vecchio").exists() and (tmp / "pdf-recente").exists())
+    S.Studio(c, registry=REG, log=lambda m: None).close()
+    verifica("provvisori: all'avvio dello Studio via tutti", tmp.is_dir() and not any(tmp.iterdir()))
+
+
 def prova_schema():
     c = Config()
     c.memory_db = str(TMP / "schema.db")
@@ -923,6 +1028,7 @@ def main() -> int:
         prova_pdf()
         prova_ostili()
         prova_server()
+        prova_orfani_schema_nuovo()
         print(f"({time.monotonic() - t0:.1f} s)")
     finally:
         shutil.rmtree(TMP, ignore_errors=True)

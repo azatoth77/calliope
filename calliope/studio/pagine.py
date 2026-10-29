@@ -530,11 +530,15 @@ def _dividi(dati: bytes, lato: int, max_pagine: int, soglia_nitidezza: float,
 # Il tetto di tempo per aprire il PDF e per ogni pagina, nel sottoprocesso (revisione della PR
 # #312: una pagina vettoriale pesantissima non deve tenere occupato il server)
 PDF_TEMPO_PAGINA_S = 10.0
+# L'avvio del sottoprocesso (Python e gli import di numpy, Pillow e pypdfium2), a parte: su una
+# macchina carica o a freddo può volere più di una pagina (seconda revisione della PR #312)
+PDF_TEMPO_AVVIO_S = 30.0
 
 
 async def dividi_pdf_a_parte(dati: bytes, lato: int = 1600, max_pagine: int = 40,
                              soglia_nitidezza: float = 60.0,
-                             tempo_pagina_s: float = PDF_TEMPO_PAGINA_S):
+                             tempo_pagina_s: float = PDF_TEMPO_PAGINA_S,
+                             provvisori=None, tempo_avvio_s: float = PDF_TEMPO_AVVIO_S):
     """`_dividi` in un sottoprocesso (`python -m calliope.studio.pagine --pdf`), con al più
     `tempo_pagina_s` per aprire il PDF e per ogni pagina: oltre, il processo si ferma e il PDF è
     rifiutato. Nessun thread del server occupato: il processo si aspetta con asyncio. Le pagine
@@ -545,7 +549,11 @@ async def dividi_pdf_a_parte(dati: bytes, lato: int = 1600, max_pagine: int = 40
     import shutil
     import sys
     import tempfile
-    cartella = Path(tempfile.mkdtemp(prefix="calliope-studio-pdf-"))
+    # Dentro la cartella dello Studio (`provvisori`, studio_cartella/tmp), che la rotazione e
+    # l'avvio puliscono: pagine di quaderni non restano nella cartella di sistema dopo un crollo
+    if provvisori is not None:
+        Path(provvisori).mkdir(parents=True, exist_ok=True)
+    cartella = Path(tempfile.mkdtemp(prefix="pdf-", dir=str(provvisori) if provvisori else None))
     radice = Path(__file__).resolve().parent.parent.parent
     proc = None
     try:
@@ -555,10 +563,13 @@ async def dividi_pdf_a_parte(dati: bytes, lato: int = 1600, max_pagine: int = 40
             str(int(lato)), str(int(max_pagine)), str(float(soglia_nitidezza)), cwd=str(radice),
             stdin=asyncio.subprocess.DEVNULL, stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.DEVNULL)
-        n, fatte = None, 0
+        n, fatte, pronto = None, 0, False
         while True:
             try:
-                riga = await asyncio.wait_for(proc.stdout.readline(), tempo_pagina_s)
+                # La prima riga («pronto») dopo l'avvio di Python e gli import: un tempo suo, più
+                # largo; poi `tempo_pagina_s` per aprire il PDF e per ogni pagina
+                riga = await asyncio.wait_for(proc.stdout.readline(),
+                                              tempo_pagina_s if pronto else tempo_avvio_s)
             except asyncio.TimeoutError:
                 raise PaginaNonValida("il PDF è troppo pesante da dividere" + (
                     f" (pagina {fatte + 1})" if n else "")) from None
@@ -567,7 +578,9 @@ async def dividi_pdf_a_parte(dati: bytes, lato: int = 1600, max_pagine: int = 40
                 raise PaginaNonValida("il PDF non si divide")
             if t.startswith("errore "):
                 raise PaginaNonValida(t[len("errore "):][:200])
-            if t.startswith("pagine "):
+            if t == "pronto":
+                pronto = True
+            elif t.startswith("pagine "):
                 n = int(t.split()[1])
             elif t.startswith("pagina "):
                 fatte += 1
@@ -598,6 +611,14 @@ def _figlio_pdf(argv) -> int:
 
     def avanti(i, n):
         print(f"pagine {n}" if i < 0 else f"pagina {i + 1}", flush=True)
+    # Gli import prima di «pronto»: il tempo d'avvio non conta per la prima pagina
+    try:
+        import numpy  # noqa: F401
+        import PIL.Image  # noqa: F401
+        import pypdfium2  # noqa: F401
+    except ImportError:
+        pass
+    print("pronto", flush=True)
     try:
         pronte, pulito = _dividi((cartella / "ingresso.pdf").read_bytes(), lato, max_pagine,
                                  soglia, avanti)

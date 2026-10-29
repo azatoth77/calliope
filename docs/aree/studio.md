@@ -182,6 +182,27 @@ prima della verifica; il PDF nel sottoprocesso (pagine, copia senza l'autore, il
 superato, il malformato); la copia tenuta sul server senza i metadati; la rotazione che toglie
 l'orfano di due giorni e lascia quello appena scritto.
 
+### 30/10: seconda revisione della PR #312
+
+- **Gli orfani con uno schema più nuovo.** La rotazione decideva «orfano» guardando solo le
+  colonne di questa versione; con lo schema «studio» di una versione più nuova (un ritorno con
+  `calliope torna` senza i dati) avrebbe tolto file validi, citati da tabelle che qui non si
+  conoscono. Ora, se la versione in `meta_schema` è più alta di `len(MIGRAZIONI)`, la pulizia
+  degli orfani si salta (`dati.versione_schema`), come la sola lettura di `prepara_schema`.
+- **Un PDF alla volta** (`STUDIO_PDF_INSIEME`, 1): dieci PDF insieme erano 20 processi e più di un
+  GB nei figli. Oltre, 429 «Sto già dividendo un PDF: riprova fra poco.» con `Retry-After`.
+- **I provvisori della divisione** stanno in `studio_cartella/tmp/`, non nella cartella di sistema:
+  tolti dopo ogni divisione, all'avvio dello Studio e, se un crollo li ha lasciati, dalla rotazione
+  dopo un'ora (`dati.togli_provvisori`).
+- **L'avvio del sottoprocesso ha un tempo suo** (`PDF_TEMPO_AVVIO_S`, 30 s): il figlio dice
+  «pronto» dopo gli import di numpy, Pillow e pypdfium2, e solo da lì valgono i 10 s per aprire il
+  PDF e per ogni pagina.
+- **Per il 4.3 (e i passi dopo): ogni file scritto sotto `studio_cartella/pagine/` deve avere la
+  sua riga** (`studio_pagine.file`, o `studio_materiali.riferimento` «file:…») nella stessa
+  transazione, o subito dopo: un file senza riga è un orfano e la rotazione lo toglie dopo un
+  giorno. Se una tabella nuova cita dei file, la sua colonna va aggiunta ai `conosciuti` di
+  `dati.cancella` (e lo schema sale di versione).
+
 ## Banco dello Studio: dai materiali alla verifica, con qwen3.6 (28/10, issue #293, ramo `issue-293-banco-studio`)
 
 *Epic #251, passo 4 (#243): misura del modello e del metodo **prima** di scrivere 4.3 (lettura) e
