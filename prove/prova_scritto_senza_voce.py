@@ -228,22 +228,54 @@ def main() -> int:
         def per_pc(self):
             return self.c
 
-    def remoto(esec):
+    lungo = "pulizia settimanale dei file temporanei del pc"     # 47 caratteri: il «ciao» lo taglia
+
+    def remoto(esec, catalogo=("calcolatrice", "backup")):
         return types.SimpleNamespace(speaker_ctx=types.SimpleNamespace(identified_by="schermo"), regole=[],
                                      pc={"portatile": RemotePCExecutor(_Server(esec), "portatile",
-                                                                       ["calcolatrice", "backup"])})
-    nuovo = {"capacita": ["app"], "app": ["calcolatrice", "backup"], "app_script": ["backup"]}
-    vecchio = {"capacita": ["app"], "app": ["calcolatrice", "backup"]}
+                                                                       list(catalogo))})
+    from calliope.satellite.server import pulisci_esecutore
+    nuovo = pulisci_esecutore({"capacita": ["app"], "app": ["calcolatrice", "backup"], "app_script": ["backup"],
+                               "avvia_scritto": True})
+    # app_script senza il segno (un satellite che non sa rifiutare lui): non si sa
+    senza_segno = pulisci_esecutore({"capacita": ["app"], "app": ["calcolatrice", "backup"], "app_script": []})
+    vecchio = pulisci_esecutore({"capacita": ["app"], "app": ["calcolatrice", "backup"]})
     verifica("satellite: lo script dichiarato nel «ciao» per iscritto solo a voce, l'app vera passa",
              g(remoto(nuovo), "pc_apri_app", {"app": "backup"}) is not None
              and g(remoto(nuovo), "pc_apri_app", {"app": "calcolatrice"}) is None)
-    verifica("contrario: un satellite di prima (senza app_script) o scollegato: nel dubbio a voce",
+    verifica("contrario: un satellite di prima (senza app_script né avvia_scritto) o scollegato: nel dubbio a voce",
              g(remoto(vecchio), "pc_apri_app", {"app": "calcolatrice"}) is not None
              and g(remoto(None), "pc_apri_app", {"app": "calcolatrice"}) is not None)
-    from calliope.satellite.server import pulisci_esecutore
-    verifica("pulisci_esecutore: app_script tenuto se c'è, assente se il satellite non lo dice",
-             pulisci_esecutore(nuovo).get("app_script") == ["backup"]
-             and "app_script" not in pulisci_esecutore(vecchio))
+    verifica("contrario: un satellite che non conosce il segno scritto, anche con app_script vuoto: a voce",
+             g(remoto(senza_segno), "pc_apri_app", {"app": "calcolatrice"}) is not None)
+    tagliato = pulisci_esecutore({"capacita": ["app"], "app": ["calcolatrice", lungo], "app_script": [lungo],
+                                  "avvia_scritto": True})
+    verifica("contrario: uno script col nome più lungo del taglio del «ciao»: non si sa, a voce (revisione della PR #309)",
+             tagliato["app_script"] != [lungo]
+             and g(remoto(tagliato, ("calcolatrice", lungo)), "pc_apri_app", {"app": lungo}) is not None)
+    pieno = pulisci_esecutore({"capacita": ["app"], "app": ["calcolatrice"],
+                               "app_script": [f"script {i}" for i in range(80)], "avvia_scritto": True})
+    verifica("contrario: l'elenco degli script al tetto: un'app che non c'è dentro non si sa, a voce",
+             len(pieno["app_script"]) == 50
+             and g(remoto(pieno, ("calcolatrice", "script 79")), "pc_apri_app", {"app": "script 79"}) is not None)
+    verifica("pulisci_esecutore: app_script e avvia_scritto tenuti se ci sono, assenti se il satellite non li dice",
+             nuovo.get("app_script") == ["backup"] and nuovo.get("avvia_scritto") is True
+             and "app_script" not in vecchio and "avvia_scritto" not in vecchio)
+    # Il tool per iscritto con l'app vera: passa il cancello, e se il satellite rifiuta (serve_voce)
+    # la risposta è la stessa del cancello, con l'azione in sospeso per la voce
+    from calliope.tools.pc import _pc_apri_app
+
+    class _Rifiuta(FakePC):
+        def apri_app(self, app, scritto=False):
+            return {"ok": False, "errore": "per iscritto no", "serve_voce": True} if scritto else super().apri_app(app)
+    rif = _Rifiuta()
+    rctx = types.SimpleNamespace(speaker_ctx=types.SimpleNamespace(identified_by="schermo"), regole=[],
+                                 pc={"portatile": rif})
+    out = _pc_apri_app(rctx, "calcolatrice")
+    verifica("il rifiuto di chi ha il comando (serve_voce) diventa «solo a voce» con l'azione in sospeso",
+             out.get("ok") is False and out.get("conferma") == SCRITTO_IRREVERSIBILE
+             and (out.get("in_sospeso") or {}).get("tool") == "pc_apri_app"
+             and "scritto_irreversibile_voce" in rctx.regole and not rif.azioni, out)
     verifica("contrario: programma_esegui, lavoro_affida con codice e un'estensione senza effetto, solo a voce",
              g(scr_ctx, "programma_esegui", {}) is not None
              and g(scr_ctx, "lavoro_affida", {"tipo": "codice", "compito": "x"}) is not None

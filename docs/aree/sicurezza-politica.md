@@ -2011,7 +2011,7 @@ toccato no, tieni e ancora sì, a voce sì; «Elimina il file di ieri» scritto 
 
 Note non bloccanti della revisione della PR #306, chiuse.
 
-- **Gli script del catalogo `pc_app` non passano per iscritto.** L'eccezione di `pc_apri_app` («si chiude
+- **Gli script del catalogo `pc_app` non passano per iscritto.** *[storico: la regola qui sotto, un elenco di esclusioni, vale fino alla revisione della PR #309; ora è un elenco di ammessi, in fondo alla sezione]* L'eccezione di `pc_apri_app` («si chiude
   subito, non cancella e non manda niente») vale per un programma, non per uno script: chi installa può mettere
   nel catalogo un `.bat`, un `.ps1` o un comando che apre un interprete, e quello fa ciò che ha dentro, come
   eseguire codice. `pc/base.e_script` riconosce le estensioni di script (`.bat`, `.cmd`, `.ps1`, `.vbs`, `.js`,
@@ -2038,4 +2038,21 @@ voce si apre); `prova_scritto_senza_voce` (l'app vera passa, lo script e l'inter
 il satellite che dichiara `app_script`, quello di prima e quello scollegato; `pulisci_esecutore`);
 `prova_valore` (ogni alias di elimina della mappa è E3, gli altri E2, un alias aggiunto è subito E3);
 `prova_cassetto` (`da_pagina` rifiuta elimina, cancella e butta anche al proprietario; `/api/cassetto` 403 su
-cancella e butta); `prova_cassetto_pagina` (un pulsante «elimina» messo a mano non chiama il server).
+cancella e butta); `prova_cassetto_pagina` (un pulsante «elimina» messo a mano non chiama il server).- **Dalla revisione della PR #309.**
+  - *Un elenco di ammessi, non di esclusioni.* Su Windows `_avvia` è ShellExecute: conta l'associazione del
+    tipo, e un elenco di esclusioni lasciava passare `.msi`, `.cpl`, `.scr`, `.jar`, `.url`, `.com`,
+    `backup.bat.`, `x.bat::$DATA`, `git-bash`, `java`, `wmic`, `regedit`, `mmc`, `control`… Per iscritto ora
+    passano solo `browser`, i protocolli noti e i `.exe` senza argomenti che non sono interpreti né strumenti
+    di sistema (`pc/base.ammessa_per_iscritto`, dopo `nome_windows`); un nome senza estensione e `%COMSPEC%`
+    valgono «non si sa». Dettagli e limite (un `.exe` che lancia uno script resta un'app): [pc](pc.md).
+  - *Il controllo lo fa chi ha il comando.* `apri_app(app, scritto=True)` e, sul satellite, l'«avvia» col
+    segno `scritto` rifiutano con `serve_voce`; il tool lo trasforma nella risposta del cancello con l'azione in
+    sospeso (`spec.solo_a_voce`). Il satellite lo dichiara (`avvia_scritto`): senza, «non si sa». Un nome di
+    `app_script` lungo quanto il taglio del «ciao» o l'elenco al tetto: «non si sa».
+  - *La terza copia degli alias* (`distruttiva` di `cassetto_gestisci`) ora si costruisce da `cassetto.AZIONI`.
+
+  Prove: `prova_pc` (tutti i casi della revisione, coi nomi normalizzati, e le voci di serie ammesse;
+  l'esecutore che rifiuta col segno), `prova_esecutore` (il satellite vero che rifiuta l'«avvia» scritto di uno
+  script anche se il «ciao» non lo dice, l'app vera che si apre), `prova_scritto_senza_voce` (il satellite senza
+  il segno, il nome tagliato, l'elenco al tetto, il rifiuto che diventa «solo a voce»), `prova_valore` (le
+  distruttive del cassetto sono gli alias della mappa).

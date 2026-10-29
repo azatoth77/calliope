@@ -554,8 +554,9 @@ def _scrivi_guida(ctx: ToolContext, diag: dict, formato: str) -> tuple[str, dict
     if prof is None or not getattr(prof, "id", None):
         # Senza una persona riconosciuta la guida non si scrive (29/10, #287): il proprietario
         # di ripiego «amministra» sarebbe finito nell'archivio dei documenti come una persona,
-        # e la pagina Documenti non l'avrebbe mostrata a nessuno. Con i livelli di oggi non
-        # succede (la guida scritta è di chi amministra, che ha sempre un profilo)
+        # e la pagina Documenti non l'avrebbe mostrata a nessuno. Con i livelli di oggi succede
+        # solo se il profilo sparisce a metà sessione: casa_integrazione è dei familiari e di chi
+        # amministra, che hanno sempre chi parla (anche nella zona grigia)
         return ("Non so a chi dare la guida scritta, quindi te lo dico a voce: " +
                 diag["prossimo_passo"]), None
     try:

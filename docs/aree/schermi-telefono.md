@@ -1981,6 +1981,6 @@ Note non bloccanti della revisione della PR #286 (#287) e della PR #306 (#307), 
   la guida non si scrive ([casa](casa.md)).
 - **Il cassetto** (#307): `bottoneCassetto` disegna solo «tieni» e «ancora», e il tocco su un pulsante d'altra
   azione non chiama `/api/cassetto` e scrive «Per eliminare un file dimmelo a voce.»; tolto il secondo tocco
-  di «Elimina tutti», codice morto dal 28/10 sera, e la sua regola CSS. Il resto in
+  di «Elimina tutti», codice morto dal 28/10 sera, e la sua regola CSS. Tolto anche `emetti("cassetto")` dal gestore dei pulsanti dei conoscenti, copiato per sbaglio (revisione della PR #309). Il resto in
   [sicurezza-politica](sicurezza-politica.md).
 - Cache del service worker `calliope-telefono-pagina-v21` (era v20), uguale a `PAGINA_VERSIONE`.

@@ -136,6 +136,11 @@ def valida_evento(t: str, m: dict) -> dict | None:
     return out
 
 
+# I nomi delle app nel «ciao»: tagliati a APP_NOME_MAX caratteri, al più APP_MAX
+APP_NOME_MAX = 40
+APP_MAX = 50
+
+
 def pulisci_esecutore(d) -> dict | None:
     """L'esecutore dichiarato nel «ciao», ridotto a ciò che il server sa usare: capacità
     note, nomi di app brevi. Dati del satellite, mai istruzioni."""
@@ -143,14 +148,19 @@ def pulisci_esecutore(d) -> dict | None:
         return None
     from ..pc.base import CAPACITA
     caps = [c for c in (d.get("capacita") or []) if c in CAPACITA]
-    app = [str(a).strip().lower()[:40] for a in (d.get("app") or [])
-           if isinstance(a, str) and a.strip()][:50]
+    app = [str(a).strip().lower()[:APP_NOME_MAX] for a in (d.get("app") or [])
+           if isinstance(a, str) and a.strip()][:APP_MAX]
     out = {}
-    # Le app che sono script (29/10, #307): un satellite di prima non lo dice, e allora la
-    # chiave manca (RemotePCExecutor.app_e_script → «non si sa», per iscritto non si apre)
+    # Le app che non si aprono per iscritto (29/10, #307): un satellite di prima non lo dice, e
+    # allora la chiave manca (RemotePCExecutor.app_e_script → «non si sa», serve la voce). Un nome
+    # tagliato o l'elenco al tetto valgono anche loro «non si sa» (revisione della PR #309), e il
+    # controllo vero lo rifà il satellite sull'«avvia» col segno `scritto`, che conosce se dice
+    # `avvia_scritto`
     if isinstance(d.get("app_script"), list):
-        out["app_script"] = [str(a).strip().lower()[:40] for a in d["app_script"]
-                             if isinstance(a, str) and a.strip()][:50]
+        out["app_script"] = [str(a).strip().lower()[:APP_NOME_MAX] for a in d["app_script"]
+                             if isinstance(a, str) and a.strip()][:APP_MAX]
+    if d.get("avvia_scritto") is True:
+        out["avvia_scritto"] = True
     return {**out, "nome": str(d.get("nome") or "")[:40], "capacita": caps, "app": app,
             "file": bool(d.get("file")), "invio": bool(d.get("invio")),
             "sistema": str(d.get("sistema") or "")[:20]}

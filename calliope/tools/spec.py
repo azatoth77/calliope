@@ -167,9 +167,11 @@ SCRITTO_IRREVERSIBILE = "Questa la confermo solo a voce, con una frase intera."
 # la tabella, ma per iscritto vanno bene
 SCRITTO_AMMESSI = {
     # aprire un programma sul PC: si chiude subito, non cancella e non manda niente fuori casa
-    # (eseguire codice, programma_esegui e i lavori con codice, resta a voce). Non le voci del
-    # catalogo pc_app che sono script o interpreti (29/10, #307: pc/base.e_script): quelle
-    # eseguono codice, e per iscritto vogliono la voce come programma_esegui
+    # (eseguire codice, programma_esegui e i lavori con codice, resta a voce). Solo le voci del
+    # catalogo pc_app ammesse per iscritto (29/10, #307: pc/base.ammessa_per_iscritto, un elenco di
+    # ammessi): le altre possono eseguire codice, e per iscritto vogliono la voce come
+    # programma_esegui. Qui il primo filtro; il controllo vero lo rifà chi ha il comando
+    # (l'esecutore, o il satellite con il segno `scritto` dell'«avvia»)
     "pc_apri_app": "si chiude subito, non cancella e non manda niente",
 }
 
@@ -214,6 +216,14 @@ def irreversibile_scritto(ctx, spec, name: str, argomenti: dict | None) -> dict 
                                     or politica._s(args, "azione").lower() in azioni)
     if e < valore.E3 and not irrev:
         return None
+    return solo_a_voce(ctx, name, args)
+
+
+def solo_a_voce(ctx, name: str, argomenti: dict | None) -> dict:
+    """Niente esecuzione, l'azione in sospeso per la conferma a voce (regola
+    `scritto_irreversibile_voce`): anche quando a rifiutare è chi ha il comando (il satellite o
+    l'esecutore locale per pc_apri_app, revisione della PR #309)."""
+    args = dict(argomenti or {})
     note_rule(ctx, "scritto_irreversibile_voce")
     return {"ok": False, "fatto": "NIENTE: l'azione NON è stata eseguita: si conferma solo a voce",
             "conferma": SCRITTO_IRREVERSIBILE, "risposta_finale": SCRITTO_IRREVERSIBILE,

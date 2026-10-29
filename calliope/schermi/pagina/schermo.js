@@ -1778,9 +1778,8 @@
       let d = {};
       try { d = await r.json(); } catch (e) { /* niente */ }
       dire(r.status === 200 ? (d.frase || "Fatto.") : (d.errore || ("Non ci sono riuscita (" + r.status + ").")));
-      // La pagina Cassetto aperta si rilegge subito (2d, seconda revisione della PR #267: prima
-      // aspettava la raffica delle schede o il giro dei 60 s)
-      if (r.status === 200) emetti("cassetto", { azione: b.dataset.cassetto });
+      // *Storico: fino al 29/10 qui c'era anche emetti("cassetto"), copiato dal gestore del
+      // cassetto (revisione della PR #309): rileggeva la pagina Cassetto dopo un conoscente*
     } catch (e) {
       dire("Calliope non risponde: riprova.");
     } finally {

@@ -37,7 +37,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
-from ..pc.base import BLOCCATO, COMANDI_MEDIA, RICERCA_VALIDA_S, TIPI_FILE, errore
+from ..pc.base import BLOCCATO, COMANDI_MEDIA, RICERCA_VALIDA_S, TIPI_FILE, e_script, errore
 from . import protocollo as P
 
 ESTENSIONI_FILE = P.ESTENSIONI_RICEVUTE  # documenti e risultati degli agenti
@@ -100,6 +100,9 @@ class EsecutoreSatellite:
                 # server non le apre per iscritto. Il comando resta qui
                 "app_script": self.pc.app_script() if self.pc is not None and "app" in caps
                 else [],
+                # Conosce il segno `scritto` dell'«avvia» e rifiuta lui ciò che per iscritto non
+                # si apre (revisione della PR #309): senza, il server chiede sempre la voce
+                "avvia_scritto": True,
                 "file": self.consegna is not None,
                 # Sa mandare all'agente una copia di un file trovato con la ricerca
                 "invio": self.pc is not None and "ricerca" in caps}
@@ -204,6 +207,11 @@ class EsecutoreSatellite:
             comando = pc._app.get(nome)
             if comando is None:
                 return errore(f"«{nome[:40]}» non è tra le app di questo PC")
+            # Per iscritto (29/10, #307, revisione della PR #309): il controllo lo fa chi ha il
+            # comando, con la regola degli ammessi di pc/base.py (ammessa_per_iscritto)
+            if a.get("scritto") and e_script(comando):
+                return errore("per iscritto questa app non la apro: serve la voce",
+                              serve_voce=True)
             pc._avvia(comando)
             return {"ok": True, "app": nome}
         if metodo == "cerca":

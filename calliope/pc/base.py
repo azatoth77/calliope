@@ -72,43 +72,90 @@ def modo_apertura(nome: str) -> str | None:
     return None
 
 
-# Le voci del catalogo `pc_app` che non sono un'app vera (29/10, #307, revisione della PR #306):
-# uno script, o un comando che apre un interprete (un terminale, PowerShell, Python). A voce si
-# aprono come le altre; per iscritto da uno schermo personale no, perché l'eccezione di
-# pc_apri_app («si chiude subito, non cancella e non manda niente», tools/spec.SCRITTO_AMMESSI)
-# per loro non vale: uno script fa quello che c'è scritto dentro
-ESTENSIONI_SCRIPT = frozenset((
-    "bat", "cmd", "ps1", "psm1", "vbs", "vbe", "js", "jse", "wsf", "wsh", "hta", "py", "pyw",
-    "sh", "bash", "pl", "rb", "msc", "lnk", "reg"))
-INTERPRETI = frozenset((
-    "cmd", "powershell", "powershell_ise", "pwsh", "wt", "windowsterminal", "wsl", "bash", "sh",
-    "wscript", "cscript", "mshta", "python", "python3", "pythonw", "py", "pyw", "node", "perl",
-    "ruby", "rundll32", "regsvr32", "msiexec", "conhost"))
+# Le voci del catalogo `pc_app` che si aprono anche per iscritto (29/10, #307; elenco di AMMESSI
+# dalla revisione della PR #309). A voce si aprono tutte; per iscritto da uno schermo personale
+# l'eccezione di pc_apri_app («si chiude subito, non cancella e non manda niente»,
+# tools/spec.SCRITTO_AMMESSI) vale solo per un programma vero. `_avvia` su Windows è ShellExecute
+# («open»): conta l'associazione del tipo di file, e un elenco di esclusioni (.bat, .ps1…) non si
+# chiude mai (.msi, .cpl, .scr, .jar, .url, .com, «backup.bat.», «x.bat::$DATA»…). Quindi per
+# iscritto passano SOLO:
+# - «browser» (il browser predefinito);
+# - un protocollo noto, `PROTOCOLLI_SCRITTO` («ms-settings:»);
+# - un percorso o un nome che finisce in .exe, senza argomenti, che non sia un interprete, un
+#   terminale o uno strumento di sistema (`EXE_NON_SCRITTO`).
+# Tutto il resto vuole la voce: script, installatori, collegamenti, un nome senza estensione (che
+# ShellExecute cerca nel PATH: «aggiorna» → aggiorna.cmd), le variabili d'ambiente (%COMSPEC%), le
+# virgolette o gli argomenti. Un .exe che dentro lancia uno script resta un'app anche per iscritto:
+# è una scelta di chi scrive il catalogo (docs/aree/pc.md)
+PROTOCOLLI_SCRITTO = frozenset((
+    "ms-settings", "ms-photos", "ms-clock", "ms-calculator", "ms-windows-store", "ms-people",
+    "ms-todo", "ms-paint", "ms-screenclip", "ms-camera", "ms-whiteboard-cmd", "microsoft-edge",
+    "mailto", "outlookmail", "outlookcal", "msteams", "spotify", "whatsapp"))
+_EXE_NON_SCRITTO_NOMI = frozenset((
+    # shell, terminali e interpreti
+    "cmd", "command", "powershell", "powershell_ise", "pwsh", "wt", "windowsterminal",
+    "openconsole", "conhost", "wsl", "wslg", "wslhost", "bash", "sh", "zsh", "git-bash", "git-cmd",
+    "mintty", "ubuntu", "debian", "kali", "opensuse", "fedora", "alpine", "archlinux", "wscript",
+    "cscript", "mshta", "python", "pythonw", "py", "pyw", "node", "deno", "bun", "perl", "ruby",
+    "php", "lua", "tclsh", "java", "javaw", "jshell", "dotnet", "csi", "fsi", "msbuild",
+    "installutil", "regasm", "regsvcs", "csc", "vbc", "jsc", "ilasm",
+    # strumenti di sistema
+    "rundll32", "regsvr32", "msiexec", "cmstp", "wmic", "regedit", "regedt32", "reg", "mmc",
+    "control", "schtasks", "at", "sc", "net", "net1", "netsh", "bitsadmin", "certutil", "forfiles",
+    "msdt", "pcalua", "presentationhost", "msxsl", "odbcconf", "mavinject", "diskpart", "format",
+    "bcdedit", "takeown", "icacls", "cacls", "attrib", "vssadmin", "wbadmin", "shutdown",
+    "taskkill", "runas", "sdclt", "fodhelper", "eventvwr", "computerdefaults",
+    "hh", "infdefaultinstall", "msconfig", "gpedit", "secpol", "lusrmgr", "compmgmt", "devmgmt",
+    "diskmgmt", "services", "taskschd", "perfmon", "certmgr", "wusa", "dism", "pnputil",
+    "setx", "where", "xcopy", "robocopy", "curl", "wget", "ftp", "tftp", "ssh", "scp", "sftp",
+    "winrm", "winrs", "psexec", "psexec64", "msra", "mstsc", "quickassist", "werfault"))
+# I nomi con la versione dentro: python3.12, pythonw3, pwsh7, java17…
+_EXE_NON_SCRITTO_RE = re.compile(
+    r"(python|pythonw|py|pwsh|powershell|java|javaw|node|perl|ruby|php|lua|bash|ubuntu|debian)"
+    r"[\d._-]*")
+
+
+def nome_windows(percorso: str) -> str:
+    """Il nome come lo usa Windows: senza lo stream (`x.bat::$DATA`, `x.bat:s:$DATA` → x.bat) e
+    senza i punti e gli spazi finali di ogni parte (`backup.bat. ` → backup.bat)."""
+    p = str(percorso or "").replace("/", "\\")
+    unita, resto = (p[:2], p[2:]) if re.match(r"^[A-Za-z]:", p) else ("", p)
+    resto = resto.split(":", 1)[0]          # lo stream dopo i due punti (dopo l'unità)
+    parti = [x.rstrip(" .") if x not in (".", "..") else x for x in resto.split("\\")]
+    return unita + "\\".join(parti)
+
+
+def ammessa_per_iscritto(comando: str) -> bool:
+    """La voce del catalogo con questo comando si apre anche per iscritto (elenco di ammessi,
+    sopra)? «calc.exe», «C:\\Program Files\\Mozilla Firefox\\firefox.exe», «ms-settings:»,
+    «browser» sì; script, installatori, interpreti, nomi senza estensione, %VARIABILI% no."""
+    c = str(comando or "").strip()
+    if len(c) >= 2 and c[0] == c[-1] == '"' and c.count('"') == 2:
+        c = c[1:-1].strip()
+    if not c or any(x in c for x in '"%<>|^&*?\t\r\n'):
+        return False
+    if c.lower() == "browser":
+        return True
+    m = re.fullmatch(r"([A-Za-z][A-Za-z0-9.+-]+):([A-Za-z0-9/_.-]*)", c)
+    if m and len(m.group(1)) > 1:            # un protocollo (una lettera sola è un'unità: «C:»)
+        return m.group(1).lower() in PROTOCOLLI_SCRITTO
+    senza_unita = c[2:] if re.match(r"^[A-Za-z]:", c) else c
+    if ":" in senza_unita:
+        return False                         # uno stream («calc.exe:x», «x.bat::$DATA»): non si sa
+    n = nome_windows(c)                      # i punti e gli spazi finali come li toglie Windows
+    if n.lower().count(".exe") != 1 or not n.lower().endswith(".exe"):
+        return False                         # niente .exe, argomenti, «x.exe.bat»: non si sa
+    nome = n.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    stem = nome[:-4].strip()
+    if stem in _EXE_NON_SCRITTO_NOMI or _EXE_NON_SCRITTO_RE.fullmatch(stem):
+        return False
+    return True
 
 
 def e_script(comando: str) -> bool:
-    """Il comando di una voce del catalogo è uno script o lancia un interprete? Si guardano
-    tutte le parti (anche fra virgolette): l'estensione di ognuna e il nome del primo programma.
-    «calc.exe», «ms-settings:», «browser» no; «backup.bat», «C:\\x\\pulisci.ps1»,
-    «powershell.exe», «cmd /c x» sì."""
-    c = str(comando or "").strip().strip('"').strip()
-    if not c:
-        return False
-    if c.lower() == "browser" or (c.endswith(":") and " " not in c):
-        return False                         # il browser predefinito, un protocollo
-    parti = [p.strip('"').strip() for p in re.findall(r'"[^"]*"|\S+', c)] or [c]
-    candidati = [c] + parti
-    for p in candidati:
-        if Path(p).suffix.lower().lstrip(".") in ESTENSIONI_SCRIPT:
-            return True
-    # Il programma: tutto il comando (un percorso con gli spazi senza virgolette) o la prima parte
-    for p in (c, parti[0]):
-        nome = Path(p.replace("\\", "/")).name.lower()
-        if nome.endswith(".exe"):
-            nome = nome[:-4]
-        if nome in INTERPRETI:
-            return True
-    return False
+    """Il contrario di `ammessa_per_iscritto`: per iscritto la voce vuole la voce (uno script, un
+    interprete, uno strumento di sistema, o un comando di cui non si sa)."""
+    return not ammessa_per_iscritto(comando)
 
 
 def errore(msg: str, **extra) -> dict:
@@ -244,13 +291,22 @@ class PCExecutor(ABC):
             return errore(BLOCCATO, bloccato=True)
         return {"ok": True, "programmi": self._programmi()}
 
-    def apri_app(self, app: str) -> dict:
+    def apri_app(self, app: str, scritto: bool = False) -> dict:
+        """Apre la voce del catalogo. Con `scritto` (la richiesta è arrivata scritta da uno
+        schermo personale, 29/10, #307) solo se il comando è tra gli ammessi per iscritto:
+        altrimenti {"ok": False, "serve_voce": True}, e il tool chiede la voce. Il controllo lo
+        fa chi ha il comando: qui, o il satellite per l'esecutore remoto."""
         if self.bloccato():
             return errore(BLOCCATO, bloccato=True)
         key = self._chiave_app(app)
         if key is None:
             return errore(f"«{app}» non è tra le app che posso aprire",
                           app_disponibili=self.app_disponibili())
+        return self._avvia_app(key, scritto)
+
+    def _avvia_app(self, key: str, scritto: bool) -> dict:
+        if scritto and e_script(self._app[key]):
+            return errore("per iscritto questa app non la apro", serve_voce=True, app=key)
         self._avvia(self._app[key])
         return {"ok": True, "app": key}
 

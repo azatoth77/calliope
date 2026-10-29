@@ -1071,11 +1071,13 @@ pc:
   # nome, mai il comando. Il comando è un programma nel PATH o registrato in Windows
   # (winword.exe), un protocollo (ms-settings:), un percorso completo, oppure «browser»
   # (il browser predefinito). Le voci non installate si tolgono all'avvio.
-  # Uno script (.bat, .cmd, .ps1, .vbs, .py, .sh…) o un comando che apre un interprete
-  # (cmd, powershell, python, un terminale) si apre a voce come le altre, ma per iscritto da
-  # uno schermo personale no: aprire un'app per iscritto è ammesso perché un programma «si
-  # chiude subito, non cancella e non manda niente», e uno script fa quello che ha dentro,
-  # come eseguire codice (29/10, #307; elenco in pc/base.py, e_script)
+  # A voce si aprono tutte; per iscritto da uno schermo personale solo «browser», un
+  # protocollo noto (ms-settings:) e un programma .exe senza argomenti che non sia un
+  # interprete, un terminale o uno strumento di sistema (cmd, powershell, wsl, python, java,
+  # regedit, mmc, control…): un programma «si chiude subito, non cancella e non manda niente».
+  # Script, installatori, collegamenti (.bat, .ps1, .msi, .lnk, .url…), nomi senza estensione e
+  # %VARIABILI% vogliono la voce. Un .exe che dentro lancia uno script resta un'app: sta a chi
+  # scrive il catalogo (29/10, #307; regola in pc/base.py, ammessa_per_iscritto)
   pc_app:
     calcolatrice: calc.exe
     blocco note: notepad.exe

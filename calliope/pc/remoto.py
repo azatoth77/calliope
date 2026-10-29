@@ -26,7 +26,7 @@ persa). Senza esecutore rispondono con un errore chiaro, come casa_integrazione.
 import threading
 import time
 
-from .base import CAPACITA, PCExecutor
+from .base import CAPACITA, PCExecutor, errore
 
 
 class PCNonCollegato(ConnectionError):
@@ -134,8 +134,12 @@ class RemotePCExecutor(PCExecutor):
         return [a for a in self._app if a in sue]
 
     def app_e_script(self, app: str) -> bool | None:
-        """Il comando sta sul satellite: lo dice lui nel «ciao» (`app_script`, 29/10, #307).
-        Senza satellite, o con uno di prima che non lo dice, None (non si sa)."""
+        """Il comando sta sul satellite: questo è solo il primo filtro, sui nomi che il satellite
+        dà nel «ciao» (`app_script`, 29/10, #307); il controllo vero lo rifà il satellite
+        sull'«avvia» col segno `scritto` (revisione della PR #309). None (non si sa, per iscritto
+        serve la voce) senza satellite, con uno di prima che non conosce il segno
+        (`avvia_scritto`), con un nome lungo quanto il taglio del server o con l'elenco al tetto."""
+        from ..satellite.server import APP_MAX, APP_NOME_MAX
         key = self._chiave_app(app)
         if key is None:
             return False                     # non è nel catalogo: il tool lo dirà
@@ -143,10 +147,35 @@ class RemotePCExecutor(PCExecutor):
             esec = self._coll().esecutore
         except PCNonCollegato:
             return None
-        script = esec.get("app_script") if isinstance(esec, dict) else None
+        if not isinstance(esec, dict) or esec.get("avvia_scritto") is not True:
+            return None
+        script = esec.get("app_script")
         if not isinstance(script, list):
             return None
-        return key in script
+        if key in script:
+            return True
+        if len(key) >= APP_NOME_MAX or len(script) >= APP_MAX:
+            return None                      # un nome tagliato o un elenco tagliato: non si sa
+        return False
+
+    def _avvia_app(self, key: str, scritto: bool) -> dict:
+        """L'«avvia» col segno `scritto`: il satellite rifiuta (serve_voce) se il SUO comando non
+        è tra gli ammessi per iscritto. A un satellite di prima il segno non si manda mai per
+        iscritto: il tool chiede la voce prima (app_e_script → None)."""
+        if scritto:
+            esec = getattr(self._coll(), "esecutore", None)
+            if not isinstance(esec, dict) or esec.get("avvia_scritto") is not True:
+                return errore("il satellite non sa controllare le app per iscritto",
+                              serve_voce=True, app=key)
+            r = self._chiama("avvia", app=key, scritto=True)
+        else:
+            r = self._chiama("avvia", app=key)
+        if r.get("ok"):
+            return {"ok": True, "app": key}
+        if r.get("serve_voce"):
+            return errore(r.get("errore") or "per iscritto questa app non la apro",
+                          serve_voce=True, app=key)
+        raise RuntimeError(r.get("errore") or "non ha funzionato")
 
     # ── schermo bloccato: qui un guasto non vale «bloccato» ──
     def bloccato(self) -> bool:

@@ -345,6 +345,11 @@ def prova_tabelle():
         C.AZIONI["sbarazzati"] = "elimina"           # un alias nuovo nel tool
         verifica("tabelle: un alias nuovo di «elimina» aggiunto alla mappa è subito E3",
                  valore.effetto("cassetto_gestisci", {"azione": "sbarazzati"}) == 3)
+        # …e distruttivo per la politica (revisione della PR #309: la terza copia a mano)
+        from calliope.tools.allegati import _classe_gestisci
+        verifica("politica: le azioni distruttive del cassetto sono gli alias di «elimina» della mappa",
+                 set(_classe_gestisci().distruttiva) == set(elimina) | {"sbarazzati"},
+                 sorted(_classe_gestisci().distruttiva))
     finally:
         C.AZIONI.clear()
         C.AZIONI.update(vecchia)
