@@ -720,6 +720,13 @@ def _ha_testo(rec: dict) -> bool:
 # `_preferenze`, `_punto`), tolte con gli esercizi, #279; le righe vecchie nel db non si
 # migrano]*
 TABELLE_MEMORIA = (("richieste_tutori", "minore", "creata"),)
+# Le tabelle dello Studio (29/10, issue #280, decisione 0035, punto 4): non scadono con la data
+# della riga ma con quella della verifica, `studio_tenuta_giorni` (60) giorni dopo; mai se
+# archiviata. Le cancella solo calliope/studio/dati.cancella (verifiche, materiali, pagine col
+# testo letto e i loro file, argomenti, piano, misure, giorni), dalla rotazione e da «svuota»;
+# «dimentica le nostre conversazioni» le toglie tranne le verifiche archiviate (main.py)
+TABELLE_STUDIO = ("studio_verifiche", "studio_materiali", "studio_pagine", "studio_argomenti",
+                  "studio_piano", "studio_giorni", "studio_misure")
 # Le preferenze che non scadono col tempo ma vanno via con i dati della persona (27/10):
 # (tabella, colonna della persona). L'accento scelto in Io › Aspetto (schermi/aspetto.py)
 TABELLE_PREFERENZE = (("aspetto_preferenze", "persona"),)
@@ -1158,6 +1165,10 @@ class Conservazione:
         # Esercizi e richieste ai tutori (12/10 sera): la stessa tenuta, anche quelli di prima
         # (alla prima rotazione, all'avvio: niente migrazioni)
         out["memoria"] = self._memoria(limite=limite)
+        # Lo Studio (29/10, #280): le verifiche non archiviate oltre `studio_tenuta_giorni` dopo
+        # la loro data, con pagine, testo letto e file
+        out["studio"] = self._studio(scadute_prima=oggi - datetime.timedelta(
+            days=int(getattr(self.cfg, "studio_tenuta_giorni", 60) or 60)))
         # L'audio del banco della stanza (17/10, issue #32): la sua rotazione girava solo
         # salvando, cioè con l'eccezione accesa; scaduta o spenta, i giorni oltre
         # `turn_log_days` restavano. Ora anche qui, all'avvio e a ogni giorno nuovo
@@ -1300,7 +1311,8 @@ class Conservazione:
         """Tutto (persona_id None) o i dati di una persona: la voce, gli eventi su disco (con
         `secure_delete`), nel registro dei turni le parole (di tutti: i file interi) e, dal 12/10
         sera, l'archivio delle conversazioni (anche le conversazioni in corso salvate) e le
-        richieste ai tutori (TABELLE_MEMORIA; fino al 28/10 anche i tentativi degli esercizi)."""
+        richieste ai tutori (TABELLE_MEMORIA; fino al 28/10 anche i tentativi degli esercizi);
+        dal 29/10 lo Studio (TABELLE_STUDIO), con le verifiche archiviate."""
         # Le righe della stanza di un conoscente (14/10 sera) hanno la chiave «conoscente:<id>»
         stanza_id = (f"conoscente:{persona_id}" if persona_id is not None
                      and self.conoscente(persona_id) is not None else persona_id)
@@ -1313,7 +1325,10 @@ class Conservazione:
                # conservati; l'impronta della registrazione resta
                "impronte_satellite": self._svuota_impronte(persona_id),
                # Le foto tenute con la Conversazione (28/10, decisione 0034): file e righe
-               "foto": self._svuota_foto(persona_id)}
+               "foto": self._svuota_foto(persona_id),
+               # Lo Studio (29/10, #280): le verifiche, archiviate comprese, e i giorni
+               "studio": (self._studio(tutto=True) if persona_id is None
+                          else self._studio(persona=str(persona_id)))["verifiche"]}
         arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)
         if persona_id is None:
@@ -1343,6 +1358,21 @@ class Conservazione:
         if arch is not None:
             out["conversazioni"] = arch.dimentica(str(persona_id))
         out["eventi"] = self._svuota_eventi(f"persona:{persona_id}")
+        return out
+
+    def _studio(self, **kw) -> dict:
+        """calliope/studio/dati.cancella sul file della memoria (tenuta e «svuota»); un errore
+        non ferma il resto."""
+        try:
+            from .studio.dati import cancella_file
+            out = cancella_file(getattr(self.cfg, "memory_db", None), log=self.log,
+                                cartella=getattr(self.cfg, "studio_cartella", None), **kw)
+        except Exception as e:  # noqa: BLE001 — lo Studio non ferma la rotazione del resto
+            self.log(f"   [CONSERVA] Studio non ripulito: {type(e).__name__}")
+            return {"verifiche": 0, "file": 0}
+        if out["verifiche"] and "scadute_prima" in kw:
+            self.log(f"   [CONSERVA] Studio: tolte {out['verifiche']} verifiche oltre "
+                     f"{getattr(self.cfg, 'studio_tenuta_giorni', 60)} giorni dalla data")
         return out
 
     def _svuota_foto(self, persona_id) -> int:
@@ -1661,7 +1691,9 @@ def main(argv=None) -> int:
                   f"avvisi" + (f", {r['stanza_banco']} segmenti audio del banco della stanza"
                                if r.get("stanza_banco") else "")
                   + (f", {r['impronte_satellite']} impronte per satellite"
-                     if r.get("impronte_satellite") else "") + ".")
+                     if r.get("impronte_satellite") else "")
+                  + (f", {r['studio']} verifiche dello Studio" if r.get("studio") else "")
+                  + ".")
         else:
             r = c.svuota()
             print(f"Dati conservati cancellati: {r['voce']} registrazioni, {r['eventi']} eventi, "
@@ -1672,7 +1704,9 @@ def main(argv=None) -> int:
                   + (f", {r['stanza_banco']} segmenti audio del banco della stanza"
                      if r.get("stanza_banco") else "")
                   + (f", {r['impronte_satellite']} impronte per satellite"
-                     if r.get("impronte_satellite") else "") + ".")
+                     if r.get("impronte_satellite") else "")
+                  + (f", {r['studio']} verifiche dello Studio" if r.get("studio") else "")
+                  + ".")
         if c.conversazioni is not None:
             c.conversazioni.close()
         return 0

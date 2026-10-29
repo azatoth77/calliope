@@ -641,6 +641,16 @@ class Avvio:
                 conv_arch.su_dimentica.append(cassetto.dimentica_foto)
             if getattr(s, "conserva", None) is not None:
                 s.conserva.cassetto = cassetto
+        # Lo Studio (29/10, #280, decisione 0035): «dimentica le nostre conversazioni» toglie le
+        # sue verifiche tranne quelle archiviate, anche con lo Studio spento (i dati di prima)
+        if conv_arch is not None:
+            from .studio.dati import cancella_file as _studio_cancella
+
+            def _studio_dimentica(persona, cfg=cfg):
+                _studio_cancella(getattr(cfg, "memory_db", None), persona=str(persona),
+                                 archiviate=False,
+                                 cartella=getattr(cfg, "studio_cartella", None))
+            conv_arch.su_dimentica.append(_studio_dimentica)
         s.tools = build_registry(biblioteca=s.biblioteca is not None, pc=self.pcs,
                                  pc_ospite=cfg.pc_ospite_volume_media,
                                  documenti=s.documenti.formati if s.documenti else None,
@@ -754,6 +764,18 @@ class Avvio:
         # Minori (05/10, calliope/minori.py): regole per persona, avvisi ai tutori
         # (stesso file della memoria)
         minori.prepara(cfg, schermi=s.schermi, registry=s.registry)
+        # Lo Studio (29/10, #280): dati e piano; in ombra niente al modello né agli schermi. Il
+        # tool e le pagine arrivano con il passo 4.5
+        from . import studio as _studio
+        try:
+            s.studio = _studio.prepara(cfg, registry=s.registry,
+                                       log=lambda m: print(m, flush=True))
+        except Exception as e:  # noqa: BLE001 — lo Studio non ferma l'avvio
+            print(f"[STUDIO] non preparato: {type(e).__name__}: {e}", flush=True)
+            s.studio = None
+        if s.studio is not None:
+            atexit.register(s.studio.close)
+            print(f"[STUDIO] {s.studio.modo}", flush=True)
         # Gli avvisi di pericolo (14/10 sera): l'audio nel cassetto del tutore, la trascrizione
         # di un avviso di prima ricostruita dalla stanza o dalla conversazione del minore, e
         # `calliope conserva --svuota` che li toglie
