@@ -150,6 +150,13 @@ guardare l'estensione il nome si normalizza come fa Windows (`nome_windows`: via
 (`calc.exe`, `notepad.exe`, `explorer.exe`, `ms-settings:`, `browser`, `winword.exe`, `excel.exe`) restano
 ammesse.
 
+Dalla seconda revisione della PR #309 valgono «non si sa» anche un nome corto 8.3 (un `~` nel comando:
+`PYTHON~1.EXE`, `POWERS~1.EXE`) e un percorso di rete (che comincia con `\\` o `//`: UNC, WebDAV con `@SSL`):
+il file cambia senza che chi amministra lo veda. L'esclusione prende anche gli interpreti con un altro nome o un
+suffisso: `pypy`, `ipython`, `jython`, `nodejs`, `python3.12t`, `python_d`, AutoHotkey in tutte le varianti
+(senza argomenti esegue da solo lo script di serie), AutoIt3, `Ahk2Exe`. Le sigle brevi (`py`, `lua`, `sh`)
+solo con una versione, così `pycharm64.exe` o `shotcut.exe` restano app.
+
 **Limite, scelto:** un `.exe` che dentro lancia uno script (un `.bat` impacchettato, un lanciatore) resta un'app
 anche per iscritto: lo decide chi scrive il catalogo.
 

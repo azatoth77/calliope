@@ -271,6 +271,48 @@ r = pc.apri_app("calcolatrice", scritto=True)
 verifica("contrario: con il segno scritto l'app vera si apre", r.get("ok") is True
          and pc.azioni[-1] == ("avvia", "calc.exe"), r)
 
+# ── seconda revisione della PR #309: nomi corti 8.3, percorsi di rete, interpreti con un altro nome ──
+seguito_si = (
+    # nomi corti 8.3: il nome vero è nascosto
+    r"C:\Python312\PYTHON~1.EXE", r"C:\PROGRA~1\PowerShell\7\PWSH~1.EXE", r"C:\WINDOWS\system32\WINDOW~1\v1.0\POWERS~1.EXE",
+    r"C:\PROGRA~1\Mozilla Firefox\firefox.exe", "CALC~1.EXE",
+    # UNC e WebDAV
+    r"\\host\share\app.exe", "//host/share/app.exe", r"\\host@SSL\DavWWWRoot\app.exe",
+    r"\\192.0.2.1\c$\app.exe", r"\\host@SSL@8443\DavWWWRoot\calc.exe", r"\/host\share\app.exe",
+    # interpreti con un altro nome o un suffisso
+    "python3.12t.exe", "python_d.exe", "pypy.exe", "pypy3.exe", r"C:\pypy\pypy3.10.exe", "ipython.exe",
+    "ipython3.exe", "jython.exe", "nodejs.exe", "AutoHotkey.exe", "AutoHotkey64.exe", "AutoHotkeyU64.exe",
+    "AutoHotkeyU32.exe", "AutoHotkeyA32.exe", "AutoHotkey32.exe", "AutoHotkey_UIA.exe",
+    r"C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe", "AutoIt3.exe", "AutoIt3_x64.exe", "Ahk2Exe.exe",
+    "Aut2exe.exe", "py3.exe", "pyw.exe", "lua54.exe", "luajit.exe", "javaw.exe", "java17.exe")
+seguito_no = ("taskmgr.exe", "spotify.exe", r"C:\Program Files\Notepad++\notepad++.exe", "pycharm64.exe",
+              "pyramid.exe", "lualatex-gui.exe", "shotcut.exe", r"C:\Users\x\AppData\Local\Programs\Zoom\Zoom.exe")
+verifica("seguito: 8.3, UNC e WebDAV, interpreti con un altro nome: per iscritto non ammessi",
+         all(e_script(c) for c in seguito_si), [c for c in seguito_si if not e_script(c)])
+verifica("contrario, seguito: app che cominciano come un interprete restano ammesse",
+         all(ammessa_per_iscritto(c) for c in seguito_no), [c for c in seguito_no if e_script(c)])
+verifica("contrario, seguito: le voci di serie del catalogo restano ammesse",
+         all(ammessa_per_iscritto(v) for v in _Cfg().pc_app.values()))
+# …e sul satellite, che ha il comando: l'«avvia» col segno scritto rifiuta gli stessi casi
+from calliope.satellite.esecutore import EsecutoreSatellite  # noqa: E402
+sat_cat = {"ahk": "AutoHotkey64.exe", "corto": r"C:\Python312\PYTHON~1.EXE", "rete": r"\\host\share\app.exe",
+           "webdav": r"\\host@SSL\DavWWWRoot\app.exe", "pypy": "pypy3.exe", "calcolatrice": "calc.exe"}
+sat_pc = FakePC(app=sat_cat)
+sat = EsecutoreSatellite(sat_pc, None, "portatile", log=lambda m: None)
+try:
+    rifiutati = {k: sat._esegui("avvia", {"app": k, "scritto": True}) for k in sat_cat if k != "calcolatrice"}
+    verifica("satellite: «avvia» scritto di AutoHotkey, nome 8.3, UNC, WebDAV, pypy: rifiutato (serve_voce), niente avviato",
+             all(not r.get("ok") and r.get("serve_voce") for r in rifiutati.values()) and not sat_pc.azioni,
+             {k: r.get("errore") for k, r in rifiutati.items()})
+    r = sat._esegui("avvia", {"app": "calcolatrice", "scritto": True})
+    verifica("contrario, satellite: per iscritto la calcolatrice si apre", r.get("ok")
+             and sat_pc.azioni == [("avvia", "calc.exe")], r)
+    r = sat._esegui("avvia", {"app": "ahk"})
+    verifica("contrario, satellite: a voce (senza il segno) AutoHotkey si apre", r.get("ok")
+             and sat_pc.azioni[-1] == ("avvia", "AutoHotkey64.exe"), r)
+finally:
+    sat.chiudi()
+
 # ── blocco ──
 pc = FakePC()
 r = chiama(pc, "pc_blocca", {}, chi="Bianca")
