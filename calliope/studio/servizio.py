@@ -19,7 +19,15 @@ passo 4.5.
 
 **Ricalcolo.** Il piano si ricalcola quando cambia qualcosa (argomenti confermati, data
 spostata, minuti, giorno fatto o saltato, giorni senza scuola) e, alla prima lettura di un
-giorno nuovo, perché «oggi» si è spostato.
+giorno nuovo, perché «oggi» si è spostato. Con i dati di una versione più nuova (connessione
+in `query_only`, `persistenza.prepara_schema`) le letture vanno lo stesso: il piano di oggi si
+calcola in memoria e non si salva (revisione della PR #308).
+
+**Chi passa chi (per il passo 4.5).** Ogni metodo decide su `chi`, il profilo di chi parla o
+del proprietario dello schermo personale. Chi chiama passa `None` per un ospite **e per la zona
+grigia** (voce incerta, frase breve senza impronta, compagnia senza il nome), come `_chi` di
+`tools/conversazioni.py`: lo Studio di una persona non si apre su un'identità incerta. Il
+profilo di un minore incerto (`minori.profilo`, `minore_incerto`) vale il minore, mai l'adulto.
 """
 
 from __future__ import annotations
@@ -38,6 +46,7 @@ MATERIE = ("Matematica", "Italiano", "Storia", "Geografia", "Scienze", "Inglese"
            "Spagnolo", "Tedesco", "Tecnologia", "Arte", "Musica", "Fisica", "Chimica", "Latino",
            "Filosofia", "Diritto", "Economia", "Informatica")
 MATERIA_MAX = 40
+FASCIA_DI_SERIE = "15:00-20:00"
 TITOLO_MAX = 60
 
 
@@ -46,7 +55,15 @@ class NonPermesso(PermissionError):
 
 
 class NonTrovata(LookupError):
-    """La verifica (o il materiale, la pagina, l'argomento) non c'è."""
+    """La verifica (o il materiale, la pagina, l'argomento, il giorno) non c'è, oppure è di un
+    altro: sempre con lo stesso messaggio, così un id non dice se esiste (revisione della PR
+    #308, nota 1)."""
+
+    def __init__(self, *_):
+        super().__init__(NON_TROVATA)
+
+
+NON_TROVATA = "non c'è"
 
 
 def modo(cfg) -> str:
@@ -69,7 +86,18 @@ def _categoria(prof) -> str:
     return categoria(prof)
 
 
-def permesso(chi, proprietario) -> str | None:
+def _e_tutore(chi, minore, registry=None) -> bool:
+    """`chi` è un tutore di `minore`. Come `minori.tutori`: valgono i tutori scritti che sono
+    ancora in casa (`conserva.tutori_validi`); se non ce n'è più nessuno, chi amministra
+    (revisione della PR #308, nota 2). Senza il registro, i tutori scritti (`minori.e_tutore`)."""
+    from ..conserva import tutori_validi
+    validi = tutori_validi(minore, registry)
+    if validi:
+        return getattr(chi, "id", None) in validi
+    return bool(getattr(chi, "admin", False))
+
+
+def permesso(chi, proprietario, registry=None) -> str | None:
     """«proprietario», «tutore» o None. Gli ospiti e i conoscenti mai, da nessuna parte."""
     if chi is None or proprietario is None:
         return None
@@ -78,8 +106,7 @@ def permesso(chi, proprietario) -> str | None:
         return None
     if getattr(chi, "id", None) and getattr(chi, "id", None) == getattr(proprietario, "id", None):
         return "proprietario"
-    from .. import minori
-    if _categoria(proprietario) == "minore" and minori.e_tutore(chi, proprietario):
+    if _categoria(proprietario) == "minore" and _e_tutore(chi, proprietario, registry):
         return "tutore"
     return None
 
@@ -124,7 +151,14 @@ class Studio:
         self.dati = D.Dati(cfg.memory_db)
         # Le misure dell'ombra (e dell'attivo): solo conti, niente nomi né titoli
         self.misure = {"verifiche_create": 0, "piani": 0, "giorni_nei_piani": 0,
-                       "pagine_nei_piani": 0, "giorni_oltre": 0, "avvisi": {}}
+                       "pagine_nei_piani": 0, "giorni_oltre": 0, "avvisi": {}, "errori": 0}
+        self.fascia = P.fascia_valida(getattr(cfg, "studio_fascia", ""))
+        if self.fascia is None:
+            # Il caricamento della configurazione la rifiuta già (config._fascia_valida); qui
+            # per una Config scritta a mano. Una riga nel registro, poi il valore di serie
+            self.log(f"   [STUDIO] studio_fascia «{getattr(cfg, 'studio_fascia', '')}» non è "
+                     f"valida: uso {FASCIA_DI_SERIE}")
+            self.fascia = P.fascia_valida(FASCIA_DI_SERIE)
 
     def close(self):
         self.dati.close()
@@ -152,7 +186,7 @@ class Studio:
 
     def _chi_puo(self, chi, persona_id) -> str:
         prop = chi if getattr(chi, "id", None) == persona_id else self._profilo(persona_id)
-        p = permesso(chi, prop)
+        p = permesso(chi, prop, self.registry)
         if p is None:
             raise NonPermesso("non è tuo")
         return p
@@ -160,12 +194,12 @@ class Studio:
     def _verifica(self, chi, vid) -> dict:
         v = self.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (int(vid),))
         if v is None:
-            raise NonTrovata("verifica")
+            raise NonTrovata()
         try:
             self._chi_puo(chi, v["persona"])
         except NonPermesso:
             # Lo stesso rifiuto di una verifica che non c'è: non si sa se quella di un altro c'è
-            raise NonTrovata("verifica") from None
+            raise NonTrovata() from None
         return v
 
     def _scrivibile(self):
@@ -296,7 +330,7 @@ class Studio:
     def _materiale(self, chi, mid) -> tuple[dict, dict]:
         m = self.dati.uno("SELECT * FROM studio_materiali WHERE id = ?", (int(mid),))
         if m is None:
-            raise NonTrovata("materiale")
+            raise NonTrovata()
         return m, self._verifica(chi, m["verifica"])
 
     def aggiungi_pagina(self, chi, mid, numero=None, ordine=None, etichetta=None, file=None,
@@ -333,10 +367,10 @@ class Studio:
             raise ValueError("stato della pagina sconosciuto")
         p = self.dati.uno("SELECT * FROM studio_pagine WHERE id = ?", (int(pid),))
         if p is None:
-            raise NonTrovata("pagina")
+            raise NonTrovata()
         _m, v = self._materiale(chi, p["materiale"])
         self.dati.scrivi("UPDATE studio_pagine SET stato = ? WHERE id = ?", (stato, p["id"]))
-        self.ricalcola(v["id"])
+        self._ricalcola_sicuro(v["id"])
 
     # ── argomenti (l'estrazione è del passo 4.4: qui il modello dei dati e la conferma) ──
     def aggiungi_argomento(self, chi, vid, titolo, pagine, proposto: bool = True,
@@ -358,7 +392,7 @@ class Studio:
              "proposto" if proposto else "aggiunto", int(r["o"]) + 1,
              D.j(avvisi) if avvisi else None, D.adesso()))
         if not proposto:
-            self.ricalcola(v["id"])
+            self._ricalcola_sicuro(v["id"])
         return aid
 
     def argomenti(self, chi, vid) -> list[dict]:
@@ -375,11 +409,11 @@ class Studio:
         self._scrivibile()
         a = self.dati.uno("SELECT * FROM studio_argomenti WHERE id = ?", (int(aid),))
         if a is None:
-            raise NonTrovata("argomento")
+            raise NonTrovata()
         v = self._verifica(chi, a["verifica"])
         self.dati.scrivi("UPDATE studio_argomenti SET stato = ? WHERE id = ?",
                          ("tenuto" if tenuto else "tolto", a["id"]))
-        self.ricalcola(v["id"])
+        self._ricalcola_sicuro(v["id"])
 
     def conferma_argomenti(self, chi, vid) -> dict:
         """La conferma a mano: gli argomenti ancora proposti diventano tenuti, la verifica
@@ -429,10 +463,10 @@ class Studio:
         r = self.dati.uno("SELECT id FROM studio_piano WHERE verifica = ? AND giorno = ?",
                           (v["id"], g.isoformat()))
         if r is None:
-            raise NonTrovata("giorno")
+            raise NonTrovata()
         self.dati.scrivi("UPDATE studio_piano SET fatto = ? WHERE id = ?",
                          (D.adesso() if fatto else None, r["id"]))
-        self.ricalcola(v["id"])
+        self._ricalcola_sicuro(v["id"])
 
     # ── misure e previsione ──
     def aggiungi_misura(self, chi, vid, valore: float, fonte: str, argomento=None,
@@ -452,8 +486,7 @@ class Studio:
     def _minuti_base(self, persona: str):
         """La funzione giorno → minuti liberi della persona (senza dividere fra le verifiche)."""
         cfg = self.cfg
-        fascia = P.fascia_valida(getattr(cfg, "studio_fascia", "")) or P.fascia_valida(
-            "15:00-20:00")
+        fascia = self.fascia
         prof = self._profilo(persona)
         orari = []
         if prof is not None and _categoria(prof) == "minore":
@@ -482,11 +515,38 @@ class Studio:
     def ricalcola_persona(self, persona: str):
         for v in self.dati.tutti("SELECT id FROM studio_verifiche WHERE persona = ? AND "
                                  "stato IN ('aperta', 'fatta')", (str(persona),)):
-            self.ricalcola(v["id"])
+            self._ricalcola_sicuro(v["id"])
+
+    def _ricalcola_sicuro(self, vid) -> P.Piano | None:
+        """`ricalcola` che non ferma mai le altre verifiche della persona né le letture: un
+        errore va nel registro (col solo id) e nelle misure."""
+        try:
+            return self.ricalcola(vid)
+        except Exception as e:  # noqa: BLE001
+            self.misure["errori"] += 1
+            self._registra(f"piano della verifica {vid} non ricalcolato: {type(e).__name__}")
+            return None
+
+    def _pagine_del_piano(self, vid) -> list[P.Pagina]:
+        """Le pagine degli argomenti tenuti, una volta sola, senza quelle tolte."""
+        argomenti = [a for a in self.dati.tutti(
+            "SELECT * FROM studio_argomenti WHERE verifica = ?", (int(vid),))
+            if a["stato"] in D.ARGOMENTI_DEL_PIANO]
+        ids = {int(x) for a in argomenti for x in D.da_j(a["pagine"])
+               if isinstance(x, int) or str(x).isdecimal()}
+        righe = self.dati.tutti(
+            "SELECT p.*, m.titolo AS materiale_titolo, m.id AS materiale_id FROM studio_pagine "
+            "p JOIN studio_materiali m ON m.id = p.materiale WHERE m.verifica = ? AND "
+            "p.stato != 'tolta'", (int(vid),))
+        return [P.Pagina(r["id"], r["ordine"], r["numero"], r["etichetta"],
+                         r["materiale_titolo"] or f"materiale {r['materiale_id']}")
+                for r in righe if r["id"] in ids]
 
     def ricalcola(self, vid) -> P.Piano | None:
         """Ricalcola il piano di una verifica aperta, tenendo i giorni fatti. Con più verifiche
-        aperte della stessa persona negli stessi giorni i minuti si dividono in parti uguali."""
+        aperte della stessa persona negli stessi giorni i minuti si dividono in parti uguali
+        (solo con quelle che hanno pagine da leggere). Con i dati in sola lettura il piano si
+        calcola e si restituisce senza salvarlo."""
         v = self.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (int(vid),))
         if v is None or v["stato"] not in ("aperta", "fatta"):
             return None
@@ -494,14 +554,17 @@ class Studio:
         data = _data(v["data"])
         # Passata: la verifica è fatta, il piano resta com'era (la storia)
         if data < oggi:
-            if v["stato"] != "fatta":
+            if v["stato"] != "fatta" and self.dati.scrivibile:
                 self.dati.scrivi("UPDATE studio_verifiche SET stato = 'fatta' WHERE id = ?",
                                  (v["id"],))
             return None
         liberi = self._minuti_base(v["persona"])
-        altre = [(_data(x["data"])) for x in self.dati.tutti(
-            "SELECT data FROM studio_verifiche WHERE persona = ? AND stato = 'aperta' AND "
-            "id != ? AND data > ?", (v["persona"], v["id"], oggi.isoformat()))]
+        # Una verifica aperta senza pagine da leggere non toglie minuti (revisione della PR
+        # #308, nota 5)
+        altre = [_data(x["data"]) for x in self.dati.tutti(
+            "SELECT id, data FROM studio_verifiche WHERE persona = ? AND stato = 'aperta' AND "
+            "id != ? AND data > ?", (v["persona"], v["id"], oggi.isoformat()))
+            if self._pagine_del_piano(x["id"])]
         minuti_v = int(v["minuti_giorno"] if v["minuti_giorno"] is not None
                        else getattr(self.cfg, "studio_minuti_giorno", 45))
         minuti = {}
@@ -509,53 +572,75 @@ class Studio:
             g = oggi + datetime.timedelta(days=i)
             k = 1 + sum(1 for d in altre if g < d)
             minuti[g] = min(minuti_v, liberi(g)) // k
-        # Le pagine degli argomenti tenuti, una volta sola, senza quelle tolte
-        argomenti = [a for a in self.dati.tutti(
-            "SELECT * FROM studio_argomenti WHERE verifica = ?", (v["id"],))
-            if a["stato"] in D.ARGOMENTI_DEL_PIANO]
-        ids = {int(p) for a in argomenti for p in D.da_j(a["pagine"])}
-        righe = self.dati.tutti(
-            "SELECT p.*, m.titolo AS materiale_titolo FROM studio_pagine p JOIN studio_materiali"
-            " m ON m.id = p.materiale WHERE m.verifica = ? AND p.stato != 'tolta'", (v["id"],))
-        pagine = [P.Pagina(r["id"], r["ordine"], r["numero"],
-                           r["etichetta"] or r["materiale_titolo"]) for r in righe
-                  if r["id"] in ids]
+        pagine = self._pagine_del_piano(v["id"])
+        # I giorni fatti prima della data (spostata prima di un giorno fatto: quelli dopo non
+        # contano più, revisione della PR #308, nota 11)
         fatti = self.dati.tutti("SELECT * FROM studio_piano WHERE verifica = ? AND "
-                                "fatto IS NOT NULL", (v["id"],))
+                                "fatto IS NOT NULL AND giorno < ?", (v["id"], data.isoformat()))
         fatte = {int(p) for r in fatti if r["fase"] == P.STUDIO for p in D.da_j(r["pagine"])}
         giorni_fatti = {_data(r["giorno"]) for r in fatti}
         piano = P.calcola(oggi, data, pagine, minuti,
                           int(getattr(self.cfg, "studio_minuti_pagina", 10) or 10),
                           fatte=fatte, giorni_fatti=giorni_fatti)
+        if not self.dati.scrivibile:
+            return piano
         with self.dati.lock:
             db = self.dati.db
-            db.execute("DELETE FROM studio_piano WHERE verifica = ? AND fatto IS NULL",
-                       (v["id"],))
-            for g in piano.giorni:
-                db.execute("INSERT INTO studio_piano (verifica, giorno, fase, pagine, attivita, "
-                           "minuti, oltre) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                           (v["id"], g.giorno.isoformat(), g.fase, D.j(g.pagine), g.attivita,
-                            g.minuti, int(g.oltre)))
-            db.execute("UPDATE studio_verifiche SET piano_del = ?, piano_avvisi = ? WHERE id = ?",
-                       (oggi.isoformat(), D.j(piano.avvisi), v["id"]))
-            db.commit()
+            try:
+                db.execute("DELETE FROM studio_piano WHERE verifica = ? AND (fatto IS NULL OR "
+                           "giorno >= ?)", (v["id"], data.isoformat()))
+                for g in piano.giorni:
+                    db.execute("INSERT INTO studio_piano (verifica, giorno, fase, pagine, "
+                               "attivita, minuti, oltre) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                               (v["id"], g.giorno.isoformat(), g.fase, D.j(g.pagine),
+                                g.attivita, g.minuti, int(g.oltre)))
+                db.execute("UPDATE studio_verifiche SET piano_del = ?, piano_avvisi = ? "
+                           "WHERE id = ?", (oggi.isoformat(), D.j(piano.avvisi), v["id"]))
+                db.commit()
+            except Exception:
+                # Niente DELETE a metà lasciato alla prossima scrittura (nota 8)
+                if db.in_transaction:
+                    db.rollback()
+                raise
         self._misura_piano(v["id"], piano)
         return piano
+
+    def _piano_vivo(self, v: dict) -> tuple[list[dict], list[str], str]:
+        """(giorni, avvisi, stato) del piano di oggi. Se va ricalcolato e i dati sono in sola
+        lettura, i giorni fatti dal db e gli altri dal calcolo in memoria."""
+        oggi = self._oggi()
+        stato = v["stato"]
+        avvisi = D.da_j(v["piano_avvisi"])
+        calcolato = None
+        if stato in ("aperta", "fatta") and v["piano_del"] != oggi.isoformat():
+            calcolato = self._ricalcola_sicuro(v["id"])
+            nuova = self.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (v["id"],))
+            if nuova is not None:
+                stato, avvisi = nuova["stato"], D.da_j(nuova["piano_avvisi"])
+            if _data(v["data"]) < oggi:
+                stato = "fatta"
+        righe = self.dati.tutti("SELECT * FROM studio_piano WHERE verifica = ? ORDER BY giorno",
+                                (v["id"],))
+        if calcolato is not None and not self.dati.scrivibile:
+            data = _data(v["data"]).isoformat()
+            righe = [r for r in righe if r["fatto"] and r["giorno"] < data] + [
+                {"id": None, "verifica": v["id"], "giorno": g.giorno.isoformat(),
+                 "fase": g.fase, "pagine": D.j(g.pagine), "attivita": g.attivita,
+                 "minuti": g.minuti, "oltre": int(g.oltre), "fatto": None}
+                for g in calcolato.giorni]
+            righe.sort(key=lambda r: r["giorno"])
+            avvisi = list(calcolato.avvisi)
+        for g in righe:
+            g["pagine"] = D.da_j(g["pagine"])
+            g["oltre"] = bool(g["oltre"])
+        return righe, (avvisi if stato == "aperta" else []), stato
 
     def piano(self, chi, vid) -> dict:
         """Il piano di una verifica: i giorni (fatti compresi), gli avvisi, i giorni che
         mancano, l'obiettivo, le tappe e la previsione (solo dopo due misure vere)."""
         v = self._verifica(chi, vid)
         oggi = self._oggi()
-        if v["stato"] in ("aperta", "fatta") and v["piano_del"] != oggi.isoformat():
-            self.ricalcola(v["id"])
-            v = self._verifica(chi, vid)
-        avvisi = D.da_j(v["piano_avvisi"]) if v["stato"] == "aperta" else []
-        giorni = self.dati.tutti("SELECT * FROM studio_piano WHERE verifica = ? "
-                                 "ORDER BY giorno", (v["id"],))
-        for g in giorni:
-            g["pagine"] = D.da_j(g["pagine"])
-            g["oltre"] = bool(g["oltre"])
+        giorni, avvisi, stato = self._piano_vivo(v)
         fatte = {p_ for g in giorni if g["fatto"] and g["fase"] == P.STUDIO
                  for p_ in g["pagine"]}
         pag = self.pagine(chi, v["id"])
@@ -565,7 +650,7 @@ class Studio:
             "SELECT giorno, valore FROM studio_misure WHERE verifica = ? ORDER BY giorno, id",
             (v["id"],))]
         data = _data(v["data"])
-        return {"verifica": v["id"], "stato": v["stato"], "data": v["data"],
+        return {"verifica": v["id"], "stato": stato, "data": v["data"],
                 "giorni_mancanti": (data - oggi).days, "obiettivo": v["obiettivo"],
                 "giorni": giorni, "avvisi": avvisi,
                 "tappe": P.tappe(args, ordine, fatte),
@@ -580,11 +665,9 @@ class Studio:
         out = []
         for v in self.dati.tutti("SELECT * FROM studio_verifiche WHERE persona = ? AND "
                                  "stato = 'aperta' ORDER BY data, id", (persona,)):
-            if v["piano_del"] != oggi.isoformat():
-                self.ricalcola(v["id"])
-            r = self.dati.uno("SELECT * FROM studio_piano WHERE verifica = ? AND giorno = ?",
-                              (v["id"], oggi.isoformat()))
-            if r is not None:
+            giorni, _avvisi, stato = self._piano_vivo(v)
+            r = next((g for g in giorni if g["giorno"] == oggi.isoformat()), None)
+            if r is not None and stato == "aperta":
                 out.append({"verifica": v["id"], "materia": v["materia"], "data": v["data"],
                             "fase": r["fase"], "attivita": r["attivita"],
                             "minuti": r["minuti"], "fatto": bool(r["fatto"])})

@@ -1370,9 +1370,10 @@ class Conservazione:
         except Exception as e:  # noqa: BLE001 — lo Studio non ferma la rotazione del resto
             self.log(f"   [CONSERVA] Studio non ripulito: {type(e).__name__}")
             return {"verifiche": 0, "file": 0}
-        if out["verifiche"] and "scadute_prima" in kw:
-            self.log(f"   [CONSERVA] Studio: tolte {out['verifiche']} verifiche oltre "
-                     f"{getattr(self.cfg, 'studio_tenuta_giorni', 60)} giorni dalla data")
+        if (out["verifiche"] or out.get("giorni")) and "scadute_prima" in kw:
+            self.log(f"   [CONSERVA] Studio: tolte {out['verifiche']} verifiche e "
+                     f"{out.get('giorni', 0)} giorni segnati oltre "
+                     f"{getattr(self.cfg, 'studio_tenuta_giorni', 60)} giorni")
         return out
 
     def _svuota_foto(self, persona_id) -> int:

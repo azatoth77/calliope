@@ -4074,8 +4074,19 @@ def _data_valida(value, dove: str = ""):
 _data_valida.prima_del_tipo = True
 
 
+def _fascia_studio_valida(value, dove: str = ""):
+    """`studio_fascia` (29/10, #280, revisione della PR #308): «HH:MM-HH:MM» nello stesso
+    giorno, l'inizio prima della fine. Scritta male è rifiutata con l'avviso e resta il valore
+    di prima, come le altre chiavi sbagliate."""
+    from .studio.piano import fascia_valida
+    if fascia_valida(value) is None:
+        raise ValueError("serve una fascia come «15:00-20:00», l'inizio prima della fine")
+    return str(value).strip()
+
+
 VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valido,
               "conserva_valutazione_fino": _data_valida,
+              "studio_fascia": _fascia_studio_valida,
               "tts_thread": _tts_thread_valido, "tts_dispositivo": _tts_dispositivo_valido,
               "agenti_num_ctx": _num_ctx_agenti_valido,
               "contesto_riassuntore": _riassuntore_valido,

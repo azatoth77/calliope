@@ -647,9 +647,14 @@ class Avvio:
             from .studio.dati import cancella_file as _studio_cancella
 
             def _studio_dimentica(persona, cfg=cfg):
-                _studio_cancella(getattr(cfg, "memory_db", None), persona=str(persona),
-                                 archiviate=False,
-                                 cartella=getattr(cfg, "studio_cartella", None))
+                # Un errore con il suo nome nel registro, non «schermi non avvisati»
+                try:
+                    _studio_cancella(getattr(cfg, "memory_db", None), persona=str(persona),
+                                     archiviate=False,
+                                     cartella=getattr(cfg, "studio_cartella", None))
+                except Exception as e:  # noqa: BLE001 — lo Studio non ferma «dimentica»
+                    print(f"[STUDIO] «dimentica» non ha tolto lo Studio: {type(e).__name__}",
+                          flush=True)
             conv_arch.su_dimentica.append(_studio_dimentica)
         s.tools = build_registry(biblioteca=s.biblioteca is not None, pc=self.pcs,
                                  pc_ospite=cfg.pc_ospite_volume_media,

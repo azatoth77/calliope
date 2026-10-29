@@ -232,7 +232,8 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
     - `tutto`: ogni verifica e ogni giorno (`svuota` di tutti);
     - `persona`: le verifiche di una persona e i suoi giorni; con `archiviate=False` quelle
       archiviate restano («dimentica»);
-    - `scadute_prima`: le verifiche non archiviate con la data prima di quel giorno (la tenuta).
+    - `scadute_prima`: le verifiche non archiviate con la data prima di quel giorno e i giorni
+      segnati delle persone prima di quel giorno (la tenuta).
     Restituisce quante verifiche e quanti file. Senza le tabelle (Studio mai usato) niente."""
     out = {"verifiche": 0, "file": 0}
     if not _c_e(db):
@@ -255,11 +256,18 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
     try:
         db.execute("BEGIN IMMEDIATE")
         ids = [r[0] for r in db.execute(q, arg)]
+        giorni = 0
         file = _togli_verifiche(db, ids)
         if tutto:
             db.execute("DELETE FROM studio_giorni")
         elif persona is not None:
             db.execute("DELETE FROM studio_giorni WHERE persona = ?", (str(persona),))
+        else:
+            # I giorni di una persona («non ce la faccio oggi», senza scuola, minuti diversi)
+            # scadono con lo stesso limite (revisione della PR #308): dati personali, anche dei
+            # minori, mai per sempre
+            giorni = db.execute("DELETE FROM studio_giorni WHERE giorno < ?",
+                                (scadute_prima.isoformat(),)).rowcount or 0
         db.commit()
     except Exception:
         if db.in_transaction:
@@ -268,6 +276,7 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
     finally:
         db.execute(f"PRAGMA secure_delete = {int(prima)}")
     out["verifiche"] = len(ids)
+    out["giorni"] = giorni
     out["file"] = togli_file(file, cartella)
     return out
 
@@ -291,8 +300,9 @@ def cancella_file(path, log=print, **kw) -> dict:
         db.close()
 
 
-def conta_file(path) -> dict:
-    """Quante verifiche ci sono (e quante archiviate), per `calliope stato`."""
+def conta_file(path, persona: str | None = None) -> dict:
+    """Quante verifiche ci sono (e quante archiviate), di tutti o di una persona: per
+    `calliope stato`, la domanda di «svuota» e quella di «dimentica»."""
     out = {"verifiche": 0, "archiviate": 0}
     if not path or not Path(path).exists():
         return out
@@ -303,9 +313,12 @@ def conta_file(path) -> dict:
     try:
         if not _c_e(db):
             return out
-        out["verifiche"] = db.execute("SELECT COUNT(*) FROM studio_verifiche").fetchone()[0]
-        out["archiviate"] = db.execute("SELECT COUNT(*) FROM studio_verifiche WHERE "
-                                       "stato = 'archiviata'").fetchone()[0]
+        dove, arg = ("WHERE persona = ?", (str(persona),)) if persona is not None else ("", ())
+        out["verifiche"] = db.execute(f"SELECT COUNT(*) FROM studio_verifiche {dove}",
+                                      arg).fetchone()[0]
+        e = "AND" if dove else "WHERE"
+        out["archiviate"] = db.execute(f"SELECT COUNT(*) FROM studio_verifiche {dove} {e} "
+                                       "stato = 'archiviata'", arg).fetchone()[0]
         return out
     except sqlite3.Error:
         return out

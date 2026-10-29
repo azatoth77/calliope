@@ -31,10 +31,11 @@ from calliope.studio import piano as P  # noqa: E402
 errori = 0
 
 
-def verifica(nome, ok):
+def verifica(nome, ok, dettaglio=""):
     global errori
     errori += not ok
-    print(f"{'ok ' if ok else 'ERR'} {nome}")
+    print(f"{'ok ' if ok else 'ERR'} {nome}" + (f"  ({dettaglio})" if dettaglio and not ok
+                                                else ""))
 
 
 def solleva(f, tipo) -> bool:
@@ -154,6 +155,8 @@ verifica("fra un mese: l'ultimo giorno (la vigilia) è ripasso di tutte le pagin
          p.giorni[-1].giorno == oggi + datetime.timedelta(days=29)
          and p.giorni[-1].fase == P.RIPASSO and p.giorni[-1].pagine == [x.id for x in pag]
          and p.giorni[-1].attivita == "Ripassa le pagine 112–119.")
+verifica("fra un mese: un giorno di solo ripasso vale i minuti delle pagine lette",
+         all(g.minuti <= len(g.pagine) * 10 for g in p.giorni[:-1] if g.fase == P.RIPASSO))
 verifica("fra un mese: i giorni senza pagine nuove ripassano quelle lette",
          any(g.fase == P.RIPASSO and g.giorno < p.giorni[-1].giorno for g in p.giorni)
          and len(p.giorni) == 30 and p.giorni_mancanti == 30)
@@ -170,10 +173,14 @@ verifica("giorni con meno minuti di una pagina: nessun giorno libero",
 
 molte = [P.Pagina(i, i, str(i)) for i in range(1, 21)]
 p = P.calcola(oggi, oggi + datetime.timedelta(days=3), molte, minuti_uguali(3), 10)
-verifica("pagine più dei giorni: 20 pagine in due giorni da 4, il ripasso resta",
-         [len(g.pagine) for g in p.giorni if g.fase == P.STUDIO] == [10, 10]
-         and all(g.oltre for g in p.giorni if g.fase == P.STUDIO)
-         and P.TROPPE_PAGINE in p.avvisi and p.giorni[-1].fase == P.RIPASSO)
+verifica("pagine più dei giorni: 20 pagine in tre giorni da 4, si legge anche la vigilia",
+         [len(g.pagine) for g in p.giorni] == [7, 7, 6]
+         and all(g.fase == P.STUDIO and g.oltre for g in p.giorni)
+         and P.TROPPE_PAGINE in p.avvisi and P.SENZA_RIPASSO in p.avvisi)
+p = P.calcola(oggi, oggi + datetime.timedelta(days=2), molte[:6], minuti_uguali(2), 10)
+verifica("6 pagine in due giorni da 4: la vigilia si legge invece di andare oltre i minuti",
+         [len(g.pagine) for g in p.giorni] == [3, 3] and not any(g.oltre for g in p.giorni)
+         and p.avvisi == [P.SENZA_RIPASSO])
 p = P.calcola(oggi, oggi + datetime.timedelta(days=4), molte[:9], minuti_uguali(4), 10)
 verifica("9 pagine in tre giorni da 4: 3 al giorno, nessuno oltre",
          [len(g.pagine) for g in p.giorni if g.fase == P.STUDIO] == [3, 3, 3]
@@ -209,6 +216,36 @@ verifica("descrizione: numeri non di fila e gli appunti",
 verifica("descrizione: un numero romano resta com'è",
          P.descrivi_pagine([P.Pagina(1, 1, "IV"), P.Pagina(2, 2, "5")]) == "le pagine 5 e IV")
 
+for strano in ("²", "①", "12²", "1 2", "-3", "p.12", "x" * 12, "\u200b"):
+    pp = [P.Pagina(1, 1, "112"), P.Pagina(2, 2, strano, None, "Libro"), P.Pagina(3, 3, "113")]
+    try:
+        p = P.calcola(oggi, oggi + datetime.timedelta(days=3), pp, minuti_uguali(3), 10)
+        ok = (P.NUMERO_STRANO in p.avvisi and sum(len(g.pagine) for g in p.giorni
+                                                 if g.fase == P.STUDIO) == 3)
+    except Exception as e:  # noqa: BLE001
+        ok = False
+        print(f"    ({strano!r}: {type(e).__name__}: {e})")
+    verifica(f"numero di pagina strano {strano!r}: il piano c'è, la pagina senza numero e "
+             f"l'avviso", ok)
+verifica("numero strano: l'attività lo nomina col materiale, mai col numero",
+         P.descrivi_pagine([P.Pagina(1, 1, "²", None, "Libro")]) == "«Libro»")
+verifica("cifre decimali di un'altra scrittura (١٢) valgono 12",
+         P.descrivi_pagine([P.Pagina(1, 1, "١٢")]) == "la pagina 12"
+         and P.numero_pagina("²") is None and P.numero_pagina("0012") == 12)
+verifica("una sigla corta resta (IV, 12a), il vuoto non è strano",
+         P.numero_leggibile("12a") == "12a" and not P.numero_strano("")
+         and not P.numero_strano(None) and P.numero_strano("²"))
+due = [P.Pagina(1, 1, "12", None, "Libro"), P.Pagina(2, 2, "13", None, "Libro"),
+       P.Pagina(3, 3, "12", None, "Quaderno")]
+verifica("due materiali con la pagina 12: l'attività li distingue",
+         P.descrivi_pagine(due, P.piu_materiali(due))
+         == "le pagine 12–13 di «Libro» e la pagina 12 di «Quaderno»")
+p = P.calcola(oggi, oggi + datetime.timedelta(days=2), due, minuti_uguali(2), 10)
+verifica("due materiali nel piano: «di «Libro»» anche nell'attività",
+         "di «Libro»" in p.giorni[0].attivita and "di «Quaderno»" in p.giorni[0].attivita)
+verifica("un solo materiale: niente titolo accanto ai numeri",
+         not P.piu_materiali(due[:2]) and P.descrivi_pagine(due[:2]) == "le pagine 12–13")
+
 fascia = P.fascia_valida("15:00-20:00")
 verifica("minuti liberi: la fascia intera", P.minuti_liberi(fascia) == 300)
 verifica("minuti liberi: oggi alle 18:30 restano 90 minuti",
@@ -219,6 +256,10 @@ verifica("minuti liberi: il riposo 19:00-07:30 (passa la mezzanotte) toglie un'o
          P.minuti_liberi(fascia, ["19:00-07:30"]) == 240)
 verifica("minuti liberi: il riposo 14:00-23:00 copre tutta la fascia",
          P.minuti_liberi(fascia, ["14:00-23:00"]) == 0)
+verifica("orari di riposo scritti come una stringa sola: letti come minori._orari_validi",
+         P.minuti_liberi(fascia, "14:00-23:00") == 0
+         and P.minuti_liberi(fascia, "19:00-07:30; 15:00-15:30") == 210
+         and P.minuti_liberi(fascia, ["sempre", "25:00-26:00"]) == 300)
 verifica("fascia scritta male rifiutata", P.fascia_valida("20:00-15:00") is None
          and P.fascia_valida("pomeriggio") is None)
 verifica("giorni della settimana, anche senza accento",
@@ -266,6 +307,24 @@ verifica("schema più nuovo: si legge, non si scrive",
          not st.dati.scrivibile and st.verifica(LEO, vid)["id"] == vid
          and solleva(lambda: st.crea_verifica(LEO, "Storia", "2026-11-20"), PermissionError))
 st.close()
+ORA[0] = datetime.datetime(2026, 10, 30, 9, 0)            # il giorno dopo: va ricalcolato
+st = studio(cfg)
+try:
+    pi, og = st.piano(LEO, vid), st.oggi(LEO)
+    ok = (pi["giorni"][0]["giorno"] == "2026-10-30" and pi["giorni"][-1]["fase"] == P.RIPASSO
+          and len(og) == 1 and og[0]["attivita"].startswith("Leggi"))
+except Exception as e:  # noqa: BLE001
+    ok = False
+    print(f"    ({type(e).__name__}: {e})")
+verifica("schema più nuovo, il giorno dopo: piano e «Oggi» calcolati in memoria", ok)
+st.close()
+db = sqlite3.connect(cfg.memory_db)
+verifica("schema più nuovo, il giorno dopo: niente scritto nel db",
+         db.execute("SELECT piano_del FROM studio_verifiche WHERE id = ?", (vid,)).fetchone()[0]
+         == "2026-10-29" and db.execute("SELECT MIN(giorno) FROM studio_piano WHERE "
+                                        "verifica = ?", (vid,)).fetchone()[0] == "2026-10-29")
+db.close()
+ORA[0] = datetime.datetime(2026, 10, 29, 10, 0)
 db = sqlite3.connect(cfg.memory_db)
 db.execute("UPDATE meta_schema SET versione = 1 WHERE modulo = 'studio'")
 db.commit()
@@ -332,6 +391,12 @@ pi = st.piano(LEO, vid)
 verifica("data spostata al 12/11: il ripasso è l'11/11, il fatto resta",
          pi["giorni"][-1]["giorno"] == "2026-11-11" and pi["giorni"][-1]["fase"] == P.RIPASSO
          and pi["giorni"][0]["fatto"] and pi["giorni_mancanti"] == 13)
+st.giorno_fatto(LEO, vid, "2026-11-03")
+st.imposta(LEO, vid, data="2026-11-03")
+pi = st.piano(LEO, vid)
+verifica("data spostata prima di un giorno fatto: il fatto dopo la data non resta",
+         all(g["giorno"] < "2026-11-03" for g in pi["giorni"]))
+st.imposta(LEO, vid, data="2026-11-12")
 verifica("data spostata nel passato rifiutata",
          solleva(lambda: st.imposta(LEO, vid, data="2026-10-01"), ValueError))
 
@@ -346,6 +411,33 @@ verifica("10 minuti al giorno: una pagina al giorno",
          all(len(g["pagine"]) <= 1 for g in pi["giorni"] if g["fase"] == P.STUDIO
              and not g["fatto"]) and pi["avvisi"] == [])
 
+prima = st.dati.tutti("SELECT * FROM studio_piano WHERE verifica = ? ORDER BY id", (vid,))
+vero_j = D.j
+chiamate = [0]
+
+
+def j_rotto(x):
+    chiamate[0] += 1
+    if chiamate[0] > 2:
+        raise RuntimeError("guasto a metà")
+    return vero_j(x)
+
+
+import calliope.studio.servizio as SV  # noqa: E402
+SV.D.j = j_rotto
+righe_log.clear()
+try:
+    st.imposta(LEO, vid, minuti_giorno=20)
+    rotto_ok = True
+except Exception:  # noqa: BLE001
+    rotto_ok = False
+finally:
+    SV.D.j = vero_j
+dopo = st.dati.tutti("SELECT * FROM studio_piano WHERE verifica = ? ORDER BY id", (vid,))
+verifica("ricalcolo guasto a metà: rollback, il piano di prima resta, una riga nel registro",
+         rotto_ok and dopo == prima and not st.dati.db.in_transaction
+         and any("non ricalcolato: RuntimeError" in x for x in righe_log))
+st.imposta(LEO, vid, minuti_giorno=10)
 st.segna_argomento(LEO, st.argomenti(LEO, vid)[-1]["id"], False)     # «Esercizi» tolto
 pi = st.piano(LEO, vid)
 verifica("argomento tolto: le sue pagine escono dal piano",
@@ -386,6 +478,20 @@ ORA[0] = datetime.datetime(2026, 11, 13, 9, 0)
 pi = st.piano(LEO, vid)
 verifica("il giorno dopo la verifica: «fatta», il piano resta come storia",
          pi["stato"] == "fatta" and len(pi["giorni"]) > 0 and st.oggi(LEO) == [])
+vn = st.crea_verifica(BRUNO, "Inglese", "2026-11-20")
+mn = st.aggiungi_materiale(BRUNO, vn, "mano", "Quaderno")
+for strano in ("²", "①", "12"):
+    st.aggiungi_pagina(BRUNO, mn, numero=strano)
+pg_b = [x["id"] for x in st.pagine(BRUNO, vn)]
+st.aggiungi_argomento(BRUNO, vn, "Verbi", pg_b)
+try:
+    pn = st.conferma_argomenti(BRUNO, vn)
+    ok = P.NUMERO_STRANO in pn["avvisi"] and len(pn["giorni"]) > 0 and len(st.oggi(BRUNO)) >= 1
+except Exception as e:  # noqa: BLE001
+    ok = False
+    print(f"    ({type(e).__name__}: {e})")
+verifica("pagine con «²» e «①» dal servizio: il piano e la riga «Oggi» ci sono, con l'avviso",
+         ok)
 verifica("verifica nuova con la data passata rifiutata",
          solleva(lambda: st.crea_verifica(LEO, "Storia", "2026-11-01"), ValueError))
 st.close()
@@ -399,6 +505,12 @@ v2, _ = carica(st, LEO, "scienze")
 p1, p2 = st.piano(LEO, v1), st.piano(LEO, v2)
 verifica("due verifiche il 5/11: i minuti si dividono (al più 22 per verifica)",
          all(g["minuti"] <= 22 for g in p1["giorni"] + p2["giorni"]))
+v_vuota = st.crea_verifica(LEO, "Inglese", "2026-11-05")
+st.conferma_argomenti(LEO, v_vuota)
+p1b = st.piano(LEO, v1)
+verifica("una terza verifica aperta senza pagine non toglie minuti alle altre",
+         [g["minuti"] for g in p1b["giorni"]] == [g["minuti"] for g in p1["giorni"]]
+         and st.piano(LEO, v_vuota)["avvisi"] == [P.NESSUNA_PAGINA])
 verifica("domenica 1/11 senza piano", all(g["giorno"] != "2026-11-01"
                                           for g in p1["giorni"] + p2["giorni"]))
 verifica("la riga «Oggi» con due verifiche", len(st.oggi(LEO)) == 2)
@@ -466,6 +578,39 @@ verifica("minore senza tutori: vale chi amministra, non un altro adulto",
          and solleva(lambda: st.verifica(ANDREA, vm), S.NonTrovata))
 verifica("una verifica che non c'è e quella di un altro: lo stesso rifiuto",
          solleva(lambda: st.verifica(LEO, 9999), S.NonTrovata))
+
+
+def messaggio(f):
+    try:
+        f()
+    except S.NonTrovata as e:
+        return str(e)
+    except Exception as e:  # noqa: BLE001
+        return f"altro: {type(e).__name__}"
+    return "niente"
+
+
+mat_l = st.dati.uno("SELECT id FROM studio_materiali WHERE verifica = ?", (vl,))["id"]
+pag_l = st.pagine(LEO, vl)[0]["id"]
+arg_l = st.argomenti(LEO, vl)[0]["id"]
+msg = {messaggio(f) for f in (
+    lambda: st.verifica(CARLA, vl), lambda: st.verifica(CARLA, 99999),
+    lambda: st.aggiungi_pagina(CARLA, mat_l), lambda: st.aggiungi_pagina(CARLA, 99999),
+    lambda: st.segna_pagina(CARLA, pag_l, "tolta"), lambda: st.segna_pagina(CARLA, 99999, "tolta"),
+    lambda: st.segna_argomento(CARLA, arg_l, False),
+    lambda: st.segna_argomento(CARLA, 99999, False),
+    lambda: st.giorno_fatto(CARLA, vl), lambda: st.giorno_fatto(LEO, vl, "2027-01-01"))}
+verifica("materiale, pagina, argomento e giorno di un altro o che non c'è: lo stesso messaggio",
+         msg == {S.servizio.NON_TROVATA}, str(msg))
+ORFANO = Prof("o1", "Nina", nascita="2015-01-01", tutori=["via1"])     # tutore non più in casa
+REG.users["Nina"] = ORFANO
+vo_ = st.crea_verifica(ORFANO, "Storia", "2026-11-20")
+verifica("tutore scritto ma non più in casa: vede chi amministra, non un altro adulto",
+         st.verifica(CARLA, vo_)["id"] == vo_
+         and solleva(lambda: st.verifica(ANDREA, vo_), S.NonTrovata)
+         and S.permesso(CARLA, ORFANO, REG) == "tutore"
+         and S.permesso(ANDREA, LEO, REG) == "tutore" and S.permesso(CARLA, LEO, REG) is None)
+del REG.users["Nina"]
 verifica("le funzioni dei permessi: proprietario, tutore, niente",
          S.permesso(LEO, LEO) == "proprietario" and S.permesso(ANDREA, LEO) == "tutore"
          and S.permesso(LEO, ANDREA) is None and S.permesso(None, LEO) is None
@@ -524,6 +669,17 @@ verifica("un file fuori dalla cartella dello Studio non si tocca", fuori.exists(
 verifica("la verifica di Bruno (10/11) resta al 5/1", quante("b1") == 1)
 cons.ruota(oggi=datetime.date(2027, 12, 31))
 verifica("archiviata: resta per sempre (un anno dopo)", quante("l1") == 1 and quante("b1") == 0)
+db = sqlite3.connect(cfg.memory_db)
+db.execute("INSERT INTO studio_giorni (persona, giorno, minuti, motivo) VALUES "
+           "('l1', '2026-10-30', 0, 'saltato'), ('l1', '2027-12-01', 0, 'senza_scuola')")
+db.commit()
+db.close()
+r = cons.ruota(oggi=datetime.date(2027, 12, 31))
+db = sqlite3.connect(cfg.memory_db)
+resti = db.execute("SELECT giorno FROM studio_giorni").fetchall()
+db.close()
+verifica("i giorni segnati scadono con la tenuta (60 giorni), quelli recenti restano",
+         resti == [("2027-12-01",)] and r["studio"].get("giorni") == 1)
 verifica("la tenuta scrive una riga nel registro, senza nomi",
          any("Studio: tolte" in x for x in righe_log)
          and not any("Leo" in x or "Storia" in x for x in righe_log if "[CONSERVA]" in x))
@@ -547,11 +703,46 @@ verifica("«dimentica»: via le verifiche di Leo non archiviate e i suoi giorni"
          resto == ["archiviata"] and giorni == 0 and orfani == 0)
 verifica("«dimentica» di Leo non tocca Bruno", quante("b1") == 1)
 cons = Conservazione(cfg, REG, log=righe_log.append)
+st = studio(cfg)
+st.imposta_giorno(LEO, "2026-11-03", 0, "senza_scuola")
+st.imposta_giorno(BRUNO, "2026-11-03", 20)
+st.close()
 r = cons.svuota("l1", "Leo")
-verifica("svuota di Leo: anche l'archiviata", r["studio"] == 1 and quante("l1") == 0
-         and quante("b1") == 1)
+db = sqlite3.connect(cfg.memory_db)
+g_l = db.execute("SELECT COUNT(*) FROM studio_giorni WHERE persona='l1'").fetchone()[0]
+g_b = db.execute("SELECT COUNT(*) FROM studio_giorni WHERE persona='b1'").fetchone()[0]
+db.close()
+verifica("svuota di Leo: anche l'archiviata e i suoi giorni, Bruno resta",
+         r["studio"] == 1 and quante("l1") == 0 and quante("b1") == 1 and g_l == 0
+         and g_b == 1)
 r = cons.svuota()
-verifica("svuota di tutti: lo Studio vuoto", r["studio"] == 1 and quante() == 0)
+db = sqlite3.connect(cfg.memory_db)
+g_t = db.execute("SELECT COUNT(*) FROM studio_giorni").fetchone()[0]
+db.close()
+verifica("svuota di tutti: lo Studio vuoto, giorni compresi",
+         r["studio"] == 1 and quante() == 0 and g_t == 0)
+from calliope.tools import conversazioni as TC  # noqa: E402
+cfg_d = cfg_nuova("frasi.db")
+st = studio(cfg_d)
+carica(st, LEO, "storia")
+st.close()
+
+
+class Ctx:
+    cfg = cfg_d
+
+
+verifica("«dimentica»: la domanda e la frase dicono lo Studio quando c'è da togliere",
+         TC._studio_da_dimenticare(Ctx, "l1") and not TC._studio_da_dimenticare(Ctx, "b1")
+         and "verifiche dello Studio, tranne quelle archiviate" in TC.STUDIO_DOMANDA
+         and "archiviate restano" in TC.STUDIO_TOLTO
+         and TC.DIMENTICA_DOMANDA.replace("Cancello", TC.STUDIO_DOMANDA + " Cancello", 1)
+         != TC.DIMENTICA_DOMANDA)
+src_tc = (QUI.parent / "calliope" / "tools" / "conversazioni.py").read_text("utf-8")
+verifica("«dimentica»: il conto dello Studio prima di cancellare, la frase dopo",
+         src_tc.index("studio = _studio_da_dimenticare(ctx, persona)")
+         < src_tc.index("n = arch.dimentica(persona)")
+         and "frase += \" \" + STUDIO_TOLTO" in src_tc)
 src = (QUI.parent / "calliope" / "main.py").read_text("utf-8")
 verifica("main.py lega «dimentica le nostre conversazioni» allo Studio (archiviate escluse)",
          "conv_arch.su_dimentica.append(_studio_dimentica)" in src
@@ -590,5 +781,27 @@ verifica("attivo: per il modello e gli schermi (passo 4.5)", st.per_modello()
          and st.per_schermi())
 st.close()
 verifica("un modo sconosciuto vale spento", S.modo(cfg_nuova(modo="acceso")) == "spento")
+righe_log.clear()
+st = studio(cfg_nuova("fascia.db", studio_fascia="20:00-15:00"))
+verifica("studio_fascia scritta male: una riga nel registro e la fascia di serie",
+         st.fascia == (900, 1200) and any("studio_fascia" in x for x in righe_log))
+st.close()
+from calliope.config import load_config  # noqa: E402
+import contextlib  # noqa: E402
+import io  # noqa: E402
+(TMP / "c.yaml").write_text("studio:\n  studio_fascia: pomeriggio\n", encoding="utf-8")
+vecchio_locale = os.environ.get("CALLIOPE_CONFIG_LOCALE")
+os.environ["CALLIOPE_CONFIG_LOCALE"] = str(TMP / "nessuno.yaml")
+uscita = io.StringIO()
+with contextlib.redirect_stdout(uscita), contextlib.redirect_stderr(uscita):
+    cc = load_config(str(TMP / "c.yaml"))
+if vecchio_locale is None:
+    os.environ.pop("CALLIOPE_CONFIG_LOCALE", None)
+else:
+    os.environ["CALLIOPE_CONFIG_LOCALE"] = vecchio_locale
+verifica("studio_fascia sbagliata nel file: segnalata come le altre chiavi, resta la serie",
+         cc.studio_fascia == "15:00-20:00" and "studio_fascia" in uscita.getvalue())
+verifica(".gitignore tiene fuori la cartella dello Studio",
+         "/studio/" in (QUI.parent / ".gitignore").read_text("utf-8").splitlines())
 
 sys.exit(1 if errori else 0)

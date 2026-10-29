@@ -15,9 +15,13 @@ Regole:
 - con almeno due giorni liberi l'ultimo è solo ripasso; con uno solo quel giorno si legge
   tutto, senza ripasso (avviso «senza_ripasso»);
 - le pagine si distribuiscono in proporzione ai minuti dei giorni, nell'ordine, senza superare
-  i minuti di nessun giorno quando ci stanno; se non ci stanno si distribuiscono lo stesso e
-  ogni giorno oltre i suoi minuti ha il segno `oltre` (avviso «troppe_pagine»);
-- un giorno di studio rimasto senza pagine nuove (meno pagine che giorni) ripassa quelle lette;
+  i minuti di nessun giorno quando ci stanno; se non ci stanno nei giorni di studio si legge
+  anche la vigilia, senza ripasso («senza_ripasso»); se non ci stanno nemmeno così si
+  distribuiscono lo stesso e ogni giorno oltre i suoi minuti ha il segno `oltre` («troppe_pagine»);
+- un giorno di studio rimasto senza pagine nuove (meno pagine che giorni) ripassa quelle lette,
+  con i minuti di quelle pagine;
+- un numero di pagina strano («²», segni) non ferma il piano: la pagina vale senza numero e il
+  piano ha l'avviso «numero_strano»; con più materiali numerati l'attività dice il titolo;
 - le pagine e i giorni già fatti restano fatti: il ricalcolo distribuisce solo il resto.
 
 Niente nomi né testi delle pagine: l'attività la scrive il codice dai numeri di pagina e dai
@@ -42,18 +46,21 @@ NESSUN_GIORNO = "nessun_giorno"     # nessun giorno con minuti liberi prima dell
 NESSUNA_PAGINA = "nessuna_pagina"   # nessun argomento tenuto con delle pagine
 SENZA_RIPASSO = "senza_ripasso"     # un giorno solo: si legge tutto, il ripasso non ci sta
 TROPPE_PAGINE = "troppe_pagine"     # le pagine non stanno nei minuti dei giorni
+NUMERO_STRANO = "numero_strano"     # un numero di pagina letto che non è un numero né una sigla
 
 GIORNI_SETTIMANA = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")
 
 
 @dataclass(frozen=True)
 class Pagina:
-    """Una pagina da leggere: l'id nel db, l'ordine nel materiale, il numero letto (o None) e
-    l'etichetta per le pagine senza numero (il titolo del materiale, «Appunti»)."""
+    """Una pagina da leggere: l'id nel db, l'ordine nel materiale, il numero letto (o None),
+    l'etichetta per le pagine senza numero e il titolo del materiale («Libro», «Appunti»), che
+    distingue la pagina 12 di due libri diversi."""
     id: int
     ordine: int
     numero: str | None = None
     etichetta: str | None = None
+    materiale: str | None = None
 
 
 @dataclass
@@ -95,14 +102,13 @@ def fascia_valida(testo) -> tuple[int, int] | None:
 
 
 def _intervalli_riposo(orari) -> list[tuple[int, int]]:
-    """Gli orari di riposo di un minore («21:00-07:30») come intervalli dentro un giorno,
-    spezzati a mezzanotte."""
+    """Gli orari di riposo di un minore («21:00-07:30», un elenco o una stringa sola) come
+    intervalli dentro un giorno, spezzati a mezzanotte. Si leggono con la stessa funzione dei
+    minori (`minori._orari_validi`), così valgono gli stessi orari di `fuori_orario`."""
+    from ..minori import _orari_validi
     out = []
-    for o in orari or ():
-        try:
-            a, b = (_minuti(x) for x in str(o).split("-"))
-        except (ValueError, TypeError):
-            continue
+    for o in _orari_validi(orari or []):
+        a, b = (_minuti(x) for x in o.split("-"))
         if a <= b:
             out.append((a, b))
         else:
@@ -158,33 +164,91 @@ def _elenco(parti: list[str]) -> str:
     return parti[0] if len(parti) == 1 else ", ".join(parti[:-1]) + " e " + parti[-1]
 
 
-def descrivi_pagine(pagine: list[Pagina]) -> str:
-    """«le pagine 112–113 e 115», «la pagina 114», «le pagine 140–141 e «Appunti»». I numeri
-    letti che non sono numeri («IV», «12a») restano come sono."""
+_SIGLA = re.compile(r"[0-9A-Za-z]{1,6}")
+
+
+def numero_pagina(numero) -> int | None:
+    """Il numero di pagina come intero, solo se è fatto di cifre decimali (`isdecimal`, non
+    `isdigit`: «²» e «①» sono «cifre» ma `int` li rifiuta). Mai un'eccezione: il numero arriva
+    dall'OCR (passo 4.3), un dato non fidato."""
+    n = str(numero or "").strip()
+    if not n or not n.isdecimal():
+        return None
+    try:
+        return int(n)
+    except ValueError:
+        return None
+
+
+def numero_leggibile(numero) -> str | None:
+    """Il numero da scrivere nell'attività: le cifre come intero, una sigla corta di lettere e
+    cifre («IV», «12a») com'è; None per un numero vuoto o strano («²», segni, spazi, testo
+    lungo), che si tratta come una pagina senza numero e dà l'avviso `numero_strano`."""
+    n = numero_pagina(numero)
+    if n is not None:
+        return str(n)
+    t = str(numero or "").strip()
+    return t if _SIGLA.fullmatch(t) else None
+
+
+def numero_strano(numero) -> bool:
+    return bool(str(numero or "").strip()) and numero_leggibile(numero) is None
+
+
+def _descrivi_gruppo(pagine: list[Pagina]) -> tuple[str | None, list[str]]:
+    """(«le pagine 112–113 e 115» o None, le etichette delle pagine senza numero)."""
     numeri, altri, etichette = [], [], []
     for p in pagine:
-        n = str(p.numero or "").strip()
-        if n.isdigit():
-            numeri.append(int(n))
-        elif n:
-            altri.append(n)
+        n = numero_pagina(p.numero)
+        if n is not None:
+            numeri.append(n)
+            continue
+        sigla = numero_leggibile(p.numero)
+        if sigla:
+            altri.append(sigla)
         else:
-            e = f"«{(p.etichetta or 'foglio senza numero').strip()[:40]}»"
+            e = f"«{(p.etichetta or p.materiale or 'foglio senza numero').strip()[:40]}»"
             if e not in etichette:
                 etichette.append(e)
     numeri = sorted(set(numeri))
+    altri = list(dict.fromkeys(altri))
     voci = _intervalli(numeri) + altri
-    parti = []
-    if voci:
-        una = len(numeri) + len(altri) == 1
-        parti.append(("la pagina " if una else "le pagine ") + _elenco(voci))
+    if not voci:
+        return None, etichette
+    una = len(numeri) + len(altri) == 1
+    return ("la pagina " if una else "le pagine ") + _elenco(voci), etichette
+
+
+def descrivi_pagine(pagine: list[Pagina], con_materiale: bool = False) -> str:
+    """«le pagine 112–113 e 115», «la pagina 114», «le pagine 140–141 e «Appunti»». Le sigle
+    («IV», «12a») restano come sono; un numero strano vale come una pagina senza numero. Con
+    `con_materiale` (più materiali con pagine numerate nella stessa verifica) i numeri si
+    dicono per materiale: «la pagina 12 di «Libro» e la pagina 12 di «Quaderno»»."""
+    if not con_materiale:
+        cosa, etichette = _descrivi_gruppo(pagine)
+        parti = ([cosa] if cosa else []) + etichette
+        return _elenco(parti) if parti else "le pagine"
+    gruppi: dict = {}
+    for p in pagine:
+        gruppi.setdefault(p.materiale or "", []).append(p)
+    parti, etichette = [], []
+    for titolo, gruppo in gruppi.items():
+        cosa, et = _descrivi_gruppo(gruppo)
+        if cosa:
+            parti.append(f"{cosa} di «{titolo.strip()[:40]}»" if titolo else cosa)
+        etichette += [e for e in et if e not in etichette]
     parti += etichette
     return _elenco(parti) if parti else "le pagine"
 
 
-def attivita(fase: str, pagine: list[Pagina]) -> str:
-    cosa = descrivi_pagine(pagine)
+def attivita(fase: str, pagine: list[Pagina], con_materiale: bool = False) -> str:
+    cosa = descrivi_pagine(pagine, con_materiale)
     return f"Leggi {cosa}." if fase == STUDIO else f"Ripassa {cosa}."
+
+
+def piu_materiali(pagine: list[Pagina]) -> bool:
+    """Le pagine numerate vengono da più materiali? Allora l'attività dice anche il titolo."""
+    return len({p.materiale for p in pagine if numero_leggibile(p.numero)}) > 1
 
 
 # ─────────────────────────── il piano ───────────────────────────
@@ -200,6 +264,13 @@ def calcola(oggi: datetime.date, data: datetime.date, pagine: list[Pagina],
     fatte = set(fatte)
     piano = Piano(giorni_mancanti=(data - oggi).days, pagine_totali=len(pagine),
                   pagine_fatte=sum(p.id in fatte for p in pagine))
+    # Un numero letto strano non ferma il piano: la pagina vale senza numero, con l'avviso
+    if any(numero_strano(p.numero) for p in pagine):
+        piano.avvisi.append(NUMERO_STRANO)
+    cm = piu_materiali(pagine)
+
+    def att(fase, quali):
+        return attivita(fase, quali, cm)
     if data < oggi:
         piano.avvisi.append(PASSATA)
         return piano
@@ -217,21 +288,30 @@ def calcola(oggi: datetime.date, data: datetime.date, pagine: list[Pagina],
         piano.avvisi.append(NESSUN_GIORNO)
         return piano
     da_leggere = [p for p in pagine if p.id not in fatte]
-    if len(liberi) >= 2:
-        studio, ripasso = liberi[:-1], liberi[-1]
-    else:
-        studio, ripasso = liberi, None
-        if da_leggere:
-            piano.avvisi.append(SENZA_RIPASSO)
     if not da_leggere:
         # Tutto letto: resta il ripasso, nei giorni che restano
         for g in liberi:
             piano.giorni.append(Giorno(g, RIPASSO, [p.id for p in pagine],
-                                       int(minuti[g]), attivita(RIPASSO, pagine)))
+                                       int(minuti[g]), att(RIPASSO, pagine)))
         return piano
-    cap = {g: int(minuti[g]) // minuti_pagina for g in studio}
-    tot = sum(cap.values())
     n = len(da_leggere)
+
+    def capacita(giorni):
+        return {g: int(minuti[g]) // minuti_pagina for g in giorni}
+
+    if len(liberi) >= 2:
+        studio, ripasso = liberi[:-1], liberi[-1]
+        # Le pagine non stanno nei giorni di studio: si legge anche la vigilia, senza ripasso,
+        # prima di mettere un giorno oltre i suoi minuti (revisione della PR #308, nota 7).
+        # Ripassare pagine mai lette non serve; leggerle tutte sì
+        if n > sum(capacita(studio).values()):
+            studio, ripasso = liberi, None
+            piano.avvisi.append(SENZA_RIPASSO)
+    else:
+        studio, ripasso = liberi, None
+        piano.avvisi.append(SENZA_RIPASSO)
+    cap = capacita(studio)
+    tot = sum(cap.values())
     if n > tot:
         piano.avvisi.append(TROPPE_PAGINE)
     # In proporzione ai minuti: dopo il giorno i, ceil(n · capacità fin lì / capacità totale)
@@ -249,14 +329,18 @@ def calcola(oggi: datetime.date, data: datetime.date, pagine: list[Pagina],
                 g, STUDIO, [p.id for p in quante],
                 len(quante) * minuti_pagina if oltre else min(int(minuti[g]),
                                                               len(quante) * minuti_pagina),
-                attivita(STUDIO, quante), oltre=oltre))
+                att(STUDIO, quante), oltre=oltre))
             lette += quante
         elif lette:
-            piano.giorni.append(Giorno(g, RIPASSO, [p.id for p in lette], int(minuti[g]),
-                                       attivita(RIPASSO, sorted(lette, key=lambda p: p.ordine))))
+            # Un giorno senza pagine nuove ripassa quelle lette (decisione di Dario del 29/10,
+            # dubbio 1), con i minuti di quelle pagine e non tutto il giorno: non pesa come una
+            # vigilia
+            piano.giorni.append(Giorno(g, RIPASSO, [p.id for p in lette],
+                                       min(int(minuti[g]), len(lette) * minuti_pagina),
+                                       att(RIPASSO, sorted(lette, key=lambda p: p.ordine))))
     if ripasso is not None:
         piano.giorni.append(Giorno(ripasso, RIPASSO, [p.id for p in pagine],
-                                   int(minuti[ripasso]), attivita(RIPASSO, pagine)))
+                                   int(minuti[ripasso]), att(RIPASSO, pagine)))
     return piano
 
 

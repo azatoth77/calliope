@@ -140,7 +140,9 @@ dell'eco della stanza.
    persona) e in quelli saltati, divisi fra più verifiche negli stessi giorni. L'attività del
    giorno è «Leggi le pagine X–Y» (punto 1): le pagine degli argomenti tenuti, nell'ordine delle
    pagine, in proporzione ai minuti; la vigilia (l'ultimo giorno libero, se sono almeno due) è
-   solo ripasso. Se le pagine non ci stanno si distribuiscono lo stesso e il piano lo dice. Si
+   solo ripasso. Se le pagine non ci stanno nei giorni di studio si legge anche la vigilia e il
+   ripasso cade; se non ci stanno nemmeno così si distribuiscono lo stesso e il piano lo dice
+   (revisione della PR #308). Un giorno senza pagine nuove ripassa quelle lette. Si
    ricalcola a ogni cambio e il primo giorno nuovo; i giorni fatti restano. Le **tappe** sono gli
    argomenti, che si sbloccano uno dopo l'altro; accanto, i giorni che mancano; la **previsione**
    per la verifica compare solo dopo almeno due misure vere (spunto approvato il 28/10, commento
@@ -151,7 +153,9 @@ dell'eco della stanza.
     loro file, testo, argomenti, piano, misure) `studio_tenuta_giorni` (60) giorni dopo la sua
     data, nella rotazione della conservazione; archiviata resta per sempre. «Dimentica le nostre
     conversazioni» toglie lo Studio della persona **tranne le verifiche archiviate**, tenute di
-    proposito come le foto archiviate della [0034](0034-miniature-nella-conversazione.md);
+    proposito come le foto archiviate della [0034](0034-miniature-nella-conversazione.md), e la
+    domanda e la frase di «dimentica» lo dicono (deciso da chi amministra il 29/10). Anche i giorni
+    segnati di una persona scadono dopo `studio_tenuta_giorni`;
     `calliope conserva --svuota` toglie tutto (`conserva.TABELLE_STUDIO`).
 12. **Interruttore** `studio_modo: spento | ombra | attivo`, spento di serie. In ombra i dati si
     scrivono e il piano si calcola, ma niente arriva al modello né agli schermi: nel registro solo

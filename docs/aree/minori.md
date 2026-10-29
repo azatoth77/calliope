@@ -1766,7 +1766,65 @@ pagine, giorni oltre, avvisi), senza nomi, materie né titoli. Attivo: per il pa
 il piano dal servizio coi materiali di fantasia e l'orologio finto, permessi, tenuta, archivia,
 «dimentica», svuota e interruttore. In `prova_config_modi.py` il campo `studio_modo`.
 
-**Da decidere** (nella PR): se un giorno senza pagine nuove debba ripassare o restare libero; se
-«dimentica» debba togliere anche le verifiche archiviate; il «quadro» del primo giorno
-dell'analisi, che senza contenuti resta fuori; i valori di serie di fascia, minuti al giorno e
-minuti per pagina, da tarare sull'uso.
+*[storico: «Da decidere» fino al 29/10: decisi da Dario il 29/10 (commento nella #280). Un
+giorno senza pagine nuove ripassa quelle lette; «dimentica» lascia le archiviate e `--svuota` le
+toglie; il «quadro» resta fuori finché non c'è un contenuto; fascia 15–20, 45 minuti al giorno e
+10 a pagina restano i valori di serie; i giorni senza scuola restano configurazione più giorni
+segnati, dal calendario della scuola più avanti (#298); al ricalcolo i giorni passati non fatti
+spariscono.]*
+
+### 29/10: correzioni dopo la revisione della PR #308
+
+*La revisione ha trovato tre punti bloccanti e dodici note. Dario ha deciso i sei dubbi il 29/10
+(commento nella #280). Tutto è nella stessa PR.*
+
+- **Dati di una versione più nuova.** Prima, dal giorno dopo, `piano()` e `oggi()` fallivano
+  perché il ricalcolo scriveva su una connessione `query_only`. Ora con i dati in sola lettura
+  il piano di oggi si calcola in memoria e non si salva: i giorni fatti vengono dal db, gli altri
+  dal calcolo (`Studio._piano_vivo`).
+- **`studio_giorni` scade.** Nella rotazione i giorni segnati («non ce la faccio oggi», senza
+  scuola, minuti diversi) più vecchi di `studio_tenuta_giorni` vanno via con lo stesso limite
+  delle verifiche; con «dimentica» e `--svuota` come prima.
+- **Numeri di pagina strani.** Il numero si legge con `isdecimal` e mai con un'eccezione
+  (`piano.numero_pagina`). Una sigla corta («IV», «12a») resta; un numero strano («²», «①»,
+  segni, testo lungo) vale come una pagina senza numero e il piano ha l'avviso
+  `numero_strano`. Un ricalcolo che fallisce lo stesso non ferma le altre verifiche della
+  persona né le letture: una riga nel registro e il conto `errori` nelle misure.
+- **Due materiali con la stessa pagina.** Quando le pagine numerate vengono da più materiali,
+  l'attività dice anche il titolo: «Leggi le pagine 12–13 di «Libro» e la pagina 12 di
+  «Quaderno».».
+- **Troppe pagine.** Scelta di questo passo: se le pagine non stanno nei giorni di studio, si
+  legge anche la vigilia e il ripasso cade (`senza_ripasso`). Solo se non stanno nemmeno così un
+  giorno va oltre i suoi minuti (`troppe_pagine`, `oltre`). Il motivo: ripassare pagine mai
+  lette non serve, e il piano non deve chiedere più minuti di quelli che ci sono quando può
+  evitarlo. Prima la vigilia restava di ripasso e il primo giorno andava oltre.
+- **Un giorno di solo ripasso** (meno pagine che giorni, decisione 1 di Dario) vale i minuti
+  delle pagine che ripassa, non tutto il giorno: non pesa come una vigilia.
+- **Una verifica aperta senza pagine** non divide più i minuti delle altre.
+- **Data spostata prima di un giorno fatto**: i giorni fatti dopo la nuova data escono dal
+  piano.
+- **Rollback in `ricalcola`**: un guasto a metà lascia il piano di prima, senza un `DELETE`
+  rimasto nella transazione.
+- **Stesso rifiuto**: `NonTrovata` ha un solo messaggio per verifica, materiale, pagina,
+  argomento e giorno, che sia di un altro o che non ci sia.
+- **Tutori non più in casa**: come `minori.tutori`, valgono i tutori scritti ancora nel registro
+  (`conserva.tutori_validi`); se non ce n'è più nessuno, chi amministra.
+- **Orari di riposo** letti con `minori._orari_validi` (anche una stringa sola, «21:00-07:30»),
+  come `fuori_orario`.
+- **`studio_fascia` sbagliata**: il caricamento della configurazione la rifiuta con l'avviso e
+  tiene il valore di prima, come le altre chiavi; una `Config` scritta a mano dà una riga nel
+  registro e la fascia di serie.
+- **«Dimentica» lo dice** (decisione 2 di Dario: resta dentro «dimentica» e lascia le
+  archiviate): se la persona ha verifiche non archiviate, la domanda aggiunge «Tolgo anche le
+  verifiche dello Studio, tranne quelle archiviate.» e la frase «Ho tolto anche le verifiche
+  dello Studio; quelle archiviate restano.» (`tools/conversazioni.py`). Un errore del gancio va
+  nel registro col suo nome.
+- **`.gitignore`**: `/studio/`, la cartella di serie di `studio_cartella`, dove dal 4.2 ci saranno
+  le foto delle pagine, anche dei minori.
+- **Zona grigia**: il docstring di `servizio.py` dice che dal passo 4.5 chi chiama passa `None`
+  per un ospite e per la zona grigia, come `_chi` di `tools/conversazioni.py`.
+
+Prove: `prova_studio_piano.py` passa da 104 a 135 controlli, con i casi nuovi di ogni punto
+(il giorno dopo in sola lettura, i giorni che scadono, «²», «①» e altri, i due materiali, la
+vigilia letta, il guasto a metà, la verifica senza pagine, il messaggio uguale, il tutore non più
+in casa, la fascia, la domanda di «dimentica»).

@@ -424,8 +424,23 @@ def _utili(risultati: list[dict]) -> list[dict]:
 DIMENTICA_DOMANDA = ("I ricordi che mi hai chiesto di tenere restano. Cancello tutte le nostre "
                      "conversazioni, anche quella di adesso?")
 DIMENTICATE_FRASE = "Fatto: ho cancellato le nostre conversazioni, anche quella di adesso."
+# Lo Studio (29/10, #280, revisione della PR #308): «dimentica» toglie anche le verifiche dello
+# Studio della persona, tranne le archiviate (decisione 0035, punto 11), e lo dice
+STUDIO_DOMANDA = "Tolgo anche le verifiche dello Studio, tranne quelle archiviate."
+STUDIO_TOLTO = "Ho tolto anche le verifiche dello Studio; quelle archiviate restano."
 FOTO_ARCHIVIATE_RESTANO = ("Ho tolto anche le foto che tenevo; quelle che hai archiviato restano "
                            "nei tuoi documenti.")
+
+
+def _studio_da_dimenticare(ctx, persona) -> bool:
+    """La persona ha verifiche dello Studio non archiviate (anche con lo Studio spento: quelle
+    di prima)? Un errore vale «no» e non ferma «dimentica»."""
+    try:
+        from ..studio.dati import conta_file
+        c = conta_file(getattr(getattr(ctx, "cfg", None), "memory_db", None), str(persona))
+        return c["verifiche"] > c["archiviate"]
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _conversazioni_dimentica(ctx: ToolContext) -> dict:
@@ -443,6 +458,7 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
     p = proposte.get(persona)
     if p is not None and 0 < turno - p <= 3:
         proposte.pop(persona, None)
+        studio = _studio_da_dimenticare(ctx, persona)
         n = arch.dimentica(persona)
         # Trascrizione e audio degli avvisi di pericolo ricevuti da chi parla (14/10 sera)
         try:
@@ -476,9 +492,14 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
             # Le foto tenute con la conversazione vanno via con lei, le archiviate no (decisione
             # 0034, seconda revisione della PR #273)
             frase += " " + FOTO_ARCHIVIATE_RESTANO
+        if studio:
+            frase += " " + STUDIO_TOLTO
         return _final(frase, cancellate=n)
     proposte[persona] = turno
     domanda = DIMENTICA_DOMANDA
+    if _studio_da_dimenticare(ctx, persona):
+        # «I ricordi … restano. Tolgo anche le verifiche dello Studio, … Cancello tutte …?»
+        domanda = DIMENTICA_DOMANDA.replace("Cancello", STUDIO_DOMANDA + " Cancello", 1)
     return _final(domanda, ok=False,
                   in_sospeso={"domanda": domanda, "cosa": "cancellare le conversazioni "
                                                        "archiviate e quella di adesso", "tool":
