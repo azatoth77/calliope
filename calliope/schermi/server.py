@@ -79,6 +79,17 @@ Indirizzi:
                                  ToolRegistry.call col livello del proprietario e lo mette nella
                                  conversazione → {ok, in_coda}; un rifiuto arriva poi con
                                  l'evento SSE «tocco». 30 al minuto
+  POST /api/studio/verifiche     «X-Calliope-Sessione», {} → {verifiche, prova}: le verifiche in
+                                 bozza o aperte a cui mandare pagine (le proprie e, da tutore,
+                                 quelle dei suoi minori; 29/10, passo 4.2 dello Studio, #281)
+  POST /api/studio/pagina        «X-Calliope-Sessione», byte nudi (octet-stream), i dati in
+                                 «X-Calliope-Studio» (URI): una foto di una pagina con i suoi
+                                 angoli, o un PDF intero (29/10, #281, studio/pagine.py), nello
+                                 Studio e mai nella conversazione; solo da uno schermo personale,
+                                 dentro gli orari, anche senza conversazione a voce; con
+                                 `studio_modo: spento` niente (404), in ombra solo chi amministra;
+                                 `Content-Length` obbligatorio (411); senza sessione la risposta
+                                 subito e la connessione chiusa, senza leggere il corpo (PR #312)
   GET  /satellite              il comando per un PC nuovo come satellite (satellite/web.py)
   /telefono/…                    la web app del telefono (telefono.py): pagina, modelli e il
                                  WebSocket del protocollo dei satelliti
@@ -198,6 +209,13 @@ TROPPI_TOCCHI = "troppi tocchi: aspetta un momento"
 TROPPE_LETTURE = "Troppe richieste in poco tempo: riprovo fra qualche secondo."
 TROPPE_RICERCHE = "Troppe ricerche in poco tempo: riprova fra qualche secondo."
 LETTURE_AL_MINUTO = 60          # /api/raccolte per schermo (era 30 fino alla revisione della PR #269)
+TROPPE_PAGINE = "Troppe pagine in poco tempo: aspetta un momento."
+# /api/studio/pagina (revisione della PR #312): il corpo di un rifiuto si butta al più per tanti
+# secondi; un invio vero si legge al più per tanti (15 MB in 2 minuti: ~1 Mbit/s)
+STUDIO_SCARTA_S = 12.0
+STUDIO_LEGGI_S = 120.0
+# PDF divisi insieme al più (ognuno è un sottoprocesso; seconda revisione della PR #312)
+STUDIO_PDF_INSIEME = 1
 
 
 def crea_app(hub: Schermi) -> Starlette:
@@ -1156,6 +1174,225 @@ def crea_app(hub: Schermi) -> Starlette:
             return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
         return _json({"ok": True, "in_coda": True})
 
+    # ── lo Studio: le pagine dei materiali (29/10, passo 4.2, #281, calliope/studio/pagine.py) ──
+    invii_studio: dict[int, list[float]] = {}
+    # I PDF che si stanno dividendo adesso (tutto nel ciclo di uvicorn: un contatore basta)
+    pdf_in_corso = [0]
+    letture_studio: dict[int, list[float]] = {}
+
+    def studio_di(schermo: dict):
+        """(servizio dello Studio, profilo del proprietario, None) oppure (None, None, risposta).
+        Con `studio_modo: spento` niente; in ombra solo chi amministra (la pagina «prova» del
+        banco); gli ospiti e i conoscenti mai (Studio.permesso, più sotto)."""
+        st = getattr(hub, "studio", None) or getattr(getattr(hub, "servizi", None), "studio", None)
+        if st is None:
+            return None, None, _json({"errore": "Lo Studio è spento."}, 404)
+        prof = profilo_di(schermo)
+        if prof is None:
+            return None, None, _json({"errore": "non so di chi è questo schermo"}, 403)
+        if not st.per_schermi() and not (st.modo == "ombra" and getattr(prof, "admin", False)):
+            return None, None, _json({"errore": "Lo Studio non è ancora acceso."}, 403)
+        return st, prof, None
+
+    async def studio_verifiche(request: Request):
+        """{} → {verifiche, prova}: le verifiche in bozza o aperte a cui il proprietario dello
+        schermo può mandare pagine (le sue e, da tutore, quelle dei suoi minori). Sola lettura."""
+        schermo, errore = schermo_personale(request, letture_studio, LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 256)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        from ..studio import NonPermesso
+        try:
+            out = await asyncio.to_thread(st.verifiche_per_pagine, prof)
+        except NonPermesso:
+            out = []
+        return _json({"verifiche": out, "prova": not st.per_schermi(),
+                      "max_pagine": int(getattr(hub.cfg, "studio_pagine_max", 80) or 80),
+                      "pdf_max_pagine": int(getattr(hub.cfg, "studio_pdf_max_pagine", 40) or 40)})
+
+    def meta_studio(request: Request):
+        """I dati dell'invio da «X-Calliope-Studio» (JSON codificato come URI, al più 2 KB):
+        {verifica, materiale?, angoli?, nome?}, o None se non sono validi."""
+        from urllib.parse import unquote
+        grezzo = request.headers.get("x-calliope-studio", "")
+        if not grezzo or len(grezzo) > 2048:
+            return None
+        try:
+            m = json.loads(unquote(grezzo))
+        except ValueError:
+            return None
+        if not isinstance(m, dict):
+            return None
+        vid, mid = m.get("verifica"), m.get("materiale")
+        if not isinstance(vid, int) or isinstance(vid, bool) or vid < 1:
+            return None
+        if mid is not None and (not isinstance(mid, int) or isinstance(mid, bool) or mid < 1):
+            return None
+        nome = m.get("nome")
+        if nome is not None and not isinstance(nome, str):
+            return None
+        # Il nome del file è solo un titolo: niente percorsi, niente caratteri di controllo
+        nome = re.sub(r"[\x00-\x1f\x7f]", " ", (nome or "").replace("\\", "/").split("/")[-1])
+        return {"verifica": vid, "materiale": mid, "angoli": m.get("angoli"),
+                "nome": " ".join(nome.split())[:60] or None}
+
+    async def studio_pagina(request: Request):
+        """Vedi `_studio_pagina`. Revisione della PR #312: senza una sessione valida, senza
+        `Content-Length` o con una lunghezza oltre il tetto la risposta arriva subito e la
+        connessione si chiude, senza leggere niente. Solo dopo una sessione valida e lo Studio
+        acceso un rifiuto (verifica, orari, pagine) legge e butta il corpo dichiarato, al più per
+        `STUDIO_SCARTA_S` secondi: il telefono che manda una foto di qualche MB riceve la frase
+        del rifiuto e non una connessione chiusa a metà, e un invio lento non tiene niente."""
+        request.state.studio_letto = False
+        request.state.studio_scarta = False
+        risposta = await _studio_pagina(request)
+        if request.state.studio_scarta and not request.state.studio_letto:
+            async def scarta():
+                async for _pezzo in request.stream():
+                    pass
+            try:
+                await asyncio.wait_for(scarta(), STUDIO_SCARTA_S)
+            except Exception:  # noqa: BLE001 — lento o andato via: si chiude e basta
+                risposta.headers["Connection"] = "close"
+        return risposta
+
+    async def _studio_pagina(request: Request):
+        """Una pagina (foto JPEG o PNG, con i quattro angoli del telefono) o un PDF intero dallo
+        schermo personale, nei byte nudi (application/octet-stream, come /api/allegato); i dati
+        dell'invio in «X-Calliope-Studio». Fuori dalla conversazione e dall'album: la pagina va
+        nello Studio, nello stato «da leggere». Nell'ordine: sessione dello schermo personale
+        (in HTTPS) e invii al minuto; lo Studio acceso; la verifica (sua o del suo minore, in
+        bozza o aperta: Studio._verifica e _chi_puo); gli orari del minore che manda; la
+        dimensione; il tipo vero dai byte; poi il controllo della pagina in un thread."""
+        n = max(1, int(getattr(hub.cfg, "studio_pagine_al_minuto", 40) or 40))
+        schermo, errore = schermo_personale(request, invii_studio, n, TROPPE_PAGINE)
+        if errore is not None:
+            errore.headers["Connection"] = "close"
+            return errore
+        mb_foto = float(getattr(hub.cfg, "studio_pagina_max_mb", 15.0) or 15.0)
+        mb_pdf = float(getattr(hub.cfg, "studio_pdf_max_mb", 30.0) or 30.0)
+        max_b = int(max(mb_foto, mb_pdf) * 1_000_000)
+        # La lunghezza dichiarata è obbligatoria (niente invii a pezzi) e sotto il tetto
+        try:
+            dichiarati = int(request.headers.get("content-length", ""))
+        except ValueError:
+            dichiarati = -1
+        if dichiarati < 0:
+            return _json({"errore": "serve la lunghezza del file"}, 411, {"Connection": "close"})
+        if dichiarati > max_b:
+            return _json({"errore": "file troppo grande"}, 413, {"Connection": "close"})
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            errore.headers["Connection"] = "close"
+            return errore
+        # Da qui un rifiuto legge e butta il corpo dichiarato, con un tempo massimo
+        request.state.studio_scarta = True
+        tipo = request.headers.get("content-type", "").split(";")[0].strip().lower()
+        if tipo != "application/octet-stream":
+            return _json({"errore": "serve application/octet-stream"}, 415)
+        meta = meta_studio(request)
+        if meta is None:
+            return _json({"errore": "dati dell'invio non validi"}, 400)
+        from .. import minori
+        from ..studio import NonPermesso, NonTrovata, TroppePagine, VerificaChiusa
+        # Gli orari dei tutori prima della verifica (revisione della PR #312): fuori orario un
+        # minore non manda pagine, come per i tocchi
+        orario = minori.fuori_orario(prof)
+        if orario:
+            return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                          "codice": "fuori_orario"}, 403)
+        try:
+            v = await asyncio.to_thread(st.verifica_per_pagine, prof, meta["verifica"])
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except VerificaChiusa:
+            return _json({"errore": "Questa verifica è chiusa: non prende pagine nuove."}, 409)
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        massimo = int(getattr(hub.cfg, "studio_pagine_max", 80) or 80)
+        if v["n_pagine"] >= massimo:
+            return _json({"errore": f"Questa verifica ha già {massimo} pagine."}, 413)
+        troppo = _json({"errore": "file troppo grande"}, 413, {"Connection": "close"})
+        corpo = bytearray()
+        request.state.studio_letto = True
+
+        async def leggi():
+            async for pezzo in request.stream():
+                corpo.extend(pezzo)
+                if len(corpo) > dichiarati:
+                    return False
+            return True
+        try:
+            if not await asyncio.wait_for(leggi(), STUDIO_LEGGI_S):
+                return troppo
+        except asyncio.TimeoutError:
+            return _json({"errore": "invio troppo lento: riprova"}, 408, {"Connection": "close"})
+        dati = bytes(corpo)
+        del corpo
+        from ..immagini import tipo_dai_byte
+        from ..studio import pagine as PG
+        lato = int(getattr(hub.cfg, "studio_pagina_lato", 1600) or 1600)
+        soglia = float(getattr(hub.cfg, "studio_nitidezza_min", 150.0) or 0.0)
+        try:
+            if PG.e_pdf(dati):
+                if len(dati) > int(mb_pdf * 1_000_000):
+                    return _json({"errore": f"PDF troppo grande (al massimo {mb_pdf:g} MB)"}, 413)
+                max_pag = min(int(getattr(hub.cfg, "studio_pdf_max_pagine", 40) or 40),
+                              massimo - v["n_pagine"])
+                # In un sottoprocesso con un tetto di tempo per pagina (revisione della PR
+                # #312); si tiene la copia rifatta senza i metadati, non il file arrivato
+                # Al più STUDIO_PDF_INSIEME divisioni insieme (seconda revisione della PR #312:
+                # dieci PDF insieme erano 20 processi e più di un GB); oltre, 429
+                if pdf_in_corso[0] >= STUDIO_PDF_INSIEME:
+                    return _json({"errore": "Sto già dividendo un PDF: riprova fra poco.",
+                                  "riprova_s": 5}, 429, {"Retry-After": "5"})
+                pdf_in_corso[0] += 1
+                try:
+                    from ..studio.dati import cartella_di, cartella_provvisori
+                    pronte, originale = await PG.dividi_pdf_a_parte(
+                        dati, lato, max_pag, soglia,
+                        provvisori=cartella_provvisori(cartella_di(hub.cfg)))
+                finally:
+                    pdf_in_corso[0] -= 1
+                origine = "file"
+            elif tipo_dai_byte(dati) in ("jpeg", "png", "webp"):
+                if len(dati) > int(mb_foto * 1_000_000):
+                    return _json({"errore": f"foto troppo grande (al massimo {mb_foto:g} MB)"},
+                                 413)
+                pronte = [await asyncio.to_thread(PG.prepara_foto, dati, meta["angoli"], lato,
+                                                  int(mb_foto * 1_000_000), soglia)]
+                origine, originale = "foto", None
+            else:
+                heic = dati[4:12] in (b"ftypheic", b"ftypheix", b"ftypmif1", b"ftyphevc")
+                return _json({"errore": "formato HEIC: mandala come JPEG" if heic else
+                              "Mandami una foto JPEG o PNG, oppure un PDF."}, 415)
+        except PG.PaginaNonValida as e:
+            return _json({"errore": str(e)}, 415)
+        del dati
+        try:
+            out = await asyncio.to_thread(
+                st.aggiungi_pronte, prof, v["id"], pronte, origine,
+                meta["nome"] if origine == "file" else None, meta["materiale"], originale)
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except VerificaChiusa:
+            return _json({"errore": "Questa verifica è chiusa: non prende pagine nuove."}, 409)
+        except TroppePagine as e:
+            return _json({"errore": f"Questa verifica arriverebbe oltre {e.massimo} pagine."},
+                         413)
+        except PermissionError:
+            return _json({"errore": "Non riesco a salvare la pagina."}, 503)
+        except OSError as e:
+            hub.log(f"[STUDIO] pagina non salvata: {type(e).__name__}")
+            return _json({"errore": "Non riesco a salvare la pagina."}, 503)
+        return _json({"ok": True, **out})
+
     app = Starlette(routes=[
         Route("/", file("index.html", "text/html; charset=utf-8")),
         Route("/schermo.css", file("schermo.css", "text/css; charset=utf-8")),
@@ -1187,6 +1424,11 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/raccolte/cerca", cerca_api, methods=["POST"]),
         Route("/api/conversazione", conversazione_api, methods=["POST"]),
         Route("/api/tocco", tocco_api, methods=["POST"]),
+        Route("/api/studio/verifiche", studio_verifiche, methods=["POST"]),
+        Route("/api/studio/pagina", studio_pagina, methods=["POST"]),
+        # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC
+        Route("/bordi.js", file("bordi.js", "text/javascript; charset=utf-8")),
+        Route("/studio.js", file("studio.js", "text/javascript; charset=utf-8")),
         *telefono.rotte(hub),
         # /satellite: il comando per far diventare satellite un PC nuovo (03/10)
         *satellite_web.rotte(hub),

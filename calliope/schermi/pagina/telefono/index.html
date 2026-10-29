@@ -20,6 +20,8 @@
 <link rel="stylesheet" href="/telefono/telefono.css">
 <script src="/schermo.js" defer></script>
 <script src="/sezioni.js" defer></script>
+<script src="/bordi.js" defer></script>
+<script src="/studio.js" defer></script>
 <script src="/telefono/telefono.js" type="module"></script>
 </head>
 <body class="telefono" data-incorporata="1" data-carosello="1" data-chiave="calliope.telefono.schermo">
@@ -104,6 +106,34 @@
           <button type="button" id="pagina-cerca-via" class="tasto pagina-cerca-via" hidden>Tutti</button>
         </form>
         <div id="pagina-schede" class="elenco pagina-schede"></div>
+        <!-- Lo Studio, pagina minima per le pagine dei materiali (29/10, passo 4.2, #281: studio.js,
+             bordi.js, POST /api/studio/pagina); la home vera arriva con la 4.5 -->
+        <div id="studio" class="studio" hidden>
+          <p id="studio-prova" class="studio-prova" hidden>Prova: lo Studio è in ombra e lo vede solo chi amministra.</p>
+          <label class="studio-campo" for="studio-verifica">Verifica</label>
+          <select id="studio-verifica" class="studio-scelta"></select>
+          <p id="studio-nessuna" class="pagina-nota" hidden>Non c'è una verifica aperta a cui mandare pagine.</p>
+          <div id="studio-azioni" class="studio-azioni">
+            <button id="studio-camera-apri" type="button" class="tasto">Fotocamera</button>
+            <button id="studio-file-apri" type="button" class="tasto">Galleria o PDF</button>
+            <input id="studio-file" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" multiple hidden>
+          </div>
+          <div id="studio-camera" class="studio-camera" hidden>
+            <div class="studio-mirino">
+              <video id="studio-video" playsinline muted aria-label="Fotocamera"></video>
+              <canvas id="studio-guida" aria-hidden="true"></canvas>
+            </div>
+            <p id="studio-camera-stato" class="studio-camera-stato" role="status"></p>
+            <div class="studio-camera-tasti">
+              <button id="studio-scatta" type="button" class="tasto studio-scatta">Scatta</button>
+              <button id="studio-camera-fine" type="button" class="tasto">Fatto</button>
+            </div>
+          </div>
+          <h3 id="studio-titolo-elenco" class="gruppo-pagina" hidden>Da mandare</h3>
+          <ol id="studio-elenco" class="studio-elenco" aria-labelledby="studio-titolo-elenco"></ol>
+          <button id="studio-invia" type="button" class="tasto studio-invia" hidden>Manda</button>
+          <p id="studio-esito" class="pagina-esito" role="status"></p>
+        </div>
         <p id="pagina-esito" class="pagina-esito" role="status"></p>
       </div>
       <div class="raccolta" data-raccolta="" hidden><h2 class="gruppo">Da scrivere</h2><div class="elenco" data-posto="cose"></div></div>

@@ -290,6 +290,18 @@ def _studio(hub, prof):
     # Lo Studio si rifà da capo (28/10, decisione 0035): la tessera resta al suo posto e dice
     # «arriva presto» finché il passo 4.5 non la riscrive. *[storico: fino al 28/10 leggeva la
     # sessione degli esercizi, tolti con la #279]*
+    # Dal 29/10 (passo 4.2, #281) con lo Studio attivo (in ombra solo per chi amministra, con la
+    # scritta «prova») la tessera apre la pagina minima delle pagine dei materiali (studio.js):
+    # il conto sono le verifiche a cui mandare pagine. La home vera arriva con la 4.5
+    st = getattr(hub, "studio", None) or _fonte(hub, "studio")
+    if st is not None and (st.per_schermi() or (st.modo == "ombra" and getattr(prof, "admin", False))):
+        try:
+            n = len(st.verifiche_per_pagine(prof))
+        except Exception:  # noqa: BLE001 — come le altre tessere: senza conto
+            n = None
+        stato = ("prova · " if not st.per_schermi() else "") + (
+            "manda le pagine" if n else "nessuna verifica aperta")
+        return {"conto": n, "stato": stato, "ultimo": None, "pagina": True}
     return {"conto": None, "stato": "arriva presto", "ultimo": None}
 
 
@@ -331,7 +343,9 @@ def tessere(hub, prof, log=print) -> list[dict]:
             d = None
         d = d or {"conto": None, "stato": "non disponibile", "ultimo": None}
         out.append({"id": k, "nome": nomi[k], "conto": d["conto"], "stato": d["stato"],
-                    "ultimo": d.get("ultimo"), "pagina": k in PAGINE})
+                    "ultimo": d.get("ultimo"),
+                    # Una tessera può dire da sé che ha la pagina (lo Studio acceso, #281)
+                    "pagina": bool(d["pagina"]) if "pagina" in d else k in PAGINE})
     return out
 
 
@@ -342,6 +356,10 @@ def pagina(hub, prof, raccolta: str, schermo: dict | None = None, log=print) -> 
     di «Scarica» (`_scarica`, `_registro`): il server le registra per lo schermo e le toglie."""
     if raccolta not in visibili(prof):
         return {"errore": "raccolta sconosciuta", "_stato": 404}
+    if raccolta == "studio" and _studio(hub, prof).get("pagina"):
+        # La pagina dello Studio la disegna studio.js con /api/studio/verifiche (#281), oggi solo
+        # sul telefono: qui arriva chi non ce l'ha (il PC personale)
+        return {"schede": [], "nota": "Le pagine dello Studio per ora si mandano dal telefono."}
     if raccolta not in PAGINE:
         return {"schede": [], "nota": "Questa pagina arriva presto: intanto chiedilo a Calliope."}
     altre = {"agenda": lambda: _pagina_agenda(hub, prof), "lavori": lambda: _pagina_lavori(hub, prof),

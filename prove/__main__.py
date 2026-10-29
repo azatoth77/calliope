@@ -96,6 +96,7 @@ A_SECCO = [
     ("prova_impronte_satellite.py", [], "impronte della voce per satellite (15/10, calliope/impronte_satellite.py): apprendimento solo dalle frasi sicure (contrari: zona grigia, breve, voce corta, margine stretto, compagnia, incerta, minore vicino, continuità), seme dopo 3 frasi, deriva dall'arruolamento e dal seme, ripiego sul canale; spento come prima; ombra (decide quella di oggi, nel registro con e senza) e attivo (il caso del 15/10 in auto riconosciuto); simmetria col minore e protezioni sui punteggi nuovi; i casi del 07/10 di prova_voci_famiglia uguali in ombra e attivo; tenuta (speakers.json, modello diverso, nuova registrazione, rinomina, svuota dal processo e da terminale con la copia); conoscenti (apprendimento, riconoscimento, file, promozione e ritorno, dimentica); stato --turni; dal 18/10 (issue #159) gli scambi divisi fra base sicura e base incerta (contrario: contro una decisione dalla voce resta sicuro)"),
     ("prova_minori.py", [], "minori (05/10): fasce, preset e permessi nel codice, orari, voce incerta, compiti guidati come sola regola nei dati del turno anche con «fammi tu il compito» e calcola col risultato (28/10, #279), avvisi ai tutori, guardiano finto, registrazione con la sfida, privacy"),
     ("prova_studio_piano.py", [], "lo Studio, dati e piano a giorni a secco (29/10, #280, decisione 0035, calliope/studio/): schema che si crea, si riapre e con una versione più nuova si legge senza scrivere; piano deterministico coi materiali di fantasia (verifica domani, fra una settimana e fra un mese, nessun giorno libero, orari di riposo, pagine più dei giorni, data spostata, oggi e passata, giorni fatti, «non ce la faccio oggi», giorni senza scuola, due verifiche negli stessi giorni), tappe e previsione dopo due misure; permessi di minore, tutore, adulto, chi amministra, ospite e conoscente; tenuta a 60 giorni dalla data con l'orologio finto, archiviata per sempre, «dimentica» e svuota; interruttore spento, ombra e attivo"),
+    ("prova_studio_pagine.py", [], "le pagine dei materiali dello Studio a secco (29/10, #281, passo 4.2): bordi sulle foto di fantasia (storte e in ombra trovate, pulite intere, quelli del telefono confermati o scartati, impossibili mai), bordi.js uguale al Python con node, raddrizzamento a 1600 e nitidezza, PDF divisi (troppe pagine, malformato, enorme, cifrato), file ostili e link fuori; sul server vero /api/studio/pagina e /api/studio/verifiche (proprietario, tutore, altro adulto, chi amministra, ospite, conoscente, stanza, orari, limiti, spento e ombra), niente nella conversazione; tenuta, dimentica, svuota e togli che tolgono i file"),
     ("prova_studio_banco.py", [], "il banco dello Studio a secco (28/10, #293, revisione della PR #302): la guardia che vede un lavoro dell'agente vivo (in_corso.json col .bak, fermo da più di 15 minuti o con i file in una sottocartella) e i contrari, --senza-guardia rifiutato con la Calliope vera attiva, harness.json uguale alle costanti del banco, pagina scritta due volte, segni della lettura, controllo delle pagine con le radici, verità dei materiali coerente"),
     ("prova_controlli_regressione.py", [], "i controlli del banco di regressione a secco (17/10, #70): il ruolo dato come nome (domande e «ma Papà» errori, il rifiuto detto no) e la frase storpiata «Calliope di Michisono.» (il nome o una domanda di chiarimento, non la ricerca)"),
     ("prova_eta_utenti.py", [], "età e compleanni dai profili (07/10, DGX): data di oggi come nascita rifiutata, persona=io o un nome, giorni contati dal programma, privacy (chi amministra e i tutori), impronta della voce in elenca_utenti, rubrica distinta, tool *_cerca con argomenti obbligatori, parole di un ospite nel registro; la propria data di nascita nel profilo con ricorda e la data dai ricordi in data_calcola (07/10 pomeriggio)"),
@@ -241,6 +242,7 @@ A_SECCO = [
     ("prova_telefono_audio.py", [], "telefono: audio del microfono giusto (durata, contenuto, contesto rifatto), «Prova il microfono» e il suo endpoint"),
     # ~10 s: schermo acceso e vista da guida, in Edge o Chromium (senza si salta) con una
     # Screen Wake Lock API finta che vuole il gesto come WebKit
+    ("prova_studio_pagina_telefono.py", [], "lo Studio nella pagina vera del telefono (29/10, #281, passo 4.2): la tessera apre la pagina, galleria con due foto e un PDF (bordi di bordi.js, miniature), fotocamera finta con due scatti, ordine su e giù, togli, rifai, misure a 390×844 e 320×693, invio nell'ordine al server, nessun errore JS né CSP"),
     ("prova_telefono_schermo.py", [], "telefono: schermo tenuto acceso col microfono (richiesta nel tocco, ripresa, avviso se negato o assente, versioni di iOS), sezioni (smistamento, schede vive in Adesso, novità, router, Io, In auto) a 3 dimensioni, Le mie cose (tessere, pagina Liste e spunta, pagina Agenda e tasti del timer, pagine Lavori, Cassetto e Giochi, pagina Documenti con «Scarica» e la ricerca, pagina Ufficio di chi amministra con «Scarica XML» e la ricerca); le schede della pagina Agenda una per una a due dimensioni (#266)"),
     ("prova_agenti.py", [], "agenti: tunnel con ssh finto, sandbox, Ollama finto, arbitro, tool, permessi"),
     ("prova_archivio.py", [], "archivio dei documenti di casa: grafo, deduplicazione, permessi, tool, agente, riprocessamento"),
@@ -385,6 +387,7 @@ def keep_alive_della_voce():
 # OBBLIGATORIO prima dell'unione su main.
 # Le durate tra parentesi sono del 06/10 sul portatile, nel gruppo parallelo.
 LIVELLO_2 = {
+    "prova_studio_pagine.py",        # ~35 s (29/10, #281: le foto di fantasia, node e il server)
     "prova_casa_ha.py",              # 13 s
     "prova_sfida_esito.py",          # ~1 s (16/10, #94)
     "prova_risposta_sospeso.py",     # ~1 s (16/10, #98)
@@ -446,7 +449,7 @@ LIVELLO_3 = {
     "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
     "prova_compagnia_pagina.py", "prova_frase_lunga_voce.py", "prova_stanza_voce.py",
     "prova_cdp_orfani.py", "prova_gioco_stato_pagina.py", "prova_fine_turno_voce.py",
-    "prova_pc_pagina.py",
+    "prova_pc_pagina.py", "prova_studio_pagina_telefono.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -571,6 +574,14 @@ LEGAMI = [
     ("calliope/notizie/", ["prova_notizie.py"]),
     # Lo Studio (29/10, #280): dati, piano e permessi; la tenuta passa da conserva.py
     ("calliope/studio/", ["prova_studio_piano.py", "prova_conserva.py"]),
+    # Le pagine dello Studio (29/10, #281): il controllo del server, l'endpoint e la pagina
+    ("calliope/studio/", ["prova_studio_pagine.py"]),
+    ("calliope/immagini.py", ["prova_studio_pagine.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_pagine.py"]),
+    ("calliope/schermi/raccolte.py", ["prova_studio_pagine.py"]),
+    ("calliope/schermi/pagina/bordi.js", ["prova_studio_pagine.py", "prova_studio_pagina_telefono.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_pagina_telefono.py"]),
+    ("prove/manuali/studio_immagini.py", ["prova_studio_pagine.py"]),
     ("calliope/conserva.py", ["prova_studio_piano.py"]),
     ("calliope/minori.py", ["prova_studio_piano.py"]),
     ("calliope/tools/archivio.py", ["prova_archivio.py"]),

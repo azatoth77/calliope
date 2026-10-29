@@ -2147,9 +2147,27 @@ class Config:
     # Giorni dopo la data della verifica in cui restano pagine, testo letto, argomenti e piano
     # (decisione 0035, punto 4); «archivia la verifica» la tiene per sempre
     studio_tenuta_giorni: int = 60
-    # La cartella dello Studio per le immagini delle pagine (dal passo 4.2): nel 4.1 solo il
-    # posto da cui la tenuta e «dimentica» tolgono i file delle pagine
+    # La cartella dello Studio per le immagini delle pagine e i PDF dei materiali (dal passo 4.2,
+    # #281: studio/pagine/<verifica>/, nomi scelti dal server); relativa = accanto a memory_db,
+    # come il cassetto. La tenuta, «dimentica» e svuota ne tolgono i file con le verifiche
     studio_cartella: str = "studio"
+    # Le pagine dalla fotocamera e dai PDF (29/10, passo 4.2, #281, POST /api/studio/pagina): il
+    # lato lungo della pagina raddrizzata (l'harness della lettura del 28/10 legge a 1600 px)
+    studio_pagina_lato: int = 1600
+    # Una foto al più così grande (il telefono la manda in JPEG sotto i 3000 px)
+    studio_pagina_max_mb: float = 15.0
+    # Un PDF al più così grande e con al più tante pagine (oltre: rifiutato, mai tagliato)
+    studio_pdf_max_mb: float = 30.0
+    studio_pdf_max_pagine: int = 40
+    # Le pagine di una verifica al più (tutti i materiali insieme)
+    studio_pagine_max: int = 80
+    # Invii di pagine al minuto per schermo (un PDF conta uno)
+    studio_pagine_al_minuto: int = 40
+    # Sotto questa nitidezza (varianza del laplaciano a 1000 px, col contrasto normalizzato) la
+    # pagina ha l'avviso «sfocata». Misurata il 29/10 sulle foto di fantasia di
+    # prove/manuali/studio_immagini.py: nitide ≥ 234, sfocate di 3 px ≤ 132; da ritarare sulle
+    # foto vere
+    studio_nitidezza_min: float = 150.0
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3440,7 +3458,9 @@ SEZIONI: dict[str, list[str]] = {
                "guardiano_pericolo_modello", "guardiano_pericolo_url"],
     "studio": ["studio_modo", "studio_minuti_giorno", "studio_minuti_pagina", "studio_fascia",
                "studio_giorni_senza_piano", "studio_obiettivo", "studio_tenuta_giorni",
-               "studio_cartella"],
+               "studio_cartella", "studio_pagina_lato", "studio_pagina_max_mb",
+               "studio_pdf_max_mb", "studio_pdf_max_pagine", "studio_pagine_max",
+               "studio_pagine_al_minuto", "studio_nitidezza_min"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -3797,6 +3817,10 @@ LIMITI: dict[str, tuple[float, float]] = {
     "minori_ospite_vicino_punteggio": (0.0, 1.0),
     "studio_minuti_giorno": (0, 600), "studio_minuti_pagina": (1, 120),
     "studio_obiettivo": (1, 100), "studio_tenuta_giorni": (1, 3650),
+    "studio_pagina_lato": (640, 4000), "studio_pagina_max_mb": (1.0, 100.0),
+    "studio_pdf_max_mb": (1.0, 200.0), "studio_pdf_max_pagine": (1, 500),
+    "studio_pagine_max": (1, 1000), "studio_pagine_al_minuto": (1, 600),
+    "studio_nitidezza_min": (0.0, 100_000.0),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),

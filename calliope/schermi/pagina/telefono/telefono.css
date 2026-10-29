@@ -714,3 +714,42 @@ button.grande.secondario { background: transparent; color: var(--accento); borde
 .conv-tel .conv-chat { padding: 0.5rem 0.6rem 0.3rem; }
 .conv-tel .conv-tu, .conv-tel .conv-calliope { max-width: 92%; }
 .intera-posto .chat-chip, .intera-posto .chat-esito, .intera-posto .piccola-apri { font-size: 1rem; }
+
+/* Lo Studio, pagina minima delle pagine dei materiali (29/10, passo 4.2, #281: studio.js). Una
+   colonna: la verifica, i due modi di prendere le pagine, il mirino della fotocamera coi bordi,
+   l'elenco con la miniatura (i bordi trovati sopra), i tasti su, giù, Rifai e Togli, poi «Manda».
+   Tocchi ≥ 44 px anche nel layout compatto; niente sotto i 16 px */
+.studio { display: flex; flex-direction: column; gap: 0.7rem; }
+.studio[hidden], .studio [hidden] { display: none; }
+.studio-prova { margin: 0; padding: 0.5rem 0.7rem; border: 1px dashed var(--accento); border-radius: 0.7rem;
+  color: var(--accento-chiaro); font-size: 1rem; }
+.studio-campo { font-size: 1rem; color: var(--tenue); }
+.studio-scelta { font: inherit; font-size: 1.05rem; min-height: 2.9rem; padding: 0.3rem 0.6rem; border-radius: 0.7rem;
+  border: 1px solid var(--bordo); background: var(--pannello); color: var(--testo); max-width: 100%; }
+.studio-azioni { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+.studio-azioni .tasto { min-height: 3.4rem; font-size: 1.05rem; }
+.studio-camera { display: flex; flex-direction: column; gap: 0.5rem; }
+.studio-mirino { position: relative; border-radius: 0.8rem; overflow: hidden; background: #111; }
+.studio-mirino video { display: block; width: 100%; height: auto; max-height: 55dvh; object-fit: contain; }
+.studio-mirino canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.studio-camera-stato { margin: 0; font-size: 1rem; color: var(--tenue); }
+.studio-camera-tasti { display: grid; grid-template-columns: 2fr 1fr; gap: 0.6rem; }
+.studio-camera-tasti .tasto { min-height: 3.4rem; }
+.tasto.studio-scatta { border-color: var(--accento); color: var(--accento-chiaro); }
+.studio-elenco { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.studio-pagina { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "fig testo" "tasti tasti";
+  gap: 0.5rem 0.7rem; padding: 0.6rem; border: 1px solid var(--bordo); border-radius: 0.8rem; background: var(--pannello); }
+.studio-fig { grid-area: fig; width: 4.5rem; display: flex; align-items: flex-start; justify-content: center; }
+.studio-mini { display: block; max-width: 4.5rem; max-height: 6rem; border-radius: 0.3rem; background: #222; }
+.studio-pdf { display: flex; align-items: center; justify-content: center; width: 4.5rem; height: 5.6rem; border-radius: 0.3rem;
+  border: 2px solid var(--bordo); font-weight: 700; color: var(--tenue); }
+.studio-testo { grid-area: testo; display: flex; flex-direction: column; gap: 0.2rem; min-width: 0; overflow-wrap: anywhere; }
+.studio-testo b { font-size: 1.1rem; color: #ece6db; }
+.studio-nota { font-size: 1rem; color: var(--tenue); }
+.studio-avviso { font-size: 1rem; color: var(--allarme); }
+.studio-tasti { grid-area: tasti; display: grid; grid-template-columns: 1fr 1fr 1.6fr 1.6fr; gap: 0.4rem; }
+.tasto.studio-tasto { min-height: 2.75rem; min-width: 2.75rem; padding: 0.2rem 0.4rem; font-size: 1.05rem; border-width: 1px; }
+.tasto.studio-tasto:disabled { opacity: 0.4; }
+.tasto.studio-invia { min-height: 3.4rem; border-color: var(--accento); background: var(--accento-tenue); color: var(--accento-chiaro); }
+.tasto.studio-invia:disabled { opacity: 0.5; }
+.studio .pagina-esito { color: var(--testo); }

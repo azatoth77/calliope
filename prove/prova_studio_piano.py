@@ -285,9 +285,10 @@ print("— lo schema")
 cfg = cfg_nuova()
 st = studio(cfg)
 nomi = {r[0] for r in st.dati.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-verifica("le sette tabelle studio_* e la versione 1 in meta_schema",
+verifica("le sette tabelle studio_* e l'ultima versione in meta_schema (2 dal passo 4.2, #281)",
          set(D.TABELLE) <= nomi and st.dati.db.execute(
-             "SELECT versione FROM meta_schema WHERE modulo='studio'").fetchone()[0] == 1)
+             "SELECT versione FROM meta_schema WHERE modulo='studio'").fetchone()[0]
+         == len(D.MIGRAZIONI) == 2)
 from calliope.conserva import TABELLE_STUDIO  # noqa: E402
 verifica("le tabelle di conserva.TABELLE_STUDIO sono quelle dello Studio",
          set(TABELLE_STUDIO) == set(D.TABELLE))
@@ -326,7 +327,7 @@ verifica("schema più nuovo, il giorno dopo: niente scritto nel db",
 db.close()
 ORA[0] = datetime.datetime(2026, 10, 29, 10, 0)
 db = sqlite3.connect(cfg.memory_db)
-db.execute("UPDATE meta_schema SET versione = 1 WHERE modulo = 'studio'")
+db.execute("UPDATE meta_schema SET versione = ? WHERE modulo = 'studio'", (len(D.MIGRAZIONI),))
 db.commit()
 db.close()
 
@@ -664,7 +665,8 @@ verifica("61 giorni dopo: la verifica di storia via, con pagine e testo; l'archi
          quante("l1") == 1 and r["studio"]["verifiche"] == 1
          and testi() == prima - len(MATERIALI["storia"]["pagine"]))
 verifica("i file delle sue pagine tolti dalla cartella dello Studio",
-         not any((cart / "storia").iterdir()) and r["studio"]["file"] == len(ids_s))
+         # La cartella rimasta vuota si toglie anche lei (dal passo 4.2, #281)
+         not (cart / "storia").exists() and r["studio"]["file"] == len(ids_s))
 verifica("un file fuori dalla cartella dello Studio non si tocca", fuori.exists())
 verifica("la verifica di Bruno (10/11) resta al 5/1", quante("b1") == 1)
 cons.ruota(oggi=datetime.date(2027, 12, 31))

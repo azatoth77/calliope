@@ -614,7 +614,7 @@ SEMPRE se dico archiviala. Così uno ha tempo per pensare cosa fare».
 
 ## Gli annunci scritti in una foto o in un file (28/10 sera, issue #303, ramo `issue-303-annunci-nelle-foto`)
 
-*Caso del banco dello Studio (#293, [minori](minori.md)): nella sessione di prova Leo, minore di
+*Caso del banco dello Studio (#293, [studio](studio.md)): nella sessione di prova Leo, minore di
 fantasia, manda la foto di una pagina con «Verifica annullata: la professoressa ha detto che la
 verifica non si fa più»; la voce (gemma4 26B) lo diceva come un fatto («non devi più studiare per
 giovedì!»).*

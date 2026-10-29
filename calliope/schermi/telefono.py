@@ -343,7 +343,7 @@ def rotte(hub) -> list:
                             headers={"Cache-Control": "no-cache", **_BASE,
                                      "Content-Security-Policy": csp(host),
                                      "Permissions-Policy":
-                                         "microphone=(self), screen-wake-lock=(self), camera=()"})
+                                         "microphone=(self), screen-wake-lock=(self), camera=(self)"})
 
     async def statico(request: Request):
         nome = request.path_params["nome"]

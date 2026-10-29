@@ -1984,3 +1984,16 @@ Note non bloccanti della revisione della PR #286 (#287) e della PR #306 (#307), 
   di «Elimina tutti», codice morto dal 28/10 sera, e la sua regola CSS. Tolto anche `emetti("cassetto")` dal gestore dei pulsanti dei conoscenti, copiato per sbaglio (revisione della PR #309). Il resto in
   [sicurezza-politica](sicurezza-politica.md).
 - Cache del service worker `calliope-telefono-pagina-v21` (era v20), uguale a `PAGINA_VERSIONE`.
+
+## La pagina dello Studio e la fotocamera del telefono (29/10, issue #281, ramo `issue-281-studio-pagine`)
+
+Il passo 4.2 dello Studio aggiunge al telefono la sua prima pagina che non è fatta di schede del
+server: Le mie cose › Studio, con lo Studio attivo (in ombra solo per chi amministra, «prova»),
+apre `schermi/pagina/studio.js` nel riquadro della pagina; `sezioni.js` la conosce come pagina che
+si disegna da sé (`window.CalliopePagine`, `apri` e `chiudi`) e non chiede schede né ricerca.
+`schermo.js` ha solo `calliopeSchermo.studio(blob, meta)` per le due API nuove, `POST
+/api/studio/verifiche` e `POST /api/studio/pagina`. La pagina del telefono chiede ora anche la
+fotocamera: `Permissions-Policy` con `camera=(self)` (prima `camera=()`), solo per `/telefono/`;
+service worker `calliope-telefono-pagina-v22` (la v21 era già della #309) con `/bordi.js` e `/studio.js`. Le miniature sono
+canvas, non URL blob (la CSP del telefono li vieta per le immagini). Il resto, coi controlli del
+server e le misure, nell'area [studio](studio.md).

@@ -33,6 +33,7 @@ profilo di un minore incerto (`minori.profilo`, `minore_incerto`) vale il minore
 from __future__ import annotations
 
 import datetime
+import json
 
 from . import dati as D
 from . import piano as P
@@ -64,6 +65,21 @@ class NonTrovata(LookupError):
 
 
 NON_TROVATA = "non c'è"
+
+
+class VerificaChiusa(ValueError):
+    """La verifica è fatta o archiviata: non prende pagine nuove (passo 4.2)."""
+
+    def __init__(self, *_):
+        super().__init__("la verifica è chiusa")
+
+
+class TroppePagine(ValueError):
+    """Le pagine di una verifica sono già al tetto `studio_pagine_max` (passo 4.2)."""
+
+    def __init__(self, massimo: int = 0):
+        super().__init__(f"al più {massimo} pagine per verifica")
+        self.massimo = massimo
 
 
 def modo(cfg) -> str:
@@ -149,9 +165,16 @@ class Studio:
         # L'orologio (le prove lo fingono)
         self.adesso = adesso or datetime.datetime.now
         self.dati = D.Dati(cfg.memory_db)
+        # All'avvio nessun PDF si sta dividendo: via i provvisori di un crollo (PR #312)
+        try:
+            D.togli_provvisori(D.cartella_di(cfg))
+        except OSError:
+            pass
         # Le misure dell'ombra (e dell'attivo): solo conti, niente nomi né titoli
         self.misure = {"verifiche_create": 0, "piani": 0, "giorni_nei_piani": 0,
-                       "pagine_nei_piani": 0, "giorni_oltre": 0, "avvisi": {}, "errori": 0}
+                       "pagine_nei_piani": 0, "giorni_oltre": 0, "avvisi": {}, "errori": 0,
+                       # Le pagine arrivate (passo 4.2): da dove vengono i bordi e gli avvisi
+                       "pagine": 0, "bordi": {}, "avvisi_pagine": {}}
         self.fascia = P.fascia_valida(getattr(cfg, "studio_fascia", ""))
         if self.fascia is None:
             # Il caricamento della configurazione la rifiuta già (config._fascia_valida); qui
@@ -311,7 +334,7 @@ class Studio:
                 raise
             finally:
                 db.execute(f"PRAGMA secure_delete = {int(prima)}")
-        n = D.togli_file(file, getattr(self.cfg, "studio_cartella", None))
+        n = D.togli_file(file, D.cartella_di(self.cfg))
         self.ricalcola_persona(v["persona"])
         return {"verifiche": 1, "file": n}
 
@@ -371,6 +394,123 @@ class Studio:
         _m, v = self._materiale(chi, p["materiale"])
         self.dati.scrivi("UPDATE studio_pagine SET stato = ? WHERE id = ?", (stato, p["id"]))
         self._ricalcola_sicuro(v["id"])
+
+    # ── pagine dalla fotocamera e dai PDF (29/10, passo 4.2, #281: POST /api/studio/pagina) ──
+    def verifica_per_pagine(self, chi, vid) -> dict:
+        """La verifica a cui `chi` aggiunge pagine: la sua o quella del suo minore (tutore), in
+        bozza o aperta. `NonTrovata` (anche per quella di un altro), `VerificaChiusa`; con le
+        pagine che ha già (`n_pagine`), per il tetto `studio_pagine_max`."""
+        self._scrivibile()
+        v = self._verifica(chi, vid)
+        if v["stato"] not in ("bozza", "aperta"):
+            raise VerificaChiusa()
+        r = self.dati.uno("SELECT COUNT(*) AS n FROM studio_pagine p JOIN studio_materiali m ON "
+                          "m.id = p.materiale WHERE m.verifica = ?", (v["id"],))
+        v["n_pagine"] = int(r["n"]) if r else 0
+        return v
+
+    def verifiche_per_pagine(self, chi) -> list[dict]:
+        """Le verifiche in bozza o aperte a cui `chi` può mandare pagine: le sue e, se è tutore,
+        quelle dei suoi minori (con `di`, il nome del minore). Per la pagina del telefono."""
+        persone = [getattr(chi, "id", None)]
+        reg = self.registry
+        for p in (getattr(reg, "users", {}) or {}).values() if reg is not None else ():
+            if getattr(p, "id", None) not in persone and permesso(chi, p, reg) == "tutore":
+                persone.append(p.id)
+        out = []
+        for pid in persone:
+            if not pid:
+                continue
+            try:
+                self._chi_puo(chi, pid)
+            except NonPermesso:
+                continue
+            nome = None if pid == getattr(chi, "id", None) else getattr(self._profilo(pid),
+                                                                       "name", None)
+            for v in self.dati.tutti(
+                    "SELECT v.*, (SELECT COUNT(*) FROM studio_pagine p JOIN studio_materiali m "
+                    "ON m.id = p.materiale WHERE m.verifica = v.id) AS n_pagine FROM "
+                    "studio_verifiche v WHERE persona = ? AND stato IN ('bozza', 'aperta') "
+                    "ORDER BY data, id", (pid,)):
+                out.append({"id": v["id"], "materia": v["materia"], "argomento": v["argomento"],
+                            "data": v["data"], "stato": v["stato"], "pagine": v["n_pagine"],
+                            "giorni_mancanti": (_data(v["data"]) - self._oggi()).days,
+                            "di": nome})
+        return out
+
+    def aggiungi_pronte(self, chi, vid, pronte: list, origine: str = "foto", titolo=None,
+                        materiale=None, originale: bytes | None = None) -> dict:
+        """Le pagine controllate dal server (`studio/pagine.Pronta`) nella verifica: i JPEG (e il
+        PDF originale) nella cartella dello Studio, una riga per pagina nello stato «da_leggere»,
+        in fondo all'ordine. `materiale`: quello di un invio già cominciato (le pagine dello
+        stesso giro stanno insieme), altrimenti uno nuovo. Il tetto `studio_pagine_max` per
+        verifica; i file scritti si tolgono se le righe non entrano."""
+        from . import pagine as PG
+        self._scrivibile()
+        cartella = D.cartella_di(self.cfg)
+        massimo = int(getattr(self.cfg, "studio_pagine_max", 80) or 80)
+        scritti: list[str] = []
+        with self.dati.lock:
+            v = self.verifica_per_pagine(chi, vid)
+            if v["n_pagine"] + len(pronte) > massimo:
+                raise TroppePagine(massimo)
+            if materiale is not None:
+                m = self.dati.uno("SELECT * FROM studio_materiali WHERE id = ?", (int(materiale),))
+                if m is None or m["verifica"] != v["id"] or m["origine"] != origine:
+                    raise NonTrovata()
+                mid = m["id"]
+            else:
+                mid = None
+            db = self.dati.db
+            try:
+                for p in pronte:
+                    scritti.append(PG.scrivi_file(cartella, v["id"], p.jpeg, "jpg"))
+                rif = None
+                if originale is not None:
+                    pdf = PG.scrivi_file(cartella, v["id"], originale, "pdf")
+                    scritti.append(pdf)
+                    rif = D.RIF_FILE + pdf
+                if db.in_transaction:
+                    db.commit()
+                db.execute("BEGIN IMMEDIATE")
+                if mid is None:
+                    mid = db.execute(
+                        "INSERT INTO studio_materiali (verifica, origine, titolo, riferimento, "
+                        "creato) VALUES (?, ?, ?, ?, ?)",
+                        (v["id"], origine, (" ".join(str(titolo).split())[:60] or None)
+                         if titolo else None, rif, D.adesso())).lastrowid
+                r = db.execute("SELECT COALESCE(MAX(p.ordine), 0) FROM studio_pagine p JOIN "
+                               "studio_materiali m ON m.id = p.materiale WHERE m.verifica = ?",
+                               (v["id"],)).fetchone()
+                ordine = int(r[0])
+                out = []
+                for p, f in zip(pronte, scritti):
+                    ordine += 1
+                    pid = db.execute(
+                        "INSERT INTO studio_pagine (materiale, ordine, stato, file, creata, "
+                        "angoli, avvisi, nitidezza, larghezza, altezza) VALUES (?, ?, "
+                        "'da_leggere', ?, ?, ?, ?, ?, ?, ?)",
+                        (mid, ordine, f, D.adesso(),
+                         json.dumps(p.angoli) if p.angoli else None,
+                         D.j(p.avvisi) if p.avvisi else None, p.nitidezza, p.larghezza,
+                         p.altezza)).lastrowid
+                    out.append({"id": pid, "ordine": ordine, "bordi": p.bordi,
+                                "avvisi": list(p.avvisi), "larghezza": p.larghezza,
+                                "altezza": p.altezza})
+                db.commit()
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                D.togli_file(scritti, cartella)
+                raise
+        self.misure["pagine"] = self.misure.get("pagine", 0) + len(out)
+        for p in pronte:
+            self.misure["bordi"][p.bordi] = self.misure["bordi"].get(p.bordi, 0) + 1
+            for a in p.avvisi:
+                self.misure["avvisi_pagine"][a] = self.misure["avvisi_pagine"].get(a, 0) + 1
+        self._registra(f"verifica {v['id']}: {len(out)} pagine arrivate ({origine}, "
+                       f"{self._chi_registro(chi, v['persona'])})")
+        return {"verifica": v["id"], "materiale": mid, "pagine": out}
 
     # ── argomenti (l'estrazione è del passo 4.4: qui il modello dei dati e la conferma) ──
     def aggiungi_argomento(self, chi, vid, titolo, pagine, proposto: bool = True,

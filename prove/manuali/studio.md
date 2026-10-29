@@ -1,6 +1,6 @@
 # Banco dello Studio: dai materiali alla verifica (28/10/2026, #293)
 
-*Area [minori](../../docs/aree/minori.md) (lo Studio, epic #251). Codice: `prove/manuali/studio/`
+*Area [studio](../../docs/aree/studio.md) (lo Studio, epic #251; fino al 29/10 [minori](../../docs/aree/minori.md)). Codice: `prove/manuali/studio/`
 (materiali e verità, copione di Leo, `harness.json`), `prove/manuali/studio_immagini.py` (le
 foto), `prove/manuali/banco_studio.py` (il banco), `prove/manuali/sessione_studio_e2e.py` (la
 sessione vera nell'istanza di prova). I comandi si lanciano **sulla DGX**.*

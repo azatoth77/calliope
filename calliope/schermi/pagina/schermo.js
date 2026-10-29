@@ -346,6 +346,26 @@
         return { ok: r.status === 200, status: r.status, dati: r.dati || {}, riprova: r.riprova };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
+    // Lo Studio (29/10, passo 4.2, #281, studio.js): senza blob le verifiche a cui mandare pagine;
+    // con il blob l'invio di una pagina (foto o PDF nei byte nudi, i dati in «X-Calliope-Studio»)
+    async studio(blob, meta) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        let r;
+        if (!blob) r = await postSessione("/api/studio/verifiche", {});
+        else {
+          const f = await fetch("/api/studio/pagina", {
+            method: "POST", cache: "no-store", body: blob,
+            headers: { "Content-Type": "application/octet-stream", "X-Calliope-Sessione": S.sessione || "",
+              "X-Calliope-Studio": encodeURIComponent(JSON.stringify(meta || {})) },
+          });
+          let d = {};
+          try { d = await f.json(); } catch (e) { /* vuota */ }
+          r = { status: f.status, dati: d };
+        }
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
   };
 
   // Nuovo accesso con il token, finché non riesce. Le sessioni del server sono in memoria:
