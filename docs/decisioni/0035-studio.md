@@ -446,7 +446,39 @@ dell'eco della stanza.
     serie** (lo scheletro «ombra» mai alla persona, solo misure); «attiva» dopo il banco della mappa
     e la rilettura dell'ombra. Alternative scartate: lo scheletro generato già confermato (il
     controllo è di forma, non di significato), un secondo giro del modello che corregge, lo scheletro
-    dalle immagini.
+    dalle immagini. *[storico fino al 30/10 notte: «un secondo giro del modello che corregge»
+    scartato; dal passo 7c c'è una seconda richiesta, ma solo per unire le isole (punto 37)]*
+37. **Lo scheletro è connesso, con un concetto centrale** (passo 7c, #328). Il banco del 30/10 dava
+    mappe a isole, doppioni permutati e composti staccati dai componenti. Il codice unisce i doppioni
+    a meno dell'ordine delle parole, scioglie un composto («A e B») quando tutte le parti sono
+    concetti, segna la radice (l'argomento della verifica o il più collegato), e con più parti
+    connesse il lettore fa **una seconda richiesta** con lo scheletro in busta: solo collegamenti fra
+    concetti che ci sono, e il codice tiene solo quelli che uniscono due parti ancora separate,
+    controllati come le triple. Se le isole restano lo scheletro lo dice. Un errore nostro segue la
+    regola del punto 36. Il banco misura le parti e chiede una parte sola in almeno il 90 % delle
+    verifiche. Alternative scartate: collegare il composto ai componenti (un nodo che ripete due
+    nodi), lasciare al modello concetti nuovi per unire le isole.
+38. **La mappa libera è della persona e la confronta il codice** (passo 7c). Da zero, partendo al
+    più dalla radice scritta dalla persona (l'argomento della verifica), con lo scheletro nascosto da
+    tutte le strade finché non dice «Ho finito» (vista, PDF, tool, carte nate dalla mappa, home), una
+    mappa senza guardare per volta. «Ho finito» la chiude come a memoria: il confronto deterministico
+    col riferimento (lo scheletro confermato, o le voci senza avvisi di quello proposto, detto
+    «rispetto alla mappa proposta, non ancora controllata»), i **concetti chiave** (la radice e i più
+    collegati, al più un terzo), presente / diverso / mancante, i mancanti prima come pagina e il
+    testo solo con «Mostra»; i tentativi «mappa» fonte «codice» una volta per giro, solo col
+    riferimento confermato: chiave presente «giusto» («indizio» dopo l'indizio di pagina), mancante
+    «sbagliato», diverso e mostrato niente. Gli **indicatori del metodo** (parti, isolati, verbi vuoti,
+    concetti lunghi, profondità, collegamenti fra rami, copertura) si tengono giro per giro, separati
+    dalla padronanza. `studio_mappa_libera`, attiva di serie con lo Studio (nessun modello).
+39. **«Parliamone» legge in busta e non svela** (passo 7c). Dopo «Ho finito», il modello della voce
+    con il tool `studio_mappa_consigli` (una lettura, fonte «foto», `non_fidato`, come le carte; non
+    un'azione di `studio`, che è fidato): la mappa, lo scheletro **senza i concetti che la persona
+    non ha e non ha scelto di vedere**, il confronto del codice e gli indicatori. Prima ciò che va
+    bene, uno o due miglioramenti sul metodo, una domanda; non decide esiti né scrive tentativi. Il
+    codice conta i concetti svelati in ogni risposta e li scrive nel registro come id (devono essere
+    0). `studio_mappa_consigli`, **ombra di serie**: la voce dice la frase del codice sul confronto e
+    la risposta del modello si fa in secondo piano solo per la misura; «attiva» dopo la rilettura
+    delle misure.
 
 ## Da completare con i passi 4.3–4.5
 

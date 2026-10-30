@@ -27,7 +27,10 @@ padronanza; dal 30/10 sera la **generazione delle carte** dal lettore (seconda p
 `studio_carte_genera`, ombra di serie; sezione sotto). Dal 30/10 sera la **mappa concettuale** (7, #247,
 prima parte: lo scheletro scritto a mano, la mia mappa, a memoria, il controllo del codice, il PDF;
 sezione sotto) e la **generazione dello scheletro** dal lettore (seconda parte, `studio_mappa_genera`,
-ombra di serie; sezione sotto). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
+ombra di serie; sezione sotto). Dal 30/10 notte la **mappa libera** (7c, #328: da zero, confrontata
+dal codice a «Ho finito», gli indicatori del metodo per giro), lo **scheletro connesso** (doppioni,
+composti, radice, seconda passata per le isole) e **«Parliamone»** (`studio_mappa_consigli`, ombra di
+serie; sezione sotto). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Moduli
@@ -42,6 +45,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Carte generate dalle pagine lette, controllo del codice, proposte confermate dalla persona (dal 30/10 sera, passo 6, seconda parte, #246; schema «studio» alla versione 7; `studio_carte_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato; `provenienza.racchiudi`, `parole`, `vicina` | `calliope/studio/genera.py` → `corpo`, `messaggi`, `blocco_argomenti`, `argomenti_rif`, `firma`, `forma_testo`, `leggi`, `proposte`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_carte`; `calliope/studio/servizio.py` → `Studio.verifiche_per_carte`, `proponi_carte`, `conferma_carte`; `calliope/schermi/server.py` → `POST /api/studio/carte` (azione `conferma`); `prove/manuali/banco_studio.py` (fase «carte»); prova `prove/prova_studio_carte_genera.py` |
 | Mappa concettuale: lo scheletro (a mano; dal lettore con la seconda parte), la mia mappa con le caselle, a memoria, il controllo deterministico, i tentativi «mappa», il PDF (dal 30/10 sera, passo 7, #247; schema «studio» alla versione 8; `studio_mappa_nodi_max`) | SQLite (`studio_mappe`, concetti e collegamenti in JSON); fpdf2 (extra `documenti`) coi font di `documenti/render.py`; nel browser SVG scritto a mano | `calliope/studio/mappa.py` → `testo_normale`, `uguale`, `verbo_simile`, `disposizione`, `scegli_caselle`, `parole_da_mettere`, `copia`, `controlla`, `esito_tentativo`; `calliope/studio/mappe.py` → `Mappe` (in `Studio`): `scrivi_scheletro`, `nodo_mappa`, `collega`, `riempi`, `tieni_mappa`, `conferma_scheletro`, `inizia_mappa`, `rifai_mappa`, `controlla_mappa`, `carte_dagli_errori`, `riordina_mappa`, `vista_mappe`, `pdf_mappa`, `_conto_mappa`; `calliope/studio/mappa_pdf.py` → `render`; `calliope/tools/studio.py` → azione `mappa`; `calliope/schermi/server.py` → `POST /api/studio/mappa`; `calliope/schermi/pagina/studio.js` (la sezione «Mappa»); prove `prove/prova_studio_mappa.py`, `prove/prova_studio_mappa_pagina.py` |
 | Scheletro della mappa generato dalle pagine lette: le triple controllate dal codice, proposte da confermare (dal 30/10 sera, passo 7, seconda parte, #247; `studio_mappa_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato | `calliope/studio/mappa_genera.py` → `corpo`, `messaggi`, `firma`, `leggi`, `scheletro`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_mappa`; `calliope/studio/mappe.py` → `verifiche_per_mappa`, `proponi_mappa`; `prove/manuali/banco_studio.py` (fase «mappa»); prova `prove/prova_studio_mappa_genera.py` |
+| Mappa libera: da zero con lo scheletro nascosto, «Un indizio» e «Mostra», «Ho finito» col confronto del codice e i tentativi una volta per giro, gli indicatori del metodo per giro; scheletro connesso (doppioni, composti, radice, seconda passata per le isole); «Parliamone» (dal 30/10 notte, passo 7c, #328; schema «studio» alla versione 9; `studio_mappa_libera` attiva, `studio_mappa_consigli` ombra di serie) | SQLite (`studio_mappe` tipo «libera», `giri`, `visti`); per la seconda passata qwen3.6 col client e la guardia del lettore; per «Parliamone» il modello della voce, dati in busta | `calliope/studio/mappa.py` → `chiave_insieme`, `parti`, `componenti`, `radice`, `concetti_chiave`, `forma`, `voci_riferimento`, `confronta`, `indicatori`, `rispetto_a_prima`, `tentativo_libera`, `svelati`; `calliope/studio/mappa_genera.py` → `corpo_connessione`, `connetti`; `calliope/studio/mappe.py` → `inizia_libera`, `indizio_libera`, `mostra_concetto`, `finisci_libera`, `consigli_mappa`, `misura_consigli`; `calliope/tools/studio.py` → `studio_mappa_consigli`; `calliope/brain.py` → `_consigli_chiudi`, `_consigli_ombra`; prove `prove/prova_studio_mappa_libera.py`, `prove/prova_studio_mappa_libera_pagina.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
@@ -79,6 +83,146 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   per pagina dei numeri di pagina, nella sezione degli argomenti]*; (2) senza vLLM la pagina e la voce lo dicono con una
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
   vede»), non un «da leggere» muto.
+
+## La mappa libera, lo scheletro connesso e «Parliamone» (30/10 notte, issue #328, ramo `issue-328-studio-mappa-libera`)
+
+*Passo 7c dell'epic #251; decisione [0035](../decisioni/0035-studio.md) punti 37–39; analisi nel
+commento della #328. Viene da una richiesta di chi amministra del 30/10: lo scheletro è un buon
+strumento per studiare, completarlo può essere una parte della verifica, e il ragazzo può fare la
+mappa da solo dopo aver studiato.*
+
+**Il banco del 30/10 alle 23:40** (`banco_studio.py --fasi mappa`, qwen3.6, le tre verifiche di
+fantasia; `studio_mappa_genera: attiva` sulla DGX dal 30/10 sera, chiesto da chi amministra prima del
+banco: tabella «Interruttori» di [setup-dgx](setup-dgx.md#interruttori-sulla-dgx)): concetti nelle
+pagine al **100, 100 e 75 %** (storia sotto il criterio dell'80 %, con 3 voci `da_controllare`
+segnate), **nessuna voce ostile pulita** (la voce sulla pagina ostile segnata). **Il difetto vero era
+la forma**: mappe a isole (12 concetti e 8 collegamenti, cioè più parti staccate), doppioni permutati
+(«Portogallo e Spagna» e «Spagna e Portogallo») e concetti composti non collegati ai loro componenti
+(«Portogallo», «Spagna»). Per studiare serve una mappa connessa con un concetto centrale.
+
+**Lo scheletro migliore** (`mappa_genera.scheletro`, `connetti`, `Lettore.genera_mappa`):
+- *doppioni permutati*: la chiave è `mappa.chiave_insieme` (le parole piene in ordine alfabetico,
+  senza articoli), quindi «Portogallo e Spagna» = «Spagna e Portogallo» e «Il Portogallo» =
+  «Portogallo»; resta il testo del primo;
+- *composti*: «A e B» (anche «A, B e C», al più tre parti) con **tutte** le parti presenti come
+  concetti si **scioglie** (ogni sua tripla diventa una per parte, stesso verbo e stesse pagine, gli
+  avvisi del composto vanno alle parti); con una parte che manca resta com'è. Scelto invece di
+  collegarlo ai componenti: un nodo che ripete due nodi non aggiunge niente da studiare;
+- *radice*: il concetto uguale all'argomento della verifica, altrimenti il più collegato, segnato
+  `radice: true`; la disposizione parte da lì (`mappa.radice`, usata anche dalle caselle);
+- *isole*: con più di una parte connessa il lettore fa **una seconda richiesta**
+  (`corpo_connessione`: stessa guardia, stesso client, temperatura 0, thinking spento, schema guidato,
+  nessun tool, `max_tokens` 1200) con le pagine in busta e lo scheletro in un'altra busta coi codici
+  C1… per parte. Si chiedono solo collegamenti fra codici: niente concetti nuovi per costruzione. Il
+  codice tiene **solo quelli che uniscono due parti ancora separate** (al più parti − 1), controllati
+  come le triple (forma del verbo e del testo unito, pagine che esistono e reggono i due concetti,
+  pagina con istruzioni) e «proposti»; un ordine o una pagina con istruzioni segna anche i due capi.
+  Se le isole restano, lo scheletro lo dice (`aiuto.isole`, e la vista conta le parti);
+- *errori della seconda passata*: ceduta, giù ed errori del server come la prima (si rifà il giro);
+  un errore nostro dà l'esito «errore» con la regola della #327 (si riprova dopo un'ora, al terzo
+  errore con la stessa firma ci si ferma); un JSON illeggibile o in tondo **non** è un errore: le isole
+  restano e lo scheletro lo dice;
+- *misure* in `stato()["lettura"]["mappa"]`: `connessioni`, `connessioni_rotte`, `uniti`,
+  `con_isole`, `doppioni`, `composti`; nel registro «parti 3 → 1, doppioni 1, composti 0».
+
+**Il banco** ha la seconda passata con lo stesso codice e le misure di forma: parti prima e dopo,
+uniti, doppioni rimasti (devono essere 0) e uniti dal codice, composti sciolti, grado della radice,
+isolati, e nel riepilogo la **percentuale di verifiche con una parte sola, criterio ≥ 90 %**. Da
+rilanciare sulla DGX (non lanciato qui):
+
+    V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale)
+    PYTHONPATH=$V $V/.venv/bin/python prove/manuali/banco_studio.py \
+        --fasi mappa --uscita /tmp/banco-studio/mappa2
+
+**La mappa libera** (`studio_mappa_libera: spenta | attiva`, **attiva di serie** con lo Studio: solo
+interfaccia e dati). Nella scheda Mappa la voce «Da zero» → «Fai la tua mappa da zero»: una per
+verifica e persona (tipo `libera` in `studio_mappe`), anche senza scheletro. Parte con **un concetto
+solo, la radice**: l'argomento della verifica scritto dalla persona, se c'è; altrimenti vuota. Mai un
+concetto dello scheletro (sarebbe una risposta data). Gli strumenti di sempre: «+ Concetto», «Collega»
+col verbo, elenco equivalente, frecce, «Riordina», PDF (della mappa libera, solo testo della
+persona); tetto `studio_mappa_nodi_max` + 6 concetti. Permessi come le mappe: la cambia solo la
+persona, il tutore la vede e scarica il PDF.
+
+**Lo scheletro nascosto** finché la libera è aperta, da tutte le strade: la vista manda scheletro, mia
+mappa e a memoria **senza testi** (come per «a memoria»); il PDF della mia mappa è rifiutato; il tool
+`studio` azione `mappa` dà solo conti («la mappa da zero è in corso»); le carte nate da «Fanne carte»
+(«Mappa di …») escono dall'elenco e dal ripasso finché la libera è aperta; la home ha solo conti. Una
+mappa senza guardare per volta: con la libera aperta a memoria non parte, e viceversa. I titoli degli
+argomenti restano nella vista: sono quelli confermati dalla persona, non lo scheletro.
+
+**«Ho finito»** (`finisci_libera`): il confronto del codice col **riferimento** (lo scheletro
+confermato; se c'è solo quello proposto, le sue voci **senza avvisi**, e la pagina dice «rispetto
+alla mappa proposta, non ancora controllata»; senza nessuno, solo gli indicatori), gli indicatori, i
+tentativi, e la mappa si **chiude** come a memoria (si guarda, si scarica, «Parliamone»; «Rifai» apre
+un giro nuovo dalla radice). Il confronto (`mappa.confronta`), deterministico:
+- **concetti chiave**: la radice e i più collegati, al più **un terzo** dei concetti (almeno uno);
+- per ogni concetto del riferimento: *presente* (`uguale` con le sue tolleranze), *diverso* (almeno
+  metà delle parole piene in comune: «presente con un nome diverso», da rivedere) o *mancante*; ogni
+  concetto della persona vale al più uno del riferimento;
+- i mancanti si dicono prima come **indizio di pagina** («ti manca un concetto chiave di p. 114»); il
+  testo solo con **«Mostra»**, un tocco per concetto chiave, che lo segna «visto»;
+- collegamenti fra concetti trovati: mancanti (con le pagine), verso diverso, e quelli della persona
+  **fuori dal quadro** (da controllare sul libro, mai un errore); quelli coi concetti solo suoi non si
+  giudicano.
+
+**Un indizio prima di «Ho finito».** Mentre la libera è aperta, «Un indizio» dà la pagina del
+prossimo concetto chiave che manca (uno per tocco), e da lì «Mostra». Così: un concetto **mostrato
+prima di «Ho finito» non conta**; uno trovato dopo il solo indizio di pagina vale «indizio», non
+«giusto».
+
+**Tentativi** (solo da «Ho finito», tipo «mappa», fonte «codice», una volta per giro: tutto dentro
+`self.dati.lock`, e la mappa chiusa non accetta un secondo «Ho finito»): chiave presente «giusto»
+(«indizio» dopo l'indizio di pagina), chiave mancante «sbagliato», *diverso* niente (scelta prudente:
+da rivedere non è né l'uno né l'altro), un concetto «visto» niente, gli altri concetti niente; solo
+argomenti del piano e **solo col riferimento confermato** (contro una mappa proposta e non controllata
+nessun tentativo). L'esito lo decide sempre il codice.
+
+**Come fare mappe migliori** (`mappa.indicatori`, sulla sola mappa della persona, mai testi):
+parti staccate, concetti isolati, verbi vuoti (vuoto o dell'elenco chiuso `VERBI_VUOTI`: «è collegato
+a», «con», «e», «va con»…), concetti lunghi (oltre **6 parole** o **45 caratteri**: una frase al
+posto di un concetto), profondità dalla radice, collegamenti trasversali fra due rami diversi,
+copertura dei concetti chiave. Giro per giro in `studio_mappe.giri` (al più 20), la pagina dice «la
+tua mappa rispetto alla volta scorsa» (`rispetto_a_prima`: meglio, uguale, da curare). È una misura
+del metodo, separata dalla padronanza e mai scritta come tentativo; per la verifica finta (#248)
+restano esiti e indicatori per giro.
+
+**«Parliamone»** (`studio_mappa_consigli: spenta | ombra | attiva`, **ombra di serie**). Dopo «Ho
+finito», a voce o scritto («parliamo della mia mappa»), il tool **`studio_mappa_consigli`**: un tool
+nuovo e non un'azione di `studio`, perché `studio` è fidato (il suo risultato varrebbe come
+provenienza fidata) e il testo delle mappe va solo in busta. Come `studio_carte`: classe «sicuro»,
+fonte «foto», `non_fidato`, mai toccabile, fuori dalla storia a risposta finita (`MAPPA_TOLTA`);
+`politica.py` e `valore.py` come le altre letture dello Studio (E0, la verifica un bersaglio). Dà in
+busta la mappa della persona (codici T1…), lo scheletro (codici R1…), il confronto del codice, gli
+indicatori e il giro di prima; **i concetti del riferimento che la persona non ha e non ha scelto di
+vedere non arrivano al modello** (al loro posto «concetto nascosto» con le pagine): non li può
+svelare nemmeno volendo. Il risultato ricorda il ruolo (prima ciò che va bene, uno o due
+miglioramenti sul metodo, una domanda; frasi brevi; mai i concetti nascosti; non decide esiti).
+- *Ombra*: il tool c'è, ma ha la frase del codice come `risposta_finale` («Nella tua mappa ci sono 1
+  concetti chiave su 2; quelli che mancano li trovi a p. 114. Qualche collegamento ha un verbo vuoto…»:
+  solo conti e pagine), quindi la voce dice solo quella; Brain fa poi in un thread la passata del
+  modello coi messaggi del turno (copie: a risposta finita i dati escono dalla storia), senza dirla.
+- *Attiva*: parla il modello.
+- In tutti e due a risposta finita lo Studio conta i **concetti svelati** (`mappa.svelati`: tutte le
+  parole piene di un concetto nascosto nella risposta, uguali o storpiate, e non già nella mappa
+  della persona) e lo scrive nel registro come misura con gli id, mai il testo (««Parliamone»
+  (ombra): 212 caratteri, 0 concetti svelati»); con uno svelato la regola `studio_mappa_svelato`
+  nel registro dei turni. Devono restare 0; si passa ad «attiva» dopo la rilettura delle misure
+  dell'ombra.
+
+**Dati.** Schema «studio» alla **versione 9**: `studio_mappe.giri` (indicatori e conti del confronto
+per giro, JSON, mai testi) e `studio_mappe.visti` (concetto del riferimento → «indizio» o «visto» nel
+giro in corso); il tipo «libera» non chiede colonne. Tenuta, «dimentica», «svuota» e orfani come le
+mappe (stessa tabella). Service worker e `PAGINA_VERSIONE` del telefono alla v30. Lo stato d'animo
+non entra in niente di questo.
+
+**Endpoint** `POST /api/studio/mappa`, azioni nuove: `libera`, `finito`, `indizio`, `mostra`
+(`concetto` = id del riferimento), `pdf` con `tipo: libera`. Stessi permessi e orari delle altre.
+
+Prove: `prova_studio_mappa_libera.py` (a secco, ~5 s), `prova_studio_mappa_libera_pagina.py`
+(browser, telefono 390 e 320, PC), in `prova_studio_mappa_genera.py` la seconda passata nel lettore e
+le misure del banco, in `prova_valore.py` `prova_mappa_consigli` attraverso `Brain` (un modello finto
+che cerca i concetti mancanti nei dati e li dice: 0 svelati in ombra e attiva; un concetto detto di
+suo si conta e va nel registro con l'id).
 
 ## Lo scheletro della mappa generato dal lettore (30/10 sera, issue #247, ramo `issue-247-studio-mappa-genera`)
 
@@ -146,7 +290,9 @@ cambiano, e il registro lo dice («mappa ferma dopo 3 errori…»). *Storico per
 **Prima di «attiva»** (proposta; le soglie le decide chi amministra): il banco della mappa sulle tre
 verifiche di fantasia con almeno l'80 % di concetti nelle pagine, **nessuna voce ostile pulita** (le
 regex `non_deve` dei materiali su concetti e verbi), le voci della pagina ostile tutte segnate, 6–12
-concetti per verifica; poi la rilettura a mano degli scheletri dell'ombra sulla DGX.
+concetti per verifica; poi la rilettura a mano degli scheletri dell'ombra sulla DGX. *[storico: dal
+30/10 sera `studio_mappa_genera: attiva` sulla DGX, chiesto da chi amministra prima del banco; il
+banco delle 23:40 e la forma a isole nella sezione della #328 qui sopra]*
 
 **Il banco** (`prove/manuali/banco_studio.py`, fase `mappa`, non lanciato: va sulla DGX a DGX libera,
 con la guardia del banco):
