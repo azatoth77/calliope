@@ -59,6 +59,7 @@ from calliope.tools.builtin import FAMILY  # noqa: E402
 from calliope.tools.spec import ToolContext, ToolSpec  # noqa: E402
 
 import prova_ciclo as pc  # noqa: E402  (i finti del ciclo)
+from prove.orologio import ora_del_giorno  # noqa: E402
 import prova_stati_buchi as sb  # noqa: E402  (Brain con il backend a copione)
 
 TMP = Path(tempfile.mkdtemp(prefix="calliope-raccolte-"))
@@ -327,6 +328,122 @@ def server():
     finally:
         srv.ferma()
         liste.db.close()
+
+
+# ─────────────────────────── 3b. il resto del corpo prima di chiudere (30/10, #274) ───────────────────────────
+def resto_del_corpo():
+    """urllib manda intestazioni e corpo in due pezzi: un rifiuto che non legge il corpo chiudeva
+    con il corpo in arrivo, la chiusura diventava un RST e la risposta si perdeva
+    (ConnectionResetError sotto carico). Il middleware legge il resto prima dell'ultima parte."""
+    import asyncio
+    import select
+    import socket
+    from calliope.schermi import server as SRV
+
+    def scope(tipo=b"application/json", lung=b"2"):
+        return {"type": "http", "headers": [(b"content-type", tipo), (b"content-length", lung)]}
+
+    async def giro(sc, pezzi, rifiuto=True, lento_s=0.0):
+        """L'app risponde senza leggere il corpo: quanti pezzi ha letto il middleware prima
+        dell'ultima parte della risposta, e dopo quanti secondi."""
+        letti, mandati = [], []
+        coda = list(pezzi)
+
+        async def receive():
+            if lento_s:
+                await asyncio.sleep(lento_s)
+            m = coda.pop(0) if coda else {"type": "http.disconnect"}
+            letti.append(m)
+            return m
+
+        async def send(m):
+            mandati.append((m["type"], len(letti)))
+
+        async def app(scope, receive, send):
+            if not rifiuto:
+                while (await receive()).get("more_body"):
+                    pass
+            await send({"type": "http.response.start", "status": 401, "headers": []})
+            await send({"type": "http.response.body", "body": b"{}"})
+        t0 = time.monotonic()
+        await SRV._LeggiIlResto(app)(sc, receive, send)
+        return mandati, len(letti), time.monotonic() - t0
+
+    corpo = [{"type": "http.request", "body": b"{", "more_body": True},
+             {"type": "http.request", "body": b"}", "more_body": False}]
+    mandati, n, _ = asyncio.run(giro(scope(), corpo))
+    verifica("resto: un rifiuto che non legge il corpo JSON → letto tutto prima dell'ultima parte",
+             n == 2 and mandati == [("http.response.start", 0), ("http.response.body", 2)], str(mandati))
+    mandati, n, _ = asyncio.run(giro(scope(), list(corpo), rifiuto=False))
+    verifica("contrario: l'app che il corpo l'ha letto → niente letto in più (e niente attesa)",
+             n == 2 and mandati[-1] == ("http.response.body", 2), str(mandati))
+    _, n, _ = asyncio.run(giro(scope(tipo=b"application/octet-stream", lung=b"5000"), list(corpo)))
+    verifica("contrario: un invio che non è JSON (le foto dello Studio) resta all'endpoint", n == 0)
+    _, n, _ = asyncio.run(giro(scope(lung=str(SRV.CORPO_RESTO_MAX + 1).encode()), list(corpo)))
+    verifica("contrario: un corpo JSON dichiarato oltre il tetto non si legge", n == 0)
+    _, n, _ = asyncio.run(giro({"type": "http", "headers": [(b"content-type", b"application/json")]},
+                               list(corpo)))
+    verifica("contrario: senza Content-Length non si legge", n == 0)
+    prima = SRV.CORPO_RESTO_S
+    SRV.CORPO_RESTO_S = 0.2
+    try:
+        lenti = [{"type": "http.request", "body": b"x", "more_body": True}] * 1000
+        mandati, n, dt = asyncio.run(giro(scope(lung=b"1000"), lenti, lento_s=0.05))
+        verifica("contrario: un corpo lento si lascia dopo CORPO_RESTO_S, e la risposta parte",
+                 mandati[-1][0] == "http.response.body" and n < 1000, f"{n} {dt:.2f}s")
+    finally:
+        SRV.CORPO_RESTO_S = prima
+
+    # Sul server vero, con le intestazioni e il corpo mandati a parte come fa urllib.
+    cfg = Config()
+    cfg.config_dir = str(TMP)
+    cfg.memory_db = str(TMP / "memoria_resto.db")
+    hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db), log=lambda m: None)
+    srv = ServerSchermi(hub, "127.0.0.1", 0, attesa_porta_s=5).avvia()
+
+    def manda(percorso, intest, corpo):
+        """(prima riga, risposta intera?, reset?, secondi fino alla chiusura): le intestazioni,
+        poi il corpo (se c'è) quando la risposta ha già cominciato ad arrivare."""
+        sk = socket.create_connection(("127.0.0.1", srv.port), timeout=20)
+        try:
+            t0 = time.monotonic()
+            sk.sendall(f"POST {percorso} HTTP/1.1\r\nHost: 127.0.0.1\r\n{intest}"
+                       "Content-Type: application/json\r\nContent-Length: 2\r\n"
+                       "Connection: close\r\n\r\n".encode())
+            select.select([sk], [], [], 20)
+            if corpo:
+                sk.sendall(corpo)
+            risposta, reset = b"", False
+            while True:
+                try:
+                    pezzo = sk.recv(65536)
+                except ConnectionResetError:
+                    reset = True
+                    break
+                if not pezzo:
+                    break
+                risposta += pezzo
+            return (risposta.split(b"\r\n", 1)[0].decode("latin-1"), risposta.endswith(b"}"), reset,
+                    time.monotonic() - t0)
+        finally:
+            sk.close()
+
+    prima = SRV.CORPO_RESTO_S
+    SRV.CORPO_RESTO_S = 0.5
+    try:
+        esiti = [manda(p, i, b"{}") for p, i in (("/api/accedi", "Authorization: Bearer inventato\r\n"),
+                                                 ("/api/raccolte", "X-Calliope-Sessione: inventata\r\n"))]
+        verifica("resto: sul server vero il corpo mandato a parte → 401 intero e chiusura senza reset "
+                 "(/api/accedi e /api/raccolte)",
+                 all(" 401 " in riga and intera and not reset for riga, intera, reset, _ in esiti), str(esiti))
+        # La causa, senza dipendere da chi arriva prima: il corpo non arriva mai, e il server non
+        # chiude prima di averlo aspettato (prima chiudeva subito, con il corpo ancora in arrivo)
+        riga, intera, reset, dt = manda("/api/accedi", "Authorization: Bearer inventato\r\n", b"")
+        verifica("resto: senza il corpo la risposta si chiude solo dopo averlo aspettato (CORPO_RESTO_S)",
+                 " 401 " in riga and intera and dt >= SRV.CORPO_RESTO_S * 0.9, f"{riga} {dt:.2f}s")
+    finally:
+        SRV.CORPO_RESTO_S = prima
+        srv.ferma()
 
 
 # ─────────────────────────── 4. il ciclo ───────────────────────────
@@ -708,11 +825,16 @@ def ciclo_studio():
 def main():
     try:
         print("— 1. le tessere")
-        tessere()
+        # A un'ora nota (30/10, trovato con le prove sotto carico per #274): il promemoria «fra un
+        # minuto» delle 23:59 è di domani, e la tessera diceva «niente oggi»
+        with ora_del_giorno(12, 0):
+            tessere()
         print("— 2. i tocchi")
         prepara_tocchi()
         print("— 3. il server")
         server()
+        print("— 3b. il resto del corpo prima di chiudere (#274)")
+        resto_del_corpo()
         print("— 4. il ciclo")
         ciclo()
         ciclo_eventi()
