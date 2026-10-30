@@ -122,10 +122,21 @@ ritentava subito e al terzo la pagina era «illeggibile» per sempre; con un cli
 errore del server (5xx, errore nello stream, stream finito senza `finish_reason`) non rende mai una
 pagina illeggibile: la pagina torna «da leggere» e la lettura aspetta `ATTESA_S` (15 s), poi il
 doppio a ogni errore di fila fino a 15 minuti, anche se arrivano pagine nuove; una risposta buona
-azzera l'attesa. Una pagina che fa cadere il motore due volte di fila va nello stato «da_parte»
-con l'avviso `fa_cadere_il_motore` e non si riprova da sola: si rilegge a mano (`segna_pagina`
-«da_leggere») o dopo un aggiornamento (in `metodo` c'è la versione che l'ha messa da parte, e
-all'avvio una versione diversa la rimette «da leggere»). Gli errori della pagina stessa (`length`;
+azzera l'attesa. Dopo una caduta si prova prima la pagina con meno cadute, così una seconda
+pagina dice se la colpa è della pagina o del server.
+
+**La pagina «da_parte»**, solo con un indizio contro di lei (nota della seconda revisione della PR
+#314: *storico: col primo disegno un guasto di mezz'ora del server mandava da parte, e lì
+lasciava, 4 pagine sane su 6*). Dopo almeno due cadute della pagina, va nello stato «da_parte»
+con l'avviso `fa_cadere_il_motore` solo se fra le sue cadute un'altra pagina è stata letta (il
+server andava) oppure se subito dopo la sua richiesta il motore è giù (`/metrics` non risponde,
+`Guardia.giu`). Se cadono anche le altre pagine, o il server dà 500 a tutti, la colpa è del
+server: nessuna pagina va da parte e vale solo l'attesa che raddoppia. Una pagina da parte si
+riprova da sola **una volta al giorno** (`RIPROVA_DA_PARTE_S`, con la guardia come le altre), a
+mano (`segna_pagina` «da_leggere») o dopo un aggiornamento (in `metodo` c'è
+«da_parte:<versione>@<secondi>», e all'avvio una versione diversa la rimette «da leggere»).
+Tornata, alla **prima** caduta torna da parte senza il secondo tentativo; letta, perde l'avviso.
+Gli errori della pagina stessa (`length`;
 un'immagine che non si apre, tre volte) restano quelli che la fanno «illeggibile». Un server giù
 (connessione rifiutata) lascia la pagina da leggere senza contare niente.
 

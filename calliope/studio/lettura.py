@@ -42,7 +42,8 @@ leggere» (`cedi`).
 
 **Errori del server** (revisione della PR #314): mai una pagina illeggibile per un 5xx o uno
 stream rotto; la lettura aspetta sempre di più e la pagina che fa cadere il motore due volte di
-fila va «da_parte» (`ErroreServer`, `_errore_server`).
+fila va «da_parte» solo con un indizio contro di lei, e si riprova una volta al giorno
+(`ErroreServer`, `_errore_server`, `riprova_del_giorno`).
 
 **Stati**: «da_leggere» → «in_lettura» → «letta», «illeggibile» o «da_parte». Dopo un riavvio le pagine
 rimaste «in_lettura» tornano «da_leggere» (`riprendi`). Un'altra modifica alla pagina nel
@@ -105,10 +106,14 @@ ERRORI_MAX = 3
 # Gli errori del server (5xx, stream rotto, EngineDeadError: revisione della PR #314) non
 # rendono mai una pagina illeggibile: la lettura aspetta, ogni volta il doppio (da ATTESA_S fino
 # a ATTESA_ERRORE_MAX_S), e la pagina resta da leggere. Una pagina che fa cadere il motore
-# CADUTE_MAX volte di fila va «da_parte» (avviso «fa_cadere_il_motore»): si riprova solo a mano
-# (`segna_pagina` «da_leggere») o dopo un aggiornamento di Calliope
+# CADUTE_MAX volte va «da_parte» (avviso «fa_cadere_il_motore») solo con un indizio contro di lei
+# (dopo la seconda caduta il motore è giù, o fra le due un'altra pagina è stata letta): un guasto
+# generale del server non mette da parte nessuno (seconda nota della PR #314). Una pagina da parte
+# si riprova a mano (`segna_pagina` «da_leggere»), dopo un aggiornamento di Calliope e da sola
+# una volta al giorno (`RIPROVA_DA_PARTE_S`); tornata, alla prima caduta torna da parte
 ATTESA_ERRORE_MAX_S = 900.0
 CADUTE_MAX = 2
+RIPROVA_DA_PARTE_S = 86400.0
 # Durante lo stream le richieste in attesa su vLLM si guardano al più ogni tanti secondi
 CEDI_METRICHE_S = 2.0
 # Ogni quanto si ricontrolla la guardia quando la DGX è occupata, e senza pagine da leggere
@@ -431,6 +436,11 @@ class Guardia:
             self._metriche_viste = (ora, aspetta)
         return aspetta
 
+    def giu(self) -> bool:
+        """Il motore è giù adesso (`/metrics` non risponde)? Subito dopo un errore è l'indizio
+        che la richiesta l'ha fatto cadere."""
+        return self._richieste() is None
+
     def close(self):
         try:
             self.http.close()
@@ -451,8 +461,21 @@ def versione_codice() -> str:
         return "?"
 
 
-# Il `metodo` di una pagina messa da parte: con la versione che l'ha messa da parte
+# Il `metodo` di una pagina messa da parte: «da_parte:<versione>@<secondi>», la versione che l'ha
+# messa da parte e quando
 DA_PARTE = "da_parte:"
+
+
+def _da_parte(metodo) -> tuple[str, float]:
+    """(versione, quando) dal `metodo` di una pagina da parte; ("", 0) se non si legge."""
+    m = str(metodo or "")
+    if not m.startswith(DA_PARTE):
+        return "", 0.0
+    ver, _, quando = m[len(DA_PARTE):].partition("@")
+    try:
+        return ver, float(quando)
+    except ValueError:
+        return ver, 0.0
 
 
 class ErroreServer(Exception):
@@ -486,7 +509,12 @@ class Lettore:
         # pagina
         self._errori_di_fila = 0
         self._riprova_dopo = 0.0
-        self._cadute: dict[int, int] = {}
+        # pid → (cadute di fila, risposte buone del server alla prima caduta)
+        self._cadute: dict[int, tuple[int, int]] = {}
+        # Le risposte buone del server: fra due cadute di una pagina dicono se il server andava
+        self._risposte_ok = 0
+        # L'orologio delle pagine da parte (secondi, le prove lo fingono)
+        self.orologio = time.time
         self._pdf: tuple = (None, None)            # (materiale, PDF) → testo delle pagine
         self.in_attesa: str | None = None          # perché la lettura aspetta (la guardia)
         self.in_lettura: int | None = None
@@ -547,12 +575,34 @@ class Lettore:
         if n:
             self._registra(f"{n} pagine riprese dopo un riavvio")
         # Le pagine messe da parte da un'altra versione (dopo un aggiornamento) si riprovano
-        m = d.scrivi("UPDATE studio_pagine SET stato = 'da_leggere', metodo = NULL WHERE stato = "
-                     "'da_parte' AND (metodo IS NULL OR metodo != ?)",
-                     (DA_PARTE + versione_codice(),))
+        ver = versione_codice()
+        ids = [r["id"] for r in d.tutti("SELECT id, metodo FROM studio_pagine WHERE stato = "
+                                        "'da_parte'") if _da_parte(r["metodo"])[0] != ver]
+        m = self._rimetti(ids)
         if m:
             self._registra(f"{m} pagine messe da parte riprese dopo un aggiornamento")
         return n + m
+
+    def _rimetti(self, ids: list[int]) -> int:
+        """Le pagine da parte di nuovo «da leggere» (l'avviso «fa_cadere_il_motore» resta: alla
+        prima caduta tornano da parte)."""
+        n = 0
+        for pid in ids:
+            n += self.studio.dati.scrivi("UPDATE studio_pagine SET stato = 'da_leggere', metodo = "
+                                         "NULL WHERE id = ? AND stato = 'da_parte'", (pid,))
+        return n
+
+    def riprova_del_giorno(self) -> int:
+        """Le pagine da parte da più di `RIPROVA_DA_PARTE_S`: un nuovo tentativo da sole, con
+        la guardia come le altre."""
+        ora = self.orologio()
+        ids = [r["id"] for r in self.studio.dati.tutti(
+            "SELECT id, metodo FROM studio_pagine WHERE stato = 'da_parte'")
+            if ora - _da_parte(r["metodo"])[1] >= RIPROVA_DA_PARTE_S]
+        n = self._rimetti(ids)
+        if n:
+            self._registra(f"{n} pagine messe da parte: il tentativo del giorno")
+        return n
 
     def prossime(self, quante: int = 50) -> list[dict]:
         """Le pagine da leggere, dalla verifica più vicina e nell'ordine delle pagine. Solo
@@ -569,11 +619,16 @@ class Lettore:
         fatte = 0
         if not self.studio.dati.scrivibile:
             return {"fatte": 0}
+        self.riprova_del_giorno()
         while not self._chiuso:
             if time.monotonic() < self._riprova_dopo:
                 # Dopo un errore si aspetta, anche se una pagina nuova sveglia il lettore
                 return {"fatte": fatte, "aspetta": "errore"}
-            righe = self.prossime(1)
+            righe = self.prossime(50)
+            # Dopo una caduta si prova prima un'altra pagina: se va, la colpa è della pagina
+            # caduta; se cade anche lei, è del server (seconda nota della PR #314)
+            # (la pagina con meno cadute, a parità nell'ordine delle pagine)
+            righe = sorted(righe, key=lambda r: self._cadute.get(r["id"], (0, 0))[0])[:1]
             if not righe:
                 self.in_attesa = None
                 return {"fatte": fatte}
@@ -665,17 +720,32 @@ class Lettore:
 
     def _errore_server(self, pid: int, e) -> str:
         """Un errore del server non rende mai la pagina illeggibile: si aspetta, sempre di più.
-        La pagina che fa cadere il motore CADUTE_MAX volte di fila va da parte."""
+        La pagina va da parte solo con un indizio contro di lei: dopo la sua seconda caduta il
+        motore è giù, o fra le due cadute un'altra pagina è stata letta (il server andava). Una
+        pagina già stata da parte ci torna alla prima caduta. Altrimenti la colpa è del server."""
         self.misure["errori_server"] += 1
         attesa = self._attendi_errore()
-        n = self._cadute.get(pid, 0) + 1
-        self._cadute[pid] = n
-        if n >= CADUTE_MAX:
+        n, ok_prima = self._cadute.get(pid, (0, self._risposte_ok))
+        n += 1
+        self._cadute[pid] = (n, ok_prima)
+        r = self.studio.dati.uno("SELECT avvisi FROM studio_pagine WHERE id = ?", (pid,))
+        tornata = r is not None and "fa_cadere_il_motore" in D.da_j(r["avvisi"])
+        indizio = None
+        if tornata:
+            indizio = "era già stata messa da parte"
+        elif n >= CADUTE_MAX:
+            giu = getattr(self.guardia, "giu", None)
+            if self._risposte_ok > ok_prima:
+                indizio = "fra le sue cadute un'altra pagina è stata letta"
+            elif callable(giu) and giu():
+                indizio = "il motore è giù subito dopo la sua richiesta"
+        if indizio is not None:
             self._cadute.pop(pid, None)
             self.misure["da_parte"] += 1
-            self._chiudi(pid, "da_parte", None, DA_PARTE + versione_codice(),
+            self._chiudi(pid, "da_parte", None,
+                         f"{DA_PARTE}{versione_codice()}@{int(self.orologio())}",
                          ["fa_cadere_il_motore"])
-            self._registra(f"pagina {pid}: errore del server {n} volte di fila, messa da parte;"
+            self._registra(f"pagina {pid}: errore del server ({indizio}), messa da parte;"
                            f" riprovo le altre fra {attesa:.0f} s")
             return "da_parte"
         self._rilascia(pid)
@@ -823,6 +893,7 @@ class Lettore:
                 self._errori_di_fila = 0
                 self._riprova_dopo = 0.0
                 self._cadute.pop(pid, None)
+                self._risposte_ok += 1
             self.misure["token_in"] += int(r.get("prompt") or 0)
             self.misure["token_out"] += int(r.get("eval") or 0)
             if not r.get("fine"):
@@ -898,6 +969,8 @@ class Lettore:
                     tutti = list(dict.fromkeys(prima + av + (["divisa"] if len(pagine) == 2
                                                                 else [])
                                                + (["girata"] if "girata" in nuove else [])))
+                    # Letta: non fa più cadere il motore
+                    tutti = [a for a in tutti if a != "fa_cadere_il_motore"]
                     file_ = scritti[i] if immagini is not None else r["file"]
                     if i == 0:
                         db.execute("UPDATE studio_pagine SET stato = 'letta', testo = ?, metodo"

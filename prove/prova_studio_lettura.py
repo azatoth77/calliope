@@ -75,6 +75,7 @@ class Finto:
         self.durante = None
         self.metriche_ok = True
         self.errore = None          # None, «500», «rotto», «errore_stream»
+        self.coda: list = []        # un modo per richiesta, prima di `errore` (None = risponde)
 
 
 F = Finto()
@@ -115,9 +116,10 @@ class Gestore(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         corpo = json.loads(self.rfile.read(n) or b"{}")
         F.richieste.append(corpo)
-        if F.errore == "500":
+        modo = F.coda.pop(0) if F.coda else F.errore
+        if modo == "500":
             return self._json(500, {"error": "EngineDeadError"})
-        if F.errore in ("rotto", "errore_stream"):
+        if modo in ("rotto", "errore_stream"):
             # Due pezzi, poi lo stream chiuso a metà (senza finish_reason né [DONE]) o un errore
             # dentro lo stream, come vLLM quando il motore cade
             self.send_response(200)
@@ -127,7 +129,7 @@ class Gestore(BaseHTTPRequestHandler):
             for p in ("=== PAGINA ", "1 ===\nCrist"):
                 ch = {"choices": [{"index": 0, "delta": {"content": p}, "finish_reason": None}]}
                 self.wfile.write(f"data: {json.dumps(ch)}\n\n".encode())
-            if F.errore == "errore_stream":
+            if modo == "errore_stream":
                 self.wfile.write(b'data: {"error": {"message": "EngineDeadError"}}\n\n')
             self.wfile.flush()
             self.close_connection = True
@@ -179,6 +181,7 @@ def azzera():
     F.durante = None
     F.metriche_ok = True
     F.errore = None
+    F.coda = []
 
 
 # ─────────────────────────── lo Studio di prova ───────────────────────────
@@ -763,13 +766,15 @@ def prova_interruttore_permessi():
 
 def prova_errori_server():
     """Revisione della PR #314: 5xx, stream rotto ed errore nello stream non fanno raffiche né
-    pagine illeggibili; l'attesa cresce; la pagina che fa cadere il motore due volte di fila va
-    da parte e si riprova solo a mano o dopo un aggiornamento."""
+    pagine illeggibili, l'attesa cresce. Seconda nota: un guasto generale di mezz'ora non mette
+    da parte nessuna pagina; la pagina colpevole (un'altra letta fra le sue cadute, o il motore
+    giù subito dopo) va da parte, si riprova una volta al giorno e, tornata, alla prima caduta
+    torna da parte; a mano e dopo un aggiornamento."""
     azzera()
     cfg = cfg_nuova("errori")
     st = S.Studio(cfg, registry=REG, log=log_righe.append)
     vid = nuova_verifica(st)
-    st.aggiungi_pronte(LEO, vid, [pronta(pagina()), pronta(pagina()), pronta(pagina())])
+    st.aggiungi_pronte(LEO, vid, [pronta(pagina()) for _ in range(6)])
     ids = [p["id"] for p in righe(st, vid)]
     lett, _ = lettore(st)
     lett.attesa_s = 0.3
@@ -778,55 +783,116 @@ def prova_errori_server():
     stati = [p["stato"] for p in righe(st, vid)]
     verifica("5xx: una richiesta, la lettura aspetta, tutte le pagine da leggere",
              e.get("aspetta") == "errore_server" and len(F.richieste) == 1
-             and stati == ["da_leggere"] * 3, (e, len(F.richieste), stati))
+             and stati == ["da_leggere"] * 6, (e, len(F.richieste), stati))
     e2 = [lett.giro() for _ in range(5)]
     verifica("5xx: nessuna raffica (cinque giri subito dopo, nessuna richiesta in più)",
              len(F.richieste) == 1 and all(x.get("aspetta") == "errore" for x in e2))
     attesa1 = lett._riprova_dopo - time.monotonic()
     time.sleep(0.35)
-    e = lett.giro()
-    p0 = righe(st, vid)[0]
+    lett.giro()
     attesa2 = lett._riprova_dopo - time.monotonic()
-    verifica("5xx due volte di fila sulla stessa pagina: da parte, «fa_cadere_il_motore»",
-             e.get("aspetta") == "da_parte" and p0["stato"] == "da_parte"
-             and "fa_cadere_il_motore" in D.da_j(p0["avvisi"]) and len(F.richieste) == 2, p0)
     verifica("l'attesa cresce a ogni errore di fila (0,3 s, poi 0,6)",
              attesa1 <= 0.3 and 0.45 < attesa2 <= 0.6, (attesa1, attesa2))
-    verifica("nessuna pagina illeggibile per un errore del server",
-             not any(p["stato"] == "illeggibile" for p in righe(st, vid)))
-    # Stream rotto ed errore nello stream sull'altra pagina: da leggere, non illeggibile
-    for modo in ("rotto", "errore_stream"):
-        F.errore = modo
+    verifica("dopo una caduta si prova un'altra pagina",
+             set(lett._cadute) == {ids[0], ids[1]}, lett._cadute)
+    # Il guasto generale di mezz'ora: 5xx, stream rotto ed errore nello stream a tutti, molti
+    # tentativi (l'attesa la salta la prova); nessuna pagina va da parte né diventa illeggibile
+    modi = ["500", "rotto", "errore_stream"]
+    for k in range(24):
+        F.errore = modi[k % 3]
         lett._riprova_dopo = 0.0
-        n = len(F.richieste)
-        e = lett.giro()
-        p1 = righe(st, vid)[1]
-        verifica(f"{modo}: errore del server, la pagina torna da leggere",
-                 e.get("aspetta") in ("errore_server", "da_parte") and len(F.richieste) == n + 1
-                 and p1["stato"] in ("da_leggere", "da_parte") and p1["testo"] is None,
-                 (e, p1["stato"]))
-    # Il server torna: le pagine si leggono, la messa da parte resta
+        lett.giro()
+    stati = [p["stato"] for p in righe(st, vid)]
+    verifica("guasto generale (26 richieste, ogni pagina caduta più volte): nessuna da parte, "
+             "nessuna illeggibile", len(F.richieste) == 26 and stati == ["da_leggere"] * 6
+             and all(n >= 2 for n, _ in lett._cadute.values()), (len(F.richieste), stati))
+    verifica("guasto generale: gli errori di fila contano tutti (l'attesa raddoppia)",
+             lett._errori_di_fila == 26)
+    # Il server torna: tutto si legge
     F.errore = None
     lett._riprova_dopo = 0.0
-    rispondi("=== PAGINA 2 ===\ndue", "=== PAGINA 3 ===\ntre", "=== PAGINA 2 ===\ndue")
+    rispondi(*[f"=== PAGINA {i} ===\npagina {i}" for i in range(1, 7)])
     lett.giro()
-    stati = {p["id"]: p["stato"] for p in righe(st, vid)}
-    verifica("server di nuovo su: le altre lette, la pagina da parte non si riprova da sola",
-             stati[ids[0]] == "da_parte" and stati[ids[2]] == "letta"
-             and lett._errori_di_fila == 0, stati)
-    verifica("riavvio con la stessa versione: resta da parte",
-             lett.riprendi() == 0 and righe(st, vid)[0]["stato"] == "da_parte")
-    st.dati.scrivi("UPDATE studio_pagine SET metodo = ? WHERE id = ?",
-                   (L.DA_PARTE + "versione-vecchia", ids[0]))
+    stati = [p["stato"] for p in righe(st, vid)]
+    verifica("server di nuovo su: tutte lette, errori di fila azzerati",
+             stati == ["letta"] * 6 and lett._errori_di_fila == 0 and not lett._cadute, stati)
+    # La pagina colpevole: cade, un'altra si legge, ricade → da parte
+    st.aggiungi_pronte(LEO, vid, [pronta(pagina()) for _ in range(3)])
+    nuove = [p["id"] for p in righe(st, vid)][6:]
+    F.coda = ["500", None, None, "500"]
+    rispondi("=== PAGINA 8 ===\notto", "=== PAGINA 9 ===\nnove")
+    for _ in range(2):
+        lett._riprova_dopo = 0.0
+        lett.giro()
+    q = {p["id"]: p for p in righe(st, vid)}
+    verifica("colpevole: altre pagine lette fra le sue due cadute → da parte",
+             q[nuove[0]]["stato"] == "da_parte" and q[nuove[1]]["stato"] == "letta"
+             and q[nuove[2]]["stato"] == "letta"
+             and "fa_cadere_il_motore" in D.da_j(q[nuove[0]]["avvisi"]),
+             [q[x]["stato"] for x in nuove])
+    # Una pagina sola che cade due volte senza indizio: resta da leggere
+    st.aggiungi_pronte(LEO, vid, [pronta(pagina())])
+    dd = righe(st, vid)[9]["id"]
+    for _ in range(2):
+        F.coda = ["500"]
+        lett._riprova_dopo = 0.0
+        lett.giro()
+    verifica("due cadute senza indizio (nessuna lettura in mezzo, motore su): resta da leggere",
+             righe(st, vid)[9]["stato"] == "da_leggere" and lett._cadute.get(dd, (0,))[0] == 2)
+    # Il motore giù subito dopo la sua richiesta: indizio
+    F.coda = ["500"]
+
+    def giu_dopo(g=lett.guardia):
+        F.metriche_ok = False
+        try:
+            return L.Guardia.giu(g)
+        finally:
+            F.metriche_ok = True
+    lett.guardia.giu = giu_dopo
+    lett._riprova_dopo = 0.0
+    lett.giro()
+    del lett.guardia.giu
+    verifica("caduta col motore giù subito dopo la richiesta: da parte",
+             righe(st, vid)[9]["stato"] == "da_parte")
+    # Riavvio con la stessa versione: resta; il giorno dopo: un nuovo tentativo da sola
+    verifica("riavvio con la stessa versione: resta da parte", lett.riprendi() == 0
+             and righe(st, vid)[6]["stato"] == "da_parte")
+    verifica("prima di un giorno niente tentativo", lett.riprova_del_giorno() == 0)
+    ora = time.time()
+    lett.orologio = lambda: ora + 86400 + 5
+    F.coda = ["500"]
+    lett._riprova_dopo = 0.0
+    n = len(F.richieste)
+    e = lett.giro()
+    q = {p["id"]: p for p in righe(st, vid)}
+    verifica("il giorno dopo: un tentativo da sola, alla prima caduta torna da parte",
+             e.get("aspetta") == "da_parte" and len(F.richieste) == n + 1
+             and q[nuove[0]]["stato"] == "da_parte" and q[dd]["stato"] == "da_leggere",
+             [q[x]["stato"] for x in nuove + [dd]])
+    lett.orologio = lambda: ora + 2 * 86400 + 10
+    lett._riprova_dopo = 0.0
+    rispondi("=== PAGINA 7 ===\nsette", "=== PAGINA 10 ===\ndieci")
+    lett.giro()
+    q = {p["id"]: p for p in righe(st, vid)}
+    verifica("il giorno dopo ancora, server sano: lette, l'avviso tolto",
+             q[nuove[0]]["stato"] == "letta" and q[dd]["stato"] == "letta"
+             and "fa_cadere_il_motore" not in D.da_j(q[nuove[0]]["avvisi"]),
+             [q[x]["stato"] for x in nuove + [dd]])
+    # Dopo un aggiornamento e a mano
+    st.dati.scrivi("UPDATE studio_pagine SET stato = 'da_parte', metodo = ? WHERE id = ?",
+                   (L.DA_PARTE + "versione-vecchia@" + str(int(ora)), ids[0]))
+    lett.orologio = time.time
     verifica("dopo un aggiornamento: torna da leggere", lett.riprendi() == 1
              and righe(st, vid)[0]["stato"] == "da_leggere")
     st.dati.scrivi("UPDATE studio_pagine SET stato = 'da_parte' WHERE id = ?", (ids[0],))
     st.segna_pagina(LEO, ids[0], "da_leggere")
     rispondi("=== PAGINA 1 ===\nuno")
+    lett._riprova_dopo = 0.0
     lett.giro()
     verifica("a mano («da_leggere»): si rilegge", righe(st, vid)[0]["stato"] == "letta")
-    av = st.lettura(LEO, vid)
-    verifica("avanzamento: le pagine da parte si contano", "da_parte" in av)
+    verifica("nessuna pagina illeggibile per un errore del server",
+             not any(p["stato"] == "illeggibile" for p in righe(st, vid)))
+    verifica("avanzamento: le pagine da parte si contano", "da_parte" in st.lettura(LEO, vid))
     st.close()
 
 
