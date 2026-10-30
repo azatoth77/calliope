@@ -1871,7 +1871,9 @@ class Ciclo:
             self.rec = {**base, "esito": "rifiutato", "voce": voce, "testo": descr,
                         "motivo": "senza bersaglio", "tocco": scritto.get("tocco"),
                         "regole": ["tocco_senza_bersaglio"]}
-            self._esito_tocco(scritto, False, "Non so quale timer: riprova dalla scheda.")
+            self._esito_tocco(scritto, False, "Non so su che cosa: riprova dalla scheda."
+                              if str(scritto.get("tocco") or "").startswith("studio_") else
+                              "Non so quale timer: riprova dalla scheda.")
             return _FINE
         # Il tocco è della conversazione della persona (come il modulo, corsie.py)
         self.corsia.turno(brain, prof.name, "schermo", True, persona_id=prof.id)

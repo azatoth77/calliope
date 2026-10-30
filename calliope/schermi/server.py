@@ -82,6 +82,11 @@ Indirizzi:
   POST /api/studio/verifiche     «X-Calliope-Sessione», {} → {verifiche, prova}: le verifiche in
                                  bozza o aperte a cui mandare pagine (le proprie e, da tutore,
                                  quelle dei suoi minori; 29/10, passo 4.2 dello Studio, #281)
+  POST /api/studio/home          «X-Calliope-Sessione», {} → la home dello Studio (30/10, #284):
+                                 verifiche, piano, tappe, lettura, argomenti da decidere, pagine da
+                                 parte, la sessione di oggi; sola lettura (le azioni sono tocchi)
+  POST /api/vista                «X-Calliope-Sessione», {vista, verifica?, pagina?} → {ok}: la vista
+                                 dello Studio aperta su questo schermo (in memoria, dati del turno)
   POST /api/studio/argomenti     «X-Calliope-Sessione», {verifica, azione?, argomento?, argomenti?,
                                  titolo?} → gli argomenti proposti di una verifica e la loro
                                  conferma: tieni, togli, rinomina, aggiungi, unisci, conferma,
@@ -1158,7 +1163,7 @@ def crea_app(hub: Schermi) -> Starlette:
             return errore
         if getattr(hub, "tool_ctx", None) is None:
             return _json({"errore": "Calliope non è pronta: riprova tra poco."}, 503)
-        out = await asyncio.to_thread(tocchi.prepara, dati, hub.tool_ctx)
+        out = await asyncio.to_thread(tocchi.prepara, dati, hub.tool_ctx, profilo_di(schermo))
         if "errore" in out:
             return _json({"errore": out["errore"]}, int(out.get("_stato", 400)))
         if not hub.ingresso.metti({"tipo": "tocco", "tool": out["tool"],
@@ -1170,6 +1175,11 @@ def crea_app(hub: Schermi) -> Starlette:
                                    "pagina": {k: str(dati.get(k))[:120]
                                               for k in ("lista", "voce", "chiave")
                                               if isinstance(dati.get(k), str)},
+                                   # Lo Studio (#284): solo gli id che la pagina ha toccato
+                                   **({"studio": {k: dati.get(k) for k in (
+                                       "verifica", "argomento", "pagina")
+                                       if isinstance(dati.get(k), int)}}
+                                      if str(dati.get("tocco")).startswith("studio_") else {}),
                                    # Il timer toccato (#257): lo sceglie il codice, mai il modello
                                    "bersaglio": out.get("bersaglio"),
                                    "persona": schermo.get("proprietario"),
@@ -1220,6 +1230,54 @@ def crea_app(hub: Schermi) -> Starlette:
         return _json({"verifiche": out, "prova": not st.per_schermi(),
                       "max_pagine": int(getattr(hub.cfg, "studio_pagine_max", 80) or 80),
                       "pdf_max_pagine": int(getattr(hub.cfg, "studio_pdf_max_pagine", 40) or 40)})
+
+    viste_fatte: dict[int, list[float]] = {}
+
+    async def vista_api(request: Request):
+        """{vista, verifica?, pagina?} → {ok}: la vista dello Studio aperta su questo schermo
+        personale (30/10, passo 4.5, studio/vista.py), al più una al secondo; {vista: null} quando
+        lo Studio si chiude. Solo in memoria, per la riga dei dati del turno."""
+        from ..studio import vista as V
+        schermo, errore = schermo_personale(request, viste_fatte, 60)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 256)
+        if errore is not None:
+            return errore
+        v = V.valida(dati)
+        if v is None:
+            return _json({"errore": "vista non valida"}, 400)
+        viste = getattr(hub, "viste_studio", None)
+        if viste is not None:
+            viste.metti(schermo["id"], v)
+        return _json({"ok": True})
+
+    async def studio_home(request: Request):
+        """{} → la home dello Studio (30/10, passo 4.5, #284): le verifiche del proprietario e,
+        da tutore, dei suoi minori, con piano, tappe, lettura, argomenti da decidere e pagine da
+        parte (`Studio.home`). Sola lettura, anche fuori orario: le azioni sono tocchi
+        (/api/tocco) e passano dal ciclo, dove valgono gli orari."""
+        schermo, errore = schermo_personale(request, letture_studio, LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 256)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        from ..studio import NonPermesso
+        try:
+            out = await asyncio.to_thread(st.home, prof)
+        except NonPermesso:
+            out = {"verifiche": [], "sessione": None, "prova": not st.per_schermi()}
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        # I tocchi solo con lo Studio per il modello (in ombra la home è la prova di chi
+        # amministra: si guarda, non si tocca)
+        out["tocchi"] = bool(st.per_modello())
+        return _json(out)
 
     # Le azioni della conferma degli argomenti (30/10, passo 4.4, #283): sui dati della persona,
     # reversibili (un argomento tolto si tiene di nuovo, rinominato si rinomina) e fuori dalla
@@ -1345,8 +1403,10 @@ def crea_app(hub: Schermi) -> Starlette:
             return None
         # Il nome del file è solo un titolo: niente percorsi, niente caratteri di controllo
         nome = re.sub(r"[\x00-\x1f\x7f]", " ", (nome or "").replace("\\", "/").split("/")[-1])
-        return {"verifica": vid, "materiale": mid, "angoli": m.get("angoli"),
-                "nome": " ".join(nome.split())[:60] or None}
+        nome = " ".join(nome.split())[:60] or None
+        return {"verifica": vid, "materiale": mid, "angoli": m.get("angoli"), "nome": nome,
+                # Un PDF dichiarato (passo 4.5): il 429 si dà prima di leggere il corpo
+                "pdf": m.get("pdf") is True or bool(nome and nome.lower().endswith(".pdf"))}
 
     async def studio_pagina(request: Request):
         """Vedi `_studio_pagina`. Revisione della PR #312: senza una sessione valida, senza
@@ -1424,6 +1484,12 @@ def crea_app(hub: Schermi) -> Starlette:
         massimo = int(getattr(hub.cfg, "studio_pagine_max", 80) or 80)
         if v["n_pagine"] >= massimo:
             return _json({"errore": f"Questa verifica ha già {massimo} pagine."}, 413)
+        # Un PDF dichiarato (il nome di un PDF, o `pdf: true`) mentre un altro si divide: il 429
+        # prima di leggere il corpo (terza revisione della PR #312, fatto con la 4.5), e il corpo
+        # dichiarato si butta come per gli altri rifiuti
+        if meta["pdf"] and pdf_in_corso[0] >= STUDIO_PDF_INSIEME:
+            return _json({"errore": "Sto già dividendo un PDF: riprova fra poco.",
+                          "riprova_s": 5}, 429, {"Retry-After": "5"})
         troppo = _json({"errore": "file troppo grande"}, 413, {"Connection": "close"})
         corpo = bytearray()
         request.state.studio_letto = True
@@ -1531,6 +1597,8 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/conversazione", conversazione_api, methods=["POST"]),
         Route("/api/tocco", tocco_api, methods=["POST"]),
         Route("/api/studio/verifiche", studio_verifiche, methods=["POST"]),
+        Route("/api/studio/home", studio_home, methods=["POST"]),
+        Route("/api/vista", vista_api, methods=["POST"]),
         Route("/api/studio/argomenti", studio_argomenti, methods=["POST"]),
         Route("/api/studio/pagina", studio_pagina, methods=["POST"]),
         # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC

@@ -17,8 +17,8 @@ si apre da Le mie cose › Studio con lo Studio attivo (in ombra solo per chi am
 leggere» con qwen3.6 su vLLM e l'harness del banco, quando la DGX è libera (sezione sotto). Dal
 30/10 gli **argomenti** (4.4, #283): quando le pagine di una verifica sono tutte lette lo stesso
 thread li chiede dal solo testo, il codice controlla le pagine citate e arrivano «proposti» alla
-persona, che li conferma da una vista minima della pagina dello Studio. Restano il tool, la home e
-la vista aperta (4.5). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
+persona, che li conferma da una vista minima della pagina dello Studio. Dal 30/10 il **tool, la home e la vista
+aperta** (4.5, #284, sezione sotto); `studio_modo` resta spento di serie. Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Moduli
@@ -54,6 +54,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 - *[storico fino alla seconda revisione della PR #315: «`unisci_argomenti` toglie le righe unite:
   una nuova estrazione li può riproporre». Ora le righe unite restano «tolte» con l'avviso «unito»
   (sezione degli argomenti)]*.
+- *[fatto il 30/10 con la 4.5: le note «per la 4.5» qui sotto, sezione «Tool, home e vista aperta»]*
 - **Per la 4.5** (revisione della PR #315): (1) la persona deve vedere *perché* un argomento è
   rimasto proposto dopo la conferma (fuori dalle pagine citate, una pagina citata con un messaggio
   per un assistente, titolo che sembra un ordine o un annuncio) e poterlo tenere con un tocco solo;
@@ -63,6 +64,70 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   per pagina dei numeri di pagina, nella sezione degli argomenti]*; (2) senza vLLM la pagina e la voce lo dicono con una
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
   vede»), non un «da leggere» muto.
+
+## Tool, home e vista aperta (30/10, issue #284, ramo `issue-284-studio-tool-home`)
+
+*Passo 4.5 dell'epic #251, l'ultimo del passo 4; decisione [0035](../decisioni/0035-studio.md)
+punti 24–30.*
+
+**I tool** (`calliope/tools/studio.py`, registrati solo con `studio_modo: attivo`):
+- `studio`, «azione», nessuna fonte: `crea` (materia, data AAAA-MM-GG o il nome del giorno,
+  argomento; `per` il minore da tutore; niente doppioni), `stato` (materia, data, pagine, conti
+  degli argomenti), `piano` (giorni, obiettivo, tappe, avvisi detti a parole; la previsione solo dopo
+  due misure), `oggi` (la frase pronta, con le due domande se la sessione non c'è), `fatto`,
+  `salta_oggi`, `archivia` (chiede senza le sue parole), `tieni`/`togli`, `riprova`, `sessione`.
+  Effetti E1, `crea` e `archivia` E2. Non dà testo né titoli (punto 24 della 0035).
+- `studio_pagina_leggi`, «sicuro» con la fonte «foto»: il testo letto di una pagina (numero
+  stampato o P1…), o con `pagina: argomenti` i titoli con l'id; Brain lo imbusta. Per un minore coi
+  compiti guidati il `cosa_fare` ha «mai la soluzione intera».
+- Conto: il registro con tutto acceso da 84 a 86; i 75 schemi di un'installazione con tutti i
+  servizi non cambiano (lo Studio dipende da `studio_modo`).
+
+**I tocchi** (`schermi/tocchi.py`): `studio_fatto`, `studio_salta`, `studio_tieni`,
+`studio_riprova`, `studio_sessione` → `studio` con l'azione fissa (`AZIONI_STUDIO`) e il bersaglio
+«studio» (gli id). `prepara` riceve il proprietario dello schermo e controlla la verifica (sua o del
+suo minore) prima del ciclo; il ciclo rifiuta un'azione diversa o il bersaglio mancante; il tool usa
+gli id del bersaglio e con un bersaglio fa solo le azioni dei tocchi. «Tieni» mette il titolo nella
+descrizione in busta col numero. `studio` in `TOCCABILI` col perché, `studio_pagina_leggi` in
+`ESCLUSI`.
+
+**La vista aperta** (`calliope/studio/vista.py`, `POST /api/vista`, `hub.viste_studio`): home,
+piano, pagine, sessione; la riga nei dati del turno da `Studio.riga_vista` («Sul suo schermo è aperta
+la verifica 12 (Storia, il 5/11): il piano.»), regola `studio_vista`.
+
+**Le due domande** (`Studio.imposta_sessione`, `sessione`, `nota_sessione`): in memoria per 3 ore e
+mai oltre la mezzanotte; la nota «Studio, sessione di oggi: …» nei dati del turno (regola
+`studio_sessione`); mai su disco, nel registro o ai tutori; «dimentica» la toglie.
+
+**La home** (`studio.js`, `POST /api/studio/home`, `Studio.home`): la tessera dice «1 verifica ·
+giovedì» e apre la home, sul telefono e sul PC personale (lì senza «Pagine»: la fotocamera è del
+telefono). Per ogni verifica (anche quelle dei minori per il tutore): data e giorni che mancano,
+obiettivo e previsione, la lettura (o la frase senza lettore), oggi con «Inizia» (le due domande),
+«Fatto», «Non ce la faccio oggi», «Pagine» (la vista del 4.2 e 4.4, con «‹ Studio»), «Impara» con
+«leggi le pagine» (Esercitati ed Esame non ci sono finché i passi 6–9 non li fanno), le tappe, «Da
+decidere» col perché e «Tieni», le pagine da parte dette a parole con «Riprova», «Il piano». La home
+si apre anche fuori orario (sola lettura); i tocchi passano dal ciclo, dove valgono gli orari. In
+ombra la vede chi amministra, senza tocchi. Service worker alla v24.
+
+**Le note delle revisioni, chiuse:**
+- `piano_non_aggiornato` quando il ricalcolo fallisce (`_piano_vivo`), detto a parole dal tool e
+  dalla home; la prova controlla `errori`;
+- «dimentica» dice «ho tolto anche le verifiche dello Studio» solo se dopo non ne restano di non
+  archiviate, altrimenti «non sono riuscita a toglierle» (regola `studio_dimentica_fallita`); provato
+  attraverso il tool con una verifica vera;
+- senza vLLM (o con `studio_lettura: false`) la pagina e la voce lo dicono (`FRASI_LETTURA`);
+- all'avvio dello Studio solo i provvisori più vecchi di 15 minuti (`PROVVISORI_AVVIO_S`);
+- il 429 di un PDF dichiarato (`pdf: true` o il nome .pdf) prima di leggere il corpo;
+- il confronto dei numeri di pagina: chiuso con la 4.4 (`numeri_dalla_prima`);
+- chi chiama l'API passa `None` per l'ospite e la zona grigia (`tools/studio.chi_di`).
+
+**Non fatto, per dopo:** creare una verifica dalla pagina (oggi a voce), il cassetto come materiale,
+PcMateriali, la previsione con le misure vere (passo 5), il resoconto delle sessioni e la vista del
+tutore (#285, #250).
+
+Prove: `prova_studio_tool.py` (a secco, ~3 s), `prova_studio_home_pagina.py` (la pagina vera,
+telefono a 390×844, 320×693 e col testo grande, PC), `prova_raccolte.py` (il tocco dello Studio dal
+ciclo vero), `prova_studio_ollama.py` (col modello, sulla DGX).
 
 ## Gli argomenti dalle pagine e la conferma (30/10, issue #283, ramo `issue-283-studio-argomenti`)
 

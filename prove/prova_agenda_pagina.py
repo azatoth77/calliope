@@ -99,7 +99,8 @@ def vincolo():
         verifica(f"vincolo: {nome} non si cambia a runtime", fermo and "prova" not in m)
     verifica("vincolo: i tocchi dell'elenco sono ammessi (anche all'import)",
              tocchi.controlla() == [] and tocchi._ERRORI == []
-             and {t.tool for t in tocchi.TOCCHI.values()} == {"lista_togli", "timer_imposta", "agenda_annulla"})
+             and {t.tool for t in tocchi.TOCCHI.values()} == {"lista_togli", "timer_imposta", "agenda_annulla",
+                                                              "studio"})
     verifica("vincolo: «Ferma» (agenda_annulla) è azione ed E2, quindi ammesso",
              politica.classe_di("agenda_annulla").classe == politica.AZIONE
              and valore.effetto("agenda_annulla", {}) == valore.E2
@@ -107,7 +108,7 @@ def vincolo():
     # L'elenco in positivo (#266): solo i toccabili, ognuno con la sua riga
     ammessi = sorted(n for n in politica.CLASSI if tocchi.ammesso(n) is None)
     verifica("vincolo: fra i tool della politica passano solo i toccabili (prima 46 su 80)",
-             ammessi == sorted(tocchi.TOCCABILI) == ["agenda_annulla", "lista_togli", "timer_imposta"],
+             ammessi == sorted(tocchi.TOCCABILI) == ["agenda_annulla", "lista_togli", "studio", "timer_imposta"],
              str(ammessi))
     verifica("vincolo: ogni toccabile ha la riga che dice perché, e i tasti del timer vogliono il bersaglio",
              all(len(t.perche) > 40 for t in tocchi.TOCCABILI.values())

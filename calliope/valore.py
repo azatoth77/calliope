@@ -76,6 +76,9 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "appuntamento_aggiungi": {"cosa": C, "quando": S, "cambia": Z},
     "lista_aggiungi": {"cose": C, "lista": B},
     "lista_togli": {"cose": B, "lista": B},
+    # lo Studio (30/10, #284): l'id della verifica e dell'argomento sono bersagli
+    "studio": {"azione": Z, "verifica": B, "materia": C, "data": S, "argomento": C, "per": B,
+               "id": B, "giorno": S, "conoscenza": S, "umore": S},
     "ricorda": {"fatto": C, "per_tutti": Z, "nascita": C},
     "dimentica": {"fatto": B},
     "pc_volume": {"azione": Z, "valore": S},
@@ -241,6 +244,10 @@ EFFETTI: dict[str, object] = {
     "modello_compila": E2, "richiesta_tutore": E2, "lavoro_rispondi": E2,
     "lavoro_annulla": E2, "pc_guarda": E2, "schede_pulisci": E2, "dati_conservati": E3,
     "stanza_pausa": E1,
+    # lo Studio (30/10, #284): i dati della persona, si disfa con un tocco o una frase; «archivia»
+    # tiene la verifica oltre la tenuta (resta, la vede il tutore): E2
+    "studio": lambda a: E2 if str((a or {}).get("azione") or "").lower() in (
+        "crea", "archivia") else E1,
     # 14/10: dimenticare un conoscente non si disfa; cambiare chi è di famiglia è fiducia
     "conoscenti": E3, "conoscente_livello": E4,
     # E3: esce di casa, esegue codice o non si disfa

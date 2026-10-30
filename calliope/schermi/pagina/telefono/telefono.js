@@ -12,7 +12,7 @@ const VERSIONE = 3;
 // (prova_telefono_consapevole le confronta). Una costante della pagina che gira, non la cache
 // più alta (revisione della PR #294: durante un aggiornamento è quella nuova), e pronta già al
 // primo «ciao»
-const PAGINA_VERSIONE = "calliope-telefono-pagina-v23";
+const PAGINA_VERSIONE = "calliope-telefono-pagina-v24";
 const CHIAVE_TOKEN = "calliope.telefono.token";
 const CHIAVE_NOME = "calliope.telefono.nome";
 const CHIAVE_MIC = "calliope.telefono.microfono";

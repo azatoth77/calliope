@@ -744,7 +744,7 @@ src_tc = (QUI.parent / "calliope" / "tools" / "conversazioni.py").read_text("utf
 verifica("«dimentica»: il conto dello Studio prima di cancellare, la frase dopo",
          src_tc.index("studio = _studio_da_dimenticare(ctx, persona)")
          < src_tc.index("n = arch.dimentica(persona)")
-         and "frase += \" \" + STUDIO_TOLTO" in src_tc)
+         and "STUDIO_NON_TOLTO if rimaste else STUDIO_TOLTO" in src_tc)
 src = (QUI.parent / "calliope" / "main.py").read_text("utf-8")
 verifica("main.py lega «dimentica le nostre conversazioni» allo Studio (archiviate escluse)",
          "conv_arch.su_dimentica.append(_studio_dimentica)" in src

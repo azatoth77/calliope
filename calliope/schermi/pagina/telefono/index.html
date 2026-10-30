@@ -106,10 +106,13 @@
           <button type="button" id="pagina-cerca-via" class="tasto pagina-cerca-via" hidden>Tutti</button>
         </form>
         <div id="pagina-schede" class="elenco pagina-schede"></div>
-        <!-- Lo Studio, pagina minima per le pagine dei materiali (29/10, passo 4.2, #281: studio.js,
-             bordi.js, POST /api/studio/pagina); la home vera arriva con la 4.5 -->
+        <!-- Lo Studio (29/10, passo 4.2, #281: studio.js, bordi.js, POST /api/studio/pagina); dal
+             30/10 (passo 4.5, #284) la home (POST /api/studio/home) e sotto la vista delle pagine -->
         <div id="studio" class="studio" hidden>
           <p id="studio-prova" class="studio-prova" hidden>Prova: lo Studio è in ombra e lo vede solo chi amministra.</p>
+          <div id="studio-home" class="studio-home"></div>
+          <div id="studio-materiali" class="studio" hidden>
+          <button id="studio-indietro" type="button" class="tasto studio-indietro">‹ Studio</button>
           <label class="studio-campo" for="studio-verifica">Verifica</label>
           <select id="studio-verifica" class="studio-scelta"></select>
           <p id="studio-nessuna" class="pagina-nota" hidden>Non c'è una verifica aperta a cui mandare pagine.</p>
@@ -142,6 +145,7 @@
             <button id="studio-argomenti-conferma" type="button" class="tasto studio-invia" hidden>Conferma gli argomenti</button>
             <p id="studio-argomenti-esito" class="pagina-esito" role="status"></p>
           </section>
+          </div>
         </div>
         <p id="pagina-esito" class="pagina-esito" role="status"></p>
       </div>

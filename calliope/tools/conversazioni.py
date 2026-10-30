@@ -428,6 +428,10 @@ DIMENTICATE_FRASE = "Fatto: ho cancellato le nostre conversazioni, anche quella 
 # Studio della persona, tranne le archiviate (decisione 0035, punto 11), e lo dice
 STUDIO_DOMANDA = "Tolgo anche le verifiche dello Studio, tranne quelle archiviate."
 STUDIO_TOLTO = "Ho tolto anche le verifiche dello Studio; quelle archiviate restano."
+# La cancellazione dello Studio non è riuscita (il gancio di «dimentica» ha dato un errore): la
+# frase lo dice invece di dire «ho tolto» (passo 4.5, nota della seconda revisione della PR #308)
+STUDIO_NON_TOLTO = ("Le verifiche dello Studio invece non sono riuscita a toglierle: riprova "
+                    "più tardi.")
 FOTO_ARCHIVIATE_RESTANO = ("Ho tolto anche le foto che tenevo; quelle che hai archiviato restano "
                            "nei tuoi documenti.")
 
@@ -493,7 +497,17 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
             # 0034, seconda revisione della PR #273)
             frase += " " + FOTO_ARCHIVIATE_RESTANO
         if studio:
-            frase += " " + STUDIO_TOLTO
+            # Solo se è riuscita: dopo «dimentica» non ne restano di non archiviate (il gancio
+            # dello Studio in main.py non ferma «dimentica» e scrive l'errore nel registro)
+            rimaste = _studio_da_dimenticare(ctx, persona)
+            frase += " " + (STUDIO_NON_TOLTO if rimaste else STUDIO_TOLTO)
+            if rimaste:
+                from .spec import note_rule
+                note_rule(ctx, "studio_dimentica_fallita")
+        # La sessione di oggi dello Studio (le due risposte, in memoria) va via anche lei
+        st = getattr(ctx, "studio", None)
+        if st is not None and hasattr(st, "dimentica_sessione"):
+            st.dimentica_sessione(persona)
         return _final(frase, cancellate=n)
     proposte[persona] = turno
     domanda = DIMENTICA_DOMANDA

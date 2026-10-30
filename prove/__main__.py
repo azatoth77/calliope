@@ -98,6 +98,7 @@ A_SECCO = [
     ("prova_studio_piano.py", [], "lo Studio, dati e piano a giorni a secco (29/10, #280, decisione 0035, calliope/studio/): schema che si crea, si riapre e con una versione più nuova si legge senza scrivere; piano deterministico coi materiali di fantasia (verifica domani, fra una settimana e fra un mese, nessun giorno libero, orari di riposo, pagine più dei giorni, data spostata, oggi e passata, giorni fatti, «non ce la faccio oggi», giorni senza scuola, due verifiche negli stessi giorni), tappe e previsione dopo due misure; permessi di minore, tutore, adulto, chi amministra, ospite e conoscente; tenuta a 60 giorni dalla data con l'orologio finto, archiviata per sempre, «dimentica» e svuota; interruttore spento, ombra e attivo"),
     ("prova_studio_pagine.py", [], "le pagine dei materiali dello Studio a secco (29/10, #281, passo 4.2): bordi sulle foto di fantasia (storte e in ombra trovate, pulite intere, quelli del telefono confermati o scartati, impossibili mai), bordi.js uguale al Python con node, raddrizzamento a 1600 e nitidezza, PDF divisi (troppe pagine, malformato, enorme, cifrato), file ostili e link fuori; sul server vero /api/studio/pagina e /api/studio/verifiche (proprietario, tutore, altro adulto, chi amministra, ospite, conoscente, stanza, orari, limiti, spento e ombra), niente nella conversazione; tenuta, dimentica, svuota e togli che tolgono i file"),
     ("prova_studio_banco.py", [], "il banco dello Studio a secco (28/10, #293, revisione della PR #302): la guardia che vede un lavoro dell'agente vivo (in_corso.json col .bak, fermo da più di 15 minuti o con i file in una sottocartella) e i contrari, --senza-guardia rifiutato con la Calliope vera attiva, harness.json uguale alle costanti del banco, pagina scritta due volte, segni della lettura, controllo delle pagine con le radici, verità dei materiali coerente"),
+    ("prova_studio_tool.py", [], "i tool dello Studio a secco (30/10, #284, passo 4.5): studio e studio_pagina_leggi con classi, effetti e livelli; proprietario, tutore (anche con «per»), un altro adulto, ospite, zona grigia e minore incerto; «archivia» che chiede; la busta «foto» del testo e dei titoli, mai nel tool fidato; i tocchi nuovi (azione fissa, bersaglio, titolo in busta, stato d'animo mai nella storia); la vista aperta nei dati del turno; le due domande in memoria; piano_non_aggiornato, la frase senza vLLM, «dimentica» che dice lo Studio solo se l'ha tolto; un minore coi compiti guidati"),
     ("prova_studio_argomenti.py", [], "gli argomenti dello Studio a secco (30/10, #283, passo 4.4) con un vLLM finto: l'harness esatto di harness.json (schema guidato, niente tool, una busta coi riferimenti P1…), il controllo delle pagine citate (giusto, pagina sbagliata, inventato, riferimento che non c'è, radice), la forma del titolo, le pagine ostili delle tre verifiche (argomento proposto con l'avviso, fuori dalla conferma e dal piano), il giro del lettore con la firma e la seconda estrazione, la conferma (tieni, togli, rinomina, unisci, aggiungi, conferma) e il piano coi soli tenuti, i permessi, gli interruttori, la guardia, gli errori del server, l'endpoint /api/studio/argomenti e la pagina"),
     ("prova_studio_lettura.py", [], "la lettura delle pagine dello Studio a secco (30/10, #282, passo 4.3) con un vLLM finto: l'harness esatto di harness.json (prompt, parametri, una foto per richiesta a 1600), pagina scritta due volte, length rifatto e poi illeggibile, capovolta girata e riletta, due pagine divise in due righe e due file, numero strano, istruzioni, controlla i numeri, PDF con testo senza modello e PDF immagine con l'OCR, la guardia (lavoro dell'agente nel processo e in in_corso.json, vLLM occupato o in pausa, lavoro che parte durante lo stream, la voce con l'arbitro), la ripresa dopo un riavvio, la pagina tolta durante la lettura, il thread, spento/ombra/attivo, permessi e ogni file con la sua riga"),
     ("prova_controlli_regressione.py", [], "i controlli del banco di regressione a secco (17/10, #70): il ruolo dato come nome (domande e «ma Papà» errori, il rifiuto detto no) e la frase storpiata «Calliope di Michisono.» (il nome o una domanda di chiarimento, non la ricerca)"),
@@ -244,6 +245,7 @@ A_SECCO = [
     ("prova_telefono_audio.py", [], "telefono: audio del microfono giusto (durata, contenuto, contesto rifatto), «Prova il microfono» e il suo endpoint"),
     # ~10 s: schermo acceso e vista da guida, in Edge o Chromium (senza si salta) con una
     # Screen Wake Lock API finta che vuole il gesto come WebKit
+    ("prova_studio_home_pagina.py", [], "la home dello Studio nella pagina vera (30/10, #284, passo 4.5): telefono a 390×844, 320×693 e col testo grande, PC personale; prossima verifica con data, obiettivo e previsione, oggi, tappe, «Impara» soltanto, «Da decidere» col perché, la pagina da parte; «Tieni», «Riprova» e le due domande come tocchi; la vista aperta al server; nessun errore JS né CSP"),
     ("prova_studio_pagina_telefono.py", [], "lo Studio nella pagina vera del telefono (29/10, #281, passo 4.2): la tessera apre la pagina, galleria con due foto e un PDF (bordi di bordi.js, miniature), fotocamera finta con due scatti, ordine su e giù, togli, rifai, misure a 390×844 e 320×693, invio nell'ordine al server, nessun errore JS né CSP"),
     ("prova_telefono_schermo.py", [], "telefono: schermo tenuto acceso col microfono (richiesta nel tocco, ripresa, avviso se negato o assente, versioni di iOS), sezioni (smistamento, schede vive in Adesso, novità, router, Io, In auto) a 3 dimensioni, Le mie cose (tessere, pagina Liste e spunta, pagina Agenda e tasti del timer, pagine Lavori, Cassetto e Giochi, pagina Documenti con «Scarica» e la ricerca, pagina Ufficio di chi amministra con «Scarica XML» e la ricerca); le schede della pagina Agenda una per una a due dimensioni (#266)"),
     ("prova_agenti.py", [], "agenti: tunnel con ssh finto, sandbox, Ollama finto, arbitro, tool, permessi"),
@@ -326,6 +328,7 @@ CON_OLLAMA = [
     ("prova_agenti_ollama.py", ["1"], "delega, stato e annullo a voce con il modello (agente finto)"),
     ("prova_archivio_ollama.py", ["1"], "documenti di casa a voce con il modello (archivio finto)"),
     ("prova_web_ollama.py", ["1"], "ricerca su internet a voce (SearXNG finto): biblioteca o web, iniezione, privacy"),
+    ("prova_studio_ollama.py", ["1"], "lo Studio a voce col modello vero (30/10, #284): crea la verifica di giovedì, «cosa devo studiare oggi?», «non ce la faccio oggi», la vista aperta con «spostala a domani», «spiegami la pagina 114», la pagina ostile senza azioni e col dubbio, i compiti guidati senza soluzioni"),
     ("prova_notizie_ollama.py", ["1"], "notizie a voce (13/10, feed di fantasia): «le notizie», «dimmi di più sulla seconda», la testata dai fatti nel contesto, tecnologia e meteo, iniezione in un sommario"),
     ("prova_ricerche_distanza_ollama.py", ["1"], "ricerche a distanza di turni (09/10, giro vero della DGX): «le ultime notizie» senza chiamate fermate, «prima mi parlavi di un festival» → quello di oggi dalla fonte giusta e non quello di ieri, contrario «ieri … Borgo Lieto», «quella cosa delle proteste» in una conversazione aperta; misure: nuova ricerca sulla stessa fonte, archivio non chiamato"),
     ("prova_ricerca_seguito_ollama.py", ["1"], "approfondire dopo una ricerca (09/10, caso vero della DGX: «Approfondiamo le condizioni [del re]» dopo le notizie, senza cercare): nuova ricerca mirata, contrari (chiacchierata, lista della spesa, internet spento); prima e dopo"),
@@ -451,7 +454,7 @@ LIVELLO_3 = {
     "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
     "prova_compagnia_pagina.py", "prova_frase_lunga_voce.py", "prova_stanza_voce.py",
     "prova_cdp_orfani.py", "prova_gioco_stato_pagina.py", "prova_fine_turno_voce.py",
-    "prova_pc_pagina.py", "prova_studio_pagina_telefono.py",
+    "prova_pc_pagina.py", "prova_studio_pagina_telefono.py", "prova_studio_home_pagina.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -582,7 +585,11 @@ LEGAMI = [
     ("calliope/schermi/server.py", ["prova_studio_pagine.py"]),
     ("calliope/schermi/raccolte.py", ["prova_studio_pagine.py"]),
     ("calliope/schermi/pagina/bordi.js", ["prova_studio_pagine.py", "prova_studio_pagina_telefono.py"]),
-    ("calliope/schermi/pagina/studio.js", ["prova_studio_pagina_telefono.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_pagina_telefono.py", "prova_studio_home_pagina.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_tool.py", "prova_politica.py"]),
+    ("calliope/studio/vista.py", ["prova_studio_tool.py"]),
+    ("calliope/studio/", ["prova_studio_tool.py"]),
+    ("calliope/schermi/tocchi.py", ["prova_studio_tool.py"]),
     ("prove/manuali/studio_immagini.py", ["prova_studio_pagine.py"]),
     ("calliope/conserva.py", ["prova_studio_piano.py"]),
     ("calliope/minori.py", ["prova_studio_piano.py"]),

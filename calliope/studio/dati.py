@@ -72,6 +72,9 @@ ORFANI_DOPO_S = 86400.0
 # Studio e, se un crollo li ha lasciati, dalla rotazione dopo un'ora
 CARTELLA_PROVVISORI = "tmp"
 PROVVISORI_DOPO_S = 3600.0
+# All'avvio dello Studio (passo 4.5, terza revisione della PR #312): solo i provvisori più vecchi
+# di 15 minuti, perché un'altra istanza sullo stesso disco può star dividendo un PDF adesso
+PROVVISORI_AVVIO_S = 900.0
 STATI_ARGOMENTO = ("proposto", "tenuto", "tolto", "aggiunto")
 # Gli argomenti su cui si fa il piano
 ARGOMENTI_DEL_PIANO = ("tenuto", "aggiunto")

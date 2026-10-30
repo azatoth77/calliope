@@ -46,6 +46,8 @@ NESSUN_GIORNO = "nessun_giorno"     # nessun giorno con minuti liberi prima dell
 NESSUNA_PAGINA = "nessuna_pagina"   # nessun argomento tenuto con delle pagine
 SENZA_RIPASSO = "senza_ripasso"     # un giorno solo: si legge tutto, il ripasso non ci sta
 TROPPE_PAGINE = "troppe_pagine"     # le pagine non stanno nei minuti dei giorni
+# Il ricalcolo del piano è fallito: resta quello di prima (passo 4.5, seconda revisione PR #308)
+NON_AGGIORNATO = "piano_non_aggiornato"
 NUMERO_STRANO = "numero_strano"     # un numero di pagina letto che non è un numero né una sigla
 
 GIORNI_SETTIMANA = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")

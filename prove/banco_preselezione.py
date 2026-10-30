@@ -173,6 +173,10 @@ f("Abbiamo ospiti, smetti di ascoltare", "stanza_pausa")
 f("Di cosa parlavamo prima a tavola?", "stanza_cerca", "conversazione_cerca")
 f("Chi conosci oltre a noi?", "conoscenti")
 f("Marco adesso è di famiglia", "conoscente_livello")
+# ── lo Studio (30/10, #284) ──
+f("Giovedì ho la verifica di storia", "studio")
+f("Cosa devo studiare oggi?", "studio")
+f("Spiegami la pagina 114 del libro di storia", "studio_pagina_leggi")
 # ── senza tool: chiacchiere e cultura generale ──
 f("Raccontami una barzelletta")
 f("Come stai oggi?")

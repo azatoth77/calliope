@@ -368,6 +368,27 @@
     },
     // Gli argomenti di una verifica e la conferma (30/10, passo 4.4, #283, studio.js):
     // {verifica, azione?, argomento?, titolo?} → {argomenti, verifica, estrazione, lettura, prova}
+    // La home dello Studio (30/10, passo 4.5, #284, studio.js): {} → verifiche, piano, lettura…
+    async studioHome() {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const r = await postSessione("/api/studio/home", {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
+    // Un tocco dello Studio (POST /api/tocco): l'esito arriva dal ciclo con l'evento «tocco»
+    async studioTocco(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const r = await postSessione("/api/tocco", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
+    // La vista dello Studio aperta (POST /api/vista): per la riga dei dati del turno
+    async vista(dati) {
+      if (!S.sessione) return;
+      try { await postSessione("/api/vista", dati || { vista: null }); } catch (e) { /* niente */ }
+    },
     async studioArgomenti(dati) {
       if (!S.sessione) return { ok: false, status: 0, dati: {} };
       try {
@@ -1295,6 +1316,11 @@
   // motivo accanto
   function esitoTocco(d) {
     if (d && d.tocco in TASTI_TIMER) { esitoTimer(d); return; }
+    // I tocchi dello Studio (30/10, #284): la home si rilegge
+    if (d && String(d.tocco || "").startsWith("studio_")) {
+      if (window.CalliopeStudio && window.CalliopeStudio.esito) window.CalliopeStudio.esito(d);
+      return;
+    }
     if (!d || d.tocco !== "spunta_lista") return;
     const p = d.pagina || {};
     const lista = String(p.lista || ""), voce = String(p.voce || "");

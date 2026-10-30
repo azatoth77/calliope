@@ -13,7 +13,10 @@ il tipo di tocco e i dati che servono, che qui si controllano contro lo stato ve
 
 - `spunta_lista`: la spunta della lista («ho preso il latte») → `lista_togli`;
 - `timer_piu`: «+1 minuto» sulla scheda del timer → `timer_imposta` con `cambia` «aggiungi»;
-- `timer_ferma`: «Ferma» sulla scheda del timer → `agenda_annulla`.
+- `timer_ferma`: «Ferma» sulla scheda del timer → `agenda_annulla`;
+- lo Studio (30/10, passo 4.5, #284): `studio_fatto`, `studio_salta`, `studio_tieni`,
+  `studio_riprova` e `studio_sessione` → `studio` con l'azione fissa del tocco
+  (`AZIONI_STUDIO`) e il bersaglio «studio» (gli id scelti dal codice).
 
 **Il vincolo** (#262, nota 9 della revisione della PR #261). Il tocco gira senza la politica del
 turno (non c'è una frase da cui possa venire un dato non fidato, e gli argomenti li scrive il
@@ -87,6 +90,9 @@ class Tocco:
     # Senza, il tool sceglierebbe dal testo, e agenda_annulla potrebbe annullare «tutti»
     # (revisione della PR #265): il ciclo lo rifiuta (`senza_bersaglio`)
     bersaglio: bool = False
+    # La funzione vuole il proprietario dello schermo (lo Studio, #284: la verifica deve essere
+    # sua o del suo minore già qui, prima del ciclo)
+    persona: bool = False
 
 
 # ─────────────────────────── il vincolo (#262, #266) ───────────────────────────
@@ -115,6 +121,13 @@ TOCCABILI: Mapping[str, Toccabile] = MappingProxyType({
         "«Ferma» sul timer toccato e solo su lui (il bersaglio, mai «tutti» né un promemoria): si "
         "rimette a voce, la scheda lo mostra subito fermato, e per sbaglio costa un timer da "
         "rimettere (criterio scritto del 28/10, #257)", bersaglio=True),
+    "studio": Toccabile(
+        "solo le azioni dei tocchi dello Studio (`AZIONI_STUDIO`, ricontrollate dal tool: «fatto», "
+        "«non ce la faccio oggi», «tieni» un argomento, «riprova» una pagina da parte, le due "
+        "domande prima di studiare), sulla verifica e sull'oggetto toccati (il bersaglio, scelto "
+        "dal codice, mai un nome): sono i dati della persona o del suo minore, si disfano con un "
+        "tocco o una frase («togli il fatto», «toglilo dal piano»), e per sbaglio costano un "
+        "giorno da rimettere o una pagina riletta (30/10, #284)", bersaglio=True),
 })
 
 # Gli esclusi in modo esplicito (#266): ammessi dalle sole tabelle della politica, o vicini a
@@ -141,6 +154,8 @@ ESCLUSI: Mapping[str, str] = MappingProxyType({
     "installa_gestisci": "annulla o cambia un'installazione: vuole la voce",
     "modello_compila": "compila un documento dell'ufficio: vuole la voce",
     "sviluppo_apri": "apre la modalità sviluppo: vuole la voce di chi amministra",
+    "studio_pagina_leggi": "legge il testo delle pagine fotografate: un dato non fidato che "
+                           "entrerebbe nella storia senza busta",
 })
 
 
@@ -206,8 +221,14 @@ def senza_bersaglio(scritto: dict) -> bool:
     con la sua regola (`tocco_senza_bersaglio`)."""
     t = TOCCHI.get(str((scritto or {}).get("tocco") or ""))
     b = (scritto or {}).get("bersaglio")
-    return bool(t and t.bersaglio) and not (isinstance(b, dict) and b.get("timer") is not None
-                                            and b.get("chiave"))
+    if not (t and t.bersaglio):
+        return False
+    if not isinstance(b, dict):
+        return True
+    if t.tool == "studio":
+        st = b.get("studio")
+        return not (isinstance(st, dict) and _intero(st.get("verifica")) is not None)
+    return not (b.get("timer") is not None and b.get("chiave"))
 
 
 def non_ammesso(scritto: dict, spec=None) -> str | None:
@@ -220,6 +241,9 @@ def non_ammesso(scritto: dict, spec=None) -> str | None:
     tool = str(scritto.get("tool") or "")
     if tool != t.tool:
         return f"il tocco «{scritto.get('tocco')}» chiama «{t.tool}», non «{tool}»"
+    azione = AZIONI_STUDIO.get(str(scritto.get("tocco")))
+    if azione is not None and (scritto.get("argomenti") or {}).get("azione") != azione:
+        return f"il tocco «{scritto.get('tocco')}» fa solo «{azione}»"
     return ammesso(tool, scritto.get("argomenti") or {}, spec)
 
 
@@ -302,11 +326,133 @@ def _timer_ferma(dati: dict, fonti) -> dict:
             "descrizione": f"(Ho fermato {_detto(it)} toccando lo schermo.)"}
 
 
+# ─────────────────────────── lo Studio (30/10, passo 4.5, #284) ───────────────────────────
+# I tocchi della home dello Studio: sui dati della persona (o del suo minore, da tutore),
+# reversibili, con gli id scelti dal codice (il bersaglio «studio»), mai un nome. Il tool è
+# `studio` con un'azione fissa per tocco (`AZIONI_STUDIO`); il tool la ricontrolla
+# (tools/studio.DA_TOCCO). I titoli degli argomenti entrano nella descrizione **in busta**, col
+# numero (decisione 0035, punto 6); lo stato d'animo non ci entra mai (punto 27).
+
+def _intero(v) -> int | None:
+    return v if isinstance(v, int) and not isinstance(v, bool) and v > 0 else None
+
+
+def _studio_di(dati: dict, fonti, persona) -> tuple:
+    """(servizio, verifica, None) o (None, None, errore): lo Studio per il modello, la persona
+    dello schermo, la verifica sua o del suo minore."""
+    st = getattr(fonti, "studio", None)
+    if st is None or not st.per_modello():
+        return None, None, {"errore": "Lo Studio non è acceso.", "_stato": 404}
+    vid = _intero(dati.get("verifica"))
+    if persona is None or vid is None:
+        return None, None, {"errore": "dati non validi", "_stato": 400}
+    from ..studio import NonPermesso, NonTrovata
+    try:
+        return st, st.verifica(persona, vid), None
+    except (NonTrovata, NonPermesso):
+        return None, None, {"errore": "Questa verifica non c'è.", "_stato": 404}
+
+
+def _materia(v: dict) -> str:
+    return str(v.get("materia") or "").lower()
+
+
+def _studio_fatto(dati: dict, fonti, persona=None) -> dict:
+    st, v, err = _studio_di(dati, fonti, persona)
+    if err:
+        return err
+    oggi = st._oggi().isoformat()
+    righe = st.piano(persona, v["id"])["giorni"] if v["stato"] == "aperta" else []
+    if not any(g["giorno"] == oggi and not g["fatto"] for g in righe):
+        return {"errore": "Oggi nel piano non c'è niente da segnare.", "_stato": 409}
+    return {"tool": "studio", "argomenti": {"azione": "fatto", "verifica": v["id"]},
+            "bersaglio": {"studio": {"verifica": v["id"], "giorno": oggi}},
+            "descrizione": f"(Ho segnato fatto il giorno di oggi del piano di {_materia(v)} "
+                           "toccando lo schermo.)"}
+
+
+def _studio_salta(dati: dict, fonti, persona=None) -> dict:
+    st, v, err = _studio_di(dati, fonti, persona)
+    if err:
+        return err
+    return {"tool": "studio", "argomenti": {"azione": "salta_oggi", "verifica": v["id"]},
+            "bersaglio": {"studio": {"verifica": v["id"]}},
+            "descrizione": "(Ho detto «non ce la faccio oggi» per lo Studio toccando lo "
+                           "schermo.)"}
+
+
+def _studio_tieni(dati: dict, fonti, persona=None) -> dict:
+    from .. import provenienza
+    st, v, err = _studio_di(dati, fonti, persona)
+    if err:
+        return err
+    aid = _intero(dati.get("argomento"))
+    args = st.argomenti(persona, v["id"])
+    a = next((x for x in args if x["id"] == aid), None)
+    if a is None:
+        return {"errore": "Questo argomento non c'è più.", "_stato": 409}
+    n = args.index(a) + 1
+    # Il titolo l'ha proposto il modello leggendo le pagine: un dato, in busta (0035, punto 6)
+    busta = provenienza.racchiudi("foto", a["titolo"], f"titolo dell'argomento {n}")
+    return {"tool": "studio", "argomenti": {"azione": "tieni", "verifica": v["id"], "id": a["id"]},
+            "bersaglio": {"studio": {"verifica": v["id"], "argomento": a["id"]}},
+            "descrizione": f"(Ho tenuto nel piano di {_materia(v)} l'argomento {n} toccando lo "
+                           f"schermo.)\n{busta}"}
+
+
+def _studio_riprova(dati: dict, fonti, persona=None) -> dict:
+    st, v, err = _studio_di(dati, fonti, persona)
+    if err:
+        return err
+    pid = _intero(dati.get("pagina"))
+    p = next((x for x in st._da_parte(v["id"]) if x["id"] == pid), None)
+    if p is None:
+        return {"errore": "Questa pagina non è più da parte.", "_stato": 409}
+    detta = f"la pagina {p['numero']}" if p["numero"] else f"la foto {p['ordine']}"
+    return {"tool": "studio", "argomenti": {"azione": "riprova", "verifica": v["id"], "id": p["id"]},
+            "bersaglio": {"studio": {"verifica": v["id"], "pagina": p["id"]}},
+            "descrizione": f"(Ho chiesto di riprovare a leggere {detta} di {_materia(v)} "
+                           "toccando lo schermo.)"}
+
+
+def _studio_sessione(dati: dict, fonti, persona=None) -> dict:
+    from ..studio import CONOSCENZA, UMORI
+    st, v, err = _studio_di(dati, fonti, persona)
+    if err:
+        return err
+    c, u = dati.get("conoscenza"), dati.get("umore")
+    c = _intero(c) if c is not None else None
+    if (c is not None and c > len(CONOSCENZA)) or (u is not None and u not in UMORI) or (
+            c is None and u is None):
+        return {"errore": "dati non validi", "_stato": 400}
+    # Lo stato d'animo va solo nel bersaglio (il tool lo tiene in memoria per la sessione): mai
+    # nella descrizione né negli argomenti, che restano nella storia (decisione 0035, punto 27)
+    return {"tool": "studio", "argomenti": {"azione": "sessione", "verifica": v["id"]},
+            "bersaglio": {"studio": {"verifica": v["id"], "conoscenza": c, "umore": u}},
+            "descrizione": f"(Ho risposto alle due domande prima di studiare {_materia(v)}, "
+                           "toccando lo schermo.)"}
+
+
+AZIONI_STUDIO = {"studio_fatto": "fatto", "studio_salta": "salta_oggi", "studio_tieni": "tieni",
+                 "studio_riprova": "riprova", "studio_sessione": "sessione"}
+
+
 # Immutabile a runtime (#266, revisione della PR #270): un tocco nuovo si aggiunge qui nel codice,
 # dove lo vede il controllo dell'import, mai dopo
 TOCCHI = MappingProxyType({"spunta_lista": Tocco("lista_togli", _spunta_lista),
                            "timer_piu": Tocco("timer_imposta", _timer_piu, bersaglio=True),
-                           "timer_ferma": Tocco("agenda_annulla", _timer_ferma, bersaglio=True)})
+                           "timer_ferma": Tocco("agenda_annulla", _timer_ferma, bersaglio=True),
+                           # lo Studio (30/10, #284): `persona` è il proprietario dello schermo
+                           "studio_fatto": Tocco("studio", _studio_fatto, bersaglio=True,
+                                                 persona=True),
+                           "studio_salta": Tocco("studio", _studio_salta, bersaglio=True,
+                                                 persona=True),
+                           "studio_tieni": Tocco("studio", _studio_tieni, bersaglio=True,
+                                                 persona=True),
+                           "studio_riprova": Tocco("studio", _studio_riprova, bersaglio=True,
+                                                   persona=True),
+                           "studio_sessione": Tocco("studio", _studio_sessione, bersaglio=True,
+                                                    persona=True)})
 
 # All'avvio: un tocco su un tool non ammesso non arriva mai a girare
 _ERRORI = controlla()
@@ -314,15 +460,20 @@ if _ERRORI:
     raise RuntimeError("tocchi non ammessi (schermi/tocchi.py): " + "; ".join(_ERRORI))
 
 
-def prepara(dati, fonti) -> dict:
+def prepara(dati, fonti, persona=None) -> dict:
     """Dal corpo della richiesta della pagina ({tocco, …}) al tool da chiamare:
-    {tool, argomenti, descrizione, bersaglio?} o {errore, _stato}."""
+    {tool, argomenti, descrizione, bersaglio?} o {errore, _stato}. `persona`: il profilo del
+    proprietario dello schermo (i tocchi dello Studio lo vogliono)."""
     if not isinstance(dati, dict):
         return {"errore": "dati non validi", "_stato": 400}
     t = TOCCHI.get(str(dati.get("tocco") or ""))
     if t is None:
         return {"errore": "tocco sconosciuto", "_stato": 400}
-    out = t.prepara(dati, fonti)
+    out = t.prepara(dati, fonti, persona) if t.persona else t.prepara(dati, fonti)
+    if "errore" not in out and AZIONI_STUDIO.get(str(dati.get("tocco"))) not in (
+            None, (out.get("argomenti") or {}).get("azione")):
+        return {"errore": "Questo tocco non è ammesso: chiedimelo a voce.", "_stato": 403,
+                "motivo": "azione diversa da quella del tocco"}
     if "errore" in out:
         return out
     motivo = (f"chiama «{out.get('tool')}» invece di «{t.tool}»" if out.get("tool") != t.tool

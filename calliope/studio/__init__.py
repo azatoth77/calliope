@@ -19,11 +19,15 @@ giorni calcolato dal codice. Rifatto da capo dopo aver tolto il vecchio processo
   del lettore con l'harness del banco, il controllo delle pagine citate e la forma del titolo; la
   conferma della persona è in `servizio.py`.
 
-Arrivano dopo: il tool, la home e la vista aperta (4.5).
+- `vista.py` (30/10, passo 4.5, #284): la vista dello Studio aperta sullo schermo personale, per la
+  riga dei dati del turno. Il tool è in `calliope/tools/studio.py`, la home in
+  `schermi/pagina/studio.js`; le due domande prima della sessione stanno in memoria (`servizio.py`).
 """
 
-from .servizio import (ATTIVO, MODI, OMBRA, SPENTO, NonPermesso, NonTrovata, Studio,
-                       TroppePagine, VerificaChiusa, modo, permesso, prepara)
+from .servizio import (ATTIVO, CONOSCENZA, FRASI_LETTURA, MODI, OMBRA, SPENTO, UMORI,
+                       NonPermesso, NonTrovata, Studio, TroppePagine, VerificaChiusa, modo,
+                       permesso, prepara)
 
-__all__ = ["ATTIVO", "MODI", "OMBRA", "SPENTO", "NonPermesso", "NonTrovata", "Studio",
-           "TroppePagine", "VerificaChiusa", "modo", "permesso", "prepara"]
+__all__ = ["ATTIVO", "CONOSCENZA", "FRASI_LETTURA", "MODI", "OMBRA", "SPENTO", "UMORI",
+           "NonPermesso", "NonTrovata", "Studio", "TroppePagine", "VerificaChiusa", "modo",
+           "permesso", "prepara"]

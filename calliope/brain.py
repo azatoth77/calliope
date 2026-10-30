@@ -6181,9 +6181,36 @@ class Brain:
             is not None, sch) if disp_t else ""
         if disp:
             who += " " + disp
+        # Lo Studio (30/10, passo 4.5, #284): la vista aperta sullo schermo personale di chi
+        # parla («spiegami questa», «spostala a domani») e la sessione di oggi (le due domande:
+        # tono e difficoltà). Nei dati del turno, che cambiano a ogni turno: il prefisso resta
+        # stabile (#95); sono dati, non ordini (principio 10). Mai il testo delle pagine
+        studio = self._nota_studio()
+        if studio:
+            who += " " + studio
         return [{"role": "system", "content": TURN_CONTEXT_MSG.format(
             ora=f"{now:%H:%M}", giorno=_GIORNI[now.weekday()],
             data=f"{now.day} {_MESI[now.month - 1]} {now.year}", chi=who)}]
+
+    def _nota_studio(self) -> str:
+        """La riga dello Studio nei dati del turno (studio/vista.py e Studio.nota_sessione): ""
+        senza lo Studio per il modello o senza chi parla riconosciuto. Regole `studio_vista` e
+        `studio_sessione` (nel registro dei turni solo il nome, mai la vista né le risposte)."""
+        st = getattr(self.tool_ctx, "studio", None)
+        if st is None or not st.per_modello():
+            return ""
+        try:
+            from .studio import vista
+            from .tools.studio import chi_di
+            riga = vista.riga(self.tool_ctx, st)
+            chi = chi_di(self.tool_ctx)
+            sess = st.nota_sessione(chi.id) if chi is not None else ""
+        except Exception:  # noqa: BLE001 — lo Studio non ferma la risposta
+            return ""
+        for nome, x in (("studio_vista", riga), ("studio_sessione", sess)):
+            if x and nome not in (getattr(self, "last_rules", None) or ()):
+                self._rule(nome)
+        return " ".join(x for x in (riga, sess) if x)
 
     def _minor_note(self, name: str | None) -> str:
         """Il preset di un minore come dato del turno (minori.dato_turno), "" per un adulto;

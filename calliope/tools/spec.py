@@ -114,6 +114,9 @@ class ToolContext:
     # quel timer invece di sceglierlo dal testo (con due timer senza nome sceglierebbero l'ultimo
     # messo). None = nessun tocco
     tocco_bersaglio: Any = None
+    # Lo Studio (30/10, passo 4.5, calliope/studio/: Studio), o None se spento: i tool
+    # studio e studio_pagina_leggi, che lavorano solo con `studio_modo: attivo`
+    studio: Any = None
 
 
 

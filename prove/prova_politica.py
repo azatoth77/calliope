@@ -487,6 +487,10 @@ def registro_completo():
     from calliope.tools.conoscenti import conoscenti_specs
     for s in conoscenti_specs():
         reg.register(s)
+    # studio e studio_pagina_leggi (30/10, #284) solo con `studio_modo: attivo`
+    from calliope.tools.studio import studio_specs
+    for s in studio_specs():
+        reg.register(s)
     return reg
 
 

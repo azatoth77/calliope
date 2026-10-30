@@ -936,11 +936,22 @@ def prova_pdf_insieme(port, sess, vid):
         r = c.getresponse()
         secondo = (r.status, r.getheader("Retry-After"), json.loads(r.read() or b"{}"))
         c.close()
+        # Un PDF dichiarato (`pdf: true`) riceve il 429 prima che il corpo si legga (passo 4.5,
+        # terza revisione della PR #312): con un corpo che non è un PDF, letto darebbe 415
+        c = http.client.HTTPConnection("127.0.0.1", port, timeout=20)
+        c.request("POST", "/api/studio/pagina", body=b"x" * 4000, headers={
+            "Content-Type": "application/octet-stream", "X-Calliope-Sessione": sess["leo"],
+            "X-Calliope-Studio": quote(json.dumps({"verifica": vid, "pdf": True}))})
+        r = c.getresponse()
+        dichiarato = (r.status, json.loads(r.read() or b"{}"))
+        c.close()
         t.join(30)
     finally:
         PG.dividi_pdf_a_parte = vero
     verifica("PDF insieme: con una divisione in corso il secondo PDF → 429 «riprova fra poco» con Retry-After",
              secondo[0] == 429 and secondo[1] and "riprova" in secondo[2].get("errore", ""), str(secondo))
+    verifica("PDF insieme: un PDF dichiarato riceve il 429 prima di leggere il corpo (non il 415)",
+             dichiarato[0] == 429, str(dichiarato))
     verifica("PDF insieme: il primo finisce bene", (esiti.get("primo") or (0,))[0] == 200, str(esiti)[:200])
     s, d = chiedi(port, "/api/studio/pagina", sess["leo"], byte=pdf_di(1), meta={"verifica": vid})
     verifica("PDF insieme: finita la prima divisione il secondo passa", s == 200, f"{s} {d}")
@@ -998,8 +1009,14 @@ def prova_orfani_schema_nuovo():
     D.cancella_file(str(db_path), scadute_prima=oggi, cartella="studio")
     verifica("provvisori: la rotazione toglie quelli di un crollo (più di un'ora), non quelli in corso",
              not (tmp / "pdf-vecchio").exists() and (tmp / "pdf-recente").exists())
+    # All'avvio (passo 4.5, terza revisione della PR #312) solo quelli più vecchi di 15 minuti:
+    # un'altra istanza sullo stesso disco può star dividendo un PDF adesso
+    (tmp / "pdf-mezzora").mkdir(parents=True)
+    mezzora = time.time() - 1800
+    os.utime(tmp / "pdf-mezzora", (mezzora, mezzora))
     S.Studio(c, registry=REG, log=lambda m: None).close()
-    verifica("provvisori: all'avvio dello Studio via tutti", tmp.is_dir() and not any(tmp.iterdir()))
+    verifica("provvisori: all'avvio dello Studio via quelli di più di 15 minuti, non quello in corso",
+             tmp.is_dir() and not (tmp / "pdf-mezzora").exists() and (tmp / "pdf-recente").exists())
 
 
 def prova_schema():

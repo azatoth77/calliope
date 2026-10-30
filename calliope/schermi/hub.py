@@ -291,6 +291,10 @@ class Schermi:
         # None = tessere «non disponibile» e /api/tocco risponde 503
         self.servizi = None
         self.tool_ctx = None
+        # La vista dello Studio aperta su ogni schermo personale (30/10, passo 4.5, #284,
+        # studio/vista.py): in memoria, per la riga dei dati del turno
+        from ..studio.vista import Viste
+        self.viste_studio = Viste()
         self.aspetto = None
         try:
             from .aspetto import PreferenzeAspetto
