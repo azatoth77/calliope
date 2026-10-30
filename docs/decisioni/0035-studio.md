@@ -9,7 +9,7 @@
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
   (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
-  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31).
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -331,6 +331,24 @@ dell'eco della stanza.
     nel piano i giorni passati (niente durata né spostamenti, piano e storia mescolati), il registro
     degli eventi della conversazione (in ombra di serie, un'altra tenuta, dipende da ciò che il
     modello ha chiamato), salvare la frase detta (è testo, non una proiezione).
+
+## Padronanza (passo 5, #245, 30/10)
+
+32. **La padronanza è una cifra calcolata nel codice dai soli tentativi**, mai dal modello e mai
+    dalle pagine lette, sempre detta con la parola («la sai», «quasi», «da studiare», «non ancora
+    misurata»). L'esito di un tentativo lo decidono la persona, il codice o il tutore. Le fonti
+    sono le carte e la verifica finta: finché non ci sono, la padronanza non è misurata e niente
+    cambia per la persona. Pesi, età, calo e soglie sono iniziali, da tarare sui tentativi veri
+    (decisione 4 del 27/10). `studio_padronanza` è in **ombra di serie**: si calcola e si misura,
+    niente al modello né agli schermi, nel registro solo i conti. Le **lacune** sono gli argomenti
+    misurati sotto l'obiettivo, con la lezione successiva dal piano; la **previsione** nasce dalla
+    padronanza misurata (la misura del giorno, con metà degli argomenti misurati), mai dal solo
+    giudizio del modello (spunto di Dario del 28/10). A voce le lacune si dicono per numero, mai
+    col titolo (punto 24). Lo stato d'animo non entra. **Criterio per «mostrata»** (proposta: le
+    soglie le decide chi amministra): almeno 60 tentativi veri su almeno 8 argomenti di 2 verifiche;
+    su almeno 10 argomenti la parola uguale a quella del tutore almeno 7 volte su 10 e mai «la sai»
+    contro il suo «da studiare»; pesi e calo ritarati. Alternative scartate: le carte prima della
+    padronanza; la padronanza dalle pagine lette.
 
 ## Da completare con i passi 4.3–4.5
 

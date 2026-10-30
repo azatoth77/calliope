@@ -188,27 +188,30 @@ def _resta(resta: dict, oggi, data) -> str:
 def frase_resoconto(r: dict, oggi, nome: str | None = None) -> str:
     """La frase del resoconto di un giorno, dai soli dati (`Studio.resoconto`). Con `nome` (chi
     chiede o chi segna non è la persona della verifica: il tutore, revisione della PR #321) la
-    frase è alla terza persona col nome del minore: «Oggi Leo ha letto…», mai «hai letto»."""
+    frase è alla terza persona col nome del minore: «Oggi Leo ha letto…», mai «hai letto». Con
+    `nome` vuoto (un profilo senza nome, #322) una forma impersonale: «Oggi è segnato fatto il
+    giorno del piano…», «lo studio è stato saltato», «la sessione è cominciata…»."""
     q = quando(r["giorno"], oggi)
     Q = q[:1].upper() + q[1:]
     stato = r.get("stato")
     cosa = pagine_dette(r.get("numeri") or [])
     verbo = "ripassato" if r.get("fase") == P.RIPASSO else "letto"
+    impersonale = nome is not None and not nome
     chi_ha = f"{nome} ha" if nome else "hai"
     di = f" di {nome}" if nome else ""
+    tempo = f", in {durata_detta(r['minuti'])}" if r.get("minuti") else ""
     if stato == FATTO:
-        prima = f"{Q} {chi_ha} {verbo} {cosa}"
-        if r.get("minuti"):
-            prima += f", in {durata_detta(r['minuti'])}"
-        prima += "."
+        prima = (f"{Q} è segnato fatto il giorno del piano: {cosa}{tempo}." if impersonale else
+                 f"{Q} {chi_ha} {verbo} {cosa}{tempo}.")
     elif stato == SALTATO:
-        prima = (f"{Q} {nome} ha saltato lo studio" if nome else f"{Q} lo studio l'hai saltato") \
-            + ": le pagine sono passate ai giorni dopo."
+        prima = (f"{Q} {nome} ha saltato lo studio" if nome else
+                 f"{Q} lo studio è stato saltato" if impersonale else
+                 f"{Q} lo studio l'hai saltato") + ": le pagine sono passate ai giorni dopo."
     elif stato == MANCATO:
         prima = f"{Q} il giorno del piano{di} non è segnato fatto."
     elif stato == INIZIATO:
-        prima = (f"{Q} {chi_ha} cominciato alle {ora_detta(r.get('inizio'))}, ma il giorno non è "
-                 "ancora segnato fatto.")
+        prima = ((f"{Q} la sessione è cominciata" if impersonale else f"{Q} {chi_ha} cominciato")
+                 + f" alle {ora_detta(r.get('inizio'))}, ma il giorno non è ancora segnato fatto.")
     elif stato == DA_FARE:
         da = "ripassare" if r.get("fase") == P.RIPASSO else "leggere"
         prima = (f"{Q} {nome} ha da {da} {cosa}" if nome else f"{Q} c'è da {da} {cosa}") + \
@@ -246,6 +249,12 @@ def frase_riepilogo(r: dict, oggi, nome: str | None = None) -> str:
         manca = "Manca 1 giorno" if m == 1 else f"Mancano {m} giorni"
         seconda = (f"{manca} e {conta(resto, 'pagina', 'pagine')}." if resto
                    else f"{manca} e le pagine sono tutte lette.")
+    # Le lacune («mostrata», passo 5, #245) per numero nell'elenco, mai col titolo (0035 p. 24)
+    lac = [int(x) for x in r.get("lacune") or () if isinstance(x, int)]
+    if lac:
+        seconda = seconda[:-1] + "; sotto l'obiettivo " + (
+            f"l'argomento {lac[0]}." if len(lac) == 1 else
+            "gli argomenti " + P._elenco([str(x) for x in lac]) + ".")
     frasi = [prima, seconda]
     pr = r.get("previsione")
     if pr:
