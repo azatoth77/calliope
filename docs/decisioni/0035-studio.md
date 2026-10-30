@@ -9,7 +9,7 @@
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
   (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
-  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34).
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34). Il passo 7 (la mappa concettuale, prima parte: scheletro a mano, la mia mappa, a memoria, controllo, PDF) il 30/10 sera sul ramo `issue-247-studio-mappa` (punto 35).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -385,6 +385,50 @@ dell'eco della stanza.
     Alternative scartate: le carte generate subito nel ripasso (il controllo del codice è di forma,
     non di significato), un secondo giro del modello che corregge (peggiore per gli argomenti nel
     banco), le carte dalle immagini.
+
+## La mappa concettuale (passo 7, #247, 30/10 sera)
+
+35. **La mappa concettuale in quattro fasi, controllata dal codice e mai dal modello.** Lo
+    **scheletro** (concetti con l'argomento e le pagine, collegamenti col verbo, al più
+    `studio_mappa_nodi_max`) lo scrive a mano la persona o il tutore e, con la seconda parte del
+    passo, lo propone il lettore; resta «proposto» finché non lo si conferma, e le voci con un avviso
+    restano proposte finché non le si tiene una per una (come le carte, punto 34). **La mia mappa**
+    (con il libro) e **a memoria** sono copie dello scheletro confermato con le caselle vuote (2, 3 o
+    6; con la padronanza mostrata sugli argomenti più deboli): il testo atteso non va mai alla pagina.
+    **Il controllo** è deterministico (`studio/mappa.py`): la casella contro il concetto (forma, non
+    significato: uguale, o le stesse parole piene con una lettera di tolleranza solo da 7 lettere e
+    mai sulla prima; un altro concetto dello scheletro o la parola di troppo non valgono mai), i
+    collegamenti mancanti (detti con un capo solo e le pagine), quelli fuori dal quadro (da
+    controllare sul libro), il verso rovesciato e il verbo diverso; i concetti propri non si
+    giudicano. Ogni
+    casella riempita al primo controllo del giro è un tentativo «mappa» con la fonte «codice» (con il
+    libro «indizio», a memoria «giusto»). **Il PDF** è della sola mappa dello studente, un formato
+    solo (A4 orizzontale e l'elenco su quante pagine servono), con fpdf2. **Il testo è un dato**
+    chiunque l'abbia scritto: **mai fuori busta**. textContent e testo SVG, nessun tool legge la
+    mappa, mai nelle frasi pronte, nel registro, negli eventi o nei dati del turno; a voce `studio`
+    azione `mappa`, una lettura con i soli conti e dove aprirla. Il testo di un concetto arriva al
+    modello solo se la persona ne fa una carta («Fanne carte», una domanda che si dice a voce), e
+    allora come carta, in busta (`studio_carte`, punto 33). **Lo scheletro confermato con le copie è
+    in sola lettura**: cambiarlo cambierebbe le risposte attese di una mappa già fatta; «Riapri lo
+    scheletro» (la persona o il tutore) lo riporta a proposto e toglie le copie, che si rifanno.
+    **Mentre una mappa a memoria è aperta** chi la fa riceve lo scheletro e la sua mappa senza testi
+    (e senza il PDF) fino a «Controlla»; dopo il primo «Controlla» la mappa a memoria **non si cambia
+    più** (né caselle, né concetti, né collegamenti, né posizioni) e le caselle lasciate vuote non
+    contano in quel giro: si riparte solo con «Rifai», un giro nuovo con altre caselle (il contatore
+    dei giri sta sullo scheletro e resta dopo «Riapri»). Le carte fatte prima con «Fanne carte»
+    restano visibili durante una mappa a memoria aperta: sono materiale di studio, scelto dalla
+    persona. **Anche il tutore** può usare «Riapri lo scheletro», che toglie le mappe del ragazzo (i
+    tentativi no): uno scheletro sbagliato va corretto, e la pagina chiede conferma prima. Al più
+    `studio_mappa_nodi_max` concetti e il doppio di collegamenti nello scheletro; nella copia 6
+    concetti della persona in più (e 12 collegamenti in più). Ogni azione legge e scrive dentro il
+    lock dei dati (revisioni della PR #326).
+    **Chi**: lo scheletro la persona e il tutore; la mia mappa e a memoria solo la persona (il tutore
+    le vede e scarica il PDF; scelta prudente, da confermare). Sullo schermo `POST /api/studio/mappa`,
+    fuori dalla conversazione come le carte, con la vista a elenco equivalente alla mappa e niente che
+    si faccia solo trascinando. Schema «studio» alla versione 8 (`studio_mappe`). Alternative
+    scartate: il giudizio del modello sulla pagina citata per un collegamento che non c'è (progetto §
+    5.4), un tool che legge la mappa in busta (non serve alle quattro fasi), tre tabelle per concetti e
+    collegamenti, la padronanza in ombra per scegliere le caselle.
 
 ## Da completare con i passi 4.3–4.5
 

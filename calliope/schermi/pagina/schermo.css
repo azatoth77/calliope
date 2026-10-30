@@ -1274,3 +1274,47 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
 .studio-c-modulo select { font: inherit; min-height: 2.6rem; padding: 0.3rem 0.6rem; border-radius: 0.6rem;
   border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo); max-width: 100%; }
 .studio-c-voce .studio-testo b { overflow-wrap: anywhere; }
+/* La mappa concettuale dello Studio (30/10, passo 7, #247, studio.js): la mappa in SVG (il testo dei
+   concetti in <text>, mai HTML) e la vista a elenco, equivalente; niente si fa solo trascinando.
+   Giusta blu, sbagliata arancio (si distinguono anche per luminosità), sempre con la parola */
+.studio-m { display: flex; flex-direction: column; gap: 0.6rem; }
+.studio-m-schede { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.studio-m-tela { width: 100%; border-radius: 0.8rem; border: 1px solid var(--accento-bordo); background: var(--pannello);
+  touch-action: none; display: block; }
+.studio-m-tela .studio-m-nodo rect { fill: var(--pannello-2); stroke: var(--accento-bordo); stroke-width: 2; }
+.studio-m-tela .studio-m-nodo.suo rect { fill: #2a2416; stroke: #d9a520; }
+.studio-m-tela .studio-m-nodo.casella rect { stroke-dasharray: 8 5; fill: var(--accento-fondo); }
+.studio-m-tela .studio-m-nodo.proposto rect { stroke: var(--tenue); stroke-dasharray: 3 4; }
+.studio-m-tela .studio-m-nodo.giusta rect { stroke: #4a8fe8; stroke-width: 4; }
+.studio-m-tela .studio-m-nodo.sbagliata rect { stroke: #e8762a; stroke-width: 4; }
+.studio-m-tela .studio-m-nodo.scelto rect { stroke: var(--accento); stroke-width: 5; }
+.studio-m-tela .studio-m-nodo:focus { outline: none; }
+.studio-m-tela .studio-m-nodo:focus-visible rect { stroke: var(--accento-chiaro); stroke-width: 6; }
+.studio-m-tela text { fill: var(--testo); font-size: 22px; font-family: inherit; pointer-events: none; }
+.studio-m-tela .studio-m-verbo { fill: var(--accento-chiaro); font-size: 19px; paint-order: stroke; stroke: var(--pannello); stroke-width: 6px; }
+.studio-m-tela line { stroke: var(--tenue); stroke-width: 2.5; }
+.studio-m-tela line.in_piu, .studio-m-tela line.verbo_diverso { stroke: #e8762a; stroke-dasharray: 10 6; }
+.studio-m-tela .studio-m-punta { fill: var(--tenue); }
+.studio-m-pannello { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.7rem 0.8rem; border-radius: 0.8rem;
+  border: 1px solid var(--accento-bordo); background: var(--accento-fondo); }
+.studio-m-elenco { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+.studio-m-voce { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.7rem; border-radius: 0.7rem;
+  border: 1px solid var(--bordo); }
+.studio-m-voce b { overflow-wrap: anywhere; color: var(--testo); font-size: 1.05rem; }
+.studio-m-coll { list-style: none; margin: 0; padding: 0 0 0 0.6rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.studio-m-coll li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; justify-content: space-between;
+  overflow-wrap: anywhere; color: var(--testo); font-size: 1rem; }
+.studio-m-esito { font-size: 1rem; font-weight: 700; }
+.studio-m-esito.giusta { color: #7fb4f5; }
+.studio-m-esito.sbagliata, .studio-m-esito.vuota, .studio-m-esito.manca { color: #f0a06a; }
+.studio-m-campo, .studio-m select { font: inherit; font-size: 1rem; min-height: 2.75rem; padding: 0.3rem 0.6rem;
+  border-radius: 0.6rem; border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo);
+  max-width: 100%; box-sizing: border-box; }
+.studio-m-campo { width: 100%; }
+.studio-m-parole { margin: 0; font-size: 1rem; color: var(--testo); overflow-wrap: anywhere; }
+.studio-m .studio-h-chip { min-width: 2.75rem; }
+.studio-m .studio-avviso { font-size: 1rem; }
+/* I tasti delle carte nell'elenco (Correggi, Tieni, Togli): a capo invece della griglia a quattro
+   colonne delle pagine, che a 320 px col testo grande li stringeva sotto i 44 px (30/10, #247) */
+.studio-c-voce .studio-tasti { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.studio-c-voce .studio-tasti .tasto { flex: 1 1 auto; min-width: 2.75rem; }
