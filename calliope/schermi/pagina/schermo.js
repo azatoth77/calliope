@@ -366,6 +366,15 @@
         return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
+    // Gli argomenti di una verifica e la conferma (30/10, passo 4.4, #283, studio.js):
+    // {verifica, azione?, argomento?, titolo?} → {argomenti, verifica, estrazione, lettura, prova}
+    async studioArgomenti(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const r = await postSessione("/api/studio/argomenti", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
   };
 
   // Nuovo accesso con il token, finché non riesce. Le sessioni del server sono in memoria:

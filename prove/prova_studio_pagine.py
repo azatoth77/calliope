@@ -972,12 +972,13 @@ def prova_orfani_schema_nuovo():
     db = sqlite3.connect(db_path)
     db.execute("CREATE TABLE studio_carte_v3 (id INTEGER PRIMARY KEY, file TEXT)")
     db.execute("INSERT INTO studio_carte_v3 (file) VALUES ('pagine/1/della_v3.jpg')")
-    db.execute("UPDATE meta_schema SET versione = 3 WHERE modulo = 'studio'")
+    db.execute("UPDATE meta_schema SET versione = ? WHERE modulo = 'studio'",
+               (len(D.MIGRAZIONI) + 1,))
     db.commit()
     db.close()
     oggi = datetime.date(2026, 10, 30)
     out = D.cancella_file(str(db_path), scadute_prima=oggi, cartella="studio")
-    verifica("orfani: con lo schema v3 la rotazione non toglie niente (il file della tabella nuova resta)",
+    verifica("orfani: con uno schema più nuovo la rotazione non toglie niente (il file della tabella nuova resta)",
              all(f.exists() for f in file.values()) and out.get("orfani_saltati") is True, str(out))
     db = sqlite3.connect(db_path)
     db.execute("UPDATE meta_schema SET versione = ? WHERE modulo = 'studio'", (len(D.MIGRAZIONI),))
@@ -1009,9 +1010,9 @@ def prova_schema():
     try:
         col = {r["name"] for r in st.dati.tutti("PRAGMA table_info(studio_pagine)")}
         ver = st.dati.uno("SELECT versione FROM meta_schema WHERE modulo = 'studio'")
-        verifica("schema: versione 2 con angoli, avvisi, nitidezza e lato delle pagine",
-                 {"angoli", "avvisi", "nitidezza", "larghezza", "altezza"} <= col
-                 and ver and ver["versione"] == 2, f"{ver} {sorted(col)}")
+        verifica("schema: dalla versione 2 angoli, avvisi, nitidezza e lato delle pagine (3 dal "
+                 "passo 4.4)", {"angoli", "avvisi", "nitidezza", "larghezza", "altezza"} <= col
+                 and ver and ver["versione"] == len(D.MIGRAZIONI) == 3, f"{ver} {sorted(col)}")
         verifica("schema: «da_leggere» è uno stato della pagina", "da_leggere" in D.STATI_PAGINA)
     finally:
         st.close()

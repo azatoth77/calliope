@@ -3,7 +3,9 @@
 // acceso (in ombra solo per chi amministra, con la scritta «prova»): si sceglie la verifica, si
 // fotografano le pagine con la fotocamera (più scatti di fila) o si prendono dalla galleria (anche
 // un PDF), si guardano con i bordi trovati, si rifanno, si mettono in ordine (su e giù), si tolgono
-// e si mandano. La home vera dello Studio arriva con la 4.5.
+// e si mandano. Dal 30/10 (passo 4.4, #283) sotto c'è la vista minima degli argomenti proposti
+// della verifica scelta: «Tieni», «Togli», «Rinomina» e «Conferma gli argomenti»
+// (POST /api/studio/argomenti). La home vera dello Studio arriva con la 4.5.
 // I bordi li trova bordi.js su un fotogramma di 320 px; la foto parte intera (JPEG, lato ≤ 3000)
 // con i quattro angoli, e il server li ricontrolla, la raddrizza e decide (studio/pagine.py).
 // Tutto ciò che arriva dal server va in textContent. Niente URL blob: la CSP del telefono non li
@@ -28,6 +30,9 @@
     sostituisci: null,          // l'id della pagina da rifare
     invio: false,
     soglia: 150,                // la nitidezza sotto cui la pagina sembra sfocata (come il server)
+    arg: null,                  // la vista degli argomenti della verifica scelta (passo 4.4)
+    argInvio: false,
+    rinomina: null,             // l'id dell'argomento che si sta rinominando
   };
 
   function metti(el, t) { if (el && el.textContent !== t) el.textContent = t; }
@@ -64,6 +69,138 @@
     $("studio-azioni").hidden = nessuna;
     if (nessuna) chiudiCamera();
     disegna();
+    caricaArgomenti();
+  }
+
+  // ── gli argomenti proposti e la conferma (30/10, passo 4.4, #283) ──
+  // Il titolo è un dato (viene dalle pagine e dal modello): sempre textContent
+  const STATI_ARG = { proposto: "proposto", tenuto: "tenuto", tolto: "tolto", aggiunto: "aggiunto da te" };
+  const AVVISI_ARG = { da_controllare: "da controllare: non lo trovo nelle pagine che cita",
+    pagina_con_istruzioni: "viene da una pagina con un messaggio per un assistente: non lo seguo",
+    titolo_ordine: "il titolo sembra un ordine o un annuncio: controllalo",
+    unito: "unito a un altro argomento" };
+  function verificaScelta() {
+    const v = Number($("studio-verifica") && $("studio-verifica").value);
+    return Number.isInteger(v) && v > 0 ? v : null;
+  }
+  async function caricaArgomenti(dati) {
+    const box = $("studio-argomenti");
+    const vid = verificaScelta();
+    if (!box || !sch() || !sch().studioArgomenti) return;
+    if (!vid) { box.hidden = true; return; }
+    st.argInvio = true;
+    disegnaArgomenti();
+    const r = await sch().studioArgomenti(Object.assign({ verifica: vid }, dati || {}));
+    st.argInvio = false;
+    if (!st.aperta || verificaScelta() !== vid) return;
+    if (!r.ok) {
+      metti($("studio-argomenti-esito"), String(r.dati.errore || "Non riesco a leggere gli argomenti: riprova tra poco."));
+      disegnaArgomenti();
+      return;
+    }
+    st.arg = r.dati;
+    if (dati && dati.azione === "conferma") {
+      const n = Number(r.dati.da_decidere) || 0;
+      metti($("studio-argomenti-esito"), "Confermati: il piano è pronto." +
+        (n ? " " + (n === 1 ? "Uno resta" : n + " restano") + " da decidere: tienili o toglili tu." : ""));
+    } else if (dati) metti($("studio-argomenti-esito"), "");
+    disegnaArgomenti();
+  }
+  function statoArgomenti(d) {
+    const e = d.estrazione || {};
+    const nl = Number(e.pagine_non_lette) || 0;
+    // Le pagine illeggibili o da parte restano fuori dagli argomenti (revisione della PR #315)
+    const fuori = nl && e.pagine_lette ? " " + (nl === 1 ? "Una pagina non l'ho letta" : nl + " pagine non le ho lette") +
+      ": gli argomenti vengono dalle altre." : "";
+    return (statoBase(d) + fuori).trim();
+  }
+  function statoBase(d) {
+    const e = d.estrazione || {}, l = d.lettura || {};
+    if ((d.argomenti || []).length) return "";
+    if (!e.pagine_lette) return "Gli argomenti arrivano quando ho letto tutte le pagine (lette " +
+      (Number(l.lette) || 0) + " di " + (Number(l.totali) || 0) + ").";
+    if (e.esito === "rotto" || e.esito === "errore") return "Non sono riuscita a trovare gli argomenti: riprova più tardi.";
+    if (e.da_fare && e.accesa) return "Sto cercando gli argomenti nelle pagine.";
+    return "Non ho trovato argomenti in queste pagine.";
+  }
+  function tastoArg(testo, etichetta, azione, id, spento) {
+    const b = tasto(testo, etichetta, azione, id, spento || st.argInvio);
+    b.dataset.argomento = String(id);
+    delete b.dataset.pagina;
+    return b;
+  }
+  function disegnaArgomenti() {
+    const box = $("studio-argomenti"), ol = $("studio-argomenti-elenco");
+    if (!box || !ol) return;
+    const d = st.arg;
+    if (!d || !verificaScelta() || !d.verifica || d.verifica.id !== verificaScelta()) { box.hidden = !verificaScelta(); ol.replaceChildren(); return; }
+    box.hidden = false;
+    metti($("studio-argomenti-stato"), statoArgomenti(d));
+    const args = Array.isArray(d.argomenti) ? d.argomenti : [];
+    ol.replaceChildren(...args.map((a) => {
+      const li = document.createElement("li");
+      li.className = "studio-pagina studio-argomento" + (a.stato === "tolto" ? " studio-tolto" : "");
+      const testo = document.createElement("div");
+      testo.className = "studio-testo";
+      if (st.rinomina === a.id) {
+        const inp = document.createElement("input");
+        inp.type = "text";
+        inp.maxLength = 60;
+        inp.className = "studio-rinomina";
+        inp.value = String(a.titolo || "");
+        inp.setAttribute("aria-label", "Nuovo titolo");
+        inp.id = "studio-rinomina-" + a.id;
+        testo.append(inp);
+      } else {
+        const t = document.createElement("b");
+        t.textContent = String(a.titolo || "");
+        testo.append(t);
+      }
+      const sotto = document.createElement("span");
+      sotto.className = "studio-nota";
+      sotto.textContent = [STATI_ARG[a.stato] || String(a.stato || ""),
+        (Array.isArray(a.pagine) && a.pagine.length) ? a.pagine.map(String).join(", ") : ""].filter(Boolean).join(" · ");
+      testo.append(sotto);
+      for (const x of Array.isArray(a.avvisi) ? a.avvisi : []) {
+        const av = document.createElement("span");
+        av.className = "studio-avviso";
+        av.textContent = AVVISI_ARG[x] || String(x);
+        testo.append(av);
+      }
+      const tasti = document.createElement("div");
+      tasti.className = "studio-tasti";
+      const nome = "«" + String(a.titolo || "").slice(0, 60) + "»";
+      if (st.rinomina === a.id) {
+        tasti.append(tastoArg("Salva", "Salva il titolo", "salva", a.id), tastoArg("Annulla", "Annulla", "annulla", a.id));
+      } else {
+        tasti.append(tastoArg("Tieni", "Tieni " + nome, "tieni", a.id, a.stato === "tenuto" || a.stato === "aggiunto"),
+          tastoArg("Togli", "Togli " + nome, "togli", a.id, a.stato === "tolto"),
+          tastoArg("Rinomina", "Rinomina " + nome, "rinomina", a.id));
+      }
+      li.append(testo, tasti);
+      return li;
+    }));
+    const conf = $("studio-argomenti-conferma");
+    const daConfermare = args.some((a) => a.stato === "proposto") || (d.verifica.stato === "bozza" && args.length);
+    conf.hidden = !daConfermare;
+    conf.disabled = !!st.argInvio;
+  }
+  function suArgomenti(ev) {
+    const b = ev.target.closest && ev.target.closest("button[data-argomento]");
+    if (!b || st.argInvio) return;
+    const id = Number(b.dataset.argomento);
+    const az = b.dataset.azione;
+    if (az === "rinomina") { st.rinomina = id; disegnaArgomenti(); try { $("studio-rinomina-" + id).focus(); } catch (e) { /* niente */ } return; }
+    if (az === "annulla") { st.rinomina = null; disegnaArgomenti(); return; }
+    if (az === "salva") {
+      const inp = $("studio-rinomina-" + id);
+      const titolo = inp ? inp.value.trim() : "";
+      st.rinomina = null;
+      if (titolo) caricaArgomenti({ azione: "rinomina", argomento: id, titolo });
+      else disegnaArgomenti();
+      return;
+    }
+    if (az === "tieni" || az === "togli") caricaArgomenti({ azione: az, argomento: id });
   }
 
   // ── una foto in una pagina da mandare ──
@@ -403,6 +540,20 @@
     $("studio-camera-fine").addEventListener("click", () => { st.sostituisci = null; chiudiCamera(); });
     $("studio-elenco").addEventListener("click", suElenco);
     $("studio-invia").addEventListener("click", invia);
+    if ($("studio-argomenti")) {
+      $("studio-verifica").addEventListener("change", () => { st.arg = null; st.rinomina = null; metti($("studio-argomenti-esito"), ""); caricaArgomenti(); });
+      $("studio-argomenti-elenco").addEventListener("click", suArgomenti);
+      $("studio-argomenti-elenco").addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" && ev.target && ev.target.classList && ev.target.classList.contains("studio-rinomina")) {
+          ev.preventDefault();
+          const id = Number(String(ev.target.id).replace("studio-rinomina-", ""));
+          const titolo = ev.target.value.trim();
+          st.rinomina = null;
+          if (titolo) caricaArgomenti({ azione: "rinomina", argomento: id, titolo }); else disegnaArgomenti();
+        }
+      });
+      $("studio-argomenti-conferma").addEventListener("click", () => { if (!st.argInvio) caricaArgomenti({ azione: "conferma" }); });
+    }
     // A pagina nascosta la fotocamera si spegne (batteria, e la luce della fotocamera)
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") chiudiCamera(); });
     window.CalliopePagine = window.CalliopePagine || {};
@@ -414,6 +565,7 @@
     stato() {
       return { aperta: st.aperta, verifiche: st.verifiche.map((v) => v.id), invio: st.invio,
         camera: !!st.flusso,
+        argomenti: st.arg && Array.isArray(st.arg.argomenti) ? st.arg.argomenti.map((a) => ({ id: a.id, stato: a.stato, avvisi: (a.avvisi || []).slice() })) : [],
         pagine: st.pagine.map((p) => ({ id: p.id, tipo: p.tipo, angoli: p.angoli, intera: !!p.intera, avvisi: p.avvisi.slice(),
           nitidezza: p.nitidezza, kb: p.kb })) };
     },

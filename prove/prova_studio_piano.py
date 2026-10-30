@@ -285,10 +285,10 @@ print("— lo schema")
 cfg = cfg_nuova()
 st = studio(cfg)
 nomi = {r[0] for r in st.dati.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-verifica("le sette tabelle studio_* e l'ultima versione in meta_schema (2 dal passo 4.2, #281)",
+verifica("le sette tabelle studio_* e l'ultima versione in meta_schema (3 dal passo 4.4, #283)",
          set(D.TABELLE) <= nomi and st.dati.db.execute(
              "SELECT versione FROM meta_schema WHERE modulo='studio'").fetchone()[0]
-         == len(D.MIGRAZIONI) == 2)
+         == len(D.MIGRAZIONI) == 3)
 from calliope.conserva import TABELLE_STUDIO  # noqa: E402
 verifica("le tabelle di conserva.TABELLE_STUDIO sono quelle dello Studio",
          set(TABELLE_STUDIO) == set(D.TABELLE))
