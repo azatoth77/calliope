@@ -834,7 +834,11 @@
     p.append(t);
     return p;
   }
-  const STATI_CARTA = { attiva: "", proposta: "proposta: controllala", tolta: "tolta dal ripasso" };
+  const STATI_CARTA = { attiva: "", proposta: "proposta da me dalle pagine: controllala", tolta: "tolta dal ripasso" };
+  // Gli avvisi di una carta proposta (passo 6, seconda parte, #246): il perché, in parole
+  const AVVISI_CARTA = { da_controllare: "non la trovo nelle pagine che cita",
+    pagina_con_istruzioni: "viene da una pagina con un messaggio per un assistente",
+    testo_ordine: "sembra un ordine o un annuncio" };
   function pannelloElenco() {
     const p = nodo("div", "studio-c-elenco");
     const d = carte.dati;
@@ -842,6 +846,15 @@
     const m = carte.modulo;
     if (m) p.append(moduloCarta(m, d));
     else p.append(tastoCarte("Scrivi una carta", "scrivi", {}, "studio-h-primo"));
+    // Le carte proposte dal modello: nessuna entra nel ripasso senza la persona o il tutore
+    const prop = (Array.isArray(d.carte) ? d.carte : []).filter((c) => c.stato === "proposta");
+    if (prop.length) {
+      const pulite = prop.filter((c) => !(c.avvisi || []).length).length;
+      p.append(nodo("p", "studio-h-riga", (prop.length === 1 ? "Una carta proposta" : prop.length + " carte proposte") +
+        " dalle pagine: entrano nel ripasso quando le confermi." +
+        (pulite < prop.length ? " Quelle con un avviso le tieni una per una." : "")));
+      if (pulite) p.append(tastoCarte("Conferma le carte proposte", "conferma", {}, "studio-h-primo"));
+    }
     const ul = nodo("ul", "studio-h-elenco");
     for (const c of Array.isArray(d.carte) ? d.carte : []) {
       const li = nodo("li", "studio-h-voce studio-c-voce" + (c.stato === "tolta" ? " studio-tolto" : ""));
@@ -852,11 +865,13 @@
         c.stato === "attiva" && c.nel_piano ? (c.da_ripassare ? "da ripassare" : c.fra ? "di nuovo " + c.fra : "") : "",
         (Array.isArray(c.pagine) && c.pagine.length) ? c.pagine.map(String).join(", ") : ""].filter(Boolean).join(" · ");
       if (info) tx.append(nodo("span", "studio-nota", info));
+      for (const x of Array.isArray(c.avvisi) ? c.avvisi : []) tx.append(nodo("span", "studio-avviso", AVVISI_CARTA[x] || String(x)));
       const nome = "«" + String(c.domanda || "").slice(0, 60) + "»";
       const t = nodo("div", "studio-tasti");
-      t.append(tastoCarte("Correggi", "correggi", { carta: c.id }, "", "Correggi " + nome),
-        c.stato === "tolta" ? tastoCarte("Rimetti", "rimetti", { carta: c.id }, "", "Rimetti " + nome)
-          : tastoCarte("Togli", "togli", { carta: c.id }, "", "Togli " + nome));
+      t.append(tastoCarte("Correggi", "correggi", { carta: c.id }, "", "Correggi " + nome));
+      if (c.stato === "proposta") t.append(tastoCarte("Tieni", "rimetti", { carta: c.id }, "", "Tieni " + nome));
+      t.append(c.stato === "tolta" ? tastoCarte("Rimetti", "rimetti", { carta: c.id }, "", "Rimetti " + nome)
+        : tastoCarte("Togli", "togli", { carta: c.id }, "", "Togli " + nome));
       li.append(tx, t);
       ul.append(li);
     }
@@ -958,6 +973,12 @@
       return;
     }
     if (az === "togli" || az === "rimetti") await caricaCarte(vid, { azione: az, carta: dati.carta });
+    if (az === "conferma" && await caricaCarte(vid, { azione: "conferma" })) {
+      const r = carte.dati.confermate || {};
+      carte.esito = (Number(r.confermate) === 1 ? "Una carta confermata" : (Number(r.confermate) || 0) + " carte confermate") +
+        (Number(r.da_decidere) ? "; " + Number(r.da_decidere) + " con un avviso restano da decidere." : ".");
+      disegnaHome();
+    }
   }
   function suCampoCarte(ev) {
     const t = ev.target;

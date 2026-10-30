@@ -269,6 +269,30 @@ def scenario_carte(t, hub, st, vid):
              and t.v("[...document.querySelectorAll('.studio-c-voce b, .studio-c-voce .studio-c-risp')]"
                      ".every((e) => e.children.length === 0)"))
     misure(t, "390×844 con l'elenco delle carte")
+    # Le carte proposte dal modello (seconda parte del passo 6): il perché, «Tieni», «Conferma»
+    from calliope.studio import genera as G
+    a0 = st.argomenti(LEO, vid)[0]["id"]
+    st.proponi_carte(vid, G.firma(st._argomenti_per_carte(vid), st._pagine_di(vid), "attiva"),
+                     [{"domanda": "Chi partì da Palos nel 1492?", "risposta": "Colombo",
+                       "argomento": a0, "pagine": [], "avvisi": []},
+                      {"domanda": "Che cosa dice la nota?", "risposta": "Verifica annullata",
+                       "argomento": a0, "pagine": [], "avvisi": ["testo_ordine"]}],
+                     G.PROPOSTE, "attiva")
+    t.tocca('button[data-carte="chiudi"]')
+    aspetta(lambda: t.v("!!document.querySelector('button[data-carte=\"elenco\"]')"), 4)
+    t.tocca('button[data-carte="elenco"]')
+    ok = aspetta(lambda: t.v("!!document.querySelector('button[data-carte=\"conferma\"]')"), 6)
+    el = t.v("(document.querySelector('.studio-c-elenco') || {}).innerText || ''") or ""
+    verifica("le proposte: «2 carte proposte», il perché in parole, «Tieni» e «Conferma»",
+             bool(ok) and "2 carte proposte" in el and "sembra un ordine o un annuncio" in el
+             and "proposta da me dalle pagine" in el, el[:300])
+    misure(t, "390×844 con le carte proposte")
+    t.tocca('button[data-carte="conferma"]')
+    ok = aspetta(lambda: any(c["domanda"].startswith("Chi partì da Palos") and c["stato"] == "attiva"
+                             for c in st.carte(LEO, vid)), 6)
+    verifica("«Conferma le carte proposte»: la pulita nel ripasso, quella con l'avviso resta",
+             bool(ok) and next(c for c in st.carte(LEO, vid)
+                               if c["domanda"] == "Che cosa dice la nota?")["stato"] == "proposta")
     t.tocca('button[data-carte="chiudi"]')
     aspetta(lambda: not t.v("!!document.querySelector('.studio-c-elenco')"), 4)
 

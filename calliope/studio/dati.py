@@ -40,7 +40,9 @@ Tabelle (versione 1):
   risposta, un dato non fidato come il testo delle pagine, chiunque l'abbia scritto; la forma
   chiusa della risposta per il confronto del codice; le pagine e l'argomento; l'origine, lo stato
   e il ripasso di Leitner: scatola, scadenza, ultima volta, `studio/carte.py`); dalla stessa
-  versione `studio_tentativi.carta`, la carta da cui viene un tentativo.
+  versione `studio_tentativi.carta`, la carta da cui viene un tentativo. Dalla versione 7
+  (seconda parte del passo 6) `studio_verifiche.carte_firma`, `carte_esito`, `carte_del`:
+  l'ultima generazione delle carte dal lettore (`studio/genera.py`).
 
 Tenuta (decisione 0035, punto 4): tutto ciò che è di una verifica resta fino a
 `studio_tenuta_giorni` (60) giorni dopo la sua data, per sempre se archiviata; «dimentica le
@@ -254,9 +256,16 @@ def _v6(db: sqlite3.Connection):
     db.execute("ALTER TABLE studio_tentativi ADD COLUMN carta INTEGER")
 
 
+def _v7(db: sqlite3.Connection):
+    """30/10, passo 6, seconda parte (#246): l'ultima generazione delle carte di una verifica (la
+    firma degli argomenti e delle pagine usate, l'esito e quando), per non chiederle due volte."""
+    for col in ("carte_firma TEXT", "carte_esito TEXT", "carte_del TEXT"):
+        db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
+
+
 # Le versioni dello schema: si aggiungono in fondo, solo colonne con NULL o un predefinito (o
 # tabelle nuove)
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6]
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi")

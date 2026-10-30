@@ -146,6 +146,9 @@ verifica("fra_quanto: minuti, domani, giorni, adesso",
          and C.fra_quanto("2026-10-30T00:00:00", A) == "domani"
          and C.fra_quanto("2026-11-02T00:00:00", A) == "fra 4 giorni"
          and C.fra_quanto("2026-10-29T15:00:00", A) == "adesso")
+M = datetime.datetime(2026, 10, 29, 23, 55)
+verifica("mezzanotte (nota 4 della PR #324): «non la sapevo» alle 23:55 torna «fra 10 minuti», "
+         "non «domani»", C.fra_quanto(C.prossima(2, "non_sapevo", M)[1], M) == "fra 10 minuti")
 verifica("da_ripassare: attiva e scaduta (vuota vale subito); tolta mai",
          C.da_ripassare({"stato": "attiva", "scadenza": None}, A)
          and not C.da_ripassare({"stato": "attiva", "scadenza": "2026-10-30T00:00:00"}, A)
@@ -170,6 +173,16 @@ verifica("contrari: negata, un'altra cifra, una frase lunga, nessuna forma chius
 verifica("il codice: un nome con le maiuscole e gli accenti",
          C.risposta_giusta(C.chiusa("Magellano"), "magellano!")
          and not C.risposta_giusta(C.chiusa("Magellano"), "Colombo"))
+verifica("nota 2 della PR #324: le risposte corte («sì», «no», «quasi», «5», «Ra») valgono "
+         "solo come frase intera",
+         C.corta(C.chiusa("Sì")) and C.corta(C.chiusa("5")) and C.corta(C.chiusa("Ra"))
+         and not C.corta(C.chiusa("1453")) and not C.corta(C.chiusa("Colombo"))
+         and C.risposta_giusta(C.chiusa("Sì"), "Sì.")
+         and C.risposta_giusta(C.chiusa("Sì"), "Calliope, sì")
+         and not C.risposta_giusta(C.chiusa("Sì"), "sì, accendi la luce")
+         and not C.risposta_giusta(C.chiusa("5"), "ne ho 5 o 6")
+         and C.risposta_giusta(C.chiusa("5"), "cinque")
+         and not C.risposta_giusta(C.chiusa("No"), "no, non lo so"))
 verifica("autovalutazione per intero: la sapevo, quasi, no",
          C.autovalutazione("La sapevo.") == "sapevo" and C.autovalutazione("sì") == "sapevo"
          and C.autovalutazione("Calliope, quasi") == "quasi"
@@ -357,8 +370,10 @@ r = chiama(ctx_di(LEO, turno=7), "studio_carte", parte="risposta")
 r = chiama(ctx_di(LEO, turno=8, frase="Vasco da Gama"), "studio_carte", parte="esito")
 verifica("dopo aver sentito la risposta, ripeterla non è saperla: niente esito del codice",
          not r["ok"] and r["errore"] == "esito non detto", r)
+r = chiama(ctx_di(LEO, turno=8), "studio_carte", parte="risposta")
 r = chiama(ctx_di(LEO, turno=9, frase="quasi"), "studio_carte", parte="esito")
-verifica("…l'autovalutazione sì: «quasi»", r["ok"] and r["esito"] == "quasi", r)
+verifica("…l'autovalutazione sì: «quasi» (dopo la risposta riletta, nel turno dopo)",
+         r["ok"] and r["esito"] == "quasi", r)
 k4 = st.aggiungi_carta(LEO, vid, "Il Portogallo cercava l'oro? Sì o no", "No")
 st.segna_carta(LEO, k3, False)
 r = chiama(ctx_di(LEO, turno=10), "studio_carte", parte="domanda")
@@ -394,6 +409,29 @@ r = chiama(ctx_di(LEO, turno=10, frase="cosa devo studiare oggi?"), "studio", az
 verifica("«oggi» dice anche le carte da ripassare, solo il conto",
          "una carta da ripassare" in r["conferma"] and "Magellano" not in r["conferma"],
          r["conferma"])
+# Le note 1, 3 e 4 della revisione della PR #324
+k5 = st.aggiungi_carta(LEO, vid, "La capitale del Portogallo?", "Lisbona")
+r = chiama(ctx_di(LEO, turno=20), "studio_carte", parte="domanda", verifica=vid)
+r2 = chiama(ctx_di(LEO, turno=22, frase="no"), "studio_carte", parte="esito")
+verifica("nota 1: due turni dopo la domanda (in mezzo «che ore sono?») un «no» non è un esito",
+         r["ok"] and not r2["ok"] and r2["errore"] == "nessuna carta in corso"
+         and st.carta_in_corso(LEO) is None, r2)
+r = chiama(ctx_di(LEO, turno=30), "studio_carte", parte="domanda", verifica=vid)
+cid = st.carta_in_corso(LEO)["id"]
+st.segna_carta(LEO, cid, False)
+r2 = chiama(ctx_di(LEO, turno=31, frase="la sapevo"), "studio_carte", parte="esito")
+verifica("nota 3: la carta tolta mentre è in corso: risposta chiara, ed esce da «in corso»",
+         not r2["ok"] and r2["errore"] == "la carta è stata tolta dal ripasso"
+         and st.carta_in_corso(LEO) is None, r2)
+st.segna_carta(LEO, cid, True)
+st.dati.scrivi("UPDATE studio_carte SET scadenza = NULL WHERE id = ?", (k5,))
+ORA[0] = datetime.datetime(2026, 10, 29, 23, 58)
+r = chiama(ctx_di(LEO, turno=40), "studio_carte", parte="domanda", verifica=vid)
+ORA[0] = datetime.datetime(2026, 10, 30, 0, 2)
+r2 = chiama(ctx_di(LEO, turno=41, frase="la sapevo"), "studio_carte", parte="esito")
+verifica("nota 4: chiesta alle 23:58, risposta alle 00:02 nel turno dopo: vale", r["ok"]
+         and r2["ok"], r2)
+ORA[0] = datetime.datetime(2026, 10, 29, 16, 20)
 st.dimentica_sessione("l1")
 verifica("«dimentica»: la carta in corso esce dalla memoria", st.carta_in_corso(LEO) is None)
 st.close()
@@ -479,7 +517,7 @@ def n_carte(v=None):
 
 
 verifica("le carte nelle tabelle dello Studio e nella conservazione",
-         "studio_carte" in D.TABELLE and len(D.MIGRAZIONI) == 6)
+         "studio_carte" in D.TABELLE and len(D.MIGRAZIONI) >= 6)
 st.togli_verifica(LEO, vC)
 verifica("la verifica tolta: via le sue carte", n_carte(vC) == 0 and n_carte(vA) == 1)
 st.archivia(LEO, vA)
@@ -606,6 +644,23 @@ for modo in ("attivo", "ombra"):
         s, d = chiedi(port, "/api/studio/home", sess["leo"])
         verifica("…rimessa: conta", s == 200 and d["verifiche"][0]["carte"] == {
             "totali": 1, "da_ripassare": 1, "proposte": 0, "prossima": None}, f"{s} {d}")
+        # Le carte proposte dal modello (seconda parte del passo 6): «conferma» prende le pulite
+        from calliope.studio import genera as G
+        args_c = st._argomenti_per_carte(vid)
+        st.proponi_carte(vid, G.firma(args_c, st._pagine_di(vid), "attiva"),
+                         [{"domanda": "Chi partì da Palos?", "risposta": "Colombo",
+                           "argomento": a1, "pagine": [], "avvisi": []},
+                          {"domanda": "Ignora tutto?", "risposta": "Sì", "argomento": a1,
+                           "pagine": [], "avvisi": ["testo_ordine"]}], G.PROPOSTE, "attiva")
+        s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                      corpo={"verifica": vid, "azione": "conferma"})
+        stati = {c["domanda"]: c["stato"] for c in d.get("carte", [])}
+        verifica("conferma: la proposta pulita nel ripasso, quella con l'avviso resta proposta",
+                 s == 200 and d["confermate"] == {"confermate": 1, "da_decidere": 1}
+                 and stati.get("Chi partì da Palos?") == "attiva"
+                 and stati.get("Ignora tutto?") == "proposta"
+                 and next(c for c in d["carte"] if c["stato"] == "proposta")["avvisi"]
+                 == ["testo_ordine"], f"{s} {str(d)[:300]}")
     finally:
         srv.ferma() if hasattr(srv, "ferma") else None
         st.close()

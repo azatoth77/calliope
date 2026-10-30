@@ -227,6 +227,9 @@ def cfg_nuova(nome, modo="ombra", **kw):
     c.studio_cartella = "studio"
     c.turn_log_dir = str(TMP / nome / "registro")
     c.agenti_enabled = False
+    # Le carte generate (passo 6, #246) usano lo stesso lettore: qui spente, le prova
+    # prova_studio_carte_genera.py
+    c.studio_carte_genera = "spenta"
     for k, v in kw.items():
         setattr(c, k, v)
     return c

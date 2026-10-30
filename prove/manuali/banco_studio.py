@@ -23,7 +23,14 @@ vere con la loro verità da `--foto-vere` (vedi il passo manuale).
 - `domande`: una verifica finta generata dalle sole pagine lette: domande con risposta e pagine,
   controllate nel codice (la risposta sta nelle pagine citate, niente istruzioni delle pagine,
   italiano); il giudizio a mano si scrive dopo, leggendo `domande.json`;
-- `risposte`: le domande della verità con le pagine lette, confrontate coi criteri.
+- `risposte`: le domande della verità con le pagine lette, confrontate coi criteri;
+- `carte` (30/10, passo 6, seconda parte, #246): le carte con l'harness esatto di Calliope
+  (`calliope/studio/genera.py`: pagine e argomenti della verità in due buste, schema guidato,
+  temperatura 0, niente tool) e il **controllo del codice** di Calliope (`genera.proposte`).
+  Misure: quante carte, quante pulite e quante per avviso, la risposta nelle pagine, le carte
+  ostili (le regex `non_deve` dei materiali su domanda e risposta), quelle su una pagina ostile e
+  segnate, l'italiano, secondi e token. Non è nella lista di serie di `--fasi`: si chiede con
+  `--fasi carte` (dal testo della verità) o `--fasi lettura,carte`.
 
 **Non disturbare** (`Guardia`): prima di ogni richiesta, vLLM senza richieste di altri in corso né
 in coda (`/metrics`), non in pausa (`/is_paused`: l'arbitro ferma vLLM quando parla la voce),
@@ -1006,6 +1013,55 @@ def fase_risposte(cli, materiali, testi_letti, uscita, log, busta=True) -> dict:
     return out
 
 
+def fase_carte(cli, materiali, testi_letti, uscita, log) -> dict:
+    """Le carte di ogni verifica con l'harness e il controllo del codice di Calliope (genera.py),
+    sugli argomenti della verità come argomenti confermati."""
+    from calliope.studio import argomenti as A
+    from calliope.studio import genera as G
+    out = {}
+    for vid, ver in materiali.items():
+        if not ver["argomenti"]:
+            continue
+        testi = testi_letti.get(vid) or {p["id"]: p["testo"] for p in ver["pagine"]}
+        pagine = [{"id": i, "ordine": i, "stato": "letta", "testo": testi.get(p["id"], ""),
+                   "numero": p.get("numero"), "metodo": "ocr",
+                   "avvisi": json.dumps(["istruzioni"]) if p.get("tipo") == "ostile" else None}
+                  for i, p in enumerate(ver["pagine"], 1)]
+        per_id = {p["id"]: i for i, p in enumerate(ver["pagine"], 1)}
+        args = [{"id": i, "titolo": a["titolo"], "pagine": [per_id[x] for x in a["pagine"]
+                                                             if x in per_id]}
+                for i, a in enumerate(ver["argomenti"], 1)]
+        v = {"materia": ver["materia"], "livello": ver.get("classe"),
+             "data": ver["data_verifica"], "argomento": ver.get("argomento")}
+        rif, arif = A.riferimenti(pagine), G.argomenti_rif(args)
+        r = cli.chat(G.messaggi(v, rif, arif), max_token=G.MAX_TOKENS, schema=G.SCHEMA,
+                     temperatura=G.TEMPERATURA, presence=G.PRESENCE)
+        grezzi = G.leggi(r.get("testo", "")) or []
+        carte = G.proposte(grezzi, rif, arif)
+        proibiti = _proibiti_risposta(ver) + [o["regex"] for x in ver.get("ostili") or []
+                                              for o in x["non_deve"] if o.get("tipo") ==
+                                              "argomento"]
+        ostili_id = {per_id[p["id"]] for p in ver["pagine"] if p.get("tipo") == "ostile"}
+        for c in carte:
+            c["ostile"] = any(re.search(p, _senza_accenti(c["domanda"] + " " + c["risposta"]))
+                              for p in proibiti)
+            c["su_pagina_ostile"] = bool(set(c["pagine"]) & ostili_id)
+        riga = {"fase": "carte", "verifica": vid, "n": len(carte), "grezze": len(grezzi),
+                "pulite": sum(not c["avvisi"] for c in carte),
+                **{a: sum(a in c["avvisi"] for c in carte) for a in G.DA_DECIDERE},
+                "ostili": sum(c["ostile"] for c in carte),
+                "ostili_pulite": sum(c["ostile"] and not c["avvisi"] for c in carte),
+                "su_pagina_ostile": sum(c["su_pagina_ostile"] for c in carte),
+                "italiano": italiano(json.dumps(carte, ensure_ascii=False)),
+                "secondi": r.get("secondi"), "token_out": r.get("token_out"), "carte": carte}
+        out[vid] = riga
+        with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(riga, ensure_ascii=False) + "\n")
+        log(f"[carte] {vid}: {riga['n']} carte, pulite {riga['pulite']}, ostili {riga['ostili']} "
+            f"(pulite {riga['ostili_pulite']}) in {r.get('secondi', 0):.1f} s")
+    return out
+
+
 # ─────────────────────────── giro e riepilogo ───────────────────────────
 
 def scegli_immagini(immagini: list[dict], materiali: dict, giro: str) -> list[dict]:
@@ -1085,6 +1141,14 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
                      f"{' TOOL ' + str(x['tool_chiamati']) if x['tool_chiamati'] else ''}"
                      f" {x['secondi']} s" for vid, x in v.items()]
             righe.append(f"  {k:28} " + " | ".join(parti))
+    if riep.get("carte"):
+        righe.append("\nCARTE (per verifica: carte, pulite, da controllare, istruzioni, ordine, "
+                     "ostili e ostili pulite)")
+        for vid, x in riep["carte"].items():
+            righe.append(f"  {vid}: n {x['n']} pulite {x['pulite']} da_controllare "
+                         f"{x['da_controllare']} istruzioni {x['pagina_con_istruzioni']} ordine "
+                         f"{x['testo_ordine']} ostili {x['ostili']} (pulite {x['ostili_pulite']}) "
+                         f"italiano {x['italiano']} {x['secondi']} s")
     for fase in ("domande", "risposte"):
         if riep.get(fase):
             righe.append(f"\n{fase.upper()}")
@@ -1189,6 +1253,8 @@ def main(argv=None):
             riep["domande"] = fase_domande(cli, materiali, testi, uscita, log)
         if "risposte" in fasi:
             riep["risposte"] = fase_risposte(cli, materiali, testi, uscita, log)
+        if "carte" in fasi:
+            riep["carte"] = fase_carte(cli, materiali, testi, uscita, log)
     except Fermati as e:
         log(f"[banco] FERMO: {e}")
         riep["fermo"] = str(e)
