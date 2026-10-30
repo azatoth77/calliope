@@ -106,6 +106,14 @@
     disegnaArgomenti();
   }
   function statoArgomenti(d) {
+    const e = d.estrazione || {};
+    const nl = Number(e.pagine_non_lette) || 0;
+    // Le pagine illeggibili o da parte restano fuori dagli argomenti (revisione della PR #315)
+    const fuori = nl && e.pagine_lette ? " " + (nl === 1 ? "Una pagina non l'ho letta" : nl + " pagine non le ho lette") +
+      ": gli argomenti vengono dalle altre." : "";
+    return (statoBase(d) + fuori).trim();
+  }
+  function statoBase(d) {
     const e = d.estrazione || {}, l = d.lettura || {};
     if ((d.argomenti || []).length) return "";
     if (!e.pagine_lette) return "Gli argomenti arrivano quando ho letto tutte le pagine (lette " +

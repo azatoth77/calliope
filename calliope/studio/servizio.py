@@ -668,15 +668,18 @@ class Studio:
     def rinomina_argomento(self, chi, aid, titolo):
         """Il titolo scritto dalla persona al posto di quello proposto (passo 4.4): lo stato
         resta, gli avvisi diventano quelli del controllo delle pagine sul titolo nuovo (la forma
-        non conta più: il titolo è suo)."""
+        non conta più: il titolo è suo). Il titolo del modello resta in `titolo_modello`: un
+        proposto rinominato è una decisione della persona, che un'estrazione nuova non toglie, e il
+        titolo del modello non si ripropone accanto (revisione della PR #315)."""
         from . import argomenti as A
         self._scrivibile()
         a, v = self._argomento(chi, aid)
         t = titolo_normale(titolo)
         avvisi = A.ricontrolla(t, [int(x) for x in D.da_j(a["pagine"])],
                                self.pagine(chi, v["id"]))
-        self.dati.scrivi("UPDATE studio_argomenti SET titolo = ?, avvisi = ? WHERE id = ?",
-                         (t, D.j(avvisi) if avvisi else None, a["id"]))
+        self.dati.scrivi("UPDATE studio_argomenti SET titolo = ?, avvisi = ?, titolo_modello = "
+                         "COALESCE(titolo_modello, ?) WHERE id = ?",
+                         (t, D.j(avvisi) if avvisi else None, a["titolo"], a["id"]))
         self._ricalcola_sicuro(v["id"])
 
     def unisci_argomenti(self, chi, ids, titolo=None) -> int:
@@ -728,15 +731,18 @@ class Studio:
         v = self._verifica(chi, vid)
         pagine = self.pagine(chi, v["id"])
         pronta = A.pronta(pagine)
+        nl = A.non_lette(pagine)
         return {"esito": v.get("argomenti_esito"), "del": v.get("argomenti_del"),
                 "pagine_lette": pronta,
+                # Le pagine illeggibili o da parte, fuori dagli argomenti (PR #315)
+                "pagine_non_lette": nl, "avvisi": ["pagine_non_lette"] if nl else [],
                 "da_fare": pronta and v.get("argomenti_firma") != A.firma(pagine),
                 "accesa": bool(getattr(self.cfg, "studio_argomenti", True))
                 and self.lettore is not None}
 
     # ── l'estrazione (dal lettore, studio/lettura.py; niente `chi`: è il lavoro di sfondo) ──
     def verifiche_per_argomenti(self) -> list[dict]:
-        """Le verifiche in bozza o aperte con le pagine tutte lette (o illeggibili) e una firma
+        """Le verifiche in bozza o aperte con le pagine tutte lette (o illeggibili, o da parte) e una firma
         diversa da quella dell'ultima estrazione, dalla più vicina. Vuoto con
         `studio_argomenti: false` o i dati in sola lettura."""
         from . import argomenti as A
@@ -756,8 +762,10 @@ class Studio:
             "m.verifica = ? ORDER BY p.ordine, p.id", (int(vid),))
 
     def proponi_argomenti(self, vid, firma: str, proposte: list[dict], esito: str) -> int | None:
-        """Scrive l'esito di un'estrazione: via i proposti non decisi, dentro i nuovi (tranne un
-        titolo che la persona ha già tenuto, tolto o aggiunto), la firma e l'esito. Se intanto
+        """Scrive l'esito di un'estrazione: via i proposti non decisi (un proposto rinominato è
+        deciso), dentro i nuovi (tranne un titolo che la persona ha già tenuto, tolto, aggiunto o
+        rinominato, anche col titolo di prima), la firma e l'esito. Con «rotto» o «errore» restano
+        i proposti di prima e si scrivono solo firma ed esito. Se intanto
         le pagine sono cambiate (o la verifica non c'è più) non scrive niente: None. Quanti
         proposti nuovi."""
         from . import argomenti as A
@@ -776,10 +784,24 @@ class Studio:
                     db.rollback()
                     return None
                 vive = {int(p["id"]) for p in pagine if p["stato"] != "tolta"}
-                db.execute("DELETE FROM studio_argomenti WHERE verifica = ? AND stato = "
-                           "'proposto'", (int(vid),))
-                decisi = {A.chiave(r["titolo"]) for r in db.execute(
-                    "SELECT titolo FROM studio_argomenti WHERE verifica = ?", (int(vid),))}
+                if esito in (A.ROTTO, A.ERRORE):
+                    # Un'estrazione fallita non svuota niente (revisione della PR #315): restano
+                    # i proposti di prima, e si scrivono solo la firma e l'esito
+                    proposte = []
+                else:
+                    # Via i proposti che la persona non ha toccato; un proposto rinominato
+                    # (titolo diverso da quello del modello) è una sua decisione e resta
+                    for r in db.execute("SELECT id, titolo, titolo_modello FROM studio_argomenti "
+                                        "WHERE verifica = ? AND stato = 'proposto'",
+                                        (int(vid),)).fetchall():
+                        if not A.rinominato(r["titolo"], r["titolo_modello"]):
+                            db.execute("DELETE FROM studio_argomenti WHERE id = ?", (r["id"],))
+                # I titoli decisi: quelli che restano e quelli del modello sotto una rinomina, che
+                # non si ripropongono accanto al titolo della persona
+                decisi = set()
+                for r in db.execute("SELECT titolo, titolo_modello FROM studio_argomenti WHERE "
+                                    "verifica = ?", (int(vid),)):
+                    decisi |= {A.chiave(r["titolo"]), A.chiave(r["titolo_modello"])} - {""}
                 ordine = db.execute("SELECT COALESCE(MAX(ordine), 0) FROM studio_argomenti WHERE "
                                     "verifica = ?", (int(vid),)).fetchone()[0]
                 n = 0
@@ -788,11 +810,13 @@ class Studio:
                         continue
                     ordine += 1
                     n += 1
+                    t = titolo_normale(a["titolo"])
                     db.execute("INSERT INTO studio_argomenti (verifica, titolo, pagine, stato, "
-                               "ordine, avvisi, creato) VALUES (?, ?, ?, 'proposto', ?, ?, ?)",
-                               (int(vid), titolo_normale(a["titolo"]),
+                               "ordine, avvisi, creato, titolo_modello) VALUES (?, ?, ?, "
+                               "'proposto', ?, ?, ?, ?)",
+                               (int(vid), t,
                                 D.j(p for p in a["pagine"] if p in vive), ordine,
-                                D.j(a["avvisi"]) if a["avvisi"] else None, D.adesso()))
+                                D.j(a["avvisi"]) if a["avvisi"] else None, D.adesso(), t))
                 db.execute("UPDATE studio_verifiche SET argomenti_firma = ?, argomenti_esito = ?,"
                            " argomenti_del = ? WHERE id = ?",
                            (firma, esito if esito != A.PROPOSTI or n else A.VUOTO, D.adesso(),

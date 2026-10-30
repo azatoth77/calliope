@@ -207,19 +207,24 @@ dell'eco della stanza.
 ## Gli argomenti e la conferma (passo 4.4, #283, 30/10)
 
 20. **Gli argomenti vengono dal solo testo letto**, mai dalle immagini, in un secondo passo dopo la
-    lettura: quando le pagine di una verifica sono tutte lette o illeggibili, lo stesso thread del
+    lettura: quando le pagine di una verifica sono tutte lette o illeggibili (una pagina «da
+    parte» vale come illeggibile, con l'avviso «pagine non lette», e quando si legge gli argomenti
+    si richiedono: revisione della PR #315), lo stesso thread del
     lettore, con la sua guardia e il suo client (punti 17–18), fa una richiesta con l'harness del
     banco (schema guidato, il testo in una busta con i riferimenti P1, P2… scritti dal codice,
     temperatura 0, thinking spento, nessun tool). Una firma delle pagine evita di chiedere due
     volte sulle stesse; pagine nuove lette ne chiedono un'altra, che sostituisce solo i proposti non
-    decisi. `studio_argomenti: false` lascia solo gli argomenti a mano.
+    decisi. Una rinomina è una decisione della persona: il titolo suo resta e quello del modello
+    non si ripropone; un'estrazione fallita non toglie i proposti di prima (PR #315).
+    `studio_argomenti: false` lascia solo gli argomenti a mano.
 21. **Il codice controlla le pagine citate** (metà delle parole del titolo, uguali, storpiate o con
     la stessa radice di 5 lettere): se non passa, l'argomento resta proposto «da controllare». Mai
     scartato da solo e niente secondo giro del modello (il banco lo ha misurato peggiore).
 22. **Nessun argomento entra nel piano senza la persona.** Tutti arrivano «proposti»; la persona li
     tiene, li toglie, li rinomina, li unisce, ne aggiunge e conferma l'elenco. La conferma tiene i
     proposti puliti; quelli con un avviso da decidere (fuori dalle pagine citate, nati solo da
-    pagine con «ISTRUZIONI: sì» della lettura, titolo che comincia con un ordine o con un indirizzo:
+    pagine con «ISTRUZIONI: sì» della lettura, titolo che comincia con un ordine, ha un indirizzo o
+    è un annuncio come «verifica annullata»:
     controlli di forma, principio 10) restano proposti finché la persona non li tiene da sé. Il
     flag delle istruzioni chiesto al modello degli argomenti non si usa (falsi 5 su 6 nel banco).
     Il piano usa solo i tenuti e gli aggiunti.

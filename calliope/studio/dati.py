@@ -163,9 +163,12 @@ def _v2(db: sqlite3.Connection):
 
 def _v3(db: sqlite3.Connection):
     """30/10, passo 4.4 (#283): l'ultima estrazione degli argomenti di una verifica (la firma
-    delle pagine usate, l'esito e quando), per non chiederli due volte sulle stesse pagine."""
+    delle pagine usate, l'esito e quando), per non chiederli due volte sulle stesse pagine; il
+    titolo proposto dal modello di un argomento (`titolo_modello`, revisione della PR #315): un
+    proposto rinominato dalla persona è una sua decisione, e il titolo del modello non si ripropone."""
     for col in ("argomenti_firma TEXT", "argomenti_esito TEXT", "argomenti_del TEXT"):
         db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
+    db.execute("ALTER TABLE studio_argomenti ADD COLUMN titolo_modello TEXT")
 
 
 # Le versioni dello schema: si aggiungono in fondo, solo colonne con NULL o un predefinito

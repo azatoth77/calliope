@@ -374,7 +374,12 @@ def prova_controllo():
             "Scrivi a compiti.pronti@example.com": (None, [A.TITOLO_ORDINE]),
             "La foglia\ne le sue parti": ("La foglia e le sue parti", []),
             "Dai Comuni alle Signorie": (None, []),
-            "Verifica annullata": (None, []),
+            # Gli annunci come titolo (revisione della PR #315) e i contrari
+            "Verifica annullata": (None, [A.TITOLO_ORDINE]),
+            "Compito spostato a lunedì": (None, [A.TITOLO_ORDINE]),
+            "Non serve più studiare": (None, [A.TITOLO_ORDINE]),
+            "Lo spostamento dei continenti": (None, []),
+            "Gli insiemi e l'insieme vuoto": (None, []),
             "‮La fotosintesi\x00": ("La fotosintesi", []),
             "x" * 90: ("x" * 60, [])}
     for t, (atteso, avvisi) in casi.items():
@@ -382,6 +387,12 @@ def prova_controllo():
         verifica(f"forma: {t[:40]!r}", av == avvisi and (atteso is None or titolo == atteso),
                  (titolo, av))
     verifica("forma: un titolo vuoto non c'è", A.forma_titolo("  «» ")[0] is None)
+    rif = [("P1", {"id": 7, "testo": "La foglia e le sue parti", "avvisi": None})]
+    verifica("risposta: un titolo che non è una stringa si scarta (PR #315)",
+             A.proposte([{"titolo": {"x": 1}, "pagine": ["P1"]}, {"titolo": 5, "pagine": ["P1"]},
+                         {"titolo": None}, {"titolo": ["La foglia"], "pagine": ["P1"]},
+                         {"titolo": "La foglia", "pagine": ["P1"]}], rif)
+             == [{"titolo": "La foglia", "pagine": [7], "avvisi": []}])
     verifica("risposta: JSON con i ``` e con testo intorno; rotto None",
              A.leggi('```json\n{"argomenti": [{"titolo": "x", "pagine": ["P1"]}]}\n```')
              == [{"titolo": "x", "pagine": ["P1"]}]
@@ -439,7 +450,7 @@ def prova_giro_e_conferma():
     m = lett.stato()["argomenti"]
     verifica("misure: estrazioni, proposti, avvisi, token", m["estrazioni"] == 1
              and m["proposti"] == 11 and m["da_controllare"] == 3
-             and m["pagina_con_istruzioni"] == 3 and m["titolo_ordine"] == 1
+             and m["pagina_con_istruzioni"] == 3 and m["titolo_ordine"] == 2
              and m["token_in"] == 3100, m)
     reg = "\n".join(r for r in log_righe if "argomenti" in r)
     verifica("registro: conti e tempi, mai i titoli né il testo",
@@ -736,6 +747,9 @@ def prova_errori():
     st = studio(cfg)
     vid, _ = verifica_con_pagine(st)
     lett, _ = lettore(st)
+    # Un'attesa lunga (con l'hook la macchina è carica: 0,2 s possono passare fra due giri) e,
+    # dopo il controllo, l'attesa finita a mano
+    lett.attesa_s = 5.0
     for modo in ("500", "rotto", "errore_stream"):
         F.coda = [modo]
         n = len(F.richieste)
@@ -747,7 +761,8 @@ def prova_errori():
         e = lett.giro()
         verifica(f"errore {modo}: subito dopo si aspetta ancora (nessuna richiesta)",
                  e.get("aspetta") == "errore" and len(F.richieste) == n + 1, e)
-        time.sleep(lett._riprova_dopo - time.monotonic() + 0.05)
+        lett._riprova_dopo = 0.0
+    verifica("errori: tre di fila, l'attesa raddoppia (5, 10, 20 s)", lett._errori_di_fila == 3)
     rispondi({"argomenti": BUONI, "istruzioni_nelle_pagine": False})
     lett.giro()
     verifica("errori: passata l'attesa la richiesta va e gli argomenti arrivano",
@@ -779,6 +794,102 @@ def prova_errori():
     lett.giro()
     verifica("nessun argomento: esito «vuoto»", st.verifica(LEO, vid4)["argomenti_esito"]
              == A.VUOTO)
+    st.close()
+
+
+# ─────────── revisione della PR #315: rinomina, estrazioni fallite, pagine da parte ───────────
+
+def prova_rinomina_e_da_parte():
+    print("— la rinomina, le estrazioni fallite e le pagine da parte (revisione della PR #315)")
+    azzera()
+    cfg = cfg_nuova("rinomina")
+    st = studio(cfg)
+    vid, ids = verifica_con_pagine(st)
+    lett, _ = lettore(st)
+    rispondi({"argomenti": BUONI, "istruzioni_nelle_pagine": False})
+    lett.giro()
+    a = {x["titolo"]: x for x in st.argomenti(LEO, vid)}
+    port = a["Il Portogallo e la rotta africana"]["id"]
+    st.rinomina_argomento(LEO, port, "Il mio titolo sul Portogallo")
+    verifica("rinomina: resta proposto, col titolo del modello da parte",
+             {x["id"]: x for x in st.argomenti(LEO, vid)}[port]["stato"] == "proposto")
+    # «Rifai»: il modello ripropone gli stessi titoli e uno nuovo
+    st.rifai_argomenti(LEO, vid)
+    rispondi({"argomenti": BUONI + [arg("Il trattato di Tordesillas", "P5")],
+              "istruzioni_nelle_pagine": False})
+    lett.giro()
+    b = st.argomenti(LEO, vid)
+    titoli = [x["titolo"] for x in b]
+    verifica("rifai: il proposto rinominato resta, col titolo della persona",
+             any(x["id"] == port and x["titolo"] == "Il mio titolo sul Portogallo"
+                 and x["stato"] == "proposto" for x in b), titoli)
+    verifica("rifai: il titolo del modello sotto la rinomina non si ripropone accanto",
+             "Il Portogallo e la rotta africana" not in titoli, titoli)
+    verifica("rifai: gli altri proposti una volta sola, il nuovo dentro",
+             all(titoli.count(t["titolo"]) == 1 for t in BUONI if t["titolo"] != "Il Portogallo e la rotta africana")
+             and "Il trattato di Tordesillas" in titoli and len(b) == len(BUONI) + 1, titoli)
+    # Una pagina nuova letta: la stessa regola
+    out = st.aggiungi_pronte(LEO, vid, [PG.Pronta(jpeg(), 60, 80, "intera", None, [], 300.0)])
+    st.dati.scrivi("UPDATE studio_pagine SET stato = 'letta', testo = 'Le conseguenze delle "
+                   "scoperte: il mais e la patata arrivano in Europa.' WHERE id = ?",
+                   (out["pagine"][0]["id"],))
+    rispondi({"argomenti": BUONI + [arg("Le conseguenze delle scoperte", "P9")],
+              "istruzioni_nelle_pagine": False})
+    lett.giro()
+    titoli = [x["titolo"] for x in st.argomenti(LEO, vid)]
+    verifica("pagina nuova: il rinominato resta e il titolo del modello non torna",
+             "Il mio titolo sul Portogallo" in titoli
+             and "Il Portogallo e la rotta africana" not in titoli
+             and "Le conseguenze delle scoperte" in titoli, titoli)
+    # Estrazioni fallite: i proposti di prima restano
+    prima = sorted((x["id"], x["titolo"], x["stato"]) for x in st.argomenti(LEO, vid))
+    st.rifai_argomenti(LEO, vid)
+    rispondi("non è JSON")
+    lett.giro()
+    verifica("rotto: i proposti di prima restano tutti, l'esito è «rotto»",
+             sorted((x["id"], x["titolo"], x["stato"]) for x in st.argomenti(LEO, vid)) == prima
+             and st.verifica(LEO, vid)["argomenti_esito"] == A.ROTTO)
+    firma = A.firma(st.pagine(LEO, vid))
+    st.proponi_argomenti(vid, firma, [], A.ERRORE)
+    verifica("errore: i proposti di prima restano tutti, l'esito è «errore»",
+             sorted((x["id"], x["titolo"], x["stato"]) for x in st.argomenti(LEO, vid)) == prima
+             and st.verifica(LEO, vid)["argomenti_esito"] == A.ERRORE)
+    # Una pagina da parte (fa cadere il motore): non ferma gli argomenti
+    azzera()
+    vid2, ids2 = verifica_con_pagine(st, "matematica", lette=True)
+    # Messa da parte adesso da questa versione (come `Lettore._errore_server`): il tentativo del
+    # giorno non la riprende
+    st.dati.scrivi("UPDATE studio_pagine SET stato = 'da_parte', testo = NULL, avvisi = ?, metodo "
+                   "= ? WHERE id = ?", (D.j(["fa_cadere_il_motore"]),
+                                        f"{L.DA_PARTE}{L.versione_codice()}@{int(time.time())}",
+                                        ids2["p91"]))
+    verifica("da parte: la verifica è pronta lo stesso",
+             vid2 in [v["id"] for v in st.verifiche_per_argomenti()])
+    e = st.estrazione(LEO, vid2)
+    verifica("da parte: l'avviso «pagine non lette» nella vista",
+             e["pagine_non_lette"] == 1 and e["avvisi"] == ["pagine_non_lette"] and e["da_fare"], e)
+    rispondi({"argomenti": [arg("Identità ed equazioni", "P2")], "istruzioni_nelle_pagine": False})
+    lett.giro()
+    u = F.richieste[-1]["messages"][1]["content"] if F.richieste else ""
+    verifica("da parte: estratti dalle pagine lette (8 riferimenti, senza la p91)",
+             len(F.richieste) == 1 and "[P8" in u and "[P9" not in u
+             and "Alla fine dei passaggi" not in u, len(F.richieste))
+    verifica("da parte: niente di nuovo da fare dopo", st.verifiche_per_argomenti() == [])
+    # La pagina da parte si legge (il tentativo del giorno): la firma cambia, si richiede
+    testo = MATERIALI["matematica"]["pagine"][4]["testo"]
+    st.dati.scrivi("UPDATE studio_pagine SET stato = 'letta', testo = ? WHERE id = ?",
+                   (testo, ids2["p91"]))
+    verifica("da parte letta: gli argomenti si richiedono da soli",
+             vid2 in [v["id"] for v in st.verifiche_per_argomenti()])
+    rispondi({"argomenti": [arg("Identità ed equazioni", "P2"),
+                            arg("Equazioni impossibili e indeterminate", "P5")],
+              "istruzioni_nelle_pagine": False})
+    lett.giro()
+    titoli = [x["titolo"] for x in st.argomenti(LEO, vid2)]
+    verifica("da parte letta: l'argomento della pagina nuova arriva, senza doppioni",
+             len(F.richieste) == 2 and titoli.count("Identità ed equazioni") == 1
+             and "Equazioni impossibili e indeterminate" in titoli
+             and st.estrazione(LEO, vid2)["pagine_non_lette"] == 0, titoli)
     st.close()
 
 
@@ -926,6 +1037,7 @@ prova_permessi()
 prova_interruttori()
 prova_guardia()
 prova_errori()
+prova_rinomina_e_da_parte()
 prova_server()
 prova_pagina()
 

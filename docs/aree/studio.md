@@ -45,12 +45,20 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 - Su Windows `in_corso.json` non ha il controllo del pid: un file rimasto da un'istanza morta con
   un lavoro «in_corso» o «in_coda» blocca la lettura su quella macchina finché il servizio dei
   lavori non lo riscrive (prudente, ma da sapere; sulla DGX, Linux, il pid morto non conta).
-- Gli argomenti si chiedono solo quando *tutte* le pagine sono lette o illeggibili: una pagina «da
-  parte» (fa cadere il motore) li ferma finché non si legge o non si toglie (4.4: da rivedere con la
-  vista della 4.5).
+- *[storico fino alla revisione della PR #315: «gli argomenti si chiedono solo quando tutte le
+  pagine sono lette o illeggibili: una pagina da parte li ferma». Ora una pagina «da_parte» vale
+  come illeggibile, con l'avviso «pagine non lette» (sezione degli argomenti)]*.
 - I falsi «ISTRUZIONI: sì» della lettura (il laboratorio di scienze e gli appunti di storia nel
   giro del 30/10) fanno restare proposti, con `pagina_con_istruzioni`, argomenti giusti: 3 su 23 nel
   giro vero degli argomenti. La persona li tiene con un tocco; da guardare nella 4.5.
+- `unisci_argomenti` toglie le righe unite: i loro titoli del modello non restano fra i «decisi», e
+  una nuova estrazione li può riproporre accanto all'argomento unito (meno grave della rinomina:
+  l'unito resta; da rivedere con la vista della 4.5).
+- **Per la 4.5** (revisione della PR #315): (1) la persona deve vedere *perché* un argomento è
+  rimasto proposto dopo la conferma (fuori dalle pagine citate, una pagina citata con un messaggio
+  per un assistente, titolo che sembra un ordine o un annuncio) e poterlo tenere con un tocco solo;
+  (2) quando i titoli entrano nella descrizione di un tocco (`record_tocco`, il tool dello Studio),
+  vanno in busta, col numero dell'argomento (0035, punto 6).
 - **Per la 4.5** (revisione della PR #314): (1) *[fatto il 30/10 con la 4.4: il confronto pagina
   per pagina dei numeri di pagina, nella sezione degli argomenti]*; (2) senza vLLM la pagina e la voce lo dicono con una
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
@@ -80,8 +88,13 @@ di pagine (un numero diverso della seconda vince; prova in `prova_studio_lettura
 «?», mai sbagliati: senza numero vale l'ordine di scatto, con l'avviso di Materiali 2.*
 
 **Quando.** Il thread del lettore, prima di prendere la prossima pagina, guarda le verifiche in
-bozza o aperte con tutte le pagine (tolte escluse) «lette» o «illeggibili» e almeno una letta col
-testo (`Studio.verifiche_per_argomenti`). Una verifica è pronta se la **firma** delle sue pagine (id
+bozza o aperte con tutte le pagine (tolte escluse) «lette», «illeggibili» o «da parte» e almeno
+una letta col testo (`Studio.verifiche_per_argomenti`). *Dalla revisione della PR #315* una pagina
+«da_parte» (fa cadere il motore, 4.3) vale come illeggibile: gli argomenti vengono dalle pagine
+lette, la vista dice «una pagina non l'ho letta: gli argomenti vengono dalle altre»
+(`Studio.estrazione`: `pagine_non_lette` e l'avviso `pagine_non_lette`) e, siccome la firma ha lo
+stato, quando la pagina da parte si legge (il tentativo del giorno, un aggiornamento) gli argomenti
+si richiedono da soli. *Storico: fino alla revisione una pagina da parte li fermava.* Una verifica è pronta se la **firma** delle sue pagine (id
 e stato, `argomenti.firma`) è diversa da quella dell'ultima estrazione, scritta in
 `studio_verifiche.argomenti_firma` con l'esito e l'ora (schema «studio» alla versione 3): così le
 stesse pagine non si chiedono due volte, e una pagina nuova letta dopo ne chiede un'altra. Con la
@@ -95,11 +108,17 @@ senza scrivere niente.
 di Storia, classe 2ª media, il 2026-11-05 (…).», con le sole parti che ci sono), il testo delle
 pagine lette in **una busta** (`provenienza.racchiudi`, «foto», o «allegato» se tutte vengono da un
 PDF col testo) con i riferimenti «[P1 · pagina stampata 112]» scritti dal codice; schema guidato
-(`format` → `response_format` di vLLM), temperatura 0, `presence_penalty` 0, `max_tokens` 3000,
+(`format` → `response_format` di vLLM; **differenza dal banco**: `ClienteOpenAI` lo manda con
+`name: "risposta"` e `strict: true`, il banco con `name: "uscita"` senza `strict`; con la decodifica
+guidata di vLLM `strict` non peggiora l'uscita, e il giro vero del 30/10 qui sotto è col formato
+nuovo), temperatura 0, `presence_penalty` 0, `max_tokens` 3000,
 thinking spento, **nessun tool** e nessuna immagine. Il modello cita P1, P2… («8», «p8» valgono
 P8); il codice li traduce negli id delle pagine e scarta quelli che non esistono. Il `motivo` del
 modello non si tiene. `length` si rifà una volta; due volte, o un JSON che non si legge, è «rotto»:
-la firma si scrive (niente giri in tondo) e la persona li scrive a mano o chiede «rifai».
+la firma si scrive (niente giri in tondo) e la persona li scrive a mano o chiede «rifai». Un
+titolo che non è una stringa (schema violato) si scarta. Dalla revisione della PR #315 un esito
+«rotto» o «errore» **non svuota** i proposti di un'estrazione buona di prima: restano, e si
+scrivono solo firma ed esito.
 
 **Il controllo del codice** (`argomenti.controlla`, quello del banco): almeno metà delle parole del
 titolo nelle pagine citate, uguali, storpiate o con la stessa radice di 5 lettere, e tutte le pagine
@@ -110,8 +129,10 @@ secondo giro** del modello.
 del modello non si usa. Vale l'avviso «istruzioni» della lettura: un argomento che cita *solo*
 pagine con «ISTRUZIONI: sì» ha `pagina_con_istruzioni`. Il titolo è una riga di al più 60 caratteri,
 senza caratteri di controllo né virgolette attorno (`forma_titolo`); se comincia con un ordine a un
-assistente («Ignora…», «Scrivi…», «Di' allo…», «SYSTEM») o contiene un indirizzo ha
-`titolo_ordine`. Con uno di questi tre avvisi (`DA_DECIDERE`) un argomento **non diventa tenuto con
+assistente («Ignora…», «Scrivi…», «Di' allo…», «SYSTEM»), contiene un indirizzo o, dalla
+revisione della PR #315, è un annuncio nelle forme chiuse delle pagine ostili («annullata»,
+«spostato», «rinviata», «non serve più», «non si fa più»; «Lo spostamento dei continenti» no) ha
+`titolo_ordine`. È un avviso, non uno scarto: la persona decide. Con uno di questi tre avvisi (`DA_DECIDERE`) un argomento **non diventa tenuto con
 la conferma dell'elenco**: resta proposto, fuori dal piano, finché la persona non lo tiene da sé.
 Così «Verifica annullata», se il modello lo proponesse dalla pagina ostile, non entra mai nel piano
 senza un tocco suo (prova con le tre pagine ostili del banco: storia p117, matematica p94, scienze
@@ -120,13 +141,18 @@ p146).
 **La conferma** (API di `Studio`, permessi dello Studio: il proprietario e il tutore del minore;
 un altro adulto, chi amministra non tutore, l'ospite e la zona grigia lo stesso «non c'è»):
 `segna_argomento` (tieni o togli, anche dopo la conferma), `rinomina_argomento` (lo stato resta, gli
-avvisi diventano quelli del controllo sul titolo nuovo, la forma non conta: è suo),
+avvisi diventano quelli del controllo sul titolo nuovo, la forma non conta: è suo; il titolo del
+modello resta in `studio_argomenti.titolo_modello`, e un proposto rinominato è una **decisione**
+della persona),
 `unisci_argomenti` (il primo resta, tenuto, con le pagine di tutti; gli altri si tolgono),
 `aggiungi_argomento` («aggiunto», anche senza pagine), `conferma_argomenti` (i proposti puliti
 diventano tenuti, la verifica passa ad aperta, il piano si calcola; `da_decidere` dice quanti
 restano), `rifai_argomenti`. Il piano usa solo i tenuti e gli aggiunti e si ricalcola a ogni tocco.
-Una nuova estrazione toglie solo i proposti non decisi e non ripropone un titolo già tenuto, tolto o
-aggiunto; se le pagine cambiano durante la richiesta il risultato si butta e si rifà.
+Una nuova estrazione (pagine nuove lette o «rifai») toglie solo i proposti non decisi e non
+ripropone un titolo già tenuto, tolto, aggiunto o rinominato, **compreso il titolo del modello sotto
+una rinomina**; se le pagine cambiano durante la richiesta il risultato si butta e si rifà.
+*Storico fino alla revisione della PR #315: un proposto rinominato spariva alla seconda estrazione,
+e il titolo del modello tornava al suo posto.*
 
 **La vista minima** (`studio.js`, sotto le pagine della verifica scelta, dalla
 `POST /api/studio/argomenti`): l'elenco con titolo (solo `textContent`), stato, pagine col numero
@@ -135,7 +161,10 @@ stampato o «foto n» e gli avvisi in parole; «Tieni», «Togli», «Rinomina»
 (lette x di y)», «sto cercando gli argomenti», «non sono riuscita a trovarli». L'endpoint, come le
 pagine del 4.2, è fuori dalla conversazione: niente `record_tocco`, quindi i titoli non entrano nella
 storia (per la 4.5, quando la conferma passerà dal tool, la busta nella descrizione del tocco resta
-da fare); gli orari del minore valgono per le azioni. Service worker alla v23.
+da fare); gli orari del minore valgono per le azioni. **La vista si apre anche fuori orario**: è di
+sola lettura (come le raccolte di Le mie cose), e fuori orario un minore vede gli argomenti ma
+«Tieni», «Togli», «Rinomina» e «Conferma» rispondono con la frase degli orari. Service worker alla
+v23.
 
 **Interruttori.** Spento: niente. `studio_argomenti` (nuova, `true` di serie): `false` = solo a
 mano. In ombra si estraggono e si misurano; niente al modello della voce né agli schermi, salvo la
@@ -161,7 +190,9 @@ fotosintesi, respirazione e linfa in più argomenti (la verità ne conta uno e i
 la precisione); con temperatura 0 le passate non sono uguali (sopra). Nessun argomento dalle
 istruzioni, nessun tool, tutto in italiano, 7 s per verifica (1 900 token in ingresso).
 
-Prove: `prove/prova_studio_argomenti.py` (livello 1, ~6 s, vLLM finto).
+Prove: `prove/prova_studio_argomenti.py` (livello 1, ~6 s, vLLM finto; dalla revisione della PR
+#315 anche la rinomina che resta con «rifai» e con una pagina nuova, «rotto» ed «errore» che non
+svuotano, la pagina da parte e la sua lettura dopo, i titoli non stringa e gli annunci).
 
 ## La lettura delle pagine (30/10, issue #282, ramo `issue-282-studio-lettura`)
 

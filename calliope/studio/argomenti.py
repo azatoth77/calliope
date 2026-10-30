@@ -5,8 +5,9 @@ Gli argomenti dello Studio dalle pagine lette (30/10, passo 4.4, issue #283, epi
 leggono le pagine (`lettura.py`), poi gli argomenti si chiedono a qwen3.6 dal **solo testo letto**,
 mai dalle immagini.
 
-**Quando.** Una verifica in bozza o aperta con tutte le pagine (tolte escluse) «lette» o
-«illeggibili», almeno una letta col testo, e una firma delle pagine diversa da quella dell'ultima
+**Quando.** Una verifica in bozza o aperta con tutte le pagine (tolte escluse) «lette»,
+«illeggibili» o «da parte» (revisione della PR #315: l'avviso «pagine non lette» nella vista),
+almeno una letta col testo, e una firma delle pagine diversa da quella dell'ultima
 estrazione (`firma`): pagine nuove lette dopo la prima estrazione ne chiedono un'altra. Lo fa il
 thread del lettore (`Lettore._argomenti`), con la sua guardia e il suo client: nessuna richiesta
 con un lavoro dell'agente vivo o vLLM occupato, la voce che passa avanti, gli errori del server
@@ -105,6 +106,10 @@ _ORDINE = re.compile(
     r"^\W*(ignora|dimentica|chiama|scrivi|manda|invia|rispondi|avvisa|cancella|esegui|aggiungi|"
     r"segui|obbedisci|di'|dì|ignore|write|call|send|delete|system|assistente|calliope)(?!\w)",
     re.I)
+# Un annuncio come titolo («Verifica annullata», «Compito spostato», «Non serve più»: revisione
+# della PR #315): le forme chiuse degli annunci delle pagine ostili del banco, solo un avviso
+_ANNUNCIO = re.compile(r"\b(annullat[aoie]|spostat[aoie]|rinviat[aoie])\b|"
+                       r"\bnon (serve|servono|si fa|si fanno|c'è) pi[uù]\b", re.I)
 _INDIRIZZO = re.compile(r"https?://|www\.|\S@\S|\b[\w-]+\.(com|it|org|net|example)\b", re.I)
 _CONTROLLO = re.compile(r"[\x00-\x1f\x7f  ​-‏‪-‮⁦-⁩]")
 
@@ -112,7 +117,8 @@ _CONTROLLO = re.compile(r"[\x00-\x1f\x7f  ​-‏‪-‮⁦-⁩]")
 def forma_titolo(testo) -> tuple[str | None, list[str]]:
     """(titolo pulito o None, avvisi): una riga, senza caratteri di controllo né virgolette
     attorno, al più `servizio.TITOLO_MAX` caratteri; `titolo_ordine` se comincia con un ordine
-    rivolto a un assistente o contiene un indirizzo."""
+    rivolto a un assistente, contiene un indirizzo o è un annuncio («annullata», «spostato»,
+    «non serve più»)."""
     from .servizio import TITOLO_MAX
     t = unicodedata.normalize("NFC", str(testo if testo is not None else ""))
     t = _CONTROLLO.sub(" ", t)
@@ -120,7 +126,8 @@ def forma_titolo(testo) -> tuple[str | None, list[str]]:
     t = t[:TITOLO_MAX].strip()
     if not t:
         return None, []
-    avvisi = [TITOLO_ORDINE] if (_ORDINE.search(t) or _INDIRIZZO.search(t)) else []
+    avvisi = [TITOLO_ORDINE] if (_ORDINE.search(t) or _INDIRIZZO.search(t)
+                                 or _ANNUNCIO.search(t)) else []
     return t, avvisi
 
 
@@ -151,11 +158,28 @@ def firma(pagine: list[dict]) -> str:
     return hashlib.sha256(json.dumps(righe).encode()).hexdigest()[:16]
 
 
+# Gli stati di una pagina che non aspettano più la lettura: «da_parte» (fa cadere il motore, 4.3)
+# vale come illeggibile, così una pagina sola non ferma gli argomenti per ore (revisione della PR
+# #315). La firma ha lo stato: quando la pagina da parte si legge, gli argomenti si richiedono
+NON_LETTE = ("illeggibile", "da_parte")
+
+
 def pronta(pagine: list[dict]) -> bool:
-    """Tutte le pagine (tolte escluse) «lette» o «illeggibili», almeno una letta col testo."""
+    """Tutte le pagine (tolte escluse) «lette», «illeggibili» o «da parte», almeno una letta col
+    testo."""
     vive = [p for p in pagine if p["stato"] != "tolta"]
-    return bool(vive) and all(p["stato"] in ("letta", "illeggibile") for p in vive) and \
+    return bool(vive) and all(p["stato"] in ("letta",) + NON_LETTE for p in vive) and \
         bool(lette(pagine))
+
+
+def non_lette(pagine: list[dict]) -> int:
+    """Le pagine illeggibili o da parte (tolte escluse): l'avviso «pagine non lette»."""
+    return sum(p["stato"] in NON_LETTE for p in pagine)
+
+
+def rinominato(titolo, titolo_modello) -> bool:
+    """Un argomento proposto che la persona ha rinominato: una sua decisione (PR #315)."""
+    return bool(titolo_modello) and chiave(titolo) != chiave(titolo_modello)
 
 
 def intestazione(v: dict) -> str:
@@ -246,6 +270,9 @@ def proposte(grezzi: list[dict], rif: list[tuple[str, dict]]) -> list[dict]:
     istruzioni = {r for r, p in rif if "istruzioni" in D.da_j(p.get("avvisi"))}
     out, visti = [], set()
     for a in grezzi:
+        if not isinstance(a.get("titolo"), str):
+            # Un titolo che non è una stringa (schema violato) si scarta (PR #315)
+            continue
         titolo, avvisi = forma_titolo(a.get("titolo"))
         if titolo is None or chiave(titolo) in visti:
             continue
