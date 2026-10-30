@@ -781,6 +781,12 @@ class Avvio:
         if s.studio is not None:
             atexit.register(s.studio.close)
             print(f"[STUDIO] {s.studio.modo}", flush=True)
+            # La lettura delle pagine (30/10, passo 4.3, #282): un thread che legge con il
+            # modello dell'agente quando la DGX è libera e cede ai lavori e alla voce
+            try:
+                s.studio.avvia_lettura(getattr(s, "lavori", None))
+            except Exception as e:  # noqa: BLE001 — la lettura non ferma l'avvio
+                print(f"[STUDIO] lettura non avviata: {type(e).__name__}: {e}", flush=True)
         # Gli avvisi di pericolo (14/10 sera): l'audio nel cassetto del tutore, la trascrizione
         # di un avviso di prima ricostruita dalla stanza o dalla conversazione del minore, e
         # `calliope conserva --svuota` che li toglie

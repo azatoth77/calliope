@@ -54,9 +54,10 @@ TABELLE = ("studio_piano", "studio_misure", "studio_argomenti", "studio_pagine",
 STATI_VERIFICA = ("bozza", "aperta", "fatta", "archiviata")
 ORIGINI = ("foto", "cassetto", "file", "biblioteca", "mano")
 # «da_leggere» (29/10, passo 4.2): la pagina arrivata dalla fotocamera o da un PDF, che aspetta la
-# lettura del passo 4.3
+# lettura del passo 4.3; «in_lettura» (30/10, passo 4.3, #282): la sta leggendo il lettore
+# (studio/lettura.py), e dopo un riavvio torna «da_leggere»
 STATI_PAGINA = ("da_controllare", "buona", "sfocata", "tolta", "letta", "illeggibile",
-                "da_leggere")
+                "da_leggere", "in_lettura")
 # Il riferimento di un materiale che è un file nella cartella dello Studio (il PDF originale)
 RIF_FILE = "file:"
 # Le immagini delle pagine e i PDF stanno in `cartella/pagine/<id della verifica>/`, con un nome

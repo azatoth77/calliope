@@ -951,6 +951,11 @@ studio:
   # prove/manuali/studio_immagini.py: nitide ≥ 234, sfocate di 3 px ≤ 132; da ritarare sulle
   # foto vere
   studio_nitidezza_min: 150.0
+  # La lettura delle pagine (30/10, passo 4.3, #282, calliope/studio/lettura.py): un thread che
+  # legge le pagine «da leggere» con qwen3.6 su vLLM (il modello dell'agente, harness del banco
+  # del 28/10) quando la DGX è libera, in ombra e in attivo. false = le pagine restano da
+  # leggere (per esempio prima del banco dello scritto a mano vero)
+  studio_lettura: true
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

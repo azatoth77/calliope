@@ -7,7 +7,8 @@
   il vecchio processo degli esercizi è tolto. Il passo 4.1 (dati e piano a giorni) è fatto il
   29/10 sul ramo `issue-280-studio-dati-piano` (sezione «Dati e piano a giorni», sotto); il passo
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
-  materiali», sotto).
+  materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
+  (sezione «La lettura delle pagine», sotto).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -188,6 +189,20 @@ dell'eco della stanza.
     nitidezza (`studio_nitidezza_min`), oggi misurate solo sulle foto di fantasia di Pillow; il
     criterio dell'analisi è al più 2 errori fra «sfocata» e «buona» (revisione della PR #312).
 
+## La lettura delle pagine (passo 4.3, #282, 30/10)
+
+17. **La lettura è un thread, non un lavoro dell'agente**, con l'harness del banco del 28/10 così
+    com'è (qwen3.6 su vLLM, il modello dell'agente; una foto per richiesta a 1600 px; testo coi
+    segni; thinking spento, temperatura 0, `max_tokens` 3500), senza tool e fuori da `Brain`
+    (punto 6). Rotazione e due pagine le dice il modello e le fa il codice; il giro in tondo si
+    rifà una volta, poi la pagina è illeggibile. I PDF col testo vero si leggono senza modello.
+18. **La DGX prima di tutto**: si legge solo con nessun lavoro dell'agente vivo e vLLM libero e
+    non in pausa; durante la lettura la voce ha la precedenza (arbitro) e un lavoro dell'agente
+    che parte la fa cedere. Lo stato è su disco: dopo un riavvio si riprende.
+19. **Il testo letto è un dato**: arriva a un modello solo in attivo e in busta, una per pagina; in
+    ombra si legge e si misura soltanto. `studio_lettura: false` ferma la lettura senza spegnere
+    lo Studio.
+
 ## Da completare con i passi 4.3–4.5
 
 - *[fatto il 29/10, passo 4.1: dove si conservano le pagine e come si applica il punto 4 (punti
@@ -195,8 +210,9 @@ dell'eco della stanza.
   accenderlo per un minore.]*
 - I tocchi nuovi e la bozza delle pagine (Sposta, Ruota, Ritaglia, Togli prima della lettura)
   fuori dalla conversazione: una lettura stretta della decisione 10 del progetto, da confermare.
-- Il modello che legge (qwen3.6 su vLLM, che cede alla voce) e cosa fa il portatile da 8 GB senza
-  OCR (0028).
+- *[fatto il 30/10, passo 4.3: il modello che legge (qwen3.6 su vLLM, che cede alla voce),
+  punti 17–19.]* Resta cosa fa il portatile da 8 GB senza OCR (0028): oggi le pagine restano «da
+  leggere».
 
 ## Alternative considerate
 

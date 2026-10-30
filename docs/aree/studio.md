@@ -13,8 +13,9 @@ schermo personale `POST /api/studio/pagina` prende foto (bordi trovati dal telef
 e ricontrollati dal server, raddrizzate a 1600 px, nitidezza) e PDF (divisi con pypdfium2), dentro
 gli orari, fuori dalla conversazione; le pagine restano «da leggere». La pagina minima del telefono
 si apre da Le mie cose › Studio con lo Studio attivo (in ombra solo per chi amministra, «prova»).
-`studio_modo` spento di serie. Restano la lettura (4.3), gli argomenti dal modello (4.4), il tool, la
-home e la vista aperta (4.5). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
+`studio_modo` spento di serie. Dal 30/10 la **lettura** (4.3, #282): un thread legge le pagine «da
+leggere» con qwen3.6 su vLLM e l'harness del banco, quando la DGX è libera (sezione sotto). Restano
+gli argomenti dal modello (4.4), il tool, la home e la vista aperta (4.5). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Moduli
@@ -24,6 +25,8 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Studio: verifiche, materiali e pagine, argomenti, piano a giorni deterministico, tenuta legata alla data della verifica (dal 29/10, passo 4.1, decisione [0035](../decisioni/0035-studio.md); `studio_modo`, spento di serie) | SQLite (stesso file della memoria: `studio_verifiche`, `studio_materiali`, `studio_pagine`, `studio_argomenti`, `studio_piano`, `studio_giorni`, `studio_misure`; modulo «studio» in `meta_schema`); libreria standard, niente modello | `calliope/studio/dati.py` → `Dati`, `cancella`, `cancella_file`; `calliope/studio/piano.py` → `calcola`, `minuti_liberi`, `descrivi_pagine`, `tappe`, `previsione`; `calliope/studio/servizio.py` → `Studio`, `permesso`, `prepara`, `NonPermesso`, `NonTrovata`; `calliope/conserva.py` → `TABELLE_STUDIO`; prova `prove/prova_studio_piano.py` |
 | Pagine dei materiali: fotocamera e galleria sul telefono, bordi ricontrollati, raddrizzamento, nitidezza, PDF divisi in pagine, file nella cartella dello Studio (dal 29/10, passo 4.2, #281) | Pillow e numpy (niente librerie native nuove), pypdfium2 (extra `archivio`); nel browser JavaScript scritto a mano, niente OpenCV.js | `calliope/studio/pagine.py` → `rileva`, `scegli_bordi`, `plausibili`, `raddrizza`, `nitidezza`, `prepara_foto`, `dividi_pdf`, `dividi_pdf_a_parte`, `scrivi_file`; `calliope/studio/servizio.py` → `Studio.verifica_per_pagine`, `Studio.verifiche_per_pagine`, `Studio.aggiungi_pronte`; `calliope/studio/dati.py` → `cartella_di`, `togli_orfani`; `calliope/schermi/server.py` → `POST /api/studio/pagina`, `POST /api/studio/verifiche`; `calliope/schermi/pagina/bordi.js`, `calliope/schermi/pagina/studio.js`; `calliope/immagini.py` → `apri`; prove `prove/prova_studio_pagine.py`, `prove/prova_studio_pagina_telefono.py` |
 
+| Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
+
 ## Problemi noti
 
 - I bordi e la soglia della nitidezza sono misurati solo sulle foto di fantasia (Pillow): da
@@ -31,6 +34,116 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 - Su un tavolo bianco il rilevatore non trova il fondo e tiene la foto intera (senza avviso).
 - HEIC: solo convertito dal browser del telefono; un HEIC da un'altra strada è rifiutato.
 - Prima di `studio_modo: attivo`: il banco delle 30 foto vere (decisione 0035, punto 16).
+- La lettura non riconosce lo scritto a mano: l'harness non lo dice. «controlla_numeri» scatta con
+  la foto piccola o sfocata o con parole non lette («[?]») e numeri o formule; gli appunti a mano
+  nitidi con una formula sbagliata non lo hanno. Da rivedere col banco dello scritto a mano vero.
+- La lettura vuole un agente su API OpenAI (vLLM): con l'agente su Ollama, o senza agente (il
+  portatile da 8 GB), le pagine restano «da leggere».
+
+## La lettura delle pagine (30/10, issue #282, ramo `issue-282-studio-lettura`)
+
+*Passo 4.3 dell'epic #251 (analisi nella #243), decisione [0035](../decisioni/0035-studio.md) punti
+6 e 17. Harness del banco del 28/10 preso così com'è (`prove/manuali/studio/harness.json`).*
+
+**Il lettore** (`studio/lettura.py`) è un thread come quello dell'archivio, non un lavoro
+dell'agente e senza tool. Prende le pagine «da_leggere» delle verifiche in bozza o aperte, dalla
+verifica più vicina e nell'ordine delle pagine, una alla volta: «da_leggere» → «in_lettura» →
+«letta» o «illeggibile». Dopo un riavvio le pagine rimaste «in_lettura» tornano «da_leggere». Si
+sveglia quando arrivano pagine nuove (`aggiungi_pronte`), altrimenti guarda ogni 5 minuti. Lo crea
+`Studio.avvia_lettura` da `main.py`, col servizio dei lavori.
+
+**L'harness, esatto.** Il modello e l'indirizzo sono quelli dell'agente (`dgx.yaml` o
+`agenti_url`), solo con l'API OpenAI (vLLM); un client suo, non quello dei lavori. Una foto per
+richiesta, JPEG 88 col lato lungo al più 1600; il prompt di sistema e la richiesta con le regole
+e i segni dell'harness; thinking spento, temperatura 0, `presence_penalty` 0 esplicito (prima
+`traduci_corpo` lo toglieva quando era zero: ora la chiave `openai` del corpo passa così com'è),
+`max_tokens` 3500. La prova controlla che le costanti siano quelle di `harness.json` e che ogni
+richiesta al vLLM finto sia quella.
+
+**I controlli del codice**, dai `controlli_del_codice` dell'harness:
+- il pezzo prima del primo «=== PAGINA» uguale alla pagina (≥ 0,8) si toglie, e una pagina scritta
+  due volte di fila (≥ 0,9) diventa una;
+- `finish_reason: length` si rifà una volta; la seconda volta la pagina è «illeggibile», con
+  l'avviso `in_tondo` («non riesco a leggerla, rifalla») e senza testo, mai il troncato;
+- «CAPOVOLTA»: il codice gira l'immagine di 180°, la scrive come file nuovo (`scrivi_file`) al
+  posto del vecchio nella stessa transazione della riga, toglie il vecchio e **rilegge** la pagina
+  girata (una seconda «CAPOVOLTA» non la gira più); avviso `girata`;
+- due «=== PAGINA»: l'immagine si taglia alla piega (la colonna più scura nel terzo centrale, o la
+  metà) e diventano due righe e due file, la seconda subito dopo la prima e le pagine dopo scalano
+  di uno; avviso `divisa`. Due segni con lo stesso numero sono una pagina sola col testo unito
+  (giro vero, sotto). Più di due segni: una riga sola col testo di tutte e l'avviso
+  `piu_pagine` (non si taglia in tre);
+- il numero dal segno con `piano.numero_pagina`; una sigla corta («IV») resta; un numero strano
+  («²», «12; DROP») non si salva e dà l'avviso `numero_strano`;
+- «ISTRUZIONI: sì» → avviso `istruzioni`; il testo resta com'è, un dato;
+- `controlla_numeri` con numeri o formule («5x = 15», «7 · 3 − 3», «x/2») su una foto piccola
+  (avviso `piccola` del 4.2) o sfocata, o con parole non lette («[?]»).
+
+**Ogni file ha la sua riga**: i file nuovi (girata, metà della doppia) si scrivono prima della
+transazione e si tolgono se la riga non c'è più (pagina tolta, verifica cancellata durante la
+lettura: vince la modifica, la lettura si butta). Un file senza riga non si legge mai, e una riga
+con un percorso fuori da `studio_cartella/pagine` diventa «illeggibile» con l'avviso `file`.
+
+**I PDF con il testo vero** non chiedono niente al modello e nemmeno alla guardia: pypdfium2 estrae
+il testo dalla copia del PDF tenuta dal 4.2, in un sottoprocesso con 30 s di tetto (`python -m
+calliope.studio.lettura --testo-pdf`), una volta per materiale; la pagina i del materiale è la
+pagina i del PDF. Sotto i 40 caratteri (un PDF che è un'immagine) si passa all'OCR. Metodo
+`pdf_testo` o `ocr`. *Correzione al 4.2*: un PDF ha sempre il suo materiale; prima, mandato con il
+`materiale` di un giro già cominciato, la sua copia non aveva una riga (sarebbe stata tolta come
+orfana) e i conti delle pagine non tornavano.
+
+**Non disturbare la DGX** (`Guardia`, prima di ogni pagina che va al modello): nessun lavoro
+dell'agente in coda o in corso (`Lavori.attivi` del processo e `in_corso.json` col `.bak` e il pid
+vivo, come la guardia del banco), `vllm:num_requests_running` e `_waiting` a zero su `/metrics`,
+`/is_paused` falso (un vLLM senza `/metrics` non riceve niente). Durante la richiesta il client è
+un `ClienteCedevole` con l'arbitro dei lavori quando la GPU è condivisa (sulla DGX): aspetta la
+voce, si congela nella pausa o chiude lo stream e rifà la pagina. Se durante lo stream parte un
+lavoro dell'agente (`cedi`, controllato a ogni pezzo), lo stream si chiude e la pagina torna «da
+leggere». Un server giù lascia la pagina da leggere; tre errori del server di fila sulla stessa
+pagina la fanno «illeggibile» (`errore`).
+
+**Testo e modello.** Il testo va in `studio_pagine.testo` e `metodo`. Arriva a un modello solo con
+`Studio.testo_per_modello` (per la 4.4 e la 4.5): `None` in ombra, in attivo una busta di
+`provenienza.racchiudi` per pagina («foto» per l'OCR, «allegato» per il PDF, entrambe con l'avviso
+degli annunci) col riferimento «P1 · pagina stampata 112» scritto dal codice.
+
+**Interruttori.** Spento: niente Studio, niente lettore. Ombra e attivo leggono uguale; `studio_lettura:
+false` (nuova, `true` di serie) lascia le pagine da leggere. Nel registro solo id, tempi e avvisi
+(«pagina 12 letta (ocr, 2,4 s, girata, avvisi istruzioni)»), mai il testo.
+
+**L'avanzamento** per la 4.5: `Studio.lettura(chi, verifica)` dà pagine totali, lette, illeggibili,
+in lettura, da leggere, gli avvisi contati e se il lettore aspetta la DGX; con gli stessi permessi
+delle altre letture. `Studio.stato()["lettura"]` ha le misure (lette, illeggibili, richieste,
+rifatte, girate, divise, doppioni tolti, cedute, attese, token, mediana dei secondi).
+
+**Giro vero sulla DGX** (30/10 notte, 00:54–01:08). Le 159 foto di fantasia del banco (rigenerate
+con `studio_immagini.py` e gli stessi font liberi della DGX), lo Studio in un db temporaneo sul
+portatile in ombra, il lettore vero con vLLM della DGX dietro un tunnel SSH e la guardia del
+lettore più `in_corso.json` e il registro dei turni della Calliope vera letti via ssh prima di ogni
+pagina; nessun lavoro dell'agente in corso, la Calliope vera zitta, mai il servizio. Confronto con
+la riga L2 del banco:
+
+| | lettore 4.3 | banco L2 (28/10) |
+|---|---|---|
+| CER medio | **0,0033** | 0,0054 |
+| CER per foto | pulita 0,0004, storta 0,0005, ombra 0,0004, capovolta 0,0005, quadretti 0,0002, doppia 0,0005, **bassa 0,0177** | pulita 0,0004, storta 0,0016, ombra 0,0044, capovolta 0,0016, quadretti 0,0019, doppia 0,0005, bassa 0,0233 |
+| capovolte girate (false) | 26/26 (0) | 26/26 (0 su 133) |
+| doppie divise | 6/6, più una falsa (sotto) | 6/6 |
+| numeri di pagina | 100/132, nessuno sbagliato (i mancanti sono «?») | 111/132 |
+| istruzioni (false) | 18/18 (4 su 141) | 18/18 (5 su 141) |
+| `length`, illeggibili, righe inventate | 0, 0, 0 | 0 uscite rotte |
+| pagine scritte due volte tolte | 10 | 11 |
+| richieste, s/pagina (mediana) | 185 (26 riletture girate), 3,3 s con la rilettura e la guardia via ssh | 2,84 s |
+
+Il CER più basso viene dalla rilettura della pagina girata e dal confronto fatto sulle righe
+salvate. I numeri di pagina persi (quadretti 6/20) sono segni «?»: il modello non li dà, non li
+sbaglia; la differenza col banco a temperatura 0 non si spiega dal codice (stessa immagine, stesso
+corpo) e resta da guardare. `controlla_numeri` è scattato su 13 delle 20 foto basse e su nessun'altra.
+**Un caso vero:** la storia p113 storta è stata scritta in due «=== PAGINA 113 ===» e divisa in due
+righe. Da qui la regola del codice: due segni con lo stesso numero sono una pagina sola, col testo
+unito (prova aggiunta). Una sola attesa: il primo `/metrics` dal tunnel appena aperto.
+
+Prove: `prove/prova_studio_lettura.py` (livello 1, ~5 s, vLLM finto).
 
 ## Le pagine dei materiali: fotocamera, bordi e PDF (29/10, issue #281, ramo `issue-281-studio-pagine`)
 

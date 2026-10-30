@@ -122,6 +122,12 @@ def traduci_corpo(body: dict) -> dict:
                                                   "strict": True}}
     elif fmt == "json":
         req["response_format"] = {"type": "json_object"}
+    # Parametri del server OpenAI passati così come sono (30/10, lettura dello Studio, #282):
+    # l'harness del banco manda `presence_penalty: 0` esplicito, che qui sopra si perderebbe
+    # (si manda solo se diverso da zero)
+    extra = body.get("openai")
+    if isinstance(extra, dict):
+        req.update(extra)
     return req
 
 
