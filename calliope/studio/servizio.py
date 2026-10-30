@@ -1270,7 +1270,7 @@ class Studio:
             return ""
         vid = vista.get("verifica")
         if tipo == "home" or vid is None:
-            return "Sul suo schermo è aperta la home dello Studio."
+            return "Sul suo schermo è aperta la home dello Studio (tool studio)."
         if not isinstance(vid, int) or isinstance(vid, bool):
             return ""
         try:
@@ -1291,9 +1291,12 @@ class Studio:
                 n = P.numero_pagina(p["numero"])
                 cosa = f"la pagina {p['id']}" + (f" (stampata {n})" if n is not None else
                                                  f" (foto {p['ordine']})")
-        return (f"Sul suo schermo è aperta la verifica {v['id']}{di} ({v['materia']}, il "
-                f"{quando.day}/{quando.month}): {cosa}. Il testo delle pagine lo leggi con "
-                "studio_pagina_leggi.")
+        # Il tool e le due «sposta» (#318: con «spostala a domani» il modello cercava negli
+        # appuntamenti): un dato, non un ordine; decide il modello, e chiede se non è chiaro
+        return (f"Sul suo schermo è aperto lo Studio (tool studio): la verifica {v['id']}{di} "
+                f"({v['materia']}, il {quando.day}/{quando.month}), {cosa}. Spostare lo studio "
+                "di oggi è studio salta_oggi, la data della verifica è studio sposta; il testo "
+                "delle pagine lo leggi con studio_pagina_leggi.")
 
     # ── registro e misure ──
     def _chi_registro(self, chi, persona) -> str:

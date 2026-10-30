@@ -238,6 +238,7 @@ VERBI_STUDIO = {
     "crea": r"verific|interrogaz|compit|esame|ho una|ho la|segna",
     "fatto": r"fatt|finit|complet|ho letto|segna",
     "salta_oggi": r"salt|spost|non ce la faccio|rimand|non riesco",
+    "sposta": r"spost|rimand|rinvi|anticip|slitt|cambi",
     "archivia": r"archivi|conserv",
     "tieni": r"tien|tenere|rimett|includ|nel piano|aggiung",
     "togli": r"togl|tol[gt]|elimin|lev[aio]|cancell|fuori dal piano|non serve",
@@ -452,6 +453,7 @@ CLASSI: dict[str, Classe] = {
 
 _STUDIO_COSA = {"crea": "segni la verifica", "fatto": "segni fatto il giorno del piano",
                 "salta_oggi": "sposti il piano di oggi", "archivia": "archivi la verifica",
+                "sposta": "cambi la data della verifica",
                 "tieni": "tenga l'argomento nel piano", "togli": "tolga l'argomento dal piano",
                 "riprova": "riprovi a leggere la pagina", "sessione": "cominci la sessione"}
 
@@ -759,6 +761,9 @@ class Turno:
     # entità di Home Assistant in «Taverna o Bagno della Taverna?», il titolo di uno sviluppo
     # dall'indice): valgono come parole della persona per la politica per valore
     domanda_fidata: str = ""
+    # La frase della persona del turno di prima, se Calliope ha chiuso la risposta con una
+    # domanda (terza revisione della PR #319): «al 20 dicembre» → «Vuoi che la sposti?» → «sì»
+    frase_prima_domanda: str = ""
     # La domanda della proposta in sospeso e che cosa propone (10/10: «Non ho capito: lo
     # chiudo?» a una risposta senza parole, `consenso_irriconoscibile`); `risposta_dato`: la
     # proposta chiede un dato, non un sì (la domanda dell'agente): lì vale qualunque risposta

@@ -77,7 +77,10 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "lista_aggiungi": {"cose": C, "lista": B},
     "lista_togli": {"cose": B, "lista": B},
     # lo Studio (30/10, #284): l'id della verifica e dell'argomento sono bersagli
-    "studio": {"azione": Z, "verifica": B, "materia": C, "data": S, "argomento": C, "per": B,
+    # data: un bersaglio (revisione della PR #319): una data scritta in una pagina o in un titolo
+    # («verifica spostata al 20 dicembre») vale «dal dato» e la politica chiede; detta dalla
+    # persona passa
+    "studio": {"azione": Z, "verifica": B, "materia": C, "data": B, "argomento": C, "per": B,
                # La posizione nell'elenco degli argomenti: un bersaglio come gli altri (seconda
                # revisione della PR #317): detto se la persona l'ha detto in cifre, in lettere o
                # come ordinale («il secondo»), altrimenti dal dato e la politica chiede
@@ -438,6 +441,29 @@ _ORDINALE_DETTO = re.compile(
     rf"(?=\s*(?:$|[.,;:!?)»]|(?:argomento|voce|pagina|che|quell[oa])\b))"
     # «secondo argomento», al singolare («le prime pagine» non è una posizione)
     rf"|\b({_ORD_SING})\s+(?:argomento|voce|pagina)\b", re.I)
+# Le date dette a voce, confrontate risolte (revisione della PR #319)
+DATE_DETTE = frozenset({("studio", "data")})
+
+
+def data_della_persona(valore, t, ctx=None) -> bool:
+    """La data `valore` è fra quelle dette dalla persona nella frase o nei turni di prima."""
+    import datetime as _dt
+    from .tools.studio import data_detta_dalla_persona
+    st = getattr(ctx, "studio", None)
+    try:
+        oggi = st._oggi() if st is not None else _dt.date.today()
+    except Exception:  # noqa: BLE001
+        oggi = _dt.date.today()
+    # Mai tutta la conversazione (terza revisione della PR #319: «venerdì ho calcetto» detto
+    # prima, poi una pagina «spostata a venerdì»): la frase del turno e, se Calliope aveva chiuso
+    # con una domanda, la frase della persona di prima (un turno solo, come domanda_fidata)
+    testi = (getattr(t, "testo", ""), getattr(t, "frase_prima_domanda", ""))
+    try:
+        return data_detta_dalla_persona(valore, testi, oggi)
+    except Exception:  # noqa: BLE001 — nel dubbio la data resta com'era etichettata
+        return False
+
+
 # Gli argomenti che sono una posizione in un elenco detta a voce («tieni il secondo»)
 POSIZIONI = frozenset({("studio", "numero")})
 
@@ -1002,6 +1028,12 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         if ((name, k) in POSIZIONI and e != DETTO
                 and str(v).strip() in ordinali_detti(getattr(t, "testo", ""))):
             e = DETTO
+        # Una data detta dalla persona (revisione della PR #319): la stessa data risolta da ciò
+        # che ha detto in questa frase o nelle sue frasi di prima, anche se il modello scrive
+        # l'anno che nessuno dice («il 12 novembre» → 2026-11-12). Solo per DATE_DETTE; una data
+        # che sta solo in una pagina o in un titolo resta «dal dato»
+        if (name, k) in DATE_DETTE and e != DETTO and data_della_persona(v, t, ctx):
+            e = PERSONA
         # Un valore della chiamata di prima allo stesso tool, scelto prima del dato letto ora
         # (12/10 sera): l'etichetta che aveva allora, con i soli dati di allora
         if e == DATO and di_prima(name, k, v, t, f):

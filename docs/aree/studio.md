@@ -151,6 +151,49 @@ era quello, dimmi «rimettilo»», e «rimettilo» porta a `tieni`. La home ha �
 gli argomenti tolti (non gli uniti) e «Tieni» col tocco. Prove in `prova_valore.py`
 (`prova_ordinali`: i contrari, S10 attraverso `Brain`, «rimettilo», i tolti della home).
 
+**La prova col modello sulla DGX (30/10 sera, issue #318).** Il primo giro di
+`prova_studio_ollama.py` sulla DGX (f6c4882) dava 5 casi verdi e 2 rossi: con la vista aperta
+«spostala a domani» finiva in `appuntamento_aggiungi` («verifica di storia, domani»), e i compiti
+guidati cadevano solo per il criterio (la risposta giusta, «posso farti delle domande per guidarti
+o darti qualche indizio», senza «?»). Correzioni: l'azione `sposta` di `studio` (la data della
+verifica, `Studio.imposta`), la descrizione che dice che verifiche e studio di scuola non sono
+appuntamenti e distingue `salta_oggi` da `sposta`, la riga della vista che nomina lo Studio e le
+due azioni; nella prova tre casi della vista al posto di uno («sposta lo studio di oggi a domani»
+→ `salta_oggi`, «la verifica è stata spostata a venerdì» → `sposta`, «spostala a domani» → Studio o
+una domanda, mai appuntamenti), il criterio dei compiti che accetta la guida senza «?», e la
+risposta stampata quando un caso cade. Sulla DGX, da una cartella in /tmp con i file nuovi e il
+`.venv` della versione installata: **9 casi su 9 a 3/3**.
+
+**Dopo la terza revisione della PR #319 (30/10 sera):** leggere le date da tutta la conversazione
+riapriva B1 («venerdì ho calcetto», poi una pagina «spostata a venerdì» e «ah, allora slitta?»). Ora
+una data vale della persona solo se sta nella frase del turno, o nella sua frase di prima quando
+Calliope aveva chiuso la risposta con una domanda (`Turno.frase_prima_domanda`, un turno solo come
+`domanda_fidata`), e solo se quella frase parla della verifica o della data (verific, interrogaz,
+compit, esame, spost, rimand, anticip, slitt, rinvi, data). Il parser non legge più «10-12»,
+«3.4», «7/10», «1/2 pagina», «il 3 per cento», «il 20 euro», «il 16 anni». **Limite accettato per
+ora**: con una pagina letta, un «sì» da solo alla proposta di Calliope fatta senza che la persona
+dica la data resta senza esecuzione (la data non è detta da lei): da risolvere con una proposta
+vera nella issue #320.
+
+**Dopo la seconda revisione della PR #319 (30/10 sera):** con `data` bersaglio, dopo una pagina
+letta anche le date dette dalla persona chiedevano, perché il modello scrive l'anno che nessuno
+dice. Ora per `studio.data` (`valore.DATE_DETTE`) una data vale della persona se dalle sue frasi
+(questa e quelle di prima) viene la stessa data risolta (`tools/studio.date_dette`: «oggi»,
+«domani», il nome del giorno, «lunedì 16», «il 12 novembre», «20/12», l'anno corrente o il
+prossimo); quelle solo nelle pagine o nei titoli chiedono ancora. Con una materia senza verifica
+`studio` non chiude più il turno con «non la trovo» (il modello può creare quella nominata), e la
+descrizione chiede la data come detta. Sulla DGX, tre giri: **11 casi su 11 almeno 2/3** (l'ultimo
+giro tutti 3/3).
+
+**Dopo la revisione della PR #319 (30/10 sera):** la data di `studio` (`crea` e `sposta`) è un
+bersaglio: una data scritta in una pagina o in un titolo («verifica spostata al 20 dicembre»)
+chiede, una detta dalla persona passa (scenari attraverso `Brain` in `prova_valore.py`); `crea` e
+`sposta` rifiutano una data oltre un anno da oggi; la frase dice «Ho spostato la verifica di
+storia a domenica 20 dicembre»; l'esempio di `salta_oggi` non promette «a domani»; il criterio dei
+compiti guarda soprattutto l'assenza di soluzioni (senza «passo» e «insieme»). Nella prova col
+modello il caso nuovo della pagina che sposta la verifica. Sulla DGX, tre giri: **10 casi su 10 a
+3/3**.
+
 **Dopo la quinta revisione della PR #317 (30/10):** la frase di «tieni»/«togli» torna senza il
 titolo («Fatto: l'argomento 3 è fuori dal piano. Se non era quello, dimmi «rimettilo».»). Il
 titolo viene dalle pagine e `studio` non ha fonte: fuori busta valeva come detto da Calliope (S12:

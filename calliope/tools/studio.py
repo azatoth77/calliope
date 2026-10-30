@@ -35,13 +35,15 @@ import re
 from .spec import ToolContext, ToolSpec, note_rule
 
 FAMILIARI = frozenset({"familiare", "amministra"})
-AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "archivia", "tieni", "togli",
-          "riprova", "sessione")
+AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "sposta", "archivia", "tieni",
+          "togli", "riprova", "sessione")
 LETTURE = frozenset({"stato", "piano", "oggi"})
 # Le azioni che un tocco può chiedere (schermi/tocchi.py): sui dati della persona, reversibili
 DA_TOCCO = frozenset({"fatto", "salta_oggi", "tieni", "togli", "riprova", "sessione"})
 
 NON_CE = "Questa verifica non la trovo."
+# Una verifica oltre un anno da oggi è quasi sempre una data capita male (revisione della PR #319)
+OLTRE_GIORNI = 366
 SPENTO = "Lo Studio qui non è acceso."
 CHI_NO = ("Lo Studio lo apro solo alle persone di casa che riconosco dalla voce: me lo chiedi di "
           "nuovo, con una frase intera?")
@@ -112,6 +114,86 @@ def _data_detta(testo, oggi: datetime.date) -> datetime.date | None:
         if t == g.replace("ì", "i"):
             return oggi + datetime.timedelta(days=(i - oggi.weekday() - 1) % 7 + 1)
     return None
+
+
+_MESI_RX = "|".join(MESI)
+_MATERIE_RX = "matematica|italiano|storia|geografia|scienze|inglese|francese|spagnolo|tedesco|" \
+              "tecnologia|arte|musica|fisica|chimica|latino|filosofia|diritto|economia|informatica"
+_GIORNI_RX = "|".join(g.replace("ì", "[iì]") for g in GIORNI)
+_DATA_TESTO = re.compile(
+    rf"\b(oggi|domani|dopodomani)\b"
+    rf"|\b({_GIORNI_RX})\b(?:\s+(\d{{1,2}})\b)?"
+    # «20/12» (non «10-12» né «3.4»; non «7/10», un voto, né «1/2 pagina», «3/4 esercizi»)
+    rf"|\b(\d{{1,2}})\s*/\s*(\d{{1,2}})(?:\s*/\s*(\d{{2,4}}))?\b"
+    rf"(?!\s*(?:pagin|eserciz|{_MATERIE_RX}))"
+    rf"|\b(\d{{1,2}})(?:\s+(?:di\s+)?({_MESI_RX}))\b"
+    # «il 16» (non «il 3 per cento», «il 3%», «il 20 euro», «il 16 anni»)
+    rf"|\b(?:il|l')\s*(\d{{1,2}})\b"
+    rf"(?!\s*(?:/|-|\.|%|per\s*cento|euro|ann[oi]|(?:di\s+)?(?:{_MESI_RX})))", re.I)
+
+
+def _giorno_mese(giorno: int, mese: int | None, oggi: datetime.date, anno: int | None = None) -> set:
+    """Le date possibili per un giorno (e un mese): quest'anno o il prossimo, mai nel passato;
+    senza il mese, questo mese o il prossimo."""
+    out = set()
+    mesi = [mese] if mese else [oggi.month, oggi.month % 12 + 1]
+    anni = [anno] if anno else [oggi.year, oggi.year + 1]
+    for a in anni:
+        for m in mesi:
+            try:
+                d = datetime.date(a, m, giorno)
+            except ValueError:
+                continue
+            if d >= oggi:
+                out.add(d)
+    return out
+
+
+def date_dette(testo, oggi: datetime.date) -> set:
+    """Le date che una frase detta dalla persona nomina (revisione della PR #319): «oggi»,
+    «domani», «dopodomani», il nome del giorno (il prossimo e quello dopo: «venerdì prossimo»),
+    «lunedì 16», «il 12 novembre», «20/12», «il 16». L'anno non detto vale quest'anno o il
+    prossimo. Si confrontano le date risolte, non le parole."""
+    out = set()
+    t = str(testo or "")
+    for m in _DATA_TESTO.finditer(t):
+        rel, gnome, gnum, d1, m1, a1, d2, mnome, d3 = m.groups()
+        if rel:
+            out.add(oggi + datetime.timedelta(days={"oggi": 0, "domani": 1,
+                                                     "dopodomani": 2}[rel.lower()]))
+        elif gnome:
+            i = [g.replace("ì", "i") for g in GIORNI].index(gnome.lower().replace("ì", "i"))
+            prossimo = oggi + datetime.timedelta(days=(i - oggi.weekday() - 1) % 7 + 1)
+            out |= {prossimo, prossimo + datetime.timedelta(days=7)}
+            if gnum:
+                out |= {d for d in _giorno_mese(int(gnum), None, oggi) if d.weekday() == i}
+        elif d1:
+            anno = int(a1) + (2000 if len(a1) == 2 else 0) if a1 else None
+            if int(m1) == 10 and not a1:
+                continue                      # «7/10» è un voto, non il 7 ottobre
+            if 1 <= int(m1) <= 12:
+                out |= _giorno_mese(int(d1), int(m1), oggi, anno)
+        elif d2:
+            out |= _giorno_mese(int(d2), MESI.index(mnome.lower()) + 1, oggi)
+        elif d3:
+            out |= _giorno_mese(int(d3), None, oggi)
+    return out
+
+
+# Una frase che parla della verifica o della data (terza revisione della PR #319): solo lì una
+# data detta vale per lo Studio («venerdì ho calcetto» no)
+_TEMA_DATA = re.compile(r"verific|interrogaz|compit|esam|spost|rimand|anticip|slitt|rinvi|"
+                        r"\bdata\b", re.I)
+
+
+def data_detta_dalla_persona(valore, testi, oggi: datetime.date) -> bool:
+    """La data del tool (`valore`: AAAA-MM-GG o il nome di un giorno) è una di quelle che la
+    persona ha detto nei `testi`: la frase del turno e, se Calliope aveva chiuso con una domanda,
+    la frase di prima; solo quelle che parlano della verifica o della data."""
+    d = _data_detta(valore, oggi)
+    if d is None:
+        return False
+    return any(d in date_dette(x, oggi) for x in testi if x and _TEMA_DATA.search(x))
 
 
 def _persona(ctx, chi, per) -> tuple[str | None, str | None]:
@@ -197,6 +279,8 @@ def _crea(ctx, svc, chi, materia, data, argomento, per) -> dict:
                              "AAAA-MM-GG o il nome del giorno."}
     if d < svc._oggi():
         return _f("Quella data è già passata: quando è la verifica?", ok=False)
+    if d > svc._oggi() + datetime.timedelta(days=OLTRE_GIORNI):
+        return _f("Quella data è oltre un anno da oggi: quando è la verifica?", ok=False)
     for v in svc.home(chi)["verifiche"]:
         if (v["data"] == d.isoformat() and str(v["materia"]).lower() == str(materia).lower()
                 and str(svc.verifica(chi, v["id"])["persona"]) == str(persona)):
@@ -296,6 +380,25 @@ def _fatto(ctx, svc, chi, v, giorno, fatto: bool = True) -> dict:
 def _salta(ctx, svc, chi, v) -> dict:
     svc.salta_oggi(chi, persona=v["persona"])
     return _f("Va bene, oggi niente: ho spostato le pagine sui giorni che restano.")
+
+
+def _sposta(ctx, svc, chi, v, data) -> dict:
+    """«La verifica è stata spostata a venerdì»: la data nuova della verifica (#318: senza
+    quest'azione il modello la segnava come appuntamento); il piano si ricalcola."""
+    d = _data_detta(data, svc._oggi())
+    if d is None:
+        return {"ok": False, "errore": "manca la data nuova",
+                "cosa_fare": "Chiedi a quando è stata spostata la verifica, poi richiama studio."}
+    if d < svc._oggi():
+        return _f("Quella data è già passata: a quando è spostata?", ok=False)
+    if d > svc._oggi() + datetime.timedelta(days=OLTRE_GIORNI):
+        return _f("Quella data è oltre un anno da oggi: a quando è spostata?", ok=False)
+    try:
+        svc.imposta(chi, v["id"], data=d)
+    except ValueError as e:
+        return _f(f"Non riesco a spostarla: {e}.", ok=False)
+    return _f(f"Ho spostato la verifica di {str(v['materia']).lower()} a {detta(d)} e rifatto il "
+              "piano.", verifica=v["id"])
 
 
 def _archivia(ctx, svc, chi, v) -> dict:
@@ -415,7 +518,15 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _oggi(ctx, svc, chi)
         v = _verifica(svc, ctx, chi, verifica, materia)
         if v is None:
-            return _f(NON_CE if verifica or materia else
+            if materia and not verifica:
+                # Una materia senza verifica (#318, sulla DGX: «giovedì ho anche la verifica di
+                # matematica» → stato con materia, «non la trovo» detto e il turno chiuso): niente
+                # frase pronta, così il modello può creare la verifica che la persona ha nominato
+                return {"ok": False, "errore": f"nessuna verifica di {materia} nello Studio",
+                        "cosa_fare": "Se chi parla sta dicendo che ha una verifica di questa "
+                                     "materia con una data, chiama studio con azione «crea»; "
+                                     "altrimenti dillo in breve."}
+            return _f(NON_CE if verifica else
                       "Non hai verifiche aperte nello Studio. Dimmi quando è la prossima.",
                       ok=False)
         if azione == "stato":
@@ -426,6 +537,8 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _fatto(ctx, svc, chi, v, giorno)
         if azione == "salta_oggi":
             return _salta(ctx, svc, chi, v)
+        if azione == "sposta":
+            return _sposta(ctx, svc, chi, v, data)
         if azione == "archivia":
             return _archivia(ctx, svc, chi, v)
         if azione in ("tieni", "togli"):
@@ -519,11 +632,15 @@ def _pagina_leggi(ctx: ToolContext, pagina: str = "", verifica=None, materia: st
 
 
 DESCRIZIONE = (
-    "Lo Studio: verifiche con una data, pagine fotografate, argomenti e piano a giorni. azione: "
-    "«crea» una verifica («giovedì ho la verifica di storia», con materia, data AAAA-MM-GG o il "
-    "giorno, argomento facoltativo; per = nome del ragazzo se la crea il tutore); «stato» di "
+    "Lo Studio: verifiche con una data, pagine fotografate, argomenti e piano a giorni. Le "
+    "verifiche, le interrogazioni e lo studio di scuola stanno qui, mai negli appuntamenti. azione: "
+    "«crea» una verifica nuova («giovedì ho la verifica di storia», «ho anche la verifica di "
+    "matematica il 12», con materia, data come detta: il nome del giorno («giovedì») "
+    "o AAAA-MM-GG, argomento facoltativo; per = nome del ragazzo se la crea il tutore); «stato» di "
     "cosa parla e a che punto è; «piano»; «oggi» («cosa devo studiare oggi?»); «fatto» il giorno "
-    "di oggi fatto; «salta_oggi» («non ce la faccio oggi»); «archivia»; «tieni» o «togli» un "
+    "di oggi fatto; «salta_oggi» per lo studio di oggi («oggi non ce la faccio», «salta lo studio "
+    "di oggi»: le pagine passano ai giorni che restano); «sposta» la data della verifica («la verifica è stata spostata a "
+    "venerdì», con data); se non è chiaro quale dei due, chiedilo; «archivia»; «tieni» o «togli» un "
     "argomento (numero = la posizione nell'elenco, o titolo); «riprova» una pagina messa da parte; «sessione» con le risposte "
     "a «quanto conosci l'argomento?» (conoscenza 1–5) e «come ti senti oggi?» (umore). verifica: "
     "l'id, se lo sai (dai dati del turno); altrimenti materia.")
@@ -540,8 +657,9 @@ PARAMETRI = {"type": "object", "properties": {
 
 DESCRIZIONE_PAGINA = (
     "Il testo letto di una pagina di una verifica dello Studio («spiegami questa pagina», «cosa "
-    "dice la pagina 114?»): pagina = il numero stampato o P1, P2…, oppure «argomenti» per i "
-    "titoli degli argomenti con il loro id; verifica = l'id (dai dati del turno) o materia.")
+    "dice la pagina 114?», anche gli esercizi per aiutare nei compiti: «aiutami con gli esercizi "
+    "della pagina 116»): pagina = il numero stampato o P1, P2…, oppure «argomenti» per i titoli "
+    "degli argomenti con il loro numero; verifica = l'id (dai dati del turno) o materia.")
 PARAMETRI_PAGINA = {"type": "object", "properties": {
     "pagina": {"type": "string"}, "verifica": {"type": "integer"},
     "materia": {"type": "string"}}, "required": ["pagina"]}

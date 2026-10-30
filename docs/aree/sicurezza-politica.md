@@ -2087,3 +2087,11 @@ cancella e butta); `prova_cassetto_pagina` (un pulsante «elimina» messo a mano
 
 Prove: `prova_studio_tool.py` e `prova_valore.py` (`prova_ordinali`: i contrari, S5b e S5c della
 revisione attraverso `Brain`, la nota della pagina tolta).
+
+**La data dello Studio detta dalla persona (30/10 sera, PR #319).** Per `studio.data`
+(`valore.DATE_DETTE`) una data vale «della persona» se la stessa data risolta sta nella frase del
+turno, o nella frase di prima quando Calliope aveva chiuso con una domanda (un turno solo), e quella
+frase parla della verifica o della data; mai dalle frasi più vecchie (terza revisione: «venerdì ho
+calcetto» detto prima e una pagina «spostata a venerdì» spostavano la verifica). **Limite
+accettato**: con una pagina letta, un «sì» da solo alla proposta di Calliope (la data non detta
+dalla persona) resta senza esecuzione; la proposta vera è nella issue #320.

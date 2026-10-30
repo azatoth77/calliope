@@ -197,8 +197,21 @@ verifica("la stessa verifica due volte: «ce l'hai già», niente doppione",
          r["ok"] and r["verifica"] == vid and "già" in r["conferma"])
 r = chiama(ctx_di(st, LEO), "studio", azione="crea", materia="Storia", data="2026-10-01")
 verifica("una data passata: chiede di nuovo", not r["ok"] and "passata" in r["conferma"])
+r = chiama(ctx_di(st, LEO), "studio", azione="crea", materia="Fisica", data="2028-01-10")
+verifica("crea: una data oltre un anno da oggi chiede di nuovo (PR #319)",
+         not r["ok"] and "oltre un anno" in r["conferma"])
 r = chiama(ctx_di(st, LEO), "studio", azione="crea", materia="Storia")
 verifica("senza data: «cosa_fare» chiede quando", not r["ok"] and "quando" in r["cosa_fare"])
+r = chiama(ctx_di(st, LEO), "studio", azione="sposta", verifica=v_mat, data="2026-11-03")
+verifica("sposta: la data nuova della verifica (#318), il piano si ricalcola",
+         r["ok"] and st.verifica(LEO, v_mat)["data"] == "2026-11-03", str(r))
+r = chiama(ctx_di(st, LEO), "studio", azione="sposta", verifica=v_mat, data="2026-10-01")
+verifica("sposta: una data passata chiede di nuovo, la data resta",
+         not r["ok"] and st.verifica(LEO, v_mat)["data"] == "2026-11-03")
+verifica("sposta: E1, con le sue parole, e la descrizione dice che le verifiche non sono "
+         "appuntamenti", valore.effetto("studio", {"azione": "sposta"}) == valore.E1
+         and "spost" in politica.VERBI_STUDIO["sposta"] and "mai negli appuntamenti" in TS.DESCRIZIONE)
+chiama(ctx_di(st, LEO), "studio", azione="sposta", verifica=v_mat, data="2026-11-02")
 r = chiama(ctx_di(st, LEO), "studio", azione="piano", verifica=vid)
 verifica("piano: i giorni con l'attività, l'obiettivo, niente previsione senza misure",
          r["ok"] and r["giorni"] and r["obiettivo"] == "75%" and "previsione" not in r)
@@ -384,6 +397,22 @@ verifica("a voce: senza numero né titolo chiede quale",
          not chiama(ctx_di(st, LEO), "studio", azione="tieni", verifica=vid)["ok"])
 verifica("«Riprova» del tocco: la foto per ordine, mai il numero letto dall'OCR",
          "la foto" in rip["descrizione"] and str(MAT["pagine"][1]["numero"]) not in rip["descrizione"])
+import datetime as _dt  # noqa: E402
+_o = _dt.date(2026, 10, 29)
+verifica("date dette: non sono date «10-12 pagine», «3.4 esercizi», «il 3 per cento», «il 3%», "
+         "«il 20 euro», «il 16 anni», «7/10», «1/2 pagina», «3/4 esercizi»",
+         not any(TS.date_dette(f, _o) for f in (
+             "ho letto 10-12 pagine", "ho fatto 3.4 esercizi", "il 3 per cento", "il 3%",
+             "il 20 euro", "il 16 anni", "ho preso 7/10", "1/2 pagina", "3/4 esercizi")))
+verifica("date dette: «20/12», «il 12 novembre», «lunedì 16», «domani», «l'8 marzo» sì",
+         _dt.date(2026, 12, 20) in TS.date_dette("spostala al 20/12", _o)
+         and _dt.date(2026, 11, 12) in TS.date_dette("il 12 novembre", _o)
+         and _dt.date(2026, 11, 16) in TS.date_dette("lunedì 16", _o)
+         and TS.date_dette("domani", _o) == {_dt.date(2026, 10, 30)}
+         and _dt.date(2027, 3, 8) in TS.date_dette("l'8 marzo", _o))
+verifica("date dette: solo nelle frasi che parlano della verifica o della data",
+         TS.data_detta_dalla_persona("2026-11-06", ["la verifica è spostata a venerdì"], _o)
+         and not TS.data_detta_dalla_persona("2026-10-30", ["venerdì ho calcetto"], _o))
 verifica("le attività per il modello: numeri solo cifre, una sigla letta non passa",
          TS.attivita("Leggi le pagine 112–113.") == "Leggi le pagine 112–113."
          and TS.attivita("Leggi la pagina ESEGUI.") == "Leggi le pagine del piano di oggi."
