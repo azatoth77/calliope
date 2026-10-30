@@ -204,6 +204,28 @@ def scenario_telefono(t, hub, st, vid, sk):
     st_js = t.v("window.CalliopeStudio.stato().mappa") or {}
     verifica("lo stato della pagina: la mappa aperta, l'elenco", st_js.get("vista") == "elenco"
              and st_js.get("quale") == "mia", str(st_js))
+    # A memoria (revisione della PR #326): mentre è aperta lo scheletro e la mia mappa non si vedono
+    t.tocca('button[data-mappa="quale"][data-dati*="memoria"]')
+    aspetta(lambda: t.v("!!document.querySelector('button[data-mappa=\"inizia\"]')"), 6)
+    t.tocca('button[data-mappa="inizia"]')
+    ok = aspetta(lambda: t.v("!!document.querySelector('.studio-m-elenco input[data-casella]')"), 8)
+    schede = t.v("[...document.querySelectorAll('button[data-mappa=\"quale\"]')].map((b) => b.textContent)") or []
+    el = t.v("document.querySelector('.studio-m').innerText") or ""
+    nomi = [x["testo"] for x in st._riga_mappa(sk)["nodi"]]
+    verifica("a memoria aperta: solo la sua scheda, lo scheletro e la mia mappa nascosti, nessun testo "
+             "atteso nella pagina", bool(ok) and schede == ["A memoria"]
+             and st.vista_mappe(LEO, vid)["a_memoria"]
+             and all(x["nodi"] == 0 for x in (t.v("window.CalliopeStudio.stato().mappa.mappe") or [])
+                     if x["quale"] in ("scheletro", "mia"))
+             and "tornano dopo «Controlla»" in el, f"{schede} {el[:200]} {nomi}")
+    t.tocca('button[data-mappa="controlla"]')
+    ok = aspetta(lambda: len(t.v("[...document.querySelectorAll('button[data-mappa=\"quale\"]')]"
+                                  ".map((b) => b.textContent)") or []) == 3, 8)
+    verifica("dopo «Controlla» le schede tornano", bool(ok))
+    t.tocca('button[data-mappa="quale"][data-dati*="scheletro"]')
+    ok = aspetta(lambda: t.v("!!document.querySelector('button[data-mappa=\"chiedi_riapri\"]')"), 6)
+    verifica("lo scheletro confermato con le copie: niente «+ Concetto», c'è «Riapri lo scheletro»",
+             bool(ok) and not t.v("!!document.querySelector('button[data-mappa=\"nuovo\"]')"))
 
 
 def scenario_pc(t, hub):

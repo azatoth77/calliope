@@ -507,43 +507,54 @@ def _carte_conto(ctx, svc, chi, v) -> dict:
 DOVE_MAPPA = "La mappa la trovi nello Studio sul telefono o sul PC: Le mie cose, Studio, Mappa."
 
 
+def _n(n: int, uno: str, tanti: str) -> str:
+    """«1 giusta», «2 giuste»."""
+    return f"{n} {uno if int(n) == 1 else tanti}"
+
+
 def _mappa_conto(ctx, svc, chi, v) -> dict:
     """«Com'è la mia mappa?», «apri la mappa»: solo conti e stati e dove aprirla, mai il testo dei
     concetti (un dato: viene dalle pagine, dal modello che le ha lette o da chi l'ha scritta;
-    decisione 0035 punto 35). La frase la scrive il codice."""
+    decisione 0035 punto 35). La frase la scrive il codice; al tutore in terza persona col nome
+    del ragazzo (`Studio._nome_per`, come il resoconto)."""
     c = svc._conto_mappa(v)
-    nome = f"la verifica di {str(v['materia']).lower()}"
+    materia = str(v["materia"]).lower()
+    nome = svc._nome_per(chi, v)
+    di = "tua" if nome is None else (f"di {nome}" if nome else "sua")
+    nome_v = f"la verifica di {materia}" + (f" di {nome}" if nome else "")
     s, mia, mem = c["scheletro"], c["mia"], c["memoria"]
     if s is None:
-        frase = (f"Per {nome} la mappa non c'è ancora: puoi scrivere lo scheletro tu, nello "
-                 "Studio.")
+        frase = (f"Per {nome_v} la mappa non c'è ancora: lo scheletro si scrive nello Studio.")
     elif s["stato"] != "confermata":
-        frase = (f"Per {nome} c'è lo scheletro della mappa, con {s['concetti']} concetti: "
-                 "aspetta che lo confermi.")
+        frase = (f"Per {nome_v} c'è lo scheletro della mappa, con "
+                 f"{_n(s['concetti'], 'concetto', 'concetti')}: aspetta la conferma.")
     elif mia is None:
-        frase = (f"Per {nome} lo scheletro è pronto, con {s['concetti']} concetti: puoi fare la "
-                 "tua mappa.")
+        frase = (f"Per {nome_v} lo scheletro è pronto, con "
+                 f"{_n(s['concetti'], 'concetto', 'concetti')}: "
+                 + ("puoi fare la tua mappa." if nome is None else "la sua mappa non c'è ancora."))
     else:
-        frase = (f"Nella tua mappa di {str(v['materia']).lower()} ci sono {mia['concetti']} "
-                 f"concetti")
+        mappa = "Nella tua mappa" if nome is None else (
+            f"Nella mappa di {nome}" if nome else "Nella sua mappa")
+        frase = f"{mappa} di {materia} ci sono {_n(mia['concetti'], 'concetto', 'concetti')}"
         if mia["caselle_vuote"]:
-            frase += (f" e {mia['caselle_vuote']} "
-                      + ("casella da riempire" if mia["caselle_vuote"] == 1 else
-                         "caselle da riempire"))
+            frase += " e " + _n(mia["caselle_vuote"], "casella da riempire",
+                                "caselle da riempire")
         u = mia["ultimo"]
         if u:
-            frase += (f". All'ultimo controllo {u['giusta']} giuste e {u['sbagliata']} "
-                      f"sbagliate" + (f", {u['mancanti']} collegamenti mancanti" if u["mancanti"]
-                                      else ""))
+            frase += (f". All'ultimo controllo {_n(u['giusta'], 'giusta', 'giuste')} e "
+                      f"{_n(u['sbagliata'], 'da rivedere', 'da rivedere')}"
+                      + (", " + _n(u["mancanti"], "collegamento mancante",
+                                   "collegamenti mancanti") if u["mancanti"] else ""))
         else:
             frase += ", non ancora controllata"
         frase += "."
     if mem is not None and mem["ultimo"]:
-        frase += (f" A memoria, l'ultima volta: {mem['ultimo']['giusta']} giuste su "
-                  f"{sum(mem['ultimo'][k] for k in ('giusta', 'sbagliata', 'vuota'))}.")
+        tot = sum(mem["ultimo"][k] for k in ("giusta", "sbagliata", "vuota"))
+        frase += (f" A memoria, l'ultima volta: {_n(mem['ultimo']['giusta'], 'giusta', 'giuste')}"
+                  f" su {tot}.")
     out = _f(f"{frase} {DOVE_MAPPA}", verifica=v["id"])
     # I conti anche per il modello (mai i testi)
-    out["mappa"] = {"scheletro": (s or {}).get("stato"),
+    out["mappa"] = {"scheletro": (s or {}).get("stato"), "di": di,
                     "concetti": (mia or {}).get("concetti") or (s or {}).get("concetti") or 0,
                     "caselle_vuote": (mia or {}).get("caselle_vuote", 0)}
     return out

@@ -1016,6 +1016,8 @@
     b.disabled = !!(mappa && mappa.attesa);
     return b;
   }
+  // «1 giusta», «2 giuste»
+  function nn(n, uno, tanti) { n = Number(n) || 0; return n + " " + (n === 1 ? uno : tanti); }
   function rigaMappa(v) {
     const c = v.mappa || {};
     const s = c.scheletro, mia = c.mia;
@@ -1025,7 +1027,7 @@
     const u = mia.ultimo;
     return "La tua mappa: " + Number(mia.concetti || 0) + " concetti" +
       (Number(mia.caselle_vuote) ? ", " + Number(mia.caselle_vuote) + " caselle da riempire" : "") +
-      (u ? " · all'ultimo controllo " + Number(u.giusta || 0) + " giuste" : " · non ancora controllata") + ".";
+      (u ? " · all'ultimo controllo " + nn(u.giusta, "giusta", "giuste") : " · non ancora controllata") + ".";
   }
   function sezioneMappa(v) {
     const sez = nodo("section", "studio-h-gruppo studio-h-mappa");
@@ -1068,16 +1070,21 @@
     if (!d) { p.append(nodo("p", "pagina-nota", "Un attimo…")); return p; }
     const sch_ = d.scheletro;
     const pronto = sch_ && sch_.stato === "confermata";
+    // Con la mappa a memoria aperta lo scheletro e la mia mappa arrivano senza testi e le loro
+    // schede non si vedono fino a «Controlla» (revisione della PR #326)
+    if (d.a_memoria) mappa.quale = "memoria";
     const schede = nodo("div", "studio-m-schede");
     schede.setAttribute("role", "group");
     schede.setAttribute("aria-label", "Quale mappa");
     for (const k of ["scheletro", "mia", "memoria"]) {
       if (k !== "scheletro" && !d[k] && !(pronto && d.puo && d.puo.mia)) continue;
+      if (d.a_memoria && k !== "memoria") continue;
       const b = tastoMappa(NOMI_M[k], "quale", { quale: k }, "studio-h-chip");
       b.setAttribute("aria-pressed", String(mappa.quale === k));
       schede.append(b);
     }
     p.append(schede);
+    if (d.a_memoria) p.append(nodo("p", "studio-h-nota", "Lo scheletro e la tua mappa tornano dopo «Controlla»."));
     const m = mappaCorrente();
     if (!m) {
       if (mappa.quale === "scheletro") {
@@ -1097,6 +1104,9 @@
     const puo = puoCambiare(m);
     p.append(nodo("p", "studio-h-riga", chiMappa(m)));
     const daDecidere = (m.nodi || []).filter((n) => n.stato === "proposto").length + (m.collegamenti || []).filter((c) => c.stato === "proposto").length;
+    if (m.tipo === "scheletro" && m.stato === "confermata" && d.puo && !d.puo.scheletro) {
+      p.append(nodo("p", "studio-h-riga", "Lo scheletro è confermato e ci sono le mappe fatte da qui: per cambiarlo va riaperto, e la tua mappa e quella a memoria si rifanno dopo la nuova conferma."));
+    }
     if (m.tipo === "scheletro" && daDecidere) p.append(nodo("p", "studio-avviso", daDecidere === 1 ? "Una voce proposta con un avviso: tienila o toglila." : daDecidere + " voci proposte con un avviso: tienile o toglile una per una."));
     // Mappa / Elenco: due viste della stessa cosa
     const viste = nodo("div", "studio-m-schede");
@@ -1131,6 +1141,10 @@
       if (m.tipo !== "scheletro") t.append(tastoMappa("Controlla", "controlla", {}, "studio-h-primo"));
       t.append(tastoMappa("Riordina", "riordina", {}, ""));
     }
+    if (m.tipo === "scheletro" && m.stato === "confermata" && d.puo && d.puo.riapri && !mappa.modulo) {
+      t.append(mappa.riapri ? tastoMappa("Sì, riapri: le mappe ripartono", "riapri", {}, "", "Riapri lo scheletro: la mia mappa e quella a memoria si rifanno dopo la conferma")
+        : tastoMappa("Riapri lo scheletro", "chiedi_riapri", {}, ""));
+    }
     if (m.tipo === "studente" && (m.nodi || []).length) t.append(tastoMappa("Scarica PDF", "pdf", {}, ""));
     if (puo && m.tipo === "memoria") {
       t.append(tastoMappa("Rifai", "rifai", {}, ""));
@@ -1144,10 +1158,11 @@
     if (t.childNodes.length) p.append(t);
     const c = m.conti;
     if (c && m.tipo !== "scheletro") {
-      const r = [Number(c.giusta || 0) + " giuste", Number(c.sbagliata || 0) + " da rivedere", Number(c.vuota || 0) + " da riempire"];
-      if (Number(c.mancanti)) r.push(Number(c.mancanti) + (Number(c.mancanti) === 1 ? " collegamento mancante" : " collegamenti mancanti"));
-      if (Number(c.in_piu)) r.push(Number(c.in_piu) + " collegamenti non nel quadro: controllali sul libro");
-      if (Number(c.verbo_diverso)) r.push(Number(c.verbo_diverso) + " con un verbo diverso");
+      const r = [nn(c.giusta, "giusta", "giuste"), nn(c.sbagliata, "da rivedere", "da rivedere"), nn(c.vuota, "da riempire", "da riempire")];
+      if (Number(c.mancanti)) r.push(nn(c.mancanti, "collegamento mancante", "collegamenti mancanti"));
+      if (Number(c.in_piu)) r.push(nn(c.in_piu, "collegamento non nel quadro: controllalo sul libro", "collegamenti non nel quadro: controllali sul libro"));
+      if (Number(c.verso_diverso)) r.push(nn(c.verso_diverso, "freccia col verso diverso", "frecce col verso diverso"));
+      if (Number(c.verbo_diverso)) r.push(nn(c.verbo_diverso, "con un verbo diverso", "con un verbo diverso"));
       p.append(nodo("p", "studio-h-riga studio-m-conti", "L'ultimo controllo: " + r.join(", ") + "."));
     }
     return p;
@@ -1313,6 +1328,7 @@
       li.append(tx);
       if (c.esito === "in_piu") li.append(nodo("span", "studio-m-esito manca", "non è nel quadro: controlla" + (Array.isArray(c.guarda) && c.guarda.length ? " a " + c.guarda.map(String).join(", ") : " sul libro")));
       if (c.esito === "verbo_diverso") li.append(nodo("span", "studio-m-esito manca", "verbo diverso: controlla"));
+      if (c.esito === "verso_diverso") li.append(nodo("span", "studio-m-esito manca", "verso diverso: da rivedere"));
       if (c.stato === "proposto") li.append(nodo("span", "studio-avviso", "proposto" + ((c.avvisi || []).length ? ": " + c.avvisi.map((x) => AVVISI_M[x] || String(x)).join("; ") : "")));
       if (puo) {
         const t = nodo("span", "studio-h-tasti");
@@ -1440,7 +1456,7 @@
     const m = mappaCorrente();
     mappa.esito = "";
     if (az === "chiudi") { mappa = null; vista({ vista: "home" }); caricaHome(); return; }
-    if (az === "quale") { mappa.quale = dati.quale; mappa.scelto = null; mappa.modulo = null; mappa.ricomincia = false; disegnaHome(); return; }
+    if (az === "quale") { mappa.quale = dati.quale; mappa.scelto = null; mappa.modulo = null; mappa.ricomincia = false; mappa.riapri = false; disegnaHome(); return; }
     if (az === "vista") { mappa.vista = dati.vista; disegnaHome(); return; }
     if (az === "aiuto") { mappa.aiuto = dati.aiuto; disegnaHome(); return; }
     if (az === "nuovo") { mappa.modulo = { tipo: "nodo", testo: "", argomento: null, pagina: null }; disegnaHome(); return; }
@@ -1461,6 +1477,7 @@
     }
     if (az === "annulla") { mappa.modulo = null; disegnaHome(); return; }
     if (az === "ricomincia") { mappa.ricomincia = true; disegnaHome(); return; }
+    if (az === "chiedi_riapri") { mappa.riapri = true; disegnaHome(); return; }
     if (az === "scheletro") { if (await caricaMappa(vid, { azione: "scheletro" })) { mappa.quale = "scheletro"; mappa.modulo = { tipo: "nodo", testo: "", argomento: null, pagina: null }; disegnaHome(); } return; }
     if (az === "inizia") {
       if (await caricaMappa(vid, { azione: "inizia", tipo: dati.tipo, aiuto: mappa.aiuto || undefined })) {
@@ -1501,7 +1518,7 @@
     if (az === "controlla") {
       if (await caricaMappa(vid, { azione: "controlla", mappa: m.id })) {
         const c = mappa.dati.controllo || {};
-        mappa.esito = "Controllata: " + Number(c.giusta || 0) + " giuste, " + Number(c.sbagliata || 0) + " da rivedere, " + Number(c.vuota || 0) + " da riempire.";
+        mappa.esito = "Controllata: " + nn(c.giusta, "giusta", "giuste") + ", " + nn(c.sbagliata, "da rivedere", "da rivedere") + ", " + nn(c.vuota, "da riempire", "da riempire") + ".";
         disegnaHome();
       }
       return;
@@ -1522,6 +1539,15 @@
       if (await caricaMappa(vid, { azione: "conferma", mappa: m.id })) {
         const r = mappa.dati.confermato || {};
         mappa.esito = "Scheletro confermato: " + Number(r.tenuti || 0) + " concetti" + (Number(r.da_decidere) ? "; " + Number(r.da_decidere) + " voci con un avviso restano da decidere." : ".");
+        disegnaHome();
+      }
+      return;
+    }
+    if (az === "riapri") {
+      if (await caricaMappa(vid, { azione: "riapri", mappa: m.id })) {
+        const n = Number((mappa.dati.riaperto || {}).copie_tolte) || 0;
+        mappa.riapri = false;
+        mappa.esito = "Lo scheletro è di nuovo da confermare" + (n ? ": la tua mappa e quella a memoria si rifanno dopo la conferma." : ".");
         disegnaHome();
       }
       return;

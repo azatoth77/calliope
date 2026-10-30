@@ -145,8 +145,9 @@ confermare). Un altro adulto, chi amministra (per una persona che non è sua) e 
 c'è» di una verifica che non c'è. Una verifica fatta o archiviata si guarda e si scarica, non si
 cambia.
 
-**Il testo è un dato** chiunque l'abbia scritto: sullo schermo textContent o testo SVG; **non va mai
-al modello** (nessun tool lo legge); nel registro solo id, conti ed esiti; la vista «mappa» nei dati
+**Il testo è un dato** chiunque l'abbia scritto: sullo schermo textContent o testo SVG; **mai fuori
+busta** (nessun tool legge la mappa; arriva al modello solo come carta fatta con «Fanne carte», in
+busta con `studio_carte`); nel registro solo id, conti ed esiti; la vista «mappa» nei dati
 del turno dice solo verifica e «la mappa concettuale». A voce `studio` azione **`mappa`** (una
 lettura, come `carte`): «com'è la mia mappa?», «apri la mappa» → i conti e gli stati (scheletro da
 confermare o pronto, quanti concetti, caselle da riempire, l'ultimo controllo) e dove aprirla («nello
@@ -166,6 +167,37 @@ controllo, quando, i tentativi già scritti) e `studio_verifiche.mappa_firma`, `
 archiviate), con `--svuota` (`conserva.TABELLE_STUDIO`); le orfane (una corsa con una cancellazione)
 sempre. *Alternative scartate*: tre tabelle (mappe, concetti, collegamenti) per una struttura piccola
 letta e scritta sempre intera; i file nella cartella dello Studio.
+
+**Le correzioni della revisione della PR #326** (stesso ramo, un commit):
+1. **Le corse**: `controlla_mappa`, `carte_dagli_errori`, `rifai_mappa` e `inizia_mappa` leggono e
+   scrivono tutto dentro `dati.lock` (RLock): quattro «Controlla» insieme danno un tentativo per
+   casella, tre «Fanne carte» nessuna carta doppia, quattro «Parti da qui» una mappa sola (prove con
+   i thread).
+2. **Lo scheletro confermato con le copie è in sola lettura** (si poteva riscrivere il concetto atteso
+   e farsi dare «giusto»; il tutore lo cambiava mentre il ragazzo lavorava; un concetto tolto lasciava
+   nella copia concetti né cambiabili né giudicati). **«Riapri lo scheletro»** (persona o tutore, con
+   la conferma in due tocchi) lo riporta a «proposto», toglie la mia mappa e quella a memoria (i
+   tentativi restano) e lo dice; dopo la nuova conferma si rifanno.
+3. **A memoria le risposte non arrivano prima**: mentre la mappa a memoria di chi chiede è aperta,
+   `vista_mappe` manda lo scheletro e la mia mappa senza testi né parole (`a_memoria`, `nascosta`),
+   la pagina ne nasconde le schede fino a «Controlla», e il PDF della mia mappa non esce per lei (il
+   tutore lo scarica).
+4. **Il PDF**: l'elenco va su quante pagine servono, con la testata ripetuta e «pagina x di N», il
+   controllo dello spazio prima di ogni riga (collegamenti compresi); i puntini e le frecce passano
+   dal latin-1 prima di essere misurati (prova al tetto massimo, 30 concetti lunghi, con e senza
+   TrueType).
+5. **`uguale` più stretto**: sbagliata se è un altro concetto dello scheletro o la parola di troppo;
+   una lettera di tolleranza solo da 7 lettere e mai sulla prima; nessuna parola piena in più o in
+   meno (gli articoli e le preposizioni sì). Contrari nelle prove: forma/forza, messa/massa,
+   Marte/Morte, Cartagena/Cartagine, «Mercurio Venere»/«Mercurio», «legame covalente ionico»/«legame
+   ionico», Vordesillas/Tordesillas.
+
+E le minori: la freccia rovesciata col verbo uguale è «verso diverso», da rivedere (prima giusta: il
+`frozenset` non guardava il verso); nella copia al più 6 concetti della persona oltre allo scheletro
+(`mappa.SUOI_MAX`); le frasi al singolare («1 giusta») a voce e sullo schermo, e al tutore in terza
+persona col nome («Nella mappa di Leo…»); le carte di «Fanne carte» hanno una domanda che si dice a
+voce («Mappa di storia: che cosa arriva in «America»?», «Mappa di storia: «Colombo» arriva in che
+cosa?»); la regola scritta per il testo: **mai fuori busta**, al modello solo come carta.
 
 **Le due note della revisione della PR #325**: `correggi_carta` su una carta dell'ombra dà «non c'è»
 come `segna_carta` (prima la rendeva attiva); le carte dell'ombra non contano nel tetto delle 300 per

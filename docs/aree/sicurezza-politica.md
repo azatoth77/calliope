@@ -2098,7 +2098,9 @@ cancella e butta); `prova_cassetto_pagina` (un pulsante «elimina» messo a mano
 *Decisione [0035](../decisioni/0035-studio.md), punto 35; dettagli in [studio](studio.md).*
 
 - **Il testo dei concetti e dei verbi è un dato** (lo scrive la persona, il tutore o, dalla seconda
-  parte, il lettore dalle pagine): **non arriva mai al modello**. Nessun tool lo legge: `studio`
+  parte, il lettore dalle pagine): **mai fuori busta**. Arriva al modello solo se la persona ne fa
+  una carta («Fanne carte»), e allora come carta, in busta con `studio_carte`. Nessun tool legge la
+  mappa: `studio`
   azione `mappa` è una lettura (`sola_lettura` in `politica.CLASSI`, «mapp» fra le parole delle
   letture) che dà solo conti e stati con la frase del codice; un tool fidato che restituisse i testi
   li farebbe valere come provenienza fidata (`Brain._ricorda_fidato`), lo stesso motivo per cui

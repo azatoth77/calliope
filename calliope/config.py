@@ -2196,9 +2196,9 @@ class Config:
     # fase «carte») e la rilettura delle carte in ombra
     studio_carte_genera: str = "ombra"
     # La mappa concettuale (30/10, passo 7, #247, calliope/studio/mappa.py): al più tanti concetti
-    # per mappa (lo scheletro, la mappa dello studente, le ricostruzioni a memoria), e il doppio di
-    # collegamenti. Il progetto del 27/10 dice 10–15 per mappa, lo scheletro 6–10: una mappa più
-    # grande si divide per capitolo (un'altra verifica)
+    # nello scheletro; nella mappa dello studente e a memoria la persona ne aggiunge al più 6 suoi
+    # in più (`mappa.SUOI_MAX`); i collegamenti al più il doppio. Il progetto del 27/10 dice 10–15
+    # per mappa, lo scheletro 6–10: una mappa più grande si divide per capitolo (un'altra verifica)
     studio_mappa_nodi_max: int = 12
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):

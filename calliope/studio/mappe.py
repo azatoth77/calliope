@@ -9,7 +9,17 @@ l'ospite e chi non è riconosciuto mai, con lo stesso «non c'è» di una verifi
 scheletro in stato «ombra» (dalla generazione in ombra) non va mai alla persona.
 
 **Il testo è un dato**: nel registro solo id, conti ed esiti; la vista per lo schermo (`vista_mappe`)
-non contiene mai il testo atteso delle caselle.
+non contiene mai il testo atteso delle caselle, e mentre una mappa a memoria è aperta manda a chi la
+fa lo scheletro e la mia mappa senza i testi. Al modello arriva solo come carta («Fanne carte»), in
+busta.
+
+**Lo scheletro confermato con le copie è in sola lettura** (revisione della PR #326): cambiarlo
+cambierebbe le risposte attese di una mappa già fatta. «Riapri lo scheletro» (la persona o il
+tutore) lo riporta a «proposto» e toglie la mia mappa e quella a memoria (i tentativi restano), che
+si rifanno dopo la nuova conferma.
+
+**Una cosa per volta**: ogni azione legge e scrive dentro `dati.lock` (un RLock), così due
+«Controlla» o due «Parti da qui» insieme non scrivono due volte.
 
 **Tentativi.** «Controlla» scrive un tentativo di tipo «mappa» (fonte «codice») per ogni casella
 riempita, una volta per casella per giro (`tentati`); «Rifai» apre un giro nuovo.
@@ -24,6 +34,8 @@ from . import mappa as M
 from . import padronanza as PD
 
 _UGUALE = object()
+SOLA_LETTURA = ("lo scheletro è confermato e ci sono le mappe fatte da lì: per cambiarlo, «Riapri "
+                "lo scheletro»")
 
 
 def _j(x) -> str:
@@ -54,9 +66,15 @@ class Mappe:
         m["tentati"] = [int(x) for x in _da_j(m["tentati"], []) if str(x).lstrip("-").isdecimal()]
         return m
 
-    def _mappa(self, chi, mid, cambia: bool = False) -> tuple[dict, dict]:
+    def _copie(self, vid) -> list[int]:
+        return [r["id"] for r in self.dati.tutti(
+            "SELECT id FROM studio_mappe WHERE verifica = ? AND tipo IN ('studente', 'memoria')",
+            (int(vid),))]
+
+    def _mappa(self, chi, mid, cambia: bool = False, riapri: bool = False) -> tuple[dict, dict]:
         """(mappa, verifica) se `chi` la può vedere (o, con `cambia`, cambiare); altrimenti
-        NonTrovata, come una verifica che non c'è."""
+        NonTrovata, come una verifica che non c'è. Uno scheletro confermato con le copie non si
+        cambia (ValueError, `SOLA_LETTURA`), tranne che per riaprirlo (`riapri`)."""
         from .servizio import NonTrovata, VerificaChiusa
         m = self._riga_mappa(mid)
         if m is None or m["stato"] == "ombra":
@@ -68,6 +86,9 @@ class Mappe:
                 raise VerificaChiusa()
             if m["tipo"] != M.SCHELETRO and self._chi_puo(chi, v["persona"]) != "proprietario":
                 raise NonTrovata()
+            if (m["tipo"] == M.SCHELETRO and m["stato"] == "confermata" and not riapri
+                    and self._copie(v["id"])):
+                raise ValueError(SOLA_LETTURA)
         return m, v
 
     def _mappe_di(self, vid) -> dict:
@@ -139,8 +160,11 @@ class Mappe:
             m, v = self._mappa(chi, mid, cambia=True)
             nodi = m["nodi"]
             if nodo is None:
-                if len(nodi) >= M.nodi_max(self.cfg):
+                if m["tipo"] == M.SCHELETRO and len(nodi) >= M.nodi_max(self.cfg):
                     raise ValueError(f"al più {M.nodi_max(self.cfg)} concetti")
+                if m["tipo"] != M.SCHELETRO and sum(n.get("da") is None
+                                                   for n in nodi) >= M.SUOI_MAX:
+                    raise ValueError(f"al più {M.SUOI_MAX} concetti tuoi in più")
                 aid = (self._argomento_di(v, argomento) if argomento is not _UGUALE else None)
                 x, y = M.libero(nodi)
                 nid = max([int(n["id"]) for n in nodi] + [0]) + 1
@@ -201,7 +225,7 @@ class Mappe:
                     raise ValueError("un concetto non si collega con sé stesso")
                 if any({int(c["da"]), int(c["a"])} == {int(da), int(a)} for c in coll):
                     raise ValueError("questi due concetti sono già collegati")
-                if len(coll) >= 2 * M.nodi_max(self.cfg):
+                if len(coll) >= 2 * (M.nodi_max(self.cfg) + M.SUOI_MAX):
                     raise ValueError("troppi collegamenti")
                 cid = max([int(c["id"]) for c in coll] + [0]) + 1
                 coll.append({"id": cid, "da": int(da), "a": int(a), "verbo": vb, "pagine": [],
@@ -297,6 +321,30 @@ class Mappe:
                 n["x"], n["y"] = pos.get(int(n["id"]), (n.get("x"), n.get("y")))
             self._salva_mappa(m, nodi=m["nodi"])
 
+    def riapri_scheletro(self, chi, mid) -> dict:
+        """«Riapri lo scheletro» (la persona o il tutore): di nuovo «proposto», da confermare; la
+        mia mappa e quella a memoria fatte da lì vanno via (i tentativi già scritti restano) e si
+        rifanno dopo la nuova conferma. {copie_tolte}."""
+        from .servizio import NonTrovata
+        with self.dati.lock:
+            m, v = self._mappa(chi, mid, cambia=True, riapri=True)
+            if m["tipo"] != M.SCHELETRO or m["stato"] != "confermata":
+                raise NonTrovata()
+            db = self.dati.db
+            try:
+                n = db.execute("DELETE FROM studio_mappe WHERE verifica = ? AND tipo IN "
+                               "('studente', 'memoria')", (v["id"],)).rowcount or 0
+                db.execute("UPDATE studio_mappe SET stato = 'proposta', modificata = ? WHERE id = ?",
+                           (self.adesso().isoformat(timespec="seconds"), m["id"]))
+                db.commit()
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
+        self._registra(f"verifica {v['id']}: scheletro {m['id']} riaperto, {n} mappe tolte "
+                       f"({self._chi_registro(chi, v['persona'])})")
+        return {"copie_tolte": n}
+
     # ── la mia mappa e a memoria ──
     def _deboli(self, v) -> tuple[list, str]:
         """(gli argomenti dal più debole, l'aiuto di serie): dalla padronanza solo se mostrata
@@ -326,26 +374,26 @@ class Mappe:
         """«Parti da qui: fai la tua» (la mia mappa, con il libro) o «Rifai la mappa a memoria»:
         una copia dello scheletro confermato con le caselle vuote. La mia mappa è una sola (se c'è,
         quella); a memoria se ne apre una nuova al posto di quella di prima (i tentativi restano).
-        Solo la persona."""
+        Solo la persona. Tutto dentro il lock: due «Parti da qui» insieme danno una mappa sola."""
         from .servizio import NonTrovata, VerificaChiusa
         if tipo not in (M.STUDENTE, M.MEMORIA):
             raise ValueError("tipo sconosciuto")
-        self._scrivibile()
-        v = self._verifica(chi, vid)
-        if v["stato"] not in ("bozza", "aperta"):
-            raise VerificaChiusa()
-        if self._chi_puo(chi, v["persona"]) != "proprietario":
-            raise NonTrovata()
-        s = self._scheletro_confermato(v["id"])
-        if s is None:
-            raise ValueError("lo scheletro non è confermato")
-        prima = self._mappe_di(v["id"]).get(tipo)
-        if tipo == M.STUDENTE and prima is not None:
-            return prima["id"]
-        giro = int((prima or {}).get("aiuto", {}).get("giro", -1)) + 1 if prima else 0
-        nodi, coll, aiuto_d = self._nuova_copia(v, s, tipo, aiuto, giro)
-        adesso = self.adesso().isoformat(timespec="seconds")
         with self.dati.lock:
+            self._scrivibile()
+            v = self._verifica(chi, vid)
+            if v["stato"] not in ("bozza", "aperta"):
+                raise VerificaChiusa()
+            if self._chi_puo(chi, v["persona"]) != "proprietario":
+                raise NonTrovata()
+            s = self._scheletro_confermato(v["id"])
+            if s is None:
+                raise ValueError("lo scheletro non è confermato")
+            prima = self._mappe_di(v["id"]).get(tipo)
+            if tipo == M.STUDENTE and prima is not None:
+                return prima["id"]
+            giro = int((prima or {}).get("aiuto", {}).get("giro", -1)) + 1 if prima else 0
+            nodi, coll, aiuto_d = self._nuova_copia(v, s, tipo, aiuto, giro)
+            adesso = self.adesso().isoformat(timespec="seconds")
             db = self.dati.db
             try:
                 if tipo == M.MEMORIA:
@@ -369,113 +417,123 @@ class Mappe:
 
     def rifai_mappa(self, chi, mid, aiuto: str | None = None) -> int:
         """«Rifai»: a memoria un giro nuovo (altre caselle); la mia mappa ricomincia dallo
-        scheletro (i concetti suoi vanno via: la pagina lo chiede prima)."""
+        scheletro (i concetti suoi vanno via: la pagina lo chiede prima). Dentro il lock."""
         from .servizio import NonTrovata
-        m, v = self._mappa(chi, mid, cambia=True)
-        if m["tipo"] == M.SCHELETRO:
-            raise NonTrovata()
-        s = self._scheletro_confermato(v["id"])
-        if s is None:
-            raise ValueError("lo scheletro non è confermato")
-        giro = int(m["aiuto"].get("giro", 0)) + 1
-        nodi, coll, aiuto_d = self._nuova_copia(v, s, m["tipo"], aiuto or m["aiuto"].get("livello"),
-                                                giro)
-        self._salva_mappa(m, nodi=nodi, collegamenti=coll, aiuto=aiuto_d, tentati=[],
-                          controllo=None, controllata=None, stato="aperta")
+        with self.dati.lock:
+            m, v = self._mappa(chi, mid, cambia=True)
+            if m["tipo"] == M.SCHELETRO:
+                raise NonTrovata()
+            s = self._scheletro_confermato(v["id"])
+            if s is None:
+                raise ValueError("lo scheletro non è confermato")
+            giro = int(m["aiuto"].get("giro", 0)) + 1
+            nodi, coll, aiuto_d = self._nuova_copia(v, s, m["tipo"],
+                                                    aiuto or m["aiuto"].get("livello"), giro)
+            self._salva_mappa(m, nodi=nodi, collegamenti=coll, aiuto=aiuto_d, tentati=[],
+                              controllo=None, controllata=None, stato="aperta")
         self._registra(f"verifica {v['id']}: mappa {m['id']} ({m['tipo']}) rifatta, giro {giro}")
         return int(m["id"])
 
     def controlla_mappa(self, chi, mid) -> dict:
         """«Controlla»: il confronto deterministico con lo scheletro confermato (`mappa.controlla`),
         salvato con l'ora; un tentativo «mappa» (fonte «codice») per ogni casella riempita, una
-        volta per casella in questo giro. Il risultato coi conti e i tentativi scritti."""
-        m, v = self._mappa(chi, mid, cambia=True)
+        volta per casella in questo giro. Tutto dentro il lock (revisione della PR #326: due
+        «Controlla» insieme scrivevano i tentativi due volte). Il risultato coi conti e i
+        tentativi scritti."""
         from .servizio import NonPermesso, NonTrovata
-        if m["tipo"] == M.SCHELETRO:
-            raise NonTrovata()
-        s = self._scheletro_confermato(v["id"])
-        if s is None:
-            raise ValueError("lo scheletro non è confermato")
-        r = M.controlla(s, m)
-        adesso = self.adesso().isoformat(timespec="seconds")
-        tentati = list(m["tentati"])
-        nel_piano = self._del_piano(v["id"])
-        scritti = 0
-        if self.modo_padronanza != PD.SPENTA:
-            for n in m["nodi"]:
-                nid = int(n["id"])
-                e = M.esito_tentativo(r["caselle"].get(nid), m["tipo"])
-                if e is None or nid in tentati or n.get("argomento") not in nel_piano:
-                    continue
-                try:
-                    self.registra_tentativo(chi, v["id"], n["argomento"], "mappa", e, "codice")
-                    tentati.append(nid)
-                    scritti += 1
-                except (ValueError, NonTrovata, NonPermesso) as ex:
-                    self._registra(f"tentativo della mappa {m['id']} non scritto: "
-                                   f"{type(ex).__name__}")
-        controllo = {"caselle": {str(k): x for k, x in r["caselle"].items()},
-                     "mancanti": r["mancanti"], "in_piu": r["in_piu"],
-                     "verbo_diverso": r["verbo_diverso"], "conti": r["conti"], "quando": adesso}
-        self._salva_mappa(m, controllo=controllo, controllata=adesso, tentati=tentati,
-                          stato="controllata", modificata=adesso)
-        mm = self._misure_mappe()
-        mm["controlli"] += 1
-        mm["tentativi"] += scritti
+        with self.dati.lock:
+            m, v = self._mappa(chi, mid, cambia=True)
+            if m["tipo"] == M.SCHELETRO:
+                raise NonTrovata()
+            s = self._scheletro_confermato(v["id"])
+            if s is None:
+                raise ValueError("lo scheletro non è confermato")
+            r = M.controlla(s, m)
+            adesso = self.adesso().isoformat(timespec="seconds")
+            tentati = list(m["tentati"])
+            nel_piano = self._del_piano(v["id"])
+            scritti = 0
+            if self.modo_padronanza != PD.SPENTA:
+                for n in m["nodi"]:
+                    nid = int(n["id"])
+                    e = M.esito_tentativo(r["caselle"].get(nid), m["tipo"])
+                    if e is None or nid in tentati or n.get("argomento") not in nel_piano:
+                        continue
+                    try:
+                        self.registra_tentativo(chi, v["id"], n["argomento"], "mappa", e, "codice")
+                        tentati.append(nid)
+                        scritti += 1
+                    except (ValueError, NonTrovata, NonPermesso) as ex:
+                        self._registra(f"tentativo della mappa {m['id']} non scritto: "
+                                       f"{type(ex).__name__}")
+            controllo = {"caselle": {str(k): x for k, x in r["caselle"].items()},
+                         "mancanti": r["mancanti"], "in_piu": r["in_piu"],
+                         "verbo_diverso": r["verbo_diverso"],
+                         "verso_diverso": r["verso_diverso"], "conti": r["conti"],
+                         "quando": adesso}
+            self._salva_mappa(m, controllo=controllo, controllata=adesso, tentati=tentati,
+                              stato="controllata", modificata=adesso)
+            mm = self._misure_mappe()
+            mm["controlli"] += 1
+            mm["tentativi"] += scritti
         k = r["conti"]
         self._registra(f"verifica {v['id']}: mappa {m['id']} ({m['tipo']}) controllata: "
                        f"{k['giusta']} giuste, {k['sbagliata']} sbagliate, {k['vuota']} vuote, "
-                       f"{k['mancanti']} collegamenti mancanti, {k['in_piu']} in più; "
-                       f"{scritti} tentativi")
+                       f"{k['mancanti']} collegamenti mancanti, {k['in_piu']} in più, "
+                       f"{k['verso_diverso']} col verso diverso; {scritti} tentativi")
         return {**controllo, "tentativi": scritti}
 
     def carte_dagli_errori(self, chi, mid) -> int:
         """«Fanne carte»: per ogni casella sbagliata o vuota dell'ultimo controllo una carta della
-        persona (domanda dal collegamento dello scheletro, risposta il concetto), con l'argomento e
-        le pagine del concetto; non due volte la stessa domanda. Quante scritte."""
+        persona, con una domanda che si dice a voce («Mappa di storia: che cosa arriva in
+        «America»?», «Mappa di storia: «Colombo» arriva in che cosa?») e il concetto come risposta,
+        con l'argomento e le pagine del concetto; non due volte la stessa domanda. Dentro il lock.
+        Il testo dei concetti entra così nelle carte, che `studio_carte` dà al modello in busta.
+        Quante scritte."""
         from .servizio import NonTrovata
-        m, v = self._mappa(chi, mid, cambia=True)
-        if m["tipo"] == M.SCHELETRO or not m["controllo"]:
-            raise NonTrovata()
-        s = self._scheletro_confermato(v["id"])
-        if s is None:
-            raise ValueError("lo scheletro non è confermato")
-        s_nodi, s_coll = M.tenuti(s)
-        per_id = {int(n["id"]): n for n in s_nodi}
-        esiste = {M.chiave(c["domanda"]) for c in self._carte_di(v)}
-        materia = str(v["materia"]).lower()
-        n_scritte = 0
-        for k, e in (m["controllo"].get("caselle") or {}).items():
-            if e not in (M.SBAGLIATA, M.VUOTA):
-                continue
-            n = next((x for x in m["nodi"] if int(x["id"]) == int(k)), None)
-            atteso = per_id.get(int((n or {}).get("da") or -1))
-            if atteso is None:
-                continue
-            c = next((c for c in s_coll if int(atteso["id"]) in (int(c["da"]), int(c["a"]))),
-                     None)
-            if c is None:
-                continue
-            sorgente = int(c["da"]) == int(atteso["id"])
-            altro = per_id[int(c["a"]) if sorgente else int(c["da"])]
-            # «? → verbo → «altro»» se il concetto da ricordare è da dove parte la freccia,
-            # «altro» → verbo → ?» se è dove arriva
-            dom = M.testo_normale(f"Mappa di {materia}: ? → {c['verbo']} → «{altro['testo']}»"
-                                  if sorgente else
-                                  f"Mappa di {materia}: «{altro['testo']}» → {c['verbo']} → ?",
-                                  240)
-            if M.chiave(dom) in esiste:
-                continue
-            try:
-                self.aggiungi_carta(chi, v["id"], dom, atteso["testo"],
-                                    argomento=atteso.get("argomento"),
-                                    pagine=[p for p in atteso.get("pagine") or ()
-                                            if p in {int(x["id"]) for x in self._pagine_di(v["id"])}])
-            except (ValueError, NonTrovata):
-                continue
-            esiste.add(M.chiave(dom))
-            n_scritte += 1
-        self._misure_mappe()["carte"] += n_scritte
+        with self.dati.lock:
+            m, v = self._mappa(chi, mid, cambia=True)
+            if m["tipo"] == M.SCHELETRO or not m["controllo"]:
+                raise NonTrovata()
+            s = self._scheletro_confermato(v["id"])
+            if s is None:
+                raise ValueError("lo scheletro non è confermato")
+            s_nodi, s_coll = M.tenuti(s)
+            per_id = {int(n["id"]): n for n in s_nodi}
+            esiste = {M.chiave(c["domanda"]) for c in self._carte_di(v)}
+            sue = {int(x["id"]) for x in self._pagine_di(v["id"])}
+            materia = str(v["materia"]).lower()
+            n_scritte = 0
+            for k, e in (m["controllo"].get("caselle") or {}).items():
+                if e not in (M.SBAGLIATA, M.VUOTA):
+                    continue
+                n = next((x for x in m["nodi"] if int(x["id"]) == int(k)), None)
+                atteso = per_id.get(int((n or {}).get("da") or -1))
+                if atteso is None:
+                    continue
+                c = next((c for c in s_coll if int(atteso["id"]) in (int(c["da"]), int(c["a"]))),
+                         None)
+                if c is None:
+                    continue
+                sorgente = int(c["da"]) == int(atteso["id"])
+                altro = per_id[int(c["a"]) if sorgente else int(c["da"])]
+                # Il concetto da ricordare è da dove parte la freccia: «che cosa <verbo> «altro»?»;
+                # è dove arriva: «altro» <verbo> che cosa?»
+                dom = M.testo_normale(f"Mappa di {materia}: che cosa {c['verbo']} «{altro['testo']}»?"
+                                      if sorgente else
+                                      f"Mappa di {materia}: «{altro['testo']}» {c['verbo']} che cosa?",
+                                      240)
+                if M.chiave(dom) in esiste:
+                    continue
+                try:
+                    self.aggiungi_carta(chi, v["id"], dom, atteso["testo"],
+                                        argomento=atteso.get("argomento"),
+                                        pagine=[p for p in atteso.get("pagine") or () if p in sue])
+                except (ValueError, NonTrovata):
+                    continue
+                esiste.add(M.chiave(dom))
+                n_scritte += 1
+            self._misure_mappe()["carte"] += n_scritte
         return n_scritte
 
     # ── per la home, la voce e lo schermo ──
@@ -492,8 +550,10 @@ class Mappe:
                     "caselle_vuote": sum(bool(n.get("casella")) and not str(n.get("testo") or "")
                                          .strip() for n in m["nodi"]),
                     "controllata": m["controllata"],
+                    "aperta": m["stato"] == "aperta",
                     "ultimo": ({x: int(k.get(x) or 0) for x in ("giusta", "sbagliata", "vuota",
-                                                                "mancanti", "in_piu")}
+                                                                "mancanti", "in_piu",
+                                                                "verso_diverso")}
                                if k else None)}
         return {"scheletro": ({"stato": s["stato"], "origine": s["origine"],
                                "concetti": len(M.tenuti(s)[0]),
@@ -506,8 +566,10 @@ class Mappe:
         """Le mappe di una verifica per lo schermo (`/api/studio/mappa`): lo scheletro (non
         dell'ombra), la mia mappa e l'ultima a memoria, coi testi (un dato: la pagina li scrive
         solo con textContent), le pagine col numero stampato o «foto n», gli esiti dell'ultimo
-        controllo; **mai il testo atteso delle caselle** (sta solo nello scheletro, che la pagina
-        mostra solo se la persona lo apre)."""
+        controllo; **mai il testo atteso delle caselle**. Mentre la mappa a memoria di chi chiede
+        è aperta (non ancora controllata), lo scheletro e la mia mappa arrivano **senza i testi**
+        dei concetti e senza le parole (`nascosta`), e la pagina ne nasconde le schede: le risposte
+        non arrivano alla pagina prima di «Controlla» (revisione della PR #326)."""
         from . import piano as P
         v = self._verifica(chi, vid)
         ruolo = self._chi_puo(chi, v["persona"])
@@ -516,12 +578,22 @@ class Mappe:
             n = P.numero_leggibile(p["numero"])
             pagine[int(p["id"])] = f"p. {n}" if n else f"foto {p['ordine']}"
 
-        def per_schermo(m):
+        mm = self._mappe_di(v["id"])
+        mem = mm.get(M.MEMORIA)
+        a_memoria = bool(ruolo == "proprietario" and mem is not None and mem["stato"] == "aperta")
+
+        def per_schermo(m, senza_testi=False):
             if m is None:
                 return None
+            if senza_testi:
+                return {"id": m["id"], "tipo": m["tipo"], "stato": m["stato"],
+                        "origine": m["origine"], "nascosta": True, "parole": [], "nodi": [],
+                        "collegamenti": [], "conti": None, "controllata": m["controllata"],
+                        "modificata": m["modificata"], "aiuto": None}
             ctrl = m["controllo"] or {}
             esiti = ctrl.get("caselle") or {}
             verbo = set(ctrl.get("verbo_diverso") or ())
+            verso = set(ctrl.get("verso_diverso") or ())
             in_piu = {int(x["collegamento"]): x for x in ctrl.get("in_piu") or ()}
             mancanti = {}
             for x in ctrl.get("mancanti") or ():
@@ -548,28 +620,33 @@ class Mappe:
                                       "stato": c.get("stato", "tenuto"),
                                       "avvisi": [x for x in c.get("avvisi") or ()
                                                  if isinstance(x, str)],
-                                      "esito": ("verbo_diverso" if int(c["id"]) in verbo else
+                                      "esito": ("verso_diverso" if int(c["id"]) in verso else
+                                                "verbo_diverso" if int(c["id"]) in verbo else
                                                 "in_piu" if int(c["id"]) in in_piu else None),
                                       "guarda": (nomi(in_piu[int(c["id"])]["pagine"])
                                                  if int(c["id"]) in in_piu else None)}
                                      for c in m["collegamenti"]]}
-        mm = self._mappe_di(v["id"])
         _d, aiuto = self._deboli(v)
         nome = getattr(self._profilo(v["persona"]), "name", None) if ruolo == "tutore" else None
         return {"verifica": {"id": v["id"], "materia": v["materia"], "data": v["data"],
                              "stato": v["stato"], "di": nome},
-                "scheletro": per_schermo(mm.get(M.SCHELETRO)),
-                "mia": per_schermo(mm.get(M.STUDENTE)),
-                "memoria": per_schermo(mm.get(M.MEMORIA)),
+                "scheletro": per_schermo(mm.get(M.SCHELETRO), a_memoria),
+                "mia": per_schermo(mm.get(M.STUDENTE), a_memoria),
+                "memoria": per_schermo(mem),
+                "a_memoria": a_memoria,
                 "argomenti": [{"id": a["id"], "numero": i, "titolo": a["titolo"]}
                               for i, a in enumerate(self.argomenti(chi, vid), 1)
                               if a["stato"] in D.ARGOMENTI_DEL_PIANO],
                 "pagine": [{"id": k, "nome": x} for k, x in pagine.items()],
                 "aiuto": aiuto, "aiuti": dict(M.AIUTI),
-                "puo": {"scheletro": v["stato"] in ("bozza", "aperta"),
+                "puo": {"scheletro": v["stato"] in ("bozza", "aperta") and not (
+                            (mm.get(M.SCHELETRO) or {}).get("stato") == "confermata"
+                            and (mm.get(M.STUDENTE) or mem)),
+                        "riapri": v["stato"] in ("bozza", "aperta")
+                        and (mm.get(M.SCHELETRO) or {}).get("stato") == "confermata",
                         "mia": ruolo == "proprietario" and v["stato"] in ("bozza", "aperta")},
-                "massimi": {"concetti": M.nodi_max(self.cfg),
-                            "collegamenti": 2 * M.nodi_max(self.cfg),
+                "massimi": {"concetti": M.nodi_max(self.cfg), "suoi": M.SUOI_MAX,
+                            "collegamenti": 2 * (M.nodi_max(self.cfg) + M.SUOI_MAX),
                             "testo": M.NODO_MAX, "verbo": M.VERBO_MAX},
                 "prova": not self.per_schermi()}
 
@@ -580,9 +657,15 @@ class Mappe:
         from . import mappa_pdf
         from .servizio import NonTrovata
         v = self._verifica(chi, vid)
-        mia = self._mappe_di(v["id"]).get(M.STUDENTE)
+        mm = self._mappe_di(v["id"])
+        mia = mm.get(M.STUDENTE)
         if mia is None or not mia["nodi"]:
             raise NonTrovata()
+        mem = mm.get(M.MEMORIA)
+        if (getattr(chi, "id", None) == v["persona"] and mem is not None
+                and mem["stato"] == "aperta"):
+            # Le risposte della mappa a memoria aperta non escono nemmeno dal PDF
+            raise ValueError("prima finisci la mappa a memoria: «Controlla»")
         from . import piano as P
         prof = chi if getattr(chi, "id", None) == v["persona"] else self._profilo(v["persona"])
         nome = str(getattr(prof, "name", "") or "")

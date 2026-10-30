@@ -396,13 +396,25 @@ dell'eco della stanza.
     (con il libro) e **a memoria** sono copie dello scheletro confermato con le caselle vuote (2, 3 o
     6; con la padronanza mostrata sugli argomenti più deboli): il testo atteso non va mai alla pagina.
     **Il controllo** è deterministico (`studio/mappa.py`): la casella contro il concetto (forma, non
-    significato), i collegamenti mancanti (detti con un capo solo e le pagine), quelli fuori dal
-    quadro (da controllare sul libro), il verbo diverso; i concetti propri non si giudicano. Ogni
+    significato: uguale, o le stesse parole piene con una lettera di tolleranza solo da 7 lettere e
+    mai sulla prima; un altro concetto dello scheletro o la parola di troppo non valgono mai), i
+    collegamenti mancanti (detti con un capo solo e le pagine), quelli fuori dal quadro (da
+    controllare sul libro), il verso rovesciato e il verbo diverso; i concetti propri non si
+    giudicano. Ogni
     casella riempita al primo controllo del giro è un tentativo «mappa» con la fonte «codice» (con il
     libro «indizio», a memoria «giusto»). **Il PDF** è della sola mappa dello studente, un formato
-    solo (A4 orizzontale e l'elenco), con fpdf2. **Il testo è un dato** chiunque l'abbia scritto:
-    textContent e testo SVG, nessun tool lo legge, mai nelle frasi pronte, nel registro, negli eventi
-    o nei dati del turno; a voce `studio` azione `mappa`, una lettura con i soli conti e dove aprirla.
+    solo (A4 orizzontale e l'elenco su quante pagine servono), con fpdf2. **Il testo è un dato**
+    chiunque l'abbia scritto: **mai fuori busta**. textContent e testo SVG, nessun tool legge la
+    mappa, mai nelle frasi pronte, nel registro, negli eventi o nei dati del turno; a voce `studio`
+    azione `mappa`, una lettura con i soli conti e dove aprirla. Il testo di un concetto arriva al
+    modello solo se la persona ne fa una carta («Fanne carte», una domanda che si dice a voce), e
+    allora come carta, in busta (`studio_carte`, punto 33). **Lo scheletro confermato con le copie è
+    in sola lettura**: cambiarlo cambierebbe le risposte attese di una mappa già fatta; «Riapri lo
+    scheletro» (la persona o il tutore) lo riporta a proposto e toglie le copie, che si rifanno.
+    **Mentre una mappa a memoria è aperta** chi la fa riceve lo scheletro e la sua mappa senza testi
+    (e senza il PDF) fino a «Controlla». Al più `studio_mappa_nodi_max` concetti nello scheletro e 6
+    della persona in più nella copia. Ogni azione legge e scrive dentro il lock dei dati (revisione
+    della PR #326).
     **Chi**: lo scheletro la persona e il tutore; la mia mappa e a memoria solo la persona (il tutore
     le vede e scarica il PDF; scelta prudente, da confermare). Sullo schermo `POST /api/studio/mappa`,
     fuori dalla conversazione come le carte, con la vista a elenco equivalente alla mappa e niente che

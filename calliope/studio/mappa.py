@@ -10,16 +10,19 @@ scheletro confermato con alcune caselle vuote, che dicono la pagina dove cercare
 mettere più una di troppo; la persona aggiunge concetti e collegamenti suoi. (3) **A memoria**: la
 stessa copia senza pagine. (4) Il **PDF** della mia mappa (`mappa_pdf.py`), mai dello scheletro.
 
-**Il testo è un dato** chiunque l'abbia scritto: sullo schermo solo textContent o testo SVG, mai al
-modello (nessun tool lo legge; `studio` azione `mappa` dà solo conti), mai nelle frasi pronte, nel
-registro o negli eventi.
+**Il testo è un dato** chiunque l'abbia scritto: sullo schermo solo textContent o testo SVG; **mai
+fuori busta**. Nessun tool legge la mappa (`studio` azione `mappa` dà solo conti); il testo di un
+concetto arriva al modello solo se la persona ne fa una carta («Fanne carte»), e allora come carta, in
+busta (`studio_carte`, fonte «foto», fuori dalla storia a risposta finita). Mai nelle frasi pronte,
+nel registro o negli eventi.
 
 **Il controllo** (`controlla`) confronta la mappa della persona con lo scheletro confermato, mai col
 giudizio del modello: per ogni casella la parola messa contro il concetto dello scheletro (`uguale`);
 i collegamenti dello scheletro che la persona ha tolto sono **mancanti** (con le pagine dove
 guardare, senza dire con quale concetto), quelli nuovi fra due concetti dello scheletro che lo
 scheletro non ha sono **in più** (da controllare sul libro, non un errore), un verbo cambiato è
-«verbo diverso»; i collegamenti con i concetti propri della persona non si giudicano.
+«verbo diverso», una freccia rovesciata «verso diverso» (da rivedere: il verso conta); i
+collegamenti con i concetti propri della persona non si giudicano.
 
 Un concetto: {id, testo, pagine (id), argomento (id o None), autore («persona», «tutore»,
 «modello», «scheletro» per la copia), stato («tenuto», «proposto»: solo nello scheletro), avvisi,
@@ -48,6 +51,16 @@ STATI_SCHELETRO = ("proposta", "confermata", "ombra")
 STATI_STUDENTE = ("aperta", "controllata")
 # Gli esiti di una casella
 GIUSTA, SBAGLIATA, VUOTA = "giusta", "sbagliata", "vuota"
+# Nella copia (la mia mappa, a memoria) la persona aggiunge al più tanti concetti suoi, oltre a
+# quelli dello scheletro (`studio_mappa_nodi_max` vale per lo scheletro)
+SUOI_MAX = 6
+# Le parole vuote che una casella può avere in più o in meno (articoli, preposizioni, «e»)
+VUOTE = frozenset("""il lo la i gli le l un uno una un di a da in con su per tra fra del dello della
+dei degli delle al allo alla ai agli alle dal dallo dalla dai dagli dalle nel nello nella nei negli
+nelle sul sullo sulla sui sugli sulle col coi e ed d""".split())
+# La tolleranza di una lettera vale solo per le parole lunghe (fino a 6 lettere una lettera cambia la
+# parola: forma/forza, messa/massa, Marte/Morte)
+STORPIATA_DA = 7
 
 _CONTROLLO = re.compile(r"[\x00-\x1f\x7f  -‏ - ⁦-⁩]")
 
@@ -77,21 +90,47 @@ def chiave(testo) -> str:
     return " ".join(re.findall(r"[a-z0-9]+", t))
 
 
-def uguale(atteso, dato) -> bool:
-    """La parola messa in una casella vale il concetto dello scheletro: uguale senza maiuscole,
-    accenti e punteggiatura, oppure con le stesse parole significative (uguali o storpiate di una
-    lettera, `provenienza.vicina`) e al più una in più. Forma, non significato: un sinonimo non vale
-    (il controllo lo dice e la persona guarda la pagina)."""
-    from ..provenienza import parole, vicina
+def _piene(t: str) -> list[str]:
+    return [w for w in chiave(t).split() if w not in VUOTE]
+
+
+def _storpiata(a: str, d: str) -> bool:
+    """Una lettera di differenza (cambiata, in più o in meno), solo fra parole di lettere di almeno
+    `STORPIATA_DA` lettere e mai sulla prima."""
+    from ..provenienza import _distanza
+    if a == d:
+        return True
+    if (min(len(a), len(d)) < STORPIATA_DA or not a.isalpha() or not d.isalpha()
+            or a[0] != d[0]):
+        return False
+    return _distanza(a, d, 1) <= 1
+
+
+def uguale(atteso, dato, altri=()) -> bool:
+    """La parola messa in una casella vale il concetto dello scheletro. Forma, non significato (un
+    sinonimo non vale: il controllo lo dice e la persona guarda la pagina):
+    - uguale senza maiuscole, accenti e punteggiatura: giusta;
+    - uguale a un **altro** concetto dello scheletro o alla parola di troppo (`altri`): sbagliata;
+    - altrimenti le stesse parole piene (senza articoli e preposizioni, che possono mancare o essere
+      in più), nessuna in più né in meno, ognuna uguale o storpiata di una lettera solo se lunga
+      almeno `STORPIATA_DA` lettere e mai sulla prima."""
     a, d = chiave(atteso), chiave(dato)
     if not d:
         return False
     if a == d:
         return True
-    pa, pd = parole(atteso), parole(dato)
-    if not pa or len(pd) > len(pa) + 1:
+    if d in {chiave(x) for x in altri or ()} - {a}:
         return False
-    return all(w in pd or vicina(w, pd) for w in pa)
+    pa, pd = _piene(atteso), _piene(dato)
+    if not pa or len(pa) != len(pd):
+        return False
+    resto = list(pd)
+    for w in pa:
+        k = next((i for i, x in enumerate(resto) if _storpiata(w, x)), None)
+        if k is None:
+            return False
+        resto.pop(k)
+    return True
 
 
 def verbo_simile(a, b) -> bool:
@@ -269,8 +308,10 @@ def parole_da_mettere(attese: list[str], altre: list[str]) -> list[str]:
 def copia(scheletro: dict, caselle: list[int], con_pagine: bool) -> tuple[list[dict], list[dict]]:
     """La copia dello scheletro confermato per la persona: i concetti tenuti (le caselle vuote,
     `casella`, col testo vuoto e, con il libro, le pagine dove cercare) e i collegamenti tenuti.
-    Il testo atteso delle caselle **non** è nella copia: lo tiene lo scheletro, e la pagina non lo
-    riceve."""
+    Il testo atteso delle caselle **non** è nella copia: lo tiene lo scheletro. La pagina lo
+    riceverebbe con lo scheletro e con la mia mappa: per questo, mentre una mappa a memoria è
+    aperta, `mappe.vista_mappe` manda a chi la fa lo scheletro e la mia mappa **senza i testi**, e la
+    pagina nasconde le loro schede fino a «Controlla»."""
     nodi, coll = tenuti(scheletro)
     vuote = set(int(x) for x in caselle)
     out_n = []
@@ -299,6 +340,9 @@ def controlla(scheletro: dict, mappa: dict) -> dict:
     scheletro con `da`; quelli senza (propri della persona) e i loro collegamenti non si giudicano."""
     s_nodi, s_coll = tenuti(scheletro)
     s_per_id = {int(n["id"]): n for n in s_nodi}
+    # Le parole che non valgono una casella anche se scritte bene: gli altri concetti e le parole da
+    # mettere (la parola di troppo compresa)
+    tutte = [n["testo"] for n in s_nodi] + list((mappa.get("aiuto") or {}).get("parole") or ())
     nodi = list(mappa.get("nodi") or ())
     # il concetto dello scheletro → il concetto della persona
     mio = {int(n["da"]): int(n["id"]) for n in nodi
@@ -311,11 +355,12 @@ def controlla(scheletro: dict, mappa: dict) -> dict:
             continue
         atteso = s_per_id[int(n["da"])]["testo"]
         t = str(n.get("testo") or "").strip()
-        caselle[int(n["id"])] = VUOTA if not t else GIUSTA if uguale(atteso, t) else SBAGLIATA
+        caselle[int(n["id"])] = (VUOTA if not t else GIUSTA if uguale(atteso, t, tutte)
+                                 else SBAGLIATA)
     s_coppie = {_coppia(c["da"], c["a"]): c for c in s_coll}
     mie_coppie = {}
     tuoi = 0
-    in_piu, verbo_diverso = [], []
+    in_piu, verbo_diverso, verso_diverso = [], [], []
     for c in mappa.get("collegamenti") or ():
         a, b = int(c["da"]), int(c["a"])
         if a not in da_di or b not in da_di:
@@ -329,6 +374,9 @@ def controlla(scheletro: dict, mappa: dict) -> dict:
             pag = list(dict.fromkeys(list(s_per_id[da_di[a]].get("pagine") or ())
                                      + list(s_per_id[da_di[b]].get("pagine") or ())))
             in_piu.append({"collegamento": int(c["id"]), "pagine": pag})
+        elif (int(sc["da"]), int(sc["a"])) != (da_di[a], da_di[b]):
+            # La freccia rovesciata: il verso conta («Colombo scopre l'America», non il contrario)
+            verso_diverso.append(int(c["id"]))
         elif not verbo_simile(sc.get("verbo"), c.get("verbo")):
             verbo_diverso.append(int(c["id"]))
     mancanti = []
@@ -346,9 +394,11 @@ def controlla(scheletro: dict, mappa: dict) -> dict:
              SBAGLIATA: sum(v == SBAGLIATA for v in caselle.values()),
              VUOTA: sum(v == VUOTA for v in caselle.values()),
              "mancanti": len(mancanti), "in_piu": len(in_piu),
-             "verbo_diverso": len(verbo_diverso), "tuoi": tuoi}
+             "verbo_diverso": len(verbo_diverso), "verso_diverso": len(verso_diverso),
+             "tuoi": tuoi}
     return {"caselle": caselle, "mancanti": mancanti, "in_piu": in_piu,
-            "verbo_diverso": verbo_diverso, "tuoi": tuoi, "conti": conti}
+            "verbo_diverso": verbo_diverso, "verso_diverso": verso_diverso, "tuoi": tuoi,
+            "conti": conti}
 
 
 def esito_tentativo(esito_casella: str, tipo: str) -> str | None:

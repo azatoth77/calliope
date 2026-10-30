@@ -165,9 +165,18 @@ verifica("la forma: una riga, senza caratteri di controllo né di direzione, al 
 verifica("uguale: maiuscole, accenti, punteggiatura e una lettera storpiata",
          M.uguale("Cristoforo Colombo", "cristoforo colombo.")
          and M.uguale("Il trattato di Tordesillas", "trattato di Tordesilas")
-         and M.uguale("Perù", "peru"))
+         and M.uguale("Perù", "peru") and M.uguale("America", "l'America")
+         and M.uguale("Il Portogallo", "Portogallo"))
+verifica("uguale: un altro concetto dello scheletro o la parola di troppo non valgono, anche "
+         "vicini", not M.uguale("Colombiano", "Colombiani", ["Colombiani", "America"])
+         and M.uguale("Colombiano", "Colombiana", ["America"]))
 for a, d in (("America", "Nuovo Mondo"), ("Cristoforo Colombo", "Amerigo Vespucci"),
-             ("Magellano", "Magellano Colombo Cortés Pizarro"), ("America", "")):
+             ("Magellano", "Magellano Colombo Cortés Pizarro"), ("America", ""),
+             # La revisione della PR #326: una lettera cambia le parole corte, la prima lettera
+             # conta, le parole piene in più non valgono
+             ("forma", "forza"), ("messa", "massa"), ("Marte", "Morte"),
+             ("Cartagine", "Cartagena"), ("Mercurio", "Mercurio Venere"),
+             ("legame ionico", "legame covalente ionico"), ("Tordesillas", "Vordesillas")):
     verifica(f"uguale, contrario: «{d}» non vale «{a}» (forma, non significato)",
              not M.uguale(a, d))
 verifica("verbo_simile: uguale o metà delle parole; «è» solo uguale",
@@ -215,6 +224,7 @@ mia["collegamenti"] = [c for c in mia["collegamenti"] if c["id"] != 3]    # 1→
 mia["collegamenti"].append({"id": 7, "da": 2, "a": 4, "verbo": "porta"})  # non nel quadro
 mia["collegamenti"].append({"id": 8, "da": 9, "a": 1, "verbo": "anche"})  # suo: non si giudica
 mia["collegamenti"][1]["verbo"] = "scopre"                                # verbo diverso
+mia["collegamenti"][0].update(da=2, a=1)                                    # 1→2 rovesciata
 r = M.controlla(sk, mia)
 verifica("il controllo: giusta, sbagliata; il mancante con un capo solo e le pagine",
          r["caselle"] == {2: M.GIUSTA, 3: M.SBAGLIATA}
@@ -223,6 +233,8 @@ verifica("il controllo: il collegamento nuovo fra due concetti del quadro è «i
          "pagine, il verbo cambiato «verbo diverso», quello di un concetto proprio non si giudica",
          r["in_piu"] == [{"collegamento": 7, "pagine": [12, 14]}]
          and r["verbo_diverso"] == [2] and r["tuoi"] == 1, str(r))
+verifica("il controllo: la freccia rovesciata col verbo uguale è «verso diverso», mai giusta",
+         r["verso_diverso"] == [1] and r["conti"]["verso_diverso"] == 1, str(r))
 mia["nodi"][2]["testo"] = ""
 verifica("una casella vuota è «vuota», e non dà un tentativo",
          M.controlla(sk, mia)["caselle"][3] == M.VUOTA
@@ -359,11 +371,14 @@ verifica("«Sposta»: dentro la mappa (0,05–0,95)", next(
 
 # ═══════════════════════════ 4. permessi ═══════════════════════════
 print("— permessi")
-verifica("il tutore cambia lo scheletro del minore",
-         isinstance(st.nodo_mappa(ANDREA, mid, "Vasco da Gama", argomento=aids[1]), int))
+verifica("lo scheletro confermato con le copie non si cambia, nemmeno dal tutore",
+         solleva(lambda: st.nodo_mappa(ANDREA, mid, "Vasco da Gama", argomento=aids[1]),
+                 ValueError)
+         and solleva(lambda: st.togli_nodo(LEO, mid, n["America"]), ValueError))
 verifica("il tutore vede la mappa di Leo ma non la cambia",
          st.vista_mappe(ANDREA, vid)["mia"]["id"] == m2
-         and st.vista_mappe(ANDREA, vid)["puo"] == {"scheletro": True, "mia": False}
+         and st.vista_mappe(ANDREA, vid)["puo"] == {"scheletro": False, "riapri": True,
+                                                    "mia": False}
          and solleva(lambda: st.riempi(ANDREA, m2, sbagliata["id"], "x"), S.NonTrovata)
          and solleva(lambda: st.controlla_mappa(ANDREA, m2), S.NonTrovata)
          and solleva(lambda: st.inizia_mappa(ANDREA, vid, "memoria"), S.NonTrovata))
@@ -416,7 +431,7 @@ verifica("«mappa» dall'ospite: niente", not r["ok"])
 st.dati.scrivi("UPDATE studio_mappe SET stato = 'proposta' WHERE id = ?", (mid,))
 r = json.loads(TOOLS.call("studio", {"azione": "mappa", "verifica": vid}, ctx_di(LEO),
                           "familiare"))
-verifica("con lo scheletro da confermare la frase lo dice", "aspetta che lo confermi"
+verifica("con lo scheletro da confermare la frase lo dice", "aspetta la conferma"
          in r["risposta_finale"], r.get("risposta_finale"))
 st.dati.scrivi("UPDATE studio_mappe SET stato = 'confermata' WHERE id = ?", (mid,))
 vista_riga = st.riga_vista(LEO, {"vista": "mappa", "verifica": vid})
@@ -441,7 +456,7 @@ verifica("lo scheletro non si scarica: senza la mia mappa niente PDF",
          solleva(lambda: st.pdf_mappa(LEO, vv), S.NonTrovata))
 st.dati.scrivi("UPDATE studio_verifiche SET stato = 'fatta' WHERE id = ?", (vid,))
 verifica("verifica fatta: la mappa si guarda e si scarica, non si cambia",
-         st.vista_mappe(LEO, vid)["puo"] == {"scheletro": False, "mia": False}
+         st.vista_mappe(LEO, vid)["puo"] == {"scheletro": False, "riapri": False, "mia": False}
          and st.pdf_mappa(LEO, vid)[:5] == b"%PDF-"
          and solleva(lambda: st.riempi(LEO, m2, giusta["id"], "x"), S.VerificaChiusa))
 st.dati.scrivi("UPDATE studio_verifiche SET stato = 'aperta' WHERE id = ?", (vid,))
@@ -484,6 +499,142 @@ db.commit()
 verifica("un db allo schema di prima (senza le mappe) si ruota senza errori",
          D.cancella(db, scadute_prima=datetime.date(2026, 6, 1))["verifiche"] == 1)
 db.close()
+
+
+# ═══════════════════════════ 7b. le note della revisione della PR #326 ═══════════════════════════
+print("— le note della revisione della PR #326")
+import threading  # noqa: E402
+
+ORA[0] = datetime.datetime(2026, 10, 29, 16, 0)
+st = studio(cfg_nuova("r326.db"))
+vid, ids, aids = carica(st)
+mid, n = scheletro(st, vid, ids, aids)
+
+
+def insieme(f, volte=2):
+    """`f` in `volte` thread partiti insieme; i risultati (o le eccezioni)."""
+    via, out = threading.Barrier(volte), []
+
+    def corri():
+        via.wait()
+        try:
+            out.append(f())
+        except Exception as e:  # noqa: BLE001
+            out.append(e)
+    tt = [threading.Thread(target=corri) for _ in range(volte)]
+    for t in tt:
+        t.start()
+    for t in tt:
+        t.join()
+    return out
+
+
+r = insieme(lambda: st.inizia_mappa(LEO, vid, "studente"), 4)
+verifica("1. quattro «Parti da qui» insieme: una mappa sola", len(set(r)) == 1
+         and st.dati.uno("SELECT COUNT(*) AS n FROM studio_mappe WHERE verifica = ? AND tipo = "
+                         "'studente'", (vid,))["n"] == 1, str(r))
+m2 = r[0]
+atteso = {x["id"]: x["testo"] for x in st.vista_mappe(LEO, vid)["scheletro"]["nodi"]}
+cas = [x["id"] for x in st.vista_mappe(LEO, vid)["mia"]["nodi"] if x["casella"]]
+for c in cas:
+    st.riempi(LEO, m2, c, atteso[c] if c == cas[0] else "Vasco da Gama")
+insieme(lambda: st.controlla_mappa(LEO, m2), 4)
+t = st.dati.tutti("SELECT * FROM studio_tentativi")
+verifica("1. quattro «Controlla» insieme: un tentativo per casella", len(t) == len(cas), len(t))
+insieme(lambda: st.inizia_mappa(LEO, vid, "memoria"), 3)
+verifica("1. tre «A memoria» insieme: una mappa a memoria sola",
+         st.dati.uno("SELECT COUNT(*) AS n FROM studio_mappe WHERE verifica = ? AND tipo = "
+                     "'memoria'", (vid,))["n"] == 1)
+m3 = st.vista_mappe(LEO, vid)["memoria"]["id"]
+# 3. con la mappa a memoria aperta lo scheletro e la mia mappa arrivano senza testi
+vm = st.vista_mappe(LEO, vid)
+tutto = json.dumps({k: vm[k] for k in ("scheletro", "mia")}, ensure_ascii=False)
+verifica("3. a memoria aperta: lo scheletro e la mia mappa senza testi né parole, «a_memoria»",
+         vm["a_memoria"] and vm["scheletro"]["nascosta"] and vm["mia"]["nascosta"]
+         and not any(x in tutto for x in atteso.values()), tutto[:200])
+verifica("3. il tutore li vede (non sta facendo la mappa)",
+         not st.vista_mappe(ANDREA, vid)["a_memoria"]
+         and st.vista_mappe(ANDREA, vid)["scheletro"]["nodi"])
+verifica("3. a memoria aperta il PDF della mia mappa non esce per la persona",
+         solleva(lambda: st.pdf_mappa(LEO, vid), ValueError)
+         and st.pdf_mappa(ANDREA, vid)[:5] == b"%PDF-")
+st.controlla_mappa(LEO, m3)
+verifica("3. dopo «Controlla» tornano", not st.vista_mappe(LEO, vid)["a_memoria"]
+         and st.vista_mappe(LEO, vid)["scheletro"]["nodi"])
+insieme(lambda: st.carte_dagli_errori(LEO, m3), 3)
+carte = st.carte(LEO, vid)
+dom = [c["domanda"] for c in carte]
+verifica("1. tre «Fanne carte» insieme: nessuna carta doppia", len(dom) == len(set(dom)) == 3, dom)
+verifica("minore: le domande delle carte si dicono a voce, senza frecce né «?» da solo",
+         all(("che cosa" in d) and "→" not in d and "? " not in d for d in dom), dom)
+# 2. lo scheletro confermato con le copie: sola lettura; «Riapri» lo riapre e toglie le copie
+verifica("2. lo scheletro confermato non si cambia (riscrivere il concetto atteso)",
+         solleva(lambda: st.nodo_mappa(LEO, mid, "facile", nodo=n["America"]), ValueError)
+         and solleva(lambda: st.collega(ANDREA, mid, n["America"], n["Magellano"], "x"),
+                     ValueError))
+r = st.riapri_scheletro(ANDREA, mid)
+vm = st.vista_mappe(LEO, vid)
+verifica("2. «Riapri lo scheletro» (dal tutore): di nuovo proposto, le copie tolte, i tentativi "
+         "restano", r == {"copie_tolte": 2} and vm["scheletro"]["stato"] == "proposta"
+         and vm["mia"] is None and vm["memoria"] is None
+         and len(st.dati.tutti("SELECT * FROM studio_tentativi")) >= len(cas), str(r))
+st.nodo_mappa(LEO, mid, "Il Nuovo Mondo", nodo=n["America"])
+st.conferma_scheletro(LEO, mid)
+verifica("2. dopo la nuova conferma la mia mappa riparte dallo scheletro cambiato",
+         isinstance(st.inizia_mappa(LEO, vid, "studente"), int)
+         and solleva(lambda: st.riapri_scheletro(BRUNO, mid), S.NonTrovata))
+# minore: i concetti propri della copia, al più 6 oltre a quelli dello scheletro
+m2 = st.vista_mappe(LEO, vid)["mia"]["id"]
+for i in range(M.SUOI_MAX):
+    st.nodo_mappa(LEO, m2, f"Mio {i}")
+verifica("minore: nella copia al più 6 concetti suoi in più dello scheletro",
+         solleva(lambda: st.nodo_mappa(LEO, m2, "uno di troppo"), ValueError)
+         and len(st._riga_mappa(m2)["nodi"]) == len(CONCETTI) + M.SUOI_MAX)
+# minore: le frasi della voce, al singolare e al tutore in terza persona
+cas = [x["id"] for x in st.vista_mappe(LEO, vid)["mia"]["nodi"] if x["casella"]]
+atteso = {x["id"]: x["testo"] for x in st.vista_mappe(LEO, vid)["scheletro"]["nodi"]}
+st.riempi(LEO, m2, cas[0], atteso[cas[0]])
+st.riempi(LEO, m2, cas[1], "Vasco da Gama")
+st.controlla_mappa(LEO, m2)
+TOOLS2 = ToolRegistry()
+for spec in TS.studio_specs():
+    TOOLS2.register(spec)
+
+
+def voce(prof):
+    sc = types.SimpleNamespace(current_speaker=prof.name, identified_by="voce", minore_incerto=None,
+                               current_level=prof.level, profile_level=prof.level)
+    ctx = ToolContext(cfg=st.cfg, speakers=REG, speaker_ctx=sc, speaker=None)
+    ctx.studio = st
+    return json.loads(TOOLS2.call("studio", {"azione": "mappa", "verifica": vid}, ctx,
+                                  "familiare"))["risposta_finale"]
+
+
+f_leo, f_tut = voce(LEO), voce(ANDREA)
+verifica("minore: «1 giusta e 1 da rivedere», al singolare", "1 giusta e 1 da rivedere" in f_leo
+         and "1 giuste" not in f_leo and "Nella tua mappa" in f_leo, f_leo)
+verifica("minore: al tutore in terza persona col nome", "Nella mappa di Leo" in f_tut
+         and "tua" not in f_tut, f_tut)
+st.close()
+# 4. il PDF al tetto massimo con testi lunghi: l'elenco intero, su più pagine
+from calliope.studio import mappa_pdf as MP  # noqa: E402
+nodi30 = [{"id": i, "testo": f"Concetto numero {i} con un testo lungo, quasi sessanta caratteri",
+           "x": (i % 6) / 6 + .05, "y": (i // 6) / 5 + .05, "pagine": [1], "da": 1}
+          for i in range(1, 31)]
+coll60 = [{"id": i, "da": i, "a": i % 30 + 1, "verbo": "porta a un altro concetto lungo"}
+          for i in range(1, 31)] + [{"id": 40 + i, "da": i, "a": (i + 5) % 30 + 1,
+                                     "verbo": "è parte di"} for i in range(1, 31)]
+for font in (None, ["nessun-font-cosi"]):
+    b = MP.render({"nodi": nodi30, "collegamenti": coll60, "controllata": "2026-10-30T10:00:00"},
+                  "Leo", "Storia", "2026-11-05", {1: "p. 112"}, font=font)
+    lett = PdfReader(io.BytesIO(b))
+    el = " ".join(p.extract_text() for p in lett.pages[1:])
+    verifica(f"4. il PDF con 30 concetti lunghi ({'TrueType' if font is None else 'latin-1'}): "
+             "tutti nell'elenco con i collegamenti, più pagine, «pagina x di N»",
+             len(lett.pages) >= 3 and all(f"Concetto numero {i} " in el for i in range(1, 31))
+             and el.count("porta a un altro") == 30
+             and f"pagina {len(lett.pages)} di {len(lett.pages)}" in lett.pages[-1].extract_text(),
+             f"{len(lett.pages)}")
 
 # ═══════════════════════════ 8. le note della PR #325 ═══════════════════════════
 print("— le due note della revisione della PR #325")
@@ -626,7 +777,8 @@ for modo in ("attivo", "ombra"):
         s, d = chiedi(port, "/api/studio/mappa", sess["leo"],
                       corpo={"verifica": vid, "azione": "riempi", "mappa": mid,
                              "nodo": nn[0], "testo": "x"})
-        verifica("riempi sullo scheletro (non è una casella): 404", s == 404, f"{s} {d}")
+        verifica("riempi sullo scheletro confermato: rifiutato (non è una casella, ed è in sola "
+                 "lettura con le copie)", s in (400, 404) and "Riapri" in str(d), f"{s} {d}")
         s, d = chiedi(port, "/api/studio/mappa", sess["leo"],
                       corpo={"verifica": vid, "azione": "sposta", "mappa": mia["id"],
                              "nodo": cas[0]["id"], "x": "a", "y": 0.2})

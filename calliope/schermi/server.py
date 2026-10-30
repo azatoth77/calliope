@@ -1539,9 +1539,9 @@ def crea_app(hub: Schermi) -> Starlette:
     # mia mappa e a memoria solo la persona (Studio._mappa)
     AZIONI_MAPPA = ("scheletro", "nodo", "togli_nodo", "collega", "togli_collegamento", "sposta",
                     "riempi", "tieni", "conferma", "inizia", "rifai", "controlla", "carte",
-                    "riordina", "pdf")
+                    "riordina", "riapri", "pdf")
     CON_MAPPA = ("nodo", "togli_nodo", "collega", "togli_collegamento", "sposta", "riempi",
-                 "tieni", "conferma", "rifai", "controlla", "carte", "riordina")
+                 "tieni", "conferma", "rifai", "controlla", "carte", "riordina", "riapri")
 
     def _intero(x) -> bool:
         return isinstance(x, int) and not isinstance(x, bool)
@@ -1646,6 +1646,8 @@ def crea_app(hub: Schermi) -> Starlette:
                 extra["carte"] = st.carte_dagli_errori(prof, mid)
             elif azione == "riordina":
                 st.riordina_mappa(prof, mid)
+            elif azione == "riapri":
+                extra["riaperto"] = st.riapri_scheletro(prof, mid)
             return {**st.vista_mappe(prof, vid), **extra}
         try:
             out = await asyncio.to_thread(fai)
