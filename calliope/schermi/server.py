@@ -1539,9 +1539,11 @@ def crea_app(hub: Schermi) -> Starlette:
     # mia mappa e a memoria solo la persona (Studio._mappa)
     AZIONI_MAPPA = ("scheletro", "nodo", "togli_nodo", "collega", "togli_collegamento", "sposta",
                     "riempi", "tieni", "conferma", "inizia", "rifai", "controlla", "carte",
-                    "riordina", "riapri", "pdf")
+                    "riordina", "riapri", "pdf", "libera", "finito", "indizio", "mostra")
+    # «libera», «finito», «indizio», «mostra»: la mappa libera (30/10, passo 7c, #328)
     CON_MAPPA = ("nodo", "togli_nodo", "collega", "togli_collegamento", "sposta", "riempi",
-                 "tieni", "conferma", "rifai", "controlla", "carte", "riordina", "riapri")
+                 "tieni", "conferma", "rifai", "controlla", "carte", "riordina", "riapri",
+                 "finito", "indizio", "mostra")
 
     def _intero(x) -> bool:
         return isinstance(x, int) and not isinstance(x, bool)
@@ -1567,7 +1569,7 @@ def crea_app(hub: Schermi) -> Starlette:
         mid = dati.get("mappa")
         if azione in CON_MAPPA and not _intero(mid):
             return _json({"errore": "manca la mappa"}, 400)
-        for k in ("nodo", "collegamento", "da", "a", "argomento"):
+        for k in ("nodo", "collegamento", "da", "a", "argomento", "concetto"):
             if dati.get(k) is not None and not _intero(dati.get(k)):
                 return _json({"errore": "richiesta non valida"}, 400)
         if azione in ("togli_nodo", "sposta", "riempi") and not _intero(dati.get("nodo")):
@@ -1589,6 +1591,10 @@ def crea_app(hub: Schermi) -> Starlette:
         tipo, aiuto = dati.get("tipo"), dati.get("aiuto")
         if azione == "inizia" and tipo not in (M.STUDENTE, M.MEMORIA):
             return _json({"errore": "tipo non valido"}, 400)
+        if azione == "pdf" and tipo not in (None, M.STUDENTE, M.LIBERA):
+            return _json({"errore": "tipo non valido"}, 400)
+        if azione == "mostra" and not _intero(dati.get("concetto")):
+            return _json({"errore": "manca il concetto"}, 400)
         if aiuto is not None and aiuto not in M.AIUTI:
             return _json({"errore": "aiuto non valido"}, 400)
         from .. import minori
@@ -1604,11 +1610,12 @@ def crea_app(hub: Schermi) -> Starlette:
             if azione in CON_MAPPA:
                 # La mappa toccata deve essere di questa verifica
                 vm = st.vista_mappe(prof, vid)
-                suoi = {m["id"] for m in (vm[k] for k in ("scheletro", "mia", "memoria")) if m}
+                suoi = {m["id"] for m in (vm.get(k) for k in ("scheletro", "mia", "memoria",
+                                                               "libera")) if m}
                 if mid not in suoi:
                     raise NonTrovata()
             if azione == "pdf":
-                return st.pdf_mappa(prof, vid)
+                return st.pdf_mappa(prof, vid, tipo or M.STUDENTE)
             if azione == "scheletro":
                 extra["mappa"] = st.scrivi_scheletro(prof, vid)
             elif azione == "nodo":
@@ -1648,6 +1655,15 @@ def crea_app(hub: Schermi) -> Starlette:
                 st.riordina_mappa(prof, mid)
             elif azione == "riapri":
                 extra["riaperto"] = st.riapri_scheletro(prof, mid)
+            elif azione == "libera":
+                extra["mappa"] = st.inizia_libera(prof, vid)
+            elif azione == "finito":
+                c = st.finisci_libera(prof, mid)
+                extra["finito"] = {"conti": c.get("conti"), "tentativi": c.get("tentativi")}
+            elif azione == "indizio":
+                extra["indizio"] = st.indizio_libera(prof, mid)
+            elif azione == "mostra":
+                st.mostra_concetto(prof, mid, dati["concetto"])
             return {**st.vista_mappe(prof, vid), **extra}
         try:
             out = await asyncio.to_thread(fai)

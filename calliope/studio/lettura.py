@@ -559,7 +559,11 @@ class Lettore:
                        "mappa": {"generazioni": 0, "concetti": 0, "collegamenti": 0, "ombra": 0,
                                  "da_controllare": 0, "pagina_con_istruzioni": 0,
                                  "testo_ordine": 0, "rotte": 0, "vuote": 0, "cambiate": 0,
-                                 "cedute": 0, "secondi": 0.0, "token_in": 0, "token_out": 0}}
+                                 "cedute": 0, "secondi": 0.0, "token_in": 0, "token_out": 0,
+                                 # La forma (passo 7c, #328): seconde passate, collegamenti
+                                 # che uniscono le isole, scheletri ancora a isole
+                                 "connessioni": 0, "connessioni_rotte": 0, "uniti": 0,
+                                 "con_isole": 0, "doppioni": 0, "composti": 0}}
 
     # ── ciclo ──
     def avvia(self):
@@ -1190,6 +1194,7 @@ class Lettore:
         arif = G.argomenti_rif(v["_argomenti"])
         t0 = time.monotonic()
         grezzi = None
+        nodi, coll, forma = [], [], {}
         try:
             for prova in range(2):
                 r = self._chiedi_corpo(MG.corpo(self.modello, v, rif, arif))
@@ -1205,6 +1210,28 @@ class Lettore:
                     break
                 self._registra(f"verifica {vid}: mappa in tondo fino a max_tokens"
                                + (", la richiedo" if not prova else ""))
+            if grezzi is not None:
+                nodi, coll = MG.scheletro(grezzi, rif, arif, M.nodi_max(self.studio.cfg),
+                                          titolo=v.get("argomento"), misure=forma)
+                forma["prima"] = len(M.componenti(nodi, coll))
+                if forma["prima"] > 1:
+                    # La seconda passata (passo 7c, #328): solo i collegamenti che uniscono le
+                    # isole, con la stessa guardia e lo stesso client. Ceduta, giù ed errori del
+                    # server come la prima; un JSON illeggibile o in tondo lascia le isole
+                    r2 = self._chiedi_corpo(MG.corpo_connessione(self.modello, v, rif, arif,
+                                                                 nodi, coll))
+                    m["token_in"] += int(r2.get("prompt") or 0)
+                    m["token_out"] += int(r2.get("eval") or 0)
+                    if not r2.get("fine"):
+                        raise ErroreServer("stream senza fine")
+                    self._risposte_ok += 1
+                    m["connessioni"] += 1
+                    g2 = (MG.leggi_connessione(r2.get("content") or "")
+                          if r2.get("fine") != "length" else None)
+                    if g2 is None:
+                        m["connessioni_rotte"] += 1
+                    forma["uniti"] = len(MG.connetti(g2 or [], nodi, coll, rif,
+                                                     M.nodi_max(self.studio.cfg)))
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: mappa, ceduto il passo a un lavoro dell'agente")
@@ -1222,13 +1249,14 @@ class Lettore:
                 vid, firma, [], [], MG.ERRORE, modo))
         s = time.monotonic() - t0
         # Il controllo del codice e la scrittura dentro un try (revisione della PR #327)
+        isole = 1
         try:
             if grezzi is None:
                 nodi, coll, esito = [], [], MG.ROTTO
             else:
-                nodi, coll = MG.scheletro(grezzi, rif, arif, M.nodi_max(self.studio.cfg))
                 esito = MG.PROPOSTO
-            n = self.studio.proponi_mappa(vid, firma, nodi, coll, esito, modo)
+                isole = len(M.componenti(nodi, coll)) if nodi else 1
+            n = self.studio.proponi_mappa(vid, firma, nodi, coll, esito, modo, isole=isole)
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("mappa", vid, e, lambda: self.studio.proponi_mappa(
                 vid, firma, [], [], MG.ERRORE, modo))
@@ -1252,11 +1280,19 @@ class Lettore:
             m[a] += k
         if not n:
             m["vuote"] += 1
+        # La forma (passo 7c, #328): solo conti
+        m["doppioni"] += int(forma.get("doppioni") or 0)
+        m["composti"] += int(forma.get("composti") or 0)
+        m["uniti"] += int(forma.get("uniti") or 0)
+        if n and isole > 1:
+            m["con_isole"] += 1
         avv = ", ".join(f"{k} {a}" for a, k in conta.items() if k)
         dove = "in ombra" if modo == MG.OMBRA else "proposto"
+        fm = (f"; parti {forma.get('prima', 1)} → {isole}, doppioni {forma.get('doppioni', 0)}, "
+              f"composti {forma.get('composti', 0)}") if n else ""
         self._registra(f"verifica {vid}: scheletro della mappa {dove}, {n} concetti e "
                        f"{len(coll)} collegamenti da {len(arif)} argomenti ({s:.1f} s"
-                       + (f", avvisi {avv}" if avv else "") + ")")
+                       + (f", avvisi {avv}" if avv else "") + fm + ")")
         return "proposto"
 
     # ── scrivere ──

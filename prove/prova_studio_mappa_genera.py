@@ -72,6 +72,9 @@ TRIPLE = {"triple": [
     tripla("Cristoforo Colombo", "scopre", "America", "A3", "P4"),                 # coppia doppia
     {"da": 5, "relazione": "x", "a": "y", "argomento": "A1", "pagine": ["P2"]},    # non stringa
 ]}
+# Per il giro: le triple buone, in una parte sola (dal passo 7c, #328, uno scheletro a isole fa
+# la seconda passata di connessione, provata a parte in prova_studio_mappa_libera)
+GIRO = {"triple": TRIPLE["triple"][:7]}
 
 
 def prepara(cfg_kw=None, nome="g"):
@@ -181,7 +184,7 @@ st.close()
 print("— il giro: ombra")
 PA.azzera()
 st, vid, ids, lett = prepara(nome="ombra")
-PA.rispondi(TRIPLE)
+PA.rispondi(GIRO)
 lett.giro()
 righe = st.dati.tutti("SELECT * FROM studio_mappe WHERE verifica = ?", (vid,))
 verifica("ombra (di serie): una richiesta, lo scheletro in stato «ombra» del modello",
@@ -193,7 +196,7 @@ verifica("ombra: niente alla persona (la vista, la home, la voce)",
          and st.home(LEO)["verifiche"][0]["mappa"]["scheletro"] is None)
 m = lett.stato()["mappa"]
 verifica("ombra: le misure (conti e avvisi, mai il testo)", m["generazioni"] == 1
-         and m["ombra"] == len(nodi) and m["testo_ordine"] >= 2 and m["da_controllare"] >= 2, m)
+         and m["ombra"] == 8 and m["da_controllare"] >= 1 and m["con_isole"] == 0, m)
 verifica("il registro senza concetti né verbi",
          any("scheletro della mappa in ombra" in x for x in PA.log_righe)
          and not any("Colombo" in x or "Portogallo" in x for x in PA.log_righe))
@@ -204,7 +207,7 @@ st.close()
 print("— il giro: attiva")
 PA.azzera()
 st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva"}, nome="attiva")
-PA.rispondi(TRIPLE)
+PA.rispondi(GIRO)
 lett.giro()
 s = st.vista_mappe(LEO, vid)["scheletro"]
 verifica("attiva: lo scheletro «proposto», di Calliope, con gli avvisi; la mia mappa non parte",
@@ -226,7 +229,7 @@ verifica("la conferma (anche dal tutore) tiene i puliti, quelli con un avviso re
          s3["stato"] == "confermata" and r["tenuti"] >= 3
          and all((n["stato"] == "tenuto") == (not n["avvisi"]) for n in s3["nodi"]), str(r))
 st.rinomina_argomento(LEO, a2, "Il Portogallo")
-PA.rispondi(TRIPLE)
+PA.rispondi(GIRO)
 lett.giro()
 verifica("mai sopra uno scheletro confermato: nessuna richiesta",
          len(PA.F.richieste) == 2 and st.vista_mappe(LEO, vid)["scheletro"]["id"] == s2["id"])
@@ -234,12 +237,12 @@ st.close()
 
 PA.azzera()
 st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva"}, nome="toccato")
-PA.rispondi(TRIPLE)
+PA.rispondi(GIRO)
 lett.giro()
 s = st.vista_mappe(LEO, vid)["scheletro"]
 st.tieni_mappa(LEO, s["id"], nodo=s["nodi"][0]["id"])
 st.rinomina_argomento(LEO, st.argomenti(LEO, vid)[1]["id"], "La rotta portoghese")
-PA.rispondi(TRIPLE)
+PA.rispondi(GIRO)
 lett.giro()
 verifica("toccato dalla persona («Tieni»): una rinomina non lo rifà",
          len(PA.F.richieste) == 1 and st.vista_mappe(LEO, vid)["scheletro"]["id"] == s["id"])
@@ -256,7 +259,7 @@ st.close()
 
 PA.azzera()
 st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva"}, nome="rotto")
-PA.rispondi(TRIPLE)
+PA.rispondi(GIRO)
 lett.giro()
 prima = st.vista_mappe(LEO, vid)["scheletro"]["id"]
 st.rinomina_argomento(LEO, st.argomenti(LEO, vid)[1]["id"], "La rotta portoghese")
@@ -287,7 +290,7 @@ for cosa in ("mappa", "carte"):
         raise RuntimeError("guasto finto")
     setattr(modulo, nome_f, rotto)
     try:
-        PA.rispondi(TRIPLE if cosa == "mappa" else {"carte": []})
+        PA.rispondi(GIRO if cosa == "mappa" else {"carte": []})
         lett._riprova_dopo = 0.0
         lett.giro()
         lett._riprova_dopo = 0.0
@@ -370,7 +373,7 @@ def prova_errori(cosa, prepara_kw, risposta, modulo, nome_f, esito_col, arrivato
     finally:
         PA.ORA[0] = ora0
 
-prova_errori("mappa", {"studio_mappa_genera": "attiva"}, TRIPLE, MG, "scheletro", "mappa_esito",
+prova_errori("mappa", {"studio_mappa_genera": "attiva"}, GIRO, MG, "scheletro", "mappa_esito",
              lambda st, vid: st.vista_mappe(LEO, vid)["scheletro"] is not None)
 
 PA.azzera()
@@ -379,6 +382,74 @@ lett.giro()
 verifica("spenta: nessuna richiesta, nessuna mappa", not PA.F.richieste
          and not st.dati.tutti("SELECT * FROM studio_mappe"))
 st.close()
+
+# ═══════════════════ 3b. la seconda passata nel lettore (passo 7c, #328) ═══════════════════
+print("— il giro: la seconda passata di connessione")
+ISOLE = {"triple": [tripla("Le scoperte geografiche", "cominciano con", "Il Portogallo", "A2", "P3"),
+                    tripla("Il Portogallo", "cerca la rotta per", "L'India", "A2", "P3"),
+                    tripla("Cristoforo Colombo", "arriva in", "America", "A3", "P4")]}
+UNISCI = {"collegamenti": [{"da": "C1", "relazione": "portano a", "a": "C4", "pagine": ["P4"]},
+                           {"da": "C2", "relazione": "porta a", "a": "C5", "pagine": ["P4"]}]}
+PA.azzera()
+st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva"}, nome="connessione")
+PA.rispondi(ISOLE, UNISCI)
+lett.giro()
+s = st.vista_mappe(LEO, vid)["scheletro"]
+m = lett.stato()["mappa"]
+verifica("due parti: la seconda richiesta con lo scheletro in busta; un collegamento solo le unisce "
+         "(il secondo unirebbe parti già unite), proposto",
+         len(PA.F.richieste) == 2 and "scheletro della mappa" in json.dumps(
+             PA.F.richieste[1], ensure_ascii=False)
+         and s is not None and s["parti"] == 1 and len(s["collegamenti"]) == 4
+         and m["connessioni"] == 1 and m["uniti"] == 1 and m["con_isole"] == 0
+         and st.verifica(LEO, vid)["mappa_esito"] == MG.PROPOSTO, f"{s and s['parti']} {m}")
+verifica("la radice dello scheletro generato: l'argomento della verifica, al centro",
+         any(n["x"] == 0.5 and n["y"] == 0.5 and n["testo"] == "Le scoperte geografiche"
+             for n in s["nodi"]), str([(n["testo"], n["x"], n["y"]) for n in s["nodi"]]))
+st.close()
+PA.azzera()
+st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva"}, nome="connessione_rotta")
+PA.rispondi(ISOLE, "non è json")
+lett.giro()
+s = st.vista_mappe(LEO, vid)["scheletro"]
+riga = st.dati.uno("SELECT aiuto FROM studio_mappe WHERE verifica = ?", (vid,))
+verifica("la seconda risposta illeggibile: lo scheletro resta con le sue isole e lo dice",
+         len(PA.F.richieste) == 2 and s["parti"] == 2 and '"isole": 2' in (riga["aiuto"] or "")
+         and lett.stato()["mappa"]["connessioni_rotte"] == 1
+         and lett.stato()["mappa"]["con_isole"] == 1
+         and st.verifica(LEO, vid)["mappa_esito"] == MG.PROPOSTO, str(riga))
+st.close()
+PA.azzera()
+st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva"}, nome="connessione_500")
+PA.rispondi(ISOLE, UNISCI)
+PA.F.coda = [None, "500"]
+esito = lett.genera_mappa(st.verifiche_per_mappa()[0])
+verifica("un errore del server nella seconda passata: come nella prima, niente scritto, si riprova",
+         esito == "errore_server" and st.vista_mappe(LEO, vid)["scheletro"] is None
+         and st.verifica(LEO, vid)["mappa_esito"] is None, esito)
+st.close()
+PA.azzera()
+st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva"}, nome="connessione_errore")
+PA.rispondi(ISOLE, UNISCI)
+vero_connetti = MG.connetti
+
+
+def _rotto(*a, **k):
+    raise RuntimeError("prova")
+
+
+MG.connetti = _rotto
+try:
+    esito = lett.genera_mappa(st.verifiche_per_mappa()[0])
+finally:
+    MG.connetti = vero_connetti
+v = st.verifica(LEO, vid)
+verifica("un'eccezione nostra nella seconda passata: l'esito «errore» con la firma (si riprova "
+         "dopo un'ora, al terzo ci si ferma)",
+         esito == "errore" and v["mappa_esito"] == MG.ERRORE
+         and str(v["mappa_firma"]).endswith("!e1"), f"{esito} {v['mappa_firma']}")
+st.close()
+PA.azzera()
 
 # ═══════════════════════════ 4. il banco ═══════════════════════════
 print("— il banco (fase «mappa», a secco)")
@@ -416,6 +487,27 @@ cli2.chat = lambda messaggi, **kw: {"testo": json.dumps({"triple": [
 x2 = PA.B.fase_mappa(cli2, {"storia": mat["storia"]}, {}, usc, lambda m: None).get("storia") or {}
 verifica("banco: la regex delle pagine ostili sul testo unito del collegamento",
          x2.get("ostili", 0) >= 1 or x2.get("testo_ordine", 0) >= 3, str(x2)[:200])
+# Le misure di forma (passo 7c, #328): la seconda passata solo con più parti, le parti prima e
+# dopo, i doppioni, il grado della radice e la % di verifiche con una parte sola
+cli3 = CliFinto()
+risposte3 = [json.dumps(TRIPLE, ensure_ascii=False),
+             json.dumps({"collegamenti": [{"da": "C1", "relazione": "porta a", "a": f"C{k}",
+                                           "pagine": ["P2"]} for k in range(2, 13)]})]
+cli3.chat = lambda messaggi, **kw: (cli3.messaggi.append((messaggi, kw)) or
+                                    {"testo": risposte3[min(len(cli3.messaggi), 2) - 1],
+                                     "secondi": 0.1})
+x3 = PA.B.fase_mappa(cli3, {"storia": mat["storia"]}, {}, usc, lambda m: None).get("storia") or {}
+verifica("banco: con più parti la seconda passata (schema della connessione), le parti prima e "
+         "dopo, i doppioni (0) e il grado della radice",
+         len(cli3.messaggi) == 2 and cli3.messaggi[1][1]["schema"] == MG.SCHEMA_CONNESSIONE
+         and x3.get("componenti_prima", 0) > 1 and x3.get("componenti") == 1
+         and x3.get("uniti", 0) == x3["componenti_prima"] - 1 and x3.get("doppioni") == 0
+         and x3.get("grado_radice", 0) >= 2, str({k: x3.get(k) for k in (
+             "componenti_prima", "componenti", "uniti", "doppioni", "grado_radice")}))
+testo_r3 = PA.B.scrivi_riepilogo(usc, {"mappa": {"a": x3, "b": x}, "modello": "finto"})
+verifica("banco: il riepilogo dice la forma e la % di verifiche con una parte sola (criterio 90 %)",
+         "forma: parti" in testo_r3 and "una parte sola: 50 %" in testo_r3
+         and "criterio ≥ 90 %: no" in testo_r3, testo_r3[-500:])
 
 PA.SRV.shutdown()
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")

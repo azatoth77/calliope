@@ -44,9 +44,10 @@ MIN_CONFERMA = 3
 # L'aiuto: quante caselle vuote (progetto, Studio 11: «Tanto / Medio / Poco», 2, 3 o 6)
 AIUTI = {"tanto": 2, "medio": 3, "poco": 6}
 AIUTO_DI_SERIE = "medio"
-# I tipi di mappa e i loro stati
-SCHELETRO, STUDENTE, MEMORIA = "scheletro", "studente", "memoria"
-TIPI = (SCHELETRO, STUDENTE, MEMORIA)
+# I tipi di mappa e i loro stati. «libera» (passo 7c, #328): la mappa fatta da zero, senza copiare
+# niente dallo scheletro, confrontata con lui solo a «Ho finito»
+SCHELETRO, STUDENTE, MEMORIA, LIBERA = "scheletro", "studente", "memoria", "libera"
+TIPI = (SCHELETRO, STUDENTE, MEMORIA, LIBERA)
 STATI_SCHELETRO = ("proposta", "confermata", "ombra")
 STATI_STUDENTE = ("aperta", "controllata")
 # Gli esiti di una casella
@@ -75,6 +76,21 @@ def nodi_max(cfg) -> int:
     except (TypeError, ValueError):
         n = 12
     return max(4, min(30, n))
+
+
+def modo_libera(cfg) -> str:
+    """`studio_mappa_libera`: «spenta» o «attiva» (di serie)."""
+    m = str(getattr(cfg, "studio_mappa_libera", "attiva") or "attiva").strip().lower()
+    return m if m in ("spenta", "attiva") else "attiva"
+
+
+def modo_consigli(cfg) -> str:
+    """`studio_mappa_consigli`: «spenta», «ombra» (di serie) o «attiva»; spenta anche con la
+    mappa libera spenta."""
+    if modo_libera(cfg) == "spenta":
+        return "spenta"
+    m = str(getattr(cfg, "studio_mappa_consigli", "ombra") or "ombra").strip().lower()
+    return m if m in ("spenta", "ombra", "attiva") else "ombra"
 
 
 def testo_normale(testo, massimo: int = NODO_MAX, vuoto: bool = False) -> str:
@@ -177,6 +193,108 @@ def verbo_simile(a, b) -> bool:
     return len(comuni) * 2 >= max(len(pa), len(pb))
 
 
+# ─────────────────────────── la forma della mappa (passo 7c, #328) ───────────────────────────
+
+def chiave_insieme(testo) -> str:
+    """Per i doppioni permutati: le parole piene in ordine alfabetico («Portogallo e Spagna» e
+    «Spagna e Portogallo» danno la stessa chiave). Forma, non significato."""
+    return " ".join(sorted(_piene(testo)))
+
+
+_PARTI = re.compile(r"\s*,\s*|\s+(?:e|ed)\s+", re.I)
+
+
+def parti(testo) -> list[str]:
+    """Le parti di un concetto composto («A e B», «A, B e C»: al più tre), o [] se non lo è."""
+    p = [x.strip() for x in _PARTI.split(str(testo or "")) if x.strip()]
+    return p if 2 <= len(p) <= 3 else []
+
+
+def vicini_di(nodi: list[dict], collegamenti: list[dict]) -> dict[int, list[int]]:
+    """id → gli id collegati (in tutti e due i versi), senza i collegamenti con un capo che non c'è."""
+    out: dict[int, list[int]] = {int(n["id"]): [] for n in nodi}
+    for c in collegamenti or ():
+        a, b = int(c["da"]), int(c["a"])
+        if a in out and b in out and a != b:
+            out[a].append(b)
+            out[b].append(a)
+    return out
+
+
+def gradi(nodi: list[dict], collegamenti: list[dict]) -> dict[int, int]:
+    return {i: len(v) for i, v in vicini_di(nodi, collegamenti).items()}
+
+
+def componenti(nodi: list[dict], collegamenti: list[dict]) -> list[list[int]]:
+    """Le parti connesse della mappa (i versi delle frecce non contano), nell'ordine dei concetti."""
+    vic = vicini_di(nodi, collegamenti)
+    viste: set[int] = set()
+    out = []
+    for n in nodi:
+        i = int(n["id"])
+        if i in viste:
+            continue
+        parte, coda = [], [i]
+        viste.add(i)
+        while coda:
+            x = coda.pop(0)
+            parte.append(x)
+            for y in vic[x]:
+                if y not in viste:
+                    viste.add(y)
+                    coda.append(y)
+        out.append(parte)
+    return out
+
+
+def radice(nodi: list[dict], collegamenti: list[dict], titolo=None) -> int | None:
+    """Il concetto radice: quello segnato (`radice`), altrimenti quello uguale al titolo della
+    verifica (`titolo`, se dato), altrimenti il più collegato (a parità il primo). None se vuota."""
+    ids = [int(n["id"]) for n in nodi]
+    if not ids:
+        return None
+    for n in nodi:
+        if n.get("radice"):
+            return int(n["id"])
+    if titolo:
+        for n in nodi:
+            if uguale(titolo, n.get("testo")):
+                return int(n["id"])
+    g = gradi(nodi, collegamenti)
+    return max(ids, key=lambda i: (g[i], -ids.index(i)))
+
+
+# I concetti chiave di un riferimento: la radice e i più collegati, al più un terzo dei concetti
+CHIAVE_QUOTA = 3
+
+
+def concetti_chiave(nodi: list[dict], collegamenti: list[dict]) -> list[int]:
+    """Gli id dei concetti chiave: la radice, poi i più collegati (a parità l'ordine), al più un
+    terzo dei concetti e almeno uno."""
+    if not nodi:
+        return []
+    ids = [int(n["id"]) for n in nodi]
+    g = gradi(nodi, collegamenti)
+    r = radice(nodi, collegamenti)
+    quanti = max(1, len(ids) // CHIAVE_QUOTA)
+    resto = sorted((i for i in ids if i != r), key=lambda i: (-g[i], ids.index(i)))
+    return ([r] + resto)[:quanti]
+
+
+def forma(nodi: list[dict], collegamenti: list[dict]) -> dict:
+    """Le misure di forma di uno scheletro (per il banco e il registro, mai testi): concetti,
+    collegamenti, parti connesse, concetti isolati, doppioni permutati (coppie con la stessa
+    `chiave_insieme`), il grado della radice."""
+    g = gradi(nodi, collegamenti)
+    chiavi = [chiave_insieme(n.get("testo")) for n in nodi]
+    r = radice(nodi, collegamenti)
+    return {"concetti": len(nodi), "collegamenti": len(collegamenti or ()),
+            "componenti": len(componenti(nodi, collegamenti)),
+            "isolati": sum(1 for v in g.values() if not v) if len(nodi) > 1 else 0,
+            "doppioni": len(chiavi) - len(set(chiavi)),
+            "grado_radice": g.get(r, 0) if r is not None else 0}
+
+
 # ─────────────────────────── la disposizione ───────────────────────────
 
 def disposizione(nodi: list[dict], collegamenti: list[dict]) -> dict[int, tuple[float, float]]:
@@ -187,13 +305,9 @@ def disposizione(nodi: list[dict], collegamenti: list[dict]) -> dict[int, tuple[
     ids = [int(n["id"]) for n in nodi]
     if not ids:
         return {}
-    vicini: dict[int, list[int]] = {i: [] for i in ids}
-    for c in collegamenti:
-        a, b = int(c["da"]), int(c["a"])
-        if a in vicini and b in vicini and a != b:
-            vicini[a].append(b)
-            vicini[b].append(a)
-    centro = max(ids, key=lambda i: (len(vicini[i]), -ids.index(i)))
+    vicini = vicini_di(nodi, collegamenti)
+    # Dal passo 7c (#328) il centro è la radice: il concetto segnato, altrimenti il più collegato
+    centro = radice(nodi, collegamenti)
     livelli: dict[int, int] = {centro: 0}
     coda = [centro]
     while coda:
@@ -302,7 +416,7 @@ def scegli_caselle(nodi: list[dict], quante: int, deboli: list[int] | None = Non
         for k in (int(c["da"]), int(c["a"])):
             if k in grado:
                 grado[k] += 1
-    centro = max(ids, key=lambda i: (grado[i], -ids.index(i))) if any(grado.values()) else None
+    centro = radice(nodi, collegamenti or []) if any(grado.values()) else None
     scelti: list[int] = []
     for a in deboli or ():
         for i in per_arg.get(a, ()):
@@ -441,3 +555,211 @@ def esito_tentativo(esito_casella: str, tipo: str) -> str | None:
     if esito_casella == SBAGLIATA:
         return "sbagliato"
     return None
+
+
+# ─────────────────────────── la mappa libera (passo 7c, 30/10, #328) ───────────────────────────
+#
+# La persona fa la mappa da zero; a «Ho finito» il codice la confronta col **riferimento** (lo
+# scheletro confermato, o le voci senza avvisi di quello proposto) e calcola gli **indicatori del
+# metodo** sulla sola mappa della persona. Mai il modello.
+
+PRESENTE, DIVERSO, MANCANTE = "presente", "diverso", "mancante"
+# Il segno di un concetto chiave nel giro: la pagina detta da «Un indizio», o il testo mostrato
+INDIZIO, VISTO = "indizio", "visto"
+# Gli indicatori: un concetto è «lungo» (una frase al posto di un concetto) oltre tante parole o
+# tanti caratteri
+LUNGO_PAROLE, LUNGO_CARATTERI = 6, 45
+# I verbi vuoti: dicono che due concetti c'entrano, non come (elenco chiuso, per intero)
+VERBI_VUOTI = frozenset(chiave(x) for x in (
+    "è collegato a", "è collegata a", "collegato a", "collegata a", "è collegato con",
+    "collegato con", "è legato a", "è legata a", "legato a", "legata a", "si collega a", "con",
+    "e", "va con", "c'entra con", "centra con"))
+# Gli indicatori e il loro verso: «meno» è meglio o «più» è meglio
+INDICATORI = {"parti": "meno", "isolati": "meno", "verbi_vuoti": "meno", "lunghi": "meno",
+              "profondita": "piu", "trasversali": "piu", "copertura": "piu"}
+
+
+def voci_riferimento(scheletro: dict | None) -> tuple[list[dict], list[dict], str | None]:
+    """(concetti, collegamenti, «confermato» | «proposto» | None) del riferimento: lo scheletro
+    confermato (le voci tenute), altrimenti le voci **senza avvisi** di quello proposto (mai
+    quello dell'ombra)."""
+    if not scheletro or scheletro.get("stato") == "ombra":
+        return [], [], None
+    if scheletro.get("stato") == "confermata":
+        n, c = tenuti(scheletro)
+        return n, c, "confermato" if n else None
+    nodi = [n for n in scheletro.get("nodi") or () if not n.get("avvisi")
+            and str(n.get("testo") or "").strip()]
+    ids = {int(n["id"]) for n in nodi}
+    coll = [c for c in scheletro.get("collegamenti") or () if not c.get("avvisi")
+            and int(c["da"]) in ids and int(c["a"]) in ids]
+    return nodi, coll, "proposto" if nodi else None
+
+
+def _simile(atteso, dato) -> bool:
+    """Presente con un nome diverso: almeno metà delle parole piene in comune (uguali, al plurale
+    o storpiate come in `uguale`), almeno una."""
+    pa, pd = _piene(atteso), _piene(dato)
+    if not pa or not pd:
+        return False
+    comuni = sum(1 for w in pa if any(_storpiata(w, x) for x in pd))
+    return comuni >= 1 and comuni * 2 >= max(len(pa), len(pd))
+
+
+def confronta(rif_nodi: list[dict], rif_coll: list[dict], mappa: dict) -> dict:
+    """Il confronto della mappa libera col riferimento, deterministico. Ogni concetto del
+    riferimento è *presente* (`uguale` a un concetto della persona), *diverso* (`_simile`: da
+    rivedere) o *mancante*; ogni concetto della persona vale al più uno del riferimento. Solo i
+    **concetti chiave** (`concetti_chiave`) contano per i tentativi e per la copertura. I
+    collegamenti fra concetti trovati: *mancanti* (con le pagine), *verso diverso*, e quelli della
+    persona **fuori dal quadro** (da controllare sul libro, mai un errore); quelli con concetti
+    solo suoi non si giudicano ("tuoi").
+    {chiave, esiti {id rif: esito}, nodo {id rif: id della persona}, mancanti [id chiave],
+    coll_mancanti [{da, a, pagine}], verso_diverso [id], fuori_quadro [id], tuoi, conti}"""
+    testi = [n["testo"] for n in rif_nodi]
+    suoi = [n for n in mappa.get("nodi") or () if str(n.get("testo") or "").strip()]
+    preso: set[int] = set()
+    nodo: dict[int, int] = {}
+    esiti: dict[int, str] = {}
+    for s in rif_nodi:
+        for k in suoi:
+            if int(k["id"]) not in preso and uguale(s["testo"], k["testo"], testi):
+                nodo[int(s["id"])] = int(k["id"])
+                preso.add(int(k["id"]))
+                esiti[int(s["id"])] = PRESENTE
+                break
+    for s in rif_nodi:
+        if int(s["id"]) in nodo:
+            continue
+        for k in suoi:
+            if (int(k["id"]) not in preso and _simile(s["testo"], k["testo"])
+                    and not any(uguale(o["testo"], k["testo"]) for o in rif_nodi if o is not s)):
+                nodo[int(s["id"])] = int(k["id"])
+                preso.add(int(k["id"]))
+                esiti[int(s["id"])] = DIVERSO
+                break
+        esiti.setdefault(int(s["id"]), MANCANTE)
+    chiave_ = concetti_chiave(rif_nodi, rif_coll)
+    per_id = {int(n["id"]): n for n in rif_nodi}
+    rif_di = {v: k for k, v in nodo.items()}
+    s_coppie = {frozenset((int(c["da"]), int(c["a"]))): c for c in rif_coll}
+    mie, verso, fuori, tuoi = set(), [], [], 0
+    for c in mappa.get("collegamenti") or ():
+        a, b = rif_di.get(int(c["da"])), rif_di.get(int(c["a"]))
+        if a is None or b is None:
+            tuoi += 1
+            continue
+        k = frozenset((a, b))
+        mie.add(k)
+        sc = s_coppie.get(k)
+        if sc is None:
+            fuori.append(int(c["id"]))
+        elif (int(sc["da"]), int(sc["a"])) != (a, b):
+            verso.append(int(c["id"]))
+    coll_mancanti = []
+    for k, sc in s_coppie.items():
+        a, b = int(sc["da"]), int(sc["a"])
+        if k in mie or a not in nodo or b not in nodo:
+            continue
+        pag = list(sc.get("pagine") or ()) or list(dict.fromkeys(
+            list(per_id[a].get("pagine") or ()) + list(per_id[b].get("pagine") or ())))
+        coll_mancanti.append({"da": nodo[a], "a": nodo[b], "pagine": pag})
+    mancanti = [i for i in chiave_ if esiti.get(i) == MANCANTE]
+    conti = {"concetti": len(rif_nodi), "chiave": len(chiave_),
+             PRESENTE: sum(esiti.get(i) == PRESENTE for i in chiave_),
+             DIVERSO: sum(esiti.get(i) == DIVERSO for i in chiave_),
+             MANCANTE: len(mancanti),
+             "trovati": sum(e != MANCANTE for e in esiti.values()),
+             "coll_mancanti": len(coll_mancanti), "verso_diverso": len(verso),
+             "fuori_quadro": len(fuori), "tuoi": tuoi}
+    return {"chiave": chiave_, "esiti": esiti, "nodo": nodo, "mancanti": mancanti,
+            "coll_mancanti": coll_mancanti, "verso_diverso": verso, "fuori_quadro": fuori,
+            "tuoi": tuoi, "conti": conti}
+
+
+def copertura(confronto: dict | None) -> int | None:
+    """I concetti chiave trovati (presenti o diversi) in percento, o None senza confronto."""
+    if not confronto or not confronto.get("chiave"):
+        return None
+    k = confronto["conti"]
+    return round(100 * (k[PRESENTE] + k[DIVERSO]) / k["chiave"])
+
+
+def indicatori(nodi: list[dict], collegamenti: list[dict], confronto: dict | None = None) -> dict:
+    """Gli indicatori del metodo, sulla sola mappa della persona (mai testi): concetti,
+    collegamenti, parti connesse, isolati (grado 0, con almeno due concetti), verbi vuoti (vuoto o
+    in `VERBI_VUOTI`), concetti lunghi (oltre `LUNGO_PAROLE` parole o `LUNGO_CARATTERI`
+    caratteri), profondità (il livello più lontano dalla radice), collegamenti trasversali (fra
+    due rami diversi della radice, la radice esclusa), copertura dei concetti chiave."""
+    nodi = [n for n in nodi if str(n.get("testo") or "").strip()]
+    ids = {int(n["id"]) for n in nodi}
+    coll = [c for c in collegamenti or () if int(c["da"]) in ids and int(c["a"]) in ids]
+    g = gradi(nodi, coll)
+    vic = vicini_di(nodi, coll)
+    r = radice(nodi, coll)
+    livello: dict[int, int] = {}
+    ramo: dict[int, int] = {}
+    if r is not None:
+        livello[r] = 0
+        coda = [r]
+        while coda:
+            x = coda.pop(0)
+            for y in vic[x]:
+                if y not in livello:
+                    livello[y] = livello[x] + 1
+                    ramo[y] = y if x == r else ramo[x]
+                    coda.append(y)
+    trasversali = sum(1 for c in coll if int(c["da"]) in ramo and int(c["a"]) in ramo
+                      and ramo[int(c["da"])] != ramo[int(c["a"])])
+    return {"concetti": len(nodi), "collegamenti": len(coll),
+            "parti": len(componenti(nodi, coll)) if nodi else 0,
+            "isolati": sum(1 for v in g.values() if not v) if len(nodi) > 1 else 0,
+            "verbi_vuoti": sum(1 for c in coll if chiave(c.get("verbo")) in VERBI_VUOTI
+                               or not chiave(c.get("verbo"))),
+            "lunghi": sum(1 for n in nodi if len(str(n["testo"]).split()) > LUNGO_PAROLE
+                          or len(str(n["testo"])) > LUNGO_CARATTERI),
+            "profondita": max(livello.values()) if livello else 0,
+            "trasversali": trasversali,
+            "copertura": copertura(confronto)}
+
+
+def rispetto_a_prima(prima: dict | None, ora: dict) -> dict:
+    """indicatore → «meglio», «uguale» o «peggio» rispetto al giro di prima (solo quelli che ci
+    sono tutti e due)."""
+    out = {}
+    for k, verso in INDICATORI.items():
+        a, b = (prima or {}).get(k), (ora or {}).get(k)
+        if a is None or b is None:
+            continue
+        d = (b - a) if verso == "piu" else (a - b)
+        out[k] = "meglio" if d > 0 else "peggio" if d < 0 else "uguale"
+    return out
+
+
+def tentativo_libera(esito: str | None, segno: str | None) -> str | None:
+    """L'esito del tentativo «mappa» di un concetto chiave a «Ho finito»: presente «giusto»
+    («indizio» se la sua pagina era stata detta prima), mancante «sbagliato»; diverso niente (da
+    rivedere), un concetto mostrato prima di «Ho finito» niente."""
+    if segno == VISTO:
+        return None
+    if esito == PRESENTE:
+        return "indizio" if segno == INDIZIO else "giusto"
+    if esito == MANCANTE:
+        return "sbagliato"
+    return None
+
+
+def svelati(nascosti: dict, risposta: str, suoi=()) -> list:
+    """Gli id dei concetti nascosti che una risposta dice: tutte le parole piene del concetto
+    nella risposta (uguali, al plurale o storpiate come in `uguale`). Un concetto le cui parole
+    piene sono già tutte nella mappa della persona non conta (non è una cosa svelata)."""
+    parole_r = _piene(risposta)
+    parole_s = [w for t in suoi or () for w in _piene(t)]
+    out = []
+    for k, t in (nascosti or {}).items():
+        pa = _piene(t)
+        if not pa or all(any(_storpiata(w, x) for x in parole_s) for w in pa):
+            continue
+        if all(any(_storpiata(w, x) for x in parole_r) for w in pa):
+            out.append(k)
+    return out

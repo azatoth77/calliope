@@ -239,7 +239,11 @@ class Studio(Mappe):
                        "carte": {"scritte": 0, "esiti": {}, "codice": 0, "a_voce": 0},
                        # Le mappe (passo 7, #247): quante, i controlli, i tentativi (mai il testo)
                        "mappe": {"scheletri": 0, "mie": 0, "memoria": 0, "controlli": 0,
-                                 "tentativi": 0, "carte": 0}}
+                                 "tentativi": 0, "carte": 0,
+                                 # La mappa libera e «Parliamone» (passo 7c, #328): conti,
+                                 # mai testi; «svelati» deve restare 0
+                                 "libere": 0, "finite": 0, "indizi": 0, "mostrati": 0,
+                                 "consigli": 0, "svelati": 0}}
         # Il lettore delle pagine (passo 4.3, studio/lettura.py): lo crea `avvia_lettura`
         self.lettore = None
         # Perché non c'è il lettore (passo 4.5, nota della revisione della PR #314): None prima di
@@ -1406,9 +1410,17 @@ class Studio(Mappe):
         numeri = {a["id"]: i for i, a in enumerate(elenco, 1)}
         nel_piano = {a["id"] for a in elenco if a["stato"] in D.ARGOMENTI_DEL_PIANO}
         out = []
+        # Con la mappa libera aperta (passo 7c, #328) le carte scritte da «Fanne carte» non si
+        # vedono e non si ripassano: dicono i concetti dello scheletro, che resta nascosto
+        from .mappe import CARTE_DALLA_MAPPA
+        libera_aperta = self.dati.uno(
+            "SELECT id FROM studio_mappe WHERE verifica = ? AND tipo = 'libera' AND stato = "
+            "'aperta'", (v["id"],)) is not None
         # Le carte dell'ombra (studio_carte_genera: ombra) non vanno mai alla persona
         for i, c in enumerate(self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? AND "
                                               "stato != 'ombra' ORDER BY id", (v["id"],)), 1):
+            if libera_aperta and str(c["domanda"] or "").startswith(CARTE_DALLA_MAPPA):
+                continue
             c["pagine"] = [int(x) for x in D.da_j(c["pagine"]) if str(x).isdecimal()]
             c["avvisi"] = D.da_j(c["avvisi"])
             c["numero"] = i

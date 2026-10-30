@@ -1000,12 +1000,19 @@
   // esito, ricomincia, aiuto}
   let mappa = null;
   const NS = "http://www.w3.org/2000/svg";
-  const ESITI_M = { giusta: "giusta", sbagliata: "da rivedere", vuota: "da riempire" };
+  // «chiave» e «da_rivedere»: i concetti della mappa libera dopo «Ho finito» (passo 7c, #328)
+  const ESITI_M = { giusta: "giusta", sbagliata: "da rivedere", vuota: "da riempire",
+    chiave: "concetto chiave", da_rivedere: "concetto chiave col nome da rivedere" };
+  const INDICATORI_M = { parti: ["parti staccate", "meno"], isolati: ["concetti senza collegamenti", "meno"],
+    verbi_vuoti: ["collegamenti con un verbo vuoto", "meno"], lunghi: ["concetti lunghi come frasi", "meno"],
+    profondita: ["livelli dal centro", "più"], trasversali: ["collegamenti fra rami diversi", "più"],
+    copertura: ["concetti chiave trovati (%)", "più"] };
+  const RISPETTO_M = { meglio: "meglio della volta scorsa", uguale: "come la volta scorsa", peggio: "da curare rispetto alla volta scorsa" };
   const AVVISI_M = { da_controllare: "non lo trovo nelle pagine che cita",
     pagina_con_istruzioni: "viene da una pagina con un messaggio per un assistente",
     testo_ordine: "sembra un ordine o un annuncio" };
   const AIUTI_M = { tanto: "Tanto aiuto", medio: "Aiuto medio", poco: "Poco aiuto" };
-  const NOMI_M = { scheletro: "Lo scheletro", mia: "La mia mappa", memoria: "A memoria" };
+  const NOMI_M = { scheletro: "Lo scheletro", mia: "La mia mappa", memoria: "A memoria", libera: "Da zero" };
 
   function tastoMappa(testo, azione, dati, cls, etichetta) {
     const b = nodo("button", "tasto studio-h-tasto" + (cls ? " " + cls : ""), testo);
@@ -1048,7 +1055,7 @@
   function mappaCorrente() { return mappa && mappa.dati ? mappa.dati[mappa.quale] || null : null; }
   function puoCambiare(m) {
     const d = mappa.dati;
-    return !!(m && d && d.puo && (m.tipo === "scheletro" ? d.puo.scheletro : d.puo.mia));
+    return !!(m && d && d.puo && (m.tipo === "scheletro" ? d.puo.scheletro : m.tipo === "libera" ? d.puo.libera : d.puo.mia));
   }
   function nodoDi(m, id) { return (m && Array.isArray(m.nodi) ? m.nodi.find((n) => n.id === id) : null) || null; }
   function testoNodo(n) { return String(n.testo || "") || (n.casella ? "…" : ""); }
@@ -1059,6 +1066,10 @@
         (m.stato === "confermata" ? " · confermato" : " · da confermare");
     }
     const di = d.verifica && d.verifica.di ? String(d.verifica.di) : "";
+    if (m.tipo === "libera") {
+      return (di ? "La mappa da zero di " + di : "La tua mappa da zero") + (Number(m.giro) ? " · giro " + (Number(m.giro) + 1) : "") +
+        (m.controllata ? " · finita " + dataDetta(String(m.controllata).slice(0, 10)) : " · in corso");
+    }
     const quando = m.controllata ? " · controllata " + dataDetta(String(m.controllata).slice(0, 10)) : " · non ancora controllata";
     return (m.tipo === "studente" ? (di ? "La mappa di " + di : "La tua mappa") + " · con il libro"
       : "A memoria" + (di ? " · di " + di : "")) + quando;
@@ -1073,19 +1084,29 @@
     // Con la mappa a memoria aperta lo scheletro e la mia mappa arrivano senza testi e le loro
     // schede non si vedono fino a «Controlla» (revisione della PR #326)
     if (d.a_memoria) mappa.quale = "memoria";
+    // La mappa libera aperta (passo 7c, #328): lo scheletro e le altre mappe tornano dopo «Ho finito»
+    if (d.a_libera) mappa.quale = "libera";
     const schede = nodo("div", "studio-m-schede");
     schede.setAttribute("role", "group");
     schede.setAttribute("aria-label", "Quale mappa");
-    for (const k of ["scheletro", "mia", "memoria"]) {
-      if (k !== "scheletro" && !d[k] && !(pronto && d.puo && d.puo.mia)) continue;
+    for (const k of ["scheletro", "mia", "memoria", "libera"]) {
+      if (k === "libera") { if (!d.libera && !(d.puo && d.puo.libera)) continue; }
+      else if (k !== "scheletro" && !d[k] && !(pronto && d.puo && d.puo.mia)) continue;
       if (d.a_memoria && k !== "memoria") continue;
+      if (d.a_libera && k !== "libera") continue;
       const b = tastoMappa(NOMI_M[k], "quale", { quale: k }, "studio-h-chip");
       b.setAttribute("aria-pressed", String(mappa.quale === k));
       schede.append(b);
     }
     p.append(schede);
     if (d.a_memoria) p.append(nodo("p", "studio-h-nota", "Lo scheletro e la tua mappa tornano dopo «Controlla»."));
+    if (d.a_libera) p.append(nodo("p", "studio-h-nota", "Lo scheletro e le altre mappe tornano dopo «Ho finito»."));
     const m = mappaCorrente();
+    if (!m && mappa.quale === "libera") {
+      p.append(nodo("p", "studio-h-riga", "Fai la mappa da solo, dopo aver studiato: si parte dal concetto centrale, senza lo scheletro. Quando hai finito, il confronto ti dice se mancano concetti chiave e come migliorare il metodo."));
+      if (d.puo && d.puo.libera) p.append(tastoMappa("Fai la tua mappa da zero", "libera", {}, "studio-h-primo"));
+      return p;
+    }
     if (!m) {
       if (mappa.quale === "scheletro") {
         p.append(nodo("p", "studio-h-riga", "Lo scheletro non c'è ancora: i concetti principali e come si collegano, ognuno con le sue pagine."));
@@ -1104,10 +1125,11 @@
     const puo = puoCambiare(m);
     // A memoria, dopo «Controlla», non si cambia più: si riparte con «Rifai» (seconda revisione
     // della PR #326)
-    const chiusa = m.tipo === "memoria" && m.stato === "controllata";
+    const chiusa = (m.tipo === "memoria" || m.tipo === "libera") && m.stato === "controllata";
     const modifica = puo && !chiusa;
     p.append(nodo("p", "studio-h-riga", chiMappa(m)));
-    if (chiusa && puo) p.append(nodo("p", "studio-h-nota", "Controllata: per rifarla a memoria, «Rifai»."));
+    if (chiusa && puo) p.append(nodo("p", "studio-h-nota", m.tipo === "libera" ? "Finita: per rifarla da zero, «Rifai»." : "Controllata: per rifarla a memoria, «Rifai»."));
+    if (m.tipo === "libera") p.append(...pannelloLibera(m, d, modifica));
     const daDecidere = (m.nodi || []).filter((n) => n.stato === "proposto").length + (m.collegamenti || []).filter((c) => c.stato === "proposto").length;
     if (m.tipo === "scheletro" && m.stato === "confermata" && d.puo && !d.puo.scheletro) {
       p.append(nodo("p", "studio-h-riga", "Lo scheletro è confermato e ci sono le mappe fatte da qui: per cambiarlo va riaperto, e la tua mappa e quella a memoria si rifanno dopo la nuova conferma."));
@@ -1143,14 +1165,16 @@
     if (modifica && !mappa.modulo) {
       t.append(tastoMappa("+ Concetto", "nuovo", {}, ""), tastoMappa("Collega", "collega", {}, ""));
       if (m.tipo === "scheletro" && m.stato !== "confermata") t.append(tastoMappa("Conferma lo scheletro", "conferma", {}, "studio-h-primo"));
-      if (m.tipo !== "scheletro") t.append(tastoMappa("Controlla", "controlla", {}, "studio-h-primo"));
+      if (m.tipo === "libera") t.append(tastoMappa("Un indizio", "indizio", {}, "", "Un indizio: la pagina di un concetto chiave che manca"), tastoMappa("Ho finito", "finito", {}, "studio-h-primo", "Ho finito: confronta la mappa con lo scheletro"));
+      else if (m.tipo !== "scheletro") t.append(tastoMappa("Controlla", "controlla", {}, "studio-h-primo"));
       t.append(tastoMappa("Riordina", "riordina", {}, ""));
     }
     if (m.tipo === "scheletro" && m.stato === "confermata" && d.puo && d.puo.riapri && !mappa.modulo) {
       t.append(mappa.riapri ? tastoMappa("Sì, riapri: le mappe ripartono", "riapri", {}, "", "Riapri lo scheletro: la mia mappa e quella a memoria si rifanno dopo la conferma")
         : tastoMappa("Riapri lo scheletro", "chiedi_riapri", {}, ""));
     }
-    if (m.tipo === "studente" && (m.nodi || []).length) t.append(tastoMappa("Scarica PDF", "pdf", {}, ""));
+    if ((m.tipo === "studente" || m.tipo === "libera") && (m.nodi || []).length) t.append(tastoMappa("Scarica PDF", "pdf", { tipo: m.tipo }, ""));
+    if (puo && m.tipo === "libera" && chiusa) t.append(tastoMappa("Rifai", "rifai", {}, "", "Rifai la mappa da zero"));
     if (puo && m.tipo === "memoria") {
       t.append(tastoMappa("Rifai", "rifai", {}, ""));
       const c = m.conti || {};
@@ -1171,6 +1195,61 @@
       p.append(nodo("p", "studio-h-riga studio-m-conti", "L'ultimo controllo: " + r.join(", ") + "."));
     }
     return p;
+  }
+  // La mappa libera (passo 7c, #328): gli indizi chiesti mentre è aperta (la pagina, il testo solo
+  // con «Mostra»), e dopo «Ho finito» il confronto del codice e gli indicatori del metodo, con la
+  // volta scorsa. Il testo dei concetti dello scheletro arriva solo se mostrato (o già trovato)
+  function rigaChiave(k, puo) {
+    const li = nodo("li", "studio-m-voce");
+    const pag = Array.isArray(k.pagine) && k.pagine.length ? k.pagine.map(String).join(", ") : "";
+    if (k.esito === "presente") {
+      li.append(nodo("span", "studio-m-esito giusta", "C'è"), nodo("b", null, String(k.testo || "")));
+    } else {
+      li.append(nodo("span", "studio-m-esito manca", k.esito === "diverso" ? "C'è con un nome diverso: da rivedere" + (pag ? " (" + pag + ")" : "")
+        : "Ti manca un concetto chiave" + (pag ? " di " + pag : "")));
+      if (k.testo) li.append(nodo("b", null, String(k.testo)));
+      else if (puo) li.append(tastoMappa("Mostra", "mostra", { concetto: k.n }, "studio-h-chip", "Mostra il concetto chiave" + (pag ? " di " + pag : "")));
+    }
+    return li;
+  }
+  function pannelloLibera(m, d, modifica) {
+    const out = [];
+    const puo = puoCambiare(m);
+    if (m.stato === "aperta") {
+      const ind = Array.isArray(m.indizi) ? m.indizi : [];
+      if (ind.length) {
+        const ul = nodo("ul", "studio-m-elenco");
+        ul.setAttribute("aria-label", "Gli indizi");
+        for (const k of ind) ul.append(rigaChiave({ n: k.n, esito: "mancante", pagine: k.pagine, testo: k.testo }, modifica));
+        out.push(ul);
+      }
+      return out;
+    }
+    const c = m.confronto;
+    if (!c) {
+      out.push(nodo("p", "studio-h-riga", "Lo scheletro per il confronto non c'è ancora: qui sotto come è venuta la tua mappa."));
+    } else {
+      const k = c.conti || {};
+      out.push(nodo("p", "studio-h-riga studio-m-conti", "Concetti chiave: " + (Number(k.presente) + Number(k.diverso)) + " su " + Number(k.chiave) +
+        (Number(k.diverso) ? ", " + nn(k.diverso, "col nome da rivedere", "col nome da rivedere") : "") +
+        (Number(k.coll_mancanti) ? "; " + nn(k.coll_mancanti, "collegamento dello scheletro manca fra i tuoi concetti", "collegamenti dello scheletro mancano fra i tuoi concetti") : "") + "."));
+      if (c.riferimento === "proposto") out.push(nodo("p", "studio-h-nota", "Rispetto alla mappa proposta, non ancora controllata."));
+      const ul = nodo("ul", "studio-m-elenco");
+      ul.setAttribute("aria-label", "I concetti chiave");
+      for (const x of Array.isArray(c.chiave) ? c.chiave : []) ul.append(rigaChiave(x, puo));
+      out.push(ul);
+    }
+    const ind = m.indicatori || {};
+    const ri = m.rispetto || {};
+    const ul = nodo("ul", "studio-m-elenco studio-m-indicatori");
+    ul.setAttribute("aria-label", "Come è fatta la tua mappa");
+    for (const key of Object.keys(INDICATORI_M)) {
+      if (ind[key] === null || ind[key] === undefined) continue;
+      ul.append(nodo("li", null, INDICATORI_M[key][0] + ": " + Number(ind[key]) + (ri[key] ? " · " + RISPETTO_M[ri[key]] : "")));
+    }
+    out.push(nodo("h5", "studio-h-sotto", "Il metodo" + (m.prima ? ", rispetto alla volta scorsa" : "")), ul);
+    if (d.consigli && !(d.verifica && d.verifica.di)) out.push(nodo("p", "studio-h-nota", "Parliamone: chiedimelo a voce o scrivendo («parliamo della mia mappa»), e ti dico cosa va bene e come fare mappe migliori."));
+    return out;
   }
   function sceltaAiuto(d) {
     const f = nodo("fieldset", "studio-h-scelte");
@@ -1247,7 +1326,7 @@
     }
     for (const n of nodi) {
       const q = pos[n.id];
-      const g = svg("g", { class: "studio-m-nodo" + (n.suo && m.tipo !== "scheletro" ? " suo" : "") + (n.casella ? " casella" : "") +
+      const g = svg("g", { class: "studio-m-nodo" + (n.suo && (m.tipo === "studente" || m.tipo === "memoria") ? " suo" : "") + (n.casella ? " casella" : "") +
         (n.stato === "proposto" ? " proposto" : "") + (n.esito ? " " + n.esito : "") + (mappa.scelto === n.id ? " scelto" : ""),
         tabindex: 0, role: "button", transform: "translate(" + q.x + "," + q.y + ")" });
       g.dataset.nodo = String(n.id);
@@ -1288,7 +1367,7 @@
   }
   function infoNodo(m, n) {
     const out = [];
-    const info = [n.stato === "proposto" ? "proposto" : "", n.suo && m.tipo !== "scheletro" ? "concetto tuo" : "",
+    const info = [n.stato === "proposto" ? "proposto" : "", n.suo && (m.tipo === "studente" || m.tipo === "memoria") ? "concetto tuo" : "",
       (Array.isArray(n.pagine) && n.pagine.length) ? (n.casella ? "cerca a " : "") + n.pagine.map(String).join(", ") : ""].filter(Boolean).join(" · ");
     if (info) out.push(nodo("span", "studio-nota", info));
     if (n.esito) out.push(nodo("span", "studio-m-esito " + String(n.esito), ESITI_M[n.esito] || String(n.esito)));
@@ -1491,7 +1570,8 @@
       }
       return;
     }
-    if (az === "pdf") { await caricaMappa(vid, { azione: "pdf" }); return; }
+    if (az === "pdf") { await caricaMappa(vid, { azione: "pdf", tipo: dati.tipo || "studente" }); return; }
+    if (az === "libera") { if (await caricaMappa(vid, { azione: "libera" })) { mappa.quale = "libera"; disegnaHome(); } return; }
     if (!m) return;
     if (az === "salva") {
       const mo = mappa.modulo;
@@ -1528,6 +1608,24 @@
       }
       return;
     }
+    // La mappa libera (passo 7c, #328): «Ho finito», «Un indizio», «Mostra»
+    if (az === "finito") {
+      if (await caricaMappa(vid, { azione: "finito", mappa: m.id })) {
+        const f = (mappa.dati.finito || {}).conti;
+        mappa.esito = f ? "Finita: " + (Number(f.presente) + Number(f.diverso)) + " concetti chiave su " + Number(f.chiave) + ". Qui sotto il confronto e il metodo." : "Finita: qui sotto come è fatta la tua mappa.";
+        disegnaHome();
+      }
+      return;
+    }
+    if (az === "indizio") {
+      if (await caricaMappa(vid, { azione: "indizio", mappa: m.id })) {
+        const i = mappa.dati.indizio || {};
+        mappa.esito = i.concetto ? "Ti manca un concetto chiave: la pagina è qui sotto." : "Non ti manca nessun altro concetto chiave.";
+        disegnaHome();
+      }
+      return;
+    }
+    if (az === "mostra") { await caricaMappa(vid, { azione: "mostra", mappa: m.id, concetto: dati.concetto }); return; }
     if (az === "carte") {
       if (await caricaMappa(vid, { azione: "carte", mappa: m.id })) {
         const n = Number(mappa.dati.carte) || 0;
@@ -1822,7 +1920,7 @@
           carte: carte.dati ? (carte.dati.carte || []).map((c) => ({ id: c.id, stato: c.stato, scatola: c.scatola })) : [] } : null,
         mappa: mappa ? { vid: mappa.vid, quale: mappa.quale, vista: mappa.vista, scelto: mappa.scelto, esito: mappa.esito,
           modulo: mappa.modulo ? mappa.modulo.tipo : null,
-          mappe: mappa.dati ? ["scheletro", "mia", "memoria"].filter((k) => mappa.dati[k]).map((k) => ({ quale: k, id: mappa.dati[k].id,
+          mappe: mappa.dati ? ["scheletro", "mia", "memoria", "libera"].filter((k) => mappa.dati[k]).map((k) => ({ quale: k, id: mappa.dati[k].id,
             stato: mappa.dati[k].stato, nodi: (mappa.dati[k].nodi || []).length, collegamenti: (mappa.dati[k].collegamenti || []).length })) : [] } : null,
         camera: !!st.flusso,
         argomenti: st.arg && Array.isArray(st.arg.argomenti) ? st.arg.argomenti.map((a) => ({ id: a.id, stato: a.stato, avvisi: (a.avvisi || []).slice() })) : [],

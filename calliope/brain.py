@@ -1424,8 +1424,13 @@ CARTA_TOLTA = ("{\"ok\": true, \"nota\": \"il testo della carta è stato tolto: 
 # web_cerca e delle estensioni, i fatti e la notizia del tool notizie (13/10)
 # «testo» e «argomenti»: studio_pagina_leggi (30/10, seconda revisione della PR #317)
 # «domanda» e «risposta»: studio_carte (30/10, passo 6, #246)
+# «mappa_tua»: studio_mappa_consigli (30/10, passo 7c, #328)
 _CHIAVI_DATO = ('"risultati"', '"fatti"', '"notizia"', '"testo"', '"argomenti"', '"domanda"',
-                '"risposta"')
+                '"risposta"', '"mappa_tua"')
+# La mappa e lo scheletro di «Parliamone» (studio_mappa_consigli, passo 7c, #328), tolti allo
+# stesso modo
+MAPPA_TOLTA = ("{\"ok\": true, \"nota\": \"la mappa e lo scheletro sono stati tolti: per "
+               "riparlarne usa studio_mappa_consigli\"}")
 
 
 class TextCallGuard:
@@ -3067,6 +3072,9 @@ class Brain:
             if politica.consenso_avversativo(user_text or ""):
                 self._rule("consenso_avversativo")
         self._letto_ora = ""      # un tool non fidato ha già risposto in questa risposta
+        # «Parliamone» in questa risposta (studio_mappa_consigli, passo 7c, #328): la misura dei
+        # concetti svelati a risposta finita
+        self._consigli_mappa = None
         # Le frasi che non sono contenuto del modello (frasi pronte dei tool, ripieghi, la riga
         # dello sviluppo): chi le dice (l'uscita unica, passo 2 del registro degli eventi) ne
         # scrive l'autore e l'atto all'invio
@@ -3098,6 +3106,9 @@ class Brain:
                         self._aggiungi_detto(coda)
                     yield " " + self._marca(coda, "atto", "riga_sviluppo")
         finally:
+            # «Parliamone» (passo 7c, #328): i concetti svelati nella risposta detta, prima che
+            # i dati escano dalla storia
+            self._consigli_chiudi(start)
             if Brain.eventi_attivo(self):
                 # Passo 3: la storia del turno vivo non si sigilla a mano. La sigillano gli
                 # eventi (riservato, personale, non fidato decisi alla scrittura) e la risposta
@@ -4139,13 +4150,14 @@ class Brain:
         provenienza.marca(self.history)
         for m in self.history:
             if m.get("role") != "tool" or m.get("content") in (WEB_TOLTO, PAGINA_TOLTA,
-                                                                CARTA_TOLTA):
+                                                                CARTA_TOLTA, MAPPA_TOLTA):
                 continue
             spec = self.tools.get(m.get("name") or "")
             if (spec is not None and getattr(spec, "non_fidato", False)
                     and not getattr(spec, "resta_in_storia", False)):
                 m["content"] = (PAGINA_TOLTA if m.get("name") == "studio_pagina_leggi"
                                 else CARTA_TOLTA if m.get("name") == "studio_carte"
+                                else MAPPA_TOLTA if m.get("name") == "studio_mappa_consigli"
                                 else WEB_TOLTO)
 
     def rules_fired(self) -> list[str]:
@@ -5848,6 +5860,14 @@ class Brain:
                 # schermo.» due volte)
                 said = " ".join(f for i, f in enumerate(finals)
                                 if f.strip() not in " ".join(finals[:i]))
+                # «Parliamone» in ombra (passo 7c, #328): la voce dice la frase del codice; la
+                # passata del modello si fa in secondo piano, con i messaggi di adesso, e si misura
+                # soltanto
+                cm = getattr(self, "_consigli_mappa", None)
+                if isinstance(cm, dict) and cm.get("modo") == "ombra":
+                    # Copie: a risposta finita i dati escono dalla storia (_togli_non_fidati),
+                    # mentre la passata in secondo piano li deve ancora leggere
+                    cm["messaggi"] = [dict(m) for m in with_memory(system)]
                 self.history.append({"role": "assistant", "content": said})
                 if self._passata == 1 and dopo_tool_s1.modo(self.cfg) != dopo_tool_s1.SPENTO:
                     # Già senza seconda passata (casa_comando, documenti): per la misura
@@ -5980,6 +6000,61 @@ class Brain:
             # Interrotta (la voce chiude lo stream): chiude anche la passata, cioè la richiesta
             # al modello, come farebbe `yield from`
             passata.close()
+
+    # ── «Parliamone» dopo la mappa libera (30/10, passo 7c, #328, studio_mappa_consigli) ──
+    def _consigli_chiudi(self, start: int):
+        """A risposta finita (anche interrotta): con `studio_mappa_consigli` attivo la risposta
+        detta si dà allo Studio, che conta i concetti nascosti che dice (`misura_consigli`, devono
+        essere 0: nel registro solo id e conti) e la regola `studio_mappa_svelato`; in ombra la
+        passata del modello, mai detta, si fa in secondo piano coi messaggi del turno e si misura
+        allo stesso modo. Lo Studio ricalcola da sé i concetti nascosti: Brain non li vede."""
+        cm, self._consigli_mappa = getattr(self, "_consigli_mappa", None), None
+        if not isinstance(cm, dict):
+            return
+        st = getattr(getattr(self, "tool_ctx", None), "studio", None)
+        if st is None:
+            return
+        try:
+            from .tools.studio import chi_di
+            chi = chi_di(self.tool_ctx)
+        except Exception:  # noqa: BLE001 — la misura non ferma la risposta
+            return
+        if chi is None:
+            return
+        vid = cm.get("verifica")
+        if cm.get("modo") == "ombra":
+            msgs = cm.get("messaggi")
+            if not msgs:
+                return
+            t = threading.Thread(target=self._consigli_ombra, args=(st, chi, vid, list(msgs)),
+                                 daemon=True, name="parliamone-ombra")
+            self.__dict__["_consigli_thread"] = t
+            t.start()
+            return
+        testo = " ".join(str(m.get("content") or "") for m in self.history[start:]
+                         if m.get("role") == "assistant")
+        try:
+            r = st.misura_consigli(chi, vid, testo, "attiva")
+        except Exception as e:  # noqa: BLE001
+            print(f"   [STUDIO] «Parliamone» non misurata ({type(e).__name__})", flush=True)
+            return
+        if r.get("svelati"):
+            self._rule("studio_mappa_svelato")
+
+    def _consigli_ombra(self, st, chi, vid, messaggi: list):
+        """La passata di «Parliamone» in ombra: il testo del modello, mai detto, solo misurato."""
+        think, testo = ThinkFilter(), ""
+        try:
+            for kind, payload in self.backend.stream(messaggi, []):
+                if kind in ("calls", "usage"):
+                    continue
+                if isinstance(payload, str):
+                    testo += think.feed(payload)
+            testo += think.flush()
+            st.misura_consigli(chi, vid, testo, "ombra")
+        except Exception as e:  # noqa: BLE001 — una misura in secondo piano
+            print(f"   [STUDIO] «Parliamone» in ombra non misurata ({type(e).__name__})",
+                  flush=True)
 
     def _dopo_tool_chiudi(self):
         """Fine della risposta: in ombra, la frase del codice confrontata con quella del modello
@@ -6925,6 +7000,12 @@ class Brain:
               flush=True)
         try:
             parsed = json.loads(result)
+            # «Parliamone» (passo 7c, #328): verifica, mappa e modo sono per Brain (la misura a
+            # risposta finita), non per il modello
+            if isinstance(parsed, dict) and "_consigli" in parsed:
+                info = parsed.pop("_consigli")
+                self._consigli_mappa = info if isinstance(info, dict) else None
+                result = json.dumps(parsed, ensure_ascii=False)
             # L'azione proposta con una domanda («Lo apro?») è per Brain, non per il modello
             if isinstance(parsed, dict) and "in_sospeso" in parsed:
                 self._offer = parsed.pop("in_sospeso")

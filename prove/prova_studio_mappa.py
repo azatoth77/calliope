@@ -388,7 +388,7 @@ verifica("lo scheletro confermato con le copie non si cambia, nemmeno dal tutore
 verifica("il tutore vede la mappa di Leo ma non la cambia",
          st.vista_mappe(ANDREA, vid)["mia"]["id"] == m2
          and st.vista_mappe(ANDREA, vid)["puo"] == {"scheletro": False, "riapri": True,
-                                                    "mia": False}
+                                                    "mia": False, "libera": False}
          and solleva(lambda: st.riempi(ANDREA, m2, sbagliata["id"], "x"), S.NonTrovata)
          and solleva(lambda: st.controlla_mappa(ANDREA, m2), S.NonTrovata)
          and solleva(lambda: st.inizia_mappa(ANDREA, vid, "memoria"), S.NonTrovata))
@@ -466,7 +466,8 @@ verifica("lo scheletro non si scarica: senza la mia mappa niente PDF",
          solleva(lambda: st.pdf_mappa(LEO, vv), S.NonTrovata))
 st.dati.scrivi("UPDATE studio_verifiche SET stato = 'fatta' WHERE id = ?", (vid,))
 verifica("verifica fatta: la mappa si guarda e si scarica, non si cambia",
-         st.vista_mappe(LEO, vid)["puo"] == {"scheletro": False, "riapri": False, "mia": False}
+         st.vista_mappe(LEO, vid)["puo"] == {"scheletro": False, "riapri": False, "mia": False,
+                                                 "libera": False}
          and st.pdf_mappa(LEO, vid)[:5] == b"%PDF-"
          and solleva(lambda: st.riempi(LEO, m2, giusta["id"], "x"), S.VerificaChiusa))
 st.dati.scrivi("UPDATE studio_verifiche SET stato = 'aperta' WHERE id = ?", (vid,))
@@ -480,9 +481,9 @@ def n_mappe(v=None):
     return st.dati.uno(q, (v,) if v else ())["n"]
 
 
-verifica("lo schema alla versione 8, studio_mappe fra le tabelle e nella conservazione",
+verifica("lo schema alla versione 9 (dal passo 7c), studio_mappe fra le tabelle e nella conservazione",
          st.dati.uno("SELECT versione FROM meta_schema WHERE modulo='studio'")["versione"]
-         == len(D.MIGRAZIONI) == 8 and "studio_mappe" in D.TABELLE
+         == len(D.MIGRAZIONI) == 9 and "studio_mappe" in D.TABELLE
          and "studio_mappe" in __import__("calliope.conserva", fromlist=["x"]).TABELLE_STUDIO)
 vb, idsb, aidsb = carica(st, ANDREA)
 scheletro(st, vb, idsb, aidsb, chi=ANDREA)
@@ -868,7 +869,7 @@ verifica("pagina: il testo dei concetti solo con textContent (niente innerHTML n
          "innerHTML" not in pezzo and "insertAdjacentHTML" not in pezzo
          and "sp.textContent = riga" in pezzo and "outerHTML" not in pezzo)
 sw = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "sw.js").read_text("utf-8")
-verifica("il service worker alla v29", "calliope-telefono-pagina-v29" in sw)
+verifica("il service worker alla v30 (dal passo 7c)", "calliope-telefono-pagina-v30" in sw)
 
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
 sys.exit(1 if errori else 0)
