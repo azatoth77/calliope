@@ -439,8 +439,10 @@ CLASSI: dict[str, Classe] = {
     # lo Studio (30/10, passo 4.5, #284, tools/studio.py): sui dati della persona (o del suo
     # minore, da tutore), reversibile; «stato», «piano» e «oggi» leggono soltanto. Niente fonte:
     # non legge il testo delle pagine né i titoli degli argomenti. «Archivia» tiene la verifica
-    # per sempre: senza le parole nella frase chiede prima (chiedi_se)
-    "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi"})),
+    # per sempre: senza le parole nella frase chiede prima (chiedi_se). Dal 30/10 (passo 4b, #244)
+    # anche «resoconto» e «riepilogo» leggono soltanto (proiezioni dei dati, frasi del codice)
+    "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi", "resoconto",
+                                                        "riepilogo"})),
                  cosa=lambda a: _studio_cosa(a), verbi_azione=("azione", VERBI_STUDIO),
                  chiedi_se=lambda testo, a, ctx, **_k: _studio_archivia(testo, a)),
     # il testo letto delle pagine e i titoli degli argomenti: dati non fidati, come una foto

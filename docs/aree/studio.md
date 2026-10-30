@@ -18,7 +18,8 @@ leggere» con qwen3.6 su vLLM e l'harness del banco, quando la DGX è libera (se
 30/10 gli **argomenti** (4.4, #283): quando le pagine di una verifica sono tutte lette lo stesso
 thread li chiede dal solo testo, il codice controlla le pagine citate e arrivano «proposti» alla
 persona, che li conferma da una vista minima della pagina dello Studio. Dal 30/10 il **tool, la home e la vista
-aperta** (4.5, #284, sezione sotto); `studio_modo` resta spento di serie. Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
+aperta** (4.5, #284, sezione sotto); `studio_modo` resta spento di serie. Dal 30/10 il **resoconto delle
+sessioni e il riepilogo della verifica** (4b, #244, sezione sotto), proiezioni dei dati salvati. Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Moduli
@@ -28,6 +29,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Studio: verifiche, materiali e pagine, argomenti, piano a giorni deterministico, tenuta legata alla data della verifica (dal 29/10, passo 4.1, decisione [0035](../decisioni/0035-studio.md); `studio_modo`, spento di serie) | SQLite (stesso file della memoria: `studio_verifiche`, `studio_materiali`, `studio_pagine`, `studio_argomenti`, `studio_piano`, `studio_giorni`, `studio_misure`; modulo «studio» in `meta_schema`); libreria standard, niente modello | `calliope/studio/dati.py` → `Dati`, `cancella`, `cancella_file`; `calliope/studio/piano.py` → `calcola`, `minuti_liberi`, `descrivi_pagine`, `tappe`, `previsione`; `calliope/studio/servizio.py` → `Studio`, `permesso`, `prepara`, `NonPermesso`, `NonTrovata`; `calliope/conserva.py` → `TABELLE_STUDIO`; prova `prove/prova_studio_piano.py` |
 | Pagine dei materiali: fotocamera e galleria sul telefono, bordi ricontrollati, raddrizzamento, nitidezza, PDF divisi in pagine, file nella cartella dello Studio (dal 29/10, passo 4.2, #281) | Pillow e numpy (niente librerie native nuove), pypdfium2 (extra `archivio`); nel browser JavaScript scritto a mano, niente OpenCV.js | `calliope/studio/pagine.py` → `rileva`, `scegli_bordi`, `plausibili`, `raddrizza`, `nitidezza`, `prepara_foto`, `dividi_pdf`, `dividi_pdf_a_parte`, `scrivi_file`; `calliope/studio/servizio.py` → `Studio.verifica_per_pagine`, `Studio.verifiche_per_pagine`, `Studio.aggiungi_pronte`; `calliope/studio/dati.py` → `cartella_di`, `togli_orfani`; `calliope/schermi/server.py` → `POST /api/studio/pagina`, `POST /api/studio/verifiche`; `calliope/schermi/pagina/bordi.js`, `calliope/schermi/pagina/studio.js`; `calliope/immagini.py` → `apri`; prove `prove/prova_studio_pagine.py`, `prove/prova_studio_pagina_telefono.py` |
 | Argomenti dalle pagine lette, controllo delle pagine citate, forma del titolo, conferma della persona (dal 30/10, passo 4.4, #283; `studio_argomenti`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato (`response_format`); `provenienza.parole`, `vicina` e `racchiudi` | `calliope/studio/argomenti.py` → `corpo`, `riferimenti`, `controlla`, `forma_titolo`, `proposte`, `firma`, `pronta`; `calliope/studio/lettura.py` → `Lettore.estrai_argomenti`, `numeri_dalla_prima`; `calliope/studio/servizio.py` → `Studio.verifiche_per_argomenti`, `proponi_argomenti`, `conferma_argomenti`, `rinomina_argomento`, `unisci_argomenti`, `rifai_argomenti`, `estrazione`; `calliope/schermi/server.py` → `POST /api/studio/argomenti`; `calliope/schermi/pagina/studio.js`; prova `prove/prova_studio_argomenti.py` |
+| Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
 ## Problemi noti
@@ -64,6 +66,64 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   per pagina dei numeri di pagina, nella sezione degli argomenti]*; (2) senza vLLM la pagina e la voce lo dicono con una
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
   vede»), non un «da leggere» muto.
+
+## Resoconto delle sessioni e riepilogo della verifica (30/10, issue #244, ramo `issue-244-studio-resoconto`)
+
+*Passo 4b dell'epic #251; decisione [0035](../decisioni/0035-studio.md) punto 31; analisi nel
+commento della #244.*
+
+**Cosa c'era.** Di una sessione restava solo l'ora di «fatto» nel piano (la fine) con le pagine e
+i minuti **previsti**; il giorno saltato era un giorno della persona (`studio_giorni`), il giorno
+passato senza «fatto» spariva al ricalcolo, lo spostamento della data sovrascriveva la data. Le
+due domande («quanto conosci l'argomento», «come ti senti») sono in memoria per scelta (punto 27):
+non ci sono e non ci devono essere.
+
+**Gli eventi** (`studio_eventi`, schema alla versione 4): «inizio» (la sessione cominciata con
+«Inizia» o con le risposte a voce; solo l'ora, mai le risposte; uno per sessione), «fatto» e
+«non_fatto» (con le pagine, i minuti previsti e la fase di quel giorno; un secondo «fatto» non
+cambia l'ora), «saltato» (per ogni verifica che oggi aveva un giorno non fatto), «mancato» (scritto
+dal ricalcolo prima di togliere un giorno passato non fatto, una volta sola), «spostata» (la data
+di prima e la nuova). Solo id, numeri e date; vanno via con la verifica, con «dimentica» (non le
+archiviate), con `--svuota` e con la rotazione (`TABELLE_STUDIO`).
+
+**Il resoconto** di un giorno (`Studio.resoconto`): fatto, saltato, non fatto, cominciato, da fare
+o niente; l'ora d'inizio e di fine; il **tempo solo misurato** (fra «inizio» e «fatto» dello stesso
+giorno, entro 3 ore, come la sessione), altrimenti niente tempo nella frase e «tempo non misurato,
+previsti N min» sullo schermo; cosa resta (pagine del piano non lette, giorni, il prossimo). A
+«fatto» la voce lo dice: «Segnato fatto: oggi hai letto le pagine 112–113, in 35 minuti. Restano 5
+pagine in 6 giorni; domani la pagina 114.» A «com'è andata ieri?» l'azione `resoconto`.
+
+**Il riepilogo** di una verifica (`Studio.riepilogo`): giorni fatti, saltati e non fatti, il tempo
+misurato (e quanti giorni fatti senza «Inizia»), pagine lette su quelle del piano, argomenti finiti
+(le tappe), quanto manca, la previsione già esistente (forbice dopo 3 misure in 2 giorni, prima
+l'ultima prova), gli spostamenti. A voce, con l'azione `riepilogo` («a che punto sono con storia?»):
+«Storia, venerdì 6 novembre: 3 giorni fatti, 1 saltato, 1 non fatto; pagine lette 6 su 7, argomenti
+finiti 9 su 10. Mancano 4 giorni e 1 pagina.» (più la previsione solo se c'è). Trova anche una
+verifica già passata e non archiviata: lì i giorni rimasti nel piano contano non fatti.
+
+**Le frasi** le scrive il codice (`resoconto.py`) dai dati: materia e data (della persona),
+conti, giorni e ore, e i numeri di pagina **solo se sono cifre** (una sigla letta come «ESEGUI»
+diventa «2 pagine»); mai titoli degli argomenti, testo delle pagine, stato d'animo. Sullo schermo
+(home, per ogni verifica aperta) «La preparazione» (le righe del riepilogo) e «Le sessioni» (una riga
+per giorno, dalla più recente, con l'attività intera del piano), con textContent. Service worker
+alla v25.
+
+**Chi lo vede**: come il resto dello Studio, la persona e il tutore del minore (la #285 chiede che
+il tutore veda le sessioni: cosa, quando, quanto, su quali pagine); mai come si sentiva.
+
+**Non fatto, per dopo**: il riepilogo di una verifica passata nella home con «Com'è andata?» e
+«Archivia» (oggi la home mostra solo bozze e aperte; a voce si chiede), «Quanto sai, prima e dopo»
+(serve la padronanza del passo 5), «Rivedi gli errori» e «Nella conversazione» (servono esercizi e
+carte), dispositivo e stanza della sessione.
+
+Prove: `prova_studio_resoconto.py` (a secco, ~3 s); `prova_studio_home_pagina.py` con «Fatto», «La
+preparazione» e «Le sessioni»; `prova_studio_piano.py` e `prova_studio_pagine.py` con lo schema 4.
+Sul portatile del 30/10 Edge esce dal primo processo e continua in un altro: `cdp.Browser` non
+trovava DevToolsActivePort e tutte le prove con il browser cadevano all'avvio, anche senza
+modifiche. Corretto in `prove/cdp.py`: si aspetta il file anche dopo l'uscita del primo processo e
+`Browser.close` si manda lo stesso (i processi rimasti si ritrovano dal profilo). In
+`prova_studio_pagina_telefono.py` il conto delle pagine dopo l'invio si aspetta (sotto carico
+arrivava dopo il controllo).
 
 ## Tool, home e vista aperta (30/10, issue #284, ramo `issue-284-studio-tool-home`)
 
@@ -224,7 +284,8 @@ escono (il confronto in `studio_pagina_leggi`, la lettura).
 
 **Non fatto, per dopo:** creare una verifica dalla pagina (oggi a voce), il cassetto come materiale,
 PcMateriali, la previsione con le misure vere (passo 5), il resoconto delle sessioni e la vista del
-tutore (#285, #250).
+tutore (#285, #250). *[il resoconto delle sessioni e il riepilogo: fatti il 30/10 con la #244,
+sezione sopra]*
 
 Prove: `prova_studio_tool.py` (a secco, ~3 s), `prova_studio_home_pagina.py` (la pagina vera,
 telefono a 390×844, 320×693 e col testo grande, PC), `prova_raccolte.py` (il tocco dello Studio dal

@@ -27,6 +27,13 @@ arrivano «proposti»; la persona li tiene, li toglie, li rinomina, li unisce o 
 (`segna_argomento`, `rinomina_argomento`, `unisci_argomenti`, `aggiungi_argomento`) e conferma
 l'elenco (`conferma_argomenti`). Il piano usa solo i tenuti e gli aggiunti.
 
+**Resoconto e riepilogo** (30/10, passo 4b, #244): `resoconto` (un giorno di una verifica) e
+`riepilogo` (la preparazione di una verifica) sono proiezioni degli eventi `studio_eventi`, del
+piano, delle pagine, degli argomenti e delle misure (`resoconto.py`): niente modello, niente
+testo di un modello. Gli eventi li scrivono le azioni stesse: «inizio» (`imposta_sessione`, senza
+le risposte), «fatto»/«non_fatto» (`giorno_fatto`), «saltato» (`salta_oggi`), «spostata»
+(`imposta`) e «mancato» (`ricalcola`, prima di togliere un giorno passato non fatto).
+
 **Ricalcolo.** Il piano si ricalcola quando cambia qualcosa (argomenti confermati, data
 spostata, minuti, giorno fatto o saltato, giorni senza scuola) e, alla prima lettura di un
 giorno nuovo, perché «oggi» si è spostato. Con i dati di una versione più nuova (connessione
@@ -48,6 +55,7 @@ import re
 
 from . import dati as D
 from . import piano as P
+from . import resoconto as R
 
 SPENTO, OMBRA, ATTIVO = "spento", "ombra", "attivo"
 MODI = (SPENTO, OMBRA, ATTIVO)
@@ -397,8 +405,20 @@ class Studio:
         if not campi:
             return
         sets = ", ".join(f"{k} = ?" for k in campi)
-        self.dati.scrivi(f"UPDATE studio_verifiche SET {sets} WHERE id = ?",
-                         (*campi.values(), v["id"]))
+        with self.dati.lock:
+            db = self.dati.db
+            try:
+                db.execute(f"UPDATE studio_verifiche SET {sets} WHERE id = ?",
+                           (*campi.values(), v["id"]))
+                if "data" in campi and campi["data"] != v["data"]:
+                    # La storia dello spostamento (passo 4b, #244): la data di prima e la nuova
+                    self._evento(db, v, "spostata", self._oggi(), chi,
+                                 da=v["data"], a=campi["data"])
+                db.commit()
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
         self.ricalcola_persona(v["persona"])
 
     def archivia(self, chi, vid):
@@ -884,20 +904,59 @@ class Studio:
         self.ricalcola_persona(persona)
 
     def salta_oggi(self, chi, persona=None):
-        """«Non ce la faccio oggi»: oggi senza piano, le pagine passano ai giorni dopo."""
+        """«Non ce la faccio oggi»: oggi senza piano, le pagine passano ai giorni dopo. Per ogni
+        verifica che oggi aveva un giorno del piano non fatto resta l'evento «saltato» (passo 4b,
+        #244), con le pagine e i minuti che erano previsti: il ricalcolo toglie quella riga."""
+        persona = str(persona or getattr(chi, "id", "") or "")
+        self._chi_puo(chi, persona)
+        oggi = self._oggi().isoformat()
+        righe = self.dati.tutti(
+            "SELECT p.*, v.persona FROM studio_piano p JOIN studio_verifiche v ON v.id = "
+            "p.verifica WHERE v.persona = ? AND v.stato = 'aperta' AND p.giorno = ? AND "
+            "p.fatto IS NULL", (persona, oggi))
         self.imposta_giorno(chi, self._oggi(), 0, "saltato", persona=persona)
+        with self.dati.lock:
+            db = self.dati.db
+            try:
+                for r in righe:
+                    if not db.execute("SELECT 1 FROM studio_eventi WHERE verifica = ? AND "
+                                      "giorno = ? AND tipo = 'saltato'",
+                                      (r["verifica"], oggi)).fetchone():
+                        self._evento(db, {"id": r["verifica"], "persona": r["persona"]},
+                                     "saltato", oggi, chi, pagine=D.da_j(r["pagine"]),
+                                     minuti=r["minuti"], fase=r["fase"])
+                db.commit()
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
 
     def giorno_fatto(self, chi, vid, giorno=None, fatto: bool = True):
         """Il giorno del piano fatto (o non più fatto): le sue pagine restano lette."""
         self._scrivibile()
         v = self._verifica(chi, vid)
         g = _data(giorno or self._oggi())
-        r = self.dati.uno("SELECT id FROM studio_piano WHERE verifica = ? AND giorno = ?",
+        r = self.dati.uno("SELECT * FROM studio_piano WHERE verifica = ? AND giorno = ?",
                           (v["id"], g.isoformat()))
         if r is None:
             raise NonTrovata()
-        self.dati.scrivi("UPDATE studio_piano SET fatto = ? WHERE id = ?",
-                         (D.adesso() if fatto else None, r["id"]))
+        # Un giorno già fatto resta con la sua ora (la fine della sessione, per il resoconto)
+        if bool(r["fatto"]) != bool(fatto):
+            with self.dati.lock:
+                db = self.dati.db
+                try:
+                    db.execute("UPDATE studio_piano SET fatto = ? WHERE id = ?",
+                               (self.adesso().isoformat(timespec="seconds") if fatto else None,
+                                r["id"]))
+                    # L'evento con le pagine e i minuti previsti di quel giorno (passo 4b, #244):
+                    # il resoconto resta anche se il piano cambia dopo
+                    self._evento(db, v, "fatto" if fatto else "non_fatto", g, chi,
+                                 pagine=D.da_j(r["pagine"]), minuti=r["minuti"], fase=r["fase"])
+                    db.commit()
+                except Exception:
+                    if db.in_transaction:
+                        db.rollback()
+                    raise
         self._ricalcola_sicuro(v["id"])
 
     # ── misure e previsione ──
@@ -1019,6 +1078,16 @@ class Studio:
         with self.dati.lock:
             db = self.dati.db
             try:
+                # I giorni passati non fatti escono dal piano: prima resta l'evento «mancato»
+                # (passo 4b, #244), una volta sola per giorno, per il riepilogo
+                for r in db.execute("SELECT * FROM studio_piano WHERE verifica = ? AND fatto IS "
+                                    "NULL AND giorno < ?", (v["id"], oggi.isoformat())).fetchall():
+                    if not db.execute("SELECT 1 FROM studio_eventi WHERE verifica = ? AND giorno "
+                                      "= ? AND tipo IN ('mancato', 'saltato')",
+                                      (v["id"], r["giorno"])).fetchone():
+                        self._evento(db, v, "mancato", r["giorno"], None,
+                                     pagine=D.da_j(r["pagine"]), minuti=r["minuti"],
+                                     fase=r["fase"])
                 db.execute("DELETE FROM studio_piano WHERE verifica = ? AND (fatto IS NULL OR "
                            "giorno >= ?)", (v["id"], data.isoformat()))
                 for g in piano.giorni:
@@ -1089,7 +1158,10 @@ class Studio:
             "SELECT giorno, valore FROM studio_misure WHERE verifica = ? ORDER BY giorno, id",
             (v["id"],))]
         data = _data(v["data"])
+        # Le pagine del piano e quelle lette nei giorni fatti (per il riepilogo, passo 4b)
+        del_piano = {p_.id for p_ in self._pagine_del_piano(v["id"])}
         return {"verifica": v["id"], "stato": stato, "data": v["data"],
+                "pagine": {"totali": len(del_piano), "lette": len(del_piano & fatte)},
                 "giorni_mancanti": (data - oggi).days, "obiettivo": v["obiettivo"],
                 "giorni": giorni, "avvisi": avvisi,
                 "tappe": P.tappe(args, ordine, fatte),
@@ -1140,6 +1212,16 @@ class Studio:
              "umore": umore or prima.get("umore"), "fino": fino}
         # La sessione è di chi studia adesso (chi parla o tocca), anche sulla verifica del figlio
         self._sessioni[chiave] = s
+        if not prima and self.dati.scrivibile:
+            # L'ora d'inizio della sessione, per il tempo del resoconto (passo 4b, #244): solo
+            # l'ora, mai le due risposte (0035 punto 27). Un errore del db non ferma la sessione
+            try:
+                with self.dati.lock:
+                    self._evento(self.dati.db, v, "inizio", adesso.date(), chi)
+                    self.dati.db.commit()
+            except Exception as e:  # noqa: BLE001
+                self.misure["errori"] += 1
+                self._registra(f"inizio della sessione non salvato: {type(e).__name__}")
         self._registra(f"sessione sulla verifica {v['id']}")
         return dict(s)
 
@@ -1249,9 +1331,151 @@ class Studio:
                               "proposti": sum(a["stato"] == "proposto" for a in args),
                               "da_decidere": decidere},
                 "da_parte": self._da_parte(vid),
+                # Il riepilogo e le sessioni (passo 4b, #244): righe scritte dal codice dai dati
+                "riepilogo": self._riepilogo_schermo(v, pi) if pi is not None else None,
                 # Fuori dal piano: i tolti (non gli uniti a un altro), per rimetterli con un tocco
                 "tolti": [{"id": a["id"], "titolo": a["titolo"]} for a in args
                           if a["stato"] == "tolto" and "unito" not in a["avvisi"]]}
+
+    # ── resoconto e riepilogo (30/10, passo 4b, #244; decisione 0035 punto 31) ──
+    def _evento(self, db, v: dict, tipo: str, giorno, chi, **dati):
+        """Un evento della verifica `v`, dentro una transazione già aperta (chi chiama fa il
+        commit). `dati`: solo id, numeri e date."""
+        if tipo not in D.EVENTI:
+            raise ValueError("evento sconosciuto")
+        db.execute("INSERT INTO studio_eventi (verifica, persona, giorno, ora, tipo, chi, dati) "
+                   "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                   (v["id"], str(v["persona"]), _data(giorno).isoformat(),
+                    self.adesso().isoformat(timespec="seconds"), tipo,
+                    getattr(chi, "id", None) if chi is not None else None,
+                    json.dumps(dati, ensure_ascii=False) if dati else None))
+
+    def _eventi(self, vid) -> list[dict]:
+        out = self.dati.tutti("SELECT * FROM studio_eventi WHERE verifica = ? ORDER BY ora, id",
+                              (int(vid),))
+        for e in out:
+            try:
+                e["dati"] = json.loads(e["dati"]) if e["dati"] else {}
+            except (TypeError, ValueError):
+                e["dati"] = {}
+            if not isinstance(e["dati"], dict):
+                e["dati"] = {}
+        return out
+
+    def _pagine_mappa(self, vid) -> dict:
+        """id → `piano.Pagina` di tutte le pagine della verifica (anche tolte: la storia)."""
+        return {r["id"]: P.Pagina(r["id"], r["ordine"], r["numero"], r["etichetta"],
+                                  r["materiale_titolo"] or f"materiale {r['materiale_id']}")
+                for r in self.dati.tutti(
+                    "SELECT p.*, m.titolo AS materiale_titolo, m.id AS materiale_id FROM "
+                    "studio_pagine p JOIN studio_materiali m ON m.id = p.materiale WHERE "
+                    "m.verifica = ?", (int(vid),))}
+
+    def _sessioni_di(self, v: dict, giorni_piano: list[dict]) -> list[dict]:
+        oggi = self._oggi().isoformat()
+        passate = [g for g in giorni_piano if g["giorno"] < oggi and not g["fatto"]]
+        return R.sessioni(self._eventi(v["id"]), passate, self._oggi())
+
+    @staticmethod
+    def _numeri(ids, mappa: dict) -> list:
+        """I numeri di pagina per la voce: interi solo se sono cifre, altrimenti None."""
+        return [P.numero_pagina(mappa[i].numero) if i in mappa else None for i in ids]
+
+    @staticmethod
+    def _attivita(fase, ids, mappa: dict) -> str | None:
+        """L'attività per lo schermo (textContent), dalle pagine di oggi del db."""
+        quali = [mappa[i] for i in ids if i in mappa]
+        return P.attivita(fase or P.STUDIO, quali, P.piu_materiali(quali)) if quali else None
+
+    def _resta(self, giorni_piano: list[dict], pi: dict, dopo: str, mappa: dict) -> dict:
+        """Cosa resta dopo il giorno `dopo` (AAAA-MM-GG): le pagine del piano non lette, i giorni
+        del piano che vengono e il prossimo (la fase e i numeri delle sue pagine)."""
+        oggi = self._oggi().isoformat()
+        avanti = [g for g in giorni_piano if g["giorno"] > dopo and g["giorno"] >= oggi
+                  and not g["fatto"]]
+        pross = avanti[0] if avanti else None
+        return {"pagine": pi["pagine"]["totali"] - pi["pagine"]["lette"], "giorni": len(avanti),
+                "prossimo": ({"giorno": pross["giorno"], "fase": pross["fase"],
+                              "numeri": self._numeri(pross["pagine"], mappa)}
+                             if pross else None)}
+
+    def resoconto(self, chi, vid, giorno=None) -> dict:
+        """Il resoconto di un giorno di una verifica (di serie oggi), proiettato dai dati: lo
+        stato (fatto, saltato, mancato, iniziato, da fare, niente), l'ora d'inizio e di fine, i
+        minuti misurati (solo fra «Inizia» e «Fatto») e quelli previsti, la fase, le pagine (id e,
+        per la voce, i numeri fatti di cifre), l'attività per lo schermo, cosa resta e la frase
+        per la voce. Permessi come il resto dello Studio. Mai lo stato d'animo (non è su disco)."""
+        v = self._verifica(chi, vid)
+        g = _data(giorno or self._oggi()).isoformat()
+        pi = self.piano(chi, v["id"])
+        mappa = self._pagine_mappa(v["id"])
+        sess = next((s for s in self._sessioni_di(v, pi["giorni"]) if s["giorno"] == g), None)
+        riga = next((x for x in pi["giorni"] if x["giorno"] == g), None)
+        if sess is not None and sess["stato"] != R.INIZIATO:
+            r = dict(sess)
+        elif riga is not None and not riga["fatto"]:
+            r = {"giorno": g, "stato": R.INIZIATO if sess else R.DA_FARE,
+                 "inizio": sess["inizio"] if sess else None, "fine": None, "minuti": None,
+                 "previsti": riga["minuti"], "fase": riga["fase"], "pagine": list(riga["pagine"])}
+        elif sess is not None:
+            r = dict(sess)
+        else:
+            r = {"giorno": g, "stato": R.NIENTE, "inizio": None, "fine": None, "minuti": None,
+                 "previsti": None, "fase": None, "pagine": []}
+        r["numeri"] = self._numeri(r["pagine"], mappa)
+        r["attivita"] = self._attivita(r["fase"], r["pagine"], mappa)
+        # Un giorno ancora da chiudere conta fra quelli che restano («oggi compreso»)
+        aperto = r["stato"] in (R.DA_FARE, R.INIZIATO)
+        dopo = (_data(g) - datetime.timedelta(days=1)).isoformat() if aperto else g
+        resta = self._resta(pi["giorni"], pi, dopo, mappa)
+        if aperto:
+            resta.update(prossimo=None, oggi_compreso=True)
+        r.update(verifica=v["id"], materia=v["materia"], data=v["data"], resta=resta)
+        r["frase"] = R.frase_resoconto(r, self._oggi())
+        return r
+
+    def riepilogo(self, chi, vid) -> dict:
+        """Il riepilogo della preparazione di una verifica, proiettato dai dati: giorni fatti,
+        saltati e mancati, il tempo misurato, le pagine lette su quelle del piano, gli argomenti
+        finiti (le tappe), quanto manca, la previsione già esistente (forbice o ultima prova), gli
+        spostamenti della data, le sessioni giorno per giorno; con le righe per lo schermo e la
+        frase per la voce."""
+        v = self._verifica(chi, vid)
+        return self._riepilogo(v, self.piano(chi, v["id"]))
+
+    def _riepilogo(self, v: dict, pi: dict) -> dict:
+        sess = self._sessioni_di(v, pi["giorni"])
+        fatti = [s for s in sess if s["stato"] == R.FATTO]
+        misurati = [s for s in fatti if s.get("minuti")]
+        spost = [{"da": e["dati"].get("da"), "a": e["dati"].get("a")}
+                 for e in self._eventi(v["id"]) if e["tipo"] == "spostata"
+                 and e["dati"].get("da")]
+        r = {"verifica": v["id"], "materia": v["materia"], "data": v["data"],
+             "stato": pi["stato"], "giorni_mancanti": pi["giorni_mancanti"],
+             "giorni": {"fatti": len(fatti),
+                        "saltati": sum(s["stato"] == R.SALTATO for s in sess),
+                        "mancati": sum(s["stato"] == R.MANCATO for s in sess)},
+             "tempo": {"minuti": sum(s["minuti"] for s in misurati), "sessioni": len(misurati),
+                       "senza": len(fatti) - len(misurati)},
+             "pagine": dict(pi["pagine"]),
+             "argomenti": {"finiti": sum(t["stato"] == "fatta" for t in pi["tappe"]),
+                           "totali": len(pi["tappe"])},
+             "previsione": list(pi["previsione"]) if pi.get("previsione") else None,
+             "ultima": pi.get("livello"), "spostata": spost, "sessioni": sess}
+        r["righe"] = R.righe_riepilogo(r)
+        r["frase"] = R.frase_riepilogo(r, self._oggi())
+        return r
+
+    def _riepilogo_schermo(self, v: dict, pi: dict) -> dict:
+        """Il riepilogo per la home: le righe e le sessioni (dalla più recente) scritte dal codice;
+        l'attività intera del piano va bene sullo schermo (textContent)."""
+        r = self._riepilogo(v, pi)
+        mappa = self._pagine_mappa(v["id"])
+        return {"righe": r["righe"],
+                "sessioni": [{"giorno": s["giorno"], "stato": s["stato"],
+                              "testo": R.riga_sessione(s, self._attivita(s["fase"], s["pagine"],
+                                                                          mappa))}
+                             for s in reversed(r["sessioni"])]}
 
     # ── la vista aperta nei dati del turno (30/10, passo 4.5; progetto § 0, punto 2) ──
     VISTE = {"home": "la home dello Studio", "piano": "il piano", "argomenti": "gli argomenti",

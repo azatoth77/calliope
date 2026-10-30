@@ -690,6 +690,25 @@
       tastoHome("Riprova", "studio_riprova", { verifica: v.id, pagina: p.id }));
       art.append(li);
     }
+    // La preparazione e le sessioni (passo 4b, #244): righe scritte dal server dai soli dati
+    // salvati (eventi, piano, pagine), mai dal modello; qui solo textContent
+    const rp = v.riepilogo;
+    if (rp && Array.isArray(rp.righe) && rp.righe.length) {
+      const sez = nodo("section", "studio-h-gruppo studio-h-preparazione");
+      sez.append(nodo("h4", "studio-h-sotto", "La preparazione"));
+      for (const x of rp.righe) sez.append(nodo("p", "studio-h-riga", String(x)));
+      art.append(sez);
+    }
+    if (rp && Array.isArray(rp.sessioni) && rp.sessioni.length) {
+      const det = nodo("details", "studio-h-sessioni");
+      det.append(nodo("summary", null, "Le sessioni"));
+      const ol = nodo("ol", "studio-h-giorni");
+      for (const s of rp.sessioni) {
+        ol.append(nodo("li", "studio-h-giorno studio-h-s-" + String(s.stato || ""), String(s.testo || "")));
+      }
+      det.append(ol);
+      art.append(det);
+    }
     // Il piano, giorno per giorno
     if ((v.giorni || []).length) {
       const det = nodo("details", "studio-h-piano");

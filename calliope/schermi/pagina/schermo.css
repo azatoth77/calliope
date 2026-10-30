@@ -1236,7 +1236,7 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
 .studio-h-scelte legend { padding: 0 0 0.35rem; font-size: 0.95rem; color: var(--testo); }
 .studio-h-chip { flex: 0 1 auto; min-height: 2.75rem; padding: 0 0.8rem; }
 .studio-h-chip[aria-pressed="true"] { background: var(--accento-selezione); border-color: var(--accento); color: var(--accento-chiaro); }
-.studio-h-piano summary { cursor: pointer; min-height: 2.75rem; display: flex; align-items: center;
+.studio-h-piano summary, .studio-h-sessioni summary { cursor: pointer; min-height: 2.75rem; display: flex; align-items: center;
   color: var(--accento-chiaro); font-weight: 600; }
 .studio-h-giorni { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
 .studio-h-giorno { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.45rem 0.6rem; border-radius: 0.6rem;
@@ -1247,5 +1247,9 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
 .studio-h-nuova { margin: 0; padding: 0.7rem; border-radius: 0.8rem; border: 1px dashed var(--accento-bordo);
   color: var(--accento-chiaro); font-size: 0.95rem; }
 .studio-indietro { align-self: flex-start; min-height: 2.75rem; }
-.studio-h-piano summary:focus-visible, .studio-h-tasto:focus-visible, .studio-h-chip:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }
+/* Le sessioni (passo 4b, #244): una riga per giorno, fatto, saltato o non fatto */
+.studio-h-sessioni .studio-h-giorno { overflow-wrap: anywhere; color: var(--testo); }
+.studio-h-s-fatto { border-left: 3px solid var(--ok); }
+.studio-h-s-saltato, .studio-h-s-mancato, .studio-h-s-iniziato { border-left: 3px solid var(--tenue); }
+.studio-h-sessioni summary:focus-visible, .studio-h-piano summary:focus-visible, .studio-h-tasto:focus-visible, .studio-h-chip:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }
 .studio-home .studio-avviso { display: block; font-size: 0.88rem; color: var(--allarme); }

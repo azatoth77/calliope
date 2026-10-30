@@ -286,7 +286,11 @@ def scenario(t, hub, st, vid, file):
     mats = {r["materiale"] for r in righe if r["origine"] == "foto"}
     verifica("manda: le foto di un giro nello stesso materiale", len(mats) == 1, mats)
     verifica("manda: niente nella conversazione", hub.ingresso.vuoto())
-    conto = t.v("document.getElementById('studio-verifica').options[0].textContent") or ""
+    # L'elenco delle verifiche si rilegge dopo l'invio, in un'altra richiesta: si aspetta (sotto
+    # carico, col runner in parallelo, arrivava dopo il controllo; 30/10)
+    leggi_conto = "document.getElementById('studio-verifica').options[0].textContent"
+    aspetta(lambda: f"{len(righe)} pag." in (t.v(leggi_conto) or ""), 8)
+    conto = t.v(leggi_conto) or ""
     verifica("manda: la verifica dice le pagine nuove", f"{len(righe)} pag." in conto, conto)
     # Indietro: la pagina dello Studio si chiude
     t.tocca("#pagina-indietro")

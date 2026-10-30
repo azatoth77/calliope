@@ -7,7 +7,10 @@ il tool non c'è: dipende dall'installazione, come `stanza_cerca`):
   `crea` («ho la verifica di storia giovedì»), `stato` (di cosa parla, a che punto è la lettura),
   `piano`, `oggi` («cosa devo studiare oggi?»), `fatto`, `salta_oggi`, `archivia`, `tieni` e
   `togli` (un argomento), `riprova` (una pagina messa da parte) e `sessione` (le due domande prima
-  di studiare). Le letture (`stato`, `piano`, `oggi`) sono di sola lettura per la politica. Non
+  di studiare); dal 30/10 (passo 4b, #244) `resoconto` di un giorno e `riepilogo` della
+  preparazione, proiezioni dei dati con la frase scritta dal codice (`studio/resoconto.py`), e
+  «fatto» dice il resoconto. Le letture (`stato`, `piano`, `oggi`, `resoconto`, `riepilogo`) sono
+  di sola lettura per la politica. Non
   legge il testo delle pagine e non dà i titoli degli argomenti (proposti dal modello che legge le
   pagine: un dato): il risultato di un tool fidato varrebbe come provenienza fidata
   (`Brain._ricorda_fidato`), quindi i titoli escono solo da `studio_pagina_leggi`, in busta.
@@ -36,8 +39,9 @@ from .spec import ToolContext, ToolSpec, note_rule
 
 FAMILIARI = frozenset({"familiare", "amministra"})
 AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "sposta", "archivia", "tieni",
-          "togli", "riprova", "sessione")
-LETTURE = frozenset({"stato", "piano", "oggi"})
+          "togli", "riprova", "sessione", "resoconto", "riepilogo")
+# «resoconto» e «riepilogo» (30/10, passo 4b, #244): proiezioni dei dati, frasi del codice
+LETTURE = frozenset({"stato", "piano", "oggi", "resoconto", "riepilogo"})
 # Le azioni che un tocco può chiedere (schermi/tocchi.py): sui dati della persona, reversibili
 DA_TOCCO = frozenset({"fatto", "salta_oggi", "tieni", "togli", "riprova", "sessione"})
 
@@ -218,9 +222,11 @@ def _bersaglio(ctx) -> dict:
     return s if isinstance(s, dict) else {}
 
 
-def _verifica(svc, ctx, chi, verifica=None, materia=None) -> dict | None:
+def _verifica(svc, ctx, chi, verifica=None, materia=None, anche_passate=False) -> dict | None:
     """La verifica di cui si parla: quella del tocco (il bersaglio), l'id detto, la materia fra
-    le sue (e dei suoi minori), altrimenti la più vicina. None se non c'è."""
+    le sue (e dei suoi minori), altrimenti la più vicina. Con `anche_passate` (resoconto e
+    riepilogo, passo 4b) anche fra le sue già fatte e non archiviate, dalla più recente. None se
+    non c'è."""
     from ..studio import NonPermesso, NonTrovata
     b = _bersaglio(ctx)
     vid = b.get("verifica") if b else verifica
@@ -230,6 +236,9 @@ def _verifica(svc, ctx, chi, verifica=None, materia=None) -> dict | None:
         except (NonTrovata, NonPermesso, TypeError, ValueError):
             return None
     tutte = svc.home(chi)["verifiche"]
+    if anche_passate:
+        tutte = tutte + sorted((v for v in svc.verifiche(chi) if v["stato"] == "fatta"),
+                               key=lambda v: v["data"], reverse=True)
     if materia:
         m = str(materia).strip().lower()
         tutte = [v for v in tutte if str(v["materia"]).lower() == m
@@ -374,7 +383,55 @@ def _fatto(ctx, svc, chi, v, giorno, fatto: bool = True) -> dict:
         return _f("Oggi nel piano di questa verifica non c'è niente da segnare.", ok=False)
     except ValueError:
         return _f("Non capisco quale giorno.", ok=False)
-    return _f("Segnato fatto: un pezzo in meno." if fatto else "Tolto il fatto.")
+    if not fatto:
+        return _f("Tolto il fatto.")
+    # Il resoconto della sessione, dai soli dati (passo 4b, #244): cosa si è fatto, il tempo se
+    # misurato, cosa resta
+    try:
+        r = svc.resoconto(chi, v["id"], g or None)
+    except (NonTrovata, ValueError):
+        return _f("Segnato fatto: un pezzo in meno.")
+    return _f("Segnato fatto: " + r["frase"][:1].lower() + r["frase"][1:], verifica=v["id"])
+
+
+def _giorno_passato(testo, oggi: datetime.date) -> datetime.date | None:
+    """Il giorno di un resoconto: vuoto o «oggi», «ieri», «l'altro ieri», AAAA-MM-GG o il nome di
+    un giorno (l'ultimo passato, oggi compreso). Una conversione della forma (principio 10)."""
+    t = " ".join(str(testo or "").lower().replace("scorso", "").split())
+    if not t or t == "oggi":
+        return oggi
+    if t == "ieri":
+        return oggi - datetime.timedelta(days=1)
+    if t in ("l'altro ieri", "altro ieri", "avantieri", "l'altroieri"):
+        return oggi - datetime.timedelta(days=2)
+    try:
+        return datetime.date.fromisoformat(t[:10])
+    except ValueError:
+        pass
+    t = t.replace("ì", "i")
+    for i, g in enumerate(GIORNI):
+        if t == g.replace("ì", "i"):
+            return oggi - datetime.timedelta(days=(oggi.weekday() - i) % 7)
+    return None
+
+
+def _resoconto(ctx, svc, chi, v, giorno) -> dict:
+    """«Cosa ho fatto oggi?», «com'è andata ieri?»: il resoconto di un giorno, dai soli dati."""
+    d = _giorno_passato(giorno, svc._oggi())
+    if d is None:
+        return {"ok": False, "errore": "giorno non capito",
+                "cosa_fare": "Chiedi di quale giorno, poi richiama studio con giorno «oggi», "
+                             "«ieri», il nome del giorno o AAAA-MM-GG."}
+    r = svc.resoconto(chi, v["id"], d)
+    return _f(r["frase"], verifica=v["id"])
+
+
+def _riepilogo(ctx, svc, chi, v) -> dict:
+    """«A che punto sono con la verifica di storia?»: il riepilogo della preparazione."""
+    if v["stato"] == "bozza":
+        return _f(f"Per {_nome_verifica(v)} il piano arriva quando confermi gli argomenti.")
+    r = svc.riepilogo(chi, v["id"])
+    return _f(r["frase"], verifica=v["id"])
 
 
 def _salta(ctx, svc, chi, v) -> dict:
@@ -516,7 +573,8 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _crea(ctx, svc, chi, materia, data, argomento, per)
         if azione == "oggi":
             return _oggi(ctx, svc, chi)
-        v = _verifica(svc, ctx, chi, verifica, materia)
+        v = _verifica(svc, ctx, chi, verifica, materia,
+                      anche_passate=azione in ("resoconto", "riepilogo"))
         if v is None:
             if materia and not verifica:
                 # Una materia senza verifica (#318, sulla DGX: «giovedì ho anche la verifica di
@@ -545,6 +603,10 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _argomento(ctx, svc, chi, v, numero, titolo, azione == "tieni")
         if azione == "riprova":
             return _riprova(ctx, svc, chi, v, numero)
+        if azione == "resoconto":
+            return _resoconto(ctx, svc, chi, v, giorno)
+        if azione == "riepilogo":
+            return _riepilogo(ctx, svc, chi, v)
         return _sessione(ctx, svc, chi, v, conoscenza, umore or None)
     except (NonTrovata, NonPermesso):
         return _f(NON_CE, ok=False)
@@ -642,8 +704,11 @@ DESCRIZIONE = (
     "di oggi»: le pagine passano ai giorni che restano); «sposta» la data della verifica («la verifica è stata spostata a "
     "venerdì», con data); se non è chiaro quale dei due, chiedilo; «archivia»; «tieni» o «togli» un "
     "argomento (numero = la posizione nell'elenco, o titolo); «riprova» una pagina messa da parte; «sessione» con le risposte "
-    "a «quanto conosci l'argomento?» (conoscenza 1–5) e «come ti senti oggi?» (umore). verifica: "
-    "l'id, se lo sai (dai dati del turno); altrimenti materia.")
+    "a «quanto conosci l'argomento?» (conoscenza 1–5) e «come ti senti oggi?» (umore); "
+    "«resoconto» di un giorno di studio («cosa ho fatto oggi?», «com'è andata ieri?», giorno "
+    "facoltativo); «riepilogo» della preparazione di una verifica («a che punto sono con la "
+    "verifica di storia?», «quanto mi manca?»). verifica: l'id, se lo sai (dai dati del turno); "
+    "altrimenti materia.")
 
 PARAMETRI = {"type": "object", "properties": {
     "azione": {"type": "string", "enum": list(AZIONI)},

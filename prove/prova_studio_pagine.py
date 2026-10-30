@@ -1027,9 +1027,9 @@ def prova_schema():
     try:
         col = {r["name"] for r in st.dati.tutti("PRAGMA table_info(studio_pagine)")}
         ver = st.dati.uno("SELECT versione FROM meta_schema WHERE modulo = 'studio'")
-        verifica("schema: dalla versione 2 angoli, avvisi, nitidezza e lato delle pagine (3 dal "
-                 "passo 4.4)", {"angoli", "avvisi", "nitidezza", "larghezza", "altezza"} <= col
-                 and ver and ver["versione"] == len(D.MIGRAZIONI) == 3, f"{ver} {sorted(col)}")
+        verifica("schema: dalla versione 2 angoli, avvisi, nitidezza e lato delle pagine (4 dal "
+                 "passo 4b, #244)", {"angoli", "avvisi", "nitidezza", "larghezza", "altezza"} <= col
+                 and ver and ver["versione"] == len(D.MIGRAZIONI) == 4, f"{ver} {sorted(col)}")
         verifica("schema: «da_leggere» è uno stato della pagina", "da_leggere" in D.STATI_PAGINA)
     finally:
         st.close()

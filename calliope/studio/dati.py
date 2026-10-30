@@ -23,7 +23,15 @@ Tabelle (versione 1):
 - `studio_piano`: un giorno per riga (fase, pagine, attività, minuti, fatto);
 - `studio_giorni`: i giorni di una persona con minuti diversi (0 = senza piano: giorno senza
   scuola, giorno saltato con «non ce la faccio oggi»);
-- `studio_misure`: le misure vere della padronanza (dal passo 5), per la previsione.
+- `studio_misure`: le misure vere della padronanza (dal passo 5), per la previsione;
+- `studio_eventi` (versione 4, 30/10, passo 4b, issue #244): la storia delle sessioni di una
+  verifica, da cui si proiettano il resoconto di una sessione e il riepilogo della verifica
+  (`studio/resoconto.py`): «inizio» (la sessione cominciata con le due domande, **senza** le
+  risposte: lo stato d'animo e la conoscenza restano in memoria, decisione 0035 punto 27),
+  «fatto» e «non_fatto» (il giorno del piano, con le pagine e i minuti previsti di quel giorno),
+  «saltato» («non ce la faccio oggi»), «mancato» (un giorno del piano passato senza «fatto»,
+  scritto dal ricalcolo prima di togliere la riga) e «spostata» (la data di prima e quella nuova).
+  Solo id, numeri e date: mai titoli né testo delle pagine.
 
 Tenuta (decisione 0035, punto 4): tutto ciò che è di una verifica resta fino a
 `studio_tenuta_giorni` (60) giorni dopo la sua data, per sempre se archiviata; «dimentica le
@@ -48,7 +56,7 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_piano", "studio_misure", "studio_argomenti", "studio_pagine",
+TABELLE = ("studio_eventi", "studio_piano", "studio_misure", "studio_argomenti", "studio_pagine",
            "studio_materiali", "studio_verifiche", "studio_giorni")
 
 STATI_VERIFICA = ("bozza", "aperta", "fatta", "archiviata")
@@ -78,6 +86,8 @@ PROVVISORI_AVVIO_S = 900.0
 STATI_ARGOMENTO = ("proposto", "tenuto", "tolto", "aggiunto")
 # Gli argomenti su cui si fa il piano
 ARGOMENTI_DEL_PIANO = ("tenuto", "aggiunto")
+# Gli eventi delle sessioni (versione 4, passo 4b, #244)
+EVENTI = ("inizio", "fatto", "non_fatto", "saltato", "mancato", "spostata")
 
 
 def _v1(db: sqlite3.Connection):
@@ -174,8 +184,26 @@ def _v3(db: sqlite3.Connection):
     db.execute("ALTER TABLE studio_argomenti ADD COLUMN titolo_modello TEXT")
 
 
-# Le versioni dello schema: si aggiungono in fondo, solo colonne con NULL o un predefinito
-MIGRAZIONI = [_v1, _v2, _v3]
+def _v4(db: sqlite3.Connection):
+    """30/10, passo 4b (#244): gli eventi delle sessioni, per il resoconto e il riepilogo.
+    `persona` è di chi è la verifica, `chi` chi ha agito (lei o il tutore); `dati` è un JSON di
+    soli id, numeri e date."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_eventi (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        giorno TEXT NOT NULL,
+        ora TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        chi TEXT,
+        dati TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_eventi_verifica "
+               "ON studio_eventi(verifica, giorno)")
+
+
+# Le versioni dello schema: si aggiungono in fondo, solo colonne con NULL o un predefinito (o
+# tabelle nuove)
+MIGRAZIONI = [_v1, _v2, _v3, _v4]
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:
@@ -265,7 +293,8 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
             file += [r[0] for r in db.execute(
                 "SELECT file FROM studio_pagine WHERE materiale = ? AND file IS NOT NULL", (m,))]
             db.execute("DELETE FROM studio_pagine WHERE materiale = ?", (m,))
-        for t in ("studio_materiali", "studio_argomenti", "studio_piano", "studio_misure"):
+        for t in ("studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
+                  "studio_eventi"):
             db.execute(f"DELETE FROM {t} WHERE verifica = ?", (vid,))
         db.execute("DELETE FROM studio_verifiche WHERE id = ?", (vid,))
     return file
