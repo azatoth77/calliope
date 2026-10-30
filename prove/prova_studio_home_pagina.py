@@ -16,6 +16,8 @@ Nel browser vero (Edge o Chromium senza finestra; senza si salta), server degli 
   bersaglio; eseguito come lo esegue il ciclo, la home si rilegge e l'argomento esce da «Da decidere»;
 - «Inizia»: le due domande (5 livelli e 6 stati), «Comincia» manda `studio_sessione` con lo stato
   d'animo solo nei dati del tocco;
+- «Fatto» (30/10, #244): il resoconto nella risposta del tool; la home mostra «La preparazione» e
+  «Le sessioni» (righe scritte dal server dai soli dati, textContent, mai lo stato d'animo);
 - la vista aperta: la home e «Il piano» arrivano al server (`hub.viste_studio`);
 - il PC personale: la stessa home nella colonna centrale, senza «Pagine» (la fotocamera è del
   telefono);
@@ -143,14 +145,42 @@ def scenario_telefono(t, hub, st, vid, aid, pid, ctx_fn):
     ok = aspetta(lambda: t.v("document.querySelectorAll('.studio-h-chip').length === 11"), 4)
     verifica("«Inizia»: le due domande, 5 livelli e 6 stati", bool(ok))
     misure(t, "390×844 con le domande")
-    t.tocca('.studio-h-chip[data-valore="2"]')
-    t.tocca('.studio-h-chip[data-valore="poca energia"]')
+    # Ogni scelta si aspetta segnata: sotto carico una rilettura della home arrivata in ritardo
+    # (l'esito di «Riprova») ridisegnava sotto il tocco (30/10, hook della #244)
+    for sel in ('.studio-h-chip[data-valore="2"]', '.studio-h-chip[data-valore="poca energia"]'):
+        for _ in range(3):
+            t.tocca(sel)
+            if aspetta(lambda: t.v(f"(document.querySelector('{sel}') || {{}}).getAttribute"
+                                   f" && document.querySelector('{sel}').getAttribute('aria-pressed') === 'true'"), 2):
+                break
     t.tocca('button[data-tocco="studio_sessione"]')
     item, r = esegui_tocco(hub, st, ctx_fn)
     verifica("«Comincia»: studio_sessione, lo stato d'animo solo nel bersaglio",
              item and item["argomenti"] == {"azione": "sessione", "verifica": vid}
              and item["bersaglio"]["studio"]["umore"] == "poca energia"
              and "poca energia" not in item["descrizione"] and st.sessione("l1"), str(item)[:300])
+    # «Fatto» dopo «Comincia»: la preparazione e le sessioni (passo 4b, #244), dai soli dati
+    aspetta(lambda: t.v("!document.querySelector('.studio-h-domande') && !!document.querySelector('button[data-tocco=\"studio_fatto\"]')"), 6)
+    t.tocca('button[data-tocco="studio_fatto"]')
+    item, r = esegui_tocco(hub, st, ctx_fn)
+    verifica("«Fatto»: il tocco al ciclo e il resoconto nella risposta",
+             item and item["argomenti"]["azione"] == "fatto" and r and r["ok"]
+             and str(r.get("risposta_finale", "")).startswith("Segnato fatto: oggi hai letto"), str(r)[:300])
+    # La home si rilegge dopo l'esito del tocco: si aspetta il giorno fatto (prima c'era già la
+    # sessione cominciata). Inizio e fine nello stesso secondo non sono una misura: il tempo lo dice
+    ok = aspetta(lambda: "1 fatto" in (t.v("(document.querySelector('.studio-h-preparazione') || {}).textContent || ''") or ""), 8)
+    prep = t.v("(document.querySelector('.studio-h-preparazione') || {}).innerText || ''") or ""
+    verifica("la home: «La preparazione» con i giorni fatti e il tempo",
+             bool(ok) and "LA PREPARAZIONE" in prep.upper() and "Giorni del piano: 1 fatto" in prep
+             and "Tempo misurato" in prep, prep[:300])
+    t.v("document.querySelector('.studio-h-sessioni').open = true; 1")
+    sess = t.v("[...document.querySelectorAll('.studio-h-sessioni li')].map((e) => e.textContent)") or []
+    verifica("«Le sessioni»: oggi fatto con l'attività, testo e mai HTML",
+             len(sess) == 1 and " min" in sess[0] and "· Leggi " in sess[0]
+             and t.v("[...document.querySelectorAll('.studio-h-sessioni li, .studio-h-preparazione p')]"
+                     ".every((e) => e.children.length === 0)")
+             and "poca energia" not in prep + " ".join(sess), str(sess))
+    misure(t, "390×844 con le sessioni")
     # Il piano aperto: la vista del piano
     aspetta(lambda: t.v("!document.querySelector('.studio-h-domande') && !!document.querySelector('.studio-h-piano')"), 6)
     time.sleep(0.3)

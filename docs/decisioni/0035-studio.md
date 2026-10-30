@@ -9,7 +9,7 @@
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
   (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
-  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30.
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -313,6 +313,24 @@ dell'eco della stanza.
     amministra. Prima di `attivo`: il banco delle **30 foto vere** (punto 16: bordi e nitidezza,
     al più 2 errori fra «sfocata» e «buona») e le **prove dal vivo** di chi amministra con la
     pagina e la voce (`prove/prova_studio_ollama.py` sulla DGX, poi una sessione vera guidata).
+
+## Resoconto e riepilogo (passo 4b, #244, 30/10)
+
+31. **Il resoconto di una sessione e il riepilogo di una verifica sono proiezioni dei dati
+    salvati**, mai testo di un modello: gli eventi delle sessioni (`studio_eventi`: inizio, fatto,
+    non fatto, saltato, mancato, spostata; solo id, numeri e date, con la tenuta della verifica),
+    il piano, le pagine, gli argomenti e le misure. Le frasi le scrive il codice, con i numeri di
+    pagina solo se sono cifre e mai i titoli né il testo delle pagine (punto 24). Il tempo si dice
+    solo misurato, fra «Inizia» e «Fatto» dello stesso giorno entro le 3 ore della sessione. Le due
+    risposte prima della sessione restano fuori (punto 27): l'evento «inizio» ha solo l'ora. Li
+    vedono la persona e il tutore del minore, come il resto dello Studio (punto 10); per il tutore
+    è la parte «vedere le sessioni» della #285, senza come si sentiva, e al tutore le frasi sono
+    alla terza persona col nome del minore (revisione della PR #321). Dopo mezzanotte «Fatto»
+    chiude la sessione cominciata ieri entro 3 ore; con un «non fatto» in mezzo il tempo non c'è.
+    Alternative scartate: tenere
+    nel piano i giorni passati (niente durata né spostamenti, piano e storia mescolati), il registro
+    degli eventi della conversazione (in ombra di serie, un'altra tenuta, dipende da ciò che il
+    modello ha chiamato), salvare la frase detta (è testo, non una proiezione).
 
 ## Da completare con i passi 4.3–4.5
 
