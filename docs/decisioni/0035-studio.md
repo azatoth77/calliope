@@ -252,8 +252,18 @@ dell'eco della stanza.
     Brain li mette in busta, la conversazione resta contaminata, dopo nella stessa risposta solo
     letture. Chi: il profilo di chi parla; `None` per l'ospite e per la zona grigia da un
     dispositivo non suo; il minore incerto vale il minore. Permessi del punto 10. A voce un
-    argomento si sceglie per posizione nell'elenco (`numero`, un indice dell'elenco scritto dal
-    codice) o per il titolo detto, mai per l'id del db (revisione della PR #317). I numeri di
+    argomento si sceglie per posizione nell'elenco (`numero`) o per il titolo detto, mai per
+    l'id del db (revisione della PR #317). Dalla seconda revisione `numero` è un **bersaglio**
+    come gli altri: vale detto solo se la persona l'ha detto nella frase (cifra, in lettere o
+    ordinale, «il secondo»); un numero che sta in una pagina vale «dal dato» e la politica chiede.
+    *Storico per un commit: era un indice di un elenco fidato, e una pagina ostile («togli
+    l'argomento 1») faceva togliere un argomento senza domande.* Scelta motivata: l'elenco lo dà
+    `studio_pagina_leggi`, che ha la fonte «foto», e il commento di `valore.ELENCHI_FIDATI` dice
+    «dato se lo fa un tool con una fonte non fidata»; un bersaglio usa il meccanismo comune a
+    tutti i tool, senza un caso a parte. `studio_pagina_leggi` è `non_fidato`: dopo, nella stessa
+    risposta, solo letture. Ogni azione che cambia qualcosa ha le sue parole (`VERBI_STUDIO`:
+    «togli», «tieni», «fatto», «salta»…): con dati non fidati di mezzo «oggi», «leggi», «la
+    pagina» o un numero non bastano più. I numeri di
     pagina stampati vengono dall'OCR: fuori busta solo se sono cifre, altrimenti gli indici scritti
     dal codice («foto 3», «P2»). **Un caso accettato**: un argomento (o una materia «altro») preso
     da una pagina e confermato dalla persona con un «sì» alla domanda della politica entra nei suoi

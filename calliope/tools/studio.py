@@ -541,14 +541,29 @@ PARAMETRI_PAGINA = {"type": "object", "properties": {
     "materia": {"type": "string"}}, "required": ["pagina"]}
 
 
+def senza_mascherati(ctx, argomenti: dict) -> dict:
+    """«…» è il valore mascherato degli argomenti delicati (ToolSpec.delicati) nella storia: il
+    modello lo copia nella chiamata dopo («anzi mi sento meglio» → conoscenza «…», umore
+    «tranquillo»). Vale «non dato», così l'altro valore si aggiorna (seconda revisione della PR
+    #317). Una conversione della forma, prima dei controlli dello schema."""
+    out = {k: v for k, v in (argomenti or {}).items() if v not in ("…", "...")}
+    if len(out) != len(argomenti or {}):
+        note_rule(ctx, "studio_mascherato_non_dato")
+    return out
+
+
 def studio_specs() -> list[ToolSpec]:
     return [
         ToolSpec(name="studio", description=DESCRIZIONE, parameters=PARAMETRI, func=_studio,
                  risk="azione", levels=FAMILIARI, classe=None,
                  # Lo stato d'animo detto a voce non va mai su disco (0035, punto 27)
-                 delicati=("conoscenza", "umore")),
+                 delicati=("conoscenza", "umore"), prepara=senza_mascherati),
         # Una lettura di un dato non fidato: come allegato_leggi, mai toccabile
+        # non_fidato (seconda revisione della PR #317): dopo il suo risultato, nella stessa
+        # risposta, solo letture (politica.DOPO_DATO, Brain._letto_ora: chiavi «testo» e
+        # «argomenti» in _CHIAVI_DATO); come web_cerca esce dalla storia a risposta finita,
+        # e si rilegge se serve
         ToolSpec(name="studio_pagina_leggi", description=DESCRIZIONE_PAGINA,
                  parameters=PARAMETRI_PAGINA, func=_pagina_leggi, risk="lettura",
-                 levels=FAMILIARI),
+                 levels=FAMILIARI, non_fidato=True),
     ]

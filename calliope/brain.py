@@ -1415,7 +1415,8 @@ WEB_TOLTO = ("{\"ok\": true, \"nota\": \"risultati di internet già usati nella 
              "sotto e poi tolti dalla conversazione: per altri dati cerca di nuovo\"}")
 # Le chiavi del JSON di un tool non fidato che portano dati (non solo un esito): i risultati di
 # web_cerca e delle estensioni, i fatti e la notizia del tool notizie (13/10)
-_CHIAVI_DATO = ('"risultati"', '"fatti"', '"notizia"')
+# «testo» e «argomenti»: studio_pagina_leggi (30/10, seconda revisione della PR #317)
+_CHIAVI_DATO = ('"risultati"', '"fatti"', '"notizia"', '"testo"', '"argomenti"')
 
 
 class TextCallGuard:

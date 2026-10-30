@@ -78,7 +78,10 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "lista_togli": {"cose": B, "lista": B},
     # lo Studio (30/10, #284): l'id della verifica e dell'argomento sono bersagli
     "studio": {"azione": Z, "verifica": B, "materia": C, "data": S, "argomento": C, "per": B,
-               "numero": "indice:studio", "titolo": B, "giorno": S, "conoscenza": S,
+               # La posizione nell'elenco degli argomenti: un bersaglio come gli altri (seconda
+               # revisione della PR #317): detto se la persona l'ha detto in cifre, in lettere o
+               # come ordinale («il secondo»), altrimenti dal dato e la politica chiede
+               "numero": B, "titolo": B, "giorno": S, "conoscenza": S,
                "umore": S},
     "ricorda": {"fatto": C, "per_tutti": Z, "nascita": C},
     "dimentica": {"fatto": B},
@@ -155,7 +158,7 @@ OGGETTO_VALORI: dict[str, tuple[str, ...]] = {"sviluppo_collauda": ("argomenti",
 
 # Gli elenchi a cui punta un indice: fidato se lo fa un tool interno (o è un file della
 # persona), dato se lo fa un tool con una fonte non fidata (provenienza.FONTI)
-ELENCHI_FIDATI = frozenset({"pc_cerca_file", "allegato", "foto", "studio"})
+ELENCHI_FIDATI = frozenset({"pc_cerca_file", "allegato", "foto"})
 
 
 def argomenti_di(name: str, spec=None) -> dict | None:
@@ -414,7 +417,14 @@ def _gettoni_numeri(testo) -> set[str]:
             out.add(str(int(g)) if len(g) < 6 else g)
     inverso = {v: str(k) for k, v in pol._NUMERI.items()}
     out |= {inverso[g] for g in pol._gettoni(testo) if g in inverso}
+    # Gli ordinali («il secondo argomento», «la terza»), seconda revisione della PR #317
+    out |= {ORDINALI[g] for g in pol._gettoni(testo) if g in ORDINALI}
     return out
+
+
+ORDINALI = {f"{radice}{fine}": str(n) for n, radice in enumerate(
+    ("prim", "second", "terz", "quart", "quint", "sest", "settim", "ottav", "non", "decim"), 1)
+    for fine in ("o", "a", "i", "e")}
 
 
 @dataclass

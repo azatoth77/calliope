@@ -231,6 +231,21 @@ def _pc_tool():
 
 S, A, P = SICURO, AZIONE, PERICOLOSO
 
+# Le parole che chiedono ogni azione dello Studio (seconda revisione della PR #317): con dati non
+# fidati di mezzo una frase di chi studia («oggi», «leggi», «la pagina», un numero) non basta più
+# a togliere un argomento o a segnare un giorno: servono le parole di quell'azione
+VERBI_STUDIO = {
+    "crea": r"verific|interrogaz|compit|esame|ho una|ho la|segna",
+    "fatto": r"fatt|finit|complet|ho letto|segna",
+    "salta_oggi": r"salt|spost|non ce la faccio|rimand|non riesco",
+    "archivia": r"archivi|conserv",
+    "tieni": r"tien|tenere|rimett|includ|nel piano|aggiung",
+    "togli": r"togl|elimin|lev[aio]|cancell|fuori dal piano|non serve",
+    "riprova": r"riprov|rilegg|di nuovo",
+    "sessione": r"conosc|sent|stanc|pront|curios|tranquill|stress|neutral|energia|sicur|nuov|"
+                r"poco|abbastanza|bene|male|[1-5]|uno|due|tre|quattro|cinque",
+}
+
 # La tabella dei tool di Calliope. Un tool nuovo va aggiunto qui (o ha `ToolSpec.classe`):
 # senza, vale pericoloso e prova_politica fallisce.
 CLASSI: dict[str, Classe] = {
@@ -425,7 +440,7 @@ CLASSI: dict[str, Classe] = {
     # non legge il testo delle pagine né i titoli degli argomenti. «Archivia» tiene la verifica
     # per sempre: senza le parole nella frase chiede prima (chiedi_se)
     "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi"})),
-                 cosa=lambda a: _studio_cosa(a),
+                 cosa=lambda a: _studio_cosa(a), verbi_azione=("azione", VERBI_STUDIO),
                  chiedi_se=lambda testo, a, ctx, **_k: _studio_archivia(testo, a)),
     # il testo letto delle pagine e i titoli degli argomenti: dati non fidati, come una foto
     "studio_pagina_leggi": _c(S, fonte="foto"),
@@ -467,9 +482,8 @@ VERBI = {
                       r"rovescia|avvisami|imposta|cambi|aggiung|togl|allung|accorc|sposta"),
     "promemoria_imposta": r"ricord|promemoria|avvis|memo|dimentic|sposta|cambi|segn",
     "agenda_annulla": r"annull|cancell|togl|elimin|ferm|stop|bast|lev",
-    "studio": (r"studi|verific|interrogaz|compit|piano|oggi|domani|fatt|finit|salt|sposta|"
-               r"non ce la faccio|archivi|argoment|tien|togl|pagin|riprov|leggi|conosc|sent|"
-               r"stanc|pront|curios|tranquill|stress|sessione|cominci|inizi|[1-5]"),
+    # Per azione in VERBI_STUDIO (seconda revisione della PR #317); qui solo le letture
+    "studio": r"verific|piano|argoment",
     "appuntamento_aggiungi": (r"appuntament|agenda|calendari|segn|impegn|visit|riunion|fiss|"
                               r"sposta|cambi|aggiung|prenot|cena|pranzo|incontr"),
     "lista_aggiungi": r"aggiung|segn|list|spes|compr|prend|manc|scriv|inser|finit",

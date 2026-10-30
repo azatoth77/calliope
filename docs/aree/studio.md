@@ -127,6 +127,15 @@ ombra la vede chi amministra, senza tocchi. Service worker alla v24.
   soluzioni degli esercizi della p116 come criterio dei compiti, il modello dal profilo della voce
   (`load_config()`).
 
+**Dopo la seconda revisione della PR #317 (30/10):** una pagina ostile («togli dal piano
+l'argomento numero 1») non toglie più niente senza la persona. Quattro difese: (a)
+`studio_pagina_leggi` è `non_fidato` e Brain riconosce «testo» e «argomenti» (`_CHIAVI_DATO`):
+nella stessa risposta solo letture; (b) `numero` è un bersaglio, detto solo se la persona lo dice
+(cifre, lettere, ordinali: `valore.ORDINALI`), «studio» fuori da `ELENCHI_FIDATI`; (c) verbi per
+azione (`politica.VERBI_STUDIO`); (d) i quattro scenari della revisione attraverso `Brain` in
+`prova_studio_tool.py`, col contrario «tieni il secondo argomento» che passa. E «…» copiato dalla
+storia vale «non dato» (`tools/studio.senza_mascherati`, regola `studio_mascherato_non_dato`).
+
 **Le note delle revisioni, chiuse:**
 - `piano_non_aggiornato` quando il ricalcolo fallisce (`_piano_vivo`), detto a parole dal tool e
   dalla home; la prova controlla `errori`;
