@@ -208,8 +208,17 @@ verifica("una misura sola: ancora niente previsione",
 ORA[0] += datetime.timedelta(days=1)
 st.aggiungi_misura(LEO, vid, 55, "carte")
 r = chiama(ctx_di(st, LEO), "studio", azione="piano", verifica=vid)
-verifica("due misure: la previsione compare (spunto del 28/10)", "previsione" in r, str(r)[:200])
+verifica("due misure: niente previsione, l'ultima prova vera (0035 punto 9)",
+         "previsione" not in r and r.get("ultima_prova") == "55%", str(r)[:200])
+st.aggiungi_misura(LEO, vid, 60, "carte")
+r = chiama(ctx_di(st, LEO), "studio", azione="piano", verifica=vid)
+verifica("tre misure in due giorni: la previsione come forbice", str(r.get("previsione", "")).startswith("fra "),
+         str(r)[:200])
 ORA[0] -= datetime.timedelta(days=1)
+r = chiama(ctx_di(st, ANDREA), "studio", azione="crea", materia="Matematica", data="lunedì",
+           per="Leo")
+verifica("il tutore che crea due volte la stessa verifica del minore riceve quella che c'è",
+         r["ok"] and r.get("verifica") == v_mat and "già" in r["conferma"], str(r))
 
 # ═══════════════════════════ 2. la busta ═══════════════════════════
 print("— la busta")
@@ -325,7 +334,7 @@ verifica("senza bersaglio dello Studio: rifiutato (`senza_bersaglio`)",
 ctx_t = ctx_di(st, LEO, come="schermo")
 st.segna_argomento(LEO, args_l[2]["id"], False)
 ctx_t.tocco_bersaglio = tieni["bersaglio"]
-r = json.loads(TOOLS.call("studio", {"azione": "tieni", "verifica": vid, "id": args_l[0]["id"]},
+r = json.loads(TOOLS.call("studio", {"azione": "tieni", "verifica": vid, "numero": 1},
                           ctx_t, "familiare"))
 verifica("il tool usa l'argomento del bersaglio, non quello degli argomenti",
          r["ok"] and next(a for a in st.argomenti(LEO, vid)
@@ -361,6 +370,29 @@ verifica("riprova: la pagina da parte torna «da leggere»", r["ok"] and next(
     == "da_leggere")
 ctx_t.tocco_bersaglio = None
 
+# «Tieni» e «togli» a voce: per posizione (indice dell'elenco del codice) o per titolo
+st.segna_argomento(LEO, args_l[1]["id"], False)
+r = chiama(ctx_di(st, LEO), "studio", azione="tieni", verifica=vid, numero=2)
+verifica("a voce: «tieni il secondo» per posizione (indice:studio, fidato)",
+         r["ok"] and next(a for a in st.argomenti(LEO, vid) if a["id"] == args_l[1]["id"])["stato"]
+         == "tenuto" and valore.etichetta(2, valore.argomenti_di("studio")["numero"], None)
+         == valore.FIDATO)
+r = chiama(ctx_di(st, LEO), "studio", azione="togli", verifica=vid,
+           titolo=args_l[1]["titolo"].split()[-1])
+verifica("a voce: «togli» per titolo detto", r["ok"] and next(
+    a for a in st.argomenti(LEO, vid) if a["id"] == args_l[1]["id"])["stato"] == "tolto", str(r))
+verifica("a voce: senza numero né titolo chiede quale",
+         not chiama(ctx_di(st, LEO), "studio", azione="tieni", verifica=vid)["ok"])
+verifica("«Riprova» del tocco: la foto per ordine, mai il numero letto dall'OCR",
+         "la foto" in rip["descrizione"] and str(MAT["pagine"][1]["numero"]) not in rip["descrizione"])
+verifica("le attività per il modello: numeri solo cifre, una sigla letta non passa",
+         TS.attivita("Leggi le pagine 112–113.") == "Leggi le pagine 112–113."
+         and TS.attivita("Leggi la pagina ESEGUI.") == "Leggi le pagine del piano di oggi."
+         and TS.attivita("Leggi «Appunti».") == "Leggi le pagine del piano di oggi.")
+r = chiama(ctx_di(st, LEO), "studio_pagina_leggi", pagina="P99", verifica=vid)
+verifica("l'errore di studio_pagina_leggi dice solo gli indici del codice",
+         not any(str(p["numero"]) in r["cosa_fare"] for p in MAT["pagine"] if p["numero"]))
+
 # ═══════════════════════════ 4. la vista aperta ═══════════════════════════
 print("— la vista aperta")
 verifica("valida: tipi e id interi; il resto rifiutato",
@@ -392,17 +424,23 @@ class Hub:
         return types.SimpleNamespace(persona=self.persona, certo=self.certo)
 
     def abbinati(self):
-        return [{"id": 1, "proprietario": "l1"}, {"id": 2, "proprietario": "a1"}]
+        return [{"id": 1, "proprietario": "l1", "creato": 10.0},
+                {"id": 2, "proprietario": "a1", "creato": 20.0}]
 
     def collegato(self, sid):
         return sid in (1, 2)
 
 
 hub = Hub()
-hub.viste_studio.metti(1, {"vista": "piano", "verifica": vid})
+hub.viste_studio.metti((1, 10.0), {"vista": "piano", "verifica": vid})
 c = ctx_di(st, LEO)
 c.schermi = hub
 verifica("vista.riga: dallo schermo collegato di chi parla", f"verifica {vid}" in V.riga(c, st))
+vecchio = Hub.abbinati
+Hub.abbinati = lambda self: [{"id": 1, "proprietario": "l1", "creato": 99.0}]
+verifica("vista: uno schermo nuovo con lo stesso numero non eredita la vista (chiave id, creato)",
+         V.riga(c, st) == "")
+Hub.abbinati = vecchio
 c2 = ctx_di(st, ANDREA)
 c2.schermi = hub
 hub.persona = "a1"
@@ -456,7 +494,11 @@ class Arch:
         self.gancio = gancio
 
     def dimentica(self, persona):
-        self.gancio(persona)
+        # Come conversazioni.ArchivioConversazioni: un gancio che solleva non ferma «dimentica»
+        try:
+            self.gancio(persona)
+        except Exception:  # noqa: BLE001
+            pass
         return 1
 
 
@@ -483,6 +525,73 @@ verifica("«dimentica»: «ho tolto le verifiche dello Studio» solo se le ha to
          TC.STUDIO_TOLTO in ok_["conferma"] and TC.STUDIO_NON_TOLTO not in ok_["conferma"]
          and TC.STUDIO_NON_TOLTO in ko["conferma"] and TC.STUDIO_TOLTO not in ko["conferma"],
          f"{ok_['conferma']} | {ko['conferma']}")
+# B2 (revisione della PR #317): il ricontrollo che fallisce vale «non so», mai «ho tolto»
+import shutil as _sh  # noqa: E402
+
+
+def gancio_db_bloccato(cfg, p):
+    # Il db diventa illeggibile (al suo posto una cartella): il gancio non toglie niente e il
+    # conteggio dopo solleva
+    _sh.move(cfg.memory_db, cfg.memory_db + ".via")
+    Path(cfg.memory_db).mkdir()
+
+
+def gancio_che_solleva(cfg, p):
+    raise RuntimeError("db bloccato")
+
+
+bloccato = dimentica_con(gancio_db_bloccato, "dim3.db")
+solleva = dimentica_con(lambda cfg, p: None, "dim4.db")
+verifica("«dimentica» col db bloccato dopo il gancio: «non sono riuscita», mai «ho tolto»",
+         TC.STUDIO_NON_TOLTO in bloccato["conferma"] and TC.STUDIO_TOLTO not in bloccato["conferma"],
+         bloccato["conferma"])
+verifica("«dimentica» col conteggio che solleva: _studio_da_dimenticare dà None (non so)",
+         TC._studio_da_dimenticare(types.SimpleNamespace(cfg=types.SimpleNamespace(
+             memory_db=str(TMP / "dim3.db"))), "l1") is None)
+# La sessione in memoria va via con «dimentica»
+st.imposta_sessione(LEO, vid, 2, "stressato")
+ctx_d = ctx_di(st, LEO)
+ctx_d.cfg = cfg_nuova("dim5.db")
+ctx_d.conversazioni = Arch(lambda p: None)
+ctx_d.turno = 1
+TC._conversazioni_dimentica(ctx_d)
+ctx_d.turno = 2
+TC._conversazioni_dimentica(ctx_d)
+verifica("«dimentica» toglie la sessione dello Studio (dimentica_sessione)", st.sessione("l1") is None)
+
+# B1 (revisione della PR #317): lo stato d'animo detto a voce, attraverso Brain
+import contextlib  # noqa: E402
+import io  # noqa: E402
+import prova_stati_buchi as SB  # noqa: E402
+from calliope.brain import tools_per_registro  # noqa: E402
+b = SB.brain([SB.chiama("studio", azione="sessione", verifica=vid, conoscenza=3,
+                        umore="stressato"), [("text", "Grazie, cominciamo.")]])
+SB.Persone.__init__  # noqa: B018
+b.tool_ctx.speakers.users["Leo"] = LEO
+b.tool_ctx.speakers.by_id = REG.by_id
+b.tool_ctx.studio = st
+for spec in TS.studio_specs():
+    b.tools.register(spec)
+st.dimentica_sessione("l1")
+uscita = io.StringIO()
+with contextlib.redirect_stdout(uscita):
+    SB.di(b, "Abbastanza, e sono stressato.", chi="Leo", livello="familiare")
+registro = json.dumps(tools_per_registro(b.last_tools), ensure_ascii=False)
+storia = json.dumps([m.get("tool_calls") for m in b.history if m.get("tool_calls")],
+                    ensure_ascii=False)
+verifica("a voce: la sessione col valore vero nel tool", (st.sessione("l1") or {}).get("umore")
+         == "stressato", uscita.getvalue()[-300:])
+verifica("a voce: niente stato d'animo nel registro dei turni né nella riga [TOOL]",
+         "stressato" not in registro and '"umore": "…"' in registro
+         and "[TOOL] studio" in uscita.getvalue() and "stressato" not in "\n".join(
+             r for r in uscita.getvalue().splitlines() if "[TOOL]" in r), registro)
+verifica("a voce: la chiamata nella storia (eventi, conversazione salvata) con «…»",
+         "stressato" not in storia and "…" in storia, storia)
+from calliope.eventi import ombra as EO  # noqa: E402
+src_eo = Path(EO.__file__).read_text("utf-8")
+verifica("gli eventi copiano gli argomenti dalla storia (chiamata_tool da m[\"tool_calls\"])",
+         'argomenti=c.get("arguments")' in src_eo)
+
 verifica("la cartella dei provvisori all'avvio: solo dopo 15 minuti",
          S.dati.PROVVISORI_AVVIO_S == 900.0)
 

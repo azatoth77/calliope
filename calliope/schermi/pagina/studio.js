@@ -580,14 +580,18 @@
     const ob = nodo("div", "studio-h-obiettivo");
     const barra = nodo("div", "studio-h-barra");
     const pieno = nodo("div", "studio-h-pieno");
-    const prev = v.previsione === null || v.previsione === undefined ? null : Number(v.previsione);
+    // La forbice dopo 3 prove in 2 giorni (0035 punto 9); prima l'ultima prova vera, se c'è
+    const fb = Array.isArray(v.previsione) && v.previsione.length === 2 ? v.previsione.map(Number) : null;
+    const ult = v.ultima === null || v.ultima === undefined ? null : Number(v.ultima);
+    const prev = fb ? (fb[0] + fb[1]) / 2 : ult;
     pieno.style.width = (prev === null ? 0 : Math.max(0, Math.min(100, prev))) + "%";
     const segno = nodo("div", "studio-h-segno");
     segno.style.left = Math.max(0, Math.min(100, Number(v.obiettivo) || 75)) + "%";
     barra.append(pieno, segno);
-    ob.append(barra, nodo("span", "studio-h-nota", prev === null
-      ? "obiettivo " + (Number(v.obiettivo) || 75) + "% · la previsione arriva dopo due prove"
-      : "previsione " + Math.round(prev) + "% · obiettivo " + (Number(v.obiettivo) || 75) + "%"));
+    const ob_ = "obiettivo " + (Number(v.obiettivo) || 75) + "%";
+    ob.append(barra, nodo("span", "studio-h-nota", fb ? "previsione fra " + fb[0] + " e " + fb[1] + "% · " + ob_
+      : ult !== null ? "l'ultima prova: " + Math.round(ult) + "% · " + ob_
+      : ob_ + " · la previsione arriva con gli esercizi"));
     art.append(ob);
     // La lettura delle pagine
     const l = v.lettura || {};

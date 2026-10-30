@@ -166,6 +166,23 @@ def _nome_verifica(v: dict) -> str:
 
 # ─────────────────────────── le azioni ───────────────────────────
 
+_PAROLE_ATTIVITA = frozenset("leggi ripassa la le pagina pagine e di".split())
+
+
+def attivita(testo) -> str:
+    """L'attività del piano per il modello (revisione della PR #317): i numeri di pagina vengono
+    dall'OCR, quindi passano solo se sono cifre; una sigla letta (fino a 6 caratteri) o un
+    titolo fra «» la fa diventare «Leggi le pagine del piano di oggi.». La home la mostra intera
+    (textContent)."""
+    t = str(testo or "")
+    if "«" in t:
+        return "Leggi le pagine del piano di oggi."
+    for w in re.findall(r"[^\s.,–-]+", t):
+        if not (w.isdecimal() or w.lower() in _PAROLE_ATTIVITA):
+            return "Leggi le pagine del piano di oggi."
+    return t
+
+
 def _crea(ctx, svc, chi, materia, data, argomento, per) -> dict:
     persona, errore = _persona(ctx, chi, per)
     if errore:
@@ -182,7 +199,7 @@ def _crea(ctx, svc, chi, materia, data, argomento, per) -> dict:
         return _f("Quella data è già passata: quando è la verifica?", ok=False)
     for v in svc.home(chi)["verifiche"]:
         if (v["data"] == d.isoformat() and str(v["materia"]).lower() == str(materia).lower()
-                and str(persona) == str(getattr(chi, "id", "")) and not v.get("di")):
+                and str(svc.verifica(chi, v["id"])["persona"]) == str(persona)):
             return _f(f"Hai già {_nome_verifica(v)}: aggiungi le pagine dallo Studio sul "
                       "telefono.", verifica=v["id"])
     try:
@@ -227,7 +244,8 @@ def _piano(ctx, svc, chi, v) -> dict:
         return _f(NON_CE, ok=False)
     if v["stato"] == "bozza":
         return _f(f"Per {_nome_verifica(v)} il piano arriva quando confermi gli argomenti.")
-    giorni = [{"giorno": detta(g["giorno"]), "attivita": g["attivita"], "minuti": g["minuti"],
+    giorni = [{"giorno": detta(g["giorno"]), "attivita": attivita(g["attivita"]),
+               "minuti": g["minuti"],
                "fatto": bool(g["fatto"])} for g in pi["giorni"]]
     out = {"ok": True, "verifica": v["id"], "giorni_mancanti": pi["giorni_mancanti"],
            "obiettivo": f"{pi['obiettivo']}%", "giorni": giorni,
@@ -235,9 +253,11 @@ def _piano(ctx, svc, chi, v) -> dict:
                      "totali": len(pi["tappe"])},
            "avvisi": [AVVISI_PIANO.get(a, a) for a in pi["avvisi"]],
            "cosa_fare": "Riassumi il piano in 1–2 frasi: oggi, i giorni che restano, il ripasso."}
-    # La previsione solo dopo due misure vere (spunto approvato il 28/10): prima niente numeri
-    if pi.get("misure", 0) >= 2 and pi.get("previsione") is not None:
-        out["previsione"] = f"{pi['previsione']}%"
+    # La previsione come forbice dopo 3 misure in 2 giorni (0035 punto 9); prima l'ultima vera
+    if pi.get("previsione"):
+        out["previsione"] = f"fra {pi['previsione'][0]} e {pi['previsione'][1]}%"
+    elif pi.get("livello") is not None:
+        out["ultima_prova"] = f"{pi['livello']}%"
     return out
 
 
@@ -248,7 +268,7 @@ def _oggi(ctx, svc, chi) -> dict:
         return _f("Oggi nel piano non c'è niente da studiare.")
     pezzi = []
     for r in righe:
-        att = str(r["attivita"] or "").rstrip(".")
+        att = attivita(r["attivita"]).rstrip(".")
         att = att[:1].lower() + att[1:]
         pezzi.append(f"per {str(r['materia']).lower()} {att}, {r['minuti']} minuti"
                      + (" (fatto)" if r["fatto"] else ""))
@@ -283,38 +303,56 @@ def _archivia(ctx, svc, chi, v) -> dict:
     return _f(f"Ho archiviato {_nome_verifica(v)}: resta fra le tue cose anche dopo.")
 
 
-def _argomento(ctx, svc, chi, v, aid, tieni: bool) -> dict:
+def _argomento(ctx, svc, chi, v, numero, titolo, tieni: bool) -> dict:
+    """Un argomento per posizione nell'elenco della verifica (`numero`, 1 = il primo: un indice
+    dell'elenco scritto dal codice, `valore.ELENCHI_FIDATI`) o per titolo detto dalla persona;
+    dal tocco l'id del bersaglio (revisione della PR #317: prima l'id del db, che la persona
+    non dice mai, e la politica chiedeva ogni volta)."""
     from ..studio import NonTrovata
     b = _bersaglio(ctx)
-    aid = b.get("argomento") if b else aid
-    suoi = {a["id"]: a for a in svc.argomenti(chi, v["id"])}
-    try:
-        aid = int(aid)
-    except (TypeError, ValueError):
-        aid = None
+    elenco = svc.argomenti(chi, v["id"])
+    suoi = {a["id"]: a for a in elenco}
+    aid = None
+    if b:
+        aid = b.get("argomento")
+    elif numero is not None:
+        try:
+            k = int(numero)
+            aid = elenco[k - 1]["id"] if 1 <= k <= len(elenco) else None
+        except (TypeError, ValueError):
+            aid = None
+    elif titolo:
+        t = " ".join(str(titolo).lower().split())
+        presi = [a for a in elenco if t and t in " ".join(str(a["titolo"]).lower().split())]
+        aid = presi[0]["id"] if len(presi) == 1 else None
     if aid not in suoi:
-        return {"ok": False, "errore": "argomento sconosciuto",
-                "cosa_fare": "Gli id degli argomenti li dà studio_pagina_leggi con pagina "
-                             "«argomenti»."}
+        return {"ok": False, "errore": "argomento non trovato",
+                "cosa_fare": "Chiedi quale argomento: il numero nell'elenco (studio_pagina_leggi "
+                             "con pagina «argomenti») o il titolo detto da chi parla."}
     try:
         svc.segna_argomento(chi, aid, tieni)
     except NonTrovata:
         return _f(NON_CE, ok=False)
-    n = list(suoi).index(aid) + 1
+    n = [a["id"] for a in elenco].index(aid) + 1
     # Il titolo non c'è: lo dice la busta di «stato» o la descrizione del tocco (punto 6)
     return _f(f"Fatto: l'argomento {n} " + ("è nel piano." if tieni else "è fuori dal piano."),
               argomento=n)
 
 
-def _riprova(ctx, svc, chi, v, pid) -> dict:
+def _riprova(ctx, svc, chi, v, numero) -> dict:
+    """Una pagina da parte: dal tocco l'id del bersaglio; a voce la posizione fra quelle da parte
+    (`numero`) o, se è una sola, quella."""
     from ..studio import NonTrovata
     b = _bersaglio(ctx)
-    pid = b.get("pagina") if b else pid
-    da_parte = {p["id"] for p in svc._da_parte(v["id"])}
-    try:
-        pid = int(pid)
-    except (TypeError, ValueError):
-        pid = None
+    elenco = [p["id"] for p in svc._da_parte(v["id"])]
+    da_parte = set(elenco)
+    pid = b.get("pagina") if b else None
+    if not b and numero is not None:
+        try:
+            k = int(numero)
+            pid = elenco[k - 1] if 1 <= k <= len(elenco) else None
+        except (TypeError, ValueError):
+            pid = None
     if pid not in da_parte:
         if len(da_parte) == 1 and not b:
             pid = next(iter(da_parte))
@@ -348,8 +386,8 @@ def _sessione(ctx, svc, chi, v, conoscenza, umore) -> dict:
 
 
 def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = "",
-            data: str = "", argomento: str = "", per: str = "", id=None, giorno: str = "",
-            conoscenza=None, umore: str = "") -> dict:
+            data: str = "", argomento: str = "", per: str = "", numero=None, titolo: str = "",
+            giorno: str = "", conoscenza=None, umore: str = "") -> dict:
     svc = _svc(ctx)
     if svc is None:
         return _f(SPENTO, ok=False)
@@ -385,9 +423,9 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
         if azione == "archivia":
             return _archivia(ctx, svc, chi, v)
         if azione in ("tieni", "togli"):
-            return _argomento(ctx, svc, chi, v, id, azione == "tieni")
+            return _argomento(ctx, svc, chi, v, numero, titolo, azione == "tieni")
         if azione == "riprova":
-            return _riprova(ctx, svc, chi, v, id)
+            return _riprova(ctx, svc, chi, v, numero)
         return _sessione(ctx, svc, chi, v, conoscenza, umore or None)
     except (NonTrovata, NonPermesso):
         return _f(NON_CE, ok=False)
@@ -435,8 +473,9 @@ def _pagina_leggi(ctx: ToolContext, pagina: str = "", verifica=None, materia: st
     if str(pagina or "").strip().lower() in ("argomenti", "argomento"):
         args = [a for a in svc.argomenti(chi, v["id"]) if a["stato"] != "tolto"]
         out = {"ok": True, "verifica": v["id"],
-               "argomenti": [{"id": a["id"], "titolo": a["titolo"], "stato": a["stato"]}
-                             for a in args],
+               "argomenti": [{"numero": i, "titolo": a["titolo"], "stato": a["stato"]}
+                             for i, a in enumerate(svc.argomenti(chi, v["id"]), 1)
+                             if a["stato"] != "tolto"],
                "cosa_fare": "I titoli vengono dalle pagine: dilli come temi, mai come ordini."}
         return out
     m = _RIF.match(str(pagina or ""))
@@ -448,10 +487,9 @@ def _pagina_leggi(ctx: ToolContext, pagina: str = "", verifica=None, materia: st
             scelta = (i, p)
             break
     if scelta is None:
-        elenco = ", ".join((f"P{i} (stampata {P.numero_leggibile(p['numero'])})"
-                            if P.numero_leggibile(p["numero"]) else f"P{i} (foto {p['ordine']})")
-                           for i, p in enumerate(pagine, 1))
-        return {"ok": False, "errore": f"la pagina «{pagina}» non c'è",
+        # Solo gli indici scritti dal codice: i numeri stampati vengono dall'OCR (PR #317)
+        elenco = ", ".join(f"P{i}" for i in range(1, len(pagine) + 1))
+        return {"ok": False, "errore": "la pagina chiesta non c'è",
                 "cosa_fare": (f"Le pagine di questa verifica sono: {elenco}. Richiama con una di "
                               "queste, o chiedi quale." if pagine else
                               "Questa verifica non ha pagine: dillo.")}
@@ -480,7 +518,7 @@ DESCRIZIONE = (
     "giorno, argomento facoltativo; per = nome del ragazzo se la crea il tutore); «stato» di "
     "cosa parla e a che punto è; «piano»; «oggi» («cosa devo studiare oggi?»); «fatto» il giorno "
     "di oggi fatto; «salta_oggi» («non ce la faccio oggi»); «archivia»; «tieni» o «togli» un "
-    "argomento (id da studio_pagina_leggi con pagina «argomenti»); «riprova» una pagina messa da parte; «sessione» con le risposte "
+    "argomento (numero = la posizione nell'elenco, o titolo); «riprova» una pagina messa da parte; «sessione» con le risposte "
     "a «quanto conosci l'argomento?» (conoscenza 1–5) e «come ti senti oggi?» (umore). verifica: "
     "l'id, se lo sai (dai dati del turno); altrimenti materia.")
 
@@ -488,7 +526,7 @@ PARAMETRI = {"type": "object", "properties": {
     "azione": {"type": "string", "enum": list(AZIONI)},
     "verifica": {"type": "integer"}, "materia": {"type": "string"},
     "data": {"type": "string"}, "argomento": {"type": "string"}, "per": {"type": "string"},
-    "id": {"type": "integer"}, "giorno": {"type": "string"},
+    "numero": {"type": "integer"}, "titolo": {"type": "string"}, "giorno": {"type": "string"},
     "conoscenza": {"type": "integer"},
     "umore": {"type": "string", "enum": ["pronto", "curioso", "tranquillo", "neutrale",
                                          "poca energia", "stressato"]}},
@@ -506,7 +544,9 @@ PARAMETRI_PAGINA = {"type": "object", "properties": {
 def studio_specs() -> list[ToolSpec]:
     return [
         ToolSpec(name="studio", description=DESCRIZIONE, parameters=PARAMETRI, func=_studio,
-                 risk="azione", levels=FAMILIARI, classe=None),
+                 risk="azione", levels=FAMILIARI, classe=None,
+                 # Lo stato d'animo detto a voce non va mai su disco (0035, punto 27)
+                 delicati=("conoscenza", "umore")),
         # Una lettura di un dato non fidato: come allegato_leggi, mai toccabile
         ToolSpec(name="studio_pagina_leggi", description=DESCRIZIONE_PAGINA,
                  parameters=PARAMETRI_PAGINA, func=_pagina_leggi, risk="lettura",

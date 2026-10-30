@@ -436,15 +436,18 @@ FOTO_ARCHIVIATE_RESTANO = ("Ho tolto anche le foto che tenevo; quelle che hai ar
                            "nei tuoi documenti.")
 
 
-def _studio_da_dimenticare(ctx, persona) -> bool:
+def _studio_da_dimenticare(ctx, persona) -> bool | None:
     """La persona ha verifiche dello Studio non archiviate (anche con lo Studio spento: quelle
-    di prima)? Un errore vale «no» e non ferma «dimentica»."""
+    di prima)? None se non si sa (un errore: il db bloccato o illeggibile). Prima di «dimentica»
+    None vale «no» e non ferma niente; dopo vale «non so», quindi «non tolte» (revisione della
+    PR #317: un errore valeva «non ne restano» e la frase diceva «ho tolto»)."""
     try:
         from ..studio.dati import conta_file
-        c = conta_file(getattr(getattr(ctx, "cfg", None), "memory_db", None), str(persona))
+        c = conta_file(getattr(getattr(ctx, "cfg", None), "memory_db", None), str(persona),
+                       solleva=True)
         return c["verifiche"] > c["archiviate"]
     except Exception:  # noqa: BLE001
-        return False
+        return None
 
 
 def _conversazioni_dimentica(ctx: ToolContext) -> dict:
@@ -462,7 +465,7 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
     p = proposte.get(persona)
     if p is not None and 0 < turno - p <= 3:
         proposte.pop(persona, None)
-        studio = _studio_da_dimenticare(ctx, persona)
+        studio = bool(_studio_da_dimenticare(ctx, persona))
         n = arch.dimentica(persona)
         # Trascrizione e audio degli avvisi di pericolo ricevuti da chi parla (14/10 sera)
         try:
@@ -499,7 +502,8 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
         if studio:
             # Solo se è riuscita: dopo «dimentica» non ne restano di non archiviate (il gancio
             # dello Studio in main.py non ferma «dimentica» e scrive l'errore nel registro)
-            rimaste = _studio_da_dimenticare(ctx, persona)
+            # Un conteggio che non riesce vale «non so»: «non tolte», mai «ho tolto»
+            rimaste = _studio_da_dimenticare(ctx, persona) is not False
             frase += " " + (STUDIO_NON_TOLTO if rimaste else STUDIO_TOLTO)
             if rimaste:
                 from .spec import note_rule

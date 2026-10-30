@@ -5,7 +5,8 @@ schermo»).
 
 La pagina dello schermo personale manda la sua vista dello Studio a ogni cambio
 (`POST /api/vista`, al più una al secondo): {vista, verifica?, pagina?}. Il server tiene l'ultima
-per schermo, in memoria, con l'ora (`Viste`). Nei dati del turno entra una riga corta **solo se**
+per schermo, in memoria, con l'ora (`Viste`), con la chiave `(id, creato)` dello schermo. Il
+«al più una al secondo» è della pagina; il server ne accetta al più 60 al minuto per schermo. Nei dati del turno entra una riga corta **solo se**
 chi parla è riconosciuto (o parla dal suo dispositivo personale), un suo schermo personale è
 collegato e ha una vista dello Studio di meno di `VISTA_S` secondi: «Sul suo schermo è aperta la
 verifica 12 (Storia, il 5/11): il piano.». La scrive il codice dagli id e dal db
@@ -41,6 +42,12 @@ def valida(dati) -> dict | None:
             return None
         out[k] = v
     return out
+
+
+def chiave(schermo: dict) -> tuple:
+    """La chiave di uno schermo per la vista: (id, creato), come le sessioni (revisione della PR
+    #317): uno schermo revocato e un altro con lo stesso numero non si passano la vista."""
+    return (schermo.get("id"), schermo.get("creato"))
 
 
 class Viste:
@@ -93,7 +100,7 @@ def riga(ctx, studio) -> str:
         for s in hub.abbinati():
             if s.get("proprietario") != chi.id or not hub.collegato(s["id"]):
                 continue
-            x = viste.di(s["id"])
+            x = viste.di(chiave(s))
             if x is not None and (migliore is None or x[1] > migliore[1]):
                 migliore = x
         return studio.riga_vista(chi, migliore[0]) if migliore else ""

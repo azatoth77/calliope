@@ -476,15 +476,18 @@ def cancella_file(path, log=print, **kw) -> dict:
         db.close()
 
 
-def conta_file(path, persona: str | None = None) -> dict:
+def conta_file(path, persona: str | None = None, solleva: bool = False) -> dict:
     """Quante verifiche ci sono (e quante archiviate), di tutti o di una persona: per
-    `calliope stato`, la domanda di «svuota» e quella di «dimentica»."""
+    `calliope stato`, la domanda di «svuota» e quella di «dimentica». Con `solleva` un errore
+    del db si solleva invece di dare zero (il ricontrollo dopo «dimentica», PR #317)."""
     out = {"verifiche": 0, "archiviate": 0}
     if not path or not Path(path).exists():
         return out
     try:
         db = apri_db(path)
     except (sqlite3.Error, OSError):
+        if solleva:
+            raise
         return out
     try:
         if not _c_e(db):
@@ -497,6 +500,8 @@ def conta_file(path, persona: str | None = None) -> dict:
                                        "stato = 'archiviata'", arg).fetchone()[0]
         return out
     except sqlite3.Error:
+        if solleva:
+            raise
         return out
     finally:
         db.close()

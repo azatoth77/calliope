@@ -104,8 +104,9 @@ def scenario_telefono(t, hub, st, vid, aid, pid, ctx_fn):
     ok = aspetta(lambda: t.v("!!document.querySelector('#studio-home .studio-h-prima')"), 8)
     verifica("la home si apre con la prossima verifica", bool(ok))
     testo = t.v("document.getElementById('studio-home').innerText") or ""
-    verifica("data, giorni che mancano, obiettivo e previsione (dopo due misure)",
-             "fra 7 giorni" in testo and "obiettivo 75%" in testo and "previsione" in testo, testo[:300])
+    verifica("data, giorni che mancano, obiettivo e, con due misure, l'ultima prova (non la previsione)",
+             "fra 7 giorni" in testo and "obiettivo 75%" in testo and "ultima prova: 55%" in testo
+             and "previsione" not in testo, testo[:300])
     verifica("oggi e «Impara» con «leggi le pagine»; niente Esercitati né Esame (non ci sono ancora)",
              "Oggi ·" in testo and "Impara" in testo.title() and "Esercitati" not in testo.title()
              and "Esame" not in testo.title(), testo[:400])
@@ -116,8 +117,8 @@ def scenario_telefono(t, hub, st, vid, aid, pid, ctx_fn):
     verifica("i titoli sono testo, mai HTML (textContent)",
              t.v("[...document.querySelectorAll('#studio-home b, #studio-home .studio-h-tappa-nome')]"
                  ".every((e) => e.children.length === 0)"))
-    vs = aspetta(lambda: hub.viste_studio.di(1) or next((hub.viste_studio.di(s) for s in range(1, 9)
-                                                          if hub.viste_studio.di(s)), None), 4)
+    vs = aspetta(lambda: next((hub.viste_studio.di(k) for k in list(hub.viste_studio._d)
+                               if hub.viste_studio.di(k)), None), 4)
     verifica("la vista aperta (la home) arriva al server", bool(vs) and vs[0]["vista"] == "home", str(vs))
     t.v("document.getElementById('pagina-racc').scrollIntoView({block: 'start'}); 1")
     misure(t, "390×844")
@@ -154,7 +155,7 @@ def scenario_telefono(t, hub, st, vid, aid, pid, ctx_fn):
     aspetta(lambda: t.v("!document.querySelector('.studio-h-domande') && !!document.querySelector('.studio-h-piano')"), 6)
     time.sleep(0.3)
     t.v("document.querySelector('.studio-h-piano').open = true; 1")
-    ok = aspetta(lambda: any((hub.viste_studio.di(s) or [{}])[0].get("vista") == "piano" for s in range(1, 9)), 6)
+    ok = aspetta(lambda: any((hub.viste_studio.di(k) or [{}])[0].get("vista") == "piano" for k in list(hub.viste_studio._d)), 6)
     verifica("«Il piano» aperto: la vista del piano arriva al server", bool(ok))
     B.dimensione(t, 320, 693)
     misure(t, "320×693")

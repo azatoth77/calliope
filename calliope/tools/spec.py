@@ -282,6 +282,11 @@ class ToolSpec:
     # vicino; dopo un esito vuoto il modello riceve «forse intendeva…». Un argomento oggetto
     # vale per ogni suo valore di testo, con il tipo dal nome del campo. Vuoto = nessuno
     nomi: dict = field(default_factory=dict)
+    # Argomenti delicati (30/10, Studio, revisione della PR #317: lo stato d'animo delle due
+    # domande): il valore serve al tool, ma non va mai su disco. Brain li scrive «…» nel
+    # terminale, nel registro dei turni e nella chiamata che resta nella storia (quindi negli
+    # eventi e nella conversazione salvata). Vuoto = nessuno
+    delicati: tuple[str, ...] = ()
 
     def schema(self) -> dict:
         """Schema del tool nel formato OpenAI (Ollama lo accetta sia su /api/chat sia su /v1)."""

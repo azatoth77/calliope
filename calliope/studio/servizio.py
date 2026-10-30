@@ -1094,7 +1094,9 @@ class Studio:
                 "giorni": giorni, "avvisi": avvisi,
                 "tappe": P.tappe(args, ordine, fatte),
                 "misure": len(misure), "livello": int(round(misure[-1][1])) if misure else None,
-                "previsione": P.previsione(misure, data)}
+                # La previsione mostrata è la forbice (revisione della PR #317, 0035 punto 9):
+                # None prima di 3 misure in 2 giorni; intanto l'ultima misura vera (`livello`)
+                "previsione": P.forbice(misure, data)}
 
     def oggi(self, chi, persona=None) -> list[dict]:
         """La riga «Oggi» di una persona: le attività di oggi di ogni verifica aperta."""
@@ -1239,8 +1241,9 @@ class Studio:
                 "tappe": [{"titolo": t.get("titolo"), "stato": t.get("stato")}
                           for t in (pi or {}).get("tappe") or ()],
                 "misure": (pi or {}).get("misure", 0),
-                "previsione": ((pi or {}).get("previsione")
-                               if (pi or {}).get("misure", 0) >= 2 else None),
+                "ultima": (pi or {}).get("livello"),
+                "previsione": (list((pi or {}).get("previsione"))
+                               if (pi or {}).get("previsione") else None),
                 "lettura": self.lettura(chi, vid),
                 "argomenti": {"tenuti": sum(a["stato"] in D.ARGOMENTI_DEL_PIANO for a in args),
                               "proposti": sum(a["stato"] == "proposto" for a in args),

@@ -1249,7 +1249,8 @@ def crea_app(hub: Schermi) -> Starlette:
             return _json({"errore": "vista non valida"}, 400)
         viste = getattr(hub, "viste_studio", None)
         if viste is not None:
-            viste.metti(schermo["id"], v)
+            from ..studio.vista import chiave
+            viste.metti(chiave(schermo), v)
         return _json({"ok": True})
 
     async def studio_home(request: Request):

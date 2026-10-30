@@ -109,6 +109,24 @@ decidere» col perché e «Tieni», le pagine da parte dette a parole con «Ripr
 si apre anche fuori orario (sola lettura); i tocchi passano dal ciclo, dove valgono gli orari. In
 ombra la vede chi amministra, senza tocchi. Service worker alla v24.
 
+**Dopo la revisione della PR #317 (30/10):**
+- lo stato d'animo detto a voce: `conoscenza` e `umore` sono argomenti delicati
+  (`ToolSpec.delicati`), «…» nel terminale, nel registro dei turni e nella chiamata della storia
+  (eventi e conversazione salvata); prova attraverso `Brain` in `prova_studio_tool.py`;
+- «dimentica»: il ricontrollo che fallisce (db bloccato, gancio che solleva) vale «non so» e la
+  frase dice «non sono riuscita a toglierle» (`conta_file(..., solleva=True)`);
+- «tieni»/«togli» a voce per posizione (`numero`, `indice:studio`, fidato) o per titolo detto;
+- i numeri stampati letti dall'OCR non escono fuori busta: «Riprova» dice «la foto N», l'errore di
+  `studio_pagina_leggi` solo P1…, le attività di `oggi` e `piano` per il modello solo con le cifre
+  (`tools/studio.attivita`);
+- le viste per `(id, creato)` dello schermo; il server ne accetta al più 60 al minuto;
+- la previsione come forbice dopo 3 misure in 2 giorni, prima l'ultima misura vera (0035 punto 9);
+  la home dice il vero («la previsione arriva con gli esercizi»);
+- il tutore che crea due volte la stessa verifica del minore riceve quella che c'è;
+- `prova_studio_ollama.py`: la vista dal codice vero (`vista.riga` con un hub finto), le
+  soluzioni degli esercizi della p116 come criterio dei compiti, il modello dal profilo della voce
+  (`load_config()`).
+
 **Le note delle revisioni, chiuse:**
 - `piano_non_aggiornato` quando il ricalcolo fallisce (`_piano_vivo`), detto a parole dal tool e
   dalla home; la prova controlla `errori`;

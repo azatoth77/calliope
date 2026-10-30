@@ -78,7 +78,8 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "lista_togli": {"cose": B, "lista": B},
     # lo Studio (30/10, #284): l'id della verifica e dell'argomento sono bersagli
     "studio": {"azione": Z, "verifica": B, "materia": C, "data": S, "argomento": C, "per": B,
-               "id": B, "giorno": S, "conoscenza": S, "umore": S},
+               "numero": "indice:studio", "titolo": B, "giorno": S, "conoscenza": S,
+               "umore": S},
     "ricorda": {"fatto": C, "per_tutti": Z, "nascita": C},
     "dimentica": {"fatto": B},
     "pc_volume": {"azione": Z, "valore": S},
@@ -154,7 +155,7 @@ OGGETTO_VALORI: dict[str, tuple[str, ...]] = {"sviluppo_collauda": ("argomenti",
 
 # Gli elenchi a cui punta un indice: fidato se lo fa un tool interno (o è un file della
 # persona), dato se lo fa un tool con una fonte non fidata (provenienza.FONTI)
-ELENCHI_FIDATI = frozenset({"pc_cerca_file", "allegato", "foto"})
+ELENCHI_FIDATI = frozenset({"pc_cerca_file", "allegato", "foto", "studio"})
 
 
 def argomenti_di(name: str, spec=None) -> dict | None:

@@ -394,7 +394,7 @@ def _studio_tieni(dati: dict, fonti, persona=None) -> dict:
     n = args.index(a) + 1
     # Il titolo l'ha proposto il modello leggendo le pagine: un dato, in busta (0035, punto 6)
     busta = provenienza.racchiudi("foto", a["titolo"], f"titolo dell'argomento {n}")
-    return {"tool": "studio", "argomenti": {"azione": "tieni", "verifica": v["id"], "id": a["id"]},
+    return {"tool": "studio", "argomenti": {"azione": "tieni", "verifica": v["id"], "numero": n},
             "bersaglio": {"studio": {"verifica": v["id"], "argomento": a["id"]}},
             "descrizione": f"(Ho tenuto nel piano di {_materia(v)} l'argomento {n} toccando lo "
                            f"schermo.)\n{busta}"}
@@ -408,8 +408,9 @@ def _studio_riprova(dati: dict, fonti, persona=None) -> dict:
     p = next((x for x in st._da_parte(v["id"]) if x["id"] == pid), None)
     if p is None:
         return {"errore": "Questa pagina non è più da parte.", "_stato": 409}
-    detta = f"la pagina {p['numero']}" if p["numero"] else f"la foto {p['ordine']}"
-    return {"tool": "studio", "argomenti": {"azione": "riprova", "verifica": v["id"], "id": p["id"]},
+    # Il numero stampato viene dall'OCR: qui la foto per ordine, scritto dal codice (PR #317)
+    detta = f"la foto {p['ordine']}"
+    return {"tool": "studio", "argomenti": {"azione": "riprova", "verifica": v["id"]},
             "bersaglio": {"studio": {"verifica": v["id"], "pagina": p["id"]}},
             "descrizione": f"(Ho chiesto di riprovare a leggere {detta} di {_materia(v)} "
                            "toccando lo schermo.)"}

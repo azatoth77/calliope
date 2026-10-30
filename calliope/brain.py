@@ -6841,6 +6841,18 @@ class Brain:
         # memoria in `last_tools` (13/10). *Storico, 12–16/10: per un minore i nomi degli
         # argomenti senza i valori; dal 16/10 (decisione 0031) come per un adulto: oggi nessuno*
         su_disco = None
+        # Gli argomenti delicati (ToolSpec.delicati: lo stato d'animo dello Studio, revisione
+        # della PR #317): «…» nel terminale, nel registro dei turni e nella chiamata che resta
+        # nella storia (eventi, conversazione salvata); il tool riceve il valore vero (`args`)
+        delicati = set(getattr(spec, "delicati", ()) or ())
+        if delicati & {k for k, v in args.items() if v not in (None, "")}:
+            shown = {k: ("…" if k in delicati and v not in (None, "") else v)
+                     for k, v in shown.items()}
+            su_disco = dict(shown)
+            if isinstance(call.get("arguments"), dict):
+                call["arguments"] = {k: ("…" if k in delicati and v not in (None, "") else v)
+                                     for k, v in call["arguments"].items()}
+            self._rule("argomenti_delicati")
         if level == "ospite":
             shown = {}
         if hidden:

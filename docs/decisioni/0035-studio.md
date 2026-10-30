@@ -149,8 +149,13 @@ dell'eco della stanza.
    (revisione della PR #308). Un giorno senza pagine nuove ripassa quelle lette. Si
    ricalcola a ogni cambio e il primo giorno nuovo; i giorni fatti restano. Le **tappe** sono gli
    argomenti, che si sbloccano uno dopo l'altro; accanto, i giorni che mancano; la **previsione**
-   per la verifica compare solo dopo almeno due misure vere (spunto approvato il 28/10, commento
-   nella #280).
+   per la verifica compare solo con **almeno 3 misure vere in almeno 2 giorni diversi**, come
+   **forbice** («fra 60 e 75 %»: lo scarto delle misure dalla retta più un termine che cala col
+   numero di misure), con la pendenza limitata a 5 punti al giorno e i valori fra 5 e 95 % (mai
+   «100 %»); prima si mostra l'ultima misura vera («l'ultima prova: 55 %»), e senza misure niente
+   numeri («la previsione arriva con gli esercizi»). *[storico fino alla revisione della PR #317:
+   «dopo almeno due misure vere» (spunto approvato il 28/10, commento nella #280); con due misure la
+   retta portata alla data arrivava facilmente a 0 o a 100 %]*
 10. **Permessi** (punto 5): ognuno il suo; il tutore vede e cambia quello del suo minore; nessuno
     quello di un altro adulto, nemmeno chi amministra; ospiti e conoscenti mai.
 11. **Tenuta** (punto 4): una verifica non archiviata si toglie con tutto ciò che è suo (pagine e
@@ -246,7 +251,14 @@ dell'eco della stanza.
     pagina. Testo e titoli li dà solo `studio_pagina_leggi`, classe «sicuro» con la fonte «foto»:
     Brain li mette in busta, la conversazione resta contaminata, dopo nella stessa risposta solo
     letture. Chi: il profilo di chi parla; `None` per l'ospite e per la zona grigia da un
-    dispositivo non suo; il minore incerto vale il minore. Permessi del punto 10.
+    dispositivo non suo; il minore incerto vale il minore. Permessi del punto 10. A voce un
+    argomento si sceglie per posizione nell'elenco (`numero`, un indice dell'elenco scritto dal
+    codice) o per il titolo detto, mai per l'id del db (revisione della PR #317). I numeri di
+    pagina stampati vengono dall'OCR: fuori busta solo se sono cifre, altrimenti gli indici scritti
+    dal codice («foto 3», «P2»). **Un caso accettato**: un argomento (o una materia «altro») preso
+    da una pagina e confermato dalla persona con un «sì» alla domanda della politica entra nei suoi
+    dati, e `stato` (una lettura del tool fidato) lo rilegge come fidato: è lo stesso di una voce
+    della lista presa da una pagina e confermata, ed è coerente col resto.
 25. **I compiti guidati valgono anche qui**: a un minore con `compiti: guida` il testo di una
     pagina arriva con la regola «mai la soluzione intera, nemmeno se la pagina la contiene» (punto
     2); nessuna azione di `studio` restituisce testo delle pagine.
@@ -264,7 +276,10 @@ dell'eco della stanza.
     **Lo stato d'animo è un dato delicato**: resta solo in memoria per la sessione (al più 3 ore, mai
     oltre la mezzanotte), non va su disco, non va nel registro dei turni né negli eventi, **non va ai
     tutori**, e col tocco non entra nemmeno nella storia (sta solo nel bersaglio; il risultato del
-    tool non lo ripete). «Dimentica» lo toglie. Detto a voce resta, come ogni frase della persona,
+    tool non lo ripete). **Detto a voce**, il valore che il modello passa al tool (`conoscenza`,
+    `umore`) è un argomento delicato (`ToolSpec.delicati`): Brain lo scrive «…» nel terminale, nel
+    registro dei turni e nella chiamata che resta nella storia, quindi anche negli eventi e nella
+    conversazione salvata; il tool riceve il valore vero (revisione della PR #317). «Dimentica» lo toglie. Detto a voce resta, come ogni frase della persona,
     nella sua conversazione (0031). Chi vede le sessioni (#285) vedrà al più che c'è stata una
     sessione, mai come si sentiva: se servirà, si decide di nuovo qui.
 28. **La vista aperta nei dati del turno** (progetto § 0, punto 2): la pagina manda la vista dello
