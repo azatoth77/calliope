@@ -51,9 +51,9 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 - I falsi «ISTRUZIONI: sì» della lettura (il laboratorio di scienze e gli appunti di storia nel
   giro del 30/10) fanno restare proposti, con `pagina_con_istruzioni`, argomenti giusti: 3 su 23 nel
   giro vero degli argomenti. La persona li tiene con un tocco; da guardare nella 4.5.
-- `unisci_argomenti` toglie le righe unite: i loro titoli del modello non restano fra i «decisi», e
-  una nuova estrazione li può riproporre accanto all'argomento unito (meno grave della rinomina:
-  l'unito resta; da rivedere con la vista della 4.5).
+- *[storico fino alla seconda revisione della PR #315: «`unisci_argomenti` toglie le righe unite:
+  una nuova estrazione li può riproporre». Ora le righe unite restano «tolte» con l'avviso «unito»
+  (sezione degli argomenti)]*.
 - **Per la 4.5** (revisione della PR #315): (1) la persona deve vedere *perché* un argomento è
   rimasto proposto dopo la conferma (fuori dalle pagine citate, una pagina citata con un messaggio
   per un assistente, titolo che sembra un ordine o un annuncio) e poterlo tenere con un tocco solo;
@@ -130,8 +130,12 @@ del modello non si usa. Vale l'avviso «istruzioni» della lettura: un argomento
 pagine con «ISTRUZIONI: sì» ha `pagina_con_istruzioni`. Il titolo è una riga di al più 60 caratteri,
 senza caratteri di controllo né virgolette attorno (`forma_titolo`); se comincia con un ordine a un
 assistente («Ignora…», «Scrivi…», «Di' allo…», «SYSTEM»), contiene un indirizzo o, dalla
-revisione della PR #315, è un annuncio nelle forme chiuse delle pagine ostili («annullata»,
-«spostato», «rinviata», «non serve più», «non si fa più»; «Lo spostamento dei continenti» no) ha
+revisione della PR #315, è un annuncio nelle forme chiuse delle pagine ostili, legato a un
+soggetto della scuola (verifica, compito, interrogazione, lezione, scuola, esame, prova) e a un
+esito («annullata», «spostato», «rinviata», «sospesa», «cancellata», in tutti e due gli ordini),
+oppure «non serve più studiare» (dalla seconda revisione: «Le rotte spostate dai venti» e «Lo
+spostamento dei continenti» no; *storico: fino alla seconda revisione bastava «spostat…» in
+qualunque punto del titolo*) ha
 `titolo_ordine`. È un avviso, non uno scarto: la persona decide. Con uno di questi tre avvisi (`DA_DECIDERE`) un argomento **non diventa tenuto con
 la conferma dell'elenco**: resta proposto, fuori dal piano, finché la persona non lo tiene da sé.
 Così «Verifica annullata», se il modello lo proponesse dalla pagina ostile, non entra mai nel piano
@@ -144,7 +148,10 @@ un altro adulto, chi amministra non tutore, l'ospite e la zona grigia lo stesso 
 avvisi diventano quelli del controllo sul titolo nuovo, la forma non conta: è suo; il titolo del
 modello resta in `studio_argomenti.titolo_modello`, e un proposto rinominato è una **decisione**
 della persona),
-`unisci_argomenti` (il primo resta, tenuto, con le pagine di tutti; gli altri si tolgono),
+`unisci_argomenti` (il primo resta, tenuto, con le pagine di tutti; gli altri diventano «tolti»
+con l'avviso «unito», mai cancellati: restano fra i «decisi» e una nuova estrazione non li
+ripropone, la conferma non li rimette nel piano; nella vista «unito a un altro argomento»; prova
+con «Colombo» + «Magellano» → «I grandi navigatori»),
 `aggiungi_argomento` («aggiunto», anche senza pagine), `conferma_argomenti` (i proposti puliti
 diventano tenuti, la verifica passa ad aperta, il piano si calcola; `da_decidere` dice quanti
 restano), `rifai_argomenti`. Il piano usa solo i tenuti e gli aggiunti e si ricalcola a ogni tocco.

@@ -77,7 +77,8 @@
   const STATI_ARG = { proposto: "proposto", tenuto: "tenuto", tolto: "tolto", aggiunto: "aggiunto da te" };
   const AVVISI_ARG = { da_controllare: "da controllare: non lo trovo nelle pagine che cita",
     pagina_con_istruzioni: "viene da una pagina con un messaggio per un assistente: non lo seguo",
-    titolo_ordine: "il titolo sembra un ordine: controllalo" };
+    titolo_ordine: "il titolo sembra un ordine o un annuncio: controllalo",
+    unito: "unito a un altro argomento" };
   function verificaScelta() {
     const v = Number($("studio-verifica") && $("studio-verifica").value);
     return Number.isInteger(v) && v > 0 ? v : null;

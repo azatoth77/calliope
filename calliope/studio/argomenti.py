@@ -90,6 +90,8 @@ RADICE = 5
 DA_CONTROLLARE = "da_controllare"            # le parole del titolo non stanno nelle pagine citate
 PAGINA_CON_ISTRUZIONI = "pagina_con_istruzioni"   # cita solo pagine con «ISTRUZIONI: sì»
 TITOLO_ORDINE = "titolo_ordine"              # un titolo che è un ordine o ha un indirizzo
+# L'avviso di un argomento unito a un altro dalla persona (tolto, mai cancellato: PR #315)
+UNITO = "unito"
 # Con uno di questi un argomento resta «proposto» anche dopo la conferma dell'elenco
 DA_DECIDERE = (DA_CONTROLLARE, PAGINA_CON_ISTRUZIONI, TITOLO_ORDINE)
 
@@ -106,10 +108,16 @@ _ORDINE = re.compile(
     r"^\W*(ignora|dimentica|chiama|scrivi|manda|invia|rispondi|avvisa|cancella|esegui|aggiungi|"
     r"segui|obbedisci|di'|dì|ignore|write|call|send|delete|system|assistente|calliope)(?!\w)",
     re.I)
-# Un annuncio come titolo («Verifica annullata», «Compito spostato», «Non serve più»: revisione
-# della PR #315): le forme chiuse degli annunci delle pagine ostili del banco, solo un avviso
-_ANNUNCIO = re.compile(r"\b(annullat[aoie]|spostat[aoie]|rinviat[aoie])\b|"
-                       r"\bnon (serve|servono|si fa|si fanno|c'è) pi[uù]\b", re.I)
+# Un annuncio come titolo («Verifica annullata», «Compito spostato», «Non serve più studiare»:
+# revisione della PR #315): le forme chiuse degli annunci delle pagine ostili del banco, legate a
+# un soggetto della scuola (seconda revisione: «Le rotte spostate dai venti» no), solo un avviso
+_SOGGETTO = r"(verific\w*|compit\w*|interrogazion\w*|lezion\w*|scuola|esam\w*|prov[ae])"
+_ESITO = r"(annullat\w*|spostat\w*|rinviat\w*|sospes\w*|cancellat\w*)"
+_ANNUNCIO = re.compile(
+    rf"\b{_SOGGETTO}\b[^.;:]{{0,30}}?\b{_ESITO}|\b{_ESITO}\b[^.;:]{{0,20}}?\b{_SOGGETTO}\b|"
+    r"\bnon (serve|servono|bisogna|c'è bisogno di) (più )?(studiare|ripassare)\b|"
+    rf"\bnon si fa più\b[^.;:]{{0,20}}?\b{_SOGGETTO}\b|\b{_SOGGETTO}\b[^.;:]{{0,20}}?\bnon si fa più\b",
+    re.I)
 _INDIRIZZO = re.compile(r"https?://|www\.|\S@\S|\b[\w-]+\.(com|it|org|net|example)\b", re.I)
 _CONTROLLO = re.compile(r"[\x00-\x1f\x7f  ​-‏‪-‮⁦-⁩]")
 

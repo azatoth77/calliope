@@ -380,6 +380,11 @@ def prova_controllo():
             "Non serve più studiare": (None, [A.TITOLO_ORDINE]),
             "Lo spostamento dei continenti": (None, []),
             "Gli insiemi e l'insieme vuoto": (None, []),
+            # Legati a un soggetto della scuola (seconda revisione della PR #315)
+            "La verifica è spostata a lunedì": (None, [A.TITOLO_ORDINE]),
+            "Interrogazione rinviata": (None, [A.TITOLO_ORDINE]),
+            "Le rotte spostate dai venti": (None, []),
+            "Le prove dell'evoluzione": (None, []),
             "‮La fotosintesi\x00": ("La fotosintesi", []),
             "x" * 90: ("x" * 60, [])}
     for t, (atteso, avvisi) in casi.items():
@@ -489,11 +494,12 @@ def prova_giro_e_conferma():
     st.rinomina_argomento(LEO, aid["I conquistadores: Cortés e Pizarro"],
                           "I conquistadores: Cortés e Pizarro")
     u2 = a2[keep]
-    verifica("unisci: il primo resta, tenuto, con le pagine di tutti; l'altro non c'è più",
+    ve = a2[aid["Amerigo Vespucci e il nome America"]]
+    verifica("unisci: il primo resta, tenuto, con le pagine di tutti; l'altro tolto con «unito»",
              keep == aid["Cristoforo Colombo e il Nuovo Mondo"] and u2["stato"] == "tenuto"
              and u2["pagine"] == [ids["p114"], ids["p115"]]
-             and aid["Amerigo Vespucci e il nome America"] not in a2
-             and u2["titolo"] == "Colombo, Vespucci e il nuovo continente", u2)
+             and ve["stato"] == "tolto" and A.UNITO in ve["avvisi"]
+             and u2["titolo"] == "Colombo, Vespucci e il nuovo continente", (u2, ve))
     verifica("unisci: contrari (uno solo, di un'altra verifica)",
              solleva(lambda: st.unisci_argomenti(LEO, [keep]), ValueError))
     verifica("aggiungi: «aggiunto», senza pagine", a2[nuovo]["stato"] == "aggiunto"
@@ -890,6 +896,47 @@ def prova_rinomina_e_da_parte():
              len(F.richieste) == 2 and titoli.count("Identità ed equazioni") == 1
              and "Equazioni impossibili e indeterminate" in titoli
              and st.estrazione(LEO, vid2)["pagine_non_lette"] == 0, titoli)
+
+    # «Unisci» (seconda revisione della PR #315): «Colombo» + «Magellano» → «I grandi
+    # navigatori»; alla seconda estrazione «Magellano» non torna proposto, e il piano non ha le
+    # pagine due volte
+    azzera()
+    vid3, ids3 = verifica_con_pagine(st)
+    rispondi({"argomenti": [arg("Cristoforo Colombo e il Nuovo Mondo", "P4"),
+                            arg("Magellano e il primo giro del mondo", "P5"),
+                            arg("Il Portogallo e la rotta africana", "P3")],
+              "istruzioni_nelle_pagine": False})
+    lett.giro()
+    a = {x["titolo"]: x["id"] for x in st.argomenti(LEO, vid3)}
+    keep = st.unisci_argomenti(LEO, [a["Cristoforo Colombo e il Nuovo Mondo"],
+                                     a["Magellano e il primo giro del mondo"]],
+                               "I grandi navigatori")
+    out = st.aggiungi_pronte(LEO, vid3, [PG.Pronta(jpeg(), 60, 80, "intera", None, [], 300.0)])
+    st.dati.scrivi("UPDATE studio_pagine SET stato = 'letta', testo = 'Le conseguenze delle "
+                   "scoperte: il mais e la patata arrivano in Europa.' WHERE id = ?",
+                   (out["pagine"][0]["id"],))
+    rispondi({"argomenti": [arg("Cristoforo Colombo e il Nuovo Mondo", "P4"),
+                            arg("Magellano e il primo giro del mondo", "P5"),
+                            arg("Il Portogallo e la rotta africana", "P3"),
+                            arg("Le conseguenze delle scoperte", "P9")],
+              "istruzioni_nelle_pagine": False})
+    n = len(F.richieste)
+    lett.giro()
+    b = [(x["titolo"], x["stato"]) for x in st.argomenti(LEO, vid3)]
+    verifica("unisci: dopo la seconda estrazione né «Magellano» né «Colombo» tornano proposti",
+             len(F.richieste) == n + 1 and ("I grandi navigatori", "tenuto") in b
+             and ("Magellano e il primo giro del mondo", "proposto") not in b
+             and ("Cristoforo Colombo e il Nuovo Mondo", "proposto") not in b
+             and ("Le conseguenze delle scoperte", "proposto") in b, b)
+    piano = st.conferma_argomenti(LEO, vid3)
+    b = [(x["titolo"], x["stato"]) for x in st.argomenti(LEO, vid3)]
+    verifica("unisci: la conferma non rimette «Magellano» (resta tolto, unito)",
+             ("Magellano e il primo giro del mondo", "tolto") in b
+             and not any(s == "tenuto" and t.startswith("Magellano") for t, s in b), b)
+    studio_p = [p for g in piano["giorni"] if g["fase"] == "studio" for p in g["pagine"]]
+    verifica("unisci: nel piano ogni pagina una volta sola (p114 e p115 comprese)",
+             len(studio_p) == len(set(studio_p)) and studio_p.count(ids3["p115"]) == 1
+             and studio_p.count(ids3["p114"]) == 1, studio_p)
     st.close()
 
 

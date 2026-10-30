@@ -684,7 +684,8 @@ class Studio:
 
     def unisci_argomenti(self, chi, ids, titolo=None) -> int:
         """Più argomenti della stessa verifica in uno (passo 4.4): il primo resta, con le pagine
-        di tutti e il titolo dato (o il suo), «tenuto»; gli altri si tolgono. L'id che resta."""
+        di tutti e il titolo dato (o il suo), «tenuto»; gli altri diventano «tolti» con l'avviso
+        «unito». L'id che resta."""
         from . import argomenti as A
         self._scrivibile()
         ids = list(dict.fromkeys(int(x) for x in ids or ()))
@@ -705,7 +706,12 @@ class Studio:
                            "avvisi = ? WHERE id = ?",
                            (t, D.j(pagine), D.j(avvisi) if avvisi else None, primo["id"]))
                 for a, _v in righe[1:]:
-                    db.execute("DELETE FROM studio_argomenti WHERE id = ?", (a["id"],))
+                    # Tolti con l'avviso «unito», non cancellati (seconda revisione della PR
+                    # #315): restano fra i «decisi» col loro titolo e quello del modello, così
+                    # una nuova estrazione non li ripropone e la conferma non li rimette nel piano
+                    av = [x for x in D.da_j(a["avvisi"]) if x != A.UNITO] + [A.UNITO]
+                    db.execute("UPDATE studio_argomenti SET stato = 'tolto', avvisi = ? WHERE "
+                               "id = ?", (D.j(av), a["id"]))
                 db.commit()
             except Exception:
                 if db.in_transaction:
