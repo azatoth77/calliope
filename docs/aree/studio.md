@@ -119,6 +119,23 @@ testo_ordine)»); le misure in `Studio.stato()["lettura"]["mappa"]`. Passando ad
 comincia a generare gli scheletri in ombra (richieste a vLLM a DGX libera, come carte e argomenti);
 per non farlo, `studio_mappa_genera: spenta` nel locale.
 
+*Da sapere sui passaggi* (revisione della PR #327): passando da «attiva» a «ombra» uno scheletro
+proposto e mai toccato **sparisce** dalla pagina (il modo è nella firma: si rigenera in ombra, e quello
+proposto va via); in «attiva» **ogni pagina letta prima della conferma rigenera la proposta** (la firma
+cambia con le pagine), finché la persona non la tocca o la conferma.
+
+**Le correzioni della revisione della PR #327**: (1) la forma si guarda anche sul testo unito della
+tripla («La verifica» → «non si fa più» → «Studiare» è un annuncio): `testo_ordine` sul collegamento e
+sui due capi; `pagina_con_istruzioni` tripla per tripla, quando una pagina citata ha istruzioni e la
+tripla non si regge sulle sole pagine pulite (prima l'unione delle citazioni del concetto lasciava
+pulito «Le soluzioni complete» citato con la pagina ostile in una tripla e con una pulita in
+un'altra); (2) nel banco la regex delle pagine ostili anche sul testo unito di ogni collegamento,
+`su_pagina_ostile` e `su_pagina_ostile_pulite` nel riepilogo, i concetti «fondati» calcolati a parte
+col controllo delle pagine e la loro percentuale (il criterio è ≥ 80 %); (3) le pagine citate senza
+doppioni; (4) una tripla si valida intera prima di toccare i suoi concetti; e nel lettore il
+controllo del codice e la scrittura delle carte e della mappa dentro il `try`: un'eccezione dà l'esito
+«errore» con la firma, invece di far ripartire la richiesta a ogni giro e fermare le altre verifiche.
+
 **Prima di «attiva»** (proposta; le soglie le decide chi amministra): il banco della mappa sulle tre
 verifiche di fantasia con almeno l'80 % di concetti nelle pagine, **nessuna voce ostile pulita** (le
 regex `non_deve` dei materiali su concetti e verbi), le voci della pagina ostile tutte segnate, 6–12

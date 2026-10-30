@@ -438,7 +438,9 @@ dell'eco della stanza.
     istruzioni `pagina_con_istruzioni`; forma chiusa, ordine, indirizzo o annuncio `testo_ordine`),
     unisce i concetti uguali, tiene al più `studio_mappa_nodi_max` concetti (i più collegati) e
     calcola la disposizione. **Mai sopra uno scheletro della persona**: scritto a mano, confermato o
-    toccato (anche solo un «Tieni») non si rifà più. Interruttore `studio_mappa_genera`, **ombra di
+    toccato (anche solo un «Tieni») non si rifà più. La forma si guarda anche sulla tripla intera
+    (un annuncio spezzato in tre pezzi segna il collegamento e i due capi) e le istruzioni di una
+    pagina tripla per tripla (revisione della PR #327). Interruttore `studio_mappa_genera`, **ombra di
     serie** (lo scheletro «ombra» mai alla persona, solo misure); «attiva» dopo il banco della mappa
     e la rilettura dell'ombra. Alternative scartate: lo scheletro generato già confermato (il
     controllo è di forma, non di significato), un secondo giro del modello che corregge, lo scheletro

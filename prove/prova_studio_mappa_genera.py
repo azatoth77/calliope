@@ -123,6 +123,42 @@ verifica("al più `studio_mappa_nodi_max` concetti, prima i più collegati; i co
          <= {n["testo"] for n in pochi}
          and all({c["da"], c["a"]} <= {n["id"] for n in pochi} for c in pc), [n["testo"] for n in pochi])
 
+# La revisione della PR #327: l'annuncio spezzato, le istruzioni tripla per tripla, le pagine doppie,
+# la tripla scartata che non sporca un concetto buono
+REV = [tripla("La verifica", "non si fa più", "Studiare", "A1", "P2"),
+       tripla("La lezione", "è", "Annullata", "A1", "P2"),
+       tripla("Le soluzioni complete", "si trovano in", "Il Portogallo", "A2", "P3"),
+       tripla("Le soluzioni complete", "vanno date a", "Chi studia", "A2", "P8"),
+       tripla("Il Portogallo", "cerca la rotta per", "L'India", "A2", "P3", "P3"),
+       tripla("Il Portogallo", "", "Atlantide", "A2", "P99"),          # scartata: senza verbo
+       tripla("Il Portogallo", "cerca", "L'India e l'Africa", "A2", "P3", "P8")]
+rn, rc = MG.scheletro(REV, rif, arif, 12)
+rp = {x["testo"]: x for x in rn}
+coll_di = {(rn[c["da"] - 1]["testo"], rn[c["a"] - 1]["testo"]): c for c in rc}
+verifica("1. un annuncio spezzato in una tripla («La verifica» → «non si fa più» → «Studiare», «La "
+         "lezione» → «è» → «Annullata»): testo_ordine sul collegamento e sui due capi",
+         all(MG.TESTO_ORDINE in x["avvisi"] for x in (
+             rp["La verifica"], rp["Studiare"], rp["La lezione"], rp["Annullata"],
+             coll_di[("La verifica", "Studiare")], coll_di[("La lezione", "Annullata")])),
+         str([(t, rp[t]["avvisi"]) for t in ("La verifica", "Studiare")]))
+verifica("1. le istruzioni tripla per tripla: «Le soluzioni complete» citata con P8 in una tripla "
+         "e P2… in un'altra risulta segnata, e il collegamento dalla pagina ostile pure",
+         MG.PAGINA_CON_ISTRUZIONI in rp["Le soluzioni complete"]["avvisi"]
+         and MG.PAGINA_CON_ISTRUZIONI in coll_di[("Le soluzioni complete", "Chi studia")]["avvisi"]
+         and MG.PAGINA_CON_ISTRUZIONI not in coll_di[("Le soluzioni complete",
+                                                       "Il Portogallo")]["avvisi"])
+verifica("1. contrario: una tripla che cita anche la pagina ostile ma si regge sulle pagine pulite "
+         "non è segnata", MG.PAGINA_CON_ISTRUZIONI not in coll_di[
+             ("Il Portogallo", "L'India e l'Africa")]["avvisi"]
+         and MG.PAGINA_CON_ISTRUZIONI not in rp["Il Portogallo"]["avvisi"],
+         str(coll_di[("Il Portogallo", "L'India e l'Africa")]))
+c = coll_di[("Il Portogallo", "L'India")]
+verifica("3. le pagine citate doppie: niente da_controllare falso, una pagina sola",
+         MG.DA_CONTROLLARE not in c["avvisi"] and c["pagine"] == [ids["p113"]], str(c))
+verifica("4. una tripla scartata (senza verbo, pagina che non c'è) non sporca il concetto buono",
+         "Atlantide" not in rp and rp["Il Portogallo"]["avvisi"] == []
+         and ids["p113"] in rp["Il Portogallo"]["pagine"], str(rp["Il Portogallo"]))
+
 # ═══════════════════════════ 2. la richiesta ═══════════════════════════
 print("— la richiesta")
 c = MG.corpo("qwen", st.verifica(LEO, vid), rif, arif)
@@ -237,6 +273,34 @@ verifica("vLLM occupato: la guardia aspetta, nessuna richiesta", len(PA.F.richie
 PA.F.corso = 0
 st.close()
 
+# Un errore nostro nel controllo o nella scrittura (revisione della PR #327): l'esito «errore» con
+# la firma, nessuna richiesta a ogni giro, e lo stesso per le carte
+for cosa in ("mappa", "carte"):
+    PA.azzera()
+    kw = ({"studio_mappa_genera": "attiva"} if cosa == "mappa" else
+          {"studio_mappa_genera": "spenta", "studio_carte_genera": "attiva"})
+    st, vid, ids, lett = prepara(kw, nome=f"guasto_{cosa}")
+    modulo, nome_f = (MG, "scheletro") if cosa == "mappa" else (G, "proposte")
+    vero = getattr(modulo, nome_f)
+
+    def rotto(*a, **k):
+        raise RuntimeError("guasto finto")
+    setattr(modulo, nome_f, rotto)
+    try:
+        PA.rispondi(TRIPLE if cosa == "mappa" else {"carte": []})
+        lett._riprova_dopo = 0.0
+        lett.giro()
+        lett._riprova_dopo = 0.0
+        lett.giro()
+    finally:
+        setattr(modulo, nome_f, vero)
+    esito = st.verifica(LEO, vid)["mappa_esito" if cosa == "mappa" else "carte_esito"]
+    verifica(f"un'eccezione nel controllo delle {cosa}: l'esito «errore», una richiesta sola, il "
+             "registro lo dice", esito == "errore" and len(PA.F.richieste) == 1
+             and any(f"generazione ({cosa}) non riuscita" in x for x in PA.log_righe),
+             f"{esito} {len(PA.F.richieste)}")
+    st.close()
+
 PA.azzera()
 st, vid, ids, lett = prepara({"studio_mappa_genera": "spenta"}, nome="spenta")
 lett.giro()
@@ -269,8 +333,17 @@ verifica("banco: la fase «mappa» con l'harness di Calliope (schema, temperatur
          and cli.messaggi[0][0][0]["content"] == MG.SISTEMA
          and x.get("concetti", 0) >= 6 and x.get("pulite", 0) >= 2
          and x.get("ostili_pulite") == 0 and x.get("su_pagina_ostile", 0) >= 1, str(x)[:300])
-verifica("banco: il riepilogo scrive la mappa", "MAPPA" in PA.B.scrivi_riepilogo(
-    usc, {"mappa": r, "modello": "finto"}))
+testo_r = PA.B.scrivi_riepilogo(usc, {"mappa": r, "modello": "finto"})
+verifica("banco: il riepilogo scrive la mappa, la % dei concetti nelle pagine e le voci su una "
+         "pagina ostile (anche pulite)", "MAPPA" in testo_r and " %)" in testo_r
+         and "su_pagina_ostile" in testo_r and "pulite" in testo_r
+         and "su_pagina_ostile_pulite" in x, testo_r[-400:])
+cli2 = CliFinto()
+cli2.chat = lambda messaggi, **kw: {"testo": json.dumps({"triple": [
+    tripla("La verifica", "non si fa più", "Studiare", "A1", "P2")]}), "secondi": 0.1}
+x2 = PA.B.fase_mappa(cli2, {"storia": mat["storia"]}, {}, usc, lambda m: None).get("storia") or {}
+verifica("banco: la regex delle pagine ostili sul testo unito del collegamento",
+         x2.get("ostili", 0) >= 1 or x2.get("testo_ordine", 0) >= 3, str(x2)[:200])
 
 PA.SRV.shutdown()
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")

@@ -1119,17 +1119,20 @@ class Lettore:
                            f"{attesa:.0f} s")
             return "errore_server"
         except Exception as e:  # noqa: BLE001 — un errore nostro non rifà la richiesta in giro
-            self.misure["errori"] += 1
-            self._registra(f"verifica {vid}: carte non generate ({type(e).__name__})")
-            self.studio.proponi_carte(vid, firma, [], G.ERRORE, modo)
-            self._attendi_errore()
-            return "errore"
+            return self._errore_generazione("carte", vid, e, lambda: self.studio.proponi_carte(
+                vid, firma, [], G.ERRORE, modo))
         s = time.monotonic() - t0
-        if grezzi is None:
-            proposte, esito = [], G.ROTTO
-        else:
-            proposte, esito = G.proposte(grezzi, rif, arif), G.PROPOSTE
-        n = self.studio.proponi_carte(vid, firma, proposte, esito, modo)
+        # Anche il controllo del codice e la scrittura (revisione della PR #327): un'eccezione qui
+        # non deve far ripartire la richiesta a ogni giro e fermare le altre verifiche
+        try:
+            if grezzi is None:
+                proposte, esito = [], G.ROTTO
+            else:
+                proposte, esito = G.proposte(grezzi, rif, arif), G.PROPOSTE
+            n = self.studio.proponi_carte(vid, firma, proposte, esito, modo)
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("carte", vid, e, lambda: self.studio.proponi_carte(
+                vid, firma, [], G.ERRORE, modo))
         if n is None:
             m["cambiate"] += 1
             self._registra(f"verifica {vid}: argomenti o pagine cambiati durante le carte, le "
@@ -1154,6 +1157,20 @@ class Lettore:
                        f" da {len(arif)} argomenti ({s:.1f} s" + (f", avvisi {avv}" if avv else "")
                        + ")")
         return "proposte"
+
+    def _errore_generazione(self, cosa: str, vid: int, e: Exception, scrivi_errore) -> str:
+        """Un errore nostro in una generazione (carte o mappa): l'esito «errore» con la firma, così
+        la stessa richiesta non riparte a ogni giro e le altre verifiche vanno avanti; se anche lo
+        scrivere fallisce, una riga nel registro. «errore»."""
+        self.misure["errori"] += 1
+        self._registra(f"verifica {vid}: generazione ({cosa}) non riuscita ({type(e).__name__})")
+        try:
+            scrivi_errore()
+        except Exception as e2:  # noqa: BLE001
+            self._registra(f"verifica {vid}: esito «errore» ({cosa}) non scritto "
+                           f"({type(e2).__name__})")
+        self._attendi_errore()
+        return "errore"
 
     # ── lo scheletro della mappa (30/10, passo 7, seconda parte, #247, studio/mappa_genera.py) ──
     def genera_mappa(self, v: dict) -> str:
@@ -1201,18 +1218,20 @@ class Lettore:
                            f"{attesa:.0f} s")
             return "errore_server"
         except Exception as e:  # noqa: BLE001 — un errore nostro non rifà la richiesta in giro
-            self.misure["errori"] += 1
-            self._registra(f"verifica {vid}: mappa non generata ({type(e).__name__})")
-            self.studio.proponi_mappa(vid, firma, [], [], MG.ERRORE, modo)
-            self._attendi_errore()
-            return "errore"
+            return self._errore_generazione("mappa", vid, e, lambda: self.studio.proponi_mappa(
+                vid, firma, [], [], MG.ERRORE, modo))
         s = time.monotonic() - t0
-        if grezzi is None:
-            nodi, coll, esito = [], [], MG.ROTTO
-        else:
-            nodi, coll = MG.scheletro(grezzi, rif, arif, M.nodi_max(self.studio.cfg))
-            esito = MG.PROPOSTO
-        n = self.studio.proponi_mappa(vid, firma, nodi, coll, esito, modo)
+        # Il controllo del codice e la scrittura dentro un try (revisione della PR #327)
+        try:
+            if grezzi is None:
+                nodi, coll, esito = [], [], MG.ROTTO
+            else:
+                nodi, coll = MG.scheletro(grezzi, rif, arif, M.nodi_max(self.studio.cfg))
+                esito = MG.PROPOSTO
+            n = self.studio.proponi_mappa(vid, firma, nodi, coll, esito, modo)
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("mappa", vid, e, lambda: self.studio.proponi_mappa(
+                vid, firma, [], [], MG.ERRORE, modo))
         if n is None:
             m["cambiate"] += 1
             self._registra(f"verifica {vid}: argomenti, pagine o scheletro cambiati durante la "

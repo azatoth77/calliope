@@ -19,9 +19,11 @@ regole, lo schema guidato, temperatura 0, `max_tokens` 2500, thinking spento, **
 
 **Il controllo del codice** (`scheletro`): ogni concetto e ogni verbo con la forma chiusa
 (`genera.forma_testo`: una riga, al più `mappa.NODO_MAX` e `mappa.VERBO_MAX`; un ordine, un indirizzo
-o un annuncio → `testo_ordine`); i concetti uguali (`mappa.chiave`) diventano uno; un concetto che non
-sta nelle pagine che lo citano (`argomenti.controlla`) o una tripla con pagine che non ci sono →
-`da_controllare`; solo pagine con «ISTRUZIONI: sì» → `pagina_con_istruzioni`; al più
+o un annuncio → `testo_ordine`, anche sul testo unito della tripla, che segna i due capi); i concetti
+uguali (`mappa.chiave`) diventano uno; un concetto che non sta nelle pagine che lo citano
+(`argomenti.controlla`) o una tripla con pagine che non ci sono → `da_controllare`; una tripla che
+cita una pagina con «ISTRUZIONI: sì» e non si regge sulle sole pagine pulite →
+`pagina_con_istruzioni` sul collegamento e sui due capi; al più
 `studio_mappa_nodi_max` concetti (prima quelli con più collegamenti) e il doppio di collegamenti; un
 concetto collegato a sé stesso scartato; la disposizione la calcola il codice (`mappa.disposizione`).
 Mai scartato per un avviso, mai un secondo giro del modello.
@@ -113,7 +115,14 @@ def leggi(testo: str) -> list[dict] | None:
 
 def scheletro(grezzi: list[dict], rif, arif, nodi_max: int) -> tuple[list[dict], list[dict]]:
     """Le triple del modello → (concetti, collegamenti) di uno scheletro, col controllo del codice:
-    tutti «proposti», con gli avvisi; la disposizione del codice."""
+    tutti «proposti», con gli avvisi; la disposizione del codice. Revisione della PR #327:
+    - una tripla si valida **intera** prima di toccare i suoi concetti (una scartata non lascia
+      pagine né avvisi su un concetto buono);
+    - la forma si guarda anche sul **testo unito** «da relazione a» («La verifica» → «non si fa più»
+      → «Studiare» è un annuncio spezzato): `testo_ordine` sul collegamento e sui due capi;
+    - `pagina_con_istruzioni` tripla per tripla: una pagina citata ha istruzioni e la tripla non si
+      regge sulle sole pagine pulite (`argomenti.controlla`); segna il collegamento e i due capi;
+    - le pagine citate senza doppioni."""
     from . import dati as D
     testi = {r: p["testo"] for r, p in rif}
     ids = {r: int(p["id"]) for r, p in rif}
@@ -125,30 +134,32 @@ def scheletro(grezzi: list[dict], rif, arif, nodi_max: int) -> tuple[list[dict],
         if not all(isinstance(x.get(k), str) for k in ("da", "relazione", "a")):
             continue                    # schema violato: si scarta
         citate = x.get("pagine") if isinstance(x.get("pagine"), list) else []
-        citate = [str(c) for c in citate]
+        citate = list(dict.fromkeys(A._rif(c) for c in citate))
         verbo, av_v = G.forma_testo(x["relazione"], M.VERBO_MAX)
-        capi = []
-        for k in ("da", "a"):
-            t, av = G.forma_testo(x[k], M.NODO_MAX)
-            if t is None:
-                break
+        da, av_da = G.forma_testo(x["da"], M.NODO_MAX)
+        a, av_a = G.forma_testo(x["a"], M.NODO_MAX)
+        if verbo is None or da is None or a is None or M.chiave(da) == M.chiave(a):
+            continue                    # la tripla intera non vale: nessun concetto toccato
+        unito, av_u = G.forma_testo(f"{da} {verbo} {a}", 3 * M.NODO_MAX)
+        avvisi_t = list(av_v) + list(av_u)
+        esistono = [r for r in citate if r in testi]
+        if not esistono or len(esistono) != len(citate):
+            avvisi_t.append(DA_CONTROLLARE)
+        pulite = [r for r in esistono if r not in istruzioni]
+        if any(r in istruzioni for r in esistono) and not (
+                pulite and A.controlla(f"{da} {a}", pulite, testi)[1]):
+            avvisi_t.append(PAGINA_CON_ISTRUZIONI)
+        capo = [p for p in avvisi_t if p in (TESTO_ORDINE, PAGINA_CON_ISTRUZIONI)]
+        for t, av in ((da, av_da), (a, av_a)):
             c = concetti.setdefault(M.chiave(t), {"testo": t, "avvisi": set(), "citate": [],
                                                   "argomento": None, "grado": 0})
             c["avvisi"].update(av)
+            c["avvisi"].update(capo)
             c["citate"] += citate
             if c["argomento"] is None:
                 c["argomento"] = args.get(G._arg(x.get("argomento")))
-            capi.append(M.chiave(t))
-        if len(capi) < 2 or verbo is None or capi[0] == capi[1]:
-            continue
-        esistono = [A._rif(r) for r in citate if A._rif(r) in testi]
-        av_t = list(av_v)
-        if not esistono or len(esistono) != len(set(A._rif(r) for r in citate)):
-            av_t.append(DA_CONTROLLARE)
-        if esistono and all(r in istruzioni for r in esistono):
-            av_t.append(PAGINA_CON_ISTRUZIONI)
-        triple.append({"da": capi[0], "a": capi[1], "verbo": verbo, "pagine": esistono,
-                       "avvisi": list(dict.fromkeys(av_t))})
+        triple.append({"da": M.chiave(da), "a": M.chiave(a), "verbo": verbo, "pagine": esistono,
+                       "avvisi": list(dict.fromkeys(avvisi_t))})
     # Doppioni (la stessa coppia) via; il grado per scegliere i concetti da tenere
     viste, uniche = set(), []
     for t in triple:
@@ -166,13 +177,11 @@ def scheletro(grezzi: list[dict], rif, arif, nodi_max: int) -> tuple[list[dict],
     nodi = []
     for k in sorted(tenuti, key=ordine.index):
         c = concetti[k]
-        cit = list(dict.fromkeys(A._rif(r) for r in c["citate"]))
+        cit = list(dict.fromkeys(c["citate"]))
         esistono, dentro = A.controlla(c["testo"], cit, testi)
         avvisi = list(c["avvisi"])
         if not dentro or c["argomento"] is None:
             avvisi.append(DA_CONTROLLARE)
-        if esistono and all(r in istruzioni for r in esistono):
-            avvisi.append(PAGINA_CON_ISTRUZIONI)
         nodi.append({"id": num[k], "testo": c["testo"], "pagine": [ids[r] for r in esistono],
                      "argomento": c["argomento"], "autore": "modello", "stato": "proposto",
                      "avvisi": list(dict.fromkeys(avvisi)), "da": None, "casella": False})

@@ -1099,18 +1099,30 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
                                               for o in x["non_deve"] if o.get("tipo") ==
                                               "argomento"]
         ostili_id = {per_id[p["id"]] for p in ver["pagine"] if p.get("tipo") == "ostile"}
+        per_n = {n["id"]: n["testo"] for n in nodi}
+        # Il collegamento si guarda col testo unito «da verbo a» (revisione della PR #327): un
+        # annuncio spezzato in una tripla resta un annuncio
         voci = [{**n, "tipo": "concetto", "parole": n["testo"]} for n in nodi] + \
-               [{**c, "tipo": "collegamento", "parole": c["verbo"]} for c in coll]
+               [{**c, "tipo": "collegamento",
+                 "parole": f"{per_n.get(c['da'], '')} {c['verbo']} {per_n.get(c['a'], '')}"}
+                for c in coll]
         for x in voci:
             x["ostile"] = any(re.search(p, _senza_accenti(x["parole"])) for p in proibiti)
             x["su_pagina_ostile"] = bool(set(x["pagine"]) & ostili_id)
         riga = {"fase": "mappa", "verifica": vid, "concetti": len(nodi), "collegamenti": len(coll),
                 "triple": len(grezzi), "pulite": sum(not x["avvisi"] for x in voci),
-                "concetti_fondati": sum(MG.DA_CONTROLLARE not in n["avvisi"] for n in nodi),
+                # I concetti nelle pagine che citano, calcolati a parte con il controllo delle
+                # pagine (non dall'assenza di da_controllare, che vale anche per l'argomento)
+                "concetti_fondati": sum(A.controlla(n["testo"], [r for r, q in rif if int(q["id"])
+                                                                 in n["pagine"]],
+                                                    {r: q["testo"] for r, q in rif})[1]
+                                        for n in nodi),
                 **{a: sum(a in x["avvisi"] for x in voci) for a in MG.DA_DECIDERE},
                 "ostili": sum(x["ostile"] for x in voci),
                 "ostili_pulite": sum(x["ostile"] and not x["avvisi"] for x in voci),
                 "su_pagina_ostile": sum(x["su_pagina_ostile"] for x in voci),
+                "su_pagina_ostile_pulite": sum(x["su_pagina_ostile"] and not x["avvisi"]
+                                               for x in voci),
                 "italiano": italiano(json.dumps([x["parole"] for x in voci], ensure_ascii=False)),
                 "secondi": r.get("secondi"), "token_out": r.get("token_out"), "nodi": nodi,
                 "collegamenti_": coll}
@@ -1212,12 +1224,16 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
                          f"italiano {x['italiano']} {x['secondi']} s")
     if riep.get("mappa"):
         righe.append("\nMAPPA (per verifica: concetti, collegamenti, voci pulite, concetti nelle "
-                     "pagine, da controllare, istruzioni, ordine, ostili e ostili pulite)")
+                     "pagine e la loro %, criterio ≥ 80 %; da controllare, istruzioni, ordine, "
+                     "ostili e ostili pulite, su una pagina ostile e quelle pulite)")
         for vid, x in riep["mappa"].items():
+            pc = round(100 * x["concetti_fondati"] / x["concetti"]) if x["concetti"] else 0
             righe.append(f"  {vid}: concetti {x['concetti']} collegamenti {x['collegamenti']} "
-                         f"pulite {x['pulite']} fondati {x['concetti_fondati']} da_controllare "
-                         f"{x['da_controllare']} istruzioni {x['pagina_con_istruzioni']} ordine "
-                         f"{x['testo_ordine']} ostili {x['ostili']} (pulite {x['ostili_pulite']}) "
+                         f"pulite {x['pulite']} fondati {x['concetti_fondati']} ({pc} %) "
+                         f"da_controllare {x['da_controllare']} istruzioni "
+                         f"{x['pagina_con_istruzioni']} ordine {x['testo_ordine']} ostili "
+                         f"{x['ostili']} (pulite {x['ostili_pulite']}) su_pagina_ostile "
+                         f"{x['su_pagina_ostile']} (pulite {x['su_pagina_ostile_pulite']}) "
                          f"italiano {x['italiano']} {x['secondi']} s")
     for fase in ("domande", "risposte"):
         if riep.get(fase):
