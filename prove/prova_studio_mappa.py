@@ -176,7 +176,9 @@ for a, d in (("America", "Nuovo Mondo"), ("Cristoforo Colombo", "Amerigo Vespucc
              # conta, le parole piene in più non valgono
              ("forma", "forza"), ("messa", "massa"), ("Marte", "Morte"),
              ("Cartagine", "Cartagena"), ("Mercurio", "Mercurio Venere"),
-             ("legame ionico", "legame covalente ionico"), ("Tordesillas", "Vordesillas")):
+             ("legame ionico", "legame covalente ionico"), ("Tordesillas", "Vordesillas"),
+             # Seconda revisione: le lettere isolate non sono parole vuote
+             ("Vitamina A", "Vitamina D"), ("Fase I", "Fase")):
     verifica(f"uguale, contrario: «{d}» non vale «{a}» (forma, non significato)",
              not M.uguale(a, d))
 verifica("verbo_simile: uguale o metà delle parole; «è» solo uguale",
@@ -561,10 +563,34 @@ verifica("3. a memoria aperta il PDF della mia mappa non esce per la persona",
 st.controlla_mappa(LEO, m3)
 verifica("3. dopo «Controlla» tornano", not st.vista_mappe(LEO, vid)["a_memoria"]
          and st.vista_mappe(LEO, vid)["scheletro"]["nodi"])
+# Seconda revisione, 1: dopo il primo «Controlla» la mappa a memoria non si cambia più; le caselle
+# lasciate vuote entrano nei tentati del giro e non contano dopo
+mem = st._riga_mappa(m3)
+vuote = [x["id"] for x in mem["nodi"] if x.get("casella")]
+prima_t = len(st.dati.tutti("SELECT * FROM studio_tentativi"))
+verifica("1b. le caselle vuote al «Controlla» sono nei tentati del giro",
+         set(vuote) <= set(mem["tentati"]), f"{vuote} {mem['tentati']}")
+att = {x["id"]: x["testo"] for x in st.vista_mappe(LEO, vid)["scheletro"]["nodi"]}
+verifica("1b. a memoria controllata: niente riempi, sposta, collega né concetti nuovi",
+         solleva(lambda: st.riempi(LEO, m3, vuote[0], att[vuote[0]]), ValueError)
+         and solleva(lambda: st.sposta_nodo(LEO, m3, vuote[0], 0.3, 0.3), ValueError)
+         and solleva(lambda: st.collega(LEO, m3, vuote[0], vuote[1], "x"), ValueError)
+         and solleva(lambda: st.nodo_mappa(LEO, m3, "Mio"), ValueError))
+st.controlla_mappa(LEO, m3)
+verifica("1b. un altro «Controlla» non scrive tentativi",
+         len(st.dati.tutti("SELECT * FROM studio_tentativi")) == prima_t)
+giro_prima = st._riga_mappa(m3)["aiuto"]["giro"]
+st.rifai_mappa(LEO, m3)
+mem = st._riga_mappa(m3)
+c2 = [x["id"] for x in mem["nodi"] if x.get("casella")]
+st.riempi(LEO, m3, c2[0], att[c2[0]])
+verifica("1b. «Rifai» riapre: un giro nuovo, si riempie e si controlla di nuovo",
+         mem["stato"] == "aperta" and mem["aiuto"]["giro"] > giro_prima
+         and st.controlla_mappa(LEO, m3)["tentativi"] == 1)
 insieme(lambda: st.carte_dagli_errori(LEO, m3), 3)
 carte = st.carte(LEO, vid)
 dom = [c["domanda"] for c in carte]
-verifica("1. tre «Fanne carte» insieme: nessuna carta doppia", len(dom) == len(set(dom)) == 3, dom)
+verifica("1. tre «Fanne carte» insieme: nessuna carta doppia", dom and len(dom) == len(set(dom)), dom)
 verifica("minore: le domande delle carte si dicono a voce, senza frecce né «?» da solo",
          all(("che cosa" in d) and "→" not in d and "? " not in d for d in dom), dom)
 # 2. lo scheletro confermato con le copie: sola lettura; «Riapri» lo riapre e toglie le copie
@@ -572,6 +598,7 @@ verifica("2. lo scheletro confermato non si cambia (riscrivere il concetto attes
          solleva(lambda: st.nodo_mappa(LEO, mid, "facile", nodo=n["America"]), ValueError)
          and solleva(lambda: st.collega(ANDREA, mid, n["America"], n["Magellano"], "x"),
                      ValueError))
+giro_s = st._riga_mappa(mid)["aiuto"].get("giro")
 r = st.riapri_scheletro(ANDREA, mid)
 vm = st.vista_mappe(LEO, vid)
 verifica("2. «Riapri lo scheletro» (dal tutore): di nuovo proposto, le copie tolte, i tentativi "
@@ -580,8 +607,10 @@ verifica("2. «Riapri lo scheletro» (dal tutore): di nuovo proposto, le copie t
          and len(st.dati.tutti("SELECT * FROM studio_tentativi")) >= len(cas), str(r))
 st.nodo_mappa(LEO, mid, "Il Nuovo Mondo", nodo=n["America"])
 st.conferma_scheletro(LEO, mid)
-verifica("2. dopo la nuova conferma la mia mappa riparte dallo scheletro cambiato",
+verifica("2. dopo la nuova conferma la mia mappa riparte dallo scheletro cambiato, e il giro "
+         "continua (le caselle non si ripetono)",
          isinstance(st.inizia_mappa(LEO, vid, "studente"), int)
+         and st._riga_mappa(st.vista_mappe(LEO, vid)["mia"]["id"])["aiuto"]["giro"] > giro_s
          and solleva(lambda: st.riapri_scheletro(BRUNO, mid), S.NonTrovata))
 # minore: i concetti propri della copia, al più 6 oltre a quelli dello scheletro
 m2 = st.vista_mappe(LEO, vid)["mia"]["id"]
@@ -615,6 +644,20 @@ verifica("minore: «1 giusta e 1 da rivedere», al singolare", "1 giusta e 1 da 
          and "1 giuste" not in f_leo and "Nella tua mappa" in f_leo, f_leo)
 verifica("minore: al tutore in terza persona col nome", "Nella mappa di Leo" in f_tut
          and "tua" not in f_tut, f_tut)
+st.close()
+# minore: il tetto dei collegamenti dello scheletro resta 2 × studio_mappa_nodi_max
+st = studio(cfg_nuova("tetto.db", studio_mappa_nodi_max=4))
+vt, _it, _at = carica(st)
+sk_t = st.scrivi_scheletro(LEO, vt)
+nn4 = [st.nodo_mappa(LEO, sk_t, f"Concetto {i}") for i in range(4)]
+m = st._riga_mappa(sk_t)
+m["collegamenti"] = [{"id": 10 + i, "da": 90 + i, "a": 91 + i, "verbo": "x"} for i in range(7)]
+st._salva_mappa(m, collegamenti=m["collegamenti"])
+st.collega(LEO, sk_t, nn4[0], nn4[1], "con")
+verifica("minore: lo scheletro ha al più 2 × studio_mappa_nodi_max collegamenti (8 con 4), i 6 "
+         "concetti propri alzano solo il tetto della copia",
+         len(st._riga_mappa(sk_t)["collegamenti"]) == 8
+         and solleva(lambda: st.collega(LEO, sk_t, nn4[2], nn4[3], "con"), ValueError))
 st.close()
 # 4. il PDF al tetto massimo con testi lunghi: l'elenco intero, su più pagine
 from calliope.studio import mappa_pdf as MP  # noqa: E402

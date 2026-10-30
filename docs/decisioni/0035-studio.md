@@ -412,9 +412,16 @@ dell'eco della stanza.
     in sola lettura**: cambiarlo cambierebbe le risposte attese di una mappa già fatta; «Riapri lo
     scheletro» (la persona o il tutore) lo riporta a proposto e toglie le copie, che si rifanno.
     **Mentre una mappa a memoria è aperta** chi la fa riceve lo scheletro e la sua mappa senza testi
-    (e senza il PDF) fino a «Controlla». Al più `studio_mappa_nodi_max` concetti nello scheletro e 6
-    della persona in più nella copia. Ogni azione legge e scrive dentro il lock dei dati (revisione
-    della PR #326).
+    (e senza il PDF) fino a «Controlla»; dopo il primo «Controlla» la mappa a memoria **non si cambia
+    più** (né caselle, né concetti, né collegamenti, né posizioni) e le caselle lasciate vuote non
+    contano in quel giro: si riparte solo con «Rifai», un giro nuovo con altre caselle (il contatore
+    dei giri sta sullo scheletro e resta dopo «Riapri»). Le carte fatte prima con «Fanne carte»
+    restano visibili durante una mappa a memoria aperta: sono materiale di studio, scelto dalla
+    persona. **Anche il tutore** può usare «Riapri lo scheletro», che toglie le mappe del ragazzo (i
+    tentativi no): uno scheletro sbagliato va corretto, e la pagina chiede conferma prima. Al più
+    `studio_mappa_nodi_max` concetti e il doppio di collegamenti nello scheletro; nella copia 6
+    concetti della persona in più (e 12 collegamenti in più). Ogni azione legge e scrive dentro il
+    lock dei dati (revisioni della PR #326).
     **Chi**: lo scheletro la persona e il tutore; la mia mappa e a memoria solo la persona (il tutore
     le vede e scarica il PDF; scelta prudente, da confermare). Sullo schermo `POST /api/studio/mappa`,
     fuori dalla conversazione come le carte, con la vista a elenco equivalente alla mappa e niente che

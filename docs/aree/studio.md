@@ -199,6 +199,17 @@ persona col nome («Nella mappa di Leo…»); le carte di «Fanne carte» hanno 
 voce («Mappa di storia: che cosa arriva in «America»?», «Mappa di storia: «Colombo» arriva in che
 cosa?»); la regola scritta per il testo: **mai fuori busta**, al modello solo come carta.
 
+**La seconda revisione della PR #326** (stesso ramo, un commit): (1) **a memoria dopo un «Controlla»
+parziale** si poteva copiare dallo scheletro tornato visibile e ricontrollare (4 «giusto» del
+codice): ora dopo il primo «Controlla» la mappa a memoria non si cambia più (`MEMORIA_CHIUSA`: niente
+riempi, sposta, collega, concetti nuovi; la pagina spegne i tasti e dice «per rifarla, «Rifai»») e
+le caselle lasciate vuote entrano nei `tentati` del giro; (2) **`VUOTE` senza lettere isolate**
+(«Vitamina D» valeva «Vitamina A», «Fase» valeva «Fase I»), gli articoli elisi tolti prima, e una
+parola vuota in fondo all'atteso conta. Minori: il contatore dei giri sullo scheletro (resta dopo
+«Riapri»: le caselle non si ripetono); il tetto dei collegamenti dello scheletro resta 2 ×
+`studio_mappa_nodi_max` (i 6 concetti propri alzano solo quello della copia); nella 0035 il tutore che
+riapre e le carte visibili durante una mappa a memoria.
+
 **Le due note della revisione della PR #325**: `correggi_carta` su una carta dell'ombra dà «non c'è»
 come `segna_carta` (prima la rendeva attiva); le carte dell'ombra non contano nel tetto delle 300 per
 verifica (`aggiungi_carta`, `proponi_carte`).

@@ -36,6 +36,10 @@ from . import padronanza as PD
 _UGUALE = object()
 SOLA_LETTURA = ("lo scheletro è confermato e ci sono le mappe fatte da lì: per cambiarlo, «Riapri "
                 "lo scheletro»")
+# La mappa a memoria dopo il primo «Controlla» (seconda revisione della PR #326): non si cambia
+# più, si riparte con «Rifai» (altrimenti, con lo scheletro di nuovo visibile, si copiava e si
+# ricontrollava)
+MEMORIA_CHIUSA = "la mappa a memoria è già controllata: per rifarla, «Rifai»"
 
 
 def _j(x) -> str:
@@ -71,10 +75,13 @@ class Mappe:
             "SELECT id FROM studio_mappe WHERE verifica = ? AND tipo IN ('studente', 'memoria')",
             (int(vid),))]
 
-    def _mappa(self, chi, mid, cambia: bool = False, riapri: bool = False) -> tuple[dict, dict]:
+    def _mappa(self, chi, mid, cambia: bool = False, riapri: bool = False,
+               chiusa_ok: bool = False) -> tuple[dict, dict]:
         """(mappa, verifica) se `chi` la può vedere (o, con `cambia`, cambiare); altrimenti
         NonTrovata, come una verifica che non c'è. Uno scheletro confermato con le copie non si
-        cambia (ValueError, `SOLA_LETTURA`), tranne che per riaprirlo (`riapri`)."""
+        cambia (ValueError, `SOLA_LETTURA`), tranne che per riaprirlo (`riapri`); una mappa a
+        memoria controllata nemmeno (`MEMORIA_CHIUSA`), tranne che per «Rifai», «Fanne carte» e un
+        altro «Controlla», che non cambia niente (`chiusa_ok`)."""
         from .servizio import NonTrovata, VerificaChiusa
         m = self._riga_mappa(mid)
         if m is None or m["stato"] == "ombra":
@@ -89,6 +96,8 @@ class Mappe:
             if (m["tipo"] == M.SCHELETRO and m["stato"] == "confermata" and not riapri
                     and self._copie(v["id"])):
                 raise ValueError(SOLA_LETTURA)
+            if m["tipo"] == M.MEMORIA and m["stato"] == "controllata" and not chiusa_ok:
+                raise ValueError(MEMORIA_CHIUSA)
         return m, v
 
     def _mappe_di(self, vid) -> dict:
@@ -225,7 +234,9 @@ class Mappe:
                     raise ValueError("un concetto non si collega con sé stesso")
                 if any({int(c["da"]), int(c["a"])} == {int(da), int(a)} for c in coll):
                     raise ValueError("questi due concetti sono già collegati")
-                if len(coll) >= 2 * (M.nodi_max(self.cfg) + M.SUOI_MAX):
+                tetto = 2 * M.nodi_max(self.cfg) + (0 if m["tipo"] == M.SCHELETRO
+                                                     else 2 * M.SUOI_MAX)
+                if len(coll) >= tetto:
                     raise ValueError("troppi collegamenti")
                 cid = max([int(c["id"]) for c in coll] + [0]) + 1
                 coll.append({"id": cid, "da": int(da), "a": int(a), "verbo": vb, "pagine": [],
@@ -358,6 +369,17 @@ class Mappe:
         aiuto = ("tanto" if lv is None or lv < 45 else "medio" if lv < 75 else "poco")
         return [a["id"] for a in misurati], aiuto
 
+    def _prossimo_giro(self, s: dict) -> int:
+        """Il giro della copia nuova: un contatore sullo scheletro (`aiuto.giro`), che cresce a
+        ogni copia e resta dopo «Riapri lo scheletro», così le caselle non si ripetono (seconda
+        revisione della PR #326). Dentro il lock di chi chiama."""
+        a = dict(s.get("aiuto") or {})
+        giro = int(a.get("giro", -1)) + 1
+        a["giro"] = giro
+        self.dati.scrivi("UPDATE studio_mappe SET aiuto = ? WHERE id = ?", (_j(a), int(s["id"])))
+        s["aiuto"] = a
+        return giro
+
     def _nuova_copia(self, v, s, tipo, aiuto, giro) -> tuple[list, list, dict]:
         deboli, di_serie = self._deboli(v)
         aiuto = aiuto if aiuto in M.AIUTI else di_serie
@@ -391,7 +413,7 @@ class Mappe:
             prima = self._mappe_di(v["id"]).get(tipo)
             if tipo == M.STUDENTE and prima is not None:
                 return prima["id"]
-            giro = int((prima or {}).get("aiuto", {}).get("giro", -1)) + 1 if prima else 0
+            giro = self._prossimo_giro(s)
             nodi, coll, aiuto_d = self._nuova_copia(v, s, tipo, aiuto, giro)
             adesso = self.adesso().isoformat(timespec="seconds")
             db = self.dati.db
@@ -420,13 +442,13 @@ class Mappe:
         scheletro (i concetti suoi vanno via: la pagina lo chiede prima). Dentro il lock."""
         from .servizio import NonTrovata
         with self.dati.lock:
-            m, v = self._mappa(chi, mid, cambia=True)
+            m, v = self._mappa(chi, mid, cambia=True, chiusa_ok=True)
             if m["tipo"] == M.SCHELETRO:
                 raise NonTrovata()
             s = self._scheletro_confermato(v["id"])
             if s is None:
                 raise ValueError("lo scheletro non è confermato")
-            giro = int(m["aiuto"].get("giro", 0)) + 1
+            giro = self._prossimo_giro(s)
             nodi, coll, aiuto_d = self._nuova_copia(v, s, m["tipo"],
                                                     aiuto or m["aiuto"].get("livello"), giro)
             self._salva_mappa(m, nodi=nodi, collegamenti=coll, aiuto=aiuto_d, tentati=[],
@@ -442,7 +464,7 @@ class Mappe:
         tentativi scritti."""
         from .servizio import NonPermesso, NonTrovata
         with self.dati.lock:
-            m, v = self._mappa(chi, mid, cambia=True)
+            m, v = self._mappa(chi, mid, cambia=True, chiusa_ok=True)
             if m["tipo"] == M.SCHELETRO:
                 raise NonTrovata()
             s = self._scheletro_confermato(v["id"])
@@ -456,6 +478,12 @@ class Mappe:
             if self.modo_padronanza != PD.SPENTA:
                 for n in m["nodi"]:
                     nid = int(n["id"])
+                    if r["caselle"].get(nid) == M.VUOTA and nid not in tentati:
+                        # Lasciata vuota al controllo: in questo giro non conta più (seconda
+                        # revisione della PR #326: riempita dopo, con lo scheletro visibile, non
+                        # deve dare un «giusto»)
+                        tentati.append(nid)
+                        continue
                     e = M.esito_tentativo(r["caselle"].get(nid), m["tipo"])
                     if e is None or nid in tentati or n.get("argomento") not in nel_piano:
                         continue
@@ -492,7 +520,7 @@ class Mappe:
         Quante scritte."""
         from .servizio import NonTrovata
         with self.dati.lock:
-            m, v = self._mappa(chi, mid, cambia=True)
+            m, v = self._mappa(chi, mid, cambia=True, chiusa_ok=True)
             if m["tipo"] == M.SCHELETRO or not m["controllo"]:
                 raise NonTrovata()
             s = self._scheletro_confermato(v["id"])

@@ -1102,7 +1102,12 @@
       return p;
     }
     const puo = puoCambiare(m);
+    // A memoria, dopo «Controlla», non si cambia più: si riparte con «Rifai» (seconda revisione
+    // della PR #326)
+    const chiusa = m.tipo === "memoria" && m.stato === "controllata";
+    const modifica = puo && !chiusa;
     p.append(nodo("p", "studio-h-riga", chiMappa(m)));
+    if (chiusa && puo) p.append(nodo("p", "studio-h-nota", "Controllata: per rifarla a memoria, «Rifai»."));
     const daDecidere = (m.nodi || []).filter((n) => n.stato === "proposto").length + (m.collegamenti || []).filter((c) => c.stato === "proposto").length;
     if (m.tipo === "scheletro" && m.stato === "confermata" && d.puo && !d.puo.scheletro) {
       p.append(nodo("p", "studio-h-riga", "Lo scheletro è confermato e ci sono le mappe fatte da qui: per cambiarlo va riaperto, e la tua mappa e quella a memoria si rifanno dopo la nuova conferma."));
@@ -1126,16 +1131,16 @@
       p.append(dl);
     }
     if (mappa.vista === "mappa") {
-      p.append(telaMappa(m, puo));
+      p.append(telaMappa(m, modifica));
       const n = nodoDi(m, mappa.scelto);
-      if (n) p.append(pannelloNodo(m, n, puo));
+      if (n) p.append(pannelloNodo(m, n, modifica));
       else p.append(nodo("p", "studio-h-nota", "Tocca un concetto per vederlo e cambiarlo; la stessa mappa è anche nell'elenco."));
     } else {
-      p.append(elencoMappa(m, puo));
+      p.append(elencoMappa(m, modifica));
     }
     if (mappa.modulo) p.append(moduloMappa(m));
     const t = nodo("div", "studio-h-tasti");
-    if (puo && !mappa.modulo) {
+    if (modifica && !mappa.modulo) {
       t.append(tastoMappa("+ Concetto", "nuovo", {}, ""), tastoMappa("Collega", "collega", {}, ""));
       if (m.tipo === "scheletro" && m.stato !== "confermata") t.append(tastoMappa("Conferma lo scheletro", "conferma", {}, "studio-h-primo"));
       if (m.tipo !== "scheletro") t.append(tastoMappa("Controlla", "controlla", {}, "studio-h-primo"));

@@ -54,10 +54,13 @@ GIUSTA, SBAGLIATA, VUOTA = "giusta", "sbagliata", "vuota"
 # Nella copia (la mia mappa, a memoria) la persona aggiunge al più tanti concetti suoi, oltre a
 # quelli dello scheletro (`studio_mappa_nodi_max` vale per lo scheletro)
 SUOI_MAX = 6
-# Le parole vuote che una casella può avere in più o in meno (articoli, preposizioni, «e»)
-VUOTE = frozenset("""il lo la i gli le l un uno una un di a da in con su per tra fra del dello della
-dei degli delle al allo alla ai agli alle dal dallo dalla dai dagli dalle nel nello nella nei negli
-nelle sul sullo sulla sui sugli sulle col coi e ed d""".split())
+# Le parole vuote che una casella può avere in più o in meno (articoli, preposizioni). Niente lettere
+# isolate (seconda revisione della PR #326: «Vitamina D» per «Vitamina A», «Fase» per «Fase I»); gli
+# articoli e le preposizioni con l'apostrofo («l'», «dell'») si tolgono prima (`_piene`)
+VUOTE = frozenset("""il lo la gli le un uno una di da in con su per tra fra del dello della dei
+degli delle al allo alla ai agli alle dal dallo dalla dai dagli dalle nel nello nella nei negli nelle
+sul sullo sulla sui sugli sulle col coi ed""".split())
+_ELISO = re.compile(r"\b(l|un|dell|all|dall|nell|sull|coll|d)['’]", re.I)
 # La tolleranza di una lettera vale solo per le parole lunghe (fino a 6 lettere una lettera cambia la
 # parola: forma/forza, messa/massa, Marte/Morte)
 STORPIATA_DA = 7
@@ -91,7 +94,10 @@ def chiave(testo) -> str:
 
 
 def _piene(t: str) -> list[str]:
-    return [w for w in chiave(t).split() if w not in VUOTE]
+    """Le parole piene: senza gli articoli e le preposizioni elisi e senza le parole vuote, tranne
+    l'ultima parola (una parola vuota in fondo fa parte del nome)."""
+    w = chiave(_ELISO.sub(" ", str(t or ""))).split()
+    return [x for i, x in enumerate(w) if x not in VUOTE or i == len(w) - 1]
 
 
 def _storpiata(a: str, d: str) -> bool:
