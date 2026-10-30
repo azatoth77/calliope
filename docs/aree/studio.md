@@ -125,6 +125,34 @@ modifiche. Corretto in `prove/cdp.py`: si aspetta il file anche dopo l'uscita de
 `prova_studio_pagina_telefono.py` il conto delle pagine dopo l'invio si aspetta (sotto carico
 arrivava dopo il controllo).
 
+**Dopo la revisione della PR #321 (30/10):**
+- **al tutore la terza persona**: quando chi chiede o chi segna non è la persona della verifica,
+  il resoconto dice il nome del minore («Oggi Leo ha letto 2 pagine, in 30 minuti.», «Leo ha
+  saltato lo studio», «Leo ha cominciato alle…», «Segnato fatto: oggi Leo ha letto…») e il
+  riepilogo «Storia di Leo, …»; le righe della home sono impersonali (anche «Il tempo si misura
+  quando la sessione comincia con «Inizia».»). *Storico per un commit: al tutore diceva «hai
+  letto», come se la sessione fosse sua*;
+- **dopo mezzanotte**: «Inizia» alle 23:40 e «Fatto» alle 00:10 segnano il giorno della sessione.
+  Se chi segna ha un «inizio» ieri su quella verifica nelle ultime 3 ore, nessuno oggi, e il giorno
+  di ieri non è fatto, «Fatto» senza giorno o con oggi (il tocco manda oggi) va a ieri
+  (`Studio._sessione_aperta_ieri`); intanto il ricalcolo non toglie quel giorno né lo segna «non
+  fatto». Oltre le 3 ore resta a oggi;
+- **le pause**: il tempo va dall'ultimo «inizio» prima del «fatto»; se fra i due c'è un «non
+  fatto» (il giorno riaperto e richiuso) il tempo non c'è, perché conterebbe la pausa. È la scelta
+  più semplice e onesta: meglio nessun tempo che uno gonfiato;
+- il tutore trova per materia anche la verifica già passata del minore (`anche_passate` con le
+  persone di `home`), con gli stessi permessi;
+- gli eventi orfani (senza la verifica, da una corsa fra un «inizio» e una cancellazione) vanno via
+  con «svuota», con la persona e per data con la rotazione; un db allo schema di prima (Studio
+  spento) si ruota senza errori.
+
+**Cose note** (revisione della PR #321): nella stessa risposta, dopo `studio_pagina_leggi`,
+anche `resoconto` e `riepilogo` sono rifiutati da Brain (`DOPO_DATO`, come `stato` e `piano`); il
+motivo che il modello riceve dice «dopo una ricerca su internet…», fuorviante per una pagina dello
+Studio (c'era già prima). `chi` negli eventi resta con l'id del tutore dopo `svuota --persona
+<tutore>`, come `creata_da`. `resoconto` e `riepilogo` alla prima lettura di un giorno nuovo
+ricalcolano il piano e scrivono i «mancato», come `stato` e `piano`.
+
 ## Tool, home e vista aperta (30/10, issue #284, ramo `issue-284-studio-tool-home`)
 
 *Passo 4.5 dell'epic #251, l'ultimo del passo 4; decisione [0035](../decisioni/0035-studio.md)

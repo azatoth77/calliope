@@ -237,8 +237,20 @@ def _verifica(svc, ctx, chi, verifica=None, materia=None, anche_passate=False) -
             return None
     tutte = svc.home(chi)["verifiche"]
     if anche_passate:
-        tutte = tutte + sorted((v for v in svc.verifiche(chi) if v["stato"] == "fatta"),
-                               key=lambda v: v["data"], reverse=True)
+        # Le sue e, da tutore, quelle dei suoi minori (revisione della PR #321, nota 3), con gli
+        # stessi permessi di `home`
+        from ..studio import permesso
+        reg = getattr(svc, "registry", None)
+        persone = [str(chi.id)] + [str(p.id) for p in (getattr(reg, "users", {}) or {}).values()
+                                   if getattr(p, "id", None) != chi.id
+                                   and permesso(chi, p, reg) == "tutore"]
+        passate = []
+        for pid in persone:
+            try:
+                passate += [v for v in svc.verifiche(chi, persona=pid) if v["stato"] == "fatta"]
+            except (NonPermesso, NonTrovata):
+                continue
+        tutte = tutte + sorted(passate, key=lambda v: v["data"], reverse=True)
     if materia:
         m = str(materia).strip().lower()
         tutte = [v for v in tutte if str(v["materia"]).lower() == m
@@ -378,7 +390,7 @@ def _fatto(ctx, svc, chi, v, giorno, fatto: bool = True) -> dict:
     b = _bersaglio(ctx)
     g = b.get("giorno") or giorno
     try:
-        svc.giorno_fatto(chi, v["id"], g or None, fatto)
+        segnato = svc.giorno_fatto(chi, v["id"], g or None, fatto)
     except NonTrovata:
         return _f("Oggi nel piano di questa verifica non c'è niente da segnare.", ok=False)
     except ValueError:
@@ -388,7 +400,8 @@ def _fatto(ctx, svc, chi, v, giorno, fatto: bool = True) -> dict:
     # Il resoconto della sessione, dai soli dati (passo 4b, #244): cosa si è fatto, il tempo se
     # misurato, cosa resta
     try:
-        r = svc.resoconto(chi, v["id"], g or None)
+        # Il giorno segnato davvero (dopo mezzanotte può essere ieri, PR #321 nota 1)
+        r = svc.resoconto(chi, v["id"], segnato or g or None)
     except (NonTrovata, ValueError):
         return _f("Segnato fatto: un pezzo in meno.")
     return _f("Segnato fatto: " + r["frase"][:1].lower() + r["frase"][1:], verifica=v["id"])

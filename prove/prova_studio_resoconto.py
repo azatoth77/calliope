@@ -312,9 +312,14 @@ verifica("sullo schermo l'attività intera (textContent)", r["attivita"] ==
 
 # ═══════════════════════════ 7. permessi e tenuta ═══════════════════════════
 print("— permessi e tenuta")
-verifica("il tutore vede resoconto e riepilogo del suo minore",
-         st2.resoconto(ANDREA, vid2)["frase"] == r["frase"]
-         and st2.riepilogo(ANDREA, vid2)["frase"] == rp2["frase"])
+ra, rpa = st2.resoconto(ANDREA, vid2), st2.riepilogo(ANDREA, vid2)
+verifica("il tutore vede il resoconto del minore alla terza persona, col suo nome (PR #321)",
+         ra["frase"].startswith("Oggi Leo ha letto 2 pagine, in 30 minuti.")
+         and " hai " not in ra["frase"] and "l'hai" not in ra["frase"], ra["frase"])
+verifica("il riepilogo al tutore dice di chi è, il resto uguale",
+         rpa["frase"] == rp2["frase"].replace("Storia,", "Storia di Leo,", 1), rpa["frase"])
+verifica("le righe della home sono impersonali (anche quella del tempo)",
+         all(" hai " not in x and "cominci " not in x for x in rpa["righe"]), rpa["righe"])
 verifica("un altro adulto e l'ospite: lo stesso «non c'è»",
          solleva(lambda: st2.resoconto(BRUNO, vid2), S.NonTrovata)
          and solleva(lambda: st2.riepilogo(BRUNO, vid2), S.NonTrovata)
@@ -336,10 +341,42 @@ verifica("«dimentica»: via gli eventi delle sue verifiche, non dell'archiviata
 D.cancella(st2.dati.db, scadute_prima=datetime.date(2027, 1, 30))
 verifica("la rotazione: via gli eventi delle verifiche scadute, l'archiviata resta",
          eventi(st2, vid3) and not eventi(st2, vid4))
+# Un evento orfano (una corsa fra un «inizio» e una cancellazione): scade per data (PR #321)
+for g in ("2026-10-01", "2027-03-01"):
+    st2.dati.scrivi("INSERT INTO studio_eventi (verifica, persona, giorno, ora, tipo) VALUES "
+                    "(999, 'l1', ?, ?, 'inizio')", (g, g + "T10:00:00"))
+D.cancella(st2.dati.db, scadute_prima=datetime.date(2027, 1, 30))
+orf = st2.dati.tutti("SELECT giorno FROM studio_eventi WHERE verifica = 999")
+verifica("la rotazione: via l'evento orfano scaduto, resta quello più nuovo",
+         [x["giorno"] for x in orf] == ["2027-03-01"], orf)
+D.cancella(st2.dati.db, persona="l1", archiviate=False)
+verifica("«dimentica»: via anche gli eventi orfani della persona",
+         not st2.dati.tutti("SELECT 1 FROM studio_eventi WHERE verifica = 999") and eventi(st2, vid3))
+st2.dati.scrivi("INSERT INTO studio_eventi (verifica, persona, giorno, ora, tipo) VALUES "
+                "(998, 'a1', '2027-03-01', '2027-03-01T10:00:00', 'inizio')")
 D.cancella(st2.dati.db, tutto=True)
 verifica("«svuota»: nessun evento",
          st2.dati.uno("SELECT COUNT(*) AS n FROM studio_eventi")["n"] == 0)
 st2.close()
+# Un db ancora allo schema di prima (lo Studio spento non lo prepara): la rotazione va lo stesso
+vecchio = TMP / "vecchio.db"
+dbv = sqlite3.connect(str(vecchio))
+dbv.execute("CREATE TABLE studio_verifiche (id INTEGER PRIMARY KEY, persona TEXT, stato TEXT, "
+            "data TEXT)")
+for t in ("studio_materiali (id INTEGER PRIMARY KEY, verifica INTEGER, riferimento TEXT)",
+          "studio_pagine (id INTEGER PRIMARY KEY, materiale INTEGER, file TEXT)",
+          "studio_argomenti (verifica INTEGER)", "studio_piano (verifica INTEGER)",
+          "studio_misure (verifica INTEGER)", "studio_giorni (persona TEXT, giorno TEXT)"):
+    dbv.execute(f"CREATE TABLE {t}")
+dbv.execute("INSERT INTO studio_verifiche VALUES (1, 'l1', 'aperta', '2026-01-01')")
+dbv.commit()
+try:
+    out = D.cancella(dbv, scadute_prima=datetime.date(2026, 6, 1))
+    ok = out["verifiche"] == 1
+except sqlite3.Error as e:
+    ok, out = False, e
+dbv.close()
+verifica("schema senza studio_eventi: la rotazione toglie la verifica senza errori", ok, out)
 
 # ═══════════════════════════ 8. tool e politica ═══════════════════════════
 print("— tool e politica")
@@ -400,8 +437,23 @@ x = chiama(c, azione="riepilogo", materia="storia")
 verifica("«a che punto sono con storia?»", x["ok"] and x["risposta_finale"].startswith(
     "Storia, giovedì 5 novembre: 1 giorno fatto; pagine lette 2 su 7"), x)
 xa = chiama(ctx_di(st3, ANDREA), azione="riepilogo", verifica=vid6)
-verifica("il tutore chiede il riepilogo del minore: la stessa frase",
-         xa["ok"] and xa["risposta_finale"] == x["risposta_finale"], xa)
+verifica("il tutore chiede il riepilogo del minore: «Storia di Leo», il resto uguale",
+         xa["ok"] and xa["risposta_finale"] == x["risposta_finale"].replace(
+             "Storia,", "Storia di Leo,", 1), xa)
+xa = chiama(ctx_di(st3, ANDREA), azione="resoconto", verifica=vid6, giorno="ieri")
+verifica("il tutore chiede il resoconto di ieri: «Ieri Leo ha letto…»",
+         xa["ok"] and xa["risposta_finale"].startswith(
+             "Ieri Leo ha letto le pagine 112–113, in 40 minuti."), xa)
+ca = ctx_di(st3, ANDREA)
+chiama(ca, azione="sessione", verifica=vid6, conoscenza=3)
+xa = chiama(ca, azione="resoconto", verifica=vid6)
+verifica("la sessione cominciata dal tutore: «Oggi Leo ha cominciato…»",
+         xa["ok"] and xa["risposta_finale"].startswith("Oggi Leo ha cominciato alle 10:00"), xa)
+ora(30, 10, 30)
+xa = chiama(ca, azione="fatto", verifica=vid6)
+verifica("«fatto» segnato dal tutore: «Segnato fatto: oggi Leo ha letto…»",
+         xa["ok"] and xa["risposta_finale"].startswith(
+             "Segnato fatto: oggi Leo ha letto la pagina 114, in 30 minuti."), xa)
 xb = chiama(ctx_di(st3, BRUNO), azione="riepilogo", verifica=vid6)
 verifica("un altro adulto: non la trovo", not xb["ok"] and xb["errore"] == TS.NON_CE, xb)
 vbozza = st3.crea_verifica(LEO, "Matematica", "2026-11-10")
@@ -414,7 +466,56 @@ verifica("la verifica passata si trova ancora (non archiviata)",
          x["ok"] and x["risposta_finale"].startswith("Storia, giovedì 5 novembre:")
          and "La verifica è passata." in x["risposta_finale"], x)
 verifica("i giorni rimasti nel piano della verifica passata contano come non fatti",
-         st3.riepilogo(LEO, vid6)["giorni"]["mancati"] >= 6, st3.riepilogo(LEO, vid6)["giorni"])
+         st3.riepilogo(LEO, vid6)["giorni"]["mancati"] >= 5, st3.riepilogo(LEO, vid6)["giorni"])
+xa = chiama(ctx_di(st3, ANDREA), azione="riepilogo", materia="storia")
+verifica("il tutore trova per materia la verifica passata del minore (PR #321)",
+         xa["ok"] and xa["risposta_finale"].startswith("Storia di Leo, giovedì 5 novembre:"), xa)
+xb = chiama(ctx_di(st3, BRUNO), azione="riepilogo", materia="storia")
+verifica("un altro adulto no, nemmeno per materia", not xb["ok"], xb)
+st3.close()
+
+# ═══════════════════════════ 8b. dopo mezzanotte e le pause ═══════════════════════════
+print("— dopo mezzanotte e le pause")
+ORA[0] = datetime.datetime(2026, 10, 29, 16, 0)
+st5 = studio(cfg_nuova("notte.db"))
+vid8, ids8 = carica(st5, LEO)
+ORA[0] = datetime.datetime(2026, 10, 29, 23, 40)       # studia tardi, il piano è del pomeriggio
+st5.imposta_sessione(LEO, vid8, conoscenza=3)
+ORA[0] = datetime.datetime(2026, 10, 30, 0, 5)
+st5.home(LEO)                                     # la home riletta dopo mezzanotte: ricalcolo
+verifica("dopo mezzanotte, con la sessione di ieri aperta, ieri non è ancora «non fatto»",
+         not eventi(st5, vid8, "mancato"))
+ORA[0] = datetime.datetime(2026, 10, 30, 0, 10)
+c5 = ctx_di(st5, LEO)
+c5.tocco_bersaglio = {"studio": {"verifica": vid8, "giorno": "2026-10-30"}}
+x = chiama(c5, azione="fatto", verifica=vid8)
+f8 = eventi(st5, vid8, "fatto")
+verifica("«Fatto» alle 00:10 (anche col giorno di oggi del tocco) va a ieri, il giorno della "
+         "sessione",
+         len(f8) == 1 and f8[0]["giorno"] == "2026-10-29"
+         and json.loads(f8[0]["dati"])["pagine"] == [ids8["p112"], ids8["p113"]], f8)
+verifica("la frase dice ieri e il tempo vero",
+         x["ok"] and x["risposta_finale"].startswith(
+             "Segnato fatto: ieri hai letto le pagine 112–113, in 30 minuti."), x)
+ORA[0] = datetime.datetime(2026, 10, 30, 4, 0)
+st5.giorno_fatto(LEO, vid8)
+verifica("oltre le 3 ore «Fatto» resta a oggi",
+         [e["giorno"] for e in eventi(st5, vid8, "fatto")] == ["2026-10-29", "2026-10-30"])
+st5.close()
+ORA[0] = datetime.datetime(2026, 10, 29, 15, 0)
+st6 = studio(cfg_nuova("pause.db"))
+vid9, _ = carica(st6, LEO)
+st6.imposta_sessione(LEO, vid9, conoscenza=3)
+ORA[0] = datetime.datetime(2026, 10, 29, 15, 20)
+st6.giorno_fatto(LEO, vid9)
+ORA[0] = datetime.datetime(2026, 10, 29, 15, 25)
+st6.giorno_fatto(LEO, vid9, fatto=False)
+ORA[0] = datetime.datetime(2026, 10, 29, 17, 50)
+st6.giorno_fatto(LEO, vid9)
+r9 = st6.resoconto(LEO, vid9)
+verifica("riaperto con «non fatto» e chiuso dopo: niente tempo (la pausa non si conta)",
+         r9["stato"] == R.FATTO and r9["minuti"] is None and "in 2 ore" not in r9["frase"], r9)
+st6.close()
 
 # ═══════════════════════════ 9. home ═══════════════════════════
 print("— home")

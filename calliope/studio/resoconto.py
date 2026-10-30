@@ -146,7 +146,13 @@ def sessioni(eventi: list[dict], righe_passate=(), oggi=None) -> list[dict]:
                  and (fine is None or _t(e["ora"]) <= fine)]
         if inizi and s["stato"] in (FATTO, INIZIATO):
             s["inizio"] = inizi[-1]["ora"]
-            if fine is not None:
+            # Le pause (revisione della PR #321, nota 2): il tempo va dall'ultimo «inizio» prima
+            # del «fatto»; se nel mezzo c'è un «non_fatto» il giorno è stato riaperto e chiuso di
+            # nuovo, e la differenza conterebbe la pausa: niente tempo, che è la scelta onesta
+            riaperto = fine is not None and any(
+                e["tipo"] == "non_fatto" and _t(e.get("ora"))
+                and _t(s["inizio"]) <= _t(e["ora"]) <= fine for e in ev)
+            if fine is not None and not riaperto:
                 secondi = (fine - _t(s["inizio"])).total_seconds()
                 if 0 <= secondi <= DURATA_MAX_S:
                     s["minuti"] = max(1, int(round(secondi / 60)))
@@ -179,35 +185,40 @@ def _resta(resta: dict, oggi, data) -> str:
     return frase + "."
 
 
-def frase_resoconto(r: dict, oggi) -> str:
-    """La frase del resoconto di un giorno, dai soli dati (`Studio.resoconto`)."""
+def frase_resoconto(r: dict, oggi, nome: str | None = None) -> str:
+    """La frase del resoconto di un giorno, dai soli dati (`Studio.resoconto`). Con `nome` (chi
+    chiede o chi segna non è la persona della verifica: il tutore, revisione della PR #321) la
+    frase è alla terza persona col nome del minore: «Oggi Leo ha letto…», mai «hai letto»."""
     q = quando(r["giorno"], oggi)
     Q = q[:1].upper() + q[1:]
     stato = r.get("stato")
     cosa = pagine_dette(r.get("numeri") or [])
     verbo = "ripassato" if r.get("fase") == P.RIPASSO else "letto"
+    chi_ha = f"{nome} ha" if nome else "hai"
+    di = f" di {nome}" if nome else ""
     if stato == FATTO:
-        prima = f"{Q} hai {verbo} {cosa}"
+        prima = f"{Q} {chi_ha} {verbo} {cosa}"
         if r.get("minuti"):
             prima += f", in {durata_detta(r['minuti'])}"
         prima += "."
     elif stato == SALTATO:
-        prima = f"{Q} lo studio l'hai saltato: le pagine sono passate ai giorni dopo."
+        prima = (f"{Q} {nome} ha saltato lo studio" if nome else f"{Q} lo studio l'hai saltato") \
+            + ": le pagine sono passate ai giorni dopo."
     elif stato == MANCATO:
-        prima = f"{Q} il giorno del piano non è segnato fatto."
+        prima = f"{Q} il giorno del piano{di} non è segnato fatto."
     elif stato == INIZIATO:
-        prima = (f"{Q} hai cominciato alle {ora_detta(r.get('inizio'))}, ma il giorno non è "
+        prima = (f"{Q} {chi_ha} cominciato alle {ora_detta(r.get('inizio'))}, ma il giorno non è "
                  "ancora segnato fatto.")
     elif stato == DA_FARE:
         da = "ripassare" if r.get("fase") == P.RIPASSO else "leggere"
-        prima = (f"{Q} c'è da {da} {cosa}, {conta(int(r.get('previsti') or 0), 'minuto', 'minuti')}"
-                 ": non è ancora fatto.")
+        prima = (f"{Q} {nome} ha da {da} {cosa}" if nome else f"{Q} c'è da {da} {cosa}") + \
+            f", {conta(int(r.get('previsti') or 0), 'minuto', 'minuti')}: non è ancora fatto."
     else:
-        prima = f"{Q} nel piano non c'era niente."
+        prima = f"{Q} nel piano{di} non c'era niente."
     return prima + " " + _resta(r.get("resta") or {}, oggi, r["data"])
 
 
-def frase_riepilogo(r: dict, oggi) -> str:
+def frase_riepilogo(r: dict, oggi, nome: str | None = None) -> str:
     """La frase del riepilogo di una verifica, dai soli dati (`Studio.riepilogo`): al più tre
     frasi brevi (principio 5)."""
     gg = r["giorni"]
@@ -218,7 +229,9 @@ def frase_riepilogo(r: dict, oggi) -> str:
     if gg["mancati"]:
         pezzi.append(conta(gg["mancati"], "non fatto", "non fatti"))
     pg, ar = r["pagine"], r["argomenti"]
-    prima = (f"{r['materia']}, {detta(r['data'])}: {', '.join(pezzi)}; "
+    # Al tutore la materia col nome del minore (revisione della PR #321): «Storia di Leo, …»
+    prima = (f"{r['materia']}{' di ' + nome if nome else ''}, {detta(r['data'])}: "
+             f"{', '.join(pezzi)}; "
              f"pagine lette {pg['lette']} su {pg['totali']}")
     if ar["totali"]:
         prima += f", argomenti finiti {ar['finiti']} su {ar['totali']}"
@@ -296,7 +309,7 @@ def righe_riepilogo(r: dict) -> list[str]:
                    + (f"; {conta(t['senza'], 'giorno fatto', 'giorni fatti')} senza «Inizia», "
                       "il tempo lì non c'è." if t.get("senza") else "."))
     elif gg["fatti"]:
-        out.append("Il tempo si misura quando cominci con «Inizia».")
+        out.append("Il tempo si misura quando la sessione comincia con «Inizia».")
     sp = r.get("spostata") or []
     if sp:
         out.append(f"Data spostata {conta(len(sp), 'volta', 'volte')}: all'inizio era "

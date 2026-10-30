@@ -324,7 +324,10 @@ dell'eco della stanza.
     solo misurato, fra «Inizia» e «Fatto» dello stesso giorno entro le 3 ore della sessione. Le due
     risposte prima della sessione restano fuori (punto 27): l'evento «inizio» ha solo l'ora. Li
     vedono la persona e il tutore del minore, come il resto dello Studio (punto 10); per il tutore
-    è la parte «vedere le sessioni» della #285, senza come si sentiva. Alternative scartate: tenere
+    è la parte «vedere le sessioni» della #285, senza come si sentiva, e al tutore le frasi sono
+    alla terza persona col nome del minore (revisione della PR #321). Dopo mezzanotte «Fatto»
+    chiude la sessione cominciata ieri entro 3 ore; con un «non fatto» in mezzo il tempo non c'è.
+    Alternative scartate: tenere
     nel piano i giorni passati (niente durata né spostamenti, piano e storia mescolati), il registro
     degli eventi della conversazione (in ombra di serie, un'altra tenuta, dipende da ciò che il
     modello ha chiamato), salvare la frase detta (è testo, non una proiezione).

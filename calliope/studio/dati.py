@@ -277,6 +277,11 @@ def _c_e(db: sqlite3.Connection) -> bool:
                       "name = 'studio_verifiche'").fetchone() is not None
 
 
+def _tabella(db: sqlite3.Connection, nome: str) -> bool:
+    return db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                      (nome,)).fetchone() is not None
+
+
 def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
     """Cancella le verifiche e tutto ciò che è loro (dentro una transazione già aperta). I file
     delle pagine tolte (dal passo 4.2 anche i PDF originali dei materiali), da togliere dal
@@ -295,6 +300,9 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
             db.execute("DELETE FROM studio_pagine WHERE materiale = ?", (m,))
         for t in ("studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
                   "studio_eventi"):
+            # Un db ancora allo schema di prima (lo Studio spento non lo prepara): niente eventi
+            if t == "studio_eventi" and not _tabella(db, t):
+                continue
             db.execute(f"DELETE FROM {t} WHERE verifica = ?", (vid,))
         db.execute("DELETE FROM studio_verifiche WHERE id = ?", (vid,))
     return file
@@ -399,11 +407,24 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
         ids = [r[0] for r in db.execute(q, arg)]
         giorni = 0
         file = _togli_verifiche(db, ids)
+        # Gli eventi senza la loro verifica (una corsa fra un «inizio» e una cancellazione,
+        # revisione della PR #321, nota 6): via con «svuota», con la persona, e per data con la
+        # rotazione; mai per sempre
+        ev = _tabella(db, "studio_eventi")
+        orfani = "verifica NOT IN (SELECT id FROM studio_verifiche)"
         if tutto:
             db.execute("DELETE FROM studio_giorni")
+            if ev:
+                db.execute("DELETE FROM studio_eventi")
         elif persona is not None:
             db.execute("DELETE FROM studio_giorni WHERE persona = ?", (str(persona),))
+            if ev:
+                db.execute(f"DELETE FROM studio_eventi WHERE persona = ? AND {orfani}",
+                           (str(persona),))
         else:
+            if ev:
+                db.execute(f"DELETE FROM studio_eventi WHERE giorno < ? AND {orfani}",
+                           (scadute_prima.isoformat(),))
             # I giorni di una persona («non ce la faccio oggi», senza scuola, minuti diversi)
             # scadono con lo stesso limite (revisione della PR #308): dati personali, anche dei
             # minori, mai per sempre

@@ -932,10 +932,17 @@ class Studio:
                 raise
 
     def giorno_fatto(self, chi, vid, giorno=None, fatto: bool = True):
-        """Il giorno del piano fatto (o non più fatto): le sue pagine restano lette."""
+        """Il giorno del piano fatto (o non più fatto): le sue pagine restano lette. Il giorno
+        segnato (AAAA-MM-GG). Dopo mezzanotte (revisione della PR #321, nota 1): senza giorno, o
+        con oggi, se chi segna ha cominciato ieri una sessione su questa verifica nelle ultime 3
+        ore e oggi no, «fatto» va a ieri (la sessione delle 23:40 chiusa alle 00:10)."""
         self._scrivibile()
         v = self._verifica(chi, vid)
         g = _data(giorno or self._oggi())
+        if fatto and g == self._oggi():
+            ieri = self._sessione_aperta_ieri(v["id"], getattr(chi, "id", None))
+            if ieri is not None:
+                g = ieri
         r = self.dati.uno("SELECT * FROM studio_piano WHERE verifica = ? AND giorno = ?",
                           (v["id"], g.isoformat()))
         if r is None:
@@ -958,6 +965,30 @@ class Studio:
                         db.rollback()
                     raise
         self._ricalcola_sicuro(v["id"])
+        return g.isoformat()
+
+    def _sessione_aperta_ieri(self, vid, chi_id=None) -> datetime.date | None:
+        """Ieri, se ieri c'è un «inizio» su questa verifica (di `chi_id`, se dato) nelle ultime
+        `SESSIONE_S`, nessun «inizio» oggi e il giorno di ieri del piano non è fatto: la sessione
+        cominciata prima di mezzanotte è ancora quella. Altrimenti None."""
+        adesso = self.adesso()
+        oggi = adesso.date()
+        ieri = oggi - datetime.timedelta(days=1)
+        da = (adesso - datetime.timedelta(seconds=SESSIONE_S)).isoformat(timespec="seconds")
+        q = ("SELECT giorno, chi FROM studio_eventi WHERE verifica = ? AND tipo = 'inizio' AND "
+             "giorno >= ?")
+        inizi = self.dati.tutti(q, (int(vid), ieri.isoformat()))
+        if chi_id is not None:
+            inizi = [e for e in inizi if e["chi"] == chi_id]
+        if any(e["giorno"] == oggi.isoformat() for e in inizi):
+            return None
+        tutti = self.dati.tutti(q + " AND ora >= ?", (int(vid), ieri.isoformat(), da))
+        if not any(e["giorno"] == ieri.isoformat() and (chi_id is None or e["chi"] == chi_id)
+                   for e in tutti):
+            return None
+        r = self.dati.uno("SELECT fatto FROM studio_piano WHERE verifica = ? AND giorno = ?",
+                          (int(vid), ieri.isoformat()))
+        return ieri if r is not None and not r["fatto"] else None
 
     # ── misure e previsione ──
     def aggiungi_misura(self, chi, vid, valore: float, fonte: str, argomento=None,
@@ -1079,17 +1110,21 @@ class Studio:
             db = self.dati.db
             try:
                 # I giorni passati non fatti escono dal piano: prima resta l'evento «mancato»
-                # (passo 4b, #244), una volta sola per giorno, per il riepilogo
+                # (passo 4b, #244), una volta sola per giorno, per il riepilogo. Resta solo ieri
+                # con una sessione cominciata nelle ultime 3 ore (PR #321, nota 1): «Fatto» dopo
+                # mezzanotte la chiude
+                aperto = self._sessione_aperta_ieri(v["id"])
+                tieni = aperto.isoformat() if aperto else ""
                 for r in db.execute("SELECT * FROM studio_piano WHERE verifica = ? AND fatto IS "
                                     "NULL AND giorno < ?", (v["id"], oggi.isoformat())).fetchall():
-                    if not db.execute("SELECT 1 FROM studio_eventi WHERE verifica = ? AND giorno "
+                    if r["giorno"] != tieni and not db.execute("SELECT 1 FROM studio_eventi WHERE verifica = ? AND giorno "
                                       "= ? AND tipo IN ('mancato', 'saltato')",
                                       (v["id"], r["giorno"])).fetchone():
                         self._evento(db, v, "mancato", r["giorno"], None,
                                      pagine=D.da_j(r["pagine"]), minuti=r["minuti"],
                                      fase=r["fase"])
-                db.execute("DELETE FROM studio_piano WHERE verifica = ? AND (fatto IS NULL OR "
-                           "giorno >= ?)", (v["id"], data.isoformat()))
+                db.execute("DELETE FROM studio_piano WHERE verifica = ? AND ((fatto IS NULL AND "
+                           "giorno != ?) OR giorno >= ?)", (v["id"], tieni, data.isoformat()))
                 for g in piano.giorni:
                     db.execute("INSERT INTO studio_piano (verifica, giorno, fase, pagine, "
                                "attivita, minuti, oltre) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -1431,7 +1466,7 @@ class Studio:
         if aperto:
             resta.update(prossimo=None, oggi_compreso=True)
         r.update(verifica=v["id"], materia=v["materia"], data=v["data"], resta=resta)
-        r["frase"] = R.frase_resoconto(r, self._oggi())
+        r["frase"] = R.frase_resoconto(r, self._oggi(), self._nome_per(chi, v))
         return r
 
     def riepilogo(self, chi, vid) -> dict:
@@ -1441,9 +1476,16 @@ class Studio:
         spostamenti della data, le sessioni giorno per giorno; con le righe per lo schermo e la
         frase per la voce."""
         v = self._verifica(chi, vid)
-        return self._riepilogo(v, self.piano(chi, v["id"]))
+        return self._riepilogo(v, self.piano(chi, v["id"]), self._nome_per(chi, v))
 
-    def _riepilogo(self, v: dict, pi: dict) -> dict:
+    def _nome_per(self, chi, v: dict) -> str | None:
+        """Il nome della persona della verifica quando chi chiede non è lei (il tutore, PR #321):
+        le frasi vanno alla terza persona. None per la persona stessa."""
+        if getattr(chi, "id", None) == v["persona"]:
+            return None
+        return str(getattr(self._profilo(v["persona"]), "name", "") or "") or "il ragazzo"
+
+    def _riepilogo(self, v: dict, pi: dict, nome: str | None = None) -> dict:
         sess = self._sessioni_di(v, pi["giorni"])
         fatti = [s for s in sess if s["stato"] == R.FATTO]
         misurati = [s for s in fatti if s.get("minuti")]
@@ -1463,7 +1505,7 @@ class Studio:
              "previsione": list(pi["previsione"]) if pi.get("previsione") else None,
              "ultima": pi.get("livello"), "spostata": spost, "sessioni": sess}
         r["righe"] = R.righe_riepilogo(r)
-        r["frase"] = R.frase_riepilogo(r, self._oggi())
+        r["frase"] = R.frase_riepilogo(r, self._oggi(), nome)
         return r
 
     def _riepilogo_schermo(self, v: dict, pi: dict) -> dict:
