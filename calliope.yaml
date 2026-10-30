@@ -983,6 +983,15 @@ studio:
   # in più (`mappa.SUOI_MAX`); i collegamenti al più il doppio. Il progetto del 27/10 dice 10–15
   # per mappa, lo scheletro 6–10: una mappa più grande si divide per capitolo (un'altra verifica)
   studio_mappa_nodi_max: 12
+  # Lo scheletro della mappa generato dalle pagine lette (30/10, passo 7, seconda parte, #247,
+  # calliope/studio/mappa_genera.py): lo stesso thread della lettura, con la sua guardia, chiede a
+  # qwen3.6 le triple (concetto, relazione, concetto) degli argomenti confermati di una verifica
+  # aperta, dal solo testo letto in busta; il codice le controlla come argomenti e carte. Mai
+  # sopra uno scheletro scritto o cambiato da una persona. «ombra» lo genera e lo misura soltanto:
+  # nessuno scheletro va alla persona; «attiva» lo dà «proposto», da confermare; «spenta» niente.
+  # Si passa ad «attiva» col banco della mappa (prove/manuali/banco_studio.py, fase «mappa») e la
+  # rilettura degli scheletri in ombra
+  studio_mappa_genera: ombra
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

@@ -553,7 +553,13 @@ class Lettore:
                        "carte": {"generazioni": 0, "carte": 0, "ombra": 0, "da_controllare": 0,
                                  "pagina_con_istruzioni": 0, "testo_ordine": 0, "rotte": 0,
                                  "vuote": 0, "cambiate": 0, "cedute": 0, "secondi": 0.0,
-                                 "token_in": 0, "token_out": 0}}
+                                 "token_in": 0, "token_out": 0},
+                       # Lo scheletro della mappa (passo 7, seconda parte, #247): conti, avvisi e
+                       # tempi, mai il testo dei concetti
+                       "mappa": {"generazioni": 0, "concetti": 0, "collegamenti": 0, "ombra": 0,
+                                 "da_controllare": 0, "pagina_con_istruzioni": 0,
+                                 "testo_ordine": 0, "rotte": 0, "vuote": 0, "cambiate": 0,
+                                 "cedute": 0, "secondi": 0.0, "token_in": 0, "token_out": 0}}
 
     # ── ciclo ──
     def avvia(self):
@@ -684,6 +690,23 @@ class Lettore:
                     return {"fatte": fatte, "aspetta": motivo}
                 self.in_attesa = None
                 esito = self.genera_carte(per_carte[0])
+                if esito in ("ceduta", "giu", "errore", "errore_server"):
+                    return {"fatte": fatte, "aspetta": esito}
+                fatte += 1
+                continue
+            # Lo scheletro della mappa (passo 7, seconda parte, #247), con la stessa guardia: dopo
+            # le carte, prima delle pagine di un'altra verifica
+            per_mappa = self.studio.verifiche_per_mappa()
+            if per_mappa:
+                motivo = self.guardia.motivo()
+                if motivo is not None:
+                    if motivo != self.in_attesa:
+                        self._registra(f"mappa in attesa: {motivo}")
+                    self.in_attesa = motivo
+                    self.misure["attese"] += 1
+                    return {"fatte": fatte, "aspetta": motivo}
+                self.in_attesa = None
+                esito = self.genera_mappa(per_mappa[0])
                 if esito in ("ceduta", "giu", "errore", "errore_server"):
                     return {"fatte": fatte, "aspetta": esito}
                 fatte += 1
@@ -1131,6 +1154,91 @@ class Lettore:
                        f" da {len(arif)} argomenti ({s:.1f} s" + (f", avvisi {avv}" if avv else "")
                        + ")")
         return "proposte"
+
+    # ── lo scheletro della mappa (30/10, passo 7, seconda parte, #247, studio/mappa_genera.py) ──
+    def genera_mappa(self, v: dict) -> str:
+        """Lo scheletro della mappa di una verifica aperta (`Studio.verifiche_per_mappa`): una
+        richiesta con l'harness della mappa, il controllo del codice, lo scheletro scritto
+        «proposto» (o «ombra»). «proposto», «rotto», «cambiate», «ceduta», «giu», «errore_server» o
+        «errore», come carte e argomenti."""
+        from . import argomenti as A
+        from . import genera as G
+        from . import mappa as M
+        from . import mappa_genera as MG
+        m = self.misure["mappa"]
+        vid = int(v["id"])
+        modo = v["_modo"]
+        firma = MG.firma(v["_argomenti"], v["_pagine"], modo)
+        rif = A.riferimenti(v["_pagine"])
+        arif = G.argomenti_rif(v["_argomenti"])
+        t0 = time.monotonic()
+        grezzi = None
+        try:
+            for prova in range(2):
+                r = self._chiedi_corpo(MG.corpo(self.modello, v, rif, arif))
+                m["token_in"] += int(r.get("prompt") or 0)
+                m["token_out"] += int(r.get("eval") or 0)
+                if not r.get("fine"):
+                    raise ErroreServer("stream senza fine")
+                self._errori_di_fila = 0
+                self._riprova_dopo = 0.0
+                self._risposte_ok += 1
+                if r.get("fine") != "length":
+                    grezzi = MG.leggi(r.get("content") or "")
+                    break
+                self._registra(f"verifica {vid}: mappa in tondo fino a max_tokens"
+                               + (", la richiedo" if not prova else ""))
+        except Ceduta:
+            m["cedute"] += 1
+            self._registra(f"verifica {vid}: mappa, ceduto il passo a un lavoro dell'agente")
+            return "ceduta"
+        except _Giu:
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: mappa, errore del server ({e}), riprovo fra "
+                           f"{attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001 — un errore nostro non rifà la richiesta in giro
+            self.misure["errori"] += 1
+            self._registra(f"verifica {vid}: mappa non generata ({type(e).__name__})")
+            self.studio.proponi_mappa(vid, firma, [], [], MG.ERRORE, modo)
+            self._attendi_errore()
+            return "errore"
+        s = time.monotonic() - t0
+        if grezzi is None:
+            nodi, coll, esito = [], [], MG.ROTTO
+        else:
+            nodi, coll = MG.scheletro(grezzi, rif, arif, M.nodi_max(self.studio.cfg))
+            esito = MG.PROPOSTO
+        n = self.studio.proponi_mappa(vid, firma, nodi, coll, esito, modo)
+        if n is None:
+            m["cambiate"] += 1
+            self._registra(f"verifica {vid}: argomenti, pagine o scheletro cambiati durante la "
+                           "mappa, la richiedo")
+            return "cambiate"
+        m["generazioni"] += 1
+        m["secondi"] = round(m["secondi"] + s, 2)
+        if esito == MG.ROTTO:
+            m["rotte"] += 1
+            self._registra(f"verifica {vid}: mappa illeggibile ({s:.1f} s)")
+            return "rotto"
+        m["concetti"] += n
+        m["collegamenti"] += len(coll) if n else 0
+        if modo == MG.OMBRA:
+            m["ombra"] += n
+        conta = {a: sum(a in x["avvisi"] for x in nodi + coll) for a in MG.DA_DECIDERE}
+        for a, k in conta.items():
+            m[a] += k
+        if not n:
+            m["vuote"] += 1
+        avv = ", ".join(f"{k} {a}" for a, k in conta.items() if k)
+        dove = "in ombra" if modo == MG.OMBRA else "proposto"
+        self._registra(f"verifica {vid}: scheletro della mappa {dove}, {n} concetti e "
+                       f"{len(coll)} collegamenti da {len(arif)} argomenti ({s:.1f} s"
+                       + (f", avvisi {avv}" if avv else "") + ")")
+        return "proposto"
 
     # ── scrivere ──
     def _chiudi(self, pid: int, stato: str, testo, metodo, avvisi: list):
