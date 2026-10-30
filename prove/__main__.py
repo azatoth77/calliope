@@ -175,7 +175,7 @@ A_SECCO = [
     ("prova_agenda.py", ["--secco"], "timer, promemoria, appuntamenti: scadenza, annullo"),
     ("prova_agenda_tutto.py", [], "annullare tutta l'agenda si conferma (16/10, #99): con più voci (non soli timer entro un'ora) la domanda con l'elenco e la proposta in sospeso; al «sì» con una frase di consenso annullate solo le voci nominate; contrari (la richiamata senza consenso, il «sì» per una parte, voce aggiunta dopo anche col sì accettato dalla politica, appuntamento non nominato, sveglia di 8 ore, una voce, il timer della pasta, la proposta di un altro tool); stanza accesa senza sfida; classe d'effetto E2"),
     ("prova_memoria.py", ["--secco"], "memoria per persona"),
-    ("prova_liste.py", [], "liste della casa e memoria della casa"),
+    ("prova_liste.py", [], "liste della casa e memoria della casa; l'ultimo cambiamento su disco (#263)"),
     ("prova_pc.py", [], "tool pc_* con un PC finto: permessi, valori a voce, blocco"),
     ("prova_documenti.py", [], "documenti Word, Excel e PDF: file, formule, modifiche, permessi; rimasti sul server con il telefono: la scheda con «Scarica» nella frase, documento_leggi (09/10)"),
     ("prova_ufficio.py", [], "ufficio: conti, XML FatturaPA (XSD se c'è), numerazione concorrente, rubrica, modelli Word e PowerPoint, flusso a voce, totale nei dati del numero"),
