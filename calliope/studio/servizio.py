@@ -34,6 +34,12 @@ testo di un modello. Gli eventi li scrivono le azioni stesse: «inizio» (`impos
 le risposte), «fatto»/«non_fatto» (`giorno_fatto`), «saltato» (`salta_oggi`), «spostata»
 (`imposta`) e «mancato» (`ricalcola`, prima di togliere un giorno passato non fatto).
 
+**Padronanza** (30/10, passo 5, #245): `registra_tentativo` scrive un tentativo su un argomento
+(dalle carte e dalla verifica finta, quando arrivano); `padronanza` la calcola dai soli tentativi
+(`padronanza.py`), con le lacune e la lezione successiva. Con `studio_padronanza: ombra` (di
+serie) si calcola e si misura soltanto; con «mostrata» va sulla home, nel riepilogo e nella
+previsione.
+
 **Ricalcolo.** Il piano si ricalcola quando cambia qualcosa (argomenti confermati, data
 spostata, minuti, giorno fatto o saltato, giorni senza scuola) e, alla prima lettura di un
 giorno nuovo, perché «oggi» si è spostato. Con i dati di una versione più nuova (connessione
@@ -55,6 +61,7 @@ import re
 
 from . import dati as D
 from . import piano as P
+from . import padronanza as PD
 from . import resoconto as R
 
 SPENTO, OMBRA, ATTIVO = "spento", "ombra", "attivo"
@@ -197,6 +204,8 @@ class Studio:
         self.registry = registry
         self.log = log
         self.modo = modo(cfg)
+        m = str(getattr(cfg, "studio_padronanza", PD.OMBRA) or PD.OMBRA).strip().lower()
+        self.modo_padronanza = m if m in PD.MODI else PD.OMBRA
         # L'orologio (le prove lo fingono)
         self.adesso = adesso or datetime.datetime.now
         self.dati = D.Dati(cfg.memory_db)
@@ -211,7 +220,9 @@ class Studio:
         self.misure = {"verifiche_create": 0, "piani": 0, "giorni_nei_piani": 0,
                        "pagine_nei_piani": 0, "giorni_oltre": 0, "avvisi": {}, "errori": 0,
                        # Le pagine arrivate (passo 4.2): da dove vengono i bordi e gli avvisi
-                       "pagine": 0, "bordi": {}, "avvisi_pagine": {}}
+                       "pagine": 0, "bordi": {}, "avvisi_pagine": {},
+                       # La padronanza (passo 5): tentativi, misure del giorno, parole
+                       "padronanza": {"tentativi": 0, "misure_giorno": 0, "parole": {}}}
         # Il lettore delle pagine (passo 4.3, studio/lettura.py): lo crea `avvia_lettura`
         self.lettore = None
         # Perché non c'è il lettore (passo 4.5, nota della revisione della PR #314): None prima di
@@ -940,7 +951,8 @@ class Studio:
         v = self._verifica(chi, vid)
         g = _data(giorno or self._oggi())
         if fatto and g == self._oggi():
-            ieri = self._sessione_aperta_ieri(v["id"], getattr(chi, "id", None))
+            # Di chiunque (#322, caso 2): il tutore fa «Inizia», il minore «Fatto»; come il ricalcolo
+            ieri = self._sessione_aperta_ieri(v["id"])
             if ieri is not None:
                 g = ieri
         r = self.dati.uno("SELECT * FROM studio_piano WHERE verifica = ? AND giorno = ?",
@@ -1003,6 +1015,113 @@ class Studio:
             "VALUES (?, ?, ?, ?, ?)",
             (v["id"], argomento, _data(giorno or self._oggi()).isoformat(), float(valore),
              str(fonte)[:40]))
+
+    # ── la padronanza (30/10, passo 5, #245; decisione 0035 punto 32) ──
+    def padronanza_mostrata(self) -> bool:
+        """La padronanza va alla persona (home, riepilogo, previsione)? Solo «mostrata» e con lo
+        Studio per gli schermi e il modello."""
+        return self.modo_padronanza == PD.MOSTRATA and self.per_schermi()
+
+    def registra_tentativo(self, chi, vid, argomento, tipo: str, esito: str,
+                           fonte: str = "persona", giorno=None) -> int:
+        """Un tentativo su un argomento della verifica: `tipo` in `padronanza.TIPI`, `esito` in
+        `padronanza.ESITI`, `fonte` (chi ha deciso l'esito) in `padronanza.FONTI`, mai il modello
+        da solo. Solo codici e id: nessun testo. Poi la misura del giorno. L'id del tentativo."""
+        self._scrivibile()
+        if self.modo_padronanza == PD.SPENTA:
+            raise ValueError("la padronanza è spenta")
+        v = self._verifica(chi, vid)
+        if tipo not in PD.TIPI or esito not in PD.ESITI or fonte not in PD.FONTI:
+            raise ValueError("tentativo sconosciuto")
+        a = self.dati.uno("SELECT id FROM studio_argomenti WHERE id = ? AND verifica = ?",
+                          (int(argomento), v["id"]))
+        if a is None:
+            raise NonTrovata()
+        adesso = self.adesso()
+        g = _data(giorno or adesso.date())
+        tid = self.dati.scrivi(
+            "INSERT INTO studio_tentativi (verifica, persona, argomento, giorno, ora, tipo, esito, "
+            "fonte, chi) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (v["id"], str(v["persona"]), a["id"], g.isoformat(),
+             adesso.isoformat(timespec="seconds"), tipo, esito, fonte,
+             getattr(chi, "id", None)))
+        self.misure["padronanza"]["tentativi"] += 1
+        try:
+            self._misura_padronanza(v)
+        except Exception as e:  # noqa: BLE001 — la misura non ferma il tentativo
+            self.misure["errori"] += 1
+            self._registra(f"misura della padronanza non scritta: {type(e).__name__}")
+        return tid
+
+    def _argomenti_numerati(self, vid) -> list[dict]:
+        """Gli argomenti del piano col numero che si dice a voce (la posizione nell'elenco intero
+        della verifica, come `tieni` e `togli` del tool)."""
+        elenco = self.dati.tutti("SELECT * FROM studio_argomenti WHERE verifica = ? "
+                                 "ORDER BY ordine, id", (int(vid),))
+        return [{"id": a["id"], "numero": i, "titolo": a["titolo"],
+                 "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
+                for i, a in enumerate(elenco, 1) if a["stato"] in D.ARGOMENTI_DEL_PIANO]
+
+    def _padronanza_di(self, vid) -> tuple[list[dict], dict]:
+        tent = self.dati.tutti("SELECT argomento, giorno, tipo, esito FROM studio_tentativi "
+                               "WHERE verifica = ?", (int(vid),))
+        return self._argomenti_numerati(vid), PD.calcola(tent, self._oggi())
+
+    def padronanza(self, chi, vid) -> dict:
+        """La padronanza degli argomenti del piano di una verifica, dai soli tentativi: per
+        argomento la cifra (o None, «non ancora misurata») con la parola, le lacune (sotto
+        l'obiettivo, dal più debole, con la lezione successiva dal piano) e il livello del giorno
+        (la media degli argomenti misurati, se lo sono almeno la metà). Permessi come il resto
+        dello Studio; chi la mostra decide con `padronanza_mostrata`."""
+        return self._padronanza(self._verifica(chi, vid))
+
+    def _padronanza(self, v: dict) -> dict:
+        args, pad = self._padronanza_di(v["id"])
+        giorni = self.dati.tutti("SELECT * FROM studio_piano WHERE verifica = ? ORDER BY giorno",
+                                 (v["id"],))
+        for g in giorni:
+            g["pagine"] = D.da_j(g["pagine"])
+        vuota = {"valore": None, "parola": PD.NON_MISURATA_P, "tentativi": 0}
+        return {"verifica": v["id"], "modo": self.modo_padronanza,
+                "obiettivo": v["obiettivo"],
+                "argomenti": [{"id": a["id"], "numero": a["numero"],
+                               **{k: pad.get(a["id"], vuota)[k]
+                                  for k in ("valore", "parola", "tentativi")}} for a in args],
+                "lacune": PD.lacune(args, pad, int(v["obiettivo"]), giorni, self._oggi()),
+                "livello": PD.livello([a["id"] for a in args], pad)}
+
+    def _misura_padronanza(self, v: dict):
+        """La misura del giorno della verifica dalla padronanza, una per giorno (si riscrive):
+        con la fonte «padronanza» se mostrata (entra nella forbice), «padronanza_ombra» in ombra
+        (la previsione la ignora). Nel registro solo i conti, senza nomi né titoli."""
+        args, pad = self._padronanza_di(v["id"])
+        lv = PD.livello([a["id"] for a in args], pad)
+        parole = {}
+        for a in args:
+            p = pad.get(a["id"])
+            k = p["parola"] if p else PD.NON_MISURATA_P
+            parole[k] = parole.get(k, 0) + 1
+        self.misure["padronanza"]["parole"] = parole
+        self._registra(f"padronanza della verifica {v['id']}: "
+                       + ", ".join(f"{k} {n}" for k, n in sorted(parole.items()))
+                       + (f", livello {lv}" if lv is not None else ", livello non misurato"))
+        if lv is None or not self.dati.scrivibile:
+            return
+        oggi = self._oggi().isoformat()
+        fonte = PD.FONTE_MISURA if self.modo_padronanza == PD.MOSTRATA else PD.FONTE_OMBRA
+        with self.dati.lock:
+            db = self.dati.db
+            try:
+                db.execute("DELETE FROM studio_misure WHERE verifica = ? AND giorno = ? AND "
+                           "fonte IN (?, ?)", (v["id"], oggi, PD.FONTE_MISURA, PD.FONTE_OMBRA))
+                db.execute("INSERT INTO studio_misure (verifica, giorno, valore, fonte) VALUES "
+                           "(?, ?, ?, ?)", (v["id"], oggi, float(lv), fonte))
+                db.commit()
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
+        self.misure["padronanza"]["misure_giorno"] += 1
 
     # ── il piano ──
     def _minuti_base(self, persona: str):
@@ -1101,9 +1220,20 @@ class Studio:
                                 "fatto IS NOT NULL AND giorno < ?", (v["id"], data.isoformat()))
         fatte = {int(p) for r in fatti if r["fase"] == P.STUDIO for p in D.da_j(r["pagine"])}
         giorni_fatti = {_data(r["giorno"]) for r in fatti}
+        # Ieri con una sessione ancora aperta (PR #321, nota 1) resta nel piano: le sue pagine non
+        # tornano anche su oggi (#322, caso 1), e il piano si ricalcola alla prossima lettura
+        # finché la sessione non si chiude o non scadono le 3 ore
+        aperto = self._sessione_aperta_ieri(v["id"])
+        tieni = aperto.isoformat() if aperto else ""
+        riservate = set()
+        if aperto:
+            r = self.dati.uno("SELECT * FROM studio_piano WHERE verifica = ? AND giorno = ? AND "
+                              "fatto IS NULL", (v["id"], tieni))
+            if r is not None and r["fase"] == P.STUDIO:
+                riservate = {int(p) for p in D.da_j(r["pagine"])}
         piano = P.calcola(oggi, data, pagine, minuti,
                           int(getattr(self.cfg, "studio_minuti_pagina", 10) or 10),
-                          fatte=fatte, giorni_fatti=giorni_fatti)
+                          fatte=fatte | riservate, giorni_fatti=giorni_fatti)
         if not self.dati.scrivibile:
             return piano
         with self.dati.lock:
@@ -1113,13 +1243,11 @@ class Studio:
                 # (passo 4b, #244), una volta sola per giorno, per il riepilogo. Resta solo ieri
                 # con una sessione cominciata nelle ultime 3 ore (PR #321, nota 1): «Fatto» dopo
                 # mezzanotte la chiude
-                aperto = self._sessione_aperta_ieri(v["id"])
-                tieni = aperto.isoformat() if aperto else ""
                 for r in db.execute("SELECT * FROM studio_piano WHERE verifica = ? AND fatto IS "
                                     "NULL AND giorno < ?", (v["id"], oggi.isoformat())).fetchall():
-                    if r["giorno"] != tieni and not db.execute("SELECT 1 FROM studio_eventi WHERE verifica = ? AND giorno "
-                                      "= ? AND tipo IN ('mancato', 'saltato')",
-                                      (v["id"], r["giorno"])).fetchone():
+                    if r["giorno"] != tieni and not db.execute(
+                            "SELECT 1 FROM studio_eventi WHERE verifica = ? AND giorno = ? AND "
+                            "tipo IN ('mancato', 'saltato')", (v["id"], r["giorno"])).fetchone():
                         self._evento(db, v, "mancato", r["giorno"], None,
                                      pagine=D.da_j(r["pagine"]), minuti=r["minuti"],
                                      fase=r["fase"])
@@ -1130,8 +1258,10 @@ class Studio:
                                "attivita, minuti, oltre) VALUES (?, ?, ?, ?, ?, ?, ?)",
                                (v["id"], g.giorno.isoformat(), g.fase, D.j(g.pagine),
                                 g.attivita, g.minuti, int(g.oltre)))
+                # Con ieri tenuto il piano resta «di ieri»: si rifà alla prossima lettura (#322)
                 db.execute("UPDATE studio_verifiche SET piano_del = ?, piano_avvisi = ? "
-                           "WHERE id = ?", (oggi.isoformat(), D.j(piano.avvisi), v["id"]))
+                           "WHERE id = ?", (tieni or oggi.isoformat(), D.j(piano.avvisi),
+                                            v["id"]))
                 db.commit()
             except Exception:
                 # Niente DELETE a metà lasciato alla prossima scrittura (nota 8)
@@ -1190,7 +1320,9 @@ class Studio:
         ordine = {p_["id"]: p_["ordine"] for p_ in pag if p_["stato"] != "tolta"}
         args = [a for a in self.argomenti(chi, v["id"]) if a["stato"] in D.ARGOMENTI_DEL_PIANO]
         misure = [(_data(r["giorno"]), r["valore"]) for r in self.dati.tutti(
-            "SELECT giorno, valore FROM studio_misure WHERE verifica = ? ORDER BY giorno, id",
+            # Le misure dell'ombra della padronanza (passo 5) non entrano nella previsione
+            "SELECT giorno, valore FROM studio_misure WHERE verifica = ? AND (fonte IS NULL OR "
+            f"fonte != '{PD.FONTE_OMBRA}') ORDER BY giorno, id",
             (v["id"],))]
         data = _data(v["data"])
         # Le pagine del piano e quelle lette nei giorni fatti (per il riepilogo, passo 4b)
@@ -1345,6 +1477,8 @@ class Studio:
                      "avvisi": [x for x in a["avvisi"] if x in da_decidere]}
                     for a in args if a["stato"] == "proposto"
                     and set(a["avvisi"]) & set(da_decidere)]
+        pad = (self._pad_schermo(v, args) if pi is not None and self.padronanza_mostrata()
+               else None)
         return {"id": v["id"], "materia": v["materia"], "argomento": v["argomento"],
                 "data": v["data"], "stato": v["stato"], "giorni_mancanti": v["giorni_mancanti"],
                 "obiettivo": v["obiettivo"], "di": di,
@@ -1355,8 +1489,13 @@ class Studio:
                             "minuti": g["minuti"], "fatto": bool(g["fatto"])}
                            for g in (pi or {}).get("giorni", ())],
                 "avvisi_piano": list((pi or {}).get("avvisi") or ()),
-                "tappe": [{"titolo": t.get("titolo"), "stato": t.get("stato")}
+                "tappe": [{"titolo": t.get("titolo"), "stato": t.get("stato"),
+                           # La parola della padronanza, solo «mostrata» (passo 5)
+                           **({"parola": pad["per"].get(t.get("argomento"))}
+                              if pad else {})}
                           for t in (pi or {}).get("tappe") or ()],
+                # Le lacune con la lezione successiva, solo «mostrata» (passo 5, #245)
+                "lacune": pad["lacune"] if pad else None,
                 "misure": (pi or {}).get("misure", 0),
                 "ultima": (pi or {}).get("livello"),
                 "previsione": (list((pi or {}).get("previsione"))
@@ -1371,6 +1510,18 @@ class Studio:
                 # Fuori dal piano: i tolti (non gli uniti a un altro), per rimetterli con un tocco
                 "tolti": [{"id": a["id"], "titolo": a["titolo"]} for a in args
                           if a["stato"] == "tolto" and "unito" not in a["avvisi"]]}
+
+    def _pad_schermo(self, v: dict, args: list[dict]) -> dict:
+        """La padronanza per la home («mostrata»): la parola per argomento e le lacune col titolo
+        (sullo schermo con textContent) e la lezione successiva."""
+        p = self._padronanza(v)
+        titoli = {a["id"]: a["titolo"] for a in args}
+        return {"per": {a["id"]: a["parola"] for a in p["argomenti"]},
+                "lacune": [{"titolo": titoli.get(x["argomento"], ""), "parola": x["parola"],
+                            "lezione": (f"{R.detta(x['lezione']['giorno'])}: "
+                                        f"{x['lezione']['attivita'] or ''}".strip()
+                                        if x["lezione"] else "nessun giorno del piano")}
+                           for x in p["lacune"]]}
 
     # ── resoconto e riepilogo (30/10, passo 4b, #244; decisione 0035 punto 31) ──
     def _evento(self, db, v: dict, tipo: str, giorno, chi, **dati):
@@ -1480,10 +1631,12 @@ class Studio:
 
     def _nome_per(self, chi, v: dict) -> str | None:
         """Il nome della persona della verifica quando chi chiede non è lei (il tutore, PR #321):
-        le frasi vanno alla terza persona. None per la persona stessa."""
+        le frasi vanno alla terza persona. None per la persona stessa, "" senza nome (#322)."""
         if getattr(chi, "id", None) == v["persona"]:
             return None
-        return str(getattr(self._profilo(v["persona"]), "name", "") or "") or "il ragazzo"
+        # Senza nome una forma impersonale (#322, caso 3): "" e non «il ragazzo», che ha il
+        # genere fisso e dava «Storia di il ragazzo»
+        return str(getattr(self._profilo(v["persona"]), "name", "") or "").strip()
 
     def _riepilogo(self, v: dict, pi: dict, nome: str | None = None) -> dict:
         sess = self._sessioni_di(v, pi["giorni"])
@@ -1505,6 +1658,9 @@ class Studio:
              "previsione": list(pi["previsione"]) if pi.get("previsione") else None,
              "ultima": pi.get("livello"), "spostata": spost, "sessioni": sess}
         r["righe"] = R.righe_riepilogo(r)
+        # Le lacune per numero, solo «mostrata» (passo 5): i titoli non escono dalla busta
+        if self.padronanza_mostrata():
+            r["lacune"] = [x["numero"] for x in self._padronanza(v)["lacune"]]
         r["frase"] = R.frase_riepilogo(r, self._oggi(), nome)
         return r
 

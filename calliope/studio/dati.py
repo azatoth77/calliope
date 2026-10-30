@@ -24,6 +24,10 @@ Tabelle (versione 1):
 - `studio_giorni`: i giorni di una persona con minuti diversi (0 = senza piano: giorno senza
   scuola, giorno saltato con «non ce la faccio oggi»);
 - `studio_misure`: le misure vere della padronanza (dal passo 5), per la previsione;
+- `studio_tentativi` (versione 5, 30/10, passo 5, issue #245): i tentativi su un argomento (tipo:
+  carta, esercizio, mappa, interrogazione, verifica finta; esito: giusto, indizio, sbagliato; chi
+  ha deciso l'esito: la persona, il codice o il tutore, mai il modello da solo), da cui il codice
+  calcola la padronanza (`studio/padronanza.py`). Solo id, codici e date: mai testo;
 - `studio_eventi` (versione 4, 30/10, passo 4b, issue #244): la storia delle sessioni di una
   verifica, da cui si proiettano il resoconto di una sessione e il riepilogo della verifica
   (`studio/resoconto.py`): «inizio» (la sessione cominciata con le due domande, **senza** le
@@ -56,7 +60,7 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_eventi", "studio_piano", "studio_misure", "studio_argomenti", "studio_pagine",
+TABELLE = ("studio_tentativi", "studio_eventi", "studio_piano", "studio_misure", "studio_argomenti", "studio_pagine",
            "studio_materiali", "studio_verifiche", "studio_giorni")
 
 STATI_VERIFICA = ("bozza", "aperta", "fatta", "archiviata")
@@ -201,9 +205,30 @@ def _v4(db: sqlite3.Connection):
                "ON studio_eventi(verifica, giorno)")
 
 
+def _v5(db: sqlite3.Connection):
+    """30/10, passo 5 (#245): i tentativi su un argomento, per la padronanza. `persona` è di chi
+    è la verifica, `chi` chi ha registrato il tentativo."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_tentativi (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        argomento INTEGER NOT NULL,
+        giorno TEXT NOT NULL,
+        ora TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        esito TEXT NOT NULL,
+        fonte TEXT NOT NULL,
+        chi TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_tentativi_verifica "
+               "ON studio_tentativi(verifica, argomento)")
+
+
 # Le versioni dello schema: si aggiungono in fondo, solo colonne con NULL o un predefinito (o
 # tabelle nuove)
-MIGRAZIONI = [_v1, _v2, _v3, _v4]
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5]
+# Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
+# scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
+CON_ORFANI = ("studio_eventi", "studio_tentativi")
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:
@@ -299,9 +324,10 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
                 "SELECT file FROM studio_pagine WHERE materiale = ? AND file IS NOT NULL", (m,))]
             db.execute("DELETE FROM studio_pagine WHERE materiale = ?", (m,))
         for t in ("studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
-                  "studio_eventi"):
-            # Un db ancora allo schema di prima (lo Studio spento non lo prepara): niente eventi
-            if t == "studio_eventi" and not _tabella(db, t):
+                  *CON_ORFANI):
+            # Un db ancora allo schema di prima (lo Studio spento non lo prepara): le tabelle
+            # nuove possono mancare
+            if t in CON_ORFANI and not _tabella(db, t):
                 continue
             db.execute(f"DELETE FROM {t} WHERE verifica = ?", (vid,))
         db.execute("DELETE FROM studio_verifiche WHERE id = ?", (vid,))
@@ -410,20 +436,20 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
         # Gli eventi senza la loro verifica (una corsa fra un «inizio» e una cancellazione,
         # revisione della PR #321, nota 6): via con «svuota», con la persona, e per data con la
         # rotazione; mai per sempre
-        ev = _tabella(db, "studio_eventi")
+        # (dal passo 5 anche i tentativi, CON_ORFANI)
+        presenti = [t for t in CON_ORFANI if _tabella(db, t)]
         orfani = "verifica NOT IN (SELECT id FROM studio_verifiche)"
         if tutto:
             db.execute("DELETE FROM studio_giorni")
-            if ev:
-                db.execute("DELETE FROM studio_eventi")
+            for t in presenti:
+                db.execute(f"DELETE FROM {t}")
         elif persona is not None:
             db.execute("DELETE FROM studio_giorni WHERE persona = ?", (str(persona),))
-            if ev:
-                db.execute(f"DELETE FROM studio_eventi WHERE persona = ? AND {orfani}",
-                           (str(persona),))
+            for t in presenti:
+                db.execute(f"DELETE FROM {t} WHERE persona = ? AND {orfani}", (str(persona),))
         else:
-            if ev:
-                db.execute(f"DELETE FROM studio_eventi WHERE giorno < ? AND {orfani}",
+            for t in presenti:
+                db.execute(f"DELETE FROM {t} WHERE giorno < ? AND {orfani}",
                            (scadute_prima.isoformat(),))
             # I giorni di una persona («non ce la faccio oggi», senza scuola, minuti diversi)
             # scadono con lo stesso limite (revisione della PR #308): dati personali, anche dei

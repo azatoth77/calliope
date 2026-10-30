@@ -1247,6 +1247,12 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
 .studio-h-nuova { margin: 0; padding: 0.7rem; border-radius: 0.8rem; border: 1px dashed var(--accento-bordo);
   color: var(--accento-chiaro); font-size: 0.95rem; }
 .studio-indietro { align-self: flex-start; min-height: 2.75rem; }
+/* La padronanza (passo 5, #245): la parola sempre scritta, il colore come aiuto (blu, oro, arancio) */
+.studio-h-parola { margin-left: auto; font-size: 0.85rem; padding: 0.1rem 0.5rem; border-radius: 0.6rem;
+  color: var(--testo); border: 2px solid var(--tenue); }
+.studio-h-p-sai { border-color: #4a8fe8; }
+.studio-h-p-quasi { border-color: #d9a520; }
+.studio-h-p-studiare { border-color: #e8762a; }
 /* Le sessioni (passo 4b, #244): una riga per giorno, fatto, saltato o non fatto */
 .studio-h-sessioni .studio-h-giorno { overflow-wrap: anywhere; color: var(--testo); }
 .studio-h-s-fatto { border-left: 3px solid var(--ok); }

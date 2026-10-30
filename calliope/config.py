@@ -2179,6 +2179,13 @@ class Config:
     # del 28/10; arrivano «proposti» e li conferma la persona. In ombra si estraggono e si
     # misurano soltanto. false = gli argomenti solo a mano
     studio_argomenti: bool = True
+    # La padronanza per argomento (30/10, passo 5, #245, calliope/studio/padronanza.py): una cifra
+    # da 0 a 100 dai soli tentativi (carte, verifica finta…), detta con la parola. «ombra» la
+    # calcola e scrive la misura del giorno con la fonte «padronanza_ombra», che la previsione
+    # ignora, e niente arriva al modello né agli schermi; «mostrata» dà la parola sulle tappe, le
+    # lacune con la lezione successiva e la previsione dalla padronanza; «spenta» niente. Si passa
+    # a «mostrata» col criterio scritto nella decisione 0035, punto 32
+    studio_padronanza: str = "ombra"
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3472,7 +3479,7 @@ SEZIONI: dict[str, list[str]] = {
                "studio_cartella", "studio_pagina_lato", "studio_pagina_max_mb",
                "studio_pdf_max_mb", "studio_pdf_max_pagine", "studio_pagine_max",
                "studio_pagine_al_minuto", "studio_nitidezza_min", "studio_lettura",
-               "studio_argomenti"],
+               "studio_argomenti", "studio_padronanza"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -4068,6 +4075,9 @@ _MODI_NUOVI = {
     "agenti_revisore": _modi("agenti_revisore", ("spento", "ombra", "attivo"), falso="spento"),
     # Lo Studio (29/10, #280): il true di YAML è ambiguo fra «ombra» e «attivo», rifiutato
     "studio_modo": _modi("studio_modo", ("spento", "ombra", "attivo"), falso="spento"),
+    # La padronanza (30/10, #245): il true di YAML è ambiguo fra «ombra» e «mostrata», rifiutato
+    "studio_padronanza": _modi("studio_padronanza", ("spenta", "ombra", "mostrata"),
+                               falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},

@@ -527,6 +527,10 @@
   const MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto",
     "settembre", "ottobre", "novembre", "dicembre"];
   const GIORNI_S = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
+  // La parola della padronanza → la classe del colore (passo 5, #245)
+  function PAROLA_CLASSE(p) {
+    return p === "la sai" ? "sai" : p === "quasi" ? "quasi" : p === "da studiare" ? "studiare" : "nonmisurata";
+  }
   const PERCHE = { da_controllare: "non lo trovo nelle pagine che cita",
     pagina_con_istruzioni: "viene da una pagina con un messaggio per un assistente",
     titolo_ordine: "il titolo sembra un ordine o un annuncio" };
@@ -649,9 +653,28 @@
         const li = nodo("li", "studio-h-tappa studio-h-" + String(x.stato || "chiusa"));
         li.append(nodo("span", "studio-h-pallino", x.stato === "fatta" ? "✓" : ""),
           nodo("span", "studio-h-tappa-nome", String(x.titolo || "")));
+        // La padronanza (passo 5, #245), solo se il server la manda («mostrata»): sempre la
+        // parola, col colore come aiuto in più (blu, oro, arancio)
+        if (x.parola) li.append(nodo("span", "studio-h-parola studio-h-p-" + PAROLA_CLASSE(x.parola), String(x.parola)));
         t.append(li);
       }
       art.append(nodo("h4", "studio-h-sotto", "Tappe"), t);
+    }
+    // Le lacune: gli argomenti sotto l'obiettivo, dal più debole, con la lezione successiva
+    if (Array.isArray(v.lacune) && v.lacune.length) {
+      const sez = nodo("section", "studio-h-gruppo studio-h-lacune");
+      sez.append(nodo("h4", "studio-h-sotto", "Da rinforzare"));
+      const ul = nodo("ul", "studio-h-elenco");
+      for (const x of v.lacune) {
+        const li = nodo("li", "studio-h-voce");
+        const tx = nodo("div", "studio-testo");
+        tx.append(nodo("b", null, String(x.titolo || "")),
+          nodo("span", "studio-h-riga", " · " + String(x.parola || "") + " · " + String(x.lezione || "")));
+        li.append(tx);
+        ul.append(li);
+      }
+      sez.append(ul);
+      art.append(sez);
     }
     // Gli argomenti da decidere, col perché, e «Tieni» con un tocco
     const dd = (v.argomenti && v.argomenti.da_decidere) || [];

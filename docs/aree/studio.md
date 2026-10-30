@@ -19,7 +19,9 @@ leggere» con qwen3.6 su vLLM e l'harness del banco, quando la DGX è libera (se
 thread li chiede dal solo testo, il codice controlla le pagine citate e arrivano «proposti» alla
 persona, che li conferma da una vista minima della pagina dello Studio. Dal 30/10 il **tool, la home e la vista
 aperta** (4.5, #284, sezione sotto); `studio_modo` resta spento di serie. Dal 30/10 il **resoconto delle
-sessioni e il riepilogo della verifica** (4b, #244, sezione sotto), proiezioni dei dati salvati. Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
+sessioni e il riepilogo della verifica** (4b, #244, sezione sotto), proiezioni dei dati salvati. Dal 30/10 la
+**padronanza per argomento** (5, #245, sezione sotto), in ombra di serie e senza fonti finché non
+arrivano le carte. Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Moduli
@@ -29,6 +31,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Studio: verifiche, materiali e pagine, argomenti, piano a giorni deterministico, tenuta legata alla data della verifica (dal 29/10, passo 4.1, decisione [0035](../decisioni/0035-studio.md); `studio_modo`, spento di serie) | SQLite (stesso file della memoria: `studio_verifiche`, `studio_materiali`, `studio_pagine`, `studio_argomenti`, `studio_piano`, `studio_giorni`, `studio_misure`; modulo «studio» in `meta_schema`); libreria standard, niente modello | `calliope/studio/dati.py` → `Dati`, `cancella`, `cancella_file`; `calliope/studio/piano.py` → `calcola`, `minuti_liberi`, `descrivi_pagine`, `tappe`, `previsione`; `calliope/studio/servizio.py` → `Studio`, `permesso`, `prepara`, `NonPermesso`, `NonTrovata`; `calliope/conserva.py` → `TABELLE_STUDIO`; prova `prove/prova_studio_piano.py` |
 | Pagine dei materiali: fotocamera e galleria sul telefono, bordi ricontrollati, raddrizzamento, nitidezza, PDF divisi in pagine, file nella cartella dello Studio (dal 29/10, passo 4.2, #281) | Pillow e numpy (niente librerie native nuove), pypdfium2 (extra `archivio`); nel browser JavaScript scritto a mano, niente OpenCV.js | `calliope/studio/pagine.py` → `rileva`, `scegli_bordi`, `plausibili`, `raddrizza`, `nitidezza`, `prepara_foto`, `dividi_pdf`, `dividi_pdf_a_parte`, `scrivi_file`; `calliope/studio/servizio.py` → `Studio.verifica_per_pagine`, `Studio.verifiche_per_pagine`, `Studio.aggiungi_pronte`; `calliope/studio/dati.py` → `cartella_di`, `togli_orfani`; `calliope/schermi/server.py` → `POST /api/studio/pagina`, `POST /api/studio/verifiche`; `calliope/schermi/pagina/bordi.js`, `calliope/schermi/pagina/studio.js`; `calliope/immagini.py` → `apri`; prove `prove/prova_studio_pagine.py`, `prove/prova_studio_pagina_telefono.py` |
 | Argomenti dalle pagine lette, controllo delle pagine citate, forma del titolo, conferma della persona (dal 30/10, passo 4.4, #283; `studio_argomenti`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato (`response_format`); `provenienza.parole`, `vicina` e `racchiudi` | `calliope/studio/argomenti.py` → `corpo`, `riferimenti`, `controlla`, `forma_titolo`, `proposte`, `firma`, `pronta`; `calliope/studio/lettura.py` → `Lettore.estrai_argomenti`, `numeri_dalla_prima`; `calliope/studio/servizio.py` → `Studio.verifiche_per_argomenti`, `proponi_argomenti`, `conferma_argomenti`, `rinomina_argomento`, `unisci_argomenti`, `rifai_argomenti`, `estrazione`; `calliope/schermi/server.py` → `POST /api/studio/argomenti`; `calliope/schermi/pagina/studio.js`; prova `prove/prova_studio_argomenti.py` |
+| Padronanza per argomento dai soli tentativi, lacune con la lezione successiva, previsione dalla padronanza (dal 30/10, passo 5, #245; schema «studio» alla versione 5; `studio_padronanza`, ombra di serie) | SQLite (`studio_tentativi`); libreria standard, niente modello | `calliope/studio/padronanza.py` → `calcola`, `parola`, `livello`, `lacune`; `calliope/studio/servizio.py` → `Studio.registra_tentativo`, `Studio.padronanza`, `padronanza_mostrata`; `calliope/schermi/pagina/studio.js` (la parola sulle tappe, «Da rinforzare»); prova `prove/prova_studio_padronanza.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
@@ -66,6 +69,61 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   per pagina dei numeri di pagina, nella sezione degli argomenti]*; (2) senza vLLM la pagina e la voce lo dicono con una
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
   vede»), non un «da leggere» muto.
+
+## La padronanza per argomento (30/10, issue #245, ramo `issue-245-studio-padronanza`)
+
+*Passo 5 dell'epic #251; decisione [0035](../decisioni/0035-studio.md) punto 32; analisi nel
+commento della #245; progetto § 5.5 e decisione 4 del 27/10.*
+
+**Le fonti oggi: nessuna.** I giorni fatti e le pagine lette dicono che si è letto, non che si sa;
+l'autovalutazione «da 1 a 5» resta in memoria (punto 27); gli esercizi guidati sulle pagine
+avrebbero il giudizio del modello (escluso). Le fonti vere sono le carte (#246) e la verifica
+finta (#248), che non ci sono ancora. **Scelta**: il modello, il registro dei tentativi e l'ombra
+adesso, senza fonti finte; le carte scrivono solo tentativi. Scartate: le carte prima (il passo 6
+si inventerebbe dove scrivere gli esiti, il 5 lo rifarebbe) e la padronanza dalle pagine lette
+(gonfierebbe la cifra a ogni «Fatto»).
+
+**Il calcolo** (`calliope/studio/padronanza.py`, soglie iniziali da tarare in ombra): esito giusto
+1, con indizio 0,5, sbagliato 0; tipo carta 1, esercizio 1, mappa 0,7, interrogazione 1,2,
+verifica finta 1,5; il peso si dimezza ogni 7 giorni; senza ripasso × 0,5^(giorni dall'ultimo /
+21); misurata solo con 3 tentativi in 2 giorni (prima «non ancora misurata», che non è una
+lacuna); «la sai» ≥ 75, «quasi» ≥ 45, «da studiare». Chi decide l'esito: la persona, il codice o
+il tutore, mai il modello da solo (la fonte «modello» è rifiutata). Lo stato d'animo non entra.
+
+**I tentativi** (`studio_tentativi`, schema 5): verifica, persona, argomento, giorno, ora, tipo,
+esito, fonte, chi; solo codici e id. `Studio.registra_tentativo` (permessi dello Studio: la persona
+e il tutore). Vanno via con la verifica, con «dimentica», con la rotazione (anche gli orfani,
+`dati.CON_ORFANI`) e con `--svuota`.
+
+**Lacune e previsione**: le lacune sono gli argomenti del piano misurati sotto l'obiettivo della
+verifica, dal più debole, ognuno con la lezione successiva (il prossimo giorno di studio con le sue
+pagine, o il ripasso; con le carte, le carte). La misura del giorno della verifica è la media dei
+misurati, quando lo è almeno metà degli argomenti del piano; va in `studio_misure` con la fonte
+«padronanza» (mostrata: entra nella forbice che c'era già) o «padronanza_ombra» (la previsione la
+ignora).
+
+**Interruttore** `studio_padronanza: spenta | ombra | mostrata`, ombra di serie. In ombra niente al
+modello né agli schermi: nel registro e in `calliope stato` solo i conti (tentativi, misure,
+quanti per parola), mai titoli né nomi. Mostrata: la parola accanto a ogni tappa (il colore blu, oro
+o arancio solo come bordo, la parola sempre scritta), «Da rinforzare» con il titolo (textContent) e
+la lezione successiva, e nel riepilogo detto le lacune per numero («sotto l'obiettivo gli argomenti 2
+e 3»: i titoli non escono dalla busta). Service worker alla v26.
+
+**Il criterio per «mostrata»** (proposta, le soglie le decide chi amministra; 0035 punto 32): (1) in
+ombra almeno 60 tentativi veri su almeno 8 argomenti di almeno 2 verifiche; (2) il confronto col
+tutore su almeno 10 argomenti, la parola uguale almeno 7 volte su 10 e mai «la sai» contro il suo
+«da studiare» (il giudizio del tutore si raccoglie con le carte o con la vista del tutore, #250);
+(3) pesi e calo ritarati su quei tentativi.
+
+**#322, casi 1–3 (nella stessa PR):** con ieri tenuto per la sessione aperta le sue pagine si
+riservano nel calcolo (non tornano su oggi) e il piano resta «di ieri», così si rifà alla prossima
+lettura finché la sessione non si chiude o non scadono le 3 ore; per la sessione aperta valgono gli
+«inizio» di chiunque, anche in `giorno_fatto` (il tutore fa «Inizia», il minore «Fatto»); un
+minore senza nome ha la forma impersonale («Oggi è segnato fatto il giorno del piano…», «lo studio
+è stato saltato», «Storia, …»). *Storico per un commit: «il ragazzo», «Storia di il ragazzo».*
+
+Prove: `prova_studio_padronanza.py` (a secco, ~2 s); i casi della #322 in
+`prova_studio_resoconto.py`; lo schema 5 in `prova_studio_piano.py` e `prova_studio_pagine.py`.
 
 ## Resoconto delle sessioni e riepilogo della verifica (30/10, issue #244, ramo `issue-244-studio-resoconto`)
 

@@ -77,6 +77,8 @@ CASI = {
     "agenti_revisore": ("attivo", "Attivo", ("attiva", "attivo"), ["acceso", "sì", "revisore"]),
     # Lo Studio (29/10, #280)
     "studio_modo": ("ombra", " Ombra ", ("attiva", "attivo"), ["acceso", "sì", "studio"]),
+    # La padronanza (30/10, #245)
+    "studio_padronanza": ("mostrata", " Mostrata ", None, ["accesa", "sì", "mostra"]),
     "agenti_arbitro": ("mai", " MAI ", None, ["acceso", "talvolta"]),
     "agenti_sandbox_motore": ("processo", "Docker", None, ["acceso", "sì", "podman"]),
     "agenti_livello": ("amministra", "Amministra", None,
@@ -154,7 +156,7 @@ for campo, atteso in (("eventi", "spento"), ("stanza", "spenta"), ("compagnia_ri
                       ("immagini_modello", "no"), ("agenti_arbitro", "mai"),
                       ("satellite_schermo", "no"), ("stanza_lenta_blocchi", "spento"),
                       ("cortesia_voce_min", "spenta"), ("agenti_revisore", "spento"),
-                      ("studio_modo", "spento")):
+                      ("studio_modo", "spento"), ("studio_padronanza", "spenta")):
     cfg, log = dal_locale(riga(campo, "no"))
     verifica(f"{campo}: il «no» di YAML vale «{atteso}»", getattr(cfg, campo) == atteso
              and "non è" not in log, f"{getattr(cfg, campo)!r} {log.strip()[-160:]}")
@@ -162,7 +164,7 @@ for campo, atteso in (("eventi", "spento"), ("stanza", "spenta"), ("compagnia_ri
 # com'erano (revisione della PR #130), con yes, on e true
 for campo in ("eventi", "system1_dopo_tool", "stanza_guardia", "arbitro_memoria",
               "agenti_conferma", "wake_mode", "speaker_impronte_satellite", "compagnia_rivolta",
-              "agenti_revisore", "studio_modo"):
+              "agenti_revisore", "studio_modo", "studio_padronanza"):
     for scritto in ("yes", "on", "true"):
         cfg, log = dal_locale(riga(campo, scritto))
         verifica(f"contrario: {campo}: il «{scritto}» di YAML (true) è ambiguo, rifiutato",

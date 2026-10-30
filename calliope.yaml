@@ -962,6 +962,13 @@ studio:
   # del 28/10; arrivano «proposti» e li conferma la persona. In ombra si estraggono e si
   # misurano soltanto. false = gli argomenti solo a mano
   studio_argomenti: true
+  # La padronanza per argomento (30/10, passo 5, #245, calliope/studio/padronanza.py): una cifra
+  # da 0 a 100 dai soli tentativi (carte, verifica finta…), detta con la parola. «ombra» la
+  # calcola e scrive la misura del giorno con la fonte «padronanza_ombra», che la previsione
+  # ignora, e niente arriva al modello né agli schermi; «mostrata» dà la parola sulle tappe, le
+  # lacune con la lezione successiva e la previsione dalla padronanza; «spenta» niente. Si passa
+  # a «mostrata» col criterio scritto nella decisione 0035, punto 32
+  studio_padronanza: ombra
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

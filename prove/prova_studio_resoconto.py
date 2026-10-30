@@ -86,7 +86,9 @@ class Registro:
 ANDREA = Prof("a1", "Andrea")
 BRUNO = Prof("b1", "Bruno")
 LEO = Prof("l1", "Leo", nascita="2014-03-01", tutori=["a1"])
-REG = Registro(ANDREA, BRUNO, LEO)
+# Un minore senza nome nel profilo (#322, caso 3)
+SENZA = Prof("n1", "", nascita="2015-05-01", tutori=["a1"])
+REG = Registro(ANDREA, BRUNO, LEO, SENZA)
 TMP = Path(tempfile.mkdtemp(prefix="calliope-studio-resoconto-"))
 ORA = [datetime.datetime(2026, 10, 29, 16, 0)]          # giovedì 29/10, verifica il 5/11
 MAT = json.loads((QUI / "manuali" / "studio" / "storia.json").read_text("utf-8"))
@@ -138,13 +140,13 @@ print("— schema")
 ora(29, 16)
 cfg = cfg_nuova("a.db")
 st = studio(cfg)
-verifica("studio_eventi alla versione 4 di meta_schema",
+verifica("studio_eventi dalla versione 4 (ora 5) di meta_schema",
          st.dati.db.execute("SELECT versione FROM meta_schema WHERE modulo='studio'").fetchone()[0]
-         == len(D.MIGRAZIONI) == 4
+         == len(D.MIGRAZIONI) == 5
          and st.dati.uno("SELECT name FROM sqlite_master WHERE name='studio_eventi'") is not None)
 verifica("studio_eventi fra le tabelle dello Studio e quelle della conservazione",
          "studio_eventi" in D.TABELLE and set(TABELLE_STUDIO) == set(D.TABELLE)
-         and D.TABELLE[0] == "studio_eventi")
+         and D.TABELLE.index("studio_eventi") < D.TABELLE.index("studio_verifiche"))
 
 # ═══════════════════════════ 2. eventi e 3. resoconto ═══════════════════════════
 print("— eventi e resoconto")
@@ -516,6 +518,63 @@ r9 = st6.resoconto(LEO, vid9)
 verifica("riaperto con «non fatto» e chiuso dopo: niente tempo (la pausa non si conta)",
          r9["stato"] == R.FATTO and r9["minuti"] is None and "in 2 ore" not in r9["frase"], r9)
 st6.close()
+
+# ═══════════════════════════ 8c. #322, casi 1–3 ═══════════════════════════
+print("— #322: pagine una volta, due persone, senza nome")
+ORA[0] = datetime.datetime(2026, 10, 29, 16, 0)
+st7 = studio(cfg_nuova("322.db"))
+vid10, ids10 = carica(st7, LEO)
+ieri_pag = {ids10["p112"], ids10["p113"]}
+ORA[0] = datetime.datetime(2026, 10, 29, 23, 40)
+st7.imposta_sessione(ANDREA, vid10, conoscenza=3)        # «Inizia» lo fa il tutore
+ORA[0] = datetime.datetime(2026, 10, 30, 0, 5)
+pi7 = st7.piano(LEO, vid10)
+oggi7 = next(g for g in pi7["giorni"] if g["giorno"] == "2026-10-30")
+verifica("caso 1: con ieri tenuto, le sue pagine non tornano anche su oggi",
+         not (set(oggi7["pagine"]) & ieri_pag)
+         and any(g["giorno"] == "2026-10-29" for g in pi7["giorni"]), pi7["giorni"][:2])
+verifica("caso 1: il piano resta «di ieri», si rifà alla prossima lettura",
+         st7.dati.uno("SELECT piano_del FROM studio_verifiche WHERE id = ?",
+                       (vid10,))["piano_del"] == "2026-10-29")
+ORA[0] = datetime.datetime(2026, 10, 30, 0, 10)
+st7.giorno_fatto(LEO, vid10)                              # «Fatto» lo fa il minore
+f10 = eventi(st7, vid10, "fatto")
+verifica("caso 2: «Inizia» del tutore e «Fatto» del minore alle 00:10 vanno a ieri",
+         [e["giorno"] for e in f10] == ["2026-10-29"], f10)
+st7.close()
+ORA[0] = datetime.datetime(2026, 10, 29, 16, 0)
+st8 = studio(cfg_nuova("322b.db"))
+vid11, ids11 = carica(st8, LEO)
+ORA[0] = datetime.datetime(2026, 10, 29, 23, 40)
+st8.imposta_sessione(LEO, vid11, conoscenza=3)
+ORA[0] = datetime.datetime(2026, 10, 30, 0, 5)
+st8.piano(LEO, vid11)
+ORA[0] = datetime.datetime(2026, 10, 30, 3, 0)            # le 3 ore sono passate
+pi8 = st8.piano(LEO, vid11)
+oggi8 = next(g for g in pi8["giorni"] if g["giorno"] == "2026-10-30")
+verifica("caso 1: scadute le 3 ore, ieri è «non fatto» e le sue pagine tornano su oggi",
+         {ids11["p112"], ids11["p113"]} <= set(oggi8["pagine"])
+         and [e["giorno"] for e in eventi(st8, vid11, "mancato")] == ["2026-10-29"]
+         and not any(g["giorno"] == "2026-10-29" for g in pi8["giorni"]), oggi8)
+st8.close()
+ORA[0] = datetime.datetime(2026, 10, 29, 16, 0)
+st9 = studio(cfg_nuova("322c.db"))
+vid12, _ = carica(st9, ANDREA, persona="n1")
+st9.imposta_sessione(ANDREA, vid12, conoscenza=3)
+ORA[0] = datetime.datetime(2026, 10, 29, 16, 30)
+st9.giorno_fatto(ANDREA, vid12)
+r12, rp12 = st9.resoconto(ANDREA, vid12), st9.riepilogo(ANDREA, vid12)
+verifica("caso 3: il minore senza nome, una forma impersonale",
+         r12["frase"].startswith("Oggi è segnato fatto il giorno del piano: le pagine 112–113, "
+                                 "in 30 minuti.")
+         and rp12["frase"].startswith("Storia, giovedì 5 novembre:")
+         and "ragazzo" not in r12["frase"] + rp12["frase"] and " hai " not in r12["frase"],
+         (r12["frase"], rp12["frase"]))
+ORA[0] = datetime.datetime(2026, 10, 30, 16, 0)
+st9.salta_oggi(ANDREA, persona="n1")
+verifica("caso 3: saltato, impersonale", st9.resoconto(ANDREA, vid12)["frase"].startswith(
+    "Oggi lo studio è stato saltato:"), st9.resoconto(ANDREA, vid12)["frase"])
+st9.close()
 
 # ═══════════════════════════ 9. home ═══════════════════════════
 print("— home")
