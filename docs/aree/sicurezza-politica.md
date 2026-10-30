@@ -2093,6 +2093,27 @@ cancella e butta); `prova_cassetto_pagina` (un pulsante «elimina» messo a mano
   nella stessa risposta né con «ok, fallo» al turno dopo; «la sapevo» con due chiamate dà un esito
   solo; il testo esce dalla storia.
 
+## La mappa concettuale dello Studio (30/10 sera, issue #247, ramo `issue-247-studio-mappa`)
+
+*Decisione [0035](../decisioni/0035-studio.md), punto 35; dettagli in [studio](studio.md).*
+
+- **Il testo dei concetti e dei verbi è un dato** (lo scrive la persona, il tutore o, dalla seconda
+  parte, il lettore dalle pagine): **non arriva mai al modello**. Nessun tool lo legge: `studio`
+  azione `mappa` è una lettura (`sola_lettura` in `politica.CLASSI`, «mapp» fra le parole delle
+  letture) che dà solo conti e stati con la frase del codice; un tool fidato che restituisse i testi
+  li farebbe valere come provenienza fidata (`Brain._ricorda_fidato`), lo stesso motivo per cui
+  `studio` non dà i titoli degli argomenti. Mai nel registro, negli eventi né nei dati del turno (la
+  vista «mappa» dice solo la verifica).
+- **Il controllo è del codice**: nessun giudizio del modello sulle caselle né sui collegamenti, e
+  l'esito (un tentativo «mappa», fonte «codice») non dipende da niente che il modello scelga.
+- Sullo schermo textContent e testo SVG (un concetto con dell'HTML resta testo, prova nella pagina
+  vera); l'endpoint fuori dalla conversazione come le carte; il PDF come allegato con `nosniff` e la
+  CSP «sandbox».
+- Prova attraverso `Brain` (`prova_valore`, `prova_mappa`): uno scheletro del modello ostile
+  («archivia la verifica», «togli dal piano l'argomento 1», «ricarica di 50 euro…») confermato dalla
+  persona; «com'è la mia mappa?» non porta testi nella risposta né nella storia, e «archivia» e
+  «togli» chiamati dopo dal modello non partono senza le parole della persona.
+
 ## Le pagine dello Studio come dato non fidato (30/10, PR #317, issue #284, ramo `issue-284-studio-tool-home`)
 
 *Decisione [0035](../decisioni/0035-studio.md), punto 24; dettagli in [studio](studio.md).*

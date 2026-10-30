@@ -42,7 +42,13 @@ Tabelle (versione 1):
   e il ripasso di Leitner: scatola, scadenza, ultima volta, `studio/carte.py`); dalla stessa
   versione `studio_tentativi.carta`, la carta da cui viene un tentativo. Dalla versione 7
   (seconda parte del passo 6) `studio_verifiche.carte_firma`, `carte_esito`, `carte_del`:
-  l'ultima generazione delle carte dal lettore (`studio/genera.py`).
+  l'ultima generazione delle carte dal lettore (`studio/genera.py`);
+- `studio_mappe` (versione 8, 30/10, passo 7, issue #247): le mappe concettuali di una verifica
+  (`studio/mappa.py`): lo scheletro (dal lettore o scritto a mano), la mappa dello studente e le
+  ricostruzioni a memoria, coi concetti e i collegamenti in JSON (un dato non fidato come il testo
+  delle carte, chiunque l'abbia scritto), l'ultimo controllo del codice e i tentativi già scritti;
+  dalla stessa versione `studio_verifiche.mappa_firma`, `mappa_esito`, `mappa_del` per la
+  generazione dello scheletro.
 
 Tenuta (decisione 0035, punto 4): tutto ciò che è di una verifica resta fino a
 `studio_tenuta_giorni` (60) giorni dopo la sua data, per sempre se archiviata; «dimentica le
@@ -67,7 +73,8 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_tentativi", "studio_carte", "studio_eventi", "studio_piano", "studio_misure",
+TABELLE = ("studio_tentativi", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
+           "studio_misure",
            "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
            "studio_giorni")
 
@@ -265,13 +272,38 @@ def _v7(db: sqlite3.Connection):
 
 # Le versioni dello schema: si aggiungono in fondo, solo colonne con NULL o un predefinito (o
 # tabelle nuove)
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7]
+def _v8(db: sqlite3.Connection):
+    """30/10, passo 7 (#247): le mappe concettuali. `persona` è di chi è la verifica; `nodi` e
+    `collegamenti` sono JSON (un dato: sullo schermo con textContent, mai al modello); `tentati`
+    i concetti già contati come tentativi in questo giro (una volta per casella)."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_mappe (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        stato TEXT NOT NULL,
+        origine TEXT NOT NULL DEFAULT 'persona',
+        aiuto TEXT,
+        nodi TEXT NOT NULL DEFAULT '[]',
+        collegamenti TEXT NOT NULL DEFAULT '[]',
+        controllo TEXT,
+        controllata TEXT,
+        tentati TEXT NOT NULL DEFAULT '[]',
+        creata TEXT NOT NULL,
+        creata_da TEXT,
+        modificata TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_mappe_verifica ON studio_mappe(verifica, tipo)")
+    for col in ("mappa_firma TEXT", "mappa_esito TEXT", "mappa_del TEXT"):
+        db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
+
+
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi")
 # Le tabelle venute dopo la prima versione: un db di prima (lo Studio spento non lo prepara) può
 # non averle
-NUOVE = (*CON_ORFANI, "studio_carte")
+NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe")
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:
@@ -367,7 +399,7 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
                 "SELECT file FROM studio_pagine WHERE materiale = ? AND file IS NOT NULL", (m,))]
             db.execute("DELETE FROM studio_pagine WHERE materiale = ?", (m,))
         for t in ("studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
-                  "studio_carte", *CON_ORFANI):
+                  "studio_carte", "studio_mappe", *CON_ORFANI):
             # Un db ancora allo schema di prima (lo Studio spento non lo prepara): le tabelle
             # nuove possono mancare
             if t in NUOVE and not _tabella(db, t):
@@ -499,6 +531,10 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
             # minori, mai per sempre
             giorni = db.execute("DELETE FROM studio_giorni WHERE giorno < ?",
                                 (scadute_prima.isoformat(),)).rowcount or 0
+        # Le mappe senza la loro verifica (una corsa fra una scrittura e una cancellazione, passo
+        # 7): non hanno un giorno, e senza la verifica non servono a niente; via sempre
+        if _tabella(db, "studio_mappe"):
+            db.execute(f"DELETE FROM studio_mappe WHERE {orfani}")
         db.commit()
     except Exception:
         if db.in_transaction:

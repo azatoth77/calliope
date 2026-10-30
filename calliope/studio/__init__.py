@@ -22,6 +22,9 @@ giorni calcolato dal codice. Rifatto da capo dopo aver tolto il vecchio processo
 - `vista.py` (30/10, passo 4.5, #284): la vista dello Studio aperta sullo schermo personale, per la
   riga dei dati del turno. Il tool è in `calliope/tools/studio.py`, la home in
   `schermi/pagina/studio.js`; le due domande prima della sessione stanno in memoria (`servizio.py`).
+
+- `mappa.py`, `mappe.py`, `mappa_pdf.py` (30/10, passo 7, #247): la mappa concettuale (lo
+  scheletro, la mia mappa, a memoria), il controllo del codice, i metodi di `Studio` e il PDF.
 """
 
 from .servizio import (ATTIVO, CONOSCENZA, FRASI_LETTURA, MODI, OMBRA, SPENTO, UMORI,

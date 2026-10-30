@@ -11,6 +11,8 @@
 // carte: «Ripassa» una carta per volta (la domanda; «Mostra la risposta»; «Non la sapevo», «Quasi»,
 // «La sapevo» con la prossima volta scritta dal server) e «Le carte» con «Scrivi una carta»,
 // «Correggi», «Togli» (POST /api/studio/carte, fuori dalla conversazione come gli argomenti).
+// Dal 30/10 (passo 7, #247) la mappa concettuale: lo scheletro, la mia mappa, a memoria, in SVG e
+// a elenco (equivalenti), il controllo del codice e il PDF (POST /api/studio/mappa).
 // Domanda e risposta sono un dato: solo textContent, come i titoli.
 // I bordi li trova bordi.js su un fotogramma di 320 px; la foto parte intera (JPEG, lato ≤ 3000)
 // con i quattro angoli, e il server li ricontrolla, la raddrizza e decide (studio/pagine.py).
@@ -646,6 +648,8 @@
     if (tasti.childNodes.length) art.append(tasti);
     if (home.domande === v.id) art.append(pannelloDomande(v));
     if (v.stato === "aperta" || v.stato === "bozza") art.append(sezioneCarte(v));
+    // La mappa concettuale (passo 7, #247): lo scheletro, la mia mappa, a memoria
+    if (v.stato === "aperta" || v.stato === "bozza") art.append(sezioneMappa(v));
     // Impara / Esercitati / Esame: solo ciò che c'è (passo 4.5: «leggi le pagine»)
     if (v.oggi) {
       const imp = nodo("section", "studio-h-gruppo");
@@ -987,6 +991,603 @@
     carte.modulo[k] = k === "argomento" ? (Number(t.value) || null) : t.value;
   }
 
+  // ── la mappa concettuale (30/10, passo 7, #247) ──
+  // Lo scheletro (proposto finché non lo si conferma), la mia mappa («con il libro»), a memoria;
+  // la mappa in SVG e l'elenco, equivalenti: tutto si fa anche dall'elenco, niente solo
+  // trascinando. Il testo dei concetti è un dato: textContent e testo SVG, mai HTML. Il controllo
+  // è del server (il codice), mai del modello. POST /api/studio/mappa, fuori dalla conversazione.
+  // {vid, quale: scheletro|mia|memoria, vista: mappa|elenco, dati, scelto, modulo, bozze, attesa,
+  // esito, ricomincia, aiuto}
+  let mappa = null;
+  const NS = "http://www.w3.org/2000/svg";
+  const ESITI_M = { giusta: "giusta", sbagliata: "da rivedere", vuota: "da riempire" };
+  const AVVISI_M = { da_controllare: "non lo trovo nelle pagine che cita",
+    pagina_con_istruzioni: "viene da una pagina con un messaggio per un assistente",
+    testo_ordine: "sembra un ordine o un annuncio" };
+  const AIUTI_M = { tanto: "Tanto aiuto", medio: "Aiuto medio", poco: "Poco aiuto" };
+  const NOMI_M = { scheletro: "Lo scheletro", mia: "La mia mappa", memoria: "A memoria" };
+
+  function tastoMappa(testo, azione, dati, cls, etichetta) {
+    const b = nodo("button", "tasto studio-h-tasto" + (cls ? " " + cls : ""), testo);
+    b.type = "button";
+    b.dataset.mappa = azione;
+    b.dataset.dati = JSON.stringify(dati || {});
+    if (etichetta) b.setAttribute("aria-label", etichetta);
+    b.disabled = !!(mappa && mappa.attesa);
+    return b;
+  }
+  function rigaMappa(v) {
+    const c = v.mappa || {};
+    const s = c.scheletro, mia = c.mia;
+    if (!s) return "Nessuna mappa: lo scheletro lo puoi scrivere tu.";
+    if (s.stato !== "confermata") return "Lo scheletro, " + Number(s.concetti || 0) + " concetti, aspetta la conferma.";
+    if (!mia) return "Lo scheletro è pronto: fai la tua mappa.";
+    const u = mia.ultimo;
+    return "La tua mappa: " + Number(mia.concetti || 0) + " concetti" +
+      (Number(mia.caselle_vuote) ? ", " + Number(mia.caselle_vuote) + " caselle da riempire" : "") +
+      (u ? " · all'ultimo controllo " + Number(u.giusta || 0) + " giuste" : " · non ancora controllata") + ".";
+  }
+  function sezioneMappa(v) {
+    const sez = nodo("section", "studio-h-gruppo studio-h-mappa");
+    sez.dataset.verifica = String(v.id);
+    sez.append(nodo("h4", "studio-h-sotto", "Mappa"), nodo("p", "studio-h-riga", rigaMappa(v)));
+    const aperta = mappa && mappa.vid === v.id;
+    const t = nodo("div", "studio-h-tasti");
+    t.append(tastoMappa(aperta ? "Chiudi la mappa" : "La mappa", aperta ? "chiudi" : "apri", { verifica: v.id }));
+    sez.append(t);
+    if (aperta) sez.append(pannelloMappa());
+    if (aperta && mappa.esito) {
+      const es = nodo("p", "pagina-esito studio-m-stato", mappa.esito);
+      es.setAttribute("role", "status");
+      sez.append(es);
+    }
+    return sez;
+  }
+  function mappaCorrente() { return mappa && mappa.dati ? mappa.dati[mappa.quale] || null : null; }
+  function puoCambiare(m) {
+    const d = mappa.dati;
+    return !!(m && d && d.puo && (m.tipo === "scheletro" ? d.puo.scheletro : d.puo.mia));
+  }
+  function nodoDi(m, id) { return (m && Array.isArray(m.nodi) ? m.nodi.find((n) => n.id === id) : null) || null; }
+  function testoNodo(n) { return String(n.testo || "") || (n.casella ? "…" : ""); }
+  function chiMappa(m) {
+    const d = mappa.dati;
+    if (m.tipo === "scheletro") {
+      return (m.origine === "modello" ? "Lo scheletro · di Calliope, dai materiali" : "Lo scheletro · scritto a mano") +
+        (m.stato === "confermata" ? " · confermato" : " · da confermare");
+    }
+    const di = d.verifica && d.verifica.di ? String(d.verifica.di) : "";
+    const quando = m.controllata ? " · controllata " + dataDetta(String(m.controllata).slice(0, 10)) : " · non ancora controllata";
+    return (m.tipo === "studente" ? (di ? "La mappa di " + di : "La tua mappa") + " · con il libro"
+      : "A memoria" + (di ? " · di " + di : "")) + quando;
+  }
+
+  function pannelloMappa() {
+    const p = nodo("div", "studio-m");
+    const d = mappa.dati;
+    if (!d) { p.append(nodo("p", "pagina-nota", "Un attimo…")); return p; }
+    const sch_ = d.scheletro;
+    const pronto = sch_ && sch_.stato === "confermata";
+    const schede = nodo("div", "studio-m-schede");
+    schede.setAttribute("role", "group");
+    schede.setAttribute("aria-label", "Quale mappa");
+    for (const k of ["scheletro", "mia", "memoria"]) {
+      if (k !== "scheletro" && !d[k] && !(pronto && d.puo && d.puo.mia)) continue;
+      const b = tastoMappa(NOMI_M[k], "quale", { quale: k }, "studio-h-chip");
+      b.setAttribute("aria-pressed", String(mappa.quale === k));
+      schede.append(b);
+    }
+    p.append(schede);
+    const m = mappaCorrente();
+    if (!m) {
+      if (mappa.quale === "scheletro") {
+        p.append(nodo("p", "studio-h-riga", "Lo scheletro non c'è ancora: i concetti principali e come si collegano, ognuno con le sue pagine."));
+        if (d.puo && d.puo.scheletro) p.append(tastoMappa("Scrivi lo scheletro", "scheletro", {}, "studio-h-primo"));
+        return p;
+      }
+      if (!pronto) { p.append(nodo("p", "studio-h-riga", "Prima serve lo scheletro confermato.")); return p; }
+      p.append(nodo("p", "studio-h-riga", mappa.quale === "mia"
+        ? "La tua mappa parte dallo scheletro: alcune caselle sono vuote e dicono la pagina dove cercare; poi la allunghi con concetti tuoi."
+        : "Rifai la mappa senza guardare: niente pagine, le caselle vuote da riempire a memoria."));
+      p.append(sceltaAiuto(d));
+      p.append(tastoMappa(mappa.quale === "mia" ? "Parti da qui: fai la tua" : "Rifai la mappa a memoria", "inizia",
+        { tipo: mappa.quale === "mia" ? "studente" : "memoria" }, "studio-h-primo"));
+      return p;
+    }
+    const puo = puoCambiare(m);
+    p.append(nodo("p", "studio-h-riga", chiMappa(m)));
+    const daDecidere = (m.nodi || []).filter((n) => n.stato === "proposto").length + (m.collegamenti || []).filter((c) => c.stato === "proposto").length;
+    if (m.tipo === "scheletro" && daDecidere) p.append(nodo("p", "studio-avviso", daDecidere === 1 ? "Una voce proposta con un avviso: tienila o toglila." : daDecidere + " voci proposte con un avviso: tienile o toglile una per una."));
+    // Mappa / Elenco: due viste della stessa cosa
+    const viste = nodo("div", "studio-m-schede");
+    viste.setAttribute("role", "group");
+    viste.setAttribute("aria-label", "Come vederla");
+    for (const [k, t] of [["mappa", "Mappa"], ["elenco", "Elenco"]]) {
+      const b = tastoMappa(t, "vista", { vista: k }, "studio-h-chip");
+      b.setAttribute("aria-pressed", String(mappa.vista === k));
+      viste.append(b);
+    }
+    p.append(viste);
+    if (Array.isArray(m.parole) && m.parole.length && m.tipo !== "scheletro") {
+      p.append(nodo("p", "studio-m-parole", "Le parole da mettere (una è di troppo): " + m.parole.map(String).join(" · ")));
+      const dl = document.createElement("datalist");
+      dl.id = "studio-m-parole-" + m.id;
+      for (const w of m.parole) { const o = document.createElement("option"); o.value = String(w); dl.append(o); }
+      p.append(dl);
+    }
+    if (mappa.vista === "mappa") {
+      p.append(telaMappa(m, puo));
+      const n = nodoDi(m, mappa.scelto);
+      if (n) p.append(pannelloNodo(m, n, puo));
+      else p.append(nodo("p", "studio-h-nota", "Tocca un concetto per vederlo e cambiarlo; la stessa mappa è anche nell'elenco."));
+    } else {
+      p.append(elencoMappa(m, puo));
+    }
+    if (mappa.modulo) p.append(moduloMappa(m));
+    const t = nodo("div", "studio-h-tasti");
+    if (puo && !mappa.modulo) {
+      t.append(tastoMappa("+ Concetto", "nuovo", {}, ""), tastoMappa("Collega", "collega", {}, ""));
+      if (m.tipo === "scheletro" && m.stato !== "confermata") t.append(tastoMappa("Conferma lo scheletro", "conferma", {}, "studio-h-primo"));
+      if (m.tipo !== "scheletro") t.append(tastoMappa("Controlla", "controlla", {}, "studio-h-primo"));
+      t.append(tastoMappa("Riordina", "riordina", {}, ""));
+    }
+    if (m.tipo === "studente" && (m.nodi || []).length) t.append(tastoMappa("Scarica PDF", "pdf", {}, ""));
+    if (puo && m.tipo === "memoria") {
+      t.append(tastoMappa("Rifai", "rifai", {}, ""));
+      const c = m.conti || {};
+      if (Number(c.sbagliata) + Number(c.vuota) > 0) t.append(tastoMappa("Fanne carte", "carte", {}, "", "Fai una carta per ogni casella da rivedere"));
+    }
+    if (puo && m.tipo === "studente") {
+      t.append(mappa.ricomincia ? tastoMappa("Sì, ricomincia da capo", "rifai", {}, "", "Ricomincia la mappa dallo scheletro: i tuoi concetti vanno via")
+        : tastoMappa("Ricomincia", "ricomincia", {}, ""));
+    }
+    if (t.childNodes.length) p.append(t);
+    const c = m.conti;
+    if (c && m.tipo !== "scheletro") {
+      const r = [Number(c.giusta || 0) + " giuste", Number(c.sbagliata || 0) + " da rivedere", Number(c.vuota || 0) + " da riempire"];
+      if (Number(c.mancanti)) r.push(Number(c.mancanti) + (Number(c.mancanti) === 1 ? " collegamento mancante" : " collegamenti mancanti"));
+      if (Number(c.in_piu)) r.push(Number(c.in_piu) + " collegamenti non nel quadro: controllali sul libro");
+      if (Number(c.verbo_diverso)) r.push(Number(c.verbo_diverso) + " con un verbo diverso");
+      p.append(nodo("p", "studio-h-riga studio-m-conti", "L'ultimo controllo: " + r.join(", ") + "."));
+    }
+    return p;
+  }
+  function sceltaAiuto(d) {
+    const f = nodo("fieldset", "studio-h-scelte");
+    f.append(nodo("legend", null, "Quanto aiuto?"));
+    const scelto = mappa.aiuto || d.aiuto || "medio";
+    for (const k of ["tanto", "medio", "poco"]) {
+      const b = tastoMappa(AIUTI_M[k] + " · " + Number((d.aiuti || {})[k] || 0) + " caselle", "aiuto", { aiuto: k }, "studio-h-chip");
+      b.setAttribute("aria-pressed", String(scelto === k));
+      f.append(b);
+    }
+    return f;
+  }
+
+  // La mappa disegnata: un riquadro per concetto (il testo in <text>, a righe), le frecce col
+  // verbo. Sul telefono in verticale. Un concetto si sceglie toccandolo o con Invio; si sposta
+  // trascinandolo o con le frecce del pannello
+  function righeDi(t, n) {
+    const out = [];
+    let cur = "";
+    for (const w of String(t).split(/\s+/)) {
+      if (!w) continue;
+      if ((cur + " " + w).trim().length <= n || !cur) cur = (cur + " " + w).trim();
+      else { out.push(cur); cur = w; }
+    }
+    if (cur) out.push(cur);
+    if (out.length > 3) { out.length = 3; out[2] = out[2].slice(0, n - 1) + "…"; }
+    return out.length ? out.map((x) => x.length > n + 2 ? x.slice(0, n) + "…" : x) : [""];
+  }
+  function svg(tag, attr) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attr || {}) e.setAttribute(k, String(attr[k]));
+    return e;
+  }
+  function telaMappa(m, puo) {
+    const box = $("studio-home");
+    const stretta = !box || box.clientWidth < 640;
+    const W = stretta ? 600 : 1000, H = stretta ? 840 : 620;
+    const s = svg("svg", { viewBox: "0 0 " + W + " " + H, class: "studio-m-tela", role: "group" });
+    s.setAttribute("aria-label", "La mappa: " + (m.nodi || []).length + " concetti e " + (m.collegamenti || []).length +
+      " collegamenti. La stessa cosa è nell'elenco.");
+    s.dataset.w = String(W);
+    s.dataset.h = String(H);
+    const defs = svg("defs");
+    const mk = svg("marker", { id: "studio-m-punta", viewBox: "0 0 10 10", refX: 9, refY: 5, markerWidth: 9, markerHeight: 9, orient: "auto-start-reverse" });
+    mk.append(svg("path", { d: "M0,0 L10,5 L0,10 z", class: "studio-m-punta" }));
+    defs.append(mk);
+    s.append(defs);
+    const nodi = Array.isArray(m.nodi) ? m.nodi : [];
+    const pos = {};
+    const bw = stretta ? 210 : 200, nc = stretta ? 15 : 15;
+    for (const n of nodi) {
+      const r = righeDi(testoNodo(n), nc);
+      const h = Math.max(78, r.length * 27 + 26);
+      const x = W * 0.12 + Math.max(0, Math.min(1, Number(n.x) || 0.5)) * W * 0.76;
+      const y = H * 0.08 + Math.max(0, Math.min(1, Number(n.y) || 0.5)) * H * 0.84;
+      pos[n.id] = { x, y, w: bw, h, r };
+    }
+    const bordo = (a, b) => {
+      const dx = b.x - a.x, dy = b.y - a.y;
+      if (!dx && !dy) return [a.x, a.y];
+      const k = Math.min(dx ? (a.w / 2 + 4) / Math.abs(dx) : Infinity, dy ? (a.h / 2 + 4) / Math.abs(dy) : Infinity);
+      return [a.x + dx * k, a.y + dy * k];
+    };
+    for (const c of Array.isArray(m.collegamenti) ? m.collegamenti : []) {
+      const a = pos[c.da], b = pos[c.a];
+      if (!a || !b) continue;
+      const [x1, y1] = bordo(a, b), [x2, y2] = bordo(b, a);
+      const l = svg("line", { x1, y1, x2, y2, "marker-end": "url(#studio-m-punta)" });
+      if (c.esito) l.setAttribute("class", String(c.esito));
+      s.append(l);
+      const t = svg("text", { x: (x1 + x2) / 2, y: (y1 + y2) / 2 + 6, "text-anchor": "middle", class: "studio-m-verbo" });
+      t.textContent = String(c.verbo || "").slice(0, 30);
+      s.append(t);
+    }
+    for (const n of nodi) {
+      const q = pos[n.id];
+      const g = svg("g", { class: "studio-m-nodo" + (n.suo && m.tipo !== "scheletro" ? " suo" : "") + (n.casella ? " casella" : "") +
+        (n.stato === "proposto" ? " proposto" : "") + (n.esito ? " " + n.esito : "") + (mappa.scelto === n.id ? " scelto" : ""),
+        tabindex: 0, role: "button", transform: "translate(" + q.x + "," + q.y + ")" });
+      g.dataset.nodo = String(n.id);
+      g.setAttribute("aria-label", (n.casella && !n.testo ? "Casella vuota" : "Concetto: " + String(n.testo || "")) +
+        (n.esito ? ", " + (ESITI_M[n.esito] || n.esito) : ""));
+      g.setAttribute("aria-pressed", String(mappa.scelto === n.id));
+      g.append(svg("rect", { x: -q.w / 2, y: -q.h / 2, width: q.w, height: q.h, rx: 14 }));
+      const t = svg("text", { "text-anchor": "middle" });
+      q.r.forEach((riga, i) => {
+        const sp = svg("tspan", { x: 0, y: -q.h / 2 + 30 + i * 27 + (q.h - (q.r.length * 27 + 26)) / 2 });
+        sp.textContent = riga;
+        t.append(sp);
+      });
+      g.append(t);
+      s.append(g);
+    }
+    s.dataset.cambia = puo ? "1" : "";
+    return s;
+  }
+
+  function pannelloNodo(m, n, puo) {
+    const p = nodo("div", "studio-m-pannello");
+    p.dataset.nodo = String(n.id);
+    p.append(nodo("b", null, n.casella && !n.testo ? "Casella vuota" : String(n.testo || "")));
+    p.append(...infoNodo(m, n));
+    if (puo && n.casella) p.append(...campoCasella(m, n));
+    const t = nodo("div", "studio-h-tasti");
+    t.append(...tastiNodo(m, n, puo));
+    if (puo) {
+      for (const [f, dx, dy, et] of [["←", -0.06, 0, "Sposta a sinistra"], ["↑", 0, -0.06, "Sposta in su"], ["↓", 0, 0.06, "Sposta in giù"], ["→", 0.06, 0, "Sposta a destra"]]) {
+        t.append(tastoMappa(f, "sposta", { nodo: n.id, x: Math.max(0, Math.min(1, (Number(n.x) || 0.5) + dx)), y: Math.max(0, Math.min(1, (Number(n.y) || 0.5) + dy)) }, "studio-h-chip", et));
+      }
+    }
+    p.append(t);
+    const ul = collegamentiDi(m, n, puo);
+    if (ul) p.append(ul);
+    return p;
+  }
+  function infoNodo(m, n) {
+    const out = [];
+    const info = [n.stato === "proposto" ? "proposto" : "", n.suo && m.tipo !== "scheletro" ? "concetto tuo" : "",
+      (Array.isArray(n.pagine) && n.pagine.length) ? (n.casella ? "cerca a " : "") + n.pagine.map(String).join(", ") : ""].filter(Boolean).join(" · ");
+    if (info) out.push(nodo("span", "studio-nota", info));
+    if (n.esito) out.push(nodo("span", "studio-m-esito " + String(n.esito), ESITI_M[n.esito] || String(n.esito)));
+    if (Array.isArray(n.manca)) out.push(nodo("span", "studio-m-esito manca", "Manca un collegamento da qui" + (n.manca.length ? ": guarda a " + n.manca.map(String).join(", ") : "") + "."));
+    for (const x of Array.isArray(n.avvisi) ? n.avvisi : []) out.push(nodo("span", "studio-avviso", AVVISI_M[x] || String(x)));
+    return out;
+  }
+  function campoCasella(m, n) {
+    const id = "studio-m-casella-" + n.id;
+    const l = nodo("label", "studio-campo", "Cosa va qui?");
+    l.htmlFor = id;
+    const i = document.createElement("input");
+    i.id = id;
+    i.type = "text";
+    i.className = "studio-m-campo";
+    i.maxLength = Number(((mappa.dati || {}).massimi || {}).testo) || 60;
+    i.dataset.casella = String(n.id);
+    i.setAttribute("list", "studio-m-parole-" + m.id);
+    i.value = mappa.bozze[n.id] !== undefined ? mappa.bozze[n.id] : String(n.testo || "");
+    return [l, i, tastoMappa("Metti", "riempi", { nodo: n.id }, "", "Metti la parola nella casella")];
+  }
+  function tastiNodo(m, n, puo) {
+    const out = [];
+    if (!puo) return out;
+    const nome = "«" + String(n.testo || "casella").slice(0, 40) + "»";
+    if (m.tipo === "scheletro" || (n.suo && !n.casella)) {
+      out.push(tastoMappa("Cambia", "cambia", { nodo: n.id }, "", "Cambia " + nome));
+      out.push(tastoMappa("Togli", "togli_nodo", { nodo: n.id }, "", "Togli " + nome));
+    }
+    if (m.tipo === "scheletro" && n.stato === "proposto") out.push(tastoMappa("Tieni", "tieni", { nodo: n.id }, "", "Tieni " + nome));
+    out.push(tastoMappa("Collega da qui", "collega", { da: n.id }, "", "Collega " + nome + " a un altro concetto"));
+    return out;
+  }
+  function collegamentiDi(m, n, puo) {
+    const coll = (Array.isArray(m.collegamenti) ? m.collegamenti : []).filter((c) => c.da === n.id);
+    if (!coll.length) return null;
+    const ul = nodo("ul", "studio-m-coll");
+    for (const c of coll) {
+      const altro = nodoDi(m, c.a);
+      const li = nodo("li", null);
+      const tx = nodo("span", null, "→ " + String(c.verbo || "") + " → " + (altro ? testoNodo(altro) || "…" : "…"));
+      li.append(tx);
+      if (c.esito === "in_piu") li.append(nodo("span", "studio-m-esito manca", "non è nel quadro: controlla" + (Array.isArray(c.guarda) && c.guarda.length ? " a " + c.guarda.map(String).join(", ") : " sul libro")));
+      if (c.esito === "verbo_diverso") li.append(nodo("span", "studio-m-esito manca", "verbo diverso: controlla"));
+      if (c.stato === "proposto") li.append(nodo("span", "studio-avviso", "proposto" + ((c.avvisi || []).length ? ": " + c.avvisi.map((x) => AVVISI_M[x] || String(x)).join("; ") : "")));
+      if (puo) {
+        const t = nodo("span", "studio-h-tasti");
+        const nome = "«" + String(c.verbo || "").slice(0, 30) + "»";
+        t.append(tastoMappa("Cambia", "cambia_coll", { collegamento: c.id }, "studio-h-chip", "Cambia il collegamento " + nome));
+        if (m.tipo === "scheletro" && c.stato === "proposto") t.append(tastoMappa("Tieni", "tieni", { collegamento: c.id }, "studio-h-chip", "Tieni il collegamento " + nome));
+        t.append(tastoMappa("Togli", "togli_collegamento", { collegamento: c.id }, "studio-h-chip", "Togli il collegamento " + nome));
+        li.append(t);
+      }
+      ul.append(li);
+    }
+    return ul;
+  }
+  function elencoMappa(m, puo) {
+    const ol = nodo("ol", "studio-m-elenco");
+    ol.setAttribute("aria-label", "La mappa a elenco");
+    for (const n of Array.isArray(m.nodi) ? m.nodi : []) {
+      const li = nodo("li", "studio-m-voce");
+      li.dataset.nodo = String(n.id);
+      li.append(nodo("b", null, n.casella && !n.testo ? "Casella vuota" : String(n.testo || "")), ...infoNodo(m, n));
+      if (puo && n.casella) li.append(...campoCasella(m, n));
+      const t = nodo("div", "studio-h-tasti");
+      t.append(...tastiNodo(m, n, puo));
+      if (t.childNodes.length) li.append(t);
+      const ul = collegamentiDi(m, n, puo);
+      if (ul) li.append(ul);
+      ol.append(li);
+    }
+    if (!ol.childNodes.length) ol.append(nodo("li", "studio-h-riga", "Ancora nessun concetto: aggiungine uno con «+ Concetto»."));
+    return ol;
+  }
+  function moduloMappa(m) {
+    const f = nodo("div", "studio-c-modulo studio-m-pannello");
+    const mo = mappa.modulo;
+    const d = mappa.dati || {};
+    const mx = d.massimi || {};
+    const scelta = (nome, etichetta, voci, valore) => {
+      const id = "studio-m-" + nome;
+      const l = nodo("label", "studio-campo", etichetta);
+      l.htmlFor = id;
+      const s = document.createElement("select");
+      s.id = id;
+      s.dataset.mcampo = nome;
+      for (const [v, t] of voci) { const o = nodo("option", null, t); o.value = String(v); s.append(o); }
+      s.value = valore === null || valore === undefined ? "" : String(valore);
+      return [l, s];
+    };
+    const testo = (nome, etichetta, max) => {
+      const id = "studio-m-" + nome;
+      const l = nodo("label", "studio-campo", etichetta);
+      l.htmlFor = id;
+      const i = document.createElement("input");
+      i.id = id;
+      i.type = "text";
+      i.className = "studio-m-campo";
+      i.maxLength = max;
+      i.dataset.mcampo = nome;
+      i.value = String(mo[nome] || "");
+      return [l, i];
+    };
+    if (mo.tipo === "nodo") {
+      f.append(...testo("testo", mo.nodo ? "Il concetto" : "Un concetto nuovo", Number(mx.testo) || 60));
+      if (m.tipo === "scheletro") {
+        f.append(...scelta("argomento", "Argomento", [["", "Nessuno"], ...(d.argomenti || []).map((a) => [a.id, a.numero + ". " + String(a.titolo || "")])], mo.argomento));
+        f.append(...scelta("pagina", "Pagina", [["", "Nessuna"], ...(d.pagine || []).map((x) => [x.id, String(x.nome || "")])], mo.pagina));
+      }
+    } else {
+      const voci = (m.nodi || []).map((n) => [n.id, n.casella && !n.testo ? "casella vuota " + n.id : String(n.testo || "")]);
+      if (!mo.collegamento) {
+        f.append(...scelta("da", "Da", [["", "Scegli"], ...voci], mo.da), ...scelta("a", "A", [["", "Scegli"], ...voci], mo.a));
+      }
+      f.append(...testo("verbo", "Con quale verbo? («porta a», «è parte di»…)", Number(mx.verbo) || 40));
+    }
+    const t = nodo("div", "studio-h-tasti");
+    t.append(tastoMappa("Salva", "salva", {}, "studio-h-primo"), tastoMappa("Annulla", "annulla", {}));
+    f.append(t);
+    return f;
+  }
+
+  async function caricaMappa(vid, dati) {
+    if (!sch() || !sch().studioMappa || !mappa) return false;
+    mappa.attesa = true;
+    disegnaHome();
+    const r = await sch().studioMappa(Object.assign({ verifica: vid }, dati || {}));
+    if (!mappa || mappa.vid !== vid) return false;
+    mappa.attesa = false;
+    if (!r.ok) {
+      mappa.esito = String(r.dati.errore || "Non ci sono riuscita: riprova tra poco.");
+      disegnaHome();
+      return false;
+    }
+    if (r.blob) {
+      const u = URL.createObjectURL(r.blob);
+      const a = document.createElement("a");
+      a.href = u;
+      a.download = "mappa-" + vid + ".pdf";
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(u), 15000);
+      mappa.esito = "Ecco il PDF della mappa: lo trovi fra i file scaricati.";
+      disegnaHome();
+      return true;
+    }
+    mappa.dati = r.dati;
+    // Senza una mappa scelta, la più avanti fra quelle che ci sono
+    if (!mappa.quale || (!r.dati[mappa.quale] && dati === undefined)) mappa.quale = r.dati.mia ? "mia" : "scheletro";
+    if (mappa.scelto && !nodoDi(mappaCorrente(), mappa.scelto)) mappa.scelto = null;
+    disegnaHome();
+    return true;
+  }
+  async function suMappa(b) {
+    const art = b.closest("[data-verifica]");
+    const vid = Number(art && art.dataset.verifica);
+    let dati = {};
+    try { dati = JSON.parse(b.dataset.dati || "{}"); } catch (e) { return; }
+    const az = b.dataset.mappa;
+    if (az === "apri") {
+      mappa = { vid, quale: "", vista: "elenco", dati: null, scelto: null, modulo: null, bozze: {}, attesa: false, esito: "", ricomincia: false, aiuto: "" };
+      vista({ vista: "mappa", verifica: vid });
+      await caricaMappa(vid);
+      return;
+    }
+    if (!mappa || mappa.vid !== vid) return;
+    const m = mappaCorrente();
+    mappa.esito = "";
+    if (az === "chiudi") { mappa = null; vista({ vista: "home" }); caricaHome(); return; }
+    if (az === "quale") { mappa.quale = dati.quale; mappa.scelto = null; mappa.modulo = null; mappa.ricomincia = false; disegnaHome(); return; }
+    if (az === "vista") { mappa.vista = dati.vista; disegnaHome(); return; }
+    if (az === "aiuto") { mappa.aiuto = dati.aiuto; disegnaHome(); return; }
+    if (az === "nuovo") { mappa.modulo = { tipo: "nodo", testo: "", argomento: null, pagina: null }; disegnaHome(); return; }
+    if (az === "collega") { mappa.modulo = { tipo: "collega", da: dati.da || null, a: null, verbo: "" }; disegnaHome(); return; }
+    if (az === "cambia") {
+      const n = nodoDi(m, dati.nodo);
+      if (!n) return;
+      mappa.modulo = { tipo: "nodo", nodo: n.id, testo: n.testo, argomento: n.argomento, pagina: null };
+      disegnaHome();
+      return;
+    }
+    if (az === "cambia_coll") {
+      const c = (m && m.collegamenti || []).find((x) => x.id === dati.collegamento);
+      if (!c) return;
+      mappa.modulo = { tipo: "collega", collegamento: c.id, verbo: c.verbo };
+      disegnaHome();
+      return;
+    }
+    if (az === "annulla") { mappa.modulo = null; disegnaHome(); return; }
+    if (az === "ricomincia") { mappa.ricomincia = true; disegnaHome(); return; }
+    if (az === "scheletro") { if (await caricaMappa(vid, { azione: "scheletro" })) { mappa.quale = "scheletro"; mappa.modulo = { tipo: "nodo", testo: "", argomento: null, pagina: null }; disegnaHome(); } return; }
+    if (az === "inizia") {
+      if (await caricaMappa(vid, { azione: "inizia", tipo: dati.tipo, aiuto: mappa.aiuto || undefined })) {
+        mappa.quale = dati.tipo === "studente" ? "mia" : "memoria";
+        disegnaHome();
+      }
+      return;
+    }
+    if (az === "pdf") { await caricaMappa(vid, { azione: "pdf" }); return; }
+    if (!m) return;
+    if (az === "salva") {
+      const mo = mappa.modulo;
+      if (!mo) return;
+      let corpo;
+      if (mo.tipo === "nodo") {
+        const testo = String(mo.testo || "").trim();
+        if (!testo) { mappa.esito = "Scrivi il concetto."; disegnaHome(); return; }
+        corpo = { azione: "nodo", mappa: m.id, testo };
+        if (mo.nodo) corpo.nodo = mo.nodo;
+        if (m.tipo === "scheletro") {
+          corpo.argomento = mo.argomento ? Number(mo.argomento) : null;
+          if (mo.pagina) corpo.pagine = [Number(mo.pagina)];
+        }
+      } else {
+        const verbo = String(mo.verbo || "").trim();
+        if (!verbo || (!mo.collegamento && (!mo.da || !mo.a))) { mappa.esito = "Scegli i due concetti e scrivi il verbo."; disegnaHome(); return; }
+        corpo = mo.collegamento ? { azione: "collega", mappa: m.id, collegamento: mo.collegamento, verbo }
+          : { azione: "collega", mappa: m.id, da: Number(mo.da), a: Number(mo.a), verbo };
+      }
+      if (await caricaMappa(vid, corpo)) { mappa.modulo = null; mappa.esito = "Fatto."; disegnaHome(); }
+      return;
+    }
+    if (az === "riempi") {
+      const testo = String(mappa.bozze[dati.nodo] !== undefined ? mappa.bozze[dati.nodo] : "").trim();
+      if (await caricaMappa(vid, { azione: "riempi", mappa: m.id, nodo: dati.nodo, testo })) { delete mappa.bozze[dati.nodo]; mappa.esito = testo ? "Messa." : "Casella svuotata."; disegnaHome(); }
+      return;
+    }
+    if (az === "controlla") {
+      if (await caricaMappa(vid, { azione: "controlla", mappa: m.id })) {
+        const c = mappa.dati.controllo || {};
+        mappa.esito = "Controllata: " + Number(c.giusta || 0) + " giuste, " + Number(c.sbagliata || 0) + " da rivedere, " + Number(c.vuota || 0) + " da riempire.";
+        disegnaHome();
+      }
+      return;
+    }
+    if (az === "carte") {
+      if (await caricaMappa(vid, { azione: "carte", mappa: m.id })) {
+        const n = Number(mappa.dati.carte) || 0;
+        mappa.esito = n ? (n === 1 ? "Una carta nuova" : n + " carte nuove") + " da ripassare." : "Nessuna carta nuova.";
+        disegnaHome();
+      }
+      return;
+    }
+    if (az === "rifai") {
+      if (await caricaMappa(vid, { azione: "rifai", mappa: m.id, aiuto: mappa.aiuto || undefined })) { mappa.ricomincia = false; mappa.scelto = null; disegnaHome(); }
+      return;
+    }
+    if (az === "conferma") {
+      if (await caricaMappa(vid, { azione: "conferma", mappa: m.id })) {
+        const r = mappa.dati.confermato || {};
+        mappa.esito = "Scheletro confermato: " + Number(r.tenuti || 0) + " concetti" + (Number(r.da_decidere) ? "; " + Number(r.da_decidere) + " voci con un avviso restano da decidere." : ".");
+        disegnaHome();
+      }
+      return;
+    }
+    const semplici = { togli_nodo: ["nodo"], togli_collegamento: ["collegamento"], tieni: ["nodo", "collegamento"], sposta: ["nodo", "x", "y"], riordina: [] };
+    if (az in semplici) {
+      const corpo = { azione: az, mappa: m.id };
+      for (const k of semplici[az]) if (dati[k] !== undefined) corpo[k] = dati[k];
+      await caricaMappa(vid, corpo);
+    }
+  }
+  function suCampoMappa(ev) {
+    const t = ev.target;
+    if (!t || !t.dataset || !mappa) return false;
+    if (t.dataset.casella) { mappa.bozze[Number(t.dataset.casella)] = t.value; return true; }
+    if (t.dataset.mcampo && mappa.modulo) { mappa.modulo[t.dataset.mcampo] = t.value; return true; }
+    return false;
+  }
+  // Scegliere un concetto sulla mappa (tocco o Invio) e spostarlo trascinando
+  let trascina = null;
+  function giuSulNodo(ev) {
+    const g = ev.target.closest && ev.target.closest(".studio-m-nodo");
+    if (!g || !mappa) return;
+    const s = g.ownerSVGElement;
+    trascina = { g, s, id: Number(g.dataset.nodo), x0: ev.clientX, y0: ev.clientY, via: false, cambia: !!(s && s.dataset.cambia) };
+    if (trascina.cambia && g.setPointerCapture) { try { g.setPointerCapture(ev.pointerId); } catch (e) { /* niente */ } }
+  }
+  function muoviNodo(ev) {
+    if (!trascina || !trascina.cambia) return;
+    const dx = ev.clientX - trascina.x0, dy = ev.clientY - trascina.y0;
+    if (!trascina.via && Math.hypot(dx, dy) < 8) return;
+    trascina.via = true;
+    const r = trascina.s.getBoundingClientRect();
+    const W = Number(trascina.s.dataset.w), H = Number(trascina.s.dataset.h);
+    const n = nodoDi(mappaCorrente(), trascina.id);
+    if (!n || !r.width) return;
+    const x = W * 0.12 + (Number(n.x) || 0.5) * W * 0.76 + dx * W / r.width;
+    const y = H * 0.08 + (Number(n.y) || 0.5) * H * 0.84 + dy * H / r.height;
+    trascina.g.setAttribute("transform", "translate(" + x + "," + y + ")");
+    trascina.fx = Math.max(0, Math.min(1, (x - W * 0.12) / (W * 0.76)));
+    trascina.fy = Math.max(0, Math.min(1, (y - H * 0.08) / (H * 0.84)));
+  }
+  function suNodo(ev) {
+    const t = trascina;
+    trascina = null;
+    if (!t || !mappa) return;
+    const m = mappaCorrente();
+    if (t.via && m && t.fx !== undefined) {
+      caricaMappa(mappa.vid, { azione: "sposta", mappa: m.id, nodo: t.id, x: Math.round(t.fx * 1000) / 1000, y: Math.round(t.fy * 1000) / 1000 });
+      return;
+    }
+    mappa.scelto = mappa.scelto === t.id ? null : t.id;
+    disegnaHome();
+  }
+  function tastoSulNodo(ev) {
+    if (ev.key !== "Enter" && ev.key !== " ") return;
+    const g = ev.target.closest && ev.target.closest(".studio-m-nodo");
+    if (!g || !mappa) return;
+    ev.preventDefault();
+    const id = Number(g.dataset.nodo);
+    mappa.scelto = mappa.scelto === id ? null : id;
+    disegnaHome();
+    const di = document.querySelector('.studio-m-nodo[data-nodo="' + id + '"]');
+    if (di) di.focus();
+  }
+
   function pannelloDomande(v) {
     const p = nodo("div", "studio-h-domande");
     const s = home.scelte;
@@ -1033,6 +1634,7 @@
     const b = ev.target.closest && ev.target.closest("button");
     if (!b || b.disabled) return;
     if (b.dataset.carte) { suCarte(b); return; }
+    if (b.dataset.mappa) { suMappa(b); return; }
     if (b.dataset.pagine) { apriMateriali(Number(b.dataset.pagine)); return; }
     if (b.dataset.domande) {
       const id = Number(b.dataset.domande);
@@ -1111,6 +1713,7 @@
   function chiudi() {
     st.aperta = false;
     carte = null;
+    mappa = null;
     if (st.materiali) chiudiCamera();
     if ($("studio")) $("studio").hidden = true;
     vista({ vista: null });
@@ -1122,6 +1725,14 @@
     // I campi di «Scrivi una carta»: restano anche quando la home si ridisegna
     $("studio-home").addEventListener("input", suCampoCarte);
     $("studio-home").addEventListener("change", suCampoCarte);
+    // La mappa (passo 7, #247): i campi, il tocco e il trascinamento dei concetti, Invio
+    $("studio-home").addEventListener("input", suCampoMappa);
+    $("studio-home").addEventListener("change", suCampoMappa);
+    $("studio-home").addEventListener("pointerdown", giuSulNodo);
+    $("studio-home").addEventListener("pointermove", muoviNodo);
+    $("studio-home").addEventListener("pointerup", suNodo);
+    $("studio-home").addEventListener("pointercancel", () => { trascina = null; });
+    $("studio-home").addEventListener("keydown", tastoSulNodo);
     // «Il piano» aperto: la vista del piano (toggle non risale: in cattura)
     $("studio-home").addEventListener("toggle", (ev) => {
       const d = ev.target;
@@ -1178,6 +1789,10 @@
         carte: carte ? { vid: carte.vid, modo: carte.modo, mostra: carte.mostra, esito: carte.esito,
           da_ripassare: carte.dati ? (carte.dati.da_ripassare || []).slice() : [],
           carte: carte.dati ? (carte.dati.carte || []).map((c) => ({ id: c.id, stato: c.stato, scatola: c.scatola })) : [] } : null,
+        mappa: mappa ? { vid: mappa.vid, quale: mappa.quale, vista: mappa.vista, scelto: mappa.scelto, esito: mappa.esito,
+          modulo: mappa.modulo ? mappa.modulo.tipo : null,
+          mappe: mappa.dati ? ["scheletro", "mia", "memoria"].filter((k) => mappa.dati[k]).map((k) => ({ quale: k, id: mappa.dati[k].id,
+            stato: mappa.dati[k].stato, nodi: (mappa.dati[k].nodi || []).length, collegamenti: (mappa.dati[k].collegamenti || []).length })) : [] } : null,
         camera: !!st.flusso,
         argomenti: st.arg && Array.isArray(st.arg.argomenti) ? st.arg.argomenti.map((a) => ({ id: a.id, stato: a.stato, avvisi: (a.avvisi || []).slice() })) : [],
         pagine: st.pagine.map((p) => ({ id: p.id, tipo: p.tipo, angoli: p.angoli, intera: !!p.intera, avvisi: p.avvisi.slice(),

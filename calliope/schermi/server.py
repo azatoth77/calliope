@@ -98,6 +98,13 @@ Indirizzi:
                                  (le proposte dal modello senza avvisi; 30/10,
                                  passo 6 dello Studio, #246); fuori dalla conversazione come gli
                                  argomenti, in ombra solo chi amministra
+  POST /api/studio/mappa         «X-Calliope-Sessione», {verifica, azione?, mappa?, nodo?,
+                                 collegamento?, testo?, da?, a?, verbo?, x?, y?, argomento?,
+                                 pagine?, tipo?, aiuto?} → le mappe concettuali di una verifica
+                                 (30/10, passo 7 dello Studio, #247): lo scheletro, la mia mappa,
+                                 a memoria, il controllo del codice; «pdf» → application/pdf della
+                                 mia mappa. Fuori dalla conversazione come le carte, in ombra solo
+                                 chi amministra
   POST /api/studio/pagina        «X-Calliope-Sessione», byte nudi (octet-stream), i dati in
                                  «X-Calliope-Studio» (URI): una foto di una pagina con i suoi
                                  angoli, o un PDF intero (29/10, #281, studio/pagine.py), nello
@@ -1526,6 +1533,146 @@ def crea_app(hub: Schermi) -> Starlette:
                     + (f" {cid}" if isinstance(cid, int) else ""))
         return _json(out)
 
+    # Le mappe concettuali (30/10, passo 7, #247): sui dati della persona, fuori dalla
+    # conversazione come le carte (il testo dei concetti è un dato e non entra nella storia); il
+    # controllo è del codice, mai del modello. Lo scheletro lo cambiano la persona e il tutore, la
+    # mia mappa e a memoria solo la persona (Studio._mappa)
+    AZIONI_MAPPA = ("scheletro", "nodo", "togli_nodo", "collega", "togli_collegamento", "sposta",
+                    "riempi", "tieni", "conferma", "inizia", "rifai", "controlla", "carte",
+                    "riordina", "pdf")
+    CON_MAPPA = ("nodo", "togli_nodo", "collega", "togli_collegamento", "sposta", "riempi",
+                 "tieni", "conferma", "rifai", "controlla", "carte", "riordina")
+
+    def _intero(x) -> bool:
+        return isinstance(x, int) and not isinstance(x, bool)
+
+    async def studio_mappa(request: Request):
+        """{verifica, azione?, …} → la vista delle mappe (`Studio.vista_mappe`). Senza azione sola
+        lettura (anche fuori orario); con un'azione la fa coi permessi dello Studio e, per un
+        minore, dentro gli orari; «pdf» dà il PDF della mia mappa (anche fuori orario: si legge)."""
+        from ..studio import mappa as M
+        schermo, errore = schermo_personale(request, letture_studio, LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 4096)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        vid, azione = dati.get("verifica"), dati.get("azione")
+        if not _intero(vid) or vid < 1 or (azione is not None and azione not in AZIONI_MAPPA):
+            return _json({"errore": "richiesta non valida"}, 400)
+        mid = dati.get("mappa")
+        if azione in CON_MAPPA and not _intero(mid):
+            return _json({"errore": "manca la mappa"}, 400)
+        for k in ("nodo", "collegamento", "da", "a", "argomento"):
+            if dati.get(k) is not None and not _intero(dati.get(k)):
+                return _json({"errore": "richiesta non valida"}, 400)
+        if azione in ("togli_nodo", "sposta", "riempi") and not _intero(dati.get("nodo")):
+            return _json({"errore": "manca il concetto"}, 400)
+        if azione == "togli_collegamento" and not _intero(dati.get("collegamento")):
+            return _json({"errore": "manca il collegamento"}, 400)
+        for k, mx in (("testo", M.NODO_MAX), ("verbo", M.VERBO_MAX)):
+            x = dati.get(k)
+            if x is not None and (not isinstance(x, str) or len(x) > mx * 4):
+                return _json({"errore": "testo non valido"}, 400)
+        pagine = dati.get("pagine")
+        if pagine is not None and (not isinstance(pagine, list) or len(pagine) > 20
+                                   or not all(_intero(x) for x in pagine)):
+            return _json({"errore": "pagine non valide"}, 400)
+        xy = [dati.get("x"), dati.get("y")]
+        if azione == "sposta" and not all(isinstance(z, (int, float)) and not isinstance(z, bool)
+                                          for z in xy):
+            return _json({"errore": "posizione non valida"}, 400)
+        tipo, aiuto = dati.get("tipo"), dati.get("aiuto")
+        if azione == "inizia" and tipo not in (M.STUDENTE, M.MEMORIA):
+            return _json({"errore": "tipo non valido"}, 400)
+        if aiuto is not None and aiuto not in M.AIUTI:
+            return _json({"errore": "aiuto non valido"}, 400)
+        from .. import minori
+        from ..studio import NonPermesso, NonTrovata, VerificaChiusa
+        if azione not in (None, "pdf"):
+            orario = minori.fuori_orario(prof)
+            if orario:
+                return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                              "codice": "fuori_orario"}, 403)
+
+        def fai():
+            extra = {}
+            if azione in CON_MAPPA:
+                # La mappa toccata deve essere di questa verifica
+                vm = st.vista_mappe(prof, vid)
+                suoi = {m["id"] for m in (vm[k] for k in ("scheletro", "mia", "memoria")) if m}
+                if mid not in suoi:
+                    raise NonTrovata()
+            if azione == "pdf":
+                return st.pdf_mappa(prof, vid)
+            if azione == "scheletro":
+                extra["mappa"] = st.scrivi_scheletro(prof, vid)
+            elif azione == "nodo":
+                kw = {}
+                if "argomento" in dati:
+                    kw["argomento"] = dati.get("argomento")
+                if pagine is not None:
+                    kw["pagine"] = pagine
+                extra["nodo"] = st.nodo_mappa(prof, mid, dati.get("testo"), dati.get("nodo"), **kw)
+            elif azione == "togli_nodo":
+                st.togli_nodo(prof, mid, dati["nodo"])
+            elif azione == "collega":
+                if dati.get("collegamento") is None and not (_intero(dati.get("da"))
+                                                             and _intero(dati.get("a"))):
+                    raise ValueError("mancano i concetti")
+                extra["collegamento"] = st.collega(prof, mid, dati.get("da"), dati.get("a"),
+                                                   dati.get("verbo"), dati.get("collegamento"))
+            elif azione == "togli_collegamento":
+                st.togli_collegamento(prof, mid, dati["collegamento"])
+            elif azione == "sposta":
+                st.sposta_nodo(prof, mid, dati["nodo"], xy[0], xy[1])
+            elif azione == "riempi":
+                st.riempi(prof, mid, dati["nodo"], dati.get("testo") or "")
+            elif azione == "tieni":
+                st.tieni_mappa(prof, mid, dati.get("nodo"), dati.get("collegamento"))
+            elif azione == "conferma":
+                extra["confermato"] = st.conferma_scheletro(prof, mid)
+            elif azione == "inizia":
+                extra["mappa"] = st.inizia_mappa(prof, vid, tipo, aiuto)
+            elif azione == "rifai":
+                extra["mappa"] = st.rifai_mappa(prof, mid, aiuto)
+            elif azione == "controlla":
+                extra["controllo"] = st.controlla_mappa(prof, mid)["conti"]
+            elif azione == "carte":
+                extra["carte"] = st.carte_dagli_errori(prof, mid)
+            elif azione == "riordina":
+                st.riordina_mappa(prof, mid)
+            return {**st.vista_mappe(prof, vid), **extra}
+        try:
+            out = await asyncio.to_thread(fai)
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except VerificaChiusa:
+            return _json({"errore": "La verifica è chiusa: la mappa si guarda e si scarica."},
+                         409)
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        except ValueError as e:
+            # Le frasi dei ValueError sono del codice (mai il testo della mappa)
+            return _json({"errore": f"Non va: {e}."}, 400)
+        if azione is not None:
+            # Nel registro solo l'azione e gli id, mai il testo dei concetti
+            hub.log(f"[STUDIO] mappa della verifica {vid}: {azione}"
+                    + (f" {mid}" if _intero(mid) else ""))
+        if azione == "pdf":
+            from starlette.responses import Response
+            return Response(out, media_type="application/pdf",
+                            headers={"Cache-Control": "no-store",
+                                     "X-Content-Type-Options": "nosniff",
+                                     "Content-Security-Policy": "sandbox",
+                                     "Content-Disposition":
+                                         f'attachment; filename="mappa-{vid}.pdf"'})
+        return _json(out)
+
     def meta_studio(request: Request):
         """I dati dell'invio da «X-Calliope-Studio» (JSON codificato come URI, al più 2 KB):
         {verifica, materiale?, angoli?, nome?}, o None se non sono validi."""
@@ -1747,6 +1894,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/vista", vista_api, methods=["POST"]),
         Route("/api/studio/argomenti", studio_argomenti, methods=["POST"]),
         Route("/api/studio/carte", studio_carte, methods=["POST"]),
+        Route("/api/studio/mappa", studio_mappa, methods=["POST"]),
         Route("/api/studio/pagina", studio_pagina, methods=["POST"]),
         # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC
         Route("/bordi.js", file("bordi.js", "text/javascript; charset=utf-8")),

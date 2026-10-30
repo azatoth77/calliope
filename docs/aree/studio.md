@@ -24,7 +24,9 @@ sessioni e il riepilogo della verifica** (4b, #244, sezione sotto), proiezioni d
 arrivano le carte. Dal 30/10 le **carte con il ripasso dilazionato** (6, #246, prima parte: dati,
 Leitner, schermo e voce, carte scritte a mano; sezione sotto), che danno i primi tentativi alla
 padronanza; dal 30/10 sera la **generazione delle carte** dal lettore (seconda parte,
-`studio_carte_genera`, ombra di serie; sezione sotto). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
+`studio_carte_genera`, ombra di serie; sezione sotto). Dal 30/10 sera la **mappa concettuale** (7, #247,
+prima parte: lo scheletro scritto a mano, la mia mappa, a memoria, il controllo del codice, il PDF;
+sezione sotto). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Moduli
@@ -37,6 +39,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Padronanza per argomento dai soli tentativi, lacune con la lezione successiva, previsione dalla padronanza (dal 30/10, passo 5, #245; schema «studio» alla versione 5; `studio_padronanza`, ombra di serie) | SQLite (`studio_tentativi`); libreria standard, niente modello | `calliope/studio/padronanza.py` → `calcola`, `parola`, `livello`, `lacune`; `calliope/studio/servizio.py` → `Studio.registra_tentativo`, `Studio.padronanza`, `padronanza_mostrata`; `calliope/schermi/pagina/studio.js` (la parola sulle tappe, «Da rinforzare»); prova `prove/prova_studio_padronanza.py` |
 | Carte e ripasso dilazionato: Leitner a cinque scatole, l'esito dalla persona o dal confronto del codice per le risposte chiuse, i tentativi «carta» (dal 30/10, passo 6, #246; schema «studio» alla versione 6) | SQLite (`studio_carte`, `studio_tentativi.carta`); libreria standard, niente modello | `calliope/studio/carte.py` → `prossima`, `da_ripassare`, `fra_quanto`, `chiusa`, `risposta_giusta`, `autovalutazione`, `testo_normale`; `calliope/studio/servizio.py` → `Studio.aggiungi_carta`, `correggi_carta`, `segna_carta`, `carte`, `da_ripassare`, `esito_carta`, `prossima_carta`, `carta_in_corso`, `risposta_letta`, `esito_a_voce`; `calliope/tools/studio.py` → `studio_carte`, azione `carte`; `calliope/schermi/server.py` → `POST /api/studio/carte`; `calliope/schermi/pagina/studio.js` (la sezione «Carte»); prova `prove/prova_studio_carte.py` |
 | Carte generate dalle pagine lette, controllo del codice, proposte confermate dalla persona (dal 30/10 sera, passo 6, seconda parte, #246; schema «studio» alla versione 7; `studio_carte_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato; `provenienza.racchiudi`, `parole`, `vicina` | `calliope/studio/genera.py` → `corpo`, `messaggi`, `blocco_argomenti`, `argomenti_rif`, `firma`, `forma_testo`, `leggi`, `proposte`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_carte`; `calliope/studio/servizio.py` → `Studio.verifiche_per_carte`, `proponi_carte`, `conferma_carte`; `calliope/schermi/server.py` → `POST /api/studio/carte` (azione `conferma`); `prove/manuali/banco_studio.py` (fase «carte»); prova `prove/prova_studio_carte_genera.py` |
+| Mappa concettuale: lo scheletro (a mano; dal lettore con la seconda parte), la mia mappa con le caselle, a memoria, il controllo deterministico, i tentativi «mappa», il PDF (dal 30/10 sera, passo 7, #247; schema «studio» alla versione 8; `studio_mappa_nodi_max`) | SQLite (`studio_mappe`, concetti e collegamenti in JSON); fpdf2 (extra `documenti`) coi font di `documenti/render.py`; nel browser SVG scritto a mano | `calliope/studio/mappa.py` → `testo_normale`, `uguale`, `verbo_simile`, `disposizione`, `scegli_caselle`, `parole_da_mettere`, `copia`, `controlla`, `esito_tentativo`; `calliope/studio/mappe.py` → `Mappe` (in `Studio`): `scrivi_scheletro`, `nodo_mappa`, `collega`, `riempi`, `tieni_mappa`, `conferma_scheletro`, `inizia_mappa`, `rifai_mappa`, `controlla_mappa`, `carte_dagli_errori`, `riordina_mappa`, `vista_mappe`, `pdf_mappa`, `_conto_mappa`; `calliope/studio/mappa_pdf.py` → `render`; `calliope/tools/studio.py` → azione `mappa`; `calliope/schermi/server.py` → `POST /api/studio/mappa`; `calliope/schermi/pagina/studio.js` (la sezione «Mappa»); prove `prove/prova_studio_mappa.py`, `prove/prova_studio_mappa_pagina.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
@@ -74,6 +77,109 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   per pagina dei numeri di pagina, nella sezione degli argomenti]*; (2) senza vLLM la pagina e la voce lo dicono con una
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
   vede»), non un «da leggere» muto.
+
+## La mappa concettuale (30/10 sera, issue #247, ramo `issue-247-studio-mappa`)
+
+*Passo 7 dell'epic #251; decisione [0035](../decisioni/0035-studio.md) punto 35; analisi nel
+commento della #247 (30/10); progetto § 5.4, Studio 10–11, decisione 5.*
+
+**Divisa in due PR.** Questa: i dati (schema 8), lo scheletro scritto a mano dalla persona o dal
+tutore, la mia mappa, la vista a elenco, il controllo del codice, a memoria, le carte dagli errori,
+il PDF, la voce e le due note della revisione della PR #325. La seconda: la **generazione dello
+scheletro** dal lettore (qwen3.6 con la guardia e il client della lettura, come le carte; concetti e
+collegamenti «proposti» con gli avvisi `da_controllare`, `pagina_con_istruzioni`, `testo_ordine`;
+`studio_mappa_genera`, ombra di serie) e la fase `mappa` del banco. Lo schema ha già `origine`
+«modello», lo stato «ombra» dello scheletro (mai alla persona) e gli avvisi per voce.
+
+**Le quattro fasi.** (1) **Lo scheletro**: concetti (al più `studio_mappa_nodi_max`, 12 di serie) e
+collegamenti col verbo, ogni concetto con l'argomento e le pagine; «proposto» finché la persona o il
+tutore non lo conferma («Conferma lo scheletro»: almeno 3 concetti; i proposti con un avviso restano
+proposti e si tengono uno per uno con «Tieni»). (2) **La mia mappa** («Parti da qui: fai la tua»,
+con il libro): la copia dello scheletro confermato con 2, 3 o 6 caselle vuote («Tanto / Medio / Poco
+aiuto»), che dicono la pagina dove cercare, e le parole da mettere con una di troppo; la persona
+riempie le caselle e aggiunge concetti e collegamenti suoi. (3) **A memoria**: la stessa copia senza
+pagine, «Rifai» per un giro nuovo con altre caselle, «Fanne carte» scrive una carta della persona per
+ogni casella da rivedere. (4) **Il PDF** della mia mappa, mai dello scheletro.
+
+**Le caselle** (`mappa.scegli_caselle`): mai tutte (almeno due concetti restano), il concetto con più
+collegamenti resta visibile finché si può; con la padronanza **mostrata** prima gli argomenti più
+deboli e l'aiuto dal livello (sotto 45 «tanto», sotto 75 «medio», poi «poco»); in ombra la padronanza
+non si usa (sarebbe mostrarla di nascosto) e il di serie è «medio». Il testo atteso non è nella copia
+né nella vista della mia mappa: sta solo nello scheletro.
+
+**Il controllo** (`mappa.controlla`), **del codice e mai del modello**: per ogni casella la parola
+messa contro il concetto dello scheletro (`uguale`: senza maiuscole, accenti e punteggiatura, o le
+stesse parole significative uguali o storpiate di una lettera, al più una in più; un sinonimo non
+vale: forma, non significato) → giusta, da rivedere, da riempire; i collegamenti dello scheletro che
+la persona ha tolto → **mancanti**, detti con un capo solo e le pagine («manca un collegamento da qui:
+guarda a p. 115»), mai con l'altro capo; quelli nuovi fra due concetti dello scheletro → **non nel
+quadro**, da controllare sul libro (una domanda, non un errore); un verbo cambiato (`verbo_simile`:
+metà delle parole) → «verbo diverso»; i collegamenti dei concetti propri non si giudicano.
+*Scartato*: il giudizio del modello sulla pagina citata (progetto § 5.4), per la consegna del passo;
+se servirà, con le misure.
+
+**Tentativi.** Ogni casella riempita, al primo «Controlla» del giro, è un tentativo di tipo «mappa»
+(peso 0,7, `padronanza.TIPI`) sull'argomento del concetto, con la fonte «codice»: con il libro una
+giusta vale «indizio» (le pagine erano aperte), a memoria «giusto»; da rivedere «sbagliato»; una
+casella vuota niente (la persona può non aver finito). Un secondo «Controlla» non ne scrive altri
+(`studio_mappe.tentati`); «Rifai» apre un giro nuovo.
+
+**Sullo schermo** (`studio.js`, telefono e PC personale; `POST /api/studio/mappa` fuori dalla
+conversazione come le carte: permessi dello Studio, orari del minore per le azioni, vista e PDF anche
+fuori orario, in ombra solo chi amministra «prova»): nella home, per ogni verifica, «Mappa» con la
+riga dei conti e «La mappa»; il pannello ha «Lo scheletro / La mia mappa / A memoria» e «Mappa /
+Elenco». **L'elenco è equivalente alla mappa** e si apre per primo: ogni concetto col suo stato, le
+pagine, l'esito e i collegamenti («→ arriva in → America»), il campo della casella con le parole
+suggerite (`datalist`) e «Metti», «Cambia», «Togli», «Tieni», «Collega da qui». La mappa è un SVG
+scritto a mano (in verticale sul telefono, in orizzontale sul PC; il testo in `<text>` con
+textContent): un concetto si sceglie toccandolo o con Invio, e il suo pannello ha gli stessi tasti più
+le frecce per spostarlo; si sposta anche trascinando, ma **niente si fa solo trascinando**.
+«+ Concetto» e «Collega» sono moduli con due elenchi e il verbo. «Riordina» rifà la disposizione del
+codice (`mappa.disposizione`: il centro col più collegamenti, i giri attorno, i riquadri allontanati
+finché non si sovrappongono). Giusta col bordo blu, da rivedere arancio, sempre anche a parole.
+Service worker alla v29.
+
+**Chi.** Lo scheletro lo cambiano la persona e il tutore del suo minore; **la mia mappa e a memoria
+solo la persona** (il tutore le vede e scarica il PDF): il PDF dice di chi è (*scelta prudente*, da
+confermare). Un altro adulto, chi amministra (per una persona che non è sua) e l'ospite mai, col «non
+c'è» di una verifica che non c'è. Una verifica fatta o archiviata si guarda e si scarica, non si
+cambia.
+
+**Il testo è un dato** chiunque l'abbia scritto: sullo schermo textContent o testo SVG; **non va mai
+al modello** (nessun tool lo legge); nel registro solo id, conti ed esiti; la vista «mappa» nei dati
+del turno dice solo verifica e «la mappa concettuale». A voce `studio` azione **`mappa`** (una
+lettura, come `carte`): «com'è la mia mappa?», «apri la mappa» → i conti e gli stati (scheletro da
+confermare o pronto, quanti concetti, caselle da riempire, l'ultimo controllo) e dove aprirla («nello
+Studio sul telefono o sul PC: Le mie cose, Studio, Mappa»); la voce non apre lo schermo.
+
+**Il PDF** (`mappa_pdf.render`, un formato solo, decisione 5): A4 orizzontale con «Mappa di Storia ·
+Leo», la data della verifica e «controllata il …» (o «non ancora controllata», «(cambiata dopo)»), i
+concetti nei riquadri (azzurri quelli del quadro, arancio chiaro quelli aggiunti) e le frecce col
+verbo; in seconda pagina lo schema a elenco. fpdf2 coi font di `documenti_font`; niente dipendenze
+native nuove. Si scarica con un blob dalla pagina: *da provare sull'iPhone* (lo scaricamento dalla PWA
+è fra i non provati, #59).
+
+**Schema «studio» alla versione 8**: `studio_mappe` (verifica, persona, tipo `scheletro | studente |
+memoria`, stato, origine, aiuto con le parole e il giro, concetti e collegamenti in JSON, l'ultimo
+controllo, quando, i tentativi già scritti) e `studio_verifiche.mappa_firma`, `mappa_esito`,
+`mappa_del` per la generazione. Le mappe vanno via con la verifica, con «dimentica» (non le
+archiviate), con `--svuota` (`conserva.TABELLE_STUDIO`); le orfane (una corsa con una cancellazione)
+sempre. *Alternative scartate*: tre tabelle (mappe, concetti, collegamenti) per una struttura piccola
+letta e scritta sempre intera; i file nella cartella dello Studio.
+
+**Le due note della revisione della PR #325**: `correggi_carta` su una carta dell'ombra dà «non c'è»
+come `segna_carta` (prima la rendeva attiva); le carte dell'ombra non contano nel tetto delle 300 per
+verifica (`aggiungi_carta`, `proponi_carte`).
+
+**Scelte prudenti di questa PR** (non coperte dalle decisioni scritte, da confermare): la mia mappa
+solo della persona; nessun tool che legge il testo della mappa; le caselle vuote non contano come
+tentativi; il di serie «medio» senza padronanza mostrata; il tetto di 12 concetti.
+
+Prove: `prova_studio_mappa.py` (a secco, ~4 s, col server vero per l'endpoint); in `prova_valore.py`
+`prova_mappa` attraverso `Brain` (uno scheletro del modello ostile confermato: «com'è la mia mappa?»
+non porta testi nella storia, «archivia» e «togli» non partono, «apri la mappa» è una lettura);
+`prova_studio_mappa_pagina.py` nella pagina vera (telefono 390×844 e 320×693, PC); lo schema 8 nelle
+prove dello Studio.
 
 ## Le carte generate dal lettore (30/10 sera, issue #246, ramo `issue-246-studio-carte-genera`)
 

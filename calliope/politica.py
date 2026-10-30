@@ -441,8 +441,9 @@ CLASSI: dict[str, Classe] = {
     # non legge il testo delle pagine né i titoli degli argomenti. «Archivia» tiene la verifica
     # per sempre: senza le parole nella frase chiede prima (chiedi_se). Dal 30/10 (passo 4b, #244)
     # anche «resoconto» e «riepilogo» leggono soltanto (proiezioni dei dati, frasi del codice)
+    # Dal 30/10 (passo 7, #247) «mappa»: i conti della mappa concettuale, mai il testo dei concetti
     "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi", "resoconto",
-                                                        "riepilogo", "carte"})),
+                                                        "riepilogo", "carte", "mappa"})),
                  cosa=lambda a: _studio_cosa(a), verbi_azione=("azione", VERBI_STUDIO),
                  chiedi_se=lambda testo, a, ctx, **_k: _studio_archivia(testo, a)),
     # il testo letto delle pagine e i titoli degli argomenti: dati non fidati, come una foto
@@ -495,7 +496,7 @@ VERBI = {
     "promemoria_imposta": r"ricord|promemoria|avvis|memo|dimentic|sposta|cambi|segn",
     "agenda_annulla": r"annull|cancell|togl|elimin|ferm|stop|bast|lev",
     # Per azione in VERBI_STUDIO (seconda revisione della PR #317); qui solo le letture
-    "studio": r"verific|piano|argoment|cart[ae]",
+    "studio": r"verific|piano|argoment|cart[ae]|mapp",
     "appuntamento_aggiungi": (r"appuntament|agenda|calendari|segn|impegn|visit|riunion|fiss|"
                               r"sposta|cambi|aggiung|prenot|cena|pranzo|incontr"),
     "lista_aggiungi": r"aggiung|segn|list|spes|compr|prend|manc|scriv|inser|finit",

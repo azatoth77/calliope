@@ -405,6 +405,27 @@
         return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
+    // Le mappe concettuali di una verifica (30/10, passo 7, #247, studio.js): {verifica, azione?,
+    // mappa?, …} → {scheletro, mia, memoria, argomenti…}; con azione «pdf» il PDF in un blob
+    async studioMappa(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        if (dati && dati.azione === "pdf") {
+          const f = await fetch("/api/studio/mappa", {
+            method: "POST", cache: "no-store", body: JSON.stringify(dati),
+            headers: { "Content-Type": "application/json", "X-Calliope-Sessione": S.sessione || "" },
+          });
+          if (f.status !== 200) {
+            let d = {};
+            try { d = await f.json(); } catch (e) { /* vuota */ }
+            return { ok: false, status: f.status, dati: d };
+          }
+          return { ok: true, status: 200, dati: {}, blob: await f.blob() };
+        }
+        const r = await postSessione("/api/studio/mappa", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
   };
 
   // Nuovo accesso con il token, finché non riesce. Le sessioni del server sono in memoria:

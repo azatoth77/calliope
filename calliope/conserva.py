@@ -728,7 +728,7 @@ TABELLE_MEMORIA = (("richieste_tutori", "minore", "creata"),)
 # «dimentica le nostre conversazioni» le toglie tranne le verifiche archiviate (main.py)
 TABELLE_STUDIO = ("studio_verifiche", "studio_materiali", "studio_pagine", "studio_argomenti",
                   "studio_piano", "studio_giorni", "studio_misure", "studio_eventi",
-                  "studio_tentativi", "studio_carte")
+                  "studio_tentativi", "studio_carte", "studio_mappe")
 # Le preferenze che non scadono col tempo ma vanno via con i dati della persona (27/10):
 # (tabella, colonna della persona). L'accento scelto in Io › Aspetto (schermi/aspetto.py)
 TABELLE_PREFERENZE = (("aspetto_preferenze", "persona"),)

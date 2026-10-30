@@ -30,6 +30,9 @@ il tool non c'è: dipende dall'installazione, come `stanza_cerca`):
   1861» non lo è; ma il modello qui non sceglie niente (né la carta né l'esito), e l'esito è una
   misura sui dati della persona (analisi nella #246).
   `studio` ha la lettura `carte` (quante da ripassare, solo conti).
+- Dal 30/10 (passo 7, #247) `studio` ha la lettura `mappa`: i conti e gli stati della mappa
+  concettuale e dove aprirla sullo schermo. Il testo dei concetti non va al modello: nessun tool lo
+  legge (decisione 0035 punto 35).
 
 **Chi.** Il profilo di chi parla (o del proprietario dello schermo per lo scritto e i tocchi);
 `None` per un ospite e per la zona grigia (voce incerta da un dispositivo non suo), come dice il
@@ -51,10 +54,11 @@ from .spec import ToolContext, ToolSpec, note_rule
 
 FAMILIARI = frozenset({"familiare", "amministra"})
 AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "sposta", "archivia", "tieni",
-          "togli", "riprova", "sessione", "resoconto", "riepilogo", "carte")
+          "togli", "riprova", "sessione", "resoconto", "riepilogo", "carte", "mappa")
 # «resoconto» e «riepilogo» (30/10, passo 4b, #244): proiezioni dei dati, frasi del codice;
-# «carte» (passo 6, #246): i conti delle carte, mai il loro testo
-LETTURE = frozenset({"stato", "piano", "oggi", "resoconto", "riepilogo", "carte"})
+# «carte» (passo 6, #246): i conti delle carte, mai il loro testo; «mappa» (passo 7, #247): i
+# conti e gli stati della mappa concettuale e dove aprirla, mai il testo dei concetti
+LETTURE = frozenset({"stato", "piano", "oggi", "resoconto", "riepilogo", "carte", "mappa"})
 # Le azioni che un tocco può chiedere (schermi/tocchi.py): sui dati della persona, reversibili
 DA_TOCCO = frozenset({"fatto", "salta_oggi", "tieni", "togli", "riprova", "sessione"})
 
@@ -500,6 +504,51 @@ def _carte_conto(ctx, svc, chi, v) -> dict:
     return _f(frase + ".", verifica=v["id"], da_ripassare=c["da_ripassare"])
 
 
+DOVE_MAPPA = "La mappa la trovi nello Studio sul telefono o sul PC: Le mie cose, Studio, Mappa."
+
+
+def _mappa_conto(ctx, svc, chi, v) -> dict:
+    """«Com'è la mia mappa?», «apri la mappa»: solo conti e stati e dove aprirla, mai il testo dei
+    concetti (un dato: viene dalle pagine, dal modello che le ha lette o da chi l'ha scritta;
+    decisione 0035 punto 35). La frase la scrive il codice."""
+    c = svc._conto_mappa(v)
+    nome = f"la verifica di {str(v['materia']).lower()}"
+    s, mia, mem = c["scheletro"], c["mia"], c["memoria"]
+    if s is None:
+        frase = (f"Per {nome} la mappa non c'è ancora: puoi scrivere lo scheletro tu, nello "
+                 "Studio.")
+    elif s["stato"] != "confermata":
+        frase = (f"Per {nome} c'è lo scheletro della mappa, con {s['concetti']} concetti: "
+                 "aspetta che lo confermi.")
+    elif mia is None:
+        frase = (f"Per {nome} lo scheletro è pronto, con {s['concetti']} concetti: puoi fare la "
+                 "tua mappa.")
+    else:
+        frase = (f"Nella tua mappa di {str(v['materia']).lower()} ci sono {mia['concetti']} "
+                 f"concetti")
+        if mia["caselle_vuote"]:
+            frase += (f" e {mia['caselle_vuote']} "
+                      + ("casella da riempire" if mia["caselle_vuote"] == 1 else
+                         "caselle da riempire"))
+        u = mia["ultimo"]
+        if u:
+            frase += (f". All'ultimo controllo {u['giusta']} giuste e {u['sbagliata']} "
+                      f"sbagliate" + (f", {u['mancanti']} collegamenti mancanti" if u["mancanti"]
+                                      else ""))
+        else:
+            frase += ", non ancora controllata"
+        frase += "."
+    if mem is not None and mem["ultimo"]:
+        frase += (f" A memoria, l'ultima volta: {mem['ultimo']['giusta']} giuste su "
+                  f"{sum(mem['ultimo'][k] for k in ('giusta', 'sbagliata', 'vuota'))}.")
+    out = _f(f"{frase} {DOVE_MAPPA}", verifica=v["id"])
+    # I conti anche per il modello (mai i testi)
+    out["mappa"] = {"scheletro": (s or {}).get("stato"),
+                    "concetti": (mia or {}).get("concetti") or (s or {}).get("concetti") or 0,
+                    "caselle_vuote": (mia or {}).get("caselle_vuote", 0)}
+    return out
+
+
 def _salta(ctx, svc, chi, v) -> dict:
     svc.salta_oggi(chi, persona=v["persona"])
     return _f("Va bene, oggi niente: ho spostato le pagine sui giorni che restano.")
@@ -675,6 +724,8 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _riepilogo(ctx, svc, chi, v)
         if azione == "carte":
             return _carte_conto(ctx, svc, chi, v)
+        if azione == "mappa":
+            return _mappa_conto(ctx, svc, chi, v)
         return _sessione(ctx, svc, chi, v, conoscenza, umore or None)
     except (NonTrovata, NonPermesso):
         return _f(NON_CE, ok=False)
@@ -920,7 +971,9 @@ DESCRIZIONE = (
     "«resoconto» di un giorno di studio («cosa ho fatto oggi?», «com'è andata ieri?», giorno "
     "facoltativo); «riepilogo» della preparazione di una verifica («a che punto sono con la "
     "verifica di storia?», «quanto mi manca?»); «carte» quante carte ci sono da ripassare (il "
-    "ripasso a voce è studio_carte). verifica: l'id, se lo sai (dai dati del turno); "
+    "ripasso a voce è studio_carte); «mappa» com'è la mappa concettuale e dove aprirla («com'è "
+    "la mia mappa?», «apri la mappa»: si fa sullo schermo). verifica: l'id, se lo sai (dai dati "
+    "del turno); "
     "altrimenti materia.")
 
 PARAMETRI = {"type": "object", "properties": {

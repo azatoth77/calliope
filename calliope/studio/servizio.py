@@ -70,6 +70,7 @@ from . import dati as D
 from . import piano as P
 from . import padronanza as PD
 from . import resoconto as R
+from .mappe import Mappe
 
 SPENTO, OMBRA, ATTIVO = "spento", "ombra", "attivo"
 MODI = (SPENTO, OMBRA, ATTIVO)
@@ -206,8 +207,9 @@ def _data(valore) -> datetime.date:
     return datetime.date.fromisoformat(str(valore).strip()[:10])
 
 
-class Studio:
-    """Lo Studio di questa installazione: un oggetto per processo."""
+class Studio(Mappe):
+    """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
+    #247) sono in `mappe.py`."""
 
     def __init__(self, cfg, registry=None, log=print, adesso=None):
         self.cfg = cfg
@@ -234,7 +236,10 @@ class Studio:
                        # La padronanza (passo 5): tentativi, misure del giorno, parole
                        "padronanza": {"tentativi": 0, "misure_giorno": 0, "parole": {}},
                        # Le carte (passo 6): quante scritte e gli esiti, da dove (mai il testo)
-                       "carte": {"scritte": 0, "esiti": {}, "codice": 0, "a_voce": 0}}
+                       "carte": {"scritte": 0, "esiti": {}, "codice": 0, "a_voce": 0},
+                       # Le mappe (passo 7, #247): quante, i controlli, i tentativi (mai il testo)
+                       "mappe": {"scheletri": 0, "mie": 0, "memoria": 0, "controlli": 0,
+                                 "tentativi": 0, "carte": 0}}
         # Il lettore delle pagine (passo 4.3, studio/lettura.py): lo crea `avvia_lettura`
         self.lettore = None
         # Perché non c'è il lettore (passo 4.5, nota della revisione della PR #314): None prima di
@@ -1200,8 +1205,10 @@ class Studio:
         pag = [int(x) for x in pagine or ()]
         if any(x not in sue for x in pag):
             raise ValueError("una pagina non è di questa verifica")
-        n = self.dati.uno("SELECT COUNT(*) AS n FROM studio_carte WHERE verifica = ?",
-                          (v["id"],))["n"]
+        # Le carte dell'ombra non contano nel tetto (revisione della PR #325, nota 2): non sono
+        # della persona e la generazione dopo le toglie
+        n = self.dati.uno("SELECT COUNT(*) AS n FROM studio_carte WHERE verifica = ? AND "
+                          "stato != 'ombra'", (v["id"],))["n"]
         if n >= C.CARTE_MAX:
             raise ValueError(f"al più {C.CARTE_MAX} carte per verifica")
         adesso = self.adesso().isoformat(timespec="seconds")
@@ -1225,6 +1232,10 @@ class Studio:
         scatola 1 se cambia la risposta."""
         self._scrivibile()
         c, v = self._carta(chi, cid)
+        if c["stato"] == "ombra":
+            # Una carta dell'ombra non è della persona: come `segna_carta` (revisione della PR
+            # #325, nota 1), mai «attiva» da una correzione
+            raise NonTrovata()
         d = C.testo_normale(domanda, C.DOMANDA_MAX) if domanda is not None else c["domanda"]
         r = C.testo_normale(risposta, C.RISPOSTA_MAX) if risposta is not None else c["risposta"]
         aid = c["argomento"] if argomento is self._UGUALE else self._argomento_di(v, argomento)
@@ -1344,8 +1355,8 @@ class Studio:
                                "'modello' AND stato IN ('proposta', 'ombra')", (int(vid),))
                     decise = {A.chiave(r[0]) for r in db.execute(
                         "SELECT domanda FROM studio_carte WHERE verifica = ?", (int(vid),))}
-                    tot = db.execute("SELECT COUNT(*) FROM studio_carte WHERE verifica = ?",
-                                     (int(vid),)).fetchone()[0]
+                    tot = db.execute("SELECT COUNT(*) FROM studio_carte WHERE verifica = ? AND "
+                                     "stato != 'ombra'", (int(vid),)).fetchone()[0]
                     adesso = self.adesso().isoformat(timespec="seconds")
                     stato = "ombra" if modo_ == G.OMBRA else "proposta"
                     for c in proposte:
@@ -1955,6 +1966,8 @@ class Studio:
                 "da_parte": self._da_parte(vid),
                 # Le carte (passo 6, #246): solo i conti; il testo lo dà /api/studio/carte
                 "carte": self._conto_carte(v),
+                # La mappa (passo 7, #247): solo conti e stati; il testo lo dà /api/studio/mappa
+                "mappa": self._conto_mappa(v),
                 # Il riepilogo e le sessioni (passo 4b, #244): righe scritte dal codice dai dati
                 "riepilogo": self._riepilogo_schermo(v, pi) if pi is not None else None,
                 # Fuori dal piano: i tolti (non gli uniti a un altro), per rimetterli con un tocco
@@ -2128,7 +2141,7 @@ class Studio:
     # ── la vista aperta nei dati del turno (30/10, passo 4.5; progetto § 0, punto 2) ──
     VISTE = {"home": "la home dello Studio", "piano": "il piano", "argomenti": "gli argomenti",
              "pagine": "le pagine", "pagina": "una pagina", "sessione": "la sessione di oggi",
-             "carte": "le carte"}
+             "carte": "le carte", "mappa": "la mappa concettuale"}
 
     def riga_vista(self, chi, vista: dict | None) -> str:
         """La riga per i dati del turno quando una pagina dello Studio è aperta sullo schermo

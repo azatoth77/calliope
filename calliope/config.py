@@ -2195,6 +2195,11 @@ class Config:
     # «spenta» niente. Si passa ad «attiva» col banco delle carte (prove/manuali/banco_studio.py,
     # fase «carte») e la rilettura delle carte in ombra
     studio_carte_genera: str = "ombra"
+    # La mappa concettuale (30/10, passo 7, #247, calliope/studio/mappa.py): al più tanti concetti
+    # per mappa (lo scheletro, la mappa dello studente, le ricostruzioni a memoria), e il doppio di
+    # collegamenti. Il progetto del 27/10 dice 10–15 per mappa, lo scheletro 6–10: una mappa più
+    # grande si divide per capitolo (un'altra verifica)
+    studio_mappa_nodi_max: int = 12
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3488,7 +3493,8 @@ SEZIONI: dict[str, list[str]] = {
                "studio_cartella", "studio_pagina_lato", "studio_pagina_max_mb",
                "studio_pdf_max_mb", "studio_pdf_max_pagine", "studio_pagine_max",
                "studio_pagine_al_minuto", "studio_nitidezza_min", "studio_lettura",
-               "studio_argomenti", "studio_padronanza", "studio_carte_genera"],
+               "studio_argomenti", "studio_padronanza", "studio_carte_genera",
+               "studio_mappa_nodi_max"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -3848,7 +3854,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "studio_pagina_lato": (640, 4000), "studio_pagina_max_mb": (1.0, 100.0),
     "studio_pdf_max_mb": (1.0, 200.0), "studio_pdf_max_pagine": (1, 500),
     "studio_pagine_max": (1, 1000), "studio_pagine_al_minuto": (1, 600),
-    "studio_nitidezza_min": (0.0, 100_000.0),
+    "studio_nitidezza_min": (0.0, 100_000.0), "studio_mappa_nodi_max": (4, 30),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),
