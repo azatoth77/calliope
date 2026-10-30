@@ -7,7 +7,11 @@
 // della verifica scelta: «Tieni», «Togli», «Rinomina» e «Conferma gli argomenti»
 // (POST /api/studio/argomenti). Dal 30/10 (passo 4.5, #284) la pagina si apre sulla home dello
 // Studio (POST /api/studio/home), anche sul PC personale; le pagine dei materiali sono una vista
-// sotto («Pagine»), solo sul telefono (la fotocamera e bordi.js).
+// sotto («Pagine»), solo sul telefono (la fotocamera e bordi.js). Dal 30/10 (passo 6, #246) le
+// carte: «Ripassa» una carta per volta (la domanda; «Mostra la risposta»; «Non la sapevo», «Quasi»,
+// «La sapevo» con la prossima volta scritta dal server) e «Le carte» con «Scrivi una carta»,
+// «Correggi», «Togli» (POST /api/studio/carte, fuori dalla conversazione come gli argomenti).
+// Domanda e risposta sono un dato: solo textContent, come i titoli.
 // I bordi li trova bordi.js su un fotogramma di 320 px; la foto parte intera (JPEG, lato ≤ 3000)
 // con i quattro angoli, e il server li ricontrolla, la raddrizza e decide (studio/pagine.py).
 // Tutto ciò che arriva dal server va in textContent. Niente URL blob: la CSP del telefono non li
@@ -535,6 +539,9 @@
     pagina_con_istruzioni: "viene da una pagina con un messaggio per un assistente",
     titolo_ordine: "il titolo sembra un ordine o un annuncio" };
   const home = { dati: null, carica: false, domande: null, scelte: {}, esito: "", attesa: {} };
+  // Le carte aperte su una verifica (passo 6, #246): {vid, modo: ripasso|elenco, dati, mostra,
+  // modulo: {carta?, domanda, risposta, argomento} | null, attesa, esito}
+  let carte = null;
 
   function nodo(tag, cls, testo) {
     const n = document.createElement(tag);
@@ -638,6 +645,7 @@
     if (st.materiali) tasti.append(pag);
     if (tasti.childNodes.length) art.append(tasti);
     if (home.domande === v.id) art.append(pannelloDomande(v));
+    if (v.stato === "aperta" || v.stato === "bozza") art.append(sezioneCarte(v));
     // Impara / Esercitati / Esame: solo ciò che c'è (passo 4.5: «leggi le pagine»)
     if (v.oggi) {
       const imp = nodo("section", "studio-h-gruppo");
@@ -755,6 +763,209 @@
     return art;
   }
 
+  // ── le carte (30/10, passo 6, #246) ──
+  function tastoCarte(testo, azione, dati, cls, etichetta) {
+    const b = nodo("button", "tasto studio-h-tasto" + (cls ? " " + cls : ""), testo);
+    b.type = "button";
+    b.dataset.carte = azione;
+    b.dataset.dati = JSON.stringify(dati || {});
+    if (etichetta) b.setAttribute("aria-label", etichetta);
+    b.disabled = !!(carte && carte.attesa);
+    return b;
+  }
+  function sezioneCarte(v) {
+    const sez = nodo("section", "studio-h-gruppo studio-h-carte");
+    sez.dataset.verifica = String(v.id);
+    sez.append(nodo("h4", "studio-h-sotto", "Carte"));
+    const c = v.carte || {};
+    const n = Number(c.da_ripassare) || 0, tot = Number(c.totali) || 0;
+    sez.append(nodo("p", "studio-h-riga", !tot ? "Nessuna carta: scrivi le domande che vuoi ripassare." :
+      n ? (n === 1 ? "Una carta da ripassare adesso." : n + " carte da ripassare adesso.") :
+      "Nessuna carta da ripassare adesso" + (c.prossima ? ": la prossima " + String(c.prossima) + "." : ".")));
+    const t = nodo("div", "studio-h-tasti");
+    const aperta = carte && carte.vid === v.id;
+    if (n) t.append(tastoCarte("Ripassa", "ripassa", { verifica: v.id }, "studio-h-primo"));
+    t.append(tastoCarte(aperta && carte.modo === "elenco" ? "Chiudi le carte" : "Le carte",
+      aperta && carte.modo === "elenco" ? "chiudi" : "elenco", { verifica: v.id }));
+    sez.append(t);
+    if (aperta) sez.append(carte.modo === "ripasso" ? pannelloRipasso() : pannelloElenco());
+    if (aperta && carte.esito) {
+      const es = nodo("p", "pagina-esito studio-c-esito", carte.esito);
+      es.setAttribute("role", "status");
+      sez.append(es);
+    }
+    return sez;
+  }
+  function cartaDi(id) {
+    const d = carte && carte.dati;
+    return d && Array.isArray(d.carte) ? d.carte.find((c) => c.id === id) || null : null;
+  }
+  function pannelloRipasso() {
+    const p = nodo("div", "studio-c-ripasso");
+    const d = carte.dati;
+    if (!d) { p.append(nodo("p", "pagina-nota", "Un attimo…")); return p; }
+    const coda = Array.isArray(d.da_ripassare) ? d.da_ripassare : [];
+    const c = coda.length ? cartaDi(coda[0]) : null;
+    if (!c) {
+      p.append(nodo("p", "studio-h-riga", "Per adesso le carte sono finite."),
+        tastoCarte("Chiudi", "chiudi", {}));
+      return p;
+    }
+    const carta = nodo("div", "studio-c-carta");
+    carta.dataset.carta = String(c.id);
+    carta.append(nodo("span", "studio-h-etichetta", "Carta · " + coda.length + " da ripassare"),
+      nodo("p", "studio-c-domanda", String(c.domanda || "")));
+    if (c.argomento_titolo) carta.append(nodo("span", "studio-nota", String(c.argomento_titolo)));
+    if (carte.mostra) {
+      carta.append(nodo("p", "studio-c-risposta", String(c.risposta || "")));
+      if (Array.isArray(c.pagine) && c.pagine.length) carta.append(nodo("span", "studio-nota", c.pagine.map(String).join(", ")));
+    }
+    p.append(carta);
+    const t = nodo("div", "studio-h-tasti studio-c-esiti");
+    if (!carte.mostra) {
+      t.append(tastoCarte("Mostra la risposta", "mostra", { carta: c.id }, "studio-h-primo"));
+    } else {
+      const k = c.tasti || {};
+      t.append(tastoCarte("Non la sapevo · " + String(k.non_sapevo || ""), "esito", { carta: c.id, esito: "non_sapevo" }),
+        tastoCarte("Quasi · " + String(k.quasi || ""), "esito", { carta: c.id, esito: "quasi" }),
+        tastoCarte("La sapevo · " + String(k.sapevo || ""), "esito", { carta: c.id, esito: "sapevo" }, "studio-h-primo"));
+    }
+    t.append(tastoCarte("Basta così", "chiudi", {}));
+    p.append(t);
+    return p;
+  }
+  const STATI_CARTA = { attiva: "", proposta: "proposta: controllala", tolta: "tolta dal ripasso" };
+  function pannelloElenco() {
+    const p = nodo("div", "studio-c-elenco");
+    const d = carte.dati;
+    if (!d) { p.append(nodo("p", "pagina-nota", "Un attimo…")); return p; }
+    const m = carte.modulo;
+    if (m) p.append(moduloCarta(m, d));
+    else p.append(tastoCarte("Scrivi una carta", "scrivi", {}, "studio-h-primo"));
+    const ul = nodo("ul", "studio-h-elenco");
+    for (const c of Array.isArray(d.carte) ? d.carte : []) {
+      const li = nodo("li", "studio-h-voce studio-c-voce" + (c.stato === "tolta" ? " studio-tolto" : ""));
+      const tx = nodo("div", "studio-testo");
+      tx.append(nodo("b", null, String(c.domanda || "")), nodo("span", "studio-c-risp", String(c.risposta || "")));
+      const info = [c.argomento_numero ? "argomento " + c.argomento_numero : "",
+        STATI_CARTA[c.stato] || "", c.stato === "attiva" && !c.nel_piano ? "argomento fuori dal piano" : "",
+        c.stato === "attiva" && c.nel_piano ? (c.da_ripassare ? "da ripassare" : c.fra ? "di nuovo " + c.fra : "") : "",
+        (Array.isArray(c.pagine) && c.pagine.length) ? c.pagine.map(String).join(", ") : ""].filter(Boolean).join(" · ");
+      if (info) tx.append(nodo("span", "studio-nota", info));
+      const nome = "«" + String(c.domanda || "").slice(0, 60) + "»";
+      const t = nodo("div", "studio-tasti");
+      t.append(tastoCarte("Correggi", "correggi", { carta: c.id }, "", "Correggi " + nome),
+        c.stato === "tolta" ? tastoCarte("Rimetti", "rimetti", { carta: c.id }, "", "Rimetti " + nome)
+          : tastoCarte("Togli", "togli", { carta: c.id }, "", "Togli " + nome));
+      li.append(tx, t);
+      ul.append(li);
+    }
+    if (ul.childNodes.length) p.append(ul);
+    return p;
+  }
+  function moduloCarta(m, d) {
+    const f = nodo("div", "studio-c-modulo");
+    const campo = (nome, etichetta, max) => {
+      const id = "studio-c-" + nome;
+      const l = nodo("label", "studio-campo", etichetta);
+      l.htmlFor = id;
+      const t = document.createElement("textarea");
+      t.id = id;
+      t.rows = 2;
+      t.maxLength = max;
+      t.className = "studio-c-campo";
+      t.dataset.campo = nome;
+      t.value = String(m[nome] || "");
+      return [l, t];
+    };
+    const mx = d.massimi || {};
+    f.append(...campo("domanda", "Domanda", Number(mx.domanda) || 240), ...campo("risposta", "Risposta", Number(mx.risposta) || 240));
+    const l = nodo("label", "studio-campo", "Argomento");
+    l.htmlFor = "studio-c-argomento";
+    const sel = document.createElement("select");
+    sel.id = "studio-c-argomento";
+    sel.className = "studio-scelta";
+    sel.dataset.campo = "argomento";
+    const o0 = nodo("option", null, "Nessuno");
+    o0.value = "";
+    sel.append(o0);
+    for (const a of Array.isArray(d.argomenti) ? d.argomenti : []) {
+      const o = nodo("option", null, String(a.numero) + ". " + String(a.titolo || ""));
+      o.value = String(a.id);
+      sel.append(o);
+    }
+    sel.value = m.argomento ? String(m.argomento) : "";
+    f.append(l, sel);
+    const t = nodo("div", "studio-h-tasti");
+    t.append(tastoCarte("Salva", "salva", {}, "studio-h-primo"), tastoCarte("Annulla", "annulla", {}));
+    f.append(t);
+    return f;
+  }
+  async function caricaCarte(vid, dati) {
+    if (!sch() || !sch().studioCarte) return;
+    carte.attesa = true;
+    disegnaHome();
+    const r = await sch().studioCarte(Object.assign({ verifica: vid }, dati || {}));
+    if (!carte || carte.vid !== vid) return;
+    carte.attesa = false;
+    if (!r.ok) {
+      carte.esito = String(r.dati.errore || "Non ci sono riuscita: riprova tra poco.");
+      disegnaHome();
+      return false;
+    }
+    carte.dati = r.dati;
+    carte.esito = r.dati.ultimo ? (r.dati.ultimo.esito === "non_sapevo" ? "La rivedi " : "La prossima volta: ") + String(r.dati.ultimo.fra || "") + "." : "";
+    disegnaHome();
+    return true;
+  }
+  async function suCarte(b) {
+    const art = b.closest("[data-verifica]");
+    const vid = Number(art && art.dataset.verifica);
+    let dati = {};
+    try { dati = JSON.parse(b.dataset.dati || "{}"); } catch (e) { return; }
+    const az = b.dataset.carte;
+    if (az === "ripassa" || az === "elenco") {
+      carte = { vid, modo: az === "ripassa" ? "ripasso" : "elenco", dati: null, mostra: false, modulo: null, attesa: false, esito: "" };
+      vista({ vista: "carte", verifica: vid });
+      await caricaCarte(vid);
+      return;
+    }
+    if (!carte || carte.vid !== vid) return;
+    if (az === "chiudi") { carte = null; vista({ vista: "home" }); caricaHome(); return; }
+    if (az === "mostra") { carte.mostra = true; disegnaHome(); return; }
+    if (az === "esito") {
+      carte.mostra = false;
+      await caricaCarte(vid, { azione: "esito", carta: dati.carta, esito: dati.esito });
+      return;
+    }
+    if (az === "scrivi") { carte.modulo = { domanda: "", risposta: "", argomento: null }; disegnaHome(); return; }
+    if (az === "correggi") {
+      const c = cartaDi(dati.carta);
+      if (!c) return;
+      carte.modulo = { carta: c.id, domanda: c.domanda, risposta: c.risposta, argomento: c.argomento };
+      disegnaHome();
+      return;
+    }
+    if (az === "annulla") { carte.modulo = null; disegnaHome(); return; }
+    if (az === "salva") {
+      const m = carte.modulo;
+      if (!m) return;
+      const domanda = String(m.domanda || "").trim(), risposta = String(m.risposta || "").trim();
+      if (!domanda || !risposta) { carte.esito = "Servono la domanda e la risposta."; disegnaHome(); return; }
+      const corpo = m.carta ? { azione: "correggi", carta: m.carta, domanda, risposta, argomento: m.argomento || null }
+        : { azione: "scrivi", domanda, risposta, argomento: m.argomento || null };
+      if (await caricaCarte(vid, corpo)) { carte.modulo = null; carte.esito = m.carta ? "Corretta." : "Scritta: è fra quelle da ripassare."; disegnaHome(); }
+      return;
+    }
+    if (az === "togli" || az === "rimetti") await caricaCarte(vid, { azione: az, carta: dati.carta });
+  }
+  function suCampoCarte(ev) {
+    const t = ev.target;
+    if (!t || !t.dataset || !t.dataset.campo || !carte || !carte.modulo) return;
+    const k = t.dataset.campo;
+    carte.modulo[k] = k === "argomento" ? (Number(t.value) || null) : t.value;
+  }
+
   function pannelloDomande(v) {
     const p = nodo("div", "studio-h-domande");
     const s = home.scelte;
@@ -800,6 +1011,7 @@
   async function suHome(ev) {
     const b = ev.target.closest && ev.target.closest("button");
     if (!b || b.disabled) return;
+    if (b.dataset.carte) { suCarte(b); return; }
     if (b.dataset.pagine) { apriMateriali(Number(b.dataset.pagine)); return; }
     if (b.dataset.domande) {
       const id = Number(b.dataset.domande);
@@ -877,6 +1089,7 @@
   }
   function chiudi() {
     st.aperta = false;
+    carte = null;
     if (st.materiali) chiudiCamera();
     if ($("studio")) $("studio").hidden = true;
     vista({ vista: null });
@@ -885,6 +1098,9 @@
   function avvia() {
     if (!$("studio") || !$("studio-home")) return;
     $("studio-home").addEventListener("click", suHome);
+    // I campi di «Scrivi una carta»: restano anche quando la home si ridisegna
+    $("studio-home").addEventListener("input", suCampoCarte);
+    $("studio-home").addEventListener("change", suCampoCarte);
     // «Il piano» aperto: la vista del piano (toggle non risale: in cattura)
     $("studio-home").addEventListener("toggle", (ev) => {
       const d = ev.target;
@@ -938,6 +1154,9 @@
       return { aperta: st.aperta, verifiche: st.verifiche.map((v) => v.id), invio: st.invio,
         home: home.dati ? { verifiche: (home.dati.verifiche || []).map((v) => v.id), sessione: home.dati.sessione,
           tocchi: !!home.dati.tocchi } : null, vista: vistaUltima,
+        carte: carte ? { vid: carte.vid, modo: carte.modo, mostra: carte.mostra, esito: carte.esito,
+          da_ripassare: carte.dati ? (carte.dati.da_ripassare || []).slice() : [],
+          carte: carte.dati ? (carte.dati.carte || []).map((c) => ({ id: c.id, stato: c.stato, scatola: c.scatola })) : [] } : null,
         camera: !!st.flusso,
         argomenti: st.arg && Array.isArray(st.arg.argomenti) ? st.arg.argomenti.map((a) => ({ id: a.id, stato: a.stato, avvisi: (a.avvisi || []).slice() })) : [],
         pagine: st.pagine.map((p) => ({ id: p.id, tipo: p.tipo, angoli: p.angoli, intera: !!p.intera, avvisi: p.avvisi.slice(),

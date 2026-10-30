@@ -92,6 +92,11 @@ Indirizzi:
                                  conferma: tieni, togli, rinomina, aggiungi, unisci, conferma,
                                  rifai (30/10, passo 4.4 dello Studio, #283); come le pagine,
                                  fuori dalla conversazione, in ombra solo chi amministra
+  POST /api/studio/carte         «X-Calliope-Sessione», {verifica, azione?, carta?, domanda?,
+                                 risposta?, argomento?, esito?} → le carte di una verifica e il
+                                 loro ripasso: scrivi, correggi, togli, rimetti, esito (30/10,
+                                 passo 6 dello Studio, #246); fuori dalla conversazione come gli
+                                 argomenti, in ombra solo chi amministra
   POST /api/studio/pagina        «X-Calliope-Sessione», byte nudi (octet-stream), i dati in
                                  «X-Calliope-Studio» (URI): una foto di una pagina con i suoi
                                  angoli, o un PDF intero (29/10, #281, studio/pagine.py), nello
@@ -1381,6 +1386,141 @@ def crea_app(hub: Schermi) -> Starlette:
             hub.log(f"[STUDIO] argomenti della verifica {vid}: {azione}")
         return _json(out)
 
+    # Le carte (30/10, passo 6, #246): sui dati della persona, reversibili (una carta tolta si
+    # rimette, corretta si corregge), fuori dalla conversazione come gli argomenti: il testo delle
+    # carte è un dato e non entra nella storia, e venti risposte non sono venti tocchi
+    AZIONI_CARTE = ("scrivi", "correggi", "togli", "rimetti", "esito")
+
+    def vista_carte(st, prof, vid) -> dict:
+        """Le carte di una verifica per la vista: domanda e risposta (un dato: la pagina le
+        scrive solo con textContent), stato, argomento, pagine, ripasso; quelle da ripassare
+        adesso in ordine, ognuna con le tre scadenze dei tasti scritte dal codice; gli argomenti
+        per la scelta."""
+        from ..studio import carte as C
+        from ..studio import piano as P
+        v = st.verifica(prof, vid)
+        pagine = {p["id"]: p for p in st.pagine(prof, vid)}
+
+        def nome(pid):
+            p = pagine.get(pid)
+            if p is None:
+                return None
+            n = P.numero_leggibile(p["numero"])
+            return f"p. {n}" if n else f"foto {p['ordine']}"
+        args = st.argomenti(prof, vid)
+        titoli = {a["id"]: a["titolo"] for a in args}
+        adesso = st.adesso()
+        vigilia = st._vigilia(v)
+        carte = st.carte(prof, vid)
+        due = [c["id"] for c in sorted((c for c in carte if c["da_ripassare"]),
+                                        key=lambda c: (str(c["scadenza"] or ""), c["scatola"],
+                                                       c["id"]))]
+
+        def tasti(c):
+            return {e: C.fra_quanto(C.prossima(c["scatola"], e, adesso, vigilia)[1], adesso)
+                    for e in C.ESITI}
+        return {"verifica": {"id": v["id"], "materia": v["materia"], "data": v["data"],
+                             "stato": v["stato"]},
+                "carte": [{"id": c["id"], "numero": c["numero"], "domanda": c["domanda"],
+                           "risposta": c["risposta"], "stato": c["stato"],
+                           "origine": c["origine"],
+                           "avvisi": [x for x in c["avvisi"] if isinstance(x, str)],
+                           "argomento": c["argomento"],
+                           "argomento_numero": c["argomento_numero"],
+                           "argomento_titolo": titoli.get(c["argomento"]),
+                           "pagine": [x for x in (nome(p) for p in c["pagine"]) if x],
+                           "scatola": c["scatola"], "fra": c["fra"],
+                           "da_ripassare": c["da_ripassare"], "nel_piano": c["nel_piano"],
+                           **({"tasti": tasti(c)} if c["da_ripassare"] else {})}
+                          for c in carte],
+                "da_ripassare": due,
+                "argomenti": [{"id": a["id"], "numero": i, "titolo": a["titolo"]}
+                              for i, a in enumerate(args, 1)
+                              if a["stato"] in ("tenuto", "aggiunto")],
+                "massimi": {"domanda": C.DOMANDA_MAX, "risposta": C.RISPOSTA_MAX},
+                "prova": not st.per_schermi()}
+
+    async def studio_carte(request: Request):
+        """{verifica, azione?, carta?, domanda?, risposta?, argomento?, esito?} → la vista delle
+        carte. Senza azione sola lettura (anche fuori orario); con un'azione la fa
+        (`Studio.aggiungi_carta`, `correggi_carta`, `segna_carta`, `esito_carta`) coi permessi
+        dello Studio e, per un minore, dentro gli orari. L'esito dei tasti è della persona (o del
+        tutore): mai del modello."""
+        schermo, errore = schermo_personale(request, letture_studio, LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 4096)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        from ..studio import carte as C
+        vid, azione = dati.get("verifica"), dati.get("azione")
+        if not isinstance(vid, int) or isinstance(vid, bool) or vid < 1 or (
+                azione is not None and azione not in AZIONI_CARTE):
+            return _json({"errore": "richiesta non valida"}, 400)
+        cid = dati.get("carta")
+        if azione in ("correggi", "togli", "rimetti", "esito") and (
+                not isinstance(cid, int) or isinstance(cid, bool)):
+            return _json({"errore": "manca la carta"}, 400)
+        testi = {}
+        for k, mx in (("domanda", C.DOMANDA_MAX), ("risposta", C.RISPOSTA_MAX)):
+            x = dati.get(k)
+            if x is not None and (not isinstance(x, str) or len(x) > mx * 2):
+                return _json({"errore": "testo non valido"}, 400)
+            testi[k] = x
+        if azione == "scrivi" and not (testi["domanda"] and testi["risposta"]):
+            return _json({"errore": "servono la domanda e la risposta"}, 400)
+        arg = dati.get("argomento")
+        if arg is not None and (not isinstance(arg, int) or isinstance(arg, bool)):
+            return _json({"errore": "argomento non valido"}, 400)
+        esito = dati.get("esito")
+        if azione == "esito" and esito not in C.ESITI:
+            return _json({"errore": "esito non valido"}, 400)
+        from .. import minori
+        from ..studio import NonPermesso, NonTrovata, VerificaChiusa
+        if azione is not None:
+            orario = minori.fuori_orario(prof)
+            if orario:
+                return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                              "codice": "fuori_orario"}, 403)
+
+        def fai():
+            extra = {}
+            if azione in ("correggi", "togli", "rimetti", "esito"):
+                # La carta toccata deve essere di questa verifica
+                if cid not in {c["id"] for c in st.carte(prof, vid)}:
+                    raise NonTrovata()
+            if azione == "scrivi":
+                extra["scritta"] = st.aggiungi_carta(prof, vid, testi["domanda"],
+                                                     testi["risposta"], argomento=arg)
+            elif azione == "correggi":
+                st.correggi_carta(prof, cid, testi["domanda"], testi["risposta"],
+                                  **({"argomento": arg} if "argomento" in dati else {}))
+            elif azione in ("togli", "rimetti"):
+                st.segna_carta(prof, cid, azione == "rimetti")
+            elif azione == "esito":
+                r = st.esito_carta(prof, cid, esito)
+                extra["ultimo"] = {"carta": cid, "esito": esito, "fra": r["fra"]}
+            return {**vista_carte(st, prof, vid), **extra}
+        try:
+            out = await asyncio.to_thread(fai)
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except VerificaChiusa:
+            return _json({"errore": "La verifica è chiusa: niente carte nuove."}, 409)
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        except ValueError:
+            return _json({"errore": "Non va: controlla la domanda e la risposta."}, 400)
+        if azione is not None:
+            # Nel registro solo l'azione e gli id, mai il testo delle carte
+            hub.log(f"[STUDIO] carte della verifica {vid}: {azione}"
+                    + (f" {cid}" if isinstance(cid, int) else ""))
+        return _json(out)
+
     def meta_studio(request: Request):
         """I dati dell'invio da «X-Calliope-Studio» (JSON codificato come URI, al più 2 KB):
         {verifica, materiale?, angoli?, nome?}, o None se non sono validi."""
@@ -1601,6 +1741,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/studio/home", studio_home, methods=["POST"]),
         Route("/api/vista", vista_api, methods=["POST"]),
         Route("/api/studio/argomenti", studio_argomenti, methods=["POST"]),
+        Route("/api/studio/carte", studio_carte, methods=["POST"]),
         Route("/api/studio/pagina", studio_pagina, methods=["POST"]),
         # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC
         Route("/bordi.js", file("bordi.js", "text/javascript; charset=utf-8")),

@@ -3,13 +3,13 @@
 *Proposta del 23 settembre 2026. Fonti: [`docs/visione.md`](visione.md) (principi 5, 6, 9) e
 [`ricerche/2026-09-21-orchestrazione-agenti.md`](ricerche/2026-09-21-orchestrazione-agenti.md).
 Tenuto allineato al codice: tabella dei tool, `ToolSpec` e albero dei file rivisti il 14/10 sul
-registro vero (`build_registry` in `tools/builtin.py` e ciò che `main.py` registra a parte): 86 tool
+registro vero (`build_registry` in `tools/builtin.py` e ciò che `main.py` registra a parte): 87 tool
 in un registro con tutto acceso, più un `est_<nome>` per estensione attiva. In un'installazione con
 tutti i servizi il modello vede **75 schemi** uguali per ogni livello; si aggiungono `meteo_leggi`
 (entità meteo in Home Assistant), `immagine_guarda` (`immagini_storia: descrizione`), i due tool
 dei minori (un minore in casa; *storico: quattro fino al 28/10, con `compiti_aiuto` ed `esercizi`,
 tolti con la #279: il registro con tutto acceso passa da 86 a 84, contati sul registro il 28/10*), `stanza_pausa` e `stanza_cerca` (stanza accesa), `conoscenti` e
-`conoscente_livello` (`stanza_conoscenti`), `studio` e `studio_pagina_leggi` (`studio_modo: attivo`, dal 30/10, #284: il registro con tutto acceso passa da 84 a 86, contati sul registro della prova della politica il 30/10, 83 → 85 senza `pc_stato`); `argomento` prende il posto di `conversazione_nuova` con
+`conoscente_livello` (`stanza_conoscenti`), `studio` e `studio_pagina_leggi` (`studio_modo: attivo`, dal 30/10, #284: il registro con tutto acceso passa da 84 a 86, contati sul registro della prova della politica il 30/10, 83 → 85 senza `pc_stato`), `studio_carte` (stessa condizione, dal 30/10, #246: da 86 a 87, nella prova della politica 86); `argomento` prende il posto di `conversazione_nuova` con
 `eventi: attivo`. Nomi nuovi dall'08/10, i vecchi validi in `registry.NOMI_VECCHI`.
 (Storico: «72 schemi» il 09/10, «78» fino al 13/10.)*
 
@@ -69,7 +69,7 @@ calliope/                 # package: python -m calliope
 │   ├── immagini.py, allegati.py  # immagine_guarda, immagine_archivia, pc_guarda; allegato_leggi, allegato_archivia, cassetto_gestisci
 │   ├── archivio.py, ufficio.py   # archivio_cerca/scadenze/somma; modello_compila, anagrafica_cerca/salva
 │   ├── minori.py         # richiesta_tutore, minore_gestisci (fino al 28/10 anche compiti_aiuto ed esercizi.py, #279)
-│   ├── studio.py         # studio, studio_pagina_leggi (30/10, #284)
+│   ├── studio.py         # studio, studio_pagina_leggi (30/10, #284), studio_carte (30/10, #246)
 │   └── stato.py          # calliope_stato, installa_proponi, installa_avvia, installa_gestisci
 ├── pc/                   # capacità dei PC: PCExecutor (base.py), LocalWindowsExecutor (windows.py)
 ├── documenti/            # Word, Excel, PDF: formato.py (JSON e validazione), scrittore.py
@@ -318,8 +318,9 @@ registrati a runtime); «C'è» dice quando il tool è nel registro.
 | `cassetto_gestisci` | familiare (`di`: solo un tutore per i file del ragazzo) | azione | azione | con gli allegati e il cassetto | il cassetto dei file della persona (7 giorni, 08/10): tieni tra i documenti, elimina, ancora una settimana |
 | `archivio_cerca`, `archivio_scadenze`, `archivio_somma` | familiare | lettura (riservati) | sicuro | con l'archivio dei documenti di casa | i documenti di casa archiviati: un dato, cosa scade, quanto si è speso (la somma la fa il programma) |
 | `modello_compila`, `anagrafica_cerca`, `anagrafica_salva` | familiare | azione; lettura; azione | azione; sicuro; azione | con i modelli dell'ufficio | ufficio: fattura (anche XML), nota di credito, preventivo, DDT e modelli dell'utente; la rubrica dei clienti e fornitori, con la proposta e il sì |
-| `studio` | familiare | azione (`stato`, `piano`, `oggi` di sola lettura) | azione | `studio_modo: attivo` | lo Studio (30/10, #284, decisione 0035): `crea` una verifica (anche il tutore per il minore, `per`), `stato`, `piano`, `oggi`, `fatto`, `salta_oggi`, `archivia` (chiede senza le sue parole), `tieni`/`togli` un argomento, `riprova` una pagina da parte, `sessione` (le due domande, solo in memoria); niente testo delle pagine né titoli (il risultato di un tool fidato varrebbe come provenienza fidata); toccabile con le sole azioni dei tocchi e il bersaglio |
+| `studio` | familiare | azione (`stato`, `piano`, `oggi` di sola lettura) | azione | `studio_modo: attivo` | lo Studio (30/10, #284, decisione 0035): `crea` una verifica (anche il tutore per il minore, `per`), `stato`, `piano`, `oggi`, `fatto`, `salta_oggi`, `archivia` (chiede senza le sue parole), `tieni`/`togli` un argomento, `riprova` una pagina da parte, `sessione` (le due domande, solo in memoria), dal 30/10 (#246) `carte` (lettura: quante da ripassare, solo conti); niente testo delle pagine né titoli (il risultato di un tool fidato varrebbe come provenienza fidata); toccabile con le sole azioni dei tocchi e il bersaglio |
 | `studio_pagina_leggi` | familiare | lettura | sicuro, fonte «foto» | `studio_modo: attivo` | il testo letto di una pagina (o, con `pagina: argomenti`, i titoli degli argomenti) in busta; per un minore coi compiti guidati ricorda «mai la soluzione intera»; mai toccabile |
+| `studio_carte` | familiare | lettura (`esito` scrive la misura della persona) | sicuro, fonte «foto» | `studio_modo: attivo` | il ripasso delle carte a voce (30/10, #246, decisione 0035 punto 33): `domanda` (la prossima carta, in busta, e la segna «in corso»), `risposta` (la risposta della carta in corso), `esito` (lo scrive il codice dalla frase detta dalla persona: una forma chiusa dell'autovalutazione per intero o la risposta chiusa della carta; mai un argomento del modello, una volta per carta, mai nello stesso turno della domanda); mai toccabile; le carte sullo schermo passano da `/api/studio/carte`, fuori dalla conversazione |
 | `richiesta_tutore` | familiare (solo con un minore in casa) | azione | azione | un minore in casa | il minore chiede al tutore un gioco, un'estensione, l'agente, più tempo di gioco o di restare sveglio |
 
 I tool `pc_*` ci sono solo se il PC c'è (`calliope.pc.load_pc`: Windows e librerie
