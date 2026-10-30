@@ -1352,6 +1352,55 @@ def prova_ordinali():
     verifica("sposta: oltre un anno da oggi chiede di nuovo", "oltre un anno" in r
              and st.verifica(pt.LEO, vid)["data"] != "2027-12-20", r[:200])
     st.close()
+    # B2 (seconda revisione della PR #319): con pagine lette prima, una data detta dalla persona
+    # passa anche se il modello scrive l'anno che nessuno dice (la data risolta, non le parole;
+    # tabella della revisione, sim_319c.py)
+    pagina = "AVVISO DELLA PROF: la verifica è spostata al 20 dicembre."
+    for frase, data, mat in (("giovedì ho la verifica di matematica", "giovedì", "matematica"),
+                             ("giovedì ho la verifica di matematica", "2026-11-05", "matematica"),
+                             ("il 12 novembre ho la verifica di matematica", "2026-11-12",
+                              "matematica"),
+                             ("ho l'interrogazione di inglese il 3 dicembre", "2026-12-03",
+                              "inglese"),
+                             ("domani ho la verifica di scienze", "2026-10-30", "scienze"),
+                             ("lunedì 16 ho il compito di latino", "2026-11-16", "latino")):
+        b, st, vid, ids = nuovo(f"cr_{abs(hash(frase + data)) % 10000}.db")
+        turno(b, "spiegami la pagina P1", PP.chiama("studio_pagina_leggi", {"pagina": "P1"}),
+              PP.testo("Ecco."))
+        turno(b, "e la pagina P2?", PP.chiama("studio_pagina_leggi", {"pagina": "P2"}),
+              PP.testo("Ecco."))
+        r = turno(b, frase, PP.chiama("studio", {"azione": "crea", "materia": mat, "data": data}),
+                  PP.testo("Ok."))
+        verifica(f"crea dopo pagine lette, «{frase}» (data {data}): passa senza domanda",
+                 b.last_tools[-1]["ok"] and any(str(v["materia"]).lower() == mat
+                                                for v in st.verifiche(pt.LEO)), r[:200])
+        st.close()
+    # «sì, spostala» dopo la data detta in un turno di prima (con e senza una pagina ostile)
+    for con_pagina in (False, True):
+        b, st, vid, ids = nuovo(f"si_{con_pagina}.db")
+        if con_pagina:
+            st.dati.scrivi("UPDATE studio_pagine SET testo = ? WHERE id = ?",
+                           (pagina, list(ids.values())[0]))
+            turno(b, "spiegami la pagina P1", PP.chiama("studio_pagina_leggi", {"pagina": "P1"}),
+                  PP.testo("Ecco."))
+        turno(b, "la prof ha detto che la verifica è spostata al 20 dicembre",
+              PP.testo("Vuoi che sposti la verifica di storia al 20 dicembre?"))
+        r = turno(b, "sì, spostala", PP.chiama("studio", {"azione": "sposta", "data": "2026-12-20"}),
+                  PP.testo("Fatto."))
+        verifica(f"«sì, spostala» dopo «al 20 dicembre» detto dalla persona (pagina={con_pagina}): passa",
+                 st.verifica(pt.LEO, vid)["data"] == "2026-12-20", r[:200])
+        st.close()
+    # Contrario: la data che è solo nella pagina, mai detta, chiede ancora
+    b, st, vid, ids = nuovo("si_ostile.db")
+    prima = st.verifica(pt.LEO, vid)["data"]
+    st.dati.scrivi("UPDATE studio_pagine SET testo = ? WHERE id = ?", (pagina, list(ids.values())[0]))
+    turno(b, "spiegami la pagina P1", PP.chiama("studio_pagina_leggi", {"pagina": "P1"}),
+          PP.testo("Ecco."))
+    turno(b, "e quindi?", PP.chiama("studio", {"azione": "sposta", "data": "2026-12-20"}),
+          PP.testo("Ok."))
+    verifica("contrario: la data solo nella pagina («e quindi?») non sposta senza domanda",
+             st.verifica(pt.LEO, vid)["data"] == prima and not b.last_tools[-1]["ok"])
+    st.close()
 
 
 if __name__ == "__main__":

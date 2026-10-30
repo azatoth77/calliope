@@ -164,6 +164,16 @@ una domanda, mai appuntamenti), il criterio dei compiti che accetta la guida sen
 risposta stampata quando un caso cade. Sulla DGX, da una cartella in /tmp con i file nuovi e il
 `.venv` della versione installata: **9 casi su 9 a 3/3**.
 
+**Dopo la seconda revisione della PR #319 (30/10 sera):** con `data` bersaglio, dopo una pagina
+letta anche le date dette dalla persona chiedevano, perché il modello scrive l'anno che nessuno
+dice. Ora per `studio.data` (`valore.DATE_DETTE`) una data vale della persona se dalle sue frasi
+(questa e quelle di prima) viene la stessa data risolta (`tools/studio.date_dette`: «oggi»,
+«domani», il nome del giorno, «lunedì 16», «il 12 novembre», «20/12», l'anno corrente o il
+prossimo); quelle solo nelle pagine o nei titoli chiedono ancora. Con una materia senza verifica
+`studio` non chiude più il turno con «non la trovo» (il modello può creare quella nominata), e la
+descrizione chiede la data come detta. Sulla DGX, tre giri: **11 casi su 11 almeno 2/3** (l'ultimo
+giro tutti 3/3).
+
 **Dopo la revisione della PR #319 (30/10 sera):** la data di `studio` (`crea` e `sposta`) è un
 bersaglio: una data scritta in una pagina o in un titolo («verifica spostata al 20 dicembre»)
 chiede, una detta dalla persona passa (scenari attraverso `Brain` in `prova_valore.py`); `crea` e
