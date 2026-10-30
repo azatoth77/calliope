@@ -761,6 +761,9 @@ class Turno:
     # entità di Home Assistant in «Taverna o Bagno della Taverna?», il titolo di uno sviluppo
     # dall'indice): valgono come parole della persona per la politica per valore
     domanda_fidata: str = ""
+    # La frase della persona del turno di prima, se Calliope ha chiuso la risposta con una
+    # domanda (terza revisione della PR #319): «al 20 dicembre» → «Vuoi che la sposti?» → «sì»
+    frase_prima_domanda: str = ""
     # La domanda della proposta in sospeso e che cosa propone (10/10: «Non ho capito: lo
     # chiudo?» a una risposta senza parole, `consenso_irriconoscibile`); `risposta_dato`: la
     # proposta chiede un dato, non un sì (la domanda dell'agente): lì vale qualunque risposta

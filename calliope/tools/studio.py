@@ -117,13 +117,19 @@ def _data_detta(testo, oggi: datetime.date) -> datetime.date | None:
 
 
 _MESI_RX = "|".join(MESI)
+_MATERIE_RX = "matematica|italiano|storia|geografia|scienze|inglese|francese|spagnolo|tedesco|" \
+              "tecnologia|arte|musica|fisica|chimica|latino|filosofia|diritto|economia|informatica"
 _GIORNI_RX = "|".join(g.replace("ì", "[iì]") for g in GIORNI)
 _DATA_TESTO = re.compile(
     rf"\b(oggi|domani|dopodomani)\b"
     rf"|\b({_GIORNI_RX})\b(?:\s+(\d{{1,2}})\b)?"
-    rf"|\b(\d{{1,2}})\s*(?:/|-|\.)\s*(\d{{1,2}})(?:\s*(?:/|-|\.)\s*(\d{{2,4}}))?\b"
+    # «20/12» (non «10-12» né «3.4»; non «7/10», un voto, né «1/2 pagina», «3/4 esercizi»)
+    rf"|\b(\d{{1,2}})\s*/\s*(\d{{1,2}})(?:\s*/\s*(\d{{2,4}}))?\b"
+    rf"(?!\s*(?:pagin|eserciz|{_MATERIE_RX}))"
     rf"|\b(\d{{1,2}})(?:\s+(?:di\s+)?({_MESI_RX}))\b"
-    rf"|\b(?:il|l')\s*(\d{{1,2}})\b(?!\s*(?:/|-|\.|(?:di\s+)?(?:{_MESI_RX})))", re.I)
+    # «il 16» (non «il 3 per cento», «il 3%», «il 20 euro», «il 16 anni»)
+    rf"|\b(?:il|l')\s*(\d{{1,2}})\b"
+    rf"(?!\s*(?:/|-|\.|%|per\s*cento|euro|ann[oi]|(?:di\s+)?(?:{_MESI_RX})))", re.I)
 
 
 def _giorno_mese(giorno: int, mese: int | None, oggi: datetime.date, anno: int | None = None) -> set:
@@ -163,6 +169,8 @@ def date_dette(testo, oggi: datetime.date) -> set:
                 out |= {d for d in _giorno_mese(int(gnum), None, oggi) if d.weekday() == i}
         elif d1:
             anno = int(a1) + (2000 if len(a1) == 2 else 0) if a1 else None
+            if int(m1) == 10 and not a1:
+                continue                      # «7/10» è un voto, non il 7 ottobre
             if 1 <= int(m1) <= 12:
                 out |= _giorno_mese(int(d1), int(m1), oggi, anno)
         elif d2:
@@ -172,13 +180,20 @@ def date_dette(testo, oggi: datetime.date) -> set:
     return out
 
 
+# Una frase che parla della verifica o della data (terza revisione della PR #319): solo lì una
+# data detta vale per lo Studio («venerdì ho calcetto» no)
+_TEMA_DATA = re.compile(r"verific|interrogaz|compit|esam|spost|rimand|anticip|slitt|rinvi|"
+                        r"\bdata\b", re.I)
+
+
 def data_detta_dalla_persona(valore, testi, oggi: datetime.date) -> bool:
     """La data del tool (`valore`: AAAA-MM-GG o il nome di un giorno) è una di quelle che la
-    persona ha detto nei `testi` (la frase del turno e le sue frasi recenti)?"""
+    persona ha detto nei `testi`: la frase del turno e, se Calliope aveva chiuso con una domanda,
+    la frase di prima; solo quelle che parlano della verifica o della data."""
     d = _data_detta(valore, oggi)
     if d is None:
         return False
-    return any(d in date_dette(x, oggi) for x in testi if x)
+    return any(d in date_dette(x, oggi) for x in testi if x and _TEMA_DATA.search(x))
 
 
 def _persona(ctx, chi, per) -> tuple[str | None, str | None]:

@@ -454,7 +454,10 @@ def data_della_persona(valore, t, ctx=None) -> bool:
         oggi = st._oggi() if st is not None else _dt.date.today()
     except Exception:  # noqa: BLE001
         oggi = _dt.date.today()
-    testi = (getattr(t, "testo", ""), getattr(t, "persona_txt", ""))
+    # Mai tutta la conversazione (terza revisione della PR #319: «venerdì ho calcetto» detto
+    # prima, poi una pagina «spostata a venerdì»): la frase del turno e, se Calliope aveva chiuso
+    # con una domanda, la frase della persona di prima (un turno solo, come domanda_fidata)
+    testi = (getattr(t, "testo", ""), getattr(t, "frase_prima_domanda", ""))
     try:
         return data_detta_dalla_persona(valore, testi, oggi)
     except Exception:  # noqa: BLE001 — nel dubbio la data resta com'era etichettata

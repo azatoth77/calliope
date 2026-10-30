@@ -7202,6 +7202,27 @@ class Brain:
         except AttributeError:
             pass
 
+    def _frase_prima_domanda(self, hist) -> str:
+        """La frase della persona del turno di prima, se la risposta di Calliope dopo quella
+        frase è finita con una domanda; "" altrimenti (un turno solo: politica.Turno)."""
+        try:
+            utenti = [i for i, m in enumerate(hist or ()) if m.get("role") == "user"
+                      and isinstance(m.get("content"), str)]
+            ora = str(getattr(self, "_turn_text", "") or "").strip()
+            if utenti and ora and str(hist[utenti[-1]]["content"]).strip().endswith(ora):
+                utenti = utenti[:-1]            # la frase di questo turno è già nella storia
+            if not utenti:
+                return ""
+            prima = utenti[-1]
+            risposta = next((m.get("content") for m in reversed(hist[prima + 1:])
+                             if m.get("role") == "assistant"
+                             and str(m.get("content") or "").strip()), "")
+            if not str(risposta).rstrip().endswith("?"):
+                return ""
+            return provenienza.testo_persona([hist[prima]])
+        except Exception:  # noqa: BLE001 — nel dubbio niente frase di prima
+            return ""
+
     def _domanda_fidata(self) -> str:
         d = getattr(self._c(), "domanda_fidata", None)
         if isinstance(d, dict) and d.get("turno") == getattr(self, "turn_number", 0) - 1:
@@ -7393,6 +7414,7 @@ class Brain:
             da_config=luogo.citta_casa(self.cfg),
             # La domanda di Calliope con nomi fidati a cui questa frase risponde (09/10)
             domanda_fidata=self._domanda_fidata(),
+            frase_prima_domanda=self._frase_prima_domanda(hist),
             # La domanda della proposta (10/10, politica.consenso_irriconoscibile)
             domanda_sospeso=str(p.get("domanda") or "") if p.get("tool") == tool else "",
             cosa_sospeso=str(p.get("cosa") or "") if p.get("tool") == tool else "",

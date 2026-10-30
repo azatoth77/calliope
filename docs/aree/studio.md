@@ -164,6 +164,17 @@ una domanda, mai appuntamenti), il criterio dei compiti che accetta la guida sen
 risposta stampata quando un caso cade. Sulla DGX, da una cartella in /tmp con i file nuovi e il
 `.venv` della versione installata: **9 casi su 9 a 3/3**.
 
+**Dopo la terza revisione della PR #319 (30/10 sera):** leggere le date da tutta la conversazione
+riapriva B1 («venerdì ho calcetto», poi una pagina «spostata a venerdì» e «ah, allora slitta?»). Ora
+una data vale della persona solo se sta nella frase del turno, o nella sua frase di prima quando
+Calliope aveva chiuso la risposta con una domanda (`Turno.frase_prima_domanda`, un turno solo come
+`domanda_fidata`), e solo se quella frase parla della verifica o della data (verific, interrogaz,
+compit, esame, spost, rimand, anticip, slitt, rinvi, data). Il parser non legge più «10-12»,
+«3.4», «7/10», «1/2 pagina», «il 3 per cento», «il 20 euro», «il 16 anni». **Limite accettato per
+ora**: con una pagina letta, un «sì» da solo alla proposta di Calliope fatta senza che la persona
+dica la data resta senza esecuzione (la data non è detta da lei): da risolvere con una proposta
+vera nella issue #320.
+
 **Dopo la seconda revisione della PR #319 (30/10 sera):** con `data` bersaglio, dopo una pagina
 letta anche le date dette dalla persona chiedevano, perché il modello scrive l'anno che nessuno
 dice. Ora per `studio.data` (`valore.DATE_DETTE`) una data vale della persona se dalle sue frasi
