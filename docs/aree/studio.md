@@ -143,6 +143,14 @@ storia vale «non dato» (`tools/studio.senza_mascherati`, regola `studio_masche
 prende «va tolto»; `_CHIAVI_DATO` scritto in [sicurezza-politica](sicurezza-politica.md). Prove
 in `prova_valore.py` (`prova_ordinali`).
 
+**Dopo la quarta revisione della PR #317 (30/10):** «articolo + ordinale» vale una posizione
+solo se dopo viene la fine della frase, una punteggiatura, «argomento», «voce», «pagina», «che» o
+«quello» («la prima cosa da fare», «faccio la prima superiore», «la terza media», «le prime
+pagine» no); «ordinale + nome» solo al singolare. Dopo «togli» la frase dice il titolo e «se non
+era quello, dimmi «rimettilo»», e «rimettilo» porta a `tieni`. La home ha «Fuori dal piano» con
+gli argomenti tolti (non gli uniti) e «Tieni» col tocco. Prove in `prova_valore.py`
+(`prova_ordinali`: i contrari, S10 attraverso `Brain`, «rimettilo», i tolti della home).
+
 **Le note delle revisioni, chiuse:**
 - `piano_non_aggiornato` quando il ricalcolo fallisce (`_piano_vivo`), detto a parole dal tool e
   dalla home; la prova controlla `errori`;

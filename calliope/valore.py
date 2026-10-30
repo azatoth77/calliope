@@ -429,9 +429,15 @@ ORDINALI = {f"{radice}{fine}": str(n) for n, radice in enumerate(
     ("prim", "second", "terz", "quart", "quint", "sest", "settim", "ottav", "non", "decim"), 1)
     for fine in ("o", "a", "i", "e")}
 _ORD = "|".join(sorted(ORDINALI, key=len, reverse=True))
+_ORD_SING = "|".join(sorted((o for o in ORDINALI if o[-1] in "oa"), key=len, reverse=True))
 _ORDINALE_DETTO = re.compile(
-    rf"(?:\b(?:il|lo|la|i|gli|le)\s+|\bl['’]\s*)({_ORD})\b(?!\s+(?:di|o|me|te|lui|lei|noi|voi|loro|volta|d['’]))"
-    rf"|\b({_ORD})\s+(?:argoment[oi]|voc[ei]|pagin[ae])\b", re.I)
+    # dopo l'ordinale: la fine, una punteggiatura, argomento/voce/pagina, «che» o «quello»
+    # (quarta revisione della PR #317: «la prima cosa da fare», «faccio la prima superiore»,
+    # «la terza media», «il primo ministro» non sono posizioni)
+    rf"(?:\b(?:il|lo|la|i|gli|le)\s+|\bl['’]\s*)({_ORD})\b"
+    rf"(?=\s*(?:$|[.,;:!?)»]|(?:argomento|voce|pagina|che|quell[oa])\b))"
+    # «secondo argomento», al singolare («le prime pagine» non è una posizione)
+    rf"|\b({_ORD_SING})\s+(?:argomento|voce|pagina)\b", re.I)
 # Gli argomenti che sono una posizione in un elenco detta a voce («tieni il secondo»)
 POSIZIONI = frozenset({("studio", "numero")})
 

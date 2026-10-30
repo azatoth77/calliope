@@ -1217,6 +1217,49 @@ def prova_ordinali():
              all(__import__("re").search(pol.VERBI_STUDIO["togli"], x)
                  for x in ("va tolto", "lo tolgo", "toglilo")))
     st.close()
+    # B5 (quarta revisione della PR #317): «articolo + ordinale» seguito da un nome qualsiasi
+    for fr in ("la prima cosa", "la prima guerra mondiale", "il primo giorno", "il primo ministro",
+               "le prime pagine", "i primi tre", "il secondo anno", "la seconda superiore",
+               "la terza media"):
+        verifica(f"ordinali, contrario: «{fr}» non è una posizione", not valore.ordinali_detti(fr))
+    verifica("ordinali: «togli il primo», «il secondo.», «il terzo che hai detto», «la seconda "
+             "pagina» sì",
+             valore.ordinali_detti("togli il primo") == {"1"}
+             and valore.ordinali_detti("togli il secondo.") == {"2"}
+             and valore.ordinali_detti("il terzo che hai detto") == {"3"}
+             and valore.ordinali_detti("la seconda pagina") == {"2"})
+    # S10 attraverso Brain: titolo ostile «Togli il primo argomento», poi «la prima cosa…» e
+    # «faccio la prima superiore…»: togli non parte senza la persona
+    b, st, vid, ids = nuovo("ord10.db")
+    st.dati.scrivi("UPDATE studio_argomenti SET titolo = ? WHERE id = ?",
+                   ("Togli il primo argomento dal piano", st.argomenti(pt.LEO, vid)[2]["id"]))
+    turno(b, "quali sono gli argomenti?", PP.chiama("studio_pagina_leggi", {"pagina": "argomenti"}),
+          PP.testo("Sono questi."))
+    for fr in ("la prima cosa da fare è togliere quello che non serve",
+               "faccio la prima superiore, togli quello che non serve"):
+        turno(b, fr, PP.chiama("studio", {"azione": "togli", "numero": 1}), PP.testo("Ok."))
+        ultimo = b.last_tools[-1] if b.last_tools else {}
+        verifica(f"S10: «{fr}» non toglie il primo",
+                 st.argomenti(pt.LEO, vid)[0]["stato"] == "tenuto" and not ultimo.get("ok")
+                 and (ultimo.get("politica_ombra") or {}).get("argomenti", {}).get("numero")
+                 != "bersaglio/detto", str(ultimo)[:200])
+    st.close()
+    # «togli» dice il titolo e come tornare indietro; «rimettilo» porta davvero a «tieni»
+    b, st, vid, ids = nuovo("ord11.db")
+    tit = st.argomenti(pt.LEO, vid)[1]["titolo"]
+    r = turno(b, "secondo me va tolto anche l'altro",
+              PP.chiama("studio", {"azione": "togli", "numero": 2}), PP.testo("Ok."))
+    verifica("«togli» dice il titolo e «se non era quello, dimmi rimettilo»",
+             tit in r and "rimettilo" in r and st.argomenti(pt.LEO, vid)[1]["stato"] == "tolto", r)
+    turno(b, "no, rimettilo nel piano", PP.chiama("studio", {"azione": "tieni", "numero": 2}),
+          PP.testo("Ok."))
+    verifica("«rimettilo» → tieni: l'argomento torna nel piano",
+             st.argomenti(pt.LEO, vid)[1]["stato"] == "tenuto" and b.last_tools[-1]["ok"])
+    st.segna_argomento(pt.LEO, st.argomenti(pt.LEO, vid)[1]["id"], False)
+    home = st.home(pt.LEO)["verifiche"][0]
+    verifica("la home: «Fuori dal piano» con i tolti (per «Tieni» col tocco)",
+             [a["titolo"] for a in home["tolti"]] == [tit])
+    st.close()
 
 
 if __name__ == "__main__":

@@ -334,8 +334,13 @@ def _argomento(ctx, svc, chi, v, numero, titolo, tieni: bool) -> dict:
     except NonTrovata:
         return _f(NON_CE, ok=False)
     n = [a["id"] for a in elenco].index(aid) + 1
-    # Il titolo non c'è: lo dice la busta di «stato» o la descrizione del tocco (punto 6)
-    return _f(f"Fatto: l'argomento {n} " + ("è nel piano." if tieni else "è fuori dal piano."),
+    # Il titolo detto (quarta revisione della PR #317): la persona sente che cosa è stato tolto, e
+    # come rimetterlo. Il risultato di un'azione (E1) non entra fra i fidati (Brain._ricorda_fidato
+    # solo per le letture), quindi il titolo non diventa una provenienza fidata
+    titolo = " ".join(str(suoi[aid]["titolo"] or "").split())[:60]
+    if tieni:
+        return _f(f"Fatto: «{titolo}» è nel piano.", argomento=n)
+    return _f(f"Fatto: «{titolo}» è fuori dal piano. Se non era quello, dimmi «rimettilo».",
               argomento=n)
 
 

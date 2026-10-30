@@ -1248,7 +1248,10 @@ class Studio:
                 "argomenti": {"tenuti": sum(a["stato"] in D.ARGOMENTI_DEL_PIANO for a in args),
                               "proposti": sum(a["stato"] == "proposto" for a in args),
                               "da_decidere": decidere},
-                "da_parte": self._da_parte(vid)}
+                "da_parte": self._da_parte(vid),
+                # Fuori dal piano: i tolti (non gli uniti a un altro), per rimetterli con un tocco
+                "tolti": [{"id": a["id"], "titolo": a["titolo"]} for a in args
+                          if a["stato"] == "tolto" and "unito" not in a["avvisi"]]}
 
     # ── la vista aperta nei dati del turno (30/10, passo 4.5; progetto § 0, punto 2) ──
     VISTE = {"home": "la home dello Studio", "piano": "il piano", "argomenti": "gli argomenti",

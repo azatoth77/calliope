@@ -668,6 +668,20 @@
       }
       art.append(ul);
     }
+    // Fuori dal piano: gli argomenti tolti, rimessi con «Tieni» (studio_tieni)
+    const tolti = Array.isArray(v.tolti) ? v.tolti : [];
+    if (tolti.length) {
+      art.append(nodo("h4", "studio-h-sotto", "Fuori dal piano"));
+      const ul = nodo("ul", "studio-h-elenco");
+      for (const a of tolti) {
+        const li = nodo("li", "studio-h-voce");
+        const tx = nodo("div", "studio-testo");
+        tx.append(nodo("b", null, String(a.titolo || "")));
+        li.append(tx, tastoHome("Tieni", "studio_tieni", { verifica: v.id, argomento: a.id }));
+        ul.append(li);
+      }
+      art.append(ul);
+    }
     // Le pagine messe da parte («da_parte» detto a parole) con «Riprova»
     for (const p of v.da_parte || []) {
       const li = nodo("div", "studio-h-voce");
