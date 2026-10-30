@@ -18,7 +18,10 @@ Nel browser vero (Edge o Chromium senza finestra; senza si salta), server degli 
   d'animo solo nei dati del tocco;
 - «Fatto» (30/10, #244): il resoconto nella risposta del tool; la home mostra «La preparazione» e
   «Le sessioni» (righe scritte dal server dai soli dati, textContent, mai lo stato d'animo);
-- la vista aperta: la home e «Il piano» arrivano al server (`hub.viste_studio`);
+- le carte (30/10, passo 6, #246): «Ripassa», la domanda sola, «Mostra la risposta», i tre esiti
+  con la prossima volta scritta dal server, il tentativo della persona; «Le carte», «Scrivi una
+  carta» (una domanda con l'HTML resta testo), tutto in textContent e con tocchi ≥ 44 px;
+- la vista aperta: la home, «Il piano» e le carte arrivano al server (`hub.viste_studio`);
 - il PC personale: la stessa home nella colonna centrale, senza «Pagine» (la fotocamera è del
   telefono);
 - nessun errore JavaScript né violazione della CSP.
@@ -73,6 +76,9 @@ def prepara(st):
     st.dati.scrivi("UPDATE studio_pagine SET stato = 'da_parte' WHERE id = ?", (ids[2],))
     st.aggiungi_misura(LEO, vid, 40, "carte", giorno=st._oggi() - datetime.timedelta(days=2))
     st.aggiungi_misura(LEO, vid, 55, "carte", giorno=st._oggi() - datetime.timedelta(days=1))
+    a0 = st.argomenti(LEO, vid)[0]["id"]
+    st.aggiungi_carta(LEO, vid, MAT["domande"][0]["domanda"], "1453", argomento=a0)
+    st.aggiungi_carta(LEO, vid, "Chi scoprì l'America?", "Cristoforo Colombo")
     return vid, aid, ids[2]
 
 
@@ -181,6 +187,7 @@ def scenario_telefono(t, hub, st, vid, aid, pid, ctx_fn):
                      ".every((e) => e.children.length === 0)")
              and "poca energia" not in prep + " ".join(sess), str(sess))
     misure(t, "390×844 con le sessioni")
+    scenario_carte(t, hub, st, vid)
     # Il piano aperto: la vista del piano
     aspetta(lambda: t.v("!document.querySelector('.studio-h-domande') && !!document.querySelector('.studio-h-piano')"), 6)
     time.sleep(0.3)
@@ -195,6 +202,75 @@ def scenario_telefono(t, hub, st, vid, aid, pid, ctx_fn):
     misure(t, "320×693 col testo grande")
     B.foto(t, "studio-home-320x693-grande.png")
     t.v("document.documentElement.style.fontSize = ''; 1")
+
+
+def scenario_carte(t, hub, st, vid):
+    """Le carte (passo 6, #246): il ripasso una carta per volta e «Scrivi una carta»."""
+    testo = t.v("(document.querySelector('.studio-h-carte') || {}).innerText || ''") or ""
+    verifica("le carte: «2 carte da ripassare adesso» e «Ripassa»",
+             "2 carte da ripassare adesso" in testo
+             and t.v("!!document.querySelector('button[data-carte=\"ripassa\"]')"), testo[:200])
+    t.tocca('button[data-carte="ripassa"]')
+    ok = aspetta(lambda: t.v("!!document.querySelector('.studio-c-domanda')"), 6)
+    dom = t.v("(document.querySelector('.studio-c-domanda') || {}).textContent || ''") or ""
+    verifica("«Ripassa»: la domanda sola, la risposta no",
+             bool(ok) and dom == MAT["domande"][0]["domanda"]
+             and not t.v("!!document.querySelector('.studio-c-risposta')"), dom)
+    vs = aspetta(lambda: any((hub.viste_studio.di(k) or [{}])[0].get("vista") == "carte"
+                             for k in list(hub.viste_studio._d)), 4)
+    verifica("le carte aperte: la vista arriva al server", bool(vs))
+    t.tocca('button[data-carte="mostra"]')
+    ok = aspetta(lambda: t.v("!!document.querySelector('.studio-c-risposta')"), 4)
+    tasti = t.v("[...document.querySelectorAll('.studio-c-esiti button')].map((b) => b.textContent)") or []
+    verifica("«Mostra la risposta»: la risposta e i tre esiti con la prossima volta",
+             bool(ok) and t.v("document.querySelector('.studio-c-risposta').textContent") == "1453"
+             and tasti[:3] == ["Non la sapevo · fra 10 minuti", "Quasi · domani",
+                               "La sapevo · fra 2 giorni"], str(tasti))
+    misure(t, "390×844 con una carta")
+    B.foto(t, "studio-carta-390x844.png")
+    t.tocca('button[data-carte="esito"][data-dati*="sapevo"]:not([data-dati*="non_sapevo"])')
+    ok = aspetta(lambda: len(st.dati.tutti("SELECT * FROM studio_tentativi")) == 1, 6)
+    tent = st.dati.tutti("SELECT * FROM studio_tentativi")
+    verifica("«La sapevo»: un tentativo «giusto» della persona sull'argomento della carta",
+             bool(ok) and tent and tent[0]["esito"] == "giusto" and tent[0]["fonte"] == "persona",
+             str(tent))
+    ok = aspetta(lambda: t.v("(document.querySelector('.studio-c-domanda') || {}).textContent")
+                 == "Chi scoprì l'America?", 6)
+    esito = t.v("(document.querySelector('.studio-c-esito') || {}).textContent || ''") or ""
+    verifica("poi la carta dopo, e l'esito detto («La prossima volta: fra 2 giorni.»)",
+             bool(ok) and "fra 2 giorni" in esito, esito)
+    t.tocca('button[data-carte="mostra"]')
+    aspetta(lambda: t.v("!!document.querySelector('.studio-c-risposta')"), 4)
+    t.tocca('button[data-carte="esito"][data-dati*="non_sapevo"]')
+    ok = aspetta(lambda: "finite" in (t.v("(document.querySelector('.studio-c-ripasso') || {}).textContent || ''") or ""), 6)
+    verifica("«Non la sapevo» sull'ultima: per adesso finite (torna fra 10 minuti)", bool(ok))
+    # Le carte: l'elenco e «Scrivi una carta» (una domanda con l'HTML resta testo)
+    t.tocca('button[data-carte="elenco"]')
+    aspetta(lambda: t.v("!!document.querySelector('button[data-carte=\"scrivi\"]')"), 6)
+    t.tocca('button[data-carte="scrivi"]')
+    aspetta(lambda: t.v("!!document.getElementById('studio-c-domanda')"), 4)
+    t.v("""(() => { const d = document.getElementById('studio-c-domanda');
+      d.value = '<img src=x onerror=window.__x=1> Chi era Magellano?';
+      d.dispatchEvent(new Event('input', { bubbles: true }));
+      const r = document.getElementById('studio-c-risposta');
+      r.value = 'Un navigatore'; r.dispatchEvent(new Event('input', { bubbles: true }));
+      const s = document.getElementById('studio-c-argomento');
+      s.selectedIndex = 1; s.dispatchEvent(new Event('change', { bubbles: true })); return 1; })()""")
+    misure(t, "390×844 con «Scrivi una carta»")
+    t.tocca('button[data-carte="salva"]')
+    ok = aspetta(lambda: any("Magellano" in c["domanda"] for c in st.carte(LEO, vid)), 6)
+    nuova = next((c for c in st.carte(LEO, vid) if "Magellano" in c["domanda"]), {})
+    verifica("«Scrivi una carta»: la carta col suo argomento, attiva",
+             bool(ok) and nuova.get("argomento") == st.argomenti(LEO, vid)[0]["id"]
+             and nuova.get("stato") == "attiva", str(nuova))
+    aspetta(lambda: t.v("[...document.querySelectorAll('.studio-c-voce b')].some((b) => b.textContent.includes('Magellano'))"), 6)
+    verifica("la domanda con l'HTML resta testo: nessuna immagine, nessuno script",
+             t.v("!document.querySelector('.studio-c-elenco img') && !window.__x")
+             and t.v("[...document.querySelectorAll('.studio-c-voce b, .studio-c-voce .studio-c-risp')]"
+                     ".every((e) => e.children.length === 0)"))
+    misure(t, "390×844 con l'elenco delle carte")
+    t.tocca('button[data-carte="chiudi"]')
+    aspetta(lambda: not t.v("!!document.querySelector('.studio-c-elenco')"), 4)
 
 
 def scenario_pc(t, hub):

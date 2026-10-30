@@ -40,6 +40,12 @@ le risposte), «fatto»/«non_fatto» (`giorno_fatto`), «saltato» (`salta_oggi
 serie) si calcola e si misura soltanto; con «mostrata» va sulla home, nel riepilogo e nella
 previsione.
 
+**Carte** (30/10, passo 6, #246): le carte di una verifica (`carte.py`), scritte dalla persona o
+dal tutore (la generazione dal lettore arriva con la seconda parte del passo), si ripassano con
+Leitner a cinque scatole; ogni esito («la sapevo», «quasi», «non la sapevo», o il confronto del
+codice per le risposte chiuse) è un tentativo di tipo «carta» sull'argomento. Il testo è un dato:
+textContent sullo schermo, in busta al modello (`tools/studio.py`, `studio_carte`).
+
 **Ricalcolo.** Il piano si ricalcola quando cambia qualcosa (argomenti confermati, data
 spostata, minuti, giorno fatto o saltato, giorni senza scuola) e, alla prima lettura di un
 giorno nuovo, perché «oggi» si è spostato. Con i dati di una versione più nuova (connessione
@@ -59,6 +65,7 @@ import datetime
 import json
 import re
 
+from . import carte as C
 from . import dati as D
 from . import piano as P
 from . import padronanza as PD
@@ -222,7 +229,9 @@ class Studio:
                        # Le pagine arrivate (passo 4.2): da dove vengono i bordi e gli avvisi
                        "pagine": 0, "bordi": {}, "avvisi_pagine": {},
                        # La padronanza (passo 5): tentativi, misure del giorno, parole
-                       "padronanza": {"tentativi": 0, "misure_giorno": 0, "parole": {}}}
+                       "padronanza": {"tentativi": 0, "misure_giorno": 0, "parole": {}},
+                       # Le carte (passo 6): quante scritte e gli esiti, da dove (mai il testo)
+                       "carte": {"scritte": 0, "esiti": {}, "codice": 0, "a_voce": 0}}
         # Il lettore delle pagine (passo 4.3, studio/lettura.py): lo crea `avvia_lettura`
         self.lettore = None
         # Perché non c'è il lettore (passo 4.5, nota della revisione della PR #314): None prima di
@@ -231,6 +240,9 @@ class Studio:
         # Le due domande prima della sessione (passo 4.5): in memoria, mai su disco, mai ai tutori
         # (decisione 0035, punto 27). {persona: {verifica, conoscenza, umore, fino}}
         self._sessioni: dict = {}
+        # La carta chiesta a voce a una persona (passo 6, #246): {persona: {carta, verifica,
+        # turno, fino}}. In memoria: l'esito detto dopo vale per lei, una volta sola
+        self._carte_in_corso: dict = {}
         self.fascia = P.fascia_valida(getattr(cfg, "studio_fascia", ""))
         if self.fascia is None:
             # Il caricamento della configurazione la rifiuta già (config._fascia_valida); qui
@@ -771,12 +783,23 @@ class Studio:
                     av = [x for x in D.da_j(a["avvisi"]) if x != A.UNITO] + [A.UNITO]
                     db.execute("UPDATE studio_argomenti SET stato = 'tolto', avvisi = ? WHERE "
                                "id = ?", (D.j(av), a["id"]))
+                    # I tentativi e le carte degli uniti passano a quello che resta (passo 6,
+                    # nota 2 della revisione della PR #323): la padronanza non li perde
+                    for t in ("studio_tentativi", "studio_carte"):
+                        db.execute(f"UPDATE {t} SET argomento = ? WHERE verifica = ? AND "
+                                   "argomento = ?", (primo["id"], vid, a["id"]))
                 db.commit()
             except Exception:
                 if db.in_transaction:
                     db.rollback()
                 raise
         self._ricalcola_sicuro(vid)
+        if self.modo_padronanza != PD.SPENTA:
+            try:
+                self._misura_padronanza(righe[0][1])
+            except Exception as e:  # noqa: BLE001 — la misura non ferma l'unione
+                self.misure["errori"] += 1
+                self._registra(f"misura della padronanza non scritta: {type(e).__name__}")
         return primo["id"]
 
     def rifai_argomenti(self, chi, vid):
@@ -1023,28 +1046,39 @@ class Studio:
         return self.modo_padronanza == PD.MOSTRATA and self.per_schermi()
 
     def registra_tentativo(self, chi, vid, argomento, tipo: str, esito: str,
-                           fonte: str = "persona", giorno=None) -> int:
+                           fonte: str = "persona", giorno=None, carta=None) -> int:
         """Un tentativo su un argomento della verifica: `tipo` in `padronanza.TIPI`, `esito` in
         `padronanza.ESITI`, `fonte` (chi ha deciso l'esito) in `padronanza.FONTI`, mai il modello
-        da solo. Solo codici e id: nessun testo. Poi la misura del giorno. L'id del tentativo."""
+        da solo. Solo codici e id: nessun testo. Poi la misura del giorno. L'id del tentativo.
+        Dal passo 6 (#246, note 1 e 6 della revisione della PR #323): un giorno dopo oggi è
+        rifiutato, e la fonte deve essere di chi registra («persona» solo la persona della
+        verifica, «tutore» solo il suo tutore, «codice» tutti e due); `carta` è la carta da cui
+        viene."""
         self._scrivibile()
         if self.modo_padronanza == PD.SPENTA:
             raise ValueError("la padronanza è spenta")
         v = self._verifica(chi, vid)
         if tipo not in PD.TIPI or esito not in PD.ESITI or fonte not in PD.FONTI:
             raise ValueError("tentativo sconosciuto")
+        ruolo = self._chi_puo(chi, v["persona"])
+        if (fonte == "persona" and ruolo != "proprietario") or (
+                fonte == "tutore" and ruolo != "tutore"):
+            raise ValueError("la fonte non è di chi registra")
         a = self.dati.uno("SELECT id FROM studio_argomenti WHERE id = ? AND verifica = ?",
                           (int(argomento), v["id"]))
         if a is None:
             raise NonTrovata()
         adesso = self.adesso()
         g = _data(giorno or adesso.date())
+        if g > adesso.date():
+            # Un tentativo datato nel futuro non conta per la padronanza di oggi (nota 1)
+            raise ValueError("il giorno è dopo oggi")
         tid = self.dati.scrivi(
             "INSERT INTO studio_tentativi (verifica, persona, argomento, giorno, ora, tipo, esito, "
-            "fonte, chi) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "fonte, chi, carta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (v["id"], str(v["persona"]), a["id"], g.isoformat(),
              adesso.isoformat(timespec="seconds"), tipo, esito, fonte,
-             getattr(chi, "id", None)))
+             getattr(chi, "id", None), int(carta) if carta is not None else None))
         self.misure["padronanza"]["tentativi"] += 1
         try:
             self._misura_padronanza(v)
@@ -1105,7 +1139,7 @@ class Studio:
         self._registra(f"padronanza della verifica {v['id']}: "
                        + ", ".join(f"{k} {n}" for k, n in sorted(parole.items()))
                        + (f", livello {lv}" if lv is not None else ", livello non misurato"))
-        if lv is None or not self.dati.scrivibile:
+        if not self.dati.scrivibile:
             return
         oggi = self._oggi().isoformat()
         fonte = PD.FONTE_MISURA if self.modo_padronanza == PD.MOSTRATA else PD.FONTE_OMBRA
@@ -1114,14 +1148,278 @@ class Studio:
             try:
                 db.execute("DELETE FROM studio_misure WHERE verifica = ? AND giorno = ? AND "
                            "fonte IN (?, ?)", (v["id"], oggi, PD.FONTE_MISURA, PD.FONTE_OMBRA))
-                db.execute("INSERT INTO studio_misure (verifica, giorno, valore, fonte) VALUES "
-                           "(?, ?, ?, ?)", (v["id"], oggi, float(lv), fonte))
+                # Il livello tornato a None (un argomento unito, un argomento che rientra nel
+                # piano e abbassa la metà dei misurati) toglie la misura di oggi invece di
+                # lasciare quella di prima (nota 4 della revisione della PR #323)
+                if lv is not None:
+                    db.execute("INSERT INTO studio_misure (verifica, giorno, valore, fonte) "
+                               "VALUES (?, ?, ?, ?)", (v["id"], oggi, float(lv), fonte))
                 db.commit()
             except Exception:
                 if db.in_transaction:
                     db.rollback()
                 raise
-        self.misure["padronanza"]["misure_giorno"] += 1
+        if lv is not None:
+            self.misure["padronanza"]["misure_giorno"] += 1
+
+    # ── le carte (30/10, passo 6, #246; decisione 0035 punto 33) ──
+    def _carta(self, chi, cid) -> tuple[dict, dict]:
+        c = self.dati.uno("SELECT * FROM studio_carte WHERE id = ?", (int(cid),))
+        if c is None:
+            raise NonTrovata()
+        return c, self._verifica(chi, c["verifica"])
+
+    def _argomento_di(self, v: dict, argomento) -> int | None:
+        """L'argomento di una carta: None, o uno della stessa verifica (non c'è → NonTrovata)."""
+        if argomento is None:
+            return None
+        a = self.dati.uno("SELECT id FROM studio_argomenti WHERE id = ? AND verifica = ?",
+                          (int(argomento), v["id"]))
+        if a is None:
+            raise NonTrovata()
+        return a["id"]
+
+    def aggiungi_carta(self, chi, vid, domanda, risposta, argomento=None, pagine=(),
+                       origine: str = "persona", avvisi=None) -> int:
+        """Una carta nuova (domanda e risposta: un dato, chiunque l'abbia scritta), nella scatola
+        1 e da ripassare subito. Di serie scritta dalla persona o dal tutore; «modello» (con gli
+        avvisi del controllo, che la lasciano «proposta») per la generazione dal lettore."""
+        self._scrivibile()
+        v = self._verifica(chi, vid)
+        if v["stato"] not in ("bozza", "aperta"):
+            raise VerificaChiusa()
+        if origine not in C.ORIGINI:
+            raise ValueError("origine sconosciuta")
+        d = C.testo_normale(domanda, C.DOMANDA_MAX)
+        r = C.testo_normale(risposta, C.RISPOSTA_MAX)
+        aid = self._argomento_di(v, argomento)
+        sue = {p["id"] for p in self._pagine_di(v["id"])}
+        pag = [int(x) for x in pagine or ()]
+        if any(x not in sue for x in pag):
+            raise ValueError("una pagina non è di questa verifica")
+        n = self.dati.uno("SELECT COUNT(*) AS n FROM studio_carte WHERE verifica = ?",
+                          (v["id"],))["n"]
+        if n >= C.CARTE_MAX:
+            raise ValueError(f"al più {C.CARTE_MAX} carte per verifica")
+        adesso = self.adesso().isoformat(timespec="seconds")
+        cid = self.dati.scrivi(
+            "INSERT INTO studio_carte (verifica, persona, argomento, domanda, risposta, chiusa, "
+            "pagine, origine, stato, avvisi, scatola, scadenza, creata, creata_da) VALUES "
+            "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)",
+            (v["id"], str(v["persona"]), aid, d, r, C.chiusa(r), D.j(dict.fromkeys(pag)),
+             origine, "proposta" if avvisi else "attiva", D.j(avvisi) if avvisi else None,
+             adesso, adesso, getattr(chi, "id", None)))
+        self.misure["carte"]["scritte"] += 1
+        self._registra(f"verifica {v['id']}: carta {cid} scritta ({origine}, "
+                       f"{self._chi_registro(chi, v['persona'])})")
+        return cid
+
+    _UGUALE = object()
+
+    def correggi_carta(self, chi, cid, domanda=None, risposta=None, argomento=_UGUALE):
+        """La persona corregge una carta (anche una proposta dal modello): diventa sua, attiva,
+        senza avvisi; il ripasso resta dov'era se cambia solo la domanda, ricomincia dalla
+        scatola 1 se cambia la risposta."""
+        self._scrivibile()
+        c, v = self._carta(chi, cid)
+        d = C.testo_normale(domanda, C.DOMANDA_MAX) if domanda is not None else c["domanda"]
+        r = C.testo_normale(risposta, C.RISPOSTA_MAX) if risposta is not None else c["risposta"]
+        aid = c["argomento"] if argomento is self._UGUALE else self._argomento_di(v, argomento)
+        nuova = r != c["risposta"]
+        adesso = self.adesso().isoformat(timespec="seconds")
+        self.dati.scrivi(
+            "UPDATE studio_carte SET domanda = ?, risposta = ?, chiusa = ?, argomento = ?, "
+            "origine = 'persona', stato = 'attiva', avvisi = NULL, modificata = ?, "
+            "scatola = CASE WHEN ? THEN 1 ELSE scatola END, "
+            "scadenza = CASE WHEN ? THEN ? ELSE scadenza END WHERE id = ?",
+            (d, r, C.chiusa(r), aid, adesso, int(nuova), int(nuova), adesso, c["id"]))
+
+    def segna_carta(self, chi, cid, attiva: bool):
+        """Toglie una carta dal ripasso o ce la rimette (reversibile)."""
+        self._scrivibile()
+        c, _v = self._carta(chi, cid)
+        self.dati.scrivi("UPDATE studio_carte SET stato = ?, modificata = ? WHERE id = ?",
+                         ("attiva" if attiva else "tolta",
+                          self.adesso().isoformat(timespec="seconds"), c["id"]))
+
+    def _del_piano(self, vid) -> set:
+        return {a["id"] for a in self.dati.tutti(
+            "SELECT id, stato FROM studio_argomenti WHERE verifica = ?", (int(vid),))
+            if a["stato"] in D.ARGOMENTI_DEL_PIANO}
+
+    def carte(self, chi, vid) -> list[dict]:
+        """Tutte le carte di una verifica, col numero (l'ordine di scrittura), il numero
+        dell'argomento nell'elenco della verifica, se è da ripassare e fra quanto. Domanda e
+        risposta sono un dato: lo schermo le scrive con textContent."""
+        v = self._verifica(chi, vid)
+        return self._carte_di(v)
+
+    def _carte_di(self, v: dict) -> list[dict]:
+        adesso = self.adesso()
+        elenco = self.dati.tutti("SELECT id, stato FROM studio_argomenti WHERE verifica = ? "
+                                 "ORDER BY ordine, id", (v["id"],))
+        numeri = {a["id"]: i for i, a in enumerate(elenco, 1)}
+        nel_piano = {a["id"] for a in elenco if a["stato"] in D.ARGOMENTI_DEL_PIANO}
+        out = []
+        for i, c in enumerate(self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? "
+                                              "ORDER BY id", (v["id"],)), 1):
+            c["pagine"] = [int(x) for x in D.da_j(c["pagine"]) if str(x).isdecimal()]
+            c["avvisi"] = D.da_j(c["avvisi"])
+            c["numero"] = i
+            c["argomento_numero"] = numeri.get(c["argomento"])
+            # Le carte di un argomento fuori dal piano non si ripassano finché non torna
+            c["nel_piano"] = c["argomento"] is None or c["argomento"] in nel_piano
+            c["da_ripassare"] = c["nel_piano"] and C.da_ripassare(c, adesso)
+            c["fra"] = (C.fra_quanto(c["scadenza"], adesso) if c["stato"] == "attiva"
+                        and c["scadenza"] else None)
+            out.append(c)
+        return out
+
+    def da_ripassare(self, chi, vid) -> list[dict]:
+        """Le carte da ripassare adesso: prima le più scadute, poi le scatole basse."""
+        v = self._verifica(chi, vid)
+        return self._da_ripassare(v)
+
+    def _da_ripassare(self, v: dict) -> list[dict]:
+        out = [c for c in self._carte_di(v) if c["da_ripassare"]]
+        out.sort(key=lambda c: (str(c["scadenza"] or ""), c["scatola"], c["id"]))
+        return out
+
+    def _conto_carte(self, v: dict) -> dict:
+        """I conti delle carte per la home e la voce: quante, quante da ripassare, la prossima."""
+        tutte = [c for c in self._carte_di(v) if c["stato"] != "tolta"]
+        attive = [c for c in tutte if c["stato"] == "attiva" and c["nel_piano"]]
+        dopo = sorted((c for c in attive if not c["da_ripassare"] and c["scadenza"]),
+                      key=lambda c: c["scadenza"])
+        return {"totali": len(tutte), "da_ripassare": sum(c["da_ripassare"] for c in attive),
+                "proposte": sum(c["stato"] == "proposta" for c in tutte),
+                "prossima": dopo[0]["fra"] if dopo else None}
+
+    def _vigilia(self, v: dict) -> datetime.date | None:
+        d = _data(v["data"]) - datetime.timedelta(days=1)
+        return d if d > self._oggi() else None
+
+    def esito_carta(self, chi, cid, esito: str, fonte: str | None = None) -> dict:
+        """L'esito di una carta: «sapevo», «quasi», «non_sapevo» (dai tasti della persona, o a
+        voce da `esito_a_voce`), il ripasso di Leitner (`carte.prossima`) e il tentativo di tipo
+        «carta» sull'argomento, se è nel piano e la padronanza non è spenta. `fonte` di serie è
+        chi registra («persona» o «tutore»); «codice» per il confronto delle risposte chiuse."""
+        self._scrivibile()
+        if esito not in C.ESITI:
+            raise ValueError("esito sconosciuto")
+        c, v = self._carta(chi, cid)
+        if c["stato"] != "attiva":
+            raise ValueError("la carta non è nel ripasso")
+        ruolo = self._chi_puo(chi, v["persona"])
+        fonte = fonte or ("persona" if ruolo == "proprietario" else "tutore")
+        adesso = self.adesso()
+        scatola, scadenza = C.prossima(c["scatola"], esito, adesso, self._vigilia(v))
+        self.dati.scrivi("UPDATE studio_carte SET scatola = ?, scadenza = ?, ultima = ? WHERE "
+                         "id = ?", (scatola, scadenza, adesso.isoformat(timespec="seconds"),
+                                    c["id"]))
+        m = self.misure["carte"]
+        m["esiti"][esito] = m["esiti"].get(esito, 0) + 1
+        m["codice"] += fonte == "codice"
+        tid = None
+        if (c["argomento"] is not None and c["argomento"] in self._del_piano(v["id"])
+                and self.modo_padronanza != PD.SPENTA):
+            try:
+                tid = self.registra_tentativo(chi, v["id"], c["argomento"], "carta",
+                                              C.ESITO_TENTATIVO[esito], fonte, carta=c["id"])
+            except (ValueError, NonTrovata, NonPermesso) as e:
+                self._registra(f"tentativo della carta {c['id']} non scritto: {type(e).__name__}")
+        self._registra(f"verifica {v['id']}: carta {c['id']} {esito} ({fonte}), scatola "
+                       f"{scatola}")
+        return {"carta": c["id"], "esito": esito, "fonte": fonte, "scatola": scatola,
+                "scadenza": scadenza, "fra": C.fra_quanto(scadenza, adesso), "tentativo": tid,
+                "restano": len(self._da_ripassare(v))}
+
+    # ── le carte a voce (la carta in corso è di chi parla, in memoria) ──
+    def _in_corso(self, persona) -> dict | None:
+        ic = self._carte_in_corso.get(str(persona or ""))
+        if ic is None:
+            return None
+        if self.adesso() > ic["fino"]:
+            self._carte_in_corso.pop(str(persona or ""), None)
+            return None
+        return ic
+
+    def carta_in_corso(self, chi) -> dict | None:
+        """La carta chiesta a voce a `chi` e non ancora risposta (o None): la carta e la verifica,
+        se è ancora sua (o del suo minore) e nel ripasso."""
+        ic = self._in_corso(getattr(chi, "id", None))
+        if ic is None:
+            return None
+        try:
+            c, v = self._carta(chi, ic["carta"])
+        except (NonTrovata, NonPermesso):
+            self._carte_in_corso.pop(str(getattr(chi, "id", "")), None)
+            return None
+        c["pagine"] = [int(x) for x in D.da_j(c["pagine"]) if str(x).isdecimal()]
+        return {**c, "verifica": v["id"], "turno": ic["turno"],
+                "letta": bool(ic.get("letta"))}
+
+    def risposta_letta(self, chi):
+        """La risposta della carta in corso è stata detta (`studio_carte` parte «risposta»): da
+        qui vale solo l'autovalutazione, perché ripetere la risposta appena sentita non è
+        saperla."""
+        ic = self._in_corso(getattr(chi, "id", None))
+        if ic is not None:
+            ic["letta"] = True
+
+    def prossima_carta(self, chi, vid, turno: int = 0) -> dict | None:
+        """La carta da chiedere a voce: quella in corso della stessa verifica, se c'è, altrimenti
+        la prima da ripassare; diventa «in corso» per `chi` (fino a `SESSIONE_S`, mai oltre la
+        mezzanotte). Con il numero fra quelle da ripassare e quante restano. None se nessuna."""
+        v = self._verifica(chi, vid)
+        due = self._da_ripassare(v)
+        chiave = str(getattr(chi, "id", "") or "")
+        ic = self._in_corso(chiave)
+        scelta = None
+        if ic is not None and ic["verifica"] == v["id"]:
+            scelta = next((c for c in self._carte_di(v) if c["id"] == ic["carta"]
+                           and c["stato"] == "attiva"), None)
+        if scelta is None and due:
+            scelta = due[0]
+        if scelta is None:
+            self._carte_in_corso.pop(chiave, None)
+            return None
+        adesso = self.adesso()
+        fino = min(adesso + datetime.timedelta(seconds=SESSIONE_S),
+                   datetime.datetime.combine(adesso.date(), datetime.time(23, 59, 59)))
+        if ic is None or ic["carta"] != scelta["id"]:
+            ic = {"carta": scelta["id"], "verifica": v["id"], "turno": int(turno or 0)}
+        ic["fino"] = fino
+        self._carte_in_corso[chiave] = ic
+        ids = [c["id"] for c in due]
+        return {**scelta, "posizione": (ids.index(scelta["id"]) + 1) if scelta["id"] in ids
+                else 1, "restano": max(len(due), 1)}
+
+    def esito_a_voce(self, chi, frase: str, turno: int = 0) -> dict:
+        """L'esito della carta in corso dalla frase detta dalla persona in questo turno, mai da
+        un argomento del modello: una forma chiusa dell'autovalutazione detta per intero
+        (`carte.autovalutazione`, fonte di chi parla), oppure la risposta chiusa della carta nella
+        frase (`carte.risposta_giusta`, fonte «codice», solo il «giusto»), questa solo prima
+        che Calliope dica la risposta e prima dell'autovalutazione (una carta che risponde «sì» o
+        «no» si confronta come risposta). Una volta per carta, e solo per una carta chiesta in un
+        turno di prima. {"esito": None, "motivo"} se non c'è: «nessuna» (nessuna carta in
+        corso), «stesso_turno», «non_detto»."""
+        ic = self.carta_in_corso(chi)
+        if ic is None:
+            return {"esito": None, "motivo": "nessuna"}
+        if int(turno or 0) <= int(ic["turno"] or 0):
+            return {"esito": None, "motivo": "stesso_turno", "carta": ic["id"]}
+        esito, fonte = None, None
+        if not ic["letta"] and C.risposta_giusta(ic["chiusa"], frase):
+            esito, fonte = C.SAPEVO, "codice"
+        else:
+            esito = C.autovalutazione(frase)
+        if esito is None:
+            return {"esito": None, "motivo": "non_detto", "carta": ic["id"]}
+        out = self.esito_carta(chi, ic["id"], esito, fonte)
+        self.misure["carte"]["a_voce"] += 1
+        self._carte_in_corso.pop(str(getattr(chi, "id", "") or ""), None)
+        return out
 
     # ── il piano ──
     def _minuti_base(self, persona: str):
@@ -1319,11 +1617,18 @@ class Studio:
         pag = self.pagine(chi, v["id"])
         ordine = {p_["id"]: p_["ordine"] for p_ in pag if p_["stato"] != "tolta"}
         args = [a for a in self.argomenti(chi, v["id"]) if a["stato"] in D.ARGOMENTI_DEL_PIANO]
-        misure = [(_data(r["giorno"]), r["valore"]) for r in self.dati.tutti(
-            # Le misure dell'ombra della padronanza (passo 5) non entrano nella previsione
-            "SELECT giorno, valore FROM studio_misure WHERE verifica = ? AND (fonte IS NULL OR "
-            f"fonte != '{PD.FONTE_OMBRA}') ORDER BY giorno, id",
-            (v["id"],))]
+        righe_m = self.dati.tutti("SELECT giorno, valore, fonte FROM studio_misure WHERE "
+                                  "verifica = ? ORDER BY giorno, id", (v["id"],))
+        # Le misure della padronanza (passo 5) entrano nella forbice solo se è mostrata: quelle
+        # dell'ombra mai, quelle «padronanza» scritte prima di tornare in ombra nemmeno (nota 3
+        # della revisione della PR #323)
+        mostrata = self.padronanza_mostrata()
+        misure = [(_data(r["giorno"]), r["valore"]) for r in righe_m
+                  if r["fonte"] != PD.FONTE_OMBRA and (r["fonte"] != PD.FONTE_MISURA or mostrata)]
+        # «L'ultima prova» è una prova vera (la verifica finta, più avanti), mai la misura del
+        # giorno della padronanza (nota 5)
+        prove = [r["valore"] for r in righe_m if r["fonte"] not in (PD.FONTE_MISURA,
+                                                                    PD.FONTE_OMBRA)]
         data = _data(v["data"])
         # Le pagine del piano e quelle lette nei giorni fatti (per il riepilogo, passo 4b)
         del_piano = {p_.id for p_ in self._pagine_del_piano(v["id"])}
@@ -1332,7 +1637,7 @@ class Studio:
                 "giorni_mancanti": (data - oggi).days, "obiettivo": v["obiettivo"],
                 "giorni": giorni, "avvisi": avvisi,
                 "tappe": P.tappe(args, ordine, fatte),
-                "misure": len(misure), "livello": int(round(misure[-1][1])) if misure else None,
+                "misure": len(misure), "livello": int(round(prove[-1])) if prove else None,
                 # La previsione mostrata è la forbice (revisione della PR #317, 0035 punto 9):
                 # None prima di 3 misure in 2 giorni; intanto l'ultima misura vera (`livello`)
                 "previsione": P.forbice(misure, data)}
@@ -1404,6 +1709,7 @@ class Studio:
 
     def dimentica_sessione(self, persona):
         self._sessioni.pop(str(persona or ""), None)
+        self._carte_in_corso.pop(str(persona or ""), None)
 
     def nota_sessione(self, persona) -> str:
         """La nota per i dati del turno (un dato, non un ordine; principio 10): come regolare
@@ -1505,6 +1811,8 @@ class Studio:
                               "proposti": sum(a["stato"] == "proposto" for a in args),
                               "da_decidere": decidere},
                 "da_parte": self._da_parte(vid),
+                # Le carte (passo 6, #246): solo i conti; il testo lo dà /api/studio/carte
+                "carte": self._conto_carte(v),
                 # Il riepilogo e le sessioni (passo 4b, #244): righe scritte dal codice dai dati
                 "riepilogo": self._riepilogo_schermo(v, pi) if pi is not None else None,
                 # Fuori dal piano: i tolti (non gli uniti a un altro), per rimetterli con un tocco
@@ -1677,7 +1985,8 @@ class Studio:
 
     # ── la vista aperta nei dati del turno (30/10, passo 4.5; progetto § 0, punto 2) ──
     VISTE = {"home": "la home dello Studio", "piano": "il piano", "argomenti": "gli argomenti",
-             "pagine": "le pagine", "pagina": "una pagina", "sessione": "la sessione di oggi"}
+             "pagine": "le pagine", "pagina": "una pagina", "sessione": "la sessione di oggi",
+             "carte": "le carte"}
 
     def riga_vista(self, chi, vista: dict | None) -> str:
         """La riga per i dati del turno quando una pagina dello Studio è aperta sullo schermo

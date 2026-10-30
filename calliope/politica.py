@@ -442,11 +442,19 @@ CLASSI: dict[str, Classe] = {
     # per sempre: senza le parole nella frase chiede prima (chiedi_se). Dal 30/10 (passo 4b, #244)
     # anche «resoconto» e «riepilogo» leggono soltanto (proiezioni dei dati, frasi del codice)
     "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi", "resoconto",
-                                                        "riepilogo"})),
+                                                        "riepilogo", "carte"})),
                  cosa=lambda a: _studio_cosa(a), verbi_azione=("azione", VERBI_STUDIO),
                  chiedi_se=lambda testo, a, ctx, **_k: _studio_archivia(testo, a)),
     # il testo letto delle pagine e i titoli degli argomenti: dati non fidati, come una foto
     "studio_pagina_leggi": _c(S, fonte="foto"),
+    # le carte dello Studio a voce (30/10, passo 6, #246): domanda e risposta sono dati non fidati
+    # come le pagine (in busta, fuori dalla storia a risposta finita). «esito» scrive l'esito
+    # della carta in corso, ma non lo sceglie il modello: lo decide il codice dalla frase detta
+    # dalla persona (una forma chiusa per intero, o la risposta chiusa della carta), una volta per
+    # carta e per turno; una misura sui dati della persona (E0), che né il testo della carta né il
+    # modello possono cambiare. Per questo è una lettura e non un'azione di `studio`: con la carta
+    # in conversazione un'azione vorrebbe una richiesta con le sue parole, e «nel 1861» non lo è
+    "studio_carte": _c(S, fonte="foto"),
     # giochi (05/10): un ragazzo chiede un permesso al tutore (resta in sospeso finché il
     # tutore non decide a voce: niente effetti da sola)
     "richiesta_tutore": _c(A, cosa=lambda a: f"mandi al tuo tutore la richiesta "
@@ -487,7 +495,7 @@ VERBI = {
     "promemoria_imposta": r"ricord|promemoria|avvis|memo|dimentic|sposta|cambi|segn",
     "agenda_annulla": r"annull|cancell|togl|elimin|ferm|stop|bast|lev",
     # Per azione in VERBI_STUDIO (seconda revisione della PR #317); qui solo le letture
-    "studio": r"verific|piano|argoment",
+    "studio": r"verific|piano|argoment|cart[ae]",
     "appuntamento_aggiungi": (r"appuntament|agenda|calendari|segn|impegn|visit|riunion|fiss|"
                               r"sposta|cambi|aggiung|prenot|cena|pranzo|incontr"),
     "lista_aggiungi": r"aggiung|segn|list|spes|compr|prend|manc|scriv|inser|finit",

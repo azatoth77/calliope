@@ -35,7 +35,12 @@ Tabelle (versione 1):
   «fatto» e «non_fatto» (il giorno del piano, con le pagine e i minuti previsti di quel giorno),
   «saltato» («non ce la faccio oggi»), «mancato» (un giorno del piano passato senza «fatto»,
   scritto dal ricalcolo prima di togliere la riga) e «spostata» (la data di prima e quella nuova).
-  Solo id, numeri e date: mai titoli né testo delle pagine.
+  Solo id, numeri e date: mai titoli né testo delle pagine;
+- `studio_carte` (versione 6, 30/10, passo 6, issue #246): le carte di una verifica (domanda e
+  risposta, un dato non fidato come il testo delle pagine, chiunque l'abbia scritto; la forma
+  chiusa della risposta per il confronto del codice; le pagine e l'argomento; l'origine, lo stato
+  e il ripasso di Leitner: scatola, scadenza, ultima volta, `studio/carte.py`); dalla stessa
+  versione `studio_tentativi.carta`, la carta da cui viene un tentativo.
 
 Tenuta (decisione 0035, punto 4): tutto ciò che è di una verifica resta fino a
 `studio_tenuta_giorni` (60) giorni dopo la sua data, per sempre se archiviata; «dimentica le
@@ -60,8 +65,9 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_tentativi", "studio_eventi", "studio_piano", "studio_misure", "studio_argomenti", "studio_pagine",
-           "studio_materiali", "studio_verifiche", "studio_giorni")
+TABELLE = ("studio_tentativi", "studio_carte", "studio_eventi", "studio_piano", "studio_misure",
+           "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
+           "studio_giorni")
 
 STATI_VERIFICA = ("bozza", "aperta", "fatta", "archiviata")
 ORIGINI = ("foto", "cassetto", "file", "biblioteca", "mano")
@@ -223,12 +229,40 @@ def _v5(db: sqlite3.Connection):
                "ON studio_tentativi(verifica, argomento)")
 
 
+def _v6(db: sqlite3.Connection):
+    """30/10, passo 6 (#246): le carte e il loro ripasso. `persona` è di chi è la verifica;
+    domanda e risposta sono un dato (sullo schermo con textContent, al modello in busta)."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_carte (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        argomento INTEGER,
+        domanda TEXT NOT NULL,
+        risposta TEXT NOT NULL,
+        chiusa TEXT,
+        pagine TEXT NOT NULL DEFAULT '[]',
+        origine TEXT NOT NULL DEFAULT 'persona',
+        stato TEXT NOT NULL DEFAULT 'attiva',
+        avvisi TEXT,
+        scatola INTEGER NOT NULL DEFAULT 1,
+        scadenza TEXT,
+        ultima TEXT,
+        creata TEXT NOT NULL,
+        creata_da TEXT,
+        modificata TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_carte_verifica ON studio_carte(verifica)")
+    db.execute("ALTER TABLE studio_tentativi ADD COLUMN carta INTEGER")
+
+
 # Le versioni dello schema: si aggiungono in fondo, solo colonne con NULL o un predefinito (o
 # tabelle nuove)
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5]
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi")
+# Le tabelle venute dopo la prima versione: un db di prima (lo Studio spento non lo prepara) può
+# non averle
+NUOVE = (*CON_ORFANI, "studio_carte")
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:
@@ -324,10 +358,10 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
                 "SELECT file FROM studio_pagine WHERE materiale = ? AND file IS NOT NULL", (m,))]
             db.execute("DELETE FROM studio_pagine WHERE materiale = ?", (m,))
         for t in ("studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
-                  *CON_ORFANI):
+                  "studio_carte", *CON_ORFANI):
             # Un db ancora allo schema di prima (lo Studio spento non lo prepara): le tabelle
             # nuove possono mancare
-            if t in CON_ORFANI and not _tabella(db, t):
+            if t in NUOVE and not _tabella(db, t):
                 continue
             db.execute(f"DELETE FROM {t} WHERE verifica = ?", (vid,))
         db.execute("DELETE FROM studio_verifiche WHERE id = ?", (vid,))

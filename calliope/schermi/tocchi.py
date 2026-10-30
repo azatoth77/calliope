@@ -156,6 +156,9 @@ ESCLUSI: Mapping[str, str] = MappingProxyType({
     "sviluppo_apri": "apre la modalità sviluppo: vuole la voce di chi amministra",
     "studio_pagina_leggi": "legge il testo delle pagine fotografate: un dato non fidato che "
                            "entrerebbe nella storia senza busta",
+    "studio_carte": "legge le carte dello Studio (un dato non fidato) e ne scrive l'esito dalla "
+                    "frase detta: sullo schermo le carte hanno la loro vista, fuori dalla "
+                    "conversazione",
 })
 
 

@@ -1417,10 +1417,15 @@ WEB_TOLTO = ("{\"ok\": true, \"nota\": \"risultati di internet già usati nella 
 # revisione della PR #317): la sua nota, non quella di internet, che spingeva verso web_cerca
 PAGINA_TOLTA = ("{\"ok\": true, \"nota\": \"il testo della pagina è stato tolto: per rileggerlo "
                 "usa studio_pagina_leggi\"}")
+# Il testo di una carta dello Studio (studio_carte, 30/10, passo 6, #246), tolto allo stesso modo
+CARTA_TOLTA = ("{\"ok\": true, \"nota\": \"il testo della carta è stato tolto: la carta in corso "
+               "la ritrovi con studio_carte\"}")
 # Le chiavi del JSON di un tool non fidato che portano dati (non solo un esito): i risultati di
 # web_cerca e delle estensioni, i fatti e la notizia del tool notizie (13/10)
 # «testo» e «argomenti»: studio_pagina_leggi (30/10, seconda revisione della PR #317)
-_CHIAVI_DATO = ('"risultati"', '"fatti"', '"notizia"', '"testo"', '"argomenti"')
+# «domanda» e «risposta»: studio_carte (30/10, passo 6, #246)
+_CHIAVI_DATO = ('"risultati"', '"fatti"', '"notizia"', '"testo"', '"argomenti"', '"domanda"',
+                '"risposta"')
 
 
 class TextCallGuard:
@@ -4133,12 +4138,14 @@ class Brain:
         conversazione resta contaminata anche senza il testo."""
         provenienza.marca(self.history)
         for m in self.history:
-            if m.get("role") != "tool" or m.get("content") in (WEB_TOLTO, PAGINA_TOLTA):
+            if m.get("role") != "tool" or m.get("content") in (WEB_TOLTO, PAGINA_TOLTA,
+                                                                CARTA_TOLTA):
                 continue
             spec = self.tools.get(m.get("name") or "")
             if (spec is not None and getattr(spec, "non_fidato", False)
                     and not getattr(spec, "resta_in_storia", False)):
                 m["content"] = (PAGINA_TOLTA if m.get("name") == "studio_pagina_leggi"
+                                else CARTA_TOLTA if m.get("name") == "studio_carte"
                                 else WEB_TOLTO)
 
     def rules_fired(self) -> list[str]:

@@ -9,7 +9,7 @@
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
   (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
-  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32).
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -349,6 +349,26 @@ dell'eco della stanza.
     su almeno 10 argomenti la parola uguale a quella del tutore almeno 7 volte su 10 e mai «la sai»
     contro il suo «da studiare»; pesi e calo ritarati. Alternative scartate: le carte prima della
     padronanza; la padronanza dalle pagine lette.
+
+## Le carte (passo 6, #246, 30/10)
+
+33. **Le carte sono un dato e l'esito non è mai del modello.** Una carta (domanda e risposta su un
+    argomento, con le pagine) la scrive la persona o il tutore e, con la seconda parte del passo, la
+    propone il lettore dalle pagine lette; il suo testo è un dato chiunque l'abbia scritto (punto 6):
+    textContent sullo schermo, in busta al modello (`studio_carte`, fonte «foto», fuori dalla storia a
+    risposta finita), mai nelle frasi pronte, nel registro o negli eventi (punto 24). Il ripasso è
+    **Leitner a cinque scatole** nel codice (1, 2, 4, 8, 16 giorni; «quasi» domani; «non la sapevo»
+    fra 10 minuti; nessuna scadenza oltre la vigilia), con soglie iniziali da tarare in ombra.
+    L'esito lo decide la persona (tre tasti; a voce una forma chiusa detta per intero, principio 10)
+    o il codice per le risposte chiuse (solo il «giusto», solo prima che Calliope dica la risposta);
+    lo schema del tool non ha l'esito, la carta in corso la tiene il codice, una volta per carta e mai
+    nel turno della domanda. Ogni esito è un tentativo «carta» sull'argomento (punto 32). Sullo
+    schermo le carte passano da `POST /api/studio/carte`, fuori dalla conversazione come la conferma
+    degli argomenti (punto 23), non dai tocchi. `studio_carte` è una lettura che scrive una misura
+    della persona (E0) che né il testo né il modello possono cambiare; un'azione di `studio` avrebbe
+    fatto chiedere la politica a ogni risposta («nel 1861» non è una richiesta). Alternative
+    scartate: SM-2 e FSRS (analisi nella #246), il giudizio del modello sulla risposta, i tocchi per
+    le risposte, le carte del tutore come dato fidato (due regole invece di una).
 
 ## Da completare con i passi 4.3–4.5
 

@@ -21,7 +21,9 @@ persona, che li conferma da una vista minima della pagina dello Studio. Dal 30/1
 aperta** (4.5, #284, sezione sotto); `studio_modo` resta spento di serie. Dal 30/10 il **resoconto delle
 sessioni e il riepilogo della verifica** (4b, #244, sezione sotto), proiezioni dei dati salvati. Dal 30/10 la
 **padronanza per argomento** (5, #245, sezione sotto), in ombra di serie e senza fonti finché non
-arrivano le carte. Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
+arrivano le carte. Dal 30/10 le **carte con il ripasso dilazionato** (6, #246, prima parte: dati,
+Leitner, schermo e voce, carte scritte a mano; sezione sotto), che danno i primi tentativi alla
+padronanza. Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Moduli
@@ -32,6 +34,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Pagine dei materiali: fotocamera e galleria sul telefono, bordi ricontrollati, raddrizzamento, nitidezza, PDF divisi in pagine, file nella cartella dello Studio (dal 29/10, passo 4.2, #281) | Pillow e numpy (niente librerie native nuove), pypdfium2 (extra `archivio`); nel browser JavaScript scritto a mano, niente OpenCV.js | `calliope/studio/pagine.py` → `rileva`, `scegli_bordi`, `plausibili`, `raddrizza`, `nitidezza`, `prepara_foto`, `dividi_pdf`, `dividi_pdf_a_parte`, `scrivi_file`; `calliope/studio/servizio.py` → `Studio.verifica_per_pagine`, `Studio.verifiche_per_pagine`, `Studio.aggiungi_pronte`; `calliope/studio/dati.py` → `cartella_di`, `togli_orfani`; `calliope/schermi/server.py` → `POST /api/studio/pagina`, `POST /api/studio/verifiche`; `calliope/schermi/pagina/bordi.js`, `calliope/schermi/pagina/studio.js`; `calliope/immagini.py` → `apri`; prove `prove/prova_studio_pagine.py`, `prove/prova_studio_pagina_telefono.py` |
 | Argomenti dalle pagine lette, controllo delle pagine citate, forma del titolo, conferma della persona (dal 30/10, passo 4.4, #283; `studio_argomenti`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato (`response_format`); `provenienza.parole`, `vicina` e `racchiudi` | `calliope/studio/argomenti.py` → `corpo`, `riferimenti`, `controlla`, `forma_titolo`, `proposte`, `firma`, `pronta`; `calliope/studio/lettura.py` → `Lettore.estrai_argomenti`, `numeri_dalla_prima`; `calliope/studio/servizio.py` → `Studio.verifiche_per_argomenti`, `proponi_argomenti`, `conferma_argomenti`, `rinomina_argomento`, `unisci_argomenti`, `rifai_argomenti`, `estrazione`; `calliope/schermi/server.py` → `POST /api/studio/argomenti`; `calliope/schermi/pagina/studio.js`; prova `prove/prova_studio_argomenti.py` |
 | Padronanza per argomento dai soli tentativi, lacune con la lezione successiva, previsione dalla padronanza (dal 30/10, passo 5, #245; schema «studio» alla versione 5; `studio_padronanza`, ombra di serie) | SQLite (`studio_tentativi`); libreria standard, niente modello | `calliope/studio/padronanza.py` → `calcola`, `parola`, `livello`, `lacune`; `calliope/studio/servizio.py` → `Studio.registra_tentativo`, `Studio.padronanza`, `padronanza_mostrata`; `calliope/schermi/pagina/studio.js` (la parola sulle tappe, «Da rinforzare»); prova `prove/prova_studio_padronanza.py` |
+| Carte e ripasso dilazionato: Leitner a cinque scatole, l'esito dalla persona o dal confronto del codice per le risposte chiuse, i tentativi «carta» (dal 30/10, passo 6, #246; schema «studio» alla versione 6) | SQLite (`studio_carte`, `studio_tentativi.carta`); libreria standard, niente modello | `calliope/studio/carte.py` → `prossima`, `da_ripassare`, `fra_quanto`, `chiusa`, `risposta_giusta`, `autovalutazione`, `testo_normale`; `calliope/studio/servizio.py` → `Studio.aggiungi_carta`, `correggi_carta`, `segna_carta`, `carte`, `da_ripassare`, `esito_carta`, `prossima_carta`, `carta_in_corso`, `risposta_letta`, `esito_a_voce`; `calliope/tools/studio.py` → `studio_carte`, azione `carte`; `calliope/schermi/server.py` → `POST /api/studio/carte`; `calliope/schermi/pagina/studio.js` (la sezione «Carte»); prova `prove/prova_studio_carte.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
@@ -70,12 +73,110 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
   vede»), non un «da leggere» muto.
 
+## Le carte con il ripasso dilazionato (30/10, issue #246, ramo `issue-246-studio-carte`)
+
+*Passo 6 dell'epic #251; decisione [0035](../decisioni/0035-studio.md) punto 33; analisi nel
+commento della #246 (30/10); progetto § «Studio 5 · Ripasso con le carte».*
+
+**Divisa in due PR.** Questa: il modello dei dati, il ripasso, la vista sullo schermo e a voce, le
+carte scritte dalla persona o dal tutore, i tentativi e le sei note della revisione della PR #323.
+La seconda: la **generazione dal lettore** (qwen3.6 con la guardia e il client della lettura, una
+richiesta per verifica sugli argomenti tenuti con le pagine lette, il controllo del codice come per
+gli argomenti, le carte con un avviso «proposte») con un caso nel banco dello Studio e
+l'interruttore `studio_carte_genera` (ombra di serie). Lo schema ha già `origine` («persona» o
+«modello»), `stato` «proposta» e `avvisi`.
+
+**Il testo è un dato**, chiunque l'abbia scritto: sullo schermo solo textContent, al modello solo in
+busta da `studio_carte` (fonte «foto», `non_fidato`, fuori dalla storia a risposta finita con
+`brain.CARTA_TOLTA`), mai nelle frasi pronte di `studio`, nel registro (solo id, conti, esiti) o
+negli eventi. Una carta del tutore per il minore è come una sua: la regola è una sola.
+
+**Il ripasso: Leitner a cinque scatole** (`calliope/studio/carte.py`; soglie iniziali, da tarare in
+ombra): una carta nuova è nella scatola 1 e si ripassa subito; «La sapevo» → scatola + 1 (al più 5)
+e la prossima volta fra 1, 2, 4, 8, 16 giorni secondo la scatola nuova; «Quasi» → la scatola resta,
+domani; «Non la sapevo» → scatola 1, di nuovo fra 10 minuti (torna nella stessa sessione). Prima
+della verifica nessuna scadenza va oltre la **vigilia** (il giorno di ripasso del piano), così la
+vigilia raccoglie tutte quelle non ancora in scatola 5. Le carte di un argomento fuori dal piano non
+si ripassano finché non torna. Scartati SM-2 (una facilità per carta che in poche settimane non si
+stabilizza) e FSRS (vuole storie lunghe).
+
+**Chi decide l'esito: mai il modello.**
+- Sullo schermo la persona, coi tre tasti dopo «Mostra la risposta»; ogni tasto dice la prossima
+  volta, calcolata dal server («Non la sapevo · fra 10 minuti», «Quasi · domani», «La sapevo · fra 2
+  giorni»).
+- A voce il codice dalla **frase detta dalla persona** (`ToolContext.user_text`): (1) prima che
+  Calliope dica la risposta, la risposta chiusa della carta nella frase (`carte.chiusa`: un numero o
+  al più tre parole senza articoli né preposizioni; `risposta_giusta`: le parole di fila, non negate
+  subito prima, in una frase di al più dieci parole; i numeri in cifre e in lettere valgono uguali):
+  solo il «giusto», con la fonte «codice», perché il contrario può essere la trascrizione che
+  sbaglia un nome; (2) altrimenti l'autovalutazione detta **per intero** in una forma chiusa breve
+  («la sapevo», «sì», «quasi», «più o meno», «no», «non la sapevo», «non lo so»…: principio 10,
+  `carte.autovalutazione`, coi contrari nelle prove); (3) altrimenti niente: il tool dice di leggere
+  la risposta e chiedere «la sapevi, quasi, o no?». Ripetere la risposta appena sentita non è
+  saperla: dopo `parte: risposta` vale solo l'autovalutazione. Una volta per carta, mai nel turno
+  in cui la carta è stata chiesta. Lo schema del tool non ha l'esito: il modello non può passarlo.
+- Il tutore che interroga il minore vale «tutore».
+
+**A voce** (`studio_carte`, classe «sicuro», fonte «foto», mai toccabile): «ripassiamo le carte di
+storia» → `parte: domanda` (la prossima da ripassare della verifica detta, o della più vicina che ne
+ha, con «1 di 3»; la segna in corso per chi parla, al più 3 ore e mai oltre la mezzanotte, come la
+sessione) → Calliope chiede con le parole della carta → la persona risponde → `parte: esito`. Se
+il codice non decide: `parte: risposta`, poi «la sapevi?», poi di nuovo `esito`. `studio` ha la
+lettura `carte` («quante carte ho?», solo conti) e «oggi» aggiunge le carte da ripassare. Perché è
+una lettura e non un'azione di `studio`: [sicurezza-politica](sicurezza-politica.md#le-carte-dello-studio-3010-issue-246-ramo-issue-246-studio-carte).
+
+**Sullo schermo** (`studio.js`, telefono e PC personale, `POST /api/studio/carte` fuori dalla
+conversazione come la conferma degli argomenti: permessi dello Studio, orari del minore per le
+azioni, la vista anche fuori orario, in ombra solo chi amministra): nella home, per ogni verifica,
+«Carte» con quante da ripassare (o la prossima), «Ripassa» (una carta per volta: la domanda, «Mostra
+la risposta», la risposta con le pagine, i tre esiti, «Basta così») e «Le carte» (l'elenco con
+argomento, stato e prossima volta; «Scrivi una carta» con domanda, risposta e argomento; «Correggi»,
+«Togli», «Rimetti»). Correggere la domanda tiene il ripasso, correggere la risposta lo ricomincia
+dalla scatola 1; una carta corretta diventa della persona. La vista «carte» arriva al server per la
+riga dei dati del turno. Non è un tocco: venti carte sarebbero venti righe nella storia, e la
+descrizione del tocco porterebbe il testo fuori busta (`TOCCABILI` non cambia). Service worker
+alla v27.
+
+**Piano e padronanza.** Ogni esito è un tentativo di tipo «carta» sull'argomento della carta (sapevo
+→ giusto, quasi → con indizio, non sapevo → sbagliato; `studio_tentativi.carta` dice da quale carta):
+le carte sono la prima fonte della padronanza, che resta in ombra di serie. Una carta senza argomento
+si ripassa ma non dà tentativi. Il piano a giorni non cambia (le carte non tolgono minuti): la home e
+«oggi» dicono le carte da ripassare, e la vigilia le raccoglie. Il piano con le carte come attività di
+richiamo è un passo dopo, con le misure vere.
+
+**Le sei note della revisione della PR #323** (nella stessa PR): (1) `registra_tentativo` rifiuta un
+giorno dopo oggi; (2) `unisci_argomenti` sposta tentativi e carte degli uniti su quello che resta e
+rifà la misura del giorno; (3) le misure «padronanza» entrano nella forbice solo con la padronanza
+mostrata (tornando in ombra escono); (4) il livello del giorno tornato a None toglie la misura di
+oggi; (5) «l'ultima prova» viene solo da misure che non sono della padronanza (la forbice resta);
+(6) la fonte è confrontata con chi registra: «persona» solo la persona della verifica, «tutore» solo
+il suo tutore, «codice» tutti e due.
+
+**Schema «studio» alla versione 6**: `studio_carte` (verifica, persona, argomento, domanda, risposta,
+forma chiusa, pagine, origine, stato, avvisi, scatola, scadenza, ultima volta, chi l'ha scritta,
+quando) e `studio_tentativi.carta`. Le carte vanno via con la verifica, con «dimentica» (non le
+archiviate), con la rotazione e con `--svuota`; al più 300 per verifica, domanda e risposta di al più
+240 caratteri, una riga.
+
+**Scelte prudenti di questa PR** (non coperte dalle decisioni scritte, da confermare): niente
+interruttore nuovo per le carte (vivono con lo Studio, spento di serie; la generazione avrà il suo, in
+ombra); il confronto del codice dice solo «giusto»; dopo la risposta letta vale solo
+l'autovalutazione; la carta del tutore resta un dato come le altre.
+
+Prove: `prova_studio_carte.py` (a secco, ~3 s, con il server vero per l'endpoint); in
+`prova_valore.py` `prova_carte` attraverso `Brain` (la carta ostile, il «sì» con due chiamate, il
+codice); in `prova_studio_home_pagina.py` il ripasso e «Scrivi una carta» nella pagina vera; lo schema
+6 in `prova_studio_piano.py`, `prova_studio_pagine.py`, `prova_studio_padronanza.py` e
+`prova_studio_resoconto.py`. La prova col modello sulla DGX (la voce che chiede e la persona che
+risponde) resta a chi amministra.
+
 ## La padronanza per argomento (30/10, issue #245, ramo `issue-245-studio-padronanza`)
 
 *Passo 5 dell'epic #251; decisione [0035](../decisioni/0035-studio.md) punto 32; analisi nel
 commento della #245; progetto § 5.5 e decisione 4 del 27/10.*
 
-**Le fonti oggi: nessuna.** I giorni fatti e le pagine lette dicono che si è letto, non che si sa;
+**Le fonti oggi: nessuna.** *[storico fino al 30/10 sera: dalla #246 le carte danno i tentativi,
+sezione sopra]* I giorni fatti e le pagine lette dicono che si è letto, non che si sa;
 l'autovalutazione «da 1 a 5» resta in memoria (punto 27); gli esercizi guidati sulle pagine
 avrebbero il giudizio del modello (escluso). Le fonti vere sono le carte (#246) e la verifica
 finta (#248), che non ci sono ancora. **Scelta**: il modello, il registro dei tentativi e l'ombra

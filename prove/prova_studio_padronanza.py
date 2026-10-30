@@ -168,9 +168,9 @@ print("— il servizio, in ombra")
 cfg = cfg_nuova("a.db")
 st = studio(cfg)
 vid, ids, aids = carica(st)
-verifica("lo schema alla versione 5, studio_tentativi fra le tabelle e nella conservazione",
+verifica("lo schema alla versione 6 (dal passo 6, #246), studio_tentativi fra le tabelle e nella conservazione",
          st.dati.uno("SELECT versione FROM meta_schema WHERE modulo='studio'")["versione"]
-         == len(D.MIGRAZIONI) == 5 and "studio_tentativi" in D.TABELLE
+         == len(D.MIGRAZIONI) == 6 and "studio_tentativi" in D.TABELLE
          and set(TABELLE_STUDIO) == set(D.TABELLE))
 pz = st.padronanza(LEO, vid)
 verifica("senza tentativi: tutti «non ancora misurata», niente lacune né livello",
@@ -250,8 +250,9 @@ for g in (28, 29, 30, 31):
         st2.registra_tentativo(LEO, vid2, aids2[4], "carta", "giusto")
         st2.registra_tentativo(LEO, vid2, aids2[5], "carta", "giusto")
 pi = st2.piano(LEO, vid2)
-verifica("mostrata: tre misure (dal secondo giorno), la previsione dalla padronanza (forbice)",
-         pi["misure"] == 3 and pi["previsione"] is not None and pi["livello"] is not None, pi)
+verifica("mostrata: tre misure (dal secondo giorno), la previsione dalla padronanza (forbice); "
+         "«l'ultima prova» no: non è una prova (#246, nota 5)",
+         pi["misure"] == 3 and pi["previsione"] is not None and pi["livello"] is None, pi)
 h = st2.home(LEO)["verifiche"][0]
 par = [x.get("parola") for x in h["tappe"]]
 verifica("la parola sulle tappe", "la sai" in par and "da studiare" in par and "quasi" in par,

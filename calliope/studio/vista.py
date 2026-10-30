@@ -20,7 +20,9 @@ import threading
 import time
 
 VISTA_S = 600.0
-TIPI = ("home", "piano", "argomenti", "pagine", "pagina", "sessione")
+# «carte» (30/10, passo 6, #246): il ripasso o l'elenco delle carte di una verifica
+TIPI = ("home", "piano", "argomenti", "pagine", "pagina", "sessione",
+        "carte")
 
 
 def valida(dati) -> dict | None:

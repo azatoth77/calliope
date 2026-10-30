@@ -1259,3 +1259,18 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
 .studio-h-s-saltato, .studio-h-s-mancato, .studio-h-s-iniziato { border-left: 3px solid var(--tenue); }
 .studio-h-sessioni summary:focus-visible, .studio-h-piano summary:focus-visible, .studio-h-tasto:focus-visible, .studio-h-chip:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }
 .studio-home .studio-avviso { display: block; font-size: 0.88rem; color: var(--allarme); }
+/* Le carte dello Studio (30/10, passo 6, #246, studio.js): una carta per volta, la risposta dopo
+   «Mostra la risposta», i tre esiti; l'elenco con «Scrivi una carta». Il testo va a capo sempre */
+.studio-c-ripasso, .studio-c-elenco, .studio-c-modulo { display: flex; flex-direction: column; gap: 0.55rem; }
+.studio-c-carta { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.8rem 0.9rem; border-radius: 0.8rem;
+  border: 1px solid var(--accento-bordo); background: var(--accento-fondo); }
+.studio-c-domanda { margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--testo); overflow-wrap: anywhere; }
+.studio-c-risposta { margin: 0; font-size: 1rem; color: var(--testo); overflow-wrap: anywhere;
+  border-top: 1px dashed var(--accento-bordo); padding-top: 0.4rem; }
+.studio-c-risp { display: block; color: var(--tenue); overflow-wrap: anywhere; }
+.studio-c-esiti .studio-h-tasto { flex: 1 1 12rem; }
+.studio-c-campo { width: 100%; box-sizing: border-box; font: inherit; padding: 0.5rem; border-radius: 0.6rem;
+  border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo); resize: vertical; }
+.studio-c-modulo select { font: inherit; min-height: 2.6rem; padding: 0.3rem 0.6rem; border-radius: 0.6rem;
+  border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo); max-width: 100%; }
+.studio-c-voce .studio-testo b { overflow-wrap: anywhere; }

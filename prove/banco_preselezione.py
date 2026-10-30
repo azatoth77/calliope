@@ -177,6 +177,7 @@ f("Marco adesso è di famiglia", "conoscente_livello")
 f("Giovedì ho la verifica di storia", "studio")
 f("Cosa devo studiare oggi?", "studio")
 f("Spiegami la pagina 114 del libro di storia", "studio_pagina_leggi")
+f("Ripassiamo le carte di storia", "studio_carte")
 # ── senza tool: chiacchiere e cultura generale ──
 f("Raccontami una barzelletta")
 f("Come stai oggi?")
