@@ -683,8 +683,9 @@ turno(b, "tieni il secondo argomento", PP.chiama("studio", {"azione": "tieni", "
       PP.testo("Fatto."))
 verifica("contrario: «tieni il secondo argomento» (ordinale detto) passa senza domanda",
          stato_di(s4, v4, 1) == "tenuto" and b.last_tools[-1]["ok"])
-verifica("valore: gli ordinali contano come numeri detti",
-         valore._gettoni_numeri("tieni il secondo argomento") >= {"2"}
+verifica("valore: gli ordinali contano solo nella forma stretta e solo per studio.numero",
+         valore.ordinali_detti("tieni il secondo argomento") == {"2"}
+         and not valore._gettoni_numeri("tieni il secondo argomento")
          and "studio" not in valore.ELENCHI_FIDATI)
 # «…» copiato dalla storia vale «non dato»: si aggiorna solo l'umore
 b, s5, v5, _ = brain_vero("b3c.db")

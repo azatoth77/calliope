@@ -2059,3 +2059,31 @@ cancella e butta); `prova_cassetto_pagina` (un pulsante «elimina» messo a mano
     voce anche i nomi corti 8.3 (`~`), i percorsi di rete (`\`, `//`, WebDAV) e gli interpreti con un altro nome
     (`pypy`, `ipython`, `jython`, `nodejs`, `python3.12t`, `python_d`, AutoHotkey, AutoIt3): [pc](pc.md). Prove in
     `prova_pc`, a secco e sull'«avvia» scritto del satellite.
+
+## Le pagine dello Studio come dato non fidato (30/10, PR #317, issue #284, ramo `issue-284-studio-tool-home`)
+
+*Decisione [0035](../decisioni/0035-studio.md), punto 24; dettagli in [studio](studio.md).*
+
+- `studio_pagina_leggi` è `non_fidato` con la fonte «foto»: dopo il suo risultato, nella stessa
+  risposta, passano solo le letture (`politica.DOPO_DATO`), e a risposta finita il testo esce dalla
+  storia con una nota sua (`brain.PAGINA_TOLTA`: «per rileggerlo usa studio_pagina_leggi»), non
+  quella di internet (`WEB_TOLTO`, che spingeva verso `web_cerca`).
+- **`_CHIAVI_DATO` ha anche `"testo"` e `"argomenti"`** (`brain.py`), e vale per **tutti** i tool
+  `non_fidato`, perché il controllo guarda il testo grezzo del risultato. Effetto fuori dallo
+  Studio: un `sviluppo_collauda` (il collaudo, `_sviluppo_prova`, `non_fidato`) fallito con la proposta `in_sospeso`
+  («Lo faccio correggere?», che ha `"argomenti"`) ora accende `letto_ora` anche senza dati del
+  programma: nella stessa risposta solo letture. È più prudente e le prove sono verdi; se desse
+  attrito, si guarderanno le chiavi del JSON già letto dopo aver tolto `in_sospeso`, o le chiavi
+  dichiarate per tool.
+- La posizione di un argomento detta a voce (`studio.numero`) è un **bersaglio**: detta solo se la
+  persona la dice in questa frase, in cifre, in lettere o come ordinale nella forma stretta («il
+  secondo», «secondo argomento»: `valore.ordinali_detti`, solo per `valore.POSIZIONI`). Gli
+  ordinali **non** sono in `_gettoni_numeri`: «prima di uscire», «secondo me», «un quarto d'ora»,
+  «sette decimi» non diventano numeri detti, né nella frase né nella conversazione, per nessun
+  tool (terza revisione della PR #317; *storico per un commit: c'erano, per ogni tool*).
+- Le azioni dello Studio hanno le loro parole (`politica.VERBI_STUDIO`, «togli» comprende «va
+  tolto» e «tolgo»): con dati non fidati di mezzo «oggi», «leggi», «la pagina» o un numero non
+  bastano.
+
+Prove: `prova_studio_tool.py` e `prova_valore.py` (`prova_ordinali`: i contrari, S5b e S5c della
+revisione attraverso `Brain`, la nota della pagina tolta).

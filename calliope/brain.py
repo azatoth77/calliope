@@ -1413,6 +1413,10 @@ class CapitoHold:
 # Calliope ha detto.
 WEB_TOLTO = ("{\"ok\": true, \"nota\": \"risultati di internet già usati nella risposta qui "
              "sotto e poi tolti dalla conversazione: per altri dati cerca di nuovo\"}")
+# Il testo di una pagina dello Studio (studio_pagina_leggi) tolto a risposta finita (terza
+# revisione della PR #317): la sua nota, non quella di internet, che spingeva verso web_cerca
+PAGINA_TOLTA = ("{\"ok\": true, \"nota\": \"il testo della pagina è stato tolto: per rileggerlo "
+                "usa studio_pagina_leggi\"}")
 # Le chiavi del JSON di un tool non fidato che portano dati (non solo un esito): i risultati di
 # web_cerca e delle estensioni, i fatti e la notizia del tool notizie (13/10)
 # «testo» e «argomenti»: studio_pagina_leggi (30/10, seconda revisione della PR #317)
@@ -4129,12 +4133,13 @@ class Brain:
         conversazione resta contaminata anche senza il testo."""
         provenienza.marca(self.history)
         for m in self.history:
-            if m.get("role") != "tool" or m.get("content") == WEB_TOLTO:
+            if m.get("role") != "tool" or m.get("content") in (WEB_TOLTO, PAGINA_TOLTA):
                 continue
             spec = self.tools.get(m.get("name") or "")
             if (spec is not None and getattr(spec, "non_fidato", False)
                     and not getattr(spec, "resta_in_storia", False)):
-                m["content"] = WEB_TOLTO
+                m["content"] = (PAGINA_TOLTA if m.get("name") == "studio_pagina_leggi"
+                                else WEB_TOLTO)
 
     def rules_fired(self) -> list[str]:
         """Le regole sul testo scattate nell'ultima risposta: quelle di Brain (spinte,

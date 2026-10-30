@@ -240,7 +240,7 @@ VERBI_STUDIO = {
     "salta_oggi": r"salt|spost|non ce la faccio|rimand|non riesco",
     "archivia": r"archivi|conserv",
     "tieni": r"tien|tenere|rimett|includ|nel piano|aggiung",
-    "togli": r"togl|elimin|lev[aio]|cancell|fuori dal piano|non serve",
+    "togli": r"togl|tol[gt]|elimin|lev[aio]|cancell|fuori dal piano|non serve",
     "riprova": r"riprov|rilegg|di nuovo",
     "sessione": r"conosc|sent|stanc|pront|curios|tranquill|stress|neutral|energia|sicur|nuov|"
                 r"poco|abbastanza|bene|male|[1-5]|uno|due|tre|quattro|cinque",

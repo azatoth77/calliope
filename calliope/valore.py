@@ -417,14 +417,33 @@ def _gettoni_numeri(testo) -> set[str]:
             out.add(str(int(g)) if len(g) < 6 else g)
     inverso = {v: str(k) for k, v in pol._NUMERI.items()}
     out |= {inverso[g] for g in pol._gettoni(testo) if g in inverso}
-    # Gli ordinali («il secondo argomento», «la terza»), seconda revisione della PR #317
-    out |= {ORDINALI[g] for g in pol._gettoni(testo) if g in ORDINALI}
     return out
 
 
+# Gli ordinali (terza revisione della PR #317): mai dentro `_gettoni_numeri`, dove «prima di
+# uscire», «secondo me», «un quarto d'ora» e «sette decimi» diventavano 1, 2, 4 e 10 detti dalla
+# persona, per ogni tool e per tutta la conversazione. Contano solo per gli argomenti di
+# `POSIZIONI`, solo nella frase del turno e solo nelle forme «articolo + ordinale» («il secondo»,
+# «la prima», «l'ottavo») o «ordinale + argomento/voce/pagina» («secondo argomento»)
 ORDINALI = {f"{radice}{fine}": str(n) for n, radice in enumerate(
     ("prim", "second", "terz", "quart", "quint", "sest", "settim", "ottav", "non", "decim"), 1)
     for fine in ("o", "a", "i", "e")}
+_ORD = "|".join(sorted(ORDINALI, key=len, reverse=True))
+_ORDINALE_DETTO = re.compile(
+    rf"(?:\b(?:il|lo|la|i|gli|le)\s+|\bl['’]\s*)({_ORD})\b(?!\s+(?:di|o|me|te|lui|lei|noi|voi|loro|volta|d['’]))"
+    rf"|\b({_ORD})\s+(?:argoment[oi]|voc[ei]|pagin[ae])\b", re.I)
+# Gli argomenti che sono una posizione in un elenco detta a voce («tieni il secondo»)
+POSIZIONI = frozenset({("studio", "numero")})
+
+
+def ordinali_detti(testo) -> set[str]:
+    """I numeri detti come ordinali nella forma stretta (vedi `_ORDINALE_DETTO`)."""
+    out = set()
+    for m in _ORDINALE_DETTO.finditer(str(testo or "")):
+        g = (m.group(1) or m.group(2) or "").lower()
+        if g in ORDINALI:
+            out.add(ORDINALI[g])
+    return out
 
 
 @dataclass
@@ -972,6 +991,11 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         if k in OGGETTO_VALORI.get(name, ()):
             v = " ".join(pol._valori_foglia(v)) if pol._valori_foglia(v) else v
         e = etichetta(v, tipo, f_data if forma_data(v) else f)
+        # Una posizione detta come ordinale in questa frase («tieni il secondo argomento»): solo
+        # per gli argomenti di POSIZIONI (terza revisione della PR #317)
+        if ((name, k) in POSIZIONI and e != DETTO
+                and str(v).strip() in ordinali_detti(getattr(t, "testo", ""))):
+            e = DETTO
         # Un valore della chiamata di prima allo stesso tool, scelto prima del dato letto ora
         # (12/10 sera): l'etichetta che aveva allora, con i soli dati di allora
         if e == DATO and di_prima(name, k, v, t, f):

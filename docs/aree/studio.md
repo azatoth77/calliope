@@ -136,6 +136,13 @@ azione (`politica.VERBI_STUDIO`); (d) i quattro scenari della revisione attraver
 `prova_studio_tool.py`, col contrario «tieni il secondo argomento» che passa. E «…» copiato dalla
 storia vale «non dato» (`tools/studio.senza_mascherati`, regola `studio_mascherato_non_dato`).
 
+**Dopo la terza revisione della PR #317 (30/10):** gli ordinali fuori da `_gettoni_numeri`
+(«prima di uscire», «secondo me» non sono più numeri detti, per nessun tool); contano solo per
+`studio.numero`, nella frase del turno e nella forma «il secondo» / «secondo argomento»
+(`valore.ordinali_detti`, `POSIZIONI`); la nota `PAGINA_TOLTA` al posto di `WEB_TOLTO`; «togli»
+prende «va tolto»; `_CHIAVI_DATO` scritto in [sicurezza-politica](sicurezza-politica.md). Prove
+in `prova_valore.py` (`prova_ordinali`).
+
 **Le note delle revisioni, chiuse:**
 - `piano_non_aggiornato` quando il ricalcolo fallisce (`_piano_vivo`), detto a parole dal tool e
   dalla home; la prova controlla `errori`;

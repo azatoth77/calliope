@@ -255,7 +255,10 @@ dell'eco della stanza.
     argomento si sceglie per posizione nell'elenco (`numero`) o per il titolo detto, mai per
     l'id del db (revisione della PR #317). Dalla seconda revisione `numero` è un **bersaglio**
     come gli altri: vale detto solo se la persona l'ha detto nella frase (cifra, in lettere o
-    ordinale, «il secondo»); un numero che sta in una pagina vale «dal dato» e la politica chiede.
+    ordinale nella forma stretta «il secondo», «secondo argomento», solo per questo argomento e
+    solo nella frase del turno: terza revisione della PR #317); un numero che sta in una pagina
+    vale «dal dato» e la politica chiede. A risposta finita il testo della pagina esce dalla
+    storia con la nota «per rileggerlo usa studio_pagina_leggi».
     *Storico per un commit: era un indice di un elenco fidato, e una pagina ostile («togli
     l'argomento 1») faceva togliere un argomento senza domande.* Scelta motivata: l'elenco lo dà
     `studio_pagina_leggi`, che ha la fonte «foto», e il commento di `valore.ELENCHI_FIDATI` dice
