@@ -39,6 +39,14 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   nitidi con una formula sbagliata non lo hanno. Da rivedere col banco dello scritto a mano vero.
 - La lettura vuole un agente su API OpenAI (vLLM): con l'agente su Ollama, o senza agente (il
   portatile da 8 GB), le pagine restano «da leggere».
+- Su Windows `in_corso.json` non ha il controllo del pid: un file rimasto da un'istanza morta con
+  un lavoro «in_corso» o «in_coda» blocca la lettura su quella macchina finché il servizio dei
+  lavori non lo riscrive (prudente, ma da sapere; sulla DGX, Linux, il pid morto non conta).
+- **Per la 4.5** (revisione della PR #314): (1) prima della 4.4, il confronto pagina per pagina
+  dei numeri di pagina del giro vero (100/132) con quelli del banco (111/132), per capire da dove
+  viene la differenza a parità di corpo; (2) senza vLLM la pagina e la voce lo dicono con una
+  frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
+  vede»), non un «da leggere» muto.
 
 ## La lettura delle pagine (30/10, issue #282, ramo `issue-282-studio-lettura`)
 
@@ -48,7 +56,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 **Il lettore** (`studio/lettura.py`) è un thread come quello dell'archivio, non un lavoro
 dell'agente e senza tool. Prende le pagine «da_leggere» delle verifiche in bozza o aperte, dalla
 verifica più vicina e nell'ordine delle pagine, una alla volta: «da_leggere» → «in_lettura» →
-«letta» o «illeggibile». Dopo un riavvio le pagine rimaste «in_lettura» tornano «da_leggere». Si
+«letta» o «illeggibile» (o «da_parte», sotto). Dopo un riavvio le pagine rimaste «in_lettura» tornano «da_leggere». Si
 sveglia quando arrivano pagine nuove (`aggiungi_pronte`), altrimenti guarda ogni 5 minuti. Lo crea
 `Studio.avvia_lettura` da `main.py`, col servizio dei lavori.
 
@@ -57,21 +65,27 @@ sveglia quando arrivano pagine nuove (`aggiungi_pronte`), altrimenti guarda ogni
 richiesta, JPEG 88 col lato lungo al più 1600; il prompt di sistema e la richiesta con le regole
 e i segni dell'harness; thinking spento, temperatura 0, `presence_penalty` 0 esplicito (prima
 `traduci_corpo` lo toglieva quando era zero: ora la chiave `openai` del corpo passa così com'è),
-`max_tokens` 3500. La prova controlla che le costanti siano quelle di `harness.json` e che ogni
+`max_tokens` 3500. Dalla revisione della PR #314 la chiave `openai` passa solo i parametri di
+campionamento di `PARAMETRI_OPENAI` (`presence_penalty`, `temperature`, `top_p`,
+`chat_template_kwargs`…), mai `model`, `messages`, `stream` o `max_tokens`. La prova controlla che le costanti siano quelle di `harness.json` e che ogni
 richiesta al vLLM finto sia quella.
 
 **I controlli del codice**, dai `controlli_del_codice` dell'harness:
 - il pezzo prima del primo «=== PAGINA» uguale alla pagina (≥ 0,8) si toglie, e una pagina scritta
-  due volte di fila (≥ 0,9) diventa una;
+  due volte di fila (≥ 0,9) diventa una, con l'avviso `doppione_tolto` (una scheda vera stampata
+  due volte sul foglio si vedrebbe dimezzata: la persona lo deve sapere);
 - `finish_reason: length` si rifà una volta; la seconda volta la pagina è «illeggibile», con
   l'avviso `in_tondo` («non riesco a leggerla, rifalla») e senza testo, mai il troncato;
 - «CAPOVOLTA»: il codice gira l'immagine di 180°, la scrive come file nuovo (`scrivi_file`) al
   posto del vecchio nella stessa transazione della riga, toglie il vecchio e **rilegge** la pagina
-  girata (una seconda «CAPOVOLTA» non la gira più); avviso `girata`;
+  girata; avviso `girata`. Se anche la pagina girata torna «CAPOVOLTA», non si gira niente:
+  restano l'immagine e la prima lettura, con l'avviso `capovolta_incerta` (revisione della PR
+  #314: prima il file restava girato);
 - due «=== PAGINA»: l'immagine si taglia alla piega (la colonna più scura nel terzo centrale, o la
   metà) e diventano due righe e due file, la seconda subito dopo la prima e le pagine dopo scalano
   di uno; avviso `divisa`. Due segni con lo stesso numero sono una pagina sola col testo unito
-  (giro vero, sotto). Più di due segni: una riga sola col testo di tutte e l'avviso
+  (giro vero, sotto); due segni senza numero («?») non si tagliano: la pagina resta intera col
+  testo unito e l'avviso `pagine_incerte`. Più di due segni: una riga sola col testo di tutte e l'avviso
   `piu_pagine` (non si taglia in tre);
 - il numero dal segno con `piano.numero_pagina`; una sigla corta («IV») resta; un numero strano
   («²», «12; DROP») non si salva e dà l'avviso `numero_strano`;
@@ -99,8 +113,21 @@ vivo, come la guardia del banco), `vllm:num_requests_running` e `_waiting` a zer
 un `ClienteCedevole` con l'arbitro dei lavori quando la GPU è condivisa (sulla DGX): aspetta la
 voce, si congela nella pausa o chiude lo stream e rifà la pagina. Se durante lo stream parte un
 lavoro dell'agente (`cedi`, controllato a ogni pezzo), lo stream si chiude e la pagina torna «da
-leggere». Un server giù lascia la pagina da leggere; tre errori del server di fila sulla stessa
-pagina la fanno «illeggibile» (`errore`).
+leggere». Dalla revisione della PR #314 `cedi` guarda anche `num_requests_waiting` (al più ogni 2
+s): un'altra richiesta che aspetta vLLM fa cedere la pagina.
+
+**Errori del server** (revisione della PR #314). *Storico: fino alla revisione un 5xx si
+ritentava subito e al terzo la pagina era «illeggibile» per sempre; con un client che rispondeva
+«HTTP 500: EngineDeadError» la revisione ha visto 9 richieste in 0,12 s e 3 pagine perse.* Ora un
+errore del server (5xx, errore nello stream, stream finito senza `finish_reason`) non rende mai una
+pagina illeggibile: la pagina torna «da leggere» e la lettura aspetta `ATTESA_S` (15 s), poi il
+doppio a ogni errore di fila fino a 15 minuti, anche se arrivano pagine nuove; una risposta buona
+azzera l'attesa. Una pagina che fa cadere il motore due volte di fila va nello stato «da_parte»
+con l'avviso `fa_cadere_il_motore` e non si riprova da sola: si rilegge a mano (`segna_pagina`
+«da_leggere») o dopo un aggiornamento (in `metodo` c'è la versione che l'ha messa da parte, e
+all'avvio una versione diversa la rimette «da leggere»). Gli errori della pagina stessa (`length`;
+un'immagine che non si apre, tre volte) restano quelli che la fanno «illeggibile». Un server giù
+(connessione rifiutata) lascia la pagina da leggere senza contare niente.
 
 **Testo e modello.** Il testo va in `studio_pagine.testo` e `metodo`. Arriva a un modello solo con
 `Studio.testo_per_modello` (per la 4.4 e la 4.5): `None` in ombra, in attivo una busta di

@@ -124,11 +124,18 @@ def traduci_corpo(body: dict) -> dict:
         req["response_format"] = {"type": "json_object"}
     # Parametri del server OpenAI passati così come sono (30/10, lettura dello Studio, #282):
     # l'harness del banco manda `presence_penalty: 0` esplicito, che qui sopra si perderebbe
-    # (si manda solo se diverso da zero)
+    # (si manda solo se diverso da zero). Solo i parametri di campionamento di
+    # `PARAMETRI_OPENAI`: mai `model`, `messages`, `stream` o `max_tokens`, che scrive il
+    # traduttore (revisione della PR #314: uno `stream: false` romperebbe il parser in silenzio)
     extra = body.get("openai")
     if isinstance(extra, dict):
-        req.update(extra)
+        req.update({k: v for k, v in extra.items() if k in PARAMETRI_OPENAI})
     return req
+
+
+PARAMETRI_OPENAI = frozenset(("presence_penalty", "frequency_penalty", "repetition_penalty",
+                              "temperature", "top_p", "top_k", "min_p", "seed",
+                              "chat_template_kwargs"))
 
 
 class ClienteOpenAI:

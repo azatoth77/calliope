@@ -74,6 +74,7 @@ class Finto:
         self.lento = 0.0
         self.durante = None
         self.metriche_ok = True
+        self.errore = None          # None, «500», «rotto», «errore_stream»
 
 
 F = Finto()
@@ -114,6 +115,23 @@ class Gestore(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         corpo = json.loads(self.rfile.read(n) or b"{}")
         F.richieste.append(corpo)
+        if F.errore == "500":
+            return self._json(500, {"error": "EngineDeadError"})
+        if F.errore in ("rotto", "errore_stream"):
+            # Due pezzi, poi lo stream chiuso a metà (senza finish_reason né [DONE]) o un errore
+            # dentro lo stream, come vLLM quando il motore cade
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            for p in ("=== PAGINA ", "1 ===\nCrist"):
+                ch = {"choices": [{"index": 0, "delta": {"content": p}, "finish_reason": None}]}
+                self.wfile.write(f"data: {json.dumps(ch)}\n\n".encode())
+            if F.errore == "errore_stream":
+                self.wfile.write(b'data: {"error": {"message": "EngineDeadError"}}\n\n')
+            self.wfile.flush()
+            self.close_connection = True
+            return
         try:
             testo, fine = F.risposte.get_nowait()
         except queue.Empty:
@@ -160,6 +178,7 @@ def azzera():
     F.lento = 0.0
     F.durante = None
     F.metriche_ok = True
+    F.errore = None
 
 
 # ─────────────────────────── lo Studio di prova ───────────────────────────
@@ -369,7 +388,9 @@ def prova_controlli():
     p1 = ps[ids[0]]
     verifica("doppione: testo una volta, numero 112, letta, ocr",
              p1["testo"] == t and p1["numero"] == "112" and p1["stato"] == "letta"
-             and p1["metodo"] == "ocr", p1)
+             and p1["metodo"] == "ocr" and "doppione_tolto" in D.da_j(p1["avvisi"]), p1)
+    verifica("senza ripetizioni niente «doppione_tolto»",
+             "doppione_tolto" not in D.da_j(ps[ids[5]]["avvisi"]))
     p2 = ps[ids[1]]
     base = D.cartella_di(cfg).resolve()
     verifica("capovolta: riletta dopo il giro del codice, file nuovo, il vecchio tolto",
@@ -740,6 +761,136 @@ def prova_interruttore_permessi():
     st.close()
 
 
+def prova_errori_server():
+    """Revisione della PR #314: 5xx, stream rotto ed errore nello stream non fanno raffiche né
+    pagine illeggibili; l'attesa cresce; la pagina che fa cadere il motore due volte di fila va
+    da parte e si riprova solo a mano o dopo un aggiornamento."""
+    azzera()
+    cfg = cfg_nuova("errori")
+    st = S.Studio(cfg, registry=REG, log=log_righe.append)
+    vid = nuova_verifica(st)
+    st.aggiungi_pronte(LEO, vid, [pronta(pagina()), pronta(pagina()), pronta(pagina())])
+    ids = [p["id"] for p in righe(st, vid)]
+    lett, _ = lettore(st)
+    lett.attesa_s = 0.3
+    F.errore = "500"
+    e = lett.giro()
+    stati = [p["stato"] for p in righe(st, vid)]
+    verifica("5xx: una richiesta, la lettura aspetta, tutte le pagine da leggere",
+             e.get("aspetta") == "errore_server" and len(F.richieste) == 1
+             and stati == ["da_leggere"] * 3, (e, len(F.richieste), stati))
+    e2 = [lett.giro() for _ in range(5)]
+    verifica("5xx: nessuna raffica (cinque giri subito dopo, nessuna richiesta in più)",
+             len(F.richieste) == 1 and all(x.get("aspetta") == "errore" for x in e2))
+    attesa1 = lett._riprova_dopo - time.monotonic()
+    time.sleep(0.35)
+    e = lett.giro()
+    p0 = righe(st, vid)[0]
+    attesa2 = lett._riprova_dopo - time.monotonic()
+    verifica("5xx due volte di fila sulla stessa pagina: da parte, «fa_cadere_il_motore»",
+             e.get("aspetta") == "da_parte" and p0["stato"] == "da_parte"
+             and "fa_cadere_il_motore" in D.da_j(p0["avvisi"]) and len(F.richieste) == 2, p0)
+    verifica("l'attesa cresce a ogni errore di fila (0,3 s, poi 0,6)",
+             attesa1 <= 0.3 and 0.45 < attesa2 <= 0.6, (attesa1, attesa2))
+    verifica("nessuna pagina illeggibile per un errore del server",
+             not any(p["stato"] == "illeggibile" for p in righe(st, vid)))
+    # Stream rotto ed errore nello stream sull'altra pagina: da leggere, non illeggibile
+    for modo in ("rotto", "errore_stream"):
+        F.errore = modo
+        lett._riprova_dopo = 0.0
+        n = len(F.richieste)
+        e = lett.giro()
+        p1 = righe(st, vid)[1]
+        verifica(f"{modo}: errore del server, la pagina torna da leggere",
+                 e.get("aspetta") in ("errore_server", "da_parte") and len(F.richieste) == n + 1
+                 and p1["stato"] in ("da_leggere", "da_parte") and p1["testo"] is None,
+                 (e, p1["stato"]))
+    # Il server torna: le pagine si leggono, la messa da parte resta
+    F.errore = None
+    lett._riprova_dopo = 0.0
+    rispondi("=== PAGINA 2 ===\ndue", "=== PAGINA 3 ===\ntre", "=== PAGINA 2 ===\ndue")
+    lett.giro()
+    stati = {p["id"]: p["stato"] for p in righe(st, vid)}
+    verifica("server di nuovo su: le altre lette, la pagina da parte non si riprova da sola",
+             stati[ids[0]] == "da_parte" and stati[ids[2]] == "letta"
+             and lett._errori_di_fila == 0, stati)
+    verifica("riavvio con la stessa versione: resta da parte",
+             lett.riprendi() == 0 and righe(st, vid)[0]["stato"] == "da_parte")
+    st.dati.scrivi("UPDATE studio_pagine SET metodo = ? WHERE id = ?",
+                   (L.DA_PARTE + "versione-vecchia", ids[0]))
+    verifica("dopo un aggiornamento: torna da leggere", lett.riprendi() == 1
+             and righe(st, vid)[0]["stato"] == "da_leggere")
+    st.dati.scrivi("UPDATE studio_pagine SET stato = 'da_parte' WHERE id = ?", (ids[0],))
+    st.segna_pagina(LEO, ids[0], "da_leggere")
+    rispondi("=== PAGINA 1 ===\nuno")
+    lett.giro()
+    verifica("a mano («da_leggere»): si rilegge", righe(st, vid)[0]["stato"] == "letta")
+    av = st.lettura(LEO, vid)
+    verifica("avanzamento: le pagine da parte si contano", "da_parte" in av)
+    st.close()
+
+
+def prova_revisione():
+    """Le note della revisione della PR #314."""
+    from calliope.agenti.remoto_openai import traduci_corpo
+    req = traduci_corpo({"model": "q", "messages": [{"role": "user", "content": "x"}],
+                         "options": {"num_predict": 3500}, "openai": {
+                             "presence_penalty": 0, "top_p": 0.9, "stream": False,
+                             "model": "altro", "messages": [], "max_tokens": 1,
+                             "stream_options": {}}})
+    verifica("openai: solo i parametri ammessi (mai model, messages, stream, max_tokens)",
+             req["presence_penalty"] == 0 and req["top_p"] == 0.9 and req["stream"] is True
+             and req["model"] == "q" and req["messages"] and req["max_tokens"] == 3500
+             and req["stream_options"] == {"include_usage": True}, req)
+    azzera()
+    cfg = cfg_nuova("revisione")
+    st = S.Studio(cfg, registry=REG, log=log_righe.append)
+    vid = nuova_verifica(st)
+    st.aggiungi_pronte(LEO, vid, [pronta(pagina(segno=True)), pronta(pagina()),
+                                  pronta(pagina())])
+    ps = righe(st, vid)
+    ids, file0, file1 = [p["id"] for p in ps], ps[0]["file"], ps[1]["file"]
+    rispondi("CAPOVOLTA\n=== PAGINA 5 ===\nprima lettura",
+             "CAPOVOLTA\n=== PAGINA 5 ===\nseconda lettura",
+             "=== PAGINA ? ===\nmetà di sopra\n=== PAGINA ? ===\nmetà di sotto")
+    lett, _ = lettore(st)
+    # cedi() con le richieste in attesa: la terza pagina cede
+    L_cedi = L.CEDI_METRICHE_S
+    L.CEDI_METRICHE_S = 0.0
+    lett.leggi_pagina(lett.prossime(1)[0])
+    lett.leggi_pagina(lett.prossime(1)[0])
+    ps = {p["id"]: p for p in righe(st, vid)}
+    base = D.cartella_di(cfg).resolve()
+    verifica("«CAPOVOLTA» anche sulla girata: immagine e lettura di prima, avviso",
+             ps[ids[0]]["testo"] == "prima lettura" and ps[ids[0]]["file"] == file0
+             and "capovolta_incerta" in D.da_j(ps[ids[0]]["avvisi"])
+             and "girata" not in D.da_j(ps[ids[0]]["avvisi"]), ps[ids[0]])
+    with Image.open(base / file0) as im:
+        verifica("«CAPOVOLTA» incerta: il file non è girato (il segno resta in alto a sinistra)",
+                 im.convert("L").getpixel((30, 30)) < 60)
+    verifica("due «?»: la pagina resta intera, niente taglio, avviso",
+             len(ps) == 3 and ps[ids[1]]["file"] == file1
+             and ps[ids[1]]["testo"] == "metà di sopra\nmetà di sotto"
+             and "pagine_incerte" in D.da_j(ps[ids[1]]["avvisi"]), ps[ids[1]])
+    rispondi("=== PAGINA 7 ===\n" + "parole della pagina " * 20)
+    F.lento = 0.02
+
+    def arriva(i):
+        if i == 2:
+            F.attesa = 1
+    F.durante = arriva
+    e = lett.giro()
+    F.durante = None
+    F.lento = 0.0
+    F.attesa = 0
+    L.CEDI_METRICHE_S = L_cedi
+    verifica("cedi(): un'altra richiesta in attesa su vLLM durante lo stream fa cedere",
+             e.get("aspetta") == "ceduta" and righe(st, vid)[2]["stato"] == "da_leggere", e)
+    su_disco, citati = file_e_righe(cfg)
+    verifica("ogni file sotto pagine/ ha la sua riga", su_disco == citati, su_disco ^ citati)
+    st.close()
+
+
 def main():
     t0 = time.monotonic()
     prova_segni()
@@ -749,6 +900,8 @@ def main():
     prova_arbitro()
     prova_stati()
     prova_interruttore_permessi()
+    prova_errori_server()
+    prova_revisione()
     SRV.shutdown()
     print(f"\n{'Tutto bene' if not errori else f'{errori} errori'} "
           f"({time.monotonic() - t0:.1f} s)")

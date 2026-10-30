@@ -222,7 +222,7 @@ class Studio:
         lett = self.lettore
         return {"verifica": v["id"], "totali": len(righe), "lette": conta.get("letta", 0),
                 "illeggibili": conta.get("illeggibile", 0),
-                "in_lettura": conta.get("in_lettura", 0),
+                "in_lettura": conta.get("in_lettura", 0), "da_parte": conta.get("da_parte", 0),
                 "da_leggere": conta.get("da_leggere", 0), "avvisi": avvisi,
                 "lettore": lett is not None,
                 "in_attesa": bool(lett is not None and lett.in_attesa)}

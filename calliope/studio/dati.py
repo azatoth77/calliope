@@ -55,9 +55,10 @@ STATI_VERIFICA = ("bozza", "aperta", "fatta", "archiviata")
 ORIGINI = ("foto", "cassetto", "file", "biblioteca", "mano")
 # «da_leggere» (29/10, passo 4.2): la pagina arrivata dalla fotocamera o da un PDF, che aspetta la
 # lettura del passo 4.3; «in_lettura» (30/10, passo 4.3, #282): la sta leggendo il lettore
-# (studio/lettura.py), e dopo un riavvio torna «da_leggere»
+# (studio/lettura.py), e dopo un riavvio torna «da_leggere»; «da_parte» (revisione della PR #314):
+# la pagina che fa cadere vLLM due volte di fila, riprovata solo a mano o dopo un aggiornamento
 STATI_PAGINA = ("da_controllare", "buona", "sfocata", "tolta", "letta", "illeggibile",
-                "da_leggere", "in_lettura")
+                "da_leggere", "in_lettura", "da_parte")
 # Il riferimento di un materiale che è un file nella cartella dello Studio (il PDF originale)
 RIF_FILE = "file:"
 # Le immagini delle pagine e i PDF stanno in `cartella/pagine/<id della verifica>/`, con un nome

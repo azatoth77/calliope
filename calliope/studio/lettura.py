@@ -40,7 +40,11 @@ richiesta il client è un `ClienteCedevole` (aspetta la voce con l'arbitro, si c
 o cede e rifà), e se parte un lavoro dell'agente lo stream si chiude e la pagina torna «da
 leggere» (`cedi`).
 
-**Stati**: «da_leggere» → «in_lettura» → «letta» o «illeggibile». Dopo un riavvio le pagine
+**Errori del server** (revisione della PR #314): mai una pagina illeggibile per un 5xx o uno
+stream rotto; la lettura aspetta sempre di più e la pagina che fa cadere il motore due volte di
+fila va «da_parte» (`ErroreServer`, `_errore_server`).
+
+**Stati**: «da_leggere» → «in_lettura» → «letta», «illeggibile» o «da_parte». Dopo un riavvio le pagine
 rimaste «in_lettura» tornano «da_leggere» (`riprendi`). Un'altra modifica alla pagina nel
 frattempo (tolta, verifica cancellata) vince: la lettura si butta e i file nuovi si tolgono.
 """
@@ -95,9 +99,18 @@ OCR, PDF_TESTO = "ocr", "pdf_testo"
 # Sotto questi caratteri (senza spazi) una pagina di PDF è un'immagine: si legge con l'OCR
 PDF_TESTO_MIN = 40
 PDF_TEMPO_S = 30.0
-# Una pagina che dà errore del server (non un giro in tondo) tante volte di fila diventa
-# illeggibile («errore»); un server giù non conta (si aspetta)
+# Una pagina che dà un errore suo (non del server: un'immagine che non si apre) tante volte
+# diventa illeggibile («errore»); fra un tentativo e l'altro si aspetta
 ERRORI_MAX = 3
+# Gli errori del server (5xx, stream rotto, EngineDeadError: revisione della PR #314) non
+# rendono mai una pagina illeggibile: la lettura aspetta, ogni volta il doppio (da ATTESA_S fino
+# a ATTESA_ERRORE_MAX_S), e la pagina resta da leggere. Una pagina che fa cadere il motore
+# CADUTE_MAX volte di fila va «da_parte» (avviso «fa_cadere_il_motore»): si riprova solo a mano
+# (`segna_pagina` «da_leggere») o dopo un aggiornamento di Calliope
+ATTESA_ERRORE_MAX_S = 900.0
+CADUTE_MAX = 2
+# Durante lo stream le richieste in attesa su vLLM si guardano al più ogni tanti secondi
+CEDI_METRICHE_S = 2.0
 # Ogni quanto si ricontrolla la guardia quando la DGX è occupata, e senza pagine da leggere
 ATTESA_S = 15.0
 INTERVALLO_S = 300.0
@@ -352,6 +365,26 @@ class Guardia:
         self.file_lavori = file_lavori
         self.http = http or httpx.Client(base_url=self.url, timeout=timeout_s, trust_env=False)
         self._file_visto = (0.0, False)
+        self._metriche_viste = (0.0, False)
+
+    def _richieste(self) -> tuple[float, float] | None:
+        """(in corso, in attesa) da `/metrics`; None se vLLM non risponde."""
+        try:
+            r = self.http.get("/metrics")
+        except Exception:  # noqa: BLE001
+            return None
+        if r.status_code != 200:
+            return None
+        corso = attesa = 0.0
+        for riga in r.text.splitlines():
+            m = re.match(r"^vllm:num_requests_(running|waiting)(?:\{[^}]*\})? ([0-9.e+-]+)$",
+                         riga)
+            if m:
+                if m.group(1) == "running":
+                    corso += float(m.group(2))
+                else:
+                    attesa += float(m.group(2))
+        return corso, attesa
 
     def _lavori_vivi(self) -> bool:
         attivi = getattr(self.lavori, "attivi", None)
@@ -370,21 +403,10 @@ class Guardia:
     def motivo(self) -> str | None:
         if self._lavori_vivi():
             return "lavoro dell'agente"
-        try:
-            r = self.http.get("/metrics")
-        except Exception:  # noqa: BLE001
+        rq = self._richieste()
+        if rq is None:
             return "vLLM non risponde"
-        if r.status_code != 200:
-            return "vLLM non risponde"
-        corso = attesa = 0.0
-        for riga in r.text.splitlines():
-            m = re.match(r"^vllm:num_requests_(running|waiting)(?:\{[^}]*\})? ([0-9.e+-]+)$",
-                         riga)
-            if m:
-                if m.group(1) == "running":
-                    corso += float(m.group(2))
-                else:
-                    attesa += float(m.group(2))
+        corso, attesa = rq
         if corso > 0 or attesa > 0:
             return "vLLM occupato"
         try:
@@ -396,8 +418,18 @@ class Guardia:
         return None
 
     def cedi(self) -> bool:
-        """Durante lo stream: è partito un lavoro dell'agente?"""
-        return self._lavori_vivi()
+        """Durante lo stream: è partito un lavoro dell'agente, o qualcun altro aspetta vLLM
+        (`num_requests_waiting`, guardato al più ogni `CEDI_METRICHE_S`: revisione della PR
+        #314)? La nostra richiesta è fra quelle in corso, non fra quelle in attesa."""
+        if self._lavori_vivi():
+            return True
+        ora = time.monotonic()
+        quando, aspetta = self._metriche_viste
+        if ora - quando >= CEDI_METRICHE_S:
+            rq = self._richieste()
+            aspetta = bool(rq is not None and rq[1] > 0)
+            self._metriche_viste = (ora, aspetta)
+        return aspetta
 
     def close(self):
         try:
@@ -407,6 +439,25 @@ class Guardia:
 
 
 # ─────────────────────────── il lettore ───────────────────────────
+
+def versione_codice() -> str:
+    """La versione di Calliope in uso (il commit, o il numero): una pagina messa da parte perché
+    fa cadere il motore si riprova da sola solo con un'altra versione."""
+    try:
+        from ..novita import versione
+        v = versione()
+        return str(v.get("commit") or v.get("numero") or "?")
+    except Exception:  # noqa: BLE001
+        return "?"
+
+
+# Il `metodo` di una pagina messa da parte: con la versione che l'ha messa da parte
+DA_PARTE = "da_parte:"
+
+
+class ErroreServer(Exception):
+    """Un errore del server (5xx, stream rotto): la pagina resta da leggere e si aspetta."""
+
 
 class Ceduta(Exception):
     """La lettura ha ceduto il passo (un lavoro dell'agente): la pagina torna «da leggere»."""
@@ -431,13 +482,19 @@ class Lettore:
         self._chiuso = False
         self._thread = None
         self._errori: dict[int, int] = {}
+        # Gli errori di fila (l'attesa cresce), quando si può riprovare, le cadute di fila per
+        # pagina
+        self._errori_di_fila = 0
+        self._riprova_dopo = 0.0
+        self._cadute: dict[int, int] = {}
         self._pdf: tuple = (None, None)            # (materiale, PDF) → testo delle pagine
         self.in_attesa: str | None = None          # perché la lettura aspetta (la guardia)
         self.in_lettura: int | None = None
         # Le misure (ombra e attivo): solo conti e tempi, niente testo né titoli
         self.misure = {"lette": 0, "illeggibili": 0, "pdf_testo": 0, "ocr": 0, "richieste": 0,
                        "riprovate": 0, "girate": 0, "divise": 0, "doppioni_tolti": 0,
-                       "cedute": 0, "errori": 0, "attese": 0, "secondi": [], "token_in": 0,
+                       "cedute": 0, "errori": 0, "errori_server": 0, "da_parte": 0,
+                       "attese": 0, "secondi": [], "token_in": 0,
                        "token_out": 0, "avvisi": {}}
 
     # ── ciclo ──
@@ -473,7 +530,7 @@ class Lettore:
             try:
                 esito = self.giro()
                 if esito.get("aspetta"):
-                    attesa = self.attesa_s
+                    attesa = max(self.attesa_s, self._riprova_dopo - time.monotonic())
             except Exception as e:  # noqa: BLE001 — un giro rotto non ferma la lettura
                 self.misure["errori"] += 1
                 self.log(f"   [STUDIO] lettura: errore nel giro ({type(e).__name__})")
@@ -489,7 +546,13 @@ class Lettore:
         n = d.scrivi("UPDATE studio_pagine SET stato = 'da_leggere' WHERE stato = 'in_lettura'")
         if n:
             self._registra(f"{n} pagine riprese dopo un riavvio")
-        return n
+        # Le pagine messe da parte da un'altra versione (dopo un aggiornamento) si riprovano
+        m = d.scrivi("UPDATE studio_pagine SET stato = 'da_leggere', metodo = NULL WHERE stato = "
+                     "'da_parte' AND (metodo IS NULL OR metodo != ?)",
+                     (DA_PARTE + versione_codice(),))
+        if m:
+            self._registra(f"{m} pagine messe da parte riprese dopo un aggiornamento")
+        return n + m
 
     def prossime(self, quante: int = 50) -> list[dict]:
         """Le pagine da leggere, dalla verifica più vicina e nell'ordine delle pagine. Solo
@@ -507,6 +570,9 @@ class Lettore:
         if not self.studio.dati.scrivibile:
             return {"fatte": 0}
         while not self._chiuso:
+            if time.monotonic() < self._riprova_dopo:
+                # Dopo un errore si aspetta, anche se una pagina nuova sveglia il lettore
+                return {"fatte": fatte, "aspetta": "errore"}
             righe = self.prossime(1)
             if not righe:
                 self.in_attesa = None
@@ -521,7 +587,7 @@ class Lettore:
                 return {"fatte": fatte, "aspetta": motivo}
             self.in_attesa = None
             esito = self.leggi_pagina(righe[0])
-            if esito in ("ceduta", "giu"):
+            if esito in ("ceduta", "giu", "errore", "errore_server", "da_parte"):
                 return {"fatte": fatte, "aspetta": esito}
             fatte += 1
         return {"fatte": fatte}
@@ -568,6 +634,8 @@ class Lettore:
         except _Giu:
             self._rilascia(pid)
             return "giu"
+        except ErroreServer as e:
+            return self._errore_server(pid, e)
         except Exception as e:  # noqa: BLE001
             self.misure["errori"] += 1
             self._registra(f"pagina {pid}: errore nella lettura ({type(e).__name__})")
@@ -575,7 +643,16 @@ class Lettore:
         finally:
             self.in_lettura = None
 
+    def _attendi_errore(self) -> float:
+        """L'attesa dopo un errore: `attesa_s`, poi il doppio a ogni errore di fila."""
+        self._errori_di_fila += 1
+        attesa = min(self.attesa_s * 2 ** (self._errori_di_fila - 1), ATTESA_ERRORE_MAX_S)
+        self._riprova_dopo = time.monotonic() + attesa
+        return attesa
+
     def _errore(self, pid: int) -> str:
+        """Un errore della pagina (non del server): dopo ERRORI_MAX la pagina è illeggibile;
+        prima torna da leggere e la lettura aspetta."""
         n = self._errori.get(pid, 0) + 1
         self._errori[pid] = n
         if n >= ERRORI_MAX:
@@ -583,7 +660,27 @@ class Lettore:
             self._chiudi(pid, "illeggibile", None, None, ["errore"])
             return "illeggibile"
         self._rilascia(pid)
+        self._attendi_errore()
         return "errore"
+
+    def _errore_server(self, pid: int, e) -> str:
+        """Un errore del server non rende mai la pagina illeggibile: si aspetta, sempre di più.
+        La pagina che fa cadere il motore CADUTE_MAX volte di fila va da parte."""
+        self.misure["errori_server"] += 1
+        attesa = self._attendi_errore()
+        n = self._cadute.get(pid, 0) + 1
+        self._cadute[pid] = n
+        if n >= CADUTE_MAX:
+            self._cadute.pop(pid, None)
+            self.misure["da_parte"] += 1
+            self._chiudi(pid, "da_parte", None, DA_PARTE + versione_codice(),
+                         ["fa_cadere_il_motore"])
+            self._registra(f"pagina {pid}: errore del server {n} volte di fila, messa da parte;"
+                           f" riprovo le altre fra {attesa:.0f} s")
+            return "da_parte"
+        self._rilascia(pid)
+        self._registra(f"pagina {pid}: errore del server ({e}), riprovo fra {attesa:.0f} s")
+        return "errore_server"
 
     def _leggi(self, riga: dict, t0: float) -> str:
         pid = int(riga["id"])
@@ -607,25 +704,44 @@ class Lettore:
         if letto is None:
             return self._illeggibile(pid, t0)
         nuove: dict = {}
+        incerta = False
         if letto["capovolta"]:
             # La rotazione la dice il modello e la fa il codice, che rilegge la pagina girata
-            img = img.rotate(180)
-            nuove["girata"] = img
-            self.misure["girate"] += 1
-            secondo = self._ocr(img, pid)
-            if secondo is not None:
-                secondo["capovolta"] = False       # mai girata due volte
-                letto = secondo
+            girata = img.rotate(180)
+            secondo = self._ocr(girata, pid)
+            if secondo is not None and secondo["capovolta"]:
+                # «CAPOVOLTA» anche sulla pagina girata (revisione della PR #314): non si gira
+                # né una seconda volta né la prima; restano l'immagine e la lettura di prima
+                incerta = True
+            else:
+                img = girata
+                nuove["girata"] = img
+                self.misure["girate"] += 1
+                if secondo is not None:
+                    letto = secondo
         self.misure["ocr"] += 1
         self.misure["doppioni_tolti"] += letto["doppioni"]
         pagine = letto["pagine"]
         avvisi = avvisi_lettura(letto, "\n".join(p["testo"] for p in pagine), avvisi_foto)
+        if incerta:
+            avvisi.append("capovolta_incerta")
+        if letto["doppioni"]:
+            # Una ripetizione tolta si dice: una scheda stampata due volte sul foglio sarebbe
+            # dimezzata in silenzio (revisione della PR #314)
+            avvisi.append("doppione_tolto")
         if len(pagine) == 2 and numero_di(pagine[0]["numero"])[0] is not None and \
                 numero_di(pagine[0]["numero"])[0] == numero_di(pagine[1]["numero"])[0]:
             # Due segni con lo stesso numero non sono un libro aperto: la pagina è una, spezzata
             # in due dal modello (storia p113 storta nel giro vero del 30/10)
             pagine = [{"numero": pagine[0]["numero"],
                        "testo": pagine[0]["testo"] + "\n" + pagine[1]["testo"]}]
+        elif len(pagine) == 2 and numero_di(pagine[0]["numero"])[0] is None and \
+                numero_di(pagine[1]["numero"])[0] is None:
+            # Due segni senza numero (revisione della PR #314): può essere una pagina spezzata
+            # dal modello. Non si taglia alla piega: la pagina resta intera, con l'avviso
+            pagine = [{"numero": None,
+                       "testo": pagine[0]["testo"] + "\n" + pagine[1]["testo"]}]
+            avvisi.append("pagine_incerte")
         if len(pagine) > 2:
             # Oltre due segni: una pagina sola col testo di tutte (non si taglia in tre)
             pagine = [{"numero": pagine[0]["numero"],
@@ -693,7 +809,8 @@ class Lettore:
         except ErroreOllama as e:
             if e.codice == "motore_giu":
                 raise _Giu() from None
-            raise
+            # 5xx, errore nello stream, stream chiuso a metà: del server, non della pagina
+            raise ErroreServer(e.codice) from None
 
     def _ocr(self, img, pid: int) -> dict | None:
         """Una lettura: il testo coi segni; se si ferma su `length` si rifà una volta, poi None
@@ -701,8 +818,16 @@ class Lettore:
         for prova in range(2):
             t = time.monotonic()
             r = self._chiedi(img)
+            if r.get("fine"):
+                # Il server ha risposto: gli errori di fila e le cadute della pagina si azzerano
+                self._errori_di_fila = 0
+                self._riprova_dopo = 0.0
+                self._cadute.pop(pid, None)
             self.misure["token_in"] += int(r.get("prompt") or 0)
             self.misure["token_out"] += int(r.get("eval") or 0)
+            if not r.get("fine"):
+                # Uno stream finito senza finish_reason (senza «[DONE]» o chiuso a metà) è rotto
+                raise ErroreServer("stream senza fine")
             if r.get("fine") != "length":
                 return leggi_segni(r.get("content") or "")
             self._registra(f"pagina {pid}: lettura in tondo fino a max_tokens "
