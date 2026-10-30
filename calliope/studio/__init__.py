@@ -12,8 +12,10 @@ giorni calcolato dal codice. Rifatto da capo dopo aver tolto il vecchio processo
   (bordi ricontrollati, raddrizzamento, nitidezza, PDF divisi in pagine, file su disco), per
   `POST /api/studio/pagina`.
 
-Arrivano dopo: la lettura (4.3), gli argomenti dal modello (4.4), il tool, la home e la vista
-aperta (4.5).
+- `lettura.py` (30/10, passo 4.3, #282): il lettore delle pagine in un thread, con l'harness del
+  banco (qwen3.6 su vLLM), i controlli del codice e la guardia della DGX.
+
+Arrivano dopo: gli argomenti dal modello (4.4), il tool, la home e la vista aperta (4.5).
 """
 
 from .servizio import (ATTIVO, MODI, OMBRA, SPENTO, NonPermesso, NonTrovata, Studio,

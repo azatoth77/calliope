@@ -2168,6 +2168,11 @@ class Config:
     # prove/manuali/studio_immagini.py: nitide ≥ 234, sfocate di 3 px ≤ 132; da ritarare sulle
     # foto vere
     studio_nitidezza_min: float = 150.0
+    # La lettura delle pagine (30/10, passo 4.3, #282, calliope/studio/lettura.py): un thread che
+    # legge le pagine «da leggere» con qwen3.6 su vLLM (il modello dell'agente, harness del banco
+    # del 28/10) quando la DGX è libera, in ombra e in attivo. false = le pagine restano da
+    # leggere (per esempio prima del banco dello scritto a mano vero)
+    studio_lettura: bool = True
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3460,7 +3465,7 @@ SEZIONI: dict[str, list[str]] = {
                "studio_giorni_senza_piano", "studio_obiettivo", "studio_tenuta_giorni",
                "studio_cartella", "studio_pagina_lato", "studio_pagina_max_mb",
                "studio_pdf_max_mb", "studio_pdf_max_pagine", "studio_pagine_max",
-               "studio_pagine_al_minuto", "studio_nitidezza_min"],
+               "studio_pagine_al_minuto", "studio_nitidezza_min", "studio_lettura"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",

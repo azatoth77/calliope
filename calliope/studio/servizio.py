@@ -17,6 +17,10 @@ scrivono e il piano si calcola, ma `per_modello()` e `per_schermi()` sono falsi:
 modello né agli schermi, solo le misure nel registro (senza nomi né titoli); «attivo» → per il
 passo 4.5.
 
+**Lettura** (30/10, passo 4.3, #282): `avvia_lettura` crea il lettore (`lettura.py`), che legge
+in ombra e in attivo; `lettura()` dà l'avanzamento di una verifica e `testo_per_modello()` il testo
+letto in busta, solo in attivo.
+
 **Ricalcolo.** Il piano si ricalcola quando cambia qualcosa (argomenti confermati, data
 spostata, minuti, giorno fatto o saltato, giorni senza scuola) e, alla prima lettura di un
 giorno nuovo, perché «oggi» si è spostato. Con i dati di una versione più nuova (connessione
@@ -175,6 +179,8 @@ class Studio:
                        "pagine_nei_piani": 0, "giorni_oltre": 0, "avvisi": {}, "errori": 0,
                        # Le pagine arrivate (passo 4.2): da dove vengono i bordi e gli avvisi
                        "pagine": 0, "bordi": {}, "avvisi_pagine": {}}
+        # Il lettore delle pagine (passo 4.3, studio/lettura.py): lo crea `avvia_lettura`
+        self.lettore = None
         self.fascia = P.fascia_valida(getattr(cfg, "studio_fascia", ""))
         if self.fascia is None:
             # Il caricamento della configurazione la rifiuta già (config._fascia_valida); qui
@@ -184,7 +190,59 @@ class Studio:
             self.fascia = P.fascia_valida(FASCIA_DI_SERIE)
 
     def close(self):
+        if self.lettore is not None:
+            self.lettore.close()
         self.dati.close()
+
+    # ── la lettura delle pagine (30/10, passo 4.3, #282) ──
+    def avvia_lettura(self, lavori=None, avvia: bool = True):
+        """Il lettore delle pagine in un thread (studio/lettura.py): legge in ombra e in attivo
+        (con `studio_lettura`); il testo arriva a un modello solo in attivo e in busta
+        (`testo_per_modello`)."""
+        from . import lettura as L
+        if self.lettore is None:
+            self.lettore = L.prepara(self, lavori=lavori, log=self.log, avvia=avvia)
+        return self.lettore
+
+    def lettura(self, chi, vid) -> dict:
+        """L'avanzamento della lettura di una verifica (per la 4.5): pagine lette su totali,
+        illeggibili, in lettura e da leggere, gli avvisi della lettura e se il lettore aspetta
+        (la DGX occupata). Le pagine tolte non contano."""
+        v = self._verifica(chi, vid)
+        righe = self.dati.tutti(
+            "SELECT p.stato, p.avvisi FROM studio_pagine p JOIN studio_materiali m ON m.id = "
+            "p.materiale WHERE m.verifica = ? AND p.stato != 'tolta'", (v["id"],))
+        conta = {}
+        for r in righe:
+            conta[r["stato"]] = conta.get(r["stato"], 0) + 1
+        avvisi = {}
+        for r in righe:
+            for a in D.da_j(r["avvisi"]):
+                avvisi[a] = avvisi.get(a, 0) + 1
+        lett = self.lettore
+        return {"verifica": v["id"], "totali": len(righe), "lette": conta.get("letta", 0),
+                "illeggibili": conta.get("illeggibile", 0),
+                "in_lettura": conta.get("in_lettura", 0), "da_parte": conta.get("da_parte", 0),
+                "da_leggere": conta.get("da_leggere", 0), "avvisi": avvisi,
+                "lettore": lett is not None,
+                "in_attesa": bool(lett is not None and lett.in_attesa)}
+
+    def testo_per_modello(self, chi, vid) -> str | None:
+        """Il testo letto delle pagine di una verifica per un modello: solo in attivo, sempre in
+        busta (`provenienza.racchiudi`, decisione 0035 punto 6), una busta per pagina col
+        riferimento P1, P2… scritto dal codice. None in ombra o senza pagine lette."""
+        if not self.per_modello():
+            return None
+        from .. import provenienza
+        out = []
+        for i, p in enumerate(self.pagine(chi, vid), 1):
+            if p["stato"] != "letta" or not p["testo"]:
+                continue
+            fonte = "allegato" if p["metodo"] == "pdf_testo" else "foto"
+            num = P.numero_leggibile(p["numero"])
+            titolo = f"P{i}" + (f" · pagina stampata {num}" if num else "")
+            out.append(provenienza.racchiudi(fonte, p["testo"], titolo))
+        return "\n\n".join(out) or None
 
     # ── interruttore ──
     def per_modello(self) -> bool:
@@ -454,7 +512,10 @@ class Studio:
             v = self.verifica_per_pagine(chi, vid)
             if v["n_pagine"] + len(pronte) > massimo:
                 raise TroppePagine(massimo)
-            if materiale is not None:
+            # Un PDF ha sempre il suo materiale (passo 4.3): la sua copia sta nel `riferimento`
+            # del materiale, e la pagina i del materiale è la pagina i del PDF per la lettura del
+            # testo senza OCR. Nello stesso materiale di un altro PDF la copia non avrebbe riga
+            if materiale is not None and originale is None:
                 m = self.dati.uno("SELECT * FROM studio_materiali WHERE id = ?", (int(materiale),))
                 if m is None or m["verifica"] != v["id"] or m["origine"] != origine:
                     raise NonTrovata()
@@ -510,6 +571,8 @@ class Studio:
                 self.misure["avvisi_pagine"][a] = self.misure["avvisi_pagine"].get(a, 0) + 1
         self._registra(f"verifica {v['id']}: {len(out)} pagine arrivate ({origine}, "
                        f"{self._chi_registro(chi, v['persona'])})")
+        if self.lettore is not None:
+            self.lettore.sveglia()
         return {"verifica": v["id"], "materiale": mid, "pagine": out}
 
     # ── argomenti (l'estrazione è del passo 4.4: qui il modello dei dati e la conferma) ──
@@ -836,5 +899,8 @@ class Studio:
 
     def stato(self) -> dict:
         """Per `calliope stato` e le prove: il modo e le misure."""
-        return {"modo": self.modo, **{k: (dict(v) if isinstance(v, dict) else v)
-                                      for k, v in self.misure.items()}}
+        out = {"modo": self.modo, **{k: (dict(v) if isinstance(v, dict) else v)
+                                     for k, v in self.misure.items()}}
+        if self.lettore is not None:
+            out["lettura"] = self.lettore.stato()
+        return out
