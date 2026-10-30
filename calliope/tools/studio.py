@@ -35,8 +35,8 @@ import re
 from .spec import ToolContext, ToolSpec, note_rule
 
 FAMILIARI = frozenset({"familiare", "amministra"})
-AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "archivia", "tieni", "togli",
-          "riprova", "sessione")
+AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "sposta", "archivia", "tieni",
+          "togli", "riprova", "sessione")
 LETTURE = frozenset({"stato", "piano", "oggi"})
 # Le azioni che un tocco può chiedere (schermi/tocchi.py): sui dati della persona, reversibili
 DA_TOCCO = frozenset({"fatto", "salta_oggi", "tieni", "togli", "riprova", "sessione"})
@@ -298,6 +298,23 @@ def _salta(ctx, svc, chi, v) -> dict:
     return _f("Va bene, oggi niente: ho spostato le pagine sui giorni che restano.")
 
 
+def _sposta(ctx, svc, chi, v, data) -> dict:
+    """«La verifica è stata spostata a venerdì»: la data nuova della verifica (#318: senza
+    quest'azione il modello la segnava come appuntamento); il piano si ricalcola."""
+    d = _data_detta(data, svc._oggi())
+    if d is None:
+        return {"ok": False, "errore": "manca la data nuova",
+                "cosa_fare": "Chiedi a quando è stata spostata la verifica, poi richiama studio."}
+    if d < svc._oggi():
+        return _f("Quella data è già passata: a quando è spostata?", ok=False)
+    try:
+        svc.imposta(chi, v["id"], data=d)
+    except ValueError as e:
+        return _f(f"Non riesco a spostarla: {e}.", ok=False)
+    v2 = svc.verifica(chi, v["id"])
+    return _f(f"Ho spostato {_nome_verifica(v2)} e rifatto il piano.", verifica=v["id"])
+
+
 def _archivia(ctx, svc, chi, v) -> dict:
     svc.archivia(chi, v["id"])
     return _f(f"Ho archiviato {_nome_verifica(v)}: resta fra le tue cose anche dopo.")
@@ -426,6 +443,8 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _fatto(ctx, svc, chi, v, giorno)
         if azione == "salta_oggi":
             return _salta(ctx, svc, chi, v)
+        if azione == "sposta":
+            return _sposta(ctx, svc, chi, v, data)
         if azione == "archivia":
             return _archivia(ctx, svc, chi, v)
         if azione in ("tieni", "togli"):
@@ -519,11 +538,14 @@ def _pagina_leggi(ctx: ToolContext, pagina: str = "", verifica=None, materia: st
 
 
 DESCRIZIONE = (
-    "Lo Studio: verifiche con una data, pagine fotografate, argomenti e piano a giorni. azione: "
+    "Lo Studio: verifiche con una data, pagine fotografate, argomenti e piano a giorni. Le "
+    "verifiche, le interrogazioni e lo studio di scuola stanno qui, mai negli appuntamenti. azione: "
     "«crea» una verifica («giovedì ho la verifica di storia», con materia, data AAAA-MM-GG o il "
     "giorno, argomento facoltativo; per = nome del ragazzo se la crea il tutore); «stato» di "
     "cosa parla e a che punto è; «piano»; «oggi» («cosa devo studiare oggi?»); «fatto» il giorno "
-    "di oggi fatto; «salta_oggi» («non ce la faccio oggi»); «archivia»; «tieni» o «togli» un "
+    "di oggi fatto; «salta_oggi» per lo studio di oggi («non ce la faccio oggi», «sposta lo studio "
+    "di oggi a domani»); «sposta» la data della verifica («la verifica è stata spostata a "
+    "venerdì», con data); se non è chiaro quale dei due, chiedilo; «archivia»; «tieni» o «togli» un "
     "argomento (numero = la posizione nell'elenco, o titolo); «riprova» una pagina messa da parte; «sessione» con le risposte "
     "a «quanto conosci l'argomento?» (conoscenza 1–5) e «come ti senti oggi?» (umore). verifica: "
     "l'id, se lo sai (dai dati del turno); altrimenti materia.")
@@ -540,8 +562,9 @@ PARAMETRI = {"type": "object", "properties": {
 
 DESCRIZIONE_PAGINA = (
     "Il testo letto di una pagina di una verifica dello Studio («spiegami questa pagina», «cosa "
-    "dice la pagina 114?»): pagina = il numero stampato o P1, P2…, oppure «argomenti» per i "
-    "titoli degli argomenti con il loro id; verifica = l'id (dai dati del turno) o materia.")
+    "dice la pagina 114?», anche gli esercizi per aiutare nei compiti: «aiutami con gli esercizi "
+    "della pagina 116»): pagina = il numero stampato o P1, P2…, oppure «argomenti» per i titoli "
+    "degli argomenti con il loro numero; verifica = l'id (dai dati del turno) o materia.")
 PARAMETRI_PAGINA = {"type": "object", "properties": {
     "pagina": {"type": "string"}, "verifica": {"type": "integer"},
     "materia": {"type": "string"}}, "required": ["pagina"]}

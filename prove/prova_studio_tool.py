@@ -199,6 +199,16 @@ r = chiama(ctx_di(st, LEO), "studio", azione="crea", materia="Storia", data="202
 verifica("una data passata: chiede di nuovo", not r["ok"] and "passata" in r["conferma"])
 r = chiama(ctx_di(st, LEO), "studio", azione="crea", materia="Storia")
 verifica("senza data: «cosa_fare» chiede quando", not r["ok"] and "quando" in r["cosa_fare"])
+r = chiama(ctx_di(st, LEO), "studio", azione="sposta", verifica=v_mat, data="2026-11-03")
+verifica("sposta: la data nuova della verifica (#318), il piano si ricalcola",
+         r["ok"] and st.verifica(LEO, v_mat)["data"] == "2026-11-03", str(r))
+r = chiama(ctx_di(st, LEO), "studio", azione="sposta", verifica=v_mat, data="2026-10-01")
+verifica("sposta: una data passata chiede di nuovo, la data resta",
+         not r["ok"] and st.verifica(LEO, v_mat)["data"] == "2026-11-03")
+verifica("sposta: E1, con le sue parole, e la descrizione dice che le verifiche non sono "
+         "appuntamenti", valore.effetto("studio", {"azione": "sposta"}) == valore.E1
+         and "spost" in politica.VERBI_STUDIO["sposta"] and "mai negli appuntamenti" in TS.DESCRIZIONE)
+chiama(ctx_di(st, LEO), "studio", azione="sposta", verifica=v_mat, data="2026-11-02")
 r = chiama(ctx_di(st, LEO), "studio", azione="piano", verifica=vid)
 verifica("piano: i giorni con l'attività, l'obiettivo, niente previsione senza misure",
          r["ok"] and r["giorni"] and r["obiettivo"] == "75%" and "previsione" not in r)

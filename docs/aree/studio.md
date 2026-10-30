@@ -151,6 +151,19 @@ era quello, dimmi «rimettilo»», e «rimettilo» porta a `tieni`. La home ha �
 gli argomenti tolti (non gli uniti) e «Tieni» col tocco. Prove in `prova_valore.py`
 (`prova_ordinali`: i contrari, S10 attraverso `Brain`, «rimettilo», i tolti della home).
 
+**La prova col modello sulla DGX (30/10 sera, issue #318).** Il primo giro di
+`prova_studio_ollama.py` sulla DGX (f6c4882) dava 5 casi verdi e 2 rossi: con la vista aperta
+«spostala a domani» finiva in `appuntamento_aggiungi` («verifica di storia, domani»), e i compiti
+guidati cadevano solo per il criterio (la risposta giusta, «posso farti delle domande per guidarti
+o darti qualche indizio», senza «?»). Correzioni: l'azione `sposta` di `studio` (la data della
+verifica, `Studio.imposta`), la descrizione che dice che verifiche e studio di scuola non sono
+appuntamenti e distingue `salta_oggi` da `sposta`, la riga della vista che nomina lo Studio e le
+due azioni; nella prova tre casi della vista al posto di uno («sposta lo studio di oggi a domani»
+→ `salta_oggi`, «la verifica è stata spostata a venerdì» → `sposta`, «spostala a domani» → Studio o
+una domanda, mai appuntamenti), il criterio dei compiti che accetta la guida senza «?», e la
+risposta stampata quando un caso cade. Sulla DGX, da una cartella in /tmp con i file nuovi e il
+`.venv` della versione installata: **9 casi su 9 a 3/3**.
+
 **Dopo la quinta revisione della PR #317 (30/10):** la frase di «tieni»/«togli» torna senza il
 titolo («Fatto: l'argomento 3 è fuori dal piano. Se non era quello, dimmi «rimettilo».»). Il
 titolo viene dalle pagine e `studio` non ha fonte: fuori busta valeva come detto da Calliope (S12:
