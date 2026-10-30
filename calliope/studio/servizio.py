@@ -95,6 +95,9 @@ FRASI_LETTURA = {
 CONOSCENZA = ("è nuovo per me", "ne so poco", "abbastanza", "lo so bene", "sono sicuro")
 UMORI = ("pronto", "curioso", "tranquillo", "neutrale", "poca energia", "stressato")
 SESSIONE_S = 3 * 3600
+# Una carta chiesta a voce resta «in corso» solo nel turno subito dopo la domanda o la risposta
+# (revisione della PR #324, nota 1), e al più tanto tempo, anche oltre la mezzanotte (nota 4)
+CARTA_IN_CORSO_S = 30 * 60
 
 
 class NonPermesso(PermissionError):
@@ -1235,12 +1238,138 @@ class Studio:
             (d, r, C.chiusa(r), aid, adesso, int(nuova), int(nuova), adesso, c["id"]))
 
     def segna_carta(self, chi, cid, attiva: bool):
-        """Toglie una carta dal ripasso o ce la rimette (reversibile)."""
+        """Toglie una carta dal ripasso o ce la rimette (reversibile). Su una carta proposta dal
+        modello è la conferma della persona o del tutore, una per una («Tieni»), anche con un
+        avviso: da lì entra nel ripasso. Una carta dell'ombra non si tocca."""
         self._scrivibile()
         c, _v = self._carta(chi, cid)
-        self.dati.scrivi("UPDATE studio_carte SET stato = ?, modificata = ? WHERE id = ?",
-                         ("attiva" if attiva else "tolta",
-                          self.adesso().isoformat(timespec="seconds"), c["id"]))
+        if c["stato"] == "ombra":
+            raise NonTrovata()
+        adesso = self.adesso().isoformat(timespec="seconds")
+        self.dati.scrivi("UPDATE studio_carte SET stato = ?, modificata = ?, scadenza = "
+                         "COALESCE(scadenza, ?) WHERE id = ?",
+                         ("attiva" if attiva else "tolta", adesso, adesso, c["id"]))
+
+    def conferma_carte(self, chi, vid) -> dict:
+        """«Conferma le carte»: le carte proposte dal modello senza avvisi entrano nel ripasso;
+        quelle con un avviso (`genera.DA_DECIDERE`) restano proposte, e la persona le tiene una
+        per una. {confermate, da_decidere}."""
+        from .genera import DA_DECIDERE
+        self._scrivibile()
+        v = self._verifica(chi, vid)
+        adesso = self.adesso().isoformat(timespec="seconds")
+        n = d = 0
+        with self.dati.lock:
+            db = self.dati.db
+            try:
+                for c in db.execute("SELECT id, avvisi FROM studio_carte WHERE verifica = ? AND "
+                                    "stato = 'proposta'", (v["id"],)).fetchall():
+                    if set(D.da_j(c["avvisi"])) & set(DA_DECIDERE):
+                        d += 1
+                        continue
+                    db.execute("UPDATE studio_carte SET stato = 'attiva', modificata = ?, "
+                               "scadenza = ? WHERE id = ?", (adesso, adesso, c["id"]))
+                    n += 1
+                db.commit()
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
+        self._registra(f"verifica {v['id']}: {n} carte confermate, {d} da decidere "
+                       f"({self._chi_registro(chi, v['persona'])})")
+        return {"confermate": n, "da_decidere": d}
+
+    # ── la generazione (dal lettore, studio/lettura.py, studio/genera.py; niente `chi`) ──
+    def _argomenti_per_carte(self, vid) -> list[dict]:
+        """Gli argomenti del piano di una verifica, con le pagine (id), nell'ordine dell'elenco."""
+        return [{"id": a["id"], "titolo": a["titolo"],
+                 "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
+                for a in self.dati.tutti("SELECT * FROM studio_argomenti WHERE verifica = ? "
+                                         "ORDER BY ordine, id", (int(vid),))
+                if a["stato"] in D.ARGOMENTI_DEL_PIANO]
+
+    def verifiche_per_carte(self) -> list[dict]:
+        """Le verifiche aperte con almeno un argomento del piano che cita una pagina letta e una
+        firma (argomenti, pagine, modo) diversa da quella dell'ultima generazione, dalla più
+        vicina. Vuoto con `studio_carte_genera: spenta`, la lettura spenta o i dati in sola
+        lettura."""
+        from . import argomenti as A
+        from . import genera as G
+        m = G.modo(self.cfg)
+        if m == G.SPENTA or not self.dati.scrivibile:
+            return []
+        out = []
+        for v in self.dati.tutti("SELECT * FROM studio_verifiche WHERE stato = 'aperta' AND "
+                                 "data >= ? ORDER BY data, id", (self._oggi().isoformat(),)):
+            args = self._argomenti_per_carte(v["id"])
+            pagine = self._pagine_di(v["id"])
+            lette = {int(p["id"]) for p in A.lette(pagine)}
+            if not any(set(a["pagine"]) & lette for a in args):
+                continue
+            if v.get("carte_firma") != G.firma(args, pagine, m):
+                out.append({**v, "_pagine": pagine, "_argomenti": args, "_modo": m})
+        return out
+
+    def proponi_carte(self, vid, firma: str, proposte: list[dict], esito: str,
+                      modo_: str) -> int | None:
+        """Scrive l'esito di una generazione: via le carte del modello non ancora decise (proposte
+        o dell'ombra, mai corrette né confermate), dentro le nuove (tranne una domanda che c'è
+        già), «proposta» con `studio_carte_genera: attiva`, «ombra» in ombra; la firma e l'esito.
+        Con «rotto» o «errore» restano quelle di prima. Se intanto argomenti o pagine sono cambiati
+        non scrive niente: None. Quante carte nuove."""
+        from . import argomenti as A
+        from . import genera as G
+        with self.dati.lock:
+            db = self.dati.db
+            try:
+                if db.in_transaction:
+                    db.commit()
+                db.execute("BEGIN IMMEDIATE")
+                v = db.execute("SELECT * FROM studio_verifiche WHERE id = ? AND stato = 'aperta'",
+                               (int(vid),)).fetchone()
+                pagine = [dict(r) for r in db.execute(
+                    "SELECT p.* FROM studio_pagine p JOIN studio_materiali m ON m.id = p.materiale"
+                    " WHERE m.verifica = ?", (int(vid),))]
+                args = [{"id": a["id"], "titolo": a["titolo"],
+                         "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
+                        for a in db.execute("SELECT * FROM studio_argomenti WHERE verifica = ? "
+                                            "ORDER BY ordine, id", (int(vid),)).fetchall()
+                        if a["stato"] in D.ARGOMENTI_DEL_PIANO]
+                if v is None or G.firma(args, pagine, modo_) != firma:
+                    db.rollback()
+                    return None
+                n = 0
+                if esito not in (G.ROTTO, G.ERRORE):
+                    db.execute("DELETE FROM studio_carte WHERE verifica = ? AND origine = "
+                               "'modello' AND stato IN ('proposta', 'ombra')", (int(vid),))
+                    decise = {A.chiave(r[0]) for r in db.execute(
+                        "SELECT domanda FROM studio_carte WHERE verifica = ?", (int(vid),))}
+                    tot = db.execute("SELECT COUNT(*) FROM studio_carte WHERE verifica = ?",
+                                     (int(vid),)).fetchone()[0]
+                    adesso = self.adesso().isoformat(timespec="seconds")
+                    stato = "ombra" if modo_ == G.OMBRA else "proposta"
+                    for c in proposte:
+                        if A.chiave(c["domanda"]) in decise or tot + n >= C.CARTE_MAX:
+                            continue
+                        db.execute(
+                            "INSERT INTO studio_carte (verifica, persona, argomento, domanda, "
+                            "risposta, chiusa, pagine, origine, stato, avvisi, scatola, scadenza, "
+                            "creata) VALUES (?, ?, ?, ?, ?, ?, ?, 'modello', ?, ?, 1, NULL, ?)",
+                            (int(vid), str(v["persona"]), c["argomento"], c["domanda"],
+                             c["risposta"], C.chiusa(c["risposta"]), D.j(c["pagine"]), stato,
+                             D.j(c["avvisi"]) if c["avvisi"] else None, adesso))
+                        decise.add(A.chiave(c["domanda"]))
+                        n += 1
+                db.execute("UPDATE studio_verifiche SET carte_firma = ?, carte_esito = ?, "
+                           "carte_del = ? WHERE id = ?",
+                           (firma, esito if esito != G.PROPOSTE or n else G.VUOTO, D.adesso(),
+                            int(vid)))
+                db.commit()
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
+        return n
 
     def _del_piano(self, vid) -> set:
         return {a["id"] for a in self.dati.tutti(
@@ -1261,8 +1390,9 @@ class Studio:
         numeri = {a["id"]: i for i, a in enumerate(elenco, 1)}
         nel_piano = {a["id"] for a in elenco if a["stato"] in D.ARGOMENTI_DEL_PIANO}
         out = []
-        for i, c in enumerate(self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? "
-                                              "ORDER BY id", (v["id"],)), 1):
+        # Le carte dell'ombra (studio_carte_genera: ombra) non vanno mai alla persona
+        for i, c in enumerate(self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? AND "
+                                              "stato != 'ombra' ORDER BY id", (v["id"],)), 1):
             c["pagine"] = [int(x) for x in D.da_j(c["pagine"]) if str(x).isdecimal()]
             c["avvisi"] = D.da_j(c["avvisi"])
             c["numero"] = i
@@ -1344,11 +1474,16 @@ class Studio:
             return None
         return ic
 
-    def carta_in_corso(self, chi) -> dict | None:
+    def carta_in_corso(self, chi, turno: int | None = None) -> dict | None:
         """La carta chiesta a voce a `chi` e non ancora risposta (o None): la carta e la verifica,
-        se è ancora sua (o del suo minore) e nel ripasso."""
+        se è ancora sua (o del suo minore). Con `turno`, solo nello stesso turno della domanda (o
+        della risposta) o in quello subito dopo: oltre, la carta esce da «in corso» (revisione
+        della PR #324, nota 1: un «no» detto due turni dopo a un'altra domanda non è un esito)."""
         ic = self._in_corso(getattr(chi, "id", None))
         if ic is None:
+            return None
+        if turno is not None and int(turno or 0) > int(ic["turno"] or 0) + 1:
+            self._carte_in_corso.pop(str(getattr(chi, "id", "")), None)
             return None
         try:
             c, v = self._carta(chi, ic["carta"])
@@ -1359,18 +1494,21 @@ class Studio:
         return {**c, "verifica": v["id"], "turno": ic["turno"],
                 "letta": bool(ic.get("letta"))}
 
-    def risposta_letta(self, chi):
+    def risposta_letta(self, chi, turno: int | None = None):
         """La risposta della carta in corso è stata detta (`studio_carte` parte «risposta»): da
         qui vale solo l'autovalutazione, perché ripetere la risposta appena sentita non è
-        saperla."""
+        saperla; l'esito si aspetta nel turno dopo questo."""
         ic = self._in_corso(getattr(chi, "id", None))
         if ic is not None:
             ic["letta"] = True
+            if turno is not None:
+                ic["turno"] = max(int(ic["turno"] or 0), int(turno or 0))
 
     def prossima_carta(self, chi, vid, turno: int = 0) -> dict | None:
         """La carta da chiedere a voce: quella in corso della stessa verifica, se c'è, altrimenti
-        la prima da ripassare; diventa «in corso» per `chi` (fino a `SESSIONE_S`, mai oltre la
-        mezzanotte). Con il numero fra quelle da ripassare e quante restano. None se nessuna."""
+        la prima da ripassare; diventa «in corso» per `chi` per il turno dopo (al più
+        `CARTA_IN_CORSO_S`). Con il numero fra quelle da ripassare e quante restano. None se
+        nessuna."""
         v = self._verifica(chi, vid)
         due = self._da_ripassare(v)
         chiave = str(getattr(chi, "id", "") or "")
@@ -1385,11 +1523,12 @@ class Studio:
             self._carte_in_corso.pop(chiave, None)
             return None
         adesso = self.adesso()
-        fino = min(adesso + datetime.timedelta(seconds=SESSIONE_S),
-                   datetime.datetime.combine(adesso.date(), datetime.time(23, 59, 59)))
         if ic is None or ic["carta"] != scelta["id"]:
-            ic = {"carta": scelta["id"], "verifica": v["id"], "turno": int(turno or 0)}
-        ic["fino"] = fino
+            ic = {"carta": scelta["id"], "verifica": v["id"]}
+        # Chiesta di nuovo: il turno è questo (nota 1), il tempo riparte (anche oltre la
+        # mezzanotte, nota 4)
+        ic["turno"] = int(turno or 0)
+        ic["fino"] = adesso + datetime.timedelta(seconds=CARTA_IN_CORSO_S)
         self._carte_in_corso[chiave] = ic
         ids = [c["id"] for c in due]
         return {**scelta, "posizione": (ids.index(scelta["id"]) + 1) if scelta["id"] in ids
@@ -1397,18 +1536,21 @@ class Studio:
 
     def esito_a_voce(self, chi, frase: str, turno: int = 0) -> dict:
         """L'esito della carta in corso dalla frase detta dalla persona in questo turno, mai da
-        un argomento del modello: una forma chiusa dell'autovalutazione detta per intero
-        (`carte.autovalutazione`, fonte di chi parla), oppure la risposta chiusa della carta nella
-        frase (`carte.risposta_giusta`, fonte «codice», solo il «giusto»), questa solo prima
-        che Calliope dica la risposta e prima dell'autovalutazione (una carta che risponde «sì» o
-        «no» si confronta come risposta). Una volta per carta, e solo per una carta chiesta in un
-        turno di prima. {"esito": None, "motivo"} se non c'è: «nessuna» (nessuna carta in
-        corso), «stesso_turno», «non_detto»."""
-        ic = self.carta_in_corso(chi)
+        un argomento del modello: la risposta chiusa della carta nella frase (`carte.risposta_
+        giusta`, fonte «codice», solo il «giusto», solo prima che Calliope dica la risposta; una
+        risposta corta solo come frase intera), altrimenti una forma chiusa dell'autovalutazione
+        detta per intero (`carte.autovalutazione`, fonte di chi parla). Una volta per carta, solo
+        nel turno subito dopo la domanda o la risposta. {"esito": None, "motivo"} se non c'è:
+        «nessuna» (nessuna carta in corso), «stesso_turno», «tolta» (la carta è uscita dal ripasso
+        intanto: esce anche da «in corso», nota 3 della PR #324), «non_detto»."""
+        ic = self.carta_in_corso(chi, turno)
         if ic is None:
             return {"esito": None, "motivo": "nessuna"}
         if int(turno or 0) <= int(ic["turno"] or 0):
             return {"esito": None, "motivo": "stesso_turno", "carta": ic["id"]}
+        if ic["stato"] != "attiva":
+            self._carte_in_corso.pop(str(getattr(chi, "id", "") or ""), None)
+            return {"esito": None, "motivo": "tolta", "carta": ic["id"]}
         esito, fonte = None, None
         if not ic["letta"] and C.risposta_giusta(ic["chiusa"], frase):
             esito, fonte = C.SAPEVO, "codice"

@@ -969,6 +969,15 @@ studio:
   # lacune con la lezione successiva e la previsione dalla padronanza; «spenta» niente. Si passa
   # a «mostrata» col criterio scritto nella decisione 0035, punto 32
   studio_padronanza: ombra
+  # Le carte generate dalle pagine lette (30/10, passo 6, seconda parte, #246,
+  # calliope/studio/genera.py): lo stesso thread della lettura, con la sua guardia, chiede a
+  # qwen3.6 le carte degli argomenti confermati di una verifica aperta, dal solo testo letto in
+  # busta. Il codice le controlla come gli argomenti (pagine vere, risposta nelle pagine,
+  # forma). «ombra» le genera e le misura soltanto: nessuna carta va alla persona; «attiva» le
+  # dà «proposte», e nessuna entra nel ripasso finché la persona o il tutore non la conferma;
+  # «spenta» niente. Si passa ad «attiva» col banco delle carte (prove/manuali/banco_studio.py,
+  # fase «carte») e la rilettura delle carte in ombra
+  studio_carte_genera: ombra
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

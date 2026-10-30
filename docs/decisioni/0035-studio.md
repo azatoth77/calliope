@@ -9,7 +9,7 @@
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
   (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
-  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33).
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -369,6 +369,22 @@ dell'eco della stanza.
     fatto chiedere la politica a ogni risposta («nel 1861» non è una richiesta). Alternative
     scartate: SM-2 e FSRS (analisi nella #246), il giudizio del modello sulla risposta, i tocchi per
     le risposte, le carte del tutore come dato fidato (due regole invece di una).
+
+34. **Le carte generate dal lettore sono proposte e restano un dato** (seconda parte del passo 6,
+    #246). Le chiede a qwen3.6 lo stesso thread della lettura, con la sua guardia e il suo client,
+    per una verifica aperta e i suoi argomenti confermati, dal solo testo letto (pagine e argomenti
+    in busta, schema guidato, nessun tool). Il codice le controlla con le regole degli argomenti
+    (punti 21–22): pagine vere e risposta nelle pagine citate, se no `da_controllare`; da pagine con
+    istruzioni `pagina_con_istruzioni`; domanda e risposta in forma chiusa, un ordine, un indirizzo
+    o un annuncio `testo_ordine` (principio 10, forma). **Nessuna carta generata entra nel ripasso
+    senza la persona o il tutore**: la conferma prende le pulite, le altre una per una. A voce una
+    proposta non si chiede. Interruttore `studio_carte_genera`, **ombra di serie** (carte «ombra»
+    mai alla persona, solo misure); «attiva» dopo il banco delle carte e la rilettura dell'ombra.
+    Con la revisione della PR #324: la carta resta in corso solo il turno dopo la domanda o la
+    risposta, le risposte corte («sì», «no», un numero piccolo) valgono solo come frase intera.
+    Alternative scartate: le carte generate subito nel ripasso (il controllo del codice è di forma,
+    non di significato), un secondo giro del modello che corregge (peggiore per gli argomenti nel
+    banco), le carte dalle immagini.
 
 ## Da completare con i passi 4.3–4.5
 

@@ -547,7 +547,13 @@ class Lettore:
                        "argomenti": {"estrazioni": 0, "proposti": 0, "da_controllare": 0,
                                      "pagina_con_istruzioni": 0, "titolo_ordine": 0,
                                      "rotte": 0, "vuote": 0, "cambiate": 0, "cedute": 0,
-                                     "secondi": 0.0, "token_in": 0, "token_out": 0}}
+                                     "secondi": 0.0, "token_in": 0, "token_out": 0},
+                       # Le carte generate (passo 6, seconda parte, #246): conti, avvisi e
+                       # tempi, mai il testo delle carte
+                       "carte": {"generazioni": 0, "carte": 0, "ombra": 0, "da_controllare": 0,
+                                 "pagina_con_istruzioni": 0, "testo_ordine": 0, "rotte": 0,
+                                 "vuote": 0, "cambiate": 0, "cedute": 0, "secondi": 0.0,
+                                 "token_in": 0, "token_out": 0}}
 
     # ── ciclo ──
     def avvia(self):
@@ -661,6 +667,23 @@ class Lettore:
                     return {"fatte": fatte, "aspetta": motivo}
                 self.in_attesa = None
                 esito = self.estrai_argomenti(pronte[0])
+                if esito in ("ceduta", "giu", "errore", "errore_server"):
+                    return {"fatte": fatte, "aspetta": esito}
+                fatte += 1
+                continue
+            # Le carte di una verifica aperta con gli argomenti confermati (passo 6, #246), con
+            # la stessa guardia: dopo gli argomenti, prima delle pagine di un'altra verifica
+            per_carte = self.studio.verifiche_per_carte()
+            if per_carte:
+                motivo = self.guardia.motivo()
+                if motivo is not None:
+                    if motivo != self.in_attesa:
+                        self._registra(f"carte in attesa: {motivo}")
+                    self.in_attesa = motivo
+                    self.misure["attese"] += 1
+                    return {"fatte": fatte, "aspetta": motivo}
+                self.in_attesa = None
+                esito = self.genera_carte(per_carte[0])
                 if esito in ("ceduta", "giu", "errore", "errore_server"):
                     return {"fatte": fatte, "aspetta": esito}
                 fatte += 1
@@ -1028,6 +1051,86 @@ class Lettore:
         self._registra(f"verifica {vid}: {n} argomenti proposti da {len(rif)} pagine "
                        f"({s:.1f} s" + (f", avvisi {avv}" if avv else "") + ")")
         return "proposti"
+
+    # ── le carte di una verifica (30/10, passo 6, seconda parte, #246, studio/genera.py) ──
+    def genera_carte(self, v: dict) -> str:
+        """Le carte di una verifica aperta (`Studio.verifiche_per_carte`): una richiesta con
+        l'harness delle carte, il controllo del codice, le carte scritte «proposte» (o «ombra»).
+        «proposte», «rotto», «cambiate», «ceduta», «giu», «errore_server» o «errore», come gli
+        argomenti."""
+        from . import argomenti as A
+        from . import genera as G
+        m = self.misure["carte"]
+        vid = int(v["id"])
+        modo = v["_modo"]
+        firma = G.firma(v["_argomenti"], v["_pagine"], modo)
+        rif = A.riferimenti(v["_pagine"])
+        arif = G.argomenti_rif(v["_argomenti"])
+        t0 = time.monotonic()
+        grezzi = None
+        try:
+            for prova in range(2):
+                r = self._chiedi_corpo(G.corpo(self.modello, v, rif, arif))
+                m["token_in"] += int(r.get("prompt") or 0)
+                m["token_out"] += int(r.get("eval") or 0)
+                if not r.get("fine"):
+                    raise ErroreServer("stream senza fine")
+                self._errori_di_fila = 0
+                self._riprova_dopo = 0.0
+                self._risposte_ok += 1
+                if r.get("fine") != "length":
+                    grezzi = G.leggi(r.get("content") or "")
+                    break
+                self._registra(f"verifica {vid}: carte in tondo fino a max_tokens"
+                               + (", le richiedo" if not prova else ""))
+        except Ceduta:
+            m["cedute"] += 1
+            self._registra(f"verifica {vid}: carte, ceduto il passo a un lavoro dell'agente")
+            return "ceduta"
+        except _Giu:
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: carte, errore del server ({e}), riprovo fra "
+                           f"{attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001 — un errore nostro non rifà la richiesta in giro
+            self.misure["errori"] += 1
+            self._registra(f"verifica {vid}: carte non generate ({type(e).__name__})")
+            self.studio.proponi_carte(vid, firma, [], G.ERRORE, modo)
+            self._attendi_errore()
+            return "errore"
+        s = time.monotonic() - t0
+        if grezzi is None:
+            proposte, esito = [], G.ROTTO
+        else:
+            proposte, esito = G.proposte(grezzi, rif, arif), G.PROPOSTE
+        n = self.studio.proponi_carte(vid, firma, proposte, esito, modo)
+        if n is None:
+            m["cambiate"] += 1
+            self._registra(f"verifica {vid}: argomenti o pagine cambiati durante le carte, le "
+                           "richiedo")
+            return "cambiate"
+        m["generazioni"] += 1
+        m["secondi"] = round(m["secondi"] + s, 2)
+        if esito == G.ROTTO:
+            m["rotte"] += 1
+            self._registra(f"verifica {vid}: carte illeggibili ({s:.1f} s)")
+            return "rotto"
+        m["carte"] += n
+        if modo == G.OMBRA:
+            m["ombra"] += n
+        conta = {a: sum(a in c["avvisi"] for c in proposte) for a in G.DA_DECIDERE}
+        for a, k in conta.items():
+            m[a] += k
+        if not n:
+            m["vuote"] += 1
+        avv = ", ".join(f"{k} {a}" for a, k in conta.items() if k)
+        self._registra(f"verifica {vid}: {n} carte {'in ombra' if modo == G.OMBRA else 'proposte'}"
+                       f" da {len(arif)} argomenti ({s:.1f} s" + (f", avvisi {avv}" if avv else "")
+                       + ")")
+        return "proposte"
 
     # ── scrivere ──
     def _chiudi(self, pid: int, stato: str, testo, metodo, avvisi: list):

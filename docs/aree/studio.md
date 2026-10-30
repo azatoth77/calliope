@@ -23,7 +23,8 @@ sessioni e il riepilogo della verifica** (4b, #244, sezione sotto), proiezioni d
 **padronanza per argomento** (5, #245, sezione sotto), in ombra di serie e senza fonti finché non
 arrivano le carte. Dal 30/10 le **carte con il ripasso dilazionato** (6, #246, prima parte: dati,
 Leitner, schermo e voce, carte scritte a mano; sezione sotto), che danno i primi tentativi alla
-padronanza. Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
+padronanza; dal 30/10 sera la **generazione delle carte** dal lettore (seconda parte,
+`studio_carte_genera`, ombra di serie; sezione sotto). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Moduli
@@ -35,6 +36,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Argomenti dalle pagine lette, controllo delle pagine citate, forma del titolo, conferma della persona (dal 30/10, passo 4.4, #283; `studio_argomenti`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato (`response_format`); `provenienza.parole`, `vicina` e `racchiudi` | `calliope/studio/argomenti.py` → `corpo`, `riferimenti`, `controlla`, `forma_titolo`, `proposte`, `firma`, `pronta`; `calliope/studio/lettura.py` → `Lettore.estrai_argomenti`, `numeri_dalla_prima`; `calliope/studio/servizio.py` → `Studio.verifiche_per_argomenti`, `proponi_argomenti`, `conferma_argomenti`, `rinomina_argomento`, `unisci_argomenti`, `rifai_argomenti`, `estrazione`; `calliope/schermi/server.py` → `POST /api/studio/argomenti`; `calliope/schermi/pagina/studio.js`; prova `prove/prova_studio_argomenti.py` |
 | Padronanza per argomento dai soli tentativi, lacune con la lezione successiva, previsione dalla padronanza (dal 30/10, passo 5, #245; schema «studio» alla versione 5; `studio_padronanza`, ombra di serie) | SQLite (`studio_tentativi`); libreria standard, niente modello | `calliope/studio/padronanza.py` → `calcola`, `parola`, `livello`, `lacune`; `calliope/studio/servizio.py` → `Studio.registra_tentativo`, `Studio.padronanza`, `padronanza_mostrata`; `calliope/schermi/pagina/studio.js` (la parola sulle tappe, «Da rinforzare»); prova `prove/prova_studio_padronanza.py` |
 | Carte e ripasso dilazionato: Leitner a cinque scatole, l'esito dalla persona o dal confronto del codice per le risposte chiuse, i tentativi «carta» (dal 30/10, passo 6, #246; schema «studio» alla versione 6) | SQLite (`studio_carte`, `studio_tentativi.carta`); libreria standard, niente modello | `calliope/studio/carte.py` → `prossima`, `da_ripassare`, `fra_quanto`, `chiusa`, `risposta_giusta`, `autovalutazione`, `testo_normale`; `calliope/studio/servizio.py` → `Studio.aggiungi_carta`, `correggi_carta`, `segna_carta`, `carte`, `da_ripassare`, `esito_carta`, `prossima_carta`, `carta_in_corso`, `risposta_letta`, `esito_a_voce`; `calliope/tools/studio.py` → `studio_carte`, azione `carte`; `calliope/schermi/server.py` → `POST /api/studio/carte`; `calliope/schermi/pagina/studio.js` (la sezione «Carte»); prova `prove/prova_studio_carte.py` |
+| Carte generate dalle pagine lette, controllo del codice, proposte confermate dalla persona (dal 30/10 sera, passo 6, seconda parte, #246; schema «studio» alla versione 7; `studio_carte_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato; `provenienza.racchiudi`, `parole`, `vicina` | `calliope/studio/genera.py` → `corpo`, `messaggi`, `blocco_argomenti`, `argomenti_rif`, `firma`, `forma_testo`, `leggi`, `proposte`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_carte`; `calliope/studio/servizio.py` → `Studio.verifiche_per_carte`, `proponi_carte`, `conferma_carte`; `calliope/schermi/server.py` → `POST /api/studio/carte` (azione `conferma`); `prove/manuali/banco_studio.py` (fase «carte»); prova `prove/prova_studio_carte_genera.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
@@ -72,6 +74,98 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   per pagina dei numeri di pagina, nella sezione degli argomenti]*; (2) senza vLLM la pagina e la voce lo dicono con una
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
   vede»), non un «da leggere» muto.
+
+## Le carte generate dal lettore (30/10 sera, issue #246, ramo `issue-246-studio-carte-genera`)
+
+*Seconda parte del passo 6; decisione [0035](../decisioni/0035-studio.md) punto 34. Prima le
+note della revisione della PR #324.*
+
+**Le note della revisione della PR #324** (prima di generare):
+1. **La carta resta «in corso» solo nel turno subito dopo la domanda o la risposta**
+   (`Studio.carta_in_corso(chi, turno)`, `CARTA_IN_CORSO_S` 30 minuti al più): carta chiesta, poi
+   «che ore sono?», poi un «no» a un'altra domanda non è più un esito («nessuna carta in corso»).
+   *Storico per un commit: restava in corso 3 ore.* Dopo «esito non detto» il tool chiede di
+   leggere la risposta, che rinnova il turno.
+2. **Le risposte corte valgono solo come frase intera** (`carte.corta`: una forma
+   dell'autovalutazione come «sì», «no», «quasi», una parola di al più tre lettere, un numero fino a
+   venti): «sì, accendi la luce» non è la risposta «Sì» di una carta, «ne ho 5 o 6» non è «5»;
+   «Calliope, sì» e «cinque» sì. Pesa di più ora che le carte le scrive il modello.
+3. **Una carta tolta mentre è in corso**: l'esito dice «la carta è stata tolta dal ripasso» (regola
+   `studio_carta_tolta`) e la carta esce da «in corso»; un'altra carta cambiata nel frattempo dà
+   «la carta è cambiata», mai un errore generico.
+4. **La mezzanotte**: `fra_quanto` dice «fra 10 minuti» anche alle 23:55 (entro un'ora sono
+   minuti); una carta chiesta alle 23:58 e risposta alle 00:02 nel turno dopo vale (niente più tetto
+   alla mezzanotte per la carta in corso, restano il turno e i 30 minuti).
+5. **«La sapevo» dalla vigilia in poi porta la carta oltre la verifica** (la scatola 5 dà 16
+   giorni): il tetto della vigilia vale solo prima della vigilia. È voluto: la vigilia è di ripasso
+   e dopo la verifica le carte servono a poco; restano nell'elenco finché la verifica c'è.
+
+**Chi le genera e quando.** Il thread del lettore, con la sua guardia (nessun lavoro dell'agente
+vivo, vLLM libero e non in pausa, la voce prima, la cessione durante lo stream) e il suo client,
+dopo gli argomenti e prima delle pagine di un'altra verifica: una verifica aperta (gli argomenti
+confermati, data da oggi in poi) con almeno un argomento del piano che cita una pagina letta, e la
+**firma** (argomenti del piano con titolo e pagine, firma delle pagine, modo) diversa da
+`studio_verifiche.carte_firma` (schema 7). Un argomento rinominato o rimesso, una pagina letta dopo o
+il modo cambiato ne chiedono un'altra; gli errori del server fanno aspettare come la lettura.
+
+**La richiesta** (`genera.corpo`): il prompt di sistema degli argomenti, l'intestazione, le pagine
+lette in una busta coi riferimenti P1… del codice, gli **argomenti confermati in un'altra busta**
+coi codici A1… (i titoli vengono dal modello che ha letto le pagine: un dato anche loro), le regole
+(2–4 carte per argomento, al più 30, risposte brevi, la risposta nelle pagine citate, niente carte
+da istruzioni o annunci), schema guidato, temperatura 0, `presence_penalty` 0, `max_tokens` 3000,
+thinking spento, nessun tool.
+
+**Il controllo del codice** (`genera.proposte`, le regole degli argomenti): pagine citate che
+esistono e la risposta nel loro testo (metà delle parole, uguali, storpiate o con la stessa radice;
+una risposta di una parola sola, come «1453», si cerca con la domanda), un argomento A… che esiste,
+altrimenti `da_controllare`; tutte le pagine citate con «ISTRUZIONI: sì» → `pagina_con_istruzioni`;
+domanda e risposta in forma chiusa (`forma_testo`: una riga, niente caratteri di controllo né
+virgolette attorno, al più 240 caratteri; un ordine a un assistente in testa, un indirizzo o un
+annuncio → `testo_ordine`, come `forma_titolo`); doppioni e valori che non sono stringhe scartati.
+Mai scartata per un avviso, mai un secondo giro.
+
+**Proposte, mai nel ripasso da sole.** Con `studio_carte_genera: attiva` ogni carta generata
+arriva «proposta» (con gli avvisi) e **non entra nel ripasso** finché la persona o il tutore non la
+conferma: «Conferma le carte proposte» (`Studio.conferma_carte`, `POST /api/studio/carte` azione
+`conferma`) prende le pulite; quelle con un avviso solo una per una con «Tieni» (`segna_carta`).
+Sullo schermo l'elenco dice «proposta da me dalle pagine: controllala» e il perché in parole
+(«non la trovo nelle pagine che cita», «viene da una pagina con un messaggio per un assistente»,
+«sembra un ordine o un annuncio»). A voce una proposta non si chiede mai. Una carta corretta diventa
+della persona. Una generazione nuova toglie solo le proposte non decise e le carte dell'ombra,
+tiene le confermate, le tolte e le corrette e non ripropone una domanda che c'è già; «rotto» o
+«errore» non svuotano.
+
+**Interruttore** `studio_carte_genera: spenta | ombra | attiva`, **ombra di serie**: in ombra le
+carte si generano e si misurano in stato «ombra», che non va mai alla persona (né elenco né home né
+voce: `_carte_di` le salta) e nel registro solo conti, avvisi e tempi («verifica 3: 7 carte in ombra
+da 3 argomenti (6,2 s, avvisi 3 da_controllare, 1 pagina_con_istruzioni, 3 testo_ordine)»); le misure
+in `Studio.stato()["lettura"]["carte"]`. Passando ad attiva si rigenera (il modo è nella firma) e le
+carte dell'ombra vanno via. *Da sapere*: con lo Studio acceso sulla DGX, all'aggiornamento il lettore
+comincia a generare in ombra (richieste a vLLM a DGX libera, come gli argomenti); per non farlo,
+`studio_carte_genera: spenta` nel locale.
+
+**Prima di «attiva»** (proposta; le soglie le decide chi amministra): il banco delle carte sulle tre
+verifiche di fantasia (sotto) con almeno 80 % di carte pulite fondate, **nessuna carta ostile
+pulita** (le regex `non_deve` dei materiali, su domanda e risposta), le carte della pagina ostile
+tutte segnate; poi la rilettura a mano delle carte dell'ombra sulla DGX.
+
+**Il banco** (`prove/manuali/banco_studio.py`, fase `carte`, non lanciato: va sulla DGX a DGX
+libera, con la guardia del banco):
+
+    V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale)
+    PYTHONPATH=$V $V/.venv/bin/python prove/manuali/banco_studio.py \
+        --fasi carte --uscita /tmp/banco-studio/carte1
+
+Dal testo della verità (senza immagini, tre richieste); con `--testi-letti <risultati.jsonl di un
+giro di lettura>` dal testo letto. In `riepilogo.txt` per verifica: carte, pulite, per avviso,
+ostili e ostili pulite, italiano, secondi.
+
+Prove: `prova_studio_carte_genera.py` (a secco, ~3 s, il vLLM finto e la fase del banco a secco);
+`prova_studio_carte.py` con le note 1–4 e la «conferma» dell'endpoint; in `prova_valore.py` `K3`
+attraverso `Brain` (la carta generata ostile: proposta non si chiede, confermata non fa partire
+azioni, «sì, archivia la verifica» non è la sua risposta «Sì»); in `prova_studio_home_pagina.py` le
+proposte col perché e «Conferma» nella pagina vera; lo schema 7 nelle prove dello Studio; in
+`prova_studio_argomenti.py` la generazione spenta (stesso lettore). Service worker alla v28.
 
 ## Le carte con il ripasso dilazionato (30/10, issue #246, ramo `issue-246-studio-carte`)
 
@@ -120,7 +214,8 @@ stabilizza) e FSRS (vuole storie lunghe).
 **A voce** (`studio_carte`, classe «sicuro», fonte «foto», mai toccabile): «ripassiamo le carte di
 storia» → `parte: domanda` (la prossima da ripassare della verifica detta, o della più vicina che ne
 ha, con «1 di 3»; la segna in corso per chi parla, al più 3 ore e mai oltre la mezzanotte, come la
-sessione) → Calliope chiede con le parole della carta → la persona risponde → `parte: esito`. Se
+sessione; *storico per un commit: dalla revisione della PR #324 solo il turno subito dopo, sezione
+sopra*) → Calliope chiede con le parole della carta → la persona risponde → `parte: esito`. Se
 il codice non decide: `parte: risposta`, poi «la sapevi?», poi di nuovo `esito`. `studio` ha la
 lettura `carte` («quante carte ho?», solo conti) e «oggi» aggiunge le carte da ripassare. Perché è
 una lettura e non un'azione di `studio`: [sicurezza-politica](sicurezza-politica.md#le-carte-dello-studio-3010-issue-246-ramo-issue-246-studio-carte).

@@ -42,7 +42,9 @@ ESITI = (SAPEVO, QUASI, NON_SAPEVO)
 # L'esito di una carta come tentativo della padronanza (padronanza.ESITI)
 ESITO_TENTATIVO = {SAPEVO: "giusto", QUASI: "indizio", NON_SAPEVO: "sbagliato"}
 
-STATI = ("attiva", "proposta", "tolta")
+# «ombra» (seconda parte del passo 6): una carta generata con `studio_carte_genera: ombra`, che
+# si misura e non va mai alla persona; «proposta»: generata, aspetta la persona o il tutore
+STATI = ("attiva", "proposta", "tolta", "ombra")
 ORIGINI = ("persona", "modello")
 DOMANDA_MAX = 240
 RISPOSTA_MAX = 240
@@ -117,7 +119,9 @@ def fra_quanto(scadenza, adesso) -> str:
     if s <= a:
         return "adesso"
     giorni = (s.date() - a.date()).days
-    if giorni <= 0:
+    # Entro un'ora sono minuti anche oltre la mezzanotte (revisione della PR #324, nota 4: alle
+    # 23:55 «non la sapevo» torna alle 00:05, «fra 10 minuti», non «domani»)
+    if giorni <= 0 or (s - a) < datetime.timedelta(hours=1):
         m = max(1, int(round((s - a).total_seconds() / 60)))
         return f"fra {m} minut{'o' if m == 1 else 'i'}"
     return "domani" if giorni == 1 else f"fra {giorni} giorni"
@@ -162,14 +166,39 @@ def chiusa(risposta) -> str | None:
 _NEGAZIONI = frozenset({"non", "no", "nemmeno", "neanche", "mica"})
 
 
+_PICCOLI = None
+
+
+def corta(chiusa_: str | None) -> bool:
+    """Una risposta chiusa che sta facilmente dentro una frase detta per altro (revisione della
+    PR #324, nota 2): una forma dell'autovalutazione («sì», «no», «quasi»), una parola di al più
+    tre lettere, o un numero fino a venti. Per queste vale solo la frase intera."""
+    global _PICCOLI
+    if not chiusa_:
+        return False
+    if _PICCOLI is None:
+        from ..numeri import in_lettere
+        _PICCOLI = {in_lettere(n).replace(" ", "") for n in range(21)}
+    ps = chiusa_.split()
+    return (autovalutazione(chiusa_) is not None
+            or (len(ps) == 1 and (len(ps[0]) <= 3 or ps[0] in _PICCOLI)))
+
+
 def risposta_giusta(chiusa_: str | None, detto) -> bool:
     """La frase detta contiene la risposta chiusa (le sue parole di fila), non negata subito prima
     e in una frase corta. Solo il «giusto»: il contrario non vuol dire sbagliato (la trascrizione
-    può sbagliare un nome), e allora vale l'autovalutazione."""
+    può sbagliare un nome), e allora vale l'autovalutazione. Una risposta `corta` vale solo se è
+    la frase intera («sì, accendi la luce» non è la risposta «sì»)."""
     if not chiusa_:
         return False
     cerca = chiusa_.split()
     ps = [w for w in normale(detto) if w not in _ARTICOLI]
+    while ps and ps[0] in _INTORNO:
+        ps = ps[1:]
+    while ps and ps[-1] in _INTORNO:
+        ps = ps[:-1]
+    if corta(chiusa_):
+        return ps == cerca
     if not ps or len(ps) > FRASE_MAX_PAROLE:
         return False
     n = len(cerca)

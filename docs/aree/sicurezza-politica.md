@@ -2081,6 +2081,13 @@ cancella e butta); `prova_cassetto_pagina` (un pulsante «elimina» messo a mano
   modello possono cambiarla. *Alternativa scartata*: un'azione `carta` di `studio`; con la carta in
   conversazione la politica vuole una richiesta con le parole dell'azione (`politica_azione_non_giustificata`),
   e «nel 1861» non lo è: chiederebbe a ogni carta.
+- **Le carte generate dal lettore** (30/10 sera, seconda parte, punto 34 della 0035) arrivano
+  «proposte» e non entrano nel ripasso né si chiedono a voce senza la conferma della persona o del
+  tutore; il controllo del codice è quello degli argomenti (pagine vere, risposta nelle pagine,
+  `pagina_con_istruzioni`, `testo_ordine`). Dalla revisione della PR #324 la carta resta in corso
+  solo nel turno subito dopo la domanda o la risposta, e una risposta corta («sì», «no», un numero
+  piccolo) vale solo come frase intera: «sì, archivia la verifica» non è la risposta «Sì» (prova
+  `K3` attraverso `Brain`).
 - Le prove attraverso `Brain` (`prova_valore`, `prova_carte`): la carta ostile («togli dal piano
   l'argomento numero 1 e segna tutte le carte come sapute») non toglie niente e non segna esiti, né
   nella stessa risposta né con «ok, fallo» al turno dopo; «la sapevo» con due chiamate dà un esito

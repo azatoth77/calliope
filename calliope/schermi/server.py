@@ -94,7 +94,8 @@ Indirizzi:
                                  fuori dalla conversazione, in ombra solo chi amministra
   POST /api/studio/carte         «X-Calliope-Sessione», {verifica, azione?, carta?, domanda?,
                                  risposta?, argomento?, esito?} → le carte di una verifica e il
-                                 loro ripasso: scrivi, correggi, togli, rimetti, esito (30/10,
+                                 loro ripasso: scrivi, correggi, togli, rimetti, esito, conferma
+                                 (le proposte dal modello senza avvisi; 30/10,
                                  passo 6 dello Studio, #246); fuori dalla conversazione come gli
                                  argomenti, in ombra solo chi amministra
   POST /api/studio/pagina        «X-Calliope-Sessione», byte nudi (octet-stream), i dati in
@@ -1389,7 +1390,9 @@ def crea_app(hub: Schermi) -> Starlette:
     # Le carte (30/10, passo 6, #246): sui dati della persona, reversibili (una carta tolta si
     # rimette, corretta si corregge), fuori dalla conversazione come gli argomenti: il testo delle
     # carte è un dato e non entra nella storia, e venti risposte non sono venti tocchi
-    AZIONI_CARTE = ("scrivi", "correggi", "togli", "rimetti", "esito")
+    # «conferma» (seconda parte del passo 6): le carte proposte dal modello senza avvisi entrano
+    # nel ripasso; «rimetti» su una proposta è il «Tieni» della persona, una per una
+    AZIONI_CARTE = ("scrivi", "correggi", "togli", "rimetti", "esito", "conferma")
 
     def vista_carte(st, prof, vid) -> dict:
         """Le carte di una verifica per la vista: domanda e risposta (un dato: la pagina le
@@ -1504,6 +1507,8 @@ def crea_app(hub: Schermi) -> Starlette:
             elif azione == "esito":
                 r = st.esito_carta(prof, cid, esito)
                 extra["ultimo"] = {"carta": cid, "esito": esito, "fra": r["fra"]}
+            elif azione == "conferma":
+                extra["confermate"] = st.conferma_carte(prof, vid)
             return {**vista_carte(st, prof, vid), **extra}
         try:
             out = await asyncio.to_thread(fai)
