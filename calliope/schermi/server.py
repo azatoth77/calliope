@@ -1240,6 +1240,7 @@ def crea_app(hub: Schermi) -> Starlette:
                 return None
             n = P.numero_leggibile(p["numero"])
             return f"p. {n}" if n else f"foto {p['ordine']}"
+        lettura = st.lettura(prof, vid)
         return {"verifica": {"id": v["id"], "materia": v["materia"], "data": v["data"],
                              "stato": v["stato"]},
                 "argomenti": [{"id": a["id"], "titolo": a["titolo"], "stato": a["stato"],
@@ -1247,8 +1248,7 @@ def crea_app(hub: Schermi) -> Starlette:
                                "pagine": [x for x in (nome(p) for p in a["pagine"]) if x]}
                               for a in st.argomenti(prof, vid)],
                 "estrazione": st.estrazione(prof, vid),
-                "lettura": {k: st.lettura(prof, vid)[k] for k in ("totali", "lette",
-                                                                  "illeggibili")},
+                "lettura": {k: lettura[k] for k in ("totali", "lette", "illeggibili")},
                 "prova": not st.per_schermi()}
 
     async def studio_argomenti(request: Request):
