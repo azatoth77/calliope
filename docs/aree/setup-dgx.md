@@ -58,6 +58,7 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 | `preselezione_tool` | non nel locale; il campo è tolto dal codice il 17/10 (PR #125, #25) | — | spenta dal 15/10 pomeriggio, tolta il 17/10 | [voce-e-regole](voce-e-regole.md) |
 | `web_searxng_url` | presente (l'indirizzo resta fuori dal repository) | vuoto | — | [biblioteca](biblioteca.md) |
 | `fatture_emittente` | presente (i dati dell'ufficio restano fuori dal repository) | vuoto | — | [documenti-ufficio](documenti-ufficio.md) |
+| `studio_modo` | `attivo` | `spento` | 30/10: acceso per le prove di tutto il giro con un minore di casa | [studio](studio.md) |
 
 Una chiave «accesa senza criterio scritto» è accesa nell'uso senza la soglia che la issue chiede
 prima dell'accensione: la misura resta da fare (le issue tra parentesi), non è già fatta. Per una lettura

@@ -649,6 +649,62 @@ def ciclo_eventi():
     liste.db.close()
 
 
+def ciclo_studio():
+    """Un tocco dello Studio dal ciclo vero (30/10, passo 4.5, #284): «Tieni» un argomento da
+    decidere passa da ToolRegistry.call col bersaglio, entra nella conversazione con il titolo in
+    busta (la conversazione resta contaminata dalla «foto») e l'argomento entra nel piano; lo
+    stato d'animo del tocco delle due domande non entra mai nella storia."""
+    import datetime
+    from calliope import provenienza
+    from calliope import studio as S
+    from calliope.tools.studio import studio_specs
+    b, c, sc, liste, turni, voce, hub, _ = prepara_ciclo()
+    cfg = Config()
+    cfg.memory_db = str(TMP / "studio-ciclo.db")
+    cfg.studio_modo, cfg.studio_cartella, cfg.studio_lettura = "attivo", str(TMP / "studio"), False
+    st = S.Studio(cfg, registry=b.tool_ctx.speakers, log=lambda m: None,
+                  adesso=lambda: datetime.datetime(2026, 10, 29, 10, 0))
+    vid = st.crea_verifica(BIANCA, "Storia", "2026-11-05")
+    mid = st.aggiungi_materiale(BIANCA, vid, "foto", "Libro")
+    pid = st.aggiungi_pagina(BIANCA, mid, numero="112", stato="letta", testo="Colombo")
+    aid = st.aggiungi_argomento(BIANCA, vid, "Colombo e le Indie", [pid],
+                                avvisi=["da_controllare"])
+    st.conferma_argomenti(BIANCA, vid)
+    b.tool_ctx.studio = st
+    for spec in studio_specs():
+        b.tools.register(spec)
+    sc.current_speaker, sc.identified_by = None, None
+    p = tocchi.prepara({"tocco": "studio_tieni", "verifica": vid, "argomento": aid},
+                       b.tool_ctx, BIANCA)
+    tocca(c, {"tipo": "tocco", "tool": p["tool"], "argomenti": p["argomenti"],
+              "descrizione": p["descrizione"], "bersaglio": p["bersaglio"],
+              "tocco": "studio_tieni", "persona": "bianca", "schermo": "telefono", "stanza": None,
+              "schermo_id": 7, "arrivato": time.time(), "pagina": {}})
+    r = turni[-1] if turni else {}
+    coda = b.history[-4:]
+    verifica("studio: «Tieni» dal ciclo è un turno «tocco» con la chiamata di studio",
+             r.get("esito") == "tocco" and (r.get("tool") or [{}])[0].get("nome") == "studio",
+             json.dumps(r, ensure_ascii=False)[:300])
+    verifica("studio: l'argomento da decidere è entrato nel piano",
+             next(a for a in st.argomenti(BIANCA, vid) if a["id"] == aid)["stato"] == "tenuto")
+    verifica("studio: nella storia il titolo è in busta e la conversazione resta contaminata",
+             ruoli(coda) == ["user", "assistant", "tool", "assistant"]
+             and "DATO NON FIDATO (fonte: foto)" in coda[0]["content"]
+             and "foto" in provenienza.fonti(b.history)
+             and "Colombo" not in provenienza.testo_persona(b.history))
+    p = tocchi.prepara({"tocco": "studio_sessione", "verifica": vid, "conoscenza": 2,
+                        "umore": "stressato"}, b.tool_ctx, BIANCA)
+    tocca(c, {"tipo": "tocco", "tool": p["tool"], "argomenti": p["argomenti"],
+              "descrizione": p["descrizione"], "bersaglio": p["bersaglio"],
+              "tocco": "studio_sessione", "persona": "bianca", "schermo": "telefono",
+              "stanza": None, "schermo_id": 7, "arrivato": time.time(), "pagina": {}})
+    verifica("studio: le due domande col tocco, lo stato d'animo mai nella storia né nel registro",
+             (st.sessione("bianca") or {}).get("umore") == "stressato"
+             and "stressato" not in json.dumps(b.history, ensure_ascii=False)
+             and "stressato" not in json.dumps(turni, ensure_ascii=False))
+    st.close()
+
+
 def main():
     try:
         print("— 1. le tessere")
@@ -660,6 +716,7 @@ def main():
         print("— 4. il ciclo")
         ciclo()
         ciclo_eventi()
+        ciclo_studio()
     finally:
         shutil.rmtree(TMP, ignore_errors=True)
     print(f"\n{len(ERRORI)} errori" if ERRORI else "\ntutto ok")

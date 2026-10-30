@@ -5,7 +5,9 @@
 // un PDF), si guardano con i bordi trovati, si rifanno, si mettono in ordine (su e giù), si tolgono
 // e si mandano. Dal 30/10 (passo 4.4, #283) sotto c'è la vista minima degli argomenti proposti
 // della verifica scelta: «Tieni», «Togli», «Rinomina» e «Conferma gli argomenti»
-// (POST /api/studio/argomenti). La home vera dello Studio arriva con la 4.5.
+// (POST /api/studio/argomenti). Dal 30/10 (passo 4.5, #284) la pagina si apre sulla home dello
+// Studio (POST /api/studio/home), anche sul PC personale; le pagine dei materiali sono una vista
+// sotto («Pagine»), solo sul telefono (la fotocamera e bordi.js).
 // I bordi li trova bordi.js su un fotogramma di 320 px; la foto parte intera (JPEG, lato ≤ 3000)
 // con i quattro angoli, e il server li ricontrolla, la raddrizza e decide (studio/pagine.py).
 // Tutto ciò che arriva dal server va in textContent. Niente URL blob: la CSP del telefono non li
@@ -33,6 +35,8 @@
     arg: null,                  // la vista degli argomenti della verifica scelta (passo 4.4)
     argInvio: false,
     rinomina: null,             // l'id dell'argomento che si sta rinominando
+    materiali: false,           // c'è la vista delle pagine (il telefono)
+    vidVoluta: null,            // la verifica scelta dalla home per «Pagine»
   };
 
   function metti(el, t) { if (el && el.textContent !== t) el.textContent = t; }
@@ -62,6 +66,7 @@
       sel.append(o);
     }
     if (prima && st.verifiche.some((v) => String(v.id) === prima)) sel.value = prima;
+    if (st.vidVoluta && st.verifiche.some((v) => v.id === st.vidVoluta)) { sel.value = String(st.vidVoluta); st.vidVoluta = null; }
     const nessuna = !st.verifiche.length;
     $("studio-nessuna").hidden = !nessuna || !r.ok;
     sel.hidden = nessuna;
@@ -488,7 +493,7 @@
         if (p.tipo === "foto") {
           if (materiale) meta.materiale = materiale;
           if (p.angoli) meta.angoli = p.angoli.map((a) => [Number(a[0].toFixed(4)), Number(a[1].toFixed(4))]);
-        } else meta.nome = p.nome;
+        } else { meta.nome = p.nome; meta.pdf = true; }     // il 429 prima del corpo (4.5)
         const r = await sch().studio(p.blob, meta);
         if (!r.ok) {
           metti(esito, String(r.dati.errore || "Non sono riuscita a mandarla: riprova.") +
@@ -510,22 +515,348 @@
     }
   }
 
+
+  // ── la home dello Studio (30/10, passo 4.5, #284) ──
+  // Dal canvas (StudioHome, StudioVerifica, PcStudio) e dagli spunti approvati il 28/10: la
+  // prossima verifica con la data, i giorni che mancano, l'obiettivo e (solo dopo due misure) la
+  // previsione; oggi; le tappe; Impara / Esercitati / Esame con ciò che c'è davvero (oggi solo
+  // «leggi le pagine»: niente tasti finti); lo stato della lettura; gli argomenti da decidere col
+  // perché e «Tieni»; le pagine messe da parte con «Riprova»; le due domande prima di cominciare.
+  // Le azioni sono tocchi (POST /api/tocco → il ciclo, ToolRegistry.call): entrano nella
+  // conversazione. Titoli e testi arrivano dalle pagine: sempre textContent.
+  const MESI = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto",
+    "settembre", "ottobre", "novembre", "dicembre"];
+  const GIORNI_S = ["domenica", "lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato"];
+  const PERCHE = { da_controllare: "non lo trovo nelle pagine che cita",
+    pagina_con_istruzioni: "viene da una pagina con un messaggio per un assistente",
+    titolo_ordine: "il titolo sembra un ordine o un annuncio" };
+  const home = { dati: null, carica: false, domande: null, scelte: {}, esito: "", attesa: {} };
+
+  function nodo(tag, cls, testo) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (testo !== undefined && testo !== null) n.textContent = String(testo);
+    return n;
+  }
+  function dataDetta(iso) {
+    const d = new Date(String(iso) + "T12:00:00");
+    if (isNaN(d)) return String(iso || "");
+    return GIORNI_S[d.getDay()] + " " + d.getDate() + " " + MESI[d.getMonth()];
+  }
+  function mancano(n) {
+    n = Number(n);
+    return n <= 0 ? "oggi" : n === 1 ? "domani" : "fra " + n + " giorni";
+  }
+  function tastoHome(testo, tocco, dati, cls) {
+    const b = nodo("button", "tasto studio-h-tasto" + (cls ? " " + cls : ""), testo);
+    b.type = "button";
+    b.dataset.tocco = tocco;
+    b.dataset.dati = JSON.stringify(dati);
+    b.disabled = !home.dati || !home.dati.tocchi || !!home.attesa[tocco + JSON.stringify(dati)];
+    return b;
+  }
+
+  async function caricaHome() {
+    if (!sch() || !sch().studioHome) return;
+    home.carica = true;
+    const r = await sch().studioHome();
+    home.carica = false;
+    if (!st.aperta) return;
+    if (!r.ok) { home.esito = String(r.dati.errore || "Non riesco a leggere lo Studio: riprova tra poco."); }
+    else home.dati = r.dati;
+    disegnaHome();
+  }
+
+  function cartaVerifica(v, prima) {
+    const art = nodo("article", "studio-h-verifica" + (prima ? " studio-h-prima" : ""));
+    art.dataset.verifica = String(v.id);
+    const testa = nodo("div", "studio-h-testa");
+    testa.append(nodo("span", "studio-h-etichetta", prima ? "Prossima verifica" : "Verifica"),
+      nodo("span", "studio-h-quando", dataDetta(v.data) + " · " + mancano(v.giorni_mancanti)));
+    art.append(testa);
+    art.append(nodo("h3", "studio-h-titolo", [String(v.materia || ""), v.argomento ? String(v.argomento) : ""]
+      .filter(Boolean).join(" · ") + (v.di ? " (di " + String(v.di) + ")" : "")));
+    // Obiettivo e previsione: la previsione solo dopo due misure vere (spunto del 28/10)
+    const ob = nodo("div", "studio-h-obiettivo");
+    const barra = nodo("div", "studio-h-barra");
+    const pieno = nodo("div", "studio-h-pieno");
+    // La forbice dopo 3 prove in 2 giorni (0035 punto 9); prima l'ultima prova vera, se c'è
+    const fb = Array.isArray(v.previsione) && v.previsione.length === 2 ? v.previsione.map(Number) : null;
+    const ult = v.ultima === null || v.ultima === undefined ? null : Number(v.ultima);
+    const prev = fb ? (fb[0] + fb[1]) / 2 : ult;
+    pieno.style.width = (prev === null ? 0 : Math.max(0, Math.min(100, prev))) + "%";
+    const segno = nodo("div", "studio-h-segno");
+    segno.style.left = Math.max(0, Math.min(100, Number(v.obiettivo) || 75)) + "%";
+    barra.append(pieno, segno);
+    const ob_ = "obiettivo " + (Number(v.obiettivo) || 75) + "%";
+    ob.append(barra, nodo("span", "studio-h-nota", fb ? "previsione fra " + fb[0] + " e " + fb[1] + "% · " + ob_
+      : ult !== null ? "l'ultima prova: " + Math.round(ult) + "% · " + ob_
+      : ob_ + " · la previsione arriva con gli esercizi"));
+    art.append(ob);
+    // La lettura delle pagine
+    const l = v.lettura || {};
+    const righe = [];
+    if (l.frase) righe.push(String(l.frase));
+    else if (Number(l.totali)) righe.push("Pagine lette " + (Number(l.lette) || 0) + " di " + Number(l.totali) +
+      ((Number(l.da_leggere) || 0) + (Number(l.in_lettura) || 0) ? (l.in_attesa ? ": leggo le altre quando la DGX è libera." : ": leggo le altre.") : "."));
+    else righe.push("Nessuna pagina: fotografale da «Pagine».");
+    if (v.stato === "bozza" && v.argomenti && v.argomenti.proposti) righe.push("Gli argomenti aspettano la tua conferma.");
+    for (const x of righe) art.append(nodo("p", "studio-h-riga", x));
+    // Oggi
+    if (v.oggi) {
+      const o = nodo("div", "studio-h-oggi");
+      o.append(nodo("span", "studio-h-oggi-cosa", "Oggi · " + (Number(v.oggi.minuti) || 0) + " minuti" + (v.oggi.fatto ? " · fatto" : "")),
+        nodo("span", "studio-h-oggi-att", String(v.oggi.attivita || "")));
+      art.append(o);
+    } else if (v.stato === "aperta" && (v.avvisi_piano || []).length) {
+      art.append(nodo("p", "studio-h-riga", "Oggi nel piano non c'è niente."));
+    }
+    for (const a of v.avvisi_piano || []) {
+      if (a === "piano_non_aggiornato") art.append(nodo("p", "studio-avviso", "Il piano non sono riuscita ad aggiornarlo: è quello di prima."));
+    }
+    // I tasti di oggi: tocchi veri, solo quando servono
+    const tasti = nodo("div", "studio-h-tasti");
+    const sess = home.dati.sessione && home.dati.sessione.verifica === v.id;
+    if (v.oggi && !v.oggi.fatto) {
+      if (!sess) {
+        const b = nodo("button", "tasto studio-h-tasto studio-h-primo", "Inizia");
+        b.type = "button";
+        b.dataset.domande = String(v.id);
+        b.disabled = !home.dati.tocchi;
+        tasti.append(b);
+      }
+      tasti.append(tastoHome("Fatto", "studio_fatto", { verifica: v.id }, sess ? "studio-h-primo" : ""),
+        tastoHome("Non ce la faccio oggi", "studio_salta", { verifica: v.id }));
+    }
+    const pag = nodo("button", "tasto studio-h-tasto", "Pagine");
+    pag.type = "button";
+    pag.dataset.pagine = String(v.id);
+    if (st.materiali) tasti.append(pag);
+    if (tasti.childNodes.length) art.append(tasti);
+    if (home.domande === v.id) art.append(pannelloDomande(v));
+    // Impara / Esercitati / Esame: solo ciò che c'è (passo 4.5: «leggi le pagine»)
+    if (v.oggi) {
+      const imp = nodo("section", "studio-h-gruppo");
+      imp.append(nodo("h4", "studio-h-sotto", "Impara"));
+      imp.append(nodo("p", "studio-h-riga", String(v.oggi.attivita || "") + " Sul tuo libro; se una cosa non è chiara, chiedimela."));
+      art.append(imp);
+    }
+    // Le tappe (gli argomenti del piano, uno dopo l'altro)
+    if ((v.tappe || []).length) {
+      const t = nodo("ol", "studio-h-tappe");
+      t.setAttribute("aria-label", "Tappe");
+      for (const x of v.tappe) {
+        const li = nodo("li", "studio-h-tappa studio-h-" + String(x.stato || "chiusa"));
+        li.append(nodo("span", "studio-h-pallino", x.stato === "fatta" ? "✓" : ""),
+          nodo("span", "studio-h-tappa-nome", String(x.titolo || "")));
+        t.append(li);
+      }
+      art.append(nodo("h4", "studio-h-sotto", "Tappe"), t);
+    }
+    // Gli argomenti da decidere, col perché, e «Tieni» con un tocco
+    const dd = (v.argomenti && v.argomenti.da_decidere) || [];
+    if (dd.length) {
+      art.append(nodo("h4", "studio-h-sotto", "Da decidere"));
+      const ul = nodo("ul", "studio-h-elenco");
+      for (const a of dd) {
+        const li = nodo("li", "studio-h-voce");
+        const tx = nodo("div", "studio-testo");
+        tx.append(nodo("b", null, String(a.titolo || "")),
+          nodo("span", "studio-avviso", "Fuori dal piano: " + (a.avvisi || []).map((x) => PERCHE[x] || String(x)).join("; ") + "."));
+        li.append(tx, tastoHome("Tieni", "studio_tieni", { verifica: v.id, argomento: a.id }));
+        ul.append(li);
+      }
+      art.append(ul);
+    }
+    // Fuori dal piano: gli argomenti tolti, rimessi con «Tieni» (studio_tieni)
+    const tolti = Array.isArray(v.tolti) ? v.tolti : [];
+    if (tolti.length) {
+      art.append(nodo("h4", "studio-h-sotto", "Fuori dal piano"));
+      const ul = nodo("ul", "studio-h-elenco");
+      for (const a of tolti) {
+        const li = nodo("li", "studio-h-voce");
+        const tx = nodo("div", "studio-testo");
+        tx.append(nodo("b", null, String(a.titolo || "")));
+        li.append(tx, tastoHome("Tieni", "studio_tieni", { verifica: v.id, argomento: a.id }));
+        ul.append(li);
+      }
+      art.append(ul);
+    }
+    // Le pagine messe da parte («da_parte» detto a parole) con «Riprova»
+    for (const p of v.da_parte || []) {
+      const li = nodo("div", "studio-h-voce");
+      li.append(nodo("p", "studio-h-riga", "La " + (p.numero ? "pagina " + p.numero : "foto " + p.ordine) +
+        " l'ho messa da parte: leggendola il modello si fermava. La riprovo da sola una volta al giorno."),
+      tastoHome("Riprova", "studio_riprova", { verifica: v.id, pagina: p.id }));
+      art.append(li);
+    }
+    // Il piano, giorno per giorno
+    if ((v.giorni || []).length) {
+      const det = nodo("details", "studio-h-piano");
+      det.dataset.verifica = String(v.id);
+      det.append(nodo("summary", null, "Il piano"));
+      const ol = nodo("ol", "studio-h-giorni");
+      for (const g of v.giorni) {
+        const li = nodo("li", "studio-h-giorno" + (g.fatto ? " studio-h-fatto" : ""));
+        li.append(nodo("span", "studio-h-g-quando", dataDetta(g.giorno) + (g.fase === "ripasso" ? " · ripasso" : "")),
+          nodo("span", "studio-h-g-cosa", String(g.attivita || "") + " " + (Number(g.minuti) || 0) + " min" + (g.fatto ? " ✓" : "")));
+        ol.append(li);
+      }
+      det.append(ol);
+      art.append(det);
+    }
+    const es = nodo("p", "pagina-esito studio-h-esito");
+    es.setAttribute("role", "status");
+    es.dataset.verifica = String(v.id);
+    es.textContent = home.esito && home.esitoDi === v.id ? home.esito : "";
+    art.append(es);
+    return art;
+  }
+
+  function pannelloDomande(v) {
+    const p = nodo("div", "studio-h-domande");
+    const s = home.scelte;
+    const gruppo = (titolo, nome, voci, valori) => {
+      const f = nodo("fieldset", "studio-h-scelte");
+      f.append(nodo("legend", null, titolo));
+      voci.forEach((t, i) => {
+        const b = nodo("button", "tasto studio-h-chip", t);
+        b.type = "button";
+        b.dataset.scelta = nome;
+        b.dataset.valore = String(valori[i]);
+        b.setAttribute("aria-pressed", String(s[nome] === valori[i]));
+        f.append(b);
+      });
+      return f;
+    };
+    const con = home.dati.conoscenza || [];
+    p.append(gruppo("Quanto conosci l'argomento?", "conoscenza", con, con.map((_, i) => i + 1)),
+      gruppo("Come ti senti oggi?", "umore", home.dati.umori || [], home.dati.umori || []));
+    const via = tastoHome("Comincia", "studio_sessione", { verifica: v.id }, "studio-h-primo");
+    via.disabled = via.disabled || (s.conoscenza === undefined && s.umore === undefined);
+    p.append(via, nodo("p", "studio-h-nota", "Lo uso solo per oggi, per come ti parlo: non lo salvo e non lo dico a nessuno."));
+    return p;
+  }
+
+  function disegnaHome() {
+    const box = $("studio-home");
+    if (!box) return;
+    const d = home.dati;
+    const fig = [];
+    if (!d) {
+      fig.push(nodo("p", "pagina-nota", home.carica ? "Un attimo…" : (home.esito || "")));
+    } else {
+      $("studio-prova").hidden = !d.prova;
+      const vv = Array.isArray(d.verifiche) ? d.verifiche : [];
+      vv.forEach((v, i) => fig.push(cartaVerifica(v, i === 0)));
+      if (!vv.length) fig.push(nodo("p", "pagina-nota", "Non hai verifiche nello Studio."));
+      fig.push(nodo("p", "studio-h-nuova", "Per una verifica nuova dimmelo: «Calliope, giovedì ho la verifica di storia»."));
+    }
+    box.replaceChildren(...fig);
+  }
+
+  async function suHome(ev) {
+    const b = ev.target.closest && ev.target.closest("button");
+    if (!b || b.disabled) return;
+    if (b.dataset.pagine) { apriMateriali(Number(b.dataset.pagine)); return; }
+    if (b.dataset.domande) {
+      const id = Number(b.dataset.domande);
+      home.domande = home.domande === id ? null : id;
+      home.scelte = {};
+      disegnaHome();
+      vista({ vista: home.domande ? "sessione" : "home", verifica: home.domande || undefined });
+      return;
+    }
+    if (b.dataset.scelta) {
+      const n = b.dataset.scelta;
+      home.scelte[n] = n === "conoscenza" ? Number(b.dataset.valore) : b.dataset.valore;
+      disegnaHome();
+      return;
+    }
+    const tocco = b.dataset.tocco;
+    if (!tocco) return;
+    let dati = {};
+    try { dati = JSON.parse(b.dataset.dati || "{}"); } catch (e) { return; }
+    if (tocco === "studio_sessione") Object.assign(dati, home.scelte);
+    const k = tocco + JSON.stringify(dati);
+    home.attesa[k] = true;
+    home.esitoDi = dati.verifica;
+    home.esito = "Un attimo…";
+    disegnaHome();
+    const r = await sch().studioTocco(Object.assign({ tocco }, dati));
+    if (r.ok) return;                                  // l'esito arriva dal ciclo (evento «tocco»)
+    delete home.attesa[k];
+    home.esito = String(r.dati.errore || "Non ci sono riuscita: riprova o chiedimelo a voce.");
+    disegnaHome();
+  }
+
+  // L'esito di un tocco dello Studio dal ciclo (evento SSE «tocco», schermo.js)
+  function esitoHome(d) {
+    home.attesa = {};
+    home.esito = d.ok ? "" : String(d.errore || "Non ci sono riuscita: riprova.");
+    if (d.ok && d.tocco === "studio_sessione") { home.domande = null; home.scelte = {}; vista({ vista: "home" }); }
+    caricaHome();
+  }
+
+  // La vista aperta, al server al più una volta al secondo (studio/vista.py)
+  let vistaUltima = "", vistaTimer = null;
+  function vista(v) {
+    const t = JSON.stringify(v || { vista: null });
+    if (t === vistaUltima) return;
+    vistaUltima = t;
+    clearTimeout(vistaTimer);
+    vistaTimer = setTimeout(() => { if (sch() && sch().vista) sch().vista(JSON.parse(vistaUltima)); }, 1000);
+  }
+
+  function apriHome() {
+    st.materiali = !!$("studio-materiali");
+    if ($("studio-materiali")) { $("studio-materiali").hidden = true; chiudiCamera(); }
+    $("studio-home").hidden = false;
+    disegnaHome();
+    caricaHome();
+    vista({ vista: "home" });
+  }
+  function apriMateriali(vid) {
+    if (!$("studio-materiali")) return;
+    $("studio-home").hidden = true;
+    $("studio-materiali").hidden = false;
+    st.vidVoluta = vid;
+    caricaVerifiche();
+    vista({ vista: "pagine", verifica: vid });
+  }
+
   // ── apri e chiudi (sezioni.js, Le mie cose › Studio) ──
   function apri() {
     st.aperta = true;
     $("studio").hidden = false;
-    metti($("studio-esito"), "");
-    disegna();
-    caricaVerifiche();
+    if ($("studio-esito")) metti($("studio-esito"), "");
+    if (st.materiali) disegna();
+    apriHome();
   }
   function chiudi() {
     st.aperta = false;
-    chiudiCamera();
+    if (st.materiali) chiudiCamera();
     if ($("studio")) $("studio").hidden = true;
+    vista({ vista: null });
   }
 
   function avvia() {
-    if (!$("studio") || !B()) return;
+    if (!$("studio") || !$("studio-home")) return;
+    $("studio-home").addEventListener("click", suHome);
+    // «Il piano» aperto: la vista del piano (toggle non risale: in cattura)
+    $("studio-home").addEventListener("toggle", (ev) => {
+      const d = ev.target;
+      if (d && d.classList && d.classList.contains("studio-h-piano")) {
+        vista(d.open ? { vista: "piano", verifica: Number(d.dataset.verifica) } : { vista: "home" });
+      }
+    }, true);
+    window.CalliopePagine = window.CalliopePagine || {};
+    window.CalliopePagine.studio = { apri, chiudi };
+    // Le pagine dei materiali solo dove ci sono (il telefono, con bordi.js)
+    st.materiali = !!($("studio-materiali") && B());
+    if (!st.materiali) return;
+    $("studio-indietro").addEventListener("click", apriHome);
+    $("studio-verifica").addEventListener("change", () => vista({ vista: "pagine", verifica: verificaScelta() || undefined }));
     $("studio-camera-apri").addEventListener("click", () => { st.sostituisci = null; apriCamera(); });
     $("studio-file-apri").addEventListener("click", () => { st.sostituisci = null; $("studio-file").click(); });
     $("studio-file").addEventListener("change", async (ev) => {
@@ -556,14 +887,15 @@
     }
     // A pagina nascosta la fotocamera si spegne (batteria, e la luce della fotocamera)
     document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") chiudiCamera(); });
-    window.CalliopePagine = window.CalliopePagine || {};
-    window.CalliopePagine.studio = { apri, chiudi };
   }
 
   // Per le prove: le pagine in lista e lo stato
   window.CalliopeStudio = {
+    esito: esitoHome,
     stato() {
       return { aperta: st.aperta, verifiche: st.verifiche.map((v) => v.id), invio: st.invio,
+        home: home.dati ? { verifiche: (home.dati.verifiche || []).map((v) => v.id), sessione: home.dati.sessione,
+          tocchi: !!home.dati.tocchi } : null, vista: vistaUltima,
         camera: !!st.flusso,
         argomenti: st.arg && Array.isArray(st.arg.argomenti) ? st.arg.argomenti.map((a) => ({ id: a.id, stato: a.stato, avvisi: (a.avvisi || []).slice() })) : [],
         pagine: st.pagine.map((p) => ({ id: p.id, tipo: p.tipo, angoli: p.angoli, intera: !!p.intera, avvisi: p.avvisi.slice(),

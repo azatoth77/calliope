@@ -781,6 +781,14 @@ class Avvio:
         if s.studio is not None:
             atexit.register(s.studio.close)
             print(f"[STUDIO] {s.studio.modo}", flush=True)
+            # I tool dello Studio (30/10, passo 4.5, #284): solo con `studio_modo: attivo`; in
+            # ombra il tool non c'è (dipende dall'installazione, come stanza_cerca)
+            if getattr(self, "tool_ctx", None) is not None:
+                self.tool_ctx.studio = s.studio
+            if s.studio.per_modello():
+                from .tools.studio import studio_specs
+                for spec in studio_specs():
+                    s.tools.register(spec)
             # La lettura delle pagine (30/10, passo 4.3, #282): un thread che legge con il
             # modello dell'agente quando la DGX è libera e cede ai lavori e alla voce
             try:

@@ -186,7 +186,11 @@ def scenario(t, hub, st, vid, file):
     ok = aspetta(lambda: t.v("!!document.querySelector('#tessere [data-tessera=\"studio\"]:not(.presto)')"), 10)
     verifica("Le mie cose: la tessera Studio apre una pagina (Studio attivo)", bool(ok))
     t.tocca('#tessere [data-tessera="studio"]')
-    ok = aspetta(lambda: t.v("!document.getElementById('studio').hidden && "
+    # Dal passo 4.5 (#284) la tessera apre la home: le pagine sono la vista «Pagine» della verifica
+    ok = aspetta(lambda: t.v(f"!!document.querySelector('#studio-home [data-pagine=\"{vid}\"]')"), 8)
+    verifica("Studio: la tessera apre la home, con «Pagine» sulla verifica", bool(ok))
+    t.tocca(f'#studio-home [data-pagine="{vid}"]')
+    ok = aspetta(lambda: t.v("!document.getElementById('studio-materiali').hidden && "
                              "document.getElementById('studio-verifica').options.length === 1"), 8)
     verifica("Studio: la pagina si apre, con la verifica da scegliere e senza schede del server",
              bool(ok) and t.v("document.getElementById('pagina-schede').hidden && location.hash === '#/cose/studio'"),

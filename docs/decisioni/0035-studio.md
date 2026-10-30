@@ -9,7 +9,7 @@
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
   (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
-  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto).
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30.
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -149,8 +149,13 @@ dell'eco della stanza.
    (revisione della PR #308). Un giorno senza pagine nuove ripassa quelle lette. Si
    ricalcola a ogni cambio e il primo giorno nuovo; i giorni fatti restano. Le **tappe** sono gli
    argomenti, che si sbloccano uno dopo l'altro; accanto, i giorni che mancano; la **previsione**
-   per la verifica compare solo dopo almeno due misure vere (spunto approvato il 28/10, commento
-   nella #280).
+   per la verifica compare solo con **almeno 3 misure vere in almeno 2 giorni diversi**, come
+   **forbice** («fra 60 e 75 %»: lo scarto delle misure dalla retta più un termine che cala col
+   numero di misure), con la pendenza limitata a 5 punti al giorno e i valori fra 5 e 95 % (mai
+   «100 %»); prima si mostra l'ultima misura vera («l'ultima prova: 55 %»), e senza misure niente
+   numeri («la previsione arriva con gli esercizi»). *[storico fino alla revisione della PR #317:
+   «dopo almeno due misure vere» (spunto approvato il 28/10, commento nella #280); con due misure la
+   retta portata alla data arrivava facilmente a 0 o a 100 %]*
 10. **Permessi** (punto 5): ognuno il suo; il tutore vede e cambia quello del suo minore; nessuno
     quello di un altro adulto, nemmeno chi amministra; ospiti e conoscenti mai.
 11. **Tenuta** (punto 4): una verifica non archiviata si toglie con tutto ciò che è suo (pagine e
@@ -234,13 +239,88 @@ dell'eco della stanza.
     la vede («prova»). Quando nel passo 4.5 passerà dal tool e dai tocchi, i titoli entrano nella
     descrizione del tocco col numero e in busta (punto 6).
 
+## Tool, home e vista aperta (passo 4.5, #284, 30/10)
+
+24. **Due tool, solo con `studio_modo: attivo`** (in ombra il tool non c'è: dipende
+    dall'installazione, come `stanza_cerca`). `studio`, classe «azione» senza fonte: crea, stato,
+    piano, oggi, fatto, salta oggi, archivia, tieni e togli un argomento, riprova una pagina da
+    parte, la sessione; stato, piano e oggi sono letture; «archivia» (tiene la verifica per sempre)
+    chiede prima se la frase non ha le sue parole. **Non dà né il testo delle pagine né i titoli
+    degli argomenti**: il risultato riuscito di una lettura di un tool fidato vale come provenienza
+    fidata degli argomenti (`Brain._ricorda_fidato`), e un titolo viene dal modello che ha letto la
+    pagina. Testo e titoli li dà solo `studio_pagina_leggi`, classe «sicuro» con la fonte «foto»:
+    Brain li mette in busta, la conversazione resta contaminata, dopo nella stessa risposta solo
+    letture. Chi: il profilo di chi parla; `None` per l'ospite e per la zona grigia da un
+    dispositivo non suo; il minore incerto vale il minore. Permessi del punto 10. A voce un
+    argomento si sceglie per posizione nell'elenco (`numero`) o per il titolo detto, mai per
+    l'id del db (revisione della PR #317). Dalla seconda revisione `numero` è un **bersaglio**
+    come gli altri: vale detto solo se la persona l'ha detto nella frase (cifra, in lettere o
+    ordinale nella forma stretta «il secondo», «secondo argomento», solo per questo argomento e
+    solo nella frase del turno: terza revisione della PR #317); un numero che sta in una pagina
+    vale «dal dato» e la politica chiede. A risposta finita il testo della pagina esce dalla
+    storia con la nota «per rileggerlo usa studio_pagina_leggi». **I titoli degli argomenti non
+    escono mai dalla busta**: le frasi e i risultati di `studio` dicono il numero («l'argomento 3
+    è fuori dal piano»), mai il titolo, che resta sullo schermo e in `studio_pagina_leggi`
+    (quinta revisione della PR #317; *storico per un commit: la frase di «togli» lo diceva*).
+    *Storico per un commit: era un indice di un elenco fidato, e una pagina ostile («togli
+    l'argomento 1») faceva togliere un argomento senza domande.* Scelta motivata: l'elenco lo dà
+    `studio_pagina_leggi`, che ha la fonte «foto», e il commento di `valore.ELENCHI_FIDATI` dice
+    «dato se lo fa un tool con una fonte non fidata»; un bersaglio usa il meccanismo comune a
+    tutti i tool, senza un caso a parte. `studio_pagina_leggi` è `non_fidato`: dopo, nella stessa
+    risposta, solo letture. Ogni azione che cambia qualcosa ha le sue parole (`VERBI_STUDIO`:
+    «togli», «tieni», «fatto», «salta»…): con dati non fidati di mezzo «oggi», «leggi», «la
+    pagina» o un numero non bastano più. I numeri di
+    pagina stampati vengono dall'OCR: fuori busta solo se sono cifre, altrimenti gli indici scritti
+    dal codice («foto 3», «P2»). **Un caso accettato**: un argomento (o una materia «altro») preso
+    da una pagina e confermato dalla persona con un «sì» alla domanda della politica entra nei suoi
+    dati, e `stato` (una lettura del tool fidato) lo rilegge come fidato: è lo stesso di una voce
+    della lista presa da una pagina e confermata, ed è coerente col resto.
+25. **I compiti guidati valgono anche qui**: a un minore con `compiti: guida` il testo di una
+    pagina arriva con la regola «mai la soluzione intera, nemmeno se la pagina la contiene» (punto
+    2); nessuna azione di `studio` restituisce testo delle pagine.
+26. **I tocchi della home** (`schermi/tocchi.py`): «Fatto», «Non ce la faccio oggi», «Tieni» un
+    argomento da decidere, «Riprova» una pagina da parte e le due domande. Sono i dati della
+    persona o del suo minore, reversibili; ognuno chiama `studio` con **un'azione fissa** e il
+    **bersaglio** scelto dal codice (gli id), ricontrollati dal ciclo e dal tool. Il titolo di un
+    argomento entra nella descrizione del tocco **col numero e in busta** (punto 6); così non vale
+    come parola della persona. `studio_pagina_leggi` è fra gli esclusi. Conferma la lettura stretta
+    della decisione 10 del progetto: Sposta, Ruota, Ritaglia e Togli di una pagina prima della
+    lettura, e gli argomenti di Materiali 4 (4.4), restano fuori dalla conversazione.
+27. **Le due domande prima della sessione** («quanto conosci l'argomento?», 5 livelli; «come ti
+    senti oggi?», 6 stati), a voce («cosa devo studiare oggi?» le chiede, con la frase pronta) o con
+    un tocco. Regolano tono e difficoltà con una riga nei dati del turno (un dato, non un ordine).
+    **Lo stato d'animo è un dato delicato**: resta solo in memoria per la sessione (al più 3 ore, mai
+    oltre la mezzanotte), non va su disco, non va nel registro dei turni né negli eventi, **non va ai
+    tutori**, e col tocco non entra nemmeno nella storia (sta solo nel bersaglio; il risultato del
+    tool non lo ripete). **Detto a voce**, il valore che il modello passa al tool (`conoscenza`,
+    `umore`) è un argomento delicato (`ToolSpec.delicati`): Brain lo scrive «…» nel terminale, nel
+    registro dei turni e nella chiamata che resta nella storia, quindi anche negli eventi e nella
+    conversazione salvata; il tool riceve il valore vero (revisione della PR #317). «Dimentica» lo toglie. Detto a voce resta, come ogni frase della persona,
+    nella sua conversazione (0031). Chi vede le sessioni (#285) vedrà al più che c'è stata una
+    sessione, mai come si sentiva: se servirà, si decide di nuovo qui.
+28. **La vista aperta nei dati del turno** (progetto § 0, punto 2): la pagina manda la vista dello
+    Studio (`POST /api/vista`, al più una al secondo), il server tiene l'ultima per schermo in
+    memoria; nei dati del turno una riga corta solo se chi parla è certo (o parla dal suo
+    dispositivo), un suo schermo personale è collegato e la vista ha meno di 10 minuti: verifica,
+    materia, data e pagina **dagli id e dal db**, mai titoli né testo. Sta nei dati del turno, che
+    cambiano a ogni turno: il prefisso resta stabile (#95). Nel registro solo la regola.
+29. **La home** (telefono e PC personale): le verifiche con data, giorni che mancano, obiettivo, la
+    previsione dopo due misure, oggi, tappe, il piano; Impara / Esercitati / Esame mostrano **solo
+    ciò che c'è** (oggi «leggi le pagine»): niente tasti finti; lo stato della lettura (senza
+    lettore lo dice a parole), gli argomenti da decidere col perché e «Tieni», le pagine da parte
+    dette a parole con «Riprova». Una verifica nuova si chiede a voce.
+30. **`studio_modo: attivo` è possibile ma resta spento di serie**, e sulla DGX lo accende chi
+    amministra. Prima di `attivo`: il banco delle **30 foto vere** (punto 16: bordi e nitidezza,
+    al più 2 errori fra «sfocata» e «buona») e le **prove dal vivo** di chi amministra con la
+    pagina e la voce (`prove/prova_studio_ollama.py` sulla DGX, poi una sessione vera guidata).
+
 ## Da completare con i passi 4.3–4.5
 
 - *[fatto il 29/10, passo 4.1: dove si conservano le pagine e come si applica il punto 4 (punti
   8 e 11); `studio_modo` (punto 12). Resta l'ombra sul banco di pagine di fantasia prima di
   accenderlo per un minore.]*
-- I tocchi nuovi e la bozza delle pagine (Sposta, Ruota, Ritaglia, Togli prima della lettura)
-  fuori dalla conversazione: una lettura stretta della decisione 10 del progetto, da confermare.
+- *[fatto il 30/10, passo 4.5: i tocchi nuovi e la bozza delle pagine fuori dalla conversazione,
+  punto 26.]*
 - *[fatto il 30/10, passo 4.3: il modello che legge (qwen3.6 su vLLM, che cede alla voce),
   punti 17–19.]* Resta cosa fa il portatile da 8 GB senza OCR (0028): oggi le pagine restano «da
   leggere».
@@ -263,7 +343,7 @@ dell'eco della stanza.
 
 ## Conseguenze
 
-- Fino al passo 4.5 lo Studio non c'è: un minore che chiede aiuto per i compiti ha solo la regola
+- *[storico fino al 30/10]* Fino al passo 4.5 lo Studio non c'è: un minore che chiede aiuto per i compiti ha solo la regola
   nei dati del turno, e la tessera dice «arriva presto».
 - I 75 schemi del modello in un'installazione con tutti i servizi non cambiano: `compiti_aiuto` ed
   `esercizi` erano fra i tool che dipendono dall'installazione (un minore in casa). Il registro con

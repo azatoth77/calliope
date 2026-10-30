@@ -1413,9 +1413,14 @@ class CapitoHold:
 # Calliope ha detto.
 WEB_TOLTO = ("{\"ok\": true, \"nota\": \"risultati di internet già usati nella risposta qui "
              "sotto e poi tolti dalla conversazione: per altri dati cerca di nuovo\"}")
+# Il testo di una pagina dello Studio (studio_pagina_leggi) tolto a risposta finita (terza
+# revisione della PR #317): la sua nota, non quella di internet, che spingeva verso web_cerca
+PAGINA_TOLTA = ("{\"ok\": true, \"nota\": \"il testo della pagina è stato tolto: per rileggerlo "
+                "usa studio_pagina_leggi\"}")
 # Le chiavi del JSON di un tool non fidato che portano dati (non solo un esito): i risultati di
 # web_cerca e delle estensioni, i fatti e la notizia del tool notizie (13/10)
-_CHIAVI_DATO = ('"risultati"', '"fatti"', '"notizia"')
+# «testo» e «argomenti»: studio_pagina_leggi (30/10, seconda revisione della PR #317)
+_CHIAVI_DATO = ('"risultati"', '"fatti"', '"notizia"', '"testo"', '"argomenti"')
 
 
 class TextCallGuard:
@@ -4128,12 +4133,13 @@ class Brain:
         conversazione resta contaminata anche senza il testo."""
         provenienza.marca(self.history)
         for m in self.history:
-            if m.get("role") != "tool" or m.get("content") == WEB_TOLTO:
+            if m.get("role") != "tool" or m.get("content") in (WEB_TOLTO, PAGINA_TOLTA):
                 continue
             spec = self.tools.get(m.get("name") or "")
             if (spec is not None and getattr(spec, "non_fidato", False)
                     and not getattr(spec, "resta_in_storia", False)):
-                m["content"] = WEB_TOLTO
+                m["content"] = (PAGINA_TOLTA if m.get("name") == "studio_pagina_leggi"
+                                else WEB_TOLTO)
 
     def rules_fired(self) -> list[str]:
         """Le regole sul testo scattate nell'ultima risposta: quelle di Brain (spinte,
@@ -6181,9 +6187,36 @@ class Brain:
             is not None, sch) if disp_t else ""
         if disp:
             who += " " + disp
+        # Lo Studio (30/10, passo 4.5, #284): la vista aperta sullo schermo personale di chi
+        # parla («spiegami questa», «spostala a domani») e la sessione di oggi (le due domande:
+        # tono e difficoltà). Nei dati del turno, che cambiano a ogni turno: il prefisso resta
+        # stabile (#95); sono dati, non ordini (principio 10). Mai il testo delle pagine
+        studio = self._nota_studio()
+        if studio:
+            who += " " + studio
         return [{"role": "system", "content": TURN_CONTEXT_MSG.format(
             ora=f"{now:%H:%M}", giorno=_GIORNI[now.weekday()],
             data=f"{now.day} {_MESI[now.month - 1]} {now.year}", chi=who)}]
+
+    def _nota_studio(self) -> str:
+        """La riga dello Studio nei dati del turno (studio/vista.py e Studio.nota_sessione): ""
+        senza lo Studio per il modello o senza chi parla riconosciuto. Regole `studio_vista` e
+        `studio_sessione` (nel registro dei turni solo il nome, mai la vista né le risposte)."""
+        st = getattr(self.tool_ctx, "studio", None)
+        if st is None or not st.per_modello():
+            return ""
+        try:
+            from .studio import vista
+            from .tools.studio import chi_di
+            riga = vista.riga(self.tool_ctx, st)
+            chi = chi_di(self.tool_ctx)
+            sess = st.nota_sessione(chi.id) if chi is not None else ""
+        except Exception:  # noqa: BLE001 — lo Studio non ferma la risposta
+            return ""
+        for nome, x in (("studio_vista", riga), ("studio_sessione", sess)):
+            if x and nome not in (getattr(self, "last_rules", None) or ()):
+                self._rule(nome)
+        return " ".join(x for x in (riga, sess) if x)
 
     def _minor_note(self, name: str | None) -> str:
         """Il preset di un minore come dato del turno (minori.dato_turno), "" per un adulto;
@@ -6814,6 +6847,18 @@ class Brain:
         # memoria in `last_tools` (13/10). *Storico, 12–16/10: per un minore i nomi degli
         # argomenti senza i valori; dal 16/10 (decisione 0031) come per un adulto: oggi nessuno*
         su_disco = None
+        # Gli argomenti delicati (ToolSpec.delicati: lo stato d'animo dello Studio, revisione
+        # della PR #317): «…» nel terminale, nel registro dei turni e nella chiamata che resta
+        # nella storia (eventi, conversazione salvata); il tool riceve il valore vero (`args`)
+        delicati = set(getattr(spec, "delicati", ()) or ())
+        if delicati & {k for k, v in args.items() if v not in (None, "")}:
+            shown = {k: ("…" if k in delicati and v not in (None, "") else v)
+                     for k, v in shown.items()}
+            su_disco = dict(shown)
+            if isinstance(call.get("arguments"), dict):
+                call["arguments"] = {k: ("…" if k in delicati and v not in (None, "") else v)
+                                     for k, v in call["arguments"].items()}
+            self._rule("argomenti_delicati")
         if level == "ospite":
             shown = {}
         if hidden:

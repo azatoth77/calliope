@@ -62,6 +62,19 @@ FASCIA_DI_SERIE = "15:00-20:00"
 TITOLO_MAX = 60
 
 
+# Senza lettore (passo 4.5, nota della revisione della PR #314): la frase della pagina e della voce
+FRASI_LETTURA = {
+    "senza_modello": "La lettura delle pagine qui non è disponibile: le leggo quando c'è il "
+                     "modello che vede.",
+    "spenta": "La lettura delle pagine è spenta: le pagine restano da leggere.",
+}
+# Le due domande prima della sessione (passo 4.5, spunto approvato il 28/10): quanto conosci
+# l'argomento (5 livelli) e come ti senti oggi (6 stati), come nell'app guardata il 28/10
+CONOSCENZA = ("è nuovo per me", "ne so poco", "abbastanza", "lo so bene", "sono sicuro")
+UMORI = ("pronto", "curioso", "tranquillo", "neutrale", "poca energia", "stressato")
+SESSIONE_S = 3 * 3600
+
+
 class NonPermesso(PermissionError):
     """Chi chiede non può vedere né cambiare lo Studio di quella persona."""
 
@@ -179,9 +192,11 @@ class Studio:
         # L'orologio (le prove lo fingono)
         self.adesso = adesso or datetime.datetime.now
         self.dati = D.Dati(cfg.memory_db)
-        # All'avvio nessun PDF si sta dividendo: via i provvisori di un crollo (PR #312)
+        # All'avvio via i provvisori di un crollo (PR #312), solo quelli più vecchi di
+        # `PROVVISORI_AVVIO_S` (terza revisione della PR #312, fatto con la 4.5): un'altra
+        # istanza sullo stesso disco (le prove, un riavvio veloce) può star dividendo un PDF adesso
         try:
-            D.togli_provvisori(D.cartella_di(cfg))
+            D.togli_provvisori(D.cartella_di(cfg), D.PROVVISORI_AVVIO_S)
         except OSError:
             pass
         # Le misure dell'ombra (e dell'attivo): solo conti, niente nomi né titoli
@@ -191,6 +206,12 @@ class Studio:
                        "pagine": 0, "bordi": {}, "avvisi_pagine": {}}
         # Il lettore delle pagine (passo 4.3, studio/lettura.py): lo crea `avvia_lettura`
         self.lettore = None
+        # Perché non c'è il lettore (passo 4.5, nota della revisione della PR #314): None prima di
+        # `avvia_lettura`, «spenta» con `studio_lettura: false`, «senza_modello» senza vLLM
+        self.lettura_motivo: str | None = None
+        # Le due domande prima della sessione (passo 4.5): in memoria, mai su disco, mai ai tutori
+        # (decisione 0035, punto 27). {persona: {verifica, conoscenza, umore, fino}}
+        self._sessioni: dict = {}
         self.fascia = P.fascia_valida(getattr(cfg, "studio_fascia", ""))
         if self.fascia is None:
             # Il caricamento della configurazione la rifiuta già (config._fascia_valida); qui
@@ -212,6 +233,9 @@ class Studio:
         from . import lettura as L
         if self.lettore is None:
             self.lettore = L.prepara(self, lavori=lavori, log=self.log, avvia=avvia)
+            self.lettura_motivo = (None if self.lettore is not None else
+                                   "spenta" if not getattr(self.cfg, "studio_lettura", True)
+                                   else "senza_modello")
         return self.lettore
 
     def lettura(self, chi, vid) -> dict:
@@ -230,12 +254,16 @@ class Studio:
             for a in D.da_j(r["avvisi"]):
                 avvisi[a] = avvisi.get(a, 0) + 1
         lett = self.lettore
+        frase = FRASI_LETTURA.get(self.lettura_motivo or "") if lett is None else None
         return {"verifica": v["id"], "totali": len(righe), "lette": conta.get("letta", 0),
                 "illeggibili": conta.get("illeggibile", 0),
                 "in_lettura": conta.get("in_lettura", 0), "da_parte": conta.get("da_parte", 0),
                 "da_leggere": conta.get("da_leggere", 0), "avvisi": avvisi,
                 "lettore": lett is not None,
-                "in_attesa": bool(lett is not None and lett.in_attesa)}
+                "in_attesa": bool(lett is not None and lett.in_attesa),
+                # Senza lettore la pagina e la voce lo dicono (revisione della PR #314): mai un
+                # «da leggere» muto. Solo se ci sono pagine che aspettano
+                "frase": frase if frase and conta.get("da_leggere") else None}
 
     def testo_per_modello(self, chi, vid) -> str | None:
         """Il testo letto delle pagine di una verifica per un modello: solo in attivo, sempre in
@@ -1011,13 +1039,18 @@ class Studio:
 
     def _piano_vivo(self, v: dict) -> tuple[list[dict], list[str], str]:
         """(giorni, avvisi, stato) del piano di oggi. Se va ricalcolato e i dati sono in sola
-        lettura, i giorni fatti dal db e gli altri dal calcolo in memoria."""
+        lettura, i giorni fatti dal db e gli altri dal calcolo in memoria. Se il ricalcolo
+        fallisce resta il piano di prima con l'avviso `piano_non_aggiornato` (passo 4.5, nota della
+        seconda revisione della PR #308: prima tornava il vecchio con gli avvisi vuoti)."""
         oggi = self._oggi()
         stato = v["stato"]
         avvisi = D.da_j(v["piano_avvisi"])
         calcolato = None
+        fallito = False
         if stato in ("aperta", "fatta") and v["piano_del"] != oggi.isoformat():
+            prima = self.misure["errori"]
             calcolato = self._ricalcola_sicuro(v["id"])
+            fallito = self.misure["errori"] > prima
             nuova = self.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (v["id"],))
             if nuova is not None:
                 stato, avvisi = nuova["stato"], D.da_j(nuova["piano_avvisi"])
@@ -1037,6 +1070,8 @@ class Studio:
         for g in righe:
             g["pagine"] = D.da_j(g["pagine"])
             g["oltre"] = bool(g["oltre"])
+        if fallito and stato == "aperta":
+            avvisi = [a for a in avvisi if a != P.NON_AGGIORNATO] + [P.NON_AGGIORNATO]
         return righe, (avvisi if stato == "aperta" else []), stato
 
     def piano(self, chi, vid) -> dict:
@@ -1059,7 +1094,9 @@ class Studio:
                 "giorni": giorni, "avvisi": avvisi,
                 "tappe": P.tappe(args, ordine, fatte),
                 "misure": len(misure), "livello": int(round(misure[-1][1])) if misure else None,
-                "previsione": P.previsione(misure, data)}
+                # La previsione mostrata è la forbice (revisione della PR #317, 0035 punto 9):
+                # None prima di 3 misure in 2 giorni; intanto l'ultima misura vera (`livello`)
+                "previsione": P.forbice(misure, data)}
 
     def oggi(self, chi, persona=None) -> list[dict]:
         """La riga «Oggi» di una persona: le attività di oggi di ogni verifica aperta."""
@@ -1076,6 +1113,187 @@ class Studio:
                             "fase": r["fase"], "attivita": r["attivita"],
                             "minuti": r["minuti"], "fatto": bool(r["fatto"])})
         return out
+
+    # ── le due domande prima della sessione (30/10, passo 4.5, #284; decisione 0035, punto 27) ──
+    def imposta_sessione(self, chi, vid, conoscenza=None, umore=None) -> dict:
+        """«Quanto conosci l'argomento?» (1–5) e «come ti senti oggi?» (uno di `UMORI`), a voce o
+        con un tocco, prima di una sessione su una verifica. Solo in memoria, per `SESSIONE_S` e
+        mai oltre la mezzanotte: mai su disco, mai nel registro, mai ai tutori; lo stato d'animo
+        di un minore è un dato delicato (decisione 0035, punto 27)."""
+        v = self._verifica(chi, vid)
+        if conoscenza is not None:
+            conoscenza = int(conoscenza)
+            if not 1 <= conoscenza <= len(CONOSCENZA):
+                raise ValueError("la conoscenza va da 1 a 5")
+        if umore is not None:
+            umore = str(umore).strip().lower()
+            if umore not in UMORI:
+                raise ValueError("stato d'animo sconosciuto")
+        adesso = self.adesso()
+        fino = min(adesso + datetime.timedelta(seconds=SESSIONE_S),
+                   datetime.datetime.combine(adesso.date(), datetime.time(23, 59, 59)))
+        chiave = str(getattr(chi, "id", "") or "")
+        prima = self.sessione(chiave) or {}
+        if prima.get("verifica") != v["id"]:
+            prima = {}
+        s = {"verifica": v["id"], "conoscenza": conoscenza or prima.get("conoscenza"),
+             "umore": umore or prima.get("umore"), "fino": fino}
+        # La sessione è di chi studia adesso (chi parla o tocca), anche sulla verifica del figlio
+        self._sessioni[chiave] = s
+        self._registra(f"sessione sulla verifica {v['id']}")
+        return dict(s)
+
+    def sessione(self, persona) -> dict | None:
+        """La sessione di oggi di una persona (le due risposte), o None se non c'è o è scaduta."""
+        s = self._sessioni.get(str(persona or ""))
+        if s is None:
+            return None
+        if self.adesso() > s["fino"]:
+            self._sessioni.pop(str(persona), None)
+            return None
+        return dict(s)
+
+    def dimentica_sessione(self, persona):
+        self._sessioni.pop(str(persona or ""), None)
+
+    def nota_sessione(self, persona) -> str:
+        """La nota per i dati del turno (un dato, non un ordine; principio 10): come regolare
+        tono e difficoltà dalle due risposte. "" senza sessione o con lo Studio non per il
+        modello."""
+        if not self.per_modello():
+            return ""
+        s = self.sessione(persona)
+        if s is None:
+            return ""
+        pezzi = []
+        c = s.get("conoscenza")
+        if c:
+            pezzi.append(f"sull'argomento dice «{CONOSCENZA[c - 1]}» ({c} su 5)"
+                         + (", quindi parti dalle basi, un passo alla volta" if c <= 2 else
+                            ", quindi domande più difficili e meno spiegazioni" if c >= 4 else ""))
+        u = s.get("umore")
+        if u:
+            pezzi.append(f"oggi si sente «{u}»"
+                         + (", quindi frasi brevi, poco per volta, e incoraggia" if u in (
+                             "poca energia", "stressato") else ""))
+        return ("Studio, sessione di oggi: " + "; ".join(pezzi) + ".") if pezzi else ""
+
+    # ── la home dello Studio (30/10, passo 4.5, #284) ──
+    def _da_parte(self, vid) -> list[dict]:
+        return [{"id": p["id"], "ordine": p["ordine"],
+                 "numero": P.numero_leggibile(p["numero"])}
+                for p in self._pagine_di(vid) if p["stato"] == "da_parte"]
+
+    def home(self, chi) -> dict:
+        """I dati della home sullo schermo personale: le verifiche aperte o in bozza di `chi` e,
+        da tutore, dei suoi minori (con `di`), dalla più vicina, ognuna con data, obiettivo,
+        giorni che mancano, oggi, tappe, previsione (solo dopo due misure), lettura, argomenti da
+        decidere col perché e pagine da parte. Titoli e testo sono dati: la pagina li scrive solo
+        con textContent."""
+        from .argomenti import DA_DECIDERE
+        persone = [getattr(chi, "id", None)]
+        reg = self.registry
+        for p in (getattr(reg, "users", {}) or {}).values() if reg is not None else ():
+            if getattr(p, "id", None) not in persone and permesso(chi, p, reg) == "tutore":
+                persone.append(p.id)
+        out = []
+        for pid in [x for x in persone if x]:
+            try:
+                self._chi_puo(chi, pid)
+            except NonPermesso:
+                continue
+            nome = None if pid == getattr(chi, "id", None) else getattr(
+                self._profilo(pid), "name", None)
+            for v in self.dati.tutti("SELECT id FROM studio_verifiche WHERE persona = ? AND "
+                                     "stato IN ('bozza', 'aperta') ORDER BY data, id", (pid,)):
+                try:
+                    out.append(self._home_verifica(chi, v["id"], nome, DA_DECIDERE))
+                except (NonTrovata, NonPermesso):
+                    continue
+        out.sort(key=lambda x: (x["data"], x["id"]))
+        sess = self.sessione(getattr(chi, "id", None))
+        return {"verifiche": out,
+                "sessione": ({"verifica": sess["verifica"], "conoscenza": sess.get("conoscenza"),
+                              "umore": sess.get("umore")} if sess else None),
+                "conoscenza": list(CONOSCENZA), "umori": list(UMORI),
+                "prova": not self.per_schermi()}
+
+    def _home_verifica(self, chi, vid, di, da_decidere) -> dict:
+        v = self.verifica(chi, vid)
+        pi = self.piano(chi, vid) if v["stato"] == "aperta" else None
+        oggi = self._oggi().isoformat()
+        r_oggi = next((g for g in (pi or {}).get("giorni", ()) if g["giorno"] == oggi), None)
+        args = self.argomenti(chi, vid)
+        decidere = [{"id": a["id"], "titolo": a["titolo"],
+                     "avvisi": [x for x in a["avvisi"] if x in da_decidere]}
+                    for a in args if a["stato"] == "proposto"
+                    and set(a["avvisi"]) & set(da_decidere)]
+        return {"id": v["id"], "materia": v["materia"], "argomento": v["argomento"],
+                "data": v["data"], "stato": v["stato"], "giorni_mancanti": v["giorni_mancanti"],
+                "obiettivo": v["obiettivo"], "di": di,
+                "oggi": ({"attivita": r_oggi["attivita"], "minuti": r_oggi["minuti"],
+                          "fase": r_oggi["fase"], "fatto": bool(r_oggi["fatto"])}
+                         if r_oggi else None),
+                "giorni": [{"giorno": g["giorno"], "fase": g["fase"], "attivita": g["attivita"],
+                            "minuti": g["minuti"], "fatto": bool(g["fatto"])}
+                           for g in (pi or {}).get("giorni", ())],
+                "avvisi_piano": list((pi or {}).get("avvisi") or ()),
+                "tappe": [{"titolo": t.get("titolo"), "stato": t.get("stato")}
+                          for t in (pi or {}).get("tappe") or ()],
+                "misure": (pi or {}).get("misure", 0),
+                "ultima": (pi or {}).get("livello"),
+                "previsione": (list((pi or {}).get("previsione"))
+                               if (pi or {}).get("previsione") else None),
+                "lettura": self.lettura(chi, vid),
+                "argomenti": {"tenuti": sum(a["stato"] in D.ARGOMENTI_DEL_PIANO for a in args),
+                              "proposti": sum(a["stato"] == "proposto" for a in args),
+                              "da_decidere": decidere},
+                "da_parte": self._da_parte(vid),
+                # Fuori dal piano: i tolti (non gli uniti a un altro), per rimetterli con un tocco
+                "tolti": [{"id": a["id"], "titolo": a["titolo"]} for a in args
+                          if a["stato"] == "tolto" and "unito" not in a["avvisi"]]}
+
+    # ── la vista aperta nei dati del turno (30/10, passo 4.5; progetto § 0, punto 2) ──
+    VISTE = {"home": "la home dello Studio", "piano": "il piano", "argomenti": "gli argomenti",
+             "pagine": "le pagine", "pagina": "una pagina", "sessione": "la sessione di oggi"}
+
+    def riga_vista(self, chi, vista: dict | None) -> str:
+        """La riga per i dati del turno quando una pagina dello Studio è aperta sullo schermo
+        personale di chi parla: quale verifica e quale pagina, coi nomi dal db e gli id scritti
+        dal codice, mai il testo delle pagine né i titoli degli argomenti (si prendono col tool,
+        in busta). "" se lo Studio non è per il modello, la vista non c'è o la verifica non è
+        sua (o del suo minore)."""
+        if not self.per_modello() or not isinstance(vista, dict):
+            return ""
+        tipo = vista.get("vista")
+        if tipo not in self.VISTE:
+            return ""
+        vid = vista.get("verifica")
+        if tipo == "home" or vid is None:
+            return "Sul suo schermo è aperta la home dello Studio."
+        if not isinstance(vid, int) or isinstance(vid, bool):
+            return ""
+        try:
+            v = self.verifica(chi, vid)
+        except (NonTrovata, NonPermesso):
+            return ""
+        di = ""
+        if v["persona"] != getattr(chi, "id", None):
+            di = f" di {getattr(self._profilo(v['persona']), 'name', '') or 'un ragazzo'}"
+        quando = _data(v["data"])
+        cosa = self.VISTE[tipo]
+        pid = vista.get("pagina")
+        if tipo == "pagina" and isinstance(pid, int) and not isinstance(pid, bool):
+            p = next((x for x in self._pagine_di(v["id"]) if x["id"] == pid), None)
+            if p is not None:
+                # Solo le cifre (sesta revisione della PR #317): il numero viene dall'OCR e la
+                # riga è fuori busta, una sigla letta («ESEGUI») non ci entra
+                n = P.numero_pagina(p["numero"])
+                cosa = f"la pagina {p['id']}" + (f" (stampata {n})" if n is not None else
+                                                 f" (foto {p['ordine']})")
+        return (f"Sul suo schermo è aperta la verifica {v['id']}{di} ({v['materia']}, il "
+                f"{quando.day}/{quando.month}): {cosa}. Il testo delle pagine lo leggi con "
+                "studio_pagina_leggi.")
 
     # ── registro e misure ──
     def _chi_registro(self, chi, persona) -> str:

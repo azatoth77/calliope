@@ -231,6 +231,21 @@ def _pc_tool():
 
 S, A, P = SICURO, AZIONE, PERICOLOSO
 
+# Le parole che chiedono ogni azione dello Studio (seconda revisione della PR #317): con dati non
+# fidati di mezzo una frase di chi studia («oggi», «leggi», «la pagina», un numero) non basta più
+# a togliere un argomento o a segnare un giorno: servono le parole di quell'azione
+VERBI_STUDIO = {
+    "crea": r"verific|interrogaz|compit|esame|ho una|ho la|segna",
+    "fatto": r"fatt|finit|complet|ho letto|segna",
+    "salta_oggi": r"salt|spost|non ce la faccio|rimand|non riesco",
+    "archivia": r"archivi|conserv",
+    "tieni": r"tien|tenere|rimett|includ|nel piano|aggiung",
+    "togli": r"togl|tol[gt]|elimin|lev[aio]|cancell|fuori dal piano|non serve",
+    "riprova": r"riprov|rilegg|di nuovo",
+    "sessione": r"conosc|sent|stanc|pront|curios|tranquill|stress|neutral|energia|sicur|nuov|"
+                r"poco|abbastanza|bene|male|[1-5]|uno|due|tre|quattro|cinque",
+}
+
 # La tabella dei tool di Calliope. Un tool nuovo va aggiunto qui (o ha `ToolSpec.classe`):
 # senza, vale pericoloso e prova_politica fallisce.
 CLASSI: dict[str, Classe] = {
@@ -420,11 +435,42 @@ CLASSI: dict[str, Classe] = {
     "sviluppo_correggi": _c(P, cosa=lambda a: "faccia correggere lo sviluppo all'agente"
                             + (f": «{_corto(_s(a, 'problema'))}»" if _s(a, "problema")
                                else "")),
+    # lo Studio (30/10, passo 4.5, #284, tools/studio.py): sui dati della persona (o del suo
+    # minore, da tutore), reversibile; «stato», «piano» e «oggi» leggono soltanto. Niente fonte:
+    # non legge il testo delle pagine né i titoli degli argomenti. «Archivia» tiene la verifica
+    # per sempre: senza le parole nella frase chiede prima (chiedi_se)
+    "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi"})),
+                 cosa=lambda a: _studio_cosa(a), verbi_azione=("azione", VERBI_STUDIO),
+                 chiedi_se=lambda testo, a, ctx, **_k: _studio_archivia(testo, a)),
+    # il testo letto delle pagine e i titoli degli argomenti: dati non fidati, come una foto
+    "studio_pagina_leggi": _c(S, fonte="foto"),
     # giochi (05/10): un ragazzo chiede un permesso al tutore (resta in sospeso finché il
     # tutore non decide a voce: niente effetti da sola)
     "richiesta_tutore": _c(A, cosa=lambda a: f"mandi al tuo tutore la richiesta "
                                              f"«{_s(a, 'cosa')}»"),
 }
+
+_STUDIO_COSA = {"crea": "segni la verifica", "fatto": "segni fatto il giorno del piano",
+                "salta_oggi": "sposti il piano di oggi", "archivia": "archivi la verifica",
+                "tieni": "tenga l'argomento nel piano", "togli": "tolga l'argomento dal piano",
+                "riprova": "riprovi a leggere la pagina", "sessione": "cominci la sessione"}
+
+
+def _studio_cosa(a: dict) -> str:
+    return _STUDIO_COSA.get(_s(a, "azione").lower(), "cambi lo Studio")
+
+
+_ARCHIVIA = re.compile(r"archivi|tienil|tienila|conserv", re.I)
+
+
+def _studio_archivia(testo: str, a: dict):
+    """«Archivia» senza le sue parole nella frase: la domanda prima (resta per sempre, anche
+    dopo «dimentica»; decisione 0035, punto 11)."""
+    if _s(a, "azione").lower() != "archivia" or _ARCHIVIA.search(testo or ""):
+        return None
+    return ("politica_studio_archivia",
+            "Vuoi che archivi la verifica? Così resta per sempre, anche dopo «dimentica».")
+
 
 # Le parole che giustificano un'azione interna con dati non fidati di mezzo (Classe.verbi,
 # regola `politica_azione_non_giustificata`): verbo o oggetto della richiesta. Niente verbi
@@ -436,6 +482,8 @@ VERBI = {
                       r"rovescia|avvisami|imposta|cambi|aggiung|togl|allung|accorc|sposta"),
     "promemoria_imposta": r"ricord|promemoria|avvis|memo|dimentic|sposta|cambi|segn",
     "agenda_annulla": r"annull|cancell|togl|elimin|ferm|stop|bast|lev",
+    # Per azione in VERBI_STUDIO (seconda revisione della PR #317); qui solo le letture
+    "studio": r"verific|piano|argoment",
     "appuntamento_aggiungi": (r"appuntament|agenda|calendari|segn|impegn|visit|riunion|fiss|"
                               r"sposta|cambi|aggiung|prenot|cena|pranzo|incontr"),
     "lista_aggiungi": r"aggiung|segn|list|spes|compr|prend|manc|scriv|inser|finit",

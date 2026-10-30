@@ -295,12 +295,17 @@ def _studio(hub, prof):
     # il conto sono le verifiche a cui mandare pagine. La home vera arriva con la 4.5
     st = getattr(hub, "studio", None) or _fonte(hub, "studio")
     if st is not None and (st.per_schermi() or (st.modo == "ombra" and getattr(prof, "admin", False))):
+        # Dal 30/10 (passo 4.5, #284) la tessera apre la home: «1 verifica · giovedì»
         try:
-            n = len(st.verifiche_per_pagine(prof))
+            vv = st.verifiche_per_pagine(prof)
         except Exception:  # noqa: BLE001 — come le altre tessere: senza conto
-            n = None
-        stato = ("prova · " if not st.per_schermi() else "") + (
-            "manda le pagine" if n else "nessuna verifica aperta")
+            vv = None
+        n = None if vv is None else len(vv)
+        stato = "nessuna verifica aperta"
+        if vv:
+            from ..tools.studio import detta
+            stato = _piu(len(vv), "verifica", "verifiche") + " · " + detta(vv[0]["data"]).split()[0]
+        stato = ("prova · " if not st.per_schermi() else "") + stato
         return {"conto": n, "stato": stato, "ultimo": None, "pagina": True}
     return {"conto": None, "stato": "arriva presto", "ultimo": None}
 

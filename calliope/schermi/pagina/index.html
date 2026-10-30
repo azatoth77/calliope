@@ -9,6 +9,7 @@
 <link rel="stylesheet" href="/schermo.css">
 <script src="/schermo.js" defer></script>
 <script src="/sezioni.js" defer></script>
+<script src="/studio.js" defer></script>
 <script src="/pc.js" defer></script>
 </head>
 <body data-sezioni="1">
@@ -84,6 +85,11 @@
           <button type="button" id="pagina-cerca-via" class="tasto pagina-cerca-via" hidden>Tutti</button>
         </form>
         <div id="pagina-schede" class="elenco pagina-schede"></div>
+        <!-- La home dello Studio (30/10, passo 4.5, #284: studio.js, POST /api/studio/home) -->
+        <div id="studio" class="studio" hidden>
+          <p id="studio-prova" class="studio-prova" hidden>Prova: lo Studio è in ombra e lo vede solo chi amministra.</p>
+          <div id="studio-home" class="studio-home"></div>
+        </div>
         <p id="pagina-esito" class="pagina-esito" role="status"></p>
       </div>
       <div class="raccolta" data-raccolta="" hidden><h2 class="gruppo">Da scrivere</h2><div class="elenco" data-posto="cose"></div></div>

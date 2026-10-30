@@ -72,6 +72,9 @@ ORFANI_DOPO_S = 86400.0
 # Studio e, se un crollo li ha lasciati, dalla rotazione dopo un'ora
 CARTELLA_PROVVISORI = "tmp"
 PROVVISORI_DOPO_S = 3600.0
+# All'avvio dello Studio (passo 4.5, terza revisione della PR #312): solo i provvisori più vecchi
+# di 15 minuti, perché un'altra istanza sullo stesso disco può star dividendo un PDF adesso
+PROVVISORI_AVVIO_S = 900.0
 STATI_ARGOMENTO = ("proposto", "tenuto", "tolto", "aggiunto")
 # Gli argomenti su cui si fa il piano
 ARGOMENTI_DEL_PIANO = ("tenuto", "aggiunto")
@@ -473,15 +476,18 @@ def cancella_file(path, log=print, **kw) -> dict:
         db.close()
 
 
-def conta_file(path, persona: str | None = None) -> dict:
+def conta_file(path, persona: str | None = None, solleva: bool = False) -> dict:
     """Quante verifiche ci sono (e quante archiviate), di tutti o di una persona: per
-    `calliope stato`, la domanda di «svuota» e quella di «dimentica»."""
+    `calliope stato`, la domanda di «svuota» e quella di «dimentica». Con `solleva` un errore
+    del db si solleva invece di dare zero (il ricontrollo dopo «dimentica», PR #317)."""
     out = {"verifiche": 0, "archiviate": 0}
     if not path or not Path(path).exists():
         return out
     try:
         db = apri_db(path)
     except (sqlite3.Error, OSError):
+        if solleva:
+            raise
         return out
     try:
         if not _c_e(db):
@@ -494,6 +500,8 @@ def conta_file(path, persona: str | None = None) -> dict:
                                        "stato = 'archiviata'", arg).fetchone()[0]
         return out
     except sqlite3.Error:
+        if solleva:
+            raise
         return out
     finally:
         db.close()

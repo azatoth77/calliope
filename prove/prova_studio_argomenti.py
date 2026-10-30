@@ -1073,7 +1073,8 @@ def prova_pagina():
              'id="studio-argomenti"' in html and 'id="studio-argomenti-conferma"' in html)
     sw = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "sw.js").read_text(
         encoding="utf-8")
-    verifica("pagina: il service worker alla versione 23", '"calliope-telefono-pagina-v23"' in sw)
+    verifica("pagina: il service worker alla versione 23 o dopo",
+             any(f'"calliope-telefono-pagina-v{n}"' in sw for n in range(23, 60)))
 
 
 prova_harness()

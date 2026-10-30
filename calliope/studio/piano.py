@@ -46,6 +46,8 @@ NESSUN_GIORNO = "nessun_giorno"     # nessun giorno con minuti liberi prima dell
 NESSUNA_PAGINA = "nessuna_pagina"   # nessun argomento tenuto con delle pagine
 SENZA_RIPASSO = "senza_ripasso"     # un giorno solo: si legge tutto, il ripasso non ci sta
 TROPPE_PAGINE = "troppe_pagine"     # le pagine non stanno nei minuti dei giorni
+# Il ricalcolo del piano è fallito: resta quello di prima (passo 4.5, seconda revisione PR #308)
+NON_AGGIORNATO = "piano_non_aggiornato"
 NUMERO_STRANO = "numero_strano"     # un numero di pagina letto che non è un numero né una sigla
 
 GIORNI_SETTIMANA = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")
@@ -370,6 +372,37 @@ def tappe(argomenti: list[dict], ordine_pagine: dict, fatte=()) -> list[dict]:
 
 
 MISURE_MIN = 2      # la previsione compare solo dopo almeno due misure vere (spunto del 28/10)
+
+
+# La previsione mostrata (revisione della PR #317): solo con almeno 3 misure in almeno 2 giorni,
+# come forbice, con la pendenza limitata e i valori fra 5 e 95 %; prima, l'ultima misura vera
+FORBICE_MISURE, FORBICE_GIORNI = 3, 2
+PENDENZA_MAX = 5.0                      # punti % al giorno, in su o in giù
+FORBICE_MIN, FORBICE_MAX = 5, 95
+
+
+def forbice(misure: list[tuple[datetime.date, float]], data: datetime.date) -> tuple | None:
+    """(basso, alto) in % della padronanza attesa il giorno della verifica, o None: meno di
+    `FORBICE_MISURE` misure o tutte in meno di `FORBICE_GIORNI` giorni. La retta dei minimi
+    quadrati con la pendenza limitata a ±`PENDENZA_MAX` al giorno; la larghezza è lo scarto delle
+    misure dalla retta più un termine che cala col numero di misure (20/√n); tutto fra 5 e 95."""
+    pts = [(d, float(v)) for d, v in misure if v is not None]
+    if len(pts) < FORBICE_MISURE or len({d for d, _ in pts}) < FORBICE_GIORNI:
+        return None
+    base = min(d for d, _ in pts)
+    xs = [(d - base).days for d, _ in pts]
+    ys = [v for _, v in pts]
+    n = len(pts)
+    mx, my = sum(xs) / n, sum(ys) / n
+    sxx = sum((x - mx) ** 2 for x in xs)
+    b = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / sxx if sxx else 0.0
+    b = max(-PENDENZA_MAX, min(PENDENZA_MAX, b))
+    y = my + b * ((data - base).days - mx)
+    scarto = (sum((v - (my + b * (x - mx))) ** 2 for x, v in zip(xs, ys)) / n) ** 0.5
+    mezza = scarto + 20.0 / n ** 0.5
+    basso = int(round(min(FORBICE_MAX, max(FORBICE_MIN, y - mezza))))
+    alto = int(round(min(FORBICE_MAX, max(FORBICE_MIN, y + mezza))))
+    return basso, max(basso, alto)
 
 
 def previsione(misure: list[tuple[datetime.date, float]], data: datetime.date) -> int | None:

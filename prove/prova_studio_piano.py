@@ -451,8 +451,21 @@ verifica("una misura: c'è il livello, la previsione no",
 ORA[0] = datetime.datetime(2026, 11, 1, 9, 0)
 st.aggiungi_misura(LEO, vid, 55, "prova")
 pi = st.piano(LEO, vid)
-verifica("due misure vere: la previsione compare (40 → 55 in 2 giorni, al 12/11 100)",
-         pi["previsione"] == 100 and pi["misure"] == 2)
+verifica("due misure: ancora niente previsione (servono 3 misure in 2 giorni, PR #317), il livello è l'ultima",
+         pi["previsione"] is None and pi["misure"] == 2 and pi["livello"] == 55)
+st.aggiungi_misura(LEO, vid, 60, "prova")
+pi = st.piano(LEO, vid)
+verifica("tre misure in due giorni: la forbice, fra 5 e 95, mai 100",
+         isinstance(pi["previsione"], tuple) and 5 <= pi["previsione"][0] <= pi["previsione"][1] <= 95,
+         str(pi["previsione"]))
+g0 = datetime.date(2026, 11, 1)
+verifica("forbice: la pendenza limitata a 5 punti al giorno (40 → 70 in un giorno, verifica dopo 10)",
+         P.forbice([(g0, 40.0), (g0, 41.0), (g0 + datetime.timedelta(days=1), 70.0)],
+                   g0 + datetime.timedelta(days=11))[1] <= 95
+         and P.forbice([(g0, 40.0), (g0, 41.0), (g0 + datetime.timedelta(days=1), 70.0)],
+                       g0 + datetime.timedelta(days=3))[0] < 80)
+verifica("forbice: niente con tre misure dello stesso giorno o con due",
+         P.forbice([(g0, 40.0)] * 3, g0) is None and P.forbice([(g0, 40.0), (g0, 50.0)], g0) is None)
 verifica("misura fuori da 0–100 rifiutata",
          solleva(lambda: st.aggiungi_misura(LEO, vid, 130, "prova"), ValueError))
 
@@ -742,9 +755,9 @@ verifica("«dimentica»: la domanda e la frase dicono lo Studio quando c'è da t
          != TC.DIMENTICA_DOMANDA)
 src_tc = (QUI.parent / "calliope" / "tools" / "conversazioni.py").read_text("utf-8")
 verifica("«dimentica»: il conto dello Studio prima di cancellare, la frase dopo",
-         src_tc.index("studio = _studio_da_dimenticare(ctx, persona)")
+         src_tc.index("studio = bool(_studio_da_dimenticare(ctx, persona))")
          < src_tc.index("n = arch.dimentica(persona)")
-         and "frase += \" \" + STUDIO_TOLTO" in src_tc)
+         and "STUDIO_NON_TOLTO if rimaste else STUDIO_TOLTO" in src_tc)
 src = (QUI.parent / "calliope" / "main.py").read_text("utf-8")
 verifica("main.py lega «dimentica le nostre conversazioni» allo Studio (archiviate escluse)",
          "conv_arch.su_dimentica.append(_studio_dimentica)" in src
