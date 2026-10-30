@@ -305,7 +305,7 @@ def _archivia(ctx, svc, chi, v) -> dict:
 
 def _argomento(ctx, svc, chi, v, numero, titolo, tieni: bool) -> dict:
     """Un argomento per posizione nell'elenco della verifica (`numero`, 1 = il primo: un indice
-    dell'elenco scritto dal codice, `valore.ELENCHI_FIDATI`) o per titolo detto dalla persona;
+    dell'elenco, un bersaglio che vale detto solo se la persona lo dice) o per titolo detto;
     dal tocco l'id del bersaglio (revisione della PR #317: prima l'id del db, che la persona
     non dice mai, e la politica chiedeva ogni volta)."""
     from ..studio import NonTrovata
@@ -334,13 +334,14 @@ def _argomento(ctx, svc, chi, v, numero, titolo, tieni: bool) -> dict:
     except NonTrovata:
         return _f(NON_CE, ok=False)
     n = [a["id"] for a in elenco].index(aid) + 1
-    # Il titolo detto (quarta revisione della PR #317): la persona sente che cosa è stato tolto, e
-    # come rimetterlo. Il risultato di un'azione (E1) non entra fra i fidati (Brain._ricorda_fidato
-    # solo per le letture), quindi il titolo non diventa una provenienza fidata
-    titolo = " ".join(str(suoi[aid]["titolo"] or "").split())[:60]
+    # Niente titolo nella frase né nel risultato (quinta revisione della PR #317, B6): il titolo
+    # viene dalle pagine e `studio` non ha fonte, quindi fuori busta varrebbe come detto da
+    # Calliope (S12: «Ricarica di 50 euro…» poi aggiunto alla lista senza domanda; S13: un
+    # titolo con le virgolette riscriveva la frase). Il titolo resta sullo schermo (la home,
+    # «Fuori dal piano», textContent) e nella busta di studio_pagina_leggi
     if tieni:
-        return _f(f"Fatto: «{titolo}» è nel piano.", argomento=n)
-    return _f(f"Fatto: «{titolo}» è fuori dal piano. Se non era quello, dimmi «rimettilo».",
+        return _f(f"Fatto: l'argomento {n} è nel piano.", argomento=n)
+    return _f(f"Fatto: l'argomento {n} è fuori dal piano. Se non era quello, dimmi «rimettilo».",
               argomento=n)
 
 

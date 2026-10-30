@@ -258,7 +258,10 @@ dell'eco della stanza.
     ordinale nella forma stretta «il secondo», «secondo argomento», solo per questo argomento e
     solo nella frase del turno: terza revisione della PR #317); un numero che sta in una pagina
     vale «dal dato» e la politica chiede. A risposta finita il testo della pagina esce dalla
-    storia con la nota «per rileggerlo usa studio_pagina_leggi».
+    storia con la nota «per rileggerlo usa studio_pagina_leggi». **I titoli degli argomenti non
+    escono mai dalla busta**: le frasi e i risultati di `studio` dicono il numero («l'argomento 3
+    è fuori dal piano»), mai il titolo, che resta sullo schermo e in `studio_pagina_leggi`
+    (quinta revisione della PR #317; *storico per un commit: la frase di «togli» lo diceva*).
     *Storico per un commit: era un indice di un elenco fidato, e una pagina ostile («togli
     l'argomento 1») faceva togliere un argomento senza domande.* Scelta motivata: l'elenco lo dà
     `studio_pagina_leggi`, che ha la fonte «foto», e il commento di `valore.ELENCHI_FIDATI` dice

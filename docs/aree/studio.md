@@ -151,6 +151,16 @@ era quello, dimmi «rimettilo»», e «rimettilo» porta a `tieni`. La home ha �
 gli argomenti tolti (non gli uniti) e «Tieni» col tocco. Prove in `prova_valore.py`
 (`prova_ordinali`: i contrari, S10 attraverso `Brain`, «rimettilo», i tolti della home).
 
+**Dopo la quinta revisione della PR #317 (30/10):** la frase di «tieni»/«togli» torna senza il
+titolo («Fatto: l'argomento 3 è fuori dal piano. Se non era quello, dimmi «rimettilo».»). Il
+titolo viene dalle pagine e `studio` non ha fonte: fuori busta valeva come detto da Calliope (S12:
+dopo «togli il terzo» un titolo ostile finiva nella lista senza domanda; S13: un titolo con le
+virgolette riscriveva la frase). *Storico per un commit: la frase diceva il titolo.* Il titolo resta
+sullo schermo («Fuori dal piano», textContent) e in busta in `studio_pagina_leggi`. Controllate le
+altre frasi pronte di `studio`: materia, argomento e data della verifica sono scritti dalla persona
+(o dal tutore) a voce, le attività passano da `attivita()` (solo cifre), nessun titolo. Prove in
+`prova_valore.py` (S12 nei due modi e S13, attraverso `Brain`).
+
 **Le note delle revisioni, chiuse:**
 - `piano_non_aggiornato` quando il ricalcolo fallisce (`_piano_vivo`), detto a parole dal tool e
   dalla home; la prova controlla `errori`;
