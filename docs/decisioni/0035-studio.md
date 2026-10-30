@@ -440,7 +440,9 @@ dell'eco della stanza.
     calcola la disposizione. **Mai sopra uno scheletro della persona**: scritto a mano, confermato o
     toccato (anche solo un «Tieni») non si rifà più. La forma si guarda anche sulla tripla intera
     (un annuncio spezzato in tre pezzi segna il collegamento e i due capi) e le istruzioni di una
-    pagina tripla per tripla (revisione della PR #327). Interruttore `studio_mappa_genera`, **ombra di
+    pagina tripla per tripla (revisione della PR #327); un errore nostro si riprova dopo un'ora e
+    al terzo di fila con la stessa firma la verifica si ferma finché la firma non cambia, per la
+    mappa come per le carte (seconda revisione della PR #327). Interruttore `studio_mappa_genera`, **ombra di
     serie** (lo scheletro «ombra» mai alla persona, solo misure); «attiva» dopo il banco della mappa
     e la rilettura dell'ombra. Alternative scartate: lo scheletro generato già confermato (il
     controllo è di forma, non di significato), un secondo giro del modello che corregge, lo scheletro

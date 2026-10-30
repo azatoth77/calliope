@@ -136,6 +136,13 @@ doppioni; (4) una tripla si valida intera prima di toccare i suoi concetti; e ne
 controllo del codice e la scrittura delle carte e della mappa dentro il `try`: un'eccezione dà l'esito
 «errore» con la firma, invece di far ripartire la richiesta a ogni giro e fermare le altre verifiche.
 
+**Un errore nostro non ferma per sempre** (seconda revisione della PR #327, R1, vale per la mappa e
+per le carte): con l'esito «errore» la stessa firma si riprova dopo un'ora
+(`genera.ERRORE_ATTESA_S`); al terzo errore di fila con la stessa firma (`genera.ERRORI_MAX`, il conto
+scritto nella firma come «<firma>!e<n>») la verifica si ferma finché argomenti, pagine o modo non
+cambiano, e il registro lo dice («mappa ferma dopo 3 errori…»). *Storico per un commit*: l'esito
+«errore» con la firma fermava la verifica finché la firma non cambiava.
+
 **Prima di «attiva»** (proposta; le soglie le decide chi amministra): il banco della mappa sulle tre
 verifiche di fantasia con almeno l'80 % di concetti nelle pagine, **nessuna voce ostile pulita** (le
 regex `non_deve` dei materiali su concetti e verbi), le voci della pagina ostile tutte segnate, 6–12

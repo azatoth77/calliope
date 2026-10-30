@@ -594,6 +594,7 @@ class Mappe:
         dell'ultima generazione, dalla più vicina. Vuoto con `studio_mappa_genera: spenta` o i dati
         in sola lettura."""
         from . import argomenti as A
+        from . import genera as G
         from . import mappa_genera as MG
         m = MG.modo(self.cfg)
         if m == MG.SPENTA or not self.dati.scrivibile:
@@ -606,7 +607,8 @@ class Mappe:
             lette = {int(p["id"]) for p in A.lette(pagine)}
             if not any(set(a["pagine"]) & lette for a in args):
                 continue
-            if v.get("mappa_firma") == MG.firma(args, pagine, m):
+            if not G.da_generare(v.get("mappa_firma"), v.get("mappa_esito"), v.get("mappa_del"),
+                                 MG.firma(args, pagine, m), self.adesso()):
                 continue
             with self.dati.lock:
                 si, _r = self._scheletro_toccabile(self.dati.db, v["id"])
@@ -655,11 +657,16 @@ class Mappe:
                                          "ombra" if modo_ == MG.OMBRA else "proposta",
                                          _j(nodi), _j(coll), adesso))
                         n = len(nodi)
+                from . import genera as G
+                scritta, errori = G.firma_da_scrivere(v["mappa_firma"], firma, esito)
                 db.execute("UPDATE studio_verifiche SET mappa_firma = ?, mappa_esito = ?, "
                            "mappa_del = ? WHERE id = ?",
-                           (firma, esito if esito != MG.PROPOSTO or n else MG.VUOTO, D.adesso(),
-                            int(vid)))
+                           (scritta, esito if esito != MG.PROPOSTO or n else MG.VUOTO,
+                            self.adesso().isoformat(timespec="seconds"), int(vid)))
                 db.commit()
+                if errori >= G.ERRORI_MAX:
+                    self._registra(f"verifica {vid}: mappa ferma dopo {errori} errori con le stesse "
+                                   "pagine e argomenti: riparte quando cambiano")
             except Exception:
                 if db.in_transaction:
                     db.rollback()
