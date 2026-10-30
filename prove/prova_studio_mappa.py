@@ -167,6 +167,14 @@ verifica("uguale: maiuscole, accenti, punteggiatura e una lettera storpiata",
          and M.uguale("Il trattato di Tordesillas", "trattato di Tordesilas")
          and M.uguale("Perù", "peru") and M.uguale("America", "l'America")
          and M.uguale("Il Portogallo", "Portogallo"))
+verifica("uguale (terza revisione): «I Romani», «I Fenici», «Romolo e Remo» con o senza le parole "
+         "vuote; i plurali e i femminili («atomi»/«atomo», «acidi»/«acido», «fenici»/«fenicio»)",
+         M.uguale("I Romani", "Romani") and M.uguale("I Fenici", "fenici")
+         and M.uguale("Romolo e Remo", "Romolo Remo") and M.uguale("atomo", "atomi")
+         and M.uguale("acido", "acidi") and M.uguale("fenicio", "fenici"))
+verifica("uguale: una parola che vale un altro concetto anche al plurale resta sbagliata",
+         not M.uguale("fenicio", "fenici", ["Fenici"]) and not M.uguale("atomo", "atomi", ["Atomi"])
+         and M.uguale("atomo", "atomi", ["Molecola"]))
 verifica("uguale: un altro concetto dello scheletro o la parola di troppo non valgono, anche "
          "vicini", not M.uguale("Colombiano", "Colombiani", ["Colombiani", "America"])
          and M.uguale("Colombiano", "Colombiana", ["America"]))
@@ -178,7 +186,7 @@ for a, d in (("America", "Nuovo Mondo"), ("Cristoforo Colombo", "Amerigo Vespucc
              ("Cartagine", "Cartagena"), ("Mercurio", "Mercurio Venere"),
              ("legame ionico", "legame covalente ionico"), ("Tordesillas", "Vordesillas"),
              # Seconda revisione: le lettere isolate non sono parole vuote
-             ("Vitamina A", "Vitamina D"), ("Fase I", "Fase")):
+             ("Vitamina A", "Vitamina D"), ("Fase I", "Fase"), ("Vitamina A", "Vitamina")):
     verifica(f"uguale, contrario: «{d}» non vale «{a}» (forma, non significato)",
              not M.uguale(a, d))
 verifica("verbo_simile: uguale o metà delle parole; «è» solo uguale",
@@ -644,6 +652,14 @@ verifica("minore: «1 giusta e 1 da rivedere», al singolare", "1 giusta e 1 da 
          and "1 giuste" not in f_leo and "Nella tua mappa" in f_leo, f_leo)
 verifica("minore: al tutore in terza persona col nome", "Nella mappa di Leo" in f_tut
          and "tua" not in f_tut, f_tut)
+# Terza revisione, 3: con il libro una casella vuota al primo «Controlla» conta ancora dopo
+vuota_l = next(c for c in cas if c not in (cas[0], cas[1]))
+prima_t = len(st.dati.tutti("SELECT * FROM studio_tentativi"))
+st.riempi(LEO, m2, vuota_l, atteso[vuota_l])
+st.controlla_mappa(LEO, m2)
+t = st.dati.tutti("SELECT * FROM studio_tentativi ORDER BY id")
+verifica("3. con il libro: la casella riempita dopo il primo «Controlla» dà ancora «indizio»",
+         len(t) == prima_t + 1 and t[-1]["esito"] == "indizio", f"{prima_t} {len(t)}")
 st.close()
 # minore: il tetto dei collegamenti dello scheletro resta 2 × studio_mappa_nodi_max
 st = studio(cfg_nuova("tetto.db", studio_mappa_nodi_max=4))

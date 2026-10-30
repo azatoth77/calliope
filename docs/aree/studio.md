@@ -210,6 +210,14 @@ parola vuota in fondo all'atteso conta. Minori: il contatore dei giri sullo sche
 `studio_mappa_nodi_max` (i 6 concetti propri alzano solo quello della copia); nella 0035 il tutore che
 riapre e le carte visibili durante una mappa a memoria.
 
+**La terza revisione della PR #326**: «i», «e», «a» di nuovo fra le parole vuote («I Romani» per
+«Romani», «Romolo e Remo» per «Romolo Remo»), mentre l'ultima parola dell'atteso conta sempre
+(«Vitamina A», «Fase I» restano nomi interi); i plurali e i femminili delle parole di almeno 4 lettere
+(la sola vocale finale fra a, e, i, o, o «-io» contro «-i»: «atomi»/«atomo», «fenici»/«fenicio»;
+forma/forza, messa/massa, Marte/Morte restano sbagliate), e una parola che vale un altro concetto
+anche con queste tolleranze resta sbagliata; le caselle vuote nei `tentati` solo a memoria (con il
+libro, riempite dopo il primo «Controlla», danno ancora «indizio»).
+
 **Le due note della revisione della PR #325**: `correggi_carta` su una carta dell'ombra dà «non c'è»
 come `segna_carta` (prima la rendeva attiva); le carte dell'ombra non contano nel tetto delle 300 per
 verifica (`aggiungi_carta`, `proponi_carte`).

@@ -478,7 +478,10 @@ class Mappe:
             if self.modo_padronanza != PD.SPENTA:
                 for n in m["nodi"]:
                     nid = int(n["id"])
-                    if r["caselle"].get(nid) == M.VUOTA and nid not in tentati:
+                    if (m["tipo"] == M.MEMORIA and r["caselle"].get(nid) == M.VUOTA
+                            and nid not in tentati):
+                        # Solo a memoria (terza revisione della PR #326): con il libro una casella
+                        # riempita dopo il primo «Controlla» dà ancora «indizio»
                         # Lasciata vuota al controllo: in questo giro non conta più (seconda
                         # revisione della PR #326: riempita dopo, con lo scheletro visibile, non
                         # deve dare un «giusto»)

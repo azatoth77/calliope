@@ -54,12 +54,13 @@ GIUSTA, SBAGLIATA, VUOTA = "giusta", "sbagliata", "vuota"
 # Nella copia (la mia mappa, a memoria) la persona aggiunge al più tanti concetti suoi, oltre a
 # quelli dello scheletro (`studio_mappa_nodi_max` vale per lo scheletro)
 SUOI_MAX = 6
-# Le parole vuote che una casella può avere in più o in meno (articoli, preposizioni). Niente lettere
-# isolate (seconda revisione della PR #326: «Vitamina D» per «Vitamina A», «Fase» per «Fase I»); gli
-# articoli e le preposizioni con l'apostrofo («l'», «dell'») si tolgono prima (`_piene`)
-VUOTE = frozenset("""il lo la gli le un uno una di da in con su per tra fra del dello della dei
+# Le parole vuote che una casella può avere in più o in meno (articoli, preposizioni, «e»). Le
+# lettere «i», «e», «a» ci sono (terza revisione della PR #326: «I Romani», «Romolo e Remo»), ma
+# `_piene` tiene sempre l'ultima parola, così «Vitamina A» e «Fase I» restano nomi interi; gli
+# articoli e le preposizioni con l'apostrofo («l'», «dell'») si tolgono prima
+VUOTE = frozenset("""il lo la i gli le un uno una di a da in con su per tra fra del dello della dei
 degli delle al allo alla ai agli alle dal dallo dalla dai dagli dalle nel nello nella nei negli nelle
-sul sullo sulla sui sugli sulle col coi ed""".split())
+sul sullo sulla sui sugli sulle col coi e ed""".split())
 _ELISO = re.compile(r"\b(l|un|dell|all|dall|nell|sull|coll|d)['’]", re.I)
 # La tolleranza di una lettera vale solo per le parole lunghe (fino a 6 lettere una lettera cambia la
 # parola: forma/forza, messa/massa, Marte/Morte)
@@ -100,11 +101,27 @@ def _piene(t: str) -> list[str]:
     return [x for i, x in enumerate(w) if x not in VUOTE or i == len(w) - 1]
 
 
+# Il plurale o il femminile delle parole di almeno tante lettere: la sola vocale finale diversa fra
+# a, e, i, o («atomi»/«atomo»), o «-io» contro «-i» («fenicio»/«fenici»)
+PLURALE_DA = 4
+_FINALI = frozenset("aeio")
+
+
+def _plurale(a: str, d: str) -> bool:
+    if min(len(a), len(d)) < PLURALE_DA or not a.isalpha() or not d.isalpha():
+        return False
+    if len(a) == len(d):
+        return a[:-1] == d[:-1] and a[-1] in _FINALI and d[-1] in _FINALI
+    corta, lunga = sorted((a, d), key=len)
+    return len(lunga) == len(corta) + 1 and lunga.endswith("io") and corta == lunga[:-1]
+
+
 def _storpiata(a: str, d: str) -> bool:
     """Una lettera di differenza (cambiata, in più o in meno), solo fra parole di lettere di almeno
-    `STORPIATA_DA` lettere e mai sulla prima."""
+    `STORPIATA_DA` lettere e mai sulla prima; oppure il plurale o il femminile (`_plurale`, dalla
+    terza revisione della PR #326)."""
     from ..provenienza import _distanza
-    if a == d:
+    if a == d or _plurale(a, d):
         return True
     if (min(len(a), len(d)) < STORPIATA_DA or not a.isalpha() or not d.isalpha()
             or a[0] != d[0]):
@@ -118,15 +135,23 @@ def uguale(atteso, dato, altri=()) -> bool:
     - uguale senza maiuscole, accenti e punteggiatura: giusta;
     - uguale a un **altro** concetto dello scheletro o alla parola di troppo (`altri`): sbagliata;
     - altrimenti le stesse parole piene (senza articoli e preposizioni, che possono mancare o essere
-      in più), nessuna in più né in meno, ognuna uguale o storpiata di una lettera solo se lunga
-      almeno `STORPIATA_DA` lettere e mai sulla prima."""
+      in più), nessuna in più né in meno, ognuna uguale, al plurale o al femminile (la sola vocale
+      finale, o «-io» contro «-i»), o storpiata di una lettera solo se lunga almeno `STORPIATA_DA`
+      lettere e mai sulla prima;
+    - una parola che vale un **altro** concetto anche con queste tolleranze resta sbagliata."""
     a, d = chiave(atteso), chiave(dato)
     if not d:
         return False
     if a == d:
         return True
-    if d in {chiave(x) for x in altri or ()} - {a}:
-        return False
+    for x in altri or ():
+        if chiave(x) != a and (chiave(x) == d or _vale(x, dato)):
+            return False
+    return _vale(atteso, dato)
+
+
+def _vale(atteso, dato) -> bool:
+    """Le stesse parole piene, ognuna uguale o tollerata (`_storpiata`)."""
     pa, pd = _piene(atteso), _piene(dato)
     if not pa or len(pa) != len(pd):
         return False
