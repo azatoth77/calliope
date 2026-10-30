@@ -31,6 +31,13 @@ vere con la loro verità da `--foto-vere` (vedi il passo manuale).
   ostili (le regex `non_deve` dei materiali su domanda e risposta), quelle su una pagina ostile e
   segnate, l'italiano, secondi e token. Non è nella lista di serie di `--fasi`: si chiede con
   `--fasi carte` (dal testo della verità) o `--fasi lettura,carte`.
+- `mappa` (30/10, passo 7, seconda parte, #247): lo scheletro della mappa con l'harness esatto di
+  Calliope (`calliope/studio/mappa_genera.py`: pagine e argomenti della verità in due buste, le
+  triple con schema guidato, temperatura 0, niente tool) e il **controllo del codice**
+  (`mappa_genera.scheletro`). Misure: concetti e collegamenti, quanti puliti e quanti per avviso, i
+  concetti nelle pagine, le voci ostili (le regex `non_deve` dei materiali sui testi e sui verbi) e
+  quelle ostili pulite, quelle su una pagina ostile, l'italiano, secondi e token. Come le carte, si
+  chiede con `--fasi mappa` (dal testo della verità) o `--fasi lettura,mappa`.
 
 **Non disturbare** (`Guardia`): prima di ogni richiesta, vLLM senza richieste di altri in corso né
 in coda (`/metrics`), non in pausa (`/is_paused`: l'arbitro ferma vLLM quando parla la voce),
@@ -1062,6 +1069,72 @@ def fase_carte(cli, materiali, testi_letti, uscita, log) -> dict:
     return out
 
 
+def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
+    """Lo scheletro della mappa di ogni verifica con l'harness e il controllo del codice di
+    Calliope (mappa_genera.py), sugli argomenti della verità come argomenti confermati."""
+    from calliope.studio import argomenti as A
+    from calliope.studio import genera as G
+    from calliope.studio import mappa_genera as MG
+    out = {}
+    for vid, ver in materiali.items():
+        if not ver["argomenti"]:
+            continue
+        testi = testi_letti.get(vid) or {p["id"]: p["testo"] for p in ver["pagine"]}
+        pagine = [{"id": i, "ordine": i, "stato": "letta", "testo": testi.get(p["id"], ""),
+                   "numero": p.get("numero"), "metodo": "ocr",
+                   "avvisi": json.dumps(["istruzioni"]) if p.get("tipo") == "ostile" else None}
+                  for i, p in enumerate(ver["pagine"], 1)]
+        per_id = {p["id"]: i for i, p in enumerate(ver["pagine"], 1)}
+        args = [{"id": i, "titolo": a["titolo"], "pagine": [per_id[x] for x in a["pagine"]
+                                                             if x in per_id]}
+                for i, a in enumerate(ver["argomenti"], 1)]
+        v = {"materia": ver["materia"], "livello": ver.get("classe"),
+             "data": ver["data_verifica"], "argomento": ver.get("argomento")}
+        rif, arif = A.riferimenti(pagine), G.argomenti_rif(args)
+        r = cli.chat(MG.messaggi(v, rif, arif), max_token=MG.MAX_TOKENS, schema=MG.SCHEMA,
+                     temperatura=MG.TEMPERATURA, presence=MG.PRESENCE)
+        grezzi = MG.leggi(r.get("testo", "")) or []
+        nodi, coll = MG.scheletro(grezzi, rif, arif, 12)
+        proibiti = _proibiti_risposta(ver) + [o["regex"] for x in ver.get("ostili") or []
+                                              for o in x["non_deve"] if o.get("tipo") ==
+                                              "argomento"]
+        ostili_id = {per_id[p["id"]] for p in ver["pagine"] if p.get("tipo") == "ostile"}
+        per_n = {n["id"]: n["testo"] for n in nodi}
+        # Il collegamento si guarda col testo unito «da verbo a» (revisione della PR #327): un
+        # annuncio spezzato in una tripla resta un annuncio
+        voci = [{**n, "tipo": "concetto", "parole": n["testo"]} for n in nodi] + \
+               [{**c, "tipo": "collegamento",
+                 "parole": f"{per_n.get(c['da'], '')} {c['verbo']} {per_n.get(c['a'], '')}"}
+                for c in coll]
+        for x in voci:
+            x["ostile"] = any(re.search(p, _senza_accenti(x["parole"])) for p in proibiti)
+            x["su_pagina_ostile"] = bool(set(x["pagine"]) & ostili_id)
+        riga = {"fase": "mappa", "verifica": vid, "concetti": len(nodi), "collegamenti": len(coll),
+                "triple": len(grezzi), "pulite": sum(not x["avvisi"] for x in voci),
+                # I concetti nelle pagine che citano, calcolati a parte con il controllo delle
+                # pagine (non dall'assenza di da_controllare, che vale anche per l'argomento)
+                "concetti_fondati": sum(A.controlla(n["testo"], [r for r, q in rif if int(q["id"])
+                                                                 in n["pagine"]],
+                                                    {r: q["testo"] for r, q in rif})[1]
+                                        for n in nodi),
+                **{a: sum(a in x["avvisi"] for x in voci) for a in MG.DA_DECIDERE},
+                "ostili": sum(x["ostile"] for x in voci),
+                "ostili_pulite": sum(x["ostile"] and not x["avvisi"] for x in voci),
+                "su_pagina_ostile": sum(x["su_pagina_ostile"] for x in voci),
+                "su_pagina_ostile_pulite": sum(x["su_pagina_ostile"] and not x["avvisi"]
+                                               for x in voci),
+                "italiano": italiano(json.dumps([x["parole"] for x in voci], ensure_ascii=False)),
+                "secondi": r.get("secondi"), "token_out": r.get("token_out"), "nodi": nodi,
+                "collegamenti_": coll}
+        out[vid] = riga
+        with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(riga, ensure_ascii=False) + "\n")
+        log(f"[mappa] {vid}: {riga['concetti']} concetti, {riga['collegamenti']} collegamenti, "
+            f"pulite {riga['pulite']}, ostili {riga['ostili']} (pulite {riga['ostili_pulite']}) "
+            f"in {r.get('secondi', 0):.1f} s")
+    return out
+
+
 # ─────────────────────────── giro e riepilogo ───────────────────────────
 
 def scegli_immagini(immagini: list[dict], materiali: dict, giro: str) -> list[dict]:
@@ -1148,6 +1221,19 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
             righe.append(f"  {vid}: n {x['n']} pulite {x['pulite']} da_controllare "
                          f"{x['da_controllare']} istruzioni {x['pagina_con_istruzioni']} ordine "
                          f"{x['testo_ordine']} ostili {x['ostili']} (pulite {x['ostili_pulite']}) "
+                         f"italiano {x['italiano']} {x['secondi']} s")
+    if riep.get("mappa"):
+        righe.append("\nMAPPA (per verifica: concetti, collegamenti, voci pulite, concetti nelle "
+                     "pagine e la loro %, criterio ≥ 80 %; da controllare, istruzioni, ordine, "
+                     "ostili e ostili pulite, su una pagina ostile e quelle pulite)")
+        for vid, x in riep["mappa"].items():
+            pc = round(100 * x["concetti_fondati"] / x["concetti"]) if x["concetti"] else 0
+            righe.append(f"  {vid}: concetti {x['concetti']} collegamenti {x['collegamenti']} "
+                         f"pulite {x['pulite']} fondati {x['concetti_fondati']} ({pc} %) "
+                         f"da_controllare {x['da_controllare']} istruzioni "
+                         f"{x['pagina_con_istruzioni']} ordine {x['testo_ordine']} ostili "
+                         f"{x['ostili']} (pulite {x['ostili_pulite']}) su_pagina_ostile "
+                         f"{x['su_pagina_ostile']} (pulite {x['su_pagina_ostile_pulite']}) "
                          f"italiano {x['italiano']} {x['secondi']} s")
     for fase in ("domande", "risposte"):
         if riep.get(fase):
@@ -1255,6 +1341,8 @@ def main(argv=None):
             riep["risposte"] = fase_risposte(cli, materiali, testi, uscita, log)
         if "carte" in fasi:
             riep["carte"] = fase_carte(cli, materiali, testi, uscita, log)
+        if "mappa" in fasi:
+            riep["mappa"] = fase_mappa(cli, materiali, testi, uscita, log)
     except Fermati as e:
         log(f"[banco] FERMO: {e}")
         riep["fermo"] = str(e)

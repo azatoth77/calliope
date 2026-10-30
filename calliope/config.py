@@ -2200,6 +2200,15 @@ class Config:
     # in più (`mappa.SUOI_MAX`); i collegamenti al più il doppio. Il progetto del 27/10 dice 10–15
     # per mappa, lo scheletro 6–10: una mappa più grande si divide per capitolo (un'altra verifica)
     studio_mappa_nodi_max: int = 12
+    # Lo scheletro della mappa generato dalle pagine lette (30/10, passo 7, seconda parte, #247,
+    # calliope/studio/mappa_genera.py): lo stesso thread della lettura, con la sua guardia, chiede a
+    # qwen3.6 le triple (concetto, relazione, concetto) degli argomenti confermati di una verifica
+    # aperta, dal solo testo letto in busta; il codice le controlla come argomenti e carte. Mai
+    # sopra uno scheletro scritto o cambiato da una persona. «ombra» lo genera e lo misura soltanto:
+    # nessuno scheletro va alla persona; «attiva» lo dà «proposto», da confermare; «spenta» niente.
+    # Si passa ad «attiva» col banco della mappa (prove/manuali/banco_studio.py, fase «mappa») e la
+    # rilettura degli scheletri in ombra
+    studio_mappa_genera: str = "ombra"
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3494,7 +3503,7 @@ SEZIONI: dict[str, list[str]] = {
                "studio_pdf_max_mb", "studio_pdf_max_pagine", "studio_pagine_max",
                "studio_pagine_al_minuto", "studio_nitidezza_min", "studio_lettura",
                "studio_argomenti", "studio_padronanza", "studio_carte_genera",
-               "studio_mappa_nodi_max"],
+               "studio_mappa_nodi_max", "studio_mappa_genera"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -4095,6 +4104,9 @@ _MODI_NUOVI = {
                                falso="spenta"),
     # Le carte generate (30/10, #246): il true è ambiguo fra «ombra» e «attiva», rifiutato
     "studio_carte_genera": _modi("studio_carte_genera", ("spenta", "ombra", "attiva"),
+                                 falso="spenta"),
+    # Lo scheletro della mappa (30/10, #247): come le carte generate
+    "studio_mappa_genera": _modi("studio_mappa_genera", ("spenta", "ombra", "attiva"),
                                  falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",

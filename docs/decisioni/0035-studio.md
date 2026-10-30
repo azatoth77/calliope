@@ -9,7 +9,7 @@
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
   (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
-  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34). Il passo 7 (la mappa concettuale, prima parte: scheletro a mano, la mia mappa, a memoria, controllo, PDF) il 30/10 sera sul ramo `issue-247-studio-mappa` (punto 35).
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34). Il passo 7 (la mappa concettuale, prima parte: scheletro a mano, la mia mappa, a memoria, controllo, PDF) il 30/10 sera sul ramo `issue-247-studio-mappa` (punto 35). La seconda parte (lo scheletro generato dal lettore) il 30/10 sera sul ramo `issue-247-studio-mappa-genera` (punto 36).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -429,6 +429,24 @@ dell'eco della stanza.
     scartate: il giudizio del modello sulla pagina citata per un collegamento che non c'è (progetto §
     5.4), un tool che legge la mappa in busta (non serve alle quattro fasi), tre tabelle per concetti e
     collegamenti, la padronanza in ombra per scegliere le caselle.
+
+36. **Lo scheletro generato dal lettore è proposto e resta un dato** (seconda parte del passo 7).
+    Lo chiede a qwen3.6 lo stesso thread della lettura, con la sua guardia e il suo client, dopo le
+    carte: le triple *(concetto, relazione, concetto)* dal solo testo letto, pagine e argomenti in
+    busta, schema guidato, nessun tool. Il codice le controlla con le regole di argomenti e carte
+    (concetto nelle pagine citate e argomento che c'è, se no `da_controllare`; solo pagine con
+    istruzioni `pagina_con_istruzioni`; forma chiusa, ordine, indirizzo o annuncio `testo_ordine`),
+    unisce i concetti uguali, tiene al più `studio_mappa_nodi_max` concetti (i più collegati) e
+    calcola la disposizione. **Mai sopra uno scheletro della persona**: scritto a mano, confermato o
+    toccato (anche solo un «Tieni») non si rifà più. La forma si guarda anche sulla tripla intera
+    (un annuncio spezzato in tre pezzi segna il collegamento e i due capi) e le istruzioni di una
+    pagina tripla per tripla (revisione della PR #327); un errore nostro si riprova dopo un'ora e
+    al terzo di fila con la stessa firma la verifica si ferma finché la firma non cambia, per la
+    mappa come per le carte (seconda revisione della PR #327). Interruttore `studio_mappa_genera`, **ombra di
+    serie** (lo scheletro «ombra» mai alla persona, solo misure); «attiva» dopo il banco della mappa
+    e la rilettura dell'ombra. Alternative scartate: lo scheletro generato già confermato (il
+    controllo è di forma, non di significato), un secondo giro del modello che corregge, lo scheletro
+    dalle immagini.
 
 ## Da completare con i passi 4.3–4.5
 

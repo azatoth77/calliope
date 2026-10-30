@@ -113,7 +113,11 @@ class Mappe:
         return s if s is not None and s["stato"] == "confermata" else None
 
     def _salva_mappa(self, m: dict, **campi):
+        """Scrive i campi di una mappa. Lo scrivono solo le azioni della persona (o del tutore):
+        uno scheletro cambiato così è «toccato», e la generazione non lo rifà più (`aiuto`)."""
         campi.setdefault("modificata", self.adesso().isoformat(timespec="seconds"))
+        if m.get("tipo") == M.SCHELETRO and "aiuto" not in campi:
+            campi["aiuto"] = {**(m.get("aiuto") or {}), "toccato": True}
         sets, arg = [], []
         for k, val in campi.items():
             if k in ("nodi", "collegamenti", "tentati", "aiuto", "controllo"):
@@ -566,6 +570,108 @@ class Mappe:
                 n_scritte += 1
             self._misure_mappe()["carte"] += n_scritte
         return n_scritte
+
+    # ── la generazione dello scheletro (dal lettore, studio/lettura.py, mappa_genera.py) ──
+    def _scheletro_toccabile(self, db, vid) -> tuple[bool, list[int]]:
+        """(si può generare?, gli id degli scheletri del modello da rifare). Mai sopra uno scheletro
+        della persona: scritto a mano, confermato, o con una voce cambiata da una persona."""
+        rifare = []
+        for r in db.execute("SELECT id, stato, origine, nodi, collegamenti, aiuto FROM "
+                            "studio_mappe WHERE verifica = ? AND tipo = 'scheletro'",
+                            (int(vid),)).fetchall():
+            voci = _da_j(r["nodi"], []) + _da_j(r["collegamenti"], [])
+            mano = r["origine"] != "modello" or r["stato"] == "confermata" or bool(
+                _da_j(r["aiuto"], {}).get("toccato")) or any(
+                isinstance(x, dict) and x.get("autore") not in (None, "modello") for x in voci)
+            if mano:
+                return False, []
+            rifare.append(r["id"])
+        return True, rifare
+
+    def verifiche_per_mappa(self) -> list[dict]:
+        """Le verifiche aperte con almeno un argomento del piano che cita una pagina letta, senza
+        uno scheletro della persona e con una firma (argomenti, pagine, modo) diversa da quella
+        dell'ultima generazione, dalla più vicina. Vuoto con `studio_mappa_genera: spenta` o i dati
+        in sola lettura."""
+        from . import argomenti as A
+        from . import genera as G
+        from . import mappa_genera as MG
+        m = MG.modo(self.cfg)
+        if m == MG.SPENTA or not self.dati.scrivibile:
+            return []
+        out = []
+        for v in self.dati.tutti("SELECT * FROM studio_verifiche WHERE stato = 'aperta' AND "
+                                 "data >= ? ORDER BY data, id", (self._oggi().isoformat(),)):
+            args = self._argomenti_per_carte(v["id"])
+            pagine = self._pagine_di(v["id"])
+            lette = {int(p["id"]) for p in A.lette(pagine)}
+            if not any(set(a["pagine"]) & lette for a in args):
+                continue
+            if not G.da_generare(v.get("mappa_firma"), v.get("mappa_esito"), v.get("mappa_del"),
+                                 MG.firma(args, pagine, m), self.adesso()):
+                continue
+            with self.dati.lock:
+                si, _r = self._scheletro_toccabile(self.dati.db, v["id"])
+            if si:
+                out.append({**v, "_pagine": pagine, "_argomenti": args, "_modo": m})
+        return out
+
+    def proponi_mappa(self, vid, firma: str, nodi: list[dict], coll: list[dict], esito: str,
+                      modo_: str) -> int | None:
+        """Scrive l'esito di una generazione: via gli scheletri del modello mai toccati (proposti o
+        dell'ombra), dentro il nuovo («proposta» con `studio_mappa_genera: attiva`, «ombra» in
+        ombra), la firma e l'esito. Con «rotto» o «errore» resta quello di prima. Se intanto
+        argomenti o pagine sono cambiati, o la persona ha scritto il suo scheletro, non scrive
+        niente: None. Quanti concetti."""
+        from . import mappa_genera as MG
+        with self.dati.lock:
+            db = self.dati.db
+            try:
+                if db.in_transaction:
+                    db.commit()
+                db.execute("BEGIN IMMEDIATE")
+                v = db.execute("SELECT * FROM studio_verifiche WHERE id = ? AND stato = 'aperta'",
+                               (int(vid),)).fetchone()
+                pagine = [dict(r) for r in db.execute(
+                    "SELECT p.* FROM studio_pagine p JOIN studio_materiali m ON m.id = p.materiale"
+                    " WHERE m.verifica = ?", (int(vid),))]
+                args = [{"id": a["id"], "titolo": a["titolo"],
+                         "pagine": [int(x) for x in D.da_j(a["pagine"]) if str(x).isdecimal()]}
+                        for a in db.execute("SELECT * FROM studio_argomenti WHERE verifica = ? "
+                                            "ORDER BY ordine, id", (int(vid),)).fetchall()
+                        if a["stato"] in D.ARGOMENTI_DEL_PIANO]
+                si, rifare = self._scheletro_toccabile(db, vid)
+                if v is None or not si or MG.firma(args, pagine, modo_) != firma:
+                    db.rollback()
+                    return None
+                n = 0
+                if esito not in (MG.ROTTO, MG.ERRORE):
+                    for mid in rifare:
+                        db.execute("DELETE FROM studio_mappe WHERE id = ?", (mid,))
+                    if nodi:
+                        adesso = self.adesso().isoformat(timespec="seconds")
+                        db.execute(
+                            "INSERT INTO studio_mappe (verifica, persona, tipo, stato, origine, "
+                            "nodi, collegamenti, creata) VALUES (?, ?, 'scheletro', ?, 'modello', "
+                            "?, ?, ?)", (int(vid), str(v["persona"]),
+                                         "ombra" if modo_ == MG.OMBRA else "proposta",
+                                         _j(nodi), _j(coll), adesso))
+                        n = len(nodi)
+                from . import genera as G
+                scritta, errori = G.firma_da_scrivere(v["mappa_firma"], firma, esito)
+                db.execute("UPDATE studio_verifiche SET mappa_firma = ?, mappa_esito = ?, "
+                           "mappa_del = ? WHERE id = ?",
+                           (scritta, esito if esito != MG.PROPOSTO or n else MG.VUOTO,
+                            self.adesso().isoformat(timespec="seconds"), int(vid)))
+                db.commit()
+                if errori >= G.ERRORI_MAX:
+                    self._registra(f"verifica {vid}: mappa ferma dopo {errori} errori con le stesse "
+                                   "pagine e argomenti: riparte quando cambiano")
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
+        return n
 
     # ── per la home, la voce e lo schermo ──
     def _conto_mappa(self, v: dict) -> dict:

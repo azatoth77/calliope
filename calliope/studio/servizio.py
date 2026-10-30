@@ -1317,7 +1317,8 @@ class Studio(Mappe):
             lette = {int(p["id"]) for p in A.lette(pagine)}
             if not any(set(a["pagine"]) & lette for a in args):
                 continue
-            if v.get("carte_firma") != G.firma(args, pagine, m):
+            if G.da_generare(v.get("carte_firma"), v.get("carte_esito"), v.get("carte_del"),
+                             G.firma(args, pagine, m), self.adesso()):
                 out.append({**v, "_pagine": pagine, "_argomenti": args, "_modo": m})
         return out
 
@@ -1371,11 +1372,15 @@ class Studio(Mappe):
                              D.j(c["avvisi"]) if c["avvisi"] else None, adesso))
                         decise.add(A.chiave(c["domanda"]))
                         n += 1
+                scritta, errori = G.firma_da_scrivere(v["carte_firma"], firma, esito)
                 db.execute("UPDATE studio_verifiche SET carte_firma = ?, carte_esito = ?, "
                            "carte_del = ? WHERE id = ?",
-                           (firma, esito if esito != G.PROPOSTE or n else G.VUOTO, D.adesso(),
-                            int(vid)))
+                           (scritta, esito if esito != G.PROPOSTE or n else G.VUOTO,
+                            self.adesso().isoformat(timespec="seconds"), int(vid)))
                 db.commit()
+                if errori >= G.ERRORI_MAX:
+                    self._registra(f"verifica {vid}: carte ferme dopo {errori} errori con le stesse "
+                                   "pagine e argomenti: ripartono quando cambiano")
             except Exception:
                 if db.in_transaction:
                     db.rollback()

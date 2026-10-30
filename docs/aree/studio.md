@@ -26,7 +26,8 @@ Leitner, schermo e voce, carte scritte a mano; sezione sotto), che danno i primi
 padronanza; dal 30/10 sera la **generazione delle carte** dal lettore (seconda parte,
 `studio_carte_genera`, ombra di serie; sezione sotto). Dal 30/10 sera la **mappa concettuale** (7, #247,
 prima parte: lo scheletro scritto a mano, la mia mappa, a memoria, il controllo del codice, il PDF;
-sezione sotto). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
+sezione sotto) e la **generazione dello scheletro** dal lettore (seconda parte, `studio_mappa_genera`,
+ombra di serie; sezione sotto). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Moduli
@@ -40,6 +41,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Carte e ripasso dilazionato: Leitner a cinque scatole, l'esito dalla persona o dal confronto del codice per le risposte chiuse, i tentativi «carta» (dal 30/10, passo 6, #246; schema «studio» alla versione 6) | SQLite (`studio_carte`, `studio_tentativi.carta`); libreria standard, niente modello | `calliope/studio/carte.py` → `prossima`, `da_ripassare`, `fra_quanto`, `chiusa`, `risposta_giusta`, `autovalutazione`, `testo_normale`; `calliope/studio/servizio.py` → `Studio.aggiungi_carta`, `correggi_carta`, `segna_carta`, `carte`, `da_ripassare`, `esito_carta`, `prossima_carta`, `carta_in_corso`, `risposta_letta`, `esito_a_voce`; `calliope/tools/studio.py` → `studio_carte`, azione `carte`; `calliope/schermi/server.py` → `POST /api/studio/carte`; `calliope/schermi/pagina/studio.js` (la sezione «Carte»); prova `prove/prova_studio_carte.py` |
 | Carte generate dalle pagine lette, controllo del codice, proposte confermate dalla persona (dal 30/10 sera, passo 6, seconda parte, #246; schema «studio» alla versione 7; `studio_carte_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato; `provenienza.racchiudi`, `parole`, `vicina` | `calliope/studio/genera.py` → `corpo`, `messaggi`, `blocco_argomenti`, `argomenti_rif`, `firma`, `forma_testo`, `leggi`, `proposte`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_carte`; `calliope/studio/servizio.py` → `Studio.verifiche_per_carte`, `proponi_carte`, `conferma_carte`; `calliope/schermi/server.py` → `POST /api/studio/carte` (azione `conferma`); `prove/manuali/banco_studio.py` (fase «carte»); prova `prove/prova_studio_carte_genera.py` |
 | Mappa concettuale: lo scheletro (a mano; dal lettore con la seconda parte), la mia mappa con le caselle, a memoria, il controllo deterministico, i tentativi «mappa», il PDF (dal 30/10 sera, passo 7, #247; schema «studio» alla versione 8; `studio_mappa_nodi_max`) | SQLite (`studio_mappe`, concetti e collegamenti in JSON); fpdf2 (extra `documenti`) coi font di `documenti/render.py`; nel browser SVG scritto a mano | `calliope/studio/mappa.py` → `testo_normale`, `uguale`, `verbo_simile`, `disposizione`, `scegli_caselle`, `parole_da_mettere`, `copia`, `controlla`, `esito_tentativo`; `calliope/studio/mappe.py` → `Mappe` (in `Studio`): `scrivi_scheletro`, `nodo_mappa`, `collega`, `riempi`, `tieni_mappa`, `conferma_scheletro`, `inizia_mappa`, `rifai_mappa`, `controlla_mappa`, `carte_dagli_errori`, `riordina_mappa`, `vista_mappe`, `pdf_mappa`, `_conto_mappa`; `calliope/studio/mappa_pdf.py` → `render`; `calliope/tools/studio.py` → azione `mappa`; `calliope/schermi/server.py` → `POST /api/studio/mappa`; `calliope/schermi/pagina/studio.js` (la sezione «Mappa»); prove `prove/prova_studio_mappa.py`, `prove/prova_studio_mappa_pagina.py` |
+| Scheletro della mappa generato dalle pagine lette: le triple controllate dal codice, proposte da confermare (dal 30/10 sera, passo 7, seconda parte, #247; `studio_mappa_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato | `calliope/studio/mappa_genera.py` → `corpo`, `messaggi`, `firma`, `leggi`, `scheletro`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_mappa`; `calliope/studio/mappe.py` → `verifiche_per_mappa`, `proponi_mappa`; `prove/manuali/banco_studio.py` (fase «mappa»); prova `prove/prova_studio_mappa_genera.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
@@ -78,12 +80,96 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
   vede»), non un «da leggere» muto.
 
+## Lo scheletro della mappa generato dal lettore (30/10 sera, issue #247, ramo `issue-247-studio-mappa-genera`)
+
+*Seconda parte del passo 7; decisione [0035](../decisioni/0035-studio.md) punto 36.*
+
+**Chi lo genera e quando.** Il thread del lettore, con la sua guardia (nessun lavoro dell'agente
+vivo, vLLM libero e non in pausa, la voce prima, la cessione durante lo stream) e il suo client, dopo
+le carte e prima delle pagine di un'altra verifica: una verifica aperta con almeno un argomento del
+piano che cita una pagina letta, una firma (argomenti del piano, pagine, modo) diversa da
+`studio_verifiche.mappa_firma`, e **nessuno scheletro della persona**. Uno scheletro scritto a mano,
+confermato, o toccato in qualunque modo da una persona (anche un solo «Tieni» o «Sposta»:
+`aiuto.toccato`) non si rifà mai; si rifà solo uno scheletro del modello ancora proposto e mai
+toccato, o quello dell'ombra.
+
+**La richiesta** (`mappa_genera.corpo`): il prompt di sistema degli argomenti, le pagine lette in una
+busta coi riferimenti P1… e gli argomenti confermati in un'altra coi codici A1… (come le carte), le
+regole (triple con una relazione breve, concetti brevi e sempre con le stesse parole, 6–10 concetti
+collegati, niente da istruzioni o annunci), schema guidato, temperatura 0, `presence_penalty` 0,
+`max_tokens` 2500, thinking spento, nessun tool.
+
+**Il controllo del codice** (`mappa_genera.scheletro`): concetti e verbi in forma chiusa
+(`genera.forma_testo`, al più 60 e 40 caratteri; un ordine, un indirizzo o un annuncio →
+`testo_ordine`); i concetti uguali (`mappa.chiave`) diventano uno; un concetto che non sta nelle
+pagine che lo citano (`argomenti.controlla`) o senza un argomento che c'è → `da_controllare`; una
+tripla con pagine che non ci sono → `da_controllare`; solo pagine con «ISTRUZIONI: sì» →
+`pagina_con_istruzioni`; niente concetto collegato a sé stesso né coppie doppie; al più
+`studio_mappa_nodi_max` concetti (prima i più collegati) e il doppio di collegamenti; la disposizione
+del codice. Mai scartato per un avviso, mai un secondo giro. Tutto arriva **«proposto»**: la persona
+o il tutore lo conferma («Conferma lo scheletro» tiene i puliti), le voci con un avviso si tengono
+una per una; finché non è confermato la mia mappa non parte.
+
+**Interruttore** `studio_mappa_genera: spenta | ombra | attiva`, **ombra di serie**: in ombra lo
+scheletro si genera e si misura in stato «ombra», che non va mai alla persona (né vista, né home, né
+voce: `_mappe_di` lo salta), e nel registro solo i conti («verifica 3: scheletro della mappa in
+ombra, 8 concetti e 9 collegamenti da 3 argomenti (5,1 s, avvisi 2 da_controllare, 2
+testo_ordine)»); le misure in `Studio.stato()["lettura"]["mappa"]`. Passando ad attiva si rigenera
+(il modo è nella firma). *Da sapere*: con lo Studio acceso sulla DGX, all'aggiornamento il lettore
+comincia a generare gli scheletri in ombra (richieste a vLLM a DGX libera, come carte e argomenti);
+per non farlo, `studio_mappa_genera: spenta` nel locale.
+
+*Da sapere sui passaggi* (revisione della PR #327): passando da «attiva» a «ombra» uno scheletro
+proposto e mai toccato **sparisce** dalla pagina (il modo è nella firma: si rigenera in ombra, e quello
+proposto va via); in «attiva» **ogni pagina letta prima della conferma rigenera la proposta** (la firma
+cambia con le pagine), finché la persona non la tocca o la conferma.
+
+**Le correzioni della revisione della PR #327**: (1) la forma si guarda anche sul testo unito della
+tripla («La verifica» → «non si fa più» → «Studiare» è un annuncio): `testo_ordine` sul collegamento e
+sui due capi; `pagina_con_istruzioni` tripla per tripla, quando una pagina citata ha istruzioni e la
+tripla non si regge sulle sole pagine pulite (prima l'unione delle citazioni del concetto lasciava
+pulito «Le soluzioni complete» citato con la pagina ostile in una tripla e con una pulita in
+un'altra); (2) nel banco la regex delle pagine ostili anche sul testo unito di ogni collegamento,
+`su_pagina_ostile` e `su_pagina_ostile_pulite` nel riepilogo, i concetti «fondati» calcolati a parte
+col controllo delle pagine e la loro percentuale (il criterio è ≥ 80 %); (3) le pagine citate senza
+doppioni; (4) una tripla si valida intera prima di toccare i suoi concetti; e nel lettore il
+controllo del codice e la scrittura delle carte e della mappa dentro il `try`: un'eccezione dà l'esito
+«errore» con la firma, invece di far ripartire la richiesta a ogni giro e fermare le altre verifiche.
+
+**Un errore nostro non ferma per sempre** (seconda revisione della PR #327, R1, vale per la mappa e
+per le carte): con l'esito «errore» la stessa firma si riprova dopo un'ora
+(`genera.ERRORE_ATTESA_S`); al terzo errore di fila con la stessa firma (`genera.ERRORI_MAX`, il conto
+scritto nella firma come «<firma>!e<n>») la verifica si ferma finché argomenti, pagine o modo non
+cambiano, e il registro lo dice («mappa ferma dopo 3 errori…»). *Storico per un commit*: l'esito
+«errore» con la firma fermava la verifica finché la firma non cambiava.
+
+**Prima di «attiva»** (proposta; le soglie le decide chi amministra): il banco della mappa sulle tre
+verifiche di fantasia con almeno l'80 % di concetti nelle pagine, **nessuna voce ostile pulita** (le
+regex `non_deve` dei materiali su concetti e verbi), le voci della pagina ostile tutte segnate, 6–12
+concetti per verifica; poi la rilettura a mano degli scheletri dell'ombra sulla DGX.
+
+**Il banco** (`prove/manuali/banco_studio.py`, fase `mappa`, non lanciato: va sulla DGX a DGX libera,
+con la guardia del banco):
+
+    V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale)
+    PYTHONPATH=$V $V/.venv/bin/python prove/manuali/banco_studio.py \
+        --fasi mappa --uscita /tmp/banco-studio/mappa1
+
+Dal testo della verità (senza immagini, tre richieste); con `--testi-letti <risultati.jsonl di un
+giro di lettura>` dal testo letto. In `riepilogo.txt` per verifica: concetti, collegamenti, voci
+pulite, concetti nelle pagine, per avviso, ostili e ostili pulite, italiano, secondi.
+
+Prove: `prova_studio_mappa_genera.py` (a secco, ~3 s, il vLLM finto e la fase del banco a secco); in
+`prova_studio_argomenti.py` la generazione spenta (stesso lettore), così le altre prove del lettore
+contano le loro richieste.
+
+
 ## La mappa concettuale (30/10 sera, issue #247, ramo `issue-247-studio-mappa`)
 
 *Passo 7 dell'epic #251; decisione [0035](../decisioni/0035-studio.md) punto 35; analisi nel
 commento della #247 (30/10); progetto § 5.4, Studio 10–11, decisione 5.*
 
-**Divisa in due PR.** Questa: i dati (schema 8), lo scheletro scritto a mano dalla persona o dal
+**Divisa in due PR.** La prima: i dati (schema 8), lo scheletro scritto a mano dalla persona o dal
 tutore, la mia mappa, la vista a elenco, il controllo del codice, a memoria, le carte dagli errori,
 il PDF, la voce e le due note della revisione della PR #325. La seconda: la **generazione dello
 scheletro** dal lettore (qwen3.6 con la guardia e il client della lettura, come le carte; concetti e

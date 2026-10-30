@@ -230,6 +230,8 @@ def cfg_nuova(nome, modo="ombra", **kw):
     # Le carte generate (passo 6, #246) usano lo stesso lettore: qui spente, le prova
     # prova_studio_carte_genera.py
     c.studio_carte_genera = "spenta"
+    # Anche lo scheletro della mappa (passo 7, #247): lo prova prova_studio_mappa_genera.py
+    c.studio_mappa_genera = "spenta"
     for k, v in kw.items():
         setattr(c, k, v)
     return c

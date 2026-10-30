@@ -231,6 +231,78 @@ verifica("vLLM occupato: la guardia aspetta, nessuna richiesta", len(PA.F.richie
 PA.F.corso = 0
 st.close()
 
+
+# R1 (seconda revisione della PR #327): un errore passeggero non ferma la verifica per sempre. Con
+# «errore» si riprova dopo un'ora; al terzo errore con la stessa firma si ferma finché la firma non
+# cambia (una riga nel registro); la firma cambiata riparte
+import datetime as _dt  # noqa: E402
+
+
+def prova_errori(cosa, prepara_kw, risposta, modulo, nome_f, esito_col, arrivato):
+    ora0 = PA.ORA[0]
+    try:
+        # un errore solo, poi l'attesa, poi arriva
+        PA.azzera()
+        st, vid, ids, lett = prepara(prepara_kw, nome=f"r1_uno_{cosa}")
+        vero = getattr(modulo, nome_f)
+        volte = [0]
+
+        def una_volta(*a, **k):
+            volte[0] += 1
+            if volte[0] == 1:
+                raise RuntimeError("guasto passeggero")
+            return vero(*a, **k)
+        setattr(modulo, nome_f, una_volta)
+        try:
+            for _ in range(3):
+                PA.rispondi(risposta)
+                lett._riprova_dopo = 0.0
+                lett.giro()
+            n_prima = len(PA.F.richieste)
+            PA.ORA[0] = PA.ORA[0] + _dt.timedelta(minutes=61)
+            PA.rispondi(risposta)
+            lett._riprova_dopo = 0.0
+            lett.giro()
+        finally:
+            setattr(modulo, nome_f, vero)
+        verifica(f"R1 {cosa}: un errore, tre giri con una richiesta sola; dopo un'ora si riprova e "
+                 "arriva", n_prima == 1 and len(PA.F.richieste) == 2 and arrivato(st, vid),
+                 f"{n_prima} {len(PA.F.richieste)} {st.verifica(LEO, vid)[esito_col]}")
+        st.close()
+        # tre errori di fila con la stessa firma: si ferma, e lo dice
+        PA.azzera()
+        PA.ORA[0] = ora0
+        st, vid, ids, lett = prepara(prepara_kw, nome=f"r1_tre_{cosa}")
+
+        def sempre(*a, **k):
+            raise RuntimeError("guasto fisso")
+        setattr(modulo, nome_f, sempre)
+        try:
+            for _ in range(5):
+                PA.rispondi(risposta)
+                lett._riprova_dopo = 0.0
+                lett.giro()
+                PA.ORA[0] = PA.ORA[0] + _dt.timedelta(minutes=61)
+            n_fermo = len(PA.F.richieste)
+            # la firma cambia: riparte
+            st.rinomina_argomento(LEO, st.argomenti(LEO, vid)[1]["id"], "La rotta portoghese")
+            PA.rispondi(risposta)
+            lett._riprova_dopo = 0.0
+            lett.giro()
+        finally:
+            setattr(modulo, nome_f, vero)
+        verifica(f"R1 {cosa}: tre errori con la stessa firma, poi ferma (anche dopo ore) e il "
+                 "registro lo dice", n_fermo == 3
+                 and any("dopo 3 errori" in x for x in PA.log_righe), str(n_fermo))
+        verifica(f"R1 {cosa}: la firma cambia e riparte", len(PA.F.richieste) == 4,
+                 str(len(PA.F.richieste)))
+        st.close()
+    finally:
+        PA.ORA[0] = ora0
+
+prova_errori("carte", {"studio_carte_genera": "attiva"}, CARTE, G, "proposte", "carte_esito",
+             lambda st, vid: bool(st.carte(LEO, vid)))
+
 print("— il giro: spenta, e da ombra ad attiva")
 PA.azzera()
 st, vid, ids, lett = prepara({"studio_carte_genera": "spenta"}, nome="spenta")

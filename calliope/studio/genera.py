@@ -79,6 +79,49 @@ SPENTA, OMBRA, ATTIVA = "spenta", "ombra", "attiva"
 MODI = (SPENTA, OMBRA, ATTIVA)
 
 
+# Un errore nostro in una generazione (seconda revisione della PR #327): la stessa firma si riprova
+# dopo `ERRORE_ATTESA_S`; al terzo errore con la stessa firma la verifica si ferma finché la firma
+# non cambia (un argomento, una pagina, il modo). Il conto sta nella firma scritta: «<firma>!e<n>»
+ERRORE_ATTESA_S = 3600
+ERRORI_MAX = 3
+
+
+def firma_e_errori(scritta) -> tuple[str | None, int]:
+    """(la firma, gli errori di fila con quella firma) da quella scritta nella verifica."""
+    s = str(scritta or "")
+    if "!e" in s:
+        base, _sep, n = s.rpartition("!e")
+        if n.isdecimal():
+            return base, int(n)
+    return (s or None), 0
+
+
+def da_generare(scritta, esito, quando, firma: str, adesso) -> bool:
+    """La generazione di una verifica va (ri)chiesta? Sì con una firma nuova; con la stessa firma
+    solo dopo un «errore», passato `ERRORE_ATTESA_S` e meno di `ERRORI_MAX` errori di fila."""
+    import datetime
+    base, n = firma_e_errori(scritta)
+    if base != firma:
+        return True
+    if esito != ERRORE or n >= ERRORI_MAX:
+        return False
+    try:
+        t = datetime.datetime.fromisoformat(str(quando))
+    except (TypeError, ValueError):
+        return True
+    return (adesso - t).total_seconds() >= ERRORE_ATTESA_S
+
+
+def firma_da_scrivere(scritta, firma: str, esito: str) -> tuple[str, int]:
+    """(la firma da scrivere, gli errori di fila): con «errore» il conto cresce (riparte da 1 con
+    una firma nuova), con un altro esito la firma nuda."""
+    if esito != ERRORE:
+        return firma, 0
+    base, n = firma_e_errori(scritta)
+    n = n + 1 if base == firma else 1
+    return f"{firma}!e{n}", n
+
+
 def modo(cfg) -> str:
     m = str(getattr(cfg, "studio_carte_genera", OMBRA) or OMBRA).strip().lower()
     return m if m in MODI else OMBRA
