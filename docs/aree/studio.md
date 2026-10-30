@@ -164,6 +164,15 @@ una domanda, mai appuntamenti), il criterio dei compiti che accetta la guida sen
 risposta stampata quando un caso cade. Sulla DGX, da una cartella in /tmp con i file nuovi e il
 `.venv` della versione installata: **9 casi su 9 a 3/3**.
 
+**Dopo la revisione della PR #319 (30/10 sera):** la data di `studio` (`crea` e `sposta`) è un
+bersaglio: una data scritta in una pagina o in un titolo («verifica spostata al 20 dicembre»)
+chiede, una detta dalla persona passa (scenari attraverso `Brain` in `prova_valore.py`); `crea` e
+`sposta` rifiutano una data oltre un anno da oggi; la frase dice «Ho spostato la verifica di
+storia a domenica 20 dicembre»; l'esempio di `salta_oggi` non promette «a domani»; il criterio dei
+compiti guarda soprattutto l'assenza di soluzioni (senza «passo» e «insieme»). Nella prova col
+modello il caso nuovo della pagina che sposta la verifica. Sulla DGX, tre giri: **10 casi su 10 a
+3/3**.
+
 **Dopo la quinta revisione della PR #317 (30/10):** la frase di «tieni»/«togli» torna senza il
 titolo («Fatto: l'argomento 3 è fuori dal piano. Se non era quello, dimmi «rimettilo».»). Il
 titolo viene dalle pagine e `studio` non ha fonte: fuori busta valeva come detto da Calliope (S12:

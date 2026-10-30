@@ -42,6 +42,8 @@ LETTURE = frozenset({"stato", "piano", "oggi"})
 DA_TOCCO = frozenset({"fatto", "salta_oggi", "tieni", "togli", "riprova", "sessione"})
 
 NON_CE = "Questa verifica non la trovo."
+# Una verifica oltre un anno da oggi è quasi sempre una data capita male (revisione della PR #319)
+OLTRE_GIORNI = 366
 SPENTO = "Lo Studio qui non è acceso."
 CHI_NO = ("Lo Studio lo apro solo alle persone di casa che riconosco dalla voce: me lo chiedi di "
           "nuovo, con una frase intera?")
@@ -197,6 +199,8 @@ def _crea(ctx, svc, chi, materia, data, argomento, per) -> dict:
                              "AAAA-MM-GG o il nome del giorno."}
     if d < svc._oggi():
         return _f("Quella data è già passata: quando è la verifica?", ok=False)
+    if d > svc._oggi() + datetime.timedelta(days=OLTRE_GIORNI):
+        return _f("Quella data è oltre un anno da oggi: quando è la verifica?", ok=False)
     for v in svc.home(chi)["verifiche"]:
         if (v["data"] == d.isoformat() and str(v["materia"]).lower() == str(materia).lower()
                 and str(svc.verifica(chi, v["id"])["persona"]) == str(persona)):
@@ -307,12 +311,14 @@ def _sposta(ctx, svc, chi, v, data) -> dict:
                 "cosa_fare": "Chiedi a quando è stata spostata la verifica, poi richiama studio."}
     if d < svc._oggi():
         return _f("Quella data è già passata: a quando è spostata?", ok=False)
+    if d > svc._oggi() + datetime.timedelta(days=OLTRE_GIORNI):
+        return _f("Quella data è oltre un anno da oggi: a quando è spostata?", ok=False)
     try:
         svc.imposta(chi, v["id"], data=d)
     except ValueError as e:
         return _f(f"Non riesco a spostarla: {e}.", ok=False)
-    v2 = svc.verifica(chi, v["id"])
-    return _f(f"Ho spostato {_nome_verifica(v2)} e rifatto il piano.", verifica=v["id"])
+    return _f(f"Ho spostato la verifica di {str(v['materia']).lower()} a {detta(d)} e rifatto il "
+              "piano.", verifica=v["id"])
 
 
 def _archivia(ctx, svc, chi, v) -> dict:
@@ -543,8 +549,8 @@ DESCRIZIONE = (
     "«crea» una verifica («giovedì ho la verifica di storia», con materia, data AAAA-MM-GG o il "
     "giorno, argomento facoltativo; per = nome del ragazzo se la crea il tutore); «stato» di "
     "cosa parla e a che punto è; «piano»; «oggi» («cosa devo studiare oggi?»); «fatto» il giorno "
-    "di oggi fatto; «salta_oggi» per lo studio di oggi («non ce la faccio oggi», «sposta lo studio "
-    "di oggi a domani»); «sposta» la data della verifica («la verifica è stata spostata a "
+    "di oggi fatto; «salta_oggi» per lo studio di oggi («oggi non ce la faccio», «salta lo studio "
+    "di oggi»: le pagine passano ai giorni che restano); «sposta» la data della verifica («la verifica è stata spostata a "
     "venerdì», con data); se non è chiaro quale dei due, chiedilo; «archivia»; «tieni» o «togli» un "
     "argomento (numero = la posizione nell'elenco, o titolo); «riprova» una pagina messa da parte; «sessione» con le risposte "
     "a «quanto conosci l'argomento?» (conoscenza 1–5) e «come ti senti oggi?» (umore). verifica: "

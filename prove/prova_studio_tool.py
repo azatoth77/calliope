@@ -197,6 +197,9 @@ verifica("la stessa verifica due volte: «ce l'hai già», niente doppione",
          r["ok"] and r["verifica"] == vid and "già" in r["conferma"])
 r = chiama(ctx_di(st, LEO), "studio", azione="crea", materia="Storia", data="2026-10-01")
 verifica("una data passata: chiede di nuovo", not r["ok"] and "passata" in r["conferma"])
+r = chiama(ctx_di(st, LEO), "studio", azione="crea", materia="Fisica", data="2028-01-10")
+verifica("crea: una data oltre un anno da oggi chiede di nuovo (PR #319)",
+         not r["ok"] and "oltre un anno" in r["conferma"])
 r = chiama(ctx_di(st, LEO), "studio", azione="crea", materia="Storia")
 verifica("senza data: «cosa_fare» chiede quando", not r["ok"] and "quando" in r["cosa_fare"])
 r = chiama(ctx_di(st, LEO), "studio", azione="sposta", verifica=v_mat, data="2026-11-03")

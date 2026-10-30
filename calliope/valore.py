@@ -77,7 +77,10 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "lista_aggiungi": {"cose": C, "lista": B},
     "lista_togli": {"cose": B, "lista": B},
     # lo Studio (30/10, #284): l'id della verifica e dell'argomento sono bersagli
-    "studio": {"azione": Z, "verifica": B, "materia": C, "data": S, "argomento": C, "per": B,
+    # data: un bersaglio (revisione della PR #319): una data scritta in una pagina o in un titolo
+    # («verifica spostata al 20 dicembre») vale «dal dato» e la politica chiede; detta dalla
+    # persona passa
+    "studio": {"azione": Z, "verifica": B, "materia": C, "data": B, "argomento": C, "per": B,
                # La posizione nell'elenco degli argomenti: un bersaglio come gli altri (seconda
                # revisione della PR #317): detto se la persona l'ha detto in cifre, in lettere o
                # come ordinale («il secondo»), altrimenti dal dato e la politica chiede
