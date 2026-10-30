@@ -260,7 +260,10 @@ def _cerca_archivio(ctx: ToolContext, domanda: str = "", quando: str = "",
     detto_periodo = ""
     if (quando or "").strip():
         from ..tempi import parse_past_range
-        d0, d1, detto_periodo = parse_past_range(quando)
+        # Lo stesso orologio di quando_detto (time.time()), così «ieri» e «l'altro ieri»
+        # si contano dallo stesso adesso delle etichette (30/10, #313)
+        d0, d1, detto_periodo = parse_past_range(
+            quando, datetime.datetime.fromtimestamp(time.time()))
         dal = d0.timestamp() if d0 else None
         al = d1.timestamp() if d1 else None
     if cronologico in (True, "true", "sì", "si") and not ospiti:
