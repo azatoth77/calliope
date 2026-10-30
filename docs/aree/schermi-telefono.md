@@ -1997,3 +1997,29 @@ fotocamera: `Permissions-Policy` con `camera=(self)` (prima `camera=()`), solo p
 service worker `calliope-telefono-pagina-v22` (la v21 era già della #309) con `/bordi.js` e `/studio.js`. Le miniature sono
 canvas, non URL blob (la CSP del telefono li vieta per le immagini). Il resto, coi controlli del
 server e le misure, nell'area [studio](studio.md).
+
+## Numeri riusati: tre resti dopo la PR #270 (30/10, issue #275, ramo `issue-275-schermi-id-riusati`)
+
+Il numero di uno schermo si riusa dopo una revoca (#266); l'identità è il numero con l'istante
+dell'abbinamento (`Schermi.identita`). Tre punti restavano solo col numero:
+
+1. **Elementi in coda.** Scritto, tocco, modulo e foto portavano solo `schermo_id`: se lo schermo veniva
+   revocato e il numero riabbinato da terminale mentre l'elemento aspettava, la risposta andava allo
+   schermo nuovo. Il server mette negli elementi anche `schermo_creato`; `Schermi.schermo`, `invia_a` ed
+   `evento_a` accettano `creato` e con l'istante sbagliato non trovano lo schermo e non mandano niente
+   (`schermi/archivio.di_quale_schermo` lo legge dall'elemento). Lo usano la risposta scritta
+   (`rispondi.py`, anche la scelta del satellite che risponde a voce), le schede e l'esito del tocco, le
+   schede di foto e file, il controllo dello scritto e il dispositivo nei dati del turno (`ciclo.py`). Il
+   tocco in sé vale (era della persona, dal suo schermo, quando l'ha fatto): cambia solo dove va la
+   risposta.
+2. **La corsa fra `abbinati()` e il lock** in `invia` e `invia_a` (e `aggiorna`, che passa da `invia_a`
+   con l'istante dell'elenco): dentro il lock si ricontrolla che il numero sia ancora dello stesso schermo
+   (`_stesso`) e si consegna solo alle pagine con la sua identità (`_sue`).
+3. **`Giochi.ascolto`** leggeva i nomi degli schermi dall'hub scorrendo `p.posti` fuori dal lock: se la cache
+   scadeva proprio lì, `schermi_via` toglieva un posto durante il giro («dictionary changed size during
+   iteration»). Si scorre una copia, lì e nella frase «Sei nella partita… con…».
+
+Prova: `prove/prova_agenda_pagina.py`, `elementi_in_coda` (il tocco in coda con lo schermo riabbinato e il
+contrario, la risposta scritta, `evento_a` e `invia_a` con l'istante di prima, la corsa simulata con
+`abbinati()` che rilegge l'elenco dopo averlo dato vecchio per `invia` e `invia_a`, che senza il controllo
+nel lock cade, e `ascolto` con l'hub che toglie un posto) e il server che mette l'istante nell'elemento.

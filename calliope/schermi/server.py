@@ -492,7 +492,7 @@ def crea_app(hub: Schermi) -> Starlette:
                                  "persona": schermo.get("proprietario"),
                                  "schermo": schermo.get("nome"), "stanza": schermo.get("stanza"),
                                  # La risposta torna qui (calliope/rispondi.py, 04/10)
-                                 "schermo_id": schermo.get("id"),
+                                 "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"),
                                  # Dalla modalità scrittura del telefono la risposta è solo
                                  # scritta (28/10, dopo la revisione della PR #304)
                                  "solo_scritto": personale and dati.get("solo_scritto") is True,
@@ -520,7 +520,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if not hub.ingresso.metti({"tipo": "modulo", "_modulo": m, "valori": valori,
                                    "schermo": schermo.get("nome"),
                                    "stanza": schermo.get("stanza"),
-                                   "schermo_id": schermo.get("id"), "arrivato": time.time()}):
+                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}):
             return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
         return _json({"ok": True})
 
@@ -563,7 +563,7 @@ def crea_app(hub: Schermi) -> Starlette:
                                    "schermo": schermo.get("nome"),
                                    "stanza": schermo.get("stanza"),
                                    "solo_scritto": dati.get("solo_scritto") is True,
-                                   "schermo_id": schermo.get("id"), "arrivato": time.time()}):
+                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}):
             return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
         return _json({"ok": True, "larghezza": w, "altezza": h})
 
@@ -611,7 +611,7 @@ def crea_app(hub: Schermi) -> Starlette:
         voce = {"testo": testo, "persona": schermo.get("proprietario"),
                 "schermo": schermo.get("nome"), "stanza": schermo.get("stanza"),
                 "solo_scritto": request.headers.get("x-calliope-solo-scritto") == "1",
-                "schermo_id": schermo.get("id"), "arrivato": time.time()}
+                "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}
         if tipo_dai_byte(dati):
             # Un'immagine (dai byte): come una foto, ridotta e riscritta in JPEG
             if not getattr(hub.cfg, "immagini_enabled", True):
@@ -1198,7 +1198,7 @@ def crea_app(hub: Schermi) -> Starlette:
                                    "persona": schermo.get("proprietario"),
                                    "schermo": schermo.get("nome"),
                                    "stanza": schermo.get("stanza"),
-                                   "schermo_id": schermo.get("id"), "arrivato": time.time()}):
+                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}):
             return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
         return _json({"ok": True, "in_coda": True})
 
