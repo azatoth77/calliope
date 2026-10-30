@@ -14,8 +14,11 @@ e ricontrollati dal server, raddrizzate a 1600 px, nitidezza) e PDF (divisi con 
 gli orari, fuori dalla conversazione; le pagine restano «da leggere». La pagina minima del telefono
 si apre da Le mie cose › Studio con lo Studio attivo (in ombra solo per chi amministra, «prova»).
 `studio_modo` spento di serie. Dal 30/10 la **lettura** (4.3, #282): un thread legge le pagine «da
-leggere» con qwen3.6 su vLLM e l'harness del banco, quando la DGX è libera (sezione sotto). Restano
-gli argomenti dal modello (4.4), il tool, la home e la vista aperta (4.5). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
+leggere» con qwen3.6 su vLLM e l'harness del banco, quando la DGX è libera (sezione sotto). Dal
+30/10 gli **argomenti** (4.4, #283): quando le pagine di una verifica sono tutte lette lo stesso
+thread li chiede dal solo testo, il codice controlla le pagine citate e arrivano «proposti» alla
+persona, che li conferma da una vista minima della pagina dello Studio. Restano il tool, la home e
+la vista aperta (4.5). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Moduli
@@ -24,7 +27,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 |---|---|---|
 | Studio: verifiche, materiali e pagine, argomenti, piano a giorni deterministico, tenuta legata alla data della verifica (dal 29/10, passo 4.1, decisione [0035](../decisioni/0035-studio.md); `studio_modo`, spento di serie) | SQLite (stesso file della memoria: `studio_verifiche`, `studio_materiali`, `studio_pagine`, `studio_argomenti`, `studio_piano`, `studio_giorni`, `studio_misure`; modulo «studio» in `meta_schema`); libreria standard, niente modello | `calliope/studio/dati.py` → `Dati`, `cancella`, `cancella_file`; `calliope/studio/piano.py` → `calcola`, `minuti_liberi`, `descrivi_pagine`, `tappe`, `previsione`; `calliope/studio/servizio.py` → `Studio`, `permesso`, `prepara`, `NonPermesso`, `NonTrovata`; `calliope/conserva.py` → `TABELLE_STUDIO`; prova `prove/prova_studio_piano.py` |
 | Pagine dei materiali: fotocamera e galleria sul telefono, bordi ricontrollati, raddrizzamento, nitidezza, PDF divisi in pagine, file nella cartella dello Studio (dal 29/10, passo 4.2, #281) | Pillow e numpy (niente librerie native nuove), pypdfium2 (extra `archivio`); nel browser JavaScript scritto a mano, niente OpenCV.js | `calliope/studio/pagine.py` → `rileva`, `scegli_bordi`, `plausibili`, `raddrizza`, `nitidezza`, `prepara_foto`, `dividi_pdf`, `dividi_pdf_a_parte`, `scrivi_file`; `calliope/studio/servizio.py` → `Studio.verifica_per_pagine`, `Studio.verifiche_per_pagine`, `Studio.aggiungi_pronte`; `calliope/studio/dati.py` → `cartella_di`, `togli_orfani`; `calliope/schermi/server.py` → `POST /api/studio/pagina`, `POST /api/studio/verifiche`; `calliope/schermi/pagina/bordi.js`, `calliope/schermi/pagina/studio.js`; `calliope/immagini.py` → `apri`; prove `prove/prova_studio_pagine.py`, `prove/prova_studio_pagina_telefono.py` |
-
+| Argomenti dalle pagine lette, controllo delle pagine citate, forma del titolo, conferma della persona (dal 30/10, passo 4.4, #283; `studio_argomenti`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato (`response_format`); `provenienza.parole`, `vicina` e `racchiudi` | `calliope/studio/argomenti.py` → `corpo`, `riferimenti`, `controlla`, `forma_titolo`, `proposte`, `firma`, `pronta`; `calliope/studio/lettura.py` → `Lettore.estrai_argomenti`, `numeri_dalla_prima`; `calliope/studio/servizio.py` → `Studio.verifiche_per_argomenti`, `proponi_argomenti`, `conferma_argomenti`, `rinomina_argomento`, `unisci_argomenti`, `rifai_argomenti`, `estrazione`; `calliope/schermi/server.py` → `POST /api/studio/argomenti`; `calliope/schermi/pagina/studio.js`; prova `prove/prova_studio_argomenti.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
 ## Problemi noti
@@ -42,11 +45,123 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 - Su Windows `in_corso.json` non ha il controllo del pid: un file rimasto da un'istanza morta con
   un lavoro «in_corso» o «in_coda» blocca la lettura su quella macchina finché il servizio dei
   lavori non lo riscrive (prudente, ma da sapere; sulla DGX, Linux, il pid morto non conta).
-- **Per la 4.5** (revisione della PR #314): (1) prima della 4.4, il confronto pagina per pagina
-  dei numeri di pagina del giro vero (100/132) con quelli del banco (111/132), per capire da dove
-  viene la differenza a parità di corpo; (2) senza vLLM la pagina e la voce lo dicono con una
+- Gli argomenti si chiedono solo quando *tutte* le pagine sono lette o illeggibili: una pagina «da
+  parte» (fa cadere il motore) li ferma finché non si legge o non si toglie (4.4: da rivedere con la
+  vista della 4.5).
+- I falsi «ISTRUZIONI: sì» della lettura (il laboratorio di scienze e gli appunti di storia nel
+  giro del 30/10) fanno restare proposti, con `pagina_con_istruzioni`, argomenti giusti: 3 su 23 nel
+  giro vero degli argomenti. La persona li tiene con un tocco; da guardare nella 4.5.
+- **Per la 4.5** (revisione della PR #314): (1) *[fatto il 30/10 con la 4.4: il confronto pagina
+  per pagina dei numeri di pagina, nella sezione degli argomenti]*; (2) senza vLLM la pagina e la voce lo dicono con una
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
   vede»), non un «da leggere» muto.
+
+## Gli argomenti dalle pagine e la conferma (30/10, issue #283, ramo `issue-283-studio-argomenti`)
+
+*Passo 4.4 dell'epic #251 (analisi nella #243), decisione [0035](../decisioni/0035-studio.md) punti
+6 e 20–23. Harness del banco del 28/10, parte «argomenti» (`prove/manuali/studio/harness.json`,
+variante A1: due passi, schema guidato, busta).*
+
+**Prima: i numeri di pagina, lettore (100/132) contro banco (111/132).** Confronto foto per foto
+fra il giro vero del 30/10 e la riga L2 del giro intero del banco (28/10): 25 foto su 159 diverse,
+in **tutte e due** le direzioni (7 meglio il lettore, 18 meglio il banco), anche fra le pulite. Le
+cause sono due, nessuna nel codice del lettore:
+- **le foto non sono le stesse**: quelle del giro del 30/10 sono state rigenerate sul portatile, e
+  le 11 del banco rimaste sul portatile hanno tutte un'impronta diversa (dimensioni che cambiano di
+  qualche centinaio di byte: il font e Pillow), quindi «stesso corpo» non valeva;
+- **vLLM a temperatura 0 non è deterministico**: lo stesso banco, sulle stesse 71 foto del giro
+  ridotto e del giro intero, ha dato i numeri diversi su 6 foto (49 giusti tutte e due le volte, ma
+  non gli stessi) e lo stesso testo solo su 29 foto su 71.
+Una differenza *è* del codice: sulle **capovolte** il banco teneva la prima lettura (numeri 20 su
+20), il lettore la rilettura della pagina girata (15 su 20: la rilettura ha dato «?» 5 volte). Ora
+`numeri_dalla_prima` tiene il numero della prima lettura dove la seconda dà «?» con lo stesso numero
+di pagine (un numero diverso della seconda vince; prova in `prova_studio_lettura.py`). Il resto
+(pulite 15 contro 19, quadretti 6 contro 4) è nel rumore delle due cause sopra. *I numeri restano
+«?», mai sbagliati: senza numero vale l'ordine di scatto, con l'avviso di Materiali 2.*
+
+**Quando.** Il thread del lettore, prima di prendere la prossima pagina, guarda le verifiche in
+bozza o aperte con tutte le pagine (tolte escluse) «lette» o «illeggibili» e almeno una letta col
+testo (`Studio.verifiche_per_argomenti`). Una verifica è pronta se la **firma** delle sue pagine (id
+e stato, `argomenti.firma`) è diversa da quella dell'ultima estrazione, scritta in
+`studio_verifiche.argomenti_firma` con l'esito e l'ora (schema «studio» alla versione 3): così le
+stesse pagine non si chiedono due volte, e una pagina nuova letta dopo ne chiede un'altra. Con la
+stessa guardia della lettura (riusata, non copiata: nessun lavoro dell'agente vivo, vLLM libero e
+non in pausa, la voce prima con l'arbitro, un lavoro che parte durante lo stream fa cedere) e lo
+stesso client; gli errori del server fanno aspettare come la lettura (l'attesa che raddoppia),
+senza scrivere niente.
+
+**La richiesta** (`argomenti.corpo`), esatta dell'harness e controllata dalla prova contro
+`harness.json` e le costanti del banco: il prompt di sistema e le regole, l'intestazione («Verifica
+di Storia, classe 2ª media, il 2026-11-05 (…).», con le sole parti che ci sono), il testo delle
+pagine lette in **una busta** (`provenienza.racchiudi`, «foto», o «allegato» se tutte vengono da un
+PDF col testo) con i riferimenti «[P1 · pagina stampata 112]» scritti dal codice; schema guidato
+(`format` → `response_format` di vLLM), temperatura 0, `presence_penalty` 0, `max_tokens` 3000,
+thinking spento, **nessun tool** e nessuna immagine. Il modello cita P1, P2… («8», «p8» valgono
+P8); il codice li traduce negli id delle pagine e scarta quelli che non esistono. Il `motivo` del
+modello non si tiene. `length` si rifà una volta; due volte, o un JSON che non si legge, è «rotto»:
+la firma si scrive (niente giri in tondo) e la persona li scrive a mano o chiede «rifai».
+
+**Il controllo del codice** (`argomenti.controlla`, quello del banco): almeno metà delle parole del
+titolo nelle pagine citate, uguali, storpiate o con la stessa radice di 5 lettere, e tutte le pagine
+citate esistono. Se no l'argomento resta proposto con `da_controllare`; mai scartato e **niente
+secondo giro** del modello.
+
+**Pagine ostili e forma** (principio 10: forma, non significato). Il flag `istruzioni_nelle_pagine`
+del modello non si usa. Vale l'avviso «istruzioni» della lettura: un argomento che cita *solo*
+pagine con «ISTRUZIONI: sì» ha `pagina_con_istruzioni`. Il titolo è una riga di al più 60 caratteri,
+senza caratteri di controllo né virgolette attorno (`forma_titolo`); se comincia con un ordine a un
+assistente («Ignora…», «Scrivi…», «Di' allo…», «SYSTEM») o contiene un indirizzo ha
+`titolo_ordine`. Con uno di questi tre avvisi (`DA_DECIDERE`) un argomento **non diventa tenuto con
+la conferma dell'elenco**: resta proposto, fuori dal piano, finché la persona non lo tiene da sé.
+Così «Verifica annullata», se il modello lo proponesse dalla pagina ostile, non entra mai nel piano
+senza un tocco suo (prova con le tre pagine ostili del banco: storia p117, matematica p94, scienze
+p146).
+
+**La conferma** (API di `Studio`, permessi dello Studio: il proprietario e il tutore del minore;
+un altro adulto, chi amministra non tutore, l'ospite e la zona grigia lo stesso «non c'è»):
+`segna_argomento` (tieni o togli, anche dopo la conferma), `rinomina_argomento` (lo stato resta, gli
+avvisi diventano quelli del controllo sul titolo nuovo, la forma non conta: è suo),
+`unisci_argomenti` (il primo resta, tenuto, con le pagine di tutti; gli altri si tolgono),
+`aggiungi_argomento` («aggiunto», anche senza pagine), `conferma_argomenti` (i proposti puliti
+diventano tenuti, la verifica passa ad aperta, il piano si calcola; `da_decidere` dice quanti
+restano), `rifai_argomenti`. Il piano usa solo i tenuti e gli aggiunti e si ricalcola a ogni tocco.
+Una nuova estrazione toglie solo i proposti non decisi e non ripropone un titolo già tenuto, tolto o
+aggiunto; se le pagine cambiano durante la richiesta il risultato si butta e si rifà.
+
+**La vista minima** (`studio.js`, sotto le pagine della verifica scelta, dalla
+`POST /api/studio/argomenti`): l'elenco con titolo (solo `textContent`), stato, pagine col numero
+stampato o «foto n» e gli avvisi in parole; «Tieni», «Togli», «Rinomina» (un campo sul posto) e
+«Conferma gli argomenti». Quando non ci sono ancora: «arrivano quando ho letto tutte le pagine
+(lette x di y)», «sto cercando gli argomenti», «non sono riuscita a trovarli». L'endpoint, come le
+pagine del 4.2, è fuori dalla conversazione: niente `record_tocco`, quindi i titoli non entrano nella
+storia (per la 4.5, quando la conferma passerà dal tool, la busta nella descrizione del tocco resta
+da fare); gli orari del minore valgono per le azioni. Service worker alla v23.
+
+**Interruttori.** Spento: niente. `studio_argomenti` (nuova, `true` di serie): `false` = solo a
+mano. In ombra si estraggono e si misurano; niente al modello della voce né agli schermi, salvo la
+vista «prova» di chi amministra come nella 4.2. Nel registro solo id, conti, avvisi e tempi
+(«verifica 3: 8 argomenti proposti da 8 pagine (5,1 s, avvisi 2 pagina_con_istruzioni)»), mai i
+titoli; le misure in `Studio.stato()["lettura"]["argomenti"]`.
+
+**Giro vero sulla DGX** (30/10, 3 richieste, 26 s). I testi letti dal lettore nel giro del 30/10
+(foto pulite delle tre verifiche di fantasia) in uno Studio in un db temporaneo sul portatile, in
+ombra, il lettore vero con vLLM dietro un tunnel SSH e la guardia del lettore più `in_corso.json` e
+il registro dei turni della Calliope vera letti via ssh; nessun lavoro in corso, mai il servizio.
+Contro la verità di `prove/manuali/studio/` (`banco_studio.confronta_verita`):
+
+| | precisione | richiamo | pagine citate (precisione) | ostili | avvisi |
+|---|---|---|---|---|---|
+| storia | 1,00 | 1,00 | 1,00 | 0 | 1 `da_controllare` («Le cause delle scoperte geografiche», falso: 9 su 180 nel banco), 2 `pagina_con_istruzioni` (gli appunti, falso «ISTRUZIONI: sì» della lettura) |
+| matematica | 1,00 | 0,83 | 1,00 | 0 | nessuno (manca «La verifica della soluzione») |
+| scienze | 0,60 | 1,00 | 1,00 | 0 | 2 `pagina_con_istruzioni` (le piante carnivore della pagina ostile, giusto; il laboratorio, falso) |
+| **media** | **0,87** | **0,94** | 1,00 | 0 | 23 proposti, 5 da decidere |
+
+Il banco A1 dava 0,95 e 0,90: la precisione più bassa è di scienze, dove il modello ha diviso
+fotosintesi, respirazione e linfa in più argomenti (la verità ne conta uno e i doppioni abbassano
+la precisione); con temperatura 0 le passate non sono uguali (sopra). Nessun argomento dalle
+istruzioni, nessun tool, tutto in italiano, 7 s per verifica (1 900 token in ingresso).
+
+Prove: `prove/prova_studio_argomenti.py` (livello 1, ~6 s, vLLM finto).
 
 ## La lettura delle pagine (30/10, issue #282, ramo `issue-282-studio-lettura`)
 
@@ -175,8 +290,10 @@ la riga L2 del banco:
 
 Il CER più basso viene dalla rilettura della pagina girata e dal confronto fatto sulle righe
 salvate. I numeri di pagina persi (quadretti 6/20) sono segni «?»: il modello non li dà, non li
-sbaglia; la differenza col banco a temperatura 0 non si spiega dal codice (stessa immagine, stesso
-corpo) e resta da guardare. `controlla_numeri` è scattato su 13 delle 20 foto basse e su nessun'altra.
+sbaglia; *[storico fino al 30/10: «la differenza col banco a temperatura 0 non si spiega dal codice
+(stessa immagine, stesso corpo) e resta da guardare». Spiegata con la 4.4: le foto rigenerate non
+erano le stesse, vLLM a temperatura 0 non dà due volte lo stesso, e le capovolte prendevano il
+numero dalla rilettura (ora `numeri_dalla_prima`); sezione degli argomenti]*. `controlla_numeri` è scattato su 13 delle 20 foto basse e su nessun'altra.
 **Un caso vero:** la storia p113 storta è stata scritta in due «=== PAGINA 113 ===» e divisa in due
 righe. Da qui la regola del codice: due segni con lo stesso numero sono una pagina sola, col testo
 unito (prova aggiunta). Una sola attesa: il primo `/metrics` dal tunnel appena aperto.

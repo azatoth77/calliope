@@ -133,6 +133,15 @@
           <ol id="studio-elenco" class="studio-elenco" aria-labelledby="studio-titolo-elenco"></ol>
           <button id="studio-invia" type="button" class="tasto studio-invia" hidden>Manda</button>
           <p id="studio-esito" class="pagina-esito" role="status"></p>
+          <!-- Gli argomenti proposti e la conferma (30/10, passo 4.4, #283: POST
+               /api/studio/argomenti); il disegno vero arriva con la 4.5 -->
+          <section id="studio-argomenti" class="studio-argomenti" aria-labelledby="studio-argomenti-titolo" hidden>
+            <h3 id="studio-argomenti-titolo" class="gruppo-pagina">Argomenti</h3>
+            <p id="studio-argomenti-stato" class="pagina-nota" role="status"></p>
+            <ol id="studio-argomenti-elenco" class="studio-elenco"></ol>
+            <button id="studio-argomenti-conferma" type="button" class="tasto studio-invia" hidden>Conferma gli argomenti</button>
+            <p id="studio-argomenti-esito" class="pagina-esito" role="status"></p>
+          </section>
         </div>
         <p id="pagina-esito" class="pagina-esito" role="status"></p>
       </div>

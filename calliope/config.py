@@ -2173,6 +2173,12 @@ class Config:
     # del 28/10) quando la DGX è libera, in ombra e in attivo. false = le pagine restano da
     # leggere (per esempio prima del banco dello scritto a mano vero)
     studio_lettura: bool = True
+    # Gli argomenti dalle pagine lette (30/10, passo 4.4, #283, calliope/studio/argomenti.py): lo
+    # stesso thread della lettura, con la sua guardia, chiede a qwen3.6 gli argomenti di una
+    # verifica quando le sue pagine sono tutte lette, dal solo testo e con l'harness del banco
+    # del 28/10; arrivano «proposti» e li conferma la persona. In ombra si estraggono e si
+    # misurano soltanto. false = gli argomenti solo a mano
+    studio_argomenti: bool = True
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3465,7 +3471,8 @@ SEZIONI: dict[str, list[str]] = {
                "studio_giorni_senza_piano", "studio_obiettivo", "studio_tenuta_giorni",
                "studio_cartella", "studio_pagina_lato", "studio_pagina_max_mb",
                "studio_pdf_max_mb", "studio_pdf_max_pagine", "studio_pagine_max",
-               "studio_pagine_al_minuto", "studio_nitidezza_min", "studio_lettura"],
+               "studio_pagine_al_minuto", "studio_nitidezza_min", "studio_lettura",
+               "studio_argomenti"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",

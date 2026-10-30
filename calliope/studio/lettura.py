@@ -45,6 +45,12 @@ stream rotto; la lettura aspetta sempre di più e la pagina che fa cadere il mot
 fila va «da_parte» solo con un indizio contro di lei, e si riprova una volta al giorno
 (`ErroreServer`, `_errore_server`, `riprova_del_giorno`).
 
+**Gli argomenti** (30/10, passo 4.4, #283): quando le pagine di una verifica sono tutte lette lo
+stesso thread, con la stessa guardia e lo stesso client, chiede gli argomenti dal solo testo
+(`estrai_argomenti`, `argomenti.py`), prima delle pagine di un'altra verifica. Una capovolta
+riletta tiene il numero di pagina della prima lettura se la seconda dà «?»
+(`numeri_dalla_prima`, dal confronto col banco del 30/10).
+
 **Stati**: «da_leggere» → «in_lettura» → «letta», «illeggibile» o «da_parte». Dopo un riavvio le pagine
 rimaste «in_lettura» tornano «da_leggere» (`riprendi`). Un'altra modifica alla pagina nel
 frattempo (tolta, verifica cancellata) vince: la lettura si butta e i file nuovi si tolgono.
@@ -187,6 +193,19 @@ def leggi_segni(t: str) -> dict:
         p["testo"], doppia = togli_doppione(p["testo"])
         doppioni += doppia
     return {"capovolta": capo, "istruzioni": istr, "pagine": pagine, "doppioni": doppioni}
+
+
+def numeri_dalla_prima(prima: dict, seconda: dict) -> dict:
+    """La rilettura della pagina girata, coi numeri di pagina della prima lettura dove la
+    seconda dà «?» e le pagine sono tante quante (30/10, #283: nel giro vero del 30/10 la
+    rilettura ha perso il numero in 5 capovolte su 20, il banco che teneva la prima lettura li
+    aveva tutti e 20). Un numero diverso nella seconda vince: la pagina girata si legge meglio."""
+    pp, ps = prima.get("pagine") or [], seconda.get("pagine") or []
+    if len(pp) != len(ps):
+        return seconda
+    pagine = [dict(s, numero=p["numero"]) if s.get("numero") is None and p.get("numero")
+              is not None else s for p, s in zip(pp, ps)]
+    return {**seconda, "pagine": pagine}
 
 
 def numero_di(segno) -> tuple[str | None, bool]:
@@ -523,7 +542,12 @@ class Lettore:
                        "riprovate": 0, "girate": 0, "divise": 0, "doppioni_tolti": 0,
                        "cedute": 0, "errori": 0, "errori_server": 0, "da_parte": 0,
                        "attese": 0, "secondi": [], "token_in": 0,
-                       "token_out": 0, "avvisi": {}}
+                       "token_out": 0, "avvisi": {},
+                       # Gli argomenti (passo 4.4, #283): conti, avvisi e tempi, mai i titoli
+                       "argomenti": {"estrazioni": 0, "proposti": 0, "da_controllare": 0,
+                                     "pagina_con_istruzioni": 0, "titolo_ordine": 0,
+                                     "rotte": 0, "vuote": 0, "cambiate": 0, "cedute": 0,
+                                     "secondi": 0.0, "token_in": 0, "token_out": 0}}
 
     # ── ciclo ──
     def avvia(self):
@@ -624,6 +648,23 @@ class Lettore:
             if time.monotonic() < self._riprova_dopo:
                 # Dopo un errore si aspetta, anche se una pagina nuova sveglia il lettore
                 return {"fatte": fatte, "aspetta": "errore"}
+            # Gli argomenti di una verifica con le pagine tutte lette (passo 4.4, #283), prima
+            # delle pagine di un'altra: la verifica più vicina è già pronta per la conferma
+            pronte = self.studio.verifiche_per_argomenti()
+            if pronte:
+                motivo = self.guardia.motivo()
+                if motivo is not None:
+                    if motivo != self.in_attesa:
+                        self._registra(f"argomenti in attesa: {motivo}")
+                    self.in_attesa = motivo
+                    self.misure["attese"] += 1
+                    return {"fatte": fatte, "aspetta": motivo}
+                self.in_attesa = None
+                esito = self.estrai_argomenti(pronte[0])
+                if esito in ("ceduta", "giu", "errore", "errore_server"):
+                    return {"fatte": fatte, "aspetta": esito}
+                fatte += 1
+                continue
             righe = self.prossime(50)
             # Dopo una caduta si prova prima un'altra pagina: se va, la colpa è della pagina
             # caduta; se cade anche lei, è del server (seconda nota della PR #314)
@@ -788,7 +829,7 @@ class Lettore:
                 nuove["girata"] = img
                 self.misure["girate"] += 1
                 if secondo is not None:
-                    letto = secondo
+                    letto = numeri_dalla_prima(letto, secondo)
         self.misure["ocr"] += 1
         self.misure["doppioni_tolti"] += letto["doppioni"]
         pagine = letto["pagine"]
@@ -864,6 +905,11 @@ class Lettore:
                 "openai": {"presence_penalty": PRESENCE}}
 
     def _chiedi(self, img) -> dict:
+        return self._chiedi_corpo(self.corpo(img))
+
+    def _chiedi_corpo(self, body: dict) -> dict:
+        """Una richiesta a vLLM con la guardia durante lo stream: la lettura di una foto o gli
+        argomenti di una verifica (passo 4.4)."""
         from ..agenti.remoto import ErroreOllama, Interrotto
         if self.prima is not None:
             self.prima()
@@ -873,7 +919,7 @@ class Lettore:
                 raise Interrotto()
         self.misure["richieste"] += 1
         try:
-            return self.cliente.chat(self.corpo(img), controlla=controlla)
+            return self.cliente.chat(body, controlla=controlla)
         except Interrotto:
             raise Ceduta() from None
         except ErroreOllama as e:
@@ -907,6 +953,81 @@ class Lettore:
             if not prova:
                 self.misure["riprovate"] += 1
         return None
+
+    # ── gli argomenti di una verifica (30/10, passo 4.4, #283, studio/argomenti.py) ──
+    def estrai_argomenti(self, v: dict) -> str:
+        """Gli argomenti di una verifica con le pagine tutte lette (`Studio.verifiche_per_
+        argomenti`): una richiesta con l'harness, il controllo del codice, i proposti scritti.
+        «proposti», «rotto» (JSON che non si legge o due giri in tondo: la persona li scrive a
+        mano o chiede di rifarli), «cambiate» (pagine cambiate intanto: si rifà), «ceduta»,
+        «giu», «errore_server» (si aspetta, come la lettura) o «errore»."""
+        from . import argomenti as A
+        m = self.misure["argomenti"]
+        vid = int(v["id"])
+        pagine = v["_pagine"]
+        firma = A.firma(pagine)
+        rif = A.riferimenti(pagine)
+        t0 = time.monotonic()
+        grezzi = None
+        try:
+            for prova in range(2):
+                r = self._chiedi_corpo(A.corpo(self.modello, v, rif))
+                m["token_in"] += int(r.get("prompt") or 0)
+                m["token_out"] += int(r.get("eval") or 0)
+                if not r.get("fine"):
+                    raise ErroreServer("stream senza fine")
+                self._errori_di_fila = 0
+                self._riprova_dopo = 0.0
+                self._risposte_ok += 1
+                if r.get("fine") != "length":
+                    grezzi = A.leggi(r.get("content") or "")
+                    break
+                self._registra(f"verifica {vid}: argomenti in tondo fino a max_tokens"
+                               + (", li richiedo" if not prova else ""))
+        except Ceduta:
+            m["cedute"] += 1
+            self._registra(f"verifica {vid}: argomenti, ceduto il passo a un lavoro dell'agente")
+            return "ceduta"
+        except _Giu:
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: argomenti, errore del server ({e}), riprovo fra "
+                           f"{attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001 — un errore nostro non rifà la richiesta in giro
+            self.misure["errori"] += 1
+            self._registra(f"verifica {vid}: argomenti non estratti ({type(e).__name__})")
+            self.studio.proponi_argomenti(vid, firma, [], A.ERRORE)
+            self._attendi_errore()
+            return "errore"
+        s = time.monotonic() - t0
+        if grezzi is None:
+            proposte, esito = [], A.ROTTO
+        else:
+            proposte, esito = A.proposte(grezzi, rif), A.PROPOSTI
+        n = self.studio.proponi_argomenti(vid, firma, proposte, esito)
+        if n is None:
+            m["cambiate"] += 1
+            self._registra(f"verifica {vid}: pagine cambiate durante gli argomenti, li richiedo")
+            return "cambiate"
+        m["estrazioni"] += 1
+        m["secondi"] = round(m["secondi"] + s, 2)
+        if esito == A.ROTTO:
+            m["rotte"] += 1
+            self._registra(f"verifica {vid}: argomenti illeggibili ({s:.1f} s)")
+            return "rotto"
+        m["proposti"] += n
+        conta = {a: sum(a in p["avvisi"] for p in proposte) for a in A.DA_DECIDERE}
+        for a, k in conta.items():
+            m[a] += k
+        if not n:
+            m["vuote"] += 1
+        avv = ", ".join(f"{k} {a}" for a, k in conta.items() if k)
+        self._registra(f"verifica {vid}: {n} argomenti proposti da {len(rif)} pagine "
+                       f"({s:.1f} s" + (f", avvisi {avv}" if avv else "") + ")")
+        return "proposti"
 
     # ── scrivere ──
     def _chiudi(self, pid: int, stato: str, testo, metodo, avvisi: list):

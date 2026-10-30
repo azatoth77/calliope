@@ -161,8 +161,15 @@ def _v2(db: sqlite3.Connection):
         db.execute(f"ALTER TABLE studio_pagine ADD COLUMN {col}")
 
 
+def _v3(db: sqlite3.Connection):
+    """30/10, passo 4.4 (#283): l'ultima estrazione degli argomenti di una verifica (la firma
+    delle pagine usate, l'esito e quando), per non chiederli due volte sulle stesse pagine."""
+    for col in ("argomenti_firma TEXT", "argomenti_esito TEXT", "argomenti_del TEXT"):
+        db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
+
+
 # Le versioni dello schema: si aggiungono in fondo, solo colonne con NULL o un predefinito
-MIGRAZIONI = [_v1, _v2]
+MIGRAZIONI = [_v1, _v2, _v3]
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:

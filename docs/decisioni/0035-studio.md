@@ -8,7 +8,8 @@
   29/10 sul ramo `issue-280-studio-dati-piano` (sezione «Dati e piano a giorni», sotto); il passo
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
-  (sezione «La lettura delle pagine», sotto).
+  (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -202,6 +203,31 @@ dell'eco della stanza.
 19. **Il testo letto è un dato**: arriva a un modello solo in attivo e in busta, una per pagina; in
     ombra si legge e si misura soltanto. `studio_lettura: false` ferma la lettura senza spegnere
     lo Studio.
+
+## Gli argomenti e la conferma (passo 4.4, #283, 30/10)
+
+20. **Gli argomenti vengono dal solo testo letto**, mai dalle immagini, in un secondo passo dopo la
+    lettura: quando le pagine di una verifica sono tutte lette o illeggibili, lo stesso thread del
+    lettore, con la sua guardia e il suo client (punti 17–18), fa una richiesta con l'harness del
+    banco (schema guidato, il testo in una busta con i riferimenti P1, P2… scritti dal codice,
+    temperatura 0, thinking spento, nessun tool). Una firma delle pagine evita di chiedere due
+    volte sulle stesse; pagine nuove lette ne chiedono un'altra, che sostituisce solo i proposti non
+    decisi. `studio_argomenti: false` lascia solo gli argomenti a mano.
+21. **Il codice controlla le pagine citate** (metà delle parole del titolo, uguali, storpiate o con
+    la stessa radice di 5 lettere): se non passa, l'argomento resta proposto «da controllare». Mai
+    scartato da solo e niente secondo giro del modello (il banco lo ha misurato peggiore).
+22. **Nessun argomento entra nel piano senza la persona.** Tutti arrivano «proposti»; la persona li
+    tiene, li toglie, li rinomina, li unisce, ne aggiunge e conferma l'elenco. La conferma tiene i
+    proposti puliti; quelli con un avviso da decidere (fuori dalle pagine citate, nati solo da
+    pagine con «ISTRUZIONI: sì» della lettura, titolo che comincia con un ordine o con un indirizzo:
+    controlli di forma, principio 10) restano proposti finché la persona non li tiene da sé. Il
+    flag delle istruzioni chiesto al modello degli argomenti non si usa (falsi 5 su 6 nel banco).
+    Il piano usa solo i tenuti e gli aggiunti.
+23. **La conferma è sui dati della persona e reversibile** (un argomento tolto si tiene di nuovo):
+    nel passo 4.4 passa da un endpoint dello Studio, come le pagine (punto 13), fuori dalla
+    conversazione e con i permessi dello Studio e gli orari del minore; in ombra solo chi amministra
+    la vede («prova»). Quando nel passo 4.5 passerà dal tool e dai tocchi, i titoli entrano nella
+    descrizione del tocco col numero e in busta (punto 6).
 
 ## Da completare con i passi 4.3–4.5
 

@@ -753,3 +753,11 @@ button.grande.secondario { background: transparent; color: var(--accento); borde
 .tasto.studio-invia { min-height: 3.4rem; border-color: var(--accento); background: var(--accento-tenue); color: var(--accento-chiaro); }
 .tasto.studio-invia:disabled { opacity: 0.5; }
 .studio .pagina-esito { color: var(--testo); }
+/* Gli argomenti proposti e la conferma (30/10, passo 4.4, #283): una riga per argomento con il
+   titolo, lo stato, le pagine e gli avvisi, poi «Tieni», «Togli» e «Rinomina» */
+.studio-argomenti { display: flex; flex-direction: column; gap: 0.6rem; }
+.studio-argomento { grid-template-columns: minmax(0, 1fr); grid-template-areas: "testo" "tasti"; }
+.studio-argomento .studio-tasti { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.studio-tolto .studio-testo b { text-decoration: line-through; color: var(--tenue); }
+.studio-rinomina { font: inherit; font-size: 1.05rem; min-height: 2.75rem; padding: 0.3rem 0.6rem; border-radius: 0.6rem;
+  border: 1px solid var(--accento); background: var(--pannello); color: var(--testo); width: 100%; box-sizing: border-box; }

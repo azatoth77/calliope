@@ -220,6 +220,9 @@ def cfg_nuova(nome, modo="ombra", **kw):
     c.studio_cartella = "studio"
     c.turn_log_dir = str(TMP / nome / "registro")
     c.agenti_enabled = False
+    # Gli argomenti (passo 4.4, #283) li prova prova_studio_argomenti.py: qui il vLLM finto
+    # risponde solo alla lettura
+    c.studio_argomenti = False
     for k, v in kw.items():
         setattr(c, k, v)
     return c
@@ -301,6 +304,17 @@ def prova_segni():
     verifica("segni: capovolta, due pagine, numero «?», istruzioni",
              s["capovolta"] and s["istruzioni"] and [p["numero"] for p in s["pagine"]] ==
              [None, "13"] and s["pagine"][1]["testo"] == "altro", s)
+    # La rilettura della capovolta (30/10, #283): il numero «?» della seconda lettura prende
+    # quello della prima; uno diverso vince; con un numero di pagine diverso vale la seconda
+    prima = L.leggi_segni("CAPOVOLTA\n=== PAGINA 145 ===\nprima")
+    seconda = L.numeri_dalla_prima(prima, L.leggi_segni("=== PAGINA ? ===\nseconda"))
+    verifica("capovolta riletta: il numero della prima dove la seconda dice «?»",
+             seconda["pagine"] == [{"numero": "145", "testo": "seconda"}], seconda)
+    altro = L.numeri_dalla_prima(prima, L.leggi_segni("=== PAGINA 146 ===\nseconda"))
+    due = L.numeri_dalla_prima(prima, L.leggi_segni("=== PAGINA ? ===\na\n=== PAGINA ? ===\nb"))
+    verifica("capovolta riletta: contrari, un numero diverso vince e due pagine restano «?»",
+             altro["pagine"][0]["numero"] == "146"
+             and [p["numero"] for p in due["pagine"]] == [None, None], (altro, due))
     s = L.leggi_segni("solo testo senza segni")
     verifica("segni: senza segni una pagina senza numero", s["pagine"] == [
         {"numero": None, "testo": "solo testo senza segni"}])

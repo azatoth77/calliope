@@ -82,6 +82,11 @@ Indirizzi:
   POST /api/studio/verifiche     «X-Calliope-Sessione», {} → {verifiche, prova}: le verifiche in
                                  bozza o aperte a cui mandare pagine (le proprie e, da tutore,
                                  quelle dei suoi minori; 29/10, passo 4.2 dello Studio, #281)
+  POST /api/studio/argomenti     «X-Calliope-Sessione», {verifica, azione?, argomento?, argomenti?,
+                                 titolo?} → gli argomenti proposti di una verifica e la loro
+                                 conferma: tieni, togli, rinomina, aggiungi, unisci, conferma,
+                                 rifai (30/10, passo 4.4 dello Studio, #283); come le pagine,
+                                 fuori dalla conversazione, in ombra solo chi amministra
   POST /api/studio/pagina        «X-Calliope-Sessione», byte nudi (octet-stream), i dati in
                                  «X-Calliope-Studio» (URI): una foto di una pagina con i suoi
                                  angoli, o un PDF intero (29/10, #281, studio/pagine.py), nello
@@ -1216,6 +1221,107 @@ def crea_app(hub: Schermi) -> Starlette:
                       "max_pagine": int(getattr(hub.cfg, "studio_pagine_max", 80) or 80),
                       "pdf_max_pagine": int(getattr(hub.cfg, "studio_pdf_max_pagine", 40) or 40)})
 
+    # Le azioni della conferma degli argomenti (30/10, passo 4.4, #283): sui dati della persona,
+    # reversibili (un argomento tolto si tiene di nuovo, rinominato si rinomina) e fuori dalla
+    # conversazione come le pagine del 4.2
+    AZIONI_ARGOMENTI = ("tieni", "togli", "rinomina", "aggiungi", "unisci", "conferma", "rifai")
+
+    def vista_argomenti(st, prof, vid) -> dict:
+        """Gli argomenti di una verifica per la vista minima: titolo (un dato: la pagina lo
+        scrive solo con textContent), stato, avvisi e le pagine citate col numero stampato o
+        l'ordine; lo stato della verifica e dell'estrazione."""
+        from ..studio import piano as P
+        v = st.verifica(prof, vid)
+        pagine = {p["id"]: p for p in st.pagine(prof, vid)}
+
+        def nome(pid):
+            p = pagine.get(pid)
+            if p is None:
+                return None
+            n = P.numero_leggibile(p["numero"])
+            return f"p. {n}" if n else f"foto {p['ordine']}"
+        return {"verifica": {"id": v["id"], "materia": v["materia"], "data": v["data"],
+                             "stato": v["stato"]},
+                "argomenti": [{"id": a["id"], "titolo": a["titolo"], "stato": a["stato"],
+                               "avvisi": [x for x in a["avvisi"] if isinstance(x, str)],
+                               "pagine": [x for x in (nome(p) for p in a["pagine"]) if x]}
+                              for a in st.argomenti(prof, vid)],
+                "estrazione": st.estrazione(prof, vid),
+                "lettura": {k: st.lettura(prof, vid)[k] for k in ("totali", "lette",
+                                                                  "illeggibili")},
+                "prova": not st.per_schermi()}
+
+    async def studio_argomenti(request: Request):
+        """{verifica, azione?, argomento?, argomenti?, titolo?} → la vista degli argomenti. Senza
+        azione sola lettura; con un'azione la fa (`Studio.segna_argomento`, `rinomina_argomento`,
+        `aggiungi_argomento`, `unisci_argomenti`, `conferma_argomenti`, `rifai_argomenti`) coi
+        permessi dello Studio (sua o, da tutore, del suo minore) e, per un minore, dentro gli
+        orari. Lo Studio acceso come per le pagine (in ombra solo chi amministra, «prova»)."""
+        schermo, errore = schermo_personale(request, letture_studio, LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 2048)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        vid, azione = dati.get("verifica"), dati.get("azione")
+        if not isinstance(vid, int) or isinstance(vid, bool) or vid < 1 or (
+                azione is not None and azione not in AZIONI_ARGOMENTI):
+            return _json({"errore": "richiesta non valida"}, 400)
+        aid = dati.get("argomento")
+        if azione in ("tieni", "togli", "rinomina") and (
+                not isinstance(aid, int) or isinstance(aid, bool)):
+            return _json({"errore": "manca l'argomento"}, 400)
+        titolo = dati.get("titolo")
+        if titolo is not None and (not isinstance(titolo, str) or len(titolo) > 200):
+            return _json({"errore": "titolo non valido"}, 400)
+        ids = dati.get("argomenti")
+        if azione == "unisci" and (not isinstance(ids, list) or not 2 <= len(ids) <= 12 or any(
+                not isinstance(x, int) or isinstance(x, bool) for x in ids)):
+            return _json({"errore": "servono da due a dodici argomenti"}, 400)
+        from .. import minori
+        from ..studio import NonPermesso, NonTrovata
+        if azione is not None:
+            orario = minori.fuori_orario(prof)
+            if orario:
+                return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                              "codice": "fuori_orario"}, 403)
+
+        def fai():
+            extra = {}
+            if azione in ("tieni", "togli", "rinomina", "unisci"):
+                # Gli argomenti toccati devono essere di questa verifica
+                suoi = {a["id"] for a in st.argomenti(prof, vid)}
+                if not ({aid} if azione != "unisci" else set(ids)) <= suoi:
+                    raise NonTrovata()
+            if azione in ("tieni", "togli"):
+                st.segna_argomento(prof, aid, azione == "tieni")
+            elif azione == "rinomina":
+                st.rinomina_argomento(prof, aid, titolo)
+            elif azione == "aggiungi":
+                st.aggiungi_argomento(prof, vid, titolo, [], proposto=False)
+            elif azione == "unisci":
+                st.unisci_argomenti(prof, ids, titolo)
+            elif azione == "conferma":
+                extra["da_decidere"] = st.conferma_argomenti(prof, vid).get("da_decidere", 0)
+            elif azione == "rifai":
+                st.rifai_argomenti(prof, vid)
+            return {**vista_argomenti(st, prof, vid), **extra}
+        try:
+            out = await asyncio.to_thread(fai)
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        except ValueError:
+            return _json({"errore": "Non va: controlla il titolo."}, 400)
+        if azione is not None:
+            hub.log(f"[STUDIO] argomenti della verifica {vid}: {azione}")
+        return _json(out)
+
     def meta_studio(request: Request):
         """I dati dell'invio da «X-Calliope-Studio» (JSON codificato come URI, al più 2 KB):
         {verifica, materiale?, angoli?, nome?}, o None se non sono validi."""
@@ -1425,6 +1531,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/conversazione", conversazione_api, methods=["POST"]),
         Route("/api/tocco", tocco_api, methods=["POST"]),
         Route("/api/studio/verifiche", studio_verifiche, methods=["POST"]),
+        Route("/api/studio/argomenti", studio_argomenti, methods=["POST"]),
         Route("/api/studio/pagina", studio_pagina, methods=["POST"]),
         # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC
         Route("/bordi.js", file("bordi.js", "text/javascript; charset=utf-8")),

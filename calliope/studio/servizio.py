@@ -21,6 +21,12 @@ passo 4.5.
 in ombra e in attivo; `lettura()` dà l'avanzamento di una verifica e `testo_per_modello()` il testo
 letto in busta, solo in attivo.
 
+**Argomenti** (30/10, passo 4.4, #283): li chiede il thread del lettore quando le pagine di una
+verifica sono tutte lette (`argomenti.py`, `verifiche_per_argomenti`, `proponi_argomenti`) e
+arrivano «proposti»; la persona li tiene, li toglie, li rinomina, li unisce o ne aggiunge
+(`segna_argomento`, `rinomina_argomento`, `unisci_argomenti`, `aggiungi_argomento`) e conferma
+l'elenco (`conferma_argomenti`). Il piano usa solo i tenuti e gli aggiunti.
+
 **Ricalcolo.** Il piano si ricalcola quando cambia qualcosa (argomenti confermati, data
 spostata, minuti, giorno fatto o saltato, giorni senza scuola) e, alla prima lettura di un
 giorno nuovo, perché «oggi» si è spostato. Con i dati di una versione più nuova (connessione
@@ -38,6 +44,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import re
 
 from . import dati as D
 from . import piano as P
@@ -143,8 +150,11 @@ def materia_normale(testo) -> str:
 
 def titolo_normale(testo) -> str:
     """Un titolo di argomento: una riga, al più `TITOLO_MAX` caratteri. Il controllo di forma
-    contro i titoli che sono ordini (decisione 0035, punto 6) arriva con il passo 4.4."""
-    t = " ".join(str(testo or "").split())[:TITOLO_MAX]
+    contro i titoli proposti dal modello che sono ordini (decisione 0035, punto 6) è
+    `argomenti.forma_titolo` (passo 4.4)."""
+    t = re.sub(r"[\x00-\x1f\x7f  ​-‏‪-‮⁦-⁩]", " ",
+               str(testo or ""))
+    t = " ".join(t.split())[:TITOLO_MAX].strip()
     if not t:
         raise ValueError("manca il titolo")
     return t
@@ -619,19 +629,180 @@ class Studio:
         self._ricalcola_sicuro(v["id"])
 
     def conferma_argomenti(self, chi, vid) -> dict:
-        """La conferma a mano: gli argomenti ancora proposti diventano tenuti, la verifica
-        passa da bozza ad aperta e il piano si calcola."""
+        """La conferma dell'elenco: gli argomenti ancora proposti diventano tenuti, la verifica
+        passa da bozza ad aperta e il piano si calcola. Dal passo 4.4 (#283) un proposto con un
+        avviso da decidere (`argomenti.DA_DECIDERE`: fuori dalle pagine citate, solo da pagine con
+        istruzioni, titolo che è un ordine) resta proposto, fuori dal piano, finché la persona non
+        lo tiene o lo toglie da solo: nel risultato `da_decidere` dice quanti sono."""
+        from .argomenti import DA_DECIDERE
         self._scrivibile()
         v = self._verifica(chi, vid)
+        da_decidere = 0
         with self.dati.lock:
-            self.dati.db.execute("UPDATE studio_argomenti SET stato = 'tenuto' WHERE "
-                                 "verifica = ? AND stato = 'proposto'", (v["id"],))
-            if v["stato"] == "bozza":
-                self.dati.db.execute("UPDATE studio_verifiche SET stato = 'aperta' WHERE id = ?",
-                                     (v["id"],))
-            self.dati.db.commit()
+            db = self.dati.db
+            try:
+                for a in db.execute("SELECT id, avvisi FROM studio_argomenti WHERE verifica = ? "
+                                    "AND stato = 'proposto'", (v["id"],)).fetchall():
+                    if set(D.da_j(a["avvisi"])) & set(DA_DECIDERE):
+                        da_decidere += 1
+                        continue
+                    db.execute("UPDATE studio_argomenti SET stato = 'tenuto' WHERE id = ?",
+                               (a["id"],))
+                if v["stato"] == "bozza":
+                    db.execute("UPDATE studio_verifiche SET stato = 'aperta' WHERE id = ?",
+                               (v["id"],))
+                db.commit()
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
         self.ricalcola_persona(v["persona"])
-        return self.piano(chi, v["id"])
+        return {**self.piano(chi, v["id"]), "da_decidere": da_decidere}
+
+    def _argomento(self, chi, aid) -> tuple[dict, dict]:
+        a = self.dati.uno("SELECT * FROM studio_argomenti WHERE id = ?", (int(aid),))
+        if a is None:
+            raise NonTrovata()
+        return a, self._verifica(chi, a["verifica"])
+
+    def rinomina_argomento(self, chi, aid, titolo):
+        """Il titolo scritto dalla persona al posto di quello proposto (passo 4.4): lo stato
+        resta, gli avvisi diventano quelli del controllo delle pagine sul titolo nuovo (la forma
+        non conta più: il titolo è suo)."""
+        from . import argomenti as A
+        self._scrivibile()
+        a, v = self._argomento(chi, aid)
+        t = titolo_normale(titolo)
+        avvisi = A.ricontrolla(t, [int(x) for x in D.da_j(a["pagine"])],
+                               self.pagine(chi, v["id"]))
+        self.dati.scrivi("UPDATE studio_argomenti SET titolo = ?, avvisi = ? WHERE id = ?",
+                         (t, D.j(avvisi) if avvisi else None, a["id"]))
+        self._ricalcola_sicuro(v["id"])
+
+    def unisci_argomenti(self, chi, ids, titolo=None) -> int:
+        """Più argomenti della stessa verifica in uno (passo 4.4): il primo resta, con le pagine
+        di tutti e il titolo dato (o il suo), «tenuto»; gli altri si tolgono. L'id che resta."""
+        from . import argomenti as A
+        self._scrivibile()
+        ids = list(dict.fromkeys(int(x) for x in ids or ()))
+        if len(ids) < 2:
+            raise ValueError("servono almeno due argomenti")
+        righe = [self._argomento(chi, x) for x in ids]
+        vid = righe[0][1]["id"]
+        if any(v["id"] != vid for _a, v in righe):
+            raise NonTrovata()
+        primo = righe[0][0]
+        t = titolo_normale(titolo) if titolo is not None else primo["titolo"]
+        pagine = list(dict.fromkeys(int(p) for a, _v in righe for p in D.da_j(a["pagine"])))
+        avvisi = A.ricontrolla(t, pagine, self.pagine(chi, vid))
+        with self.dati.lock:
+            db = self.dati.db
+            try:
+                db.execute("UPDATE studio_argomenti SET titolo = ?, pagine = ?, stato = 'tenuto', "
+                           "avvisi = ? WHERE id = ?",
+                           (t, D.j(pagine), D.j(avvisi) if avvisi else None, primo["id"]))
+                for a, _v in righe[1:]:
+                    db.execute("DELETE FROM studio_argomenti WHERE id = ?", (a["id"],))
+                db.commit()
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
+        self._ricalcola_sicuro(vid)
+        return primo["id"]
+
+    def rifai_argomenti(self, chi, vid):
+        """«Rifai gli argomenti»: la prossima volta che la DGX è libera il lettore li chiede di
+        nuovo; i proposti non decisi si sostituiscono, quelli decisi restano."""
+        self._scrivibile()
+        v = self._verifica(chi, vid)
+        self.dati.scrivi("UPDATE studio_verifiche SET argomenti_firma = NULL, argomenti_esito = "
+                         "NULL WHERE id = ?", (v["id"],))
+        if self.lettore is not None:
+            self.lettore.sveglia()
+
+    def estrazione(self, chi, vid) -> dict:
+        """Dove sono gli argomenti di una verifica (per la vista): l'esito dell'ultima estrazione
+        e quando, se le pagine sono tutte lette e se gli argomenti vanno chiesti di nuovo."""
+        from . import argomenti as A
+        v = self._verifica(chi, vid)
+        pagine = self.pagine(chi, v["id"])
+        pronta = A.pronta(pagine)
+        return {"esito": v.get("argomenti_esito"), "del": v.get("argomenti_del"),
+                "pagine_lette": pronta,
+                "da_fare": pronta and v.get("argomenti_firma") != A.firma(pagine),
+                "accesa": bool(getattr(self.cfg, "studio_argomenti", True))
+                and self.lettore is not None}
+
+    # ── l'estrazione (dal lettore, studio/lettura.py; niente `chi`: è il lavoro di sfondo) ──
+    def verifiche_per_argomenti(self) -> list[dict]:
+        """Le verifiche in bozza o aperte con le pagine tutte lette (o illeggibili) e una firma
+        diversa da quella dell'ultima estrazione, dalla più vicina. Vuoto con
+        `studio_argomenti: false` o i dati in sola lettura."""
+        from . import argomenti as A
+        if not getattr(self.cfg, "studio_argomenti", True) or not self.dati.scrivibile:
+            return []
+        out = []
+        for v in self.dati.tutti("SELECT * FROM studio_verifiche WHERE stato IN ('bozza', "
+                                 "'aperta') ORDER BY data, id"):
+            pagine = self._pagine_di(v["id"])
+            if A.pronta(pagine) and v["argomenti_firma"] != A.firma(pagine):
+                out.append({**v, "_pagine": pagine})
+        return out
+
+    def _pagine_di(self, vid) -> list[dict]:
+        return self.dati.tutti(
+            "SELECT p.* FROM studio_pagine p JOIN studio_materiali m ON m.id = p.materiale WHERE "
+            "m.verifica = ? ORDER BY p.ordine, p.id", (int(vid),))
+
+    def proponi_argomenti(self, vid, firma: str, proposte: list[dict], esito: str) -> int | None:
+        """Scrive l'esito di un'estrazione: via i proposti non decisi, dentro i nuovi (tranne un
+        titolo che la persona ha già tenuto, tolto o aggiunto), la firma e l'esito. Se intanto
+        le pagine sono cambiate (o la verifica non c'è più) non scrive niente: None. Quanti
+        proposti nuovi."""
+        from . import argomenti as A
+        with self.dati.lock:
+            db = self.dati.db
+            try:
+                if db.in_transaction:
+                    db.commit()
+                db.execute("BEGIN IMMEDIATE")
+                v = db.execute("SELECT * FROM studio_verifiche WHERE id = ? AND stato IN "
+                               "('bozza', 'aperta')", (int(vid),)).fetchone()
+                pagine = [dict(r) for r in db.execute(
+                    "SELECT p.* FROM studio_pagine p JOIN studio_materiali m ON m.id = p.materiale"
+                    " WHERE m.verifica = ?", (int(vid),))]
+                if v is None or A.firma(pagine) != firma:
+                    db.rollback()
+                    return None
+                vive = {int(p["id"]) for p in pagine if p["stato"] != "tolta"}
+                db.execute("DELETE FROM studio_argomenti WHERE verifica = ? AND stato = "
+                           "'proposto'", (int(vid),))
+                decisi = {A.chiave(r["titolo"]) for r in db.execute(
+                    "SELECT titolo FROM studio_argomenti WHERE verifica = ?", (int(vid),))}
+                ordine = db.execute("SELECT COALESCE(MAX(ordine), 0) FROM studio_argomenti WHERE "
+                                    "verifica = ?", (int(vid),)).fetchone()[0]
+                n = 0
+                for a in proposte:
+                    if A.chiave(a["titolo"]) in decisi:
+                        continue
+                    ordine += 1
+                    n += 1
+                    db.execute("INSERT INTO studio_argomenti (verifica, titolo, pagine, stato, "
+                               "ordine, avvisi, creato) VALUES (?, ?, ?, 'proposto', ?, ?, ?)",
+                               (int(vid), titolo_normale(a["titolo"]),
+                                D.j(p for p in a["pagine"] if p in vive), ordine,
+                                D.j(a["avvisi"]) if a["avvisi"] else None, D.adesso()))
+                db.execute("UPDATE studio_verifiche SET argomenti_firma = ?, argomenti_esito = ?,"
+                           " argomenti_del = ? WHERE id = ?",
+                           (firma, esito if esito != A.PROPOSTI or n else A.VUOTO, D.adesso(),
+                            int(vid)))
+                db.commit()
+            except Exception:
+                if db.in_transaction:
+                    db.rollback()
+                raise
+        return n
 
     # ── giorni ──
     def imposta_giorno(self, chi, giorno, minuti: int | None, motivo: str = "minuti",
