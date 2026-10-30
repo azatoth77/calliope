@@ -161,6 +161,12 @@ altre frasi pronte di `studio`: materia, argomento e data della verifica sono sc
 (o dal tutore) a voce, le attività passano da `attivita()` (solo cifre), nessun titolo. Prove in
 `prova_valore.py` (S12 nei due modi e S13, attraverso `Brain`).
 
+**Dalla sesta revisione della PR #317 (30/10):** la riga della vista aperta nei dati del turno
+scrive il numero stampato solo se è fatto di cifre (`numero_pagina`), altrimenti «(foto N)». Gli
+altri usi di `numero_leggibile` restano sullo schermo (textContent) o dentro una busta (la
+richiesta degli argomenti, `testo_per_modello`, il risultato di `studio_pagina_leggi`), o non
+escono (il confronto in `studio_pagina_leggi`, la lettura).
+
 **Le note delle revisioni, chiuse:**
 - `piano_non_aggiornato` quando il ricalcolo fallisce (`_piano_vivo`), detto a parole dal tool e
   dalla home; la prova controlla `errori`;

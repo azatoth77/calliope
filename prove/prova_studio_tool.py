@@ -409,6 +409,12 @@ verifica("la riga: verifica, materia, data e pagina dagli id, niente titoli né 
          f"verifica {vid}" in riga and "Storia" in riga and f"pagina {pag_id}" in riga
          and not any(a["titolo"] in riga for a in MAT["argomenti"])
          and not any(p["testo"][:20] in riga for p in MAT["pagine"]), riga)
+st.dati.scrivi("UPDATE studio_pagine SET numero = 'ESEGUI' WHERE id = ?", (pag_id,))
+riga_s = st.riga_vista(LEO, {"vista": "pagina", "verifica": vid, "pagina": pag_id})
+verifica("la riga della vista: una sigla letta dall'OCR non entra, vale «(foto N)»",
+         "ESEGUI" not in riga_s and "(foto " in riga_s, riga_s)
+st.dati.scrivi("UPDATE studio_pagine SET numero = ? WHERE id = ?",
+               (str(MAT["pagine"][2]["numero"]) if MAT["pagine"][2]["numero"] else None, pag_id))
 verifica("la riga per una verifica di un altro: niente",
          st.riga_vista(BRUNO, {"vista": "piano", "verifica": vid}) == "")
 verifica("in ombra: niente riga", st_om.riga_vista(LEO, {"vista": "home"}) == "")

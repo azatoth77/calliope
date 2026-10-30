@@ -1286,8 +1286,10 @@ class Studio:
         if tipo == "pagina" and isinstance(pid, int) and not isinstance(pid, bool):
             p = next((x for x in self._pagine_di(v["id"]) if x["id"] == pid), None)
             if p is not None:
-                n = P.numero_leggibile(p["numero"])
-                cosa = f"la pagina {p['id']}" + (f" (stampata {n})" if n else
+                # Solo le cifre (sesta revisione della PR #317): il numero viene dall'OCR e la
+                # riga è fuori busta, una sigla letta («ESEGUI») non ci entra
+                n = P.numero_pagina(p["numero"])
+                cosa = f"la pagina {p['id']}" + (f" (stampata {n})" if n is not None else
                                                  f" (foto {p['ordine']})")
         return (f"Sul suo schermo è aperta la verifica {v['id']}{di} ({v['materia']}, il "
                 f"{quando.day}/{quando.month}): {cosa}. Il testo delle pagine lo leggi con "
