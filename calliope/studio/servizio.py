@@ -1179,6 +1179,11 @@ class Studio(Mappe):
         c = self.dati.uno("SELECT * FROM studio_carte WHERE id = ?", (int(cid),))
         if c is None:
             raise NonTrovata()
+        # Una carta nata dalla mappa («Fanne carte», origine «mappa») con la mappa libera aperta
+        # non c'è (revisione della PR #330): dice i concetti dello scheletro nascosto. Vale anche
+        # per `carta_in_corso`, che passa di qui
+        if c["origine"] == "mappa" and self._libera_aperta(c["verifica"]):
+            raise NonTrovata()
         return c, self._verifica(chi, c["verifica"])
 
     def _argomento_di(self, v: dict, argomento) -> int | None:
@@ -1247,7 +1252,8 @@ class Studio(Mappe):
         adesso = self.adesso().isoformat(timespec="seconds")
         self.dati.scrivi(
             "UPDATE studio_carte SET domanda = ?, risposta = ?, chiusa = ?, argomento = ?, "
-            "origine = 'persona', stato = 'attiva', avvisi = NULL, modificata = ?, "
+            "origine = CASE WHEN origine = 'mappa' THEN 'mappa' ELSE 'persona' END, "
+            "stato = 'attiva', avvisi = NULL, modificata = ?, "
             "scatola = CASE WHEN ? THEN 1 ELSE scatola END, "
             "scadenza = CASE WHEN ? THEN ? ELSE scadenza END WHERE id = ?",
             (d, r, C.chiusa(r), aid, adesso, int(nuova), int(nuova), adesso, c["id"]))
@@ -1412,14 +1418,13 @@ class Studio(Mappe):
         out = []
         # Con la mappa libera aperta (passo 7c, #328) le carte scritte da «Fanne carte» non si
         # vedono e non si ripassano: dicono i concetti dello scheletro, che resta nascosto
-        from .mappe import CARTE_DALLA_MAPPA
         libera_aperta = self.dati.uno(
             "SELECT id FROM studio_mappe WHERE verifica = ? AND tipo = 'libera' AND stato = "
             "'aperta'", (v["id"],)) is not None
         # Le carte dell'ombra (studio_carte_genera: ombra) non vanno mai alla persona
         for i, c in enumerate(self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? AND "
                                               "stato != 'ombra' ORDER BY id", (v["id"],)), 1):
-            if libera_aperta and str(c["domanda"] or "").startswith(CARTE_DALLA_MAPPA):
+            if libera_aperta and c["origine"] == "mappa":
                 continue
             c["pagine"] = [int(x) for x in D.da_j(c["pagine"]) if str(x).isdecimal()]
             c["avvisi"] = D.da_j(c["avvisi"])

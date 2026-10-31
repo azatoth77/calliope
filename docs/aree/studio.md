@@ -224,6 +224,50 @@ le misure del banco, in `prova_valore.py` `prova_mappa_consigli` attraverso `Bra
 che cerca i concetti mancanti nei dati e li dice: 0 svelati in ombra e attiva; un concetto detto di
 suo si conta e va nel registro con l'id).
 
+### 31/10: le correzioni della revisione della PR #330
+
+La revisione indipendente ha trovato modi di prendere «giusto» senza saperlo e qualche tripla falsa.
+Ogni correzione ha i suoi scenari d'imbroglio in `prova_studio_mappa_libera.py` (sezione 5b).
+1. **La radice seminata non conta.** Il concetto da cui parte la libera ha `autore: «codice»`, e un
+   concetto chiave uguale all'argomento della verifica (anche tolto e riscritto) è «seminato»: fuori
+   dai conti, dalla copertura e dai tentativi. *[storico fino al 31/10: «Ho finito» + «Rifai» a mappa
+   vuota davano «giusto» a ogni giro]*
+2. **«Rifai» sulla libera solo dopo «Ho finito»**, come a memoria: prima azzerava i concetti mostrati.
+3. **Con la sua libera aperta la persona non tocca lo scheletro né le copie.** Sono rifiutati
+   (`LIBERA_APERTA`):
+   - sullo scheletro: cambiare, togliere, aggiungere, collegare, tenere, confermare, riaprire,
+     riordinare;
+   - sulle copie: riempire, controllare o rifare la mia mappa, aprire a memoria.
+
+   Facevano da oracolo o costruivano la risposta. Il tutore resta libero. Il lettore non rigenera lo
+   scheletro finché la libera è aperta, perché è il suo riferimento.
+4. **La passata in ombra di «Parliamone»**:
+   - usa gli stessi tool della passata vera (il prefisso resta in cache, #95) e ignora le chiamate;
+   - al più 300 token e thinking spento (`stream(..., num_predict, think)` nei due backend);
+   - una alla volta nel processo: un lock, e se ce n'è una in corso si salta e il registro lo dice;
+   - parte solo a voce ferma (`arbitro_memoria.quiete`, al più 120 s di attesa).
+5. **Triple false.**
+   - Un composto collegato a una sua parte («Portogallo e Spagna» —comprende→ «Portogallo») si
+     scarta invece di sciogliersi.
+   - I doppioni si uniscono solo per le **parti** di un composto in altro ordine (o per gli
+     articoli), non per una permutazione qualsiasi: «Stato della Chiesa» e «Chiesa di Stato» restano
+     due. *[storico fino al 31/10: la chiave era le parole piene ordinate]*
+6. **«Diverso» più stretto e fuori dalla copertura.** Servono più di metà delle parole piene del
+   riferimento: «Guerra» non vale «Guerra fredda», «Colombo» non vale «Cristoforo Colombo». Un
+   «diverso» resta «da rivedere»: non conta nella copertura né fra i trovati e non scrive tentativi.
+7. **La frase del codice.** Al tutore va tutta in terza persona («si possono collegare»), e con un
+   concetto solo al singolare («quello che manca è a p. 114»).
+8. **Le carte di «Fanne carte» hanno l'origine «mappa»** (`carte.ORIGINI`), anche dopo
+   `correggi_carta`. Con la libera aperta non ci sono nemmeno per id (`_carta`, quindi anche la
+   carta in corso). *[storico fino al 31/10: si riconoscevano dal prefisso «Mappa di »]*
+
+Le correzioni minori:
+- un concetto di una parola sola conta come svelato solo se è lungo almeno 6 lettere e non è fra le
+  parole comuni (`mappa.PAROLE_COMUNI`): «Stato» no, «Magellano» sì;
+- in «Parliamone» un collegamento con un capo nascosto arriva senza verbo;
+- la prova della pagina misura i tocchi a 320 px col testo grande;
+- `main.py` passerà `cfg` a `studio_specs` con la #335.
+
 ## Lo scheletro della mappa generato dal lettore (30/10 sera, issue #247, ramo `issue-247-studio-mappa-genera`)
 
 *Seconda parte del passo 7; decisione [0035](../decisioni/0035-studio.md) punto 36.*

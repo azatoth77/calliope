@@ -1746,7 +1746,7 @@ def prova_mappa_consigli():
     r = turno(b, "parliamo della mia mappa")
     log = "\n".join(pt.righe_log)
     verifica("P1 ombra: la voce dice la frase del codice (conti e pagine), niente concetti nascosti",
-             "concetti chiave su" in r and not any(x in r for x in nascosti), r)
+             "concetto chiave" in r and not any(x in r for x in nascosti), r)
     verifica("P1 ombra: la passata del modello si fa in secondo piano e prova a svelare, ma nei "
              "dati non c'è niente da svelare: 0 concetti svelati nel registro",
              sv.detti and "concetto nascosto" in sv.detti[0][0]
@@ -1759,6 +1759,35 @@ def prova_mappa_consigli():
     verifica("P1: i dati della mappa escono dalla storia a risposta finita (la sua nota)",
              note and all(x == BR.MAPPA_TOLTA for x in note) and "Le spezie" not in storia,
              storia[-300:])
+    # P1b (revisione della PR #330): la passata di misura con gli stessi tool della passata vera
+    # (il prefisso in cache), corta e senza thinking; una alla volta
+    class Spia(Svelatore):
+        def __init__(self):
+            super().__init__()
+            self.chiamate = []
+
+        def stream(self, messages, tools, num_predict=None, think=None):
+            self.chiamate.append((len(tools or []), num_predict, think))
+            yield from super().stream(messages, tools)
+    sp = Spia()
+    b = nuovo(sp)
+    turno(b, "parliamo della mia mappa")
+    vera, misura = sp.chiamate[0], sp.chiamate[-1]
+    verifica("P1b ombra: la passata di misura ha gli stessi tool della vera, al più 300 token, "
+             "thinking spento", len(sp.chiamate) == 2 and vera[0] > 0 and misura[0] == vera[0]
+             and misura[1] == BR.CONSIGLI_OMBRA_TOKEN == 300 and misura[2] is False,
+             str(sp.chiamate))
+    pt.righe_log.clear()
+    sp = Spia()
+    b = nuovo(sp)
+    BR.CONSIGLI_OMBRA_LOCK.acquire()
+    try:
+        turno(b, "parliamo della mia mappa")
+    finally:
+        BR.CONSIGLI_OMBRA_LOCK.release()
+    verifica("P1b ombra: con un'altra misura in corso questa si salta e il registro lo dice",
+             len(sp.chiamate) == 1 and any("saltata" in x for x in pt.righe_log),
+             f"{sp.chiamate} {pt.righe_log[-2:]}")
     # P2: attiva. Il modello parla, il codice conta ciò che ha detto
     st.cfg.studio_mappa_consigli = "attiva"
     pt.righe_log.clear()

@@ -196,9 +196,15 @@ def verbo_simile(a, b) -> bool:
 # ─────────────────────────── la forma della mappa (passo 7c, #328) ───────────────────────────
 
 def chiave_insieme(testo) -> str:
-    """Per i doppioni permutati: le parole piene in ordine alfabetico («Portogallo e Spagna» e
-    «Spagna e Portogallo» danno la stessa chiave). Forma, non significato."""
-    return " ".join(sorted(_piene(testo)))
+    """Per i doppioni: le parole piene (senza articoli e preposizioni: «Il Portogallo» =
+    «Portogallo») nel loro ordine; si mettono in ordine solo le **parti** di un composto attorno a
+    «e», «ed» o alla virgola («Portogallo e Spagna» = «Spagna e Portogallo»). Una permutazione
+    qualsiasi delle parole non vale: «Stato della Chiesa» e «Chiesa di Stato» restano due
+    (revisione della PR #330). Forma, non significato."""
+    p = parti(testo)
+    if p:
+        return " + ".join(sorted(" ".join(_piene(x)) for x in p))
+    return " ".join(_piene(testo))
 
 
 _PARTI = re.compile(r"\s*,\s*|\s+(?:e|ed)\s+", re.I)
@@ -597,16 +603,19 @@ def voci_riferimento(scheletro: dict | None) -> tuple[list[dict], list[dict], st
 
 
 def _simile(atteso, dato) -> bool:
-    """Presente con un nome diverso: almeno metà delle parole piene in comune (uguali, al plurale
-    o storpiate come in `uguale`), almeno una."""
+    """Presente con un nome diverso: **più di metà** delle parole piene del riferimento in comune
+    (uguali, al plurale o storpiate come in `uguale`) e almeno metà di quelle della persona
+    (revisione della PR #330: «Guerra» non vale «Guerra fredda»). Resta largo («Seconda guerra
+    mondiale» per «Prima guerra mondiale»): per questo un «diverso» è solo «da rivedere», non
+    conta nella copertura e non scrive tentativi."""
     pa, pd = _piene(atteso), _piene(dato)
     if not pa or not pd:
         return False
     comuni = sum(1 for w in pa if any(_storpiata(w, x) for x in pd))
-    return comuni >= 1 and comuni * 2 >= max(len(pa), len(pd))
+    return comuni * 2 > len(pa) and comuni * 2 >= len(pd)
 
 
-def confronta(rif_nodi: list[dict], rif_coll: list[dict], mappa: dict) -> dict:
+def confronta(rif_nodi: list[dict], rif_coll: list[dict], mappa: dict, dati=()) -> dict:
     """Il confronto della mappa libera col riferimento, deterministico. Ogni concetto del
     riferimento è *presente* (`uguale` a un concetto della persona), *diverso* (`_simile`: da
     rivedere) o *mancante*; ogni concetto della persona vale al più uno del riferimento. Solo i
@@ -615,7 +624,10 @@ def confronta(rif_nodi: list[dict], rif_coll: list[dict], mappa: dict) -> dict:
     persona **fuori dal quadro** (da controllare sul libro, mai un errore); quelli con concetti
     solo suoi non si giudicano ("tuoi").
     {chiave, esiti {id rif: esito}, nodo {id rif: id della persona}, mancanti [id chiave],
-    coll_mancanti [{da, a, pagine}], verso_diverso [id], fuori_quadro [id], tuoi, conti}"""
+    coll_mancanti [{da, a, pagine}], verso_diverso [id], fuori_quadro [id], tuoi, conti}.
+    `dati`: i testi già dati alla persona (l'argomento della verifica): un concetto chiave uguale
+    a uno di loro è «seminato» come quello scritto dal codice (`SEMINATO`), anche se la persona
+    l'ha tolto e riscritto."""
     testi = [n["testo"] for n in rif_nodi]
     suoi = [n for n in mappa.get("nodi") or () if str(n.get("testo") or "").strip()]
     preso: set[int] = set()
@@ -665,24 +677,37 @@ def confronta(rif_nodi: list[dict], rif_coll: list[dict], mappa: dict) -> dict:
             list(per_id[a].get("pagine") or ()) + list(per_id[b].get("pagine") or ())))
         coll_mancanti.append({"da": nodo[a], "a": nodo[b], "pagine": pag})
     mancanti = [i for i in chiave_ if esiti.get(i) == MANCANTE]
-    conti = {"concetti": len(rif_nodi), "chiave": len(chiave_),
-             PRESENTE: sum(esiti.get(i) == PRESENTE for i in chiave_),
-             DIVERSO: sum(esiti.get(i) == DIVERSO for i in chiave_),
+    # Il concetto seminato dal codice (la radice con l'argomento della verifica, `autore:
+    # «codice»`): trovato, ma non dalla persona. Non conta né nei conti né nei tentativi
+    # (revisione della PR #330: «Ho finito» a mappa vuota dava «giusto» a ogni giro)
+    semi = {int(k["id"]) for k in suoi if k.get("autore") == SEMINATO}
+    seminati = [i for i in chiave_ if nodo.get(i) in semi
+                or any(uguale(d, per_id[i]["testo"]) for d in dati or () if d)]
+    contati = [i for i in chiave_ if i not in seminati]
+    conti = {"concetti": len(rif_nodi), "chiave": len(contati), "seminati": len(seminati),
+             PRESENTE: sum(esiti.get(i) == PRESENTE for i in contati),
+             DIVERSO: sum(esiti.get(i) == DIVERSO for i in contati),
              MANCANTE: len(mancanti),
              "trovati": sum(e != MANCANTE for e in esiti.values()),
              "coll_mancanti": len(coll_mancanti), "verso_diverso": len(verso),
              "fuori_quadro": len(fuori), "tuoi": tuoi}
-    return {"chiave": chiave_, "esiti": esiti, "nodo": nodo, "mancanti": mancanti,
-            "coll_mancanti": coll_mancanti, "verso_diverso": verso, "fuori_quadro": fuori,
-            "tuoi": tuoi, "conti": conti}
+    return {"chiave": chiave_, "seminati": seminati, "esiti": esiti, "nodo": nodo,
+            "mancanti": mancanti, "coll_mancanti": coll_mancanti, "verso_diverso": verso,
+            "fuori_quadro": fuori, "tuoi": tuoi, "conti": conti}
+
+
+# L'autore del concetto seminato dal codice nella mappa libera (la radice dell'argomento)
+SEMINATO = "codice"
 
 
 def copertura(confronto: dict | None) -> int | None:
-    """I concetti chiave trovati (presenti o diversi) in percento, o None senza confronto."""
-    if not confronto or not confronto.get("chiave"):
+    """I concetti chiave **presenti** in percento (i «diversi» sono da rivedere e non contano; il
+    concetto seminato dal codice è fuori dal conto), o None senza confronto o senza concetti
+    chiave da trovare."""
+    if not confronto or not (confronto.get("conti") or {}).get("chiave"):
         return None
     k = confronto["conti"]
-    return round(100 * (k[PRESENTE] + k[DIVERSO]) / k["chiave"])
+    return round(100 * k[PRESENTE] / k["chiave"])
 
 
 def indicatori(nodi: list[dict], collegamenti: list[dict], confronto: dict | None = None) -> dict:
@@ -749,16 +774,32 @@ def tentativo_libera(esito: str | None, segno: str | None) -> str | None:
     return None
 
 
+# Un concetto di una parola: svelato solo se la parola è lunga e non comune (le parole che una
+# frase sul metodo usa comunque, e le più frequenti nei libri di scuola)
+SVELATO_MIN = 6
+PAROLE_COMUNI = frozenset("""mappa mappe concetto concetti collegamento collegamenti ramo rami
+centro centrale parte parti pagina pagine libro capitolo esempio domanda risposta verbo verbi
+stato stati guerra guerre mondo tempo tempi popolo popoli chiesa impero imperi storia societa
+economia governo potere territorio territori periodo epoca secolo secoli citta paese paesi
+natura energia materia forza forze sistema sistemi processo processi elemento elementi forma
+forme numero numeri insieme causa cause effetto effetti conseguenza conseguenze idea idee""".split())
+
+
 def svelati(nascosti: dict, risposta: str, suoi=()) -> list:
     """Gli id dei concetti nascosti che una risposta dice: tutte le parole piene del concetto
     nella risposta (uguali, al plurale o storpiate come in `uguale`). Un concetto le cui parole
-    piene sono già tutte nella mappa della persona non conta (non è una cosa svelata)."""
+    piene sono già tutte nella mappa della persona non conta (non è una cosa svelata). Un concetto
+    di una parola sola conta solo se la parola è lunga almeno `SVELATO_MIN` lettere e non è fra
+    le parole comuni (`PAROLE_COMUNI`): «Stato» non è svelato da «lo stato della tua mappa»
+    (revisione della PR #330); i nomi propri lunghi («Magellano», «America») sì."""
     parole_r = _piene(risposta)
     parole_s = [w for t in suoi or () for w in _piene(t)]
     out = []
     for k, t in (nascosti or {}).items():
         pa = _piene(t)
         if not pa or all(any(_storpiata(w, x) for x in parole_s) for w in pa):
+            continue
+        if len(pa) == 1 and (len(pa[0]) < SVELATO_MIN or pa[0] in PAROLE_COMUNI):
             continue
         if all(any(_storpiata(w, x) for x in parole_r) for w in pa):
             out.append(k)

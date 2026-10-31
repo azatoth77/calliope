@@ -365,7 +365,7 @@ st.controlla_mappa(LEO, m3)
 n_carte = st.carte_dagli_errori(LEO, m3)
 carte = st.carte(LEO, vid)
 verifica("«Fanne carte»: una carta della persona per ogni casella da rivedere, con l'argomento",
-         n_carte == 3 and len(carte) == 3 and all(c["origine"] == "persona" and c["stato"] ==
+         n_carte == 3 and len(carte) == 3 and all(c["origine"] == "mappa" and c["stato"] ==
                                                   "attiva" and c["argomento"] for c in carte)
          and all(c["domanda"].startswith("Mappa di storia: ") for c in carte), str(carte)[:300])
 verifica("«Fanne carte» di nuovo: nessun doppione", st.carte_dagli_errori(LEO, m3) == 0)

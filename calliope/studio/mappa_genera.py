@@ -181,8 +181,17 @@ def scheletro(grezzi: list[dict], rif, arif, nodi_max: int, titolo=None,
             sciolti.add(K(t))
             return p
         return [t]
+    def parte_di(composto: str, altro: str) -> bool:
+        """`altro` è una parte di `composto`, e il composto si scioglie."""
+        p = M.parti(composto)
+        return bool(p) and K(altro) in {K(x) for x in p} and all(K(x) in presenti for x in p)
     espanse = []
     for t in valide:
+        # Un composto collegato a una sua parte («Portogallo e Spagna» —comprende→
+        # «Portogallo»): sciolto darebbe una tripla falsa («Spagna» —comprende→ «Portogallo»),
+        # e la tripla si scarta (revisione della PR #330)
+        if parte_di(t["da"], t["a"]) or parte_di(t["a"], t["da"]):
+            continue
         for da in sciogli(t["da"]):
             for a in sciogli(t["a"]):
                 if K(da) != K(a):

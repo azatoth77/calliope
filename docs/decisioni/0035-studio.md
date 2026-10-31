@@ -450,8 +450,9 @@ dell'eco della stanza.
     scartato; dal passo 7c c'è una seconda richiesta, ma solo per unire le isole (punto 37)]*
 37. **Lo scheletro è connesso, con un concetto centrale** (passo 7c, #328). Il banco del 30/10 dava
     mappe a isole, doppioni permutati e composti staccati dai componenti. Il codice unisce i doppioni
-    a meno dell'ordine delle parole, scioglie un composto («A e B») quando tutte le parti sono
-    concetti, segna la radice (l'argomento della verifica o il più collegato), e con più parti
+    a meno dell'ordine delle parti di un composto (mai una permutazione qualsiasi delle parole,
+    revisione della PR #330), scioglie un composto («A e B») quando tutte le parti sono concetti
+    (e scarta la tripla che lo collega a una sua parte), segna la radice (l'argomento della verifica o il più collegato), e con più parti
     connesse il lettore fa **una seconda richiesta** con lo scheletro in busta: solo collegamenti fra
     concetti che ci sono, e il codice tiene solo quelli che uniscono due parti ancora separate,
     controllati come le triple. Se le isole restano lo scheletro lo dice. Un errore nostro segue la
@@ -467,7 +468,9 @@ dell'eco della stanza.
     collegati, al più un terzo), presente / diverso / mancante, i mancanti prima come pagina e il
     testo solo con «Mostra»; i tentativi «mappa» fonte «codice» una volta per giro, solo col
     riferimento confermato: chiave presente «giusto» («indizio» dopo l'indizio di pagina), mancante
-    «sbagliato», diverso e mostrato niente. Gli **indicatori del metodo** (parti, isolati, verbi vuoti,
+    «sbagliato», diverso e mostrato niente; la radice seminata (l'argomento della verifica) non
+    conta mai. Con la libera aperta la persona non tocca lo scheletro né le sue copie, e «Rifai»
+    viene solo dopo «Ho finito» (revisione della PR #330). Gli **indicatori del metodo** (parti, isolati, verbi vuoti,
     concetti lunghi, profondità, collegamenti fra rami, copertura) si tengono giro per giro, separati
     dalla padronanza. `studio_mappa_libera`, attiva di serie con lo Studio (nessun modello).
 39. **«Parliamone» legge in busta e non svela** (passo 7c). Dopo «Ho finito», il modello della voce

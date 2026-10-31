@@ -101,6 +101,11 @@ def scenario_telefono(t, st, vid):
     t.v("document.querySelector('.studio-h-mappa').scrollIntoView({block: 'start'}); 1")
     misure(t, "320×693 con la mappa libera")
     B.foto(t, "studio-libera-320x693.png")
+    # Col testo grande (125 %, revisione della PR #330): i tocchi restano ≥ 44 px
+    t.v("document.documentElement.style.fontSize = '125%'; 1")
+    t.v("document.querySelector('.studio-h-mappa').scrollIntoView({block: 'start'}); 1")
+    misure(t, "320×693 con la mappa libera e il testo grande")
+    t.v("document.documentElement.style.fontSize = ''; 1")
     B.dimensione(t, 390, 844)
     # Ho finito
     t.tocca('button[data-mappa="finito"]')
@@ -108,12 +113,11 @@ def scenario_telefono(t, st, vid):
     el = testo(t)
     tent = st.dati.tutti("SELECT * FROM studio_tentativi")
     verifica("«Ho finito»: il confronto a parole, gli indicatori del metodo, «Parliamone»",
-             bool(ok) and "Concetti chiave: 1 su 2" in el and "il metodo" in el.lower()
+             bool(ok) and "Concetti chiave trovati: 0 su 1" in el and "Da qui sei partito" in el and "il metodo" in el.lower()
              and "concetti senza collegamenti: 0" in el and "Parliamone" in el
              and "Rifai" in el, el[:600])
-    verifica("«Ho finito»: i tentativi dal codice (la radice «giusto»; Colombo mostrato non conta)",
-             [(x["tipo"], x["esito"], x["fonte"]) for x in tent] == [("mappa", "giusto", "codice")],
-             str(tent))
+    verifica("«Ho finito»: nessun tentativo (la radice seminata non conta, Colombo mostrato nemmeno)",
+             tent == [], str(tent))
     schede = t.v("[...document.querySelectorAll('button[data-mappa=\"quale\"]')].map((b) => b.textContent)") or []
     verifica("dopo «Ho finito» le schede tornano", schede == ["Lo scheletro", "La mia mappa", "A memoria", "Da zero"],
              str(schede))

@@ -1203,7 +1203,8 @@
     const li = nodo("li", "studio-m-voce");
     const pag = Array.isArray(k.pagine) && k.pagine.length ? k.pagine.map(String).join(", ") : "";
     if (k.esito === "presente") {
-      li.append(nodo("span", "studio-m-esito giusta", "C'è"), nodo("b", null, String(k.testo || "")));
+      // Il concetto da cui si parte (seminato dal codice, #330): c'è, ma non conta
+      li.append(nodo("span", "studio-m-esito giusta", k.seminato ? "Da qui sei partito" : "C'è"), nodo("b", null, String(k.testo || "")));
     } else {
       li.append(nodo("span", "studio-m-esito manca", k.esito === "diverso" ? "C'è con un nome diverso: da rivedere" + (pag ? " (" + pag + ")" : "")
         : "Ti manca un concetto chiave" + (pag ? " di " + pag : "")));
@@ -1230,7 +1231,7 @@
       out.push(nodo("p", "studio-h-riga", "Lo scheletro per il confronto non c'è ancora: qui sotto come è venuta la tua mappa."));
     } else {
       const k = c.conti || {};
-      out.push(nodo("p", "studio-h-riga studio-m-conti", "Concetti chiave: " + (Number(k.presente) + Number(k.diverso)) + " su " + Number(k.chiave) +
+      out.push(nodo("p", "studio-h-riga studio-m-conti", "Concetti chiave trovati: " + Number(k.presente) + " su " + Number(k.chiave) +
         (Number(k.diverso) ? ", " + nn(k.diverso, "col nome da rivedere", "col nome da rivedere") : "") +
         (Number(k.coll_mancanti) ? "; " + nn(k.coll_mancanti, "collegamento dello scheletro manca fra i tuoi concetti", "collegamenti dello scheletro mancano fra i tuoi concetti") : "") + "."));
       if (c.riferimento === "proposto") out.push(nodo("p", "studio-h-nota", "Rispetto alla mappa proposta, non ancora controllata."));
@@ -1612,7 +1613,7 @@
     if (az === "finito") {
       if (await caricaMappa(vid, { azione: "finito", mappa: m.id })) {
         const f = (mappa.dati.finito || {}).conti;
-        mappa.esito = f ? "Finita: " + (Number(f.presente) + Number(f.diverso)) + " concetti chiave su " + Number(f.chiave) + ". Qui sotto il confronto e il metodo." : "Finita: qui sotto come è fatta la tua mappa.";
+        mappa.esito = f ? "Finita: " + Number(f.presente) + " concetti chiave su " + Number(f.chiave) + ". Qui sotto il confronto e il metodo." : "Finita: qui sotto come è fatta la tua mappa.";
         disegnaHome();
       }
       return;

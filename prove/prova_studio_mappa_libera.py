@@ -45,10 +45,14 @@ def tripla(da, rel, a, arg, *pagine):
 
 # ═══════════════════════════ 1. la forma dello scheletro ═══════════════════════════
 print("— la forma dello scheletro")
-verifica("chiave_insieme: le stesse parole piene in qualunque ordine",
+verifica("chiave_insieme: le parti di un composto in qualunque ordine, gli articoli no",
          M.chiave_insieme("Portogallo e Spagna") == M.chiave_insieme("Spagna e Portogallo")
          == M.chiave_insieme("il Portogallo e la Spagna")
+         and M.chiave_insieme("Il Portogallo") == M.chiave_insieme("Portogallo")
          and M.chiave_insieme("Portogallo") != M.chiave_insieme("Spagna"))
+verifica("chiave_insieme (revisione della PR #330): una permutazione di parole non è un doppione "
+         "(«Stato della Chiesa» e «Chiesa di Stato»)",
+         M.chiave_insieme("Stato della Chiesa") != M.chiave_insieme("Chiesa di Stato"))
 verifica("parti: «A e B», «A, B e C»; non un concetto solo né più di tre",
          M.parti("Portogallo e Spagna") == ["Portogallo", "Spagna"]
          and M.parti("Romani, Greci e Fenici") == ["Romani", "Greci", "Fenici"]
@@ -151,7 +155,7 @@ RC = [{"id": 1, "da": 1, "a": 2, "verbo": "con"}, {"id": 2, "da": 2, "a": 3, "ve
 verifica("i concetti chiave: la radice e i più collegati, al più un terzo",
          M.concetti_chiave(RN, RC) == [1, 2])
 MIA = {"nodi": [{"id": 1, "testo": "Scoperte geografiche", "radice": True},
-                {"id": 2, "testo": "Colombo"},                       # nome diverso
+                {"id": 2, "testo": "Cristoforo Colombo navigatore"},  # nome diverso
                 {"id": 3, "testo": "l'America"},
                 {"id": 4, "testo": "Le spezie"},
                 {"id": 5, "testo": "Vasco da Gama"},                 # suo, non nel quadro
@@ -168,9 +172,23 @@ verifica("il confronto: presente (uguale con le tolleranze), diverso (da riveder
 verifica("il confronto: i collegamenti col verso diverso, fuori dal quadro, mancanti; i suoi no",
          r["verso_diverso"] == [1] and r["fuori_quadro"] == [2] and r["tuoi"] == 1
          and r["coll_mancanti"] == [{"da": 1, "a": 4, "pagine": [11, 15]}], str(r))
-verifica("i conti sui concetti chiave", r["conti"]["chiave"] == 2 and r["conti"]["presente"] == 1
+verifica("i conti sui concetti chiave: il «diverso» è da rivedere e non conta nella copertura",
+         r["conti"]["chiave"] == 2 and r["conti"]["presente"] == 1
          and r["conti"]["diverso"] == 1 and r["conti"]["mancante"] == 0
-         and M.copertura(r) == 100, str(r["conti"]))
+         and M.copertura(r) == 50, str(r["conti"]))
+verifica("«diverso»: più di metà delle parole piene del riferimento («Guerra» non vale «Guerra "
+         "fredda», «Colombo» non vale «Cristoforo Colombo»)",
+         not M._simile("Guerra fredda", "Guerra") and not M._simile("Cristoforo Colombo", "Colombo")
+         and M._simile("Prima guerra mondiale", "Seconda guerra mondiale")
+         and not M.uguale("Prima guerra mondiale", "Seconda guerra mondiale"))
+rs = M.confronta(RN, RC, {"nodi": [{"id": 1, "testo": "Le scoperte geografiche", "radice": True,
+                                    "autore": M.SEMINATO}], "collegamenti": []})
+rs2 = M.confronta(RN, RC, {"nodi": [{"id": 7, "testo": "le scoperte geografiche"}],
+                           "collegamenti": []}, ["Le scoperte geografiche"])
+verifica("il concetto seminato dal codice (o uguale all'argomento dato) non conta: chiave 1, "
+         "copertura 0, mai fra i tentativi",
+         rs["seminati"] == [1] and rs["conti"]["chiave"] == 1 and rs["conti"]["presente"] == 0
+         and M.copertura(rs) == 0 and rs2["seminati"] == [1], str(rs["conti"]))
 r0 = M.confronta(RN, RC, {"nodi": [{"id": 1, "testo": "Il Portogallo", "radice": True}],
                           "collegamenti": []})
 verifica("un concetto chiave che manca è fra i mancanti; la copertura scende",
@@ -178,7 +196,7 @@ verifica("un concetto chiave che manca è fra i mancanti; la copertura scende",
 ind = M.indicatori(MIA["nodi"], MIA["collegamenti"], r)
 verifica("gli indicatori: isolati, verbi vuoti, concetti lunghi, profondità, parti, copertura",
          ind["isolati"] == 2 and ind["verbi_vuoti"] == 3 and ind["lunghi"] == 1
-         and ind["profondita"] == 1 and ind["parti"] == 3 and ind["copertura"] == 100
+         and ind["profondita"] == 1 and ind["parti"] == 3 and ind["copertura"] == 50
          and ind["concetti"] == 6 and ind["collegamenti"] == 4, str(ind))
 albero = {"nodi": [{"id": i, "testo": f"Concetto {i}", "radice": i == 1} for i in range(1, 7)],
           "collegamenti": [{"id": 1, "da": 1, "a": 2, "verbo": "porta a"},
@@ -210,6 +228,11 @@ verifica("svelati: le parole del concetto nella risposta (anche storpiate); non 
                    "Hai pensato al trattato di Tordesilas?", ["America"]) == [3]
          and M.svelati({4: "Il Portogallo"}, "Bene il Portogallo!", ["Portogallo e Spagna"]) == []
          and M.svelati({4: "Il Portogallo"}, "Prova a collegare i rami.") == [])
+verifica("svelati: una parola sola conta solo se lunga e non comune («Stato» no, «Magellano» sì)",
+         M.svelati({1: "Stato"}, "Lo stato della tua mappa è buono.") == []
+         and M.svelati({1: "Re"}, "I re di Francia") == []
+         and M.svelati({1: "Guerra"}, "Pensa alla guerra.") == []
+         and M.svelati({1: "Magellano"}, "E Magellano?") == [1])
 
 # ═══════════════════════════ 3. la mappa libera ═══════════════════════════
 print("— la mappa libera")
@@ -221,13 +244,17 @@ chiave_ = M.concetti_chiave(*M.tenuti(st._riga_mappa(sid)))
 verifica("lo scheletro di prova: due concetti chiave, la radice e Colombo",
          chiave_ == [n["Le scoperte geografiche"], n["Cristoforo Colombo"]], str(chiave_))
 mia = st.inizia_mappa(LEO, vid, "studente")
-st.aggiungi_carta(LEO, vid, "Mappa di storia: che cosa arriva in «America»?", "Cristoforo Colombo")
+# Una carta di «Fanne carte» (origine «mappa») e una scritta dalla persona
+cm_ = st.aggiungi_carta(LEO, vid, "Mappa di storia: che cosa arriva in «America»?",
+                        "Cristoforo Colombo", origine="mappa")
 st.aggiungi_carta(LEO, vid, "In che anno cadde Costantinopoli?", "1453")
 lib = st.inizia_libera(LEO, vid)
 vm = st.vista_mappe(LEO, vid)
-verifica("«Fai la tua mappa da zero»: una mappa sola, parte dalla radice dell'argomento",
+verifica("«Fai la tua mappa da zero»: una mappa sola, parte dalla radice dell'argomento, segnata "
+         "come seminata dal codice",
          st.inizia_libera(LEO, vid) == lib and vm["libera"]["stato"] == "aperta"
          and [x["testo"] for x in vm["libera"]["nodi"]] == ["Le scoperte geografiche"]
+         and vm["libera"]["nodi"][0]["autore"] == M.SEMINATO
          and vm["a_libera"] and vm["libera"]["giro"] == 0)
 segreti = [t for t, _a, _p in CONCETTI if t != "Le scoperte geografiche"]
 # (gli argomenti della verifica restano: sono i titoli confermati dalla persona, non lo scheletro)
@@ -239,10 +266,13 @@ verifica("…e il PDF della mia mappa non esce, a memoria non parte",
          solleva(lambda: st.pdf_mappa(LEO, vid), ValueError)
          and solleva(lambda: st.inizia_mappa(LEO, vid, "memoria"), ValueError))
 carte = st.carte(LEO, vid)
-verifica("…e le carte nate dalla mappa non si vedono né si ripassano",
+verifica("…e le carte nate dalla mappa (origine «mappa») non si vedono né si ripassano",
          [c["domanda"] for c in carte] == ["In che anno cadde Costantinopoli?"]
          and not any("America" in json.dumps(c, ensure_ascii=False)
                      for c in st.da_ripassare(LEO, vid)))
+verifica("…né per id: la carta della mappa «non c'è» (segnarla, correggerla)",
+         solleva(lambda: st.segna_carta(LEO, cm_, False), S.NonTrovata)
+         and solleva(lambda: st.correggi_carta(LEO, cm_, domanda="x"), S.NonTrovata))
 TOOLS = ToolRegistry()
 for spec in TS.studio_specs(st.cfg):
     TOOLS.register(spec)
@@ -262,6 +292,11 @@ def chiama(prof, nome, **args):
     return json.loads(TOOLS.call(nome, args, ctx_di(prof), prof.level))
 
 
+def tentativi(v=None):
+    q = "SELECT * FROM studio_tentativi" + (" WHERE verifica = ?" if v else "") + " ORDER BY id"
+    return [x["esito"] for x in st.dati.tutti(q, (v,) if v else ())]
+
+
 rv = chiama(LEO, "studio", azione="mappa")
 verifica("…e il tool «mappa» dà solo conti (la mappa da zero «in corso»)",
          rv["ok"] and "in corso" in rv["conferma"]
@@ -276,7 +311,8 @@ verifica("«Mostra» prima di un indizio: niente",
          solleva(lambda: st.mostra_concetto(LEO, lib, n["Cristoforo Colombo"]), S.NonTrovata))
 ind1 = st.indizio_libera(LEO, lib)
 vm = st.vista_mappe(LEO, vid)
-verifica("«Un indizio»: la pagina del concetto chiave che manca, senza il testo",
+verifica("«Un indizio»: la pagina del concetto chiave che manca, senza il testo (la radice "
+         "seminata no)",
          ind1["concetto"] == n["Cristoforo Colombo"] and ind1["pagine"] == [ids["p114"]]
          and vm["libera"]["indizi"] == [{"n": n["Cristoforo Colombo"], "pagine": ["p. 114"],
                                          "testo": None, "visto": False}], str(ind1))
@@ -285,44 +321,44 @@ verifica("un altro indizio: nessun altro concetto chiave manca",
 st.mostra_concetto(LEO, lib, n["Cristoforo Colombo"])
 verifica("«Mostra»: il testo, solo di quel concetto",
          st.vista_mappe(LEO, vid)["libera"]["indizi"][0]["testo"] == "Cristoforo Colombo")
+verifica("«Rifai» con la libera aperta: rifiutato (azzererebbe i concetti mostrati)",
+         solleva(lambda: st.rifai_mappa(LEO, lib), ValueError)
+         and st._riga_mappa(lib)["visti"] == {str(n["Cristoforo Colombo"]): M.VISTO})
 k_col = st.nodo_mappa(LEO, lib, "Cristoforo Colombo")
 st.collega(LEO, lib, radice, k_col, "con")
-c0 = st.finisci_libera(LEO, vid and lib)
-t = st.dati.tutti("SELECT * FROM studio_tentativi ORDER BY id")
-verifica("«Ho finito»: la radice presente «giusto»; Colombo mostrato prima non conta",
-         c0["tentativi"] == 1 and len(t) == 1 and t[0]["tipo"] == "mappa"
-         and t[0]["fonte"] == "codice" and t[0]["esito"] == "giusto", str(t))
+c0 = st.finisci_libera(LEO, lib)
+verifica("«Ho finito»: la radice seminata non conta, Colombo mostrato prima nemmeno: nessun "
+         "tentativo", c0["tentativi"] == 0 and tentativi() == [] and c0["seminati"]
+         == [n["Le scoperte geografiche"]] and c0["conti"]["chiave"] == 1, str(c0["conti"]))
 verifica("un secondo «Ho finito» nello stesso giro non passa né scrive",
-         solleva(lambda: st.finisci_libera(LEO, lib), ValueError)
-         and len(st.dati.tutti("SELECT * FROM studio_tentativi")) == 1)
+         solleva(lambda: st.finisci_libera(LEO, lib), ValueError) and tentativi() == [])
 verifica("dopo «Ho finito» la mappa libera è chiusa: non si cambia",
          solleva(lambda: st.nodo_mappa(LEO, lib, "Magellano"), ValueError))
 vm = st.vista_mappe(LEO, vid)
 lv = vm["libera"]
 verifica("dopo «Ho finito» lo scheletro torna, la libera ha il confronto e gli indicatori",
          not vm["scheletro"].get("nascosta") and not vm["a_libera"]
-         and lv["confronto"]["conti"]["chiave"] == 2 and lv["indicatori"]["concetti"] == 3
+         and lv["confronto"]["conti"]["chiave"] == 1 and lv["indicatori"]["concetti"] == 3
          and lv["confronto"]["riferimento"] == "confermato"
+         and lv["confronto"]["chiave"][0]["seminato"]
          and [x["esito"] for x in lv["nodi"]] == ["chiave", None, "chiave"], str(lv)[:400])
 verifica("le carte dalla mappa tornano", len(st.carte(LEO, vid)) == 2)
 st.rifai_mappa(LEO, lib)
 lv = st.vista_mappe(LEO, vid)["libera"]
-verifica("«Rifai»: giro nuovo dalla radice, indizi e concetti mostrati da capo",
+verifica("«Rifai» dopo «Ho finito»: giro nuovo dalla radice, indizi e concetti mostrati da capo",
          lv["giro"] == 1 and lv["stato"] == "aperta" and len(lv["nodi"]) == 1
          and lv["indizi"] == [] and lv["giri"] == 1)
 st.indizio_libera(LEO, lib)
 k = st.nodo_mappa(LEO, lib, "Cristoforo Colombo")
 st.collega(LEO, lib, radice, k, "con")
 c1 = st.finisci_libera(LEO, lib)
-t = st.dati.tutti("SELECT * FROM studio_tentativi ORDER BY id")
 verifica("giro 1: dopo il solo indizio di pagina, il concetto trovato vale «indizio»",
-         c1["tentativi"] == 2 and [x["esito"] for x in t[1:]] == ["giusto", "indizio"], str(t))
+         c1["tentativi"] == 1 and tentativi() == ["indizio"], str(tentativi()))
 st.rifai_mappa(LEO, lib)
 c2 = st.finisci_libera(LEO, lib)
-t = st.dati.tutti("SELECT * FROM studio_tentativi ORDER BY id")
 lv = st.vista_mappe(LEO, vid)["libera"]
 verifica("giro 2: il concetto chiave che manca «sbagliato»; l'indizio di pagina prima del testo",
-         c2["tentativi"] == 2 and [x["esito"] for x in t[3:]] == ["giusto", "sbagliato"]
+         c2["tentativi"] == 1 and tentativi() == ["indizio", "sbagliato"]
          and lv["confronto"]["chiave"][1]["esito"] == M.MANCANTE
          and lv["confronto"]["chiave"][1]["pagine"] == ["p. 114"]
          and lv["confronto"]["chiave"][1]["testo"] is None, str(lv["confronto"])[:300])
@@ -332,7 +368,7 @@ verifica("i giri: tre, con gli indicatori e la volta scorsa",
 st.mostra_concetto(LEO, lib, n["Cristoforo Colombo"])
 verifica("«Mostra» dopo «Ho finito»: il testo del mancante, nessun tentativo in più",
          st.vista_mappe(LEO, vid)["libera"]["confronto"]["chiave"][1]["testo"]
-         == "Cristoforo Colombo" and len(st.dati.tutti("SELECT * FROM studio_tentativi")) == 5)
+         == "Cristoforo Colombo" and len(tentativi()) == 2)
 verifica("«Mostra» di un concetto che non è chiave: niente",
          solleva(lambda: st.mostra_concetto(LEO, lib, n["America"]), S.NonTrovata))
 verifica("il PDF della mappa libera (solo i concetti della persona)",
@@ -383,9 +419,15 @@ verifica("«Parliamone» (ombra): la mappa, lo scheletro e il confronto, senza i
          and not any(x in testo_rc for x in nascosti) and "concetto nascosto" in testo_rc
          and rc["concetti_nascosti"] == 5, testo_rc[:600])
 verifica("«Parliamone» (ombra): la frase del codice (conti e pagine) è la risposta finale",
-         "1 concetti chiave su 2" in rc["risposta_finale"] and "p. 114" in rc["risposta_finale"]
-         and "verbo vuoto" in rc["risposta_finale"]
+         rc["risposta_finale"] == "Nella tua mappa manca il concetto chiave; quello che manca è "
+         "a p. 114. Qualche collegamento ha un verbo vuoto: prova a dire come sono legati."
          and rc["_consigli"] == {"verifica": vid, "mappa": lib, "modo": "ombra"}, rc)
+verifica("«Parliamone»: il verbo di un collegamento con un capo nascosto non va al modello",
+         "arriva in" not in testo_rc and "divide" not in testo_rc and "per cercare" in testo_rc)
+ft = st.consigli_mappa(ANDREA, vid)["frase"]
+verifica("la frase per il tutore, tutta in terza persona e al singolare",
+         ft == "Nella mappa di Leo manca il concetto chiave; quello che manca è a p. 114. Qualche "
+         "collegamento ha un verbo vuoto: si può dire come sono legati.", ft)
 verifica("«Parliamone»: il ruolo e il divieto di svelare nel risultato",
          "Non dire mai i concetti nascosti" in rc["cosa_fare"])
 r_att = json.loads(TOOLS.call("studio_mappa_consigli", {}, ctx_di(ANDREA), "familiare"))
@@ -419,6 +461,103 @@ st.cfg.studio_mappa_libera = "attiva"
 v4, _i4, _a4 = carica(st)
 verifica("«Parliamone» prima di «Ho finito»: la frase che dice di finire",
          solleva(lambda: st.consigli_mappa(LEO, v4), ValueError))
+
+# ═══════════════════ 5b. gli scenari d'imbroglio (revisione della PR #330) ═══════════════════
+print("— gli scenari d'imbroglio")
+sa = studio(cfg_nuova("imbroglio.db"))
+va, ida, aida = carica(sa)
+ska, na = scheletro(sa, va, ida, aida)
+
+
+def tent_a():
+    return [x["esito"] for x in sa.dati.tutti(
+        "SELECT * FROM studio_tentativi WHERE verifica = ? ORDER BY id", (va,))]
+
+
+la = sa.inizia_libera(LEO, va)
+for _ in range(4):
+    sa.finisci_libera(LEO, la)
+    sa.rifai_mappa(LEO, la)
+verifica("A. «Ho finito» e «Rifai» a mappa vuota: mai un «giusto» (la radice seminata non conta)",
+         "giusto" not in tent_a() and tent_a() == ["sbagliato"] * 4, str(tent_a()))
+r_la = sa._riga_mappa(la)["nodi"][0]
+sa.togli_nodo(LEO, la, r_la["id"])
+sa.nodo_mappa(LEO, la, "Le scoperte geografiche")
+sa.finisci_libera(LEO, la)
+verifica("A. tolta e riscritta a mano, la radice (l'argomento dato) non conta lo stesso",
+         tent_a() == ["sbagliato"] * 5, str(tent_a()))
+sa.rifai_mappa(LEO, la)
+i_b = sa.indizio_libera(LEO, la)
+sa.mostra_concetto(LEO, la, i_b["concetto"])
+verifica("B. «Rifai» sulla libera aperta dopo «Mostra»: rifiutato, il «visto» resta",
+         solleva(lambda: sa.rifai_mappa(LEO, la), ValueError)
+         and sa._riga_mappa(la)["visti"].get(str(i_b["concetto"])) == M.VISTO)
+k_b = sa.nodo_mappa(LEO, la, "Cristoforo Colombo")
+sa.collega(LEO, la, sa._riga_mappa(la)["nodi"][0]["id"], k_b, "con")
+sa.finisci_libera(LEO, la)
+verifica("B. il concetto mostrato e poi scritto non vale «giusto»", tent_a() == ["sbagliato"] * 5,
+         str(tent_a()))
+# C: con la libera aperta la persona non tocca lo scheletro né le sue copie; il tutore sì
+mia_a = sa.inizia_mappa(LEO, va, "studente")
+cas_a = next(x for x in sa._riga_mappa(mia_a)["nodi"] if x.get("casella"))
+sa.rifai_mappa(LEO, la)
+cn = na["Cristoforo Colombo"]
+prove_c = {
+    "cambiare un concetto": lambda: sa.nodo_mappa(LEO, ska, "Parola", nodo=cn),
+    "togliere un concetto": lambda: sa.togli_nodo(LEO, ska, cn),
+    "aggiungere un concetto": lambda: sa.nodo_mappa(LEO, ska, "Alfa"),
+    "collegare": lambda: sa.collega(LEO, ska, cn, na["Magellano"], "x"),
+    "tenere": lambda: sa.tieni_mappa(LEO, ska, nodo=cn),
+    "confermare": lambda: sa.conferma_scheletro(LEO, ska),
+    "riaprire": lambda: sa.riapri_scheletro(LEO, ska),
+    "riordinare": lambda: sa.riordina_mappa(LEO, ska),
+    "riempire la mia mappa": lambda: sa.riempi(LEO, mia_a, cas_a["id"], "Cristoforo Colombo"),
+    "controllare la mia mappa": lambda: sa.controlla_mappa(LEO, mia_a),
+    "rifare la mia mappa": lambda: sa.rifai_mappa(LEO, mia_a),
+    "a memoria": lambda: sa.inizia_mappa(LEO, va, "memoria"),
+}
+rifiutate = [k for k, f in prove_c.items() if solleva(f, ValueError)]
+verifica("C. con la libera aperta la persona non cambia lo scheletro né le copie (oracolo)",
+         rifiutate == list(prove_c), str(set(prove_c) - set(rifiutate)))
+verifica("C. …e niente è cambiato", sa._riga_mappa(ska)["stato"] == "confermata"
+         and next(x for x in sa._riga_mappa(mia_a)["nodi"] if x["id"] == cas_a["id"])["testo"] == "")
+verifica("C. il tutore resta libero sullo scheletro (riaprirlo)",
+         sa.riapri_scheletro(ANDREA, ska)["copie_tolte"] >= 1)
+verifica("C. il lettore non rigenera lo scheletro con la libera aperta",
+         sa._scheletro_toccabile(sa.dati.db, va) == (False, []))
+vc, idc, aidc = carica(sa)
+skc, nc_ = scheletro(sa, vc, idc, aidc, conferma=False)
+lc = sa.inizia_libera(LEO, vc)
+verifica("C2. scheletro proposto: con la libera aperta la persona non lo svuota né lo conferma",
+         solleva(lambda: sa.togli_nodo(LEO, skc, nc_["Magellano"]), ValueError)
+         and solleva(lambda: sa.conferma_scheletro(LEO, skc), ValueError)
+         and sa._riga_mappa(skc)["stato"] == "proposta" and len(sa._riga_mappa(skc)["nodi"]) == 7)
+# Le carte della mappa: anche corrette restano «mappa» e si nascondono
+vk, idk, aidk = carica(sa)
+scheletro(sa, vk, idk, aidk)
+ck = sa.aggiungi_carta(LEO, vk, "Mappa di storia: che cosa divide «America»?",
+                       "Il trattato di Tordesillas", origine="mappa")
+sa.correggi_carta(LEO, ck, domanda="Che cosa divide l'America?")
+lk = sa.inizia_libera(LEO, vk)
+verifica("le carte della mappa corrette restano «mappa» e con la libera aperta non ci sono",
+         sa.dati.uno("SELECT origine FROM studio_carte WHERE id = ?", (ck,))["origine"] == "mappa"
+         and sa.carte(LEO, vk) == [] and sa.prossima_carta(LEO, vk) is None
+         and solleva(lambda: sa._carta(LEO, ck), S.NonTrovata))
+rd = A.riferimenti(sa._pagine_di(va))
+ad = G.argomenti_rif(sa._argomenti_per_carte(va))
+tr_ = lambda da, rel, a: {"da": da, "relazione": rel, "a": a, "argomento": "A1",  # noqa: E731
+                          "pagine": ["P2"]}
+nd, cd = MG.scheletro([tr_("Portogallo e Spagna", "comprende", "Portogallo"),
+                       tr_("Spagna", "finanzia", "Colombo")], rd, ad, 12)
+trip = {(nd[c["da"] - 1]["testo"], c["verbo"], nd[c["a"] - 1]["testo"]) for c in cd}
+verifica("D. un composto collegato a una sua parte non dà triple false («Spagna comprende "
+         "Portogallo»)", ("Spagna", "comprende", "Portogallo") not in trip
+         and ("Spagna", "finanzia", "Colombo") in trip, str(trip))
+nd, _cd = MG.scheletro([tr_("Stato della Chiesa", "governato da", "Papa"),
+                        tr_("Chiesa di Stato", "tipica di", "Inghilterra")], rd, ad, 12)
+verifica("D. «Stato della Chiesa» e «Chiesa di Stato» restano due concetti",
+         {"Stato della Chiesa", "Chiesa di Stato"} <= {n["testo"] for n in nd})
+sa.close()
 
 # ═══════════════════════════ 6. dati ═══════════════════════════
 print("— dati")
