@@ -162,6 +162,8 @@ ESCLUSI: Mapping[str, str] = MappingProxyType({
     "studio_interroga": "l'interrogazione a voce dello Studio: domande e risposte attese sono dati "
                         "non fidati e l'esito si decide dalla frase detta; sullo schermo c'è la "
                         "verifica finta",
+    "studio_esercizio": "l'esercizio guidato a voce: domande e indizi sono dati non fidati e "
+                        "l'esito si decide dalla frase detta; sullo schermo c'è la sua vista",
     "studio_mappa_consigli": "legge la mappa e lo scheletro dello Studio (dati non fidati) per "
                              "«Parliamone»: sullo schermo la mappa ha la sua vista",
     "studio_ascolta": "il ripasso letto ad alta voce dove si parla: sullo schermo c'è «Ascolta», "

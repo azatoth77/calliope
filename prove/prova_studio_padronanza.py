@@ -168,9 +168,9 @@ print("— il servizio, in ombra")
 cfg = cfg_nuova("a.db")
 st = studio(cfg)
 vid, ids, aids = carica(st)
-verifica("lo schema alla versione 12 (dai premi, #296), studio_tentativi fra le tabelle e nella conservazione",
+verifica("lo schema alla versione 13 (dagli esercizi guidati, #278), studio_tentativi fra le tabelle e nella conservazione",
          st.dati.uno("SELECT versione FROM meta_schema WHERE modulo='studio'")["versione"]
-         == len(D.MIGRAZIONI) == 12 and "studio_tentativi" in D.TABELLE
+         == len(D.MIGRAZIONI) == 13 and "studio_tentativi" in D.TABELLE
          and set(TABELLE_STUDIO) == set(D.TABELLE))
 pz = st.padronanza(LEO, vid)
 verifica("senza tentativi: tutti «non ancora misurata», niente lacune né livello",

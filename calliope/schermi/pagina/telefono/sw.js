@@ -5,7 +5,7 @@
 // schede non passano mai di qui.
 "use strict";
 
-const CACHE = "calliope-telefono-pagina-v36";
+const CACHE = "calliope-telefono-pagina-v37";
 const PAGINA = [
   "/telefono/", "/telefono/telefono.js", "/telefono/voce.js", "/telefono/microfono.js",
   "/telefono/schermo-acceso.js",
@@ -13,6 +13,7 @@ const PAGINA = [
   "/telefono/icona-180.png", "/telefono/icona-192.png", "/telefono/icona-512.png",
   "/schermo.js", "/schermo.css", "/sezioni.js", "/bordi.js", "/studio.js",
   "/libreria.js",
+  "/esercizio.js",
 ];
 
 self.addEventListener("install", (ev) => {

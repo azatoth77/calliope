@@ -65,7 +65,11 @@ Tabelle (versione 1):
 - `studio_stelle`, `studio_premi` e `studio_duelli` (versione 12, 31/10, issue #296): le stelle
   guadagnate, gli interruttori dei premi di una persona e i duelli fra persone di casa
   (`studio/premi.py`). La serie di giorni non ha una tabella: la calcola il codice dai dati che
-  ci sono (eventi, tentativi, prove).
+  ci sono (eventi, tentativi, prove);
+- `studio_esercizi` (versione 13, 31/10, issue #278): gli esercizi guidati, un problema portato
+  dalla persona (una foto o il testo scritto) con i passi della guida (`studio/esercizi.py`,
+  `studio/esercizi_genera.py`). Il testo del problema e i passi sono un dato (sullo schermo con
+  textContent, al modello in busta, mai le risposte attese).
 
 Tenuta (decisione 0035, punto 4): tutto ciò che è di una verifica resta fino a
 `studio_tenuta_giorni` (60) giorni dopo la sua data, per sempre se archiviata; «dimentica le
@@ -90,7 +94,7 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_pratica", "studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
+TABELLE = ("studio_esercizi", "studio_pratica", "studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
            "studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
            "studio_misure",
            "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
@@ -459,14 +463,45 @@ def _v12(db: sqlite3.Connection):
     db.execute("CREATE INDEX IF NOT EXISTS studio_pratica_persona ON studio_pratica(persona, giorno)")
 
 
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12]
+def _v13(db: sqlite3.Connection):
+    """31/10, issue #278: gli esercizi guidati (`studio/esercizi.py`). `persona` è di chi è la
+    verifica; `testo` il problema letto o scritto (un dato), `file` la foto (dentro
+    `cartella/pagine/<verifica>/`); `passi` i passi della guida in JSON (domanda, tipo, risposta
+    attesa, indizio: un dato), `risultato` il risultato finale proposto dal lettore, solo per la
+    guardia della voce (mai mostrato né detto); `esiti` gli esiti dei passi decisi dal codice."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_esercizi (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        origine TEXT NOT NULL,
+        file TEXT,
+        testo TEXT,
+        stato TEXT NOT NULL,
+        avvisi TEXT NOT NULL DEFAULT '[]',
+        passi TEXT NOT NULL DEFAULT '[]',
+        risultato TEXT,
+        passo INTEGER NOT NULL DEFAULT 0,
+        esiti TEXT NOT NULL DEFAULT '[]',
+        errori INTEGER NOT NULL DEFAULT 0,
+        indizi INTEGER NOT NULL DEFAULT 0,
+        firma TEXT,
+        creato TEXT NOT NULL,
+        creato_da TEXT,
+        modificato TEXT,
+        finito TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_esercizi_verifica ON studio_esercizi(verifica)")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_esercizi_persona ON studio_esercizi(persona)")
+
+
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")
 # Le tabelle venute dopo la prima versione: un db di prima (lo Studio spento non lo prepara) può
 # non averle
 NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
-         "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_premi")
+         "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_premi",
+         "studio_esercizi")
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:
@@ -561,9 +596,15 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
             file += [r[0] for r in db.execute(
                 "SELECT file FROM studio_pagine WHERE materiale = ? AND file IS NOT NULL", (m,))]
             db.execute("DELETE FROM studio_pagine WHERE materiale = ?", (m,))
+        # Le foto degli esercizi guidati (#278), via con la verifica
+        if _tabella(db, "studio_esercizi"):
+            file += [r[0] for r in db.execute(
+                "SELECT file FROM studio_esercizi WHERE verifica = ? AND file IS NOT NULL",
+                (vid,))]
         for t in ("studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
                   "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
-                  "studio_indicazioni", "studio_stelle", "studio_duelli", *CON_ORFANI):
+                  "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_esercizi",
+                  *CON_ORFANI):
             # Un db ancora allo schema di prima (lo Studio spento non lo prepara): le tabelle
             # nuove possono mancare
             if t in NUOVE and not _tabella(db, t):
@@ -775,6 +816,9 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
         conosciuti |= {r[0][len(RIF_FILE):] for r in db.execute(
             "SELECT riferimento FROM studio_materiali WHERE riferimento LIKE ?",
             (RIF_FILE + "%",))}
+        if _tabella(db, "studio_esercizi"):
+            conosciuti |= {r[0] for r in db.execute(
+                "SELECT file FROM studio_esercizi WHERE file IS NOT NULL")}
         out["orfani"] = togli_orfani(cartella, conosciuti, ORFANI_DOPO_S)
         out["file"] += out["orfani"]
     return out

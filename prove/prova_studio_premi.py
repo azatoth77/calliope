@@ -164,8 +164,8 @@ TITOLI = [a["titolo"] for a in MAT["argomenti"]]
 print("— schema")
 st = studio(cfg_nuova("schema.db"))
 from calliope.conserva import TABELLE_STUDIO  # noqa: E402
-verifica("schema «studio» alla versione 12", D.versione_schema(st.dati.db) == 12
-         and len(D.MIGRAZIONI) == 12)
+verifica("schema «studio» alla versione 13 (12 coi premi, 13 con gli esercizi guidati, #278)",
+         D.versione_schema(st.dati.db) == 13 and len(D.MIGRAZIONI) == 13)
 verifica("le tabelle dei premi in TABELLE e in conserva.TABELLE_STUDIO",
          {"studio_stelle", "studio_premi", "studio_duelli", "studio_pratica"} <= set(D.TABELLE)
          and set(TABELLE_STUDIO) == set(D.TABELLE))

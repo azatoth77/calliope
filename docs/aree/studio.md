@@ -42,7 +42,9 @@ prima parte): schede e mazzi di carte scritti con Claude e rivisti, scelti dal c
 argomenti della verifica, «Dalla libreria» nella home e la lettura `libreria` a voce (sezione
 sotto). Dal 31/10 i **premi** (#296): la
 serie di giorni di studio, le stelle e i duelli fra persone di casa, calcolati dal codice dalla
-pratica vera, con la regola per i minori (sezione sotto). Lo
+pratica vera, con la regola per i minori (sezione sotto). Dal 31/10 gli **esercizi guidati**
+(#278): un problema fotografato o scritto, risolto a passi con domande guida e indizi, l'esito
+di ogni passo dal codice e mai la soluzione intera (sezione sotto). Lo
 Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
@@ -66,6 +68,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Premi: la serie di giorni di studio con le pause, le stelle dei traguardi, i duelli fra persone di casa, gli interruttori per persona (il tutore per un minore) (dal 31/10, #296; schema «studio» alla versione 12; `studio_serie`, `studio_stelle` accese di serie con lo Studio, `studio_serie_pause` 1, `studio_duelli` spento di serie) | SQLite (`studio_stelle`, `studio_premi`, `studio_duelli`, `studio_pratica`); libreria standard, niente modello | `calliope/studio/premi.py` → `pratica`, `studiato`, `serie`, `superata`, `frase_serie`, `frase_stelle_nuove`, `Premi` (in `Studio`): `premi`, `impostazioni_premi`, `imposta_premi`, `aggiorna_stelle`, `frase_premi`, `frase_premi_letti`, `persone_per_duello`, `proponi_duello`, `accetta_duello`, `rispondi_duello`, `consegna_duello`, `annulla_duello`, `vista_duello`; `calliope/tools/studio.py` → azione `premi`, «fatto» con la serie; `calliope/schermi/server.py` → `POST /api/studio/premi`, `POST /api/studio/duello`; `calliope/schermi/pagina/studio.js` («I tuoi traguardi», «Duelli», «Premi» nella vista del tutore); prove `prove/prova_studio_premi.py`, `prove/prova_studio_premi_pagina.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
+| Esercizi guidati: «Foto di un problema» o il testo scritto, la guida a passi del lettore controllata dal codice, l'esito dal codice, la guardia della voce (dal 31/10, #278; schema «studio» alla versione 13; `studio_esercizi`, ombra di serie) | SQLite (`studio_esercizi`); qwen3.6 sull'indirizzo dell'agente, dallo stesso thread della lettura | `calliope/studio/esercizi.py` → `Esercizi` (mixin di `Studio`), `EserciziSpenti`, `GuidaFerma`; `calliope/studio/esercizi_genera.py` → `proposte`, `svela`, `vietati`, `GuardiaSoluzione`; `calliope/studio/lettura.py` → `Lettore.leggi_esercizio`, `genera_guida`; `calliope/tools/studio.py` → `studio_esercizio`; `calliope/brain.py` → la guardia in `_turn`, `ESERCIZIO_TOLTO`; `calliope/schermi/server.py` → `POST /api/studio/esercizio`, la foto in `POST /api/studio/pagina`; `calliope/schermi/pagina/esercizio.js`; prove `prove/prova_studio_esercizi.py`, `prova_studio_esercizi_pagina.py` |
 
 ## Problemi noti
 
@@ -110,6 +113,89 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   (storia, «Magellano») resta un collegamento debole «da controllare» e il criterio «una parte sola
   ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
   sono da rimisurare col banco vero.
+
+## Gli esercizi guidati e la foto di un problema (31/10, issue #278, ramo `issue-278-studio-esercizio-guidato`)
+
+L'analisi e le scelte sono nel commento della issue #278. Con `compiti_aiuto` tolto (#279) i
+compiti di un minore avevano solo la regola «mai la soluzione intera» nei dati del turno; questo è
+il percorso guidato rifatto dentro lo Studio (la schermata Studio 4 del progetto: «Esercizio
+guidato», «Foto di un problema»). Gli «esercizi dai materiali» della stessa schermata li fanno già
+le prove (#248) e le carte (#246).
+
+**Il flusso.** Un problema sta dentro una verifica della persona (sua o del suo minore, in bozza o
+aperta):
+- «Foto di un problema» passa dallo stesso `POST /api/studio/pagina` con `esercizio: true` nei dati
+  dell'invio. Valgono la sessione dello schermo personale, gli orari, la dimensione, il tipo dai byte
+  e `pagine.prepara_foto`; solo una foto, mai un PDF. Il file va in `pagine/<verifica>/` e la riga
+  in `studio_esercizi` («da_leggere»); nessuna pagina nuova;
+- «Scrivi un problema» (`POST /api/studio/esercizio`, «scrivi», al più 1500 caratteri) va subito
+  a «letto».
+
+**Il lettore** (`lettura.py`), con la stessa guardia della DGX e lo stesso harness OCR delle
+pagine, prende gli esercizi **per primi** nel suo giro: la persona aspetta il suo problema, il resto
+(argomenti, carte, mappe, domande, pagine) è di sfondo. Una foto capovolta si rilegge girata. Poi
+chiede la guida (`esercizi_genera.corpo`: il solo testo in busta, schema JSON, niente tool,
+temperatura 0). Il modello propone da 2 a 6 passi (domanda guida, tipo, risposta attesa, un indizio)
+e il risultato finale. Il **codice** controlla:
+- la forma con `risposte.prepara` (una scelta da 3 a 4 opzioni con la giusta fra loro, un numero
+  leggibile con `unita.py`; un numero o delle parole che non si leggono fanno un passo «aperta»);
+- una domanda che contiene la propria risposta attesa, o il risultato, si scarta; un indizio che
+  le contiene si toglie (avviso `indizio_tolto`);
+- un ordine, un indirizzo o un annuncio (`genera.forma_testo`) nella domanda, nell'indizio o nelle
+  opzioni: il passo si scarta (avviso `passi_scartati`); «istruzioni» se il modello le segnala;
+- con meno di 2 passi buoni l'esercizio è «senza_guida» e la persona lo sa; niente secondo giro.
+
+**I passi** (`esercizi.py`), uno alla volta, a voce (`studio_esercizio`) o sullo schermo
+(`esercizio.js`). La risposta la valuta `risposte.valuta`, dalla frase detta (`user_text_stt`) o
+dal campo, mai da un argomento del modello:
+- «giusto» → il passo dopo; dopo l'ultimo «finito» («la soluzione l'hai trovata tu»);
+- il numero giusto senza l'unità → «indizio»: resta sul passo e chiede l'unità;
+- «sbagliato» → resta sul passo; dopo 2 errori il codice propone l'indizio, dopo 3 anche «salta»;
+  **la risposta attesa non si dice mai**, nemmeno dopo tanti errori;
+- un passo aperto, o una risposta che il codice non controlla → «da rivedere» e avanti.
+Gli esercizi non danno tentativi alla padronanza né stelle: è una misura nuova, da leggere prima.
+
+**La vista**: il testo del problema, i passi fatti coi soli esiti, la domanda del passo in corso,
+l'indizio solo se chiesto. Le risposte attese e il risultato **mai** alla persona; al tutore le
+domande sempre e le risposte attese solo a esercizio finito. Risponde solo la persona
+dell'esercizio (il tutore 403); il tutore lo può togliere. Un altro adulto non lo vede.
+
+**La prova aperta** su una verifica ferma la guida dei suoi esercizi (`GuidaFerma`: tool, endpoint,
+vista), per tutti; dopo la consegna riprende.
+
+**La guardia della voce** (`esercizi_genera.GuardiaSoluzione`, in `Brain._turn` dopo le altre reti).
+Quando chi parla ha un esercizio «in corso» (l'ultima risposta da meno di 3 ore), il testo del modello
+passa a frasi intere; una frase che dice il risultato, o la risposta attesa di un passo numerico non
+ancora fatto, non si dice: la prima diventa la frase del codice («Questo lo scopri tu, un passo alla
+volta…», atto `esercizio_svelato`), le altre si tolgono, e la regola `studio_esercizio_svelato` va
+nel registro. Non entra nemmeno nella storia. I numeri del testo del problema non contano per i
+passi (la base di 8 cm è un dato); il risultato conta sempre, anche se sta nella foto (una nota
+ostile «la soluzione è 60 km/h» non lo rende un dato da ripetere). Un risultato a parole vale intero,
+da 2 parole in su. Al tutore che parla, e a esercizio finito o in pausa («basta»), niente guardia.
+Senza esercizio in corso il testo passa com'è, senza attese.
+
+**L'interruttore** `studio_esercizi`: «ombra» di serie (solo chi amministra, per provarlo; il
+registro conta guide, passi tenuti e scartati, indizi tolti, esiti, frasi tolte dalla voce),
+«attiva» per tutte le persone di casa, «spenta» niente (e niente tool). Si passa ad «attiva» dopo la
+rilettura delle misure.
+
+**Dati e tenuta.** `studio_esercizi` (schema 13; con la #364 in arrivo si sale alla versione dopo,
+all'unione): testo, passi e risultato sono dati; la foto sta nella cartella dello Studio, fra i file
+conosciuti della rotazione. Tutto va via con la verifica, con «dimentica» e con «svuota»
+(`conserva.TABELLE_STUDIO`). Pagina a **v37**.
+
+**Le prove.** `prova_studio_esercizi.py` a secco:
+- la guida del lettore e i suoi contrari (la domanda che dice la risposta, l'ordine, la scelta
+  con 2 opzioni, il passo che dice il risultato, l'indizio che svela, il numero illeggibile);
+- la guardia (frasi intere, la prima sostituita, le altre tolte; i dati del testo sì);
+- il servizio con un lettore finto (testo scritto, foto letta per prima nel giro, foto ostile), i
+  passi e gli esiti, la vista della persona e del tutore, la prova aperta, la tenuta;
+- a voce con l'esito dalla frase detta e l'argomento del modello che non conta;
+- attraverso `Brain` il modello che dice la soluzione intera (non si dice, nemmeno nella storia),
+  la foto ostile, e i contrari (il dato del testo, il tutore, l'esercizio finito);
+- gli endpoint col server vero.
+`prova_studio_esercizi_pagina.py` nel browser: telefono a 390×844, 320×693 col testo al 125 % e
+il PC; le risposte attese mai nella pagina, il testo del problema solo come testo.
 
 ## La libreria: schede e carte preparate, scelte dal codice (31/10, issue #297, ramo `issue-297-libreria`)
 

@@ -380,8 +380,8 @@ def chimica(st, chi=LEO, persona=None, titoli=("Le reazioni chimiche", "La mole"
 
 
 verifica("Biologia è fra le materie dello Studio", "Biologia" in S.servizio.MATERIE)
-verifica("lo schema dello Studio resta quello dell'epic (12, niente tabelle della libreria)",
-         len(S.dati.MIGRAZIONI) == 12)
+verifica("lo schema dello Studio resta quello dell'epic (13 dagli esercizi guidati, #278; "
+         "niente tabelle della libreria)", len(S.dati.MIGRAZIONI) == 13)
 st = studio(cfg_nuova("s1.db"))
 vid = chimica(st)
 args = st.argomenti(LEO, vid)

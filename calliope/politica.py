@@ -477,6 +477,8 @@ CLASSI: dict[str, Classe] = {
     # decide il codice dalla frase detta dalla persona, mai `proposta` del modello (una misura);
     # una volta per domanda e mai nel turno in cui è stata chiesta (E0 sui dati della persona)
     "studio_interroga": _c(S, fonte="foto"),
+    # l'esercizio guidato (31/10, #278): come le carte, la domanda e l'indizio sono dati
+    "studio_esercizio": _c(S, fonte="foto"),
     # il ripasso da ascoltare (31/10, passo 9, #249): una lettura senza fonte non fidata. Il
     # risultato ha solo conti e una frase del codice; le pagine e le carte le legge il ciclo dopo
     # la risposta, con la voce del libro, e non entrano nella conversazione né nella storia

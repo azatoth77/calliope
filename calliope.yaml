@@ -1073,6 +1073,16 @@ studio:
   # con lo Studio. «ombra» calcola le proposte e le conta nel registro senza mostrarle; «spenta»
   # niente
   studio_libreria: attiva
+  # Gli esercizi guidati (31/10, issue #278, calliope/studio/esercizi.py): un problema portato
+  # dalla persona (una foto, «Foto di un problema», o il testo scritto) dentro una sua verifica;
+  # il lettore delle pagine legge la foto e chiede a qwen3.6 una guida a passi (domande guida e
+  # indizi), che il codice controlla (mai la risposta di un passo nella sua domanda o nel suo
+  # indizio, mai il risultato). L'esito di ogni passo lo decide il codice; la soluzione intera
+  # non si dice mai, e mentre un esercizio è in corso la voce non la dice (la guardia di Brain).
+  # «ombra» (di serie): li usa solo chi amministra, per provarli, e il registro conta passi,
+  # esiti e frasi tolte; «attiva»: tutte le persone di casa; «spenta»: niente. Si passa ad
+  # «attiva» dopo la rilettura delle misure
+  studio_esercizi: ombra
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

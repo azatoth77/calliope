@@ -407,6 +407,15 @@
     },
     // La libreria dello Studio (31/10, #297, libreria.js): {verifica, azione?, contenuto?, n?,
     // argomento?} → {proposte, materie, chiusa}, la scheda, la soluzione o le carte aggiunte
+    // Gli esercizi guidati dello Studio (31/10, #278, esercizio.js): {verifica, azione?,
+    // esercizio?, testo?, risposta?} → gli esercizi della verifica, il passo, l'esito del codice
+    async studioEsercizio(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const r = await postSessione("/api/studio/esercizio", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
     async studioLibreria(dati) {
       if (!S.sessione) return { ok: false, status: 0, dati: {} };
       try {
