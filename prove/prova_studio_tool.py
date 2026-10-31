@@ -744,7 +744,7 @@ verifica("la cartella dei provvisori all'avvio: solo dopo 15 minuti",
 # ═══════════════════════════ registro: il conto dei tool ═══════════════════════════
 src_main = (QUI.parent / "calliope" / "main.py").read_text("utf-8")
 verifica("main.py: i tool dello Studio solo con lo Studio per il modello",
-         "if s.studio.per_modello():" in src_main and "studio_specs()" in src_main)
+         "if s.studio.per_modello():" in src_main and "studio_specs(cfg)" in src_main)
 st.close()
 st_om.close()
 sys.exit(1 if errori else 0)

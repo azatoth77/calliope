@@ -1696,9 +1696,9 @@ def senza_mascherati(ctx, argomenti: dict) -> dict:
 
 
 def studio_specs(cfg=None) -> list[ToolSpec]:
-    """I tool dello Studio. `studio_mappa_consigli` c'è sempre quando `cfg` non è dato (main.py
-    oggi non lo passa) e con `studio_mappa_consigli: spenta` risponde che non è acceso; con `cfg`
-    e «spenta» non c'è del tutto."""
+    """I tool dello Studio. Con `cfg` (main.py lo passa dal 31/10, #335) e
+    `studio_mappa_consigli: spenta` il tool non c'è del tutto; senza `cfg` (le prove) c'è sempre e
+    da spento risponde che non è acceso."""
     from ..studio import mappa as M
     extra = []
     if cfg is None or M.modo_consigli(cfg) != "spenta":

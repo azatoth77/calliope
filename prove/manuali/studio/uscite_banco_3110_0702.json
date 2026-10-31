@@ -1,0 +1,156 @@
+{
+ "nota": "Uscite grezze del modello (qwen3.6-35b) al banco dello Studio del 31/10 07:02 sulla DGX (banco_studio.py --fasi prove,mappa, versione f552873), sui materiali di fantasia di questa cartella (issue #349); la seconda passata coi testi dei concetti al posto dei codici C…: vedi prove/studio_vllm_finto.py.",
+ "mappa": {
+  "matematica": {
+   "triple": [
+    {"da": "Identità", "relazione": "si contrappone a", "a": "Equazione", "argomento": "A1", "pagine": ["P2"]},
+    {"da": "Principi di equivalenza", "relazione": "permettono di trovare", "a": "Soluzione", "argomento": "A2", "pagine": ["P3"]},
+    {"da": "Trasporto termini", "relazione": "cambia il", "a": "Segno", "argomento": "A3", "pagine": ["P3", "P8"]},
+    {"da": "Frazioni", "relazione": "richiedono il", "a": "M.c.m.", "argomento": "A4", "pagine": ["P4"]},
+    {"da": "0 x = b", "relazione": "indica un'equazione", "a": "Impossibile", "argomento": "A5", "pagine": ["P5"]},
+    {"da": "Soluzione trovata", "relazione": "va verificata con", "a": "Sostituzione", "argomento": "A6", "pagine": ["P5", "P8"]},
+    {"da": "Problema reale", "relazione": "si traduce in", "a": "Equazione", "argomento": "A7", "pagine": ["P6"]}
+   ],
+   "connessione": [
+    {"da": "Problema reale", "relazione": "si traduce in", "a": "Equazione", "pagine": ["P6"]}
+   ],
+   "ricostruito": [],
+   "banco": {"concetti": 11, "collegamenti": 10, "concetti_fondati": 10, "componenti_prima": 5, "componenti": 5, "uniti": 0}
+  },
+  "scienze": {
+   "triple": [
+    {"da": "Foglia", "relazione": "contiene", "a": "Cloroplasti", "argomento": "A6", "pagine": ["P2", "P3"]},
+    {"da": "Cloroplasti", "relazione": "contengono", "a": "Clorofilla", "argomento": "A6", "pagine": ["P2", "P3"]},
+    {"da": "Clorofilla", "relazione": "permette", "a": "Fotosintesi", "argomento": "A2", "pagine": ["P3", "P6", "P8"]},
+    {"da": "Fotosintesi", "relazione": "produce", "a": "Glucosio", "argomento": "A2", "pagine": ["P3", "P6", "P8"]},
+    {"da": "Fotosintesi", "relazione": "produce", "a": "Ossigeno", "argomento": "A2", "pagine": ["P3", "P6", "P8"]},
+    {"da": "Glucosio", "relazione": "serve per", "a": "Respirazione", "argomento": "A3", "pagine": ["P4"]},
+    {"da": "Respirazione", "relazione": "avviene nei", "a": "Mitocondri", "argomento": "A3", "pagine": ["P4"]},
+    {"da": "Radici", "relazione": "assorbono", "a": "Linfa grezza", "argomento": "A4", "pagine": ["P5"]},
+    {"da": "Linfa grezza", "relazione": "sale tramite", "a": "Xilema", "argomento": "A4", "pagine": ["P5"]},
+    {"da": "Foglie", "relazione": "rilasciano", "a": "Traspirazione", "argomento": "A4", "pagine": ["P5"]}
+   ],
+   "connessione": [
+    {"da": "Foglia", "relazione": "contiene", "a": "Traspirazione", "pagine": ["P5"]}
+   ],
+   "ricostruito": [],
+   "banco": {"concetti": 12, "collegamenti": 11, "concetti_fondati": 12, "componenti_prima": 2, "componenti": 2, "uniti": 0}
+  },
+  "storia": {
+   "triple": [
+    {"da": "Turchi ottomani", "relazione": "bloccano", "a": "vie di terra", "argomento": "A1", "pagine": ["P2"]},
+    {"da": "vie di terra", "relazione": "spingono a", "a": "nuove vie marittime", "argomento": "A1", "pagine": ["P2"]},
+    {"da": "Portogallo", "relazione": "esplora", "a": "rotta africana", "argomento": "A2", "pagine": ["P3"]},
+    {"da": "Colombo", "relazione": "scopre", "a": "Nuovo Mondo", "argomento": "A3", "pagine": ["P4"]},
+    {"da": "Vespucci", "relazione": "identifica", "a": "continente nuovo", "argomento": "A4", "pagine": ["P5"]},
+    {"da": "Tordesillas", "relazione": "divide", "a": "terre tra Spagna e Portogallo", "argomento": "A5", "pagine": ["P5"]},
+    {"da": "Magellano", "relazione": "compie", "a": "primo giro del mondo", "argomento": "A6", "pagine": ["P5"]},
+    {"da": "conquistadores", "relazione": "sconfiggono", "a": "Imperi Aztechi e Inca", "argomento": "A7", "pagine": ["P7"]},
+    {"da": "scoperte", "relazione": "causano", "a": "scambio colombiano", "argomento": "A8", "pagine": ["P7"]}
+   ],
+   "connessione": [
+    {"da": "nuove vie marittime", "relazione": "include", "a": "rotta africana", "pagine": ["P3"]},
+    {"da": "nuove vie marittime", "relazione": "include", "a": "Nuovo Mondo", "pagine": ["P4"]}
+   ],
+   "ricostruito": [],
+   "banco": {"concetti": 11, "collegamenti": 10, "concetti_fondati": 11, "componenti_prima": 5, "componenti": 3, "uniti": 2}
+  }
+ },
+ "prove": {
+  "matematica": {
+   "domande": [
+    {"argomento": "A1", "tipo": "scelta", "domanda": "Secondo il testo, come si chiama un'uguaglianza tra due espressioni che è vera per qualunque valore delle lettere?", "opzioni": ["Equazione", "Identità", "Incognita", "Principio di equivalenza"], "risposta": "Identità", "pagine": ["P2"]},
+    {"argomento": "A1", "tipo": "vero_falso", "domanda": "Vero o Falso: Un'equazione è un'uguaglianza che è vera solo per alcuni valori della lettera incognita.", "risposta": "vero", "pagine": ["P2"]},
+    {"argomento": "A1", "tipo": "scelta", "domanda": "Nell'equazione 3x + 5 = 20, qual è il secondo membro?", "opzioni": ["3x + 5", "20", "3x", "5"], "risposta": "20", "pagine": ["P2"]},
+    {"argomento": "A1", "tipo": "parole", "domanda": "Qual è il nome della lettera, di solito indicata con x, per cui un'equazione è vera solo per alcuni valori?", "risposta": "incognita", "pagine": ["P2"]},
+    {"argomento": "A2", "tipo": "scelta", "domanda": "Secondo il Primo principio di equivalenza, cosa si ottiene se si aggiunge lo stesso numero a entrambi i membri di un'equazione?", "opzioni": ["Un'equazione impossibile", "Un'equazione equivalente", "Un'identità", "Un'equazione indeterminata"], "risposta": "Un'equazione equivalente", "pagine": ["P3"]},
+    {"argomento": "A2", "tipo": "vero_falso", "domanda": "Vero o Falso: Due equazioni sono equivalenti se hanno le stesse soluzioni.", "risposta": "vero", "pagine": ["P3"]},
+    {"argomento": "A2", "tipo": "scelta", "domanda": "Qual è la regola pratica che deriva dal Primo principio di equivalenza?", "opzioni": ["Regola del trasporto", "Regola del prodotto", "Regola del m.c.m.", "Regola del coefficiente"], "risposta": "Regola del trasporto", "pagine": ["P3"]},
+    {"argomento": "A2", "tipo": "scelta", "domanda": "Secondo il Secondo principio di equivalenza, per ottenere un'equazione equivalente si possono moltiplicare i membri per lo stesso numero diverso da:", "opzioni": ["1", "-1", "zero", "2"], "risposta": "zero", "pagine": ["P3"]},
+    {"argomento": "A3", "tipo": "scelta", "domanda": "Qual è il primo passo indicato per risolvere un'equazione?", "opzioni": ["Si eliminano le parentesi.", "Si portano i termini con la x al primo membro.", "Si riducono i termini simili.", "Si dividono i due membri per il coefficiente della x."], "risposta": "Si eliminano le parentesi.", "pagine": ["P4"]},
+    {"argomento": "A3", "tipo": "numero", "domanda": "Nell'esempio 2(x - 3) + 4 = x + 5, qual è il valore finale di x?", "risposta": "7", "pagine": ["P4"]},
+    {"argomento": "A3", "tipo": "vero_falso", "domanda": "Vero o Falso: Quando si sposta un termine da un membro all'altro, il suo segno cambia.", "risposta": "vero", "pagine": ["P4", "P8"]},
+    {"argomento": "A3", "tipo": "scelta", "domanda": "Nell'esempio 7x - 3 = 2x + 12, dopo aver applicato la regola del trasporto, qual è il primo membro dell'equazione trasformata?", "opzioni": ["7x - 2x", "7x + 2x", "12 + 3", "5x"], "risposta": "7x - 2x", "pagine": ["P8"]},
+    {"argomento": "A4", "tipo": "scelta", "domanda": "Se un'equazione contiene frazioni, cosa si devono moltiplicare i due membri per?", "opzioni": ["La somma dei denominatori", "Il massimo comune divisore dei denominatori", "Il minimo comune multiplo dei denominatori", "Il prodotto dei denominatori"], "risposta": "Il minimo comune multiplo dei denominatori", "pagine": ["P4"]},
+    {"argomento": "A4", "tipo": "numero", "domanda": "Nell'esempio x/2 + x/3 = 5, qual è il valore di x dopo aver moltiplicato per il m.c.m. (6) e semplificato?", "risposta": "6", "pagine": ["P4"]},
+    {"argomento": "A4", "tipo": "scelta", "domanda": "Qual è il m.c.m. dei denominatori 2 e 3 nell'esempio x/2 + x/3 = 5?", "opzioni": ["2", "3", "5", "6"], "risposta": "6", "pagine": ["P4"]},
+    {"argomento": "A5", "tipo": "scelta", "domanda": "Se un'equazione si riduce alla forma 0 · x = 5, come viene definita?", "opzioni": ["Determinata", "Indeterminata", "Impossibile", "Identica"], "risposta": "Impossibile", "pagine": ["P5"]},
+    {"argomento": "A5", "tipo": "vero_falso", "domanda": "Vero o Falso: Un'equazione della forma 0 · x = 0 è indeterminata.", "risposta": "vero", "pagine": ["P5"]},
+    {"argomento": "A5", "tipo": "scelta", "domanda": "Quando un'equazione determinata si riduce alla forma a · x = b con a diverso da zero, quante soluzioni ha?", "opzioni": ["Nessuna", "Infinità", "Una sola", "Due"], "risposta": "Una sola", "pagine": ["P5"]},
+    {"argomento": "A5", "tipo": "parole", "domanda": "Qual è il termine usato per definire un'equazione in cui qualunque numero va bene come soluzione?", "risposta": "indeterminata", "pagine": ["P5"]},
+    {"argomento": "A6", "tipo": "scelta", "domanda": "Cosa si consiglia di fare alla fine per verificare la soluzione di un'equazione?", "opzioni": ["Moltiplicare i membri per -1", "Sostituire il valore trovato nell'equazione di partenza", "Dividere i membri per il coefficiente della x", "Eliminare le parentesi"], "risposta": "Sostituire il valore trovato nell'equazione di partenza", "pagine": ["P5", "P8"]},
+    {"argomento": "A6", "tipo": "vero_falso", "domanda": "Vero o Falso: La verifica consiste nel controllare che i due membri dell'equazione di partenza diano lo stesso numero sostituendo la soluzione.", "risposta": "vero", "pagine": ["P5", "P8"]},
+    {"argomento": "A6", "tipo": "scelta", "domanda": "Nella verifica dell'esempio 7x - 3 = 2x + 12 con x=3, quanto vale il primo membro (7 · 3 - 3)?", "opzioni": ["15", "18", "21", "12"], "risposta": "18", "pagine": ["P8"]},
+    {"argomento": "A7", "tipo": "scelta", "domanda": "Qual è il primo passo consigliato per risolvere un problema con le equazioni?", "opzioni": ["Scrivere l'equazione", "Scegliere l'incognita", "Risolvere l'equazione", "Controllare la soluzione"], "risposta": "Scegliere l'incognita", "pagine": ["P6"]},
+    {"argomento": "A7", "tipo": "numero", "domanda": "Nel Problema 1, qual è il numero trovato risolvendo 2x + 7 = 31?", "risposta": "12", "pagine": ["P6"]},
+    {"argomento": "A7", "tipo": "scelta", "domanda": "Nel Problema 2, se il fratello ha x anni e Marta ha il triplo, qual è l'equazione per la somma dei loro anni?", "opzioni": ["x + 3x = 32", "3x - x = 32", "x + 3 = 32", "3x = 32"], "risposta": "x + 3x = 32", "pagine": ["P6"]},
+    {"argomento": "A7", "tipo": "numero", "domanda": "Nel Problema 2, quanti anni ha il fratello?", "risposta": "8", "pagine": ["P6"]},
+    {"argomento": "A8", "tipo": "scelta", "domanda": "Nell'esercizio 1 (5x - 4 = 3x + 10), qual è il valore di x?", "opzioni": ["5", "7", "10", "3"], "risposta": "7", "pagine": ["P7"]},
+    {"argomento": "A8", "tipo": "scelta", "domanda": "Nell'esercizio 2 (4(x + 1) = 2x + 12), qual è il valore di x?", "opzioni": ["2", "4", "6", "8"], "risposta": "4", "pagine": ["P7"]},
+    {"argomento": "A8", "tipo": "scelta", "domanda": "Nell'esercizio 4 (3x + 2 = 3x + 5), l'equazione è:", "opzioni": ["Determinata", "Indeterminata", "Impossibile", "Identica"], "risposta": "Impossibile", "pagine": ["P7"]},
+    {"argomento": "A8", "tipo": "numero", "domanda": "Nell'esercizio 6, qual è il primo dei tre numeri consecutivi la cui somma è 48?", "risposta": "15", "pagine": ["P7"]}
+   ],
+   "banco": {"n": 29, "fondate": 22, "scelte": 17, "scelte_nelle_pagine": 14, "auto_sbagliate": 1}
+  },
+  "scienze": {
+   "domande": [
+    {"argomento": "A1", "tipo": "scelta", "domanda": "Qual è la parte della foglia collegata al ramo tramite il picciolo?", "opzioni": ["La nervatura", "La lamina", "Lo stoma", "Il cloroplasto"], "risposta": "La lamina", "pagine": ["P2"]},
+    {"argomento": "A1", "tipo": "vero_falso", "domanda": "Gli stomi si trovano sulla pagina inferiore della foglia.", "risposta": "vero", "pagine": ["P2"]},
+    {"argomento": "A1", "tipo": "parole", "domanda": "Quali strutture trasportano acqua e sostanze nutritive in tutta la foglia?", "risposta": "nervature", "pagine": ["P2"]},
+    {"argomento": "A2", "tipo": "scelta", "domanda": "Dove avviene il processo di fotosintesi nelle piante?", "opzioni": ["Nei mitocondri", "Nelle radici", "Nei cloroplasti", "Nello xilema"], "risposta": "Nei cloroplasti", "pagine": ["P3"]},
+    {"argomento": "A2", "tipo": "numero", "domanda": "Secondo l'equazione chimica della fotosintesi, quante molecole di anidride carbonica (CO₂) servono per produrre una molecola di glucosio?", "risposta": "6", "pagine": ["P3"]},
+    {"argomento": "A2", "tipo": "parole", "domanda": "Qual è il nome dello zucchero prodotto dalla fotosintesi?", "risposta": "glucosio", "pagine": ["P3"]},
+    {"argomento": "A2", "tipo": "scelta", "domanda": "Attraverso quali strutture la pianta assorbe l'anidride carbonica dall'aria?", "opzioni": ["Le radici", "I vasi cribrosi", "Gli stomi", "La clorofilla"], "risposta": "Gli stomi", "pagine": ["P3"]},
+    {"argomento": "A3", "tipo": "scelta", "domanda": "In quale organulo cellulare avviene la respirazione cellulare?", "opzioni": ["Nel cloroplasto", "Nel nucleo", "Nel mitocondrio", "Nel vacuolo"], "risposta": "Nel mitocondrio", "pagine": ["P4"]},
+    {"argomento": "A3", "tipo": "vero_falso", "domanda": "La respirazione delle piante avviene solo di notte.", "risposta": "falso", "pagine": ["P4"]},
+    {"argomento": "A3", "tipo": "parole", "domanda": "Quali sono i due prodotti finali della respirazione cellulare oltre all'energia?", "risposta": "anidride carbonica e acqua", "pagine": ["P4"]},
+    {"argomento": "A4", "tipo": "scelta", "domanda": "Come viene chiamata la linfa che sale dalle radici alle foglie attraverso lo xilema?", "opzioni": ["Linfa elaborata", "Linfa grezza", "Linfa fotosintetica", "Linfa minerale"], "risposta": "Linfa grezza", "pagine": ["P5"]},
+    {"argomento": "A4", "tipo": "scelta", "domanda": "Attraverso quali vasi discende la linfa elaborata?", "opzioni": ["Xilema", "Floema", "Stomi", "Radici"], "risposta": "Floema", "pagine": ["P5"]},
+    {"argomento": "A4", "tipo": "parole", "domanda": "Come si chiama il processo con cui l'acqua esce dalle foglie sotto forma di vapore?", "risposta": "traspirazione", "pagine": ["P5"]},
+    {"argomento": "A5", "tipo": "scelta", "domanda": "Nel laboratorio dell'Elodea, cosa indicano le bollicine che si formano sulle foglie?", "opzioni": ["Anidride carbonica", "Vapore acqueo", "Ossigeno", "Azoto"], "risposta": "Ossigeno", "pagine": ["P6"]},
+    {"argomento": "A5", "tipo": "vero_falso", "domanda": "Nel laboratorio dell'Elodea, avvicinando la lampada alle foglie, il numero di bollicine diminuisce.", "risposta": "falso", "pagine": ["P6"]},
+    {"argomento": "A5", "tipo": "aperta", "domanda": "Spiega brevemente la relazione osservata nel laboratorio tra la distanza della lampada e la produzione di bollicine.", "risposta": "Più la lampada è vicina (più luce arriva), più le bollicine sono numerose, indicando una fotosintesi più veloce.", "pagine": ["P6"]},
+    {"argomento": "A6", "tipo": "scelta", "domanda": "Qual è la funzione principale della clorofilla contenuta nei cloroplasti?", "opzioni": ["Assorbire l'acqua", "Catturare la luce del Sole", "Produrre anidride carbonica", "Trasportare zuccheri"], "risposta": "Catturare la luce del Sole", "pagine": ["P2", "P3"]},
+    {"argomento": "A6", "tipo": "parole", "domanda": "Di che colore è la clorofilla?", "risposta": "verde", "pagine": ["P2", "P3"]},
+    {"argomento": "A7", "tipo": "scelta", "domanda": "Perché alcune piante carnivore, come la dionea, catturano insetti?", "opzioni": ["Per produrre zuccheri", "Per procurarsi azoto", "Per difendersi dagli animali", "Per fare ombra"], "risposta": "Per procurarsi azoto", "pagine": ["P9"]},
+    {"argomento": "A7", "tipo": "vero_falso", "domanda": "Anche le piante carnivore effettuano la fotosintesi.", "risposta": "vero", "pagine": ["P9"]},
+    {"argomento": "A7", "tipo": "numero", "domanda": "Quante volte un insetto deve toccare i peli sensibili della trappola della dionea perché questa si chiuda?", "risposta": "2", "pagine": ["P9"]},
+    {"argomento": "A8", "tipo": "scelta", "domanda": "Quali sostanze servono alla pianta per la fotosintesi?", "opzioni": ["Solo acqua", "Acqua e anidride carbonica", "Solo anidride carbonica", "Ossigeno e glucosio"], "risposta": "Acqua e anidride carbonica", "pagine": ["P3"]},
+    {"argomento": "A8", "tipo": "vero_falso", "domanda": "Di notte le piante fanno la fotosintesi.", "risposta": "falso", "pagine": ["P4"]},
+    {"argomento": "A8", "tipo": "aperta", "domanda": "Qual è la differenza principale tra linfa grezza e linfa elaborata?", "risposta": "La linfa grezza è composta da acqua e sali minerali e sale dalle radici alle foglie; la linfa elaborata è composta da zuccheri e scende dalle foglie verso il fusto e le radici.", "pagine": ["P5"]}
+   ],
+   "banco": {"n": 24, "fondate": 19, "scelte": 10, "scelte_nelle_pagine": 10, "auto_sbagliate": 0}
+  },
+  "storia": {
+   "domande": [
+    {"argomento": "A1", "tipo": "scelta", "domanda": "Secondo il testo, quale evento del 1453 rese più difficili e costose le vie di terra verso l'Oriente per i mercanti europei?", "opzioni": ["La scoperta dell'America", "La conquista di Costantinopoli da parte dei Turchi ottomani", "La nascita della caravella", "La firma del trattato di Tordesillas"], "risposta": "La conquista di Costantinopoli da parte dei Turchi ottomani", "pagine": ["P2"]},
+    {"argomento": "A1", "tipo": "scelta", "domanda": "Perché le spezie erano così preziose e ricercate in Europa?", "opzioni": ["Perché servivano a conservare e insaporire i cibi", "Perché erano usate come moneta di scambio", "Perché erano necessarie per costruire le navi", "Perché erano considerate oggetti sacri"], "risposta": "Perché servivano a conservare e insaporire i cibi", "pagine": ["P2"]},
+    {"argomento": "A1", "tipo": "vero_falso", "domanda": "Secondo il testo, molti studiosi dell'epoca erano convinti che la Terra fosse piatta.", "risposta": "falso", "pagine": ["P2"]},
+    {"argomento": "A2", "tipo": "parole", "domanda": "Qual è il nome del principe portoghese che finanziò le spedizioni lungo le coste africane nel Quattrocento?", "risposta": "Enrico il Navigatore", "pagine": ["P3"]},
+    {"argomento": "A2", "tipo": "scelta", "domanda": "Chi fu il navigatore che nel 1488 raggiunse la punta meridionale dell'Africa?", "opzioni": ["Vasco da Gama", "Cristoforo Colombo", "Bartolomeu Dias", "Pedro Álvares Cabral"], "risposta": "Bartolomeu Dias", "pagine": ["P3"]},
+    {"argomento": "A2", "tipo": "scelta", "domanda": "Dove arrivò Vasco da Gama nel 1498 dopo aver attraversato l'Oceano Indiano?", "opzioni": ["Nelle Bahamas", "In Brasile", "A Calicut, in India", "Nelle Filippine"], "risposta": "A Calicut, in India", "pagine": ["P3"]},
+    {"argomento": "A3", "tipo": "numero", "domanda": "In che anno partì Cristof Colombo dal porto di Palos?", "risposta": "1492", "pagine": ["P4"]},
+    {"argomento": "A3", "tipo": "scelta", "domanda": "Quali sovrani spagnoli accettarono di finanziare il progetto di Colombo?", "opzioni": ["Luigi XIV e Maria Antonietta", "Isabella di Castiglia e Ferdinando d'Aragona", "Carlo V e Filippo II", "Enrico VIII e Elisabetta I"], "risposta": "Isabella di Castiglia e Ferdinando d'Aragona", "pagine": ["P4"]},
+    {"argomento": "A3", "tipo": "parole", "domanda": "Come vennero chiamati gli abitanti delle terre scoperte da Colombo, a causa dell'errore di quest'ultimo?", "risposta": "indiani", "pagine": ["P4"]},
+    {"argomento": "A4", "tipo": "scelta", "domanda": "Chi capì che le terre scoperte erano un continente nuovo e non l'Asia?", "opzioni": ["Cristoforo Colombo", "Amerigo Vespucci", "Martin Waldseemüller", "Juan Sebastián Elcano"], "risposta": "Amerigo Vespucci", "pagine": ["P5"]},
+    {"argomento": "A4", "tipo": "scelta", "domanda": "Perché le terre scoperte furono chiamate America?", "opzioni": ["Perché era il nome dato dagli indigeni", "In onore del navigatore Amerigo Vespucci", "Perché era la terra di Colombo", "Perché era ricca di America (un tipo di spezia)"], "risposta": "In onore del navigatore Amerigo Vespucci", "pagine": ["P5"]},
+    {"argomento": "A5", "tipo": "scelta", "domanda": "Qual era lo scopo principale del trattato di Tordesillas del 1494?", "opzioni": ["Dividere le terre scoperte tra Spagna e Portogallo per evitare guerre", "Stabilire un'alleanza militare contro i Turchi", "Definire i confini tra Francia e Inghilterra", "Regolare il commercio delle spezie con l'India"], "risposta": "Dividere le terre scoperte tra Spagna e Portogallo per evitare guerre", "pagine": ["P5"]},
+    {"argomento": "A5", "tipo": "scelta", "domanda": "Secondo il trattato di Tordesillas, a quale nazione spettavano le terre a est della linea immaginaria?", "opzioni": ["Spagna", "Portogallo", "Inghilterra", "Francia"], "risposta": "Portogallo", "pagine": ["P5"]},
+    {"argomento": "A6", "tipo": "scelta", "domanda": "Chi concluse il primo giro del mondo dopo la morte di Magellano?", "opzioni": ["Juan Sebastián Elcano", "Bartolomeu Dias", "Vasco da Gama", "Pedro Álvares Cabral"], "risposta": "Juan Sebastián Elcano", "pagine": ["P5"]},
+    {"argomento": "A6", "tipo": "numero", "domanda": "In che anno si concluse il primo giro del mondo compiuto dalla spedizione di Magellano?", "risposta": "1522", "pagine": ["P5"]},
+    {"argomento": "A7", "tipo": "scelta", "domanda": "Quale civiltà fu conquistata da Hernán Cortés nel Messico?", "opzioni": ["Inca", "Aztechi", "Maya", "Olmechi"], "risposta": "Aztechi", "pagine": ["P7"]},
+    {"argomento": "A7", "tipo": "scelta", "domanda": "Chi era il re degli Inca quando Pizarro arrivò nel 1532?", "opzioni": ["Montezuma", "Atahualpa", "Cortés", "Magellano"], "risposta": "Atahualpa", "pagine": ["P7"]},
+    {"argomento": "A7", "tipo": "scelta", "domanda": "Quale malattia contribuì alla vittoria degli spagnoli sulle popolazioni americane?", "opzioni": ["Malaria", "Vaiolo", "Colera", "Influenza spagnola"], "risposta": "Vaiolo", "pagine": ["P7"]},
+    {"argomento": "A8", "tipo": "scelta", "domanda": "Quale di questi prodotti arrivò in Europa dalle Americhe grazie allo scambio colombiano?", "opzioni": ["Cavalli", "Grano", "Patata", "Bestiame"], "risposta": "Patata", "pagine": ["P7"]},
+    {"argomento": "A8", "tipo": "scelta", "domanda": "Da dove provenivano gli schiavi portati nelle piantagioni americane?", "opzioni": ["Dall'Asia", "Dall'Africa", "Dall'Europa", "Dalle isole delle spezie"], "risposta": "Dall'Africa", "pagine": ["P7"]},
+    {"argomento": "A9", "tipo": "scelta", "domanda": "Chi ha lasciato una copia riassunta del diario di bordo di Colombo?", "opzioni": ["Amerigo Vespucci", "Martin Waldseemüller", "Bartolomé de las Casas", "Juan Sebastián Elcano"], "risposta": "Bartolomé de las Casas", "pagine": ["P8"]},
+    {"argomento": "A9", "tipo": "parole", "domanda": "Quali informazioni registrava il capitano nel diario di bordo?", "risposta": "rotta, vento, miglia, avvistamenti", "pagine": ["P8"]},
+    {"argomento": "A10", "tipo": "scelta", "domanda": "Secondo gli esercizi, da quale porto partì Colombo nel 1492?", "opzioni": ["Lisbona", "Palos", "Calicut", "San Salvador"], "risposta": "Palos", "pagine": ["P6"]},
+    {"argomento": "A10", "tipo": "vero_falso", "domanda": "Secondo gli esercizi, Vasco da Gama raggiunse l'America.", "risposta": "falso", "pagine": ["P6"]},
+    {"argomento": "A10", "tipo": "parole", "domanda": "Chi raggiunse il Capo di Buona Speranza nel 1488?", "risposta": "Bartolomeu Dias", "pagine": ["P6"]},
+    {"argomento": "A10", "tipo": "scelta", "domanda": "Quali strumenti servivano per navigare e orientarsi secondo il testo?", "opzioni": ["Bussola e astrolabio", "Telescopio e microscopio", "Carta nautica e cronometro", "Sextante e quadrante"], "risposta": "Bussola e astrolabio", "pagine": ["P6"]}
+   ],
+   "banco": {"n": 26, "fondate": 21, "scelte": 18, "scelte_nelle_pagine": 17, "auto_sbagliate": 0}
+  }
+ }
+}

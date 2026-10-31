@@ -17,6 +17,7 @@ prova di `prova_studio_argomenti.py`, i materiali di fantasia.
 4. **La fase del banco** a secco (`banco_studio.fase_prove` col client finto).
 5. **Il banco del 31/10** (#344): le domande vere col vLLM finto di `studio_vllm_finto.py`, nessuna
    risposta attesa giudicata sbagliata; l'atteso che il codice non dà giusto → `da_controllare`.
+6. **Il banco del 31/10 07:02** (#349): le domande vere, l'atteso «x + 3x = 32» giusto.
 
     python prove/prova_studio_domande_genera.py
 """
@@ -289,6 +290,16 @@ finally:
     RS.valuta = _vera
 verifica("una domanda chiusa con l'atteso che il codice non dà giusto: da_controllare, mai pulita",
          finte and DG.DA_CONTROLLARE in finte[0]["avvisi"], finte)
+
+# ═══════════════════════════ 6. il banco del 31/10 07:02 (#349) ═══════════════════════════
+print("— le domande vere del banco del 31/10 07:02")
+u0702 = carica_uscite(QUI / "manuali" / "studio" / "uscite_banco_3110_0702.json")
+r6 = B.fase_prove(VllmFinto(uscite=u0702, materiali=tutti), tutti, {}, uscita, lambda m: None)
+eq = next(d for d in r6["matematica"]["domande"] if "x + 3x = 32" in d["opzioni"])
+verifica("il banco del 31/10 07:02 aveva un atteso «sbagliato»: «x + 3x = 32» con l'opzione «3x = "
+         "32» dentro; ora l'atteso vale giusto e nessuna risposta attesa è sbagliata",
+         u0702["prove"]["matematica"]["banco"]["auto_sbagliate"] == 1 and eq["auto"] == RS.GIUSTO
+         and all(x["auto_sbagliate"] == 0 for x in r6.values()), eq)
 
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
 sys.exit(1 if errori else 0)

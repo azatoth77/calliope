@@ -564,7 +564,8 @@ class Lettore:
                                  # che uniscono le isole, scheletri ancora a isole
                                  "connessioni": 0, "connessioni_rotte": 0, "uniti": 0,
                                  "con_isole": 0, "doppioni": 0, "composti": 0,
-                                 "deboli": 0, "codici": 0},
+                                 "deboli": 0, "codici": 0, "connessioni_proposte": 0,
+                                 "connessioni_stessa_parte": 0},
                        # Le domande delle prove (passo 8, #248): conti, avvisi, tipi e tempi,
                        # mai il testo delle domande
                        "domande": {"generazioni": 0, "domande": 0, "ombra": 0,
@@ -1340,8 +1341,12 @@ class Lettore:
                           if r2.get("fine") != "length" else None)
                     if g2 is None:
                         m["connessioni_rotte"] += 1
+                    conn: dict = {}
                     forma["uniti"] = len(MG.connetti(g2 or [], nodi, coll, rif,
-                                                     M.nodi_max(self.studio.cfg)))
+                                                     M.nodi_max(self.studio.cfg), misure=conn))
+                    # Quanti ne propone il modello e quanti dentro una parte già unita (#349)
+                    m["connessioni_proposte"] += int(conn.get("proposti") or 0)
+                    m["connessioni_stessa_parte"] += int(conn.get("stessa_parte") or 0)
                     # Le isole che restano: un collegamento debole alla radice, «da
                     # controllare» (#344)
                     forma["deboli"] = len(MG.collega_isole(nodi, coll,

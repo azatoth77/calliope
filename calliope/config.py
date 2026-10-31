@@ -2220,7 +2220,7 @@ class Config:
     # indicatori (tool studio_mappa_consigli) e dà uno o due consigli sul metodo. «ombra» (di
     # serie): il tool c'è ma la voce dice solo la frase del codice sul confronto; la risposta del
     # modello si fa in secondo piano e si misura soltanto (lunghezza, concetti svelati: devono
-    # essere 0). «attiva» la dice; «spenta»: il tool risponde che non è acceso. Si passa ad
+    # essere 0). «attiva» la dice; «spenta»: il tool non c'è (dal 31/10, #335). Si passa ad
     # «attiva» dopo la rilettura delle misure dell'ombra (registro dello Studio)
     studio_mappa_consigli: str = "ombra"
     # Le prove dello Studio (31/10, passo 8, #248, calliope/studio/prove.py): la verifica finta
