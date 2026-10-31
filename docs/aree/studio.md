@@ -672,6 +672,12 @@ Gli script del revisore (`falsi.py`, `seme.py`, `filtri.py`) sono nei casi di
    voce chiesta nella stessa veglia (livello B; «Parla» toccato vale una persona), e decide quello.
    Senza esito il seme si tiene: il libro non dice più il nome (`nome_dentro`) e il satellite che
    suona ignora già il proprio. `known_voice` non riceve più il segnale.
+   *[storico fino al 31/10, #347: «l'esito dell'impronta della voce chiesta nella stessa veglia»]*
+   Dal 31/10 (#347) il seme porta solo l'esito che ha fermato la voce: in `watch_for_name` del
+   server `ultimo_ok` tiene un sì (il livello B interrompe solo con un sì) e un no lo azzera. Prima
+   un no tenuto, per esempio la TV sentita col livello B, passava al nome detto poco dopo dalla
+   persona registrata: il seme arrivava con `voce_ok=False` e il ripasso lo buttava. Il protocollo
+   non cambia: il satellite manda sempre «nome sentito».
 6. **I confini di parola** dopo «alexa», «siri» e «cortana»: «Siria, Libano e Giordania»,
    «Alexander Fleming», «Sirio», «Siriani» si dicono.
 7. **«chiocciola» da sola non è un indirizzo**: vale solo fra due parole e con «punto» dopo

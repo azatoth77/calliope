@@ -81,9 +81,9 @@ def contesto_tls(cfg):
 class SeedRemoto(list):
     """Il barge-in è avvenuto sul satellite, che tiene l'audio con il nome: qui basta un
     segnale vero da passare a `listen(seed=…)`, che lo chiede al satellite. Dal 31/10 (seconda
-    revisione della PR #345) porta anche il motivo e, se in questa veglia il satellite ha chiesto
-    l'impronta della voce (livello B), il suo esito: chi lo usa (il ripasso da ascoltare) decide
-    senza l'audio, che resta sul satellite."""
+    revisione della PR #345) porta anche il motivo e, se a fermare la voce è stata l'impronta
+    (livello B), il suo sì (#347: un no di prima non resta): chi lo usa (il ripasso da ascoltare)
+    decide senza l'audio, che resta sul satellite."""
 
     remoto = True
 
@@ -1608,7 +1608,11 @@ class AscoltoRemoto:
                      and coll.eco <= self.cfg.barge_in_echo_max)
         coll.invia(tipo="veglia", id=wid, livello_b=livello_b)
         fine = None
-        ultimo_ok = None            # l'esito dell'impronta chiesta in questa veglia (livello B)
+        # L'esito dell'impronta che ha fermato la voce (livello B). Solo un sì interrompe: un no
+        # non ferma niente, e tenerlo darebbe a un'interruzione dopo, col nome, l'esito di un
+        # altro pezzo di parlato (la TV, un ospite, l'eco del libro), e il ripasso butterebbe
+        # il seme della persona registrata (31/10, #347). Per il solo nome resta None
+        ultimo_ok = None
         while True:
             if stop.is_set() and fine is None:
                 coll.invia(tipo="fine_veglia", id=wid)
@@ -1627,7 +1631,7 @@ class AscoltoRemoto:
                 continue
             if tipo == "voce":
                 ok = bool(voice_ok(P.da_pcm(d["pcm"]))) if voice_ok is not None else False
-                ultimo_ok = ok
+                ultimo_ok = True if ok else None
                 coll.invia(tipo="esito_voce", id=wid, ok=ok)
             elif tipo == "interruzione":
                 print(f"\n   [BARGE-IN] {d.get('motivo') or 'interrotta'} sul satellite",
