@@ -124,7 +124,14 @@ Indirizzi:
                                  carte, indicazioni; giudica, rivedi, indica, cambia, togli. Solo un
                                  tutore del minore, solo da uno schermo personale; gli altri «non
                                  c'è»
-  POST /api/studio/pagina        «X-Calliope-Sessione», byte nudi (octet-stream), i dati in
+  POST /api/studio/premi         «X-Calliope-Sessione», {persona?, azione?, serie?, stelle?,
+                                 duelli?} → la serie, le stelle e i duelli di una persona (31/10,
+                                 #296, studio/premi.py); «imposta» accende o spegne (un minore: il
+                                 tutore; un adulto: lui)
+  POST /api/studio/duello        «X-Calliope-Sessione», {duello?, azione?, verifica?, a?, voce?,
+                                 risposta?} → un duello fra persone di casa: proponi, accetta,
+                                 rifiuta, annulla, rispondi, consegna; solo chi ne fa parte
+  POST /api/studio/pagina       «X-Calliope-Sessione», byte nudi (octet-stream), i dati in
                                  «X-Calliope-Studio» (URI): una foto di una pagina con i suoi
                                  angoli, o un PDF intero (29/10, #281, studio/pagine.py), nello
                                  Studio e mai nella conversazione; solo da uno schermo personale,
@@ -1743,6 +1750,132 @@ def crea_app(hub: Schermi) -> Starlette:
         out["prova"] = not st.per_schermi()
         return _json(out)
 
+    # I premi dello Studio (31/10, #296, studio/premi.py): la serie, le stelle, gli interruttori
+    # (per un minore li cambia il tutore, per un adulto lui) e i duelli fra persone di casa. Fuori
+    # dalla conversazione come le prove; il testo delle domande di un duello è un dato (la pagina
+    # lo scrive con textContent) e le risposte attese arrivano solo a duello finito
+    AZIONI_DUELLO = ("proponi", "accetta", "rifiuta", "annulla", "rispondi", "consegna")
+
+    async def studio_premi(request: Request):
+        """{persona?, azione?, serie?, stelle?, duelli?} → i premi di una persona (di serie il
+        proprietario dello schermo; un tutore quelli del suo minore). «imposta» accende o spegne
+        serie, stelle e duelli (true, false o null = di serie)."""
+        schermo, errore = schermo_personale(request, letture_studio, LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 512)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        from ..studio import premi as PM
+        persona, azione = dati.get("persona"), dati.get("azione")
+        if (persona is not None and (not isinstance(persona, str) or len(persona) > 80)) or (
+                azione is not None and azione != "imposta"):
+            return _json({"errore": "richiesta non valida"}, 400)
+        valori = {k: dati[k] for k in PM.CHIAVI if k in dati}
+        if azione == "imposta" and (not valori or not all(
+                v is None or isinstance(v, bool) for v in valori.values())):
+            return _json({"errore": "richiesta non valida"}, 400)
+        from ..studio import NonPermesso, NonTrovata
+
+        def fai():
+            if azione == "imposta":
+                st.imposta_premi(prof, persona or prof.id, **valori)
+            out = st.premi(prof, persona or prof.id)
+            if (persona or prof.id) == prof.id:
+                out["persone_duello"] = st.persone_per_duello(prof)
+            return out
+        try:
+            out = await asyncio.to_thread(fai)
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Non c'è."}, 404)
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        except ValueError:
+            return _json({"errore": "Non va: riprova."}, 400)
+        if azione is not None:
+            hub.log("[STUDIO] premi: imposta " + ", ".join(sorted(valori)))
+        out["prova"] = not st.per_schermi()
+        return _json(out)
+
+    async def studio_duello(request: Request):
+        """{duello?, azione?, verifica?, a?, voce?, risposta?} → la vista del duello. Senza azione
+        sola lettura (anche fuori orario); «proponi» (verifica, a: l'id di una persona di casa),
+        «accetta», «rifiuta», «annulla», «rispondi» (voce, risposta), «consegna», per un minore
+        dentro gli orari. Solo chi ne fa parte; gli altri lo stesso «non c'è»."""
+        schermo, errore = schermo_personale(request, letture_studio, LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 2048)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        from ..studio import premi as PM
+        from ..studio import risposte as RS
+        azione, did = dati.get("azione"), dati.get("duello")
+        if azione is not None and azione not in AZIONI_DUELLO:
+            return _json({"errore": "richiesta non valida"}, 400)
+        if azione == "proponi":
+            vid, a = dati.get("verifica"), dati.get("a")
+            if not _intero(vid) or vid < 1 or not isinstance(a, str) or not a or len(a) > 80:
+                return _json({"errore": "richiesta non valida"}, 400)
+        elif not _intero(did) or did < 1:
+            return _json({"errore": "manca il duello"}, 400)
+        risposta = dati.get("risposta")
+        if azione == "rispondi" and (not _intero(dati.get("voce")) or (
+                risposta is not None and (not isinstance(risposta, str)
+                                          or len(risposta) > RS.RISPOSTA_MAX * 2))):
+            return _json({"errore": "richiesta non valida"}, 400)
+        from .. import minori
+        from ..studio import NonPermesso, NonTrovata, VerificaChiusa
+        if azione is not None:
+            orario = minori.fuori_orario(prof)
+            if orario:
+                return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                              "codice": "fuori_orario"}, 403)
+
+        def fai():
+            if azione == "proponi":
+                n = st.proponi_duello(prof, dati["verifica"], dati["a"])
+                return st.vista_duello(prof, n)
+            if azione in ("accetta", "rifiuta"):
+                return st.accetta_duello(prof, did, azione == "accetta")
+            if azione == "annulla":
+                return st.annulla_duello(prof, did)
+            if azione == "rispondi":
+                return st.rispondi_duello(prof, did, dati["voce"], risposta or "")
+            if azione == "consegna":
+                return st.consegna_duello(prof, did)
+            return st.vista_duello(prof, did)
+        noti = {PM.DUELLI_SPENTI: "I duelli qui sono spenti.",
+                PM.DUELLI_NON_PER_TE: "I duelli per te non sono accesi.",
+                PM.DUELLO_POCHE: "Per un duello servono almeno 3 domande che il codice sa "
+                                 "correggere: scrivile o fai le carte con una risposta breve.",
+                PM.DUELLO_PROVA: "C'è una prova o una mappa da zero aperta su questa verifica: il "
+                                 "duello aspetta che finisca.",
+                PM.DUELLI_TROPPI: "Ci sono già troppi duelli aperti: finiscine uno.",
+                "il duello è chiuso": "Il duello è chiuso: le risposte non cambiano più."}
+        try:
+            out = await asyncio.to_thread(fai)
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Non c'è."}, 404)
+        except VerificaChiusa:
+            return _json({"errore": "La verifica è chiusa."}, 409)
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        except ValueError as e:
+            return _json({"errore": noti.get(str(e), "Non va: riprova.")}, 400)
+        if azione is not None:
+            # Nel registro solo l'azione e gli id, mai il testo
+            hub.log(f"[STUDIO] duello {out.get('id')}: {azione}")
+        return _json(out)
+
     # Le prove e le domande (31/10, passo 8, #248): la verifica finta scritta, le domande scritte
     # a mano o proposte dal lettore, il tipo della prova vera. Fuori dalla conversazione come le
     # carte (il testo è un dato: la pagina lo scrive con textContent); l'esito lo decide il codice,
@@ -2394,6 +2527,8 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/studio/mappa", studio_mappa, methods=["POST"]),
         Route("/api/studio/ascolta", studio_ascolta, methods=["POST"]),
         Route("/api/studio/tutore", studio_tutore, methods=["POST"]),
+        Route("/api/studio/premi", studio_premi, methods=["POST"]),
+        Route("/api/studio/duello", studio_duello, methods=["POST"]),
         Route("/api/studio/pagina", studio_pagina, methods=["POST"]),
         # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC
         Route("/bordi.js", file("bordi.js", "text/javascript; charset=utf-8")),

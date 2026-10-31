@@ -203,6 +203,9 @@ class Tutore:
                                 "carte": self._conto_carte(v)},
                     "mappa": self._conto_mappa(v),
                     "indicazioni": self._indicazioni_per(v["persona"], v),
+                    # I premi del minore (#296): serie, stelle e duelli (con chi, stato e punti,
+                    # mai le domande), e gli interruttori che il tutore accende e spegne
+                    "premi": self.premi(chi, v["persona"]),
                     "indicazioni_accese": self.indicazioni_accese(),
                     "giorni_di_serie": self._giorni_di_serie(), "giorni_max": GIORNI_MAX,
                     "testo_max": INDICAZIONE_MAX, "oggi": oggi.isoformat()}

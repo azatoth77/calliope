@@ -72,6 +72,7 @@ from . import padronanza as PD
 from . import resoconto as R
 from .ascolta import Ascolti
 from .mappe import Mappe
+from .premi import Premi
 from .prove import Prove
 from .tutore import Tutore
 
@@ -222,11 +223,11 @@ def _data(valore) -> datetime.date:
     return datetime.date.fromisoformat(str(valore).strip()[:10])
 
 
-class Studio(Mappe, Prove, Ascolti, Tutore):
+class Studio(Mappe, Prove, Ascolti, Tutore, Premi):
     """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
     #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`, il ripasso da
     ascoltare (passo 9, #249) in `ascolta.py`, la vista del tutore e le indicazioni (passo 10,
-    #250, #285) in `tutore.py`."""
+    #250, #285) in `tutore.py`, la serie, le stelle e i duelli (#296) in `premi.py`."""
 
     def __init__(self, cfg, registry=None, log=print, adesso=None):
         self.cfg = cfg
@@ -2102,7 +2103,23 @@ class Studio(Mappe, Prove, Ascolti, Tutore):
                 # minore ne vede il testo (decisione del 30/10); textContent sulla pagina
                 "indicazioni": (self._indicazioni_per(getattr(chi, "id", None))
                                 if self.indicazioni_accese() else []),
+                # I premi di chi guarda (#296): serie, stelle e duelli, coi soli numeri, i tipi e
+                # i nomi delle persone di casa; le persone per un duello
+                "premi": self._premi_home(chi),
                 "prova": not self.per_schermi()}
+
+    def _premi_home(self, chi) -> dict | None:
+        """I premi per la home, o None con lo Studio non attivo. Un errore non ferma la home."""
+        if not self.premi_accesi():
+            return None
+        try:
+            p = self.premi(chi)
+            p["persone_duello"] = self.persone_per_duello(chi)
+            return p
+        except Exception as e:  # noqa: BLE001
+            self.misure["errori"] += 1
+            self._registra(f"premi non calcolati: {type(e).__name__}")
+            return None
 
     def _home_verifica(self, chi, vid, di, da_decidere) -> dict:
         v = self.verifica(chi, vid)

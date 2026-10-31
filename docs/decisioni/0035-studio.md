@@ -9,7 +9,7 @@
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
   (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
-  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34). Il passo 7 (la mappa concettuale, prima parte: scheletro a mano, la mia mappa, a memoria, controllo, PDF) il 30/10 sera sul ramo `issue-247-studio-mappa` (punto 35). La seconda parte (lo scheletro generato dal lettore) il 30/10 sera sul ramo `issue-247-studio-mappa-genera` (punto 36). Il passo 8 (verifica finta e interrogazione dai materiali) il 31/10 sul ramo `issue-248-studio-verifica-finta` (punti 40 e 41). Il passo 9 (ripasso da ascoltare) il 31/10 sul ramo `issue-249-studio-ripasso-ascolto` (punto 42). Il passo 10 (la vista del tutore e le indicazioni dei tutori, #250 e #285) il 31/10 sul ramo `issue-250-studio-tutore` (punti 43 e 44).
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34). Il passo 7 (la mappa concettuale, prima parte: scheletro a mano, la mia mappa, a memoria, controllo, PDF) il 30/10 sera sul ramo `issue-247-studio-mappa` (punto 35). La seconda parte (lo scheletro generato dal lettore) il 30/10 sera sul ramo `issue-247-studio-mappa-genera` (punto 36). Il passo 8 (verifica finta e interrogazione dai materiali) il 31/10 sul ramo `issue-248-studio-verifica-finta` (punti 40 e 41). Il passo 9 (ripasso da ascoltare) il 31/10 sul ramo `issue-249-studio-ripasso-ascolto` (punto 42). Il passo 10 (la vista del tutore e le indicazioni dei tutori, #250 e #285) il 31/10 sul ramo `issue-250-studio-tutore` (punti 43 e 44). I premi (serie, stelle e duelli, con la regola per i minori, #296) il 31/10 sul ramo `issue-296-studio-serie-stelle` (punto 45).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -668,6 +668,54 @@ dell'eco della stanza.
       regola sul significato (principio 10); restano le regole per i minori, sopra.
     - Resta fuori l'interruttore «controllo io le domande» (decisione 3 del progetto): senza domande
       generate attive non ha effetto.
+
+## I premi e la regola per i minori (#296, 31/10)
+
+45. **Premi al minimo, solo come rinforzo positivo, calcolati dal codice dalla pratica vera.**
+    Decisioni di chi amministra: «il minimo di gamification sullo studio che è un rinforzo
+    positivo» (28/10) e «le soglie le sceglie chi sviluppa, si cambiano con l'uso» (30/10).
+    L'analisi, con le soglie, è nel commento della #296; i dettagli sono nel documento d'area.
+    - **Il giorno di studio** ha una pratica vera: una sessione misurata fra «Inizia» e «Fatto» di
+      almeno 10 minuti, 5 carte diverse ripassate da chi studia (l'esito non conta), una prova
+      consegnata con metà delle risposte, o 3 caselle di una mappa controllate dal codice. Non
+      contano mai le autovalutazioni, il tempo nell'app, le aperture o le ripetizioni.
+    - **La serie** conta i giorni di studio. Un giorno senza piano non conta e non la ferma. Un
+      giorno del piano senza pratica, o saltato, usa una pausa (1 ogni 7, `studio_serie_pause`).
+      Quando si ferma non si dice né si mostra. A voce si dice al più una volta al giorno, dentro la
+      risposta a «fatto».
+    - **Le stelle** sono traguardi di padronanza, una volta per verifica, e restano:
+      - un argomento all'obiettivo, coi soli esiti del codice e del tutore e solo con la
+        padronanza mostrata;
+      - una verifica finta o un'interrogazione superate, con le risposte giuste decise dal codice o
+        dal tutore;
+      - il ripasso delle carte in due giorni;
+      - il piano seguito.
+    - **I duelli** si fanno fra persone di casa, sulle domande che il codice corregge di una
+      verifica di chi propone. L'altro deve accettare. Le risposte attese arrivano solo alla fine,
+      senza «vinto» né «perso». Con una prova aperta il duello aspetta. Non danno stelle, serie
+      né tentativi. Sono spenti di serie (`studio_duelli`).
+
+    **La regola per i minori** (la proposta della #296, decisa qui):
+    1. i premi seguono la pratica e la padronanza decise dal codice, mai il tempo d'uso;
+    2. la serie non punisce: ci sono le pause, i giorni senza piano la fermano da sola, nessuna
+       perdita è detta;
+    3. niente notifiche, promemoria o conti alla rovescia;
+    4. i duelli si fanno solo in casa e li accende il tutore; mai classifiche, ospiti o conoscenti;
+    5. il tutore vede serie, stelle e duelli nella sua vista e li spegne, tutti o in parte, per
+       ciascun minore; spegnere i duelli annulla quelli aperti;
+    6. un adulto ha le stesse meccaniche e decide da sé.
+
+    Lo stato d'animo non entra (punto 27). Schema «studio» alla versione 12 (`studio_stelle`,
+    `studio_premi`, `studio_duelli`).
+
+    Alternative scartate:
+    - la serie che si azzera: punisce;
+    - i premi per il tempo nell'app o per le carte «la sapevo»: si imbrogliano;
+    - la stella dell'argomento con la padronanza in ombra: rivelerebbe la cifra che il tutore
+      giudica alla cieca;
+    - i duelli sulla macchina dei giochi: l'esito deve deciderlo il codice dello Studio;
+    - i duelli che danno stelle o tentativi: spingerebbero a imbrogliare;
+    - un record della serie e i promemoria: sono meccaniche in più.
 
 ## Da completare con i passi 4.3–4.5
 
