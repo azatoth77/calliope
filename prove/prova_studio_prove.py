@@ -801,7 +801,12 @@ SC4 = [(IS, "Isabella di Castiglia e Ferdinando d'Aragona", "giusto"),
        (CA, "arrivò a Calicut", "giusto"), (CA, "a Calicut", "giusto"),
        (CA, "a San Salvador", "sbagliato"), (CA, "la c", "giusto"), (CA, "c'è Calicut", "giusto"),
        (CA, "Calicut, la c", "giusto"), (CA, "a, anzi c", "da_rivedere"),
-       (CA, "a o c", "sbagliato"), (CA, "la a", "sbagliato"), (CA, "non la a, la c", "giusto")]
+       (CA, "a o c", "sbagliato"), (CA, "la a", "sbagliato"), (CA, "non la a, la c", "giusto"),
+       # Seconda revisione della PR #346: la preposizione «a» in ogni punto della frase
+       (CA, "secondo me a Calicut", "giusto"), (CA, "penso a Calicut", "giusto"),
+       (CA, "direi a Calicut", "giusto"), (CA, "boh, a Calicut", "giusto"),
+       (CA, "credo a San Salvador", "sbagliato"), (CA, "credo a", "sbagliato"),
+       (CA, "penso la a", "sbagliato"), (CA, "la a, no, la c", "da_rivedere")]
 male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC4 if RS.valuta(d, r)[0] != e]
 verifica("lettere dentro la frase: «d'Aragona», «c'è» e la preposizione «a» non sono opzioni; «la "
          "a», «a o c», «a, anzi c» sì (banco del 31/10)", not male, male)

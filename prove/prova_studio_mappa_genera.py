@@ -689,6 +689,21 @@ PA.rispondi(ISOLE, "non è json")
 lett.giro()
 s = st.vista_mappe(LEO, vid)["scheletro"]
 deb = next(c for c in s["collegamenti"] if c.get("debole"))
+# Seconda revisione della PR #346: «Cambia» con un verbo vuoto (lo stesso «è collegato a», o un
+# altro di VERBI_VUOTI) è rifiutato come «Tieni»; il debole resta com'era
+rifiutati = []
+for vb in (MG.VERBO_DEBOLE, "è legato a", "Con", "va con"):
+    try:
+        st.collega(LEO, s["id"], None, None, vb, collegamento=deb["id"])
+    except ValueError as e:
+        rifiutati.append(str(e))
+ancora = next(c for c in st._mappe_di(vid)[M.SCHELETRO]["collegamenti"]
+              if int(c["id"]) == int(deb["id"]))
+verifica("«Cambia» sul debole con un verbo vuoto: rifiutato con la frase di «Tieni», il debole "
+         "resta proposto e da controllare",
+         len(rifiutati) == 4 and all("per tenerlo scrivi tu il verbo" in x for x in rifiutati)
+         and ancora.get("debole") and ancora["stato"] == "proposto"
+         and ancora["avvisi"] == [MG.DA_CONTROLLARE], (rifiutati, ancora))
 st.collega(LEO, s["id"], None, None, "è un esempio di", collegamento=deb["id"])
 grezzo = st._mappe_di(vid)[M.SCHELETRO]
 c2 = next(c for c in grezzo["collegamenti"] if int(c["id"]) == int(deb["id"]))

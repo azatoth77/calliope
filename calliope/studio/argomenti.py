@@ -285,26 +285,53 @@ _PICCOLE = frozenset("il lo la i gli le l un una di del della dei e ed a al da i
                      "fra che o".split())
 # Gli operatori sono pezzi anche loro (revisione della PR #346: «3x - 5 = 20» non è «3x + 5 = 20»);
 # il segno di potenza «^» si toglie, come l'esponente scritto in alto («x^2» = «x²»)
-_OPERATORI = frozenset("+-=<>/×")
-_RELAZIONI = frozenset("=<>")
+_OPERATORI = frozenset("+-=<>/×≤≥≠")
+_RELAZIONI = frozenset("=<>≤≥≠")
 # La punteggiatura che chiude un pezzo di formula in una frase («… 2x + 12? 18»)
 _CONFINI = r"|[?!;,()\[\]]|\.(?=\s|$)"
+# Le scritture diverse dello stesso segno (seconda revisione della PR #346): «<=» è «≤», «!=» è
+# «≠», «**» è la potenza; il meno, il per, il diviso e la barra della frazione («½») uguali
+_SCRITTE = (("<=", "≤"), (">=", "≥"), ("!=", "≠"), ("**", "^"))
 _SOSTITUZIONI = str.maketrans({"−": "-", "–": "-", "·": "×", "⋅": "×", "*": "×", "^": "",
-                               "÷": "/"})
+                               "÷": "/", "⁄": "/"})
+# Le sigle puntate («m.c.m.», «a.C.») si leggono senza punti: «m.c.m.» = «mcm». Gli elementi
+# staccati da uno spazio («Na Cl») restano due pezzi: unirli farebbe di ogni coppia di lettere
+# una sigla («a b» = «ab»), e la scrittura giusta di una formula è senza spazio
+_SIGLA = re.compile(r"\b(?:[^\W\d_]\.){2,}")
+# Una lettera sola (latina senza accento o greca) che non è elisa («20 l'espressione», «5 è»
+# restano staccati)
+_LETTERA = r"[b-df-hj-np-zB-DF-HJ-NP-Zα-ωΑ-Ω]"
+_PER_LETTERA = re.compile(r"(\d)[ \t]*[·×⋅*][ \t]*([a-zA-Zα-ωΑ-Ω])(?![\w'’])")
+_CIFRA_LETTERA = re.compile(r"(?<![\w.,])(\d+)[ \t]+(?:(" + _LETTERA + r")|([aeioAEIO])"
+                            r"(?=[ \t]*[-+=<>≤≥≠/×·*^\ue000]))(?![\w'’])")
 
 
 def _pezzi(testo, confini: bool = False) -> list[str]:
     """I pezzi di un testo per le formule: minuscole, senza accenti, lettere latine e greche,
-    cifre (indici ed esponenti diventano cifre: «CO₂» → «co2», «x²» → «x2») e operatori; le
-    parole piccole via, tranne accanto a un operatore. Con `confini` la punteggiatura che chiude
-    un pezzo («?», «,», «;», le parentesi, il punto in fondo) resta come «|»."""
-    t = unicodedata.normalize("NFKD", str(testo or "").translate(_SOSTITUZIONI))
+    cifre (indici ed esponenti diventano cifre: «CO₂» → «co2», «x²» → «x2», «Fe³⁺» → «fe3+»: la
+    carica attaccata resta nel pezzo) e operatori (anche «≤», «≥», «≠»); le parole piccole via,
+    tranne accanto a un operatore. Una cifra e una lettera sola sono un pezzo («3 x», «2·x» →
+    «3x», «2x»). Con `confini` la punteggiatura che chiude un pezzo («?», «,», «;», le
+    parentesi, il punto in fondo) resta come «|»."""
+    t = str(testo or "")
+    for a, b in _SCRITTE:
+        t = t.replace(a, b)
+    t = _SIGLA.sub(lambda m: m.group(0).replace(".", ""), t.replace("≠", "\ue000"))
+    # «3 x», «2·x», «2 × x» = «3x», «2x»: una cifra e una lettera sola sulla stessa riga; «a»,
+    # «e», «i», «o» (parole piccole) solo davanti a un operatore («4 e 6» resta, «2 a + 1» no);
+    # mai attraverso un a capo («5x = 15» e «x = 3» su due righe restano due)
+    t = _PER_LETTERA.sub(lambda m: m.group(1) + m.group(2), t)
+    t = _CIFRA_LETTERA.sub(lambda m: m.group(1) + (m.group(2) or m.group(3)), t)
+    t = unicodedata.normalize("NFKD", t.translate(_SOSTITUZIONI))
     t = "".join(c for c in t if not unicodedata.combining(c)).lower().translate(_SOSTITUZIONI)
-    g = re.findall(r"[a-z0-9α-ω]+|[-+=<>/×]" + (_CONFINI if confini else ""), t)
-    g = [w if w[0].isalnum() or w in _OPERATORI else "|" for w in g]
-    op = [w in _OPERATORI for w in g]
-    return [w for k, w in enumerate(g) if w not in _PICCOLE or (k and op[k - 1])
-            or (k + 1 < len(g) and op[k + 1])]
+    # «≠» si scompone in «=» e una barra combinante: tenuto da parte fino a qui
+    t = t.replace("\ue000", "≠")
+    g = re.findall(r"[a-z0-9α-ω]+(?:[+-](?![a-z0-9α-ω]))?|[-+=<>/×≤≥≠]"
+                   + (_CONFINI if confini else ""), t)
+    out = [w if w[0].isalnum() or w in _OPERATORI else "|" for w in g]
+    op = [w in _OPERATORI for w in out]
+    return [w for k, w in enumerate(out) if w not in _PICCOLE or (k and op[k - 1])
+            or (k + 1 < len(out) and op[k + 1])]
 
 
 def _segmenti(titolo) -> list[list[str]]:
@@ -341,7 +368,9 @@ def _di_fila(voluti: list[str], pp: list[str]) -> bool:
     «3x + 5 = 20». Un pezzo senza («CO₂», «15», «6 CO₂ + 6 H₂O», «3x + 5») può stare dentro una
     formula."""
     n = len(voluti)
-    if not n or voluti[0] in _OPERATORI or voluti[-1] in _OPERATORI:
+    # Il meno all'inizio è un numero negativo («-5»), gli altri operatori no
+    if not n or (voluti[0] in _OPERATORI and not (voluti[0] == "-" and n > 1)) \
+            or voluti[-1] in _OPERATORI:
         return False
     espr = any(w in _RELAZIONI for w in voluti)
     for i in range(len(pp) - n + 1):

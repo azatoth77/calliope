@@ -69,6 +69,12 @@ def _da_j(t, vuoto):
     return v if isinstance(v, type(vuoto)) else vuoto
 
 
+
+# Il collegamento debole del codice (#344) non si tiene così com'è: né con «Tieni» né con
+# «Cambia» e un verbo vuoto (`mappa.VERBI_VUOTI`)
+DEBOLE_NON_SI_TIENE = ("questo legame l'ha aggiunto Calliope e non è nelle pagine: per tenerlo "
+                       "scrivi tu il verbo con «Cambia»")
+
 class Mappe:
     """Mescolata in `Studio` (servizio.py): usa `dati`, `_verifica`, `_chi_puo`, `_scrivibile`,
     `_pagine_di`, `_registra`, `registra_tentativo`, `padronanza_mostrata`, `_padronanza`."""
@@ -314,6 +320,10 @@ class Mappe:
                 c = next((c for c in coll if int(c["id"]) == int(collegamento)), None)
                 if c is None:
                     raise NonTrovata()
+                if c.get("debole") and M.chiave(vb) in M.VERBI_VUOTI:
+                    # Un verbo vuoto lascerebbe il legame come l'ha scritto il codice: non è un
+                    # verbo della persona (seconda revisione della PR #346)
+                    raise ValueError(DEBOLE_NON_SI_TIENE)
                 c["verbo"] = vb
                 if m["tipo"] == M.SCHELETRO:
                     c.update(autore=self._autore(chi, v), stato="tenuto", avvisi=[])
@@ -391,8 +401,7 @@ class Mappe:
             if x.get("debole"):
                 # Il collegamento debole del codice non è nelle pagine: «Tieni» lo farebbe un
                 # fatto. Si tiene solo riscrivendolo con «Cambia» (#344, revisione della PR #346)
-                raise ValueError("questo legame l'ha aggiunto Calliope e non è nelle pagine: "
-                                 "per tenerlo scrivi tu il verbo con «Cambia»")
+                raise ValueError(DEBOLE_NON_SI_TIENE)
             x["stato"] = "tenuto"
             self._salva_mappa(m, nodi=m["nodi"], collegamenti=m["collegamenti"])
 

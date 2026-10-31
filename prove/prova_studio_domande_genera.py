@@ -233,7 +233,9 @@ verifica("la fase «prove»: una richiesta per verifica, le misure", cli.n == 1
              k: v for k, v in x.items() if k != "domande"})
 testo = B.scrivi_riepilogo(uscita, {"modello": "finto", "richieste": 1, "attese_s": 0,
                                     "prove": r})
-verifica("il riepilogo con i criteri", "PROVE" in testo and "auto_sbagliate 0" in testo, testo)
+verifica("il riepilogo con i criteri, le calcolate a parte",
+         "PROVE" in testo and "auto_sbagliate 0" in testo
+         and "calcolate 1 (da controllare 1, criterio: tutte)" in testo, testo)
 
 # ═══════════════════════════ 5. il banco del 31/10 (#344) ═══════════════════════════
 print("— le domande vere del banco del 31/10 col vLLM finto")
@@ -250,20 +252,23 @@ verifica("il banco del 31/10 aveva una risposta attesa giudicata sbagliata (stor
 verifica("«Isabella di Castiglia e Ferdinando d'Aragona»: la «d» di «d'Aragona» non è più "
          "l'opzione d; l'atteso vale giusto e la domanda resta pulita",
          isabella["auto"] == RS.GIUSTO and isabella["avvisi"] == [], isabella)
-# In matematica una domanda in meno è fondata (revisione della PR #346: niente confronto largo
-# per le cifre): «il primo dei tre numeri consecutivi la cui somma è 48» → 15 è un conto, non sta
-# nelle pagine; il codice non lo può controllare e resta da controllare
+# Le «calcolate» (revisione della PR #346 e la seconda): una risposta numerica che non sta nelle
+# pagine («il primo dei tre numeri consecutivi la cui somma è 48» → 15) è un conto; il codice non
+# la può controllare: resta da controllare, conta a parte e non entra nelle fondate
 consecutivi = next(d for d in r5["matematica"]["domande"] if "consecutivi" in d["testo"])
-verifica("una risposta numerica calcolata, che non sta nelle pagine, è da controllare",
-         DG.DA_CONTROLLARE in consecutivi["avvisi"], consecutivi)
-verifica("le domande vere del 31/10: nessuna risposta attesa sbagliata, fondate e scelte come il "
-         "banco (≥ 80 % e ≥ 90 %; matematica 17 su 22, una calcolata da controllare)",
+verifica("una risposta numerica calcolata, che non sta nelle pagine: «calcolata» e da controllare; "
+         "una che sta nelle pagine («1492») no",
+         consecutivi["calcolata"] and DG.DA_CONTROLLARE in consecutivi["avvisi"]
+         and not any(d.get("calcolata") for d in r5["storia"]["domande"]), consecutivi)
+verifica("le domande vere del 31/10: nessuna risposta attesa sbagliata, fondate ≥ 80 % sulle non "
+         "calcolate, le calcolate tutte da controllare, scelte ≥ 90 %",
          all(x["auto_sbagliate"] == 0 for x in r5.values())
-         and all(x["fondate"] * 100 >= 80 * x["n"] for v, x in r5.items() if v != "matematica")
-         and r5["matematica"]["fondate"] == 17
+         and all(x["fondate"] * 100 >= 80 * (x["n"] - x["calcolate"]) for x in r5.values())
+         and all(x["calcolate_da_controllare"] == x["calcolate"] for x in r5.values())
+         and r5["matematica"]["calcolate"] >= 1
          and all(x["scelte_nelle_pagine"] * 100 >= 90 * x["scelte"] for x in r5.values())
          and all(x["grezzo"] for x in r5.values()),
-         {v: (x["auto_sbagliate"], x["fondate"], x["n"]) for v, x in r5.items()})
+         {v: (x["auto_sbagliate"], x["fondate"], x["n"], x["calcolate"]) for v, x in r5.items()})
 # Il controllo nuovo di proposte: un'attesa che il codice non dà giusta → da_controllare
 _vera = RS.valuta
 

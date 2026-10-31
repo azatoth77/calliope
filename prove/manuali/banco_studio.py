@@ -1126,6 +1126,11 @@ def fase_prove(cli, materiali, testi_letti, uscita, log) -> dict:
             d["su_pagina_ostile"] = bool(set(d["pagine"]) & ostili_id)
             # La risposta attesa, detta come risposta: il codice deve dire giusto o da rivedere
             d["auto"] = RS.valuta(d, RS.attesa_detta(d).split(") ", 1)[-1])[0]
+            # Le «calcolate» (seconda revisione della PR #346): una risposta numerica che non sta
+            # nelle pagine citate è un conto del modello; il codice non la può controllare, quindi
+            # deve restare da controllare finché non c'è un verificatore del conto
+            d["calcolata"] = d["tipo"] == "numero" and not A.controlla(
+                d["attesa"], [r_di[x] for x in d["pagine"] if x in r_di], testi_r)[1]
             if d["tipo"] == "scelta":
                 base = (d["attesa"] if len(d["attesa"].split()) > 1
                         else f"{d['testo']} {d['attesa']}")
@@ -1133,10 +1138,16 @@ def fase_prove(cli, materiali, testi_letti, uscita, log) -> dict:
                     base, [r_di[x] for x in d["pagine"] if x in r_di], testi_r)[1]
         scelte = [d for d in domande if d["tipo"] == "scelta"]
         pulite = [d for d in domande if not d["avvisi"]]
+        calcolate = [d for d in domande if d.get("calcolata")]
         riga = {"fase": "prove", "verifica": vid, "n": len(domande), "grezze": len(grezzi),
                 "tipi": {t: sum(d["tipo"] == t for d in domande) for t in RS.TIPI},
                 "pulite": len(pulite),
-                "fondate": sum(DG.DA_CONTROLLARE not in d["avvisi"] for d in domande),
+                # Le fondate sulle domande non calcolate; le calcolate a parte, col loro criterio
+                "fondate": sum(DG.DA_CONTROLLARE not in d["avvisi"] for d in domande
+                               if not d.get("calcolata")),
+                "calcolate": len(calcolate),
+                "calcolate_da_controllare": sum(DG.DA_CONTROLLARE in d["avvisi"]
+                                                for d in calcolate),
                 **{a: sum(a in d["avvisi"] for d in domande) for a in DG.DA_DECIDERE},
                 "scelte": len(scelte),
                 "scelte_nelle_pagine": sum(bool(d.get("opzione_nelle_pagine")) for d in scelte),
@@ -1385,14 +1396,19 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
     if riep.get("prove"):
         righe.append(f"\nPROVE (per verifica: domande e tipi, pulite, fondate, criterio ≥ "
                      f"{CRITERIO_PROVE_FONDATE} %; scelte con l'opzione giusta nelle pagine, "
-                     f"criterio ≥ {CRITERIO_PROVE_SCELTE} %; ostili e ostili pulite, devono "
+                     f"criterio ≥ {CRITERIO_PROVE_SCELTE} %; le calcolate, risposte numeriche che "
+                     "non stanno nelle pagine, fuori dalle fondate e tutte da controllare; ostili "
+                     "e ostili pulite, devono "
                      "essere 0; le risposte attese che il codice dice sbagliate, devono essere 0)")
         for vid, x in riep["prove"].items():
-            fp = round(100 * x["fondate"] / x["n"]) if x["n"] else 0
+            base_f = x["n"] - x.get("calcolate", 0)
+            fp = round(100 * x["fondate"] / base_f) if base_f else 0
             sp = round(100 * x["scelte_nelle_pagine"] / x["scelte"]) if x["scelte"] else 100
             righe.append(f"  {vid}: n {x['n']} " + " ".join(f"{t} {k}" for t, k in
                                                            x["tipi"].items() if k)
-                         + f" pulite {x['pulite']} fondate {x['fondate']} ({fp} %) scelte "
+                         + f" pulite {x['pulite']} fondate {x['fondate']}/{base_f} ({fp} %) "
+                         f"calcolate {x.get('calcolate', 0)} (da controllare "
+                         f"{x.get('calcolate_da_controllare', 0)}, criterio: tutte) scelte "
                          f"{x['scelte_nelle_pagine']}/{x['scelte']} ({sp} %) da_controllare "
                          f"{x['da_controllare']} istruzioni {x['pagina_con_istruzioni']} ordine "
                          f"{x['testo_ordine']} ostili {x['ostili']} (pulite {x['ostili_pulite']})"

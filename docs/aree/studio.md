@@ -523,6 +523,35 @@ Le minori:
 - una pausa per la sveglia del ciclo (un avviso di un'altra corsia, un tocco) dice solo «Metto in
   pausa il ripasso.»; «è arrivato un messaggio» resta per lo scritto.
 
+### 31/10: la seconda revisione della PR #346
+
+Chiusi i punti 1, 3 e 6 della prima revisione; per gli altri, e per uno nuovo:
+1. **La preposizione «a» presa per l'opzione a** in ogni punto della frase («secondo me a Calicut»,
+   «penso a Calicut», «boh, a Calicut» davano «sbagliato» con la giusta c): il controllo della «a»
+   seguita da una parola che non è in `_DOPO_LA_A` né una lettera detta vale ora in ogni posizione,
+   non solo in testa. «credo a», «la a», «a o c», «la a, no, la c» restano come prima.
+2. **Le formule** (`argomenti._pezzi`): «≤», «≥», «≠» sono operatori e relazioni («<=», «>=», «!=»
+   si traducono; «≠» si tiene da parte prima della scomposizione, che lo farebbe «=»); «**» è la
+   potenza; la barra della frazione di «½» è «/»; una cifra e una lettera sola sulla stessa riga
+   sono un pezzo («3 x» = «3x», «2·x» = «2x»), mai attraverso un a capo, con una lettera elisa o
+   accentata («20 l'espressione», «5 è») o con una parola piccola senza un operatore dopo («4 e 6»);
+   il meno all'inizio è permesso («-5», «−5»); la carica attaccata resta nel pezzo («Fe³⁺» =
+   «Fe3+»). **Scelte prudenti**: le sigle puntate si leggono senza punti («m.c.m.» = «mcm»), ma le
+   lettere staccate da uno spazio restano due pezzi («NaCl» ≠ «Na Cl»: unirle farebbe di «a b» la
+   sigla «ab»). Blocco 3b del revisore: 45 varianti su 46 come atteso; l'unica diversa è «Na Cl», per
+   questa scelta.
+3. **«Cambia» con un verbo vuoto** (lo stesso «è collegato a» o un altro di `mappa.VERBI_VUOTI`) su
+   un debole è rifiutato con la frase di «Tieni» (`mappe.DEBOLE_NON_SI_TIENE`); con un verbo vero il
+   collegamento diventa della persona, tenuto e senza avvisi.
+4. **Le domande «calcolate»** nel banco: una risposta numerica che non sta nelle pagine citate è un
+   conto del modello (`calcolata`), fuori dal denominatore delle fondate, con un criterio suo
+   (tutte da controllare finché non c'è un verificatore del conto) e nel riepilogo («fondate
+   16/20 (80 %) calcolate 2 (da controllare 2, criterio: tutte)»). *[storico fino a questa
+   revisione: «matematica 17 su 22 (77 %), sotto il criterio» e un'eccezione a mano nella prova]*.
+
+Col vLLM finto: domande fondate 16/20 (80 %), 21/23, 24/28; calcolate 2, 0, 0, tutte da
+controllare; `auto_sbagliate` 0, 0, 0; la mappa come sopra.
+
 ## Le prove: verifica finta e interrogazione simulata (31/10, issue #248, ramo `issue-248-studio-verifica-finta`)
 
 *Passo 8 dell'epic #251. Decisione [0035](../decisioni/0035-studio.md), punti 40 e 41. L'analisi è

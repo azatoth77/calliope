@@ -238,9 +238,11 @@ def _lettera_in_frase(ps: list[str], elise: list[bool], k: int, quante: int,
         return None
     if k and ps[k - 1] not in _PRIMA_DI_LETTERA and not (in_fondo and k == len(ps) - 1):
         return None
-    if (w == "a" and not k and len(ps) > 1 and ps[1] not in _DOPO_LA_A
-            and ps[1] not in LETTERE_DETTE):
-        return None                 # «a Calicut»: la preposizione in testa
+    # «a Calicut», «penso a Calicut», «secondo me a Calicut»: la preposizione, in ogni punto
+    # della frase (seconda revisione della PR #346)
+    if (w == "a" and k + 1 < len(ps) and ps[k + 1] not in _DOPO_LA_A
+            and ps[k + 1] not in LETTERE_DETTE):
+        return None
     return w
 
 
