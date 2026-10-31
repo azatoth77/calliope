@@ -1761,6 +1761,100 @@ def senza_mascherati(ctx, argomenti: dict) -> dict:
     return out
 
 
+# ─────────────────────────── studio_attivita (31/10, #297, parte 2) ───────────────────────────
+# Le mini-app della libreria (studio/libreria/miniapp.py): giochi puri, scritti e rivisti da noi,
+# con la macchina a stati di Calliope. Le apre sullo schermo `Giochi.avvia` coi file della libreria
+# (mai dall'archivio delle estensioni). Dal tocco «Apri» della home l'attività è quella del
+# bersaglio (scelta dal codice); a voce la sceglie il codice fra i titoli della libreria (dati
+# fidati) dalle parole dette, e se non è chiaro dice quali ci sono.
+ATTIVITA_QUALE = "Quale attività apro? Nella libreria ci sono: {}."
+ATTIVITA_PROVA = ("C'è una prova aperta nello Studio: le attività della libreria tornano dopo la "
+                  "consegna.")
+ATTIVITA_SENZA_SCHERMI = "Per le attività serve uno schermo collegato, e qui non c'è."
+TIPI_APP_DETTI = {"esplora": "da esplorare", "quiz": "con un quiz", "percorso": "un percorso "
+                  "guidato"}
+
+
+def _elenco_attivita(lib) -> str:
+    titoli = [lib.contenuti[k]["titolo"] for k in sorted(lib.app)]
+    return ", ".join(f"«{x}»" for x in titoli)
+
+
+def scegli_attivita(lib, testo) -> tuple[str | None, list[str]]:
+    """(id, []) dell'attività che le parole nominano, o (None, i candidati): le radici delle
+    parole dette contro quelle del titolo e delle chiavi delle sue schede (dati fidati). Vince
+    solo un massimo unico; a pari merito o a zero, None."""
+    from ..studio.libreria import parole
+    detto = set(parole(testo))
+    punti = []
+    for k in lib.app:
+        c = lib.contenuti[k]
+        pw = set(parole(c["titolo"]))
+        for s in c.get("schede") or ():
+            for ch in lib.contenuti.get(s, {}).get("chiavi", ()):
+                pw |= set(parole(ch))
+        punti.append((len(detto & pw), k))
+    punti.sort(reverse=True)
+    if not punti or punti[0][0] == 0:
+        return None, [k for _, k in punti]
+    if len(punti) > 1 and punti[1][0] == punti[0][0]:
+        return None, [k for n, k in punti if n == punti[0][0]]
+    return punti[0][1], []
+
+
+def _attivita(ctx: ToolContext, attivita: str = "", verifica=None, materia: str = "") -> dict:
+    svc = _svc(ctx)
+    if svc is None:
+        return _f(SPENTO, ok=False)
+    chi = chi_di(ctx)
+    if chi is None:
+        note_rule(ctx, "studio_chi_incerto")
+        return _f(CHI_NO, ok=False)
+    if svc.libreria_modo() != "attiva":
+        return _f(LIBRERIA_SPENTA, ok=False)
+    lib = svc.libreria()
+    b = _bersaglio(ctx)
+    from ..studio import NonPermesso, NonTrovata
+    if b:
+        # Dal tocco: la verifica e l'attività del bersaglio, ricontrollate
+        try:
+            v = svc.verifica(chi, b.get("verifica"))
+        except (NonTrovata, NonPermesso, TypeError, ValueError):
+            return _f(NON_CE, ok=False)
+        if svc._libreria_chiusa(v):
+            return _f(ATTIVITA_PROVA, ok=False)
+        cid = b.get("contenuto")
+        if not isinstance(cid, str) or cid not in lib.app:
+            return _f("Questa attività non c'è nella libreria.", ok=False)
+    else:
+        if svc.prova_aperta_di(chi):
+            return _f(ATTIVITA_PROVA, ok=False)
+        cid, quali = scegli_attivita(lib, f"{attivita} {materia}")
+        if cid is None:
+            nomi = ", ".join(f"«{lib.contenuti[k]['titolo']}»" for k in quali[:8]) \
+                if quali else _elenco_attivita(lib)
+            return _f(ATTIVITA_QUALE.format(nomi or "niente"), ok=False, scegli=True)
+    app = lib.app[cid]
+    if not app.intatta():
+        return _f("Non la apro: i suoi file sono cambiati dopo il caricamento.", ok=False)
+    giochi = getattr(getattr(ctx, "schermi", None), "giochi", None)
+    if giochi is None:
+        return _f(ATTIVITA_SENZA_SCHERMI, ok=False)
+    svc.nota_attivita(cid)
+    note_rule(ctx, "studio_attivita")
+    return giochi.avvia(ctx, app.nome, 0, app.manifesto, {}, file=app.file)
+
+
+DESCRIZIONE_ATTIVITA = (
+    "Apre sullo schermo un'attività della libreria dello Studio (una mini-app di chimica, fisica, "
+    "informatica o biologia: «apri l'attività sull'atomo», «fammi giocare con i bit», «voglio "
+    "bilanciare le reazioni»). attivita = le parole dette per l'attività; materia se la dice. Le "
+    "attività che ci sono le dice studio con azione «libreria».")
+PARAMETRI_ATTIVITA = {"type": "object", "properties": {
+    "attivita": {"type": "string"}, "verifica": {"type": "integer"},
+    "materia": {"type": "string"}}, "required": ["attivita"]}
+
+
 def studio_specs(cfg=None) -> list[ToolSpec]:
     """I tool dello Studio. Con `cfg` (main.py lo passa dal 31/10, #335) e
     `studio_mappa_consigli: spenta` il tool non c'è del tutto; senza `cfg` (le prove) c'è sempre e
@@ -1795,6 +1889,11 @@ def studio_specs(cfg=None) -> list[ToolSpec]:
         ToolSpec(name="studio_interroga", description=DESCRIZIONE_INTERROGA,
                  parameters=PARAMETRI_INTERROGA, func=_interroga, risk="lettura",
                  levels=FAMILIARI, non_fidato=True),
+        # Le attività della libreria (31/10, #297, parte 2): apre un gioco puro e fidato sullo
+        # schermo, come un gioco delle estensioni; niente dati della persona né fonti non fidate
+        ToolSpec(name="studio_attivita", description=DESCRIZIONE_ATTIVITA,
+                 parameters=PARAMETRI_ATTIVITA, func=_attivita, risk="lettura",
+                 levels=FAMILIARI),
     ] + extra + ascolta
 
 

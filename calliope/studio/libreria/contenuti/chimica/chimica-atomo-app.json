@@ -1,0 +1,15 @@
+{
+  "formato": 1,
+  "id": "chimica-atomo-app",
+  "tipo": "miniapp",
+  "titolo": "Costruisci l'atomo",
+  "materia": "Chimica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "tipo_app": "esplora",
+  "estensione": "atomo",
+  "schede": ["chimica-atomo"],
+  "durata": 10,
+  "comandi": ["un protone in più", "un protone in meno", "ho finito"],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31"
+}

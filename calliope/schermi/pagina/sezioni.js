@@ -257,7 +257,10 @@
       if (car.aperte.has(k)) return true;
       car.aperte.add(k);
       const p = sezioneDi(c);
-      if (vis.sezione !== p.split("/")[0]) vai("#/" + p);
+      // Anche dentro la stessa sezione su un'altra pagina (31/10, #297: un'attività della libreria
+      // aperta dalla pagina dello Studio, in Le mie cose › Studio, va in Le mie cose › Giochi)
+      if (vis.sezione !== p.split("/")[0] || (p.indexOf("/") >= 0
+          && vis.percorso.slice(0, p.split("/").length).join("/") !== p)) vai("#/" + p);
       mostraIn(k, vis.sezione);
       return true;
     }

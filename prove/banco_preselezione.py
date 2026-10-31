@@ -184,6 +184,8 @@ f("Parliamo della mia mappa da zero di storia", "studio_mappa_consigli")
 f("Interrogami di storia", "studio_interroga")
 # Il ripasso da ascoltare (31/10, #249, passo 9)
 f("Fammi ascoltare il ripasso di storia", "studio_ascolta")
+# le attività della libreria (31/10, #297, parte 2)
+f("Apri l'attività per bilanciare le reazioni", "studio_attivita")
 # ── senza tool: chiacchiere e cultura generale ──
 f("Raccontami una barzelletta")
 f("Come stai oggi?")

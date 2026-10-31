@@ -1,0 +1,27 @@
+{
+  "nome": "libreria_bit",
+  "titolo": "Accendi i bit",
+  "cosa_fa": {"verbo": "mostra", "oggetto": "come otto bit formano un numero"},
+  "input": {"type": "object", "properties": {}, "required": []},
+  "permessi": {},
+  "scheda": {"tipo": "gioco", "file": ["logica.js"], "giocatori": {"min": 1, "max": 1},
+             "salva": false, "azioni": [],
+             "macchina": {
+               "inizio": "bit",
+               "fasi": {
+                 "bit": {"pagina": "griglia", "turni": false, "verso": ["esito", "fine"],
+                         "comandi": {
+                           "bit": {"forme": ["bit {n}", "il bit {n}",
+                                             "cambia il bit {n}"],
+                                   "n": {"da": 0, "a": 7}, "etichetta": "Bit {n}"},
+                           "accendi": {"forme": ["accendi tutto", "accendi tutti i bit"],
+                                       "etichetta": "Accendi tutto"},
+                           "spegni": {"forme": ["spegni tutto", "spegni tutti i bit"],
+                                      "etichetta": "Spegni tutto"},
+                           "finito": {"forme": ["ho finito", "basta bit"],
+                                      "etichetta": "Ho finito"}}}
+               }
+             }},
+  "livello": "familiare",
+  "limiti": {"tempo_s": 5, "memoria_mb": 128}
+}

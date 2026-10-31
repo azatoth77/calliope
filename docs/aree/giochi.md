@@ -1307,3 +1307,15 @@ ogni avviso dal prefisso e da una frase sua (`ciclo.regole_avvisi`), mentre prim
 prefisso contava come `gioco_esito_ogni_mossa`. `puntiPersi` tiene solo il primo.
 
 **Le prove**: `prove/prova_esito_giochi.py` (nuova, livello 2, ~10 s).
+
+## Le mini-app della libreria dello Studio (31/10, issue #297, parte 2)
+
+Otto giochi della macchina a stati scritti e rivisti da noi, nel repository
+(`calliope/studio/libreria/miniapp/`; area [studio](studio.md), decisione 0035 punto 47). Non sono
+estensioni dell'archivio: `Giochi.avvia` ha il parametro `file` (i byte caricati dalla libreria,
+con l'impronta) e `Partita.file`; `documento` compone il riquadro da quei byte, con la stessa
+sandbox e la stessa CSP, senza guardare l'archivio (anche con le estensioni spente). Il resto della
+partita (istantanea, voce, palco, giudice) è quello di ogni gioco. In `sezioni.js` un gioco che
+arriva apre la sua pagina (Le mie cose › Giochi) anche quando si è già in Le mie cose su un'altra
+pagina: dalla pagina dello Studio restava nascosto. Prove: `prova_studio_miniapp.py`,
+`prova_studio_libreria_pagina.py`.

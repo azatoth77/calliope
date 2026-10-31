@@ -707,6 +707,34 @@ della #297; tre parti: libreria e indice (qui), mini-app, adattamento e preparaz
     Alternative scartate: generare le schede a runtime con qwen (lento e da controllare: resta per
     ciò che manca, parte 3); un indice del programma ministeriale (il punto 7 e la #279); la
     padronanza in ombra per l'ordine; un modello che sceglie i contenuti dai titoli.
+
+47. **Le mini-app della libreria sono giochi puri fidati, aperti dai file del repository**
+    (#297, parte 2, 31/10). Otto per la prima serie, due per materia, nei tre tipi della issue
+    (da esplorare, con il quiz, percorso guidato con previsione, verifica e secondo tentativo).
+    - Ognuna è un gioco della **macchina a stati** con il **palco fisso** (`estensioni/macchina.py`,
+      `motore_gioco.js`): JavaScript deterministico senza modello, niente permessi, niente azioni,
+      niente dati salvati, un giocatore. Sta in `calliope/studio/libreria/miniapp/<cartella>/`
+      (manifesto, `logica.js` con `GIOCO` e `DATI`, `gioco.test.js`) con la sua scheda della
+      libreria (`tipo: miniapp`). Il caricamento la valida come un'estensione (manifesto, analisi
+      statica) e ne tiene l'impronta; i comandi a voce della scheda devono essere forme vere della
+      macchina.
+    - **Non passano dall'archivio delle estensioni** né dall'approvazione: sono scritte e riviste
+      nella PR come il codice. `Giochi.avvia` prende i file della libreria (`file`), e il riquadro
+      si compone da quei byte, con la stessa sandbox e la stessa CSP dei giochi approvati; un file
+      cambiato dopo il caricamento non si apre.
+    - Si aprono con il tool `studio_attivita` («sicuro», nessuna fonte, E0): a voce l'attività la
+      sceglie il codice fra i titoli della libreria (dati fidati) dalle parole dette, e se non è
+      chiaro dice quali ci sono; dalla home con il tocco «Apri» (`studio_attivita` in `TOCCABILI`,
+      col bersaglio). Con una prova aperta no, come le carte. Per un minore vale il tempo dei
+      giochi (`minori_gioco_minuti`): sono giochi, e il limite di chi lo segue resta.
+    - La **verità** di ciò che mostrano la controlla una prova con conti e tabelle sue
+      (`prove/verita_miniapp.mjs` e `prova_studio_miniapp.py`), oltre ai test e alla prova di fumo
+      di ognuna.
+
+    Alternative scartate: installarle come estensioni approvate all'avvio (passerebbero dalla
+    porta e dall'archivio, che servono per ciò che scrive l'agente); generarle con l'agente (resta
+    per una mini-app che manca, in modalità sviluppo); una tela libera (la misura del palco e la
+    voce le dà solo la macchina).
 ## I premi e la regola per i minori (#296, 31/10)
 
 45. **Premi al minimo, solo come rinforzo positivo, calcolati dal codice dalla pratica vera.**

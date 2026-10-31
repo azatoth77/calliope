@@ -14,6 +14,9 @@ confermati («Le reazioni chimiche», «La mole»):
   quella; «Aggiungi le carte» mette il mazzo fra le carte (origine «libreria») e la sezione Carte si
   aggiorna; un prerequisito si apre dalla scheda; «Chiudi la scheda»;
 - 320×693 e col testo grande (125 %): niente fuori dallo schermo né di lato, tocchi ≥ 44 px;
+- le attività (31/10, parte 2): «Apri» su una mini-app manda il tocco `studio_attivita` col
+  bersaglio; eseguito come lo esegue il ciclo, il gioco arriva sul telefono nel riquadro, il motore
+  gira (l'istantanea della partita arriva al server) e la pagina sta nel palco;
 - il PC personale: la stessa sezione nella colonna centrale;
 - nessun errore JavaScript né violazione della CSP.
 Con CALLIOPE_FOTO=<cartella> gli screenshot. ~20 s.
@@ -133,6 +136,61 @@ def scenario_telefono(t, hub, st, vid):
     verifica("«Chiudi la scheda»", bool(ok))
 
 
+def scenario_attivita(t, hub, st, vid):
+    """«Apri» su un'attività della libreria: il tocco al ciclo, eseguito come lo esegue il ciclo
+    (ToolRegistry.call col bersaglio), poi il gioco sul telefono."""
+    import types
+    from calliope.config import Config  # noqa: F401
+    from calliope.tools.registry import ToolRegistry
+    from calliope.tools.spec import ToolContext
+    from calliope.tools.studio import studio_specs
+    t.v("document.querySelector('.studio-l').scrollIntoView({block: 'start'}); 1")
+    sel = 'button[data-tocco="studio_attivita"][data-dati*="chimica-reazioni-app"]'
+    ok = aspetta(lambda: t.v(f"!!document.querySelector('{sel}')"), 6)
+    verifica("«Dalla libreria»: l'attività «Bilancia la reazione» con «Apri»", bool(ok))
+    t.tocca(sel)
+    item = aspetta(lambda: hub.ingresso.prendi(), 5)
+    verifica("«Apri»: il tocco al ciclo con studio_attivita e il bersaglio",
+             bool(item) and item["tool"] == "studio_attivita"
+             and item["bersaglio"]["studio"] == {"verifica": vid, "contenuto": "chimica-reazioni-app"},
+             str(item)[:300])
+    if not item:
+        return
+    reg = ToolRegistry()
+    for s in studio_specs():
+        reg.register(s)
+    sc = types.SimpleNamespace(current_speaker="Leo", identified_by="schermo", minore_incerto=None,
+                               current_level="familiare", profile_level="familiare")
+    ctx = ToolContext(cfg=hub.cfg, speakers=REG, speaker_ctx=sc, speaker=None)
+    ctx.studio, ctx.schermi = st, hub
+    ctx.tocco_bersaglio = item.get("bersaglio")
+    hub.origine_corrente = lambda: {"schermo": item["schermo_id"]}
+    r = json.loads(reg.call(item["tool"], item["argomenti"], ctx, "familiare"))
+    hub.evento_a(item["schermo_id"], "tocco", {"tocco": item["tocco"], "ok": bool(r.get("ok", True)),
+                                               "pagina": item.get("pagina") or {}})
+    verifica("il tool apre la mini-app", r.get("ok") is not False and any(
+        p.nome == "libreria_bilancia" for p in hub.giochi.partite.values()), str(r)[:200])
+    ok = aspetta(lambda: t.v("!!document.querySelector('iframe.riquadro-gioco')"), 10)
+    verifica("il gioco arriva sul telefono nel riquadro", bool(ok))
+    p = next((x for x in hub.giochi.partite.values() if x.nome == "libreria_bilancia"), None)
+    ok = aspetta(lambda: p is not None and any(x.attivi for x in p.posti.values()), 15)
+    verifica("il motore gira nel riquadro: la partita arriva al server coi comandi attivi",
+             bool(ok), str([x.attivi for x in p.posti.values()]) if p else "")
+    ok = aspetta(lambda: p is not None and any(getattr(x, "palco", None) is not None for x in p.posti.values()), 20)
+    ok = ok and all(x.palco in (None, []) for x in p.posti.values())
+    verifica("la pagina del gioco sta nel palco sul telefono vero (la misura del motore)", bool(ok),
+             str([getattr(x, "palco", None) for x in p.posti.values()]) if p else "")
+    # «Inizia» (la stessa strada della voce): la prima domanda del percorso, misurata anche lei
+    if p is not None and p.posti:
+        sid = next(iter(p.posti))
+        hub.giochi.comando(p.id, sid, "inizia")
+        ok = aspetta(lambda: "coeff_1" in (p.posti[sid].attivi or []), 15)
+        time.sleep(1.0)            # la misura del motore arriva dopo due fotogrammi, se cambia
+        verifica("«Inizia»: la prima domanda del percorso coi coefficienti, nel palco",
+                 bool(ok) and p.posti[sid].palco == [], f"{p.posti[sid].attivi} {p.posti[sid].palco}")
+    B.foto(t, "studio-libreria-attivita-390x844.png")
+
+
 def scenario_pc(t, hub):
     B.dimensione(t, 1440, 900)
     ok = aspetta(lambda: t.v("document.body.classList.contains('con-sezioni')"), 15)
@@ -174,6 +232,9 @@ def main() -> int:
         hub.servizi = serv
         hub.profilo = REG.by_id
         hub.tool_ctx = types.SimpleNamespace(studio=st)
+        # I giochi (le attività della libreria, parte 2): senza le estensioni, coi file della libreria
+        from calliope.schermi.giochi import Giochi
+        hub.giochi = Giochi(cfg, hub, None, log=lambda *a: None)
         vid = prepara(st)
         _, token = srv.archivio.crea_con_token("telefono", proprietario="l1", proprietario_nome="Leo")
         from prova_parla_pc import CollFinto
@@ -193,6 +254,8 @@ def main() -> int:
             time.sleep(0.5)
             B.dimensione(t, 390, 844)
             scenario_telefono(t, hub, st, vid)
+            B.dimensione(t, 390, 844)
+            scenario_attivita(t, hub, st, vid)
             pagina.pompa(0.3)
             errori = [r for r in pagina.log if r.startswith("ECCEZIONE") or "Content Security" in r]
             verifica("telefono: nessun errore JavaScript né violazione della CSP", not errori, "; ".join(errori)[:300])

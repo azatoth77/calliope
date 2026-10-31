@@ -83,18 +83,22 @@ class Libreria:
     """I contenuti caricati e controllati. `contenuti`: id → dict (coi metadati ereditati del
     mazzo già scritti), `errori`: «file: errore» dei file saltati."""
 
-    def __init__(self, contenuti: dict[str, dict] | None = None, errori: list[str] | None = None):
+    def __init__(self, contenuti: dict[str, dict] | None = None, errori: list[str] | None = None,
+                 app: dict | None = None):
         self.contenuti = dict(contenuti or {})
         self.errori = list(errori or [])
+        # Le mini-app caricate (parte 2 della #297, `miniapp.py`): id del contenuto → MiniApp
+        self.app = dict(app or {})
         self._chiavi: dict[str, list[list[str]]] = {}
         self._indicizza()
 
     # ── caricamento ──
     @classmethod
-    def carica(cls, cartella=None, log=None) -> "Libreria":
+    def carica(cls, cartella=None, log=None, cartella_app=None) -> "Libreria":
         """Tutti i file `*.json` sotto `cartella` (di serie i contenuti nel repository). Un file
         che non va si salta con una riga nel registro (`log`), come un contenuto che punta a un id
-        che non c'è o un ciclo di prerequisiti."""
+        che non c'è o un ciclo di prerequisiti. Le mini-app (`tipo: miniapp`) si caricano da
+        `cartella_app` (di serie `miniapp/`, `miniapp.carica`): una che non va resta fuori."""
         base = Path(cartella) if cartella else F.CARTELLA
         contenuti, errori = {}, []
         for p in sorted(base.rglob("*.json")) if base.is_dir() else ():
@@ -107,7 +111,22 @@ class Libreria:
                 errori.append(f"{nome}: id «{dati['id']}» già usato")
                 continue
             contenuti[dati["id"]] = dati
-        lib = cls(*cls.controlla(contenuti, errori))
+        buoni, errori = cls.controlla(contenuti, errori)
+        from . import miniapp as MA
+        app, nomi = {}, {}
+        for k, v in sorted(buoni.items()):
+            if v["tipo"] != F.MINIAPP:
+                continue
+            a, ee = MA.carica(v["estensione"], v["comandi"],
+                              Path(cartella_app) if cartella_app else None)
+            if a is not None and a.nome in nomi:
+                ee = [f"la cartella «{v['estensione']}» è già di «{nomi[a.nome]}»"]
+            if ee:
+                errori.extend(f"{k} (miniapp/{v['estensione']}): {x}" for x in ee)
+                del buoni[k]
+                continue
+            app[k], nomi[a.nome] = a, k
+        lib = cls(buoni, errori, app)
         if log and lib.errori:
             log(f"   [STUDIO] libreria: {len(lib.errori)} errori, quei contenuti restano fuori "
                 f"(il primo: {lib.errori[0]})")

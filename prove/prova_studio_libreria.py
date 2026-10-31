@@ -128,8 +128,8 @@ verifica("i file stanno nella cartella della loro materia",
 verifica("i mazzi hanno ereditato argomento, chiavi e prerequisiti dalla scheda",
          all(v["chiavi"] == LIB.contenuti[v["scheda"]]["chiavi"]
              for v in LIB.contenuti.values() if v["tipo"] == F.MAZZO))
-verifica("i comandi a voce di schede e mazzi sono vuoti (le mini-app arrivano con la parte 2)",
-         all(v["comandi"] == [] for v in LIB.contenuti.values()))
+verifica("i comandi a voce di schede e mazzi sono vuoti (li hanno le mini-app, parte 2)",
+         all(v["comandi"] == [] for v in LIB.contenuti.values() if v["tipo"] != F.MINIAPP))
 
 # ═══════════════════════════ 2. la verità ═══════════════════════════
 print("— la verità")
@@ -138,7 +138,8 @@ verifica("verità: nessun errore (conti, risposte chiuse, sbagliate, risposte ne
          not ver, "; ".join(ver[:4]))
 calcoli = sum(1 for v in LIB.contenuti.values() for x in (
     v["carte"] if v["tipo"] == F.MAZZO else
-    v["scheda"].get("esempi", []) + v["scheda"].get("prova_tu", [])) if x.get("calcolo"))
+    v["scheda"].get("esempi", []) + v["scheda"].get("prova_tu", []) if v["tipo"] == F.SCHEDA
+    else []) if x.get("calcolo"))
 chiuse = sum(1 for v in LIB.contenuti.values() for c in v.get("carte", [])
              if C.chiusa(c["risposta"]))
 verifica("la verità ha di che lavorare: almeno 40 conti e 80 risposte chiuse",
@@ -322,9 +323,10 @@ ARGS = [{"id": 11, "numero": 1, "titolo": "Le reazioni chimiche"},
         {"id": 12, "numero": 2, "titolo": "La mole"},
         {"id": 13, "numero": 3, "titolo": "Una cosa che non c'è"}]
 p0 = I.scegli(LIB, ARGS, "Chimica")
-verifica("senza padronanza: l'ordine degli argomenti, scheda e poi mazzo, niente prerequisiti",
+verifica("senza padronanza: l'ordine degli argomenti, scheda, mazzo e attività, niente "
+         "prerequisiti",
          [(p["contenuto"], p["numero"]) for p in p0] == [
-             ("chimica-reazioni", 1), ("chimica-reazioni-carte", 1),
+             ("chimica-reazioni", 1), ("chimica-reazioni-carte", 1), ("chimica-reazioni-app", 1),
              ("chimica-mole", 2), ("chimica-mole-carte", 2)]
          and all(p["motivo"] == "argomento" for p in p0), str([p["contenuto"] for p in p0]))
 p1 = I.scegli(LIB, ARGS, "Chimica", {11: 90, 12: 40, 13: None}, 75)
@@ -334,7 +336,8 @@ verifica("con la padronanza: la lacuna prima, coi prerequisiti dopo i suoi conte
          and p1[0]["motivo"] == "lacuna"
          and [p["contenuto"] for p in p1 if p["motivo"] == "prerequisito"] == [
              "chimica-reazioni", "fisica-grandezze"]
-         and [p["contenuto"] for p in p1][-1] == "chimica-reazioni-carte",
+         and [p["contenuto"] for p in p1][-2:] == ["chimica-reazioni-carte",
+                                                   "chimica-reazioni-app"],
          str([(p["contenuto"], p["motivo"]) for p in p1]))
 verifica("un prerequisito già proposto per il suo argomento non si ripete",
          len({p["contenuto"] for p in I.scegli(LIB, ARGS[:2], "Chimica", {11: 10, 12: 10}, 75)})
@@ -386,10 +389,10 @@ st = studio(cfg_nuova("s1.db"))
 vid = chimica(st)
 args = st.argomenti(LEO, vid)
 r = st.proposte_libreria(LEO, vid)
-verifica("le proposte della verifica: scheda e carte per gli argomenti 1 e 2",
+verifica("le proposte della verifica: scheda, carte (e attività) per gli argomenti 1 e 2",
          [(p["contenuto"], p["numero"]) for p in r["proposte"]] == [
-             ("chimica-reazioni", 1), ("chimica-reazioni-carte", 1), ("chimica-mole", 2),
-             ("chimica-mole-carte", 2)]
+             ("chimica-reazioni", 1), ("chimica-reazioni-carte", 1), ("chimica-reazioni-app", 1),
+             ("chimica-mole", 2), ("chimica-mole-carte", 2)]
          and r["proposte"][0]["argomento"] == args[0]["id"] and r["chiusa"] is None,
          str(r["proposte"])[:300])
 mz_r = next(p for p in r["proposte"] if p["tipo"] == "mazzo")
@@ -397,7 +400,7 @@ verifica("un mazzo dice quante carte e se è già aggiunto",
          mz_r["carte"] == len(LIB.contenuti[mz_r["contenuto"]]["carte"])
          and mz_r["aggiunte"] == 0 and mz_r["aggiunto"] is False)
 verifica("il tutore vede le proposte del suo minore",
-         len(st.proposte_libreria(ANDREA, vid)["proposte"]) == 4)
+         len(st.proposte_libreria(ANDREA, vid)["proposte"]) == 5)
 verifica("un altro adulto: lo stesso «non c'è»",
          solleva(lambda: st.proposte_libreria(BRUNO, vid), S.NonTrovata))
 verifica("l'ospite (None): lo stesso «non c'è»",
@@ -523,7 +526,7 @@ ho = so_.home(LEO)["verifiche"][0]
 so_.home(LEO)
 righe_o = [x for x in registro if "libreria della verifica" in x]
 verifica("in ombra: la home senza la sezione, una riga di conti nel registro (una sola)",
-         ho["libreria"] is None and len(righe_o) == 1 and "4 proposte" in righe_o[0]
+         ho["libreria"] is None and len(righe_o) == 1 and "5 proposte" in righe_o[0]
          and "mole" not in righe_o[0].lower() and "reazion" not in righe_o[0].lower(),
          str(righe_o))
 verifica("in ombra: niente proposte né schede né carte",
@@ -705,7 +708,7 @@ with ora_del_giorno(12, 0) as _inizio:
             st.aggiungi_argomento(LEO, vid, t_, [], proposto=False)
         st.conferma_argomenti(LEO, vid)
         s, d = chiedi(port, "/api/studio/libreria", sess["leo"], corpo={"verifica": vid})
-        verifica("le proposte (200)", s == 200 and len(d["proposte"]) == 4
+        verifica("le proposte (200)", s == 200 and len(d["proposte"]) == 5
                  and d["materie"] == ["Biologia", "Chimica", "Fisica", "Informatica"], f"{s} {d}")
         s, d = chiedi(port, "/api/studio/libreria", sess["leo"],
                       corpo={"verifica": vid, "azione": "scheda", "contenuto": "chimica-mole"})
@@ -726,7 +729,7 @@ with ora_del_giorno(12, 0) as _inizio:
         s, d = chiedi(port, "/api/studio/libreria", sess["bruno"], corpo={"verifica": vid})
         verifica("un altro adulto: 404", s == 404, f"{s} {d}")
         s, d = chiedi(port, "/api/studio/libreria", sess["andrea"], corpo={"verifica": vid})
-        verifica("il tutore: 200", s == 200 and len(d["proposte"]) == 4, f"{s}")
+        verifica("il tutore: 200", s == 200 and len(d["proposte"]) == 5, f"{s}")
         for corpo, nome in (({"verifica": vid, "azione": "magia", "contenuto": "x"}, "un'azione"),
                             ({"verifica": vid, "azione": "scheda"}, "senza contenuto"),
                             ({"verifica": vid, "azione": "soluzione", "contenuto": "chimica-mole"},

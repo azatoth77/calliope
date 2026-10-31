@@ -481,6 +481,10 @@ CLASSI: dict[str, Classe] = {
     # risultato ha solo conti e una frase del codice; le pagine e le carte le legge il ciclo dopo
     # la risposta, con la voce del libro, e non entrano nella conversazione né nella storia
     "studio_ascolta": _c(S),
+    # le attività della libreria dello Studio (31/10, #297, parte 2): apre sullo schermo un gioco
+    # puro e fidato (una mini-app scritta e rivista da noi), come un gioco delle estensioni puro;
+    # niente dati della persona, nessuna fonte non fidata
+    "studio_attivita": _c(S),
     # «Parliamone» dopo la mappa libera (30/10, passo 7c, #328): la mappa, lo scheletro senza i
     # concetti nascosti, il confronto del codice e gli indicatori, dati non fidati come le carte
     # (in busta, fuori dalla storia a risposta finita); non scrive niente

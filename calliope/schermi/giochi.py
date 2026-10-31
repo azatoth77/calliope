@@ -168,8 +168,12 @@ class Posto:
 
 class Partita:
     def __init__(self, nome: str, versione: int, manifesto: dict, avviata_da: Mittente,
-                 prova: bool = False):
+                 prova: bool = False, file: dict | None = None):
         self.id = "P" + secrets.token_hex(4)
+        # Una mini-app della libreria dello Studio (31/10, #297): i file del riquadro vengono dal
+        # repository (studio/libreria/miniapp.py, impronta controllata al caricamento), non
+        # dall'archivio delle estensioni. None per un gioco dell'archivio
+        self.file = dict(file) if file is not None else None
         # La versione candidata nel collaudo (11/10): niente ponte verso Calliope
         self.prova = bool(prova)
         self.gettone = secrets.token_urlsafe(24)
@@ -280,12 +284,14 @@ class Giochi:
 
     # ── dal tool del gioco ──
     def avvia(self, ctx, nome: str, versione: int, m: dict, argomenti: dict,
-              prova: bool = False) -> dict:
+              prova: bool = False, file: dict | None = None) -> dict:
         """Apre una partita (o si unisce a quella aperta da un altro schermo) e manda la
         scheda del gioco a uno schermo. Il risultato per la voce. `prova` (11/10): un gioco
         non ancora approvato, aperto per il collaudo: la scheda porta "prova": true e la
         pagina lo mostra nella modalità gioco con la cornice arancio e «PROVA» (contratto in
-        docs/aree/giochi.md; chi apre la versione non attiva è lo sviluppo, non questo)."""
+        docs/aree/giochi.md; chi apre la versione non attiva è lo sviluppo, non questo). `file`
+        (31/10, #297): i file di una mini-app della libreria dello Studio, un gioco puro fidato
+        che non sta nell'archivio delle estensioni (il riquadro si compone da questi byte)."""
         from .. import minori
         from ..estensioni.scheda import e_gioco_puro, ha_macchina
         if not getattr(self.cfg, "giochi_enabled", True):
@@ -347,7 +353,7 @@ class Giochi:
                 p = max(aperte, key=lambda x: x.ultimo) if aperte else None
             nuova = p is None
             if nuova:
-                p = Partita(nome, versione, m, mitt)
+                p = Partita(nome, versione, m, mitt, file=file)
                 self.partite[p.id] = p
                 self._per_gettone[p.gettone] = p.id
             p.posti[sid] = Posto(sid, mitt, minore, schermo=s)
@@ -449,9 +455,11 @@ class Giochi:
             pid = self._per_gettone.get(str(gettone or ""))
             p = self.partite.get(pid) if pid else None
         est = self.estensioni
-        if p is None or est is None:
+        if p is None or (est is None and p.file is None):
             return None
-        if p.prova:
+        if p.file is not None:
+            pass        # una mini-app della libreria (#297): i file caricati dal repository
+        elif p.prova:
             # La versione candidata (11/10): ancora la candidata, con i file di quando l'agente
             # l'ha consegnata (come Estensioni.prova_candidata)
             if not candidata_intatta(est, p.nome, p.versione):
@@ -465,7 +473,8 @@ class Giochi:
         d = self._documenti.get(chiave)
         if d is None:
             try:
-                d = documento(p.scheda, est.file_versione(p.nome, p.versione), p.titolo)
+                d = documento(p.scheda, p.file if p.file is not None
+                              else est.file_versione(p.nome, p.versione), p.titolo)
             except SchedaNonValida:
                 return None                       # un gioco del formato di prima (14/10)
             self._documenti = {chiave: d}             # una versione per volta in memoria
