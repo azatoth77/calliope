@@ -1979,6 +1979,7 @@ class Studio(Mappe, Prove):
     def dimentica_sessione(self, persona):
         self._sessioni.pop(str(persona or ""), None)
         self._carte_in_corso.pop(str(persona or ""), None)
+        self._orali.pop(str(persona or ""), None)
 
     def nota_sessione(self, persona) -> str:
         """La nota per i dati del turno (un dato, non un ordine; principio 10): come regolare

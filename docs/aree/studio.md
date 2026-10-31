@@ -171,9 +171,9 @@ almeno 3.
 - La fa **solo la persona**. Il tutore la vede, vede la correzione e decide le voci da rivedere.
 - La vista aperta **non ha mai la risposta attesa né l'esito**: arrivano solo dopo «Consegna».
 - **Mentre una prova è aperta**, alla persona sono nascoste carte e domande di quella verifica:
-  elenco, ripasso, conti della home, carta in corso, `studio_carte` e «conferma le domande».
-  Durante l'orale si aggiunge `studio_pagina_leggi`. Il tutore le vede. Il libro di carta resta
-  suo: è una prova a casa.
+  elenco, ripasso, conti della home, carta in corso, `studio_carte` e «conferma le domande»; a
+  voce `studio_pagina_leggi` non legge le pagine (scritta o orale). Il tutore le vede. Il libro
+  di carta resta suo: è una prova a casa.
 - **Consegna**: il codice valuta le risposte. Poi scrive i tentativi «verifica_finta» (1,5) con la
   fonte «codice» e il riepilogo per argomento: giuste, a metà, sbagliate, da rivedere, senza
   risposta, il punteggio e il confronto con la prova di prima. Per ultima scrive la misura in

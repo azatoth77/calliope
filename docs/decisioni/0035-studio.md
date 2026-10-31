@@ -508,9 +508,9 @@ dell'eco della stanza.
       misura «l'ultima prova» c'è solo se almeno metà delle voci date è decisa dal codice o dal
       tutore.
     - La prova la fa **solo la persona**. La vista aperta **non ha mai le risposte attese né
-      l'esito**. Mentre è aperta, carte e domande della verifica sono nascoste alla persona
-      (e `studio_pagina_leggi` durante l'orale). Tutto dentro il lock, e lo stato cambia una volta
-      sola.
+      l'esito**. Mentre è aperta, carte e domande della verifica sono nascoste alla persona,
+      e `studio_pagina_leggi` non legge le pagine. Tutto dentro il lock, e lo stato cambia una
+      volta sola.
     - Una verifica che si chiude chiude davvero le prove aperte, «annullate» e senza tentativi.
     - Il mix per argomento è uniforme con la padronanza in ombra (i pesi solo nel registro), e
       pesato con la padronanza mostrata.
