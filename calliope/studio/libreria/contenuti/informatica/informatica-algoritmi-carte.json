@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "informatica-algoritmi-carte",
+  "tipo": "mazzo",
+  "titolo": "Algoritmi e diagrammi di flusso: le carte",
+  "materia": "Informatica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "informatica-algoritmi",
+  "carte": [
+    {"domanda": "Che cos'è un algoritmo?", "risposta": "Una sequenza ordinata e finita di istruzioni chiare ed eseguibili che risolve un problema."},
+    {"domanda": "Quale struttura ripete un gruppo di istruzioni finché una condizione cambia?", "risposta": "Iterazione", "sbagliata": "Selezione"},
+    {"domanda": "Quale struttura sceglie fra due strade secondo una condizione?", "risposta": "Selezione", "sbagliata": "Sequenza"},
+    {"domanda": "Come si chiama la struttura in cui le istruzioni si eseguono una dopo l'altra?", "risposta": "Sequenza", "sbagliata": "Iterazione"},
+    {"domanda": "Che forma ha il blocco di decisione in un diagramma di flusso?", "risposta": "Rombo", "sbagliata": "Rettangolo"},
+    {"domanda": "Che forma ha il blocco di input e output in un diagramma di flusso?", "risposta": "Parallelogramma", "sbagliata": "Rombo"},
+    {"domanda": "Che forma ha il blocco di un'istruzione o di un calcolo?", "risposta": "Rettangolo", "sbagliata": "Ovale"},
+    {"domanda": "Quante frecce escono da un blocco di decisione?", "risposta": "2", "sbagliata": "1"},
+    {"domanda": "Quale proprietà chiede che un algoritmo termini dopo un numero finito di passi?", "risposta": "Finitezza", "sbagliata": "Eseguibilità"},
+    {"domanda": "Perché «aggiungi un po' di sale» non va bene in un algoritmo?", "risposta": "Perché è ambigua: l'esecutore non sa quanto sale mettere."}
+  ]
+}

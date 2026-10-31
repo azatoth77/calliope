@@ -1,0 +1,45 @@
+{
+  "formato": 1,
+  "id": "biologia-classificazione",
+  "tipo": "scheda",
+  "titolo": "La classificazione dei viventi",
+  "materia": "Biologia",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "La classificazione dei viventi: categorie, nomenclatura binomia, domini e regni, il concetto di specie",
+  "chiavi": ["classificazione dei viventi", "classificazione degli organismi", "nomenclatura binomia", "nomenclatura binomiale", "sistematica", "tassonomia", "categorie tassonomiche", "tre domini", "domini e regni", "regni dei viventi", "cinque regni", "concetto di specie", "specie biologica", "Linneo"],
+  "prerequisiti": ["biologia-viventi"],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Sulla Terra sono state descritte quasi due milioni di specie di viventi, e molte di più aspettano ancora un nome. Per orientarsi i biologi le mettono in ordine in gruppi, dal più ampio al più piccolo, e danno a ogni specie un nome scientifico valido in tutto il mondo. Questo lavoro si chiama classificazione, o tassonomia.",
+    "sezioni": [
+      {"titolo": "Le categorie, dalla più ampia alla più piccola", "testo": "La classificazione mette i viventi in gruppi uno dentro l'altro, come scatole sempre più piccole. Le categorie principali, dalla più ampia alla più piccola, sono: dominio, regno, phylum, classe, ordine, famiglia, genere e specie. Per le piante al posto di phylum si dice spesso divisione.\n\nPiù si scende, più gli organismi di un gruppo si somigliano. Il gatto domestico e il leone stanno nella stessa famiglia, quella dei felidi, ma in due generi diversi: il gatto nel genere Felis, il leone nel genere Panthera. Il gatto e il cane stanno nello stesso ordine, i carnivori, ma in famiglie diverse.\n\nL'essere umano, per esempio, appartiene al dominio degli eucarioti, al regno degli animali, al phylum dei cordati, alla classe dei mammiferi, all'ordine dei primati, alla famiglia degli ominidi, al genere Homo e alla specie Homo sapiens."},
+      {"titolo": "La nomenclatura binomia di Linneo", "testo": "Nel Settecento il naturalista svedese Linneo introdusse la nomenclatura binomia: ogni specie ha un nome scientifico di due parole, in latino o latinizzate, uguale in tutte le lingue.\n\nLa prima parola è il nome del genere e si scrive con l'iniziale maiuscola. La seconda parola, l'epiteto specifico, si scrive tutta minuscola e da sola non basta: il nome della specie è sempre la coppia. Così il leone è Panthera leo e la tigre Panthera tigris; il gatto domestico è Felis catus. Nei libri il nome scientifico si scrive in corsivo.\n\nIl nome comune cambia da lingua a lingua e a volte da regione a regione; il nome scientifico invece è uno solo, e così un biologo italiano e uno giapponese sanno di parlare dello stesso organismo."},
+      {"titolo": "Che cos'è una specie", "testo": "Una specie è un gruppo di individui che in natura possono incrociarsi fra loro e generare figli fertili, capaci a loro volta di avere figli.\n\nIl cavallo e l'asino possono avere un figlio, il mulo, ma il mulo è sterile: per questo cavallo e asino sono due specie diverse. Invece tutti i cani, dal più piccolo al più grande, possono incrociarsi e avere cuccioli fertili: sono razze diverse della stessa specie.\n\nQuesta definizione non funziona per i viventi che si riproducono senza sesso, come i batteri: per loro si usano soprattutto le somiglianze nel DNA."},
+      {"titolo": "I tre domini e i regni", "testo": "Oggi i viventi si dividono in tre domini. I Batteri e gli Archei sono fatti di cellule procariote, senza nucleo; gli Archei somigliano ai batteri, ma la loro chimica è diversa e molti vivono in ambienti estremi, come sorgenti bollenti o acque salatissime. Il terzo dominio è quello degli Eucarioti, con cellule dotate di nucleo.\n\nGli eucarioti si dividono in quattro regni. I protisti sono soprattutto unicellulari, come le amebe e molte alghe. I funghi, come muffe, lieviti e funghi a cappello, assorbono il cibo dall'ambiente e hanno la parete di chitina. Le piante fanno la fotosintesi e hanno la parete di cellulosa. Gli animali sono pluricellulari, si nutrono di altri viventi e non hanno parete.\n\nIn libri più vecchi si trova la classificazione in cinque regni, che metteva tutti i procarioti in un solo regno, le monere."}
+    ],
+    "ricorda": [
+      "Le categorie, dalla più ampia: dominio, regno, phylum, classe, ordine, famiglia, genere, specie.",
+      "Nomenclatura binomia di Linneo: genere con la maiuscola, epiteto specifico tutto minuscolo, come Homo sapiens.",
+      "Una specie: individui che si incrociano in natura e hanno figli fertili.",
+      "Tre domini: Batteri, Archei ed Eucarioti.",
+      "Regni degli eucarioti: protisti, funghi, piante e animali.",
+      "Più si scende nelle categorie, più gli organismi di un gruppo si somigliano."
+    ],
+    "esempi": [
+      {"testo": "La quercia comune si chiama Quercus robur: Quercus è il genere, con la maiuscola; robur è l'epiteto specifico, minuscolo. Scritto quercus Robur sarebbe sbagliato."},
+      {"testo": "Il lupo, Canis lupus, e lo sciacallo dorato, Canis aureus, sono nello stesso genere ma sono specie diverse. Il lupo e la volpe sono nella stessa famiglia, i canidi, ma la volpe sta in un altro genere, Vulpes."}
+    ],
+    "errori": [
+      "Scrivere il genere minuscolo o la specie maiuscola: si scrive Homo sapiens, non homo Sapiens.",
+      "Pensare che il nome della specie sia solo la seconda parola: sapiens da solo non basta, la specie è Homo sapiens.",
+      "Credere che due animali che hanno un figlio siano sempre della stessa specie: il figlio deve essere fertile."
+    ],
+    "prova_tu": [
+      {"domanda": "Un lievito ha cellule con il nucleo e la parete di chitina, e non fa la fotosintesi. In quale regno sta?", "risposta": "Nel regno dei funghi, nel dominio degli eucarioti."},
+      {"domanda": "Ordina dalla più piccola alla più ampia: famiglia, specie, classe, genere, ordine.", "risposta": "Specie, genere, famiglia, ordine, classe."}
+    ]
+  }
+}

@@ -37,7 +37,10 @@ due, con l'esito deciso dal codice e le domande dal lettore in ombra di serie (s
 voce e sullo schermo, con un copione scritto dal codice e la «voce del libro» (sezione sotto). Dal
 31/10 la **vista del tutore** e le **indicazioni dei tutori** (10, #250 e #285): padronanza alla
 cieca in ombra, il giudizio del tutore a peso pieno, «Da guardare tu», e le frasi dei tutori nei dati
-del turno del minore con una cornice del codice (sezione sotto). Lo
+del turno del minore con una cornice del codice (sezione sotto). Dal 31/10 la **libreria** (#297,
+prima parte): schede e mazzi di carte scritti con Claude e rivisti, scelti dal codice dagli
+argomenti della verifica, «Dalla libreria» nella home e la lettura `libreria` a voce (sezione
+sotto). Lo
 Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
@@ -57,6 +60,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Prove: il tipo della prova vera e la finestra «dal», le domande (scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta; anche le carte), la verifica finta scritta e l'interrogazione simulata a voce, l'esito del codice, «da rivedere» della persona o del tutore, la generazione delle domande dal lettore (dal 31/10, passo 8, #248; schema «studio» alla versione 10; `studio_domande_genera` ombra di serie) | SQLite (`studio_domande`, `studio_prove`); qwen3.6 col client e la guardia del lettore per la generazione; libreria standard per l'esito | `calliope/studio/risposte.py` → `prepara`, `valuta`, `attesa_detta`; `calliope/studio/unita.py` → `leggi`, `una_misura`, `confronta`; `calliope/studio/prove.py` → `Prove` (in `Studio`): `aggiungi_domanda`, `domande`, `conferma_domande`, `inizia_prova`, `rispondi_prova`, `consegna_prova`, `rivedi_voce`, `orale_inizia`, `orale_risposta`, `orale_basta`, `_chiudi_prove`, `_conto_prove`; `calliope/studio/domande_genera.py` → `corpo`, `proposte`, `firma`; `calliope/studio/lettura.py` → `Lettore.genera_domande`; `calliope/studio/servizio.py` → `conclusa`, `_fine`; `calliope/tools/studio.py` → `studio_interroga`, azioni `tipo`, `conclusa`, `prove`; `calliope/schermi/server.py` → `POST /api/studio/prova`; `calliope/schermi/pagina/studio.js` (la sezione «Prove»); prove `prove/prova_studio_prove.py`, `prove/prova_studio_domande_genera.py`, `prove/prova_studio_prove_pagina.py` |
 | Ripasso da ascoltare: il copione a parti composto dal codice (le pagine del piano ripulite per la voce, le carte con la pausa per pensare), la lettura a voce dopo la risposta col barge-in, riprendi e ripeti, l'audio delle parti per lo schermo, la tenuta della cache (dal 31/10, passo 9, #249; schema «studio» invariato, alla versione 10; `studio_ascolta` attiva di serie con lo Studio, `studio_ascolta_voce`, `studio_ascolta_giorni`) | Piper con le voci dello Speaker (la voce di Calliope e la «voce del libro»), `wave` della libreria standard; niente modello | `calliope/studio/ascolta.py` → `paragrafi`, `frasi`, `scarto`, `frasi_pagina`, `componi`, `Copione`, `pezzi`, `sentite`, `da_ripetere`, `leggi`, `Sintesi`, `togli_audio`, `Ascolti` (in `Studio`): `ascolto_prepara`, `ascolto_vale`, `ascolto_fermo`, `nota_ascolto`, `ascolto_parti`, `ascolto_audio`; `calliope/pronuncia.py` → `per_ripasso`, `formule_dette`, `sigle_dette`, `romani_detti`, `simboli_detti`; `calliope/tts.py` → `sintesi_pcm`, `Speaker.say(spezza, voce)`, `silenzio`, `voce_per`; `calliope/eventi/uscita.py` → `turno_lettura`, `leggi`, `pausa`; `calliope/ciclo.py` → `_leggi_ripasso`; `calliope/tools/studio.py` → `studio_ascolta`; `calliope/schermi/server.py` → `POST /api/studio/ascolta`; `calliope/schermi/pagina/studio.js` («Ascolta»); prove `prove/prova_studio_ascolta.py`, `prove/prova_studio_ascolta_pagina.py`, `prove/prova_valore.py` (il ripasso attraverso Brain) |
 | Vista del tutore (padronanza alla cieca in ombra, giudizio del tutore, «Da guardare tu», prove, ripasso, mappa) e indicazioni dei tutori nei dati del turno del minore (dal 31/10, passo 10, #250 e #285; schema «studio» alla versione 11; `studio_indicazioni`, acceso di serie con lo Studio, `studio_indicazioni_giorni`) | SQLite (`studio_indicazioni`, `studio_tentativi` tipo «giudizio»); libreria standard, niente modello | `calliope/studio/tutore.py` → `forma_indicazione`, `CORNICE`, `Tutore` (in `Studio`): `vista_tutore`, `giudica`, `rivedi_da_tutore`, `scrivi_indicazione`, `cambia_indicazione`, `togli_indicazione`, `togli_indicazioni`, `indicazioni`, `nota_indicazioni`; `calliope/studio/padronanza.py` → `GIUDIZI`, `accordo`; `calliope/brain.py` → `_nota_studio`; `calliope/tools/studio.py` → azioni `indica`, `indicazioni`, `indicazioni_togli`; `calliope/schermi/server.py` → `POST /api/studio/tutore`; `calliope/schermi/pagina/studio.js` («Per te che lo segui», «Indicazioni di chi ti segue»); prove `prove/prova_studio_tutore.py`, `prove/prova_studio_tutore_pagina.py` |
+| Libreria: schede degli argomenti e mazzi di carte nel repository (dati fidati, JSON), il formato e la verità, l'indice per argomento, la scelta del codice con la padronanza solo mostrata, «Dalla libreria» nella home, «Aggiungi le carte», la lettura `libreria` a voce (dal 31/10, #297, prima parte; schema «studio» invariato; `studio_libreria`, attiva di serie con lo Studio) | libreria standard, niente modello; i contenuti in `calliope/studio/libreria/contenuti/<materia>/*.json` | `calliope/studio/libreria/formato.py` → `valida`, `leggi_file`, `FORMULE`; `calliope/studio/libreria/indice.py` → `Libreria` (`carica`, `controlla`, `trova`, `di_scheda`), `parole`, `radice`, `materia_vale`, `scegli`; `calliope/studio/libreria/studio.py` → `DallaLibreria` (in `Studio`): `proposte_libreria`, `scheda_libreria`, `soluzione_libreria`, `aggiungi_mazzo`, `_libreria_home`; `calliope/tools/studio.py` → azione `libreria`; `calliope/schermi/server.py` → `POST /api/studio/libreria`; `calliope/schermi/pagina/libreria.js`; prove `prove/prova_studio_libreria.py`, `prove/prova_studio_libreria_pagina.py`, `prove/verita_libreria.py`; passo manuale `prove/manuali/libreria-studio.md` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
@@ -98,6 +102,62 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   (storia, «Magellano») resta un collegamento debole «da controllare» e il criterio «una parte sola
   ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
   sono da rimisurare col banco vero.
+
+## La libreria: schede e carte preparate, scelte dal codice (31/10, issue #297, ramo `issue-297-libreria`)
+
+Prima delle tre parti della #297 (analisi nel commento della issue; decisione 0035 punto 45).
+La prima serie è per la **prima superiore, tecnico tecnologico, indirizzo Chimica, materiali e
+biotecnologie** (decisione di chi amministra del 30/10; nient'altro della classe vera nel
+repository): **17 schede e 17 mazzi** (168 carte), Chimica (sostanze pure e miscugli, l'atomo,
+reazioni e bilanciamento, la mole, acidi basi e pH), Fisica (grandezze e unità, la misura e gli
+errori, la densità, il moto rettilineo uniforme), Informatica (il sistema binario, bit e byte,
+algoritmi e diagrammi di flusso, hardware e software), Biologia (i viventi, la cellula, la
+membrana e l'osmosi, la classificazione). Scritte con Claude da capo, originali, AGPL.
+
+- **Formato** (`libreria/formato.py`): un JSON per contenuto, metadati obbligatori (materia,
+  classe, argomento, chiavi, prerequisiti, durata, comandi a voce, licenza, revisione); il mazzo
+  eredita argomento, chiavi e prerequisiti dalla scheda. Testo semplice (niente link, markdown,
+  emoji, caratteri di controllo), lunghezze massime. Il tipo `miniapp` (estensione, tipo
+  «esplora»/«quiz»/«percorso», schede, comandi non vuoti) è già nel formato per la parte 2.
+- **Verità** (`prove/verita_libreria.py`, anche da sola): 101 conti dichiarati (densità, moto,
+  conversioni, moli e masse molari, pH, bilanciamento, binario ed esadecimale, livelli
+  elettronici, neutroni) rifatti con la tabella della prova e cercati nel testo; le 128 risposte
+  chiuse delle carte giuste per `carte.risposta_giusta` e le «sbagliate» tipiche no; ogni
+  risposta chiusa senza conto nella sua scheda. *[I numeri dei conti e delle chiuse sono quelli
+  del 31/10: la prova vuole almeno 40 e 80.]*
+- **Indice** (`libreria/indice.py`): radici delle parole (le vocali finali tolte fino a tre lettere:
+  «mole» e «moli», «atomo» e «atomi»), le parole di servizio dei titoli fuori («capitolo»,
+  «esercizi», «pagina»), una chiave vale se tutte le sue radici sono nel titolo, punteggio dalla
+  somma delle parole. Venti titoli veri provati e i contrari («il moto dei pianeti», «soluzioni
+  degli esercizi», un titolo ostile, «gli atomi» in storia). «Teoria» e «unità» contano (all'inizio
+  erano parole di servizio: «teoria cellulare» e «unità di misura» non trovavano niente).
+- **Scelta** (`scegli`): due schede per argomento al più, dodici proposte; la padronanza solo
+  «mostrata» (le lacune prima coi prerequisiti), in ombra l'ordine degli argomenti; senza argomenti
+  confermati l'argomento generale della verifica.
+- **Home e pagina** (`libreria.js`, studio.js cambia di sei righe): «Dalla libreria» per verifica,
+  la scheda con sezioni, «Da ricordare», esempi, errori tipici, «Prova tu» con «Mostra la
+  soluzione» (la soluzione arriva dal server una per volta, mai prima), i prerequisiti da aprire,
+  «Aggiungi le carte»; tutto textContent; ogni risposta del server porta il numero della sua
+  richiesta e una vecchia si butta. La vista «libreria» nei dati del turno (solo il tipo).
+- **Voce**: la lettura `libreria` del tool `studio` (E0, verbi «librer» e «sched»): «Per la
+  verifica di chimica nella libreria ho: per l'argomento 1 la scheda «…», le carte «…»; …». Mai il
+  titolo di un argomento; al tutore «la verifica di chimica di Leo». Dopo una pagina letta nella
+  stessa risposta non parte, come le altre letture di `studio` (`politica.DOPO_DATO`).
+- **Carte**: origine «libreria» (nuova in `carte.ORIGINI`), attive e da ripassare, legate
+  all'argomento della proposta (o a quello scelto dal tutore), niente doppioni, il tetto delle
+  300. Schema «studio» invariato (11): niente conflitto con la 12 della #355.
+- Materia **Biologia** nell'elenco fisso dello Studio.
+
+**Da sapere** (trovato scrivendo le carte, non corretto qui): `carte.normale` scrive «1» come
+«uno», che `chiusa` toglie come articolo. Una risposta chiusa «1» non è chiusa, e «1,5 g/cm³»
+diventa «cinque g cm3», che è dentro «2,5 g/cm³»: il codice la darebbe giusta. Le carte della
+libreria lo evitano (la prova di verità controlla ogni «sbagliata»), le carte scritte dalla persona
+no: da correggere in `carte.py` con le sue prove.
+
+**Come si aggiunge un contenuto**: [`prove/manuali/libreria-studio.md`](../../prove/manuali/libreria-studio.md).
+
+**Prove**: `prova_studio_libreria.py` (a secco, col server vero e attraverso Brain),
+`prova_studio_libreria_pagina.py` (browser a 390×844, 320×693, col testo al 125 % e sul PC).
 
 ## Il banco del 31/10 07:02: l'opzione dentro un'altra e la seconda passata col modello vero (31/10, issue #349, ramo `issue-349-studio-scelta-connessione`)
 

@@ -1,0 +1,50 @@
+{
+  "formato": 1,
+  "id": "informatica-algoritmi",
+  "tipo": "scheda",
+  "titolo": "Algoritmi e diagrammi di flusso",
+  "materia": "Informatica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "Algoritmo e sue proprietà, diagrammi di flusso, le strutture di sequenza, selezione e iterazione",
+  "chiavi": ["algoritmi", "proprietà degli algoritmi", "diagrammi di flusso", "diagramma a blocchi", "flow chart", "flowchart", "strutture di controllo", "sequenza selezione iterazione", "programmazione strutturata", "teorema di böhm jacopini", "problem solving"],
+  "prerequisiti": [],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Un algoritmo è una sequenza ordinata di istruzioni che porta a risolvere un problema. Lo usiamo ogni giorno senza chiamarlo così: una ricetta, le istruzioni per montare un mobile, la strada per andare a scuola. Chi esegue le istruzioni si chiama esecutore, e può essere una persona o un computer.",
+    "sezioni": [
+      {"titolo": "Che cos'è un algoritmo", "testo": "Un algoritmo descrive passo per passo come si arriva dai dati di partenza, l'input, al risultato, l'output. Il computer non capisce le intenzioni: fa esattamente quello che c'è scritto, nell'ordine in cui è scritto. Per questo l'algoritmo si pensa prima di scrivere il programma.\n\nUn programma è un algoritmo scritto in un linguaggio di programmazione, che il computer può eseguire. Lo stesso algoritmo si può scrivere in linguaggi diversi, oppure disegnare con un diagramma di flusso."},
+      {"titolo": "Le proprietà di un algoritmo", "testo": "Perché una serie di istruzioni sia un algoritmo servono alcune proprietà. Finitezza: deve terminare dopo un numero finito di passi, non può andare avanti per sempre. Non ambiguità: ogni istruzione ha un solo significato e non lascia scelte all'esecutore; «aggiungi un po' di sale» è ambigua, «aggiungi 5 grammi di sale» no. Eseguibilità: ogni istruzione è qualcosa che l'esecutore sa fare davvero.\n\nSpesso si chiede anche la generalità: un buon algoritmo risolve tutta una classe di problemi, per esempio la somma di due numeri qualsiasi, non solo di 3 e 4."},
+      {"titolo": "I diagrammi di flusso", "testo": "Un diagramma di flusso disegna un algoritmo con blocchi collegati da frecce, che danno l'ordine dei passi. Ogni tipo di blocco ha la sua forma. Inizio e fine: un ovale. Input e output: un parallelogramma, per leggere un dato o scrivere un risultato. Istruzione: un rettangolo, per un'azione o un calcolo, come «somma = a + b». Decisione: un rombo, con dentro una domanda che ha risposta sì o no; dal rombo escono due frecce, una per il sì e una per il no.\n\nIl diagramma si legge dall'alto verso il basso seguendo le frecce. C'è un solo inizio, e ogni strada deve arrivare alla fine."},
+      {"titolo": "Le tre strutture", "testo": "Il teorema di Böhm e Jacopini, due informatici italiani, dice che ogni algoritmo si può scrivere usando solo tre strutture.\n\nSequenza: le istruzioni si eseguono una dopo l'altra, nell'ordine. Selezione: con una decisione si sceglie fra due strade; se la condizione è vera si fa una cosa, altrimenti un'altra. Iterazione: un gruppo di istruzioni si ripete finché una condizione non cambia, per esempio finché un contatore non arriva a dieci. In un'iterazione la condizione prima o poi deve far uscire, altrimenti il ciclo non finisce mai e l'algoritmo perde la finitezza."},
+      {"titolo": "Un esempio di ogni giorno", "testo": "Preparare un tè. Inizio. Riempi il bollitore d'acqua e accendilo. L'acqua bolle? Se no, aspetta un minuto e torna alla domanda: è un'iterazione. Se sì, versa l'acqua nella tazza con la bustina. Vuoi lo zucchero? Se sì aggiungi un cucchiaino, altrimenti vai avanti: è una selezione. Aspetta tre minuti e togli la bustina. Fine.\n\nNel diagramma di flusso le due domande sono rombi, le azioni sono rettangoli, l'inizio e la fine sono ovali, e i passi uno dopo l'altro formano la sequenza. Ogni istruzione è chiara ed eseguibile e il procedimento finisce: è un algoritmo."}
+    ],
+    "ricorda": [
+      "Un algoritmo è una sequenza ordinata, finita e non ambigua di istruzioni eseguibili.",
+      "Le proprietà: finitezza, non ambiguità, eseguibilità; spesso anche generalità.",
+      "Ovale per inizio e fine, parallelogramma per input e output, rettangolo per le istruzioni, rombo per le decisioni.",
+      "Dal rombo della decisione escono due frecce: una per il sì e una per il no.",
+      "Le tre strutture sono sequenza, selezione e iterazione.",
+      "Un'iterazione deve avere una condizione che prima o poi fa uscire dal ciclo."
+    ],
+    "esempi": [
+      {"testo": "Sapere se un numero è pari. Inizio. Leggi il numero N, in un parallelogramma. Calcola il resto della divisione di N per 2, in un rettangolo. Il resto è zero? È un rombo: se sì scrivi pari, se no scrivi dispari. Fine. È una sequenza con dentro una selezione."},
+      {"testo": "Contare da uno a dieci. Inizio. Metti il contatore a uno. Scrivi il contatore. Aumenta il contatore di uno. Il contatore è maggiore di dieci? Se no torna a scrivere, se sì vai alla fine. È un'iterazione: dopo dieci giri la condizione diventa vera e il ciclo finisce."},
+      {"testo": "«Scrivi tutti i numeri pari» non è un algoritmo: i numeri pari sono infiniti e l'esecutore non finirebbe mai, manca la finitezza. «Scrivi i numeri pari fino a venti» invece lo è."}
+    ],
+    "errori": [
+      "Scrivere istruzioni vaghe come «cuoci un po'»: un algoritmo non deve lasciare dubbi all'esecutore.",
+      "Mettere una domanda in un rettangolo: le decisioni vanno nel rombo.",
+      "Dimenticare una delle due frecce che escono dal rombo.",
+      "Scrivere un ciclo con una condizione che non cambia mai: l'algoritmo non finisce."
+    ],
+    "prova_tu": [
+      {"domanda": "Quale struttura usi per ripetere un'azione finché succede qualcosa?", "risposta": "L'iterazione."},
+      {"domanda": "In un diagramma di flusso, che forma ha il blocco che legge un dato dalla tastiera?", "risposta": "Un parallelogramma, il blocco di input e output."},
+      {"domanda": "«Mescola finché è pronto» è un'istruzione non ambigua?", "risposta": "No: pronto non è definito. Meglio «mescola per due minuti»."},
+      {"domanda": "Descrivi un algoritmo che legge due numeri e scrive il più grande.", "risposta": "Inizio; leggi A e B; A è maggiore di B? Se sì scrivi A, se no scrivi B; fine. È una selezione."}
+    ]
+  }
+}

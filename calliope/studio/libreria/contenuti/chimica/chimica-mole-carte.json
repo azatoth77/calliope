@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "chimica-mole-carte",
+  "tipo": "mazzo",
+  "titolo": "La mole: le carte",
+  "materia": "Chimica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "chimica-mole",
+  "carte": [
+    {"domanda": "Quante particelle contiene una mole?", "risposta": "Circa 6,02 × 10^23 particelle."},
+    {"domanda": "Come si chiama il numero 6,02 × 10^23?", "risposta": "Numero di Avogadro", "sbagliata": "Numero atomico"},
+    {"domanda": "In che unità si misura la massa molare?", "risposta": "Grammi per mole", "sbagliata": "Grammi"},
+    {"domanda": "Con quale formula si trovano le moli conoscendo la massa e la massa molare?", "risposta": "Si divide la massa per la massa molare: n = m / M."},
+    {"domanda": "Qual è la massa molare dell'acqua, H2O?", "risposta": "18 g/mol", "sbagliata": "17 g/mol", "calcolo": {"formula": "massa_molare", "dati": {"formula": "H2O"}, "risultato": 18}},
+    {"domanda": "Qual è la massa molare dell'anidride carbonica, CO2?", "risposta": "44 g/mol", "sbagliata": "28 g/mol", "calcolo": {"formula": "massa_molare", "dati": {"formula": "CO2"}, "risultato": 44}},
+    {"domanda": "Quante moli sono 64 grammi di ossigeno, O2?", "risposta": "2 mol", "sbagliata": "4 mol", "calcolo": {"formula": "moli", "dati": {"m": 64, "formula": "O2"}, "risultato": 2}},
+    {"domanda": "Quante moli ci sono in 9 grammi d'acqua?", "risposta": "0,5 mol", "sbagliata": "2 mol", "calcolo": {"formula": "moli", "dati": {"m": 9, "formula": "H2O"}, "risultato": 0.5}},
+    {"domanda": "Quanti grammi pesano 2 moli di cloruro di sodio, NaCl?", "risposta": "117 grammi", "sbagliata": "29 grammi", "calcolo": {"formula": "massa_da_moli", "dati": {"n": 2, "formula": "NaCl"}, "risultato": 117}},
+    {"domanda": "Una mole d'acqua e una mole di sale hanno la stessa massa?", "risposta": "No: hanno lo stesso numero di particelle, ma masse diverse, perché le particelle pesano in modo diverso."}
+  ]
+}

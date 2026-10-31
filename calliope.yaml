@@ -1047,6 +1047,13 @@ studio:
   # Quanti giorni vale un'indicazione se il tutore non lo dice (da 1 a 90; legata a una verifica
   # mai oltre la fine della prova vera)
   studio_indicazioni_giorni: 30
+  # La libreria dello Studio (31/10, #297, calliope/studio/libreria/): schede degli argomenti e
+  # mazzi di carte scritti e rivisti da noi, nel repository, che il codice sceglie dagli argomenti
+  # della verifica (e dalla padronanza, se mostrata): la sezione «Dalla libreria» della home e la
+  # lettura «libreria» del tool studio. Dati fidati e niente modello: per questo attiva di serie
+  # con lo Studio. «ombra» calcola le proposte e le conta nel registro senza mostrarle; «spenta»
+  # niente
+  studio_libreria: attiva
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

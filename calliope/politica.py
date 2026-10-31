@@ -454,9 +454,11 @@ CLASSI: dict[str, Classe] = {
     # Dal 31/10 (passo 8, #248) «prove» legge i conti delle prove; «tipo» e «conclusa» cambiano
     # Dal 31/10 (passo 10, #250, #285) «indica» e «indicazioni_togli» cambiano le indicazioni
     # del tutore per lo studio del suo minore; «indicazioni» ne legge il conto
+    # Dal 31/10 (#297) «libreria» legge le proposte della libreria (titoli fidati, scelti dal codice)
     "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi", "resoconto",
                                                         "riepilogo", "carte", "mappa",
-                                                        "prove", "indicazioni"})),
+                                                        "prove", "indicazioni",
+                                                        "libreria"})),
                  cosa=lambda a: _studio_cosa(a), verbi_azione=("azione", VERBI_STUDIO),
                  chiedi_se=lambda testo, a, ctx, **_k: _studio_archivia(testo, a)),
     # il testo letto delle pagine e i titoli degli argomenti: dati non fidati, come una foto
@@ -525,7 +527,7 @@ VERBI = {
     "promemoria_imposta": r"ricord|promemoria|avvis|memo|dimentic|sposta|cambi|segn",
     "agenda_annulla": r"annull|cancell|togl|elimin|ferm|stop|bast|lev",
     # Per azione in VERBI_STUDIO (seconda revisione della PR #317); qui solo le letture
-    "studio": r"verific|piano|argoment|cart[ae]|mapp|prov[ae]|interrog",
+    "studio": r"verific|piano|argoment|cart[ae]|mapp|prov[ae]|interrog|librer|sched",
     "appuntamento_aggiungi": (r"appuntament|agenda|calendari|segn|impegn|visit|riunion|fiss|"
                               r"sposta|cambi|aggiung|prenot|cena|pranzo|incontr"),
     "lista_aggiungi": r"aggiung|segn|list|spes|compr|prend|manc|scriv|inser|finit",

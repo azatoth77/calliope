@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "chimica-ph-carte",
+  "tipo": "mazzo",
+  "titolo": "Acidi, basi e pH: le carte",
+  "materia": "Chimica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "chimica-ph",
+  "carte": [
+    {"domanda": "Che pH ha una soluzione neutra?", "risposta": "7", "sbagliata": "0"},
+    {"domanda": "Una soluzione con pH 3 è acida o basica?", "risposta": "Acida", "sbagliata": "Basica"},
+    {"domanda": "Una soluzione con pH 12 è acida o basica?", "risposta": "Basica", "sbagliata": "Acida"},
+    {"domanda": "Quali ioni libera un acido in acqua?", "risposta": "Ioni H+", "sbagliata": "Ioni idrossido"},
+    {"domanda": "Quali ioni libera una base in acqua?", "risposta": "Ioni idrossido", "sbagliata": "Ioni H+"},
+    {"domanda": "Che pH ha una soluzione con [H+] = 0,0001 mol/L?", "risposta": "4", "sbagliata": "3", "calcolo": {"formula": "ph", "dati": {"H": 0.0001}, "risultato": 4}},
+    {"domanda": "Che pH ha una soluzione con [H+] = 10^-8 mol/L?", "risposta": "8", "sbagliata": "6", "calcolo": {"formula": "ph", "dati": {"H": 1e-8}, "risultato": 8}},
+    {"domanda": "Di che colore diventa la cartina tornasole in un acido?", "risposta": "Rossa", "sbagliata": "Blu"},
+    {"domanda": "Una soluzione a pH 2 quante volte più ioni H+ ha di una a pH 4?", "risposta": "100 volte", "sbagliata": "2 volte"},
+    {"domanda": "Che cosa si ottiene quando un acido e una base si neutralizzano?", "risposta": "Sale e acqua", "sbagliata": "Un gas"}
+  ]
+}

@@ -1,0 +1,56 @@
+{
+  "formato": 1,
+  "id": "fisica-misura",
+  "tipo": "scheda",
+  "titolo": "La misura e i suoi errori",
+  "materia": "Fisica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "Strumenti, portata e sensibilità, errori casuali e sistematici, valore medio, errori e cifre significative",
+  "chiavi": ["errori di misura", "errore di misura", "errore assoluto", "errore relativo", "errore percentuale", "errori casuali", "errori sistematici", "cifre significative", "strumenti di misura", "portata e sensibilità", "sensibilità di uno strumento", "incertezza della misura", "semidispersione", "valore medio"],
+  "prerequisiti": ["fisica-grandezze"],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Nessuna misura è perfetta: ogni strumento ha i suoi limiti e chi misura può sbagliare. Per questo il risultato di una misura non è un solo numero, ma un valore con la sua incertezza. Qui si vede come si sceglie lo strumento, quali errori si fanno e come si scrive il risultato.",
+    "sezioni": [
+      {"titolo": "Gli strumenti di misura", "testo": "Ogni grandezza ha i suoi strumenti: il righello e il calibro per le lunghezze, la bilancia per la massa, il cronometro per il tempo, il termometro per la temperatura, il cilindro graduato per il volume dei liquidi. Uno strumento è analogico se ha una scala da leggere con un indice o un livello, digitale se mostra direttamente le cifre.\n\nPrima di misurare si controlla che lo strumento sia adatto: deve poter misurare tutta la grandezza e deve essere abbastanza preciso per quello che serve."},
+      {"titolo": "Portata e sensibilità", "testo": "La portata è il valore più grande che uno strumento può misurare: una bilancia da cucina con portata 5 kg non serve a pesare una persona. La sensibilità è la più piccola variazione che lo strumento riesce a rilevare: in un righello con le tacche ogni millimetro la sensibilità è 1 mm.\n\nSe si fa una sola misura, la sua incertezza è uguale alla sensibilità dello strumento. Un righello con sensibilità 1 mm che legge 12,4 cm dà come risultato (12,4 ± 0,1) cm."},
+      {"titolo": "Errori casuali e sistematici", "testo": "Gli errori casuali cambiano da una misura all'altra, a volte in più e a volte in meno: un riflesso un po' lento quando si ferma il cronometro, una lettura un po' imprecisa. Si riducono ripetendo la misura molte volte e facendo la media.\n\nGli errori sistematici spostano tutte le misure sempre nello stesso verso: una bilancia starata che segna sempre 3 g in più, un righello con l'inizio consumato, guardare la scala sempre di lato (errore di parallasse). Ripetere la misura non serve: gli errori sistematici si trovano e si correggono controllando lo strumento e il metodo."},
+      {"titolo": "Valore medio ed errore assoluto", "testo": "Quando si ripete una misura più volte, il valore più attendibile è il valore medio: la somma delle misure divisa per il loro numero. Come errore assoluto si usa spesso la semidispersione: la misura massima meno la minima, diviso 2. Se viene più piccola della sensibilità dello strumento, si prende la sensibilità.\n\nIl risultato si scrive come valore medio più o meno errore assoluto, con l'unità di misura: (12,5 ± 0,2) g. Vuol dire che il valore vero sta, con buona probabilità, fra 12,3 g e 12,7 g."},
+      {"titolo": "Errore relativo e percentuale", "testo": "L'errore assoluto da solo non dice se una misura è buona: sbagliare di 1 cm sulla lunghezza di un campo da calcio è pochissimo, sulla lunghezza di una gomma è tantissimo. Per confrontare si usa l'errore relativo: errore assoluto diviso valore medio. È un numero puro, senza unità di misura.\n\nMoltiplicato per 100 diventa l'errore percentuale. Più l'errore relativo è piccolo, più la misura è precisa."},
+      {"titolo": "Cifre significative", "testo": "Le cifre significative di una misura sono le cifre note con sicurezza, più la prima incerta. Gli zeri all'inizio non contano: 0,0450 ha tre cifre significative, cioè 4, 5 e lo zero finale. Gli zeri alla fine, dopo la virgola, contano: scrivere 12,30 cm vuol dire aver misurato anche i decimi di millimetro.\n\nIn una moltiplicazione o in una divisione il risultato si arrotonda allo stesso numero di cifre significative del dato che ne ha meno. La calcolatrice dà tante cifre, ma non sono tutte vere."}
+    ],
+    "ricorda": [
+      "Portata: il valore più grande che lo strumento misura. Sensibilità: la variazione più piccola che rileva.",
+      "Una sola misura: l'incertezza è la sensibilità dello strumento.",
+      "Errori casuali: in più e in meno, si riducono con la media. Errori sistematici: sempre nello stesso verso, si correggono controllando lo strumento.",
+      "Valore medio: la somma delle misure diviso il loro numero.",
+      "Semidispersione: misura massima meno misura minima, diviso 2.",
+      "Errore relativo: errore assoluto diviso valore medio. Per 100 dà l'errore percentuale.",
+      "Il risultato: valore medio più o meno errore assoluto, con l'unità di misura.",
+      "Gli zeri all'inizio di un numero non sono cifre significative."
+    ],
+    "esempi": [
+      {"testo": "Cinque misure della massa di un tappo: 12,4 g, 12,6 g, 12,5 g, 12,3 g e 12,7 g. La somma è 62,5 g, che divisa per 5 dà il valore medio 12,5 g. La semidispersione è (12,7 − 12,3) : 2 = 0,2 g. Risultato: m = (12,5 ± 0,2) g."},
+      {"testo": "L'errore relativo della misura del tappo è 0,2 : 12,5 = 0,016. L'errore percentuale è 0,016 per 100, cioè 1,6 %."},
+      {"testo": "Con un cronometro che mostra i centesimi di secondo si misura una sola volta il tempo di caduta di una pallina: 0,45 s. L'incertezza è la sensibilità, quindi t = (0,45 ± 0,01) s."},
+      {"testo": "Quante cifre significative? Il numero 25,0 ne ha tre, 0,008 ne ha una sola, 1,050 ne ha quattro."}
+    ],
+    "errori": [
+      "Scrivere il valore medio con troppe cifre: si arrotonda come l'errore, per esempio 12,5 g e non 12,4867 g.",
+      "Pensare che ripetere tante volte la misura tolga anche gli errori sistematici.",
+      "Dimenticare l'unità di misura nell'errore assoluto: anche lui si scrive in grammi, metri o secondi.",
+      "Contare come cifre significative gli zeri all'inizio, come in 0,005.",
+      "Confondere portata e sensibilità."
+    ],
+    "prova_tu": [
+      {"domanda": "Un righello ha tacche ogni millimetro e arriva a 30 cm. Quali sono la sua portata e la sua sensibilità?", "risposta": "Portata 30 cm, sensibilità 1 mm."},
+      {"domanda": "Tre misure di una lunghezza danno 20,2 cm, 20,6 cm e 20,4 cm. Quanto valgono valore medio ed errore assoluto?", "risposta": "Valore medio 61,2 : 3 = 20,4 cm, semidispersione (20,6 − 20,2) : 2 = 0,2 cm. Risultato (20,4 ± 0,2) cm."},
+      {"domanda": "Quante cifre significative ha 0,0305?", "risposta": "Tre: 3, 0 e 5. Gli zeri all'inizio non contano, quello in mezzo sì."},
+      {"domanda": "Una bilancia segna sempre 3 g in più del vero. Che tipo di errore è?", "risposta": "Un errore sistematico: sposta tutte le misure nello stesso verso."},
+      {"domanda": "Una lunghezza vale (50,0 ± 0,5) cm. Quanto valgono l'errore relativo e quello percentuale?", "risposta": "Errore relativo 0,5 : 50,0 = 0,01, errore percentuale 1 %."}
+    ]
+  }
+}

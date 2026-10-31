@@ -2264,6 +2264,13 @@ class Config:
     # Quanti giorni vale un'indicazione se il tutore non lo dice (da 1 a 90; legata a una verifica
     # mai oltre la fine della prova vera)
     studio_indicazioni_giorni: int = 30
+    # La libreria dello Studio (31/10, #297, calliope/studio/libreria/): schede degli argomenti e
+    # mazzi di carte scritti e rivisti da noi, nel repository, che il codice sceglie dagli argomenti
+    # della verifica (e dalla padronanza, se mostrata): la sezione «Dalla libreria» della home e la
+    # lettura «libreria» del tool studio. Dati fidati e niente modello: per questo attiva di serie
+    # con lo Studio. «ombra» calcola le proposte e le conta nel registro senza mostrarle; «spenta»
+    # niente
+    studio_libreria: str = "attiva"
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3562,7 +3569,7 @@ SEZIONI: dict[str, list[str]] = {
                "studio_mappa_consigli", "studio_prova_domande", "studio_prova_minuti",
                "studio_finestra_giorni", "studio_domande_genera", "studio_ascolta",
                "studio_ascolta_voce", "studio_ascolta_giorni", "studio_indicazioni",
-               "studio_indicazioni_giorni"],
+               "studio_indicazioni_giorni", "studio_libreria"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -4179,6 +4186,8 @@ _MODI_NUOVI = {
                                    falso="spenta"),
     # Il ripasso da ascoltare (31/10, #249): come la mappa libera
     "studio_ascolta": _modi("studio_ascolta", ("spenta", "attiva"), falso="spenta"),
+    # La libreria dello Studio (31/10, #297)
+    "studio_libreria": _modi("studio_libreria", ("spenta", "ombra", "attiva"), falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},

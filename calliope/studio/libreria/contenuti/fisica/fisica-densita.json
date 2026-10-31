@@ -1,0 +1,51 @@
+{
+  "formato": 1,
+  "id": "fisica-densita",
+  "tipo": "scheda",
+  "titolo": "Massa, volume e densità",
+  "materia": "Fisica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "Massa, volume e densità: d = m/V, unità di misura, densità dei materiali e galleggiamento",
+  "chiavi": ["densità", "densità assoluta", "densità dei materiali", "densità dei corpi", "massa volumica", "massa e volume", "volume dei solidi", "volume per immersione", "galleggiamento", "galleggiamento dei corpi", "corpi che galleggiano"],
+  "prerequisiti": ["fisica-grandezze"],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Perché un chiodo affonda e un tronco galleggia? Non conta quanto pesano in tutto, ma quanta massa c'è in ogni pezzetto di volume. Questa grandezza è la densità, e ogni sostanza ha la sua.",
+    "sezioni": [
+      {"titolo": "Massa e volume", "testo": "La massa dice quanta materia c'è in un corpo. Si misura con la bilancia e nel SI si esprime in chilogrammi (kg); in laboratorio si usano spesso i grammi. La massa non cambia se il corpo viene portato sulla Luna; il peso invece è la forza con cui il pianeta lo attira, e si misura in newton.\n\nIl volume è lo spazio che un corpo occupa. Nel SI si misura in m³, ma in laboratorio si usano cm³ e mL (1 mL = 1 cm³). Il volume di un liquido si legge in un cilindro graduato. Per un solido dalla forma irregolare si usa l'immersione: si mette il solido nel cilindro con l'acqua e si misura di quanto sale il livello."},
+      {"titolo": "La densità", "testo": "La densità è la massa di un corpo divisa per il suo volume: d = m/V. Dice quanta massa c'è in ogni unità di volume. Dalla formula si ricavano le formule inverse: m = d × V e V = m/d.\n\nLa densità dipende dalla sostanza, non da quanto è grande il pezzo: un chiodo di ferro e una trave di ferro hanno la stessa densità. Per questo aiuta a riconoscere un materiale. Cambia un po' con la temperatura: quasi tutti i corpi scaldandosi si dilatano e la loro densità diminuisce."},
+      {"titolo": "Le unità della densità", "testo": "Nel SI la densità si misura in kg/m³. In laboratorio si usa più spesso il g/cm³, che è uguale al g/mL. Le due unità sono legate così: 1 g/cm³ = 1000 kg/m³, perché in un metro cubo ci sono un milione di centimetri cubi e in un chilogrammo ci sono mille grammi.\n\nAlcuni valori, circa a temperatura ambiente: acqua 1,00 g/cm³, cioè 1000 kg/m³; olio d'oliva 0,92 g/cm³; ghiaccio 0,92 g/cm³; alluminio 2,7 g/cm³; ferro 7,9 g/cm³; mercurio 13,6 g/cm³; aria circa 0,0012 g/cm³."},
+      {"titolo": "Galleggiare o affondare", "testo": "Un corpo pieno messo in un liquido galleggia se la sua densità è minore di quella del liquido, affonda se è maggiore. Il ghiaccio (0,92 g/cm³) galleggia sull'acqua (1,00 g/cm³), ma solo una piccola parte resta fuori: per questo di un iceberg si vede appena la punta. L'olio galleggia sull'acqua; il ferro in acqua affonda, ma galleggia sul mercurio.\n\nUna nave d'acciaio galleggia perché è vuota dentro: conta la densità media dello scafo insieme all'aria che contiene, che è minore di quella dell'acqua."}
+    ],
+    "ricorda": [
+      "Densità: d = m/V. Formule inverse: m = d × V e V = m/d.",
+      "Unità: kg/m³ nel SI, g/cm³ in laboratorio. 1 g/cm³ = 1000 kg/m³.",
+      "Acqua: 1,00 g/cm³. Ghiaccio e olio d'oliva: circa 0,92 g/cm³. Ferro: circa 7,9 g/cm³.",
+      "Un corpo pieno galleggia su un liquido se ha densità minore di quella del liquido.",
+      "La densità dipende dalla sostanza, non dalla grandezza del pezzo.",
+      "Volume di un solido irregolare: per immersione, da quanto sale il livello dell'acqua."
+    ],
+    "esempi": [
+      {"testo": "Un cubetto di alluminio ha massa 54 g e volume 20 cm³. La densità è d = m/V = 54 : 20 = 2,7 g/cm³.", "calcolo": {"formula": "densita", "dati": {"m": 54, "V": 20}, "risultato": 2.7}},
+      {"testo": "La stessa densità nelle unità del SI: si moltiplica per 1000, quindi 2,7 g/cm³ diventano 2700 kg/m³.", "calcolo": {"formula": "conversione", "dati": {"valore": 2.7, "da": "g/cm3", "a": "kg/m3"}, "risultato": 2700}},
+      {"testo": "Quanta massa ha un bicchiere con 250 cm³ di olio d'oliva? m = d × V = 0,92 per 250 = 230 g.", "calcolo": {"formula": "massa_da_densita", "dati": {"d": 0.92, "V": 250}, "risultato": 230}},
+      {"testo": "Un pezzo di ferro ha massa 158 g. Il suo volume è V = m/d = 158 : 7,9 = 20 cm³.", "calcolo": {"formula": "volume_da_densita", "dati": {"m": 158, "d": 7.9}, "risultato": 20}}
+    ],
+    "errori": [
+      "Pensare che un oggetto grande sia per forza più denso: un tronco è enorme ma galleggia.",
+      "Dividere il volume per la massa invece della massa per il volume.",
+      "Mescolare le unità: con la massa in g il volume va in cm³, così la densità viene in g/cm³.",
+      "Confondere massa e peso: la massa si misura in kg, il peso è una forza e si misura in newton.",
+      "Credere che 1 g/cm³ sia uguale a 1 kg/m³: in realtà vale 1000 kg/m³."
+    ],
+    "prova_tu": [
+      {"domanda": "Un sasso ha massa 75 g. Messo in un cilindro graduato, fa salire l'acqua da 50 mL a 80 mL. Qual è la sua densità?", "risposta": "Il volume è 80 − 50 = 30 cm³, quindi d = 75 : 30 = 2,5 g/cm³.", "calcolo": {"formula": "densita", "dati": {"m": 75, "V": 30}, "risultato": 2.5}},
+      {"domanda": "Quanta massa ha 1 L di acqua?", "risposta": "1 L = 1000 cm³, quindi m = d × V = 1000 g, cioè 1 kg.", "calcolo": {"formula": "massa_da_densita", "dati": {"d": 1.0, "V": 1000}, "risultato": 1000}},
+      {"domanda": "Un oggetto di plastica piena ha densità 0,95 g/cm³: in acqua galleggia o affonda?", "risposta": "Galleggia, perché 0,95 g/cm³ è minore di 1,00 g/cm³."},
+      {"domanda": "Quanto vale 0,92 g/cm³ in kg/m³?", "risposta": "920 kg/m³: si moltiplica per 1000.", "calcolo": {"formula": "conversione", "dati": {"valore": 0.92, "da": "g/cm3", "a": "kg/m3"}, "risultato": 920}}
+    ]
+  }
+}

@@ -1,0 +1,52 @@
+{
+  "formato": 1,
+  "id": "chimica-mole",
+  "tipo": "scheda",
+  "titolo": "La mole e la massa molare",
+  "materia": "Chimica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "La mole, il numero di Avogadro, la massa molare e i conti fra massa e numero di moli",
+  "chiavi": ["mole", "massa molare", "numero di Avogadro", "costante di Avogadro", "quantità di sostanza", "massa molecolare", "peso molecolare", "massa atomica relativa", "calcoli con le moli", "conversione massa moli", "calcoli stechiometrici", "stechiometria"],
+  "prerequisiti": ["chimica-reazioni", "fisica-grandezze"],
+  "durata": 25,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Gli atomi e le molecole sono troppo piccoli per contarli uno a uno. I chimici allora li contano a pacchi, come le uova si contano a dozzine. Il pacco dei chimici si chiama mole, ed è enorme: serve per passare dai grammi che si pesano sulla bilancia al numero di particelle che reagiscono.",
+    "sezioni": [
+      {"titolo": "La mole e il numero di Avogadro", "testo": "Una mole è la quantità di sostanza che contiene circa 6,02 × 10^23 particelle: atomi, molecole o ioni, secondo la sostanza. Questo numero si chiama numero di Avogadro, dal nome del fisico italiano Amedeo Avogadro.\n\nÈ un numero gigantesco: 602 mila miliardi di miliardi. Una mole d'acqua però sta in un cucchiaio abbondante, 18 millilitri, perché ogni molecola è piccolissima.\n\nLa mole è l'unità di misura della quantità di sostanza nel Sistema Internazionale, e il suo simbolo è mol."},
+      {"titolo": "Massa atomica e massa molecolare", "testo": "La massa di un atomo si misura in unità di massa atomica, u. Nelle tavole il carbonio vale circa 12 u, l'ossigeno 16 u, l'idrogeno 1 u.\n\nLa massa molecolare è la somma delle masse degli atomi di una molecola, ognuna contata tante volte quanto dice l'indice. Per H2O: 2 per 1 più 16 fa 18 u.\n\nIn questa scheda usiamo le masse arrotondate della scuola: H 1, C 12, N 14, O 16, Na 23, S 32, Cl 35,5, Ca 40."},
+      {"titolo": "La massa molare", "testo": "La massa molare M è la massa di una mole di sostanza, e si misura in grammi per mole, g/mol. Il trucco è che ha lo stesso numero della massa atomica o molecolare: l'acqua ha massa molecolare 18 u, quindi una mole d'acqua pesa 18 grammi.\n\nCosì la bilancia diventa un contatore di particelle: 18 grammi d'acqua contengono 6,02 × 10^23 molecole."},
+      {"titolo": "I conti fra massa e moli", "testo": "Tre grandezze: la massa m in grammi, la massa molare M in g/mol e il numero di moli n in mol.\n\nPer trovare le moli si divide la massa per la massa molare: n = m / M.\n\nPer trovare la massa si moltiplica: m = n · M.\n\nPer trovare il numero di particelle si moltiplicano le moli per il numero di Avogadro. Un controllo utile sono le unità: grammi diviso grammi per mole dà mol."},
+      {"titolo": "Le moli nelle reazioni", "testo": "I coefficienti stechiometrici di una reazione bilanciata si possono leggere in moli. In 2 H2 + O2 -> 2 H2O, 2 moli di idrogeno reagiscono con 1 mole di ossigeno e danno 2 moli di acqua.\n\nAttenzione: i coefficienti dicono le moli, non i grammi. Due moli di idrogeno pesano 4 grammi, una mole di ossigeno ne pesa 32."}
+    ],
+    "ricorda": [
+      "Una mole contiene circa 6,02 × 10^23 particelle: è il numero di Avogadro.",
+      "La massa molare si misura in grammi per mole e ha lo stesso numero della massa molecolare.",
+      "La massa molare di un composto è la somma delle masse dei suoi atomi, contati con gli indici.",
+      "n = m / M: le moli sono la massa divisa per la massa molare.",
+      "m = n · M: la massa è il numero di moli per la massa molare.",
+      "I coefficienti di una reazione bilanciata dicono le moli, non i grammi."
+    ],
+    "esempi": [
+      {"testo": "La massa molare dell'acqua, H2O, è 2 per 1 più 16, cioè 18 g/mol.", "calcolo": {"formula": "massa_molare", "dati": {"formula": "H2O"}, "risultato": 18}},
+      {"testo": "La massa molare dell'anidride carbonica, CO2, è 12 più 2 per 16, cioè 44 g/mol.", "calcolo": {"formula": "massa_molare", "dati": {"formula": "CO2"}, "risultato": 44}},
+      {"testo": "Quante moli ci sono in 36 grammi d'acqua? n = m / M = 36 diviso 18, cioè 2 mol.", "calcolo": {"formula": "moli", "dati": {"m": 36, "formula": "H2O"}, "risultato": 2}},
+      {"testo": "Quanto pesano 0,5 moli di cloruro di sodio, NaCl? La massa molare è 23 più 35,5, cioè 58,5 g/mol. Quindi m = n · M = 0,5 per 58,5, cioè 29,25 grammi.", "calcolo": {"formula": "massa_da_moli", "dati": {"n": 0.5, "formula": "NaCl"}, "risultato": 29.25}}
+    ],
+    "errori": [
+      "Dimenticare l'indice nella massa molare: H2O vale 18 g/mol, non 17, perché gli idrogeni sono due.",
+      "Moltiplicare invece di dividere: per trovare le moli la massa si divide per la massa molare.",
+      "Pensare che una mole di sostanze diverse pesi lo stesso: hanno lo stesso numero di particelle, non la stessa massa.",
+      "Leggere i coefficienti di una reazione come grammi invece che come moli."
+    ],
+    "prova_tu": [
+      {"domanda": "Qual è la massa molare dell'ammoniaca, NH3?", "risposta": "17 g/mol: 14 più 3 per 1.", "calcolo": {"formula": "massa_molare", "dati": {"formula": "NH3"}, "risultato": 17}},
+      {"domanda": "Quante moli ci sono in 88 grammi di CO2?", "risposta": "2 mol: 88 diviso 44.", "calcolo": {"formula": "moli", "dati": {"m": 88, "formula": "CO2"}, "risultato": 2}},
+      {"domanda": "Quanti grammi pesano 3 moli d'acqua?", "risposta": "54 grammi: 3 per 18.", "calcolo": {"formula": "massa_da_moli", "dati": {"n": 3, "formula": "H2O"}, "risultato": 54}},
+      {"domanda": "Quanti grammi pesano 0,25 moli di calcio, Ca?", "risposta": "10 grammi: 0,25 per 40.", "calcolo": {"formula": "massa_da_moli", "dati": {"n": 0.25, "formula": "Ca"}, "risultato": 10}},
+      {"domanda": "Quante molecole ci sono in 2 moli d'acqua?", "risposta": "Circa 1,2 × 10^24 molecole: 2 per 6,02 × 10^23.", "calcolo": {"formula": "notazione_scientifica", "dati": {"valore": 1.204e24}, "risultato": 1.204e24}}
+    ]
+  }
+}

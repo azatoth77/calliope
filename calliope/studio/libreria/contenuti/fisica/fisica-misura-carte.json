@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "fisica-misura-carte",
+  "tipo": "mazzo",
+  "titolo": "La misura e i suoi errori: le carte",
+  "materia": "Fisica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "fisica-misura",
+  "carte": [
+    {"domanda": "Come si chiama il valore più grande che uno strumento può misurare?", "risposta": "La portata", "sbagliata": "La sensibilità"},
+    {"domanda": "Come si chiama la più piccola variazione che uno strumento riesce a rilevare?", "risposta": "La sensibilità", "sbagliata": "La portata"},
+    {"domanda": "Una bilancia starata che segna sempre di più fa errori di che tipo?", "risposta": "Sistematici", "sbagliata": "Casuali"},
+    {"domanda": "Quali errori si riducono ripetendo la misura e facendo la media?", "risposta": "Gli errori casuali", "sbagliata": "Gli errori sistematici"},
+    {"domanda": "Come si calcola la semidispersione di una serie di misure?", "risposta": "Misura massima meno misura minima, diviso 2."},
+    {"domanda": "Come si calcola l'errore relativo?", "risposta": "Errore assoluto diviso valore medio."},
+    {"domanda": "Le misure di una massa vanno da 12,3 g a 12,7 g. Quanto vale la semidispersione?", "risposta": "0,2 g", "sbagliata": "0,4 g"},
+    {"domanda": "Quante cifre significative ha il numero 0,0450?", "risposta": "3", "sbagliata": "5"},
+    {"domanda": "Gli zeri all'inizio di un numero, come in 0,007, sono cifre significative?", "risposta": "No, gli zeri all'inizio non sono cifre significative."},
+    {"domanda": "Come si scrive il risultato di una misura ripetuta?", "risposta": "Valore medio più o meno errore assoluto, con l'unità di misura."}
+  ]
+}
