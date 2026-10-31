@@ -58,6 +58,11 @@ def prepara(st):
              for i in range(5)]
     for c in carte:
         st.esito_carta(LEO, c, "non_sapevo")
+    # Il ripasso vero dura qualche minuto (revisione della PR #355): la prima carta 3 minuti fa
+    import datetime
+    prima = (datetime.datetime.now() - datetime.timedelta(minutes=3)).isoformat(timespec="seconds")
+    st.dati.scrivi("UPDATE studio_pratica SET ora = ? WHERE id = (SELECT MIN(id) FROM "
+                   "studio_pratica)", (prima,))
     for i in range(3):
         st.aggiungi_domanda(LEO, vid, "numero", f"In che anno {i}?", str(1490 + i),
                             argomento=a[i]["id"])
@@ -66,6 +71,7 @@ def prepara(st):
         i = int(x["testo"].split()[-1][:-1])
         st.rispondi_prova(LEO, p["id"], x["n"], str(1490 + i) if x["testo"].startswith("In che")
                           else f"risposta {i}")
+    st.dati.scrivi("UPDATE studio_prove SET inizio = ? WHERE id = ?", (prima, p["id"]))
     st.consegna_prova(LEO, p["id"])
     return vid
 

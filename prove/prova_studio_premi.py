@@ -167,7 +167,7 @@ from calliope.conserva import TABELLE_STUDIO  # noqa: E402
 verifica("schema «studio» alla versione 12", D.versione_schema(st.dati.db) == 12
          and len(D.MIGRAZIONI) == 12)
 verifica("le tabelle dei premi in TABELLE e in conserva.TABELLE_STUDIO",
-         {"studio_stelle", "studio_premi", "studio_duelli"} <= set(D.TABELLE)
+         {"studio_stelle", "studio_premi", "studio_duelli", "studio_pratica"} <= set(D.TABELLE)
          and set(TABELLE_STUDIO) == set(D.TABELLE))
 st.close()
 
@@ -251,17 +251,119 @@ ora(29)
 st = studio(cfg_nuova("carte.db"))
 v = carica(st)
 args = st._argomenti_numerati(v)
-carte = [st.aggiungi_carta(LEO, v, f"Domanda {i}?", f"risposta {i}", argomento=args[i]["id"])
-         for i in range(6)]
+carte = [st.aggiungi_carta(LEO, v, f"Domanda {i}?", f"risposta {i}", argomento=args[i % 8]["id"])
+         for i in range(14)]
 for _ in range(10):
     st.esito_carta(LEO, carte[0], "sapevo")
 verifica("la stessa carta ripetuta dieci volte: non fa un giorno", serie(st)["giorni"] == 0)
-for c in carte[1:4]:
+for c in carte[1:6]:
     st.esito_carta(ANDREA, c, "sapevo")
 verifica("le carte ripassate dal tutore non sono la pratica di Leo", serie(st)["giorni"] == 0)
-for c in carte[1:5]:
+for c in carte[1:6]:
+    ORA[0] += datetime.timedelta(seconds=40)
     st.esito_carta(LEO, c, "non_sapevo")
-verifica("cinque carte diverse, tutte «non la sapevo»: il giorno conta",
+verifica("cinque carte appena ripassate dal tutore (non da ripassare): non contano",
+         serie(st)["giorni"] == 0, str(serie(st)))
+st.close()
+# Revisione della PR #355, scenario A: «non la sapevo» e subito «la sapevo» su cinque carte nuove
+ora(29)
+st = studio(cfg_nuova("carte_a.db"))
+v = carica(st)
+args = st._argomenti_numerati(v)
+carte = [st.aggiungi_carta(LEO, v, f"Domanda {i}?", f"risposta {i}", argomento=args[i % 8]["id"])
+         for i in range(11)]
+for c in carte[6:11]:
+    st.esito_carta(LEO, c, "non_sapevo")
+for c in carte[6:11]:
+    st.esito_carta(LEO, c, "sapevo")
+verifica("cinque carte nuove toccate due volte in pochi secondi: non fanno un giorno",
+         serie(st)["giorni"] == 0, str(serie(st)))
+st.close()
+ora(29)
+st = studio(cfg_nuova("carte_tempo.db"))
+v = carica(st)
+args = st._argomenti_numerati(v)
+carte = [st.aggiungi_carta(LEO, v, f"Domanda {i}?", f"risposta {i}", argomento=args[i]["id"])
+         for i in range(5)]
+for c in carte:
+    ORA[0] += datetime.timedelta(seconds=20)
+    st.esito_carta(LEO, c, "non_sapevo")
+verifica(f"cinque carte da ripassare in 80 secondi (meno di {PM.CARTE_SECONDI}): non contano",
+         serie(st)["giorni"] == 0, str(serie(st)))
+st.close()
+ora(29)
+st = studio(cfg_nuova("carte_ok.db"))
+v = carica(st)
+args = st._argomenti_numerati(v)
+carte = [st.aggiungi_carta(LEO, v, f"Domanda {i}?", f"risposta {i}", argomento=args[i]["id"])
+         for i in range(5)]
+for c in carte:
+    ORA[0] += datetime.timedelta(seconds=40)
+    st.esito_carta(LEO, c, "non_sapevo")
+verifica("cinque carte da ripassare in 160 secondi, tutte «non la sapevo»: il giorno conta",
+         serie(st)["giorni"] == 1, str(serie(st)))
+st.close()
+
+# Revisione della PR #355, scenari B–D: mappa e prove riempite a caso
+ora(29)
+st = studio(cfg_nuova("mappa_caso.db"))
+v = carica(st)
+a0 = st._argomenti_numerati(v)[0]["id"]
+sid = st.scrivi_scheletro(LEO, v)
+nn = [st.nodo_mappa(LEO, sid, t, argomento=a0) for t in
+      ("Colombo", "America", "Spagna", "Portogallo", "Spezie", "Indie", "Magellano")]
+for i in range(1, len(nn)):
+    st.collega(LEO, sid, nn[0], nn[i], "porta a")
+st.conferma_scheletro(LEO, sid)
+mem = st.inizia_mappa(LEO, v, "memoria", aiuto="poco")
+for n in st._riga_mappa(mem)["nodi"]:
+    if n.get("casella"):
+        st.riempi(LEO, mem, n["id"], "xyz")
+st.controlla_mappa(LEO, mem)
+verifica("una mappa a memoria riempita a caso e controllata: non fa un giorno",
+         serie(st)["giorni"] == 0, str(serie(st)))
+st.close()
+ora(29)
+st = studio(cfg_nuova("libera_vuota.db"))
+v = carica(st)
+a0 = st._argomenti_numerati(v)[0]["id"]
+sid = st.scrivi_scheletro(LEO, v)
+nn = [st.nodo_mappa(LEO, sid, t, argomento=a0) for t in
+      ("Scoperte", "Colombo", "America", "Spagna", "Portogallo", "Spezie", "Indie", "Magellano",
+       "Vasco", "Tordesillas")]
+for i in range(1, len(nn)):
+    st.collega(LEO, sid, nn[0], nn[i], "porta a")
+for i in range(1, 5):
+    st.collega(LEO, sid, nn[i], nn[i + 4], "porta a")
+st.conferma_scheletro(LEO, sid)
+st.finisci_libera(LEO, st.inizia_libera(LEO, v))
+verifica("una mappa da zero vuota con «Ho finito»: non fa un giorno", serie(st)["giorni"] == 0,
+         str(serie(st)))
+st.close()
+
+
+def prova_scelta(st_, v_, risposte, secondi):
+    pv = st_.inizia_prova(LEO, v_)
+    for x, r in zip(pv["voci"], risposte):
+        st_.rispondi_prova(LEO, pv["id"], x["n"], r)
+    ORA[0] += datetime.timedelta(seconds=secondi)
+    st_.consegna_prova(LEO, pv["id"])
+
+
+ora(29)
+st = studio(cfg_nuova("prova_caso.db"))
+v = carica(st)
+a0 = st._argomenti_numerati(v)[0]["id"]
+for i in range(4):
+    st.aggiungi_domanda(LEO, v, "scelta", f"Q{i}?", "a", ["uno", "due", "tre"], argomento=a0)
+prova_scelta(st, v, ["c", "c"], 300)
+verifica("una prova con metà delle risposte tutte sbagliate: non fa un giorno",
+         serie(st)["giorni"] == 0, str(serie(st)))
+prova_scelta(st, v, ["a", "c"], 5)
+verifica(f"una prova con una risposta giusta consegnata in 5 secondi (meno di "
+         f"{PM.PROVA_SECONDI}): non fa un giorno", serie(st)["giorni"] == 0, str(serie(st)))
+prova_scelta(st, v, ["a", "c"], 180)
+verifica("una prova con una risposta giusta in 3 minuti: il giorno conta",
          serie(st)["giorni"] == 1, str(serie(st)))
 st.close()
 
@@ -279,7 +381,10 @@ for c in carte:
 ora(29)
 verifica("una sessione e cinque carte con l'orologio avanti: tornati a oggi non contano",
          serie(st)["giorni"] == 0, str(serie(st)))
+# Le scadenze scritte con l'orologio avanti sono nel futuro: rimesse da ripassare
+st.dati.scrivi("UPDATE studio_carte SET scadenza = NULL")
 for c in carte:
+    ORA[0] += datetime.timedelta(seconds=40)
     st.esito_carta(LEO, c, "quasi")
 verifica("la frase della serie si dice", "La tua serie è a 1 giorno" in st.frase_premi(LEO))
 verifica("una seconda volta lo stesso giorno no", "serie" not in st.frase_premi(LEO))

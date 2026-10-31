@@ -9,10 +9,11 @@ sviluppa (30/10) e si cambiano con l'uso: sono tutte qui, in cima.
 passato nell'app né numero di aperture:
 - **il giorno di studio** (`studiato`) è un giorno con almeno una pratica vera: una sessione del
   piano misurata fra «Inizia» e «Fatto» di almeno `SERIE_MINUTI` minuti (una sessione aperta e
-  chiusa subito non conta), almeno `SERIE_CARTE` carte diverse ripassate da chi studia (la stessa
-  carta ripetuta conta una volta, e l'esito, che è un'autovalutazione, non conta), una prova
-  consegnata con almeno metà delle risposte date, oppure almeno `SERIE_CASELLE` caselle di una
-  mappa controllate dal codice;
+  chiusa subito non conta), almeno `SERIE_CARTE` carte diverse ripassate da chi studia quando
+  erano da ripassare, nell'arco di almeno `CARTE_SECONDI` (la stessa carta ripetuta conta una
+  volta, e l'esito, che è un'autovalutazione, non conta), una prova consegnata con almeno metà
+  delle risposte date, almeno una giusta o a metà per il codice e durata almeno `PROVA_SECONDI`,
+  oppure almeno `SERIE_CASELLE` caselle giuste o a metà di una mappa controllata dal codice;
 - **la serie** (`serie`) conta i giorni di studio andando indietro da oggi. Un giorno senza piano
   (nessuna verifica aperta, giorno senza scuola, fuori dagli orari del tutore: il piano lì ha zero
   minuti) non conta e non la ferma; un giorno del piano senza pratica, o saltato con «non ce la
@@ -61,6 +62,15 @@ from . import resoconto as R
 SERIE_MINUTI = 10
 SERIE_CARTE = 5
 SERIE_CASELLE = 3
+# Revisione della PR #355: le carte contano solo se erano da ripassare quando la persona ha dato
+# l'esito (`studio_pratica`), una volta per carta e per giorno, e fra la prima e l'ultima che
+# contano devono passare almeno `CARTE_SECONDI` secondi (cinque tocchi di fila non sono un
+# ripasso); una prova conta con almeno una risposta «giusto» o «indizio» decisa dal codice e
+# almeno `PROVA_SECONDI` secondi fra l'inizio e la consegna; le caselle della mappa solo giuste o
+# a metà (tentativi «mappa» del codice, scritti solo da «Controlla» e «Ho finito»)
+CARTE_SECONDI = 120
+PROVA_SECONDI = 120
+ESITI_PRATICA = ("giusto", "indizio")
 # La serie: la finestra delle pause e quanto indietro si guarda
 PAUSA_FINESTRA = 7
 PAUSE_MAX = 3
@@ -122,14 +132,25 @@ def _da(x, vuoto):
 
 # ─────────────────────────── funzioni pure ───────────────────────────
 
+def _t(x) -> datetime.datetime | None:
+    try:
+        return datetime.datetime.fromisoformat(str(x))
+    except (TypeError, ValueError):
+        return None
+
+
 def pratica(sessioni: list[dict], tentativi: list[dict], prove: list[dict], persona: str,
-            oggi) -> dict[str, dict]:
+            oggi, carte: list[dict] = ()) -> dict[str, dict]:
     """{giorno: {minuti, carte, caselle, prove}} della pratica di `persona` fino a oggi (i giorni
     dopo oggi, un orologio spostato, non contano):
     - `sessioni`: le sessioni del piano (`resoconto.sessioni`), i minuti misurati di quelle fatte;
-    - `tentativi`: righe di `studio_tentativi`; contano solo quelli registrati dalla persona
-      (`chi`), le carte una volta per carta e per giorno, le caselle della mappa decise dal codice;
-    - `prove`: righe di `studio_prove` consegnate o scadute con almeno metà delle risposte date."""
+    - `carte`: righe di `studio_pratica` (`giorno`, `ora`, `rif`): le carte ripassate quando erano
+      da ripassare, una volta per carta e per giorno; se fra la prima e l'ultima di un giorno
+      passano meno di `CARTE_SECONDI` il giorno non ne ha nessuna;
+    - `tentativi`: righe di `studio_tentativi`; contano solo le caselle della mappa decise dal
+      codice, giuste o a metà, registrate dalla persona (`chi`);
+    - `prove`: righe di `studio_prove` consegnate o scadute con almeno metà delle risposte date,
+      almeno una «giusto» o «indizio» decisa dal codice e `PROVA_SECONDI` fra inizio e fine."""
     oggi = _d(oggi).isoformat()
     out: dict[str, dict] = {}
 
@@ -138,13 +159,23 @@ def pratica(sessioni: list[dict], tentativi: list[dict], prove: list[dict], pers
     for s in sessioni:
         if s.get("stato") == R.FATTO and s.get("minuti") and str(s["giorno"]) <= oggi:
             g(str(s["giorno"]))["minuti"] += int(s["minuti"])
+    ore: dict[str, list] = {}
+    for c in carte:
+        giorno = str(c.get("giorno") or "")
+        t = _t(c.get("ora"))
+        if not giorno or giorno > oggi or c.get("rif") is None or t is None:
+            continue
+        g(giorno)["carte"].add(int(c["rif"]))
+        ore.setdefault(giorno, []).append(t)
+    for giorno, tt in ore.items():
+        if (max(tt) - min(tt)).total_seconds() < CARTE_SECONDI:
+            out[giorno]["carte"] = set()
     for t in tentativi:
         giorno = str(t.get("giorno") or "")
         if not giorno or giorno > oggi or str(t.get("chi") or "") != str(persona):
             continue
-        if t.get("tipo") == "carta" and t.get("carta") is not None:
-            g(giorno)["carte"].add(int(t["carta"]))
-        elif t.get("tipo") == "mappa" and t.get("fonte") == "codice":
+        if (t.get("tipo") == "mappa" and t.get("fonte") == "codice"
+                and t.get("esito") in ESITI_PRATICA):
             g(giorno)["caselle"] += 1
     for p in prove:
         fine = str(p.get("fine") or "")[:10]
@@ -153,6 +184,13 @@ def pratica(sessioni: list[dict], tentativi: list[dict], prove: list[dict], pers
             continue
         rp = _da(p.get("riepilogo"), {})
         if rp.get("poche_risposte") or not rp.get("domande"):
+            continue
+        voci = [x for x in _da(p.get("voci"), []) if isinstance(x, dict)]
+        if not any(x.get("esito") in ESITI_PRATICA and x.get("fonte_esito") == "codice"
+                   for x in voci):
+            continue
+        a, b = _t(p.get("inizio")), _t(p.get("fine"))
+        if a is None or b is None or (b - a).total_seconds() < PROVA_SECONDI:
             continue
         g(fine)["prove"] += 1
     return out
@@ -345,11 +383,14 @@ class Premi:
     def _serie_di(self, persona) -> dict:
         oggi = self._oggi()
         sess, pianificati = self._sessioni_persona(persona)
-        tent = self.dati.tutti("SELECT giorno, tipo, fonte, chi, carta FROM studio_tentativi "
-                               "WHERE persona = ?", (str(persona),))
-        prove = self.dati.tutti("SELECT persona, stato, fine, riepilogo FROM studio_prove WHERE "
-                                "persona = ?", (str(persona),))
-        pr = pratica(sess, tent, prove, persona, oggi)
+        tent = self.dati.tutti("SELECT giorno, tipo, esito, fonte, chi, carta FROM "
+                               "studio_tentativi WHERE persona = ? AND tipo = 'mappa'",
+                               (str(persona),))
+        prove = self.dati.tutti("SELECT persona, stato, inizio, fine, riepilogo, voci FROM "
+                                "studio_prove WHERE persona = ?", (str(persona),))
+        carte = self.dati.tutti("SELECT giorno, ora, rif FROM studio_pratica WHERE persona = ? "
+                                "AND tipo = 'carta'", (str(persona),))
+        pr = pratica(sess, tent, prove, persona, oggi, carte)
         return serie(pr, pianificati, oggi, self._pause())
 
     # ── le stelle ──

@@ -90,7 +90,8 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni", "studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
+TABELLE = ("studio_pratica", "studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
+           "studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
            "studio_misure",
            "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
            "studio_giorni")
@@ -444,12 +445,24 @@ def _v12(db: sqlite3.Connection):
         fine TEXT)""")
     db.execute("CREATE INDEX IF NOT EXISTS studio_duelli_da ON studio_duelli(da)")
     db.execute("CREATE INDEX IF NOT EXISTS studio_duelli_a ON studio_duelli(a)")
+    # La pratica che conta per la serie e che i tentativi non dicono (revisione della PR #355):
+    # una carta ripassata da chi studia **quando era da ripassare** (`tipo` «carta», `rif` l'id
+    # della carta). Solo id, codici e date; va con la verifica, con la persona e per data
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_pratica (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        giorno TEXT NOT NULL,
+        ora TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        rif INTEGER)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_pratica_persona ON studio_pratica(persona, giorno)")
 
 
 MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
-CON_ORFANI = ("studio_eventi", "studio_tentativi")
+CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")
 # Le tabelle venute dopo la prima versione: un db di prima (lo Studio spento non lo prepara) può
 # non averle
 NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe", "studio_domande", "studio_prove",

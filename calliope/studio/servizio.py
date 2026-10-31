@@ -1588,10 +1588,25 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi):
         ruolo = self._chi_puo(chi, v["persona"])
         fonte = fonte or ("persona" if ruolo == "proprietario" else "tutore")
         adesso = self.adesso()
-        scatola, scadenza = C.prossima(c["scatola"], esito, adesso, self._vigilia(v))
-        self.dati.scrivi("UPDATE studio_carte SET scatola = ?, scadenza = ?, ultima = ? WHERE "
-                         "id = ?", (scatola, scadenza, adesso.isoformat(timespec="seconds"),
-                                    c["id"]))
+        with self.dati.lock:
+            # Era da ripassare adesso? Solo così conta per la serie (revisione della PR #355: una
+            # carta toccata di nuovo subito dopo non è un ripasso); riletta dentro il lock
+            att = self.dati.uno("SELECT * FROM studio_carte WHERE id = ?", (c["id"],)) or c
+            era_da = C.da_ripassare(att, adesso)
+            scatola, scadenza = C.prossima(att["scatola"], esito, adesso, self._vigilia(v))
+            self.dati.scrivi("UPDATE studio_carte SET scatola = ?, scadenza = ?, ultima = ? WHERE "
+                             "id = ?", (scatola, scadenza, adesso.isoformat(timespec="seconds"),
+                                        c["id"]))
+            if era_da and ruolo == "proprietario":
+                try:
+                    self.dati.scrivi(
+                        "INSERT INTO studio_pratica (verifica, persona, giorno, ora, tipo, rif) "
+                        "VALUES (?, ?, ?, ?, 'carta', ?)",
+                        (v["id"], str(v["persona"]), adesso.date().isoformat(),
+                         adesso.isoformat(timespec="seconds"), c["id"]))
+                except Exception as e:  # noqa: BLE001 — la serie non ferma il ripasso
+                    self._registra(f"pratica della carta {c['id']} non scritta: "
+                                   f"{type(e).__name__}")
         m = self.misure["carte"]
         m["esiti"][esito] = m["esiti"].get(esito, 0) + 1
         m["codice"] += fonte == "codice"

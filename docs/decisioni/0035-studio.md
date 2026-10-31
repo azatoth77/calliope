@@ -675,10 +675,18 @@ dell'eco della stanza.
     Decisioni di chi amministra: «il minimo di gamification sullo studio che è un rinforzo
     positivo» (28/10) e «le soglie le sceglie chi sviluppa, si cambiano con l'uso» (30/10).
     L'analisi, con le soglie, è nel commento della #296; i dettagli sono nel documento d'area.
-    - **Il giorno di studio** ha una pratica vera: una sessione misurata fra «Inizia» e «Fatto» di
-      almeno 10 minuti, 5 carte diverse ripassate da chi studia (l'esito non conta), una prova
-      consegnata con metà delle risposte, o 3 caselle di una mappa controllate dal codice. Non
-      contano mai le autovalutazioni, il tempo nell'app, le aperture o le ripetizioni.
+    - **Il giorno di studio** ha una pratica vera, una di queste:
+      - una sessione misurata fra «Inizia» e «Fatto» di almeno 10 minuti;
+      - 5 carte diverse ripassate da chi studia quando erano da ripassare, in almeno 2 minuti
+        (l'esito non conta);
+      - una prova consegnata con metà delle risposte, almeno una giusta o a metà per il codice e
+        almeno 2 minuti fra inizio e consegna;
+      - 3 caselle giuste o a metà di una mappa controllata dal codice.
+
+      Le tre soglie su carte, prove e caselle vengono dalla revisione della PR #355; prima
+      bastavano cinque tocchi o una prova a caso. Non contano mai le autovalutazioni, il tempo
+      nell'app, le aperture o le ripetizioni. Resta un limite noto: una sessione di 10 minuti senza
+      fare niente conta.
     - **La serie** conta i giorni di studio. Un giorno senza piano non conta e non la ferma. Un
       giorno del piano senza pratica, o saltato, usa una pausa (1 ogni 7, `studio_serie_pause`).
       Quando si ferma non si dice né si mostra. A voce si dice al più una volta al giorno, dentro la
@@ -706,7 +714,7 @@ dell'eco della stanza.
     6. un adulto ha le stesse meccaniche e decide da sé.
 
     Lo stato d'animo non entra (punto 27). Schema «studio» alla versione 12 (`studio_stelle`,
-    `studio_premi`, `studio_duelli`).
+    `studio_premi`, `studio_duelli` e, dalla revisione della PR #355, `studio_pratica`).
 
     Alternative scartate:
     - la serie che si azzera: punisce;
