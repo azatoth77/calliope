@@ -219,6 +219,15 @@ def _scelta(d: dict, risposta: str) -> str:
     esatte |= {i for i, o in enumerate(ops) if _uguale_opzione(o, risposta)}
     if len(pr) <= 12:
         esatte |= {i for i, o in enumerate(ops) if parole(o) and _di_fila(parole(o), pr)}
+    # «la a, no, la c», «Austria no Australia», «a, anzi c» (terza revisione della PR #342):
+    # una correzione fra due opzioni nominate esattamente la decide chi rivede, mai il codice
+    nominate = {LETTERE.index(w) for w in ps if len(w) == 1 and w != "e"
+                and w in LETTERE[:len(ops)]}
+    if len(pr) <= 12:
+        nominate |= {i for i, o in enumerate(ops) if parole(o) and _di_fila(parole(o), pr,
+                                                                             negate=True)}
+    if len(nominate) > 1 and any(w in _CORREZIONI for w in ps):
+        return DA_RIVEDERE
     if esatte:
         if len(esatte) > 1:
             # Più opzioni nominate esattamente («a o b»): «sbagliato»; con una negazione di
@@ -237,21 +246,28 @@ def _scelta(d: dict, risposta: str) -> str:
     return GIUSTO if simili == {giusta} else SBAGLIATO
 
 
-def _di_fila(chiave: list[str], ps: list[str]) -> bool:
-    """Le parole dell'opzione tutte uguali e di fila nella frase, non negate subito prima."""
+def _di_fila(chiave: list[str], ps: list[str], negate: bool = False) -> bool:
+    """Le parole dell'opzione tutte uguali e di fila nella frase, non negate subito prima (con
+    `negate` anche negate)."""
     n = len(chiave)
-    return any(ps[i:i + n] == chiave and not _negata(ps, i) for i in range(len(ps) - n + 1))
+    return any(ps[i:i + n] == chiave and (negate or not _negata(ps, i))
+               for i in range(len(ps) - n + 1))
 
 
 _TRA = frozenset(("la", "il", "lo", "l", "i", "gli", "le", "e", "era", "proprio"))
 
 
 def _negata(ps: list[str], k: int) -> bool:
-    """La parola k è negata: «non» prima, saltando articoli ed «è» («non è la a»)."""
+    """La parola k è negata: «non» subito prima, saltando articoli ed «è» («non è la a»). Solo
+    «non» (terza revisione della PR #342): in «la a, no, la c» il «no» corregge, non nega."""
     j = k - 1
     while j >= 0 and ps[j] in _TRA:
         j -= 1
-    return j >= 0 and ps[j] in C._NEGAZIONI
+    return j >= 0 and ps[j] == "non"
+
+
+# Le parole che correggono fra due opzioni («la a, no, la c», «a, anzi c», «cioè no»)
+_CORREZIONI = frozenset(("no", "anzi"))
 
 
 def _vero_falso(d: dict, risposta: str) -> str:
@@ -279,7 +295,10 @@ def _numero(d: dict, risposta: str) -> str:
     if attesa is None or not nn:
         return DA_RIVEDERE
     if len({round(v, 9) for v, _u in nn}) == 1:
-        return U.confronta(next(((v, u) for v, u in nn if u), nn[0]), attesa)
+        e = U.confronta(next(((v, u) for v, u in nn if u), nn[0]), attesa)
+        # Lo stesso numero ripetuto («1 kg, 1 kg e 1 kg») che non è l'atteso: forse una somma
+        # che il codice non fa (terza revisione della PR #342), la decide chi rivede
+        return DA_RIVEDERE if len(nn) > 1 and e != GIUSTO else e
     ua = attesa[1]
     # Con l'unità attesa contano le misure della sua grandezza («60 km/h in 2 ore»)
     stesse = [(v, u) for v, u in nn if u and ua and U.UNITA[u][0] == U.UNITA[ua][0]]
@@ -288,7 +307,13 @@ def _numero(d: dict, risposta: str) -> str:
     gruppo = stesse or nn
     if all(U.confronta(x, attesa) == GIUSTO for x in gruppo):
         return GIUSTO
-    if stesse and ua:
+    # Si sommano solo le misure composte (terza revisione della PR #342): lunghezza, massa o
+    # tempo, unità tutte diverse dalla più grande alla più piccola («1 km e 500 m», «1 metro e
+    # 50 centimetri»); mai velocità né temperatura, mai la stessa unità due volte
+    fattori = [U.UNITA[u][1] for _v, u in stesse]
+    composta = (ua and U.UNITA[ua][0] in (U.L, U.M, U.T) and len(stesse) > 1
+                and all(a > b for a, b in zip(fattori, fattori[1:])))
+    if composta:
         somma = sum(v * U.UNITA[u][1] for v, u in stesse) / U.UNITA[ua][1]
         if U.confronta((somma, ua), attesa) == GIUSTO:
             return GIUSTO

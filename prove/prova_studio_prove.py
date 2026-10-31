@@ -771,6 +771,31 @@ male = [(a, r, RS.valuta(RS.prepara("numero", "q?", a), r)[0]) for a, r, e in NN
         if RS.valuta(RS.prepara("numero", "q?", a), r)[0] != e]
 verifica("più numeri: tutti l'atteso o sommati «giusto», alternative senza l'atteso "
          "«sbagliato», il resto «da rivedere»; le frazioni come numeri", not male, male)
+# La terza revisione della PR #342 (esiti3.py del revisore)
+AU = RS.prepara("scelta", "Dove?", "a", ["Austria", "Australia", "Argentina"])
+AB = RS.prepara("scelta", "Dove?", "b", ["Austria", "Australia", "Argentina"])
+AT = RS.prepara("scelta", "Anno?", "b", ["1491", "1492", "1493"])
+SC3 = [(AU, "la a, no, la c", "da_rivedere"), (AU, "la a no la c", "da_rivedere"),
+       (AU, "a, anzi c", "da_rivedere"), (AU, "Austria no Australia", "da_rivedere"),
+       (AB, "Austria, no, Australia", "da_rivedere"), (AT, "1492 no 1493", "da_rivedere"),
+       (AU, "non è la b, è la a", "giusto"), (AU, "non Australia, Austria", "giusto"),
+       (AT, "non il 1491, il 1492", "giusto"), (AU, "Austria e Argentina", "sbagliato"),
+       (AU, "la a o forse la b", "sbagliato")]
+male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC3 if RS.valuta(d, r)[0] != e]
+verifica("«X, no, Y» e «X, anzi Y» fra due opzioni: da rivedere; «non X, Y» come prima", not male,
+         male)
+NN3 = [("0,5 kg", "1/2 kg", "giusto"), ("0,75 L", "3/4 di litro", "giusto"),
+       ("0,5 kg", "mezzo chilo", "giusto"), ("1571", "in mezzo al Mediterraneo, nel 1571",
+                                             "giusto"),
+       ("1,5 h", "un'ora e mezza", "giusto"), ("1500 m", "1 km e 500 m", "giusto"),
+       ("1,05 m", "1 metro e 5 centimetri", "giusto"),
+       ("20 m/s", "5 m/s e 15 m/s", "da_rivedere"), ("50 °C", "20 °C e 30 °C", "da_rivedere"),
+       ("100 m", "50 m e 50 m", "da_rivedere"), ("3 kg", "1 kg, 1 kg e 1 kg", "da_rivedere"),
+       ("20 m/s", "18 o 19 m/s", "sbagliato"), ("0,05", "mezzo", "sbagliato")]
+male = [(a, r, RS.valuta(RS.prepara("numero", "q?", a), r)[0]) for a, r, e in NN3
+        if RS.valuta(RS.prepara("numero", "q?", a), r)[0] != e]
+verifica("frazioni prima dell'unità o di «di», «mezzo» solo come numero vero, somme solo delle "
+         "misure composte (mai velocità né temperatura)", not male, male)
 VF_ = RS.prepara("vero_falso", "x", "vero")
 verifica("vero e falso con una negazione («vero, non è falso») da rivedere; senza, sbagliato",
          RS.valuta(VF_, "vero, non è falso")[0] == "da_rivedere"

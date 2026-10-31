@@ -355,6 +355,23 @@ fino a questa revisione: «Più opzioni […], più numeri («1491 o 1492») [�
   negazione restano «sbagliato».
 - `ToolContext.user_text_stt` è dichiarato nel dataclass (`tools/spec.py`).
 
+### 31/10: la terza revisione della PR #342
+
+I casi di `esiti3.py` del revisore sono entrati nella sezione 10 di `prova_studio_prove.py`.
+
+8. **«X, no, Y».** Come negazione conta solo «non» subito prima della parola (articoli ed «è» si
+   saltano). Un «no» o un «anzi» fra due opzioni nominate esattamente dà «da rivedere»: «la a,
+   no, la c», «Austria no Australia», «a, anzi c», «1492 no 1493». *[storico per un commit:
+   «X, no, Y» dava X, cioè l'opzione abbandonata]* «Non X, Y» e «non è X, è Y» restano come
+   prima.
+9. **Le frazioni** si leggono anche prima di un'unità o di «di»: «1/2 kg», «3/4 di litro».
+10. **Le somme** valgono solo per le misure composte: lunghezza, massa o tempo, unità tutte
+    diverse e dalla più grande alla più piccola («1 km e 500 m», «1 metro e 5 centimetri»).
+    Velocità e temperatura non si sommano mai: «5 m/s e 15 m/s» e «20 °C e 30 °C» sono da
+    rivedere. Lo stesso numero ripetuto che non è l'atteso («1 kg, 1 kg e 1 kg») è da rivedere.
+11. **«Mezzo»** è un numero solo come risposta intera, prima di un'unità («mezzo chilo») o come
+    «e mezzo» dopo un numero o un'unità. «In mezzo al Mediterraneo, nel 1571» vale 1571.
+
 **Scelte prudenti di questa PR** (da confermare):
 - il tutore non fa la prova al posto del minore;
 - le vuote non scrivono tentativi;

@@ -176,15 +176,24 @@ def _in_cifre(t: str) -> str:
     t = re.sub(r"(\d+) virgola ((?:\d+ )*\d+)",
                lambda m: m.group(1) + "," + m.group(2).replace(" ", ""), t)
     t = re.sub(r"\bmeno (\d)", r"-\1", t)
-    # Seconda revisione della PR #342: «un mezzo», «mezzo» da solo (non «e mezzo»), le frazioni
-    # «1/2», «3/4» come numeri, «un metro», «un'ora» come 1 con l'unità
-    t = re.sub(r"\bun mezzo\b", "0,5", t)
-    t = re.sub(r"(?<!\be )\bmezz[oa]\b", "0,5", t)
-    t = re.sub(r"(?<![\d,.])\b(\d+)\s*/\s*([1-9]\d*)\b(?!\s*[a-z])",
+    # Seconda revisione della PR #342: «un mezzo», le frazioni «1/2», «3/4» come numeri, «un
+    # metro», «un'ora» come 1 con l'unità. Terza revisione: «mezzo» è un numero solo se è
+    # l'intera risposta o se lo segue un'unità («mezzo chilo»), mai dentro una frase («in mezzo
+    # al Mediterraneo»); «e mezzo» dopo un numero o un'unità lo legge `leggi`. La frazione si
+    # legge anche prima di un'unità o di «di» («1/2 kg», «3/4 di litro»); «m/s» non ha cifre
+    if re.fullmatch(r"(?:un[ao]? )?mezz[oa]", t.strip()):
+        return "0,5"
+    t = re.sub(r"\bun[a]? mezz[oa](?= " + _NOMI_UNITA + r")|(?<!\be )\bmezz[oa](?= "
+               + _NOMI_UNITA + r")", "0,5", t)
+    t = re.sub(r"(?<![\d,./])\b(\d+)\s*/\s*([1-9]\d*)\b(?!\s*/)",
                lambda m: f"{int(m.group(1)) / int(m.group(2)):g}".replace(".", ","), t)
-    t = re.sub(r"\bun[a]? (?=(?:metr|chil|litr|gramm|or[ae]\b|minut|second|centimetr|"
-               r"millimetr|mol|grad|newton|joule|watt)[a-z]*\b)", "1 ", t)
+    t = re.sub(r"\bun[a]? (?=" + _NOMI_UNITA + ")", "1 ", t)
     return t
+
+
+# L'inizio dei nomi delle unità, per «un metro», «mezzo chilo»
+_NOMI_UNITA = (r"(?:metr|chil|litr|gramm|or[ae]\b|minut|second|centimetr|millimetr|mol|grad|"
+               r"newton|joule|watt)[a-z]*\b")
 
 
 def leggi(testo) -> list[tuple[float, str | None]]:
@@ -209,7 +218,8 @@ def leggi(testo) -> list[tuple[float, str | None]]:
         if re.match(r"\s+e\s+mezz[oa]\b", dopo) or re.match(r"\s+e\s+0\.5\b", dopo):
             v += 0.5
         span = next(((s, e_, c) for s, e_, c in unita if s >= m.end()
-                     and re.fullmatch(r"[\s,]*(?:e\s+mezz[oa]\s*)?", t[m.end():s])), None)
+                     and re.fullmatch(r"[\s,]*(?:e\s+mezz[oa]\s*)?(?:di\s+)?",
+                                      t[m.end():s])), None)
         u = span[2] if span else None
         # «un metro e mezzo», «2 ore e mezza»: il mezzo dopo l'unità (seconda revisione PR #342)
         if span and re.match(r"\s+e\s+mezz[oa]\b", t[span[1]:]) and not re.match(
