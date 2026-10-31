@@ -954,7 +954,7 @@ class Mappe:
                                      **({} if int(x["da"]) in nascosti or int(x["a"]) in nascosti
                                         else {"verbo": x["verbo"]})} for x in rc]}
         ind = c.get("indicatori") or {}
-        prima = lib["giri"][-2]["indicatori"] if len(lib["giri"]) >= 2 else None
+        prima = M.giro_di_prima(lib["giri"])
         coppia = {int(x["id"]): [tcod.get(int(x["da"])), tcod.get(int(x["a"]))]
                   for x in lib["collegamenti"]}
         return {"verifica": v["id"], "mappa": lib["id"], "tua": tua, "riferimento": rif,
@@ -971,7 +971,10 @@ class Mappe:
                               if c.get("conti") else None),
                 "indicatori": ind, "giro_di_prima": prima,
                 "rispetto_a_prima": M.rispetto_a_prima(prima, ind) if prima else None,
-                "nascosti": len(nascosti), "frase": self._frase_confronto(c, nomi, chi, v)}
+                "nascosti": len(nascosti), "frase": self._frase_confronto(c, nomi, chi, v),
+                # Chiusa da sola alla fine della verifica, prima di «Ho finito» (#340): niente
+                # confronto; il tool dice la frase e non dà la mappa al modello
+                "scaduta": c.get("scaduto")}
 
     def _frase_confronto(self, c: dict, nomi: dict, chi, v) -> str:
         """La frase del codice sul confronto (per la voce in ombra e per la pagina): solo conti e
@@ -981,6 +984,14 @@ class Mappe:
         di = "Nella tua mappa" if tu else (f"Nella mappa di {nome}" if nome else "Nella sua mappa")
         k = c.get("conti")
         ind = c.get("indicatori") or {}
+        if c.get("scaduto"):
+            # Una mappa lasciata a metà (31/10, #340): non «lo scheletro non c'è ancora», e
+            # nessun consiglio sul metodo da una mappa non finita
+            chi_ = ("La tua mappa da zero" if tu else f"La mappa da zero di {nome}" if nome
+                    else "La sua mappa da zero")
+            return (f"{chi_} si è chiusa da sola, prima di «Ho finito», quando la verifica è "
+                    "finita: il confronto non c'è. "
+                    + ("Per rifarla, «Rifai»." if tu else "Si può rifare con «Rifai»."))
         pezzi = []
         if k and k["chiave"]:
             # Solo i presenti: un nome «da rivedere» non conta (revisione della PR #330)
@@ -1182,6 +1193,8 @@ class Mappe:
                 "libera": ({"concetti": len(lib["nodi"]), "collegamenti": len(lib["collegamenti"]),
                             "aperta": lib["stato"] == "aperta", "controllata": lib["controllata"],
                             "giri": len(lib["giri"]),
+                            # Chiusa da sola alla fine della verifica (#340)
+                            "scaduta": bool((lib["controllo"] or {}).get("scaduto")),
                             "chiave": (((lib["controllo"] or {}).get("conti") or {})
                                        .get("chiave")),
                             "trovati": (((lib["controllo"] or {}).get("conti") or {})
@@ -1375,7 +1388,7 @@ class Mappe:
                               else None)
         out["confronto"] = conf
         ind = c.get("indicatori") or {}
-        prima = lib["giri"][-2]["indicatori"] if len(lib["giri"]) >= 2 else None
+        prima = M.giro_di_prima(lib["giri"])
         out["indicatori"] = ind
         out["prima"] = prima
         out["rispetto"] = M.rispetto_a_prima(prima, ind) if prima else None

@@ -907,6 +907,12 @@ Gli script del revisore (`falsi.py`, `seme.py`, `filtri.py`) sono nei casi di
    voce chiesta nella stessa veglia (livello B; «Parla» toccato vale una persona), e decide quello.
    Senza esito il seme si tiene: il libro non dice più il nome (`nome_dentro`) e il satellite che
    suona ignora già il proprio. `known_voice` non riceve più il segnale.
+   *[storico fino al 31/10, #347: «l'esito dell'impronta della voce chiesta nella stessa veglia»]*
+   Dal 31/10 (#347) il seme porta solo l'esito che ha fermato la voce: in `watch_for_name` del
+   server `ultimo_ok` tiene un sì (il livello B interrompe solo con un sì) e un no lo azzera. Prima
+   un no tenuto, per esempio la TV sentita col livello B, passava al nome detto poco dopo dalla
+   persona registrata: il seme arrivava con `voce_ok=False` e il ripasso lo buttava. Il protocollo
+   non cambia: il satellite manda sempre «nome sentito».
 6. **I confini di parola** dopo «alexa», «siri» e «cortana»: «Siria, Libano e Giordania»,
    «Alexander Fleming», «Sirio», «Siriani» si dicono.
 7. **«chiocciola» da sola non è un indirizzo**: vale solo fra due parole e con «punto» dopo
@@ -1489,6 +1495,23 @@ vedono ancora tutti. `prova_robustezza` conta ora il tempo del «La apro?» senz
 ascolto e non dall'avvio di main, che prova tre volte l'Ollama locale (immagini, capacità, contesto):
 su Windows una porta chiusa costa circa 2 s a tentativo, e sul portatile senza Ollama la prova
 cadeva (6,6 s contro 5).
+
+### 31/10: la libera scaduta in «Parliamone» e nella volta scorsa (issue #340, quarta revisione della PR #330)
+
+1. **«Parliamone» su una libera scaduta**, cioè chiusa da sola alla fine della verifica e poi
+   riaperta da `imposta`. `consigli_mappa` diceva «lo scheletro per il confronto non c'è ancora»
+   (il controllo della scaduta non ha conti). Ora la frase del codice dice «La tua mappa da zero si
+   è chiusa da sola, prima di «Ho finito», quando la verifica è finita: il confronto non c'è. Per
+   rifarla, «Rifai».» (al tutore «La mappa da zero di Leo…», «Si può rifare con «Rifai»»), senza
+   consigli sul metodo. Il tool `studio_mappa_consigli` la dice come risposta finale e non dà la
+   mappa al modello (regola `studio_mappa_consigli_scaduta`). Senza una verifica detta,
+   `_verifica_con_libera` sceglie la libera finita più recente e salta le scadute: i conti della
+   mappa nella home hanno `libera.scaduta`.
+2. **La volta scorsa** (`mappa.giro_di_prima`): il giro più recente prima dell'ultimo che non è
+   scaduto, per la pagina (`prima`, `rispetto`) e per «Parliamone» (`giro_di_prima`,
+   `rispetto_a_prima`). Prima si prendeva il penultimo giro, anche se era una mappa lasciata a
+   metà. Il giro scaduto stesso mostra ancora i suoi indicatori, e l'eventuale confronto con il
+   giro di prima: la pagina lo segna «scaduta».
 
 ## Lo scheletro della mappa generato dal lettore (30/10 sera, issue #247, ramo `issue-247-studio-mappa-genera`)
 

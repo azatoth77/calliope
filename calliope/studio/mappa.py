@@ -772,6 +772,16 @@ def rispetto_a_prima(prima: dict | None, ora: dict) -> dict:
     return out
 
 
+def giro_di_prima(giri: list) -> dict | None:
+    """Gli indicatori della «volta scorsa»: il giro più recente prima dell'ultimo che non è
+    scaduto. Un giro scaduto è una mappa lasciata a metà, chiusa da sola alla fine della verifica,
+    e non è un termine di confronto (31/10, #340, quarta revisione della PR #330)."""
+    for g in reversed(list(giri or ())[:-1]):
+        if isinstance(g, dict) and not g.get("scaduto"):
+            return g.get("indicatori")
+    return None
+
+
 def tentativo_libera(esito: str | None, segno: str | None) -> str | None:
     """L'esito del tentativo «mappa» di un concetto chiave a «Ho finito»: presente «giusto»
     («indizio» se la sua pagina era stata detta prima), mancante «sbagliato»; diverso niente (da
