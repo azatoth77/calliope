@@ -788,29 +788,78 @@ INDICA_CHI = ("Le indicazioni per lo studio le scrivo solo quando riconosco bene
               "se ne occupa, o dal suo telefono: me lo ripeti con una frase intera?")
 INDICA_PAROLE = ("L'indicazione la scrivo con le tue parole: dimmi di nuovo cosa vuoi che faccia "
                  "quando lo aiuto a studiare.")
-# Quante parole piene del testo devono stare nella frase detta (analisi della #250)
-PAROLE_DETTE = 2 / 3
+# Le sole parole che il modello può aggiungere a quelle dette (revisione della PR #348, nota 1:
+# la soglia dei due terzi lasciava passare «dagli», «ignora»): articoli, preposizioni semplici e
+# articolate, congiunzioni e pochi avverbi di grado. Un verbo nuovo non c'è mai
+FUNZIONALI = frozenset("""
+il lo la i gli le l un uno una un d di a da in con su per tra fra e ed o od ma anche
+del dello della dei degli delle dell al allo alla ai agli alle all dal dallo dalla dai dagli
+dalle dall nel nello nella nei negli nelle nell col coi sul sullo sulla sui sugli sulle sull
+che piu più bene molto poco sempre
+""".split())
+# Le negazioni: tante nel testo quante nella frase, e davanti alle stesse parole (nota 1)
+NEGAZIONI = frozenset({"non", "mai", "senza", "nessun", "nessuno", "nessuna", "niente", "nulla"})
 
 
-def _stessa_parola(w: str, dette: set) -> bool:
+def _parole_tutte(testo) -> list[str]:
+    """Tutte le parole, minuscole e senza accenti (l'apostrofo divide: «l'esercizio»)."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(testo or ""))
+    t = "".join(c for c in t if not unicodedata.combining(c)).lower()
+    return re.findall(r"[a-z0-9]+", t)
+
+
+def _stessa_parola(w: str, dette) -> bool:
     """La parola del testo è fra quelle dette: uguale, con la stessa radice di 5 lettere
     («insisti» e «insistere») o una storpiatura (`provenienza.vicina`)."""
     from .. import provenienza
-    return (w in dette or (len(w) >= 5 and any(d[:5] == w[:5] for d in dette))
+    dette = set(dette)
+    return (w in dette or (len(w) >= 5 and any(len(d) >= 5 and d[:5] == w[:5] for d in dette))
             or provenienza.vicina(w, dette))
 
 
+def _dopo_negazioni(parole: list[str]) -> list[tuple[str, str]]:
+    """(negazione, la parola piena dopo) per ogni negazione (saltando le funzionali e le altre
+    negazioni; "" in fondo alla frase)."""
+    out = []
+    for i, w in enumerate(parole):
+        if w not in NEGAZIONI:
+            continue
+        dopo = next((x for x in parole[i + 1:] if x not in FUNZIONALI and x not in NEGAZIONI),
+                    "")
+        out.append((w, dopo))
+    return out
+
+
 def _detta_dal_tutore(ctx, testo) -> bool:
-    """Il testo dell'indicazione viene dalle parole del tutore in questa frase: almeno
-    `PAROLE_DETTE` delle sue parole piene (`provenienza.parole`). Un vincolo sulla provenienza di
-    un argomento già scelto dal modello (principio 10), come la data detta: un'«indicazione»
-    letta in una pagina non diventa un'indicazione."""
-    from .. import provenienza
-    p = provenienza.parole(testo)
-    if not p:
+    """Il testo dell'indicazione viene dalle parole del tutore in questa frase. Un vincolo sulla
+    provenienza di un argomento già scelto dal modello (principio 10), come la data detta:
+    un'«indicazione» letta in una pagina, o girata dal modello, non diventa un'indicazione.
+    Dalla revisione della PR #348 (nota 1):
+    - ogni parola del testo è stata detta (uguale, stessa radice, una storpiatura) oppure è una
+      parola funzionale (`FUNZIONALI`): il modello non aggiunge verbi né parole piene;
+    - le negazioni sono tante quante nella frase e davanti alle stesse parole: «non dargli il
+      risultato» non diventa «dagli il risultato»;
+    - almeno una parola piena."""
+    tw = _parole_tutte(testo)
+    fw = _parole_tutte(getattr(ctx, "user_text", "") or "")
+    piene = [w for w in tw if w not in FUNZIONALI and w not in NEGAZIONI]
+    if not piene:
         return False
-    dette = provenienza.parole(getattr(ctx, "user_text", "") or "")
-    return sum(_stessa_parola(w, dette) for w in p) >= PAROLE_DETTE * len(p)
+    if not all(_stessa_parola(w, fw) for w in piene):
+        return False
+    # Le negazioni: la stessa negazione davanti alla stessa parola, una per una
+    restano = _dopo_negazioni(fw)
+    coppie = _dopo_negazioni(tw)
+    if len(coppie) != len(restano):
+        return False
+    for neg, dopo in coppie:
+        k = next((i for i, (n, f) in enumerate(restano) if n == neg and (
+            dopo == f or (dopo and f and _stessa_parola(dopo, [f])))), None)
+        if k is None:
+            return False
+        restano.pop(k)
+    return True
 
 
 def _identita_certa(ctx) -> bool:
@@ -837,15 +886,20 @@ def _indica(ctx, svc, chi, per, testo, materia, verifica, giorni) -> dict:
     if not _detta_dal_tutore(ctx, testo):
         note_rule(ctx, "studio_indicazione_non_detta")
         return _f(INDICA_PAROLE, ok=False)
+    come = getattr(getattr(ctx, "speaker_ctx", None), "identified_by", None)
+    canale = "voce" if come == "voce" else "schermo" if come == "schermo" else "dispositivo"
     try:
-        svc.scrivi_indicazione(chi, persona, testo, verifica=verifica, materia=materia or None,
-                               giorni=giorni)
+        iid = svc.scrivi_indicazione(chi, persona, testo, verifica=verifica,
+                                     materia=materia or None, giorni=giorni, canale=canale)
     except ValueError as e:
         return {"ok": False, "errore": str(e),
                 "cosa_fare": "Dillo in breve a chi parla, con parole tue."}
     nome = _nome_di(svc, persona)
-    return _f(f"Fatto: l'ho segnata per lo studio di {nome}. La vede anche {nome}, e la "
-              "trovi nella vista del tutore, nello Studio.")
+    salvata = next((x["testo"] for x in svc.indicazioni(chi, persona) if x["id"] == iid), "")
+    # La conferma rilegge il testo salvato (revisione della PR #348, nota 1): chi l'ha detta
+    # sente che cosa è stato scritto, e può correggerlo
+    return _f(f"Ho segnato per {nome}: «{salvata}». La vede anche {nome}, e la trovi nella "
+              "vista del tutore, nello Studio.")
 
 
 def _indicazioni_conto(ctx, svc, chi, per) -> dict:

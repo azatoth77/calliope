@@ -1192,7 +1192,7 @@ class Studio(Mappe, Prove, Ascolti, Tutore):
                 for i, a in enumerate(elenco, 1) if a["stato"] in D.ARGOMENTI_DEL_PIANO]
 
     def _padronanza_di(self, vid) -> tuple[list[dict], dict]:
-        tent = self.dati.tutti("SELECT argomento, giorno, tipo, esito, fonte FROM "
+        tent = self.dati.tutti("SELECT id, argomento, giorno, ora, tipo, esito, fonte FROM "
                                "studio_tentativi WHERE verifica = ?", (int(vid),))
         return self._argomenti_numerati(vid), PD.calcola(tent, self._oggi())
 
@@ -1330,6 +1330,10 @@ class Studio(Mappe, Prove, Ascolti, Tutore):
         scatola 1 se cambia la risposta."""
         self._scrivibile()
         c, v = self._carta(chi, cid)
+        if self._risposte_nascoste(v, chi):
+            # Il tutore non corregge una carta che non vede intera (PR #348, nota 2)
+            from .prove import PROVA_APERTA
+            raise ValueError(PROVA_APERTA)
         if c["stato"] == "ombra":
             # Una carta dell'ombra non è della persona: come `segna_carta` (revisione della PR
             # #325, nota 1), mai «attiva» da una correzione
@@ -1511,9 +1515,11 @@ class Studio(Mappe, Prove, Ascolti, Tutore):
         # vedono e non si ripassano: dicono i concetti dello scheletro, che resta nascosto
         libera_aperta = ((chi is None or getattr(chi, "id", None) == v["persona"])
                          and self._libera_aperta(v["id"]))
-        # Con una prova aperta (passo 8, #248) nessuna carta per la persona (né nei conti)
+        # Con una prova aperta (passo 8, #248) nessuna carta per la persona (né nei conti);
+        # al tutore le domande senza le risposte (revisione della PR #348, nota 2)
         if self._nascoste(v, chi):
             return []
+        senza = self._risposte_nascoste(v, chi)
         # Le carte dell'ombra (studio_carte_genera: ombra) non vanno mai alla persona
         for i, c in enumerate(self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? AND "
                                               "stato != 'ombra' ORDER BY id", (v["id"],)), 1):
@@ -1528,6 +1534,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore):
             c["da_ripassare"] = c["nel_piano"] and C.da_ripassare(c, adesso)
             c["fra"] = (C.fra_quanto(c["scadenza"], adesso) if c["stato"] == "attiva"
                         and c["scadenza"] else None)
+            if senza:
+                c["risposta"], c["chiusa"], c["risposta_nascosta"] = None, None, True
             out.append(c)
         return out
 

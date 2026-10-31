@@ -375,7 +375,8 @@ def _v11(db: sqlite3.Connection):
     `persona` è il minore; `verifica` (una sua verifica) e `materia` dicono dove valgono (tutte e
     due vuote: tutto il suo studio); `testo` è la frase del tutore, già controllata nella forma
     (`studio/tutore.py`); `scade` il giorno dopo cui non vale più; `creata_da` e `modificata_da`
-    gli id dei tutori. Una tolta si cancella."""
+    gli id dei tutori; `canale` da dove è arrivata («voce», «schermo», «dispositivo»: revisione
+    della PR #348, nota 5). Una tolta si cancella."""
     db.execute("""CREATE TABLE IF NOT EXISTS studio_indicazioni (
         id INTEGER PRIMARY KEY,
         persona TEXT NOT NULL,
@@ -386,7 +387,8 @@ def _v11(db: sqlite3.Connection):
         creata TEXT NOT NULL,
         creata_da TEXT,
         modificata TEXT,
-        modificata_da TEXT)""")
+        modificata_da TEXT,
+        canale TEXT)""")
     db.execute("CREATE INDEX IF NOT EXISTS studio_indicazioni_persona "
                "ON studio_indicazioni(persona)")
 

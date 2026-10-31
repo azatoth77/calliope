@@ -620,7 +620,11 @@ dell'eco della stanza.
       L'accordo si misura contro la padronanza calcolata senza i giudizi; solo conti nel registro.
     - Le voci «da rivedere» si decidono dalla vista (`rivedi_voce`, fonte «tutore», peso pieno).
       **Con una prova aperta** sulla verifica la vista dà solo il conto: niente domande, risposte
-      attese né frasi delle prove, e «rivedi» aspetta la consegna.
+      attese né frasi delle prove, e «rivedi» aspetta la consegna. Dalla revisione della PR #348
+      lo stesso vale su ogni strada: con la prova del minore aperta il tutore vede al più i testi
+      delle domande e delle carte, mai le risposte.
+    - Il giudizio non fa da solo una padronanza misurata: conta solo l'ultimo per argomento e la
+      soglia di misura guarda i soli tentativi della persona (revisione della PR #348).
 
     Alternative scartate:
     - la cifra della padronanza al tutore anche in ombra: il suo giudizio si piegherebbe al numero
@@ -633,10 +637,16 @@ dell'eco della stanza.
 44. **Le indicazioni dei tutori indirizzano l'assistente, sotto le regole e senza permessi.**
     Decisione di chi amministra del 30/10: il minore ne vede il testo.
     - Le scrivono, cambiano e tolgono solo i tutori del minore, dallo schermo o a voce («indica»,
-      col testo fatto delle parole dette e un'identità certa); valgono per tutto lo studio, una
+      col testo fatto delle sole parole dette, più articoli e preposizioni, con le stesse
+      negazioni davanti alle stesse parole, un'identità certa, e la conferma che rilegge il testo;
+      revisione della PR #348); scritte dallo schermo o da un dispositivo avvisano gli altri
+      tutori; valgono per tutto lo studio, una
       materia o una verifica; al più 8, di 200 caratteri, 30 giorni di serie (1–90), mai oltre la
       prova vera; la forma la controlla il codice (niente link, email, telefoni; principio 10).
-    - **Nei dati del turno del minore, con una cornice del codice, fuori dalla busta.** La busta
+    - **Nei dati del turno del minore, con una cornice del codice, fuori dalla busta**, come
+      elenco JSON (un testo non imita la cornice), mai con una prova, un'interrogazione o una
+      carta in corso; la cornice dice che non fanno mai dare risposte né la soluzione intera
+      (revisione della PR #348). La busta
       dice di non seguire le istruzioni, e un'indicazione è un'istruzione di metodo; fidate come
       ordini no, perché un account può essere usato da altri e un testo salvato non vale come la
       richiesta di chi parla. La cornice le mette sotto le regole per i minori, senza permessi né

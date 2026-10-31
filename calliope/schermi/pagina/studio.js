@@ -816,6 +816,8 @@
     const p = [x.ambito === "materia" ? "per " + String(x.materia || materia || "la materia") : AMBITI[x.ambito] || ""];
     if (x.scade) p.push("fino a " + dataDetta(x.scade));
     if (x.da) p.push("da " + String(x.da));
+    // Scritta dallo schermo o da un dispositivo, non a voce (revisione della PR #348, nota 5)
+    if (x.dallo_schermo) p.push("scritta dallo schermo");
     return p.filter(Boolean).join(" · ");
   }
   // Le indicazioni per chi studia: il testo, dove valgono, fino a quando e chi le ha scritte
@@ -1176,7 +1178,8 @@
     for (const c of Array.isArray(d.carte) ? d.carte : []) {
       const li = nodo("li", "studio-h-voce studio-c-voce" + (c.stato === "tolta" ? " studio-tolto" : ""));
       const tx = nodo("div", "studio-testo");
-      tx.append(nodo("b", null, String(c.domanda || "")), nodo("span", "studio-c-risp", String(c.risposta || "")));
+      tx.append(nodo("b", null, String(c.domanda || "")), nodo("span", "studio-c-risp", c.risposta === null || c.risposta === undefined
+        ? "La risposta si vede dopo la consegna della prova aperta." : String(c.risposta || "")));
       const info = [c.argomento_numero ? "argomento " + c.argomento_numero : "",
         STATI_CARTA[c.stato] || "", c.stato === "attiva" && !c.nel_piano ? "argomento fuori dal piano" : "",
         c.stato === "attiva" && c.nel_piano ? (c.da_ripassare ? "da ripassare" : c.fra ? "di nuovo " + c.fra : "") : "",
@@ -1489,7 +1492,8 @@
       const tx = nodo("div", "studio-testo");
       tx.append(nodo("b", null, String(x.testo || "")));
       if (Array.isArray(x.opzioni) && x.opzioni.length) tx.append(nodo("span", "studio-c-risp", x.opzioni.map((o, i) => LETTERE_P[i] + ") " + String(o)).join(" · ")));
-      tx.append(nodo("span", "studio-c-risp", "Risposta: " + String(x.attesa || "")));
+      tx.append(nodo("span", "studio-c-risp", x.attesa === null || x.attesa === undefined
+        ? "La risposta si vede dopo la consegna della prova aperta." : "Risposta: " + String(x.attesa || "")));
       const info = [TIPI_D[x.tipo] || String(x.tipo), x.argomento_numero ? "argomento " + x.argomento_numero : "",
         x.stato === "proposta" ? "proposta da me dalle pagine: controllala" : x.stato === "tolta" ? "tolta" : ""].filter(Boolean).join(" · ");
       tx.append(nodo("span", "studio-nota", info));

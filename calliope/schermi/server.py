@@ -1715,7 +1715,7 @@ def crea_app(hub: Schermi) -> Starlette:
                     st.scrivi_indicazione(prof, v["persona"], testo,
                                           verifica=v["id"] if ambito == "verifica" else None,
                                           materia=v["materia"] if ambito == "materia" else None,
-                                          giorni=giorni)
+                                          giorni=giorni, canale="schermo")
                 else:
                     iid = intero("indicazione")
                     r = st.dati.uno("SELECT persona FROM studio_indicazioni WHERE id = ?", (iid,))
@@ -1758,11 +1758,15 @@ def crea_app(hub: Schermi) -> Starlette:
         return {**st.prove(prof, vid),
                 "domande": [{"id": x["id"], "numero": x["numero"], "tipo": x["tipo"],
                              "testo": x["testo"], "opzioni": x["opzioni"],
-                             "attesa": RS.attesa_detta(x), "chiave": x["chiave"],
+                             # Al tutore con la prova del minore aperta niente risposte
+                             # (revisione della PR #348, nota 2)
+                             "attesa": (RS.attesa_detta(x) if x.get("attesa") is not None
+                                        else None), "chiave": x["chiave"],
                              "stato": x["stato"], "origine": x["origine"], "avvisi": x["avvisi"],
                              "argomento_numero": x["argomento_numero"]}
                             for x in d["domande"]],
                 "domande_nascoste": d["nascoste"],
+                "risposte_nascoste": bool(d.get("risposte_nascoste")),
                 "argomenti": [{"id": a["id"], "numero": i, "titolo": a["titolo"]}
                               for i, a in enumerate(args, 1)
                               if a["stato"] in ("tenuto", "aggiunto")],
