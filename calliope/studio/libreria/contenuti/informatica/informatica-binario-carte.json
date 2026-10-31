@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "informatica-binario-carte",
+  "tipo": "mazzo",
+  "titolo": "Il sistema binario: le carte",
+  "materia": "Informatica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "informatica-binario",
+  "carte": [
+    {"domanda": "Quante cifre diverse usa il sistema binario?", "risposta": "2", "sbagliata": "10"},
+    {"domanda": "Quanto vale in decimale il numero binario 101?", "risposta": "5", "sbagliata": "101", "calcolo": {"formula": "binario_in_decimale", "dati": {"binario": "101"}, "risultato": 5}},
+    {"domanda": "Quanto vale in decimale il numero binario 1100?", "risposta": "12", "sbagliata": "3", "calcolo": {"formula": "binario_in_decimale", "dati": {"binario": "1100"}, "risultato": 12}},
+    {"domanda": "Come si scrive 6 in binario?", "risposta": "110", "sbagliata": "011", "calcolo": {"formula": "decimale_in_binario", "dati": {"decimale": 6}, "risultato": "110"}},
+    {"domanda": "Come si scrive 10 in binario?", "risposta": "1010", "sbagliata": "0101", "calcolo": {"formula": "decimale_in_binario", "dati": {"decimale": 10}, "risultato": "1010"}},
+    {"domanda": "Quanto vale il peso della quarta posizione da destra in un numero binario?", "risposta": "8", "sbagliata": "4"},
+    {"domanda": "Con quale metodo si passa da un numero decimale al binario?", "risposta": "Le divisioni successive per 2", "sbagliata": "Le moltiplicazioni per 10"},
+    {"domanda": "Quanto vale in decimale il numero esadecimale 10?", "risposta": "16", "sbagliata": "10", "calcolo": {"formula": "esadecimale_in_decimale", "dati": {"esadecimale": "10"}, "risultato": 16}},
+    {"domanda": "Quanto vale la cifra esadecimale F?", "risposta": "15", "sbagliata": "16", "calcolo": {"formula": "esadecimale_in_decimale", "dati": {"esadecimale": "F"}, "risultato": 15}},
+    {"domanda": "A quanti bit corrisponde una cifra esadecimale?", "risposta": "4", "sbagliata": "8"}
+  ]
+}

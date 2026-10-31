@@ -1,0 +1,43 @@
+{
+  "formato": 1,
+  "id": "chimica-materia",
+  "tipo": "scheda",
+  "titolo": "Sostanze pure e miscugli",
+  "materia": "Chimica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "La materia: stati di aggregazione, sostanze pure, miscugli e tecniche di separazione",
+  "chiavi": ["materia", "sostanze pure", "sostanza pura", "miscugli", "miscuglio", "miscugli omogenei", "miscugli eterogenei", "soluto e solvente", "tecniche di separazione", "separazione dei miscugli", "stati di aggregazione", "stati della materia", "filtrazione", "distillazione", "cromatografia"],
+  "prerequisiti": [],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "La materia è tutto ciò che ha una massa e occupa uno spazio. Per studiarla la chimica si chiede due cose: in che stato si trova e se è fatta di una sola sostanza o di più sostanze mescolate.",
+    "sezioni": [
+      {"titolo": "Gli stati di aggregazione", "testo": "Un solido ha forma e volume propri. Un liquido ha un volume proprio ma prende la forma del recipiente. Un aeriforme, come un gas, non ha né forma né volume propri e occupa tutto lo spazio che trova.\n\nNel modello particellare cambia quanto le particelle sono vicine e libere di muoversi: strette e vibrano intorno a posizioni fisse nel solido, vicine ma libere di scorrere nel liquido, lontane e veloci nel gas."},
+      {"titolo": "Sostanze pure e miscugli", "testo": "Una sostanza pura ha una composizione fissa e proprietà costanti: l'acqua distillata bolle sempre a 100 gradi al livello del mare. Un miscuglio è fatto di due o più sostanze, in proporzioni che possono cambiare.\n\nUn miscuglio è omogeneo quando ha lo stesso aspetto in ogni punto, anche al microscopio: l'acqua con lo zucchero sciolto è una soluzione, un miscuglio omogeneo. È eterogeneo quando si distinguono le parti: acqua e sabbia, acqua e olio."},
+      {"titolo": "Separare un miscuglio", "testo": "Ogni tecnica sfrutta una differenza fra i componenti. La filtrazione separa un solido non sciolto da un liquido, con un filtro che trattiene il solido. La decantazione lascia depositare sul fondo il solido più denso. La centrifugazione fa lo stesso più in fretta, facendo girare la provetta.\n\nLa distillazione separa due liquidi, o un liquido da ciò che vi è sciolto, sfruttando la differenza di temperatura di ebollizione. La cromatografia separa i componenti di una miscela, per esempio i colori di un inchiostro, perché ognuno corre a velocità diversa su un supporto."}
+    ],
+    "ricorda": [
+      "Solido: forma e volume propri. Liquido: volume proprio. Gas: né forma né volume propri.",
+      "Una sostanza pura ha composizione fissa e proprietà costanti.",
+      "Miscuglio omogeneo: lo stesso aspetto ovunque, come una soluzione. Eterogeneo: si vedono le parti.",
+      "Filtrazione: un solido non sciolto da un liquido.",
+      "Distillazione: sfrutta le diverse temperature di ebollizione.",
+      "Cromatografia: separa i componenti che corrono a velocità diverse."
+    ],
+    "esempi": [
+      {"testo": "Acqua e sabbia: miscuglio eterogeneo. Si separa con la filtrazione, o lasciando depositare la sabbia con la decantazione."},
+      {"testo": "Acqua e sale sciolto: soluzione, cioè miscuglio omogeneo. Il filtro non trattiene il sale; per riaverlo si fa evaporare l'acqua, o si distilla per raccogliere anche l'acqua."}
+    ],
+    "errori": [
+      "Pensare che una soluzione si separi con il filtro: il soluto sciolto passa insieme al liquido.",
+      "Chiamare sostanza pura l'acqua del rubinetto: contiene sali sciolti, quindi è un miscuglio omogeneo."
+    ],
+    "prova_tu": [
+      {"domanda": "Latte e acqua del mare: sono sostanze pure o miscugli?", "risposta": "Sono tutti e due miscugli: hanno più componenti in proporzioni che possono cambiare."},
+      {"domanda": "Quale tecnica useresti per separare i colori dell'inchiostro di un pennarello?", "risposta": "La cromatografia, per esempio su una striscia di carta da filtro."}
+    ]
+  }
+}

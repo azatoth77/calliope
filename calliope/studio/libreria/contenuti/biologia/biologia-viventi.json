@@ -1,0 +1,46 @@
+{
+  "formato": 1,
+  "id": "biologia-viventi",
+  "tipo": "scheda",
+  "titolo": "Le caratteristiche dei viventi",
+  "materia": "Biologia",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "I viventi: le caratteristiche comuni e i livelli di organizzazione",
+  "chiavi": ["caratteristiche dei viventi", "proprietà dei viventi", "esseri viventi", "organismi viventi", "organizzazione dei viventi", "livelli di organizzazione", "omeostasi", "metabolismo", "organismi unicellulari", "organismi pluricellulari"],
+  "prerequisiti": [],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Un batterio, una quercia, un fungo e una persona sembrano non avere niente in comune. Eppure tutti gli esseri viventi condividono alcune caratteristiche che un sasso, l'acqua o un robot non hanno insieme. La biologia parte da qui: che cosa vuol dire essere vivi, e come è organizzato un vivente, dalla cellula all'organismo intero.",
+    "sezioni": [
+      {"titolo": "Fatti di cellule, con un metabolismo", "testo": "Ogni vivente è fatto di una o più cellule. La cellula è la più piccola unità che possiede tutte le caratteristiche della vita. Un organismo unicellulare, come un batterio o un'ameba, è fatto di una sola cellula; un organismo pluricellulare, come una pianta o un animale, di moltissime cellule che si dividono il lavoro.\n\nOgni vivente ha un metabolismo: l'insieme delle reazioni chimiche che avvengono al suo interno. Con il metabolismo un vivente ricava energia dal cibo o dalla luce del Sole, costruisce le proprie molecole ed elimina le sostanze di scarto."},
+      {"titolo": "Crescere e riprodursi", "testo": "I viventi crescono e si sviluppano: un seme diventa una pianta, un girino diventa una rana. La crescita avviene perché le cellule aumentano di dimensione e di numero.\n\nI viventi si riproducono, cioè generano nuovi individui simili a loro. Nella riproduzione asessuata basta un solo genitore e i figli sono copie quasi identiche, come quando un batterio si divide in due. Nella riproduzione sessuata due genitori uniscono le loro cellule riproduttive e i figli sono diversi da entrambi."},
+      {"titolo": "Stimoli, omeostasi ed evoluzione", "testo": "I viventi rispondono agli stimoli dell'ambiente: una pianta piega il fusto verso la luce, la pupilla si stringe quando la luce è forte, una mano si ritira da una superficie che scotta.\n\nI viventi mantengono stabili le condizioni interne anche quando fuori cambiano: questa capacità si chiama omeostasi. Il corpo umano, per esempio, resta intorno ai 37 gradi sia d'estate sia d'inverno, sudando o tremando.\n\nInfine i viventi evolvono: nel corso di molte generazioni le popolazioni cambiano e si adattano all'ambiente. L'evoluzione riguarda le popolazioni, non il singolo individuo, che durante la sua vita cresce ma non evolve."},
+      {"titolo": "I livelli di organizzazione", "testo": "Negli organismi pluricellulari la vita è organizzata a livelli, uno dentro l'altro. Gli atomi formano le molecole; le molecole formano la cellula. Un gruppo di cellule simili che svolgono la stessa funzione forma un tessuto, come il tessuto muscolare. Più tessuti diversi che lavorano insieme formano un organo, come il cuore o lo stomaco. Più organi che collaborano a una funzione formano un apparato, come l'apparato digerente. L'insieme degli apparati forma l'organismo.\n\nOltre l'organismo ci sono i livelli dell'ecologia: gli individui della stessa specie in un luogo formano una popolazione, più popolazioni una comunità, e la comunità con l'ambiente fisico un ecosistema."},
+      {"titolo": "Un caso di confine: i virus", "testo": "I virus contengono materiale genetico e possono moltiplicarsi, ma non sono fatti di cellule e non hanno un metabolismo proprio: si moltiplicano solo dentro una cellula che infettano, usando le sue risorse. Per questo di solito non sono considerati viventi a pieno titolo.\n\nUn solo carattere non basta per dire che qualcosa è vivo: il fuoco cresce e consuma sostanze, un cristallo di sale cresce nell'acqua, ma nessuno dei due ha tutte le caratteristiche dei viventi insieme."}
+    ],
+    "ricorda": [
+      "Ogni vivente è fatto di una o più cellule: la cellula è la più piccola unità vivente.",
+      "Il metabolismo è l'insieme delle reazioni chimiche di un vivente.",
+      "I viventi crescono, si riproducono, rispondono agli stimoli e mantengono l'omeostasi.",
+      "L'evoluzione cambia le popolazioni nel corso delle generazioni, non il singolo individuo.",
+      "Livelli: cellula, tessuto, organo, apparato, organismo.",
+      "Unicellulare: una sola cellula. Pluricellulare: molte cellule che si dividono il lavoro."
+    ],
+    "esempi": [
+      {"testo": "Quando corri sudi: il sudore evapora e raffredda la pelle, così la temperatura del corpo resta stabile. È un esempio di omeostasi."},
+      {"testo": "Il cuore è un organo: contiene tessuto muscolare, tessuto nervoso e tessuto connettivo. Insieme ai vasi sanguigni forma l'apparato circolatorio."}
+    ],
+    "errori": [
+      "Pensare che basti una sola caratteristica per essere vivi: anche il fuoco cresce, ma non è un vivente.",
+      "Confondere tessuto e organo: il tessuto è fatto di cellule simili, l'organo di più tessuti diversi.",
+      "Dire che un individuo evolve durante la sua vita: evolvono le popolazioni, nel corso delle generazioni."
+    ],
+    "prova_tu": [
+      {"domanda": "Quando hai freddo e tremi, quale caratteristica dei viventi stai mostrando?", "risposta": "L'omeostasi: i muscoli che tremano producono calore e mantengono stabile la temperatura del corpo."},
+      {"domanda": "Metti in ordine dal più piccolo al più grande: organo, cellula, apparato, tessuto.", "risposta": "Cellula, tessuto, organo, apparato."}
+    ]
+  }
+}

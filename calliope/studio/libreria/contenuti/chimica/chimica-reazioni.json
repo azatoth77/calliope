@@ -1,0 +1,52 @@
+{
+  "formato": 1,
+  "id": "chimica-reazioni",
+  "tipo": "scheda",
+  "titolo": "Le reazioni chimiche e il bilanciamento",
+  "materia": "Chimica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "Reagenti e prodotti, equazioni chimiche, legge di Lavoisier, coefficienti stechiometrici e bilanciamento",
+  "chiavi": ["reazioni chimiche", "reazione chimica", "equazioni chimiche", "equazione chimica", "bilanciamento delle reazioni", "bilanciamento", "bilanciare le reazioni", "reagenti e prodotti", "coefficienti stechiometrici", "legge di Lavoisier", "conservazione della massa", "trasformazioni chimiche"],
+  "prerequisiti": ["chimica-atomo"],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "In una reazione chimica alcune sostanze si trasformano in sostanze nuove, con proprietà diverse. Gli atomi non spariscono e non nascono: si separano e si legano in un modo nuovo. Per questo una reazione si scrive come un conto che deve tornare, e farlo tornare si chiama bilanciare.",
+    "sezioni": [
+      {"titolo": "Reagenti e prodotti", "testo": "Le sostanze di partenza si chiamano reagenti, quelle che si formano si chiamano prodotti. Quando il ferro arrugginisce, ferro, ossigeno e acqua sono i reagenti e la ruggine è il prodotto.\n\nSi capisce che è avvenuta una reazione da alcuni segni: si libera un gas, cambia il colore, si produce o si assorbe calore, compare un solido nuovo. Il ghiaccio che fonde invece non è una reazione: l'acqua resta acqua, cambia solo lo stato."},
+      {"titolo": "L'equazione chimica", "testo": "Una reazione si scrive con un'equazione chimica: i reagenti a sinistra, una freccia, i prodotti a destra. Il segno più separa le sostanze dalla stessa parte. La freccia si legge «danno» oppure «si trasformano in».\n\nPer esempio C + O2 -> CO2 si legge: carbonio e ossigeno danno anidride carbonica."},
+      {"titolo": "La legge di Lavoisier", "testo": "Antoine Lavoisier, chimico francese del Settecento, pesò con cura reagenti e prodotti in recipienti chiusi. Scoprì che la massa totale non cambia: in un sistema chiuso la massa dei reagenti è uguale alla massa dei prodotti. È la legge di conservazione della massa.\n\nIl motivo è che gli atomi si conservano: ogni atomo che c'è prima c'è anche dopo, solo legato in un altro modo. Se un gas scappa da un recipiente aperto, la bilancia segna meno, ma la massa non è sparita: è nell'aria."},
+      {"titolo": "Indici e coefficienti", "testo": "In una formula il numero piccolo dopo un simbolo è l'indice: dice quanti atomi di quell'elemento ci sono in una molecola. In H2O l'indice 2 vuol dire 2 atomi di idrogeno, mentre l'ossigeno senza numero è uno solo.\n\nIl numero grande davanti a una formula è il coefficiente stechiometrico: dice quante molecole di quella sostanza prendono parte alla reazione. 2 H2O vuol dire due molecole d'acqua, cioè 4 atomi di idrogeno e 2 di ossigeno.\n\nGli indici non si cambiano mai per bilanciare: cambiarli vuol dire cambiare la sostanza. H2O è acqua, H2O2 è acqua ossigenata, un'altra cosa."},
+      {"titolo": "Come si bilancia", "testo": "Una reazione è bilanciata quando per ogni elemento gli atomi a sinistra sono tanti quanti a destra. Si procede così.\n\nPrimo, si conta quanti atomi di ogni elemento ci sono da ciascuna parte. Secondo, si mettono i coefficienti davanti alle formule, cominciando dagli elementi che compaiono in una sola sostanza per parte; idrogeno e ossigeno conviene lasciarli per ultimi. Terzo, si ricontano tutti gli atomi. Quarto, si controlla che i coefficienti siano i numeri interi più piccoli possibili.\n\nIl coefficiente 1 non si scrive. Se un coefficiente cambia, cambiano gli atomi di tutti gli elementi di quella formula: per questo dopo ogni modifica si riconta tutto."}
+    ],
+    "ricorda": [
+      "I reagenti stanno a sinistra della freccia, i prodotti a destra.",
+      "Legge di Lavoisier: in un sistema chiuso la massa totale dei reagenti è uguale a quella dei prodotti.",
+      "Nelle reazioni gli atomi non si creano e non si distruggono: si riorganizzano.",
+      "L'indice dice quanti atomi ci sono in una molecola; il coefficiente quante molecole.",
+      "Per bilanciare si cambiano i coefficienti, mai gli indici.",
+      "Bilanciata vuol dire: per ogni elemento, gli stessi atomi a sinistra e a destra.",
+      "Nei conti della massa usiamo le masse arrotondate della scuola: H 1, C 12, O 16."
+    ],
+    "esempi": [
+      {"testo": "H2 + O2 -> H2O non è bilanciata: a sinistra ci sono 2 atomi di ossigeno, a destra 1. Si mette 2 davanti a H2O e gli ossigeni tornano, ma ora a destra ci sono 4 idrogeni: si mette 2 anche davanti a H2. Il risultato è 2 H2 + O2 -> 2 H2O, che è bilanciata.", "calcolo": {"formula": "bilanciata", "dati": {"reazione": "2 H2 + O2 -> 2 H2O"}, "risultato": "bilanciata"}},
+      {"testo": "Il metano brucia: CH4 + 2 O2 -> CO2 + 2 H2O. Contiamo: 1 carbonio per parte, 4 idrogeni per parte, e 4 ossigeni per parte (2 nel CO2 e 2 nelle due molecole d'acqua). È bilanciata.", "calcolo": {"formula": "bilanciata", "dati": {"reazione": "CH4 + 2 O2 -> CO2 + 2 H2O"}, "risultato": "bilanciata"}},
+      {"testo": "Per fare l'ammoniaca: N2 + 3 H2 -> 2 NH3. Azoto: 2 a sinistra, 2 a destra. Idrogeno: 6 a sinistra, 6 a destra. È bilanciata.", "calcolo": {"formula": "bilanciata", "dati": {"reazione": "N2 + 3 H2 -> 2 NH3"}, "risultato": "bilanciata"}},
+      {"testo": "Nella reazione 2 H2 + O2 -> 2 H2O, 4 grammi di idrogeno reagiscono con 32 grammi di ossigeno. Per la legge di Lavoisier si formano 4 + 32 = 36 grammi di acqua.", "calcolo": {"formula": "massa_da_moli", "dati": {"n": 2, "formula": "H2O"}, "risultato": 36}}
+    ],
+    "errori": [
+      "Cambiare un indice per far tornare i conti: così si scrive un'altra sostanza.",
+      "Dimenticare che il coefficiente vale per tutti gli atomi della formula: 2 H2O ha 4 idrogeni, non 2.",
+      "Contare gli atomi solo di un elemento e dichiarare la reazione bilanciata senza ricontrollare gli altri.",
+      "Pensare che la massa sparisca quando si libera un gas: è andata nell'aria, non si è persa."
+    ],
+    "prova_tu": [
+      {"domanda": "La reazione Na + Cl2 -> NaCl è bilanciata?", "risposta": "No: a sinistra ci sono 2 atomi di cloro e a destra 1. Si bilancia così: 2 Na + Cl2 -> 2 NaCl.", "calcolo": {"formula": "bilanciata", "dati": {"reazione": "Na + Cl2 -> NaCl"}, "risultato": "non bilanciata"}},
+      {"domanda": "Bilancia la reazione Mg + O2 -> MgO.", "risposta": "2 Mg + O2 -> 2 MgO: 2 atomi di magnesio e 2 di ossigeno per parte.", "calcolo": {"formula": "bilanciata", "dati": {"reazione": "2 Mg + O2 -> 2 MgO"}, "risultato": "bilanciata"}},
+      {"domanda": "12 grammi di carbonio bruciano con 32 grammi di ossigeno: C + O2 -> CO2. Quanti grammi di CO2 si formano?", "risposta": "44 grammi: 12 più 32, per la legge di Lavoisier.", "calcolo": {"formula": "massa_da_moli", "dati": {"n": 1, "formula": "CO2"}, "risultato": 44}},
+      {"domanda": "Per bilanciare H2 + O2 -> H2O si potrebbe scrivere H2O2 a destra?", "risposta": "No: H2O2 è acqua ossigenata, un'altra sostanza. Gli indici non si toccano; si cambiano solo i coefficienti."}
+    ]
+  }
+}

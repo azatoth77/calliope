@@ -1,0 +1,53 @@
+{
+  "formato": 1,
+  "id": "fisica-moto",
+  "tipo": "scheda",
+  "titolo": "Il moto rettilineo uniforme",
+  "materia": "Fisica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "Moto rettilineo uniforme: sistema di riferimento, traiettoria, velocità media, legge oraria e grafico spazio-tempo",
+  "chiavi": ["moto rettilineo uniforme", "moto rettilineo", "moto uniforme", "moti rettilinei", "velocità media", "legge oraria", "grafico spazio tempo", "diagramma orario", "sistema di riferimento", "traiettoria", "punto materiale", "cinematica"],
+  "prerequisiti": ["fisica-grandezze"],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Un'auto in autostrada, un treno su un binario dritto, un nastro trasportatore: tutti si muovono. Per descrivere un moto servono un punto di riferimento, la strada percorsa e il tempo impiegato. Il moto più semplice è quello rettilineo uniforme: in linea retta, sempre alla stessa velocità.",
+    "sezioni": [
+      {"titolo": "Sistema di riferimento e traiettoria", "testo": "Un corpo è in moto se cambia posizione rispetto a un sistema di riferimento: per esempio un punto fisso sulla strada, con un righello immaginario che misura le distanze e un orologio che misura il tempo. Il moto è relativo: un passeggero seduto in treno è fermo per chi sta nel vagone e in moto per chi lo guarda dalla banchina.\n\nSe il corpo è piccolo rispetto alla strada che fa, lo si tratta come un punto materiale. La linea che descrive muovendosi è la sua traiettoria: rettilinea se è una retta, curvilinea altrimenti."},
+      {"titolo": "La velocità media", "testo": "La velocità media è lo spazio percorso diviso il tempo impiegato: v = s/t. Nel SI si misura in metri al secondo (m/s); nella vita di tutti i giorni si usano i chilometri all'ora (km/h).\n\nPer passare da km/h a m/s si divide per 3,6; da m/s a km/h si moltiplica per 3,6. Il motivo: 1 km/h vuol dire 1000 m in 3600 s, e 3600 : 1000 = 3,6. Così 72 km/h = 20 m/s. Dalla formula della velocità vengono le formule inverse: s = v × t e t = s/v."},
+      {"titolo": "Il moto rettilineo uniforme", "testo": "Un moto è rettilineo uniforme quando la traiettoria è una retta e la velocità resta costante: il corpo percorre spazi uguali in tempi uguali. Se un'auto fa 25 m in ogni secondo, dopo 4 s ha fatto 100 m, dopo 8 s ne ha fatti 200.\n\nIn questo moto la velocità media è la stessa in ogni tratto, e coincide con la velocità che il corpo ha in ogni istante."},
+      {"titolo": "La legge oraria", "testo": "La legge oraria dice dove si trova il corpo in ogni istante: s = s0 + v × t. Qui s0 è la posizione iniziale, quella al tempo zero, v è la velocità e t il tempo trascorso. Se si parte dall'origine, s0 = 0 e la legge diventa s = v × t.\n\nDalla legge oraria si trova anche il tempo per arrivare a una posizione: t = (s − s0)/v. La velocità può essere negativa: vuol dire che il corpo si muove nel verso opposto a quello scelto come positivo."},
+      {"titolo": "Il grafico spazio-tempo", "testo": "Nel grafico spazio-tempo il tempo sta sull'asse orizzontale e la posizione su quello verticale. Per il moto rettilineo uniforme il grafico è una retta, che taglia l'asse verticale nella posizione iniziale s0.\n\nLa pendenza della retta è la velocità: più la retta è ripida, più il corpo è veloce. Una retta orizzontale vuol dire che il corpo è fermo, una retta che scende vuol dire che torna indietro. Il punto in cui due rette si incrociano dice dove e quando due corpi si incontrano."}
+    ],
+    "ricorda": [
+      "Un moto si descrive sempre rispetto a un sistema di riferimento.",
+      "Velocità media: v = s/t, in m/s o in km/h.",
+      "Da km/h a m/s si divide per 3,6; da m/s a km/h si moltiplica per 3,6.",
+      "Moto rettilineo uniforme: traiettoria retta e velocità costante, spazi uguali in tempi uguali.",
+      "Legge oraria: s = s0 + v × t.",
+      "Grafico spazio-tempo: una retta, e la sua pendenza è la velocità."
+    ],
+    "esempi": [
+      {"testo": "Un ciclista percorre 1800 m in 300 s. La sua velocità media è v = s/t = 1800 : 300 = 6 m/s.", "calcolo": {"formula": "velocita", "dati": {"s": 1800, "t": 300}, "risultato": 6}},
+      {"testo": "Un'auto va a 72 km/h. In metri al secondo: 72 : 3,6 = 20 m/s.", "calcolo": {"formula": "conversione", "dati": {"valore": 72, "da": "km/h", "a": "m/s"}, "risultato": 20}},
+      {"testo": "Un carrello parte dalla posizione s0 = 50 m e si muove a 4 m/s. In 10 s percorre 4 per 10 = 40 m, quindi dopo 10 s si trova nella posizione s = 50 + 40 = 90 m.", "calcolo": {"formula": "spazio", "dati": {"v": 4, "t": 10}, "risultato": 40}},
+      {"testo": "Un treno viaggia a 25 m/s su un tratto dritto lungo 3000 m. Il tempo per percorrerlo è t = s/v = 3000 : 25 = 120 s, cioè 2 minuti.", "calcolo": {"formula": "tempo", "dati": {"s": 3000, "v": 25}, "risultato": 120}}
+    ],
+    "errori": [
+      "Moltiplicare per 3,6 per passare da km/h a m/s: il numero in m/s deve venire più piccolo.",
+      "Dividere il tempo per lo spazio invece dello spazio per il tempo.",
+      "Dimenticare la posizione iniziale s0 nella legge oraria.",
+      "Leggere il grafico spazio-tempo come il disegno della strada: mostra la posizione nel tempo, non la traiettoria.",
+      "Mescolare le unità: con lo spazio in km e il tempo in s la velocità non viene in m/s."
+    ],
+    "prova_tu": [
+      {"domanda": "Un'auto va a 90 km/h. Quanti metri al secondo sono?", "risposta": "25 m/s, perché 90 : 3,6 = 25.", "calcolo": {"formula": "conversione", "dati": {"valore": 90, "da": "km/h", "a": "m/s"}, "risultato": 25}},
+      {"domanda": "Una persona cammina a 1,5 m/s per 600 s. Quanta strada fa?", "risposta": "900 m, perché s = v × t = 1,5 per 600.", "calcolo": {"formula": "spazio", "dati": {"v": 1.5, "t": 600}, "risultato": 900}},
+      {"domanda": "Quanto tempo serve per percorrere 200 m a 8 m/s?", "risposta": "25 s, perché t = s/v = 200 : 8.", "calcolo": {"formula": "tempo", "dati": {"s": 200, "v": 8}, "risultato": 25}},
+      {"domanda": "Un corriere percorre 150 km in 2 h. Qual è la sua velocità media?", "risposta": "75 km/h, perché 150 : 2 = 75.", "calcolo": {"formula": "velocita", "dati": {"s": 150, "t": 2}, "risultato": 75}},
+      {"domanda": "Nel grafico spazio-tempo, che cosa indica una retta orizzontale?", "risposta": "Che il corpo è fermo: la sua posizione non cambia nel tempo."}
+    ]
+  }
+}

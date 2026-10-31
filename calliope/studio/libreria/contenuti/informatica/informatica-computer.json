@@ -1,0 +1,51 @@
+{
+  "formato": 1,
+  "id": "informatica-computer",
+  "tipo": "scheda",
+  "titolo": "Il computer: hardware e software",
+  "materia": "Informatica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "Hardware e software, CPU, memorie RAM e ROM, memorie di massa, periferiche, sistema operativo e applicazioni",
+  "chiavi": ["hardware e software", "hardware", "software", "architettura del computer", "componenti del computer", "struttura del computer", "cpu", "processore", "memoria ram", "memoria centrale", "memorie di massa", "periferiche", "sistema operativo", "software applicativo"],
+  "prerequisiti": ["informatica-informazione"],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Un computer è una macchina che elabora informazioni: riceve dati, li trasforma seguendo le istruzioni di un programma e restituisce risultati. Per capire come funziona si distinguono due parti: quella che si può toccare, l'hardware, e quella che si esegue, il software.",
+    "sezioni": [
+      {"titolo": "Hardware e software", "testo": "L'hardware è l'insieme delle parti fisiche del computer: il processore, le memorie, la scheda madre, i cavi, la tastiera, lo schermo. Il software è l'insieme dei programmi, cioè delle istruzioni che dicono all'hardware che cosa fare.\n\nL'uno senza l'altro non serve: un computer senza software non sa fare nulla, e un programma senza un computer su cui girare resta solo un elenco di istruzioni. Il software si divide in software di base, come il sistema operativo, e software applicativo, cioè le applicazioni."},
+      {"titolo": "La CPU", "testo": "La CPU, o processore, è il cervello del computer: prende le istruzioni dei programmi dalla memoria e le esegue una dopo l'altra, miliardi di volte al secondo. Dentro ha l'unità di controllo, che legge le istruzioni e coordina il lavoro, l'unità aritmetico logica (ALU), che fa i calcoli e i confronti, e i registri, piccole memorie velocissime per i dati che sta usando.\n\nLa velocità di lavoro si misura in gigahertz (GHz): 3 GHz vuol dire 3 miliardi di cicli al secondo. Oggi una CPU ha di solito più nuclei, detti core, che lavorano insieme. Le parti del computer si scambiano dati e indirizzi attraverso i bus, delle linee di collegamento."},
+      {"titolo": "La memoria centrale: RAM e ROM", "testo": "La RAM è la memoria di lavoro: contiene i programmi aperti e i dati che la CPU sta usando. È veloce ma volatile: quando si spegne il computer il suo contenuto si perde. Per questo un documento non salvato va perso se manca la corrente.\n\nLa ROM è una memoria di sola lettura e non volatile: conserva i dati anche a computer spento. Contiene il firmware, il programma che parte all'accensione, controlla l'hardware e avvia il sistema operativo; nei PC si chiama BIOS o UEFI. Oggi è spesso una memoria flash, che si può aggiornare ma non si usa per i propri file. RAM e ROM insieme formano la memoria centrale."},
+      {"titolo": "Le memorie di massa", "testo": "Le memorie di massa conservano i dati in modo permanente, anche a computer spento; sono molto più capienti della RAM ma più lente. Il disco fisso (HDD) registra i dati su dischi magnetici che girano; l'unità a stato solido (SSD) usa chip di memoria flash, senza parti in movimento, ed è molto più veloce. Sono memorie di massa anche le chiavette USB, le schede di memoria e i dischi ottici come i DVD.\n\nQuando si apre un programma, il computer lo copia dalla memoria di massa nella RAM, dove la CPU lo può eseguire velocemente."},
+      {"titolo": "Le periferiche", "testo": "Le periferiche sono i dispositivi collegati al computer per far entrare o uscire i dati. Le periferiche di input portano i dati dentro: tastiera, mouse, microfono, webcam, scanner. Le periferiche di output portano i risultati fuori: monitor, stampante, altoparlanti, cuffie.\n\nAlcune periferiche sono di input e output insieme: lo schermo tattile, o touchscreen, mostra le immagini e riceve i tocchi delle dita."},
+      {"titolo": "Sistema operativo e applicazioni", "testo": "Il sistema operativo è il programma principale: parte all'accensione e resta sempre attivo. Gestisce le risorse: decide quale programma usa la CPU e quanta RAM gli spetta, organizza i file nelle cartelle, controlla le periferiche e offre all'utente un'interfaccia, di solito grafica, con finestre e icone. Esempi sono Windows, macOS e Linux, e sui telefoni Android e iOS.\n\nLe applicazioni sono i programmi che servono all'utente per un compito preciso: la videoscrittura, il foglio di calcolo, il browser, un videogioco. Funzionano sopra il sistema operativo e gli chiedono le risorse di cui hanno bisogno."}
+    ],
+    "ricorda": [
+      "Hardware sono le parti fisiche, software sono i programmi.",
+      "La CPU esegue le istruzioni; dentro ha l'unità di controllo, la ALU e i registri.",
+      "La RAM è veloce ma volatile; la ROM è di sola lettura e non volatile.",
+      "Le memorie di massa, come HDD, SSD e chiavette, conservano i dati anche a computer spento.",
+      "Periferiche di input: tastiera, mouse, microfono; di output: monitor, stampante, altoparlanti.",
+      "Il sistema operativo gestisce le risorse; le applicazioni gli chiedono ciò che serve."
+    ],
+    "esempi": [
+      {"testo": "Scrivere una lettera: la tastiera, periferica di input, manda le lettere; la CPU le elabora; la RAM tiene aperto il documento; il monitor, periferica di output, lo mostra; quando si salva, il file va sulla memoria di massa."},
+      {"testo": "Un SSD da 512 GB contiene 512 per 1000, cioè 512000 MB.", "calcolo": {"formula": "conversione", "dati": {"valore": 512, "da": "GB", "a": "MB"}, "risultato": 512000}},
+      {"testo": "Una foto da 4 MB occupa 4 per 1000, cioè 4000 kB di una chiavetta USB.", "calcolo": {"formula": "conversione", "dati": {"valore": 4, "da": "MB", "a": "kB"}, "risultato": 4000}}
+    ],
+    "errori": [
+      "Confondere la RAM con la memoria di massa: la RAM si svuota allo spegnimento, il disco no.",
+      "Pensare di salvare i propri file nella ROM: contiene il firmware e serve all'avvio.",
+      "Chiamare computer il monitor: il monitor è solo una periferica di output.",
+      "Considerare il sistema operativo un'applicazione come le altre: è il software di base che le fa funzionare."
+    ],
+    "prova_tu": [
+      {"domanda": "La webcam è una periferica di input o di output?", "risposta": "Di input: porta le immagini dentro il computer."},
+      {"domanda": "Perché se manca la corrente si perde un documento non salvato?", "risposta": "Perché sta nella RAM, che è volatile."},
+      {"domanda": "Quanti MB sono 2 GB?", "risposta": "2000 MB.", "calcolo": {"formula": "conversione", "dati": {"valore": 2, "da": "GB", "a": "MB"}, "risultato": 2000}},
+      {"domanda": "Il browser è software di base o software applicativo?", "risposta": "Software applicativo: è un'applicazione che funziona sopra il sistema operativo."}
+    ]
+  }
+}

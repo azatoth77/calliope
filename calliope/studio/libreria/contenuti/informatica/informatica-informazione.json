@@ -1,0 +1,51 @@
+{
+  "formato": 1,
+  "id": "informatica-informazione",
+  "tipo": "scheda",
+  "titolo": "Bit, byte e codifica dei caratteri",
+  "materia": "Informatica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "Bit e byte, unità di misura dell'informazione e multipli binari, combinazioni con n bit, codice ASCII",
+  "chiavi": ["bit e byte", "byte", "misura dell'informazione", "multipli del byte", "kilobyte", "megabyte", "gigabyte", "codifica dei caratteri", "codice ascii", "ascii", "rappresentazione dell'informazione", "codifica dell'informazione", "combinazioni di bit"],
+  "prerequisiti": ["informatica-binario"],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Il computer conserva e trasmette tutto, numeri, testi, immagini e suoni, come sequenze di 0 e di 1. Per dire quanta informazione c'è in un file, o quanta ne sta in una memoria, servono delle unità di misura, proprio come il metro serve per le lunghezze.",
+    "sezioni": [
+      {"titolo": "Il bit e il byte", "testo": "Il bit è la più piccola quantità di informazione: può valere 0 oppure 1. Il nome viene dall'inglese binary digit, cioè cifra binaria.\n\nUn bit da solo dice poco, perciò i bit si raggruppano. Un gruppo di 8 bit si chiama byte e si indica con la B maiuscola; il bit si scrive per esteso o con la b minuscola. Un byte basta per un carattere di un testo semplice. Per passare da byte a bit si moltiplica per 8, da bit a byte si divide per 8."},
+      {"titolo": "I multipli: kB, MB, GB", "testo": "Come per il metro, si usano i prefissi del Sistema Internazionale, che vanno di mille in mille. 1 kilobyte (kB) è 1000 byte, 1 megabyte (MB) è 1000 kB, 1 gigabyte (GB) è 1000 MB e 1 terabyte (TB) è 1000 GB.\n\nPer passare a un'unità più piccola si moltiplica per 1000, per passare a una più grande si divide per 1000. Per esempio 3 GB sono 3000 MB, e 7000 kB sono 7 MB."},
+      {"titolo": "KiB e MiB: i multipli binari", "testo": "Il computer lavora in base 2, e 1000 non è una potenza di 2. Per questo esistono anche i multipli binari, che vanno di 1024 in 1024, perché 1024 è 2^10. 1 kibibyte (KiB) è 1024 byte, 1 mebibyte (MiB) è 1024 KiB, cioè 1048576 byte, e 1 gibibyte (GiB) è 1024 MiB.\n\nLa differenza sembra piccola ma cresce: un disco venduto come 500 GB al computer risulta di circa 465 GiB. Non manca niente, sono due unità diverse. Alcuni programmi scrivono KB o GB anche quando intendono i multipli binari: conviene guardare bene la sigla."},
+      {"titolo": "Quante combinazioni con n bit", "testo": "Con 1 bit si hanno 2 combinazioni: 0 e 1. Con 2 bit se ne hanno 4: 00, 01, 10 e 11. Ogni bit in più raddoppia le combinazioni, quindi con n bit le combinazioni sono 2 alla n.\n\nCon 3 bit si hanno 8 combinazioni, con 4 bit 16, con 8 bit, cioè un byte, 256. Le combinazioni servono a dare un codice diverso a ogni oggetto: per distinguere 20 oggetti 4 bit non bastano, perché danno solo 16 codici, e ne servono 5, che ne danno 32. Con 8 bit si scrivono i numeri da 0 a 255: sono 256 valori, ma il più grande è 255 perché si parte da 0."},
+      {"titolo": "La codifica dei caratteri", "testo": "Per scrivere un testo il computer dà un numero a ogni carattere: la tabella che lega caratteri e numeri si chiama codifica. La più famosa è il codice ASCII, nato negli anni Sessanta: usa 7 bit, quindi 2^7 = 128 caratteri, fra lettere inglesi maiuscole e minuscole, cifre, punteggiatura e alcuni caratteri di controllo. La A maiuscola ha codice 65, la a minuscola 97, lo spazio 32.\n\nIn pratica ogni carattere ASCII occupa un byte. Però 128 caratteri non bastano per le lettere accentate o per gli altri alfabeti: per questo oggi si usa Unicode, che dà un numero a più di centomila caratteri di tutte le lingue e, nella forma UTF-8, usa da 1 a 4 byte per carattere."}
+    ],
+    "ricorda": [
+      "Il bit vale 0 oppure 1; 8 bit fanno un byte.",
+      "Da byte a bit si moltiplica per 8, da bit a byte si divide per 8.",
+      "kB, MB e GB vanno di 1000 in 1000; KiB, MiB e GiB vanno di 1024 in 1024.",
+      "Con n bit si hanno 2 alla n combinazioni diverse.",
+      "Il codice ASCII usa 7 bit e rappresenta 128 caratteri; Unicode li rappresenta quasi tutti."
+    ],
+    "esempi": [
+      {"testo": "Un dato di 4 byte contiene 4 per 8, cioè 32 bit.", "calcolo": {"formula": "byte_in_bit", "dati": {"byte": 4}, "risultato": 32}},
+      {"testo": "Un piccolo file di testo di 2 kB occupa 2 per 1000, cioè 2000 byte.", "calcolo": {"formula": "conversione", "dati": {"valore": 2, "da": "kB", "a": "B"}, "risultato": 2000}},
+      {"testo": "Un blocco di 1 KiB contiene 1024 byte, non 1000: rispetto al kB ci sono 24 byte in più.", "calcolo": {"formula": "conversione", "dati": {"valore": 1, "da": "KiB", "a": "B"}, "risultato": 1024}},
+      {"testo": "La lettera A ha in ASCII il codice 65. Con le divisioni successive per 2 si trova che 65 in binario è 1000001: sono 7 bit, e in un byte si scrive con uno 0 davanti.", "calcolo": {"formula": "decimale_in_binario", "dati": {"decimale": 65}, "risultato": "1000001"}}
+    ],
+    "errori": [
+      "Confondere bit e byte: un byte è fatto di 8 bit.",
+      "Pensare che 1 kB sia 1024 byte: 1024 byte sono 1 KiB, mentre 1 kB è 1000 byte.",
+      "Dire che con 8 bit si arriva a 256: i valori sono 256, ma il più grande è 255.",
+      "Moltiplicare invece di fare la potenza: con 4 bit le combinazioni non sono 8 ma 16."
+    ],
+    "prova_tu": [
+      {"domanda": "Quanti bit ci sono in 3 byte?", "risposta": "24 bit, perché 3 per 8 fa 24.", "calcolo": {"formula": "byte_in_bit", "dati": {"byte": 3}, "risultato": 24}},
+      {"domanda": "Quanti kB sono 5 MB?", "risposta": "5000 kB.", "calcolo": {"formula": "conversione", "dati": {"valore": 5, "da": "MB", "a": "kB"}, "risultato": 5000}},
+      {"domanda": "Quanti byte sono 2 KiB?", "risposta": "2048 byte, perché 2 per 1024 fa 2048.", "calcolo": {"formula": "conversione", "dati": {"valore": 2, "da": "KiB", "a": "B"}, "risultato": 2048}},
+      {"domanda": "Quante combinazioni si hanno con 4 bit?", "risposta": "16, cioè 2 alla 4."},
+      {"domanda": "Quanti bit servono per dare un codice diverso a 50 oggetti?", "risposta": "6 bit: 5 bit danno solo 32 combinazioni, 6 bit ne danno 64."}
+    ]
+  }
+}

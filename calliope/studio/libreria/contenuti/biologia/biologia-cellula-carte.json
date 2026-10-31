@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "biologia-cellula-carte",
+  "tipo": "mazzo",
+  "titolo": "La cellula: le carte",
+  "materia": "Biologia",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 12,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "biologia-cellula",
+  "carte": [
+    {"domanda": "Quali sono i tre punti della teoria cellulare?", "risposta": "I viventi sono fatti di cellule, la cellula è l'unità di base, ogni cellula nasce da un'altra cellula."},
+    {"domanda": "Come si chiama una cellula con il DNA racchiuso in un nucleo con la membrana?", "risposta": "Eucariote", "sbagliata": "Procariote"},
+    {"domanda": "Dove si trova il DNA in una cellula procariote?", "risposta": "Nel citoplasma, in una zona chiamata nucleoide, senza membrana intorno."},
+    {"domanda": "Quali strutture costruiscono le proteine e ci sono sia nei procarioti sia negli eucarioti?", "risposta": "I ribosomi", "sbagliata": "I mitocondri"},
+    {"domanda": "Quale organulo fa la respirazione cellulare e fornisce energia alla cellula?", "risposta": "I mitocondri", "sbagliata": "I cloroplasti"},
+    {"domanda": "In quale organulo avviene la fotosintesi?", "risposta": "Nei cloroplasti", "sbagliata": "Nei mitocondri"},
+    {"domanda": "Quale organulo modifica, impacchetta e spedisce le proteine?", "risposta": "Apparato di Golgi", "sbagliata": "Reticolo endoplasmatico"},
+    {"domanda": "Di che cosa è fatta la parete cellulare delle piante?", "risposta": "Di cellulosa", "sbagliata": "Di chitina"},
+    {"domanda": "Quali tre strutture ha la cellula vegetale e non quella animale?", "risposta": "La parete cellulare, i cloroplasti e un grande vacuolo centrale."},
+    {"domanda": "Che cosa usa il microscopio elettronico al posto della luce?", "risposta": "Un fascio di elettroni", "sbagliata": "Un fascio di raggi X"}
+  ]
+}
