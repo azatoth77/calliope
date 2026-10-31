@@ -73,6 +73,7 @@ from . import resoconto as R
 from .ascolta import Ascolti
 from .libreria.studio import DallaLibreria
 from .mappe import Mappe
+from .premi import Premi
 from .prove import Prove
 from .tutore import Tutore
 
@@ -223,11 +224,12 @@ def _data(valore) -> datetime.date:
     return datetime.date.fromisoformat(str(valore).strip()[:10])
 
 
-class Studio(Mappe, Prove, Ascolti, Tutore, DallaLibreria):
+class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria):
     """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
     #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`, il ripasso da
     ascoltare (passo 9, #249) in `ascolta.py`, la vista del tutore e le indicazioni (passo 10,
-    #250, #285) in `tutore.py`, la libreria (#297) in `libreria/studio.py`."""
+    #250, #285) in `tutore.py`, la serie, le stelle e i duelli (#296) in `premi.py`, la libreria (#297) in
+    `libreria/studio.py`."""
 
     def __init__(self, cfg, registry=None, log=print, adesso=None):
         self.cfg = cfg
@@ -1588,10 +1590,25 @@ class Studio(Mappe, Prove, Ascolti, Tutore, DallaLibreria):
         ruolo = self._chi_puo(chi, v["persona"])
         fonte = fonte or ("persona" if ruolo == "proprietario" else "tutore")
         adesso = self.adesso()
-        scatola, scadenza = C.prossima(c["scatola"], esito, adesso, self._vigilia(v))
-        self.dati.scrivi("UPDATE studio_carte SET scatola = ?, scadenza = ?, ultima = ? WHERE "
-                         "id = ?", (scatola, scadenza, adesso.isoformat(timespec="seconds"),
-                                    c["id"]))
+        with self.dati.lock:
+            # Era da ripassare adesso? Solo così conta per la serie (revisione della PR #355: una
+            # carta toccata di nuovo subito dopo non è un ripasso); riletta dentro il lock
+            att = self.dati.uno("SELECT * FROM studio_carte WHERE id = ?", (c["id"],)) or c
+            era_da = C.da_ripassare(att, adesso)
+            scatola, scadenza = C.prossima(att["scatola"], esito, adesso, self._vigilia(v))
+            self.dati.scrivi("UPDATE studio_carte SET scatola = ?, scadenza = ?, ultima = ? WHERE "
+                             "id = ?", (scatola, scadenza, adesso.isoformat(timespec="seconds"),
+                                        c["id"]))
+            if era_da and ruolo == "proprietario":
+                try:
+                    self.dati.scrivi(
+                        "INSERT INTO studio_pratica (verifica, persona, giorno, ora, tipo, rif) "
+                        "VALUES (?, ?, ?, ?, 'carta', ?)",
+                        (v["id"], str(v["persona"]), adesso.date().isoformat(),
+                         adesso.isoformat(timespec="seconds"), c["id"]))
+                except Exception as e:  # noqa: BLE001 — la serie non ferma il ripasso
+                    self._registra(f"pratica della carta {c['id']} non scritta: "
+                                   f"{type(e).__name__}")
         m = self.misure["carte"]
         m["esiti"][esito] = m["esiti"].get(esito, 0) + 1
         m["codice"] += fonte == "codice"
@@ -2103,7 +2120,23 @@ class Studio(Mappe, Prove, Ascolti, Tutore, DallaLibreria):
                 # minore ne vede il testo (decisione del 30/10); textContent sulla pagina
                 "indicazioni": (self._indicazioni_per(getattr(chi, "id", None))
                                 if self.indicazioni_accese() else []),
+                # I premi di chi guarda (#296): serie, stelle e duelli, coi soli numeri, i tipi e
+                # i nomi delle persone di casa; le persone per un duello
+                "premi": self._premi_home(chi),
                 "prova": not self.per_schermi()}
+
+    def _premi_home(self, chi) -> dict | None:
+        """I premi per la home, o None con lo Studio non attivo. Un errore non ferma la home."""
+        if not self.premi_accesi():
+            return None
+        try:
+            p = self.premi(chi)
+            p["persone_duello"] = self.persone_per_duello(chi)
+            return p
+        except Exception as e:  # noqa: BLE001
+            self.misure["errori"] += 1
+            self._registra(f"premi non calcolati: {type(e).__name__}")
+            return None
 
     def _home_verifica(self, chi, vid, di, da_decidere) -> dict:
         v = self.verifica(chi, vid)

@@ -1,7 +1,7 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-"""La libreria dello Studio a secco (31/10, issue #297, epic #251, decisione 0035 punto 45;
+"""La libreria dello Studio a secco (31/10, issue #297, epic #251, decisione 0035 punto 46;
 calliope/studio/libreria/, tools/studio.py, schermi/server.py). Niente modello, un orologio finto,
 persone di fantasia (Leo, il tutore Andrea, Bruno adulto).
 
@@ -380,8 +380,8 @@ def chimica(st, chi=LEO, persona=None, titoli=("Le reazioni chimiche", "La mole"
 
 
 verifica("Biologia è fra le materie dello Studio", "Biologia" in S.servizio.MATERIE)
-verifica("lo schema dello Studio non cambia (versione 11, niente tabelle nuove)",
-         len(S.dati.MIGRAZIONI) == 11)
+verifica("lo schema dello Studio resta quello dell'epic (12, niente tabelle della libreria)",
+         len(S.dati.MIGRAZIONI) == 12)
 st = studio(cfg_nuova("s1.db"))
 vid = chimica(st)
 args = st.argomenti(LEO, vid)
@@ -450,6 +450,9 @@ r_es = st.esito_carta(LEO, cc[0]["id"], "sapevo")
 tent = st.dati.tutti("SELECT * FROM studio_tentativi WHERE carta = ?", (cc[0]["id"],))
 verifica("una carta della libreria è un tentativo «carta» sull'argomento, come le altre",
          r_es and tent and tent[0]["argomento"] == args[1]["id"] and tent[0]["tipo"] == "carta")
+pratica = st.dati.tutti("SELECT * FROM studio_pratica WHERE persona = 'l1'")
+verifica("una carta della libreria ripassata conta come pratica per la serie (#296), come le altre",
+         len(pratica) == 1, str(pratica))
 a3 = st.aggiungi_mazzo(ANDREA, vid, "chimica-reazioni-carte", argomento=args[0]["id"])
 verifica("il tutore aggiunge le carte per il suo minore, sull'argomento che sceglie",
          a3["aggiunte"] > 0 and all(c["argomento"] == args[0]["id"] for c in st.carte(LEO, vid)

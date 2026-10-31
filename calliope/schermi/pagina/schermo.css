@@ -1306,6 +1306,20 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
   min-height: 2.75rem; }
 .studio-t-scelte .studio-t-campo { flex: 1 1 9rem; width: auto; max-width: 100%; }
 .studio-t-guarda .studio-c-esiti .studio-h-tasto { flex: 1 1 6.5rem; }
+/* I premi dello Studio (31/10, #296, studio.js): la serie, le stelle col loro traguardo, i duelli;
+   niente colori che premono, i testi vanno a capo; gli interruttori del tutore su una riga quando
+   ci stanno */
+.studio-r .studio-h-riga, .studio-t-premi .studio-h-riga { overflow-wrap: anywhere; }
+.studio-r-stelle summary { cursor: pointer; min-height: 2.75rem; padding-top: 0.6rem; box-sizing: border-box; }
+.studio-r-stella { align-items: baseline; gap: 0.5rem; justify-content: flex-start; flex-wrap: nowrap; }
+.studio-r-stella .studio-h-riga { min-width: 0; }
+.studio-r-segno { color: var(--accento); flex: none; }
+.studio-r-duelli { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; padding-top: 0.5rem;
+  border-top: 1px solid var(--bordo); }
+.studio-r-duello { flex-direction: column; align-items: stretch; }
+.studio-r-pannello { display: flex; flex-direction: column; gap: 0.55rem; min-width: 0; }
+.studio-t-interruttori .studio-h-tasto { flex: 1 1 7rem; padding: 0 0.6rem; }
+.studio-t-interruttori .studio-h-tasto[aria-pressed="true"] { font-weight: 700; }
 /* Le prove dello Studio (31/10, passo 8, #248, studio.js): la verifica finta con le risposte, la
    correzione con l'esito sempre scritto a parole (il colore è solo un aiuto in più) */
 .studio-p-prova, .studio-p-correzione { display: flex; flex-direction: column; gap: 0.55rem; }

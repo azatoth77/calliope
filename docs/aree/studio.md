@@ -40,7 +40,9 @@ cieca in ombra, il giudizio del tutore a peso pieno, «Da guardare tu», e le fr
 del turno del minore con una cornice del codice (sezione sotto). Dal 31/10 la **libreria** (#297,
 prima parte): schede e mazzi di carte scritti con Claude e rivisti, scelti dal codice dagli
 argomenti della verifica, «Dalla libreria» nella home e la lettura `libreria` a voce (sezione
-sotto). Lo
+sotto). Dal 31/10 i **premi** (#296): la
+serie di giorni di studio, le stelle e i duelli fra persone di casa, calcolati dal codice dalla
+pratica vera, con la regola per i minori (sezione sotto). Lo
 Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
@@ -61,10 +63,16 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Ripasso da ascoltare: il copione a parti composto dal codice (le pagine del piano ripulite per la voce, le carte con la pausa per pensare), la lettura a voce dopo la risposta col barge-in, riprendi e ripeti, l'audio delle parti per lo schermo, la tenuta della cache (dal 31/10, passo 9, #249; schema «studio» invariato, alla versione 10; `studio_ascolta` attiva di serie con lo Studio, `studio_ascolta_voce`, `studio_ascolta_giorni`) | Piper con le voci dello Speaker (la voce di Calliope e la «voce del libro»), `wave` della libreria standard; niente modello | `calliope/studio/ascolta.py` → `paragrafi`, `frasi`, `scarto`, `frasi_pagina`, `componi`, `Copione`, `pezzi`, `sentite`, `da_ripetere`, `leggi`, `Sintesi`, `togli_audio`, `Ascolti` (in `Studio`): `ascolto_prepara`, `ascolto_vale`, `ascolto_fermo`, `nota_ascolto`, `ascolto_parti`, `ascolto_audio`; `calliope/pronuncia.py` → `per_ripasso`, `formule_dette`, `sigle_dette`, `romani_detti`, `simboli_detti`; `calliope/tts.py` → `sintesi_pcm`, `Speaker.say(spezza, voce)`, `silenzio`, `voce_per`; `calliope/eventi/uscita.py` → `turno_lettura`, `leggi`, `pausa`; `calliope/ciclo.py` → `_leggi_ripasso`; `calliope/tools/studio.py` → `studio_ascolta`; `calliope/schermi/server.py` → `POST /api/studio/ascolta`; `calliope/schermi/pagina/studio.js` («Ascolta»); prove `prove/prova_studio_ascolta.py`, `prove/prova_studio_ascolta_pagina.py`, `prove/prova_valore.py` (il ripasso attraverso Brain) |
 | Vista del tutore (padronanza alla cieca in ombra, giudizio del tutore, «Da guardare tu», prove, ripasso, mappa) e indicazioni dei tutori nei dati del turno del minore (dal 31/10, passo 10, #250 e #285; schema «studio» alla versione 11; `studio_indicazioni`, acceso di serie con lo Studio, `studio_indicazioni_giorni`) | SQLite (`studio_indicazioni`, `studio_tentativi` tipo «giudizio»); libreria standard, niente modello | `calliope/studio/tutore.py` → `forma_indicazione`, `CORNICE`, `Tutore` (in `Studio`): `vista_tutore`, `giudica`, `rivedi_da_tutore`, `scrivi_indicazione`, `cambia_indicazione`, `togli_indicazione`, `togli_indicazioni`, `indicazioni`, `nota_indicazioni`; `calliope/studio/padronanza.py` → `GIUDIZI`, `accordo`; `calliope/brain.py` → `_nota_studio`; `calliope/tools/studio.py` → azioni `indica`, `indicazioni`, `indicazioni_togli`; `calliope/schermi/server.py` → `POST /api/studio/tutore`; `calliope/schermi/pagina/studio.js` («Per te che lo segui», «Indicazioni di chi ti segue»); prove `prove/prova_studio_tutore.py`, `prove/prova_studio_tutore_pagina.py` |
 | Libreria: schede degli argomenti e mazzi di carte nel repository (dati fidati, JSON), il formato e la verità, l'indice per argomento, la scelta del codice con la padronanza solo mostrata, «Dalla libreria» nella home, «Aggiungi le carte», la lettura `libreria` a voce (dal 31/10, #297, prima parte; schema «studio» invariato; `studio_libreria`, attiva di serie con lo Studio) | libreria standard, niente modello; i contenuti in `calliope/studio/libreria/contenuti/<materia>/*.json` | `calliope/studio/libreria/formato.py` → `valida`, `leggi_file`, `FORMULE`; `calliope/studio/libreria/indice.py` → `Libreria` (`carica`, `controlla`, `trova`, `di_scheda`), `parole`, `radice`, `materia_vale`, `scegli`; `calliope/studio/libreria/studio.py` → `DallaLibreria` (in `Studio`): `proposte_libreria`, `scheda_libreria`, `soluzione_libreria`, `aggiungi_mazzo`, `_libreria_home`; `calliope/tools/studio.py` → azione `libreria`; `calliope/schermi/server.py` → `POST /api/studio/libreria`; `calliope/schermi/pagina/libreria.js`; prove `prove/prova_studio_libreria.py`, `prove/prova_studio_libreria_pagina.py`, `prove/verita_libreria.py`; passo manuale `prove/manuali/libreria-studio.md` |
+| Premi: la serie di giorni di studio con le pause, le stelle dei traguardi, i duelli fra persone di casa, gli interruttori per persona (il tutore per un minore) (dal 31/10, #296; schema «studio» alla versione 12; `studio_serie`, `studio_stelle` accese di serie con lo Studio, `studio_serie_pause` 1, `studio_duelli` spento di serie) | SQLite (`studio_stelle`, `studio_premi`, `studio_duelli`, `studio_pratica`); libreria standard, niente modello | `calliope/studio/premi.py` → `pratica`, `studiato`, `serie`, `superata`, `frase_serie`, `frase_stelle_nuove`, `Premi` (in `Studio`): `premi`, `impostazioni_premi`, `imposta_premi`, `aggiorna_stelle`, `frase_premi`, `frase_premi_letti`, `persone_per_duello`, `proponi_duello`, `accetta_duello`, `rispondi_duello`, `consegna_duello`, `annulla_duello`, `vista_duello`; `calliope/tools/studio.py` → azione `premi`, «fatto» con la serie; `calliope/schermi/server.py` → `POST /api/studio/premi`, `POST /api/studio/duello`; `calliope/schermi/pagina/studio.js` («I tuoi traguardi», «Duelli», «Premi» nella vista del tutore); prove `prove/prova_studio_premi.py`, `prove/prova_studio_premi_pagina.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
 ## Problemi noti
+
+- I premi (#296, revisione della PR #355): una sessione del piano con «Inizia» e «Fatto» a 10
+  minuti di distanza conta come giorno di studio anche se in mezzo non si è fatto niente. Il codice
+  misura il tempo, non cosa si fa sulle pagine. La serie è solo un numero, e le stelle non
+  dipendono dal tempo.
 
 - I bordi e la soglia della nitidezza sono misurati solo sulle foto di fantasia (Pillow): da
   ritarare sulle foto vere (tavoli chiari, pagine curve del libro, luce di sera).
@@ -105,7 +113,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## La libreria: schede e carte preparate, scelte dal codice (31/10, issue #297, ramo `issue-297-libreria`)
 
-Prima delle tre parti della #297 (analisi nel commento della issue; decisione 0035 punto 45).
+Prima delle tre parti della #297 (analisi nel commento della issue; decisione 0035 punto 46).
 La prima serie è per la **prima superiore, tecnico tecnologico, indirizzo Chimica, materiali e
 biotecnologie** (decisione di chi amministra del 30/10; nient'altro della classe vera nel
 repository): **17 schede e 17 mazzi** (168 carte), Chimica (sostanze pure e miscugli, l'atomo,
@@ -145,8 +153,15 @@ membrana e l'osmosi, la classificazione). Scritte con Claude da capo, originali,
   stessa risposta non parte, come le altre letture di `studio` (`politica.DOPO_DATO`).
 - **Carte**: origine «libreria» (nuova in `carte.ORIGINI`), attive e da ripassare, legate
   all'argomento della proposta (o a quello scelto dal tutore), niente doppioni, il tetto delle
-  300. Schema «studio» invariato (11): niente conflitto con la 12 della #355.
+  300. Schema «studio» invariato: quello dell'epic (12 dopo la #355). Una carta della libreria
+  ripassata conta per la serie dei premi (#296) come le altre: è pratica vera, e `premi.py` non
+  guarda l'origine (provato in `prova_studio_libreria.py`).
 - Materia **Biologia** nell'elenco fisso dello Studio.
+
+**Revisione della PR #360** (31/10): il caffè al posto della «bibita a pH 5»; la regola delle cifre
+dopo la virgola solo per le potenze di dieci, col contrario 0,005; nel solido le particelle vibrano
+intorno a posizioni fisse; il glucosio fra le molecole polari, non «grandi»; il SI definito oggi
+con costanti della natura, un tempo con campioni. Unita l'epic coi premi: pagina v36.
 
 **Da sapere** (trovato scrivendo le carte, non corretto qui): `carte.normale` scrive «1» come
 «uno», che `chiusa` toglie come articolo. Una risposta chiusa «1» non è chiusa, e «1,5 g/cm³»
@@ -158,6 +173,144 @@ no: da correggere in `carte.py` con le sue prove.
 
 **Prove**: `prova_studio_libreria.py` (a secco, col server vero e attraverso Brain),
 `prova_studio_libreria_pagina.py` (browser a 390×844, 320×693, col testo al 125 % e sul PC).
+## I premi: serie, stelle e duelli (31/10, issue #296, ramo `issue-296-studio-serie-stelle`)
+
+*Epic #251. Decisione [0035](../decisioni/0035-studio.md), punto 45. L'analisi, con le soglie, è
+nel commento della #296. Viene dagli spunti presi da un'app di studio commerciale (#243) e da due
+decisioni di chi amministra: «il minimo di gamification, solo come rinforzo positivo» (28/10) e
+«le soglie le sceglie chi sviluppa, si cambiano con l'uso» (30/10).*
+
+**Il principio: niente da imbrogliare.** Serie e stelle si calcolano solo dai dati che lo Studio
+ha già: gli eventi delle sessioni, i tentativi, le prove e le carte (`studio/premi.py`, soglie in
+cima al file). Il modello non entra. Non contano mai:
+- le autovalutazioni: l'esito delle carte e «Era giusta» detto da sé;
+- il tempo passato nell'app e il numero di aperture;
+- le ripetizioni.
+
+**Il giorno di studio** (`studiato`) ha almeno una pratica vera, una di queste:
+- una sessione del piano misurata fra «Inizia» e «Fatto» di almeno `SERIE_MINUTI` (10) minuti.
+  Aperta e chiusa subito dà 1 minuto; «Fatto» senza «Inizia» non ha tempo; con un «non fatto» in
+  mezzo il tempo non c'è;
+- almeno `SERIE_CARTE` (5) carte **diverse** ripassate da chi studia. Una carta conta una volta
+  al giorno, qualunque sia l'esito; quelle ripassate dal tutore non contano;
+- una prova consegnata con almeno metà delle risposte date;
+- almeno `SERIE_CASELLE` (3) caselle di una mappa controllate dal codice.
+
+Pratica e date sono quelle del server: con l'orologio spostato in avanti i giorni dopo oggi non
+contano, e la frase non si ripete tornando indietro.
+
+**La serie** (`serie`) conta i giorni di studio andando indietro da oggi:
+- un giorno senza piano (nessuna verifica aperta, senza scuola, fuori dagli orari: il piano ha
+  zero minuti) non conta e non la ferma;
+- oggi non ancora studiato aspetta;
+- un giorno del piano senza pratica, o saltato con «non ce la faccio oggi», usa una pausa
+  (`studio_serie_pause`, 1 ogni 7 giorni);
+- finite le pause, la serie riparte dal giorno dopo il buco.
+
+Lo schermo la mostra solo quando c'è: mai «0 giorni», mai «persa», nessun record. A voce
+(«La tua serie è a 4 giorni di studio.») si dice al più una volta al giorno: dentro la risposta a
+«fatto» della persona e solo se oggi conta già (`frase_premi`, regola `studio_premi_detti`,
+`studio_premi.serie_detta`). A chi la chiede si risponde sempre: azione `premi` del tool, «quante
+stelle ho?», anche il tutore per il suo ragazzo alla terza persona.
+
+**Le stelle** (`aggiorna_stelle`) si prendono una volta per verifica e restano (`studio_stelle`,
+una riga unica per traguardo):
+- **argomento all'obiettivo**: la padronanza calcolata coi soli esiti del codice e del tutore (mai
+  le autovalutazioni né il giudizio del tutore), solo con `studio_padronanza: mostrata`. In ombra
+  la stella rivelerebbe la cifra che il tutore giudica alla cieca;
+- **verifica finta superata, interrogazione simulata superata**: le risposte giuste decise dal
+  codice o dal tutore, su tutte le domande, almeno l'obiettivo, con almeno 3 domande; rifarla non
+  dà altre stelle;
+- **ripasso delle carte fatto**: almeno 5 carte attive, ognuna ripassata in almeno 2 giorni;
+- **piano seguito**: alla data della verifica, almeno l'80 % dei giorni del piano chiusi sono fatti
+  con una sessione misurata, e almeno 3.
+
+Una stella nuova si dice una volta; l'argomento si nomina col numero, mai col titolo.
+
+**I duelli** (`studio_duelli`, spento di serie):
+- si fanno fra persone di casa, mai ospiti né conoscenti;
+- li propone la persona della verifica, su una sua verifica aperta, con le domande che il codice
+  sa correggere (mai le aperte), 5;
+- l'altro accetta; prima del sì nessuno risponde;
+- si gioca in contemporanea; le risposte attese e i punti di tutti e due arrivano a duello finito,
+  senza «vinto» né «perso»; scadenza 24 ore, al più 3 aperti per persona;
+- **niente premi**: niente stelle, niente serie, niente tentativi;
+- con una prova aperta sulla verifica il duello aspetta, per tutti e due;
+- per un minore li accende il tutore.
+
+Non riusano la macchina dei giochi: l'esito deve deciderlo il codice dello Studio
+(`risposte.valuta`), e un duello è una prova a due con le voci delle prove.
+
+**Interruttori per persona** (`studio_premi`; NULL vuol dire «di serie»):
+- di serie serie e stelle sono accese, i duelli accesi per un adulto e spenti per un minore;
+- per un minore li cambia solo un suo tutore, dalla vista del tutore («Premi», tre tasti);
+- un adulto cambia i suoi, e nessuno quelli di un altro adulto;
+- spegnere i duelli annulla quelli aperti.
+
+**Sullo schermo**:
+- nella home, dopo le verifiche, «I tuoi traguardi»: la serie, le stelle e i duelli, con
+  «Proponi un duello», «Accetta», «Rispondi» e «Consegna»;
+- nella vista del tutore il blocco «Premi», coi duelli del minore (con chi, stato e punti, mai le
+  domande);
+- le domande sono un dato: solo textContent.
+
+Endpoint `POST /api/studio/premi` e `POST /api/studio/duello`; per un minore le azioni valgono
+dentro gli orari.
+
+**Tenuta**:
+- stelle e duelli vanno via con la loro verifica;
+- «dimentica» della persona toglie le sue stelle, i suoi duelli (con chiunque) e i suoi
+  interruttori;
+- `--svuota` toglie tutto;
+- la rotazione toglie i duelli più vecchi della tenuta.
+
+Schema «studio» alla **versione 12**. Service worker e `PAGINA_VERSIONE` alla **v35**. Lo stato
+d'animo non entra mai.
+
+**Prove.**
+- `prove/prova_studio_premi.py`, a secco: le funzioni pure, la serie dai dati con gli imbrogli
+  (sessioni vuote, «Fatto» senza «Inizia», la stessa carta, le carte del tutore, gli esiti
+  autovalutati, l'orologio, le pause), le stelle (codice, tutore, autovalutazioni, ripasso,
+  argomento solo con la padronanza mostrata, piano), interruttori e permessi, i duelli (spenti,
+  tutore, conoscente, consenso, risposte attese solo alla fine, prova aperta, niente tentativi né
+  stelle, scadenza, tenuta), il tool, `Brain` ed endpoint.
+- `prove/prova_studio_premi_pagina.py`, nel browser: il tutore accende i duelli; il minore vede
+  serie e stella, propone, risponde con dell'HTML e vede la fine; a 390 e 320 px col testo al
+  125 %.
+
+**Resta fuori**:
+- i promemoria del tutore (la issue dice «se c'è»);
+- i duelli a voce;
+- un record della serie e i duelli a turni.
+
+Prima di accendere i duelli sulla DGX va guardato l'uso vero con un minore di casa.
+
+### 31/10: la revisione della PR #355
+
+La revisione indipendente ha trovato che la serie si poteva far crescere senza studiare. Ogni
+punto ha il suo caso in `prove/prova_studio_premi.py`.
+1. **Cinque tocchi sulle carte valevano un giorno** («non la sapevo» e poi «la sapevo» su cinque
+   carte nuove). Ora una carta conta per la serie solo se **era da ripassare** quando la persona
+   ha dato l'esito (`carte.da_ripassare`, letto dentro il lock prima di cambiare la scatola).
+   - Queste carte vanno in una tabella nuova della versione 12, `studio_pratica`: carta, giorno
+     e ora, una riga per ripasso vero. La tabella va con la verifica, con la persona e per data.
+   - Ogni carta conta una volta al giorno.
+   - Fra la prima e l'ultima carta che contano devono passare almeno **`CARTE_SECONDI` (120
+     secondi)**: cinque carte in 80 secondi non fanno un giorno, in 160 sì.
+   - Le carte ripassate dal tutore non sono la pratica del minore. Dopo il ripasso del tutore non
+     sono più da ripassare, nemmeno per il minore.
+2. **Mappa e prove riempite a caso valevano un giorno.**
+   - Mappa: ora contano solo le caselle **giuste o a metà**, cioè i tentativi «mappa» del codice,
+     che scrivono soltanto «Controlla» e «Ho finito». Una mappa a memoria piena di «xyz» o una
+     mappa da zero vuota non fanno un giorno.
+   - Prova: ora servono almeno una risposta **giusta o a metà decisa dal codice** e almeno
+     **`PROVA_SECONDI` (120 secondi)** fra l'inizio e la consegna. Una prova con risposte tutte
+     sbagliate non conta, e nemmeno una con una giusta consegnata in 5 secondi; in 3 minuti sì.
+3. **Limite noto** (in «Problemi noti»): una sessione del piano con «Inizia» e «Fatto» a 10 minuti
+   di distanza conta anche se in mezzo non si è fatto niente.
+
+Con l'unione dell'epic (dopo le #349 e #352) lo schema resta alla versione 12 e la pagina alla
+v35.
 
 ## Il banco del 31/10 07:02: l'opzione dentro un'altra e la seconda passata col modello vero (31/10, issue #349, ramo `issue-349-studio-scelta-connessione`)
 
@@ -411,6 +564,30 @@ ha i suoi casi nelle prove.
 Misure col vLLM finto dopo la revisione: mappa come sopra (matematica 8/8 nelle pagine, tutti da
 controllare; una parte sola 67 %, coi deboli 100 %); domande fondate 17/22, 21/23, 24/28,
 `auto_sbagliate` 0, 0, 0.
+
+### 31/10: i ritocchi di risposte, unità, argomenti e indicazioni (issue #343)
+
+Dalle revisioni delle PR #342, #346 e #348, non bloccanti, ognuno coi suoi contrari nelle prove:
+- **`risposte._numero`**: una misura composta sola, senza altri numeri né alternative, con la somma
+  diversa dall'atteso è «sbagliato» («1 metro e 50 centimetri» con 1,05 m, «2 ore e 30 minuti» con
+  2 h; prima «da rivedere»). Con un numero in più («3 prove: …») o la stessa unità due volte resta
+  «da rivedere».
+- **`unita.leggi`**: dopo «di» non legano il numero le unità che sono parole comuni («secondo»,
+  «ore», «gradi»): «2 di secondo grado» e «3 di ore» non sono 2 s e 3 h. «3/4 di litro» sì.
+- **`argomenti._pezzi`**: una cifra e una consonante si uniscono solo con un operatore subito
+  prima della cifra o subito dopo la lettera, come le vocali: «punto 2 b» e «classe 3 B» restano
+  due pezzi. Effetto noto: «2 x» scritto senza operatori non è più «2x».
+- **`argomenti._di_fila`**: il meno in testa al titolo («-5») vale solo se nella pagina non segue
+  un numero o una lettera sola: non è dentro «10 - 5 = 5» né «x - 5»; dopo una parola («di -5
+  gradi») sì.
+- **`tools/studio._detta_dal_tutore`**: le forme di cortesia staccate dalla punteggiatura o in
+  fondo («se puoi,», «se riesci.», «se vuoi,») si tolgono prima di contare il «se»; «se puoi farlo…»
+  senza virgola resta.
+- **Il banco** (`banco_studio.py`) scrive la quota delle calcolate e le fondate anche sul totale.
+
+Gli script del revisore rilanciati contro il ramo dell'epic: il blocco 4 di `funzioni.py` (PR
+#346) e `nominate.py` (PR #350) danno gli stessi esiti di prima, nessuna risposta sbagliata
+diventa «giusto».
 
 ## La vista del tutore e le indicazioni (31/10, issue #250 e #285, ramo `issue-250-studio-tutore`)
 
@@ -820,6 +997,12 @@ Gli script del revisore (`falsi.py`, `seme.py`, `filtri.py`) sono nei casi di
    voce chiesta nella stessa veglia (livello B; «Parla» toccato vale una persona), e decide quello.
    Senza esito il seme si tiene: il libro non dice più il nome (`nome_dentro`) e il satellite che
    suona ignora già il proprio. `known_voice` non riceve più il segnale.
+   *[storico fino al 31/10, #347: «l'esito dell'impronta della voce chiesta nella stessa veglia»]*
+   Dal 31/10 (#347) il seme porta solo l'esito che ha fermato la voce: in `watch_for_name` del
+   server `ultimo_ok` tiene un sì (il livello B interrompe solo con un sì) e un no lo azzera. Prima
+   un no tenuto, per esempio la TV sentita col livello B, passava al nome detto poco dopo dalla
+   persona registrata: il seme arrivava con `voce_ok=False` e il ripasso lo buttava. Il protocollo
+   non cambia: il satellite manda sempre «nome sentito».
 6. **I confini di parola** dopo «alexa», «siri» e «cortana»: «Siria, Libano e Giordania»,
    «Alexander Fleming», «Sirio», «Siriani» si dicono.
 7. **«chiocciola» da sola non è un indirizzo**: vale solo fra due parole e con «punto» dopo
@@ -1403,6 +1586,23 @@ ascolto e non dall'avvio di main, che prova tre volte l'Ollama locale (immagini,
 su Windows una porta chiusa costa circa 2 s a tentativo, e sul portatile senza Ollama la prova
 cadeva (6,6 s contro 5).
 
+### 31/10: la libera scaduta in «Parliamone» e nella volta scorsa (issue #340, quarta revisione della PR #330)
+
+1. **«Parliamone» su una libera scaduta**, cioè chiusa da sola alla fine della verifica e poi
+   riaperta da `imposta`. `consigli_mappa` diceva «lo scheletro per il confronto non c'è ancora»
+   (il controllo della scaduta non ha conti). Ora la frase del codice dice «La tua mappa da zero si
+   è chiusa da sola, prima di «Ho finito», quando la verifica è finita: il confronto non c'è. Per
+   rifarla, «Rifai».» (al tutore «La mappa da zero di Leo…», «Si può rifare con «Rifai»»), senza
+   consigli sul metodo. Il tool `studio_mappa_consigli` la dice come risposta finale e non dà la
+   mappa al modello (regola `studio_mappa_consigli_scaduta`). Senza una verifica detta,
+   `_verifica_con_libera` sceglie la libera finita più recente e salta le scadute: i conti della
+   mappa nella home hanno `libera.scaduta`.
+2. **La volta scorsa** (`mappa.giro_di_prima`): il giro più recente prima dell'ultimo che non è
+   scaduto, per la pagina (`prima`, `rispetto`) e per «Parliamone» (`giro_di_prima`,
+   `rispetto_a_prima`). Prima si prendeva il penultimo giro, anche se era una mappa lasciata a
+   metà. Il giro scaduto stesso mostra ancora i suoi indicatori, e l'eventuale confronto con il
+   giro di prima: la pagina lo segna «scaduta».
+
 ## Lo scheletro della mappa generato dal lettore (30/10 sera, issue #247, ramo `issue-247-studio-mappa-genera`)
 
 *Seconda parte del passo 7; decisione [0035](../decisioni/0035-studio.md) punto 36.*
@@ -1832,6 +2032,18 @@ codice); in `prova_studio_home_pagina.py` il ripasso e «Scrivi una carta» nell
 6 in `prova_studio_piano.py`, `prova_studio_pagine.py`, `prova_studio_padronanza.py` e
 `prova_studio_resoconto.py`. La prova col modello sulla DGX (la voce che chiede e la persona che
 risponde) resta a chi amministra.
+
+### 31/10 sera: «domani» non è fra dieci minuti (issue #356)
+
+`carte.prossima` metteva ogni scadenza a giorni alla mezzanotte del giorno: alle 23:50 «Quasi»
+tornava dopo 10 minuti, come «Non la sapevo», e «La sapevo» dalla scatola 1 dopo circa 24 ore
+invece di 2 giorni (trovato nella revisione della PR #351, dove `prova_studio_carte` fissava quel
+comportamento). Ora la scadenza è la più tarda fra la mezzanotte del giorno e adesso più i giorni
+meno `MARGINE_ORE` (12): «Quasi» alle 23:50 torna domani alle 11:50, «La sapevo» dopo 36 ore; la
+mattina vince la mezzanotte come prima (alle 8:00 «Quasi» è domani alle 0:00), dal pomeriggio la
+scadenza cade nelle prime ore del giorno (alle 16:00 domani alle 4:00). I tasti dicono «domani» e
+«fra 2 giorni» anche a tarda sera. La vigilia resta il tetto. Le carte già scritte tengono la
+scadenza che hanno.
 
 ## La padronanza per argomento (30/10, issue #245, ramo `issue-245-studio-padronanza`)
 

@@ -1,6 +1,6 @@
 """
 La libreria caricata, l'indice per argomento e la scelta del codice (31/10, issue #297, epic #251,
-decisione 0035 punto 45).
+decisione 0035 punto 46).
 
 **L'indice** lega un titolo di argomento (un dato non fidato: viene dalle pagine e dalla conferma
 della persona) alle schede della libreria (dati fidati). Le parole del titolo si riducono a radici

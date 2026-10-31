@@ -1,5 +1,5 @@
 """
-I metodi di `Studio` per la libreria (31/10, issue #297, epic #251, decisione 0035 punto 45).
+I metodi di `Studio` per la libreria (31/10, issue #297, epic #251, decisione 0035 punto 46).
 
 - `proposte_libreria`: i contenuti scelti dal codice per una verifica (`indice.scegli`), coi mazzi
   già aggiunti segnati; la padronanza conta solo se «mostrata»;

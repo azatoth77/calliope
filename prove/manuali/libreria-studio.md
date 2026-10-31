@@ -1,6 +1,6 @@
 # Aggiungere un contenuto alla libreria dello Studio
 
-*31/10/2026, issue #297, epic #251, decisione [0035](../../docs/decisioni/0035-studio.md) punto 45.
+*31/10/2026, issue #297, epic #251, decisione [0035](../../docs/decisioni/0035-studio.md) punto 46.
 Codice in `calliope/studio/libreria/`, contenuti in `calliope/studio/libreria/contenuti/<materia>/`,
 area [studio](../../docs/aree/studio.md).*
 

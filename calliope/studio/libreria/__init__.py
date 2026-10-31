@@ -1,5 +1,5 @@
 """
-La libreria dello Studio (31/10, issue #297, epic #251, decisione 0035 punto 45): contenuti
+La libreria dello Studio (31/10, issue #297, epic #251, decisione 0035 punto 46): contenuti
 preparati con Claude, scritti e rivisti da noi, originali e AGPL, che a runtime **il codice
 sceglie** dagli argomenti della verifica e dalla padronanza. Niente modello: sono dati fidati
 (come le frasi pronte), a differenza dei materiali della persona.

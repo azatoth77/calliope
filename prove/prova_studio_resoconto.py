@@ -142,7 +142,7 @@ cfg = cfg_nuova("a.db")
 st = studio(cfg)
 verifica("studio_eventi dalla versione 4 (ora 11) di meta_schema",
          st.dati.db.execute("SELECT versione FROM meta_schema WHERE modulo='studio'").fetchone()[0]
-         == len(D.MIGRAZIONI) == 11
+         == len(D.MIGRAZIONI) == 12
          and st.dati.uno("SELECT name FROM sqlite_master WHERE name='studio_eventi'") is not None)
 verifica("studio_eventi fra le tabelle dello Studio e quelle della conservazione",
          "studio_eventi" in D.TABELLE and set(TABELLE_STUDIO) == set(D.TABELLE)
@@ -420,9 +420,10 @@ c = ctx_di(st3, LEO)
 chiama(c, azione="sessione", conoscenza=2, umore="curioso")
 ora(29, 16, 40)
 x = chiama(c, azione="fatto")
-verifica("«fatto» a voce dice il resoconto",
+verifica("«fatto» a voce dice il resoconto (e dal 31/10, #296, la serie, una volta al giorno)",
          x["ok"] and x["risposta_finale"] == "Segnato fatto: oggi hai letto le pagine 112–113, "
-         "in 40 minuti. Restano 5 pagine in 6 giorni; domani la pagina 114.", x)
+         "in 40 minuti. Restano 5 pagine in 6 giorni; domani la pagina 114. La tua serie è a 1 "
+         "giorno di studio.", x)
 verifica("il risultato non ha lo stato d'animo né titoli",
          "curioso" not in json.dumps(x, ensure_ascii=False)
          and "scoperte" not in json.dumps(x, ensure_ascii=False).lower())

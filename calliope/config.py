@@ -2271,6 +2271,25 @@ class Config:
     # con lo Studio. «ombra» calcola le proposte e le conta nel registro senza mostrarle; «spenta»
     # niente
     studio_libreria: str = "attiva"
+    # I premi dello Studio (31/10, issue #296, calliope/studio/premi.py): un rinforzo positivo e
+    # al minimo, calcolato dal codice dai soli dati della pratica (sessioni misurate fra «Inizia»
+    # e «Fatto», carte ripassate, prove consegnate, esiti decisi dal codice o dal tutore), mai
+    # dalle autovalutazioni né dal tempo passato nell'app. Niente perdite punitive, niente
+    # notifiche, niente classifiche. Per un minore il tutore li vede e li spegne, tutti o in parte,
+    # dalla sua vista. La serie di giorni di studio: un giorno senza piano (senza scuola, fuori
+    # dagli orari, senza verifiche aperte) non conta e non la ferma
+    studio_serie: bool = True
+    # I giorni di pausa della serie ogni 7: un giorno del piano senza pratica, o saltato con «non
+    # ce la faccio oggi», entro questo numero non la interrompe (0: nessuna pausa; al più 3)
+    studio_serie_pause: int = 1
+    # Le stelle: un argomento portato all'obiettivo (solo con la padronanza mostrata), una
+    # verifica finta o un'interrogazione superate, il ripasso delle carte fatto, il piano seguito.
+    # Una stella presa resta
+    studio_stelle: bool = True
+    # I duelli fra persone di casa sulle domande di una verifica, sugli schermi, mai con ospiti o
+    # conoscenti e mai in classifica; non danno premi né tentativi. Spenti di serie: con true li
+    # usano gli adulti, e per un minore li accende il suo tutore dalla vista del tutore
+    studio_duelli: bool = False
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3569,7 +3588,8 @@ SEZIONI: dict[str, list[str]] = {
                "studio_mappa_consigli", "studio_prova_domande", "studio_prova_minuti",
                "studio_finestra_giorni", "studio_domande_genera", "studio_ascolta",
                "studio_ascolta_voce", "studio_ascolta_giorni", "studio_indicazioni",
-               "studio_indicazioni_giorni", "studio_libreria"],
+               "studio_indicazioni_giorni", "studio_serie", "studio_serie_pause",
+               "studio_stelle", "studio_duelli", "studio_libreria"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -3932,7 +3952,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "studio_nitidezza_min": (0.0, 100_000.0), "studio_mappa_nodi_max": (4, 30),
     "studio_prova_domande": (3, 40), "studio_prova_minuti": (2, 180),
     "studio_finestra_giorni": (1, 90), "studio_ascolta_giorni": (1, 365),
-    "studio_indicazioni_giorni": (1, 90),
+    "studio_indicazioni_giorni": (1, 90), "studio_serie_pause": (0, 3),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),

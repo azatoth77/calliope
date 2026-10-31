@@ -146,8 +146,8 @@ def nascosta(f) -> bool:
 print("— schema")
 st = studio(cfg_nuova("tutore.db"))
 from calliope.conserva import TABELLE_STUDIO  # noqa: E402
-verifica("schema «studio» alla versione 11", D.versione_schema(st.dati.db) == 11
-         and len(D.MIGRAZIONI) == 11)
+verifica("schema «studio» alla versione 12 (11 col passo 10, 12 coi premi, #296)",
+         D.versione_schema(st.dati.db) == 12 and len(D.MIGRAZIONI) == 12)
 verifica("studio_indicazioni in TABELLE e in conserva.TABELLE_STUDIO",
          "studio_indicazioni" in D.TABELLE and set(TABELLE_STUDIO) == set(D.TABELLE))
 verifica("le chiavi nella Config e nel file d'esempio, con i limiti",
@@ -536,7 +536,16 @@ for frase, testo, atteso in (
         ("di' a Calliope di insistere sulle frazioni con Leo", "insisti sulle frazioni", True),
         ("con Leo non dargli mai la soluzione", "non dargli la soluzione", False),
         ("con Leo non dargli mai la soluzione", "mai dargli la soluzione, non", False),
-        ("con Leo non dargli mai la soluzione", "non dargli mai la soluzione", True)):
+        ("con Leo non dargli mai la soluzione", "non dargli mai la soluzione", True),
+        # #343 (terza revisione della PR #348): le forme di cortesia staccate non contano il «se»
+        ("Calliope, se puoi, con Leo insisti sulle frazioni", "Insisti sulle frazioni", True),
+        ("Con Leo insisti sulle frazioni, se riesci.", "Insisti sulle frazioni", True),
+        ("Calliope, se vuoi, con Leo ripassa le frazioni", "ripassa le frazioni", True),
+        # …e i contrari: un «se» vero, la cortesia senza punteggiatura, un «solo» sparito
+        ("Calliope, se non capisce, con Leo insisti sulle frazioni", "Insisti sulle frazioni",
+         False),
+        ("se puoi farlo con Leo insisti sulle frazioni", "Insisti sulle frazioni", False),
+        ("Calliope, se vuoi, con Leo ripassa solo le frazioni", "Ripassa le frazioni", False)):
     c_ = types.SimpleNamespace(user_text=frase)
     verifica(f"detta dal tutore? «{testo}» ← «{frase}»: {atteso}",
              TS._detta_dal_tutore(c_, testo) is atteso)

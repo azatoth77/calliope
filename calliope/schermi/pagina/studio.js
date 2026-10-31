@@ -982,6 +982,8 @@
       "Mappa: scheletro " + (sk.stato === "confermata" ? "confermato" : "da confermare") + ", " + nn(sk.concetti, "concetto", "concetti") +
       (mp.mia ? "; la sua mappa c'è" : "") + (mp.memoria && mp.memoria.ultimo ? "; a memoria: " + nn(mp.memoria.ultimo.giusta, "giusta", "giuste") : "") + "."));
     p.append(rp);
+    // I premi del minore e i loro interruttori (#296)
+    if (d.premi) p.append(bloccoPremiTutore(d, nome));
     return p;
   }
   function moduloIndicazione(v, d) {
@@ -1067,6 +1069,20 @@
       return;
     }
     if (az === "annulla") { tut.cambia = null; tut.testo = ""; disegnaHome(); return; }
+    if (az === "premio") {
+      // Un interruttore dei premi del minore (#296): poi la vista si ricarica
+      const persona = tut.dati && tut.dati.premi ? tut.dati.premi.persona : null;
+      if (!persona || !sch() || !sch().studioPremi) return;
+      tut.attesa = true;
+      disegnaHome();
+      sch().studioPremi({ persona, azione: "imposta", [String(dati.chiave)]: !!dati.valore }).then((r) => {
+        if (!tut) return;
+        tut.attesa = false;
+        tut.esito = r.ok ? "Fatto." : String(r.dati.errore || "Non ci sono riuscita: riprova tra poco.");
+        caricaTutore();
+      });
+      return;
+    }
     if (az === "indica" || az === "cambia") {
       const testo = String(tut.testo || "").trim();
       if (!testo) { tut.esito = "Scrivi prima l'indicazione."; disegnaHome(); return; }
@@ -1682,6 +1698,279 @@
     }
   }
   // ── fine delle prove ──
+
+  // ── i premi: serie, stelle e duelli (31/10, #296, studio/premi.py) ──
+  // Un rinforzo positivo e al minimo: la serie si mostra solo quando c'è (mai «0», mai «persa»),
+  // le stelle con il loro traguardo, i duelli fra persone di casa senza «vinto» né «perso».
+  // Niente notifiche, niente conti alla rovescia. Le domande di un duello sono un dato: solo
+  // textContent; le risposte attese arrivano solo a duello finito (dal server).
+  // pre: {duello, dati, risposte: {n: testo}, verifica, a, esito, attesa}
+  const pre = { duello: null, dati: null, risposte: {}, verifica: null, a: null, esito: "", attesa: false };
+  const STATI_D = { proposto: "proposto", in_corso: "in corso", finito: "finito", rifiutato: "non accettato",
+    annullato: "annullato", scaduto: "scaduto" };
+  function tastoPremi(testo, azione, dati, cls, etichetta) {
+    const b = nodo("button", "tasto studio-h-tasto" + (cls ? " " + cls : ""), testo);
+    b.type = "button";
+    b.dataset.premi = azione;
+    b.dataset.dati = JSON.stringify(dati || {});
+    if (etichetta) b.setAttribute("aria-label", etichetta);
+    b.disabled = !!pre.attesa;
+    return b;
+  }
+  function nn_(n, uno, tanti) { n = Number(n) || 0; return n === 1 ? "1 " + uno : n + " " + tanti; }
+  function rigaStella(s) {
+    const li = nodo("li", "studio-h-voce studio-r-stella");
+    const nome = String(s.nome || "");
+    li.append(nodo("span", "studio-r-segno", "★"),
+      nodo("span", "studio-h-riga", nome.charAt(0).toUpperCase() + nome.slice(1) + " · " + String(s.materia || "") +
+        (s.data ? ", " + dataDetta(s.data) : "")));
+    li.querySelector(".studio-r-segno").setAttribute("aria-hidden", "true");
+    return li;
+  }
+  function puntiDetti(d) {
+    const p = d.punti || {};
+    const io = p.io === null || p.io === undefined ? "non ha consegnato" : Number(p.io) + " su " + (Number(d.domande) || 0);
+    const lui = p.altro === null || p.altro === undefined ? "non ha consegnato" : Number(p.altro) + " su " + (Number(d.domande) || 0);
+    return "Tu: " + io + " · " + String(d.con || "l'altra persona") + ": " + lui + ".";
+  }
+  function sezionePremi(p) {
+    const sez = nodo("section", "studio-h-gruppo studio-r");
+    sez.append(nodo("h4", "studio-h-sotto", "I tuoi traguardi"));
+    const imp = p.impostazioni || {};
+    const s = p.serie;
+    let vuota = true;
+    if (imp.serie && s && Number(s.giorni) > 0) {
+      vuota = false;
+      sez.append(nodo("p", "studio-h-riga studio-r-serie", "Serie di studio: " + nn_(s.giorni, "giorno", "giorni") +
+        (s.oggi ? " (oggi compreso)." : ".")));
+    }
+    const stelle = Array.isArray(p.stelle) ? p.stelle : [];
+    if (imp.stelle && stelle.length) {
+      vuota = false;
+      const det = nodo("details", "studio-r-stelle");
+      det.append(nodo("summary", "studio-h-riga", "Stelle: " + stelle.length));
+      const ul = nodo("ul", "studio-h-elenco");
+      for (const x of stelle.slice().reverse()) ul.append(rigaStella(x));
+      det.append(ul);
+      sez.append(det);
+    }
+    if (vuota && (imp.serie || imp.stelle)) {
+      sez.append(nodo("p", "studio-nota", "La serie cresce con le sessioni del piano, le carte e le prove; le stelle arrivano con i traguardi."));
+    }
+    if (Array.isArray(p.duelli)) sez.append(sezioneDuelli(p));
+    if (pre.esito) {
+      const es = nodo("p", "pagina-esito studio-r-esito", pre.esito);
+      es.setAttribute("role", "status");
+      sez.append(es);
+    }
+    return sez;
+  }
+  function sezioneDuelli(p) {
+    const box = nodo("div", "studio-r-duelli");
+    box.append(nodo("h5", "studio-t-titolo", "Duelli"));
+    const lista = Array.isArray(p.duelli) ? p.duelli : [];
+    const persone = Array.isArray(p.persone_duello) ? p.persone_duello : [];
+    if (!lista.length && !persone.length) {
+      box.append(nodo("p", "studio-nota", (p.impostazioni || {}).duelli ? "Nessuno in casa ha i duelli accesi." :
+        "I duelli per te non sono accesi."));
+      return box;
+    }
+    const ul = nodo("ul", "studio-h-elenco");
+    for (const d of lista) {
+      const li = nodo("li", "studio-h-voce studio-r-duello");
+      li.dataset.duello = String(d.id);
+      const tx = nodo("div", "studio-testo");
+      let r = "Con " + String(d.con || "") + " · " + String(d.materia || "") + " · " + (STATI_D[d.stato] || "");
+      if (d.stato === "finito") r += " · " + puntiDetti(d);
+      else if (d.stato === "in_corso" && d.consegnato) r += " · aspetti la consegna di " + String(d.con || "");
+      if (d.in_attesa_prova) r += " · aspetta la fine della prova o della mappa";
+      tx.append(nodo("span", "studio-h-riga", r));
+      li.append(tx);
+      const t = nodo("div", "studio-h-tasti");
+      if (d.puo_accettare) t.append(tastoPremi("Accetta", "accetta", { duello: d.id }, "studio-h-primo"),
+        tastoPremi("No, grazie", "rifiuta", { duello: d.id }));
+      else if (d.stato === "in_corso" || d.stato === "finito") {
+        const aperto = pre.duello === d.id;
+        t.append(tastoPremi(aperto ? "Chiudi" : d.stato === "finito" ? "Vedi le risposte" : "Rispondi",
+          aperto ? "chiudi" : "apri", { duello: d.id }, aperto ? "" : "studio-h-primo"));
+      }
+      if (d.stato === "proposto" || d.stato === "in_corso") t.append(tastoPremi("Annulla", "annulla", { duello: d.id }));
+      if (t.childNodes.length) li.append(t);
+      if (pre.duello === d.id) li.append(pannelloDuello());
+      ul.append(li);
+    }
+    if (lista.length) box.append(ul);
+    // Proponi un duello: una tua verifica aperta e una persona di casa
+    const mie = (home.dati && Array.isArray(home.dati.verifiche) ? home.dati.verifiche : [])
+      .filter((v) => !v.di && v.stato === "aperta");
+    if (persone.length && mie.length) {
+      const f = nodo("div", "studio-t-scelte studio-r-proponi");
+      const sv = nodo("select", "studio-t-campo");
+      sv.dataset.premiCampo = "verifica";
+      sv.setAttribute("aria-label", "Su quale verifica");
+      for (const v of mie) {
+        const o = nodo("option", null, String(v.materia || "") + ", " + dataDetta(v.data));
+        o.value = String(v.id);
+        if (Number(pre.verifica || mie[0].id) === v.id) o.selected = true;
+        sv.append(o);
+      }
+      const sp = nodo("select", "studio-t-campo");
+      sp.dataset.premiCampo = "a";
+      sp.setAttribute("aria-label", "Con chi");
+      for (const x of persone) {
+        const o = nodo("option", null, "con " + String(x.nome || ""));
+        o.value = String(x.id);
+        if ((pre.a || persone[0].id) === x.id) o.selected = true;
+        sp.append(o);
+      }
+      f.append(sv, sp);
+      box.append(f);
+      const t = nodo("div", "studio-h-tasti");
+      t.append(tastoPremi("Proponi un duello", "proponi", {}, ""));
+      box.append(t);
+      box.append(nodo("p", "studio-nota", "Le stesse domande per tutti e due, ognuno al suo ritmo. Il duello non conta per le stelle né per la serie."));
+    }
+    return box;
+  }
+  function pannelloDuello() {
+    const p = nodo("div", "studio-r-pannello");
+    const d = pre.dati;
+    if (!d || d.id !== pre.duello) { p.append(nodo("p", "pagina-nota", "Un attimo…")); return p; }
+    if (d.in_attesa_prova) { p.append(nodo("p", "studio-avviso", "C'è una prova o una mappa da zero aperta su questa verifica: il duello aspetta che finisca.")); return p; }
+    const finito = d.stato === "finito";
+    if (finito) p.append(nodo("p", "studio-h-riga", puntiDetti(d)));
+    const ol = nodo("ol", "studio-p-voci");
+    for (const x of Array.isArray(d.voci) ? d.voci : []) {
+      const li = nodo("li", "studio-p-voce" + (finito ? " studio-p-" + String(x.esito || "vuota") : ""));
+      li.append(nodo("p", "studio-c-domanda", String(x.testo || "")));
+      const ops = x.tipo === "scelta" ? (x.opzioni || []).map((o, i) => LETTERE_P[i] + ") " + String(o)) : [];
+      if (ops.length) li.append(nodo("p", "studio-nota", ops.join(" · ")));
+      if (finito) {
+        li.append(nodo("span", "studio-c-risp", "La tua risposta: " + (x.risposta ? String(x.risposta) : "nessuna")),
+          nodo("span", "studio-c-risposta", "Risposta attesa: " + String(x.attesa || "")));
+      } else {
+        const id = "studio-r-" + d.id + "-" + x.n;
+        const l = nodo("label", "studio-campo", x.tipo === "scelta" ? "La lettera" : x.tipo === "vero_falso" ? "Vero o falso" : "La tua risposta");
+        l.htmlFor = id;
+        const t = document.createElement("input");
+        t.id = id;
+        t.className = "studio-c-campo";
+        t.maxLength = 600;
+        t.dataset.voceDuello = String(x.n);
+        const k = String(x.n);
+        t.value = pre.risposte[k] !== undefined ? pre.risposte[k] : String(x.risposta || "");
+        t.disabled = !d.puo_rispondere;
+        li.append(l, t);
+      }
+      ol.append(li);
+    }
+    p.append(ol);
+    const t = nodo("div", "studio-h-tasti");
+    if (d.puo_rispondere) t.append(tastoPremi("Consegna", "consegna", { duello: d.id }, "studio-h-primo"));
+    if (!finito && d.consegnato) p.append(nodo("p", "studio-nota", "Hai consegnato: le risposte giuste arrivano quando consegna anche " + String(d.con || "l'altra persona") + "."));
+    if (t.childNodes.length) p.append(t);
+    return p;
+  }
+  async function chiamaDuello(corpo) {
+    if (!sch() || !sch().studioDuello) return { ok: false, dati: {} };
+    pre.attesa = true;
+    disegnaHome();
+    const r = await sch().studioDuello(corpo);
+    pre.attesa = false;
+    return r;
+  }
+  async function suPremi(b) {
+    let dati = {};
+    try { dati = JSON.parse(b.dataset.dati || "{}"); } catch (e) { return; }
+    const az = b.dataset.premi;
+    pre.esito = "";
+    if (az === "chiudi") { pre.duello = null; pre.dati = null; pre.risposte = {}; disegnaHome(); return; }
+    if (az === "apri") {
+      pre.duello = Number(dati.duello);
+      pre.dati = null;
+      pre.risposte = {};
+      const r = await chiamaDuello({ duello: pre.duello });
+      if (r.ok) pre.dati = r.dati; else { pre.duello = null; pre.esito = String(r.dati.errore || "Non riesco ad aprirlo."); }
+      disegnaHome();
+      return;
+    }
+    if (az === "proponi") {
+      const lista = (home.dati && home.dati.verifiche || []).filter((v) => !v.di && v.stato === "aperta");
+      const pers = (home.dati && home.dati.premi && home.dati.premi.persone_duello) || [];
+      const vid = Number(pre.verifica || (lista[0] && lista[0].id));
+      const a = String(pre.a || (pers[0] && pers[0].id) || "");
+      const r = await chiamaDuello({ azione: "proponi", verifica: vid, a });
+      pre.esito = r.ok ? "Proposto: lo vede nella sua pagina dello Studio." : String(r.dati.errore || "Non ci sono riuscita.");
+      caricaHome();
+      return;
+    }
+    if (az === "annulla" && !window.confirm("Annullo il duello?")) return;
+    if (az === "consegna") {
+      // Prima le risposte scritte, poi la consegna (le risposte non cambiano più)
+      for (const k of Object.keys(pre.risposte)) {
+        const r = await chiamaDuello({ azione: "rispondi", duello: Number(dati.duello), voce: Number(k), risposta: String(pre.risposte[k]) });
+        if (!r.ok) { pre.esito = String(r.dati.errore || "La risposta non è salvata: riprova."); disegnaHome(); return; }
+      }
+      pre.risposte = {};
+    }
+    const r = await chiamaDuello({ azione: az, duello: Number(dati.duello) });
+    if (r.ok && pre.duello === Number(dati.duello)) pre.dati = r.dati;
+    if (!r.ok) pre.esito = String(r.dati.errore || "Non ci sono riuscita.");
+    else pre.esito = { accetta: "Accettato: rispondi quando vuoi.", rifiuta: "Va bene, niente duello.",
+      annulla: "Annullato.", consegna: r.dati.stato === "finito" ? "Finito." : "Consegnato." }[az] || "";
+    caricaHome();
+  }
+  function suCampoPremi(ev) {
+    const el = ev.target;
+    if (!el || !el.dataset) return;
+    if (el.dataset.voceDuello) { pre.risposte[el.dataset.voceDuello] = String(el.value); return; }
+    if (el.dataset.premiCampo === "verifica") pre.verifica = Number(el.value);
+    else if (el.dataset.premiCampo === "a") pre.a = String(el.value);
+  }
+  // I premi del minore nella vista del tutore: la serie, le stelle, i duelli (con chi, stato e
+  // punti) e i tre interruttori, che il tutore accende e spegne per lui
+  function bloccoPremiTutore(d, nome) {
+    const pm = d.premi || {};
+    const imp = pm.impostazioni || {};
+    const sez = nodo("section", "studio-t-blocco studio-t-premi");
+    sez.append(nodo("h5", "studio-t-titolo", "Premi"));
+    if (!pm.acceso) { sez.append(nodo("p", "studio-h-riga", "I premi arrivano con lo Studio acceso.")); return sez; }
+    const chi = nome || "chi studia";
+    const s = pm.serie;
+    if (imp.serie) sez.append(nodo("p", "studio-h-riga", s && Number(s.giorni) > 0 ? "Serie di studio: " + nn_(s.giorni, "giorno", "giorni") +
+      (s.pause && s.pause.length ? ", con " + nn_(s.pause.length, "giorno", "giorni") + " di pausa." : ".") : "Serie di studio: non c'è adesso."));
+    const stelle = Array.isArray(pm.stelle) ? pm.stelle : [];
+    if (imp.stelle) {
+      sez.append(nodo("p", "studio-h-riga", stelle.length ? "Stelle: " + stelle.length + "." : "Stelle: ancora nessuna."));
+      if (stelle.length) {
+        const ul = nodo("ul", "studio-h-elenco");
+        for (const x of stelle.slice(-5).reverse()) ul.append(rigaStella(x));
+        sez.append(ul);
+      }
+    }
+    const du = Array.isArray(pm.duelli) ? pm.duelli : [];
+    if (imp.installazione && imp.installazione.duelli) {
+      sez.append(nodo("p", "studio-h-riga", du.length ? "Duelli: " + du.slice(0, 3).map((x) => "con " + String(x.con || "") +
+        " (" + (STATI_D[x.stato] || "") + (x.stato === "finito" && x.punti ? ", " + (x.punti.io === null ? "non consegnato" : Number(x.punti.io) + " su " + Number(x.domande)) : "") + ")").join("; ") + "."
+        : "Duelli: nessuno."));
+    }
+    sez.append(nodo("p", "studio-nota", "Premi solo per la pratica vera: niente notifiche, niente classifiche, nessuna perdita detta. Li accendi e spegni tu per " + chi + "."));
+    const t = nodo("div", "studio-h-tasti studio-t-interruttori");
+    t.setAttribute("role", "group");
+    t.setAttribute("aria-label", "Premi di " + chi);
+    const scelte = imp.scelte || {};
+    const voci = [["serie", "Serie: accesa", "Serie: spenta"], ["stelle", "Stelle: accese", "Stelle: spente"]];
+    if (imp.installazione && imp.installazione.duelli) voci.push(["duelli", "Duelli: accesi", "Duelli: spenti"]);
+    for (const [k, si, no] of voci) {
+      const acceso = !!scelte[k];
+      const b = tastoTutore(acceso ? si : no, "premio", { chiave: k, valore: !acceso }, acceso ? "studio-h-primo" : "");
+      b.setAttribute("aria-pressed", acceso ? "true" : "false");
+      t.append(b);
+    }
+    sez.append(t);
+    return sez;
+  }
+  // ── fine dei premi ──
 
   // ── la mappa concettuale (30/10, passo 7, #247) ──
   // Lo scheletro (proposto finché non lo si conferma), la mia mappa («con il libro»), a memoria;
@@ -2782,6 +3071,8 @@
       }
       vv.forEach((v, i) => fig.push(cartaVerifica(v, i === 0)));
       if (!vv.length) fig.push(nodo("p", "pagina-nota", "Non hai verifiche nello Studio."));
+      // I premi (#296): serie, stelle e duelli di chi guarda, dopo lo studio e non prima
+      if (d.premi && d.premi.acceso) fig.push(sezionePremi(d.premi));
       fig.push(nodo("p", "studio-h-nuova", "Per una verifica nuova dimmelo: «Calliope, giovedì ho la verifica di storia»."));
     }
     box.replaceChildren(...fig);
@@ -2796,6 +3087,7 @@
     if (b.dataset.mappa) { suMappa(b); return; }
     if (b.dataset.ascolta) { suAscolta(b); return; }
     if (b.dataset.tutore) { suTutore(b); return; }
+    if (b.dataset.premi) { suPremi(b); return; }
     if (b.dataset.pagine) { apriMateriali(Number(b.dataset.pagine)); return; }
     if (b.dataset.domande) {
       const id = Number(b.dataset.domande);
@@ -2877,6 +3169,7 @@
     mappa = null;
     tut = null;
     if (window.CalliopeLibreria) window.CalliopeLibreria.chiudi();
+    Object.assign(pre, { duello: null, dati: null, risposte: {}, esito: "", attesa: false });
     chiudiAscolta();
     if (st.materiali) chiudiCamera();
     if ($("studio")) $("studio").hidden = true;
@@ -2907,6 +3200,9 @@
     // La vista del tutore (passo 10, #250): il testo dell'indicazione, dove vale e quanto
     $("studio-home").addEventListener("input", suCampoTutore);
     $("studio-home").addEventListener("change", suCampoTutore);
+    // I premi (#296): le risposte di un duello, la verifica e la persona per proporlo
+    $("studio-home").addEventListener("input", suCampoPremi);
+    $("studio-home").addEventListener("change", suCampoPremi);
     // Il ripasso da ascoltare (passo 9, #249): la barra dell'avanzamento e lo stato della voce
     $("studio-home").addEventListener("input", suBarraAscolta);
     document.addEventListener("calliope:voce", suVoce);
@@ -2981,6 +3277,9 @@
           perVoce: !!perVoce } : null,
         // La vista del tutore (passo 10, #250): lo stato e i dati che la pagina ha
         tutore: tut ? { vid: tut.vid, esito: tut.esito, cambia: tut.cambia, dati: tut.dati } : null,
+        // I premi (#296): ciò che la pagina ha, così una prova vede che le risposte attese di un
+        // duello non ci sono prima della fine
+        premi: { home: home.dati ? home.dati.premi || null : null, duello: pre.duello, dati: pre.dati, esito: pre.esito },
         indicazioni: home.dati && Array.isArray(home.dati.indicazioni) ? home.dati.indicazioni.slice() : [],
         camera: !!st.flusso,
         argomenti: st.arg && Array.isArray(st.arg.argomenti) ? st.arg.argomenti.map((a) => ({ id: a.id, stato: a.stato, avvisi: (a.avvisi || []).slice() })) : [],

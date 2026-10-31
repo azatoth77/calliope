@@ -455,9 +455,10 @@ CLASSI: dict[str, Classe] = {
     # Dal 31/10 (passo 10, #250, #285) «indica» e «indicazioni_togli» cambiano le indicazioni
     # del tutore per lo studio del suo minore; «indicazioni» ne legge il conto
     # Dal 31/10 (#297) «libreria» legge le proposte della libreria (titoli fidati, scelti dal codice)
+    # Dal 31/10 (#296) «premi» legge la serie e il conto delle stelle (frasi del codice, numeri)
     "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi", "resoconto",
                                                         "riepilogo", "carte", "mappa",
-                                                        "prove", "indicazioni",
+                                                        "prove", "indicazioni", "premi",
                                                         "libreria"})),
                  cosa=lambda a: _studio_cosa(a), verbi_azione=("azione", VERBI_STUDIO),
                  chiedi_se=lambda testo, a, ctx, **_k: _studio_archivia(testo, a)),

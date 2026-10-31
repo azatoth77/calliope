@@ -523,8 +523,9 @@ verifica("…cioè sul satellite «Calliope, ripeti» durante il ripasso arriva 
          list(SeedRemoto("nome sentito")) == [True] and SeedRemoto().remoto)
 
 
-def veglia_remota(eventi):
-    """`AscoltoRemoto.watch_for_name` con un satellite finto che manda `eventi` (tipo, dati)."""
+def veglia_remota(eventi, impronte=None):
+    """`AscoltoRemoto.watch_for_name` con un satellite finto che manda `eventi` (tipo, dati);
+    `impronte`: gli esiti dell'impronta della voce, uno per evento «voce» (di serie sempre sì)."""
     import queue
     import threading
     from calliope.satellite.server import AscoltoRemoto
@@ -535,8 +536,9 @@ def veglia_remota(eventi):
         q.put((coll, tipo, dict(d, id=1)))
     server = types.SimpleNamespace(insieme=False, eventi=q, attivo_pronto=lambda sat=None: coll)
     a = AscoltoRemoto(server, types.SimpleNamespace(barge_in_echo_max=0.5), log=lambda m: None)
+    esiti = list(impronte) if impronte is not None else None
     return a.watch_for_name(None, threading.Event(), lambda: False,
-                            voice_ok=lambda audio: True), coll
+                            voice_ok=lambda audio: esiti.pop(0) if esiti else True), coll
 
 
 pcm = b"\x00\x00" * 1600
@@ -549,6 +551,18 @@ verifica("satellite: solo il nome, senza impronta, il seme non ha esito (e il ri
          seme.voce_ok is None and Ciclo._seme_di_persona(types.SimpleNamespace(), seme) is True)
 seme, _ = veglia_remota([("interruzione", {"motivo": "tocco"})])
 verifica("satellite: «Parla» toccato sulla pagina vale una persona", seme.voce_ok is True)
+# #347: un'impronta rifiutata (la TV col livello B) non ha fermato niente; il nome detto dopo
+# dalla persona registrata non riceve quell'esito vecchio
+seme, coll = veglia_remota([("voce", {"pcm": pcm}), ("interruzione", {"motivo": "nome sentito"})],
+                           impronte=[False])
+verifica("#347: un'impronta rifiutata prima del nome non va nel seme: senza esito, il ripasso lo "
+         "tiene", seme.voce_ok is None and Ciclo._seme_di_persona(types.SimpleNamespace(), seme)
+         is True and any(m.get("tipo") == "esito_voce" and m.get("ok") is False
+                         for m in coll.mandati), (vars(seme), coll.mandati))
+seme, _ = veglia_remota([("voce", {"pcm": pcm}), ("voce", {"pcm": pcm}),
+                         ("interruzione", {"motivo": "nome sentito"})], impronte=[False, True])
+verifica("#347, contrario: un no e poi il sì che interrompe → il seme porta il sì",
+         seme.voce_ok is True)
 sp = VoceFinta()
 c = ciclo_finto(st, sp, lettura=st.ascolto_prepara(LEO, vid, "tutto"))
 Ciclo._leggi_ripasso(c, types.SimpleNamespace(watch={"seed": [1]}, non_rivolta=False))
@@ -1044,7 +1058,7 @@ tel = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "telefono.j
 verifica("telefono: mentre suona il ripasso la stanza vale «Calliope parla»",
          "() => player.inCorso() || !!st.ripasso" in tel and '"calliope:voce"' in tel)
 sw = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "sw.js").read_text("utf-8")
-verifica("il service worker alla v35 (dalla libreria, #297)", "calliope-telefono-pagina-v35" in sw)
+verifica("il service worker alla v36 (dalla libreria, #297, dopo i premi)", "calliope-telefono-pagina-v36" in sw)
 
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
 sys.exit(1 if errori else 0)
