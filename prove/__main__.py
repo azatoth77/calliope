@@ -957,6 +957,8 @@ LEGAMI = [
     ("calliope/tts.py", ["prova_robustezza.py"]),
     ("calliope/audio.py", ["prova_robustezza.py"]),
     ("calliope/persistenza.py", ["prova_robustezza.py"]),
+    # Le versioni dello schema in meta_schema (#263: le liste alla 2)
+    ("calliope/liste.py", ["prova_liste.py", "prova_robustezza.py"]),
     ("calliope/turnlog.py", ["prova_robustezza.py"]),
     # La conservazione dei dati e la metrica della scelta dei tool (12/10): livello 1; qui i
     # tool d'area
