@@ -129,6 +129,9 @@ def scenario_telefono(t, st, vid):
              and all(x["fonte"] == "codice" and x["tipo"] == "verifica_finta" for x in tent), str(tent))
     misure(t, "390×844 con la correzione")
     B.foto(t, "studio-prove-correzione-390x844.png")
+    # Dopo la consegna la home si ricarica e si ridisegna: si tocca a pagina ferma
+    aspetta(lambda: t.v("!!document.querySelector('.studio-h-prove button[data-prove=\"rivedi\"]')"), 6)
+    time.sleep(0.6)
     t.tocca('.studio-h-prove button[data-prove="rivedi"][data-dati*="giusto"]')
     ok = aspetta(lambda: len(st.dati.tutti("SELECT * FROM studio_tentativi")) == 5, 8)
     tent = st.dati.tutti("SELECT * FROM studio_tentativi")

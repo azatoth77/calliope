@@ -313,7 +313,8 @@ verifica("la misura «l'ultima prova» nel piano", len(mis) == 1
 nap = next(x["n"] for x in r["voci"] if x["esito"] == "da_rivedere")
 verifica("«da rivedere»: un esito sconosciuto no, una voce già decisa no",
          solleva(lambda: st.rivedi_voce(LEO, pid, nap, "boh"), ValueError)
-         and solleva(lambda: st.rivedi_voce(LEO, pid, 1, "giusto"), ValueError))
+         and solleva(lambda: st.rivedi_voce(LEO, pid, next(
+             x["n"] for x in r["voci"] if x["esito"] == "giusto"), "giusto"), ValueError))
 st.rivedi_voce(LEO, pid, nap, "indizio")
 t = tentativi(st)
 verifica("la persona decide «da rivedere»: fonte «persona», una volta sola",
