@@ -750,7 +750,7 @@ def prova_cruscotto():
         # Avviso: solo agli schermi personali di chi amministra
         ricevuti = []
         vero = hub.invia_a
-        hub.invia_a = lambda sid, scheda: (ricevuti.append((sid, scheda)), vero(sid, scheda))[1] or True
+        hub.invia_a = lambda sid, scheda, **k: (ricevuti.append((sid, scheda)), vero(sid, scheda, **k))[1] or True
         n = cr.avvisa("SearXNG", "Ho aggiornato SearXNG")
         sids = {x[0] for x in ricevuti}
         verifica("avviso: solo lo schermo personale di chi amministra", n == 1

@@ -157,6 +157,31 @@ suffisso: `pypy`, `ipython`, `jython`, `nodejs`, `python3.12t`, `python_d`, Auto
 (senza argomenti esegue da solo lo script di serie), AutoIt3, `Ahk2Exe`. Le sigle brevi (`py`, `lua`, `sh`)
 solo con una versione, così `pycharm64.exe` o `shotcut.exe` restano app.
 
+Dalla revisione della PR #310 (30/10, issue #311): Tcl col «t» dei thread (`tclsh86t`, `tclsh86`, `wish86t`);
+le shell di MSYS2, che aprono una shell come `git-bash` (`msys2`, `mingw32`, `mingw64`, `ucrt64`, `clang32`,
+`clang64`, `clangarm64`); `deno`, `bun` e `julia` con qualunque coda dopo una cifra o un separatore
+(`deno1.40`, `bun-windows-x64`, `julia-1.10`; `bunny.exe` e `bundle-viewer.exe` restano app); gli altri
+interpreti e REPL valutati nella revisione (`R`, `Rscript`, `Rterm`, `Rgui`, `erl`, `werl`, `escript`, `ghc`,
+`ghci`, `runghc`, `racket`, `raco`, `scala`, `groovy`, `groovysh`, `dart`; `iex` ed `elixir` sono `.bat`, ma il
+nome c'è). Vogliono la voce anche un percorso dalla radice senza l'unità (`\app.exe`, `/app.exe`: dipende
+dall'unità corrente) e un `.exe` su un'unità di rete mappata (`Z:\app.exe`): come un percorso UNC, il file cambia
+senza che chi amministra lo veda. L'unità di rete si riconosce solo sul Windows che esegue (`GetDriveTypeW`,
+`DRIVE_REMOTE`): sul PC del satellite l'«avvia» col segno scritto la rifiuta; il server sulla DGX, che non vede
+le unità del PC, la lascia passare al satellite.
+
+Dalla revisione della PR #334 (31/10): `ghc`, `ghci`, `runghc`, `runhaskell`, `racket` e `gracket` hanno la
+coda dopo un separatore come `deno` (`ghc-9.4.8.exe`); `tclkit` in ogni variante (`tclkitsh`, `tclkit-gui`);
+`tclsh86tg`; `jruby` e `jrubyw`; `bunx`; `julialauncher`. Anche i terminali di terze parti vogliono la voce:
+`ConEmu`, `ConEmu64`, `Cmder`, `alacritty`, `wezterm`, `wezterm-gui`, `tabby`, `nu`, `fish`, `cygwin`. Un
+percorso con l'unità ma senza la radice (`C:app.exe`, `C:..\x\app.exe`) vale «non si sa»: è relativo alla
+cartella corrente di quell'unità.
+
+**Limiti noti** (revisione della PR #334): un collegamento simbolico o una giunzione su un'unità locale che
+punta a una condivisione UNC (`C:\app\x.exe` → `\host\share\x.exe`) passa come un percorso locale, perché la
+regola guarda il testo del comando e non risolve i collegamenti. E `GetDriveTypeW` su un'unità di rete mappata
+ma irraggiungibile può bloccarsi finché Windows rinuncia: la risposta per iscritto arriva in ritardo, ma
+l'unità resta di rete e la voce si chiede lo stesso.
+
 **Limite, scelto:** un `.exe` che dentro lancia uno script (un `.bat` impacchettato, un lanciatore) resta un'app
 anche per iscritto: lo decide chi scrive il catalogo.
 

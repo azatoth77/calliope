@@ -524,6 +524,9 @@ def _proprietario(ctx: ToolContext, hub, azione: str, stanza: str, persona: str)
     else:
         fatto = hub.archivio.imposta_proprietario(s["id"], owner, owner_name)
         hub._rinfresca()
+        # Subito: la pagina aperta del proprietario di prima riceve «proprietario» e la cronologia
+        # in memoria dello schermo si svuota (#338; lo farebbe comunque la prossima scheda)
+        hub.abbinati()
     if fatto is None:
         return _final(f"Non trovo più {nome}: forse è stato scollegato.", ok=False,
                       fatto=NIENTE)

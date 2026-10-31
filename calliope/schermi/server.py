@@ -207,6 +207,67 @@ class _SoloHostNoti:
         await self.app(scope, receive, send)
 
 
+# Il resto del corpo piccolo prima di chiudere (30/10, #274). urllib (e non solo) manda le
+# intestazioni e il corpo in due pezzi; un rifiuto che non legge il corpo (401, 403, 429, 413) o
+# /api/accedi, che non lo legge mai, rispondeva e chiudeva la connessione con il corpo ancora in
+# arrivo. Con dati non letti la chiusura diventa un RST (Windows e Linux), e il client che non ha
+# ancora letto la risposta la perde: «ConnectionResetError» invece del 401 o del 429. Sotto carico
+# capitava a qualche richiesta ogni cento (prova_raccolte 14 giri verdi su 24); con il ciclo a
+# selettori a quasi tutte. Prima dell'ultima parte della risposta si legge il resto, solo per un
+# corpo JSON dichiarato e piccolo e al più per CORPO_RESTO_S: gli invii grossi o lenti (le foto
+# dello Studio, application/octet-stream) restano alle regole dei loro endpoint.
+CORPO_RESTO_MAX = 64 * 1024
+CORPO_RESTO_S = 2.0
+
+
+class _LeggiIlResto:
+    """Middleware ASGI: prima di chiudere la risposta legge il resto di un corpo JSON piccolo
+    che l'app non ha letto, così la connessione si chiude con un FIN e non con un RST."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        intest = dict(scope.get("headers") or [])
+        tipo = intest.get(b"content-type", b"").split(b";")[0].strip().lower()
+        try:
+            dichiarato = int(intest.get(b"content-length", b"-1"))
+        except ValueError:
+            dichiarato = -1
+        # Con «Expect: 100-continue» il corpo arriva solo dopo il «100 Continue»: su un rifiuto il
+        # client non lo manda, e leggerlo vorrebbe dire aspettare CORPO_RESTO_S per niente
+        # (revisione della PR #331)
+        if (tipo != b"application/json" or not 0 < dichiarato <= CORPO_RESTO_MAX
+                or b"expect" in intest):
+            return await self.app(scope, receive, send)
+        finito = False
+
+        async def ricevi():
+            nonlocal finito
+            m = await receive()
+            if m.get("type") != "http.request" or not m.get("more_body", False):
+                finito = True
+            return m
+
+        async def resto():
+            letti = 0
+            while not finito and letti <= CORPO_RESTO_MAX:
+                letti += len((await ricevi()).get("body", b""))
+
+        async def manda(m):
+            if (m.get("type") == "http.response.body" and not m.get("more_body", False)
+                    and not finito):
+                try:
+                    await asyncio.wait_for(resto(), CORPO_RESTO_S)
+                except (asyncio.TimeoutError, OSError):
+                    pass
+            await send(m)
+
+        await self.app(scope, ricevi, manda)
+
+
 def _nomi_ammessi(extra=()) -> set[str]:
     nomi = {"localhost"}
     try:
@@ -350,14 +411,40 @@ def crea_app(hub: Schermi) -> Starlette:
                 hub.log(f"[SCHERMI] ripresa della cronologia non riuscita: {type(e).__name__}")
         conn, storia = hub.collega(schermo, asyncio.get_running_loop(),
                                    locale=client in ("127.0.0.1", "::1"), ripresa=ripresa)
+        # Accettata da `collega` con l'identità di adesso (#338, revisione della PR #341): se lo
+        # schermo è passato a un'altra persona mentre si preparava la ripresa, niente della persona
+        # di prima (conversazione, «Scarica» della chat, contesto) e la pagina rifà l'accesso
+        accettata = bool(getattr(conn, "accettata", True))
         # La scheda «Conversazione» (08/10): dopo collega, così un turno archiviato nel frattempo
         # arriva comunque (la pagina scarta i doppioni per id)
-        chat = await asyncio.to_thread(hub.chat_per, schermo) if personale else None
-        if chat is not None:
-            hub.registra_chat(schermo["id"], schermo.get("proprietario"))
+        chat = await asyncio.to_thread(hub.chat_per, schermo) if personale and accettata else None
+        if chat is not None and hub.registra_chat(schermo["id"], schermo.get("proprietario"),
+                                                  schermo=schermo) is False:
+            chat = None                 # cambiato proprio adesso: la conversazione non va
+        contesto = hub.contesto_per(schermo) if accettata else None
+
+        def da_rifare() -> str | None:
+            """Subito prima del benvenuto: «revocato», «proprietario» o None (va bene)."""
+            if not hub.valido(schermo["id"], schermo.get("creato")):
+                return "revocato"
+            if not accettata or not hub.valido(schermo["id"], schermo.get("creato"),
+                                               schermo.get("proprietario")):
+                return "proprietario"
+            return None
 
         async def flusso():
             try:
+                subito = da_rifare()
+                if subito is not None:
+                    # Niente benvenuto con la riga di prima: la pagina rifà l'accesso (o l'abbinamento)
+                    yield "retry: 3000\n\n"
+                    yield f"event: {subito}\ndata: {{}}\n\n"
+                    if subito == "revocato":
+                        with lock:
+                            for k in [k for k, v in sessioni.items()
+                                      if v == (schermo["id"], schermo.get("creato"))]:
+                                sessioni.pop(k, None)
+                    return
                 benvenuto = {"nome": schermo["nome"], "stanza": schermo["stanza"],
                              "personale": personale,
                              "ora_server": time.time(), "cronologia": storia,
@@ -372,7 +459,7 @@ def crea_app(hub: Schermi) -> Starlette:
                              # Si può scrivere adesso? (dal 28/10, #301: moduli a parte)
                              "scrittura": hub.stato_scrittura_per(conn),
                              # Uso del contesto dell'ultima risposta (schermi personali)
-                             "contesto": hub.contesto_per(schermo),
+                             "contesto": contesto,
                              # La parola che sveglia («Dormo · di' «Computer»», 04/10)
                              "parola": (getattr(hub.cfg, "wake_names", None)
                                         or ["Calliope"])[0]}
@@ -384,6 +471,10 @@ def crea_app(hub: Schermi) -> Starlette:
                     except asyncio.TimeoutError:
                         if not hub.valido(schermo["id"], schermo.get("creato")):  # revocato o riusato
                             tipo, dati = "revocato", "{}"
+                        elif not hub.valido(schermo["id"], schermo.get("creato"),
+                                            schermo.get("proprietario")):
+                            # Passato a un'altra persona (#338): la pagina rifà l'accesso
+                            tipo, dati = "proprietario", "{}"
                         else:
                             # Un evento vero e non un commento: la pagina lo vede e capisce
                             # da sola se il flusso è morto (rete caduta senza chiusura, 02/10)
@@ -394,8 +485,15 @@ def crea_app(hub: Schermi) -> Starlette:
                     yield f"event: {tipo}\ndata: {dati}\n\n"
                     if tipo == "revocato":
                         with lock:
-                            for k in [k for k, v in sessioni.items() if v[0] == schermo["id"]]:
+                            # Solo le sessioni di questo abbinamento: un numero riusato ha le sue (#338)
+                            for k in [k for k, v in sessioni.items()
+                                      if v == (schermo["id"], schermo.get("creato"))]:
                                 sessioni.pop(k, None)
+                        return
+                    if tipo == "proprietario":
+                        # Lo stesso schermo di un'altra persona (#338): il flusso finisce e la pagina
+                        # svuota e rifà l'accesso col token, che vale ancora (la sessione nuova
+                        # nasce con il proprietario di adesso)
                         return
             finally:
                 hub.scollega(conn)
@@ -492,7 +590,7 @@ def crea_app(hub: Schermi) -> Starlette:
                                  "persona": schermo.get("proprietario"),
                                  "schermo": schermo.get("nome"), "stanza": schermo.get("stanza"),
                                  # La risposta torna qui (calliope/rispondi.py, 04/10)
-                                 "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"),
+                                 "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "schermo_proprietario": schermo.get("proprietario"),
                                  # Dalla modalità scrittura del telefono la risposta è solo
                                  # scritta (28/10, dopo la revisione della PR #304)
                                  "solo_scritto": personale and dati.get("solo_scritto") is True,
@@ -520,7 +618,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if not hub.ingresso.metti({"tipo": "modulo", "_modulo": m, "valori": valori,
                                    "schermo": schermo.get("nome"),
                                    "stanza": schermo.get("stanza"),
-                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}):
+                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "schermo_proprietario": schermo.get("proprietario"), "arrivato": time.time()}):
             return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
         return _json({"ok": True})
 
@@ -563,7 +661,7 @@ def crea_app(hub: Schermi) -> Starlette:
                                    "schermo": schermo.get("nome"),
                                    "stanza": schermo.get("stanza"),
                                    "solo_scritto": dati.get("solo_scritto") is True,
-                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}):
+                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "schermo_proprietario": schermo.get("proprietario"), "arrivato": time.time()}):
             return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
         return _json({"ok": True, "larghezza": w, "altezza": h})
 
@@ -611,7 +709,7 @@ def crea_app(hub: Schermi) -> Starlette:
         voce = {"testo": testo, "persona": schermo.get("proprietario"),
                 "schermo": schermo.get("nome"), "stanza": schermo.get("stanza"),
                 "solo_scritto": request.headers.get("x-calliope-solo-scritto") == "1",
-                "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}
+                "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "schermo_proprietario": schermo.get("proprietario"), "arrivato": time.time()}
         if tipo_dai_byte(dati):
             # Un'immagine (dai byte): come una foto, ridotta e riscritta in JPEG
             if not getattr(hub.cfg, "immagini_enabled", True):
@@ -1198,7 +1296,7 @@ def crea_app(hub: Schermi) -> Starlette:
                                    "persona": schermo.get("proprietario"),
                                    "schermo": schermo.get("nome"),
                                    "stanza": schermo.get("stanza"),
-                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}):
+                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "schermo_proprietario": schermo.get("proprietario"), "arrivato": time.time()}):
             return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
         return _json({"ok": True, "in_coda": True})
 
@@ -1539,9 +1637,11 @@ def crea_app(hub: Schermi) -> Starlette:
     # mia mappa e a memoria solo la persona (Studio._mappa)
     AZIONI_MAPPA = ("scheletro", "nodo", "togli_nodo", "collega", "togli_collegamento", "sposta",
                     "riempi", "tieni", "conferma", "inizia", "rifai", "controlla", "carte",
-                    "riordina", "riapri", "pdf")
+                    "riordina", "riapri", "pdf", "libera", "finito", "indizio", "mostra")
+    # «libera», «finito», «indizio», «mostra»: la mappa libera (30/10, passo 7c, #328)
     CON_MAPPA = ("nodo", "togli_nodo", "collega", "togli_collegamento", "sposta", "riempi",
-                 "tieni", "conferma", "rifai", "controlla", "carte", "riordina", "riapri")
+                 "tieni", "conferma", "rifai", "controlla", "carte", "riordina", "riapri",
+                 "finito", "indizio", "mostra")
 
     def _intero(x) -> bool:
         return isinstance(x, int) and not isinstance(x, bool)
@@ -1567,7 +1667,7 @@ def crea_app(hub: Schermi) -> Starlette:
         mid = dati.get("mappa")
         if azione in CON_MAPPA and not _intero(mid):
             return _json({"errore": "manca la mappa"}, 400)
-        for k in ("nodo", "collegamento", "da", "a", "argomento"):
+        for k in ("nodo", "collegamento", "da", "a", "argomento", "concetto"):
             if dati.get(k) is not None and not _intero(dati.get(k)):
                 return _json({"errore": "richiesta non valida"}, 400)
         if azione in ("togli_nodo", "sposta", "riempi") and not _intero(dati.get("nodo")):
@@ -1589,6 +1689,10 @@ def crea_app(hub: Schermi) -> Starlette:
         tipo, aiuto = dati.get("tipo"), dati.get("aiuto")
         if azione == "inizia" and tipo not in (M.STUDENTE, M.MEMORIA):
             return _json({"errore": "tipo non valido"}, 400)
+        if azione == "pdf" and tipo not in (None, M.STUDENTE, M.LIBERA):
+            return _json({"errore": "tipo non valido"}, 400)
+        if azione == "mostra" and not _intero(dati.get("concetto")):
+            return _json({"errore": "manca il concetto"}, 400)
         if aiuto is not None and aiuto not in M.AIUTI:
             return _json({"errore": "aiuto non valido"}, 400)
         from .. import minori
@@ -1604,11 +1708,12 @@ def crea_app(hub: Schermi) -> Starlette:
             if azione in CON_MAPPA:
                 # La mappa toccata deve essere di questa verifica
                 vm = st.vista_mappe(prof, vid)
-                suoi = {m["id"] for m in (vm[k] for k in ("scheletro", "mia", "memoria")) if m}
+                suoi = {m["id"] for m in (vm.get(k) for k in ("scheletro", "mia", "memoria",
+                                                               "libera")) if m}
                 if mid not in suoi:
                     raise NonTrovata()
             if azione == "pdf":
-                return st.pdf_mappa(prof, vid)
+                return st.pdf_mappa(prof, vid, tipo or M.STUDENTE)
             if azione == "scheletro":
                 extra["mappa"] = st.scrivi_scheletro(prof, vid)
             elif azione == "nodo":
@@ -1648,6 +1753,15 @@ def crea_app(hub: Schermi) -> Starlette:
                 st.riordina_mappa(prof, mid)
             elif azione == "riapri":
                 extra["riaperto"] = st.riapri_scheletro(prof, mid)
+            elif azione == "libera":
+                extra["mappa"] = st.inizia_libera(prof, vid)
+            elif azione == "finito":
+                c = st.finisci_libera(prof, mid)
+                extra["finito"] = {"conti": c.get("conti"), "tentativi": c.get("tentativi")}
+            elif azione == "indizio":
+                extra["indizio"] = st.indizio_libera(prof, mid)
+            elif azione == "mostra":
+                st.mostra_concetto(prof, mid, dati["concetto"])
             return {**st.vista_mappe(prof, vid), **extra}
         try:
             out = await asyncio.to_thread(fai)
@@ -1906,7 +2020,7 @@ def crea_app(hub: Schermi) -> Starlette:
         *satellite_web.rotte(hub),
     ])
     app.state.sessioni = sessioni
-    return _SoloHostNoti(app, _nomi_ammessi(getattr(hub.cfg, "schermi_nomi", ())))
+    return _LeggiIlResto(_SoloHostNoti(app, _nomi_ammessi(getattr(hub.cfg, "schermi_nomi", ()))))
 
 
 def _gestore_eccezioni(loop, context):

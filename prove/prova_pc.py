@@ -313,6 +313,50 @@ try:
 finally:
     sat.chiudi()
 
+# ── revisione della PR #310 (#311): Tcl, MSYS2, Deno, Bun e altri interpreti, la radice senza
+# l'unità, le unità di rete mappate ──
+import calliope.pc.base as _base  # noqa: E402
+terzo_si = (
+    # Tcl col «t» dei thread
+    "tclsh86t.exe", "tclsh86.exe", "wish86t.exe", "tclsh8.6t.exe", r"C:\Tcl\bin\wish86.exe",
+    # le shell di MSYS2
+    "msys2.exe", "mingw64.exe", "ucrt64.exe", r"C:\msys64\ucrt64.exe", "mingw32.exe", "clang64.exe",
+    # deno, bun e julia con una coda
+    "deno.exe", "deno1.40.exe", "bun.exe", "bun-windows-x64.exe", "julia.exe", "julia-1.10.exe",
+    # altri interpreti e REPL
+    "R.exe", "Rscript.exe", r"C:\Program Files\R\R-4.4.1\bin\x64\Rgui.exe", "Rterm.exe", "erl.exe",
+    "werl.exe", "escript.exe", "ghci.exe", "ghc.exe", "runghc.exe", "racket.exe", "raco.exe",
+    "scala.exe", "groovy.exe", "groovysh.exe", "dart.exe",
+    # dalla radice senza l'unità: dipende dall'unità corrente
+    r"\app.exe", "/app.exe", r"\Program Files\Mozilla Firefox\firefox.exe",
+    # revisione della PR #334: altri nomi, tclkit in ogni variante, i terminali di terze parti
+    "ghc-9.4.8.exe", "ghci-9.4.8.exe", "runghc-9.4.exe", "runhaskell_1.exe", "gracket.exe",
+    "gracket-text.exe", "julialauncher.exe", "tclkit.exe", "tclkitsh.exe", "tclkit-gui.exe",
+    "tclsh86tg.exe", "jruby.exe", "jrubyw.exe", "bunx.exe", "bunx-1.1.exe", "ConEmu64.exe",
+    "ConEmu.exe", r"C:\cmder\Cmder.exe", "alacritty.exe", "wezterm-gui.exe", "wezterm.exe",
+    "tabby.exe", "nu.exe", "fish.exe", "cygwin.exe",
+    # con l'unità ma senza la radice: relativo alla cartella corrente dell'unità
+    "C:app.exe", r"C:..\x\app.exe", "D:calc.exe")
+terzo_no = ("bunny.exe", "bundle-viewer.exe", "denon.exe", "juliaset.exe", "wishlist.exe", "dartmouth.exe",
+            "racketball.exe", "Rufus.exe", "erlang-gui.exe", r"D:\Giochi\gioco.exe", "ghcide-viewer.exe",
+            "fisher.exe", "nuget-gui.exe", "tabbyfox.exe", "bunxy.exe", "cmdermaker.exe")
+verifica("#311: Tcl, MSYS2, deno, bun, julia, R, Erlang, Haskell, Racket, Scala, Groovy, Dart e la radice "
+         "senza l'unità: per iscritto non ammessi",
+         all(e_script(c) for c in terzo_si), [c for c in terzo_si if not e_script(c)])
+verifica("contrario, #311: app che cominciano come quei nomi e un'unità locale restano ammesse",
+         all(ammessa_per_iscritto(c) for c in terzo_no), [c for c in terzo_no if e_script(c)])
+verifica("contrario, #311: le voci di serie del catalogo restano ammesse",
+         all(ammessa_per_iscritto(v) for v in _Cfg().pc_app.values()))
+verifica("#311: l'unità di sistema non è un'unità di rete", _base._unita_di_rete("C") is False)
+_vera = _base._unita_di_rete
+_base._unita_di_rete = lambda lettera: lettera.upper() == "Z"      # Z: mappata su una condivisione
+try:
+    verifica("#311: un .exe su un'unità di rete mappata vuole la voce, uno su un'unità locale no",
+             e_script(r"Z:\app.exe") and e_script(r"z:\Programmi\calc.exe")
+             and ammessa_per_iscritto(r"C:\Program Files\Mozilla Firefox\firefox.exe"))
+finally:
+    _base._unita_di_rete = _vera
+
 # ── blocco ──
 pc = FakePC()
 r = chiama(pc, "pc_blocca", {}, chi="Bianca")

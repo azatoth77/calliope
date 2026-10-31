@@ -936,7 +936,7 @@ def prova_schema():
     Numeratore(path)
     db = sqlite3.connect(path)
     ver = dict(db.execute("SELECT modulo, versione FROM meta_schema").fetchall())
-    # Le liste alla 2 dal 30/10 (#263: liste_cambi, l'ora dell'ultimo cambiamento su disco)
+    # Le liste sono alla versione 2 dal 30/10 (#263, l'ora dell'ultimo cambiamento su disco)
     check(ver.get("agenda") == 1 and ver.get("memoria") == 1 and ver.get("liste") == 2
           and ver.get("numeri") == 1, f"ogni modulo ha la sua versione in meta_schema: {ver}")
     # migrazioni numerate: dalla versione registrata in avanti, una volta sola

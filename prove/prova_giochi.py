@@ -129,9 +129,9 @@ class Ambiente:
         self.eventi = []
         vero = self.hub.evento_a
 
-        def registra(sid, tipo, dati):
+        def registra(sid, tipo, dati, **identita):
             self.eventi.append((sid, tipo, dati))
-            return vero(sid, tipo, dati)
+            return vero(sid, tipo, dati, **identita)
         self.hub.evento_a = registra
         self.tools = build_registry(minori_tool=True)
         self.casa = []

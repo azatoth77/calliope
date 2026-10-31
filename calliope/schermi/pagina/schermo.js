@@ -477,6 +477,17 @@
     if (S.es) { S.es.close(); S.es = null; }
   }
 
+  // La pagina da capo, all'inizio (#338): senza il percorso di prima (#/cose/agenda) e col token.
+  // Se il browser non lo tiene (storage bloccato, kiosk) torna nel frammento «#t=», che
+  // `leggiToken` legge e toglie subito; il frammento non va mai al server
+  function ricaricaDaCapo() {
+    let tenuto = null;
+    try { tenuto = localStorage.getItem(CHIAVE); } catch (e) { tenuto = null; }
+    const frammento = !INCORPORATA && S.token && tenuto !== S.token ? "#t=" + S.token : "";
+    try { history.replaceState(null, "", location.pathname + location.search + frammento); } catch (e) { /* niente */ }
+    location.reload();
+  }
+
   // Un solo ciclo di ricollegamento alla volta, da qualunque causa (errore del flusso,
   // silenzio troppo lungo, flusso chiuso)
   function ricollega() {
@@ -577,18 +588,31 @@
     es.addEventListener("gioco", (ev) => { vivo(); daServerGioco(JSON.parse(ev.data)); });
     es.addEventListener("chat", (ev) => { vivo(); chatDalServer(JSON.parse(ev.data)); });
     es.addEventListener("pulisci", () => { vivo(); pulisciLocale(); });
-    es.addEventListener("revocato", () => {
+    // Via tutto ciò che la pagina mostra dello schermo di prima (revocato, o di un'altra persona)
+    function svuotaSchermo() {
       mostraVoce(null);
       mostraContesto(null);
       chiudiEventi();
       casellaScrivi(false);
-      salvaToken(null);
       S.cronologia = [];
+      S.corrente = null;
       impostaChat(null);
       emetti("schede", {});
       disegnaCronologia();
+    }
+    es.addEventListener("revocato", () => {
+      svuotaSchermo();
+      salvaToken(null);
       if (INCORPORATA) { S.sessione = null; stato("attesa", "schede in attesa"); return; }
       abbina();
+    });
+    // Lo stesso schermo è diventato di un'altra persona (31/10, #338): la pagina si ricarica da
+    // capo, così non resta niente del proprietario di prima (Le mie cose, lo Studio, la ricerca, il
+    // telefono e le sue sezioni: revisione della PR #341). Il token vale ancora e resta salvato
+    es.addEventListener("proprietario", () => {
+      if (es !== S.es) return;
+      svuotaSchermo();
+      ricaricaDaCapo();
     });
     es.addEventListener("error", () => {
       if (es !== S.es) return;

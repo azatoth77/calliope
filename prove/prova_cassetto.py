@@ -980,7 +980,7 @@ class Hub:
         return [{"id": 1, "proprietario": "dario", "nome": "telefono"},
                 {"id": 2, "proprietario": None, "nome": "soggiorno"}]
 
-    def invia_a(self, sid, scheda):
+    def invia_a(self, sid, scheda, **identita):
         self.mandate.append((sid, scheda))
         return self.aperti
 

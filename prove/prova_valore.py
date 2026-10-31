@@ -1642,6 +1642,191 @@ def prova_mappa():
     st.close()
 
 
+# ─────────── «Parliamone» della mappa libera attraverso Brain (30/10, passo 7c, #328) ───────────
+def prova_mappa_consigli():
+    """`studio_mappa_consigli` è una lettura in busta (fonte «foto»): un modello finto che prova a
+    svelare i concetti mancanti (li cerca nei dati del tool e li dice) non li trova, perché non
+    arrivano al modello: il conteggio del codice dà 0, in ombra (la voce dice la frase del codice,
+    la passata del modello si misura in secondo piano) e attiva; un concetto detto «di suo» si conta
+    e nel registro dello Studio va come id, mai come testo; i dati escono dalla storia a risposta
+    finita."""
+    import contextlib
+    import io
+    import types as _t
+    from pathlib import Path as _P
+    qui = _P(__file__).resolve().parent
+    pt = _t.ModuleType("PT")
+    pt.__file__ = str(qui / "prova_studio_tool.py")
+    src = (qui / "prova_studio_tool.py").read_text("utf-8").split(
+        "# ═══════════════════════════ 1.")[0]
+    exec(compile(src, pt.__file__, "exec"), pt.__dict__)
+    from calliope import brain as BR
+    from calliope.tools.builtin import build_registry
+    from calliope.tools.studio import studio_specs
+    st = pt.studio(pt.cfg_nuova("mappa_consigli.db"))
+    vid, ids = pt.carica(st, pt.LEO)
+    aids = [a["id"] for a in st.argomenti(pt.LEO, vid)]
+    pagine = list(ids.values())
+    sid = st.scrivi_scheletro(pt.LEO, vid)
+    concetti = ("Le scoperte geografiche", "Cristoforo Colombo", "America", "Le spezie",
+                "Il Portogallo", "Magellano")
+    n = {t: st.nodo_mappa(pt.LEO, sid, t, argomento=aids[0], pagine=[pagine[i % len(pagine)]])
+         for i, t in enumerate(concetti)}
+    for da, a, vb in (("Le scoperte geografiche", "Cristoforo Colombo", "con"),
+                      ("Cristoforo Colombo", "America", "arriva in"),
+                      ("Le scoperte geografiche", "Le spezie", "per cercare"),
+                      ("Il Portogallo", "Le scoperte geografiche", "comincia"),
+                      ("Le scoperte geografiche", "Magellano", "con")):
+        st.collega(pt.LEO, sid, n[da], n[a], vb)
+    st.conferma_scheletro(pt.LEO, sid)
+    lib = st.inizia_libera(pt.LEO, vid)
+    radice = st.vista_mappe(pt.LEO, vid)["libera"]["nodi"][0]["id"]
+    k = st.nodo_mappa(pt.LEO, lib, "Le spezie")
+    st.collega(pt.LEO, lib, radice, k, "per cercare")
+    st.finisci_libera(pt.LEO, lib)
+    nascosti = [t for t in concetti if t not in ("Le scoperte geografiche", "Le spezie")]
+
+    class Svelatore:
+        """Il modello finto: chiama il tool, poi cerca nei suoi dati i concetti «mancanti» e li
+        dice (o, con `di_suo`, dice un concetto che sa da sé)."""
+        def __init__(self, di_suo=""):
+            self.di_suo, self.detti = di_suo, []
+
+        def stream(self, messages, tools):
+            ultimo = next((m for m in reversed(messages) if m.get("role") == "tool"
+                           and m.get("name") == "studio_mappa_consigli"), None)
+            if ultimo is None:
+                yield ("calls", [{"id": "c1", "name": "studio_mappa_consigli", "arguments": {}}])
+                return
+            trovati = []
+
+            def cerca(x):
+                if isinstance(x, dict):
+                    if x.get("esito") == "mancante" and isinstance(x.get("testo"), str):
+                        trovati.append(x["testo"])
+                    for y in x.values():
+                        cerca(y)
+                elif isinstance(x, list):
+                    for y in x:
+                        cerca(y)
+            try:
+                cerca(json.loads(ultimo["content"]))
+            except (TypeError, ValueError):
+                pass
+            t = (f"Bella mappa! Ti manca «{self.di_suo}»." if self.di_suo else
+                 "Bella mappa! Ti mancano " + ", ".join(f"«{x}»" for x in trovati)
+                 + ". Come li collegheresti ai rami?")
+            self.detti.append((t, len(trovati)))
+            yield ("text", t)
+
+    def nuovo(backend):
+        reg = build_registry()
+        for sp in studio_specs(st.cfg):
+            reg.register(sp)
+        c = pt.ctx_di(st, pt.LEO)
+        for k_, v in (("from_session", False), ("voce_sicura", "Leo"), ("punteggio", 0.7),
+                      ("conferma_breve", False), ("sfida", None), ("sfida_superata", False)):
+            setattr(c.speaker_ctx, k_, v)
+        b = Brain(st.cfg, reg, c)
+        b.backend = backend
+        return b
+
+    def turno(b, frase):
+        with contextlib.redirect_stdout(io.StringIO()):
+            r = "".join(b.stream_reply(frase, "familiare"))
+            t = b.__dict__.get("_consigli_thread")
+            if t is not None:
+                t.join(10)
+        return r
+
+    # P1: ombra (di serie). La voce dice la frase del codice, il modello si misura in secondo piano
+    pt.righe_log.clear()
+    sv = Svelatore()
+    b = nuovo(sv)
+    r = turno(b, "parliamo della mia mappa")
+    log = "\n".join(pt.righe_log)
+    verifica("P1 ombra: la voce dice la frase del codice (conti e pagine), niente concetti nascosti",
+             "concetto chiave" in r and not any(x in r for x in nascosti), r)
+    verifica("P1 ombra: la passata del modello si fa in secondo piano e prova a svelare, ma nei "
+             "dati non c'è niente da svelare: 0 concetti svelati nel registro",
+             sv.detti and "concetto nascosto" in sv.detti[0][0]
+             and not any(x in sv.detti[0][0] for x in nascosti)
+             and "«Parliamone» (ombra)" in log and "0 concetti svelati" in log
+             and st.misure["mappe"]["svelati"] == 0, f"{sv.detti} {log[-300:]}")
+    storia = json.dumps(b.history, ensure_ascii=False)
+    note = [m.get("content") for m in b.history if m.get("role") == "tool"
+            and m.get("name") == "studio_mappa_consigli"]
+    verifica("P1: i dati della mappa escono dalla storia a risposta finita (la sua nota)",
+             note and all(x == BR.MAPPA_TOLTA for x in note) and "Le spezie" not in storia,
+             storia[-300:])
+    # P1b (revisione della PR #330): la passata di misura con gli stessi tool della passata vera
+    # (il prefisso in cache), corta e senza thinking; una alla volta
+    class Spia(Svelatore):
+        def __init__(self):
+            super().__init__()
+            self.chiamate = []
+
+        def stream(self, messages, tools, num_predict=None, think=None):
+            self.chiamate.append((len(tools or []), num_predict, think))
+            yield from super().stream(messages, tools)
+    sp = Spia()
+    b = nuovo(sp)
+    turno(b, "parliamo della mia mappa")
+    vera, misura = sp.chiamate[0], sp.chiamate[-1]
+    verifica("P1b ombra: la passata di misura ha gli stessi tool della vera, al più 300 token, "
+             "thinking spento", len(sp.chiamate) == 2 and vera[0] > 0 and misura[0] == vera[0]
+             and misura[1] == BR.CONSIGLI_OMBRA_TOKEN == 300 and misura[2] is False,
+             str(sp.chiamate))
+    pt.righe_log.clear()
+    sp = Spia()
+    b = nuovo(sp)
+    BR.CONSIGLI_OMBRA_LOCK.acquire()
+    try:
+        turno(b, "parliamo della mia mappa")
+    finally:
+        BR.CONSIGLI_OMBRA_LOCK.release()
+    verifica("P1b ombra: con un'altra misura in corso questa si salta e il registro lo dice",
+             len(sp.chiamate) == 1 and any("saltata" in x for x in pt.righe_log),
+             f"{sp.chiamate} {pt.righe_log[-2:]}")
+    # P1c (seconda revisione della PR #330): una risposta vuota (finita nel ragionamento) non è
+    # «0 svelati»: non è misurata
+    class Muto(Svelatore):
+        def stream(self, messages, tools, num_predict=None, think=None):
+            if any(m.get("role") == "tool" for m in messages):
+                yield ("text", "")
+                return
+            yield from super().stream(messages, tools)
+    pt.righe_log.clear()
+    b = nuovo(Muto())
+    turno(b, "parliamo della mia mappa")
+    log = "\n".join(pt.righe_log)
+    verifica("P1c ombra: risposta vuota → «non misurata», non «0 svelati»",
+             "non misurata" in log and "concetti svelati" not in log, log[-300:])
+    # P2: attiva. Il modello parla, il codice conta ciò che ha detto
+    st.cfg.studio_mappa_consigli = "attiva"
+    pt.righe_log.clear()
+    sv = Svelatore()
+    b = nuovo(sv)
+    r = turno(b, "parliamo della mia mappa")
+    log = "\n".join(pt.righe_log)
+    verifica("P2 attiva: il modello che prova a svelare dice solo «concetto nascosto»: 0 svelati",
+             "Bella mappa" in r and not any(x in r for x in nascosti)
+             and "«Parliamone» (attiva)" in log and "0 concetti svelati" in log
+             and "studio_mappa_svelato" not in b.rules_fired(), f"{r} {log[-300:]}")
+    # P3: attiva, un concetto detto «di suo»: si conta, e nel registro va l'id, mai il testo
+    pt.righe_log.clear()
+    b = nuovo(Svelatore(di_suo="Cristoforo Colombo"))
+    r = turno(b, "come faccio mappe migliori?")
+    log = "\n".join(pt.righe_log)
+    verifica("P3: un concetto nascosto detto dal modello si conta (regola e registro con l'id), "
+             "senza il testo nel registro",
+             "Cristoforo Colombo" in r and "studio_mappa_svelato" in b.rules_fired()
+             and "1 concetti svelati" in log
+             and f"concetto {n['Cristoforo Colombo']}" in log
+             and not any(x in log for x in nascosti), log[-300:])
+    st.close()
+
+
 if __name__ == "__main__":
     t0 = time.perf_counter()
     prova_richiesta_ripetuta()
@@ -1661,6 +1846,7 @@ if __name__ == "__main__":
     prova_incongruenze()
     prova_ordinali()
     prova_mappa()
+    prova_mappa_consigli()
     prova_carte()
     print(f"\n{time.perf_counter() - t0:.1f} s")
     print("\nTutto bene." if not errori else f"\n{errori} errori.")

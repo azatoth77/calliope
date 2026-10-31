@@ -178,6 +178,8 @@ f("Giovedì ho la verifica di storia", "studio")
 f("Cosa devo studiare oggi?", "studio")
 f("Spiegami la pagina 114 del libro di storia", "studio_pagina_leggi")
 f("Ripassiamo le carte di storia", "studio_carte")
+# «Parliamone» dopo la mappa libera (30/10, #328)
+f("Parliamo della mia mappa da zero di storia", "studio_mappa_consigli")
 # ── senza tool: chiacchiere e cultura generale ──
 f("Raccontami una barzelletta")
 f("Come stai oggi?")
