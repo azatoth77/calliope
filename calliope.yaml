@@ -1047,6 +1047,25 @@ studio:
   # Quanti giorni vale un'indicazione se il tutore non lo dice (da 1 a 90; legata a una verifica
   # mai oltre la fine della prova vera)
   studio_indicazioni_giorni: 30
+  # I premi dello Studio (31/10, issue #296, calliope/studio/premi.py): un rinforzo positivo e
+  # al minimo, calcolato dal codice dai soli dati della pratica (sessioni misurate fra «Inizia»
+  # e «Fatto», carte ripassate, prove consegnate, esiti decisi dal codice o dal tutore), mai
+  # dalle autovalutazioni né dal tempo passato nell'app. Niente perdite punitive, niente
+  # notifiche, niente classifiche. Per un minore il tutore li vede e li spegne, tutti o in parte,
+  # dalla sua vista. La serie di giorni di studio: un giorno senza piano (senza scuola, fuori
+  # dagli orari, senza verifiche aperte) non conta e non la ferma
+  studio_serie: true
+  # I giorni di pausa della serie ogni 7: un giorno del piano senza pratica, o saltato con «non
+  # ce la faccio oggi», entro questo numero non la interrompe (0: nessuna pausa; al più 3)
+  studio_serie_pause: 1
+  # Le stelle: un argomento portato all'obiettivo (solo con la padronanza mostrata), una
+  # verifica finta o un'interrogazione superate, il ripasso delle carte fatto, il piano seguito.
+  # Una stella presa resta
+  studio_stelle: true
+  # I duelli fra persone di casa sulle domande di una verifica, sugli schermi, mai con ospiti o
+  # conoscenti e mai in classifica; non danno premi né tentativi. Spenti di serie: con true li
+  # usano gli adulti, e per un minore li accende il suo tutore dalla vista del tutore
+  studio_duelli: false
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

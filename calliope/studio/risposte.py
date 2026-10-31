@@ -459,11 +459,17 @@ def _numero(d: dict, risposta: str) -> str:
     fattori = [U.UNITA[u][1] for _v, u in stesse]
     composta = (ua and U.UNITA[ua][0] in (U.L, U.M, U.T) and len(stesse) > 1
                 and all(a > b for a, b in zip(fattori, fattori[1:])))
+    alt = U.alternative(risposta)
     if composta:
         somma = sum(v * U.UNITA[u][1] for v, u in stesse) / U.UNITA[ua][1]
-        if U.confronta((somma, ua), attesa) == GIUSTO:
+        e = U.confronta((somma, ua), attesa)
+        if e == GIUSTO:
             return GIUSTO
-    alt = U.alternative(risposta)
+        # Una misura composta sola, senza altri numeri né alternative («1 metro e 50
+        # centimetri» con atteso 1,05 m): la sua somma è la risposta, ed è sbagliata (31/10,
+        # #343, quarta revisione della PR #342). Con un numero in più («3 prove: …») si rivede
+        if len(stesse) == len(nn) and not alt:
+            return e
     if alt and not any(U.confronta(x, attesa) in (GIUSTO, INDIZIO) for x in alt):
         return SBAGLIATO
     return DA_RIVEDERE

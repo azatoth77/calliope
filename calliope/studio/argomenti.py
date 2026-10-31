@@ -306,6 +306,22 @@ _CIFRA_LETTERA = re.compile(r"(?<![\w.,])(\d+)[ \t]+(?:(" + _LETTERA + r")|([aei
                             r"(?=[ \t]*[-+=<>≤≥≠/×·*^\ue000]))(?![\w'’])")
 
 
+_OPERATORE_VICINO = re.compile("[-+=<>≤≥≠/×·*^]")
+
+
+def _unisci_cifra_lettera(m: re.Match) -> str:
+    """«3 x» → «3x» solo dentro una formula (31/10, #343, terza revisione della PR #346): una
+    vocale con un operatore subito dopo (già nella regex), una consonante con un operatore subito
+    prima della cifra o subito dopo la lettera. «punto 2 b» e «classe 3 B» restano staccati."""
+    if m.group(3) is None:
+        prima = m.string[:m.start()].rstrip(" \t")
+        dopo = m.string[m.end():].lstrip(" \t")
+        if not ((prima and _OPERATORE_VICINO.match(prima[-1]))
+                or (dopo and _OPERATORE_VICINO.match(dopo[0]))):
+            return m.group(0)
+    return m.group(1) + (m.group(2) or m.group(3))
+
+
 def _pezzi(testo, confini: bool = False) -> list[str]:
     """I pezzi di un testo per le formule: minuscole, senza accenti, lettere latine e greche,
     cifre (indici ed esponenti diventano cifre: «CO₂» → «co2», «x²» → «x2», «Fe³⁺» → «fe3+»: la
@@ -321,7 +337,7 @@ def _pezzi(testo, confini: bool = False) -> list[str]:
     # «e», «i», «o» (parole piccole) solo davanti a un operatore («4 e 6» resta, «2 a + 1» no);
     # mai attraverso un a capo («5x = 15» e «x = 3» su due righe restano due)
     t = _PER_LETTERA.sub(lambda m: m.group(1) + m.group(2), t)
-    t = _CIFRA_LETTERA.sub(lambda m: m.group(1) + (m.group(2) or m.group(3)), t)
+    t = _CIFRA_LETTERA.sub(_unisci_cifra_lettera, t)
     t = unicodedata.normalize("NFKD", t.translate(_SOSTITUZIONI))
     t = "".join(c for c in t if not unicodedata.combining(c)).lower().translate(_SOSTITUZIONI)
     # «≠» si scompone in «=» e una barra combinante: tenuto da parte fino a qui
@@ -376,6 +392,11 @@ def _di_fila(voluti: list[str], pp: list[str]) -> bool:
     for i in range(len(pp) - n + 1):
         if pp[i:i + n] == voluti and not (espr and (
                 (i and pp[i - 1] in _OPERATORI) or (i + n < len(pp) and pp[i + n] in _OPERATORI))):
+            # Il meno in testa è un numero negativo solo se nella pagina non segue un numero o
+            # una lettera sola (31/10, #343: «-5» non è dentro «10 - 5 = 5» né «x - 5»)
+            if voluti[0] == "-" and i and (any(c.isdigit() for c in pp[i - 1])
+                                           or (len(pp[i - 1]) == 1 and pp[i - 1].isalpha())):
+                continue
             return True
     return False
 

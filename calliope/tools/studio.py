@@ -69,7 +69,10 @@ from .spec import ToolContext, ToolSpec, note_rule
 FAMILIARI = frozenset({"familiare", "amministra"})
 AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "sposta", "archivia", "tieni",
           "togli", "riprova", "sessione", "resoconto", "riepilogo", "carte", "mappa", "tipo",
-          "conclusa", "prove", "indica", "indicazioni", "indicazioni_togli", "proponi_data")
+          "conclusa", "prove", "indica", "indicazioni", "indicazioni_togli", "premi",
+          "proponi_data")
+# «premi» (31/10, #296): la serie di giorni di studio e il conto delle stelle, frasi del codice
+# coi soli numeri (studio/premi.py); per = il ragazzo, per il tutore. I duelli solo sullo schermo
 # «proponi_data» (31/10, #320): quando è Calliope a proporre la data nuova di una verifica (letta
 # in una pagina, calcolata), la domanda la scrive il codice con la data esatta e resta in sospeso
 # (tool `studio`, azione «sposta», gli stessi argomenti): il «sì» della persona alla stessa chiamata
@@ -86,7 +89,7 @@ AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "sposta", "ar
 # testo delle domande; «tipo» (scritta o interrogazione, la finestra «dal») e «conclusa» (la prova
 # vera è fatta) cambiano i dati della persona
 LETTURE = frozenset({"stato", "piano", "oggi", "resoconto", "riepilogo", "carte", "mappa",
-                     "prove", "indicazioni"})
+                     "prove", "indicazioni", "premi"})
 # Le azioni che un tocco può chiedere (schermi/tocchi.py): sui dati della persona, reversibili
 DA_TOCCO = frozenset({"fatto", "salta_oggi", "tieni", "togli", "riprova", "sessione"})
 
@@ -502,12 +505,35 @@ def _fatto(ctx, svc, chi, v, giorno, fatto: bool = True) -> dict:
         return _f("Tolto il fatto.")
     # Il resoconto della sessione, dai soli dati (passo 4b, #244): cosa si è fatto, il tempo se
     # misurato, cosa resta
+    # I premi (#296): la serie al più una volta al giorno, le stelle nuove una volta; solo a chi
+    # ha studiato, mai al tutore che segna per il minore. Frasi del codice coi soli numeri
+    premi = ""
+    if v["persona"] == getattr(chi, "id", None):
+        try:
+            premi = svc.frase_premi(chi)
+        except Exception:  # noqa: BLE001 — i premi non fermano «fatto»
+            premi = ""
+        if premi:
+            note_rule(ctx, "studio_premi_detti")
     try:
         # Il giorno segnato davvero (dopo mezzanotte può essere ieri, PR #321 nota 1)
         r = svc.resoconto(chi, v["id"], segnato or g or None)
     except (NonTrovata, ValueError):
-        return _f("Segnato fatto: un pezzo in meno.")
-    return _f("Segnato fatto: " + r["frase"][:1].lower() + r["frase"][1:], verifica=v["id"])
+        return _f("Segnato fatto: un pezzo in meno." + (" " + premi if premi else ""))
+    return _f("Segnato fatto: " + r["frase"][:1].lower() + r["frase"][1:]
+              + (" " + premi if premi else ""), verifica=v["id"])
+
+
+def _premi(ctx, svc, chi, per) -> dict:
+    """«Quante stelle ho?», «a che punto è la mia serie?» (e il tutore per il suo ragazzo): la
+    serie e il conto delle stelle, frasi del codice; i duelli e l'elenco sono sullo schermo."""
+    persona, frase = _persona(ctx, chi, per)
+    if frase:
+        return _f(frase, ok=False)
+    detto = svc.frase_premi_letti(chi, persona)
+    if not detto:
+        return _f("I premi dello Studio qui non sono accesi.", ok=False)
+    return _f(detto + " L'elenco delle stelle è nello Studio, sul telefono o sul PC.")
 
 
 def _giorno_passato(testo, oggi: datetime.date) -> datetime.date | None:
@@ -882,6 +908,12 @@ def _dopo_negazioni(parole: list[str]) -> list[tuple[str, str]]:
     return out
 
 
+# Le forme di cortesia fisse, staccate dalla punteggiatura o in fondo («Calliope, se puoi, con Leo
+# insisti…»): il loro «se» non è una condizione e non si conta (31/10, #343, terza revisione della
+# PR #348). Senza punteggiatura («se puoi farlo solo il lunedì») restano
+_CORTESIA = re.compile(r"\bse\s+(?:puoi|riesci|vuoi)\b(?=\s*(?:[,.;:!?]|$))", re.I)
+
+
 def _detta_dal_tutore(ctx, testo) -> bool:
     """Il testo dell'indicazione viene dalle parole del tutore in questa frase. Un vincolo sulla
     provenienza di un argomento già scelto dal modello (principio 10), come la data detta:
@@ -892,8 +924,8 @@ def _detta_dal_tutore(ctx, testo) -> bool:
     - le negazioni sono tante quante nella frase e davanti alle stesse parole: «non dargli il
       risultato» non diventa «dagli il risultato»;
     - almeno una parola piena."""
-    tw = _parole_tutte(testo)
-    fw = _parole_tutte(getattr(ctx, "user_text", "") or "")
+    tw = _parole_tutte(_CORTESIA.sub(" ", str(testo or "")))
+    fw = _parole_tutte(_CORTESIA.sub(" ", getattr(ctx, "user_text", "") or ""))
     piene = [w for w in tw if w not in FUNZIONALI and w not in NEGAZIONI and w not in CONTATE]
     if not piene:
         return False
@@ -1016,6 +1048,8 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _indicazioni_conto(ctx, svc, chi, per)
         if azione == "indicazioni_togli":
             return _indicazioni_togli(ctx, svc, chi, per, materia)
+        if azione == "premi":
+            return _premi(ctx, svc, chi, per)
         v = _verifica(svc, ctx, chi, verifica, materia,
                       anche_passate=azione in ("resoconto", "riepilogo"))
         if v is None:
@@ -1686,7 +1720,9 @@ DESCRIZIONE = (
     "«indica» un'indicazione del tutore per lo studio del suo ragazzo («con Leo insisti sulle "
     "frazioni»: per = il nome del ragazzo, testo = l'indicazione con le sue parole, materia o "
     "verifica se la dice, giorni se dice quanto vale); «indicazioni» quante ce ne sono (per = il "
-    "ragazzo, vuoto per sé); «indicazioni_togli» le toglie (per, materia facoltativa). "
+    "ragazzo, vuoto per sé); «indicazioni_togli» le toglie (per, materia facoltativa); «premi» "
+    "la serie di giorni di studio e le stelle («quante stelle ho?», «com'è la mia serie?»; per = "
+    "il ragazzo se lo chiede il tutore). "
     "verifica: l'id, se lo sai (dai dati del turno); altrimenti materia.")
 
 PARAMETRI = {"type": "object", "properties": {

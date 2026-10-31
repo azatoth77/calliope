@@ -414,6 +414,24 @@
         return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
+    // I premi dello Studio (31/10, #296, studio.js): {persona?, azione?, serie?, stelle?,
+    // duelli?} → serie, stelle, duelli e interruttori
+    async studioPremi(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const r = await postSessione("/api/studio/premi", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
+    // Un duello fra persone di casa (31/10, #296, studio.js): {duello?, azione?, verifica?, a?,
+    // voce?, risposta?} → la vista del duello; le risposte attese solo a duello finito
+    async studioDuello(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const r = await postSessione("/api/studio/duello", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
     // Le prove di una verifica (31/10, passo 8, #248, studio.js): {verifica, azione?, prova?,
     // voce?, risposta?, …} → {aperta, chiuse, domande…}; le risposte attese solo dopo la consegna
     async studioProva(dati) {
