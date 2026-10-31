@@ -1180,9 +1180,11 @@ class Studio(Mappe):
         if c is None:
             raise NonTrovata()
         # Una carta nata dalla mappa («Fanne carte», origine «mappa») con la mappa libera aperta
-        # non c'è (revisione della PR #330): dice i concetti dello scheletro nascosto. Vale anche
-        # per `carta_in_corso`, che passa di qui
-        if c["origine"] == "mappa" and self._libera_aperta(c["verifica"]):
+        # non c'è per la persona (revisione della PR #330): dice i concetti dello scheletro
+        # nascosto. Vale anche per `carta_in_corso`, che passa di qui. Il tutore la vede e la
+        # corregge (seconda revisione)
+        if (c["origine"] == "mappa" and getattr(chi, "id", None) == c["persona"]
+                and self._libera_aperta(c["verifica"])):
             raise NonTrovata()
         return c, self._verifica(chi, c["verifica"])
 
@@ -1407,9 +1409,11 @@ class Studio(Mappe):
         dell'argomento nell'elenco della verifica, se è da ripassare e fra quanto. Domanda e
         risposta sono un dato: lo schermo le scrive con textContent."""
         v = self._verifica(chi, vid)
-        return self._carte_di(v)
+        return self._carte_di(v, chi)
 
-    def _carte_di(self, v: dict) -> list[dict]:
+    def _carte_di(self, v: dict, chi=None) -> list[dict]:
+        """`chi`: chi guarda; le carte della mappa si nascondono alla persona (e ai conti, senza
+        `chi`), non al tutore (seconda revisione della PR #330)."""
         adesso = self.adesso()
         elenco = self.dati.tutti("SELECT id, stato FROM studio_argomenti WHERE verifica = ? "
                                  "ORDER BY ordine, id", (v["id"],))
@@ -1418,9 +1422,8 @@ class Studio(Mappe):
         out = []
         # Con la mappa libera aperta (passo 7c, #328) le carte scritte da «Fanne carte» non si
         # vedono e non si ripassano: dicono i concetti dello scheletro, che resta nascosto
-        libera_aperta = self.dati.uno(
-            "SELECT id FROM studio_mappe WHERE verifica = ? AND tipo = 'libera' AND stato = "
-            "'aperta'", (v["id"],)) is not None
+        libera_aperta = ((chi is None or getattr(chi, "id", None) == v["persona"])
+                         and self._libera_aperta(v["id"]))
         # Le carte dell'ombra (studio_carte_genera: ombra) non vanno mai alla persona
         for i, c in enumerate(self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? AND "
                                               "stato != 'ombra' ORDER BY id", (v["id"],)), 1):
@@ -1441,10 +1444,10 @@ class Studio(Mappe):
     def da_ripassare(self, chi, vid) -> list[dict]:
         """Le carte da ripassare adesso: prima le più scadute, poi le scatole basse."""
         v = self._verifica(chi, vid)
-        return self._da_ripassare(v)
+        return self._da_ripassare(v, chi)
 
-    def _da_ripassare(self, v: dict) -> list[dict]:
-        out = [c for c in self._carte_di(v) if c["da_ripassare"]]
+    def _da_ripassare(self, v: dict, chi=None) -> list[dict]:
+        out = [c for c in self._carte_di(v, chi) if c["da_ripassare"]]
         out.sort(key=lambda c: (str(c["scadenza"] or ""), c["scatola"], c["id"]))
         return out
 
@@ -1543,12 +1546,12 @@ class Studio(Mappe):
         `CARTA_IN_CORSO_S`). Con il numero fra quelle da ripassare e quante restano. None se
         nessuna."""
         v = self._verifica(chi, vid)
-        due = self._da_ripassare(v)
+        due = self._da_ripassare(v, chi)
         chiave = str(getattr(chi, "id", "") or "")
         ic = self._in_corso(chiave)
         scelta = None
         if ic is not None and ic["verifica"] == v["id"]:
-            scelta = next((c for c in self._carte_di(v) if c["id"] == ic["carta"]
+            scelta = next((c for c in self._carte_di(v, chi) if c["id"] == ic["carta"]
                            and c["stato"] == "attiva"), None)
         if scelta is None and due:
             scelta = due[0]

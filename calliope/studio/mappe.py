@@ -130,8 +130,12 @@ class Mappe:
 
     def _libera_aperta(self, vid) -> bool:
         """La verifica ha una mappa libera aperta (la persona la sta facendo senza guardare)."""
-        return self.dati.uno("SELECT id FROM studio_mappe WHERE verifica = ? AND tipo = 'libera' "
-                             "AND stato = 'aperta'", (int(vid),)) is not None
+        # Solo su una verifica ancora aperta (seconda revisione della PR #330): su una verifica
+        # fatta o archiviata una mappa senza guardare rimasta aperta vale chiusa, senza tentativi
+        return self.dati.uno(
+            "SELECT m.id FROM studio_mappe m JOIN studio_verifiche v ON v.id = m.verifica WHERE "
+            "m.verifica = ? AND m.tipo = 'libera' AND m.stato = 'aperta' AND v.stato IN "
+            "('bozza', 'aperta')", (int(vid),)) is not None
 
     def _mappe_di(self, vid) -> dict:
         """{tipo: la mappa più recente di quel tipo} di una verifica, senza quelle dell'ombra."""
@@ -226,6 +230,10 @@ class Mappe:
                 if n is None or (m["tipo"] != M.SCHELETRO and (n.get("da") is not None
                                                                or n.get("casella"))):
                     raise NonTrovata()
+                if n.get("autore") == M.SEMINATO and t != n.get("testo"):
+                    # Il seme cambiato dalla persona è suo (seconda revisione della PR #330); se
+                    # torna al testo dell'argomento lo riconosce `aiuto.seme`
+                    n["autore"] = "persona"
                 n["testo"] = t
                 if m["tipo"] == M.SCHELETRO:
                     # Cambiato da una persona: suo, tenuto, senza gli avvisi del modello
@@ -503,6 +511,9 @@ class Mappe:
                 # restano negli indicatori, gli indizi e i concetti mostrati ripartono
                 a = dict(m["aiuto"] or {})
                 a["giro"] = int(a.get("giro", 0) or 0) + 1
+                # Il seme del giro: l'argomento di adesso, salvato (seconda revisione della PR
+                # #330: `imposta` può cambiarlo dopo, il seme del giro resta)
+                a["seme"] = self._seme(v)
                 self._salva_mappa(m, nodi=self._nodi_libera(v), collegamenti=[], aiuto=a,
                                   tentati=[], controllo=None, controllata=None, stato="aperta",
                                   visti={})
@@ -651,6 +662,14 @@ class Mappe:
         return M.voci_riferimento(self._mappe_di(vid).get(M.SCHELETRO))
 
     @staticmethod
+    def _seme(v) -> str | None:
+        """Il testo del seme: l'argomento della verifica in forma normale, o None."""
+        try:
+            return M.testo_normale(v.get("argomento"), M.NODO_MAX)
+        except ValueError:
+            return None
+
+    @staticmethod
     def _nodi_libera(v) -> list[dict]:
         """La partenza della mappa libera: la radice con l'argomento della verifica scritto dalla
         persona, se c'è; altrimenti vuota. Mai un concetto dello scheletro (sarebbe una risposta
@@ -686,7 +705,8 @@ class Mappe:
             mid = self.dati.scrivi(
                 "INSERT INTO studio_mappe (verifica, persona, tipo, stato, origine, aiuto, nodi, "
                 "collegamenti, creata, creata_da) VALUES (?, ?, 'libera', 'aperta', 'persona', ?, "
-                "?, '[]', ?, ?)", (v["id"], str(v["persona"]), _j({"giro": 0}),
+                "?, '[]', ?, ?)", (v["id"], str(v["persona"]), _j({"giro": 0,
+                                                                   "seme": self._seme(v)}),
                                    _j(self._nodi_libera(v)),
                                    self.adesso().isoformat(timespec="seconds"),
                                    getattr(chi, "id", None)))
@@ -711,7 +731,7 @@ class Mappe:
             rn, rc, _t = self._riferimento(v["id"])
             if not rn:
                 raise ValueError("non c'è ancora uno scheletro con cui confrontarla")
-            r = M.confronta(rn, rc, m, [v.get("argomento")])
+            r = M.confronta(rn, rc, m, [(m["aiuto"] or {}).get("seme")])
             per_id = {int(n["id"]): n for n in rn}
             visti = dict(m["visti"])
             for sid in r["mancanti"]:
@@ -741,7 +761,9 @@ class Mappe:
                 ok = visti.get(str(sid)) in (M.INDIZIO, M.VISTO)
             else:
                 c = m["controllo"] or {}
+                # Mai un seminato (seconda revisione della PR #330): non è da trovare
                 ok = (sid in [int(x) for x in c.get("chiave") or ()]
+                      and sid not in [int(x) for x in c.get("seminati") or ()]
                       and (c.get("esiti") or {}).get(str(sid)) in (M.MANCANTE, M.DIVERSO))
             if not ok:
                 raise NonTrovata()
@@ -761,7 +783,7 @@ class Mappe:
         with self.dati.lock:
             m, v = self._libera(chi, mid)
             rn, rc, rtipo = self._riferimento(v["id"])
-            r = M.confronta(rn, rc, m, [v.get("argomento")]) if rn else None
+            r = M.confronta(rn, rc, m, [(m["aiuto"] or {}).get("seme")]) if rn else None
             ind = M.indicatori(m["nodi"], m["collegamenti"], r)
             adesso = self.adesso().isoformat(timespec="seconds")
             tentati = list(m["tentati"])
@@ -965,8 +987,10 @@ class Mappe:
         # Con una mappa libera aperta lo scheletro è il suo riferimento: non si rigenera finché
         # non dice «Ho finito» (revisione della PR #330; un riferimento nuovo farebbe valere gli
         # indizi e i concetti mostrati su concetti diversi). La firma resta, si riprova dopo
-        if db.execute("SELECT id FROM studio_mappe WHERE verifica = ? AND tipo = 'libera' AND "
-                      "stato = 'aperta'", (int(vid),)).fetchone() is not None:
+        if db.execute("SELECT m.id FROM studio_mappe m JOIN studio_verifiche v ON v.id = "
+                      "m.verifica WHERE m.verifica = ? AND m.tipo = 'libera' AND m.stato = "
+                      "'aperta' AND v.stato IN ('bozza', 'aperta')",
+                      (int(vid),)).fetchone() is not None:
             return False, []
         for r in db.execute("SELECT id, stato, origine, nodi, collegamenti, aiuto FROM "
                             "studio_mappe WHERE verifica = ? AND tipo = 'scheletro'",
@@ -1124,10 +1148,13 @@ class Mappe:
         mm = self._mappe_di(v["id"])
         mem = mm.get(M.MEMORIA)
         lib = mm.get(M.LIBERA)
-        a_memoria = bool(ruolo == "proprietario" and self._aperta(mem))
+        # Su una verifica fatta o archiviata una mappa senza guardare rimasta aperta vale chiusa
+        # (seconda revisione della PR #330): niente resta nascosto per sempre
+        viva = v["stato"] in ("bozza", "aperta")
+        a_memoria = bool(ruolo == "proprietario" and viva and self._aperta(mem))
         # La mappa libera aperta (passo 7c, #328): lo scheletro, la mia mappa e a memoria (che
         # hanno i concetti dello scheletro) arrivano senza testi, come con a memoria aperta
-        a_libera = bool(ruolo == "proprietario" and self._aperta(lib))
+        a_libera = bool(ruolo == "proprietario" and viva and self._aperta(lib))
         nascondi = a_memoria or a_libera
 
         def per_schermo(m, senza_testi=False):
@@ -1254,7 +1281,10 @@ class Mappe:
                                 "visto": visti.get(str(sid)) == M.VISTO,
                                 "seminato": int(sid) in set(c.get("seminati") or ()),
                                 "testo": testo_se(sid, esiti.get(str(sid)) == M.PRESENTE)}
-                               for sid in c.get("chiave") or ()],
+                               for sid in c.get("chiave") or ()
+                               # Un seminato che manca non è da trovare: niente riga né «Mostra»
+                               if not (int(sid) in set(c.get("seminati") or ())
+                                       and esiti.get(str(sid)) != M.PRESENTE)],
                     "coll_mancanti": [{"da": x.get("da"), "a": x.get("a"),
                                        "pagine": nomi(x.get("pagine"))}
                                       for x in c.get("coll_mancanti") or ()]}
@@ -1294,6 +1324,7 @@ class Mappe:
             raise NonTrovata()
         mem = mm.get(M.MEMORIA)
         if (tipo == M.STUDENTE and getattr(chi, "id", None) == v["persona"]
+                and v["stato"] in ("bozza", "aperta")
                 and (self._aperta(mem) or self._aperta(mm.get(M.LIBERA)))):
             # Le risposte della mappa a memoria aperta (o lo scheletro, con la libera aperta)
             # non escono nemmeno dal PDF

@@ -268,6 +268,37 @@ Le correzioni minori:
 - la prova della pagina misura i tocchi a 320 px col testo grande;
 - `main.py` passerà `cfg` a `studio_specs` con la #335.
 
+### 31/10: la seconda revisione della PR #330
+
+Le prove sono nella sezione 5c di `prova_studio_mappa_libera.py`, e `P1c` è in `prova_valore.py`.
+9. **Verifica chiusa con una mappa senza guardare aperta.** Se la verifica diventa «fatta» o
+   «archiviata» mentre la libera o quella a memoria sono aperte, valgono come chiuse e senza
+   tentativi. Lo fanno in tutte le strade: `vista_mappe` (`a_libera`, `a_memoria`), `pdf_mappa`,
+   `_libera_aperta` (quindi `_mappa`, `_carta`, `_carte_di`) e `_scheletro_toccabile`. «Ho finito»
+   resta `VerificaChiusa`. Prima restava tutto nascosto per sempre, anche al tutore.
+10. **I seminati non sono mai «mancanti».** Restano fuori dal conto, dalla frase e dalla pagina,
+    quindi non hanno «Mostra».
+    - Il seme cambiato dalla persona diventa suo (`autore: «persona»`).
+    - Il seme si riconosce dall'argomento salvato all'apertura del giro (`aiuto.seme`), non da
+      quello di adesso, che `imposta` può cambiare.
+11. **«Diverso» per il nome accorciato.** Conta anche quando tutte le parole piene della persona
+    stanno nel riferimento e almeno una non è comune: «Colombo» per «Cristoforo Colombo», «Scoperte»
+    per «Le scoperte geografiche». È sempre da rivedere e senza tentativo. «Guerra» per «Guerra
+    fredda» resta fuori.
+12. **Carte.**
+    - La versione 9 dà l'origine «mappa» alle carte di prima che cominciano con «Mappa di » e
+      avevano l'origine «persona», come quelle già sulla DGX.
+    - Il filtro con la libera aperta vale solo per la persona: il tutore le vede e le corregge.
+
+Le correzioni minori e le note:
+- La passata in ombra che torna vuota si registra «non misurata», non «0 svelati». Sul backend
+  OpenAI la risposta può finire tutta nel ragionamento.
+- **Limite noto:** i concetti di una parola sotto le 6 lettere («Roma», «Nilo») non contano mai come
+  svelati: `SVELATO_MIN` li esclude per non contare le parole di ogni giorno («Stato»).
+- **Da misurare sulla DGX:** se il prefisso resta in cache nella passata in ombra con `think=False`.
+  Lo dice `prompt_eval_cached_count` della passata di misura; il thinking cambia il corpo della
+  richiesta, non il prefisso, ma non è stato misurato.
+
 ## Lo scheletro della mappa generato dal lettore (30/10 sera, issue #247, ramo `issue-247-studio-mappa-genera`)
 
 *Seconda parte del passo 7; decisione [0035](../decisioni/0035-studio.md) punto 36.*

@@ -307,6 +307,10 @@ def _v9(db: sqlite3.Connection):
     giro in corso."""
     db.execute("ALTER TABLE studio_mappe ADD COLUMN giri TEXT NOT NULL DEFAULT '[]'")
     db.execute("ALTER TABLE studio_mappe ADD COLUMN visti TEXT NOT NULL DEFAULT '{}'")
+    # Le carte di «Fanne carte» scritte prima della 9 (sulla DGX ce ne sono): l'origine «mappa»
+    # dal prefisso che il codice scriveva (seconda revisione della PR #330)
+    db.execute("UPDATE studio_carte SET origine = 'mappa' WHERE origine = 'persona' AND "
+               "domanda LIKE 'Mappa di %'")
 
 
 MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9]

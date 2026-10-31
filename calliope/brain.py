@@ -6100,6 +6100,12 @@ class Brain:
                 if isinstance(payload, str):
                     testo += think.feed(payload)
             testo += think.flush()
+            if not testo.strip():
+                # Una risposta vuota (sul backend OpenAI finita tutta nel ragionamento) non è
+                # «0 svelati»: non è misurata (seconda revisione della PR #330)
+                st._registra(f"verifica {vid}: «Parliamone» in ombra non misurata, risposta "
+                             "vuota")
+                return
             st.misura_consigli(chi, vid, testo, "ombra")
         except Exception as e:  # noqa: BLE001 — una misura in secondo piano
             print(f"   [STUDIO] «Parliamone» in ombra non misurata ({type(e).__name__})",

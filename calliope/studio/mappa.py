@@ -607,12 +607,19 @@ def _simile(atteso, dato) -> bool:
     (uguali, al plurale o storpiate come in `uguale`) e almeno metà di quelle della persona
     (revisione della PR #330: «Guerra» non vale «Guerra fredda»). Resta largo («Seconda guerra
     mondiale» per «Prima guerra mondiale»): per questo un «diverso» è solo «da rivedere», non
-    conta nella copertura e non scrive tentativi."""
+    conta nella copertura e non scrive tentativi.
+    Seconda revisione della PR #330: è «diverso» anche il nome **accorciato**, cioè tutte le
+    parole piene della persona dentro il riferimento e almeno una non comune (`PAROLE_COMUNI`):
+    «Colombo» per «Cristoforo Colombo», «Scoperte» per «Le scoperte geografiche»; «Guerra» per
+    «Guerra fredda» resta fuori (parola comune)."""
     pa, pd = _piene(atteso), _piene(dato)
     if not pa or not pd:
         return False
     comuni = sum(1 for w in pa if any(_storpiata(w, x) for x in pd))
-    return comuni * 2 > len(pa) and comuni * 2 >= len(pd)
+    if comuni * 2 > len(pa) and comuni * 2 >= len(pd):
+        return True
+    return (all(any(_storpiata(w, x) for x in pa) for w in pd)
+            and any(w not in PAROLE_COMUNI for w in pd))
 
 
 def confronta(rif_nodi: list[dict], rif_coll: list[dict], mappa: dict, dati=()) -> dict:
@@ -676,7 +683,6 @@ def confronta(rif_nodi: list[dict], rif_coll: list[dict], mappa: dict, dati=()) 
         pag = list(sc.get("pagine") or ()) or list(dict.fromkeys(
             list(per_id[a].get("pagine") or ()) + list(per_id[b].get("pagine") or ())))
         coll_mancanti.append({"da": nodo[a], "a": nodo[b], "pagine": pag})
-    mancanti = [i for i in chiave_ if esiti.get(i) == MANCANTE]
     # Il concetto seminato dal codice (la radice con l'argomento della verifica, `autore:
     # «codice»`): trovato, ma non dalla persona. Non conta né nei conti né nei tentativi
     # (revisione della PR #330: «Ho finito» a mappa vuota dava «giusto» a ogni giro)
@@ -684,6 +690,9 @@ def confronta(rif_nodi: list[dict], rif_coll: list[dict], mappa: dict, dati=()) 
     seminati = [i for i in chiave_ if nodo.get(i) in semi
                 or any(uguale(d, per_id[i]["testo"]) for d in dati or () if d)]
     contati = [i for i in chiave_ if i not in seminati]
+    # I seminati non sono mai «mancanti» (niente indizio, niente «Mostra», niente conto: seconda
+    # revisione della PR #330)
+    mancanti = [i for i in contati if esiti.get(i) == MANCANTE]
     conti = {"concetti": len(rif_nodi), "chiave": len(contati), "seminati": len(seminati),
              PRESENTE: sum(esiti.get(i) == PRESENTE for i in contati),
              DIVERSO: sum(esiti.get(i) == DIVERSO for i in contati),

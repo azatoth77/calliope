@@ -1788,6 +1788,20 @@ def prova_mappa_consigli():
     verifica("P1b ombra: con un'altra misura in corso questa si salta e il registro lo dice",
              len(sp.chiamate) == 1 and any("saltata" in x for x in pt.righe_log),
              f"{sp.chiamate} {pt.righe_log[-2:]}")
+    # P1c (seconda revisione della PR #330): una risposta vuota (finita nel ragionamento) non è
+    # «0 svelati»: non è misurata
+    class Muto(Svelatore):
+        def stream(self, messages, tools, num_predict=None, think=None):
+            if any(m.get("role") == "tool" for m in messages):
+                yield ("text", "")
+                return
+            yield from super().stream(messages, tools)
+    pt.righe_log.clear()
+    b = nuovo(Muto())
+    turno(b, "parliamo della mia mappa")
+    log = "\n".join(pt.righe_log)
+    verifica("P1c ombra: risposta vuota → «non misurata», non «0 svelati»",
+             "non misurata" in log and "concetti svelati" not in log, log[-300:])
     # P2: attiva. Il modello parla, il codice conta ciò che ha detto
     st.cfg.studio_mappa_consigli = "attiva"
     pt.righe_log.clear()

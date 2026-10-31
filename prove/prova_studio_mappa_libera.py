@@ -176,9 +176,11 @@ verifica("i conti sui concetti chiave: il «diverso» è da rivedere e non conta
          r["conti"]["chiave"] == 2 and r["conti"]["presente"] == 1
          and r["conti"]["diverso"] == 1 and r["conti"]["mancante"] == 0
          and M.copertura(r) == 50, str(r["conti"]))
-verifica("«diverso»: più di metà delle parole piene del riferimento («Guerra» non vale «Guerra "
-         "fredda», «Colombo» non vale «Cristoforo Colombo»)",
-         not M._simile("Guerra fredda", "Guerra") and not M._simile("Cristoforo Colombo", "Colombo")
+verifica("«diverso»: più di metà delle parole piene del riferimento, o il nome accorciato con una "
+         "parola non comune («Colombo», «Scoperte» sì; «Guerra» per «Guerra fredda» no)",
+         not M._simile("Guerra fredda", "Guerra") and M._simile("Cristoforo Colombo", "Colombo")
+         and M._simile("Le scoperte geografiche", "Scoperte")
+         and not M._simile("Cristoforo Colombo", "Amerigo")
          and M._simile("Prima guerra mondiale", "Seconda guerra mondiale")
          and not M.uguale("Prima guerra mondiale", "Seconda guerra mondiale"))
 rs = M.confronta(RN, RC, {"nodi": [{"id": 1, "testo": "Le scoperte geografiche", "radice": True,
@@ -558,6 +560,99 @@ nd, _cd = MG.scheletro([tr_("Stato della Chiesa", "governato da", "Papa"),
 verifica("D. «Stato della Chiesa» e «Chiesa di Stato» restano due concetti",
          {"Stato della Chiesa", "Chiesa di Stato"} <= {n["testo"] for n in nd})
 sa.close()
+
+# ═══════════════ 5c. la seconda revisione della PR #330 ═══════════════
+print("— la seconda revisione")
+sb = studio(cfg_nuova("revisione2.db"))
+
+
+def tent_b(v):
+    return [x["esito"] for x in sb.dati.tutti(
+        "SELECT * FROM studio_tentativi WHERE verifica = ? ORDER BY id", (v,))]
+
+
+# 9: una mappa senza guardare rimasta aperta su una verifica archiviata o fatta vale chiusa
+for come in ("archiviata", "fatta"):
+    v9, i9, a9 = carica(sb)
+    s9, n9 = scheletro(sb, v9, i9, a9)
+    mia9 = sb.inizia_mappa(LEO, v9, "studente")
+    c9 = sb.aggiungi_carta(LEO, v9, "Mappa di storia: che cosa arriva in «America»?",
+                           "Cristoforo Colombo", origine="mappa")
+    l9 = sb.inizia_libera(LEO, v9)
+    if come == "archiviata":
+        sb.archivia(LEO, v9)
+    else:
+        sb.dati.scrivi("UPDATE studio_verifiche SET stato = 'fatta' WHERE id = ?", (v9,))
+    vm9 = sb.vista_mappe(LEO, v9)
+    verifica(f"9. verifica {come} con la libera aperta: vale chiusa, niente resta nascosto, "
+             "nessun tentativo",
+             not vm9["a_libera"] and not vm9["scheletro"].get("nascosta")
+             and not vm9["mia"].get("nascosta") and sb.pdf_mappa(LEO, v9)[:5] == b"%PDF-"
+             and [c["id"] for c in sb.carte(LEO, v9)] == [c9] and not sb._libera_aperta(v9)
+             and solleva(lambda: sb.finisci_libera(LEO, l9), S.VerificaChiusa)
+             and tent_b(v9) == [], str(vm9["a_libera"]))
+# 10: i seminati non sono mancanti; il seme cambiato è della persona; il seme del giro resta
+va_, ia_, aa_ = carica(sb)
+sa_, na_ = scheletro(sb, va_, ia_, aa_)
+la_ = sb.inizia_libera(LEO, va_)
+sb.togli_nodo(LEO, la_, sb._riga_mappa(la_)["nodi"][0]["id"])
+c10 = sb.finisci_libera(LEO, la_)
+verifica("10a. seme tolto: la radice non è fra i mancanti (niente «Mostra»), i conti senza di lei",
+         na_["Le scoperte geografiche"] not in c10["mancanti"] and c10["conti"]["chiave"] == 1
+         and c10["conti"]["mancante"] == 1
+         and "Le scoperte geografiche" not in json.dumps(
+             sb.vista_mappe(LEO, va_)["libera"]["confronto"]["chiave"], ensure_ascii=False)
+         and len(sb.vista_mappe(LEO, va_)["libera"]["confronto"]["chiave"]) == 1
+         and solleva(lambda: sb.mostra_concetto(LEO, la_, na_["Le scoperte geografiche"]),
+                     S.NonTrovata), str(c10["conti"]))
+sb.rifai_mappa(LEO, la_)
+seme_ = sb._riga_mappa(la_)["nodi"][0]["id"]
+sb.nodo_mappa(LEO, la_, "Cristoforo Colombo", nodo=seme_)
+sb.finisci_libera(LEO, la_)
+verifica("10b. il seme rinominato dalla persona è suo: Colombo conta «giusto»",
+         sb._riga_mappa(la_)["nodi"][0]["autore"] == "persona"
+         and tent_b(va_)[-1:] == ["giusto"], str(tent_b(va_)))
+sb.rifai_mappa(LEO, la_)
+sb.imposta(LEO, va_, argomento="Cristoforo Colombo")
+c10c = sb.finisci_libera(LEO, la_)
+verifica("10c. l'argomento cambiato durante il giro non cambia il seme salvato all'apertura",
+         sb._riga_mappa(la_)["aiuto"]["seme"] == "Le scoperte geografiche"
+         and c10c["seminati"] == [na_["Le scoperte geografiche"]]
+         and na_["Cristoforo Colombo"] in c10c["mancanti"], str(c10c["seminati"]))
+# 11: il nome accorciato è «diverso», da rivedere, senza tentativo
+vd_, id_, ad_ = carica(sb)
+sd_, nd_ = scheletro(sb, vd_, id_, ad_)
+ld_ = sb.inizia_libera(LEO, vd_)
+sb.nodo_mappa(LEO, ld_, "Colombo")
+c11 = sb.finisci_libera(LEO, ld_)
+verifica("11. «Colombo» per «Cristoforo Colombo»: diverso, da rivedere, nessun tentativo",
+         c11["esiti"][str(nd_["Cristoforo Colombo"])] == M.DIVERSO and tent_b(vd_) == []
+         and c11["conti"]["presente"] == 0 and c11["conti"]["diverso"] == 1, str(c11["conti"]))
+# 12: le carte della mappa: il tutore le vede e le corregge con la libera aperta
+vt_, it_, at_ = carica(sb)
+scheletro(sb, vt_, it_, at_)
+ct_ = sb.aggiungi_carta(LEO, vt_, "Mappa di storia: che cosa divide «America»?",
+                        "Il trattato di Tordesillas", origine="mappa")
+sb.inizia_libera(LEO, vt_)
+sb.correggi_carta(ANDREA, ct_, domanda="Che cosa divide l'America?")
+verifica("12. con la libera aperta le carte della mappa sono nascoste alla persona, non al tutore",
+         sb.carte(LEO, vt_) == [] and [c["id"] for c in sb.carte(ANDREA, vt_)] == [ct_]
+         and sb.dati.uno("SELECT origine FROM studio_carte WHERE id = ?", (ct_,))["origine"]
+         == "mappa")
+sb.close()
+db8 = D.apri_db(str(TMP / "carte_v8.db"))
+for f in D.MIGRAZIONI[:8]:
+    f(db8)
+db8.execute("INSERT INTO studio_carte (verifica, persona, domanda, risposta, origine, stato, "
+            "scatola, creata) VALUES (1, 'l1', 'Mappa di storia: che cosa?', 'x', 'persona', "
+            "'attiva', 1, '2026-10-30'), (1, 'l1', 'Altra', 'y', 'persona', 'attiva', 1, "
+            "'2026-10-30'), (1, 'l1', 'Mappa di nulla', 'z', 'modello', 'proposta', 1, "
+            "'2026-10-30')")
+D.MIGRAZIONI[8](db8)
+verifica("12. la versione 9 dà l'origine «mappa» alle carte di prima che vengono dalla mappa",
+         [r[0] for r in db8.execute("SELECT origine FROM studio_carte ORDER BY id")]
+         == ["mappa", "persona", "modello"])
+db8.close()
 
 # ═══════════════════════════ 6. dati ═══════════════════════════
 print("— dati")
