@@ -61,7 +61,11 @@ Tabelle (versione 1):
   generazione delle domande dal lettore (`studio/domande_genera.py`);
 - `studio_indicazioni` (versione 11, 31/10, passo 10, issue #250 e #285): le indicazioni dei
   tutori per lo studio di un minore (per tutto il suo studio, una materia o una verifica), con la
-  scadenza; testo di un adulto di casa, controllato nella forma (`studio/tutore.py`).
+  scadenza; testo di un adulto di casa, controllato nella forma (`studio/tutore.py`);
+- `studio_stelle`, `studio_premi` e `studio_duelli` (versione 12, 31/10, issue #296): le stelle
+  guadagnate, gli interruttori dei premi di una persona e i duelli fra persone di casa
+  (`studio/premi.py`). La serie di giorni non ha una tabella: la calcola il codice dai dati che
+  ci sono (eventi, tentativi, prove).
 
 Tenuta (decisione 0035, punto 4): tutto ciò che è di una verifica resta fino a
 `studio_tenuta_giorni` (60) giorni dopo la sua data, per sempre se archiviata; «dimentica le
@@ -86,7 +90,8 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_indicazioni", "studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
+TABELLE = ("studio_pratica", "studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
+           "studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
            "studio_misure",
            "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
            "studio_giorni")
@@ -393,14 +398,75 @@ def _v11(db: sqlite3.Connection):
                "ON studio_indicazioni(persona)")
 
 
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11]
+def _v12(db: sqlite3.Connection):
+    """31/10, issue #296: i premi dello Studio (`studio/premi.py`).
+    - `studio_stelle`: le stelle guadagnate, una riga per traguardo (`tipo` e `chiave`: l'id
+      dell'argomento per «argomento», "" per gli altri), con la verifica, il giorno e se è già
+      stata detta a voce. Una stella presa resta (niente perdite), finché c'è la sua verifica;
+    - `studio_premi`: gli interruttori di una persona (serie, stelle, duelli: NULL = di serie),
+      chi li ha cambiati (il tutore per un minore, la persona stessa per un adulto) e il giorno in
+      cui la serie è stata detta a voce l'ultima volta (al più una volta al giorno);
+    - `studio_duelli`: i duelli fra persone di casa sulle domande di una verifica di chi propone
+      (`da`), con l'altra persona (`a`); le voci (la domanda copiata, come nelle prove) e le
+      risposte di ognuno in JSON, gli esiti decisi dal codice alla consegna. Solo id, codici e date
+      fuori dal JSON; il testo delle domande è un dato come nelle prove."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_stelle (
+        id INTEGER PRIMARY KEY,
+        persona TEXT NOT NULL,
+        verifica INTEGER NOT NULL,
+        tipo TEXT NOT NULL,
+        chiave TEXT NOT NULL DEFAULT '',
+        giorno TEXT NOT NULL,
+        ora TEXT NOT NULL,
+        detta INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (persona, verifica, tipo, chiave))""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_stelle_persona ON studio_stelle(persona)")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_premi (
+        persona TEXT PRIMARY KEY,
+        serie INTEGER,
+        stelle INTEGER,
+        duelli INTEGER,
+        cambiati TEXT,
+        cambiati_da TEXT,
+        serie_detta TEXT)""")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_duelli (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        da TEXT NOT NULL,
+        a TEXT NOT NULL,
+        stato TEXT NOT NULL,
+        voci TEXT NOT NULL DEFAULT '[]',
+        risposte_da TEXT NOT NULL DEFAULT '{}',
+        risposte_a TEXT NOT NULL DEFAULT '{}',
+        consegna_da TEXT,
+        consegna_a TEXT,
+        creato TEXT NOT NULL,
+        scade TEXT NOT NULL,
+        fine TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_duelli_da ON studio_duelli(da)")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_duelli_a ON studio_duelli(a)")
+    # La pratica che conta per la serie e che i tentativi non dicono (revisione della PR #355):
+    # una carta ripassata da chi studia **quando era da ripassare** (`tipo` «carta», `rif` l'id
+    # della carta). Solo id, codici e date; va con la verifica, con la persona e per data
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_pratica (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        giorno TEXT NOT NULL,
+        ora TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        rif INTEGER)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_pratica_persona ON studio_pratica(persona, giorno)")
+
+
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
-CON_ORFANI = ("studio_eventi", "studio_tentativi")
+CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")
 # Le tabelle venute dopo la prima versione: un db di prima (lo Studio spento non lo prepara) può
 # non averle
 NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
-         "studio_indicazioni")
+         "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_premi")
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:
@@ -497,7 +563,7 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
             db.execute("DELETE FROM studio_pagine WHERE materiale = ?", (m,))
         for t in ("studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
                   "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
-                  "studio_indicazioni", *CON_ORFANI):
+                  "studio_indicazioni", "studio_stelle", "studio_duelli", *CON_ORFANI):
             # Un db ancora allo schema di prima (lo Studio spento non lo prepara): le tabelle
             # nuove possono mancare
             if t in NUOVE and not _tabella(db, t):
@@ -649,6 +715,24 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
                 db.execute("DELETE FROM studio_indicazioni WHERE persona = ?", (str(persona),))
             else:
                 db.execute("DELETE FROM studio_indicazioni WHERE scade < ?",
+                           (scadute_prima.isoformat(),))
+        # I premi (31/10, #296): le stelle e i duelli vanno con la loro verifica (sopra) e, se
+        # orfani, sempre; le stelle e gli interruttori di una persona con la persona e con
+        # «svuota»; un duello con chiunque dei due; i duelli più vecchi della tenuta con la
+        # rotazione (sono una partita, non la preparazione)
+        if _tabella(db, "studio_stelle"):
+            db.execute(f"DELETE FROM studio_stelle WHERE {orfani}")
+            db.execute(f"DELETE FROM studio_duelli WHERE {orfani}")
+            if tutto:
+                for t in ("studio_stelle", "studio_duelli", "studio_premi"):
+                    db.execute(f"DELETE FROM {t}")
+            elif persona is not None:
+                db.execute("DELETE FROM studio_stelle WHERE persona = ?", (str(persona),))
+                db.execute("DELETE FROM studio_duelli WHERE da = ? OR a = ?",
+                           (str(persona), str(persona)))
+                db.execute("DELETE FROM studio_premi WHERE persona = ?", (str(persona),))
+            else:
+                db.execute("DELETE FROM studio_duelli WHERE creato < ?",
                            (scadute_prima.isoformat(),))
         db.commit()
     except Exception:

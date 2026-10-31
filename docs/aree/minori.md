@@ -1556,3 +1556,22 @@ dopo la revisione della PR #305 (3 giri) tutto giusto tranne «è annullata davv
 ## Lo Studio: spostato nella sua area (29/10)
 
 *Dal 29/10 (passo 4.2, #281) lo Studio ha la sua area: [studio](studio.md), con i dati e il piano a giorni (4.1, #280), il banco (#293) e le pagine dei materiali (4.2). Qui restano ciò che è dei minori (tutori, orari, la regola «mai la soluzione intera») e la storia degli esercizi tolti.*
+
+## I premi dello Studio e la regola per i minori (31/10, issue #296, ramo `issue-296-studio-serie-stelle`)
+
+La serie di giorni di studio, le stelle e i duelli sono descritti nell'area [studio](studio.md)
+(sezione «I premi»). La regola per i minori sta nella decisione [0035](../decisioni/0035-studio.md),
+punto 45. In breve, per un minore di casa:
+- i premi vengono solo dalla pratica e dalla padronanza decise dal codice, mai dal tempo d'uso né
+  dalle autovalutazioni;
+- la serie non punisce: c'è una pausa ogni 7 giorni, e i giorni senza piano (senza scuola, fuori
+  dagli orari dei tutori) la fermano da sola; nessuna perdita detta o mostrata;
+- niente notifiche né promemoria; a voce la serie si dice al più una volta al giorno, dentro una
+  risposta;
+- i duelli si fanno solo fra persone di casa, mai con ospiti o conoscenti, e li accende il tutore
+  (spenti di serie anche nell'installazione, `studio_duelli`);
+- il tutore vede serie, stelle e duelli (con chi, stato e punti, mai le domande) nella vista del
+  tutore e li spegne, tutti o in parte; spegnere i duelli annulla quelli aperti.
+
+Le azioni dei duelli valgono, per un minore, dentro gli orari dei tutori (`minori.fuori_orario`,
+come le prove). Lo stato d'animo non entra.
