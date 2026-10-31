@@ -2295,7 +2295,62 @@ compit, esame, spost, rimand, anticip, slitt, rinvi, data). Il parser non legge 
 «3.4», «7/10», «1/2 pagina», «il 3 per cento», «il 20 euro», «il 16 anni». **Limite accettato per
 ora**: con una pagina letta, un «sì» da solo alla proposta di Calliope fatta senza che la persona
 dica la data resta senza esecuzione (la data non è detta da lei): da risolvere con una proposta
-vera nella issue #320.
+vera nella issue #320. *[storico fino al 31/10: risolto con «proponi_data», sotto]*
+
+**La proposta vera e il tema della data più stretto (31/10, issue #320, quarta revisione della PR
+#319).** Quando è Calliope a proporre la data nuova di una verifica (letta in una pagina, o calcolata:
+«slitta di una settimana»), il modello chiama `studio` con l'azione **`proponi_data`** (verifica e
+data) invece di chiederlo con parole sue. Il codice scrive la domanda con la data esatta («Vuoi che
+sposti la verifica di storia da giovedì 5 novembre a giovedì 12 novembre?») e la mette in sospeso
+(tool `studio`, azione «sposta», la stessa verifica e la data in AAAA-MM-GG); non cambia niente. È
+una lettura per la politica e parte anche dopo una pagina letta nella stessa risposta
+(`politica.PROPOSTE_DOPO_DATO`, `proposta_dopo_dato`). Al «sì» la stessa chiamata vale come
+consenso. Due eccezioni in `valore._matrice`:
+- la data diversa da quella proposta (confronto esatto: `pol._uguali` guarda le parole lunghe e
+  «2026-11-19» valeva come «2026-11-12») chiede (`valore_proposta_data_diversa`);
+- la data che sta in una pagina, un titolo o una foto della conversazione (la data risolta,
+  `valore.data_dai_dati`, non i numeri) e che la persona non ha detto chiede dicendo da dove viene
+  (««2026-12-20» viene da una foto, non da te: vuoi davvero che cambi la data della verifica?»,
+  `valore_proposta_data_dato`); solo il «sì» a questa domanda sposta.
+La domanda scritta dal modello con un «sì» resta senza esecuzione, come prima.
+
+`_TEMA_DATA` (`tools/studio.py`) è più stretto: «verifica» e «verifiche» intere (non
+«verificato»), «compito in classe» o «compito di <materia>» (non «compito di casa»), «esame di
+<materia>» (non «esame del sangue»), «data» ma non «data di nascita». Le parole dello spostamento
+(«spost», «rimand», «anticip», «slitt», «rinvi») valgono da sole solo nella frase del turno, e la
+data vale solo nel pezzo di frase (fra virgole, punti, «ma») che parla della verifica: «il compito
+di casa è per venerdì, la verifica slitta?» non dice venerdì per la verifica. I quattro scenari
+della revisione (`sim_319e`: «compito di casa per venerdì», «esame del sangue», «ho spostato la
+macchina», il compito di casa nella frase del turno) chiedono da dove viene la data. Prove in
+`prova_valore.py` attraverso `Brain`: la proposta → «sì» → sposta (con e senza una pagina letta
+prima), i contrari (la domanda del modello, un'altra data, «no»), la pagina ostile → proposta →
+«sì» → la domanda con la fonte → «sì» → sposta, i quattro scenari e i casi del tema.
+
+**Dopo la revisione della PR #362 (31/10 sera).**
+- Con dati non fidati nella conversazione e la data non detta dalla persona, al «sì» alla proposta
+  si chiede **sempre**. Una pagina con una data relativa («fra due settimane», «alla settimana
+  prossima», «rinviata di 15 giorni», «al giorno 12») non si ritrova come data, e prima un «sì»
+  solo spostava. Se la data si ritrova in un dato la domanda dice la fonte («viene da una
+  pagina»); altrimenti è generica («Questa data, «giovedì 12 novembre», non l'hai detta tu, e c'è
+  di mezzo una pagina: è quella giusta?», `valore_proposta_data_non_detta`). La proposta di una
+  data calcolata senza pagine di mezzo sposta ancora con un «sì».
+- Le date della proposta e del «sì» si confrontano risolte («20 dicembre» è «2026-12-20»), anche
+  per ritrovarle nelle pagine; per le pagine dello Studio la domanda dice «da una pagina».
+- Il tema: «ma», «però», «invece» e il punto chiudono il pezzo di frase; la virgola, «?», «:» e
+  «;» no, se il pezzo dopo ha solo la data e parole di contorno («la verifica, che era il 5, ora è
+  il 20 novembre», «la verifica? il 20 novembre», «verifiche spostate: storia al 20 novembre»);
+  con un altro soggetto sì («la verifica di matematica non c'è più, il 20 novembre gita»).
+  «prova di <materia>» e «test di <materia>» sono tema. Resta tema, nella frase del turno, anche
+  «ho spostato la macchina il 20 novembre» (le parole dello spostamento valgono da sole lì).
+
+Nella stessa PR, due ritocchi della revisione della PR #358 (#343):
+- `_detta_dal_tutore`: la forma di cortesia non si toglie dopo «solo» o «soltanto» («Dagli la
+  soluzione solo se puoi» è una condizione: «dagli solo la soluzione» non passa);
+- `argomenti._pezzi`: il meno attaccato alla cifra con uno spazio (o l'inizio, una parentesi, un
+  operatore) prima è un numero negativo, un pezzo a sé (`NEGATIVO`): «la temperatura scese a -5»
+  trova «-5»; con lo spazio anche dopo («a - 5», «10 - 5») o attaccato a una parola («x-5»,
+  «10-12») resta la sottrazione. Gli script del revisore (`funzioni.py` della PR #346,
+  `nominate.py` della PR #350) danno gli stessi esiti del ramo della #343.
 
 **Dopo la seconda revisione della PR #319 (30/10 sera):** con `data` bersaglio, dopo una pagina
 letta anche le date dette dalla persona chiedevano, perché il modello scrive l'anno che nessuno
