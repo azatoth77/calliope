@@ -643,7 +643,7 @@ class Frasi:
 
     def tono_turno(self) -> str:
         """Il tono del turno in corso (di chi parla, o della casa): per le frasi dette dai tool
-        con le loro varianti (esercizi, 12/10 sera)."""
+        con le loro varianti (dal 12/10 sera)."""
         return self._tono(None)
 
     # ── la scelta ──

@@ -714,17 +714,81 @@ def _ha_testo(rec: dict) -> bool:
 
 
 # Le tabelle di memoria.db con il testo dei ragazzi che scadono con la stessa tenuta (12/10
-# sera, decisione di Dario): (tabella, colonna della persona, colonna della data ISO). I
-# tentativi degli esercizi (domanda, risposta attesa e data, al più 60 caratteri: il dettaglio
-# dei tutori), le richieste ai tutori (con `oggetto`, ciò che il ragazzo ha chiesto) e le
-# segnalazioni degli esercizi (risposta data e nota del ragazzo; anche queste dal 12/10 sera)
-TABELLE_MEMORIA = (("esercizi_tentativi", "persona", "giorno"),
-                   ("richieste_tutori", "minore", "creata"),
-                   ("esercizi_segnalazioni", "persona", "quando"),
-                   # Le preferenze degli esercizi (12/10): 60 giorni dall'ultimo cambio
-                   ("esercizi_preferenze", "persona", "aggiornato"),
-                   # «A che punto siete» e la classe (12/10 sera): come le preferenze
-                   ("esercizi_punto", "persona", "aggiornato"))
+# sera, decisione di Dario): (tabella, colonna della persona, colonna della data ISO). Le
+# richieste ai tutori (con `oggetto`, ciò che il ragazzo ha chiesto). *[storico: fino al 28/10
+# anche le quattro tabelle degli esercizi (`esercizi_tentativi`, `_segnalazioni`,
+# `_preferenze`, `_punto`), tolte con gli esercizi, #279; le righe vecchie nel db non si
+# migrano]*
+TABELLE_MEMORIA = (("richieste_tutori", "minore", "creata"),)
+# Le tabelle dello Studio (29/10, issue #280, decisione 0035, punto 4): non scadono con la data
+# della riga ma con quella della verifica, `studio_tenuta_giorni` (60) giorni dopo; mai se
+# archiviata. Le cancella solo calliope/studio/dati.cancella (verifiche, materiali, pagine col
+# testo letto e i loro file, argomenti, piano, misure, giorni e, dal 30/10 (#244), gli eventi
+# delle sessioni; dal 30/10, #245 e #246, i tentativi e le carte; dal 31/10, #248, le domande e le
+# prove; dal 31/10, #250, le indicazioni dei tutori; dal 31/10, #296, le stelle, gli interruttori
+# dei premi e i duelli; dal 31/10, #298, le importazioni dei materiali; dal 31/10, #278, gli
+# esercizi guidati), dalla rotazione e da «svuota»; «dimentica le nostre conversazioni» le
+# toglie tranne le verifiche archiviate (main.py)
+TABELLE_STUDIO = ("studio_verifiche", "studio_materiali", "studio_pagine", "studio_argomenti",
+                  "studio_piano", "studio_giorni", "studio_misure", "studio_eventi",
+                  "studio_tentativi", "studio_carte", "studio_mappe", "studio_domande",
+                  "studio_prove", "studio_indicazioni", "studio_stelle", "studio_premi",
+                  "studio_duelli", "studio_pratica", "studio_importazioni",
+                  "studio_esercizi",
+                  "studio_preparazioni")
+# Le preferenze che non scadono col tempo ma vanno via con i dati della persona (27/10):
+# (tabella, colonna della persona). L'accento scelto in Io › Aspetto (schermi/aspetto.py)
+TABELLE_PREFERENZE = (("aspetto_preferenze", "persona"),)
+# Le tabelle dismesse di memoria.db (28/10, revisione della PR #292): quelle degli esercizi e il
+# riepilogo dei compiti, tolti con la #279. Avevano domande, risposte e note dei ragazzi, e
+# nessuno le ruota né le svuota più: si tolgono da sole all'apertura della memoria
+# (`togli_tabelle_dismesse`, da memory.Memory), con una riga nel registro. Una tabella dismessa
+# in futuro si aggiunge qui
+TABELLE_DISMESSE = ("esercizi_tentativi", "esercizi_segnalazioni", "esercizi_preferenze",
+                    "esercizi_punto", "esercizi_banco", "compiti_giorno")
+# Le versioni di schema che vanno via con loro: «esercizi» (le sue tabelle) e «dismesse» (il segno
+# «una volta sola» del primo giro di questa pulizia, 28/10, che non si usa più)
+_MODULI_DISMESSI = ("esercizi", "dismesse")
+
+
+def togli_tabelle_dismesse(db, log=print) -> list[str]:
+    """`DROP TABLE` delle TABELLE_DISMESSE che ci sono, a ogni apertura (seconda revisione della
+    PR #292): costa un SELECT su `sqlite_master`, e se si torna a una versione di prima, che le
+    ricrea, al ritorno avanti si tolgono di nuovo. Nessun segno in `meta_schema`, quindi nessuna
+    versione «più nuova» che possa mettere la memoria in sola lettura. Toglie anche le versioni
+    di `_MODULI_DISMESSI`. Tutto in una transazione: un errore la annulla e non la lascia aperta.
+    `secure_delete` solo per il tempo del DROP, poi com'era. Le tabelle tolte, per la riga nel
+    registro (scritta solo se ne toglie qualcuna); [] se non c'era niente."""
+    nomi = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")}
+    tolte = [t for t in TABELLE_DISMESSE if t in nomi]
+    moduli = []
+    if "meta_schema" in nomi:
+        segni = ",".join("?" * len(_MODULI_DISMESSI))
+        moduli = [r[0] for r in db.execute(
+            f"SELECT modulo FROM meta_schema WHERE modulo IN ({segni})", _MODULI_DISMESSI)]
+    if not tolte and not moduli:
+        return []
+    if db.in_transaction:
+        db.commit()
+    prima = db.execute("PRAGMA secure_delete").fetchone()[0]
+    db.execute("PRAGMA secure_delete = ON")
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        for t in tolte:
+            db.execute(f"DROP TABLE IF EXISTS {t}")
+        for m in moduli:
+            db.execute("DELETE FROM meta_schema WHERE modulo = ?", (m,))
+        db.commit()
+    except Exception:
+        if db.in_transaction:
+            db.rollback()
+        raise
+    finally:
+        db.execute(f"PRAGMA secure_delete = {int(prima)}")
+    if tolte:
+        log(f"[CONSERVA] tabelle dismesse tolte da memoria.db (esercizi e compiti, #279): "
+            f"{', '.join(tolte)}")
+    return tolte
 
 
 class Conservazione:
@@ -1110,6 +1174,10 @@ class Conservazione:
         # Esercizi e richieste ai tutori (12/10 sera): la stessa tenuta, anche quelli di prima
         # (alla prima rotazione, all'avvio: niente migrazioni)
         out["memoria"] = self._memoria(limite=limite)
+        # Lo Studio (29/10, #280): le verifiche non archiviate oltre `studio_tenuta_giorni` dopo
+        # la loro data, con pagine, testo letto e file
+        out["studio"] = self._studio(scadute_prima=oggi - datetime.timedelta(
+            days=int(getattr(self.cfg, "studio_tenuta_giorni", 60) or 60)))
         # L'audio del banco della stanza (17/10, issue #32): la sua rotazione girava solo
         # salvando, cioè con l'eccezione accesa; scaduta o spenta, i giorni oltre
         # `turn_log_days` restavano. Ora anche qui, all'avvio e a ogni giorno nuovo
@@ -1180,11 +1248,11 @@ class Conservazione:
                      f"{self.giorni} giorni")
         return n
 
-    # ── esercizi e richieste ai tutori (memoria.db) ──
+    # ── richieste ai tutori e preferenze (memoria.db) ──
     def _memoria(self, limite: datetime.date | None = None, persona_id=None,
                  tutto: bool = False) -> int:
         """Righe tolte da TABELLE_MEMORIA, con `secure_delete`: più vecchie di `limite`, di una
-        persona, o tutte. Una tabella che non c'è (esercizi mai usati) non conta; il file della
+        persona, o tutte. Una tabella che non c'è (mai usata) non conta; il file della
         memoria che non si apre non ferma niente."""
         path = getattr(self.cfg, "memory_db", None)
         if not path or not Path(path).exists():
@@ -1200,6 +1268,13 @@ class Conservazione:
             return 0
         try:
             db.execute("PRAGMA secure_delete = ON")
+            if tutto or persona_id is not None:
+                for tabella, chi in TABELLE_PREFERENZE:
+                    sql = f"DELETE FROM {tabella}" + ("" if tutto else f" WHERE {chi} = ?")
+                    try:
+                        n += db.execute(sql, () if tutto else (str(persona_id),)).rowcount or 0
+                    except sqlite3.OperationalError:
+                        continue                  # la tabella non c'è
             for tabella, chi, quando in TABELLE_MEMORIA:
                 if tutto:
                     sql, arg = f"DELETE FROM {tabella}", ()
@@ -1214,11 +1289,11 @@ class Conservazione:
                     continue                      # la tabella non c'è
             db.commit()
         except sqlite3.Error as e:
-            self.log(f"   [CONSERVA] esercizi e richieste non ripuliti: {type(e).__name__}")
+            self.log(f"   [CONSERVA] richieste ai tutori non ripulite: {type(e).__name__}")
         finally:
             db.close()
         if n and limite is not None and persona_id is None and not tutto:
-            self.log(f"   [CONSERVA] esercizi e richieste ai tutori oltre {self.giorni} giorni: "
+            self.log(f"   [CONSERVA] richieste ai tutori oltre {self.giorni} giorni: "
                      f"{n} righe tolte")
         return n
 
@@ -1244,20 +1319,25 @@ class Conservazione:
     def svuota(self, persona_id: str | None = None, nome: str | None = None) -> dict:
         """Tutto (persona_id None) o i dati di una persona: la voce, gli eventi su disco (con
         `secure_delete`), nel registro dei turni le parole (di tutti: i file interi) e, dal 12/10
-        sera, l'archivio delle conversazioni (anche le conversazioni in corso salvate) e i
-        tentativi degli esercizi e le richieste ai tutori (TABELLE_MEMORIA)."""
+        sera, l'archivio delle conversazioni (anche le conversazioni in corso salvate) e le
+        richieste ai tutori (TABELLE_MEMORIA; fino al 28/10 anche i tentativi degli esercizi);
+        dal 29/10 lo Studio (TABELLE_STUDIO), con le verifiche archiviate."""
         # Le righe della stanza di un conoscente (14/10 sera) hanno la chiave «conoscente:<id>»
         stanza_id = (f"conoscente:{persona_id}" if persona_id is not None
                      and self.conoscente(persona_id) is not None else persona_id)
         out = {"voce": 0, "eventi": 0, "turni": 0, "conversazioni": 0,
-               "esercizi_richieste": self._memoria(persona_id=persona_id,
-                                                   tutto=persona_id is None),
+               "richieste": self._memoria(persona_id=persona_id, tutto=persona_id is None),
                "stanza": self._svuota_stanza(stanza_id),
                "stanza_banco": self._svuota_banco(persona_id),
                "avvisi": self._svuota_avvisi(persona_id),
                # Le impronte per satellite (15/10): imparate dall'uso, si tolgono con i dati
                # conservati; l'impronta della registrazione resta
-               "impronte_satellite": self._svuota_impronte(persona_id)}
+               "impronte_satellite": self._svuota_impronte(persona_id),
+               # Le foto tenute con la Conversazione (28/10, decisione 0034): file e righe
+               "foto": self._svuota_foto(persona_id),
+               # Lo Studio (29/10, #280): le verifiche, archiviate comprese, e i giorni
+               "studio": (self._studio(tutto=True) if persona_id is None
+                          else self._studio(persona=str(persona_id)))["verifiche"]}
         arch = self.conversazioni
         lock = getattr(self.turnlog, "_lock", None)
         if persona_id is None:
@@ -1288,6 +1368,47 @@ class Conservazione:
             out["conversazioni"] = arch.dimentica(str(persona_id))
         out["eventi"] = self._svuota_eventi(f"persona:{persona_id}")
         return out
+
+    def _studio(self, **kw) -> dict:
+        """calliope/studio/dati.cancella sul file della memoria (tenuta e «svuota»); un errore
+        non ferma il resto."""
+        try:
+            from .studio.dati import cancella_file
+            # L'audio del ripasso da ascoltare (31/10, #249) scade anche da sé, dall'ultimo ascolto
+            kw.setdefault("ascolta_giorni",
+                          int(getattr(self.cfg, "studio_ascolta_giorni", 7) or 7))
+            out = cancella_file(getattr(self.cfg, "memory_db", None), log=self.log,
+                                cartella=getattr(self.cfg, "studio_cartella", None), **kw)
+        except Exception as e:  # noqa: BLE001 — lo Studio non ferma la rotazione del resto
+            self.log(f"   [CONSERVA] Studio non ripulito: {type(e).__name__}")
+            return {"verifiche": 0, "file": 0}
+        if (out["verifiche"] or out.get("giorni")) and "scadute_prima" in kw:
+            self.log(f"   [CONSERVA] Studio: tolte {out['verifiche']} verifiche e "
+                     f"{out.get('giorni', 0)} giorni segnati oltre "
+                     f"{getattr(self.cfg, 'studio_tenuta_giorni', 60)} giorni")
+        return out
+
+    def _svuota_foto(self, persona_id) -> int:
+        """Le foto tenute nel cassetto (decisione 0034) di una persona o di tutti; quelle
+        archiviate restano nei documenti. Dal processo di Calliope il suo cassetto, da terminale
+        quello del file della memoria."""
+        cas, chiudi = getattr(self, "cassetto", None), False
+        try:
+            if cas is None:
+                db = str(getattr(self.cfg, "memory_db", "") or "")
+                if not db or not Path(db).exists():
+                    return 0
+                from .cassetto import load_cassetto
+                cas, chiudi = load_cassetto(self.cfg, log=lambda m: None), True
+                if cas is None:
+                    return 0
+            return cas.dimentica_foto(None if persona_id is None else str(persona_id))
+        except Exception as e:  # noqa: BLE001 — le foto non fermano lo svuotamento
+            self.log(f"   [CONSERVA] foto tenute non tolte: {type(e).__name__}")
+            return 0
+        finally:
+            if chiudi and cas is not None:
+                cas.close()
 
     def _svuota_impronte(self, persona_id) -> int:
         """Le impronte per satellite (15/10, calliope/impronte_satellite.py) di una persona o di
@@ -1578,23 +1699,27 @@ def main(argv=None) -> int:
             print(f"Dati conservati di {nome} cancellati: {r['voce']} registrazioni, "
                   f"{r['eventi']} eventi, parole tolte da {r['turni']} turni, "
                   f"{r['conversazioni']} conversazioni archiviate, "
-                  f"{r['esercizi_richieste']} tra esercizi e richieste ai tutori, "
+                  f"{r['richieste']} tra richieste ai tutori e preferenze, "
                   f"{r['stanza']} righe della stanza, {r['avvisi']} trascrizioni e audio di "
                   f"avvisi" + (f", {r['stanza_banco']} segmenti audio del banco della stanza"
                                if r.get("stanza_banco") else "")
                   + (f", {r['impronte_satellite']} impronte per satellite"
-                     if r.get("impronte_satellite") else "") + ".")
+                     if r.get("impronte_satellite") else "")
+                  + (f", {r['studio']} verifiche dello Studio" if r.get("studio") else "")
+                  + ".")
         else:
             r = c.svuota()
             print(f"Dati conservati cancellati: {r['voce']} registrazioni, {r['eventi']} eventi, "
                   f"{r['turni']} giorni del registro dei turni, {r['conversazioni']} "
-                  f"conversazioni archiviate, {r['esercizi_richieste']} tra esercizi e "
-                  f"richieste ai tutori, {r['stanza']} righe della stanza, {r['avvisi']} "
+                  f"conversazioni archiviate, {r['richieste']} tra richieste ai "
+                  f"tutori e preferenze, {r['stanza']} righe della stanza, {r['avvisi']} "
                   f"trascrizioni e audio di avvisi, {r.get('conoscenti', 0)} conoscenti"
                   + (f", {r['stanza_banco']} segmenti audio del banco della stanza"
                      if r.get("stanza_banco") else "")
                   + (f", {r['impronte_satellite']} impronte per satellite"
-                     if r.get("impronte_satellite") else "") + ".")
+                     if r.get("impronte_satellite") else "")
+                  + (f", {r['studio']} verifiche dello Studio" if r.get("studio") else "")
+                  + ".")
         if c.conversazioni is not None:
             c.conversazioni.close()
         return 0

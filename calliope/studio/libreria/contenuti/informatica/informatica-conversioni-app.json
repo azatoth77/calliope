@@ -1,0 +1,15 @@
+{
+  "formato": 1,
+  "id": "informatica-conversioni-app",
+  "tipo": "miniapp",
+  "titolo": "Binario e decimale",
+  "materia": "Informatica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "tipo_app": "quiz",
+  "estensione": "binario",
+  "schede": ["informatica-binario"],
+  "durata": 10,
+  "comandi": ["passo dopo", "un altro esempio", "alle domande", "la risposta a", "ho finito"],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31"
+}

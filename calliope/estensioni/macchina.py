@@ -184,10 +184,14 @@ def normalizza(m, giocatori: dict) -> dict:
     il manifesto."""
     if not isinstance(m, dict):
         _err("", "un oggetto {\"inizio\": \"turno\", \"fasi\": {…}}")
-    altri = [k for k in m if k not in ("inizio", "fasi", "esito_s", "giocatore")]
+    altri = [k for k in m if k not in ("inizio", "fasi", "esito_s", "giocatore", "anchio")]
     if altri:
         _err("", f"sconosciuto {', '.join(map(str, altri))} (solo inizio, fasi, esito_s, "
-                 "giocatore)")
+                 "giocatore, anchio)")
+    # «anchio»: false (31/10, revisione della PR #366): niente «Gioco anch'io» nella preparazione
+    # (un gioco per uno senza nomi, come le attività della libreria dello Studio)
+    if "anchio" in m and not isinstance(m["anchio"], bool):
+        _err(".anchio", "true o false")
     fasi = m.get("fasi")
     if not isinstance(fasi, dict) or not fasi or len(fasi) > MAX_FASI:
         _err(".fasi", f"da 1 a {MAX_FASI} fasi del gioco (preparazione, esito e fine sono di "
@@ -248,7 +252,8 @@ def normalizza(m, giocatori: dict) -> dict:
     if not (0 <= esito_s <= 30):
         _err(".esito_s", "da 0 a 30 secondi (0 = solo con «avanti»)")
     out = {"inizio": inizio, "fasi": out_fasi, "esito_s": esito_s,
-           **({"giocatore": True} if _bool(m.get("giocatore"), False) else {})}
+           **({"giocatore": True} if _bool(m.get("giocatore"), False) else {}),
+           **({"anchio": False} if m.get("anchio") is False else {})}
     ascolta(out, giocatori)            # i doppioni e i tetti della voce, già qui
     return out
 
@@ -320,7 +325,8 @@ def per_fase(m: dict, giocatori: dict) -> dict[str, list[str]]:
     # «Gioco anch'io» a partita cominciata (15/10): nelle fasi del gioco (non in una tela) e
     # nella fine, con più di un giocatore
     entra = ["anchio"] if gmax > 1 else []
-    out = {"preparazione": prep + list(STANDARD_PREPARAZIONE) + ["inizia"],
+    std = [x for x in STANDARD_PREPARAZIONE if not (x == "anchio" and m.get("anchio") is False)]
+    out = {"preparazione": prep + std + ["inizia"],
            "esito": ["avanti"], "fine": ["ancora"] + entra}
     for fnome, f in (m.get("fasi") or {}).items():
         lista = []

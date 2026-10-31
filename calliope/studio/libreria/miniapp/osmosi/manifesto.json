@@ -1,0 +1,32 @@
+{
+  "nome": "libreria_osmosi",
+  "titolo": "Il globulo rosso e l'osmosi",
+  "cosa_fa": {"verbo": "mostra", "oggetto": "cosa fa un globulo rosso in acqua salata"},
+  "input": {"type": "object", "properties": {}, "required": []},
+  "permessi": {},
+  "scheda": {"tipo": "gioco", "file": ["logica.js"], "giocatori": {"min": 1, "max": 1},
+             "salva": false, "azioni": [],
+             "macchina": {
+               "anchio": false,
+               "inizio": "previsione",
+               "fasi": {
+                 "previsione": {"pagina": "scelte", "turni": false, "verso": ["verifica", "esito", "fine"],
+                                "comandi": {
+                                  "gonfia": {"forme": ["si gonfia", "gonfia"], "etichetta": "Si gonfia"},
+                                  "uguale": {"forme": ["resta com'è", "resta uguale", "non cambia"],
+                                             "etichetta": "Resta com'è"},
+                                  "raggrinzisce": {"forme": ["si raggrinzisce", "raggrinzisce"],
+                                                   "etichetta": "Si raggrinzisce"},
+                                  "finito": {"forme": ["ho finito", "basta globuli"],
+                                             "etichetta": "Ho finito"}}},
+                 "verifica": {"pagina": "messaggio", "turni": false, "verso": ["previsione", "esito", "fine"],
+                              "comandi": {
+                                "prossimo": {"forme": ["prossimo passo", "passo successivo"],
+                                             "etichetta": "Prossimo passo"},
+                                "finito": {"forme": ["ho finito", "basta globuli"],
+                                           "etichetta": "Ho finito"}}}
+               }
+             }},
+  "livello": "familiare",
+  "limiti": {"tempo_s": 5, "memoria_mb": 128}
+}

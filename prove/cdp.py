@@ -11,6 +11,10 @@ Due cause d'instabilità tolte, comuni a tutte le prove con il browser:
   processi lasciati vivi (13 log su 18 di prova_scritto_pagina). I processi si riconoscono
   anche dal profilo (`--user-data-dir`): alcune utility di Edge (ProfileImport) partono tardi,
   dopo l'elenco dei figli, e restano orfane quando il principale esce.
+
+Dal 30/10 (#244): il processo lanciato può uscire subito lasciando il browser in un altro
+processo (Edge sul portatile): si aspetta `DevToolsActivePort` lo stesso, e `Browser.close` si
+manda anche col primo processo già uscito; il resto si ritrova dal profilo.
 """
 
 import json
@@ -64,7 +68,15 @@ class Browser:
         self.porta: int | None = None
         self.ws_browser: str | None = None
         fine = time.monotonic() + attesa_s
-        while time.monotonic() < fine and self.proc.poll() is None:
+        # Il processo lanciato può uscire subito e lasciare il browser vivo in un altro (Edge
+        # sul portatile dal 30/10: il primo msedge esce con 0 e DevToolsActivePort arriva dopo):
+        # si aspetta il file fino al tempo massimo; i processi si ritrovano dal profilo
+        uscito = None
+        while time.monotonic() < fine:
+            if self.proc.poll() is not None and uscito is None:
+                uscito = time.monotonic()
+            if uscito is not None and time.monotonic() - uscito > 10:
+                break                       # uscito davvero, e nessun file dopo 10 s
             try:
                 righe = file_porta.read_text(encoding="utf-8").split()
                 if len(righe) >= 2 and righe[0].isdigit():
@@ -115,7 +127,8 @@ class Browser:
                 figli = psutil.Process(proc.pid).children(recursive=True)
             except Exception:  # noqa: BLE001 — già uscito
                 pass
-        if proc.poll() is None and self.ws_browser:
+        # Anche col processo lanciato già uscito: il browser può vivere in un altro (sopra)
+        if self.ws_browser:
             try:
                 from websockets.sync.client import connect
                 with connect(self.ws_browser, open_timeout=3, close_timeout=1,

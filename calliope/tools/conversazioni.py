@@ -154,7 +154,7 @@ def _argomento(domanda: str) -> str:
 
 
 def _cronologico(ctx, arch, persona, quando: str, dal, al, detto_periodo: str,
-                 domanda: str = "") -> dict:
+                 domanda: str = "", adesso: float | None = None) -> dict:
     """Le ultime conversazioni di chi parla dalla più recente (la conversazione in corso
     esclusa: è nella storia), una alla volta (con un periodo, «ieri», fino a tre: un elenco);
     ogni chiamata successiva va una più indietro. Con tre alla volta anche senza periodo il
@@ -186,7 +186,7 @@ def _cronologico(ctx, arch, persona, quando: str, dal, al, detto_periodo: str,
                           f"{tengo}.", ok=False)
         return _niente(ctx, f"Non trovo nostre conversazioni passate{dove}.")
     stato[chiave] = {"salta": salta, "turno": turno, "t": ora, "quando": periodo}
-    adesso = time.time()
+    adesso = time.time() if adesso is None else adesso
     elenco = []
     for c in r["conversazioni"]:
         voce = {"quando": _periodo(c["inizio"], c["fine"], adesso), "dove": _luogo(c["luogo"]),
@@ -258,14 +258,18 @@ def _cerca_archivio(ctx: ToolContext, domanda: str = "", quando: str = "",
                           "riconosco dalla voce.", ok=False)
     dal = al = None
     detto_periodo = ""
+    # Un adesso solo per il periodo detto a voce e per le etichette (30/10, #313, revisione
+    # della PR #329): «ieri» e «ieri alle 23:41» si contano dallo stesso istante, anche a
+    # cavallo della mezzanotte
+    adesso = time.time()
     if (quando or "").strip():
         from ..tempi import parse_past_range
-        d0, d1, detto_periodo = parse_past_range(quando)
+        d0, d1, detto_periodo = parse_past_range(quando, datetime.datetime.fromtimestamp(adesso))
         dal = d0.timestamp() if d0 else None
         al = d1.timestamp() if d1 else None
     if cronologico in (True, "true", "sì", "si") and not ospiti:
         return _cronologico(ctx, arch, persona, quando, dal, al, detto_periodo,
-                            domanda or getattr(ctx, "user_text", "") or "")
+                            domanda or getattr(ctx, "user_text", "") or "", adesso=adesso)
     testo = (domanda or "").strip() or (getattr(ctx, "user_text", "") or "")
     r = arch.cerca(testo, persona, ospiti=ospiti, dal=dal, al=al, k=8)
     fuori_periodo = False
@@ -281,7 +285,6 @@ def _cerca_archivio(ctx: ToolContext, domanda: str = "", quando: str = "",
         chi = "degli ospiti" if ospiti else "nostre"
         frase = f"Non trovo niente nelle {chi} conversazioni{dove}{su}."
         return _final(frase, ok=False) if ospiti else _niente(ctx, frase)
-    adesso = time.time()
     risultati = []
     in_corso = getattr(ctx, "conv_archivio", None)
     for x in per_recenti(r["risultati"]):
@@ -424,6 +427,30 @@ def _utili(risultati: list[dict]) -> list[dict]:
 DIMENTICA_DOMANDA = ("I ricordi che mi hai chiesto di tenere restano. Cancello tutte le nostre "
                      "conversazioni, anche quella di adesso?")
 DIMENTICATE_FRASE = "Fatto: ho cancellato le nostre conversazioni, anche quella di adesso."
+# Lo Studio (29/10, #280, revisione della PR #308): «dimentica» toglie anche le verifiche dello
+# Studio della persona, tranne le archiviate (decisione 0035, punto 11), e lo dice
+STUDIO_DOMANDA = "Tolgo anche le verifiche dello Studio, tranne quelle archiviate."
+STUDIO_TOLTO = "Ho tolto anche le verifiche dello Studio; quelle archiviate restano."
+# La cancellazione dello Studio non è riuscita (il gancio di «dimentica» ha dato un errore): la
+# frase lo dice invece di dire «ho tolto» (passo 4.5, nota della seconda revisione della PR #308)
+STUDIO_NON_TOLTO = ("Le verifiche dello Studio invece non sono riuscita a toglierle: riprova "
+                    "più tardi.")
+FOTO_ARCHIVIATE_RESTANO = ("Ho tolto anche le foto che tenevo; quelle che hai archiviato restano "
+                           "nei tuoi documenti.")
+
+
+def _studio_da_dimenticare(ctx, persona) -> bool | None:
+    """La persona ha verifiche dello Studio non archiviate (anche con lo Studio spento: quelle
+    di prima)? None se non si sa (un errore: il db bloccato o illeggibile). Prima di «dimentica»
+    None vale «no» e non ferma niente; dopo vale «non so», quindi «non tolte» (revisione della
+    PR #317: un errore valeva «non ne restano» e la frase diceva «ho tolto»)."""
+    try:
+        from ..studio.dati import conta_file
+        c = conta_file(getattr(getattr(ctx, "cfg", None), "memory_db", None), str(persona),
+                       solleva=True)
+        return c["verifiche"] > c["archiviate"]
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _conversazioni_dimentica(ctx: ToolContext) -> dict:
@@ -441,6 +468,7 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
     p = proposte.get(persona)
     if p is not None and 0 < turno - p <= 3:
         proposte.pop(persona, None)
+        studio = bool(_studio_da_dimenticare(ctx, persona))
         n = arch.dimentica(persona)
         # Trascrizione e audio degli avvisi di pericolo ricevuti da chi parla (14/10 sera)
         try:
@@ -470,9 +498,29 @@ def _conversazioni_dimentica(ctx: ToolContext) -> dict:
         frase = (DIMENTICATE_FRASE if n else
                  "Fatto: non c'erano conversazioni archiviate, e quella di adesso l'ho "
                  "dimenticata.")
+        if getattr(ctx, "cassetto", None) is not None:
+            # Le foto tenute con la conversazione vanno via con lei, le archiviate no (decisione
+            # 0034, seconda revisione della PR #273)
+            frase += " " + FOTO_ARCHIVIATE_RESTANO
+        if studio:
+            # Solo se è riuscita: dopo «dimentica» non ne restano di non archiviate (il gancio
+            # dello Studio in main.py non ferma «dimentica» e scrive l'errore nel registro)
+            # Un conteggio che non riesce vale «non so»: «non tolte», mai «ho tolto»
+            rimaste = _studio_da_dimenticare(ctx, persona) is not False
+            frase += " " + (STUDIO_NON_TOLTO if rimaste else STUDIO_TOLTO)
+            if rimaste:
+                from .spec import note_rule
+                note_rule(ctx, "studio_dimentica_fallita")
+        # La sessione di oggi dello Studio (le due risposte, in memoria) va via anche lei
+        st = getattr(ctx, "studio", None)
+        if st is not None and hasattr(st, "dimentica_sessione"):
+            st.dimentica_sessione(persona)
         return _final(frase, cancellate=n)
     proposte[persona] = turno
     domanda = DIMENTICA_DOMANDA
+    if _studio_da_dimenticare(ctx, persona):
+        # «I ricordi … restano. Tolgo anche le verifiche dello Studio, … Cancello tutte …?»
+        domanda = DIMENTICA_DOMANDA.replace("Cancello", STUDIO_DOMANDA + " Cancello", 1)
     return _final(domanda, ok=False,
                   in_sospeso={"domanda": domanda, "cosa": "cancellare le conversazioni "
                                                        "archiviate e quella di adesso", "tool":
@@ -533,7 +581,7 @@ def conversazioni_specs() -> list[ToolSpec]:
                 "parli o chiedi conferma, di' così, mai che verrà cancellato. Cancellare è "
                 "un'altra cosa (conversazioni_dimentica, dimentica). "
                 "NON chiamarlo quando vuole ricominciare una cosa precisa (il collaudo, un "
-                "gioco, un esercizio, un timer, una lista: per quelle c'è il loro strumento) né "
+                "gioco, un timer, una lista: per quelle c'è il loro strumento) né "
                 "quando vuole riprendere o continuare («ricominciamo da dove eravamo», "
                 "«riprendiamo il discorso»): è il contrario, la conversazione serve. Se invece "
                 "chiede di ripartire da zero, chiamalo: non dire che ricominciate senza "

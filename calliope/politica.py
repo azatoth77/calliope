@@ -231,6 +231,31 @@ def _pc_tool():
 
 S, A, P = SICURO, AZIONE, PERICOLOSO
 
+# Le parole che chiedono ogni azione dello Studio (seconda revisione della PR #317): con dati non
+# fidati di mezzo una frase di chi studia («oggi», «leggi», «la pagina», un numero) non basta più
+# a togliere un argomento o a segnare un giorno: servono le parole di quell'azione
+VERBI_STUDIO = {
+    "crea": r"verific|interrogaz|compit|esame|ho una|ho la|segna",
+    "fatto": r"fatt|finit|complet|ho letto|segna",
+    "salta_oggi": r"salt|spost|non ce la faccio|rimand|non riesco",
+    "sposta": r"spost|rimand|rinvi|anticip|slitt|cambi",
+    "archivia": r"archivi|conserv",
+    "tieni": r"tien|tenere|rimett|includ|nel piano|aggiung",
+    "togli": r"togl|tol[gt]|elimin|lev[aio]|cancell|fuori dal piano|non serve",
+    "riprova": r"riprov|rilegg|di nuovo",
+    # passo 8 (#248): il tipo della prova vera e «l'ho fatta»
+    "tipo": r"interrog|oral|scritt|verific|da (?:luned|marted|mercoled|gioved|venerd|sabato|oggi|"
+            r"domani)|dal|dall",
+    "conclusa": r"fatt|interrogat|finit|conclus|andat|consegnat",
+    "sessione": r"conosc|sent|stanc|pront|curios|tranquill|stress|neutral|energia|sicur|nuov|"
+                r"poco|abbastanza|bene|male|[1-5]|uno|due|tre|quattro|cinque",
+    # passo 10 (#250, #285): le indicazioni del tutore; il testo deve venire anche dalle sue
+    # parole (tools/studio._detta_dal_tutore)
+    "indica": r"indic|insist|di' a|dì a|digli|dagli|fagli|ricord|quando (?:lo|la) aiut|"
+              r"con (?:lui|lei)|non (?:dargli|dirgli|fargli)|chied|insegn|spieg|segna",
+    "indicazioni_togli": r"togl|tol[gt]|elimin|lev[aio]|cancell|basta|non serv",
+}
+
 # La tabella dei tool di Calliope. Un tool nuovo va aggiunto qui (o ha `ToolSpec.classe`):
 # senza, vale pericoloso e prova_politica fallisce.
 CLASSI: dict[str, Classe] = {
@@ -250,9 +275,6 @@ CLASSI: dict[str, Classe] = {
     # le conversazioni passate di chi parla (calliope/conversazioni.py): parole sue e risposte
     # di Calliope, i risultati non fidati non si archiviano
     "conversazione_cerca": _c(S),
-    # minori (calliope/minori.py): il registro dei compiti è contabilità interna, senza effetti
-    # fuori (con la foto del compito di mezzo non deve chiedere a ogni risposta)
-    "compiti_aiuto": _c(S),
     # la risposta strutturata a una proposta (10/10, calliope/stato_dialogo.py): non fa niente
     # da sé; il «sì» diventa la chiamata del tool proposto, che passa da qui come sempre
     "proposta_rispondi": _c(S),
@@ -388,8 +410,7 @@ CLASSI: dict[str, Classe] = {
                                              if _s(a, "azione") == "promuovi" else
                                              f"tolga {_s(a, 'chi', 'qualcuno')} dalla famiglia")),
     "minore_gestisci": _c(P, sfida=True, chiave=("valore",),
-                          sola_lettura=("azione", frozenset({"stato", "riepilogo_compiti",
-                                                             "richieste"})),
+                          sola_lettura=("azione", frozenset({"stato", "richieste"})),
                           cosa=lambda a: f"cambi le regole di {_s(a, 'nome', 'un ragazzo')} "
                                          f"({_s(a, 'azione')})"),
     # la modalità sviluppo (08/10, calliope/sviluppo.py): «stato» legge; sospendere,
@@ -424,11 +445,85 @@ CLASSI: dict[str, Classe] = {
     "sviluppo_correggi": _c(P, cosa=lambda a: "faccia correggere lo sviluppo all'agente"
                             + (f": «{_corto(_s(a, 'problema'))}»" if _s(a, "problema")
                                else "")),
+    # lo Studio (30/10, passo 4.5, #284, tools/studio.py): sui dati della persona (o del suo
+    # minore, da tutore), reversibile; «stato», «piano» e «oggi» leggono soltanto. Niente fonte:
+    # non legge il testo delle pagine né i titoli degli argomenti. «Archivia» tiene la verifica
+    # per sempre: senza le parole nella frase chiede prima (chiedi_se). Dal 30/10 (passo 4b, #244)
+    # anche «resoconto» e «riepilogo» leggono soltanto (proiezioni dei dati, frasi del codice)
+    # Dal 30/10 (passo 7, #247) «mappa»: i conti della mappa concettuale, mai il testo dei concetti
+    # Dal 31/10 (passo 8, #248) «prove» legge i conti delle prove; «tipo» e «conclusa» cambiano
+    # Dal 31/10 (passo 10, #250, #285) «indica» e «indicazioni_togli» cambiano le indicazioni
+    # del tutore per lo studio del suo minore; «indicazioni» ne legge il conto
+    # Dal 31/10 (#297) «libreria» legge le proposte della libreria (titoli fidati, scelti dal codice)
+    # Dal 31/10 (#296) «premi» legge la serie e il conto delle stelle (frasi del codice, numeri)
+    # «proponi_data» (#320) non cambia niente: scrive la domanda e la mette in sospeso
+    "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi", "resoconto",
+                                                        "riepilogo", "carte", "mappa",
+                                                        "prove", "indicazioni", "premi",
+                                                        "libreria", "proponi_data"})),
+                 cosa=lambda a: _studio_cosa(a), verbi_azione=("azione", VERBI_STUDIO),
+                 chiedi_se=lambda testo, a, ctx, **_k: _studio_archivia(testo, a)),
+    # il testo letto delle pagine e i titoli degli argomenti: dati non fidati, come una foto
+    "studio_pagina_leggi": _c(S, fonte="foto"),
+    # le carte dello Studio a voce (30/10, passo 6, #246): domanda e risposta sono dati non fidati
+    # come le pagine (in busta, fuori dalla storia a risposta finita). «esito» scrive l'esito
+    # della carta in corso, ma non lo sceglie il modello: lo decide il codice dalla frase detta
+    # dalla persona (una forma chiusa per intero, o la risposta chiusa della carta), una volta per
+    # carta e per turno; una misura sui dati della persona (E0), che né il testo della carta né il
+    # modello possono cambiare. Per questo è una lettura e non un'azione di `studio`: con la carta
+    # in conversazione un'azione vorrebbe una richiesta con le sue parole, e «nel 1861» non lo è
+    "studio_carte": _c(S, fonte="foto"),
+    # l'interrogazione simulata a voce (31/10, passo 8, #248): come le carte. Domande e risposte
+    # attese sono dati non fidati (in busta, fuori dalla storia a risposta finita); l'esito lo
+    # decide il codice dalla frase detta dalla persona, mai `proposta` del modello (una misura);
+    # una volta per domanda e mai nel turno in cui è stata chiesta (E0 sui dati della persona)
+    "studio_interroga": _c(S, fonte="foto"),
+    # l'esercizio guidato (31/10, #278): come le carte, la domanda e l'indizio sono dati
+    "studio_esercizio": _c(S, fonte="foto"),
+    # il ripasso da ascoltare (31/10, passo 9, #249): una lettura senza fonte non fidata. Il
+    # risultato ha solo conti e una frase del codice; le pagine e le carte le legge il ciclo dopo
+    # la risposta, con la voce del libro, e non entrano nella conversazione né nella storia
+    "studio_ascolta": _c(S),
+    # le attività della libreria dello Studio (31/10, #297, parte 2): apre sullo schermo un gioco
+    # puro e fidato (una mini-app scritta e rivista da noi), come un gioco delle estensioni puro;
+    # niente dati della persona, nessuna fonte non fidata
+    "studio_attivita": _c(S),
+    # «Parliamone» dopo la mappa libera (30/10, passo 7c, #328): la mappa, lo scheletro senza i
+    # concetti nascosti, il confronto del codice e gli indicatori, dati non fidati come le carte
+    # (in busta, fuori dalla storia a risposta finita); non scrive niente
+    "studio_mappa_consigli": _c(S, fonte="foto"),
     # giochi (05/10): un ragazzo chiede un permesso al tutore (resta in sospeso finché il
     # tutore non decide a voce: niente effetti da sola)
     "richiesta_tutore": _c(A, cosa=lambda a: f"mandi al tuo tutore la richiesta "
                                              f"«{_s(a, 'cosa')}»"),
 }
+
+_STUDIO_COSA = {"crea": "segni la verifica", "fatto": "segni fatto il giorno del piano",
+                "salta_oggi": "sposti il piano di oggi", "archivia": "archivi la verifica",
+                "sposta": "cambi la data della verifica",
+                "tieni": "tenga l'argomento nel piano", "togli": "tolga l'argomento dal piano",
+                "proponi_data": "ti proponga la data nuova della verifica",
+                "riprova": "riprovi a leggere la pagina", "sessione": "cominci la sessione",
+                "tipo": "cambi il tipo della prova", "conclusa": "segni fatta la verifica",
+                "indica": "segni un'indicazione per lo studio del ragazzo",
+                "indicazioni_togli": "tolga le indicazioni per lo studio del ragazzo"}
+
+
+def _studio_cosa(a: dict) -> str:
+    return _STUDIO_COSA.get(_s(a, "azione").lower(), "cambi lo Studio")
+
+
+_ARCHIVIA = re.compile(r"archivi|tienil|tienila|conserv", re.I)
+
+
+def _studio_archivia(testo: str, a: dict):
+    """«Archivia» senza le sue parole nella frase: la domanda prima (resta per sempre, anche
+    dopo «dimentica»; decisione 0035, punto 11)."""
+    if _s(a, "azione").lower() != "archivia" or _ARCHIVIA.search(testo or ""):
+        return None
+    return ("politica_studio_archivia",
+            "Vuoi che archivi la verifica? Così resta per sempre, anche dopo «dimentica».")
+
 
 # Le parole che giustificano un'azione interna con dati non fidati di mezzo (Classe.verbi,
 # regola `politica_azione_non_giustificata`): verbo o oggetto della richiesta. Niente verbi
@@ -440,6 +535,8 @@ VERBI = {
                       r"rovescia|avvisami|imposta|cambi|aggiung|togl|allung|accorc|sposta"),
     "promemoria_imposta": r"ricord|promemoria|avvis|memo|dimentic|sposta|cambi|segn",
     "agenda_annulla": r"annull|cancell|togl|elimin|ferm|stop|bast|lev",
+    # Per azione in VERBI_STUDIO (seconda revisione della PR #317); qui solo le letture
+    "studio": r"verific|piano|argoment|cart[ae]|mapp|prov[ae]|interrog|librer|sched",
     "appuntamento_aggiungi": (r"appuntament|agenda|calendari|segn|impegn|visit|riunion|fiss|"
                               r"sposta|cambi|aggiung|prenot|cena|pranzo|incontr"),
     "lista_aggiungi": r"aggiung|segn|list|spes|compr|prend|manc|scriv|inser|finit",
@@ -715,6 +812,9 @@ class Turno:
     # entità di Home Assistant in «Taverna o Bagno della Taverna?», il titolo di uno sviluppo
     # dall'indice): valgono come parole della persona per la politica per valore
     domanda_fidata: str = ""
+    # La frase della persona del turno di prima, se Calliope ha chiuso la risposta con una
+    # domanda (terza revisione della PR #319): «al 20 dicembre» → «Vuoi che la sposti?» → «sì»
+    frase_prima_domanda: str = ""
     # La domanda della proposta in sospeso e che cosa propone (10/10: «Non ho capito: lo
     # chiudo?» a una risposta senza parole, `consenso_irriconoscibile`); `risposta_dato`: la
     # proposta chiede un dato, non un sì (la domanda dell'agente): lì vale qualunque risposta
@@ -1090,7 +1190,7 @@ def bloccata(name: str, ctx, args: dict | None = None) -> dict | None:
     if not t.letto_ora:
         _ricorda_prima(name, args, t)
         return None
-    if name in DOPO_DATO:
+    if name in DOPO_DATO or proposta_dopo_dato(name, args):
         return None
     if detto_dopo_dato(name, args, t):
         note_rule(ctx, "dopo_dato_valore_detto")
@@ -1292,6 +1392,19 @@ DOPO_DATO = frozenset({"web_cerca", "notizie", "biblioteca_cerca", "ora_attuale"
 # nella stessa frase). Il collaudo esegue la versione da approvare con la porta stretta: i suoi
 # effetti li governa il guardrail delle estensioni, non il testo letto
 DOPO_DATO_SE_DETTO = {"sviluppo_collauda": ("dati", "argomenti")}
+# Dopo un dato letto in questa risposta parte anche una proposta che non fa niente da sola: la
+# domanda scritta dal codice, in sospeso (31/10, #320: «proponi_data» di studio). Al «sì» la
+# politica guarda ancora da dove viene il valore (valore._matrice)
+PROPOSTE_DOPO_DATO = {"studio": ("azione", "proponi_data")}
+
+
+def proposta_dopo_dato(name: str, args: dict | None) -> bool:
+    """La chiamata è una proposta di PROPOSTE_DOPO_DATO (una domanda del codice, nessun
+    effetto): parte anche dopo un dato letto in questa risposta."""
+    k = PROPOSTE_DOPO_DATO.get(name)
+    return bool(k) and isinstance(args, dict) and _s(args, k[0]).lower() == k[1]
+
+
 # Azioni reversibili che con il valore detto tutto nella frase (e il verbo dell'azione) non
 # chiedono conferma nemmeno con un dato di mezzo: {tool: (azione, argomento)}
 DETTO_BASTA = {"estensione_gestisci": ("rinomina", "titolo")}
@@ -1600,7 +1713,8 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
     if cl.classe == VIETATO:
         return Decisione("vieta", "politica_vietato")
     if (t is not None and t.letto_ora and name not in DOPO_DATO
-            and not detto_dopo_dato(name, args, t)):
+            and not detto_dopo_dato(name, args, t)
+            and not proposta_dopo_dato(name, args)):
         return Decisione("blocca", "web_azione_bloccata", fonte=t.letto_ora)
     if t is None or cl.classe == SICURO:
         if cl.esce and t is not None and t.contaminazione:

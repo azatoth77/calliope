@@ -733,11 +733,10 @@ _DATA_IN_CONTO = re.compile(r"\b\d{4}-\d{1,2}-\d{1,2}\b|\b\d{1,2}/\d{1,2}/\d{2,4
 
 def _calcola(ctx: ToolContext, espressione: str) -> dict:
     """Calcola un'espressione aritmetica in modo esatto."""
-    # Un minore nei compiti (05/10): il risultato non si dà, si controlla il suo
-    from .minori import calcola_in_compiti
-    compito = calcola_in_compiti(ctx, espressione or "")
-    if compito is not None:
-        return compito
+    # Per un minore il risultato si dà sempre (28/10, #279, decisione 0035): la regola «mai la
+    # soluzione intera» dei compiti guidati è nei dati del turno (minori.REGOLA_COMPITI).
+    # *[storico: dal 05/10 al 28/10, con un esercizio aperto di compiti_aiuto, «nascosto: è un
+    # compito»]*
     expr = (espressione or "").strip()
     # Scritture comuni del modello o del parlato: × ÷ ^ , decimale
     expr = expr.replace("×", "*").replace("÷", "/").replace("^", "**").replace(":", "/")
@@ -758,6 +757,12 @@ def _calcola(ctx: ToolContext, espressione: str) -> dict:
         return {"ok": False, "errore": "risultato non finito"}
     out = {"ok": True, "espressione": expr, "risultato": _format_it(value),
            "da_dire": _to_say(value)}
+    # Un minore coi compiti guidati (28/10, revisione della PR #292): il risultato al modello
+    # sì, la scheda «Calcolo» sullo schermo no (vincolo di prudenza, principio 10)
+    from .. import minori as _minori
+    if _minori.compiti_guidati(ctx):
+        note_rule(ctx, "minore_calcolo_senza_scheda")
+        return out
     return _con_scheda(out, ctx, lambda: schede.calcolo(expr, out["risultato"]))
 
 
@@ -1058,11 +1063,45 @@ def _timer_auto_label(label: str) -> bool:
     return bool(re.fullmatch(r"di [\w ]+", label or "")) and bool(parse_duration(label))
 
 
+_TIMER_SPARITO = {"ok": False, "fatto": "NIENTE: il timer toccato non c'è più",
+                  "errore": "Questo timer non c'è più: è già suonato o è stato fermato.",
+                  "conferma": "Questo timer non c'è più: è già suonato o è stato fermato.",
+                  "risposta_finale": "Questo timer non c'è più: è già suonato o è stato fermato."}
+_FINITO_FRASE = "Questo timer è già finito: suona fra un attimo, non lo allungo."
+_TIMER_FINITO = {"ok": False, "fatto": "NIENTE: il timer toccato è già finito",
+                 "errore": _FINITO_FRASE, "conferma": _FINITO_FRASE, "risposta_finale": _FINITO_FRASE}
+
+
+def _timer_toccato(ctx):
+    """Il timer toccato sullo schermo personale (28/10, #257: «+1 minuto» e «Ferma»), scelto dal
+    codice (`ToolContext.tocco_bersaglio`, lo imposta solo il ciclo) e non dal testo: False se la
+    chiamata non viene da un tocco; None se quel timer non c'è più (suonato, fermato, o un altro
+    con lo stesso id: l'identità della scheda ha anche l'istante di creazione)."""
+    b = getattr(ctx, "tocco_bersaglio", None)
+    if not isinstance(b, dict) or "timer" not in b:
+        return False
+    try:
+        it = ctx.agenda.get(int(b["timer"]))
+    except (TypeError, ValueError):
+        return None
+    if it is None or it.get("kind") != "timer" or schede.chiave_timer(it) != b.get("chiave"):
+        return None
+    return it
+
+
 def _timer_cambia(ctx, durata: str, nome: str, modo: str, prof) -> dict | None:
     """Cambia un timer già messo. None = nessun timer da cambiare (il chiamante ne avvia uno
     nuovo e lo dice)."""
     owner = prof.id if prof else None
-    item, _ = ctx.agenda.find("timer", nome, owner)
+    item = _timer_toccato(ctx)
+    if item is None:
+        return dict(_TIMER_SPARITO)          # un tocco su un timer suonato: niente timer nuovo
+    if item and float(item.get("due") or 0) <= time.time():
+        # Finito ma non ancora suonato (#266, revisione della PR #270): «+1 minuto» non lo allunga,
+        # suona come doveva
+        return dict(_TIMER_FINITO)
+    if item is False:
+        item, _ = ctx.agenda.find("timer", nome, owner)
     if item is None:
         return None
     now = time.time()
@@ -1389,7 +1428,15 @@ def _agenda_annulla(ctx: ToolContext, cosa: str) -> dict:
     prof = _person(ctx)
     owner = prof.id if prof else None
     gone = None
-    if is_cancel_all(cosa or ""):
+    toccato = _timer_toccato(ctx)
+    if toccato is None:
+        return dict(_TIMER_SPARITO)
+    if toccato:
+        # «Ferma» sulla scheda del timer (28/10, #257): quel timer e solo lui
+        gone = ctx.agenda.cancel_ids({toccato["id"]}, owner)
+        if not gone:
+            return dict(_TIMER_SPARITO)
+    elif is_cancel_all(cosa or ""):
         chosen = ctx.agenda.scegli(cosa or "", owner)
         if _da_confermare(chosen):
             proposte = getattr(ctx.agenda, "proposte_tutto", {})
@@ -1415,7 +1462,7 @@ def _agenda_annulla(ctx: ToolContext, cosa: str) -> dict:
                 return _annulla_tutto_chiede(ctx, chosen, cosa or "", owner)
     if gone is None:
         gone = ctx.agenda.cancel(cosa or "", owner)
-    if is_cancel_all(cosa or ""):
+    if is_cancel_all(cosa or "") and not toccato:
         note_rule(ctx, "agenda_tutto")
     if not gone:
         return _annulla_quale(ctx, cosa or "", prof)
@@ -2258,7 +2305,7 @@ def build_registry(biblioteca: bool = False, pc: dict | None = None,
     allegato_archivia con l'archivio, e il parametro `allegato` di lavoro_affida.
     `cassetto` (08/10, calliope/cassetto.py): con gli allegati, il cassetto dei file per persona
     (allegato_leggi con `cassetto` e `minore`, prima `di`, cassetto_gestisci).
-    `minori_tool`: compiti_aiuto e minore_gestisci (calliope/tools/minori.py, 05/10), con
+    `minori_tool`: richiesta_tutore e minore_gestisci (calliope/tools/minori.py, 05/10), con
     almeno un profilo minorenne in casa (il prefisso degli altri non cambia finché non c'è).
     """
     reg = ToolRegistry()

@@ -6,8 +6,9 @@ pagina (pagina/schermo.js) la disegna con `textContent`, mai come HTML. Tipi:
 
   lista       voci della lista, con quelle appena aggiunte in evidenza           casa
   timer       timer della casa con la fine (epoch): il conto alla rovescia è
-              nella pagina                                                        pubblica
-  promemoria  promemoria e appuntamenti di una persona                            personale
+              nella pagina; chi l'ha messo (28/10)                                pubblica
+  promemoria  promemoria e appuntamenti di una persona, tutti o di un giorno
+              della pagina Agenda (28/10: oggi, domani, in settimana)             personale
   biblioteca  voce, fonte, passaggio usato e un testo più lungo da leggere        pubblica
   documento   anteprima del documento appena creato o cambiato (dal suo JSON), o il
               testo in Markdown di un lavoro dell'agente (07/10: `markdown`, letto dalla
@@ -37,6 +38,9 @@ schermo della stanza, anche per gli ospiti; `casa` solo se chi parla è riconosc
 decide chi costruisce la scheda, qui: il modello non la sceglie.
 
 Le schede sono piccole (testi tagliati): passano su SSE a ogni schermo della stanza.
+
+Sezione (27/10, `sezione`): dove la scheda sta sul telefono a sezioni (`SEZIONE_DI_TIPO`); la
+pagina non decide altro che dove mostrarla.
 
 Le chiavi che cominciano con «_» restano sul server (hub.py le toglie prima di mandare la
 scheda e di metterla nella cronologia): `_scarica` è la sorgente intera del documento per il
@@ -68,6 +72,28 @@ _MAX_TESTO = 4000
 _MAX_USCITA = 12_000
 
 
+# Il telefono a sezioni (27/10, docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md, 3.2): la
+# casa fissa di ogni tipo sul satellite personale, «sezione» o «sezione/raccolta», scritta nella
+# scheda (`sezione`). La stessa tabella è in pagina/schermo.js per le schede che non passano da
+# `nuova` (chat, cruscotto, sviluppo): prove/prova_sezioni.py le confronta. Un tipo che manca va
+# nella conversazione
+SEZIONI = ("adesso", "conversazione", "cose", "casa", "io")
+SEZIONE_DI_TIPO = {
+    "risposta": "conversazione", "calcolo": "conversazione", "biblioteca": "conversazione",
+    "web": "conversazione", "testo": "conversazione", "chat": "conversazione",
+    "timer": "cose/agenda", "promemoria": "cose/agenda", "lista": "cose/liste",
+    "lavoro": "cose/lavori", "esecuzione": "cose/lavori", "sviluppo": "cose/lavori",
+    "documento": "cose/documenti", "archivio": "cose/documenti", "ufficio": "cose/ufficio",
+    "foto": "cose/cassetto", "allegato": "cose/cassetto",
+    "cassetto": "cose/cassetto", "modulo": "cose", "gioco": "cose/giochi", "giochi": "cose/giochi",
+    "casa": "casa", "conoscente": "casa", "avviso": "casa", "cruscotto": "io",
+}
+
+
+def sezione_di(tipo: str) -> str:
+    return SEZIONE_DI_TIPO.get(tipo, "conversazione")
+
+
 def _taglia(testo, n: int) -> str:
     t = re.sub(r"\s+", " ", str(testo or "")).strip()
     return t if len(t) <= n else t[:n - 1].rstrip() + "…"
@@ -79,7 +105,7 @@ def nuova(tipo: str, titolo: str, visibilita: str, durata_s: float | None = DURA
         raise ValueError(f"visibilità sconosciuta: {visibilita}")
     now = time.time()
     return {"id": uuid.uuid4().hex[:12], "tipo": tipo, "titolo": _taglia(titolo, 120),
-            "visibilita": visibilita, "creata": now,
+            "visibilita": visibilita, "creata": now, "sezione": sezione_di(tipo),
             "scade": (now + durata_s) if durata_s else None,
             **({"chiave": str(chiave)} if chiave else {}),
             **({} if sposta else {"sposta": False}), **dati}
@@ -129,6 +155,9 @@ def timer(item: dict, stato: str = "attivo", quando: float | None = None) -> dic
     now = time.time()
     etichetta = _taglia(item["label"], 60)
     voce = {"etichetta": etichetta, "fine": item["due"]}
+    if item.get("owner_name"):
+        # Chi l'ha messo (28/10, #257): la pagina lo scrive solo sugli schermi personali
+        voce["chi"] = _taglia(item["owner_name"], 40)
     if stato != "attivo":
         ora = datetime.datetime.fromtimestamp(quando or now).strftime("%H:%M")
         voce.update(stato=stato, nota=f"{stato} alle {ora}")
@@ -165,6 +194,33 @@ def promemoria(agenda, persona: str, nome: str | None = None) -> dict:
                          "ts": it["due"], "tipo": it["kind"]})
     titolo = f"Agenda di {nome}" if nome else "Agenda"
     return nuova("promemoria", titolo, PERSONALE, chiave=f"agenda:{persona}", voci=voci[:30])
+
+
+_GIORNI = ("lun", "mar", "mer", "gio", "ven", "sab", "dom")
+# La vista per giorno della pagina Agenda (28/10, #257, agenda.per_giorno): titolo e frase del
+# vuoto di ogni giorno
+GIORNI_AGENDA = (("oggi", "Oggi", "Niente oggi."), ("domani", "Domani", "Niente domani."),
+                 ("settimana", "In settimana", "Niente nei prossimi giorni."))
+
+
+def giorno(persona: str, quale: str, voci: list[dict], dopo: int = 0) -> dict:
+    """Promemoria e appuntamenti di una persona per un giorno della vista (`GIORNI_AGENDA`):
+    una scheda `promemoria` (lo stesso disegno), personale, con la sua identità
+    `agenda:<persona>:<giorno>` (non sostituisce quella di tutta l'agenda). Oggi e domani con
+    la sola ora; in settimana con il giorno («gio 30/10 alle 9:00»). `dopo`: quante voci oltre
+    la settimana (solo nell'ultima)."""
+    titolo, vuoto = next((t, v) for k, t, v in GIORNI_AGENDA if k == quale)
+    righe = []
+    for it in voci[:30]:
+        d = datetime.datetime.fromtimestamp(it["due"])
+        ora = f"alle {d.strftime('%H:%M')}"
+        righe.append({"testo": _taglia(it["label"], 80), "ts": it["due"], "tipo": it["kind"],
+                      "quando": ora if quale != "settimana"
+                      else f"{_GIORNI[d.weekday()]} {d.strftime('%d/%m')} {ora}"})
+    altro = {"altre": dopo} if dopo else {}
+    return nuova("promemoria", titolo, PERSONALE, durata_s=None,
+                 chiave=f"agenda:{persona}:{quale}", voci=righe, vuoto=vuoto,
+                 giorno=quale, **altro)
 
 
 # ─────────────────────────── biblioteca ───────────────────────────
@@ -382,6 +438,62 @@ def esecuzione(titolo: str, programma: str, linguaggio: str, stato: str, dati, r
                  file=_taglia(file, 120), ora_server=ora_server or time.time())
 
 
+def giochi(chiave: str, titolo: str, giochi=(), partite=(), nota: str = "", vuoto: str = "") -> dict:
+    """Le partite aperte e i giochi di casa nella pagina Giochi di Le mie cose (28/10, passo 2c,
+    #258, schermi/raccolte.py): solo testo, nessun tasto (un gioco si apre a voce, e il riquadro
+    vero è la scheda `gioco`). `giochi`: [{titolo, descrizione, giocatori, dire}]; `partite`:
+    [{titolo, dove, qui, prova, tocca, punti: [{nome, punti}], esito}]. Personale: è la pagina
+    di chi la guarda."""
+    def num(x):
+        return x if isinstance(x, (int, float)) and not isinstance(x, bool) else 0
+    return nuova("giochi", titolo, PERSONALE, durata_s=None, chiave=chiave,
+                 giochi=[{"titolo": _taglia(g.get("titolo"), 60), "descrizione": _taglia(g.get("descrizione"), 200),
+                          "giocatori": _taglia(g.get("giocatori"), 40), "dire": _taglia(g.get("dire"), 100)}
+                         for g in list(giochi or ())[:_MAX_VOCI]],
+                 partite=[{"titolo": _taglia(p.get("titolo"), 60),
+                           "dove": [_taglia(d, 60) for d in list(p.get("dove") or ())[:8]],
+                           "qui": bool(p.get("qui")), "prova": bool(p.get("prova")),
+                           "tocca": _taglia(p.get("tocca"), 30), "esito": _taglia(p.get("esito"), 160),
+                           "punti": [{"nome": _taglia(x.get("nome"), 30), "punti": num(x.get("punti"))}
+                                     for x in list(p.get("punti") or ())[:8]]}
+                          for p in list(partite or ())[:12]],
+                 nota=_taglia(nota, 300), vuoto=_taglia(vuoto, 200))
+
+
+def archivio(chiave: str, titolo: str, voci=(), nota: str = "", vuoto: str = "") -> dict:
+    """Un gruppo di documenti dell'archivio di casa nella pagina Documenti di Le mie cose (28/10,
+    passo 2d, #259, schermi/raccolte.py): una riga per documento con nome, data, importo, di chi è
+    (`di`, solo nella pagina di chi amministra) e «Scarica» del file originale (`chiave` della
+    riga, `estensione`). Solo testo: il nome viene dai dati estratti dal documento, un dato non
+    fidato. Le sorgenti di «Scarica» stanno in `_scarica_voci` e restano sul server. Personale:
+    è la pagina di chi la guarda."""
+    out = []
+    for v in list(voci or ())[:_MAX_VOCI]:
+        out.append({"nome": _taglia(v.get("nome"), 160), "data": _taglia(v.get("data"), 40),
+                    "importo": _taglia(v.get("importo"), 40), "di": _taglia(v.get("di"), 60),
+                    "chiave": _taglia(v.get("chiave"), 80), "estensione": _taglia(v.get("estensione"), 8)})
+    return nuova("archivio", titolo, PERSONALE, durata_s=None, chiave=chiave, voci=out,
+                 nota=_taglia(nota, 300), vuoto=_taglia(vuoto, 200))
+
+
+def ufficio(chiave: str, titolo: str, voci=(), nota: str = "", vuoto: str = "") -> dict:
+    """Un gruppo della pagina Ufficio di Le mie cose (28/10, passo 2e, #260, schermi/raccolte.py),
+    solo per chi amministra: i documenti di una serie (fatture, preventivi, DDT) o la rubrica. Una
+    riga per voce con il nome, i dettagli (data, cliente, importo; o tipo, partita IVA, luogo,
+    recapiti), lo stato (emesso, annullato col motivo; di casa o solo sua), `annullato` e i file da
+    scaricare (`file`: chiave ed estensione, al più 3). Solo testo: nomi e recapiti dei clienti sono
+    dati non fidati. Le sorgenti di «Scarica» stanno in `_scarica_voci` e restano sul server."""
+    out = []
+    for v in list(voci or ())[:_MAX_VOCI]:
+        file = [{"chiave": _taglia(f.get("chiave"), 80), "estensione": _taglia(f.get("estensione"), 8)}
+                for f in list(v.get("file") or ())[:3] if isinstance(f, dict) and f.get("chiave")]
+        out.append({"nome": _taglia(v.get("nome"), 160),
+                    "dettagli": [_taglia(d, 120) for d in list(v.get("dettagli") or ())[:6] if d],
+                    "stato": _taglia(v.get("stato"), 200), "annullato": bool(v.get("annullato")), "file": file})
+    return nuova("ufficio", titolo, PERSONALE, durata_s=None, chiave=chiave, voci=out,
+                 nota=_taglia(nota, 300), vuoto=_taglia(vuoto, 200))
+
+
 def testo(titolo: str, contenuto: str, visibilita: str) -> dict:
     return nuova("testo", titolo, visibilita, testo=_taglia(contenuto, _MAX_TESTO))
 
@@ -395,11 +507,24 @@ def risposta(domanda: str, contenuto: str, visibilita: str, chiave: str | None =
 
 def foto(img, didascalia: str = "") -> dict:
     """La miniatura (data URL JPEG, ~20 kB) di una foto della conversazione: solo agli schermi
-    personali di chi parla. Resta solo nella cronologia in memoria degli schermi."""
+    personali di chi parla; resta nella cronologia in memoria degli schermi. Dal 28/10 (decisione
+    0034) una miniatura più piccola (`_mini`, 144 px) resta col turno nell'archivio delle
+    conversazioni per 60 giorni, anche per webcam e schermate, con l'id della foto intera tenuta
+    nel cassetto (`_cassetto`) (*storico, fino al 28/10: «resta solo nella cronologia in memoria
+    degli schermi»*). Si fa qui e non al momento della legatura: la
+    scheda passa dal JSON dei risultati dei tool, dove non può portare né i byte né una funzione."""
     from ..immagini import FONTI, miniatura
+    try:
+        # La miniatura piccola per la Conversazione (28/10, #272): resta sul server finché
+        # per_conversazione la mette nella copia del turno (sotto CONV_SCHEDA_MAX)
+        mini = miniatura(img.jpeg, lato=CONV_FOTO_LATO, qualita=CONV_FOTO_QUALITA)
+    except Exception:  # noqa: BLE001 — senza, la copia è un rimando
+        mini = ""
     return nuova("foto", f"Foto {img.n}", PERSONALE, chiave=f"foto:{id(img)}",
                  src=miniatura(img.jpeg), fonte=FONTI.get(img.fonte, img.fonte),
-                 lato=max(img.larghezza, img.altezza), didascalia=_taglia(didascalia, 200))
+                 lato=max(img.larghezza, img.altezza), didascalia=_taglia(didascalia, 200),
+                 _mini=mini, **({"_cassetto": img.cassetto}
+                                if isinstance(getattr(img, "cassetto", None), int) else {}))
 
 
 def allegato(att) -> dict:
@@ -417,3 +542,86 @@ def allegato(att) -> dict:
 def vuota() -> dict:
     """Torna all'orologio."""
     return nuova("vuota", "Orologio", PUBBLICA, durata_s=None)
+
+
+# ─────────────────────── le schede dentro la Conversazione (28/10, #242) ───────────────────────
+# Le schede mandate in un turno restano col turno nell'archivio delle conversazioni (stessa
+# tenuta, stessa «dimentica», mai degli ospiti): la Conversazione degli schermi personali le
+# mostra piccole dentro la risposta, e un tocco apre la scheda intera com'era allora.
+#   - una copia per i tipi di contenuto, sotto CONV_SCHEDA_MAX byte (oltre: un rimando);
+#   - un rimando (tipo, titolo, chiave, sezione) per i tipi vivi o pesanti: la pagina porta alla
+#     scheda nella sua sezione, se c'è ancora;
+#   - niente per le altre (la risposta scritta ripete il testo del turno; chat e cruscotto sono
+#     della pagina; la voce nuova ha le parole di un ospite; archivio e ufficio sono riservati).
+CONV_COPIA = frozenset({"biblioteca", "web", "calcolo", "testo", "lista", "timer", "promemoria",
+                        "casa", "documento"})
+# (Non `avviso`: gli avvisi ai tutori passano da hub.invia diretto e non si legano mai)
+CONV_RIMANDO = frozenset({"lavoro", "esecuzione", "sviluppo", "gioco", "giochi", "cassetto",
+                          "modulo"})
+# Le foto e i file della conversazione (28/10, #272): la foto con la sua miniatura piccola
+# (`_mini`, mai la miniatura dello schermo né il file), il file con nome, tipo e dimensione
+# (mai l'anteprima del testo né le note: sono il contenuto del file). Oltre il tetto, un rimando
+CONV_FOTO_LATO = 144
+CONV_FOTO_QUALITA = 55
+CONV_FILE = ("nome", "tipo_file", "categoria", "dimensione")
+# Byte del JSON di una copia (revisione della PR #271: era 16 000; le copie vanno alle pagine
+# con la conversazione)
+CONV_SCHEDA_MAX = 8_000
+CONV_SCHEDE_TURNO = 4             # schede al più per turno
+# Mai nella copia: la sorgente di «Scarica» resta sul server e non vale per una copia vecchia;
+# la scadenza non conta più (la copia è del turno); `sposta` è dell'invio
+_CONV_FUORI = frozenset({"scarica", "scade", "sposta", "durata"})
+
+
+def per_conversazione(scheda) -> dict | None:
+    """La scheda come resta nel turno della Conversazione: una copia `storica` (la pagina la
+    disegna senza spunta né tasti: quei tocchi varrebbero sullo stato di oggi), un `rimando`, o
+    None. Sempre senza le chiavi «_» (restano sul server)."""
+    if not isinstance(scheda, dict):
+        return None
+    # Il contenuto non è conservabile quanto il turno (revisione della PR #271): mandata in una
+    # risposta con un tool riservato, o che ne ripete una (`_riservata`); le miniature di foto e
+    # file del turno, che partono prima della frase (`_conv` False)
+    if scheda.get("_riservata") or scheda.get("_conv") is False:
+        return None
+    tipo = str(scheda.get("tipo") or "")
+    if tipo not in CONV_COPIA and tipo not in CONV_RIMANDO and tipo not in ("foto", "allegato"):
+        return None
+    base = {"tipo": tipo, "titolo": _taglia(scheda.get("titolo") or "", 120),
+            "sezione": str(scheda.get("sezione") or sezione_di(tipo))}
+    for k in ("id", "chiave"):
+        if isinstance(scheda.get(k), str) and scheda[k]:
+            base[k] = scheda[k][:120]
+    if isinstance(scheda.get("creata"), (int, float)):
+        base["creata"] = round(float(scheda["creata"]), 3)
+    if tipo in ("foto", "allegato"):
+        import json
+        if tipo == "foto":
+            mini = scheda.get("_mini")
+            copia = ({**base, "src": mini, "storica": True,
+                      **{k: scheda[k] for k in ("fonte", "didascalia") if scheda.get(k)},
+                      # La foto intera tenuta (decisione 0034): il dettaglio la chiede al server
+                      **({"cassetto": scheda["_cassetto"]}
+                         if isinstance(scheda.get("_cassetto"), int) else {})}
+                     if isinstance(mini, str) and mini.startswith("data:image/jpeg;base64,") else None)
+        else:
+            copia = {**base, "storica": True, **{k: scheda[k] for k in CONV_FILE if scheda.get(k)}}
+        if copia is not None and len(json.dumps(copia, ensure_ascii=False)) <= CONV_SCHEDA_MAX:
+            return copia
+        return {**base, "rimando": True}
+    if tipo in CONV_COPIA:
+        import json
+        copia = {k: v for k, v in scheda.items()
+                 if not str(k).startswith("_") and k not in _CONV_FUORI}
+        copia.update(base, storica=True)
+        if tipo == "timer" and isinstance(copia.get("timer"), list):
+            # Chi l'ha messo è un dato d'un'altra persona: nella copia no (revisione della PR #271)
+            copia["timer"] = [{k: v for k, v in t.items() if k != "chi"} if isinstance(t, dict)
+                              else t for t in copia["timer"]]
+        try:
+            peso = len(json.dumps(copia, ensure_ascii=False, default=str).encode("utf-8"))
+        except (TypeError, ValueError):
+            peso = CONV_SCHEDA_MAX + 1
+        if peso <= CONV_SCHEDA_MAX:
+            return copia
+    return {**base, "rimando": True}

@@ -11,8 +11,8 @@ vero su 127.0.0.1, cassetto in una cartella temporanea.
   può (non sullo zip), pulsanti di almeno 44 px;
 - «Tieni ancora 7 giorni» → la frase nella scheda e la scadenza spostata; «Tieni» sul PDF →
   nella cartella personale dell'archivio, la scheda aggiornata al suo posto senza quel file;
-  «Elimina» sulla foto; «Elimina tutti» al primo tocco chiede il secondo e non elimina, al
-  secondo sì, e la scheda resta con la frase;
+  dal 28/10 sera (seguito della #301) eliminare si fa a voce: niente «Elimina» né «Elimina
+  tutti», la nota «Per eliminare un file dimmelo a voce.» (il 403 del server: prova_cassetto);
 - lo schermo personale di Teodora non riceve niente, e i suoi file restano;
 - nessun errore JavaScript né violazione della CSP. ~15 s.
 """
@@ -51,6 +51,7 @@ STATO = f"""(() => {{
   }}));
   const bott = [...s.querySelectorAll('button')].map(b => b.getBoundingClientRect().height);
   return {{voci, tutti: [...s.querySelectorAll('.cassetto-tutti button')].map(b => b.textContent),
+          notaVoce: (s.querySelector('.nota-cassetto') || {{}}).textContent || '',
           esito: (s.querySelector('.esito-cassetto') || {{}}).textContent || '',
           nota: [...s.querySelectorAll('.corpo > p.sotto')].map(p => p.textContent),
           altezza: Math.min(...bott)}};
@@ -116,12 +117,13 @@ def prova(exe, hub, web, cas):
         verifica("nome, quando e da dove, scadenza", "bolletta luce.pdf" == pdf_v.get("nome")
                  and "Arrivato" in pdf_v.get("testo", "") and "dal telefono" in pdf_v.get(
                      "testo", "") and "Scade domani" in pdf_v.get("testo", ""), pdf_v)
-        verifica("«Tieni» solo dove si può (non sullo zip); Tieni ancora ed Elimina sempre",
-                 pdf_v.get("pulsanti") == ["Tieni", "Elimina", "Tieni ancora 7 giorni"]
-                 and zip_v.get("pulsanti") == ["Elimina", "Tieni ancora 7 giorni"],
+        verifica("«Tieni» solo dove si può (non sullo zip); Tieni ancora sempre; niente «Elimina» (28/10 sera)",
+                 pdf_v.get("pulsanti") == ["Tieni", "Tieni ancora 7 giorni"]
+                 and zip_v.get("pulsanti") == ["Tieni ancora 7 giorni"],
                  (pdf_v.get("pulsanti"), zip_v.get("pulsanti")))
-        verifica("in alto «Elimina tutti» e «Tieni tutti»",
-                 st.get("tutti") == ["Elimina tutti", "Tieni tutti"], st.get("tutti"))
+        verifica("in alto solo «Tieni tutti», e la nota: eliminare si fa a voce",
+                 st.get("tutti") == ["Tieni tutti"] and st.get("notaVoce") == "Per eliminare un file dimmelo a voce.",
+                 (st.get("tutti"), st.get("notaVoce")))
         verifica("pulsanti di almeno 44 px", (st.get("altezza") or 0) >= 44, st.get("altezza"))
         dario.pompa(1.2)
         PCP.foto(dario, "cassetto-1280x800.png")
@@ -141,19 +143,24 @@ def prova(exe, hub, web, cas):
         verifica("«Tieni» sul PDF: nella cartella personale dell'archivio, la scheda senza",
                  bool(ok) and len(salvati) == 1 and salvati[0].parent.name == "Dario"
                  and cas.prendi("dario", pdf) is None, (salvati, stato(dario).get("voci")))
-        # Elimina tutti: due tocchi
-        clic(dario, "Elimina tutti")
-        dario.pompa(0.3)
-        st = stato(dario)
-        verifica("«Elimina tutti» al primo tocco chiede il secondo e non elimina",
-                 "Tocca di nuovo per eliminarli tutti" in st.get("tutti", [])
-                 and len(cas.elenco("dario")) == 2, st.get("tutti"))
-        clic(dario, "Tocca di nuovo per eliminarli tutti")
-        ok = aspetta(lambda: stato(dario).get("voci") == [], 8)
-        st = stato(dario)
-        verifica("al secondo tocco: eliminati, la scheda resta con la frase",
-                 bool(ok) and not cas.elenco("dario") and cas.prendi("dario", f) is None
-                 and "Eliminati 2 file." in st.get("nota", []), st)
+        # Difesa in più (29/10, #307): un pulsante «elimina» messo a mano nella scheda non parte
+        # nemmeno (il tocco non chiama /api/cassetto), e la scheda dice di farlo a voce
+        dario.valuta(
+            "(() => { window.__chiamate = []; const f0 = window.fetch; window.fetch = (u, o) => {"
+            " window.__chiamate.push(String(u) + ' ' + ((o && o.body) || '')); return f0(u, o); };"
+            f" const s = document.querySelector({json.dumps(SEL)});"
+            " const b = document.createElement('button'); b.type = 'button'; b.textContent = 'Elimina';"
+            f" b.dataset.cassetto = 'elimina'; b.dataset.ids = '{f}';"
+            " s.querySelector('.cassetto-tutti').append(b); return 1; })()")
+        clic(dario, "Elimina")
+        ok = aspetta(lambda: stato(dario).get("esito", "") == "Per eliminare un file dimmelo a voce.", 5)
+        chiamate = dario.valuta("window.__chiamate.filter(c => c.includes('/api/cassetto'))") or []
+        verifica("contrario: un pulsante «elimina» messo a mano non chiama /api/cassetto, la nota dice «a voce»",
+                 bool(ok) and chiamate == [] and cas.prendi("dario", f) is not None,
+                 (stato(dario).get("esito"), chiamate))
+        # Un «elimina» mandato a /api/cassetto è 403 (prova_cassetto, sul server): qui i file restano
+        verifica("nessun file eliminato dalla pagina", cas.prendi("dario", f) is not None
+                 and cas.prendi("dario", z) is not None)
         verifica("i file di Teodora restano", cas.prendi("teodora", a) is not None)
         for p, nome in ((dario, "Dario"), (teodora, "Teodora")):
             p.pompa(0.3)
@@ -183,6 +190,9 @@ def main() -> int:
     cfg = Config()
     cfg.config_dir = str(TMP)
     cfg.memory_db = str(TMP / "memoria.db")
+    # Il contenuto delle schede sulla pagina del PC si prova con la vista di prima (la scheda
+    # grande): la disposizione a sezioni dello schermo personale la prova prova_pc_pagina (27/10)
+    cfg.schermi_sezioni = False
     hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db), log=lambda m: None)
     web = ServerSchermi(hub, "127.0.0.1", PTP.porta_libera(), attesa_porta_s=5).avvia()
     hub.server = web

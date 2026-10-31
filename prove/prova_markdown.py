@@ -333,8 +333,9 @@ sat2 = Satellite(TMP / "spento", collegato=False)
 svc2 = servizio("senza-pc", RemoteDelivery(sat2, LocalDelivery(TMP / "riserva2"), "portatile"))
 lav2, item2 = ricerca(svc2)
 msg2 = item2["messaggio"] if item2 else ""
-verifica("senza portatile: resta sul server e la frase lo dice, niente «Lo apro?»",
-         "sul server, nella cartella Lavori, perché il portatile non è collegato" in msg2
+verifica("senza portatile: resta sul server e la frase lo dice, niente «Lo apro?» (senza «server», #290)",
+         "tra i miei file, nella cartella Lavori, perché il portatile non è collegato" in msg2
+         and "server" not in msg2
          and not msg2.endswith("?") and not item2.get("in_sospeso") and not sat2.ricevuti, msg2)
 svc3 = servizio("locale", None)
 lav3, item3 = ricerca(svc3)

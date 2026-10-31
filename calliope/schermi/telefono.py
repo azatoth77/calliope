@@ -21,6 +21,9 @@ Indirizzi (sullo stesso host e porta della pagina degli schermi):
   GET /telefono/ort/<file>       onnxruntime-web (cartella telefono_web), gzip se accettato
   GET /telefono/modelli/<nome>   VAD e wake word: solo con il token di un satellite abbinato
   GET /telefono/calliope-ca.crt  la CA di casa da installare sul telefono (tls.py)
+  POST /telefono/condividi       la condivisione da un'altra app (share_target, 31/10, #298):
+                                 la riceve il service worker; se arriva qui, 303 senza leggere
+                                 il corpo («?condividi=0»)
   GET /telefono/api/stato        cosa c'è e cosa manca (nessun segreto)
   POST /telefono/api/diagnostica «Prova il microfono»: due registrazioni brevi dal telefono
                                  (token del satellite, solo telefoni personali), salvate come
@@ -60,6 +63,8 @@ FILE_PAGINA = {
     "voce.js": "text/javascript; charset=utf-8",
     "microfono.js": "text/javascript; charset=utf-8",
     "schermo-acceso.js": "text/javascript; charset=utf-8",
+    # La condivisione da un'altra app (31/10, #298 parte 3)
+    "condividi.js": "text/javascript; charset=utf-8",
     "sw.js": "text/javascript; charset=utf-8",
     "telefono.css": "text/css; charset=utf-8",
     "manifest.webmanifest": "application/manifest+json",
@@ -72,6 +77,11 @@ TIPI = {".mjs": "text/javascript; charset=utf-8", ".wasm": "application/wasm",
         ".onnx": "application/octet-stream"}
 
 DIAG_PER_10_MIN = 6          # prove del microfono ogni 10 minuti, per telefono
+# Il corpo di una condivisione arrivata al server (senza il service worker) si butta al più per
+# tanti secondi, e al più fino al tetto di un file dell'importazione (`studio_importa_max_mb`),
+# prima del 303 (revisione della PR #369): un file vero lo riceve, un invio più lungo o più
+# grande si chiude lo stesso (e lì il browser vede la connessione chiusa)
+CONDIVIDI_SCARTA_S = 3.0
 
 _BASE = {"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
          "X-Frame-Options": "DENY"}
@@ -343,7 +353,7 @@ def rotte(hub) -> list:
                             headers={"Cache-Control": "no-cache", **_BASE,
                                      "Content-Security-Policy": csp(host),
                                      "Permissions-Policy":
-                                         "microphone=(self), screen-wake-lock=(self), camera=()"})
+                                         "microphone=(self), screen-wake-lock=(self), camera=(self)"})
 
     async def statico(request: Request):
         nome = request.path_params["nome"]
@@ -355,6 +365,32 @@ def rotte(hub) -> list:
         if nome == "sw.js":
             h["Service-Worker-Allowed"] = "/telefono/"
         return FileResponse(p, media_type=tipo, headers=h)
+
+    async def condividi(request: Request):
+        """La condivisione da un'altra app (31/10, #298 parte 3) arrivata qui invece che al
+        service worker (non ancora attivo, o il certificato non fidato): il server non prende
+        file senza la sessione di uno schermo personale, quindi non lo tiene e manda la pagina a
+        dire di riprovare. Una strada sola per i file: /api/studio/importa.
+
+        Revisione della PR #369: chiudere con il corpo ancora in arrivo dava al browser un RST
+        invece del 303. Come `studio_importa` (`STUDIO_SCARTA_S`), il corpo si legge e si butta
+        (mai salvato) al più per CONDIVIDI_SCARTA_S secondi e fino a `studio_importa_max_mb`; con
+        «Expect: 100-continue» il corpo non arriva e non si aspetta."""
+        if request.method == "POST" and "expect" not in request.headers:
+            async def scarta():
+                letti = 0
+                async for pezzo in request.stream():
+                    letti += len(pezzo)
+                    if letti > tetto:
+                        return
+            tetto = int(float(getattr(cfg, "studio_importa_max_mb", 100.0) or 100.0) * 1_000_000)
+            try:
+                await asyncio.wait_for(scarta(), CONDIVIDI_SCARTA_S)
+            except Exception:  # noqa: BLE001 — lento, troppo o andato via: si chiude e basta
+                pass
+        return RedirectResponse("/telefono/?condividi=0#/cose", status_code=303,
+                                headers={"Connection": "close", "Cache-Control": "no-store",
+                                         **_BASE})
 
     async def ort(request: Request):
         nome = request.path_params["nome"]
@@ -479,6 +515,7 @@ def rotte(hub) -> list:
         Route("/telefono/calliope-ca.crt", ca),
         Route("/telefono/ort/{nome}", ort),
         Route("/telefono/modelli/{nome}", modello),
+        Route("/telefono/condividi", condividi, methods=["GET", "POST"]),
         Route("/telefono/{nome}", statico),
         WebSocketRoute("/telefono/ws/abbina", ws_abbina),
         WebSocketRoute("/telefono/ws/sessione", ws_sessione),

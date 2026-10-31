@@ -1,0 +1,654 @@
+import os, sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+"""Lo schermo personale del PC a sezioni nella pagina vera (27/10/2026, passo 1b di
+docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md, issue #239; decisioni del 27/10 sera:
+solo sugli schermi personali, con «Parla»).
+
+Nel browser vero (Edge o Chromium senza finestra, DevTools; senza si salta), server degli
+schermi e dei satelliti veri su 127.0.0.1, un satellite finto legato allo schermo del PC.
+- schermo di stanza: niente sezioni (né barra né colonne), la scheda grande e la fila come prima;
+- schermo personale del PC: sezioni accese, lo stesso smistamento del telefono (sezioni.js): lista,
+  timer, programma e documento nelle raccolte di Le mie cose e, vivi, in Adesso; il calcolo in
+  Conversazione; la barra porta alle sezioni (#/cose) e il gesto indietro torna;
+- «Parla»: c'è sullo schermo legato al satellite; un clic fa arrivare «tocco» al satellite e il
+  pulsante dice «Ti ascolto»;
+- la casella per scrivere sotto la conversazione, a destra; un file trascinato sulla pagina arriva
+  nella casella (con la conversazione a voce aperta);
+- disposizione a 1440×900 e 1100×800 (tre colonne), 1000×760 (la conversazione dietro il suo
+  pulsante, che la apre sopra la pagina; Esc la chiude), 700×900 (la barra in basso): la pagina
+  non scorre, parti che non si sovrappongono, niente testo fuori dai contenitori della barra e
+  della voce, contrasto AA, clic ≥ 44 px;
+- con la configurazione di serie (revisioni della PR #255): la conversazione a destra con i turni
+  dell'archivio resta anche dopo otto schede e prende i turni nuovi; il «Cruscotto» della testa
+  porta in Io con la scheda, e il suo ridisegno periodico non ci riporta; «Schermo intero» della
+  conversazione apre lo strato coi turni; «Pulisci le mie schede» in Io con due clic;
+- la conversazione con le schede dentro (28/10, #242): le schede piccole, il tocco come gesto, la
+  copia nello strato senza spunta, Ieri e la ricerca con testo ostile, mai i turni di un'altra persona;
+- Le mie cose (28/10, passo 2a): le tessere coi conti, più di due per riga; la pagina Liste dalla
+  tessera; la spunta manda il tocco giusto; contrasto e clic ≥ 44 px a 1440×900 e 700×900;
+  la pagina Agenda (28/10, passo 2b) con «+1 minuto» e «Ferma» che mandano il tocco giusto; le
+  pagine Lavori e programmi, Cassetto e Giochi (28/10, passo 2c) dai servizi, contrasto e niente fuori;
+- nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> gli screenshot.
+"""
+
+import base64
+import json
+import shutil
+import tempfile
+import time
+from pathlib import Path
+
+import prova_telefono_pagina as PTP
+import prova_telefono_schermo as PTS
+from prova_parla_pc import CollFinto
+
+TMP = Path(tempfile.mkdtemp(prefix="calliope-pc-pagina-"))
+ERRORI = []
+SALTATA = 77
+
+
+def verifica(nome, ok, dettaglio=""):
+    print(("ok  " if ok else "NO  ") + nome + (f"  ({dettaglio})" if dettaglio else ""), flush=True)
+    if not ok:
+        ERRORI.append(nome)
+
+
+def aspetta(cond, max_s=5.0, passo=0.05):
+    t0 = time.monotonic()
+    while time.monotonic() - t0 < max_s:
+        v = cond()
+        if v:
+            return v
+        time.sleep(passo)
+    return None
+
+
+def foto(p, nome):
+    cartella = os.environ.get("CALLIOPE_FOTO")
+    if not cartella:
+        return
+    r = p._chiama("Page.captureScreenshot", {"format": "png"})
+    Path(cartella).mkdir(parents=True, exist_ok=True)
+    (Path(cartella) / nome).write_bytes(base64.b64decode(r["result"]["data"]))
+
+
+def dimensione(p, w, h):
+    p._chiama("Emulation.setDeviceMetricsOverride", {"width": w, "height": h, "deviceScaleFactor": 1, "mobile": False})
+    aspetta(lambda: p.valuta(f"innerWidth === {w} && innerHeight === {h}"), 5)
+    p.valuta("new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(() => ok(1))))")
+
+
+def clic(p, sel):
+    r = p.valuta(f"(() => {{ const e = document.querySelector({json.dumps(sel)}); if (!e) return null;"
+                 f" if (e.closest('.sezione')) e.scrollIntoView({{block: 'nearest'}});"
+                 f" const b = e.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }})()")
+    if not r:
+        return False
+    for t in ("mousePressed", "mouseReleased"):
+        p._chiama("Input.dispatchMouseEvent", {"type": t, "x": r[0], "y": r[1], "button": "left", "clickCount": 1})
+    return True
+
+
+MISURA = r"""(() => {
+  const W = innerWidth, H = innerHeight;
+  const vis = (e) => e && !e.hidden && e.getClientRects().length > 0 && getComputedStyle(e).display !== 'none';
+  const nome = (e) => e.id || e.className || e.tagName;
+  const fuori = [];
+  const dentro = (r, c) => r.left >= c.left - 1 && r.right <= c.right + 1 && r.top >= c.top - 1 && r.bottom <= c.bottom + 1;
+  const aree = ['testa', 'barra', 'pc-voce', 'pc', 'pc-conv'].map((id) => document.getElementById(id)).filter(vis)
+    .filter((e) => getComputedStyle(e).position !== 'fixed').map((e) => [e.id, e.getBoundingClientRect()]);
+  for (let i = 0; i < aree.length; i++) {
+    if (!dentro(aree[i][1], {left: 0, top: 0, right: W, bottom: H})) fuori.push(aree[i][0] + ' fuori dallo schermo');
+    for (let j = i + 1; j < aree.length; j++) {
+      const a = aree[i][1], b = aree[j][1];
+      if (a.left < b.right - 1 && b.left < a.right - 1 && a.top < b.bottom - 1 && b.top < a.bottom - 1)
+        fuori.push(aree[i][0] + ' sopra ' + aree[j][0]);
+    }
+  }
+  const scatole = [...document.querySelectorAll('#barra a, #pc-parla, #pc-conv-apri, #sez-titolo, #tessere .tessera, #pc button.spunta, #pc button.tasto-timer, #pagina-indietro, #pc-chat .chat-chip, #pc-chat .piccola-apri')].filter(vis);
+  for (const e of scatole) if (e.scrollWidth > e.clientWidth + 1) fuori.push(nome(e) + ' trabocca');
+  const clic = scatole.filter((e) => e.id !== 'sez-titolo').map((e) => { const r = e.getBoundingClientRect(); return [nome(e), Math.round(Math.min(r.width, r.height))]; })
+    .filter(([, m]) => m < 44);
+  const lum = (c) => { const m = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((v) => v / 255)
+    .map((v) => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+  // un fondo quasi trasparente (la tinta dell'accento sulla sezione aperta) vale quello sotto
+  const alfa = (c) => { const m = c.match(/[\d.]+/g); return m.length > 3 ? Number(m[3]) : 1; };
+  const contrasto = (e) => { const cs = getComputedStyle(e); let b = e, bg = 'rgba(0, 0, 0, 0)';
+    while (b && alfa(bg = getComputedStyle(b).backgroundColor) < 0.5) b = b.parentElement;
+    const l1 = lum(cs.color), l2 = lum(b ? bg : 'rgb(0, 0, 0)'); return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
+  const bassi = [...document.querySelectorAll('#barra *, #pc-voce *, #pc *, #pc-conv *')].filter(vis)
+    .filter((e) => [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()))
+    .filter((e) => { const r = e.getBoundingClientRect(); return r.bottom > 0 && r.top < H && r.right > 0 && r.left < W; })
+    .map((e) => [nome(e) + ' «' + e.textContent.trim().slice(0, 16) + '»', contrasto(e)]).filter(([, c]) => c < 4.5).map(([n, c]) => n + ' ' + c.toFixed(2)).slice(0, 6);
+  const se = document.scrollingElement;
+  return {scorre: se.scrollHeight > H + 1 || se.scrollWidth > W + 1, fuori, clic, bassi,
+          conv: vis(document.getElementById('pc-conv')), apri: vis(document.getElementById('pc-conv-apri')),
+          barraSotto: (() => { const b = document.getElementById('barra').getBoundingClientRect(); return b.bottom >= H - 2 && b.width > W * 0.8; })()};
+})()"""
+
+
+def avvia_server():
+    # Quello del cruscotto (chi amministra, il cruscotto vero) con le sezioni accese, com'è di
+    # serie, e l'archivio delle conversazioni per la colonna a destra
+    import prova_cruscotto_pagina as PCP
+    from calliope.conversazioni import ArchivioConversazioni
+    PCP.TMP = TMP
+    cfg, srv, hub, web = PCP.avvia()
+    cfg.schermi_sezioni = True
+    arch_conv = ArchivioConversazioni(TMP / "conversazioni.db", giorni=30, avvia=False, log=lambda m: None)
+    hub.chat_fonte = arch_conv
+    arch_conv.su_turni[:] = [hub.chat_nuovi]
+    hub.arch_conv = arch_conv
+    pc = CollFinto(5, "studio")
+    srv.collegati.append(pc)
+    arch = hub.archivio
+    s_pc, t_pc = arch.crea_con_token("studio", proprietario="dario", proprietario_nome="Dario")
+    arch.lega_satellite(s_pc["id"], 5)
+    # Le tessere e la pagina Liste (28/10, passo 2a): le liste di casa e il profilo di Dario
+    PTS.prepara_raccolte(cfg, hub, TMP)
+    _, t_stanza = arch.crea_con_token("cucina")
+    hub._rinfresca()
+    return cfg, srv, hub, web, pc, t_pc, t_stanza
+
+
+def stanza(exe, web, t_stanza):
+    p = PTP.Pagina(exe, f"http://127.0.0.1:{web.port}/#t={t_stanza}", profilo="profilo-pc-stanza",
+                   opzioni=("--window-size=1280,800",))
+    try:
+        ok = aspetta(lambda: p.valuta("!!window.calliopeSchermo && !!window.calliopePC && document.getElementById('stato').className.includes('ok')"), 15)
+        time.sleep(0.5)
+        s = p.valuta("({sezioni: document.body.classList.contains('con-sezioni'), barra: document.getElementById('barra').hidden,"
+                     " pc: document.getElementById('pc').hidden, principale: getComputedStyle(document.getElementById('principale')).display,"
+                     " stato: window.calliopePC.stato()})") or {}
+        verifica("schermo di stanza: niente sezioni, la pagina di prima (scheda grande e fila)",
+                 bool(ok) and s.get("sezioni") is False and s.get("barra") and s.get("pc") and s.get("principale") != "none"
+                 and s.get("stato") is None, json.dumps(s))
+        p.pompa(0.2)
+        errori = [r for r in p.log if r.startswith("ECCEZIONE") or "Content Security" in r]
+        verifica("schermo di stanza: nessun errore JS né CSP", not errori, "; ".join(errori)[:300])
+    finally:
+        p.chiudi()
+
+
+def personale(exe, srv, hub, web, pc, t_pc):
+    P = "window.calliopePC"
+    p = PTP.Pagina(exe, f"http://127.0.0.1:{web.port}/#t={t_pc}", profilo="profilo-pc-personale",
+                   opzioni=("--window-size=1440,900",))
+    try:
+        dimensione(p, 1440, 900)
+        ok = aspetta(lambda: p.valuta(f"!!{P} && !!{P}.stato() && document.body.classList.contains('con-sezioni')"), 15)
+        verifica("schermo personale del PC: le sezioni accese", bool(ok))
+        if not ok:
+            return
+        aspetta(lambda: hub.collegati(), 10)
+        S = PTS.schede_prova()
+        for k in ("lista", "timer", "esecuzione", "documento"):
+            PTS.tutti(hub, S[k])
+            time.sleep(0.15)
+        from calliope.schermi import schede
+        calc = schede.calcolo("17 × 6", "102")
+        PTS.tutti(hub, calc)
+        ok = aspetta(lambda: ((p.valuta(f"{P}.stato()") or {}).get("posti") or {}).get("cose/liste") == ["lista:spesa"]
+                     and calc["id"] in ((p.valuta(f"{P}.stato()") or {}).get("posti") or {}).get("conversazione", []), 5)
+        st = p.valuta(f"{P}.stato()") or {}
+        posti = st.get("posti", {})
+        verifica("smistamento: le raccolte di Le mie cose, le vive in Adesso, il calcolo in Conversazione",
+                 bool(ok) and posti.get("cose/agenda") == [S["timer"]["chiave"]] and posti.get("cose/lavori") == ["esecuzione:7"]
+                 and posti.get("cose/documenti") == ["documento:5"] and "documento:5" in posti.get("adesso/corso", []),
+                 json.dumps(posti)[:300])
+        verifica("smistamento: niente fila delle schede recenti (la pagina di stanza)",
+                 p.valuta("getComputedStyle(document.getElementById('cronologia')).display") == "none")
+        clic(p, '#barra a[data-sezione="cose"]')
+        ok = aspetta(lambda: (p.valuta(f"{P}.stato()") or {}).get("sezione") == "cose"
+                     and p.valuta("location.hash") == "#/cose" and p.valuta("!document.getElementById('sez-cose').hidden"), 3)
+        verifica("barra: Le mie cose (#/cose)", bool(ok))
+        p.valuta("history.back(); 1")
+        ok = aspetta(lambda: (p.valuta(f"{P}.stato()") or {}).get("sezione") == "adesso", 3)
+        verifica("barra: il gesto indietro torna ad Adesso", bool(ok))
+        raccolte_pc(p, hub)
+        foto(p, "pc-1440x900.png")
+        # «Parla»: il satellite riceve «tocco»
+        ok = aspetta(lambda: p.valuta("!document.getElementById('pc-parla').hidden"), 3)
+        prima = len(pc.ricevuti)
+        clic(p, "#pc-parla")
+        ok2 = aspetta(lambda: any(m.get("tipo") == "tocco" for m in pc.ricevuti[prima:]), 5)
+        testo = aspetta(lambda: "ascolto" in (p.valuta("document.querySelector('#pc-parla .parla-testo').textContent") or ""), 3)
+        verifica("«Parla»: c'è, il satellite del PC riceve «tocco», il pulsante dice «Ti ascolto»",
+                 bool(ok) and bool(ok2) and bool(testo), json.dumps(pc.ricevuti[prima:]))
+        # La casella per scrivere a destra; un file trascinato arriva nella casella
+        verifica("la casella per scrivere sotto la conversazione, a destra",
+                 p.valuta("!!document.querySelector('#pc-conv #scrivi')"))
+        # Dal 28/10 (#301): accesa anche senza aver parlato, il testo su più righe, Invio manda
+        verifica("la casella accesa anche senza aver parlato, su più righe, con la nota dell'Invio (28/10, #301)",
+                 p.valuta("!document.getElementById('scrivi-testo').disabled"
+                          " && document.getElementById('scrivi-testo').tagName === 'TEXTAREA'"
+                          " && document.querySelector('#pc-conv .nota-invio').textContent.includes('Maiusc+Invio')"
+                          " && document.getElementById('scrivi-invia').disabled"))
+        while hub.ingresso.prendi():
+            pass
+        p.valuta("(() => { const i = document.getElementById('scrivi-testo'); i.focus(); i.value = 'Che ore sono?';"
+                 " i.dispatchEvent(new Event('input', {bubbles: true}));"
+                 " i.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true, cancelable: true})); return 1; })()")
+        item = aspetta(lambda: hub.ingresso.prendi(), 5)
+        verifica("Invio manda la frase senza conversazione a voce, a nome del proprietario",
+                 bool(item) and item.get("tipo") == "scritto" and item.get("testo") == "Che ore sono?"
+                 and item.get("persona") == "dario", str(item)[:200])
+        foto(p, "pc-scrivere-1440x900.png")
+        hub.conversazioni.voce("dario", "voce", stanza="studio")
+        aspetta(lambda: not p.valuta("document.getElementById('scrivi-testo').disabled"), 3)
+        p.valuta("""(() => { const dt = new DataTransfer();
+          dt.items.add(new File(['un file di prova'], 'appunti.txt', {type: 'text/plain'}));
+          document.body.dispatchEvent(new DragEvent('dragover', {dataTransfer: dt, bubbles: true, cancelable: true}));
+          document.body.dispatchEvent(new DragEvent('drop', {dataTransfer: dt, bubbles: true, cancelable: true})); return 1; })()""")
+        ok = aspetta(lambda: "appunti.txt" in (p.valuta("(document.querySelector('#pc-conv .allegato-info')||{}).textContent") or ""), 3)
+        verifica("un file trascinato sulla pagina arriva nella casella", bool(ok))
+        hub.conversazioni.chiudi()
+        conversazione_a_destra(p, hub)
+        conversazione_schede_pc(p, hub)
+        cruscotto_e_pulisci(p, hub)
+        # Le disposizioni
+        for w, h, cosa in ((1440, 900, "tre colonne"), (1100, 800, "tre colonne"), (1000, 760, "conversazione dietro il pulsante"),
+                           (700, 900, "barra in basso")):
+            dimensione(p, w, h)
+            time.sleep(0.3)
+            m = p.valuta(MISURA) or {}
+            foto(p, f"pc-{w}x{h}.png")
+            d = f"{w}×{h} ({cosa})"
+            verifica(f"{d}: la pagina non scorre, parti separate, niente testo fuori", not m.get("scorre") and not m.get("fuori"),
+                     json.dumps(m.get("fuori"))[:240])
+            verifica(f"{d}: contrasto AA e clic ≥ 44 px", not m.get("bassi") and not m.get("clic"),
+                     json.dumps([m.get("bassi"), m.get("clic")])[:240])
+            if w >= 1100:
+                verifica(f"{d}: la conversazione aperta a destra, senza pulsante", m.get("conv") and not m.get("apri"))
+            else:
+                verifica(f"{d}: la conversazione chiusa, il pulsante c'è", not m.get("conv") and m.get("apri"))
+            if w < 760:
+                verifica(f"{d}: la barra in basso, larga", m.get("barraSotto"))
+        dimensione(p, 1000, 760)
+        clic(p, "#pc-conv-apri")
+        ok = aspetta(lambda: p.valuta("getComputedStyle(document.getElementById('pc-conv')).display !== 'none'"), 2)
+        foto(p, "pc-1000x760-conversazione.png")
+        verifica("1000×760: il pulsante apre la conversazione sopra la pagina", bool(ok)
+                 and p.valuta("getComputedStyle(document.getElementById('pc-conv')).position") == "fixed")
+        p._chiama("Input.dispatchKeyEvent", {"type": "keyDown", "key": "Escape", "code": "Escape", "windowsVirtualKeyCode": 27})
+        p._chiama("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Escape", "code": "Escape", "windowsVirtualKeyCode": 27})
+        ok = aspetta(lambda: p.valuta("getComputedStyle(document.getElementById('pc-conv')).display === 'none'"), 2)
+        verifica("1000×760: Esc la chiude", bool(ok))
+        p.pompa(0.3)
+        errori = [r for r in p.log if r.startswith("ECCEZIONE") or "Content Security" in r]
+        verifica("schermo personale: nessun errore JS né CSP", not errori, "; ".join(errori)[:300])
+    finally:
+        p.chiudi()
+
+
+def raccolte_pc(p, hub):
+    """Le mie cose sul PC personale (28/10, passo 2a): le tessere coi conti (più di due per riga),
+    la pagina Liste dalla tessera, la spunta che manda il tocco giusto, clic ≥ 44 px e contrasto
+    AA a 1440×900 e 700×900; il gesto indietro torna alle tessere."""
+    P = "window.calliopePC"
+    S = f"({P}.stato() || {{}})"
+    p.valuta(f"{P}.vai('#/cose'); 1")
+    ok = aspetta(lambda: len(p.valuta(f"{S}.tessere") or []) == 8, 5)
+    tes = {x["id"]: x for x in p.valuta(f"{S}.tessere") or []}
+    colonne = p.valuta("getComputedStyle(document.getElementById('tessere')).gridTemplateColumns.split(' ').length")
+    verifica("PC: otto tessere in cima a Le mie cose, coi conti, più di due per riga",
+             bool(ok) and tes.get("liste", {}).get("conto") == "1" and "ufficio" in tes and (colonne or 0) >= 3,
+             f"{colonne} {json.dumps(tes)[:200]}")
+    clic(p, '#tessere [data-tessera="liste"]')
+    ok = aspetta(lambda: p.valuta("location.hash") == "#/cose/liste" and p.valuta(f"{S}.vistaCose") == "pagina"
+                 and p.valuta(f"{S}.pagina") == ["lista:spesa"], 5)
+    spunte = p.valuta("[...document.querySelectorAll('#pagina-schede button.spunta')].map((b) => b.dataset.voce)") or []
+    verifica("PC: la pagina Liste dalla tessera, con le voci da spuntare",
+             bool(ok) and spunte[:2] == ["latte", "uova"], json.dumps(spunte))
+    while hub.ingresso.prendi() is not None:
+        pass
+    clic(p, '#pagina-schede button.spunta[data-voce="uova"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    verifica("PC: la spunta manda il tocco giusto (lista_togli con le uova, a nome di Dario)",
+             bool(ok) and item.get("tipo") == "tocco" and item.get("tool") == "lista_togli"
+             and item.get("argomenti") == {"cose": "uova", "lista": "spesa"} and item.get("persona") == "dario",
+             json.dumps(item, ensure_ascii=False)[:300])
+    for w, h in ((1440, 900), (700, 900)):
+        dimensione(p, w, h)
+        time.sleep(0.3)
+        m = p.valuta(MISURA) or {}
+        foto(p, f"pc-{w}x{h}-liste.png")
+        verifica(f"PC {w}×{h} pagina Liste: contrasto AA, clic ≥ 44 px, niente fuori",
+                 not m.get("bassi") and not m.get("clic") and not m.get("fuori") and not m.get("scorre"),
+                 json.dumps([m.get("bassi"), m.get("clic"), m.get("fuori")])[:240])
+    dimensione(p, 1440, 900)
+    agenda_pc(p, hub, S)
+    pagine_2c_pc(p, hub, S)
+    pagina_documenti_pc(p, hub, S)
+    pagina_ufficio_pc(p, hub, S)
+    p.valuta("history.back(); 1")
+    ok = aspetta(lambda: p.valuta("location.hash") == "#/cose" and p.valuta(f"{S}.vistaCose") == "tessere", 3)
+    m = p.valuta(MISURA) or {}
+    verifica("PC: il gesto indietro torna alle tessere; contrasto e clic delle tessere",
+             bool(ok) and not m.get("bassi") and not m.get("clic"), json.dumps([m.get("bassi"), m.get("clic")])[:240])
+    p.valuta(f"{P}.vai('#/adesso'); 1")
+
+
+def agenda_pc(p, hub, S):
+    """La pagina Agenda sul PC personale (28/10, passo 2b, #257): dalla tessera (passando dalle
+    tessere), il timer di casa con «+1 minuto» e «Ferma» che mandano il tocco giusto; clic ≥ 44 px
+    e contrasto AA a 1440×900 e 700×900."""
+    from calliope.schermi import schede
+    P = "window.calliopePC"
+    agenda = hub.tool_ctx.agenda
+    timer = next(it for it in agenda.items("dario") if it["kind"] == "timer")
+    chiave = schede.chiave_timer(timer)
+    p.valuta("history.back(); 1")
+    aspetta(lambda: p.valuta("location.hash") == "#/cose", 3)
+    clic(p, '#tessere [data-tessera="agenda"]')
+    ok = aspetta(lambda: p.valuta("location.hash") == "#/cose/agenda" and p.valuta(f"{S}.vistaCose") == "pagina"
+                 and (p.valuta(f"{S}.pagina") or [None])[0] == chiave, 5)
+    tasti = p.valuta("[...document.querySelectorAll('#pagina-schede button.tasto-timer')].map((b) => b.dataset.tocco)") or []
+    verifica("PC: la pagina Agenda dalla tessera, con i tasti del timer",
+             bool(ok) and tasti == ["timer_piu", "timer_ferma"]
+             and "messo da Bianca" in (p.valuta("document.querySelector('#pagina-schede .scheda').textContent") or ""),
+             json.dumps([p.valuta(f"{S}.pagina"), tasti]))
+    while hub.ingresso.prendi() is not None:
+        pass
+    clic(p, '#pagina-schede button.tasto-timer[data-tocco="timer_ferma"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    verifica("PC: «Ferma» manda il tocco giusto (agenda_annulla su quel timer, a nome di Dario)",
+             bool(ok) and item.get("tocco") == "timer_ferma" and item.get("tool") == "agenda_annulla"
+             and item.get("bersaglio") == {"timer": timer["id"], "chiave": chiave} and item.get("persona") == "dario",
+             json.dumps(item, ensure_ascii=False)[:300])
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "timer_ferma", "ok": True, "pagina": item.get("pagina")})
+    for w, h in ((1440, 900), (700, 900)):
+        dimensione(p, w, h)
+        time.sleep(0.3)
+        m = p.valuta(MISURA) or {}
+        foto(p, f"pc-{w}x{h}-agenda.png")
+        verifica(f"PC {w}×{h} pagina Agenda: contrasto AA, clic ≥ 44 px, niente fuori",
+                 not m.get("bassi") and not m.get("clic") and not m.get("fuori") and not m.get("scorre"),
+                 json.dumps([m.get("bassi"), m.get("clic"), m.get("fuori")])[:240])
+    dimensione(p, 1440, 900)
+
+
+def turno(domanda, risposta, t):
+    return [{"role": "user", "content": domanda, "_turno": {"t": t, "luogo": "Studio", "canale": "voce"}},
+            {"role": "assistant", "content": risposta}]
+
+
+def conversazione_a_destra(p, hub):
+    """La conversazione resta nella sua colonna anche quando dalla cronologia (al più 6 schede)
+    escono le schede vecchie, e prende i turni nuovi."""
+    from calliope.conversazione import Conversazione, turni
+    from calliope.schermi import Mittente, schede
+    dario = Mittente(persona="dario", nome="Dario", livello="amministra", certo=True)
+    conv = Conversazione("persona:dario")
+    conv.luogo = "studio"
+    t0 = time.time() - 120
+    hub.arch_conv.archivia(conv, turni(turno("Che ore sono?", "Sono le sei.", t0)), "dario", "Dario", ospite=False)
+    conta = "document.querySelectorAll('#pc-chat .conv-turno').length"
+    ok = aspetta(lambda: (p.valuta(conta) or 0) >= 1, 8)
+    verifica("conversazione: i turni dell'archivio nella colonna a destra", bool(ok), str(p.valuta(conta)))
+    for i in range(8):
+        hub.invia(schede.calcolo(f"{i} + 1", str(i + 1)), dario)
+        time.sleep(0.08)
+    time.sleep(0.5)
+    verifica("conversazione: resta a destra dopo otto schede", (p.valuta(conta) or 0) >= 1, str(p.valuta(conta)))
+    hub.arch_conv.archivia(conv, turni(turno("Che ore sono?", "Sono le sei.", t0) + turno("E domani?", "Domani piove.", t0 + 30)),
+                           "dario", "Dario", ospite=False)
+    ok = aspetta(lambda: (p.valuta(conta) or 0) >= 2, 8)
+    verifica("conversazione: prende i turni nuovi", bool(ok), str(p.valuta(conta)))
+    # «Schermo intero» della conversazione: lo strato con i turni (seconda revisione della #255)
+    clic(p, "#pc-chat [data-intero]")
+    ok = aspetta(lambda: p.valuta("!!document.getElementById('strato-intero') && !document.getElementById('strato-intero').hidden"
+                                  " && document.querySelectorAll('#intero-posto .conv-turno').length >= 2"), 3)
+    verifica("conversazione: «Schermo intero» apre lo strato con i turni", bool(ok))
+    p.valuta("document.getElementById('intero-chiudi').click(); 1")
+
+
+def conversazione_schede_pc(p, hub):
+    """La conversazione con le schede dentro e i filtri sul PC (28/10, #242): il canale, la scheda
+    piccola che apre la copia del turno nello strato (com'era, senza spunta), Ieri e la ricerca con
+    testo ostile, solo i turni di Dario."""
+    from types import SimpleNamespace
+    from calliope.conversazione import Conversazione, turni
+    from calliope.schermi import schede
+    C = "#pc-chat"
+
+    def clic_c(sel):
+        p.valuta(f"(() => {{ const e = document.querySelector({json.dumps(sel)}); if (e) e.scrollIntoView({{block: 'center'}}); return 1; }})()")
+        return clic(p, sel)
+    ieri = time.time() - 86400
+    bib = schede.biblioteca("Quando è nato Manzoni?", [SimpleNamespace(titolo="Alessandro Manzoni", fonte="Wikipedia",
+                                                                       testo="Nacque a Milano il 7 marzo 1785.")])
+    lista = schede.lista("spesa", ["latte", "pane"])
+    m1 = turno("Quando è nato Manzoni?", "Il 7 marzo 1785.", ieri)
+    m1[0]["_schede"] = [schede.per_conversazione(bib)]
+    m2 = [{"role": "user", "content": "(Ho tolto «uova» dalla lista della spesa toccando lo schermo.)",
+           "_turno": {"t": time.time() - 30, "canale": "tocco"}, "_schede": [schede.per_conversazione(lista)]},
+          {"role": "assistant", "content": "Fatto."}]
+    m3 = turno("Cerca <script>alert(1)</script>", "Non trovo <b>niente</b>.", time.time() - 20)
+    hub.arch_conv.archivia(Conversazione("persona:dario"), turni(m1 + m2 + m3), "dario", "Dario", ospite=False)
+    hub.arch_conv.archivia(Conversazione("persona:bianca"), turni(turno("Manzoni di Bianca", "Sì.", ieri)),
+                           "bianca", "Bianca", ospite=False)
+    ok = aspetta(lambda: p.valuta(f"document.querySelectorAll('{C} .scheda-piccola').length") == 2, 8)
+    verifica("PC: le schede piccole dentro le risposte, nella colonna a destra", bool(ok),
+             p.valuta(f"document.querySelectorAll('{C} .scheda-piccola').length"))
+    meta = p.valuta(f"(document.querySelector('{C} .canale-tocco .conv-meta') || {{}}).textContent") or ""
+    verifica("PC: il tocco con l'ora e «con un tocco», come gesto",
+             meta.endswith("con un tocco") and p.valuta(f"!!document.querySelector('{C} .canale-tocco .conv-gesto')"), meta)
+    verifica("PC: il testo ostile resta testo",
+             p.valuta(f"!document.querySelector('{C} .conv-turni script, {C} .conv-turni b')"
+                      f" && document.querySelector('{C}').textContent.includes('<script>alert(1)</script>')"))
+    clic_c(f"{C} .scheda-piccola.tipo-lista .piccola-apri")
+    ok = aspetta(lambda: p.valuta("!!document.getElementById('strato-intero') && !document.getElementById('strato-intero').hidden"
+                                  " && !!document.querySelector('#intero-posto .tipo-lista')"), 4)
+    verifica("PC: la scheda piccola apre la scheda intera com'era, senza spunta",
+             bool(ok) and not p.valuta("!!document.querySelector('#intero-posto button.spunta')")
+             and "com'era alle" in (p.valuta("document.querySelector('#intero-posto .etichetta').textContent") or ""),
+             p.valuta("(document.querySelector('#intero-posto .etichetta') || {}).textContent"))
+    foto(p, "pc-1440x900-scheda-piccola.png")
+    p.valuta("document.getElementById('intero-chiudi').click(); 1")
+    ok = aspetta(lambda: p.valuta("document.getElementById('strato-intero').hidden"), 2)
+    verifica("PC: «Chiudi» torna alla pagina", bool(ok))
+
+    def domande():
+        return p.valuta(f"[...document.querySelectorAll('{C} .conv-turno')].map(t => (t.querySelector('.conv-tu .conv-x, .conv-gesto') || {{}}).textContent || '')") or []
+    clic_c(f"{C} [data-chat-filtro='ieri']")
+    ok = aspetta(lambda: domande() == ["Quando è nato Manzoni?"], 5)
+    verifica("PC: Ieri dal server, solo i turni di Dario", bool(ok), domande())
+    esito = p.valuta(f"document.querySelector('{C} .chat-esito').textContent") or ""
+    verifica("PC: l'esito dice cosa si guarda", esito.startswith("Ieri: 1 turno"), esito)
+    foto(p, "pc-1440x900-ieri.png")
+    clic_c(f"{C} .chat-cerca-via")
+    clic_c(f"{C} .chat-cerca-apri")
+    aspetta(lambda: p.valuta(f"!document.querySelector('{C} .chat-cerca').hidden"), 2)
+    p.valuta(f"(() => {{ const i = document.querySelector('{C} .chat-cerca input'); i.value = '<img src=x onerror=alert(3)>';"
+             f" i.form.requestSubmit(); return 1; }})()")
+    ok = aspetta(lambda: domande() == [] and "Nessun turno" in (p.valuta(f"document.querySelector('{C} .chat-esito').textContent") or ""), 5)
+    verifica("PC: la ricerca con testo ostile non trova niente e non crea elementi",
+             bool(ok) and not p.valuta(f"!!document.querySelector('{C} img')"))
+    p.valuta(f"(() => {{ const i = document.querySelector('{C} .chat-cerca input'); i.value = 'Manzoni';"
+             f" i.form.requestSubmit(); return 1; }})()")
+    ok = aspetta(lambda: domande() == ["Quando è nato Manzoni?"], 5)
+    verifica("PC: la ricerca trova il turno di Dario, non quello di Bianca", bool(ok), domande())
+    clic_c(f"{C} .chat-cerca-via")
+    aspetta(lambda: len(domande()) >= 4, 5)
+    # Dalla revisione della PR #271: oltre gli ultimi turni con schede le copie arrivano leggere, e il
+    # dettaglio si chiede al tocco (la pagina ricaricata riceve il benvenuto con le leggere)
+    msg = []
+    for i in range(13):
+        msg += turno(f"Quanto fa {i} + 1?", str(i + 1), time.time() - 600 + i)
+        msg[-2]["_schede"] = [schede.per_conversazione(schede.calcolo(f"{i} + 1", str(i + 1)))]
+    hub.arch_conv.archivia(Conversazione("persona:dario"), turni(msg), "dario", "Dario", ospite=False)
+    p._chiama("Page.reload")
+    ok = aspetta(lambda: (p.valuta(f"document.querySelectorAll('{C} .scheda-piccola').length") or 0) >= 15, 15)
+    leggere = p.valuta(f"[...document.querySelectorAll('{C} .scheda-piccola')].filter(e => !e.querySelector('.piccola-anteprima') && !e.classList.contains('rimando')).length")
+    verifica("PC: le schede dei turni vecchi arrivano leggere, senza anteprima", bool(ok) and (leggere or 0) >= 1, leggere)
+    clic_c(f"{C} .scheda-piccola:not(.rimando):not(:has(.piccola-anteprima)) .piccola-apri")
+    ok = aspetta(lambda: p.valuta("!!document.getElementById('strato-intero') && !document.getElementById('strato-intero').hidden"
+                                  " && !!document.querySelector('#intero-posto .scheda')"), 5)
+    verifica("PC: un tocco sulla scheda leggera chiede il dettaglio e lo apre", bool(ok))
+    p.valuta("document.getElementById('intero-chiudi').click(); 1")
+
+
+def cruscotto_e_pulisci(p, hub):
+    P = "window.calliopePC"
+    ok = aspetta(lambda: p.valuta("!!document.getElementById('cruscotto-apri')"), 8)
+    clic(p, "#cruscotto-apri")
+    ok2 = aspetta(lambda: (p.valuta(f"{P}.stato()") or {}).get("sezione") == "io"
+                  and p.valuta("!!document.querySelector('#sez-io .tipo-cruscotto')"), 10)
+    verifica("cruscotto: il pulsante della testa porta in Io, con la scheda", bool(ok) and bool(ok2))
+    # Il ridisegno periodico (ogni 30 s, «mostra» con segnale false) non riporta in Io
+    p.valuta(f"{P}.vai('#/cose'); 1")
+    aspetta(lambda: (p.valuta(f"{P}.stato()") or {}).get("sezione") == "cose", 2)
+    p.valuta("(() => { const c = window.calliopeSchermo.cronologia().find((x) => x.tipo === 'cruscotto');"
+             " document.dispatchEvent(new CustomEvent('calliope:mostra', {detail: {scheda: c, segnale: false}})); return 1; })()")
+    time.sleep(0.4)
+    verifica("cruscotto: il ridisegno periodico non riporta la pagina in Io",
+             (p.valuta(f"{P}.stato()") or {}).get("sezione") == "cose")
+    p.valuta(f"{P}.vai('#/io'); 1")
+    verifica("pulisci: «Pulisci le mie schede» in Io", p.valuta("!document.getElementById('pc-pulisci').hidden"))
+    clic(p, "#pc-pulisci")
+    aspetta(lambda: "nuovo" in (p.valuta("document.getElementById('pc-pulisci').textContent") or ""), 2)
+    clic(p, "#pc-pulisci")
+    ok = aspetta(lambda: (p.valuta("document.getElementById('pc-pulisci-esito').textContent") or "") != "", 6)
+    verifica("pulisci: due clic, l'esito detto", bool(ok), p.valuta("document.getElementById('pc-pulisci-esito').textContent"))
+    p.valuta(f"{P}.vai('#/adesso'); 1")
+
+
+def pagine_2c_pc(p, hub, S):
+    """Lavori e programmi, Cassetto e Giochi sul PC personale (28/10, passo 2c, #258): dalle
+    tessere, le schede dai servizi; contrasto AA e niente fuori a 1440×900 e 700×900."""
+    import types
+    from calliope.cassetto import Cassetto
+    from calliope.config import Config
+    import prova_pagine_cose as ppc
+    P = "window.calliopePC"
+    cartella = TMP / "pagine-2c"
+    cfg = Config()
+    cfg.agenti_risultati = str(cartella / "risultati")
+    ora = time.time()
+    hub.tool_ctx.lavori = ppc.servizio_lavori(cfg, [
+        ppc.lavoro("L1", ppc.DARIO, "in_corso", "orari dei treni", creato=ora - 60, passo="legge le pagine"),
+        ppc.lavoro("L2", ppc.DARIO, "fatto", "ricetta del pane", creato=ora - 900, fine=ora - 800,
+                   risultato={"markdown": True, "testo": "# Pane\n\nFarina e acqua.", "riassunto": "Farina e acqua."})])
+    cas = Cassetto(str(cartella / "cassetto.db"), str(cartella / "cassetto"), log=lambda m: None)
+    cas.metti("dario", b"scontrino del ferramenta", "scontrino.txt", "testo", fonte="telefono")
+    hub.cassetto = cas
+    hub.tool_ctx.estensioni = types.SimpleNamespace(archivio=ppc.Archivio([ppc.manifesto("tris", "Tris")]))
+    attese = {"lavori": ["lavoro:L1", "lavoro:L2"], "cassetto": ["cassetto:dario:pagina"], "giochi": ["giochi:casa:dario"]}
+    for quale, chiavi in attese.items():
+        p.valuta(f"{P}.vai('#/cose'); 1")
+        p.valuta(f"{P}.aggiornaRaccolte && {P}.aggiornaRaccolte(); 1")
+        aspetta(lambda: any(x.get("id") == quale and "presto" not in str(x.get("stato"))
+                            for x in p.valuta(f"{S}.tessere") or []), 5)
+        clic(p, f'#tessere [data-tessera="{quale}"]')
+        ok = aspetta(lambda: p.valuta("location.hash") == f"#/cose/{quale}" and p.valuta(f"{S}.pagina") == chiavi, 5)
+        verifica(f"PC: la pagina {quale} dalla tessera, con le schede dal servizio", bool(ok),
+                 json.dumps([p.valuta("location.hash"), p.valuta(f"{S}.pagina")]))
+        for w, h in ((1440, 900), (700, 900)):
+            dimensione(p, w, h)
+            time.sleep(0.3)
+            m = p.valuta(MISURA) or {}
+            foto(p, f"pc-{w}x{h}-{quale}.png")
+            verifica(f"PC {w}×{h} pagina {quale}: contrasto AA, niente fuori",
+                     not m.get("bassi") and not m.get("fuori") and not m.get("scorre"),
+                     json.dumps([m.get("bassi"), m.get("fuori")])[:240])
+        dimensione(p, 1440, 900)
+    cas.close()
+
+
+def pagina_documenti_pc(p, hub, S):
+    """La pagina Documenti sul PC personale (28/10, passo 2d, #259): dalla tessera, i gruppi e la
+    ricerca; contrasto AA, clic ≥ 44 px e niente fuori a 1440×900 e 700×900."""
+    import prova_pagina_documenti as ppd
+    P = "window.calliopePC"
+    ppd.prepara(TMP / "documenti", hub.tool_ctx)
+    p.valuta(f"{P}.vai('#/cose'); 1")
+    p.valuta(f"{P}.aggiornaRaccolte && {P}.aggiornaRaccolte(); 1")
+    aspetta(lambda: any(x.get("id") == "documenti" and x.get("conto") == "1" for x in p.valuta(f"{S}.tessere") or []), 5)
+    clic(p, '#tessere [data-tessera="documenti"]')
+    ok = aspetta(lambda: p.valuta("location.hash") == "#/cose/documenti" and len(p.valuta(f"{S}.pagina") or []) == 9, 5)
+    gruppi = p.valuta(f"{S}.gruppi") or []
+    verifica("PC: la pagina Documenti dalla tessera, coi gruppi e l'archivio di casa",
+             bool(ok) and gruppi[:1] == ["Fatti da Calliope per te"] and gruppi[-1:] == ["Archivio di casa"], json.dumps(gruppi))
+    for w, h in ((1440, 900), (700, 900)):
+        dimensione(p, w, h)
+        time.sleep(0.3)
+        m = p.valuta(MISURA) or {}
+        foto(p, f"pc-{w}x{h}-documenti.png")
+        verifica(f"PC {w}×{h} pagina Documenti: contrasto AA, clic ≥ 44 px, niente fuori",
+                 not m.get("bassi") and not m.get("clic") and not m.get("fuori") and not m.get("scorre"),
+                 json.dumps([m.get("bassi"), m.get("clic"), m.get("fuori")])[:240])
+    dimensione(p, 1440, 900)
+    p.valuta("document.getElementById('pagina-cerca-testo').value = 'bolletta';"
+             " document.getElementById('pagina-cerca').requestSubmit(); 1")
+    ok = aspetta(lambda: p.valuta(f"{S}.cerca") == "bolletta" and len(p.valuta(f"{S}.pagina") or []) == 1, 5)
+    verifica("PC: la ricerca nella pagina Documenti", bool(ok), json.dumps(p.valuta(f"{S}.pagina")))
+    clic(p, "#pagina-cerca-via")
+    ok = aspetta(lambda: len(p.valuta(f"{S}.pagina") or []) == 9, 5)
+    verifica("PC: «Tutti» torna alla pagina intera", bool(ok))
+
+
+def pagina_ufficio_pc(p, hub, S):
+    """La pagina Ufficio sul PC personale di chi amministra (28/10, passo 2e, #260): dalla tessera,
+    i gruppi, il testo ostile come testo e la ricerca; contrasto AA, clic ≥ 44 px e niente fuori a
+    1440×900 e 700×900."""
+    import prova_pagina_ufficio as ppu
+    P = "window.calliopePC"
+    ppu.prepara(TMP / "ufficio", hub.tool_ctx)
+    p.valuta(f"{P}.vai('#/cose'); 1")
+    p.valuta(f"{P}.aggiornaRaccolte && {P}.aggiornaRaccolte(); 1")
+    aspetta(lambda: any(x.get("id") == "ufficio" and x.get("conto") == "6" for x in p.valuta(f"{S}.tessere") or []), 5)
+    clic(p, '#tessere [data-tessera="ufficio"]')
+    ok = aspetta(lambda: p.valuta("location.hash") == "#/cose/ufficio" and len(p.valuta(f"{S}.pagina") or []) == 6, 5)
+    gruppi = p.valuta(f"{S}.gruppi") or []
+    verifica("PC: la pagina Ufficio dalla tessera, coi documenti e la rubrica",
+             bool(ok) and gruppi == ["Documenti dell'ufficio", "Rubrica"], json.dumps(gruppi))
+    verifica("PC: nella pagina Ufficio il nome ostile resta testo",
+             "onerror" in (p.valuta("document.getElementById('pagina-schede').textContent") or "")
+             and p.valuta("document.querySelectorAll('#pagina-schede img').length") == 0)
+    for w, h in ((1440, 900), (700, 900)):
+        dimensione(p, w, h)
+        time.sleep(0.3)
+        m = p.valuta(MISURA) or {}
+        foto(p, f"pc-{w}x{h}-ufficio.png")
+        verifica(f"PC {w}×{h} pagina Ufficio: contrasto AA, clic ≥ 44 px, niente fuori",
+                 not m.get("bassi") and not m.get("clic") and not m.get("fuori") and not m.get("scorre"),
+                 json.dumps([m.get("bassi"), m.get("clic"), m.get("fuori")])[:240])
+    dimensione(p, 1440, 900)
+    p.valuta("document.getElementById('pagina-cerca-testo').value = 'Lodi';"
+             " document.getElementById('pagina-cerca').requestSubmit(); 1")
+    ok = aspetta(lambda: p.valuta(f"{S}.cerca") == "Lodi" and len(p.valuta(f"{S}.pagina") or []) == 2, 5)
+    verifica("PC: la ricerca nella pagina Ufficio", bool(ok), json.dumps(p.valuta(f"{S}.pagina")))
+    clic(p, "#pagina-cerca-via")
+    ok = aspetta(lambda: len(p.valuta(f"{S}.pagina") or []) == 6, 5)
+    verifica("PC: «Tutti» torna alla pagina Ufficio intera", bool(ok))
+
+
+def main() -> int:
+    shutil.rmtree(PTP.TMP, ignore_errors=True)
+    PTP.TMP = TMP
+    try:
+        exe = PTP.browser()
+        if exe is None:
+            print("Nessun Edge né Chromium: prova saltata.")
+            return SALTATA
+        cfg, srv, hub, web, pc, t_pc, t_stanza = avvia_server()
+        try:
+            stanza(exe, web, t_stanza)
+            personale(exe, srv, hub, web, pc, t_pc)
+        finally:
+            web.ferma()
+            srv.ferma()
+    finally:
+        shutil.rmtree(TMP, ignore_errors=True)
+    print("\nTutto bene." if not ERRORI else f"\n{len(ERRORI)} prove non riuscite.")
+    return 1 if ERRORI else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

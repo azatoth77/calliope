@@ -476,7 +476,10 @@ def converti(svc, lav, testo: str, formato: str, attesa_s: float = 8.0) -> dict:
     lock = threading.Lock()
 
     def frase_di(ris: dict) -> tuple[str, dict | None]:
-        dove = ris.get("dove") or "nella cartella Lavori dei Documenti"
+        # La pagina Lavori e programmi solo se il lavoro è ancora fra gli ultimi (PR #294)
+        detto = getattr(svc, "dove_detto", None)
+        dove = ((detto(lav, ris) if callable(detto) else ris.get("dove"))
+                or "nella cartella Lavori dei Documenti")
         f = f"Ho fatto {nome} di «{titolo}», {dove}."
         if ris.get("apribile"):
             return f + " Lo apro?", in_sospeso("Lo apro?", f"{nome} di «{titolo}»")

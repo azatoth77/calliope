@@ -215,6 +215,19 @@ def aspetta_llm(cfg: Config, brain, dire=None, dormi=time.sleep) -> str | None:
             attesa = min(attesa * 2, 30.0)
 
 
+def _lega_studio_giochi(s):
+    """Lo Studio e i giochi (31/10, #297, revisione della PR #366): i giochi sanno quando una
+    persona ha una prova aperta (le attività della libreria si chiudono al battito), e una prova
+    che parte chiude subito le attività aperte dalla persona. Si chiama quando c'è il secondo dei
+    due, nell'ordine in cui l'avvio li prepara; una volta sola."""
+    st, giochi = getattr(s, "studio", None), getattr(s, "giochi", None)
+    if st is None or giochi is None or getattr(giochi, "studio", None) is st:
+        return
+    giochi.studio = st
+    ganci = st.__dict__.setdefault("ganci_prova", [])
+    ganci.append(giochi.ferma_libreria)
+
+
 class Avvio:
     """L'avvio di Calliope (06/10, P8): ciò che era il corpo di `main()`, diviso in passi. Gli
     attributi sono gli oggetti preparati (configurazione, audio, servizi, tool, Brain, corsie);
@@ -475,6 +488,11 @@ class Avvio:
             # schermi personali di chi amministra; lavori e satelliti letti al momento
             from .schermi.cruscotto import Cruscotto
             schermi.cruscotto = Cruscotto(cfg, schermi, servizi=s)
+            # Il profilo del proprietario di uno schermo personale (27/10, schermi/aspetto.py:
+            # le sezioni nascoste a un minore), letto a ogni accesso
+            schermi.profilo = lambda pid: s.registry.by_id(pid) if s.registry is not None else None
+            # Le tessere di «Le mie cose» (28/10, schermi/raccolte.py): i conti dai servizi
+            schermi.servizi = s
         if schermi is not None and s.satelliti is not None:
             # Le schede vanno agli schermi della stanza del satellite che ascolta, e il
             # satellite può aprire la pagina con un token suo (calliope/satellite/server.py)
@@ -518,6 +536,9 @@ class Avvio:
             atexit.register(lavori.close)        # chiude il tunnel anche su un'uscita brusca
             # Il risultato consegnato al portatile si offre ad «aprilo» (07/10)
             lavori.pcs = self.pcs
+            # Gli schermi personali di chi ha chiesto il lavoro, decisi alla consegna (revisione
+            # della PR #294: anche per i lavori rifatti o ripresi dopo un riavvio)
+            lavori.schermi = s.schermi
             # La vista dello sviluppo (08/10): a ogni fase la scheda va agli schermi personali
             # di chi sviluppa
             if s.schermi is not None and getattr(lavori, "sviluppi", None) is not None:
@@ -627,6 +648,27 @@ class Avvio:
             atexit.register(cassetto.close)
             cassetto.archivio, cassetto.registry = self.archivio, s.registry
             schermi.cassetto = cassetto
+            # Le foto tenute con la Conversazione (28/10, decisione 0034) vanno via con
+            # «dimentica le nostre conversazioni» e con `svuota`
+            if conv_arch is not None:
+                conv_arch.su_dimentica.append(cassetto.dimentica_foto)
+            if getattr(s, "conserva", None) is not None:
+                s.conserva.cassetto = cassetto
+        # Lo Studio (29/10, #280, decisione 0035): «dimentica le nostre conversazioni» toglie le
+        # sue verifiche tranne quelle archiviate, anche con lo Studio spento (i dati di prima)
+        if conv_arch is not None:
+            from .studio.dati import cancella_file as _studio_cancella
+
+            def _studio_dimentica(persona, cfg=cfg):
+                # Un errore con il suo nome nel registro, non «schermi non avvisati»
+                try:
+                    _studio_cancella(getattr(cfg, "memory_db", None), persona=str(persona),
+                                     archiviate=False,
+                                     cartella=getattr(cfg, "studio_cartella", None))
+                except Exception as e:  # noqa: BLE001 — lo Studio non ferma «dimentica»
+                    print(f"[STUDIO] «dimentica» non ha tolto lo Studio: {type(e).__name__}",
+                          flush=True)
+            conv_arch.su_dimentica.append(_studio_dimentica)
         s.tools = build_registry(biblioteca=s.biblioteca is not None, pc=self.pcs,
                                  pc_ospite=cfg.pc_ospite_volume_media,
                                  documenti=s.documenti.formati if s.documenti else None,
@@ -672,6 +714,10 @@ class Avvio:
                                     web=web, notizie=s.notizie,
                                     conversazioni=conv_arch, modalita=self.modalita,
                                     cassetto=cassetto, stanza=s.stanza)
+        if schermi is not None:
+            # Le raccolte e i tocchi dello schermo personale (28/10, schermi/raccolte.py e
+            # tocchi.py): liste, lavori, documenti… dal contesto dei tool della corsia principale
+            schermi.tool_ctx = self.tool_ctx
         if s.stanza is not None:
             # stanza_pausa (13/10): «abbiamo ospiti», «metti in pausa la stanza», «ascolta di
             # nuovo la stanza», solo con la stanza accesa; stanza_cerca (14/10, passo 4) anche
@@ -719,10 +765,11 @@ class Avvio:
         s.eventi.riprendi(float(getattr(cfg, "storia_inattiva_s", 0) or 0))
 
     def attiva_minori(self) -> bool:
-        """I tool compiti_aiuto e minore_gestisci solo con un minore in casa: True se li ha
-        appena registrati."""
+        """I tool richiesta_tutore e minore_gestisci solo con un minore in casa: True se li ha
+        appena registrati. *[storico: fino al 28/10 anche compiti_aiuto ed esercizi, tolti con
+        la #279]*"""
         tools, registry = self.s.tools, self.s.registry
-        if tools.get("compiti_aiuto") is not None or not any(
+        if tools.get("minore_gestisci") is not None or not any(
                 minori.e_minore(p) for p in getattr(registry, "users", {}).values()):
             return False
         from .tools.minori import minori_specs
@@ -732,9 +779,65 @@ class Avvio:
 
     def _minori_e_guardiano(self):
         cfg, s = self.cfg, self.s
-        # Minori (05/10, calliope/minori.py): regole per persona, compiti, avvisi ai tutori
+        # Minori (05/10, calliope/minori.py): regole per persona, avvisi ai tutori
         # (stesso file della memoria)
         minori.prepara(cfg, schermi=s.schermi, registry=s.registry)
+        # Lo Studio (29/10, #280): dati e piano; in ombra niente al modello né agli schermi. Il
+        # tool e le pagine arrivano con il passo 4.5
+        from . import studio as _studio
+        try:
+            s.studio = _studio.prepara(cfg, registry=s.registry,
+                                       log=lambda m: print(m, flush=True))
+        except Exception as e:  # noqa: BLE001 — lo Studio non ferma l'avvio
+            print(f"[STUDIO] non preparato: {type(e).__name__}: {e}", flush=True)
+            s.studio = None
+        if s.studio is not None:
+            atexit.register(s.studio.close)
+            _lega_studio_giochi(s)
+            print(f"[STUDIO] {s.studio.modo}", flush=True)
+            # I tool dello Studio (30/10, passo 4.5, #284): solo con `studio_modo: attivo`; in
+            # ombra il tool non c'è (dipende dall'installazione, come stanza_cerca)
+            if getattr(self, "tool_ctx", None) is not None:
+                self.tool_ctx.studio = s.studio
+            if s.studio.per_modello():
+                from .tools.studio import studio_specs
+                # Con la configurazione (31/10, #335): un tool spento nel file
+                # (`studio_mappa_consigli`, `studio_ascolta`) non entra nel registro
+                for spec in studio_specs(cfg):
+                    s.tools.register(spec)
+            # La lettura delle pagine (30/10, passo 4.3, #282): un thread che legge con il
+            # modello dell'agente quando la DGX è libera e cede ai lavori e alla voce
+            try:
+                s.studio.avvia_lettura(getattr(s, "lavori", None))
+            except Exception as e:  # noqa: BLE001 — la lettura non ferma l'avvio
+                print(f"[STUDIO] lettura non avviata: {type(e).__name__}: {e}", flush=True)
+            # Le importazioni dei materiali rimaste da un riavvio (31/10, #298): riprendono
+            try:
+                s.studio.avvia_importi()
+            except Exception as e:  # noqa: BLE001 — non ferma l'avvio
+                print(f"[STUDIO] importazioni non riprese: {type(e).__name__}: {e}", flush=True)
+            self._ripasso_da_ascoltare()
+
+    def _ripasso_da_ascoltare(self):
+        """Il ripasso da ascoltare (31/10, passo 9, #249): la «voce del libro» caricata in secondo
+        piano, e la sintesi dell'audio per lo schermo con le voci e la pronuncia dello Speaker,
+        che cede alla voce dal vivo (studio/ascolta.py, `Sintesi`)."""
+        cfg, s = self.cfg, self.s
+        speaker = getattr(self, "speaker", None)
+        if s.studio is None or not s.studio.per_modello() or speaker is None:
+            return
+        from .studio import ascolta as _ascolta
+        if _ascolta.modo(cfg) != "attiva":
+            return
+        libro = str(getattr(cfg, "studio_ascolta_voce", "") or "")
+        libro = libro if libro and Path(libro).is_file() else None
+        if libro:
+            speaker.preload([libro])
+        s.studio.sintesi = _ascolta.Sintesi(
+            speaker.voce_per, cfg.piper_voice, libro, pronuncia=getattr(speaker, "pronuncia", None),
+            attivita=getattr(speaker, "_attivita", None), log=lambda m: print(m, flush=True))
+        print(f"[STUDIO] ripasso da ascoltare: voce del libro "
+              f"{Path(libro).name if libro else 'quella di Calliope'}", flush=True)
         # Gli avvisi di pericolo (14/10 sera): l'audio nel cassetto del tutore, la trascrizione
         # di un avviso di prima ricostruita dalla stanza o dalla conversazione del minore, e
         # `calliope conserva --svuota` che li toglie
@@ -762,16 +865,6 @@ class Avvio:
             except Exception as e:  # noqa: BLE001 — Calliope parte lo stesso
                 print(f"[MINORI] segnali dei cancelli non ripresi: {type(e).__name__}: {e}",
                       flush=True)
-        # Esercizi generati da Calliope (08/10, calliope/esercizi/): stesso file della memoria;
-        # la scheda risponde da /api/esercizio (schermi/server.py)
-        try:
-            from .esercizi import sessione as esercizi
-            srv = esercizi.prepara(cfg, schermi=s.schermi, biblioteca=s.biblioteca,
-                                    registry=s.registry)
-            if s.schermi is not None:
-                s.schermi.esercizi = srv
-        except Exception as e:  # noqa: BLE001 — senza esercizi Calliope parte lo stesso
-            print(f"[ESERCIZI] non disponibili: {type(e).__name__}: {e}", flush=True)
         s.attiva_minori = self.attiva_minori
         self.attiva_minori()
         # Il guardiano (calliope/guardiano.py): domanda e frasi della risposta per minori e
@@ -830,6 +923,7 @@ class Avvio:
             giochi.guardiano = s.guardiano
             giochi.on_frase = self.due_event.set
             s.schermi.giochi = estensioni.giochi = giochi
+            _lega_studio_giochi(s)
             # I comandi a voce dei giochi detti con altre parole (11/10, gioco_comando): solo
             # con i giochi accesi e, dal 14/10, con il giudice di fase spento (il giudice fa la
             # stessa cosa con una chiamata breve e l'uscita vincolata, calliope/gioco_giudice.py)
@@ -1230,6 +1324,21 @@ class Avvio:
             self.s.satelliti.ferma()
 
 
+def contesto_corsia(base, speaker_ctx, speaker):
+    """Il contesto dei tool di una corsia nuova (un satellite che si collega): i servizi di
+    `base` (la corsia principale), chi parla e la voce suoi, e niente di ciò che vale per un
+    turno solo. `crea` gira nel thread delle corsie, anche mentre il ciclo principale è dentro
+    un tocco o una risposta (revisione della PR #265): la proposta in sospeso, il «sì» già dato,
+    il gioco che aspetta un comando e il timer toccato non passano alla corsia nuova."""
+    return dataclasses.replace(base, speaker_ctx=speaker_ctx, speaker=speaker, storia=[],
+                               risposta_precedente={}, regole=[], immagini_viste=[], turno=0,
+                               tool_in_sospeso=None, user_text="", immagini=None,
+                               allegati=None, politica=None, politica_accettata=False,
+                               gioco_turno=None, tocco_bersaglio=None, si_breve=[],
+                               errore_registro=False, scheda_risultato=None,
+                               lavoro_turno=None, attesa=None)
+
+
 class Corsie:
     """Tutti i satelliti insieme (06/10, calliope/corsie.py): ogni satellite che si collega per
     la prima volta ha la sua corsia, un thread con il suo `Ciclo` (calliope/ciclo.py) e i suoi
@@ -1313,10 +1422,7 @@ class Corsie:
         lst.on_speech_start, lst.on_speech_end = a.parlato   # lo stato della voce: Ciclo
         sp = a.speaker.gemello(UscitaRemota(self.satelliti, sat_id=sid))
         sc = SpeakerContext(a.s.registry)
-        tc = dataclasses.replace(a.tool_ctx, speaker_ctx=sc, speaker=sp, storia=[],
-                                 risposta_precedente={}, regole=[], immagini_viste=[], turno=0,
-                                 tool_in_sospeso=None, user_text="", immagini=None,
-                                 allegati=None, politica=None)
+        tc = contesto_corsia(a.tool_ctx, sc, sp)
         b = Brain(cfg, a.s.tools, tc)
         for k in ("archivio_conv", "compressore", "luogo_fn", "prefix_tokens", "last_context"):
             setattr(b, k, getattr(brain, k, None))

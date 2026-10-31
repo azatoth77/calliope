@@ -216,6 +216,147 @@ pc.locked = True
 r = chiama(pc, "pc_apri_app", {"app": "calcolatrice"})
 verifica("schermo bloccato: apri_app rifiutato", rifiutato(r) and len(pc.azioni) == 2, str(r))
 
+# ── per iscritto solo le voci ammesse (29/10, #307; elenco di AMMESSI dalla revisione della
+# PR #309): browser, protocolli noti, .exe che non sono interpreti né strumenti di sistema ──
+from calliope.config import Config as _Cfg  # noqa: E402
+from calliope.pc.base import ammessa_per_iscritto, e_script, nome_windows  # noqa: E402
+from prove.pc_finto import APP as APP_FINTE  # noqa: E402
+script_si = (
+    # script
+    "backup.bat", "pulisci.CMD", r"C:\Script\pulisci.ps1", "avvia.vbs", "giochi.py", "/home/x/su.sh",
+    r'"C:\Program Files\x\y.bat"',
+    # interpreti e terminali (anche con la versione nel nome)
+    "powershell.exe", "pwsh", "cmd.exe", "cmd /c dir", "python.exe", "python3.12.exe", "pythonw.exe",
+    r"C:\Program Files\PowerShell\7\pwsh.exe", "wt.exe", "wscript.exe", "mshta.exe",
+    r"C:\Program Files\Git\git-bash.exe", "mintty.exe", "java", "javaw.exe", "ubuntu.exe", "wsl.exe",
+    "msbuild.exe", "installutil.exe", "cmstp.exe",
+    # strumenti di sistema
+    "wmic.exe", "regedit.exe", "mmc.exe", "control.exe", r"C:\Windows\System32\rundll32.exe",
+    # tipi che ShellExecute esegue (revisione della PR #309)
+    r"C:\tools\setup.msi", "pannello.cpl", r"C:\x\blocca.scr", "app.jar", "collegamento.url",
+    "vecchio.pif", "vecchio.com", "x.appref-ms", "x.application", "x.settingcontent-ms", "x.wsc",
+    "guida.chm", "x.lnk", "servizi.msc", "chiavi.reg",
+    # nomi che Windows normalizza: punti e spazi finali, stream
+    "backup.bat.", "backup.bat. ", "backup.bat::$DATA", r"C:\x\backup.bat:s:$DATA", "calc.exe:x.bat",
+    # non si sa: senza estensione (il PATH), variabili d'ambiente, argomenti, due programmi
+    "aggiorna", "calc", "%COMSPEC%", r"%SystemRoot%\system32\calc.exe", "notepad.exe C:\\x\\a.bat",
+    "calc.exe -x", "x.exe.bat", "", "file:", "search-ms:", "C:")
+script_no = ("calc.exe", "notepad.exe", "ms-settings:", "ms-settings:display", "browser", "winword.exe",
+             "excel.exe", r"C:\Program Files\Mozilla Firefox\firefox.exe", "explorer.exe", "spotify:",
+             r'"C:\Program Files\Mozilla Firefox\firefox.exe"', "calc.exe.", "Calc.EXE")
+verifica("per iscritto non ammessi: script, interpreti, strumenti, tipi eseguibili, nomi normalizzati, non si sa",
+         all(e_script(c) for c in script_si), [c for c in script_si if not e_script(c)])
+verifica("contrario: per iscritto ammessi browser, protocolli noti e i .exe che sono app",
+         all(ammessa_per_iscritto(c) for c in script_no), [c for c in script_no if e_script(c)])
+verifica("contrario: le voci di serie del catalogo restano ammesse",
+         all(ammessa_per_iscritto(v) for v in _Cfg().pc_app.values()), _Cfg().pc_app)
+verifica("nome_windows: via i punti e gli spazi finali e lo stream",
+         nome_windows("backup.bat. ") == "backup.bat" and nome_windows("backup.bat::$DATA") == "backup.bat"
+         and nome_windows(r"C:\x.\y.bat.") == r"C:\x\y.bat" and nome_windows(r"C:\a\b.exe") == r"C:\a\b.exe")
+pc = FakePC(app={**APP_FINTE, "backup": r"C:\x\backup.bat", "terminale": "powershell.exe"})
+verifica("app_script: le sole voci script del catalogo, per nome",
+         sorted(pc.app_script()) == ["backup", "terminale"]
+         and pc.descrizione().get("app_script") == pc.app_script(), str(pc.app_script()))
+verifica("app_e_script: anche col nome vicino; un'app vera no; fuori catalogo no",
+         pc.app_e_script("Backup") is True and pc.app_e_script("terminal") is True
+         and pc.app_e_script("calcolatrice") is False and pc.app_e_script("truffaldino") is False)
+r = chiama(pc, "pc_apri_app", {"app": "backup"})
+verifica("a voce lo script del catalogo si apre come le altre", r.get("ok") is True
+         and pc.azioni[-1] == ("avvia", r"C:\x\backup.bat"), str(r))
+n = len(pc.azioni)
+r = pc.apri_app("backup", scritto=True)
+verifica("l'esecutore con il segno scritto rifiuta lui lo script (serve_voce), niente avviato",
+         r.get("ok") is False and r.get("serve_voce") and len(pc.azioni) == n, r)
+r = pc.apri_app("calcolatrice", scritto=True)
+verifica("contrario: con il segno scritto l'app vera si apre", r.get("ok") is True
+         and pc.azioni[-1] == ("avvia", "calc.exe"), r)
+
+# ── seconda revisione della PR #309: nomi corti 8.3, percorsi di rete, interpreti con un altro nome ──
+seguito_si = (
+    # nomi corti 8.3: il nome vero è nascosto
+    r"C:\Python312\PYTHON~1.EXE", r"C:\PROGRA~1\PowerShell\7\PWSH~1.EXE", r"C:\WINDOWS\system32\WINDOW~1\v1.0\POWERS~1.EXE",
+    r"C:\PROGRA~1\Mozilla Firefox\firefox.exe", "CALC~1.EXE",
+    # UNC e WebDAV
+    r"\\host\share\app.exe", "//host/share/app.exe", r"\\host@SSL\DavWWWRoot\app.exe",
+    r"\\192.0.2.1\c$\app.exe", r"\\host@SSL@8443\DavWWWRoot\calc.exe", r"\/host\share\app.exe",
+    # interpreti con un altro nome o un suffisso
+    "python3.12t.exe", "python_d.exe", "pypy.exe", "pypy3.exe", r"C:\pypy\pypy3.10.exe", "ipython.exe",
+    "ipython3.exe", "jython.exe", "nodejs.exe", "AutoHotkey.exe", "AutoHotkey64.exe", "AutoHotkeyU64.exe",
+    "AutoHotkeyU32.exe", "AutoHotkeyA32.exe", "AutoHotkey32.exe", "AutoHotkey_UIA.exe",
+    r"C:\Program Files\AutoHotkey\v2\AutoHotkey64.exe", "AutoIt3.exe", "AutoIt3_x64.exe", "Ahk2Exe.exe",
+    "Aut2exe.exe", "py3.exe", "pyw.exe", "lua54.exe", "luajit.exe", "javaw.exe", "java17.exe")
+seguito_no = ("taskmgr.exe", "spotify.exe", r"C:\Program Files\Notepad++\notepad++.exe", "pycharm64.exe",
+              "pyramid.exe", "lualatex-gui.exe", "shotcut.exe", r"C:\Users\x\AppData\Local\Programs\Zoom\Zoom.exe")
+verifica("seguito: 8.3, UNC e WebDAV, interpreti con un altro nome: per iscritto non ammessi",
+         all(e_script(c) for c in seguito_si), [c for c in seguito_si if not e_script(c)])
+verifica("contrario, seguito: app che cominciano come un interprete restano ammesse",
+         all(ammessa_per_iscritto(c) for c in seguito_no), [c for c in seguito_no if e_script(c)])
+verifica("contrario, seguito: le voci di serie del catalogo restano ammesse",
+         all(ammessa_per_iscritto(v) for v in _Cfg().pc_app.values()))
+# …e sul satellite, che ha il comando: l'«avvia» col segno scritto rifiuta gli stessi casi
+from calliope.satellite.esecutore import EsecutoreSatellite  # noqa: E402
+sat_cat = {"ahk": "AutoHotkey64.exe", "corto": r"C:\Python312\PYTHON~1.EXE", "rete": r"\\host\share\app.exe",
+           "webdav": r"\\host@SSL\DavWWWRoot\app.exe", "pypy": "pypy3.exe", "calcolatrice": "calc.exe"}
+sat_pc = FakePC(app=sat_cat)
+sat = EsecutoreSatellite(sat_pc, None, "portatile", log=lambda m: None)
+try:
+    rifiutati = {k: sat._esegui("avvia", {"app": k, "scritto": True}) for k in sat_cat if k != "calcolatrice"}
+    verifica("satellite: «avvia» scritto di AutoHotkey, nome 8.3, UNC, WebDAV, pypy: rifiutato (serve_voce), niente avviato",
+             all(not r.get("ok") and r.get("serve_voce") for r in rifiutati.values()) and not sat_pc.azioni,
+             {k: r.get("errore") for k, r in rifiutati.items()})
+    r = sat._esegui("avvia", {"app": "calcolatrice", "scritto": True})
+    verifica("contrario, satellite: per iscritto la calcolatrice si apre", r.get("ok")
+             and sat_pc.azioni == [("avvia", "calc.exe")], r)
+    r = sat._esegui("avvia", {"app": "ahk"})
+    verifica("contrario, satellite: a voce (senza il segno) AutoHotkey si apre", r.get("ok")
+             and sat_pc.azioni[-1] == ("avvia", "AutoHotkey64.exe"), r)
+finally:
+    sat.chiudi()
+
+# ── revisione della PR #310 (#311): Tcl, MSYS2, Deno, Bun e altri interpreti, la radice senza
+# l'unità, le unità di rete mappate ──
+import calliope.pc.base as _base  # noqa: E402
+terzo_si = (
+    # Tcl col «t» dei thread
+    "tclsh86t.exe", "tclsh86.exe", "wish86t.exe", "tclsh8.6t.exe", r"C:\Tcl\bin\wish86.exe",
+    # le shell di MSYS2
+    "msys2.exe", "mingw64.exe", "ucrt64.exe", r"C:\msys64\ucrt64.exe", "mingw32.exe", "clang64.exe",
+    # deno, bun e julia con una coda
+    "deno.exe", "deno1.40.exe", "bun.exe", "bun-windows-x64.exe", "julia.exe", "julia-1.10.exe",
+    # altri interpreti e REPL
+    "R.exe", "Rscript.exe", r"C:\Program Files\R\R-4.4.1\bin\x64\Rgui.exe", "Rterm.exe", "erl.exe",
+    "werl.exe", "escript.exe", "ghci.exe", "ghc.exe", "runghc.exe", "racket.exe", "raco.exe",
+    "scala.exe", "groovy.exe", "groovysh.exe", "dart.exe",
+    # dalla radice senza l'unità: dipende dall'unità corrente
+    r"\app.exe", "/app.exe", r"\Program Files\Mozilla Firefox\firefox.exe",
+    # revisione della PR #334: altri nomi, tclkit in ogni variante, i terminali di terze parti
+    "ghc-9.4.8.exe", "ghci-9.4.8.exe", "runghc-9.4.exe", "runhaskell_1.exe", "gracket.exe",
+    "gracket-text.exe", "julialauncher.exe", "tclkit.exe", "tclkitsh.exe", "tclkit-gui.exe",
+    "tclsh86tg.exe", "jruby.exe", "jrubyw.exe", "bunx.exe", "bunx-1.1.exe", "ConEmu64.exe",
+    "ConEmu.exe", r"C:\cmder\Cmder.exe", "alacritty.exe", "wezterm-gui.exe", "wezterm.exe",
+    "tabby.exe", "nu.exe", "fish.exe", "cygwin.exe",
+    # con l'unità ma senza la radice: relativo alla cartella corrente dell'unità
+    "C:app.exe", r"C:..\x\app.exe", "D:calc.exe")
+terzo_no = ("bunny.exe", "bundle-viewer.exe", "denon.exe", "juliaset.exe", "wishlist.exe", "dartmouth.exe",
+            "racketball.exe", "Rufus.exe", "erlang-gui.exe", r"D:\Giochi\gioco.exe", "ghcide-viewer.exe",
+            "fisher.exe", "nuget-gui.exe", "tabbyfox.exe", "bunxy.exe", "cmdermaker.exe")
+verifica("#311: Tcl, MSYS2, deno, bun, julia, R, Erlang, Haskell, Racket, Scala, Groovy, Dart e la radice "
+         "senza l'unità: per iscritto non ammessi",
+         all(e_script(c) for c in terzo_si), [c for c in terzo_si if not e_script(c)])
+verifica("contrario, #311: app che cominciano come quei nomi e un'unità locale restano ammesse",
+         all(ammessa_per_iscritto(c) for c in terzo_no), [c for c in terzo_no if e_script(c)])
+verifica("contrario, #311: le voci di serie del catalogo restano ammesse",
+         all(ammessa_per_iscritto(v) for v in _Cfg().pc_app.values()))
+verifica("#311: l'unità di sistema non è un'unità di rete", _base._unita_di_rete("C") is False)
+_vera = _base._unita_di_rete
+_base._unita_di_rete = lambda lettera: lettera.upper() == "Z"      # Z: mappata su una condivisione
+try:
+    verifica("#311: un .exe su un'unità di rete mappata vuole la voce, uno su un'unità locale no",
+             e_script(r"Z:\app.exe") and e_script(r"z:\Programmi\calc.exe")
+             and ammessa_per_iscritto(r"C:\Program Files\Mozilla Firefox\firefox.exe"))
+finally:
+    _base._unita_di_rete = _vera
+
 # ── blocco ──
 pc = FakePC()
 r = chiama(pc, "pc_blocca", {}, chi="Bianca")

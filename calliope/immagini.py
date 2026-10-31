@@ -7,9 +7,13 @@ dall'esecutore su richiesta.
   Content-Type; niente SVG né formati con script), la dimensione e i pixel (bomba di
   decompressione), gira la foto secondo l'EXIF, la riduce (lato lungo `immagini_lato_max`) e
   la riscrive in JPEG: i metadati (posizione GPS, modello del telefono) non passano.
-- `Immagine`: una foto della conversazione, solo **in memoria**: mai su disco, mai nel
-  registro dei turni (dove resta solo il numero, la fonte e la dimensione). Si salva solo con
-  «archiviala» (tool immagine_archivia → cartella dell'archivio).
+- `Immagine`: una foto della conversazione, in memoria per il modello finché dura la
+  conversazione, mai nel registro dei turni (dove resta solo il numero, la fonte e la
+  dimensione). Dal 28/10 (decisione 0034) la foto intera di una persona di casa con l'identità
+  certa, catture di webcam e schermo comprese, si tiene nel suo cassetto `immagini_tenuta_giorni`
+  (60) giorni (`cassetto`: l'id della copia), e per sempre con «archiviala»; la sua miniatura di
+  144 px resta col turno nella Conversazione. *Storico, fino al 28/10: «solo in memoria: mai su
+  disco… Si salva solo con «archiviala»».*
 - `Album`: le foto della conversazione, numerate (1, 2, 3…: «la prima», «l'ultima foto»);
   vive dentro Brain e si azzera con la conversazione (Brain.end_conversation).
 - `InAttesa`: una foto mandata senza domanda aspetta la frase dopo della stessa persona
@@ -69,9 +73,12 @@ def tipo_dai_byte(dati: bytes) -> str | None:
     return None
 
 
-def prepara(dati: bytes, lato_max: int = 1280, max_byte: int = 12_000_000,
-            qualita: int = 85) -> tuple[bytes, int, int]:
-    """(jpeg, larghezza, altezza) pronti per il modello. Solleva ImmagineNonValida."""
+def apri(dati: bytes, lato_max: int = 1280, max_byte: int = 12_000_000):
+    """L'immagine decodificata, girata secondo l'EXIF e in RGB (PIL.Image), con gli stessi
+    controlli di `prepara` (tipo vero dai byte, dimensione, pixel, bomba di decompressione); i
+    JPEG grandi si decodificano già ridotti verso `lato_max` (la riduzione vera la fa chi
+    chiama). La usano `prepara` e le pagine dello Studio (29/10, calliope/studio/pagine.py), che
+    raddrizzano la foto prima di ridurla. Solleva ImmagineNonValida."""
     if not dati:
         raise ImmagineNonValida("immagine vuota")
     if len(dati) > max_byte:
@@ -112,28 +119,40 @@ def prepara(dati: bytes, lato_max: int = 1280, max_byte: int = 12_000_000,
                 im = fondo
             else:
                 im = im.convert("RGB")
-            if max(im.size) > lato_max:
-                k = lato_max / max(im.size)
-                im = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))),
-                               Image.LANCZOS)
-            buf = io.BytesIO()
-            im.save(buf, "JPEG", quality=qualita, optimize=True)   # senza EXIF
+            return im
     except ImmagineNonValida:
         raise
     except (Image.DecompressionBombWarning, Image.DecompressionBombError):
         raise ImmagineNonValida("immagine con troppi pixel") from None
     except Exception as e:  # noqa: BLE001 - un file rovinato non deve far cadere nulla
         raise ImmagineNonValida(f"immagine rovinata ({type(e).__name__})") from None
+
+
+def prepara(dati: bytes, lato_max: int = 1280, max_byte: int = 12_000_000,
+            qualita: int = 85) -> tuple[bytes, int, int]:
+    """(jpeg, larghezza, altezza) pronti per il modello. Solleva ImmagineNonValida."""
+    im = apri(dati, lato_max, max_byte)
+    from PIL import Image
+    try:
+        if max(im.size) > lato_max:
+            k = lato_max / max(im.size)
+            im = im.resize((max(1, round(im.width * k)), max(1, round(im.height * k))),
+                           Image.LANCZOS)
+        buf = io.BytesIO()
+        im.save(buf, "JPEG", quality=qualita, optimize=True)   # senza EXIF
+    except Exception as e:  # noqa: BLE001 - un file rovinato non deve far cadere nulla
+        raise ImmagineNonValida(f"immagine rovinata ({type(e).__name__})") from None
     return buf.getvalue(), im.width, im.height
 
 
-def miniatura(jpeg: bytes, lato: int = 360) -> str:
-    """La miniatura come data URL (per la scheda sullo schermo): JPEG piccolo."""
+def miniatura(jpeg: bytes, lato: int = 360, qualita: int = 70) -> str:
+    """La miniatura come data URL (per la scheda sullo schermo): JPEG piccolo. Più piccola
+    (`lato`, `qualita`) per la copia nella Conversazione (28/10, #272)."""
     from PIL import Image
     im = Image.open(io.BytesIO(jpeg))
     im.thumbnail((lato, lato))
     buf = io.BytesIO()
-    im.convert("RGB").save(buf, "JPEG", quality=70)
+    im.convert("RGB").save(buf, "JPEG", quality=qualita)
     return "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode()
 
 
@@ -161,6 +180,9 @@ class Immagine:
     arrivata: float = field(default_factory=time.time)
     n: int = 0                       # numero nella conversazione (Album.aggiungi)
     descrizione: str = ""            # breve, fatta dal modello (Brain.descrivi_immagini)
+    # L'id della sua copia nel cassetto (28/10, decisione 0034): tenuta `immagini_tenuta_giorni`
+    # (60), per sempre con «archiviala»; None se non è tenuta (ospiti, tenuta spenta, cassetto pieno)
+    cassetto: int | None = None
 
     def b64(self) -> str:
         return base64.b64encode(self.jpeg).decode()

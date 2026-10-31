@@ -8,8 +8,14 @@
 <title>Calliope · schermo</title>
 <link rel="stylesheet" href="/schermo.css">
 <script src="/schermo.js" defer></script>
+<script src="/sezioni.js" defer></script>
+<script src="/studio.js" defer></script>
+<script src="/libreria.js" defer></script>
+<script src="/studio_importa.js" defer></script>
+<script src="/esercizio.js" defer></script>
+<script src="/pc.js" defer></script>
 </head>
-<body>
+<body data-sezioni="1">
 <header id="testa">
   <span id="luogo">Calliope</span>
   <span id="orologio-piccolo"></span>
@@ -26,6 +32,121 @@
 </div>
 <main id="principale" aria-live="polite"></main>
 <footer id="cronologia" aria-label="Schede recenti"></footer>
+
+<!-- Lo schermo personale del PC (27/10, passo 1b di docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md):
+     le sezioni del telefono in colonne. A sinistra le sezioni e la voce, al centro la sezione,
+     a destra la conversazione sempre aperta con la casella per scrivere. Solo sugli schermi
+     personali: quelli di stanza restano con la scheda grande (pc.js la accende dopo l'accesso) -->
+<nav id="barra" class="pc-barra" aria-label="Sezioni" hidden>
+  <a href="#/adesso" data-sezione="adesso"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span><span>Adesso</span></a>
+  <a href="#/conversazione" data-sezione="conversazione"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H9l-4 4z"/></svg></span><span>Conversazione</span><span class="novita" hidden></span></a>
+  <a href="#/cose" data-sezione="cose"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span><span>Le mie cose</span><span class="novita" hidden></span></a>
+  <a href="#/casa" data-sezione="casa"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/></svg></span><span>Casa</span><span class="novita" hidden></span></a>
+  <a href="#/io" data-sezione="io"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></span><span>Io</span></a>
+</nav>
+
+<div id="pc-voce" class="pc-voce" hidden>
+  <!-- lo stato della voce (#voce) finisce qui; «Parla»: il satellite di questo PC ascolta senza il nome -->
+  <button id="pc-parla" type="button" class="pc-parla" hidden>
+    <span class="parla-icona" aria-hidden="true"></span><span class="parla-testo">Parla</span>
+  </button>
+  <p id="pc-parla-esito" class="pc-nota" role="status"></p>
+</div>
+
+<div id="pc" class="pc-centro" data-sezione="adesso" hidden>
+  <div class="pc-testa">
+    <h1 id="sez-titolo" class="sez-titolo">Adesso</h1>
+    <button id="pc-conv-apri" type="button" class="piccolo-bottone pc-conv-apri" aria-controls="pc-conv" aria-expanded="false">Conversazione</button>
+  </div>
+  <div id="sezioni" class="sezioni">
+    <section id="sez-adesso" class="sezione" data-sezione="adesso" aria-labelledby="sez-titolo">
+      <h2 class="gruppo" data-gruppo="aspetta" hidden>Aspetta te</h2>
+      <div class="elenco" data-posto="adesso/aspetta"></div>
+      <h2 class="gruppo" data-gruppo="corso" hidden>In corso</h2>
+      <div class="elenco" data-posto="adesso/corso"></div>
+      <h2 class="gruppo" data-gruppo="risposta" hidden>Ultima risposta</h2>
+      <div class="elenco" data-posto="adesso/risposta"></div>
+      <p class="vuoto-sez">Di' «Calliope» o usa «Parla»: ciò che è in corso e ciò che aspetta te compare qui, il resto nelle sezioni a sinistra.</p>
+    </section>
+    <section id="sez-conversazione" class="sezione" data-sezione="conversazione" aria-labelledby="sez-titolo" hidden>
+      <div class="elenco" data-posto="conversazione"></div>
+      <p class="vuoto-sez">Le risposte con una scheda (biblioteca, internet, calcoli, testi da leggere) restano qui; la conversazione è a destra.</p>
+    </section>
+    <section id="sez-cose" class="sezione" data-sezione="cose" aria-labelledby="sez-titolo" hidden>
+      <!-- Le tessere e le pagine delle raccolte (28/10, passo 2a: POST /api/raccolte, sezioni.js) -->
+      <nav id="tessere" class="tessere" aria-label="Le mie raccolte" hidden></nav>
+      <div id="pagina-racc" class="pagina-racc" hidden>
+        <div class="pagina-testa">
+          <button id="pagina-indietro" type="button" class="tasto pagina-indietro"><span aria-hidden="true">‹ </span>Le mie cose</button>
+          <h2 id="pagina-titolo" class="pagina-titolo"></h2>
+        </div>
+        <p id="pagina-nota" class="pagina-nota" hidden></p>
+        <!-- La ricerca delle pagine Documenti e Ufficio (28/10, passi 2d e 2e: POST /api/raccolte/cerca, sezioni.js) -->
+        <form id="pagina-cerca" class="pagina-cerca" role="search" hidden>
+          <input id="pagina-cerca-testo" type="search" aria-label="Cerca nei documenti" maxlength="120" autocomplete="off" enterkeyhint="search" placeholder="Cerca: bolletta, garanzia, lettera…">
+          <button type="submit" class="tasto pagina-cerca-vai">Cerca</button>
+          <button type="button" id="pagina-cerca-via" class="tasto pagina-cerca-via" hidden>Tutti</button>
+        </form>
+        <div id="pagina-schede" class="elenco pagina-schede"></div>
+        <!-- La home dello Studio (30/10, passo 4.5, #284: studio.js, POST /api/studio/home) -->
+        <div id="studio" class="studio" hidden>
+          <p id="studio-prova" class="studio-prova" hidden>Prova: lo Studio è in ombra e lo vede solo chi amministra.</p>
+          <div id="studio-home" class="studio-home"></div>
+        </div>
+        <p id="pagina-esito" class="pagina-esito" role="status"></p>
+      </div>
+      <div class="raccolta" data-raccolta="" hidden><h2 class="gruppo">Da scrivere</h2><div class="elenco" data-posto="cose"></div></div>
+      <div class="raccolta" data-raccolta="liste" hidden><h2 class="gruppo">Liste</h2><div class="elenco" data-posto="cose/liste"></div></div>
+      <div class="raccolta" data-raccolta="agenda" hidden><h2 class="gruppo">Agenda</h2><div class="elenco" data-posto="cose/agenda"></div></div>
+      <div class="raccolta" data-raccolta="lavori" hidden><h2 class="gruppo">Lavori e programmi</h2><div class="elenco" data-posto="cose/lavori"></div></div>
+      <div class="raccolta" data-raccolta="documenti" hidden><h2 class="gruppo">Documenti</h2><div class="elenco" data-posto="cose/documenti"></div></div>
+      <div class="raccolta" data-raccolta="cassetto" hidden><h2 class="gruppo">Cassetto</h2><div class="elenco" data-posto="cose/cassetto"></div></div>
+      <div class="raccolta" data-raccolta="giochi" hidden><h2 class="gruppo">Giochi</h2><div class="elenco" data-posto="cose/giochi"></div></div>
+      <div class="raccolta" data-raccolta="studio" hidden><h2 class="gruppo">Studio</h2><div class="elenco" data-posto="cose/studio"></div></div>
+      <div class="raccolta" data-raccolta="ufficio" hidden><h2 class="gruppo">Ufficio</h2><div class="elenco" data-posto="cose/ufficio"></div></div>
+      <p class="vuoto-sez">Qui ritrovi le liste, l'agenda, i lavori, i documenti, i file e i giochi che Calliope ti ha mostrato. Puoi trascinare qui un file per Calliope.</p>
+    </section>
+    <section id="sez-casa" class="sezione" data-sezione="casa" aria-labelledby="sez-titolo" hidden>
+      <div class="elenco" data-posto="casa"></div>
+      <p class="vuoto-sez">Qui compaiono i dispositivi di casa che chiedi a Calliope, le voci nuove e gli avvisi per te.</p>
+    </section>
+    <section id="sez-io" class="sezione" data-sezione="io" aria-labelledby="sez-titolo" hidden>
+      <h2 class="gruppo">Questo schermo</h2>
+      <dl class="pc-righe">
+        <dt>Nome</dt><dd id="pc-nome">—</dd>
+        <dt>Stanza</dt><dd id="pc-luogo">—</dd>
+      </dl>
+      <!-- L'accento (27/10): una preferenza della persona, vale sui suoi satelliti personali -->
+      <h2 id="io-aspetto" class="gruppo" hidden>Aspetto</h2>
+      <div id="accenti" class="accenti" role="group" aria-labelledby="io-aspetto" hidden></div>
+      <p id="accento-esito" class="pc-nota accento-esito" role="status"></p>
+      <div class="elenco" data-posto="io"></div>
+      <!-- «Pulisci le mie schede» (08/10): due clic -->
+      <button id="pc-pulisci" type="button" class="piccolo-bottone pc-pulisci">Pulisci le mie schede</button>
+      <p id="pc-pulisci-esito" class="pc-nota" role="status"></p>
+    </section>
+  </div>
+</div>
+
+<!-- La conversazione, sempre aperta a destra (sotto i 1100 px dietro il pulsante «Conversazione») -->
+<aside id="pc-conv" class="pc-conv" aria-label="Conversazione" hidden>
+  <div class="pc-conv-testa">
+    <h2>Conversazione</h2>
+    <button id="pc-conv-chiudi" type="button" class="piccolo-bottone pc-conv-chiudi">Chiudi</button>
+  </div>
+  <div id="pc-chat" class="pc-chat"></div>
+  <div id="scrivi-posto" class="pc-scrivi"></div>
+</aside>
+
+<!-- Le icone della casella per scrivere (28/10, #301): schermo.js e telefono.js le copiano da qui
+     (niente HTML scritto dal codice, niente indirizzi nel JS) -->
+<template id="icone">
+  <svg data-icona="graffetta" viewBox="0 0 24 24"><path d="M20 11l-8 8a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a2 2 0 0 1-3-3l7-7"/></svg>
+  <svg data-icona="invia" viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg>
+  <svg data-icona="togli" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  <svg data-icona="microfono" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+</template>
+
 <noscript><p class="avviso">Questa pagina ha bisogno di JavaScript.</p></noscript>
 </body>
 </html>

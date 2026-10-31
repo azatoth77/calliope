@@ -39,7 +39,7 @@ import asyncio
 import json
 import threading
 import time
-from collections import deque
+from collections import OrderedDict, deque
 from dataclasses import dataclass
 
 from . import conversazione as conv_mod
@@ -51,6 +51,9 @@ from .schede import CASA, PERSONALE, PUBBLICA
 
 # Coda per connessione: oltre, le schede vecchie di uno schermo lento si scartano
 CODA_MAX = 32
+# «Qualunque proprietario» per `schermo`, `valido`, `invia_a` ed `evento_a` (#338): None vuol dire
+# «nessuno» (uno schermo di stanza), quindi serve un segnaposto per «non controllare»
+QUALUNQUE = object()
 # Stati della voce mostrati sugli schermi (Schermi.voce)
 VOCE_STATI = ("dorme", "ascolta", "pensa", "parla")
 
@@ -66,6 +69,11 @@ class Mittente:
     # Lo schermo da cui arriva la richiesta (04/10, «rispondi dove ti ho chiesto»): quello
     # del satellite che ha sentito la frase, o quello dove è stata scritta. Riceve per primo
     schermo: int | None = None
+    # L'identità di quello schermo quando la richiesta è partita (#338): {"creato", "proprietario"}
+    # da un elemento in coda (`archivio.di_quale_schermo`), None se non si sa. Con questa lo
+    # schermo d'origine riceve solo se è ancora lui (non revocato e riabbinato, non passato a
+    # un'altra persona)
+    schermo_identita: dict | None = None
 
     @property
     def chiave(self) -> str:
@@ -149,10 +157,34 @@ def registra_scaricabili(scaricamenti, sid: int, scheda: dict, persona: str):
     sotto la chiave `registro:<id>`, la stessa che la pagina chiede)."""
     if "_scarica" in scheda:
         scaricamenti.registra(sid, scheda, persona)
+    # Una voce per riga (28/10, #259: la scheda `archivio` della pagina Documenti, un file per
+    # riga): [{chiave, sorgente, formati}], ognuna sotto la sua chiave
+    for v in scheda.get("_scarica_voci") or ():
+        if isinstance(v, dict) and v.get("chiave") and isinstance(v.get("sorgente"), dict):
+            scaricamenti.registra(sid, {"chiave": v["chiave"], "_scarica": v["sorgente"],
+                                        "scarica": list(v.get("formati") or ())}, persona)
     reg = scheda.get("registro")
     if isinstance(scheda.get("_registro"), dict) and isinstance(reg, dict) and reg.get("chiave"):
         scaricamenti.registra(sid, {"chiave": reg["chiave"], "_scarica": scheda["_registro"],
                                     "scarica": list(reg.get("formati") or ["md"])}, persona)
+
+
+def registra_pagina(scaricamenti, sid: int, schede: list, persona: str, log=None):
+    """«Scarica» di una pagina di Le mie cose (revisione della PR #269): le voci di uno schermo sono
+    al più `MAX_VOCI` e se ne va la più vecchia, quindi si registrano dall'ultima scheda alla prima
+    e dall'ultima riga alla prima: le prime della pagina (le fatture nell'Ufficio, i documenti più
+    recenti) sono le ultime a perdere «Scarica» se la pagina, o quelle aperte dopo, superano il
+    tetto."""
+    for c in reversed(list(schede or ())):
+        if not isinstance(c, dict) or not any(k in c for k in ("_scarica", "_registro", "_scarica_voci")):
+            continue
+        try:
+            voci = c.get("_scarica_voci")
+            registra_scaricabili(scaricamenti, sid, {**c, "_scarica_voci": list(reversed(voci))} if voci else c,
+                                 persona)
+        except Exception as e:  # noqa: BLE001 — «Scarica» non ferma la pagina
+            if log:
+                log(f"[SCHERMI] «Scarica» della pagina non registrato: {type(e).__name__}")
 
 
 class _Connessione:
@@ -163,6 +195,9 @@ class _Connessione:
         self.coda: asyncio.Queue = asyncio.Queue(maxsize=CODA_MAX)
         self.persi = 0
         self.scrittura = None               # ultimo stato dello scritto mandato a questa pagina
+        # `collega` l'ha accettata con l'identità di adesso (#338, revisione della PR #341): se no
+        # il benvenuto non porta niente della persona (conversazione, contesto)
+        self.accettata = False
 
     def _metti(self, item):                 # nel ciclo del server
         try:
@@ -189,6 +224,17 @@ class Schermi:
         self._lock = threading.RLock()
         self._conn: dict[int, list[_Connessione]] = {}
         self._storia: dict[int, deque] = {}
+        # Dove è andata ogni scheda con una `chiave` (#266, revisione della PR #270): chiave →
+        # schermi, solo in memoria e con un tetto (`_DOVE_MAX`, le più vecchie escono). Serve a
+        # mandare l'aggiornamento di un tocco dove la scheda c'è (`aggiorna`)
+        self._dove: "OrderedDict[str, set[int]]" = OrderedDict()
+        # Numero → istante dell'abbinamento, dall'ultimo elenco letto (#266): un numero riusato
+        # da un altro schermo si riconosce (`_identita_cambiate`)
+        # Dal 31/10 (#338) numero → (istante, proprietario): lo stesso schermo passato a un'altra
+        # persona è un'identità nuova. `_identita_ver`: la versione dell'archivio dell'ultimo elenco
+        # usato (una lettura più vecchia non torna indietro)
+        self._identita: dict[int, tuple] = {}
+        self._identita_ver = -1
         self._ultime: dict[str, dict] = {}
         self._cache: tuple[float, int, list[dict]] = (0.0, -1, [])
         self.url = ""                       # lo imposta il server quando parte
@@ -231,8 +277,9 @@ class Schermi:
         # principale, che la sveglia (ingresso.sveglia) fa guardare tra un turno e l'altro
         self.moduli = Moduli(self)
         self.ingresso = Ingresso()
-        # Scrivere solo durante una conversazione cominciata a voce (05/10, conversazione.py):
-        # il ciclo principale le aggiorna, le pagine si accendono e spengono da sole
+        # Le conversazioni cominciate a voce (05/10, conversazione.py): il ciclo principale le
+        # aggiorna, le pagine si accendono e spengono da sole. Dal 28/10 (#301) servono ai
+        # moduli e agli schermi di stanza: dallo schermo personale si scrive sempre
         self.conversazioni = Conversazioni(lambda: conv_mod.durata(self.cfg),
                                            on_cambio=self._scrittura_cambiata)
         self._scrittura_persone: set = set()
@@ -247,12 +294,28 @@ class Schermi:
         self._contesto: dict[str, dict] = {}
         # I giochi delle estensioni (05/10, giochi.py): lo imposta main.py con le estensioni
         self.giochi = None
-        # Gli esercizi (08/10, calliope/esercizi/sessione.py): la scheda risponde da
-        # /api/esercizio; lo imposta main.py
-        self.esercizi = None
         # Il cruscotto di chi amministra (06/10, cruscotto.py: sola lettura), da main.py;
         # None = niente pulsante e /api/cruscotto risponde 404
         self.cruscotto = None
+        # L'aspetto dei satelliti personali (27/10, aspetto.py): l'accento scelto per persona e
+        # le sezioni nascoste a un minore. `profilo`: id → profilo della persona (da main.py,
+        # letto a ogni accesso); None = nessuna sezione nascosta
+        self.profilo = None
+        # Le raccolte di «Le mie cose» e i tocchi (28/10, raccolte.py e tocchi.py): i servizi
+        # della voce (ciclo.Servizi) e il contesto dei tool della corsia principale, da main.py.
+        # None = tessere «non disponibile» e /api/tocco risponde 503
+        self.servizi = None
+        self.tool_ctx = None
+        # La vista dello Studio aperta su ogni schermo personale (30/10, passo 4.5, #284,
+        # studio/vista.py): in memoria, per la riga dei dati del turno
+        from ..studio.vista import Viste
+        self.viste_studio = Viste()
+        self.aspetto = None
+        try:
+            from .aspetto import PreferenzeAspetto
+            self.aspetto = PreferenzeAspetto(archivio.path)
+        except Exception as e:  # noqa: BLE001 — senza la tabella resta l'accento di serie
+            log(f"   [SCHERMI] preferenze dell'aspetto non disponibili: {type(e).__name__}")
         # «Scarica» nella scheda del documento (07/10, scarica.py): le schede scaricabili
         # arrivate a ogni schermo personale e i gettoni degli indirizzi
         self.scaricamenti = Scaricamenti(cfg)
@@ -311,19 +374,122 @@ class Schermi:
         t, ver, rows = self._cache
         if ver == self.archivio.versione and time.monotonic() - t < 5.0:
             return rows
+        # La versione prima dell'elenco (revisione della PR #269): letta dopo, un abbinamento fatto
+        # nel mezzo lasciava per 5 s le righe vecchie con la versione nuova
+        ver = self.archivio.versione
         rows = self.archivio.elenco()
-        self._cache = (time.monotonic(), self.archivio.versione, rows)
+        # Prima le identità e ciò che lascia uno schermo cambiato, poi l'elenco nella cache (#338,
+        # revisione della PR #332): pubblicato prima, un altro thread prendeva la riga nuova mentre
+        # `_identita` era ancora quella di prima, e `_stesso` scartava una scheda legittima per lo
+        # schermo appena riabbinato
+        via, passati = self._identita_cambiate(rows, ver)
+        sc = getattr(self, "scaricamenti", None)
+        if sc is not None:
+            # Gli schermi revocati (anche da terminale) perdono le voci di «Scarica» (seconda
+            # revisione della PR #268, #260); anche quelli col numero riusato (#266) e quelli
+            # passati a un'altra persona (#338: le voci erano del proprietario di prima)
+            sc.tieni_solo(s["id"] for s in rows)
+            if via:
+                sc.dimentica(via)
+        if via:
+            self._schermi_via(via, passati)
+        with self._lock:
+            # Una lettura più vecchia di quella già in cache (due thread a cache scaduta) non la
+            # sostituisce
+            if ver >= self._cache[1]:
+                self._cache = (time.monotonic(), ver, rows)
         return rows
 
     def _rinfresca(self):
         self._cache = (0.0, -1, [])
 
+    @staticmethod
+    def _chi(schermo: dict) -> tuple:
+        """(istante dell'abbinamento, proprietario) di uno schermo: con il numero, la sua identità."""
+        return (schermo.get("creato"), schermo.get("proprietario") or None)
+
+    @classmethod
+    def identita(cls, schermo: dict | None):
+        """Chi è uno schermo: il numero da solo non basta, perché la tabella lo riusa dopo una
+        revoca (`INTEGER PRIMARY KEY` senza AUTOINCREMENT). Con l'istante dell'abbinamento sì
+        (#266, seconda revisione della PR #270). Dal 31/10 (#338) anche il proprietario: «rendilo
+        personale di Bianca» lascia numero e istante, ma per le schede è un altro schermo (la
+        risposta di Dario in coda, la sua cronologia in memoria, la sua pagina aperta non sono
+        di Bianca)."""
+        return (schermo.get("id"), *cls._chi(schermo)) if schermo else None
+
+    @classmethod
+    def quale(cls, schermo: dict | None) -> dict:
+        """{"creato", "proprietario"} di uno schermo letto adesso, da passare a `schermo`,
+        `invia_a` ed `evento_a` come fa un elemento in coda (`archivio.di_quale_schermo`)."""
+        if not schermo:
+            return {}
+        creato, prop = cls._chi(schermo)
+        return {"creato": creato, "proprietario": prop}
+
+    def _identita_cambiate(self, rows: list[dict], ver: int = 0) -> tuple[set[int], set[int]]:
+        """(via, passati): i numeri degli schermi che non ci sono più, che sono di un altro schermo
+        o di un'altra persona da quando l'hub ha letto l'elenco l'ultima volta (anche per le
+        revoche e gli abbinamenti fatti da terminale, in un altro processo); `passati` quelli dello
+        stesso abbinamento con un altro proprietario (#338). Una lettura con una versione più
+        vecchia dell'ultima usata non cambia niente."""
+        ora = {s["id"]: self._chi(s) for s in rows}
+        with self._lock:
+            if ver < getattr(self, "_identita_ver", -1):
+                return set(), set()
+            self._identita_ver = ver
+            prima, self._identita = self._identita, ora
+            via = {sid for sid, chi in prima.items() if sid not in ora or ora[sid] != chi}
+            passati = {sid for sid in via if sid in ora and ora[sid][0] == prima[sid][0]}
+            # Ciò che c'è in memoria per un numero che non è (più) nell'elenco
+            via |= {sid for sid in set(self._storia) | set(self._conn) if sid not in ora}
+        return via, passati
+
+    def _schermi_via(self, via: set[int], passati: set[int] = frozenset()):
+        """Uno schermo revocato, col numero riusato o passato a un'altra persona lascia tutto ciò
+        che l'hub tiene per quel numero (#266, seconda revisione della PR #270: la scheda personale
+        di Dario andava al telefono nuovo di Bianca al collegamento, «Ferma» al suo PC nuovo; #338:
+        lo stesso con «rendilo personale di Bianca»): la cronologia, la traccia delle schede, le
+        pagine ancora collegate con l'identità di prima e i posti nelle partite. Le pagine ricevono
+        «revocato» (tornano all'abbinamento) o, se lo schermo è lo stesso con un altro proprietario
+        (`passati`), «proprietario»: svuotano ciò che mostrano e rifanno l'accesso col token, che
+        vale ancora. Lo schermo riparte vuoto."""
+        with self._lock:
+            for sid in via:
+                self._storia.pop(sid, None)
+                vive = []
+                adesso = self._identita.get(sid)
+                for c in self._conn.get(sid, []):
+                    if adesso is not None and self.identita(c.schermo) == (sid, *adesso):
+                        vive.append(c)                  # già dello schermo di adesso
+                    else:
+                        c.consegna(("proprietario" if sid in passati else "revocato", "{}"))
+                if vive:
+                    self._conn[sid] = vive
+                else:
+                    self._conn.pop(sid, None)
+            self._dimentica_dove(via)
+        viste = getattr(self, "viste_studio", None)
+        if viste is not None:
+            # La vista dello Studio aperta dal proprietario di prima non va nei turni di quello nuovo
+            for sid in passati:
+                creato = (self._identita.get(sid) or (None,))[0]
+                viste.togli((sid, creato))
+        giochi = getattr(self, "giochi", None)
+        if giochi is not None and callable(getattr(giochi, "schermi_via", None)):
+            try:
+                giochi.schermi_via(via)
+            except Exception as e:  # noqa: BLE001 — una partita non ferma gli schermi
+                self.log(f"[SCHERMI] posti dei giochi non tolti: {type(e).__name__}: {e}")
+
     def collegati(self) -> list[dict]:
         with self._lock:
             return [c[0].schermo for c in self._conn.values() if c]
 
-    def valido(self, sid: int) -> bool:
-        return any(s["id"] == sid for s in self.abbinati())
+    def valido(self, sid: int, creato=None, proprietario=QUALUNQUE) -> bool:
+        """Lo schermo c'è ancora; con `creato`, è proprio quello (non un altro col numero
+        riusato, #266); con `proprietario`, è ancora di quella persona (None: di nessuno, #338)."""
+        return self.schermo(sid, creato, proprietario) is not None
 
     # ── connessioni (dal server) ──
     def collega(self, schermo: dict, loop, locale: bool = False, ripresa=None
@@ -336,12 +502,19 @@ class Schermi:
         conn = _Connessione(schermo, loop, locale)
         with self._lock:
             self._conn.setdefault(schermo["id"], []).append(conn)
+            if not self._stesso(schermo):
+                # La riga letta prima di un cambio (un'altra persona, un altro abbinamento, #338):
+                # niente cronologia, e la pagina rifà l'accesso con lo schermo di adesso
+                conn.consegna(("proprietario", "{}"))
+                return conn, []
+            conn.accettata = True
             if ripresa:
                 self._unisci_storia(schermo["id"], ripresa, schermo.get("proprietario"))
             storia = list(self._storia.get(schermo["id"], ()))
         if not schermo.get("proprietario"):
             # Uno schermo che non è (più) personale («rendilo condiviso») non rimanda le schede
-            # personali che aveva in memoria (08/10)
+            # personali che aveva in memoria (08/10; dal 31/10, #338, il cambio di proprietario
+            # svuota già la cronologia: resta come difesa in più)
             storia = [c for c in storia if c.get("visibilita") != PERSONALE]
         return conn, storia
 
@@ -417,16 +590,20 @@ class Schermi:
         if not persona:
             return 0
         n = self.cronologia.pulisci(persona) if self.cronologia is not None else 0
-        sids = [s["id"] for s in self.abbinati() if s.get("proprietario") == persona]
+        mie = [s for s in self.abbinati() if s.get("proprietario") == persona]
         with self._lock:
             self._ultime.pop(persona, None)
-            for sid in sids:
-                n = max(n, len(self._storia.pop(sid, ()) or ()))
-                for c in self._conn.get(sid, []):
+            # Solo gli schermi ancora suoi e le loro pagine (#338, revisione della PR #341): uno
+            # passato a un'altra persona fra `abbinati()` e il lock non si tocca
+            mie = [s for s in mie if self._stesso(s)]
+            self._dimentica_dove({s["id"] for s in mie})
+            for s in mie:
+                n = max(n, len(self._storia.pop(s["id"], ()) or ()))
+                for c in self._sue(s):
                     c.consegna(("pulisci", "{}"))
         for c in self._ricostruite(persona):
-            for sid in sids:
-                self.invia_a(sid, c)
+            for s in mie:
+                self.invia_a(s["id"], c, **self.quale(s))
         return n
 
     def togli_schede(self, togliere) -> int:
@@ -467,16 +644,134 @@ class Schermi:
             turni = []
         return {"turni": turni, "max": n, "giorni": float(getattr(fonte, "giorni", 0) or 0)}
 
-    def registra_chat(self, sid: int, persona):
+    def chat_filtrata(self, schermo: dict | None, giorno: str | None = None,
+                      solo_schede: bool = False, testo: str = "", ora: float | None = None) -> dict:
+        """I filtri e la ricerca della Conversazione (28/10, #242) per uno schermo personale: i
+        turni del suo proprietario e di nessun altro (un tutore non vede quelli del ragazzo, né
+        il ragazzo quelli del tutore: come `chat_per`). `giorno` «oggi» o «ieri» (l'ora locale
+        di questo computer), `solo_schede`, `testo` (per parole). {"turni", "nota"}, o
+        {"_stato", "errore"}."""
+        persona = (schermo or {}).get("proprietario")
+        fonte = self.chat_fonte
+        if not persona:
+            return {"_stato": 403, "errore": "solo da uno schermo personale"}
+        if fonte is None or self._n_chat() <= 0 or not hasattr(fonte, "chat_filtra"):
+            return {"_stato": 404, "errore": "La conversazione non c'è su questo Calliope."}
+        dal = al = None
+        if giorno in ("oggi", "ieri"):
+            import datetime as _dt
+            oggi = _dt.datetime.fromtimestamp(time.time() if ora is None else ora).replace(
+                hour=0, minute=0, second=0, microsecond=0)
+            inizio = oggi if giorno == "oggi" else oggi - _dt.timedelta(days=1)
+            dal = inizio.timestamp()
+            al = (inizio + _dt.timedelta(days=1)).timestamp()
+        testo = " ".join(str(testo or "").split())[:120]
+        try:
+            r = fonte.chat_filtra(persona, dal=dal, al=al, solo_schede=bool(solo_schede),
+                                  testo=testo, n=200 if not testo else 60)
+        except Exception as e:  # noqa: BLE001 — la pagina dice che non riesce
+            self.log(f"[SCHERMI] conversazione non filtrata: {type(e).__name__}")
+            return {"_stato": 500, "errore": "Non riesco a leggere la conversazione adesso: riprova tra poco."}
+        turni = r.get("turni") or []
+        nota = ""
+        if testo and not r.get("parole"):
+            nota = "Scrivi almeno una parola da cercare."
+        elif not turni:
+            nota = ("Nessun turno con queste parole." if testo else
+                    "Nessuna scheda in questi turni." if solo_schede else
+                    "Oggi non ci siamo ancora detti niente." if giorno == "oggi" else
+                    "Ieri non ci siamo detti niente." if giorno == "ieri" else
+                    "Ancora niente qui.")
+        elif r.get("troppi"):
+            nota = "Ci sono altri turni prima: restringi la ricerca per vederli."
+        return {"turni": turni, "nota": nota}
+
+    def chat_scheda(self, schermo: dict | None, turno, indice) -> dict:
+        """Il dettaglio di una scheda piccola leggera (revisione della PR #271): la copia intera,
+        solo dai turni del proprietario dello schermo personale. {"scheda"} o {"_stato", "errore"}."""
+        persona = (schermo or {}).get("proprietario")
+        fonte = self.chat_fonte
+        if not persona:
+            return {"_stato": 403, "errore": "solo da uno schermo personale"}
+        if fonte is None or self._n_chat() <= 0 or not hasattr(fonte, "chat_scheda"):
+            return {"_stato": 404, "errore": "La conversazione non c'è su questo Calliope."}
+        try:
+            c = fonte.chat_scheda(persona, int(turno), int(indice))
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[SCHERMI] scheda della conversazione non letta: {type(e).__name__}")
+            c = None
+        if c is None:
+            return {"_stato": 404, "errore": "Questa scheda non c'è più."}
+        return {"scheda": c}
+
+    def chat_foto(self, schermo: dict | None, fid) -> dict:
+        """Lo stato della foto di una miniatura della Conversazione e, finché è tenuta, la foto
+        intera (28/10, decisione 0034): solo dallo schermo personale del suo proprietario, e la
+        foto passa da «Scarica» (una voce per questo schermo, un gettone a tempo e per poche
+        richieste, i permessi rifatti al GET; via con gli schermi revocati). {"stato", "scade"?,
+        "url"?} o {"_stato", "errore"}."""
+        persona = (schermo or {}).get("proprietario")
+        if not persona:
+            return {"_stato": 403, "errore": "solo da uno schermo personale"}
+        cas = self.cassetto
+        if cas is None or not hasattr(cas, "stato_foto"):
+            return {"stato": "persa"}
+        try:
+            st = cas.stato_foto(str(persona), fid)
+        except Exception as e:  # noqa: BLE001
+            self.log(f"[SCHERMI] foto della conversazione non letta: {type(e).__name__}")
+            return {"_stato": 500, "errore": "Non riesco a leggere la foto adesso: riprova tra poco."}
+        if st is None:
+            return {"_stato": 404, "errore": "Questa foto non c'è."}
+        out = {"stato": st["stato"]}
+        if st.get("scade"):
+            out["scade"] = round(float(st["scade"]), 3)
+        if st.get("jpeg"):
+            out.update(self._foto_scaricabile(schermo, str(persona), int(fid)))
+        return out
+
+    def _foto_scaricabile(self, schermo: dict, persona: str, fid: int) -> dict:
+        """La foto tenuta come voce di «Scarica» di questo schermo, e il suo gettone: {"url"} o {}."""
+        from .scarica import Rifiuto
+        cas = self.cassetto
+
+        def leggi():
+            st = cas.stato_foto(persona, fid)            # i permessi rifatti adesso
+            return (st["jpeg"], "jpg") if st and st.get("jpeg") else None
+
+        def estensione():
+            st = cas.stato_foto(persona, fid)
+            return "jpg" if st and st.get("stato") == "tenuta" else None
+        chiave = f"foto:C{fid}"
+        self.scaricamenti.registra(schermo["id"], {
+            "chiave": chiave, "scarica": ["originale"], "titolo": "Foto",
+            "_scarica": {"file_fn": leggi, "estensione_fn": estensione, "titolo": "Foto",
+                         "solo_persona": True}}, persona)
+        try:
+            g = self.scaricamenti.gettone(schermo, chiave, "originale")
+        except Rifiuto as e:
+            self.log(f"[SCHERMI] foto tenuta senza gettone: {getattr(e, 'stato', '')}")
+            return {}
+        return {"url": g["url"]}
+
+    def registra_chat(self, sid: int, persona, schermo: dict | None = None) -> bool:
         """«Scarica» della trascrizione in Markdown, per uno schermo personale del proprietario:
-        il testo si fa al tocco, dall'archivio di quel momento."""
+        il testo si fa al tocco, dall'archivio di quel momento. Con `schermo` (la riga letta da chi
+        chiama, #338) solo se è ancora quello e di `persona`, controllato nel lock; la voce vale
+        solo per la persona (`solo_persona`: nemmeno chi amministra, se lo schermo passa a lui).
+        True se registrata."""
         fonte = self.chat_fonte
         if fonte is None or not persona or self._n_chat() <= 0:
-            return
-        self.scaricamenti.registra(sid, {
-            "chiave": "chat", "scarica": ["md"],
-            "_scarica": {"markdown_fn": lambda p=persona: fonte.chat_markdown(p),
-                         "titolo": "Conversazione con Calliope"}}, persona)
+            return False
+        voce = {"chiave": "chat", "scarica": ["md"],
+                "_scarica": {"markdown_fn": lambda p=persona: fonte.chat_markdown(p),
+                             "titolo": "Conversazione con Calliope", "solo_persona": True}}
+        with self._lock:
+            if schermo is not None and (schermo.get("id") != sid or not self._stesso(schermo)
+                                        or (schermo.get("proprietario") or None) != persona):
+                return False
+            self.scaricamenti.registra(sid, voce, persona)
+        return True
 
     def chat_nuovi(self, persona, turni: list[dict]) -> int:
         """Turni appena archiviati di `persona` (dal thread dell'archivio): in diretta ai suoi
@@ -485,8 +780,9 @@ class Schermi:
             return 0
         msg = json.dumps({"turni": turni}, ensure_ascii=False, default=str)
         # «Scarica» resta valido anche se nel frattempo tanti documenti l'hanno spinto fuori
-        for sid in [x["id"] for x in self.abbinati() if x.get("proprietario") == persona]:
-            self.registra_chat(sid, persona)
+        # Con la riga letta, ricontrollata nel lock (#338): non a uno schermo passato ad altri
+        for s in [x for x in self.abbinati() if x.get("proprietario") == persona]:
+            self.registra_chat(s["id"], persona, schermo=s)
         return self._a_personali(persona, "chat", msg)
 
     def chat_dimenticata(self, persona) -> int:
@@ -496,11 +792,15 @@ class Schermi:
         return self._a_personali(persona, "chat", json.dumps({"reset": True, "turni": []}))
 
     def _a_personali(self, persona, tipo: str, msg: str) -> int:
-        sids = [s["id"] for s in self.abbinati() if s.get("proprietario") == persona]
+        mie = [s for s in self.abbinati() if s.get("proprietario") == persona]
         n = 0
         with self._lock:
-            for sid in sids:
-                for c in self._conn.get(sid, []):
+            for s in mie:
+                # Solo se lo schermo è ancora suo, e solo alle pagine con la sua identità (#338:
+                # fra `abbinati()` e il lock lo schermo può essere passato a un'altra persona)
+                if not self._stesso(s):
+                    continue
+                for c in self._sue(s):
                     n += c.consegna((tipo, msg))
         return n
 
@@ -551,10 +851,12 @@ class Schermi:
                        and mittente.certo and mittente.persona)
         with self._lock:
             for s in dest:
+                if not self._stesso(s):
+                    continue                    # il numero è di un altro schermo, da adesso
                 self._in_storia(s["id"], storia)
                 if scaricabile and s.get("proprietario") == mittente.persona:
                     registra_scaricabili(self.scaricamenti, s["id"], scheda, mittente.persona)
-                for c in self._conn.get(s["id"], []):
+                for c in self._sue(s):
                     if c.consegna(("scheda", msg)):
                         raggiunti.append(s["nome"])
         # La cronologia su disco della persona (08/10): solo le schede personali di chi è
@@ -569,24 +871,32 @@ class Schermi:
                 "destinatari": [s["nome"] for s in dest], "motivo": motivo,
                 "abbinati": len(tutti), "ms": round((time.perf_counter() - t0) * 1000, 2)}
 
-    def invia_a(self, sid: int, scheda: dict) -> bool:
+    def invia_a(self, sid: int, scheda: dict, creato=None, proprietario=QUALUNQUE) -> bool:
         """La scheda a uno schermo preciso, senza scegliere i destinatari: la risposta a una
         frase scritta torna sullo schermo da cui è arrivata (04/10). True se una sua pagina è
-        collegata (altrimenti resta nella sua cronologia)."""
-        if not self.valido(sid):
+        collegata (altrimenti resta nella sua cronologia). Con `creato` (l'istante
+        dell'abbinamento, #275) solo se lo schermo è ancora quello: un elemento rimasto in coda
+        mentre lo schermo veniva revocato e il numero riabbinato non va allo schermo nuovo. Con
+        `proprietario` (#338; None = di nessuno) solo se è ancora di quella persona: la risposta
+        di Dario in coda non va allo schermo diventato di Bianca. Chi sceglie lo schermo da un
+        elenco letto prima passa entrambi (`quale`)."""
+        s = self.schermo(sid, creato, proprietario)
+        if s is None:
             return False
         pub = pubblica(scheda)
         msg = json.dumps(pub, ensure_ascii=False, default=str)
         ok = False
-        s = self.schermo(sid) or {}
-        if "_scarica" in scheda or "_registro" in scheda:
-            # Lo schermo da cui è stata scritta la richiesta: il suo proprietario (se è personale)
-            if s.get("proprietario"):
-                registra_scaricabili(self.scaricamenti, sid, scheda, s["proprietario"])
         storia = per_storia(scheda, pub)
         with self._lock:
+            if not self._stesso(s):
+                return False
+            if ("_scarica" in scheda or "_registro" in scheda) and s.get("proprietario"):
+                # Lo schermo da cui è stata scritta la richiesta: il suo proprietario (se è
+                # personale). Nel lock, dopo il controllo (#338): con la riga di prima la voce di
+                # «Scarica» del proprietario di prima resterebbe allo schermo
+                registra_scaricabili(self.scaricamenti, sid, scheda, s["proprietario"])
             self._in_storia(sid, storia)
-            for c in self._conn.get(sid, []):
+            for c in self._sue(s):
                 ok = c.consegna(("scheda", msg)) or ok
         # Una scheda personale a uno schermo personale (la risposta scritta da lì, lo sviluppo,
         # il cassetto): nella cronologia su disco del suo proprietario (08/10)
@@ -594,18 +904,106 @@ class Schermi:
             self._salva_persona(s["proprietario"], scheda, storia)
         return ok
 
-    def evento_a(self, sid: int, tipo: str, dati: dict) -> int:
+    def evento_a(self, sid: int, tipo: str, dati: dict, creato=None, proprietario=QUALUNQUE) -> int:
         """Un evento SSE a tutte le pagine aperte di uno schermo (05/10: i messaggi dei giochi
-        verso il loro riquadro). Non entra nella cronologia; non blocca. Quante pagine."""
+        verso il loro riquadro). Non entra nella cronologia; non blocca. Quante pagine. Con
+        `creato` (#275) e `proprietario` (#338) solo se lo schermo è ancora quello, e solo alle
+        pagine con la sua identità."""
+        s = None
+        if creato is not None or proprietario is not QUALUNQUE:
+            s = self.schermo(sid, creato, proprietario)
+            if s is None:
+                return 0
         msg = json.dumps(dati, ensure_ascii=False, default=str)
         n = 0
         with self._lock:
-            for c in self._conn.get(sid, []):
+            if s is not None and not self._stesso(s):
+                return 0
+            for c in (self._sue(s) if s is not None else self._conn.get(sid, [])):
                 n += c.consegna((tipo, msg))
         return n
 
-    def schermo(self, sid) -> dict | None:
-        return next((s for s in self.abbinati() if s["id"] == sid), None)
+    # ── l'aspetto dei satelliti personali (27/10, aspetto.py) ──
+    def aspetto_di(self, schermo: dict | None) -> dict:
+        """L'accento per la pagina: quello scelto dal proprietario di uno schermo personale, il
+        lilla di serie sugli schermi condivisi; con le scelte solo sugli schermi personali."""
+        from . import aspetto as A
+        persona = (schermo or {}).get("proprietario")
+        nome = self.aspetto.accento(persona) if self.aspetto is not None and persona else A.DI_SERIE
+        return A.per_pagina(nome, bool(persona))
+
+    def nascoste_di(self, schermo: dict | None) -> dict:
+        """Sezioni e raccolte da non mostrare: dal profilo del proprietario, letto adesso."""
+        from . import aspetto as A
+        persona = (schermo or {}).get("proprietario")
+        prof = None
+        if persona and self.profilo is not None:
+            try:
+                prof = self.profilo(persona)
+            except Exception:  # noqa: BLE001 — un profilo illeggibile: niente da nascondere
+                prof = None
+        return A.nascoste(prof)
+
+    def parla_possibile(self, schermo: dict | None) -> bool:
+        """«Parla» sulla pagina (27/10, passo 1b): uno schermo personale legato a un satellite
+        (il PC che fa da satellite) e il server dei satelliti acceso."""
+        s = schermo or {}
+        return bool(s.get("proprietario") and s.get("satellite") and self.satelliti is not None
+                    and hasattr(self.satelliti, "tocca"))
+
+    def parla(self, schermo: dict) -> dict:
+        """«Parla» dalla pagina: il satellite legato allo schermo ascolta senza il nome.
+        {ok} o {errore, _stato}."""
+        if not self.parla_possibile(schermo):
+            return {"errore": "«Parla» c'è solo sullo schermo personale di un PC satellite", "_stato": 403}
+        secondi = float(getattr(self.cfg, "schermi_parla_s", 8.0) or 8.0)
+        if not self.satelliti.tocca(int(schermo["satellite"]), secondi):
+            return {"errore": "Il satellite di questo PC non è collegato.", "_stato": 409}
+        return {"ok": True, "secondi": secondi}
+
+    def scegli_accento(self, schermo: dict, accento: str) -> dict:
+        """L'accento scelto da uno schermo personale: salvato per il proprietario e mandato a
+        tutte le sue pagine aperte (evento «aspetto»), così vale subito su ogni suo satellite
+        personale. {ok, aspetto} o {errore, _stato}."""
+        from . import aspetto as A
+        persona = (schermo or {}).get("proprietario")
+        if not persona:
+            return {"errore": "l'accento si sceglie da uno schermo personale", "_stato": 403}
+        if accento not in A.ACCENTI:
+            return {"errore": "accento sconosciuto", "_stato": 400}
+        if self.aspetto is None or not self.aspetto.salva(persona, accento):
+            return {"errore": "non ho potuto salvarlo", "_stato": 500}
+        dati = A.per_pagina(accento, True)
+        msg = json.dumps(dati, ensure_ascii=False)
+        with self._lock:
+            conns = [c for lst in self._conn.values() for c in lst
+                     if c.schermo.get("proprietario") == persona]
+        for c in conns:
+            c.consegna(("aspetto", msg))
+        return {"ok": True, "aspetto": dati}
+
+    def schermo(self, sid, creato=None, proprietario=QUALUNQUE) -> dict | None:
+        """Lo schermo col numero `sid`; con `creato`, solo se è proprio quello (non un altro col
+        numero riusato dopo una revoca, #275); con `proprietario`, solo se è ancora di quella
+        persona (None: di nessuno; #338)."""
+        prop = QUALUNQUE if proprietario is QUALUNQUE else (proprietario or None)
+        return next((s for s in self.abbinati() if s["id"] == sid
+                     and (creato is None or s.get("creato") == creato)
+                     and (prop is QUALUNQUE or (s.get("proprietario") or None) == prop)), None)
+
+    def _stesso(self, s: dict) -> bool:
+        """Chiamare col lock: lo schermo `s` (letto da `abbinati()` prima del lock) è ancora
+        quello che l'hub conosce con quel numero (#275, punto 2: fra `abbinati()` e il lock una
+        revoca e un riabbinamento da terminale possono dare il numero a un altro schermo; #338: o
+        lo schermo può passare a un'altra persona)."""
+        sid = s.get("id")
+        return sid not in self._identita or self._identita[sid] == self._chi(s)
+
+    def _sue(self, s: dict) -> list:
+        """Chiamare col lock: le pagine collegate dello schermo `s`, solo quelle con la sua
+        identità (una pagina dello schermo di prima col numero riusato non conta)."""
+        ident = self.identita(s)
+        return [c for c in self._conn.get(s.get("id"), []) if self.identita(c.schermo) == ident]
 
     def collegato(self, sid, locale: bool | None = None) -> bool:
         """Lo schermo ha una pagina aperta (con `locale`: aperta su questo computer)."""
@@ -623,6 +1021,24 @@ class Schermi:
         return any(s.get("proprietario") == mittente.persona and self.collegato(s["id"])
                    for s in dest)
 
+    def personale_abbinato(self, mittente: Mittente) -> bool:
+        """`mittente` ha uno schermo personale abbinato (il telefono, il PC personale), anche
+        con la pagina chiusa: un suo documento rimasto sul server si ritrova da lì, in Le mie
+        cose › Documenti, con «Scarica» (28/10, passo 2d, #259). Solo con l'identità decisa
+        dalla voce, come `personale_collegato`."""
+        if not mittente.certo or not mittente.persona:
+            return False
+        return any(s.get("proprietario") == mittente.persona for s in self.abbinati())
+
+    def apri_pagina(self, persona, pagina: str) -> int:
+        """Le pagine aperte degli schermi personali di `persona` vanno su `#/cose/<pagina>`
+        (28/10, issue #289, schermo_mostra con cosa=pagina): evento SSE «pagina». Quante
+        pagine l'hanno ricevuto. I permessi (chi, quale pagina) li controlla il tool; la pagina
+        mostra comunque solo ciò che il server le dà (/api/raccolte)."""
+        if not persona or not isinstance(pagina, str) or not pagina.isalpha():
+            return 0
+        return self._a_personali(persona, "pagina", json.dumps({"pagina": pagina}))
+
     def _in_storia(self, sid: int, scheda: dict):
         """La scheda nella cronologia dello schermo (con il lock). Con una `chiave` già
         presente la sostituisce: in cima (di norma: è cambiata per un'azione o un evento) o
@@ -632,6 +1048,10 @@ class Schermi:
         h = list(self._storia.get(sid, ()))
         k = scheda.get("chiave")
         if k:
+            self._dove.setdefault(k, set()).add(sid)
+            self._dove.move_to_end(k)
+            while len(self._dove) > self._DOVE_MAX:
+                self._dove.popitem(last=False)
             i = next((j for j, x in enumerate(h) if x.get("chiave") == k), None)
             if i is not None and scheda.get("sposta") is False:
                 h[i] = scheda
@@ -644,6 +1064,46 @@ class Schermi:
     def storia(self, sid: int) -> list[dict]:
         with self._lock:
             return list(self._storia.get(sid, ()))
+
+    _DOVE_MAX = 512
+
+    def dove(self, chiave) -> set[int]:
+        """Gli schermi a cui è andata la scheda con questa chiave (da quando Calliope è accesa)."""
+        with self._lock:
+            return set(self._dove.get(chiave, ())) if chiave else set()
+
+    def _dimentica_dove(self, sids):
+        for v in self._dove.values():
+            v.difference_update(sids)
+
+    def aggiorna(self, scheda: dict, mittente: Mittente) -> dict:
+        """L'aggiornamento di una scheda dopo un tocco (#266, revisione della PR #270: il timer
+        messo a voce in cucina e fermato dal telefono restava indietro sulla TV, e arrivava al
+        telefono di un altro familiare con la stessa «stanza»). Va agli schermi a cui la scheda con
+        la stessa `chiave` era già andata, più quelli personali di chi tocca e lo schermo del tocco,
+        anche con le schede automatiche spente. Una scheda mai vista qui (Calliope riaccesa) va dove
+        andrebbe a voce, senza gli schermi personali di altre persone. {"schermi": [nomi]}."""
+        tutti = self.abbinati()
+        per_id = {s["id"]: s for s in tutti}
+        # Lo schermo del tocco solo se è ancora quello del tocco (#338, revisione della PR #332):
+        # con l'identità che l'elemento in coda portava (istante e proprietario)
+        ident = mittente.schermo_identita or {}
+        origine = mittente.schermo if (mittente.schermo in per_id and (
+            not ident or self.schermo(mittente.schermo, **ident) is not None)) else None
+        gia = [i for i in self.dove(scheda.get("chiave")) if i in per_id]
+        if not gia and self.automatiche:
+            stanza = mittente.stanza or self.stanza_predefinita or None
+            d, _ = _destinatari(scheda.get("visibilita", PERSONALE), mittente, tutti, stanza)
+            gia = [s["id"] for s in d
+                   if not s.get("proprietario") or s.get("proprietario") == mittente.persona]
+        mie = [s["id"] for s in tutti
+               if mittente.persona and s.get("proprietario") == mittente.persona]
+        dest = list(dict.fromkeys(([origine] if origine is not None else []) + mie + gia))
+        self.ricorda(scheda, mittente)
+        for sid in dest:
+            # Con l'identità letta con l'elenco (o quella del tocco): `invia_a` la ricontrolla nel lock
+            self.invia_a(sid, scheda, **(ident if (sid == origine and ident) else self.quale(per_id[sid])))
+        return {"schermi": [per_id[i]["nome"] for i in dest]}
 
     # ── stato della voce ──
     _DORME = {"stato": "dorme", "fino": None}
@@ -860,7 +1320,9 @@ class Schermi:
         with self._lock:
             self._contesto[mittente.chiave] = dati
             for s in dest:
-                for c in self._conn.get(s["id"], []):
+                if not self._stesso(s):
+                    continue                    # passato a un'altra persona da adesso (#338)
+                for c in self._sue(s):
                     n += c.consegna(("contesto", msg))
         return n
 
@@ -880,6 +1342,10 @@ class Schermi:
                 for c in self._conn.get(sid, []):
                     c.consegna(("revocato", "{}"))
                 self._storia.pop(sid, None)
+            self._dimentica_dove(set(sids))
+        sc = getattr(self, "scaricamenti", None)
+        if sc is not None:
+            sc.dimentica(sids)              # «Scarica» non vale più da qui (#260)
 
     def chiudi_tutte(self):
         """Arresto: ogni flusso SSE finisce da sé (le pagine si ricollegheranno), così uvicorn
@@ -913,19 +1379,36 @@ class Schermi:
             motivo = m
         return False, motivo
 
+    def scritto_consentito(self, schermo: dict | None, canale: str = "scritto") -> tuple[bool, str]:
+        """Il punto per ciò che arriva dalle pagine (28/10, #301): dallo schermo personale la
+        casella, le foto e i file valgono sempre (`conversazione.CANALI_LIBERI`, al più
+        familiare come il tocco); i moduli e gli schermi di stanza vogliono ancora la
+        conversazione a voce (`scrittura_consentita`)."""
+        if conv_mod.scritto_libero(schermo, canale):
+            return True, ""
+        return self.scrittura_consentita(schermo)
+
     def scrittura_persona(self, persona: str | None) -> bool:
         """La persona è in una conversazione attiva (i suoi schermi personali scrivono)."""
         return bool(persona) and any(c.persona == persona for c in self.conversazioni.attive())
 
-    def testo_senza_conversazione(self) -> str:
+    def testo_senza_conversazione(self, canale: str = "scritto") -> str:
         nome = (getattr(self.cfg, "wake_names", None) or ["Calliope"])[0]
+        if canale == "modulo":
+            # Dal 28/10 (#301) solo i moduli dello schermo personale vogliono la voce
+            return (f"Di' «{nome}» per mandarmi il modulo: i moduli valgono durante una "
+                    "conversazione a voce.")
         return f"Di' «{nome}» per scrivermi: scrivo solo durante una conversazione a voce."
 
     def stato_scrittura(self, schermo: dict) -> dict:
-        """Per la pagina: {"attiva", "motivo", "testo"} (nessun nome, nessun dato)."""
-        ok, motivo = self.scrittura_consentita(schermo)
-        return {"attiva": ok, "motivo": motivo,
-                "testo": "" if ok else self.testo_senza_conversazione()}
+        """Per la pagina: {"attiva", "moduli", "motivo", "testo", "testo_moduli"} (nessun nome,
+        nessun dato). `attiva`: la casella, le foto e i file (dallo schermo personale sempre,
+        dal 28/10, #301); `moduli`: l'invio dei moduli, solo durante una conversazione a voce."""
+        ok, motivo = self.scritto_consentito(schermo, "scritto")
+        mod, motivo_mod = self.scrittura_consentita(schermo)
+        return {"attiva": ok, "moduli": mod, "motivo": motivo or motivo_mod,
+                "testo": "" if ok else self.testo_senza_conversazione(),
+                "testo_moduli": "" if mod else self.testo_senza_conversazione("modulo")}
 
     def stato_scrittura_per(self, conn: _Connessione) -> dict:
         """Lo stato per una pagina che si (ri)collega: lo ricorda, così i cambi dopo partono

@@ -14,6 +14,7 @@ import difflib
 import re
 import sqlite3
 import threading
+import time
 
 from .persistenza import apri_db, prepara_schema
 
@@ -63,6 +64,14 @@ def _norm(item: str) -> str:
     return " ".join(words)
 
 
+def _v2_cambi(db):
+    """Versione 2 (30/10, #263): l'ora dell'ultimo cambiamento su disco. Le voci tolte non
+    lasciano righe in `liste`, e l'ora tenuta in memoria si perdeva al riavvio: il pallino
+    della tessera Liste si accendeva solo per le voci aggiunte."""
+    db.execute("CREATE TABLE IF NOT EXISTS liste_cambi (chiave TEXT PRIMARY KEY, "
+               "quando REAL NOT NULL)")
+
+
 class Liste:
     SAME = 0.8          # somiglianza oltre la quale due voci sono la stessa cosa
 
@@ -81,7 +90,7 @@ class Liste:
         # Versione dello schema (03/10, persistenza.prepara_schema): la 1 è quello qui sopra;
         # le prossime si aggiungono in fondo all'elenco, solo colonne con NULL o un
         # predefinito. Dati di una versione più nuova: sola lettura
-        self.scrivibile = prepara_schema(self.db, "liste", [lambda db: None])
+        self.scrivibile = prepara_schema(self.db, "liste", [lambda db: None, _v2_cambi])
 
     def _rows(self, key: str) -> list[tuple[int, str, str]]:
         return self.db.execute("SELECT id, voce, norm FROM liste WHERE lista = ? ORDER BY id",
@@ -111,6 +120,8 @@ class Liste:
                                 (key, clean, _norm(clean), who,
                                  datetime.datetime.now().isoformat(timespec="seconds")))
                 added.append(clean)
+            if added:
+                self._segna_cambio()
             self.db.commit()
         return key, added, already
 
@@ -136,8 +147,39 @@ class Liste:
                         removed.append(found[1])
                     else:
                         missing.append(it)
+            if removed:
+                self._segna_cambio()
             self.db.commit()
         return key, removed, missing
+
+    def _segna_cambio(self):
+        """L'ora di adesso come ultimo cambiamento, nella stessa transazione del cambiamento
+        (chiamata col lock preso)."""
+        self.db.execute("INSERT INTO liste_cambi (chiave, quando) VALUES ('ultimo', ?) "
+                        "ON CONFLICT(chiave) DO UPDATE SET quando = excluded.quando",
+                        (time.time(),))
+
+    def ultimo_cambio(self) -> float | None:
+        """L'ultimo cambiamento delle liste (epoch), per il pallino della tessera Liste (28/10,
+        schermi/raccolte.py): l'ultima voce aggiunta o tolta, da `liste_cambi` su disco (30/10,
+        #263: prima le voci tolte si tenevano in memoria e si perdevano al riavvio). Per i
+        database di prima, l'ultima voce aggiunta che c'è ancora."""
+        with self._lock:
+            r = self.db.execute("SELECT MAX(created) FROM liste").fetchone()
+            try:
+                c = self.db.execute("SELECT quando FROM liste_cambi WHERE chiave = 'ultimo'"
+                                    ).fetchone()
+            except sqlite3.OperationalError:      # sola lettura senza la tabella
+                c = None
+        t = None
+        if r and r[0]:
+            try:
+                t = datetime.datetime.fromisoformat(r[0]).timestamp()
+            except ValueError:
+                t = None
+        cambio = float(c[0]) if c and c[0] is not None else None
+        valori = [x for x in (t, cambio) if x is not None]
+        return max(valori) if valori else None
 
     def names(self) -> list[str]:
         with self._lock:

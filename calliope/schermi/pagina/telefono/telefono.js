@@ -8,6 +8,11 @@ import { SchermoAcceso } from "./schermo-acceso.js";
 
 // Versione 3 (13/10): l'ascolto della stanza (calliope/satellite/protocollo.py)
 const VERSIONE = 3;
+// La versione di questa pagina, nei log del server (28/10, #291): uguale alla cache di sw.js
+// (prova_telefono_consapevole le confronta). Una costante della pagina che gira, non la cache
+// più alta (revisione della PR #294: durante un aggiornamento è quella nuova), e pronta già al
+// primo «ciao»
+const PAGINA_VERSIONE = "calliope-telefono-pagina-v41";
 const CHIAVE_TOKEN = "calliope.telefono.token";
 const CHIAVE_NOME = "calliope.telefono.nome";
 const CHIAVE_MIC = "calliope.telefono.microfono";
@@ -61,7 +66,9 @@ const player = new Riproduttore("Calliope");
 // L'ascolto della stanza (13/10): un secondo VAD sugli stessi blocchi, solo con la stanza accesa
 // dal server, l'interruttore acceso e il microfono acceso; mentre Calliope parla solo con
 // `durante_voce` dal server (passo 5, 14/10: i segmenti portano le frasi che suonavano)
-const stanza = new AscoltoStanza(param, mandaStanza, () => player.inCorso(),
+// Mentre suona il ripasso da ascoltare (31/10, #249, studio.js: evento «calliope:ripasso») la
+// stanza vale «Calliope parla» (half-duplex): i segmenti in corso si buttano
+const stanza = new AscoltoStanza(param, mandaStanza, () => player.inCorso() || !!st.ripasso,
   () => (st.ultimoLid !== null ? { t: st.ultimoA, id: st.ultimoLid } : null),
   () => player.voceOra(1.0));
 // La voce comincia a sentirsi (07/10): come `suona` del satellite in Python, per `prima_voce_s`
@@ -90,10 +97,11 @@ const RITMO_TOLLERANZA = 0.06;      // ±6 % tra l'orologio del contesto e quell
 const RITMO_FINESTRA_MS = 2500;
 
 // ───────────────────────────── interfaccia ─────────────────────────────
-// Dal 04/10 la pagina è una vista sola, quella che era la «vista da guida»: stato di questo
-// telefono, il carosello (risposta e schede), «Parla», «Microfono» e «Scrivi». Il resto
-// (impostazioni, «Prova il microfono», certificato, abbinamento) sta nel menu o compare
-// quando serve (il modulo da compilare, la casella per scrivere).
+// Dal 27/10 la pagina ha cinque sezioni (Adesso, Conversazione, Le mie cose, Casa, Io) con la
+// barra in basso, e sopra la barra la voce: stato di questo telefono, «Microfono», «Parla»,
+// «Scrivi». Impostazioni, «Prova il microfono» e certificato stanno in Io; il modulo da
+// compilare e la casella per scrivere sono strati che compaiono quando servono. La vista unica
+// del 04/10 (la «vista da guida») è la modalità «In auto».
 function statoTel(cls, testo) {
   for (const [id, idt] of [["tel-stato", "tel-stato-testo"], ["tel-collegamento", "tel-collegamento-testo"]]) {
     const e = $(id);
@@ -134,14 +142,23 @@ function voceLocale() {
 
 // Lo stato in alto riguarda QUESTO telefono (04/10: in auto «In ascolto su «studio»» col
 // microfono del telefono spento confondeva): [classe, parola grande, riga piccola sotto]
+const SUGGERIMENTO = "Tocca «Parla» per parlare";
 function statoVista(cls) {
   const dove = st.altro ? "Il microfono attivo è su «" + st.altro + "»" : "";
   if (!st.collegato) return ["spento", "Non collegata", "Riprovo da sola"];
   if (cls === "parla") return ["parla", "Parlo", ""];
   if (cls === "pensa") return ["pensa", "Penso…", ""];
   if (cls === "ascolta" && (st.reg || st.mic || (st.corsa && st.corsa.parla))) return ["ascolta", "Ti ascolto", ""];
-  if (!st.mic && !st.reg) return ["spento", "Microfono spento", dove || "Tocca «Parla» per parlare"];
+  if (!st.mic && !st.reg) return ["spento", "Microfono spento", dove || SUGGERIMENTO];
   return ["dorme", TESTI.dorme, st.attivo ? "" : dove];
+}
+
+// Lo stato breve dentro «Parla» nel layout compatto (28/10, #277: sull'iPhone 13 mini la voce
+// prendeva tre righe): la parola grande diventa più corta, quella che si capisce già dal
+// microfono sbarrato o verde resta lì
+function statoBreve(parola) {
+  if (parola === TESTI.dorme) return "di' «Calliope»";
+  return parola;
 }
 
 function disegna() {
@@ -157,10 +174,16 @@ function disegna() {
   const d = $("tel-dove");
   d.hidden = !sotto;
   metti(d, sotto);
+  // Il suggerimento di sempre: nel compatto non si mostra (resta la descrizione di «Parla»)
+  attr(d, "data-ovvio", sotto === SUGGERIMENTO ? "1" : "0");
+  descriviParla();
   $("vista").classList.toggle("mic-acceso", st.mic);
   const b = $("parla");
   metti(b.querySelector(".parla-testo"), st.reg ? "Ti ascolto · tocca per finire"
     : cls === "parla" ? "Interrompi e parla" : "Parla");
+  metti(b.querySelector(".parla-breve"), st.reg ? "Tocca per finire" : cls === "parla" ? "Interrompi" : "Parla");
+  metti(b.querySelector(".parla-stato"), statoBreve(parola));
+  attr(b, "data-stato", gc);
   b.disabled = !st.collegato;
   b.classList.toggle("in-corso", !!st.reg || st.forza || (cls === "ascolta" && !!st.corsa && st.corsa.parla));
   b.classList.toggle("parla-calliope", cls === "parla" && !st.reg);
@@ -168,14 +191,49 @@ function disegna() {
   metti($("mic-stato"), st.mic ? "acceso" : "spento");
   disegnaRisposta();
   segnaTagli();
+  disegnaOra();
   // Il pallino sopra un gioco (11/10, modalità gioco di schermo.js): lo stato di QUESTO telefono
   if (sch() && sch().voceGioco) sch().voceGioco(gc);
 }
 setInterval(disegna, 250);
 
+// Il ripasso da ascoltare (31/10, passo 9, #249, studio.js): la pagina dello Studio dice quando
+// suona («calliope:ripasso»), e qui si dice lo stato della voce di questo telefono
+// («calliope:voce»): il ripasso si ferma quando il telefono ascolta, pensa o parla, così il nome
+// lo interrompe e la domanda non si mescola all'audio, e riparte quando torna a dormire
+let voceDetta = null;
+function diciVoce() {
+  const [cls] = voceLocale();
+  if (cls === voceDetta) return;
+  voceDetta = cls;
+  try { document.dispatchEvent(new CustomEvent("calliope:voce", { detail: { stato: cls } })); } catch (e) { /* niente */ }
+}
+setInterval(diciVoce, 250);
+document.addEventListener("calliope:ripasso", (ev) => { st.ripasso = !!(ev.detail && ev.detail.suona); });
+
 // Scrive solo se cambia: il giro ogni 250 ms non tocca il DOM per niente
 function metti(el, testo) { if (el && el.textContent !== testo) el.textContent = testo; }
 function attr(el, k, v) { if (el && el.getAttribute(k) !== v) el.setAttribute(k, v); }
+
+// «Parla» descritto dal suggerimento solo quando il suggerimento non si vede (29/10, #287): nel
+// compatto, dove «Tocca «Parla» per parlare» è nascosto (data-ovvio). Fuori dal compatto, o quando la
+// riga piccola si vede, la riga si legge già nel suo posto e VoiceOver la diceva due volte. Si
+// rifà a ogni disegno, al cambio del compatto (media query) e al cambio di modo (In auto)
+function descriviParla() {
+  const d = $("tel-dove"), b = $("parla");
+  if (!d || !b) return;
+  const nascosta = !d.hidden && !!d.textContent && getComputedStyle(d).display === "none";
+  if (nascosta) attr(b, "aria-describedby", "tel-dove");
+  else if (b.hasAttribute("aria-describedby")) b.removeAttribute("aria-describedby");
+}
+const COMPATTO = window.matchMedia
+  ? window.matchMedia("(orientation: portrait) and (max-width: 389px), (orientation: portrait) and (max-height: 719px)")
+  : null;
+if (COMPATTO) {
+  const cambia = () => descriviParla();
+  if (COMPATTO.addEventListener) COMPATTO.addEventListener("change", cambia);
+  else if (COMPATTO.addListener) COMPATTO.addListener(cambia);
+}
 
 // ───────────────────────────── schermo acceso (04/10) ─────────────────────────────
 // Una pagina web non ascolta a schermo spento (iOS la sospende): finché il microfono è acceso
@@ -195,7 +253,7 @@ function statoSchermo() {
   return ["avvisa", PUO_SPEGNERSI + (m ? ": " + m : "") + "."];
 }
 
-// Nel menu l'indicatore discreto; nella vista solo l'avviso, quando lo schermo può spegnersi
+// In Io l'indicatore discreto; nella vista solo l'avviso, quando lo schermo può spegnersi
 function disegnaSchermo() {
   const r = statoSchermo();
   const box = $("schermo-stato");
@@ -220,41 +278,113 @@ function impostaTieni(v) {
   disegnaSchermo();
 }
 
-// ───────────────────────────── carosello (04/10) ─────────────────────────────
-// La risposta e le schede (lista, timer, programma, documento, risposta scritta…) una per
-// volta, la più recente per prima, scorrendo di lato (scroll-snap, niente librerie). Le schede
-// le tiene schermo.js (sessione, cronologia, disegno): qui si mettono in fila. Una scheda
-// aggiornata (stessa chiave) si allinea al suo posto, senza ricostruirla né spostarla; una
-// scheda nuova, o mandata di nuovo («sposta»), va in testa e si mostra. La risposta di un
-// turno nuovo va in testa e si mostra, a meno che Calliope abbia appena mostrato una scheda
-// (che di solito è proprio il contenuto della risposta): allora resta la scheda. Chi scorre
-// a mano non viene spostato per un po'.
+// ───────────────────────────── sezioni (27/10) ─────────────────────────────
+// docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md, passo 1: al posto del carosello cinque
+// sezioni (Adesso, Conversazione, Le mie cose, Casa, Io) con la barra in basso e la voce sopra.
+// Lo smistamento delle schede per sezione, il router sul frammento, le novità e i rimandi sono
+// in ../sezioni.js (dal passo 1b lo usa anche la pagina degli schermi personali sul PC); qui le
+// parti del telefono: l'ultima risposta, la scheda nell'elenco con «Espandi», gli strati (modulo,
+// scheda a schermo intero), la vista dello sviluppo. La vista unica di prima resta come modalità
+// «In auto», che si accende a mano (decisione del 27/10): stato grande, l'ultima risposta,
+// «Parla» e il microfono, niente barra.
 const RISPOSTA = "__risposta";
-const car = {
-  seq: { [RISPOSTA]: 0 },   // chiave → ordine (più grande = più recente)
-  n: 0,
-  schede: {},               // chiave → dati della scheda
-  ordine: [RISPOSTA],       // le chiavi mostrate, la più recente per prima
-  vista: RISPOSTA,          // la chiave che si sta guardando
-  atteso: null,             // dove deve arrivare lo scorrimento chiesto da qui (vaiA)
-  toccato: -1e9,            // ultimo scorrimento a mano (performance.now)
-  mostrataDa: -1e9,         // ultima scheda mostrata da Calliope
-  modulo: null,             // chiave del modulo aperto nello strato
-  moduloFirma: "",
-  intera: null,             // chiave della scheda aperta a schermo intero (06/10)
-  svil: null,               // lo sviluppo aperto già mostrato nella sua vista (08/10)
-};
+const CHIAVE_AUTO = "calliope.telefono.auto";              // "1": la modalità In auto
 // Le schede che hanno sempre «Espandi» (le altre solo se non ci stanno): sul telefono il
 // cruscotto, il codice di un lavoro, un documento o l'uscita di un programma non si leggono
-// nel riquadro del carosello (06/10, iPhone 13 mini)
+// nel riquadro (06/10, iPhone 13 mini)
 const TIPI_LUNGHI = new Set(["cruscotto", "lavoro", "documento", "esecuzione", "biblioteca", "web", "allegato", "sviluppo", "chat"]);
 // Queste non si aprono a schermo intero: il modulo ha il suo strato, il gioco il suo riquadro
 const TIPI_SENZA_INTERA = new Set(["modulo", "gioco"]);
-const opzioniCarosello = { manoMs: 10000, schedaMs: 12000 };
 const fmtOra = new Intl.DateTimeFormat("it-IT", { hour: "2-digit", minute: "2-digit" });
 const sch = () => window.calliopeSchermo;
 
-function chiaveDi(c) { return c.chiave || c.id; }
+const SEZ = window.CalliopeSezioni.crea({
+  radice: () => $("vista"),
+  chiaveVisti: "calliope.telefono.visti",
+  costruisci: (c) => costruisciPagina(c),
+  // Il modulo aperto nel suo strato e la scheda a schermo intero si aggiornano al loro posto
+  aggiornata(k, c) {
+    if (car.modulo === k) aggiornaModulo(c);
+    if (car.intera === k) disegnaIntera();
+  },
+  dopoSincronizza: (det) => sviluppoAperto(det),
+  // Tolta da chi la guarda (il «Chiudi» del cruscotto) o da Calliope (revoca, non amministra
+  // più): lo strato si chiude. Uscita dalla cronologia perché ne sono arrivate altre: resta
+  // aperta con l'ultimo contenuto (una scheda nuova non chiude quella che si sta leggendo)
+  tolta(k, lista) {
+    if (car.intera === k && (k === "cruscotto" || k === "chat" || !lista.length)) chiudiStrato("strato-scheda");
+  },
+  dopoDisponi: () => segnaTagli(),
+  // Uscendo dalla Conversazione la modalità scrittura si chiude (risposta 4 del 28/10, #301)
+  dopoPercorso: () => {
+    if (vis.sezione !== "conversazione") { impostaScrittura(false); delete $("vista").dataset.filtri; }
+    segnaLente();
+  },
+  // Con la conversazione nella sezione (28/10, #242) l'elenco sotto tiene solo le schede che la
+  // conversazione non mostra già: non le risposte scritte (sono il testo del turno), non le schede
+  // dentro un turno; in Adesso restano come prima
+  fuoriDaCasa: (k, c) => !!car.chatEl && (c.tipo === "risposta" || chatHaScheda(c)),
+  // Con la scheda a schermo intero aperta la sua voce nella cronologia del browser si sostituisce
+  primaDiVai() {
+    if ($("strato-scheda").hidden) return false;
+    const sua = !!(history.state && history.state.calliopeStrato === "scheda");
+    chiudiStrato("strato-scheda");
+    return sua;
+  },
+});
+const { car, vis, chiaveDi, sezioneDi, etichettaOra, disponi, sincronizza, mostraIn, vaiA, vai,
+  applicaPercorso, applicaNascoste } = SEZ;
+const opzioniVista = SEZ.opzioni;
+const TITOLI_SEZIONE = SEZ.TITOLI_SEZIONE;
+car.seq[RISPOSTA] = 0;
+car.modulo = null;              // chiave del modulo aperto nello strato
+car.moduloFirma = "";
+car.intera = null;              // chiave della scheda aperta a schermo intero (06/10)
+car.chatSchede = {};            // la scheda piccola della conversazione aperta a schermo intero (28/10)
+car.chatEl = null;              // la conversazione nella sua sezione (28/10, #242)
+car.svil = null;                // lo sviluppo aperto già mostrato nella sua vista (08/10)
+vis.modo = leggi(CHIAVE_AUTO) === "1" ? "auto" : "sezioni";
+
+// ───────────────────────────── la conversazione nella sua sezione (28/10, #242) ─────────────────────────────
+// La scheda «chat» di schermo.js (frasi con ora e canale, risposte con le schede piccole, filtri e
+// ricerca) dentro la sezione Conversazione, allineata al suo posto quando arrivano turni nuovi
+function chatHaScheda(c) {
+  const ch = sch() && sch().schedaChat ? sch().schedaChat() : null;
+  if (!ch || !c) return false;
+  return ch.turni.some((t) => Array.isArray(t.schede) && t.schede.some((x) => x && x.id && x.id === c.id));
+}
+function disegnaChatTel() {
+  const posto = $("conv-tel");
+  if (!posto || !sch()) return;
+  const c = sch().schedaChat ? sch().schedaChat() : null;
+  posto.hidden = !c;
+  if (!c) { posto.replaceChildren(); car.chatEl = null; disponi(); return; }
+  const nuova = sch().costruisci(c);
+  nuova.classList.add("conv-tel-scheda");
+  const prima = car.chatEl;
+  if (prima && prima.isConnected && prima.dataset.chiave === nuova.dataset.chiave) {
+    const seguite = sch().misuraSegui(prima);
+    sch().allinea(prima, nuova);
+    sch().ripristinaSegui(prima, seguite);
+  } else {
+    posto.replaceChildren(nuova);
+    car.chatEl = nuova;
+    sch().ripristinaSegui(nuova, null);
+  }
+  // L'elenco sotto perde le schede che un turno nuovo mostra già
+  disponi();
+  segnaLente();
+}
+
+// La conversazione disegnata mentre la sezione era nascosta non è scesa in fondo (nascosta, lo
+// scorrimento non vale): entrando nella sezione va all'ultimo turno, se chi legge non era risalito
+function chatInFondo() {
+  if (vis.sezione !== "conversazione" || !car.chatEl) return;
+  requestAnimationFrame(() => {
+    for (const b of car.chatEl.querySelectorAll("[data-segui]")) if (!b.classList.contains("staccato")) b.scrollTop = b.scrollHeight;
+  });
+}
+window.addEventListener("hashchange", chatInFondo);
 
 // L'ultima risposta (le frasi di un turno, in ordine), al più ~300 caratteri: la coda
 function ricordaFrase(turno, testo) {
@@ -266,8 +396,6 @@ function ricordaFrase(turno, testo) {
   if (nuovo) {
     car.seq[RISPOSTA] = ++car.n;
     disponi();
-    const ora = performance.now();
-    if (ora - car.toccato > opzioniCarosello.manoMs && ora - car.mostrataDa > opzioniCarosello.schedaMs) vaiA(RISPOSTA);
   }
   disegnaRisposta();
   if (car.intera === RISPOSTA) disegnaIntera();
@@ -277,13 +405,13 @@ function disegnaRisposta() {
   const r = $("risposta-testo");
   if (!r) return;
   const vuota = !st.risposta.testo;
-  metti(r, vuota ? "Di' «Calliope» o tocca «Parla»: le risposte e le schede compaiono qui." : st.risposta.testo);
+  metti(r, vuota ? "Di' «Calliope» o tocca «Parla»: le risposte compaiono qui, le schede nelle sezioni in basso." : st.risposta.testo);
   r.classList.toggle("vuota", vuota);
   const et = $("risposta").querySelector(".etichetta");
   metti(et, vuota ? "Calliope" : "Risposta · " + fmtOra.format(new Date(st.risposta.ora || Date.now())));
 }
 
-// La scheda per il carosello: quella di schermo.js, con l'ora; il modulo come riassunto con
+// La scheda in un elenco: quella di schermo.js, con l'ora; il modulo come riassunto con
 // «Compila» (il modulo vero si apre nel suo strato, che ha posto per la tastiera)
 function costruisciPagina(c) {
   let s;
@@ -325,13 +453,7 @@ function costruisciPagina(c) {
   }
   s.classList.add("pagina-car");
   s.setAttribute("aria-roledescription", "scheda");
-  const et = s.querySelector(".etichetta");
-  if (et && c.creata) {
-    const q = document.createElement("span");
-    q.className = "quando";
-    q.textContent = fmtOra.format(new Date(c.creata * 1000));
-    et.append(q);
-  }
+  etichettaOra(s, c);
   // «Espandi» (06/10): in fondo alla scheda, sotto la dissolvenza; visibile sulle schede
   // lunghe (classe «lunga», da segnaTagli)
   if (!TIPI_SENZA_INTERA.has(c.tipo)) {
@@ -345,58 +467,10 @@ function costruisciPagina(c) {
   return s;
 }
 
-// La fila: le chiavi in ordine di tempo; la risposta vuota solo se non c'è nient'altro
-function disponi() {
-  const bin = $("binario");
-  const chiavi = Object.keys(car.schede);
-  const conRisposta = !!st.risposta.testo || !chiavi.length;
-  const ordine = (conRisposta ? [RISPOSTA] : []).concat(chiavi)
-    .sort((a, b) => (car.seq[b] || 0) - (car.seq[a] || 0));
-  const prima = car.vista;
-  const r = $("risposta");
-  r.hidden = !conRisposta;
-  // In fila solo dove serve: spostare un elemento ne azzera lo scorrimento interno
-  ordine.forEach((k, i) => {
-    const e = k === RISPOSTA ? r : bin.querySelector(':scope > [data-chiave="' + CSS.escape(k) + '"]');
-    if (e && bin.children[i] !== e) bin.insertBefore(e, bin.children[i] || null);
-  });
-  if (!conRisposta && r.parentNode === bin) bin.append(r);   // nascosta, in fondo
-  car.ordine = ordine;
-  disegnaPunti();
-  if (ordine.includes(prima)) vaiA(prima); else vaiA(ordine[0]);
-}
-
-// Le schede di schermo.js nel binario: nuove, aggiornate al loro posto, tolte
-function sincronizza(det) {
-  const bin = $("binario");
-  const lista = sch() ? sch().cronologia() : [];
-  const viste = new Set();
-  if (det && det.scheda && det.spostata) car.seq[chiaveDi(det.scheda)] = ++car.n;
-  for (const c of lista) {
-    const k = chiaveDi(c);
-    viste.add(k);
-    if (!(k in car.seq)) car.seq[k] = ++car.n;
-    const vecchia = car.schede[k];
-    car.schede[k] = c;
-    const el = bin.querySelector(':scope > [data-chiave="' + CSS.escape(k) + '"]');
-    if (el && vecchia === c) continue;
-    const nuova = costruisciPagina(c);
-    if (el && vecchia && vecchia.tipo === c.tipo && c.tipo !== "esercizio") {
-      const seguite = sch().misuraSegui(el);
-      sch().allinea(el, nuova);
-      sch().ripristinaSegui(el, seguite);
-    } else if (el) {
-      el.replaceWith(nuova);
-    } else {
-      bin.append(nuova);
-      sch().ripristinaSegui(nuova, null);
-    }
-    if (car.modulo === k) aggiornaModulo(c);
-    if (car.intera === k) disegnaIntera();
-  }
-  // La vista dello sviluppo (08/10): a schermo intero quando uno sviluppo si apre (se non c'è
-  // un altro strato aperto: il menu, lo scritto, un modulo), chiusa quando si chiude o si
-  // sospende; aperta, si ridisegna anche quando cambia il suo lavoro (il flusso, i tetti)
+// La vista dello sviluppo (08/10): a schermo intero quando uno sviluppo si apre (se non c'è
+// un altro strato aperto: lo scritto, un modulo), chiusa quando si chiude o si sospende;
+// aperta, si ridisegna anche quando cambia il suo lavoro (il flusso, i tetti)
+function sviluppoAperto(det) {
   const d = det && det.scheda;
   if (d && d.tipo === "sviluppo") {
     const k = chiaveDi(d);
@@ -411,77 +485,60 @@ function sincronizza(det) {
     }
   }
   if (car.intera && car.schede[car.intera] && car.schede[car.intera].tipo === "sviluppo") disegnaIntera();
-  for (const k of Object.keys(car.schede)) {
-    if (viste.has(k)) continue;
-    delete car.schede[k];
-    const el = bin.querySelector(':scope > [data-chiave="' + CSS.escape(k) + '"]');
-    if (el) el.remove();
-    // Tolta da chi la guarda (il «Chiudi» del cruscotto) o da Calliope (revoca, non amministra
-    // più): lo strato si chiude. Uscita dalla cronologia perché ne sono arrivate altre: resta
-    // aperta con l'ultimo contenuto (una scheda nuova non chiude quella che si sta leggendo)
-    if (car.intera === k && (k === "cruscotto" || k === "chat" || !lista.length)) chiudiStrato("strato-scheda");
-  }
-  if (sch()) sch().aggiorna();          // timer e tempi dei lavori subito, non al giro dopo
-  disponi();
-  segnaTagli();                         // «Espandi» subito (allinea toglie le classi messe qui)
 }
 
+// Calliope mostra una scheda: il modulo si apre nel suo strato; in Adesso la scheda viva va in
+// vista (se chi guarda non sta scorrendo); altrove resta il pallino sulla sua sezione
 function suMostra(c) {
   const k = chiaveDi(c);
-  car.mostrataDa = performance.now();
   sincronizza(null);
   if (c.tipo === "modulo" && c.stato === "aperto") apriModulo(k);
-  if (performance.now() - car.toccato > opzioniCarosello.manoMs) vaiA(k);
+  // In auto niente giochi: il riquadro non si vedrebbe ma ascolterebbe i comandi a voce
+  if (vis.modo === "auto" && c.tipo === "gioco" && sch().viva(c)) {
+    setTimeout(() => sch().chiudiPartita(c.partita), 0);
+    return;
+  }
+  // Un gioco che Calliope apre si usa subito: la sua sezione si apre da sola
+  if (vis.modo === "sezioni" && SEZ.apriSeServe(c)) return;
+  if (performance.now() - car.toccato > opzioniVista.manoMs) mostraIn(k, vis.sezione);
 }
 
-function pagine() { return [...$("binario").children].filter((e) => !e.hidden); }
+// Io › Aspetto (27/10): il disegno e il tocco sono in ../sezioni.js, comuni col PC
+function disegnaAccenti(a) { window.CalliopeSezioni.disegnaAccenti(a, $("accenti"), $("io-aspetto")); }
+function suAccento(ev) { return window.CalliopeSezioni.suAccento(ev, $("accento-esito")); }
 
-function vaiA(k) {
-  const bin = $("binario");
-  const i = car.ordine.indexOf(k);
-  if (i < 0) return;
-  car.vista = k;
-  const el = pagine()[i];
-  if (el) {
-    const x = el.offsetLeft - pagine()[0].offsetLeft;
-    car.atteso = x;
-    if (Math.abs(bin.scrollLeft - x) > 1) bin.scrollTo({ left: x, behavior: "instant" });
-  }
-  disegnaPunti();
+// La modalità In auto (decisione del 27/10: a mano): «In auto» in Adesso e in Io, «Esci» la chiude
+function segnaModo() {
+  const acceso = vis.modo === "auto";
+  $("vista").dataset.modo = vis.modo;
+  $("auto-segno").hidden = !acceso;
+  $("auto-esci").hidden = !acceso;
+  $("auto-apri").hidden = acceso;
+  descriviParla();
 }
 
-// Quale pagina si vede, dallo scorrimento
-function suScorri() {
-  const bin = $("binario");
-  const p = pagine();
-  if (!p.length) return;
-  // Uno scorrimento che non è quello chiesto da vaiA è di chi guarda: per un po' non lo si sposta
-  if (car.atteso === null || Math.abs(bin.scrollLeft - car.atteso) > 2) { car.toccato = performance.now(); car.atteso = null; }
-  const passo = p.length > 1 ? p[1].offsetLeft - p[0].offsetLeft : bin.clientWidth;
-  const i = Math.max(0, Math.min(p.length - 1, Math.round(bin.scrollLeft / Math.max(1, passo))));
-  if (car.ordine[i] && car.ordine[i] !== car.vista) {
-    car.vista = car.ordine[i];
-    disegnaPunti();
+function impostaAuto(acceso) {
+  vis.modo = acceso ? "auto" : "sezioni";
+  scrivi(CHIAVE_AUTO, acceso ? "1" : null);
+  segnaModo();
+  if (acceso) {
+    for (const s of STRATI) { if (s === "strato-scheda") chiudiIntera(); else chiudiStrato(s); }
+    impostaScrittura(false);           // in auto la tastiera non c'è (28/10, #301)
   }
+  if (!acceso && vis.sezione !== "adesso") vai("#/adesso");
+  else applicaPercorso();
 }
 
-function disegnaPunti() {
-  const box = $("punti");
-  const n = car.ordine.length;
-  const i = Math.max(0, car.ordine.indexOf(car.vista));
-  if (box.querySelectorAll("i").length !== n) {
-    box.querySelectorAll("i").forEach((x) => x.remove());
-    for (let j = 0; j < n; j++) box.append(document.createElement("i"));
-  }
-  box.querySelectorAll("i").forEach((x, j) => { x.className = j === i ? "qui" : ""; x.setAttribute("aria-hidden", "true"); });
-  box.classList.toggle("nascosti", n < 2);
-  const c = car.schede[car.vista];
-  const nome = car.vista === RISPOSTA ? "risposta" : (c && (sch().NOMI_TIPO[c.tipo] || c.tipo) || "scheda").toLowerCase();
-  metti($("punti-testo"), n < 2 ? "" : nome + ", " + (i + 1) + " di " + n);
+// All'avvio: l'indirizzo com'è (una sezione sconosciuta diventa Adesso) e il modo salvato
+function avviaVista() {
+  segnaModo();
+  SEZ.avvia();
 }
 
 // La dissolvenza in fondo solo dove il testo non ci sta; «Espandi» dove non ci sta (in alto o
 // di lato) e sulle schede lunghe per tipo
+function pagine() { return [...document.querySelectorAll("#sezioni .pagina-car")].filter((e) => !e.closest("[hidden]")); }
+
 function segnaTagli() {
   const r = $("risposta-testo");
   if (r) {
@@ -490,6 +547,7 @@ function segnaTagli() {
     $("risposta").classList.toggle("lunga", !!st.risposta.testo && r.scrollHeight > r.clientHeight + 1);
   }
   for (const e of pagine()) {
+    if (e.dataset.rimando) continue;
     const corpo = e.querySelector(":scope > .corpo");
     if (!corpo) continue;
     e.classList.toggle("taglia", corpo.scrollHeight > corpo.clientHeight + 1
@@ -502,12 +560,12 @@ function segnaTagli() {
 }
 
 // ───────────────────────────── una scheda a schermo intero (06/10) ─────────────────────────────
-// Sul telefono il riquadro del carosello è piccolo: il cruscotto, il codice di un lavoro, un
+// Sul telefono il riquadro di una scheda è piccolo: il cruscotto, il codice di un lavoro, un
 // documento non si leggevano. Un tocco sulla scheda (o «Espandi») la apre in uno strato sopra
 // la vista, con il testo grande, le tabelle e il codice che scorrono di lato nel loro riquadro.
 // La scheda aperta si aggiorna al suo posto (stessa chiave: il cruscotto ogni 30 s, un lavoro in
-// diretta) senza perdere il punto in cui si legge; le schede nuove vanno nel carosello. Si chiude
-// con «Chiudi», Esc o il gesto indietro (una voce nella cronologia del browser).
+// diretta) senza perdere il punto in cui si legge. Si chiude con «Chiudi», Esc o il gesto
+// indietro (una voce nella cronologia del browser, con lo stesso indirizzo della sezione).
 function costruisciIntera(k) {
   let s;
   if (k === RISPOSTA) {
@@ -524,17 +582,20 @@ function costruisciIntera(k) {
     t.append(p);
     s.append(et, t);
   } else {
-    const c = car.schede[k];
+    const c = schedaIntera(k);
     if (!c) return null;
     s = sch().costruisci(c, { intera: true });
   }
-  s.dataset.tipo = k === RISPOSTA ? "risposta" : car.schede[k].tipo;
+  s.dataset.tipo = k === RISPOSTA ? "risposta" : schedaIntera(k).tipo;
   return s;
 }
 
+// La scheda di una sezione, o la copia di un turno aperta dalla conversazione (28/10, #242)
+function schedaIntera(k) { return car.schede[k] || car.chatSchede[k] || null; }
+
 function titoloIntera(k) {
   if (k === RISPOSTA) return "Risposta";
-  const c = car.schede[k];
+  const c = schedaIntera(k);
   return (c && (c.titolo || sch().NOMI_TIPO[c.tipo] || c.tipo)) || "Scheda";
 }
 
@@ -560,7 +621,7 @@ function disegnaIntera() {
 }
 
 function apriIntera(k) {
-  if (k !== RISPOSTA && (!car.schede[k] || TIPI_SENZA_INTERA.has(car.schede[k].tipo))) return false;
+  if (k !== RISPOSTA && (!schedaIntera(k) || TIPI_SENZA_INTERA.has(schedaIntera(k).tipo))) return false;
   if (k === RISPOSTA && !st.risposta.testo) return false;
   const gia = !$("strato-scheda").hidden;
   if (car.intera !== k) $("intera-posto").replaceChildren();
@@ -582,13 +643,17 @@ function chiudiIntera() {
   if (history.state && history.state.calliopeStrato === "scheda") { try { history.back(); } catch (e) { /* niente */ } }
 }
 
-// Un tocco su una scheda del carosello la apre (non sui suoi pulsanti, né sulla risposta, che
-// ha «Espandi» quando è lunga, né su modulo e gioco)
-function suToccoCarosello(ev) {
+// Un tocco su una scheda la apre (non sui suoi pulsanti, né sulla risposta, che ha «Espandi»
+// quando è lunga, né su modulo e gioco); «Apri» di un rimando porta alla sua sezione
+function suToccoScheda(ev) {
   const t = ev.target;
   if (!t.closest) return;
-  const pag = t.closest("#binario > [data-chiave]");
+  // La conversazione nella sua sezione (28/10, #242) ha i suoi tocchi: filtri, schede piccole
+  if (t.closest(".conv-tel")) return;
+  const pag = t.closest("#sezioni [data-chiave]");
   if (!pag) return;
+  if (t.closest(".apri-modulo")) { apriModulo(pag.dataset.chiave); return; }
+  if (pag.dataset.rimando) { if (t.closest(".apri-rimando") || !t.closest("button, a")) vaiA(pag.dataset.chiave); return; }
   if (t.closest(".espandi")) { apriIntera(pag.dataset.chiave); return; }
   if (pag.dataset.chiave === RISPOSTA) return;
   if (t.closest("button, a, input, textarea, select, summary, label, iframe")) return;
@@ -597,9 +662,9 @@ function suToccoCarosello(ev) {
   apriIntera(pag.dataset.chiave);
 }
 
-// ───────────────────────────── strati: menu, modulo, scrivi ─────────────────────────────
+// ───────────────────────────── strati: modulo, scrivi ─────────────────────────────
 let ritornoFuoco = null;
-const STRATI = ["strato-scheda", "strato-modulo", "strato-scrivi", "menu"];
+const STRATI = ["strato-scheda", "strato-modulo"];
 function apriStrato(id, fuoco) {
   for (const s of STRATI) {
     if (s === id || $(s).hidden) continue;
@@ -617,7 +682,7 @@ function chiudiStrato(id) {
   if (s.hidden) return;
   s.hidden = true;
   if (id === "strato-modulo") { car.modulo = null; car.moduloFirma = ""; $("modulo-posto").replaceChildren(); }
-  if (id === "strato-scheda") { car.intera = null; $("intera-posto").replaceChildren(); }
+  if (id === "strato-scheda") { car.intera = null; car.chatSchede = {}; $("intera-posto").replaceChildren(); }
   const r = ritornoFuoco;
   ritornoFuoco = null;
   if (r && document.contains(r) && !r.closest("[hidden]")) { try { r.focus({ preventScroll: true }); } catch (e) { /* niente */ } }
@@ -653,40 +718,153 @@ function aggiornaModulo(c) {
 function suScrivi(det) {
   const b = $("scrivi-apri");
   b.hidden = !det.attiva;
-  b.closest(".vista-fondo").classList.toggle("solo-mic", !det.attiva);
-  // «Allega» (foto o file, 05/10): solo da un telefono personale (il server rifiuta le altre)
-  const f = $("foto-apri");
-  f.hidden = !(det.attiva && det.personale);
-  b.closest(".vista-fondo").classList.toggle("con-foto", !f.hidden);
-  if (!det.attiva) chiudiStrato("strato-scrivi");
-  // Senza una conversazione a voce (05/10) il tasto resta, attenuato: apre la casella spenta,
-  // che dice la parola da dire; tutto si riaccende da solo appena la conversazione comincia
+  b.closest(".voce-riga").classList.toggle("con-scrivi", !b.hidden);
+  if (!det.attiva) impostaScrittura(false);
+  else preparaRigaScrivi();
+  // Da uno schermo di stanza senza una conversazione a voce (05/10) il tasto resta, attenuato:
+  // apre la casella spenta, che dice la parola da dire. Dallo schermo personale si scrive sempre
+  // (28/10, #301)
   const spento = !!det.attiva && !det.abilitata;
   b.classList.toggle("spento", spento);
-  f.classList.toggle("spento", spento);           // «Foto» come «Scrivi»
-  if (spento) {
-    b.setAttribute("aria-disabled", "true");
-    b.title = "Di' «" + (det.parola || "Calliope") + "» per scrivermi";
+  if (spento) b.title = "Di' «" + (det.parola || "Calliope") + "» per scrivermi";
+  else b.removeAttribute("title");
+  segnaLente();
+}
+
+// ───────────────────────────── scrivere nella Conversazione (28/10, #301) ─────────────────────────────
+// Il tocco sulla tastiera porta alla Conversazione in modalità scrittura, nella stessa schermata: la
+// riga della voce diventa la casella («Torna alla voce», Allega, il testo, Invia), la conversazione è
+// solo chat (le schede un rimando di una riga), i filtri dietro la lente. Resta finché non si tocca il
+// microfono o si esce dalla Conversazione; la wake word resta accesa. In auto no
+vis.scrittura = false;
+function preparaRigaScrivi() {
+  const f = $("scrivi");
+  if (!f || $("scrivi-voce")) return;
+  const b = document.createElement("button");
+  b.type = "button";
+  b.id = "scrivi-voce";
+  b.className = "scrivi-voce";
+  b.setAttribute("aria-label", "Torna alla voce");
+  if (window.calliopeIcona) b.append(window.calliopeIcona("voce-icona", "microfono"));
+  b.addEventListener("click", tornaAllaVoce);
+  f.insertBefore(b, $("scrivi-foto") || f.firstChild);
+}
+
+function impostaScrittura(v) {
+  v = !!v && vis.modo !== "auto" && !!$("scrivi") && !$("scrivi-apri").hidden;
+  const vista = $("vista");
+  if (vis.scrittura === v) return;
+  vis.scrittura = v;
+  if (v) vista.dataset.scrittura = "1"; else delete vista.dataset.scrittura;
+  $("scrivi-posto").hidden = !v;
+  attr($("scrivi-apri"), "aria-pressed", v ? "true" : "false");
+  // Scrivendo la risposta è solo scritta (decisione del 28/10 dopo la revisione della PR #304):
+  // Calliope torna a parlare con «Torna alla voce» o quando si dice il suo nome
+  if (sch() && sch().soloScritto) sch().soloScritto(v);
+  if (!v) {
+    const i = $("scrivi-testo");
+    if (i && document.activeElement === i) i.blur();
+  }
+  segnaLente();
+  misuraTastiera();
+  disegnaOra();
+  chatInFondo();
+}
+
+// Il tocco sulla tastiera: la Conversazione, la casella e il cursore nello stesso gesto (iOS apre la
+// tastiera solo dentro il tocco)
+function entraScrittura() {
+  if (!$("scrivi") || vis.modo === "auto") return false;
+  if (vis.sezione !== "conversazione") vai("#/conversazione");
+  impostaScrittura(true);
+  const i = $("scrivi-testo");
+  if (i && !i.disabled) { try { i.focus({ preventScroll: true }); } catch (e) { i.focus(); } }
+  return vis.scrittura;
+}
+
+// «Torna alla voce» fa partire subito l'ascolto, come «Parla» (risposta 1 del 28/10). Se Calliope
+// sta parlando non la interrompe (revisione della PR #304): scrivendo le risposte sono solo
+// scritte, quindi ciò che suona è un avviso (il timer, un pericolo) che un tocco per cambiare modo
+// non deve zittire; per interromperla c'è «Parla», che subito dopo dice «Interrompi e parla»
+function tornaAllaVoce() {
+  impostaScrittura(false);
+  const p = $("parla");
+  if (p) { try { p.focus({ preventScroll: true }); } catch (e) { /* niente */ } }
+  if (st.collegato && !player.inCorso()) tocca();
+}
+
+// La lente in alto nella Conversazione (a voce e scrivendo, come nelle tavole): apre e chiude i
+// filtri e la ricerca; un filtro acceso resta detto nella riga sotto («Ieri: 2 turni», «Tutto»)
+function segnaLente() {
+  const l = $("conv-lente");
+  if (!l) return;
+  l.hidden = !(vis.modo === "sezioni" && vis.sezione === "conversazione" && !!car.chatEl);
+  attr(l, "aria-expanded", $("vista").dataset.filtri ? "true" : "false");
+}
+function suLente() {
+  const vista = $("vista");
+  if (vista.dataset.filtri) delete vista.dataset.filtri; else vista.dataset.filtri = "1";
+  segnaLente();
+}
+
+// La tastiera di sistema (28/10, #301, e #287): con interactive-widget=resizes-visual né iOS né
+// Android ridimensionano la pagina, quindi il layout compatto (media query sull'altezza) non scatta;
+// la parte visibile la dice visualViewport. Con un campo di testo col fuoco e la parte visibile più
+// bassa di 120 px della finestra, la vista si stringe a quella parte e la barra delle sezioni si
+// nasconde; chiusa la tastiera, tutto torna com'era
+function campoDiTesto(e) {
+  return !!e && !!e.matches && e.matches("textarea, [contenteditable=''], [contenteditable='true'], input:not([type]), input[type='text'], input[type='search'], input[type='email'], input[type='number'], input[type='tel'], input[type='url']");
+}
+function misuraTastiera() {
+  const vv = window.visualViewport;
+  const vista = $("vista");
+  let aperta = false;
+  if (vv && campoDiTesto(document.activeElement)) {
+    const coperto = window.innerHeight - vv.height * (vv.scale || 1);
+    aperta = coperto > 120;
+  }
+  if (aperta) {
+    vista.style.setProperty("--alto-visibile", Math.round(vv.height) + "px");
+    vista.style.setProperty("--su-visibile", Math.round(vv.offsetTop || 0) + "px");
   } else {
-    b.removeAttribute("aria-disabled");
-    b.removeAttribute("title");
+    vista.style.removeProperty("--alto-visibile");
+    vista.style.removeProperty("--su-visibile");
+  }
+  if (st.tastiera !== aperta) {
+    st.tastiera = aperta;
+    vista.classList.toggle("tastiera", aperta);
+    if (aperta) chatInFondo();
   }
 }
-
-// «Allega»: la casella di scrittura si apre con la scelta del file, nello stesso tocco (iOS
-// apre fotocamera o libreria solo dentro il gesto); la domanda si scrive lì o si dice a voce
-function apriFoto() {
-  if (!$("scrivi")) return;
-  // Senza conversazione (05/10): si apre la casella spenta, che dice la parola da dire
-  if ($("foto-apri").classList.contains("spento")) { apriStrato("strato-scrivi", null); return; }
-  apriStrato("strato-scrivi", null);
-  const sc = window.calliopeSchermo;
-  if (!sc || !sc.foto || !sc.foto()) chiudiStrato("strato-scrivi");
+function ascoltaTastiera() {
+  const vv = window.visualViewport;
+  if (vv) { vv.addEventListener("resize", misuraTastiera); vv.addEventListener("scroll", misuraTastiera); }
+  window.addEventListener("resize", misuraTastiera);
+  document.addEventListener("focusin", misuraTastiera);
+  // Col fuoco che se ne va l'elemento attivo cambia dopo l'evento
+  document.addEventListener("focusout", () => setTimeout(misuraTastiera, 0));
 }
 
-function apriScrivi() {
-  if (!$("scrivi")) return;
-  apriStrato("strato-scrivi", "scrivi-testo");
+// «ti ascolto…» mentre si parla (risposta 5 del 28/10), «Calliope sta scrivendo…» dopo un invio
+// finché non arriva il turno, «Calliope sta rispondendo…» mentre pensa: in fondo alla chat
+st.attesaScritto = 0;
+function disegnaOra() {
+  const o = $("conv-ora");
+  if (!o) return;
+  const [cls] = voceLocale();
+  const [, parola] = statoVista(cls);
+  if (st.attesaScritto && (cls === "parla" || performance.now() - st.attesaScritto > 30000)) st.attesaScritto = 0;
+  let t = "";
+  if (parola === "Ti ascolto") t = "ti ascolto…";
+  else if (st.attesaScritto) t = "Calliope sta scrivendo…";
+  else if (cls === "pensa") t = "Calliope sta rispondendo…";
+  // Scrivendo la riga della voce non c'è: lo stato si legge da qui; a voce lo dice già lei.
+  // role="status" resta sempre (nell'HTML): una regione già nel DOM, che VoiceOver legge, e
+  // l'aria-hidden cambia prima del testo, così la prima frase scrivendo si sente
+  if (vis.scrittura) o.removeAttribute("aria-hidden"); else attr(o, "aria-hidden", "true");
+  metti(o.querySelector(".conv-ora-testo"), t);
+  attr(o, "data-vuoto", t ? "0" : "1");
+  attr(o, "data-ascolto", parola === "Ti ascolto" ? "1" : "0");
 }
 
 // ───────────────────────────── rete ─────────────────────────────
@@ -928,7 +1106,8 @@ function connetti(ripresa) {
   st.sostituito = false;
   ws.onopen = () => {
     ws.send(JSON.stringify({ tipo: "ciao", versione: VERSIONE, token: st.token, primo: false,
-      nome: "telefono", esecutore: null, modalita: true, stanza: true }));
+      nome: "telefono", esecutore: null, modalita: true, stanza: true,
+      pagina: PAGINA_VERSIONE }));
   };
   ws.onmessage = (ev) => {
     if (ws !== st.ws) return;
@@ -1066,6 +1245,8 @@ async function benvenuto(m) {
   st.tentativi = 0;
   player.nuovaSessione();
   metti($("luogo"), st.satellite.nome || "—");
+  // Nella Conversazione il posto di ciò che si è detto da qui non si ripete (28/10, #301)
+  if (sch() && sch().nomiPropri && st.satellite.nome) sch().nomiPropri([st.satellite.nome]);
   statoTel("ok", "collegata");
   manda({ tipo: "pronto", eco: null });
   st.stanza.server = m.stanza || null;
@@ -1800,13 +1981,21 @@ async function avvio() {
   const bs = $("stanza-tieni");
   if (bs) bs.addEventListener("click", () => impostaStanza(!st.stanza.voluta));
   aggiornaStanza();
-  // Menu, modulo e casella per scrivere: strati sopra la vista (Esc li chiude)
-  $("menu-apri").addEventListener("click", () => apriStrato("menu"));
-  $("menu-chiudi").addEventListener("click", () => chiudiStrato("menu"));
+  // Le sezioni: il frammento dice quale (#/cose/liste), il gesto indietro torna a quella di prima;
+  // «In auto» a mano, «Esci» torna ad Adesso
+  // L'accento e le sezioni nascoste (27/10): da schermo.js, all'accesso e quando cambiano
+  document.addEventListener("calliope:aspetto", (ev) => disegnaAccenti(ev.detail));
+  document.addEventListener("calliope:nascoste", (ev) => applicaNascoste(ev.detail));
+  $("accenti").addEventListener("click", suAccento);
+  $("auto-apri").addEventListener("click", () => impostaAuto(true));
+  $("auto-io").addEventListener("click", () => impostaAuto(true));
+  $("auto-esci").addEventListener("click", () => impostaAuto(false));
+  // Modulo e casella per scrivere: strati sopra la vista (Esc li chiude)
   $("modulo-chiudi").addEventListener("click", () => chiudiStrato("strato-modulo"));
-  $("scrivi-apri").addEventListener("click", apriScrivi);
-  $("foto-apri").addEventListener("click", apriFoto);
-  $("scrivi-chiudi").addEventListener("click", () => chiudiStrato("strato-scrivi"));
+  // Scrivere nella Conversazione (28/10, #301): la tastiera, la lente, la tastiera di sistema
+  $("scrivi-apri").addEventListener("click", entraScrittura);
+  $("conv-lente").addEventListener("click", suLente);
+  ascoltaTastiera();
   document.addEventListener("keydown", (ev) => {
     if (ev.key !== "Escape") return;
     for (const s of STRATI) {
@@ -1817,7 +2006,9 @@ async function avvio() {
   });
   // La scheda a schermo intero: «Chiudi» e il gesto indietro (la voce messa da apriIntera)
   $("intera-chiudi").addEventListener("click", chiudiIntera);
-  window.addEventListener("popstate", () => { if (!$("strato-scheda").hidden) chiudiStrato("strato-scheda"); });
+  window.addEventListener("popstate", (ev) => {
+    if (!$("strato-scheda").hidden && !(ev.state && ev.state.calliopeStrato === "scheda")) chiudiStrato("strato-scheda");
+  });
   // Un avviso si toglie toccandolo (quello dello schermo no: il tocco lo riprova)
   $("avviso-tel").addEventListener("click", () => avviso(""));
   // Il carosello: le schede di schermo.js, chi scorre a mano, «Compila» di un modulo
@@ -1830,10 +2021,10 @@ async function avvio() {
     st.compagnia = d.attiva ? String(d.testo || "In compagnia: chiamami per nome") : "";
     disegna();
   });
-  // La modalità gioco (11/10): il gioco copre il carosello; uscendo, il carosello torna sulla
-  // scheda che si guardava (lo scorrimento con una scheda fissa non vale)
+  // La modalità gioco (11/10): il gioco copre la pagina; uscendo, le dissolvenze si rifanno e
+  // un gioco chiuso esce subito da Adesso (non è più vivo)
   document.addEventListener("calliope:gioco", (ev) => {
-    if (!(ev.detail || {}).partita) requestAnimationFrame(() => { vaiA(car.vista); segnaTagli(); });
+    if (!(ev.detail || {}).partita) requestAnimationFrame(() => { disponi(); });
   });
   // Il pallino della voce sopra il gioco è anche «Parla»: tocca e parla, tieni premuto per
   // parlare a lungo (come preparaPulsante, ma per delega: schermo.js ridisegna il pallino)
@@ -1852,33 +2043,52 @@ async function avvio() {
   };
   document.addEventListener("pointerup", giocoSu);
   document.addEventListener("pointercancel", giocoSu);
-  document.addEventListener("calliope:scritto", () => setTimeout(() => chiudiStrato("strato-scrivi"), 1200));
+  document.addEventListener("calliope:scritto", () => { st.attesaScritto = performance.now(); disegnaOra(); });
   // «Prova con…», «Chiedi all'agente…» della vista dello sviluppo (08/10): la frase da finire
   // nella casella dello scritto (lo strato dello sviluppo si chiude, e si riapre dalla scheda)
   document.addEventListener("calliope:prefill", (ev) => {
     const testo = String((ev.detail && ev.detail.testo) || "");
-    apriScrivi();
+    entraScrittura();
     const i = $("scrivi-testo");
     if (i && !i.disabled) {
       i.value = testo;
       try { i.setSelectionRange(testo.length, testo.length); } catch (e) { /* niente */ }
     }
   });
-  // Il cruscotto di chi amministra (06/10): la voce del menu solo se il proprietario di questo
-  // telefono amministra (lo ricontrolla il server); la scheda va nel carosello
-  document.addEventListener("calliope:amministra", (ev) => { $("cruscotto-tel").hidden = !ev.detail.attiva; });
-  // Dal menu il cruscotto si apre subito a schermo intero (resta anche nel carosello)
+  // Il cruscotto di chi amministra (06/10): in Io solo se il proprietario di questo telefono
+  // amministra (lo ricontrolla il server); la scheda resta in Io
+  document.addEventListener("calliope:amministra", (ev) => {
+    $("cruscotto-tel").hidden = !ev.detail.attiva;
+    $("io-amministra").hidden = !ev.detail.attiva;
+  });
+  // Il cruscotto si apre subito a schermo intero
   $("cruscotto-tel").addEventListener("click", async () => {
-    chiudiStrato("menu");
     if (sch() && await sch().cruscotto()) apriIntera("cruscotto");
   });
-  // La conversazione (08/10): dal menu a schermo intero, e resta nel carosello; «Pulisci le mie
+  // La conversazione (08/10): da Conversazione a schermo intero, e resta lì; «Pulisci le mie
   // schede» con due tocchi (le schede non tornano). Solo su un telefono personale
-  document.addEventListener("calliope:chat", (ev) => { $("chat-tel").hidden = !ev.detail.attiva; });
+  // Dal 28/10 (#242) la conversazione sta nella sezione, con le schede piccole, i filtri e la ricerca
+  document.addEventListener("calliope:chat", () => disegnaChatTel());
+  // Il turno arrivato toglie «Calliope sta scrivendo…»
+  document.addEventListener("calliope:chatturni", () => { disegnaChatTel(); st.attesaScritto = 0; disegnaOra(); segnaLente(); });
+  // Una scheda piccola della conversazione: la copia del turno a schermo intero; un rimando porta
+  // alla scheda nella sua sezione, o alla sezione se la scheda non c'è più
+  document.addEventListener("calliope:intera", (ev) => {
+    const c = ev.detail && ev.detail.scheda;
+    if (!c || !c.chiave) return;
+    car.chatSchede = { [c.chiave]: c };
+    apriIntera(c.chiave);
+  });
+  document.addEventListener("calliope:vai", (ev) => {
+    const c = ev.detail && ev.detail.scheda;
+    if (!c) return;
+    if (!(c.chiave && vaiA(c.chiave))) vai("#/" + sezioneDi(c));
+  });
   document.addEventListener("calliope:scrivi", (ev) => { $("pulisci-tel").hidden = !(ev.detail && ev.detail.personale); });
-  $("chat-tel").addEventListener("click", () => {
-    chiudiStrato("menu");
-    if (sch() && sch().chat()) apriIntera("chat");
+  // Calliope apre una pagina di Le mie cose (28/10, #289): solo un nome di raccolta, mai un indirizzo
+  document.addEventListener("calliope:pagina", (ev) => {
+    const p = ev.detail && ev.detail.pagina;
+    if (typeof p === "string" && /^[a-z]{1,20}$/.test(p)) vai("#/cose/" + p);
   });
   let pulisciArmato = 0;
   $("pulisci-tel").addEventListener("click", async () => {
@@ -1897,14 +2107,8 @@ async function avvio() {
     esito.hidden = false;
     esito.textContent = r.ok ? (r.frase || "Schede tolte.") : (r.errore || "Non ci sono riuscita: riprova.");
   });
-  const bin = $("binario");
-  bin.addEventListener("scroll", suScorri, { passive: true });
-  bin.addEventListener("click", (ev) => {
-    const b = ev.target.closest && ev.target.closest(".apri-modulo");
-    if (b) { apriModulo(b.closest("[data-chiave]").dataset.chiave); return; }
-    suToccoCarosello(ev);
-  });
-  window.addEventListener("resize", () => vaiA(car.vista));
+  $("sezioni").addEventListener("click", suToccoScheda);
+  avviaVista();
   // Ogni tocco, se il browser aveva tolto lo schermo acceso, lo richiede con il gesto in corso
   document.addEventListener("pointerdown", () => { st.tocco = performance.now(); schermo.riprova(); }, true);
   $("dimentica").addEventListener("click", () => {
@@ -1958,8 +2162,14 @@ window.calliopeTelefono = {
   }),
   impostaStanza, stanzaAscolto: stanza,
   impostaMic, tocca, diagnostica, opzioniMic, mic,
-  schermo, comando, opzioniCarosello, apriStrato, chiudiStrato, apriModulo, vaiA, apriIntera, chiudiIntera,
-  carosello: () => ({ ordine: car.ordine.slice(), vista: car.vista, modulo: car.modulo, intera: car.intera }),
+  // Scrivere nella Conversazione (28/10, #301)
+  entraScrittura, impostaScrittura, tornaAllaVoce, misuraTastiera,
+  scrittura: () => ({ attiva: vis.scrittura, tastiera: !!st.tastiera, filtri: !!$("vista").dataset.filtri }),
+  schermo, comando, opzioniVista, apriStrato, chiudiStrato, apriModulo, vaiA, vai, impostaAuto, apriIntera, chiudiIntera,
+  // Dove sta ogni scheda (per le prove): la sezione guardata, il modo, le chiavi per elenco
+  sezioni: () => Object.assign(SEZ.stato(), { modulo: car.modulo, intera: car.intera }),
+  // Le tessere di Le mie cose rilette subito (28/10), senza aspettare il minuto
+  aggiornaRaccolte: () => SEZ.aggiornaRaccolte(),
   schermoStato: () => ({ stato: schermo.stato, motivo: schermo.motivo, voluto: schermo.voluto,
     richieste: schermo.richieste, cadute: schermo.cadute, info: schermo.info,
     indicatore: statoSchermo(), tieni: st.tieni }),

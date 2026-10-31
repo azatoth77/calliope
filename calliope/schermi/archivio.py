@@ -47,6 +47,25 @@ def hash_token(token: str) -> str:
     return hashlib.sha256(str(token or "").encode("utf-8")).hexdigest()
 
 
+def di_quale_schermo(item: dict | None) -> dict:
+    """{"creato": …} per riconoscere lo schermo da cui è arrivato un elemento in coda (scritto,
+    tocco, modulo, foto), da passare a `Schermi.schermo`, `invia_a` ed `evento_a`; {} se
+    l'elemento non lo porta. Il numero da solo non basta: dopo una revoca la tabella lo riusa,
+    e un elemento che aspettava in coda mentre lo schermo veniva revocato e il numero
+    riabbinato da terminale mandava la risposta allo schermo nuovo (#275). Dal 31/10 (#338) anche
+    {"proprietario": …} (None = schermo di stanza), se l'elemento lo porta: lo schermo passato a
+    un'altra persona («rendilo personale di Bianca») mentre la frase di Dario aspettava non riceve
+    la sua risposta."""
+    item = item or {}
+    creato = item.get("schermo_creato")
+    if creato is None:
+        return {}
+    out = {"creato": creato}
+    if "schermo_proprietario" in item:
+        out["proprietario"] = item.get("schermo_proprietario") or None
+    return out
+
+
 def norm_stanza(testo: str | None) -> str:
     """«al soggiorno», «della Cucina», «lo studio.» → «soggiorno», «cucina», «studio».
     È una conversione dell'argomento scelto dal modello (principio 10), non una scelta."""

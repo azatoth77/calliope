@@ -57,6 +57,9 @@ def main() -> int:
         return SALTATA
     cfg = Config()
     cfg.memory_db = str(TMP / "scritto.db")
+    # Il contenuto delle schede sulla pagina del PC si prova con la vista di prima (la scheda
+    # grande): la disposizione a sezioni dello schermo personale la prova prova_pc_pagina (27/10)
+    cfg.schermi_sezioni = False
     cfg.config_dir = str(TMP)
     port = porta_libera()
     hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db))
@@ -72,12 +75,14 @@ def main() -> int:
         verifica("casella «scrivi a Calliope» visibile", aspetta(lambda: pagina.valuta(
             "!!document.getElementById('scrivi') && !document.getElementById('scrivi').hidden"),
             5) is not None)
-        # Senza conversazione a voce (05/10): casella spenta, con la parola da dire
-        verifica("senza conversazione: casella spenta con «Di' «Calliope» per scrivermi»",
+        # Senza conversazione a voce: dal 28/10 (#301) la casella dello schermo personale è accesa
+        # (fino al 28/10 spenta, con «Di' «Calliope» per scrivermi»); Invia spento finché è vuota
+        verifica("senza conversazione: casella accesa (28/10, #301), Invia spento con la casella vuota",
                  aspetta(lambda: pagina.valuta(
-                     "document.getElementById('scrivi-testo').disabled && document"
-                     ".getElementById('scrivi-testo').placeholder.includes('Calliope')"
-                     " && !document.querySelector('#scrivi .nota-scrittura').hidden"), 15)
+                     "!document.getElementById('scrivi-testo').disabled"
+                     " && document.getElementById('scrivi-testo').tagName === 'TEXTAREA'"
+                     " && document.getElementById('scrivi-invia').disabled"
+                     " && document.querySelector('#scrivi .nota-scrittura').hidden"), 15)
                  is not None)
         spec = {"chiave": "prova", "titolo": "Dati per la fattura",
                 "domanda": "Mi servono questi dati.",
@@ -93,11 +98,12 @@ def main() -> int:
         verifica("modulo consegnato alla pagina", res["mostrato"])
         verifica("modulo disegnato", aspetta(lambda: pagina.valuta(
             "document.querySelectorAll('.modulo .campo-modulo').length") == 6, 15) is not None)
-        verifica("senza conversazione: «Invia» del modulo spento, i campi no", pagina.valuta(
+        verifica("senza conversazione: «Invia» del modulo spento con la sua frase, i campi no", pagina.valuta(
             "document.querySelector('.invia-modulo').disabled && !document.querySelector("
-            "'.campo-modulo input').disabled"))
+            "'.campo-modulo input').disabled && document.querySelector('.modulo .nota-scrittura')"
+            ".textContent.includes('modulo')"))
         hub.conversazioni.voce("dario-id", "voce")       # Dario parla a Calliope
-        verifica("conversazione: casella e «Invia» si riaccendono da soli", aspetta(
+        verifica("conversazione: «Invia» del modulo si riaccende da solo", aspetta(
             lambda: pagina.valuta("!document.getElementById('scrivi-testo').disabled && "
                                   "!document.querySelector('.invia-modulo').disabled"), 15)
             is not None)
@@ -151,7 +157,7 @@ def main() -> int:
             "document.querySelector('.esito-modulo').textContent") or ""), 15) is not None)
         # La casella
         scrivi(pagina, "#scrivi-testo", "Calliope, che ore sono?")
-        pagina.valuta("document.querySelector('#scrivi button').click()")
+        pagina.valuta("document.getElementById('scrivi-invia').click()")
         t = aspetta(lambda: not hub.ingresso.vuoto(), 15)
         item = hub.ingresso.prendi()
         verifica("casella: la frase arriva in coda con la persona dello schermo",
@@ -168,11 +174,20 @@ def main() -> int:
                         "amministra")
         aspetta(lambda: pagina.valuta("!!document.querySelector('.modulo .invia-modulo')"), 15)
         hub.conversazioni.voce("bianca-id", "voce")
-        verifica("parla un'altra persona: casella spenta, modulo chiuso con la nota", aspetta(
-            lambda: pagina.valuta("document.getElementById('scrivi-testo').disabled") and
+        verifica("parla un'altra persona: modulo chiuso con la nota, la casella resta accesa (28/10, #301)", aspetta(
+            lambda: not pagina.valuta("document.getElementById('scrivi-testo').disabled") and
             "conversazione è finita" in (pagina.valuta(
                 "(document.querySelector('.nota-modulo') || {}).textContent") or ""), 15)
             is not None)
+        # Invio con Invio (Maiusc+Invio va a capo): la frase parte
+        pagina.valuta("(() => { const i = document.getElementById('scrivi-testo'); i.focus(); i.value = 'Ciao';"
+                      " i.dispatchEvent(new Event('input', {bubbles: true}));"
+                      " i.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', shiftKey: true, bubbles: true, cancelable: true}));"
+                      " i.dispatchEvent(new KeyboardEvent('keydown', {key: 'Enter', bubbles: true, cancelable: true})); })()")
+        t = aspetta(lambda: not hub.ingresso.vuoto(), 10)
+        item = hub.ingresso.prendi() if t else None
+        verifica("Invio manda (una volta sola), anche senza conversazione a voce",
+                 bool(item) and item["testo"] == "Ciao" and hub.ingresso.vuoto(), str(item))
         err = pagina.valuta("window.__errori") or []
         verifica("nessun errore JavaScript", not err, str(err))
     finally:

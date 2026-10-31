@@ -10,6 +10,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
    «fammi vedere i miei promemoria», «togli tutto dallo schermo», «scollega lo schermo»; un
    familiare che prova ad abbinare; distrattori con la parola «schermo» che sono del PC
    («abbassa la luminosità dello schermo», «blocca lo schermo») e «che ore sono?».
+   Dal 28/10 (#288, #289) dal telefono di Dario col suo schermo personale aperto: «Apri lo
+   schermo dei documenti su questo dispositivo.» e «La scheda documenti del tab Le mie cose.»
+   (casi veri della DGX, 13:53 e 13:54) → schermo_mostra con cosa=pagina e l'evento «pagina»
+   sul telefono, senza «computer» né «portatile»; contrari: «metti la lista sullo schermo» e
+   «mostramelo sullo schermo» non vanno su cosa=pagina, «aprimi i documenti» non va su
+   cosa=documento.
 2. Latenza: le stesse frasi con gli schermi spenti (nessun tool degli schermi, nessun server)
    e accesi (tool, server e una pagina collegata): la prima frase non deve peggiorare.
 
@@ -97,6 +103,7 @@ class Pagina:
     def __init__(self, base, token):
         a = httpx.post(f"{base}/api/accedi", headers={"Authorization": f"Bearer {token}"}).json()
         self.schede = []
+        self.pagine = []            # gli eventi «pagina» (28/10, #289: schermo_mostra cosa=pagina)
         self.t = threading.Thread(target=self._run, args=(base, a["sessione"]), daemon=True)
         self.t.start()
 
@@ -109,6 +116,8 @@ class Pagina:
                         ev = line[7:]
                     elif line.startswith("data: ") and ev == "scheda":
                         self.schede.append(json.loads(line[6:]))
+                    elif line.startswith("data: ") and ev == "pagina":
+                        self.pagine.append(json.loads(line[6:]).get("pagina"))
                     elif ev == "revocato":
                         return
         except Exception:  # noqa: BLE001 — server fermato a fine prova
@@ -287,6 +296,54 @@ for giro in range(1, GIRI + 1):
         verifica(f"[{giro}] {chi or 'ospite'}: «{detta}» → {argomenti}", ok_tool and ok_stato,
                  f"{primo:.2f}/{totale:.2f}s  {risposta[:140]!r}")
         righe.append((giro, frase, ok_tool and ok_stato, primo, totale))
+
+    # 1b. Dal telefono di Dario, con il suo schermo personale aperto (28/10, #288 e #289): i due
+    # casi veri delle 13:53 e 13:54 e i contrari («mostramelo», «metti la lista» non vanno su
+    # cosa=pagina; «aprimi i documenti» non va su cosa=documento). Ogni frase in una conversazione
+    # nuova, con la nota del dispositivo come la mette il ciclo
+    from calliope import dispositivo
+    _, tok_tel = hub.archivio.crea_con_token("telefono", "dario-id", "Dario")
+    tel = Pagina(base, tok_tel)
+    time.sleep(0.3)
+
+    def sul_telefono(pagina):
+        def ok(r, t):
+            time.sleep(0.2)
+            return (any(x["nome"] == "schermo_mostra" and x["argomenti"].get("cosa") == "pagina"
+                        and x["argomenti"].get("pagina") == pagina for x in t)
+                    and tel.pagine[-1:] == [pagina]
+                    and "computer" not in r.lower() and "portatile" not in r.lower())
+        return ok
+
+    def non_pagina(r, t):
+        return not any(x["nome"] == "schermo_mostra" and x["argomenti"].get("cosa") == "pagina"
+                       for x in t)
+    CASI_TEL = [
+        (["Apri lo schermo dei documenti su questo dispositivo."], "schermo_mostra",
+         sul_telefono("documenti")),
+        (["La scheda documenti del tab Le mie cose."], "schermo_mostra", sul_telefono("documenti")),
+        (["Aprimi i documenti sul telefono."], "schermo_mostra",
+         lambda r, t: sul_telefono("documenti")(r, t) and not any(
+             x["argomenti"].get("cosa") == "documento" for x in t)),
+        (["Fammi vedere la pagina dei lavori e programmi."], "schermo_mostra", sul_telefono("lavori")),
+        (["Metti la lista della spesa sullo schermo."], "schermo_mostra", non_pagina),
+        (["Quanto fa 17 per 6?", "Mostramelo sullo schermo."], "schermo_mostra", non_pagina),
+    ]
+    for frasi, atteso, controllo in CASI_TEL:
+        ctx = ToolContext(cfg=cfg, speakers=Speakers(), speaker_ctx=SpeakerCtx("Dario", "amministra"),
+                          speaker=None, agenda=agenda, liste=liste, pc={"portatile": pc},
+                          biblioteca=BibliotecaFinta(), schermi=hub)
+        b = Brain(cfg, reg, ctx)
+        for frase in frasi:
+            b.dispositivo_turno = dispositivo.descrivi("telefono", di="dario-id")
+            risposta, primo, totale = esegui(b, frase, "amministra")
+        tools = [t["nome"] for t in b.last_tools]
+        ok = atteso in tools and bool(controllo(risposta, b.last_tools))
+        argomenti = "; ".join(f"{t['nome']}({', '.join(f'{k}={v!r}' for k, v in t['argomenti'].items())})"
+                              for t in b.last_tools) or "—"
+        verifica(f"[{giro}] telefono, Dario: «{frasi[-1]}» → {argomenti}", ok,
+                 f"{primo:.2f}/{totale:.2f}s  {risposta[:140]!r}")
+        righe.append((giro, frasi[-1], ok, primo, totale))
     srv.ferma()
 
 prime = sorted(r[3] for r in righe)

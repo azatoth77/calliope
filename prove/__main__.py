@@ -94,22 +94,35 @@ A_SECCO = [
     ("prova_documento_proprio.py", [], "aprire il documento appena scritto con una foto di mezzo (07/10, giro 9, caso della DGX): documento proprio senza conferma a voce e i contrari, consenso ripetendo la richiesta e i contrari, un solo file e il numero 2, numero che non c'è detto al modello, sfida superata con il tool fallito, allegato_leggi fallito che non contamina"),
     ("prova_voci_famiglia.py", [], "voci di famiglia (07/10): margine tra primo e secondo profilo, chi amministra con un minore vicino, la frase che chiede chi parla, conferma breve con un'altra voce più vicina, i quattro casi veri con impronte sintetiche; continuità delle frasi cortissime (08/10) con i contrari; il proprietario del telefono (09/10, voce_proprietario): frasi incerte col minore restano sue, con i contrari (minore sicuro, satellite di stanza, finestra scaduta, compagnia)"),
     ("prova_impronte_satellite.py", [], "impronte della voce per satellite (15/10, calliope/impronte_satellite.py): apprendimento solo dalle frasi sicure (contrari: zona grigia, breve, voce corta, margine stretto, compagnia, incerta, minore vicino, continuità), seme dopo 3 frasi, deriva dall'arruolamento e dal seme, ripiego sul canale; spento come prima; ombra (decide quella di oggi, nel registro con e senza) e attivo (il caso del 15/10 in auto riconosciuto); simmetria col minore e protezioni sui punteggi nuovi; i casi del 07/10 di prova_voci_famiglia uguali in ombra e attivo; tenuta (speakers.json, modello diverso, nuova registrazione, rinomina, svuota dal processo e da terminale con la copia); conoscenti (apprendimento, riconoscimento, file, promozione e ritorno, dimentica); stato --turni; dal 18/10 (issue #159) gli scambi divisi fra base sicura e base incerta (contrario: contro una decisione dalla voce resta sicuro)"),
-    ("prova_minori.py", [], "minori (05/10): fasce, preset e permessi nel codice, orari, voce incerta, compiti e avvisi ai tutori, guardiano finto, registrazione con la sfida, privacy"),
+    ("prova_minori.py", [], "minori (05/10): fasce, preset e permessi nel codice, orari, voce incerta, compiti guidati come sola regola nei dati del turno anche con «fammi tu il compito» e calcola col risultato (28/10, #279), avvisi ai tutori, guardiano finto, registrazione con la sfida, privacy"),
+    ("prova_studio_piano.py", [], "lo Studio, dati e piano a giorni a secco (29/10, #280, decisione 0035, calliope/studio/): schema che si crea, si riapre e con una versione più nuova si legge senza scrivere; piano deterministico coi materiali di fantasia (verifica domani, fra una settimana e fra un mese, nessun giorno libero, orari di riposo, pagine più dei giorni, data spostata, oggi e passata, giorni fatti, «non ce la faccio oggi», giorni senza scuola, due verifiche negli stessi giorni), tappe e previsione dopo due misure; permessi di minore, tutore, adulto, chi amministra, ospite e conoscente; tenuta a 60 giorni dalla data con l'orologio finto, archiviata per sempre, «dimentica» e svuota; interruttore spento, ombra e attivo"),
+    ("prova_studio_pagine.py", [], "le pagine dei materiali dello Studio a secco (29/10, #281, passo 4.2): bordi sulle foto di fantasia (storte e in ombra trovate, pulite intere, quelli del telefono confermati o scartati, impossibili mai), bordi.js uguale al Python con node, raddrizzamento a 1600 e nitidezza, PDF divisi (troppe pagine, malformato, enorme, cifrato), file ostili e link fuori; sul server vero /api/studio/pagina e /api/studio/verifiche (proprietario, tutore, altro adulto, chi amministra, ospite, conoscente, stanza, orari, limiti, spento e ombra), niente nella conversazione; tenuta, dimentica, svuota e togli che tolgono i file"),
+    ("prova_studio_banco.py", [], "il banco dello Studio a secco (28/10, #293, revisione della PR #302): la guardia che vede un lavoro dell'agente vivo (in_corso.json col .bak, fermo da più di 15 minuti o con i file in una sottocartella) e i contrari, --senza-guardia rifiutato con la Calliope vera attiva, harness.json uguale alle costanti del banco, pagina scritta due volte, segni della lettura, controllo delle pagine con le radici, verità dei materiali coerente"),
+    ("prova_studio_tool.py", [], "i tool dello Studio a secco (30/10, #284, passo 4.5): studio e studio_pagina_leggi con classi, effetti e livelli; proprietario, tutore (anche con «per»), un altro adulto, ospite, zona grigia e minore incerto; «archivia» che chiede; la busta «foto» del testo e dei titoli, mai nel tool fidato; i tocchi nuovi (azione fissa, bersaglio, titolo in busta, stato d'animo mai nella storia); la vista aperta nei dati del turno; le due domande in memoria; piano_non_aggiornato, la frase senza vLLM, «dimentica» che dice lo Studio solo se l'ha tolto; un minore coi compiti guidati"),
+    ("prova_studio_padronanza.py", [], "la padronanza per argomento dello Studio a secco (30/10, #245, passo 5): il calcolo dai soli tentativi (soglia di misura, esiti, tipi, età, calo, parole, livello), le lacune con la lezione successiva, registra_tentativo (codici, mai la fonte «modello», permessi), ombra (misura «padronanza_ombra» ignorata dalla previsione, niente su home e riepilogo, registro senza titoli) e mostrata (previsione dalla padronanza, parola sulle tappe, lacune sulla home e per numero nel riepilogo), spenta, tenuta e orfani, niente stato d'animo"),
+    ("prova_studio_carte.py", [], "le carte dello Studio a secco (30/10, #246, passo 6): Leitner (le tre risposte, scatole fino a 5, la vigilia come tetto, «fra 10 minuti»), la forma chiusa e il confronto del codice (solo il «giusto»; contrari: negata, un'altra cifra, una frase lunga, la risposta ripetuta dopo averla sentita), l'autovalutazione detta per intero e i contrari; scrivere, correggere, togliere, da ripassare, un argomento fuori dal piano; l'esito coi tentativi «carta» di persona, tutore e codice; a voce studio_carte con domanda, risposta ed esito dalla frase della persona (mai dal modello, una volta, mai nello stesso turno), ospite e zona grigia no; le sei note della PR #323 (giorno futuro, unione, ombra, misura a None, l'ultima prova, fonte e chi); tenuta; l'endpoint /api/studio/carte col server vero; textContent nella pagina"),
+    ("prova_studio_libreria.py", [], "la libreria dello Studio a secco (31/10, #297): i contenuti tutti validi (Chimica, Fisica, Informatica e Biologia, ogni scheda col suo mazzo, la classe solo descritta), la verità (i conti rifatti con la tabella di verita_libreria.py, le risposte chiuse giuste per il codice e le sbagliate tipiche no, le risposte nella scheda) coi contrari, il formato coi contrari (link, markdown, emoji, cicli, mazzi orfani, mini-app senza comandi), l'indice per argomento coi contrari (titoli ostili, altre materie), la scelta con la padronanza solo mostrata e i prerequisiti, il servizio (permessi, home in attivo, ombra e spenta, scheda senza soluzioni, «Aggiungi le carte», la prova aperta), la lettura «libreria» a voce senza titoli degli argomenti, attraverso Brain, l'endpoint /api/studio/libreria col server vero"),
+    ("prova_studio_miniapp.py", [], "le mini-app della libreria dello Studio (31/10, #297, parte 2): otto mini-app nelle quattro materie e nei tre tipi, il caricamento coi contrari (permessi, nome, dati salvati, senza macchina, fetch, impronta), test e prova di fumo di ognuna col motore vero, la verità di ciò che mostrano (verita_miniapp.mjs: elementi e livelli, reazioni bilanciate, densità, moto, bit e binario, cellula, osmosi), Giochi.avvia coi file della libreria, studio_attivita a voce e dal tocco, la prova aperta, attraverso Brain"),
+    ("prova_studio_preparazione.py", [], "la preparazione dello Studio dietro le quinte (31/10, #297, parte 3): i valori validati (reazioni e misure) coi contrari, la lezione fondata nelle pagine, ombra e attiva («pronto», «in preparazione», la lezione, i parametri, «ho preparato…» una volta), le attività adattate (parametri nella partita, nel riquadro e nella logica, Node), la prova aperta, la regola degli errori, il giro del lettore con la guardia e quiete, i ritocchi della PR #366, la fase del banco a secco"),
+    ("prova_studio_mappa.py", [], "la mappa concettuale dello Studio a secco (30/10, #247, passo 7): la forma dei testi, uguale e verbo_simile coi contrari, la disposizione, le caselle (mai tutte, le deboli prima, il centro resta, «Rifai»), le parole con una di troppo, la copia senza il testo atteso, il controllo deterministico (giuste, sbagliate, vuote, mancanti con un capo solo, in più, verbo diverso, i concetti propri non giudicati); lo scheletro a mano proposto, la conferma che tiene i puliti, l'ombra mai alla persona, il tetto dei concetti; la mia mappa e a memoria coi tentativi «mappa» fonte «codice» una volta per casella, «Fanne carte»; permessi (il tutore cambia lo scheletro, non la mappa di Leo); il registro e studio «mappa» senza testi anche con uno scheletro ostile; il PDF in due pagine, mai dello scheletro; tenuta, dimentica, svuota, orfani, schema 8; le due note della PR #325; l'endpoint col server vero"),
+    ("prova_studio_mappa_libera.py", [], "la mappa libera dello Studio a secco (30/10, #328, passo 7c): la forma dello scheletro (doppioni permutati, composti sciolti, la radice, le parti, i concetti chiave), la seconda passata `connetti` con un lettore finto anche ostile; il confronto (presente, diverso, mancante, collegamenti mancanti, verso diverso, fuori dal quadro), gli indicatori del metodo e la volta scorsa, i concetti svelati; la mappa libera con lo scheletro nascosto (vista, PDF, tool, carte), «Un indizio», «Mostra», «Ho finito» coi tentativi una volta per giro («Mostra» toglie il tentativo, l'indizio lo fa «indizio»), «Rifai» e i giri; il riferimento confermato, proposto senza avvisi e senza tentativi, nessuno; permessi; «Parliamone» senza i concetti nascosti, ombra e attiva, la misura nel registro senza testi; schema 9, dimentica, svuota"),
+    ("prova_studio_tutore.py", [], "la vista del tutore e le indicazioni dei tutori dello Studio a secco (31/10, #250 e #285, passo 10): schema 11; solo il tutore del minore vede (Leo, un altro adulto, chi amministra non tutore e l'ospite «non c'è»); la padronanza alla cieca in ombra e con le cifre se mostrata; il giudizio del tutore a peso pieno, uno al giorno, l'accordo senza i giudizi; da guardare tu e «rivedi» del tutore, nascosti con una prova aperta; le indicazioni (forma, ambiti, durata, tetto, chi le vede e chi le scrive, scadute, la nota con la cornice); la tenuta; il tool «indica» dalle parole del tutore; attraverso Brain la voce del tutore, l'indicazione dettata e quella inventata, l'indicazione ostile senza permessi né azioni; l'endpoint /api/studio/tutore"),
+    ("prova_studio_condividi.py", [], "la condivisione dal telefono allo Studio a secco (31/10, #298 parte 3): share_target nel manifest (azione nello scope, POST multipart, i formati dell'importazione e niente eseguibili), il service worker (solo il POST di /telefono/condividi, i file in IndexedDB al più 10, la condivisione nuova che sostituisce la vecchia, «?condividi=1», la versione della cache uguale alla pagina), condividi.js (solo studioImporta, la verifica scelta dalla persona, textContent, i file tolti dopo l'invio e dopo un'ora), il server (POST senza service worker: 303 a «?condividi=0» senza leggere il corpo)"),
+    ("prova_studio_importa.py", [], "l'importazione dei materiali scaricati a secco (31/10, #298): schema 13; il tipo dai byte e i tipi falsi, i nomi strani, l'HTML senza tag, le pagine di testo, docx con macro, testo nascosto e DOCTYPE; ZIP ostili nel sottoprocesso vero (zip-slip, assoluti, unità, link, cifrati, bomba per rapporto, voci che mentono sulla dimensione, voci sovrapposte, tetto del totale, troppe voci, zip nello zip, PDF rotto, voce troppo pesante con la ripartenza); le pagine (PDF e foto da leggere, testi già letti con la fonte «allegato»), gli argomenti che aspettano; sul server vero /api/studio/importa e /api/studio/importazioni (minore, tutore, altro adulto, conoscente, zona grigia, stanza, orari, 411, 413, 415, spento, il tetto delle importazioni vive, ferma, riprendi, annulla, il riavvio a metà), la tenuta e gli orfani"),
+    ("prova_studio_premi.py", [], "i premi dello Studio a secco (31/10, #296): schema 12; il giorno di studio e la serie con le pause, i giorni senza piano, oggi che aspetta; gli imbrogli (sessioni vuote, «Fatto» senza «Inizia», la stessa carta ripetuta, le carte del tutore, gli esiti autovalutati, l'orologio spostato); le stelle (verifica finta superata dal codice o dal tutore e non dalle autovalutazioni, una volta sola, il ripasso in due giorni, l'argomento all'obiettivo solo con la padronanza mostrata, il piano seguito) dette una volta; gli interruttori del tutore e dell'adulto, l'ombra; i duelli (spenti di serie, per un minore col tutore, mai con un conoscente, senza consenso niente risposte, le risposte attese solo alla fine, la prova aperta che li ferma, niente tentativi né stelle, scadenza, tenuta); il tool «premi» e «fatto» con la serie una volta al giorno; attraverso Brain; gli endpoint /api/studio/premi e /api/studio/duello"),
+    ("prova_studio_esercizi.py", [], "gli esercizi guidati dello Studio a secco (31/10, #278): la guida del lettore controllata dal codice (la domanda o l'indizio che dicono la risposta o il risultato, gli ordini, la scelta malformata, il numero illeggibile «aperto», troppo pochi passi), svela e la guardia della voce; ombra, attiva e spenta; il testo scritto, la foto letta dal lettore per prima, la foto ostile; i passi (giusto, l'unità che manca, sbagliato, l'indizio dopo 2 errori, salta dopo 3, aperto da rivedere, finito), mai le risposte attese alla persona, al tutore solo a esercizio finito; la prova aperta che ferma la guida; tenuta; a voce studio_esercizio con l'esito dalla frase detta; attraverso Brain col modello che dice la soluzione e la foto ostile; gli endpoint /api/studio/esercizio e la foto in /api/studio/pagina"),
+    ("prova_studio_mappa_genera.py", [], "lo scheletro della mappa generato dal lettore a secco (30/10, #247, passo 7, seconda parte) con un vLLM finto: le triple controllate dal codice (concetti uguali uniti, forma e testo_ordine, fuori dalle pagine o argomento che non c'è → da_controllare, la pagina ostile → pagina_con_istruzioni, con sé stesso e coppie doppie scartati, il tetto dei concetti, la disposizione), la richiesta (niente tool, schema, due buste), il giro: ombra mai alla persona, attiva «proposto», la conferma che tiene i puliti, mai sopra uno scheletro scritto, confermato o toccato dalla persona, la rinomina che rifà quello mai toccato, JSON rotto, spenta, la guardia; dal passo 7c (#328) la seconda passata di connessione nel lettore (le isole unite, la risposta illeggibile che lascia le isole, l'errore del server e l'errore nostro con la regola dell'ora); la fase «mappa» del banco a secco con le misure di forma e la % di verifiche con una parte sola; dal 31/10 (#344) i capi scritti come codice (A… → titolo dell'argomento, gli altri scartati), singolare e plurale uniti, il tetto che tiene la rete connessa, il collegamento debole «da controllare» alle isole e le uscite vere del banco del 31/10 col vLLM finto (studio_vllm_finto.py); dal 31/10 07:02 (#349) i codici della seconda richiesta per parte, gli scarti di connetti per motivo e le uscite vere della seconda passata"),
+    ("prova_studio_ascolta.py", [], "il ripasso da ascoltare dello Studio a secco (31/10, #249, passo 9): il testo per la voce e le frasi che non si dicono (indirizzo, nome, messaggio per un assistente, annuncio, ordine) coi contrari; formule, sigle, romani e simboli coi contrari; il copione a parti coi soli numeri nelle frasi di Calliope, le carte con la pausa, oggi, un argomento; la lettura a voce con l'uscita vera (niente eventi né schermo, la voce del libro, interrotta, fermata) e il ciclo dopo la risposta; riprendi, ripeti, ferma, dimentica; la prova aperta che blocca le quattro strade; il tool senza fonte e senza testo nel risultato; il WAV per lo schermo; la tenuta dell'audio; l'endpoint /api/studio/ascolta"),
+    ("prova_studio_prove.py", [], "le prove dello Studio a secco (31/10, #248, passo 8): l'esito del codice (scelta multipla, vero o falso, numero con l'unità e la tolleranza, parole chiave, carta, aperta, «non lo so», vuota) coi casi contrari; le domande scritte, permessi; la verifica finta (solo la persona, la vista senza risposte attese, consegna coi tentativi «verifica_finta», gli imbrogli: consegna doppia, risposte dopo la consegna o dopo il tempo, carte e domande nascoste, un'altra verifica, il tutore che risponde; il tempo scaduto; «da rivedere» una volta, persona col peso dimezzato e tutore); la verifica che si chiude («annullata» senza tentativi); il mix uniforme in ombra e pesato; il tipo e la finestra «dal»; l'orale da studio_interroga (stesso turno, la proposta del modello solo misura, pagine chiuse, «basta», il tutore no); tenuta e schema 10; l'endpoint /api/studio/prova; dal 31/10 (#344) le lettere dentro la frase («d'Aragona», «c'è», la preposizione «a» non sono opzioni); dal 31/10 07:02 (#349) un'opzione dentro un'altra (vince l'opzione uguale alla risposta, poi la più lunga)"),
+    ("prova_studio_domande_genera.py", [], "le domande delle prove generate dal lettore a secco (31/10, #248, passo 8) con un vLLM finto: il controllo del codice (buone pulite, risposta fuori dalle pagine e argomento che non c'è → da_controllare, pagina ostile, ordine in un'opzione, scelta senza la giusta e vero o falso malformato scartati, numero illeggibile → aperta, parole chiave inventate tolte), la richiesta (niente tool, schema coi tipi, due buste, la firma), il giro: ombra mai alla persona né alle prove, attiva «proposte» e «Conferma» le pulite, spenta; la fase «prove» del banco a secco; dal 31/10 (#344) le domande vere del banco col vLLM finto (nessuna risposta attesa sbagliata) e l'atteso che il codice non dà giusto → da_controllare"),
+    ("prova_studio_carte_genera.py", [], "le carte generate dal lettore a secco (30/10, #246, passo 6, seconda parte) con un vLLM finto: la forma di domanda e risposta (una riga, niente controllo né virgolette, ordini, indirizzi e annunci → testo_ordine), il controllo del codice (risposta nelle pagine citate, pagine e argomento che non ci sono → da_controllare, solo pagine con istruzioni → pagina_con_istruzioni, doppioni e non stringhe scartati), la richiesta (niente tool, schema, due buste), il giro: ombra mai alla persona, attiva «proposte» fuori dal ripasso, «Conferma» le pulite e «Tieni» una per una, firma, rigenerazione che tiene le decise, JSON rotto, spenta, la guardia, da ombra ad attiva; la fase «carte» del banco a secco"),
+    ("prova_studio_resoconto.py", [], "il resoconto delle sessioni e il riepilogo della verifica dello Studio a secco (30/10, #244, passo 4b): studio_eventi (dalla versione 4: «inizio» senza le due risposte, fatto, saltato, mancato una volta sola, spostata), il tempo solo fra «Inizia» e «Fatto» entro 3 ore, le frasi esatte, gli stessi dati dopo la riapertura, niente sigle né titoli delle pagine nelle frasi, tutore sì e altri no, la tenuta, «fatto», «resoconto» e «riepilogo» nel tool (letture), la home; i casi 1–3 della #322 (pagine di ieri una volta, «Inizia» e «Fatto» di due persone, il minore senza nome)"),
+    ("prova_studio_argomenti.py", [], "gli argomenti dello Studio a secco (30/10, #283, passo 4.4) con un vLLM finto: l'harness esatto di harness.json (schema guidato, niente tool, una busta coi riferimenti P1…), il controllo delle pagine citate (giusto, pagina sbagliata, inventato, riferimento che non c'è, radice), la forma del titolo, le pagine ostili delle tre verifiche (argomento proposto con l'avviso, fuori dalla conferma e dal piano), il giro del lettore con la firma e la seconda estrazione, la conferma (tieni, togli, rinomina, unisci, aggiungi, conferma) e il piano coi soli tenuti, i permessi, gli interruttori, la guardia, gli errori del server, l'endpoint /api/studio/argomenti e la pagina; dal 31/10 (#344) formule, sigle e simboli nelle pagine coi loro contrari"),
+    ("prova_studio_lettura.py", [], "la lettura delle pagine dello Studio a secco (30/10, #282, passo 4.3) con un vLLM finto: l'harness esatto di harness.json (prompt, parametri, una foto per richiesta a 1600), pagina scritta due volte, length rifatto e poi illeggibile, capovolta girata e riletta, due pagine divise in due righe e due file, numero strano, istruzioni, controlla i numeri, PDF con testo senza modello e PDF immagine con l'OCR, la guardia (lavoro dell'agente nel processo e in in_corso.json, vLLM occupato o in pausa, lavoro che parte durante lo stream, la voce con l'arbitro), la ripresa dopo un riavvio, la pagina tolta durante la lettura, il thread, spento/ombra/attivo, permessi e ogni file con la sua riga"),
     ("prova_controlli_regressione.py", [], "i controlli del banco di regressione a secco (17/10, #70): il ruolo dato come nome (domande e «ma Papà» errori, il rifiuto detto no) e la frase storpiata «Calliope di Michisono.» (il nome o una domanda di chiarimento, non la ricerca)"),
     ("prova_eta_utenti.py", [], "età e compleanni dai profili (07/10, DGX): data di oggi come nascita rifiutata, persona=io o un nome, giorni contati dal programma, privacy (chi amministra e i tutori), impronta della voce in elenca_utenti, rubrica distinta, tool *_cerca con argomenti obbligatori, parole di un ospite nel registro; la propria data di nascita nel profilo con ricorda e la data dai ricordi in data_calcola (07/10 pomeriggio)"),
-    # ~8 s: generatori su migliaia di semi, secondo parere finto, server degli schermi vero
-    ("prova_esercizi.py", [], "esercizi generati da Calliope (08/10): numeri detti, generatori di matematica (ricalcolo indipendente) e d'italiano (forme chiuse, lessico sul Wikizionario), secondo parere finto (buono, scartato, guasto, banco), flusso a voce (indizi, 5 errori con avviso ai tutori una volta, salta, soluzione, segnala, livelli, fine), permessi (ospite, adulto che non segue ragazzi, tutore, riepilogo), dato del turno, /api/esercizio sul server vero (schermo personale, fuori orario con la pausa che copre ogni minuto del giorno, limite, mai la risposta attesa)"),
-    # ~9 s: generatori di logica, fisica e chimica su migliaia di semi, tool e sessione veri
-    ("prova_materie.py", [], "materie calcolabili (12/10, S1: logica, fisica, chimica con lo schema della matematica): unità di misura lette come le scrive Whisper (simboli, nomi storpiati, numeri in lettere, decimali detti, «un chilo e mezzo», «mezz'ora») e dette per esteso, con i contrari; decimali e migliaia; 300 semi per argomento e livello con il ricalcolo indipendente, risposta giusta in ogni forma, senza unità con il promemoria, unità equivalente (non nelle conversioni), sbagliata e di un'altra grandezza rifiutate; il ricalcolo che prende gli errori (composizione, reazione non bilanciata o non minima, sequenza ambigua, risposte rovesciate); vero o falso letto; materia e argomento dal testo («logica» non è l'analisi logica); flusso dal tool con la scheda «misura», segnalazione e argomenti per età"),
-    # ~1 s: le correzioni del 12/10 (prova vera con una bambina, 26B sulla DGX)
-    ("prova_esercizi_voce.py", [], "esercizi dopo la prova vera del 12/10: il numero si ricava dalla frase (solo le forme parlate chiuse come «sedeci», «Prenta due» → 32 e «Suttanto salida» → 76 no, si chiede di ripetere), domande solo dal programma (risposta a una domanda inventata non giudicata; in Brain domanda inventata e «Segno tutto» non detti dopo la spinta, anche a sessione aperta senza l'azione in sospeso), blocchi da 5 e 10 con «Facciamo una pausa o cambiamo?», pausa e continua, punti e tappe contati dal codice, modo giocoso, preferenze salvate per persona (servizio nuovo, 60 giorni, svuota), indizi vuoti, schermo_mostra con un testo e l'esercizio, «te lo scrivo qui» tolto a voce"),
-    # ~1 s: l'indice del programma ministeriale (12/10, fase A)
-    ("prova_programma.py", [], "indice del programma ministeriale (12/10, calliope/esercizi/programma/): forma dei dati (fonti, id, traguardi, argomenti, classi, livelli, obiettivi della mappa), quali Indicazioni valgono per classe e anno scolastico (DM 221/2025 art. 1 e 5, casi al confine e contrari), anno scolastico e periodo da una data, il caso vero del 12/10 (terza a ottobre entro il 100), generatore_dentro della mappa rifatto sul generatore vero"),
-    # ~7 s: fase B dell'indice (12/10 sera): limite stretto, numeri, a che punto, interrogazioni
-    ("prova_esercizi_programma.py", [], "fase B dell'indice del programma (12/10 sera): generatori con «entro», cambio e operazioni ammesse, ogni voce della mappa dentro il suo limite; limite stretto per classe e periodo (terza a ottobre entro il 100 senza salire al 3, prima entro il 10 senza riporto), nessun livello adatto (frazioni in terza: lo dice e propone, contrario in quarta), oltre solo se chiesto (oltre, «tre cifre», piu_difficile) e solo per la sessione; numero da ripetere con frasi sempre diverse e col tono, lo schermo dopo due non capiti (contrari); «a che punto siete» a inizio sessione (contrari: appena detto, adulto, 0 giorni), mappato o foto della pagina, a metà sessione una volta, detto da un tutore (contrario: chi non lo segue), classe salvata e anno dopo, 60 giorni e svuota; interrogazioni dall'indice (aperte con giudizio e sicurezza, «da guardare» nel riepilogo e avviso, problema solo con «+») e dalla pagina, senza pagina la chiede"),
     # ~25 s: la pagina degli schermi e del telefono in Edge o Chromium senza finestra
     ("prova_vista_sviluppo_pagina.py", [], "vista dello sviluppo e lavoro in diretta nella pagina vera (08/10): fasi, due colonne, flusso che si accumula senza buchi né doppioni anche dopo una riconnessione, scorrimento e «In fondo», schermo intero sul computer, giro 2 e correzione, comandi a tocco innocui, uscita dalla vista, telefono in una colonna, nessun errore JS né CSP"),
-    ("prova_esercizi_pagina.py", [], "scheda degli esercizi nella pagina vera (08/10): domanda grande, risposta scritta sbagliata e giusta, indizio, segnalazione, fine, scelte d'italiano come pulsanti, risposta attesa mai nel DOM, telefono con la scheda nel carosello, nessun errore JS né CSP"),
     ("prova_minori_pericolo.py", [], "minore in pericolo con la frase spezzata (06/10, e2e): pezzi uniti per il guardiano, protezione senza barge-in con la sola voce e ripetuta se il nome la interrompe, avviso non ripetuto per lo stesso episodio, con i contrari"),
     ("prova_compagnia.py", [], "modalità compagnia (09/10): più voci vicino allo stesso satellite (profilo recente, gruppi tra ospiti, due profili) con i contrari (voce variabile, altro microfono, frasi brevi, finestra scaduta, altro satellite, stesso ospite, spenta), i due episodi veri della DGX in numeri, niente frase breve né continuità, voce non sicura per i due cancelli e l'avviso che lo dice, azioni con la voce nella frase, nome a ogni frase con una voce sconosciuta (il nome passa sempre), famiglia tutta riconosciuta, ombra senza effetti; giudizio «rivolta a Calliope» finto in ombra e acceso (silenzio, protezione sempre, guasto = rivolta, nessun tool, storia ripulita); calliope stato --turni; impronta non aggiornata in compagnia (12/10)"),
     ("prova_console_minori.py", [], "parole dei minori nel terminale e nel journal come quelle degli adulti (16/10, decisione 0031; dal 12/10 sera al 16/10 nascoste, conserva.console_riservata): la frase e la risposta in chiaro anche nel dubbio tra un adulto e un minore, nelle reti di Brain e negli argomenti dei tool; minori.parla_minore per la frase dopo il tool; contrario l'ospite («(una frase di un ospite)», «…»)"),
@@ -174,10 +187,10 @@ A_SECCO = [
     ("prova_agenda.py", ["--secco"], "timer, promemoria, appuntamenti: scadenza, annullo"),
     ("prova_agenda_tutto.py", [], "annullare tutta l'agenda si conferma (16/10, #99): con più voci (non soli timer entro un'ora) la domanda con l'elenco e la proposta in sospeso; al «sì» con una frase di consenso annullate solo le voci nominate; contrari (la richiamata senza consenso, il «sì» per una parte, voce aggiunta dopo anche col sì accettato dalla politica, appuntamento non nominato, sveglia di 8 ore, una voce, il timer della pasta, la proposta di un altro tool); stanza accesa senza sfida; classe d'effetto E2"),
     ("prova_memoria.py", ["--secco"], "memoria per persona"),
-    ("prova_liste.py", [], "liste della casa e memoria della casa"),
+    ("prova_liste.py", [], "liste della casa e memoria della casa; l'ultimo cambiamento su disco (#263)"),
     ("prova_pc.py", [], "tool pc_* con un PC finto: permessi, valori a voce, blocco"),
     ("prova_documenti.py", [], "documenti Word, Excel e PDF: file, formule, modifiche, permessi; rimasti sul server con il telefono: la scheda con «Scarica» nella frase, documento_leggi (09/10)"),
-    ("prova_ufficio.py", [], "ufficio: conti, XML FatturaPA (XSD se c'è), numerazione concorrente, rubrica, modelli Word e PowerPoint, flusso a voce"),
+    ("prova_ufficio.py", [], "ufficio: conti, XML FatturaPA (XSD se c'è), numerazione concorrente, rubrica, modelli Word e PowerPoint, flusso a voce, totale nei dati del numero"),
     ("prova_casa_ha.py", [], "casa via Home Assistant con un HA finto: regole, permessi, TLS, diagnosi"),
     ("prova_meteo_casa.py", [], "meteo di casa (09/10): condizioni di HA in italiano, giorni chiesti, entità weather esposta con l'HA finto (adesso, domani, stasera, cache, solo weather.get_forecasts, ospite), non esposta mai vista, prompt secondo la disponibilità (entità, città, segnaposto, niente, HA spento), città salvata a voce solo da chi amministra (proposta e conferma, luogo.json, configurazione che vince)"),
     ("prova_casa_nomi.py", [], "casa: comando capito da HA ma senza dispositivi (08/10), la candidata tra le esposte per nome o area, domanda, mai allargare, consiglio a chi amministra"),
@@ -191,21 +204,23 @@ A_SECCO = [
     # ~3 s: server degli schermi vero, registro dei turni finto (anche grande: 28 000 turni)
     ("prova_cruscotto.py", [], "cruscotto di chi amministra (06/10): solo lo schermo personale di chi amministra, nessun testo di persone, latenza, regole, errori, abbinamenti, richieste in attesa, cache e registro grande, prefisso del modello invariato"),
     # ~20 s: la pagina degli schermi e del telefono in Edge o Chromium senza finestra
-    ("prova_cruscotto_pagina.py", [], "cruscotto nella pagina vera: pulsante solo per chi amministra, scheda con le sezioni, Aggiorna al suo posto, Chiudi, nel carosello del telefono dal menu, nessun errore JS"),
+    ("prova_cruscotto_pagina.py", [], "cruscotto nella pagina vera: pulsante solo per chi amministra, scheda con le sezioni, Aggiorna al suo posto, Chiudi, sul telefono da Io a schermo intero, nessun errore JS"),
     # ~25 s: la pagina del telefono e dello schermo in Edge o Chromium senza finestra
     ("prova_markdown_pagina.py", [], "lettore Markdown nel browser vero (07/10): testo dell'agente ostile (script, HTML con attributi, javascript:, immagini) mai eseguito né come elementi, tabella di 300 righe, annidamenti, sommario, «Scarica» PDF/Word/MD negli scaricamenti, schermo intero del telefono leggibile, nessun errore JS né CSP"),
-    ("prova_scheda_intera.py", [], "telefono (06/10): una scheda a schermo intero (cruscotto dal menu, lavoro con il codice, documento con una tabella larga) a 3 dimensioni: testo ≥ 16 px, niente di lato, aggiornamento al suo posto senza perdere lo scorrimento, Chiudi, Esc, indietro, nessun errore JS"),
+    ("prova_scheda_intera.py", [], "telefono (06/10): una scheda a schermo intero (cruscotto da Io, lavoro con il codice, documento con una tabella larga) a 3 dimensioni: testo ≥ 16 px, niente di lato, aggiornamento al suo posto senza perdere lo scorrimento, Chiudi, Esc, indietro, nessun errore JS"),
     # ~15 s: la pagina in Edge o Chromium senza finestra; senza browser si salta
     ("prova_schermi_satellite.py", [], "uno schermo per satellite: riusato ai ricollegamenti e dopo i riavvii, token rinnovato se perso, revoca a cascata, abbinamenti inattivi segnalati"),
     ("prova_schermi_pagina.py", [], "pagina degli schermi in un browser vero: si ricollega da sola dopo un riavvio"),
     ("prova_cdp_orfani.py", [], "browser delle prove nel job object della prova (14/10): la prova che muore senza chiudi() non lascia processi msedge con il suo profilo, contrario senza job, chiudi() di sempre"),
     # ~10 s: server degli schermi vero su 127.0.0.1, ufficio con l'estrazione finta
-    ("prova_scritto_conversazione.py", [], "scrivere solo durante una conversazione a voce: regola pura, voce che apre e rinnova, breve e scritto che non rinnovano, altra persona e ospite che chiudono, server con evento «scrittura», 403 senza_conversazione e regola nel registro, modulo chiuso a metà"),
+    ("prova_scritto_conversazione.py", [], "la conversazione a voce e lo scritto: regola pura, voce che apre e rinnova, breve e scritto che non rinnovano, altra persona e ospite che chiudono; dal 28/10 (#301) casella, foto e file dello schermo personale sempre, moduli e schermi di stanza ancora in conversazione (evento «scrittura» con `moduli`, 403 senza_conversazione e regola nel registro), modulo chiuso a metà"),
+    ("prova_scritto_senza_voce.py", [], "scritto dallo schermo personale senza aver parlato (28/10, #301) nel ciclo vero: familiare al modello, chi amministra al più familiare, ciò che vuole la voce rifiutato, minore fuori orario rifiutato e dentro gli orari col suo livello, foto e file di un minore fuori orario rifiutati, conversazioni_dimentica scritto e poi «sì» scritto mai eseguito, ospite dallo schermo di stanza e modulo rifiutati"),
     ("prova_scritto.py", [], "scrivere invece di parlare: controlli dei codici, moduli dei tool con il server vero, valori al tool senza il modello, permessi, canale, registro"),
     # ~15 s: modulo e casella nella pagina vera (Edge o Chromium senza finestra); senza si salta
     ("prova_rispondi.py", [], "rispondi dove ti ho chiesto: scritto dal telefono con lo studio attivo, schermo senza audio, schermo_mostra, follow-up, annunci"),
     ("prova_scritto_pagina.py", [], "moduli nel browser vero: errore della cifra di controllo mentre si scrive, invio, casella"),
     # ~5 s: Pillow, Brain con un backend finto, server degli schermi vero, PC finto
+    ("prova_annunci_foto.py", [], "gli annunci scritti in una foto o in un file arrivano al modello col dubbio (28/10, issue #303, caso del banco dello Studio): etichetta della foto e busta di file e audio con la frase sugli annunci, uguale a ogni turno; contrari web, estensione, agente, archivio; quarantena; dato del turno dei minori; caratteri aggiunti"),
     ("prova_immagini.py", [], "foto (05/10): controllo e riduzione dei byte, album della conversazione, foto nei messaggi, guardia sulle azioni, /api/immagine, pc_guarda e permessi, cattura dal satellite"),
     # ~3 s: Brain con un backend finto, esecutore remoto con un server dei satelliti finto
     ("prova_dispositivo.py", [], "il dispositivo da cui si parla (16/10, issue #100): la spinta di pc_guarda solo col PC raggiungibile e capace (telefono senza portatile no), la riga «dispositivo:» nei dati del turno per telefono, satellite, PC, scritto e locale, Ciclo._dispositivo_turno, i volti non si riconoscono nel prompt"),
@@ -216,10 +231,10 @@ A_SECCO = [
     # ~6 s: cassetto in una cartella temporanea, Brain finto, server degli schermi vero
     ("prova_cassetto.py", [], "cassetto dei file per persona (08/10): entrata (foto, file, audio; mai programmi né ospiti), scadenza e «ho eliminato», revisione una volta al giorno, tieni/elimina/tieni ancora, tetto, minore e tutore, zona grigia, ritrovamento dopo un riavvio, contenuto in busta, /api/cassetto, ciclo finto"),
     # ~15 s: la scheda del cassetto in Edge o Chromium senza finestra; senza browser si salta
-    ("prova_cronologia_schede.py", [], "cronologia delle schede per persona e scheda «Conversazione» (08/10): salvataggio solo personale e certo, chiavi, tenuta e tetti, ripresa dopo un riavvio con le schede finali (lavoro interrotto, esercizi, sviluppo ricostruito, modulo e timer saltati), «Scarica» con un gettone nuovo, pulizia (tool, /api/schede, evento), conversazione dall'archivio (meta, sfida e codici tolti, in diretta solo ai propri schermi, dimentica, tenuta, Markdown), server vero"),
+    ("prova_cronologia_schede.py", [], "cronologia delle schede per persona e scheda «Conversazione» (08/10): salvataggio solo personale e certo, chiavi, tenuta e tetti, ripresa dopo un riavvio con le schede finali (lavoro interrotto, sviluppo ricostruito, modulo e timer saltati), «Scarica» con un gettone nuovo, pulizia (tool, /api/schede, evento), conversazione dall'archivio (meta, sfida e codici tolti, in diretta solo ai propri schermi, dimentica, tenuta, Markdown), server vero"),
     ("prova_compagnia_pagina.py", [], "segno della compagnia nella pagina vera (09/10): «In compagnia: chiamami per nome» sotto lo stato della voce dello schermo di stanza e sul telefono, resta addormentata, sparisce con una voce sola, mai in un'altra stanza, nessun errore JS né CSP"),
-    ("prova_cronologia_pagina.py", [], "cronologia delle schede e conversazione nella pagina vera: riavvio del server, schermo nuovo che ritrova schede e chat, turno nuovo in fondo senza riscrivere, Scarica, stanza vuota, Pulisci con due tocchi, vista dello sviluppo dopo un riavvio, telefono dal menu, nessun errore JS né CSP"),
-    ("prova_cassetto_pagina.py", [], "scheda del cassetto nella pagina vera: carosello (miniatura, sigle), Tieni solo dove si può, Tieni ancora, Tieni, Elimina tutti con due tocchi, schermo di un'altra persona vuoto, nessun errore JS né CSP"),
+    ("prova_cronologia_pagina.py", [], "cronologia delle schede e conversazione nella pagina vera: riavvio del server, schermo nuovo che ritrova schede e chat, turno nuovo in fondo senza riscrivere, Scarica, stanza vuota, Pulisci con due tocchi, vista dello sviluppo dopo un riavvio, telefono con la conversazione nella sezione (schede piccole, filtri, ricerca, misure), nessun errore JS né CSP"),
+    ("prova_cassetto_pagina.py", [], "scheda del cassetto nella pagina vera: carosello (miniatura, sigle), Tieni solo dove si può, Tieni ancora, Tieni, niente Elimina (dal 28/10 sera si elimina a voce), schermo di un'altra persona vuoto, nessun errore JS né CSP"),
     # ~15 s: la pagina in Edge o Chromium senza finestra; senza browser si salta
     ("prova_immagini_pagina.py", [], "foto nella pagina vera: pulsante, file scelto, incolla, trascina, SVG rifiutato, scheda con la miniatura"),
     # ~40 s: Calliope vera con un satellite finto; senza voci di Piper o modelli si salta
@@ -231,13 +246,38 @@ A_SECCO = [
     ("prova_telefono_pagina.py", [], "telefono nel browser vero: wake word e VAD come in Python, niente audio senza il nome, voce e barge-in"),
     # ~12 s: abbinamento del telefono che riprende dopo la pagina sospesa (iOS); con Edge o
     # Chromium anche nel browser vero, senza si fa solo la parte a secco
+    ("prova_parla_pc.py", [], "«Parla» sul PC personale (27/10, passo 1b): il satellite legato prende il posto e riceve «tocco», /api/accedi e /api/parla sul server vero (solo schermo personale legato, 403, 409, 401, 429), il satellite allunga la finestra senza il nome (al più 30 s) e il Listener usa la più lontana"),
+    ("prova_pc_pagina.py", [], "schermo personale del PC a sezioni nella pagina vera (27/10, passo 1b): stanza invariata, smistamento di sezioni.js, barra e indietro, «Parla» fino al satellite, casella a destra e file trascinato, tre colonne a 1440 e 1100, conversazione dietro il pulsante a 1000, barra in basso a 700, contrasto e clic, pagine Liste e Agenda coi tocchi, Lavori, Cassetto e Giochi, Documenti e Ufficio con la ricerca, conversazione con le schede piccole e i filtri, nessun errore JS né CSP"),
+    ("prova_aspetto.py", [], "aspetto dei satelliti personali (27/10, passo 1c): accenti con contrasto AA e il lilla di serie anche nei CSS, sezioni nascoste per età (12 anni, il giorno dei 13, senza data), la preferenza salvata e tolta con «svuota», /api/accedi e /api/aspetto sul server vero (personale sì, stanza no, evento a tutte le pagine della persona)"),
+    ("prova_sezioni.py", [], "telefono a sezioni (27/10): SEZIONE_DI_TIPO uguale in schede.py e schermo.js, ogni tipo con la sua casa e il suo elenco, la sezione scritta dal server (anche nella scheda dello sviluppo), la regola «viva» per tipo e il router sul frammento (con node)"),
+    ("prova_telefono_consapevole.py", [], "quello che Calliope dice del telefono e dello schermo personale (28/10, #288–#291): la nota del dispositivo con lo schermo personale aperto, chiuso o assente (ospite e zona grigia mai, Casa sotto i 13 anni, Ufficio per chi non amministra, lo scritto dallo schermo personale), il paragrafo delle sezioni nel prompt (token stimati) e il prefisso uguale fra turni e persone, i due casi del 28/10 nel Brain (nota, prompt, schermo_mostra con la pagina, campo dispositivo); schermo_mostra con cosa=pagina (aperto, chiuso, assente, ospite, zona grigia, Ufficio, minore, forme, classe sicura, fuori dai tocchi, Schermi.apri_pagina col solo nome); i lavori e i documenti rimasti in casa senza «server» né «satellite» (Le mie cose › Lavori e programmi con lo schermo abbinato), documento_crea «lo consegna a chi parla»; protocollo e pagina del telefono nella riga «[SATELLITE] collegato» sul server vero, una versione fuori forma no"),
+    ("prova_raccolte.py", [], "Le mie cose e il canale «tocco» (28/10, passo 2a): tessere dai servizi (conti, Ufficio solo a chi amministra, servizio mancante o rotto «non disponibile»), pagina Liste, tocchi.prepara (sconosciuto, dati non validi, voce sparita 409, voci ambigue 422), /api/raccolte e /api/tocco sul server vero (personale sì, stanza 403, 401, 429) e il ciclo: ToolRegistry.call col livello del proprietario, registro esito e canale «tocco», la riga nella storia, rifiuti per voce, livello e minore, detto_persona col canale «tocco»; #266: col vincolo e lo ToolSpec del registro, la spunta su un lista_togli non fidato o solo per chi amministra rifiutata; «tutto.» 422; #274: il resto del corpo JSON letto prima di chiudere (niente reset sotto carico)"),
+    ("prova_conversazione_schede.py", [], "Conversazione con le schede dentro e i filtri (28/10, passo 3, #242): la scheda del turno (copia storica, rimando, niente; tetto), Brain la lega al turno solo con l'identità certa (anche il tocco), turni() con oscura e riservato, i canali voce/scritto/tocco/modulo, il modulo nella storia col canale, chat_filtra (oggi, ieri, solo schede, ricerca con testo ostile, mai turni d'altri), /api/conversazione sul server vero (solo il proprietario, tutore e ragazzo separati, stanza 403, 401, 400, 413, 429); dalla revisione della PR #271 il riservato che non passa da una scheda, la stima dei token, le copie leggere e il dettaglio, foto e file mai legati"),
+    ("prova_agenda_pagina.py", [], "pagina Agenda, tasti del timer e vincolo dei tocchi (28/10, passo 2b, #257 e #262): tocchi ammessi solo su tool di classe nota e reversibile (pericoloso, senza classe, dati non fidati, irreversibile, oltre E2, ToolSpec che declassa: no; all'import, in prepara e nel ciclo senza chiamare il tool), contesto del turno di prima azzerato e rimesso, vista per giorno ai bordi (mezzanotte, sesto e settimo giorno, ora legale), pagina coi timer di casa e i promemoria della persona, «+1 minuto» e «Ferma» sul timer toccato (non l'ultimo messo) fino al registro e alla storia, timer suonato nel frattempo, /api/raccolte e /api/tocco sul server vero (409, 429); #266: solo i TOCCABILI, gli ESCLUSI rifiutati (dimentica, catture, rubrica, tutore, agente, voce), la fonte non fidata anche per un'«azione», l'hub vero con due stanze (stanza predefinita, tutti, la sua), livello del mittente, conv_archivio; PR #270: aggiornamento dove la scheda c'è (cucina sì, telefono d'altri no), traccia col tetto, conv_archivio del modulo, timer finito, TOCCHI immutabile; numero degli schermi riusato dopo una revoca da terminale (Ferma, collegamento, sessione); #275: elementi in coda con l'istante dell'abbinamento, corsa fra abbinati() e il lock, Giochi.ascolto su una copia dei posti"),
+    ("prova_schermi_proprietario.py", [], "cambio di proprietario dello stesso schermo (31/10, #338): la scheda personale di Dario in memoria non torna alla pagina di Bianca dopo «rendilo personale di Bianca» (tool vero) e dopo _allinea_schermo del satellite, la risposta scritta e il tocco di Dario in coda non vanno allo schermo di Bianca né nella sua cronologia su disco, la pagina aperta di prima riceve «proprietario» (non «revocato»), corse fra abbinati() e il lock di invia, invia_a ed eventi personali; abbinati() pubblica l'elenco dopo le identità, aggiorna con l'identità dello schermo del tocco, per_schermo e _allinea_schermo non seguono un numero riusato; contrari: ricollegamento, token rinnovato, SSE riaperto, stesso proprietario rimesso, condiviso → personale; server vero (proprietario nell'elemento in coda, flusso chiuso con «proprietario», benvenuto di Bianca senza la scheda di Dario); dalla revisione della PR #341 il benvenuto preparato mentre lo schermo cambia (niente conversazione né contesto di Dario, «Scarica» della chat solo per la persona), chat_nuovi e pulisci_schede in corsa, i posti dei giochi con l'identità"),
+    ("prova_schermi_proprietario_pagina.py", [], "cambio di proprietario nella pagina vera (31/10, revisione della PR #341, #338): PC personale e telefono aperti su Le mie cose › Agenda di Dario, lo schermo diventa di Bianca (archivio come il tool; satellite reso di Bianca): la pagina si ricarica da capo col token, nel DOM non resta il promemoria di Dario, collegata come schermo di Bianca con la sua Agenda, nessun errore JS né CSP"),
+    ("prova_pagine_cose.py", [], "pagine Lavori e programmi, Cassetto e Giochi (28/10, passo 2c, #258): sviluppi, lavori in corso con la scheda in diretta della cronologia (non quella di un avvio di prima), la domanda, i programmi, i finiti in memoria e dalla cartella dei risultati, della persona e, per chi amministra, quelli degli altri (minori compresi) col nome in una sezione a parte (2d, decisione del 28/10; un familiare mai), la frase di lavoro_stato sui soli suoi (anche per chi amministra), schede finali costruite una volta (lock, file riscritto con lo stesso nome), estensione approvata senza «da approvare»; cassetto vuoto del figlio; cassetto della persona e del figlio al tutore in sola lettura (non ad altri adulti), «Tieni» non ai minori, chiave della pagina; giochi di casa col livello del manifesto e quelli abilitati al minore, partite aperte della persona (qui, a chi tocca, punti), giochi spenti; servizi che mancano o sollevano; /api/raccolte sul server vero («Scarica» registrato e tolto dalla pagina, il tasto del cassetto come prima, ospite 403)"),
+    ("prova_pagina_documenti.py", [], "pagina Documenti (28/10, passo 2d, #259): fatti da Calliope (i propri; chi amministra anche quelli di Bianca e dei minori col nome; un familiare mai quelli di Dario; un minore i suoi, col preset «documenti: no» nessuno), archivio di casa per tipo coi permessi della voce (chi amministra tutto; un familiare non i personali degli altri; un minore niente), di chi è e «Scarica» del file originale (tipo e nome con gli accenti, permessi rifatti al clic, file tolto 404), ricerca con le stesse regole e testo ostile, servizi che mancano o sollevano, /api/raccolte/cerca sul server vero (20 al minuto, ospite 403, 400), scaricamento vero, annuncio con lo schermo abbinato ma chiuso; dalla revisione della PR #268: più di 8 documenti (nota, ricerca su tutti, tessera), sole parole vuote, tessera di chi amministra, voci di «Scarica» per schermo, originale riletto col tipo vero, file_di mai fuori dalla cartella (.., assoluto, giunzione NTFS) né oltre archivio_max_mb; dalla seconda revisione: parole corte e pertinenza nella ricerca, nome di «Scaricato» uguale al file salvato, voci degli schermi revocati tolte"),
+    ("prova_pagina_ufficio.py", [], "pagina Ufficio (28/10, passo 2e, #260), solo chi amministra: fatture, note di credito, preventivi, DDT e serie dei modelli da Numeratore.elenco (numero, data, cliente, importo salvato, emessa o annullata col motivo, in preparazione, al più 20 per serie), «Scarica» del PDF e dell'XML (tipo e nome, permessi rifatti al clic, file tolto o fuori dal registro 404), rubrica (di casa e sua, non i personali degli altri); familiare, minore anche col segno di chi amministra e ospite 404 su pagina, ricerca e «Scarica»; ricerca per numero, cliente, comune, partita IVA, parole corte e vuote, testo ostile; servizio che manca (nota) o che solleva (503); nomi ostili come dato; server vero (200, 404, 403, XML scaricato)"),
     ("prova_telefono_abbina.py", [], "telefono: abbinamento che riprende (ripresa segreta, token una volta sola, niente orfani), sessione che riprende al ritorno in primo piano"),
     # ~70 s: diagnostica e microfono del telefono; con Edge o Chromium e una voce di Piper anche
     # nel browser vero (microfono finto a 44,1 e 48 kHz, contesto forzato), Whisper se in cache
     ("prova_telefono_audio.py", [], "telefono: audio del microfono giusto (durata, contenuto, contesto rifatto), «Prova il microfono» e il suo endpoint"),
     # ~10 s: schermo acceso e vista da guida, in Edge o Chromium (senza si salta) con una
     # Screen Wake Lock API finta che vuole il gesto come WebKit
-    ("prova_telefono_schermo.py", [], "telefono: schermo tenuto acceso col microfono (richiesta nel tocco, ripresa, avviso se negato o assente, versioni di iOS), vista da guida in uno schermo a 3 dimensioni"),
+    ("prova_studio_tutore_pagina.py", [], "la vista del tutore e le indicazioni nella pagina vera (31/10, #250 e #285, passo 10): il telefono del tutore a 390×844 e 320×693 (anche col testo al 125 %), la padronanza alla cieca, il giudizio, «Era giusta» del tutore, l'indicazione scritta con dell'HTML (resta testo) e cambiata; il telefono del minore con l'indicazione e senza la vista del tutore; il PC personale del tutore; niente di lato, tocchi ≥ 44 px; nessun errore JavaScript né violazione della CSP"),
+    ("prova_studio_condividi_pagina.py", [], "la condivisione dal telefono allo Studio nella pagina vera (31/10, #298 parte 3): il POST della condivisione preso dal service worker vero, il riquadro «Condiviso con Calliope» coi nomi (l'HTML resta testo), «Aggiungi ai materiali» spento finché la persona non sceglie la verifica, i file mandati con la stessa importazione e tolti dal telefono, «Apri lo Studio»; «?condividi=0»; a 390×844 e 320×693 col testo al 125 %; nessun errore JavaScript né violazione della CSP"),
+    ("prova_studio_importa_pagina.py", [], "«Aggiungi materiali» dello Studio nella pagina vera (31/10, #298): sul telefono del minore tre file mandati dalla pagina (uno ZIP, un testo, un nome in HTML che resta testo) col lavoro di sfondo vero, la scheda con le fasi e i conti che si aggiorna da sola, «I file»; a 390×844 e 320×693 col testo al 125 %, niente di lato, tocchi ≥ 44 px; il PC personale; nessun errore JavaScript né violazione della CSP"),
+    ("prova_studio_premi_pagina.py", [], "i premi dello Studio nella pagina vera (31/10, #296): il telefono del tutore coi premi del minore e gli interruttori (i duelli accesi dal tocco), il telefono del minore con la serie, la stella e il duello proposto, aperto senza risposte attese, consegnato con dell'HTML (resta testo) e finito coi punti; a 390×844 e 320×693 col testo al 125 %; niente di lato, tocchi ≥ 44 px; nessun errore JavaScript né violazione della CSP"),
+    ("prova_studio_esercizi_pagina.py", [], "gli esercizi guidati nella pagina vera (31/10, #278): la foto di un problema e il testo scritto, i passi con la risposta nel campo, l'esito del codice, l'indizio, salta, finito; il tutore che vede e non risponde; la prova aperta; a 390×844, 320×693 col testo al 125 % e sul PC; il testo del problema solo come testo; niente di lato, tocchi ≥ 44 px; nessun errore JavaScript né violazione della CSP"),
+    ("prova_studio_ascolta_pagina.py", [], "il ripasso da ascoltare nella pagina vera (31/10, #249, passo 9): telefono a 390×844 e 320×693 (anche col testo al 125 %) e PC personale legato a un satellite; le parti col titolo come testo, l'audio preparato e suonato dal blob, pausa, velocità, −15 s, la voce che lo ferma e lo fa ripartire, la stanza del telefono come «Calliope parla» e quella del satellite del PC in pausa (mai quella di una persona), la prova aperta che lo ferma; niente di lato, tocchi ≥ 44 px; nessun errore JavaScript né violazione della CSP"),
+    ("prova_studio_prove_pagina.py", [], "le prove dello Studio nella pagina vera (31/10, #248, passo 8): telefono a 390×844 e 320×693 (anche col testo al 125 %) e PC personale; «Verifica finta» con le domande e nessuna risposta attesa nella pagina né nello stato, le risposte salvate sul server, «Consegna» con la correzione a parole, i tentativi del codice, «Era giusta» della persona, «Le domande» e «Scrivi una domanda» (l'HTML resta testo); niente di lato, tocchi ≥ 44 px; nessun errore JavaScript né violazione della CSP"),
+    ("prova_studio_mappa_libera_pagina.py", [], "la mappa libera dello Studio nella pagina vera (30/10, #328, passo 7c): telefono a 390×844 e 320×693 e PC personale; la scheda «Da zero», lo scheletro nascosto (pagina e stato), «+ Concetto» (l'HTML resta testo) e «Collega», «Un indizio» con la pagina e «Mostra», «Ho finito» col confronto, i tentativi del codice, gli indicatori e «Parliamone», le schede che tornano; la mappa disegnata sul PC; niente di lato, tocchi ≥ 44 px; nessun errore JavaScript né violazione della CSP"),
+    ("prova_studio_mappa_pagina.py", [], "la mappa concettuale dello Studio nella pagina vera (30/10, #247, passo 7): telefono a 390×844 e 320×693 e PC personale; lo scheletro a elenco, «Parti da qui» con l'aiuto, le caselle coi campi e le parole, «Metti» e «Controlla» (gli esiti e i tentativi del codice), «+ Concetto» e «Collega» coi moduli, la vista «Mappa» in SVG col testo in textContent (l'HTML resta testo), il pannello del concetto con le frecce per spostarlo, «Scarica PDF»; niente di lato, tocchi ≥ 44 px, testo ≥ 16 px; la vista al server; nessun errore JavaScript né violazione della CSP; il collegamento debole tratteggiato e con la sua frase (revisione della PR #346)"),
+    ("prova_studio_home_pagina.py", [], "la home dello Studio nella pagina vera (30/10, #284, passo 4.5): telefono a 390×844, 320×693 e col testo grande, PC personale; prossima verifica con data, obiettivo e previsione, oggi, tappe, «Impara» soltanto, «Da decidere» col perché, la pagina da parte; «Tieni», «Riprova» e le due domande come tocchi; «Fatto» col resoconto, «La preparazione» e «Le sessioni» (30/10, #244); la vista aperta al server; nessun errore JS né CSP"),
+    ("prova_studio_libreria_pagina.py", [], "la libreria dello Studio nella pagina vera (31/10, #297): «Dalla libreria» con scheda e carte per argomento, «Apri» con le sezioni e «Prova tu», le soluzioni solo dopo «Mostra la soluzione», «Aggiungi le carte» e la sezione Carte aggiornata, un prerequisito dalla scheda, la vista «libreria» al server; misure a 390×844, 320×693 e col testo grande, il PC personale; nessun errore JS né CSP"),
+    ("prova_studio_pagina_telefono.py", [], "lo Studio nella pagina vera del telefono (29/10, #281, passo 4.2): la tessera apre la pagina, galleria con due foto e un PDF (bordi di bordi.js, miniature), fotocamera finta con due scatti, ordine su e giù, togli, rifai, misure a 390×844 e 320×693, invio nell'ordine al server, nessun errore JS né CSP"),
+    ("prova_telefono_schermo.py", [], "telefono: schermo tenuto acceso col microfono (richiesta nel tocco, ripresa, avviso se negato o assente, versioni di iOS), sezioni (smistamento, schede vive in Adesso, novità, router, Io, In auto) a 3 dimensioni, Le mie cose (tessere, pagina Liste e spunta, pagina Agenda e tasti del timer, pagine Lavori, Cassetto e Giochi, pagina Documenti con «Scarica» e la ricerca, pagina Ufficio di chi amministra con «Scarica XML» e la ricerca); le schede della pagina Agenda una per una a due dimensioni (#266)"),
     ("prova_agenti.py", [], "agenti: tunnel con ssh finto, sandbox, Ollama finto, arbitro, tool, permessi"),
     ("prova_archivio.py", [], "archivio dei documenti di casa: grafo, deduplicazione, permessi, tool, agente, riprocessamento"),
     # ~12 s: docker finto, container usa-e-getta simulati
@@ -313,13 +353,12 @@ CON_OLLAMA = [
     ("prova_chi_sei_ollama.py", ["1"], "chi sei, novità, versione e «cosa sai fare?» per aree con il modello (09/10): tool e argomenti giusti, niente invenzioni su di sé, contrari"),
     ("prova_personalita_ollama.py", ["1"], "tono di voce chiesto a voce (cambia_voce con tono, per_tutti) e tool dopo il cambio"),
     ("prova_modalita_ollama.py", ["1"], "modalità Star Trek chiesta a voce (cambia_voce con modalita), «non sento i suoni», tool dopo il cambio, i toni restano toni"),
-    ("prova_esercizi_ollama.py", ["--giri", "1"], "esercizi a voce con il modello (08/10): un giro di 10 esercizi per materia con risposte giuste, sbagliate, indizi e segnalazioni simulate; correzioni giuste, tool chiamato, tempi, secondo parere vero sugli esercizi d'italiano"),
-    ("prova_esercizi_programma_ollama.py", ["--giri", "1"], "fase B dell'indice col modello (12/10 sera, il 4B del profilo ridotto): inizio con «a che punto siete», a_che_punto mappato, risposta, piu_difficile, fuori programma e oltre, interrogazione con la domanda aperta giudicata, la pagina chiesta; turni giusti, tool, prima frase; soglia 0,75"),
-    ("prova_minori_ollama.py", ["--giri", "1"], "minori (05/10): richieste esplicite, aggiramenti, pericolo, compiti con 5 tentativi, tool, contrari per gli adulti, con il guardiano"),
+    ("prova_minori_ollama.py", ["--giri", "1"], "minori (05/10): richieste esplicite, aggiramenti, pericolo, compiti senza la soluzione intera (dal 28/10 solo la regola, #279), tool, contrari per gli adulti, con il guardiano"),
     ("prova_schermi_ollama.py", ["1"], "schermi a voce con il modello e il server vero; latenza"),
     ("prova_agenti_ollama.py", ["1"], "delega, stato e annullo a voce con il modello (agente finto)"),
     ("prova_archivio_ollama.py", ["1"], "documenti di casa a voce con il modello (archivio finto)"),
     ("prova_web_ollama.py", ["1"], "ricerca su internet a voce (SearXNG finto): biblioteca o web, iniezione, privacy"),
+    ("prova_studio_ollama.py", ["1"], "lo Studio a voce col modello vero (30/10, #284): crea la verifica di giovedì, «cosa devo studiare oggi?», «non ce la faccio oggi», la vista aperta con «spostala a domani», «spiegami la pagina 114», la pagina ostile senza azioni e col dubbio, i compiti guidati senza soluzioni"),
     ("prova_notizie_ollama.py", ["1"], "notizie a voce (13/10, feed di fantasia): «le notizie», «dimmi di più sulla seconda», la testata dai fatti nel contesto, tecnologia e meteo, iniezione in un sommario"),
     ("prova_ricerche_distanza_ollama.py", ["1"], "ricerche a distanza di turni (09/10, giro vero della DGX): «le ultime notizie» senza chiamate fermate, «prima mi parlavi di un festival» → quello di oggi dalla fonte giusta e non quello di ieri, contrario «ieri … Borgo Lieto», «quella cosa delle proteste» in una conversazione aperta; misure: nuova ricerca sulla stessa fonte, archivio non chiamato"),
     ("prova_ricerca_seguito_ollama.py", ["1"], "approfondire dopo una ricerca (09/10, caso vero della DGX: «Approfondiamo le condizioni [del re]» dopo le notizie, senza cercare): nuova ricerca mirata, contrari (chiacchierata, lista della spesa, internet spento); prima e dopo"),
@@ -383,6 +422,8 @@ def keep_alive_della_voce():
 # OBBLIGATORIO prima dell'unione su main.
 # Le durate tra parentesi sono del 06/10 sul portatile, nel gruppo parallelo.
 LIVELLO_2 = {
+    "prova_studio_pagine.py",        # ~35 s (29/10, #281: le foto di fantasia, node e il server)
+    "prova_studio_importa.py",       # ~25 s (31/10, #298: il sottoprocesso vero e il server)
     "prova_casa_ha.py",              # 13 s
     "prova_sfida_esito.py",          # ~1 s (16/10, #94)
     "prova_risposta_sospeso.py",     # ~1 s (16/10, #98)
@@ -433,8 +474,6 @@ LIVELLO_2 = {
     "prova_frase_lunga.py",          # ~6 s (10/10)
     "prova_fine_turno.py",           # ~3 s (14/10)
     "prova_preselezione.py",         # ~4 s (15/10)
-    "prova_esercizi.py",             # 8 s (08/10)
-    "prova_materie.py",              # ~9 s (12/10)
     "prova_searxng_aggiorna.py",     # 5 s (09/10)
 }
 LIVELLO_3 = {
@@ -443,9 +482,20 @@ LIVELLO_3 = {
     "prova_telefono_audio.py", "prova_telefono_schermo.py", "prova_satellite.py",
     "prova_corsie_satelliti.py", "prova_installa_satellite.py", "prova_cruscotto_pagina.py",
     "prova_scheda_intera.py", "prova_markdown_pagina.py", "prova_cassetto_pagina.py",
-    "prova_esercizi_pagina.py", "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
+    "prova_vista_sviluppo_pagina.py", "prova_cronologia_pagina.py",
     "prova_compagnia_pagina.py", "prova_frase_lunga_voce.py", "prova_stanza_voce.py",
     "prova_cdp_orfani.py", "prova_gioco_stato_pagina.py", "prova_fine_turno_voce.py",
+    "prova_pc_pagina.py", "prova_studio_pagina_telefono.py", "prova_studio_home_pagina.py",
+    "prova_studio_mappa_pagina.py", "prova_studio_mappa_libera_pagina.py",
+    "prova_studio_prove_pagina.py", "prova_schermi_proprietario_pagina.py",
+    "prova_studio_ascolta_pagina.py", "prova_studio_tutore_pagina.py",
+    "prova_studio_libreria_pagina.py",
+    "prova_studio_premi_pagina.py",
+    "prova_studio_esercizi_pagina.py",
+    # «Aggiungi materiali» dello Studio nella pagina vera (31/10, #298)
+    "prova_studio_importa_pagina.py",
+    # La condivisione dal telefono (31/10, #298 parte 3): il service worker vero nel browser
+    "prova_studio_condividi_pagina.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -526,6 +576,7 @@ LEGAMI = [
     # I conoscenti (14/10, decisione 0030): i tool, i tasti della proposta, la scheda
     ("calliope/tools/conoscenti.py", ["prova_stanza_conoscenti.py", "prova_politica.py"]),
     ("calliope/schermi/server.py", ["prova_stanza_conoscenti.py"]),
+    ("calliope/schermi/server.py", ["prova_raccolte.py"]),        # il resto del corpo (#274)
     ("calliope/schermi/cronologia.py", ["prova_stanza_conoscenti.py"]),
     # Il conoscente nei turni rivolti a Calliope (14/10 sera, rifiniture)
     ("calliope/ciclo.py", ["prova_stanza_conoscenti.py"]),
@@ -536,6 +587,19 @@ LEGAMI = [
     ("calliope/minori.py", ["prova_stanza_guardia.py"]),
     # Passo 6 (14/10 sera): la modalità gioco chiede a Giochi.in_corso; main collega le due
     ("calliope/schermi/giochi.py", ["prova_stanza_guardia.py"]),
+    # Gli elementi in coda con l'istante dell'abbinamento (#275)
+    ("calliope/schermi/hub.py", ["prova_agenda_pagina.py"]),
+    ("calliope/rispondi.py", ["prova_agenda_pagina.py"]),
+    ("calliope/schermi/giochi.py", ["prova_agenda_pagina.py"]),
+    # Il proprietario nell'identità dello schermo (#338)
+    ("calliope/schermi/hub.py", ["prova_schermi_proprietario.py"]),
+    ("calliope/schermi/archivio.py", ["prova_schermi_proprietario.py"]),
+    ("calliope/schermi/server.py", ["prova_schermi_proprietario.py"]),
+    ("calliope/schermi/pagina/schermo.js", ["prova_schermi_proprietario.py"]),
+    ("calliope/schermi/giochi.py", ["prova_schermi_proprietario.py"]),
+    ("calliope/satellite/server.py", ["prova_schermi_proprietario.py"]),
+    ("calliope/tools/schermi.py", ["prova_schermi_proprietario.py"]),
+    ("calliope/rispondi.py", ["prova_schermi_proprietario.py"]),
     # Avvisi con la data e l'origine (14/10): minori, cancelli, ciclo, stato, tool dei minori
     ("calliope/minori.py", ["prova_avvisi_data.py"]),
     ("calliope/cancelli.py", ["prova_avvisi_data.py"]),
@@ -568,18 +632,153 @@ LEGAMI = [
     ("calliope/rivolta.py", ["prova_stanza_contesto.py", "prova_compagnia_passo0.py"]),
     ("calliope/satellite/stanza.py", ["prova_stanza.py", "prova_stanza_eco.py"]),
     ("calliope/notizie/", ["prova_notizie.py"]),
+    # Lo Studio (29/10, #280): dati, piano e permessi; la tenuta passa da conserva.py
+    ("calliope/studio/", ["prova_studio_piano.py", "prova_conserva.py"]),
+    # Le pagine dello Studio (29/10, #281): il controllo del server, l'endpoint e la pagina
+    ("calliope/studio/", ["prova_studio_pagine.py"]),
+    ("calliope/immagini.py", ["prova_studio_pagine.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_pagine.py"]),
+    ("calliope/schermi/raccolte.py", ["prova_studio_pagine.py"]),
+    ("calliope/schermi/pagina/bordi.js", ["prova_studio_pagine.py", "prova_studio_pagina_telefono.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_pagina_telefono.py", "prova_studio_home_pagina.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_tool.py", "prova_politica.py"]),
+    ("calliope/studio/vista.py", ["prova_studio_tool.py"]),
+    ("calliope/studio/", ["prova_studio_tool.py"]),
+    # Resoconto e riepilogo (30/10, #244): eventi, proiezioni, frasi, tool e home
+    ("calliope/studio/", ["prova_studio_resoconto.py"]),
+    # La padronanza (30/10, #245)
+    ("calliope/studio/", ["prova_studio_padronanza.py"]),
+    # Le carte (30/10, #246): il ripasso, i tentativi, il tool a voce, l'endpoint e la pagina
+    ("calliope/studio/", ["prova_studio_carte.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_carte.py", "prova_valore.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_carte.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_carte.py"]),
+    ("calliope/brain.py", ["prova_studio_carte.py"]),
+    # La libreria (31/10, #297): contenuti, verità, indice, scelta, servizio, tool, endpoint e pagina
+    ("calliope/studio/", ["prova_studio_libreria.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_libreria.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_libreria.py"]),
+    ("prove/verita_libreria.py", ["prova_studio_libreria.py"]),
+    # Le mini-app (31/10, #297, parte 2): contenuti, giochi, tool, tocchi e pagina
+    ("calliope/studio/", ["prova_studio_miniapp.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_miniapp.py"]),
+    ("calliope/schermi/giochi.py", ["prova_studio_miniapp.py"]),
+    ("calliope/schermi/tocchi.py", ["prova_studio_miniapp.py"]),
+    ("calliope/estensioni/", ["prova_studio_miniapp.py"]),
+    ("calliope/agenti/fumo_js.mjs", ["prova_studio_miniapp.py"]),
+    ("prove/verita_miniapp.mjs", ["prova_studio_miniapp.py"]),
+    # La preparazione dietro le quinte (31/10, #297, parte 3)
+    ("calliope/studio/", ["prova_studio_preparazione.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_preparazione.py"]),
+    ("calliope/schermi/giochi.py", ["prova_studio_preparazione.py"]),
+    ("calliope/estensioni/", ["prova_studio_preparazione.py"]),
+    ("prove/manuali/banco_studio.py", ["prova_studio_preparazione.py"]),
+    ("calliope/schermi/pagina/sezioni.js", ["prova_studio_libreria_pagina.py"]),
+    ("calliope/schermi/pagina/libreria.js", ["prova_studio_libreria_pagina.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_libreria_pagina.py"]),
+    ("calliope/schermi/pagina/schermo.css", ["prova_studio_libreria_pagina.py"]),
+    # La mappa concettuale (30/10, #247): dati, controllo, tool, endpoint, PDF e la pagina
+    ("calliope/studio/", ["prova_studio_mappa.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_mappa.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_mappa.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_mappa.py", "prova_studio_mappa_pagina.py"]),
+    ("calliope/schermi/pagina/schermo.js", ["prova_studio_mappa_pagina.py"]),
+    ("calliope/schermi/pagina/schermo.css", ["prova_studio_mappa_pagina.py"]),
+    ("calliope/documenti/render.py", ["prova_studio_mappa.py"]),
+    ("calliope/politica.py", ["prova_studio_mappa.py"]),
+    # Lo scheletro generato (30/10, #247, seconda parte): il lettore, l'harness e il banco
+    ("calliope/studio/", ["prova_studio_mappa_genera.py"]),
+    # La mappa libera e «Parliamone» (30/10, #328, passo 7c)
+    ("calliope/studio/", ["prova_studio_mappa_libera.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_mappa_libera.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_mappa_libera.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_mappa_libera_pagina.py"]),
+    ("prove/prova_studio_mappa.py", ["prova_studio_mappa_libera.py"]),
+    ("prove/manuali/banco_studio.py", ["prova_studio_mappa_genera.py"]),
+    ("prove/prova_studio_argomenti.py", ["prova_studio_mappa_genera.py"]),
+    # Le carte generate (30/10, #246, seconda parte): il lettore, l'harness e il banco
+    ("calliope/studio/", ["prova_studio_carte_genera.py"]),
+    ("prove/manuali/banco_studio.py", ["prova_studio_carte_genera.py", "prova_studio_banco.py"]),
+    ("prove/prova_studio_argomenti.py", ["prova_studio_carte_genera.py"]),
+    ("calliope/config.py", ["prova_studio_padronanza.py"]),
+    # Le prove (31/10, #248, passo 8): risposte, verifica finta, orale, endpoint, generazione
+    ("calliope/studio/", ["prova_studio_prove.py", "prova_studio_domande_genera.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_prove.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_prove.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_prove.py", "prova_studio_prove_pagina.py"]),
+    ("calliope/brain.py", ["prova_studio_prove.py"]),
+    ("prove/manuali/banco_studio.py", ["prova_studio_domande_genera.py"]),
+    # Il ripasso da ascoltare (31/10, #249, passo 9): copione, voce, schermo, tenuta
+    ("calliope/studio/", ["prova_studio_ascolta.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_ascolta.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_ascolta.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_ascolta.py", "prova_studio_ascolta_pagina.py"]),
+    ("calliope/schermi/pagina/telefono/", ["prova_studio_ascolta.py"]),
+    ("calliope/pronuncia.py", ["prova_studio_ascolta.py"]),
+    ("calliope/eventi/uscita.py", ["prova_studio_ascolta.py"]),
+    ("calliope/ciclo.py", ["prova_studio_ascolta.py"]),
+    ("calliope/tts.py", ["prova_studio_ascolta.py"]),
+    ("calliope/conserva.py", ["prova_studio_ascolta.py"]),
+    ("calliope/satellite/server.py", ["prova_studio_ascolta.py"]),
+    ("prove/prova_studio_argomenti.py", ["prova_studio_domande_genera.py"]),
+    ("prove/studio_vllm_finto.py", ["prova_studio_mappa_genera.py",
+                                    "prova_studio_domande_genera.py"]),
+    ("prove/manuali/studio/", ["prova_studio_mappa_genera.py", "prova_studio_domande_genera.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_resoconto.py"]),
+    ("calliope/schermi/tocchi.py", ["prova_studio_tool.py"]),
+    # Gli esercizi guidati (31/10, #278): la guida, i passi, la guardia di Brain, la pagina
+    ("calliope/studio/", ["prova_studio_esercizi.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_esercizi.py"]),
+    ("calliope/brain.py", ["prova_studio_esercizi.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_esercizi.py"]),
+    ("calliope/schermi/pagina/esercizio.js", ["prova_studio_esercizi_pagina.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_esercizi_pagina.py"]),
+    # La vista del tutore e le indicazioni (31/10, #250 e #285, passo 10)
+    ("calliope/studio/", ["prova_studio_tutore.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_tutore.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_tutore.py"]),
+    ("calliope/brain.py", ["prova_studio_tutore.py"]),
+    ("calliope/politica.py", ["prova_studio_tutore.py"]),
+    ("calliope/valore.py", ["prova_studio_tutore.py"]),
+    ("calliope/conserva.py", ["prova_studio_tutore.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_tutore.py", "prova_studio_tutore_pagina.py"]),
+    ("calliope/schermi/pagina/schermo.css", ["prova_studio_tutore_pagina.py"]),
+    # I premi dello Studio (31/10, #296): serie, stelle e duelli
+    # L'importazione dei materiali (31/10, #298): il sottoprocesso, l'endpoint e la pagina
+    ("calliope/studio/", ["prova_studio_importa.py"]),
+    # La condivisione dal telefono (31/10, #298 parte 3)
+    ("calliope/schermi/pagina/telefono/", ["prova_studio_condividi.py", "prova_studio_condividi_pagina.py"]),
+    ("calliope/schermi/telefono.py", ["prova_studio_condividi.py"]),
+    ("calliope/schermi/pagina/studio_importa.js", ["prova_studio_condividi_pagina.py"]),
+    ("calliope/allegati.py", ["prova_studio_importa.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_importa.py"]),
+    ("calliope/conserva.py", ["prova_studio_importa.py"]),
+    ("calliope/schermi/pagina/studio_importa.js", ["prova_studio_importa_pagina.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_importa_pagina.py"]),
+    ("calliope/schermi/pagina/schermo.js", ["prova_studio_importa_pagina.py"]),
+    ("calliope/schermi/pagina/schermo.css", ["prova_studio_importa_pagina.py"]),
+    ("calliope/studio/", ["prova_studio_premi.py"]),
+    ("calliope/tools/studio.py", ["prova_studio_premi.py"]),
+    ("calliope/schermi/server.py", ["prova_studio_premi.py"]),
+    ("calliope/politica.py", ["prova_studio_premi.py"]),
+    ("calliope/conserva.py", ["prova_studio_premi.py"]),
+    ("calliope/config.py", ["prova_studio_premi.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_premi_pagina.py"]),
+    ("calliope/schermi/pagina/schermo.js", ["prova_studio_premi_pagina.py"]),
+    ("calliope/schermi/pagina/schermo.css", ["prova_studio_premi_pagina.py"]),
+    ("prove/manuali/studio_immagini.py", ["prova_studio_pagine.py"]),
+    ("calliope/conserva.py", ["prova_studio_piano.py"]),
+    ("calliope/minori.py", ["prova_studio_piano.py"]),
     ("calliope/tools/archivio.py", ["prova_archivio.py"]),
     ("calliope/tools/immagini.py", ["prova_immagini.py"]),
     ("calliope/tools/allegati.py", ["prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/cassetto.py", ["prova_cassetto.py"]),
-    ("calliope/tools/minori.py", ["prova_minori.py", "prova_giochi.py", "prova_esercizi.py"]),
-    # Esercizi (08/10): il pacchetto, il tool, la scheda e il dato del turno dei minori
-    ("calliope/esercizi/", ["prova_esercizi.py", "prova_materie.py"]),
-    ("calliope/tools/esercizi.py", ["prova_esercizi.py", "prova_materie.py"]),
-    # Materie calcolabili e unità di misura (12/10): anche la pronuncia dei simboli
-    ("calliope/unita.py", ["prova_materie.py", "prova_pronuncia.py"]),
-    ("calliope/minori.py", ["prova_esercizi.py"]),
-    ("calliope/schermi/", ["prova_esercizi.py"]),
+    ("calliope/tools/minori.py", ["prova_minori.py", "prova_giochi.py"]),
+    # Funzioni spostate dagli esercizi tolti (28/10, #279); le tabelle dismesse tolte
+    # all'apertura della memoria (revisione della PR #292)
+    ("calliope/memory.py", ["prova_conserva.py"]),
+    ("calliope/numeri.py", ["prova_stanza_eco.py"]),
+    ("calliope/pronuncia.py", ["prova_pronuncia.py"]),
     ("calliope/speaker_id.py", ["prova_voci_famiglia.py", "prova_conferme.py"]),
     # Il «sì» breve dei tutori (16/10, #108): breve_impronta_ok per dati_conservati (#114:
     # anche dal ciclo vero, con minori.piu_protetto, e da ToolRegistry.call)
@@ -613,17 +812,19 @@ LEGAMI = [
     # L'uscita unica (10/10, passo 2): le frasi fuori turno sul satellite e la voce vera
     ("calliope/eventi/uscita.py", ["prova_giro3.py", "prova_giro4.py", "prova_robustezza.py"]),
     # La cronologia delle schede per persona e la scheda «Conversazione» (08/10)
-    ("calliope/schermi/", ["prova_cronologia_schede.py"]),
+    ("calliope/schermi/", ["prova_cronologia_schede.py", "prova_conversazione_schede.py"]),
     ("calliope/conversazioni.py", ["prova_cronologia_schede.py", "prova_conversazioni.py",
-                                   "prova_conserva.py"]),
-    ("calliope/conversazione.py", ["prova_cronologia_schede.py", "prova_conversazioni.py"]),
+                                   "prova_conserva.py", "prova_conversazione_schede.py"]),
+    ("calliope/conversazione.py", ["prova_cronologia_schede.py", "prova_conversazioni.py",
+                                   "prova_conversazione_schede.py"]),
+    ("calliope/brain.py", ["prova_conversazione_schede.py"]),
     ("calliope/tools/schermi.py", ["prova_cronologia_schede.py"]),
     ("calliope/schermi/", ["prova_schermi.py", "prova_cruscotto.py", "prova_scritto.py", "prova_giochi.py",
                            "prova_telefono_abbina.py",
                            "prova_immagini.py", "prova_allegati.py", "prova_cassetto.py"]),
     ("calliope/ufficio/", ["prova_scritto.py"]),
     ("calliope/immagini.py", ["prova_immagini.py"]),
-    ("calliope/dispositivo.py", ["prova_dispositivo.py"]),
+    ("calliope/dispositivo.py", ["prova_dispositivo.py", "prova_telefono_consapevole.py"]),
     ("calliope/brain.py", ["prova_dispositivo.py"]),
     ("calliope/ciclo.py", ["prova_dispositivo.py"]),
     ("calliope/pc/remoto.py", ["prova_dispositivo.py"]),
@@ -870,6 +1071,8 @@ LEGAMI = [
     ("calliope/tts.py", ["prova_robustezza.py"]),
     ("calliope/audio.py", ["prova_robustezza.py"]),
     ("calliope/persistenza.py", ["prova_robustezza.py"]),
+    # Le versioni dello schema in meta_schema (#263: le liste alla 2)
+    ("calliope/liste.py", ["prova_liste.py", "prova_robustezza.py"]),
     ("calliope/turnlog.py", ["prova_robustezza.py"]),
     # La conservazione dei dati e la metrica della scelta dei tool (12/10): livello 1; qui i
     # tool d'area

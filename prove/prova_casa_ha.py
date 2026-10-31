@@ -16,6 +16,7 @@ c'è openssl), guida scritta, prompt. Alla fine: il token non compare mai nell'o
 
 import io
 import json
+from types import SimpleNamespace
 import time
 from pathlib import Path
 
@@ -536,6 +537,95 @@ try:
     rr = chiama(reg, contesto(c, be, "Bianca", "familiare", documenti=svc), "casa_integrazione",
                 {"per_iscritto": True}, "familiare")
     verifica("guida scritta: non per i familiari", len(list((Path(TMP) / "Documenti").iterdir())) == 1)
+    verifica("guida consegnata al PC: fuori dall'archivio dei documenti, niente scheda",
+             svc.archive.conta() == 0 and "scheda" not in rr)
+    svc.close()
+
+    # Rimasta sul server (28/10, #277, caso vero sull'iPhone: «Ti ho preparato la guida in PDF sul
+    # server, perché il satellite collegato non riceve documenti», e la guida non si ritrovava):
+    # come documento_crea, la scheda con «Scarica» o la pagina Documenti
+    class SulServer:
+        def __init__(self, cartella):
+            self.locale = LocalDelivery(cartella)
+
+        def where(self):
+            return "sul portatile"
+
+        def deliver(self, stem, ext, data, replace=None, mtime=None):
+            d = self.locale.deliver(stem, ext, data, replace=replace, mtime=mtime)
+            return {**d, "dove": "tra i miei documenti, perché il portatile non è collegato",
+                    "remoto": False}
+
+    class Hub:
+        def __init__(self, aperto, abbinato):
+            self.aperto, self.abbinato = aperto, abbinato
+
+        def mittente(self, ctx):
+            return SimpleNamespace(persona="dario", certo=True)
+
+        def personale_collegato(self, m):
+            return self.aperto
+
+        def personale_abbinato(self, m):
+            return self.abbinato
+
+    for aperto, abbinato, attesa, con_scheda in (
+            (True, True, "È sulla scheda del tuo schermo: per averla tocca «Scarica».", True),
+            (False, True, "La trovi in Le mie cose, alla voce Documenti: per averla tocca «Scarica».", False),
+            (False, False, "tra i miei documenti, perché il portatile non è collegato", False)):
+        svc = Documenti(c, str(Path(TMP) / f"doc-srv-{aperto}{abbinato}.db"), writer=NoWriter(),
+                        delivery=SulServer(Path(TMP) / f"Srv-{aperto}{abbinato}"))
+        cx = contesto(c, be, "Dario", "amministra", documenti=svc)
+        cx.schermi = Hub(aperto, abbinato)
+        rr = chiama(reg, cx, "casa_integrazione", {"per_iscritto": True}, "amministra")
+        voci = svc.archive.recenti_di_tutti()
+        doc_ok = len(voci) == 1 and voci[0]["nome_file"].endswith((".pdf", ".docx"))
+        verifica(f"guida rimasta sul server (schermo aperto {aperto}, abbinato {abbinato}): la frase vera",
+                 attesa in rr["conferma"] and rr["conferma"].startswith("Ti ho preparato la guida")
+                 and "server" not in rr["conferma"] and "satellite" not in rr["conferma"],
+                 rr["conferma"])
+        verifica(f"…nell'archivio dei documenti, quindi nella pagina Documenti con «Scarica»",
+                 doc_ok, [v.get("nome_file") for v in voci])
+        verifica(f"…la scheda con «Scarica» {'c' if con_scheda else 'non c'}'è",
+                 bool(rr.get("scheda")) == con_scheda
+                 and (not con_scheda or rr["scheda"].get("tipo") == "documento"), str(rr.get("scheda"))[:120])
+        # Di chi è, la pagina Documenti e la sorgente di «Scarica» (29/10, #287)
+        verifica("…la guida è di chi l'ha chiesta (l'id di Dario, col suo nome), non di «amministra»",
+                 len(voci) == 1 and voci[0].get("owner") == "dario-id" and voci[0].get("owner_name") == "Dario",
+                 [(v.get("owner"), v.get("owner_name")) for v in voci])
+        from calliope.schermi import raccolte as R
+        hub_pag = SimpleNamespace(servizi=SimpleNamespace(documenti=svc))
+        pag_d = R._pagina_documenti(hub_pag, Prof("dario-id", "Dario", True))
+        pag_b = R._pagina_documenti(hub_pag, Prof("bianca-id", "Bianca"))
+        mie = [s for s in pag_d["schede"] if s.get("gruppo") == "Fatti da Calliope per te"]
+        verifica("…nella pagina Documenti di Dario fra «Fatti da Calliope per te», con «Scarica»",
+                 len(mie) == 1 and mie[0].get("tipo") == "documento" and mie[0].get("scarica")
+                 and mie[0].get("titolo") == voci[0].get("titolo") and "Home Assistant" in mie[0].get("titolo", ""),
+                 [(s.get("gruppo"), s.get("titolo")) for s in pag_d["schede"]])
+        verifica("contrario: nella pagina Documenti di Bianca (familiare) la guida di Dario non c'è",
+                 not [s for s in pag_b["schede"] if s.get("tipo") == "documento"], pag_b)
+        src = (mie[0].get("_scarica") if mie else None) or {}
+        verifica("…la sorgente di «Scarica» è la guida intera, nel suo formato",
+                 src.get("formato") == voci[0].get("formato") and src.get("titolo") == voci[0].get("titolo")
+                 and (src.get("documento") or {}).get("titolo") == voci[0].get("titolo")
+                 and len(json.dumps(src.get("documento"), ensure_ascii=False)) > 500,
+                 {k: src.get(k) for k in ("formato", "titolo")})
+        svc.close()
+
+    # Senza una persona riconosciuta (29/10, #287: il proprietario di ripiego «amministra»): la guida
+    # non si scrive e non entra nell'archivio; si dice a voce
+    svc = Documenti(c, str(Path(TMP) / "doc-srv-nessuno.db"), writer=NoWriter(),
+                    delivery=SulServer(Path(TMP) / "Srv-nessuno"))
+    cx = contesto(c, be, "Sconosciuto", "amministra", documenti=svc)
+    cx.schermi = Hub(True, True)
+    rr = chiama(reg, cx, "casa_integrazione", {"per_iscritto": True}, "amministra")
+    verifica("contrario: senza profilo la guida scritta non si fa, niente nell'archivio, si dice a voce",
+             svc.archive.conta() == 0 and "a voce" in rr["conferma"] and not rr.get("scheda")
+             and not list((Path(TMP) / "Srv-nessuno").glob("*")), rr["conferma"])
+    r_vuoto = svc.scrivi_fisso("", "pdf" if "pdf" in svc.formati else "word",
+                               {"titolo": "Prova", "blocchi": [{"tipo": "paragrafo", "testo": "x"}]})
+    verifica("contrario: scrivi_fisso senza proprietario, rimasto sul server: fuori dall'archivio",
+             r_vuoto.get("sul_server") and "documento" not in r_vuoto and svc.archive.conta() == 0, r_vuoto)
     svc.close()
 except ImportError as e:
     print(f"SALTATA IN PARTE: guida scritta: {e}")

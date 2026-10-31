@@ -1114,7 +1114,7 @@ certa, anche dei minori, mai degli ospiti: 7 giorni, al più 40 schede e 4 MB pe
 cassetto dei file (foto, file, audio di chi è riconosciuto, anche dei minori, visibili ai tutori
 sotto i 14 anni, dal 14/10 a ogni età, mai degli ospiti: 7 giorni, 500 MB per persona); i ricordi (`memoria.db`,
 `facts`, anche dei minori, per sempre, al più 50 per persona; degli ospiti niente); gli esercizi
-(`esercizi_tentativi`: domanda, risposta attesa e risposta del ragazzo fino a 60 caratteri, senza
+(*storico: tolti il 28/10, #279*) (`esercizi_tentativi`: domanda, risposta attesa e risposta del ragazzo fino a 60 caratteri, senza
 scadenza: è il dettaglio dei tutori); le richieste ai tutori (`richieste_tutori.oggetto`, senza
 scadenza della riga) *(storico per queste due: dal 12/10 sera scadono con `turn_log_days` e si
 svuotano con la persona, [minori](minori.md))*, gli avvisi ai tutori (solo l'argomento) e i compiti del giorno (argomento e
@@ -2771,3 +2771,46 @@ l'etichetta nuova arriva anche a `stanza_cerca`, al giudizio «rivolta» (in omb
 più quello misurato il 09/10, da rileggere prima di accenderlo) e al riassunto della corsia lenta;
 il guardiano a posteriori ha la sua etichetta e resta «Calliope».
 
+
+## Il tocco dallo schermo come turno della conversazione (28/10, issue #256, ramo `issue-256-raccolte`)
+
+Un tocco che cambia qualcosa dallo schermo personale (la spunta della lista, [schermi-telefono](schermi-telefono.md))
+entra nella conversazione della persona come un turno (decisione 10 del progetto del telefono a
+sezioni). `Brain.record_tocco` lo scrive come una risposta con un tool: prima chiude la conversazione
+scaduta o di un'altra persona (`_check_conversation`), poi scrive quattro messaggi. Il primo è la frase
+della persona («(Ho tolto «latte» dalla lista della spesa toccando lo schermo.)»), il secondo il
+messaggio di Calliope con la chiamata di `lista_togli` e i suoi argomenti, il terzo l'esito del tool, il
+quarto la conferma del tool come messaggio di Calliope («Ho tolto latte dalla lista della spesa.»), non
+detta. Infine segna `last_turn_at` e salva la conversazione (`salva_conversazione`). Così «rimettilo»
+detto dopo sa che cosa è stato fatto, e il turno chiude con Calliope come `_sfida_reply` e `record_stop`
+(seconda revisione della PR #261: dopo un messaggio `tool` il template di Gemma 4 su vLLM poteva lasciare
+la frase della persona dentro il turno del modello).
+
+Nel registro dei turni il tocco ha `esito` e `canale` «tocco», con il tool. Nel registro degli eventi
+c'è un `detto_persona` col canale «tocco» e `come` «schermo» (`eventi/tipi.CANALI_PERSONA`,
+`ombra.ESITI_PERSONA`), più `chiamata_tool` ed `esito_tool`, ricopiati dall'ombra dal turno vivo, e la
+conferma come `detto_calliope` col canale «muta» e l'atto `tocco_esito` (`Uscita.muta`: l'osservatore la
+riceve come un pezzo sentito, la voce no). La proiezione dà gli stessi messaggi della storia di Brain,
+quindi con `eventi: attivo` non cambia niente; in ombra resta solo il motivo dichiarato
+`canale_scritto`. Un tocco rifiutato non entra nella storia (`esito` «rifiutato», canale «tocco»).
+*[storico: fino alla prima revisione della PR #261 la riga andava in `brain.history` a mano, senza
+`last_turn_at` né salvataggio, e con la frase dopo c'erano due messaggi della persona di fila; fino alla
+seconda il turno chiudeva con l'esito del tool]*
+
+## Le schede del turno nell'archivio, i canali e i filtri della Conversazione (28/10 sera, issue #242, ramo `issue-242-conversazione`)
+
+Per la Conversazione degli schermi con le schede dentro ([schermi-telefono](schermi-telefono.md)):
+
+- **Le schede mandate in un turno** vanno nel `meta` del turno archiviato (`schede`): `Brain._invia_schede`
+  le lega al messaggio della persona (`_schede`, solo con l'identità certa), `conversazione.turni` le porta
+  nell'archivio passate da `oscura` e dai segreti del turno (non le chiavi), e le toglie in un turno
+  riservato. Una copia piccola (`schede.per_conversazione`, al più 16 kB) o un rimando, al più quattro per
+  turno. Stessa tenuta e stessa «dimentica» dei turni; un turno `non_conservare` non va su disco con le sue
+  schede. Niente nell'indice FTS5: si cercano le parole del turno, non quelle delle schede.
+- **Il canale** del turno passa com'è (voce, scritto, tocco, modulo); prima `voce_chat` lo riduceva a voce o
+  scritto. Il modulo inviato ha ora il suo `_turno` (`moduli.completa`).
+- **`ArchivioConversazioni.chat_filtra`**: i turni di una persona fra due istanti, solo quelli con una
+  scheda, o con tutte le parole cercate (FTS5 per prefisso, senza vettori: mai un modello in più durante una
+  conversazione), al più 200 (60 con una ricerca). Mai i turni degli ospiti né di altre persone.
+- **Limite**: con `eventi: attivo` i turni li archivia l'ombra dalla proiezione, e le schede lì non ci sono
+  ancora.

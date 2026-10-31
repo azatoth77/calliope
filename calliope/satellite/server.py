@@ -80,10 +80,17 @@ def contesto_tls(cfg):
 
 class SeedRemoto(list):
     """Il barge-in è avvenuto sul satellite, che tiene l'audio con il nome: qui basta un
-    segnale vero da passare a `listen(seed=…)`, che lo chiede al satellite."""
+    segnale vero da passare a `listen(seed=…)`, che lo chiede al satellite. Dal 31/10 (seconda
+    revisione della PR #345) porta anche il motivo e, se a fermare la voce è stata l'impronta
+    (livello B), il suo sì (#347: un no di prima non resta): chi lo usa (il ripasso da ascoltare)
+    decide senza l'audio, che resta sul satellite."""
 
-    def __init__(self):
+    remoto = True
+
+    def __init__(self, motivo=None, voce_ok=None):
         super().__init__([True])
+        self.motivo = motivo
+        self.voce_ok = voce_ok
 
 
 def _numero(v, minimo: float, massimo: float, predefinito: float = 0.0) -> float:
@@ -136,6 +143,11 @@ def valida_evento(t: str, m: dict) -> dict | None:
     return out
 
 
+# I nomi delle app nel «ciao»: tagliati a APP_NOME_MAX caratteri, al più APP_MAX
+APP_NOME_MAX = 40
+APP_MAX = 50
+
+
 def pulisci_esecutore(d) -> dict | None:
     """L'esecutore dichiarato nel «ciao», ridotto a ciò che il server sa usare: capacità
     note, nomi di app brevi. Dati del satellite, mai istruzioni."""
@@ -143,9 +155,20 @@ def pulisci_esecutore(d) -> dict | None:
         return None
     from ..pc.base import CAPACITA
     caps = [c for c in (d.get("capacita") or []) if c in CAPACITA]
-    app = [str(a).strip().lower()[:40] for a in (d.get("app") or [])
-           if isinstance(a, str) and a.strip()][:50]
-    return {"nome": str(d.get("nome") or "")[:40], "capacita": caps, "app": app,
+    app = [str(a).strip().lower()[:APP_NOME_MAX] for a in (d.get("app") or [])
+           if isinstance(a, str) and a.strip()][:APP_MAX]
+    out = {}
+    # Le app che non si aprono per iscritto (29/10, #307): un satellite di prima non lo dice, e
+    # allora la chiave manca (RemotePCExecutor.app_e_script → «non si sa», serve la voce). Un nome
+    # tagliato o l'elenco al tetto valgono anche loro «non si sa» (revisione della PR #309), e il
+    # controllo vero lo rifà il satellite sull'«avvia» col segno `scritto`, che conosce se dice
+    # `avvia_scritto`
+    if isinstance(d.get("app_script"), list):
+        out["app_script"] = [str(a).strip().lower()[:APP_NOME_MAX] for a in d["app_script"]
+                             if isinstance(a, str) and a.strip()][:APP_MAX]
+    if d.get("avvia_scritto") is True:
+        out["avvia_scritto"] = True
+    return {**out, "nome": str(d.get("nome") or "")[:40], "capacita": caps, "app": app,
             "file": bool(d.get("file")), "invio": bool(d.get("invio")),
             "sistema": str(d.get("sistema") or "")[:20]}
 
@@ -161,6 +184,8 @@ class Collegamento:
         self.pronto = False                     # ha detto il saluto (o non serviva)
         self.eco = None                         # quota di frame «parlato» sul saluto
         self.schermo_id = None                  # lo schermo del satellite (pagina), se c'è
+        # L'istante dell'abbinamento di quello schermo (#338): il numero si riusa dopo una revoca
+        self.schermo_creato = None
         self.chiuso = threading.Event()
         self._lock = threading.Lock()
         self._invii: dict[int, float] = {}       # thread che stanno mandando → da quando
@@ -181,6 +206,7 @@ class Collegamento:
         self.inviati = 0                        # byte mandati (misure)
         self.ricevuti = 0
         self.versione = 1                       # protocollo detto nel «ciao»
+        self.pagina: str | None = None          # la versione della pagina del telefono (28/10)
         self.modalita = False                   # segue la modalità cambiata a voce (05/10)
         self.wake_presenti: set | None = None   # i classificatori che ha, se lo dice
         # L'esecutore del PC del satellite (versione 2, solo Windows): {"nome", "capacita",
@@ -778,6 +804,17 @@ class ServerSatelliti:
                  + (f" (al posto di {prima.satellite['nome']})" if prima is not None else ""))
         return True
 
+    def tocca(self, sat_id, secondi: float = 8.0) -> bool:
+        """«Parla» dalla pagina dello schermo personale legato al satellite `sat_id` (27/10,
+        passo 1b): il satellite prende il posto (come il telefono che tocca «Parla») e ascolta
+        senza il nome per `secondi` («tocco»). False se il satellite non è collegato."""
+        with self._cond:
+            coll = next((c for c in reversed(self.collegati) if c.satellite.get("id") == sat_id
+                         and not c.chiuso.is_set()), None)
+        if coll is None or not self.prendi(coll):
+            return False
+        return coll.invia(tipo="tocco", secondi=float(secondi))
+
     def lascia(self, coll: Collegamento) -> bool:
         """Il satellite restituisce il posto all'ultimo degli altri collegati e pronti; se non
         ce ne sono resta attivo (qualcuno deve pur sentire gli annunci). Tutti insieme: non
@@ -814,7 +851,28 @@ class ServerSatelliti:
         with self._cond:
             via = [c for c in reversed(self.collegati)
                    if c.schermo_id == sid and c.pronto and not c.chiuso.is_set()]
+        hub = getattr(self, "schermi", None)
+        if via and hub is not None and callable(getattr(hub, "schermo", None)):
+            # Il numero dello schermo è ancora del suo satellite (#338, nota della revisione della PR
+            # #332): `schermo_id` resta al collegamento anche se lo schermo viene revocato, e la
+            # tabella riusa il numero. Senza questo il satellite di prima (lo studio di Dario)
+            # avrebbe detto a voce la risposta scritta dal telefono nuovo di Bianca
+            riga = hub.schermo(sid)
+            via = [c for c in via if self._schermo_suo(c, riga)]
         return via[0] if via else None
+
+    @staticmethod
+    def _schermo_suo(coll, riga: dict | None) -> bool:
+        """La riga dello schermo col numero `coll.schermo_id` è ancora quella che il satellite ha
+        aperto (#338): lo stesso istante dell'abbinamento e, se la riga lo dice, lo stesso
+        satellite. Un collegamento senza l'istante (di prima, o delle prove) si fida del numero."""
+        if riga is None:
+            return False
+        creato = getattr(coll, "schermo_creato", None)
+        if creato is not None and riga.get("creato") != creato:
+            return False
+        legato = riga.get("satellite")
+        return legato is None or legato == (getattr(coll, "satellite", None) or {}).get("id")
 
     def per_id(self, sat_id) -> Collegamento | None:
         """Il satellite collegato e pronto con questo id d'archivio, o None."""
@@ -1037,6 +1095,11 @@ class ServerSatelliti:
             ws.ping()                           # il satellite aspetta: la connessione resta viva
         coll = Collegamento(ws, sat, hash_token(token))
         coll.versione = int(d.get("versione") or 1)
+        # La versione della pagina del telefono (28/10, issue #291): la cache del service worker,
+        # solo nei log e solo se ha la forma attesa (è un dato del dispositivo)
+        pag = d.get("pagina")
+        coll.pagina = (pag if isinstance(pag, str)
+                       and re.fullmatch(r"calliope-telefono-pagina-v\d{1,4}", pag) else None)
         # Segue la modalità cambiata a voce senza riconnettersi (05/10), con i classificatori
         # della wake word che ha
         coll.modalita = d.get("modalita") is True
@@ -1086,6 +1149,9 @@ class ServerSatelliti:
             stanza.collegato(coll)
         ese = coll.esecutore
         self.log(f"   [SATELLITE] collegato: {sat['nome']} (stanza {sat['stanza']})"
+                 # Le versioni (28/10, #291): il protocollo del «ciao» e la pagina del telefono
+                 + f", protocollo {coll.versione}"
+                 + (f", pagina {coll.pagina}" if coll.pagina else "")
                  + (f", giro {coll.ws.latency * 1000:.0f} ms" if coll.ws.latency else "")
                  + ((", esecutore del PC: " + (", ".join(ese["capacita"]) or "nessuna capacità")
                      + (", documenti" if ese["file"] else "")) if ese else ""))
@@ -1341,7 +1407,7 @@ class ServerSatelliti:
                 self.log(f"   [SATELLITE] schermo «{s['nome']}» abbinato per il satellite"
                          + (f" (personale di {s['proprietario_nome']})"
                             if s.get("proprietario_nome") else ""))
-        coll.schermo_id = s["id"]
+        coll.schermo_id, coll.schermo_creato = s["id"], s.get("creato")
         self._allinea_schermo(coll)
         coll.invia(tipo="schermo", porta=porta, locale=schermi_locali(self.cfg), token=token,
                    **self._tls_schermi(hub))
@@ -1381,9 +1447,16 @@ class ServerSatelliti:
         s = next((x for x in hub.archivio.elenco() if x["id"] == sid), None)
         if s is None or s.get("proprietario") == sat.get("proprietario"):
             return
+        if not self._schermo_suo(coll, s):
+            # Il numero è ora di un altro schermo (lo schermo del satellite revocato, il numero
+            # riusato: #338): non gli si cambia il proprietario
+            return
         hub.archivio.imposta_proprietario(sid, sat.get("proprietario"),
                                           sat.get("proprietario_nome"))
         hub._rinfresca()
+        # Subito, non alla prossima scheda: le pagine aperte col proprietario di prima ricevono
+        # «proprietario» e la cronologia in memoria si svuota (#338)
+        hub.abbinati()
         self.log(f"   [SATELLITE] schermo «{s['nome']}»: "
                  + (f"personale di {sat['proprietario_nome']}" if sat.get("proprietario")
                     else "della stanza"))
@@ -1535,6 +1608,11 @@ class AscoltoRemoto:
                      and coll.eco <= self.cfg.barge_in_echo_max)
         coll.invia(tipo="veglia", id=wid, livello_b=livello_b)
         fine = None
+        # L'esito dell'impronta che ha fermato la voce (livello B). Solo un sì interrompe: un no
+        # non ferma niente, e tenerlo darebbe a un'interruzione dopo, col nome, l'esito di un
+        # altro pezzo di parlato (la TV, un ospite, l'eco del libro), e il ripasso butterebbe
+        # il seme della persona registrata (31/10, #347). Per il solo nome resta None
+        ultimo_ok = None
         while True:
             if stop.is_set() and fine is None:
                 coll.invia(tipo="fine_veglia", id=wid)
@@ -1553,11 +1631,14 @@ class AscoltoRemoto:
                 continue
             if tipo == "voce":
                 ok = bool(voice_ok(P.da_pcm(d["pcm"]))) if voice_ok is not None else False
+                ultimo_ok = True if ok else None
                 coll.invia(tipo="esito_voce", id=wid, ok=ok)
             elif tipo == "interruzione":
                 print(f"\n   [BARGE-IN] {d.get('motivo') or 'interrotta'} sul satellite",
                       flush=True)
-                return SeedRemoto()
+                motivo = d.get("motivo")
+                # «tocco»: «Parla» dalla pagina dello schermo personale, cioè una persona
+                return SeedRemoto(motivo, True if motivo == "tocco" else ultimo_ok)
             elif tipo == "veglia_finita":
                 return None
 

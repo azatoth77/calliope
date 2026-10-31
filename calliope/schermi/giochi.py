@@ -118,8 +118,14 @@ def _rifiuto(ctx, testo: str, regola: str) -> dict:
 
 
 class Posto:
-    def __init__(self, sid: int, mitt: Mittente, minore: bool):
+    def __init__(self, sid: int, mitt: Mittente, minore: bool, schermo: dict | None = None):
         self.sid = sid
+        # L'identità dello schermo quando il posto è nato (#338, revisione della PR #341):
+        # {"creato", "proprietario"} per `invia_a` ed `evento_a`. Lo schermo passato a un'altra
+        # persona (o revocato e riabbinato) non riceve più niente della partita
+        s = schermo or {}
+        self.identita = ({"creato": s["creato"], "proprietario": s.get("proprietario") or None}
+                         if s.get("creato") is not None else {})
         self.persona = mitt.persona
         self.nome = mitt.nome
         self.livello = mitt.livello if mitt.persona else "ospite"
@@ -162,8 +168,20 @@ class Posto:
 
 class Partita:
     def __init__(self, nome: str, versione: int, manifesto: dict, avviata_da: Mittente,
-                 prova: bool = False):
+                 prova: bool = False, file: dict | None = None, libreria: bool = False,
+                 parametri: dict | None = None):
         self.id = "P" + secrets.token_hex(4)
+        # Una mini-app della libreria dello Studio (31/10, #297): i file del riquadro vengono dal
+        # repository (studio/libreria/miniapp.py, impronta controllata al caricamento), non
+        # dall'archivio delle estensioni. None per un gioco dell'archivio
+        self.file = dict(file) if file is not None else None
+        # Il segno esplicito di un'attività della libreria (revisione della PR #366, nota 2): lo
+        # mette solo `studio_attivita`. Non conta nel tempo dei giochi di un minore; si chiude al
+        # fuori orario e quando parte una prova della persona; non va nel registro dell'archivio
+        self.libreria = bool(libreria)
+        # I parametri validati di un'attività adattata ai materiali (#297, parte 3): solo con
+        # `libreria`, dati e mai codice (studio/preparazione.py li valida)
+        self.parametri = dict(parametri) if (parametri and libreria) else None
         # La versione candidata nel collaudo (11/10): niente ponte verso Calliope
         self.prova = bool(prova)
         self.gettone = secrets.token_urlsafe(24)
@@ -274,12 +292,16 @@ class Giochi:
 
     # ── dal tool del gioco ──
     def avvia(self, ctx, nome: str, versione: int, m: dict, argomenti: dict,
-              prova: bool = False) -> dict:
+              prova: bool = False, file: dict | None = None,
+              libreria: bool = False, parametri: dict | None = None) -> dict:
         """Apre una partita (o si unisce a quella aperta da un altro schermo) e manda la
         scheda del gioco a uno schermo. Il risultato per la voce. `prova` (11/10): un gioco
         non ancora approvato, aperto per il collaudo: la scheda porta "prova": true e la
         pagina lo mostra nella modalità gioco con la cornice arancio e «PROVA» (contratto in
-        docs/aree/giochi.md; chi apre la versione non attiva è lo sviluppo, non questo)."""
+        docs/aree/giochi.md; chi apre la versione non attiva è lo sviluppo, non questo). `file`
+        (31/10, #297): i file di una mini-app della libreria dello Studio, un gioco puro fidato
+        che non sta nell'archivio delle estensioni (il riquadro si compone da questi byte);
+        `libreria` il segno della mini-app (non conta nel tempo dei giochi)."""
         from .. import minori
         from ..estensioni.scheda import e_gioco_puro, ha_macchina
         if not getattr(self.cfg, "giochi_enabled", True):
@@ -288,7 +310,7 @@ class Giochi:
         titolo = m.get("titolo", nome)
         prof = minori.profilo(ctx)
         minore = minori.e_minore(prof)
-        if minore:
+        if minore and not libreria:
             resta = minori.gioco_restante_s(prof)
             if resta is not None and resta <= 0:
                 out = _rifiuto(ctx, "Per oggi il tempo dei giochi è finito.", "gioco_tempo_finito")
@@ -341,10 +363,11 @@ class Giochi:
                 p = max(aperte, key=lambda x: x.ultimo) if aperte else None
             nuova = p is None
             if nuova:
-                p = Partita(nome, versione, m, mitt)
+                p = Partita(nome, versione, m, mitt, file=file, libreria=libreria,
+                            parametri=parametri)
                 self.partite[p.id] = p
                 self._per_gettone[p.gettone] = p.id
-            p.posti[sid] = Posto(sid, mitt, minore)
+            p.posti[sid] = Posto(sid, mitt, minore, schermo=s)
             p.ultimo = time.time()
         card = schede.nuova("gioco", titolo, vis, durata_s=None, chiave=f"gioco:{p.id}",
                             partita=p.id, doc=f"/gioco/{p.gettone}", condivisa=p.condivisa,
@@ -352,12 +375,13 @@ class Giochi:
                             **({"prova": True} if prova else {}))
         self.hub.ricorda(card, mitt)
         p.carte[sid] = card
-        collegato = self.hub.invia_a(sid, card)
+        collegato = self._invia(p.posti[sid], card)
         self._registra(p, "avvio" if nuova else "unito", schermo=s.get("nome"),
                        persona=mitt.nome)
         dove = s.get("nome") or "schermo"
         if not nuova:
-            altri = [self._nome_schermo(x) for x in p.posti if x != sid]
+            # Su una copia (#275): l'hub può togliere un posto mentre si legge il nome
+            altri = [self._nome_schermo(x) for x in list(p.posti) if x != sid]
             frase = (f"Sei nella partita di «{titolo}»" + (f" con {', '.join(altri)}"
                                                            if altri else "") + ".")
         elif p.condivisa:
@@ -406,7 +430,7 @@ class Giochi:
             p = Partita(nome, versione, m, mitt, prova=True)
             self.partite[p.id] = p
             self._per_gettone[p.gettone] = p.id
-            p.posti[sid] = Posto(sid, mitt, False)
+            p.posti[sid] = Posto(sid, mitt, False, schermo=s)
         card = schede.nuova("gioco", titolo, schede.CASA, durata_s=None,
                             chiave=f"gioco:{p.id}", partita=p.id, doc=f"/gioco/{p.gettone}",
                             condivisa=False, giocatori=p.massimo,
@@ -414,7 +438,7 @@ class Giochi:
                             versione=versione)
         self.hub.ricorda(card, mitt)
         p.carte[sid] = card
-        collegato = self.hub.invia_a(sid, card)
+        collegato = self._invia(p.posti[sid], card)
         self._registra(p, "prova", schermo=s.get("nome"), persona=mitt.nome)
         frase = (f"Ecco «{titolo}» in prova sullo schermo {self._di(s.get('nome') or 'schermo')}"
                  f": è la versione {versione}, non ancora attiva.")
@@ -442,9 +466,11 @@ class Giochi:
             pid = self._per_gettone.get(str(gettone or ""))
             p = self.partite.get(pid) if pid else None
         est = self.estensioni
-        if p is None or est is None:
+        if p is None or (est is None and p.file is None):
             return None
-        if p.prova:
+        if p.file is not None:
+            pass        # una mini-app della libreria (#297): i file caricati dal repository
+        elif p.prova:
             # La versione candidata (11/10): ancora la candidata, con i file di quando l'agente
             # l'ha consegnata (come Estensioni.prova_candidata)
             if not candidata_intatta(est, p.nome, p.versione):
@@ -454,11 +480,13 @@ class Giochi:
             if voce.get("stato") != "attiva" or voce.get("attiva") != p.versione \
                     or not est.archivio.verifica(p.nome):
                 return None
-        chiave = (p.nome, p.versione, p.prova)
+        chiave = (p.nome, p.versione, p.prova,
+                  json.dumps(p.parametri, sort_keys=True) if p.parametri else "")
         d = self._documenti.get(chiave)
         if d is None:
             try:
-                d = documento(p.scheda, est.file_versione(p.nome, p.versione), p.titolo)
+                d = documento(p.scheda, p.file if p.file is not None
+                              else est.file_versione(p.nome, p.versione), p.titolo, p.parametri)
             except SchedaNonValida:
                 return None                       # un gioco del formato di prima (14/10)
             self._documenti = {chiave: d}             # una versione per volta in memoria
@@ -573,6 +601,17 @@ class Giochi:
         passato = ora - posto.ultimo_battito if posto.ultimo_battito else secondi
         secondi = max(0.0, min(secondi, passato + 1.0, 30.0))
         posto.ultimo_battito = ora
+        if p.libreria:
+            # Un'attività della libreria (#297, revisione della PR #366, nota 2): è studio, non
+            # conta nel tempo dei giochi; si chiude quando comincia il fuori orario del minore o
+            # c'è una prova aperta della persona
+            if posto.fermato:
+                return {"ok": True, "fine_tempo": True}
+            nota = self._libreria_fermata(posto)
+            if nota:
+                self._ferma(p, posto, nota, "libreria_fermata")
+                return {"ok": True, "fine_tempo": True, "nota": nota}
+            return {"ok": True}
         if not posto.minore or posto.fermato:
             return {"ok": True, "fine_tempo": posto.fermato}
         prof = self._profilo(posto.persona)
@@ -585,10 +624,56 @@ class Giochi:
             posto.fermato = True
             self._registra(p, "fine_tempo", regola="gioco_tempo_finito", persona=prof.name)
             nota = "Per oggi il tempo dei giochi è finito."
-            self.hub.evento_a(posto.sid, "gioco", {"partita": p.id, "tipo": "fine_tempo",
+            self._evento(posto, "gioco", {"partita": p.id, "tipo": "fine_tempo",
                                                    "dati": {"nota": nota}})
             return {"ok": True, "fine_tempo": True, "nota": nota}
         return {"ok": True, "resta_s": round(resta) if resta is not None else None}
+
+    # ── le attività della libreria dello Studio (#297, revisione della PR #366) ──
+    LIBRERIA_ORARIO = "È l'ora di riposare: l'attività dello Studio si chiude."
+    LIBRERIA_PROVA = "C'è una prova aperta nello Studio: l'attività si chiude."
+
+    def _libreria_fermata(self, posto: Posto) -> str | None:
+        """La frase per chiudere un'attività della libreria, o None: il fuori orario di un
+        minore, una prova aperta della persona (lo Studio, se legato: `self.studio`)."""
+        from .. import minori
+        prof = self._profilo(posto.persona)
+        if prof is not None and posto.minore and minori.fuori_orario(prof):
+            return self.LIBRERIA_ORARIO
+        st = getattr(self, "studio", None)
+        if st is not None and posto.persona:
+            try:
+                if st.prova_aperta_di(str(posto.persona)):
+                    return self.LIBRERIA_PROVA
+            except Exception:  # noqa: BLE001
+                return None
+        return None
+
+    def _ferma(self, p: Partita, posto: Posto, nota: str, evento: str):
+        """Ferma il riquadro di un posto (come la fine del tempo dei giochi): la pagina lo chiude
+        con la nota. Una volta sola (revisione della PR #366): sotto il lock, chi arriva secondo
+        (il battito e il gancio della prova insieme) non manda un secondo avviso."""
+        with self._lock:
+            if posto.fermato:
+                return False
+            posto.fermato = True
+        self._registra(p, evento)
+        self._evento(posto, "gioco", {"partita": p.id, "tipo": "fine_tempo",
+                                      "dati": {"nota": nota}})
+        return True
+
+    def ferma_libreria(self, persona: str, nota: str | None = None) -> int:
+        """Chiude le attività della libreria aperte da `persona` (una prova che parte: il gancio
+        dello Studio). Quanti riquadri."""
+        n = 0
+        with self._lock:
+            partite = [p for p in self.partite.values()
+                       if p.libreria and getattr(p.avviata_da, "persona", None) == persona]
+        for p in partite:
+            for posto in list(p.posti.values()):
+                if self._ferma(p, posto, nota or self.LIBRERIA_PROVA, "libreria_fermata"):
+                    n += 1
+        return n
 
     def _file_dati(self, p: Partita, chiave: str):
         est = self.estensioni
@@ -747,7 +832,7 @@ class Giochi:
             # crede di tenerla (la sua pagina taceva e la partita è passata a un altro) torna
             # specchio, con lo stato di adesso
             self._registra(p, "stato_rifiutato", regola="gioco_stato_non_autorevole")
-            self.hub.evento_a(posto.sid, "gioco", {"partita": p.id, "tipo": "specchio",
+            self._evento(posto, "gioco", {"partita": p.id, "tipo": "specchio",
                                                    "dati": {"stato": p.stato_condiviso}})
             return {"errore": "la partita la tiene un altro schermo", "_stato": 403}
         try:
@@ -818,7 +903,7 @@ class Giochi:
             if (not isinstance(i, int) or isinstance(i, bool) or not 0 <= i < len(ist["giocatori"])
                     or not mc.nome_chiuso(nome)):
                 return {"errore": "nome non valido", "_stato": 400}
-            self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "nome",
+            self._evento(t, "gioco", {"partita": p.id, "tipo": "nome",
                                                "dati": {"i": i, "nome": nome}})
             return {"ok": True}
         comando, n = dati.get("comando"), dati.get("n")
@@ -833,8 +918,26 @@ class Giochi:
         dati_m = {"comando": comando, "n": n}
         if posto.giocatore:
             dati_m["schermo"] = posto.giocatore
-        self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati_m})
+        self._evento(t, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati_m})
         return {"ok": True}
+
+    def schermi_via(self, sids):
+        """Schermi revocati o col numero riusato da un altro schermo (#266, seconda revisione
+        della PR #270, `Schermi._schermi_via`): i loro posti e le loro schede escono dalle
+        partite, così lo schermo nuovo con lo stesso numero non riceve la partita di un altro.
+        Chi teneva la partita condivisa la passa a un altro schermo aperto."""
+        sids = set(sids)
+        with self._lock:
+            for p in list(self.partite.values()):
+                for sid in sids & set(p.posti):
+                    posto = p.posti[sid]
+                    posto.aperto = False
+                    self._passa_la_partita(p, posto)
+                    p.posti.pop(sid, None)
+                    if p.autorevole == sid:
+                        p.autorevole = None
+                for sid in sids:
+                    p.carte.pop(sid, None)
 
     def _passa_la_partita(self, p: Partita, posto: Posto):
         """Lo schermo che teneva la partita condivisa si è chiuso: la tiene un altro schermo
@@ -847,7 +950,7 @@ class Giochi:
         p.autorevole = altri[0].sid if altri else None
         if altri:
             self._registra(p, "passa", regola="gioco_partita_passata")
-            self.hub.evento_a(altri[0].sid, "gioco", {"partita": p.id, "tipo": "autorevole",
+            self._evento(altri[0], "gioco", {"partita": p.id, "tipo": "autorevole",
                                                       "dati": {"stato": p.stato_condiviso}})
 
     @staticmethod
@@ -983,7 +1086,7 @@ class Giochi:
             nota = NOTE_GUASTO.get(motivo, "Il gioco si è chiuso.")
             p.carte[posto.sid] = chiusa = {**card, "stato": "chiuso", "nota": nota,
                                            "sposta": False}
-            self.hub.invia_a(posto.sid, chiusa)
+            self._invia(posto, chiusa)
         posto.fermato = True
         posto.aperto = False
         self._passa_la_partita(p, posto)
@@ -1084,8 +1187,10 @@ class Giochi:
                 # schermo, i nomi degli altri schermi della partita e i segni delle voci (per
                 # «tocca a te» e «quanti punti ho?»: restano dentro Calliope)
                 "massimo": p.massimo, "posto": posto.giocatore,
+                # Su una copia, fuori dal lock (#275): se la cache dell'hub scade proprio qui,
+                # `schermi_via` toglie un posto durante il giro («dictionary changed size»)
                 "schermi": {x.giocatore: (self.hub.schermo(x.sid) or {}).get("nome") or ""
-                            for x in p.posti.values() if x.giocatore},
+                            for x in list(p.posti.values()) if x.giocatore},
                 "voci": dict(p.voci)}
 
     def turno_altrui(self, partita: str, schermo, comando: str,
@@ -1183,7 +1288,7 @@ class Giochi:
                 dati["schermo"] = posto.giocatore
             posto.segno = t.segno = time.monotonic()
             p.ultimo = time.time()
-        self.hub.evento_a(t.sid, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati})
+        self._evento(t, "gioco", {"partita": p.id, "tipo": "comando", "dati": dati})
         return True
 
     # ── utilità ──
@@ -1195,10 +1300,19 @@ class Giochi:
     def _agli_altri(self, p: Partita, da: Posto, tipo: str, dati: dict):
         for sid, posto in list(p.posti.items()):
             if sid != da.sid and not posto.fermato:
-                self.hub.evento_a(sid, "gioco", {"partita": p.id, "tipo": tipo, "dati": dati})
+                self._evento(posto, "gioco", {"partita": p.id, "tipo": tipo, "dati": dati})
+
+    def _evento(self, posto: Posto, tipo: str, dati: dict) -> int:
+        """Un evento della partita alle pagine dello schermo del posto, solo se è ancora lo schermo
+        di quando il posto è nato (#338): stesso abbinamento, stesso proprietario."""
+        return self.hub.evento_a(posto.sid, tipo, dati, **posto.identita)
+
+    def _invia(self, posto: Posto, card: dict) -> bool:
+        """La scheda della partita allo schermo del posto, con la sua identità (#338)."""
+        return self.hub.invia_a(posto.sid, card, **posto.identita)
 
     def manda_a(self, p: Partita, posto: Posto, tipo: str, dati: dict):
-        self.hub.evento_a(posto.sid, "gioco", {"partita": p.id, "tipo": tipo, "dati": dati})
+        self._evento(posto, "gioco", {"partita": p.id, "tipo": tipo, "dati": dati})
 
     def _guardiano(self, testo: str, domanda: bool, minore: bool) -> str:
         """ok | vietato | pericolo | guasto. Senza guardiano: per un minore si blocca (come
@@ -1236,7 +1350,9 @@ class Giochi:
 
     def _registra(self, p: Partita, evento: str, **extra):
         est = self.estensioni
-        if est is not None:
+        # Le attività della libreria (#297, revisione della PR #366, nota 3) non sono estensioni:
+        # niente righe nel registro dell'archivio (il nome `libreria_` è riservato)
+        if est is not None and not p.libreria:
             est.archivio.registra({"gioco": p.nome, "versione": p.versione, "partita": p.id,
                                    "evento": evento, **extra})
         regola = extra.get("regola")

@@ -21,21 +21,39 @@ una riuscita non serve più; i tocchi sono veri (Input.dispatchMouseEvent: gesto
   spento a mano → blocco tolto, indicatore nascosto; opzione «tengo acceso lo schermo» spenta →
   blocco tolto e avviso; riaccesa → richiesto;
 - senza l'API: il microfono si accende lo stesso e l'avviso c'è;
-- la vista (dal 04/10 la pagina è sempre quella che era la vista da guida): fondo nero, nessuna
-  animazione, niente vista normale né «Vista da guida»/«Esci», l'ultima risposta nel carosello,
-  «Parla» ridotto col microfono acceso, avviso dello schermo in alto;
-- carosello: 4 schede (lista, timer, programma, documento), la più recente per prima e in
-  vista, puntini; un aggiornamento resta al suo posto (stesso elemento, vista invariata); la
-  risposta subito dopo una scheda non la copre, un turno senza schede mostra la risposta; chi
-  scorre a mano non viene spostato; il timer conta;
+- la vista (dal 27/10 a sezioni, docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md): fondo
+  nero, nessuna animazione, niente menu né carosello, l'ultima risposta in Adesso, «Parla» ridotto
+  col microfono acceso, avviso dello schermo in alto; Io dalla barra (schermo acceso, gesto
+  indietro);
+- sezioni: 4 schede (lista, timer, programma, documento) nelle loro raccolte di Le mie cose e,
+  vive, anche in Adesso, la più recente per prima; un aggiornamento resta al suo posto (stesso
+  elemento); il timer scaduto esce da Adesso e resta in Agenda; il calcolo è l'ultima risposta
+  (Conversazione e Adesso); novità sulla barra solo per ciò che non si vede, tolte guardando;
+  router sul frammento (barra, #/cose/lavori, indirizzo sconosciuto → Adesso, gesto indietro);
+  «In auto» a mano (niente barra, salvata) ed «Esci»;
+- Le mie cose (28/10, passo 2a): otto tessere coi conti dai servizi (Ufficio per chi amministra), due
+  colonne, il pallino dopo un cambiamento; la pagina Liste dalla tessera (schede del server al posto
+  delle tessere, il gesto indietro); la spunta manda il tocco giusto all'ingresso, resta in attesa,
+  si aggiorna con la lista del tool, un rifiuto (evento «tocco») o un 409 lo dice accanto;
+- l'Agenda (28/10, passo 2b): la pagina dalla tessera (timer di casa con chi l'ha messo, oggi,
+  domani, in settimana); «+1 minuto» e «Ferma» mandano il tocco giusto col bersaglio, restano in
+  attesa, la scheda aggiornata e l'esito la chiudono, un rifiuto o un 409 lo dice accanto; i tasti
+  anche in Adesso;
+- Lavori e programmi, Cassetto e Giochi (28/10, passo 2c, #258): le pagine dalle tessere coi servizi,
+  il lavoro in diretta che si allinea nella pagina, «Tieni ancora» del cassetto come prima con la
+  pagina che resta intera, i giochi di casa; il gioco che arriva resta uno solo, visibile sotto la
+  pagina Giochi;
 - modulo da compilare: si apre da solo nel suo strato, controlli mentre si scrive, «Invia»,
-  scheda «Compila» nel carosello; «Scrivi» apre la casella col fuoco, la frase arriva e lo
-  strato si chiude; il menu ha prova del microfono, schermo acceso, certificato, «dimentica»;
-- misure a 375×812, 320×568, 812×375 con 0 e 4+ schede, microfono spento, «Penso…», acceso:
-  tutto in uno schermo, niente testo fuori dai contenitori, schede dentro il carosello,
-  contrasto AA, tocchi ≥ 64 px, col microfono acceso «Parla» più basso e il carosello più alto;
-  modulo, menu e casella aperti: niente di lato, tasti ≥ 64 px (CALLIOPE_FOTO=<cartella> per gli
-  screenshot);
+  «Compila» in Adesso sotto «Aspetta te»; «Scrivi» apre la casella col fuoco, la frase arriva e
+  lo strato si chiude; Io ha prova del microfono, schermo acceso, certificato, «dimentica»;
+- misure a 375×812, 320×568, 812×375, 375×667 e 320×693 (iPhone 13 mini con lo «Zoom schermo»,
+  28/10) con 0 e 6 schede, microfono spento, «Penso…», acceso, in
+  ogni sezione e in auto: tutto in uno schermo (la sezione scorre da sé), niente testo fuori dai
+  contenitori, schede dentro la sezione, contrasto AA, tocchi ≥ 44 px (≥ 64 in auto), in auto col
+  microfono acceso «Parla» più basso e la risposta più alta; modulo e casella aperti: niente di
+  lato, tasti ≥ 64 px (CALLIOPE_FOTO=<cartella> per gli screenshot); il layout compatto in
+  verticale (28/10, #277): la voce su una riga con lo stato in «Parla», voce e barra sotto il 25 %
+  dell'altezza (30 % col testo ingrandito del 20 %), le tessere senza parole spezzate; in auto no;
 - nessun errore JavaScript né violazione della CSP. ~25 s.
 """
 
@@ -157,7 +175,7 @@ class Tel:
     def tocca_sel(self, sel):
         """Un tocco vero (gesto del browser) al centro del primo elemento del selettore."""
         r = self.v(f"(() => {{ const e = document.querySelector({json.dumps(sel)});"
-                   f" if (!e.closest('#vista')) e.scrollIntoView({{block: 'center'}});"
+                   f" if (!e.closest('#vista') || e.closest('.sezione')) e.scrollIntoView({{block: 'nearest'}});"
                    f" const b = e.getBoundingClientRect(); return [b.x + b.width / 2, b.y + b.height / 2]; }})()")
         for t in ("mousePressed", "mouseReleased"):
             self.p._chiama("Input.dispatchMouseEvent", {"type": t, "x": r[0], "y": r[1],
@@ -296,8 +314,9 @@ def scenari(t: Tel, srv):
     # 6. opzione «tengo acceso lo schermo» spenta e riaccesa
     t.tocca("microfono")
     aspetta(lambda: t.mic() and t.schermo().get("stato") == "acceso", 5)
-    t.tocca("menu-apri")
-    verifica("menu: si apre dall'icona in alto", bool(aspetta(lambda: t.v("!document.getElementById('menu').hidden"), 2)))
+    t.tocca_sel('#barra a[data-sezione="io"]')
+    verifica("Io: si apre dalla barra (#/io)", bool(aspetta(lambda: t.v(
+        "location.hash === '#/io' && !document.getElementById('sez-io').hidden"), 2)))
     t.tocca("schermo-tieni")
     ok = aspetta(lambda: t.wl().get("n") == 0 and not t.schermo().get("tieni"), 3)
     ind = t.indicatore()
@@ -307,10 +326,12 @@ def scenari(t: Tel, srv):
     t.tocca("schermo-tieni")
     ok = aspetta(lambda: t.wl().get("n") == 1 and t.schermo().get("stato") == "acceso", 3)
     verifica("opzione riaccesa: schermo di nuovo tenuto acceso", bool(ok))
-    t.tocca("menu-chiudi")
-    verifica("menu: «Chiudi» lo chiude", bool(aspetta(lambda: t.v("document.getElementById('menu').hidden"), 2)))
+    t.v("history.back(); 1")
+    verifica("Io: il gesto indietro torna ad Adesso", bool(aspetta(lambda: t.v(
+        "location.hash === '#/adesso' && document.getElementById('sez-io').hidden"
+        " && !document.getElementById('sez-adesso').hidden"), 2)))
 
-    # 7. la vista (04/10: è sempre quella che era la vista da guida)
+    # 7. la vista (27/10: a sezioni; la vista da guida è la modalità In auto)
     t.v(f"{T}.comando({{tipo: 'frase', turno: 7, id: 70, testo: 'Sono le 18:42.', rate: 22050, byte: 0}});"
         f"{T}.comando({{tipo: 'frase', turno: 7, id: 71, testo: 'Domani piove.', rate: 22050, byte: 0}}); 1")
     g = t.v("""(() => {
@@ -324,17 +345,18 @@ def scenari(t: Tel, srv):
       return {
         sfondo: cs(vista).backgroundColor, body: cs(document.body).backgroundColor, anim,
         risposta: document.getElementById('risposta-testo').textContent,
-        vecchi: ['guida', 'guida-apri', 'guida-esci', 'voce-tel', 'principale', 'cronologia'].filter((id) => document.getElementById(id)),
+        vecchi: ['guida', 'guida-apri', 'guida-esci', 'voce-tel', 'principale', 'cronologia', 'menu', 'menu-apri',
+                 'carosello', 'binario', 'punti'].filter((id) => document.getElementById(id)),
         parla: document.getElementById('parla').getBoundingClientRect().height,
         mic: document.getElementById('microfono').getAttribute('aria-checked'),
         acceso: vista.classList.contains('mic-acceso'),
       };
     })()""") or {}
-    verifica("vista: fondo nero, niente vista normale né «Vista da guida»/«Esci»",
+    verifica("vista: fondo nero, niente vista normale, menu né carosello",
              g.get("sfondo") == "rgb(0, 0, 0)" and g.get("body") == "rgb(0, 0, 0)" and g.get("vecchi") == [],
              json.dumps(g.get("vecchi")))
     verifica("vista: nessuna animazione (anche nello stato «ascolto»)", g.get("anim") == [], json.dumps(g.get("anim")))
-    verifica("vista: l'ultima risposta intera nel carosello (le frasi del turno)",
+    verifica("vista: l'ultima risposta intera in Adesso (le frasi del turno)",
              g.get("risposta") == "Sono le 18:42. Domani piove.", g.get("risposta"))
     verifica("vista: microfono acceso segnato, «Parla» ridotto (≤ 76 px)",
              g.get("mic") == "true" and g.get("acceso") and g.get("parla", 999) <= 76, f"{g.get('parla')}")
@@ -373,9 +395,9 @@ def tutti(hub, scheda):
     return [hub.invia_a(s["id"], scheda) for s in hub.abbinati()]
 
 
-def carosello(t: Tel, hub):
-    """Le schede nel carosello: la più recente per prima, aggiornate al loro posto, chi scorre
-    a mano non viene spostato, la risposta dopo una scheda non la copre."""
+def sezioni(t: Tel, hub):
+    """Le schede nelle sezioni (27/10): ognuna nella sua raccolta, quelle vive anche in Adesso,
+    aggiornate al loro posto; l'ultima risposta; le novità sulla barra; il router; In auto."""
     T = "window.calliopeTelefono"
     ok = aspetta(lambda: hub.collegati(), 10)
     verifica("schede: il telefono è collegato anche come schermo", bool(ok))
@@ -383,65 +405,643 @@ def carosello(t: Tel, hub):
     for k in ("lista", "timer", "esecuzione", "documento"):
         tutti(hub, S[k])
         time.sleep(0.15)
-    ok = aspetta(lambda: len((t.v(f"{T}.carosello()") or {}).get("ordine", [])) == 5, 5)
-    c = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: risposta e 4 schede, la più recente per prima e in vista",
-             bool(ok) and c.get("ordine", [""])[0] == "documento:5" and c.get("vista") == "documento:5",
-             json.dumps(c))
-    punti = t.v("document.querySelectorAll('#punti i').length")
-    verifica("carosello: indicatore di posizione (5 puntini, uno segnato)", punti == 5
-             and t.v("document.querySelectorAll('#punti i.qui').length") == 1, str(punti))
-    # aggiornamento al suo posto: stesso elemento, stessa posizione, vista invariata, niente segno
-    t.v("window.__el = document.querySelector('#binario [data-chiave=\"esecuzione:7\"]'); 1")
+    chiavi = ["documento:5", "esecuzione:7", S["timer"]["chiave"], "lista:spesa"]
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("adesso/corso") == chiavi, 5)
+    c = t.v(f"{T}.sezioni()") or {}
+    p = c.get("posti", {})
+    verifica("sezioni: ogni scheda nella sua raccolta di Le mie cose (liste, agenda, lavori, documenti)",
+             p.get("cose/liste") == ["lista:spesa"] and p.get("cose/agenda") == [S["timer"]["chiave"]]
+             and p.get("cose/lavori") == ["esecuzione:7"] and p.get("cose/documenti") == ["documento:5"],
+             json.dumps(p)[:300])
+    verifica("sezioni: le quattro vive anche in Adesso, la più recente per prima",
+             bool(ok) and c.get("sezione") == "adesso", json.dumps(p.get("adesso/corso")))
+    verifica("sezioni: niente novità per ciò che si vede già in Adesso", c.get("novita", {}).get("cose") == 0,
+             json.dumps(c.get("novita")))
+    gruppi = t.v("[...document.querySelectorAll('#sez-cose .raccolta')].filter((r) => !r.hidden)"
+                 ".map((r) => r.dataset.raccolta)") or []
+    verifica("sezioni: in Le mie cose solo le raccolte con qualcosa", gruppi == ["liste", "agenda", "lavori", "documenti"],
+             json.dumps(gruppi))
+    # aggiornamento al suo posto: stesso elemento in Le mie cose e in Adesso, ordine uguale
+    t.v("window.__el = document.querySelector('#sez-cose [data-chiave=\"esecuzione:7\"]');"
+        " window.__el2 = document.querySelector('#sez-adesso [data-chiave=\"esecuzione:7\"]'); 1")
     from calliope.schermi import schede
     righe = [{"tipo": "out", "testo": f"riga {i}\n"} for i in range(20)]
     tutti(hub, schede.esecuzione("Conta le parole", "conta.py", "python", "in_corso", [], righe, 0, None,
                                  time.time() - 5, 5.0, 60, ident=7, sposta=False))
-    ok = aspetta(lambda: t.v("(document.querySelector('#binario [data-chiave=\"esecuzione:7\"] pre')||{}).textContent||''")
+    ok = aspetta(lambda: t.v("(document.querySelector('#sez-cose [data-chiave=\"esecuzione:7\"] pre')||{}).textContent||''")
                  .count("riga") == 20, 5)
-    c2 = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: scheda aggiornata al suo posto (stesso elemento, ordine e vista uguali)",
-             bool(ok) and t.v("window.__el === document.querySelector('#binario [data-chiave=\"esecuzione:7\"]')")
-             and c2.get("ordine") == c.get("ordine") and c2.get("vista") == "documento:5", json.dumps(c2))
-    # la risposta del turno arriva subito dopo la scheda: resta la scheda
-    t.v(f"{T}.comando({{tipo: 'frase', turno: 30, id: 300, testo: 'Ecco la disdetta.', rate: 22050, byte: 0}}); 1")
-    c3 = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: la risposta va in testa ma la scheda appena mostrata resta in vista",
-             c3.get("ordine", [""])[0] == "__risposta" and c3.get("vista") == "documento:5", json.dumps(c3))
-    # turno nuovo senza schede: si vede la risposta
-    t.v(f"{T}.opzioniCarosello.schedaMs = 0; {T}.comando({{tipo: 'frase', turno: 31, id: 310, testo: 'Sono le sette.', rate: 22050, byte: 0}}); 1")
-    c4 = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: turno nuovo senza schede → la risposta in vista", c4.get("vista") == "__risposta", json.dumps(c4))
-    # scorrimento a mano (come un dito): poi una scheda nuova non la sposta
-    t.v("(() => { const b = document.getElementById('binario'); b.dispatchEvent(new PointerEvent('pointerdown'));"
-        " const p = [...b.children].filter((e) => !e.hidden); b.scrollTo({left: p[3].offsetLeft - p[0].offsetLeft, behavior: 'instant'}); })(); 1")
-    ok = aspetta(lambda: (t.v(f"{T}.carosello()") or {}).get("vista") == c4["ordine"][3], 2)
-    tutti(hub, schede.calcolo("17 × 6", "102"))
-    aspetta(lambda: len((t.v(f"{T}.carosello()") or {}).get("ordine", [])) == 6, 5)
-    c5 = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: chi scorre a mano non viene spostato da una scheda nuova",
-             bool(ok) and c5.get("vista") == c4["ordine"][3] and len(c5.get("ordine", [])) == 6, json.dumps(c5))
-    t.v(f"{T}.opzioniCarosello.manoMs = 0; 1")
-    tutti(hub, schede.calcolo("2 + 2", "4"))
-    # Si aspetta lo stato finale (06/10): la condizione di prima («vista» con un trattino)
-    # era già vera con la vista vecchia, e sotto carico la verifica guardava troppo presto
-    def mostrata():
-        c = t.v(f"{T}.carosello()") or {}
-        return (c.get("vista") == (c.get("ordine") or [""])[0]
-                and c.get("vista") != "__risposta" and len(c.get("ordine", [])) == 7)
-    ok = aspetta(mostrata, 15)
-    c6 = t.v(f"{T}.carosello()") or {}
-    verifica("carosello: passato il tempo, la scheda nuova si mostra (al più 7 cose)",
-             c6.get("vista") == c6.get("ordine", [""])[0] and c6.get("vista") != "__risposta"
-             and len(c6.get("ordine", [])) == 7, json.dumps(c6))
-    t.v(f"{T}.opzioniCarosello.manoMs = 10000; {T}.opzioniCarosello.schedaMs = 12000; 1")
-    timer = t.v("(document.querySelector('#binario .tipo-timer .resto')||{}).textContent||''") or ""
-    verifica("carosello: il timer conta anche nel carosello", ":" in timer, timer)
+    c2 = t.v(f"{T}.sezioni()") or {}
+    verifica("sezioni: scheda aggiornata al suo posto (stessi elementi, stesso ordine)",
+             bool(ok) and t.v("window.__el === document.querySelector('#sez-cose [data-chiave=\"esecuzione:7\"]')"
+                              " && window.__el2 === document.querySelector('#sez-adesso [data-chiave=\"esecuzione:7\"]')")
+             and c2.get("posti", {}).get("adesso/corso") == chiavi, json.dumps(c2.get("posti", {}).get("adesso/corso")))
+    timer = t.v("(document.querySelector('#sez-adesso .tipo-timer .resto')||{}).textContent||''") or ""
+    verifica("sezioni: il timer conta in Adesso", ":" in timer, timer)
+    # il timer scaduto non è più vivo: esce da Adesso, resta in Agenda
+    scaduto = dict(schede.timer({"id": 4, "label": "per la pasta", "due": time.time() - 1}, "scaduto"),
+                   chiave=S["timer"]["chiave"])
+    tutti(hub, scaduto)
+    ok = aspetta(lambda: S["timer"]["chiave"] not in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("adesso/corso", []), 5)
+    c3 = t.v(f"{T}.sezioni()") or {}
+    verifica("sezioni: il timer scaduto esce da Adesso e resta in Agenda",
+             bool(ok) and c3.get("posti", {}).get("cose/agenda") == [S["timer"]["chiave"]], json.dumps(c3.get("posti"))[:300])
+    # la risposta del turno e il calcolo: l'ultima risposta in Adesso, il calcolo anche in Conversazione
+    t.v(f"{T}.comando({{tipo: 'frase', turno: 30, id: 300, testo: 'Fa 102.', rate: 22050, byte: 0}}); 1")
+    calc = schede.calcolo("17 × 6", "102")
+    tutti(hub, calc)
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("adesso/risposta") == [calc["id"]], 5)
+    c4 = t.v(f"{T}.sezioni()") or {}
+    verifica("sezioni: il calcolo è l'ultima risposta (in Adesso sotto il testo) e sta in Conversazione",
+             bool(ok) and c4.get("posti", {}).get("conversazione") == [calc["id"]]
+             and t.v("document.getElementById('risposta-testo').textContent") == "Fa 102.", json.dumps(c4.get("posti"))[:300])
+    # le novità: una scheda della conversazione arrivata mentre si guarda Io; guardando si tolgono
+    t.tocca_sel('#barra a[data-sezione="io"]')
+    aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("sezione") == "io", 2)
+    tutti(hub, schede.testo("Da leggere", "Un testo da leggere con calma.", schede.PUBBLICA))
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("novita", {}).get("conversazione") == 1, 5)
+    segno = t.v("(() => { const b = document.querySelector('#barra a[data-sezione=\"conversazione\"] .novita');"
+                " return !b.hidden && b.textContent; })()")
+    verifica("novità: il pallino col numero su Conversazione", bool(ok) and segno == "1", str(segno))
+    t.tocca_sel('#barra a[data-sezione="conversazione"]')
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("novita", {}).get("conversazione") == 0
+                 and t.v("document.querySelector('#barra a[data-sezione=\"conversazione\"] .novita').hidden"), 3)
+    verifica("novità: guardando la sezione si tolgono", bool(ok))
+    # il router: un indirizzo per raccolta, uno sconosciuto torna ad Adesso, il gesto indietro
+    t.v(f"{T}.vai('#/cose/lavori'); 1")
+    ok = aspetta(lambda: t.v("location.hash === '#/cose/lavori' && !document.getElementById('sez-cose').hidden"), 2)
+    verifica("router: #/cose/lavori apre Le mie cose", bool(ok))
+    t.v("history.back(); 1")
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("sezione") == "conversazione", 2)
+    verifica("router: il gesto indietro torna alla sezione di prima", bool(ok))
+    t.v("location.hash = '#/boh'; 1")
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("sezione") == "adesso", 2)
+    verifica("router: un indirizzo sconosciuto è Adesso", bool(ok))
+    t.v(f"{T}.vai('#/adesso'); 1")
+    titolo = t.v("document.getElementById('sez-titolo').textContent")
+    verifica("router: il titolo è quello della sezione", titolo == "Adesso", titolo)
+    # In auto: a mano, niente barra, salvata; «Esci» torna ad Adesso
+    t.tocca("auto-apri")
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("modo") == "auto", 2)
+    a = t.v("({barra: getComputedStyle(document.getElementById('barra')).display,"
+            " salvata: localStorage.getItem('calliope.telefono.auto'),"
+            " esci: !document.getElementById('auto-esci').hidden,"
+            " altre: [...document.querySelectorAll('#sezioni .pagina-car')].filter((e) => e.getClientRects().length && e.id !== 'risposta').length})") or {}
+    verifica("In auto: a mano, niente barra né schede, solo la risposta; salvata",
+             bool(ok) and a.get("barra") == "none" and a.get("salvata") == "1" and a.get("esci") and a.get("altre") == 0,
+             json.dumps(a))
+    t.tocca("auto-esci")
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("modo") == "sezioni"
+                 and t.v("localStorage.getItem('calliope.telefono.auto')") is None, 2)
+    verifica("In auto: «Esci» torna alle sezioni", bool(ok))
+    aspetto(t, hub)
+    nascoste(t, hub)
+
+
+ACCENTO = "getComputedStyle(document.documentElement).getPropertyValue('--accento').trim()"
+
+
+def aspetto(t: Tel, hub):
+    """Io › Aspetto (27/10, passo 1c): lilla di serie, le scelte dal server, un tocco cambia
+    l'accento (variabile CSS, scelta segnata), salvata per la persona."""
+    T = "window.calliopeTelefono"
+    t.tocca_sel('#barra a[data-sezione="io"]')
+    # Io visibile prima di toccare «Rosa» (revisione della PR #254: con Io ancora nascosta il tocco
+    # finiva su (0, 0) e la prova cadeva a caso)
+    aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("sezione") == "io"
+            and t.v("!document.getElementById('sez-io').hidden"), 3)
+    ok = aspetta(lambda: t.v("document.querySelectorAll('#accenti .accento-scelta').length") >= 3, 3)
+    a = t.v("({accento: " + ACCENTO + ", segnata: (document.querySelector('#accenti [aria-pressed=\"true\"]')||{dataset: {}}).dataset.accento || '',"
+            " nomi: [...document.querySelectorAll('#accenti .accento-scelta')].map((b) => b.textContent)})") or {}
+    verifica("Aspetto: in Io le scelte con il nome, il lilla di serie segnato",
+             bool(ok) and a.get("accento") == "#b9a3e3" and a.get("segnata") == "lilla"
+             and "Lilla" in (a.get("nomi") or []), json.dumps(a))
+    t.tocca_sel('#accenti [data-accento="rosa"]')
+    ok = aspetta(lambda: t.v(ACCENTO) == "#e8a6c8"
+                 and t.v("document.querySelector('#accenti [data-accento=\"rosa\"]').getAttribute('aria-pressed')") == "true", 3)
+    verifica("Aspetto: un tocco su «Rosa» cambia l'accento della pagina e lo segna", bool(ok),
+             f"{t.v(ACCENTO)} esito «{t.v('document.getElementById(\"accento-esito\").textContent')}»"
+             f" {t.v('JSON.stringify(window.calliopeSchermo.aspetto())')[:120]}")
+    verifica("Aspetto: salvato per la persona sul server", hub.aspetto.accento("dario") == "rosa",
+             hub.aspetto.accento("dario"))
+    barra = t.v("getComputedStyle(document.querySelector('#barra a[aria-current]')).color")
+    verifica("Aspetto: la sezione aperta nella barra col nuovo accento", barra == "rgb(232, 166, 200)", barra)
+    t.tocca_sel('#accenti [data-accento="lilla"]')
+    aspetta(lambda: t.v(ACCENTO) == "#b9a3e3", 3)
+    t.v(f"{T}.vai('#/adesso'); 1")
+
+
+def nascoste(t: Tel, hub):
+    """Le sezioni nascoste sul telefono di un minore (27/10, passo 1c): la barra perde Casa,
+    #/casa porta ad Adesso, una scheda della casa va in Conversazione; tolte, tutto torna."""
+    T = "window.calliopeTelefono"
+    from calliope.schermi import schede
+    evento = "document.dispatchEvent(new CustomEvent('calliope:nascoste', {detail: %s})); 1"
+    t.v(evento % json.dumps({"sezioni": ["casa"], "raccolte": ["ufficio"]}))
+    tutti(hub, schede.nuova("casa", "Cucina", schede.CASA, chiave="casa:cucina",
+                            righe=[{"nome": "Luce cucina", "stato": "accesa", "acceso": True}]))
+    ok = aspetta(lambda: "casa:cucina" in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("conversazione", []), 5)
+    n = t.v("({casa: getComputedStyle(document.querySelector('#barra a[data-sezione=\"casa\"]')).display,"
+            " voci: [...document.querySelectorAll('#barra a')].filter((a) => getComputedStyle(a).display !== 'none').length})") or {}
+    verifica("minore: niente Casa nella barra (4 voci), la scheda della casa in Conversazione",
+             bool(ok) and n.get("casa") == "none" and n.get("voci") == 4, json.dumps(n))
+    t.v("location.hash = '#/casa'; 1")
+    ok = aspetta(lambda: (t.v(f"{T}.sezioni()") or {}).get("sezione") == "adesso", 2)
+    verifica("minore: #/casa porta ad Adesso", bool(ok))
+    t.v(evento % json.dumps({"sezioni": [], "raccolte": []}))
+    ok = aspetta(lambda: "casa:cucina" in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("casa", []), 3)
+    verifica("tolte le sezioni nascoste: Casa torna, con la sua scheda", bool(ok)
+             and t.v("document.querySelectorAll('#barra a').length") == 5
+             and t.v("getComputedStyle(document.querySelector('#barra a[data-sezione=\"casa\"]')).display") != "none")
+
+
+def prepara_raccolte(cfg, hub, cartella: Path):
+    """Le tessere e la pagina Liste (28/10, passo 2a): le liste di casa su disco e il profilo di
+    chi ha il telefono (amministra: anche la tessera Ufficio); gli altri servizi mancano."""
+    import types
+    from calliope.liste import Liste
+    from calliope.tools.spec import ToolContext
+    liste = Liste(str(cartella / "liste.db"))
+    liste.add("spesa", ["latte", "uova", "pane", "pomodori", "caffè"], "Dario")
+    hub.profilo = lambda pid: (types.SimpleNamespace(id="dario", name="Dario", admin=True, nascita=None, fascia=None)
+                               if pid == "dario" else None)
+    # L'agenda (28/10, passo 2b, #257): un timer di casa messo da Bianca e un promemoria di domani
+    from calliope.agenda import Agenda
+    agenda = Agenda(str(cartella / "agenda.db"))
+    agenda.add("timer", "per la pasta", time.time() + 900, owner="bianca", owner_name="Bianca")
+    # Domani a mezzogiorno (28/10: «adesso + 1,2 giorni» dopo le 19:12 cadeva dopodomani, «In settimana»)
+    import datetime as _dt
+    domani = (_dt.datetime.now() + _dt.timedelta(days=1)).replace(hour=12, minute=0, second=0, microsecond=0)
+    agenda.add("promemoria", "chiamare il fabbro", domani.timestamp(), owner="dario", owner_name="Dario")
+    hub.tool_ctx = ToolContext(cfg=cfg, speakers=None, speaker_ctx=None, speaker=None, liste=liste,
+                               agenda=agenda)
+    return liste
+
+
+def raccolte(t: Tel, hub, liste):
+    """Le mie cose (28/10, passo 2a): le tessere coi conti dai servizi e il pallino; la pagina
+    Liste dalla tessera (le schede dal server, il gesto indietro); la spunta manda il tocco giusto,
+    resta in attesa, si aggiorna con la lista che manda il tool, e un rifiuto si dice accanto."""
+    from calliope.schermi import schede
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    t.v(f"{T}.vai('#/cose'); 1")
+    ok = aspetta(lambda: len(t.v(f"{S}.tessere") or []) == 8, 5)
+    tes = {x["id"]: x for x in t.v(f"{S}.tessere") or []}
+    verifica("raccolte: otto tessere in cima a Le mie cose (Ufficio per chi amministra)",
+             bool(ok) and list(tes) == ["liste", "agenda", "lavori", "cassetto", "documenti", "giochi", "studio", "ufficio"]
+             and t.v("document.getElementById('sez-cose').firstElementChild.id === 'tessere'"), json.dumps(tes)[:300])
+    verifica("raccolte: la tessera Liste col conto vero, senza pallino alla prima visita",
+             tes.get("liste", {}).get("conto") == "1" and not tes.get("liste", {}).get("novita"), json.dumps(tes.get("liste")))
+    stato = t.v("document.querySelector('#tessere [data-tessera=\"studio\"] .tessera-stato').textContent")
+    # Lo Studio rifatto da capo (28/10, #279): la tessera dice «arriva presto», senza conto
+    verifica("raccolte: lo Studio senza conto dice «arriva presto» e la pagina «presto»",
+             tes.get("studio", {}).get("conto") == "—" and "arriva presto" in stato and "pagina presto" in stato, stato)
+    # Un servizio che manca (qui i giochi: nessun servizio delle estensioni) dice ancora «non
+    # disponibile», senza conto (fino al 28/10 l'esempio era lo Studio)
+    stato_g = t.v("document.querySelector('#tessere [data-tessera=\"giochi\"] .tessera-stato').textContent")
+    verifica("raccolte: un servizio che manca dice «non disponibile» (i giochi)",
+             tes.get("giochi", {}).get("conto") == "—" and "non disponibile" in (stato_g or ""), str(stato_g))
+    colonne = t.v("getComputedStyle(document.getElementById('tessere')).gridTemplateColumns.split(' ').length")
+    verifica("raccolte: due colonne sul telefono", colonne == 2, str(colonne))
+    # Un cambiamento della lista dopo la visita: il pallino
+    time.sleep(1.1)                              # «created» ha i secondi interi
+    liste.add("spesa", ["burro"], "Bianca")
+    t.v(f"{T}.aggiornaRaccolte(); 1")
+    ok = aspetta(lambda: any(x["id"] == "liste" and x["novita"] for x in t.v(f"{S}.tessere") or []), 5)
+    etichetta = t.v("document.querySelector('#tessere [data-tessera=\"liste\"]').getAttribute('aria-label')") or ""
+    verifica("raccolte: il pallino sulla tessera cambiata, detto anche a chi non vede", bool(ok) and "novità" in etichetta,
+             etichetta)
+    # La pagina Liste dalla tessera
+    t.tocca_sel('#tessere [data-tessera="liste"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/liste" and t.v(f"{S}.vistaCose") == "pagina"
+                 and t.v(f"{S}.pagina") == ["lista:spesa"], 5)
+    v = t.v("({titolo: document.getElementById('pagina-titolo').textContent,"
+            " tessere: getComputedStyle(document.getElementById('tessere')).display,"
+            " gruppo: getComputedStyle(document.querySelector('#sez-cose .raccolta[data-raccolta=\"liste\"]')).display})") or {}
+    verifica("pagina Liste: dalla tessera, con la lista del server, al posto delle tessere e dei gruppi",
+             bool(ok) and v.get("titolo") == "Liste" and v.get("tessere") == "none" and v.get("gruppo") == "none",
+             json.dumps(v))
+    verifica("pagina Liste: guardata, il pallino si toglie",
+             not any(x["id"] == "liste" and x["novita"] for x in t.v(f"{S}.tessere") or []))
+    spunte = t.v("[...document.querySelectorAll('#pagina-schede button.spunta')].map((b) => [b.dataset.voce,"
+                 " b.getAttribute('role'), b.getAttribute('aria-checked'), Math.round(b.getBoundingClientRect().height)])") or []
+    verifica("spunta: ogni voce è un tasto «checkbox» non spuntato, alto ≥ 44 px",
+             [s[0] for s in spunte] == ["latte", "uova", "pane", "pomodori", "caffè", "burro"]
+             and all(s[1] == "checkbox" and s[2] == "false" and s[3] >= 44 for s in spunte), json.dumps(spunte))
+    verifica("spunta: la regione per l'esito c'è già (role=status)",
+             t.v("!!document.querySelector('#pagina-schede .esito-tocco[role=\"status\"]')"))
+    while hub.ingresso.prendi() is not None:
+        pass
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="latte"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    verifica("spunta: il tocco giusto nell'ingresso (lista_togli col latte, a nome di chi ha il telefono)",
+             bool(ok) and item.get("tipo") == "tocco" and item.get("tool") == "lista_togli"
+             and item.get("argomenti") == {"cose": "latte", "lista": "spesa"} and item.get("persona") == "dario"
+             and item.get("pagina") == {"lista": "spesa", "voce": "latte"}, json.dumps(item, ensure_ascii=False)[:300])
+    b = t.v("(() => { const b = document.querySelector('#pagina-schede button.spunta[data-voce=\"latte\"]');"
+            " return {c: b.getAttribute('aria-checked'), busy: b.getAttribute('aria-busy'),"
+            " esito: b.closest('.scheda').querySelector('.esito-tocco').textContent}; })()") or {}
+    verifica("spunta: la voce resta segnata in attesa, detto nella regione di stato",
+             b.get("c") == "true" and b.get("busy") == "true" and "latte" in (b.get("esito") or ""), json.dumps(b))
+    # Il ciclo (qui finto): la voce tolta, la lista aggiornata dal tool e l'esito allo schermo
+    liste.remove("spesa", ["latte"])
+    tutti(hub, schede.lista("spesa", liste.read("spesa")[1], tolti=["latte"]))
+    hub.evento_a(item["schermo_id"], "tocco", {"tocco": "spunta_lista", "ok": True, "pagina": item["pagina"]})
+    ok = aspetta(lambda: t.v("[...document.querySelectorAll('#pagina-schede button.spunta')].map((b) => b.dataset.voce)")
+                 == ["uova", "pane", "pomodori", "caffè", "burro"]
+                 and t.v("document.querySelector('#pagina-schede .esito-tocco').textContent") == "", 5)
+    verifica("spunta: la lista aggiornata dal tool sostituisce quella della pagina, al suo posto", bool(ok))
+    # Un rifiuto dal ciclo (evento «tocco»): la voce torna com'era, il motivo accanto
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="uova"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "spunta_lista", "ok": False,
+                                                    "errore": "Non hai il permesso per farlo.", "pagina": item.get("pagina")})
+    ok = aspetta(lambda: t.v("(() => { const b = document.querySelector('#pagina-schede button.spunta[data-voce=\"uova\"]');"
+                             " return b.getAttribute('aria-checked') === 'false' && !b.hasAttribute('aria-busy')"
+                             " && b.closest('.scheda').querySelector('.esito-tocco').textContent === 'Non hai il permesso per farlo.'; })()"), 5)
+    verifica("spunta: un rifiuto del ciclo la toglie e lo dice accanto", bool(ok))
+    # Un errore HTTP (la voce tolta nel frattempo da un'altra parte): 409 col motivo
+    liste.remove("spesa", ["pane"])
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="pane"]')
+    ok = aspetta(lambda: t.v("(() => { const b = document.querySelector('#pagina-schede button.spunta[data-voce=\"pane\"]');"
+                             " return b.getAttribute('aria-checked') === 'false'"
+                             " && b.closest('.scheda').querySelector('.esito-tocco').textContent.includes('non c\\'è più'); })()"), 5)
+    verifica("spunta: una voce che non c'è più (409) torna com'era, col motivo", bool(ok) and hub.ingresso.vuoto(),
+             t.v("document.querySelector('#pagina-schede .esito-tocco').textContent"))
+    # Riuscito senza la lista aggiornata (SSE perso, schede automatiche spente in un hub vecchio):
+    # la voce resta spuntata e non si ritocca, invece di tornare libera
+    sel = lambda v: f"document.querySelector('#pagina-schede button.spunta[data-voce=\"{v}\"]')"  # noqa: E731
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="pomodori"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "spunta_lista", "ok": True, "pagina": item.get("pagina")})
+    ok = aspetta(lambda: t.v(f"{sel('pomodori')}.getAttribute('aria-disabled') === 'true'"
+                             f" && {sel('pomodori')}.getAttribute('aria-checked') === 'true'"
+                             f" && !{sel('pomodori')}.hasAttribute('aria-busy')"), 5)
+    verifica("spunta: riuscita senza la lista nuova, la voce resta spuntata (non torna libera)", bool(ok))
+    # Una lista più recente che contiene ancora la voce («rimettilo» a voce): si tocca di nuovo
+    tutti(hub, schede.lista("spesa", liste.read("spesa")[1]))
+    ok = aspetta(lambda: t.v(f"{sel('pomodori')}.getAttribute('aria-checked') === 'false'"
+                             f" && !{sel('pomodori')}.hasAttribute('aria-disabled')"), 5)
+    verifica("spunta: la voce rimessa in una lista nuova si tocca di nuovo", bool(ok))
+    # Nessun esito entro l'attesa (un turno a voce in corso): la pagina lo dice com'è, e un
+    # secondo tocco della stessa voce non rimanda niente
+    t.v("window.calliopeSchermo.spunta.attesaMs = 1500; 1")
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="caffè"]')
+    aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    esito = f"{sel('caffè')}.closest('.scheda').querySelector('.esito-tocco').textContent"
+    ok = aspetta(lambda: "occupata" in (t.v(esito) or "") and t.v(f"{sel('caffè')}.getAttribute('aria-checked')") == "true", 5)
+    verifica("spunta: senza esito la pagina dice che Calliope è occupata (il tocco è in coda)", bool(ok), t.v(esito))
+    t.tocca_sel('#pagina-schede button.spunta[data-voce="caffè"]')
+    time.sleep(0.5)
+    verifica("spunta: un secondo tocco della stessa voce non rimanda il tocco", hub.ingresso.vuoto()
+             and "occupata" in (t.v(esito) or ""))
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "spunta_lista", "ok": True, "pagina": item.get("pagina")})
+    ok = aspetta(lambda: t.v(f"{sel('caffè')}.getAttribute('aria-disabled')") == "true" and t.v(esito) == "", 5)
+    verifica("spunta: l'esito che arriva dopo chiude l'attesa", bool(ok))
+    t.v("window.calliopeSchermo.spunta.attesaMs = 30000; 1")
+    # Il gesto indietro torna alle tessere; una tessera senza pagina porta al suo gruppo
+    t.v("history.back(); 1")
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose" and t.v(f"{S}.vistaCose") == "tessere"
+                 and t.v("getComputedStyle(document.getElementById('tessere')).display") != "none", 3)
+    verifica("pagina Liste: il gesto indietro torna alle tessere", bool(ok))
+    t.tocca_sel('#tessere [data-tessera="studio"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/studio" and t.v(f"{S}.vistaCose") == "tessere", 3)
+    verifica("raccolte: una tessera senza pagina resta sulle tessere e porta al suo gruppo", bool(ok))
+    # Una scheda della lista da Adesso («Apri») porta alla pagina, con la scheda in vista
+    t.v(f"{T}.vaiA('lista:spesa'); 1")
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/liste/lista%3Aspesa" and t.v(f"{S}.vistaCose") == "pagina", 3)
+    verifica("raccolte: la scheda della lista porta alla pagina Liste", bool(ok), t.v("location.hash"))
+    t.v(f"{T}.vai('#/adesso'); 1")
+
+
+def agenda_pagina(t: Tel, hub):
+    """La pagina Agenda e i tasti del timer (28/10, passo 2b, #257): dalla tessera, il timer di casa
+    con chi l'ha messo e i tre giorni; «+1 minuto» e «Ferma» mandano il tocco giusto, restano in
+    attesa, la scheda aggiornata e l'esito la chiudono, un rifiuto si dice accanto; i tasti anche
+    sulla scheda del timer in Adesso."""
+    from calliope.schermi import schede
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    agenda = hub.tool_ctx.agenda
+    timer = next(it for it in agenda.items("dario") if it["kind"] == "timer")
+    chiave = schede.chiave_timer(timer)
+    t.v(f"{T}.vai('#/cose'); 1")
+    aspetta(lambda: any(x["id"] == "agenda" for x in t.v(f"{S}.tessere") or []), 5)
+    t.tocca_sel('#tessere [data-tessera="agenda"]')
+    attese = [chiave, "agenda:dario:oggi", "agenda:dario:domani", "agenda:dario:settimana"]
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/agenda" and t.v(f"{S}.vistaCose") == "pagina"
+                 and t.v(f"{S}.pagina") == attese, 5)
+    verifica("pagina Agenda: dalla tessera, il timer di casa e i tre giorni dal server",
+             bool(ok) and t.v("document.getElementById('pagina-titolo').textContent") == "Agenda", str(t.v(f"{S}.pagina")))
+    testi = t.v("[...document.querySelectorAll('#pagina-schede .scheda')].map((s) => s.textContent)") or []
+    verifica("pagina Agenda: chi ha messo il timer, il promemoria di domani, il vuoto di oggi",
+             len(testi) == 4 and "messo da Bianca" in testi[0] and "chiamare il fabbro" in testi[2]
+             and "Niente oggi." in testi[1] and "Niente nei prossimi giorni." in testi[3], json.dumps(testi)[:400])
+    sel = "#pagina-schede button.tasto-timer"
+    tasti = t.v(f"[...document.querySelectorAll('{sel}')].map((b) => [b.dataset.tocco, b.textContent,"
+                " b.getAttribute('aria-label'), Math.round(b.getBoundingClientRect().height),"
+                " Math.round(b.getBoundingClientRect().width)])") or []
+    verifica("tasti del timer: «+1 minuto» e «Ferma», con il nome del timer per chi non vede, ≥ 44 px",
+             [x[:2] for x in tasti] == [["timer_piu", "+1 minuto"], ["timer_ferma", "Ferma"]]
+             and all("per la pasta" in x[2] and x[3] >= 44 and x[4] >= 44 for x in tasti), json.dumps(tasti))
+    verifica("tasti del timer: la regione per l'esito c'è già (role=status)",
+             t.v("!!document.querySelector('#pagina-schede .scheda .esito-tocco[role=\"status\"]')"))
+    while hub.ingresso.prendi() is not None:
+        pass
+    t.tocca_sel(f'{sel}[data-tocco="timer_piu"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    verifica("tasti del timer: «+1 minuto» manda il tocco giusto (timer_imposta aggiungi, quel timer)",
+             bool(ok) and item.get("tocco") == "timer_piu" and item.get("tool") == "timer_imposta"
+             and item.get("argomenti", {}).get("cambia") == "aggiungi"
+             and item.get("bersaglio") == {"timer": timer["id"], "chiave": chiave}
+             and item.get("pagina") == {"chiave": chiave} and item.get("persona") == "dario",
+             json.dumps(item, ensure_ascii=False)[:300])
+    stato = ("(() => { const b = [...document.querySelectorAll('" + sel + "')];"
+             " return {busy: b.map((x) => x.getAttribute('aria-busy')), attesa: b.map((x) => x.classList.contains('in-attesa')),"
+             " esito: (b[0] ? b[0].closest('.scheda').querySelector('.esito-tocco').textContent : null)}; })()")
+    v = t.v(stato) or {}
+    verifica("tasti del timer: in attesa, detto nella regione di stato",
+             v.get("busy") == ["true", "true"] and v.get("attesa") == [True, False]
+             and v.get("esito") == "Aggiungo un minuto…", json.dumps(v, ensure_ascii=False))
+    # Il ciclo (qui finto): il timer allungato, la scheda aggiornata e l'esito allo schermo
+    nuovo = agenda.reschedule(timer["id"], timer["due"] + 60)
+    tutti(hub, schede.timer(nuovo))
+    hub.evento_a(item["schermo_id"], "tocco", {"tocco": "timer_piu", "ok": True, "pagina": item["pagina"]})
+    ok = aspetta(lambda: (t.v(stato) or {}).get("busy") == [None, None] and (t.v(stato) or {}).get("esito") == ""
+                 and abs((t.v("Number(document.querySelector('#pagina-schede .timer .resto').dataset.fine)") or 0)
+                         - nuovo["due"] * 1000) < 2, 5)
+    verifica("tasti del timer: la scheda aggiornata (un minuto in più) e l'esito chiudono l'attesa", bool(ok),
+             json.dumps(t.v(stato)))
+    # «Ferma», rifiutato dal ciclo: i tasti tornano liberi col motivo accanto
+    t.tocca_sel(f'{sel}[data-tocco="timer_ferma"]')
+    ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
+    item = hub.ingresso.prendi() or {}
+    verifica("tasti del timer: «Ferma» manda agenda_annulla su quel timer",
+             bool(ok) and item.get("tool") == "agenda_annulla" and item.get("bersaglio", {}).get("chiave") == chiave)
+    hub.evento_a(item.get("schermo_id"), "tocco", {"tocco": "timer_ferma", "ok": False, "pagina": item.get("pagina"),
+                                                    "errore": "Questo timer non c'è più: è già suonato o è stato fermato."})
+    ok = aspetta(lambda: (t.v(stato) or {}).get("busy") == [None, None]
+                 and "non c'è più" in ((t.v(stato) or {}).get("esito") or ""), 5)
+    verifica("tasti del timer: un rifiuto del ciclo libera i tasti e lo dice accanto", bool(ok), json.dumps(t.v(stato)))
+    # Un errore HTTP (il timer suonato prima di arrivare al server): 409 col motivo
+    agenda.cancel_ids({timer["id"]})
+    t.tocca_sel(f'{sel}[data-tocco="timer_piu"]')
+    ok = aspetta(lambda: "non c'è più" in ((t.v(stato) or {}).get("esito") or "")
+                 and (t.v(stato) or {}).get("busy") == [None, None], 5)
+    verifica("tasti del timer: un timer che non c'è più (409) lo dice, niente al ciclo", bool(ok) and hub.ingresso.vuoto())
+    # La scheda del timer in Adesso ha gli stessi tasti
+    tid = agenda.add("timer", "per le uova", time.time() + 600, owner="dario", owner_name="Dario")
+    c = schede.timer(agenda.get(tid))
+    tutti(hub, c)
+    t.v(f"{T}.vai('#/adesso'); 1")
+    ok = aspetta(lambda: t.v("[...document.querySelectorAll('#sez-adesso button.tasto-timer')]"
+                             f".filter((b) => b.dataset.chiave === {json.dumps(c['chiave'])}).length") == 2, 5)
+    verifica("tasti del timer: anche sulla scheda del timer in Adesso", bool(ok))
+
+
+def pagine_2c(t: Tel, hub, cartella: Path):
+    """Lavori e programmi, Cassetto e Giochi (28/10, passo 2c, #258): dalla tessera, le schede dai
+    servizi; il lavoro in diretta che arriva si allinea al suo posto nella pagina; il tasto del
+    cassetto va come prima e la pagina resta coi file di tutti (la scheda che manda il server dopo
+    il tasto non la sostituisce); i giochi di casa con «Calliope, giochiamo a…»."""
+    import types
+    from calliope.cassetto import Cassetto
+    from calliope.config import Config
+    from calliope.schermi import schede
+    import prova_pagine_cose as ppc
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    cfg = Config()
+    cfg.agenti_risultati = str(cartella / "risultati")
+    ora = time.time()
+    corso = ppc.lavoro("L1", ppc.DARIO, "in_corso", "orari dei treni", creato=ora - 60, passo="legge le pagine")
+    fatto = ppc.lavoro("L2", ppc.DARIO, "fatto", "ricetta del pane", creato=ora - 900, fine=ora - 800,
+                       risultato={"markdown": True, "testo": "# Pane\n\nFarina e acqua.", "riassunto": "Farina e acqua."})
+    hub.tool_ctx.lavori = ppc.servizio_lavori(cfg, [corso, fatto])
+    cas = Cassetto(str(cartella / "cassetto.db"), str(cartella / "cassetto"), log=lambda m: None)
+    fid = cas.metti("dario", b"scontrino del ferramenta", "scontrino.txt", "testo", fonte="telefono")
+    hub.cassetto = cas
+    hub.tool_ctx.estensioni = types.SimpleNamespace(archivio=ppc.Archivio(
+        [ppc.manifesto("tris", "Tris"), ppc.manifesto("cassaforte", "La cassaforte", livello="amministra")]))
+    t.v(f"{T}.vai('#/cose'); 1")
+    t.v(f"{T}.aggiornaRaccolte(); 1")
+    ok = aspetta(lambda: {x["id"]: x["conto"] for x in t.v(f"{S}.tessere") or []}.get("lavori") == "2", 5)
+    stati = t.v("[...document.querySelectorAll('#tessere .tessera')].filter((a) => ['lavori', 'cassetto', 'giochi']"
+                ".includes(a.dataset.tessera)).map((a) => a.querySelector('.tessera-stato').textContent)") or []
+    verifica("pagine 2c: le tessere Lavori, Cassetto e Giochi coi conti e la pagina (niente «presto»)",
+             bool(ok) and len(stati) == 3 and not any("presto" in x for x in stati), json.dumps(stati))
+    # Lavori e programmi
+    t.tocca_sel('#tessere [data-tessera="lavori"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/lavori" and t.v(f"{S}.pagina") == ["lavoro:L1", "lavoro:L2"], 5)
+    nota = t.v("document.getElementById('pagina-nota').hidden ? '' : document.getElementById('pagina-nota').textContent") or ""
+    verifica("pagina Lavori: il lavoro in corso e quello finito dal servizio, con la frase della voce sopra",
+             bool(ok) and "orari dei treni" in nota and t.v("document.getElementById('pagina-titolo').textContent")
+             == "Lavori e programmi", f"{t.v(f'{S}.pagina')} {nota}")
+    testi = t.v("[...document.querySelectorAll('#pagina-schede .scheda')].map((s) => s.textContent)") or []
+    verifica("pagina Lavori: il passo del lavoro in corso e il testo del finito",
+             len(testi) == 2 and "legge le pagine" in testi[0] and "Farina" in testi[1], json.dumps(testi)[:300])
+    sel_l1 = "document.querySelector('#pagina-schede [data-chiave=\"lavoro:L1\"]')"
+    t.v(f"{sel_l1}.__segno = 'x'; 1")
+    tutti(hub, schede.lavoro_avanzamento("orari dei treni", "ricerca", "in_corso",
+                                         {"passo": "confronta gli orari", "passi": []}, ident="L1"))
+    ok = aspetta(lambda: "confronta gli orari" in (t.v(f"{sel_l1} && {sel_l1}.textContent") or ""), 5)
+    verifica("pagina Lavori: la scheda in diretta che arriva si allinea al suo posto (stesso elemento)",
+             bool(ok) and t.v(f"{sel_l1}.__segno") == "x" and t.v(f"{S}.pagina") == ["lavoro:L1", "lavoro:L2"])
+    # Una raffica di schede della raccolta che la pagina non ha: una rilettura sola (revisione PR #267)
+    t.v("(() => { const s = window.calliopeSchermo, f = s.raccolte; window.__letture = 0;"
+        " s.raccolte = (d) => { if (d && d.raccolta) window.__letture++; return f(d); }; })(); 1")
+    for i in range(6):
+        tutti(hub, schede.esecuzione("orari dei treni", "main.py", "Python", "fatto", [], [], 0, 0,
+                                     inizio=ora - 5, trascorso_s=1, max_s=60, ident=f"L1-{i}"))
+    aspetta(lambda: (t.v("window.__letture") or 0) >= 1, 12)
+    time.sleep(2.0)
+    letture = t.v("window.__letture")
+    verifica("pagina Lavori: una raffica di schede la rilegge una volta sola (al più una ogni 10 s)",
+             letture == 1 and t.v(f"{S}.pagina") == ["lavoro:L1", "lavoro:L2"], str(letture))
+    # Cassetto
+    t.v(f"{T}.vai('#/cose'); 1")
+    t.tocca_sel('#tessere [data-tessera="cassetto"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/cassetto" and t.v(f"{S}.pagina") == ["cassetto:dario:pagina"], 5)
+    prima_scheda = "document.querySelector('#pagina-schede .scheda')"
+    testo = t.v(f"{prima_scheda} && {prima_scheda}.textContent") or ""
+    nota = t.v("document.getElementById('pagina-nota').textContent") or ""
+    verifica("pagina Cassetto: i file della persona, la nota dei giorni e del dato",
+             bool(ok) and "scontrino.txt" in testo and "7 giorni" in nota and "dato" in nota, f"{testo[:120]} {nota}")
+    prima = cas.prendi("dario", fid)["scade"]
+    # Dopo il tasto riuscito la pagina si rilegge subito (2d, seconda revisione della PR #267): una
+    # lettura della pagina Cassetto entro 1 s dall'esito, prima dell'attesa delle schede (≥ 1,5 s); la
+    # lettura parte nello stesso evento, prima di questo ascoltatore (registrato dopo): qualche ms prima
+    t.v("(() => { const s = window.calliopeSchermo, f = s.raccolte; window.__tempi = []; window.__esito = 0;"
+        " document.addEventListener('calliope:cassetto', () => { window.__esito = Date.now(); });"
+        " s.raccolte = (d) => { if (d && d.raccolta === 'cassetto') window.__tempi.push(Date.now()); return f(d); }; })(); 1")
+    t.tocca_sel('#pagina-schede button[data-cassetto="ancora"]')
+    ok_subito = aspetta(lambda: t.v("window.__esito > 0 && window.__tempi.some((x) => x - window.__esito > -50"
+                                    " && x - window.__esito < 1000)"), 5)
+    verifica("pagina Cassetto: dopo un tasto riuscito la pagina si rilegge subito", bool(ok_subito),
+             json.dumps(t.v("[window.__esito, window.__tempi]")))
+    ok = aspetta(lambda: (cas.prendi("dario", fid) or {}).get("scade", 0) > prima, 5)
+    time.sleep(0.6)
+    ok2 = aspetta(lambda: t.v(f"{S}.pagina") == ["cassetto:dario:pagina"]
+                  and "scontrino.txt" in (t.v(f"{prima_scheda} && {prima_scheda}.textContent") or ""), 5)
+    verifica("pagina Cassetto: «Tieni ancora» va come prima, e la pagina resta coi suoi file", bool(ok) and bool(ok2),
+             json.dumps(t.v(f"{S}.pagina")))
+    # Giochi
+    t.v(f"{T}.vai('#/cose'); 1")
+    t.tocca_sel('#tessere [data-tessera="giochi"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/giochi" and t.v(f"{S}.pagina") == ["giochi:casa:dario"], 5)
+    testo = t.v(f"{prima_scheda} && {prima_scheda}.textContent") or ""
+    verifica("pagina Giochi: i giochi di casa (anche quello di chi amministra) e come si aprono a voce",
+             bool(ok) and "La cassaforte" in testo and "Tris" in testo and "«Calliope, giochiamo a Tris»" in testo
+             and t.v("document.getElementById('sez-cose').dataset.pagina") == "giochi", testo[:200])
+    t.v(f"{T}.vai('#/adesso'); 1")
+    cas.close()
+
+
+def pagina_documenti(t: Tel, hub, cartella: Path):
+    """La pagina Documenti (28/10, passo 2d, #259): dalla tessera, i gruppi (i suoi, quelli di Bianca
+    per chi amministra, l'archivio di casa), il testo estratto ostile scritto come testo, «Scarica»
+    di una riga dell'archivio, la ricerca e «Tutti»."""
+    import prova_pagina_documenti as ppd
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    ppd.prepara(cartella, hub.tool_ctx)
+    t.v(f"{T}.vai('#/cose'); 1")
+    t.v(f"{T}.aggiornaRaccolte(); 1")
+    aspetta(lambda: any(x["id"] == "documenti" and x["conto"] == "1" for x in t.v(f"{S}.tessere") or []), 5)
+    t.tocca_sel('#tessere [data-tessera="documenti"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/documenti" and len(t.v(f"{S}.pagina") or []) == 9, 5)
+    gruppi = t.v(f"{S}.gruppi") or []
+    verifica("pagina Documenti: dalla tessera, i gruppi «per te», quelli degli altri (chi amministra) e l'archivio",
+             bool(ok) and gruppi[0] == "Fatti da Calliope per te" and "Fatti da Calliope per Bianca" in gruppi
+             and gruppi[-1] == "Archivio di casa", json.dumps(gruppi))
+    verifica("pagina Documenti: la casella della ricerca c'è",
+             t.v("!document.getElementById('pagina-cerca').hidden && document.getElementById('pagina-cerca-via').hidden"))
+    testo = t.v("document.getElementById('pagina-schede').textContent") or ""
+    verifica("pagina Documenti: il nome estratto ostile resta testo (nessun elemento img nato dal dato)",
+             "onerror" in testo and t.v("document.querySelectorAll('#pagina-schede img').length") == 0, testo[:200])
+    sel = "#pagina-schede .scheda-archivio button[data-scarica=\"originale\"]"
+    verifica("pagina Documenti: «Scarica» per ogni riga dell'archivio", (t.v(f"document.querySelectorAll('{sel}').length") or 0) == 5)
+    t.tocca_sel(sel)
+    ok = aspetta(lambda: "Scaricato" in (t.v(f"document.querySelector('{sel}').parentElement.querySelector('.esito-scarica').textContent") or ""), 5)
+    verifica("pagina Documenti: «Scarica» di una riga dà il file", bool(ok),
+             t.v(f"document.querySelector('{sel}').parentElement.querySelector('.esito-scarica').textContent"))
+    t.v("document.getElementById('pagina-cerca-testo').value = 'contratto affitto';"
+        " document.getElementById('pagina-cerca').requestSubmit(); 1")
+    ok = aspetta(lambda: t.v(f"{S}.cerca") == "contratto affitto" and len(t.v(f"{S}.pagina") or []) == 1
+                 and "contratto" in (t.v("document.getElementById('pagina-schede').textContent") or "").lower(), 5)
+    verifica("pagina Documenti: la ricerca mostra solo ciò che trova, e «Tutti» compare",
+             bool(ok) and not t.v("document.getElementById('pagina-cerca-via').hidden"), json.dumps(t.v(f"{S}.pagina")))
+    t.v("document.getElementById('pagina-cerca-testo').value = '<b>\"ciao\"</b>';"
+        " document.getElementById('pagina-cerca').requestSubmit(); 1")
+    ok = aspetta(lambda: "Non trovo" in (t.v("document.getElementById('pagina-nota').textContent") or ""), 5)
+    verifica("pagina Documenti: una ricerca con HTML risponde «Non trovo», senza errori", bool(ok)
+             and t.v("document.querySelectorAll('#pagina-schede b').length") == 0)
+    t.tocca_sel("#pagina-cerca-via")
+    ok = aspetta(lambda: t.v(f"{S}.cerca") == "" and len(t.v(f"{S}.pagina") or []) == 9, 5)
+    verifica("pagina Documenti: «Tutti» torna alla pagina intera", bool(ok))
+    t.v(f"{T}.vai('#/adesso'); 1")
+
+
+def pagina_ufficio(t: Tel, hub, cartella: Path):
+    """La pagina Ufficio (28/10, passo 2e, #260), di chi amministra: dalla tessera, i gruppi
+    (documenti dell'ufficio e rubrica), il nome ostile di un cliente e il motivo dell'annullo scritti
+    come testo, l'annullata segnata, «Scarica XML» col nome giusto, la ricerca e «Tutti», il 429 delle
+    letture che riprova da solo; niente fuori dalla vista."""
+    import prova_pagina_ufficio as ppu
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    ppu.prepara(cartella, hub.tool_ctx)
+    t.v(f"{T}.vai('#/cose'); 1")
+    t.v(f"{T}.aggiornaRaccolte(); 1")
+    aspetta(lambda: any(x["id"] == "ufficio" and x["conto"] == "6" for x in t.v(f"{S}.tessere") or []), 5)
+    t.tocca_sel('#tessere [data-tessera="ufficio"]')
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/ufficio" and len(t.v(f"{S}.pagina") or []) == 6, 5)
+    gruppi = t.v(f"{S}.gruppi") or []
+    verifica("pagina Ufficio: dalla tessera, le serie e la rubrica nei loro gruppi",
+             bool(ok) and gruppi == ["Documenti dell'ufficio", "Rubrica"], json.dumps([gruppi, t.v(f"{S}.pagina")]))
+    verifica("pagina Ufficio: la casella della ricerca col suggerimento dell'ufficio",
+             t.v("!document.getElementById('pagina-cerca').hidden"
+                 " && document.getElementById('pagina-cerca-testo').placeholder.includes('cliente')"))
+    testo = t.v("document.getElementById('pagina-schede').textContent") or ""
+    verifica("pagina Ufficio: il nome ostile del cliente e il motivo restano testo (nessun img nato dal dato)",
+             testo.count("onerror") >= 3 and t.v("document.querySelectorAll('#pagina-schede img').length") == 0, testo[:200])
+    verifica("pagina Ufficio: la fattura annullata è segnata, con il motivo",
+             t.v("[...document.querySelectorAll('#pagina-schede li.annullata .stato-ufficio')]"
+                 ".some((e) => e.textContent.startsWith('Annullata: prova sbagliata'))"))
+    n = t.v("[...document.querySelectorAll('#pagina-schede .scheda-ufficio button[data-scarica]')]"
+            ".filter((b) => b.textContent === 'Scarica XML').length")
+    verifica("pagina Ufficio: «Scarica XML» per le fatture e la nota di credito", n == 3, str(n))
+    t.v("(() => { const b = [...document.querySelectorAll('#pagina-schede .scheda-ufficio button[data-scarica]')]"
+        ".find((x) => x.textContent === 'Scarica XML'); b.id = 'scarica-xml-prova'; })(); 1")
+    t.tocca("scarica-xml-prova")
+    esito = "document.getElementById('scarica-xml-prova').parentElement.querySelector('.esito-scarica').textContent"
+    ok = aspetta(lambda: "Scaricato" in (t.v(esito) or ""), 5)
+    verifica("pagina Ufficio: «Scarica XML» dà il file, col nome del file salvato", bool(ok)
+             and t.v(esito) == "Scaricato: Fattura 2.xml.", t.v(esito))
+    fuori = t.v("(() => { const w = document.documentElement.clientWidth; return [...document.querySelectorAll("
+                "'#pagina-schede .scheda-ufficio *')].filter((e) => { const r = e.getBoundingClientRect();"
+                " return r.width && (r.left < -1 || r.right > w + 1); }).length; })()")
+    verifica("pagina Ufficio: niente esce dalla vista (nomi lunghi, PEC, partite IVA)", fuori == 0, str(fuori))
+    t.v("document.getElementById('pagina-cerca-testo').value = 'Fittizia';"
+        " document.getElementById('pagina-cerca').requestSubmit(); 1")
+    ok = aspetta(lambda: t.v(f"{S}.cerca") == "Fittizia" and len(t.v(f"{S}.pagina") or []) == 2, 5)
+    verifica("pagina Ufficio: la ricerca per cliente, documenti e rubrica", bool(ok), json.dumps(t.v(f"{S}.pagina")))
+    # «Tutti» (fino alla revisione della PR #269 qui non si provava: con 30 letture al minuto la prova
+    # arrivava al 429). La casella è in cima alla pagina, che dopo «Scarica» è scorsa in basso
+    t.v("document.getElementById('pagina-cerca').scrollIntoView({block: 'center'}); 1")
+    t.tocca_sel("#pagina-cerca-via")
+    ok = aspetta(lambda: t.v(f"{S}.cerca") == "" and len(t.v(f"{S}.pagina") or []) == 6, 5)
+    verifica("pagina Ufficio: «Tutti» torna alla pagina intera", bool(ok),
+             json.dumps([t.v(f"{S}.cerca"), t.v(f"{S}.pagina"), t.v("document.getElementById('pagina-esito').textContent")]))
+    # Un 429 delle letture: la pagina resta com'era, lo dice e riprova da sola dopo Retry-After
+    t.v("(() => { const s = window.calliopeSchermo, f = s.raccolte; window.__volte = 0;"
+        " s.raccolte = async (d) => { if (d && d.raccolta === 'ufficio' && window.__volte++ === 0)"
+        " return { ok: false, status: 429, riprova: 1, dati: { errore: 'Troppe richieste in poco tempo: riprovo fra qualche secondo.' } };"
+        " return f(d); }; })(); 1")
+    t.v(f"{T}.aggiornaRaccolte(); 1")
+    ok = aspetta(lambda: "Troppe richieste" in (t.v("document.getElementById('pagina-esito').textContent") or ""), 5)
+    restano = len(t.v(f"{S}.pagina") or [])
+    verifica("pagina Ufficio: un 429 lo dice e la pagina resta piena", bool(ok) and restano == 6, str(restano))
+    ok = aspetta(lambda: t.v("window.__volte") >= 2 and t.v("document.getElementById('pagina-esito').textContent") == ""
+                 and len(t.v(f"{S}.pagina") or []) == 6, 6)
+    verifica("pagina Ufficio: dopo Retry-After riprova da sola, una volta, e torna a posto", bool(ok),
+             json.dumps([t.v("window.__volte"), t.v("document.getElementById('pagina-esito').textContent")]))
+    t.v(f"{T}.vai('#/adesso'); 1")
+
+
+def pagina_da_calliope(t: Tel, hub):
+    """schermo_mostra con cosa=pagina (28/10, #289): l'evento «pagina» del server porta il telefono
+    vero su #/cose/<pagina>, con la pagina disegnata; un nome fuori forma non sposta niente, e
+    l'evento per un'altra persona non arriva."""
+    import json as _j
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    t.v(f"{T}.vai('#/adesso'); 1")
+    n = hub.apri_pagina("dario", "documenti")
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/documenti" and t.v(f"{S}.vistaCose") == "pagina", 5)
+    verifica("schermo_mostra pagina: il telefono va su #/cose/documenti e mostra la pagina",
+             n >= 1 and bool(ok), (n, t.v("location.hash"), t.v(f"{S}.vistaCose")))
+    hub.apri_pagina("dario", "liste")
+    ok = aspetta(lambda: t.v("location.hash") == "#/cose/liste", 5)
+    verifica("schermo_mostra pagina: poi su #/cose/liste", bool(ok), t.v("location.hash"))
+    hub._a_personali("dario", "pagina", _j.dumps({"pagina": "../io"}))
+    hub._a_personali("dario", "pagina", "non json")
+    time.sleep(0.5)
+    verifica("contrario: una pagina fuori forma (o un JSON rotto) non sposta niente",
+             t.v("location.hash") == "#/cose/liste", t.v("location.hash"))
+    verifica("contrario: la pagina per un'altra persona non arriva",
+             hub.apri_pagina("bianca", "documenti") == 0 and t.v("location.hash") == "#/cose/liste")
+    t.v(f"{T}.vai('#/adesso'); 1")
 
 
 def modulo_e_scrivi(t: Tel, hub):
     """Il modulo da compilare si apre da solo in uno strato; la casella per scrivere si apre
-    da «Scrivi»; il menu ha tutto il resto."""
+    da «Scrivi»; Io ha tutto il resto."""
     from calliope.schermi import Mittente
     from calliope.schermi.moduli import campo
     T = "window.calliopeTelefono"
@@ -453,8 +1053,9 @@ def modulo_e_scrivi(t: Tel, hub):
     ok = aspetta(lambda: t.v("!document.getElementById('strato-modulo').hidden"
                              " && document.querySelectorAll('#strato-modulo .campo-modulo').length === 2"), 5)
     verifica("modulo: arriva e si apre da solo nel suo strato", res.get("mostrato") and bool(ok), json.dumps(res)[:120])
-    verifica("modulo: nel carosello c'è la sua scheda con «Compila»",
-             bool(t.v("!!document.querySelector('#binario .modulo-car .apri-modulo')")))
+    verifica("modulo: in Adesso sotto «Aspetta te» c'è la sua scheda con «Compila»",
+             bool(t.v("!!document.querySelector('#sez-adesso [data-posto=\"adesso/aspetta\"] .modulo-car .apri-modulo')"
+                      " && !document.querySelector('#sez-adesso h2[data-gruppo=\"aspetta\"]').hidden")))
     return ricevuti, spec
 
 
@@ -471,19 +1072,18 @@ def compila(t: Tel, hub, foto_cb=None):
     if foto_cb:
         foto_cb()
     t.v("document.activeElement.blur(); 1")
-    # Senza conversazione a voce (05/10): «Invia» spento, con la parola da dire; «Scrivi» attenuato
+    # Senza conversazione a voce (05/10): «Invia» del modulo spento, con la parola da dire; dal
+    # 28/10 (#301) «Scrivi» resta acceso (dallo schermo personale si scrive sempre)
     spento = t.v("(() => { const b = document.querySelector('#strato-modulo .invia-modulo');"
                  " const n = document.querySelector('#strato-modulo .nota-scrittura');"
                  " return b.disabled && n && !n.hidden && n.textContent.includes('Calliope')"
-                 " && document.getElementById('scrivi-apri').classList.contains('spento')"
-                 " && document.getElementById('foto-apri').classList.contains('spento'); })()")
-    verifica("senza conversazione: «Invia» del modulo spento, «Di' «Calliope»…», «Scrivi» e «Foto» attenuati",
+                 " && !document.getElementById('scrivi-apri').classList.contains('spento'); })()")
+    verifica("senza conversazione: «Invia» del modulo spento con «Di' «Calliope»…», «Scrivi» acceso (28/10, #301)",
              bool(spento))
     hub.conversazioni.voce("dario", "voce", stanza="telefono")      # Dario parla a Calliope
     ok = aspetta(lambda: t.v("!document.querySelector('#strato-modulo .invia-modulo').disabled"
-                             " && document.querySelector('#strato-modulo .nota-scrittura').hidden"
-                             " && !document.getElementById('scrivi-apri').classList.contains('spento')"), 3)
-    verifica("conversazione cominciata: i comandi si riaccendono da soli (evento «scrittura»)", bool(ok))
+                             " && document.querySelector('#strato-modulo .nota-scrittura').hidden"), 3)
+    verifica("conversazione cominciata: «Invia» del modulo si riaccende da solo (evento «scrittura»)", bool(ok))
     t.tocca_sel("#strato-modulo .invia-modulo")
     ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
     item = hub.ingresso.prendi() if ok else {}
@@ -492,43 +1092,59 @@ def compila(t: Tel, hub, foto_cb=None):
     t.tocca("modulo-chiudi")
     ok = aspetta(lambda: t.v("document.getElementById('strato-modulo').hidden"), 2)
     verifica("modulo: «Chiudi» torna alla vista", bool(ok))
-    # la casella per scrivere
+    # la casella per scrivere: dal 28/10 (#301) nella Conversazione, al posto della riga della voce
     ok = aspetta(lambda: t.v("!document.getElementById('scrivi-apri').hidden"), 5)
     verifica("scrivi: «Scrivi» c'è in fondo (telefono personale)", bool(ok))
     t.tocca("scrivi-apri")
-    ok = aspetta(lambda: t.v("!document.getElementById('strato-scrivi').hidden"
+    ok = aspetta(lambda: t.v("document.getElementById('vista').dataset.scrittura === '1'"
+                             " && !document.getElementById('sez-conversazione').hidden"
                              " && document.activeElement === document.getElementById('scrivi-testo')"), 2)
-    verifica("scrivi: si apre con la casella pronta (fuoco nel campo)", bool(ok))
+    verifica("scrivi: la Conversazione in modalità scrittura, con la casella pronta (fuoco nel campo)", bool(ok))
     scrivi("#scrivi-testo", "Calliope, che ore sono?")
-    t.tocca_sel("#scrivi button")
+    t.tocca_sel("#scrivi-invia")
     ok = aspetta(lambda: not hub.ingresso.vuoto(), 5)
     item = hub.ingresso.prendi() if ok else {}
     verifica("scrivi: la frase arriva in coda come scritta", bool(ok) and item.get("tipo") == "scritto"
              and item.get("testo") == "Calliope, che ore sono?", str(item)[:160])
-    ok = aspetta(lambda: t.v("document.getElementById('strato-scrivi').hidden"), 3)
-    verifica("scrivi: inviata, lo strato si chiude da solo", bool(ok))
+    ok = aspetta(lambda: t.v("document.getElementById('scrivi-testo').value === ''"
+                             " && document.getElementById('vista').dataset.scrittura === '1'"), 3)
+    verifica("scrivi: inviata, la casella si svuota e la modalità scrittura resta", bool(ok))
     hub.conversazioni.chiudi()                                      # «esci»
-    ok = aspetta(lambda: t.v("document.getElementById('scrivi-testo').disabled"
-                             " && document.getElementById('scrivi-apri').classList.contains('spento')"), 3)
-    verifica("conversazione chiusa: casella spenta di nuovo", bool(ok))
-    # il menu: tutto il resto
-    t.tocca("menu-apri")
-    m = t.v("""(() => { const m = document.getElementById('menu'); const q = (s) => m.querySelector(s);
+    time.sleep(0.3)
+    verifica("conversazione chiusa: la casella resta accesa (28/10, #301)",
+             t.v("!document.getElementById('scrivi-testo').disabled"
+                 " && !document.getElementById('scrivi-apri').classList.contains('spento')"))
+    t.tocca("scrivi-voce")
+    aspetta(lambda: t.v("!document.getElementById('vista').dataset.scrittura"), 2)
+    t.v("(() => { const r = window.calliopeTelefono.st.reg; if (r) r.finisci = true; return 1; })()")
+    aspetta(lambda: t.v("!window.calliopeTelefono.st.reg"), 5)
+    # Io: tutto il resto
+    t.tocca_sel('#barra a[data-sezione="io"]')
+    aspetta(lambda: t.v("!document.getElementById('sez-io').hidden"), 2)
+    m = t.v("""(() => { const m = document.getElementById('sez-io'); const q = (s) => m.querySelector(s);
       return {aperto: !m.hidden, diag: !!q('#diag-prova'), tieni: !!q('#schermo-tieni'), ca: !!q('#link-ca'),
-              dimentica: !!q('#dimentica'), stato: (q('#tel-collegamento-testo')||{}).textContent,
+              dimentica: !!q('#dimentica'), auto: !!q('#auto-io'), stato: (q('#tel-collegamento-testo')||{}).textContent,
               schede: (q('#stato-testo')||{}).textContent}; })()""") or {}
-    verifica("menu: prova del microfono, schermo acceso, certificato, dimentica, collegamento",
-             m.get("aperto") and m.get("diag") and m.get("tieni") and m.get("ca") and m.get("dimentica")
+    verifica("Io: prova del microfono, schermo acceso, In auto, certificato, dimentica, collegamento",
+             m.get("aperto") and m.get("diag") and m.get("tieni") and m.get("ca") and m.get("dimentica") and m.get("auto")
              and m.get("stato") == "collegata" and m.get("schede") == "collegato", json.dumps(m))
-    t.p._chiama("Input.dispatchKeyEvent", {"type": "keyDown", "key": "Escape", "code": "Escape", "windowsVirtualKeyCode": 27})
-    t.p._chiama("Input.dispatchKeyEvent", {"type": "keyUp", "key": "Escape", "code": "Escape", "windowsVirtualKeyCode": 27})
-    verifica("menu: Esc lo chiude", bool(aspetta(lambda: t.v("document.getElementById('menu').hidden"), 2)))
+    t.tocca_sel('#barra a[data-sezione="adesso"]')
+    verifica("Io: la barra torna ad Adesso", bool(aspetta(lambda: t.v("document.getElementById('sez-io').hidden"), 2)))
 
 
-# Misure della vista (04/10): per ogni dimensione e stato niente scorrimento, nessun testo fuori
-# dal suo contenitore, parti che non si sovrappongono, schede dentro il carosello, tocchi ≥ 64 px,
-# contrasto AA. Con CALLIOPE_FOTO=<cartella> salva anche gli screenshot.
-DIMENSIONI = [(375, 812, "iphone13mini"), (320, 568, "piccolo"), (812, 375, "orizzontale")]
+# Misure della vista (04/10, a sezioni dal 27/10): per ogni dimensione, stato e sezione la pagina
+# non scorre (scorre la sezione), nessun testo fuori dal suo contenitore, parti che non si
+# sovrappongono, schede dentro la sezione, tocchi ≥ 44 px (≥ 64 in auto), contrasto AA. Con
+# CALLIOPE_FOTO=<cartella> salva anche gli screenshot.
+# 28/10 (#277): anche l'iPhone SE (375×667) e l'iPhone 13 mini con lo «Zoom schermo» di iOS
+# (320×693, il caso vero delle schermate di Dario), dove vale il layout compatto
+DIMENSIONI = [(375, 812, "iphone13mini"), (320, 568, "piccolo"), (812, 375, "orizzontale"),
+              (375, 667, "se"), (320, 693, "mini-zoom")]
+# I telefoni grandi in verticale, dove il compatto NON scatta (29/10, #287): iPhone 13–15 e un
+# Android grande
+GRANDI = [(390, 844, "iphone13"), (412, 915, "android-grande")]
+# Il compatto (28/10, #277): la voce e la barra insieme al più un quarto dell'altezza
+FISSI_MAX = 0.25
 RISPOSTA_LUNGA = ("Va bene, allora il file resta salvato nella cartella dei documenti del portatile, "
                   "con il nome che mi hai detto prima. Quando vuoi lo apro, oppure lo mando sullo schermo "
                   "dello studio. Fammi sapere se hai bisogno di altro, anche più tardi.")
@@ -541,10 +1157,13 @@ MISURA = r"""(() => {
   const vis = (e) => e && !e.hidden && e.getClientRects().length > 0;
   const nome = (e) => e.id || e.className || e.tagName;
   const dentro = (r, c) => r.left >= c.left - 1 && r.right <= c.right + 1 && r.top >= c.top - 1 && r.bottom <= c.bottom + 1;
+  // il testo solo per i lettori (ritagliato a 1 px: la parola sotto un'icona) non si vede
+  const nascosto = (n) => { for (let e = n.parentElement; e; e = e.parentElement) {
+    const cs = getComputedStyle(e); if (cs.clip !== 'auto' && cs.position === 'absolute') return true; } return false; };
   const testiDentro = (e, r, solo_x) => {
     const w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT);
     for (let n = w.nextNode(); n; n = w.nextNode()) {
-      if (!n.textContent.trim()) continue;
+      if (!n.textContent.trim() || nascosto(n)) continue;
       const rg = document.createRange(); rg.selectNodeContents(n);
       for (const q of rg.getClientRects()) {
         const ok = solo_x ? q.left >= r.left - 1 && q.right <= r.right + 1 : dentro(q, r);
@@ -552,27 +1171,38 @@ MISURA = r"""(() => {
       }
     }
   };
+  const auto = g.dataset.modo === 'auto';
   // contenitori il cui testo deve starci tutto
-  const scatole = ['tel-voce', 'tel-dove', 'avviso-tel', 'schermo-avviso', 'parla', 'microfono', 'scrivi-apri', 'menu-apri']
-    .map((id) => document.getElementById(id)).filter(vis);
-  for (const e of scatole) {
+  const scatole = ['tel-voce', 'tel-dove', 'avviso-tel', 'schermo-avviso', 'parla', 'microfono', 'scrivi-apri',
+    'auto-apri', 'auto-esci', 'sez-titolo'].map((id) => document.getElementById(id))
+    .concat([...document.querySelectorAll('#barra a')]).filter(vis);
+  // ritagliata a 1 px per i lettori (28/10, #277: la riga dello stato nel layout compatto)
+  const ritagliata = (e) => { const cs = getComputedStyle(e); return cs.position === 'absolute' && cs.clip !== 'auto'; };
+  for (const e of scatole.filter((x) => !ritagliata(x))) {
     if (e.scrollWidth > e.clientWidth + 1 || e.scrollHeight > e.clientHeight + 1) fuori.push(nome(e) + ' trabocca');
     const r = e.getBoundingClientRect();
     if (!dentro(r, gr)) fuori.push(nome(e) + ' fuori dalla vista');
     testiDentro(e, r, false);
   }
-  // le schede: dentro il carosello, niente testo fuori di lato (in verticale scorrono dentro di sé)
-  const bin = document.getElementById('binario'), br = bin.getBoundingClientRect();
-  const pagine = [...bin.children].filter(vis);
-  const quiPagina = pagine.find((p) => Math.abs(p.getBoundingClientRect().left - br.left) < 2);
-  if (!quiPagina) fuori.push('nessuna scheda allineata al carosello');
+  // le schede: dentro la sezione di lato, niente testo fuori di lato (in verticale scorre la sezione)
+  const sez = [...document.querySelectorAll('#sezioni .sezione')].find(vis);
+  const br = sez.getBoundingClientRect();
+  const pagine = [...sez.querySelectorAll('.pagina-car')].filter(vis);
+  const inVista = [];
   for (const p of pagine) {
     const r = p.getBoundingClientRect();
-    if (r.top < br.top - 1 || r.bottom > br.bottom + 1) fuori.push(p.dataset.chiave + ' esce dal carosello in altezza');
+    if (r.left < br.left - 1 || r.right > br.right + 1) fuori.push(p.dataset.chiave + ' esce dalla sezione di lato');
     if (p.scrollWidth > p.clientWidth + 1) fuori.push(p.dataset.chiave + ' trabocca di lato');
-    if (p === quiPagina) testiDentro(p, r, true);
+    if (r.bottom > br.top && r.top < br.bottom) { inVista.push(p.dataset.chiave); testiDentro(p, r, true); }
   }
-  const aree = ['.vista-testa', '#carosello', '#parla', '.vista-fondo']
+  // le tessere di Le mie cose (28/10, #277): niente parola spezzata a metà (più righe che parole)
+  for (const e of [...document.querySelectorAll('#tessere .tessera-nome, #tessere .tessera-stato')].filter(vis)) {
+    const righe = Math.round(e.getBoundingClientRect().height / parseFloat(getComputedStyle(e).lineHeight));
+    if (righe > e.textContent.trim().split(/\s+/).length) fuori.push('tessera: «' + e.textContent.trim().slice(0, 20) + '» spezzata');
+    const t = e.closest('.tessera');
+    if (t.scrollWidth > t.clientWidth + 1 || t.scrollHeight > t.clientHeight + 1) fuori.push('tessera ' + t.dataset.tessera + ' trabocca');
+  }
+  const aree = ['.vista-testa', '#sezioni', '.voce-riga', '#barra']
     .map((s) => g.querySelector(s)).filter(vis).map((e) => [nome(e), e.getBoundingClientRect()]);
   for (let i = 0; i < aree.length; i++) {
     if (!dentro(aree[i][1], {left: 0, top: 0, right: W, bottom: H})) fuori.push(aree[i][0] + ' fuori dallo schermo');
@@ -590,25 +1220,47 @@ MISURA = r"""(() => {
     while (b && (bg = getComputedStyle(b).backgroundColor) === 'rgba(0, 0, 0, 0)') b = b.parentElement;
     const l1 = lum(cs.color), l2 = lum(b ? bg : 'rgb(0, 0, 0)');
     return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
-  // ogni elemento con del testo proprio, nella vista e nella scheda in vista
+  // ogni elemento con del testo proprio che si vede (nella sezione: dentro il suo riquadro)
   const conTesto = [...g.querySelectorAll('*')].filter(vis).filter((e) =>
     [...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim())
-    && (!e.closest('#binario') || (quiPagina && quiPagina.contains(e))));
+    && (!e.closest('.sezione') || (() => { const r = e.getBoundingClientRect(); return r.bottom > br.top && r.top < br.bottom; })()));
   const bassi = conTesto.map((e) => [nome(e), contrasto(e)]).filter(([, c]) => c < 4.5)
     .map(([n, c]) => n + ' ' + c.toFixed(2));
-  const tocchi = ['parla', 'microfono', 'scrivi-apri', 'menu-apri'].map((id) => document.getElementById(id)).filter(vis)
+  const tocchi = ['parla', 'microfono', 'scrivi-apri', 'auto-apri', 'auto-esci', 'conv-lente'].map((id) => document.getElementById(id))
+    .concat([...document.querySelectorAll('#barra a, #tessere .tessera, #sezioni button.spunta, #pagina-indietro')]).filter(vis)
     .map((e) => e.getBoundingClientRect()).map((r) => Math.min(r.width, r.height));
+  // Il layout compatto (28/10, #277): lo stato dentro «Parla», i pulsanti su una riga, quanto
+  // prendono la voce e la barra insieme
+  const compatto = ritagliata(document.getElementById('tel-voce'));
+  const vr = document.querySelector('.voce-riga').getBoundingClientRect();
+  const pulsanti = ['microfono', 'parla', 'scrivi-apri'].map((id) => document.getElementById(id)).filter(vis)
+    .map((e) => e.getBoundingClientRect());
+  const unaRiga = pulsanti.every((r) => Math.abs(r.top - pulsanti[0].top) <= 2 && Math.abs(r.bottom - pulsanti[0].bottom) <= 2);
+  const righe = (el) => Math.round(el.getBoundingClientRect().height / parseFloat(getComputedStyle(el).lineHeight));
   return {
     scorre: se.scrollHeight > H + 1 || se.scrollWidth > W + 1 || g.scrollHeight > g.clientHeight + 1,
-    fuori, bassi, tocchi, H, W,
-    carosello: br.height, parla: document.getElementById('parla').getBoundingClientRect().height,
+    fuori, bassi, tocchi, H, W, auto, inVista, compatto, unaRiga,
+    fissi: (H - vr.top) / H,
+    stato: compatto ? document.querySelector('#parla .parla-stato').textContent : '',
+    statoRighe: compatto ? righe(document.querySelector('#parla .parla-stato')) : 0,
+    spazio: br.height, parla: document.getElementById('parla').getBoundingClientRect().height,
     voce: document.querySelector('#tel-voce .voce-testo').textContent,
+    // quante righe prende lo stato (27/10, iPhone: andava a capo a ogni sillaba)
+    voceRighe: compatto ? 1 : (() => { const v = document.querySelector('#tel-voce .voce-testo'); const r = document.createRange();
+      r.selectNodeContents(v); return new Set([...r.getClientRects()].map((q) => Math.round(q.top))).size; })(),
     dove: document.getElementById('tel-dove').hidden ? '' : document.getElementById('tel-dove').textContent,
-    vista: window.calliopeTelefono.carosello().vista,
+    sezione: window.calliopeTelefono.sezioni().sezione,
+    // «Parla» descritto dal suggerimento solo quando la riga non si vede (29/10, #287)
+    descritto: document.getElementById('parla').getAttribute('aria-describedby') || '',
+    doveNascosta: (() => { const d = document.getElementById('tel-dove');
+      return !d.hidden && !!d.textContent && getComputedStyle(d).display === 'none'; })(),
+    // le etichette della barra, in px (29/10, #287: 0,62rem nel compatto)
+    etichetta: Math.min(...[...document.querySelectorAll('#barra a')].filter(vis)
+      .map((a) => parseFloat(getComputedStyle(a).fontSize))),
   };
 })()"""
 
-# Gli strati (modulo, menu, scrivi): lo strato scorre da sé, i suoi tasti ≥ 64 px, niente di lato
+# Gli strati (modulo, scrivi): lo strato scorre da sé, i suoi tasti ≥ 64 px, niente di lato
 MISURA_STRATO = r"""((id) => {
   const s = document.getElementById(id), W = innerWidth;
   const vis = (e) => e && !e.hidden && e.getClientRects().length > 0;
@@ -639,12 +1291,11 @@ def dimensione(t, w, h):
     # 0,2 s fissi non bastavano sotto carico)
     aspetta(lambda: t.v(f"innerWidth === {w} && innerHeight === {h}"), 5, 0.05)
     t.v("new Promise(ok => requestAnimationFrame(() => requestAnimationFrame(() => ok(1))))")
-    t.v("window.calliopeTelefono.vaiA(window.calliopeTelefono.carosello().vista); 1")
 
 
 def misure(t, etichetta):
-    """La vista nelle tre dimensioni, col microfono spento (il posto è dello studio), mentre
-    pensa e col microfono acceso."""
+    """La vista nelle tre dimensioni: in Adesso e in auto col microfono spento (il posto è dello
+    studio), mentre pensa e col microfono acceso; le altre sezioni col microfono spento."""
     T = "window.calliopeTelefono"
     t.v(f"{T}.comando({{tipo: 'frase', turno: {40 + len(etichetta)}, id: 400, testo: {json.dumps(RISPOSTA_LUNGA)}, rate: 22050, byte: 0}}); 1")
 
@@ -670,58 +1321,250 @@ def misure(t, etichetta):
         ("pensa", pensa, "Penso…", ""),
         ("acceso", acceso, "Dormo · di' «Calliope»", ""),
     ]
+
+    def suggerimento():
+        # microfono spento e nessun altro satellite: la riga piccola è il suggerimento di sempre
+        mic(False)
+        t.v(f"{T}.st.attivo = false; {T}.st.altro = null; {T}.st.pensa = false; 1")
+
+    def misura(d, parola, minimo, fissi_max=FISSI_MAX, compatto=True):
+        ok = aspetta(lambda: (t.v(MISURA) or {}).get("voce") == parola, 2)
+        time.sleep(0.35)                     # la dissolvenza si decide al giro dopo
+        m = t.v(MISURA) or {}
+        verifica(f"{d}: tutto in uno schermo, la pagina non scorre",
+                 bool(ok) and not m.get("scorre"), f"{m.get('W')}×{m.get('H')}")
+        verifica(f"{d}: nessun testo fuori dai contenitori, parti separate, schede nella sezione",
+                 not m.get("fuori"), "; ".join(m.get("fuori", []))[:240])
+        verifica(f"{d}: contrasto AA e tocchi ≥ {minimo} px",
+                 not m.get("bassi") and min(m.get("tocchi") or [0]) >= minimo,
+                 f"{m.get('bassi')} {[round(x) for x in m.get('tocchi') or []]}")
+        verifica(f"{d}: la sezione ha spazio (≥ 120 px)", m.get("spazio", 0) >= 120, f"{m.get('spazio', 0):.0f} px")
+        verifica(f"{d}: lo stato della voce su al più due righe", m.get("voceRighe", 9) <= 2, str(m.get("voceRighe")))
+        verifica(f"{d}: «Parla» descritto dalla riga piccola solo quando non si vede (niente doppia lettura)",
+                 (m.get("descritto") == "tel-dove") == bool(m.get("doveNascosta")),
+                 f"descritto {m.get('descritto')!r}, nascosta {m.get('doveNascosta')}, «{m.get('dove')}»")
+        if not m.get("auto") and m.get("etichetta") is not None:
+            # le etichette della barra: 0,62rem nel compatto (~10,5 px), come i 10 pt della barra di iOS
+            verifica(f"{d}: le etichette della barra almeno 10 px", m.get("etichetta", 0) >= 10,
+                     f"{m.get('etichetta')} px")
+        if m.get("H", 0) > m.get("W", 0) and not m.get("auto") and not compatto:
+            # Un telefono grande in verticale (29/10, #287): il compatto NON scatta
+            verifica(f"{d}: telefono grande, niente layout compatto (la riga dello stato si vede)",
+                     not m.get("compatto"), f"{m.get('W')}×{m.get('H')}")
+        elif m.get("H", 0) > m.get("W", 0) and not m.get("auto"):
+            # Il layout compatto (28/10, #277): in verticale su questi telefoni
+            verifica(f"{d}: layout compatto, la voce su una riga (i pulsanti allineati, lo stato in «Parla»)",
+                     m.get("compatto") and m.get("unaRiga") and m.get("stato")
+                     and m.get("statoRighe", 9) <= 2, f"{m.get('stato')!r}, {m.get('statoRighe')} righe")
+            verifica(f"{d}: voce e barra insieme sotto il {fissi_max:.0%} dell'altezza",
+                     m.get("fissi", 1) < fissi_max, f"{m.get('fissi', 1):.1%}")
+        elif m.get("auto"):
+            verifica(f"{d}: in auto niente layout compatto (bersagli grandi)", not m.get("compatto"))
+        return m
+
     alti = {}
     for w, h, nome_d in DIMENSIONI:
         dimensione(t, w, h)
-        for nome_s, fai, parola, dove in stati:
-            fai()
-            ok = aspetta(lambda: (t.v(MISURA) or {}).get("voce") == parola, 2)
-            time.sleep(0.35)                     # la dissolvenza si decide al giro dopo
-            m = t.v(MISURA) or {}
-            foto(t, f"telefono-{etichetta}-{nome_d}-{nome_s}.png")
-            d = f"{etichetta} {w}×{h} «{parola}»"
-            verifica(f"{d}: tutto in uno schermo, niente scorrimento",
-                     bool(ok) and not m.get("scorre"), f"{m.get('W')}×{m.get('H')}")
-            verifica(f"{d}: nessun testo fuori dai contenitori, parti separate, schede nel carosello",
-                     not m.get("fuori"), "; ".join(m.get("fuori", []))[:240])
-            verifica(f"{d}: contrasto AA e tocchi ≥ 64 px",
-                     not m.get("bassi") and min(m.get("tocchi") or [0]) >= 64,
-                     f"{m.get('bassi')} {[round(x) for x in m.get('tocchi') or []]}")
-            if dove:
-                verifica(f"{d}: il microfono di un altro satellite in una riga piccola",
-                         dove in m.get("dove", ""), m.get("dove"))
-            verifica(f"{d}: il carosello ha spazio (≥ 120 px)", m.get("carosello", 0) >= 120,
-                     f"{m.get('carosello', 0):.0f} px")
-            alti[(nome_d, nome_s)] = (m.get("parla", 0), m.get("carosello", 0))
+        for modo in ("sezioni", "auto"):
+            t.v(f"{T}.impostaAuto({'true' if modo == 'auto' else 'false'}); 1")
+            for nome_s, fai, parola, dove in stati:
+                fai()
+                d = f"{etichetta} {w}×{h} {'in auto' if modo == 'auto' else 'Adesso'} «{parola}»"
+                m = misura(d, parola, 64 if modo == "auto" else 44)
+                foto(t, f"telefono-{etichetta}-{nome_d}-{modo}-{nome_s}.png")
+                if dove:
+                    verifica(f"{d}: il microfono di un altro satellite in una riga piccola",
+                             dove in m.get("dove", ""), m.get("dove"))
+                alti[(nome_d, modo, nome_s)] = (m.get("parla", 0), m.get("spazio", 0))
+            if h > w and modo == "auto":
+                p_sp, c_sp = alti[(nome_d, modo, "spento")]
+                p_ac, c_ac = alti[(nome_d, modo, "acceso")]
+                verifica(f"{etichetta} {w}×{h} in auto: col microfono acceso «Parla» più basso e la risposta più alta",
+                         p_ac < p_sp and c_ac > c_sp, f"Parla {p_sp:.0f} → {p_ac:.0f}, risposta {c_sp:.0f} → {c_ac:.0f}")
+        t.v(f"{T}.impostaAuto(false); 1")
+        spento()
+        for sez in ("conversazione", "cose", "casa", "io"):
+            t.v(f"{T}.vai('#/{sez}'); 1")
+            m = misura(f"{etichetta} {w}×{h} {sez}", "Microfono spento", 44)
+            foto(t, f"telefono-{etichetta}-{nome_d}-{sez}.png")
+        t.v(f"{T}.vai('#/adesso'); 1")
         if h > w:
-            p_sp, c_sp = alti[(nome_d, "spento")]
-            p_ac, c_ac = alti[(nome_d, "acceso")]
-            verifica(f"{etichetta} {w}×{h}: col microfono acceso «Parla» più basso e il carosello più alto",
-                     p_ac < p_sp and c_ac > c_sp, f"Parla {p_sp:.0f} → {p_ac:.0f}, carosello {c_sp:.0f} → {c_ac:.0f}")
+            # Il suggerimento di sempre nel compatto: nascosto, e descrizione di «Parla» (#287)
+            suggerimento()
+            m = misura(f"{etichetta} {w}×{h} Adesso col suggerimento", "Microfono spento", 44)
+            verifica(f"{etichetta} {w}×{h}: il suggerimento nascosto è la descrizione di «Parla»",
+                     m.get("doveNascosta") and m.get("descritto") == "tel-dove", m.get("descritto"))
+    # I telefoni grandi in verticale (29/10, #287): il compatto non deve scattare, e «Parla» non è
+    # descritto dalla riga piccola, che si vede (VoiceOver la leggeva due volte)
+    for w, h, nome_d in GRANDI:
+        dimensione(t, w, h)
+        t.v(f"{T}.impostaAuto(false); 1")
+        for nome_s, fai, parola in (("suggerimento", suggerimento, "Microfono spento"),
+                                    ("spento", spento, "Microfono spento"),
+                                    ("acceso", acceso, "Dormo · di' «Calliope»")):
+            fai()
+            d = f"{etichetta} {w}×{h} Adesso «{parola}» ({nome_s})"
+            m = misura(d, parola, 44, compatto=False)
+            foto(t, f"telefono-{etichetta}-{nome_d}-{nome_s}.png")
+            if nome_s == "suggerimento":
+                verifica(f"{d}: il suggerimento si vede e «Parla» non ne è descritto",
+                         "Parla" in m.get("dove", "") and not m.get("doveNascosta") and not m.get("descritto"),
+                         f"«{m.get('dove')}» {m.get('descritto')!r}")
+        spento()
+    # Un font più largo (27/10: sull'iPhone il font di sistema è più largo di Segoe UI e
+    # «Conversazione» usciva dalla sua voce della barra): Verdana, nelle sezioni, ai due telefoni
+    t.v("document.documentElement.style.setProperty('font-family', 'Verdana, sans-serif'); "
+        "document.body.style.fontFamily = 'Verdana, sans-serif'; 1")
+    spento()
+    for w, h, nome_d in DIMENSIONI[:2]:
+        dimensione(t, w, h)
+        largo = t.v("getComputedStyle(document.body).fontFamily")
+        verifica(f"{w}×{h}: il font largo è applicato", "Verdana" in (largo or ""), largo)
+        for sez in ("adesso", "conversazione", "cose", "io"):
+            t.v(f"{T}.vai('#/{sez}'); 1")
+            spento()
+            misura(f"{etichetta} {w}×{h} {sez} col font largo", "Microfono spento", 44)
+            foto(t, f"telefono-{etichetta}-{nome_d}-{sez}-font-largo.png")
+            # la frase vista sull'iPhone: «Dormo · di' «Calliope»» col microfono acceso
+            acceso()
+            misura(f"{etichetta} {w}×{h} {sez} col font largo e «Dormo»", "Dormo · di' «Calliope»", 44)
+    t.v("document.documentElement.style.removeProperty('font-family'); document.body.style.fontFamily = ''; 1")
+    # Il testo ingrandito (28/10, #277): la base della pagina da 17 a 20 px (+18 %), nel compatto
+    t.v("document.documentElement.style.fontSize = '20px'; 1")
+    for w, h, nome_d in (DIMENSIONI[0], DIMENSIONI[1], DIMENSIONI[4]):
+        dimensione(t, w, h)
+        for sez in ("adesso", "conversazione", "cose", "io"):
+            t.v(f"{T}.vai('#/{sez}'); 1")
+            spento()
+            # col testo più grande anche la voce e la barra crescono (sono in rem): al più il 30 %
+            misura(f"{etichetta} {w}×{h} {sez} col testo ingrandito", "Microfono spento", 44, 0.30)
+            foto(t, f"telefono-{etichetta}-{nome_d}-{sez}-testo-grande.png")
+            acceso()
+            misura(f"{etichetta} {w}×{h} {sez} col testo ingrandito e «Dormo»", "Dormo · di' «Calliope»", 44, 0.30)
+    t.v("document.documentElement.style.fontSize = ''; 1")
+    spento()
+    t.v(f"{T}.vai('#/adesso'); 1")
     mic(False)
     t.p._chiama("Emulation.clearDeviceMetricsOverride")
 
 
 def una_per_una(t):
-    """Ogni scheda del carosello in vista, una alla volta, a 375×812 e 320×568: dentro il
-    carosello, niente testo fuori di lato, contrasto AA (le foto: una per tipo)."""
+    """Ogni scheda nella sua sezione, portata in vista, a 375×812 e 320×568: dentro la sezione,
+    niente testo fuori di lato, contrasto AA (le foto: una per tipo)."""
     T = "window.calliopeTelefono"
     for w, h, nome_d in DIMENSIONI[:2]:
         dimensione(t, w, h)
-        for k in (t.v(f"{T}.carosello()") or {}).get("ordine", []):
+        posti = (t.v(f"{T}.sezioni()") or {}).get("posti", {})
+        chiavi = [k for p, ks in posti.items() if not p.startswith("adesso") for k in ks]
+        for k in chiavi:
             t.v(f"{T}.vaiA({json.dumps(k)}); 1")
             time.sleep(0.3)
             m = t.v(MISURA) or {}
             tipo = k.split(":")[0].strip("_")
+            sz = t.v(f"{T}.sezioni()") or {}
+            if (sz.get("vistaCose") == "pagina" and str(t.v("location.hash")).startswith("#/cose/")
+                    and k not in (sz.get("pagina") or [])):
+                # Una raccolta con la sua pagina (28/10: l'Agenda) mostra ciò che dà il server: un
+                # timer finito o mai stato nell'agenda non c'è più, e «Apri» porta alla pagina
+                verifica(f"{nome_d} scheda {tipo} che il server non ha più: «Apri» porta alla pagina della raccolta",
+                         not m.get("fuori") and not m.get("bassi"),
+                         f"{t.v('location.hash')} {m.get('fuori')} {m.get('bassi')}"[:240])
+                continue
             foto(t, f"telefono-scheda-{nome_d}-{tipo}.png")
-            verifica(f"{nome_d} scheda {tipo}: in vista, dentro il carosello, testo dentro, contrasto AA",
-                     m.get("vista") == k and not m.get("fuori") and not m.get("bassi") and not m.get("scorre"),
-                     f"{m.get('vista')} {m.get('fuori')} {m.get('bassi')}"[:240])
+            verifica(f"{nome_d} scheda {tipo}: in vista nella sua sezione, testo dentro, contrasto AA",
+                     k in m.get("inVista", []) and not m.get("fuori") and not m.get("bassi") and not m.get("scorre"),
+                     f"{m.get('sezione')} {m.get('inVista')} {m.get('fuori')} {m.get('bassi')}"[:240])
+        _schede_della_pagina(t, nome_d, "agenda")
+        t.v(f"{T}.vai('#/adesso'); 1")
     t.p._chiama("Emulation.clearDeviceMetricsOverride")
 
 
+# Le schede di una pagina di raccolta (#266, nota della revisione della PR #265: le schede
+# `promemoria` dell'Agenda erano misurate a una dimensione sola): ognuna portata in vista, dentro
+# la sezione di lato, niente testo fuori di lato
+MISURA_PAGINA = r"""((i) => {
+  const s = [...document.querySelectorAll('#pagina-schede .scheda')][i];
+  if (!s) return null;
+  s.scrollIntoView({block: 'nearest'});
+  const sez = [...document.querySelectorAll('#sezioni .sezione')].find((e) => e.getClientRects().length > 0);
+  const br = sez.getBoundingClientRect(), r = s.getBoundingClientRect();
+  const fuori = [];
+  if (r.left < br.left - 1 || r.right > br.right + 1) fuori.push('esce dalla sezione di lato');
+  if (s.scrollWidth > s.clientWidth + 1) fuori.push('trabocca di lato');
+  const w = document.createTreeWalker(s, NodeFilter.SHOW_TEXT);
+  for (let n = w.nextNode(); n; n = w.nextNode()) {
+    if (!n.textContent.trim()) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    for (const q of rg.getClientRects())
+      if (q.width && (q.left < r.left - 1 || q.right > r.right + 1)) fuori.push('«' + n.textContent.trim().slice(0, 20) + '» esce');
+  }
+  // il testo tagliato in basso (revisione della PR #270): fuori dalla scheda in verticale, o in un
+  // contenitore che nasconde ciò che trabocca; il testo solo per i lettori (ritagliato) non conta
+  const nascosto = (e) => { for (let x = e; x && x !== s.parentElement; x = x.parentElement) {
+    const cs = getComputedStyle(x); if (cs.clip !== 'auto' && cs.position === 'absolute') return true; } return false; };
+  const tagliati = [];
+  const w2 = document.createTreeWalker(s, NodeFilter.SHOW_TEXT);
+  for (let n = w2.nextNode(); n; n = w2.nextNode()) {
+    if (!n.textContent.trim() || nascosto(n.parentElement)) continue;
+    const rg = document.createRange(); rg.selectNodeContents(n);
+    for (const q of rg.getClientRects())
+      if (q.height && (q.bottom > r.bottom + 1 || q.top < r.top - 1)) tagliati.push('«' + n.textContent.trim().slice(0, 20) + '» fuori in verticale');
+  }
+  for (const e of [s, ...s.querySelectorAll('*')]) {
+    if (!e.getClientRects().length || nascosto(e)) continue;
+    const cs = getComputedStyle(e);
+    if (/(hidden|clip)/.test(cs.overflowY) && e.textContent.trim() && e.scrollHeight > e.clientHeight + 1)
+      tagliati.push((e.className || e.tagName) + ' taglia il testo in basso');
+  }
+  // il contrasto di ogni testo della scheda (non solo di ciò che è in vista con le altre)
+  const lum = (c) => { const m = c.match(/[\d.]+/g).slice(0, 3).map(Number).map((v) => v / 255)
+    .map((v) => v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
+    return 0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]; };
+  const contrasto = (e) => { const cs = getComputedStyle(e);
+    let b = e, bg = 'rgba(0, 0, 0, 0)';
+    while (b && (bg = getComputedStyle(b).backgroundColor) === 'rgba(0, 0, 0, 0)') b = b.parentElement;
+    const l1 = lum(cs.color), l2 = lum(b ? bg : 'rgb(0, 0, 0)');
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05); };
+  const bassi = [s, ...s.querySelectorAll('*')].filter((e) => e.getClientRects().length && !nascosto(e)
+    && [...e.childNodes].some((x) => x.nodeType === 3 && x.textContent.trim()))
+    .map((e) => [e.className || e.tagName, contrasto(e)]).filter(([, c]) => c < 4.5).map(([n, c]) => n + ' ' + c.toFixed(2));
+  return {tipo: s.dataset.tipo || [...s.classList].join(' '), testo: s.textContent.slice(0, 200), fuori,
+          tagliati, bassi, inVista: r.bottom > br.top && r.top < br.bottom};
+})"""
+
+
+def _schede_della_pagina(t, nome_d: str, raccolta: str):
+    T = "window.calliopeTelefono"
+    S = f"({T}.sezioni() || {{}})"
+    t.v(f"{T}.vai('#/cose/{raccolta}'); 1")
+    if not aspetta(lambda: t.v(f"{S}.vistaCose") == "pagina" and t.v(f"{S}.pagina"), 5):
+        verifica(f"{nome_d} pagina {raccolta}: si apre", False, str(t.v("location.hash")))
+        return
+    n = t.v("document.querySelectorAll('#pagina-schede .scheda').length") or 0
+    misure = []
+    for i in range(n):
+        m = t.v(f"({MISURA_PAGINA})({i})") or {}
+        time.sleep(0.1)
+        misure.append(m)
+    foto(t, f"telefono-pagina-{nome_d}-{raccolta}.png")
+    testi = " ".join(m.get("testo", "") for m in misure)
+    verifica(f"{nome_d} pagina {raccolta}: ogni scheda (il promemoria compreso) in vista, dentro la sezione, "
+             f"niente testo di lato",
+             n >= 2 and "fabbro" in testi and all(m.get("inVista") and not m.get("fuori") for m in misure),
+             json.dumps(misure, ensure_ascii=False)[:300])
+    verifica(f"{nome_d} pagina {raccolta}: in ogni scheda niente testo tagliato in basso",
+             all(not m.get("tagliati") for m in misure),
+             json.dumps([[m.get("tipo"), m.get("tagliati")] for m in misure if m.get("tagliati")], ensure_ascii=False)[:300])
+    verifica(f"{nome_d} pagina {raccolta}: contrasto AA in ogni scheda",
+             all(not m.get("bassi") for m in misure),
+             json.dumps([[m.get("tipo"), m.get("bassi")] for m in misure if m.get("bassi")], ensure_ascii=False)[:300])
+    m = t.v(MISURA) or {}
+    verifica(f"{nome_d} pagina {raccolta}: contrasto AA", not m.get("bassi"), str(m.get("bassi"))[:200])
+
+
 def misure_strati(t, hub, spec):
-    """Modulo aperto, menu aperto e casella per scrivere, nelle tre dimensioni."""
+    """Il modulo aperto nelle tre dimensioni (Io è una sezione: misure). La casella per scrivere non è
+    più uno strato (28/10, #301): la misura prova_cronologia_pagina, nella Conversazione."""
     from calliope.schermi import Mittente
     T = "window.calliopeTelefono"
     dario = Mittente(persona="dario", nome="Dario", livello="amministra", certo=True)
@@ -729,14 +1572,12 @@ def misure_strati(t, hub, spec):
     aspetta(lambda: t.v("!document.getElementById('strato-modulo').hidden"), 5)
     for w, h, nome_d in DIMENSIONI:
         dimensione(t, w, h)
-        for id_, apri in (("strato-modulo", None), ("menu", "menu-apri"), ("strato-scrivi", "scrivi-apri")):
+        for id_, apri in (("strato-modulo", None),):
             if apri:
                 t.v(f"{T}.apriStrato({json.dumps(id_)}); document.activeElement.blur(); 1")
             else:
-                t.v(f"{T}.apriModulo({T}.carosello().modulo || [...document.querySelectorAll('#binario .modulo-car')]"
+                t.v(f"{T}.apriModulo({T}.sezioni().modulo || [...document.querySelectorAll('#sezioni .modulo-car')]"
                     f".map((e) => e.dataset.chiave)[0]); document.activeElement.blur(); 1")
-            if id_ == "menu":
-                t.v("document.getElementById('diag-tel').open = false; 1")
             time.sleep(0.2)
             m = t.v(f"({MISURA_STRATO})({json.dumps(id_)})") or {}
             foto(t, f"telefono-{nome_d}-{id_}.png")
@@ -811,6 +1652,12 @@ def gioco(t: Tel, hub):
              bool(m.get("chiudi")) and m["chiudi"][2] >= 44 and m["chiudi"][1] < 80 and m.get("libero"),
              json.dumps(m.get("chiudi")))
     verifica("modalità gioco: il microfono resta acceso entrando", mic_prima and t.mic())
+    verifica("modalità gioco: la scheda sta in Le mie cose › Giochi (aperta da sola)",
+             t.v("location.hash === '#/cose/giochi' && !!document.querySelector('#sez-cose [data-posto=\"cose/giochi\"] article.scheda-gioco')"))
+    verifica("modalità gioco: con la pagina Giochi aperta il riquadro è quello del gruppo, visibile, uno solo (#258)",
+             t.v("document.getElementById('sez-cose').dataset.vista === 'pagina'"
+                 " && document.querySelector('#sez-cose [data-posto=\"cose/giochi\"] article.scheda-gioco').getClientRects().length > 0"
+                 " && document.querySelectorAll('iframe.riquadro-gioco').length === 1"))
     # il pallino segue lo stato di questo telefono
     t.v(f"{T}.st.pensa = true; {T}.st.attivo = true; 1")
     ok = aspetta(lambda: "pensa" in voce(), 2)
@@ -828,10 +1675,10 @@ def gioco(t: Tel, hub):
     t.v(f"{T}.st.forza = false; 1")
     t.v(f"if ({T}.st.reg) {T}.st.reg.finisci = true; 1")
     time.sleep(0.5)
-    # ✕ chiude: la scheda torna nel carosello con «Riapri», il microfono resta
+    # ✕ chiude: la scheda resta in Giochi con «Riapri», il microfono resta
     t.tocca_sel("article.modo-gioco .gioco-chiudi")
     ok = aspetta(lambda: not (t.v(G) or {}).get("partita"), 3)
-    stato = t.v("(() => { const a = document.querySelector('#binario article.scheda-gioco');"
+    stato = t.v("(() => { const a = document.querySelector('#sez-cose article.scheda-gioco');"
                 " return {riquadro: !!(a && a.querySelector('iframe')), riapri: !!(a && a.querySelector('.gioco-riapri')),"
                 " fissa: !!a && getComputedStyle(a).position === 'fixed',"
                 " body: document.body.classList.contains('in-modo-gioco')}; })()") or {}
@@ -839,8 +1686,11 @@ def gioco(t: Tel, hub):
              bool(ok) and not stato.get("riquadro") and stato.get("riapri") and not stato.get("fissa")
              and not stato.get("body"), json.dumps(stato))
     verifica("✕: il microfono resta acceso", t.mic() == mic_prima)
+    ok = aspetta(lambda: "gioco:finta1" not in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("adesso/corso", []), 3)
+    verifica("✕: il gioco chiuso esce da Adesso e resta in Giochi", bool(ok)
+             and "gioco:finta1" in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).get("cose/giochi", []))
     t.v(f"{T}.vaiA('gioco:finta1'); 1")
-    t.tocca_sel("#binario article.scheda-gioco .gioco-riapri")
+    t.tocca_sel("#sez-cose article.scheda-gioco .gioco-riapri")
     ok = aspetta(lambda: (t.v(G) or {}).get("partita") == "finta1", 3)
     m = t.v(MISURA_GIOCO) or {}
     verifica("«Riapri»: di nuovo a tutta la finestra", bool(ok) and pieno(m), json.dumps(m.get("articolo")))
@@ -877,6 +1727,12 @@ def senza_api(t: Tel):
     ok = aspetta(lambda: t.v(f"!!{T} && {T}.st.collegato"), 15)
     verifica("senza l'API: pagina ricaricata e collegata", bool(ok)
              and t.v("'wakeLock' in navigator") is False)
+    # La cronologia ripresa al ricollegamento non è una novità (revisione della PR #252)
+    aspetta(lambda: len([k for ks in (t.v(f"{T}.sezioni()") or {}).get("posti", {}).values() for k in ks]) > 3, 5)
+    time.sleep(0.5)
+    nov = (t.v(f"{T}.sezioni()") or {}).get("novita", {})
+    verifica("ricaricata: le schede riprese dal server non accendono novità", nov and not any(nov.values()),
+             json.dumps(nov))
     t.modelli_finti()
     # il modulo ancora aperto sul server si riapre da solo con la pagina: lo si chiude
     aspetta(lambda: t.v("!document.getElementById('strato-modulo').hidden"), 3)
@@ -907,6 +1763,7 @@ def main() -> int:
             print("Nessun Edge né Chromium: prova saltata.")
             return SALTATA
         cfg, srv, hub, web = avvia(TMP / "server")
+        liste = prepara_raccolte(cfg, hub, TMP / "server")
         _, token = srv.archivio.crea_con_token("telefono", proprietario="dario",
                                                proprietario_nome="Dario")
         url = f"http://127.0.0.1:{web.port}/telefono/"
@@ -923,7 +1780,13 @@ def main() -> int:
             time.sleep(0.5)
             scenari(t, srv)
             misure(t, "0schede")
-            carosello(t, hub)
+            sezioni(t, hub)
+            raccolte(t, hub, liste)
+            agenda_pagina(t, hub)
+            pagine_2c(t, hub, TMP / "server")
+            pagina_documenti(t, hub, TMP / "documenti")
+            pagina_ufficio(t, hub, TMP / "ufficio")
+            pagina_da_calliope(t, hub)
             misure(t, "schede")
             una_per_una(t)
             _, spec = modulo_e_scrivi(t, hub)

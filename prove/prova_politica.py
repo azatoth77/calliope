@@ -487,6 +487,10 @@ def registro_completo():
     from calliope.tools.conoscenti import conoscenti_specs
     for s in conoscenti_specs():
         reg.register(s)
+    # studio e studio_pagina_leggi (30/10, #284) solo con `studio_modo: attivo`
+    from calliope.tools.studio import studio_specs
+    for s in studio_specs():
+        reg.register(s)
     return reg
 
 
@@ -1515,6 +1519,36 @@ def prova_reti_spente():
         verifica(f"reti spente {spente}: riferire resta acceso", b.cfg.rete("riferire"))
 
 
+def prova_schermo_pagina():
+    """schermo_mostra con cosa=pagina (28/10, #289; revisione della PR #294): una scelta fissata.
+    Cambia solo la vista dello schermo personale di chi parla, è reversibile: classe sicura, parte
+    anche dopo un dato non fidato letto in questa risposta (DOPO_DATO), e la porta stretta delle
+    estensioni con lo scope «schermi» lo dà sicuro. Un'estensione però non apre pagine: la porta
+    passa solo titolo e testo (estensioni/porta.py, `svc.mostra`)."""
+    print("── schermo_mostra con cosa=pagina ──")
+    T = politica.Turno
+    cl = politica.classe_di("schermo_mostra")
+    verifica("classe sicura", cl.classe == politica.SICURO, cl)
+    for pagina in ("documenti", "ufficio"):
+        a = {"cosa": "pagina", "pagina": pagina}
+        verifica(f"pulita: «aprimi {pagina}» → esegue",
+                 politica.decidi("schermo_mostra", a, cl, T(testo=f"aprimi {pagina}")).esito == "esegui")
+        web = T(testo="cerca la ricetta", contaminazione=frozenset({"web"}),
+                esterni=[("web", INIEZIONE)], persona_txt="cerca la ricetta", letto_ora="web")
+        verifica(f"dopo un dato non fidato: {pagina} → esegue (DOPO_DATO, cambia solo la vista)",
+                 politica.decidi("schermo_mostra", a, cl, web).esito == "esegui"
+                 and "schermo_mostra" in politica.DOPO_DATO)
+    from calliope import guardrail as gr
+    v = gr.valuta_porta("schermo_mostra", {"cosa": "pagina", "pagina": "ufficio"},
+                        {"schermi": True}, gr.StatoEsecuzione())
+    verifica("estensione con lo scope schermi: sicura", v.classe == gr.SICURA, v)
+    v = gr.valuta_porta("schermo_mostra", {"cosa": "pagina"}, {}, gr.StatoEsecuzione())
+    verifica("estensione senza lo scope schermi: vietata", v.classe == gr.VIETATA, v)
+    porta = (Path(__file__).resolve().parent.parent / "calliope/estensioni/porta.py").read_text(encoding="utf-8")
+    verifica("la porta delle estensioni passa a schermo_mostra solo titolo e testo (mai una pagina)",
+             'return self.svc.mostra(es, s("titolo")[:80], s("testo")[:2000])' in porta)
+
+
 if __name__ == "__main__":
     prova_busta()
     prova_decidi()
@@ -1534,5 +1568,6 @@ if __name__ == "__main__":
     prova_riformulati()
     prova_descrizioni_estensioni()
     prova_attacchi()
+    prova_schermo_pagina()
     print(f"\n{errori} errori")
     sys.exit(1 if errori else 0)

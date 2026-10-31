@@ -24,6 +24,8 @@ class Listener:
     def __init__(self, cfg: Config, sorgente=None):
         """`sorgente`: la classe del flusso del microfono, con gli argomenti di
         sd.InputStream (le prove ne passano una che legge un file)."""
+        # «Parla» dal PC (27/10): fino a quando (monotonic) si ascolta senza il nome
+        self.sveglio_fino = 0.0
         from .vad import carica_vad
         self.cfg = cfg
         self._sorgente = sorgente or sd.InputStream
@@ -282,6 +284,10 @@ class Listener:
 
         Con `wakeup` impostato (un timer o un promemoria scaduto) restituisce None appena
         nessuno sta parlando, così Calliope può annunciarlo senza aspettare una frase.
+
+        `self.sveglio_fino` (monotonic) allunga da fuori la finestra senza il nome mentre si
+        ascolta: «Parla» dalla pagina dello schermo personale del PC (27/10, il satellite riceve
+        «tocco»). Vale la più lontana tra le due.
         """
         from .pause import MisuraPause
         cfg = self.cfg
@@ -364,7 +370,7 @@ class Listener:
                             self.wake_score = max(self.wake_score, score)
                             if streak >= cfg.wake_consecutive:
                                 if (not self.woke and on_wake is not None
-                                        and self.started_at > awake_until):
+                                        and self.started_at > max(awake_until, self.sveglio_fino)):
                                     try:
                                         on_wake()
                                     except Exception:  # noqa: BLE001 — un suono non ferma
@@ -379,11 +385,16 @@ class Listener:
                         misura.frame_voce = 1        # il frame che ha fatto partire la frase
                         self.started_at = time.monotonic() - len(preroll) * frame_ms / 1000
                         self.woke, self.wake_score = False, 0.0
+                        # Cominciata nella finestra di «Parla» (27/10): vale come il nome, come
+                        # il tocco del telefono, così il server non la scarta (revisione #255)
+                        if (wake is not None and self.started_at > awake_until
+                                and self.started_at <= self.sveglio_fino):
+                            self.woke, self.wake_score = True, 1.0
                     continue
 
                 speech.append(frame)
-                if not signaled and (
-                        wake is None or self.started_at <= awake_until or self.woke):
+                if not signaled and (wake is None or self.started_at <= max(awake_until, self.sveglio_fino)
+                                     or self.woke):
                     signaled = True
                     if on_start is not None:
                         on_start()
@@ -408,7 +419,8 @@ class Listener:
                 too_long = len(speech) * frame_ms >= cfg.max_utterance_s * 1000
                 if silent * frame_ms >= soglia_ms or anticipa or too_long:
                     long_enough = (len(speech) - silent) * frame_ms >= cfg.min_speech_ms
-                    for_me = wake is None or self.started_at <= awake_until or self.woke
+                    for_me = (wake is None or self.started_at <= max(awake_until, self.sveglio_fino)
+                              or self.woke)
                     if long_enough and for_me:
                         self.ended_at = time.monotonic() - silent * frame_ms / 1000
                         # Solo misura (07/10): pause interne, parlato, come si è chiusa

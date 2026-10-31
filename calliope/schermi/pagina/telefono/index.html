@@ -2,7 +2,9 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- interactive-widget (28/10, #301): su Android la tastiera non ridimensiona la pagina, come su iOS;
+     la parte visibile la misura telefono.js (visualViewport), così il layout compatto non scatta -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-visual">
 <meta name="color-scheme" content="dark">
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#000000">
@@ -17,6 +19,13 @@
 <link rel="stylesheet" href="/schermo.css">
 <link rel="stylesheet" href="/telefono/telefono.css">
 <script src="/schermo.js" defer></script>
+<script src="/sezioni.js" defer></script>
+<script src="/bordi.js" defer></script>
+<script src="/studio.js" defer></script>
+<script src="/libreria.js" defer></script>
+<script src="/studio_importa.js" defer></script>
+<script src="/esercizio.js" defer></script>
+<script src="/telefono/condividi.js" defer></script>
 <script src="/telefono/telefono.js" type="module"></script>
 </head>
 <body class="telefono" data-incorporata="1" data-carosello="1" data-chiave="calliope.telefono.schermo">
@@ -39,61 +48,227 @@
   <p id="abbina-avviso" class="avviso-tel" role="alert" hidden></p>
 </section>
 
-<!-- La pagina: una vista sola, senza scorrere (04/10: sempre come la vista da guida) -->
-<main id="vista" class="vista" hidden aria-label="Calliope">
+<!-- La pagina (27/10, docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md): cinque sezioni con
+     la barra in basso e la voce sempre sopra la barra; ogni scheda nella sua sezione, quelle vive
+     anche in Adesso. La vista unica di prima (04/10) resta come modalità «In auto», a mano -->
+<main id="vista" class="vista" data-modo="sezioni" data-sezione="adesso" hidden aria-label="Calliope">
   <div class="vista-testa">
-    <div class="riga-stato">
-      <div id="tel-voce" class="voce dorme" role="status" aria-live="polite">
-        <span class="forma" aria-hidden="true"><i></i><i></i><i></i></span>
-        <span class="voce-testo">…</span>
-      </div>
-      <button id="menu-apri" type="button" class="tasto-icona" aria-label="Impostazioni e aiuto" aria-haspopup="dialog" aria-controls="menu">
-        <span class="ingranaggio" aria-hidden="true"><i></i><i></i><i></i></span>
+    <div class="riga-titolo">
+      <h1 id="sez-titolo" class="sez-titolo">Adesso</h1>
+      <span id="auto-segno" class="auto-segno" hidden><span class="auto-icona" aria-hidden="true"></span>In auto</span>
+      <button id="auto-apri" type="button" class="tasto tasto-piccolo auto-apri">In auto</button>
+      <button id="auto-esci" type="button" class="tasto tasto-piccolo auto-esci" hidden>Esci</button>
+      <!-- Scrivendo nella Conversazione (28/10, #301) i filtri stanno dietro la lente -->
+      <button id="conv-lente" type="button" class="tasto tasto-piccolo conv-lente" aria-label="Cerca e filtra la conversazione" aria-expanded="false" hidden>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/></svg>
       </button>
     </div>
-    <p id="tel-dove" class="vista-dove" hidden></p>
     <p id="avviso-tel" class="vista-avviso" role="alert" hidden></p>
     <p id="schermo-avviso" class="vista-avviso" role="alert" hidden></p>
   </div>
 
-  <section id="carosello" class="carosello" aria-roledescription="carosello" aria-label="Risposta e schede">
-    <div id="binario" class="binario" tabindex="0">
+  <div id="sezioni" class="sezioni">
+    <!-- Adesso: ciò che aspetta te, ciò che è in corso, l'ultima risposta -->
+    <section id="sez-adesso" class="sezione" data-sezione="adesso" aria-labelledby="sez-titolo">
+      <h2 class="gruppo" data-gruppo="aspetta" hidden>Aspetta te</h2>
+      <div class="elenco" data-posto="adesso/aspetta"></div>
+      <h2 class="gruppo" data-gruppo="corso" hidden>In corso</h2>
+      <div class="elenco" data-posto="adesso/corso"></div>
+      <h2 class="gruppo gruppo-risposta">Ultima risposta</h2>
       <article id="risposta" class="pagina-car risposta-car" data-chiave="__risposta" aria-roledescription="scheda">
         <div class="etichetta">Risposta</div>
         <p id="risposta-testo" class="risposta-testo" aria-live="polite"></p>
         <button type="button" class="espandi" aria-label="Apri la risposta a schermo intero">Espandi</button>
       </article>
+      <div class="elenco" data-posto="adesso/risposta"></div>
+    </section>
+
+    <section id="sez-conversazione" class="sezione" data-sezione="conversazione" aria-labelledby="sez-titolo" hidden>
+      <!-- La conversazione (08/10; dal 28/10, #242, dentro la sezione con le schede piccole, i
+           filtri e la ricerca): solo su un telefono personale -->
+      <div id="conv-tel" class="conv-tel" hidden></div>
+      <!-- «ti ascolto…» mentre si parla, «Calliope sta scrivendo…» dopo l'invio (28/10, #301) -->
+      <div id="conv-ora" class="conv-ora" role="status" aria-hidden="true" data-vuoto="1"><span class="conv-ora-punti" aria-hidden="true"><i></i><i></i><i></i></span><span class="conv-ora-testo"></span></div>
+      <h2 class="gruppo" data-gruppo="altre-conv" hidden>Altre schede</h2>
+      <div class="elenco" data-posto="conversazione"></div>
+      <p class="vuoto-sez">Le risposte con una scheda (biblioteca, internet, calcoli, testi da leggere) restano qui.</p>
+    </section>
+
+    <section id="sez-cose" class="sezione" data-sezione="cose" aria-labelledby="sez-titolo" hidden>
+      <!-- Le tessere e le pagine delle raccolte (28/10, passo 2a: POST /api/raccolte, sezioni.js) -->
+      <nav id="tessere" class="tessere" aria-label="Le mie raccolte" hidden></nav>
+      <!-- I file condivisi con Calliope da un'altra app (31/10, #298 parte 3: share target della
+           PWA, sw.js e condividi.js): la persona sceglie la verifica, poi la stessa importazione
+           di «Aggiungi materiali» (POST /api/studio/importa) -->
+      <section id="condividi" class="condividi" aria-labelledby="condividi-titolo" hidden>
+        <h2 id="condividi-titolo" class="gruppo" tabindex="-1">Condiviso con Calliope</h2>
+        <p id="condividi-nota" class="pagina-nota"></p>
+        <ul id="condividi-file" class="condividi-file"></ul>
+        <label id="condividi-etichetta" class="studio-campo" for="condividi-verifica" hidden>In quale verifica?</label>
+        <select id="condividi-verifica" class="studio-scelta" hidden></select>
+        <div class="studio-h-tasti">
+          <button id="condividi-manda" type="button" class="tasto studio-h-tasto studio-h-primo" hidden disabled>Aggiungi ai materiali</button>
+          <button id="condividi-studio" type="button" class="tasto studio-h-tasto" hidden>Apri lo Studio</button>
+          <button id="condividi-annulla" type="button" class="tasto studio-h-tasto">Annulla</button>
+        </div>
+        <p id="condividi-esito" class="pagina-esito" role="status"></p>
+      </section>
+      <div id="pagina-racc" class="pagina-racc" hidden>
+        <div class="pagina-testa">
+          <button id="pagina-indietro" type="button" class="tasto pagina-indietro"><span aria-hidden="true">‹ </span>Le mie cose</button>
+          <h2 id="pagina-titolo" class="pagina-titolo"></h2>
+        </div>
+        <p id="pagina-nota" class="pagina-nota" hidden></p>
+        <!-- La ricerca delle pagine Documenti e Ufficio (28/10, passi 2d e 2e: POST /api/raccolte/cerca, sezioni.js) -->
+        <form id="pagina-cerca" class="pagina-cerca" role="search" hidden>
+          <input id="pagina-cerca-testo" type="search" aria-label="Cerca nei documenti" maxlength="120" autocomplete="off" enterkeyhint="search" placeholder="Cerca: bolletta, garanzia, lettera…">
+          <button type="submit" class="tasto pagina-cerca-vai">Cerca</button>
+          <button type="button" id="pagina-cerca-via" class="tasto pagina-cerca-via" hidden>Tutti</button>
+        </form>
+        <div id="pagina-schede" class="elenco pagina-schede"></div>
+        <!-- Lo Studio (29/10, passo 4.2, #281: studio.js, bordi.js, POST /api/studio/pagina); dal
+             30/10 (passo 4.5, #284) la home (POST /api/studio/home) e sotto la vista delle pagine -->
+        <div id="studio" class="studio" hidden>
+          <p id="studio-prova" class="studio-prova" hidden>Prova: lo Studio è in ombra e lo vede solo chi amministra.</p>
+          <div id="studio-home" class="studio-home"></div>
+          <div id="studio-materiali" class="studio" hidden>
+          <button id="studio-indietro" type="button" class="tasto studio-indietro">‹ Studio</button>
+          <label class="studio-campo" for="studio-verifica">Verifica</label>
+          <select id="studio-verifica" class="studio-scelta"></select>
+          <p id="studio-nessuna" class="pagina-nota" hidden>Non c'è una verifica aperta a cui mandare pagine.</p>
+          <div id="studio-azioni" class="studio-azioni">
+            <button id="studio-camera-apri" type="button" class="tasto">Fotocamera</button>
+            <button id="studio-file-apri" type="button" class="tasto">Galleria o PDF</button>
+            <input id="studio-file" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,application/pdf" multiple hidden>
+          </div>
+          <div id="studio-camera" class="studio-camera" hidden>
+            <div class="studio-mirino">
+              <video id="studio-video" playsinline muted aria-label="Fotocamera"></video>
+              <canvas id="studio-guida" aria-hidden="true"></canvas>
+            </div>
+            <p id="studio-camera-stato" class="studio-camera-stato" role="status"></p>
+            <div class="studio-camera-tasti">
+              <button id="studio-scatta" type="button" class="tasto studio-scatta">Scatta</button>
+              <button id="studio-camera-fine" type="button" class="tasto">Fatto</button>
+            </div>
+          </div>
+          <h3 id="studio-titolo-elenco" class="gruppo-pagina" hidden>Da mandare</h3>
+          <ol id="studio-elenco" class="studio-elenco" aria-labelledby="studio-titolo-elenco"></ol>
+          <button id="studio-invia" type="button" class="tasto studio-invia" hidden>Manda</button>
+          <p id="studio-esito" class="pagina-esito" role="status"></p>
+          <!-- Gli argomenti proposti e la conferma (30/10, passo 4.4, #283: POST
+               /api/studio/argomenti); il disegno vero arriva con la 4.5 -->
+          <section id="studio-argomenti" class="studio-argomenti" aria-labelledby="studio-argomenti-titolo" hidden>
+            <h3 id="studio-argomenti-titolo" class="gruppo-pagina">Argomenti</h3>
+            <p id="studio-argomenti-stato" class="pagina-nota" role="status"></p>
+            <ol id="studio-argomenti-elenco" class="studio-elenco"></ol>
+            <button id="studio-argomenti-conferma" type="button" class="tasto studio-invia" hidden>Conferma gli argomenti</button>
+            <p id="studio-argomenti-esito" class="pagina-esito" role="status"></p>
+          </section>
+          </div>
+        </div>
+        <p id="pagina-esito" class="pagina-esito" role="status"></p>
+      </div>
+      <div class="raccolta" data-raccolta="" hidden><h2 class="gruppo">Da scrivere</h2><div class="elenco" data-posto="cose"></div></div>
+      <div class="raccolta" data-raccolta="liste" hidden><h2 class="gruppo">Liste</h2><div class="elenco" data-posto="cose/liste"></div></div>
+      <div class="raccolta" data-raccolta="agenda" hidden><h2 class="gruppo">Agenda</h2><div class="elenco" data-posto="cose/agenda"></div></div>
+      <div class="raccolta" data-raccolta="lavori" hidden><h2 class="gruppo">Lavori e programmi</h2><div class="elenco" data-posto="cose/lavori"></div></div>
+      <div class="raccolta" data-raccolta="documenti" hidden><h2 class="gruppo">Documenti</h2><div class="elenco" data-posto="cose/documenti"></div></div>
+      <div class="raccolta" data-raccolta="cassetto" hidden><h2 class="gruppo">Cassetto</h2><div class="elenco" data-posto="cose/cassetto"></div></div>
+      <div class="raccolta" data-raccolta="giochi" hidden><h2 class="gruppo">Giochi</h2><div class="elenco" data-posto="cose/giochi"></div></div>
+      <div class="raccolta" data-raccolta="studio" hidden><h2 class="gruppo">Studio</h2><div class="elenco" data-posto="cose/studio"></div></div>
+      <div class="raccolta" data-raccolta="ufficio" hidden><h2 class="gruppo">Ufficio</h2><div class="elenco" data-posto="cose/ufficio"></div></div>
+      <p class="vuoto-sez">Qui ritrovi le liste, l'agenda, i lavori, i documenti, i file e i giochi che Calliope ti ha mostrato.</p>
+    </section>
+
+    <section id="sez-casa" class="sezione" data-sezione="casa" aria-labelledby="sez-titolo" hidden>
+      <div class="elenco" data-posto="casa"></div>
+      <p class="vuoto-sez">Qui compaiono i dispositivi di casa che chiedi a Calliope, le voci nuove e gli avvisi per te.</p>
+    </section>
+
+    <!-- Io: quello che era il menu delle impostazioni -->
+    <section id="sez-io" class="sezione" data-sezione="io" aria-labelledby="sez-titolo" hidden>
+      <h2 class="gruppo">Questo telefono</h2>
+      <dl class="menu-riga">
+        <dt>Questo telefono</dt><dd id="luogo">Calliope</dd>
+        <dt>Voce</dt><dd><span id="tel-collegamento" class="stato attesa"><span class="punto"></span><span id="tel-collegamento-testo">avvio…</span></span></dd>
+        <dt>Schede</dt><dd><span id="stato" class="stato"><span class="punto"></span><span id="stato-testo">schede</span></span></dd>
+      </dl>
+      <p id="schermo-stato" class="schermo-stato" role="status" hidden><span class="punto" aria-hidden="true"></span><span id="schermo-testo"></span></p>
+      <div class="interruttore">
+        <button id="schermo-tieni" type="button" role="switch" aria-checked="true">
+          <span class="leva" aria-hidden="true"></span>
+          <span>Con il microfono acceso tengo acceso lo schermo</span>
+        </button>
+      </div>
+      <!-- La conversazione della stanza (13/10): solo se Calliope la fa per questo telefono -->
+      <div id="stanza-interruttore" class="interruttore" hidden>
+        <button id="stanza-tieni" type="button" role="switch" aria-checked="true">
+          <span class="leva" aria-hidden="true"></span>
+          <span>Ascolto la stanza (con il microfono acceso Calliope trascrive la conversazione, solo in memoria)</span>
+        </button>
+      </div>
+      <button id="auto-io" type="button" class="grande">In auto: solo la voce e l'ultima risposta</button>
+      <!-- L'accento (27/10): una preferenza della persona, vale sui suoi satelliti personali -->
+      <h2 id="io-aspetto" class="gruppo" hidden>Aspetto</h2>
+      <div id="accenti" class="accenti" role="group" aria-labelledby="io-aspetto" hidden></div>
+      <p id="accento-esito" class="nota-tel accento-esito" role="status"></p>
+      <p class="nota-tel">Se lo schermo si spegne, blocchi il telefono o passi a un'altra app il microfono si spegne (lo fanno tutti i browser): con il microfono acceso tengo acceso lo schermo, tu tieni aperta questa pagina.</p>
+      <h2 class="gruppo">Aiuto</h2>
+      <p class="nota-tel">«Parla»: tocca e parla, smetto di ascoltare quando fai una pausa; tieni premuto per parlare a lungo. Con il microfono acceso rispondo quando sento «Calliope», e «Parla» serve per parlarmi senza dire il nome. Le schede stanno nelle sezioni in basso; quelle in corso anche in Adesso.</p>
+      <details id="diag-tel" class="diag-tel">
+        <summary>Calliope non capisce bene? Prova il microfono</summary>
+        <p>Registro due volte 5 secondi (la seconda senza le correzioni del browser): ogni volta di' la frase che compare. Le registrazioni vanno a Calliope, che le tiene qualche giorno per capire cosa succede.</p>
+        <button id="diag-prova" type="button" class="grande">Prova il microfono</button>
+        <pre id="diag-esito" class="diag-esito" aria-live="polite" hidden></pre>
+      </details>
+      <!-- Il cruscotto di chi amministra (06/10, sola lettura): solo se questo telefono è personale
+           di chi amministra; «Pulisci le mie schede» (08/10) solo se è personale -->
+      <h2 id="io-amministra" class="gruppo" hidden>Amministra</h2>
+      <button id="cruscotto-tel" type="button" class="grande" hidden>Stato di Calliope (cruscotto)</button>
+      <div class="elenco" data-posto="io"></div>
+      <button id="pulisci-tel" type="button" class="grande secondario" hidden>Pulisci le mie schede</button>
+      <p id="pulisci-esito" class="nota-tel" role="status" hidden></p>
+      <p class="menu-piede"><a href="/telefono/calliope-ca.crt" id="link-ca">Certificato di casa</a>
+        <button type="button" id="dimentica" class="link">Dimentica il telefono</button></p>
+    </section>
+  </div>
+
+  <!-- La voce, sempre sopra la barra: grande in Adesso e in Conversazione, più bassa altrove;
+       su una riga sola sugli schermi bassi o stretti (28/10, #277) -->
+  <section class="voce-riga" aria-label="Voce">
+    <div id="tel-voce" class="voce dorme" role="status" aria-live="polite">
+      <span class="forma" aria-hidden="true"><i></i><i></i><i></i></span>
+      <span class="voce-testo">…</span>
     </div>
-    <div id="punti" class="punti"><span id="punti-testo" class="solo-lettori"></span></div>
-  </section>
-
-  <button id="parla" type="button" class="parla">
-    <span class="parla-icona" aria-hidden="true"></span><span class="parla-testo">Parla</span>
-  </button>
-
-  <div class="vista-fondo">
+    <p id="tel-dove" class="vista-dove" hidden></p>
     <button id="microfono" type="button" class="tasto mic" role="switch" aria-checked="false" aria-label="Microfono">
       <span class="mic-icona" aria-hidden="true"></span><span class="mic-testo"><span>Microfono</span> <b id="mic-stato">spento</b></span>
     </button>
-    <button id="scrivi-apri" type="button" class="tasto scrivi-apri" aria-haspopup="dialog" aria-controls="strato-scrivi" hidden>
-      <span class="tastiera-icona" aria-hidden="true"><i></i><i></i></span><span>Scrivi</span>
+    <!-- Nel layout compatto (28/10, #277) la voce sta su una riga: la parola breve e lo stato
+         piccolo dentro «Parla»; il suggerimento («Tocca «Parla» per parlare») ne è la descrizione,
+         solo quando non si vede (aria-describedby messo da telefono.js, descriviParla: 29/10, #287) -->
+    <button id="parla" type="button" class="parla">
+      <span class="parla-icona" aria-hidden="true"></span><span class="parla-parole"><span class="parla-testo">Parla</span><span class="parla-breve">Parla</span><span class="parla-stato" aria-hidden="true"></span></span>
     </button>
-    <!-- Allega (05/10): fotocamera, libreria o un file del telefono, poi la domanda scritta o detta -->
-    <button id="foto-apri" type="button" class="tasto foto-apri" aria-label="Allega una foto o un file per Calliope" hidden>
-      <span class="foto-icona" aria-hidden="true"></span><span>Allega</span>
+    <!-- Scrivi (28/10, #301): la Conversazione in modalità scrittura, nella stessa schermata -->
+    <button id="scrivi-apri" type="button" class="tasto scrivi-apri" aria-label="Scrivi a Calliope" aria-pressed="false" hidden>
+      <span class="tastiera-icona" aria-hidden="true"><i></i><i></i></span><span class="tasto-parola">Scrivi</span>
     </button>
-  </div>
-</main>
+  </section>
 
-<!-- Scrivere a Calliope: la casella di schermo.js finisce qui (#scrivi-posto) -->
-<section id="strato-scrivi" class="strato strato-alto" role="dialog" aria-modal="true" aria-labelledby="scrivi-titolo" hidden>
-  <div class="strato-testa">
-    <h2 id="scrivi-titolo">Scrivi a Calliope</h2>
-    <button id="scrivi-chiudi" type="button" class="tasto chiudi">Chiudi</button>
-  </div>
-  <div id="scrivi-posto"></div>
-  <p class="strato-nota">La risposta arriva tra le schede.</p>
-</section>
+  <!-- Scrivendo, la riga della voce diventa la casella di schermo.js (#scrivi): «Torna alla voce»,
+       Allega, il testo e Invia; Allega c'è solo qui (28/10, #301) -->
+  <div id="scrivi-posto" class="scrivi-riga" hidden></div>
+
+  <nav id="barra" class="barra" aria-label="Sezioni">
+    <a href="#/adesso" data-sezione="adesso"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg></span><span>Adesso</span></a>
+    <a href="#/conversazione" data-sezione="conversazione"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 5h14v10H9l-4 4z"/></svg></span><span>Conversazione</span><span class="novita" hidden></span></a>
+    <a href="#/cose" data-sezione="cose"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg></span><span>Le mie cose</span><span class="novita" hidden></span></a>
+    <a href="#/casa" data-sezione="casa"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/></svg></span><span>Casa</span><span class="novita" hidden></span></a>
+    <a href="#/io" data-sezione="io"><span class="icona-sez" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></span><span>Io</span></a>
+  </nav>
+</main>
 
 <!-- Una scheda a schermo intero (06/10): un tocco sulla scheda o «Espandi»; si aggiorna al suo
      posto, si chiude con «Chiudi», Esc o il gesto indietro -->
@@ -114,51 +289,14 @@
   <div id="modulo-posto" class="modulo-posto"></div>
 </section>
 
-<!-- Impostazioni e aiuto: tutto quello che non serve guidando -->
-<section id="menu" class="strato menu" role="dialog" aria-modal="true" aria-labelledby="menu-titolo" hidden>
-  <div class="strato-testa">
-    <h2 id="menu-titolo">Impostazioni</h2>
-    <button id="menu-chiudi" type="button" class="tasto chiudi">Chiudi</button>
-  </div>
-  <div class="menu-corpo">
-    <dl class="menu-riga">
-      <dt>Questo telefono</dt><dd id="luogo">Calliope</dd>
-      <dt>Voce</dt><dd><span id="tel-collegamento" class="stato attesa"><span class="punto"></span><span id="tel-collegamento-testo">avvio…</span></span></dd>
-      <dt>Schede</dt><dd><span id="stato" class="stato"><span class="punto"></span><span id="stato-testo">schede</span></span></dd>
-    </dl>
-    <p id="schermo-stato" class="schermo-stato" role="status" hidden><span class="punto" aria-hidden="true"></span><span id="schermo-testo"></span></p>
-    <div class="interruttore">
-      <button id="schermo-tieni" type="button" role="switch" aria-checked="true">
-        <span class="leva" aria-hidden="true"></span>
-        <span>Con il microfono acceso tengo acceso lo schermo</span>
-      </button>
-    </div>
-    <!-- La conversazione della stanza (13/10): solo se Calliope la fa per questo telefono -->
-    <div id="stanza-interruttore" class="interruttore" hidden>
-      <button id="stanza-tieni" type="button" role="switch" aria-checked="true">
-        <span class="leva" aria-hidden="true"></span>
-        <span>Ascolto la stanza (con il microfono acceso Calliope trascrive la conversazione, solo in memoria)</span>
-      </button>
-    </div>
-    <p class="nota-tel">Se lo schermo si spegne, blocchi il telefono o passi a un'altra app il microfono si spegne (lo fanno tutti i browser): con il microfono acceso tengo acceso lo schermo, tu tieni aperta questa pagina.</p>
-    <p class="nota-tel">«Parla»: tocca e parla, smetto di ascoltare quando fai una pausa; tieni premuto per parlare a lungo. Con il microfono acceso rispondo quando sento «Calliope», e «Parla» serve per parlarmi senza dire il nome. Le schede si scorrono di lato.</p>
-    <!-- Il cruscotto di chi amministra (06/10, sola lettura): solo se questo telefono è personale
-         di chi amministra; si apre nel carosello come una scheda -->
-    <button id="cruscotto-tel" type="button" class="grande" hidden>Stato di Calliope (cruscotto)</button>
-    <!-- La conversazione e «Pulisci le mie schede» (08/10): solo se questo telefono è personale -->
-    <button id="chat-tel" type="button" class="grande" hidden>La nostra conversazione</button>
-    <button id="pulisci-tel" type="button" class="grande secondario" hidden>Pulisci le mie schede</button>
-    <p id="pulisci-esito" class="nota-tel" role="status" hidden></p>
-    <details id="diag-tel" class="diag-tel">
-      <summary>Calliope non capisce bene? Prova il microfono</summary>
-      <p>Registro due volte 5 secondi (la seconda senza le correzioni del browser): ogni volta di' la frase che compare. Le registrazioni vanno a Calliope, che le tiene qualche giorno per capire cosa succede.</p>
-      <button id="diag-prova" type="button" class="grande">Prova il microfono</button>
-      <pre id="diag-esito" class="diag-esito" aria-live="polite" hidden></pre>
-    </details>
-    <p class="menu-piede"><a href="/telefono/calliope-ca.crt" id="link-ca">Certificato di casa</a>
-      <button type="button" id="dimentica" class="link">Dimentica il telefono</button></p>
-  </div>
-</section>
+<!-- Le icone della casella per scrivere (28/10, #301): schermo.js e telefono.js le copiano da qui
+     (niente HTML scritto dal codice, niente indirizzi nel JS) -->
+<template id="icone">
+  <svg data-icona="graffetta" viewBox="0 0 24 24"><path d="M20 11l-8 8a5 5 0 0 1-7-7l8-8a3.5 3.5 0 0 1 5 5l-8 8a2 2 0 0 1-3-3l7-7"/></svg>
+  <svg data-icona="invia" viewBox="0 0 24 24"><path d="M12 19V6M6 11l6-6 6 6"/></svg>
+  <svg data-icona="togli" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+  <svg data-icona="microfono" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+</template>
 
 <noscript><p class="avviso">Questa pagina ha bisogno di JavaScript.</p></noscript>
 </body>

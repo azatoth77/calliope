@@ -185,7 +185,7 @@ permessi per accedere ai file del server» (falso) e `pc_cerca_file` sul PC non 
   l'ha chiesto aperto (`Schermi.personale_collegato`): la frase dice «È sulla scheda del tuo
   schermo: per averlo tocca «Scarica».» (`frase_scheda`, regola `documento_sulla_scheda`), e
   così l'annuncio se finisce in secondo piano e la scheda arriva. Senza schermo, o consegnato
-  davvero al portatile, la frase di sempre.
+  davvero al portatile, la frase di sempre. *[storico: «senza schermo» valeva fino al 28/10; dal passo 2d (#259) con uno schermo personale abbinato ma chiuso la frase dice la pagina Documenti, vedi sotto]*
 - `lavoro_risultato` con un riferimento che non è un lavoro non ripiega più: vedi
   [agenti-estensioni](agenti-estensioni.md).
 
@@ -194,3 +194,58 @@ finto, 3 giri): la frase della scheda con «Scarica» 3/3; «Puoi raccontarmi co
 file?» → `documento_leggi` **3/3** con il contenuto giusto detto in due frasi; il riassunto
 chiesto dopo, 3/3 dalla conversazione senza un altro tool. Prove: `prova_documenti`
 (`prova_rilettura`).
+
+## I documenti sul telefono in ogni momento: la pagina Documenti (28/10, issue #259, ramo `issue-259-documenti`)
+
+Decisione di Dario del 28/10: *il telefono deve poter ricevere i documenti*. Prima un documento
+preparato per una persona collegata dal telefono restava «sul server» e si scaricava solo se lo schermo
+personale era aperto quando la scheda arrivava. Ora la pagina Le mie cose › Documenti mostra gli ultimi 8
+documenti della persona, e tutti gli altri si trovano con «Cerca» (la ricerca li guarda tutti), e si
+scaricano da lì in ogni momento (la pagina è in [schermi-telefono](schermi-telefono.md), con chi vede
+cosa). *[storico: «ogni documento si ritrova in Le mie cose» fino alla revisione della PR #268; la pagina
+ne mostrava 8 e la ricerca guardava gli ultimi 50]* I limiti trovati e cosa se n'è fatto:
+
+- **La frase «sul server, perché il satellite collegato non riceve documenti»** *[storico: fino al 28/10; dal 28/10 (#290), senza schermo personale, «tra i miei documenti, perché il dispositivo da cui mi parli non riceve file»: [schermi-telefono](schermi-telefono.md)]* con lo schermo personale
+  chiuso: con uno schermo personale abbinato (`Schermi.personale_abbinato`, identità decisa dalla voce)
+  la frase è `frase_pagina`, «Lo trovi in Le mie cose, alla voce Documenti: per averlo tocca
+  «Scarica».» (regola `documento_sulla_pagina`; il documento appena fatto è il primo della pagina; senza
+  «sul tuo telefono», che fino alla revisione della PR #268 diceva anche a chi ha solo il PC personale:
+  gli schermi non dicono di che tipo sono), e così l'annuncio se il documento finisce in secondo piano
+  (`annuncio_pagina`, `job.ha_pagina` messo dal tool). Con lo schermo aperto resta `frase_scheda`; senza
+  schermi personali, o consegnato davvero al portatile, la frase di sempre. `documento_leggi` con
+  «mostramelo» e lo schermo chiuso dice al modello di aggiungere dove lo trova: nella pagina se è fra gli
+  ultimi 8, altrimenti «cercando «titolo»» (revisione della PR #268: la frase deve essere vera).
+- **I documenti fatti da Calliope si scaricano sempre**: la pagina rifà la scheda dal JSON dell'archivio
+  (`Archive.recenti`), quindi «Scarica» funziona anche per un file finito sul portatile o per un documento
+  di prima di un riavvio. La tessera chiamava `recenti` sul servizio invece che sull'archivio: col servizio
+  vero diceva sempre «non disponibile» (corretto).
+- **«Scarica» per i file dell'archivio di casa** non c'era: ora il file originale (PDF, foto, docx, txt),
+  con i permessi della pagina rifatti al clic (`Archivio.documento_visibile`, `Archivio.file_di` dentro
+  `archivio_cartella`). A voce l'archivio non cambia: i tool restano quelli, coi permessi di `puo_vedere`.
+- **Nomi e tipi per l'iPhone**: il nome di riserva di `Content-Disposition` toglie gli accenti invece di
+  metterci «_», il nome è in forma NFC, i file originali hanno il loro tipo (`application/pdf`,
+  `image/jpeg`…). Lo scaricamento dalla PWA sull'iPhone vero resta da provare (#59): in particolare il
+  Markdown (`text/markdown`), che Safari potrebbe aprire invece di salvare.
+- **Chi amministra** (seconda decisione di Dario del 28/10) vede nella pagina anche i documenti fatti per gli
+  altri, minori compresi, e tutto l'archivio di casa, ognuno con di chi è. A voce `documento_leggi` resta
+  dei soli documenti di chi parla, e l'archivio coi permessi di sempre.
+
+Prove: `prova_pagina_documenti`, `prova_documenti` (le frasi col telefono abbinato ma chiuso).
+
+## L'ufficio sugli schermi: la pagina Ufficio di chi amministra (28/10 sera, issue #260, ramo `issue-260-ufficio`)
+
+Le mie cose › Ufficio, solo sugli schermi personali di chi amministra (decisione del 28/10; la pagina e chi la
+vede sono in [schermi-telefono](schermi-telefono.md)): fatture, note di credito, preventivi, DDT e le serie
+dei modelli da `Numeratore.elenco`, con numero, data, cliente, importo, stato (emesso o annullato col motivo)
+e «Scarica» del PDF e dell'XML; la rubrica da `Rubrica.visibili`; una ricerca. In sola lettura: a voce non
+cambia nulla, e l'invio allo SdI resta a mano (la pagina non dice mai «inviata»: nessuno lo registra).
+
+- **Il totale nei dati del numero**: `_scrivi` aggiunge `_totale` (e `_da_pagare` con la ritenuta) ai dati
+  salvati da `Numeratore.emetti`, dai conti del programma (`doc["totali"]`). I numeri emessi prima del 28/10
+  non l'hanno, e la pagina lascia la riga senza importo invece di rifare i conti, che dipendono
+  dall'emittente e dalle aliquote di quel giorno.
+- **`Numeratore.elenco(con_dati=True)`** dà anche `dati` (il JSON dell'emissione, col contatto della rubrica
+  com'era allora), `owner`, `creato` e `annullato`; senza il parametro l'elenco è quello di prima.
+- «Scarica» serve solo i file registrati per quel numero (`rif`), riletti al clic con i permessi rifatti.
+
+Prove: `prova_ufficio` (il totale, il da pagare e il cliente nei dati del numero), `prova_pagina_ufficio`.

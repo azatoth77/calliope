@@ -518,6 +518,8 @@ Il banco (`prove/prova_regressione.py`, gemma4 e4b locale, 2 giri) era 166/174 i
 
 ## Rete `spinta_esercizi` (08/10, ramo `esercizi-pilota`)
 
+*[storico: la rete è tolta il 28/10 con gli esercizi (#279, decisione [0035](../decisioni/0035-studio.md)); resta come storia.]*
+
 Con un esercizio in sospeso (tool `esercizi`, calliope/esercizi/) una risposta del modello senza
 il tool si trattiene e il modello riceve una spinta (`ESERCIZI_NUDGE`), una volta; poi la sua
 risposta si dice. Caso: col 4B, a «Verbo.» la risposta era «Perfetto! Prossima: …» copiata
@@ -2133,7 +2135,7 @@ Profili (`PROFILI_LLM`): `gemma4-e4b-ollama` e `qwen3.6-35b-vllm` le tengono tut
 | `spinta_stanza` | `spinta_stanza`, `stanza_dopo_ricerca_vuota` | brain.py, STANZA_NOTA | 14/10 |
 | `spinta_rinuncia` | `spinta_rinuncia` | brain.py, RINUNCIA_NUDGE | ≤ 06/10 |
 | `spinta_sviluppo` | `spinta_sviluppo`, `sviluppo_testo_taciuto` | brain.py, SVILUPPO_NUDGE | 12/10 |
-| `spinta_esercizi` | `spinta_esercizi`, `esercizi_domanda_inventata`, `esercizi_promessa_taciuta` | brain.py, ESERCIZI_NUDGE | 08/10 |
+| ~~`spinta_esercizi`~~ | `spinta_esercizi`, `esercizi_domanda_inventata`, `esercizi_promessa_taciuta` | *storico: tolta il 28/10 con gli esercizi, #279* | 08/10 |
 | `scrivo_qui_a_voce` | `scrivo_qui_tolto` | brain.py, FraseTolta(SCRIVO_QUI) | 12/10 |
 | `argomento_forse` | `argomento_forse` (aiuto usato: `argomento_forse_usato`) | brain.py, argomenti_incerti.py | 08/10 |
 | `correzione_tool` | `correzione_tool`, `correzione_avviso` (esito cattivo: `correzioni_esaurite`) | brain.py, CORREZIONE_NUDGE | 09/10 |
@@ -2909,3 +2911,56 @@ un falso positivo.
     - Q8: la frase d'attesa di correzione; il silenzio da quando il testo passa;
     - Q9: `volte` con le regole che accompagnano; la riga oltre il tetto come scatto;
     - M18: il flush del seguito senza il ricontrollo.
+
+## Il telefono a sezioni nel prompt e nella nota del dispositivo (28/10, issue #288 e #289, ramo `issue-288-telefono-consapevole`)
+
+Casi veri della DGX del 28/10 dal telefono (13:53 «Apri lo schermo dei documenti su questo dispositivo.» →
+«non è un computer»; 13:54 «la scheda documenti del tab Le mie cose» → «non ho una scheda Le mie cose»):
+il modello non sapeva che il telefono è uno schermo personale a sezioni. Dettagli, frasi e misure in
+[schermi-telefono](schermi-telefono.md), sezione «Il modello sa del telefono a sezioni».
+
+- **Prompt di sistema**: un paragrafo fisso (`Config._frase_sezioni`, parametro `sezioni` di `prompt_for`,
+  ~216 token stimati) con le sezioni, le pagine di Le mie cose, cosa si fa dallo schermo, la tenuta delle foto
+  e `schermo_mostra` con `cosa=pagina`. Uguale per tutti i livelli e fra i turni, come il resto del prompt:
+  l'Ufficio «solo per chi amministra» e Casa «non sotto i 13 anni» sono detti come regole, non secondo chi
+  parla. Senza `schermo_mostra` il prompt resta parola per parola quello di prima.
+- **Dati del turno**: la nota del dispositivo dice lo schermo personale di chi parla aperto, chiuso o assente,
+  e cosa lì non c'è per lui; il «niente» è della webcam e della schermata del computer. Un dato, non un
+  ordine (principio 10).
+- **Regole nuove nel registro dei turni**: `schermo_pagina` (la pagina aperta sullo schermo) e
+  `schermo_pagina_chiuso` (detto dove trovarla). Sono esiti di un tool scelto dal modello, non regole sul
+  testo della persona; le forme della pagina («lavori e programmi» → lavori) sono correzioni della forma di
+  una scelta già fatta.
+- **Da misurare col modello** (sulla DGX): che «aprimi i documenti» dal telefono scelga `schermo_mostra` con
+  `cosa=pagina` e non `documento_leggi` o un rifiuto, e che il paragrafo non sposti i tool vicini
+  («mostramelo sullo schermo», «metti la lista sullo schermo»: `prova_schermi_ollama`); il banco di
+  regressione per i casi senza schermo.
+
+## I nomi inventati `studio_<oggetto>_<azione>`, «stoppa ti» e il promemoria fuori tema (31/10, issue #373, ramo `issue-373-studio-nome-inventato`)
+
+Prova di chi amministra del 31/10 alle 9:23 sulla DGX (gemma4 26B), e `prova_studio_ollama` 2/3
+sul caso «crea». «Venerdì ho la verifica di informatica…» → `studio_verifica_crea({'azione':
+'crea', …})`: tool sconosciuto, oltre la distanza 2 dal nome vero, nessun nome suggerito; la
+stessa chiamata ripetuta, poi «Ho segnato la verifica…» senza tool (fermato dalla rete), e la
+verifica non c'era.
+- **Regola `tool_nome_azione` anche per lo Studio** (`registry.studio_dal_nome`, attraverso
+  `nome_e_argomenti` in `ToolRegistry.call`, `mancanti` e `Brain._nome_corretto`): un nome
+  sconosciuto `studio_…` diventa `studio` con l'azione degli argomenti se è un'azione di
+  `studio`, altrimenti l'unica azione di `studio` fra le parole del nome (`studio_crea_verifica`,
+  `studio_verifica_sposta`, `studio_salta_oggi`); gli argomenti che `studio` non conosce si
+  tolgono. Mai per un'azione che non esiste (`studio_verifica_cancella`), con due azioni nel nome
+  o per un altro prefisso (`agenda_crea`). Permessi e politica restano quelli di `studio`.
+- **L'errore di tool sconosciuto** suggerisce anche per prefisso (`studio` per
+  `studio_verifica_cancella`, prima dei nomi vicini) e dice che le azioni vanno nell'argomento
+  «azione».
+- **La descrizione di `studio`** dice in una frase che è un tool solo e che crea, sposta, togli e
+  le altre sono valori di azione.
+- **«No, stoppa ti.»** mentre non c'era niente da fermare: il modello diceva «Ho fermato tutto»
+  senza tool e la rete lo trasformava in «Non ci sono riuscita: puoi ripetere la richiesta?».
+  «stoppa», «stoppati» e «smetti» entrano nel lessico della chiusura (ordini di silenzio), e «no»
+  vale solo insieme a un ordine di silenzio («No, basta.»), mai da solo; contrari in
+  `prova_testo` («No.», «No, grazie.», «No, stoppa la musica.», «Stoppa il timer.»).
+- **Il promemoria del giorno degli sviluppi sospesi** non si attacca più a una risposta che ha
+  usato o tentato un tool d'altro (era in coda alla risposta sulla verifica): aspetta la prima
+  risposta senza tool (`Brain._sviluppo_coda`, contrari in `prova_sviluppo`).
+- **Da misurare sulla DGX**: `prova_studio_ollama` col caso «crea» a 3/3.

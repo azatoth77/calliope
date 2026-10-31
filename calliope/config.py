@@ -761,6 +761,13 @@ class Config:
     # nome, mai il comando. Il comando è un programma nel PATH o registrato in Windows
     # (winword.exe), un protocollo (ms-settings:), un percorso completo, oppure «browser»
     # (il browser predefinito). Le voci non installate si tolgono all'avvio.
+    # A voce si aprono tutte; per iscritto da uno schermo personale solo «browser», un
+    # protocollo noto (ms-settings:) e un programma .exe senza argomenti che non sia un
+    # interprete, un terminale o uno strumento di sistema (cmd, powershell, wsl, python, java,
+    # regedit, mmc, control…): un programma «si chiude subito, non cancella e non manda niente».
+    # Script, installatori, collegamenti (.bat, .ps1, .msi, .lnk, .url…), nomi senza estensione e
+    # %VARIABILI% vogliono la voce. Un .exe che dentro lancia uno script resta un'app: sta a chi
+    # scrive il catalogo (29/10, #307; regola in pc/base.py, ammessa_per_iscritto)
     pc_app: dict[str, str] = field(default_factory=lambda: {
         "calcolatrice": "calc.exe",
         "blocco note": "notepad.exe",
@@ -919,6 +926,14 @@ class Config:
     schermi_scritto: bool = True
     # Anche dagli schermi di stanza (non personali): lì chi scrive conta come un ospite
     schermi_scritto_stanza: bool = False
+    # «Parla» sulla pagina dello schermo personale di un PC satellite (27/10, passo 1b del
+    # telefono a sezioni): per quanti secondi il satellite ascolta senza il nome, come «Parla»
+    # del telefono; la frase cominciata in tempo arriva intera
+    schermi_parla_s: float = 8.0
+    # Lo schermo personale sulla pagina degli schermi (il PC che fa da satellite) a sezioni come
+    # il telefono (27/10, passo 1b): false lo riporta alla scheda grande e alla fila di prima,
+    # come gli schermi di stanza. Il telefono è a sezioni comunque
+    schermi_sezioni: bool = True
     # Caratteri al massimo di un testo scritto, e invii al minuto per schermo (testo e moduli)
     schermi_scritto_max: int = 500
     schermi_scritto_al_minuto: int = 12
@@ -930,8 +945,9 @@ class Config:
     schermi_scarica_s: float = 180.0
     # Foto in ingresso (05/10, calliope/immagini.py, docs/ricerche/2026-10-05-immagini.md):
     # dal telefono e dagli schermi personali (pulsante «Foto», file, trascina, incolla), dalla
-    # webcam e dallo schermo del PC su richiesta (pc_guarda). Solo in memoria, legate alla
-    # conversazione; su disco solo con «archiviala». Spente: niente pulsante né tool
+    # webcam e dallo schermo del PC su richiesta (pc_guarda). Legate alla conversazione; dal
+    # 28/10 tenute 60 giorni (`immagini_tenuta`, decisione 0034) e per sempre con «archiviala».
+    # Spente: niente pulsante né tool
     immagini_enabled: bool = True
     # Il modello della voce vede le immagini? "auto" (Ollama: capacità «vision» di
     # /api/show; API OpenAI: sì), "si", "no". Gemma 4 (e4b e 26B) e qwen3.6 le vedono
@@ -957,6 +973,15 @@ class Config:
     # c'è più, chiedi di rimandarla», invece di una causa inventata dal modello (16/10, #96,
     # DGX 15/10). Oltre, il dato non vale più (la persona parla d'altro); 0 lo spegne
     immagini_persa_s: float = 600.0
+    # La foto intera si tiene (28/10, decisione 0034 di chi amministra): ogni foto mandata da una
+    # persona di casa con l'identità certa (minori compresi, decisione 0031) e ogni cattura di
+    # webcam e schermo chiesta a voce resta nel suo cassetto `immagini_tenuta_giorni` giorni (al
+    # posto di `cassetto_giorni`), con la miniatura nel turno della Conversazione; «archiviala»
+    # la tiene per sempre nei suoi documenti. Mai per gli ospiti. Va via con «dimentica le nostre
+    # conversazioni» e `calliope conserva --svuota`. Spenta: le foto come prima (cassetto per
+    # `cassetto_giorni`, le catture solo in memoria)
+    immagini_tenuta: bool = True
+    immagini_tenuta_giorni: float = 60.0
     # Allegati di qualsiasi tipo (05/10, calliope/allegati.py, docs/ricerche/2026-10-05-allegati.md):
     # dal pulsante «Allega» del telefono e degli schermi personali (scegli, trascina, incolla),
     # con la vita delle foto (la conversazione) e le stesse regole (solo durante una
@@ -1987,9 +2012,6 @@ class Config:
     # per ciò che vuole chi amministra serve una frase più chiara (la frase di sfida), regola
     # `amministra_minore_vicino`
     minori_margine_amministra: float = 0.12
-    # Compiti: risposte sbagliate sullo stesso esercizio prima di spiegare la soluzione (e
-    # avvisare i tutori). Decisione del 05/10: 5
-    minori_compiti_tentativi: int = 5
     # Ogni quanti mesi ricordare ai tutori di rifare l'impronta di un minore: sotto i 14 anni e
     # dai 14 (la voce dei bambini cambia in fretta); anche prima se il riconoscimento cala
     minori_impronta_mesi: list = field(default_factory=lambda: [6, 12])
@@ -2071,41 +2093,6 @@ class Config:
     avvisi_audio_contesto_s: float = 20.0
     # Giorni dopo cui l'audio (nel cassetto) e la trascrizione di un avviso si cancellano
     avvisi_audio_giorni: float = 30.0
-    # Esercizi generati da Calliope (08/10, calliope/esercizi/, docs/ricerche/
-    # 2026-10-08-esercizi.md): matematica e italiano per i ragazzi di casa, a voce e sulla
-    # scheda, con la correzione nel codice e il registro dei tentativi per i tutori; dal 12/10
-    # anche logica, fisica e chimica (calcolabili, unità di misura in calliope/unita.py)
-    esercizi_enabled: bool = True
-    # Il secondo modello che risolve da solo gli esercizi d'italiano (se non concorda,
-    # l'esercizio si scarta). Vuoto = il modello della voce sullo stesso Ollama; sulla DGX si
-    # può scegliere un modello più forte. Su Ollama (API nativa, output strutturato)
-    esercizi_verifica_modello: str = ""
-    esercizi_verifica_url: str = ""
-    esercizi_verifica_timeout_s: float = 20.0
-    # Esercizi d'italiano senza il secondo parere quando il modello non risponde (solo lessico e
-    # Wikizionario). false = in quel caso niente esercizi d'italiano
-    esercizi_senza_secondo_parere: bool = False
-    # Esercizi d'italiano controllati in anticipo per livello, in secondo piano
-    esercizi_pronti: int = 3
-    # Esercizi a campione nel riepilogo per i tutori (da controllare al posto della revisione)
-    esercizi_campione: int = 3
-    # Esercizi di un blocco prima della proposta «Facciamo una pausa o cambiamo?», detta dal
-    # codice (12/10, caso vero: tabelline senza pause finché la bambina non ha detto «basta,
-    # sono stanca»). Più corto per la primaria bassa (prima, seconda e terza elementare); chi
-    # vuole blocchi diversi lo dice a voce («blocchi più corti») e resta salvato per persona
-    esercizi_blocco_piccoli: int = 5
-    esercizi_blocco: int = 10
-    # Tappe del percorso «a tappe» (una tappa = un blocco), attivato a voce
-    esercizi_tappe: int = 3
-    # «A che punto siete?» (12/10 sera, decisione di Dario: si chiede spesso, non una volta
-    # all'anno): a inizio sessione, per un minore, una domanda breve detta dal codice se
-    # l'informazione su quella materia manca o ha più di tanti giorni; a metà sessione al più
-    # una volta, se sbaglia molte risposte di fila o le fa tutte giuste al primo colpo. La
-    # risposta stringe o sposta il limite del programma dentro l'anno. 0 = mai chiedere
-    esercizi_punto_giorni: int = 14
-    # Domande di un'interrogazione simulata («interrogami sulle addizioni»): aperte dagli
-    # obiettivi dell'indice e conti corretti dal codice
-    esercizi_interroga_domande: int = 5
     # Il modello guardiano (calliope/guardiano.py): giudica la domanda e ogni frase della
     # risposta prima della voce, solo per minori e ospiti. Su Ollama (lo stesso della voce se
     # guardiano_url è vuoto: llm_native_url). Scelta con prove/misura_guardiano.py (rapporto
@@ -2135,6 +2122,217 @@ class Config:
     guardiano_pericolo: bool = True
     guardiano_pericolo_modello: str = "gemma4:e4b-it-qat"
     guardiano_pericolo_url: str = ""
+
+    # Lo Studio (29/10, passo 4.1, issue #280, decisione 0035; calliope/studio/): verifiche con
+    # una data, materiali e pagine, argomenti e un piano a giorni calcolato dal codice, per tutte
+    # le persone di casa (i tutori vedono quello dei minori, gli ospiti mai). «spento» = niente
+    # Studio (i dati di prima scadono e si cancellano lo stesso); «ombra» = i dati si scrivono e
+    # il piano si calcola, ma niente arriva al modello né agli schermi: solo le misure nel
+    # registro; «attivo» = per il tool e le pagine dello Studio (passo 4.5, non ancora fatti)
+    studio_modo: str = "spento"
+    # Minuti di studio al giorno per una verifica (il tutore li ritocca per verifica); con più
+    # verifiche aperte negli stessi giorni si dividono
+    studio_minuti_giorno: int = 45
+    # Minuti per leggere e studiare una pagina: quante pagine stanno in un giorno
+    studio_minuti_pagina: int = 10
+    # La fascia del giorno in cui si studia: i minuti di un giorno sono quelli della fascia non
+    # coperti dagli orari di riposo di un minore (un giorno con gli orari che coprono tutta la
+    # fascia non ha studio). Oggi conta solo la parte della fascia che deve ancora venire
+    studio_fascia: str = "15:00-20:00"
+    # I giorni della settimana senza piano («domenica», «sabato»…): giorni senza scuola noti.
+    # Vuoto di serie; i singoli giorni liberi (vacanze, gite) si segnano per persona
+    studio_giorni_senza_piano: list[str] = field(default_factory=list)
+    # L'obiettivo di padronanza in % accanto alla data, di serie (spunto approvato il 28/10)
+    studio_obiettivo: int = 75
+    # Giorni dopo la data della verifica in cui restano pagine, testo letto, argomenti e piano
+    # (decisione 0035, punto 4); «archivia la verifica» la tiene per sempre
+    studio_tenuta_giorni: int = 60
+    # La cartella dello Studio per le immagini delle pagine e i PDF dei materiali (dal passo 4.2,
+    # #281: studio/pagine/<verifica>/, nomi scelti dal server); relativa = accanto a memory_db,
+    # come il cassetto. La tenuta, «dimentica» e svuota ne tolgono i file con le verifiche
+    studio_cartella: str = "studio"
+    # Le pagine dalla fotocamera e dai PDF (29/10, passo 4.2, #281, POST /api/studio/pagina): il
+    # lato lungo della pagina raddrizzata (l'harness della lettura del 28/10 legge a 1600 px)
+    studio_pagina_lato: int = 1600
+    # Una foto al più così grande (il telefono la manda in JPEG sotto i 3000 px)
+    studio_pagina_max_mb: float = 15.0
+    # Un PDF al più così grande e con al più tante pagine (oltre: rifiutato, mai tagliato)
+    studio_pdf_max_mb: float = 30.0
+    studio_pdf_max_pagine: int = 40
+    # Le pagine di una verifica al più (tutti i materiali insieme)
+    studio_pagine_max: int = 80
+    # Invii di pagine al minuto per schermo (un PDF conta uno)
+    studio_pagine_al_minuto: int = 40
+    # Sotto questa nitidezza (varianza del laplaciano a 1000 px, col contrasto normalizzato) la
+    # pagina ha l'avviso «sfocata». Misurata il 29/10 sulle foto di fantasia di
+    # prove/manuali/studio_immagini.py: nitide ≥ 234, sfocate di 3 px ≤ 132; da ritarare sulle
+    # foto vere
+    studio_nitidezza_min: float = 150.0
+    # La lettura delle pagine (30/10, passo 4.3, #282, calliope/studio/lettura.py): un thread che
+    # legge le pagine «da leggere» con qwen3.6 su vLLM (il modello dell'agente, harness del banco
+    # del 28/10) quando la DGX è libera, in ombra e in attivo. false = le pagine restano da
+    # leggere (per esempio prima del banco dello scritto a mano vero)
+    studio_lettura: bool = True
+    # Gli argomenti dalle pagine lette (30/10, passo 4.4, #283, calliope/studio/argomenti.py): lo
+    # stesso thread della lettura, con la sua guardia, chiede a qwen3.6 gli argomenti di una
+    # verifica quando le sue pagine sono tutte lette, dal solo testo e con l'harness del banco
+    # del 28/10; arrivano «proposti» e li conferma la persona. In ombra si estraggono e si
+    # misurano soltanto. false = gli argomenti solo a mano
+    studio_argomenti: bool = True
+    # La padronanza per argomento (30/10, passo 5, #245, calliope/studio/padronanza.py): una cifra
+    # da 0 a 100 dai soli tentativi (carte, verifica finta…), detta con la parola. «ombra» la
+    # calcola e scrive la misura del giorno con la fonte «padronanza_ombra», che la previsione
+    # ignora, e niente arriva al modello né agli schermi; «mostrata» dà la parola sulle tappe, le
+    # lacune con la lezione successiva e la previsione dalla padronanza; «spenta» niente. Si passa
+    # a «mostrata» col criterio scritto nella decisione 0035, punto 32
+    studio_padronanza: str = "ombra"
+    # Le carte generate dalle pagine lette (30/10, passo 6, seconda parte, #246,
+    # calliope/studio/genera.py): lo stesso thread della lettura, con la sua guardia, chiede a
+    # qwen3.6 le carte degli argomenti confermati di una verifica aperta, dal solo testo letto in
+    # busta. Il codice le controlla come gli argomenti (pagine vere, risposta nelle pagine,
+    # forma). «ombra» le genera e le misura soltanto: nessuna carta va alla persona; «attiva» le
+    # dà «proposte», e nessuna entra nel ripasso finché la persona o il tutore non la conferma;
+    # «spenta» niente. Si passa ad «attiva» col banco delle carte (prove/manuali/banco_studio.py,
+    # fase «carte») e la rilettura delle carte in ombra
+    studio_carte_genera: str = "ombra"
+    # La mappa concettuale (30/10, passo 7, #247, calliope/studio/mappa.py): al più tanti concetti
+    # nello scheletro; nella mappa dello studente e a memoria la persona ne aggiunge al più 6 suoi
+    # in più (`mappa.SUOI_MAX`); i collegamenti al più il doppio. Il progetto del 27/10 dice 10–15
+    # per mappa, lo scheletro 6–10: una mappa più grande si divide per capitolo (un'altra verifica)
+    studio_mappa_nodi_max: int = 12
+    # Lo scheletro della mappa generato dalle pagine lette (30/10, passo 7, seconda parte, #247,
+    # calliope/studio/mappa_genera.py): lo stesso thread della lettura, con la sua guardia, chiede a
+    # qwen3.6 le triple (concetto, relazione, concetto) degli argomenti confermati di una verifica
+    # aperta, dal solo testo letto in busta; il codice le controlla come argomenti e carte. Mai
+    # sopra uno scheletro scritto o cambiato da una persona. «ombra» lo genera e lo misura soltanto:
+    # nessuno scheletro va alla persona; «attiva» lo dà «proposto», da confermare; «spenta» niente.
+    # Si passa ad «attiva» col banco della mappa (prove/manuali/banco_studio.py, fase «mappa») e la
+    # rilettura degli scheletri in ombra
+    studio_mappa_genera: str = "ombra"
+    # La mappa libera (30/10, passo 7c, #328, calliope/studio/mappe.py): la persona fa la mappa da
+    # zero, con lo scheletro nascosto finché non dice «Ho finito»; il codice la confronta con lo
+    # scheletro (concetti chiave, collegamenti) e misura il metodo (isolati, verbi vuoti, concetti
+    # lunghi, profondità, collegamenti fra rami), giro per giro. Solo interfaccia e dati, nessun
+    # modello: per questo attiva di serie con lo Studio. «spenta» toglie la voce dalla scheda Mappa
+    studio_mappa_libera: str = "attiva"
+    # «Parliamone» dopo la mappa libera (30/10, passo 7c, #328): il modello della voce legge in
+    # busta la mappa, lo scheletro senza i concetti che mancano, il confronto del codice e gli
+    # indicatori (tool studio_mappa_consigli) e dà uno o due consigli sul metodo. «ombra» (di
+    # serie): il tool c'è ma la voce dice solo la frase del codice sul confronto; la risposta del
+    # modello si fa in secondo piano e si misura soltanto (lunghezza, concetti svelati: devono
+    # essere 0). «attiva» la dice; «spenta»: il tool non c'è (dal 31/10, #335). Si passa ad
+    # «attiva» dopo la rilettura delle misure dell'ombra (registro dello Studio)
+    studio_mappa_consigli: str = "ombra"
+    # Le prove dello Studio (31/10, passo 8, #248, calliope/studio/prove.py): la verifica finta
+    # scritta sullo schermo e l'interrogazione simulata a voce, sempre tutte e due qualunque sia la
+    # prova vera; l'esito lo decide il codice (scelta multipla, vero o falso, numero con l'unità,
+    # parole chiave), le risposte aperte la persona o il tutore, mai il modello. Domande per
+    # verifica finta (al più quelle che ci sono; l'orale ne fa 5) e il tempo in minuti
+    studio_prova_domande: int = 10
+    studio_prova_minuti: int = 20
+    # L'interrogazione «da una data» (passo 8): quanti giorni dura la finestra dopo la data; poi la
+    # verifica diventa fatta da sola (prima, «conclusa» a voce o dalla pagina)
+    studio_finestra_giorni: int = 14
+    # Le domande delle prove generate dalle pagine lette (passo 8, #248,
+    # calliope/studio/domande_genera.py): lo stesso thread della lettura, con la sua guardia, le
+    # chiede a qwen3.6 dal solo testo letto in busta, dopo carte e scheletro; il codice le
+    # controlla nella forma (una sola opzione giusta, un numero leggibile, le parole chiave nelle
+    # pagine). «ombra» le genera e le misura soltanto: nessuna va alla persona; «attiva» le dà
+    # «proposte», da confermare; «spenta» niente. Si passa ad «attiva» col banco delle domande
+    # (prove/manuali/banco_studio.py, fase «domande») e la rilettura delle domande in ombra
+    studio_domande_genera: str = "ombra"
+    # Il ripasso da ascoltare (31/10, passo 9, #249, calliope/studio/ascolta.py): le pagine lette
+    # degli argomenti del piano e le carte, lette da Piper, a voce («fammi ascoltare il ripasso»,
+    # tool studio_ascolta, fermato da «Calliope, basta») e sullo schermo («Ascolta», con pausa,
+    # −15 s e velocità). Il testo lo compone il codice, senza modello: per questo attiva di serie
+    # con lo Studio. «spenta» toglie il tool e la sezione
+    studio_ascolta: str = "attiva"
+    # La «voce del libro»: il materiale (pagine e carte) si legge con questa voce di Piper, le
+    # frasi di Calliope con la sua, così chi ascolta le distingue. Vuoto, un file che manca o una
+    # voce con un'altra frequenza: tutto con la voce di Calliope
+    studio_ascolta_voce: str = "voices/it_IT-paola-medium.onnx"
+    # L'audio del ripasso per lo schermo è una cache del testo (studio_cartella/ascolta/): si toglie
+    # dopo tanti giorni dall'ultimo ascolto, e sempre con la verifica, «dimentica» e --svuota
+    studio_ascolta_giorni: int = 7
+    # Le indicazioni dei tutori (31/10, passo 10, #250 e #285, calliope/studio/tutore.py): frasi
+    # di un tutore per lo studio del suo minore («insisti sulle frazioni»), per tutto il suo
+    # studio, una materia o una verifica, scritte dalla vista del tutore o a voce. Il minore ne
+    # vede il testo; nei dati del turno del minore entrano con una cornice del codice, sotto le
+    # regole per i minori, senza permessi né azioni. Accese di serie con lo Studio: senza un tutore
+    # che scrive non cambia niente. false: niente scrittura e niente nei dati del turno
+    studio_indicazioni: bool = True
+    # Quanti giorni vale un'indicazione se il tutore non lo dice (da 1 a 90; legata a una verifica
+    # mai oltre la fine della prova vera)
+    studio_indicazioni_giorni: int = 30
+    # La libreria dello Studio (31/10, #297, calliope/studio/libreria/): schede degli argomenti e
+    # mazzi di carte scritti e rivisti da noi, nel repository, che il codice sceglie dagli argomenti
+    # della verifica (e dalla padronanza, se mostrata): la sezione «Dalla libreria» della home e la
+    # lettura «libreria» del tool studio. Dati fidati e niente modello: per questo attiva di serie
+    # con lo Studio. «ombra» calcola le proposte e le conta nel registro senza mostrarle; «spenta»
+    # niente
+    studio_libreria: str = "attiva"
+    # Gli esercizi guidati (31/10, issue #278, calliope/studio/esercizi.py): un problema portato
+    # dalla persona (una foto, «Foto di un problema», o il testo scritto) dentro una sua verifica;
+    # il lettore delle pagine legge la foto e chiede a qwen3.6 una guida a passi (domande guida e
+    # indizi), che il codice controlla (mai la risposta di un passo nella sua domanda o nel suo
+    # indizio, mai il risultato). L'esito di ogni passo lo decide il codice; la soluzione intera
+    # non si dice mai, e mentre un esercizio è in corso la voce non la dice (la guardia di Brain).
+    # «ombra» (di serie): li usa solo chi amministra, per provarli, e il registro conta passi,
+    # esiti e frasi tolte; «attiva»: tutte le persone di casa; «spenta»: niente. Si passa ad
+    # «attiva» dopo la rilettura delle misure
+    studio_esercizi: str = "ombra"
+    # La preparazione dietro le quinte (31/10, #297, parte 3, calliope/studio/preparazione.py): il
+    # lettore delle pagine, quando la DGX è libera e la voce ferma, prepara per ogni verifica
+    # aperta una lezione breve per argomento e i valori dalle pagine (reazioni, misure) che
+    # adattano le attività della libreria, controllati dal codice. «ombra» (di serie, come le
+    # altre generazioni) prepara e misura soltanto; «attiva» la home dice «pronto» o «in
+    # preparazione», la lezione si apre sullo schermo, le attività prendono i valori e la voce
+    # dice «ho preparato…» una volta; «spenta» niente
+    studio_preparazione: str = "ombra"
+    # Da quanti secondi la voce dev'essere ferma (arbitro_memoria.quiete) perché si prepari
+    studio_preparazione_quiete_s: int = 120
+    # I premi dello Studio (31/10, issue #296, calliope/studio/premi.py): un rinforzo positivo e
+    # al minimo, calcolato dal codice dai soli dati della pratica (sessioni misurate fra «Inizia»
+    # e «Fatto», carte ripassate, prove consegnate, esiti decisi dal codice o dal tutore), mai
+    # dalle autovalutazioni né dal tempo passato nell'app. Niente perdite punitive, niente
+    # notifiche, niente classifiche. Per un minore il tutore li vede e li spegne, tutti o in parte,
+    # dalla sua vista. La serie di giorni di studio: un giorno senza piano (senza scuola, fuori
+    # dagli orari, senza verifiche aperte) non conta e non la ferma
+    studio_serie: bool = True
+    # I giorni di pausa della serie ogni 7: un giorno del piano senza pratica, o saltato con «non
+    # ce la faccio oggi», entro questo numero non la interrompe (0: nessuna pausa; al più 3)
+    studio_serie_pause: int = 1
+    # Le stelle: un argomento portato all'obiettivo (solo con la padronanza mostrata), una
+    # verifica finta o un'interrogazione superate, il ripasso delle carte fatto, il piano seguito.
+    # Una stella presa resta
+    studio_stelle: bool = True
+    # I duelli fra persone di casa sulle domande di una verifica, sugli schermi, mai con ospiti o
+    # conoscenti e mai in classifica; non danno premi né tentativi. Spenti di serie: con true li
+    # usano gli adulti, e per un minore li accende il suo tutore dalla vista del tutore
+    studio_duelli: bool = False
+    # L'importazione dei materiali scaricati (31/10, issue #298, studio/importa.py): un file o un
+    # archivio ZIP dallo schermo personale («Aggiungi materiali» sulla verifica) diventa pagine
+    # della verifica, con un lavoro di sfondo e le fasi sullo schermo. PDF e immagini come le
+    # pagine della 4.2; Word, PowerPoint, Excel, OpenDocument, testo, Markdown, CSV e HTML in
+    # pagine di testo già lette. Il tipo dai byte, mai dall'estensione. Acceso di serie quando c'è
+    # lo Studio; false lo spegne senza spegnere lo Studio
+    studio_importa: bool = True
+    # Un file mandato al più così grande (un archivio ZIP compreso)
+    studio_importa_max_mb: float = 100.0
+    # Le voci di un archivio al più (oltre: rifiutato intero)
+    studio_importa_file_max: int = 500
+    # I byte decompressi di una voce e di tutto l'archivio al più, contati leggendo e non quelli
+    # dichiarati (bomba di decompressione): oltre, le voci restano «non lette»
+    studio_importa_voce_max_mb: float = 30.0
+    studio_importa_totale_max_mb: float = 300.0
+    # Il sottoprocesso che legge i file dà un segno di vita a ogni voce e a ogni pagina di un PDF:
+    # oltre tanti secondi senza la voce è «troppo pesante» e si riparte dalla successiva; oltre
+    # il tempo massimo l'importazione si ferma (si riprende a mano)
+    studio_importa_passo_s: float = 30.0
+    studio_importa_tempo_max_s: float = 1800.0
+    # Le importazioni vive (in coda, in corso o fermate) di una persona al più: ogni file scelto
+    # insieme è un'importazione
+    studio_importa_coda: int = 10
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -2372,8 +2570,18 @@ class Config:
                    archivio: bool = False, ufficio: bool = False, web: bool = False,
                    estensioni: bool = False, meteo_casa: bool = False,
                    citta: str | None = None, citta_salva: bool = False,
-                   notizie: bool = False, stanza: bool = False) -> str:
+                   notizie: bool = False, stanza: bool = False,
+                   sezioni: bool = False) -> str:
         """Prompt di sistema, senza il nome dell'interlocutore: lo dà il tool chi_parla.
+
+        `sezioni` (28/10, issue #288): ci sono gli schermi personali a sezioni (il telefono, o il
+        PC personale con `schermi_sezioni`). Allora un paragrafo dice com'è fatto lo schermo
+        personale: le sezioni, le pagine di Le mie cose (l'Ufficio solo per chi amministra, Casa
+        non per i più piccoli), cosa si fa da lì e quanto restano le foto (decisione 0034). È
+        uguale per tutti e fra i turni: il prefisso resta in cache; se lo schermo di chi parla è
+        aperto, e cosa lì non c'è per lui, lo dice la nota del dispositivo nei dati del turno
+        (dispositivo.nota). Casi veri del 28/10: dal telefono «non posso aprire uno schermo
+        perché non è un computer» e «non ho una scheda Le mie cose».
 
         `biblioteca`: se il tool biblioteca_cerca c'è. Nominare un tool che non esiste è
         dannoso: il 26/09, senza file ZIM, il modello chiamava biblioteca_cerca, riceveva
@@ -2651,6 +2859,8 @@ class Config:
                      + ("; quando te lo dice, chiama citta_casa_salva con la città e "
                         "rispondi alla richiesta per quella città" if citta_salva else "")
                      + ". ")
+        if sezioni and schermi:
+            news += self._frase_sezioni(ufficio)
         return (
             f"Sei {self.name}, {role} vocale che gira in locale. {self.persona} "
             f"Parli di te al {grammar}. Dai del {tone['registro']} a chi ti parla; non ne "
@@ -2720,6 +2930,57 @@ class Config:
             + (f" {capacita}" if capacita else "")
             + self._frase_modalita()
         )
+
+    def _frase_sezioni(self, ufficio: bool) -> str:
+        """Lo schermo personale a sezioni nel prompt di sistema (28/10, issue #288): uguale per
+        tutti e fra i turni (il prefisso resta in cache), cambia solo con la configurazione o con
+        l'Ufficio installato. Le pagine sono quelle di schermi/raccolte.PAGINE (Studio arriva
+        dopo); le sezioni nascoste per età come schermi/aspetto.nascoste. Dalla revisione della
+        PR #294 segue gli interruttori veri: il PC solo con `schermi_sezioni`, il telefono solo
+        con `telefono_enabled`, lo scritto con `schermi_scritto`, foto e file con
+        `immagini_enabled` e `allegati_enabled`, il Cassetto con `cassetto_enabled`: niente
+        promesse di ciò che è spento."""
+        try:
+            from .schermi.aspetto import ETA_CASA
+        except Exception:  # noqa: BLE001 — il valore di serie
+            ETA_CASA = 13
+        on = lambda k: bool(getattr(self, k, True))  # noqa: E731
+        dove = [x for x, k in (("il telefono", "telefono_enabled"),
+                               ("la pagina di Calliope sul PC", "schermi_sezioni")) if on(k)]
+        if not dove:
+            return ""
+        cassetto = on("cassetto_enabled")
+        pagine = ["Liste", "Agenda", "Lavori e programmi"] + (["Cassetto"] if cassetto else [])             + ["Documenti", "Giochi"]
+        testo = (f"Chi è di casa può avere uno schermo personale ({' o '.join(dove)}) con le "
+                 f"sezioni Adesso, Conversazione, Le mie cose, Casa e Io; in Le mie cose ci sono "
+                 f"{', '.join(pagine)}"
+                 + (" e, solo per chi amministra, Ufficio" if ufficio else "")
+                 + f"; Casa non c'è sotto i {ETA_CASA} anni. ")
+        # Cosa si fa da lì: solo ciò che è acceso
+        allega = [x for x, k in (("foto", "immagini_enabled"), ("file", "allegati_enabled"))
+                  if on(k)]
+        fa = []
+        if on("schermi_scritto"):
+            # Dal 28/10 (#301) anche senza aver parlato, al più come familiare (storico: fino ad
+            # allora «in una conversazione cominciata a voce»)
+            fa.append("si scrive" + (f" e si allegano {' e '.join(allega)}" if allega else "")
+                      + " anche senza aver parlato (ciò che vuole la voce si chiede a voce)")
+        fa.append("si spuntano le liste e si danno «+1 minuto» e «Ferma» ai timer")
+        testo += "Da lì " + ", ".join(fa) + "; "
+        if cassetto and allega:
+            if "foto" in allega and getattr(self, "immagini_tenuta", True):
+                tenuta = (f"le foto restano nel Cassetto {_giorni(self.immagini_tenuta_giorni)} "
+                          f"giorni" + (f" (gli altri file {_giorni(self.cassetto_giorni)})"
+                                       if "file" in allega else ""))
+            else:
+                tenuta = (f"{' e '.join(allega)} restano nel Cassetto "
+                          f"{_giorni(self.cassetto_giorni)} giorni")
+            testo += tenuta + (", per sempre con «archiviala»" if on("archivio_enabled") else "") + ". "
+        else:
+            testo = testo[:-2] + ". "
+        return (testo + "Per portare lo schermo aperto di chi parla su una di queste pagine "
+                "chiama schermo_mostra con cosa=pagina; se è chiuso di' dove trovarla («in Le mie "
+                "cose, alla voce Documenti»); se è aperto lo dicono i dati del turno. ")
 
     def _frase_modalita(self) -> str:
         """La modalità accesa, in fondo al prompt (05/10): cosa fa davvero, così a «non sento
@@ -2805,6 +3066,15 @@ def nome_tono(nome: str | None) -> str | None:
             return t
     close = difflib.get_close_matches(k, list(candidati), n=1, cutoff=0.8)
     return candidati[close[0]] if close else None
+
+
+def _giorni(n) -> str:
+    """Un numero di giorni detto a voce: 60.0 → «60», 1.5 → «1,5»."""
+    try:
+        x = float(n)
+    except (TypeError, ValueError):
+        return str(n)
+    return str(int(x)) if x == int(x) else f"{x:g}".replace(".", ",")
 
 
 def tono_di(nome: str | None) -> dict[str, str]:
@@ -3136,13 +3406,6 @@ RETI: dict[str, Rete] = {
         "il 26B (spinta_promessa spenta) prometteva «faccio continuare l'agente… ti avviso» "
         "senza tool alla revisione (12/10, 12:20), e il testo prima del tool si attaccava alla "
         "frase del tool (11:13)"),
-    "spinta_esercizi": Rete(
-        "esercizio in sospeso o sessione aperta e risposta senza il tool esercizi: trattenuta, "
-        "spinta; dopo la spinta una domanda d'esercizio inventata non si dice (al suo posto "
-        "quella del programma) né la promessa di segnarsi una preferenza", MODELLO,
-        "il 4B copiava dalla storia «Perfetto! Prossima: …» correggendo da sé (08/10, 7 turni "
-        "d'italiano su 18): la correzione è del programma; il 26B inventava le domande "
-        "(«quanto fa 125 più 87?») e diceva «Segno tutto» senza salvare (12/10, DGX)"),
     "scrivo_qui_a_voce": Rete(
         "«te lo scrivo qui nella conversazione» a una persona che parla a voce: la frase si "
         "toglie", MODELLO,
@@ -3345,7 +3608,6 @@ SEZIONI: dict[str, list[str]] = {
                   "speaker_impronte_alpha", "speaker_impronte_deriva_arruolamento",
                   "speaker_impronte_deriva_seme", "speaker_impronte_max"],
     "minori": ["minori_enabled", "minori_margine_ambiguo", "minori_margine_amministra",
-               "minori_compiti_tentativi",
                "minori_impronta_mesi", "minori_gioco_minuti", "minori_richieste_giorni",
                "minori_avviso_ripetuto_s", "minori_pericolo_verifica",
                "minori_pericolo_attesa_s", "minori_pericolo_silenzio",
@@ -3355,15 +3617,26 @@ SEZIONI: dict[str, list[str]] = {
                "avvisi_contesto_ore",
                "avvisi_trascrizione", "avvisi_audio", "avvisi_audio_anello_min",
                "avvisi_audio_anello_mb", "avvisi_audio_contesto_s", "avvisi_audio_giorni",
-               "esercizi_enabled", "esercizi_verifica_modello", "esercizi_verifica_url",
-               "esercizi_verifica_timeout_s", "esercizi_senza_secondo_parere",
-               "esercizi_pronti", "esercizi_campione", "esercizi_blocco_piccoli",
-               "esercizi_blocco", "esercizi_tappe", "esercizi_punto_giorni",
-               "esercizi_interroga_domande",
                "guardiano_enabled", "guardiano_modello", "guardiano_url",
                "guardiano_timeout_s", "guardiano_se_guasto", "guardiano_keep_alive",
                "guardiano_num_ctx", "guardiano_ospiti", "guardiano_pericolo",
                "guardiano_pericolo_modello", "guardiano_pericolo_url"],
+    "studio": ["studio_modo", "studio_minuti_giorno", "studio_minuti_pagina", "studio_fascia",
+               "studio_giorni_senza_piano", "studio_obiettivo", "studio_tenuta_giorni",
+               "studio_cartella", "studio_pagina_lato", "studio_pagina_max_mb",
+               "studio_pdf_max_mb", "studio_pdf_max_pagine", "studio_pagine_max",
+               "studio_pagine_al_minuto", "studio_nitidezza_min", "studio_lettura",
+               "studio_argomenti", "studio_padronanza", "studio_carte_genera",
+               "studio_mappa_nodi_max", "studio_mappa_genera", "studio_mappa_libera",
+               "studio_mappa_consigli", "studio_prova_domande", "studio_prova_minuti",
+               "studio_finestra_giorni", "studio_domande_genera", "studio_ascolta",
+               "studio_ascolta_voce", "studio_ascolta_giorni", "studio_indicazioni",
+               "studio_indicazioni_giorni", "studio_serie", "studio_serie_pause",
+                "studio_stelle", "studio_duelli", "studio_libreria", "studio_importa",
+                "studio_importa_max_mb", "studio_importa_file_max", "studio_importa_voce_max_mb",
+                "studio_importa_totale_max_mb", "studio_importa_passo_s",
+                "studio_importa_tempo_max_s", "studio_importa_coda", "studio_esercizi",
+                "studio_preparazione", "studio_preparazione_quiete_s"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -3393,14 +3666,14 @@ SEZIONI: dict[str, list[str]] = {
                 "schermi_cronologia_cartella", "schermi_cronologia_giorni",
                 "schermi_cronologia_max", "schermi_cronologia_mb", "schermi_chat_turni",
                 "schermi_nomi", "schermi_tls_cert", "schermi_tls_chiave",
-                "schermi_senza_tls", "schermi_scritto", "schermi_scritto_stanza",
+                "schermi_senza_tls", "schermi_scritto", "schermi_scritto_stanza", "schermi_parla_s", "schermi_sezioni",
                 "schermi_scritto_max", "schermi_scritto_al_minuto", "schermi_moduli_s",
                 "schermi_scarica_s",
                 "telefono_enabled", "telefono_web"],
     "immagini": ["immagini_enabled", "immagini_modello", "immagini_lato_max",
                  "immagini_pixel_per_token", "immagini_max_mb", "immagini_storia",
                  "immagini_max_conversazione", "immagini_attesa_s",
-                 "immagini_persa_s"],
+                 "immagini_persa_s", "immagini_tenuta", "immagini_tenuta_giorni"],
     "allegati": ["allegati_enabled", "allegati_max_mb", "allegati_memoria_mb",
                  "allegati_max_conversazione", "allegati_token_file", "allegati_token_totale",
                  "allegati_pdf_pagine", "allegati_pdf_pagine_immagini", "allegati_audio_max_s",
@@ -3718,14 +3991,24 @@ LIMITI: dict[str, tuple[float, float]] = {
     "minori_avviso_privato_s": (0.0, 86_400.0),
     "minori_ospite_vicino_s": (0.0, 86_400.0),
     "minori_ospite_vicino_punteggio": (0.0, 1.0),
+    "studio_minuti_giorno": (0, 600), "studio_minuti_pagina": (1, 120),
+    "studio_obiettivo": (1, 100), "studio_tenuta_giorni": (1, 3650),
+    "studio_pagina_lato": (640, 4000), "studio_pagina_max_mb": (1.0, 100.0),
+    "studio_pdf_max_mb": (1.0, 200.0), "studio_pdf_max_pagine": (1, 500),
+    "studio_pagine_max": (1, 1000), "studio_pagine_al_minuto": (1, 600),
+    "studio_nitidezza_min": (0.0, 100_000.0), "studio_mappa_nodi_max": (4, 30),
+    "studio_prova_domande": (3, 40), "studio_prova_minuti": (2, 180),
+    "studio_finestra_giorni": (1, 90), "studio_ascolta_giorni": (1, 365),
+    "studio_indicazioni_giorni": (1, 90), "studio_serie_pause": (0, 3),
+    "studio_importa_max_mb": (1.0, 2000.0), "studio_importa_file_max": (1, 5000),
+    "studio_importa_voce_max_mb": (1.0, 200.0), "studio_importa_totale_max_mb": (1.0, 4000.0),
+    "studio_importa_passo_s": (5.0, 600.0), "studio_importa_tempo_max_s": (60.0, 86400.0),
+    "studio_importa_coda": (1, 50),
+    "studio_preparazione_quiete_s": (0, 3600),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),
     "avvisi_audio_contesto_s": (0.0, 300.0), "avvisi_audio_giorni": (0.0, 365.0),
-    "esercizi_verifica_timeout_s": (0.5, 300.0), "esercizi_pronti": (0, 50),
-    "esercizi_campione": (0, 50), "esercizi_blocco_piccoli": (1, 50),
-    "esercizi_blocco": (1, 50), "esercizi_tappe": (1, 20),
-    "esercizi_punto_giorni": (0, 365), "esercizi_interroga_domande": (2, 15),
     "suoni_volume": (0.0, 1.0),
     "vad_threshold": (0.0, 1.0), "wake_consecutive": (1, 50), "turn_log_days": (1, 3650),
     "conserva_voce_mb": (0, 1_000_000),
@@ -3955,6 +4238,33 @@ _MODI_NUOVI = {
     "agenti_conferma": _modi("agenti_conferma", ("costosi", "sempre", "mai")),
     # Il revisore (20/10, #190): il true di YAML è ambiguo fra «ombra» e «attivo», rifiutato
     "agenti_revisore": _modi("agenti_revisore", ("spento", "ombra", "attivo"), falso="spento"),
+    # Lo Studio (29/10, #280): il true di YAML è ambiguo fra «ombra» e «attivo», rifiutato
+    "studio_modo": _modi("studio_modo", ("spento", "ombra", "attivo"), falso="spento"),
+    # La padronanza (30/10, #245): il true di YAML è ambiguo fra «ombra» e «mostrata», rifiutato
+    "studio_padronanza": _modi("studio_padronanza", ("spenta", "ombra", "mostrata"),
+                               falso="spenta"),
+    # Le carte generate (30/10, #246): il true è ambiguo fra «ombra» e «attiva», rifiutato
+    "studio_carte_genera": _modi("studio_carte_genera", ("spenta", "ombra", "attiva"),
+                                 falso="spenta"),
+    # Lo scheletro della mappa (30/10, #247): come le carte generate
+    "studio_mappa_genera": _modi("studio_mappa_genera", ("spenta", "ombra", "attiva"),
+                                 falso="spenta"),
+    # La mappa libera e «Parliamone» (30/10, #328): il true è ambiguo, rifiutato
+    "studio_mappa_libera": _modi("studio_mappa_libera", ("spenta", "attiva"), falso="spenta"),
+    "studio_mappa_consigli": _modi("studio_mappa_consigli", ("spenta", "ombra", "attiva"),
+                                   falso="spenta"),
+    # Le domande generate (31/10, #248): come le carte generate
+    "studio_domande_genera": _modi("studio_domande_genera", ("spenta", "ombra", "attiva"),
+                                   falso="spenta"),
+    # Il ripasso da ascoltare (31/10, #249): come la mappa libera
+    "studio_ascolta": _modi("studio_ascolta", ("spenta", "attiva"), falso="spenta"),
+    # La libreria dello Studio (31/10, #297)
+    "studio_libreria": _modi("studio_libreria", ("spenta", "ombra", "attiva"), falso="spenta"),
+    # Gli esercizi guidati (31/10, #278): come le domande generate
+    "studio_esercizi": _modi("studio_esercizi", ("spenta", "ombra", "attiva"), falso="spenta"),
+    # La preparazione dietro le quinte (31/10, #297, parte 3)
+    "studio_preparazione": _modi("studio_preparazione", ("spenta", "ombra", "attiva"),
+                                 falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},
@@ -4004,8 +4314,19 @@ def _data_valida(value, dove: str = ""):
 _data_valida.prima_del_tipo = True
 
 
+def _fascia_studio_valida(value, dove: str = ""):
+    """`studio_fascia` (29/10, #280, revisione della PR #308): «HH:MM-HH:MM» nello stesso
+    giorno, l'inizio prima della fine. Scritta male è rifiutata con l'avviso e resta il valore
+    di prima, come le altre chiavi sbagliate."""
+    from .studio.piano import fascia_valida
+    if fascia_valida(value) is None:
+        raise ValueError("serve una fascia come «15:00-20:00», l'inizio prima della fine")
+    return str(value).strip()
+
+
 VALIDATORI = {"llm_keep_alive": keep_alive_valido, "llm_num_ctx": _num_ctx_valido,
               "conserva_valutazione_fino": _data_valida,
+              "studio_fascia": _fascia_studio_valida,
               "tts_thread": _tts_thread_valido, "tts_dispositivo": _tts_dispositivo_valido,
               "agenti_num_ctx": _num_ctx_agenti_valido,
               "contesto_riassuntore": _riassuntore_valido,

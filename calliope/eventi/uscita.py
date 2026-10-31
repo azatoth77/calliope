@@ -31,6 +31,10 @@ Una `Uscita` per voce (quindi per corsia: `per_voce`), intorno allo `Speaker` di
   forma breve, scelta in ombra: mai parole). Finiscono nel detto (`pronte`) e a `su_pronta` (il
   ciclo le scrive nel registro dei turni); solo allora contano per la rotazione e la forma breve.
 
+- **la lettura di un materiale** (31/10, il ripasso da ascoltare dello Studio, #249):
+  `turno_lettura`, `leggi` e `pausa` mandano alla voce le pagine lette, che sono un dato non
+  fidato e non parole di Calliope: niente detto, niente osservatore, niente schermo (vedi sotto).
+
 Gli eventi entrano nel registro della conversazione a turno finito (`Ombra.chiudi_turno`), con
 il `seq` dopo il `detto_persona` del turno: finché l'ombra scrive il turno a cose fatte (fino al
 passo 3) l'ordine del registro lo vuole così (§ 8.1 del progetto).
@@ -153,6 +157,21 @@ class Uscita:
             sp.say(testo)
         return detto
 
+    def muta(self, testo: str, atto: str, autore: str = "esito",
+             dopo_chiamate: int | None = None) -> dict | None:
+        """Una frase di Calliope che entra nella conversazione senza andare alla voce (28/10,
+        il tocco dallo schermo: chi tocca può essere al supermercato). Per l'osservatore è un
+        pezzo suo, chiuso e «sentito» (canale «muta»), così la proiezione ha lo stesso messaggio
+        della storia di Brain; lo speaker non la riceve."""
+        if not isinstance(testo, str) or not testo.strip():
+            return None
+        detto = {"testo": testo, "atto": atto, "autore": autore, "canale": "muta",
+                 "pronta": False, "t": time.time(), "dopo_chiamate": dopo_chiamate,
+                 "fonte": None}
+        self._nota(("frase", detto))
+        self._nota(("fine", [testo], False))
+        return detto
+
     def di_e_aspetta(self, testo: str, atto: str, autore: str | None = None) -> bool:
         """Una frase fuori da una risposta, in un turno della voce suo, e l'attesa che sia
         finita. Con l'uscita di un satellite controlla che lui l'abbia detta per intero (le
@@ -172,6 +191,37 @@ class Uscita:
                  f"{getattr(sp, 'turno', '?')}, interrotta {getattr(sp, 'interrupted', None)}, "
                  f"attesa finita {finita})")
         return False
+
+    # ── la lettura di un materiale (31/10, il ripasso da ascoltare dello Studio, #249) ──
+    # Le pagine lette ad alta voce sono un dato non fidato, non parole di Calliope: non vanno
+    # all'osservatore (eventi), né nella risposta scritta sullo schermo, né nella storia. Il
+    # turno della voce che le porta lo apre e lo chiude `turno_lettura`, che non dice
+    # all'osservatore le frasi sentite (sarebbero il testo delle pagine). Le chiama solo
+    # `studio/ascolta.leggi`, dal ciclo, dopo la risposta.
+    def turno_lettura(self):
+        """Un turno della voce per un pezzo della lettura: quello che si chiude (un pezzo di
+        materiale, o il turno vuoto lasciato dalla risposta) non va all'osservatore."""
+        self.speaker.start_turn()
+        self._aperto = True
+        self._lt_ref, self._lt_base = None, 0
+
+    def leggi(self, testo: str, voce: str | None = None):
+        """Una frase della lettura alla voce (intera: si contano le frasi sentite in `played`),
+        con la voce `voce` (il percorso di un'altra voce di Piper) o quella di adesso."""
+        if not isinstance(testo, str) or not testo.strip():
+            return
+        if not self._aperto:
+            self.turno_lettura()
+        if bool(getattr(self.speaker, "interrupted", False)):
+            return          # interrotta a metà del pezzo: il resto non si manda (e non si apre
+            # un turno nuovo, che cancellerebbe l'interruzione prima che la lettura la veda)
+        self.speaker.say(testo, spezza=False, voce=voce)
+
+    def pausa(self, secondi: float):
+        """Un silenzio nella lettura (i secondi per pensare di una carta)."""
+        f = getattr(self.speaker, "silenzio", None)
+        if callable(f):
+            f(secondi)
 
     # ── segnali (niente testo: non sono frasi) ──
     def segnale(self):

@@ -455,7 +455,8 @@
     M = M || {};
     var g = giocatori || {};
     var out = { inizio: M.inizio, fasi: {}, esito_s: M.esito_s === undefined ? 4 : Number(M.esito_s),
-                gmin: Math.max(1, Number(g.min || 1)), gmax: Math.max(1, Number(g.max || g.min || 1)) };
+                gmin: Math.max(1, Number(g.min || 1)), gmax: Math.max(1, Number(g.max || g.min || 1)),
+                anchio: M.anchio !== false };
     var fasi = M.fasi || {};
     Object.keys(fasi).forEach(function (nome) {
       var f = fasi[nome] || {};
@@ -494,6 +495,7 @@
     }
     var M = normalizza(Mgrezza, giocatori);
     var titoloGioco = String((opzioni && opzioni.titolo) || "");
+    var parametri = opzioni && opzioni.parametri && typeof opzioni.parametri === "object" ? opzioni.parametri : null;
     if (!M.fasi[M.inizio]) throw errore("la macchina non ha la fase d'inizio «" + M.inizio + "»");
 
     function nuovo() {
@@ -576,7 +578,10 @@
           for (var i = M.gmin; i <= M.gmax; i++) v.push(i);
           out.giocatori = v;
         }
-        if ((S.iscritti || []).length < M.gmax) out.anchio = true;
+        // «Gioco anch'io» lega anche in un gioco per uno la voce e il nome di chi gioca; una
+        // macchina con «anchio»: false (le attività della libreria dello Studio, revisione della
+        // PR #366) non lo mostra
+        if (M.anchio !== false && (S.iscritti || []).length < M.gmax) out.anchio = true;
         out.inizia = true;
         return out;
       }
@@ -667,7 +672,11 @@
         gs.push(g);
       }
       var nomi = gs.map(function (g) { return g.nome; });
-      var dati = GIOCO.nuovaPartita({ giocatori: numero, nomi: nomi.slice() });
+      // I parametri (31/10, #297, parte 3): valori già validati dal server (numeri, parole brevi),
+      // dati e mai codice, per le attività della libreria adattate ai materiali; una copia
+      var arg = { giocatori: numero, nomi: nomi.slice() };
+      if (parametri) arg.parametri = copia(parametri, "i parametri della partita");
+      var dati = GIOCO.nuovaPartita(arg);
       if (dati === undefined || dati === null || typeof dati !== "object") {
         throw errore("GIOCO.nuovaPartita restituisce " + tipo(dati) + ": deve restituire i dati della partita (un oggetto)");
       }
@@ -1125,7 +1134,7 @@
       radice.appendChild(p);
       segnala(e);
     }
-    try { nucleo = crea(GIOCO, conf && conf.macchina, conf && conf.giocatori, { titolo: opzioni.titolo || (conf && conf.titolo) || "" }); }
+    try { nucleo = crea(GIOCO, conf && conf.macchina, conf && conf.giocatori, { titolo: opzioni.titolo || (conf && conf.titolo) || "", parametri: conf && conf.parametri }); }
     catch (e) { radice.replaceChildren(el("div", "motore")); mostraErrore(e); return null; }
     S = nucleo.nuovo();
     function M() { return nucleo.M; }

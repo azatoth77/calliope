@@ -23,6 +23,7 @@ ricerche di persone diverse.
 """
 
 import difflib
+import re
 import threading
 import time
 from abc import ABC, abstractmethod
@@ -69,6 +70,143 @@ def modo_apertura(nome: str) -> str | None:
     if ext in ESTENSIONI_COME_TESTO:
         return "testo"
     return None
+
+
+# Le voci del catalogo `pc_app` che si aprono anche per iscritto (29/10, #307; elenco di AMMESSI
+# dalla revisione della PR #309). A voce si aprono tutte; per iscritto da uno schermo personale
+# l'eccezione di pc_apri_app («si chiude subito, non cancella e non manda niente»,
+# tools/spec.SCRITTO_AMMESSI) vale solo per un programma vero. `_avvia` su Windows è ShellExecute
+# («open»): conta l'associazione del tipo di file, e un elenco di esclusioni (.bat, .ps1…) non si
+# chiude mai (.msi, .cpl, .scr, .jar, .url, .com, «backup.bat.», «x.bat::$DATA»…). Quindi per
+# iscritto passano SOLO:
+# - «browser» (il browser predefinito);
+# - un protocollo noto, `PROTOCOLLI_SCRITTO` («ms-settings:»);
+# - un percorso o un nome che finisce in .exe, senza argomenti, che non sia un interprete, un
+#   terminale o uno strumento di sistema (`EXE_NON_SCRITTO`).
+# Tutto il resto vuole la voce: script, installatori, collegamenti, un nome senza estensione (che
+# ShellExecute cerca nel PATH: «aggiorna» → aggiorna.cmd), le variabili d'ambiente (%COMSPEC%), le
+# virgolette o gli argomenti. Un .exe che dentro lancia uno script resta un'app anche per iscritto:
+# è una scelta di chi scrive il catalogo (docs/aree/pc.md)
+PROTOCOLLI_SCRITTO = frozenset((
+    "ms-settings", "ms-photos", "ms-clock", "ms-calculator", "ms-windows-store", "ms-people",
+    "ms-todo", "ms-paint", "ms-screenclip", "ms-camera", "ms-whiteboard-cmd", "microsoft-edge",
+    "mailto", "outlookmail", "outlookcal", "msteams", "spotify", "whatsapp"))
+_EXE_NON_SCRITTO_NOMI = frozenset((
+    # shell, terminali e interpreti
+    "cmd", "command", "powershell", "powershell_ise", "pwsh", "wt", "windowsterminal",
+    "openconsole", "conhost", "wsl", "wslg", "wslhost", "bash", "sh", "zsh", "git-bash", "git-cmd",
+    "mintty", "ubuntu", "debian", "kali", "opensuse", "fedora", "alpine", "archlinux", "wscript",
+    "cscript", "mshta", "python", "pythonw", "py", "pyw", "node", "deno", "bun", "perl", "ruby",
+    "php", "lua", "tclsh", "java", "javaw", "jshell", "dotnet", "csi", "fsi", "msbuild",
+    "installutil", "regasm", "regsvcs", "csc", "vbc", "jsc", "ilasm",
+    # Dalla revisione della PR #310 (#311): le shell di MSYS2 (aprono una shell come git-bash) e
+    # altri interpreti e REPL (R, Julia, Erlang ed Elixir, Haskell, Racket, Scala, Groovy, Dart)
+    "msys2", "mingw32", "mingw64", "ucrt64", "clang32", "clang64", "clangarm64",
+    "r", "rscript", "rterm", "rgui", "erl", "werl", "escript", "iex", "elixir", "ghc", "ghci",
+    "runghc", "runhaskell", "racket", "raco", "scala", "scala-cli", "groovy", "groovysh", "dart",
+    # Dalla revisione della PR #334: altri interpreti e i terminali di terze parti
+    "gracket", "julialauncher", "tclkit", "tclkitsh", "jruby", "jrubyw", "bunx",
+    "conemu", "conemu64", "cmder", "alacritty", "wezterm", "wezterm-gui", "tabby", "nu", "fish",
+    "cygwin",
+    # strumenti di sistema
+    "rundll32", "regsvr32", "msiexec", "cmstp", "wmic", "regedit", "regedt32", "reg", "mmc",
+    "control", "schtasks", "at", "sc", "net", "net1", "netsh", "bitsadmin", "certutil", "forfiles",
+    "msdt", "pcalua", "presentationhost", "msxsl", "odbcconf", "mavinject", "diskpart", "format",
+    "bcdedit", "takeown", "icacls", "cacls", "attrib", "vssadmin", "wbadmin", "shutdown",
+    "taskkill", "runas", "sdclt", "fodhelper", "eventvwr", "computerdefaults",
+    "hh", "infdefaultinstall", "msconfig", "gpedit", "secpol", "lusrmgr", "compmgmt", "devmgmt",
+    "diskmgmt", "services", "taskschd", "perfmon", "certmgr", "wusa", "dism", "pnputil",
+    "setx", "where", "xcopy", "robocopy", "curl", "wget", "ftp", "tftp", "ssh", "scp", "sftp",
+    "winrm", "winrs", "psexec", "psexec64", "msra", "mstsc", "quickassist", "werfault"))
+# I nomi con la versione o un suffisso dentro. Le famiglie larghe prendono qualunque coda
+# (python3.12t, python_d, pypy3, ipython3, nodejs, javaw, AutoHotkey64, AutoHotkeyU32,
+# AutoIt3_x64, Ahk2Exe: seconda revisione della PR #309; AutoHotkey senza argomenti esegue da solo
+# lo script di serie); le sigle brevi (py, lua, sh…) solo una versione, per non prendere nomi di
+# app che cominciano così
+# Dalla revisione della PR #310 (#311): Tcl col «t» dei thread e la «g» delle build di debug
+# (tclsh86t, tclsh86tg, wish86t), tclkit in tutte le varianti (tclkitsh, tclkit-gui); deno, bun,
+# bunx, julia, ghc e i suoi, racket e gracket con qualunque coda dopo un separatore o una cifra
+# (deno1.40, bun-windows-x64, julia-1.10, ghc-9.4.8), per non prendere «bunny» o «bundle»;
+# jruby come ruby (jrubyw)
+_EXE_NON_SCRITTO_RE = re.compile(
+    r"(python|pypy|ipython|jython|pwsh|powershell|java|node|perl|ruby|jruby|php|bash|ubuntu"
+    r"|debian|autohotkey|autoit|ahk2exe|aut2exe|tclkit)[\w.-]*"
+    r"|(deno|bun|bunx|julia|ghc|ghci|runghc|runhaskell|racket|gracket)([\d._-][\w.-]*)?"
+    r"|(tcl|tclsh|wish)[\d._-]*t?g?"
+    r"|(py|pyw|lua|luajit|sh|zsh|osascript)[\d._-]*")
+
+
+def _unita_di_rete(lettera: str) -> bool:
+    """La lettera è un'unità di rete mappata («Z:» su una condivisione)? Si sa solo sul Windows
+    che esegue (il satellite ricontrolla l'«avvia» col segno scritto): altrove False. Come un
+    percorso UNC, cambia senza che chi amministra lo veda (#311)."""
+    import sys
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        return ctypes.windll.kernel32.GetDriveTypeW(f"{lettera}:\\") == 4     # DRIVE_REMOTE
+    except Exception:  # noqa: BLE001 — nel dubbio come un'unità locale
+        return False
+
+
+def nome_windows(percorso: str) -> str:
+    """Il nome come lo usa Windows: senza lo stream (`x.bat::$DATA`, `x.bat:s:$DATA` → x.bat) e
+    senza i punti e gli spazi finali di ogni parte (`backup.bat. ` → backup.bat)."""
+    p = str(percorso or "").replace("/", "\\")
+    unita, resto = (p[:2], p[2:]) if re.match(r"^[A-Za-z]:", p) else ("", p)
+    resto = resto.split(":", 1)[0]          # lo stream dopo i due punti (dopo l'unità)
+    parti = [x.rstrip(" .") if x not in (".", "..") else x for x in resto.split("\\")]
+    return unita + "\\".join(parti)
+
+
+def ammessa_per_iscritto(comando: str) -> bool:
+    """La voce del catalogo con questo comando si apre anche per iscritto (elenco di ammessi,
+    sopra)? «calc.exe», «C:\\Program Files\\Mozilla Firefox\\firefox.exe», «ms-settings:»,
+    «browser» sì; script, installatori, interpreti, nomi senza estensione, %VARIABILI% no."""
+    c = str(comando or "").strip()
+    if len(c) >= 2 and c[0] == c[-1] == '"' and c.count('"') == 2:
+        c = c[1:-1].strip()
+    if not c or any(x in c for x in '"%<>|^&*?\t\r\n'):
+        return False
+    if c.lower() == "browser":
+        return True
+    # Seconda revisione della PR #309: un nome corto 8.3 («C:\\Python312\\PYTHON~1.EXE») nasconde
+    # il nome vero, e un percorso di rete (UNC «\\\\host\\share», WebDAV «\\\\host@SSL\\…», o «//»)
+    # cambia senza che chi amministra lo veda: non si sa, serve la voce
+    if "~" in c or c.startswith(("\\\\", "//", "\\/", "/\\")):
+        return False
+    m = re.fullmatch(r"([A-Za-z][A-Za-z0-9.+-]+):([A-Za-z0-9/_.-]*)", c)
+    if m and len(m.group(1)) > 1:            # un protocollo (una lettera sola è un'unità: «C:»)
+        return m.group(1).lower() in PROTOCOLLI_SCRITTO
+    unita = re.match(r"^([A-Za-z]):", c)
+    senza_unita = c[2:] if unita else c
+    # Dalla radice senza l'unità («\app.exe», «/app.exe»): dipende dall'unità corrente, non si sa
+    # (#311); un'unità di rete mappata è come un percorso di rete
+    if senza_unita.startswith(("\\", "/")) and not unita:
+        return False
+    # Con l'unità ma senza la radice («C:app.exe», «C:..\x\app.exe»): relativo alla cartella
+    # corrente di quell'unità, non si sa (revisione della PR #334)
+    if unita and not senza_unita.startswith(("\\", "/")):
+        return False
+    if unita and _unita_di_rete(unita.group(1)):
+        return False
+    if ":" in senza_unita:
+        return False                         # uno stream («calc.exe:x», «x.bat::$DATA»): non si sa
+    n = nome_windows(c)                      # i punti e gli spazi finali come li toglie Windows
+    if n.lower().count(".exe") != 1 or not n.lower().endswith(".exe"):
+        return False                         # niente .exe, argomenti, «x.exe.bat»: non si sa
+    nome = n.replace("\\", "/").rsplit("/", 1)[-1].lower()
+    stem = nome[:-4].strip()
+    if stem in _EXE_NON_SCRITTO_NOMI or _EXE_NON_SCRITTO_RE.fullmatch(stem):
+        return False
+    return True
+
+
+def e_script(comando: str) -> bool:
+    """Il contrario di `ammessa_per_iscritto`: per iscritto la voce vuole la voce (uno script, un
+    interprete, uno strumento di sistema, o un comando di cui non si sa)."""
+    return not ammessa_per_iscritto(comando)
 
 
 def errore(msg: str, **extra) -> dict:
@@ -174,26 +312,52 @@ class PCExecutor(ABC):
 
     def descrizione(self) -> dict:
         """Ciò che l'esecutore dichiara di sé (all'abbinamento, domani via rete)."""
-        return {"nome": self.nome, "capacita": self.capacita(), "app": self.app_disponibili()}
+        return {"nome": self.nome, "capacita": self.capacita(), "app": self.app_disponibili(),
+                "app_script": self.app_script()}
 
     def app_disponibili(self) -> list[str]:
         return list(self._app)
+
+    def app_script(self) -> list[str]:
+        """Le voci del catalogo che sono script o interpreti (`e_script`): per iscritto non si
+        aprono (29/10, #307). Il satellite le annuncia nel «ciao» per nome, mai col comando."""
+        return [k for k, v in self._app.items() if e_script(v)]
+
+    def _chiave_app(self, app: str) -> str | None:
+        """La voce del catalogo che `apri_app` aprirebbe: il nome, o il più vicino."""
+        key = (app or "").strip().lower()
+        if key in self._app:
+            return key
+        close = difflib.get_close_matches(key, list(self._app), n=1, cutoff=0.8)
+        return close[0] if close else None
+
+    def app_e_script(self, app: str) -> bool | None:
+        """La voce che si aprirebbe è uno script? None se non si sa (l'esecutore remoto con un
+        satellite che non lo dice): chi chiede tratta None come sì."""
+        key = self._chiave_app(app)
+        return key is not None and e_script(self._app[key])
 
     def programmi_aperti(self) -> dict:
         if self.bloccato():
             return errore(BLOCCATO, bloccato=True)
         return {"ok": True, "programmi": self._programmi()}
 
-    def apri_app(self, app: str) -> dict:
+    def apri_app(self, app: str, scritto: bool = False) -> dict:
+        """Apre la voce del catalogo. Con `scritto` (la richiesta è arrivata scritta da uno
+        schermo personale, 29/10, #307) solo se il comando è tra gli ammessi per iscritto:
+        altrimenti {"ok": False, "serve_voce": True}, e il tool chiede la voce. Il controllo lo
+        fa chi ha il comando: qui, o il satellite per l'esecutore remoto."""
         if self.bloccato():
             return errore(BLOCCATO, bloccato=True)
-        key = (app or "").strip().lower()
-        if key not in self._app:
-            close = difflib.get_close_matches(key, list(self._app), n=1, cutoff=0.8)
-            if not close:
-                return errore(f"«{app}» non è tra le app che posso aprire",
-                              app_disponibili=self.app_disponibili())
-            key = close[0]
+        key = self._chiave_app(app)
+        if key is None:
+            return errore(f"«{app}» non è tra le app che posso aprire",
+                          app_disponibili=self.app_disponibili())
+        return self._avvia_app(key, scritto)
+
+    def _avvia_app(self, key: str, scritto: bool) -> dict:
+        if scritto and e_script(self._app[key]):
+            return errore("per iscritto questa app non la apro", serve_voce=True, app=key)
         self._avvia(self._app[key])
         return {"ok": True, "app": key}
 

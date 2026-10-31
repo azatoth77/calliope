@@ -175,7 +175,7 @@ def mancanti(params: dict, argomenti, func=None, contratto: bool = False) -> lis
     """Gli argomenti obbligatori che impediscono la chiamata: tutti quelli dello schema se la
     chiamata non ha nessun argomento (06/10, `conversazione_cerca({})`); altrimenti quelli
     assenti o vuoti che la funzione non sa completare da sola (niente valore predefinito: una
-    proposta in sospeso o un esercizio in corso li completano, e lì la funzione ne ha uno).
+    proposta in sospeso li completa, e lì la funzione ne ha uno).
     Una funzione con soli **kw non dice niente: vale lo schema solo se è il contratto del tool
     (`contratto`: le estensioni, dove lo schema è il manifesto)."""
     required = list((params or {}).get("required") or [])

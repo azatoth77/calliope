@@ -1,0 +1,340 @@
+"""
+Le carte dello Studio e il loro ripasso dilazionato (30/10, passo 6, issue #246, epic #251,
+decisione 0035 punto 33; progetto § «Studio 5 · Ripasso con le carte»). Funzioni pure: il servizio
+(`servizio.Studio`) legge e scrive il db.
+
+**Il ripasso: Leitner a cinque scatole**, tutto nel codice, mai il modello:
+- una carta nuova è nella scatola 1 e si ripassa subito;
+- «La sapevo»: scatola + 1 (al più `SCATOLE`), la prossima volta fra `INTERVALLI[scatola]` giorni;
+- «Quasi»: la scatola resta, la prossima volta domani;
+- a tarda sera «domani» non è fra pochi minuti (31/10, #356): la scadenza a giorni è la più tarda
+  fra la mezzanotte di quel giorno e adesso più l'intervallo meno `MARGINE_ORE` ore (per «domani»
+  adesso + 12 ore);
+- «Non la sapevo»: scatola 1, di nuovo fra `DI_NUOVO_MIN` minuti (nella stessa sessione);
+- prima della verifica nessuna scadenza va oltre la **vigilia** (il giorno di ripasso del piano).
+Le soglie sono iniziali, da tarare in ombra sulle risposte vere (decisione 4 del 27/10): si
+cambiano qui, le prove le leggono da qui. Alternative scartate nell'analisi della #246: SM-2 (una
+facilità per carta che in poche settimane non si stabilizza) e FSRS (vuole storie lunghe).
+
+**L'esito** lo decidono la persona (i tre tasti, o a voce una forma chiusa breve detta per intero:
+`autovalutazione`, principio 10) o il codice per le risposte chiuse (`risposta_giusta`: un
+numero, un anno, al più tre parole, e solo il «giusto»). Mai il modello. Ogni esito è un tentativo
+di tipo «carta» sull'argomento (`ESITO_TENTATIVO`, la padronanza del passo 5).
+
+**Il testo di una carta è un dato** (decisione 0035 punto 6), chiunque l'abbia scritto: sullo
+schermo solo textContent, al modello solo in busta (`tools/studio.py`, `studio_carte`), mai nelle
+frasi pronte né nel registro.
+"""
+
+from __future__ import annotations
+
+import datetime
+import re
+import unicodedata
+
+# Le scatole di Leitner e gli intervalli in giorni dopo «La sapevo» (la scatola nuova)
+SCATOLE = 5
+INTERVALLI = {1: 1, 2: 2, 3: 4, 4: 8, 5: 16}
+# «Non la sapevo»: di nuovo nella stessa sessione
+DI_NUOVO_MIN = 10
+# «Quasi»: domani
+QUASI_GIORNI = 1
+# Una scadenza a giorni non arriva prima di tanti giorni meno queste ore (#356): alle 23:50 «quasi»
+# tornava a mezzanotte, dopo 10 minuti come «non la sapevo»
+MARGINE_ORE = 12
+
+SAPEVO, QUASI, NON_SAPEVO = "sapevo", "quasi", "non_sapevo"
+ESITI = (SAPEVO, QUASI, NON_SAPEVO)
+# L'esito di una carta come tentativo della padronanza (padronanza.ESITI)
+ESITO_TENTATIVO = {SAPEVO: "giusto", QUASI: "indizio", NON_SAPEVO: "sbagliato"}
+
+# «ombra» (seconda parte del passo 6): una carta generata con `studio_carte_genera: ombra`, che
+# si misura e non va mai alla persona; «proposta»: generata, aspetta la persona o il tutore
+STATI = ("attiva", "proposta", "tolta", "ombra")
+# «mappa» (revisione della PR #330): le carte di «Fanne carte», scritte dalla persona dagli errori
+# della mappa; con la mappa libera aperta non si vedono (servizio._carte_di, _carta)
+# «libreria» (31/10, #297): le carte di un mazzo della libreria, aggiunte dalla persona o dal tutore
+# con «Aggiungi le carte» (studio/libreria/studio.py, `aggiungi_mazzo`)
+ORIGINI = ("persona", "modello", "mappa", "libreria")
+DOMANDA_MAX = 240
+RISPOSTA_MAX = 240
+# Una risposta «chiusa» (la controlla il codice): un numero o al più tante parole
+CHIUSA_PAROLE = 3
+# La frase detta con la risposta: oltre tante parole non si confronta (una spiegazione lunga può
+# contenere la risposta per caso)
+FRASE_MAX_PAROLE = 10
+# Le carte di una verifica
+CARTE_MAX = 300
+
+
+def _dt(x) -> datetime.datetime:
+    if isinstance(x, datetime.datetime):
+        return x
+    if isinstance(x, datetime.date):
+        return datetime.datetime.combine(x, datetime.time())
+    return datetime.datetime.fromisoformat(str(x))
+
+
+def testo_normale(testo, massimo: int) -> str:
+    """Una domanda o una risposta: una riga, senza caratteri di controllo né di direzione, al più
+    `massimo` caratteri. Vuota → ValueError."""
+    t = re.sub(r"[\x00-\x1f\x7f ​-‏‪-‮⁦-⁩]", " ",
+               str(testo or ""))
+    t = " ".join(t.split())[:massimo].strip()
+    if not t:
+        raise ValueError("manca il testo")
+    return t
+
+
+# ─────────────────────────── il ripasso ───────────────────────────
+
+def prossima(scatola: int, esito: str, adesso, vigilia=None) -> tuple[int, str]:
+    """(scatola nuova, scadenza AAAA-MM-GGTHH:MM:SS) dopo un esito. `vigilia`: il giorno prima
+    della verifica; se è dopo oggi nessuna scadenza va oltre (la vigilia è di ripasso)."""
+    if esito not in ESITI:
+        raise ValueError("esito sconosciuto")
+    adesso = _dt(adesso).replace(microsecond=0)
+    oggi = adesso.date()
+    s = max(1, min(SCATOLE, int(scatola or 1)))
+    if esito == NON_SAPEVO:
+        return 1, (adesso + datetime.timedelta(minutes=DI_NUOVO_MIN)).isoformat()
+    if esito == QUASI:
+        giorni = QUASI_GIORNI
+    else:
+        s = min(SCATOLE, s + 1)
+        giorni = INTERVALLI[s]
+    # La più tarda fra la mezzanotte del giorno e adesso + giorni − MARGINE_ORE (31/10, #356)
+    scadenza = max(datetime.datetime.combine(oggi + datetime.timedelta(days=giorni),
+                                             datetime.time()),
+                   adesso + datetime.timedelta(days=giorni, hours=-MARGINE_ORE))
+    if vigilia is not None:
+        v = _dt(vigilia).date()
+        tetto = datetime.datetime.combine(v, datetime.time())
+        if v > oggi and scadenza > tetto:
+            scadenza = tetto
+    return s, scadenza.isoformat()
+
+
+def da_ripassare(carta: dict, adesso) -> bool:
+    """La carta è attiva e scaduta (la scadenza vuota vale subito)."""
+    if carta.get("stato") != "attiva":
+        return False
+    sc = carta.get("scadenza")
+    if not sc:
+        return True
+    try:
+        return _dt(sc) <= _dt(adesso)
+    except (TypeError, ValueError):
+        return True
+
+
+def fra_quanto(scadenza, adesso) -> str:
+    """«fra 10 minuti», «domani», «fra 4 giorni», «adesso» (per i tasti e la voce, dal codice)."""
+    s, a = _dt(scadenza), _dt(adesso)
+    if s <= a:
+        return "adesso"
+    giorni = (s.date() - a.date()).days
+    # Entro un'ora sono minuti anche oltre la mezzanotte (revisione della PR #324, nota 4: alle
+    # 23:55 «non la sapevo» torna alle 00:05, «fra 10 minuti», non «domani»)
+    if giorni <= 0 or (s - a) < datetime.timedelta(hours=1):
+        m = max(1, int(round((s - a).total_seconds() / 60)))
+        return f"fra {m} minut{'o' if m == 1 else 'i'}"
+    return "domani" if giorni == 1 else f"fra {giorni} giorni"
+
+
+# ─────────────────────────── le risposte ───────────────────────────
+
+def normale(testo) -> list[str]:
+    """Le parole di un testo per il confronto: minuscole, senza accenti né punteggiatura, gli
+    apostrofi come spazi, i numeri in lettere (la trascrizione scrive «1861», la carta può dire
+    «milleottocentosessantuno»), «e» e gli articoli tolti solo se il testo ha altro."""
+    from ..numeri import in_lettere
+    t = unicodedata.normalize("NFKD", str(testo or "").lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    t = re.sub(r"(?<=\d)[.\s](?=\d{3}\b)", "", t)          # «1.861», «1 861»
+    out = []
+    for w in re.findall(r"[a-z0-9]+", t):
+        if w.isdecimal() and len(w) <= 6:
+            w = in_lettere(int(w)).replace(" ", "")
+        out.append(w)
+    return out
+
+
+# Articoli e preposizioni: non contano né nella forma chiusa né nella frase («Nel 1453» e «il
+# 1453» valgono «1453»)
+_ARTICOLI = frozenset("il lo la i gli le l un uno una di del dello della dei degli delle a al "
+                      "allo alla ai agli alle da dal dallo dalla dai dagli dalle in nel nello "
+                      "nella nei negli nelle con col su sul sullo sulla sui sugli sulle per tra "
+                      "fra".split())
+
+
+# I numeri della forma chiusa (31/10, #361): un gettone «#valore» o «#valore@unità», confrontato
+# come numero con `studio/unita.py` (come in `risposte.py`), mai trasformato in parole prima del
+# confronto. Prima «1» diventava «uno» e si scartava come articolo, e «1,5 g/cm³» diventava
+# «cinque g cm3», che si trovava dentro «2,5 g/cm³»
+NUMERO = "#"
+_MOLTIPLICATORI = {"mila": 1e3, "milione": 1e6, "milioni": 1e6, "miliardo": 1e9,
+                   "miliardi": 1e9}
+_MOLTIPLICA = re.compile(r"\s+(mila|milioni|milione|miliardi|miliardo)\b")
+_E_MEZZO = re.compile(r"\s+e\s+mezzo\b")
+
+
+def _gettoni(testo) -> list[str]:
+    """Le parole di un testo per la forma chiusa e il confronto: minuscole, senza accenti né
+    punteggiatura, gli apostrofi come spazi; i numeri (anche in lettere, coi decimali e
+    l'unità subito dopo: «1,5 g/cm³», «un metro e mezzo» no) un gettone solo `NUMERO`."""
+    from . import unita as U
+    t = U._in_cifre(U._semplice(testo))
+    t = re.sub(r"(?<=\d) (?=\d{3}\b)", "", t)                # «1 861»
+    out, p = [], 0
+    rx = re.compile(r"(?<![\w.,])(" + U._NUM.pattern + r")(?![\w])|[a-z0-9]+")
+    while True:
+        m = rx.search(t, p)
+        if m is None:
+            return out
+        p = m.end()
+        if m.group(1) is not None:
+            v = U._cifre(m.group(1))
+            if v is not None:
+                # «2 milioni», «3 mila»; «1 e mezzo», «due e mezzo» (revisione della PR #363)
+                mm = _MOLTIPLICA.match(t, p)
+                if mm is not None:
+                    v *= _MOLTIPLICATORI[mm.group(1)]
+                    p = mm.end()
+                mz = _E_MEZZO.match(t, p)
+                if mz is not None:
+                    v += 0.5
+                    p = mz.end()
+                tok = f"{NUMERO}{v:.10g}"
+                mu = U._RE_U.match(t, p + len(t[p:]) - len(t[p:].lstrip(" ")))
+                if mu is not None:
+                    tok += "@" + U._VOCI[int(mu.lastgroup[1:])][1]
+                    p = mu.end()
+                out.append(tok)
+                continue
+        out.append(m.group(0))
+
+
+def _numero(tok: str):
+    """(valore, unità) di un gettone numero, o None."""
+    if not tok.startswith(NUMERO):
+        return None
+    v, _, u = tok[1:].partition("@")
+    try:
+        return float(v), (u or None)
+    except ValueError:
+        return None
+
+
+def _uguale(atteso: str, detto: str) -> bool:
+    """Una parola della forma chiusa e una della frase: uguali; due numeri, uguali come numeri.
+    Con la stessa unità (o senza) il valore **esatto** dopo la normalizzazione («1,5» = «1,50» =
+    «1.5» = «uno virgola cinque»; «1,49» per «1,5», «3,11» per «3,14» no: revisione della PR
+    #363); la tolleranza dell'1 % di `unita.confronta` solo dopo una conversione d'unità («1500
+    kg/m³» per «1,5 g/cm³», «72 km/h» per «20 m/s»). L'unità attesa che manca non basta."""
+    na, nd = _numero(atteso), _numero(detto)
+    if na is None or nd is None:
+        return na is None and nd is None and atteso == detto
+    (va, ua), (vd, ud) = na, nd
+    if ua and ud and ua != ud:
+        from . import unita as U
+        return U.confronta(nd, na) == "giusto"
+    if ua and not ud:
+        return False
+    return abs(vd - va) <= 1e-9 * max(1.0, abs(va))
+
+
+def chiusa(risposta) -> str | None:
+    """La forma chiusa di una risposta, se il codice la può controllare: un numero (anche con
+    l'unità: un gettone solo) o al più `CHIUSA_PAROLE` parole senza gli articoli. Altrimenti None
+    (vale solo l'autovalutazione). Un'espressione fra numeri («3,6 × 10^-3», «6,02 × 10²³»,
+    «2 + 3») non è chiusa: il codice non confronta le espressioni (revisione della PR #363)."""
+    if _ESPRESSIONE.search(str(risposta or "")):
+        return None
+    ps = [w for w in _gettoni(risposta) if w not in _ARTICOLI]
+    if not ps or len(ps) > CHIUSA_PAROLE:
+        return None
+    return " ".join(ps)
+
+
+_ESPRESSIONE = re.compile(r"\d\s*[×x*·^+=÷:]\s*[-−]?\d|\d\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]|\^|10\s*[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]")
+
+
+_NEGAZIONI = frozenset({"non", "no", "nemmeno", "neanche", "mica"})
+
+
+def corta(chiusa_: str | None) -> bool:
+    """Una risposta chiusa che sta facilmente dentro una frase detta per altro (revisione della
+    PR #324, nota 2): una forma dell'autovalutazione («sì», «no», «quasi»), una parola di al più
+    tre lettere, o un numero intero fino a venti senza unità. Per queste vale solo la frase
+    intera."""
+    if not chiusa_:
+        return False
+    ps = chiusa_.split()
+    if len(ps) == 1 and _numero(ps[0]) is not None:
+        v, u = _numero(ps[0])
+        return u is None and float(v).is_integer() and 0 <= v <= 20
+    return (autovalutazione(chiusa_) is not None
+            or (len(ps) == 1 and len(ps[0]) <= 3))
+
+
+def risposta_giusta(chiusa_: str | None, detto) -> bool:
+    """La frase detta contiene la risposta chiusa (le sue parole di fila), non negata subito prima
+    e in una frase corta. Solo il «giusto»: il contrario non vuol dire sbagliato (la trascrizione
+    può sbagliare un nome), e allora vale l'autovalutazione. Una risposta `corta` vale solo se è
+    la frase intera («sì, accendi la luce» non è la risposta «sì»)."""
+    if not chiusa_:
+        return False
+    cerca = chiusa_.split()
+    ps = [w for w in _gettoni(detto) if w not in _ARTICOLI]
+    while ps and ps[0] in _INTORNO:
+        ps = ps[1:]
+    while ps and ps[-1] in _INTORNO:
+        ps = ps[:-1]
+
+    def di_fila(pezzo):
+        return len(pezzo) == len(cerca) and all(_uguale(a, d) for a, d in zip(cerca, pezzo))
+    if corta(chiusa_):
+        return di_fila(ps)
+    if not ps or len(ps) > FRASE_MAX_PAROLE:
+        return False
+    n = len(cerca)
+    for i in range(len(ps) - n + 1):
+        if di_fila(ps[i:i + n]) and not (i and ps[i - 1] in _NEGAZIONI) and not (
+                i > 1 and ps[i - 2] in _NEGAZIONI and ps[i - 1] in ("e", "era", "e'")):
+            return True
+    return False
+
+
+# L'autovalutazione a voce: la frase intera, dopo il nome, i saluti e la punteggiatura, deve
+# essere una di queste forme chiuse (principio 10: una forma breve riconosciuta per intero, mai
+# una parola dentro la frase). Ognuna coi suoi contrari nelle prove (prova_studio_carte.py)
+_FORME = {
+    SAPEVO: ("si", "sì", "sapevo", "la sapevo", "lo sapevo", "si la sapevo", "si lo sapevo",
+             "si sapevo", "giusto", "giusta", "esatto", "esatta", "la so", "lo so",
+             "si la so", "si lo so", "la sapevo bene", "lo sapevo bene", "la sapevo si",
+             "ce l ho fatta", "indovinata", "l ho indovinata", "presa"),
+    QUASI: ("quasi", "piu o meno", "in parte", "quasi giusta", "quasi giusto", "la sapevo quasi",
+            "lo sapevo quasi", "abbastanza", "cosi cosi", "mezza", "a meta", "quasi si"),
+    NON_SAPEVO: ("no", "non la sapevo", "non lo sapevo", "non sapevo", "no non la sapevo",
+                 "no non lo sapevo", "sbagliata", "sbagliato", "non la so", "non lo so",
+                 "non me la ricordavo", "non me lo ricordavo", "non ricordavo", "non mi ricordavo",
+                 "no non me la ricordavo", "boh", "non ne ho idea", "nessuna idea", "dimmela",
+                 "non lo so dimmela", "non la so dimmela", "no dimmela"),
+}
+_INDICE = {" ".join(normale(f)): e for e, forme in _FORME.items() for f in forme}
+_INTORNO = frozenset({"calliope", "allora", "beh", "mah", "ok", "okay", "ehm", "uhm", "eh",
+                      "ah", "oh"})
+
+
+def autovalutazione(frase) -> str | None:
+    """L'esito detto dalla persona a voce, se la frase intera è una forma chiusa (`_FORME`); il
+    nome e le interiezioni ai bordi non contano. Altrimenti None."""
+    ps = normale(frase)
+    while ps and ps[0] in _INTORNO:
+        ps = ps[1:]
+    while ps and ps[-1] in _INTORNO:
+        ps = ps[:-1]
+    if not ps or len(ps) > 6:
+        return None
+    return _INDICE.get(" ".join(ps))

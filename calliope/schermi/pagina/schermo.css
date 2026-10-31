@@ -6,14 +6,22 @@
   --bordo: #2a2f3a;
   --testo: #ece8df;
   --tenue: #9aa1ad;
-  --accento: #e2b45a;
-  --accento-tenue: rgba(226, 180, 90, 0.14);
+  /* L'accento (27/10, calliope/schermi/aspetto.py): lilla di serie su tutto; su uno schermo
+     personale la pagina mette quello scelto dal proprietario (applicaAspetto in schermo.js) */
+  --accento: #b9a3e3;
+  --accento-chiaro: #cdbcf0;
+  --accento-bordo: #5b4a80;
+  --accento-selezione: #2a2140;
+  --accento-fondo: #15111f;
+  --su-accento: #1a1226;
+  --accento-rgb: 185, 163, 227;
+  --accento-tenue: rgba(var(--accento-rgb), 0.14);
   --ok: #82c99f;
   --allarme: #f0896a;
   /* Stato della voce: colore e forma insieme (mai solo il colore) */
   --v-dorme: #8b93a3;
   --v-ascolta: #6fd39a;
-  --v-pensa: #e2b45a;
+  --v-pensa: var(--accento);
   --v-parla: #7fb4f5;
   --raggio: 0.9rem;
   color-scheme: dark;
@@ -463,7 +471,7 @@ pre.uscita-esecuzione .omessi, pre.uscita-esecuzione .vuoto { color: var(--tenue
 .modulo { display: grid; gap: 0.9rem; max-width: 46rem; }
 .campo-modulo { display: grid; gap: 0.3rem; }
 .campo-modulo label { color: var(--tenue); font-size: 1rem; }
-.modulo input, .modulo textarea, .modulo select, .scrivi input {
+.modulo input, .modulo textarea, .modulo select, .scrivi textarea {
   font: inherit;
   font-size: 1.15rem;
   color: var(--testo);
@@ -475,7 +483,7 @@ pre.uscita-esecuzione .omessi, pre.uscita-esecuzione .vuoto { color: var(--tenue
   width: 100%;
 }
 .modulo input:focus-visible, .modulo textarea:focus-visible, .modulo select:focus-visible,
-.scrivi input:focus-visible, .modulo button:focus-visible, .scrivi button:focus-visible {
+.scrivi textarea:focus-visible, .modulo button:focus-visible, .scrivi button:focus-visible {
   outline: 2px solid var(--accento);
   outline-offset: 2px;
 }
@@ -497,30 +505,48 @@ pre.uscita-esecuzione .omessi, pre.uscita-esecuzione .vuoto { color: var(--tenue
   padding: 0.4rem 1.1rem;
 }
 .piccolo-bottone { background: transparent; color: var(--accento); justify-self: start; font-size: 0.95rem; }
-.invia-modulo, .scrivi button { background: var(--accento); color: #16130e; font-weight: 600; font-size: 1.1rem; }
-.invia-modulo:disabled, .scrivi button:disabled { opacity: 0.55; cursor: default; }
+.invia-modulo, .scrivi .scrivi-invia { background: var(--accento); color: var(--su-accento); font-weight: 600; font-size: 1.1rem; }
+.invia-modulo:disabled { opacity: 0.55; cursor: default; }
 .piede-modulo { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
 .esito-modulo { margin: 0; color: var(--tenue); }
 .modulo.inviato .esito-modulo { color: var(--ok); }
+/* La casella (dal 28/10, #301, come nella tavola PcConversazione): sopra l'anteprima di ciò che
+   si allega, il testo su più righe, sotto Allega, la nota e Invia (spento con la casella vuota) */
 .scrivi {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-areas: "ante ante ante" "testo testo testo" "allega nota invia" "esito esito esito";
   align-items: center;
   gap: 0.6rem;
   padding: 0.5rem 1.4rem 0.8rem;
 }
 .scrivi[hidden] { display: none; }
-.scrivi input { flex: 1 1 14rem; width: auto; }
-.esito-scrivi { color: var(--tenue); font-size: 0.95rem; flex-basis: 100%; }
-/* Senza conversazione a voce (05/10): casella e invio spenti, con la parola da dire */
-.nota-scrittura { color: var(--tenue); font-size: 1rem; flex-basis: 100%; margin: 0.4rem 0 0; }
-.scrivi.spento input, .modulo.spento .invia-modulo { opacity: 0.55; }
+.scrivi textarea {
+  grid-area: testo; resize: none; min-height: 3.5rem; max-height: 10rem; box-sizing: border-box;
+  line-height: 1.45; overflow-y: auto;
+}
+.scrivi textarea::placeholder { color: var(--tenue); opacity: 1; }
+.scrivi .scrivi-invia { grid-area: invia; display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; }
+.scrivi .scrivi-invia:disabled { background: var(--pannello-2); color: var(--tenue); border-color: var(--pannello-2); cursor: default; }
+.scrivi svg { flex: none; width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; }
+.scrivi .invia-icona { display: none; }
+.nota-invio { grid-area: nota; color: var(--tenue); font-size: 0.85rem; min-width: 0; }
+@media (hover: none) { .nota-invio { visibility: hidden; } }
+.esito-scrivi { grid-area: esito; color: var(--tenue); font-size: 0.95rem; }
+/* Senza conversazione a voce (05/10): casella e invio spenti, con la parola da dire. Dal 28/10
+   (#301) sullo schermo personale solo i moduli; la casella resta così sugli schermi di stanza */
+.nota-scrittura { grid-column: 1 / -1; color: var(--tenue); font-size: 1rem; flex-basis: 100%; margin: 0.4rem 0 0; }
+.scrivi.spento textarea, .modulo.spento .invia-modulo { opacity: 0.55; }
 .esito-scrivi:empty { display: none; }
 /* Foto (05/10): pulsante, anteprima prima dell'invio, pagina mentre si trascina un file */
-.scrivi .foto-apri { background: transparent; color: var(--accento); border: 2px solid var(--accento); }
+.scrivi .foto-apri { grid-area: allega; justify-self: start; display: inline-flex; align-items: center; gap: 0.5rem;
+  background: var(--pannello); color: var(--testo); border: 1px solid var(--bordo); font-size: 0.95rem; }
 .scrivi .foto-apri[hidden] { display: none; }
 .scrivi .foto-apri:disabled { opacity: 0.55; cursor: default; }
-.foto-anteprima { display: flex; align-items: center; gap: 0.8rem; flex-basis: 100%; order: -1; }
+.scrivi .togli-allegato { display: inline-flex; align-items: center; gap: 0.4rem; flex: none; color: var(--testo);
+  border-color: var(--bordo); }
+.foto-anteprima { grid-area: ante; display: flex; align-items: center; gap: 0.8rem; flex-basis: 100%; order: -1; }
 .foto-anteprima[hidden] { display: none; }
 .foto-anteprima img { max-height: 7rem; max-width: 60%; border-radius: 0.4rem; }
 body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
@@ -529,10 +555,12 @@ body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
 /* Allegati (05/10): il nome del file nell'anteprima prima dell'invio, e la scheda */
 .foto-anteprima img[hidden], .allegato-info[hidden] { display: none; }
 .allegato-info { font-weight: 600; overflow-wrap: anywhere; flex: 1 1 auto; min-width: 0; }
+.allegato-info:empty { display: none; }
 .scheda-allegato .nome-allegato { font-weight: 650; overflow-wrap: anywhere; }
 .scheda-allegato .anteprima-allegato { margin-top: 0.6rem; color: var(--tenue); white-space: pre-wrap; }
 /* Il cassetto dei file (08/10): un carosello orizzontale, una voce per file */
 .cassetto-tutti { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.8rem; }
+.nota-cassetto { color: var(--tenue); font-size: 0.95rem; flex-basis: 100%; }
 .esito-cassetto { color: var(--tenue); font-size: 1rem; }
 .cassetto-carosello {
   display: flex; gap: 0.8rem; overflow-x: auto; scroll-snap-type: x mandatory;
@@ -555,7 +583,6 @@ body.trascina-foto { outline: 4px dashed var(--accento); outline-offset: -8px; }
 .cassetto-voce .sotto { margin: 0; font-size: 0.95rem; }
 .cassetto-scade { color: var(--accento); margin: 0; font-size: 0.95rem; }
 .cassetto-pulsanti { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
-.tasto-cassetto.conferma[data-armato] { background: var(--allarme); color: #16130e; border-color: var(--allarme); }
 @media (max-width: 600px) {
   .riga-modulo { grid-template-columns: 1fr 1fr; }
   .riga-modulo input[data-k="descrizione"] { grid-column: 1 / -1; }
@@ -673,40 +700,6 @@ button.gioco-voce:focus-visible { outline: 3px solid var(--accento); outline-off
 .cr-conti li { display: flex; justify-content: space-between; gap: 0.5rem; min-width: 0; }
 .cr-conti .cr-nome { font-weight: 400; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cr-n { font-variant-numeric: tabular-nums; color: var(--accento); }
-
-/* Esercizi (08/10, calliope/esercizi/): la domanda grande, la risposta, l'esito */
-.domanda-esercizio { font-size: 1.8rem; line-height: 1.25; margin: 0.2rem 0 0.7rem; font-weight: 600; }
-.risposta-esercizio { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; max-width: 40rem; }
-.risposta-esercizio label { flex-basis: 100%; color: var(--tenue); font-size: 1rem; }
-.risposta-esercizio input {
-  font: inherit; font-size: 1.6rem; color: var(--testo); background: var(--pannello-2);
-  border: 1px solid var(--bordo); border-radius: 0.5rem; padding: 0.4rem 0.7rem;
-  min-height: 3rem; flex: 1 1 10rem; min-width: 0;
-}
-.risposta-esercizio input:focus-visible, .scelta-esercizio:focus-visible,
-.piede-esercizio button:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }
-.scelte-esercizio { display: flex; flex-wrap: wrap; gap: 0.5rem; }
-.scelta-esercizio {
-  font: inherit; font-size: 1.2rem; min-height: 2.9rem; padding: 0.4rem 1rem; cursor: pointer;
-  color: var(--testo); background: var(--pannello-2); border: 1px solid var(--bordo); border-radius: 0.5rem;
-}
-.scelta-esercizio:disabled { opacity: 0.55; cursor: default; }
-.esito-esercizio { font-size: 1.25rem; margin: 0.5rem 0; min-height: 1.4em; color: var(--tenue); }
-.esito-esercizio.giusta { color: var(--ok); }
-.esito-esercizio.giusta::before { content: "✓ "; }
-.esito-esercizio.sbagliata { color: var(--allarme); }
-.esito-esercizio.sbagliata::before { content: "✗ "; }
-.piede-esercizio { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.4rem; }
-@media (max-width: 40rem) {
-  /* Telefono: la scheda deve stare nel carosello senza «Espandi» */
-  .tipo-esercizio h1.titolo { font-size: 1.3rem; margin-bottom: 0.2rem; }
-  .domanda-esercizio { font-size: 1.35rem; margin-bottom: 0.4rem; }
-  .risposta-esercizio label { position: absolute; width: 1px; height: 1px; overflow: hidden;
-    clip: rect(0 0 0 0); white-space: nowrap; }
-  .risposta-esercizio input { font-size: 1.2rem; min-height: 2.75rem; }
-  .esito-esercizio { font-size: 1.05rem; margin: 0.35rem 0; }
-  .scelta-esercizio { font-size: 1.05rem; padding: 0.3rem 0.7rem; min-height: 2.75rem; }
-}
 
 /* ── a schermo intero sulla pagina degli schermi (08/10): lavoro, documento, programma ── */
 .tasto-intero { margin-left: auto; text-transform: none; letter-spacing: normal; font-weight: 600;
@@ -893,6 +886,61 @@ body.in-vista-sviluppo #cronologia { display: none; }     /* «Vista normale» r
    barra sola); a schermo intero ha l'altezza del flusso dell'agente */
 .scheda-chat:not(.intera) > .corpo { display: flex; flex-direction: column; overflow: hidden; }
 .scheda-chat:not(.intera) .conv-chat { flex: 1; height: auto; min-height: 8rem; }
+/* I filtri e la ricerca (28/10, #242): Oggi, Ieri, Solo schede; la casella; l'esito in una riga.
+   Tocchi ≥ 44 px, testo AA sui pannelli (il tenue e l'accento: prova_aspetto) */
+.chat-filtri { display: flex; flex-direction: column; gap: 0.45rem; margin: 0 0 0.6rem; }
+.chat-chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.chat-cerca { display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center; margin: 0; }
+.chat-cerca input {
+  flex: 1 1 10rem; min-width: 0; min-height: 2.75rem; box-sizing: border-box; padding: 0.4rem 0.8rem;
+  font: inherit; font-size: 1rem; color: var(--testo); background: var(--pannello);
+  border: 1px solid var(--bordo); border-radius: 0.8rem;
+}
+.chat-chip {
+  font: inherit; font-size: 0.92rem; font-weight: 600; min-height: 2.75rem; min-width: 2.75rem; padding: 0.2rem 0.75rem;
+  border: 1px solid var(--bordo); border-radius: 1.4rem; background: var(--pannello); color: var(--testo); cursor: pointer;
+}
+.chat-chip[aria-pressed="true"] { border-color: var(--accento); background: var(--accento-tenue); color: var(--accento-chiaro); }
+.chat-chip[hidden], .chat-cerca[hidden] { display: none; }
+.chat-chip[aria-expanded="true"] { border-color: var(--accento); }
+.scheda-chat .scarica { margin: 0.6rem 0 0; }
+.chat-chip:focus-visible, .chat-cerca input:focus-visible, .piccola-apri:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+.chat-stato { display: flex; align-items: center; gap: 0.6rem; }
+.chat-stato[hidden] { display: none; }
+.chat-esito { flex: 1; margin: 0; color: var(--tenue); font-size: 0.95rem; }
+/* il tocco e il modulo: un gesto al centro, non una bolla */
+.conv-gesto {
+  align-self: center; max-width: 92%; padding: 0.35rem 0.8rem; border-radius: 0.7rem; border: 1px dashed var(--bordo);
+  background: var(--pannello-2); color: var(--testo); font-size: 0.95rem; overflow-wrap: anywhere; text-align: center;
+}
+/* la scheda piccola dentro la risposta: il pulsante con tipo e titolo, sotto l'anteprima inerte */
+.scheda-piccola {
+  margin-top: 0.5rem; border: 1px solid var(--bordo); border-radius: 0.8rem; background: var(--sfondo);
+  overflow: hidden; cursor: pointer;
+}
+.piccola-apri {
+  display: flex; align-items: center; gap: 0.6rem; width: 100%; min-height: 2.75rem; box-sizing: border-box;
+  padding: 0.3rem 0.8rem; font: inherit; font-size: 0.95rem; text-align: left; cursor: pointer;
+  border: 0; background: transparent; color: var(--testo);
+}
+.piccola-tipo { flex: none; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--accento); }
+.piccola-titolo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.piccola-freccia { flex: none; color: var(--tenue); font-size: 1.2rem; }
+.piccola-anteprima {
+  max-height: 5.2rem; overflow: hidden; padding: 0 0.8rem 0.4rem; font-size: 0.9rem; line-height: 1.35;
+  -webkit-mask-image: linear-gradient(#000 60%, transparent); mask-image: linear-gradient(#000 60%, transparent);
+}
+/* l'anteprima è piccola qualunque sia la misura della scheda vera (la TV, il telefono) */
+.piccola-anteprima .corpo, .piccola-anteprima .corpo * { font-size: 0.9rem !important; line-height: 1.35 !important; }
+.piccola-anteprima .corpo > * { margin-top: 0; margin-bottom: 0.25rem; }
+.piccola-anteprima .timer .riga, .piccola-anteprima .casa .riga { padding: 0.2rem 0.5rem; }
+.piccola-anteprima .calcolo .risultato { font-size: 1.3rem; }
+.piccola-anteprima blockquote { margin: 0; padding-left: 0.5rem; }
+.resto.storico { color: var(--tenue); }
+/* Lo stato della foto tenuta nel dettaglio (28/10, decisione 0034) */
+.stato-foto { margin: 0.6rem 0 0; color: var(--testo); font-size: 1rem; line-height: 1.4; }
+.stato-foto-persa, .stato-foto-eliminata { color: var(--tenue); }
+.vai-documenti { min-height: 2.75rem; margin-left: 0.3rem; }
 
 /* Una voce nuova da salvare come conoscente (14/10): il pezzo di trascrizione e il modulo */
 .estratto-conoscente { margin: 0 0 0.3rem; padding-left: 0.8rem; border-left: 3px solid var(--bordo); color: var(--testo); overflow-wrap: anywhere; }
@@ -902,3 +950,485 @@ body.in-vista-sviluppo #cronologia { display: none; }     /* «Vista normale» r
 .trascrizione-avviso summary { cursor: pointer; font-weight: 600; }
 .trascrizione-avviso p { margin: 0.4rem 0; }
 .trascrizione-avviso p.segnale { border-left: 0.3rem solid currentColor; padding-left: 0.6rem; }
+
+/* ───────────────── lo schermo personale del PC a sezioni (27/10, passo 1b) ─────────────────
+   docs/ricerche/2026-10-27-telefono-sezioni-e-studio.md § 3.6. Solo sugli schermi personali
+   (body.con-sezioni, da schermo.js dopo l'accesso): a sinistra le sezioni e la voce con «Parla»,
+   al centro la sezione (la vista dello sviluppo di #principale sopra), a destra la conversazione.
+   Sotto i 1100 px la conversazione dietro un pulsante; sotto i 760 px la barra in basso. */
+/* Sul PC il testo ha la misura di una pagina da leggere da vicino, non quella della TV */
+html:has(> body.con-sezioni) { font-size: 16px; }
+body.con-sezioni {
+  grid-template-columns: 13.5rem minmax(0, 1fr) minmax(19rem, 27rem);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-areas: "barra testa conv" "barra centro conv" "voce centro conv";
+}
+body.con-sezioni #testa { grid-area: testa; grid-row: auto; padding: 0.7rem 1.6rem 0.2rem; }
+body.con-sezioni #principale { grid-area: centro; grid-row: auto; z-index: 2; background: var(--sfondo); }
+body.con-sezioni #principale:empty { display: none; }
+body.con-sezioni #cronologia { display: none; }
+.pc-barra[hidden], .pc-voce[hidden], .pc-centro[hidden], .pc-conv[hidden] { display: none; }
+
+/* le sezioni, in colonna a sinistra */
+.pc-barra {
+  grid-area: barra; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 0.3rem;
+  padding: 1rem 0.7rem; border-right: 1px solid var(--bordo); background: #0b0d10; min-height: 0; overflow-y: auto;
+}
+.pc-barra a {
+  position: relative; display: flex; align-items: center; gap: 0.75rem; min-height: 2.9rem; padding: 0 0.8rem;
+  border-radius: 0.7rem; color: var(--tenue); text-decoration: none; font-size: 1.05rem;
+}
+.pc-barra a:hover { color: var(--testo); background: var(--pannello); }
+.pc-barra a[aria-current="page"] { color: var(--accento); background: var(--accento-tenue); font-weight: 650; }
+.pc-barra a[hidden] { display: none; }
+.pc-barra a:focus-visible { outline: 3px solid var(--accento); outline-offset: -3px; }
+.icona-sez svg { display: block; width: 1.45rem; height: 1.45rem; fill: none; stroke: currentColor; stroke-width: 1.8;
+  stroke-linecap: round; stroke-linejoin: round; }
+.pc-barra .novita { margin-left: auto; min-width: 1.3rem; height: 1.3rem; padding: 0 0.35rem; box-sizing: border-box;
+  border-radius: 0.7rem; background: var(--accento); color: var(--su-accento); font-size: 0.8rem; font-weight: 800;
+  display: flex; align-items: center; justify-content: center; }
+.pc-barra .novita[hidden] { display: none; }
+
+/* la voce in fondo alla colonna delle sezioni: lo stato e «Parla» */
+.pc-voce { grid-area: voce; display: flex; flex-direction: column; gap: 0.6rem; padding: 0.8rem 0.7rem 1rem;
+  border-right: 1px solid var(--bordo); border-top: 1px solid var(--bordo); background: #0b0d10; }
+.pc-voce .voce { margin: 0; padding: 0.45rem 0.8rem; font-size: 1.05rem; border-radius: 0.9rem; column-gap: 0.6rem;
+  grid-template-columns: auto minmax(0, 1fr) auto; }
+.pc-voce .voce .forma { transform: scale(0.6); transform-origin: left center; margin-right: -0.6rem; }
+.pc-parla {
+  font: inherit; font-size: 1.15rem; font-weight: 700; min-height: 3.2rem; padding: 0.3rem 1rem; border-radius: 0.9rem;
+  border: 2px solid var(--v-ascolta); background: #0b1a12; color: var(--testo); cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 0.6rem;
+}
+.pc-parla[hidden] { display: none; }
+.pc-parla .parla-icona { width: 1.1rem; height: 1.1rem; border-radius: 50%; border: 0.18rem solid var(--v-ascolta); box-sizing: border-box; }
+.pc-parla.in-corso { background: #1a4a2f; }
+.pc-parla.in-corso .parla-icona { background: currentColor; border-color: currentColor; }
+.pc-parla:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+.pc-nota { margin: 0; color: var(--tenue); font-size: 0.95rem; }
+.pc-nota:empty { display: none; }
+
+/* il centro: titolo della sezione e la sezione che scorre */
+.pc-centro { grid-area: centro; min-height: 0; display: flex; flex-direction: column; padding: 0 1.6rem 1rem; }
+.pc-testa { display: flex; align-items: center; gap: 1rem; min-height: 3rem; }
+.pc-testa .sez-titolo { flex: 1; margin: 0; font-size: 1.8rem; line-height: 1.3; }
+.pc-conv-apri { display: none; }
+.pc-centro .sezioni { position: relative; flex: 1; min-height: 0; }
+.pc-centro .sezione { position: absolute; inset: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 0.8rem;
+  padding: 0.2rem 0.2rem 1rem; scrollbar-width: thin; }
+.pc-centro .sezione[hidden] { display: none; }
+.pc-centro h2.gruppo { margin: 0.6rem 0 0; font-size: 0.85rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--tenue); font-weight: 650; }
+.pc-centro h2.gruppo[hidden], .pc-centro .raccolta[hidden], .pc-centro .raccolta[data-nascosta], .pc-centro .vuoto-sez[hidden] { display: none; }
+.pc-centro .raccolta { display: flex; flex-direction: column; gap: 0.8rem; }
+/* le schede affiancate quando c'è posto, alte quanto serve (la sezione scorre) */
+.pc-centro .elenco { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 24rem), 1fr)); gap: 1rem; align-items: start; }
+.pc-centro .elenco:empty { display: none; }
+/* (non sul gioco a tutta la finestra: lì valgono le regole della modalità gioco) */
+.pc-centro .elenco > .scheda:not(.modo-gioco) { flex: none; max-height: 70vh; padding: 1rem 1.3rem; animation: none; }
+.pc-centro .elenco > .scheda.tipo-gioco, .pc-centro .elenco > .scheda.scheda-gioco,
+.pc-centro .elenco > .scheda.tipo-modulo { max-height: none; }
+.pc-centro .elenco > .scheda h1.titolo { font-size: 1.4rem; }
+.pc-centro .vuoto-sez { margin: 0.6rem 0 0; color: var(--tenue); font-size: 1.1rem; line-height: 1.45; max-width: 46rem; }
+.pc-centro .etichetta { flex-wrap: wrap; row-gap: 0.35rem; }
+.pc-centro .etichetta .quando { margin-left: auto; color: var(--tenue); letter-spacing: 0.02em; font-weight: 500; }
+.pc-centro .etichetta .tasto-intero { white-space: nowrap; }
+/* il rimando in Adesso: tipo, titolo e «Apri» */
+.pc-centro .rimando-car { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 0.1rem 1rem; cursor: pointer; }
+.pc-centro .rimando-car h1.titolo { margin: 0; }
+.pc-centro .rimando-car .apri-rimando { grid-column: 2; grid-row: 1 / span 2; min-height: 2.75rem; padding: 0 1rem; font: inherit;
+  border-radius: 0.7rem; border: 1px solid var(--bordo); background: var(--pannello-2); color: var(--testo); cursor: pointer; }
+.pc-centro [data-posto="adesso/aspetta"] > .scheda { border-color: var(--accento); background: var(--accento-fondo); }
+/* il pulsante «Conversazione» della testa non serve: la conversazione ha la sua colonna */
+body.con-sezioni #chat-apri { display: none; }
+.pc-pulisci { align-self: flex-start; min-height: 2.75rem; padding: 0 1rem; margin-top: 0.6rem; }
+.pc-righe { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 0.35rem 1rem; font-size: 1.05rem; }
+.pc-righe dt { color: var(--tenue); }
+.pc-righe dd { margin: 0; overflow-wrap: anywhere; }
+
+/* la conversazione, sempre aperta a destra */
+.pc-conv { grid-area: conv; grid-row: 1 / -1; min-height: 0; display: flex; flex-direction: column; gap: 0.6rem;
+  padding: 0.8rem 1rem 1rem; border-left: 1px solid var(--bordo); background: #0b0d10; }
+.pc-conv-testa { display: flex; align-items: center; gap: 0.8rem; }
+.pc-conv-testa h2 { flex: 1; margin: 0; font-size: 1.15rem; color: var(--tenue); font-weight: 650; }
+.pc-conv-chiudi { display: none; }
+.pc-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.pc-chat > .scheda { flex: 1; min-height: 0; padding: 0.8rem 1rem; animation: none; }
+.pc-scrivi #scrivi { margin: 0; padding: 0; }
+
+/* Io › Aspetto: una scelta per accento, col nome scritto; quella in uso col bordo pieno (27/10,
+   comune al telefono e al PC) */
+/* Io › Aspetto (27/10): una scelta per accento, col nome scritto; quella in uso col bordo pieno */
+.accenti { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+.accenti[hidden], #io-aspetto[hidden] { display: none; }
+.accento-esito:empty { margin: 0; }
+.accento-scelta {
+  font: inherit; font-size: 1.05rem; min-height: 3rem; padding: 0.3rem 0.9rem; border-radius: 1.5rem;
+  display: inline-flex; align-items: center; gap: 0.55rem; cursor: pointer;
+  border: 2px solid var(--bordo); background: var(--pannello); color: var(--testo);
+}
+.accento-scelta .tinta { width: 1.3rem; height: 1.3rem; border-radius: 50%; flex: none; }
+.accento-scelta[aria-pressed="true"] { border-color: var(--accento); font-weight: 700; }
+.accento-scelta[aria-pressed="true"]::after { content: "✓"; color: var(--accento); }
+.accento-scelta:focus-visible { outline: 3px solid var(--v-pensa); outline-offset: 2px; }
+
+/* sotto i 1100 px: la conversazione dietro il suo pulsante, sopra la pagina */
+@media (max-width: 1099px) {
+  body.con-sezioni { grid-template-columns: 12rem minmax(0, 1fr); grid-template-areas: "barra testa" "barra centro" "voce centro"; }
+  .pc-conv-apri { display: inline-flex; min-height: 2.75rem; align-items: center; }
+  .pc-conv { position: fixed; inset: 0 0 0 auto; width: min(28rem, 100%); z-index: 20; box-shadow: -1rem 0 2rem #000a; }
+  body.con-sezioni:not(.conv-aperta) .pc-conv { display: none; }
+  .pc-conv-chiudi { display: inline-flex; min-height: 2.75rem; align-items: center; }
+}
+/* sotto i 760 px: come il telefono, la barra in basso */
+@media (max-width: 759px) {
+  body.con-sezioni { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto;
+    grid-template-areas: "testa" "centro" "voce" "barra"; }
+  .pc-barra { grid-row: auto; flex-direction: row; justify-content: space-around; padding: 0.2rem; border-right: 0;
+    border-top: 1px solid var(--bordo); overflow: visible; }
+  .pc-barra a { flex-direction: column; gap: 0.15rem; padding: 0.3rem 0.2rem; font-size: 0.72rem; min-height: 3.5rem;
+    flex: 1 1 auto; justify-content: center; white-space: nowrap; }
+  .pc-barra .novita { position: absolute; top: 0.2rem; left: calc(50% + 0.4rem); margin: 0; }
+  .pc-voce { border-right: 0; flex-direction: row; align-items: center; }
+  .pc-voce .voce { flex: 1; }
+  .pc-centro { padding: 0 1rem 0.6rem; }
+}
+
+/* ── Le mie cose: le tessere e le pagine delle raccolte (28/10, passo 2a: sezioni.js) ──
+   Comuni al telefono e al PC personale; due colonne sul telefono, di più sul PC. Tocchi ≥ 44 px,
+   testo sopra AA (il tenue e l'accento sui pannelli: prova_aspetto). */
+.tessere { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+.tessere[hidden], .pagina-racc[hidden], .pagina-nota[hidden], .tessera-pallino[hidden] { display: none; }
+.tessera {
+  display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; min-height: 5.25rem; box-sizing: border-box;
+  padding: 0.65rem 0.85rem; border: 1px solid var(--bordo); border-radius: var(--raggio);
+  background: var(--pannello); color: var(--testo); text-decoration: none; cursor: pointer;
+}
+.tessera:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+.tessera.presto { border-style: dashed; }
+.tessera-testa { display: flex; align-items: center; gap: 0.4rem; min-width: 0; }
+.tessera-nome { font-weight: 650; font-size: 1rem; line-height: 1.25; overflow-wrap: anywhere; }
+.tessera-pallino { flex: none; margin-left: auto; width: 0.65rem; height: 0.65rem; border-radius: 50%; background: var(--accento); }
+.tessera-conto { font-size: 1.55rem; font-weight: 700; line-height: 1.15; color: var(--accento); }
+.tessera-stato { font-size: 0.9rem; line-height: 1.3; color: var(--tenue); overflow-wrap: anywhere; }
+/* La pagina di una raccolta prende il posto delle tessere e dei gruppi */
+#sez-cose[data-vista="pagina"] > .raccolta, #sez-cose[data-vista="pagina"] > .vuoto-sez { display: none; }
+/* …tranne in Giochi (28/10, #258): la scheda «gioco» di questo schermo resta sotto la pagina, una
+   copia sola del riquadro */
+#sez-cose[data-vista="pagina"][data-pagina="giochi"] > .raccolta[data-raccolta="giochi"]:not([hidden]):not([data-nascosta]) {
+  display: flex; flex-direction: column; gap: 0.6rem;
+}
+ul.voci-giochi { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+ul.voci-giochi .nome-gioco { margin: 0; font-weight: 650; font-size: 1.1em; }
+ul.voci-giochi p { margin: 0.1rem 0 0; overflow-wrap: anywhere; }
+.pagina-racc { display: flex; flex-direction: column; gap: 0.6rem; }
+.pagina-testa { display: flex; align-items: center; flex-wrap: wrap; gap: 0.4rem 0.9rem; }
+.pagina-indietro {
+  font: inherit; font-size: 1rem; font-weight: 650; min-height: 2.75rem; min-width: 2.75rem; padding: 0.3rem 0.9rem;
+  border: 1px solid var(--bordo); border-radius: 0.8rem; background: var(--pannello); color: var(--testo); cursor: pointer;
+}
+.pagina-indietro:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+.pagina-titolo { margin: 0; font-size: 1.3rem; line-height: 1.25; color: var(--testo); }
+.pagina-nota { margin: 0; color: var(--tenue); font-size: 1.05rem; line-height: 1.45; }
+.pagina-esito { margin: 0; color: var(--allarme); font-size: 1rem; }
+/* La ricerca e i gruppi della pagina Documenti (28/10, passo 2d, #259) */
+.pagina-cerca { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; }
+.pagina-cerca[hidden], .pagina-cerca-via[hidden] { display: none; }
+.pagina-cerca input {
+  flex: 1 1 12rem; min-width: 0; min-height: 2.75rem; box-sizing: border-box; padding: 0.4rem 0.8rem;
+  font: inherit; font-size: 1rem; color: var(--testo); background: var(--pannello);
+  border: 1px solid var(--bordo); border-radius: 0.8rem;
+}
+.pagina-cerca input:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+.pagina-cerca .tasto {
+  font: inherit; font-size: 1rem; font-weight: 650; min-height: 2.75rem; min-width: 2.75rem; padding: 0.3rem 0.9rem;
+  border: 1px solid var(--bordo); border-radius: 0.8rem; background: var(--pannello); color: var(--testo); cursor: pointer;
+}
+.pagina-cerca .tasto:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+.gruppo-pagina { margin: 0.6rem 0 0; font-size: 1.05rem; line-height: 1.3; color: var(--tenue); font-weight: 650; }
+ul.voci-archivio { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.7rem; }
+ul.voci-archivio .nome-documento { margin: 0; font-weight: 650; overflow-wrap: anywhere; }
+ul.voci-archivio p { margin: 0.1rem 0 0; overflow-wrap: anywhere; }
+/* La pagina Ufficio (28/10, passo 2e, #260): lo stato sotto i dettagli, l'annullato più tenue */
+ul.voci-ufficio .stato-ufficio { color: var(--tenue); font-size: 0.95rem; }
+ul.voci-ufficio li.annullata .nome-documento { text-decoration: line-through; color: var(--tenue); }
+/* La spunta della lista (28/10, POST /api/tocco): ogni voce è un tasto «checkbox» */
+ul.voci.spunte li { padding: 0; }
+ul.voci.spunte li::before { display: none; }
+button.spunta {
+  display: flex; align-items: center; gap: 0.7rem; width: 100%; min-height: 2.75rem; box-sizing: border-box;
+  padding: 0.3rem 0.2rem; font: inherit; color: inherit; background: transparent; border: 0; border-radius: 0.4rem;
+  text-align: left; cursor: pointer;
+}
+button.spunta:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+button.spunta .casella {
+  flex: none; position: relative; width: 1.5rem; height: 1.5rem; box-sizing: border-box;
+  border: 2px solid var(--tenue); border-radius: 0.35rem;
+}
+button.spunta[aria-checked="true"] .casella { background: var(--accento); border-color: var(--accento); }
+button.spunta[aria-checked="true"] .casella::after {
+  content: ""; position: absolute; left: 0.38rem; top: 0.1rem; width: 0.35rem; height: 0.75rem;
+  border: solid var(--su-accento); border-width: 0 0.18rem 0.18rem 0; transform: rotate(45deg);
+}
+button.spunta[aria-checked="true"] .testo-voce { text-decoration: line-through; color: var(--tenue); }
+.esito-tocco { margin: 0.4rem 0 0; color: var(--tenue); font-size: 1rem; }
+.esito-tocco.errore { color: var(--allarme); }
+.esito-tocco:empty { margin: 0; }
+/* I tasti del timer (28/10, #257): «+1 minuto» e «Ferma», almeno 44 px; chi l'ha messo */
+.timer .chi { color: var(--tenue); font-size: 1rem; }
+.tasti-timer { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.6rem; }
+button.tasto-timer {
+  min-height: 2.75rem; min-width: 2.75rem; box-sizing: border-box; padding: 0.3rem 1.1rem;
+  font: inherit; font-size: 1.05rem; color: var(--testo); background: var(--pannello);
+  border: 1px solid var(--bordo); border-radius: 0.8rem; cursor: pointer;
+}
+button.tasto-timer:focus-visible { outline: 3px solid var(--accento); outline-offset: 2px; }
+button.tasto-timer[aria-busy="true"] { cursor: progress; border-style: dashed; }
+button.tasto-timer.in-attesa { border-color: var(--accento); }
+/* Sul PC personale più tessere per riga, e la lista in una colonna sola come sul telefono */
+.pc-centro .tessere { grid-template-columns: repeat(auto-fill, minmax(min(100%, 12rem), 1fr)); gap: 0.8rem; }
+.pc-centro ul.voci.spunte { columns: 1; font-size: 1.3rem; }
+
+/* ── La home dello Studio (30/10, passo 4.5, #284: studio.js), sul telefono e sul PC ── */
+.studio-home { display: flex; flex-direction: column; gap: 0.8rem; }
+.studio-h-verifica { display: flex; flex-direction: column; gap: 0.55rem; padding: 0.9rem 1rem;
+  border-radius: 1rem; background: var(--pannello); border: 1px solid var(--bordo); min-width: 0; }
+.studio-h-prima { background: var(--accento-fondo); border-color: var(--accento-bordo); }
+.studio-h-testa { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.3rem 0.8rem; }
+.studio-h-etichetta { font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase;
+  font-weight: 700; color: var(--accento); }
+.studio-h-quando { font-size: 0.85rem; color: var(--tenue); }
+.studio-h-titolo { margin: 0; font-size: 1.15rem; line-height: 1.3; color: var(--testo);
+  overflow-wrap: anywhere; }
+.studio-h-obiettivo { display: flex; flex-direction: column; gap: 0.3rem; }
+.studio-h-barra { position: relative; height: 0.5rem; border-radius: 0.25rem; background: var(--bordo); }
+.studio-h-pieno { height: 100%; border-radius: 0.25rem; background: var(--accento); }
+.studio-h-segno { position: absolute; top: -0.2rem; width: 2px; height: 0.9rem; background: var(--testo); }
+.studio-h-nota, .studio-h-riga { margin: 0; font-size: 0.9rem; color: var(--tenue); overflow-wrap: anywhere; }
+.studio-h-oggi { display: flex; flex-direction: column; gap: 0.15rem; padding: 0.6rem 0.75rem;
+  border-radius: 0.8rem; background: var(--accento-tenue); }
+.studio-h-oggi-cosa { font-size: 0.85rem; font-weight: 700; color: var(--accento-chiaro); }
+.studio-h-oggi-att { font-size: 1rem; color: var(--testo); overflow-wrap: anywhere; }
+.studio-h-tasti { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+.studio-h-tasto, .studio-h-chip { font: inherit; min-height: 2.9rem; padding: 0 1rem; font-size: 1rem;
+  flex: 1 1 auto; border-radius: 0.8rem; border: 1px solid var(--bordo); background: var(--sfondo);
+  color: var(--testo); cursor: pointer; }
+.studio-h-tasto:disabled, .studio-h-chip:disabled { opacity: 0.55; cursor: default; }
+.studio-h-primo { background: var(--accento); color: var(--su-accento); border-color: var(--accento); font-weight: 700; }
+.studio-h-sotto { margin: 0.2rem 0 0; font-size: 0.75rem; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--tenue); font-weight: 600; }
+.studio-h-gruppo { display: flex; flex-direction: column; gap: 0.3rem; }
+.studio-h-tappe { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.35rem; }
+.studio-h-tappa { display: flex; align-items: center; gap: 0.55rem; font-size: 0.95rem; min-width: 0; }
+.studio-h-tappa-nome { min-width: 0; overflow-wrap: anywhere; }
+.studio-h-pallino { flex: none; width: 1.2rem; height: 1.2rem; border-radius: 50%; border: 2px solid var(--bordo);
+  display: flex; align-items: center; justify-content: center; font-size: 0.75rem; box-sizing: border-box; }
+.studio-h-fatta .studio-h-pallino { background: var(--ok); border-color: var(--ok); color: #04120b; }
+.studio-h-aperta .studio-h-pallino { border-color: var(--accento); border-width: 3px; }
+.studio-h-chiusa { color: var(--tenue); }
+.studio-h-elenco { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.5rem; }
+.studio-h-voce { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; justify-content: space-between; }
+.studio-h-voce .studio-testo { flex: 1 1 12rem; min-width: 0; }
+.studio-h-voce .tasto { flex: 0 0 auto; }
+.studio-h-domande { display: flex; flex-direction: column; gap: 0.6rem; padding: 0.7rem; border-radius: 0.8rem;
+  border: 1px dashed var(--accento-bordo); }
+.studio-h-scelte { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; min-width: 0; }
+.studio-h-scelte legend { padding: 0 0 0.35rem; font-size: 0.95rem; color: var(--testo); }
+.studio-h-chip { flex: 0 1 auto; min-height: 2.75rem; padding: 0 0.8rem; }
+.studio-h-chip[aria-pressed="true"] { background: var(--accento-selezione); border-color: var(--accento); color: var(--accento-chiaro); }
+.studio-h-piano summary, .studio-h-sessioni summary { cursor: pointer; min-height: 2.75rem; display: flex; align-items: center;
+  color: var(--accento-chiaro); font-weight: 600; }
+.studio-h-giorni { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.studio-h-giorno { display: flex; flex-direction: column; gap: 0.1rem; padding: 0.45rem 0.6rem; border-radius: 0.6rem;
+  background: var(--sfondo); }
+.studio-h-g-quando { font-size: 0.85rem; font-weight: 600; color: var(--testo); }
+.studio-h-g-cosa { font-size: 0.9rem; color: var(--tenue); overflow-wrap: anywhere; }
+.studio-h-fatto .studio-h-g-quando { color: var(--ok); }
+.studio-h-nuova { margin: 0; padding: 0.7rem; border-radius: 0.8rem; border: 1px dashed var(--accento-bordo);
+  color: var(--accento-chiaro); font-size: 0.95rem; }
+.studio-indietro { align-self: flex-start; min-height: 2.75rem; }
+/* La padronanza (passo 5, #245): la parola sempre scritta, il colore come aiuto (blu, oro, arancio) */
+.studio-h-parola { margin-left: auto; font-size: 0.85rem; padding: 0.1rem 0.5rem; border-radius: 0.6rem;
+  color: var(--testo); border: 2px solid var(--tenue); }
+.studio-h-p-sai { border-color: #4a8fe8; }
+.studio-h-p-quasi { border-color: #d9a520; }
+.studio-h-p-studiare { border-color: #e8762a; }
+/* Le sessioni (passo 4b, #244): una riga per giorno, fatto, saltato o non fatto */
+.studio-h-sessioni .studio-h-giorno { overflow-wrap: anywhere; color: var(--testo); }
+.studio-h-s-fatto { border-left: 3px solid var(--ok); }
+.studio-h-s-saltato, .studio-h-s-mancato, .studio-h-s-iniziato { border-left: 3px solid var(--tenue); }
+.studio-h-sessioni summary:focus-visible, .studio-h-piano summary:focus-visible, .studio-h-tasto:focus-visible, .studio-h-chip:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }
+.studio-home .studio-avviso { display: block; font-size: 0.88rem; color: var(--allarme); }
+/* «Aggiungi materiali» dello Studio (31/10, #298, studio_importa.js): una scheda per importazione
+   con le fasi e i conti; i nomi dei file vanno a capo sempre */
+.studio-i-voce { align-items: flex-start; padding: 0.6rem 0.7rem; border-radius: 0.8rem; background: var(--sfondo); }
+.studio-i-nome { overflow-wrap: anywhere; word-break: break-word; }
+.studio-i-fasi { list-style: none; margin: 0.3rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.studio-i-fase { display: flex; align-items: baseline; gap: 0.4rem; font-size: 0.88rem; color: var(--tenue); min-width: 0; }
+.studio-i-segno { flex: none; width: 1rem; text-align: center; font-weight: 700; }
+.studio-i-f-fatta { color: var(--testo); }
+.studio-i-f-fatta .studio-i-segno { color: var(--ok); }
+.studio-i-f-in_corso { color: var(--accento-chiaro); }
+.studio-i-righe summary { cursor: pointer; min-height: 2.75rem; display: flex; align-items: center;
+  color: var(--accento-chiaro); font-weight: 600; }
+.studio-i-righe summary:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }
+.studio-i-riga { font-size: 0.88rem; overflow-wrap: anywhere; }
+.studio-i-riga .studio-avviso { display: inline; }
+.studio-i-errore { border-left: 3px solid var(--allarme); }
+.studio-i-finita { border-left: 3px solid var(--ok); }
+/* Le carte dello Studio (30/10, passo 6, #246, studio.js): una carta per volta, la risposta dopo
+   «Mostra la risposta», i tre esiti; l'elenco con «Scrivi una carta». Il testo va a capo sempre */
+.studio-c-ripasso, .studio-c-elenco, .studio-c-modulo { display: flex; flex-direction: column; gap: 0.55rem; }
+.studio-c-carta { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.8rem 0.9rem; border-radius: 0.8rem;
+  border: 1px solid var(--accento-bordo); background: var(--accento-fondo); }
+.studio-c-domanda { margin: 0; font-size: 1.1rem; font-weight: 600; color: var(--testo); overflow-wrap: anywhere; }
+.studio-c-risposta { margin: 0; font-size: 1rem; color: var(--testo); overflow-wrap: anywhere;
+  border-top: 1px dashed var(--accento-bordo); padding-top: 0.4rem; }
+.studio-c-risp { display: block; color: var(--tenue); overflow-wrap: anywhere; }
+.studio-c-esiti .studio-h-tasto { flex: 1 1 12rem; }
+/* La libreria dello Studio (31/10, #297, libreria.js): le proposte e una scheda da leggere, con le
+   soluzioni di «Prova tu» una per volta. Il testo va a capo sempre, anche col carattere grande */
+.studio-l-scheda { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.8rem 0.9rem; border-radius: 0.8rem;
+  border: 1px solid var(--accento-bordo); background: var(--accento-fondo); min-width: 0; }
+.studio-l-nome { margin: 0; font-size: 1.15rem; color: var(--testo); overflow-wrap: anywhere; }
+.studio-l-titoletto { margin: 0.4rem 0 0; font-size: 1rem; color: var(--testo); overflow-wrap: anywhere; }
+.studio-l-testo { margin: 0; color: var(--testo); line-height: 1.45; overflow-wrap: anywhere; }
+.studio-l-righe, .studio-l-prova { margin: 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 0.3rem;
+  color: var(--testo); overflow-wrap: anywhere; }
+.studio-l-domanda { display: flex; flex-direction: column; gap: 0.3rem; align-items: flex-start; }
+.studio-l-soluzione { margin: 0; color: var(--testo); border-top: 1px dashed var(--accento-bordo); padding-top: 0.3rem;
+  overflow-wrap: anywhere; }
+.studio-l-voce .studio-nota { overflow-wrap: anywhere; }
+.studio-l-voce .studio-tasti { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.studio-c-campo { width: 100%; box-sizing: border-box; font: inherit; padding: 0.5rem; border-radius: 0.6rem;
+  border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo); resize: vertical; }
+.studio-c-modulo select { font: inherit; min-height: 2.6rem; padding: 0.3rem 0.6rem; border-radius: 0.6rem;
+  border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo); max-width: 100%; }
+.studio-c-voce .studio-testo b { overflow-wrap: anywhere; }
+/* La vista del tutore e le indicazioni (31/10, passo 10, #250 e #285, studio.js): blocchi uno
+   sotto l'altro, i testi vanno sempre a capo, i tre giudizi su una riga quando ci stanno */
+.studio-t-pannello { display: flex; flex-direction: column; gap: 0.9rem; min-width: 0; }
+.studio-t-blocco { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; padding-top: 0.5rem;
+  border-top: 1px solid var(--bordo); }
+.studio-t-titolo { margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--testo); overflow-wrap: anywhere; }
+.studio-t-testo-ind { overflow-wrap: anywhere; }
+.studio-t-per-te .studio-h-riga, .studio-t-pannello .studio-h-riga { overflow-wrap: anywhere; }
+.studio-t-argomento { flex-direction: column; align-items: stretch; }
+.studio-t-giudizi .studio-h-tasto { flex: 1 1 6.5rem; padding: 0 0.6rem; }
+.studio-t-giudizi .studio-h-tasto[aria-pressed="true"] { font-weight: 700; }
+.studio-t-modulo { display: flex; flex-direction: column; gap: 0.45rem; }
+.studio-t-scelte { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.studio-t-campo { width: 100%; box-sizing: border-box; font: inherit; padding: 0.5rem; border-radius: 0.6rem;
+  border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo); resize: vertical;
+  min-height: 2.75rem; }
+.studio-t-scelte .studio-t-campo { flex: 1 1 9rem; width: auto; max-width: 100%; }
+.studio-t-guarda .studio-c-esiti .studio-h-tasto { flex: 1 1 6.5rem; }
+/* I premi dello Studio (31/10, #296, studio.js): la serie, le stelle col loro traguardo, i duelli;
+   niente colori che premono, i testi vanno a capo; gli interruttori del tutore su una riga quando
+   ci stanno */
+.studio-r .studio-h-riga, .studio-t-premi .studio-h-riga { overflow-wrap: anywhere; }
+.studio-r-stelle summary { cursor: pointer; min-height: 2.75rem; padding-top: 0.6rem; box-sizing: border-box; }
+.studio-r-stella { align-items: baseline; gap: 0.5rem; justify-content: flex-start; flex-wrap: nowrap; }
+.studio-r-stella .studio-h-riga { min-width: 0; }
+.studio-r-segno { color: var(--accento); flex: none; }
+.studio-r-duelli { display: flex; flex-direction: column; gap: 0.45rem; min-width: 0; padding-top: 0.5rem;
+  border-top: 1px solid var(--bordo); }
+.studio-r-duello { flex-direction: column; align-items: stretch; }
+.studio-r-pannello { display: flex; flex-direction: column; gap: 0.55rem; min-width: 0; }
+.studio-t-interruttori .studio-h-tasto { flex: 1 1 7rem; padding: 0 0.6rem; }
+.studio-t-interruttori .studio-h-tasto[aria-pressed="true"] { font-weight: 700; }
+/* Le prove dello Studio (31/10, passo 8, #248, studio.js): la verifica finta con le risposte, la
+   correzione con l'esito sempre scritto a parole (il colore è solo un aiuto in più) */
+.studio-p-prova, .studio-p-correzione { display: flex; flex-direction: column; gap: 0.55rem; }
+.studio-p-voci { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: column; gap: 0.8rem; }
+.studio-p-voce { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.studio-p-scelte { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.studio-p-opzione { display: flex; align-items: center; gap: 0.6rem; min-height: 2.75rem; padding: 0 0.6rem;
+  border-radius: 0.6rem; border: 1px solid var(--accento-bordo); overflow-wrap: anywhere; cursor: pointer; }
+.studio-p-opzione input { width: 1.25rem; height: 1.25rem; flex: none; }
+.studio-p-opzione span { min-width: 0; }
+.studio-p-esito-voce { font-weight: 600; color: var(--testo); }
+.studio-p-giusto .studio-p-esito-voce { color: var(--accento); }
+.studio-p-sbagliato .studio-p-esito-voce, .studio-p-da_rivedere .studio-p-esito-voce { color: var(--allarme); }
+.studio-p-tempo { font-weight: 600; }
+/* La mappa concettuale dello Studio (30/10, passo 7, #247, studio.js): la mappa in SVG (il testo dei
+   concetti in <text>, mai HTML) e la vista a elenco, equivalente; niente si fa solo trascinando.
+   Giusta blu, sbagliata arancio (si distinguono anche per luminosità), sempre con la parola */
+.studio-m { display: flex; flex-direction: column; gap: 0.6rem; }
+.studio-m-schede { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.studio-m-tela { width: 100%; border-radius: 0.8rem; border: 1px solid var(--accento-bordo); background: var(--pannello);
+  touch-action: none; display: block; }
+.studio-m-tela .studio-m-nodo rect { fill: var(--pannello-2); stroke: var(--accento-bordo); stroke-width: 2; }
+.studio-m-tela .studio-m-nodo.suo rect { fill: #2a2416; stroke: #d9a520; }
+.studio-m-tela .studio-m-nodo.casella rect { stroke-dasharray: 8 5; fill: var(--accento-fondo); }
+.studio-m-tela .studio-m-nodo.proposto rect { stroke: var(--tenue); stroke-dasharray: 3 4; }
+.studio-m-tela .studio-m-nodo.giusta rect { stroke: #4a8fe8; stroke-width: 4; }
+.studio-m-tela .studio-m-nodo.sbagliata rect { stroke: #e8762a; stroke-width: 4; }
+.studio-m-tela .studio-m-nodo.scelto rect { stroke: var(--accento); stroke-width: 5; }
+.studio-m-tela .studio-m-nodo:focus { outline: none; }
+.studio-m-tela .studio-m-nodo:focus-visible rect { stroke: var(--accento-chiaro); stroke-width: 6; }
+.studio-m-tela text { fill: var(--testo); font-size: 22px; font-family: inherit; pointer-events: none; }
+.studio-m-tela .studio-m-verbo { fill: var(--accento-chiaro); font-size: 19px; paint-order: stroke; stroke: var(--pannello); stroke-width: 6px; }
+.studio-m-tela line { stroke: var(--tenue); stroke-width: 2.5; }
+.studio-m-tela line.in_piu, .studio-m-tela line.verbo_diverso { stroke: #e8762a; stroke-dasharray: 10 6; }
+.studio-m-tela .studio-m-punta { fill: var(--tenue); }
+.studio-m-pannello { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.7rem 0.8rem; border-radius: 0.8rem;
+  border: 1px solid var(--accento-bordo); background: var(--accento-fondo); }
+.studio-m-elenco { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+.studio-m-voce { display: flex; flex-direction: column; gap: 0.35rem; padding: 0.55rem 0.7rem; border-radius: 0.7rem;
+  border: 1px solid var(--bordo); }
+.studio-m-voce b { overflow-wrap: anywhere; color: var(--testo); font-size: 1.05rem; }
+.studio-m-coll { list-style: none; margin: 0; padding: 0 0 0 0.6rem; display: flex; flex-direction: column; gap: 0.3rem; }
+.studio-m-coll li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; justify-content: space-between;
+  overflow-wrap: anywhere; color: var(--testo); font-size: 1rem; }
+.studio-m-esito { font-size: 1rem; font-weight: 700; }
+.studio-m-esito.giusta { color: #7fb4f5; }
+.studio-m-esito.sbagliata, .studio-m-esito.vuota, .studio-m-esito.manca { color: #f0a06a; }
+.studio-m-campo, .studio-m select { font: inherit; font-size: 1rem; min-height: 2.75rem; padding: 0.3rem 0.6rem;
+  border-radius: 0.6rem; border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo);
+  max-width: 100%; box-sizing: border-box; }
+.studio-m-campo { width: 100%; }
+.studio-m-parole { margin: 0; font-size: 1rem; color: var(--testo); overflow-wrap: anywhere; }
+.studio-m .studio-h-chip { min-width: 2.75rem; }
+/* La mappa libera (30/10, passo 7c, #328): i concetti chiave trovati in blu, col nome da rivedere
+   in arancio (sempre con la parola), il verso diverso tratteggiato; gli indicatori del metodo */
+.studio-m-tela .studio-m-nodo.chiave rect { stroke: #4a8fe8; stroke-width: 4; }
+.studio-m-tela .studio-m-nodo.da_rivedere rect { stroke: #e8762a; stroke-width: 4; }
+.studio-m-tela line.verso_diverso { stroke: #e8762a; stroke-dasharray: 10 6; }
+.studio-m-esito.chiave { color: #7fb4f5; }
+.studio-m-esito.da_rivedere { color: #f0a06a; }
+.studio-m-indicatori li { color: var(--testo); font-size: 1rem; overflow-wrap: anywhere; }
+.studio-m .studio-avviso { font-size: 1rem; }
+/* I tasti delle carte nell'elenco (Correggi, Tieni, Togli): a capo invece della griglia a quattro
+   colonne delle pagine, che a 320 px col testo grande li stringeva sotto i 44 px (30/10, #247) */
+.studio-c-voce .studio-tasti { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.studio-c-voce .studio-tasti .tasto { flex: 1 1 auto; min-width: 2.75rem; }
+/* Il ripasso da ascoltare dello Studio (31/10, passo 9, #249, studio.js): il lettore della parte
+   (titolo, barra, tempo, −15 s, Ascolta/Pausa, velocità, parte prima e dopo, Scarica) e l'elenco
+   delle parti; il titolo è un dato e va sempre a capo */
+.studio-a { display: flex; flex-direction: column; gap: 0.55rem; }
+.studio-a-player { display: flex; flex-direction: column; gap: 0.45rem; padding: 0.8rem 0.9rem; border-radius: 0.8rem;
+  border: 1px solid var(--accento-bordo); background: var(--accento-fondo); min-width: 0; }
+.studio-a-titolo { margin: 0; display: flex; flex-direction: column; gap: 0.15rem; color: var(--testo); overflow-wrap: anywhere; }
+.studio-a-dato { display: block; color: var(--tenue); overflow-wrap: anywhere; }
+.studio-a-barra { width: 100%; min-height: 2.75rem; margin: 0; accent-color: var(--accento); }
+.studio-a-tempo { font-variant-numeric: tabular-nums; font-size: 0.9rem; color: var(--tenue); }
+.studio-a-tasti .studio-h-tasto { flex: 1 1 6.5rem; min-width: 2.75rem; }
+.studio-a-scarica { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; box-sizing: border-box; }
+.studio-a-corrente .studio-testo b { color: var(--accento-chiaro); }
+.studio-a-barra:focus-visible, .studio-a-scarica:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }
+
+/* Gli esercizi guidati dello Studio (31/10, #278, esercizio.js): il testo del problema com'è, a
+   capo dove serve; la foto come un tasto (il campo file nascosto ma raggiungibile) */
+.studio-e-testo { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.3rem 0 0.6rem;
+  padding: 0.6rem 0.7rem; border-radius: 0.6rem; background: var(--fondo-2, rgba(127, 127, 127, 0.08)); }
+.studio-e-foto { display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  min-height: 44px; }
+.studio-e-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.studio-e-file:focus-visible + * , .studio-e-foto:focus-within { outline: 2px solid var(--accento, currentColor); }
+.studio-e-passo { margin-top: 0.6rem; }
+.studio-e-indizio { font-style: italic; overflow-wrap: anywhere; }
+.studio-e-fatti { margin: 0.4rem 0; padding-left: 1.4rem; }
+.studio-e-fatto { overflow-wrap: anywhere; margin-bottom: 0.3rem; }
+.studio-e-fatto .studio-nota { display: block; }
+.studio-e-anteprima { display: block; overflow-wrap: anywhere; }

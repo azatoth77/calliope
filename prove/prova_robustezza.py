@@ -936,7 +936,8 @@ def prova_schema():
     Numeratore(path)
     db = sqlite3.connect(path)
     ver = dict(db.execute("SELECT modulo, versione FROM meta_schema").fetchall())
-    check(ver.get("agenda") == 1 and ver.get("memoria") == 1 and ver.get("liste") == 1
+    # Le liste sono alla versione 2 dal 30/10 (#263, l'ora dell'ultimo cambiamento su disco)
+    check(ver.get("agenda") == 1 and ver.get("memoria") == 1 and ver.get("liste") == 2
           and ver.get("numeri") == 1, f"ogni modulo ha la sua versione in meta_schema: {ver}")
     # migrazioni numerate: dalla versione registrata in avanti, una volta sola
     fatte = []
@@ -1086,15 +1087,23 @@ def prova_incroci():
           f"il «sì» va al documento anche con il timer in mezzo, «rosso» all'agente: "
           f"{risposte}")
     # Un annuncio rinviato non resta in coda per sempre se nessuno risponde: alla scadenza
-    # della domanda di prima l'ascolto si sveglia da solo (main.rinvia) e lo dice
+    # della domanda di prima l'ascolto si sveglia da solo (main.rinvia) e lo dice. Il tempo si
+    # conta dal primo ascolto, non dall'avvio (31/10, #335): l'avvio di main prova l'Ollama
+    # locale tre volte (immagini, capacità, contesto) e su Windows una porta chiusa costa ~2 s
+    # a tentativo, così sul portatile senza Ollama la prova cadeva (6,6 s contro 5)
     tmp = Path(tempfile.mkdtemp())
-    t0 = time.monotonic()
-    detto, uscita, righe = _main_finto(
-        tmp, [], documenti=[doc], lavori=[lav], scadenza_s=0.6,
-        prima_di_ascoltare=lambda n: "attendi" if n == 1 else None)
-    check(any("di che colore" in t for t in detto) and time.monotonic() - t0 < 5,
+    ascolto = []
+
+    def attendi(n):
+        if n == 1:
+            ascolto.append(time.monotonic())
+            return "attendi"
+    detto, uscita, righe = _main_finto(tmp, [], documenti=[doc], lavori=[lav], scadenza_s=0.6,
+                                       prima_di_ascoltare=attendi)
+    dt = time.monotonic() - ascolto[0] if ascolto else float("inf")
+    check(any("di che colore" in t for t in detto) and dt < 3,
           f"nessuno risponde al «La apro?»: la domanda dell'agente arriva alla scadenza "
-          f"({time.monotonic() - t0:.1f} s), senza che nessuno parli")
+          f"({dt:.1f} s dal primo ascolto, scadenza 0,6 s), senza che nessuno parli")
 
 
 def prova_cortesia():

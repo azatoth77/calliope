@@ -600,6 +600,13 @@ def prova_servizio(cartella_modelli):
         verifica("XML emesso valido per l'XSD", fatturapa.valida_xsd(xml, XSD) == [])
     verifica("registro della numerazione", [d["numero"] for d in u.numeri.elenco("fatture", 2026)]
              == [1])
+    # Il totale nei dati del numero (28/10, passo 2e, #260: la pagina Ufficio lo mostra senza
+    # rifare i conti), con il cliente della rubrica e il da pagare della ritenuta
+    reg1 = u.numeri.elenco("fatture", 2026, con_dati=True)[0]
+    verifica("registro con i dati: totale, da pagare e cliente salvati all'emissione",
+             reg1["dati"].get("_totale") == "1220.00" and reg1["dati"].get("_da_pagare") == "1020.00"
+             and reg1["dati"]["cliente"]["nome_completo"].startswith("Rossi & Figli") and reg1["owner"]
+             and reg1["creato"] > 0 and "dati" not in u.numeri.elenco("fatture", 2026)[0], json.dumps(reg1["dati"])[:200])
     # Privato: niente ritenuta (non ha partita IVA), bollo solo se serve
     est.code.append({"cliente": "Mario Rossi", "righe": [{"descrizione": "Riparazione PC",
                                                           "quantita": None, "prezzo": 122,

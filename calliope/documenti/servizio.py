@@ -107,6 +107,25 @@ class Archive:
                 "ORDER BY modificato DESC, id DESC LIMIT ?", (owner, max(1, int(n)))).fetchall()
         return [dict(zip(campi, r)) for r in rows]
 
+    def conta(self, owner=None) -> int:
+        """Quanti documenti ha `owner` (tutti con None): la tessera Documenti (28/10, #259)."""
+        with self._lock:
+            if owner is None:
+                return int(self.db.execute("SELECT COUNT(*) FROM documenti").fetchone()[0])
+            return int(self.db.execute("SELECT COUNT(*) FROM documenti WHERE owner = ?",
+                                       (owner,)).fetchone()[0])
+
+    def recenti_di_tutti(self, n: int = 10) -> list[dict]:
+        """Gli ultimi `n` documenti di ogni persona, dal più recente (senza il contenuto): la
+        pagina Documenti di chi amministra (28/10, #259, decisione di Dario)."""
+        campi = [f for f in _FIELDS if f != "contenuto"]
+        with self._lock:
+            rows = self.db.execute(
+                f"SELECT {', '.join(campi)} FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY owner "
+                "ORDER BY modificato DESC, id DESC) AS n FROM documenti) WHERE n <= ? "
+                "ORDER BY modificato DESC, id DESC", (max(1, int(n)),)).fetchall()
+        return [dict(zip(campi, r)) for r in rows]
+
     def trova(self, owner, quale: str = "") -> dict | None:
         """Il documento di `owner` detto con parole del titolo («la tabella dell'idratazione»),
         o l'ultimo se `quale` è vuoto; None se le parole non corrispondono a nessuno dei suoi
@@ -256,6 +275,15 @@ class Documenti:
                     result["annuncio"] = result["annuncio_scheda"]
             except Exception as e:  # noqa: BLE001 — lo schermo non ferma l'annuncio
                 print(f"   [DOCUMENTI] scheda non inviata: {e}", flush=True)
+        # Nessuno schermo aperto, ma uno personale abbinato (28/10, #259): la pagina Documenti
+        ha_pagina = getattr(job, "ha_pagina", None)
+        if background and result.get("annuncio_pagina") and result.get("annuncio") != \
+                result.get("annuncio_scheda") and callable(ha_pagina):
+            try:
+                if ha_pagina():
+                    result["annuncio"] = result["annuncio_pagina"]
+            except Exception:  # noqa: BLE001 — nel dubbio, l'annuncio di sempre
+                pass
         if background:
             text = result.get("annuncio") or result.get("frase") or ""
             if text:
@@ -320,11 +348,23 @@ class Documenti:
         sulla_scheda = {}
         if d.get("remoto") is False:
             lo = "averla" if fem else "averlo"
+            la = "la" if fem else "lo"
             sulla_scheda = {
                 "frase_scheda": (f"Ho preparato {name} «{doc['titolo']}»: {what}. È sulla "
                                  f"scheda del tuo schermo: per {lo} tocca «Scarica»."),
                 "annuncio_scheda": (f"È {pronto} {name} «{doc['titolo']}»: {what}. È sulla "
-                                    f"scheda del tuo schermo: per {lo} tocca «Scarica».")}
+                                    f"scheda del tuo schermo: per {lo} tocca «Scarica»."),
+                # Con uno schermo personale abbinato ma chiuso (28/10, #259): il documento si
+                # ritrova nella pagina Documenti, non «sul server» (lo sceglie il tool, o
+                # l'annuncio, con Schermi.personale_abbinato). Appena fatto è il primo della
+                # pagina. Senza dire quale schermo: può essere il telefono o il PC personale, e
+                # gli schermi non dicono di che tipo sono (revisione della PR #268)
+                "frase_pagina": (f"Ho preparato {name} «{doc['titolo']}»: {what}. {la.capitalize()} "
+                                 f"trovi in Le mie cose, alla voce Documenti: per {lo} tocca "
+                                 f"«Scarica»."),
+                "annuncio_pagina": (f"È {pronto} {name} «{doc['titolo']}»: {what}. {la.capitalize()} "
+                                    f"trovi in Le mie cose, alla voce Documenti: per {lo} "
+                                    f"tocca «Scarica».")}
         leggi = (" Per dire cosa contiene, riassumerlo o mostrarlo di nuovo: documento_leggi.")
         return {"ok": True, "documento": doc_id, "formato": formato, "titolo": doc["titolo"],
                 "nome_file": d["nome_file"], "contenuto": what, "secondi": round(total_s, 1),
@@ -343,17 +383,33 @@ class Documenti:
                 **({"in_sospeso": in_sospeso(ask.strip(), f"{name} «{doc['titolo']}»")}
                    if can_open else {})}
 
-    def scrivi_fisso(self, owner: str, formato: str, doc: dict) -> dict:
+    def scrivi_fisso(self, owner: str, formato: str, doc: dict, owner_name: str = "") -> dict:
         """Un documento con il testo già pronto nel codice (la guida per collegare la casa):
-        niente LLM, stessa validazione, stesso file e stessa consegna. Non entra
-        nell'archivio delle modifiche. {"ok", "nome_file", "dove", "apribile"}."""
+        niente LLM, stessa validazione, stesso file e stessa consegna.
+        {"ok", "nome_file", "dove", "apribile", "sul_server"}; rimasto sul server anche
+        "documento" e "scheda".
+
+        Rimasto sul server perché il satellite non riceve documenti (un telefono), entra
+        nell'archivio di `owner` come un documento fatto da Calliope (28/10, #277: sull'iPhone
+        «Ti ho preparato la guida in PDF sul server, perché il satellite collegato non riceve
+        documenti», e la guida non si ritrovava da nessuna parte): la pagina Documenti la mostra
+        con «Scarica», e chi chiede la guida riceve la scheda. *Storico: fino al 28/10 non
+        entrava mai nell'archivio.* Consegnata al PC resta fuori, come prima. Senza `owner` (un
+        id di persona) niente archivio (29/10, #287): un documento di nessuno non si ritrova."""
         doc = validate(formato, doc)
         data = render(formato, doc, self.fonts)
         ext = ESTENSIONI[formato]
         d = self.delivery.deliver(safe_filename(doc["titolo"]), ext, data)
-        return {"ok": True, "nome_file": d["nome_file"],
-                "dove": d.get("dove") or self.delivery.where(),
-                "apribile": self._offer(owner, d, doc["titolo"], ext)}
+        out = {"ok": True, "nome_file": d["nome_file"],
+               "dove": d.get("dove") or self.delivery.where(),
+               "apribile": self._offer(owner, d, doc["titolo"], ext),
+               "sul_server": d.get("remoto") is False}
+        if out["sul_server"] and str(owner or "").strip():
+            doc_id = self.archive.add(owner, owner_name or owner, formato, doc["titolo"], d["rif"],
+                                      d["nome_file"], doc, d.get("mtime"), doc["titolo"])
+            out["documento"] = doc_id
+            out["scheda"] = _scheda(doc, formato, d["nome_file"], ident=doc_id)
+        return out
 
     def _offer(self, owner: str, delivered: dict, title: str, ext: str) -> bool:
         """Il file appena scritto diventa l'«ultima ricerca» della persona sul PC:

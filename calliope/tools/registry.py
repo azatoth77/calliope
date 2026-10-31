@@ -14,7 +14,7 @@ import json
 from .. import politica
 from ..conferme import admin_confermato, chiedi_conferma, e_admin, incerta_con_admin
 from . import dialogo
-from .spec import ToolSpec, ToolContext, note_rule, serve_la_voce
+from .spec import ToolSpec, ToolContext, irreversibile_scritto, note_rule, serve_la_voce
 from ..testi import NIENTE
 
 # Rifiuto per permessi, detto così com'è (risposta_finale): gentile, e senza un'altra
@@ -106,6 +106,68 @@ def argomenti_con_azione(extra: dict, arguments) -> dict:
     if not azione_dal_nome(f"sviluppo_{str(args.get('azione') or '').strip().lower()}"):
         args.update(extra)
     return args
+
+
+# I tool veri `studio_*`: un nome che comincia con uno di loro («studio_carte_scrivi») è di quel
+# tool, non un'azione di `studio` (revisione della PR #374). Il chiamante aggiunge i nomi del suo
+# registro (anche quelli che verranno)
+STUDIO_VERI = frozenset({"studio_pagina_leggi", "studio_carte", "studio_interroga",
+                         "studio_attivita", "studio_ascolta", "studio_esercizio",
+                         "studio_mappa_consigli"})
+
+
+def studio_dal_nome(name, arguments, veri=()) -> tuple[str, dict] | None:
+    """Un nome inventato `studio_<oggetto>_<azione>` (31/10, #373: gemma4 26B chiamava
+    `studio_verifica_crea` e la verifica non si creava) → ("studio", argomenti con l'azione):
+    l'azione degli argomenti se è un'azione di `studio`, altrimenti l'unica azione di `studio`
+    fra le parole del nome («crea», «sposta», «salta_oggi»). Correzione della forma di una
+    scelta già fatta dal modello (principio 10, regola `tool_nome_azione`). Gli argomenti che
+    `studio` non conosce si tolgono. None senza un'azione che esiste, con due azioni diverse nel
+    nome, o per un altro prefisso. Il chiamante controlla prima che il nome non sia un tool vero.
+    Revisione della PR #374: None anche se il nome dice un'azione diversa da quella degli
+    argomenti (`studio_verifica_sposta` con «archivia»), e se comincia col nome di un altro tool
+    vero (`studio_carte_scrivi`, `studio_mappa_consigli_x`: `veri` e `STUDIO_VERI`)."""
+    n = str(name or "").strip().lower().replace("-", "_").replace(" ", "_")
+    if not n.startswith("studio_"):
+        return None
+    if any(n.startswith(v + "_") for v in set(STUDIO_VERI) | {str(x) for x in veri or ()}
+           if v != "studio"):
+        return None
+    from .studio import AZIONI, PARAMETRI
+    args = dict(arguments) if isinstance(arguments, dict) else {}
+    parti = [x for x in n.split("_")[1:] if x]
+    trovate, i = [], 0
+    while i < len(parti):
+        for k in (3, 2, 1):
+            w = "_".join(parti[i:i + k])
+            if len(parti[i:i + k]) == k and w in AZIONI:
+                trovate.append(w)
+                i += k
+                break
+        else:
+            i += 1
+    trovate = list(dict.fromkeys(trovate))
+    a = str(args.get("azione") or "").strip().lower()
+    if a in AZIONI:
+        if trovate and trovate != [a]:
+            return None                      # il nome e gli argomenti dicono due azioni
+    else:
+        if len(trovate) != 1:
+            return None
+        a = trovate[0]
+    ammessi = PARAMETRI.get("properties") or {}
+    args = {k: v for k, v in args.items() if k in ammessi}
+    args["azione"] = a
+    return "studio", args
+
+
+def nome_e_argomenti(name, arguments, veri=()) -> tuple[str, dict] | None:
+    """Il tool vero e gli argomenti di un nome inventato con l'azione dentro: `sviluppo_<azione>`
+    (10/10) e `studio_<…>_<azione>` (31/10, #373); None per gli altri."""
+    conv = nome_con_azione(name)
+    if conv is not None:
+        return conv[0], argomenti_con_azione(conv[1], arguments)
+    return studio_dal_nome(name, arguments, veri)
 NOME_DISTANZA_MAX = 2
 NOME_LUNGHEZZA_MIN = 6
 NOME_SUGGERIMENTI_MAX = 4
@@ -204,11 +266,18 @@ class ToolRegistry:
     def sconosciuto(self, name: str) -> str:
         """L'errore per un tool che non c'è: niente è stato eseguito e, se ci sono, i nomi
         giusti più vicini (con un solo nome vicino il modello riprova con quello)."""
-        vicini = [v for _, v in self.vicini(name)][:NOME_SUGGERIMENTI_MAX]
+        n = str(name or "").strip().lower().replace("-", "_").replace(" ", "_")
+        # Anche per prefisso (31/10, #373): per `studio_verifica_cancella` il tool `studio`,
+        # così il modello non ripete la stessa chiamata
+        prefissi = sorted((v for v in self._tools if n.startswith(v + "_")), key=len,
+                          reverse=True)
+        vicini = list(dict.fromkeys(prefissi + [v for _, v in self.vicini(name)]))
+        vicini = vicini[:NOME_SUGGERIMENTI_MAX]
         out = {"errore": f"tool sconosciuto: {name}", "ok": False, "fatto": NIENTE}
         if vicini:
             out["nomi_giusti"] = vicini
-            out["cosa_fare"] = ("se intendevi uno di questi, chiamalo con il nome esatto; "
+            out["cosa_fare"] = ("se intendevi uno di questi, chiamalo con il nome esatto (le "
+                                "azioni vanno nell'argomento «azione», non nel nome); "
                                 "per le altre richieste chiama i tool come sempre")
         return json.dumps(out, ensure_ascii=False)
 
@@ -220,12 +289,12 @@ class ToolRegistry:
         sa completare da sola (`web_cerca({'tipo': 'notizie'})`), un valore fuori dai valori
         ammessi o del tipo sbagliato, un argomento che la funzione non conosce. Gli
         obbligatori con un valore predefinito nella funzione restano ai tool, che li
-        completano (la proposta in sospeso di lavoro_affida, l'esercizio di compiti_aiuto)."""
+        completano (la proposta in sospeso di lavoro_affida)."""
         spec = self._tools.get(name)
         if spec is None:
-            conv = nome_con_azione(name)
+            conv = nome_e_argomenti(name, arguments, self._tools)
             if conv is not None and self._tools.get(conv[0]) is not None:
-                spec, arguments = self._tools[conv[0]], argomenti_con_azione(conv[1], arguments)
+                spec, arguments = self._tools[conv[0]], conv[1]
             else:
                 vero = NOMI_VECCHI.get(name) or self.nome_vicino(name)
                 spec = self._tools.get(vero) if vero else None
@@ -273,12 +342,14 @@ class ToolRegistry:
             spec = self._tools[name]
         if spec is None:
             # `sviluppo_<azione>` inventato (10/10): sviluppo_passo con quell'azione, prima del
-            # nome vicino (`sviluppo_chiudi` è a una lettera da sviluppo_chiedi)
-            conv = nome_con_azione(name)
+            # nome vicino (`sviluppo_chiudi` è a una lettera da sviluppo_chiedi); dal 31/10
+            # (#373) `studio_verifica_crea` e simili: studio con l'azione. Permessi e politica
+            # qui sotto sono quelli del tool vero
+            conv = nome_e_argomenti(name, arguments, self._tools)
             if conv is not None and self._tools.get(conv[0]) is not None:
                 note_rule(ctx, "tool_nome_azione")
                 name, spec = conv[0], self._tools[conv[0]]
-                arguments = argomenti_con_azione(conv[1], arguments)
+                arguments = conv[1]
         if spec is None:
             # Nome storpiato ma senza dubbi: vale il tool giusto, con tutti i controlli qui
             # sotto (politica, livello, minori) come se il modello l'avesse scritto bene
@@ -303,6 +374,16 @@ class ToolRegistry:
             except Exception:  # noqa: BLE001 — nel dubbio, gli argomenti come sono
                 pass
         sc = getattr(ctx, "speaker_ctx", None)
+        # La soluzione di un esercizio guidato vivo di chi parla negli argomenti (31/10, #278,
+        # revisione della PR #367: «ricorda» la ripeteva nella sua conferma): non si scrive né
+        # si mostra, con una frase del codice
+        from ..studio.esercizi import guardia_argomenti, guardia_risultato
+        fermo = guardia_argomenti(name, arguments, ctx)
+        if fermo is not None:
+            note_rule(ctx, "studio_esercizio_svelato")
+            print(f"   [STUDIO] {name}: la soluzione di un esercizio guidato negli argomenti, "
+                  f"non lo eseguo", flush=True)
+            return json.dumps(fermo, ensure_ascii=False)
         # Dopo un dato non fidato letto in questa risposta, solo letture (politica.DOPO_DATO)
         fermo = politica.bloccata(name, ctx, arguments)
         if fermo is not None:
@@ -410,6 +491,13 @@ class ToolRegistry:
         # Politica unica (05/10, calliope/politica.py): classe del tool, azione chiesta in
         # questo turno, conversazione con dati non fidati, provenienza degli argomenti. Qui,
         # nell'esecutore: il modello non la scavalca e un canale nuovo non la dimentica
+        # Ciò che non si disfa, scritto o toccato dallo schermo personale: solo a voce (28/10,
+        # decisione dopo la revisione della PR #304). Qui, dopo livello e minori e prima della
+        # politica: nessuna domanda né «sì» scritto la fa passare
+        fermo = irreversibile_scritto(ctx, spec, name, arguments or {})
+        if fermo is not None:
+            print(f"   [POLITICA] {name}: scritto_irreversibile_voce", flush=True)
+            return json.dumps(fermo, ensure_ascii=False)
         fermo = politica.controlla(spec, name, arguments or {}, ctx)
         if fermo is not None:
             return json.dumps(fermo, ensure_ascii=False)
@@ -429,6 +517,12 @@ class ToolRegistry:
             result = spec.func(ctx, **(arguments or {}))
             if result is None:
                 result = {"ok": True}
+            # Le frasi pronte del risultato con la soluzione di un esercizio vivo (#278): la
+            # frase del codice al loro posto (non passano dalla guardia della voce di Brain)
+            pulito = guardia_risultato(name, result, ctx)
+            if pulito is not result:
+                note_rule(ctx, "studio_esercizio_svelato")
+                result = pulito
             return json.dumps(dialogo.uniforma(result), ensure_ascii=False, default=str)
         except Exception as e:  # noqa: BLE001 — l'errore torna al modello, mai la traccia
             # Gli argomenti sono già stati controllati: un'eccezione qui è del tool (09/10:

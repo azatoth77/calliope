@@ -208,16 +208,18 @@ def prova(exe, srv, hub, web):
         verifica("sullo schermo di un'altra persona la scheda non c'è",
                  not bianca.valuta("!!document.querySelector('.markdown')"))
 
-        # ── il telefono: carosello e schermo intero ──
-        ok = aspetta(lambda: tel.valuta("!!document.querySelector('#binario [data-chiave=\"lavoro:L9\"] .markdown')"), 10)
-        verifica("telefono: la scheda nel carosello", bool(ok))
-        sel_t = '#binario [data-chiave="lavoro:L9"]'
-        controlla(tel, sel_t, "telefono (carosello)")
+        # ── il telefono: Le mie cose › Lavori e schermo intero ──
+        ok = aspetta(lambda: tel.valuta("!!document.querySelector('#sez-cose [data-chiave=\"lavoro:L9\"] .markdown')"), 10)
+        tel.valuta(f"{T}.vaiA('lavoro:L9'); 1")
+        aspetta(lambda: tel.valuta("!document.getElementById('sez-cose').hidden"), 2)
+        verifica("telefono: la scheda in Le mie cose › Lavori", bool(ok))
+        sel_t = '#sez-cose [data-chiave="lavoro:L9"]'
+        controlla(tel, sel_t, "telefono (Le mie cose)")
         scarica(tel, sel_t, "pdf", b"%PDF-")
         tel.valuta(f"{T}.vaiA('lavoro:L9'); 1")
         time.sleep(0.2)
         PSI.tocca(tel, sel_t + " .espandi")
-        ok = aspetta(lambda: tel.valuta(f"{T}.carosello().intera") == "lavoro:L9", 3)
+        ok = aspetta(lambda: tel.valuta(f"{T}.sezioni().intera") == "lavoro:L9", 3)
         verifica("telefono: «Espandi» apre il documento a schermo intero", bool(ok))
         controlla(tel, "#intera-posto article.scheda", "telefono (schermo intero)")
         for w, hh, nome in PSI.DIMENSIONI:

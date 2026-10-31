@@ -205,6 +205,10 @@ class Agenda:
                 (owner,)).fetchall()
         return [dict(zip(_FIELDS, r)) for r in rows]
 
+    def giorni(self, owner=None, ora: float | None = None) -> dict:
+        """La vista per giorno di `owner` (28/10, #257): vedi `per_giorno`."""
+        return per_giorno(self.items(owner), ora)
+
     def appointments(self, owner, start: float, end: float) -> list[dict]:
         """Gli appuntamenti di `owner` tra due istanti (epoch), in ordine."""
         with self._lock:
@@ -344,6 +348,47 @@ class Agenda:
                 self.on_due()
             except Exception as e:  # noqa: BLE001
                 print(f"   [AGENDA] on_due: {type(e).__name__}: {e}", flush=True)
+
+
+# La vista per giorno (28/10, passo 2b del telefono a sezioni, #257): la pagina Agenda di «Le mie
+# cose». «In settimana» sono i giorni dopo domani fino al sesto da oggi (una settimana con oggi);
+# quello che viene dopo si conta soltanto
+GIORNI_SETTIMANA = 7
+
+
+def per_giorno(voci, ora: float | None = None) -> dict:
+    """Le voci dell'agenda (come le dà `items`) divise per giorno del calendario locale:
+    {"timer": [...], "oggi": [...], "domani": [...], "settimana": [...], "dopo": n}.
+
+    - i timer della casa a parte, quelli non ancora scaduti, in ordine di scadenza (hanno il loro
+      conto alla rovescia e i loro tasti);
+    - promemoria e appuntamenti per il giorno in cui scadono: oggi (da adesso a mezzanotte),
+      domani, in settimana (da dopodomani al sesto giorno da oggi); `dopo` quanti oltre;
+    - gli avvisi interni restano fuori, e così le voci già scadute che il thread non ha ancora
+      tolto (il loro annuncio arriva comunque).
+
+    Il giorno si decide sulla data locale della scadenza, non contando 86400 secondi: una voce a
+    mezzanotte in punto è di domani, e il cambio dell'ora legale non sposta niente."""
+    ora = time.time() if ora is None else ora
+    oggi = datetime.date.fromtimestamp(ora)
+    out = {"timer": [], "oggi": [], "domani": [], "settimana": [], "dopo": 0}
+    for it in sorted(voci or (), key=lambda v: (v.get("due") or 0, v.get("id") or 0)):
+        due = float(it.get("due") or 0)
+        if it.get("kind") == "avviso" or due <= ora:
+            continue
+        if it.get("kind") == "timer":
+            out["timer"].append(it)
+            continue
+        giorni = (datetime.date.fromtimestamp(due) - oggi).days
+        if giorni <= 0:
+            out["oggi"].append(it)
+        elif giorni == 1:
+            out["domani"].append(it)
+        elif giorni < GIORNI_SETTIMANA:
+            out["settimana"].append(it)
+        else:
+            out["dopo"] += 1
+    return out
 
 
 def _in(seconds: float) -> str:

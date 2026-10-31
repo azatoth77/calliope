@@ -325,8 +325,9 @@ class Cruscotto:
         n = 0
         for s in self.hub.abbinati():
             if self.amministra(s):
-                n += bool(self.hub.invia_a(s["id"], schede.testo(titolo, testo,
-                                                                 schede.PERSONALE)))
+                # Con l'identità letta adesso (#338): passato a un'altra persona, non va
+                n += bool(self.hub.invia_a(s["id"], schede.testo(titolo, testo, schede.PERSONALE),
+                                           creato=s.get("creato"), proprietario=s.get("proprietario")))
         return n
 
     def _parte(self, fn, *a):

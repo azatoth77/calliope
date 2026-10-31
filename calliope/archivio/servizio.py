@@ -439,6 +439,39 @@ class Archivio:
                 out.append(d)
         return out
 
+    def documento_visibile(self, chi: Chi, doc_id: int) -> dict | None:
+        """Il documento `doc_id` se `chi` lo può vedere adesso (gli stessi permessi di
+        `documenti`), altrimenti None. Per «Scarica» della pagina Documenti (28/10, #259): i
+        permessi si rifanno al clic, non quando la pagina è stata letta."""
+        rows = self.grafo.leggi("SELECT * FROM nodi WHERE tipo = 'documento' AND id = ?",
+                                (int(doc_id),))
+        if not rows:
+            return None
+        r = rows[0]
+        d = {"id": r["id"], "nome": r["nome"], "data": r["data"], "totale": r["valore"],
+             "attributi": json.loads(r["attributi"] or "{}"),
+             "persone": self._persone_doc([r["id"]])[r["id"]]}
+        return d if self.puo_vedere(d, chi) else None
+
+    def file_di(self, doc_id: int) -> Path | None:
+        """Il file vero di un documento dentro `archivio_cartella` (il primo letto bene), o None
+        se non c'è più, è fuori dalla cartella o supera `archivio_max_mb`."""
+        if self.cartella is None:
+            return None
+        base = self.cartella.resolve()
+        for r in self.grafo.leggi("SELECT percorso FROM file WHERE nodo = ? AND stato = 'ok' "
+                                  "ORDER BY percorso", (int(doc_id),)):
+            try:
+                p = (base / str(r["percorso"])).resolve()
+                if not p.is_relative_to(base) or not p.is_file():
+                    continue
+                if p.stat().st_size > self.max_byte:
+                    continue
+            except (OSError, ValueError):
+                continue
+            return p
+        return None
+
     def _enti_di(self, nome: str) -> set[int]:
         k = nz.nome_ente(nome)
         if not k:

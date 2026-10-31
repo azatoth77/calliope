@@ -186,9 +186,10 @@ def principale(tmp: Path):
            and "aggiornato" in r.get("errore", ""), r.get("errore"))
         dv = RemoteDelivery(srv, LocalDelivery(tmp / "server"), "portatile")
         d = dv.deliver("Vecchio", "pdf", b"%PDF-1.4 x")
-        ok("satellite vecchio: il documento resta sul server e lo si dice",
+        ok("satellite vecchio: il documento resta sul server e lo si dice (senza «server» né «satellite», #290)",
            not d.get("remoto") and (tmp / "server" / "Vecchio.pdf").is_file()
-           and "non riceve documenti" in d.get("dove", ""), d.get("dove"))
+           and "non riceve file" in d.get("dove", "") and "server" not in d.get("dove", "")
+           and "satellite" not in d.get("dove", ""), d.get("dove"))
     aspetta(lambda: srv.attivo is None, 3)
 
     # ── satellite nuovo davanti a un server vecchio: torna al protocollo 1 ──
@@ -256,6 +257,27 @@ def principale(tmp: Path):
     r = c.chiama_pc("avvia", {"app": "cmd.exe /c del"}, 2.0)
     ok("un comando dal server non si esegue mai (solo nomi del catalogo)",
        not r.get("ok") and pc.azioni[-1] != ("avvia", "cmd.exe /c del"), r.get("errore"))
+    # Per iscritto il controllo lo fa il satellite, che ha il comando (29/10, #307, revisione
+    # della PR #309): il segno `scritto` dell'«avvia»
+    ok("il «ciao» dice che il satellite conosce il segno scritto (avvia_scritto)",
+       c.esecutore.get("avvia_scritto") is True, str(c.esecutore))
+    pc._app["backup"] = r"C:\x\backup.bat"
+    remoto._app["backup"] = "backup"
+    n = len(pc.azioni)
+    r = c.chiama_pc("avvia", {"app": "backup", "scritto": True}, 2.0)
+    ok("satellite: «avvia» con il segno scritto di uno script, rifiutato (serve_voce), niente avviato",
+       not r.get("ok") and r.get("serve_voce") and len(pc.azioni) == n, r)
+    c.esecutore["app_script"] = []         # anche se il primo filtro del server non lo sa
+    r = remoto.apri_app("backup", scritto=True)
+    ok("esecutore remoto per iscritto: il rifiuto del satellite arriva come serve_voce",
+       not r.get("ok") and r.get("serve_voce") and len(pc.azioni) == n, r)
+    r = remoto.apri_app("calcolatrice", scritto=True)
+    ok("contrario: per iscritto l'app vera si apre sul satellite", r.get("ok")
+       and pc.azioni[-1] == ("avvia", "calc.exe"), r)
+    r = remoto.apri_app("backup")
+    ok("contrario: a voce lo script del catalogo si apre", r.get("ok")
+       and pc.azioni[-1] == ("avvia", r"C:\x\backup.bat"), r)
+    del pc._app["backup"], remoto._app["backup"]
     r = c.chiama_pc("os_system", {"cmd": "x"}, 2.0)
     ok("metodo fuori elenco: rifiutato dal satellite", not r.get("ok")
        and "sconosciuto" in r.get("errore", ""), r.get("errore"))
@@ -445,7 +467,8 @@ def principale(tmp: Path):
     aspetta(lambda: srv.attivo is None, 5)
     res = svc.wait(svc.crea("bianca-id", "Bianca", "excel", "le spese"), 10)
     ok("nessun satellite: il file resta sul server, la frase lo dice, niente «Lo apro?»",
-       res and res.get("ok") and "sul server" in res.get("frase", "")
+       res and res.get("ok") and "tra i miei documenti" in res.get("frase", "")
+       and "server" not in res.get("frase", "")
        and "non è collegato" in res.get("frase", "") and "apro?" not in res.get("frase", ""),
        (res or {}).get("frase"))
     r = chiama(reg, pcs, "pc_volume", {"azione": "alza"})

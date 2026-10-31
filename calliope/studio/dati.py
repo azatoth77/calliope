@@ -1,0 +1,997 @@
+"""
+I dati dello Studio in `memoria.db` (29/10, passo 4.1, issue #280, decisione 0035), nello stile
+di `memory.py` e `conserva.py`: tabelle `studio_*` con la versione in `meta_schema` (modulo
+«studio», `persistenza.prepara_schema`), una connessione e un lock.
+
+Tabelle (versione 1):
+- `studio_verifiche`: di chi è (`persona`, l'id del profilo, mai un nome), materia, argomento
+  generale, data, classe o livello, obiettivo di padronanza in %, minuti al giorno (None = di
+  serie), stato (bozza → aperta → fatta, oppure archiviata), chi l'ha creata, il giorno
+  dell'ultimo calcolo del piano;
+- `studio_materiali`: i materiali di una verifica (origine foto, cassetto, file, biblioteca,
+  mano; titolo scelto dalla persona; il riferimento all'origine). Il caricamento vero arriva con
+  il passo 4.2;
+- `studio_pagine`: le pagine di un materiale, solo i riferimenti (ordine, numero letto,
+  etichetta, stato, file nella cartella dello Studio); il testo letto (`testo`, `metodo`) lo
+  scrive la lettura del passo 4.3 ed è un dato non fidato. Dalla versione 2 (29/10, passo 4.2,
+  issue #281) anche ciò che dice il controllo del server sulla foto: gli angoli usati (`angoli`,
+  JSON, in frazioni della foto), gli avvisi (`avvisi`, JSON: «bordi», «sfocata», «piccola»), la
+  nitidezza e il lato della pagina salvata;
+- `studio_argomenti`: gli argomenti con le pagine che citano (id, JSON), lo stato (proposto,
+  tenuto, tolto, aggiunto dalla persona) e l'ordine; l'estrazione arriva con il passo 4.4, qui
+  c'è la conferma a mano;
+- `studio_piano`: un giorno per riga (fase, pagine, attività, minuti, fatto);
+- `studio_giorni`: i giorni di una persona con minuti diversi (0 = senza piano: giorno senza
+  scuola, giorno saltato con «non ce la faccio oggi»);
+- `studio_misure`: le misure vere della padronanza (dal passo 5), per la previsione;
+- `studio_tentativi` (versione 5, 30/10, passo 5, issue #245): i tentativi su un argomento (tipo:
+  carta, esercizio, mappa, interrogazione, verifica finta; esito: giusto, indizio, sbagliato; chi
+  ha deciso l'esito: la persona, il codice o il tutore, mai il modello da solo), da cui il codice
+  calcola la padronanza (`studio/padronanza.py`). Solo id, codici e date: mai testo;
+- `studio_eventi` (versione 4, 30/10, passo 4b, issue #244): la storia delle sessioni di una
+  verifica, da cui si proiettano il resoconto di una sessione e il riepilogo della verifica
+  (`studio/resoconto.py`): «inizio» (la sessione cominciata con le due domande, **senza** le
+  risposte: lo stato d'animo e la conoscenza restano in memoria, decisione 0035 punto 27),
+  «fatto» e «non_fatto» (il giorno del piano, con le pagine e i minuti previsti di quel giorno),
+  «saltato» («non ce la faccio oggi»), «mancato» (un giorno del piano passato senza «fatto»,
+  scritto dal ricalcolo prima di togliere la riga) e «spostata» (la data di prima e quella nuova).
+  Solo id, numeri e date: mai titoli né testo delle pagine;
+- `studio_carte` (versione 6, 30/10, passo 6, issue #246): le carte di una verifica (domanda e
+  risposta, un dato non fidato come il testo delle pagine, chiunque l'abbia scritto; la forma
+  chiusa della risposta per il confronto del codice; le pagine e l'argomento; l'origine, lo stato
+  e il ripasso di Leitner: scatola, scadenza, ultima volta, `studio/carte.py`); dalla stessa
+  versione `studio_tentativi.carta`, la carta da cui viene un tentativo. Dalla versione 7
+  (seconda parte del passo 6) `studio_verifiche.carte_firma`, `carte_esito`, `carte_del`:
+  l'ultima generazione delle carte dal lettore (`studio/genera.py`);
+- `studio_mappe` (versione 8, 30/10, passo 7, issue #247): le mappe concettuali di una verifica
+  (`studio/mappa.py`): lo scheletro (dal lettore o scritto a mano), la mappa dello studente e le
+  ricostruzioni a memoria, coi concetti e i collegamenti in JSON (un dato non fidato come il testo
+  delle carte, chiunque l'abbia scritto), l'ultimo controllo del codice e i tentativi già scritti;
+  dalla stessa versione `studio_verifiche.mappa_firma`, `mappa_esito`, `mappa_del` per la
+  generazione dello scheletro. Dalla versione 9 (30/10, passo 7c, issue #328) la mappa libera
+  (tipo «libera»), `studio_mappe.giri` (gli indicatori del metodo e i conti del confronto per
+  giro) e `studio_mappe.visti` (i concetti del riferimento con la pagina detta o il testo
+  mostrato nel giro);
+- `studio_domande` e `studio_prove` (versione 10, 31/10, passo 8, issue #248): le domande delle
+  prove (scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta; un dato come le
+  carte, chiunque l'abbia scritto) e le prove fatte, la verifica finta scritta e l'interrogazione
+  orale, con le voci (la domanda copiata, la risposta della persona, l'esito e chi l'ha deciso) in
+  JSON; dalla stessa versione `studio_verifiche.prova` («scritta» o «interrogazione»),
+  `finestra` (la data è «dal») e `domande_firma`, `domande_esito`, `domande_del` per la
+  generazione delle domande dal lettore (`studio/domande_genera.py`);
+- `studio_indicazioni` (versione 11, 31/10, passo 10, issue #250 e #285): le indicazioni dei
+  tutori per lo studio di un minore (per tutto il suo studio, una materia o una verifica), con la
+  scadenza; testo di un adulto di casa, controllato nella forma (`studio/tutore.py`);
+- `studio_stelle`, `studio_premi` e `studio_duelli` (versione 12, 31/10, issue #296): le stelle
+  guadagnate, gli interruttori dei premi di una persona e i duelli fra persone di casa
+  (`studio/premi.py`). La serie di giorni non ha una tabella: la calcola il codice dai dati che
+  ci sono (eventi, tentativi, prove);
+- `studio_esercizi` (versione 14, 31/10, issue #278): gli esercizi guidati, un problema portato
+  dalla persona (una foto o il testo scritto) con i passi della guida (`studio/esercizi.py`,
+  `studio/esercizi_genera.py`). Il testo del problema e i passi sono un dato (sullo schermo con
+  textContent, al modello in busta, mai le risposte attese).
+
+Tenuta (decisione 0035, punto 4): tutto ciò che è di una verifica resta fino a
+`studio_tenuta_giorni` (60) giorni dopo la sua data, per sempre se archiviata; «dimentica le
+nostre conversazioni» toglie lo Studio della persona tranne le verifiche archiviate (tenute di
+proposito, come le foto archiviate della 0034); `calliope conserva --svuota` toglie tutto.
+Sempre con `secure_delete`, e con i file delle pagine dentro la cartella dello Studio (dal
+passo 4.2 anche il PDF originale di un materiale, `riferimento` «file:…»). Una cartella relativa
+sta accanto a `memory_db`, come il cassetto (`cartella_di`).
+"""
+
+from __future__ import annotations
+
+import datetime
+import json
+import os
+import sqlite3
+import threading
+from pathlib import Path
+
+from ..persistenza import apri_db, prepara_schema
+
+MODULO = "studio"
+
+# Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
+TABELLE = ("studio_preparazioni", "studio_esercizi", "studio_importazioni", "studio_pratica","studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
+           "studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
+           "studio_misure",
+           "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
+           "studio_giorni")
+
+STATI_VERIFICA = ("bozza", "aperta", "fatta", "archiviata")
+ORIGINI = ("foto", "cassetto", "file", "biblioteca", "mano")
+# «da_leggere» (29/10, passo 4.2): la pagina arrivata dalla fotocamera o da un PDF, che aspetta la
+# lettura del passo 4.3; «in_lettura» (30/10, passo 4.3, #282): la sta leggendo il lettore
+# (studio/lettura.py), e dopo un riavvio torna «da_leggere»; «da_parte» (revisione della PR #314):
+# la pagina che fa cadere vLLM due volte di fila, riprovata solo a mano o dopo un aggiornamento
+STATI_PAGINA = ("da_controllare", "buona", "sfocata", "tolta", "letta", "illeggibile",
+                "da_leggere", "in_lettura", "da_parte")
+# Il riferimento di un materiale che è un file nella cartella dello Studio (il PDF originale)
+RIF_FILE = "file:"
+# Le immagini delle pagine e i PDF stanno in `cartella/pagine/<id della verifica>/`, con un nome
+# scelto dal server (studio/pagine.py, `scrivi_file`)
+CARTELLA_PAGINE = "pagine"
+# Un file senza riga si toglie nella rotazione solo dopo un giorno (un invio in corso ha il file
+# scritto un attimo prima della riga)
+ORFANI_DOPO_S = 86400.0
+# I provvisori della divisione dei PDF (seconda revisione della PR #312): dentro la cartella
+# dello Studio, non nella cartella temporanea di sistema; tolti dopo la divisione, all'avvio dello
+# Studio e, se un crollo li ha lasciati, dalla rotazione dopo un'ora
+CARTELLA_PROVVISORI = "tmp"
+PROVVISORI_DOPO_S = 3600.0
+# All'avvio dello Studio (passo 4.5, terza revisione della PR #312): solo i provvisori più vecchi
+# di 15 minuti, perché un'altra istanza sullo stesso disco può star dividendo un PDF adesso
+PROVVISORI_AVVIO_S = 900.0
+STATI_ARGOMENTO = ("proposto", "tenuto", "tolto", "aggiunto")
+# Gli argomenti su cui si fa il piano
+ARGOMENTI_DEL_PIANO = ("tenuto", "aggiunto")
+# Gli eventi delle sessioni (versione 4, passo 4b, #244)
+EVENTI = ("inizio", "fatto", "non_fatto", "saltato", "mancato", "spostata")
+
+
+def _v1(db: sqlite3.Connection):
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_verifiche (
+        id INTEGER PRIMARY KEY,
+        persona TEXT NOT NULL,
+        materia TEXT NOT NULL,
+        argomento TEXT,
+        data TEXT NOT NULL,
+        livello TEXT,
+        obiettivo INTEGER NOT NULL DEFAULT 75,
+        minuti_giorno INTEGER,
+        stato TEXT NOT NULL DEFAULT 'bozza',
+        creata TEXT NOT NULL,
+        creata_da TEXT,
+        archiviata TEXT,
+        piano_del TEXT,
+        piano_avvisi TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_verifiche_persona "
+               "ON studio_verifiche(persona)")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_materiali (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        origine TEXT NOT NULL,
+        titolo TEXT,
+        riferimento TEXT,
+        creato TEXT NOT NULL)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_materiali_verifica "
+               "ON studio_materiali(verifica)")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_pagine (
+        id INTEGER PRIMARY KEY,
+        materiale INTEGER NOT NULL,
+        ordine INTEGER NOT NULL,
+        numero TEXT,
+        etichetta TEXT,
+        stato TEXT NOT NULL DEFAULT 'da_controllare',
+        file TEXT,
+        testo TEXT,
+        metodo TEXT,
+        creata TEXT NOT NULL)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_pagine_materiale ON studio_pagine(materiale)")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_argomenti (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        titolo TEXT NOT NULL,
+        pagine TEXT NOT NULL DEFAULT '[]',
+        stato TEXT NOT NULL DEFAULT 'proposto',
+        ordine INTEGER NOT NULL DEFAULT 0,
+        avvisi TEXT,
+        creato TEXT NOT NULL)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_argomenti_verifica "
+               "ON studio_argomenti(verifica)")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_piano (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        giorno TEXT NOT NULL,
+        fase TEXT NOT NULL,
+        pagine TEXT NOT NULL DEFAULT '[]',
+        attivita TEXT NOT NULL,
+        minuti INTEGER NOT NULL DEFAULT 0,
+        oltre INTEGER NOT NULL DEFAULT 0,
+        fatto TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_piano_verifica ON studio_piano(verifica)")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_giorni (
+        persona TEXT NOT NULL,
+        giorno TEXT NOT NULL,
+        minuti INTEGER NOT NULL,
+        motivo TEXT,
+        PRIMARY KEY (persona, giorno))""")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_misure (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        argomento INTEGER,
+        giorno TEXT NOT NULL,
+        valore REAL NOT NULL,
+        fonte TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_misure_verifica ON studio_misure(verifica)")
+
+
+def _v2(db: sqlite3.Connection):
+    """29/10, passo 4.2 (#281): il controllo del server sulle pagine dalla fotocamera e dai PDF."""
+    for col in ("angoli TEXT", "avvisi TEXT", "nitidezza REAL", "larghezza INTEGER",
+                "altezza INTEGER"):
+        db.execute(f"ALTER TABLE studio_pagine ADD COLUMN {col}")
+
+
+def _v3(db: sqlite3.Connection):
+    """30/10, passo 4.4 (#283): l'ultima estrazione degli argomenti di una verifica (la firma
+    delle pagine usate, l'esito e quando), per non chiederli due volte sulle stesse pagine; il
+    titolo proposto dal modello di un argomento (`titolo_modello`, revisione della PR #315): un
+    proposto rinominato dalla persona è una sua decisione, e il titolo del modello non si ripropone."""
+    for col in ("argomenti_firma TEXT", "argomenti_esito TEXT", "argomenti_del TEXT"):
+        db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
+    db.execute("ALTER TABLE studio_argomenti ADD COLUMN titolo_modello TEXT")
+
+
+def _v4(db: sqlite3.Connection):
+    """30/10, passo 4b (#244): gli eventi delle sessioni, per il resoconto e il riepilogo.
+    `persona` è di chi è la verifica, `chi` chi ha agito (lei o il tutore); `dati` è un JSON di
+    soli id, numeri e date."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_eventi (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        giorno TEXT NOT NULL,
+        ora TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        chi TEXT,
+        dati TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_eventi_verifica "
+               "ON studio_eventi(verifica, giorno)")
+
+
+def _v5(db: sqlite3.Connection):
+    """30/10, passo 5 (#245): i tentativi su un argomento, per la padronanza. `persona` è di chi
+    è la verifica, `chi` chi ha registrato il tentativo."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_tentativi (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        argomento INTEGER NOT NULL,
+        giorno TEXT NOT NULL,
+        ora TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        esito TEXT NOT NULL,
+        fonte TEXT NOT NULL,
+        chi TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_tentativi_verifica "
+               "ON studio_tentativi(verifica, argomento)")
+
+
+def _v6(db: sqlite3.Connection):
+    """30/10, passo 6 (#246): le carte e il loro ripasso. `persona` è di chi è la verifica;
+    domanda e risposta sono un dato (sullo schermo con textContent, al modello in busta)."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_carte (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        argomento INTEGER,
+        domanda TEXT NOT NULL,
+        risposta TEXT NOT NULL,
+        chiusa TEXT,
+        pagine TEXT NOT NULL DEFAULT '[]',
+        origine TEXT NOT NULL DEFAULT 'persona',
+        stato TEXT NOT NULL DEFAULT 'attiva',
+        avvisi TEXT,
+        scatola INTEGER NOT NULL DEFAULT 1,
+        scadenza TEXT,
+        ultima TEXT,
+        creata TEXT NOT NULL,
+        creata_da TEXT,
+        modificata TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_carte_verifica ON studio_carte(verifica)")
+    db.execute("ALTER TABLE studio_tentativi ADD COLUMN carta INTEGER")
+
+
+def _v7(db: sqlite3.Connection):
+    """30/10, passo 6, seconda parte (#246): l'ultima generazione delle carte di una verifica (la
+    firma degli argomenti e delle pagine usate, l'esito e quando), per non chiederle due volte."""
+    for col in ("carte_firma TEXT", "carte_esito TEXT", "carte_del TEXT"):
+        db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
+
+
+# Le versioni dello schema: si aggiungono in fondo, solo colonne con NULL o un predefinito (o
+# tabelle nuove)
+def _v8(db: sqlite3.Connection):
+    """30/10, passo 7 (#247): le mappe concettuali. `persona` è di chi è la verifica; `nodi` e
+    `collegamenti` sono JSON (un dato: sullo schermo con textContent, mai al modello); `tentati`
+    i concetti già contati come tentativi in questo giro (una volta per casella)."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_mappe (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        stato TEXT NOT NULL,
+        origine TEXT NOT NULL DEFAULT 'persona',
+        aiuto TEXT,
+        nodi TEXT NOT NULL DEFAULT '[]',
+        collegamenti TEXT NOT NULL DEFAULT '[]',
+        controllo TEXT,
+        controllata TEXT,
+        tentati TEXT NOT NULL DEFAULT '[]',
+        creata TEXT NOT NULL,
+        creata_da TEXT,
+        modificata TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_mappe_verifica ON studio_mappe(verifica, tipo)")
+    for col in ("mappa_firma TEXT", "mappa_esito TEXT", "mappa_del TEXT"):
+        db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
+
+
+def _v9(db: sqlite3.Connection):
+    """30/10, passo 7c (#328): la mappa libera (il tipo «libera» non chiede colonne). `giri` gli
+    indicatori del metodo e i conti del confronto di ogni giro (JSON, mai testi); `visti` i
+    concetti del riferimento con la pagina detta («indizio») o il testo mostrato («visto») nel
+    giro in corso."""
+    db.execute("ALTER TABLE studio_mappe ADD COLUMN giri TEXT NOT NULL DEFAULT '[]'")
+    db.execute("ALTER TABLE studio_mappe ADD COLUMN visti TEXT NOT NULL DEFAULT '{}'")
+    # Le carte di «Fanne carte» scritte prima della 9 (sulla DGX ce ne sono): l'origine «mappa»
+    # dal prefisso che il codice scriveva (seconda revisione della PR #330)
+    db.execute("UPDATE studio_carte SET origine = 'mappa' WHERE origine = 'persona' AND "
+               "domanda LIKE 'Mappa di %'")
+
+
+def _v10(db: sqlite3.Connection):
+    """31/10, passo 8 (#248): le domande delle prove e le prove (verifica finta e interrogazione).
+    `persona` è di chi è la verifica; testo, opzioni e risposta attesa sono un dato (sullo schermo
+    con textContent, al modello in busta). `voci` della prova: la domanda copiata (così la
+    correzione resta anche se la domanda cambia dopo), la risposta della persona, l'esito e chi
+    l'ha deciso; `riepilogo` i conti per argomento, mai testi. Sulla verifica il tipo della prova
+    vera e la finestra «dal», e l'ultima generazione delle domande."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_domande (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        argomento INTEGER,
+        tipo TEXT NOT NULL,
+        testo TEXT NOT NULL,
+        opzioni TEXT NOT NULL DEFAULT '[]',
+        attesa TEXT NOT NULL,
+        chiave TEXT NOT NULL DEFAULT '[]',
+        pagine TEXT NOT NULL DEFAULT '[]',
+        origine TEXT NOT NULL DEFAULT 'persona',
+        stato TEXT NOT NULL DEFAULT 'attiva',
+        avvisi TEXT,
+        creata TEXT NOT NULL,
+        creata_da TEXT,
+        modificata TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_domande_verifica ON studio_domande(verifica)")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_prove (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        modalita TEXT NOT NULL,
+        stato TEXT NOT NULL,
+        inizio TEXT NOT NULL,
+        scade TEXT,
+        fine TEXT,
+        ultima TEXT,
+        corrente INTEGER NOT NULL DEFAULT 0,
+        seme INTEGER NOT NULL DEFAULT 0,
+        mix TEXT,
+        voci TEXT NOT NULL DEFAULT '[]',
+        riepilogo TEXT,
+        creata_da TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_prove_verifica ON studio_prove(verifica)")
+    for col in ("prova TEXT NOT NULL DEFAULT 'scritta'", "finestra INTEGER NOT NULL DEFAULT 0",
+                "domande_firma TEXT", "domande_esito TEXT", "domande_del TEXT"):
+        db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
+
+
+def _v11(db: sqlite3.Connection):
+    """31/10, passo 10 (#250, #285): le indicazioni dei tutori per lo studio di un minore.
+    `persona` è il minore; `verifica` (una sua verifica) e `materia` dicono dove valgono (tutte e
+    due vuote: tutto il suo studio); `testo` è la frase del tutore, già controllata nella forma
+    (`studio/tutore.py`); `scade` il giorno dopo cui non vale più; `creata_da` e `modificata_da`
+    gli id dei tutori; `canale` da dove è arrivata («voce», «schermo», «dispositivo»: revisione
+    della PR #348, nota 5). Una tolta si cancella."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_indicazioni (
+        id INTEGER PRIMARY KEY,
+        persona TEXT NOT NULL,
+        verifica INTEGER,
+        materia TEXT,
+        testo TEXT NOT NULL,
+        scade TEXT NOT NULL,
+        creata TEXT NOT NULL,
+        creata_da TEXT,
+        modificata TEXT,
+        modificata_da TEXT,
+        canale TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_indicazioni_persona "
+               "ON studio_indicazioni(persona)")
+
+
+def _v12(db: sqlite3.Connection):
+    """31/10, issue #296: i premi dello Studio (`studio/premi.py`).
+    - `studio_stelle`: le stelle guadagnate, una riga per traguardo (`tipo` e `chiave`: l'id
+      dell'argomento per «argomento», "" per gli altri), con la verifica, il giorno e se è già
+      stata detta a voce. Una stella presa resta (niente perdite), finché c'è la sua verifica;
+    - `studio_premi`: gli interruttori di una persona (serie, stelle, duelli: NULL = di serie),
+      chi li ha cambiati (il tutore per un minore, la persona stessa per un adulto) e il giorno in
+      cui la serie è stata detta a voce l'ultima volta (al più una volta al giorno);
+    - `studio_duelli`: i duelli fra persone di casa sulle domande di una verifica di chi propone
+      (`da`), con l'altra persona (`a`); le voci (la domanda copiata, come nelle prove) e le
+      risposte di ognuno in JSON, gli esiti decisi dal codice alla consegna. Solo id, codici e date
+      fuori dal JSON; il testo delle domande è un dato come nelle prove."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_stelle (
+        id INTEGER PRIMARY KEY,
+        persona TEXT NOT NULL,
+        verifica INTEGER NOT NULL,
+        tipo TEXT NOT NULL,
+        chiave TEXT NOT NULL DEFAULT '',
+        giorno TEXT NOT NULL,
+        ora TEXT NOT NULL,
+        detta INTEGER NOT NULL DEFAULT 0,
+        UNIQUE (persona, verifica, tipo, chiave))""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_stelle_persona ON studio_stelle(persona)")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_premi (
+        persona TEXT PRIMARY KEY,
+        serie INTEGER,
+        stelle INTEGER,
+        duelli INTEGER,
+        cambiati TEXT,
+        cambiati_da TEXT,
+        serie_detta TEXT)""")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_duelli (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        da TEXT NOT NULL,
+        a TEXT NOT NULL,
+        stato TEXT NOT NULL,
+        voci TEXT NOT NULL DEFAULT '[]',
+        risposte_da TEXT NOT NULL DEFAULT '{}',
+        risposte_a TEXT NOT NULL DEFAULT '{}',
+        consegna_da TEXT,
+        consegna_a TEXT,
+        creato TEXT NOT NULL,
+        scade TEXT NOT NULL,
+        fine TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_duelli_da ON studio_duelli(da)")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_duelli_a ON studio_duelli(a)")
+    # La pratica che conta per la serie e che i tentativi non dicono (revisione della PR #355):
+    # una carta ripassata da chi studia **quando era da ripassare** (`tipo` «carta», `rif` l'id
+    # della carta). Solo id, codici e date; va con la verifica, con la persona e per data
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_pratica (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        giorno TEXT NOT NULL,
+        ora TEXT NOT NULL,
+        tipo TEXT NOT NULL,
+        rif INTEGER)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_pratica_persona ON studio_pratica(persona, giorno)")
+
+
+def _v13(db: sqlite3.Connection):
+    """31/10, issue #298: l'importazione dei materiali scaricati (`studio/importa.py`).
+    - `studio_importazioni`: un file o un archivio mandato dallo schermo personale per una
+      verifica. `persona` è di chi è la verifica, `chi` chi l'ha mandato (lei o il tutore);
+      `file` il file arrivato nella cartella dello Studio (col nome del server, tolto a lavoro
+      finito); `nome` il nome del file arrivato, un dato (sullo schermo con textContent, mai al
+      modello); `stato` in_coda, in_corso, fermata, finita, errore; `prossima` la voce
+      dell'archivio da cui ripartire; `conti` (JSON di numeri) e `righe` (JSON: le voci non lette
+      col nome ripulito e il motivo scritto dal codice);
+    - `studio_materiali.importazione` e `voce`: l'importazione e la voce dell'archivio da cui
+      viene un materiale."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_importazioni (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        chi TEXT,
+        file TEXT,
+        nome TEXT,
+        tipo TEXT,
+        stato TEXT NOT NULL DEFAULT 'in_coda',
+        prossima INTEGER NOT NULL DEFAULT 0,
+        voci INTEGER,
+        conti TEXT NOT NULL DEFAULT '{}',
+        righe TEXT NOT NULL DEFAULT '[]',
+        motivo TEXT,
+        creata TEXT NOT NULL,
+        aggiornata TEXT,
+        fine TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_importazioni_verifica "
+               "ON studio_importazioni(verifica)")
+    db.execute("ALTER TABLE studio_materiali ADD COLUMN importazione INTEGER")
+    # La voce dell'archivio da cui viene il materiale: una voce si scrive una volta sola anche
+    # se un riavvio cade fra le sue pagine e la prossima voce (revisione della PR #364)
+    db.execute("ALTER TABLE studio_materiali ADD COLUMN voce INTEGER")
+
+
+def _v14(db: sqlite3.Connection):
+    """31/10, issue #278 (versione 14, dopo l'importazione della #298): gli esercizi guidati
+    (`studio/esercizi.py`). `persona` è di chi è la
+    verifica; `testo` il problema letto o scritto (un dato), `file` la foto (dentro
+    `cartella/pagine/<verifica>/`); `passi` i passi della guida in JSON (domanda, tipo, risposta
+    attesa, indizio: un dato), `risultato` il risultato finale proposto dal lettore, solo per la
+    guardia della voce (mai mostrato né detto); `esiti` gli esiti dei passi decisi dal codice."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_esercizi (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        origine TEXT NOT NULL,
+        file TEXT,
+        testo TEXT,
+        stato TEXT NOT NULL,
+        avvisi TEXT NOT NULL DEFAULT '[]',
+        passi TEXT NOT NULL DEFAULT '[]',
+        risultato TEXT,
+        passo INTEGER NOT NULL DEFAULT 0,
+        esiti TEXT NOT NULL DEFAULT '[]',
+        errori INTEGER NOT NULL DEFAULT 0,
+        indizi INTEGER NOT NULL DEFAULT 0,
+        firma TEXT,
+        creato TEXT NOT NULL,
+        creato_da TEXT,
+        modificato TEXT,
+        finito TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_esercizi_verifica ON studio_esercizi(verifica)")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_esercizi_persona ON studio_esercizi(persona)")
+
+
+def _v15(db: sqlite3.Connection):
+    """31/10, issue #297, parte 3 (versione 15, dopo gli esercizi della #278): la preparazione dietro le quinte (studio/preparazione.py). Una
+    riga per la lezione di un argomento (`tipo` «lezione», i paragrafi in JSON con le pagine e gli
+    avvisi) e una per i valori validati dalle pagine (`tipo` «valori», `argomento` NULL); `stato`
+    «ombra» o «pronta». Testo del modello dalle pagine: un dato (textContent, al modello in busta).
+    Sulla verifica l'ultima preparazione (firma, esito, quando) e la firma già detta a voce."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_preparazioni (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        argomento INTEGER,
+        tipo TEXT NOT NULL,
+        stato TEXT NOT NULL,
+        contenuto TEXT NOT NULL,
+        creata TEXT NOT NULL)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_preparazioni_verifica "
+               "ON studio_preparazioni(verifica)")
+    for col in ("prep_firma TEXT", "prep_esito TEXT", "prep_del TEXT", "prep_detto TEXT"):
+        db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
+
+
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13, _v14, _v15]
+# Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
+# scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
+CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")
+# Le tabelle venute dopo la prima versione: un db di prima (lo Studio spento non lo prepara) può
+# non averle
+NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
+         "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_premi",
+         "studio_importazioni",
+         "studio_esercizi",
+         "studio_preparazioni")
+
+
+def cartella_di(cfg, db_path=None) -> Path | None:
+    """La cartella dello Studio, assoluta: `studio_cartella` com'è se assoluta, altrimenti
+    accanto al file della memoria (come il cassetto); None senza cartella."""
+    c = str(getattr(cfg, "studio_cartella", "") or "") if cfg is not None else ""
+    return _assoluta(c, db_path or (getattr(cfg, "memory_db", None) if cfg is not None
+                                    else None))
+
+
+def _assoluta(cartella, db_path) -> Path | None:
+    if not cartella:
+        return None
+    p = Path(str(cartella))
+    if not p.is_absolute() and db_path:
+        p = Path(str(db_path)).resolve().parent / p
+    return p
+
+
+def adesso() -> str:
+    return datetime.datetime.now().isoformat(timespec="seconds")
+
+
+def j(valore) -> str:
+    return json.dumps(list(valore or ()), ensure_ascii=False)
+
+
+def da_j(testo) -> list:
+    try:
+        v = json.loads(testo or "[]")
+    except (TypeError, ValueError):
+        return []
+    return v if isinstance(v, list) else []
+
+
+class Dati:
+    """La connessione dello Studio a `memoria.db`, con il suo lock (persistenza.apri_db)."""
+
+    def __init__(self, path):
+        self.path = str(path)
+        self.lock = threading.RLock()
+        self.db = apri_db(self.path)
+        self.db.row_factory = sqlite3.Row
+        self.scrivibile = prepara_schema(self.db, MODULO, MIGRAZIONI)
+
+    def close(self):
+        with self.lock:
+            self.db.close()
+
+    def uno(self, sql: str, arg=()) -> dict | None:
+        with self.lock:
+            r = self.db.execute(sql, arg).fetchone()
+        return dict(r) if r is not None else None
+
+    def tutti(self, sql: str, arg=()) -> list[dict]:
+        with self.lock:
+            return [dict(r) for r in self.db.execute(sql, arg).fetchall()]
+
+    def scrivi(self, sql: str, arg=()) -> int:
+        """Una scrittura con commit; l'id della riga nuova (o il numero di righe)."""
+        with self.lock:
+            c = self.db.execute(sql, arg)
+            self.db.commit()
+            return c.lastrowid if sql.lstrip().upper().startswith("INSERT") else c.rowcount
+
+
+# ─────────────────────────── cancellare (tenuta, dimentica, svuota) ───────────────────────────
+
+def _c_e(db: sqlite3.Connection) -> bool:
+    return db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND "
+                      "name = 'studio_verifiche'").fetchone() is not None
+
+
+def _tabella(db: sqlite3.Connection, nome: str) -> bool:
+    return db.execute("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+                      (nome,)).fetchone() is not None
+
+
+def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
+    """Cancella le verifiche e tutto ciò che è loro (dentro una transazione già aperta). I file
+    delle pagine tolte (dal passo 4.2 anche i PDF originali dei materiali), da togliere dal
+    disco dopo il commit."""
+    file = []
+    for vid in ids:
+        mats = []
+        for mid, rif in db.execute("SELECT id, riferimento FROM studio_materiali WHERE "
+                                   "verifica = ?", (vid,)).fetchall():
+            mats.append(mid)
+            if isinstance(rif, str) and rif.startswith(RIF_FILE):
+                file.append(rif[len(RIF_FILE):])
+        for m in mats:
+            file += [r[0] for r in db.execute(
+                "SELECT file FROM studio_pagine WHERE materiale = ? AND file IS NOT NULL", (m,))]
+            db.execute("DELETE FROM studio_pagine WHERE materiale = ?", (m,))
+        # Le foto degli esercizi guidati (#278), via con la verifica
+        if _tabella(db, "studio_esercizi"):
+            file += [r[0] for r in db.execute(
+                "SELECT file FROM studio_esercizi WHERE verifica = ? AND file IS NOT NULL",
+                (vid,))]
+        # I file arrivati delle importazioni ancora da finire (versione 13, #298)
+        if _tabella(db, "studio_importazioni"):
+            file += [r[0] for r in db.execute(
+                "SELECT file FROM studio_importazioni WHERE verifica = ? AND file IS NOT NULL",
+                (vid,))]
+        for t in ("studio_importazioni", "studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
+                  "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
+                  "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_esercizi",
+                  "studio_preparazioni",
+                  *CON_ORFANI):
+            # Un db ancora allo schema di prima (lo Studio spento non lo prepara): le tabelle
+            # nuove possono mancare
+            if t in NUOVE and not _tabella(db, t):
+                continue
+            db.execute(f"DELETE FROM {t} WHERE verifica = ?", (vid,))
+        db.execute("DELETE FROM studio_verifiche WHERE id = ?", (vid,))
+    return file
+
+
+def togli_file(file: list[str], cartella) -> int:
+    """I file delle pagine dentro `cartella` (la cartella dello Studio); un percorso fuori non
+    si tocca mai. Quanti tolti. Le cartelle delle verifiche rimaste vuote si tolgono."""
+    if not cartella or not file:
+        return 0
+    base = Path(cartella).resolve()
+    n = 0
+    padri = set()
+    for f in file:
+        try:
+            p = (base / f).resolve()
+            if base not in p.parents:
+                continue
+            if p.exists():
+                p.unlink()
+                n += 1
+            padri.add(p.parent)
+        except OSError:
+            continue
+    for d in padri:
+        try:
+            if d != base and base in d.parents and d.is_dir() and not any(d.iterdir()):
+                d.rmdir()
+        except OSError:
+            continue
+    return n
+
+
+def togli_orfani(cartella, conosciuti: set | None = None, piu_vecchi_di_s: float = 0.0) -> int:
+    """I file sotto `cartella/pagine` che nessuna riga cita: tutti per `svuota` di tutti (dopo le
+    righe); nella rotazione (revisione della PR #312) solo quelli non in `conosciuti` (percorsi
+    relativi alla cartella) e più vecchi di `piu_vecchi_di_s`: un crollo fra la scrittura e il
+    commit, o il ritorno di `calliope aggiorna` a un `memoria.db` di prima, non lasciano foto di
+    quaderni per sempre. Mai fuori dalla cartella, mai seguendo un link."""
+    import time
+    if not cartella:
+        return 0
+    base = Path(cartella).resolve()
+    radice = base / CARTELLA_PAGINE
+    if radice.is_symlink() or not radice.is_dir() or base not in radice.resolve().parents:
+        return 0
+    n = 0
+    for dirpath, _dirnames, filenames in os.walk(radice, followlinks=False):
+        for nome in filenames:
+            p = Path(dirpath) / nome
+            try:
+                if p.is_symlink() or base not in p.resolve().parents:
+                    continue
+                if conosciuti is not None and p.relative_to(base).as_posix() in conosciuti:
+                    continue
+                if piu_vecchi_di_s and time.time() - p.stat().st_mtime < piu_vecchi_di_s:
+                    continue
+                p.unlink()
+                n += 1
+            except OSError:
+                continue
+    for dirpath, _d, _f in sorted(os.walk(radice, followlinks=False), key=lambda t: -len(t[0])):
+        d = Path(dirpath)
+        try:
+            if d != radice and not d.is_symlink() and not any(d.iterdir()):
+                d.rmdir()
+        except OSError:
+            continue
+    return n
+
+
+def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool = False,
+             scadute_prima: datetime.date | None = None, archiviate: bool = True,
+             cartella=None, ascolta_giorni: int = 7) -> dict:
+    """Il solo posto che cancella lo Studio, con `secure_delete` e in una transazione:
+    - `tutto`: ogni verifica e ogni giorno (`svuota` di tutti);
+    - `persona`: le verifiche di una persona e i suoi giorni; con `archiviate=False` quelle
+      archiviate restano («dimentica»);
+    - `scadute_prima`: le verifiche non archiviate con la data prima di quel giorno e i giorni
+      segnati delle persone prima di quel giorno (la tenuta).
+    Restituisce quante verifiche e quanti file. Senza le tabelle (Studio mai usato) niente.
+    Dal 31/10 (passo 9, #249) anche l'audio del ripasso da ascoltare (`ascolta.togli_audio`,
+    una cache del testo): via con le verifiche tolte, con «svuota» e, nella rotazione, quello di
+    verifiche che non ci sono più e quello non ascoltato da `ascolta_giorni`."""
+    out = {"verifiche": 0, "file": 0}
+    if not _c_e(db):
+        return out
+    if tutto:
+        q, arg = "SELECT id FROM studio_verifiche", ()
+    elif persona is not None:
+        q, arg = "SELECT id FROM studio_verifiche WHERE persona = ?", (str(persona),)
+        if not archiviate:
+            q += " AND stato != 'archiviata'"
+    elif scadute_prima is not None:
+        q, arg = ("SELECT id FROM studio_verifiche WHERE stato != 'archiviata' AND data < ?",
+                  (scadute_prima.isoformat(),))
+    else:
+        return out
+    if db.in_transaction:
+        db.commit()
+    prima = db.execute("PRAGMA secure_delete").fetchone()[0]
+    db.execute("PRAGMA secure_delete = ON")
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        ids = [r[0] for r in db.execute(q, arg)]
+        giorni = 0
+        file = _togli_verifiche(db, ids)
+        # Gli eventi senza la loro verifica (una corsa fra un «inizio» e una cancellazione,
+        # revisione della PR #321, nota 6): via con «svuota», con la persona, e per data con la
+        # rotazione; mai per sempre
+        # (dal passo 5 anche i tentativi, CON_ORFANI)
+        presenti = [t for t in CON_ORFANI if _tabella(db, t)]
+        orfani = "verifica NOT IN (SELECT id FROM studio_verifiche)"
+        if tutto:
+            db.execute("DELETE FROM studio_giorni")
+            for t in presenti:
+                db.execute(f"DELETE FROM {t}")
+        elif persona is not None:
+            db.execute("DELETE FROM studio_giorni WHERE persona = ?", (str(persona),))
+            for t in presenti:
+                db.execute(f"DELETE FROM {t} WHERE persona = ? AND {orfani}", (str(persona),))
+        else:
+            for t in presenti:
+                db.execute(f"DELETE FROM {t} WHERE giorno < ? AND {orfani}",
+                           (scadute_prima.isoformat(),))
+            # I giorni di una persona («non ce la faccio oggi», senza scuola, minuti diversi)
+            # scadono con lo stesso limite (revisione della PR #308): dati personali, anche dei
+            # minori, mai per sempre
+            giorni = db.execute("DELETE FROM studio_giorni WHERE giorno < ?",
+                                (scadute_prima.isoformat(),)).rowcount or 0
+        # Le mappe senza la loro verifica (una corsa fra una scrittura e una cancellazione, passo
+        # 7): non hanno un giorno, e senza la verifica non servono a niente; via sempre
+        # (le importazioni, #298, dopo: i loro file arrivati sono già nella lista sopra solo per
+        # le verifiche tolte; quelle orfane li perdono nella rotazione degli orfani)
+        for t in ("studio_mappe", "studio_domande", "studio_prove", "studio_importazioni",
+                  "studio_preparazioni"):
+            # Le domande e le prove (passo 8, #248) come le mappe
+            if _tabella(db, t):
+                db.execute(f"DELETE FROM {t} WHERE {orfani}")
+        # Le indicazioni dei tutori (31/10, passo 10, #250, #285): sono dati del minore. Quelle
+        # di una verifica che non c'è più vanno via come le mappe; tutte con la persona e con
+        # «svuota»; le scadute con la rotazione, `studio_tenuta_giorni` dopo la scadenza
+        if _tabella(db, "studio_indicazioni"):
+            db.execute(f"DELETE FROM studio_indicazioni WHERE verifica IS NOT NULL AND {orfani}")
+            if tutto:
+                db.execute("DELETE FROM studio_indicazioni")
+            elif persona is not None:
+                db.execute("DELETE FROM studio_indicazioni WHERE persona = ?", (str(persona),))
+            else:
+                db.execute("DELETE FROM studio_indicazioni WHERE scade < ?",
+                           (scadute_prima.isoformat(),))
+        # I premi (31/10, #296): le stelle e i duelli vanno con la loro verifica (sopra) e, se
+        # orfani, sempre; le stelle e gli interruttori di una persona con la persona e con
+        # «svuota»; un duello con chiunque dei due; i duelli più vecchi della tenuta con la
+        # rotazione (sono una partita, non la preparazione)
+        if _tabella(db, "studio_stelle"):
+            db.execute(f"DELETE FROM studio_stelle WHERE {orfani}")
+            db.execute(f"DELETE FROM studio_duelli WHERE {orfani}")
+            if tutto:
+                for t in ("studio_stelle", "studio_duelli", "studio_premi"):
+                    db.execute(f"DELETE FROM {t}")
+            elif persona is not None:
+                db.execute("DELETE FROM studio_stelle WHERE persona = ?", (str(persona),))
+                db.execute("DELETE FROM studio_duelli WHERE da = ? OR a = ?",
+                           (str(persona), str(persona)))
+                db.execute("DELETE FROM studio_premi WHERE persona = ?", (str(persona),))
+            else:
+                db.execute("DELETE FROM studio_duelli WHERE creato < ?",
+                           (scadute_prima.isoformat(),))
+        # Gli esercizi guidati (31/10, #278, revisione della PR #367): vanno con la verifica
+        # (sopra); senza la verifica (una corsa fra un invio e una cancellazione) sempre, con le
+        # loro foto, e tutti con «svuota»
+        if _tabella(db, "studio_esercizi"):
+            dove = "1 = 1" if tutto else orfani
+            file += [r[0] for r in db.execute(
+                f"SELECT file FROM studio_esercizi WHERE {dove} AND file IS NOT NULL")]
+            db.execute(f"DELETE FROM studio_esercizi WHERE {dove}")
+        db.commit()
+    except Exception:
+        if db.in_transaction:
+            db.rollback()
+        raise
+    finally:
+        db.execute(f"PRAGMA secure_delete = {int(prima)}")
+    out["verifiche"] = len(ids)
+    out["giorni"] = giorni
+    out["file"] = togli_file(file, cartella)
+    if cartella:
+        # L'audio del ripasso da ascoltare (31/10, #249): una cache del testo, legata alla verifica
+        from .ascolta import togli_audio
+        if tutto:
+            out["audio"] = togli_audio(cartella)
+        else:
+            out["audio"] = togli_audio(cartella, solo=list(ids)) if ids else 0
+            if scadute_prima is not None:
+                vive = {r[0] for r in db.execute("SELECT id FROM studio_verifiche")}
+                out["audio"] += togli_audio(cartella, verifiche_vive=vive,
+                                            piu_vecchi_di_s=max(1, int(ascolta_giorni)) * 86400.0)
+        out["file"] += out["audio"]
+    if tutto and cartella:
+        # «svuota» di tutti: anche i file rimasti senza riga (un invio a metà)
+        out["file"] += togli_orfani(cartella)
+        togli_provvisori(cartella)
+    elif scadute_prima is not None and cartella:
+        # La rotazione: anche i provvisori della divisione dei PDF rimasti da un crollo
+        out["provvisori"] = togli_provvisori(cartella, PROVVISORI_DOPO_S)
+    if scadute_prima is not None and cartella and versione_schema(db) > len(MIGRAZIONI):
+        # Uno schema dello Studio più nuovo di questa versione (seconda revisione della PR #312):
+        # i file li possono citare tabelle o colonne che qui non si conoscono, quindi nessun
+        # orfano si toglie (sola lettura, come prepara_schema)
+        out["orfani_saltati"] = True
+    elif scadute_prima is not None and cartella:
+        # La rotazione: anche i file che nessuna riga cita, vecchi di più di un giorno
+        conosciuti = {r[0] for r in db.execute(
+            "SELECT file FROM studio_pagine WHERE file IS NOT NULL")}
+        conosciuti |= {r[0][len(RIF_FILE):] for r in db.execute(
+            "SELECT riferimento FROM studio_materiali WHERE riferimento LIKE ?",
+            (RIF_FILE + "%",))}
+        if _tabella(db, "studio_esercizi"):
+            conosciuti |= {r[0] for r in db.execute(
+                "SELECT file FROM studio_esercizi WHERE file IS NOT NULL")}
+        if _tabella(db, "studio_importazioni"):
+            conosciuti |= {r[0] for r in db.execute(
+                "SELECT file FROM studio_importazioni WHERE file IS NOT NULL")}
+        out["orfani"] = togli_orfani(cartella, conosciuti, ORFANI_DOPO_S)
+        out["file"] += out["orfani"]
+    return out
+
+
+def versione_schema(db: sqlite3.Connection) -> int:
+    """La versione dello schema «studio» scritta in `meta_schema` (0 se non c'è)."""
+    try:
+        r = db.execute("SELECT versione FROM meta_schema WHERE modulo = ?", (MODULO,)).fetchone()
+    except sqlite3.Error:
+        return 0
+    return int(r[0]) if r else 0
+
+
+def cartella_provvisori(cartella) -> Path | None:
+    """`cartella/tmp`: dove il sottoprocesso divide un PDF (pagine.dividi_pdf_a_parte)."""
+    return Path(cartella) / CARTELLA_PROVVISORI if cartella else None
+
+
+def togli_provvisori(cartella, piu_vecchi_di_s: float = 0.0) -> int:
+    """Le cartelle sotto `cartella/tmp` più vecchie di `piu_vecchi_di_s` (0: tutte, all'avvio
+    dello Studio): ciò che resta di una divisione interrotta da un crollo. Mai seguendo un link."""
+    import shutil
+    import time
+    tmp = cartella_provvisori(cartella)
+    if tmp is None or tmp.is_symlink() or not tmp.is_dir():
+        return 0
+    base = Path(cartella).resolve()
+    n = 0
+    for d in tmp.iterdir():
+        try:
+            if d.is_symlink() or base not in d.resolve().parents:
+                continue
+            if piu_vecchi_di_s and time.time() - d.stat().st_mtime < piu_vecchi_di_s:
+                continue
+            if d.is_dir():
+                shutil.rmtree(d, ignore_errors=True)
+            else:
+                d.unlink()
+            n += 1
+        except OSError:
+            continue
+    return n
+
+
+def cancella_file(path, log=print, **kw) -> dict:
+    """`cancella` sul file della memoria, aprendolo e chiudendolo (conservazione e terminale).
+    Un file che non c'è, o che non si apre, non ferma niente."""
+    out = {"verifiche": 0, "file": 0}
+    if not path or not Path(path).exists():
+        return out
+    if kw.get("cartella"):
+        # Una cartella relativa sta accanto al file della memoria (cartella_di)
+        kw["cartella"] = _assoluta(kw["cartella"], path)
+    try:
+        db = apri_db(path)
+    except (sqlite3.Error, OSError):
+        return out
+    try:
+        return cancella(db, **kw)
+    except sqlite3.Error as e:
+        log(f"   [STUDIO] dati dello Studio non cancellati: {type(e).__name__}")
+        return out
+    finally:
+        db.close()
+
+
+def conta_file(path, persona: str | None = None, solleva: bool = False) -> dict:
+    """Quante verifiche ci sono (e quante archiviate), di tutti o di una persona: per
+    `calliope stato`, la domanda di «svuota» e quella di «dimentica». Con `solleva` un errore
+    del db si solleva invece di dare zero (il ricontrollo dopo «dimentica», PR #317)."""
+    out = {"verifiche": 0, "archiviate": 0}
+    if not path or not Path(path).exists():
+        return out
+    try:
+        db = apri_db(path)
+    except (sqlite3.Error, OSError):
+        if solleva:
+            raise
+        return out
+    try:
+        if not _c_e(db):
+            return out
+        dove, arg = ("WHERE persona = ?", (str(persona),)) if persona is not None else ("", ())
+        out["verifiche"] = db.execute(f"SELECT COUNT(*) FROM studio_verifiche {dove}",
+                                      arg).fetchone()[0]
+        e = "AND" if dove else "WHERE"
+        out["archiviate"] = db.execute(f"SELECT COUNT(*) FROM studio_verifiche {dove} {e} "
+                                       "stato = 'archiviata'", arg).fetchone()[0]
+        return out
+    except sqlite3.Error:
+        if solleva:
+            raise
+        return out
+    finally:
+        db.close()

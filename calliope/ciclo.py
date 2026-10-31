@@ -20,9 +20,11 @@ errore (così era nato il difetto dello stato della voce sugli schermi, P9). Qui
 import concurrent.futures
 import dataclasses
 import datetime
+import json
 import re
 import threading
 import time
+import types
 import wave
 from pathlib import Path
 
@@ -56,6 +58,8 @@ from .tools.dialogo import FRASI_CORREZIONE
 from .config import Config, DEEPEN_WORDS, SEARCH_PROMISE
 from .immagini import FOTO_IN_ATTESA, FOTO_NON_VISTA, FOTO_PERSA, Immagine
 from .schermi import schede as schede_foto
+from .schermi.archivio import di_quale_schermo
+from .schermi import tocchi
 from .schermi.moduli import annuncio_lavoro, completa as completa_modulo, oscura, oscura_tutto
 from .speaker_id import estimate_gender
 from .suoni import FINE, INIZIO
@@ -162,6 +166,9 @@ class Servizi:
     # tiene le parole e la voce; None = nessuna voce salvata e le parole come prima (prove)
     conserva: object = None
     attiva_minori: object = None         # () → True se ha registrato i tool dei minori
+    # Lo Studio (29/10, calliope/studio/, #280): None con `studio_modo: spento`; in ombra i dati
+    # si scrivono ma niente arriva al modello né agli schermi (Studio.per_modello/per_schermi)
+    studio: object = None
     # Cambiano a voce (modalità, main.applica_modalita) o da un'installazione
     wake: object = None
     suoni: object = None
@@ -1247,6 +1254,7 @@ class Ciclo:
         self._rispondi(t)
         self._registra_risposta(t)
         self._dopo_la_risposta(t)
+        self._leggi_ripasso(t)
         return None
 
     def _dialogo_prima_di_brain(self, t, fase, foto):
@@ -1530,9 +1538,20 @@ class Ciclo:
         self.sveglia.clear()          # la sveglia era per questo: l'ascolto non gira a vuoto
         if not self.ingresso.vuoto():
             self.sveglia.set()
+        if scritto.get("tipo") == "tocco":
+            # Un tocco dallo schermo personale (28/10, schermi/tocchi.py): si fa sempre, anche
+            # senza una conversazione a voce (decisione di chi amministra del 28/10), e non ha
+            # una risposta da instradare
+            t.scritto = scritto
+            return None
         # Di nuovo qui (05/10): la conversazione può essere finita mentre il testo
-        # aspettava in coda («esci» detto un attimo prima). Niente al ciclo
-        ok, motivo = schermi.scrittura_consentita(schermi.schermo(scritto.get("schermo_id")))
+        # aspettava in coda («esci» detto un attimo prima). Niente al ciclo. Dal 28/10 (#301)
+        # dallo schermo personale la casella, le foto e i file valgono sempre (al più
+        # familiare, con gli orari di un minore: _fuori_orario); i moduli no
+        schermo = schermi.schermo(scritto.get("schermo_id"), **di_quale_schermo(scritto))
+        consentito = getattr(schermi, "scritto_consentito", None)
+        ok, motivo = (consentito(schermo, scritto.get("tipo") or "scritto") if consentito
+                      else schermi.scrittura_consentita(schermo))
         if not ok:
             print(f"   [SCHERMI] scritto dallo schermo «{scritto.get('schermo')}» "
                   f"scartato: nessuna conversazione ({motivo})", flush=True)
@@ -1555,13 +1574,45 @@ class Ciclo:
         """File, foto e moduli dagli schermi: con il testo sono una frase scritta, da soli
         aspettano la domanda (o vanno dritti al tool)."""
         tipo = (t.scritto or {}).get("tipo")
+        if tipo in ("allegato", "immagine"):
+            fuori = self._file_fuori_orario(t)
+            if fuori is not None:
+                return fuori
+            tipo = t.scritto.get("tipo")
         if tipo == "allegato":
             return self._allegato_dallo_schermo(t)
         if tipo == "immagine":
             return self._foto_dallo_schermo(t)
         if tipo == "modulo":
             return self._modulo_dallo_schermo(t)
+        if tipo == "tocco":
+            return self._tocco_dallo_schermo(t)
         return None
+
+    def _file_fuori_orario(self, t):
+        """Gli orari dei tutori anche per le foto e i file (revisione della PR #304): dal 28/10
+        lo schermo personale manda senza aver parlato, e fuori orario un minore non lascia niente
+        nel cassetto né in attesa. Con il testo il file si toglie e la frase segue la strada di
+        sempre (_fuori_orario, col guardiano per chi è in pericolo); senza, il rifiuto con la
+        frase degli orari."""
+        scritto = t.scritto
+        prof = self.s.registry.by_id(scritto.get("persona")) if scritto.get("persona") else None
+        orario = minori.fuori_orario(prof) if prof is not None else None
+        if not orario:
+            return None
+        scritto.pop("immagine", None)
+        scritto.pop("allegato", None)
+        print(f"   [SCHERMI] file dallo schermo «{scritto.get('schermo')}» scartato: fuori "
+              f"dagli orari dei tutori", flush=True)
+        if (scritto.get("testo") or "").strip():
+            scritto["tipo"] = "scritto"
+            return None
+        self.rec = {"inizio": datetime.datetime.now().isoformat(timespec="milliseconds"),
+                    "esito": "fuori_orario", "canale": "scritto",
+                    "voce": {"nome": prof.name, "modo": "schermo", "schermo": scritto.get("schermo"),
+                             "id": prof.id},
+                    "motivo": "fuori_orario", "regole": ["minore_fuori_orario"]}
+        return self._senza_domanda(t, minori.frase_fuori_orario(prof, orario))
 
     def _senza_domanda(self, t, frase: str):
         """La frase detta (e scritta sullo schermo) per un file o una foto senza domanda."""
@@ -1596,7 +1647,8 @@ class Ciclo:
               f"{round(att.dimensione / 1024)} kB): aspetto la domanda", flush=True)
         if schermi is not None and scritto.get("schermo_id") is not None:
             try:
-                schermi.invia_a(scritto["schermo_id"], schede_foto.allegato(att))
+                schermi.invia_a(scritto["schermo_id"], schede_foto.allegato(att),
+                                **di_quale_schermo(scritto))
             except Exception as e:  # noqa: BLE001 — lo schermo non ferma la voce
                 print(f"   [SCHERMI] file non mostrato: {e}", flush=True)
         return self._senza_domanda(t, frase)
@@ -1618,7 +1670,8 @@ class Ciclo:
               f"({img.larghezza}×{img.altezza}): aspetto la domanda", flush=True)
         if schermi is not None and scritto.get("schermo_id") is not None:
             try:
-                schermi.invia_a(scritto["schermo_id"], schede_foto.foto(img))
+                schermi.invia_a(scritto["schermo_id"], schede_foto.foto(img),
+                                **di_quale_schermo(scritto))
             except Exception as e:  # noqa: BLE001 — lo schermo non ferma la voce
                 print(f"   [SCHERMI] foto non mostrata: {e}", flush=True)
         return self._senza_domanda(t, self._frase_pieno(FOTO_IN_ATTESA) if pieno
@@ -1691,7 +1744,7 @@ class Ciclo:
                 cas.manda_scheda(schermi, prof.id, cas.scheda(
                     prof.id, righe, tieni=not minori.e_minore(prof)))
                 cas.schede_aperte[prof.id] = {r["id"] for r in righe}
-            frasi.append(cas.frase(info, aperto))
+            frasi += [f for f in [cas.frase(info, aperto)] if f]   # solo foto: la scheda basta
             self.rule("cassetto_revisione" if info["in_scadenza"] else "cassetto_eliminati")
             if self.rec is not None:
                 self.rec["cassetto"] = {"eliminati": info["eliminati"],
@@ -1716,6 +1769,8 @@ class Ciclo:
         self.voce("pensa")
         # Il modulo è della conversazione della persona (06/10, corsie.py)
         self.corsia.turno(brain, None, "schermo", True, persona_id=scritto.get("persona"))
+        if hasattr(brain, "contesto_conversazione"):
+            brain.contesto_conversazione()    # conv_archivio della sua conversazione (#266)
         esito = completa_modulo(self.s.schermi, scritto, brain, getattr(brain, "turn_number", 0))
         self.rec = {"inizio": datetime.datetime.now().isoformat(timespec="milliseconds"),
                     **esito["rec"]}
@@ -1730,6 +1785,247 @@ class Ciclo:
             self.rec["risposta"] = oscura(esito["frase"])
         self.awake_until = time.monotonic() + self.s.cfg.followup_s
         return _FINE
+
+    # I segni di chi parla che valgono una frase (come in _chi_parla): per il tocco si azzerano,
+    # perché chi tocca è il proprietario dello schermo e non la voce del turno prima, e dopo si
+    # rimettono com'erano, così il tocco non cambia la conversazione a voce in corso
+    _SEGNI_TOCCO = ("current_speaker", "identified_by", "from_session", "conferma_breve",
+                    "sfida_superata", "breve_impronta_ok", "incerta", "minore_vicino",
+                    "minore_incerto", "compagnia", "compagnia_sconosciute", "senza_nome",
+                    "conoscente", "minore_ospite")
+    _AZZERATI_TOCCO = {"from_session": False, "conferma_breve": False, "sfida_superata": False,
+                       "breve_impronta_ok": False, "compagnia": False,
+                       "compagnia_sconosciute": False, "senza_nome": False}
+    # Il contesto dei tool che Brain imposta a ogni chiamata: per il tocco senza la politica del
+    # turno (ferma solo i tool vietati) e con la descrizione al posto della frase. Anche ciò che
+    # resta del turno a voce di prima (#262): la proposta in sospeso, il «sì» già dato e il gioco
+    # che aspetta un comando non valgono per il tocco; il bersaglio (il timer toccato, #257) vale
+    # solo per lui. Si rimettono com'erano dopo
+    _CTX_TOCCO = ("politica", "user_text", "regole", "politica_esito", "strumenti",
+                  "errore_registro", "tool_in_sospeso", "politica_accettata", "gioco_turno",
+                  "tocco_bersaglio")
+
+    def _tocco_dallo_schermo(self, t):
+        """Un tocco che cambia qualcosa dallo schermo personale (28/10, schermi/tocchi.py: la
+        spunta della lista). Vale come una frase del proprietario dello schermo: passa da
+        `ToolRegistry.call` col suo livello e `identified_by` «schermo» (i tool che vogliono la
+        voce restano rifiutati), entra nella sua conversazione come un turno con la sua chiamata
+        (`Brain.record_tocco`), nel registro dei turni con `esito` «tocco» e negli eventi con il
+        canale «tocco». Niente frase detta né suoni: chi tocca può essere al supermercato. Un
+        rifiuto o un errore va solo allo schermo, con l'evento SSE «tocco»: sempre, anche se
+        qui qualcosa si rompe (revisione della PR #261: la spunta restava in attesa)."""
+        scritto = t.scritto
+        try:
+            return self._tocco(t)
+        except Exception as e:  # noqa: BLE001 — la pagina deve sapere com'è andata
+            print(f"   [SCHERMI] tocco non riuscito: {type(e).__name__}: {e}", flush=True)
+            inizio = datetime.datetime.fromtimestamp(scritto.get("arrivato") or time.time())
+            self.rec = {"inizio": inizio.isoformat(timespec="milliseconds"), "canale": "tocco",
+                        "esito": "rifiutato", "schermo": scritto.get("schermo"),
+                        "motivo": f"errore: {type(e).__name__}", "regole": ["tocco_errore"]}
+            self._esito_tocco(scritto, False, "")
+            return _FINE
+
+    def _tocco(self, t):
+        scritto, brain, s = t.scritto, self.brain, self.s
+        ctx = self.tool_ctx
+        # Nessun dispositivo dell'ultimo turno a voce nel tocco (seconda revisione della PR #294)
+        if ctx is not None:
+            ctx.dispositivo = None
+        # Quello che legge ToolRegistry.call (nel ciclo vero è lo stesso di self.speaker_ctx)
+        sc = getattr(ctx, "speaker_ctx", None) or self.speaker_ctx
+        tool = str(scritto.get("tool") or "")
+        args = dict(scritto.get("argomenti") or {})
+        descr = str(scritto.get("descrizione") or "")
+        inizio = datetime.datetime.fromtimestamp(scritto.get("arrivato") or time.time())
+        prof = s.registry.by_id(scritto.get("persona")) if scritto.get("persona") else None
+        base = {"inizio": inizio.isoformat(timespec="milliseconds"), "canale": "tocco",
+                "durata_s": 0.0, "sveglia": False}
+        if prof is None:
+            # Lo schermo personale di una persona che non c'è più: niente a nome di nessuno
+            self.rec = {**base, "esito": "rifiutato", "schermo": scritto.get("schermo"),
+                        "motivo": "proprietario sconosciuto", "regole": ["tocco_senza_persona"]}
+            self._esito_tocco(scritto, False, "Non so di chi è questo schermo.")
+            return _FINE
+        voce = {"nome": prof.name, "modo": "schermo", "schermo": scritto.get("schermo"),
+                "id": prof.id}
+        # Gli orari dei tutori (revisione della PR #261): fuori orario un minore non cambia
+        # niente nemmeno toccando, come a voce e scrivendo (fase _fuori_orario)
+        orario = minori.fuori_orario(prof)
+        if orario:
+            self.rec = {**base, "esito": "rifiutato", "voce": voce, "testo": descr,
+                        "motivo": "fuori_orario", "tocco": scritto.get("tocco"),
+                        "regole": ["minore_fuori_orario"]}
+            self._esito_tocco(scritto, False, minori.frase_fuori_orario(prof, orario))
+            return _FINE
+        # Il vincolo dei tocchi (#262, schermi/tocchi.py): solo il tool dichiarato per quel
+        # tocco, di una classe nota e reversibile; di nuovo qui, con lo ToolSpec del registro
+        spec = s.tools.get(tool) if hasattr(s.tools, "get") else None
+        motivo = tocchi.non_ammesso(scritto, spec)
+        if motivo:
+            print(f"   [SCHERMI] tocco non ammesso: {motivo}", flush=True)
+            self.rec = {**base, "esito": "rifiutato", "voce": voce, "testo": descr,
+                        "motivo": f"non ammesso: {motivo}"[:200], "tocco": scritto.get("tocco"),
+                        "regole": ["tocco_non_ammesso"]}
+            self._esito_tocco(scritto, False, "Questo non si fa toccando lo schermo: "
+                                              "chiedimelo a voce.")
+            return _FINE
+        if tocchi.senza_bersaglio(scritto):
+            # Un tocco del timer senza il timer toccato (revisione della PR #265): il tool
+            # sceglierebbe dal testo, senza la politica del turno
+            self.rec = {**base, "esito": "rifiutato", "voce": voce, "testo": descr,
+                        "motivo": "senza bersaglio", "tocco": scritto.get("tocco"),
+                        "regole": ["tocco_senza_bersaglio"]}
+            self._esito_tocco(scritto, False, "Non so su che cosa: riprova dalla scheda."
+                              if str(scritto.get("tocco") or "").startswith("studio_") else
+                              "Non so quale timer: riprova dalla scheda.")
+            return _FINE
+        # Il tocco è della conversazione della persona (come il modulo, corsie.py)
+        self.corsia.turno(brain, prof.name, "schermo", True, persona_id=prof.id)
+        # La conversazione della persona anche nel contesto dei tool (#266): resta, come
+        # `brain.conv`, fino al turno dopo
+        if hasattr(brain, "contesto_conversazione"):
+            brain.contesto_conversazione()
+        segni = {k: getattr(sc, k, None) for k in self._SEGNI_TOCCO if hasattr(sc, k)}
+        prima_ctx = {k: getattr(ctx, k, None) for k in self._CTX_TOCCO}
+        regole: list = []
+        ok, res, livello = False, {}, None
+        try:
+            for k in segni:
+                setattr(sc, k, self._AZZERATI_TOCCO.get(k))
+            sc.current_speaker, sc.identified_by = prof.name, "schermo"
+            livello = sc.current_level
+            bersaglio = scritto.get("bersaglio")
+            for k, v in (("politica", None), ("user_text", descr), ("regole", regole),
+                         ("politica_esito", None), ("strumenti", s.tools),
+                         ("errore_registro", False), ("tool_in_sospeso", None),
+                         ("politica_accettata", False), ("gioco_turno", None),
+                         ("tocco_bersaglio", dict(bersaglio) if isinstance(bersaglio, dict)
+                          else None)):
+                try:
+                    setattr(ctx, k, v)
+                except AttributeError:
+                    pass
+            grezzo = s.tools.call(tool, args, ctx, livello)
+            try:
+                res = json.loads(grezzo)
+            except (TypeError, ValueError):
+                res = {"ok": False, "errore": "risposta del tool illeggibile"}
+            res = res if isinstance(res, dict) else {"ok": True}
+            ok = res.get("ok") is not False
+            if ok and hasattr(brain, "record_tocco"):
+                # Nella conversazione con la sua chiamata, con chi tocca ancora come chi parla
+                # (la conversazione è sua: scaduta o d'altri si chiude prima)
+                conferma = str(res.get("conferma") or res.get("risposta_finale")
+                               or "Fatto.").strip()
+                brain.record_tocco(descr, tool, args, grezzo, conferma)
+                if hasattr(brain, "contesto_conversazione"):
+                    brain.contesto_conversazione()    # scaduta, si è chiusa: la nuova
+                # La stessa conferma negli eventi, senza voce: storia e proiezione uguali
+                self.uscita.muta(conferma, "tocco_esito", dopo_chiamate=1)
+        finally:
+            for k, v in segni.items():
+                setattr(sc, k, v)
+            for k, v in prima_ctx.items():
+                try:
+                    setattr(ctx, k, v)
+                except AttributeError:
+                    pass
+        riga = {"nome": tool, "argomenti": oscura_tutto(args), "ok": ok,
+                "azione": getattr(spec, "risk", "azione") != "lettura"}
+        self.rec = {**base, "esito": "tocco" if ok else "rifiutato", "livello": livello,
+                    "voce": voce, "testo": descr, "tool": [riga],
+                    "tocco": scritto.get("tocco"), "regole": list(regole)}
+        if not ok:
+            self.rec["motivo"] = str(res.get("motivo") or res.get("errore") or "")[:200]
+        print(f"\n👆 Tocco dallo schermo «{scritto.get('schermo')}» di {prof.name}: "
+              f"{tool} → {'fatto' if ok else 'no'}", flush=True)
+        if ok:
+            t.text = descr
+            self._meta_turno = {"t": round(inizio.timestamp(), 3), "canale": "tocco"}
+            self._schede_del_tocco(res, scritto, livello)
+        frase = str(res.get("risposta_finale") or res.get("conferma") or res.get("errore")
+                    or "").strip()
+        self._esito_tocco(scritto, ok, frase if not ok else "")
+        return _FINE
+
+    def _schede_del_tocco(self, res: dict, scritto: dict, livello: str | None = None):
+        """Le schede del risultato (la lista aggiornata) allo schermo del tocco, e solo a lui
+        (revisione della PR #261): la spunta aspetta lì l'aggiornamento, anche con le schede
+        automatiche spente; chi spunta al supermercato non fa comparire la spesa sulla TV."""
+        hub, sid = self.s.schermi, scritto.get("schermo_id")
+        if hub is None or sid is None:
+            return
+        quale = di_quale_schermo(scritto)
+        if quale and hub.schermo(sid, **quale) is None:
+            # Lo schermo del tocco è stato revocato e il numero riabbinato mentre il tocco
+            # aspettava (#275): le sue schede non vanno allo schermo nuovo
+            return
+        for card in [c for c in (res.get("scheda"), res.get("schede")) if c]:
+            for c in (card if isinstance(card, list) else [card]):
+                try:
+                    if c.get("visibilita") == schede_foto.PUBBLICA:
+                        self._scheda_pubblica_del_tocco(hub, sid, c, scritto, livello)
+                    else:
+                        hub.invia_a(sid, c, **quale)
+                except Exception as e:  # noqa: BLE001 — lo schermo non ferma il ciclo
+                    print(f"   [SCHERMI] scheda del tocco non inviata: {type(e).__name__}",
+                          flush=True)
+
+    def _scheda_pubblica_del_tocco(self, hub, sid, card: dict, scritto: dict,
+                                   livello: str | None = None):
+        """Una scheda pubblica del risultato (il timer di casa dopo «+1 minuto» o «Ferma»,
+        revisione della PR #265): è già sulla TV della cucina e sugli altri schermi, che
+        resterebbero indietro (il conto di un timer fermato, «Finito» un minuto prima). Va dove va
+        quando lo stesso tool parte dalla voce (`hub.invia`, le regole di sempre della scheda
+        pubblica, dalla stanza dello schermo del tocco), e in più allo schermo del tocco e agli
+        altri schermi personali della persona, anche con le schede automatiche spente. Le schede
+        di casa e personali (la lista) restano solo allo schermo del tocco (revisione della PR
+        #261: la spesa spuntata al supermercato non va sulla TV).
+
+        Il mittente ha il livello con cui il tool è stato chiamato (#266): quello vero del
+        proprietario, limitato come lo scritto da uno schermo personale (`current_level`: chi
+        amministra vale «familiare»). Con l'hub vero (`Schermi.aggiorna`, #266) l'aggiornamento va
+        agli schermi che hanno già la scheda con la stessa chiave, più quelli di chi tocca; una
+        scheda mai vista va come a voce (senza la stanza dello schermo vale la predefinita, senza
+        quella tutti), mai agli schermi personali di altre persone."""
+        from .schermi import Mittente
+        persona = scritto.get("persona")
+        prof = self.s.registry.by_id(persona) if persona else None
+        # Con l'identità dello schermo del tocco (#338, revisione della PR #332): `aggiorna` lo
+        # raggiunge solo se è ancora quello (non revocato e riabbinato, non passato ad altri)
+        mitt = Mittente(persona=persona if prof else None, nome=getattr(prof, "name", None),
+                        livello=(livello or "ospite") if prof else "ospite", certo=bool(prof),
+                        stanza=scritto.get("stanza") or None, schermo=sid,
+                        schermo_identita=di_quale_schermo(scritto) or None)
+        if callable(getattr(hub, "aggiorna", None)):
+            # Dove la scheda c'è già (#266, revisione della PR #270: il timer messo in cucina e
+            # fermato dal telefono, la cui «stanza» è «telefono»), più gli schermi di chi tocca
+            hub.aggiorna(card, mitt)
+            return
+        r = hub.invia(card, mitt) or {}
+        fatti = set(r.get("destinatari") or ())
+        abbinati = hub.abbinati() if callable(getattr(hub, "abbinati", None)) else []
+        nomi = {s.get("id"): s.get("nome") for s in abbinati}
+        mie = [sid] + [s.get("id") for s in abbinati
+                       if persona and s.get("proprietario") == persona and s.get("id") != sid]
+        for i in mie:
+            if i not in nomi or nomi[i] not in fatti:
+                hub.invia_a(i, card)
+
+    def _esito_tocco(self, scritto: dict, ok: bool, errore: str):
+        """L'esito del tocco alla pagina che l'ha mandato (evento SSE «tocco»): la spunta in
+        attesa si toglie, e un errore si dice accanto."""
+        hub, sid = self.s.schermi, scritto.get("schermo_id")
+        if hub is None or sid is None or not hasattr(hub, "evento_a"):
+            return
+        dati = {"tocco": scritto.get("tocco"), "ok": ok, "pagina": scritto.get("pagina") or {}}
+        if not ok:
+            dati["errore"] = errore or "Non ci sono riuscita: riprova o chiedimelo a voce."
+        try:
+            hub.evento_a(sid, "tocco", dati, **di_quale_schermo(scritto))
+        except Exception:  # noqa: BLE001 — lo schermo non ferma il ciclo
+            pass
 
     # ── fase 2: ascolto ──
     def _ascolta(self, t):
@@ -2695,7 +2991,17 @@ class Ciclo:
         calliope/dispositivo.py): letto adesso, non all'avvio (un satellite va e viene)."""
         from . import dispositivo
         if t.scritto is not None:
-            return dispositivo.descrivi(dispositivo.SCRITTO)
+            # Dallo schermo personale (il telefono o il PC, 28/10, #288): lo schermo a sezioni
+            # «di»: di chi è lo schermo (revisione della PR #294, dispositivo.proprio)
+            di = None
+            try:
+                hub = getattr(self.s, "schermi", None)
+                sid = (t.scritto or {}).get("schermo_id")
+                di = ((hub.schermo(sid, **di_quale_schermo(t.scritto)) or {}).get("proprietario")
+                      if hub is not None and sid is not None else None)
+            except Exception:  # noqa: BLE001 — nel dubbio uno schermo qualunque
+                di = None
+            return dispositivo.descrivi(dispositivo.SCRITTO, personale=bool(di), di=di)
         L, sat = self.listener, self.s.satelliti
         if not getattr(L, "remoto", False) or sat is None:
             return dispositivo.descrivi(dispositivo.LOCALE)
@@ -2707,7 +3013,11 @@ class Ciclo:
             coll = (ultima[0] if ultima else
                     sat.per_id(sid) if sid is not None else sat.attivo_pronto())
             canale = getattr(coll, "canale", None) or getattr(L, "canale", None)
-            return dispositivo.descrivi(canale, getattr(coll, "esecutore", None) is not None)
+            # Di chi è il satellite (il telefono di una persona, abbinato come personale):
+            # nella zona grigia lo schermo personale da cui parla resta il suo (PR #294)
+            di = (getattr(coll, "satellite", None) or {}).get("proprietario")
+            return dispositivo.descrivi(canale, getattr(coll, "esecutore", None) is not None,
+                                        di=di if isinstance(di, str) else None)
         except Exception:  # noqa: BLE001 — il dispositivo non ferma la voce
             return None
 
@@ -3956,6 +4266,13 @@ class Ciclo:
         """Il modello risponde in streaming, frase per frase verso la voce (con i controlli
         di ciò che dice e, per minori e ospiti, il guardiano)."""
         s, cfg, brain, speaker, u = self.s, self.s.cfg, self.brain, self.speaker, self.uscita
+        # Il ripasso da ascoltare (31/10, #249) vale solo per la risposta che lo chiede: uno
+        # rimasto da un giro finito con un errore non si legge dopo un'altra domanda
+        if getattr(self, "tool_ctx", None) is not None:
+            try:
+                self.tool_ctx.ascolta = None
+            except AttributeError:
+                pass
         # In compagnia, una frase senza il nome nella finestra d'ascolto: il giudizio «rivolta a
         # Calliope» parte adesso, in parallelo alla risposta (09/10, calliope/rivolta.py)
         t.rivolta = self._avvia_rivolta(t)
@@ -4625,6 +4942,11 @@ class Ciclo:
         df = getattr(brain, "last_dati_fissi", None)
         if isinstance(df, dict) and df:
             self.rec["dati_fissi"] = dict(df)
+        # Il dispositivo del turno e lo schermo personale di chi parla (28/10, #288): fino ad
+        # allora i turni a voce dal telefono non dicevano da dove venivano
+        di = getattr(brain, "last_dispositivo", None)
+        if isinstance(di, dict) and di.get("canale"):
+            self.rec["dispositivo"] = {k: v for k, v in di.items() if v is not None}
         # Le righe della stanza nella storia (14/10 sera, `stanza_contesto_in_storia`): quante
         # nuove in questo turno e quante davanti al modello, solo numeri
         st_s = getattr(brain, "last_stanza_storia", None)
@@ -4721,6 +5043,102 @@ class Ciclo:
                  f"frasi, una alla volta. {speaker_ctx.enroll_prompt}", "registrazione")
             u.aspetta()
         self.awake_until = time.monotonic() + cfg.followup_s
+
+    def _leggi_ripasso(self, t):
+        """Il ripasso da ascoltare chiesto in questa risposta (31/10, passo 9, #249,
+        `studio_ascolta`): la lettura a pezzi dopo la risposta (`studio/ascolta.leggi`), fuori
+        dalla conversazione, con la voce del libro per il materiale. Half-duplex come la
+        risposta: mentre legge si ascolta solo il nome (`_ascolta_il_nome`, livelli A e B),
+        niente trascrizioni; «Calliope, basta» la ferma e la frase dopo il nome va al giro
+        successivo come ogni barge-in, ma solo se nell'audio dell'interruzione c'è la voce di una
+        persona registrata (revisione della PR #345): la voce del libro che dice il nome, anche
+        storpiato, ferma la lettura e basta, senza diventare un turno. Prima di ogni pezzo una
+        prova aperta, gli orari, lo Studio spento, un annuncio in coda o un messaggio scritto
+        arrivato intanto la fermano (la posizione resta). Nel registro dei turni solo i conti."""
+        ctx = getattr(self, "tool_ctx", None)
+        lettura = getattr(ctx, "ascolta", None) if ctx is not None else None
+        if lettura is None:
+            return
+        ctx.ascolta = None
+        st = getattr(self.s, "studio", None)
+        speaker, u = self.speaker, self.uscita
+        if (st is None or not isinstance(lettura, dict) or t.watch.get("seed") or t.non_rivolta
+                or getattr(speaker, "muto", False)):
+            return
+        from .studio import ascolta as ascolta_mod
+        cfg = self.s.cfg
+        voce = str(getattr(cfg, "studio_ascolta_voce", "") or "")
+        voce = voce if voce and Path(voce).is_file() else None
+
+        def controlla():
+            if self._annunci_pronti():
+                return ("annuncio", "Metto in pausa il ripasso: c'è un avviso.")
+            # Un messaggio scritto da uno schermo, o la sveglia del ciclo (revisione della PR
+            # #345): non aspetta la fine della lettura, che si ferma come per un timer
+            ingresso = getattr(self, "ingresso", None)
+            sveglia = getattr(self, "sveglia", None)
+            if ingresso is not None and not ingresso.vuoto():
+                return ("messaggio", "Metto in pausa il ripasso: è arrivato un messaggio.")
+            if sveglia is not None and sveglia.is_set():
+                # Un avviso di un'altra corsia o un tocco: niente «messaggio» (seconda revisione)
+                return ("sveglia", "Metto in pausa il ripasso.")
+            return st.ascolto_vale(lettura)
+
+        w = types.SimpleNamespace()
+        self._ascolta_il_nome(w)
+        try:
+            esito = ascolta_mod.leggi(lettura, u, speaker, controlla=controlla,
+                                      voce_libro=voce, log=lambda m: print(m, flush=True))
+        except Exception as e:  # noqa: BLE001 — la lettura non ferma il ciclo
+            print(f"   [STUDIO] ripasso a voce interrotto da un errore: {type(e).__name__}: {e}",
+                  flush=True)
+            esito = {"pos": int(lettura.get("da", 0)), "motivo": "errore", "frasi": 0,
+                     "sentite": 0}
+            try:
+                u.turno_lettura()
+            except Exception:  # noqa: BLE001
+                pass
+        finally:
+            w.watch_stop.set()
+            if w.watcher is not None:
+                w.watcher.join()
+        st.ascolto_fermo(lettura, esito)
+        if self.rec is not None:
+            # Solo i conti: mai il testo delle pagine (decisione 0035, punti 6 e 42)
+            self.rec["ripasso"] = {k: esito.get(k) for k in ("motivo", "frasi", "sentite")}
+            self.rule("studio_ripasso_letto")
+        seme = w.watch.get("seed")
+        if seme and self._seme_di_persona(seme):
+            # Interrotta da una persona registrata: si ascolta subito, dall'audio col nome
+            self.barge_seed = seme
+        elif seme:
+            # Il nome sentito senza la voce di una persona registrata: era il libro (o la TV).
+            # La lettura si ferma e basta: niente turno dall'audio del materiale
+            if self.rec is not None:
+                self.rule("studio_ripasso_fermato_senza_voce")
+            print("   [STUDIO] ripasso fermato dal nome senza una voce registrata: niente turno",
+                  flush=True)
+        self.awake_until = time.monotonic() + cfg.followup_s
+
+    def _seme_di_persona(self, seme) -> bool:
+        """L'audio dell'interruzione è di una persona registrata (`known_voice`, come il barge-in
+        di livello B)? Nel dubbio no: il ripasso resta fermo e la persona richiama.
+
+        Col satellite (`SeedRemoto`, seconda revisione della PR #345) l'audio resta lì e decide
+        lui: l'esito dell'impronta della voce, se in questa veglia l'ha chiesta (livello B, o un
+        tocco di «Parla»); senza esito il seme si tiene, perché il libro non dice più il nome
+        (`ascolta.nome_dentro`) e il satellite che suona ignora già il proprio nome. Così
+        «Calliope, ripeti» arriva."""
+        if getattr(seme, "remoto", False):
+            esito = getattr(seme, "voce_ok", None)
+            return True if esito is None else bool(esito)
+        try:
+            parti = [np.asarray(x).reshape(-1) for x in seme if x is not None]
+            if not parti:
+                return False
+            return bool(self.known_voice(np.concatenate(parti)))
+        except Exception:  # noqa: BLE001
+            return False
 
     def _storia_come_detta(self, t):
         """Nella storia la risposta di Calliope è ciò che la persona ha sentito (10/10, giro

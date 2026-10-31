@@ -1307,3 +1307,30 @@ ogni avviso dal prefisso e da una frase sua (`ciclo.regole_avvisi`), mentre prim
 prefisso contava come `gioco_esito_ogni_mossa`. `puntiPersi` tiene solo il primo.
 
 **Le prove**: `prove/prova_esito_giochi.py` (nuova, livello 2, ~10 s).
+
+## Le mini-app della libreria dello Studio (31/10, issue #297, parte 2)
+
+Otto giochi della macchina a stati scritti e rivisti da noi, nel repository
+(`calliope/studio/libreria/miniapp/`; area [studio](studio.md), decisione 0035 punto 47). Non sono
+estensioni dell'archivio: `Giochi.avvia` ha il parametro `file` (i byte caricati dalla libreria,
+con l'impronta) e `Partita.file`; `documento` compone il riquadro da quei byte, con la stessa
+sandbox e la stessa CSP, senza guardare l'archivio (anche con le estensioni spente). Il resto della
+partita (istantanea, voce, palco, giudice) è quello di ogni gioco. In `sezioni.js` un gioco che
+arriva apre la sua pagina (Le mie cose › Giochi) anche quando si è già in Le mie cose su un'altra
+pagina: dalla pagina dello Studio restava nascosto. Prove: `prova_studio_miniapp.py`,
+`prova_studio_libreria_pagina.py`.
+
+Dalla revisione della PR #366 (31/10): `Partita.libreria` è il segno delle attività della libreria,
+messo solo da `studio_attivita` (non `file is not None`): non contano nel tempo dei giochi di un
+minore (decisione di chi amministra), al battito si chiudono con la nota quando comincia il fuori
+orario o c'è una prova aperta della persona (`Giochi.studio`), e `Giochi.ferma_libreria` le chiude
+quando una prova parte; non vanno nel registro dell'archivio, e il prefisso `libreria_` è riservato
+in `manifesto.valida`. La macchina ha la chiave facoltativa `"anchio": false`: niente «Gioco
+anch'io» nella preparazione (motore e `per_fase`); la usano le mini-app, perché negli altri giochi
+per uno «gioco anch'io» lega la voce e il nome di chi gioca.
+
+Dal 31/10 (#297, parte 3) una partita della libreria può avere i **parametri** (`Partita.parametri`,
+solo col segno `libreria`): valori validati dai materiali della verifica che `scheda.avvio_js`
+mette in JSON nella configurazione del motore (come il titolo) e il motore passa a
+`GIOCO.nuovaPartita({ parametri })`; `apriGioco({ parametri })` li prova. Il documento in memoria
+ha la chiave anche dei parametri.

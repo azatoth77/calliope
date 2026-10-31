@@ -337,6 +337,29 @@ class _VoiceChange:
         self.voice = voice
 
 
+class _Silenzio:
+    """Un silenzio fra due frasi, nell'ordine della coda (31/10, il ripasso da ascoltare dello
+    Studio: i secondi per pensare fra la domanda di una carta e la risposta). Non va in `played`."""
+
+    def __init__(self, secondi: float):
+        self.secondi = max(0.0, min(30.0, float(secondi)))
+
+
+def sintesi_pcm(voice, text: str, pronuncia=None) -> bytes:
+    """PCM int16 di una frase con una voce di Piper, con la pronuncia degli inglesismi e delle
+    unità (`Speaker._pcm`; dal 31/10 anche per l'audio del ripasso dello Studio, che si prepara
+    fuori dalle code della voce)."""
+    if hasattr(voice, "synthesize_stream_raw"):               # piper-tts < 1.3
+        with _SINTESI:
+            if pronuncia is not None:
+                text = pronuncia.applica(text, fonemi=False)
+            return b"".join(voice.synthesize_stream_raw(text))
+    _fonemi_protetti(voice)
+    if pronuncia is not None:
+        text = pronuncia.applica(text, fonemi=supporta_fonemi(voice))
+    return b"".join(ch.audio_int16_bytes for ch in voice.synthesize(text))
+
+
 # Piper e espeak-ng da più thread (06/10, più satelliti insieme): espeak-ng ha uno stato
 # globale, quindi i fonemi uno alla volta in tutto il processo; la voce vera (onnxruntime) può
 # girare in parallelo. Con piper-tts < 1.3 (fonemi e voce insieme) la sintesi intera
@@ -712,16 +735,7 @@ class Speaker:
         cambia solo il testo dato a Piper: `played`, la storia e gli schermi restano uguali.
         Più satelliti insieme (06/10): i fonemi uno alla volta in tutto il processo (espeak-ng,
         che Piper usa per i fonemi, ha uno stato globale), la voce (onnxruntime) in parallelo."""
-        pron = getattr(self, "pronuncia", None)
-        if hasattr(voice, "synthesize_stream_raw"):               # piper-tts < 1.3
-            with _SINTESI:
-                if pron is not None:
-                    text = pron.applica(text, fonemi=False)
-                return b"".join(voice.synthesize_stream_raw(text))
-        _fonemi_protetti(voice)
-        if pron is not None:
-            text = pron.applica(text, fonemi=supporta_fonemi(voice))
-        return b"".join(ch.audio_int16_bytes for ch in voice.synthesize(text))
+        return sintesi_pcm(voice, text, getattr(self, "pronuncia", None))
 
     def gemello(self, uscita) -> "Speaker":
         """Un'altra voce in uscita (la corsia di un altro satellite, calliope/corsie.py) con le
@@ -746,6 +760,11 @@ class Speaker:
                 elif isinstance(item, _Filler):
                     if not self._interrupted.is_set():
                         audio_q.put(("", self._synth(item.text)))   # "": non va in played
+                elif isinstance(item, _Silenzio):
+                    if not self._interrupted.is_set():
+                        rate = getattr(getattr(self.voice, "config", None), "sample_rate",
+                                       0) or self._rate
+                        audio_q.put(("", b"\0\0" * int(rate * item.secondi)))
                 elif not self._interrupted.is_set():      # interrotta: non si sintetizza più
                     audio_q.put((item, self._synth(item)))
             except Exception as e:  # noqa: BLE001 — Piper/espeak su un testo strano
@@ -907,6 +926,17 @@ class Speaker:
             if getattr(self, "_filler_phrases", None):
                 self.prepare(self._filler_phrases)
 
+    def silenzio(self, secondi: float):
+        """Un silenzio in coda, dopo le frasi già mandate (31/10, il ripasso dello Studio)."""
+        if self.muto:
+            return
+        self.text_q.put(_Silenzio(secondi))
+
+    def voce_per(self, voice_path: str):
+        """La voce di Piper di quel percorso, caricata una volta sola (`_load`): per l'audio del
+        ripasso dello Studio, che si prepara fuori dalle code (31/10)."""
+        return self._load(voice_path)
+
     def chime(self):
         """Due note brevi prima di un annuncio (timer, promemoria): chi è nella stanza
         capisce che non è una risposta ma un avviso."""
@@ -970,9 +1000,30 @@ class Speaker:
     def interrupted(self) -> bool:
         return self._interrupted.is_set()
 
-    def say(self, text: str):
+    def say(self, text: str, spezza: bool = True, voce: str | None = None):
+        """Una frase in coda. `spezza=False`: la prima frase del turno non si divide (il ripasso
+        dello Studio conta le frasi sentite per intero in `played`, 31/10). `voce`: il percorso
+        di un'altra voce di Piper per questa frase sola (la «voce del libro» del ripasso), già
+        caricata o da caricare (`voce_per`); con un'altra frequenza resta la voce di adesso."""
         if self.muto:
             return
+        if voce and voce != self._current_voice_path:
+            try:
+                altra = self._load(voce)
+                attuale = self._load(self._current_voice_path)
+            except Exception as e:  # noqa: BLE001 — la frase si dice con la voce di adesso
+                print(f"   [TTS] Voce {voce} non caricata ({type(e).__name__}): uso quella di "
+                      f"adesso", flush=True)
+                altra = attuale = None
+            if altra is not None and (altra.config.sample_rate
+                                      == attuale.config.sample_rate):
+                self._prima_del_turno = False
+                self.text_q.put(_VoiceChange(altra))
+                self.text_q.put(text)
+                self.text_q.put(_VoiceChange(attuale))
+                return
+        if not spezza:
+            self._prima_del_turno = False
         if self.__dict__.get("_prima_del_turno", False):
             # La prima frase del turno, se lunga, in due pezzi (primo_pezzo, 07/10): la voce
             # comincia dopo la sintesi del primo, il resto si sintetizza mentre suona. In

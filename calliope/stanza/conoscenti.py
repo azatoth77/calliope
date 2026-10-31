@@ -859,7 +859,8 @@ class Conoscenti:
                 if str(s.get("proprietario") or "") in admin:
                     try:
                         if hub.collegato(s["id"]):
-                            n += bool(hub.invia_a(s["id"], scheda))
+                            n += bool(hub.invia_a(s["id"], scheda, creato=s.get("creato"),
+                                                  proprietario=s.get("proprietario")))
                     except Exception:  # noqa: BLE001
                         continue
         except Exception:  # noqa: BLE001

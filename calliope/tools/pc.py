@@ -396,7 +396,15 @@ def _pc_apri_app(ctx: ToolContext, app: str, pc: str | None = None) -> dict:
     fuori = _fuori(name, ex, "app")
     if fuori:
         return fuori
-    r = _call(name, ex.apri_app, app)
+    # Per iscritto il controllo degli ammessi lo rifà chi ha il comando (29/10, #307, revisione
+    # della PR #309): l'esecutore locale o il satellite; il cancello di spec è il primo filtro
+    from .spec import scritto, solo_a_voce
+    if scritto(ctx):
+        r = _call(name, ex.apri_app, app, scritto=True)
+    else:
+        r = _call(name, ex.apri_app, app)
+    if r.get("serve_voce"):
+        return solo_a_voce(ctx, "pc_apri_app", {"app": app, **({"pc": pc} if pc else {})})
     if r.get("bloccato"):
         return _locked(name)
     if not r.get("ok"):

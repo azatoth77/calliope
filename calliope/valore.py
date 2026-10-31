@@ -76,6 +76,36 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "appuntamento_aggiungi": {"cosa": C, "quando": S, "cambia": Z},
     "lista_aggiungi": {"cose": C, "lista": B},
     "lista_togli": {"cose": B, "lista": B},
+    # lo Studio (30/10, #284): l'id della verifica e dell'argomento sono bersagli
+    # data: un bersaglio (revisione della PR #319): una data scritta in una pagina o in un titolo
+    # («verifica spostata al 20 dicembre») vale «dal dato» e la politica chiede; detta dalla
+    # persona passa
+    "studio": {"azione": Z, "verifica": B, "materia": C, "data": B, "argomento": C, "per": B,
+               # La posizione nell'elenco degli argomenti: un bersaglio come gli altri (seconda
+               # revisione della PR #317): detto se la persona l'ha detto in cifre, in lettere o
+               # come ordinale («il secondo»), altrimenti dal dato e la politica chiede
+               "numero": B, "titolo": B, "giorno": S, "conoscenza": S,
+               "umore": S,
+               # Il tipo della prova vera e la finestra «dal» (passo 8, #248): una scelta chiusa
+               "prova": S, "finestra": S,
+               # L'indicazione del tutore (passo 10, #250, #285): un contenuto; quanti giorni
+               # vale, una scelta entro i limiti
+               "testo": C, "giorni": S},
+    # L'interrogazione a voce (passo 8, #248): una lettura (E0) come le carte; la verifica è un
+    # bersaglio, la proposta del modello solo una misura
+    "studio_interroga": {"parte": Z, "verifica": B, "materia": C, "proposta": S},
+    "studio_esercizio": {"parte": Z, "verifica": B, "materia": C},
+    # Il ripasso da ascoltare (31/10, passo 9, #249): una lettura (E0) come le carte; la verifica
+    # e il ragazzo di cui si parla sono bersagli, cosa e il numero dell'argomento una scelta
+    "studio_ascolta": {"azione": Z, "cosa": S, "numero": S, "verifica": B, "materia": C,
+                       "per": B},
+    # «Parliamone» (30/10, passo 7c, #328): una lettura (E0); la verifica è un bersaglio come
+    # per `studio`, la materia un contenuto
+    "studio_mappa_consigli": {"verifica": B, "materia": C},
+    # Le attività della libreria (31/10, #297): una lettura (E0) come aprire un gioco puro;
+    # l'attività la sceglie il codice fra i titoli della libreria (una scelta), la verifica è
+    # un bersaglio come per `studio`
+    "studio_attivita": {"attivita": S, "verifica": B, "materia": C},
     "ricorda": {"fatto": C, "per_tutti": Z, "nascita": C},
     "dimentica": {"fatto": B},
     "pc_volume": {"azione": Z, "valore": S},
@@ -99,7 +129,7 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     "anagrafica_salva": {"azione": Z, "nome": B, "dati": C, "proposta": X},
     "conversazioni_dimentica": {},
     "pc_guarda": {"cosa": Z},
-    "immagine_archivia": {"foto": "indice:foto"},
+    "immagine_archivia": {"foto": "indice:foto", "quale": B},
     "allegato_archivia": {"allegato": "indice:allegato"},
     # 08/10, cassetto dei file: «quale» sceglie i file della persona, «minore» (prima «di», che
     # resta accettato: 17/10, #58) un ragazzo per il suo tutore
@@ -213,6 +243,15 @@ def _sviluppo(a: dict) -> int:
     return E3                                # avanti, rifai, completa (11/10): riparte un lavoro
 
 
+def _cassetto(a: dict) -> int:
+    # 28/10 sera (decisione di chi amministra, seguito della #301): eliminare dal cassetto non si
+    # disfa (E3: per iscritto vuole la voce); tenere e tenere ancora restano E2. Gli alias sono
+    # quelli del tool, dalla stessa mappa (29/10, #307): un sinonimo nuovo di «elimina» non resta
+    # E2
+    from .cassetto import azione_canonica
+    return E3 if azione_canonica(pol._s(a, "azione")) == "elimina" else E2
+
+
 def _ricorda(a: dict) -> int:
     # D3: per tutti E2; personale E2 anche lui, ma senza parole dal dato si esegue come oggi
     # (fatto_detto o ancorata): la differenza la fanno le etichette
@@ -224,7 +263,7 @@ EFFETTI: dict[str, object] = {
     "pc_volume": E1, "pc_luminosita": E1, "pc_media": E1, "pc_apri_file": E1,
     "timer_imposta": E1, "promemoria_imposta": E1, "cambia_voce": E1, "documento_crea": E1,
     "documento_modifica": E1, "pc_blocca": E1, "immagine_archivia": E1,
-    "allegato_archivia": E1, "cassetto_gestisci": E2,
+    "allegato_archivia": E1, "cassetto_gestisci": _cassetto,
     # E2: resta, altri lo vedono o cambia le risposte future
     "lista_aggiungi": E2, "lista_togli": E2, "ricorda": _ricorda, "dimentica": E2,
     "citta_casa_salva": E2,
@@ -232,6 +271,12 @@ EFFETTI: dict[str, object] = {
     "modello_compila": E2, "richiesta_tutore": E2, "lavoro_rispondi": E2,
     "lavoro_annulla": E2, "pc_guarda": E2, "schede_pulisci": E2, "dati_conservati": E3,
     "stanza_pausa": E1,
+    # lo Studio (30/10, #284): i dati della persona, si disfa con un tocco o una frase; «archivia»
+    # tiene la verifica oltre la tenuta (resta, la vede il tutore): E2
+    # «indica» e «indicazioni_togli» (passo 10, #250): cambiano come Calliope aiuta un minore,
+    # lo vedono lui e i tutori: E2 come «crea»
+    "studio": lambda a: E2 if str((a or {}).get("azione") or "").lower() in (
+        "crea", "archivia", "indica", "indicazioni_togli") else E1,
     # 14/10: dimenticare un conoscente non si disfa; cambiare chi è di famiglia è fiducia
     "conoscenti": E3, "conoscente_livello": E4,
     # E3: esce di casa, esegue codice o non si disfa
@@ -397,6 +442,130 @@ def _gettoni_numeri(testo) -> set[str]:
             out.add(str(int(g)) if len(g) < 6 else g)
     inverso = {v: str(k) for k, v in pol._NUMERI.items()}
     out |= {inverso[g] for g in pol._gettoni(testo) if g in inverso}
+    return out
+
+
+# Gli ordinali (terza revisione della PR #317): mai dentro `_gettoni_numeri`, dove «prima di
+# uscire», «secondo me», «un quarto d'ora» e «sette decimi» diventavano 1, 2, 4 e 10 detti dalla
+# persona, per ogni tool e per tutta la conversazione. Contano solo per gli argomenti di
+# `POSIZIONI`, solo nella frase del turno e solo nelle forme «articolo + ordinale» («il secondo»,
+# «la prima», «l'ottavo») o «ordinale + argomento/voce/pagina» («secondo argomento»)
+ORDINALI = {f"{radice}{fine}": str(n) for n, radice in enumerate(
+    ("prim", "second", "terz", "quart", "quint", "sest", "settim", "ottav", "non", "decim"), 1)
+    for fine in ("o", "a", "i", "e")}
+_ORD = "|".join(sorted(ORDINALI, key=len, reverse=True))
+_ORD_SING = "|".join(sorted((o for o in ORDINALI if o[-1] in "oa"), key=len, reverse=True))
+_ORDINALE_DETTO = re.compile(
+    # dopo l'ordinale: la fine, una punteggiatura, argomento/voce/pagina, «che» o «quello»
+    # (quarta revisione della PR #317: «la prima cosa da fare», «faccio la prima superiore»,
+    # «la terza media», «il primo ministro» non sono posizioni)
+    rf"(?:\b(?:il|lo|la|i|gli|le)\s+|\bl['’]\s*)({_ORD})\b"
+    rf"(?=\s*(?:$|[.,;:!?)»]|(?:argomento|voce|pagina|che|quell[oa])\b))"
+    # «secondo argomento», al singolare («le prime pagine» non è una posizione)
+    rf"|\b({_ORD_SING})\s+(?:argomento|voce|pagina)\b", re.I)
+# Le date dette a voce, confrontate risolte (revisione della PR #319)
+DATE_DETTE = frozenset({("studio", "data")})
+
+
+def data_della_persona(valore, t, ctx=None) -> bool:
+    """La data `valore` è fra quelle dette dalla persona nella frase o nei turni di prima."""
+    import datetime as _dt
+    from .tools.studio import data_detta_dalla_persona
+    st = getattr(ctx, "studio", None)
+    try:
+        oggi = st._oggi() if st is not None else _dt.date.today()
+    except Exception:  # noqa: BLE001
+        oggi = _dt.date.today()
+    # Mai tutta la conversazione (terza revisione della PR #319: «venerdì ho calcetto» detto
+    # prima, poi una pagina «spostata a venerdì»): la frase del turno e, se Calliope aveva chiuso
+    # con una domanda, la frase della persona di prima (un turno solo, come domanda_fidata)
+    testi = (getattr(t, "testo", ""), getattr(t, "frase_prima_domanda", ""))
+    try:
+        return data_detta_dalla_persona(valore, testi, oggi)
+    except Exception:  # noqa: BLE001 — nel dubbio la data resta com'era etichettata
+        return False
+
+
+def data_dai_dati(valore, t, ctx=None) -> str | None:
+    """La fonte del dato non fidato della conversazione (una pagina, un titolo, una foto) che
+    nomina la stessa data risolta di `valore` (`tools/studio.date_dette`); None se nessuno
+    (31/10, #320: la proposta di una data letta solo lì). Nel dubbio la data viene dal dato."""
+    from .tools.studio import date_dette
+    try:
+        oggi = _oggi_di(ctx)
+        dd = _date_possibili(valore, ctx)
+        if not dd:
+            return None
+        for fonte, testo in reversed(list(getattr(t, "esterni", None) or ())):
+            if dd & date_dette(testo, oggi):
+                return fonte or "dato"
+    except Exception:  # noqa: BLE001
+        return "dato"
+    return None
+
+
+def _oggi_di(ctx):
+    import datetime as _dt
+    st = getattr(ctx, "studio", None)
+    try:
+        return st._oggi() if st is not None else _dt.date.today()
+    except Exception:  # noqa: BLE001
+        return _dt.date.today()
+
+
+def _date_possibili(valore, ctx=None) -> set:
+    """Le date di un valore: AAAA-MM-GG o il nome di un giorno (una), o le date di un testo
+    («20 novembre»: quest'anno o il prossimo)."""
+    from .tools.studio import _data_detta, date_dette
+    oggi = _oggi_di(ctx)
+    try:
+        d = _data_detta(valore, oggi)
+        return {d} if d is not None else set(date_dette(str(valore or ""), oggi))
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def _data_risolta(valore, ctx=None):
+    """La data di un valore, se è una sola; altrimenti None."""
+    dd = _date_possibili(valore, ctx)
+    return next(iter(dd)) if len(dd) == 1 else None
+
+
+def _stessa_data(a, b, ctx=None) -> bool:
+    """Due valori sono la stessa data, confrontata risolta («20 novembre» e «2026-11-20»: una
+    delle date possibili, se l'altro valore ne ha una sola); altrimenti il confronto esatto."""
+    da, db = _date_possibili(a, ctx), _date_possibili(b, ctx)
+    if da and db and (len(da) == 1 or len(db) == 1):
+        return bool(da & db)
+    return _esatto(a) == _esatto(b)
+
+
+def _data_mostrata(valore, ctx=None) -> str:
+    from .tools.studio import detta
+    d = _data_risolta(valore, ctx)
+    return detta(d) if d is not None else _mostra(valore)
+
+
+def _da_studio(fonte: str) -> str:
+    """«da una pagina» per le pagine dello Studio (fonte «foto»: sono pagine fotografate)."""
+    return "da una pagina" if fonte == "foto" else prov.da(fonte)
+
+
+def _detta_studio(fonte: str) -> str:
+    return "una pagina" if fonte == "foto" else prov.detta(fonte)
+
+
+# Gli argomenti che sono una posizione in un elenco detta a voce («tieni il secondo»)
+POSIZIONI = frozenset({("studio", "numero")})
+
+
+def ordinali_detti(testo) -> set[str]:
+    """I numeri detti come ordinali nella forma stretta (vedi `_ORDINALE_DETTO`)."""
+    out = set()
+    for m in _ORDINALE_DETTO.finditer(str(testo or "")):
+        g = (m.group(1) or m.group(2) or "").lower()
+        if g in ORDINALI:
+            out.add(ORDINALI[g])
     return out
 
 
@@ -885,6 +1054,39 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
     # La risposta al dato chiesto dal tool stesso (#98) passa dall'ancora anche se comincia con
     # un consenso («Sì, è nata il 12 ottobre»): il «sì» non è alla domanda della politica
     risposta = risposta_al_sospeso(name, args, t)
+    # Il «sì» alla proposta di un tool con una data (31/10, #320, «proponi_data» di studio): la
+    # persona ha sentito la data, ma se viene solo da una pagina o da un titolo, e non l'ha detta
+    # lei, la domanda dice da dove viene prima di eseguire (mai la proposta da sola)
+    if proposta and not risposta and not getattr(t, "sospeso_politica", False):
+        sosp = t.args_sospeso if isinstance(t.args_sospeso, dict) else {}
+        for k, v in args.items():
+            if (name, k) not in DATE_DETTE:
+                continue
+            # La stessa data della proposta, confrontata risolta («20 novembre» e «2026-11-20»
+            # sono la stessa; `pol._uguali` guarda le parole lunghe: «2026-11-19» valeva come
+            # «2026-11-12»; revisione della PR #362)
+            if k in sosp and not _stessa_data(v, sosp[k], ctx):
+                return pol.Decisione(
+                    "conferma", "valore_proposta_data_diversa",
+                    f"«{_data_mostrata(v, ctx)}» non è la data che ti ho proposto: vuoi davvero "
+                    f"che {cosa}?", fonte), det
+            # Con dati non fidati nella conversazione si chiede sempre, se la persona non ha
+            # detto la data (revisione della PR #362: «fra due settimane», «rinviata di 15
+            # giorni», «al giorno 12» nella pagina non si ritrovano come date, e un «sì» solo
+            # spostava). Se la data si ritrova in un dato, la domanda dice da dove viene
+            if data_della_persona(v, t, ctx):
+                continue
+            da = data_dai_dati(v, t, ctx)
+            det["argomenti"] = {k: f"{(tipi or {}).get(k, BERSAGLIO)}/{DATO if da else MODELLO}"}
+            if da:
+                return pol.Decisione(
+                    "conferma", "valore_proposta_data_dato",
+                    f"«{_data_mostrata(v, ctx)}» viene {_da_studio(da)}, non da te: vuoi davvero "
+                    f"che {cosa}?", da), det
+            return pol.Decisione(
+                "conferma", "valore_proposta_data_non_detta",
+                f"Questa data, «{_data_mostrata(v, ctx)}», non l'hai detta tu, e c'è di mezzo "
+                f"{_detta_studio(fonte)}: è quella giusta? Vuoi davvero che {cosa}?", fonte), det
     if proposta and not risposta:
         # Il «sì» breve della persona della conversazione a una domanda su un'azione E1–E2
         # (09/10, caso vero della DGX delle 20:39: «Sì.» a «vuoi che spenga la luce della
@@ -945,6 +1147,17 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
         if k in OGGETTO_VALORI.get(name, ()):
             v = " ".join(pol._valori_foglia(v)) if pol._valori_foglia(v) else v
         e = etichetta(v, tipo, f_data if forma_data(v) else f)
+        # Una posizione detta come ordinale in questa frase («tieni il secondo argomento»): solo
+        # per gli argomenti di POSIZIONI (terza revisione della PR #317)
+        if ((name, k) in POSIZIONI and e != DETTO
+                and str(v).strip() in ordinali_detti(getattr(t, "testo", ""))):
+            e = DETTO
+        # Una data detta dalla persona (revisione della PR #319): la stessa data risolta da ciò
+        # che ha detto in questa frase o nelle sue frasi di prima, anche se il modello scrive
+        # l'anno che nessuno dice («il 12 novembre» → 2026-11-12). Solo per DATE_DETTE; una data
+        # che sta solo in una pagina o in un titolo resta «dal dato»
+        if (name, k) in DATE_DETTE and e != DETTO and data_della_persona(v, t, ctx):
+            e = PERSONA
         # Un valore della chiamata di prima allo stesso tool, scelto prima del dato letto ora
         # (12/10 sera): l'etichetta che aveva allora, con i soli dati di allora
         if e == DATO and di_prima(name, k, v, t, f):
@@ -980,18 +1193,27 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
             return "foto"          # parole senza fonte con una foto di mezzo (etichetta)
         return fonte_del_valore(v, t, ps) or fonte
 
+    def _citato(k, da) -> tuple[str, str]:
+        """Il valore citato nella domanda e da dove viene: con una data dello Studio fra gli
+        argomenti, la data detta e «da una pagina» (revisione della PR #374: al «sì, spostala»
+        la domanda diceva ««1» viene da una foto», l'id della verifica)."""
+        dk = next((x for x in args if (name, x) in DATE_DETTE and args.get(x)), None)
+        if dk is not None:
+            return _data_mostrata(args[dk], ctx), _da_studio(da)
+        return _mostra(args[k]), prov.da(da)
+
     if bers_dato:
         k = bers_dato[0]
         da = _da(k)
-        domanda = (f"«{_mostra(args[k])}» viene {prov.da(da)}, non da te: vuoi davvero che "
-                   f"{cosa}?")
+        cit, dove = _citato(k, da)
+        domanda = f"«{cit}» viene {dove}, non da te: vuoi davvero che {cosa}?"
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_bersaglio_dato",
                              domanda, da), det
     if cont_dato and E >= E2:
         k = cont_dato[0]
         da = _da(k)
-        domanda = (f"«{_mostra(args[k])}» viene {prov.da(da)}, non da te: vuoi davvero che "
-                   f"{cosa}?")
+        cit, dove = _citato(k, da)
+        domanda = f"«{cit}» viene {dove}, non da te: vuoi davvero che {cosa}?"
         return pol.Decisione("sfida" if E == E4 else "conferma", "valore_contenuto_dato",
                              domanda, da), det
     if cont_modello and E >= E2:

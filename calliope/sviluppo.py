@@ -2452,6 +2452,7 @@ class Sviluppi:
                                          chiave=f"sviluppo:{sv.id}",
                                          stato=sv.fase if sv.stato == "aperta" else sv.stato)
         card["tipo"] = "sviluppo"
+        card["sezione"] = schede.sezione_di("sviluppo")
         card["sviluppo"] = self.dati_vista(sv)
         return card
 
@@ -2507,7 +2508,9 @@ class Sviluppi:
             card = self.scheda(sv)
             for s in hub.abbinati():
                 if s.get("proprietario") == sv.persona:
-                    hub.invia_a(s["id"], card)
+                    # Con l'identità letta adesso (#338): passato a un'altra persona, non va
+                    hub.invia_a(s["id"], card, creato=s.get("creato"),
+                                proprietario=s.get("proprietario"))
         except Exception as e:  # noqa: BLE001 — lo schermo non ferma niente
             self.log(f"[SVILUPPO] scheda non inviata agli schermi: {type(e).__name__}: {e}")
 

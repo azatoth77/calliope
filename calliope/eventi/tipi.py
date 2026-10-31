@@ -118,6 +118,9 @@ ATTI: dict[str, tuple[str, bool, str]] = {
     "onesta": ("risposta", False, "1c"),
     # La frase pronta dopo una risposta che girava in tondo (14/10 notte, ciclo_ripetuto)
     "incartata": ("risposta", False, "1c"),
+    # La frase del codice al posto di una frase del modello che diceva la soluzione di un
+    # esercizio guidato (31/10, #278, la guardia di Brain)
+    "esercizio_svelato": ("risposta", False, "1c"),
     "riga_sviluppo": ("risposta", False, "1f"),
     "sfida": ("risposta", False, "1g"),
     # La mezza frase fissa al cambio d'argomento (§ 13, passo 3): «Metto da parte lo sviluppo
@@ -133,6 +136,9 @@ ATTI: dict[str, tuple[str, bool, str]] = {
     "annuncio_estensione": ("registrato", True, "6"),
     "annuncio_cassetto": ("registrato", True, "7"),
     "modulo": ("registrato", False, "8"),
+    # La conferma del tool di un tocco dallo schermo (28/10, revisione della PR #261): nella
+    # storia, mai alla voce (canale «muta»)
+    "tocco_esito": ("registrato", False, "tocco"),
     "annuncio_agenda": ("fuori_storia", True, "10"),
     "avviso_tutore": ("fuori_storia", True, "11"),
     "errore": ("fuori_storia", False, "12"),
@@ -182,7 +188,8 @@ def e_annuncio(atto) -> bool:
     return bool(v and v[1])
 # Canali di ciò che dice Calliope e di ciò che dice la persona
 CANALI_CALLIOPE = ("voce", "scritto", "muta")
-CANALI_PERSONA = ("voce", "scritto", "modulo")
+# «tocco» (28/10, schermi/tocchi.py): un tocco dallo schermo personale che cambia qualcosa
+CANALI_PERSONA = ("voce", "scritto", "modulo", "tocco")
 
 
 @dataclasses.dataclass(frozen=True)

@@ -24,7 +24,7 @@ per le pagine e 91.000 di prove. La parte grossa è logica nostra:
 | Brain (ciclo del modello, spinte, reti) | 4.800 |
 | Politica, valore, provenienza | 3.000 |
 | Ciclo della voce | 3.100 |
-| Casa, web, documenti, ufficio, archivio, PC, esercizi | 17.700 |
+| Casa, web, documenti, ufficio, archivio, PC, esercizi *[storico: gli esercizi, ~5.400 righe, tolti il 28/10, #279]* | 17.700 |
 
 ## Decisione
 

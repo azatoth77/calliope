@@ -55,6 +55,9 @@ class ToolContext:
     # La frase detta da chi parla in questo turno (la imposta Brain): ai tool serve quando
     # il modello riformula il parametro e perde un dettaglio («spiegamelo in modo semplice»)
     user_text: str = ""
+    # La frase di Whisper prima di «capito» (31/10, revisione della PR #342): l'orale dello
+    # Studio valuta questa, non quella riscritta dal modello; None fuori da Brain
+    user_text_stt: str | None = None
     # Regole deterministiche scattate in questo turno (correzioni degli argomenti, «tutti»,
     # riscritture della casa…): Brain le azzera a ogni risposta e le passa al registro dei
     # turni. Vedi note_rule.
@@ -108,6 +111,19 @@ class ToolContext:
     # La conversazione di stanza (13/10, calliope/stanza/: Stanza), o None se spenta:
     # stanza_pausa e «dimentica»
     stanza: Any = None
+    # Il bersaglio di un tocco dallo schermo personale (28/10, #257, calliope/schermi/tocchi.py):
+    # {"timer": id, "chiave": identità della scheda} per «+1 minuto» e «Ferma». Lo imposta solo
+    # il ciclo per la durata del tocco, mai il modello: timer_imposta e agenda_annulla cambiano
+    # quel timer invece di sceglierlo dal testo (con due timer senza nome sceglierebbero l'ultimo
+    # messo). None = nessun tocco
+    tocco_bersaglio: Any = None
+    # Lo Studio (30/10, passo 4.5, calliope/studio/: Studio), o None se spento: i tool
+    # studio e studio_pagina_leggi, che lavorano solo con `studio_modo: attivo`
+    studio: Any = None
+    # Il ripasso da ascoltare chiesto in questa risposta (31/10, passo 9, #249: lo imposta
+    # studio_ascolta, lo legge e lo azzera il ciclo dopo la risposta, Ciclo._leggi_ripasso): la
+    # lettura di studio/ascolta.py, o None
+    ascolta: Any = None
 
 
 
@@ -147,6 +163,82 @@ def serve_la_voce(ctx, tool: str, argomenti: dict | None, cosa: str,
             "conferma": frase, "risposta_finale": frase,
             "in_sospeso": {"domanda": "Me lo chiedi a voce?", "cosa": cosa, "tool": tool,
                            "argomenti": dict(argomenti or {})}}
+
+
+# Le azioni irreversibili si confermano a voce (decisione di chi amministra del 28/10, dopo la
+# revisione della PR #304): dallo schermo personale si scrive tutto il resto, ma ciò che non si
+# disfa (classe d'effetto E3 o più in valore.py, o politica.IRREVERSIBILI) vuole la voce, e il
+# «sì» scritto non basta: il tool richiamato dallo scritto torna qui. La frase dice «con una frase
+# intera» (seconda revisione della PR #304): un «Sì.» detto subito dopo uno scritto, sotto
+# speaker_min_voice_s, eredita lo schermo come chi parla, e «dimmelo a voce» a chi ha appena
+# parlato non si capiva
+SCRITTO_IRREVERSIBILE = "Questa la confermo solo a voce, con una frase intera."
+# Le eccezioni, una per una col loro perché (decisione di chi amministra del 28/10 sera): E3 per
+# la tabella, ma per iscritto vanno bene
+SCRITTO_AMMESSI = {
+    # aprire un programma sul PC: si chiude subito, non cancella e non manda niente fuori casa
+    # (eseguire codice, programma_esegui e i lavori con codice, resta a voce). Solo le voci del
+    # catalogo pc_app ammesse per iscritto (29/10, #307: pc/base.ammessa_per_iscritto, un elenco di
+    # ammessi): le altre possono eseguire codice, e per iscritto vogliono la voce come
+    # programma_esegui. Qui il primo filtro; il controllo vero lo rifà chi ha il comando
+    # (l'esecutore, o il satellite con il segno `scritto` dell'«avvia»)
+    "pc_apri_app": "si chiude subito, non cancella e non manda niente",
+}
+
+
+def ammesso_per_iscritto(ctx, name: str, argomenti: dict | None) -> bool:
+    """L'eccezione di SCRITTO_AMMESSI vale per questa chiamata? Per pc_apri_app solo se l'app
+    che si aprirebbe non è uno script; nel dubbio (il satellite non lo dice) no."""
+    if name not in SCRITTO_AMMESSI:
+        return False
+    if name == "pc_apri_app":
+        a = argomenti or {}
+        pcs = getattr(ctx, "pc", None) or {}
+        if not pcs:
+            return True                      # niente PC: il tool lo dirà, non apre niente
+        voluto = str(a.get("pc") or "").strip().lower()
+        ex = next((e for n, e in pcs.items() if n.lower() == voluto), None) \
+            or next(iter(pcs.values()))
+        f = getattr(ex, "app_e_script", None)
+        if f is None:
+            return False
+        try:
+            return f(str(a.get("app") or "")) is False
+        except Exception:  # noqa: BLE001 — nel dubbio, a voce
+            return False
+    return True
+
+
+def irreversibile_scritto(ctx, spec, name: str, argomenti: dict | None) -> dict | None:
+    """Il risultato da dare se la richiesta è scritta (o toccata) da uno schermo personale e
+    l'azione non si disfa: niente esecuzione, l'azione in sospeso per la conferma a voce. None
+    altrimenti."""
+    if not scritto(ctx) or ammesso_per_iscritto(ctx, name, argomenti):
+        return None
+    from .. import politica, valore
+    args = dict(argomenti or {})
+    try:
+        e = valore.effetto(name, args, spec)
+    except Exception:  # noqa: BLE001 — nel dubbio, irreversibile
+        e = valore.E3
+    azioni = politica.IRREVERSIBILI.get(name, False)
+    irrev = azioni is not False and (azioni is None
+                                    or politica._s(args, "azione").lower() in azioni)
+    if e < valore.E3 and not irrev:
+        return None
+    return solo_a_voce(ctx, name, args)
+
+
+def solo_a_voce(ctx, name: str, argomenti: dict | None) -> dict:
+    """Niente esecuzione, l'azione in sospeso per la conferma a voce (regola
+    `scritto_irreversibile_voce`): anche quando a rifiutare è chi ha il comando (il satellite o
+    l'esecutore locale per pc_apri_app, revisione della PR #309)."""
+    args = dict(argomenti or {})
+    note_rule(ctx, "scritto_irreversibile_voce")
+    return {"ok": False, "fatto": "NIENTE: l'azione NON è stata eseguita: si conferma solo a voce",
+            "conferma": SCRITTO_IRREVERSIBILE, "risposta_finale": SCRITTO_IRREVERSIBILE,
+            "in_sospeso": {"domanda": "Me lo dici a voce?", "cosa": "questa richiesta",
+                           "tool": name, "argomenti": args}}
 
 
 @dataclass
@@ -197,6 +289,11 @@ class ToolSpec:
     # vicino; dopo un esito vuoto il modello riceve «forse intendeva…». Un argomento oggetto
     # vale per ogni suo valore di testo, con il tipo dal nome del campo. Vuoto = nessuno
     nomi: dict = field(default_factory=dict)
+    # Argomenti delicati (30/10, Studio, revisione della PR #317: lo stato d'animo delle due
+    # domande): il valore serve al tool, ma non va mai su disco. Brain li scrive «…» nel
+    # terminale, nel registro dei turni e nella chiamata che resta nella storia (quindi negli
+    # eventi e nella conversazione salvata). Vuoto = nessuno
+    delicati: tuple[str, ...] = ()
 
     def schema(self) -> dict:
         """Schema del tool nel formato OpenAI (Ollama lo accetta sia su /api/chat sia su /v1)."""

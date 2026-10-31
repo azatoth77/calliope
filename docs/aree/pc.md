@@ -131,3 +131,66 @@ domande (dettagli e correzioni della politica in
   si è aperta la versione nuova, ma la frase diceva il titolo senza «(2)».
 - **Documento proprio con una foto di mezzo**: si apre alla richiesta («volevo che tu aprissi il
   file»), senza la conferma a voce (`politica_documento_proprio`).
+
+## Le app del catalogo `pc_app` per iscritto (29/10, issue #307; elenco di ammessi dalla revisione della PR #309)
+
+A voce si apre ogni voce del catalogo. Per iscritto, da uno schermo personale, si aprono senza voce **solo**
+(`pc/base.ammessa_per_iscritto`; `e_script` è il suo contrario):
+- `browser`;
+- un protocollo noto (`PROTOCOLLI_SCRITTO`: `ms-settings:`, `ms-photos:`, `spotify:`…);
+- un `.exe`, con o senza percorso e senza argomenti, che non sia un interprete, un terminale o uno strumento di
+  sistema (`cmd`, `powershell`, `pwsh`, `wt`, `wsl`, `ubuntu`, `git-bash`, `mintty`, `python3.12`, `java`,
+  `msbuild`, `wmic`, `regedit`, `mmc`, `control`, `rundll32`, `msiexec`…).
+
+Tutto il resto vuole la voce: script, installatori, collegamenti e ogni tipo che ShellExecute esegue (`.bat`,
+`.ps1`, `.msi`, `.cpl`, `.scr`, `.jar`, `.url`, `.com`, `.lnk`…), un nome senza estensione (ShellExecute lo
+cerca nel PATH: «aggiorna» può essere `aggiorna.cmd`), `%COMSPEC%` e le altre variabili, gli argomenti. Prima di
+guardare l'estensione il nome si normalizza come fa Windows (`nome_windows`: via i punti e gli spazi finali,
+`backup.bat.` → `backup.bat`), e uno stream (`x.bat::$DATA`, `calc.exe:x`) vale «non si sa». Le voci di serie
+(`calc.exe`, `notepad.exe`, `explorer.exe`, `ms-settings:`, `browser`, `winword.exe`, `excel.exe`) restano
+ammesse.
+
+Dalla seconda revisione della PR #309 valgono «non si sa» anche un nome corto 8.3 (un `~` nel comando:
+`PYTHON~1.EXE`, `POWERS~1.EXE`) e un percorso di rete (che comincia con `\\` o `//`: UNC, WebDAV con `@SSL`):
+il file cambia senza che chi amministra lo veda. L'esclusione prende anche gli interpreti con un altro nome o un
+suffisso: `pypy`, `ipython`, `jython`, `nodejs`, `python3.12t`, `python_d`, AutoHotkey in tutte le varianti
+(senza argomenti esegue da solo lo script di serie), AutoIt3, `Ahk2Exe`. Le sigle brevi (`py`, `lua`, `sh`)
+solo con una versione, così `pycharm64.exe` o `shotcut.exe` restano app.
+
+Dalla revisione della PR #310 (30/10, issue #311): Tcl col «t» dei thread (`tclsh86t`, `tclsh86`, `wish86t`);
+le shell di MSYS2, che aprono una shell come `git-bash` (`msys2`, `mingw32`, `mingw64`, `ucrt64`, `clang32`,
+`clang64`, `clangarm64`); `deno`, `bun` e `julia` con qualunque coda dopo una cifra o un separatore
+(`deno1.40`, `bun-windows-x64`, `julia-1.10`; `bunny.exe` e `bundle-viewer.exe` restano app); gli altri
+interpreti e REPL valutati nella revisione (`R`, `Rscript`, `Rterm`, `Rgui`, `erl`, `werl`, `escript`, `ghc`,
+`ghci`, `runghc`, `racket`, `raco`, `scala`, `groovy`, `groovysh`, `dart`; `iex` ed `elixir` sono `.bat`, ma il
+nome c'è). Vogliono la voce anche un percorso dalla radice senza l'unità (`\app.exe`, `/app.exe`: dipende
+dall'unità corrente) e un `.exe` su un'unità di rete mappata (`Z:\app.exe`): come un percorso UNC, il file cambia
+senza che chi amministra lo veda. L'unità di rete si riconosce solo sul Windows che esegue (`GetDriveTypeW`,
+`DRIVE_REMOTE`): sul PC del satellite l'«avvia» col segno scritto la rifiuta; il server sulla DGX, che non vede
+le unità del PC, la lascia passare al satellite.
+
+Dalla revisione della PR #334 (31/10): `ghc`, `ghci`, `runghc`, `runhaskell`, `racket` e `gracket` hanno la
+coda dopo un separatore come `deno` (`ghc-9.4.8.exe`); `tclkit` in ogni variante (`tclkitsh`, `tclkit-gui`);
+`tclsh86tg`; `jruby` e `jrubyw`; `bunx`; `julialauncher`. Anche i terminali di terze parti vogliono la voce:
+`ConEmu`, `ConEmu64`, `Cmder`, `alacritty`, `wezterm`, `wezterm-gui`, `tabby`, `nu`, `fish`, `cygwin`. Un
+percorso con l'unità ma senza la radice (`C:app.exe`, `C:..\x\app.exe`) vale «non si sa»: è relativo alla
+cartella corrente di quell'unità.
+
+**Limiti noti** (revisione della PR #334): un collegamento simbolico o una giunzione su un'unità locale che
+punta a una condivisione UNC (`C:\app\x.exe` → `\host\share\x.exe`) passa come un percorso locale, perché la
+regola guarda il testo del comando e non risolve i collegamenti. E `GetDriveTypeW` su un'unità di rete mappata
+ma irraggiungibile può bloccarsi finché Windows rinuncia: la risposta per iscritto arriva in ritardo, ma
+l'unità resta di rete e la voce si chiede lo stesso.
+
+**Limite, scelto:** un `.exe` che dentro lancia uno script (un `.bat` impacchettato, un lanciatore) resta un'app
+anche per iscritto: lo decide chi scrive il catalogo.
+
+**Chi controlla.** Il cancello di `tools/spec` è il primo filtro (`app_e_script`); il controllo vero lo fa chi ha
+il comando: `PCExecutor.apri_app(app, scritto=True)` rifiuta con `serve_voce`, e sul PC del satellite l'«avvia»
+porta il segno `scritto: true` e lo rifiuta il satellite (`satellite/esecutore.py`), con la stessa regola. Il
+satellite lo dichiara nel «ciao» (`avvia_scritto`); uno di prima, che non conosce il segno, vale «non si sa» e
+per iscritto si chiede la voce. I nomi di `app_script` nel «ciao» sono tagliati a 40 caratteri e al più 50: un
+nome lungo quanto il taglio, o l'elenco al tetto, valgono «non si sa». Un rifiuto di chi ha il comando diventa la
+stessa risposta del cancello («Questa la confermo solo a voce, con una frase intera.»), con l'azione in sospeso.
+*[storico: dal 29/10 mattina alla revisione della PR #309 un elenco di esclusioni (script e interpreti) e il
+solo controllo del server sui nomi del «ciao»]* Il perché e le prove: [sicurezza-politica](sicurezza-politica.md).

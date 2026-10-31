@@ -46,8 +46,17 @@ def _io(persona) -> bool:
 
 # «promemoria» e non «agenda»: con «agenda» il modello sceglieva timer per «fammi vedere i
 # miei promemoria sullo schermo» (prova del 02/10)
-COSE = ("ultima", "risposta", "testo", "esercizio", "lista", "timer", "promemoria", "documento",
-        "casa", "niente")
+COSE = ("ultima", "risposta", "testo", "lista", "timer", "promemoria", "documento", "casa",
+        "pagina", "niente")
+# Le pagine di Le mie cose che `cosa=pagina` apre sullo schermo personale (28/10, issue #289):
+# quelle che esistono (schermi/raccolte.PAGINE); l'Ufficio solo per chi amministra e le pagine
+# nascoste per età come la pagina stessa (raccolte.visibili)
+PAGINE = ("documenti", "liste", "agenda", "lavori", "cassetto", "giochi", "ufficio")
+# Come il modello scrive la pagina (forma di una scelta già fatta, principio 10)
+_PAGINA_ALIAS = {"documento": "documenti", "lista": "liste", "lavoro": "lavori",
+                 "lavori e programmi": "lavori", "programmi": "lavori", "programma": "lavori",
+                 "gioco": "giochi", "appuntamenti": "agenda", "promemoria": "agenda",
+                 "timer": "agenda", "fatture": "ufficio", "foto": "cassetto", "file": "cassetto"}
 TESTO_MAX = 4000
 # I tool che toccano cose personali: la loro risposta, riletta sullo schermo, è personale
 _PERSONALI = {"promemoria_imposta", "appuntamento_aggiungi", "appuntamenti_elenca",
@@ -93,17 +102,14 @@ def _dove(nomi: list[str]) -> str:
 
 # ─────────────────────────── schermo_mostra ───────────────────────────
 
-def _esercizio_aperto(ctx, prof):
-    """La scheda dell'esercizio in corso di chi parla (calliope/esercizi/), o None."""
-    if prof is None:
-        return None
-    try:
-        from ..esercizi import sessione as S
-        srv = S.servizio()
-        s = srv.sessione(prof.id) if srv is not None else None
-        return srv.scheda(s) if s is not None else None
-    except Exception:  # noqa: BLE001 — lo schermo non si ferma per gli esercizi
-        return None
+def _segna_riservata(card: dict, ctx) -> dict:
+    """Una scheda che ripete la risposta di prima (`cosa` risposta, o un testo scritto dal
+    modello subito dopo) quando quella veniva da un tool riservato: il segno `_riservata` (resta
+    sul server) la tiene fuori dalla Conversazione e dall'archivio (revisione della PR #271)."""
+    prev = getattr(ctx, "risposta_precedente", None) or {}
+    if prev.get("riservata"):
+        card["_riservata"] = True
+    return card
 
 
 def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender, testo: str = ""):
@@ -111,25 +117,18 @@ def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender, testo: str
     prof = _person(ctx)
     if cosa == "niente":
         return schede.vuota(), ""
-    # Con gli esercizi aperti «scrivimelo sullo schermo» è l'esercizio di adesso (12/10, DGX:
-    # il problema non arrivava sullo schermo); la scheda è quella degli esercizi, personale
-    if cosa in ("esercizio", "ultima", "risposta"):
-        card = _esercizio_aperto(ctx, prof)
-        if card is not None:
-            note_rule(ctx, "schermo_esercizio")
-            return card, ""
-        if cosa == "esercizio":
-            return None, "Non abbiamo esercizi aperti da mostrare."
     if cosa == "testo":
         # Un testo scelto dal modello (12/10): un problema, una poesia, i passaggi di un conto.
         # Visibilità come la risposta di prima (di casa per una persona riconosciuta)
         t = str(testo or "").strip()[:TESTO_MAX]
         if not t:
             return None, "Dimmi cosa vuoi che scriva sullo schermo."
-        return schede.testo("Da leggere", t, schede.CASA if prof else schede.PUBBLICA), ""
+        card = schede.testo("Da leggere", t, schede.CASA if prof else schede.PUBBLICA)
+        return _segna_riservata(card, ctx), ""
     if cosa == "ultima":
         card = hub.ultima(sender)
         if card is not None:
+            # Il segno `_riservata` (Brain._invia_schede) viaggia con la scheda ricordata
             return card, ""
         cosa = "risposta"                     # nessuna scheda: la risposta di prima
     if cosa == "risposta":
@@ -140,7 +139,7 @@ def _scheda_per(ctx: ToolContext, cosa: str, lista: str, hub, sender, testo: str
         # Chi ha usato tool personali nella risposta di prima la rilegge solo sul suo schermo
         vis = (schede.PERSONALE if set(prev.get("tool") or ()) & _PERSONALI
                else schede.CASA if prof else schede.PUBBLICA)
-        return schede.testo("Ultima risposta", text, vis), ""
+        return _segna_riservata(schede.testo("Ultima risposta", text, vis), ctx), ""
     if cosa == "lista":
         if ctx.liste is None:
             return None, "Le liste non sono disponibili."
@@ -250,13 +249,78 @@ def _proprio_grigio(ctx, sender, chi_titolo) -> bool:
     return appena_consegnato(ctx, titolo)
 
 
+def _apri_pagina(ctx: ToolContext, hub, pagina: str) -> dict:
+    """`cosa=pagina` (28/10, issue #289): lo schermo personale aperto di chi parla va su
+    `#/cose/<pagina>`; chiuso, la frase dice dove la trova. Solo le pagine che lì ci sono
+    (raccolte.visibili: l'Ufficio solo per chi amministra, niente Ufficio ai minori), solo con
+    l'identità decisa dalla voce, come le schede personali. Reversibile: cambia solo la vista."""
+    from ..schermi.raccolte import TESSERE, visibili
+    p = " ".join(str(pagina or "").strip().lower().replace("_", " ").split())
+    p = _PAGINA_ALIAS.get(p, p)
+    nomi = dict(TESSERE)
+    if p not in PAGINE:
+        return _final("Quale pagina di Le mie cose? Liste, Agenda, Lavori e programmi, Cassetto, "
+                      "Documenti o Giochi.", ok=False, fatto=NIENTE)
+    sender = hub.mittente(ctx)
+    prof = _person(ctx)
+    if prof is None or not getattr(sender, "persona", None):
+        return _final("Le mie cose c'è solo sullo schermo personale di chi riconosco dalla voce.",
+                      ok=False, fatto=NIENTE)
+    if not getattr(sender, "certo", False):
+        # Zona grigia (revisione della PR #294): dal suo telefono, o dal suo schermo personale,
+        # la pagina si apre lo stesso: è reversibile, sul suo schermo, con le sue cose (come
+        # `_proprio_grigio`); da un altro dispositivo no, senza dire «chiamami per nome»
+        from ..dispositivo import proprio
+        if not proprio(ctx, sender):
+            return _final("Non sono sicura di chi parla, quindi da qui non apro uno schermo "
+                          "personale: chiedimelo dal tuo telefono, o con una frase più lunga.",
+                          ok=False, fatto=NIENTE)
+        sender.certo = True                 # solo per questa chiamata, come _proprio_grigio
+        note_rule(ctx, "schermo_pagina_proprio")
+    # L'Ufficio c'è solo con l'ufficio installato, come nel prompt (revisione della PR #294)
+    cfg = getattr(ctx, "cfg", None)
+    spenta = ((p == "ufficio" and getattr(ctx, "ufficio", None) is None)
+              or (p == "cassetto" and not getattr(cfg, "cassetto_enabled", True)))
+    if p not in visibili(prof) or spenta:
+        return _final(f"Sul tuo schermo la pagina {nomi[p]} non c'è.", ok=False, fatto=NIENTE)
+    # L'Ufficio col livello vero del turno, «amministra» (seconda revisione della PR #294): non
+    # basta il profilo, perché nella zona grigia e dallo schermo il livello è al più «familiare»
+    if p == "ufficio" and _level(ctx) != "amministra":
+        # Chi amministra, col livello del turno più basso (frase breve, zona grigia): l'Ufficio
+        # sul suo schermo c'è, quindi non «non c'è» (issue #299: il modello ripeteva «non hai
+        # l'Ufficio»). «Non c'è» resta per familiari, minori e ufficio non installato
+        note_rule(ctx, "schermo_ufficio_voce")
+        return _final("L'Ufficio lo apro solo quando riconosco bene la tua voce: chiedimelo con "
+                      "una frase intera.", ok=False, fatto=NIENTE)
+    apri = getattr(hub, "apri_pagina", None)
+    n = apri(sender.persona, p) if apri is not None else 0
+    if n:
+        note_rule(ctx, "schermo_pagina")
+        return _final(f"Ecco, sul tuo schermo c'è Le mie cose, alla voce {nomi[p]}.",
+                      fatto="mostrato")
+    abbinato = getattr(hub, "personale_abbinato", None)
+    if abbinato is not None and abbinato(sender):
+        note_rule(ctx, "schermo_pagina_chiuso")
+        return _final(f"Lo trovi in Le mie cose, alla voce {nomi[p]}, quando apri il tuo schermo.",
+                      fatto=NIENTE)
+    return _final("Le mie cose c'è sullo schermo personale, il telefono o il PC, e non ne hai uno "
+                  "abbinato.", ok=False, fatto=NIENTE)
+
+
 def _schermo_mostra(ctx: ToolContext, cosa: str = "ultima", lista: str = "",
-                    testo: str = "") -> dict:
+                    testo: str = "", pagina: str = "") -> dict:
     hub = getattr(ctx, "schermi", None)
     if hub is None:
         return _final("Gli schermi non sono attivi in questa installazione.", ok=False,
                       fatto=NIENTE)
     cosa = str(cosa or "ultima").strip().lower()
+    if cosa == "pagina":
+        return _apri_pagina(ctx, hub, pagina)
+    if cosa not in COSE and cosa not in ("agenda", "appuntamenti") and str(pagina or "").strip():
+        # `cosa` fuori elenco con la pagina scritta: un errore, non una pagina aperta a caso
+        # (revisione della PR #294: cosa="agenda", pagina="liste" apriva le Liste)
+        return _final("Non so cosa mostrare: per una pagina di Le mie cose serve cosa=pagina.",
+                      ok=False, fatto=NIENTE)
     if cosa in ("agenda", "appuntamenti"):          # sinonimi dello stesso valore
         cosa = "promemoria"
     if cosa not in COSE:
@@ -460,6 +524,9 @@ def _proprietario(ctx: ToolContext, hub, azione: str, stanza: str, persona: str)
     else:
         fatto = hub.archivio.imposta_proprietario(s["id"], owner, owner_name)
         hub._rinfresca()
+        # Subito: la pagina aperta del proprietario di prima riceve «proprietario» e la cronologia
+        # in memoria dello schermo si svuota (#338; lo farebbe comunque la prossima scheda)
+        hub.abbinati()
     if fatto is None:
         return _final(f"Non trovo più {nome}: forse è stato scollegato.", ok=False,
                       fatto=NIENTE)
@@ -699,21 +766,24 @@ def schermi_specs() -> list[ToolSpec]:
     return [
         ToolSpec(
             name="schermo_mostra",
-            description=("Mostra qualcosa su uno schermo di casa, quando lo chiedono: "
+            description=("Mostra qualcosa su uno schermo, anche il telefono di chi parla, quando "
+                         "lo chiedono: "
                          "«mostramelo sullo schermo», «fammelo vedere», «fammelo leggere», "
                          "«metti la lista sullo schermo», «togli dallo schermo», «chiudi il gioco». cosa: "
                          "ultima (quello di cui si parla adesso), risposta (il testo della "
                          "tua ultima risposta), testo (un testo che scrivi tu in testo=: un "
-                         "problema, i passaggi di un conto, una poesia), esercizio (l'esercizio "
-                         "in corso), lista, timer, promemoria (i promemoria, gli "
+                         "problema, i passaggi di un conto, una poesia), lista, timer, promemoria (i promemoria, gli "
                          "appuntamenti e l'agenda di chi parla: «mettimi sullo schermo i miei "
                          "appuntamenti»), documento (l'ultimo preparato), casa (luci e "
-                         "temperature), niente (pulisci lo schermo, chiude anche un gioco). lista: il nome della "
-                         "lista, se cosa=lista."),
+                         "temperature), pagina (apre sullo schermo personale di chi parla una "
+                         "pagina di Le mie cose: «aprimi i documenti sul telefono»), niente "
+                         "(pulisci lo schermo, chiude anche un gioco). lista: il nome della "
+                         "lista, se cosa=lista. pagina: quale, se cosa=pagina."),
             parameters={"type": "object",
                         "properties": {"cosa": {"type": "string", "enum": list(COSE)},
                                        "lista": {"type": "string"},
-                                       "testo": {"type": "string"}},
+                                       "testo": {"type": "string"},
+                                       "pagina": {"type": "string", "enum": list(PAGINE)}},
                         "required": ["cosa"]},
             func=_schermo_mostra, risk="lettura", levels=ALL),
         ToolSpec(

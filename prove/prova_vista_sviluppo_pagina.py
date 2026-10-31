@@ -23,10 +23,10 @@ Schermo del computer (1280×800 e 1920×1080):
 - al giro 2 i tetti sono di 48 passate e 60 minuti; il riepilogo dice «correzione 1, riparte
   dalla versione provata» e i numeri dello sviluppo intero;
 - comandi: «A che punto siamo?» manda la frase come scritta (solo con la conversazione aperta),
-  «Prova con…» la mette nella casella; nessun pulsante per approvare o attivare;
+  «Chiedi all'agente…» la mette nella casella, «Prova con…» non c'è più (28/10 sera, si prova a voce); nessun pulsante per approvare o attivare;
 - sviluppo chiuso: lo schermo esce dalla vista; uno schermo di un'altra persona non cambia.
 Telefono (375×812): la vista si apre a schermo intero da sola, in una colonna, con testo ≥ 16 px
-e niente di lato; il carosello resta; chiusa con «Chiudi», un tocco sulla scheda la riapre; il
+e niente di lato; la scheda resta in Le mie cose; chiusa con «Chiudi», un tocco sulla scheda la riapre; il
 lavoro a schermo intero con il flusso; sviluppo chiuso: lo strato si chiude.
 Nessun errore JavaScript né violazione della CSP. Con CALLIOPE_FOTO=<cartella> gli screenshot.
 """
@@ -269,14 +269,16 @@ def pc(exe, srv, hub, web, svs, lavori):
                  rie[:400])
         # ── vista normale, schermo intero, torna allo sviluppo ──
         clic(p, "#principale [data-svil-esci]")
+        # Con le sezioni (di serie) la scheda del lavoro torna in Adesso, e la vista lascia il centro
         ok = aspetta(lambda: p.valuta("!document.body.classList.contains('in-vista-sviluppo') && "
-                                      "!!document.querySelector('#principale .tipo-lavoro')"), 5)
-        verifica("«Vista normale»: la scheda del lavoro", bool(ok))
+                                      "!document.querySelector('#principale > *') && "
+                                      "!!document.querySelector('#sez-adesso .tipo-lavoro')"), 5)
+        verifica("«Vista normale»: la scheda del lavoro in Adesso", bool(ok))
         verifica("nella scheda normale il codice non si vede",
-                 p.valuta("!document.querySelector('#principale .flusso-chat') && "
-                          "!document.querySelector('#principale pre.anteprima')"))
+                 p.valuta("!document.querySelector('#sezioni .flusso-chat') && "
+                          "!document.querySelector('#sezioni pre.anteprima')"))
         verifica("«Torna allo sviluppo» nella testa", p.valuta("!document.getElementById('torna-svil').hidden"))
-        clic(p, "#principale [data-intero]")
+        clic(p, "#sez-adesso .tipo-lavoro [data-intero]")
         ok = aspetta(lambda: p.valuta("!document.getElementById('strato-intero').hidden && "
                                       "!!document.querySelector('#intero-posto .due-colonne .flusso-chat')"), 5)
         verifica("«Schermo intero» del lavoro: lo strato con le due colonne e il flusso", bool(ok))
@@ -314,8 +316,9 @@ def pc(exe, srv, hub, web, svs, lavori):
         verifica("nome dell'estensione e versione nella testa della vista",
                  "meteo_citta" in tit and "versione 2" in tit, tit)
         tasti = p.valuta("[...document.querySelectorAll('#principale .comandi-svil button')].map(b => [b.textContent, b.disabled])")
-        verifica("comandi senza conversazione: spenti (tranne «Vista normale»), nessuno per approvare",
-                 tasti and all(d for t, d in tasti if t != "Vista normale")
+        # Dal 28/10 (#301) dallo schermo personale si scrive sempre: i comandi (frasi scritte) accesi
+        verifica("comandi senza conversazione: accesi (28/10, #301), nessuno per approvare",
+                 tasti and all(not d for t, d in tasti)
                  and not any("pprov" in t or "ttiv" in t for t, _ in tasti), str(tasti))
         foto(p, "vista-collaudo-1280x800.png")
         finestra(p, 1920, 1080)
@@ -326,18 +329,24 @@ def pc(exe, srv, hub, web, svs, lavori):
         verifica("con la conversazione aperta i comandi si accendono", bool(ok))
         while hub.ingresso.prendi() is not None:
             pass
+        # Dal 28/10 sera (seguito della #301): provare esegue codice (E3), dallo schermo solo a voce
+        verifica("niente «Prova con…» nel collaudo; la nota dice che provare, approvare e attivare si fa a voce",
+                 not p.valuta("!!document.querySelector(\"#principale [data-svil-scrivi='Prova con ']\")")
+                 and "Provare, approvare e attivare si fa a voce." in (p.valuta(
+                     "document.querySelector('#principale .nota-svil').textContent") or ""))
         clic(p, "#principale [data-svil-invia]")
         arr = aspetta(lambda: hub.ingresso.prendi(), 5)
         verifica("«A che punto siamo?» manda la frase come scritta",
                  bool(arr) and "A che punto è lo sviluppo?" in json.dumps(arr, ensure_ascii=False),
                  json.dumps(arr, ensure_ascii=False)[:200])
-        clic(p, "#principale [data-svil-scrivi='Prova con ']")
+        clic(p, "#principale [data-svil-scrivi='Perché ']")
         val = aspetta(lambda: p.valuta("document.getElementById('scrivi-testo').value"), 3)
-        verifica("«Prova con…»: la frase da finire nella casella dello scritto", val == "Prova con ", val)
+        verifica("«Chiedi all'agente…»: la frase da finire nella casella dello scritto", val == "Perché ", val)
         # ── chiusura ──
         svs.chiudi(sv, "uscita")
         ok = aspetta(lambda: p.valuta("!document.body.classList.contains('in-vista-sviluppo') && "
-                                      "(document.querySelector('#principale .svil-chiuso') || {}).textContent"), 5)
+                                      "!document.querySelector('#principale > *') && "
+                                      "(document.querySelector('#sezioni .svil-chiuso') || {}).textContent"), 5)
         verifica("sviluppo chiuso: lo schermo esce dalla vista", bool(ok), ok)
         verifica("…e «Torna allo sviluppo» sparisce", p.valuta("document.getElementById('torna-svil').hidden"))
         # Lo schema chiaro del sistema: la pagina resta scura (ha un tema solo), leggibile
@@ -374,9 +383,9 @@ def telefono(exe, srv, hub, web, svs, lavori):
         hub._rinfresca()
         sv = svs.apri("dario", "Dario", "estensione", "Un'estensione per le maree", "maree")
         k = f"sviluppo:{sv.id}"
-        ok = aspetta(lambda: p.valuta(f"{T}.carosello().intera") == k, 8)
+        ok = aspetta(lambda: p.valuta(f"{T}.sezioni().intera") == k, 8)
         verifica("sviluppo aperto: il telefono apre la vista a schermo intero da solo", bool(ok),
-                 p.valuta(f"{T}.carosello()"))
+                 p.valuta(f"{T}.sezioni()"))
         a = Agente(svs, hub, "L2")
         agenti.append(a)
         lavori.lavori.append(a.lav)
@@ -405,16 +414,17 @@ def telefono(exe, srv, hub, web, svs, lavori):
         foto(p, "telefono-vista-sotto-375x812.png")
         PSI.tocca(p, "#intera-chiudi")
         ok = aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 3)
-        car = p.valuta(f"{T}.carosello()") or {}
-        verifica("«Chiudi»: torna il carosello, con la scheda dello sviluppo e quella del lavoro",
-                 bool(ok) and k in car.get("ordine", []) and "lavoro:L2" in car.get("ordine", []),
+        car = (p.valuta(f"{T}.sezioni()") or {}).get("posti", {})
+        verifica("«Chiudi»: in Le mie cose › Lavori la scheda dello sviluppo e quella del lavoro",
+                 bool(ok) and k in car.get("cose/lavori", []) and "lavoro:L2" in car.get("cose/lavori", []),
                  json.dumps(car))
-        verifica("nel carosello il codice non si vede",
-                 p.valuta("!document.querySelector('#binario .flusso-chat')"))
+        verifica("nelle sezioni il codice non si vede",
+                 p.valuta("!document.querySelector('#sezioni .flusso-chat')"))
         p.valuta(f"{T}.vaiA('lavoro:L2'); 1")
+        aspetta(lambda: p.valuta("!document.getElementById('sez-cose').hidden"), 2)
         time.sleep(0.2)
-        PSI.tocca(p, "#binario [data-chiave=\"lavoro:L2\"] h1.titolo")
-        ok = aspetta(lambda: p.valuta(f"{T}.carosello().intera") == "lavoro:L2"
+        PSI.tocca(p, "#sez-cose [data-chiave=\"lavoro:L2\"] h1.titolo")
+        ok = aspetta(lambda: p.valuta(f"{T}.sezioni().intera") == "lavoro:L2"
                      and (testo_pagina(p, "#intera-posto") or "") == a.atteso, 5)
         verifica("telefono: il lavoro a schermo intero, con il flusso", bool(ok))
         PSI.misura_strato(p, "lavoro con il flusso", "375×812")
@@ -423,8 +433,8 @@ def telefono(exe, srv, hub, web, svs, lavori):
         aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 3)
         p.valuta(f"{T}.vaiA({json.dumps(k)}); 1")
         time.sleep(0.2)
-        PSI.tocca(p, f"#binario [data-chiave=\"{k}\"] .svil-titolo")
-        ok = aspetta(lambda: p.valuta(f"{T}.carosello().intera") == k, 3)
+        PSI.tocca(p, f"#sez-cose [data-chiave=\"{k}\"] .svil-titolo")
+        ok = aspetta(lambda: p.valuta(f"{T}.sezioni().intera") == k, 3)
         verifica("un tocco sulla scheda dello sviluppo riapre la vista", bool(ok))
         svs.chiudi(sv, "uscita")
         ok = aspetta(lambda: p.valuta("document.getElementById('strato-scheda').hidden"), 5)
@@ -455,6 +465,9 @@ def main() -> int:
     from calliope.sviluppo import Sviluppi
     try:
         cfg, srv, hub, web = PCP.avvia()
+        # La vista dello sviluppo è la funzione principale dello schermo del PC: si prova con le
+        # sezioni accese, com'è di serie (seconda revisione della PR #255)
+        cfg.schermi_sezioni = True
         lavori = SimpleNamespace(lavori=[])
         svs = Sviluppi(cfg, TMP, lavori=lavori, log=lambda m: None)
         svs.schermi = hub

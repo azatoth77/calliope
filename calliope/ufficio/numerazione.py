@@ -228,7 +228,12 @@ class Numeratore:
             db.close()
         return {"serie": serie, "anno": anno, "numero": numero, "nota": nota}
 
-    def elenco(self, serie: str | None = None, anno: int | None = None) -> list[dict]:
+    def elenco(self, serie: str | None = None, anno: int | None = None,
+               con_dati: bool = False) -> list[dict]:
+        """I numeri di una serie e di un anno (o tutti). Con `con_dati` anche i dati del documento
+        (`dati`, il JSON salvato all'emissione: il cliente, le righe e dal 28/10 `_totale`), chi
+        l'ha emesso (`owner`) e quando (`creato`, `annullato`): la pagina Ufficio degli schermi
+        (passo 2e, #260)."""
         where, args = [], []
         if serie:
             where.append("serie = ?")
@@ -236,8 +241,8 @@ class Numeratore:
         if anno:
             where.append("anno = ?")
             args.append(anno)
-        sql = ("SELECT serie, anno, numero, data, owner_name, modello, titolo, rif, stato, nota "
-               "FROM numeri" + (" WHERE " + " AND ".join(where) if where else "")
+        sql = ("SELECT serie, anno, numero, data, owner_name, modello, titolo, rif, stato, nota"
+               + (", dati, owner, creato, annullato" if con_dati else "") + " FROM numeri" + (" WHERE " + " AND ".join(where) if where else "")
                + " ORDER BY serie, anno, numero")
         db = self._conn()
         try:
@@ -245,11 +250,16 @@ class Numeratore:
         finally:
             db.close()
         keys = ("serie", "anno", "numero", "data", "chi", "modello", "titolo", "file", "stato",
-                "nota")
+                "nota") + (("dati", "owner", "creato", "annullato") if con_dati else ())
         out = []
         for r in rows:
             d = dict(zip(keys, r))
             d["file"] = json.loads(d["file"] or "[]")
+            if con_dati:
+                try:
+                    d["dati"] = json.loads(d["dati"] or "{}")
+                except ValueError:
+                    d["dati"] = {}
             d["testo"] = self.testo(d["serie"], d["numero"], d["anno"])
             out.append(d)
         return out

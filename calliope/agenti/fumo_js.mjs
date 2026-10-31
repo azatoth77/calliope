@@ -367,7 +367,8 @@ async function prepara(file, opzioni = {}) {
     catch (e) { nota(`caricamento di ${base(f)}`, e, { file: base(f) }); return amb; }
   }
   {
-    const conf = JSON.stringify({ macchina, giocatori: { min: opzioni.minimo || 1, max: opzioni.massimo || 1 } });
+    const conf = JSON.stringify({ macchina, giocatori: { min: opzioni.minimo || 1, max: opzioni.massimo || 1 },
+      ...(opzioni.parametri ? { parametri: opzioni.parametri } : {}) });
     try {
       vm.runInContext(`CalliopeMotore.avvia(typeof GIOCO === "undefined" ? undefined : GIOCO, ${conf}, { errore: __notaMotore, titolo: ${JSON.stringify(opzioni.titolo || "")}, finto: true });`,
         contesto, { filename: "avvio", timeout: 2000 });
