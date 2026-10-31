@@ -435,6 +435,28 @@
         return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
+    // Il ripasso da ascoltare (31/10, passo 9, #249, studio.js): {verifica, azione?, parte?,
+    // firma?, suona?} → le parti; con azione «audio» il WAV in un blob (202 mentre si prepara),
+    // preso con la sessione nell'intestazione: niente gettoni nell'indirizzo
+    async studioAscolta(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        if (dati && dati.azione === "audio") {
+          const f = await fetch("/api/studio/ascolta", {
+            method: "POST", cache: "no-store", body: JSON.stringify(dati),
+            headers: { "Content-Type": "application/json", "X-Calliope-Sessione": S.sessione || "" },
+          });
+          if (f.status !== 200) {
+            let d = {};
+            try { d = await f.json(); } catch (e) { /* vuota */ }
+            return { ok: false, status: f.status, dati: d };
+          }
+          return { ok: true, status: 200, dati: {}, blob: await f.blob() };
+        }
+        const r = await postSessione("/api/studio/ascolta", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
   };
 
   // Nuovo accesso con il token, finché non riesce. Le sessioni del server sono in memoria:
@@ -4218,6 +4240,10 @@
       emetti("compagnia", { attiva: !!(v && v.compagnia), testo: TESTO_COMPAGNIA });
       return;
     }
+    // Lo stato della voce per il ripasso da ascoltare (31/10, #249, studio.js): si ferma quando
+    // Calliope ascolta, pensa o parla, e riparte quando torna a dormire
+    try { document.dispatchEvent(new CustomEvent("calliope:voce", { detail: { stato: v && v.stato ? String(v.stato) : null } })); }
+    catch (e) { /* niente */ }
     const box = $("voce");
     S.voce = v && TESTI_VOCE[v.stato] ? v : null;
     if (!S.voce) { box.hidden = true; voceGioco(""); return; }

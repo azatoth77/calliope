@@ -1024,6 +1024,19 @@ studio:
   # «proposte», da confermare; «spenta» niente. Si passa ad «attiva» col banco delle domande
   # (prove/manuali/banco_studio.py, fase «domande») e la rilettura delle domande in ombra
   studio_domande_genera: ombra
+  # Il ripasso da ascoltare (31/10, passo 9, #249, calliope/studio/ascolta.py): le pagine lette
+  # degli argomenti del piano e le carte, lette da Piper, a voce («fammi ascoltare il ripasso»,
+  # tool studio_ascolta, fermato da «Calliope, basta») e sullo schermo («Ascolta», con pausa,
+  # −15 s e velocità). Il testo lo compone il codice, senza modello: per questo attiva di serie
+  # con lo Studio. «spenta» toglie il tool e la sezione
+  studio_ascolta: attiva
+  # La «voce del libro»: il materiale (pagine e carte) si legge con questa voce di Piper, le
+  # frasi di Calliope con la sua, così chi ascolta le distingue. Vuoto, un file che manca o una
+  # voce con un'altra frequenza: tutto con la voce di Calliope
+  studio_ascolta_voce: voices/it_IT-paola-medium.onnx
+  # L'audio del ripasso per lo schermo è una cache del testo (studio_cartella/ascolta/): si toglie
+  # dopo tanti giorni dall'ultimo ascolto, e sempre con la verifica, «dimentica» e --svuota
+  studio_ascolta_giorni: 7
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

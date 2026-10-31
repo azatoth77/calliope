@@ -1369,6 +1369,9 @@ class Conservazione:
         non ferma il resto."""
         try:
             from .studio.dati import cancella_file
+            # L'audio del ripasso da ascoltare (31/10, #249) scade anche da sé, dall'ultimo ascolto
+            kw.setdefault("ascolta_giorni",
+                          int(getattr(self.cfg, "studio_ascolta_giorni", 7) or 7))
             out = cancella_file(getattr(self.cfg, "memory_db", None), log=self.log,
                                 cartella=getattr(self.cfg, "studio_cartella", None), **kw)
         except Exception as e:  # noqa: BLE001 — lo Studio non ferma la rotazione del resto

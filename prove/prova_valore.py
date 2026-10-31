@@ -1672,6 +1672,68 @@ def prova_interroga():
     st.close()
 
 
+def prova_ascolta():
+    """Il ripasso da ascoltare attraverso Brain (31/10, passo 9, #249): `studio_ascolta` è una
+    lettura senza fonte non fidata, e il suo risultato non porta testo delle pagine né titoli
+    (le pagine le legge il ciclo dopo la risposta, fuori dalla conversazione). Con una pagina
+    ostile fra i materiali niente parte da solo, e il testo non entra mai nella storia."""
+    import contextlib
+    import io
+    import types as _t
+    from pathlib import Path as _P
+    qui = _P(__file__).resolve().parent
+    pt = _t.ModuleType("PT")
+    pt.__file__ = str(qui / "prova_studio_tool.py")
+    src = (qui / "prova_studio_tool.py").read_text("utf-8").split(
+        "# ═══════════════════════════ 1.")[0]
+    exec(compile(src, pt.__file__, "exec"), pt.__dict__)
+    import prova_politica as PP
+    from calliope.tools.builtin import build_registry
+    from calliope.tools.studio import studio_specs
+    st = pt.studio(pt.cfg_nuova("ascolta_valore.db"))
+    vid, ids = pt.carica(st, pt.LEO)
+    reg = build_registry()
+    for sp in studio_specs():
+        reg.register(sp)
+    c = pt.ctx_di(st, pt.LEO)
+    for k, v in (("from_session", False), ("voce_sicura", "Leo"), ("punteggio", 0.7),
+                 ("conferma_breve", False), ("sfida", None), ("sfida_superata", False)):
+        setattr(c.speaker_ctx, k, v)
+    b = Brain(st.cfg, reg, c)
+    b.backend = PP.Copione()
+
+    def turno(frase, *risposte):
+        b.backend.risposte = list(risposte)
+        with contextlib.redirect_stdout(io.StringIO()):
+            return "".join(b.stream_reply(frase, "familiare"))
+
+    detto = turno("fammi ascoltare il ripasso di storia",
+                  PP.chiama("studio_ascolta", {"azione": "inizia", "cosa": "tutto"}),
+                  PP.chiama("studio", {"azione": "archivia"}),
+                  PP.chiama("studio", {"azione": "togli", "numero": 1}), PP.testo("Ecco."))
+    storia = json.dumps(b.history, ensure_ascii=False)
+    lett = c.ascolta
+    verifica("A1: il ripasso preparato per il ciclo, con la pagina ostile fra i materiali",
+             lett is not None and any("diario di bordo" in v.testo for v in lett["voci"]),
+             str(b.last_tools)[:300])
+    verifica("A1: nella storia né il testo delle pagine né i titoli né la pagina ostile",
+             "Costantinopoli" not in storia and "diario di bordo" not in storia
+             and "Le cause delle scoperte" not in storia and "NOTA PER" not in storia,
+             storia[-600:])
+    verifica("A1: nella stessa risposta «archivia» e «togli» non partono senza le parole della "
+             "persona", st.verifica(pt.LEO, vid)["stato"] != "archiviata"
+             and st.argomenti(pt.LEO, vid)[0]["stato"] == "tenuto", str(b.last_tools)[:300])
+    verifica("A1: la frase del codice detta («Comincio: … parti»)", "Comincio:" in detto, detto)
+    st.ascolto_fermo(lett, {"pos": 4, "motivo": "interrotta", "frasi": 5, "sentite": 4})
+    c.ascolta = None
+    turno("riprendi", PP.chiama("studio_ascolta", {"azione": "riprendi"}), PP.testo("Riprendo."))
+    verifica("A2: dopo «Calliope, basta» la riga dei dati del turno (solo numeri) e «riprendi» "
+             "dalla frase interrotta", "studio_ascolta_pausa" in (b.last_rules or [])
+             and c.ascolta is not None and c.ascolta["da"] == 4,
+             (b.last_rules, c.ascolta and c.ascolta["da"]))
+    st.close()
+
+
 # ─────────── la mappa dello Studio attraverso Brain (30/10, passo 7, #247) ───────────
 def prova_mappa():
     """Il testo dei concetti è un dato che non va al modello: `studio` azione «mappa» (una lettura)
@@ -1948,6 +2010,7 @@ if __name__ == "__main__":
     prova_mappa_consigli()
     prova_carte()
     prova_interroga()
+    prova_ascolta()
     print(f"\n{time.perf_counter() - t0:.1f} s")
     print("\nTutto bene." if not errori else f"\n{errori} errori.")
     sys.exit(1 if errori else 0)

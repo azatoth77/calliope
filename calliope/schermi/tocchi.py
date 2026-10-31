@@ -164,6 +164,8 @@ ESCLUSI: Mapping[str, str] = MappingProxyType({
                         "verifica finta",
     "studio_mappa_consigli": "legge la mappa e lo scheletro dello Studio (dati non fidati) per "
                              "«Parliamone»: sullo schermo la mappa ha la sua vista",
+    "studio_ascolta": "il ripasso letto ad alta voce dove si parla: sullo schermo c'è «Ascolta», "
+                      "che lo suona sul dispositivo",
 })
 
 

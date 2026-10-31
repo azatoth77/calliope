@@ -13,14 +13,16 @@
 // «Correggi», «Togli» (POST /api/studio/carte, fuori dalla conversazione come gli argomenti).
 // Dal 30/10 (passo 7, #247) la mappa concettuale: lo scheletro, la mia mappa, a memoria, in SVG e
 // a elenco (equivalenti), il controllo del codice e il PDF (POST /api/studio/mappa).
+// Dal 31/10 (passo 9, #249) «Ascolta»: il ripasso da ascoltare (le pagine lette e le carte, lette
+// da Piper; POST /api/studio/ascolta), con pausa, −15 s, velocità e «Scarica».
 // Dal 31/10 (passo 8, #248) le prove: la verifica finta scritta (le risposte, «Consegna», la
 // correzione con «Era giusta / Quasi / No» sulle risposte da rivedere), le domande scritte o
 // proposte dalle pagine, il tipo della prova vera (POST /api/studio/prova); l'orale si fa a voce.
 // Domanda e risposta sono un dato: solo textContent, come i titoli.
 // I bordi li trova bordi.js su un fotogramma di 320 px; la foto parte intera (JPEG, lato ≤ 3000)
 // con i quattro angoli, e il server li ricontrolla, la raddrizza e decide (studio/pagine.py).
-// Tutto ciò che arriva dal server va in textContent. Niente URL blob: la CSP del telefono non li
-// ammette per le immagini; le miniature sono canvas.
+// Tutto ciò che arriva dal server va in textContent. Niente URL blob per le immagini: la CSP del
+// telefono non li ammette (le miniature sono canvas); per l'audio del ripasso sì (media-src blob:).
 "use strict";
 
 (function () {
@@ -660,6 +662,8 @@
     if (v.stato === "aperta") art.append(sezioneProve(v));
     // La mappa concettuale (passo 7, #247): lo scheletro, la mia mappa, a memoria
     if (v.stato === "aperta" || v.stato === "bozza") art.append(sezioneMappa(v));
+    // Il ripasso da ascoltare (passo 9, #249): le pagine lette e le carte, lette da Piper
+    if (home.dati.ascolta && (v.stato === "aperta" || v.stato === "bozza")) art.append(sezioneAscolta(v));
     // Impara / Esercitati / Esame: solo ciò che c'è (passo 4.5: «leggi le pagine»)
     if (v.oggi) {
       const imp = nodo("section", "studio-h-gruppo");
@@ -2126,6 +2130,329 @@
     return p;
   }
 
+  // ── il ripasso da ascoltare (31/10, passo 9, #249) ──
+  // Le pagine lette dei suoi argomenti e le carte, lette da Piper (le frasi di Calliope con la sua
+  // voce, il materiale con la «voce del libro»). L'audio di una parte arriva in un blob con la
+  // sessione nell'intestazione (POST /api/studio/ascolta) e suona da un elemento Audio fuori dal
+  // DOM: la home si ridisegna e l'audio non si ferma. Il titolo di una parte è un dato: solo
+  // textContent. Mentre suona la pagina lo dice («calliope:ripasso»: sul telefono la stanza vale
+  // «Calliope parla») e manda il battito; si ferma quando Calliope ascolta, pensa o parla
+  // («calliope:voce») e riparte da sola se torna a dormire entro RIPRENDI_MS. Con una prova aperta
+  // niente: gli audio in memoria si buttano.
+  const VELOCITA = [0.75, 1, 1.25, 1.5];
+  const RIPRENDI_MS = 120000;
+  const BATTITO_MS = 30000;
+  let ascolta = null;            // {vid, dati, parte, url: {n: url}, attesa, esito, prepara, velocita}
+  let lettore = null;            // l'elemento Audio (uno per pagina)
+  let voceAttiva = false;        // Calliope ascolta, pensa o parla
+  let perVoce = 0;               // quando il ripasso si è fermato per la voce (ms), 0 = no
+  let battito = null, sondaggio = null;
+
+  function fmtTempo(s) {
+    s = Math.max(0, Math.floor(Number(s) || 0));
+    return Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+  }
+  function minuti(s) {
+    const m = Math.max(1, Math.round((Number(s) || 0) / 60));
+    return m === 1 ? "1 minuto" : m + " minuti";
+  }
+  function tastoAscolta(testo, azione, dati, cls, etichetta) {
+    const b = nodo("button", "tasto studio-h-tasto" + (cls ? " " + cls : ""), testo);
+    b.type = "button";
+    b.dataset.ascolta = azione;
+    b.dataset.dati = JSON.stringify(dati || {});
+    if (etichetta) b.setAttribute("aria-label", etichetta);
+    return b;
+  }
+  function lettoreAudio() {
+    if (lettore) return lettore;
+    lettore = new Audio();
+    lettore.preload = "auto";
+    try { lettore.preservesPitch = true; } catch (e) { /* vecchio Safari */ }
+    lettore.addEventListener("timeupdate", aggiornaTempo);
+    lettore.addEventListener("play", () => { suona(true); disegnaHome(); });
+    lettore.addEventListener("pause", () => { suona(false); disegnaHome(); });
+    lettore.addEventListener("ended", () => {
+      if (!ascolta) return;
+      const parti = (ascolta.dati && ascolta.dati.parti) || [];
+      const dopo = parti.find((p) => p.n === ascolta.parte + 1);
+      if (dopo) suonaParte(dopo.n);
+      else { ascolta.esito = "Il ripasso è finito."; disegnaHome(); }
+    });
+    return lettore;
+  }
+  function inCorso() { return !!(lettore && !lettore.paused && !lettore.ended); }
+  // Il ripasso suona (o smette): al telefono (half-duplex) e al server (il battito, la stanza
+  // del satellite del PC in pausa, e la prova aperta che lo ferma)
+  function suona(si) {
+    try { document.dispatchEvent(new CustomEvent("calliope:ripasso", { detail: { suona: !!si } })); } catch (e) { /* niente */ }
+    clearInterval(battito);
+    battito = null;
+    if (!ascolta || !sch() || !sch().studioAscolta) return;
+    const vid = ascolta.vid;
+    const manda = async (acceso) => {
+      const r = await sch().studioAscolta({ verifica: vid, azione: "suona", suona: acceso });
+      if (r.ok && r.dati && r.dati.prova) chiudiPerProva();
+    };
+    manda(!!si);
+    if (si) battito = setInterval(() => { if (inCorso()) manda(true); }, BATTITO_MS);
+  }
+  function buttaAudio() {
+    // load() toglie dalla coda l'evento «pause»: il «non suona più» si dice da qui
+    const suonava = inCorso();
+    if (lettore) { lettore.pause(); lettore.removeAttribute("src"); try { lettore.load(); } catch (e) { /* niente */ } }
+    if (suonava) suona(false);
+    if (ascolta) for (const k of Object.keys(ascolta.url || {})) { try { URL.revokeObjectURL(ascolta.url[k]); } catch (e) { /* niente */ } }
+    if (ascolta) ascolta.url = {};
+    clearTimeout(sondaggio);
+  }
+  function chiudiPerProva() {
+    buttaAudio();
+    if (ascolta) { ascolta.dati = Object.assign({}, ascolta.dati || {}, { prova: true, parti: [] }); ascolta.esito = ""; }
+    disegnaHome();
+  }
+  function aggiornaTempo() {
+    if (!ascolta || !lettore) return;
+    const t = document.querySelector(".studio-a-tempo");
+    if (t) metti(t, fmtTempo(lettore.currentTime) + " di " + fmtTempo(lettore.duration || parteCorrente().secondi || 0));
+    const r = document.querySelector(".studio-a-barra");
+    if (r && document.activeElement !== r && isFinite(lettore.duration) && lettore.duration > 0) {
+      r.value = String(Math.round((lettore.currentTime / lettore.duration) * 1000));
+    }
+  }
+  function parteCorrente() {
+    const parti = (ascolta && ascolta.dati && ascolta.dati.parti) || [];
+    return parti.find((p) => p.n === (ascolta && ascolta.parte)) || {};
+  }
+  function nomeParte(p) {
+    if (!p || !p.n) return "";
+    if (p.tipo === "carte") return "Le carte";
+    return "Argomento " + Number(p.argomento) + (p.continua ? " (continua)" : "");
+  }
+  function pagineDette(p) {
+    const pg = Array.isArray(p.pagine) ? p.pagine.map(String) : [];
+    if (!pg.length) return "";
+    return (pg.length === 1 ? "pagina " : "pagine ") + pg.join(", ");
+  }
+
+  async function caricaAscolta(vid) {
+    if (!sch() || !sch().studioAscolta) return;
+    ascolta.attesa = true;
+    disegnaHome();
+    const r = await sch().studioAscolta({ verifica: vid });
+    if (!ascolta || ascolta.vid !== vid) return;
+    ascolta.attesa = false;
+    if (!r.ok) { ascolta.esito = String(r.dati.errore || "Non riesco a leggere il ripasso: riprova tra poco."); disegnaHome(); return; }
+    if (ascolta.dati && ascolta.dati.firma && r.dati.firma !== ascolta.dati.firma) buttaAudio();
+    ascolta.dati = r.dati;
+    if (r.dati.prova) chiudiPerProva();
+    disegnaHome();
+  }
+
+  async function suonaParte(n) {
+    if (!ascolta) return;
+    const vid = ascolta.vid;
+    ascolta.parte = n;
+    ascolta.esito = "";
+    if (voceAttiva) {
+      // Calliope ascolta o parla: riparte da sola quando torna a dormire
+      perVoce = Date.now();
+      ascolta.esito = "Riparte quando ho finito di ascoltare o di parlare.";
+      disegnaHome();
+      return;
+    }
+    const p = lettoreAudio();
+    let url = ascolta.url[n];
+    if (!url) {
+      clearTimeout(sondaggio);
+      const r = await sch().studioAscolta({ verifica: vid, azione: "audio", parte: n, firma: ascolta.dati && ascolta.dati.firma });
+      if (!ascolta || ascolta.vid !== vid || ascolta.parte !== n) return;
+      if (r.status === 202) {
+        const f = Number(r.dati.fatto) || 0;
+        ascolta.prepara = Math.round(f * 100);
+        disegnaHome();
+        sondaggio = setTimeout(() => { if (ascolta && ascolta.vid === vid && ascolta.parte === n) suonaParte(n); }, 2500);
+        return;
+      }
+      ascolta.prepara = null;
+      if (!r.ok) {
+        if (r.dati && r.dati.prova) { chiudiPerProva(); return; }
+        ascolta.esito = String((r.dati && r.dati.errore) || "Non riesco a prendere l'audio: riprova tra poco.");
+        if (r.dati && r.dati.cambiato) caricaAscolta(vid);
+        disegnaHome();
+        return;
+      }
+      url = URL.createObjectURL(r.blob);
+      ascolta.url[n] = url;
+      // Al più tre parti in memoria: le altre si riprendono dal server
+      const chiavi = Object.keys(ascolta.url).map(Number).filter((k) => k !== n);
+      while (chiavi.length > 2) { const k = chiavi.shift(); try { URL.revokeObjectURL(ascolta.url[k]); } catch (e) { /* niente */ } delete ascolta.url[k]; }
+    }
+    if (p.src !== url) p.src = url;
+    p.playbackRate = ascolta.velocita;
+    try { await p.play(); }
+    catch (e) { ascolta.esito = "Tocca «Ascolta» per farlo partire."; }
+    disegnaHome();
+  }
+
+  function pannelloAscolta(v) {
+    const box = nodo("div", "studio-a");
+    const d = ascolta.dati;
+    if (!d) { box.append(nodo("p", "studio-h-riga", ascolta.attesa ? "Un attimo…" : "")); return box; }
+    if (d.prova) {
+      box.append(nodo("p", "studio-h-riga", "C'è una prova in corso: il ripasso torna dopo la consegna."));
+      return box;
+    }
+    const parti = Array.isArray(d.parti) ? d.parti : [];
+    if (!parti.length) {
+      box.append(nodo("p", "studio-h-riga", "Non c'è ancora niente da ascoltare: servono le pagine lette degli argomenti confermati, o delle carte."));
+      return box;
+    }
+    if (!d.audio) box.append(nodo("p", "studio-avviso", "Qui l'audio del ripasso non si può preparare: chiedimelo a voce, «fammi ascoltare il ripasso»."));
+    const cur = parteCorrente();
+    const suonando = inCorso();
+    if (ascolta.parte) {
+      const pl = nodo("div", "studio-a-player");
+      pl.setAttribute("role", "group");
+      pl.setAttribute("aria-label", "Ripasso, parte " + ascolta.parte + " di " + parti.length);
+      const testa = nodo("p", "studio-a-titolo");
+      testa.append(nodo("b", null, "Parte " + ascolta.parte + " di " + parti.length + " · " + nomeParte(cur)));
+      if (cur.titolo) testa.append(nodo("span", "studio-a-dato", String(cur.titolo)));
+      pl.append(testa);
+      const barra = document.createElement("input");
+      barra.type = "range";
+      barra.min = "0";
+      barra.max = "1000";
+      barra.className = "studio-a-barra";
+      barra.setAttribute("aria-label", "Avanzamento della parte");
+      barra.value = lettore && isFinite(lettore.duration) && lettore.duration > 0 ? String(Math.round((lettore.currentTime / lettore.duration) * 1000)) : "0";
+      pl.append(barra, nodo("span", "studio-a-tempo", fmtTempo(lettore ? lettore.currentTime : 0) + " di " +
+        fmtTempo((lettore && isFinite(lettore.duration) && lettore.duration) || cur.secondi || 0)));
+      if (ascolta.prepara !== null && ascolta.prepara !== undefined) {
+        pl.append(nodo("p", "studio-h-riga", "Preparo l'audio di questa parte… " + ascolta.prepara + "%"));
+      }
+      const t = nodo("div", "studio-h-tasti studio-a-tasti");
+      t.append(tastoAscolta("−15 s", "indietro", {}, "", "Indietro di 15 secondi"),
+        tastoAscolta(suonando ? "Pausa" : "Ascolta", suonando ? "pausa" : "riprendi", {}, "studio-h-primo"),
+        tastoAscolta(String(ascolta.velocita).replace(".", ",") + "×", "velocita", {}, "", "Velocità " + String(ascolta.velocita).replace(".", ",")));
+      const prima = parti.find((p) => p.n === ascolta.parte - 1), dopo = parti.find((p) => p.n === ascolta.parte + 1);
+      if (prima) t.append(tastoAscolta("Parte prima", "parte", { n: prima.n }));
+      if (dopo) t.append(tastoAscolta("Parte dopo", "parte", { n: dopo.n }));
+      const url = ascolta.url[ascolta.parte];
+      if (url) {
+        const a = nodo("a", "tasto studio-h-tasto studio-a-scarica", "Scarica");
+        a.href = url;
+        a.download = "ripasso-parte-" + ascolta.parte + ".wav";
+        t.append(a);
+      }
+      pl.append(t);
+      box.append(pl);
+    }
+    if (!ascolta.parte) {
+      const prima = parti.find((p) => p.oggi) || parti[0];
+      const t0 = nodo("div", "studio-h-tasti");
+      t0.append(tastoAscolta(prima.oggi ? "Ascolta le pagine di oggi" : "Ascolta dall'inizio", "parte", { n: prima.n }, "studio-h-primo"));
+      box.append(t0);
+    }
+    box.append(nodo("p", "studio-h-nota", "Interrompimi quando vuoi: se mi chiami il ripasso si ferma, e dopo la risposta riparte."));
+    const ol = nodo("ol", "studio-h-elenco studio-a-parti");
+    for (const p of parti) {
+      const li = nodo("li", "studio-h-voce studio-a-parte" + (p.n === ascolta.parte ? " studio-a-corrente" : ""));
+      const tx = nodo("div", "studio-testo");
+      tx.append(nodo("b", null, "Parte " + p.n + " · " + nomeParte(p) + (p.oggi ? " · oggi" : "")));
+      if (p.titolo) tx.append(nodo("span", "studio-a-dato", String(p.titolo)));
+      tx.append(nodo("span", "studio-h-riga", [pagineDette(p), p.tipo === "carte" ? (Number(p.carte) || 0) + " carte" : "",
+        minuti(p.secondi), p.pronta ? "pronta" : ""].filter(Boolean).join(" · ")));
+      li.append(tx, tastoAscolta(p.n === ascolta.parte && suonando ? "In ascolto" : "Ascolta", "parte", { n: p.n }, "",
+        "Ascolta la parte " + p.n));
+      ol.append(li);
+    }
+    box.append(ol);
+    return box;
+  }
+
+  function sezioneAscolta(v) {
+    const sez = nodo("section", "studio-h-gruppo studio-h-ascolta");
+    sez.dataset.verifica = String(v.id);
+    sez.append(nodo("h4", "studio-h-sotto", "Ascolta"));
+    const aperta = ascolta && ascolta.vid === v.id;
+    if (!aperta) {
+      sez.append(nodo("p", "studio-h-riga", "Le pagine lette degli argomenti e le carte, ad alta voce."));
+    }
+    const t = nodo("div", "studio-h-tasti");
+    t.append(tastoAscolta(aperta ? "Chiudi il ripasso" : "Ripasso da ascoltare", aperta ? "chiudi" : "apri", {}, aperta ? "" : "studio-h-primo"));
+    sez.append(t);
+    if (aperta) sez.append(pannelloAscolta(v));
+    if (aperta && ascolta.esito) {
+      const es = nodo("p", "pagina-esito studio-a-esito", ascolta.esito);
+      es.setAttribute("role", "status");
+      sez.append(es);
+    }
+    return sez;
+  }
+
+  async function suAscolta(b) {
+    const art = b.closest("[data-verifica]");
+    const vid = Number(art && art.dataset.verifica);
+    let dati = {};
+    try { dati = JSON.parse(b.dataset.dati || "{}"); } catch (e) { return; }
+    const az = b.dataset.ascolta;
+    if (az === "apri") {
+      if (ascolta && ascolta.vid !== vid) chiudiAscolta();
+      ascolta = { vid, dati: null, parte: 0, url: {}, attesa: false, esito: "", prepara: null, velocita: 1 };
+      vista({ vista: "ascolta", verifica: vid });
+      await caricaAscolta(vid);
+      return;
+    }
+    if (!ascolta || ascolta.vid !== vid) return;
+    if (az === "chiudi") { chiudiAscolta(); vista({ vista: "home" }); disegnaHome(); return; }
+    if (az === "parte") { perVoce = 0; await suonaParte(Number(dati.n)); return; }
+    if (az === "pausa") { perVoce = 0; if (lettore) lettore.pause(); return; }
+    if (az === "riprendi") {
+      perVoce = 0;
+      if (lettore && lettore.src && ascolta.url[ascolta.parte]) {
+        if (voceAttiva) { perVoce = Date.now(); ascolta.esito = "Riparte quando ho finito di ascoltare o di parlare."; disegnaHome(); return; }
+        lettore.play().catch(() => { ascolta.esito = "Tocca «Ascolta» per farlo partire."; disegnaHome(); });
+      } else await suonaParte(ascolta.parte || 1);
+      return;
+    }
+    if (az === "indietro" && lettore) { lettore.currentTime = Math.max(0, lettore.currentTime - 15); aggiornaTempo(); return; }
+    if (az === "velocita") {
+      const i = VELOCITA.indexOf(ascolta.velocita);
+      ascolta.velocita = VELOCITA[(i + 1) % VELOCITA.length];
+      if (lettore) lettore.playbackRate = ascolta.velocita;
+      disegnaHome();
+    }
+  }
+  function suBarraAscolta(ev) {
+    const r = ev.target;
+    if (!r || !r.classList || !r.classList.contains("studio-a-barra") || !lettore) return;
+    if (isFinite(lettore.duration) && lettore.duration > 0) lettore.currentTime = (Number(r.value) / 1000) * lettore.duration;
+  }
+  function chiudiAscolta() {
+    buttaAudio();
+    perVoce = 0;
+    ascolta = null;
+  }
+  // La voce di Calliope (schermo.js sul PC, telefono.js sul telefono): il ripasso si ferma quando
+  // ascolta, pensa o parla, e riparte da solo (2 s indietro) se torna a dormire entro RIPRENDI_MS
+  function suVoce(ev) {
+    const stato = ev && ev.detail ? ev.detail.stato : null;
+    voceAttiva = stato === "ascolta" || stato === "pensa" || stato === "parla";
+    if (!ascolta || !lettore) return;
+    if (voceAttiva) {
+      if (inCorso()) { lettore.pause(); perVoce = Date.now(); }
+      return;
+    }
+    if (perVoce && Date.now() - perVoce < RIPRENDI_MS) {
+      perVoce = 0;
+      if (lettore.src && ascolta.url[ascolta.parte]) {
+        lettore.currentTime = Math.max(0, lettore.currentTime - 2);
+        lettore.play().catch(() => { ascolta.esito = "Tocca «Ascolta» per farlo ripartire."; disegnaHome(); });
+      } else if (ascolta.parte) suonaParte(ascolta.parte);
+    } else perVoce = 0;
+  }
+
   function disegnaHome() {
     const box = $("studio-home");
     if (!box) return;
@@ -2149,6 +2476,7 @@
     if (b.dataset.carte) { suCarte(b); return; }
     if (b.dataset.prove) { suProve(b); return; }
     if (b.dataset.mappa) { suMappa(b); return; }
+    if (b.dataset.ascolta) { suAscolta(b); return; }
     if (b.dataset.pagine) { apriMateriali(Number(b.dataset.pagine)); return; }
     if (b.dataset.domande) {
       const id = Number(b.dataset.domande);
@@ -2228,6 +2556,7 @@
     st.aperta = false;
     carte = null;
     mappa = null;
+    chiudiAscolta();
     if (st.materiali) chiudiCamera();
     if ($("studio")) $("studio").hidden = true;
     vista({ vista: null });
@@ -2254,6 +2583,9 @@
     $("studio-home").addEventListener("pointerup", suNodo);
     $("studio-home").addEventListener("pointercancel", () => { trascina = null; });
     $("studio-home").addEventListener("keydown", tastoSulNodo);
+    // Il ripasso da ascoltare (passo 9, #249): la barra dell'avanzamento e lo stato della voce
+    $("studio-home").addEventListener("input", suBarraAscolta);
+    document.addEventListener("calliope:voce", suVoce);
     // «Il piano» aperto: la vista del piano (toggle non risale: in cattura)
     $("studio-home").addEventListener("toggle", (ev) => {
       const d = ev.target;
@@ -2317,6 +2649,12 @@
           modulo: mappa.modulo ? mappa.modulo.tipo : null,
           mappe: mappa.dati ? ["scheletro", "mia", "memoria", "libera"].filter((k) => mappa.dati[k]).map((k) => ({ quale: k, id: mappa.dati[k].id,
             stato: mappa.dati[k].stato, nodi: (mappa.dati[k].nodi || []).length, collegamenti: (mappa.dati[k].collegamenti || []).length })) : [] } : null,
+        // Il ripasso da ascoltare (passo 9, #249): le parti e lo stato del lettore, mai il testo
+        ascolta: ascolta ? { vid: ascolta.vid, parte: ascolta.parte, esito: ascolta.esito, velocita: ascolta.velocita,
+          prova: !!(ascolta.dati && ascolta.dati.prova), firma: ascolta.dati ? ascolta.dati.firma : null,
+          parti: ascolta.dati ? (ascolta.dati.parti || []).map((p) => ({ n: p.n, tipo: p.tipo, pronta: p.pronta, oggi: p.oggi })) : [],
+          suona: inCorso(), tempo: lettore ? lettore.currentTime : 0, url: !!(ascolta.url && ascolta.url[ascolta.parte]),
+          perVoce: !!perVoce } : null,
         camera: !!st.flusso,
         argomenti: st.arg && Array.isArray(st.arg.argomenti) ? st.arg.argomenti.map((a) => ({ id: a.id, stato: a.stato, avvisi: (a.avvisi || []).slice() })) : [],
         pagine: st.pagine.map((p) => ({ id: p.id, tipo: p.tipo, angoli: p.angoli, intera: !!p.intera, avvisi: p.avvisi.slice(),

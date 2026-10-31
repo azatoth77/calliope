@@ -12,7 +12,7 @@ const VERSIONE = 3;
 // (prova_telefono_consapevole le confronta). Una costante della pagina che gira, non la cache
 // più alta (revisione della PR #294: durante un aggiornamento è quella nuova), e pronta già al
 // primo «ciao»
-const PAGINA_VERSIONE = "calliope-telefono-pagina-v31";
+const PAGINA_VERSIONE = "calliope-telefono-pagina-v32";
 const CHIAVE_TOKEN = "calliope.telefono.token";
 const CHIAVE_NOME = "calliope.telefono.nome";
 const CHIAVE_MIC = "calliope.telefono.microfono";
@@ -66,7 +66,9 @@ const player = new Riproduttore("Calliope");
 // L'ascolto della stanza (13/10): un secondo VAD sugli stessi blocchi, solo con la stanza accesa
 // dal server, l'interruttore acceso e il microfono acceso; mentre Calliope parla solo con
 // `durante_voce` dal server (passo 5, 14/10: i segmenti portano le frasi che suonavano)
-const stanza = new AscoltoStanza(param, mandaStanza, () => player.inCorso(),
+// Mentre suona il ripasso da ascoltare (31/10, #249, studio.js: evento «calliope:ripasso») la
+// stanza vale «Calliope parla» (half-duplex): i segmenti in corso si buttano
+const stanza = new AscoltoStanza(param, mandaStanza, () => player.inCorso() || !!st.ripasso,
   () => (st.ultimoLid !== null ? { t: st.ultimoA, id: st.ultimoLid } : null),
   () => player.voceOra(1.0));
 // La voce comincia a sentirsi (07/10): come `suona` del satellite in Python, per `prima_voce_s`
@@ -194,6 +196,20 @@ function disegna() {
   if (sch() && sch().voceGioco) sch().voceGioco(gc);
 }
 setInterval(disegna, 250);
+
+// Il ripasso da ascoltare (31/10, passo 9, #249, studio.js): la pagina dello Studio dice quando
+// suona («calliope:ripasso»), e qui si dice lo stato della voce di questo telefono
+// («calliope:voce»): il ripasso si ferma quando il telefono ascolta, pensa o parla, così il nome
+// lo interrompe e la domanda non si mescola all'audio, e riparte quando torna a dormire
+let voceDetta = null;
+function diciVoce() {
+  const [cls] = voceLocale();
+  if (cls === voceDetta) return;
+  voceDetta = cls;
+  try { document.dispatchEvent(new CustomEvent("calliope:voce", { detail: { stato: cls } })); } catch (e) { /* niente */ }
+}
+setInterval(diciVoce, 250);
+document.addEventListener("calliope:ripasso", (ev) => { st.ripasso = !!(ev.detail && ev.detail.suona); });
 
 // Scrive solo se cambia: il giro ogni 250 ms non tocca il DOM per niente
 function metti(el, testo) { if (el && el.textContent !== testo) el.textContent = testo; }

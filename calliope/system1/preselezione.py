@@ -101,7 +101,7 @@ FAMIGLIE = {
                 "argomento", "proposta_rispondi"),
     "minori": ("richiesta_tutore", "minore_gestisci"),
     "studio": ("studio", "studio_pagina_leggi", "studio_carte", "studio_mappa_consigli",
-               "studio_interroga"),
+               "studio_interroga", "studio_ascolta"),
     "calliope": ("calliope_stato", "installa_proponi", "installa_avvia", "installa_gestisci",
                  "dati_conservati"),
     "stanza": ("stanza_pausa", "stanza_cerca", "conoscenti", "conoscente_livello"),
