@@ -126,6 +126,19 @@ for testo, atteso in [("Grazie.", "grazie"), ("Ok, grazie", "grazie"), ("Grazie 
                       ("Perfetto, mettimi un timer.", None), ("No grazie.", None), ("Sei.", None),
                       ("Molto.", None), ("Grazie a tutti.", None), ("Sì.", None)]:
     verifica(f"chiusura «{testo}»", closing_kind(testo), atteso)
+# «stoppati», «stoppa ti», «smetti» (31/10, #373: «No, stoppa ti.» diventava «Non ci sono riuscita:
+# puoi ripetere?»); «no» solo con un ordine di silenzio
+for testo, atteso in [("No, stoppa ti.", "silenzio"), ("Stoppati.", "silenzio"),
+                      ("Calliope, stoppati.", "silenzio"), ("Smetti.", "silenzio"),
+                      ("No, basta.", "silenzio"),
+                      # contrari: «no» da solo è una risposta, e lo stop di una cosa è un comando
+                      ("No.", None), ("No, grazie.", None), ("No, stoppa la musica.", None),
+                      ("Stoppa il timer.", None), ("Smetti di suonare.", None), ("No, ok.", None),
+                      # revisione della PR #374: «No, lo stesso.» a una domanda è una risposta;
+                      # «fa lo stesso» resta silenzio
+                      ("No, lo stesso.", None), ("Lo stesso.", None), ("No, fa lo stesso.", "silenzio")]:
+    verifica(f"chiusura «{testo}» (#373)", closing_kind(testo), atteso)
+    verifica(f"stop «{testo}» (#373)", is_stop(testo), atteso is not None)
 import re  # noqa: E402
 
 from calliope.cortesia import RISPOSTE, Cortesia  # noqa: E402

@@ -451,21 +451,37 @@ _CLOSING = {"ok", "okay", "va", "bene", "grazie", "mille", "tante", "basta", "co
             "d", "accordo", "fa", "lo", "stesso", "fine", "benissimo", "ottimo", "dai",
             # cortesia (05/10): «ti ringrazio», «gentilissima», «ok, capito». Non «sei» né
             # «molto»: da sole sono risposte («Sei.» a «di quanti minuti?»)
-            "ti", "ringrazio", "gentile", "gentilissima", "capito"}
+            "ti", "ringrazio", "gentile", "gentilissima", "capito",
+            # «No, stoppa ti.» (31/10, #373: diventava «Non ci sono riuscita: puoi ripetere?»)
+            "stoppa", "stoppati", "smetti"}
 
 # Le due forme della chiusura (05/10, segnalazione di Dario: «ok, grazie» e «perfetto»
 # restavano senza risposta). Un ordine di silenzio basta che compaia una sua parola
 # («ok, basta», «grazie, lascia stare»): resta muta. Senza, una parola di ringraziamento
 # fa «grazie» («perfetto, grazie»); altrimenti è una conferma («ok», «va bene così»).
 _SILENCE = {"basta", "stop", "niente", "nulla", "lascia", "stare", "zitta", "zitto",
-            "silenzio", "fermati", "ferma", "taci", "smettila", "fine", "stesso"}
+            "silenzio", "fermati", "ferma", "taci", "smettila", "fine", "stesso",
+            "stoppa", "stoppati", "smetti"}
 _THANKS = {"grazie", "ringrazio", "gentile", "gentilissima"}
+
+
+def _chiusura(words: list) -> bool:
+    """Tutte le parole nel lessico di chiusura; «no» solo con un ordine di silenzio («No,
+    stoppa ti.», «no, basta»: 31/10, #373), mai da solo (è una risposta: «Lo apro?» «No.»)."""
+    if not words:
+        return False
+    # «stesso» solo in «fa lo stesso» (revisione della PR #374: «No, lo stesso.» a una domanda è
+    # una risposta, «lo faccio lo stesso», non un ordine di silenzio)
+    if "stesso" in words and "fa" not in words:
+        return False
+    silenzio = any(w in _SILENCE for w in words)
+    return all(w in _CLOSING or (w == "no" and silenzio) for w in words)
 
 
 def is_stop(text: str, name="Calliope") -> bool:
     """La frase intera è una chiusura («Grazie mille», «Calliope, stop», «Va bene così»)?"""
     words = [w for w in _plain_words(text, name) if w != _NAME_MARK]
-    return bool(words) and all(w in _CLOSING for w in words)
+    return _chiusura(words)
 
 
 def closing_kind(text: str, name="Calliope") -> str | None:
@@ -473,7 +489,7 @@ def closing_kind(text: str, name="Calliope") -> str | None:
     "grazie" («grazie mille», «ok, grazie») o "conferma" («perfetto», «va bene così»);
     None se non è una chiusura (vedi is_stop)."""
     words = [w for w in _plain_words(text, name) if w != _NAME_MARK]
-    if not words or not all(w in _CLOSING for w in words):
+    if not _chiusura(words):
         return None
     if any(w in _SILENCE for w in words):
         return "silenzio"

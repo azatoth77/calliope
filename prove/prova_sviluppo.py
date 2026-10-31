@@ -677,6 +677,19 @@ def prova_sospensione(tmp: Path, iso):
     detto = risposta(b, "Ciao")
     verifica("contrario: la risposta finisce con una domanda → il promemoria aspetta",
              detto.endswith("vuoi qualcosa?") and svs.promemoria_giorno("u1") is not None)
+    b.backend.risposte = [chiamata("ora_attuale", {}), [("text", "Sono le 10:00.")]]
+    detto = risposta(b, "Che ore sono?")
+    verifica("contrario (#373): una risposta che ha usato un tool d'altro → il promemoria aspetta",
+             detto == "Sono le 10:00." and svs.promemoria_giorno("u1") is not None
+             and "sviluppo_promemoria_giorno" not in b.last_rules, detto)
+    b.backend.risposte = [chiamata("studio_verifica_crea", {"materia": "storia"}),
+                          [("text", "Va bene.")]]
+    detto = risposta(b, "Venerdì ho la verifica di storia")
+    verifica("contrario (#373): anche un tool solo tentato (un nome che non c'è) → aspetta",
+             "sospesi" not in detto and svs.promemoria_giorno("u1") is not None, detto)
+    b.backend.risposte = [[("text", "Ciao!")]]
+    detto = risposta(b, "Ciao")
+    verifica("…e arriva con la prima risposta senza tool", "sospesi" in detto, detto)
     sv.ultimo = time.time()
     out = P.chiama(reg, ctx, "sviluppo_passo", {"azione": "stato"}, turno=9)
     verifica("stato senza uno aperto: dice i sospesi", "sospesi" in detta(out), detta(out))

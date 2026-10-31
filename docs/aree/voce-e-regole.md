@@ -2935,3 +2935,32 @@ il modello non sapeva che il telefono è uno schermo personale a sezioni. Dettag
   `cosa=pagina` e non `documento_leggi` o un rifiuto, e che il paragrafo non sposti i tool vicini
   («mostramelo sullo schermo», «metti la lista sullo schermo»: `prova_schermi_ollama`); il banco di
   regressione per i casi senza schermo.
+
+## I nomi inventati `studio_<oggetto>_<azione>`, «stoppa ti» e il promemoria fuori tema (31/10, issue #373, ramo `issue-373-studio-nome-inventato`)
+
+Prova di chi amministra del 31/10 alle 9:23 sulla DGX (gemma4 26B), e `prova_studio_ollama` 2/3
+sul caso «crea». «Venerdì ho la verifica di informatica…» → `studio_verifica_crea({'azione':
+'crea', …})`: tool sconosciuto, oltre la distanza 2 dal nome vero, nessun nome suggerito; la
+stessa chiamata ripetuta, poi «Ho segnato la verifica…» senza tool (fermato dalla rete), e la
+verifica non c'era.
+- **Regola `tool_nome_azione` anche per lo Studio** (`registry.studio_dal_nome`, attraverso
+  `nome_e_argomenti` in `ToolRegistry.call`, `mancanti` e `Brain._nome_corretto`): un nome
+  sconosciuto `studio_…` diventa `studio` con l'azione degli argomenti se è un'azione di
+  `studio`, altrimenti l'unica azione di `studio` fra le parole del nome (`studio_crea_verifica`,
+  `studio_verifica_sposta`, `studio_salta_oggi`); gli argomenti che `studio` non conosce si
+  tolgono. Mai per un'azione che non esiste (`studio_verifica_cancella`), con due azioni nel nome
+  o per un altro prefisso (`agenda_crea`). Permessi e politica restano quelli di `studio`.
+- **L'errore di tool sconosciuto** suggerisce anche per prefisso (`studio` per
+  `studio_verifica_cancella`, prima dei nomi vicini) e dice che le azioni vanno nell'argomento
+  «azione».
+- **La descrizione di `studio`** dice in una frase che è un tool solo e che crea, sposta, togli e
+  le altre sono valori di azione.
+- **«No, stoppa ti.»** mentre non c'era niente da fermare: il modello diceva «Ho fermato tutto»
+  senza tool e la rete lo trasformava in «Non ci sono riuscita: puoi ripetere la richiesta?».
+  «stoppa», «stoppati» e «smetti» entrano nel lessico della chiusura (ordini di silenzio), e «no»
+  vale solo insieme a un ordine di silenzio («No, basta.»), mai da solo; contrari in
+  `prova_testo` («No.», «No, grazie.», «No, stoppa la musica.», «Stoppa il timer.»).
+- **Il promemoria del giorno degli sviluppi sospesi** non si attacca più a una risposta che ha
+  usato o tentato un tool d'altro (era in coda alla risposta sulla verifica): aspetta la prima
+  risposta senza tool (`Brain._sviluppo_coda`, contrari in `prova_sviluppo`).
+- **Da misurare sulla DGX**: `prova_studio_ollama` col caso «crea» a 3/3.

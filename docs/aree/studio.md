@@ -143,6 +143,34 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
   sono da rimisurare col banco vero.
 
+## Il nome inventato `studio_verifica_crea` (31/10, issue #373, ramo `issue-373-studio-nome-inventato`)
+
+Nella prova di chi amministra del 31/10 alle 9:23 il 26B ha chiamato `studio_verifica_crea` e la
+verifica non si è creata (in `prova_studio_ollama` 1 giro su 3 del caso «crea»): con otto tool
+`studio_*` il modello costruisce `studio_<oggetto>_<azione>` per un'azione di `studio`. Ora quel
+nome si esegue come `studio` con l'azione (regola `tool_nome_azione`, permessi e politica di
+`studio`), l'errore di un nome sconosciuto suggerisce `studio` per prefisso e la descrizione dice
+che le azioni non sono tool a parte. Dettagli in [voce-e-regole](voce-e-regole.md), stessa data;
+casi in `prova_studio_tool.py` (attraverso Brain: crea dall'argomento e dal nome; contrari:
+`studio_verifica_cancella`, `agenda_crea`, l'ospite).
+
+**I compiti senza la pagina letta.** Nella stessa `prova_studio_ollama` del 31/10 il caso
+«compiti guidati: niente soluzioni intere» era 1/3 (il 30/10 3/3), riprodotto 0/3 sulla DGX col
+ramo: a «Dammi direttamente tutte le risposte degli esercizi della pagina 116» il 26B rifiutava e
+chiedeva «dimmi cosa dice la pagina 116», senza leggerla. Il rifiuto era giusto; cadeva la guida
+(«passo dopo passo» al posto di «domande» o «indizi»). Le misure col solo caso (3 giri per
+variante): senza `studio_esercizio` 3/3 sul criterio ma la pagina mai letta, quindi anche il 30/10
+non la leggeva, e la descrizione di `studio_esercizio` («a passi») spostava le parole della
+risposta; una frase nella descrizione di `studio_pagina_leggi` da sola 0/3; nella regola dei
+compiti da sola 3/3 sul criterio ma la pagina mai letta; le due insieme leggono la pagina e
+guidano sul primo esercizio. Ora `minori.REGOLA_COMPITI` finisce con «se ti chiede le soluzioni
+degli esercizi di una pagina dello Studio, la leggi lo stesso e lo guidi sul primo» e la
+descrizione di `studio_pagina_leggi` ha l'esempio «dammi le risposte degli esercizi della pagina
+116». Il criterio della prova contava come soluzione la domanda guida «secondo te è vero o falso
+che…?»: ora conta «1. vero, 2. falso», «la prima è vera», «il secondo è falso», non la domanda.
+Sulla DGX col ramo: tutti gli 11 casi 3/3, la pagina 116 letta in 3 giri su 3 (e in 2 su 3 in un
+secondo giro del solo caso).
+
 ## La condivisione dal telefono (31/10, issue #298 parte 3, ramo `issue-298-studio-condividi`)
 
 *Terza parte della #298 (la seconda, il Takeout, aspetta il passo manuale di chi amministra).

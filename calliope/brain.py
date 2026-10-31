@@ -4655,7 +4655,8 @@ class Brain:
 
     def _sviluppo_coda(self, user_text: str | None, level: str) -> str | None:
         """La frase da aggiungere in coda alla risposta, o None (08/10, modalità sviluppo):
-        - una volta al giorno, a chi amministra, gli sviluppi sospesi;
+        - una volta al giorno, a chi amministra, gli sviluppi sospesi, dopo una risposta senza
+          tool (dal 31/10, #373);
         - con uno sviluppo aperto, dopo una risposta che ha usato soltanto tool d'altro (l'ora,
           il meteo, la casa) e non lo nomina: «Lo sviluppo di … resta aperto: …».
         Mai dopo una domanda: deve restare l'ultima cosa detta (l'azione in sospeso)."""
@@ -4675,7 +4676,10 @@ class Brain:
         try:
             if level == "amministra":
                 promemoria = svs.promemoria_giorno(chi)
-                if promemoria:
+                # Non dopo una risposta che ha usato o tentato un tool d'altro (31/10, #373: il
+                # «tris» sospeso attaccato alla risposta sulla verifica dello Studio): resta per
+                # una risposta senza tool
+                if promemoria and (dello_sviluppo or not nomi):
                     svs.ricordato(chi)
                     if not dello_sviluppo:
                         self._rule("sviluppo_promemoria_giorno")
@@ -6957,11 +6961,14 @@ class Brain:
         # `sviluppo_<azione>` inventato (10/10, DGX delle 15:57: `sviluppo_ferma`, e
         # `sviluppo_chiudi` che qui sotto diventava sviluppo_chiedi): sviluppo_passo con
         # quell'azione negli argomenti, prima del nome vicino. Regola `tool_nome_azione`
-        from .tools.registry import argomenti_con_azione, nome_con_azione
-        conv = nome_con_azione(nome)
+        # Dal 31/10 (#373) anche `studio_verifica_crea` e simili: studio con l'azione
+        from .tools.registry import nome_e_argomenti
+        conv = nome_e_argomenti(nome, call.get("arguments"),
+                                [s.get("name") for s in (tools.all_schemas() if hasattr(
+                                    tools, "all_schemas") else ())])
         if conv is not None and tools.get(conv[0]) is not None:
             call["name"] = conv[0]
-            call["arguments"] = argomenti_con_azione(conv[1], call.get("arguments"))
+            call["arguments"] = conv[1]
             print(f"   [TOOL] nome con l'azione: {nome} → {conv[0]}("
                   f"{'…' if self.console_riservata() else call['arguments']})",
                   flush=True)

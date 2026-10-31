@@ -1930,7 +1930,8 @@ PARAMETRI_CARTE = {"type": "object", "properties": {
 
 DESCRIZIONE = (
     "Lo Studio: verifiche con una data, pagine fotografate, argomenti e piano a giorni. Le "
-    "verifiche, le interrogazioni e lo studio di scuola stanno qui, mai negli appuntamenti. azione: "
+    "verifiche, le interrogazioni e lo studio di scuola stanno qui, mai negli appuntamenti. Un "
+    "tool solo: crea, sposta, togli e le altre sono valori di azione, non tool a parte. azione: "
     "«crea» una verifica nuova («giovedì ho la verifica di storia», «ho anche la verifica di "
     "matematica il 12», con materia, data come detta: il nome del giorno («giovedì») "
     "o AAAA-MM-GG, argomento facoltativo; per = nome del ragazzo se la crea il tutore); «stato» di "
@@ -1978,7 +1979,8 @@ PARAMETRI = {"type": "object", "properties": {
 DESCRIZIONE_PAGINA = (
     "Il testo letto di una pagina di una verifica dello Studio («spiegami questa pagina», «cosa "
     "dice la pagina 114?», anche gli esercizi per aiutare nei compiti: «aiutami con gli esercizi "
-    "della pagina 116»): pagina = il numero stampato o P1, P2…, oppure «argomenti» per i titoli "
+    "della pagina 116»; anche a «dammi le risposte degli esercizi della pagina 116» la leggi lo "
+    "stesso e lo guidi sul primo esercizio, senza le soluzioni): pagina = il numero stampato o P1, P2…, oppure «argomenti» per i titoli "
     "degli argomenti con il loro numero; verifica = l'id (dai dati del turno) o materia.")
 PARAMETRI_PAGINA = {"type": "object", "properties": {
     "pagina": {"type": "string"}, "verifica": {"type": "integer"},
