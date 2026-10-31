@@ -1417,3 +1417,18 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
 .studio-a-scarica { display: inline-flex; align-items: center; justify-content: center; text-decoration: none; box-sizing: border-box; }
 .studio-a-corrente .studio-testo b { color: var(--accento-chiaro); }
 .studio-a-barra:focus-visible, .studio-a-scarica:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }
+
+/* Gli esercizi guidati dello Studio (31/10, #278, esercizio.js): il testo del problema com'è, a
+   capo dove serve; la foto come un tasto (il campo file nascosto ma raggiungibile) */
+.studio-e-testo { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.3rem 0 0.6rem;
+  padding: 0.6rem 0.7rem; border-radius: 0.6rem; background: var(--fondo-2, rgba(127, 127, 127, 0.08)); }
+.studio-e-foto { display: inline-flex; align-items: center; justify-content: center; cursor: pointer;
+  min-height: 44px; }
+.studio-e-file { position: absolute; width: 1px; height: 1px; opacity: 0; overflow: hidden; }
+.studio-e-file:focus-visible + * , .studio-e-foto:focus-within { outline: 2px solid var(--accento, currentColor); }
+.studio-e-passo { margin-top: 0.6rem; }
+.studio-e-indizio { font-style: italic; overflow-wrap: anywhere; }
+.studio-e-fatti { margin: 0.4rem 0; padding-left: 1.4rem; }
+.studio-e-fatto { overflow-wrap: anywhere; margin-bottom: 0.3rem; }
+.studio-e-fatto .studio-nota { display: block; }
+.studio-e-anteprima { display: block; overflow-wrap: anywhere; }

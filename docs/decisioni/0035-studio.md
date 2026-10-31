@@ -873,7 +873,7 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     - La **regola degli errori** delle carte: un'ora, ferma al terzo con la stessa firma. Con una
       **prova aperta** sulla verifica niente si prepara né si mostra, e una preparazione arrivata
       durante la prova non si scrive.
-    - Schema «studio» alla versione 14 (`studio_preparazioni`; sulla verifica `prep_firma`,
+    - Schema «studio» alla versione 15 (`studio_preparazioni`; sulla verifica `prep_firma`,
       `prep_esito`, `prep_del`, `prep_detto`); va via con la verifica e con tutto lo Studio.
     - Una fase del banco (`--fasi preparazione`) misura lezioni e valori sulla DGX, con una pagina
       di chimica di fantasia e una ostile.

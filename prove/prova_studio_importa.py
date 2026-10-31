@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 decisione 0035; calliope/studio/importa.py, POST /api/studio/importa e /api/studio/importazioni).
 Solo file e archivi di fantasia costruiti qui.
 
-1. **Schema e configurazione**: «studio» alla versione 13, `studio_importazioni` in `TABELLE` e in
+1. **Schema e configurazione**: «studio» alla versione 14 (13 con l'importazione), `studio_importazioni` in `TABELLE` e in
    `conserva.TABELLE_STUDIO`, `studio_materiali.importazione`; le chiavi in `Config` e nel file
    d'esempio.
 2. **Che cos'è**: il tipo dai byte e i tipi falsi (un programma che si chiama .pdf, un documento
@@ -357,9 +357,10 @@ def prova_schema():
     try:
         from calliope.conserva import TABELLE_STUDIO
         col = {r["name"] for r in st.dati.tutti("PRAGMA table_info(studio_materiali)")}
-        verifica("schema «studio» alla versione 13, studio_importazioni nelle tabelle e nella "
+        verifica("schema «studio» alla versione 15 (13 con l'importazione, 14 con gli esercizi "
+                 "guidati, 15 con la preparazione), studio_importazioni nelle tabelle e nella "
                  "conservazione, studio_materiali.importazione",
-                 D.versione_schema(st.dati.db) == len(D.MIGRAZIONI) == 14
+                 D.versione_schema(st.dati.db) == len(D.MIGRAZIONI) == 15
                  and "studio_importazioni" in D.TABELLE and set(TABELLE_STUDIO) == set(D.TABELLE)
                  and "importazione" in col
                  and D.TABELLE.index("studio_importazioni") < D.TABELLE.index("studio_verifiche"))

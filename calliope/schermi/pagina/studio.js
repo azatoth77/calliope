@@ -669,6 +669,11 @@
     }
     if (v.tutore) art.append(sezioneTutore(v));
     if (v.stato === "aperta" || v.stato === "bozza") art.append(sezioneCarte(v));
+    // Gli esercizi guidati (31/10, #278, esercizio.js): i conti del server; null → spenti per chi
+    // guarda, e niente sezione
+    if (window.CalliopeEsercizio && v.esercizi && (v.stato === "aperta" || v.stato === "bozza")) {
+      art.append(window.CalliopeEsercizio.sezione(v, { ridisegna: disegnaHome, ricarica: caricaHome, vista }));
+    }
     // La libreria (31/10, #297, libreria.js): le proposte del server; null → niente sezione
     if (window.CalliopeLibreria && (Array.isArray(v.libreria) || v.preparazione)) {
       art.append(window.CalliopeLibreria.sezione(v, { ridisegna: disegnaHome, ricarica: caricaHome, vista,
@@ -3086,6 +3091,7 @@
     if (!b || b.disabled) return;
     if (b.dataset.carte) { suCarte(b); return; }
     if (b.dataset.libreria) { if (window.CalliopeLibreria) window.CalliopeLibreria.su(b); return; }
+    if (b.dataset.esercizio) { if (window.CalliopeEsercizio) window.CalliopeEsercizio.su(b); return; }
     if (b.dataset.prove) { suProve(b); return; }
     if (b.dataset.mappa) { suMappa(b); return; }
     if (b.dataset.ascolta) { suAscolta(b); return; }
@@ -3172,6 +3178,7 @@
     mappa = null;
     tut = null;
     if (window.CalliopeLibreria) window.CalliopeLibreria.chiudi();
+    if (window.CalliopeEsercizio) window.CalliopeEsercizio.chiudi();
     Object.assign(pre, { duello: null, dati: null, risposte: {}, esito: "", attesa: false });
     chiudiAscolta();
     if (st.materiali) chiudiCamera();
@@ -3185,6 +3192,11 @@
     // I campi di «Scrivi una carta»: restano anche quando la home si ridisegna
     $("studio-home").addEventListener("input", suCampoCarte);
     $("studio-home").addEventListener("change", suCampoCarte);
+    // Gli esercizi guidati (#278, esercizio.js): il testo, la risposta, la foto, Invio
+    const campoEs = (ev) => { if (window.CalliopeEsercizio) window.CalliopeEsercizio.campo(ev); };
+    $("studio-home").addEventListener("input", campoEs);
+    $("studio-home").addEventListener("change", campoEs);
+    $("studio-home").addEventListener("keydown", (ev) => { if (window.CalliopeEsercizio) window.CalliopeEsercizio.tasti(ev); });
     // Le prove (passo 8, #248): le risposte e «Scrivi una domanda»; il tempo che resta
     $("studio-home").addEventListener("input", suCampoProve);
     $("studio-home").addEventListener("change", suCampoProve);

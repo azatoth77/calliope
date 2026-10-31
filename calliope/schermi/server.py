@@ -136,6 +136,10 @@ Indirizzi:
   POST /api/studio/duello        «X-Calliope-Sessione», {duello?, azione?, verifica?, a?, voce?,
                                  risposta?} → un duello fra persone di casa: proponi, accetta,
                                  rifiuta, annulla, rispondi, consegna; solo chi ne fa parte
+  POST /api/studio/esercizio     «X-Calliope-Sessione», {verifica, azione?, esercizio?, testo?,
+                                 risposta?} → gli esercizi guidati (31/10, #278,
+                                 studio/esercizi.py): scrivi, passo, rispondi (l'esito lo decide il
+                                 codice), indizio, salta, togli; mai le risposte attese alla persona
   POST /api/studio/pagina       «X-Calliope-Sessione», byte nudi (octet-stream), i dati in
                                  «X-Calliope-Studio» (URI): una foto di una pagina con i suoi
                                  angoli, o un PDF intero (29/10, #281, studio/pagine.py), nello
@@ -2417,8 +2421,118 @@ def crea_app(hub: Schermi) -> Starlette:
         nome = re.sub(r"[\x00-\x1f\x7f]", " ", (nome or "").replace("\\", "/").split("/")[-1])
         nome = " ".join(nome.split())[:60] or None
         return {"verifica": vid, "materiale": mid, "angoli": m.get("angoli"), "nome": nome,
+                # La foto di un problema per un esercizio guidato (#278): non una pagina
+                "esercizio": m.get("esercizio") is True,
                 # Un PDF dichiarato (passo 4.5): il 429 si dà prima di leggere il corpo
                 "pdf": m.get("pdf") is True or bool(nome and nome.lower().endswith(".pdf"))}
+
+    async def _esercizio_foto(st, prof, v, dati, meta, lato, soglia, mb_foto):
+        """La foto di un problema (#278): controllata come una pagina (`pagine.prepara_foto`), poi
+        un esercizio guidato nuovo «da leggere» (`Studio.aggiungi_esercizio`)."""
+        from ..immagini import tipo_dai_byte
+        from ..studio import NonPermesso, NonTrovata, VerificaChiusa
+        from ..studio import pagine as PG
+        from ..studio.esercizi import EserciziSpenti
+        if tipo_dai_byte(dati) not in ("jpeg", "png", "webp"):
+            return _json({"errore": "Mandami una foto JPEG o PNG."}, 415)
+        if len(dati) > int(mb_foto * 1_000_000):
+            return _json({"errore": f"foto troppo grande (al massimo {mb_foto:g} MB)"}, 413)
+        try:
+            pronta = await asyncio.to_thread(PG.prepara_foto, dati, meta["angoli"], lato,
+                                             int(mb_foto * 1_000_000), soglia)
+        except PG.PaginaNonValida as e:
+            return _json({"errore": str(e)}, 415)
+        try:
+            out = await asyncio.to_thread(st.aggiungi_esercizio, prof, v["id"], None,
+                                          pronta.jpeg, list(pronta.avvisi))
+        except (NonTrovata, NonPermesso, EserciziSpenti):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except VerificaChiusa:
+            return _json({"errore": "Questa verifica è chiusa."}, 409)
+        except ValueError as e:
+            return _json({"errore": str(e)}, 413)
+        except (PermissionError, OSError):
+            return _json({"errore": "Non riesco a salvare la foto."}, 503)
+        return _json({"ok": True, **out, "avvisi": list(pronta.avvisi)})
+
+    async def studio_esercizio(request: Request):
+        """{verifica, azione?, esercizio?, testo?, risposta?} → gli esercizi guidati della verifica
+        (#278, studio/esercizi.py). Senza azione sola lettura (anche fuori orario); «scrivi» un
+        problema col testo; «passo», «rispondi» (la risposta dal campo: l'esito lo decide il
+        codice), «indizio», «salta» solo la persona, dentro gli orari; «togli» anche il tutore.
+        Le risposte attese non arrivano mai alla persona."""
+        schermo, errore = schermo_personale(request, letture_studio, LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 8192)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        from .. import minori
+        from ..studio import NonPermesso, NonTrovata, VerificaChiusa
+        from ..studio.esercizi import EserciziSpenti, GuidaFerma
+        vid, azione, eid = dati.get("verifica"), dati.get("azione"), dati.get("esercizio")
+        if not isinstance(vid, int) or isinstance(vid, bool) or vid < 1 or azione not in (
+                None, "scrivi", "passo", "rispondi", "indizio", "salta", "togli"):
+            return _json({"errore": "richiesta non valida"}, 400)
+        if azione not in (None, "scrivi") and (not isinstance(eid, int) or isinstance(eid, bool)):
+            return _json({"errore": "manca l'esercizio"}, 400)
+        for k, mx in (("testo", 3000), ("risposta", 1200)):
+            x = dati.get(k)
+            if x is not None and (not isinstance(x, str) or len(x) > mx):
+                return _json({"errore": "testo non valido"}, 400)
+        if azione is not None:
+            orario = minori.fuori_orario(prof)
+            if orario:
+                return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                              "codice": "fuori_orario"}, 403)
+
+        def fai():
+            extra = {}
+            if eid is not None:
+                # L'esercizio deve essere di questa verifica
+                if st.esercizio(prof, eid)["verifica"] != vid:
+                    raise NonTrovata()
+            if azione == "scrivi":
+                extra["scritto"] = st.aggiungi_esercizio(prof, vid, dati.get("testo") or "")[
+                    "esercizio"]
+            elif azione == "passo":
+                extra["passo"] = st.passo_esercizio(prof, eid)
+            elif azione == "rispondi":
+                extra["ultimo"] = st.rispondi_esercizio(prof, dati.get("risposta") or "", eid,
+                                                        fonte="schermo")
+            elif azione == "indizio":
+                extra["indizio"] = st.indizio_esercizio(prof, eid)
+            elif azione == "salta":
+                extra["saltato"] = st.salta_passo(prof, eid)
+            elif azione == "togli":
+                extra["tolto"] = st.togli_esercizio(prof, eid)["tolto"]
+            return {**st.esercizi(prof, vid), **extra}
+        try:
+            out = await asyncio.to_thread(fai)
+        except (NonTrovata, EserciziSpenti):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except NonPermesso:
+            return _json({"errore": "Ai passi risponde chi studia."}, 403)
+        except GuidaFerma as e:
+            return _json({"errore": e.frase, "codice": "prova_aperta"}, 409)
+        except VerificaChiusa:
+            return _json({"errore": "Questa verifica è chiusa."}, 409)
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        except ValueError as e:
+            frase = {"senza_guida": "Per questo problema non ho una guida.",
+                     "finito": "Questo esercizio è già finito.",
+                     "da_leggere": "Il problema non l'ho ancora letto.",
+                     "in_lettura": "Sto leggendo il problema.",
+                     "letto": "Sto preparando i passi.",
+                     "illeggibile": "Il problema non sono riuscita a leggerlo: rifai la foto."
+                     }.get(str(e), str(e))
+            return _json({"errore": frase}, 400)
+        return _json({"ok": True, **out})
 
     async def studio_pagina(request: Request):
         """Vedi `_studio_pagina`. Revisione della PR #312: senza una sessione valida, senza
@@ -2494,7 +2608,13 @@ def crea_app(hub: Schermi) -> Starlette:
         except PermissionError:
             return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
         massimo = int(getattr(hub.cfg, "studio_pagine_max", 80) or 80)
-        if v["n_pagine"] >= massimo:
+        if meta["esercizio"]:
+            # La foto di un problema (#278): solo una foto, e con gli esercizi accesi per chi manda
+            if meta["pdf"]:
+                return _json({"errore": "Per un problema mandami una foto, non un PDF."}, 415)
+            if not st.esercizi_per(prof):
+                return _json({"errore": "Gli esercizi guidati non sono accesi."}, 404)
+        elif v["n_pagine"] >= massimo:
             return _json({"errore": f"Questa verifica ha già {massimo} pagine."}, 413)
         # Un PDF dichiarato (il nome di un PDF, o `pdf: true`) mentre un altro si divide: il 429
         # prima di leggere il corpo (terza revisione della PR #312, fatto con la 4.5), e il corpo
@@ -2523,6 +2643,8 @@ def crea_app(hub: Schermi) -> Starlette:
         from ..studio import pagine as PG
         lato = int(getattr(hub.cfg, "studio_pagina_lato", 1600) or 1600)
         soglia = float(getattr(hub.cfg, "studio_nitidezza_min", 150.0) or 0.0)
+        if meta["esercizio"]:
+            return await _esercizio_foto(st, prof, v, dati, meta, lato, soglia, mb_foto)
         try:
             if PG.e_pdf(dati):
                 if len(dati) > int(mb_pdf * 1_000_000):
@@ -2810,6 +2932,8 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/studio/pagina", studio_pagina, methods=["POST"]),
         Route("/api/studio/importa", studio_importa, methods=["POST"]),
         Route("/api/studio/importazioni", studio_importazioni, methods=["POST"]),
+        Route("/api/studio/esercizio", studio_esercizio, methods=["POST"]),
+        Route("/esercizio.js", file("esercizio.js", "text/javascript; charset=utf-8")),
         # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC
         Route("/bordi.js", file("bordi.js", "text/javascript; charset=utf-8")),
         Route("/studio.js", file("studio.js", "text/javascript; charset=utf-8")),

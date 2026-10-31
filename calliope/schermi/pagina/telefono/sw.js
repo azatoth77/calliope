@@ -6,8 +6,9 @@
 "use strict";
 
 // v38 (31/10, #298): studio_importa.js, «Aggiungi materiali» dello Studio (dopo le mini-app, v37)
-// v39 (31/10, #297, parte 3): la preparazione dietro le quinte nella libreria
-const CACHE = "calliope-telefono-pagina-v39";
+// v39 (31/10, #278): esercizio.js, gli esercizi guidati dello Studio (dopo l'importazione, v38)
+// v40 (31/10, #297, parte 3): la preparazione dietro le quinte nella libreria (dopo gli esercizi, v39)
+const CACHE = "calliope-telefono-pagina-v40";
 const PAGINA = [
   "/telefono/", "/telefono/telefono.js", "/telefono/voce.js", "/telefono/microfono.js",
   "/telefono/schermo-acceso.js",
@@ -15,6 +16,7 @@ const PAGINA = [
   "/telefono/icona-180.png", "/telefono/icona-192.png", "/telefono/icona-512.png",
   "/schermo.js", "/schermo.css", "/sezioni.js", "/bordi.js", "/studio.js",
   "/libreria.js", "/studio_importa.js",
+  "/esercizio.js",
 ];
 
 self.addEventListener("install", (ev) => {
