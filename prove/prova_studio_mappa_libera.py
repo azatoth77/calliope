@@ -654,6 +654,85 @@ verifica("12. la versione 9 dà l'origine «mappa» alle carte di prima che veng
          == ["mappa", "persona", "modello"])
 db8.close()
 
+# ═══════════════ 5d. la terza revisione della PR #330 (difetto 13) ═══════════════
+print("— la terza revisione: la chiusura vera")
+sc = studio(cfg_nuova("revisione3.db"))
+futura = (sc._oggi() + datetime.timedelta(days=5)).isoformat()
+
+
+def tent_c(v):
+    return [x["esito"] for x in sc.dati.tutti(
+        "SELECT * FROM studio_tentativi WHERE verifica = ? ORDER BY id", (v,))]
+
+
+def nuova_con_scheletro():
+    v_, i_, a_ = carica(sc)
+    s_, n_ = scheletro(sc, v_, i_, a_)
+    return v_, n_
+
+
+def scrivi_tutto(lib_):
+    rad = sc._riga_mappa(lib_)["nodi"][0]["id"]
+    for t_ in ("Cristoforo Colombo", "America", "Il Portogallo"):
+        k_ = sc.nodo_mappa(LEO, lib_, t_)
+        sc.collega(LEO, lib_, rad, k_, "porta a")
+
+
+# Lo scenario del revisore: libera aperta, verifica fatta (come la mette ricalcola), lo scheletro
+# visto, la data spostata con imposta che la riapre, la mappa scritta: nessun «giusto»
+for strada in ("vista", "senza vista"):
+    v13, n13 = nuova_con_scheletro()
+    l13 = sc.inizia_libera(LEO, v13)
+    sc.dati.scrivi("UPDATE studio_verifiche SET stato = 'fatta' WHERE id = ?", (v13,))
+    if strada == "vista":
+        vm13 = sc.vista_mappe(LEO, v13)
+        visto = "Cristoforo Colombo" in json.dumps(vm13["scheletro"], ensure_ascii=False)
+    else:
+        visto = True
+    sc.imposta(LEO, v13, data=futura)
+    r13 = sc._riga_mappa(l13)
+    ok = solleva(lambda: scrivi_tutto(l13), ValueError) and solleva(
+        lambda: sc.finisci_libera(LEO, l13), ValueError)
+    verifica(f"13. fatta ({strada}), poi imposta: la libera è chiusa davvero, scaduta, senza "
+             "tentativi; si riparte con «Rifai»",
+             visto and sc.verifica(LEO, v13)["stato"] == "aperta" and r13["stato"] == "controllata"
+             and r13["controllo"]["scaduto"] == "fatta" and r13["giri"][-1]["scaduto"] == "fatta"
+             and ok and tent_c(v13) == [] and sc.vista_mappe(LEO, v13)["libera"]["scaduta"]
+             and sc.rifai_mappa(LEO, l13) == l13
+             and sc._riga_mappa(l13)["stato"] == "aperta", str(r13["stato"]))
+# La strada vera: ricalcola con la data passata
+v13r, n13r = nuova_con_scheletro()
+l13r = sc.inizia_libera(LEO, v13r)
+sc.dati.scrivi("UPDATE studio_verifiche SET data = ? WHERE id = ?",
+               ((sc._oggi() - datetime.timedelta(days=1)).isoformat(), v13r))
+sc.ricalcola(v13r)
+verifica("13. ricalcola con la data passata: verifica fatta e libera chiusa senza tentativi",
+         sc.verifica(LEO, v13r)["stato"] == "fatta"
+         and sc._riga_mappa(l13r)["stato"] == "controllata" and tent_c(v13r) == [])
+# A memoria: fatta, imposta, poi «Controlla» con le caselle riempite: nessun tentativo
+v13m, n13m = nuova_con_scheletro()
+m13 = sc.inizia_mappa(LEO, v13m, "memoria")
+sc.dati.scrivi("UPDATE studio_verifiche SET stato = 'fatta' WHERE id = ?", (v13m,))
+sc.vista_mappe(LEO, v13m)
+sc.imposta(LEO, v13m, data=futura)
+atteso13 = {x["id"]: x["testo"] for x in M.tenuti(sc._riga_mappa(
+    sc.vista_mappe(LEO, v13m)["scheletro"]["id"]))[0]}
+mm13 = sc._riga_mappa(m13)
+mm13["nodi"] = [dict(x, testo=atteso13[x["da"]]) if x.get("casella") else x for x in mm13["nodi"]]
+sc._salva_mappa(mm13, nodi=mm13["nodi"])
+c13m = sc.controlla_mappa(LEO, m13)
+verifica("13. a memoria: fatta, imposta, «Controlla» con le risposte giuste: nessun tentativo",
+         sc._riga_mappa(m13)["stato"] == "controllata" and c13m["tentativi"] == 0
+         and tent_c(v13m) == [], str(c13m.get("conti")))
+# Archivia
+v13a, n13a = nuova_con_scheletro()
+l13a = sc.inizia_libera(LEO, v13a)
+sc.archivia(LEO, v13a)
+verifica("13. archivia: la libera aperta si chiude davvero, scaduta, senza tentativi",
+         sc._riga_mappa(l13a)["stato"] == "controllata"
+         and sc._riga_mappa(l13a)["controllo"]["scaduto"] == "archiviata" and tent_c(v13a) == [])
+sc.close()
+
 # ═══════════════════════════ 6. dati ═══════════════════════════
 print("— dati")
 col = {r["name"] for r in st.dati.tutti("PRAGMA table_info(studio_mappe)")}

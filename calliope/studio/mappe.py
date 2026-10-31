@@ -128,6 +128,48 @@ class Mappe:
                 raise ValueError(LIBERA_CHIUSA)
         return m, v
 
+    def _chiudi_scadute(self, vid, motivo: str) -> int:
+        """La verifica non è più aperta («fatta» o «archiviata»): la mappa libera e quella a
+        memoria ancora aperte si chiudono **davvero** (terza revisione della PR #330), stato
+        «controllata», **senza tentativi** (a memoria tutti i concetti contano come già tentati:
+        un «Controlla» dopo non scrive niente), il giro segnato «scaduto». La persona riparte con
+        «Rifai». La chiusura virtuale di `_libera_aperta` e di `vista_mappe` resta come rete.
+        Quante chiuse."""
+        if not self.dati.scrivibile:
+            return 0
+        n = 0
+        with self.dati.lock:
+            adesso = self.adesso().isoformat(timespec="seconds")
+            for r in self.dati.tutti("SELECT id FROM studio_mappe WHERE verifica = ? AND tipo IN "
+                                     "('libera', 'memoria') AND stato = 'aperta'", (int(vid),)):
+                m = self._riga_mappa(r["id"])
+                if m is None:
+                    continue
+                giro = int((m["aiuto"] or {}).get("giro", 0) or 0)
+                if m["tipo"] == M.LIBERA:
+                    ind = M.indicatori(m["nodi"], m["collegamenti"])
+                    controllo = {"tipo": M.LIBERA, "riferimento": None, "indicatori": ind,
+                                 "quando": adesso, "tentativi": 0, "conti": None,
+                                 "scaduto": motivo}
+                    giri = [g for g in m["giri"] if g.get("giro") != giro] + [{
+                        "giro": giro, "quando": adesso, "riferimento": None, "indicatori": ind,
+                        "conti": None, "tentativi": 0, "scaduto": motivo}]
+                    self._salva_mappa(m, controllo=controllo, controllata=adesso,
+                                      stato="controllata", giri=giri[-GIRI_MAX:])
+                else:
+                    tentati = list(dict.fromkeys(list(m["tentati"])
+                                                 + [int(x["id"]) for x in m["nodi"]]))
+                    self._salva_mappa(m, controllo={"caselle": {}, "mancanti": [], "in_piu": [],
+                                                    "verbo_diverso": [], "verso_diverso": [],
+                                                    "conti": None, "quando": adesso,
+                                                    "scaduto": motivo},
+                                      controllata=adesso, tentati=tentati, stato="controllata")
+                n += 1
+        if n:
+            self._registra(f"verifica {vid}: {n} mappe senza guardare chiuse senza tentativi "
+                           f"(verifica {motivo})")
+        return n
+
     def _libera_aperta(self, vid) -> bool:
         """La verifica ha una mappa libera aperta (la persona la sta facendo senza guardare)."""
         # Solo su una verifica ancora aperta (seconda revisione della PR #330): su una verifica
@@ -1145,12 +1187,18 @@ class Mappe:
             n = P.numero_leggibile(p["numero"])
             pagine[int(p["id"])] = f"p. {n}" if n else f"foto {p['ordine']}"
 
+        viva = v["stato"] in ("bozza", "aperta")
+        if not viva and self.dati.uno(
+                "SELECT id FROM studio_mappe WHERE verifica = ? AND tipo IN ('libera', 'memoria') "
+                "AND stato = 'aperta'", (v["id"],)) is not None:
+            # Una strada che ha cambiato lo stato senza chiuderle (terza revisione della PR #330):
+            # si chiudono adesso, prima di mostrare lo scheletro
+            self._chiudi_scadute(v["id"], v["stato"])
         mm = self._mappe_di(v["id"])
         mem = mm.get(M.MEMORIA)
         lib = mm.get(M.LIBERA)
         # Su una verifica fatta o archiviata una mappa senza guardare rimasta aperta vale chiusa
         # (seconda revisione della PR #330): niente resta nascosto per sempre
-        viva = v["stato"] in ("bozza", "aperta")
         a_memoria = bool(ruolo == "proprietario" and viva and self._aperta(mem))
         # La mappa libera aperta (passo 7c, #328): lo scheletro, la mia mappa e a memoria (che
         # hanno i concetti dello scheletro) arrivano senza testi, come con a memoria aperta
@@ -1246,6 +1294,7 @@ class Mappe:
             return None
         out = per_schermo(lib, senza_testi)
         out["giro"] = int((lib["aiuto"] or {}).get("giro", 0) or 0)
+        out["scaduta"] = (lib["controllo"] or {}).get("scaduto")
         out["giri"] = len(lib["giri"])
         if senza_testi:
             return out

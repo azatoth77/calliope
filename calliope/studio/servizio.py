@@ -423,6 +423,10 @@ class Studio(Mappe):
             campi["data"] = d.isoformat()
             if v["stato"] == "fatta":
                 campi["stato"] = "aperta"
+                # Prima di riaprirla, le mappe senza guardare rimaste aperte si chiudono davvero
+                # (terza revisione della PR #330: con la verifica fatta lo scheletro era tornato
+                # visibile, e riaperte avrebbero dato «giusto» ai concetti visti)
+                self._chiudi_scadute(v["id"], "fatta")
         if obiettivo is not None:
             if not 1 <= int(obiettivo) <= 100:
                 raise ValueError("l'obiettivo va da 1 a 100")
@@ -463,6 +467,7 @@ class Studio(Mappe):
         v = self._verifica(chi, vid)
         self.dati.scrivi("UPDATE studio_verifiche SET stato = 'archiviata', archiviata = ? "
                          "WHERE id = ?", (D.adesso(), v["id"]))
+        self._chiudi_scadute(v["id"], "archiviata")
         self.ricalcola_persona(v["persona"])
 
     def togli_verifica(self, chi, vid) -> dict:
@@ -1674,6 +1679,9 @@ class Studio(Mappe):
             if v["stato"] != "fatta" and self.dati.scrivibile:
                 self.dati.scrivi("UPDATE studio_verifiche SET stato = 'fatta' WHERE id = ?",
                                  (v["id"],))
+                # Le mappe senza guardare ancora aperte si chiudono davvero (terza revisione
+                # della PR #330)
+                self._chiudi_scadute(v["id"], "fatta")
             return None
         liberi = self._minuti_base(v["persona"])
         # Una verifica aperta senza pagine da leggere non toglie minuti (revisione della PR

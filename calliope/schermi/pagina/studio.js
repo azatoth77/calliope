@@ -1227,6 +1227,8 @@
       return out;
     }
     const c = m.confronto;
+    // Chiusa da sé perché la verifica è finita (terza revisione della PR #330): senza confronto né tentativi
+    if (m.scaduta) out.push(nodo("p", "studio-h-nota", "La verifica è finita prima di «Ho finito»: la mappa si è chiusa da sola, senza tentativi. Per rifarla, «Rifai»."));
     if (!c) {
       out.push(nodo("p", "studio-h-riga", "Lo scheletro per il confronto non c'è ancora: qui sotto come è venuta la tua mappa."));
     } else {

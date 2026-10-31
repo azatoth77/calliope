@@ -299,6 +299,28 @@ Le correzioni minori e le note:
   Lo dice `prompt_eval_cached_count` della passata di misura; il thinking cambia il corpo della
   richiesta, non il prefisso, ma non è stato misurato.
 
+### 31/10: la terza revisione della PR #330
+
+13. **La chiusura delle mappe senza guardare è vera.** Prima era solo virtuale. Una libera o a
+    memoria aperta su una verifica diventata «fatta» lasciava di nuovo vedere lo scheletro; poi
+    `imposta` spostava la data, la verifica tornava «aperta», la mappa anche, e i concetti visti
+    valevano «giusto». Lo stesso succedeva con «Controlla» a memoria. Adesso:
+    - quando la verifica passa a «fatta» (`ricalcola`) o ad «archiviata» (`archivia`), le mappe
+      ancora aperte si chiudono davvero con `Mappe._chiudi_scadute`;
+    - lo stesso fa `imposta` prima di riaprire una verifica fatta, e `vista_mappe` per una strada
+      che cambiasse lo stato senza chiuderle;
+    - lo stato diventa «controllata», senza tentativi. A memoria tutti i concetti contano come
+      già tentati, quindi un «Controlla» dopo non scrive niente;
+    - il giro si segna «scaduto»: la pagina lo dice, e si riparte con «Rifai».
+
+    La chiusura virtuale resta come rete. Le prove sono nella sezione 5d di
+    `prova_studio_mappa_libera.py`: lo scenario del revisore con e senza la vista, `ricalcola` con
+    la data passata, a memoria con «Controlla», `archivia`.
+
+**Limite noto (31/10):** il tutore vede le carte d'origine «mappa» del minore anche mentre la sua
+mappa libera è aperta. Se il tutore le ripassa a voce col minore vicino, Calliope ne dice ad alta
+voce i concetti. È raro e si lascia così.
+
 ## Lo scheletro della mappa generato dal lettore (30/10 sera, issue #247, ramo `issue-247-studio-mappa-genera`)
 
 *Seconda parte del passo 7; decisione [0035](../decisioni/0035-studio.md) punto 36.*
