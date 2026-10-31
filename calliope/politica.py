@@ -243,6 +243,10 @@ VERBI_STUDIO = {
     "tieni": r"tien|tenere|rimett|includ|nel piano|aggiung",
     "togli": r"togl|tol[gt]|elimin|lev[aio]|cancell|fuori dal piano|non serve",
     "riprova": r"riprov|rilegg|di nuovo",
+    # passo 8 (#248): il tipo della prova vera e «l'ho fatta»
+    "tipo": r"interrog|oral|scritt|verific|da (?:luned|marted|mercoled|gioved|venerd|sabato|oggi|"
+            r"domani)|dal|dall",
+    "conclusa": r"fatt|interrogat|finit|conclus|andat|consegnat",
     "sessione": r"conosc|sent|stanc|pront|curios|tranquill|stress|neutral|energia|sicur|nuov|"
                 r"poco|abbastanza|bene|male|[1-5]|uno|due|tre|quattro|cinque",
 }
@@ -442,8 +446,10 @@ CLASSI: dict[str, Classe] = {
     # per sempre: senza le parole nella frase chiede prima (chiedi_se). Dal 30/10 (passo 4b, #244)
     # anche «resoconto» e «riepilogo» leggono soltanto (proiezioni dei dati, frasi del codice)
     # Dal 30/10 (passo 7, #247) «mappa»: i conti della mappa concettuale, mai il testo dei concetti
+    # Dal 31/10 (passo 8, #248) «prove» legge i conti delle prove; «tipo» e «conclusa» cambiano
     "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi", "resoconto",
-                                                        "riepilogo", "carte", "mappa"})),
+                                                        "riepilogo", "carte", "mappa",
+                                                        "prove"})),
                  cosa=lambda a: _studio_cosa(a), verbi_azione=("azione", VERBI_STUDIO),
                  chiedi_se=lambda testo, a, ctx, **_k: _studio_archivia(testo, a)),
     # il testo letto delle pagine e i titoli degli argomenti: dati non fidati, come una foto
@@ -456,6 +462,11 @@ CLASSI: dict[str, Classe] = {
     # modello possono cambiare. Per questo è una lettura e non un'azione di `studio`: con la carta
     # in conversazione un'azione vorrebbe una richiesta con le sue parole, e «nel 1861» non lo è
     "studio_carte": _c(S, fonte="foto"),
+    # l'interrogazione simulata a voce (31/10, passo 8, #248): come le carte. Domande e risposte
+    # attese sono dati non fidati (in busta, fuori dalla storia a risposta finita); l'esito lo
+    # decide il codice dalla frase detta dalla persona, mai `proposta` del modello (una misura);
+    # una volta per domanda e mai nel turno in cui è stata chiesta (E0 sui dati della persona)
+    "studio_interroga": _c(S, fonte="foto"),
     # «Parliamone» dopo la mappa libera (30/10, passo 7c, #328): la mappa, lo scheletro senza i
     # concetti nascosti, il confronto del codice e gli indicatori, dati non fidati come le carte
     # (in busta, fuori dalla storia a risposta finita); non scrive niente
@@ -470,7 +481,8 @@ _STUDIO_COSA = {"crea": "segni la verifica", "fatto": "segni fatto il giorno del
                 "salta_oggi": "sposti il piano di oggi", "archivia": "archivi la verifica",
                 "sposta": "cambi la data della verifica",
                 "tieni": "tenga l'argomento nel piano", "togli": "tolga l'argomento dal piano",
-                "riprova": "riprovi a leggere la pagina", "sessione": "cominci la sessione"}
+                "riprova": "riprovi a leggere la pagina", "sessione": "cominci la sessione",
+                "tipo": "cambi il tipo della prova", "conclusa": "segni fatta la verifica"}
 
 
 def _studio_cosa(a: dict) -> str:
@@ -500,7 +512,7 @@ VERBI = {
     "promemoria_imposta": r"ricord|promemoria|avvis|memo|dimentic|sposta|cambi|segn",
     "agenda_annulla": r"annull|cancell|togl|elimin|ferm|stop|bast|lev",
     # Per azione in VERBI_STUDIO (seconda revisione della PR #317); qui solo le letture
-    "studio": r"verific|piano|argoment|cart[ae]|mapp",
+    "studio": r"verific|piano|argoment|cart[ae]|mapp|prov[ae]|interrog",
     "appuntamento_aggiungi": (r"appuntament|agenda|calendari|segn|impegn|visit|riunion|fiss|"
                               r"sposta|cambi|aggiung|prenot|cena|pranzo|incontr"),
     "lista_aggiungi": r"aggiung|segn|list|spes|compr|prend|manc|scriv|inser|finit",

@@ -1420,6 +1420,10 @@ PAGINA_TOLTA = ("{\"ok\": true, \"nota\": \"il testo della pagina è stato tolto
 # Il testo di una carta dello Studio (studio_carte, 30/10, passo 6, #246), tolto allo stesso modo
 CARTA_TOLTA = ("{\"ok\": true, \"nota\": \"il testo della carta è stato tolto: la carta in corso "
                "la ritrovi con studio_carte\"}")
+# La domanda e la risposta attesa dell'interrogazione (studio_interroga, 31/10, passo 8, #248),
+# tolte allo stesso modo: la domanda in corso si ridice con «ripeti»
+INTERROGA_TOLTA = ("{\"ok\": true, \"nota\": \"la domanda e la risposta attesa sono state "
+                   "tolte: la domanda in corso la ridici con studio_interroga parte ripeti\"}")
 # Le chiavi del JSON di un tool non fidato che portano dati (non solo un esito): i risultati di
 # web_cerca e delle estensioni, i fatti e la notizia del tool notizie (13/10)
 # «testo» e «argomenti»: studio_pagina_leggi (30/10, seconda revisione della PR #317)
@@ -4166,7 +4170,8 @@ class Brain:
         provenienza.marca(self.history)
         for m in self.history:
             if m.get("role") != "tool" or m.get("content") in (WEB_TOLTO, PAGINA_TOLTA,
-                                                                CARTA_TOLTA, MAPPA_TOLTA):
+                                                                CARTA_TOLTA, MAPPA_TOLTA,
+                                                                INTERROGA_TOLTA):
                 continue
             spec = self.tools.get(m.get("name") or "")
             if (spec is not None and getattr(spec, "non_fidato", False)
@@ -4174,6 +4179,7 @@ class Brain:
                 m["content"] = (PAGINA_TOLTA if m.get("name") == "studio_pagina_leggi"
                                 else CARTA_TOLTA if m.get("name") == "studio_carte"
                                 else MAPPA_TOLTA if m.get("name") == "studio_mappa_consigli"
+                                else INTERROGA_TOLTA if m.get("name") == "studio_interroga"
                                 else WEB_TOLTO)
 
     def rules_fired(self) -> list[str]:

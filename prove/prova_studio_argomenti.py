@@ -232,6 +232,8 @@ def cfg_nuova(nome, modo="ombra", **kw):
     c.studio_carte_genera = "spenta"
     # Anche lo scheletro della mappa (passo 7, #247): lo prova prova_studio_mappa_genera.py
     c.studio_mappa_genera = "spenta"
+    # E le domande delle prove (passo 8, #248): le prova prova_studio_domande_genera.py
+    c.studio_domande_genera = "spenta"
     for k, v in kw.items():
         setattr(c, k, v)
     return c

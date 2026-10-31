@@ -85,6 +85,7 @@ CASI = {
     # La mappa libera e «Parliamone» (30/10, #328)
     "studio_mappa_libera": ("spenta", " Spenta ", ("spento", "spenta"), ["accesa", "sì", "libera"]),
     "studio_mappa_consigli": ("attiva", " Attiva ", ("attivo", "attiva"), ["accesa", "sì", "parla"]),
+    "studio_domande_genera": ("attiva", " Attiva ", ("attivo", "attiva"), ["accesa", "sì", "genera"]),
     "agenti_arbitro": ("mai", " MAI ", None, ["acceso", "talvolta"]),
     "agenti_sandbox_motore": ("processo", "Docker", None, ["acceso", "sì", "podman"]),
     "agenti_livello": ("amministra", "Amministra", None,
@@ -164,7 +165,8 @@ for campo, atteso in (("eventi", "spento"), ("stanza", "spenta"), ("compagnia_ri
                       ("cortesia_voce_min", "spenta"), ("agenti_revisore", "spento"),
                       ("studio_modo", "spento"), ("studio_padronanza", "spenta"),
                       ("studio_carte_genera", "spenta"), ("studio_mappa_genera", "spenta"),
-                      ("studio_mappa_libera", "spenta"), ("studio_mappa_consigli", "spenta")):
+                      ("studio_mappa_libera", "spenta"), ("studio_mappa_consigli", "spenta"),
+                      ("studio_domande_genera", "spenta")):
     cfg, log = dal_locale(riga(campo, "no"))
     verifica(f"{campo}: il «no» di YAML vale «{atteso}»", getattr(cfg, campo) == atteso
              and "non è" not in log, f"{getattr(cfg, campo)!r} {log.strip()[-160:]}")
@@ -173,7 +175,8 @@ for campo, atteso in (("eventi", "spento"), ("stanza", "spenta"), ("compagnia_ri
 for campo in ("eventi", "system1_dopo_tool", "stanza_guardia", "arbitro_memoria",
               "agenti_conferma", "wake_mode", "speaker_impronte_satellite", "compagnia_rivolta",
               "agenti_revisore", "studio_modo", "studio_padronanza", "studio_carte_genera",
-              "studio_mappa_genera", "studio_mappa_libera", "studio_mappa_consigli"):
+              "studio_mappa_genera", "studio_mappa_libera", "studio_mappa_consigli",
+              "studio_domande_genera"):
     for scritto in ("yes", "on", "true"):
         cfg, log = dal_locale(riga(campo, scritto))
         verifica(f"contrario: {campo}: il «{scritto}» di YAML (true) è ambiguo, rifiutato",

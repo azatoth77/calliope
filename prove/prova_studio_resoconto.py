@@ -140,9 +140,9 @@ print("— schema")
 ora(29, 16)
 cfg = cfg_nuova("a.db")
 st = studio(cfg)
-verifica("studio_eventi dalla versione 4 (ora 8) di meta_schema",
+verifica("studio_eventi dalla versione 4 (ora 10) di meta_schema",
          st.dati.db.execute("SELECT versione FROM meta_schema WHERE modulo='studio'").fetchone()[0]
-         == len(D.MIGRAZIONI) == 9
+         == len(D.MIGRAZIONI) == 10
          and st.dati.uno("SELECT name FROM sqlite_master WHERE name='studio_eventi'") is not None)
 verifica("studio_eventi fra le tabelle dello Studio e quelle della conservazione",
          "studio_eventi" in D.TABELLE and set(TABELLE_STUDIO) == set(D.TABELLE)

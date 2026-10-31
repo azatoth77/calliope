@@ -51,7 +51,14 @@ Tabelle (versione 1):
   generazione dello scheletro. Dalla versione 9 (30/10, passo 7c, issue #328) la mappa libera
   (tipo «libera»), `studio_mappe.giri` (gli indicatori del metodo e i conti del confronto per
   giro) e `studio_mappe.visti` (i concetti del riferimento con la pagina detta o il testo
-  mostrato nel giro).
+  mostrato nel giro);
+- `studio_domande` e `studio_prove` (versione 10, 31/10, passo 8, issue #248): le domande delle
+  prove (scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta; un dato come le
+  carte, chiunque l'abbia scritto) e le prove fatte, la verifica finta scritta e l'interrogazione
+  orale, con le voci (la domanda copiata, la risposta della persona, l'esito e chi l'ha deciso) in
+  JSON; dalla stessa versione `studio_verifiche.prova` («scritta» o «interrogazione»),
+  `finestra` (la data è «dal») e `domande_firma`, `domande_esito`, `domande_del` per la
+  generazione delle domande dal lettore (`studio/domande_genera.py`).
 
 Tenuta (decisione 0035, punto 4): tutto ciò che è di una verifica resta fino a
 `studio_tenuta_giorni` (60) giorni dopo la sua data, per sempre se archiviata; «dimentica le
@@ -76,7 +83,7 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_tentativi", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
+TABELLE = ("studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
            "studio_misure",
            "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
            "studio_giorni")
@@ -313,13 +320,60 @@ def _v9(db: sqlite3.Connection):
                "domanda LIKE 'Mappa di %'")
 
 
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9]
+def _v10(db: sqlite3.Connection):
+    """31/10, passo 8 (#248): le domande delle prove e le prove (verifica finta e interrogazione).
+    `persona` è di chi è la verifica; testo, opzioni e risposta attesa sono un dato (sullo schermo
+    con textContent, al modello in busta). `voci` della prova: la domanda copiata (così la
+    correzione resta anche se la domanda cambia dopo), la risposta della persona, l'esito e chi
+    l'ha deciso; `riepilogo` i conti per argomento, mai testi. Sulla verifica il tipo della prova
+    vera e la finestra «dal», e l'ultima generazione delle domande."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_domande (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        argomento INTEGER,
+        tipo TEXT NOT NULL,
+        testo TEXT NOT NULL,
+        opzioni TEXT NOT NULL DEFAULT '[]',
+        attesa TEXT NOT NULL,
+        chiave TEXT NOT NULL DEFAULT '[]',
+        pagine TEXT NOT NULL DEFAULT '[]',
+        origine TEXT NOT NULL DEFAULT 'persona',
+        stato TEXT NOT NULL DEFAULT 'attiva',
+        avvisi TEXT,
+        creata TEXT NOT NULL,
+        creata_da TEXT,
+        modificata TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_domande_verifica ON studio_domande(verifica)")
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_prove (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        modalita TEXT NOT NULL,
+        stato TEXT NOT NULL,
+        inizio TEXT NOT NULL,
+        scade TEXT,
+        fine TEXT,
+        ultima TEXT,
+        corrente INTEGER NOT NULL DEFAULT 0,
+        seme INTEGER NOT NULL DEFAULT 0,
+        mix TEXT,
+        voci TEXT NOT NULL DEFAULT '[]',
+        riepilogo TEXT,
+        creata_da TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_prove_verifica ON studio_prove(verifica)")
+    for col in ("prova TEXT NOT NULL DEFAULT 'scritta'", "finestra INTEGER NOT NULL DEFAULT 0",
+                "domande_firma TEXT", "domande_esito TEXT", "domande_del TEXT"):
+        db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
+
+
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi")
 # Le tabelle venute dopo la prima versione: un db di prima (lo Studio spento non lo prepara) può
 # non averle
-NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe")
+NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe", "studio_domande", "studio_prove")
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:
@@ -415,7 +469,8 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
                 "SELECT file FROM studio_pagine WHERE materiale = ? AND file IS NOT NULL", (m,))]
             db.execute("DELETE FROM studio_pagine WHERE materiale = ?", (m,))
         for t in ("studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
-                  "studio_carte", "studio_mappe", *CON_ORFANI):
+                  "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
+                  *CON_ORFANI):
             # Un db ancora allo schema di prima (lo Studio spento non lo prepara): le tabelle
             # nuove possono mancare
             if t in NUOVE and not _tabella(db, t):
@@ -549,8 +604,10 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
                                 (scadute_prima.isoformat(),)).rowcount or 0
         # Le mappe senza la loro verifica (una corsa fra una scrittura e una cancellazione, passo
         # 7): non hanno un giorno, e senza la verifica non servono a niente; via sempre
-        if _tabella(db, "studio_mappe"):
-            db.execute(f"DELETE FROM studio_mappe WHERE {orfani}")
+        for t in ("studio_mappe", "studio_domande", "studio_prove"):
+            # Le domande e le prove (passo 8, #248) come le mappe
+            if _tabella(db, t):
+                db.execute(f"DELETE FROM {t} WHERE {orfani}")
         db.commit()
     except Exception:
         if db.in_transaction:

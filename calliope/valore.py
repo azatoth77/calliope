@@ -85,7 +85,12 @@ ARGOMENTI: dict[str, dict[str, str]] = {
                # revisione della PR #317): detto se la persona l'ha detto in cifre, in lettere o
                # come ordinale («il secondo»), altrimenti dal dato e la politica chiede
                "numero": B, "titolo": B, "giorno": S, "conoscenza": S,
-               "umore": S},
+               "umore": S,
+               # Il tipo della prova vera e la finestra «dal» (passo 8, #248): una scelta chiusa
+               "prova": S, "finestra": S},
+    # L'interrogazione a voce (passo 8, #248): una lettura (E0) come le carte; la verifica è un
+    # bersaglio, la proposta del modello solo una misura
+    "studio_interroga": {"parte": Z, "verifica": B, "materia": C, "proposta": S},
     # «Parliamone» (30/10, passo 7c, #328): una lettura (E0); la verifica è un bersaglio come
     # per `studio`, la materia un contenuto
     "studio_mappa_consigli": {"verifica": B, "materia": C},

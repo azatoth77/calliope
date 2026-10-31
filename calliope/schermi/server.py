@@ -98,6 +98,12 @@ Indirizzi:
                                  (le proposte dal modello senza avvisi; 30/10,
                                  passo 6 dello Studio, #246); fuori dalla conversazione come gli
                                  argomenti, in ombra solo chi amministra
+  POST /api/studio/prova         «X-Calliope-Sessione», {verifica, azione?, prova?, voce?,
+                                 risposta?, esito?, domanda?…} → le prove della verifica (31/10,
+                                 #248): la verifica finta scritta (inizia, rispondi, consegna,
+                                 rivedi), le domande (domanda, togli_domanda, rimetti_domanda,
+                                 conferma_domande), il tipo della prova vera e «conclusa». Le
+                                 risposte attese solo dopo la consegna
   POST /api/studio/mappa         «X-Calliope-Sessione», {verifica, azione?, mappa?, nodo?,
                                  collegamento?, testo?, da?, a?, verbo?, x?, y?, argomento?,
                                  pagine?, tipo?, aiuto?} → le mappe concettuali di una verifica
@@ -1533,6 +1539,148 @@ def crea_app(hub: Schermi) -> Starlette:
                     + (f" {cid}" if isinstance(cid, int) else ""))
         return _json(out)
 
+    # Le prove e le domande (31/10, passo 8, #248): la verifica finta scritta, le domande scritte
+    # a mano o proposte dal lettore, il tipo della prova vera. Fuori dalla conversazione come le
+    # carte (il testo è un dato: la pagina lo scrive con textContent); l'esito lo decide il codice,
+    # «da rivedere» la persona o il tutore, mai il modello. Le risposte attese arrivano alla pagina
+    # solo dopo la consegna (Studio._vista)
+    AZIONI_PROVA = ("inizia", "rispondi", "consegna", "rivedi", "domanda", "togli_domanda",
+                    "rimetti_domanda", "conferma_domande", "tipo", "conclusa")
+
+    def vista_prove(st, prof, vid) -> dict:
+        from ..studio import risposte as RS
+        args = st.argomenti(prof, vid)
+        d = st.domande(prof, vid)
+        return {**st.prove(prof, vid),
+                "domande": [{"id": x["id"], "numero": x["numero"], "tipo": x["tipo"],
+                             "testo": x["testo"], "opzioni": x["opzioni"],
+                             "attesa": RS.attesa_detta(x), "chiave": x["chiave"],
+                             "stato": x["stato"], "origine": x["origine"], "avvisi": x["avvisi"],
+                             "argomento_numero": x["argomento_numero"]}
+                            for x in d["domande"]],
+                "domande_nascoste": d["nascoste"],
+                "argomenti": [{"id": a["id"], "numero": i, "titolo": a["titolo"]}
+                              for i, a in enumerate(args, 1)
+                              if a["stato"] in ("tenuto", "aggiunto")],
+                "tipi": list(RS.TIPI),
+                "massimi": {"testo": RS.TESTO_MAX, "opzione": RS.OPZIONE_MAX,
+                            "attesa": RS.ATTESA_MAX, "risposta": RS.RISPOSTA_MAX},
+                "prova": not st.per_schermi()}
+
+    async def studio_prova(request: Request):
+        """{verifica, azione?, prova?, voce?, risposta?, esito?, domanda?, tipo?, testo?,
+        attesa?, opzioni?, chiave?, argomento?, prova_vera?, finestra?} → la vista delle prove.
+        Senza azione sola lettura (anche fuori orario); con un'azione la fa coi permessi dello
+        Studio e, per un minore, dentro gli orari. Le prove le fa solo la persona."""
+        schermo, errore = schermo_personale(request, letture_studio, LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 8192)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        from ..studio import risposte as RS
+        vid, azione = dati.get("verifica"), dati.get("azione")
+        if not _intero(vid) or vid < 1 or (azione is not None and azione not in AZIONI_PROVA):
+            return _json({"errore": "richiesta non valida"}, 400)
+        pid, voce, did = dati.get("prova"), dati.get("voce"), dati.get("domanda")
+        if azione in ("rispondi", "consegna", "rivedi") and not _intero(pid):
+            return _json({"errore": "manca la prova"}, 400)
+        if azione in ("rispondi", "rivedi") and not _intero(voce):
+            return _json({"errore": "manca la domanda"}, 400)
+        if azione in ("togli_domanda", "rimetti_domanda") and not _intero(did):
+            return _json({"errore": "manca la domanda"}, 400)
+        risposta = dati.get("risposta")
+        if risposta is not None and (not isinstance(risposta, str)
+                                     or len(risposta) > RS.RISPOSTA_MAX * 2):
+            return _json({"errore": "risposta non valida"}, 400)
+        if azione == "rivedi" and dati.get("esito") not in RS.REVISIONI:
+            return _json({"errore": "esito non valido"}, 400)
+        campi = {}
+        if azione == "domanda":
+            for k, mx in (("testo", RS.TESTO_MAX), ("attesa", RS.ATTESA_MAX)):
+                x = dati.get(k)
+                if not isinstance(x, str) or len(x) > mx * 2:
+                    return _json({"errore": "testo non valido"}, 400)
+                campi[k] = x
+            for k in ("opzioni", "chiave"):
+                x = dati.get(k) or []
+                if not isinstance(x, list) or len(x) > 5 or not all(
+                        isinstance(o, str) and len(o) <= 2 * RS.OPZIONE_MAX for o in x):
+                    return _json({"errore": "testo non valido"}, 400)
+                campi[k] = x
+            if dati.get("tipo") not in RS.TIPI:
+                return _json({"errore": "tipo non valido"}, 400)
+            arg = dati.get("argomento")
+            if arg is not None and not _intero(arg):
+                return _json({"errore": "argomento non valido"}, 400)
+        if azione == "tipo" and (dati.get("prova_vera") not in ("scritta", "interrogazione")
+                                 or not isinstance(dati.get("finestra", False), bool)):
+            return _json({"errore": "tipo non valido"}, 400)
+        from .. import minori
+        from ..studio import NonPermesso, NonTrovata, VerificaChiusa
+        if azione is not None:
+            orario = minori.fuori_orario(prof)
+            if orario:
+                return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                              "codice": "fuori_orario"}, 403)
+
+        def fai():
+            extra = {}
+            if azione in ("rispondi", "consegna", "rivedi"):
+                # La prova toccata deve essere di questa verifica
+                if st.vista_prova(prof, pid)["verifica"] != vid:
+                    raise NonTrovata()
+            if azione == "inizia":
+                extra["iniziata"] = st.inizia_prova(prof, vid)["id"]
+            elif azione == "rispondi":
+                st.rispondi_prova(prof, pid, voce, risposta or "")
+            elif azione == "consegna":
+                extra["consegnata"] = st.consegna_prova(prof, pid)["id"]
+            elif azione == "rivedi":
+                st.rivedi_voce(prof, pid, voce, dati["esito"])
+            elif azione == "domanda":
+                extra["scritta"] = st.aggiungi_domanda(
+                    prof, vid, dati["tipo"], campi["testo"], campi["attesa"], campi["opzioni"],
+                    campi["chiave"], argomento=dati.get("argomento"))
+            elif azione in ("togli_domanda", "rimetti_domanda"):
+                if did not in {x["id"] for x in st.domande(prof, vid)["domande"]}:
+                    raise NonTrovata()
+                st.segna_domanda(prof, did, azione == "rimetti_domanda")
+            elif azione == "conferma_domande":
+                extra["confermate"] = st.conferma_domande(prof, vid)
+            elif azione == "tipo":
+                st.imposta(prof, vid, prova=dati["prova_vera"],
+                           finestra=bool(dati.get("finestra", False)))
+            elif azione == "conclusa":
+                st.conclusa(prof, vid)
+            return {**vista_prove(st, prof, vid), **extra}
+        try:
+            out = await asyncio.to_thread(fai)
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except VerificaChiusa:
+            return _json({"errore": "La verifica è chiusa."}, 409)
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        except ValueError as e:
+            from ..studio import prove as PV
+            noti = {PV.POCHE: "Servono almeno 3 domande sugli argomenti del piano: scrivile o "
+                              "fai le carte.",
+                    PV.PROVA_APERTA: "C'è già una prova aperta su questa verifica.",
+                    PV.SOLO_PERSONA: "La prova la fa chi studia, dal suo schermo.",
+                    "la prova è chiusa": "La prova è chiusa: le risposte non cambiano più."}
+            return _json({"errore": noti.get(str(e), "Non va: controlla la domanda e la "
+                                                     "risposta.")}, 400)
+        if azione is not None:
+            # Nel registro solo l'azione e gli id, mai il testo
+            hub.log(f"[STUDIO] prove della verifica {vid}: {azione}"
+                    + (f" {pid}" if _intero(pid) else "") + (f" {did}" if _intero(did) else ""))
+        return _json(out)
+
     # Le mappe concettuali (30/10, passo 7, #247): sui dati della persona, fuori dalla
     # conversazione come le carte (il testo dei concetti è un dato e non entra nella storia); il
     # controllo è del codice, mai del modello. Lo scheletro lo cambiano la persona e il tutore, la
@@ -1912,6 +2060,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/vista", vista_api, methods=["POST"]),
         Route("/api/studio/argomenti", studio_argomenti, methods=["POST"]),
         Route("/api/studio/carte", studio_carte, methods=["POST"]),
+        Route("/api/studio/prova", studio_prova, methods=["POST"]),
         Route("/api/studio/mappa", studio_mappa, methods=["POST"]),
         Route("/api/studio/pagina", studio_pagina, methods=["POST"]),
         # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC

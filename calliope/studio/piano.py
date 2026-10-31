@@ -48,6 +48,9 @@ SENZA_RIPASSO = "senza_ripasso"     # un giorno solo: si legge tutto, il ripasso
 TROPPE_PAGINE = "troppe_pagine"     # le pagine non stanno nei minuti dei giorni
 # Il ricalcolo del piano è fallito: resta quello di prima (passo 4.5, seconda revisione PR #308)
 NON_AGGIORNATO = "piano_non_aggiornato"
+# Dentro la finestra «dal» di un'interrogazione (31/10, passo 8, #248): niente pagine nuove, si
+# ripassa con le carte e le prove
+FINESTRA = "finestra"
 NUMERO_STRANO = "numero_strano"     # un numero di pagina letto che non è un numero né una sigla
 
 GIORNI_SETTIMANA = ("lunedì", "martedì", "mercoledì", "giovedì", "venerdì", "sabato", "domenica")

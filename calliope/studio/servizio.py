@@ -71,6 +71,7 @@ from . import piano as P
 from . import padronanza as PD
 from . import resoconto as R
 from .mappe import Mappe
+from .prove import Prove
 
 SPENTO, OMBRA, ATTIVO = "spento", "ombra", "attivo"
 MODI = (SPENTO, OMBRA, ATTIVO)
@@ -99,6 +100,8 @@ SESSIONE_S = 3 * 3600
 # Una carta chiesta a voce resta «in corso» solo nel turno subito dopo la domanda o la risposta
 # (revisione della PR #324, nota 1), e al più tanto tempo, anche oltre la mezzanotte (nota 4)
 CARTA_IN_CORSO_S = 30 * 60
+# Il tipo della prova vera (passo 8, #248): la finestra «dal» vale solo per l'interrogazione
+PROVE_VERE = ("scritta", "interrogazione")
 
 
 class NonPermesso(PermissionError):
@@ -207,9 +210,9 @@ def _data(valore) -> datetime.date:
     return datetime.date.fromisoformat(str(valore).strip()[:10])
 
 
-class Studio(Mappe):
+class Studio(Mappe, Prove):
     """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
-    #247) sono in `mappe.py`."""
+    #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`."""
 
     def __init__(self, cfg, registry=None, log=print, adesso=None):
         self.cfg = cfg
@@ -243,7 +246,12 @@ class Studio(Mappe):
                                  # La mappa libera e «Parliamone» (passo 7c, #328): conti,
                                  # mai testi; «svelati» deve restare 0
                                  "libere": 0, "finite": 0, "indizi": 0, "mostrati": 0,
-                                 "consigli": 0, "svelati": 0}}
+                                 "consigli": 0, "svelati": 0},
+                       # Le prove (passo 8, #248): conti ed esiti, mai il testo; le proposte del
+                       # modello nell'orale e quante uguali alla decisione di chi rivede
+                       "prove": {"domande": 0, "iniziate": 0, "consegnata": 0, "scaduta": 0,
+                                 "annullate": 0, "riviste": 0, "esiti": {}, "proposte": 0,
+                                 "proposte_confrontate": 0, "proposte_uguali": 0}}
         # Il lettore delle pagine (passo 4.3, studio/lettura.py): lo crea `avvia_lettura`
         self.lettore = None
         # Perché non c'è il lettore (passo 4.5, nota della revisione della PR #314): None prima di
@@ -255,6 +263,9 @@ class Studio(Mappe):
         # La carta chiesta a voce a una persona (passo 6, #246): {persona: {carta, verifica,
         # turno, fino}}. In memoria: l'esito detto dopo vale per lei, una volta sola
         self._carte_in_corso: dict = {}
+        # La domanda dell'orale chiesta a voce (passo 8, #248): {persona: {prova, n, turno}}; la
+        # prova sta su disco, il turno della domanda in memoria (la risposta vale dal turno dopo)
+        self._orali: dict = {}
         self.fascia = P.fascia_valida(getattr(cfg, "studio_fascia", ""))
         if self.fascia is None:
             # Il caricamento della configurazione la rifiuta già (config._fascia_valida); qui
@@ -370,8 +381,10 @@ class Studio(Mappe):
 
     # ── verifiche ──
     def crea_verifica(self, chi, materia, data, livello=None, argomento=None, obiettivo=None,
-                      persona=None) -> int:
-        """Una verifica nuova, in bozza, per `chi` o (un tutore) per il suo minore."""
+                      persona=None, prova: str = "scritta", finestra: bool = False) -> int:
+        """Una verifica nuova, in bozza, per `chi` o (un tutore) per il suo minore. `prova`
+        «scritta» o «interrogazione»; `finestra`: la data è «dal», il primo giorno in cui può
+        arrivare l'interrogazione (passo 8, #248)."""
         self._scrivibile()
         persona = str(persona or getattr(chi, "id", "") or "")
         self._chi_puo(chi, persona)
@@ -381,21 +394,44 @@ class Studio(Mappe):
         ob = int(obiettivo if obiettivo is not None else getattr(self.cfg, "studio_obiettivo", 75))
         if not 1 <= ob <= 100:
             raise ValueError("l'obiettivo va da 1 a 100")
+        if prova not in PROVE_VERE:
+            raise ValueError("la prova è scritta o un'interrogazione")
         vid = self.dati.scrivi(
             "INSERT INTO studio_verifiche (persona, materia, argomento, data, livello, obiettivo,"
-            " stato, creata, creata_da) VALUES (?, ?, ?, ?, ?, ?, 'bozza', ?, ?)",
+            " stato, creata, creata_da, prova, finestra) VALUES (?, ?, ?, ?, ?, ?, 'bozza', ?, ?,"
+            " ?, ?)",
             (persona, materia_normale(materia),
              (" ".join(str(argomento).split())[:120] or None) if argomento else None,
              d.isoformat(), (" ".join(str(livello).split())[:60] or None) if livello else None,
-             ob, D.adesso(), getattr(chi, "id", None)))
+             ob, D.adesso(), getattr(chi, "id", None), prova,
+             int(bool(finestra) and prova == "interrogazione")))
         self.misure["verifiche_create"] += 1
         self._registra(f"verifica {vid} creata ({self._chi_registro(chi, persona)})")
         return vid
 
     def verifica(self, chi, vid) -> dict:
         v = self._verifica(chi, vid)
-        v["giorni_mancanti"] = (_data(v["data"]) - self._oggi()).days
+        self._tempi(v)
         return v
+
+    def _fine(self, v: dict) -> datetime.date:
+        """L'ultimo giorno della prova vera: la data, o con la finestra «dal» la data più
+        `studio_finestra_giorni` (passo 8, #248)."""
+        d = _data(v["data"])
+        if v.get("finestra"):
+            d += datetime.timedelta(days=int(getattr(self.cfg, "studio_finestra_giorni", 14)
+                                             or 14))
+        return d
+
+    def _tempi(self, v: dict):
+        """I giorni che mancano (mai negativi nella finestra), la fine e se oggi è nella
+        finestra «dal»."""
+        oggi = self._oggi()
+        d = _data(v["data"])
+        v["prova"] = v.get("prova") or "scritta"
+        v["fine"] = self._fine(v).isoformat()
+        v["in_finestra"] = bool(v.get("finestra")) and d <= oggi <= self._fine(v)
+        v["giorni_mancanti"] = max(0, (d - oggi).days) if v["in_finestra"] else (d - oggi).days
 
     def verifiche(self, chi, persona=None, archiviate: bool = False) -> list[dict]:
         """Le verifiche di una persona (di serie di chi chiede), dalla più vicina."""
@@ -406,11 +442,11 @@ class Studio(Mappe):
             q += " AND stato != 'archiviata'"
         out = self.dati.tutti(q + " ORDER BY data, id", (persona,))
         for v in out:
-            v["giorni_mancanti"] = (_data(v["data"]) - self._oggi()).days
+            self._tempi(v)
         return out
 
     def imposta(self, chi, vid, *, data=None, obiettivo=None, minuti_giorno=None,
-                livello=None, materia=None, argomento=None):
+                livello=None, materia=None, argomento=None, prova=None, finestra=None):
         """Cambia la data («la verifica è spostata a lunedì»), l'obiettivo, i minuti al giorno
         (anche il tutore), la classe, la materia; poi il piano si ricalcola."""
         self._scrivibile()
@@ -425,8 +461,10 @@ class Studio(Mappe):
                 campi["stato"] = "aperta"
                 # Prima di riaprirla, le mappe senza guardare rimaste aperte si chiudono davvero
                 # (terza revisione della PR #330: con la verifica fatta lo scheletro era tornato
-                # visibile, e riaperte avrebbero dato «giusto» ai concetti visti)
+                # visibile, e riaperte avrebbero dato «giusto» ai concetti visti); così le prove
+                # (passo 8, #248)
                 self._chiudi_scadute(v["id"], "fatta")
+                self._chiudi_prove(v["id"], "fatta")
         if obiettivo is not None:
             if not 1 <= int(obiettivo) <= 100:
                 raise ValueError("l'obiettivo va da 1 a 100")
@@ -441,6 +479,14 @@ class Studio(Mappe):
             campi["materia"] = materia_normale(materia)
         if argomento is not None:
             campi["argomento"] = " ".join(str(argomento).split())[:120] or None
+        if prova is not None:
+            if prova not in PROVE_VERE:
+                raise ValueError("la prova è scritta o un'interrogazione")
+            campi["prova"] = prova
+        if finestra is not None or prova is not None:
+            tipo = campi.get("prova", v.get("prova") or "scritta")
+            f = bool(finestra if finestra is not None else v.get("finestra"))
+            campi["finestra"] = int(f and tipo == "interrogazione")
         if not campi:
             return
         sets = ", ".join(f"{k} = ?" for k in campi)
@@ -468,6 +514,23 @@ class Studio(Mappe):
         self.dati.scrivi("UPDATE studio_verifiche SET stato = 'archiviata', archiviata = ? "
                          "WHERE id = ?", (D.adesso(), v["id"]))
         self._chiudi_scadute(v["id"], "archiviata")
+        self._chiudi_prove(v["id"], "archiviata")
+        self.ricalcola_persona(v["persona"])
+
+    def conclusa(self, chi, vid):
+        """«La verifica l'ho fatta», «mi hanno interrogato» (passo 8, #248): la verifica diventa
+        «fatta» prima della data o della fine della finestra; mappe senza guardare e prove aperte
+        si chiudono davvero, senza tentativi. Si riapre spostando la data."""
+        self._scrivibile()
+        with self.dati.lock:
+            v = self._verifica(chi, vid)
+            if v["stato"] not in ("bozza", "aperta"):
+                raise VerificaChiusa()
+            self.dati.scrivi("UPDATE studio_verifiche SET stato = 'fatta' WHERE id = ?",
+                             (v["id"],))
+            self._chiudi_scadute(v["id"], "fatta")
+            self._chiudi_prove(v["id"], "fatta")
+        self._registra(f"verifica {v['id']} conclusa ({self._chi_registro(chi, v['persona'])})")
         self.ricalcola_persona(v["persona"])
 
     def togli_verifica(self, chi, vid) -> dict:
@@ -1114,8 +1177,8 @@ class Studio(Mappe):
                 for i, a in enumerate(elenco, 1) if a["stato"] in D.ARGOMENTI_DEL_PIANO]
 
     def _padronanza_di(self, vid) -> tuple[list[dict], dict]:
-        tent = self.dati.tutti("SELECT argomento, giorno, tipo, esito FROM studio_tentativi "
-                               "WHERE verifica = ?", (int(vid),))
+        tent = self.dati.tutti("SELECT argomento, giorno, tipo, esito, fonte FROM "
+                               "studio_tentativi WHERE verifica = ?", (int(vid),))
         return self._argomenti_numerati(vid), PD.calcola(tent, self._oggi())
 
     def padronanza(self, chi, vid) -> dict:
@@ -1190,6 +1253,10 @@ class Studio(Mappe):
         # corregge (seconda revisione)
         if (c["origine"] == "mappa" and getattr(chi, "id", None) == c["persona"]
                 and self._libera_aperta(c["verifica"])):
+            raise NonTrovata()
+        # Con una prova aperta (passo 8, #248) le carte della verifica non ci sono per la persona:
+        # hanno le risposte delle domande
+        if getattr(chi, "id", None) == c["persona"] and self._prova_aperta(c["verifica"]):
             raise NonTrovata()
         return c, self._verifica(chi, c["verifica"])
 
@@ -1429,6 +1496,9 @@ class Studio(Mappe):
         # vedono e non si ripassano: dicono i concetti dello scheletro, che resta nascosto
         libera_aperta = ((chi is None or getattr(chi, "id", None) == v["persona"])
                          and self._libera_aperta(v["id"]))
+        # Con una prova aperta (passo 8, #248) nessuna carta per la persona (né nei conti)
+        if self._nascoste(v, chi):
+            return []
         # Le carte dell'ombra (studio_carte_genera: ombra) non vanno mai alla persona
         for i, c in enumerate(self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? AND "
                                               "stato != 'ombra' ORDER BY id", (v["id"],)), 1):
@@ -1674,14 +1744,27 @@ class Studio(Mappe):
             return None
         oggi = self._oggi()
         data = _data(v["data"])
-        # Passata: la verifica è fatta, il piano resta com'era (la storia)
-        if data < oggi:
+        # Passata (con la finestra «dal», passata la fine: passo 8, #248): la verifica è fatta,
+        # il piano resta com'era (la storia)
+        if self._fine(v) < oggi:
             if v["stato"] != "fatta" and self.dati.scrivibile:
                 self.dati.scrivi("UPDATE studio_verifiche SET stato = 'fatta' WHERE id = ?",
                                  (v["id"],))
                 # Le mappe senza guardare ancora aperte si chiudono davvero (terza revisione
-                # della PR #330)
+                # della PR #330), e le prove (passo 8)
                 self._chiudi_scadute(v["id"], "fatta")
+                self._chiudi_prove(v["id"], "fatta")
+            return None
+        # «Conclusa» prima della data (passo 8): il piano resta com'era
+        if v["stato"] == "fatta":
+            return None
+        # Dentro la finestra «dal»: niente pagine nuove, il piano di prima resta la storia;
+        # l'avviso «finestra» lo dice (ripasso, carte e prove)
+        if data < oggi or (data == oggi and v.get("finestra")):
+            if self.dati.scrivibile:
+                self.dati.scrivi("UPDATE studio_verifiche SET piano_del = ?, piano_avvisi = ? "
+                                 "WHERE id = ?", (oggi.isoformat(), D.j([P.FINESTRA]),
+                                                  v["id"]))
             return None
         liberi = self._minuti_base(v["persona"])
         # Una verifica aperta senza pagine da leggere non toglie minuti (revisione della PR
@@ -1772,7 +1855,7 @@ class Studio(Mappe):
             nuova = self.dati.uno("SELECT * FROM studio_verifiche WHERE id = ?", (v["id"],))
             if nuova is not None:
                 stato, avvisi = nuova["stato"], D.da_j(nuova["piano_avvisi"])
-            if _data(v["data"]) < oggi:
+            if self._fine(v) < oggi:
                 stato = "fatta"
         righe = self.dati.tutti("SELECT * FROM studio_piano WHERE verifica = ? ORDER BY giorno",
                                 (v["id"],))
@@ -1974,6 +2057,11 @@ class Studio(Mappe):
         return {"id": v["id"], "materia": v["materia"], "argomento": v["argomento"],
                 "data": v["data"], "stato": v["stato"], "giorni_mancanti": v["giorni_mancanti"],
                 "obiettivo": v["obiettivo"], "di": di,
+                # Il tipo della prova vera e la finestra «dal» (passo 8, #248)
+                "prova": v["prova"], "finestra": bool(v.get("finestra")), "fine": v["fine"],
+                "in_finestra": v["in_finestra"],
+                # Le prove (passo 8): solo conti; il testo lo dà /api/studio/prova
+                "prove": self._conto_prove(v),
                 "oggi": ({"attivita": r_oggi["attivita"], "minuti": r_oggi["minuti"],
                           "fase": r_oggi["fase"], "fatto": bool(r_oggi["fatto"])}
                          if r_oggi else None),
@@ -2158,6 +2246,23 @@ class Studio(Mappe):
         if self.padronanza_mostrata():
             r["lacune"] = [x["numero"] for x in self._padronanza(v)["lacune"]]
         r["frase"] = R.frase_riepilogo(r, self._oggi(), nome)
+        # Le ultime prove, scritta e orale (passo 8, #248): sempre tutte e due le modalità; per
+        # un'interrogazione prima l'orale
+        r["prove"] = self._conto_prove(v).get("ultime", {})
+        r["tipo"] = v.get("prova") or "scritta"
+        pezzi = []
+        ordine = ("orale", "scritta") if r["tipo"] == "interrogazione" else ("scritta", "orale")
+        for m in ordine:
+            u = r["prove"].get(m)
+            nome_m = "verifica finta" if m == "scritta" else "interrogazione simulata"
+            if u and u.get("punteggio") is not None:
+                pezzi.append(f"l'ultima {nome_m} è andata al {u['punteggio']}%")
+            elif not u:
+                pezzi.append(f"{nome_m} ancora da fare")
+        if pezzi and r["prove"]:
+            frase = "; ".join(pezzi)
+            r["frase"] = f"{r['frase']} Prove: {frase}."
+            r["righe"] = list(r["righe"]) + [f"Prove: {frase}."]
         return r
 
     def _riepilogo_schermo(self, v: dict, pi: dict) -> dict:
