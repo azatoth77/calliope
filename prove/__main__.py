@@ -674,6 +674,7 @@ LEGAMI = [
     ("calliope/ciclo.py", ["prova_studio_ascolta.py"]),
     ("calliope/tts.py", ["prova_studio_ascolta.py"]),
     ("calliope/conserva.py", ["prova_studio_ascolta.py"]),
+    ("calliope/satellite/server.py", ["prova_studio_ascolta.py"]),
     ("prove/prova_studio_argomenti.py", ["prova_studio_domande_genera.py"]),
     ("calliope/tools/studio.py", ["prova_studio_resoconto.py"]),
     ("calliope/schermi/tocchi.py", ["prova_studio_tool.py"]),

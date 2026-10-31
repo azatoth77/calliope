@@ -305,8 +305,7 @@ Lo script del revisore (frasi ostili da una pagina, contro `scarto` e `per_ripas
    passava sempre il suo audio al giro dopo (`barge_seed`), e l'audio era quello del libro. Ora il
    seme vale solo se `known_voice` vi riconosce una persona registrata, come il barge-in di livello
    B; altrimenti la lettura si ferma e basta (regola `studio_ripasso_fermato_senza_voce`). Col
-   satellite il seme non ha audio: nel dubbio non vale, e la persona richiama (la finestra
-   d'ascolto resta aperta `followup_s`).
+   satellite decide lui: vedi la seconda revisione, punto 5.
 3. **Lo scritto non aspetta.** Fra un pezzo e l'altro anche un messaggio scritto da uno schermo
    (`ingresso`) o la sveglia del ciclo fermano la lettura, come un timer: «Metto in pausa il
    ripasso: è arrivato un messaggio.» La posizione resta.
@@ -327,6 +326,33 @@ Le minori:
 - `prova_studio_prove_pagina.py` cadeva a volte su «Scrivi una domanda»: controllava la pagina
   prima che si ridisegnasse. Ora aspetta, e se cade il dettaglio dice cosa manca (salvata, nella
   pagina, modulo, esito, inizio e fine del testo). Tre giri di fila verdi.
+
+### 31/10: la seconda revisione della PR #345
+
+Gli script del revisore (`falsi.py`, `seme.py`, `filtri.py`) sono nei casi di
+`prova_studio_ascolta.py`.
+
+5. **Il seme del satellite.** Sul satellite il barge-in torna come `SeedRemoto`: un segnale senza
+   audio, che resta sul satellite. La correzione di prima lo passava a `known_voice` come un array
+   di un booleano, e lo buttava sempre: «Calliope, ripeti» fermava la lettura ma «ripeti» non
+   arrivava, sulla DGX a ogni interruzione. *[storico per un commit: «Col satellite il seme non ha
+   audio: nel dubbio non vale»]* Ora `SeedRemoto` porta il motivo e l'esito dell'impronta della
+   voce chiesta nella stessa veglia (livello B; «Parla» toccato vale una persona), e decide quello.
+   Senza esito il seme si tiene: il libro non dice più il nome (`nome_dentro`) e il satellite che
+   suona ignora già il proprio. `known_voice` non riceve più il segnale.
+6. **I confini di parola** dopo «alexa», «siri» e «cortana»: «Siria, Libano e Giordania»,
+   «Alexander Fleming», «Sirio», «Siriani» si dicono.
+7. **«chiocciola» da sola non è un indirizzo**: vale solo fra due parole e con «punto» dopo
+   («mario chiocciola gmail punto com»); «punto it» solo dopo «w w w» o «sito …». «La chiocciola
+   è un mollusco», «il punto com è finito», «al punto 3» si dicono. «Per l'IA» conta solo con i due
+   punti o la virgola dopo.
+
+Le minori:
+- le parole che svegliano comuni (in startrek «computer») valgono solo dove chiamano: in testa alla
+  frase o dopo un segno di punteggiatura. Il nome di Calliope vale dovunque. «Il computer elabora i
+  dati» si dice;
+- una pausa per la sveglia del ciclo (un avviso di un'altra corsia, un tocco) dice solo «Metto in
+  pausa il ripasso.»; «è arrivato un messaggio» resta per lo scritto.
 
 ## Le prove: verifica finta e interrogazione simulata (31/10, issue #248, ramo `issue-248-studio-verifica-finta`)
 

@@ -569,7 +569,8 @@ dell'eco della stanza.
       risposta, a pezzi di 3 frasi. Il guardiano del nome è quello della risposta: half-duplex,
       niente trascrizioni mentre legge, «Calliope, basta» la ferma. L'audio dell'interruzione
       diventa un turno solo con la voce di una persona registrata: il nome detto dal libro ferma
-      e basta. Un messaggio scritto arrivato intanto la ferma come un timer (revisione della PR
+      e basta. Col satellite decide lui, con l'impronta della voce della stessa veglia; senza,
+      il seme vale (seconda revisione della PR #345). Un messaggio scritto arrivato intanto la ferma come un timer (revisione della PR
       #345). Il testo non entra nella
       storia, negli eventi, nello schermo né nel registro (`Uscita.leggi`, `turno_lettura`).
       «Riprendi» e «ripeti» (dall'inizio del paragrafo) usano la posizione delle frasi sentite per

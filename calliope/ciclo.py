@@ -5077,9 +5077,11 @@ class Ciclo:
             # #345): non aspetta la fine della lettura, che si ferma come per un timer
             ingresso = getattr(self, "ingresso", None)
             sveglia = getattr(self, "sveglia", None)
-            if (ingresso is not None and not ingresso.vuoto()) or (
-                    sveglia is not None and sveglia.is_set()):
+            if ingresso is not None and not ingresso.vuoto():
                 return ("messaggio", "Metto in pausa il ripasso: è arrivato un messaggio.")
+            if sveglia is not None and sveglia.is_set():
+                # Un avviso di un'altra corsia o un tocco: niente «messaggio» (seconda revisione)
+                return ("sveglia", "Metto in pausa il ripasso.")
             return st.ascolto_vale(lettura)
 
         w = types.SimpleNamespace()
@@ -5120,7 +5122,16 @@ class Ciclo:
 
     def _seme_di_persona(self, seme) -> bool:
         """L'audio dell'interruzione è di una persona registrata (`known_voice`, come il barge-in
-        di livello B)? Nel dubbio no: il ripasso resta fermo e la persona richiama."""
+        di livello B)? Nel dubbio no: il ripasso resta fermo e la persona richiama.
+
+        Col satellite (`SeedRemoto`, seconda revisione della PR #345) l'audio resta lì e decide
+        lui: l'esito dell'impronta della voce, se in questa veglia l'ha chiesta (livello B, o un
+        tocco di «Parla»); senza esito il seme si tiene, perché il libro non dice più il nome
+        (`ascolta.nome_dentro`) e il satellite che suona ignora già il proprio nome. Così
+        «Calliope, ripeti» arriva."""
+        if getattr(seme, "remoto", False):
+            esito = getattr(seme, "voce_ok", None)
+            return True if esito is None else bool(esito)
         try:
             parti = [np.asarray(x).reshape(-1) for x in seme if x is not None]
             if not parti:

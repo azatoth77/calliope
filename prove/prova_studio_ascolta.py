@@ -205,11 +205,24 @@ for frase, motivo in (
              A.scarto(frase, NOMI, False))
 for frase in ("Callisto è una luna di Giove.", "Google ha comprato YouTube nel 2006.",
               "La calle veneziana è stretta.", "Il computer di bordo calcolava la rotta.",
-              "Gli assistenti di volo servono il pranzo.", "Il punto più alto è l'Everest."):
+              "Gli assistenti di volo servono il pranzo.", "Il punto più alto è l'Everest.",
+              # Seconda revisione della PR #345: i confini di parola, la chiocciola, il punto
+              "Siria, Libano e Giordania.", "La Siria è un paese del Medio Oriente.",
+              "Alexander Fleming scoprì la penicillina.", "Sirio è la stella più luminosa.",
+              "Siriani e libanesi commerciavano.", "Cortanaro è un nome inventato.",
+              "La chiocciola è un mollusco.", "Il guscio della chiocciola.",
+              "Il punto com è finito.", "Al punto 3 si legge.", "Per l'IA questo è difficile."):
     verifica(f"contrario, si dice: «{frase}»", A.scarto(frase, NOMI, False) is None,
              A.scarto(frase, NOMI, False))
 verifica("startrek: con «computer» fra le parole che svegliano, la frase col computer non si dice",
-         A.scarto("Computer, spegni le luci.", ["Calliope", "computer"], False) == "nome")
+         A.scarto("Computer, spegni le luci.", ["Calliope", "computer"], False) == "nome"
+         and A.scarto("Bene. Computer, apri.", ["Calliope", "computer"], False) == "nome")
+for frase in ("Il computer elabora i dati.", "I computer moderni sono veloci.",
+              "Il compito di oggi."):
+    verifica(f"contrario, startrek: «computer» che non chiama nessuno si dice: «{frase}»",
+             A.scarto(frase, ["Calliope", "computer"], False) is None)
+verifica("…mentre il nome di Calliope vale dovunque nella frase",
+         A.scarto("La musa Calliope ispirò Omero.", ["Calliope", "computer"], False) == "nome")
 verifica("…e il servizio usa le wake_names in uso, non solo il nome",
          studio(cfg_nuova("nomi.db", wake_word="computer"))._nomi_ascolto()
          == ["Calliope", "computer"])
@@ -483,15 +496,59 @@ c = ciclo_finto(st, sp, annunci=True, lettura=st.ascolto_prepara(LEO, vid, "tutt
 Ciclo._leggi_ripasso(c, t)
 verifica("un avviso in coda (un timer): la lettura si ferma e lo dice",
          c.rec["ripasso"]["motivo"] == "annuncio" and sp.mandate[-1][0].startswith("Metto in pausa"))
-for come, kw in (("un messaggio scritto da uno schermo", {"scritto": True}),
-                 ("la sveglia del ciclo", {"sveglia": True})):
+for come, kw, motivo, frase in (
+        ("un messaggio scritto da uno schermo", {"scritto": True}, "messaggio",
+         "Metto in pausa il ripasso: è arrivato un messaggio."),
+        ("la sveglia del ciclo (un avviso, un tocco), con la frase neutra", {"sveglia": True},
+         "sveglia", "Metto in pausa il ripasso.")):
     sp = VoceFinta()
     c = ciclo_finto(st, sp, lettura=st.ascolto_prepara(LEO, vid, "tutto"), **kw)
     Ciclo._leggi_ripasso(c, t)
     verifica(f"revisione della PR #345: {come} ferma la lettura (la posizione resta) e passa "
-             "avanti", c.rec["ripasso"]["motivo"] == "messaggio"
-             and sp.mandate[-1][0] == "Metto in pausa il ripasso: è arrivato un messaggio."
-             and st.ascolto_in_pausa("l1") is not None, c.rec)
+             "avanti", c.rec["ripasso"]["motivo"] == motivo and sp.mandate[-1][0] == frase
+             and st.ascolto_in_pausa("l1") is not None, (c.rec, sp.mandate[-1]))
+print("— seconda revisione della PR #345: il seme del satellite")
+from calliope.satellite.server import SeedRemoto  # noqa: E402
+for seme, atteso, come in ((SeedRemoto("nome sentito"), True, "senza esito della voce"),
+                           (SeedRemoto("nome sentito", True), True, "con l'impronta di una persona"),
+                           (SeedRemoto("nome sentito", False), False, "con l'impronta rifiutata"),
+                           (SeedRemoto("tocco", True), True, "dal tocco di «Parla»")):
+    sp = VoceFinta(ferma_a=3)
+    c = ciclo_finto(st, sp, seme=seme, persona=False, lettura=st.ascolto_prepara(LEO, vid))
+    Ciclo._leggi_ripasso(c, t)
+    verifica(f"satellite, {come}: il seme {'si tiene' if atteso else 'non vale'} e known_voice non "
+             "riceve il segnale senza audio", (c.barge_seed is seme) == atteso and c.sentiti == [],
+             (c.barge_seed, c.sentiti))
+verifica("…cioè sul satellite «Calliope, ripeti» durante il ripasso arriva al giro dopo",
+         list(SeedRemoto("nome sentito")) == [True] and SeedRemoto().remoto)
+
+
+def veglia_remota(eventi):
+    """`AscoltoRemoto.watch_for_name` con un satellite finto che manda `eventi` (tipo, dati)."""
+    import queue
+    import threading
+    from calliope.satellite.server import AscoltoRemoto
+    coll = types.SimpleNamespace(eco=0.0, mandati=[])
+    coll.invia = lambda **k: coll.mandati.append(k) or True
+    q = queue.Queue()
+    for tipo, d in eventi:
+        q.put((coll, tipo, dict(d, id=1)))
+    server = types.SimpleNamespace(insieme=False, eventi=q, attivo_pronto=lambda sat=None: coll)
+    a = AscoltoRemoto(server, types.SimpleNamespace(barge_in_echo_max=0.5), log=lambda m: None)
+    return a.watch_for_name(None, threading.Event(), lambda: False,
+                            voice_ok=lambda audio: True), coll
+
+
+pcm = b"\x00\x00" * 1600
+seme, coll = veglia_remota([("voce", {"pcm": pcm}), ("interruzione", {"motivo": "nome sentito"})])
+verifica("satellite: dopo l'impronta della voce (livello B) il seme porta il suo esito",
+         seme.remoto and seme.motivo == "nome sentito" and seme.voce_ok is True
+         and any(m.get("tipo") == "esito_voce" for m in coll.mandati), (vars(seme), coll.mandati))
+seme, _ = veglia_remota([("interruzione", {"motivo": "nome sentito"})])
+verifica("satellite: solo il nome, senza impronta, il seme non ha esito (e il ripasso lo tiene)",
+         seme.voce_ok is None and Ciclo._seme_di_persona(types.SimpleNamespace(), seme) is True)
+seme, _ = veglia_remota([("interruzione", {"motivo": "tocco"})])
+verifica("satellite: «Parla» toccato sulla pagina vale una persona", seme.voce_ok is True)
 sp = VoceFinta()
 c = ciclo_finto(st, sp, lettura=st.ascolto_prepara(LEO, vid, "tutto"))
 Ciclo._leggi_ripasso(c, types.SimpleNamespace(watch={"seed": [1]}, non_rivolta=False))

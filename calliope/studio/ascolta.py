@@ -206,16 +206,19 @@ _MESSAGGIO = re.compile(
     r"\b(?:per|all?)\s+l['’]\s*assistente\b|\bassistente\s+(?:vocale|virtuale|digitale)\b|"
     r"\bintelligenza artificiale\b.{0,30}\b(?:ignora|rispondi|scrivi|di['’]|dì)\b|"
     r"\bignora\s+(?:le|tutte\s+le|ogni)\s+(?:regole|istruzioni)\b|"
-    r"\b(?:regole|istruzioni)\s+precedenti\b|\b(?:per|all?)\s+l['’]\s*ia\b", re.I)
+    r"\b(?:regole|istruzioni)\s+precedenti\b|\b(?:per|all?)\s+l['’]\s*ia\s*[:,]", re.I)
 # Gli assistenti di altre marche chiamati in testa alla frase o dopo un segno (revisione della PR
 # #345): «Alexa, …», «Ok Google», «Ehi Siri», «Hey Cortana», «Ehi assistente», «Assistente, …».
 # «Google ha comprato…» resta: Google da solo non chiama nessuno
 _ALTRI_ASSISTENTI = re.compile(
     r"(?:^|[,;:.!?«\"(]\s*)\W*(?:(?:ehi|ehy|hey|ok|okay)\s+(?:google|siri|alexa|cortana|"
-    r"assistente)|alexa|siri|cortana|assistente\s*[,:!])", re.I)
-# Un indirizzo detto a parole («w w w punto sito punto it», «mario chiocciola gmail punto com»)
+    r"assistente)\b|(?:alexa|siri|cortana)\b|assistente\s*[,:!])", re.I)
+# Un indirizzo detto a parole («w w w punto sito punto it», «mario chiocciola gmail punto com»,
+# «il sito esempio punto it»). Solo le forme intere: «la chiocciola è un mollusco», «al punto 3»
+# e «il punto com è finito» si dicono (seconda revisione della PR #345)
 _INDIRIZZO_DETTO = re.compile(
-    r"\bw\s*w\s*w\b|\bchiocciola\b|\bpunto\s+(?:it|com|org|net|eu|info)\b", re.I)
+    r"\bw\s*w\s*w\s+punto\b|\b\w+\s+chiocciola\s+\w+\s+punto\b|"
+    r"\bsito\b.{0,40}?\b\w+\s+punto\s+(?:it|com|org|net|eu|info)\b", re.I)
 
 
 def _norma_nome(t: str) -> str:
@@ -238,14 +241,29 @@ def _distanza_uno(a: str, b: str) -> bool:
     return any(lungo[:i] + lungo[i + 1:] == corto for i in range(len(lungo)))
 
 
+def _chiama(frase: str) -> set:
+    """Le prime parole di ogni pezzo della frase (in testa e dopo un segno di punteggiatura),
+    normalizzate: dove una parola comune chiama qualcuno («Computer, spegni…»)."""
+    out = set()
+    for pezzo in re.split(r"[,;:.!?«»\"()\[\]\-–—]", _norma_nome(frase)):
+        w = re.findall(r"[a-z]+", pezzo)
+        if w:
+            out.add(w[0])
+    return out
+
+
 def nome_dentro(frase: str, nomi) -> bool:
-    """La frase contiene una delle parole che svegliano (il nome e, in startrek, «computer»),
-    anche storpiata (revisione della PR #345): senza accenti, con la k, le doppie semplificate,
-    con una lettera di tolleranza dalle 6 lettere (mai sulla prima), e scritta a lettere staccate
-    («C a l l i o p e»). Forma, non significato (principio 10)."""
+    """La frase contiene una delle parole che svegliano, anche storpiata (revisione della PR #345):
+    senza accenti, con la k, le doppie semplificate, con una lettera di tolleranza dalle 6 lettere
+    (mai sulla prima), e scritta a lettere staccate («C a l l i o p e»). Il primo di `nomi` è il
+    nome di Calliope e vale dovunque; gli altri sono parole comuni (in startrek «computer»: seconda
+    revisione della PR #345) e valgono solo dove chiamano, in testa o dopo un segno di
+    punteggiatura, così un capitolo di informatica non perde le frasi. Forma, non significato
+    (principio 10)."""
     parole = re.findall(r"[a-z]+", _norma_nome(frase))
     if not parole:
         return False
+    in_testa = _chiama(frase)
     candidati = set(parole)
     corsa: list[str] = []
     for p in parole + [""]:                       # le lettere staccate, unite
@@ -255,11 +273,11 @@ def nome_dentro(frase: str, nomi) -> bool:
         if len(corsa) >= 3:
             candidati.add(re.sub(r"([a-z])\1+", r"\1", "".join(corsa)))
         corsa = []
-    for n in nomi or ():
+    for i, n in enumerate(nomi or ()):
         nn = _norma_nome(n)
         if not nn:
             continue
-        for w in candidati:
+        for w in (candidati if i == 0 else in_testa):
             if w == nn or (len(nn) >= 6 and w[:1] == nn[:1] and _distanza_uno(w, nn)):
                 return True
     return False
