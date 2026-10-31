@@ -168,35 +168,114 @@ _ARTICOLI = frozenset("il lo la i gli le l un uno una di del dello della dei deg
                       "fra".split())
 
 
+# I numeri della forma chiusa (31/10, #361): un gettone «#valore» o «#valore@unità», confrontato
+# come numero con `studio/unita.py` (come in `risposte.py`), mai trasformato in parole prima del
+# confronto. Prima «1» diventava «uno» e si scartava come articolo, e «1,5 g/cm³» diventava
+# «cinque g cm3», che si trovava dentro «2,5 g/cm³»
+NUMERO = "#"
+_MOLTIPLICATORI = {"mila": 1e3, "milione": 1e6, "milioni": 1e6, "miliardo": 1e9,
+                   "miliardi": 1e9}
+_MOLTIPLICA = re.compile(r"\s+(mila|milioni|milione|miliardi|miliardo)\b")
+_E_MEZZO = re.compile(r"\s+e\s+mezzo\b")
+
+
+def _gettoni(testo) -> list[str]:
+    """Le parole di un testo per la forma chiusa e il confronto: minuscole, senza accenti né
+    punteggiatura, gli apostrofi come spazi; i numeri (anche in lettere, coi decimali e
+    l'unità subito dopo: «1,5 g/cm³», «un metro e mezzo» no) un gettone solo `NUMERO`."""
+    from . import unita as U
+    t = U._in_cifre(U._semplice(testo))
+    t = re.sub(r"(?<=\d) (?=\d{3}\b)", "", t)                # «1 861»
+    out, p = [], 0
+    rx = re.compile(r"(?<![\w.,])(" + U._NUM.pattern + r")(?![\w])|[a-z0-9]+")
+    while True:
+        m = rx.search(t, p)
+        if m is None:
+            return out
+        p = m.end()
+        if m.group(1) is not None:
+            v = U._cifre(m.group(1))
+            if v is not None:
+                # «2 milioni», «3 mila»; «1 e mezzo», «due e mezzo» (revisione della PR #363)
+                mm = _MOLTIPLICA.match(t, p)
+                if mm is not None:
+                    v *= _MOLTIPLICATORI[mm.group(1)]
+                    p = mm.end()
+                mz = _E_MEZZO.match(t, p)
+                if mz is not None:
+                    v += 0.5
+                    p = mz.end()
+                tok = f"{NUMERO}{v:.10g}"
+                mu = U._RE_U.match(t, p + len(t[p:]) - len(t[p:].lstrip(" ")))
+                if mu is not None:
+                    tok += "@" + U._VOCI[int(mu.lastgroup[1:])][1]
+                    p = mu.end()
+                out.append(tok)
+                continue
+        out.append(m.group(0))
+
+
+def _numero(tok: str):
+    """(valore, unità) di un gettone numero, o None."""
+    if not tok.startswith(NUMERO):
+        return None
+    v, _, u = tok[1:].partition("@")
+    try:
+        return float(v), (u or None)
+    except ValueError:
+        return None
+
+
+def _uguale(atteso: str, detto: str) -> bool:
+    """Una parola della forma chiusa e una della frase: uguali; due numeri, uguali come numeri.
+    Con la stessa unità (o senza) il valore **esatto** dopo la normalizzazione («1,5» = «1,50» =
+    «1.5» = «uno virgola cinque»; «1,49» per «1,5», «3,11» per «3,14» no: revisione della PR
+    #363); la tolleranza dell'1 % di `unita.confronta` solo dopo una conversione d'unità («1500
+    kg/m³» per «1,5 g/cm³», «72 km/h» per «20 m/s»). L'unità attesa che manca non basta."""
+    na, nd = _numero(atteso), _numero(detto)
+    if na is None or nd is None:
+        return na is None and nd is None and atteso == detto
+    (va, ua), (vd, ud) = na, nd
+    if ua and ud and ua != ud:
+        from . import unita as U
+        return U.confronta(nd, na) == "giusto"
+    if ua and not ud:
+        return False
+    return abs(vd - va) <= 1e-9 * max(1.0, abs(va))
+
+
 def chiusa(risposta) -> str | None:
     """La forma chiusa di una risposta, se il codice la può controllare: un numero (anche con
-    l'unità) o al più `CHIUSA_PAROLE` parole senza gli articoli. Altrimenti None (vale solo
-    l'autovalutazione)."""
-    ps = [w for w in normale(risposta) if w not in _ARTICOLI]
+    l'unità: un gettone solo) o al più `CHIUSA_PAROLE` parole senza gli articoli. Altrimenti None
+    (vale solo l'autovalutazione). Un'espressione fra numeri («3,6 × 10^-3», «6,02 × 10²³»,
+    «2 + 3») non è chiusa: il codice non confronta le espressioni (revisione della PR #363)."""
+    if _ESPRESSIONE.search(str(risposta or "")):
+        return None
+    ps = [w for w in _gettoni(risposta) if w not in _ARTICOLI]
     if not ps or len(ps) > CHIUSA_PAROLE:
         return None
     return " ".join(ps)
 
 
+_ESPRESSIONE = re.compile(r"\d\s*[×x*·^+=÷:]\s*[-−]?\d|\d\s*[⁰¹²³⁴⁵⁶⁷⁸⁹]|\^|10\s*[⁻⁰¹²³⁴⁵⁶⁷⁸⁹]")
+
+
 _NEGAZIONI = frozenset({"non", "no", "nemmeno", "neanche", "mica"})
-
-
-_PICCOLI = None
 
 
 def corta(chiusa_: str | None) -> bool:
     """Una risposta chiusa che sta facilmente dentro una frase detta per altro (revisione della
     PR #324, nota 2): una forma dell'autovalutazione («sì», «no», «quasi»), una parola di al più
-    tre lettere, o un numero fino a venti. Per queste vale solo la frase intera."""
-    global _PICCOLI
+    tre lettere, o un numero intero fino a venti senza unità. Per queste vale solo la frase
+    intera."""
     if not chiusa_:
         return False
-    if _PICCOLI is None:
-        from ..numeri import in_lettere
-        _PICCOLI = {in_lettere(n).replace(" ", "") for n in range(21)}
     ps = chiusa_.split()
+    if len(ps) == 1 and _numero(ps[0]) is not None:
+        v, u = _numero(ps[0])
+        return u is None and float(v).is_integer() and 0 <= v <= 20
     return (autovalutazione(chiusa_) is not None
-            or (len(ps) == 1 and (len(ps[0]) <= 3 or ps[0] in _PICCOLI)))
+            or (len(ps) == 1 and len(ps[0]) <= 3))
 
 
 def risposta_giusta(chiusa_: str | None, detto) -> bool:
@@ -207,18 +286,21 @@ def risposta_giusta(chiusa_: str | None, detto) -> bool:
     if not chiusa_:
         return False
     cerca = chiusa_.split()
-    ps = [w for w in normale(detto) if w not in _ARTICOLI]
+    ps = [w for w in _gettoni(detto) if w not in _ARTICOLI]
     while ps and ps[0] in _INTORNO:
         ps = ps[1:]
     while ps and ps[-1] in _INTORNO:
         ps = ps[:-1]
+
+    def di_fila(pezzo):
+        return len(pezzo) == len(cerca) and all(_uguale(a, d) for a, d in zip(cerca, pezzo))
     if corta(chiusa_):
-        return ps == cerca
+        return di_fila(ps)
     if not ps or len(ps) > FRASE_MAX_PAROLE:
         return False
     n = len(cerca)
     for i in range(len(ps) - n + 1):
-        if ps[i:i + n] == cerca and not (i and ps[i - 1] in _NEGAZIONI) and not (
+        if di_fila(ps[i:i + n]) and not (i and ps[i - 1] in _NEGAZIONI) and not (
                 i > 1 and ps[i - 2] in _NEGAZIONI and ps[i - 1] in ("e", "era", "e'")):
             return True
     return False

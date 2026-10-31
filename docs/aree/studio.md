@@ -2033,6 +2033,26 @@ codice); in `prova_studio_home_pagina.py` il ripasso e «Scrivi una carta» nell
 `prova_studio_resoconto.py`. La prova col modello sulla DGX (la voce che chiede e la persona che
 risponde) resta a chi amministra.
 
+### 31/10 sera: i numeri delle carte restano numeri (issue #361)
+
+`carte.normale` scriveva i numeri in lettere prima del confronto: «1» diventava «uno» e `chiusa` lo
+scartava come un articolo (una risposta «1» non era chiusa), e «1,5 g/cm³» diventava «cinque g cm3»,
+che si trovava dentro «2,5 g/cm³»: il codice dava giusta la risposta sbagliata (trovato dall'autore
+della PR #360). Ora la forma chiusa e il confronto usano `carte._gettoni`: i numeri, anche detti in
+lettere, coi decimali e l'unità subito dopo, sono un gettone solo («#1», «#1.5@g/cm3») confrontato
+come numero con `unita.confronta` (le unità convertite, la tolleranza di `risposte.py`). «uno» detto
+vale 1, «1500 kg/m³» vale «1,5 g/cm³»; «12» non sta dentro «112», «1,5» senza l'unità attesa non
+basta. Una carta scritta prima tiene la forma chiusa di prima (in lettere) e non dà più «giusto»
+dal codice: vale l'autovalutazione, finché la risposta non si corregge. `normale` resta per le
+altre parole (autovalutazione, risposte).
+
+*Revisione della PR #363:* due numeri si confrontano **esatti** quando l'unità è la stessa o manca
+(«1,5» = «1,50» = «1.5» = «uno virgola cinque»; «3,11» per «3,14», «1,49» per «1,5», «9,72 m/s²»
+per «9,81 m/s²» non sono giusti); la tolleranza dell'1 % di `unita.confronta` vale solo dopo una
+conversione d'unità («1500 kg/m³» per «1,5 g/cm³», «72 km/h» per «20 m/s»). I gettoni leggono
+anche «1 e mezzo», «due e mezzo», «2 milioni», «3 mila». Lo script del revisore
+(`carte_numeri.py`, 64 casi) dà 0 esiti diversi dall'atteso.
+
 ### 31/10 sera: «domani» non è fra dieci minuti (issue #356)
 
 `carte.prossima` metteva ogni scadenza a giorni alla mezzanotte del giorno: alle 23:50 «Quasi»
