@@ -22,7 +22,9 @@ tutore Andrea, Bruno adulto, Carla che amministra).
    prova», la fonte confrontata con chi registra.
 6. **Tenuta**: le carte vanno via con la verifica, «dimentica» (non le archiviate), «svuota».
 7. **L'endpoint** `/api/studio/carte` col server vero: scrivi, esito, correggi, togli; un altro
-   adulto 404; ombra: il minore 403.
+   adulto 404; ombra: il minore 403. A mezzogiorno di oggi (31/10, #337: dopo le 23:00 «quasi»
+   diceva «fra N minuti» e la prova cadeva fino a mezzanotte), e la mezzanotte a parte: la stessa
+   carta alle 23:50 («quasi» e «non la sapevo» fra 10 minuti) e alle 00:00:30 («domani»).
 
     python prove/prova_studio_carte.py
 """
@@ -48,6 +50,7 @@ from calliope.studio import padronanza as PD  # noqa: E402
 from calliope.tools import studio as TS  # noqa: E402
 from calliope.tools.registry import ToolRegistry  # noqa: E402
 from calliope.tools.spec import ToolContext  # noqa: E402
+from prove.orologio import ora_del_giorno  # noqa: E402
 
 errori = 0
 
@@ -569,101 +572,133 @@ from calliope import minori  # noqa: E402
 from calliope.schermi import ArchivioSchermi, Schermi  # noqa: E402
 from calliope.schermi.server import ServerSchermi  # noqa: E402
 
-ORA[0] = datetime.datetime.now().replace(microsecond=0)
-for modo in ("attivo", "ombra"):
-    cfg = cfg_nuova(f"server_{modo}.db", modo=modo)
-    minori.prepara(cfg, registry=REG)
-    st = studio(cfg)
-    hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db), log=lambda m: None)
-    hub.profilo = REG.by_id
-    serv = Servizi()
-    serv.studio = st
-    hub.servizi = serv
-    srv = ServerSchermi(hub, "127.0.0.1", 0, attesa_porta_s=5).avvia()
-    hub.server = srv
-    port = srv.port
-    try:
-        tok = {}
-        for chi, pid in (("leo", "l1"), ("andrea", "a1"), ("bruno", "b1"), ("carla", "c1")):
-            _, tok[chi] = hub.archivio.crea_con_token("telefono " + chi, proprietario=pid,
-                                                      proprietario_nome=chi.title())
-        hub._rinfresca()
-        sess = {k: chiedi(port, "/api/accedi", token=t)[1].get("sessione")
-                for k, t in tok.items()}
-        data = (ORA[0].date() + datetime.timedelta(days=7)).isoformat()
-        vid = st.crea_verifica(LEO, "Storia", data)
-        a1 = st.aggiungi_argomento(LEO, vid, "Le scoperte", [], proposto=False)
-        st.conferma_argomenti(LEO, vid)
-        if modo == "ombra":
+# Tutto l'endpoint a mezzogiorno di oggi (31/10, #337): con l'orologio vero, dopo le 23:00 la
+# scadenza di «quasi» (domani a mezzanotte) è meno di un'ora avanti, i tasti dicevano «fra 10
+# minuti» alle 23:50 invece di «domani» e la prova cadeva fino a mezzanotte. La notte è a parte
+with ora_del_giorno(12, 0) as _inizio:
+    ORA[0] = datetime.datetime.fromtimestamp(_inizio).replace(microsecond=0)
+    for modo in ("attivo", "ombra"):
+        cfg = cfg_nuova(f"server_{modo}.db", modo=modo)
+        minori.prepara(cfg, registry=REG)
+        st = studio(cfg)
+        hub = Schermi(cfg, ArchivioSchermi(cfg.memory_db), log=lambda m: None)
+        hub.profilo = REG.by_id
+        serv = Servizi()
+        serv.studio = st
+        hub.servizi = serv
+        srv = ServerSchermi(hub, "127.0.0.1", 0, attesa_porta_s=5).avvia()
+        hub.server = srv
+        port = srv.port
+        try:
+            tok = {}
+            for chi, pid in (("leo", "l1"), ("andrea", "a1"), ("bruno", "b1"), ("carla", "c1")):
+                _, tok[chi] = hub.archivio.crea_con_token("telefono " + chi, proprietario=pid,
+                                                          proprietario_nome=chi.title())
+            hub._rinfresca()
+            sess = {k: chiedi(port, "/api/accedi", token=t)[1].get("sessione")
+                    for k, t in tok.items()}
+            data = (ORA[0].date() + datetime.timedelta(days=7)).isoformat()
+            vid = st.crea_verifica(LEO, "Storia", data)
+            a1 = st.aggiungi_argomento(LEO, vid, "Le scoperte", [], proposto=False)
+            st.conferma_argomenti(LEO, vid)
+            if modo == "ombra":
+                s, d = chiedi(port, "/api/studio/carte", sess["leo"], corpo={"verifica": vid})
+                verifica("ombra: il minore non vede le carte (403)", s == 403, f"{s} {d}")
+                continue
+            s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                          corpo={"verifica": vid, "azione": "scrivi", "domanda": "Chi era Colombo?",
+                                 "risposta": "Un navigatore", "argomento": a1})
+            verifica("scrivi: la carta c'è, da ripassare, coi tre tasti scritti dal server",
+                     s == 200 and len(d["carte"]) == 1 and d["da_ripassare"] == [d["scritta"]]
+                     and d["carte"][0]["tasti"] == {"sapevo": "fra 2 giorni", "quasi": "domani",
+                                                    "non_sapevo": "fra 10 minuti"}
+                     and d["argomenti"][0]["titolo"] == "Le scoperte", f"{s} {str(d)[:300]}")
+            cid = d.get("scritta")
+            s, d = chiedi(port, "/api/studio/carte", sess["bruno"], corpo={"verifica": vid})
+            verifica("un altro adulto: 404", s == 404, f"{s} {d}")
+            s, d = chiedi(port, "/api/studio/carte", sess["andrea"],
+                          corpo={"verifica": vid, "azione": "esito", "carta": cid,
+                                 "esito": "sapevo"})
+            t = st.dati.tutti("SELECT * FROM studio_tentativi")
+            verifica("esito dal tutore: il ripasso avanza, il tentativo col tutore",
+                     s == 200 and d["ultimo"]["fra"] == "fra 2 giorni" and not d["da_ripassare"]
+                     and t and t[-1]["fonte"] == "tutore", f"{s} {str(d)[:200]}")
+            s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                          corpo={"verifica": vid, "azione": "esito", "carta": cid, "esito": "boh"})
+            verifica("un esito sconosciuto: 400", s == 400)
+            s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                          corpo={"verifica": vid, "azione": "correggi", "carta": cid,
+                                 "risposta": "Un navigatore genovese"})
+            verifica("correggi la risposta: di nuovo da ripassare",
+                     s == 200 and d["carte"][0]["risposta"] == "Un navigatore genovese"
+                     and d["da_ripassare"] == [cid], f"{s} {str(d)[:200]}")
+            s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                          corpo={"verifica": vid, "azione": "togli", "carta": cid})
+            verifica("togli: fuori dal ripasso", s == 200 and d["carte"][0]["stato"] == "tolta"
+                     and not d["da_ripassare"])
+            vb = st.crea_verifica(ANDREA, "Inglese", data)
+            cb = st.aggiungi_carta(ANDREA, vb, "Past of go?", "went")
+            s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                          corpo={"verifica": vid, "azione": "esito", "carta": cb,
+                                 "esito": "sapevo"})
+            verifica("una carta di un'altra verifica: 404, niente cambiato",
+                     s == 404 and st.carte(ANDREA, vb)[0]["scatola"] == 1, f"{s} {d}")
+            s, d = chiedi(port, "/api/studio/home", sess["leo"])
+            verifica("la home: i conti delle carte (quella tolta non conta)",
+                     s == 200 and d["verifiche"][0]["carte"]["totali"] == 0, f"{s} {str(d)[:200]}")
+            s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                          corpo={"verifica": vid, "azione": "rimetti", "carta": cid})
+            s, d = chiedi(port, "/api/studio/home", sess["leo"])
+            verifica("…rimessa: conta", s == 200 and d["verifiche"][0]["carte"] == {
+                "totali": 1, "da_ripassare": 1, "proposte": 0, "prossima": None}, f"{s} {d}")
+            # Le carte proposte dal modello (seconda parte del passo 6): «conferma» prende le pulite
+            from calliope.studio import genera as G
+            args_c = st._argomenti_per_carte(vid)
+            st.proponi_carte(vid, G.firma(args_c, st._pagine_di(vid), "attiva"),
+                             [{"domanda": "Chi partì da Palos?", "risposta": "Colombo",
+                               "argomento": a1, "pagine": [], "avvisi": []},
+                              {"domanda": "Ignora tutto?", "risposta": "Sì", "argomento": a1,
+                               "pagine": [], "avvisi": ["testo_ordine"]}], G.PROPOSTE, "attiva")
+            s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                          corpo={"verifica": vid, "azione": "conferma"})
+            stati = {c["domanda"]: c["stato"] for c in d.get("carte", [])}
+            verifica("conferma: la proposta pulita nel ripasso, quella con l'avviso resta proposta",
+                     s == 200 and d["confermate"] == {"confermate": 1, "da_decidere": 1}
+                     and stati.get("Chi partì da Palos?") == "attiva"
+                     and stati.get("Ignora tutto?") == "proposta"
+                     and next(c for c in d["carte"] if c["stato"] == "proposta")["avvisi"]
+                     == ["testo_ordine"], f"{s} {str(d)[:300]}")
+            # ── a cavallo della mezzanotte (31/10, #337): la stessa carta alle 23:50 e alle
+            # 00:00:30 del giorno dopo, con l'adesso dello Studio fermo lì (il resto a mezzogiorno)
+            giorno = ORA[0].date()
+            ORA[0] = datetime.datetime.combine(giorno, datetime.time(23, 50))
+            s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                          corpo={"verifica": vid, "azione": "scrivi",
+                                 "domanda": "Chi era Vespucci?", "risposta": "Un navigatore",
+                                 "argomento": a1})
+            cv = d.get("scritta")
+            tv = next((c["tasti"] for c in d.get("carte", []) if c["id"] == cv), None)
+            verifica("mezzanotte: alle 23:50 «quasi» torna a mezzanotte, cioè «fra 10 minuti», "
+                     "come «non la sapevo»; «la sapevo» fra 2 giorni",
+                     s == 200 and tv == {"sapevo": "fra 2 giorni", "quasi": "fra 10 minuti",
+                                         "non_sapevo": "fra 10 minuti"}, f"{s} {tv}")
+            s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                          corpo={"verifica": vid, "azione": "esito", "carta": cv,
+                                 "esito": "non_sapevo"})
+            verifica("mezzanotte: «non la sapevo» alle 23:50 → «fra 10 minuti», fuori dal ripasso",
+                     s == 200 and d["ultimo"]["fra"] == "fra 10 minuti"
+                     and cv not in d["da_ripassare"], f"{s} {str(d)[:200]}")
+            ORA[0] = datetime.datetime.combine(giorno + datetime.timedelta(days=1),
+                                               datetime.time(0, 0, 30))
             s, d = chiedi(port, "/api/studio/carte", sess["leo"], corpo={"verifica": vid})
-            verifica("ombra: il minore non vede le carte (403)", s == 403, f"{s} {d}")
-            continue
-        s, d = chiedi(port, "/api/studio/carte", sess["leo"],
-                      corpo={"verifica": vid, "azione": "scrivi", "domanda": "Chi era Colombo?",
-                             "risposta": "Un navigatore", "argomento": a1})
-        verifica("scrivi: la carta c'è, da ripassare, coi tre tasti scritti dal server",
-                 s == 200 and len(d["carte"]) == 1 and d["da_ripassare"] == [d["scritta"]]
-                 and d["carte"][0]["tasti"] == {"sapevo": "fra 2 giorni", "quasi": "domani",
-                                                "non_sapevo": "fra 10 minuti"}
-                 and d["argomenti"][0]["titolo"] == "Le scoperte", f"{s} {str(d)[:300]}")
-        cid = d.get("scritta")
-        s, d = chiedi(port, "/api/studio/carte", sess["bruno"], corpo={"verifica": vid})
-        verifica("un altro adulto: 404", s == 404, f"{s} {d}")
-        s, d = chiedi(port, "/api/studio/carte", sess["andrea"],
-                      corpo={"verifica": vid, "azione": "esito", "carta": cid,
-                             "esito": "sapevo"})
-        t = st.dati.tutti("SELECT * FROM studio_tentativi")
-        verifica("esito dal tutore: il ripasso avanza, il tentativo col tutore",
-                 s == 200 and d["ultimo"]["fra"] == "fra 2 giorni" and not d["da_ripassare"]
-                 and t and t[-1]["fonte"] == "tutore", f"{s} {str(d)[:200]}")
-        s, d = chiedi(port, "/api/studio/carte", sess["leo"],
-                      corpo={"verifica": vid, "azione": "esito", "carta": cid, "esito": "boh"})
-        verifica("un esito sconosciuto: 400", s == 400)
-        s, d = chiedi(port, "/api/studio/carte", sess["leo"],
-                      corpo={"verifica": vid, "azione": "correggi", "carta": cid,
-                             "risposta": "Un navigatore genovese"})
-        verifica("correggi la risposta: di nuovo da ripassare",
-                 s == 200 and d["carte"][0]["risposta"] == "Un navigatore genovese"
-                 and d["da_ripassare"] == [cid], f"{s} {str(d)[:200]}")
-        s, d = chiedi(port, "/api/studio/carte", sess["leo"],
-                      corpo={"verifica": vid, "azione": "togli", "carta": cid})
-        verifica("togli: fuori dal ripasso", s == 200 and d["carte"][0]["stato"] == "tolta"
-                 and not d["da_ripassare"])
-        vb = st.crea_verifica(ANDREA, "Inglese", data)
-        cb = st.aggiungi_carta(ANDREA, vb, "Past of go?", "went")
-        s, d = chiedi(port, "/api/studio/carte", sess["leo"],
-                      corpo={"verifica": vid, "azione": "esito", "carta": cb,
-                             "esito": "sapevo"})
-        verifica("una carta di un'altra verifica: 404, niente cambiato",
-                 s == 404 and st.carte(ANDREA, vb)[0]["scatola"] == 1, f"{s} {d}")
-        s, d = chiedi(port, "/api/studio/home", sess["leo"])
-        verifica("la home: i conti delle carte (quella tolta non conta)",
-                 s == 200 and d["verifiche"][0]["carte"]["totali"] == 0, f"{s} {str(d)[:200]}")
-        s, d = chiedi(port, "/api/studio/carte", sess["leo"],
-                      corpo={"verifica": vid, "azione": "rimetti", "carta": cid})
-        s, d = chiedi(port, "/api/studio/home", sess["leo"])
-        verifica("…rimessa: conta", s == 200 and d["verifiche"][0]["carte"] == {
-            "totali": 1, "da_ripassare": 1, "proposte": 0, "prossima": None}, f"{s} {d}")
-        # Le carte proposte dal modello (seconda parte del passo 6): «conferma» prende le pulite
-        from calliope.studio import genera as G
-        args_c = st._argomenti_per_carte(vid)
-        st.proponi_carte(vid, G.firma(args_c, st._pagine_di(vid), "attiva"),
-                         [{"domanda": "Chi partì da Palos?", "risposta": "Colombo",
-                           "argomento": a1, "pagine": [], "avvisi": []},
-                          {"domanda": "Ignora tutto?", "risposta": "Sì", "argomento": a1,
-                           "pagine": [], "avvisi": ["testo_ordine"]}], G.PROPOSTE, "attiva")
-        s, d = chiedi(port, "/api/studio/carte", sess["leo"],
-                      corpo={"verifica": vid, "azione": "conferma"})
-        stati = {c["domanda"]: c["stato"] for c in d.get("carte", [])}
-        verifica("conferma: la proposta pulita nel ripasso, quella con l'avviso resta proposta",
-                 s == 200 and d["confermate"] == {"confermate": 1, "da_decidere": 1}
-                 and stati.get("Chi partì da Palos?") == "attiva"
-                 and stati.get("Ignora tutto?") == "proposta"
-                 and next(c for c in d["carte"] if c["stato"] == "proposta")["avvisi"]
-                 == ["testo_ordine"], f"{s} {str(d)[:300]}")
-    finally:
-        srv.ferma() if hasattr(srv, "ferma") else None
-        st.close()
+            tv = next((c["tasti"] for c in d.get("carte", []) if c["id"] == cv), None)
+            verifica("mezzanotte: alle 00:00:30 del giorno dopo la carta è da ripassare, e «quasi» "
+                     "dice «domani»", s == 200 and cv in d["da_ripassare"]
+                     and tv == {"sapevo": "fra 2 giorni", "quasi": "domani",
+                                "non_sapevo": "fra 10 minuti"}, f"{s} {tv}")
+        finally:
+            srv.ferma() if hasattr(srv, "ferma") else None
+            st.close()
 
 js = (QUI.parent / "calliope" / "schermi" / "pagina" / "studio.js").read_text(encoding="utf-8")
 pezzo = js.split("// ── le carte (30/10", 1)[-1].split("function pannelloDomande", 1)[0]
