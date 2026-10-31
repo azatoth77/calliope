@@ -846,6 +846,38 @@ male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC6 if RS.valuta(d, 
 verifica("un'opzione dentro un'altra (#349): l'opzione uguale alla risposta vince, vince la più "
          "lunga nello stesso punto; due opzioni in punti diversi sbagliato; la più lunga in un "
          "altro ordine da rivedere", not male, male)
+# La revisione della PR #350: con delle formule fra le opzioni il confronto tiene gli operatori
+# (le opzioni del banco del 31/10 07:02); le parole negate non contano per «l'altro ordine»
+SC7 = [(EQ, "x - 3x = 32", "sbagliato"), (EQ, "x × 3x = 32", "sbagliato"),
+       (EQ, "x · 3x = 32", "sbagliato"), (EQ, "3x + x = 32", "da_rivedere"),
+       (EQ, "x+3x=32", "giusto"), (EQ, "la risposta è x + 3x = 32", "giusto"),
+       (EQ, "non 3x = 32 ma x + 3x = 32", "giusto"), (EQ, "x + 3x = 32, non 3x = 32", "giusto"),
+       (EQD, "è 3x = 32 e non x + 3x = 32", "giusto"), (EQD, "direi 3x = 32", "giusto"),
+       (SPS, "Spagna, non Portogallo", "giusto"), (SPS, "non Spagna e Portogallo, Spagna", "giusto"),
+       (SPS, "Portogallo e Spagna", "da_rivedere")]
+# «3x + x = 32» con l'atteso «3x - x = 32»: è «x + 3x = 32» in un altro ordine, mai la b
+B3 = RS.prepara("scelta", "Quale?", "b", ["x + 3x = 32", "3x - x = 32", "x + 3 = 32", "3x = 32"])
+SC7 += [(B3, "3x - x = 32", "giusto"), (B3, "3x + x = 32", "da_rivedere"),
+        (B3, "x + 3x = 32", "sbagliato")]
+male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC7 if RS.valuta(d, r)[0] != e]
+verifica("formule fra le opzioni: gli operatori contano («x - 3x = 32» e «x × 3x = 32» non sono "
+         "«x + 3x = 32», «3x + x = 32» non è «3x - x = 32»); gli stessi pezzi in un altro ordine da "
+         "rivedere; le parole negate fuori dall'«altro ordine» (revisione della PR #350)",
+         not male, male)
+ok_op, uguali = [], None
+for ops in (["2x + 4", "2x - 4", "2x", "4"], ["x < 5", "x > 5", "x = 5"],
+            ["x + 3x = 32", "3x - x = 32", "x + 3 = 32", "3x = 32"]):
+    try:
+        ok_op.append(RS.prepara("scelta", "Quale?", "a", ops)["opzioni"] == ops)
+    except ValueError:
+        ok_op.append(False)
+try:
+    RS.prepara("scelta", "Quale?", "a", ["x + 3", "x+3", "x"])
+except ValueError as e:
+    uguali = str(e)
+verifica("prepara: opzioni diverse solo per l'operatore o il verso accettate («2x + 4» e «2x - 4», "
+         "«x < 5» e «x > 5»); la stessa formula scritta due volte resta «due opzioni uguali»",
+         all(ok_op) and uguali == "due opzioni uguali", (ok_op, uguali))
 NN3 = [("0,5 kg", "1/2 kg", "giusto"), ("0,75 L", "3/4 di litro", "giusto"),
        ("0,5 kg", "mezzo chilo", "giusto"), ("1571", "in mezzo al Mediterraneo, nel 1571",
                                              "giusto"),

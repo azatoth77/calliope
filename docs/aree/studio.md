@@ -128,6 +128,20 @@ Il blocco 4 dello script del revisore della PR #346: le 58 risposte come prima, 
 che passa. Col vLLM finto sulle uscite delle 07:02 `auto_sbagliate` 1 → **0** e le fondate di
 matematica 22 → **23/28 (82 %)**.
 
+**La revisione della PR #350.** Con le sole parole gli operatori sparivano: «x - 3x = 32» e «x × 3x
+= 32» valevano l'opzione «x + 3x = 32» e prendevano «giusto» (prima erano «sbagliato» solo per caso).
+Ora, se fra le opzioni c'è una formula (un operatore), l'opzione intera, le opzioni nominate e la
+frase si leggono coi pezzi di `argomenti._pezzi`, operatori compresi; una formula che non è nessuna
+opzione è «sbagliata», salvo gli stessi pezzi di un'opzione in un altro ordine («3x + x = 32»): «da
+rivedere». `prepara` non rifiuta più come «uguali» le opzioni diverse solo per l'operatore o il
+verso («2x + 4» e «2x - 4», «x < 5» e «x > 5»): col vLLM finto sulle uscite delle 07:02 una domanda
+di matematica in più (30), fondate 23/29 (79 %). Nella regola «stesse parole in altro ordine» le
+parole negate subito prima e le opzioni nominate negate non contano («Spagna, non Portogallo» →
+giusto). Lo script del revisore (48 casi): 44 come atteso; i 4 diversi sono uguali alla base e
+seguono la regola della PR #342 (due opzioni nominate → «sbagliato»: «allora 3x = 24 quindi x =
+8», «Roma, la capitale della Roma antica») o non sono nominati esattamente («Carlo quinto», «C O»).
+Il blocco 4 della #346: 58 come prima.
+
 **2. La seconda passata unisce poco: le cause, dalle uscite vere.**
 - *La prima passata* scrive **una tripla isolata per argomento** («Principi di equivalenza →
   Soluzione», «Frazioni → M.c.m.», «0 x = b → Impossibile»…): in matematica 7 triple e 13 concetti
