@@ -841,7 +841,10 @@ def prova_dos(port, sess, vid, foto_b):
     `sendall` mentre si scrive vale «il server ha chiuso». Un byte partito proprio mentre il
     server chiude torna come RST e su Windows porta via la risposta non ancora letta (1 volta su
     20): il codice allora si legge dal lato server, dalle risposte che il server ha costruito
-    (`_json`, spiato), con l'istante."""
+    (`_json`, spiato), con l'istante. Solo dopo un reset vero (`OSError` in `recv` o `sendall`),
+    mai dopo una chiusura pulita senza dati; e in quel caso il giro si rifà fino a due volte e
+    passa solo se almeno una volta il codice è arrivato al client, con una riga di nota per ogni
+    ripiego (seconda revisione della PR #336, mutante «leggi_abort»)."""
     import select
     import socket
     from calliope.schermi import server as SRV
@@ -869,7 +872,7 @@ def prova_dos(port, sess, vid, foto_b):
         sk.sendall(f"POST /api/studio/pagina HTTP/1.1\r\nHost: 127.0.0.1\r\n{righe}\r\n".encode()
                    + corpo_iniziale)
         fine = t0 + entro
-        risposta, chiusa, durante, visto = b"", False, False, None
+        risposta, chiusa, durante, visto, reset = b"", False, False, None, False
         while time.monotonic() < fine:
             attesa = min(lento, fine - time.monotonic()) if lento else fine - time.monotonic()
             if select.select([sk], [], [], max(attesa, 0))[0]:
@@ -878,8 +881,8 @@ def prova_dos(port, sess, vid, foto_b):
             if lento:
                 try:
                     sk.sendall(b"0")
-                except OSError:             # il server ha chiuso mentre si scriveva
-                    chiusa = durante = True
+                except OSError:             # reset mentre si scriveva: il server ha chiuso
+                    chiusa = durante = reset = True
                     visto = time.monotonic()
                     break
         sk.settimeout(max(fine - time.monotonic(), 0.1))
@@ -889,7 +892,7 @@ def prova_dos(port, sess, vid, foto_b):
             except socket.timeout:
                 break
             except OSError:                 # reset: chiusa, e quello che è arrivato resta
-                chiusa = True
+                chiusa = reset = True
                 break
             if not pezzo:
                 chiusa = True
@@ -900,11 +903,28 @@ def prova_dos(port, sess, vid, foto_b):
         m = re.match(r"HTTP/1\.[01] (\d{3})", riga)
         if m:
             codice, da = int(m.group(1)), "client"
-        else:
+        elif reset:
+            # Il ripiego solo dopo un reset vero (OSError in recv o sendall), che può aver portato
+            # via la risposta; mai dopo una chiusura pulita senza dati (seconda revisione della
+            # PR #336: il mutante «leggi_abort» costruisce il 408 e chiude senza mandarlo)
             dopo = [c for t, c in costruite if t >= t0]
-            codice, da = (dopo[-1], "server") if (dopo and chiusa) else (None, "")
+            codice, da = (dopo[-1], "server") if dopo else (None, "")
+        else:
+            codice, da = None, ""
         return {"riga": riga, "codice": codice, "da": da, "chiusa": chiusa, "durante": durante,
-                "dt": (visto or time.monotonic()) - t0}
+                "dt": (visto or time.monotonic()) - t0, "reset": reset}
+
+    def caso(nome, *args, **kw):
+        """`manda` e, se il codice è venuto dal server (un reset ha portato via la risposta), lo
+        si rifà fino a due volte: passa solo se almeno una volta il codice è arrivato al client.
+        Ogni ripiego si dice in una riga di nota. Rende l'ultimo giro e se è arrivato al client."""
+        for giro in range(3):
+            r = manda(*args, **kw)
+            if r["da"] != "server":
+                return r, r["da"] == "client"
+            print(f"   nota: {nome}: il {r['codice']} dal lato server dopo un reset "
+                  f"(giro {giro + 1} di 3)", flush=True)
+        return r, False
 
     def descrivi(r):
         return (f"{r['codice']} (dal {r['da'] or 'nessuno'}) {r['dt']:.1f}s chiusa={r['chiusa']} "
@@ -920,10 +940,12 @@ def prova_dos(port, sess, vid, foto_b):
         r = manda({**base, "Content-Length": "20000000"}, b"x" * 1000, entro=SRV.STUDIO_SCARTA_S)
         verifica("DoS: senza sessione e con un corpo grosso → 401 subito, niente letto, connessione chiusa",
                  r["codice"] == 401 and r["chiusa"] and r["dt"] < SRV.STUDIO_SCARTA_S, descrivi(r))
-        r = manda({**base, "X-Calliope-Sessione": "inventata", "Content-Length": "5000"}, b"",
-                  lento=0.5, entro=SRV.STUDIO_SCARTA_S)
+        r, al_client = caso("sessione inventata",
+                            {**base, "X-Calliope-Sessione": "inventata", "Content-Length": "5000"}, b"",
+                            lento=0.5, entro=SRV.STUDIO_SCARTA_S)
         verifica("DoS: una sessione inventata con un invio lento → 401 subito, senza aspettare il corpo",
-                 r["codice"] == 401 and r["durante"] and r["dt"] < SRV.STUDIO_SCARTA_S, descrivi(r))
+                 al_client and r["codice"] == 401 and r["durante"] and r["dt"] < SRV.STUDIO_SCARTA_S,
+                 descrivi(r))
         r = manda({**base, "X-Calliope-Sessione": sess["leo"]}, b"", entro=SRV.STUDIO_SCARTA_S)
         verifica("DoS: senza Content-Length → 411 subito e la connessione chiusa",
                  r["codice"] == 411 and r["chiusa"] and r["dt"] < SRV.STUDIO_SCARTA_S, descrivi(r))
@@ -932,20 +954,25 @@ def prova_dos(port, sess, vid, foto_b):
         # smette: il corpo si butta al più per STUDIO_SCARTA_S, poi il 404 e la connessione chiusa
         meta = quote(json.dumps({"verifica": 9999}))
         t = SRV.STUDIO_SCARTA_S
-        r = manda({**base, "X-Calliope-Studio": meta, "X-Calliope-Sessione": sess["leo"],
-                   "Content-Length": "100000"}, b"", lento=0.3, entro=tetto(t))
+        r, al_client = caso("rifiuto lento", {**base, "X-Calliope-Studio": meta,
+                                              "X-Calliope-Sessione": sess["leo"],
+                                              "Content-Length": "100000"}, b"", lento=0.3,
+                            entro=tetto(t))
         verifica("DoS: un rifiuto con un invio lento si interrompe dopo il tempo massimo (404)",
-                 r["codice"] == 404 and r["durante"] and 0.9 * t <= r["dt"] <= tetto(t), descrivi(r))
+                 al_client and r["codice"] == 404 and r["durante"] and 0.9 * t <= r["dt"] <= tetto(t),
+                 descrivi(r))
         # Lo stesso rifiuto con il corpo tutto mandato: la frase arriva (il telefono la vede)
         s, d = chiedi(port, "/api/studio/pagina", sess["leo"], byte=foto_b, meta={"verifica": 9999})
         verifica("DoS: il rifiuto con il corpo intero arriva con la sua frase", s == 404 and d.get("errore"),
                  f"{s} {d}")
         # Un invio vero troppo lento, che non smette: 408 dopo STUDIO_LEGGI_S
         t = SRV.STUDIO_LEGGI_S
-        r = manda({**base, "X-Calliope-Sessione": sess["leo"], "Content-Length": "100000"},
-                  b"\xff\xd8\xff", lento=0.3, entro=tetto(t))
+        r, al_client = caso("invio troppo lento",
+                            {**base, "X-Calliope-Sessione": sess["leo"], "Content-Length": "100000"},
+                            b"\xff\xd8\xff", lento=0.3, entro=tetto(t))
         verifica("DoS: un invio vero troppo lento si ferma (408) dopo il tempo massimo",
-                 r["codice"] == 408 and r["durante"] and 0.9 * t <= r["dt"] <= tetto(t), descrivi(r))
+                 al_client and r["codice"] == 408 and r["durante"] and 0.9 * t <= r["dt"] <= tetto(t),
+                 descrivi(r))
     finally:
         SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S = prima_s, prima_l
         SRV._json = vero_json
