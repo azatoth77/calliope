@@ -281,11 +281,11 @@ verifica("una sola prova aperta per verifica: la stessa si riprende, l'orale no"
          st.inizia_prova(LEO, vid)["id"] == pid
          and solleva(lambda: st.inizia_prova(LEO, vid, "orale"), ValueError))
 k = st.aggiungi_carta(LEO, vid, "Chi diede il nome all'America?", "Vespucci", argomento=a1)
-verifica("mentre la prova è aperta: carte e domande nascoste alla persona (non al tutore)",
+verifica("mentre la prova è aperta: carte e domande nascoste alla persona (al tutore senza le risposte; a voce nessuno, PR #348)",
          st.carte(LEO, vid) == [] and st.domande(LEO, vid) == {"domande": [], "nascoste": True}
          and st._conto_carte(st.verifica(LEO, vid))["totali"] == 0
          and solleva(lambda: st._carta(LEO, k), S.NonTrovata)
-         and st.prossima_carta(LEO, vid) is None
+         and solleva(lambda: st.prossima_carta(LEO, vid), S.servizio.CarteFerme)
          and len(st.carte(ANDREA, vid)) == 1 and st.domande(ANDREA, vid)["domande"])
 verifica("…e niente «conferma le domande» per la persona",
          solleva(lambda: st.conferma_domande(LEO, vid), ValueError))

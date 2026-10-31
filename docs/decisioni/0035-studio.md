@@ -622,7 +622,8 @@ dell'eco della stanza.
       **Con una prova aperta** sulla verifica la vista dà solo il conto: niente domande, risposte
       attese né frasi delle prove, e «rivedi» aspetta la consegna. Dalla revisione della PR #348
       lo stesso vale su ogni strada: con la prova del minore aperta il tutore vede al più i testi
-      delle domande e delle carte, mai le risposte.
+      delle domande e delle carte, mai le risposte; e le carte di quella verifica non si
+      ripassano a voce per nessuno, come il ripasso da ascoltare (seconda revisione).
     - Il giudizio non fa da solo una padronanza misurata: conta solo l'ultimo per argomento e la
       soglia di misura guarda i soli tentativi della persona (revisione della PR #348).
 

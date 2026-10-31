@@ -129,6 +129,16 @@ class VerificaChiusa(ValueError):
         super().__init__("la verifica è chiusa")
 
 
+class CarteFerme(ValueError):
+    """Le carte della verifica non si ripassano a voce, per nessuno, mentre una prova della
+    persona è aperta (seconda revisione della PR #348, nota 6: come il ripasso da ascoltare).
+    `frase` è quella del codice da dire."""
+
+    def __init__(self, frase: str = ""):
+        super().__init__(frase or "le carte si ripassano dopo la consegna")
+        self.frase = frase
+
+
 class TroppePagine(ValueError):
     """Le pagine di una verifica sono già al tetto `studio_pagine_max` (passo 4.2)."""
 
@@ -1608,6 +1618,13 @@ class Studio(Mappe, Prove, Ascolti, Tutore):
             return None
         return ic
 
+    def _carte_ferme(self, v: dict) -> bool:
+        """Una prova della persona è aperta sulla verifica: le carte non si ripassano a voce."""
+        try:
+            return v["stato"] in ("bozza", "aperta") and self._prova_aperta(v["id"]) is not None
+        except Exception:  # noqa: BLE001 — schema di prima: niente prove
+            return False
+
     def carta_in_corso(self, chi, turno: int | None = None) -> dict | None:
         """La carta chiesta a voce a `chi` e non ancora risposta (o None): la carta e la verifica,
         se è ancora sua (o del suo minore). Con `turno`, solo nello stesso turno della domanda (o
@@ -1622,6 +1639,11 @@ class Studio(Mappe, Prove, Ascolti, Tutore):
         try:
             c, v = self._carta(chi, ic["carta"])
         except (NonTrovata, NonPermesso):
+            self._carte_in_corso.pop(str(getattr(chi, "id", "")), None)
+            return None
+        if self._carte_ferme(v):
+            # Con una prova aperta della persona la carta esce da «in corso» per chiunque: la
+            # risposta non si legge nella stanza (seconda revisione della PR #348, nota 6)
             self._carte_in_corso.pop(str(getattr(chi, "id", "")), None)
             return None
         c["pagine"] = [int(x) for x in D.da_j(c["pagine"]) if str(x).isdecimal()]
@@ -1644,8 +1666,16 @@ class Studio(Mappe, Prove, Ascolti, Tutore):
         `CARTA_IN_CORSO_S`). Con il numero fra quelle da ripassare e quante restano. None se
         nessuna."""
         v = self._verifica(chi, vid)
-        due = self._da_ripassare(v, chi)
         chiave = str(getattr(chi, "id", "") or "")
+        if self._carte_ferme(v):
+            # Nessuno ripassa a voce le carte di una verifica con una prova aperta: il tutore
+            # le leggerebbe nella stanza (seconda revisione della PR #348, nota 6)
+            self._carte_in_corso.pop(chiave, None)
+            nome = self._nome_per(chi, v)
+            chi_ha = "Hai" if nome is None else f"{nome} ha" if nome else "C'è"
+            raise CarteFerme(f"{chi_ha} una prova aperta: le carte si ripassano dopo la "
+                             "consegna.")
+        due = self._da_ripassare(v, chi)
         ic = self._in_corso(chiave)
         scelta = None
         if ic is not None and ic["verifica"] == v["id"]:

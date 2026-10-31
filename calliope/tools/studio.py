@@ -792,11 +792,16 @@ INDICA_PAROLE = ("L'indicazione la scrivo con le tue parole: dimmi di nuovo cosa
 # la soglia dei due terzi lasciava passare «dagli», «ignora»): articoli, preposizioni semplici e
 # articolate, congiunzioni e pochi avverbi di grado. Un verbo nuovo non c'è mai
 FUNZIONALI = frozenset("""
-il lo la i gli le l un uno una un d di a da in con su per tra fra e ed o od ma anche
-del dello della dei degli delle dell al allo alla ai agli alle all dal dallo dalla dai dagli
+il lo la i gli le l un uno una un d di a ad da in con su per tra fra e ed o od ma anche
+del dello della dei degli delle dell al allo alla ai agli alle all dal dallo dalla dai
 dalle dall nel nello nella nei negli nelle nell col coi sul sullo sulla sui sugli sulle sull
-che piu più bene molto poco sempre
+che piu più bene molto poco
+fai fagli fallo falle
 """.split())
+# Le parole che cambiano quando vale un'indicazione (seconda revisione della PR #348): tante nel
+# testo quante nella frase, così togliere una condizione («solo se la chiede») o aggiungere
+# «sempre» viene rifiutato. «ogni volta» conta come «ogni»
+CONTATE = frozenset({"sempre", "comunque", "ogni", "solo", "soltanto", "se"})
 # Le negazioni: tante nel testo quante nella frase, e davanti alle stesse parole (nota 1)
 NEGAZIONI = frozenset({"non", "mai", "senza", "nessun", "nessuno", "nessuna", "niente", "nulla"})
 
@@ -843,10 +848,12 @@ def _detta_dal_tutore(ctx, testo) -> bool:
     - almeno una parola piena."""
     tw = _parole_tutte(testo)
     fw = _parole_tutte(getattr(ctx, "user_text", "") or "")
-    piene = [w for w in tw if w not in FUNZIONALI and w not in NEGAZIONI]
+    piene = [w for w in tw if w not in FUNZIONALI and w not in NEGAZIONI and w not in CONTATE]
     if not piene:
         return False
     if not all(_stessa_parola(w, fw) for w in piene):
+        return False
+    if any(tw.count(w) != fw.count(w) for w in CONTATE):
         return False
     # Le negazioni: la stessa negazione davanti alla stessa parola, una per una
     restano = _dopo_negazioni(fw)
@@ -1204,7 +1211,13 @@ def _carte(ctx: ToolContext, parte: str = "", verifica=None, materia: str = "") 
             return _f(NON_CE if verifica else
                       "Non hai verifiche aperte nello Studio. Dimmi quando è la prossima.",
                       ok=False)
-        c = svc.prossima_carta(chi, v["id"], int(getattr(ctx, "turno", 0) or 0))
+        from ..studio.servizio import CarteFerme
+        try:
+            c = svc.prossima_carta(chi, v["id"], int(getattr(ctx, "turno", 0) or 0))
+        except CarteFerme as e:
+            # Con una prova aperta le carte non si ripassano a voce (PR #348, nota 6)
+            note_rule(ctx, "studio_carte_prova_aperta")
+            return _f(e.frase, ok=False)
         if c is None:
             n = svc._conto_carte(v)
             nome = f"la verifica di {str(v['materia']).lower()}"

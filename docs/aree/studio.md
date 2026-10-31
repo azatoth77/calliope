@@ -405,6 +405,21 @@ script della revisione, casi in `prove/prova_studio_tutore.py`).
   dati del turno (`Studio._in_prova`).
 - (b) La cornice dice anche che le indicazioni non fanno mai dare le risposte di prove,
   interrogazioni o carte, né la soluzione intera dei compiti.
+### 31/10: la seconda revisione della PR #348
+
+6. **La carta letta a voce dava la risposta al tutore durante la prova del minore**
+   (`prossima_carta` la nascondeva, `carta_in_corso` → `studio_carte` «risposta» no, e Calliope la
+   leggeva nella stanza). Ora, come il ripasso da ascoltare, mentre una prova della persona è
+   aperta le carte di quella verifica **non si ripassano a voce per nessuno**: `prossima_carta`
+   solleva `CarteFerme` con la frase del codice («Leo ha una prova aperta: le carte si ripassano
+   dopo la consegna.», alla persona «Hai una prova aperta…»; regola `studio_carte_prova_aperta`) e
+   `carta_in_corso` toglie la carta in corso e non la dà. Dopo la consegna si riprende.
+- In `_detta_dal_tutore`: «ad» fra le funzionali e «fai», «fagli», «fallo», «falle» consentite
+  («Fagli ripetere i verbi ad alta voce»); «dagli» non è più funzionale (è anche un imperativo);
+  «sempre», «comunque», «ogni» (volta), «solo», «soltanto» e «se» devono comparire tante quante
+  nella frase: «dagli la soluzione solo se la chiede due volte» non diventa «Dagli sempre la
+  soluzione», né «dagli la soluzione».
+
 - Con l'unione dell'epic dopo la PR #346 (che aveva già portato la pagina a v33) il service
   worker e `PAGINA_VERSIONE` passano a **v34**; lo schema «studio» resta alla versione 11.
 

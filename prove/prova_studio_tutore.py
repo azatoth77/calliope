@@ -584,6 +584,61 @@ verifica("valore: il testo un contenuto, «indica» e «indicazioni_togli» E2",
          and valore.EFFETTI["studio"]({"azione": "indicazioni_togli"}) == valore.E2
          and valore.EFFETTI["studio"]({"azione": "indicazioni"}) == valore.E1)
 
+# Seconda revisione della PR #348, nota 6: con la prova di Leo aperta le carte non si ripassano a
+# voce per nessuno (lo scenario 7 del revisore)
+st7 = studio(cfg_nuova("carte_voce.db"))
+v7 = carica(st7)
+a7 = st7._argomenti_numerati(v7)[0]["id"]
+st7.aggiungi_carta(LEO, v7, "Chi finanziò Colombo?", "Isabella di Castiglia", argomento=a7)
+for i in range(3):
+    st7.aggiungi_domanda(LEO, v7, "numero", f"Anno {i}?", str(1490 + i), argomento=a7)
+c_prima = st7.prossima_carta(ANDREA, v7, turno=1)
+verifica("prima della prova il tutore ripassa la carta a voce", c_prima is not None
+         and st7.carta_in_corso(ANDREA) is not None)
+pv7 = st7.inizia_prova(LEO, v7)
+verifica("prova di Leo aperta: carta_in_corso del tutore vuota (la risposta non esce)",
+         st7.carta_in_corso(ANDREA) is None and st7.carta_in_corso(ANDREA, 2) is None)
+e7 = ""
+try:
+    st7.prossima_carta(ANDREA, v7, turno=2)
+except S.servizio.CarteFerme as e:
+    e7 = e.frase
+verifica("prova di Leo aperta: prossima_carta al tutore con la frase del codice",
+         e7 == "Leo ha una prova aperta: le carte si ripassano dopo la consegna.", e7)
+e7l = ""
+try:
+    st7.prossima_carta(LEO, v7, turno=2)
+except S.servizio.CarteFerme as e:
+    e7l = e.frase
+verifica("prova aperta: nemmeno Leo ripassa le carte a voce", e7l.startswith("Hai una prova aperta"))
+for parte in ("domanda", "risposta"):
+    r7 = json.loads(TOOLS.call("studio_carte", {"parte": parte, "verifica": v7},
+                               ctx_di(st7, ANDREA, frase="ripassiamo le carte di Leo"),
+                               "familiare"))
+    verifica(f"studio_carte «{parte}» del tutore durante la prova: niente risposta",
+             not r7["ok"] and "Isabella" not in json.dumps(r7, ensure_ascii=False), str(r7))
+verifica("nota delle indicazioni di Leo durante la prova: vuota", st7.nota_indicazioni("l1") == "")
+st7.consegna_prova(LEO, pv7["id"])
+verifica("dopo la consegna la carta torna, con la risposta",
+         st7.prossima_carta(ANDREA, v7, turno=3) is not None
+         and (st7.carta_in_corso(ANDREA) or {}).get("risposta") == "Isabella di Castiglia")
+st7.close()
+# Seconda revisione della PR #348: «ad», «fai/fagli/fallo/falle», «dagli» non funzionale, le
+# condizioni e i quantificatori contati
+for frase, testo, atteso in (
+        ("Fai ripassare a Leo le date della scoperta", "Fai ripassare a Leo le date", True),
+        ("con Leo fagli ripetere i verbi ad alta voce", "Fagli ripetere i verbi ad alta voce", True),
+        ("dagli la soluzione solo se la chiede due volte", "Dagli sempre la soluzione", False),
+        ("dagli la soluzione solo se la chiede due volte", "dagli la soluzione", False),
+        ("dagli la soluzione solo se la chiede due volte",
+         "dagli la soluzione solo se la chiede due volte", True),
+        ("con Leo insisti sulle frazioni", "insisti comunque sulle frazioni", False),
+        ("con Leo ripassa la storia", "ripassa la storia ogni volta", False),
+        ("con Leo insisti sulle frazioni", "dagli le frazioni", False)):
+    c_ = types.SimpleNamespace(user_text=frase)
+    verifica(f"detta dal tutore? «{testo}» ← «{frase}»: {atteso}",
+             TS._detta_dal_tutore(c_, testo) is atteso)
+
 # ═══════════════════════════ 8. attraverso Brain ═══════════════════════════
 print("— attraverso Brain")
 import prova_politica as PP  # noqa: E402
