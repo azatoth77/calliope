@@ -52,9 +52,18 @@ def di_quale_schermo(item: dict | None) -> dict:
     tocco, modulo, foto), da passare a `Schermi.schermo`, `invia_a` ed `evento_a`; {} se
     l'elemento non lo porta. Il numero da solo non basta: dopo una revoca la tabella lo riusa,
     e un elemento che aspettava in coda mentre lo schermo veniva revocato e il numero
-    riabbinato da terminale mandava la risposta allo schermo nuovo (#275)."""
-    creato = (item or {}).get("schermo_creato")
-    return {"creato": creato} if creato is not None else {}
+    riabbinato da terminale mandava la risposta allo schermo nuovo (#275). Dal 31/10 (#338) anche
+    {"proprietario": …} (None = schermo di stanza), se l'elemento lo porta: lo schermo passato a
+    un'altra persona («rendilo personale di Bianca») mentre la frase di Dario aspettava non riceve
+    la sua risposta."""
+    item = item or {}
+    creato = item.get("schermo_creato")
+    if creato is None:
+        return {}
+    out = {"creato": creato}
+    if "schermo_proprietario" in item:
+        out["proprietario"] = item.get("schermo_proprietario") or None
+    return out
 
 
 def norm_stanza(testo: str | None) -> str:

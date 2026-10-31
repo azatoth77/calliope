@@ -156,7 +156,7 @@ class HubFinto:
     def collegato(self, sid):
         return sid in self.collegati
 
-    def invia_a(self, sid, scheda):
+    def invia_a(self, sid, scheda, **identita):
         self.mandate.append((sid, scheda))
         return sid in self.collegati
 

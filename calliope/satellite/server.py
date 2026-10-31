@@ -177,6 +177,8 @@ class Collegamento:
         self.pronto = False                     # ha detto il saluto (o non serviva)
         self.eco = None                         # quota di frame «parlato» sul saluto
         self.schermo_id = None                  # lo schermo del satellite (pagina), se c'è
+        # L'istante dell'abbinamento di quello schermo (#338): il numero si riusa dopo una revoca
+        self.schermo_creato = None
         self.chiuso = threading.Event()
         self._lock = threading.Lock()
         self._invii: dict[int, float] = {}       # thread che stanno mandando → da quando
@@ -842,7 +844,28 @@ class ServerSatelliti:
         with self._cond:
             via = [c for c in reversed(self.collegati)
                    if c.schermo_id == sid and c.pronto and not c.chiuso.is_set()]
+        hub = getattr(self, "schermi", None)
+        if via and hub is not None and callable(getattr(hub, "schermo", None)):
+            # Il numero dello schermo è ancora del suo satellite (#338, nota della revisione della PR
+            # #332): `schermo_id` resta al collegamento anche se lo schermo viene revocato, e la
+            # tabella riusa il numero. Senza questo il satellite di prima (lo studio di Dario)
+            # avrebbe detto a voce la risposta scritta dal telefono nuovo di Bianca
+            riga = hub.schermo(sid)
+            via = [c for c in via if self._schermo_suo(c, riga)]
         return via[0] if via else None
+
+    @staticmethod
+    def _schermo_suo(coll, riga: dict | None) -> bool:
+        """La riga dello schermo col numero `coll.schermo_id` è ancora quella che il satellite ha
+        aperto (#338): lo stesso istante dell'abbinamento e, se la riga lo dice, lo stesso
+        satellite. Un collegamento senza l'istante (di prima, o delle prove) si fida del numero."""
+        if riga is None:
+            return False
+        creato = getattr(coll, "schermo_creato", None)
+        if creato is not None and riga.get("creato") != creato:
+            return False
+        legato = riga.get("satellite")
+        return legato is None or legato == (getattr(coll, "satellite", None) or {}).get("id")
 
     def per_id(self, sat_id) -> Collegamento | None:
         """Il satellite collegato e pronto con questo id d'archivio, o None."""
@@ -1377,7 +1400,7 @@ class ServerSatelliti:
                 self.log(f"   [SATELLITE] schermo «{s['nome']}» abbinato per il satellite"
                          + (f" (personale di {s['proprietario_nome']})"
                             if s.get("proprietario_nome") else ""))
-        coll.schermo_id = s["id"]
+        coll.schermo_id, coll.schermo_creato = s["id"], s.get("creato")
         self._allinea_schermo(coll)
         coll.invia(tipo="schermo", porta=porta, locale=schermi_locali(self.cfg), token=token,
                    **self._tls_schermi(hub))
@@ -1417,9 +1440,16 @@ class ServerSatelliti:
         s = next((x for x in hub.archivio.elenco() if x["id"] == sid), None)
         if s is None or s.get("proprietario") == sat.get("proprietario"):
             return
+        if not self._schermo_suo(coll, s):
+            # Il numero è ora di un altro schermo (lo schermo del satellite revocato, il numero
+            # riusato: #338): non gli si cambia il proprietario
+            return
         hub.archivio.imposta_proprietario(sid, sat.get("proprietario"),
                                           sat.get("proprietario_nome"))
         hub._rinfresca()
+        # Subito, non alla prossima scheda: le pagine aperte col proprietario di prima ricevono
+        # «proprietario» e la cronologia in memoria si svuota (#338)
+        hub.abbinati()
         self.log(f"   [SATELLITE] schermo «{s['nome']}»: "
                  + (f"personale di {sat['proprietario_nome']}" if sat.get("proprietario")
                     else "della stanza"))

@@ -465,7 +465,7 @@ class HubFinto:
         self.a_tutti.append((scheda, mittente))
         return {"schermi": ["salotto"], "motivo": None}
 
-    def invia_a(self, sid, scheda):
+    def invia_a(self, sid, scheda, **identita):
         self.inviate.append((sid, scheda))
         return True
 
