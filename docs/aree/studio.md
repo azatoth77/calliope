@@ -2326,6 +2326,23 @@ macchina», il compito di casa nella frase del turno) chiedono da dove viene la 
 prima), i contrari (la domanda del modello, un'altra data, «no»), la pagina ostile → proposta →
 «sì» → la domanda con la fonte → «sì» → sposta, i quattro scenari e i casi del tema.
 
+**Dopo la revisione della PR #362 (31/10 sera).**
+- Con dati non fidati nella conversazione e la data non detta dalla persona, al «sì» alla proposta
+  si chiede **sempre**. Una pagina con una data relativa («fra due settimane», «alla settimana
+  prossima», «rinviata di 15 giorni», «al giorno 12») non si ritrova come data, e prima un «sì»
+  solo spostava. Se la data si ritrova in un dato la domanda dice la fonte («viene da una
+  pagina»); altrimenti è generica («Questa data, «giovedì 12 novembre», non l'hai detta tu, e c'è
+  di mezzo una pagina: è quella giusta?», `valore_proposta_data_non_detta`). La proposta di una
+  data calcolata senza pagine di mezzo sposta ancora con un «sì».
+- Le date della proposta e del «sì» si confrontano risolte («20 dicembre» è «2026-12-20»), anche
+  per ritrovarle nelle pagine; per le pagine dello Studio la domanda dice «da una pagina».
+- Il tema: «ma», «però», «invece» e il punto chiudono il pezzo di frase; la virgola, «?», «:» e
+  «;» no, se il pezzo dopo ha solo la data e parole di contorno («la verifica, che era il 5, ora è
+  il 20 novembre», «la verifica? il 20 novembre», «verifiche spostate: storia al 20 novembre»);
+  con un altro soggetto sì («la verifica di matematica non c'è più, il 20 novembre gita»).
+  «prova di <materia>» e «test di <materia>» sono tema. Resta tema, nella frase del turno, anche
+  «ho spostato la macchina il 20 novembre» (le parole dello spostamento valgono da sole lì).
+
 Nella stessa PR, due ritocchi della revisione della PR #358 (#343):
 - `_detta_dal_tutore`: la forma di cortesia non si toglie dopo «solo» o «soltanto» («Dagli la
   soluzione solo se puoi» è una condizione: «dagli solo la soluzione» non passa);

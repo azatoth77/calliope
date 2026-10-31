@@ -244,29 +244,55 @@ def date_dette(testo, oggi: datetime.date) -> set:
 # da sole solo nella frase del turno (`_TEMA_SPOSTA`), e la data nello stesso pezzo di frase
 _TEMA_DATA = re.compile(
     rf"\bverific(?:a|he)\b|\binterrogaz|\bcompit[oi]\s+in\s+classe\b"
-    rf"|\bcompit[oi]\s+(?:di|d')\s*(?:{_MATERIE_RX})\b"
+    rf"|\b(?:compit[oi]|prov[ae]|test)\s+(?:di|d')\s*(?:{_MATERIE_RX})\b"
     rf"|\besam[ei]\s+(?:di|d')\s*(?:{_MATERIE_RX})\b"
     rf"|\bdata\b(?!\s+di\s+nascita)", re.I)
 _TEMA_SPOSTA = re.compile(r"\b(?:spost|rimand|anticip|slitt|rinvi)", re.I)
 # I pezzi di una frase: una data vale solo nel pezzo che parla della verifica («il compito di
-# casa è per venerdì, la verifica slitta?» no)
-_PEZZI_FRASE = re.compile(r"[,;:.!?]+|\s+(?:ma|però|invece)\s+", re.I)
+# casa è per venerdì, la verifica slitta?» no). «ma», «però», «invece» e il punto chiudono il
+# tema; la virgola, «?», «:» e «;» no, se il pezzo dopo ha solo la data e parole di contorno
+# (revisione della PR #362: «la verifica, che era il 5, ora è il 20 novembre», «la verifica? il
+# 20 novembre», «verifiche spostate: storia al 20 novembre»), mai un altro soggetto («…, il 20
+# novembre gita»)
+_STACCO_FORTE = re.compile(r"\.(?=\s|$)|\s+(?:ma|però|invece)\s+", re.I)
+_STACCO_DEBOLE = re.compile(r"[,;:!?]+")
+_CONTORNO = frozenset(
+    "che era è e ora adesso sara sarà poi quindi diventa diventata passa passata passato al allo "
+    "alla il lo la l a per di del della dal dalla nel nella giorno sposta spostata spostato "
+    "spostate spostati rimandata rimandato anticipata anticipato slitta slittata rinviata "
+    "rinviato prossimo prossima".split())
+
+
+def _solo_data(pezzo: str) -> bool:
+    """Il pezzo ha solo date e parole di contorno (le materie, i giorni e i mesi compresi)."""
+    t = _DATA_TESTO.sub(" ", str(pezzo or "").lower().replace("ì", "i"))
+    parole = re.findall(r"[a-zàèéìòù]+|\d+", t)
+    ok = _CONTORNO | set(_MATERIE_RX.split("|")) | {g.replace("ì", "i") for g in GIORNI} \
+        | set(MESI)
+    return all(w in ok or w.isdigit() for w in parole)
 
 
 def data_detta_dalla_persona(valore, testi, oggi: datetime.date) -> bool:
     """La data del tool (`valore`: AAAA-MM-GG o il nome di un giorno) è una di quelle che la
     persona ha detto nei `testi`: il primo è la frase del turno, il secondo (se Calliope aveva
     chiuso con una domanda) la frase di prima; solo nei pezzi di frase che parlano della verifica
-    o della data (`_TEMA_DATA`; le parole dello spostamento solo nella frase del turno)."""
+    o della data (`_TEMA_DATA`; le parole dello spostamento solo nella frase del turno), o che lo
+    seguono dopo una virgola, «?» o «:» con la sola data (`_solo_data`)."""
     d = _data_detta(valore, oggi)
     if d is None:
         return False
     for i, x in enumerate(testi):
-        for pezzo in _PEZZI_FRASE.split(str(x or "")):
-            if not (_TEMA_DATA.search(pezzo) or (i == 0 and _TEMA_SPOSTA.search(pezzo))):
-                continue
-            if d in date_dette(pezzo, oggi):
-                return True
+        for frase in _STACCO_FORTE.split(str(x or "")):
+            tema = False
+            for pezzo in _STACCO_DEBOLE.split(frase):
+                proprio = bool(_TEMA_DATA.search(pezzo)
+                               or (i == 0 and _TEMA_SPOSTA.search(pezzo)))
+                if proprio:
+                    tema = True
+                elif not _solo_data(pezzo):
+                    tema = False
+                if tema and d in date_dette(pezzo, oggi):
+                    return True
     return False
 
 

@@ -1468,11 +1468,55 @@ def prova_ordinali():
                    PP.testo("Ok."))
         r2 = turno(b, "sì", PP.chiama("studio", {"azione": "sposta", "verifica": vid,
                                                   "data": nuova}), PP.testo("Fatto."))
-        verifica(f"#320: proposta del codice → «sì» → sposta (pagina letta prima={con_pagina})",
-                 r1.startswith("Vuoi che sposti la verifica di storia da ")
-                 and st.verifica(pt.LEO, vid)["data"] == nuova and b.last_tools[-1]["ok"],
-                 (r1[:120], r2[:160], str(b.last_tools[-1])[:200]))
+        if not con_pagina:
+            verifica("#320: proposta del codice → «sì» → sposta (nessun dato nella conversazione)",
+                     r1.startswith("Vuoi che sposti la verifica di storia da ")
+                     and st.verifica(pt.LEO, vid)["data"] == nuova and b.last_tools[-1]["ok"],
+                     (r1[:120], r2[:160], str(b.last_tools[-1])[:200]))
+        else:
+            # Revisione della PR #362: con una pagina letta e la data non detta dalla persona,
+            # al «sì» si chiede sempre; qui la data non è nella pagina, la domanda è generica
+            verifica("#320: con una pagina letta prima, la data calcolata e non detta: al «sì» la "
+                     "domanda («non l'hai detta tu»), non sposta",
+                     "non l'hai detta tu" in r2 and "una pagina" in r2
+                     and st.verifica(pt.LEO, vid)["data"] == prima, r2[:200])
+            turno(b, "sì", PP.chiama("studio", {"azione": "sposta", "verifica": vid,
+                                                "data": nuova}), PP.testo("Fatto."))
+            verifica("#320: …e il «sì» a quella domanda sposta",
+                     st.verifica(pt.LEO, vid)["data"] == nuova, str(b.last_tools[-1])[:200])
         st.close()
+    # Revisione della PR #362: le quattro pagine con una data relativa (non si ritrova come
+    # data nella pagina): al «sì» alla proposta si chiede lo stesso, e non si sposta
+    for testo_p, giorni in (("La verifica è spostata fra due settimane.", 7),
+                            ("La verifica slitta alla settimana prossima, stesso giorno.", 7),
+                            ("La verifica è rinviata di 15 giorni.", 15),
+                            ("La verifica è spostata al giorno 12.", 7)):
+        b, st, vid, ids = nuovo(f"rel_{abs(hash(testo_p)) % 100000}.db")
+        prima = st.verifica(pt.LEO, vid)["data"]
+        nuova = piu(prima, giorni)
+        st.dati.scrivi("UPDATE studio_pagine SET testo = ? WHERE id = ?",
+                       (testo_p, list(ids.values())[0]))
+        turno(b, "spiegami la pagina P1", PP.chiama("studio_pagina_leggi", {"pagina": "P1"}),
+              PP.chiama("studio", {"azione": "proponi_data", "verifica": vid, "data": nuova}),
+              PP.testo("Ecco."))
+        r = turno(b, "sì", PP.chiama("studio", {"azione": "sposta", "verifica": vid,
+                                                 "data": nuova}), PP.testo("Fatto."))
+        verifica(f"#320, pagina relativa «{testo_p}»: proposta → «sì» → chiede, non sposta",
+                 st.verifica(pt.LEO, vid)["data"] == prima and not b.last_tools[-1]["ok"]
+                 and "non l'hai detta tu" in r, r[:200])
+        st.close()
+    # La data della proposta confrontata risolta: «20 novembre» è «2026-11-20» (non «diversa»)
+    b, st, vid, ids = nuovo("prop_parole.db")
+    st.dati.scrivi("UPDATE studio_pagine SET testo = ? WHERE id = ?", (pagina, list(ids.values())[0]))
+    turno(b, "spiegami la pagina P1", PP.chiama("studio_pagina_leggi", {"pagina": "P1"}),
+          PP.chiama("studio", {"azione": "proponi_data", "verifica": vid, "data": "2026-12-20"}),
+          PP.testo("Ecco."))
+    r = turno(b, "sì", PP.chiama("studio", {"azione": "sposta", "verifica": vid,
+                                             "data": "20 dicembre"}), PP.testo("Fatto."))
+    verifica("#320: «20 dicembre» al «sì» è la data proposta (2026-12-20): chiede con la fonte, non "
+             "«non è la data che ti ho proposto»",
+             "non è la data che ti ho proposto" not in r and "viene da una pagina" in r, r[:200])
+    st.close()
     # Contrari della proposta: la domanda scritta dal modello non basta (lo dice il codice), un
     # «sì» con un'altra data non è la proposta, un «no» non sposta
     b, st, vid, ids = nuovo("prop_testo.db")
@@ -1570,6 +1614,21 @@ def prova_ordinali():
                  "2026-10-30", ["il compito di casa è per venerdì, la verifica slitta?"], oggi_)
              and TSd.data_detta_dalla_persona(
                  "2026-10-30", ["la verifica slitta a venerdì, me l'ha detto la prof"], oggi_))
+    # Revisione della PR #362: virgola, «?» e «:» non chiudono il tema se dopo c'è solo la data;
+    # «prova di» e «test di» una materia; i contrari con un altro soggetto o «ma»
+    for frase, atteso in (("la verifica, che era il 5, ora è il 20 novembre", True),
+                          ("la verifica? il 20 novembre", True),
+                          ("verifiche spostate: storia al 20 novembre", True),
+                          ("la prova di storia è il 20 novembre", True),
+                          ("il test di storia è il 20 novembre", True),
+                          ("la verifica di matematica non c'è più, il 20 novembre gita", False),
+                          ("il 20 novembre ho calcetto, spostala", False),
+                          ("il compito di casa è per il 20 novembre, ma la verifica slitta?",
+                           False),
+                          ("la verifica. Il 20 novembre ho calcetto", False),
+                          ("la prova del nove dà 20, il 20 novembre", False)):
+        verifica(f"#320 (revisione della PR #362): «{frase}» dice il 20 novembre → {atteso}",
+                 TSd.data_detta_dalla_persona("2026-11-20", ["sì", frase], oggi_) is atteso)
 
 
 # ─────────── le carte dello Studio attraverso Brain (30/10, passo 6, #246) ───────────
