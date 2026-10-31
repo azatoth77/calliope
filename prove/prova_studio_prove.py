@@ -784,6 +784,44 @@ SC3 = [(AU, "la a, no, la c", "da_rivedere"), (AU, "la a no la c", "da_rivedere"
 male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC3 if RS.valuta(d, r)[0] != e]
 verifica("«X, no, Y» e «X, anzi Y» fra due opzioni: da rivedere; «non X, Y» come prima", not male,
          male)
+# Il banco del 31/10 (#344): la risposta attesa «Isabella di Castiglia e Ferdinando d'Aragona» era
+# «sbagliato» per la «d» di «d'Aragona», presa per l'opzione d. Le lettere dentro la frase: mai
+# elise, e solo all'inizio o dopo «la», «è», «o», «anzi», «no»…; la «a» in testa solo se segue
+# «o», «anzi», «no»… (altrimenti è la preposizione)
+IS = RS.prepara("scelta", "Quali sovrani?", "a", [
+    "Isabella di Castiglia e Ferdinando d'Aragona", "Luigi XIV e Maria Antonietta",
+    "Carlo V e Filippo II", "Elisabetta I e Giacomo I"])
+CA = RS.prepara("scelta", "Dove arrivò?", "c", ["Lisbona", "Palos", "Calicut", "San Salvador"])
+SC4 = [(IS, "Isabella di Castiglia e Ferdinando d'Aragona", "giusto"),
+       (IS, "Isabella di Castiglia e Ferdinando d’Aragona", "giusto"),
+       (IS, "allora, Isabella di Castiglia e Ferdinando d'Aragona", "giusto"),
+       (IS, "la a", "giusto"), (IS, "la d", "sbagliato"), (IS, "d", "sbagliato"),
+       (IS, "Carlo V e Filippo II", "sbagliato"), (IS, "a o d", "sbagliato"),
+       (IS, "la d, anzi la a", "da_rivedere"),
+       (CA, "arrivò a Calicut", "giusto"), (CA, "a Calicut", "giusto"),
+       (CA, "a San Salvador", "sbagliato"), (CA, "la c", "giusto"), (CA, "c'è Calicut", "giusto"),
+       (CA, "Calicut, la c", "giusto"), (CA, "a, anzi c", "da_rivedere"),
+       (CA, "a o c", "sbagliato"), (CA, "la a", "sbagliato"), (CA, "non la a, la c", "giusto"),
+       # Seconda revisione della PR #346: la preposizione «a» in ogni punto della frase
+       (CA, "secondo me a Calicut", "giusto"), (CA, "penso a Calicut", "giusto"),
+       (CA, "direi a Calicut", "giusto"), (CA, "boh, a Calicut", "giusto"),
+       (CA, "credo a San Salvador", "sbagliato"), (CA, "credo a", "sbagliato"),
+       (CA, "penso la a", "sbagliato"), (CA, "la a, no, la c", "da_rivedere")]
+male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC4 if RS.valuta(d, r)[0] != e]
+verifica("lettere dentro la frase: «d'Aragona», «c'è» e la preposizione «a» non sono opzioni; «la "
+         "a», «a o c», «a, anzi c» sì (banco del 31/10)", not male, male)
+# La revisione della PR #346: le risposte giuste di prima restano giuste (opinione, scelta, la
+# lettera in fondo dopo una virgola o fra parentesi); «direi c» resta sbagliato
+CB = RS.prepara("scelta", "Chi arrivò in America nel 1492?", "b",
+                ["Vasco da Gama", "Cristoforo Colombo", "Magellano", "Amerigo Vespucci"])
+SC5 = [(CB, r, "giusto") for r in ("direi b", "credo b", "penso b", "secondo me b", "scelgo b",
+                                    "scelgo la b", "metto b", "dico b", "sicuramente b", "boh b",
+                                    "Colombo, b", "Colombo (b)", "forse b", "b, Colombo")] +       [(CB, "direi c", "sbagliato"), (CB, "credo a", "sbagliato"), (CB, "c, Magellano", "sbagliato"),
+       (CB, "Magellano b", "sbagliato"), (CB, "non la b", "da_rivedere"),
+       (CB, "la b anzi la c", "da_rivedere")]
+male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC5 if RS.valuta(d, r)[0] != e]
+verifica("lettere dopo «direi», «credo», «secondo me», «scelgo»… e in fondo dopo una virgola o fra "
+         "parentesi: giuste come prima; «direi c» sbagliato (revisione della PR #346)", not male, male)
 NN3 = [("0,5 kg", "1/2 kg", "giusto"), ("0,75 L", "3/4 di litro", "giusto"),
        ("0,5 kg", "mezzo chilo", "giusto"), ("1571", "in mezzo al Mediterraneo, nel 1571",
                                              "giusto"),

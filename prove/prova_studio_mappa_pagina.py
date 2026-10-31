@@ -89,6 +89,15 @@ def prepara(st):
         st.collega(ANDREA, sk, n[da], n[a], vb)
     st.conferma_scheletro(ANDREA, sk)
     st.riordina_mappa(ANDREA, sk)
+    # Un collegamento debole del codice (#344, revisione della PR #346), proposto, come lo lascia
+    # `mappa_genera.collega_isole`: sullo schermo tratteggiato e con la sua frase
+    from calliope.studio import mappa_genera as MG
+    m = st._riga_mappa(sk)
+    m["collegamenti"].append({"id": 99, "da": n["Il Portogallo"], "a": n["America"],
+                              "verbo": MG.VERBO_DEBOLE, "pagine": [], "autore": "modello",
+                              "stato": "proposto", "avvisi": ["da_controllare"], "origine": None,
+                              "debole": True})
+    st._salva_mappa(m, collegamenti=m["collegamenti"])
     return vid, sk
 
 
@@ -112,6 +121,12 @@ def scenario_telefono(t, hub, st, vid, sk):
     el = t.v("document.querySelector('.studio-m').innerText") or ""
     verifica("lo scheletro: chi l'ha fatto, i concetti e i collegamenti a parole",
              "scritto a mano" in el and "confermato" in el and "→ arriva in → America" in el, el[:300])
+    verifica("il collegamento debole: la sua frase vera, senza «Tieni»; autore «codice» (#344)",
+             "legame aggiunto da Calliope per unire le parti: non è nelle pagine" in el
+             and "non lo trovo nelle pagine che cita" not in el
+             and not t.v("!!document.querySelector('button[data-mappa=\"tieni\"][data-dati*=\"99\"]')")
+             and next(c for c in st.vista_mappe(LEO, vid)["scheletro"]["collegamenti"]
+                      if c["id"] == 99)["autore"] == "codice", el[:400])
     verifica("l'HTML di un concetto resta testo (nessuna immagine, il testo intero)",
              HTML in el and not t.v("!!document.querySelector('.studio-m img')"))
     vs = aspetta(lambda: any((hub.viste_studio.di(k) or [{}])[0].get("vista") == "mappa"
@@ -226,6 +241,15 @@ def scenario_telefono(t, hub, st, vid, sk):
     ok = aspetta(lambda: t.v("!!document.querySelector('button[data-mappa=\"chiedi_riapri\"]')"), 6)
     verifica("lo scheletro confermato con le copie: niente «+ Concetto», c'è «Riapri lo scheletro»",
              bool(ok) and not t.v("!!document.querySelector('button[data-mappa=\"nuovo\"]')"))
+    t.tocca('button[data-mappa="vista"][data-dati*="mappa"]')
+    ok = aspetta(lambda: t.v("!!document.querySelector('svg.studio-m-tela')"), 6)
+    trat = t.v("[...document.querySelectorAll('svg.studio-m-tela line')].map((l) => l.getAttribute('stroke-dasharray') || '')") or []
+    verifica("nel disegno dello scheletro il collegamento debole è tratteggiato, gli altri no; nelle "
+             "copie non c'è (#344)",
+             bool(ok) and sum(bool(x) for x in trat) == 1 and len(trat) == 6
+             and not any(c["verbo"] == "è collegato a" for c in st.vista_mappe(LEO, vid)["mia"]["collegamenti"]),
+             str(trat))
+    t.tocca('button[data-mappa="vista"][data-dati*="elenco"]')
 
 
 def scenario_pc(t, hub):

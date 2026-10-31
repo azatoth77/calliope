@@ -196,11 +196,62 @@ def _lettera_chiusa(ps: list[str]) -> str | None:
     return LETTERE_DETTE.get(resto[0]) if len(resto) == 1 else None
 
 
+def _elise(risposta) -> list[bool]:
+    """Per ogni parola di `_bordi(C.normale(risposta))`: è una lettera elisa con l'apostrofo
+    («d'Aragona», «c'è», «l'India»)? Gli stessi passi di `carte.normale`, parola per parola."""
+    import unicodedata
+    t = unicodedata.normalize("NFKD", str(risposta or "").lower())
+    t = "".join(c for c in t if not unicodedata.combining(c))
+    t = re.sub(r"(?<=\d)[.\s](?=\d{3}\b)", "", t)
+    el = [t[m.end():m.end() + 1] in ("'", "’", "`") for m in re.finditer(r"[a-z0-9]+", t)]
+    tutte = C.normale(risposta)
+    ps = _bordi(tutte)
+    inizio = next((i for i in range(len(tutte) - len(ps) + 1)
+                   if tutte[i:i + len(ps)] == ps), 0)
+    return el[inizio:inizio + len(ps)]
+
+
+# Prima di una lettera dentro la frase: «la b», «è la c», «a o b», «a, anzi c», «non la d»
+_PRIMA_DI_LETTERA = frozenset(_PRIMA_DELLA_LETTERA) | {"o", "oppure", "anzi", "no", "forse",
+                                                        "non", "proprio",
+                                                        # opinione e scelta («direi b»,
+                                                        # «secondo me b», «scelgo b»: revisione
+                                                        # della PR #346)
+                                                        "direi", "credo", "penso", "me", "scelgo",
+                                                        "metto", "dico", "sicuramente", "boh",
+                                                        "sicuro", "secondo"}
+# La lettera in fondo dopo una virgola o fra parentesi: «Colombo, b», «Colombo (b)»
+_LETTERA_IN_FONDO = re.compile(r"[,(]\s*([a-z])\s*\)?\s*[.!?]*\s*$", re.I)
+# Dopo la «a» in testa, perché sia la lettera e non la preposizione: «a o b», «a, anzi c», «a, no»
+_DOPO_LA_A = frozenset({"o", "oppure", "anzi", "no", "forse", "e", "credo", "penso", "sicuro"})
+
+
+def _lettera_in_frase(ps: list[str], elise: list[bool], k: int, quante: int,
+                      in_fondo: bool = False) -> str | None:
+    """La lettera di un'opzione detta dentro la frase, o None (banco del 31/10, #344: «Isabella di
+    Castiglia e Ferdinando d'Aragona», la risposta attesa, era «sbagliato» per la «d» di
+    «d'Aragona»). Una lettera sola fra quelle delle opzioni, «e» mai (è una congiunzione), mai
+    elisa con l'apostrofo, e all'inizio della frase o dopo «la», «è», «o», «anzi», «no»…: così la
+    «a» di «arrivò a Calicut» è una preposizione e non l'opzione a."""
+    w = ps[k]
+    if len(w) != 1 or w == "e" or w not in LETTERE[:quante] or (k < len(elise) and elise[k]):
+        return None
+    if k and ps[k - 1] not in _PRIMA_DI_LETTERA and not (in_fondo and k == len(ps) - 1):
+        return None
+    # «a Calicut», «penso a Calicut», «secondo me a Calicut»: la preposizione, in ogni punto
+    # della frase (seconda revisione della PR #346)
+    if (w == "a" and k + 1 < len(ps) and ps[k + 1] not in _DOPO_LA_A
+            and ps[k + 1] not in LETTERE_DETTE):
+        return None
+    return w
+
+
 def _scelta(d: dict, risposta: str) -> str:
     """Più opzioni nella stessa risposta («a o b», «Colombo e Magellano»): «sbagliato» (revisione
     della PR #342, punto 2), così una risposta a cavallo non diventa giusta con «Era giusta»."""
     ops = list(d.get("opzioni") or ())
     ps = _bordi(C.normale(risposta))
+    elise = _elise(risposta)
     giusta = next((i for i, o in enumerate(ops) if _uguale_opzione(o, d["attesa"])), None)
     lett = _lettera_chiusa(ps)
     if lett is not None:
@@ -214,15 +265,16 @@ def _scelta(d: dict, risposta: str) -> str:
     # parole tutte uguali e di fila, i numeri come numeri), non negate subito prima. Il confronto
     # largo (radici, una lettera di tolleranza) solo se nessuna opzione è nominata così:
     # Austria/Australia, Costantinopoli/Costantino, 1491/1492 restano distinte
-    esatte = {LETTERE.index(w) for k, w in enumerate(ps) if len(w) == 1 and w != "e"
-              and w in LETTERE[:len(ops)] and not _negata(ps, k)}
+    in_fondo = bool(_LETTERA_IN_FONDO.search(str(risposta or "")))
+    lettere = {k: x for k in range(len(ps))
+               if (x := _lettera_in_frase(ps, elise, k, len(ops), in_fondo)) is not None}
+    esatte = {LETTERE.index(w) for k, w in lettere.items() if not _negata(ps, k)}
     esatte |= {i for i, o in enumerate(ops) if _uguale_opzione(o, risposta)}
     if len(pr) <= 12:
         esatte |= {i for i, o in enumerate(ops) if parole(o) and _di_fila(parole(o), pr)}
     # «la a, no, la c», «Austria no Australia», «a, anzi c» (terza revisione della PR #342):
     # una correzione fra due opzioni nominate esattamente la decide chi rivede, mai il codice
-    nominate = {LETTERE.index(w) for w in ps if len(w) == 1 and w != "e"
-                and w in LETTERE[:len(ops)]}
+    nominate = {LETTERE.index(w) for w in lettere.values()}
     if len(pr) <= 12:
         nominate |= {i for i, o in enumerate(ops) if parole(o) and _di_fila(parole(o), pr,
                                                                              negate=True)}

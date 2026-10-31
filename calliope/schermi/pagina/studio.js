@@ -2010,6 +2010,8 @@
       const [x1, y1] = bordo(a, b), [x2, y2] = bordo(b, a);
       const l = svg("line", { x1, y1, x2, y2, "marker-end": "url(#studio-m-punta)" });
       if (c.esito) l.setAttribute("class", String(c.esito));
+      // Il legame debole aggiunto dal codice per unire le parti (#344): tratteggiato
+      if (c.debole) { l.setAttribute("stroke-dasharray", "6 6"); l.classList.add("debole"); }
       s.append(l);
       const t = svg("text", { x: (x1 + x2) / 2, y: (y1 + y2) / 2 + 6, "text-anchor": "middle", class: "studio-m-verbo" });
       t.textContent = String(c.verbo || "").slice(0, 30);
@@ -2104,12 +2106,13 @@
       if (c.esito === "in_piu") li.append(nodo("span", "studio-m-esito manca", "non è nel quadro: controlla" + (Array.isArray(c.guarda) && c.guarda.length ? " a " + c.guarda.map(String).join(", ") : " sul libro")));
       if (c.esito === "verbo_diverso") li.append(nodo("span", "studio-m-esito manca", "verbo diverso: controlla"));
       if (c.esito === "verso_diverso") li.append(nodo("span", "studio-m-esito manca", "verso diverso: da rivedere"));
-      if (c.stato === "proposto") li.append(nodo("span", "studio-avviso", "proposto" + ((c.avvisi || []).length ? ": " + c.avvisi.map((x) => AVVISI_M[x] || String(x)).join("; ") : "")));
+      if (c.debole) li.append(nodo("span", "studio-avviso studio-m-debole", "legame aggiunto da Calliope per unire le parti: non è nelle pagine"));
+      else if (c.stato === "proposto") li.append(nodo("span", "studio-avviso", "proposto" + ((c.avvisi || []).length ? ": " + c.avvisi.map((x) => AVVISI_M[x] || String(x)).join("; ") : "")));
       if (puo) {
         const t = nodo("span", "studio-h-tasti");
         const nome = "«" + String(c.verbo || "").slice(0, 30) + "»";
         t.append(tastoMappa("Cambia", "cambia_coll", { collegamento: c.id }, "studio-h-chip", "Cambia il collegamento " + nome));
-        if (m.tipo === "scheletro" && c.stato === "proposto") t.append(tastoMappa("Tieni", "tieni", { collegamento: c.id }, "studio-h-chip", "Tieni il collegamento " + nome));
+        if (m.tipo === "scheletro" && c.stato === "proposto" && !c.debole) t.append(tastoMappa("Tieni", "tieni", { collegamento: c.id }, "studio-h-chip", "Tieni il collegamento " + nome));
         t.append(tastoMappa("Togli", "togli_collegamento", { collegamento: c.id }, "studio-h-chip", "Togli il collegamento " + nome));
         li.append(t);
       }

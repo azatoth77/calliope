@@ -563,7 +563,8 @@ class Lettore:
                                  # La forma (passo 7c, #328): seconde passate, collegamenti
                                  # che uniscono le isole, scheletri ancora a isole
                                  "connessioni": 0, "connessioni_rotte": 0, "uniti": 0,
-                                 "con_isole": 0, "doppioni": 0, "composti": 0},
+                                 "con_isole": 0, "doppioni": 0, "composti": 0,
+                                 "deboli": 0, "codici": 0},
                        # Le domande delle prove (passo 8, #248): conti, avvisi, tipi e tempi,
                        # mai il testo delle domande
                        "domande": {"generazioni": 0, "domande": 0, "ombra": 0,
@@ -1341,6 +1342,10 @@ class Lettore:
                         m["connessioni_rotte"] += 1
                     forma["uniti"] = len(MG.connetti(g2 or [], nodi, coll, rif,
                                                      M.nodi_max(self.studio.cfg)))
+                    # Le isole che restano: un collegamento debole alla radice, «da
+                    # controllare» (#344)
+                    forma["deboli"] = len(MG.collega_isole(nodi, coll,
+                                                           M.nodi_max(self.studio.cfg)))
         except Ceduta:
             m["cedute"] += 1
             self._registra(f"verifica {vid}: mappa, ceduto il passo a un lavoro dell'agente")
@@ -1364,7 +1369,9 @@ class Lettore:
                 nodi, coll, esito = [], [], MG.ROTTO
             else:
                 esito = MG.PROPOSTO
-                isole = len(M.componenti(nodi, coll)) if nodi else 1
+                # Le isole le contano le parti che le pagine reggono, senza i collegamenti
+                # deboli (#344): la pagina dice che restano
+                isole = len(MG.parti_fondate(nodi, coll)) if nodi else 1
             n = self.studio.proponi_mappa(vid, firma, nodi, coll, esito, modo, isole=isole)
         except Exception as e:  # noqa: BLE001
             return self._errore_generazione("mappa", vid, e, lambda: self.studio.proponi_mappa(
@@ -1393,12 +1400,15 @@ class Lettore:
         m["doppioni"] += int(forma.get("doppioni") or 0)
         m["composti"] += int(forma.get("composti") or 0)
         m["uniti"] += int(forma.get("uniti") or 0)
+        m["deboli"] += int(forma.get("deboli") or 0)
+        m["codici"] += int(forma.get("codici") or 0)
         if n and isole > 1:
             m["con_isole"] += 1
         avv = ", ".join(f"{k} {a}" for a, k in conta.items() if k)
         dove = "in ombra" if modo == MG.OMBRA else "proposto"
         fm = (f"; parti {forma.get('prima', 1)} → {isole}, doppioni {forma.get('doppioni', 0)}, "
-              f"composti {forma.get('composti', 0)}") if n else ""
+              f"composti {forma.get('composti', 0)}, deboli {forma.get('deboli', 0)}, "
+              f"codici {forma.get('codici', 0)}") if n else ""
         self._registra(f"verifica {vid}: scheletro della mappa {dove}, {n} concetti e "
                        f"{len(coll)} collegamenti da {len(arif)} argomenti ({s:.1f} s"
                        + (f", avvisi {avv}" if avv else "") + fm + ")")

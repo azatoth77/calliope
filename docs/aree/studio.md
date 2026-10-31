@@ -52,7 +52,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Carte e ripasso dilazionato: Leitner a cinque scatole, l'esito dalla persona o dal confronto del codice per le risposte chiuse, i tentativi «carta» (dal 30/10, passo 6, #246; schema «studio» alla versione 6) | SQLite (`studio_carte`, `studio_tentativi.carta`); libreria standard, niente modello | `calliope/studio/carte.py` → `prossima`, `da_ripassare`, `fra_quanto`, `chiusa`, `risposta_giusta`, `autovalutazione`, `testo_normale`; `calliope/studio/servizio.py` → `Studio.aggiungi_carta`, `correggi_carta`, `segna_carta`, `carte`, `da_ripassare`, `esito_carta`, `prossima_carta`, `carta_in_corso`, `risposta_letta`, `esito_a_voce`; `calliope/tools/studio.py` → `studio_carte`, azione `carte`; `calliope/schermi/server.py` → `POST /api/studio/carte`; `calliope/schermi/pagina/studio.js` (la sezione «Carte»); prova `prove/prova_studio_carte.py` |
 | Carte generate dalle pagine lette, controllo del codice, proposte confermate dalla persona (dal 30/10 sera, passo 6, seconda parte, #246; schema «studio» alla versione 7; `studio_carte_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato; `provenienza.racchiudi`, `parole`, `vicina` | `calliope/studio/genera.py` → `corpo`, `messaggi`, `blocco_argomenti`, `argomenti_rif`, `firma`, `forma_testo`, `leggi`, `proposte`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_carte`; `calliope/studio/servizio.py` → `Studio.verifiche_per_carte`, `proponi_carte`, `conferma_carte`; `calliope/schermi/server.py` → `POST /api/studio/carte` (azione `conferma`); `prove/manuali/banco_studio.py` (fase «carte»); prova `prove/prova_studio_carte_genera.py` |
 | Mappa concettuale: lo scheletro (a mano; dal lettore con la seconda parte), la mia mappa con le caselle, a memoria, il controllo deterministico, i tentativi «mappa», il PDF (dal 30/10 sera, passo 7, #247; schema «studio» alla versione 8; `studio_mappa_nodi_max`) | SQLite (`studio_mappe`, concetti e collegamenti in JSON); fpdf2 (extra `documenti`) coi font di `documenti/render.py`; nel browser SVG scritto a mano | `calliope/studio/mappa.py` → `testo_normale`, `uguale`, `verbo_simile`, `disposizione`, `scegli_caselle`, `parole_da_mettere`, `copia`, `controlla`, `esito_tentativo`; `calliope/studio/mappe.py` → `Mappe` (in `Studio`): `scrivi_scheletro`, `nodo_mappa`, `collega`, `riempi`, `tieni_mappa`, `conferma_scheletro`, `inizia_mappa`, `rifai_mappa`, `controlla_mappa`, `carte_dagli_errori`, `riordina_mappa`, `vista_mappe`, `pdf_mappa`, `_conto_mappa`; `calliope/studio/mappa_pdf.py` → `render`; `calliope/tools/studio.py` → azione `mappa`; `calliope/schermi/server.py` → `POST /api/studio/mappa`; `calliope/schermi/pagina/studio.js` (la sezione «Mappa»); prove `prove/prova_studio_mappa.py`, `prove/prova_studio_mappa_pagina.py` |
-| Scheletro della mappa generato dalle pagine lette: le triple controllate dal codice, proposte da confermare (dal 30/10 sera, passo 7, seconda parte, #247; `studio_mappa_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato | `calliope/studio/mappa_genera.py` → `corpo`, `messaggi`, `firma`, `leggi`, `scheletro`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_mappa`; `calliope/studio/mappe.py` → `verifiche_per_mappa`, `proponi_mappa`; `prove/manuali/banco_studio.py` (fase «mappa»); prova `prove/prova_studio_mappa_genera.py` |
+| Scheletro della mappa generato dalle pagine lette: le triple controllate dal codice, proposte da confermare (dal 30/10 sera, passo 7, seconda parte, #247; `studio_mappa_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato | `calliope/studio/mappa_genera.py` → `corpo`, `messaggi`, `firma`, `leggi`, `scheletro`, `modo`, `collega_isole` e `parti_fondate` (dal 31/10, #344); `prove/studio_vllm_finto.py` (le uscite del banco del 31/10); `calliope/studio/lettura.py` → `Lettore.genera_mappa`; `calliope/studio/mappe.py` → `verifiche_per_mappa`, `proponi_mappa`; `prove/manuali/banco_studio.py` (fase «mappa»); prova `prove/prova_studio_mappa_genera.py` |
 | Mappa libera: da zero con lo scheletro nascosto, «Un indizio» e «Mostra», «Ho finito» col confronto del codice e i tentativi una volta per giro, gli indicatori del metodo per giro; scheletro connesso (doppioni, composti, radice, seconda passata per le isole); «Parliamone» (dal 30/10 notte, passo 7c, #328; schema «studio» alla versione 9; `studio_mappa_libera` attiva, `studio_mappa_consigli` ombra di serie) | SQLite (`studio_mappe` tipo «libera», `giri`, `visti`); per la seconda passata qwen3.6 col client e la guardia del lettore; per «Parliamone» il modello della voce, dati in busta | `calliope/studio/mappa.py` → `chiave_insieme`, `parti`, `componenti`, `radice`, `concetti_chiave`, `forma`, `voci_riferimento`, `confronta`, `indicatori`, `rispetto_a_prima`, `tentativo_libera`, `svelati`; `calliope/studio/mappa_genera.py` → `corpo_connessione`, `connetti`; `calliope/studio/mappe.py` → `inizia_libera`, `indizio_libera`, `mostra_concetto`, `finisci_libera`, `consigli_mappa`, `misura_consigli`; `calliope/tools/studio.py` → `studio_mappa_consigli`; `calliope/brain.py` → `_consigli_chiudi`, `_consigli_ombra`; prove `prove/prova_studio_mappa_libera.py`, `prove/prova_studio_mappa_libera_pagina.py` |
 | Prove: il tipo della prova vera e la finestra «dal», le domande (scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta; anche le carte), la verifica finta scritta e l'interrogazione simulata a voce, l'esito del codice, «da rivedere» della persona o del tutore, la generazione delle domande dal lettore (dal 31/10, passo 8, #248; schema «studio» alla versione 10; `studio_domande_genera` ombra di serie) | SQLite (`studio_domande`, `studio_prove`); qwen3.6 col client e la guardia del lettore per la generazione; libreria standard per l'esito | `calliope/studio/risposte.py` → `prepara`, `valuta`, `attesa_detta`; `calliope/studio/unita.py` → `leggi`, `una_misura`, `confronta`; `calliope/studio/prove.py` → `Prove` (in `Studio`): `aggiungi_domanda`, `domande`, `conferma_domande`, `inizia_prova`, `rispondi_prova`, `consegna_prova`, `rivedi_voce`, `orale_inizia`, `orale_risposta`, `orale_basta`, `_chiudi_prove`, `_conto_prove`; `calliope/studio/domande_genera.py` → `corpo`, `proposte`, `firma`; `calliope/studio/lettura.py` → `Lettore.genera_domande`; `calliope/studio/servizio.py` → `conclusa`, `_fine`; `calliope/tools/studio.py` → `studio_interroga`, azioni `tipo`, `conclusa`, `prove`; `calliope/schermi/server.py` → `POST /api/studio/prova`; `calliope/schermi/pagina/studio.js` (la sezione «Prove»); prove `prove/prova_studio_prove.py`, `prove/prova_studio_domande_genera.py`, `prove/prova_studio_prove_pagina.py` |
 | Ripasso da ascoltare: il copione a parti composto dal codice (le pagine del piano ripulite per la voce, le carte con la pausa per pensare), la lettura a voce dopo la risposta col barge-in, riprendi e ripeti, l'audio delle parti per lo schermo, la tenuta della cache (dal 31/10, passo 9, #249; schema «studio» invariato, alla versione 10; `studio_ascolta` attiva di serie con lo Studio, `studio_ascolta_voce`, `studio_ascolta_giorni`) | Piper con le voci dello Speaker (la voce di Calliope e la «voce del libro»), `wave` della libreria standard; niente modello | `calliope/studio/ascolta.py` → `paragrafi`, `frasi`, `scarto`, `frasi_pagina`, `componi`, `Copione`, `pezzi`, `sentite`, `da_ripetere`, `leggi`, `Sintesi`, `togli_audio`, `Ascolti` (in `Studio`): `ascolto_prepara`, `ascolto_vale`, `ascolto_fermo`, `nota_ascolto`, `ascolto_parti`, `ascolto_audio`; `calliope/pronuncia.py` → `per_ripasso`, `formule_dette`, `sigle_dette`, `romani_detti`, `simboli_detti`; `calliope/tts.py` → `sintesi_pcm`, `Speaker.say(spezza, voce)`, `silenzio`, `voce_per`; `calliope/eventi/uscita.py` → `turno_lettura`, `leggi`, `pausa`; `calliope/ciclo.py` → `_leggi_ripasso`; `calliope/tools/studio.py` → `studio_ascolta`; `calliope/schermi/server.py` → `POST /api/studio/ascolta`; `calliope/schermi/pagina/studio.js` («Ascolta»); prove `prove/prova_studio_ascolta.py`, `prove/prova_studio_ascolta_pagina.py`, `prove/prova_valore.py` (il ripasso attraverso Brain) |
@@ -94,6 +94,175 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   per pagina dei numeri di pagina, nella sezione degli argomenti]*; (2) senza vLLM la pagina e la voce lo dicono con una
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
   vede»), non un «da leggere» muto.
+- Lo scheletro della mappa (banco del 31/10, #344): quando le pagine non legano una parte al resto
+  (storia, «Magellano») resta un collegamento debole «da controllare» e il criterio «una parte sola
+  ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
+  sono da rimisurare col banco vero.
+
+## Il banco del 31/10: lo scheletro a isole, la matematica e l'atteso «sbagliato» (31/10, issue #344, ramo `issue-344-studio-banco-qualita`)
+
+*Epic #251. Viene dal banco sulla DGX del 31/10 alle 04:29 (`banco_studio.py --fasi prove,mappa`,
+qwen3.6-35b, versione aa1dd29, dopo le PR #330 e #342): una parte sola nel 33 % delle verifiche
+(criterio ≥ 90 %), matematica con lo 0 % dei concetti nelle pagine, una domanda di storia con
+l'atteso giudicato sbagliato dal codice.*
+
+**Come si è misurato.** Il banco salvava solo lo scheletro già controllato e le domande già
+preparate, non le uscite del modello. Le uscite sono state **ricostruite** da
+`/tmp/banco-studio/prove1/risultati.jsonl` (letto in sola lettura) in
+`prove/manuali/studio/uscite_banco_3110.json` (materiali di fantasia): le triple dai collegamenti
+tenuti, il composto «Spagna e Portogallo» rimesso insieme, la seconda passata coi testi dei concetti
+al posto dei codici C… Una tripla di scienze aveva un capo tagliato dal tetto dei concetti e non
+salvato: è ricostruita dalla pagina («Foglie → perdono acqua con → Traspirazione», segnata in
+`ricostruito`). Il vLLM finto (`prove/studio_vllm_finto.py`) le ridà al banco: **col codice di
+prima rifà gli stessi numeri del banco** (0 %, 3 → 2, 2 → 2, un atteso sbagliato), quindi la
+ricostruzione regge. Da oggi il banco salva anche le uscite grezze (`grezzo`,
+`grezzo_connessione`).
+
+**1. Matematica allo 0 %: non erano le formule.** Il modello aveva scritto la mappa **degli
+argomenti coi loro codici**: «A1 → si oppone a → A2», «A2 → permette di → A3»… otto concetti «A1»…
+«A8», con l'argomento della tripla uguale al codice del primo capo e le pagine dell'argomento giuste.
+Un codice non ha parole da cercare nelle pagine, quindi 0 su 8. Correzioni:
+- il prompt dice che i concetti sono parole delle pagine, mai i codici (A… solo nel campo
+  «argomento», P… solo in «pagine»);
+- nel codice (`mappa_genera.scheletro`) un capo che è **per intero** un codice (`A3`, `P 2`, `c1`)
+  non è un concetto: il codice di un argomento che c'è diventa **il titolo di quell'argomento**, con
+  quell'argomento (una conversione del riferimento scelto dal modello, come P… → pagina; principio
+  10); un altro codice scarta la tripla. Contrari: «Vitamina C», «Carlo V», «Anno 1492» restano come
+  sono. *[storico fino alla revisione della PR #346: «ogni codice d'argomento diventa il titolo», e
+  pulito. Ora solo nella mappa scritta coi codici o se è l'argomento della tripla, e sempre
+  `da_controllare`: sotto, «la revisione della PR #346»]*;
+- il controllo delle pagine (`argomenti.controlla`) reggeva male anche i concetti fatti solo di
+  segni: le parole sotto le 4 lettere non contavano, e «3x + 5 = 20», «m.c.m.», «CO₂», «pH» erano
+  sempre fuori. Ora un titolo **senza parole di 4 lettere** passa se i suoi pezzi (lettere latine e
+  greche, cifre; indici ed esponenti come cifre) stanno **tutti e di fila** nel testo, uniti senza
+  spazi (`_segni`: «x^2» = «x²», «mcm» = «m.c.m.»). Più stretto delle parole: niente storpiature né
+  metà, un segno cambiato («3x + 5 = 21») o inventato («H2SO4», «π») non passa, un codice nemmeno.
+  *[storico fino alla revisione della PR #346: gli operatori non contavano («3x - 5 = 20» passava)
+  e un titolo con parole restava al solo controllo delle parole («Equazione 3x + 5 = 21» passava).
+  Ora `_pezzi`, `_segmenti`, `_di_fila`: sotto]*
+
+**2. La seconda passata unisce poco: le cause.** Il codice di `connetti` non scartava collegamenti
+buoni (tiene ogni collegamento fra due parti ancora separate, con `da_controllare` se le pagine non
+lo reggono; scarta solo i codici che non ci sono, quelli nella stessa parte e i verbi vuoti). Le
+cause erano altre:
+- *scienze, 3 parti*: «Foglie» era un concetto a sé, accanto a «Foglia», e il **tetto dei 12
+  concetti** (che teneva i più collegati senza guardare la rete) aveva tagliato il suo vicino,
+  lasciandolo senza collegamenti: una parte fatta di un concetto solo. Ora **singolare e plurale
+  sono un concetto** (`_stesso_lemma`: la sola vocale finale fra a/e, o/i, e/i, a/i, o «-io»/«-i»,
+  parole di almeno 4 lettere; «Porto» e «Porta» restano due; *[storico fino alla revisione della PR
+  #346: ora almeno 5 lettere e le due forme nelle pagine citate]*) e **il tetto tiene la rete connessa**
+  (`_tieni`: dalla radice si aggiunge il più collegato fra i vicini di chi è dentro; una parte nuova
+  solo se ci stanno almeno due concetti);
+- *storia, 2 parti*: «Magellano → compie → Primo giro del mondo» è davvero staccato: la pagina 115
+  non lo lega alla Spagna né alle rotte, e il modello, giustamente, non ha inventato. La seconda
+  richiesta ora dice il **centro** della mappa, chiede un collegamento per parte staccata verso la
+  parte più grande e ammette un legame generale **se le pagine lo dicono** («fa parte di», «avviene
+  durante»): l'effetto sul modello vero è da misurare al banco;
+- *le isole che restano* si legano alla radice con un **collegamento debole** del codice
+  (`collega_isole`): dal concetto più collegato della parte, verbo «è collegato a» (uno dei verbi
+  vuoti), nessuna pagina, `da_controllare`, `debole: true`. Non dice niente di vero: la pagina lo
+  mostra «da controllare», resta fuori dal riferimento della mappa libera finché ha l'avviso, la
+  persona lo tiene, lo cambia o lo toglie *[storico fino alla revisione della PR #346: con «Tieni»
+  diventava un fatto; ora «Tieni» è rifiutato e si tiene solo riscritto con «Cambia»]*. `autore` resta «modello» (un altro autore farebbe
+  sembrare lo scheletro scritto a mano, e non si rifarebbe più). Le parti che la pagina e
+  `aiuto.isole` dicono restano quelle **senza i deboli** (`parti_fondate`);
+- *una terza passata, valutata e non fatta*: alla stessa temperatura 0, con le stesse pagine e lo
+  stesso scheletro, il modello rifà la stessa risposta; con un prompt diverso costerebbe una
+  richiesta in più (secondi di DGX) per un'isola che le pagine non reggono. Il collegamento debole
+  non costa niente e non finge.
+
+**Le misure col vLLM finto** (le uscite del 31/10, codice di prima → codice di oggi):
+
+| verifica | concetti nelle pagine | parti (prima della seconda passata → dopo) | note |
+|---|---|---|---|
+| matematica | 0/8 (0 %) → **8/8 (100 %)** | 1 → 1 | 14 capi scritti come codice convertiti (dalla revisione della PR #346 tutti `da_controllare`) |
+| scienze | 12/12 → 12/12 | 3 → 2, ora **2 → 1** | «Foglie» unito a «Foglia» (doppioni uniti 1) |
+| storia | 10/12 (83 %) → 10/12 | 2 → 2 (coi deboli **1**) | 1 collegamento debole da controllare |
+
+Una parte sola: **33 % → 67 %** delle verifiche, coi deboli 100 %; il criterio (≥ 90 %, senza i
+deboli) resta **no** finché storia non ha un collegamento che le pagine reggono. Nessuna voce
+ostile pulita, nessun doppione.
+
+**3. La domanda di storia con l'atteso «sbagliato».** «Quali sovrani spagnoli accettarono il
+progetto di Colombo?», atteso «Isabella di Castiglia e Ferdinando d'Aragona» (opzione a). L'errore
+era **del lettore delle risposte** (`risposte._scelta`), non del modello: la «d» di «d'Aragona»
+(elisa: l'apostrofo diventa uno spazio) contava come l'opzione d, e due opzioni nominate davano
+«sbagliato». Lo stesso con «c'è» e con la preposizione «a» («arrivò a Calicut» era anche l'opzione
+a). Ora una lettera dentro la frase (`_lettera_in_frase`) vale un'opzione solo se non è elisa, se
+sta all'inizio o dopo «la», «è», «o», «anzi», «no», «non»… e, per la «a» in testa, solo se segue
+«o», «anzi», «no»… Restano: «la a», «a o b» (sbagliato), «a, anzi c» e «la a, no, la c» (da
+rivedere), «non è la b, è la a». In più (`domande_genera.proposte`) una domanda chiusa la cui
+risposta attesa, detta così com'è, il codice non dà «giusta» resta **`da_controllare`**: un errore
+futuro del lettore o del modello non arriva pulito alla persona. Col vLLM finto `auto_sbagliate`
+0, 0, 0 (prima 0, 0, 1); fondate e scelte come il banco *[storico fino alla revisione della PR
+#346: in matematica ora 17 su 22, sotto]*.
+
+**Il banco** (`prove/manuali/banco_studio.py`): nella fase «mappa» il collegamento debole dopo la
+seconda passata; `componenti` sono le parti rette dalle pagine (il criterio), in più
+`componenti_con_deboli`, `deboli`, `codici` e `codici_scartati`, e il riepilogo dice «coi
+collegamenti deboli da controllare N %»; le uscite grezze in `grezzo` (anche nella fase «prove») e
+`grezzo_connessione`. Nel lettore le misure `deboli` e `codici` in `stato()["lettura"]["mappa"]` e
+nel registro («parti 2 → 2, doppioni 0, composti 1, deboli 1, codici 0»). Da rilanciare sulla DGX
+dopo l'unione (non lanciato qui):
+
+    V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale)
+    PYTHONPATH=$V $V/.venv/bin/python prove/manuali/banco_studio.py \
+        --fasi prove,mappa --uscita /tmp/banco-studio/prove2
+
+Prove: in `prova_studio_mappa_genera.py` la sezione 5 (codici, plurali, tetto, collegamento debole,
+le uscite del 31/10 col vLLM finto) e il debole nel giro del lettore; in
+`prova_studio_domande_genera.py` la sezione 5 (le domande del 31/10, l'atteso non giusto →
+`da_controllare`); in `prova_studio_prove.py` le lettere dentro la frase; in
+`prova_studio_argomenti.py` formule, sigle e simboli coi contrari.
+
+### 31/10: la revisione della PR #346
+
+La revisione indipendente (script `debole.py`, `codici.py`, `funzioni.py`) ha trovato sei punti; ognuno
+ha i suoi casi nelle prove.
+1. **Il collegamento debole diventava un fatto con «Tieni».** Tenuto e confermato entrava nel
+   riferimento (mancante, con le pagine), nella copia a memoria senza segno e da lì in «Parliamone»,
+   nei tentativi e nelle carte. Ora `tieni_mappa` lo rifiuta («per tenerlo scrivi tu il verbo con
+   «Cambia»»); con «Cambia» (`collega` sul collegamento) `debole` si toglie e diventa della persona,
+   e `parti_fondate` lo conta; `mappa.tenuti` e `voci_riferimento` non lo danno mai, quindi né la
+   copia (`_nuova_copia`, `copia`) né «Fanne carte» lo vedono.
+2. **Sullo schermo non si distingueva.** La vista passa `debole` e l'autore «codice»; nel disegno
+   SVG la linea è tratteggiata, nell'elenco al posto di «non lo trovo nelle pagine che cita» c'è
+   «legame aggiunto da Calliope per unire le parti: non è nelle pagine», senza «Tieni» (righe del
+   debole in `studio.js`; *[storico fino all'unione della #345 nel ramo: «il numero di versione
+   della pagina non è cambiato»]*: dopo l'unione la pagina e il service worker del telefono sono
+   alla **v33**, altrimenti il telefono continuava a servire la pagina vecchia). Controllo in
+   `prova_studio_mappa_pagina.py`.
+3. **La conversione dei codici inventava fatti puliti** («A4», il formato del foglio, diventava
+   «Le proiezioni ortogonali», l'argomento 4). Ora un codice d'argomento si converte solo se più di
+   metà dei capi della risposta sono codici (il caso del banco, A1…A8) o se è l'argomento della sua
+   tripla; il concetto convertito ha sempre `da_controllare`. Un codice non convertito che sta così
+   nelle pagine citate resta testo («A4»); gli altri scartano la tripla.
+4. **`_segni` ignorava gli operatori** («3x - 5 = 20», «3x / 5 = 20», «5 = 20», «C₆H₁₂O₇» contro
+   «C₆H₁₂O₆» passavano). Ora (`_pezzi`) gli operatori `+ − - × · / = < >` sono pezzi («·», «×» e «*»
+   valgono uguale, «^» si toglie come l'esponente in alto); i pezzi si confrontano **uguali e di
+   fila**, senza unirli (`_di_fila`: «mcm» non è più «m.c.m.»); un'uguaglianza non comincia né finisce
+   con un operatore e nelle pagine non ha un operatore accanto («5 = 20» non è dentro «3x + 5 = 20»).
+   Ogni titolo con una cifra o un indice passa da qui: in un titolo con parole ogni pezzo con una
+   cifra o un operatore (`_segmenti`, spezzati dalla punteggiatura, senza i riferimenti «(P8)»)
+   deve esserci così, oltre alla metà delle parole; niente confronto largo per le cifre
+   («Equazione 3x + 5 = 21» no, «del 1494» sì, «del 1495» no). Un effetto: in matematica una
+   domanda generata («il primo di tre numeri consecutivi con somma 48» → 15) non è più fondata,
+   perché 15 è un conto e non sta nelle pagine: col vLLM finto fondate 18 → **17 su 22 (77 %)**,
+   sotto il criterio dell'80 %, ed è la misura onesta.
+5. **Singolare e plurale uniti a torto** («Fine/Fini», «Pena/Pene», «Mari/Mara», «Bari/Bare»,
+   «Corte/Corti», «Pianta/Pianti»). Ora (`_canon_plurali`) solo parole di almeno 5 lettere
+   (`PLURALE_MIN`) e solo se **tutte e due le forme** stanno nel testo delle pagine citate dai due
+   concetti: «Foglia/Foglie» e «Atomo/Atomi» restano uniti, «Porto/Porta», «Caso/Casa», «Moto/Mota»
+   separati.
+6. **Risposte giuste diventate «da rivedere»** («direi b», «credo b», «secondo me b», «scelgo b»,
+   «Colombo, b», «Colombo (b)»…). I verbi d'opinione e di scelta (e «me» di «secondo me») sono fra
+   quelli che possono stare prima della lettera, e la lettera in fondo dopo una virgola o fra
+   parentesi vale; «direi c» resta «sbagliato». Lo script del revisore: tutte le 58 risposte come
+   prima della PR.
+
+Misure col vLLM finto dopo la revisione: mappa come sopra (matematica 8/8 nelle pagine, tutti da
+controllare; una parte sola 67 %, coi deboli 100 %); domande fondate 17/22, 21/23, 24/28,
+`auto_sbagliate` 0, 0, 0.
 
 ## La vista del tutore e le indicazioni (31/10, issue #250 e #285, ramo `issue-250-studio-tutore`)
 
@@ -236,6 +405,8 @@ script della revisione, casi in `prove/prova_studio_tutore.py`).
   dati del turno (`Studio._in_prova`).
 - (b) La cornice dice anche che le indicazioni non fanno mai dare le risposte di prove,
   interrogazioni o carte, né la soluzione intera dei compiti.
+- Con l'unione dell'epic dopo la PR #346 (che aveva già portato la pagina a v33) il service
+  worker e `PAGINA_VERSIONE` passano a **v34**; lo schema «studio» resta alla versione 11.
 
 ## Il ripasso da ascoltare (31/10, issue #249, ramo `issue-249-studio-ripasso-ascolto`)
 
@@ -499,6 +670,35 @@ Le minori:
   dati» si dice;
 - una pausa per la sveglia del ciclo (un avviso di un'altra corsia, un tocco) dice solo «Metto in
   pausa il ripasso.»; «è arrivato un messaggio» resta per lo scritto.
+
+### 31/10: la seconda revisione della PR #346
+
+Chiusi i punti 1, 3 e 6 della prima revisione; per gli altri, e per uno nuovo:
+1. **La preposizione «a» presa per l'opzione a** in ogni punto della frase («secondo me a Calicut»,
+   «penso a Calicut», «boh, a Calicut» davano «sbagliato» con la giusta c): il controllo della «a»
+   seguita da una parola che non è in `_DOPO_LA_A` né una lettera detta vale ora in ogni posizione,
+   non solo in testa. «credo a», «la a», «a o c», «la a, no, la c» restano come prima.
+2. **Le formule** (`argomenti._pezzi`): «≤», «≥», «≠» sono operatori e relazioni («<=», «>=», «!=»
+   si traducono; «≠» si tiene da parte prima della scomposizione, che lo farebbe «=»); «**» è la
+   potenza; la barra della frazione di «½» è «/»; una cifra e una lettera sola sulla stessa riga
+   sono un pezzo («3 x» = «3x», «2·x» = «2x»), mai attraverso un a capo, con una lettera elisa o
+   accentata («20 l'espressione», «5 è») o con una parola piccola senza un operatore dopo («4 e 6»);
+   il meno all'inizio è permesso («-5», «−5»); la carica attaccata resta nel pezzo («Fe³⁺» =
+   «Fe3+»). **Scelte prudenti**: le sigle puntate si leggono senza punti («m.c.m.» = «mcm»), ma le
+   lettere staccate da uno spazio restano due pezzi («NaCl» ≠ «Na Cl»: unirle farebbe di «a b» la
+   sigla «ab»). Blocco 3b del revisore: 45 varianti su 46 come atteso; l'unica diversa è «Na Cl», per
+   questa scelta.
+3. **«Cambia» con un verbo vuoto** (lo stesso «è collegato a» o un altro di `mappa.VERBI_VUOTI`) su
+   un debole è rifiutato con la frase di «Tieni» (`mappe.DEBOLE_NON_SI_TIENE`); con un verbo vero il
+   collegamento diventa della persona, tenuto e senza avvisi.
+4. **Le domande «calcolate»** nel banco: una risposta numerica che non sta nelle pagine citate è un
+   conto del modello (`calcolata`), fuori dal denominatore delle fondate, con un criterio suo
+   (tutte da controllare finché non c'è un verificatore del conto) e nel riepilogo («fondate
+   16/20 (80 %) calcolate 2 (da controllare 2, criterio: tutte)»). *[storico fino a questa
+   revisione: «matematica 17 su 22 (77 %), sotto il criterio» e un'eccezione a mano nella prova]*.
+
+Col vLLM finto: domande fondate 16/20 (80 %), 21/23, 24/28; calcolate 2, 0, 0, tutte da
+controllare; `auto_sbagliate` 0, 0, 0; la mappa come sopra.
 
 ## Le prove: verifica finta e interrogazione simulata (31/10, issue #248, ramo `issue-248-studio-verifica-finta`)
 
