@@ -77,6 +77,11 @@ TIPI = {".mjs": "text/javascript; charset=utf-8", ".wasm": "application/wasm",
         ".onnx": "application/octet-stream"}
 
 DIAG_PER_10_MIN = 6          # prove del microfono ogni 10 minuti, per telefono
+# Il corpo di una condivisione arrivata al server (senza il service worker) si butta al più per
+# tanti secondi, e al più fino al tetto di un file dell'importazione (`studio_importa_max_mb`),
+# prima del 303 (revisione della PR #369): un file vero lo riceve, un invio più lungo o più
+# grande si chiude lo stesso (e lì il browser vede la connessione chiusa)
+CONDIVIDI_SCARTA_S = 3.0
 
 _BASE = {"X-Content-Type-Options": "nosniff", "Referrer-Policy": "no-referrer",
          "X-Frame-Options": "DENY"}
@@ -364,8 +369,25 @@ def rotte(hub) -> list:
     async def condividi(request: Request):
         """La condivisione da un'altra app (31/10, #298 parte 3) arrivata qui invece che al
         service worker (non ancora attivo, o il certificato non fidato): il server non prende
-        file senza la sessione di uno schermo personale, quindi non legge il corpo e manda la
-        pagina a dire di riprovare. Una strada sola per i file: /api/studio/importa."""
+        file senza la sessione di uno schermo personale, quindi non lo tiene e manda la pagina a
+        dire di riprovare. Una strada sola per i file: /api/studio/importa.
+
+        Revisione della PR #369: chiudere con il corpo ancora in arrivo dava al browser un RST
+        invece del 303. Come `studio_importa` (`STUDIO_SCARTA_S`), il corpo si legge e si butta
+        (mai salvato) al più per CONDIVIDI_SCARTA_S secondi e fino a `studio_importa_max_mb`; con
+        «Expect: 100-continue» il corpo non arriva e non si aspetta."""
+        if request.method == "POST" and "expect" not in request.headers:
+            async def scarta():
+                letti = 0
+                async for pezzo in request.stream():
+                    letti += len(pezzo)
+                    if letti > tetto:
+                        return
+            tetto = int(float(getattr(cfg, "studio_importa_max_mb", 100.0) or 100.0) * 1_000_000)
+            try:
+                await asyncio.wait_for(scarta(), CONDIVIDI_SCARTA_S)
+            except Exception:  # noqa: BLE001 — lento, troppo o andato via: si chiude e basta
+                pass
         return RedirectResponse("/telefono/?condividi=0#/cose", status_code=303,
                                 headers={"Connection": "close", "Cache-Control": "no-store",
                                          **_BASE})

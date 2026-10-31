@@ -48,13 +48,39 @@ def stato(t) -> dict:
 
 
 def condividi_js(file: list) -> str:
-    """Il POST multipart che Android manda all'azione del manifest, fatto dalla pagina."""
+    """Un POST multipart fatto da uno script della pagina (fetch): non è la condivisione del
+    sistema, e il service worker non lo prende (revisione della PR #369)."""
     parti = "".join(
         f"fd.append('file', new File([Uint8Array.from(atob({json.dumps(base64.b64encode(d).decode())}), "
         f"c => c.charCodeAt(0))], {json.dumps(n)}));" for n, d in file)
     return ("(async () => { const fd = new FormData(); fd.append('titolo', 'Condiviso');" + parti +
             " const r = await fetch('/telefono/condividi', {method: 'POST', body: fd});"
             " window.__condiviso = r.url; })(); 1")
+
+
+def navigazione_js(url: str, file: list) -> str:
+    """Come la condivisione di Android: una navigazione POST multipart senza la pagina di
+    provenienza. Da una pagina vuota (about:blank, senza referrer) un modulo coi file messi con
+    DataTransfer, mandato all'azione del manifest."""
+    parti = "".join(
+        f"dt.items.add(new File([Uint8Array.from(atob({json.dumps(base64.b64encode(d).decode())}), "
+        f"c => c.charCodeAt(0))], {json.dumps(n)}));" for n, d in file)
+    return ("(() => { const f = document.createElement('form'); f.method = 'POST'; "
+            "f.enctype = 'multipart/form-data'; f.action = " + json.dumps(url) + "; "
+            "const i = document.createElement('input'); i.type = 'file'; i.name = 'file'; i.multiple = true; "
+            "const dt = new DataTransfer();" + parti + " i.files = dt.files; f.append(i); "
+            "document.body.append(f); f.submit(); })(); 1")
+
+
+def conta_idb(t) -> int | None:
+    """Quanti file condivisi ci sono in IndexedDB sul telefono."""
+    t.v("window.__conta = undefined; (async () => { const r = indexedDB.open('calliope-condivisi', 1); "
+        "r.onupgradeneeded = () => r.result.createObjectStore('file', {keyPath: 'id', autoIncrement: true}); "
+        "const db = await new Promise(ok => r.onsuccess = () => ok(r.result)); "
+        "const c = await new Promise(ok => { const q = db.transaction('file').objectStore('file').count(); "
+        "q.onsuccess = () => ok(q.result); }); db.close(); window.__conta = c; })(); 1")
+    aspetta(lambda: t.v("window.__conta !== undefined"), 5)
+    return t.v("window.__conta")
 
 
 def scenario(t, pagina, st, vid):
@@ -70,14 +96,23 @@ def scenario(t, pagina, st, vid):
     import prova_studio_importa as PI
     z = PI.zip_di([("corso/1 appunti.md", "Le caravelle e il quadrante.".encode()),
                    ("corso/2 libro.pdf", PI.pdf(1))])
-    t.v(condividi_js([("Classroom.zip", z), (NOME_HTML, "Il testo col nome strano.".encode())]))
-    ok = aspetta(lambda: "condividi=1" in (t.v("window.__condiviso || ''") or ""), 10)
-    verifica("il POST della condivisione lo prende il service worker e manda a «?condividi=1»", bool(ok),
+    # Un POST da uno script (non una navigazione del sistema): il service worker non lo prende
+    t.v(condividi_js([("altro.txt", b"file messi da una pagina")]))
+    aspetta(lambda: t.v("window.__condiviso || ''"), 10)
+    verifica("un POST fatto da uno script: niente file sul telefono, nessun «?condividi=1»",
+             "condividi=1" not in (t.v("window.__condiviso || ''") or "") and conta_idb(t) == 0,
              t.v("window.__condiviso || ''"))
+    # La condivisione del sistema: una navigazione senza referrer
+    base = t.v("location.origin")
+    pagina._chiama("Page.navigate", {"url": "about:blank"})
+    time.sleep(0.5)
+    t.v(navigazione_js(base + "/telefono/condividi", [("Classroom.zip", z),
+                                                      (NOME_HTML, "Il testo col nome strano.".encode())]))
+    ok = aspetta(lambda: "condividi=1" in (t.v("location.href") or ""), 15)
+    verifica("la navigazione POST senza referrer la prende il service worker e apre «?condividi=1»", bool(ok),
+             t.v("location.href"))
     verifica("niente arrivato al server prima della scelta della verifica",
              not st.dati.tutti("SELECT id FROM studio_importazioni"))
-    t.v("location.href = '/telefono/?condividi=1#/cose'; 1")
-    time.sleep(0.5)
     aspetta(lambda: t.v(f"!!{T_} && {T_}.st.collegato"), 15)
     ok = aspetta(lambda: (stato(t).get("aperto") and len(stato(t).get("file") or []) == 2
                           and stato(t).get("verifiche") == [vid]), 15)
@@ -88,6 +123,8 @@ def scenario(t, pagina, st, vid):
     testo = t.v("document.getElementById('condividi').innerText") or ""
     verifica("il nome in HTML resta testo: nessun elemento creato",
              "<img src=x" in testo and not t.v("!!document.querySelector('#condividi img')"), testo[:200])
+    verifica("la riga che chiede di controllare che i file siano quelli condivisi",
+             "controlla che siano i file che hai condiviso tu" in testo, testo[:200])
     verifica("«Aggiungi ai materiali» spento finché la persona non sceglie la verifica",
              t.v("document.getElementById('condividi-manda').disabled")
              and t.v("document.getElementById('condividi-verifica').value") == "")

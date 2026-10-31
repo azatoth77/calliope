@@ -161,6 +161,23 @@ Calliope una volta, poi condividi di nuovo». Il testo o il link condivisi senza
 
 **Versioni.** Pagina e service worker v39; `condividi.js` nella cache. Schema invariato (13).
 
+**La revisione della PR #369** («da unire», con tre ritocchi):
+1. *Il 303 diventava un RST.* Col file mandato davvero il server chiudeva con il corpo in arrivo.
+   Ora, come `studio_importa`, il corpo si legge e si butta (mai salvato) al più per 3 s e fino a
+   `studio_importa_max_mb`, poi il 303 e la chiusura; con «Expect: 100-continue» niente attesa. Con
+   lo script del revisore: chunked lento 303 in 3 s, «Expect» 303 subito, JSON 303; un invio di 200
+   MB (oltre il tetto) si chiude ancora dopo i primi 100 MB, e lì il browser vede la connessione
+   chiusa.
+2. *Un POST da un'altra pagina.* Il service worker prende solo una **navigazione senza referrer**
+   (`mode` «navigate», `referrer` vuoto), com'è la condivisione del sistema: un `fetch` o un modulo
+   di un altro sito col suo referrer non mettono file in «Condiviso con Calliope». Un sito che manda
+   un modulo con «no-referrer» passa ancora: per questo la pagina dice «Arrivati da una condivisione:
+   controlla che siano i file che hai condiviso tu», e la verifica la sceglie comunque la persona.
+3. *I file sul telefono.* I file più vecchi di un'ora li toglie anche il service worker,
+   all'«activate» e a ogni apertura della pagina, e la pagina toglie solo quelli vecchi; prima di
+   mandare la pagina controlla `studio_importa_max_mb` (`importa_max_mb` di `POST
+   /api/studio/verifiche`).
+
 Prove: `prova_studio_condividi.py` (a secco: manifest, service worker, pagina, il POST al server senza
 service worker) e `prova_studio_condividi_pagina.py` (il browser col service worker vero: il POST
 multipart fatto dalla pagina e preso dal service worker, il riquadro a 390 e 320 px col testo al 125

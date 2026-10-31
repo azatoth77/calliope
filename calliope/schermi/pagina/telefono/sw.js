@@ -23,6 +23,8 @@ const PAGINA = [
 // «Aggiungi materiali». Al più CONDIVISI_MAX file; una condivisione nuova sostituisce la vecchia
 const CONDIVISI_DB = "calliope-condivisi";
 const CONDIVISI_MAX = 10;
+// I file condivisi e non mandati restano sul telefono al più un'ora (anche condividi.js li toglie)
+const CONDIVISI_DURATA_MS = 3600 * 1000;
 
 function condivisiDb() {
   return new Promise((ok, no) => {
@@ -31,6 +33,27 @@ function condivisiDb() {
     r.onsuccess = () => ok(r.result);
     r.onerror = () => no(r.error);
   });
+}
+
+// Via i file condivisi più vecchi di un'ora (revisione della PR #369): all'«activate» e a ogni
+// apertura della pagina, non solo quando la pagina li legge
+async function pulisciCondivisi() {
+  try {
+    const db = await condivisiDb();
+    await new Promise((ok) => {
+      const t = db.transaction("file", "readwrite");
+      const s = t.objectStore("file");
+      const r = s.openCursor();
+      r.onsuccess = () => {
+        const c = r.result;
+        if (!c) return;
+        if (!(Date.now() - Number(c.value && c.value.quando) < CONDIVISI_DURATA_MS)) c.delete();
+        c.continue();
+      };
+      t.oncomplete = ok; t.onerror = ok; t.onabort = ok;
+    });
+    db.close();
+  } catch (e) { /* niente */ }
 }
 
 async function condividi(req) {
@@ -65,14 +88,26 @@ self.addEventListener("activate", (ev) => {
   ev.waitUntil(caches.keys()
     .then((k) => Promise.all(k.filter((n) => n.startsWith("calliope-telefono-pagina-") && n !== CACHE)
       .map((n) => caches.delete(n))))
+    .then(() => pulisciCondivisi())
     .then(() => self.clients.claim()));
 });
 
 self.addEventListener("fetch", (ev) => {
   const u = new URL(ev.request.url);
   if (ev.request.method === "POST" && u.origin === location.origin && u.pathname === "/telefono/condividi") {
+    // Solo la condivisione del sistema (revisione della PR #369): una navigazione senza la
+    // pagina di provenienza. Un modulo di un altro sito che manda qui ha il suo «referrer», e un
+    // fetch non è una navigazione: niente file suoi in «Condiviso con Calliope»
+    if (ev.request.mode !== "navigate" || ev.request.referrer) {
+      ev.respondWith(Response.redirect("/telefono/#/cose", 303));
+      return;
+    }
     ev.respondWith(condividi(ev.request));
     return;
+  }
+  // A ogni apertura della pagina, la pulizia dei file condivisi vecchi
+  if (ev.request.mode === "navigate" && u.origin === location.origin && u.pathname === "/telefono/") {
+    ev.waitUntil(pulisciCondivisi());
   }
   if (ev.request.method !== "GET" || u.origin !== location.origin) return;
   if (!PAGINA.includes(u.pathname)) return;      // API, modelli, eventi, WebSocket: diretti

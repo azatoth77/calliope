@@ -88,6 +88,16 @@ def prova_sw_e_pagina():
              and "Number($(\"condividi-verifica\").value)" in c)
     verifica("i file tolti dal telefono dopo l'invio e dopo un'ora",
              "await svuota()" in c and "DURATA_MS = 3600 * 1000" in c)
+    # Revisione della PR #369
+    verifica("il service worker prende solo la condivisione del sistema: una navigazione senza "
+             "referrer", 'ev.request.mode !== "navigate" || ev.request.referrer' in sw)
+    verifica("la pulizia dei file vecchi anche nel service worker, all'«activate» e a ogni apertura",
+             "CONDIVISI_DURATA_MS = 3600 * 1000" in sw and ".then(() => pulisciCondivisi())" in sw
+             and "ev.waitUntil(pulisciCondivisi())" in sw)
+    verifica("la pagina chiede di controllare che siano i file condivisi dalla persona",
+             "controlla che siano i file che hai condiviso tu" in c)
+    verifica("la pagina controlla il tetto prima di mandare (importa_max_mb)",
+             "importa_max_mb" in c and "f.dim) > mb * 1000000" in c)
     idx = (TEL / "index.html").read_text("utf-8")
     verifica("la pagina carica condividi.js e ha il riquadro in Le mie cose, sotto le tessere",
              '<script src="/telefono/condividi.js" defer></script>' in idx
@@ -115,9 +125,31 @@ def prova_server():
             risposta += pezzo
         s.close()
         testa = risposta.split(b"\r\n\r\n")[0].decode("latin-1")
-        verifica("POST arrivato al server: 303 a «?condividi=0» subito, senza leggere il corpo",
-                 testa.startswith("HTTP/1.1 303") and "/telefono/?condividi=0" in testa
-                 and time.monotonic() - t0 < 5, testa[:200])
+        verifica("POST arrivato al server: 303 a «?condividi=0» entro il tempo per buttare il "
+                 "corpo, senza tenerlo", testa.startswith("HTTP/1.1 303")
+                 and "/telefono/?condividi=0" in testa and time.monotonic() - t0 < 5, testa[:200])
+        # Un file vero mandato davvero (revisione della PR #369): il 303 arriva, non un RST
+        import threading
+        s = socket.create_connection(("127.0.0.1", port), timeout=10)
+        corpo = (b'--x\r\nContent-Disposition: form-data; name="file"; filename="a.pdf"\r\n\r\n'
+                 + b"z" * 3_000_000 + b"\r\n--x--\r\n")
+        s.sendall(b"POST /telefono/condividi HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                  b"Content-Type: multipart/form-data; boundary=x\r\n"
+                  + f"Content-Length: {len(corpo)}\r\n\r\n".encode())
+        threading.Thread(target=lambda: s.sendall(corpo), daemon=True).start()
+        risposta = b""
+        try:
+            while b"\r\n\r\n" not in risposta:
+                pezzo = s.recv(4096)
+                if not pezzo:
+                    break
+                risposta += pezzo
+        except ConnectionResetError:
+            risposta += b"RST"
+        s.close()
+        verifica("un file vero di 3 MB mandato al server: arriva il 303, non un RST",
+                 risposta.startswith(b"HTTP/1.1 303"), risposta[:80])
+        verifica("niente salvato nella cartella del server", not list((TMP / "server").rglob("*.pdf")))
 
         class NoRedir(urllib.request.HTTPRedirectHandler):
             def redirect_request(self, *a, **k):

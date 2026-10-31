@@ -14,7 +14,7 @@
   const DURATA_MS = 3600 * 1000;
   const $ = (id) => document.getElementById(id);
   const sch = () => window.calliopeSchermo;
-  const st = { file: [], verifiche: [], invio: false, fatto: null, motivo: "" };
+  const st = { file: [], verifiche: [], invio: false, fatto: null, motivo: "", maxMb: 0 };
 
   function apriDb() {
     return new Promise((ok, no) => {
@@ -46,6 +46,19 @@
     } catch (e) { /* niente */ }
   }
 
+  async function togli(ids) {
+    try {
+      const db = await apriDb();
+      await new Promise((ok) => {
+        const t = db.transaction(STORE, "readwrite");
+        const s = t.objectStore(STORE);
+        for (const id of ids) s.delete(id);
+        t.oncomplete = ok; t.onerror = ok; t.onabort = ok;
+      });
+      db.close();
+    } catch (e) { /* niente */ }
+  }
+
   function metti(el, t) { if (el && el.textContent !== t) el.textContent = t; }
   function kb(n) { n = Number(n) || 0; return n < 1048576 ? Math.max(1, Math.round(n / 1024)) + " kB" : (n / 1048576).toFixed(1).replace(".", ",") + " MB"; }
 
@@ -54,9 +67,10 @@
     if (!box) return;
     box.hidden = !st.file.length && !st.motivo && !st.fatto;
     if (box.hidden) return;
-    metti($("condividi-nota"), st.motivo || (st.fatto ? "" : st.file.length === 1
-      ? "Un file da un'altra app. Scegli la verifica in cui metterlo."
-      : st.file.length + " file da un'altra app. Scegli la verifica in cui metterli."));
+    // Una pagina di un altro sito non può mettere file qui (il service worker accetta solo la
+    // condivisione del sistema), ma la persona controlla lo stesso (revisione della PR #369)
+    metti($("condividi-nota"), st.motivo || (st.fatto ? "" : "Arrivati da una condivisione: controlla che siano i file che hai condiviso tu. " +
+      (st.file.length === 1 ? "Poi scegli la verifica in cui metterlo." : "Poi scegli la verifica in cui metterli.")));
     $("condividi-file").replaceChildren(...st.file.map((f) => {
       const li = document.createElement("li");
       li.className = "condividi-voce";
@@ -95,6 +109,7 @@
       if (sch() && sch().studio) {
         const r = await sch().studio();
         if (r.ok) {
+          st.maxMb = Number(r.dati.importa_max_mb) || 100;
           st.verifiche = Array.isArray(r.dati.verifiche) ? r.dati.verifiche.filter((v) => v && Number.isInteger(v.id)) : [];
           if (!st.verifiche.length) st.motivo = "Non c'è una verifica aperta a cui aggiungerli: creala a voce, poi condividi di nuovo.";
           return disegna();
@@ -119,8 +134,14 @@
     let fatti = 0;
     const errori = [];
     try {
+      const mb = st.maxMb || 100;
       for (const f of st.file) {
         const quale = "Mando " + (fatti + errori.length + 1) + " di " + st.file.length;
+        // Il tetto anche qui, prima di mandare (revisione della PR #369, come studio_importa.js)
+        if (Number(f.dim) > mb * 1000000) {
+          errori.push(String(f.nome || "file").slice(0, 60) + ": troppo grande (al più " + mb + " MB)");
+          continue;
+        }
         metti(esito, quale + "…");
         let ultimo = -1;
         const r = await sch().studioImporta(f.blob, { verifica: vid, nome: String(f.nome || "file").slice(0, 120) },
@@ -176,11 +197,12 @@
     }
     let file = [];
     try { file = await tutti(); } catch (e) { file = []; }
-    // Più vecchi di un'ora: via, senza mostrarli
+    // Più vecchi di un'ora: via dal telefono, senza mostrarli (lo fa anche il service worker)
     const ora = Date.now();
-    if (file.some((f) => !(ora - Number(f.quando) < DURATA_MS))) {
+    const vecchi = file.filter((f) => !(ora - Number(f.quando) < DURATA_MS));
+    if (vecchi.length) {
       file = file.filter((f) => ora - Number(f.quando) < DURATA_MS);
-      if (!file.length) await svuota();
+      await togli(vecchi.map((f) => f.id));
     }
     if (arrivo === null) return;                    // solo quando si arriva da «Condividi»
     st.file = file;

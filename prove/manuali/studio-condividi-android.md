@@ -22,6 +22,12 @@ Serve lo Studio acceso per la persona e una verifica aperta; il telefono già ab
 6. Condividere, non scegliere, chiudere l'app; riaprirla dopo più di un'ora: niente riquadro.
 7. Disinstallare la PWA, reinstallarla e condividere **subito** prima di aprirla: annotare se arriva
    «La condivisione non è arrivata…» e se dopo un'apertura funziona.
+8. Il riquadro dice «Arrivati da una condivisione: controlla che siano i file che hai condiviso tu».
+9. Una pagina di un altro sito (revisione della PR #369): dal telefono aprire in Chrome una pagina
+   di prova di casa (non di Calliope) con un modulo che manda un file con POST a
+   `https://<calliope>/telefono/condividi`. Inviarlo: Calliope **non** deve mostrare «Condiviso con
+   Calliope» con quel file (si apre Le mie cose senza riquadro). Annotare cosa succede anche se il
+   modulo ha `rel="noreferrer"`: lì il file può comparire, e il riquadro deve chiedere di controllare.
 
 ## B. iPhone
 
