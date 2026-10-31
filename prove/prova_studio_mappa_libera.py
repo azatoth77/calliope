@@ -105,12 +105,13 @@ isole = [tripla("Le scoperte geografiche", "cominciano con", "Il Portogallo", "A
          tripla("Cristoforo Colombo", "arriva in", "America", "A3", "P4"),
          tripla("Il trattato di Tordesillas", "divide", "Il mondo", "A5", "P5")]
 n3, c3 = MG.scheletro(isole, rif, arif, 12)
-cod = {n["testo"]: c for c, n in MG.codici(n3)}
+cod = {n["testo"]: c for c, n in MG.codici(n3, c3)}
 corpo2 = MG.corpo_connessione("qwen", st.verifica(LEO, vid), rif, arif, n3, c3)
 testo2 = corpo2["messages"][1]["content"]
 verifica("la seconda richiesta: lo scheletro in busta coi codici C1… per parte, schema guidato, "
          "niente tool, temperatura 0, thinking spento",
-         "Parte 3:" in testo2 and "scheletro della mappa" in testo2 and "[P2 · " in testo2
+         "Parte 3 (staccata):" in testo2 and "Parte 1 (la principale, col centro C1):" in testo2
+         and "scheletro della mappa" in testo2 and "[P2 · " in testo2
          and corpo2["format"] == MG.SCHEMA_CONNESSIONE and "tools" not in corpo2
          and corpo2["think"] is False and corpo2["options"]["temperature"] == 0
          and corpo2["options"]["num_predict"] == MG.MAX_TOKENS_CONNESSIONE
