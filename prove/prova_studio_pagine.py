@@ -831,33 +831,54 @@ def prova_dos(port, sess, vid, foto_b):
     """Revisione della PR #312: senza sessione niente si legge e la connessione si chiude subito;
     un rifiuto dopo una sessione valida butta il corpo al più per STUDIO_SCARTA_S; un invio vero
     troppo lento si ferma dopo STUDIO_LEGGI_S."""
+    import select
     import socket
     from calliope.schermi import server as SRV
 
-    def manda(intestazioni: dict, corpo_iniziale: bytes = b"", lento: float = 0.0, durata: float = 0.0):
-        """(prima riga della risposta, secondi, chiusa?) mandando le intestazioni e poi, se
-        `lento`, un byte ogni `lento` secondi per al più `durata` secondi."""
+    def manda(intestazioni: dict, corpo_iniziale: bytes = b"", lento: float = 0.0, durata: float = 30.0,
+              smetti: float | None = None):
+        """(prima riga della risposta, secondi, chiusa?, risposta arrivata mentre si mandava?)
+        mandando le intestazioni e poi, se `lento`, un byte ogni `lento` secondi fino a `smetti`
+        secondi (poi si aspetta e basta), per al più `durata` secondi. Seconda revisione della PR
+        #315 (#316): prima di ogni byte si guarda se la risposta è arrivata, e allora si smette di
+        scrivere e la si legge; un reset vale come una chiusura, senza perdere quello che è già
+        arrivato. Prima si continuava a scrivere dopo la risposta e la chiusura del server: il
+        byte successivo provocava un RST, e su Windows `recv` alzava ConnectionResetError prima di
+        leggere la risposta (1 volta su 14). Resta una corsa che nessun controllo prima del byte
+        chiude: un byte partito proprio mentre il server chiude arriva dopo la chiusura, il RST
+        torna subito e Windows butta la risposta non ancora letta (visto 1 volta su 20 col solo
+        controllo). Per questo nei casi a tempo si smette di scrivere (`smetti`) prima che il
+        tempo del server possa scadere: il server lo conta da quando ha la richiesta, cioè dopo
+        `t0`, e quando chiude non c'è niente in volo."""
         sk = socket.create_connection(("127.0.0.1", port), timeout=30)
         t0 = time.monotonic()
         righe = "".join(f"{k}: {v}\r\n" for k, v in intestazioni.items())
         sk.sendall(f"POST /api/studio/pagina HTTP/1.1\r\nHost: 127.0.0.1\r\n{righe}\r\n".encode()
                    + corpo_iniziale)
-        risposta = b""
-        sk.settimeout(lento or 30)
-        fine = t0 + (durata or 30)
-        chiusa = False
+        fine = t0 + durata
+        risposta, chiusa, durante = b"", False, False
+        # Finché si manda: si aspetta la risposta al più `lento` (o fino alla fine) e, se non c'è,
+        # un byte. Appena c'è, si smette di scrivere
         while time.monotonic() < fine:
+            scrive = lento and (smetti is None or time.monotonic() - t0 < smetti)
+            attesa = min(lento, fine - time.monotonic()) if scrive else fine - time.monotonic()
+            if select.select([sk], [], [], max(attesa, 0))[0]:
+                durante = True
+                break
+            if scrive:
+                try:
+                    sk.sendall(b"0")
+                except OSError:            # il server ha chiuso mentre si mandava
+                    chiusa = durante = True
+                    break
+        # Poi si legge tutto quello che c'è, fino alla chiusura
+        sk.settimeout(max(fine - time.monotonic(), 0.1))
+        while not chiusa:
             try:
                 pezzo = sk.recv(65536)
             except socket.timeout:
-                if lento:
-                    try:
-                        sk.sendall(b"0")
-                    except OSError:
-                        chiusa = True
-                        break
-                continue
-            except OSError:
+                break
+            except OSError:                # reset: chiusa, e quello che è arrivato resta
                 chiusa = True
                 break
             if not pezzo:
@@ -865,40 +886,50 @@ def prova_dos(port, sess, vid, foto_b):
                 break
             risposta += pezzo
         sk.close()
-        return risposta.split(b"\r\n", 1)[0].decode("latin-1"), time.monotonic() - t0, chiusa
+        return (risposta.split(b"\r\n", 1)[0].decode("latin-1"), time.monotonic() - t0, chiusa,
+                durante)
 
     base = {"Content-Type": "application/octet-stream",
             "X-Calliope-Studio": quote(json.dumps({"verifica": vid}))}
-    # Senza sessione, 20 MB dichiarati e solo 1 kB mandato: 401 subito e la connessione chiusa
-    riga, dt, chiusa = manda({**base, "Content-Length": "20000000"}, b"x" * 1000)
+    # Senza sessione, 20 MB dichiarati e solo 1 kB mandato: 401 subito, niente letto, connessione
+    # chiusa. «Subito»: prima del tempo in cui si butterebbe il corpo di un rifiuto
+    riga, dt, chiusa, _ = manda({**base, "Content-Length": "20000000"}, b"x" * 1000)
     verifica("DoS: senza sessione e con un corpo grosso → 401 subito, niente letto, connessione chiusa",
-             " 401 " in riga and chiusa and dt < 5, f"{riga} {dt:.1f}s chiusa={chiusa}")
-    riga, dt, chiusa = manda({**base, "X-Calliope-Sessione": "inventata", "Content-Length": "5000"}, b"",
-                             lento=0.5, durata=8)
+             " 401 " in riga and chiusa and dt < SRV.STUDIO_SCARTA_S, f"{riga} {dt:.1f}s chiusa={chiusa}")
+    # Un byte solo, dopo mezzo secondo: la risposta arriva prima (il server non aspetta il corpo), e
+    # niente è in volo quando il server chiude
+    riga, dt, chiusa, durante = manda({**base, "X-Calliope-Sessione": "inventata", "Content-Length": "5000"},
+                                      b"", lento=0.5, smetti=0.5)
     verifica("DoS: una sessione inventata con un invio lento → 401 subito, senza aspettare il corpo",
-             " 401 " in riga and dt < 5, f"{riga} {dt:.1f}s")
-    riga, dt, chiusa = manda({**base, "X-Calliope-Sessione": sess["leo"]}, b"")
+             " 401 " in riga and durante and dt < SRV.STUDIO_SCARTA_S, f"{riga} {dt:.1f}s")
+    riga, dt, chiusa, _ = manda({**base, "X-Calliope-Sessione": sess["leo"]}, b"")
     verifica("DoS: senza Content-Length → 411 subito e la connessione chiusa",
-             " 411 " in riga and chiusa and dt < 5, f"{riga} {dt:.1f}s")
+             " 411 " in riga and chiusa and dt < SRV.STUDIO_SCARTA_S, f"{riga} {dt:.1f}s")
     prima_s, prima_l = SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S
     SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S = 1.5, 1.5
     try:
         # Un rifiuto dopo una sessione valida (la verifica che non c'è) con un invio lento: il corpo
-        # si butta al più per STUDIO_SCARTA_S, poi la risposta e la connessione chiusa
+        # si butta al più per STUDIO_SCARTA_S, poi la risposta e la connessione chiusa. Senza tetto
+        # in secondi (#316: non reggeva su una macchina carica): la risposta arriva mentre si manda
+        # ancora (100 kB a un byte ogni 0,3 s non finirebbero mai), e non prima del tempo massimo
         meta = quote(json.dumps({"verifica": 9999}))
-        riga, dt, chiusa = manda({**base, "X-Calliope-Studio": meta, "X-Calliope-Sessione": sess["leo"],
-                                  "Content-Length": "100000"}, b"", lento=0.3, durata=10)
+        riga, dt, chiusa, durante = manda({**base, "X-Calliope-Studio": meta,
+                                           "X-Calliope-Sessione": sess["leo"],
+                                           "Content-Length": "100000"}, b"", lento=0.3,
+                                          smetti=SRV.STUDIO_SCARTA_S * 0.6)
         verifica("DoS: un rifiuto con un invio lento si interrompe dopo il tempo massimo (404)",
-                 " 404 " in riga and dt < 6, f"{riga} {dt:.1f}s chiusa={chiusa}")
+                 " 404 " in riga and durante and dt >= SRV.STUDIO_SCARTA_S * 0.9,
+                 f"{riga} {dt:.1f}s chiusa={chiusa}")
         # Lo stesso rifiuto con il corpo tutto mandato: la frase arriva (il telefono la vede)
         s, d = chiedi(port, "/api/studio/pagina", sess["leo"], byte=foto_b, meta={"verifica": 9999})
         verifica("DoS: il rifiuto con il corpo intero arriva con la sua frase", s == 404 and d.get("errore"),
                  f"{s} {d}")
-        # Un invio vero troppo lento: 408 dopo STUDIO_LEGGI_S
-        riga, dt, chiusa = manda({**base, "X-Calliope-Sessione": sess["leo"], "Content-Length": "100000"},
-                                 b"\xff\xd8\xff", lento=0.3, durata=10)
+        # Un invio vero troppo lento: 408 dopo STUDIO_LEGGI_S, mentre si manda ancora
+        riga, dt, chiusa, durante = manda({**base, "X-Calliope-Sessione": sess["leo"],
+                                           "Content-Length": "100000"}, b"\xff\xd8\xff", lento=0.3,
+                                          smetti=SRV.STUDIO_LEGGI_S * 0.6)
         verifica("DoS: un invio vero troppo lento si ferma (408) dopo il tempo massimo",
-                 " 408 " in riga and dt < 6, f"{riga} {dt:.1f}s")
+                 " 408 " in riga and durante and dt >= SRV.STUDIO_LEGGI_S * 0.9, f"{riga} {dt:.1f}s")
     finally:
         SRV.STUDIO_SCARTA_S, SRV.STUDIO_LEGGI_S = prima_s, prima_l
 
