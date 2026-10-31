@@ -485,6 +485,75 @@ def data_della_persona(valore, t, ctx=None) -> bool:
         return False
 
 
+def data_dai_dati(valore, t, ctx=None) -> str | None:
+    """La fonte del dato non fidato della conversazione (una pagina, un titolo, una foto) che
+    nomina la stessa data risolta di `valore` (`tools/studio.date_dette`); None se nessuno
+    (31/10, #320: la proposta di una data letta solo lì). Nel dubbio la data viene dal dato."""
+    from .tools.studio import date_dette
+    try:
+        oggi = _oggi_di(ctx)
+        dd = _date_possibili(valore, ctx)
+        if not dd:
+            return None
+        for fonte, testo in reversed(list(getattr(t, "esterni", None) or ())):
+            if dd & date_dette(testo, oggi):
+                return fonte or "dato"
+    except Exception:  # noqa: BLE001
+        return "dato"
+    return None
+
+
+def _oggi_di(ctx):
+    import datetime as _dt
+    st = getattr(ctx, "studio", None)
+    try:
+        return st._oggi() if st is not None else _dt.date.today()
+    except Exception:  # noqa: BLE001
+        return _dt.date.today()
+
+
+def _date_possibili(valore, ctx=None) -> set:
+    """Le date di un valore: AAAA-MM-GG o il nome di un giorno (una), o le date di un testo
+    («20 novembre»: quest'anno o il prossimo)."""
+    from .tools.studio import _data_detta, date_dette
+    oggi = _oggi_di(ctx)
+    try:
+        d = _data_detta(valore, oggi)
+        return {d} if d is not None else set(date_dette(str(valore or ""), oggi))
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def _data_risolta(valore, ctx=None):
+    """La data di un valore, se è una sola; altrimenti None."""
+    dd = _date_possibili(valore, ctx)
+    return next(iter(dd)) if len(dd) == 1 else None
+
+
+def _stessa_data(a, b, ctx=None) -> bool:
+    """Due valori sono la stessa data, confrontata risolta («20 novembre» e «2026-11-20»: una
+    delle date possibili, se l'altro valore ne ha una sola); altrimenti il confronto esatto."""
+    da, db = _date_possibili(a, ctx), _date_possibili(b, ctx)
+    if da and db and (len(da) == 1 or len(db) == 1):
+        return bool(da & db)
+    return _esatto(a) == _esatto(b)
+
+
+def _data_mostrata(valore, ctx=None) -> str:
+    from .tools.studio import detta
+    d = _data_risolta(valore, ctx)
+    return detta(d) if d is not None else _mostra(valore)
+
+
+def _da_studio(fonte: str) -> str:
+    """«da una pagina» per le pagine dello Studio (fonte «foto»: sono pagine fotografate)."""
+    return "da una pagina" if fonte == "foto" else prov.da(fonte)
+
+
+def _detta_studio(fonte: str) -> str:
+    return "una pagina" if fonte == "foto" else prov.detta(fonte)
+
+
 # Gli argomenti che sono una posizione in un elenco detta a voce («tieni il secondo»)
 POSIZIONI = frozenset({("studio", "numero")})
 
@@ -984,6 +1053,39 @@ def _matrice(name: str, args: dict, cl, t, base, conferma_voce: bool = False,
     # La risposta al dato chiesto dal tool stesso (#98) passa dall'ancora anche se comincia con
     # un consenso («Sì, è nata il 12 ottobre»): il «sì» non è alla domanda della politica
     risposta = risposta_al_sospeso(name, args, t)
+    # Il «sì» alla proposta di un tool con una data (31/10, #320, «proponi_data» di studio): la
+    # persona ha sentito la data, ma se viene solo da una pagina o da un titolo, e non l'ha detta
+    # lei, la domanda dice da dove viene prima di eseguire (mai la proposta da sola)
+    if proposta and not risposta and not getattr(t, "sospeso_politica", False):
+        sosp = t.args_sospeso if isinstance(t.args_sospeso, dict) else {}
+        for k, v in args.items():
+            if (name, k) not in DATE_DETTE:
+                continue
+            # La stessa data della proposta, confrontata risolta («20 novembre» e «2026-11-20»
+            # sono la stessa; `pol._uguali` guarda le parole lunghe: «2026-11-19» valeva come
+            # «2026-11-12»; revisione della PR #362)
+            if k in sosp and not _stessa_data(v, sosp[k], ctx):
+                return pol.Decisione(
+                    "conferma", "valore_proposta_data_diversa",
+                    f"«{_data_mostrata(v, ctx)}» non è la data che ti ho proposto: vuoi davvero "
+                    f"che {cosa}?", fonte), det
+            # Con dati non fidati nella conversazione si chiede sempre, se la persona non ha
+            # detto la data (revisione della PR #362: «fra due settimane», «rinviata di 15
+            # giorni», «al giorno 12» nella pagina non si ritrovano come date, e un «sì» solo
+            # spostava). Se la data si ritrova in un dato, la domanda dice da dove viene
+            if data_della_persona(v, t, ctx):
+                continue
+            da = data_dai_dati(v, t, ctx)
+            det["argomenti"] = {k: f"{(tipi or {}).get(k, BERSAGLIO)}/{DATO if da else MODELLO}"}
+            if da:
+                return pol.Decisione(
+                    "conferma", "valore_proposta_data_dato",
+                    f"«{_data_mostrata(v, ctx)}» viene {_da_studio(da)}, non da te: vuoi davvero "
+                    f"che {cosa}?", da), det
+            return pol.Decisione(
+                "conferma", "valore_proposta_data_non_detta",
+                f"Questa data, «{_data_mostrata(v, ctx)}», non l'hai detta tu, e c'è di mezzo "
+                f"{_detta_studio(fonte)}: è quella giusta? Vuoi davvero che {cosa}?", fonte), det
     if proposta and not risposta:
         # Il «sì» breve della persona della conversazione a una domanda su un'azione E1–E2
         # (09/10, caso vero della DGX delle 20:39: «Sì.» a «vuoi che spenga la luce della
