@@ -52,7 +52,26 @@ class DallaLibreria:
     def _misure_libreria(self) -> dict:
         return self.misure.setdefault("libreria", {"proposte": 0, "ombra": 0, "schede": 0,
                                                     "soluzioni": 0, "mazzi": 0, "carte": 0,
-                                                    "senza": 0})
+                                                    "senza": 0, "attivita": 0})
+
+    def prova_aperta_di(self, chi) -> bool:
+        """`chi` (un profilo o l'id della persona) ha una prova aperta su una sua verifica,
+        qualsiasi: le attività della libreria aspettano la consegna, come le carte (revisione
+        della PR #366, nota 1: anche su un'altra verifica)."""
+        pid = chi if isinstance(chi, str) else str(getattr(chi, "id", "") or "")
+        try:
+            return self.dati.uno(
+                "SELECT p.id FROM studio_prove p JOIN studio_verifiche v ON v.id = p.verifica "
+                "WHERE v.persona = ? AND p.stato = 'aperta' AND v.stato IN ('bozza', 'aperta')",
+                (pid,)) is not None
+        except Exception:  # noqa: BLE001 — una tabella che manca (schema di prima): niente prove
+            return False
+
+    def nota_attivita(self, cid: str):
+        """Un'attività della libreria aperta: solo il conto e l'id (della libreria, non della
+        persona) nel registro."""
+        self._misure_libreria()["attivita"] += 1
+        self._registra(f"libreria: attività {cid} aperta")
 
     def _libreria_chiusa(self, v: dict) -> bool:
         """Con una prova aperta la libreria non c'è, per nessuno."""
@@ -78,6 +97,9 @@ class DallaLibreria:
         if self.padronanza_mostrata():
             pad = {a["id"]: a["valore"] for a in self._padronanza(v)["argomenti"]}
         out = I.scegli(lib, args, v["materia"], pad, int(v["obiettivo"] or 75))
+        for p in out:
+            if p["tipo"] == F.MINIAPP:
+                p["tipo_app"] = lib.contenuti[p["contenuto"]]["tipo_app"]
         if any(p["tipo"] == F.MAZZO for p in out):
             from ..argomenti import chiave
             ci_sono = self._chiavi_carte(v["id"])
@@ -158,7 +180,12 @@ class DallaLibreria:
                 "prerequisiti": [{"id": p, "titolo": lib.contenuti[p]["titolo"]}
                                  for p in s["prerequisiti"] if p in lib.contenuti],
                 "mazzi": [{"id": x["id"], "titolo": x["titolo"], "carte": len(x["carte"])}
-                          for x in lib.di_scheda(s["id"]) if x["tipo"] == F.MAZZO]}
+                          for x in lib.di_scheda(s["id"]) if x["tipo"] == F.MAZZO],
+                # Le mini-app della scheda (parte 2): si aprono col tocco «studio_attivita»
+                "attivita": [{"id": x["id"], "titolo": x["titolo"], "tipo_app": x["tipo_app"],
+                              "durata": x["durata"]}
+                             for x in lib.di_scheda(s["id"])
+                             if x["tipo"] == F.MINIAPP and x["id"] in lib.app]}
 
     def soluzione_libreria(self, chi, vid, sid, n) -> dict:
         """La soluzione della domanda `n` (da 1) di «prova tu» di una scheda."""

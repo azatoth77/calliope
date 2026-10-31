@@ -195,21 +195,38 @@ def voci_dichiarate(path) -> tuple[int, int] | None:
             ll = f.read(20)
             if ll[:4] == b"PK\x06\x07":
                 reloff = struct.unpack_from("<Q", ll, 8)[0]
-                if reloff + 56 > dim:
+                # I due posti dove una versione o l'altra di `zipfile` cerca il record ZIP64:
+                # dove punta `reloff` e subito prima del localizzatore (terza revisione della PR
+                # #364). Se ci sono tutti e due e dicono cose diverse, l'archivio è fatto apposta
+                record = []
+                for pos in (reloff, loc - 56):
+                    if 0 <= pos and pos + 56 <= dim:
+                        f.seek(pos)
+                        r = f.read(56)
+                        if r[:4] == b"PK\x06\x06":
+                            record.append((struct.unpack_from("<Q", r, 32)[0],
+                                           struct.unpack_from("<Q", r, 40)[0],
+                                           struct.unpack_from("<Q", r, 48)[0]))
+                if not record or len(set(record)) > 1:
                     return None
-                f.seek(reloff)
-                r = f.read(56)
-                if r[:4] != b"PK\x06\x06" and loc - 56 >= 0:
-                    f.seek(loc - 56)            # dati prima dell'archivio, come zipfile
-                    r = f.read(56)
-                if r[:4] != b"PK\x06\x06":
-                    return None
-                zip64 = (struct.unpack_from("<Q", r, 32)[0], struct.unpack_from("<Q", r, 40)[0])
+                zip64 = record[0][:2]
         if zip64 is not None:
             voci, cd = zip64
         elif voci == 0xFFFF or cd == 0xFFFFFFFF:
             return None
         return int(voci), int(cd)
+
+
+# Le voci che i sistemi aggiungono da sé agli archivi (terza revisione della PR #364): si saltano
+# senza una riga «non letto», per nome
+SISTEMA_NOMI = frozenset({".ds_store", "thumbs.db", "desktop.ini"})
+
+
+def di_sistema(nome: str) -> bool:
+    """La voce la mette il sistema, non la persona: la cartella `__MACOSX/` di macOS (con i suoi
+    «._file»), `.DS_Store`, `Thumbs.db`, `desktop.ini`."""
+    parti = [x for x in str(nome or "").replace("\\", "/").split("/") if x]
+    return bool(parti) and (parti[0] == "__MACOSX" or parti[-1].lower() in SISTEMA_NOMI)
 
 
 def _e_link(info: zipfile.ZipInfo) -> bool:
@@ -279,7 +296,8 @@ def elenca(path, nome: str, tetti: Tetti) -> tuple[str, list[Voce]]:
             raise Rifiuto(f"l'archivio ha {len(infos)} file: al più {tetti.file_max}")
         controlla_struttura(zf, infos)
         voci = []
-        for info in sorted((i for i in infos if not i.is_dir()), key=lambda i: i.filename):
+        for info in sorted((i for i in infos if not i.is_dir() and not di_sistema(i.filename)),
+                           key=lambda i: i.filename):
             motivo = nome_strano(info.filename)
             if motivo is None and _e_link(info):
                 motivo = "collegamento: non lo seguo"

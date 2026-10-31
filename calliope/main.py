@@ -215,6 +215,19 @@ def aspetta_llm(cfg: Config, brain, dire=None, dormi=time.sleep) -> str | None:
             attesa = min(attesa * 2, 30.0)
 
 
+def _lega_studio_giochi(s):
+    """Lo Studio e i giochi (31/10, #297, revisione della PR #366): i giochi sanno quando una
+    persona ha una prova aperta (le attività della libreria si chiudono al battito), e una prova
+    che parte chiude subito le attività aperte dalla persona. Si chiama quando c'è il secondo dei
+    due, nell'ordine in cui l'avvio li prepara; una volta sola."""
+    st, giochi = getattr(s, "studio", None), getattr(s, "giochi", None)
+    if st is None or giochi is None or getattr(giochi, "studio", None) is st:
+        return
+    giochi.studio = st
+    ganci = st.__dict__.setdefault("ganci_prova", [])
+    ganci.append(giochi.ferma_libreria)
+
+
 class Avvio:
     """L'avvio di Calliope (06/10, P8): ciò che era il corpo di `main()`, diviso in passi. Gli
     attributi sono gli oggetti preparati (configurazione, audio, servizi, tool, Brain, corsie);
@@ -780,6 +793,7 @@ class Avvio:
             s.studio = None
         if s.studio is not None:
             atexit.register(s.studio.close)
+            _lega_studio_giochi(s)
             print(f"[STUDIO] {s.studio.modo}", flush=True)
             # I tool dello Studio (30/10, passo 4.5, #284): solo con `studio_modo: attivo`; in
             # ombra il tool non c'è (dipende dall'installazione, come stanza_cerca)
@@ -909,6 +923,7 @@ class Avvio:
             giochi.guardiano = s.guardiano
             giochi.on_frase = self.due_event.set
             s.schermi.giochi = estensioni.giochi = giochi
+            _lega_studio_giochi(s)
             # I comandi a voce dei giochi detti con altre parole (11/10, gioco_comando): solo
             # con i giochi accesi e, dal 14/10, con il giudice di fase spento (il giudice fa la
             # stessa cosa con una chiamata breve e l'uscita vincolata, calliope/gioco_giudice.py)

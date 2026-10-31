@@ -322,6 +322,12 @@ def _unisci_cifra_lettera(m: re.Match) -> str:
     return m.group(1) + (m.group(2) or m.group(3))
 
 
+# Il segno di un numero negativo, un pezzo a sé (non un operatore: «-5» non comincia con un
+# operatore, e «5» resta dentro «-5»)
+NEGATIVO = "~"
+_MENO_NEGATIVO = re.compile(r"(?:(?<=[\s(\[=<>≤≥≠+×/])|^)-(?=\d)")
+
+
 def _pezzi(testo, confini: bool = False) -> list[str]:
     """I pezzi di un testo per le formule: minuscole, senza accenti, lettere latine e greche,
     cifre (indici ed esponenti diventano cifre: «CO₂» → «co2», «x²» → «x2», «Fe³⁺» → «fe3+»: la
@@ -342,9 +348,14 @@ def _pezzi(testo, confini: bool = False) -> list[str]:
     t = "".join(c for c in t if not unicodedata.combining(c)).lower().translate(_SOSTITUZIONI)
     # «≠» si scompone in «=» e una barra combinante: tenuto da parte fino a qui
     t = t.replace("\ue000", "≠")
-    g = re.findall(r"[a-z0-9α-ω]+(?:[+-](?![a-z0-9α-ω]))?|[-+=<>/×≤≥≠]"
+    # Il meno attaccato alla cifra, con uno spazio (o l'inizio, una parentesi, un operatore)
+    # prima, è un numero negativo: «a -5» → «~» «5»; con lo spazio anche dopo («a - 5», «10 - 5»)
+    # o attaccato a una parola («x-5», «10-12») resta il meno della sottrazione (31/10, #320,
+    # revisione della PR #358)
+    t = _MENO_NEGATIVO.sub(NEGATIVO, t)
+    g = re.findall(r"[a-z0-9α-ω]+(?:[+-](?![a-z0-9α-ω]))?|[-+=<>/×≤≥≠" + NEGATIVO + "]"
                    + (_CONFINI if confini else ""), t)
-    out = [w if w[0].isalnum() or w in _OPERATORI else "|" for w in g]
+    out = [w if w[0].isalnum() or w in _OPERATORI or w == NEGATIVO else "|" for w in g]
     op = [w in _OPERATORI for w in out]
     return [w for k, w in enumerate(out) if w not in _PICCOLE or (k and op[k - 1])
             or (k + 1 < len(out) and op[k + 1])]
@@ -361,7 +372,7 @@ def _segmenti(titolo) -> list[list[str]]:
         w = g[k]
         if w == "|":
             return False
-        if op[k] or any(c.isdigit() for c in w):
+        if op[k] or w == NEGATIVO or any(c.isdigit() for c in w):
             return True
         return (len(w) < 4 and w.isalpha()
                 and ((k and op[k - 1]) or (k + 1 < len(g) and op[k + 1])))

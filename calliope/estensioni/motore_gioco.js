@@ -455,7 +455,8 @@
     M = M || {};
     var g = giocatori || {};
     var out = { inizio: M.inizio, fasi: {}, esito_s: M.esito_s === undefined ? 4 : Number(M.esito_s),
-                gmin: Math.max(1, Number(g.min || 1)), gmax: Math.max(1, Number(g.max || g.min || 1)) };
+                gmin: Math.max(1, Number(g.min || 1)), gmax: Math.max(1, Number(g.max || g.min || 1)),
+                anchio: M.anchio !== false };
     var fasi = M.fasi || {};
     Object.keys(fasi).forEach(function (nome) {
       var f = fasi[nome] || {};
@@ -576,7 +577,10 @@
           for (var i = M.gmin; i <= M.gmax; i++) v.push(i);
           out.giocatori = v;
         }
-        if ((S.iscritti || []).length < M.gmax) out.anchio = true;
+        // «Gioco anch'io» lega anche in un gioco per uno la voce e il nome di chi gioca; una
+        // macchina con «anchio»: false (le attività della libreria dello Studio, revisione della
+        // PR #366) non lo mostra
+        if (M.anchio !== false && (S.iscritti || []).length < M.gmax) out.anchio = true;
         out.inizia = true;
         return out;
       }

@@ -431,13 +431,20 @@ def _dichiarazioni(zf: zipfile.ZipFile, info) -> str | None:
     veri di Office e OpenDocument sono in UTF-8."""
     doctype = "contiene dichiarazioni XML non ammesse (DOCTYPE)"
     with zf.open(info) as f:
-        testa = f.read(256)
+        testa = f.read(1 << 16)
         if testa.startswith((b"\xff\xfe", b"\xfe\xff", b"\x00\x00\xfe\xff")) or \
                 testa[:4] in (b"<\x00?\x00", b"\x00<\x00?", b"<\x00\x00\x00", b"\x00\x00\x00<"):
             return "contiene XML in una codifica non ammessa (UTF-16 o UTF-32)"
-        m = re.match(rb"\s*<\?xml[^>]*?encoding\s*=\s*[\"']([A-Za-z0-9._-]+)[\"']", testa)
-        if m and m.group(1).lower() not in (b"utf-8", b"utf8"):
-            return "contiene XML in una codifica non ammessa"
+        # La dichiarazione XML intera, fino a «?>» (terza revisione della PR #364: non solo i
+        # primi 256 byte, che uno spazio lungo prima di `encoding` scavalcava)
+        inizio = testa[3:] if testa.startswith(b"\xef\xbb\xbf") else testa
+        if re.match(rb"\s*<\?xml", inizio):
+            fine = inizio.find(b"?>")
+            if fine < 0:
+                return "contiene XML con una dichiarazione strana"
+            m = re.search(rb"encoding\s*=\s*[\"']([^\"']*)[\"']", inizio[:fine])
+            if m and m.group(1).strip().lower().replace(b"_", b"-") not in (b"utf-8", b"utf8"):
+                return "contiene XML in una codifica non ammessa"
         if b"<!DOCTYPE" in testa or b"<!ENTITY" in testa:
             return doctype
         coda = testa[-16:]

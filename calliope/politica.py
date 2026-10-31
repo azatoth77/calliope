@@ -456,10 +456,11 @@ CLASSI: dict[str, Classe] = {
     # del tutore per lo studio del suo minore; «indicazioni» ne legge il conto
     # Dal 31/10 (#297) «libreria» legge le proposte della libreria (titoli fidati, scelti dal codice)
     # Dal 31/10 (#296) «premi» legge la serie e il conto delle stelle (frasi del codice, numeri)
+    # «proponi_data» (#320) non cambia niente: scrive la domanda e la mette in sospeso
     "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi", "resoconto",
                                                         "riepilogo", "carte", "mappa",
                                                         "prove", "indicazioni", "premi",
-                                                        "libreria"})),
+                                                        "libreria", "proponi_data"})),
                  cosa=lambda a: _studio_cosa(a), verbi_azione=("azione", VERBI_STUDIO),
                  chiedi_se=lambda testo, a, ctx, **_k: _studio_archivia(testo, a)),
     # il testo letto delle pagine e i titoli degli argomenti: dati non fidati, come una foto
@@ -481,6 +482,10 @@ CLASSI: dict[str, Classe] = {
     # risultato ha solo conti e una frase del codice; le pagine e le carte le legge il ciclo dopo
     # la risposta, con la voce del libro, e non entrano nella conversazione né nella storia
     "studio_ascolta": _c(S),
+    # le attività della libreria dello Studio (31/10, #297, parte 2): apre sullo schermo un gioco
+    # puro e fidato (una mini-app scritta e rivista da noi), come un gioco delle estensioni puro;
+    # niente dati della persona, nessuna fonte non fidata
+    "studio_attivita": _c(S),
     # «Parliamone» dopo la mappa libera (30/10, passo 7c, #328): la mappa, lo scheletro senza i
     # concetti nascosti, il confronto del codice e gli indicatori, dati non fidati come le carte
     # (in busta, fuori dalla storia a risposta finita); non scrive niente
@@ -495,6 +500,7 @@ _STUDIO_COSA = {"crea": "segni la verifica", "fatto": "segni fatto il giorno del
                 "salta_oggi": "sposti il piano di oggi", "archivia": "archivi la verifica",
                 "sposta": "cambi la data della verifica",
                 "tieni": "tenga l'argomento nel piano", "togli": "tolga l'argomento dal piano",
+                "proponi_data": "ti proponga la data nuova della verifica",
                 "riprova": "riprovi a leggere la pagina", "sessione": "cominci la sessione",
                 "tipo": "cambi il tipo della prova", "conclusa": "segni fatta la verifica",
                 "indica": "segni un'indicazione per lo studio del ragazzo",
@@ -1182,7 +1188,7 @@ def bloccata(name: str, ctx, args: dict | None = None) -> dict | None:
     if not t.letto_ora:
         _ricorda_prima(name, args, t)
         return None
-    if name in DOPO_DATO:
+    if name in DOPO_DATO or proposta_dopo_dato(name, args):
         return None
     if detto_dopo_dato(name, args, t):
         note_rule(ctx, "dopo_dato_valore_detto")
@@ -1384,6 +1390,19 @@ DOPO_DATO = frozenset({"web_cerca", "notizie", "biblioteca_cerca", "ora_attuale"
 # nella stessa frase). Il collaudo esegue la versione da approvare con la porta stretta: i suoi
 # effetti li governa il guardrail delle estensioni, non il testo letto
 DOPO_DATO_SE_DETTO = {"sviluppo_collauda": ("dati", "argomenti")}
+# Dopo un dato letto in questa risposta parte anche una proposta che non fa niente da sola: la
+# domanda scritta dal codice, in sospeso (31/10, #320: «proponi_data» di studio). Al «sì» la
+# politica guarda ancora da dove viene il valore (valore._matrice)
+PROPOSTE_DOPO_DATO = {"studio": ("azione", "proponi_data")}
+
+
+def proposta_dopo_dato(name: str, args: dict | None) -> bool:
+    """La chiamata è una proposta di PROPOSTE_DOPO_DATO (una domanda del codice, nessun
+    effetto): parte anche dopo un dato letto in questa risposta."""
+    k = PROPOSTE_DOPO_DATO.get(name)
+    return bool(k) and isinstance(args, dict) and _s(args, k[0]).lower() == k[1]
+
+
 # Azioni reversibili che con il valore detto tutto nella frase (e il verbo dell'azione) non
 # chiedono conferma nemmeno con un dato di mezzo: {tool: (azione, argomento)}
 DETTO_BASTA = {"estensione_gestisci": ("rinomina", "titolo")}
@@ -1692,7 +1711,8 @@ def decidi(name: str, args: dict, cl: Classe, t: Turno | None,
     if cl.classe == VIETATO:
         return Decisione("vieta", "politica_vietato")
     if (t is not None and t.letto_ora and name not in DOPO_DATO
-            and not detto_dopo_dato(name, args, t)):
+            and not detto_dopo_dato(name, args, t)
+            and not proposta_dopo_dato(name, args)):
         return Decisione("blocca", "web_azione_bloccata", fonte=t.letto_ora)
     if t is None or cl.classe == SICURO:
         if cl.esce and t is not None and t.contaminazione:

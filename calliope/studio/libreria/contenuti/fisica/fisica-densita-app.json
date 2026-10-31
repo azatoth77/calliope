@@ -1,0 +1,15 @@
+{
+  "formato": 1,
+  "id": "fisica-densita-app",
+  "tipo": "miniapp",
+  "titolo": "Affonda o galleggia?",
+  "materia": "Fisica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "tipo_app": "quiz",
+  "estensione": "densita",
+  "schede": ["fisica-densita"],
+  "durata": 10,
+  "comandi": ["il sughero", "fammi il quiz", "galleggia", "affonda", "ho finito"],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31"
+}

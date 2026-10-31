@@ -128,6 +128,11 @@ TOCCABILI: Mapping[str, Toccabile] = MappingProxyType({
         "dal codice, mai un nome): sono i dati della persona o del suo minore, si disfano con un "
         "tocco o una frase («togli il fatto», «toglilo dal piano»), e per sbaglio costano un "
         "giorno da rimettere o una pagina riletta (30/10, #284)", bersaglio=True),
+    "studio_attivita": Toccabile(
+        "«Apri» su un'attività della libreria dello Studio (31/10, #297): apre sullo schermo un "
+        "gioco puro, scritto e rivisto da noi, scelto dal codice (il bersaglio: la verifica e "
+        "l'attività toccate, mai un nome); niente dati della persona, si chiude con ✕, e per "
+        "sbaglio costa un gioco da chiudere", bersaglio=True),
 })
 
 # Gli esclusi in modo esplicito (#266): ammessi dalle sole tabelle della politica, o vicini a
@@ -238,6 +243,10 @@ def senza_bersaglio(scritto: dict) -> bool:
     if t.tool == "studio":
         st = b.get("studio")
         return not (isinstance(st, dict) and _intero(st.get("verifica")) is not None)
+    if t.tool == "studio_attivita":
+        st = b.get("studio")
+        return not (isinstance(st, dict) and _intero(st.get("verifica")) is not None
+                    and isinstance(st.get("contenuto"), str) and st.get("contenuto"))
     return not (b.get("timer") is not None and b.get("chiave"))
 
 
@@ -444,6 +453,29 @@ def _studio_sessione(dati: dict, fonti, persona=None) -> dict:
                            "toccando lo schermo.)"}
 
 
+def _studio_attivita(dati: dict, fonti, persona=None) -> dict:
+    """«Apri» su un'attività della libreria (31/10, #297): `studio_attivita` con la verifica e
+    l'attività toccate nel bersaglio. L'attività deve esserci nella libreria (un id del codice) e
+    la verifica essere della persona o del suo minore, senza una prova aperta."""
+    st, v, err = _studio_di(dati, fonti, persona)
+    if err:
+        return err
+    cid = _testo(dati.get("contenuto"), 60)
+    lib = st.libreria() if st.libreria_modo() == "attiva" else None
+    if lib is None or cid not in lib.app:
+        return {"errore": "Questa attività non c'è nella libreria.", "_stato": 404}
+    # Una prova aperta su questa verifica o su un'altra della stessa persona (revisione della PR
+    # #366, nota 1)
+    if st._libreria_chiusa(v) or st.prova_aperta_di(str(v["persona"])):
+        return {"errore": "C'è una prova aperta: le attività tornano dopo la consegna.",
+                "_stato": 409}
+    titolo = lib.contenuti[cid]["titolo"]
+    return {"tool": "studio_attivita", "argomenti": {"attivita": titolo},
+            "bersaglio": {"studio": {"verifica": v["id"], "contenuto": cid}},
+            "descrizione": f"(Ho aperto l'attività «{titolo}» della libreria dello Studio "
+                           "toccando lo schermo.)"}
+
+
 AZIONI_STUDIO = {"studio_fatto": "fatto", "studio_salta": "salta_oggi", "studio_tieni": "tieni",
                  "studio_riprova": "riprova", "studio_sessione": "sessione"}
 
@@ -463,7 +495,10 @@ TOCCHI = MappingProxyType({"spunta_lista": Tocco("lista_togli", _spunta_lista),
                            "studio_riprova": Tocco("studio", _studio_riprova, bersaglio=True,
                                                    persona=True),
                            "studio_sessione": Tocco("studio", _studio_sessione, bersaglio=True,
-                                                    persona=True)})
+                                                    persona=True),
+                           # le attività della libreria (31/10, #297, parte 2)
+                           "studio_attivita": Tocco("studio_attivita", _studio_attivita,
+                                                    bersaglio=True, persona=True)})
 
 # All'avvio: un tocco su un tool non ammesso non arriva mai a girare
 _ERRORI = controlla()

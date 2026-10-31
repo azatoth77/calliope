@@ -15,10 +15,23 @@
   let lib = { vid: null, scheda: null, dati: null, soluzioni: {}, attesa: false, esito: "",
     esitoDi: null, richiesta: 0 };
   // Le funzioni della home (studio.js): ridisegna, ricarica, vista
-  let ctx = { ridisegna() {}, ricarica() {}, vista() {} };
+  let ctx = { ridisegna() {}, ricarica() {}, vista() {}, tocchi: false };
 
   const TIPI = { scheda: "Scheda", mazzo: "Carte", miniapp: "Attività" };
   const MOTIVI = { lacuna: "da rinforzare", prerequisito: "per ripartire da prima" };
+  // Le mini-app (parte 2 della #297): il tipo detto in parole
+  const TIPI_APP = { esplora: "da esplorare", quiz: "con il quiz", percorso: "percorso guidato" };
+  // «Apri» su un'attività: un tocco vero (studio_attivita, il bersaglio lo sceglie il server), che
+  // studio.js manda come gli altri tocchi della home (data-tocco); l'esito arriva dal ciclo
+  function tastoAttivita(vid, id, titolo, cls) {
+    const b = nodo("button", "tasto studio-h-tasto" + (cls ? " " + cls : ""), "Apri");
+    b.type = "button";
+    b.dataset.tocco = "studio_attivita";
+    b.dataset.dati = JSON.stringify({ verifica: vid, contenuto: id });
+    b.setAttribute("aria-label", "Apri l'attività «" + String(titolo || "") + "»");
+    b.disabled = !ctx.tocchi;
+    return b;
+  }
 
   function nodo(tag, cls, testo) {
     const el = document.createElement(tag);
@@ -38,6 +51,7 @@
 
   function infoProposta(p) {
     const pezzi = [TIPI[p.tipo] || "Contenuto"];
+    if (p.tipo === "miniapp" && TIPI_APP[p.tipo_app]) pezzi.push(TIPI_APP[p.tipo_app]);
     if (p.tipo === "mazzo") pezzi.push((Number(p.carte) || 0) + " carte");
     else pezzi.push((Number(p.durata) || 0) + " min");
     pezzi.push(p.numero ? "argomento " + Number(p.numero) : "argomento della verifica");
@@ -70,6 +84,8 @@
           const aperta = lib.vid === v.id && lib.scheda === p.contenuto;
           t.append(tasto(aperta ? "Chiudi" : "Apri", aperta ? "chiudi" : "apri", { scheda: p.contenuto },
             aperta ? "" : "studio-h-primo", (aperta ? "Chiudi " : "Apri ") + nome));
+        } else if (p.tipo === "miniapp") {
+          t.append(tastoAttivita(v.id, p.contenuto, p.titolo));
         } else if (p.tipo === "mazzo" && !p.aggiunto) {
           t.append(tasto("Aggiungi le carte", "carte", { mazzo: p.contenuto, argomento: p.argomento },
             "", "Aggiungi le carte " + nome));
@@ -138,6 +154,22 @@
       const t = nodo("div", "studio-h-tasti");
       for (const p of pre) t.append(tasto(String(p.titolo || ""), "apri", { scheda: p.id }, "", "Apri la scheda «" + String(p.titolo || "") + "»"));
       box.append(t);
+    }
+    const app = Array.isArray(d.attivita) ? d.attivita : [];
+    if (app.length) {
+      box.append(nodo("h5", "studio-l-titoletto", "Attività"));
+      const ul = nodo("ul", "studio-h-elenco studio-l-elenco");
+      for (const a of app) {
+        const li = nodo("li", "studio-h-voce studio-l-voce");
+        const tx = nodo("div", "studio-testo");
+        tx.append(nodo("b", null, String(a.titolo || "")),
+          nodo("span", "studio-nota", [TIPI_APP[a.tipo_app] || "", (Number(a.durata) || 0) + " min"].filter(Boolean).join(" · ")));
+        const tt = nodo("div", "studio-tasti");
+        tt.append(tastoAttivita(v.id, a.id, a.titolo, "studio-h-primo"));
+        li.append(tx, tt);
+        ul.append(li);
+      }
+      box.append(ul);
     }
     const t = nodo("div", "studio-h-tasti");
     for (const m of Array.isArray(d.mazzi) ? d.mazzi : []) {

@@ -189,6 +189,24 @@ def eocd_aggirato(n, voci_campo, cd_basso=None):
     return loc + cd + fine
 
 
+def zip64_doppio(n: int) -> bytes:
+    """Lo script del revisore (terza revisione della PR #364): un localizzatore ZIP64 valido e
+    due record ZIP64, uno piccolo dove punta `reloff` e uno vero subito prima del localizzatore."""
+    import struct
+    loc = struct.pack("<4s5H3L2H", b"PK", 10, 0, 0, 0, 0, 0, 0, 0, 1, 0) + b"a"
+    cd = b"".join(struct.pack("<4s6H3L5H2L", b"PK", 20, 10, 0, 0, 0, 0, 0, 0, 0,
+                              len(nm), 0, 0, 0, 0, 0, 0) + nm
+                  for nm in (f"n{i}".encode() for i in range(n)))
+
+    def rec64(voci, dimcd, offcd):
+        return struct.pack("<4sQ2H2L4Q", b"PK", 44, 45, 45, 0, 0, voci, voci, dimcd, offcd)
+    off_cd = len(loc) + 56
+    finto, vero = rec64(1, 48, off_cd), rec64(n, len(cd), off_cd)
+    localizzatore = struct.pack("<4sLQL", b"PK", 0, len(loc), 1)
+    eocd = struct.pack("<4s4H2LH", b"PK", 0, 0, 0xFFFF, 0xFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0)
+    return loc + finto + cd + vero + localizzatore + eocd
+
+
 def docx_utf16() -> bytes:
     w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
     x = (f'<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE w:document [<!ENTITY x "INIETTATO">]>'
@@ -202,9 +220,9 @@ def docx_utf16() -> bytes:
     return b.getvalue()
 
 
-def odt_utf16(codifica="utf-16") -> bytes:
-    nome = "UTF-16" if codifica.startswith("utf-16") else codifica.upper()
-    x = (f'<?xml version="1.0" encoding="{nome}"?><!DOCTYPE x [<!ENTITY a "INIETTATO">]>'
+def odt_utf16(codifica="utf-16", spazi=0, nome=None) -> bytes:
+    nome = nome or ("UTF-16" if codifica.startswith("utf-16") else codifica.upper())
+    x = (f'<?xml version="1.0"{" " * spazi} encoding="{nome}"?><!DOCTYPE x [<!ENTITY a "INIETTATO">]>'
          '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
          'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text>'
          '<text:p>&a;</text:p></office:text></office:body></office:document-content>')
@@ -431,7 +449,9 @@ def prova_classifica():
     # ASCII, e la parte non si apre
     for nome, dati, cat in (("u16.docx", docx_utf16(), "word"), ("u16.odt", odt_utf16(), "opendocument"),
                             ("u16le.odt", odt_utf16("utf-16-le"), "opendocument"),
-                            ("latin.odt", odt_utf16("iso-8859-1"), "opendocument")):
+                            ("latin.odt", odt_utf16("iso-8859-1"), "opendocument"),
+                            # La dichiarazione oltre i 256 byte (terza revisione della PR #364)
+                            ("spazi.odt", odt_utf16("iso-8859-1", spazi=600), "opendocument")):
         try:
             pp_, _ = I.testi(dati, nome, cat, 30_000_000)
             esito = "letto: " + "".join(pp_)[:60]
@@ -439,6 +459,21 @@ def prova_classifica():
             esito = str(e)
         verifica(f"{nome}: la parte XML in un'altra codifica con un'ENTITY non si apre",
                  "codifica" in esito, esito)
+    # «utf_8» è UTF-8 (senza entità: si legge)
+    dati = odt_utf16("utf-8", nome="utf_8").replace(b"<!DOCTYPE x [<!ENTITY a \"INIETTATO\">]>", b"")
+    import zipfile as _z
+    buf = io.BytesIO()
+    with _z.ZipFile(io.BytesIO(dati)) as zin, _z.ZipFile(buf, "w") as zout:
+        for i in zin.infolist():
+            d = zin.read(i)
+            zout.writestr(i.filename, d.replace(b'<!DOCTYPE x [<!ENTITY a "INIETTATO">]>', b"")
+                          .replace(b"&a;", b"le caravelle"))
+    try:
+        pp_, _ = I.testi(buf.getvalue(), "u8.odt", "opendocument", 30_000_000)
+        esito = "".join(pp_)
+    except ValueError as e:
+        esito = str(e)
+    verifica("una parte che dichiara «utf_8» si legge", "caravelle" in esito, esito)
     pp, _ = I.testi(pptx(), "a.pptx", "powerpoint", 30_000_000)
     verifica("pptx: una diapositiva per pagina", len(pp) == 2 and "nucleo" in pp[1], pp)
 
@@ -612,6 +647,25 @@ def prova_zip_ostili():
             z.comment = b"un commento con PK dentro e altro"
         verifica("un archivio onesto col commento (anche con la firma dentro) si apre se non è ambiguo, "
                  "o si rifiuta senza eccezioni", isinstance(I.voci_dichiarate(q), (tuple, type(None))))
+        # Due record ZIP64 diversi (terza revisione della PR #364): uno piccolo dove punta
+        # `reloff`, uno vero subito prima del localizzatore
+        q = TMP / "zip64-doppio.zip"
+        q.write_bytes(zip64_doppio(3000))
+        try:
+            I.elenca(q, "x.zip", I.Tetti())
+            esito = "aperto"
+        except I.Rifiuto as e:
+            esito = str(e)
+        verifica("due record ZIP64 diversi: «fatto in modo strano», rifiutato prima di aprirlo",
+                 I.voci_dichiarate(q) is None and "strano" in esito, esito)
+        # Le voci dei sistemi (__MACOSX, .DS_Store, Thumbs.db, desktop.ini) saltate senza righe
+        q = TMP / "mac.zip"
+        q.write_bytes(zip_di([("appunti.txt", b"le caravelle"), ("__MACOSX/._appunti.txt", b"x"),
+                              ("cartella/.DS_Store", b"x"), ("Thumbs.db", b"x"),
+                              ("cartella/desktop.ini", b"x")]))
+        _t, vv = I.elenca(q, "mac.zip", I.Tetti())
+        verifica("le voci dei sistemi non sono nemmeno elencate", [v.nome for v in vv] == ["appunti.txt"],
+                 [v.nome for v in vv])
         q2 = TMP / "commento2.zip"
         with zipfile.ZipFile(q2, "w") as z:
             z.writestr("a.txt", b"ciao")

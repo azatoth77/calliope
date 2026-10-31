@@ -5,8 +5,8 @@
 // schede non passano mai di qui.
 "use strict";
 
-// v37 (31/10, #298): studio_importa.js, «Aggiungi materiali» dello Studio
-const CACHE = "calliope-telefono-pagina-v37";
+// v38 (31/10, #298): studio_importa.js, «Aggiungi materiali» dello Studio (dopo le mini-app, v37)
+const CACHE = "calliope-telefono-pagina-v38";
 const PAGINA = [
   "/telefono/", "/telefono/telefono.js", "/telefono/voce.js", "/telefono/microfono.js",
   "/telefono/schermo-acceso.js",

@@ -280,7 +280,9 @@ def errori_di_verita(lib) -> list[str]:
                                     + sc.get("errori", [])
                                     + [x["domanda"] + " " + x["risposta"]
                                        for x in sc.get("prova_tu", [])])
-            parole_scheda = set(C.normale(testo_scheda))
+            # I gettoni della forma chiusa (#361: i numeri restano numeri, «#2»), non le parole
+            # di `normale` (i numeri in lettere)
+            parole_scheda = set(C._gettoni(testo_scheda))
             for i, c in enumerate(v["carte"]):
                 dove = f"{cid} carte[{i}]"
                 if c.get("calcolo"):

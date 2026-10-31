@@ -669,44 +669,6 @@ dell'eco della stanza.
     - Resta fuori l'interruttore «controllo io le domande» (decisione 3 del progetto): senza domande
       generate attive non ha effetto.
 
-## La libreria (#297, 31/10)
-
-Decisione di chi amministra del 28/10 (#297) e del 30/10 sulla prima serie: contenuti preparati con
-Claude, che a runtime si scelgono e si adattano invece di generarli; la prima serie è «un bel set di
-Chimica, Fisica, Informatica e Biologia» per la **prima superiore, tecnico tecnologico, indirizzo
-Chimica, materiali e biotecnologie** (solo questa descrizione nel repository). Analisi nel commento
-della #297; tre parti: libreria e indice (qui), mini-app, adattamento e preparazione notturna.
-
-46. **La libreria è un dato fidato nel repository, e la sceglie il codice.**
-    - Un file JSON per contenuto in `calliope/studio/libreria/contenuti/<materia>/`, mai testo nel
-      codice: `scheda` (un argomento), `mazzo` (le carte di una scheda), `miniapp` (la parte 2).
-      Metadati obbligatori: materia, classe, argomento, chiavi, prerequisiti, durata, comandi a
-      voce, licenza AGPL, data di revisione. Il formato lo controlla il codice all'avvio (un file che
-      non va resta fuori con una riga nel registro); la **verità** la controlla una prova con i suoi
-      conti e la sua tabella degli elementi (`prove/verita_libreria.py`): i conti dichiarati, le
-      risposte chiuse giuste per il codice delle carte e le «sbagliate» tipiche no, le risposte
-      nella scheda. Scritti con Claude e rivisti da una persona nella PR
-      (`prove/manuali/libreria-studio.md`): per questo fidati, a differenza dei materiali.
-    - **L'indice per argomento non è un indice del programma** (punto 7 resta): lega i titoli degli
-      argomenti confermati dalla persona (un dato) alle schede, con le radici delle parole e chiavi
-      che valgono solo per intero; la materia filtra («Scienze» per Chimica, Fisica e Biologia,
-      «Tecnologia» per Informatica, una materia fuori elenco per tutte). Una regola sul testo che
-      sceglie fra dati fidati, reversibile e vista dalla persona (principio 10), coi contrari nelle
-      prove. Il modello non sceglie niente.
-    - **La padronanza conta solo se «mostrata»**: le lacune prima, coi prerequisiti. In ombra
-      l'ordine resta quello degli argomenti, perché un ordine diverso la direbbe.
-    - Si vede nella home («Dalla libreria», con la scheda da leggere e «Aggiungi le carte») e a voce
-      con la lettura `libreria` del tool `studio`: i titoli della libreria (fidati) e i numeri degli
-      argomenti, mai i loro titoli. Le soluzioni di «prova tu» arrivano una per volta, a richiesta.
-      Le carte aggiunte hanno l'origine «libreria», sono della persona come le altre (correggi,
-      togli, esiti e tentativi). Con una prova aperta la libreria non c'è per nessuno.
-    - Niente schema nuovo: l'origine è una colonna di testo, «già aggiunto» viene dalle domande che
-      ci sono. Interruttore `studio_libreria` (attiva di serie con lo Studio, «ombra» solo i conti
-      nel registro, «spenta»).
-
-    Alternative scartate: generare le schede a runtime con qwen (lento e da controllare: resta per
-    ciò che manca, parte 3); un indice del programma ministeriale (il punto 7 e la #279); la
-    padronanza in ombra per l'ordine; un modello che sceglie i contenuti dai titoli.
 ## I premi e la regola per i minori (#296, 31/10)
 
 45. **Premi al minimo, solo come rinforzo positivo, calcolati dal codice dalla pratica vera.**
@@ -763,6 +725,80 @@ della #297; tre parti: libreria e indice (qui), mini-app, adattamento e preparaz
     - i duelli che danno stelle o tentativi: spingerebbero a imbrogliare;
     - un record della serie e i promemoria: sono meccaniche in più.
 
+## La libreria (#297, 31/10)
+
+Decisione di chi amministra del 28/10 (#297) e del 30/10 sulla prima serie: contenuti preparati con
+Claude, che a runtime si scelgono e si adattano invece di generarli; la prima serie è «un bel set di
+Chimica, Fisica, Informatica e Biologia» per la **prima superiore, tecnico tecnologico, indirizzo
+Chimica, materiali e biotecnologie** (solo questa descrizione nel repository). Analisi nel commento
+della #297; tre parti: libreria e indice (qui), mini-app, adattamento e preparazione notturna.
+
+46. **La libreria è un dato fidato nel repository, e la sceglie il codice.**
+    - Un file JSON per contenuto in `calliope/studio/libreria/contenuti/<materia>/`, mai testo nel
+      codice: `scheda` (un argomento), `mazzo` (le carte di una scheda), `miniapp` (la parte 2).
+      Metadati obbligatori: materia, classe, argomento, chiavi, prerequisiti, durata, comandi a
+      voce, licenza AGPL, data di revisione. Il formato lo controlla il codice all'avvio (un file che
+      non va resta fuori con una riga nel registro); la **verità** la controlla una prova con i suoi
+      conti e la sua tabella degli elementi (`prove/verita_libreria.py`): i conti dichiarati, le
+      risposte chiuse giuste per il codice delle carte e le «sbagliate» tipiche no, le risposte
+      nella scheda. Scritti con Claude e rivisti da una persona nella PR
+      (`prove/manuali/libreria-studio.md`): per questo fidati, a differenza dei materiali.
+    - **L'indice per argomento non è un indice del programma** (punto 7 resta): lega i titoli degli
+      argomenti confermati dalla persona (un dato) alle schede, con le radici delle parole e chiavi
+      che valgono solo per intero; la materia filtra («Scienze» per Chimica, Fisica e Biologia,
+      «Tecnologia» per Informatica, una materia fuori elenco per tutte). Una regola sul testo che
+      sceglie fra dati fidati, reversibile e vista dalla persona (principio 10), coi contrari nelle
+      prove. Il modello non sceglie niente.
+    - **La padronanza conta solo se «mostrata»**: le lacune prima, coi prerequisiti. In ombra
+      l'ordine resta quello degli argomenti, perché un ordine diverso la direbbe.
+    - Si vede nella home («Dalla libreria», con la scheda da leggere e «Aggiungi le carte») e a voce
+      con la lettura `libreria` del tool `studio`: i titoli della libreria (fidati) e i numeri degli
+      argomenti, mai i loro titoli. Le soluzioni di «prova tu» arrivano una per volta, a richiesta.
+      Le carte aggiunte hanno l'origine «libreria», sono della persona come le altre (correggi,
+      togli, esiti e tentativi). Con una prova aperta la libreria non c'è per nessuno.
+    - Niente schema nuovo: l'origine è una colonna di testo, «già aggiunto» viene dalle domande che
+      ci sono. Interruttore `studio_libreria` (attiva di serie con lo Studio, «ombra» solo i conti
+      nel registro, «spenta»).
+
+    Alternative scartate: generare le schede a runtime con qwen (lento e da controllare: resta per
+    ciò che manca, parte 3); un indice del programma ministeriale (il punto 7 e la #279); la
+    padronanza in ombra per l'ordine; un modello che sceglie i contenuti dai titoli.
+
+47. **Le mini-app della libreria sono giochi puri fidati, aperti dai file del repository**
+    (#297, parte 2, 31/10). Otto per la prima serie, due per materia, nei tre tipi della issue
+    (da esplorare, con il quiz, percorso guidato con previsione, verifica e secondo tentativo).
+    - Ognuna è un gioco della **macchina a stati** con il **palco fisso** (`estensioni/macchina.py`,
+      `motore_gioco.js`): JavaScript deterministico senza modello, niente permessi, niente azioni,
+      niente dati salvati, un giocatore. Sta in `calliope/studio/libreria/miniapp/<cartella>/`
+      (manifesto, `logica.js` con `GIOCO` e `DATI`, `gioco.test.js`) con la sua scheda della
+      libreria (`tipo: miniapp`). Il caricamento la valida come un'estensione (manifesto, analisi
+      statica) e ne tiene l'impronta; i comandi a voce della scheda devono essere forme vere della
+      macchina.
+    - **Non passano dall'archivio delle estensioni** né dall'approvazione: sono scritte e riviste
+      nella PR come il codice. `Giochi.avvia` prende i file della libreria (`file`), e il riquadro
+      si compone da quei byte, con la stessa sandbox e la stessa CSP dei giochi approvati; un file
+      cambiato dopo il caricamento non si apre.
+    - Si aprono con il tool `studio_attivita` («sicuro», nessuna fonte, E0): a voce l'attività la
+      sceglie il codice fra i titoli della libreria (dati fidati) dalle parole dette, e se non è
+      chiaro dice quali ci sono; dalla home con il tocco «Apri» (`studio_attivita` in `TOCCABILI`,
+      col bersaglio). Con una prova aperta della persona, su qualsiasi sua verifica, no; e una
+      prova che parte chiude le attività che la persona ha aperte (il gancio `ganci_prova` dello
+      Studio verso `Giochi.ferma_libreria`). *[storico fino alla revisione della PR #366: «per
+      un minore vale il tempo dei giochi»]* Decisione di chi amministra del 31/10: **sono studio,
+      non contano nel tempo dei giochi** di un minore (`Partita.libreria`, un segno messo solo da
+      `studio_attivita`); valgono gli orari del minore come per tutto lo Studio, e un'attività
+      aperta prima del riposo si chiude al battito quando il riposo comincia.
+    - Il prefisso `libreria_` è riservato (`manifesto.valida`): un'estensione dell'archivio non lo
+      usa; le partite della libreria non vanno nel registro dell'archivio delle estensioni.
+    - La **verità** di ciò che mostrano la controlla una prova con conti e tabelle sue
+      (`prove/verita_miniapp.mjs` e `prova_studio_miniapp.py`), oltre ai test e alla prova di fumo
+      di ognuna.
+
+    Alternative scartate: installarle come estensioni approvate all'avvio (passerebbero dalla
+    porta e dall'archivio, che servono per ciò che scrive l'agente); generarle con l'agente (resta
+    per una mini-app che manca, in modalità sviluppo); una tela libera (la misura del palco e la
+    voce le dà solo la macchina).
+
 ## L'importazione dei materiali scaricati (#298, 31/10)
 
 Decisione di chi amministra del 28/10: per i materiali della scuola niente API di Classroom (sugli
@@ -770,7 +806,7 @@ account dei minorenni serve l'amministratore della scuola), ma tre strade sempli
 scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi nel commento della
 #298; la prima PR fa i file e gli ZIP con l'avanzamento, Takeout e condivisione vengono dopo.
 
-47. **Un file o un archivio diventa pagine della verifica, con un lavoro di sfondo.** «Aggiungi
+48. **Un file o un archivio diventa pagine della verifica, con un lavoro di sfondo.** «Aggiungi
     materiali» sulla carta della verifica (telefono e PC personale) manda i file a `POST
     /api/studio/importa`, coi permessi delle pagine (punto 13: lo schermo personale, gli orari del
     minore, la propria verifica o quella del minore da tutore; ospiti e conoscenti mai). Il file
@@ -779,7 +815,7 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     «da leggere» come quelle della 4.2; Word, PowerPoint, Excel, OpenDocument, testo, Markdown,
     CSV e HTML diventano **pagine di testo già lette** (`metodo` «file_testo»), senza OCR. Lo ZIP
     si apre un livello; il resto è una riga «non letto: …» che non ferma gli altri.
-48. **Il tipo dai byte, i tetti contati, i nomi mai sul disco.** Il tipo lo dicono i byte;
+49. **Il tipo dai byte, i tetti contati, i nomi mai sul disco.** Il tipo lo dicono i byte;
     l'estensione serve solo a scoprire i tipi falsi. Le voci dello ZIP non si estraggono per
     nome: si leggono in memoria contando i byte decompressi (per voce e per archivio, non quelli
     dichiarati), con un tetto alle voci e al rapporto di compressione; percorsi assoluti, «..»,
@@ -789,11 +825,11 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     sottoprocesso (la voce che lo blocca è «troppo pesante», si riparte dalla successiva), uno
     per voce e uno per tutta l'importazione, più stretto per gli archivi (si ferma, si riprende
     a mano).
-49. **I nomi dei file sono dati.** Sullo schermo con textContent, mai al modello né nelle frasi
+50. **I nomi dei file sono dati.** Sullo schermo con textContent, mai al modello né nelle frasi
     pronte: i materiali importati non hanno titolo e il piano li dice «materiale N». Il testo è
     un dato come quello dell'OCR (punto 6): al modello solo in busta, con la fonte «allegato»; le
     macro non si eseguono mai, il testo nascosto entra con l'avviso.
-50. **L'avanzamento sta su disco e si vede.** Una riga per importazione (`studio_importazioni`,
+51. **L'avanzamento sta su disco e si vede.** Una riga per importazione (`studio_importazioni`,
     schema 13) con le fasi (ricevuto, estratto, letto, argomenti, preparato), i conti e le righe
     «non letto»; dopo un riavvio riparte dalla prossima voce. Si ferma, si riprende, si annulla.
     Durante un'importazione la verifica non chiede gli argomenti. La tenuta è quella delle pagine

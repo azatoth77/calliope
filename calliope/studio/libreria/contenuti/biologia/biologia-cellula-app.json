@@ -1,0 +1,15 @@
+{
+  "formato": 1,
+  "id": "biologia-cellula-app",
+  "tipo": "miniapp",
+  "titolo": "Dentro la cellula",
+  "materia": "Biologia",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "tipo_app": "quiz",
+  "estensione": "cellula",
+  "schede": ["biologia-cellula"],
+  "durata": 10,
+  "comandi": ["la prossima", "al quiz", "sì", "no", "la risposta a", "ho finito"],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31"
+}
