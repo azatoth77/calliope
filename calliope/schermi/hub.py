@@ -51,6 +51,9 @@ from .schede import CASA, PERSONALE, PUBBLICA
 
 # Coda per connessione: oltre, le schede vecchie di uno schermo lento si scartano
 CODA_MAX = 32
+# «Qualunque proprietario» per `schermo`, `valido`, `invia_a` ed `evento_a` (#338): None vuol dire
+# «nessuno» (uno schermo di stanza), quindi serve un segnaposto per «non controllare»
+QUALUNQUE = object()
 # Stati della voce mostrati sugli schermi (Schermi.voce)
 VOCE_STATI = ("dorme", "ascolta", "pensa", "parla")
 
@@ -66,6 +69,11 @@ class Mittente:
     # Lo schermo da cui arriva la richiesta (04/10, «rispondi dove ti ho chiesto»): quello
     # del satellite che ha sentito la frase, o quello dove è stata scritta. Riceve per primo
     schermo: int | None = None
+    # L'identità di quello schermo quando la richiesta è partita (#338): {"creato", "proprietario"}
+    # da un elemento in coda (`archivio.di_quale_schermo`), None se non si sa. Con questa lo
+    # schermo d'origine riceve solo se è ancora lui (non revocato e riabbinato, non passato a
+    # un'altra persona)
+    schermo_identita: dict | None = None
 
     @property
     def chiave(self) -> str:
@@ -219,7 +227,11 @@ class Schermi:
         self._dove: "OrderedDict[str, set[int]]" = OrderedDict()
         # Numero → istante dell'abbinamento, dall'ultimo elenco letto (#266): un numero riusato
         # da un altro schermo si riconosce (`_identita_cambiate`)
-        self._identita: dict[int, float] = {}
+        # Dal 31/10 (#338) numero → (istante, proprietario): lo stesso schermo passato a un'altra
+        # persona è un'identità nuova. `_identita_ver`: la versione dell'archivio dell'ultimo elenco
+        # usato (una lettura più vecchia non torna indietro)
+        self._identita: dict[int, tuple] = {}
+        self._identita_ver = -1
         self._ultime: dict[str, dict] = {}
         self._cache: tuple[float, int, list[dict]] = (0.0, -1, [])
         self.url = ""                       # lo imposta il server quando parte
@@ -363,61 +375,103 @@ class Schermi:
         # nel mezzo lasciava per 5 s le righe vecchie con la versione nuova
         ver = self.archivio.versione
         rows = self.archivio.elenco()
-        self._cache = (time.monotonic(), ver, rows)
-        via = self._identita_cambiate(rows)
+        # Prima le identità e ciò che lascia uno schermo cambiato, poi l'elenco nella cache (#338,
+        # revisione della PR #332): pubblicato prima, un altro thread prendeva la riga nuova mentre
+        # `_identita` era ancora quella di prima, e `_stesso` scartava una scheda legittima per lo
+        # schermo appena riabbinato
+        via, passati = self._identita_cambiate(rows, ver)
         sc = getattr(self, "scaricamenti", None)
         if sc is not None:
             # Gli schermi revocati (anche da terminale) perdono le voci di «Scarica» (seconda
-            # revisione della PR #268, #260); anche quelli col numero riusato (#266)
+            # revisione della PR #268, #260); anche quelli col numero riusato (#266) e quelli
+            # passati a un'altra persona (#338: le voci erano del proprietario di prima)
             sc.tieni_solo(s["id"] for s in rows)
             if via:
                 sc.dimentica(via)
         if via:
-            self._schermi_via(via)
+            self._schermi_via(via, passati)
+        with self._lock:
+            # Una lettura più vecchia di quella già in cache (due thread a cache scaduta) non la
+            # sostituisce
+            if ver >= self._cache[1]:
+                self._cache = (time.monotonic(), ver, rows)
         return rows
 
     def _rinfresca(self):
         self._cache = (0.0, -1, [])
 
     @staticmethod
-    def identita(schermo: dict | None):
+    def _chi(schermo: dict) -> tuple:
+        """(istante dell'abbinamento, proprietario) di uno schermo: con il numero, la sua identità."""
+        return (schermo.get("creato"), schermo.get("proprietario") or None)
+
+    @classmethod
+    def identita(cls, schermo: dict | None):
         """Chi è uno schermo: il numero da solo non basta, perché la tabella lo riusa dopo una
         revoca (`INTEGER PRIMARY KEY` senza AUTOINCREMENT). Con l'istante dell'abbinamento sì
-        (#266, seconda revisione della PR #270)."""
-        return (schermo.get("id"), schermo.get("creato")) if schermo else None
+        (#266, seconda revisione della PR #270). Dal 31/10 (#338) anche il proprietario: «rendilo
+        personale di Bianca» lascia numero e istante, ma per le schede è un altro schermo (la
+        risposta di Dario in coda, la sua cronologia in memoria, la sua pagina aperta non sono
+        di Bianca)."""
+        return (schermo.get("id"), *cls._chi(schermo)) if schermo else None
 
-    def _identita_cambiate(self, rows: list[dict]) -> set[int]:
-        """I numeri degli schermi che non ci sono più o che sono di un altro schermo da quando
-        l'hub ha letto l'elenco l'ultima volta: anche per le revoche e gli abbinamenti fatti da
-        terminale, in un altro processo."""
-        ora = {s["id"]: s.get("creato") for s in rows}
+    @classmethod
+    def quale(cls, schermo: dict | None) -> dict:
+        """{"creato", "proprietario"} di uno schermo letto adesso, da passare a `schermo`,
+        `invia_a` ed `evento_a` come fa un elemento in coda (`archivio.di_quale_schermo`)."""
+        if not schermo:
+            return {}
+        creato, prop = cls._chi(schermo)
+        return {"creato": creato, "proprietario": prop}
+
+    def _identita_cambiate(self, rows: list[dict], ver: int = 0) -> tuple[set[int], set[int]]:
+        """(via, passati): i numeri degli schermi che non ci sono più, che sono di un altro schermo
+        o di un'altra persona da quando l'hub ha letto l'elenco l'ultima volta (anche per le
+        revoche e gli abbinamenti fatti da terminale, in un altro processo); `passati` quelli dello
+        stesso abbinamento con un altro proprietario (#338). Una lettura con una versione più
+        vecchia dell'ultima usata non cambia niente."""
+        ora = {s["id"]: self._chi(s) for s in rows}
         with self._lock:
+            if ver < getattr(self, "_identita_ver", -1):
+                return set(), set()
+            self._identita_ver = ver
             prima, self._identita = self._identita, ora
-            via = {sid for sid, creato in prima.items() if sid not in ora or ora[sid] != creato}
+            via = {sid for sid, chi in prima.items() if sid not in ora or ora[sid] != chi}
+            passati = {sid for sid in via if sid in ora and ora[sid][0] == prima[sid][0]}
             # Ciò che c'è in memoria per un numero che non è (più) nell'elenco
             via |= {sid for sid in set(self._storia) | set(self._conn) if sid not in ora}
-        return via
+        return via, passati
 
-    def _schermi_via(self, via: set[int]):
-        """Uno schermo revocato o col numero riusato lascia tutto ciò che l'hub tiene per quel
-        numero (#266, seconda revisione della PR #270: la scheda personale di Dario andava al
-        telefono nuovo di Bianca al collegamento, «Ferma» al suo PC nuovo): la cronologia, la
-        traccia delle schede, le pagine ancora collegate dello schermo di prima (ricevono
-        «revocato») e i posti nelle partite. Il nuovo schermo con lo stesso numero riparte vuoto."""
+    def _schermi_via(self, via: set[int], passati: set[int] = frozenset()):
+        """Uno schermo revocato, col numero riusato o passato a un'altra persona lascia tutto ciò
+        che l'hub tiene per quel numero (#266, seconda revisione della PR #270: la scheda personale
+        di Dario andava al telefono nuovo di Bianca al collegamento, «Ferma» al suo PC nuovo; #338:
+        lo stesso con «rendilo personale di Bianca»): la cronologia, la traccia delle schede, le
+        pagine ancora collegate con l'identità di prima e i posti nelle partite. Le pagine ricevono
+        «revocato» (tornano all'abbinamento) o, se lo schermo è lo stesso con un altro proprietario
+        (`passati`), «proprietario»: svuotano ciò che mostrano e rifanno l'accesso col token, che
+        vale ancora. Lo schermo riparte vuoto."""
         with self._lock:
             for sid in via:
                 self._storia.pop(sid, None)
                 vive = []
+                adesso = self._identita.get(sid)
                 for c in self._conn.get(sid, []):
-                    if self.identita(c.schermo) == (sid, self._identita.get(sid, object())):
-                        vive.append(c)                  # già del nuovo schermo
+                    if adesso is not None and self.identita(c.schermo) == (sid, *adesso):
+                        vive.append(c)                  # già dello schermo di adesso
                     else:
-                        c.consegna(("revocato", "{}"))
+                        c.consegna(("proprietario" if sid in passati else "revocato", "{}"))
                 if vive:
                     self._conn[sid] = vive
                 else:
                     self._conn.pop(sid, None)
             self._dimentica_dove(via)
+        viste = getattr(self, "viste_studio", None)
+        if viste is not None:
+            # La vista dello Studio aperta dal proprietario di prima non va nei turni di quello nuovo
+            for sid in passati:
+                creato = (self._identita.get(sid) or (None,))[0]
+                viste.togli((sid, creato))
         giochi = getattr(self, "giochi", None)
         if giochi is not None and callable(getattr(giochi, "schermi_via", None)):
             try:
@@ -429,11 +483,10 @@ class Schermi:
         with self._lock:
             return [c[0].schermo for c in self._conn.values() if c]
 
-    def valido(self, sid: int, creato=None) -> bool:
+    def valido(self, sid: int, creato=None, proprietario=QUALUNQUE) -> bool:
         """Lo schermo c'è ancora; con `creato`, è proprio quello (non un altro col numero
-        riusato, #266)."""
-        return any(s["id"] == sid and (creato is None or s.get("creato") == creato)
-                   for s in self.abbinati())
+        riusato, #266); con `proprietario`, è ancora di quella persona (None: di nessuno, #338)."""
+        return self.schermo(sid, creato, proprietario) is not None
 
     # ── connessioni (dal server) ──
     def collega(self, schermo: dict, loop, locale: bool = False, ripresa=None
@@ -446,12 +499,18 @@ class Schermi:
         conn = _Connessione(schermo, loop, locale)
         with self._lock:
             self._conn.setdefault(schermo["id"], []).append(conn)
+            if not self._stesso(schermo):
+                # La riga letta prima di un cambio (un'altra persona, un altro abbinamento, #338):
+                # niente cronologia, e la pagina rifà l'accesso con lo schermo di adesso
+                conn.consegna(("proprietario", "{}"))
+                return conn, []
             if ripresa:
                 self._unisci_storia(schermo["id"], ripresa, schermo.get("proprietario"))
             storia = list(self._storia.get(schermo["id"], ()))
         if not schermo.get("proprietario"):
             # Uno schermo che non è (più) personale («rendilo condiviso») non rimanda le schede
-            # personali che aveva in memoria (08/10)
+            # personali che aveva in memoria (08/10; dal 31/10, #338, il cambio di proprietario
+            # svuota già la cronologia: resta come difesa in più)
             storia = [c for c in storia if c.get("visibilita") != PERSONALE]
         return conn, storia
 
@@ -527,7 +586,8 @@ class Schermi:
         if not persona:
             return 0
         n = self.cronologia.pulisci(persona) if self.cronologia is not None else 0
-        sids = [s["id"] for s in self.abbinati() if s.get("proprietario") == persona]
+        mie = [s for s in self.abbinati() if s.get("proprietario") == persona]
+        sids = [s["id"] for s in mie]
         with self._lock:
             self._ultime.pop(persona, None)
             self._dimentica_dove(set(sids))
@@ -536,8 +596,8 @@ class Schermi:
                 for c in self._conn.get(sid, []):
                     c.consegna(("pulisci", "{}"))
         for c in self._ricostruite(persona):
-            for sid in sids:
-                self.invia_a(sid, c)
+            for s in mie:
+                self.invia_a(s["id"], c, **self.quale(s))
         return n
 
     def togli_schede(self, togliere) -> int:
@@ -717,11 +777,15 @@ class Schermi:
         return self._a_personali(persona, "chat", json.dumps({"reset": True, "turni": []}))
 
     def _a_personali(self, persona, tipo: str, msg: str) -> int:
-        sids = [s["id"] for s in self.abbinati() if s.get("proprietario") == persona]
+        mie = [s for s in self.abbinati() if s.get("proprietario") == persona]
         n = 0
         with self._lock:
-            for sid in sids:
-                for c in self._conn.get(sid, []):
+            for s in mie:
+                # Solo se lo schermo è ancora suo, e solo alle pagine con la sua identità (#338:
+                # fra `abbinati()` e il lock lo schermo può essere passato a un'altra persona)
+                if not self._stesso(s):
+                    continue
+                for c in self._sue(s):
                     n += c.consegna((tipo, msg))
         return n
 
@@ -792,26 +856,30 @@ class Schermi:
                 "destinatari": [s["nome"] for s in dest], "motivo": motivo,
                 "abbinati": len(tutti), "ms": round((time.perf_counter() - t0) * 1000, 2)}
 
-    def invia_a(self, sid: int, scheda: dict, creato=None) -> bool:
+    def invia_a(self, sid: int, scheda: dict, creato=None, proprietario=QUALUNQUE) -> bool:
         """La scheda a uno schermo preciso, senza scegliere i destinatari: la risposta a una
         frase scritta torna sullo schermo da cui è arrivata (04/10). True se una sua pagina è
         collegata (altrimenti resta nella sua cronologia). Con `creato` (l'istante
         dell'abbinamento, #275) solo se lo schermo è ancora quello: un elemento rimasto in coda
-        mentre lo schermo veniva revocato e il numero riabbinato non va allo schermo nuovo."""
-        s = self.schermo(sid, creato)
+        mentre lo schermo veniva revocato e il numero riabbinato non va allo schermo nuovo. Con
+        `proprietario` (#338; None = di nessuno) solo se è ancora di quella persona: la risposta
+        di Dario in coda non va allo schermo diventato di Bianca. Chi sceglie lo schermo da un
+        elenco letto prima passa entrambi (`quale`)."""
+        s = self.schermo(sid, creato, proprietario)
         if s is None:
             return False
         pub = pubblica(scheda)
         msg = json.dumps(pub, ensure_ascii=False, default=str)
         ok = False
-        if "_scarica" in scheda or "_registro" in scheda:
-            # Lo schermo da cui è stata scritta la richiesta: il suo proprietario (se è personale)
-            if s.get("proprietario"):
-                registra_scaricabili(self.scaricamenti, sid, scheda, s["proprietario"])
         storia = per_storia(scheda, pub)
         with self._lock:
             if not self._stesso(s):
                 return False
+            if ("_scarica" in scheda or "_registro" in scheda) and s.get("proprietario"):
+                # Lo schermo da cui è stata scritta la richiesta: il suo proprietario (se è
+                # personale). Nel lock, dopo il controllo (#338): con la riga di prima la voce di
+                # «Scarica» del proprietario di prima resterebbe allo schermo
+                registra_scaricabili(self.scaricamenti, sid, scheda, s["proprietario"])
             self._in_storia(sid, storia)
             for c in self._sue(s):
                 ok = c.consegna(("scheda", msg)) or ok
@@ -821,18 +889,23 @@ class Schermi:
             self._salva_persona(s["proprietario"], scheda, storia)
         return ok
 
-    def evento_a(self, sid: int, tipo: str, dati: dict, creato=None) -> int:
+    def evento_a(self, sid: int, tipo: str, dati: dict, creato=None, proprietario=QUALUNQUE) -> int:
         """Un evento SSE a tutte le pagine aperte di uno schermo (05/10: i messaggi dei giochi
         verso il loro riquadro). Non entra nella cronologia; non blocca. Quante pagine. Con
-        `creato` (#275) solo le pagine dello schermo con quell'abbinamento."""
-        if creato is not None and self.schermo(sid, creato) is None:
-            return 0
+        `creato` (#275) e `proprietario` (#338) solo se lo schermo è ancora quello, e solo alle
+        pagine con la sua identità."""
+        s = None
+        if creato is not None or proprietario is not QUALUNQUE:
+            s = self.schermo(sid, creato, proprietario)
+            if s is None:
+                return 0
         msg = json.dumps(dati, ensure_ascii=False, default=str)
         n = 0
         with self._lock:
-            for c in self._conn.get(sid, []):
-                if creato is None or (c.schermo or {}).get("creato") == creato:
-                    n += c.consegna((tipo, msg))
+            if s is not None and not self._stesso(s):
+                return 0
+            for c in (self._sue(s) if s is not None else self._conn.get(sid, [])):
+                n += c.consegna((tipo, msg))
         return n
 
     # ── l'aspetto dei satelliti personali (27/10, aspetto.py) ──
@@ -894,18 +967,22 @@ class Schermi:
             c.consegna(("aspetto", msg))
         return {"ok": True, "aspetto": dati}
 
-    def schermo(self, sid, creato=None) -> dict | None:
+    def schermo(self, sid, creato=None, proprietario=QUALUNQUE) -> dict | None:
         """Lo schermo col numero `sid`; con `creato`, solo se è proprio quello (non un altro col
-        numero riusato dopo una revoca, #275)."""
+        numero riusato dopo una revoca, #275); con `proprietario`, solo se è ancora di quella
+        persona (None: di nessuno; #338)."""
+        prop = QUALUNQUE if proprietario is QUALUNQUE else (proprietario or None)
         return next((s for s in self.abbinati() if s["id"] == sid
-                     and (creato is None or s.get("creato") == creato)), None)
+                     and (creato is None or s.get("creato") == creato)
+                     and (prop is QUALUNQUE or (s.get("proprietario") or None) == prop)), None)
 
     def _stesso(self, s: dict) -> bool:
         """Chiamare col lock: lo schermo `s` (letto da `abbinati()` prima del lock) è ancora
         quello che l'hub conosce con quel numero (#275, punto 2: fra `abbinati()` e il lock una
-        revoca e un riabbinamento da terminale possono dare il numero a un altro schermo)."""
+        revoca e un riabbinamento da terminale possono dare il numero a un altro schermo; #338: o
+        lo schermo può passare a un'altra persona)."""
         sid = s.get("id")
-        return sid not in self._identita or self._identita[sid] == s.get("creato")
+        return sid not in self._identita or self._identita[sid] == self._chi(s)
 
     def _sue(self, s: dict) -> list:
         """Chiamare col lock: le pagine collegate dello schermo `s`, solo quelle con la sua
@@ -993,6 +1070,11 @@ class Schermi:
         andrebbe a voce, senza gli schermi personali di altre persone. {"schermi": [nomi]}."""
         tutti = self.abbinati()
         per_id = {s["id"]: s for s in tutti}
+        # Lo schermo del tocco solo se è ancora quello del tocco (#338, revisione della PR #332):
+        # con l'identità che l'elemento in coda portava (istante e proprietario)
+        ident = mittente.schermo_identita or {}
+        origine = mittente.schermo if (mittente.schermo in per_id and (
+            not ident or self.schermo(mittente.schermo, **ident) is not None)) else None
         gia = [i for i in self.dove(scheda.get("chiave")) if i in per_id]
         if not gia and self.automatiche:
             stanza = mittente.stanza or self.stanza_predefinita or None
@@ -1001,11 +1083,11 @@ class Schermi:
                    if not s.get("proprietario") or s.get("proprietario") == mittente.persona]
         mie = [s["id"] for s in tutti
                if mittente.persona and s.get("proprietario") == mittente.persona]
-        dest = list(dict.fromkeys(([mittente.schermo] if mittente.schermo in per_id else [])
-                                  + mie + gia))
+        dest = list(dict.fromkeys(([origine] if origine is not None else []) + mie + gia))
         self.ricorda(scheda, mittente)
         for sid in dest:
-            self.invia_a(sid, scheda, creato=per_id[sid].get("creato"))
+            # Con l'identità letta con l'elenco (o quella del tocco): `invia_a` la ricontrolla nel lock
+            self.invia_a(sid, scheda, **(ident if (sid == origine and ident) else self.quale(per_id[sid])))
         return {"schermi": [per_id[i]["nome"] for i in dest]}
 
     # ── stato della voce ──
@@ -1223,7 +1305,9 @@ class Schermi:
         with self._lock:
             self._contesto[mittente.chiave] = dati
             for s in dest:
-                for c in self._conn.get(s["id"], []):
+                if not self._stesso(s):
+                    continue                    # passato a un'altra persona da adesso (#338)
+                for c in self._sue(s):
                     n += c.consegna(("contesto", msg))
         return n
 

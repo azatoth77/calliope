@@ -577,18 +577,31 @@
     es.addEventListener("gioco", (ev) => { vivo(); daServerGioco(JSON.parse(ev.data)); });
     es.addEventListener("chat", (ev) => { vivo(); chatDalServer(JSON.parse(ev.data)); });
     es.addEventListener("pulisci", () => { vivo(); pulisciLocale(); });
-    es.addEventListener("revocato", () => {
+    // Via tutto ciò che la pagina mostra dello schermo di prima (revocato, o di un'altra persona)
+    function svuotaSchermo() {
       mostraVoce(null);
       mostraContesto(null);
       chiudiEventi();
       casellaScrivi(false);
-      salvaToken(null);
       S.cronologia = [];
+      S.corrente = null;
       impostaChat(null);
       emetti("schede", {});
       disegnaCronologia();
+    }
+    es.addEventListener("revocato", () => {
+      svuotaSchermo();
+      salvaToken(null);
       if (INCORPORATA) { S.sessione = null; stato("attesa", "schede in attesa"); return; }
       abbina();
+    });
+    // Lo stesso schermo è diventato di un'altra persona (31/10, #338): niente di ciò che mostrava
+    // resta, il token vale ancora e un accesso nuovo porta lo schermo di adesso
+    es.addEventListener("proprietario", () => {
+      if (es !== S.es) return;
+      svuotaSchermo();
+      mostraInattiva();
+      ricollega();
     });
     es.addEventListener("error", () => {
       if (es !== S.es) return;

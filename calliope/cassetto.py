@@ -783,7 +783,10 @@ class Cassetto:
         for s in hub.abbinati():
             if s.get("proprietario") == persona:
                 try:
-                    n += bool(hub.invia_a(s["id"], scheda))
+                    # Con l'identità letta adesso: se lo schermo passa a un'altra persona prima
+                    # dell'invio, la scheda non va (#338)
+                    n += bool(hub.invia_a(s["id"], scheda, creato=s.get("creato"),
+                                          proprietario=s.get("proprietario")))
                 except Exception:  # noqa: BLE001 — lo schermo non ferma niente
                     pass
         return n

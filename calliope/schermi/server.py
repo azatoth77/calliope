@@ -384,6 +384,10 @@ def crea_app(hub: Schermi) -> Starlette:
                     except asyncio.TimeoutError:
                         if not hub.valido(schermo["id"], schermo.get("creato")):  # revocato o riusato
                             tipo, dati = "revocato", "{}"
+                        elif not hub.valido(schermo["id"], schermo.get("creato"),
+                                            schermo.get("proprietario")):
+                            # Passato a un'altra persona (#338): la pagina rifà l'accesso
+                            tipo, dati = "proprietario", "{}"
                         else:
                             # Un evento vero e non un commento: la pagina lo vede e capisce
                             # da sola se il flusso è morto (rete caduta senza chiusura, 02/10)
@@ -394,8 +398,15 @@ def crea_app(hub: Schermi) -> Starlette:
                     yield f"event: {tipo}\ndata: {dati}\n\n"
                     if tipo == "revocato":
                         with lock:
-                            for k in [k for k, v in sessioni.items() if v[0] == schermo["id"]]:
+                            # Solo le sessioni di questo abbinamento: un numero riusato ha le sue (#338)
+                            for k in [k for k, v in sessioni.items()
+                                      if v == (schermo["id"], schermo.get("creato"))]:
                                 sessioni.pop(k, None)
+                        return
+                    if tipo == "proprietario":
+                        # Lo stesso schermo di un'altra persona (#338): il flusso finisce e la pagina
+                        # svuota e rifà l'accesso col token, che vale ancora (la sessione nuova
+                        # nasce con il proprietario di adesso)
                         return
             finally:
                 hub.scollega(conn)
@@ -492,7 +503,7 @@ def crea_app(hub: Schermi) -> Starlette:
                                  "persona": schermo.get("proprietario"),
                                  "schermo": schermo.get("nome"), "stanza": schermo.get("stanza"),
                                  # La risposta torna qui (calliope/rispondi.py, 04/10)
-                                 "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"),
+                                 "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "schermo_proprietario": schermo.get("proprietario"),
                                  # Dalla modalità scrittura del telefono la risposta è solo
                                  # scritta (28/10, dopo la revisione della PR #304)
                                  "solo_scritto": personale and dati.get("solo_scritto") is True,
@@ -520,7 +531,7 @@ def crea_app(hub: Schermi) -> Starlette:
         if not hub.ingresso.metti({"tipo": "modulo", "_modulo": m, "valori": valori,
                                    "schermo": schermo.get("nome"),
                                    "stanza": schermo.get("stanza"),
-                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}):
+                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "schermo_proprietario": schermo.get("proprietario"), "arrivato": time.time()}):
             return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
         return _json({"ok": True})
 
@@ -563,7 +574,7 @@ def crea_app(hub: Schermi) -> Starlette:
                                    "schermo": schermo.get("nome"),
                                    "stanza": schermo.get("stanza"),
                                    "solo_scritto": dati.get("solo_scritto") is True,
-                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}):
+                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "schermo_proprietario": schermo.get("proprietario"), "arrivato": time.time()}):
             return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
         return _json({"ok": True, "larghezza": w, "altezza": h})
 
@@ -611,7 +622,7 @@ def crea_app(hub: Schermi) -> Starlette:
         voce = {"testo": testo, "persona": schermo.get("proprietario"),
                 "schermo": schermo.get("nome"), "stanza": schermo.get("stanza"),
                 "solo_scritto": request.headers.get("x-calliope-solo-scritto") == "1",
-                "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}
+                "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "schermo_proprietario": schermo.get("proprietario"), "arrivato": time.time()}
         if tipo_dai_byte(dati):
             # Un'immagine (dai byte): come una foto, ridotta e riscritta in JPEG
             if not getattr(hub.cfg, "immagini_enabled", True):
@@ -1198,7 +1209,7 @@ def crea_app(hub: Schermi) -> Starlette:
                                    "persona": schermo.get("proprietario"),
                                    "schermo": schermo.get("nome"),
                                    "stanza": schermo.get("stanza"),
-                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "arrivato": time.time()}):
+                                   "schermo_id": schermo.get("id"), "schermo_creato": schermo.get("creato"), "schermo_proprietario": schermo.get("proprietario"), "arrivato": time.time()}):
             return _json({"errore": "Calliope è occupata: riprova tra poco"}, 503)
         return _json({"ok": True, "in_coda": True})
 

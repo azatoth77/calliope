@@ -1990,9 +1990,12 @@ class Ciclo:
         from .schermi import Mittente
         persona = scritto.get("persona")
         prof = self.s.registry.by_id(persona) if persona else None
+        # Con l'identità dello schermo del tocco (#338, revisione della PR #332): `aggiorna` lo
+        # raggiunge solo se è ancora quello (non revocato e riabbinato, non passato ad altri)
         mitt = Mittente(persona=persona if prof else None, nome=getattr(prof, "name", None),
                         livello=(livello or "ospite") if prof else "ospite", certo=bool(prof),
-                        stanza=scritto.get("stanza") or None, schermo=sid)
+                        stanza=scritto.get("stanza") or None, schermo=sid,
+                        schermo_identita=di_quale_schermo(scritto) or None)
         if callable(getattr(hub, "aggiorna", None)):
             # Dove la scheda c'è già (#266, revisione della PR #270: il timer messo in cucina e
             # fermato dal telefono, la cui «stanza» è «telefono»), più gli schermi di chi tocca
