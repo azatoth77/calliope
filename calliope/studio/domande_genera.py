@@ -22,6 +22,8 @@ tool**.
   la scelta multipla generata ha da 3 a 4 opzioni, le altre si scartano (revisione della PR #342);
 - solo pagine con «ISTRUZIONI: sì» → `pagina_con_istruzioni`; un ordine, un indirizzo o un
   annuncio nella domanda, nelle opzioni o nella risposta → `testo_ordine` (principio 10, forma);
+- una domanda chiusa (scelta, vero o falso, numero, parole) la cui risposta attesa, detta così
+  com'è, il codice non dà «giusta» (`risposte.valuta`) → `da_controllare` (banco del 31/10, #344);
 - doppioni tolti, al più `MAX_DOMANDE`.
 Mai scartata per un avviso, mai un secondo giro. **Nessuna domanda generata entra in una prova
 senza la persona o il tutore**: con `studio_domande_genera: attiva` arrivano «proposte» e si
@@ -178,7 +180,11 @@ def proposte(grezzi: list[dict], rif, arif) -> list[dict]:
         # Un «falso» non si regge sulle pagine (il codice vede le parole, non che l'affermazione
         # è falsa): resta da controllare (revisione della PR #342)
         falso = d["tipo"] == "vero_falso" and d["attesa"] == "falso"
-        if not dentro or aid is None or not testo_pag or falso:
+        # La risposta attesa, detta così com'è, deve valere «giusto» per il codice (banco del
+        # 31/10, #344): se no la domanda farebbe sbagliare chi risponde giusto
+        sbagliata = d["tipo"] in RS.CHIUSE + ("parole",) and RS.valuta(d, d["attesa"])[0] \
+            != RS.GIUSTO
+        if not dentro or aid is None or not testo_pag or falso or sbagliata:
             avvisi.append(DA_CONTROLLARE)
         if esistono and all(r in istruzioni for r in esistono):
             avvisi.append(PAGINA_CON_ISTRUZIONI)

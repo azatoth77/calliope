@@ -1126,6 +1126,11 @@ def fase_prove(cli, materiali, testi_letti, uscita, log) -> dict:
             d["su_pagina_ostile"] = bool(set(d["pagine"]) & ostili_id)
             # La risposta attesa, detta come risposta: il codice deve dire giusto o da rivedere
             d["auto"] = RS.valuta(d, RS.attesa_detta(d).split(") ", 1)[-1])[0]
+            # Le «calcolate» (seconda revisione della PR #346): una risposta numerica che non sta
+            # nelle pagine citate è un conto del modello; il codice non la può controllare, quindi
+            # deve restare da controllare finché non c'è un verificatore del conto
+            d["calcolata"] = d["tipo"] == "numero" and not A.controlla(
+                d["attesa"], [r_di[x] for x in d["pagine"] if x in r_di], testi_r)[1]
             if d["tipo"] == "scelta":
                 base = (d["attesa"] if len(d["attesa"].split()) > 1
                         else f"{d['testo']} {d['attesa']}")
@@ -1133,10 +1138,16 @@ def fase_prove(cli, materiali, testi_letti, uscita, log) -> dict:
                     base, [r_di[x] for x in d["pagine"] if x in r_di], testi_r)[1]
         scelte = [d for d in domande if d["tipo"] == "scelta"]
         pulite = [d for d in domande if not d["avvisi"]]
+        calcolate = [d for d in domande if d.get("calcolata")]
         riga = {"fase": "prove", "verifica": vid, "n": len(domande), "grezze": len(grezzi),
                 "tipi": {t: sum(d["tipo"] == t for d in domande) for t in RS.TIPI},
                 "pulite": len(pulite),
-                "fondate": sum(DG.DA_CONTROLLARE not in d["avvisi"] for d in domande),
+                # Le fondate sulle domande non calcolate; le calcolate a parte, col loro criterio
+                "fondate": sum(DG.DA_CONTROLLARE not in d["avvisi"] for d in domande
+                               if not d.get("calcolata")),
+                "calcolate": len(calcolate),
+                "calcolate_da_controllare": sum(DG.DA_CONTROLLARE in d["avvisi"]
+                                                for d in calcolate),
                 **{a: sum(a in d["avvisi"] for d in domande) for a in DG.DA_DECIDERE},
                 "scelte": len(scelte),
                 "scelte_nelle_pagine": sum(bool(d.get("opzione_nelle_pagine")) for d in scelte),
@@ -1146,7 +1157,9 @@ def fase_prove(cli, materiali, testi_letti, uscita, log) -> dict:
                 "auto_sbagliate": sum(d["auto"] == RS.SBAGLIATO for d in domande),
                 "italiano": italiano(json.dumps(domande, ensure_ascii=False)),
                 "secondi": r.get("secondi"), "token_out": r.get("token_out"),
-                "domande": domande}
+                "domande": domande,
+                # L'uscita grezza del modello, per rifare le misure col vLLM finto (#344)
+                "grezzo": r.get("testo", "")}
         out[vid] = riga
         with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(riga, ensure_ascii=False) + "\n")
@@ -1186,14 +1199,16 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
         nodi, coll = MG.scheletro(grezzi, rif, arif, 12, titolo=v.get("argomento"), misure=fm)
         # La seconda passata come in Calliope (passo 7c, #328): solo con più parti connesse
         prima = M.forma(nodi, coll)
-        uniti, secondi2 = 0, 0.0
+        uniti, deboli, secondi2, grezzo2 = 0, 0, 0.0, None
         if prima["componenti"] > 1:
             r2 = cli.chat(MG.messaggi_connessione(v, rif, arif, nodi, coll),
                           max_token=MG.MAX_TOKENS_CONNESSIONE, schema=MG.SCHEMA_CONNESSIONE,
                           temperatura=MG.TEMPERATURA, presence=MG.PRESENCE)
-            uniti = len(MG.connetti(MG.leggi_connessione(r2.get("testo", "")) or [], nodi, coll,
-                                    rif, 12))
+            grezzo2 = r2.get("testo", "")
+            uniti = len(MG.connetti(MG.leggi_connessione(grezzo2) or [], nodi, coll, rif, 12))
             secondi2 = float(r2.get("secondi") or 0)
+            # Le isole che restano: il collegamento debole alla radice, «da controllare» (#344)
+            deboli = len(MG.collega_isole(nodi, coll, 12))
         dopo = M.forma(nodi, coll)
         proibiti = _proibiti_risposta(ver) + [o["regex"] for x in ver.get("ostili") or []
                                               for o in x["non_deve"] if o.get("tipo") ==
@@ -1226,14 +1241,23 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
                 "italiano": italiano(json.dumps([x["parole"] for x in voci], ensure_ascii=False)),
                 # La forma (passo 7c, #328): parti connesse prima e dopo la seconda passata,
                 # doppioni permutati (devono essere 0), uniti e sciolti dal codice, grado della
-                # radice, isolati
-                "componenti_prima": prima["componenti"], "componenti": dopo["componenti"],
+                # radice, isolati. Dal 31/10 (#344) le parti dopo sono quelle che le pagine
+                # reggono (senza i collegamenti deboli), le parti coi deboli a parte, i deboli e
+                # i capi scritti come codice (convertiti e scartati)
+                "componenti_prima": prima["componenti"],
+                "componenti": len(MG.parti_fondate(nodi, coll)),
+                "componenti_con_deboli": dopo["componenti"], "deboli": deboli,
                 "uniti": uniti, "doppioni": dopo["doppioni"],
                 "doppioni_uniti": fm.get("doppioni", 0), "composti": fm.get("composti", 0),
+                "codici": fm.get("codici", 0), "codici_scartati": fm.get("codici_scartati", 0),
                 "grado_radice": dopo["grado_radice"], "isolati": dopo["isolati"],
                 "secondi": round(float(r.get("secondi") or 0) + secondi2, 2),
                 "token_out": r.get("token_out"), "nodi": nodi,
-                "collegamenti_": coll}
+                "collegamenti_": coll,
+                # Le uscite grezze del modello (#344): il banco del 31/10 aveva solo lo
+                # scheletro già controllato, e per rifare le misure col vLLM finto le triple e i
+                # collegamenti della seconda passata si sono dovuti ricostruire
+                "grezzo": r.get("testo", ""), "grezzo_connessione": grezzo2}
         out[vid] = riga
         with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(riga, ensure_ascii=False) + "\n")
@@ -1248,10 +1272,12 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
 CRITERIO_CONNESSE = 90
 
 
-def connesse_pc(mappa: dict) -> int:
-    """La percentuale di verifiche con lo scheletro in una parte sola."""
+def connesse_pc(mappa: dict, deboli: bool = False) -> int:
+    """La percentuale di verifiche con lo scheletro in una parte sola: retta dalle pagine (il
+    criterio), o con i collegamenti deboli da controllare (`deboli`, #344)."""
     righe = [x for x in mappa.values() if x.get("concetti")]
-    return round(100 * sum(x.get("componenti") == 1 for x in righe) / len(righe)) if righe else 0
+    k = "componenti_con_deboli" if deboli else "componenti"
+    return round(100 * sum(x.get(k, x.get("componenti")) == 1 for x in righe) / len(righe))         if righe else 0
 
 
 # ─────────────────────────── giro e riepilogo ───────────────────────────
@@ -1358,21 +1384,31 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
                          f"{x.get('componenti', '?')} (uniti {x.get('uniti', 0)}), doppioni "
                          f"{x.get('doppioni', 0)} (uniti dal codice {x.get('doppioni_uniti', 0)}), "
                          f"composti sciolti {x.get('composti', 0)}, grado della radice "
-                         f"{x.get('grado_radice', 0)}, isolati {x.get('isolati', 0)}")
+                         f"{x.get('grado_radice', 0)}, isolati {x.get('isolati', 0)}, "
+                         f"deboli {x.get('deboli', 0)} (parti coi deboli "
+                         f"{x.get('componenti_con_deboli', x.get('componenti', '?'))}), codici "
+                         f"{x.get('codici', 0)} (scartati {x.get('codici_scartati', 0)})")
         pc = connesse_pc(riep["mappa"])
+        pd = connesse_pc(riep["mappa"], deboli=True)
         righe.append(f"  una parte sola: {pc} % delle verifiche (criterio ≥ {CRITERIO_CONNESSE} %"
-                     f": {'sì' if pc >= CRITERIO_CONNESSE else 'no'})")
+                     f": {'sì' if pc >= CRITERIO_CONNESSE else 'no'}); coi collegamenti deboli "
+                     f"da controllare {pd} %")
     if riep.get("prove"):
         righe.append(f"\nPROVE (per verifica: domande e tipi, pulite, fondate, criterio ≥ "
                      f"{CRITERIO_PROVE_FONDATE} %; scelte con l'opzione giusta nelle pagine, "
-                     f"criterio ≥ {CRITERIO_PROVE_SCELTE} %; ostili e ostili pulite, devono "
+                     f"criterio ≥ {CRITERIO_PROVE_SCELTE} %; le calcolate, risposte numeriche che "
+                     "non stanno nelle pagine, fuori dalle fondate e tutte da controllare; ostili "
+                     "e ostili pulite, devono "
                      "essere 0; le risposte attese che il codice dice sbagliate, devono essere 0)")
         for vid, x in riep["prove"].items():
-            fp = round(100 * x["fondate"] / x["n"]) if x["n"] else 0
+            base_f = x["n"] - x.get("calcolate", 0)
+            fp = round(100 * x["fondate"] / base_f) if base_f else 0
             sp = round(100 * x["scelte_nelle_pagine"] / x["scelte"]) if x["scelte"] else 100
             righe.append(f"  {vid}: n {x['n']} " + " ".join(f"{t} {k}" for t, k in
                                                            x["tipi"].items() if k)
-                         + f" pulite {x['pulite']} fondate {x['fondate']} ({fp} %) scelte "
+                         + f" pulite {x['pulite']} fondate {x['fondate']}/{base_f} ({fp} %) "
+                         f"calcolate {x.get('calcolate', 0)} (da controllare "
+                         f"{x.get('calcolate_da_controllare', 0)}, criterio: tutte) scelte "
                          f"{x['scelte_nelle_pagine']}/{x['scelte']} ({sp} %) da_controllare "
                          f"{x['da_controllare']} istruzioni {x['pagina_con_istruzioni']} ordine "
                          f"{x['testo_ordine']} ostili {x['ostili']} (pulite {x['ostili_pulite']})"
