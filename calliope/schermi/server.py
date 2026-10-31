@@ -207,6 +207,67 @@ class _SoloHostNoti:
         await self.app(scope, receive, send)
 
 
+# Il resto del corpo piccolo prima di chiudere (30/10, #274). urllib (e non solo) manda le
+# intestazioni e il corpo in due pezzi; un rifiuto che non legge il corpo (401, 403, 429, 413) o
+# /api/accedi, che non lo legge mai, rispondeva e chiudeva la connessione con il corpo ancora in
+# arrivo. Con dati non letti la chiusura diventa un RST (Windows e Linux), e il client che non ha
+# ancora letto la risposta la perde: «ConnectionResetError» invece del 401 o del 429. Sotto carico
+# capitava a qualche richiesta ogni cento (prova_raccolte 14 giri verdi su 24); con il ciclo a
+# selettori a quasi tutte. Prima dell'ultima parte della risposta si legge il resto, solo per un
+# corpo JSON dichiarato e piccolo e al più per CORPO_RESTO_S: gli invii grossi o lenti (le foto
+# dello Studio, application/octet-stream) restano alle regole dei loro endpoint.
+CORPO_RESTO_MAX = 64 * 1024
+CORPO_RESTO_S = 2.0
+
+
+class _LeggiIlResto:
+    """Middleware ASGI: prima di chiudere la risposta legge il resto di un corpo JSON piccolo
+    che l'app non ha letto, così la connessione si chiude con un FIN e non con un RST."""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http":
+            return await self.app(scope, receive, send)
+        intest = dict(scope.get("headers") or [])
+        tipo = intest.get(b"content-type", b"").split(b";")[0].strip().lower()
+        try:
+            dichiarato = int(intest.get(b"content-length", b"-1"))
+        except ValueError:
+            dichiarato = -1
+        # Con «Expect: 100-continue» il corpo arriva solo dopo il «100 Continue»: su un rifiuto il
+        # client non lo manda, e leggerlo vorrebbe dire aspettare CORPO_RESTO_S per niente
+        # (revisione della PR #331)
+        if (tipo != b"application/json" or not 0 < dichiarato <= CORPO_RESTO_MAX
+                or b"expect" in intest):
+            return await self.app(scope, receive, send)
+        finito = False
+
+        async def ricevi():
+            nonlocal finito
+            m = await receive()
+            if m.get("type") != "http.request" or not m.get("more_body", False):
+                finito = True
+            return m
+
+        async def resto():
+            letti = 0
+            while not finito and letti <= CORPO_RESTO_MAX:
+                letti += len((await ricevi()).get("body", b""))
+
+        async def manda(m):
+            if (m.get("type") == "http.response.body" and not m.get("more_body", False)
+                    and not finito):
+                try:
+                    await asyncio.wait_for(resto(), CORPO_RESTO_S)
+                except (asyncio.TimeoutError, OSError):
+                    pass
+            await send(m)
+
+        await self.app(scope, ricevi, manda)
+
+
 def _nomi_ammessi(extra=()) -> set[str]:
     nomi = {"localhost"}
     try:
@@ -1922,7 +1983,7 @@ def crea_app(hub: Schermi) -> Starlette:
         *satellite_web.rotte(hub),
     ])
     app.state.sessioni = sessioni
-    return _SoloHostNoti(app, _nomi_ammessi(getattr(hub.cfg, "schermi_nomi", ())))
+    return _LeggiIlResto(_SoloHostNoti(app, _nomi_ammessi(getattr(hub.cfg, "schermi_nomi", ()))))
 
 
 def _gestore_eccezioni(loop, context):

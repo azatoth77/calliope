@@ -1998,6 +1998,37 @@ service worker `calliope-telefono-pagina-v22` (la v21 era già della #309) con `
 canvas, non URL blob (la CSP del telefono li vieta per le immagini). Il resto, coi controlli del
 server e le misure, nell'area [studio](studio.md).
 
+## Il corpo letto prima di chiudere: niente reset sotto carico (30/10, issue #274, ramo `issue-274-raccolte-reset`)
+
+Sotto carico (`prove/manuali/carico.py prova_raccolte.py --corsie 3 --giri 8 --carico 16`) `prova_raccolte`
+cadeva in 8–10 giri su 24 con `ConnectionResetError` (WinError 10054) dentro `chiedi`, su richieste diverse,
+anche `/api/accedi`. La causa è nel server: `urllib` di Python 3.14 manda le intestazioni e il corpo con due
+`send`, e un endpoint che risponde senza leggere il corpo (`/api/accedi` non lo legge mai; i rifiuti 401,
+403, 413 e 429 rispondono prima) faceva chiudere a uvicorn la connessione con il corpo ancora in arrivo. Con
+dati non letti la chiusura diventa un RST (Windows e Linux), e il client che non ha ancora letto la risposta
+la perde. Misura sul portatile, 3000 richieste in fila con 20 processi di carico: 29 reset col ciclo
+proactor (quello di serie su Windows), 2508 col ciclo a selettori; dopo la correzione 0 e 0.
+
+Correzione: il middleware `_LeggiIlResto` (`schermi/server.py`, il più esterno) legge il resto del corpo
+prima dell'ultima parte della risposta, solo per un corpo JSON con `Content-Length` fino a 64 kB
+(`CORPO_RESTO_MAX`) e al più per 2 s (`CORPO_RESTO_S`); gli invii grossi o lenti, come le foto dello Studio
+(`application/octet-stream`), restano alle regole dei loro endpoint. Vale anche per i telefoni veri, che
+perdevano allo stesso modo un 401 o un 429. Dopo la correzione, con `carico.py` (3 corsie, 8 giri, 16
+processi): `prova_raccolte` 48 giri senza un reset; `prova_pagina_documenti`, `prova_pagina_ufficio` e
+`prova_pagine_cose` 24 su 24 ciascuna. Nelle stesse corse `prova_raccolte` cadeva nell'ultimo minuto prima
+di mezzanotte (il promemoria «fra un minuto» è di domani): le tessere ora girano alle 12:00
+(`prove.orologio.ora_del_giorno`).
+
+Limiti noti (revisione della PR #331): con `Expect: 100-continue` il resto non si legge (il corpo arriva
+solo dopo il «100 Continue», e su un rifiuto aspettarlo vorrebbe dire 2 s per niente), quindi un client che lo
+manda lo stesso può ancora vedere il reset; e un 401 o un 403 su una foto mandata come JSON in base64 oltre i
+64 kB può ancora finire in un reset, perché un corpo così grande non si legge apposta.
+
+Prova: `prove/prova_raccolte.py`, sezione 3b (il middleware a secco con i contrari: JSON letto, corpo già
+letto, octet-stream, oltre il tetto, senza `Content-Length`, corpo lento lasciato dopo il tempo; sul server
+vero il corpo mandato a parte → 401 intero senza reset, e senza il corpo la chiusura solo dopo averlo
+aspettato, che senza la correzione cade).
+
 ## Numeri riusati: tre resti dopo la PR #270 (30/10, issue #275, ramo `issue-275-schermi-id-riusati`)
 
 Il numero di uno schermo si riusa dopo una revoca (#266); l'identità è il numero con l'istante
