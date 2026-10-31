@@ -328,9 +328,18 @@ terzo_si = (
     "werl.exe", "escript.exe", "ghci.exe", "ghc.exe", "runghc.exe", "racket.exe", "raco.exe",
     "scala.exe", "groovy.exe", "groovysh.exe", "dart.exe",
     # dalla radice senza l'unità: dipende dall'unità corrente
-    r"\app.exe", "/app.exe", r"\Program Files\Mozilla Firefox\firefox.exe")
+    r"\app.exe", "/app.exe", r"\Program Files\Mozilla Firefox\firefox.exe",
+    # revisione della PR #334: altri nomi, tclkit in ogni variante, i terminali di terze parti
+    "ghc-9.4.8.exe", "ghci-9.4.8.exe", "runghc-9.4.exe", "runhaskell_1.exe", "gracket.exe",
+    "gracket-text.exe", "julialauncher.exe", "tclkit.exe", "tclkitsh.exe", "tclkit-gui.exe",
+    "tclsh86tg.exe", "jruby.exe", "jrubyw.exe", "bunx.exe", "bunx-1.1.exe", "ConEmu64.exe",
+    "ConEmu.exe", r"C:\cmder\Cmder.exe", "alacritty.exe", "wezterm-gui.exe", "wezterm.exe",
+    "tabby.exe", "nu.exe", "fish.exe", "cygwin.exe",
+    # con l'unità ma senza la radice: relativo alla cartella corrente dell'unità
+    "C:app.exe", r"C:..\x\app.exe", "D:calc.exe")
 terzo_no = ("bunny.exe", "bundle-viewer.exe", "denon.exe", "juliaset.exe", "wishlist.exe", "dartmouth.exe",
-            "racketball.exe", "Rufus.exe", "erlang-gui.exe", r"D:\Giochi\gioco.exe", "tclkit-gui.exe")
+            "racketball.exe", "Rufus.exe", "erlang-gui.exe", r"D:\Giochi\gioco.exe", "ghcide-viewer.exe",
+            "fisher.exe", "nuget-gui.exe", "tabbyfox.exe", "bunxy.exe", "cmdermaker.exe")
 verifica("#311: Tcl, MSYS2, deno, bun, julia, R, Erlang, Haskell, Racket, Scala, Groovy, Dart e la radice "
          "senza l'unità: per iscritto non ammessi",
          all(e_script(c) for c in terzo_si), [c for c in terzo_si if not e_script(c)])

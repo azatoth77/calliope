@@ -104,6 +104,10 @@ _EXE_NON_SCRITTO_NOMI = frozenset((
     "msys2", "mingw32", "mingw64", "ucrt64", "clang32", "clang64", "clangarm64",
     "r", "rscript", "rterm", "rgui", "erl", "werl", "escript", "iex", "elixir", "ghc", "ghci",
     "runghc", "runhaskell", "racket", "raco", "scala", "scala-cli", "groovy", "groovysh", "dart",
+    # Dalla revisione della PR #334: altri interpreti e i terminali di terze parti
+    "gracket", "julialauncher", "tclkit", "tclkitsh", "jruby", "jrubyw", "bunx",
+    "conemu", "conemu64", "cmder", "alacritty", "wezterm", "wezterm-gui", "tabby", "nu", "fish",
+    "cygwin",
     # strumenti di sistema
     "rundll32", "regsvr32", "msiexec", "cmstp", "wmic", "regedit", "regedt32", "reg", "mmc",
     "control", "schtasks", "at", "sc", "net", "net1", "netsh", "bitsadmin", "certutil", "forfiles",
@@ -119,14 +123,16 @@ _EXE_NON_SCRITTO_NOMI = frozenset((
 # AutoIt3_x64, Ahk2Exe: seconda revisione della PR #309; AutoHotkey senza argomenti esegue da solo
 # lo script di serie); le sigle brevi (py, lua, sh…) solo una versione, per non prendere nomi di
 # app che cominciano così
-# Dalla revisione della PR #310 (#311): Tcl col «t» dei thread (tclsh86t, wish86t); deno, bun e
-# julia con qualunque coda dopo un separatore o una cifra (deno1.40, bun-windows-x64, julia-1.10),
-# per non prendere «bunny» o «bundle»
+# Dalla revisione della PR #310 (#311): Tcl col «t» dei thread e la «g» delle build di debug
+# (tclsh86t, tclsh86tg, wish86t), tclkit in tutte le varianti (tclkitsh, tclkit-gui); deno, bun,
+# bunx, julia, ghc e i suoi, racket e gracket con qualunque coda dopo un separatore o una cifra
+# (deno1.40, bun-windows-x64, julia-1.10, ghc-9.4.8), per non prendere «bunny» o «bundle»;
+# jruby come ruby (jrubyw)
 _EXE_NON_SCRITTO_RE = re.compile(
-    r"(python|pypy|ipython|jython|pwsh|powershell|java|node|perl|ruby|php|bash|ubuntu|debian"
-    r"|autohotkey|autoit|ahk2exe|aut2exe)[\w.-]*"
-    r"|(deno|bun|julia)([\d._-][\w.-]*)?"
-    r"|(tcl|tclsh|wish)[\d._-]*t?"
+    r"(python|pypy|ipython|jython|pwsh|powershell|java|node|perl|ruby|jruby|php|bash|ubuntu"
+    r"|debian|autohotkey|autoit|ahk2exe|aut2exe|tclkit)[\w.-]*"
+    r"|(deno|bun|bunx|julia|ghc|ghci|runghc|runhaskell|racket|gracket)([\d._-][\w.-]*)?"
+    r"|(tcl|tclsh|wish)[\d._-]*t?g?"
     r"|(py|pyw|lua|luajit|sh|zsh|osascript)[\d._-]*")
 
 
@@ -178,6 +184,10 @@ def ammessa_per_iscritto(comando: str) -> bool:
     # Dalla radice senza l'unità («\app.exe», «/app.exe»): dipende dall'unità corrente, non si sa
     # (#311); un'unità di rete mappata è come un percorso di rete
     if senza_unita.startswith(("\\", "/")) and not unita:
+        return False
+    # Con l'unità ma senza la radice («C:app.exe», «C:..\x\app.exe»): relativo alla cartella
+    # corrente di quell'unità, non si sa (revisione della PR #334)
+    if unita and not senza_unita.startswith(("\\", "/")):
         return False
     if unita and _unita_di_rete(unita.group(1)):
         return False
