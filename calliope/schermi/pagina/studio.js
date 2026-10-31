@@ -1139,10 +1139,13 @@
       li.append(nodo("span", "studio-c-risposta", "Risposta attesa: " + String(x.attesa || "")));
       if (x.esito === "da_rivedere" && pr.puo_rivedere) {
         const t = nodo("div", "studio-h-tasti studio-c-esiti");
+        // Sulle domande chiuse chi studia dice al più «quasi»: «giusta» la decide il codice o il tutore
+        const solo_quasi = x.chiusa && !pr.tutore;
         t.append(tastoProve("No", "rivedi", { prova: pr.id, voce: x.n, esito: "sbagliato" }),
-          tastoProve("Quasi", "rivedi", { prova: pr.id, voce: x.n, esito: "indizio" }),
-          tastoProve("Era giusta", "rivedi", { prova: pr.id, voce: x.n, esito: "giusto" }, "studio-h-primo"));
-        li.append(nodo("span", "studio-nota", "Guarda la risposta attesa e decidi tu."), t);
+          tastoProve("Quasi", "rivedi", { prova: pr.id, voce: x.n, esito: "indizio" }, solo_quasi ? "studio-h-primo" : ""));
+        if (!solo_quasi) t.append(tastoProve("Era giusta", "rivedi", { prova: pr.id, voce: x.n, esito: "giusto" }, "studio-h-primo"));
+        li.append(nodo("span", "studio-nota", solo_quasi ? "Guarda la risposta attesa: qui puoi dire al più «quasi»."
+          : "Guarda la risposta attesa e decidi tu."), t);
       }
       ol.append(li);
     }

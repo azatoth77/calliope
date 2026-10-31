@@ -40,6 +40,9 @@ DECISI = (GIUSTO, INDIZIO, SBAGLIATO)
 PROPOSTE = {"giusta": GIUSTO, "parziale": INDIZIO, "sbagliata": SBAGLIATO}
 # «Era giusta / Quasi / No» della persona o del tutore su una voce da rivedere
 REVISIONI = (GIUSTO, INDIZIO, SBAGLIATO)
+# Le domande chiuse (revisione della PR #342, punto 2): la persona che rivede la sua risposta può
+# dare al più «indizio»; il «giusto» resta al codice o al tutore
+CHIUSE = ("scelta", "vero_falso", "numero", "carta")
 
 TESTO_MAX = 300
 OPZIONE_MAX = 120
@@ -178,31 +181,58 @@ def _trova(chiave: list[str], ps: list[str]) -> bool:
     return False
 
 
+# Le lettere dette a voce (revisione della PR #342, punto 5): valgono solo come forma chiusa per
+# intero («bi», «la bi», «risposta ci»), mai dentro una frase
+LETTERE_DETTE = {"a": "a", "bi": "b", "b": "b", "ci": "c", "c": "c", "di": "d", "d": "d",
+                 "e": "e", "effe": "f", "f": "f"}
+_PRIMA_DELLA_LETTERA = ("la", "risposta", "lettera", "opzione", "quella", "e")
+
+
+def _lettera_chiusa(ps: list[str]) -> str | None:
+    """La lettera della frase intera: «b», «la bi», «la risposta è la ci» (forma chiusa)."""
+    resto = list(ps)
+    while len(resto) > 1 and resto[0] in _PRIMA_DELLA_LETTERA:
+        resto = resto[1:]
+    return LETTERE_DETTE.get(resto[0]) if len(resto) == 1 else None
+
+
 def _scelta(d: dict, risposta: str) -> str:
+    """Più opzioni nella stessa risposta («a o b», «Colombo e Magellano»): «sbagliato» (revisione
+    della PR #342, punto 2), così una risposta a cavallo non diventa giusta con «Era giusta»."""
     ops = list(d.get("opzioni") or ())
     ps = _bordi(C.normale(risposta))
+    giusta = next((i for i, o in enumerate(ops) if _uguale_opzione(o, d["attesa"])), None)
+    lett = _lettera_chiusa(ps)
+    if lett is not None:
+        if lett not in LETTERE[:len(ops)]:
+            return DA_RIVEDERE                       # una lettera che non c'è («f» con 3 opzioni)
+        return GIUSTO if LETTERE.index(lett) == giusta else SBAGLIATO
+    # Le opzioni nominate: le lettere sole dentro la frase («a o b»; «e» no, è una congiunzione)
+    # e i testi delle opzioni detti di fila
+    prese = {LETTERE.index(w) for w in ps if len(w) == 1 and w != "e"
+             and w in LETTERE[:len(ops)]}
+    pr = parole(risposta)
+    if len(pr) <= 12:
+        prese |= {i for i, o in enumerate(ops) if parole(o) and _trova(parole(o), pr)}
+    prese |= {i for i, o in enumerate(ops) if _uguale_opzione(o, risposta)}
     if any(w in C._NEGAZIONI for w in ps):
+        # Negata («non è la a»): la decide la persona (al più «indizio») o il tutore
         return DA_RIVEDERE
-    # «b», «la b», «risposta b», «lettera b», «la risposta è la b»
-    resto = [w for w in ps if w not in ("la", "risposta", "lettera", "e", "opzione", "quella")]
-    if len(resto) == 1 and len(resto[0]) == 1 and resto[0] in LETTERE[:len(ops)]:
-        scelta = ops[LETTERE.index(resto[0])]
-        return GIUSTO if _uguale_opzione(scelta, d["attesa"]) else SBAGLIATO
-    prese = [o for o in ops if _uguale_opzione(o, risposta)]
-    if len(prese) != 1:
-        # Un'opzione detta dentro una frase corta («credo Lisbona»): di fila, una sola
-        pr = parole(risposta)
-        if len(pr) <= 8:
-            prese = [o for o in ops if parole(o) and _trova(parole(o), pr)]
+    if len(prese) > 1:
+        return SBAGLIATO
     if len(prese) != 1:
         return DA_RIVEDERE
-    return GIUSTO if _uguale_opzione(prese[0], d["attesa"]) else SBAGLIATO
+    return GIUSTO if prese == {giusta} else SBAGLIATO
 
 
 def _vero_falso(d: dict, risposta: str) -> str:
-    k = " ".join(_bordi(C.normale(risposta)))
+    ps = _bordi(C.normale(risposta))
+    k = " ".join(ps)
     detto = "vero" if k in _VERO else "falso" if k in _FALSO else None
     if detto is None:
+        # Vero e falso nella stessa risposta («boh, vero o falso»): «sbagliato» (PR #342, 2)
+        if {"vero", "vera"} & set(ps) and {"falso", "falsa"} & set(ps):
+            return SBAGLIATO
         return DA_RIVEDERE
     return GIUSTO if detto == d["attesa"] else SBAGLIATO
 
@@ -210,6 +240,10 @@ def _vero_falso(d: dict, risposta: str) -> str:
 def _numero(d: dict, risposta: str) -> str:
     detta = U.una_misura(risposta)
     attesa = U.una_misura(d["attesa"])
+    if detta is None and attesa is not None and len(
+            {round(v, 9) for v, _u in U.numeri_detti(risposta)}) > 1:
+        # Più numeri nella stessa risposta («1491 o 1492»): «sbagliato» (PR #342, punto 2)
+        return SBAGLIATO
     if detta is None or attesa is None:
         return DA_RIVEDERE
     return U.confronta(detta, attesa)
@@ -246,7 +280,8 @@ def valuta(d: dict, risposta) -> tuple[str, str | None]:
     r = riga(risposta, RISPOSTA_MAX)
     if not r or not C.normale(r):
         return VUOTA, None
-    if d.get("tipo") != "vero_falso" and non_so(r):
+    # «Non lo so» detto per intero, anche sul vero o falso (revisione della PR #342)
+    if non_so(r):
         return SBAGLIATO, "persona"
     fn = {"scelta": _scelta, "vero_falso": _vero_falso, "numero": _numero, "parole": _parole,
           CARTA: _carta}.get(d.get("tipo"))

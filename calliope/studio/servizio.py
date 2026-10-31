@@ -266,6 +266,9 @@ class Studio(Mappe, Prove):
         # La domanda dell'orale chiesta a voce (passo 8, #248): {persona: {prova, n, turno}}; la
         # prova sta su disco, il turno della domanda in memoria (la risposta vale dal turno dopo)
         self._orali: dict = {}
+        # Quando è partito il servizio (revisione della PR #342): una domanda dell'orale chiesta
+        # prima, e persa dalla memoria con un riavvio, si valuta alla risposta
+        self._avvio = self.adesso()
         self.fascia = P.fascia_valida(getattr(cfg, "studio_fascia", ""))
         if self.fascia is None:
             # Il caricamento della configurazione la rifiuta già (config._fascia_valida); qui

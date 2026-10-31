@@ -1126,7 +1126,12 @@ def _interroga(ctx: ToolContext, parte: str = "", verifica=None, materia: str = 
             return _f(r["frase"])
         # parte «risposta»: l'esito dalla frase detta, mai dal modello
         prop = str(proposta or "").strip().lower() or None
-        r = svc.orale_risposta(chi, getattr(ctx, "user_text", "") or "", turno, prop)
+        # La frase di Whisper prima di «capito» (revisione della PR #342): il modello che la
+        # riscrive non deve poter cambiare la risposta che il codice valuta
+        frase = getattr(ctx, "user_text_stt", None)
+        if frase is None:
+            frase = getattr(ctx, "user_text", "") or ""
+        r = svc.orale_risposta(chi, frase, turno, prop)
         if r.get("motivo") == "nessuna":
             return {"ok": False, "errore": "nessuna interrogazione in corso",
                     "cosa_fare": "Se vuole essere interrogato, studio_interroga con parte "
@@ -1255,6 +1260,11 @@ def _mappa_consigli(ctx: ToolContext, verifica=None, materia: str = "") -> dict:
         v = _verifica_con_libera(svc, ctx, chi, verifica, materia)
         if v is None:
             return _f("Non hai verifiche aperte nello Studio.", ok=False)
+        if svc.prova_in_corso(chi, v["id"]):
+            # Durante una prova aperta niente concetti in busta (revisione della PR #342)
+            note_rule(ctx, "studio_mappa_prova_in_corso")
+            return _f("C'è una prova in corso: della mappa parliamo quando l'hai finita.",
+                      ok=False)
         d = svc.consigli_mappa(chi, v["id"])
     except (NonTrovata, NonPermesso):
         return _f(NON_CE, ok=False)

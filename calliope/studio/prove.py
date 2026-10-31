@@ -339,13 +339,19 @@ class Prove:
         for d in pool:
             per.setdefault(d["argomento"], []).append(d)
         usate: dict[tuple, int] = {}
+        # Le domande viste e lasciate vuote (revisione della PR #342): la prova dopo le evita se
+        # può, altrimenti le mette in fondo (consegnare vuoto non fa ritrovare le stesse domande)
+        vuote: dict[tuple, int] = {}
         for r in self.dati.tutti("SELECT voci FROM studio_prove WHERE verifica = ?", (v["id"],)):
             for x in _da(r["voci"], []):
                 k = (x.get("fonte"), x.get("id"))
                 usate[k] = usate.get(k, 0) + 1
+                if x.get("esito") == RS.VUOTA:
+                    vuote[k] = vuote.get(k, 0) + 1
         for lst in per.values():
             rnd.shuffle(lst)
-            lst.sort(key=lambda d: usate.get((d["fonte"], d["id"]), 0))
+            lst.sort(key=lambda d: (vuote.get((d["fonte"], d["id"]), 0),
+                                    usate.get((d["fonte"], d["id"]), 0)))
         pad = self._padronanza(v)
         parola = {a["id"]: a["parola"] for a in pad["argomenti"]}
         pesi = {a: PESI_MIX.get(parola.get(a, PD.NON_MISURATA_P), 2) for a in per}
@@ -356,6 +362,8 @@ class Prove:
         for a in sorted(per, key=lambda a: (-quota[a], a)):
             scelte += per[a][:quota[a]]
         rnd.shuffle(scelte)
+        # Quelle lasciate vuote l'altra volta, se non si sono potute evitare, vanno in fondo
+        scelte.sort(key=lambda d: vuote.get((d["fonte"], d["id"]), 0))
         mix = {"modo": "padronanza" if pesata else "uniforme",
                "quote": {str(a): q for a, q in quota.items()},
                "pesate": {str(a): q for a, q in misura.items()}}
@@ -484,7 +492,8 @@ class Prove:
                  "argomento_numero": numeri.get(x.get("argomento")),
                  "risposta": x.get("risposta")}
             if not aperta:
-                y.update(esito=x.get("esito"), deciso_da=x.get("fonte_esito"),
+                y.update(chiusa=x["tipo"] in RS.CHIUSE,
+                         esito=x.get("esito"), deciso_da=x.get("fonte_esito"),
                          attesa=RS.attesa_detta(x), pagine=list(x.get("pagine") or ()))
             voci.append(y)
         ruolo = self._chi_puo(chi, v["persona"])
@@ -492,7 +501,9 @@ class Prove:
                "inizio": p["inizio"], "scade": p["scade"], "fine": p["fine"], "voci": voci,
                "corrente": p["corrente"], "puo_rispondere": aperta and ruolo == "proprietario"
                and p["modalita"] == SCRITTA,
-               "puo_rivedere": not aperta and p["stato"] != ANNULLATA}
+               "puo_rivedere": not aperta and p["stato"] != ANNULLATA,
+               # Sulle domande chiuse la persona dà al più «indizio» (revisione della PR #342)
+               "tutore": ruolo == "tutore"}
         if aperta and p["scade"]:
             out["secondi"] = max(0, int((datetime.datetime.fromisoformat(p["scade"])
                                          - self.adesso()).total_seconds()))
@@ -620,10 +631,17 @@ class Prove:
         decise = [x for x in p["voci"] if x.get("esito") in RS.DECISI]
         affidabili = [x for x in decise if x.get("fonte_esito") in ("codice", "tutore")]
         date = [x for x in p["voci"] if x.get("esito") != RS.VUOTA]
+        vuote = [x for x in p["voci"] if x.get("esito") == RS.VUOTA]
         punteggio = None
-        if decise and len(affidabili) * 2 >= max(1, len(date)):
+        # Revisione della PR #342: nella scritta le vuote valgono 0 (rispondere solo a quella che
+        # si sa non dà 100); nell'orale le voci sono già le sole domande fatte. Il punteggio c'è
+        # solo con almeno metà delle domande con una risposta e metà delle date decise dal codice
+        # o dal tutore
+        contate = decise + vuote
+        if (decise and len(affidabili) * 2 >= max(1, len(date))
+                and len(date) * 2 >= max(1, len(p["voci"]))):
             punti = sum(PD.ESITI[x["esito"]] for x in decise)
-            punteggio = int(round(100 * punti / len(decise)))
+            punteggio = int(round(100 * punti / len(contate)))
         prima = self.dati.uno("SELECT riepilogo FROM studio_prove WHERE verifica = ? AND "
                               "modalita = ? AND stato IN ('consegnata', 'scaduta') AND id < ? "
                               "ORDER BY id DESC LIMIT 1", (v["id"], p["modalita"], p["id"]))
@@ -643,7 +661,8 @@ class Prove:
                 mappe.append({"tipo": "libera", "giuste": int(k.get("trovati") or 0),
                               "su": int(k.get("chiave") or 0)})
         return {"per_argomento": per, "totali": tot, "punteggio": punteggio,
-                "prima": prec, "domande": len(p["voci"]), "mappe": mappe}
+                "prima": prec, "domande": len(p["voci"]), "mappe": mappe,
+                "poche_risposte": len(date) * 2 < max(1, len(p["voci"]))}
 
     def _misura_prova(self, p: dict, v: dict):
         """La misura vera della prova in `studio_misure` («l'ultima prova» del piano), con la
@@ -669,6 +688,10 @@ class Prove:
             if voce is None or voce.get("esito") != RS.DA_RIVEDERE:
                 raise ValueError("questa risposta non è da rivedere")
             ruolo = self._chi_puo(chi, v["persona"])
+            # Sulle domande chiuse la persona dà al più «indizio» (revisione della PR #342): una
+            # risposta a cavallo o negata non diventa «giusto» con l'autovalutazione
+            if ruolo == "proprietario" and voce.get("tipo") in RS.CHIUSE and esito == RS.GIUSTO:
+                esito = RS.INDIZIO
             voce["esito"] = esito
             voce["fonte_esito"] = "persona" if ruolo == "proprietario" else "tutore"
             p["riepilogo"] = self._riepilogo_prova(p, v)
@@ -727,6 +750,8 @@ class Prove:
         if t.get(RS.VUOTA):
             pezzi.append(f"{t[RS.VUOTA]} senza risposta")
         frase = ", ".join(pezzi) + "."
+        if rp.get("poche_risposte"):
+            frase += " Con meno di metà delle risposte la prova non conta come misura."
         deboli = sorted(((k, a) for k, a in (rp.get("per_argomento") or {}).items()
                          if k != "0" and a.get(RS.SBAGLIATO, 0) + a.get(RS.INDIZIO, 0) > 0),
                         key=lambda x: -(x[1].get(RS.SBAGLIATO, 0) * 2 + x[1].get(RS.INDIZIO, 0)))
@@ -761,6 +786,11 @@ class Prove:
             return None
         x = p["voci"][p["corrente"]]
         self._orali[str(p["persona"])] = {"prova": p["id"], "n": x["n"], "turno": int(turno)}
+        # Anche su disco il turno e l'ora della domanda (revisione della PR #342): dopo un
+        # riavvio la risposta si valuta, ma mai nello stesso turno di una domanda di adesso
+        x["chiesta"] = {"turno": int(turno), "ora": self.adesso().isoformat(timespec="seconds")}
+        self.dati.scrivi("UPDATE studio_prove SET voci = ? WHERE id = ? AND stato = 'aperta'",
+                         (_j(p["voci"]), p["id"]))
         return {"n": x["n"], "di": len(p["voci"]), "tipo": x["tipo"], "testo": x["testo"],
                 "opzioni": list(x.get("opzioni") or ())}
 
@@ -798,6 +828,15 @@ class Prove:
             if x is None:
                 self._chiudi_prova(p, CONSEGNATA, chi)
                 return self._fine_orale(chi, p["id"])
+            if not (chiesta.get("prova") == p["id"] and chiesta.get("n") == x["n"]):
+                # Niente in memoria (un riavvio): vale la domanda scritta nella prova; chiesta
+                # prima dell'avvio di questo processo si valuta sempre
+                su_disco = x.get("chiesta") or {}
+                avvio = getattr(self, "_avvio", None)
+                prima = (not su_disco.get("ora") or avvio is None
+                         or datetime.datetime.fromisoformat(su_disco["ora"]) < avvio)
+                chiesta = {} if prima else {"prova": p["id"], "n": x["n"],
+                                            "turno": su_disco.get("turno")}
             if chiesta.get("prova") == p["id"] and chiesta.get("n") == x["n"] and \
                     int(turno or 0) <= int(chiesta.get("turno") or 0):
                 return {"motivo": "stesso_turno", "domanda": {"n": x["n"], "testo": x["testo"]}}

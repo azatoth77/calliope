@@ -56,7 +56,7 @@ _TABELLA = (
     ("min", T, 60.0, ("minuto", "minuti"), ("min",)),
     ("h", T, 3600.0, ("ora", "ore"), ("h",)),
     ("m/s", VEL, 1.0, ("metri al secondo", "metro al secondo", "metri al secondi",
-                       "metri per secondo"), ("m/s",)),
+                       "metri per secondo", "metri/secondo", "metro/secondo"), ("m/s",)),
     ("km/h", VEL, 1 / 3.6, ("chilometri all ora", "chilometro all ora", "chilometri orari",
                             "chilometri allora", "chilometri l ora", "km all ora", "km orari"),
      ("km/h", "kmh")),
@@ -95,6 +95,9 @@ def _semplice(testo) -> str:
     t = unicodedata.normalize("NFKD", t)
     t = "".join(c for c in t if not unicodedata.combining(c)).casefold()
     t = t.replace("°c", " °c ").replace("%", " % ").replace("'", " ")
+    # «m / s», «km / h» e, dopo un numero, «m s» valgono «m/s» (revisione della PR #342)
+    t = re.sub(r"\b(k?m)\s*/\s*(s2|s|h)\b", r"\1/\2", t)
+    t = re.sub(r"(\d\s*)(k?m) (s|h)\b(?![a-z0-9/])", r"\1\2/\3", t)
     return re.sub(r"[ \t]+", " ", t).strip()
 
 
@@ -114,7 +117,9 @@ def _regex_unita() -> re.Pattern:
     for i, (a, _c, _s) in enumerate(_VOCI):
         corpo = r"\s+".join(re.escape(p) for p in a.split(" "))
         parti.append(f"(?P<u{i}>{corpo})")
-    return re.compile(r"(?<![a-z0-9/])(?:" + "|".join(parti) + r")(?![a-z0-9/])")
+    # Una cifra può stare subito prima del simbolo: «125g», «0,125kg», «20m/s» (revisione della PR
+    # #342); una lettera no («cm3» non contiene «m3»)
+    return re.compile(r"(?<![a-z/])(?:" + "|".join(parti) + r")(?![a-z0-9/])")
 
 
 _RE_U = _regex_unita()
@@ -139,7 +144,8 @@ _NUM = re.compile(r"-?\d+(?:[.,]\d+)*")
 
 def _cifre(tok: str) -> float | None:
     t = tok
-    if re.fullmatch(r"-?\d{1,3}(?:\.\d{3})+", t):          # «1.861», «12.000»
+    # «1.861», «12.000»; mai «0.125», che è un decimale (revisione della PR #342)
+    if re.fullmatch(r"-?[1-9]\d{0,2}(?:\.\d{3})+", t):
         t = t.replace(".", "")
     elif t.count(",") == 1 and "." not in t:
         t = t.replace(",", ".")
@@ -154,12 +160,21 @@ def _cifre(tok: str) -> float | None:
 def _in_cifre(t: str) -> str:
     """I numeri in lettere diventano cifre; «X virgola Y», «X e mezzo», «meno X»."""
     pw = _parole()
-    out = []
+    out: list = []
     for w in t.split(" "):
-        out.append(str(pw[w]) if w in pw and w not in ("un", "una", "mezzo", "mezza") else w)
-    t = " ".join(out)
+        n = pw.get(w) if w not in ("un", "una", "mezzo", "mezza") else None
+        # «mille quattrocento novantadue» detto staccato: le parole di fila, ognuna più piccola
+        # della precedente tonda, si sommano (1000 + 400 + 92)
+        if (n is not None and out and isinstance(out[-1], int) and n < out[-1]
+                and out[-1] % (10 ** len(str(n))) == 0 and out[-1] >= 20):
+            out[-1] += n
+            continue
+        out.append(n if n is not None else w)
+    t = " ".join(str(x) for x in out)
+    # La virgola decimale, che `_cifre` legge sempre come decimale («zero virgola
+    # centoventicinque» è 0,125, mai 125: revisione della PR #342)
     t = re.sub(r"(\d+) virgola ((?:\d+ )*\d+)",
-               lambda m: m.group(1) + "." + m.group(2).replace(" ", ""), t)
+               lambda m: m.group(1) + "," + m.group(2).replace(" ", ""), t)
     t = re.sub(r"\bmeno (\d)", r"-\1", t)
     return t
 
@@ -191,10 +206,27 @@ def leggi(testo) -> list[tuple[float, str | None]]:
     return out
 
 
+_MESI = ("gennaio|febbraio|marzo|aprile|maggio|giugno|luglio|agosto|settembre|ottobre|"
+         "novembre|dicembre")
+
+
+def numeri_detti(testo) -> list[tuple[float, str | None]]:
+    """Come `leggi`, senza il giorno di una data («il 12 ottobre 1492» → 1492), se resta almeno
+    un altro numero."""
+    nn = leggi(testo)
+    if len(nn) > 1:
+        senza = re.sub(rf"\b(\d{{1,2}}|[a-z]+)\s+(?:di\s+)?(?:{_MESI})\b", " ",
+                       _semplice(testo))
+        altri = leggi(senza)
+        if altri:
+            return altri
+    return nn
+
+
 def una_misura(testo) -> tuple[float, str | None] | None:
     """La misura di una risposta: l'unico numero (o lo stesso ripetuto); None se non c'è un
     numero o se ce ne sono di diversi («5 o 6»)."""
-    nn = leggi(testo)
+    nn = numeri_detti(testo)
     if not nn:
         return None
     if len({round(v, 9) for v, _u in nn}) > 1:

@@ -154,13 +154,21 @@ verifica("scelta: la lettera attesa diventa l'opzione; la lettera, «la b», il 
          and RS.valuta(sc, "la b")[0] == "giusto" and RS.valuta(sc, "Palos")[0] == "giusto"
          and RS.valuta(sc, "credo Palos")[0] == "giusto"
          and RS.valuta(sc, "la risposta è la b")[0] == "giusto")
-verifica("scelta, contrari: un'altra opzione «sbagliato»; negata, niente o due opzioni «da "
-         "rivedere»", RS.valuta(sc, "a") == ("sbagliato", "codice")
+verifica("scelta, contrari: un'altra opzione o più opzioni «sbagliato» (PR #342); negata, "
+         "niente o una lettera che non c'è «da rivedere»", RS.valuta(sc, "a") == ("sbagliato", "codice")
          and RS.valuta(sc, "Genova")[0] == "sbagliato"
          and RS.valuta(sc, "non la b")[0] == "da_rivedere"
          and RS.valuta(sc, "Venezia")[0] == "da_rivedere"
-         and RS.valuta(sc, "Palos o Lisbona")[0] == "da_rivedere"
+         and RS.valuta(sc, "Palos o Lisbona")[0] == "sbagliato"
+         and RS.valuta(sc, "a o b")[0] == "sbagliato"
+         and RS.valuta(sc, "a b c")[0] == "sbagliato"
          and RS.valuta(sc, "f")[0] == "da_rivedere")
+verifica("le lettere dette a voce, solo come forma chiusa per intero (PR #342, punto 5)",
+         RS.valuta(sc, "bi")[0] == "giusto" and RS.valuta(sc, "la bi")[0] == "giusto"
+         and RS.valuta(sc, "Calliope, la bi")[0] == "giusto"
+         and RS.valuta(sc, "ci")[0] == "sbagliato" and RS.valuta(sc, "di")[0] == "da_rivedere"
+         and RS.valuta(sc, "effe")[0] == "da_rivedere"
+         and RS.valuta(sc, "io di storia non so niente")[0] == "da_rivedere")
 verifica("scelta: due opzioni uguali o la giusta fuori dalle opzioni sono rifiutate",
          solleva(lambda: RS.prepara("scelta", "x?", "Palos", ["Palos", "palos"]), ValueError)
          and solleva(lambda: RS.prepara("scelta", "x?", "Roma", ["Palos", "Genova"]), ValueError)
@@ -182,11 +190,14 @@ verifica("numero con l'unità: cifre, lettere, conversione nella stessa grandezz
          and RS.valuta(nm, "due virgola cinque m/s")[0] == "giusto"
          and RS.valuta(nm, "9 chilometri orari")[0] == "giusto"
          and RS.valuta(nm, "2.52 m/s")[0] == "giusto")
-verifica("numero, contrari: un'altra grandezza o un altro valore «sbagliato», senza unità "
-         "«indizio», due numeri o nessuno «da rivedere»",
+verifica("numero, contrari: un'altra grandezza, un altro valore o due numeri «sbagliato» (PR "
+         "#342), senza unità «indizio», nessun numero «da rivedere»",
          RS.valuta(nm, "2,5 kg")[0] == "sbagliato" and RS.valuta(nm, "3 m/s")[0] == "sbagliato"
          and RS.valuta(nm, "2,5")[0] == "indizio" and RS.valuta(nm, "2 o 3 m/s")[0] ==
-         "da_rivedere" and RS.valuta(nm, "boh, veloce")[0] == "da_rivedere")
+         "sbagliato" and RS.valuta(nm, "boh, veloce")[0] == "da_rivedere")
+verifica("vero o falso tutti e due nella risposta «sbagliato»; «non lo so» anche sul vero o falso",
+         RS.valuta(vf, "boh vero o falso")[0] == "sbagliato"
+         and RS.valuta(vf, "non lo so") == ("sbagliato", "persona"))
 an = RS.prepara("numero", "Anno?", "1492")
 verifica("un intero sotto il tetto della tolleranza: anno esatto, in lettere",
          RS.valuta(an, "nel 1492")[0] == "giusto"
@@ -688,6 +699,113 @@ for modo in ("attivo", "ombra"):
     finally:
         srv.ferma() if hasattr(srv, "ferma") else None
         st.close()
+
+# ═══════════════════════════ 10. la revisione della PR #342 ═══════════════════════════
+print("— la revisione della PR #342")
+# La tabella del revisore: tutte risposte giuste (o «indizio» dove manca solo l'unità)
+S_ = RS.prepara("scelta", "Chi arrivò in America nel 1492?", "b",
+                ["Vasco da Gama", "Cristoforo Colombo", "Magellano", "Marco Polo"])
+N_ANNO = RS.prepara("numero", "In che anno?", "1492")
+N_VEL = RS.prepara("numero", "Velocità?", "20 m/s")
+N_DEC = RS.prepara("numero", "Massa?", "0,125 kg")
+N_G = RS.prepara("numero", "g?", "9,8 m/s2")
+GIUSTI = [(S_, x) for x in ("b", "la b", "La B.", "bi", "la bi", "B, Cristoforo Colombo",
+                            "Calliope, la b", "risposta b", "la risposta è la b",
+                            "Cristoforo Colombo")] +     [(N_ANNO, x) for x in ("1492", "millequattrocentonovantadue", "nel 1492", "circa nel 1492",
+                           "1.492", "mille quattrocento novantadue", "Calliope, 1492",
+                           "il 12 ottobre 1492", "1492 d.C.")] +     [(N_VEL, x) for x in ("20 m/s", "20m/s", "20 metri al secondo", "venti metri al secondo",
+                          "72 km/h", "72 chilometri orari", "20 m / s", "20 m s",
+                          "20 metri/secondo")] +     [(N_DEC, x) for x in ("0,125 kg", "0.125 kg", "125 g", "125g", "0,125kg",
+                          "zero virgola centoventicinque chili")] +     [(N_G, x) for x in ("9,8 m/s2", "9,8 m/s²", "9.8 metri al secondo quadrato", "9,81 m/s^2")]
+sbagliati = [(d["attesa"], x, RS.valuta(d, x)) for d, x in GIUSTI if RS.valuta(d, x)[0] != "giusto"]
+verifica("la tabella del revisore: tutte giuste (cifra attaccata al simbolo, «0.125», virgola "
+         "detta, «m / s», migliaia staccate, il giorno della data)", not sbagliati, sbagliati)
+verifica("…e i contrari: «a o b», «1492 o 1493», «20 metri», «nel 1492, 500 anni fa»",
+         RS.valuta(S_, "a o b")[0] == "sbagliato" and RS.valuta(N_ANNO, "1492 o 1493")[0]
+         == "sbagliato" and RS.valuta(N_VEL, "20 metri")[0] == "sbagliato"
+         and RS.valuta(N_ANNO, "nel 1492, 500 anni fa")[0] == "sbagliato"
+         and RS.valuta(N_VEL, "20")[0] == "indizio")
+verifica("unità: «0.125» decimale, «1.492» migliaia, «zero virgola centoventicinque»",
+         U.una_misura("0.125 kg") == (0.125, "kg") and U.una_misura("1.492") == (1492.0, None)
+         and U.una_misura("zero virgola centoventicinque") == (0.125, None)
+         and U.una_misura("125g") == (125.0, "g"))
+ORA[0] = datetime.datetime(2026, 10, 29, 16, 0)
+s6 = studio(cfg_nuova("rev342.db"))
+v6, b1, b2, _d = carica(s6)
+q = s6.inizia_prova(LEO, v6)
+num = next(x for x in q["voci"] if x["tipo"] == "numero")
+s6.rispondi_prova(LEO, q["id"], num["n"], "1492")
+c6 = s6.consegna_prova(LEO, q["id"])
+verifica("1 risposta giusta su 5: niente punteggio né misura, la frase lo dice",
+         c6["riepilogo"]["punteggio"] is None and "non conta come misura" in c6["frase"]
+         and not s6.dati.tutti("SELECT * FROM studio_misure WHERE verifica = ? AND fonte = "
+                               "'verifica_finta'", (v6,)), c6["riepilogo"])
+q2 = s6.inizia_prova(LEO, v6)
+verifica("le vuote della prova prima in fondo, la risposta data prima (se non si può evitare)",
+         q2["voci"][0]["testo"] == num["testo"], [x["testo"] for x in q2["voci"]])
+for x in q2["voci"]:
+    s6.rispondi_prova(LEO, q2["id"], x["n"], {"scelta": "a o b", "numero": "1491 o 1492",
+                                              "vero_falso": "boh vero o falso"}.get(
+        x["tipo"], "1492" if x["tipo"] == "numero" else "a"))
+c7 = s6.consegna_prova(LEO, q2["id"])
+chiuse = {x["tipo"]: x["esito"] for x in c7["voci"]}
+verifica("risposte a cavallo sulle chiuse: «sbagliato» dal codice",
+         chiuse["scelta"] == chiuse["numero"] == chiuse["vero_falso"] == "sbagliato", chiuse)
+verifica("le vuote valgono 0 nel punteggio della scritta",
+         c7["riepilogo"]["punteggio"] == 0 or c7["riepilogo"]["punteggio"] is None,
+         c7["riepilogo"])
+# Sulle chiuse la persona dà al più «indizio»: una carta chiusa da rivedere
+s6.aggiungi_carta(LEO, v6, "Chi diede il nome all'America?", "Vespucci", argomento=b1)
+q3 = s6.inizia_prova(LEO, v6)
+for x in q3["voci"]:
+    s6.rispondi_prova(LEO, q3["id"], x["n"], "Amerigo" if x["tipo"] == "carta" else "x")
+c8 = s6.consegna_prova(LEO, q3["id"])
+ca = next((x for x in c8["voci"] if x["tipo"] == "carta"), None)
+if ca is not None and ca["esito"] == "da_rivedere":
+    r8 = s6.rivedi_voce(LEO, q3["id"], ca["n"], "giusto")
+    v8 = next(x for x in r8["voci"] if x["n"] == ca["n"])
+    verifica("su una domanda chiusa «Era giusta» della persona vale «indizio»",
+             v8["esito"] == "indizio" and tentativi(s6)[-1]["esito"] == "indizio"
+             and ca["chiusa"] and not r8["tutore"], v8)
+else:
+    verifica("la carta chiusa nella prova, da rivedere", False, ca)
+s6.close()
+# L'orale dopo un riavvio: la domanda chiesta prima dell'avvio si valuta, quella di adesso no
+s7 = studio(cfg_nuova("rev342b.db"))
+v7, *_r = carica(s7)
+o7 = s7.orale_inizia(LEO, v7, turno=5)
+s7._orali.clear()
+verifica("senza memoria, domanda chiesta in questo processo: stesso turno, niente esito",
+         s7.orale_risposta(LEO, "boh", 5).get("motivo") == "stesso_turno")
+s7.close()
+ORA[0] = ORA[0] + datetime.timedelta(minutes=1)
+s7 = studio(cfg_nuova("rev342b.db"))
+r7 = s7.orale_risposta(LEO, "non lo so", 1)
+verifica("dopo un riavvio la domanda di prima si valuta, anche col turno che riparte",
+         (r7.get("valutata") or {}).get("esito") == "sbagliato", r7)
+s7.close()
+# «Parliamone» durante una prova aperta e l'orale sul testo di Whisper
+ORA[0] = datetime.datetime(2026, 10, 29, 16, 0)
+st = studio(cfg_nuova("rev342c.db"))
+v9, *_r = carica(st)
+st.inizia_prova(LEO, v9)
+r = chiama(ctx_di(LEO, turno=1, frase="parliamo della mia mappa"), "studio_mappa_consigli",
+           verifica=v9)
+verifica("«Parliamone» durante una prova: niente concetti, «c'è una prova in corso»",
+         not r["ok"] and "prova in corso" in r["conferma"] and "scheletro" not in r, r)
+st.close()
+st = studio(cfg_nuova("rev342d.db"))
+v10, *_r = carica(st)
+c = ctx_di(LEO, turno=1, frase="interrogami")
+chiama(c, "studio_interroga", parte="inizia")
+x = json.loads(st.dati.uno("SELECT voci FROM studio_prove")["voci"])[0]
+giusta_ = GIUSTE.get(x["testo"], "x")
+c = ctx_di(LEO, turno=2, frase=giusta_)
+c.user_text_stt = "non lo so"           # Whisper ha sentito questo; «capito» ha riscritto
+r = chiama(c, "studio_interroga", parte="risposta")
+verifica("l'orale valuta la frase di Whisper, non quella riscritta da «capito»",
+         r.get("esito") == "sbagliata", r)
+st.close()
 
 js = (QUI.parent / "calliope" / "schermi" / "pagina" / "studio.js").read_text(encoding="utf-8")
 pezzo = js.split("// ── le prove (31/10", 1)[-1].split("// ── fine delle prove", 1)[0]

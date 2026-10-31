@@ -18,6 +18,8 @@ tool**.
   `da_controllare`; un argomento che non c'è, anche;
 - le parole chiave che non stanno nelle pagine citate si tolgono (una chiave inventata farebbe
   sbagliare il codice);
+- un vero o falso con «falso» resta `da_controllare` (il codice vede le parole, non che è falso);
+  la scelta multipla generata ha da 3 a 4 opzioni, le altre si scartano (revisione della PR #342);
 - solo pagine con «ISTRUZIONI: sì» → `pagina_con_istruzioni`; un ordine, un indirizzo o un
   annuncio nella domanda, nelle opzioni o nella risposta → `testo_ordine` (principio 10, forma);
 - doppioni tolti, al più `MAX_DOMANDE`.
@@ -146,6 +148,8 @@ def proposte(grezzi: list[dict], rif, arif) -> list[dict]:
         citate = g.get("pagine") if isinstance(g.get("pagine"), list) else []
         esistono, _dentro = A.controlla(dom, citate, testi)
         testo_pag = " ".join(testi.get(r, "") for r in esistono)
+        if tipo == "scelta" and not 3 <= len(opz) <= 4:
+            continue                     # da 3 a 4 opzioni, come chiede la richiesta (PR #342)
         if tipo == "parole":
             # Le parole chiave che non stanno nelle pagine citate si tolgono
             ch = [c for c in ch if A.controlla(c, citate, testi)[1]]
@@ -171,7 +175,10 @@ def proposte(grezzi: list[dict], rif, arif) -> list[dict]:
             base = d["testo"]
         _e, dentro = A.controlla(base, citate, testi)
         aid = args.get(G._arg(g.get("argomento")))
-        if not dentro or aid is None or not testo_pag:
+        # Un «falso» non si regge sulle pagine (il codice vede le parole, non che l'affermazione
+        # è falsa): resta da controllare (revisione della PR #342)
+        falso = d["tipo"] == "vero_falso" and d["attesa"] == "falso"
+        if not dentro or aid is None or not testo_pag or falso:
             avvisi.append(DA_CONTROLLARE)
         if esistono and all(r in istruzioni for r in esistono):
             avvisi.append(PAGINA_CON_ISTRUZIONI)

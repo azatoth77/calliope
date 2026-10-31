@@ -504,9 +504,13 @@ dell'eco della stanza.
     - Il modello passa al più una **proposta** nell'orale: è una misura (accordo con chi decide)
       e non scrive mai un tentativo. `registra_tentativo` resta com'è: la fonte «modello» è
       rifiutata, senza strade laterali.
-    - I tentativi sono «verifica_finta» (1,5) e «interrogazione» (1,2). Le vuote non contano. La
-      misura «l'ultima prova» c'è solo se almeno metà delle voci date è decisa dal codice o dal
-      tutore.
+    - I tentativi sono «verifica_finta» (1,5) e «interrogazione» (1,2). Le vuote non scrivono
+      tentativi, ma nella scritta valgono 0 nel punteggio. La misura «l'ultima prova» c'è solo se
+      almeno metà delle domande ha una risposta e metà delle date è decisa dal codice o dal tutore
+      (revisione della PR #342).
+    - Sulle domande chiuse (scelta, vero o falso, numero, carta) più opzioni o più numeri nella
+      stessa risposta valgono «sbagliato», e la persona che rivede dà al più «indizio»: il
+      «giusto» resta al codice o al tutore (revisione della PR #342).
     - La prova la fa **solo la persona**. La vista aperta **non ha mai le risposte attese né
       l'esito**. Mentre è aperta, carte e domande della verifica sono nascoste alla persona,
       e `studio_pagina_leggi` non legge le pagine. Tutto dentro il lock, e lo stato cambia una

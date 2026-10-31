@@ -4097,6 +4097,9 @@ class Brain:
                                 or getattr(self, "_nuovi_allegati", None))
         if self.tool_ctx is not None and hasattr(self.tool_ctx, "user_text"):
             self.tool_ctx.user_text = user_text
+            # La frase di Whisper prima di «capito» (revisione della PR #342): l'orale dello
+            # Studio valuta la risposta detta, non quella riscritta dal modello
+            self.tool_ctx.user_text_stt = user_text
         if sfida is not None:
             self.turn_pending_tool = sfida.tool
             try:
@@ -5087,6 +5090,7 @@ class Brain:
         if (self.tool_ctx is not None and hasattr(self.tool_ctx, "user_text")
                 and user_text is not None):
             self.tool_ctx.user_text = user_text
+            self.tool_ctx.user_text_stt = user_text
         # Stessi tool per tutti i livelli (03/10): con un elenco per livello, quando cambiava
         # chi parla Ollama rileggeva ~6000 token di prefisso (+1,5 s col 4B, +2 s col 26B).
         # I permessi li ricontrolla ToolRegistry.call a ogni esecuzione

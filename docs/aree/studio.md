@@ -286,6 +286,47 @@ solo con lo Studio attivo, come gli altri tool.
 La prova col modello sulla DGX resta a chi amministra: la voce che interroga, la trascrizione vera
 delle risposte e i tempi della prima frase.
 
+### 31/10: la revisione della PR #342
+
+I casi stanno nella sezione 10 di `prova_studio_prove.py`, nel vero o falso generato di
+`prova_studio_domande_genera.py` e nella pagina.
+
+1. **Le vuote contano.** Nella scritta valgono 0 nel punteggio; nell'orale le voci sono già le
+   sole domande fatte. Il punteggio e la misura «l'ultima prova» ci sono solo se almeno metà
+   delle domande ha una risposta, e la frase lo dice: «con meno di metà delle risposte la prova
+   non conta come misura». Le domande lasciate vuote si evitano nella prova dopo, se si può;
+   altrimenti vanno in fondo. *[storico fino a questa revisione: una risposta giusta su 5 dava
+   100 e scriveva la misura]*
+2. **Le risposte a cavallo sulle chiuse.** Più opzioni («a o b», «Colombo e Magellano»), più
+   numeri («1491 o 1492») o vero e falso insieme valgono «sbagliato». «Non lo so» vale
+   «sbagliato» anche sul vero o falso. Sulle chiuse (scelta, vero o falso, numero, carta) la
+   persona che rivede dà al più «indizio»: «Era giusta» non c'è, e il server lo riduce a
+   «indizio». Il «giusto» resta al codice o al tutore. Sulle parole chiave e sulle aperte resta
+   l'autovalutazione col peso 0,5.
+3. **I numeri.**
+   - Una cifra attaccata al simbolo vale: «125g», «0,125kg», «20m/s».
+   - «0.125» è sempre un decimale; le migliaia valgono solo con la prima cifra da 1 a 9
+     («1.492»).
+   - «zero virgola centoventicinque» si scrive con la virgola, cioè 0,125.
+   - «m / s» e, dopo un numero, «m s» diventano «m/s»; vale anche «metri/secondo».
+   - «mille quattrocento novantadue» detto staccato si somma.
+   - Il giorno di una data non conta come un secondo numero: «il 12 ottobre 1492» vale 1492.
+     «Nel 1492, 500 anni fa» invece vale «sbagliato» (due numeri).
+4. **L'orale dopo un riavvio.** La domanda chiesta è scritta anche nella voce della prova, col
+   turno e l'ora. Senza memoria, una domanda chiesta prima dell'avvio del servizio si valuta
+   alla risposta; una chiesta adesso aspetta il turno dopo.
+5. **Le lettere dette a voce** («bi», «la bi», «ci», «di», «e», «effe») valgono, ma solo come
+   forma chiusa per intero.
+
+Le minori:
+- l'orale valuta la frase di Whisper prima di «capito» (`ToolContext.user_text_stt`), non
+  quella riscritta dal modello;
+- **le mappe restano visibili durante una prova**, che è fatta a casa: lo scheletro non è una
+  risposta esatta. «Parliamone» però, con una prova aperta, non mette concetti in busta e
+  risponde «c'è una prova in corso»;
+- le domande generate: un «falso» resta `da_controllare`, perché il codice vede le parole, non
+  che l'affermazione è falsa; la scelta generata ha da 3 a 4 opzioni, le altre si scartano.
+
 **Scelte prudenti di questa PR** (da confermare):
 - il tutore non fa la prova al posto del minore;
 - le vuote non scrivono tentativi;
