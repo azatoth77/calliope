@@ -81,13 +81,19 @@ function rigaConto(r, c) {
 }
 
 // L'aiuto del secondo tentativo: quanti atomi dall'altra parte, quanti in ogni formula
+// I pedici delle formule per lo schermo: «H2O» → «H₂O» (le cifre dopo una lettera o una parentesi)
+const PEDICI = "₀₁₂₃₄₅₆₇₈₉";
+function pedici(testo) {
+  return String(testo).replace(/([A-Za-z)])(\d+)/g, (_, a, n) => a + n.split("").map((c) => PEDICI[+c]).join(""));
+}
+
 function aiuto(r) {
   const { lato, i } = mancante(r);
   const altro = lato === "sinistra" ? "destra" : "sinistra";
   const el = elementoChiave(r);
   const f = r[lato][i][1];
   const n = conta(r, altro, el, 0);
-  return `Aiuto: a ${altro} ci sono ${n} atomi di ${el}, e ogni ${f} ne ha ${atomi(f)[el]}.`;
+  return `Aiuto: a ${altro} ci sono ${n} atomi di ${el}, e ogni ${f} ne ha ${atomi(f)[el]}. Il coefficiente 1 non si scrive.`;
 }
 
 const N = DATI.reazioni.length;
@@ -130,31 +136,33 @@ const GIOCO = {
       finito: (d) => ({ dati: d, esito: chiudi(d), dopo: "fine" }),
     },
   },
+  // Sullo schermo le formule coi pedici (H₂O); l'esito, che Calliope può dire, resta in testo
+  // semplice (revisione della PR #366)
   vista: {
     domanda: (d) => {
       const r = DATI.reazioni[d.passo];
       return {
         titolo: `Reazione ${d.passo + 1} di ${N}`,
-        sottotitolo: equazione(r),
-        testo: "Quale coefficiente manca?" + (d.tentativo === 2 ? " " + aiuto(r) : ""),
+        sottotitolo: pedici(equazione(r)),
+        testo: pedici("Quale coefficiente manca?" + (d.tentativo === 2 ? " " + aiuto(r) : "")),
       };
     },
     verifica: (d) => {
       const r = DATI.reazioni[d.passo];
       if (d.stato === "giusto") {
-        return { titolo: "Giusto!", sottotitolo: equazione(r, r.giusto),
-                 testo: `Con ${r.giusto}: ${rigaConto(r, r.giusto)}. La reazione è bilanciata.` };
+        return { titolo: "Giusto!", sottotitolo: pedici(equazione(r, r.giusto)),
+                 testo: pedici(`Con ${r.giusto}: ${rigaConto(r, r.giusto)}. La reazione è bilanciata.`) };
       }
       if (d.stato === "riprova") {
-        return { titolo: "Non torna", sottotitolo: equazione(r, d.scelto),
-                 testo: `Con ${d.scelto}: ${rigaConto(r, d.scelto)}. Riprova.` };
+        return { titolo: "Non torna", sottotitolo: pedici(equazione(r, d.scelto)),
+                 testo: pedici(`Con ${d.scelto}: ${rigaConto(r, d.scelto)}. Riprova.`) };
       }
-      return { titolo: "La soluzione", sottotitolo: equazione(r, r.giusto),
-               testo: `Con ${d.scelto}: ${rigaConto(r, d.scelto)}. Serve ${r.giusto}: ${rigaConto(r, r.giusto)}.` };
+      return { titolo: "La soluzione", sottotitolo: pedici(equazione(r, r.giusto)),
+               testo: pedici(`Con ${d.scelto}: ${rigaConto(r, d.scelto)}. Serve ${r.giusto}: ${rigaConto(r, r.giusto)}.`) };
     },
   },
 };
 
 if (typeof module !== "undefined") {
-  module.exports = { GIOCO, DATI, atomi, conta, mancante, elementoChiave, equazione, rigaConto, aiuto };
+  module.exports = { GIOCO, DATI, atomi, conta, mancante, elementoChiave, equazione, rigaConto, aiuto, pedici };
 }

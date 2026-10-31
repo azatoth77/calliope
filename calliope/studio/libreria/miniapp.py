@@ -89,7 +89,7 @@ def carica(estensione: str, comandi=(), cartella: Path | None = None) -> tuple[M
     except (OSError, UnicodeDecodeError, ValueError) as ex:
         return None, [f"manifesto.json non si legge: {type(ex).__name__}"]
     try:
-        m = MF.valida(dati)
+        m = MF.valida(dati, riservato=True)
     except MF.ManifestoNonValido as ex:
         return None, [f"manifesto: {ex}"]
     errori = []
@@ -101,6 +101,9 @@ def carica(estensione: str, comandi=(), cartella: Path | None = None) -> tuple[M
     sch = m.get("scheda") or {}
     if sch.get("salva") or sch.get("condivisa") or sch.get("chat"):
         errori.append("una mini-app non salva dati, non è condivisa e non ha la chat")
+    if (sch.get("macchina") or {}).get("anchio") is not False:
+        # Si studia da soli: niente «Gioco anch'io» nella preparazione (revisione della PR #366)
+        errori.append("una mini-app dichiara «anchio»: false nella macchina")
     file = {}
     for n in sch.get("file") or []:
         try:

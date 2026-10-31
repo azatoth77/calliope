@@ -44,17 +44,17 @@ function verso(c) { return c < DATI.interna ? "entra" : c > DATI.interna ? "esce
 
 function perche(p) {
   const fuori = p.concentrazione === 0 ? "Fuori niente sale" : `Fuori ${numero(p.concentrazione)} %`;
-  const intro = `${fuori}, dentro ${numero(DATI.interna)} %: soluzione ${p.tipo}.`;
+  const intro = `${fuori}, dentro l'equivalente dello ${numero(DATI.interna)} %: soluzione ${p.tipo}.`;
   const v = verso(p.concentrazione);
-  if (v === "pari") return `${intro} L'acqua entra ed esce allo stesso modo: il globulo resta com'è.`;
-  if (v === "esce") return `${intro} L'acqua esce verso il lato più concentrato: il globulo si raggrinzisce.`;
-  if (p.concentrazione === 0) return `${intro} Entra tanta acqua: il globulo si gonfia fino a rompersi (emolisi).`;
-  return `${intro} L'acqua entra verso il lato più concentrato: il globulo si gonfia.`;
+  if (v === "pari") return `${intro} I soluti sono pari dentro e fuori: l'acqua entra ed esce allo stesso modo e il globulo resta com'è.`;
+  if (v === "esce") return `${intro} L'acqua esce verso il lato più concentrato di soluti: il globulo si raggrinzisce (crenatura).`;
+  if (p.concentrazione === 0) return `${intro} Entra tanta acqua verso il lato con i soluti: il globulo si gonfia fino a rompersi (emolisi).`;
+  return `${intro} L'acqua entra verso il lato più concentrato di soluti: il globulo si gonfia.`;
 }
 
 function aiuto(p) {
   const fuori = p.concentrazione === 0 ? "fuori non c'è sale" : `fuori c'è ${numero(p.concentrazione)} %`;
-  return `Aiuto: ${fuori}, dentro ${numero(DATI.interna)} %. L'acqua passa dal lato meno concentrato a quello più concentrato.`;
+  return `Aiuto: ${fuori}, dentro l'equivalente dello ${numero(DATI.interna)} %. L'acqua passa dal lato meno concentrato di soluti a quello più concentrato.`;
 }
 
 function prevedi(d, scelta) {
@@ -106,7 +106,7 @@ const GIOCO = {
       return { titolo: `Passo ${d.passo + 1} di ${DATI.passi.length}: ${soluzione(p.concentrazione)}`,
                sottotitolo: d.tentativo === 1 ? "Cosa fa il globulo rosso?" : "Non proprio: riprova.",
                testo: d.tentativo === 1
-                 ? `Dentro il globulo l'acqua è salata come NaCl allo ${numero(DATI.interna)} %.`
+                 ? `Dentro il globulo la concentrazione di soluti equivale a una soluzione di NaCl allo ${numero(DATI.interna)} %.`
                  : aiuto(p) };
     },
     verifica: (d) => {

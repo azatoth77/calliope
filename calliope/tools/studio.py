@@ -1906,7 +1906,7 @@ def _attivita(ctx: ToolContext, attivita: str = "", verifica=None, materia: str 
             v = svc.verifica(chi, b.get("verifica"))
         except (NonTrovata, NonPermesso, TypeError, ValueError):
             return _f(NON_CE, ok=False)
-        if svc._libreria_chiusa(v):
+        if svc._libreria_chiusa(v) or svc.prova_aperta_di(str(v["persona"])):
             return _f(ATTIVITA_PROVA, ok=False)
         cid = b.get("contenuto")
         if not isinstance(cid, str) or cid not in lib.app:
@@ -1919,6 +1919,13 @@ def _attivita(ctx: ToolContext, attivita: str = "", verifica=None, materia: str 
             nomi = ", ".join(f"«{lib.contenuti[k]['titolo']}»" for k in quali[:8]) \
                 if quali else _elenco_attivita(lib)
             return _f(ATTIVITA_QUALE.format(nomi or "niente"), ok=False, scegli=True)
+    # Gli orari di un minore valgono come per tutto lo Studio (decisione di chi amministra del
+    # 31/10): il ciclo li ferma già a voce e al tocco, qui di nuovo per chi chiama il tool
+    from .. import minori
+    prof = minori.profilo(ctx)
+    orario = minori.fuori_orario(prof) if minori.e_minore(prof) else None
+    if orario:
+        return _f(minori.frase_fuori_orario(prof, orario), ok=False)
     app = lib.app[cid]
     if not app.intatta():
         return _f("Non la apro: i suoi file sono cambiati dopo il caricamento.", ok=False)
@@ -1927,7 +1934,9 @@ def _attivita(ctx: ToolContext, attivita: str = "", verifica=None, materia: str 
         return _f(ATTIVITA_SENZA_SCHERMI, ok=False)
     svc.nota_attivita(cid)
     note_rule(ctx, "studio_attivita")
-    return giochi.avvia(ctx, app.nome, 0, app.manifesto, {}, file=app.file)
+    # `libreria`: un segno esplicito (revisione della PR #366, nota 2): è studio, non conta nel
+    # tempo dei giochi di un minore; il fuori orario e la prova aperta la chiudono
+    return giochi.avvia(ctx, app.nome, 0, app.manifesto, {}, file=app.file, libreria=True)
 
 
 DESCRIZIONE_ATTIVITA = (

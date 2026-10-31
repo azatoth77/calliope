@@ -168,12 +168,16 @@ class Posto:
 
 class Partita:
     def __init__(self, nome: str, versione: int, manifesto: dict, avviata_da: Mittente,
-                 prova: bool = False, file: dict | None = None):
+                 prova: bool = False, file: dict | None = None, libreria: bool = False):
         self.id = "P" + secrets.token_hex(4)
         # Una mini-app della libreria dello Studio (31/10, #297): i file del riquadro vengono dal
         # repository (studio/libreria/miniapp.py, impronta controllata al caricamento), non
         # dall'archivio delle estensioni. None per un gioco dell'archivio
         self.file = dict(file) if file is not None else None
+        # Il segno esplicito di un'attività della libreria (revisione della PR #366, nota 2): lo
+        # mette solo `studio_attivita`. Non conta nel tempo dei giochi di un minore; si chiude al
+        # fuori orario e quando parte una prova della persona; non va nel registro dell'archivio
+        self.libreria = bool(libreria)
         # La versione candidata nel collaudo (11/10): niente ponte verso Calliope
         self.prova = bool(prova)
         self.gettone = secrets.token_urlsafe(24)
@@ -284,14 +288,16 @@ class Giochi:
 
     # ── dal tool del gioco ──
     def avvia(self, ctx, nome: str, versione: int, m: dict, argomenti: dict,
-              prova: bool = False, file: dict | None = None) -> dict:
+              prova: bool = False, file: dict | None = None,
+              libreria: bool = False) -> dict:
         """Apre una partita (o si unisce a quella aperta da un altro schermo) e manda la
         scheda del gioco a uno schermo. Il risultato per la voce. `prova` (11/10): un gioco
         non ancora approvato, aperto per il collaudo: la scheda porta "prova": true e la
         pagina lo mostra nella modalità gioco con la cornice arancio e «PROVA» (contratto in
         docs/aree/giochi.md; chi apre la versione non attiva è lo sviluppo, non questo). `file`
         (31/10, #297): i file di una mini-app della libreria dello Studio, un gioco puro fidato
-        che non sta nell'archivio delle estensioni (il riquadro si compone da questi byte)."""
+        che non sta nell'archivio delle estensioni (il riquadro si compone da questi byte);
+        `libreria` il segno della mini-app (non conta nel tempo dei giochi)."""
         from .. import minori
         from ..estensioni.scheda import e_gioco_puro, ha_macchina
         if not getattr(self.cfg, "giochi_enabled", True):
@@ -300,7 +306,7 @@ class Giochi:
         titolo = m.get("titolo", nome)
         prof = minori.profilo(ctx)
         minore = minori.e_minore(prof)
-        if minore:
+        if minore and not libreria:
             resta = minori.gioco_restante_s(prof)
             if resta is not None and resta <= 0:
                 out = _rifiuto(ctx, "Per oggi il tempo dei giochi è finito.", "gioco_tempo_finito")
@@ -353,7 +359,7 @@ class Giochi:
                 p = max(aperte, key=lambda x: x.ultimo) if aperte else None
             nuova = p is None
             if nuova:
-                p = Partita(nome, versione, m, mitt, file=file)
+                p = Partita(nome, versione, m, mitt, file=file, libreria=libreria)
                 self.partite[p.id] = p
                 self._per_gettone[p.gettone] = p.id
             p.posti[sid] = Posto(sid, mitt, minore, schermo=s)
@@ -589,6 +595,17 @@ class Giochi:
         passato = ora - posto.ultimo_battito if posto.ultimo_battito else secondi
         secondi = max(0.0, min(secondi, passato + 1.0, 30.0))
         posto.ultimo_battito = ora
+        if p.libreria:
+            # Un'attività della libreria (#297, revisione della PR #366, nota 2): è studio, non
+            # conta nel tempo dei giochi; si chiude quando comincia il fuori orario del minore o
+            # c'è una prova aperta della persona
+            if posto.fermato:
+                return {"ok": True, "fine_tempo": True}
+            nota = self._libreria_fermata(posto)
+            if nota:
+                self._ferma(p, posto, nota, "libreria_fermata")
+                return {"ok": True, "fine_tempo": True, "nota": nota}
+            return {"ok": True}
         if not posto.minore or posto.fermato:
             return {"ok": True, "fine_tempo": posto.fermato}
         prof = self._profilo(posto.persona)
@@ -605,6 +622,48 @@ class Giochi:
                                                    "dati": {"nota": nota}})
             return {"ok": True, "fine_tempo": True, "nota": nota}
         return {"ok": True, "resta_s": round(resta) if resta is not None else None}
+
+    # ── le attività della libreria dello Studio (#297, revisione della PR #366) ──
+    LIBRERIA_ORARIO = "È l'ora di riposare: l'attività dello Studio si chiude."
+    LIBRERIA_PROVA = "C'è una prova aperta nello Studio: l'attività si chiude."
+
+    def _libreria_fermata(self, posto: Posto) -> str | None:
+        """La frase per chiudere un'attività della libreria, o None: il fuori orario di un
+        minore, una prova aperta della persona (lo Studio, se legato: `self.studio`)."""
+        from .. import minori
+        prof = self._profilo(posto.persona)
+        if prof is not None and posto.minore and minori.fuori_orario(prof):
+            return self.LIBRERIA_ORARIO
+        st = getattr(self, "studio", None)
+        if st is not None and posto.persona:
+            try:
+                if st.prova_aperta_di(str(posto.persona)):
+                    return self.LIBRERIA_PROVA
+            except Exception:  # noqa: BLE001
+                return None
+        return None
+
+    def _ferma(self, p: Partita, posto: Posto, nota: str, evento: str):
+        """Ferma il riquadro di un posto (come la fine del tempo dei giochi): la pagina lo chiude
+        con la nota."""
+        posto.fermato = True
+        self._registra(p, evento)
+        self._evento(posto, "gioco", {"partita": p.id, "tipo": "fine_tempo",
+                                      "dati": {"nota": nota}})
+
+    def ferma_libreria(self, persona: str, nota: str | None = None) -> int:
+        """Chiude le attività della libreria aperte da `persona` (una prova che parte: il gancio
+        dello Studio). Quanti riquadri."""
+        n = 0
+        with self._lock:
+            partite = [p for p in self.partite.values()
+                       if p.libreria and getattr(p.avviata_da, "persona", None) == persona]
+        for p in partite:
+            for posto in list(p.posti.values()):
+                if not posto.fermato:
+                    self._ferma(p, posto, nota or self.LIBRERIA_PROVA, "libreria_fermata")
+                    n += 1
+        return n
 
     def _file_dati(self, p: Partita, chiave: str):
         est = self.estensioni
@@ -1281,7 +1340,9 @@ class Giochi:
 
     def _registra(self, p: Partita, evento: str, **extra):
         est = self.estensioni
-        if est is not None:
+        # Le attività della libreria (#297, revisione della PR #366, nota 3) non sono estensioni:
+        # niente righe nel registro dell'archivio (il nome `libreria_` è riservato)
+        if est is not None and not p.libreria:
             est.archivio.registra({"gioco": p.nome, "versione": p.versione, "partita": p.id,
                                    "evento": evento, **extra})
         regola = extra.get("regola")

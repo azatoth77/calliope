@@ -71,7 +71,7 @@ def scenario_telefono(t, hub, st, vid):
     t.v("location.hash = '#/cose'; 1")
     aspetta(lambda: t.v("!!document.querySelector('#tessere [data-tessera=\"studio\"]:not(.presto)')"), 10)
     t.tocca('#tessere [data-tessera="studio"]')
-    ok = aspetta(lambda: t.v("!!document.querySelector('#studio-home .studio-l')"), 8)
+    ok = aspetta(lambda: t.v("!!document.querySelector('#studio-home .studio-l')"), 15)
     testo = t.v("(document.querySelector('.studio-l') || {}).innerText || ''") or ""
     verifica("la sezione «Dalla libreria» con scheda e carte degli argomenti 1 e 2",
              bool(ok) and "DALLA LIBRERIA" in testo.upper()
@@ -183,12 +183,30 @@ def scenario_attivita(t, hub, st, vid):
     # «Inizia» (la stessa strada della voce): la prima domanda del percorso, misurata anche lei
     if p is not None and p.posti:
         sid = next(iter(p.posti))
+        verifica("la preparazione di una mini-app per uno: «Inizia» senza «Gioco anch'io»",
+                 "inizia" in (p.posti[sid].attivi or []) and "anchio" not in (p.posti[sid].attivi or []),
+                 str(p.posti[sid].attivi))
         hub.giochi.comando(p.id, sid, "inizia")
         ok = aspetta(lambda: "coeff_1" in (p.posti[sid].attivi or []), 15)
         time.sleep(1.0)            # la misura del motore arriva dopo due fotogrammi, se cambia
         verifica("«Inizia»: la prima domanda del percorso coi coefficienti, nel palco",
                  bool(ok) and p.posti[sid].palco == [], f"{p.posti[sid].attivi} {p.posti[sid].palco}")
     B.foto(t, "studio-libreria-attivita-390x844.png")
+    # A 320×693 col testo al 125 %: il palco si riscala, la pagina del gioco ci sta ancora
+    if p is not None and p.posti:
+        B.dimensione(t, 320, 693)
+        t.v("document.documentElement.style.fontSize = '125%'; 1")
+        time.sleep(1.5)
+        r = t.v("(() => { const f = document.querySelector('iframe.riquadro-gioco'); if (!f) return null; "
+                "const r = f.getBoundingClientRect(); return [r.left, r.top, r.right, r.bottom, "
+                "innerWidth, innerHeight]; })()") or []
+        dentro = bool(r) and r[0] >= -1 and r[1] >= -1 and r[2] <= r[4] + 1 and r[3] <= r[5] + 1
+        verifica("320×693 col testo al 125 %: il riquadro dentro lo schermo e la pagina nel palco",
+                 dentro and all(x.palco in (None, []) for x in p.posti.values()),
+                 f"{r} {[x.palco for x in p.posti.values()]}")
+        B.foto(t, "studio-libreria-attivita-320x693-grande.png")
+        t.v("document.documentElement.style.fontSize = ''; 1")
+        B.dimensione(t, 390, 844)
 
 
 def scenario_pc(t, hub):

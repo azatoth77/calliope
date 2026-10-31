@@ -464,7 +464,9 @@ def _studio_attivita(dati: dict, fonti, persona=None) -> dict:
     lib = st.libreria() if st.libreria_modo() == "attiva" else None
     if lib is None or cid not in lib.app:
         return {"errore": "Questa attività non c'è nella libreria.", "_stato": 404}
-    if st._libreria_chiusa(v):
+    # Una prova aperta su questa verifica o su un'altra della stessa persona (revisione della PR
+    # #366, nota 1)
+    if st._libreria_chiusa(v) or st.prova_aperta_di(str(v["persona"])):
         return {"errore": "C'è una prova aperta: le attività tornano dopo la consegna.",
                 "_stato": 409}
     titolo = lib.contenuti[cid]["titolo"]

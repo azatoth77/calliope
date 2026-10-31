@@ -1319,3 +1319,12 @@ partita (istantanea, voce, palco, giudice) è quello di ogni gioco. In `sezioni.
 arriva apre la sua pagina (Le mie cose › Giochi) anche quando si è già in Le mie cose su un'altra
 pagina: dalla pagina dello Studio restava nascosto. Prove: `prova_studio_miniapp.py`,
 `prova_studio_libreria_pagina.py`.
+
+Dalla revisione della PR #366 (31/10): `Partita.libreria` è il segno delle attività della libreria,
+messo solo da `studio_attivita` (non `file is not None`): non contano nel tempo dei giochi di un
+minore (decisione di chi amministra), al battito si chiudono con la nota quando comincia il fuori
+orario o c'è una prova aperta della persona (`Giochi.studio`), e `Giochi.ferma_libreria` le chiude
+quando una prova parte; non vanno nel registro dell'archivio, e il prefisso `libreria_` è riservato
+in `manifesto.valida`. La macchina ha la chiave facoltativa `"anchio": false`: niente «Gioco
+anch'io» nella preparazione (motore e `per_fase`); la usano le mini-app, perché negli altri giochi
+per uno «gioco anch'io» lega la voce e il nome di chi gioca.

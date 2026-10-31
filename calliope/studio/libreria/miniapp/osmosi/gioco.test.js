@@ -10,14 +10,14 @@ test("quattro passi: giusto, secondo tentativo, soluzione, emolisi e fine", asyn
   // passo 1, isotonica: giusto al primo tentativo (2 punti)
   await g.tocca("Resta com'è");
   assert.match(g.testo(), /Giusto: resta com'è!/);
-  assert.match(g.testo(), /Fuori 0,9 %, dentro 0,9 %: soluzione isotonica/);
+  assert.match(g.testo(), /Fuori 0,9 %, dentro l'equivalente dello 0,9 %: soluzione isotonica/);
   assert.deepStrictEqual(g.palco(), []);
   await g.tocca("Prossimo passo");
   // passo 2, ipotonica: sbagliato, poi giusto con l'aiuto (1 punto)
   assert.match(g.testo(), /Passo 2 di 4: NaCl allo 0,6 %/);
   await g.tocca("Si raggrinzisce");
   assert.match(g.testo(), /Non proprio: riprova/);
-  assert.match(g.testo(), /Aiuto: fuori c'è 0,6 %, dentro 0,9 %/);
+  assert.match(g.testo(), /Aiuto: fuori c'è 0,6 %, dentro l'equivalente dello 0,9 %/);
   assert.ok(!ha(g, "raggrinzisce") && ha(g, "gonfia"));
   assert.deepStrictEqual(g.palco(), []);
   await g.tocca("Si gonfia");

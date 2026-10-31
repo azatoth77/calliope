@@ -55,13 +55,15 @@ class DallaLibreria:
                                                     "senza": 0, "attivita": 0})
 
     def prova_aperta_di(self, chi) -> bool:
-        """`chi` ha una prova aperta su una sua verifica (le attività della libreria aspettano
-        la consegna, come le carte)."""
+        """`chi` (un profilo o l'id della persona) ha una prova aperta su una sua verifica,
+        qualsiasi: le attività della libreria aspettano la consegna, come le carte (revisione
+        della PR #366, nota 1: anche su un'altra verifica)."""
+        pid = chi if isinstance(chi, str) else str(getattr(chi, "id", "") or "")
         try:
             return self.dati.uno(
                 "SELECT p.id FROM studio_prove p JOIN studio_verifiche v ON v.id = p.verifica "
                 "WHERE v.persona = ? AND p.stato = 'aperta' AND v.stato IN ('bozza', 'aperta')",
-                (str(getattr(chi, "id", "") or ""),)) is not None
+                (pid,)) is not None
         except Exception:  # noqa: BLE001 — una tabella che manca (schema di prima): niente prove
             return False
 

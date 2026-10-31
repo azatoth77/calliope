@@ -140,14 +140,34 @@ tecnologico, Chimica, materiali e biotecnologie, due per materia, nei tre tipi:
 - **Pagina**: «Apri» manda il tocco `studio_attivita`; dalla pagina dello Studio il gioco va in
   Le mie cose › Giochi (sezioni.js apre la pagina del gioco anche dentro la stessa sezione: prima
   si apriva solo da un'altra sezione e restava nascosto dietro lo Studio). Pagina v37.
-- **Contenuto**: scritte con Claude (tre agenti in parallelo sullo stesso brief, poi riviste); allo
-  0,3 % di NaCl l'emolisi comincia già, quindi il passo ipotonico è allo 0,6 %.
+- **Contenuto**: scritte con Claude (tre agenti in parallelo sullo stesso brief, poi riviste). Il
+  passo ipotonico è allo 0,6 % e non allo 0,3 %: l'emolisi comincia intorno allo 0,45–0,5 % di
+  NaCl, e allo 0,3 % è già quasi completa (*[storico fino alla revisione della PR #366: «allo
+  0,3 % l'emolisi comincia già»]*).
+- **Revisione della PR #366** (31/10):
+  - una prova aperta su un'altra verifica della persona ferma anche il tocco su una verifica
+    libera, e una prova che parte chiude le attività aperte (`Studio.ganci_prova` →
+    `Giochi.ferma_libreria`, legati all'avvio da `main._lega_studio_giochi`);
+  - decisione di chi amministra: le mini-app sono studio, **non contano nel tempo dei giochi**
+    (`Partita.libreria`, messo solo da `studio_attivita`); gli orari del minore valgono, e al
+    battito un'attività aperta prima del riposo si chiude con la nota;
+  - il prefisso `libreria_` è riservato in `manifesto.valida`, e le partite della libreria non
+    vanno nel registro dell'archivio delle estensioni;
+  - contenuti: dentro il globulo «la concentrazione di soluti equivale a NaCl allo 0,9 %», «di
+    soluti» e la crenatura al 3 %; «gomma da cancellare»; nell'aiuto della bilancia «il
+    coefficiente 1 non si scrive»; i pedici (H₂O) sullo schermo e il testo semplice nell'esito;
+    il mitocondrio «produce l'ATP dagli zuccheri»;
+  - giocabilità: «Gioco anch'io» nascosto nelle mini-app (`"anchio": false` nella macchina, nuovo
+    e obbligatorio per le mini-app: negli altri giochi per uno serve a legare voce e nome); nelle scelte a, b, c anche «bi», «ci», «prima», «seconda», «terza»
+    (binario, cellula, moto, che ha anche «quarta»); in bilancia tolta la forma nuda «{n}», un
+    numero detto da solo nella finestra senza nome muoveva il gioco (restano «coefficiente {n}»,
+    «il {n}», «metto {n}»); la mini-app a 320 col testo al 125 % nella prova della pagina.
 - **Prove**: `prova_studio_miniapp.py` (la serie, il caricamento coi contrari, test e prova di
   fumo di ognuna col motore vero, la verità di ciò che mostrano con `verita_miniapp.mjs`,
   `studio_attivita` a voce e dal tocco, attraverso Brain), `prova_studio_libreria_pagina.py`
   («Apri» dal telefono: il gioco nel riquadro, il motore che gira, la pagina nel palco).
-- **Da sapere**: la preparazione di un gioco per uno dice «Inizia» e «Gioco anch'io» (il motore la
-  disegna così per tutti i giochi); la misura del palco sul telefono vero è solo della pagina
+- **Da sapere**: *[storico fino alla revisione della PR #366: «la preparazione di un gioco per uno
+  dice «Inizia» e «Gioco anch'io»»; ora solo «Inizia»]*; la misura del palco sul telefono vero è solo della pagina
   aperta, quella delle altre la fa la prova di fumo.
 
 ## La libreria: schede e carte preparate, scelte dal codice (31/10, issue #297, ramo `issue-297-libreria`)

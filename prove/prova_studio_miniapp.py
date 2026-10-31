@@ -101,7 +101,8 @@ m = json.loads((cart / "atomo" / "manifesto.json").read_text("utf-8"))
 for nome, cambia in (("un permesso (legge l'agenda)", lambda d: d.update(permessi={"legge": ["agenda"]})),
                      ("il nome diverso dalla cartella", lambda d: d.update(nome="libreria_altro")),
                      ("i dati salvati", lambda d: d["scheda"].update(salva=True)),
-                     ("senza la macchina", lambda d: d["scheda"].pop("macchina"))):
+                     ("senza la macchina", lambda d: d["scheda"].pop("macchina")),
+                     ("con «Gioco anch'io»", lambda d: d["scheda"]["macchina"].pop("anchio"))):
     d = copy.deepcopy(m)
     cambia(d)
     (cart / "atomo" / "manifesto.json").write_text(json.dumps(d), "utf-8")
@@ -304,6 +305,8 @@ if NODE is not None:
             err.append(f"{c} %: {p['risposta']} {p['tipo']} {p['verso']}")
         if (c == 0) != ("emolisi" in p["perche"]):
             err.append(f"{c} %: l'emolisi solo in acqua distillata")
+        if (c > i) != ("crenatura" in p["perche"]) or "soluti" not in p["perche"]:
+            err.append(f"{c} %: la crenatura solo nell'ipertonica, e i soluti")
     verifica("osmosi: interna 0,9 %, ipo, iso e ipertonica con l'acqua che entra o esce, "
              "l'emolisi solo in acqua distillata",
              os_.get("interna") == 0.9 and {p["tipo"] for p in os_.get("passi", [])}
@@ -344,6 +347,7 @@ class Hub:
 
     def __init__(self):
         self.inviate = []
+        self.eventi = []
         self.giochi = None
 
     def mittente(self, ctx):
@@ -358,6 +362,10 @@ class Hub:
     def invia_a(self, sid, card, **kw):
         self.inviate.append((sid, card))
         return True
+
+    def evento_a(self, sid, tipo, dati, **kw):
+        self.eventi.append((sid, tipo, dati))
+        return 1
 
     def schermo(self, sid, creato=None):
         return {"id": sid, "nome": "telefono di Leo"}
@@ -376,6 +384,7 @@ st.aggiungi_argomento(LEO, vid, "La struttura dell'atomo", [], proposto=False)
 st.conferma_argomenti(LEO, vid)
 hub = Hub()
 hub.giochi = Giochi(cfg, hub, None, log=lambda *a: None)
+hub.giochi.speakers = REG          # i profili per id (senza estensioni: Giochi._profilo)
 TOOLS = ToolRegistry()
 for sp in TS.studio_specs():
     TOOLS.register(sp)
@@ -461,6 +470,16 @@ verifica("con una prova aperta: niente attività, a voce e dal tocco",
          r.get("ok") is False and r["conferma"] == TS.ATTIVITA_PROVA
          and T.prepara({"tocco": "studio_attivita", "verifica": pv, "contenuto": "fisica-moto-app"},
                        types.SimpleNamespace(studio=st), LEO).get("_stato") == 409, str(r))
+# Revisione della PR #366, nota 1: una prova aperta su UN'ALTRA verifica della persona
+vb = st.crea_verifica(LEO, "Informatica", "2026-11-12")
+st.aggiungi_argomento(LEO, vb, "Il sistema binario", [], proposto=False)
+st.conferma_argomenti(LEO, vb)
+pr_b = T.prepara({"tocco": "studio_attivita", "verifica": vb,
+                  "contenuto": "informatica-binario-app"}, types.SimpleNamespace(studio=st), LEO)
+r = chiama(ctx_di(LEO, {"verifica": vb, "contenuto": "informatica-binario-app"}), attivita="bit")
+verifica("con una prova aperta su un'altra verifica: il tocco su una verifica libera non apre "
+         "(nota 1 della revisione)", pr_b.get("_stato") == 409 and r.get("ok") is False
+         and r["conferma"] == TS.ATTIVITA_PROVA, f"{pr_b} {r}")
 st.dati.scrivi("UPDATE studio_prove SET stato = 'consegnata'")
 # I file cambiati dopo il caricamento
 lib2 = I.Libreria.carica(cartella_app=None)
@@ -479,6 +498,103 @@ verifica("la scheda e le proposte: l'attività col suo tipo",
                               "tipo_app": "esplora", "durata": 10}]
          and any(x["contenuto"] == "chimica-atomo-app" and x["tipo_app"] == "esplora"
                  for x in prop), str(sch.get("attivita")))
+
+# ═══════ revisione della PR #366: la prova che parte, il tempo dei giochi, gli orari, il registro ═══════
+print("— la prova che parte, il tempo dei giochi, gli orari")
+import calliope.main as MAIN  # noqa: E402
+from calliope import minori  # noqa: E402
+from calliope.estensioni import manifesto as MF  # noqa: E402
+
+MAIN._lega_studio_giochi(types.SimpleNamespace(studio=st, giochi=hub.giochi))
+verifica("Studio e giochi legati come all'avvio (una volta sola)",
+         hub.giochi.studio is st and st.ganci_prova == [hub.giochi.ferma_libreria])
+MAIN._lega_studio_giochi(types.SimpleNamespace(studio=st, giochi=hub.giochi))
+verifica("legarli due volte non raddoppia i ganci", len(st.ganci_prova) == 1)
+hub.giochi.partite.clear()
+r = chiama(ctx_di(LEO), attivita="osmosi")
+pa = next(iter(hub.giochi.partite.values()))
+posto = next(iter(pa.posti.values()))
+verifica("solo studio_attivita mette il segno «libreria» sulla partita", pa.libreria is True)
+pc = st.crea_verifica(LEO, "Biologia", "2026-11-09")
+ac = st.aggiungi_argomento(LEO, pc, "La membrana", [], proposto=False)
+st.conferma_argomenti(LEO, pc)
+for i in range(3):
+    st.aggiungi_domanda(LEO, pc, "vero_falso", f"La membrana {i}?", "vero", argomento=ac)
+hub.eventi.clear()
+st.inizia_prova(LEO, pc)
+verifica("una prova che parte chiude subito l'attività aperta dalla persona (nota 1)",
+         posto.fermato and any(e[1] == "gioco" and e[2].get("tipo") == "fine_tempo"
+                               and "prova aperta" in e[2]["dati"]["nota"] for e in hub.eventi),
+         str(hub.eventi)[:300])
+st.dati.scrivi("UPDATE studio_prove SET stato = 'consegnata'")
+
+
+class Minore:
+    """Leo minore, col tempo dei giochi finito e (a richiesta) fuori orario."""
+    def __init__(self):
+        self.vecchi = {k: getattr(minori, k) for k in ("e_minore", "gioco_restante_s",
+                                                      "fuori_orario", "tempo_gioco", "profilo")}
+        self.fuori = None
+        self.contati = []
+
+    def __enter__(self):
+        minori.e_minore = lambda prof: getattr(prof, "id", None) == "l1"
+        minori.gioco_restante_s = lambda prof: 0
+        minori.fuori_orario = lambda prof, adesso=None: self.fuori
+        minori.profilo = lambda ctx: LEO
+        conta = self.contati
+        minori.tempo_gioco = lambda: types.SimpleNamespace(aggiungi=lambda pid, s: conta.append(s))
+        return self
+
+    def __exit__(self, *a):
+        for k, v in self.vecchi.items():
+            setattr(minori, k, v)
+
+
+hub.giochi.partite.clear()
+with Minore() as mn:
+    vecchio = hub.giochi.avvia(ctx_di(LEO), "tris", 1, {"titolo": "Tris", "scheda": {
+        "macchina": {"inizio": "t", "fasi": {"t": {"comandi": {}}}}}}, {})
+    verifica("contrario: un gioco dell'archivio col tempo dei giochi finito non si apre",
+             "tempo dei giochi" in str(vecchio.get("conferma", "")), str(vecchio)[:200])
+    r = chiama(ctx_di(LEO), attivita="accendi i bit")
+    pa = next((x for x in hub.giochi.partite.values() if x.nome == "libreria_bit"), None)
+    verifica("col tempo dei giochi finito la mini-app si apre: è studio (decisione del 31/10)",
+             r.get("ok") is not False and pa is not None and pa.libreria, str(r)[:200])
+    posto = next(iter(pa.posti.values())) if pa else None
+    rb = hub.giochi._t_battito(pa, posto, {"secondi": 15}) if posto else {}
+    verifica("il battito di una mini-app non conta nel tempo dei giochi",
+             rb.get("ok") and not rb.get("fine_tempo") and not mn.contati, str(rb))
+    # Aperta alle 21:59, alle 22:00 comincia il riposo: al battito si chiude
+    mn.fuori = "22:00-07:00"
+    posto.ultimo_battito = 0
+    hub.eventi.clear()
+    rb = hub.giochi._t_battito(pa, posto, {"secondi": 15})
+    verifica("aperta prima del riposo, al fuori orario si chiude (al battito, con la nota)",
+             rb.get("fine_tempo") and posto.fermato and any(
+                 e[2].get("tipo") == "fine_tempo" and "riposare" in e[2]["dati"]["nota"]
+                 for e in hub.eventi), str(rb))
+    r = chiama(ctx_di(LEO), attivita="accendi i bit")
+    verifica("fuori orario la mini-app non si apre (anche chiamando il tool)",
+             r.get("ok") is False and "riposare" in r["conferma"], str(r)[:200])
+# Il registro dell'archivio e il prefisso riservato
+righe_arch = []
+est_finta = types.SimpleNamespace(archivio=types.SimpleNamespace(registra=righe_arch.append))
+gio2 = Giochi(cfg, hub, est_finta, log=lambda *a: None)
+mitt = Mittente(persona="l1", nome="Leo", livello="familiare", certo=True)
+from calliope.schermi.giochi import Partita  # noqa: E402
+gio2._registra(Partita("libreria_bit", 0, {"titolo": "Accendi i bit"}, mitt, libreria=True), "avvio")
+gio2._registra(Partita("tris", 1, {"titolo": "Tris"}, mitt), "avvio")
+verifica("le partite della libreria non vanno nel registro dell'archivio delle estensioni (nota 3)",
+         [x["gioco"] for x in righe_arch] == ["tris"], str(righe_arch))
+man = json.loads((MA.CARTELLA / "atomo" / "manifesto.json").read_text("utf-8"))
+try:
+    MF.valida(man)
+    riservato = False
+except MF.ManifestoNonValido as ex:
+    riservato = "riservato" in str(ex)
+verifica("il prefisso «libreria_» è riservato: un'estensione dell'archivio non lo usa (nota 3)",
+         riservato and MF.valida(man, riservato=True)["nome"] == "libreria_atomo")
 
 # Attraverso Brain
 print("— attraverso Brain")

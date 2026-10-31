@@ -30,7 +30,7 @@ const DATI = {
     { m: 125, V: 50, materiale: "vetro" },
     { m: 3, V: 100, materiale: "polistirolo espanso" },
     { m: 91, V: 100, materiale: "olio d'oliva" },
-    { m: 58, V: 50, materiale: "gomma" },
+    { m: 58, V: 50, materiale: "gomma da cancellare" },
   ],
 };
 

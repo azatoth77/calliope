@@ -27,7 +27,7 @@ const DATI = {
       funzione: "Custodisce il DNA e dirige la vita della cellula.",
       in: ["animale", "vegetale"] },
     { id: "mitocondrio", art: "il", nome: "Mitocondrio",
-      funzione: "Con la respirazione cellulare ricava energia dagli zuccheri.",
+      funzione: "Con la respirazione cellulare produce l'ATP dagli zuccheri.",
       in: ["animale", "vegetale"] },
     { id: "cloroplasto", art: "il", nome: "Cloroplasto",
       funzione: "Fa la fotosintesi: con la luce produce zuccheri.",
