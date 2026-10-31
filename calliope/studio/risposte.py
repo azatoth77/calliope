@@ -213,12 +213,21 @@ def _elise(risposta) -> list[bool]:
 
 # Prima di una lettera dentro la frase: «la b», «è la c», «a o b», «a, anzi c», «non la d»
 _PRIMA_DI_LETTERA = frozenset(_PRIMA_DELLA_LETTERA) | {"o", "oppure", "anzi", "no", "forse",
-                                                        "non", "proprio"}
+                                                        "non", "proprio",
+                                                        # opinione e scelta («direi b»,
+                                                        # «secondo me b», «scelgo b»: revisione
+                                                        # della PR #346)
+                                                        "direi", "credo", "penso", "me", "scelgo",
+                                                        "metto", "dico", "sicuramente", "boh",
+                                                        "sicuro", "secondo"}
+# La lettera in fondo dopo una virgola o fra parentesi: «Colombo, b», «Colombo (b)»
+_LETTERA_IN_FONDO = re.compile(r"[,(]\s*([a-z])\s*\)?\s*[.!?]*\s*$", re.I)
 # Dopo la «a» in testa, perché sia la lettera e non la preposizione: «a o b», «a, anzi c», «a, no»
 _DOPO_LA_A = frozenset({"o", "oppure", "anzi", "no", "forse", "e", "credo", "penso", "sicuro"})
 
 
-def _lettera_in_frase(ps: list[str], elise: list[bool], k: int, quante: int) -> str | None:
+def _lettera_in_frase(ps: list[str], elise: list[bool], k: int, quante: int,
+                      in_fondo: bool = False) -> str | None:
     """La lettera di un'opzione detta dentro la frase, o None (banco del 31/10, #344: «Isabella di
     Castiglia e Ferdinando d'Aragona», la risposta attesa, era «sbagliato» per la «d» di
     «d'Aragona»). Una lettera sola fra quelle delle opzioni, «e» mai (è una congiunzione), mai
@@ -227,7 +236,7 @@ def _lettera_in_frase(ps: list[str], elise: list[bool], k: int, quante: int) -> 
     w = ps[k]
     if len(w) != 1 or w == "e" or w not in LETTERE[:quante] or (k < len(elise) and elise[k]):
         return None
-    if k and ps[k - 1] not in _PRIMA_DI_LETTERA:
+    if k and ps[k - 1] not in _PRIMA_DI_LETTERA and not (in_fondo and k == len(ps) - 1):
         return None
     if (w == "a" and not k and len(ps) > 1 and ps[1] not in _DOPO_LA_A
             and ps[1] not in LETTERE_DETTE):
@@ -254,8 +263,9 @@ def _scelta(d: dict, risposta: str) -> str:
     # parole tutte uguali e di fila, i numeri come numeri), non negate subito prima. Il confronto
     # largo (radici, una lettera di tolleranza) solo se nessuna opzione è nominata così:
     # Austria/Australia, Costantinopoli/Costantino, 1491/1492 restano distinte
+    in_fondo = bool(_LETTERA_IN_FONDO.search(str(risposta or "")))
     lettere = {k: x for k in range(len(ps))
-               if (x := _lettera_in_frase(ps, elise, k, len(ops))) is not None}
+               if (x := _lettera_in_frase(ps, elise, k, len(ops), in_fondo)) is not None}
     esatte = {LETTERE.index(w) for k, w in lettere.items() if not _negata(ps, k)}
     esatte |= {i for i, o in enumerate(ops) if _uguale_opzione(o, risposta)}
     if len(pr) <= 12:

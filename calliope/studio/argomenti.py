@@ -257,54 +257,97 @@ def _rif(x) -> str:
 def controlla(titolo: str, citate: list[str], testi: dict[str, str]) -> tuple[list[str], bool]:
     """(riferimenti che esistono, nelle pagine?): metà delle parole del titolo almeno nel testo
     delle pagine citate, uguali, storpiate o con la stessa radice di 5 lettere; tutte le pagine
-    citate devono esistere. Un titolo **senza parole di 4 lettere** (una formula, una sigla, un
-    simbolo: «3x + 5 = 20», «m.c.m.», «CO₂», «pH») si controlla con `_segni` (31/10, #344)."""
+    citate devono esistere. Le formule, i numeri e le sigle con una cifra (31/10, #344, e la sua
+    revisione) non hanno confronto largo: un titolo **senza parole di 4 lettere** («3x + 5 = 20»,
+    «m.c.m.», «CO₂», «pH») sta nelle pagine solo se i suoi pezzi ci sono uguali e di fila
+    (`_di_fila`); in un titolo con parole, ogni pezzo con una cifra o un operatore («del 1494»,
+    «C₆H₁₂O₆») deve esserci così, oltre alla metà delle parole."""
     from ..provenienza import parole, vicina
     rifs = list(dict.fromkeys(_rif(x) for x in citate or ()))
     esistono = [r for r in rifs if r in testi]
     testo = " ".join(testi[r] for r in esistono)
-    pt, pp = parole(titolo), parole(testo)
+    ok = bool(esistono) and len(esistono) == len(rifs)
+    pp_s = _pezzi(testo)
+    pt = {w for w in parole(titolo) if not any(c.isdigit() for c in w)}
     if not pt:
-        dentro_s = _segni(titolo, testo)
-        return esistono, bool(esistono) and len(esistono) == len(rifs) and dentro_s
+        tt = _pezzi(titolo)
+        return esistono, ok and bool(tt) and _di_fila(tt, pp_s)
+    pp = parole(testo)
     radici = {w[:RADICE] for w in pp}
     dentro = [w for w in pt if w in pp or vicina(w, pp) or w[:RADICE] in radici]
-    quota = len(dentro) / len(pt)
-    return esistono, bool(esistono) and len(esistono) == len(rifs) and quota >= SOGLIA
+    segni = all(_di_fila(seg, pp_s) for seg in _segmenti(titolo))
+    return esistono, ok and len(dentro) / len(pt) >= SOGLIA and segni
 
 
-# Le parole piccole che non fanno un segno da cercare («il pH», «la x»)
+# Le parole piccole che non fanno un segno da cercare («il pH», «la x»); dentro una formula
+# («a = 0») restano, sono variabili
 _PICCOLE = frozenset("il lo la i gli le l un una di del della dei e ed a al da in con per su tra "
                      "fra che o".split())
+# Gli operatori sono pezzi anche loro (revisione della PR #346: «3x - 5 = 20» non è «3x + 5 = 20»);
+# il segno di potenza «^» si toglie, come l'esponente scritto in alto («x^2» = «x²»)
+_OPERATORI = frozenset("+-=<>/×")
+_RELAZIONI = frozenset("=<>")
+# La punteggiatura che chiude un pezzo di formula in una frase («… 2x + 12? 18»)
+_CONFINI = r"|[?!;,()\[\]]|\.(?=\s|$)"
+_SOSTITUZIONI = str.maketrans({"−": "-", "–": "-", "·": "×", "⋅": "×", "*": "×", "^": "",
+                               "÷": "/"})
 
 
-def _gettoni(testo) -> list[str]:
-    """I pezzi di un testo per le formule: minuscole, senza accenti, lettere latine e greche e
-    cifre (gli indici e gli esponenti diventano cifre: «CO₂» → «co2», «x²» → «x2»)."""
-    t = unicodedata.normalize("NFKD", str(testo or ""))
-    t = "".join(c for c in t if not unicodedata.combining(c)).lower()
-    return re.findall(r"[a-z0-9α-ω]+", t)
+def _pezzi(testo, confini: bool = False) -> list[str]:
+    """I pezzi di un testo per le formule: minuscole, senza accenti, lettere latine e greche,
+    cifre (indici ed esponenti diventano cifre: «CO₂» → «co2», «x²» → «x2») e operatori; le
+    parole piccole via, tranne accanto a un operatore. Con `confini` la punteggiatura che chiude
+    un pezzo («?», «,», «;», le parentesi, il punto in fondo) resta come «|»."""
+    t = unicodedata.normalize("NFKD", str(testo or "").translate(_SOSTITUZIONI))
+    t = "".join(c for c in t if not unicodedata.combining(c)).lower().translate(_SOSTITUZIONI)
+    g = re.findall(r"[a-z0-9α-ω]+|[-+=<>/×]" + (_CONFINI if confini else ""), t)
+    g = [w if w[0].isalnum() or w in _OPERATORI else "|" for w in g]
+    op = [w in _OPERATORI for w in g]
+    return [w for k, w in enumerate(g) if w not in _PICCOLE or (k and op[k - 1])
+            or (k + 1 < len(g) and op[k + 1])]
 
 
-def _segni(titolo, testo) -> bool:
-    """Un titolo fatto solo di segni (formule, sigle, simboli, parole sotto le 4 lettere) sta nelle
-    pagine se i suoi pezzi, senza le parole piccole, ci sono **tutti e di fila**: uniti senza
-    spazi, uguali a dei pezzi consecutivi del testo («x^2» e «x²», «3 · 5» e «3 × 5», «m.c.m.» e
-    «mcm» valgono). Più stretto delle parole (nessuna storpiatura, nessuna metà): un segno
-    inventato non passa, e un titolo con parole vere resta al controllo delle parole."""
-    pt = [w for w in _gettoni(titolo) if w not in _PICCOLE]
-    if not pt:
+def _segmenti(titolo) -> list[list[str]]:
+    """In un titolo con parole, i pezzi di fila con una cifra o un operatore, con le lettere
+    sole accanto a un operatore (le variabili): «del 1494» → [«1494»], «Equazione 3x + 5 = 21» →
+    [3x + 5 = 21], «x = 5» → [x = 5]; «nel» o «re» non entrano in un pezzo."""
+    g = _pezzi(titolo, confini=True)
+    op = [w in _OPERATORI for w in g]
+
+    def segno(k: int) -> bool:
+        w = g[k]
+        if w == "|":
+            return False
+        if op[k] or any(c.isdigit() for c in w):
+            return True
+        return (len(w) < 4 and w.isalpha()
+                and ((k and op[k - 1]) or (k + 1 < len(g) and op[k + 1])))
+    out, cur = [], []
+    for k in range(len(g) + 1):
+        if k < len(g) and segno(k):
+            cur.append(g[k])
+            continue
+        # Un riferimento solo («(P8)», «A3») non è un pezzo del testo delle pagine
+        if cur and not (len(cur) == 1 and re.fullmatch(r"[pac]\d{1,3}", cur[0])):
+            out.append(cur)
+        cur = []
+    return out
+
+
+def _di_fila(voluti: list[str], pp: list[str]) -> bool:
+    """I pezzi `voluti` uguali e di fila in `pp`: nessuna storpiatura, nessuna radice. Non
+    comincia né finisce con un operatore («= 20»). Un'uguaglianza o una disuguaglianza («=», «<»,
+    «>») nelle pagine non ha un operatore subito prima o subito dopo: «5 = 20» non è dentro
+    «3x + 5 = 20». Un pezzo senza («CO₂», «15», «6 CO₂ + 6 H₂O», «3x + 5») può stare dentro una
+    formula."""
+    n = len(voluti)
+    if not n or voluti[0] in _OPERATORI or voluti[-1] in _OPERATORI:
         return False
-    voluto = "".join(pt)
-    pp = _gettoni(testo)
-    for i in range(len(pp)):
-        unito = ""
-        for w in pp[i:]:
-            unito += w
-            if unito == voluto:
-                return True
-            if len(unito) >= len(voluto) or not voluto.startswith(unito):
-                break
+    espr = any(w in _RELAZIONI for w in voluti)
+    for i in range(len(pp) - n + 1):
+        if pp[i:i + n] == voluti and not (espr and (
+                (i and pp[i - 1] in _OPERATORI) or (i + n < len(pp) and pp[i + n] in _OPERATORI))):
+            return True
     return False
 
 

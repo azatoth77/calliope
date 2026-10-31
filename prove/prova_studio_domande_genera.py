@@ -250,16 +250,29 @@ verifica("il banco del 31/10 aveva una risposta attesa giudicata sbagliata (stor
 verifica("«Isabella di Castiglia e Ferdinando d'Aragona»: la «d» di «d'Aragona» non è più "
          "l'opzione d; l'atteso vale giusto e la domanda resta pulita",
          isabella["auto"] == RS.GIUSTO and isabella["avvisi"] == [], isabella)
+# In matematica una domanda in meno è fondata (revisione della PR #346: niente confronto largo
+# per le cifre): «il primo dei tre numeri consecutivi la cui somma è 48» → 15 è un conto, non sta
+# nelle pagine; il codice non lo può controllare e resta da controllare
+consecutivi = next(d for d in r5["matematica"]["domande"] if "consecutivi" in d["testo"])
+verifica("una risposta numerica calcolata, che non sta nelle pagine, è da controllare",
+         DG.DA_CONTROLLARE in consecutivi["avvisi"], consecutivi)
 verifica("le domande vere del 31/10: nessuna risposta attesa sbagliata, fondate e scelte come il "
-         "banco (≥ 80 % e ≥ 90 %)",
+         "banco (≥ 80 % e ≥ 90 %; matematica 17 su 22, una calcolata da controllare)",
          all(x["auto_sbagliate"] == 0 for x in r5.values())
-         and all(x["fondate"] * 100 >= 80 * x["n"] for x in r5.values())
+         and all(x["fondate"] * 100 >= 80 * x["n"] for v, x in r5.items() if v != "matematica")
+         and r5["matematica"]["fondate"] == 17
          and all(x["scelte_nelle_pagine"] * 100 >= 90 * x["scelte"] for x in r5.values())
          and all(x["grezzo"] for x in r5.values()),
          {v: (x["auto_sbagliate"], x["fondate"], x["n"]) for v, x in r5.items()})
 # Il controllo nuovo di proposte: un'attesa che il codice non dà giusta → da_controllare
 _vera = RS.valuta
-RS.valuta = lambda d, risposta: (RS.SBAGLIATO, "codice") if d["tipo"] == "scelta"     else _vera(d, risposta)
+
+
+def _finta(d, risposta):
+    return (RS.SBAGLIATO, "codice") if d["tipo"] == "scelta" else _vera(d, risposta)
+
+
+RS.valuta = _finta
 ver = tutti["storia"]
 pag5 = [{"id": i, "ordine": i, "stato": "letta", "testo": p["testo"], "numero": p.get("numero"),
          "metodo": "ocr", "avvisi": None} for i, p in enumerate(ver["pagine"], 1)]

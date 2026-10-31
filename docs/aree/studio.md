@@ -121,15 +121,18 @@ Un codice non ha parole da cercare nelle pagine, quindi 0 su 8. Correzioni:
   non è un concetto: il codice di un argomento che c'è diventa **il titolo di quell'argomento**, con
   quell'argomento (una conversione del riferimento scelto dal modello, come P… → pagina; principio
   10); un altro codice scarta la tripla. Contrari: «Vitamina C», «Carlo V», «Anno 1492» restano come
-  sono;
+  sono. *[storico fino alla revisione della PR #346: «ogni codice d'argomento diventa il titolo», e
+  pulito. Ora solo nella mappa scritta coi codici o se è l'argomento della tripla, e sempre
+  `da_controllare`: sotto, «la revisione della PR #346»]*;
 - il controllo delle pagine (`argomenti.controlla`) reggeva male anche i concetti fatti solo di
   segni: le parole sotto le 4 lettere non contavano, e «3x + 5 = 20», «m.c.m.», «CO₂», «pH» erano
   sempre fuori. Ora un titolo **senza parole di 4 lettere** passa se i suoi pezzi (lettere latine e
   greche, cifre; indici ed esponenti come cifre) stanno **tutti e di fila** nel testo, uniti senza
   spazi (`_segni`: «x^2» = «x²», «mcm» = «m.c.m.»). Più stretto delle parole: niente storpiature né
   metà, un segno cambiato («3x + 5 = 21») o inventato («H2SO4», «π») non passa, un codice nemmeno.
-  Un titolo con parole vere resta al controllo di prima: una formula dentro non lo allarga e non lo
-  stringe (*limite noto*: «Equazione 3x + 5 = 21» passa per la parola, come prima).
+  *[storico fino alla revisione della PR #346: gli operatori non contavano («3x - 5 = 20» passava)
+  e un titolo con parole restava al solo controllo delle parole («Equazione 3x + 5 = 21» passava).
+  Ora `_pezzi`, `_segmenti`, `_di_fila`: sotto]*
 
 **2. La seconda passata unisce poco: le cause.** Il codice di `connetti` non scartava collegamenti
 buoni (tiene ogni collegamento fra due parti ancora separate, con `da_controllare` se le pagine non
@@ -139,7 +142,8 @@ cause erano altre:
   concetti** (che teneva i più collegati senza guardare la rete) aveva tagliato il suo vicino,
   lasciandolo senza collegamenti: una parte fatta di un concetto solo. Ora **singolare e plurale
   sono un concetto** (`_stesso_lemma`: la sola vocale finale fra a/e, o/i, e/i, a/i, o «-io»/«-i»,
-  parole di almeno 4 lettere; «Porto» e «Porta» restano due) e **il tetto tiene la rete connessa**
+  parole di almeno 4 lettere; «Porto» e «Porta» restano due; *[storico fino alla revisione della PR
+  #346: ora almeno 5 lettere e le due forme nelle pagine citate]*) e **il tetto tiene la rete connessa**
   (`_tieni`: dalla radice si aggiunge il più collegato fra i vicini di chi è dentro; una parte nuova
   solo se ci stanno almeno due concetti);
 - *storia, 2 parti*: «Magellano → compie → Primo giro del mondo» è davvero staccato: la pagina 115
@@ -151,7 +155,8 @@ cause erano altre:
   (`collega_isole`): dal concetto più collegato della parte, verbo «è collegato a» (uno dei verbi
   vuoti), nessuna pagina, `da_controllare`, `debole: true`. Non dice niente di vero: la pagina lo
   mostra «da controllare», resta fuori dal riferimento della mappa libera finché ha l'avviso, la
-  persona lo tiene, lo cambia o lo toglie. `autore` resta «modello» (un altro autore farebbe
+  persona lo tiene, lo cambia o lo toglie *[storico fino alla revisione della PR #346: con «Tieni»
+  diventava un fatto; ora «Tieni» è rifiutato e si tiene solo riscritto con «Cambia»]*. `autore` resta «modello» (un altro autore farebbe
   sembrare lo scheletro scritto a mano, e non si rifarebbe più). Le parti che la pagina e
   `aiuto.isole` dicono restano quelle **senza i deboli** (`parti_fondate`);
 - *una terza passata, valutata e non fatta*: alla stessa temperatura 0, con le stesse pagine e lo
@@ -163,7 +168,7 @@ cause erano altre:
 
 | verifica | concetti nelle pagine | parti (prima della seconda passata → dopo) | note |
 |---|---|---|---|
-| matematica | 0/8 (0 %) → **8/8 (100 %)** | 1 → 1 | 14 capi scritti come codice convertiti |
+| matematica | 0/8 (0 %) → **8/8 (100 %)** | 1 → 1 | 14 capi scritti come codice convertiti (dalla revisione della PR #346 tutti `da_controllare`) |
 | scienze | 12/12 → 12/12 | 3 → 2, ora **2 → 1** | «Foglie» unito a «Foglia» (doppioni uniti 1) |
 | storia | 10/12 (83 %) → 10/12 | 2 → 2 (coi deboli **1**) | 1 collegamento debole da controllare |
 
@@ -182,7 +187,8 @@ sta all'inizio o dopo «la», «è», «o», «anzi», «no», «non»… e, per
 rivedere), «non è la b, è la a». In più (`domande_genera.proposte`) una domanda chiusa la cui
 risposta attesa, detta così com'è, il codice non dà «giusta» resta **`da_controllare`**: un errore
 futuro del lettore o del modello non arriva pulito alla persona. Col vLLM finto `auto_sbagliate`
-0, 0, 0 (prima 0, 0, 1); fondate e scelte come il banco.
+0, 0, 0 (prima 0, 0, 1); fondate e scelte come il banco *[storico fino alla revisione della PR
+#346: in matematica ora 17 su 22, sotto]*.
 
 **Il banco** (`prove/manuali/banco_studio.py`): nella fase «mappa» il collegamento debole dopo la
 seconda passata; `componenti` sono le parti rette dalle pagine (il criterio), in più
@@ -201,6 +207,53 @@ le uscite del 31/10 col vLLM finto) e il debole nel giro del lettore; in
 `prova_studio_domande_genera.py` la sezione 5 (le domande del 31/10, l'atteso non giusto →
 `da_controllare`); in `prova_studio_prove.py` le lettere dentro la frase; in
 `prova_studio_argomenti.py` formule, sigle e simboli coi contrari.
+
+### 31/10: la revisione della PR #346
+
+La revisione indipendente (script `debole.py`, `codici.py`, `funzioni.py`) ha trovato sei punti; ognuno
+ha i suoi casi nelle prove.
+1. **Il collegamento debole diventava un fatto con «Tieni».** Tenuto e confermato entrava nel
+   riferimento (mancante, con le pagine), nella copia a memoria senza segno e da lì in «Parliamone»,
+   nei tentativi e nelle carte. Ora `tieni_mappa` lo rifiuta («per tenerlo scrivi tu il verbo con
+   «Cambia»»); con «Cambia» (`collega` sul collegamento) `debole` si toglie e diventa della persona,
+   e `parti_fondate` lo conta; `mappa.tenuti` e `voci_riferimento` non lo danno mai, quindi né la
+   copia (`_nuova_copia`, `copia`) né «Fanne carte» lo vedono.
+2. **Sullo schermo non si distingueva.** La vista passa `debole` e l'autore «codice»; nel disegno
+   SVG la linea è tratteggiata, nell'elenco al posto di «non lo trovo nelle pagine che cita» c'è
+   «legame aggiunto da Calliope per unire le parti: non è nelle pagine», senza «Tieni» (righe del
+   debole in `studio.js`; il numero di versione della pagina non è cambiato, per non scontrarsi
+   con la PR #345 aperta). Controllo in `prova_studio_mappa_pagina.py`.
+3. **La conversione dei codici inventava fatti puliti** («A4», il formato del foglio, diventava
+   «Le proiezioni ortogonali», l'argomento 4). Ora un codice d'argomento si converte solo se più di
+   metà dei capi della risposta sono codici (il caso del banco, A1…A8) o se è l'argomento della sua
+   tripla; il concetto convertito ha sempre `da_controllare`. Un codice non convertito che sta così
+   nelle pagine citate resta testo («A4»); gli altri scartano la tripla.
+4. **`_segni` ignorava gli operatori** («3x - 5 = 20», «3x / 5 = 20», «5 = 20», «C₆H₁₂O₇» contro
+   «C₆H₁₂O₆» passavano). Ora (`_pezzi`) gli operatori `+ − - × · / = < >` sono pezzi («·», «×» e «*»
+   valgono uguale, «^» si toglie come l'esponente in alto); i pezzi si confrontano **uguali e di
+   fila**, senza unirli (`_di_fila`: «mcm» non è più «m.c.m.»); un'uguaglianza non comincia né finisce
+   con un operatore e nelle pagine non ha un operatore accanto («5 = 20» non è dentro «3x + 5 = 20»).
+   Ogni titolo con una cifra o un indice passa da qui: in un titolo con parole ogni pezzo con una
+   cifra o un operatore (`_segmenti`, spezzati dalla punteggiatura, senza i riferimenti «(P8)»)
+   deve esserci così, oltre alla metà delle parole; niente confronto largo per le cifre
+   («Equazione 3x + 5 = 21» no, «del 1494» sì, «del 1495» no). Un effetto: in matematica una
+   domanda generata («il primo di tre numeri consecutivi con somma 48» → 15) non è più fondata,
+   perché 15 è un conto e non sta nelle pagine: col vLLM finto fondate 18 → **17 su 22 (77 %)**,
+   sotto il criterio dell'80 %, ed è la misura onesta.
+5. **Singolare e plurale uniti a torto** («Fine/Fini», «Pena/Pene», «Mari/Mara», «Bari/Bare»,
+   «Corte/Corti», «Pianta/Pianti»). Ora (`_canon_plurali`) solo parole di almeno 5 lettere
+   (`PLURALE_MIN`) e solo se **tutte e due le forme** stanno nel testo delle pagine citate dai due
+   concetti: «Foglia/Foglie» e «Atomo/Atomi» restano uniti, «Porto/Porta», «Caso/Casa», «Moto/Mota»
+   separati.
+6. **Risposte giuste diventate «da rivedere»** («direi b», «credo b», «secondo me b», «scelgo b»,
+   «Colombo, b», «Colombo (b)»…). I verbi d'opinione e di scelta (e «me» di «secondo me») sono fra
+   quelli che possono stare prima della lettera, e la lettera in fondo dopo una virgola o fra
+   parentesi vale; «direi c» resta «sbagliato». Lo script del revisore: tutte le 58 risposte come
+   prima della PR.
+
+Misure col vLLM finto dopo la revisione: mappa come sopra (matematica 8/8 nelle pagine, tutti da
+controllare; una parte sola 67 %, coi deboli 100 %); domande fondate 17/22, 21/23, 24/28,
+`auto_sbagliate` 0, 0, 0.
 
 ## Le prove: verifica finta e interrogazione simulata (31/10, issue #248, ramo `issue-248-studio-verifica-finta`)
 

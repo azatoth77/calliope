@@ -317,6 +317,9 @@ class Mappe:
                 c["verbo"] = vb
                 if m["tipo"] == M.SCHELETRO:
                     c.update(autore=self._autore(chi, v), stato="tenuto", avvisi=[])
+                    # Un collegamento debole riscritto con «Cambia» diventa della persona
+                    # (#344, revisione della PR #346): da qui conta come gli altri
+                    c.pop("debole", None)
                 cid = int(c["id"])
             else:
                 if int(da) not in ids or int(a) not in ids:
@@ -385,6 +388,11 @@ class Mappe:
             x = next((x for x in voci if int(x["id"]) == int(k)), None) if k is not None else None
             if x is None:
                 raise NonTrovata()
+            if x.get("debole"):
+                # Il collegamento debole del codice non è nelle pagine: «Tieni» lo farebbe un
+                # fatto. Si tiene solo riscrivendolo con «Cambia» (#344, revisione della PR #346)
+                raise ValueError("questo legame l'ha aggiunto Calliope e non è nelle pagine: "
+                                 "per tenerlo scrivi tu il verbo con «Cambia»")
             x["stato"] = "tenuto"
             self._salva_mappa(m, nodi=m["nodi"], collegamenti=m["collegamenti"])
 
@@ -1239,7 +1247,11 @@ class Mappe:
                              for n in m["nodi"]],
                     "collegamenti": [{"id": int(c["id"]), "da": int(c["da"]), "a": int(c["a"]),
                                       "verbo": str(c.get("verbo") or ""),
-                                      "pagine": nomi(c.get("pagine")), "autore": c.get("autore"),
+                                      "pagine": nomi(c.get("pagine")),
+                                      # Il debole lo scrive il codice (#344): sullo schermo
+                                      # tratteggiato e con la sua frase
+                                      "autore": "codice" if c.get("debole") else c.get("autore"),
+                                      "debole": bool(c.get("debole")),
                                       "stato": c.get("stato", "tenuto"),
                                       "avvisi": [x for x in c.get("avvisi") or ()
                                                  if isinstance(x, str)],
@@ -1258,7 +1270,8 @@ class Mappe:
             # collegamenti deboli del codice (#344): legano le isole «da controllare», non dalle
             # pagine
             from . import mappa_genera as MG
-            vs["parti"] = len(MG.parti_fondate(sch["nodi"], sch["collegamenti"]))                 if sch["nodi"] else 0
+            parti = MG.parti_fondate(sch["nodi"], sch["collegamenti"])
+            vs["parti"] = len(parti) if sch["nodi"] else 0
         return {"verifica": {"id": v["id"], "materia": v["materia"], "data": v["data"],
                              "stato": v["stato"], "di": nome},
                 "scheletro": vs,

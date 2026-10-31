@@ -25,8 +25,9 @@ uguali (`mappa.chiave`) diventano uno; un concetto che non sta nelle pagine che 
 cita una pagina con «ISTRUZIONI: sì» e non si regge sulle sole pagine pulite →
 `pagina_con_istruzioni` sul collegamento e sui due capi; al più
 `studio_mappa_nodi_max` concetti (dal 31/10 senza spezzare la rete: `_tieni`) e il doppio di
-collegamenti; un capo scritto come codice («A3») diventa il titolo di quell'argomento, un altro
-codice scarta la tripla (#344); un
+collegamenti; un capo scritto come codice («A3») diventa il titolo di quell'argomento, da
+controllare, nella mappa scritta coi codici o se è l'argomento della tripla; gli altri codici
+scartano la tripla, se non stanno così nelle pagine (#344 e la revisione della PR #346); un
 concetto collegato a sé stesso scartato; la disposizione la calcola il codice (`mappa.disposizione`).
 Mai scartato per un avviso.
 
@@ -38,7 +39,8 @@ lo stesso client) con lo scheletro in busta coi codici C1…: solo collegamenti 
 sono, e il codice tiene solo quelli che uniscono due parti ancora separate (`connetti`), controllati
 come le triple. Se le isole restano, lo scheletro lo dice (`aiuto.isole`).
 
-**Dal banco del 31/10** (#344): singolare e plurale sono un concetto solo («Foglia», «Foglie»); la
+**Dal banco del 31/10** (#344): singolare e plurale sono un concetto solo («Foglia», «Foglie»,
+se tutte e due stanno nelle pagine); la
 seconda richiesta dice il centro e chiede un collegamento per parte staccata, anche generale se le
 pagine lo dicono; le parti che restano staccate si legano alla radice con un **collegamento
 debole** del codice (`collega_isole`: «è collegato a», `da_controllare`, `debole: true`), mai un
@@ -137,17 +139,51 @@ _CODICE = re.compile(r"\s*([ACPacp])\s*(\d{1,3})\s*")
 # Il singolare e il plurale (o il femminile plurale) di una parola italiana: la sola vocale finale
 # fra queste coppie, o «-io» contro «-i». Non «o»/«a» («Porto» e «Porta» restano due)
 _COPPIE_PLURALE = frozenset(frozenset(x) for x in ("ae", "oi", "ei", "ai"))
+# Le parole più corte non si uniscono («Fine»/«Fini», «Pena»/«Pene», «Mari»/«Mara»: revisione
+# della PR #346)
+PLURALE_MIN = 5
 
 
 def _plurale_stretto(a: str, b: str) -> bool:
     if a == b:
         return True
-    if min(len(a), len(b)) < M.PLURALE_DA or not a.isalpha() or not b.isalpha():
+    if min(len(a), len(b)) < PLURALE_MIN or not a.isalpha() or not b.isalpha():
         return False
     if len(a) == len(b):
         return a[:-1] == b[:-1] and frozenset((a[-1], b[-1])) in _COPPIE_PLURALE
     corta, lunga = sorted((a, b), key=len)
     return len(lunga) == len(corta) + 1 and lunga.endswith("io") and corta == lunga[:-1]
+
+
+def _canon_plurali(valide: list[dict], testi: dict[str, str]) -> dict[str, str]:
+    """chiave → chiave del primo concetto con le stesse parole al singolare o al plurale
+    (`_stesso_lemma`), solo se **tutte e due le forme** stanno nel testo delle pagine citate dai
+    due concetti (revisione della PR #346: «Fine» e «Fini», «Corte» e «Corti», «Pianta» e
+    «Pianti» sono parole diverse, e il testo lo dice)."""
+    citate: dict[str, set] = {}
+    ordine: list[str] = []
+    for t in valide:
+        for capo_ in (t["da"], t["a"]):
+            k = M.chiave_insieme(capo_)
+            if k not in citate:
+                citate[k] = set()
+                ordine.append(k)
+            citate[k].update(t["esistono"])
+    parole_di = {r: set(M.chiave(x).split()) for r, x in testi.items()}
+
+    def nelle_pagine(k: str, pagine: set) -> bool:
+        ws = {w for w in k.split() if w != "+"}
+        return bool(ws) and ws <= set().union(*(parole_di.get(r, set()) for r in pagine))
+    out: dict[str, str] = {}
+    for i, k in enumerate(ordine):
+        for c in ordine[:i]:
+            if c in out or not _stesso_lemma(c, k):
+                continue
+            pag = citate[c] | citate[k]
+            if nelle_pagine(c, pag) and nelle_pagine(k, pag):
+                out[k] = c
+                break
+    return out
 
 
 def _stesso_lemma(k1: str, k2: str) -> bool:
@@ -211,8 +247,11 @@ def scheletro(grezzi: list[dict], rif, arif, nodi_max: int, titolo=None,
     - un capo che è **un codice** («A3», «P2», «C1») non è un concetto: il codice di un argomento
       che c'è diventa il **titolo** di quell'argomento (una conversione del riferimento scelto dal
       modello, come P… → pagina; il banco del 31/10 dava in matematica la mappa degli argomenti
-      scritta coi codici A1…A8), con quell'argomento; un altro codice scarta la tripla;
-    - il singolare e il plurale sono un concetto («Foglia» e «Foglie», `_stesso_lemma`);
+      scritta coi codici A1…A8), con quell'argomento e `da_controllare`, solo se più di metà dei
+      capi sono codici o se è l'argomento della tripla; un codice che sta così nelle pagine resta
+      testo («A4»), un altro scarta la tripla (revisione della PR #346);
+    - il singolare e il plurale sono un concetto («Foglia» e «Foglie», `_stesso_lemma`), con parole
+      di almeno 5 lettere e le due forme nelle pagine citate (`_canon_plurali`);
     - il tetto dei concetti tiene **la rete connessa** (`_tieni`): si parte dalla radice e si
       aggiungono i più collegati vicini a chi è già dentro; una parte nuova solo se ci stanno
       almeno due concetti (prima un concetto poteva restare senza collegamenti).
@@ -227,34 +266,43 @@ def scheletro(grezzi: list[dict], rif, arif, nodi_max: int, titolo=None,
     canon: dict[str, str] = {}
 
     def K(testo) -> str:
-        """La chiave dei doppioni, col singolare e il plurale insieme (il primo visto vale)."""
+        """La chiave dei doppioni, col singolare e il plurale insieme dove `canon` li ha uniti
+        (dopo la lettura delle triple: `_canon_plurali`)."""
         k = M.chiave_insieme(testo)
-        if k not in canon:
-            canon[k] = next((c for c in dict.fromkeys(canon.values()) if _stesso_lemma(c, k)), k)
-        return canon[k]
+        return canon.get(k, k)
     conti = {"codici": 0, "codici_scartati": 0}
+    # La mappa scritta coi codici (il banco del 31/10: A1…A8): più di metà dei capi sono codici.
+    # Altrimenti un codice si converte solo se è l'argomento della sua tripla: «A4» come formato
+    # del foglio non diventa il titolo dell'argomento 4 (revisione della PR #346)
+    capi = [x[k] for x in grezzi for k in ("da", "a")
+            if all(isinstance(x.get(j), str) for j in ("da", "relazione", "a"))]
+    a_codici = 2 * sum(bool(_CODICE.fullmatch(t)) for t in capi) > len(capi)
 
-    def capo(testo) -> tuple[str | None, int | None, bool]:
-        """(testo del capo, argomento dal codice, scartare la tripla?)."""
+    def capo(testo, arg_tripla, citate) -> tuple[str | None, int | None, bool]:
+        """(testo del capo, argomento dal codice, scartare la tripla?). Un codice non convertito
+        resta testo solo se sta così nelle pagine citate («A4», il formato del foglio)."""
         m = _CODICE.fullmatch(testo)
         if not m:
             return testo, None, False
         cod = f"{m.group(1).upper()}{int(m.group(2))}"
-        if cod in titoli_arg and titoli_arg[cod].strip():
+        if cod in titoli_arg and titoli_arg[cod].strip() and (a_codici or cod == arg_tripla):
             conti["codici"] += 1
             return titoli_arg[cod], args[cod], False
+        if not a_codici and A.controlla(testo, citate, testi)[1]:
+            return testo, None, False
         conti["codici_scartati"] += 1
         return None, None, True
     valide = []
     for x in grezzi:
         if not all(isinstance(x.get(k), str) for k in ("da", "relazione", "a")):
             continue                    # schema violato: si scarta
-        x_da, arg_da, via_da = capo(x["da"])
-        x_a, arg_a, via_a = capo(x["a"])
-        if via_da or via_a:
-            continue                    # un codice che non è un argomento: niente concetti finti
         citate = x.get("pagine") if isinstance(x.get("pagine"), list) else []
         citate = list(dict.fromkeys(A._rif(c) for c in citate))
+        arg_t = G._arg(x.get("argomento"))
+        x_da, arg_da, via_da = capo(x["da"], arg_t, citate)
+        x_a, arg_a, via_a = capo(x["a"], arg_t, citate)
+        if via_da or via_a:
+            continue                    # un codice che non è un argomento: niente concetti finti
         verbo, av_v = G.forma_testo(x["relazione"], M.VERBO_MAX)
         da, av_da = G.forma_testo(x_da, M.NODO_MAX)
         a, av_a = G.forma_testo(x_a, M.NODO_MAX)
@@ -269,11 +317,18 @@ def scheletro(grezzi: list[dict], rif, arif, nodi_max: int, titolo=None,
         if any(r in istruzioni for r in esistono) and not (
                 pulite and A.controlla(f"{da} {a}", pulite, testi)[1]):
             avvisi_t.append(PAGINA_CON_ISTRUZIONI)
+        # Un concetto venuto da un codice resta da controllare: il titolo dell'argomento è una
+        # nostra lettura del codice, non un concetto scritto dal modello (revisione della PR #346)
+        av_da = list(av_da) + ([DA_CONTROLLARE] if arg_da is not None else [])
+        av_a = list(av_a) + ([DA_CONTROLLARE] if arg_a is not None else [])
         valide.append({"da": da, "a": a, "av_da": list(av_da), "av_a": list(av_a),
                        "verbo": verbo, "citate": citate, "esistono": esistono,
                        "avvisi": list(dict.fromkeys(avvisi_t)),
                        "argomento": args.get(G._arg(x.get("argomento"))),
                        "arg_da": arg_da, "arg_a": arg_a})
+    # Singolare e plurale: un concetto solo, se tutte e due le forme sono nelle pagine citate
+    # (revisione della PR #346)
+    canon.update(_canon_plurali(valide, testi))
     # I composti con tutte le parti presenti si sciolgono
     presenti = {K(t["da"]) for t in valide} | {K(t["a"]) for t in valide}
     sciolti: set[str] = set()
@@ -545,8 +600,10 @@ def collega_isole(nodi: list[dict], coll: list[dict], nodi_max: int) -> list[dic
     «Magellano → compie → Primo giro del mondo», che le pagine non legano al resto) si legano alla
     **radice** con un collegamento **debole**: dal concetto più collegato della parte, verbo
     `VERBO_DEBOLE`, nessuna pagina, avviso `da_controllare`, `debole: true`. Non lo scrive il
-    modello e non dice niente di vero: la pagina lo mostra «da controllare» e la persona lo tiene,
-    lo cambia o lo toglie; fuori dal riferimento finché ha l'avviso (`mappa.voci_riferimento`).
+    modello e non dice niente di vero: la pagina lo mostra tratteggiato, con la sua frase; «Tieni»
+    lo rifiuta e la persona lo tiene solo riscrivendolo con «Cambia» (allora è suo), o lo toglie;
+    mai nei tenuti, nel riferimento, nelle copie né nelle carte (`mappa.tenuti`, revisione della PR
+    #346).
     `autore` resta «modello» come il resto dello scheletro generato (un altro autore lo farebbe
     sembrare scritto a mano: `Studio._scheletro_toccabile`). Al più il tetto di `2 * nodi_max`
     collegamenti. Restituisce quelli aggiunti (già in `coll`)."""

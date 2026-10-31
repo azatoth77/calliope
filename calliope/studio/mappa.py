@@ -394,12 +394,14 @@ def libero(nodi: list[dict]) -> tuple[float, float]:
 
 def tenuti(scheletro: dict) -> tuple[list[dict], list[dict]]:
     """I concetti e i collegamenti tenuti di uno scheletro (i proposti con un avviso no; un
-    collegamento solo se i suoi due concetti sono tenuti)."""
+    collegamento solo se i suoi due concetti sono tenuti). Mai un collegamento **debole** del
+    codice (#344, revisione della PR #346): non è nelle pagine, quindi non va nelle copie, nel
+    riferimento, nei tentativi né nelle carte; diventa della persona solo se lo riscrive."""
     nodi = [n for n in scheletro.get("nodi") or () if n.get("stato", "tenuto") == "tenuto"]
     ids = {int(n["id"]) for n in nodi}
     coll = [c for c in scheletro.get("collegamenti") or ()
             if c.get("stato", "tenuto") == "tenuto" and int(c["da"]) in ids
-            and int(c["a"]) in ids]
+            and int(c["a"]) in ids and not c.get("debole")]
     return nodi, coll
 
 
@@ -598,7 +600,7 @@ def voci_riferimento(scheletro: dict | None) -> tuple[list[dict], list[dict], st
             and str(n.get("testo") or "").strip()]
     ids = {int(n["id"]) for n in nodi}
     coll = [c for c in scheletro.get("collegamenti") or () if not c.get("avvisi")
-            and int(c["da"]) in ids and int(c["a"]) in ids]
+            and not c.get("debole") and int(c["da"]) in ids and int(c["a"]) in ids]
     return nodi, coll, "proposto" if nodi else None
 
 

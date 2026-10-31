@@ -805,6 +805,18 @@ SC4 = [(IS, "Isabella di Castiglia e Ferdinando d'Aragona", "giusto"),
 male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC4 if RS.valuta(d, r)[0] != e]
 verifica("lettere dentro la frase: «d'Aragona», «c'è» e la preposizione «a» non sono opzioni; «la "
          "a», «a o c», «a, anzi c» sì (banco del 31/10)", not male, male)
+# La revisione della PR #346: le risposte giuste di prima restano giuste (opinione, scelta, la
+# lettera in fondo dopo una virgola o fra parentesi); «direi c» resta sbagliato
+CB = RS.prepara("scelta", "Chi arrivò in America nel 1492?", "b",
+                ["Vasco da Gama", "Cristoforo Colombo", "Magellano", "Amerigo Vespucci"])
+SC5 = [(CB, r, "giusto") for r in ("direi b", "credo b", "penso b", "secondo me b", "scelgo b",
+                                    "scelgo la b", "metto b", "dico b", "sicuramente b", "boh b",
+                                    "Colombo, b", "Colombo (b)", "forse b", "b, Colombo")] +       [(CB, "direi c", "sbagliato"), (CB, "credo a", "sbagliato"), (CB, "c, Magellano", "sbagliato"),
+       (CB, "Magellano b", "sbagliato"), (CB, "non la b", "da_rivedere"),
+       (CB, "la b anzi la c", "da_rivedere")]
+male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC5 if RS.valuta(d, r)[0] != e]
+verifica("lettere dopo «direi», «credo», «secondo me», «scelgo»… e in fondo dopo una virgola o fra "
+         "parentesi: giuste come prima; «direi c» sbagliato (revisione della PR #346)", not male, male)
 NN3 = [("0,5 kg", "1/2 kg", "giusto"), ("0,75 L", "3/4 di litro", "giusto"),
        ("0,5 kg", "mezzo chilo", "giusto"), ("1571", "in mezzo al Mediterraneo, nel 1571",
                                              "giusto"),
