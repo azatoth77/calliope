@@ -495,6 +495,22 @@ def _frase_carte(carte: list[tuple[str, int]]) -> str:
             + ", ".join(pezzi) + ".")
 
 
+def _preparato(svc, chi, verifiche=None) -> str:
+    """«Ho preparato…» (#297, parte 3) delle verifiche di chi parla, al più una volta per
+    preparazione (`Studio.frase_preparato`): frasi del codice, coi titoli della libreria e i numeri
+    degli argomenti, mai il testo preparato."""
+    out = []
+    try:
+        vv = verifiche if verifiche is not None else svc.verifiche(chi)
+        for v in vv:
+            f = svc.frase_preparato(chi, v)
+            if f:
+                out.append(f)
+    except Exception:  # noqa: BLE001 — la frase in più non ferma la risposta
+        return ""
+    return (" " + " ".join(out[:2])) if out else ""
+
+
 def _oggi(ctx, svc, chi) -> dict:
     righe = svc.oggi(chi)
     sess = svc.sessione(chi.id)
@@ -517,6 +533,7 @@ def _oggi(ctx, svc, chi) -> dict:
         # Le due domande prima della sessione (passo 4.5): a voce le chiede questa frase
         frase += (" Prima di cominciare: quanto conosci l'argomento, da 1 a 5, e come ti senti "
                   "oggi?")
+    frase += _preparato(svc, chi)
     return _f(frase, oggi=[{"verifica": r["verifica"], "fatto": r["fatto"]} for r in righe])
 
 
@@ -662,7 +679,8 @@ def _libreria_conto(ctx, svc, chi, v) -> dict:
             pezzi[-1] += f", {cosa}"
     altri = len(prop) - LIBRERIA_VOCE_MAX
     frase = (f"Per {di} nella libreria ho: " + "; ".join(pezzi)
-             + (f"; e altri {altri}" if altri > 0 else "") + ". " + DOVE_LIBRERIA)
+             + (f"; e altri {altri}" if altri > 0 else "") + ". " + DOVE_LIBRERIA
+             + _preparato(svc, chi, [svc.verifica(chi, v["id"])]))
     return _f(frase, verifica=v["id"], proposte=len(prop))
 
 
@@ -1936,7 +1954,13 @@ def _attivita(ctx: ToolContext, attivita: str = "", verifica=None, materia: str 
     note_rule(ctx, "studio_attivita")
     # `libreria`: un segno esplicito (revisione della PR #366, nota 2): è studio, non conta nel
     # tempo dei giochi di un minore; il fuori orario e la prova aperta la chiudono
-    return giochi.avvia(ctx, app.nome, 0, app.manifesto, {}, file=app.file, libreria=True)
+    # I valori validati dei materiali della verifica (#297, parte 3), se c'è una preparazione
+    # pronta che adatta questa attività: dati per GIOCO.nuovaPartita, mai codice
+    par = svc.parametri_per(chi, app.nome, b.get("verifica") if b else verifica)
+    if par:
+        note_rule(ctx, "studio_attivita_adattata")
+    return giochi.avvia(ctx, app.nome, 0, app.manifesto, {}, file=app.file, libreria=True,
+                        parametri=par)
 
 
 DESCRIZIONE_ATTIVITA = (

@@ -798,6 +798,37 @@ della #297; tre parti: libreria e indice (qui), mini-app, adattamento e preparaz
     porta e dall'archivio, che servono per ciò che scrive l'agente); generarle con l'agente (resta
     per una mini-app che manca, in modalità sviluppo); una tela libera (la misura del palco e la
     voce le dà solo la macchina).
+48. **La preparazione dietro le quinte prende dai materiali solo valori validati** (#297, parte
+    3, 31/10). Il lettore delle pagine (lo stesso thread e la stessa guardia: vLLM libero, nessun
+    lavoro dell'agente) e in più la voce ferma da `studio_preparazione_quiete_s`
+    (`arbitro_memoria.quiete`, la definizione unica) chiede a qwen3.6, per ogni verifica aperta,
+    una lezione breve per argomento e i valori delle pagine.
+    - **I valori** sono dati, mai codice: una reazione entra solo se le formule sono di elementi
+      veri, senza parentesi, la reazione è bilanciata e scritta nella pagina citata, e si può
+      nascondere un coefficiente da 1 a 4 che solo lui la bilancia; una misura solo se massa e
+      volume sono numeri scritti nella pagina, la densità è fra 0,01 e 25 e lontana dall'acqua e
+      il materiale è una parola breve della pagina. Le pagine con «ISTRUZIONI: sì» non danno
+      valori. Arrivano alle mini-app come **parametri** (`GIOCO.nuovaPartita({ parametri })`), in
+      JSON nella configurazione del motore come il titolo, e la logica li ricontrolla; senza, i
+      dati di serie. Solo con il segno `Partita.libreria`.
+    - **La lezione** è testo del modello dalle pagine: un dato, sullo schermo con textContent; i
+      paragrafi fuori dalle pagine citate o da una pagina con istruzioni hanno un avviso e non si
+      mostrano.
+    - `studio_preparazione`: «ombra» di serie (si prepara e si misura, niente alla persona),
+      «attiva» (la home dice «pronto» o «in preparazione», la lezione si apre, le attività si
+      adattano, la voce dice «ho preparato…» al più una volta per preparazione), «spenta».
+    - La **regola degli errori** delle carte: un'ora, ferma al terzo con la stessa firma. Con una
+      **prova aperta** sulla verifica niente si prepara né si mostra, e una preparazione arrivata
+      durante la prova non si scrive.
+    - Schema «studio» alla versione 13 (`studio_preparazioni`; sulla verifica `prep_firma`,
+      `prep_esito`, `prep_del`, `prep_detto`); va via con la verifica e con tutto lo Studio.
+    - Una fase del banco (`--fasi preparazione`) misura lezioni e valori sulla DGX, con una pagina
+      di chimica di fantasia e una ostile.
+
+    Alternative scartate: generare le mini-app con i valori dentro il codice (l'agente, il
+    collaudo: resta per una mini-app che manca); lasciare al modello la scelta del coefficiente
+    nascosto (lo decide il codice); mostrare la lezione intera con gli avvisi.
+
 ## Da completare con i passi 4.3–4.5
 
 - *[fatto il 29/10, passo 4.1: dove si conservano le pagine e come si applica il punto 4 (punti

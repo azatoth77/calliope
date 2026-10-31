@@ -50,3 +50,18 @@ test("ho finito a metà quiz", async () => {
   await g.comando("avanti");
   assert.strictEqual(g.stato().fase, "fine");
 });
+
+test("i parametri dai materiali: le domande validate, e una vicina all'acqua lascia quelle di serie", async () => {
+  const domande = [{ materiale: "legno di pino", m: 52, V: 100 }, { materiale: "ottone", m: 85, V: 10 }];
+  const g = await apriGioco({ seme: 1, inizia: true, parametri: { domande } });
+  await g.tocca("Al quiz");
+  assert.match(g.testo(), /Domanda 1 di 2, dai tuoi materiali/);
+  assert.match(g.testo(), /Legno di pino: m = 52 g, V = 100 cm³/);
+  assert.deepStrictEqual(g.palco(), []);
+  const g2 = await apriGioco({ seme: 1, inizia: true, parametri: { domande: [{ materiale: "acqua salata", m: 101, V: 100 }] } });
+  await g2.tocca("Al quiz");
+  assert.doesNotMatch(g2.testo(), /dai tuoi materiali/);
+  const g3 = await apriGioco({ seme: 1, inizia: true, parametri: { domande: [{ materiale: "<b>x</b>", m: 5, V: 1 }] } });
+  await g3.tocca("Al quiz");
+  assert.doesNotMatch(g3.testo(), /dai tuoi materiali/);
+});

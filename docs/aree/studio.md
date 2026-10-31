@@ -112,6 +112,37 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
   sono da rimisurare col banco vero.
 
+## La preparazione dietro le quinte (31/10, issue #297, parte 3, ramo `issue-297-preparazione`)
+
+Terza parte della #297 (decisione 0035 punto 48). `calliope/studio/preparazione.py` e
+`Lettore.prepara`: per ogni verifica aperta, quando la DGX è libera (la guardia del lettore) e la
+voce è ferma da `studio_preparazione_quiete_s` secondi (`arbitro_memoria.quiete`), una richiesta a
+qwen3.6 col solo testo letto in busta: una **lezione** breve per argomento e i **valori** delle
+pagine (reazioni e misure). Il codice controlla tutto:
+- reazioni: elementi veri, senza parentesi, bilanciate, scritte nella pagina citata, un solo
+  coefficiente da 1 a 4 che le bilancia (lo nasconde il codice); misure: numeri della pagina,
+  densità fra 0,01 e 25 e lontana da 1, il materiale una parola breve della pagina; niente dalle
+  pagine con «ISTRUZIONI: sì»;
+- la lezione: i paragrafi fuori dalle pagine citate o da una pagina con istruzioni hanno l'avviso e
+  non si mostrano.
+
+Con `studio_preparazione: attiva` la sezione «Dalla libreria» dice «In preparazione…» o «Pronto
+dalle tue pagine» con le attività adattate e i tasti «Lezione dell'argomento N»
+(`POST /api/studio/libreria`, azione «lezione»); «Bilancia la reazione» e «Affonda o galleggia?»
+si aprono coi **parametri** (`Partita.parametri`, `scheda.avvio_js`, `GIOCO.nuovaPartita({
+parametri })`, ricontrollati dalla logica: «Reazione 1 di 3, dai tuoi materiali»); la voce dice
+«Ho preparato…» una volta per preparazione (nella lettura «oggi» e «libreria» del tool `studio`).
+In ombra (di serie) si prepara e si conta nel registro soltanto. Regola degli errori delle carte;
+con una prova aperta niente. Schema 13 (`studio_preparazioni`). Banco: `--fasi preparazione`
+(pagina di chimica di fantasia in `prove/manuali/studio/preparazione/`).
+
+**Ritocchi della revisione della PR #366**: «di» per la «d» nel moto; `_ferma` controlla
+`posto.fermato` sotto il lock (un avviso solo col battito e il gancio della prova insieme); la
+docstring di `miniapp.py` cita il punto 47. Pagina v38.
+
+**Da misurare sulla DGX** prima di `attiva`: `--fasi preparazione` (paragrafi fondati, valori
+giusti, ostili 0) e qualche notte in ombra (`[STUDIO] … preparazione in ombra` nel registro).
+
 ## Le mini-app della libreria (31/10, issue #297, parte 2, ramo `issue-297-miniapp`)
 
 Seconda parte della #297 (decisione 0035 punto 47). Otto mini-app per la prima superiore, tecnico

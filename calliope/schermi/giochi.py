@@ -168,7 +168,8 @@ class Posto:
 
 class Partita:
     def __init__(self, nome: str, versione: int, manifesto: dict, avviata_da: Mittente,
-                 prova: bool = False, file: dict | None = None, libreria: bool = False):
+                 prova: bool = False, file: dict | None = None, libreria: bool = False,
+                 parametri: dict | None = None):
         self.id = "P" + secrets.token_hex(4)
         # Una mini-app della libreria dello Studio (31/10, #297): i file del riquadro vengono dal
         # repository (studio/libreria/miniapp.py, impronta controllata al caricamento), non
@@ -178,6 +179,9 @@ class Partita:
         # mette solo `studio_attivita`. Non conta nel tempo dei giochi di un minore; si chiude al
         # fuori orario e quando parte una prova della persona; non va nel registro dell'archivio
         self.libreria = bool(libreria)
+        # I parametri validati di un'attività adattata ai materiali (#297, parte 3): solo con
+        # `libreria`, dati e mai codice (studio/preparazione.py li valida)
+        self.parametri = dict(parametri) if (parametri and libreria) else None
         # La versione candidata nel collaudo (11/10): niente ponte verso Calliope
         self.prova = bool(prova)
         self.gettone = secrets.token_urlsafe(24)
@@ -289,7 +293,7 @@ class Giochi:
     # ── dal tool del gioco ──
     def avvia(self, ctx, nome: str, versione: int, m: dict, argomenti: dict,
               prova: bool = False, file: dict | None = None,
-              libreria: bool = False) -> dict:
+              libreria: bool = False, parametri: dict | None = None) -> dict:
         """Apre una partita (o si unisce a quella aperta da un altro schermo) e manda la
         scheda del gioco a uno schermo. Il risultato per la voce. `prova` (11/10): un gioco
         non ancora approvato, aperto per il collaudo: la scheda porta "prova": true e la
@@ -359,7 +363,8 @@ class Giochi:
                 p = max(aperte, key=lambda x: x.ultimo) if aperte else None
             nuova = p is None
             if nuova:
-                p = Partita(nome, versione, m, mitt, file=file, libreria=libreria)
+                p = Partita(nome, versione, m, mitt, file=file, libreria=libreria,
+                            parametri=parametri)
                 self.partite[p.id] = p
                 self._per_gettone[p.gettone] = p.id
             p.posti[sid] = Posto(sid, mitt, minore, schermo=s)
@@ -475,12 +480,13 @@ class Giochi:
             if voce.get("stato") != "attiva" or voce.get("attiva") != p.versione \
                     or not est.archivio.verifica(p.nome):
                 return None
-        chiave = (p.nome, p.versione, p.prova)
+        chiave = (p.nome, p.versione, p.prova,
+                  json.dumps(p.parametri, sort_keys=True) if p.parametri else "")
         d = self._documenti.get(chiave)
         if d is None:
             try:
                 d = documento(p.scheda, p.file if p.file is not None
-                              else est.file_versione(p.nome, p.versione), p.titolo)
+                              else est.file_versione(p.nome, p.versione), p.titolo, p.parametri)
             except SchedaNonValida:
                 return None                       # un gioco del formato di prima (14/10)
             self._documenti = {chiave: d}             # una versione per volta in memoria
@@ -645,11 +651,16 @@ class Giochi:
 
     def _ferma(self, p: Partita, posto: Posto, nota: str, evento: str):
         """Ferma il riquadro di un posto (come la fine del tempo dei giochi): la pagina lo chiude
-        con la nota."""
-        posto.fermato = True
+        con la nota. Una volta sola (revisione della PR #366): sotto il lock, chi arriva secondo
+        (il battito e il gancio della prova insieme) non manda un secondo avviso."""
+        with self._lock:
+            if posto.fermato:
+                return False
+            posto.fermato = True
         self._registra(p, evento)
         self._evento(posto, "gioco", {"partita": p.id, "tipo": "fine_tempo",
                                       "dati": {"nota": nota}})
+        return True
 
     def ferma_libreria(self, persona: str, nota: str | None = None) -> int:
         """Chiude le attività della libreria aperte da `persona` (una prova che parte: il gancio
@@ -660,8 +671,7 @@ class Giochi:
                        if p.libreria and getattr(p.avviata_da, "persona", None) == persona]
         for p in partite:
             for posto in list(p.posti.values()):
-                if not posto.fermato:
-                    self._ferma(p, posto, nota or self.LIBRERIA_PROVA, "libreria_fermata")
+                if self._ferma(p, posto, nota or self.LIBRERIA_PROVA, "libreria_fermata"):
                     n += 1
         return n
 

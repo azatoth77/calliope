@@ -2271,6 +2271,16 @@ class Config:
     # con lo Studio. «ombra» calcola le proposte e le conta nel registro senza mostrarle; «spenta»
     # niente
     studio_libreria: str = "attiva"
+    # La preparazione dietro le quinte (31/10, #297, parte 3, calliope/studio/preparazione.py): il
+    # lettore delle pagine, quando la DGX è libera e la voce ferma, prepara per ogni verifica
+    # aperta una lezione breve per argomento e i valori dalle pagine (reazioni, misure) che
+    # adattano le attività della libreria, controllati dal codice. «ombra» (di serie, come le
+    # altre generazioni) prepara e misura soltanto; «attiva» la home dice «pronto» o «in
+    # preparazione», la lezione si apre sullo schermo, le attività prendono i valori e la voce
+    # dice «ho preparato…» una volta; «spenta» niente
+    studio_preparazione: str = "ombra"
+    # Da quanti secondi la voce dev'essere ferma (arbitro_memoria.quiete) perché si prepari
+    studio_preparazione_quiete_s: int = 120
     # I premi dello Studio (31/10, issue #296, calliope/studio/premi.py): un rinforzo positivo e
     # al minimo, calcolato dal codice dai soli dati della pratica (sessioni misurate fra «Inizia»
     # e «Fatto», carte ripassate, prove consegnate, esiti decisi dal codice o dal tutore), mai
@@ -3589,7 +3599,8 @@ SEZIONI: dict[str, list[str]] = {
                "studio_finestra_giorni", "studio_domande_genera", "studio_ascolta",
                "studio_ascolta_voce", "studio_ascolta_giorni", "studio_indicazioni",
                "studio_indicazioni_giorni", "studio_serie", "studio_serie_pause",
-               "studio_stelle", "studio_duelli", "studio_libreria"],
+               "studio_stelle", "studio_duelli", "studio_libreria", "studio_preparazione",
+               "studio_preparazione_quiete_s"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -3953,6 +3964,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "studio_prova_domande": (3, 40), "studio_prova_minuti": (2, 180),
     "studio_finestra_giorni": (1, 90), "studio_ascolta_giorni": (1, 365),
     "studio_indicazioni_giorni": (1, 90), "studio_serie_pause": (0, 3),
+    "studio_preparazione_quiete_s": (0, 3600),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),
@@ -4208,6 +4220,9 @@ _MODI_NUOVI = {
     "studio_ascolta": _modi("studio_ascolta", ("spenta", "attiva"), falso="spenta"),
     # La libreria dello Studio (31/10, #297)
     "studio_libreria": _modi("studio_libreria", ("spenta", "ombra", "attiva"), falso="spenta"),
+    # La preparazione dietro le quinte (31/10, #297, parte 3)
+    "studio_preparazione": _modi("studio_preparazione", ("spenta", "ombra", "attiva"),
+                                 falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},

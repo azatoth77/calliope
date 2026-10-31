@@ -670,7 +670,7 @@
     if (v.tutore) art.append(sezioneTutore(v));
     if (v.stato === "aperta" || v.stato === "bozza") art.append(sezioneCarte(v));
     // La libreria (31/10, #297, libreria.js): le proposte del server; null → niente sezione
-    if (window.CalliopeLibreria && Array.isArray(v.libreria)) {
+    if (window.CalliopeLibreria && (Array.isArray(v.libreria) || v.preparazione)) {
       art.append(window.CalliopeLibreria.sezione(v, { ridisegna: disegnaHome, ricarica: caricaHome, vista,
         tocchi: !!(home.dati && home.dati.tocchi) }));
     }

@@ -495,6 +495,7 @@
     }
     var M = normalizza(Mgrezza, giocatori);
     var titoloGioco = String((opzioni && opzioni.titolo) || "");
+    var parametri = opzioni && opzioni.parametri && typeof opzioni.parametri === "object" ? opzioni.parametri : null;
     if (!M.fasi[M.inizio]) throw errore("la macchina non ha la fase d'inizio «" + M.inizio + "»");
 
     function nuovo() {
@@ -671,7 +672,11 @@
         gs.push(g);
       }
       var nomi = gs.map(function (g) { return g.nome; });
-      var dati = GIOCO.nuovaPartita({ giocatori: numero, nomi: nomi.slice() });
+      // I parametri (31/10, #297, parte 3): valori già validati dal server (numeri, parole brevi),
+      // dati e mai codice, per le attività della libreria adattate ai materiali; una copia
+      var arg = { giocatori: numero, nomi: nomi.slice() };
+      if (parametri) arg.parametri = copia(parametri, "i parametri della partita");
+      var dati = GIOCO.nuovaPartita(arg);
       if (dati === undefined || dati === null || typeof dati !== "object") {
         throw errore("GIOCO.nuovaPartita restituisce " + tipo(dati) + ": deve restituire i dati della partita (un oggetto)");
       }
@@ -1129,7 +1134,7 @@
       radice.appendChild(p);
       segnala(e);
     }
-    try { nucleo = crea(GIOCO, conf && conf.macchina, conf && conf.giocatori, { titolo: opzioni.titolo || (conf && conf.titolo) || "" }); }
+    try { nucleo = crea(GIOCO, conf && conf.macchina, conf && conf.giocatori, { titolo: opzioni.titolo || (conf && conf.titolo) || "", parametri: conf && conf.parametri }); }
     catch (e) { radice.replaceChildren(el("div", "motore")); mostraErrore(e); return null; }
     S = nucleo.nuovo();
     function M() { return nucleo.M; }
