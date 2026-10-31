@@ -350,14 +350,40 @@ def crea_app(hub: Schermi) -> Starlette:
                 hub.log(f"[SCHERMI] ripresa della cronologia non riuscita: {type(e).__name__}")
         conn, storia = hub.collega(schermo, asyncio.get_running_loop(),
                                    locale=client in ("127.0.0.1", "::1"), ripresa=ripresa)
+        # Accettata da `collega` con l'identità di adesso (#338, revisione della PR #341): se lo
+        # schermo è passato a un'altra persona mentre si preparava la ripresa, niente della persona
+        # di prima (conversazione, «Scarica» della chat, contesto) e la pagina rifà l'accesso
+        accettata = bool(getattr(conn, "accettata", True))
         # La scheda «Conversazione» (08/10): dopo collega, così un turno archiviato nel frattempo
         # arriva comunque (la pagina scarta i doppioni per id)
-        chat = await asyncio.to_thread(hub.chat_per, schermo) if personale else None
-        if chat is not None:
-            hub.registra_chat(schermo["id"], schermo.get("proprietario"))
+        chat = await asyncio.to_thread(hub.chat_per, schermo) if personale and accettata else None
+        if chat is not None and hub.registra_chat(schermo["id"], schermo.get("proprietario"),
+                                                  schermo=schermo) is False:
+            chat = None                 # cambiato proprio adesso: la conversazione non va
+        contesto = hub.contesto_per(schermo) if accettata else None
+
+        def da_rifare() -> str | None:
+            """Subito prima del benvenuto: «revocato», «proprietario» o None (va bene)."""
+            if not hub.valido(schermo["id"], schermo.get("creato")):
+                return "revocato"
+            if not accettata or not hub.valido(schermo["id"], schermo.get("creato"),
+                                               schermo.get("proprietario")):
+                return "proprietario"
+            return None
 
         async def flusso():
             try:
+                subito = da_rifare()
+                if subito is not None:
+                    # Niente benvenuto con la riga di prima: la pagina rifà l'accesso (o l'abbinamento)
+                    yield "retry: 3000\n\n"
+                    yield f"event: {subito}\ndata: {{}}\n\n"
+                    if subito == "revocato":
+                        with lock:
+                            for k in [k for k, v in sessioni.items()
+                                      if v == (schermo["id"], schermo.get("creato"))]:
+                                sessioni.pop(k, None)
+                    return
                 benvenuto = {"nome": schermo["nome"], "stanza": schermo["stanza"],
                              "personale": personale,
                              "ora_server": time.time(), "cronologia": storia,
@@ -372,7 +398,7 @@ def crea_app(hub: Schermi) -> Starlette:
                              # Si può scrivere adesso? (dal 28/10, #301: moduli a parte)
                              "scrittura": hub.stato_scrittura_per(conn),
                              # Uso del contesto dell'ultima risposta (schermi personali)
-                             "contesto": hub.contesto_per(schermo),
+                             "contesto": contesto,
                              # La parola che sveglia («Dormo · di' «Computer»», 04/10)
                              "parola": (getattr(hub.cfg, "wake_names", None)
                                         or ["Calliope"])[0]}

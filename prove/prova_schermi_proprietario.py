@@ -90,6 +90,9 @@ class Cronologia:
     def ultime(self, persona):
         return []
 
+    def pulisci(self, persona):
+        return 0
+
     def di(self, persona, chiave):
         return [x for x in self.aggiunte if x == (persona, chiave)]
 
@@ -287,7 +290,8 @@ def corsa():
     """La corsa fra `abbinati()` e il lock: un altro thread cambia il proprietario proprio lì."""
     hub = hub_nuovo("corsa")
     dario = Mittente(persona="dario", nome="Dario", livello="amministra", certo=True)
-    for nome in ("invia", "invia_a", "_a_personali"):
+    hub.chat_fonte = types.SimpleNamespace(giorni=60, chat_markdown=lambda p: f"# di {p}")
+    for nome in ("invia", "invia_a", "_a_personali", "chat_nuovi", "pulisci_schede"):
         tel = tel_di(hub, "dario", "Dario")
         vero = Schermi.abbinati
         stato = {"fatto": False}
@@ -300,6 +304,8 @@ def corsa():
                 stato["loop"] = CicloFinto()
                 stato["conn"], _ = self.collega(next(s for s in vero(self) if s["id"] == tel["id"]),
                                                 stato["loop"])
+                # Una scheda di Bianca sul suo schermo, che «pulisci le mie schede» di Dario non toglie
+                self.invia_a(tel["id"], dict(NOTA, chiave="nota:bianca", testo="di Bianca"))
             return righe
         hub.abbinati = abbinati_in_corsa
         try:
@@ -307,22 +313,38 @@ def corsa():
                 hub.invia(dict(NOTA), dario, forza=True)
             elif nome == "invia_a":
                 hub.invia_a(tel["id"], dict(NOTA))
-            else:
+            elif nome == "_a_personali":
                 hub._a_personali("dario", "chat", json.dumps({"turni": [{"id": 1, "testo": "di Dario"}]}))
+            elif nome == "chat_nuovi":
+                hub.chat_nuovi("dario", [{"id": 1, "testo": "di Dario"}])
+            else:
+                hub.pulisci_schede("dario")
         finally:
             del hub.abbinati
         verifica(f"corsa ({nome}): ciò che è di Dario non arriva allo schermo diventato di Bianca",
                  not stato["loop"].con("di Dario") and not con_storia(hub, tel["id"], "nota:dario"),
                  f"{stato['loop'].arrivati} {[x.get('chiave') for x in hub.storia(tel['id'])]}")
+        if nome == "chat_nuovi":
+            verifica("corsa (chat_nuovi): «Scarica» della conversazione di Dario non si registra sullo schermo di Bianca",
+                     hub.scaricamenti.voce(tel["id"], "chat") is None, str(hub.scaricamenti.voce(tel["id"], "chat")))
+        if nome == "pulisci_schede":
+            verifica("corsa (pulisci_schede): la pagina e la scheda di Bianca restano",
+                     "pulisci" not in stato["loop"].tipi() and bool(con_storia(hub, tel["id"], "nota:bianca")),
+                     f"{stato['loop'].arrivati} {hub.storia(tel['id'])}")
         hub.scollega(stato["conn"])
     # Contrario: senza corsa arriva
     tel = tel_di(hub, "dario", "Dario")
     loop = CicloFinto()
     conn, _ = hub.collega(tel, loop)
     hub.invia(dict(NOTA, chiave="nota:q"), dario, forza=True)
-    hub._a_personali("dario", "chat", json.dumps({"turni": [{"id": 2, "testo": "turno di Dario"}]}))
-    verifica("contrario: senza corsa la scheda e il turno arrivano allo schermo di Dario",
-             loop.con("nota:q") and loop.con("turno di Dario"), str(loop.arrivati)[:300])
+    hub.chat_nuovi("dario", [{"id": 2, "testo": "turno di Dario"}])
+    voce = hub.scaricamenti.voce(tel["id"], "chat") or {}
+    verifica("contrario: senza corsa la scheda e il turno arrivano allo schermo di Dario, «Scarica» solo per lui",
+             loop.con("nota:q") and loop.con("turno di Dario") and voce.get("persona") == "dario"
+             and voce.get("solo_persona") is True, f"{str(loop.arrivati)[:300]} {voce}")
+    hub.pulisci_schede("dario")
+    verifica("contrario: senza corsa «pulisci le mie schede» arriva alla pagina di Dario e la svuota",
+             "pulisci" in loop.tipi() and not hub.storia(tel["id"]), str(loop.arrivati)[-3:])
     hub.scollega(conn)
 
 
@@ -474,7 +496,7 @@ def contrari():
 
 
 # ─────────────────────────── 5. il server vero ───────────────────────────
-def leggi_eventi(port, sess, quanti, timeout=8.0):
+def leggi_eventi(port, sess, quanti, timeout=8.0, dopo_primo=None):
     """I primi `quanti` eventi del flusso SSE (tipo, dati), o meno se il flusso si chiude."""
     con = http.client.HTTPConnection("127.0.0.1", port, timeout=timeout)
     con.request("GET", f"/eventi?sessione={sess}")
@@ -491,6 +513,8 @@ def leggi_eventi(port, sess, quanti, timeout=8.0):
             elif linea.startswith("data: ") and tipo:
                 out.append((tipo, linea[6:]))
                 tipo = None
+                if len(out) == 1 and dopo_primo is not None:
+                    dopo_primo.set()
     finally:
         con.close()
     return out
@@ -513,14 +537,13 @@ def server():
                  f"{st} {d} {item}")
         hub.invia_a(r["id"], dict(NOTA))
         risultato = {}
+        benvenuto = threading.Event()
 
         def apri():
-            risultato["eventi"] = leggi_eventi(port, sess, 3)
+            risultato["eventi"] = leggi_eventi(port, sess, 3, dopo_primo=benvenuto)
         t = threading.Thread(target=apri, daemon=True)
         t.start()
-        fine = time.monotonic() + 5
-        while not hub.collegato(r["id"]) and time.monotonic() < fine:
-            time.sleep(0.02)
+        benvenuto.wait(5)
         personale_di(hub, r["id"], "bianca", "Bianca")
         hub.abbinati()
         t.join(10)
@@ -539,19 +562,90 @@ def server():
         srv.ferma()
 
 
-def pagina_js():
-    js = (Path(__file__).resolve().parent.parent / "calliope" / "schermi" / "pagina" / "schermo.js").read_text(
-        encoding="utf-8")
-    verifica("pagina: schermo.js gestisce «proprietario» (svuota senza togliere il token, rifà l'accesso)",
-             'addEventListener("proprietario"' in js)
+class FonteChat:
+    """L'archivio delle conversazioni, solo ciò che usano il benvenuto e «Scarica»."""
+    giorni = 30
+
+    def chat(self, persona, n):
+        return [{"id": 1, "testo": f"turno privato di {persona}"}]
+
+    def chat_markdown(self, persona):
+        return f"# conversazione di {persona}"
+
+
+def benvenuto_in_corsa():
+    """Revisione della PR #341: lo schermo passa a Bianca mentre `/eventi` prepara il benvenuto
+    (dopo aver letto la riga, durante la ripresa). Niente benvenuto con la conversazione o il contesto
+    di Dario, niente «Scarica» della chat per lui sullo schermo: la pagina riceve «proprietario»."""
+    hub = hub_nuovo("benvenuto")
+    hub.chat_fonte = FonteChat()
+    srv = ServerSchermi(hub, "127.0.0.1", 0, attesa_porta_s=5).avvia()
+    hub.server = srv
+    try:
+        r, tok = hub.archivio.crea_con_token("telefono", proprietario="dario", proprietario_nome="Dario")
+        hub._rinfresca()
+        hub.contesto(Mittente(persona="dario", nome="Dario", livello="amministra", certo=True),
+                     {"token": 900, "finestra": 8000, "percento": 11})
+        sess = pr.chiedi(srv.port, "/api/accedi", token=tok)[1].get("sessione")
+        vera = hub.ripresa
+
+        def ripresa_in_corsa(schermo):
+            out = vera(schermo)
+            personale_di(hub, r["id"], "bianca", "Bianca")      # proprio qui, il tool
+            hub.abbinati()
+            return out
+        hub.ripresa = ripresa_in_corsa
+        ev = leggi_eventi(srv.port, sess, 3, timeout=6)
+        hub.ripresa = vera
+        verifica("benvenuto in corsa: niente benvenuto con la riga di Dario, la pagina riceve «proprietario»",
+                 [x[0] for x in ev] == ["proprietario"] and "privato di dario" not in str(ev)
+                 and "900" not in str(ev), str(ev)[:300])
+        verifica("benvenuto in corsa: «Scarica» della conversazione di Dario non resta sullo schermo",
+                 hub.scaricamenti.voce(r["id"], "chat") is None, str(hub.scaricamenti.voce(r["id"], "chat")))
+        # Contrario: rifatto l'accesso, il benvenuto è di Bianca, con la sua conversazione
+        sess_b = pr.chiedi(srv.port, "/api/accedi", token=tok)[1].get("sessione")
+        ev = leggi_eventi(srv.port, sess_b, 1)
+        benv = json.loads(ev[0][1]) if ev and ev[0][0] == "benvenuto" else {}
+        voce = hub.scaricamenti.voce(r["id"], "chat") or {}
+        verifica("contrario: il benvenuto di Bianca ha la sua conversazione, «Scarica» per lei sola",
+                 "privato di bianca" in json.dumps(benv.get("chat")) and benv.get("contesto") is None
+                 and voce.get("persona") == "bianca" and voce.get("solo_persona") is True, str(ev)[:300])
+    finally:
+        srv.ferma()
+
+
+def giochi():
+    """I posti delle partite tengono l'identità dello schermo (revisione della PR #341): passato a
+    Bianca, lo schermo non riceve più eventi né schede della partita di Dario."""
+    from calliope.schermi import giochi as G
+    hub = hub_nuovo("giochi")
+    tel = tel_di(hub, "dario", "Dario")
+    gio = G.Giochi(Config(), hub, log=lambda *a: None)
+    m = Mittente(persona="dario", nome="Dario", livello="amministra", certo=True)
+    posto = G.Posto(tel["id"], m, False, schermo=tel)
+    loop = CicloFinto()
+    conn, _ = hub.collega(tel, loop)
+    verifica("giochi: il posto ha l'identità dello schermo e la partita gli arriva",
+             posto.identita == {"creato": tel["creato"], "proprietario": "dario"}
+             and gio._evento(posto, "gioco", {"tipo": "nome"}) == 1
+             and gio._invia(posto, {"tipo": "gioco", "chiave": "gioco:1", "visibilita": "personale"}) is True)
+    hub.scollega(conn)
+    personale_di(hub, tel["id"], "bianca", "Bianca")
+    loop_b = CicloFinto()
+    conn_b, _ = hub.collega(riga(hub, tel["id"]), loop_b)
+    verifica("giochi: passato a Bianca, niente eventi né schede della partita di Dario",
+             gio._evento(posto, "gioco", {"tipo": "comando"}) == 0
+             and gio._invia(posto, {"tipo": "gioco", "chiave": "gioco:1", "visibilita": "personale"}) is False
+             and not loop_b.arrivati, str(loop_b.arrivati))
+    hub.scollega(conn_b)
 
 
 def main():
-    parti = [("1. la riproduzione", (collegamento, coda, pagina_aperta, corsa)),
+    parti = [("1. la riproduzione", (collegamento, coda, pagina_aperta, corsa, giochi)),
              ("2. i due difetti bassi", (elenco_dopo_identita, aggiorna_origine)),
              ("3. per_schermo", (per_schermo,)),
              ("4. i contrari", (contrari,)),
-             ("5. il server", (server, pagina_js))]
+             ("5. il server", (server, benvenuto_in_corsa))]
     try:
         for titolo, prove in parti:
             print("— " + titolo)

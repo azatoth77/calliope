@@ -2052,7 +2052,7 @@ l'identità invece valgono da sole le difese della #275:
 - `_identita_cambiate` vede anche un proprietario diverso. `_schermi_via` svuota cronologia, traccia,
   «Scarica», posti nei giochi e la vista dello Studio di quel numero. Le pagine con l'identità di prima
   ricevono il nuovo evento **«proprietario»**: non è «revocato», perché il token vale ancora. La pagina
-  (`schermo.js`) svuota ciò che mostra e rifà l'accesso; il flusso del server si chiude. Il controllo del
+  (`schermo.js`) svuota ciò che mostra e rifà l'accesso (*[storico: fino alla revisione della PR #341; dal 31/10 sera si ricarica da capo, vedi sotto]*); il flusso del server si chiude. Il controllo del
   ping manda «proprietario» anche a una pagina che si fosse persa l'evento;
 - `_stesso` e `_sue` confrontano anche il proprietario. `collega` con una riga letta prima del cambio non
   dà la cronologia e manda «proprietario». `_a_personali` e `contesto` consegnano solo alle pagine dello
@@ -2089,3 +2089,34 @@ vista è solo tolta dall'hub, e il middleware `_LeggiIlResto` del server (PR #33
 Prova: `prove/prova_schermi_proprietario.py`. Le altre prove degli schermi restano verdi; i finti di
 `invia_a` in `prova_cassetto`, `prova_raccolte`, `prova_stanza_conoscenti` e `prova_searxng_aggiorna`
 accettano l'identità.
+
+**Revisione della PR #341** (31/10 sera). Restavano due strade, ora chiuse:
+
+1. **La pagina aperta teneva Le mie cose e lo Studio del proprietario di prima.** Riprodotto nel
+   browser: Dario su `#/cose/agenda`, lo schermo diventa di Bianca, e dopo il nuovo accesso il
+   promemoria di Dario restava, con tessere e conti. Lo stesso valeva per Documenti, Ufficio,
+   Cassetto, la ricerca, la pagina dello Studio e le sezioni del telefono. All'evento
+   «proprietario» la pagina ora **si ricarica da capo** (`ricaricaDaCapo`, poi `location.reload()`),
+   senza il percorso di prima. Il token resta salvato. Se il browser non lo tiene (storage bloccato),
+   torna nel frammento `#t=`, che non va mai al server. Prova nel browser su PC e telefono:
+   `prove/prova_schermi_proprietario_pagina.py`. Al posto del controllo sulla sola stringa di
+   `schermo.js` c'è questa prova, che cade col codice di prima.
+2. **Il benvenuto di `/eventi` usava la riga di prima.** Lo schermo poteva cambiare mentre `/eventi`
+   preparava la ripresa. Allora il benvenuto portava la conversazione e il contesto di Dario, e
+   «Scarica» della chat restava registrato per lui. Le correzioni:
+   - `collega` segna la pagina accettata (`_Connessione.accettata`);
+   - conversazione e contesto si calcolano solo per una pagina accettata;
+   - subito prima del benvenuto si ricontrolla `valido(id, creato, proprietario)`, e se non torna
+     parte solo «proprietario» (o «revocato»);
+   - `registra_chat` ricontrolla l'identità nel lock, e la voce «chat» di «Scarica» ha
+     `solo_persona`. Lo stesso controllo vale in `chat_nuovi`.
+
+Nello stesso giro:
+- `pulisci_schede` tocca solo gli schermi ancora della persona (`_stesso`) e le loro pagine (`_sue`);
+- i posti dei giochi tengono l'identità dello schermo (`Posto.identita`). `Giochi._evento` e
+  `Giochi._invia` la passano a `evento_a` e `invia_a`, invece di non controllarla.
+
+**Le sessioni restano `(id, creato)`**, senza il proprietario. Dopo il cambio la sessione della
+pagina vale per il nuovo proprietario: il dispositivo è suo, e ogni richiesta legge la riga di adesso
+(`_schermo_sessione`), quindi l'elemento in coda nasce con il proprietario nuovo. Ciò che la pagina
+mostrava prima lo toglie il ricaricamento.

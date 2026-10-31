@@ -195,6 +195,9 @@ class _Connessione:
         self.coda: asyncio.Queue = asyncio.Queue(maxsize=CODA_MAX)
         self.persi = 0
         self.scrittura = None               # ultimo stato dello scritto mandato a questa pagina
+        # `collega` l'ha accettata con l'identità di adesso (#338, revisione della PR #341): se no
+        # il benvenuto non porta niente della persona (conversazione, contesto)
+        self.accettata = False
 
     def _metti(self, item):                 # nel ciclo del server
         try:
@@ -504,6 +507,7 @@ class Schermi:
                 # niente cronologia, e la pagina rifà l'accesso con lo schermo di adesso
                 conn.consegna(("proprietario", "{}"))
                 return conn, []
+            conn.accettata = True
             if ripresa:
                 self._unisci_storia(schermo["id"], ripresa, schermo.get("proprietario"))
             storia = list(self._storia.get(schermo["id"], ()))
@@ -587,13 +591,15 @@ class Schermi:
             return 0
         n = self.cronologia.pulisci(persona) if self.cronologia is not None else 0
         mie = [s for s in self.abbinati() if s.get("proprietario") == persona]
-        sids = [s["id"] for s in mie]
         with self._lock:
             self._ultime.pop(persona, None)
-            self._dimentica_dove(set(sids))
-            for sid in sids:
-                n = max(n, len(self._storia.pop(sid, ()) or ()))
-                for c in self._conn.get(sid, []):
+            # Solo gli schermi ancora suoi e le loro pagine (#338, revisione della PR #341): uno
+            # passato a un'altra persona fra `abbinati()` e il lock non si tocca
+            mie = [s for s in mie if self._stesso(s)]
+            self._dimentica_dove({s["id"] for s in mie})
+            for s in mie:
+                n = max(n, len(self._storia.pop(s["id"], ()) or ()))
+                for c in self._sue(s):
                     c.consegna(("pulisci", "{}"))
         for c in self._ricostruite(persona):
             for s in mie:
@@ -748,16 +754,24 @@ class Schermi:
             return {}
         return {"url": g["url"]}
 
-    def registra_chat(self, sid: int, persona):
+    def registra_chat(self, sid: int, persona, schermo: dict | None = None) -> bool:
         """«Scarica» della trascrizione in Markdown, per uno schermo personale del proprietario:
-        il testo si fa al tocco, dall'archivio di quel momento."""
+        il testo si fa al tocco, dall'archivio di quel momento. Con `schermo` (la riga letta da chi
+        chiama, #338) solo se è ancora quello e di `persona`, controllato nel lock; la voce vale
+        solo per la persona (`solo_persona`: nemmeno chi amministra, se lo schermo passa a lui).
+        True se registrata."""
         fonte = self.chat_fonte
         if fonte is None or not persona or self._n_chat() <= 0:
-            return
-        self.scaricamenti.registra(sid, {
-            "chiave": "chat", "scarica": ["md"],
-            "_scarica": {"markdown_fn": lambda p=persona: fonte.chat_markdown(p),
-                         "titolo": "Conversazione con Calliope"}}, persona)
+            return False
+        voce = {"chiave": "chat", "scarica": ["md"],
+                "_scarica": {"markdown_fn": lambda p=persona: fonte.chat_markdown(p),
+                             "titolo": "Conversazione con Calliope", "solo_persona": True}}
+        with self._lock:
+            if schermo is not None and (schermo.get("id") != sid or not self._stesso(schermo)
+                                        or (schermo.get("proprietario") or None) != persona):
+                return False
+            self.scaricamenti.registra(sid, voce, persona)
+        return True
 
     def chat_nuovi(self, persona, turni: list[dict]) -> int:
         """Turni appena archiviati di `persona` (dal thread dell'archivio): in diretta ai suoi
@@ -766,8 +780,9 @@ class Schermi:
             return 0
         msg = json.dumps({"turni": turni}, ensure_ascii=False, default=str)
         # «Scarica» resta valido anche se nel frattempo tanti documenti l'hanno spinto fuori
-        for sid in [x["id"] for x in self.abbinati() if x.get("proprietario") == persona]:
-            self.registra_chat(sid, persona)
+        # Con la riga letta, ricontrollata nel lock (#338): non a uno schermo passato ad altri
+        for s in [x for x in self.abbinati() if x.get("proprietario") == persona]:
+            self.registra_chat(s["id"], persona, schermo=s)
         return self._a_personali(persona, "chat", msg)
 
     def chat_dimenticata(self, persona) -> int:
