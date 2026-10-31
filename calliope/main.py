@@ -787,7 +787,9 @@ class Avvio:
                 self.tool_ctx.studio = s.studio
             if s.studio.per_modello():
                 from .tools.studio import studio_specs
-                for spec in studio_specs():
+                # Con la configurazione (31/10, #335): un tool spento nel file
+                # (`studio_mappa_consigli`, `studio_ascolta`) non entra nel registro
+                for spec in studio_specs(cfg):
                     s.tools.register(spec)
             # La lettura delle pagine (30/10, passo 4.3, #282): un thread che legge con il
             # modello dell'agente quando la DGX è libera e cede ai lavori e alla voce
