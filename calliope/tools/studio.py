@@ -1930,7 +1930,8 @@ PARAMETRI_CARTE = {"type": "object", "properties": {
 
 DESCRIZIONE = (
     "Lo Studio: verifiche con una data, pagine fotografate, argomenti e piano a giorni. Le "
-    "verifiche, le interrogazioni e lo studio di scuola stanno qui, mai negli appuntamenti. azione: "
+    "verifiche, le interrogazioni e lo studio di scuola stanno qui, mai negli appuntamenti. Un "
+    "tool solo: crea, sposta, togli e le altre sono valori di azione, non tool a parte. azione: "
     "«crea» una verifica nuova («giovedì ho la verifica di storia», «ho anche la verifica di "
     "matematica il 12», con materia, data come detta: il nome del giorno («giovedì») "
     "o AAAA-MM-GG, argomento facoltativo; per = nome del ragazzo se la crea il tutore); «stato» di "

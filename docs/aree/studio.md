@@ -143,6 +143,17 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
   sono da rimisurare col banco vero.
 
+## Il nome inventato `studio_verifica_crea` (31/10, issue #373, ramo `issue-373-studio-nome-inventato`)
+
+Nella prova di chi amministra del 31/10 alle 9:23 il 26B ha chiamato `studio_verifica_crea` e la
+verifica non si è creata (in `prova_studio_ollama` 1 giro su 3 del caso «crea»): con otto tool
+`studio_*` il modello costruisce `studio_<oggetto>_<azione>` per un'azione di `studio`. Ora quel
+nome si esegue come `studio` con l'azione (regola `tool_nome_azione`, permessi e politica di
+`studio`), l'errore di un nome sconosciuto suggerisce `studio` per prefisso e la descrizione dice
+che le azioni non sono tool a parte. Dettagli in [voce-e-regole](voce-e-regole.md), stessa data;
+casi in `prova_studio_tool.py` (attraverso Brain: crea dall'argomento e dal nome; contrari:
+`studio_verifica_cancella`, `agenda_crea`, l'ospite).
+
 ## La condivisione dal telefono (31/10, issue #298 parte 3, ramo `issue-298-studio-condividi`)
 
 *Terza parte della #298 (la seconda, il Takeout, aspetta il passo manuale di chi amministra).

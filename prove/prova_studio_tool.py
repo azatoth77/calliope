@@ -741,6 +741,76 @@ for x in (s3, s4, s5):
 verifica("la cartella dei provvisori all'avvio: solo dopo 15 minuti",
          S.dati.PROVVISORI_AVVIO_S == 900.0)
 
+# ═══════════════ #373: i nomi inventati «studio_<oggetto>_<azione>» ═══════════════
+print("— i nomi inventati dello Studio (#373)")
+from calliope.tools import registry as R  # noqa: E402
+
+
+def materie_di(s_):
+    return sorted(r["materia"].lower() for r in s_.dati.tutti("SELECT materia FROM studio_verifiche"))
+
+
+verifica("studio_dal_nome: l'azione degli argomenti, poi quella del nome (anche composta); gli "
+         "argomenti che studio non conosce via",
+         R.studio_dal_nome("studio_verifica_crea", {"azione": "crea", "materia": "x", "foo": 1})
+         == ("studio", {"azione": "crea", "materia": "x"})
+         and R.studio_dal_nome("studio_crea_verifica", {}) == ("studio", {"azione": "crea"})
+         and R.studio_dal_nome("studio_verifica_sposta", {"data": "venerdì"})
+         == ("studio", {"data": "venerdì", "azione": "sposta"})
+         and R.studio_dal_nome("studio_salta_oggi", {}) == ("studio", {"azione": "salta_oggi"})
+         and R.studio_dal_nome("studio_verifica", {"azione": "togli"}) == ("studio",
+                                                                         {"azione": "togli"}))
+verifica("contrari: un'azione che non esiste, due azioni nel nome, un altro prefisso, nessuna "
+         "azione",
+         R.studio_dal_nome("studio_verifica_cancella", {}) is None
+         and R.studio_dal_nome("studio_verifica_cancella", {"azione": "cancella"}) is None
+         and R.studio_dal_nome("studio_crea_sposta", {}) is None
+         and R.studio_dal_nome("agenda_crea", {"azione": "crea"}) is None
+         and R.studio_dal_nome("studio_verifica", {}) is None)
+e = json.loads(TOOLS.sconosciuto("studio_verifica_cancella"))
+verifica("l'errore di un nome sconosciuto suggerisce anche per prefisso (studio) e dice che le "
+         "azioni vanno in «azione»", e["nomi_giusti"][0] == "studio" and "azione" in e["cosa_fare"],
+         str(e))
+verifica("la descrizione di studio: un tool solo, le azioni non sono tool a parte",
+         "non tool a parte" in TS.DESCRIZIONE)
+# Attraverso Brain: il caso vero della DGX (31/10 alle 9:23)
+b, s9, v9, _ = brain_vero("b373.db")
+prima = materie_di(s9)
+r = turno(b, "Venerdì ho la verifica di informatica sulle unità di misura e le conversioni.",
+          PP.chiama("studio_verifica_crea", {"azione": "crea", "materia": "informatica",
+                                             "data": "venerdì",
+                                             "testo": "unità di misura e conversioni"}),
+          PP.testo("Fatto."))
+verifica("Brain: «studio_verifica_crea» con azione crea → studio crea, la verifica c'è, regola "
+         "tool_nome_azione", materie_di(s9) == sorted(prima + ["informatica"])
+         and [(x["nome"], x["ok"]) for x in b.last_tools] == [("studio", True)]
+         and "tool_nome_azione" in b.rules_fired(), (r, b.last_tools, b.rules_fired()))
+r = turno(b, "Giovedì ho anche la verifica di matematica.",
+          PP.chiama("studio_crea_verifica", {"materia": "matematica", "data": "giovedì"}),
+          PP.testo("Fatto."))
+verifica("Brain: «studio_crea_verifica» senza azione negli argomenti → l'azione dal nome",
+         "matematica" in materie_di(s9) and b.last_tools[-1]["nome"] == "studio"
+         and b.last_tools[-1]["ok"], (r, b.last_tools))
+n = len(materie_di(s9))
+r = turno(b, "Cancella la verifica di matematica.",
+          PP.chiama("studio_verifica_cancella", {"materia": "matematica"}), PP.testo("Ok."))
+storia = json.dumps(b.history, ensure_ascii=False)
+verifica("contrario: «studio_verifica_cancella» (un'azione che non esiste) resta sconosciuto, con "
+         "studio fra i nomi giusti, niente fatto", len(materie_di(s9)) == n
+         and "tool sconosciuto: studio_verifica_cancella" in storia and '"studio"' in storia
+         and "tool_nome_azione" not in b.rules_fired(), r)
+r = turno(b, "Domani ho il dentista.",
+          PP.chiama("agenda_crea", {"azione": "crea", "titolo": "dentista"}), PP.testo("Ok."))
+verifica("contrario: un altro prefisso («agenda_crea») non diventa studio",
+         len(materie_di(s9)) == n and not any(x["nome"] == "studio" for x in b.last_tools), r)
+c_o = ctx_di(s9, None)
+o = json.loads(TOOLS.call("studio_verifica_crea", {"azione": "crea", "materia": "storia",
+                                                   "data": "venerdì"}, c_o, "ospite"))
+verifica("il permesso è quello di studio: l'ospite con «studio_verifica_crea» è rifiutato",
+         o.get("ok") is False and "permesso" in str(o.get("motivo"))
+         and len(materie_di(s9)) == n, str(o)[:200])
+s9.close()
+
 # ═══════════════════════════ registro: il conto dei tool ═══════════════════════════
 src_main = (QUI.parent / "calliope" / "main.py").read_text("utf-8")
 verifica("main.py: i tool dello Studio solo con lo Studio per il modello",
