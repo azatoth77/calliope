@@ -1106,6 +1106,16 @@ studio:
   # esiti e frasi tolte; «attiva»: tutte le persone di casa; «spenta»: niente. Si passa ad
   # «attiva» dopo la rilettura delle misure
   studio_esercizi: ombra
+  # La preparazione dietro le quinte (31/10, #297, parte 3, calliope/studio/preparazione.py): il
+  # lettore delle pagine, quando la DGX è libera e la voce ferma, prepara per ogni verifica
+  # aperta una lezione breve per argomento e i valori dalle pagine (reazioni, misure) che
+  # adattano le attività della libreria, controllati dal codice. «ombra» (di serie, come le
+  # altre generazioni) prepara e misura soltanto; «attiva» la home dice «pronto» o «in
+  # preparazione», la lezione si apre sullo schermo, le attività prendono i valori e la voce
+  # dice «ho preparato…» una volta; «spenta» niente
+  studio_preparazione: ombra
+  # Da quanti secondi la voce dev'essere ferma (arbitro_memoria.quiete) perché si prepari
+  studio_preparazione_quiete_s: 120
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

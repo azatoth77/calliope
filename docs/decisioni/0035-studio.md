@@ -861,6 +861,47 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     sessione dello schermo: una strada laterale); la verifica scelta da sola (la più vicina): il
     materiale può essere di un'altra; tenere i file sul server in attesa della scelta.
 
+## La preparazione dietro le quinte (#297, parte 3, 31/10)
+
+53. **La preparazione dietro le quinte prende dai materiali solo valori validati** (#297, parte
+    3, 31/10). Il lettore delle pagine (lo stesso thread e la stessa guardia: vLLM libero, nessun
+    lavoro dell'agente) e in più la voce ferma da `studio_preparazione_quiete_s`
+    (`arbitro_memoria.quiete`, la definizione unica) chiede a qwen3.6, per ogni verifica aperta,
+    una lezione breve per argomento e i valori delle pagine.
+    - **I valori** sono dati, mai codice: una reazione entra solo se le formule sono di elementi
+      veri, senza parentesi, la reazione è bilanciata e scritta nella pagina citata, e si può
+      nascondere un coefficiente da 1 a 4 che solo lui la bilancia (scritta per intero, niente
+      cifre o lettere a ridosso; che sia chimicamente possibile non si controlla: viene dalla
+      pagina); una misura solo se materiale, massa e volume stanno nella stessa frase della
+      pagina, con una massa sola e un volume solo seguiti dalle unità (g, kg; cm³, ml, L, dm³,
+      anche per esteso: convertiti), senza un altro materiale nella frase (uno dei comuni o uno
+      proposto nello stesso giro), la densità è fra 0,01 e 25 e lontana dall'acqua e il
+      materiale è una parola breve (revisioni della PR #368). Le frecce degli equilibri («⇌»,
+      «⇄», «<=>») valgono come le altre. Le pagine con «ISTRUZIONI: sì» non danno
+      valori. Arrivano alle mini-app come **parametri** (`GIOCO.nuovaPartita({ parametri })`), in
+      JSON nella configurazione del motore come il titolo, e la logica li ricontrolla; senza, i
+      dati di serie. Solo con il segno `Partita.libreria`.
+    - **La lezione** è testo del modello dalle pagine: un dato, sullo schermo con textContent; i
+      paragrafi fuori dalle pagine citate o da una pagina con istruzioni hanno un avviso e non si
+      mostrano.
+    - `studio_preparazione`: «ombra» di serie (si prepara e si misura, niente alla persona),
+      «attiva» (la home dice «pronto» o «in preparazione», la lezione si apre, le attività si
+      adattano, la voce dice «ho preparato…» al più una volta per preparazione), «spenta».
+    - **Per ultima nel giro del lettore**, dopo tutte le pagine, e solo per una verifica con le
+      pagine tutte lette: la voce non ferma salta la preparazione, mai la lettura.
+    - La **regola degli errori** delle carte: un'ora, ferma al terzo con la stessa firma. Con una
+      **prova aperta** sulla verifica niente si prepara né si mostra, e una preparazione arrivata
+      durante la prova non si scrive.
+    - Schema «studio» alla versione 15 (`studio_preparazioni`; sulla verifica `prep_firma`,
+      `prep_esito`, `prep_del`, `prep_detto`); va via con la verifica e con tutto lo Studio.
+    - Una fase del banco (`--fasi preparazione`) misura lezioni e valori sulla DGX, con una pagina
+      di chimica di fantasia e una ostile.
+
+    Alternative scartate: generare le mini-app con i valori dentro il codice (l'agente, il
+    collaudo: resta per una mini-app che manca); lasciare al modello la scelta del coefficiente
+    nascosto (lo decide il codice); mostrare la lezione intera con gli avvisi.
+
+
 ## Da completare con i passi 4.3–4.5
 
 - *[fatto il 29/10, passo 4.1: dove si conservano le pagine e come si applica il punto 4 (punti

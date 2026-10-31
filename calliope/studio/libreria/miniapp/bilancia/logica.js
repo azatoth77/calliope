@@ -14,6 +14,11 @@
 //   DATI.punti_primo, DATI.punti_secondo: i punti al primo e al secondo tentativo
 // Gli atomi li conta la logica (atomi, conta): l'elemento che conta è il primo elemento della
 // formula mancante che, dal suo lato, non compare in altri termini (elementoChiave).
+//
+// I parametri (31/10, #297, parte 3): `nuovaPartita({ parametri: { reazioni } })` con reazioni
+// della stessa forma prese dai materiali della verifica e già validate dal server
+// (studio/preparazione.py: formule degli elementi veri, la reazione bilanciata, il coefficiente
+// mancante da 1 a 4). La logica le ricontrolla (`valide`): una che non va, e si usa DATI.
 "use strict";
 
 const DATI = {
@@ -96,15 +101,55 @@ function aiuto(r) {
   return `Aiuto: a ${altro} ci sono ${n} atomi di ${el}, e ogni ${f} ne ha ${atomi(f)[el]}. Il coefficiente 1 non si scrive.`;
 }
 
-const N = DATI.reazioni.length;
-const MASSIMO = N * DATI.punti_primo;
+const FORMULA = /^([A-Z][a-z]?\d*)+$/;
+
+// Le reazioni dei parametri, ricontrollate: la forma, un solo coefficiente mancante e la
+// reazione bilanciata solo col coefficiente giusto. null se una non va (si usa DATI)
+function valide(rr) {
+  if (!Array.isArray(rr) || rr.length < 1 || rr.length > 6) return null;
+  for (const r of rr) {
+    if (!r || !Array.isArray(r.sinistra) || !Array.isArray(r.destra)) return null;
+    const termini = r.sinistra.concat(r.destra);
+    if (termini.length < 2 || termini.length > 6) return null;
+    if (termini.filter((x) => Array.isArray(x) && x[0] === null).length !== 1) return null;
+    for (const x of termini) {
+      if (!Array.isArray(x) || x.length !== 2 || typeof x[1] !== "string" || x[1].length > 12
+          || !FORMULA.test(x[1])) return null;
+      if (x[0] !== null && !(Number.isInteger(x[0]) && x[0] >= 1 && x[0] <= 9)) return null;
+    }
+    if (!(Number.isInteger(r.giusto) && r.giusto >= 1 && r.giusto <= 4)) return null;
+    try {
+      const pari = (c) => {
+        const sx = {}, dx = {};
+        for (const [lato, acc] of [["sinistra", sx], ["destra", dx]]) {
+          for (const [k, f] of r[lato]) {
+            const a = atomi(f);
+            for (const el of Object.keys(a)) acc[el] = (acc[el] || 0) + (k === null ? c : k) * a[el];
+          }
+        }
+        const els = new Set(Object.keys(sx).concat(Object.keys(dx)));
+        return [...els].every((el) => sx[el] === dx[el]);
+      };
+      if (!pari(r.giusto) || [1, 2, 3, 4].some((c) => c !== r.giusto && pari(c))) return null;
+    } catch (e) { return null; }
+  }
+  return rr.map((r) => ({ sinistra: r.sinistra.map((x) => [x[0], x[1]]),
+                          destra: r.destra.map((x) => [x[0], x[1]]), giusto: r.giusto }));
+}
+
+function reazioni(d) { return d.reazioni || DATI.reazioni; }
 
 function chiudi(d) {
-  return `Hai fatto ${d.punti} punti su ${MASSIMO}.`;
+  return `Hai fatto ${d.punti} punti su ${reazioni(d).length * DATI.punti_primo}.`;
 }
 
 const GIOCO = {
-  nuovaPartita() { return { passo: 0, tentativo: 1, scelto: null, stato: null, punti: 0 }; },
+  nuovaPartita({ parametri } = {}) {
+    const d = { passo: 0, tentativo: 1, scelto: null, stato: null, punti: 0 };
+    const rr = parametri ? valide(parametri.reazioni) : null;
+    if (rr) d.reazioni = rr;          // dai materiali della verifica, ricontrollate
+    return d;
+  },
   attivi: {
     verifica: (d) => (d.stato === "riprova" ? { riprova: true, prossima: false, finito: true }
                                              : { riprova: false, prossima: true, finito: true }),
@@ -112,7 +157,7 @@ const GIOCO = {
   mosse: {
     domanda: {
       coeff(d, { valore }) {
-        const r = DATI.reazioni[d.passo];
+        const r = reazioni(d)[d.passo];
         const c = Number(valore);
         const giusto = c === r.giusto;
         let stato, punti = 0;
@@ -129,7 +174,7 @@ const GIOCO = {
     verifica: {
       riprova: (d) => ({ dati: { ...d, tentativo: 2, scelto: null, stato: null }, fase: "domanda" }),
       prossima(d) {
-        if (d.passo + 1 >= N) return { dati: d, esito: `Reazioni finite! ${chiudi(d)}`, dopo: "fine" };
+        if (d.passo + 1 >= reazioni(d).length) return { dati: d, esito: `Reazioni finite! ${chiudi(d)}`, dopo: "fine" };
         return { dati: { ...d, passo: d.passo + 1, tentativo: 1, scelto: null, stato: null },
                  fase: "domanda" };
       },
@@ -140,15 +185,15 @@ const GIOCO = {
   // semplice (revisione della PR #366)
   vista: {
     domanda: (d) => {
-      const r = DATI.reazioni[d.passo];
+      const r = reazioni(d)[d.passo];
       return {
-        titolo: `Reazione ${d.passo + 1} di ${N}`,
+        titolo: `Reazione ${d.passo + 1} di ${reazioni(d).length}` + (d.reazioni ? ", dai tuoi materiali" : ""),
         sottotitolo: pedici(equazione(r)),
         testo: pedici("Quale coefficiente manca?" + (d.tentativo === 2 ? " " + aiuto(r) : "")),
       };
     },
     verifica: (d) => {
-      const r = DATI.reazioni[d.passo];
+      const r = reazioni(d)[d.passo];
       if (d.stato === "giusto") {
         return { titolo: "Giusto!", sottotitolo: pedici(equazione(r, r.giusto)),
                  testo: pedici(`Con ${r.giusto}: ${rigaConto(r, r.giusto)}. La reazione è bilanciata.`) };
@@ -164,5 +209,6 @@ const GIOCO = {
 };
 
 if (typeof module !== "undefined") {
-  module.exports = { GIOCO, DATI, atomi, conta, mancante, elementoChiave, equazione, rigaConto, aiuto, pedici };
+  module.exports = { GIOCO, DATI, atomi, conta, mancante, elementoChiave, equazione, rigaConto, aiuto, pedici,
+    valide };
 }

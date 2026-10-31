@@ -2281,6 +2281,16 @@ class Config:
     # esiti e frasi tolte; «attiva»: tutte le persone di casa; «spenta»: niente. Si passa ad
     # «attiva» dopo la rilettura delle misure
     studio_esercizi: str = "ombra"
+    # La preparazione dietro le quinte (31/10, #297, parte 3, calliope/studio/preparazione.py): il
+    # lettore delle pagine, quando la DGX è libera e la voce ferma, prepara per ogni verifica
+    # aperta una lezione breve per argomento e i valori dalle pagine (reazioni, misure) che
+    # adattano le attività della libreria, controllati dal codice. «ombra» (di serie, come le
+    # altre generazioni) prepara e misura soltanto; «attiva» la home dice «pronto» o «in
+    # preparazione», la lezione si apre sullo schermo, le attività prendono i valori e la voce
+    # dice «ho preparato…» una volta; «spenta» niente
+    studio_preparazione: str = "ombra"
+    # Da quanti secondi la voce dev'essere ferma (arbitro_memoria.quiete) perché si prepari
+    studio_preparazione_quiete_s: int = 120
     # I premi dello Studio (31/10, issue #296, calliope/studio/premi.py): un rinforzo positivo e
     # al minimo, calcolato dal codice dai soli dati della pratica (sessioni misurate fra «Inizia»
     # e «Fatto», carte ripassate, prove consegnate, esiti decisi dal codice o dal tutore), mai
@@ -3625,7 +3635,8 @@ SEZIONI: dict[str, list[str]] = {
                 "studio_stelle", "studio_duelli", "studio_libreria", "studio_importa",
                 "studio_importa_max_mb", "studio_importa_file_max", "studio_importa_voce_max_mb",
                 "studio_importa_totale_max_mb", "studio_importa_passo_s",
-                "studio_importa_tempo_max_s", "studio_importa_coda", "studio_esercizi"],
+                "studio_importa_tempo_max_s", "studio_importa_coda", "studio_esercizi",
+                "studio_preparazione", "studio_preparazione_quiete_s"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -3993,6 +4004,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "studio_importa_voce_max_mb": (1.0, 200.0), "studio_importa_totale_max_mb": (1.0, 4000.0),
     "studio_importa_passo_s": (5.0, 600.0), "studio_importa_tempo_max_s": (60.0, 86400.0),
     "studio_importa_coda": (1, 50),
+    "studio_preparazione_quiete_s": (0, 3600),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),
@@ -4250,6 +4262,9 @@ _MODI_NUOVI = {
     "studio_libreria": _modi("studio_libreria", ("spenta", "ombra", "attiva"), falso="spenta"),
     # Gli esercizi guidati (31/10, #278): come le domande generate
     "studio_esercizi": _modi("studio_esercizi", ("spenta", "ombra", "attiva"), falso="spenta"),
+    # La preparazione dietro le quinte (31/10, #297, parte 3)
+    "studio_preparazione": _modi("studio_preparazione", ("spenta", "ombra", "attiva"),
+                                 falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},

@@ -94,7 +94,7 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_esercizi", "studio_importazioni", "studio_pratica","studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
+TABELLE = ("studio_preparazioni", "studio_esercizi", "studio_importazioni", "studio_pratica","studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
            "studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
            "studio_misure",
            "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
@@ -530,7 +530,28 @@ def _v14(db: sqlite3.Connection):
     db.execute("CREATE INDEX IF NOT EXISTS studio_esercizi_persona ON studio_esercizi(persona)")
 
 
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13, _v14]
+def _v15(db: sqlite3.Connection):
+    """31/10, issue #297, parte 3 (versione 15, dopo gli esercizi della #278): la preparazione dietro le quinte (studio/preparazione.py). Una
+    riga per la lezione di un argomento (`tipo` «lezione», i paragrafi in JSON con le pagine e gli
+    avvisi) e una per i valori validati dalle pagine (`tipo` «valori», `argomento` NULL); `stato`
+    «ombra» o «pronta». Testo del modello dalle pagine: un dato (textContent, al modello in busta).
+    Sulla verifica l'ultima preparazione (firma, esito, quando) e la firma già detta a voce."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_preparazioni (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        argomento INTEGER,
+        tipo TEXT NOT NULL,
+        stato TEXT NOT NULL,
+        contenuto TEXT NOT NULL,
+        creata TEXT NOT NULL)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_preparazioni_verifica "
+               "ON studio_preparazioni(verifica)")
+    for col in ("prep_firma TEXT", "prep_esito TEXT", "prep_del TEXT", "prep_detto TEXT"):
+        db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
+
+
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13, _v14, _v15]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")
@@ -539,7 +560,8 @@ CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")
 NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
          "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_premi",
          "studio_importazioni",
-         "studio_esercizi")
+         "studio_esercizi",
+         "studio_preparazioni")
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:
@@ -647,6 +669,7 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
         for t in ("studio_importazioni", "studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
                   "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
                   "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_esercizi",
+                  "studio_preparazioni",
                   *CON_ORFANI):
             # Un db ancora allo schema di prima (lo Studio spento non lo prepara): le tabelle
             # nuove possono mancare
@@ -786,7 +809,8 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
         # 7): non hanno un giorno, e senza la verifica non servono a niente; via sempre
         # (le importazioni, #298, dopo: i loro file arrivati sono già nella lista sopra solo per
         # le verifiche tolte; quelle orfane li perdono nella rotazione degli orfani)
-        for t in ("studio_mappe", "studio_domande", "studio_prove", "studio_importazioni"):
+        for t in ("studio_mappe", "studio_domande", "studio_prove", "studio_importazioni",
+                  "studio_preparazioni"):
             # Le domande e le prove (passo 8, #248) come le mappe
             if _tabella(db, t):
                 db.execute(f"DELETE FROM {t} WHERE {orfani}")

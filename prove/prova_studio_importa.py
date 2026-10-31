@@ -357,10 +357,10 @@ def prova_schema():
     try:
         from calliope.conserva import TABELLE_STUDIO
         col = {r["name"] for r in st.dati.tutti("PRAGMA table_info(studio_materiali)")}
-        verifica("schema «studio» alla versione 14 (13 con l'importazione, 14 con gli esercizi "
-                 "guidati, #278), studio_importazioni nelle tabelle e nella "
+        verifica("schema «studio» alla versione 15 (13 con l'importazione, 14 con gli esercizi "
+                 "guidati, 15 con la preparazione), studio_importazioni nelle tabelle e nella "
                  "conservazione, studio_materiali.importazione",
-                 D.versione_schema(st.dati.db) == len(D.MIGRAZIONI) == 14
+                 D.versione_schema(st.dati.db) == len(D.MIGRAZIONI) == 15
                  and "studio_importazioni" in D.TABELLE and set(TABELLE_STUDIO) == set(D.TABELLE)
                  and "importazione" in col
                  and D.TABELLE.index("studio_importazioni") < D.TABELLE.index("studio_verifiche"))

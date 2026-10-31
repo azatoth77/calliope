@@ -74,6 +74,7 @@ from .ascolta import Ascolti
 from .esercizi import Esercizi
 from .importa import Importazioni
 from .libreria.studio import DallaLibreria
+from .preparazione import Preparazioni
 from .mappe import Mappe
 from .premi import Premi
 from .prove import Prove
@@ -226,7 +227,7 @@ def _data(valore) -> datetime.date:
     return datetime.date.fromisoformat(str(valore).strip()[:10])
 
 
-class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, Esercizi):
+class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, Esercizi, Preparazioni):
     """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
     #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`, il ripasso da
     ascoltare (passo 9, #249) in `ascolta.py`, la vista del tutore e le indicazioni (passo 10,
@@ -2207,6 +2208,9 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni, 
                 # La libreria (#297): le proposte scelte dal codice, dati fidati; la scheda la dà
                 # /api/studio/libreria. None se spenta, in ombra o con una prova aperta
                 "libreria": self._libreria_home(chi, v),
+                # La preparazione dietro le quinte (#297, parte 3): «pronta» o «in preparazione»;
+                # None da spenta, in ombra o con una prova aperta
+                "preparazione": self._preparazione_home(v),
                 # La mappa (passo 7, #247): solo conti e stati; il testo lo dà /api/studio/mappa
                 "mappa": self._conto_mappa(v),
                 # Gli esercizi guidati (#278): solo conti (None se spenti per chi guarda); il

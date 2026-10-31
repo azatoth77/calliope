@@ -1328,3 +1328,9 @@ quando una prova parte; non vanno nel registro dell'archivio, e il prefisso `lib
 in `manifesto.valida`. La macchina ha la chiave facoltativa `"anchio": false`: niente «Gioco
 anch'io» nella preparazione (motore e `per_fase`); la usano le mini-app, perché negli altri giochi
 per uno «gioco anch'io» lega la voce e il nome di chi gioca.
+
+Dal 31/10 (#297, parte 3) una partita della libreria può avere i **parametri** (`Partita.parametri`,
+solo col segno `libreria`): valori validati dai materiali della verifica che `scheda.avvio_js`
+mette in JSON nella configurazione del motore (come il titolo) e il motore passa a
+`GIOCO.nuovaPartita({ parametri })`; `apriGioco({ parametri })` li prova. Il documento in memoria
+ha la chiave anche dei parametri.

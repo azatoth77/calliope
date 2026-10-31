@@ -104,3 +104,12 @@ sul telefono: «Calliope, apri l'attività …», o «Apri» nella sezione «Dal
 
 Rivederla come una scheda, e in più: si capisce cosa fare senza spiegazioni? Il secondo tentativo
 aiuta davvero? Le risposte sbagliate proposte sono errori tipici e non trabocchetti?
+
+## Una mini-app adattata ai materiali (31/10, #297, parte 3)
+
+Una mini-app può prendere valori dai materiali della verifica (`GIOCO.nuovaPartita({ parametri })`):
+lo fanno «Bilancia la reazione» (reazioni) e «Affonda o galleggia?» (misure). Per un'altra servono
+tre cose, tutte rivedute come il resto: il validatore in `calliope/studio/preparazione.py` (valori
+semplici, numeri e parole brevi, ricontrollati contro le pagine), lo schema e le regole della
+richiesta, e in `logica.js` una funzione che li ricontrolla e usa i dati di serie se uno non va;
+con i casi e i contrari in `prova_studio_preparazione.py` e nel `gioco.test.js` della mini-app.

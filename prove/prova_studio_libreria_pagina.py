@@ -60,6 +60,21 @@ def prepara(st):
     for t in ("Le reazioni chimiche", "La mole"):
         st.aggiungi_argomento(LEO, vid, t, [], proposto=False)
     st.conferma_argomenti(LEO, vid)
+    # La preparazione dietro le quinte, pronta (#297, parte 3): una lezione per l'argomento 1 e
+    # due reazioni validate per «Bilancia la reazione», scritte come le scrive il lettore
+    from calliope.studio import preparazione as PR
+    aid = st.argomenti(LEO, vid)[0]["id"]
+    f = PR.firma(st._argomenti_per_carte(vid), st._pagine_di(vid), "attiva")
+    st.proponi_preparazione(vid, f, {
+        "lezioni": [{"argomento": aid, "paragrafi": [
+            {"testo": "<b>Gli atomi</b> si conservano: si contano a sinistra e a destra.",
+             "pagine": [], "avvisi": []},
+            {"testo": "Un paragrafo con un avviso non si mostra.", "pagine": [],
+             "avvisi": ["da_controllare"]}]}],
+        "valori": {"reazioni": [
+            {"sinistra": [[None, "C"], [1, "O2"]], "destra": [[1, "CO2"]], "giusto": 1},
+            {"sinistra": [[2, "Mg"], [1, "O2"]], "destra": [[None, "MgO"]], "giusto": 2}],
+            "misure": []}}, PR.PRONTE, "attiva")
     return vid
 
 
@@ -168,8 +183,9 @@ def scenario_attivita(t, hub, st, vid):
     r = json.loads(reg.call(item["tool"], item["argomenti"], ctx, "familiare"))
     hub.evento_a(item["schermo_id"], "tocco", {"tocco": item["tocco"], "ok": bool(r.get("ok", True)),
                                                "pagina": item.get("pagina") or {}})
-    verifica("il tool apre la mini-app", r.get("ok") is not False and any(
-        p.nome == "libreria_bilancia" for p in hub.giochi.partite.values()), str(r)[:200])
+    verifica("il tool apre la mini-app, coi parametri preparati dai materiali", r.get("ok") is not False and any(
+        p.nome == "libreria_bilancia" and p.parametri and len(p.parametri["reazioni"]) == 2
+        for p in hub.giochi.partite.values()), str(r)[:200])
     ok = aspetta(lambda: t.v("!!document.querySelector('iframe.riquadro-gioco')"), 10)
     verifica("il gioco arriva sul telefono nel riquadro", bool(ok))
     p = next((x for x in hub.giochi.partite.values() if x.nome == "libreria_bilancia"), None)
@@ -209,6 +225,24 @@ def scenario_attivita(t, hub, st, vid):
         B.dimensione(t, 390, 844)
 
 
+def scenario_preparazione(t, hub, st, vid):
+    """La preparazione pronta nella home (#297, parte 3): «Pronto dalle tue pagine», la lezione
+    con textContent, il paragrafo con un avviso nascosto."""
+    ok = aspetta(lambda: t.v("!!document.querySelector('.studio-l-prep')"), 10)
+    pr = t.v("(document.querySelector('.studio-l-prep') || {}).innerText || ''") or ""
+    verifica("la preparazione pronta: «Pronto dalle tue pagine» con l'attività adattata",
+             bool(ok) and "Pronto dalle tue pagine" in pr and "«Bilancia la reazione»" in pr, pr[:200])
+    t.tocca('button[data-libreria="lezione"]')
+    ok = aspetta(lambda: t.v("!!document.querySelector('.studio-l-lezione .studio-l-testo')"), 6)
+    testi = t.v("[...document.querySelectorAll('.studio-l-lezione .studio-l-testo')].map((e) => e.textContent)") or []
+    verifica("la lezione: i paragrafi senza avvisi, scritti come testo (l'HTML resta testo)",
+             bool(ok) and testi == ["<b>Gli atomi</b> si conservano: si contano a sinistra e a destra."]
+             and not t.v("!!document.querySelector('.studio-l-lezione b')"), str(testi))
+    misure(t, "390×844 con la lezione preparata")
+    t.tocca('button[data-libreria="lezione_chiudi"]')
+    aspetta(lambda: not t.v("!!document.querySelector('.studio-l-lezione')"), 4)
+
+
 def scenario_pc(t, hub):
     B.dimensione(t, 1440, 900)
     ok = aspetta(lambda: t.v("document.body.classList.contains('con-sezioni')"), 15)
@@ -242,6 +276,7 @@ def main() -> int:
         from calliope import studio as S
         import types
         cfg.studio_modo, cfg.studio_cartella, cfg.studio_lettura = "attivo", "studio", False
+        cfg.studio_preparazione = "attiva"
         minori.prepara(cfg, registry=REG)
         st = S.Studio(cfg, registry=REG, log=lambda m: None)
         st.avvia_lettura(None, avvia=False)
@@ -273,6 +308,7 @@ def main() -> int:
             B.dimensione(t, 390, 844)
             scenario_telefono(t, hub, st, vid)
             B.dimensione(t, 390, 844)
+            scenario_preparazione(t, hub, st, vid)
             scenario_attivita(t, hub, st, vid)
             pagina.pompa(0.3)
             errori = [r for r in pagina.log if r.startswith("ECCEZIONE") or "Content Security" in r]

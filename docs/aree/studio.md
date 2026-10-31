@@ -379,6 +379,65 @@ come l'adulto è l'adulto per Calliope (niente `minore_incerto`, il dispositivo 
 minore), e la guardia non ha i suoi esercizi: lo ferma solo il riconoscimento della voce
 (`minore_piu_protetto`, la compagnia), non lo Studio.
 
+## La preparazione dietro le quinte (31/10, issue #297, parte 3, ramo `issue-297-preparazione`)
+
+Terza parte della #297 (decisione 0035 punto 53). `calliope/studio/preparazione.py` e
+`Lettore.prepara`: per ogni verifica aperta, quando la DGX è libera (la guardia del lettore) e la
+voce è ferma da `studio_preparazione_quiete_s` secondi (`arbitro_memoria.quiete`), una richiesta a
+qwen3.6 col solo testo letto in busta: una **lezione** breve per argomento e i **valori** delle
+pagine (reazioni e misure). Il codice controlla tutto:
+- reazioni: elementi veri, senza parentesi, bilanciate, scritte nella pagina citata, un solo
+  coefficiente da 1 a 4 che le bilancia (lo nasconde il codice); misure: materiale, massa e
+  volume nella stessa frase con le unità, densità fra 0,01 e 25 e lontana da 1, il materiale una
+  parola breve; niente dalle pagine con «ISTRUZIONI: sì»;
+- la lezione: i paragrafi fuori dalle pagine citate o da una pagina con istruzioni hanno l'avviso e
+  non si mostrano.
+
+Con `studio_preparazione: attiva` la sezione «Dalla libreria» dice «In preparazione…» o «Pronto
+dalle tue pagine» con le attività adattate e i tasti «Lezione dell'argomento N»
+(`POST /api/studio/libreria`, azione «lezione»); «Bilancia la reazione» e «Affonda o galleggia?»
+si aprono coi **parametri** (`Partita.parametri`, `scheda.avvio_js`, `GIOCO.nuovaPartita({
+parametri })`, ricontrollati dalla logica: «Reazione 1 di 3, dai tuoi materiali»); la voce dice
+«Ho preparato…» una volta per preparazione (nella lettura «oggi» e «libreria» del tool `studio`).
+In ombra (di serie) si prepara e si conta nel registro soltanto. Regola degli errori delle carte;
+con una prova aperta niente. Schema 15 (`studio_preparazioni`, dopo gli esercizi della #278). Banco: `--fasi preparazione`
+(pagina di chimica di fantasia in `prove/manuali/studio/preparazione/`).
+
+**Ritocchi della revisione della PR #366**: «di» per la «d» nel moto; `_ferma` controlla
+`posto.fermato` sotto il lock (un avviso solo col battito e il gancio della prova insieme); la
+docstring di `miniapp.py` cita il punto 47. Pagina v41.
+
+**Revisione della PR #368** (31/10):
+- **La preparazione dopo le pagine.** Stava prima della lettura nel giro del lettore: con la voce
+  non ferma il giro usciva e nessuna pagina, di nessuna verifica, si leggeva più (anche in ombra).
+  Ora viene per ultima, quando non resta una pagina da leggere; con la sola voce non ferma si
+  salta, e una verifica si prepara solo a pagine tutte lette (non a ogni pagina che arriva).
+- **Le misure con la loro frase e le unità.** Prima bastava che massa e volume fossero numeri della
+  pagina: «Il ferro: 79 g occupano 10 cm³. Il sughero: 24 g occupano 100 cm³.» dava «sughero
+  79/10». Ora materiale, massa e volume stanno nella stessa frase, con una massa sola e un volume
+  solo, ognuno subito seguito dall'unità (g, kg; cm³, ml, L, dm³), convertiti in grammi e cm³;
+  un numero senza unità non vale.
+- **La reazione intera.** «2H2 + O2 -> 2H2O» stava dentro «12H2 + O2 -> 2H2O2»: ora la reazione
+  deve essere scritta per intero, senza cifre o lettere a ridosso.
+- **Che cosa non si controlla.** Che una reazione sia chimicamente possibile: viene dalla pagina
+  (bilanciata ed elementi veri sì, la chimica no). Se il libro sbaglia, sbaglia anche l'attività.
+- Le preparazioni orfane vanno via nella rotazione, come mappe e importazioni.
+
+**Seconda revisione della PR #368** (31/10):
+- **Un altro materiale nella frase.** «Il ferro, a differenza del sughero, pesa 79 g per 10 cm³.»
+  dava «sughero 79/10», cioè un sughero che affonda. Ora la frase non vale se nomina un altro
+  materiale: uno di `MATERIALI_COMUNI` (ferro, rame, sughero, legno, ghiaccio, olio, acqua…) o uno
+  proposto dal modello nello stesso giro. Una parola del materiale stesso non conta («legno» per
+  «legno di pino»); parole generiche come «sasso» non sono nell'elenco (un «sasso di granito»).
+- **Le unità per esteso**: «gr», «grammi», «chilogrammi»; «cc», «millilitri», «litro», «litri»,
+  «cm^3», «dm^3», «centimetri cubi», «decimetri cubi». Il punto delle migliaia vale solo con tre
+  cifre dopo («1.000 g»); «45.9 g» resta un decimale.
+- **Gli equilibri**: «⇌», «⇄» e «<=>» come frecce, nella reazione del modello e nella pagina.
+- Resta accettata una reazione scritta intera seguita da «+ calore»: il confine è solo contro
+  cifre e lettere a ridosso.
+
+**Da misurare sulla DGX** prima di `attiva`: `--fasi preparazione` (paragrafi fondati, valori
+giusti, ostili 0) e qualche notte in ombra (`[STUDIO] … preparazione in ombra` nel registro).
 ## L'importazione dei materiali scaricati: file e ZIP (31/10, issue #298, ramo `issue-298-studio-importa`)
 
 *Epic #251, decisione di chi amministra del 28/10 (niente API di Classroom: sugli account dei

@@ -675,7 +675,7 @@
       art.append(window.CalliopeEsercizio.sezione(v, { ridisegna: disegnaHome, ricarica: caricaHome, vista }));
     }
     // La libreria (31/10, #297, libreria.js): le proposte del server; null → niente sezione
-    if (window.CalliopeLibreria && Array.isArray(v.libreria)) {
+    if (window.CalliopeLibreria && (Array.isArray(v.libreria) || v.preparazione)) {
       art.append(window.CalliopeLibreria.sezione(v, { ridisegna: disegnaHome, ricarica: caricaHome, vista,
         tocchi: !!(home.dati && home.dati.tocchi) }));
     }

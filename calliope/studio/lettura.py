@@ -766,8 +766,19 @@ class Lettore:
             # (la pagina con meno cadute, a parità nell'ordine delle pagine)
             righe = sorted(righe, key=lambda r: self._cadute.get(r["id"], (0, 0))[0])[:1]
             if not righe:
-                self.in_attesa = None
-                return {"fatte": fatte}
+                # La preparazione dietro le quinte (#297, parte 3): per ultima, dopo tutte le
+                # pagine (revisione della PR #368: prima delle pagine, la voce non ferma fermava
+                # anche la lettura), con la stessa guardia e in più la voce ferma da un po'
+                # (`arbitro_memoria.quiete`, la definizione unica). Senza la voce ferma si salta
+                # soltanto: il giro finisce e la pagina nuova che arriva sveglia il lettore.
+                esito = self._passo_preparazione()
+                if esito is None:
+                    self.in_attesa = None
+                    return {"fatte": fatte}
+                if esito != "fatta":
+                    return {"fatte": fatte, "aspetta": esito}
+                fatte += 1
+                continue
             # Una pagina di un PDF col testo vero non chiede niente a vLLM: niente guardia
             motivo = None if self._testo_da_pdf(righe[0]) is not None else self.guardia.motivo()
             if motivo is not None:
@@ -1432,6 +1443,117 @@ class Lettore:
                        f"{'in ombra' if modo == DG.OMBRA else 'proposte'} da {len(arif)} "
                        f"argomenti ({s:.1f} s" + (f"; tipi {tipi}" if tipi else "")
                        + (f"; avvisi {avv}" if avv else "") + ")")
+        return "proposte"
+
+    def _passo_preparazione(self) -> str | None:
+        """Un passo della preparazione, quando non resta nessuna pagina da leggere: None (niente
+        da preparare), «fatta», oppure il motivo per aspettare (la guardia, «voce non ferma»,
+        l'esito di `prepara` che chiede di aspettare)."""
+        per_prep = self.studio.verifiche_per_preparazione()
+        if not per_prep:
+            return None
+        motivo = self.guardia.motivo() or self._voce_non_ferma()
+        if motivo is not None:
+            if motivo != self.in_attesa:
+                self._registra(f"preparazione in attesa: {motivo}")
+            self.in_attesa = motivo
+            self.misure["attese"] += 1
+            return motivo
+        self.in_attesa = None
+        esito = self.prepara(per_prep[0])
+        if esito in ("ceduta", "giu", "errore", "errore_server"):
+            return esito
+        return "fatta"
+
+    def _voce_non_ferma(self) -> str | None:
+        """«voce non ferma» se la voce non è ferma da `studio_preparazione_quiete_s` secondi
+        (la preparazione è il lavoro meno urgente: aspetta anche la voce, non solo vLLM)."""
+        from ..arbitro_memoria import quiete
+        from . import preparazione as PR
+        s = float(getattr(self.studio.cfg, "studio_preparazione_quiete_s", PR.QUIETE_S) or 0)
+        try:
+            return None if quiete(s) else "voce non ferma"
+        except Exception:  # noqa: BLE001 — nel dubbio si aspetta
+            return "voce non ferma"
+
+    def prepara(self, v: dict) -> str:
+        """La preparazione di una verifica aperta (`Studio.verifiche_per_preparazione`, #297,
+        parte 3): una richiesta, il controllo del codice (studio/preparazione.py), le lezioni e i
+        valori scritti «pronta» (o «ombra»). Gli esiti delle carte."""
+        from . import argomenti as A
+        from . import genera as G
+        from . import preparazione as PR
+        m = self.misure.setdefault("preparazione", {
+            "generazioni": 0, "rotte": 0, "cambiate": 0, "cedute": 0, "lezioni": 0,
+            "reazioni": 0, "misure": 0, "scartati": 0, "secondi": 0.0, "token_in": 0,
+            "token_out": 0})
+        vid, modo, firma = int(v["id"]), v["_modo"], v["_firma"]
+        rif = A.riferimenti(v["_pagine"])
+        arif = G.argomenti_rif(v["_argomenti"])
+        t0 = time.monotonic()
+        grezzo = None
+        try:
+            for prova in range(2):
+                r = self._chiedi_corpo(PR.corpo(self.modello, v, rif, arif))
+                m["token_in"] += int(r.get("prompt") or 0)
+                m["token_out"] += int(r.get("eval") or 0)
+                if not r.get("fine"):
+                    raise ErroreServer("stream senza fine")
+                self._errori_di_fila = 0
+                self._riprova_dopo = 0.0
+                self._risposte_ok += 1
+                if r.get("fine") != "length":
+                    grezzo = PR.leggi(r.get("content") or "")
+                    break
+                self._registra(f"verifica {vid}: preparazione in tondo fino a max_tokens"
+                               + (", la richiedo" if not prova else ""))
+        except Ceduta:
+            m["cedute"] += 1
+            self._registra(f"verifica {vid}: preparazione, ceduto il passo a un lavoro "
+                           "dell'agente")
+            return "ceduta"
+        except _Giu:
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: preparazione, errore del server ({e}), riprovo fra "
+                           f"{attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("preparazione", vid, e, lambda: (
+                self.studio.proponi_preparazione(vid, firma, None, G.ERRORE, modo)))
+        s = time.monotonic() - t0
+        try:
+            if grezzo is None:
+                ris, esito = None, G.ROTTO
+            else:
+                ris, esito = PR.valida(grezzo, rif, arif), PR.PRONTE
+            n = self.studio.proponi_preparazione(vid, firma, ris, esito, modo)
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("preparazione", vid, e, lambda: (
+                self.studio.proponi_preparazione(vid, firma, None, G.ERRORE, modo)))
+        if n is None:
+            m["cambiate"] += 1
+            self._registra(f"verifica {vid}: argomenti, pagine o prova cambiati durante la "
+                           "preparazione")
+            return "cambiate"
+        m["generazioni"] += 1
+        m["secondi"] = round(m["secondi"] + s, 2)
+        if esito == G.ROTTO:
+            m["rotte"] += 1
+            self._registra(f"verifica {vid}: preparazione illeggibile ({s:.1f} s)")
+            return "rotto"
+        val = ris["valori"]
+        m["lezioni"] += len(ris["lezioni"])
+        m["reazioni"] += len(val["reazioni"])
+        m["misure"] += len(val["misure"])
+        m["scartati"] += ris["scartati"]
+        avv = sum(bool(p["avvisi"]) for lz in ris["lezioni"] for p in lz["paragrafi"])
+        self._registra(f"verifica {vid}: preparazione {'in ombra' if modo == PR.OMBRA else 'pronta'}"
+                       f": {len(ris['lezioni'])} lezioni ({avv} paragrafi con avvisi), "
+                       f"{len(val['reazioni'])} reazioni, {len(val['misure'])} misure, "
+                       f"{ris['scartati']} scartati ({s:.1f} s)")
         return "proposte"
 
     def _errore_generazione(self, cosa: str, vid: int, e: Exception, scrivi_errore) -> str:

@@ -13,7 +13,7 @@
   // butta (niente corse)
   // lib: {vid, scheda, dati, soluzioni: {n: testo}, attesa, esito, esitoDi, richiesta}
   let lib = { vid: null, scheda: null, dati: null, soluzioni: {}, attesa: false, esito: "",
-    esitoDi: null, richiesta: 0 };
+    esitoDi: null, richiesta: 0, lezione: null };
   // Le funzioni della home (studio.js): ridisegna, ricarica, vista
   let ctx = { ridisegna() {}, ricarica() {}, vista() {}, tocchi: false };
 
@@ -95,6 +95,33 @@
         ul.append(li);
       }
       sez.append(ul);
+    }
+    // La preparazione dietro le quinte (#297, parte 3): «in preparazione» o «pronto», con le
+    // lezioni dalle pagine (testo del modello: textContent) e le attività adattate ai materiali
+    const pr = v.preparazione;
+    if (pr && pr.stato === "in_preparazione") {
+      sez.append(nodo("p", "studio-h-riga studio-l-prep", "In preparazione: una lezione dalle tue pagine e gli esempi per le attività. La trovi qui quando è pronta."));
+    } else if (pr && pr.stato === "pronta") {
+      const box = nodo("div", "studio-l-prep");
+      box.append(nodo("p", "studio-h-riga", "Pronto dalle tue pagine" +
+        (Array.isArray(pr.attivita) && pr.attivita.length ? ": anche " + pr.attivita.map((x) => "«" + String(x) + "»").join(", ") + " con i loro esempi." : ".")));
+      const t = nodo("div", "studio-h-tasti");
+      for (const a of Array.isArray(pr.argomenti) ? pr.argomenti : []) {
+        const aperta = lib.lezione && lib.lezione.vid === v.id && lib.lezione.aid === a.id;
+        t.append(tasto((aperta ? "Chiudi la lezione " : "Lezione dell'argomento ") + (Number(a.numero) || ""),
+          aperta ? "lezione_chiudi" : "lezione", { argomento: a.id }));
+      }
+      if (t.childNodes.length) box.append(t);
+      if (lib.lezione && lib.lezione.vid === v.id && lib.lezione.dati) {
+        const art = nodo("article", "studio-l-scheda studio-l-lezione");
+        art.append(nodo("h4", "studio-l-nome", "Lezione dell'argomento " + (Number(lib.lezione.dati.numero) || "")),
+          nodo("p", "studio-nota", "Preparata dalle tue pagine: controllala sul libro."));
+        for (const x of Array.isArray(lib.lezione.dati.paragrafi) ? lib.lezione.dati.paragrafi : []) {
+          art.append(nodo("p", "studio-l-testo", String(x)));
+        }
+        box.append(art);
+      }
+      sez.append(box);
     }
     if (lib.vid === v.id && lib.scheda) sez.append(pannello(v));
     if (lib.esitoDi === v.id && lib.esito) {
@@ -221,6 +248,16 @@
       ctx.ridisegna();
       return;
     }
+    if (az === "lezione") {
+      const aid = Number(dati.argomento);
+      lib.lezione = { vid, aid, dati: null };
+      const r = await chiedi(vid, { azione: "lezione", argomento: aid });
+      if (r && r.lezione && lib.lezione && lib.lezione.aid === r.lezione.argomento) lib.lezione.dati = r.lezione;
+      else if (!r) lib.lezione = null;
+      ctx.ridisegna();
+      return;
+    }
+    if (az === "lezione_chiudi") { lib.lezione = null; lib.richiesta++; ctx.ridisegna(); return; }
     if (az === "soluzione") {
       const sid = lib.scheda;
       const r = await chiedi(vid, { azione: "soluzione", contenuto: sid, n: Number(dati.n) });
@@ -246,7 +283,7 @@
 
   function chiudi() {
     lib = { vid: null, scheda: null, dati: null, soluzioni: {}, attesa: false, esito: "", esitoDi: null,
-      richiesta: lib.richiesta + 1 };
+      richiesta: lib.richiesta + 1, lezione: null };
   }
 
   window.CalliopeLibreria = { sezione, su, chiudi };

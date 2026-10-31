@@ -68,8 +68,8 @@ def prova_sw_e_pagina():
     tel = (TEL / "telefono.js").read_text("utf-8")
     v_sw = re.search(r'const CACHE = "(calliope-telefono-pagina-v\d+)"', sw)
     v_tel = re.search(r'const PAGINA_VERSIONE = "(calliope-telefono-pagina-v\d+)"', tel)
-    verifica("la versione della cache è quella della pagina (v40)",
-             v_sw and v_tel and v_sw.group(1) == v_tel.group(1) == "calliope-telefono-pagina-v40")
+    verifica("la versione della cache è quella della pagina (v41, dopo la preparazione della #297)",
+             v_sw and v_tel and v_sw.group(1) == v_tel.group(1) == "calliope-telefono-pagina-v41")
     verifica("il service worker prende solo il POST di /telefono/condividi dalla sua origine",
              'ev.request.method === "POST" && u.origin === location.origin && u.pathname === '
              '"/telefono/condividi"' in sw)

@@ -1690,7 +1690,7 @@ def crea_app(hub: Schermi) -> Starlette:
     # e le carte sono testo nostro, ma la pagina le scrive lo stesso con textContent; le soluzioni
     # di «prova tu» arrivano una per volta, solo a richiesta. «carte» scrive sui dati della persona
     # (come «scrivi» delle carte): per un minore dentro gli orari
-    AZIONI_LIBRERIA = ("scheda", "soluzione", "carte")
+    AZIONI_LIBRERIA = ("scheda", "soluzione", "carte", "lezione")
 
     async def studio_libreria(request: Request):
         """{verifica, azione?, contenuto?, n?, argomento?} → {proposte, materie, chiusa} e, con
@@ -1710,8 +1710,10 @@ def crea_app(hub: Schermi) -> Starlette:
         if not isinstance(vid, int) or isinstance(vid, bool) or vid < 1 or (
                 azione is not None and azione not in AZIONI_LIBRERIA):
             return _json({"errore": "richiesta non valida"}, 400)
-        if azione is not None and (not isinstance(cid, str) or not 0 < len(cid) <= 60):
+        if azione not in (None, "lezione") and (not isinstance(cid, str) or not 0 < len(cid) <= 60):
             return _json({"errore": "manca il contenuto"}, 400)
+        if azione == "lezione" and (not isinstance(arg, int) or isinstance(arg, bool)):
+            return _json({"errore": "manca l'argomento"}, 400)
         if azione == "soluzione" and (not isinstance(n, int) or isinstance(n, bool)):
             return _json({"errore": "manca la domanda"}, 400)
         if arg is not None and (not isinstance(arg, int) or isinstance(arg, bool)):
@@ -1729,6 +1731,9 @@ def crea_app(hub: Schermi) -> Starlette:
                 return {"scheda": st.scheda_libreria(prof, vid, cid)}
             if azione == "soluzione":
                 return {"soluzione": st.soluzione_libreria(prof, vid, cid, n)}
+            if azione == "lezione":
+                # La lezione preparata dalle pagine (#297, parte 3): testo del modello, un dato
+                return {"lezione": st.lezione_preparata(prof, vid, arg)}
             extra = {}
             if azione == "carte":
                 extra["aggiunte"] = st.aggiungi_mazzo(prof, vid, cid, argomento=arg)

@@ -46,10 +46,32 @@ function conto(m, V) {
   return `d = ${numero(m)} : ${numero(V)} = ${cifre(d)} g/cm³, ${rispetto} di ${numero(DATI.acqua)}: ${destino(m, V)}`;
 }
 
-const N = DATI.domande.length;
+// I parametri (31/10, #297, parte 3): `nuovaPartita({ parametri: { domande } })` con domande
+// della stessa forma prese dai materiali della verifica, già validate dal server
+// (studio/preparazione.py: numeri veri, densità lontana da 1, il materiale una parola breve). La
+// logica le ricontrolla (`valide`); se una non va si usano quelle di DATI
+const MATERIALE = /^[a-zàèéìòù' ]{2,30}$/;
+function valide(qq) {
+  if (!Array.isArray(qq) || qq.length < 1 || qq.length > 8) return null;
+  for (const q of qq) {
+    if (!q || typeof q.materiale !== "string" || !MATERIALE.test(q.materiale)) return null;
+    for (const k of ["m", "V"]) {
+      if (typeof q[k] !== "number" || !isFinite(q[k]) || q[k] <= 0 || q[k] > 100000) return null;
+    }
+    const d = q.m / q.V;
+    if (d < 0.01 || d > 25 || Math.abs(d - DATI.acqua) < 0.03) return null;
+  }
+  return qq.map((q) => ({ m: q.m, V: q.V, materiale: q.materiale }));
+}
+function domande(d) { return d.domande || DATI.domande; }
 
 const GIOCO = {
-  nuovaPartita() { return { scelto: null, domanda: 0, giuste: 0 }; },
+  nuovaPartita({ parametri } = {}) {
+    const d = { scelto: null, domanda: 0, giuste: 0 };
+    const qq = parametri ? valide(parametri.domande) : null;
+    if (qq) d.domande = qq;            // dai materiali della verifica, ricontrollate
+    return d;
+  },
   mosse: {
     esplora: {
       oggetto: (d, { valore }) => ({ dati: { ...d, scelto: valore } }),
@@ -72,8 +94,8 @@ const GIOCO = {
                testo: conto(o.m, o.V) + "." };
     },
     quiz: (d) => {
-      const q = DATI.domande[d.domanda];
-      return { titolo: `Domanda ${d.domanda + 1} di ${N}`,
+      const q = domande(d)[d.domanda];
+      return { titolo: `Domanda ${d.domanda + 1} di ${domande(d).length}` + (d.domande ? ", dai tuoi materiali" : ""),
                sottotitolo: `${q.materiale.charAt(0).toUpperCase() + q.materiale.slice(1)}: m = ${numero(q.m)} g, V = ${numero(q.V)} cm³`,
                testo: "In acqua affonda o galleggia?" };
     },
@@ -81,11 +103,11 @@ const GIOCO = {
 };
 
 function risposta(d, detta) {
-  const q = DATI.domande[d.domanda];
+  const q = domande(d)[d.domanda];
   const giusta = detta === destino(q.m, q.V);
   const dati = { ...d, domanda: d.domanda + 1, giuste: d.giuste + (giusta ? 1 : 0) };
   const esito = `${giusta ? "Giusto" : "No"}: ${conto(q.m, q.V)}.`;
-  return { dati, punti: giusta ? 1 : 0, esito, dopo: dati.domanda >= N ? "fine" : "quiz" };
+  return { dati, punti: giusta ? 1 : 0, esito, dopo: dati.domanda >= domande(d).length ? "fine" : "quiz" };
 }
 
-if (typeof module !== "undefined") module.exports = { GIOCO, DATI, densita, cifre, destino, conto };
+if (typeof module !== "undefined") module.exports = { GIOCO, DATI, densita, cifre, destino, conto, valide };

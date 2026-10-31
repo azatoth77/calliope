@@ -456,10 +456,14 @@ def motore_js() -> str:
     return _MOTORE
 
 
-def avvio_js(macchina: dict, giocatori: dict, titolo: str = "") -> str:
-    """Lo script dopo quelli del gioco: avvia il motore con la logica (GIOCO) e la macchina."""
-    dati = json.dumps({"macchina": macchina, "giocatori": giocatori,
-                       "titolo": str(titolo or "")[:80]}, ensure_ascii=False)
+def avvio_js(macchina: dict, giocatori: dict, titolo: str = "", parametri: dict | None = None) -> str:
+    """Lo script dopo quelli del gioco: avvia il motore con la logica (GIOCO) e la macchina.
+    `parametri` (31/10, #297, parte 3): valori già validati (numeri, parole brevi) per le
+    attività della libreria adattate ai materiali; in JSON, un dato, come il titolo."""
+    conf = {"macchina": macchina, "giocatori": giocatori, "titolo": str(titolo or "")[:80]}
+    if parametri:
+        conf["parametri"] = parametri
+    dati = json.dumps(conf, ensure_ascii=False)
     return ('CalliopeMotore.avvia(typeof GIOCO === "undefined" ? undefined : GIOCO, '
             + _js_sicuro(dati) + ");")
 
@@ -473,7 +477,8 @@ def _js_sicuro(js: str) -> str:
     return re.sub(r"</(script)", r"<\\/\1", js, flags=re.I)
 
 
-def documento(scheda: dict, file: dict[str, bytes], titolo: str = "") -> tuple[str, str]:
+def documento(scheda: dict, file: dict[str, bytes], titolo: str = "",
+              parametri: dict | None = None) -> tuple[str, str]:
     """(HTML del riquadro, CSP) dai file della versione approvata. `file`: {percorso: byte}.
     `titolo`: il titolo del gioco (la pagina della preparazione). Un gioco senza la macchina
     (formato di prima del 14/10) non ha documento: SchedaNonValida."""
@@ -491,7 +496,7 @@ def documento(scheda: dict, file: dict[str, bytes], titolo: str = "") -> tuple[s
     # una dichiarazione di logica.js nello stesso spazio globale)
     script = ([runtime, _js_sicuro(motore_js())]
               + [_js_sicuro(file.get(f, b"").decode("utf-8", "replace")) for f in scheda["file"]]
-              + [avvio_js(scheda["macchina"], scheda["giocatori"], titolo)])
+              + [avvio_js(scheda["macchina"], scheda["giocatori"], titolo, parametri)])
     base = _STILE_BASE + STILE_MOTORE
     css = base + "\n" + (file.get(scheda["stile"], b"").decode("utf-8", "replace")
                                 if scheda.get("stile") else "")

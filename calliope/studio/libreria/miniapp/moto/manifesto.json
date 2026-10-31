@@ -14,7 +14,7 @@
                              "comandi": {
                                "risposta": {"forme": ["la risposta {n}", "risposta {n}", "la {n}"],
                                             "n": {"valori": {"a": ["a", "prima"], "b": ["b", "bi", "seconda"],
-                                                             "c": ["c", "ci", "terza"], "d": ["d", "quarta"]}},
+                                                             "c": ["c", "ci", "terza"], "d": ["d", "di", "quarta"]}},
                                             "etichetta": "{n}"},
                                "finito": {"forme": ["ho finito", "smetto qui"],
                                           "etichetta": "Ho finito"}}},

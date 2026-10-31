@@ -69,3 +69,21 @@ test("i pedici sono solo dello schermo: l'esito resta in testo semplice", async 
   const e = g.stato().esito || "";
   assert.ok(!/[₀-₉]/.test(e), e);
 });
+
+test("i parametri dai materiali: le reazioni validate, e una che non torna lascia quelle di serie", async () => {
+  const reazioni = [{ sinistra: [[null, "C"], [1, "O2"]], destra: [[1, "CO2"]], giusto: 1 },
+                    { sinistra: [[2, "Mg"], [1, "O2"]], destra: [[null, "MgO"]], giusto: 2 }];
+  const g = await apriGioco({ seme: 1, inizia: true, parametri: { reazioni } });
+  assert.match(g.testo(), /Reazione 1 di 2, dai tuoi materiali/);
+  assert.match(g.testo(), /\? C \+ O₂ → CO₂/);
+  assert.deepStrictEqual(g.palco(), []);
+  await g.tocca("1");
+  assert.match(g.testo(), /Giusto!/);
+  // Una reazione che non torna (il coefficiente giusto non bilancia): si usano quelle di serie
+  const sbagliata = [{ sinistra: [[null, "H2"], [1, "O2"]], destra: [[2, "H2O"]], giusto: 1 }];
+  const g2 = await apriGioco({ seme: 1, inizia: true, parametri: { reazioni: sbagliata } });
+  assert.match(g2.testo(), /Reazione 1 di 4/);
+  assert.doesNotMatch(g2.testo(), /dai tuoi materiali/);
+  const g3 = await apriGioco({ seme: 1, inizia: true, parametri: { reazioni: [{ sinistra: [[null, "alert(1)"]], destra: [[1, "X"]], giusto: 1 }] } });
+  assert.match(g3.testo(), /Reazione 1 di 4/);
+});

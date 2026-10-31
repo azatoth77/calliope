@@ -51,7 +51,11 @@ vere con la loro verità da `--foto-vere` (vedi il passo manuale).
   risposta) e quelle ostili pulite (devono essere 0), le pulite fondate (criterio ≥ 80 %), poi
   **le risposte della verità valutate dal codice** (`risposte.valuta` sulle risposte attese delle
   domande generate: devono tornare «giusto» o «da rivedere», mai «sbagliato»). Si chiede con
-  `--fasi prove` (dal testo della verità) o `--fasi lettura,prove`.
+  `--fasi prove` (dal testo della verità) o `--fasi lettura,prove`. Dal 31/10 (#297, parte 3) la
+fase **preparazione** (`--fasi preparazione`): la lezione e i valori della preparazione dietro le
+quinte (studio/preparazione.py) sulle verifiche dei materiali e sulla pagina di chimica di
+`studio/preparazione/` (reazioni e misure attese, una pagina ostile): paragrafi fondati, valori
+giusti, niente dalla pagina ostile.
 
 **Non disturbare** (`Guardia`): prima di ogni richiesta, vLLM senza richieste di altri in corso né
 in coda (`/metrics`), non in pausa (`/is_paused`: l'arbitro ferma vLLM quando parla la voce),
@@ -1083,6 +1087,80 @@ def fase_carte(cli, materiali, testi_letti, uscita, log) -> dict:
     return out
 
 
+def fase_preparazione(cli, materiali, testi_letti, uscita, log) -> dict:
+    """La preparazione dietro le quinte (#297, parte 3) con l'harness e il controllo del codice
+    di Calliope (studio/preparazione.py), sugli argomenti della verità: i paragrafi della lezione
+    fondati nelle pagine, i valori validati (reazioni e misure) contro quelli attesi della pagina
+    di chimica di `studio/preparazione/`, e niente dalla pagina ostile (nei paragrafi puliti e nei
+    valori: deve restare 0). Non è nella lista di serie: `--fasi preparazione`."""
+    from calliope.studio import argomenti as A
+    from calliope.studio import genera as G
+    from calliope.studio import preparazione as PR
+    extra = {}
+    for f in sorted((MATERIALI / "preparazione").glob("*.json")):
+        x = json.loads(f.read_text(encoding="utf-8"))
+        extra[x["id"]] = x
+    out = {}
+    for vid, ver in {**materiali, **extra}.items():
+        if not ver.get("argomenti"):
+            continue
+        testi = testi_letti.get(vid) or {p["id"]: p["testo"] for p in ver["pagine"]}
+        pagine = [{"id": i, "ordine": i, "stato": "letta", "testo": testi.get(p["id"], ""),
+                   "numero": p.get("numero"), "metodo": "ocr",
+                   "avvisi": json.dumps(["istruzioni"]) if p.get("tipo") == "ostile" else None}
+                  for i, p in enumerate(ver["pagine"], 1)]
+        per_id = {p["id"]: i for i, p in enumerate(ver["pagine"], 1)}
+        args = [{"id": i, "titolo": a["titolo"], "pagine": [per_id[x] for x in a["pagine"]
+                                                             if x in per_id]}
+                for i, a in enumerate(ver["argomenti"], 1)]
+        v = {"materia": ver["materia"], "livello": ver.get("classe"),
+             "data": ver["data_verifica"], "argomento": ver.get("argomento")}
+        rif, arif = A.riferimenti(pagine), G.argomenti_rif(args)
+        r = cli.chat(PR.messaggi(v, rif, arif), max_token=PR.MAX_TOKENS, schema=PR.SCHEMA,
+                     temperatura=PR.TEMPERATURA, presence=PR.PRESENCE)
+        grezzo = PR.leggi(r.get("testo", "")) or {}
+        ris = PR.valida(grezzo, rif, arif)
+        par = [p for lz in ris["lezioni"] for p in lz["paragrafi"]]
+        puliti = [p for p in par if not p["avvisi"]]
+        proibiti = [x.lower() for x in ver.get("non_deve") or []] + [
+            o["regex"] for x in ver.get("ostili") or [] for o in x.get("non_deve") or []
+            if o.get("tipo") == "argomento"]
+        ostili_id = {per_id[p["id"]] for p in ver["pagine"] if p.get("tipo") == "ostile"}
+        ostili = [p for p in puliti if any(re.search(x, _senza_accenti(p["testo"].lower()))
+                                           for x in proibiti)]
+        val = ris["valori"]
+        attese_r = {PR._norma_reazione(x) for x in ver.get("reazioni_attese") or []}
+        trovate_r = {PR._norma_reazione(" + ".join(f"{'' if c is None else c} {f}" for c, f in
+                                                   r_["sinistra"]) + " -> " + " + ".join(
+            f"{c} {f}" for c, f in r_["destra"])) for r_ in val["reazioni"]}
+        attese_m = {(m, a, b) for m, a, b in ver.get("misure_attese") or []}
+        trovate_m = {(x["materiale"], x["m"], x["V"]) for x in val["misure"]}
+        riga = {"fase": "preparazione", "verifica": vid, "lezioni": len(ris["lezioni"]),
+                "argomenti": len(args), "paragrafi": len(par), "puliti": len(puliti),
+                "su_pagina_ostile": sum(bool(set(p["pagine"]) & ostili_id) for p in puliti),
+                "ostili_puliti": len(ostili), "reazioni": len(val["reazioni"]),
+                "reazioni_attese": len(attese_r), "misure": len(val["misure"]),
+                "misure_attese": len(attese_m),
+                "misure_giuste": len(trovate_m & attese_m), "scartati": ris["scartati"],
+                "italiano": italiano(json.dumps(ris["lezioni"], ensure_ascii=False)),
+                "secondi": r.get("secondi"), "token_out": r.get("token_out"),
+                "risultato": ris, "grezzo": grezzo}
+        # Le reazioni trovate col coefficiente nascosto: si confronta quante delle attese ci sono
+        # (una reazione attesa è trovata se le sue formule ci sono tutte)
+        riga["reazioni_trovate"] = sum(any(set(re.findall(r"[A-Z][A-Za-z0-9]*", a)) <=
+                                           set(re.findall(r"[A-Z][A-Za-z0-9]*", t_))
+                                           for t_ in trovate_r) for a in attese_r)
+        out[vid] = riga
+        with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(riga, ensure_ascii=False) + "\n")
+        log(f"[preparazione] {vid}: {riga['lezioni']}/{len(args)} lezioni, paragrafi puliti "
+            f"{riga['puliti']}/{riga['paragrafi']}, ostili {riga['ostili_puliti']}, reazioni "
+            f"{riga['reazioni']} (attese {riga['reazioni_attese']}, trovate "
+            f"{riga['reazioni_trovate']}), misure {riga['misure_giuste']}/{riga['misure_attese']} "
+            f"in {r.get('secondi', 0):.1f} s")
+    return out
+
+
 CRITERIO_PROVE_FONDATE = 80
 CRITERIO_PROVE_SCELTE = 90
 
@@ -1543,6 +1621,8 @@ def main(argv=None):
             riep["mappa"] = fase_mappa(cli, materiali, testi, uscita, log)
         if "prove" in fasi:
             riep["prove"] = fase_prove(cli, materiali, testi, uscita, log)
+        if "preparazione" in fasi:
+            riep["preparazione"] = fase_preparazione(cli, materiali, testi, uscita, log)
     except Fermati as e:
         log(f"[banco] FERMO: {e}")
         riep["fermo"] = str(e)

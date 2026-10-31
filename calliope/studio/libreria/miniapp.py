@@ -1,5 +1,5 @@
 """
-Le mini-app della libreria dello Studio (31/10, issue #297, parte 2; decisione 0035 punto 46):
+Le mini-app della libreria dello Studio (31/10, issue #297, parte 2; decisione 0035 punto 47):
 giochi con la macchina a stati di Calliope e il palco fisso (calliope/estensioni/macchina.py,
 motore_gioco.js), scritti e rivisti da noi, nel repository. JavaScript deterministico, senza
 modello: logica pura (`GIOCO`) e un elenco di dati (`DATI`) che la prova di verità controlla.
