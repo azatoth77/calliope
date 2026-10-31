@@ -1332,6 +1332,17 @@ Le correzioni minori e le note:
 mappa libera è aperta. Se il tutore le ripassa a voce col minore vicino, Calliope ne dice ad alta
 voce i concetti. È raro e si lascia così.
 
+### 31/10: «spenta» toglie il tool dal registro (issue #335)
+
+`main.py` passa la configurazione a `studio_specs(cfg)`: con `studio_mappa_consigli: spenta` (o la
+mappa libera spenta) il tool `studio_mappa_consigli` non entra nel registro, e con `studio_ascolta:
+spenta` nemmeno `studio_ascolta`. Prima main.py non la passava e i due tool c'erano sempre; da
+spenti rispondevano che non erano accesi. Le prove che chiamano `studio_specs()` senza `cfg` li
+vedono ancora tutti. `prova_robustezza` conta ora il tempo del «La apro?» senza risposta dal primo
+ascolto e non dall'avvio di main, che prova tre volte l'Ollama locale (immagini, capacità, contesto):
+su Windows una porta chiusa costa circa 2 s a tentativo, e sul portatile senza Ollama la prova
+cadeva (6,6 s contro 5).
+
 ## Lo scheletro della mappa generato dal lettore (30/10 sera, issue #247, ramo `issue-247-studio-mappa-genera`)
 
 *Seconda parte del passo 7; decisione [0035](../decisioni/0035-studio.md) punto 36.*
