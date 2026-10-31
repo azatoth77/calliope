@@ -254,6 +254,7 @@ A_SECCO = [
     ("prova_telefono_audio.py", [], "telefono: audio del microfono giusto (durata, contenuto, contesto rifatto), «Prova il microfono» e il suo endpoint"),
     # ~10 s: schermo acceso e vista da guida, in Edge o Chromium (senza si salta) con una
     # Screen Wake Lock API finta che vuole il gesto come WebKit
+    ("prova_studio_prove_pagina.py", [], "le prove dello Studio nella pagina vera (31/10, #248, passo 8): telefono a 390×844 e 320×693 (anche col testo al 125 %) e PC personale; «Verifica finta» con le domande e nessuna risposta attesa nella pagina né nello stato, le risposte salvate sul server, «Consegna» con la correzione a parole, i tentativi del codice, «Era giusta» della persona, «Le domande» e «Scrivi una domanda» (l'HTML resta testo); niente di lato, tocchi ≥ 44 px; nessun errore JavaScript né violazione della CSP"),
     ("prova_studio_mappa_libera_pagina.py", [], "la mappa libera dello Studio nella pagina vera (30/10, #328, passo 7c): telefono a 390×844 e 320×693 e PC personale; la scheda «Da zero», lo scheletro nascosto (pagina e stato), «+ Concetto» (l'HTML resta testo) e «Collega», «Un indizio» con la pagina e «Mostra», «Ho finito» col confronto, i tentativi del codice, gli indicatori e «Parliamone», le schede che tornano; la mappa disegnata sul PC; niente di lato, tocchi ≥ 44 px; nessun errore JavaScript né violazione della CSP"),
     ("prova_studio_mappa_pagina.py", [], "la mappa concettuale dello Studio nella pagina vera (30/10, #247, passo 7): telefono a 390×844 e 320×693 e PC personale; lo scheletro a elenco, «Parti da qui» con l'aiuto, le caselle coi campi e le parole, «Metti» e «Controlla» (gli esiti e i tentativi del codice), «+ Concetto» e «Collega» coi moduli, la vista «Mappa» in SVG col testo in textContent (l'HTML resta testo), il pannello del concetto con le frecce per spostarlo, «Scarica PDF»; niente di lato, tocchi ≥ 44 px, testo ≥ 16 px; la vista al server; nessun errore JavaScript né violazione della CSP"),
     ("prova_studio_home_pagina.py", [], "la home dello Studio nella pagina vera (30/10, #284, passo 4.5): telefono a 390×844, 320×693 e col testo grande, PC personale; prossima verifica con data, obiettivo e previsione, oggi, tappe, «Impara» soltanto, «Da decidere» col perché, la pagina da parte; «Tieni», «Riprova» e le due domande come tocchi; «Fatto» col resoconto, «La preparazione» e «Le sessioni» (30/10, #244); la vista aperta al server; nessun errore JS né CSP"),
@@ -467,6 +468,7 @@ LIVELLO_3 = {
     "prova_cdp_orfani.py", "prova_gioco_stato_pagina.py", "prova_fine_turno_voce.py",
     "prova_pc_pagina.py", "prova_studio_pagina_telefono.py", "prova_studio_home_pagina.py",
     "prova_studio_mappa_pagina.py", "prova_studio_mappa_libera_pagina.py",
+    "prova_studio_prove_pagina.py",
 }
 # Mai nel gruppo parallelo, anche quando una prova li sceglie nel livello 2: un browser, un
 # tempo reale o tanti processi, che sotto carico falliscono a caso. Tutto il livello 3 è
@@ -643,7 +645,7 @@ LEGAMI = [
     ("calliope/studio/", ["prova_studio_prove.py", "prova_studio_domande_genera.py"]),
     ("calliope/tools/studio.py", ["prova_studio_prove.py"]),
     ("calliope/schermi/server.py", ["prova_studio_prove.py"]),
-    ("calliope/schermi/pagina/studio.js", ["prova_studio_prove.py"]),
+    ("calliope/schermi/pagina/studio.js", ["prova_studio_prove.py", "prova_studio_prove_pagina.py"]),
     ("calliope/brain.py", ["prova_studio_prove.py"]),
     ("prove/manuali/banco_studio.py", ["prova_studio_domande_genera.py"]),
     ("prove/prova_studio_argomenti.py", ["prova_studio_domande_genera.py"]),

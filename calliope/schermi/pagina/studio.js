@@ -13,6 +13,9 @@
 // «Correggi», «Togli» (POST /api/studio/carte, fuori dalla conversazione come gli argomenti).
 // Dal 30/10 (passo 7, #247) la mappa concettuale: lo scheletro, la mia mappa, a memoria, in SVG e
 // a elenco (equivalenti), il controllo del codice e il PDF (POST /api/studio/mappa).
+// Dal 31/10 (passo 8, #248) le prove: la verifica finta scritta (le risposte, «Consegna», la
+// correzione con «Era giusta / Quasi / No» sulle risposte da rivedere), le domande scritte o
+// proposte dalle pagine, il tipo della prova vera (POST /api/studio/prova); l'orale si fa a voce.
 // Domanda e risposta sono un dato: solo textContent, come i titoli.
 // I bordi li trova bordi.js su un fotogramma di 320 px; la foto parte intera (JPEG, lato ≤ 3000)
 // con i quattro angoli, e il server li ricontrolla, la raddrizza e decide (studio/pagine.py).
@@ -584,8 +587,12 @@
     const art = nodo("article", "studio-h-verifica" + (prima ? " studio-h-prima" : ""));
     art.dataset.verifica = String(v.id);
     const testa = nodo("div", "studio-h-testa");
-    testa.append(nodo("span", "studio-h-etichetta", prima ? "Prossima verifica" : "Verifica"),
-      nodo("span", "studio-h-quando", dataDetta(v.data) + " · " + mancano(v.giorni_mancanti)));
+    // Il tipo della prova vera e la finestra «dal» (passo 8, #248)
+    const inter = v.prova === "interrogazione";
+    testa.append(nodo("span", "studio-h-etichetta", (prima ? "Prossima " : "") + (inter ? (prima ? "interrogazione" : "Interrogazione")
+      : (prima ? "verifica" : "Verifica"))),
+    nodo("span", "studio-h-quando", (v.finestra ? "dal " : "") + dataDetta(v.data) + " · " +
+      (v.in_finestra ? "nei giorni dell'interrogazione" : mancano(v.giorni_mancanti))));
     art.append(testa);
     art.append(nodo("h3", "studio-h-titolo", [String(v.materia || ""), v.argomento ? String(v.argomento) : ""]
       .filter(Boolean).join(" · ") + (v.di ? " (di " + String(v.di) + ")" : "")));
@@ -626,6 +633,7 @@
     }
     for (const a of v.avvisi_piano || []) {
       if (a === "piano_non_aggiornato") art.append(nodo("p", "studio-avviso", "Il piano non sono riuscita ad aggiornarlo: è quello di prima."));
+      if (a === "finestra") art.append(nodo("p", "studio-h-riga", "Siamo nei giorni dell'interrogazione: ripassa con le carte e le prove."));
     }
     // I tasti di oggi: tocchi veri, solo quando servono
     const tasti = nodo("div", "studio-h-tasti");
@@ -648,6 +656,8 @@
     if (tasti.childNodes.length) art.append(tasti);
     if (home.domande === v.id) art.append(pannelloDomande(v));
     if (v.stato === "aperta" || v.stato === "bozza") art.append(sezioneCarte(v));
+    // Le prove (passo 8, #248): la verifica finta e le domande; l'orale si fa a voce
+    if (v.stato === "aperta") art.append(sezioneProve(v));
     // La mappa concettuale (passo 7, #247): lo scheletro, la mia mappa, a memoria
     if (v.stato === "aperta" || v.stato === "bozza") art.append(sezioneMappa(v));
     // Impara / Esercitati / Esame: solo ciò che c'è (passo 4.5: «leggi le pagine»)
@@ -990,6 +1000,374 @@
     const k = t.dataset.campo;
     carte.modulo[k] = k === "argomento" ? (Number(t.value) || null) : t.value;
   }
+
+  // ── le prove (31/10, passo 8, #248) ──
+  // La verifica finta scritta e le domande (POST /api/studio/prova, fuori dalla conversazione
+  // come le carte). Tutto il testo (domande, opzioni, risposte) è un dato: solo textContent. Le
+  // risposte attese arrivano dal server solo dopo «Consegna»; l'esito lo decide il server (il
+  // codice), «da rivedere» la persona o il tutore coi tre tasti, mai il modello.
+  // {vid, modo: prova|domande|correzione, dati, modulo, attesa, esito, caricata}
+  let prove = null;
+  const TIPI_D = { scelta: "Scelta multipla", vero_falso: "Vero o falso", numero: "Numero", parole: "Parole chiave",
+    aperta: "Aperta", carta: "Carta" };
+  const ESITI_P = { giusto: "giusta", indizio: "a metà", sbagliato: "sbagliata", da_rivedere: "da rivedere",
+    vuota: "senza risposta" };
+  const LETTERE_P = "abcde";
+  const AVVISI_D = { da_controllare: "non la trovo nelle pagine che cita",
+    pagina_con_istruzioni: "viene da una pagina con un messaggio per un assistente",
+    testo_ordine: "sembra un ordine o un annuncio" };
+
+  function tastoProve(testo, azione, dati, cls, etichetta) {
+    const b = nodo("button", "tasto studio-h-tasto" + (cls ? " " + cls : ""), testo);
+    b.type = "button";
+    b.dataset.prove = azione;
+    b.dataset.dati = JSON.stringify(dati || {});
+    if (etichetta) b.setAttribute("aria-label", etichetta);
+    b.disabled = !!(prove && prove.attesa);
+    return b;
+  }
+  function sezioneProve(v) {
+    const sez = nodo("section", "studio-h-gruppo studio-h-prove");
+    sez.dataset.verifica = String(v.id);
+    sez.append(nodo("h4", "studio-h-sotto", "Prove"));
+    const c = v.prove || {};
+    const u = c.ultime || {};
+    const righe = [];
+    for (const [m, nome] of [["scritta", "verifica finta"], ["orale", "interrogazione a voce"]]) {
+      const x = u[m];
+      if (x && x.punteggio !== null && x.punteggio !== undefined) righe.push("L'ultima " + nome + ": " + Number(x.punteggio) + "%.");
+      else if (x) righe.push("L'ultima " + nome + " ha risposte da rivedere.");
+    }
+    if (!righe.length) righe.push("Prova a fare tutte e due: la verifica finta qui, e a voce «Calliope, interrogami».");
+    for (const r of righe) sez.append(nodo("p", "studio-h-riga", r));
+    const ap = c.aperta;
+    if (ap && ap.modalita === "orale") sez.append(nodo("p", "studio-h-riga", "C'è un'interrogazione a voce in corso."));
+    if (!ap && (Number(c.pronte) || 0) < (Number(c.minimo) || 3)) {
+      sez.append(nodo("p", "studio-h-riga", "Per una prova servono almeno " + (Number(c.minimo) || 3) +
+        " domande sugli argomenti del piano: scrivile qui o fai le carte."));
+    }
+    const t = nodo("div", "studio-h-tasti");
+    const aperta = prove && prove.vid === v.id;
+    if (ap && ap.modalita === "scritta") t.append(tastoProve("Continua la verifica finta", "apri", { verifica: v.id }, "studio-h-primo"));
+    else if (!ap && (Number(c.pronte) || 0) >= (Number(c.minimo) || 3) && !(aperta && prove.modo === "prova")) {
+      t.append(tastoProve("Verifica finta", "inizia", { verifica: v.id }, "studio-h-primo"));
+    }
+    t.append(tastoProve(aperta && prove.modo === "domande" ? "Chiudi le domande" : "Le domande",
+      aperta && prove.modo === "domande" ? "chiudi" : "domande", { verifica: v.id }));
+    sez.append(t);
+    if (aperta) sez.append(prove.modo === "prova" ? pannelloProva() : prove.modo === "correzione" ? pannelloCorrezione()
+      : pannelloDomandeP());
+    if (aperta && prove.esito) {
+      const es = nodo("p", "pagina-esito studio-p-esito", prove.esito);
+      es.setAttribute("role", "status");
+      sez.append(es);
+    }
+    return sez;
+  }
+  function restano(p) {
+    if (!p || p.secondi === undefined || p.secondi === null) return "";
+    const s = Math.max(0, Number(p.secondi) - Math.round((Date.now() - (prove.caricata || Date.now())) / 1000));
+    const m = Math.ceil(s / 60);
+    return s <= 0 ? "Tempo finito: consegna." : m <= 1 ? "Manca meno di un minuto." : "Mancano " + m + " minuti.";
+  }
+  function pannelloProva() {
+    const p = nodo("div", "studio-p-prova");
+    const d = prove.dati;
+    const pr = d && d.aperta;
+    if (!pr) { p.append(nodo("p", "pagina-nota", d ? "La prova è chiusa." : "Un attimo…")); return p; }
+    p.append(nodo("p", "studio-h-riga studio-p-tempo", restano(pr)));
+    p.append(nodo("p", "studio-nota", "Rispondi senza guardare le carte: le rivedi dopo la consegna, con le risposte giuste."));
+    const ol = nodo("ol", "studio-p-voci");
+    for (const x of Array.isArray(pr.voci) ? pr.voci : []) {
+      const li = nodo("li", "studio-p-voce");
+      li.dataset.voce = String(x.n);
+      li.append(nodo("p", "studio-c-domanda", String(x.testo || "")));
+      if (x.argomento_numero) li.append(nodo("span", "studio-nota", "argomento " + x.argomento_numero));
+      const scelte = x.tipo === "scelta" ? (x.opzioni || []).map((o, i) => [LETTERE_P[i], LETTERE_P[i] + ") " + String(o)])
+        : x.tipo === "vero_falso" ? [["vero", "Vero"], ["falso", "Falso"]] : null;
+      if (scelte) {
+        const g = nodo("fieldset", "studio-p-scelte");
+        g.append(nodo("legend", "studio-nota", "Scegli una risposta"));
+        for (const [val, testo] of scelte) {
+          const l = nodo("label", "studio-p-opzione");
+          const r = document.createElement("input");
+          r.type = "radio";
+          r.name = "studio-p-" + pr.id + "-" + x.n;
+          r.value = val;
+          r.dataset.voceProva = String(x.n);
+          r.checked = String(x.risposta || "") === val;
+          r.disabled = !pr.puo_rispondere;
+          l.append(r, nodo("span", null, testo));
+          g.append(l);
+        }
+        li.append(g);
+      } else {
+        const id = "studio-p-" + pr.id + "-" + x.n;
+        const l = nodo("label", "studio-campo", x.tipo === "numero" ? "La tua risposta (con l'unità, se c'è)" : "La tua risposta");
+        l.htmlFor = id;
+        const t = document.createElement(x.tipo === "aperta" || x.tipo === "carta" ? "textarea" : "input");
+        t.id = id;
+        if (t.tagName === "TEXTAREA") t.rows = 2;
+        t.maxLength = Number((d.massimi || {}).risposta) || 600;
+        t.className = "studio-c-campo";
+        t.dataset.voceProva = String(x.n);
+        t.value = String(x.risposta || "");
+        t.disabled = !pr.puo_rispondere;
+        li.append(l, t);
+      }
+      ol.append(li);
+    }
+    p.append(ol);
+    const t = nodo("div", "studio-h-tasti");
+    if (pr.puo_rispondere) t.append(tastoProve("Consegna", "consegna", { prova: pr.id }, "studio-h-primo"));
+    t.append(tastoProve("Chiudi", "chiudi", {}));
+    p.append(t);
+    return p;
+  }
+  function pannelloCorrezione() {
+    const p = nodo("div", "studio-p-correzione");
+    const d = prove.dati;
+    const pr = d && Array.isArray(d.chiuse) ? d.chiuse.find((x) => x.id === prove.prova) || d.chiuse[0] : null;
+    if (!pr) { p.append(nodo("p", "pagina-nota", d ? "Nessuna prova fatta." : "Un attimo…")); return p; }
+    if (pr.frase) p.append(nodo("p", "studio-h-riga studio-p-frase", String(pr.frase)));
+    const ol = nodo("ol", "studio-p-voci");
+    for (const x of Array.isArray(pr.voci) ? pr.voci : []) {
+      const li = nodo("li", "studio-p-voce studio-p-" + String(x.esito || "vuota"));
+      li.append(nodo("p", "studio-c-domanda", String(x.testo || "")));
+      li.append(nodo("span", "studio-p-esito-voce", ESITI_P[x.esito] || String(x.esito || "")));
+      li.append(nodo("span", "studio-c-risp", "La tua risposta: " + (x.risposta ? String(x.risposta) : "nessuna")));
+      li.append(nodo("span", "studio-c-risposta", "Risposta attesa: " + String(x.attesa || "")));
+      if (x.esito === "da_rivedere" && pr.puo_rivedere) {
+        const t = nodo("div", "studio-h-tasti studio-c-esiti");
+        t.append(tastoProve("No", "rivedi", { prova: pr.id, voce: x.n, esito: "sbagliato" }),
+          tastoProve("Quasi", "rivedi", { prova: pr.id, voce: x.n, esito: "indizio" }),
+          tastoProve("Era giusta", "rivedi", { prova: pr.id, voce: x.n, esito: "giusto" }, "studio-h-primo"));
+        li.append(nodo("span", "studio-nota", "Guarda la risposta attesa e decidi tu."), t);
+      }
+      ol.append(li);
+    }
+    p.append(ol);
+    p.append(tastoProve("Chiudi", "chiudi", {}));
+    return p;
+  }
+  function pannelloDomandeP() {
+    const p = nodo("div", "studio-c-elenco");
+    const d = prove.dati;
+    if (!d) { p.append(nodo("p", "pagina-nota", "Un attimo…")); return p; }
+    // Il tipo della prova vera e «l'ho fatta» (le prove si fanno sempre tutte e due)
+    const tipo = nodo("div", "studio-h-tasti");
+    const inter = d.prova_vera === "interrogazione";
+    p.append(nodo("p", "studio-h-riga", "La prova vera: " + (inter ? "interrogazione" + (d.finestra ? ", da quella data in poi" : "") : "scritta") + "."));
+    tipo.append(inter ? tastoProve("È scritta", "tipo", { prova_vera: "scritta", finestra: false })
+      : tastoProve("È un'interrogazione", "tipo", { prova_vera: "interrogazione", finestra: false }));
+    if (inter) tipo.append(tastoProve(d.finestra ? "In un giorno preciso" : "Da quella data in poi", "tipo",
+      { prova_vera: "interrogazione", finestra: !d.finestra }));
+    tipo.append(tastoProve("L'ho fatta", "conclusa", {}));
+    p.append(tipo);
+    if (d.domande_nascoste) {
+      p.append(nodo("p", "studio-h-riga", "C'è una prova aperta: le domande tornano dopo la consegna."));
+      return p;
+    }
+    if (prove.modulo) p.append(moduloDomanda(prove.modulo, d));
+    else p.append(tastoProve("Scrivi una domanda", "scrivi", {}, "studio-h-primo"));
+    const prop = (Array.isArray(d.domande) ? d.domande : []).filter((x) => x.stato === "proposta");
+    if (prop.length) {
+      const pulite = prop.filter((x) => !(x.avvisi || []).length).length;
+      p.append(nodo("p", "studio-h-riga", (prop.length === 1 ? "Una domanda proposta" : prop.length + " domande proposte") +
+        " dalle pagine: entrano nelle prove quando le confermi."));
+      if (pulite) p.append(tastoProve("Conferma le domande proposte", "conferma_domande", {}, "studio-h-primo"));
+    }
+    const ul = nodo("ul", "studio-h-elenco");
+    for (const x of Array.isArray(d.domande) ? d.domande : []) {
+      const li = nodo("li", "studio-h-voce studio-c-voce" + (x.stato === "tolta" ? " studio-tolto" : ""));
+      const tx = nodo("div", "studio-testo");
+      tx.append(nodo("b", null, String(x.testo || "")));
+      if (Array.isArray(x.opzioni) && x.opzioni.length) tx.append(nodo("span", "studio-c-risp", x.opzioni.map((o, i) => LETTERE_P[i] + ") " + String(o)).join(" · ")));
+      tx.append(nodo("span", "studio-c-risp", "Risposta: " + String(x.attesa || "")));
+      const info = [TIPI_D[x.tipo] || String(x.tipo), x.argomento_numero ? "argomento " + x.argomento_numero : "",
+        x.stato === "proposta" ? "proposta da me dalle pagine: controllala" : x.stato === "tolta" ? "tolta" : ""].filter(Boolean).join(" · ");
+      tx.append(nodo("span", "studio-nota", info));
+      for (const a of Array.isArray(x.avvisi) ? x.avvisi : []) tx.append(nodo("span", "studio-avviso", AVVISI_D[a] || String(a)));
+      const nome = "«" + String(x.testo || "").slice(0, 60) + "»";
+      const t = nodo("div", "studio-tasti");
+      if (x.stato === "proposta") t.append(tastoProve("Tieni", "rimetti_domanda", { domanda: x.id }, "", "Tieni " + nome));
+      t.append(x.stato === "tolta" ? tastoProve("Rimetti", "rimetti_domanda", { domanda: x.id }, "", "Rimetti " + nome)
+        : tastoProve("Togli", "togli_domanda", { domanda: x.id }, "", "Togli " + nome));
+      li.append(tx, t);
+      ul.append(li);
+    }
+    if (ul.childNodes.length) p.append(ul);
+    return p;
+  }
+  function moduloDomanda(m, d) {
+    const f = nodo("div", "studio-c-modulo");
+    const mx = d.massimi || {};
+    const scelta = (id, etichetta, campo, voci, valore) => {
+      const l = nodo("label", "studio-campo", etichetta);
+      l.htmlFor = id;
+      const s = document.createElement("select");
+      s.id = id;
+      s.className = "studio-scelta";
+      s.dataset.campoProva = campo;
+      for (const [val, testo] of voci) {
+        const o = nodo("option", null, testo);
+        o.value = val;
+        s.append(o);
+      }
+      s.value = valore;
+      return [l, s];
+    };
+    const testo = (id, etichetta, campo, max, valore, area) => {
+      const l = nodo("label", "studio-campo", etichetta);
+      l.htmlFor = id;
+      const t = document.createElement(area ? "textarea" : "input");
+      t.id = id;
+      if (area) t.rows = 2;
+      t.maxLength = max;
+      t.className = "studio-c-campo";
+      t.dataset.campoProva = campo;
+      t.value = String(valore || "");
+      return [l, t];
+    };
+    f.append(...scelta("studio-p-tipo", "Tipo", "tipo", Object.keys(TIPI_D).filter((k) => k !== "carta").map((k) => [k, TIPI_D[k]]), m.tipo));
+    f.append(...testo("studio-p-testo", "Domanda", "testo", Number(mx.testo) || 300, m.testo, true));
+    if (m.tipo === "scelta") {
+      for (let i = 0; i < 4; i++) f.append(...testo("studio-p-op" + i, "Opzione " + LETTERE_P[i], "op" + i, Number(mx.opzione) || 120, m["op" + i]));
+      f.append(...scelta("studio-p-giusta", "Quella giusta", "giusta", [0, 1, 2, 3].map((i) => [String(i), LETTERE_P[i]]), String(m.giusta || 0)));
+    } else if (m.tipo === "vero_falso") {
+      f.append(...scelta("studio-p-vf", "La risposta", "attesa", [["vero", "Vero"], ["falso", "Falso"]], m.attesa || "vero"));
+    } else {
+      f.append(...testo("studio-p-attesa", m.tipo === "numero" ? "Risposta (un numero, con l'unità se c'è)" : "Risposta", "attesa",
+        Number(mx.attesa) || 300, m.attesa, m.tipo === "aperta"));
+      if (m.tipo === "parole") f.append(...testo("studio-p-chiave", "Parole chiave, separate da virgole (al più 5)", "chiave", 300, m.chiave));
+    }
+    f.append(...scelta("studio-p-argomento", "Argomento", "argomento", [["", "Nessuno"]].concat(
+      (Array.isArray(d.argomenti) ? d.argomenti : []).map((a) => [String(a.id), String(a.numero) + ". " + String(a.titolo || "")])),
+    m.argomento ? String(m.argomento) : ""));
+    const t = nodo("div", "studio-h-tasti");
+    t.append(tastoProve("Salva", "salva", {}, "studio-h-primo"), tastoProve("Annulla", "annulla", {}));
+    f.append(t);
+    return f;
+  }
+  async function caricaProve(vid, dati) {
+    if (!sch() || !sch().studioProva || !prove) return false;
+    prove.attesa = true;
+    disegnaHome();
+    const r = await sch().studioProva(Object.assign({ verifica: vid }, dati || {}));
+    if (!prove || prove.vid !== vid) return false;
+    prove.attesa = false;
+    if (!r.ok) {
+      prove.esito = String(r.dati.errore || "Non ci sono riuscita: riprova tra poco.");
+      disegnaHome();
+      return false;
+    }
+    prove.dati = r.dati;
+    prove.caricata = Date.now();
+    disegnaHome();
+    return true;
+  }
+  async function suProve(b) {
+    const art = b.closest("[data-verifica]");
+    const vid = Number(art && art.dataset.verifica);
+    let dati = {};
+    try { dati = JSON.parse(b.dataset.dati || "{}"); } catch (e) { return; }
+    const az = b.dataset.prove;
+    if (az === "inizia" || az === "apri" || az === "domande") {
+      prove = { vid, modo: az === "domande" ? "domande" : "prova", dati: null, modulo: null, attesa: false, esito: "", caricata: 0 };
+      vista({ vista: "prove", verifica: vid });
+      const ok = await caricaProve(vid, az === "inizia" ? { azione: "inizia" } : {});
+      if (ok && az !== "domande" && !(prove.dati && prove.dati.aperta)) prove.modo = "domande";
+      disegnaHome();
+      return;
+    }
+    if (!prove || prove.vid !== vid) return;
+    if (az === "chiudi") { prove = null; vista({ vista: "home" }); caricaHome(); return; }
+    if (az === "consegna") {
+      // Le risposte scritte e non ancora mandate, poi la consegna
+      await mandaRisposte(vid);
+      if (await caricaProve(vid, { azione: "consegna", prova: dati.prova })) {
+        prove.modo = "correzione";
+        prove.prova = dati.prova;
+        prove.esito = "Consegnata: ecco la correzione.";
+        disegnaHome();
+        caricaHome();
+      }
+      return;
+    }
+    if (az === "rivedi") {
+      if (await caricaProve(vid, { azione: "rivedi", prova: dati.prova, voce: dati.voce, esito: dati.esito })) {
+        prove.modo = "correzione";
+        prove.prova = dati.prova;
+        prove.esito = "Segnato.";
+        disegnaHome();
+      }
+      return;
+    }
+    if (az === "scrivi") { prove.modulo = { tipo: "scelta", testo: "", attesa: "", giusta: 0, argomento: null }; disegnaHome(); return; }
+    if (az === "annulla") { prove.modulo = null; disegnaHome(); return; }
+    if (az === "salva") {
+      const m = prove.modulo;
+      if (!m) return;
+      const corpo = { azione: "domanda", tipo: m.tipo, testo: String(m.testo || "").trim(), argomento: m.argomento || null,
+        opzioni: [], chiave: [] };
+      if (m.tipo === "scelta") {
+        const ops = [0, 1, 2, 3].map((i) => String(m["op" + i] || "").trim());
+        const g = ops[Number(m.giusta) || 0];
+        corpo.opzioni = ops.filter(Boolean);
+        corpo.attesa = g;
+      } else {
+        corpo.attesa = String(m.attesa || (m.tipo === "vero_falso" ? "vero" : "")).trim();
+        if (m.tipo === "parole") corpo.chiave = String(m.chiave || "").split(",").map((x) => x.trim()).filter(Boolean).slice(0, 5);
+      }
+      if (!corpo.testo || !corpo.attesa) { prove.esito = "Servono la domanda e la risposta."; disegnaHome(); return; }
+      if (await caricaProve(vid, corpo)) { prove.modulo = null; prove.esito = "Scritta: entra nelle prove."; disegnaHome(); caricaHome(); }
+      return;
+    }
+    if (az === "togli_domanda" || az === "rimetti_domanda") { await caricaProve(vid, { azione: az, domanda: dati.domanda }); return; }
+    if (az === "conferma_domande" && await caricaProve(vid, { azione: "conferma_domande" })) {
+      const r = prove.dati.confermate || {};
+      prove.esito = (Number(r.confermate) === 1 ? "Una domanda confermata" : (Number(r.confermate) || 0) + " domande confermate") +
+        (Number(r.da_decidere) ? "; " + Number(r.da_decidere) + " con un avviso restano da decidere." : ".");
+      disegnaHome();
+      return;
+    }
+    if (az === "tipo") {
+      if (await caricaProve(vid, { azione: "tipo", prova_vera: dati.prova_vera, finestra: !!dati.finestra })) { prove.esito = "Segnato."; disegnaHome(); caricaHome(); }
+      return;
+    }
+    if (az === "conclusa") {
+      if (!window.confirm("Segno la verifica come fatta? Le prove aperte si chiudono senza esito.")) return;
+      if (await caricaProve(vid, { azione: "conclusa" })) { prove = null; caricaHome(); }
+    }
+  }
+  // Le risposte della prova: salvate sul server quando cambiano (radio subito, testo all'uscita)
+  const daMandare = {};
+  function suCampoProve(ev) {
+    const t = ev.target;
+    if (!t || !t.dataset || !prove) return;
+    if (t.dataset.campoProva && prove.modulo) {
+      prove.modulo[t.dataset.campoProva] = t.dataset.campoProva === "argomento" ? (Number(t.value) || null) : t.value;
+      if (t.dataset.campoProva === "tipo" && ev.type === "change") disegnaHome();
+      return;
+    }
+    if (!t.dataset.voceProva || !prove.dati || !prove.dati.aperta) return;
+    const n = Number(t.dataset.voceProva);
+    daMandare[n] = t.value;
+    const v = (prove.dati.aperta.voci || []).find((x) => x.n === n);
+    if (v) v.risposta = t.value;
+    if (ev.type === "change") mandaRisposte(prove.vid);
+  }
+  async function mandaRisposte(vid) {
+    const pr = prove && prove.dati && prove.dati.aperta;
+    if (!pr) return;
+    for (const k of Object.keys(daMandare)) {
+      const risposta = daMandare[k];
+      delete daMandare[k];
+      const r = await sch().studioProva({ verifica: vid, azione: "rispondi", prova: pr.id, voce: Number(k), risposta });
+      if (!r.ok && prove) { prove.esito = String(r.dati.errore || "La risposta non è salvata: riprova."); disegnaHome(); return; }
+    }
+  }
+  // ── fine delle prove ──
 
   // ── la mappa concettuale (30/10, passo 7, #247) ──
   // Lo scheletro (proposto finché non lo si conferma), la mia mappa («con il libro»), a memoria;
@@ -1766,6 +2144,7 @@
     const b = ev.target.closest && ev.target.closest("button");
     if (!b || b.disabled) return;
     if (b.dataset.carte) { suCarte(b); return; }
+    if (b.dataset.prove) { suProve(b); return; }
     if (b.dataset.mappa) { suMappa(b); return; }
     if (b.dataset.pagine) { apriMateriali(Number(b.dataset.pagine)); return; }
     if (b.dataset.domande) {
@@ -1857,6 +2236,13 @@
     // I campi di «Scrivi una carta»: restano anche quando la home si ridisegna
     $("studio-home").addEventListener("input", suCampoCarte);
     $("studio-home").addEventListener("change", suCampoCarte);
+    // Le prove (passo 8, #248): le risposte e «Scrivi una domanda»; il tempo che resta
+    $("studio-home").addEventListener("input", suCampoProve);
+    $("studio-home").addEventListener("change", suCampoProve);
+    setInterval(() => {
+      const el = document.querySelector(".studio-p-tempo");
+      if (el && prove && prove.dati && prove.dati.aperta) metti(el, restano(prove.dati.aperta));
+    }, 15000);
     // La mappa (passo 7, #247): i campi, il tocco e il trascinamento dei concetti, Invio
     $("studio-home").addEventListener("input", suCampoMappa);
     $("studio-home").addEventListener("change", suCampoMappa);
@@ -1918,6 +2304,9 @@
       return { aperta: st.aperta, verifiche: st.verifiche.map((v) => v.id), invio: st.invio,
         home: home.dati ? { verifiche: (home.dati.verifiche || []).map((v) => v.id), sessione: home.dati.sessione,
           tocchi: !!home.dati.tocchi } : null, vista: vistaUltima,
+        // Le prove (passo 8, #248): tutto ciò che la pagina ha, così una prova vede che le
+        // risposte attese non ci sono prima della consegna
+        prove: prove ? { vid: prove.vid, modo: prove.modo, esito: prove.esito, dati: prove.dati } : null,
         carte: carte ? { vid: carte.vid, modo: carte.modo, mostra: carte.mostra, esito: carte.esito,
           da_ripassare: carte.dati ? (carte.dati.da_ripassare || []).slice() : [],
           carte: carte.dati ? (carte.dati.carte || []).map((c) => ({ id: c.id, stato: c.stato, scatola: c.scatola })) : [] } : null,

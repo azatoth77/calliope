@@ -1274,6 +1274,20 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
 .studio-c-modulo select { font: inherit; min-height: 2.6rem; padding: 0.3rem 0.6rem; border-radius: 0.6rem;
   border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo); max-width: 100%; }
 .studio-c-voce .studio-testo b { overflow-wrap: anywhere; }
+/* Le prove dello Studio (31/10, passo 8, #248, studio.js): la verifica finta con le risposte, la
+   correzione con l'esito sempre scritto a parole (il colore è solo un aiuto in più) */
+.studio-p-prova, .studio-p-correzione { display: flex; flex-direction: column; gap: 0.55rem; }
+.studio-p-voci { margin: 0; padding-left: 1.4rem; display: flex; flex-direction: column; gap: 0.8rem; }
+.studio-p-voce { display: flex; flex-direction: column; gap: 0.35rem; min-width: 0; }
+.studio-p-scelte { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.3rem; min-width: 0; }
+.studio-p-opzione { display: flex; align-items: center; gap: 0.6rem; min-height: 2.75rem; padding: 0 0.6rem;
+  border-radius: 0.6rem; border: 1px solid var(--accento-bordo); overflow-wrap: anywhere; cursor: pointer; }
+.studio-p-opzione input { width: 1.25rem; height: 1.25rem; flex: none; }
+.studio-p-opzione span { min-width: 0; }
+.studio-p-esito-voce { font-weight: 600; color: var(--testo); }
+.studio-p-giusto .studio-p-esito-voce { color: var(--accento); }
+.studio-p-sbagliato .studio-p-esito-voce, .studio-p-da_rivedere .studio-p-esito-voce { color: var(--allarme); }
+.studio-p-tempo { font-weight: 600; }
 /* La mappa concettuale dello Studio (30/10, passo 7, #247, studio.js): la mappa in SVG (il testo dei
    concetti in <text>, mai HTML) e la vista a elenco, equivalente; niente si fa solo trascinando.
    Giusta blu, sbagliata arancio (si distinguono anche per luminosità), sempre con la parola */

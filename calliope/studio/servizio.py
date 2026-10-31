@@ -2279,7 +2279,8 @@ class Studio(Mappe, Prove):
     # ── la vista aperta nei dati del turno (30/10, passo 4.5; progetto § 0, punto 2) ──
     VISTE = {"home": "la home dello Studio", "piano": "il piano", "argomenti": "gli argomenti",
              "pagine": "le pagine", "pagina": "una pagina", "sessione": "la sessione di oggi",
-             "carte": "le carte", "mappa": "la mappa concettuale"}
+             "carte": "le carte", "mappa": "la mappa concettuale",
+             "prove": "le prove (la verifica finta e le domande)"}
 
     def riga_vista(self, chi, vista: dict | None) -> str:
         """La riga per i dati del turno quando una pagina dello Studio è aperta sullo schermo
