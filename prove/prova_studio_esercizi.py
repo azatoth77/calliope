@@ -206,8 +206,8 @@ st.close()
 st = PT.studio(PT.cfg_nuova("attiva.db", studio_esercizi="attiva"))
 vid, _ = PT.carica(st, LEO)
 lt, cli = lettore(st)
-verifica("schema 13 con studio_esercizi, nelle tabelle dello Studio e della conservazione",
-         D.versione_schema(st.dati.db) == 13 == len(D.MIGRAZIONI)
+verifica("schema 14 con studio_esercizi, nelle tabelle dello Studio e della conservazione",
+         D.versione_schema(st.dati.db) == 14 == len(D.MIGRAZIONI)
          and "studio_esercizi" in D.TABELLE
          and "studio_esercizi" in __import__("calliope.conserva",
                                              fromlist=["x"]).TABELLE_STUDIO)

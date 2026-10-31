@@ -2151,3 +2151,19 @@ Nello stesso giro:
 pagina vale per il nuovo proprietario: il dispositivo è suo, e ogni richiesta legge la riga di adesso
 (`_schermo_sessione`), quindi l'elemento in coda nasce con il proprietario nuovo. Ciò che la pagina
 mostrava prima lo toglie il ricaricamento.
+
+## «Aggiungi materiali» dello Studio (31/10, issue #298, ramo `issue-298-studio-importa`)
+
+Sulla carta di una verifica della home dello Studio, sul telefono e sul PC personale, la sezione
+«Aggiungi materiali» (`schermi/pagina/studio_importa.js`, una pagina sua per non toccare il resto di
+`studio.js`, che la mette con `window.CalliopeImporta.sezione`): «Scegli i file» è un tasto vero
+(fuoco e tastiera) che apre il selettore nascosto (`accept` coi formati), anche più file; ogni file
+parte da solo (`POST /api/studio/importa`, byte nudi come `/api/studio/pagina`) e la scheda si
+rilegge ogni 2 s finché un'importazione è viva (`POST /api/studio/importazioni`, 90 letture al
+minuto, un conto suo), ridisegnando solo la sua sezione. Nomi dei file e motivi arrivano dal server
+come dati: sempre `textContent` (la prova manda un file col nome in HTML). Due endpoint nuovi
+documentati in testa a `schermi/server.py`; la scheda e i tetti nel documento
+[studio](studio.md). Cache del service worker `calliope-telefono-pagina-v38` (era v37, delle mini-app #297), con
+`studio_importa.js`; `PAGINA_VERSIONE` uguale. Prova: `prova_studio_importa_pagina.py` (390×844,
+320×693 col testo al 125 %, il PC). La condivisione dal telefono (share target della PWA) è la terza
+parte della #298: oggi il manifest non lo dichiara.

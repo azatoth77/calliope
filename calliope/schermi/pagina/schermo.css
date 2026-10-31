@@ -1259,6 +1259,23 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
 .studio-h-s-saltato, .studio-h-s-mancato, .studio-h-s-iniziato { border-left: 3px solid var(--tenue); }
 .studio-h-sessioni summary:focus-visible, .studio-h-piano summary:focus-visible, .studio-h-tasto:focus-visible, .studio-h-chip:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }
 .studio-home .studio-avviso { display: block; font-size: 0.88rem; color: var(--allarme); }
+/* «Aggiungi materiali» dello Studio (31/10, #298, studio_importa.js): una scheda per importazione
+   con le fasi e i conti; i nomi dei file vanno a capo sempre */
+.studio-i-voce { align-items: flex-start; padding: 0.6rem 0.7rem; border-radius: 0.8rem; background: var(--sfondo); }
+.studio-i-nome { overflow-wrap: anywhere; word-break: break-word; }
+.studio-i-fasi { list-style: none; margin: 0.3rem 0 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.studio-i-fase { display: flex; align-items: baseline; gap: 0.4rem; font-size: 0.88rem; color: var(--tenue); min-width: 0; }
+.studio-i-segno { flex: none; width: 1rem; text-align: center; font-weight: 700; }
+.studio-i-f-fatta { color: var(--testo); }
+.studio-i-f-fatta .studio-i-segno { color: var(--ok); }
+.studio-i-f-in_corso { color: var(--accento-chiaro); }
+.studio-i-righe summary { cursor: pointer; min-height: 2.75rem; display: flex; align-items: center;
+  color: var(--accento-chiaro); font-weight: 600; }
+.studio-i-righe summary:focus-visible { outline: 2px solid var(--accento); outline-offset: 2px; }
+.studio-i-riga { font-size: 0.88rem; overflow-wrap: anywhere; }
+.studio-i-riga .studio-avviso { display: inline; }
+.studio-i-errore { border-left: 3px solid var(--allarme); }
+.studio-i-finita { border-left: 3px solid var(--ok); }
 /* Le carte dello Studio (30/10, passo 6, #246, studio.js): una carta per volta, la risposta dopo
    «Mostra la risposta», i tre esiti; l'elenco con «Scrivi una carta». Il testo va a capo sempre */
 .studio-c-ripasso, .studio-c-elenco, .studio-c-modulo { display: flex; flex-direction: column; gap: 0.55rem; }

@@ -66,7 +66,7 @@ Tabelle (versione 1):
   guadagnate, gli interruttori dei premi di una persona e i duelli fra persone di casa
   (`studio/premi.py`). La serie di giorni non ha una tabella: la calcola il codice dai dati che
   ci sono (eventi, tentativi, prove);
-- `studio_esercizi` (versione 13, 31/10, issue #278): gli esercizi guidati, un problema portato
+- `studio_esercizi` (versione 14, 31/10, issue #278): gli esercizi guidati, un problema portato
   dalla persona (una foto o il testo scritto) con i passi della guida (`studio/esercizi.py`,
   `studio/esercizi_genera.py`). Il testo del problema e i passi sono un dato (sullo schermo con
   textContent, al modello in busta, mai le risposte attese).
@@ -94,7 +94,7 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_esercizi", "studio_pratica", "studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
+TABELLE = ("studio_esercizi", "studio_importazioni", "studio_pratica","studio_premi", "studio_duelli", "studio_stelle", "studio_indicazioni",
            "studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
            "studio_misure",
            "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
@@ -464,7 +464,44 @@ def _v12(db: sqlite3.Connection):
 
 
 def _v13(db: sqlite3.Connection):
-    """31/10, issue #278: gli esercizi guidati (`studio/esercizi.py`). `persona` è di chi è la
+    """31/10, issue #298: l'importazione dei materiali scaricati (`studio/importa.py`).
+    - `studio_importazioni`: un file o un archivio mandato dallo schermo personale per una
+      verifica. `persona` è di chi è la verifica, `chi` chi l'ha mandato (lei o il tutore);
+      `file` il file arrivato nella cartella dello Studio (col nome del server, tolto a lavoro
+      finito); `nome` il nome del file arrivato, un dato (sullo schermo con textContent, mai al
+      modello); `stato` in_coda, in_corso, fermata, finita, errore; `prossima` la voce
+      dell'archivio da cui ripartire; `conti` (JSON di numeri) e `righe` (JSON: le voci non lette
+      col nome ripulito e il motivo scritto dal codice);
+    - `studio_materiali.importazione` e `voce`: l'importazione e la voce dell'archivio da cui
+      viene un materiale."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_importazioni (
+        id INTEGER PRIMARY KEY,
+        verifica INTEGER NOT NULL,
+        persona TEXT NOT NULL,
+        chi TEXT,
+        file TEXT,
+        nome TEXT,
+        tipo TEXT,
+        stato TEXT NOT NULL DEFAULT 'in_coda',
+        prossima INTEGER NOT NULL DEFAULT 0,
+        voci INTEGER,
+        conti TEXT NOT NULL DEFAULT '{}',
+        righe TEXT NOT NULL DEFAULT '[]',
+        motivo TEXT,
+        creata TEXT NOT NULL,
+        aggiornata TEXT,
+        fine TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_importazioni_verifica "
+               "ON studio_importazioni(verifica)")
+    db.execute("ALTER TABLE studio_materiali ADD COLUMN importazione INTEGER")
+    # La voce dell'archivio da cui viene il materiale: una voce si scrive una volta sola anche
+    # se un riavvio cade fra le sue pagine e la prossima voce (revisione della PR #364)
+    db.execute("ALTER TABLE studio_materiali ADD COLUMN voce INTEGER")
+
+
+def _v14(db: sqlite3.Connection):
+    """31/10, issue #278 (versione 14, dopo l'importazione della #298): gli esercizi guidati
+    (`studio/esercizi.py`). `persona` è di chi è la
     verifica; `testo` il problema letto o scritto (un dato), `file` la foto (dentro
     `cartella/pagine/<verifica>/`); `passi` i passi della guida in JSON (domanda, tipo, risposta
     attesa, indizio: un dato), `risultato` il risultato finale proposto dal lettore, solo per la
@@ -493,7 +530,7 @@ def _v13(db: sqlite3.Connection):
     db.execute("CREATE INDEX IF NOT EXISTS studio_esercizi_persona ON studio_esercizi(persona)")
 
 
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13]
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13, _v14]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")
@@ -501,6 +538,7 @@ CON_ORFANI = ("studio_eventi", "studio_tentativi", "studio_pratica")
 # non averle
 NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
          "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_premi",
+         "studio_importazioni",
          "studio_esercizi")
 
 
@@ -601,7 +639,12 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
             file += [r[0] for r in db.execute(
                 "SELECT file FROM studio_esercizi WHERE verifica = ? AND file IS NOT NULL",
                 (vid,))]
-        for t in ("studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
+        # I file arrivati delle importazioni ancora da finire (versione 13, #298)
+        if _tabella(db, "studio_importazioni"):
+            file += [r[0] for r in db.execute(
+                "SELECT file FROM studio_importazioni WHERE verifica = ? AND file IS NOT NULL",
+                (vid,))]
+        for t in ("studio_importazioni", "studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
                   "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
                   "studio_indicazioni", "studio_stelle", "studio_duelli", "studio_esercizi",
                   *CON_ORFANI):
@@ -741,7 +784,9 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
                                 (scadute_prima.isoformat(),)).rowcount or 0
         # Le mappe senza la loro verifica (una corsa fra una scrittura e una cancellazione, passo
         # 7): non hanno un giorno, e senza la verifica non servono a niente; via sempre
-        for t in ("studio_mappe", "studio_domande", "studio_prove"):
+        # (le importazioni, #298, dopo: i loro file arrivati sono già nella lista sopra solo per
+        # le verifiche tolte; quelle orfane li perdono nella rotazione degli orfani)
+        for t in ("studio_mappe", "studio_domande", "studio_prove", "studio_importazioni"):
             # Le domande e le prove (passo 8, #248) come le mappe
             if _tabella(db, t):
                 db.execute(f"DELETE FROM {t} WHERE {orfani}")
@@ -827,6 +872,9 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
         if _tabella(db, "studio_esercizi"):
             conosciuti |= {r[0] for r in db.execute(
                 "SELECT file FROM studio_esercizi WHERE file IS NOT NULL")}
+        if _tabella(db, "studio_importazioni"):
+            conosciuti |= {r[0] for r in db.execute(
+                "SELECT file FROM studio_importazioni WHERE file IS NOT NULL")}
         out["orfani"] = togli_orfani(cartella, conosciuti, ORFANI_DOPO_S)
         out["file"] += out["orfani"]
     return out

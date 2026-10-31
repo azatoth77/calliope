@@ -1073,6 +1073,29 @@ studio:
   # con lo Studio. «ombra» calcola le proposte e le conta nel registro senza mostrarle; «spenta»
   # niente
   studio_libreria: attiva
+  # L'importazione dei materiali scaricati (31/10, issue #298, studio/importa.py): un file o un
+  # archivio ZIP dallo schermo personale («Aggiungi materiali» sulla verifica) diventa pagine
+  # della verifica, con un lavoro di sfondo e le fasi sullo schermo. PDF e immagini come le
+  # pagine della 4.2; Word, PowerPoint, Excel, OpenDocument, testo, Markdown, CSV e HTML in
+  # pagine di testo già lette. Il tipo dai byte, mai dall'estensione. Acceso di serie quando c'è
+  # lo Studio; false lo spegne senza spegnere lo Studio
+  studio_importa: true
+  # Un file mandato al più così grande (un archivio ZIP compreso)
+  studio_importa_max_mb: 100.0
+  # Le voci di un archivio al più (oltre: rifiutato intero)
+  studio_importa_file_max: 500
+  # I byte decompressi di una voce e di tutto l'archivio al più, contati leggendo e non quelli
+  # dichiarati (bomba di decompressione): oltre, le voci restano «non lette»
+  studio_importa_voce_max_mb: 30.0
+  studio_importa_totale_max_mb: 300.0
+  # Il sottoprocesso che legge i file dà un segno di vita a ogni voce e a ogni pagina di un PDF:
+  # oltre tanti secondi senza la voce è «troppo pesante» e si riparte dalla successiva; oltre
+  # il tempo massimo l'importazione si ferma (si riprende a mano)
+  studio_importa_passo_s: 30.0
+  studio_importa_tempo_max_s: 1800.0
+  # Le importazioni vive (in coda, in corso o fermate) di una persona al più: ogni file scelto
+  # insieme è un'importazione
+  studio_importa_coda: 10
   # Gli esercizi guidati (31/10, issue #278, calliope/studio/esercizi.py): un problema portato
   # dalla persona (una foto, «Foto di un problema», o il testo scritto) dentro una sua verifica;
   # il lettore delle pagine legge la foto e chiede a qwen3.6 una guida a passi (domande guida e

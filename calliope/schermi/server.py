@@ -148,6 +148,14 @@ Indirizzi:
                                  `studio_modo: spento` niente (404), in ombra solo chi amministra;
                                  `Content-Length` obbligatorio (411); senza sessione la risposta
                                  subito e la connessione chiusa, senza leggere il corpo (PR #312)
+  POST /api/studio/importa      «X-Calliope-Sessione», byte nudi (octet-stream), {verifica, nome}
+                                 in «X-Calliope-Studio»: un file o un archivio ZIP da importare
+                                 nella verifica (31/10, #298, studio/importa.py), scritto su disco
+                                 a pezzi e trasformato in pagine dal lavoro di sfondo; come
+                                 /api/studio/pagina per sessione, orari, permessi e rifiuti
+  POST /api/studio/importazioni «X-Calliope-Sessione», {verifica, azione?, importazione?} → le
+                                 importazioni della verifica con le fasi e i conti; ferma,
+                                 riprendi, togli
   GET  /satellite              il comando per un PC nuovo come satellite (satellite/web.py)
   /telefono/…                    la web app del telefono (telefono.py): pagina, modelli e il
                                  WebSocket del protocollo dei satelliti
@@ -338,6 +346,12 @@ STUDIO_SCARTA_S = 12.0
 STUDIO_LEGGI_S = 120.0
 # PDF divisi insieme al più (ognuno è un sottoprocesso; seconda revisione della PR #312)
 STUDIO_PDF_INSIEME = 1
+# /api/studio/importa (31/10, #298): gli invii al minuto per schermo e il tempo massimo per
+# leggere un file (100 MB in 15 minuti: ~1 Mbit/s)
+STUDIO_IMPORTA_AL_MINUTO = 20
+STUDIO_IMPORTA_LEGGI_S = 900.0
+# /api/studio/importazioni: la scheda si rilegge ogni 2 s mentre lavora (più le azioni)
+STUDIO_IMPORTAZIONI_AL_MINUTO = 90
 
 
 def crea_app(hub: Schermi) -> Starlette:
@@ -2680,6 +2694,193 @@ def crea_app(hub: Schermi) -> Starlette:
             return _json({"errore": "Non riesco a salvare la pagina."}, 503)
         return _json({"ok": True, **out})
 
+    # ── lo Studio: l'importazione dei materiali scaricati (31/10, #298, studio/importa.py) ──
+    invii_importa: dict[int, list[float]] = {}
+    letture_importa: dict[int, list[float]] = {}
+
+    async def studio_importa(request: Request):
+        """Vedi `_studio_importa`. Come `studio_pagina` (PR #312): senza sessione, senza
+        `Content-Length` o oltre il tetto la risposta subito e la connessione chiusa; dopo, un
+        rifiuto butta il corpo dichiarato al più per `STUDIO_SCARTA_S`."""
+        request.state.studio_letto = False
+        request.state.studio_scarta = False
+        risposta = await _studio_importa(request)
+        if request.state.studio_scarta and not request.state.studio_letto:
+            async def scarta():
+                async for _pezzo in request.stream():
+                    pass
+            try:
+                await asyncio.wait_for(scarta(), STUDIO_SCARTA_S)
+            except Exception:  # noqa: BLE001 — lento o andato via: si chiude e basta
+                risposta.headers["Connection"] = "close"
+        return risposta
+
+    async def _studio_importa(request: Request):
+        """Un file o un archivio ZIP da importare in una verifica («Aggiungi materiali»), nei
+        byte nudi (application/octet-stream); i dati in «X-Calliope-Studio» ({verifica, nome}).
+        Fuori dalla conversazione: il file va su disco a pezzi (col nome del server, nella
+        cartella delle pagine della verifica) e diventa un'importazione «in_coda» che il lavoro
+        di sfondo trasforma in pagine. Nell'ordine: sessione dello schermo personale (in HTTPS) e
+        invii al minuto; lo Studio acceso e `studio_importa`; la lunghezza dichiarata; gli orari
+        del minore che manda; la verifica (sua o del suo minore, in bozza o aperta); le
+        importazioni vive della persona; poi il corpo, al più `STUDIO_IMPORTA_LEGGI_S`."""
+        schermo, errore = schermo_personale(request, invii_importa, STUDIO_IMPORTA_AL_MINUTO,
+                                            TROPPE_PAGINE)
+        if errore is not None:
+            errore.headers["Connection"] = "close"
+            return errore
+        max_b = int(float(getattr(hub.cfg, "studio_importa_max_mb", 100.0) or 100.0) * 1_000_000)
+        try:
+            dichiarati = int(request.headers.get("content-length", ""))
+        except ValueError:
+            dichiarati = -1
+        if dichiarati < 0:
+            return _json({"errore": "serve la lunghezza del file"}, 411, {"Connection": "close"})
+        if dichiarati > max_b:
+            return _json({"errore": f"file troppo grande (al più {max_b // 1_000_000} MB)"}, 413,
+                         {"Connection": "close"})
+        if dichiarati == 0:
+            return _json({"errore": "file vuoto"}, 400, {"Connection": "close"})
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            errore.headers["Connection"] = "close"
+            return errore
+        if not st.importa_acceso():
+            return _json({"errore": "L'importazione dei materiali è spenta."}, 404,
+                         {"Connection": "close"})
+        request.state.studio_scarta = True
+        tipo = request.headers.get("content-type", "").split(";")[0].strip().lower()
+        if tipo != "application/octet-stream":
+            return _json({"errore": "serve application/octet-stream"}, 415)
+        meta = meta_studio(request)
+        if meta is None:
+            return _json({"errore": "dati dell'invio non validi"}, 400)
+        from .. import minori
+        from ..studio import NonPermesso, NonTrovata, TroppePagine, VerificaChiusa
+        from ..studio.importa import TroppeImportazioni
+        orario = minori.fuori_orario(prof)
+        if orario:
+            return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                          "codice": "fuori_orario"}, 403)
+        try:
+            v = await asyncio.to_thread(st.verifica_per_pagine, prof, meta["verifica"])
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except VerificaChiusa:
+            return _json({"errore": "Questa verifica è chiusa: non prende materiali nuovi."}, 409)
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        coda = int(getattr(hub.cfg, "studio_importa_coda", 10) or 10)
+        if await asyncio.to_thread(st.importazioni_vive, v["persona"]) >= coda:
+            return _json({"errore": f"Ci sono già {coda} importazioni da finire: aspetta che "
+                          "finiscano, o togline una."}, 429)
+        massimo = int(getattr(hub.cfg, "studio_pagine_max", 80) or 80)
+        if v["n_pagine"] >= massimo:
+            return _json({"errore": f"Questa verifica ha già {massimo} pagine."}, 413)
+        from ..studio import pagine as PG
+        from ..studio.dati import cartella_di, togli_file
+        cartella = cartella_di(hub.cfg)
+        try:
+            rel, f = await asyncio.to_thread(PG.apri_nuovo, cartella, v["id"], "imp")
+        except (OSError, PermissionError, ValueError):
+            return _json({"errore": "Non riesco a salvare il file."}, 503)
+        request.state.studio_letto = True
+        letti = 0
+        buf = bytearray()
+
+        async def leggi():
+            nonlocal letti
+            async for pezzo in request.stream():
+                letti += len(pezzo)
+                if letti > dichiarati:
+                    return False
+                buf.extend(pezzo)
+                if len(buf) >= 1 << 20:
+                    blocco = bytes(buf)
+                    buf.clear()
+                    await asyncio.to_thread(f.write, blocco)
+            if buf:
+                await asyncio.to_thread(f.write, bytes(buf))
+            return True
+        ok, risposta = False, None
+        try:
+            if not await asyncio.wait_for(leggi(), STUDIO_IMPORTA_LEGGI_S):
+                risposta = _json({"errore": "file troppo grande"}, 413, {"Connection": "close"})
+            elif letti != dichiarati:
+                risposta = _json({"errore": "invio interrotto: riprova"}, 400)
+            else:
+                ok = True
+        except asyncio.TimeoutError:
+            risposta = _json({"errore": "invio troppo lento: riprova"}, 408, {"Connection": "close"})
+        except OSError as e:
+            hub.log(f"[STUDIO] importazione non salvata: {type(e).__name__}")
+            risposta = _json({"errore": "Non riesco a salvare il file."}, 503)
+        finally:
+            f.close()
+            if not ok:
+                togli_file([rel], cartella)
+        if not ok:
+            return risposta
+        try:
+            iid = await asyncio.to_thread(st.registra_importazione, prof, v["id"], rel,
+                                          meta["nome"] or "file")
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except VerificaChiusa:
+            return _json({"errore": "Questa verifica è chiusa: non prende materiali nuovi."}, 409)
+        except TroppeImportazioni as e:
+            return _json({"errore": f"Ci sono già {e.massimo} importazioni da finire: aspetta "
+                          "che finiscano, o togline una."}, 429)
+        except TroppePagine as e:
+            return _json({"errore": f"Questa verifica ha già {e.massimo} pagine."}, 413)
+        except (OSError, PermissionError):
+            return _json({"errore": "Non riesco a salvare il file."}, 503)
+        return _json({"ok": True, "importazione": iid, "verifica": v["id"]})
+
+    async def studio_importazioni(request: Request):
+        """{verifica, azione?, importazione?} → le importazioni della verifica con le fasi e i
+        conti (studio/importa.py, `Importazioni.importazioni`); «ferma», «riprendi», «togli».
+        Solo da uno schermo personale, coi permessi dello Studio (sua o del suo minore); le azioni
+        dentro gli orari del minore che le fa. Un conto suo delle letture: la scheda si rilegge
+        ogni 2 s finché un'importazione è viva."""
+        schermo, errore = schermo_personale(request, letture_importa,
+                                            STUDIO_IMPORTAZIONI_AL_MINUTO, TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 512)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        if not isinstance(dati, dict):
+            return _json({"errore": "dati non validi"}, 400)
+        vid, iid, az = dati.get("verifica"), dati.get("importazione"), dati.get("azione")
+        if not isinstance(vid, int) or isinstance(vid, bool) or vid < 1:
+            return _json({"errore": "manca la verifica"}, 400)
+        from ..studio import NonPermesso, NonTrovata
+        if az is not None:
+            if az not in ("ferma", "riprendi", "togli") or not isinstance(iid, int) or \
+                    isinstance(iid, bool) or iid < 1:
+                return _json({"errore": "azione non valida"}, 400)
+            from .. import minori
+            orario = minori.fuori_orario(prof)
+            if orario:
+                return _json({"errore": minori.frase_fuori_orario(prof, orario),
+                              "codice": "fuori_orario"}, 403)
+            try:
+                await asyncio.to_thread(st.azione_importazione, prof, vid, iid, az)
+            except (NonTrovata, NonPermesso):
+                return _json({"errore": "Questa importazione non c'è."}, 404)
+            except PermissionError:
+                return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        try:
+            out = await asyncio.to_thread(st.importazioni, prof, vid)
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        out["max_mb"] = float(getattr(hub.cfg, "studio_importa_max_mb", 100.0) or 100.0)
+        return _json(out)
+
     app = Starlette(routes=[
         Route("/", file("index.html", "text/html; charset=utf-8")),
         Route("/schermo.css", file("schermo.css", "text/css; charset=utf-8")),
@@ -2724,6 +2925,8 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/studio/premi", studio_premi, methods=["POST"]),
         Route("/api/studio/duello", studio_duello, methods=["POST"]),
         Route("/api/studio/pagina", studio_pagina, methods=["POST"]),
+        Route("/api/studio/importa", studio_importa, methods=["POST"]),
+        Route("/api/studio/importazioni", studio_importazioni, methods=["POST"]),
         Route("/api/studio/esercizio", studio_esercizio, methods=["POST"]),
         Route("/esercizio.js", file("esercizio.js", "text/javascript; charset=utf-8")),
         # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC
@@ -2731,6 +2934,8 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/studio.js", file("studio.js", "text/javascript; charset=utf-8")),
         # La libreria dello Studio (31/10, #297)
         Route("/libreria.js", file("libreria.js", "text/javascript; charset=utf-8")),
+        # «Aggiungi materiali» dello Studio (31/10, #298), del telefono e del PC
+        Route("/studio_importa.js", file("studio_importa.js", "text/javascript; charset=utf-8")),
         *telefono.rotte(hub),
         # /satellite: il comando per far diventare satellite un PC nuovo (03/10)
         *satellite_web.rotte(hub),

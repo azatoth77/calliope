@@ -568,8 +568,8 @@ def n_di(t, s=s5):
     return s.dati.uno(f"SELECT COUNT(*) AS n FROM {t}")["n"]
 
 
-verifica("lo schema alla versione 13 (dagli esercizi guidati, #278), domande e prove fra le tabelle e nella conservazione",
-         D.versione_schema(s5.dati.db) == len(D.MIGRAZIONI) == 13
+verifica("lo schema alla versione 14 (dagli esercizi guidati, #278), domande e prove fra le tabelle e nella conservazione",
+         D.versione_schema(s5.dati.db) == len(D.MIGRAZIONI) == 14
          and {"studio_domande", "studio_prove"} <= set(D.TABELLE)
          and {"studio_domande", "studio_prove"} <= set(
              __import__("calliope.conserva", fromlist=["x"]).TABELLE_STUDIO))
