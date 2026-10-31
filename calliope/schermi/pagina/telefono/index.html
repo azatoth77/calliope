@@ -25,6 +25,7 @@
 <script src="/libreria.js" defer></script>
 <script src="/studio_importa.js" defer></script>
 <script src="/esercizio.js" defer></script>
+<script src="/telefono/condividi.js" defer></script>
 <script src="/telefono/telefono.js" type="module"></script>
 </head>
 <body class="telefono" data-incorporata="1" data-carosello="1" data-chiave="calliope.telefono.schermo">
@@ -96,6 +97,22 @@
     <section id="sez-cose" class="sezione" data-sezione="cose" aria-labelledby="sez-titolo" hidden>
       <!-- Le tessere e le pagine delle raccolte (28/10, passo 2a: POST /api/raccolte, sezioni.js) -->
       <nav id="tessere" class="tessere" aria-label="Le mie raccolte" hidden></nav>
+      <!-- I file condivisi con Calliope da un'altra app (31/10, #298 parte 3: share target della
+           PWA, sw.js e condividi.js): la persona sceglie la verifica, poi la stessa importazione
+           di «Aggiungi materiali» (POST /api/studio/importa) -->
+      <section id="condividi" class="condividi" aria-labelledby="condividi-titolo" hidden>
+        <h2 id="condividi-titolo" class="gruppo" tabindex="-1">Condiviso con Calliope</h2>
+        <p id="condividi-nota" class="pagina-nota"></p>
+        <ul id="condividi-file" class="condividi-file"></ul>
+        <label id="condividi-etichetta" class="studio-campo" for="condividi-verifica" hidden>In quale verifica?</label>
+        <select id="condividi-verifica" class="studio-scelta" hidden></select>
+        <div class="studio-h-tasti">
+          <button id="condividi-manda" type="button" class="tasto studio-h-tasto studio-h-primo" hidden disabled>Aggiungi ai materiali</button>
+          <button id="condividi-studio" type="button" class="tasto studio-h-tasto" hidden>Apri lo Studio</button>
+          <button id="condividi-annulla" type="button" class="tasto studio-h-tasto">Annulla</button>
+        </div>
+        <p id="condividi-esito" class="pagina-esito" role="status"></p>
+      </section>
       <div id="pagina-racc" class="pagina-racc" hidden>
         <div class="pagina-testa">
           <button id="pagina-indietro" type="button" class="tasto pagina-indietro"><span aria-hidden="true">‹ </span>Le mie cose</button>

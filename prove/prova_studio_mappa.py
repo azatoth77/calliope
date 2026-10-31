@@ -869,7 +869,7 @@ verifica("pagina: il testo dei concetti solo con textContent (niente innerHTML n
          "innerHTML" not in pezzo and "insertAdjacentHTML" not in pezzo
          and "sp.textContent = riga" in pezzo and "outerHTML" not in pezzo)
 sw = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "sw.js").read_text("utf-8")
-verifica("il service worker alla v39 (dagli esercizi guidati, #278, dopo l'importazione)", "calliope-telefono-pagina-v39" in sw)
+verifica("il service worker alla v40 (la condivisione, #298 parte 3, dopo gli esercizi guidati)", "calliope-telefono-pagina-v40" in sw)
 
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
 sys.exit(1 if errori else 0)

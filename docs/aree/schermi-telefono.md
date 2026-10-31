@@ -2166,4 +2166,15 @@ documentati in testa a `schermi/server.py`; la scheda e i tetti nel documento
 [studio](studio.md). Cache del service worker `calliope-telefono-pagina-v38` (era v37, delle mini-app #297), con
 `studio_importa.js`; `PAGINA_VERSIONE` uguale. Prova: `prova_studio_importa_pagina.py` (390×844,
 320×693 col testo al 125 %, il PC). La condivisione dal telefono (share target della PWA) è la terza
-parte della #298: oggi il manifest non lo dichiara.
+parte della #298: oggi il manifest non lo dichiara. *[storico fino al 31/10 sera: ora lo dichiara, sezione sotto]*
+
+## «Condividi» verso Calliope (31/10, issue #298 parte 3, ramo `issue-298-studio-condividi`)
+
+Il manifest ha uno `share_target` (POST multipart a `/telefono/condividi`, i formati
+dell'importazione); il service worker prende il POST, tiene i file in IndexedDB sul telefono e apre
+«/telefono/?condividi=1#/cose», dove `telefono/condividi.js` mostra «Condiviso con Calliope», fa
+scegliere la verifica e manda i file con `studioImporta` (`POST /api/studio/importa`). Il server ha
+solo un ripiego: `POST /telefono/condividi` arrivato a lui torna 303 a «?condividi=0» senza leggere
+il corpo. Solo Android con la PWA installata; iOS no. Cache del service worker
+`calliope-telefono-pagina-v40` (era v39, degli esercizi guidati #278), con `condividi.js`; `PAGINA_VERSIONE` uguale. Dettagli e
+Family Link nel documento [studio](studio.md).
