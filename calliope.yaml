@@ -1066,6 +1066,13 @@ studio:
   # conoscenti e mai in classifica; non danno premi né tentativi. Spenti di serie: con true li
   # usano gli adulti, e per un minore li accende il suo tutore dalla vista del tutore
   studio_duelli: false
+  # La libreria dello Studio (31/10, #297, calliope/studio/libreria/): schede degli argomenti e
+  # mazzi di carte scritti e rivisti da noi, nel repository, che il codice sceglie dagli argomenti
+  # della verifica (e dalla padronanza, se mostrata): la sezione «Dalla libreria» della home e la
+  # lettura «libreria» del tool studio. Dati fidati e niente modello: per questo attiva di serie
+  # con lo Studio. «ombra» calcola le proposte e le conta nel registro senza mostrarle; «spenta»
+  # niente
+  studio_libreria: attiva
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

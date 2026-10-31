@@ -545,7 +545,11 @@ for frase, testo, atteso in (
         ("Calliope, se non capisce, con Leo insisti sulle frazioni", "Insisti sulle frazioni",
          False),
         ("se puoi farlo con Leo insisti sulle frazioni", "Insisti sulle frazioni", False),
-        ("Calliope, se vuoi, con Leo ripassa solo le frazioni", "Ripassa le frazioni", False)):
+        ("Calliope, se vuoi, con Leo ripassa solo le frazioni", "Ripassa le frazioni", False),
+        # #320 (revisione della PR #358): dopo «solo» o «soltanto» il «se puoi» è una condizione
+        ("Dagli la soluzione solo se puoi", "dagli solo la soluzione", False),
+        ("Dagli la soluzione soltanto se riesci.", "dagli soltanto la soluzione", False),
+        ("Dagli la soluzione solo se puoi", "dagli la soluzione solo se puoi", True)):
     c_ = types.SimpleNamespace(user_text=frase)
     verifica(f"detta dal tutore? «{testo}» ← «{frase}»: {atteso}",
              TS._detta_dal_tutore(c_, testo) is atteso)

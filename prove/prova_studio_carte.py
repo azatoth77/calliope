@@ -200,6 +200,24 @@ verifica("#361, contrari dei numeri: «12» non dentro «112», «5» non dentro
          and not C.risposta_giusta(C.chiusa("5"), "15 credo")
          and not C.risposta_giusta(ch_d, "1,5")
          and C.risposta_giusta(C.chiusa("20 m/s"), "72 km/h"))
+# Revisione della PR #363: con la stessa unità (o senza) il valore esatto; la tolleranza solo
+# dopo una conversione d'unità
+NUM363 = [("3,14", "3,11", False), ("9,81 m/s²", "9,72 m/s²", False), ("1,5", "1,49", False),
+          ("2,5 m", "2,48 m", False), ("1,5", "1,55", False), ("0,1", "0,01", False),
+          ("1,5", "1,50", True), ("1,5", "1.5", True), ("1,5", "uno virgola cinque", True),
+          ("1,5", "1 e mezzo", True), ("2,5", "due e mezzo", True),
+          ("2 milioni", "2000000", True), ("2000000", "2 milioni", True),
+          ("1,5 g/cm³", "1500 kg/m³", True), ("20 m/s", "72 km/h", True),
+          ("12 m", "1200 cm", True), ("3 h", "180 minuti", True), ("1,5 g/cm³", "1,5 kg/m³", False),
+          ("12 m", "12", False), ("-5", "5", False), ("-5", "meno 5", True)]
+male = [(a, d) for a, d, e in NUM363 if C.risposta_giusta(C.chiusa(a), d) is not e]
+# Un'espressione fra numeri non è chiusa (il codice non la confronta): vale l'autovalutazione
+male += [(a, C.chiusa(a)) for a in ("3,6 × 10^-3", "6,02 × 10²³", "2 + 3") if C.chiusa(a)]
+male += [(a, C.chiusa(a)) for a in ("1,5 g/cm³", "9,81 m/s²", "12") if not C.chiusa(a)]
+verifica("#363: esatti con la stessa unità («3,11» per «3,14», «1,49» per «1,5», «9,72 m/s²» per "
+         "«9,81 m/s²» no; «1,50», «uno virgola cinque», «1 e mezzo», «2 milioni» sì), la "
+         "tolleranza solo dopo una conversione («1500 kg/m³», «72 km/h», «180 minuti»)",
+         not male, male)
 ch = C.chiusa("1453")
 verifica("il codice: la cifra detta, anche dentro una frase corta",
          C.risposta_giusta(ch, "1453") and C.risposta_giusta(ch, "nel 1453 mi pare")

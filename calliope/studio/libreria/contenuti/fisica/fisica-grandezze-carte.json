@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "fisica-grandezze-carte",
+  "tipo": "mazzo",
+  "titolo": "Grandezze fisiche e SI: le carte",
+  "materia": "Fisica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "fisica-grandezze",
+  "carte": [
+    {"domanda": "Qual è l'unità di base della massa nel Sistema Internazionale?", "risposta": "Il chilogrammo", "sbagliata": "Il grammo"},
+    {"domanda": "Qual è l'unità del Sistema Internazionale per la temperatura?", "risposta": "Il kelvin", "sbagliata": "Il grado Celsius"},
+    {"domanda": "Quante sono le unità di base del Sistema Internazionale?", "risposta": "Sette", "sbagliata": "Cinque"},
+    {"domanda": "Che grandezza misura la mole?", "risposta": "La quantità di sostanza", "sbagliata": "La massa"},
+    {"domanda": "Il volume è una grandezza fondamentale o derivata?", "risposta": "Derivata", "sbagliata": "Fondamentale"},
+    {"domanda": "Quale prefisso vuol dire mille volte l'unità?", "risposta": "Chilo", "sbagliata": "Mega"},
+    {"domanda": "Quanti metri sono 3,5 km?", "risposta": "3500 m", "sbagliata": "350 m", "calcolo": {"formula": "conversione", "dati": {"valore": 3.5, "da": "km", "a": "m"}, "risultato": 3500}},
+    {"domanda": "Quanti cm³ ci sono in un litro?", "risposta": "1000 cm³", "sbagliata": "100 cm³", "calcolo": {"formula": "conversione", "dati": {"valore": 1, "da": "L", "a": "cm3"}, "risultato": 1000}},
+    {"domanda": "Come si scrive 0,0036 in notazione scientifica?", "risposta": "3,6 × 10^-3", "calcolo": {"formula": "notazione_scientifica", "dati": {"valore": 0.0036}, "risultato": "3.6e-3"}},
+    {"domanda": "In notazione scientifica, fra quali valori deve stare il numero davanti alla potenza di dieci?", "risposta": "Fra 1 compreso e 10 escluso."}
+  ]
+}

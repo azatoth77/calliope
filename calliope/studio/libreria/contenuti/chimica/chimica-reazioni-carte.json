@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "chimica-reazioni-carte",
+  "tipo": "mazzo",
+  "titolo": "Le reazioni chimiche: le carte",
+  "materia": "Chimica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "chimica-reazioni",
+  "carte": [
+    {"domanda": "Come si chiamano le sostanze di partenza di una reazione chimica?", "risposta": "Reagenti", "sbagliata": "Prodotti"},
+    {"domanda": "Come si chiamano le sostanze che si formano in una reazione chimica?", "risposta": "Prodotti", "sbagliata": "Reagenti"},
+    {"domanda": "Che cosa dice la legge di Lavoisier?", "risposta": "In un sistema chiuso la massa totale dei reagenti è uguale alla massa totale dei prodotti."},
+    {"domanda": "Che cosa resta uguale prima e dopo una reazione in un recipiente chiuso?", "risposta": "La massa totale", "sbagliata": "Il volume"},
+    {"domanda": "Come si chiama il numero scritto davanti a una formula in un'equazione chimica?", "risposta": "Coefficiente stechiometrico", "sbagliata": "Indice"},
+    {"domanda": "Per bilanciare una reazione si cambiano gli indici o i coefficienti?", "risposta": "I coefficienti", "sbagliata": "Gli indici"},
+    {"domanda": "Perché per bilanciare non si può cambiare un indice?", "risposta": "Perché si cambierebbe la sostanza: H2O è acqua, H2O2 è un'altra cosa."},
+    {"domanda": "La reazione N2 + H2 -> NH3, scritta così, è bilanciata o non bilanciata?", "risposta": "Non bilanciata", "sbagliata": "Bilanciata", "calcolo": {"formula": "bilanciata", "dati": {"reazione": "N2 + H2 -> NH3"}, "risultato": "non bilanciata"}},
+    {"domanda": "Nella reazione Mg + O2 -> MgO, che coefficiente va davanti a MgO per bilanciarla?", "risposta": "2", "sbagliata": "1", "calcolo": {"formula": "bilanciata", "dati": {"reazione": "2 Mg + O2 -> 2 MgO"}, "risultato": "bilanciata"}},
+    {"domanda": "Quante molecole di O2 servono per bruciare una molecola di metano, CH4?", "risposta": "2", "sbagliata": "1", "calcolo": {"formula": "bilanciata", "dati": {"reazione": "CH4 + 2 O2 -> CO2 + 2 H2O"}, "risultato": "bilanciata"}}
+  ]
+}

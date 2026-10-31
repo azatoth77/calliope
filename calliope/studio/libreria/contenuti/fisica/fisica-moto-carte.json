@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "fisica-moto-carte",
+  "tipo": "mazzo",
+  "titolo": "Il moto rettilineo uniforme: le carte",
+  "materia": "Fisica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "fisica-moto",
+  "carte": [
+    {"domanda": "Come si chiama la linea descritta da un corpo che si muove?", "risposta": "La traiettoria", "sbagliata": "Lo spostamento"},
+    {"domanda": "Qual è la formula della velocità media?", "risposta": "Spazio percorso diviso tempo impiegato: v = s/t."},
+    {"domanda": "Nel moto rettilineo uniforme, quale grandezza resta costante?", "risposta": "La velocità", "sbagliata": "Lo spazio"},
+    {"domanda": "Nel grafico spazio-tempo, che cosa rappresenta la pendenza della retta?", "risposta": "La velocità", "sbagliata": "Il tempo"},
+    {"domanda": "Scrivi la legge oraria del moto rettilineo uniforme.", "risposta": "s = s0 + v × t, con s0 la posizione iniziale."},
+    {"domanda": "Quanti m/s sono 36 km/h?", "risposta": "10 m/s", "sbagliata": "130 m/s", "calcolo": {"formula": "conversione", "dati": {"valore": 36, "da": "km/h", "a": "m/s"}, "risultato": 10}},
+    {"domanda": "Quanti km/h sono 15 m/s?", "risposta": "54 km/h", "sbagliata": "4,2 km/h", "calcolo": {"formula": "conversione", "dati": {"valore": 15, "da": "m/s", "a": "km/h"}, "risultato": 54}},
+    {"domanda": "Un corridore fa 400 m in 50 s. Qual è la sua velocità media?", "risposta": "8 m/s", "sbagliata": "0,125 m/s", "calcolo": {"formula": "velocita", "dati": {"s": 400, "t": 50}, "risultato": 8}},
+    {"domanda": "Quanta strada fa in 30 s un'auto che va a 20 m/s?", "risposta": "600 m", "sbagliata": "1,5 m", "calcolo": {"formula": "spazio", "dati": {"v": 20, "t": 30}, "risultato": 600}},
+    {"domanda": "Perché si dice che il moto è relativo?", "risposta": "Perché lo stesso corpo può essere fermo per un osservatore e in moto per un altro: dipende dal sistema di riferimento."}
+  ]
+}
