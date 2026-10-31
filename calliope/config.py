@@ -2290,6 +2290,29 @@ class Config:
     # conoscenti e mai in classifica; non danno premi né tentativi. Spenti di serie: con true li
     # usano gli adulti, e per un minore li accende il suo tutore dalla vista del tutore
     studio_duelli: bool = False
+    # L'importazione dei materiali scaricati (31/10, issue #298, studio/importa.py): un file o un
+    # archivio ZIP dallo schermo personale («Aggiungi materiali» sulla verifica) diventa pagine
+    # della verifica, con un lavoro di sfondo e le fasi sullo schermo. PDF e immagini come le
+    # pagine della 4.2; Word, PowerPoint, Excel, OpenDocument, testo, Markdown, CSV e HTML in
+    # pagine di testo già lette. Il tipo dai byte, mai dall'estensione. Acceso di serie quando c'è
+    # lo Studio; false lo spegne senza spegnere lo Studio
+    studio_importa: bool = True
+    # Un file mandato al più così grande (un archivio ZIP compreso)
+    studio_importa_max_mb: float = 100.0
+    # Le voci di un archivio al più (oltre: rifiutato intero)
+    studio_importa_file_max: int = 500
+    # I byte decompressi di una voce e di tutto l'archivio al più, contati leggendo e non quelli
+    # dichiarati (bomba di decompressione): oltre, le voci restano «non lette»
+    studio_importa_voce_max_mb: float = 30.0
+    studio_importa_totale_max_mb: float = 300.0
+    # Il sottoprocesso che legge i file dà un segno di vita a ogni voce e a ogni pagina di un PDF:
+    # oltre tanti secondi senza la voce è «troppo pesante» e si riparte dalla successiva; oltre
+    # il tempo massimo l'importazione si ferma (si riprende a mano)
+    studio_importa_passo_s: float = 30.0
+    studio_importa_tempo_max_s: float = 1800.0
+    # Le importazioni vive (in coda, in corso o fermate) di una persona al più: ogni file scelto
+    # insieme è un'importazione
+    studio_importa_coda: int = 10
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3589,7 +3612,10 @@ SEZIONI: dict[str, list[str]] = {
                "studio_finestra_giorni", "studio_domande_genera", "studio_ascolta",
                "studio_ascolta_voce", "studio_ascolta_giorni", "studio_indicazioni",
                "studio_indicazioni_giorni", "studio_serie", "studio_serie_pause",
-               "studio_stelle", "studio_duelli", "studio_libreria"],
+                "studio_stelle", "studio_duelli", "studio_libreria", "studio_importa",
+                "studio_importa_max_mb", "studio_importa_file_max", "studio_importa_voce_max_mb",
+                "studio_importa_totale_max_mb", "studio_importa_passo_s",
+                "studio_importa_tempo_max_s", "studio_importa_coda"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -3953,6 +3979,10 @@ LIMITI: dict[str, tuple[float, float]] = {
     "studio_prova_domande": (3, 40), "studio_prova_minuti": (2, 180),
     "studio_finestra_giorni": (1, 90), "studio_ascolta_giorni": (1, 365),
     "studio_indicazioni_giorni": (1, 90), "studio_serie_pause": (0, 3),
+    "studio_importa_max_mb": (1.0, 2000.0), "studio_importa_file_max": (1, 5000),
+    "studio_importa_voce_max_mb": (1.0, 200.0), "studio_importa_totale_max_mb": (1.0, 4000.0),
+    "studio_importa_passo_s": (5.0, 600.0), "studio_importa_tempo_max_s": (60.0, 86400.0),
+    "studio_importa_coda": (1, 50),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),

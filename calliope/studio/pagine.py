@@ -647,7 +647,24 @@ def scrivi_file(cartella, verifica: int, dati: bytes, estensione: str) -> str:
     percorso relativo alla cartella (con «/»). Il nome lo sceglie il server; il percorso si
     controlla quando si scrive: dentro la cartella anche dopo aver seguito i link, file nuovo
     (mai sovrascritto). Solleva OSError o PermissionError."""
-    if estensione not in ("jpg", "pdf"):
+    rel, f = apri_nuovo(cartella, verifica, estensione)
+    try:
+        f.write(dati)
+    finally:
+        f.close()
+    return rel
+
+
+# Le estensioni dei file nella cartella delle pagine: le pagine (jpg), le copie dei PDF (pdf) e,
+# dal 31/10 (#298), il file arrivato di un'importazione (imp), tolto a lavoro finito
+ESTENSIONI = ("jpg", "pdf", "imp")
+
+
+def apri_nuovo(cartella, verifica: int, estensione: str):
+    """(percorso relativo, file aperto in scrittura) di un file nuovo in
+    `cartella/pagine/<verifica>/`, con gli stessi controlli di `scrivi_file`: per chi scrive a
+    pezzi (l'importazione, che non tiene il file arrivato in memoria). Chi lo apre lo chiude."""
+    if estensione not in ESTENSIONI:
         raise ValueError("estensione")
     if cartella is None:
         raise PermissionError("manca la cartella dello Studio")
@@ -661,9 +678,7 @@ def scrivi_file(cartella, verifica: int, dati: bytes, estensione: str) -> str:
     if base not in reale.parents or reale != (base / "pagine" / str(int(verifica))).resolve() \
             or (base / "pagine").is_symlink() or dest.parent.is_symlink():
         raise PermissionError("la cartella delle pagine esce dalla cartella dello Studio")
-    with open(reale / dest.name, "xb") as f:
-        f.write(dati)
-    return rel
+    return rel, open(reale / dest.name, "xb")
 
 
 if __name__ == "__main__":

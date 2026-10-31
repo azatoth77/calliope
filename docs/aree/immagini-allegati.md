@@ -678,3 +678,13 @@ annullata davvero?» giusta 1/3: in un giro «…c'è scritto che… quindi per 
 problema» senza consigliare la conferma, in un altro «quindi non serve studiare. Però… chiedi
 conferma a lei». Le attese del passo ora prendono anche queste due frasi. Prima frase mediana
 1,35–1,50 s; contesto da 15 253 a 18 924–19 287 token.
+
+## I lettori degli allegati per lo Studio (31/10, issue #298)
+
+L'importazione dei materiali scaricati nello Studio (`calliope/studio/importa.py`, documento
+[studio](studio.md)) usa `allegati.riconosci` per il tipo dai byte e `allegati.prepara` per il testo
+di Word, PowerPoint, Excel, OpenDocument e dei file di testo, coi suoi controlli (`_zip_sicuro`:
+bomba, DOCTYPE; le macro dette e mai eseguite), senza cambiarli. La differenza: lì gira in un
+sottoprocesso con un tetto di tempo, il testo diventa pagine dello Studio (dati non fidati, in busta
+con la fonte «allegato») e uno ZIP si apre davvero un livello, voce per voce in memoria e coi byte
+contati, invece del solo elenco degli allegati.
