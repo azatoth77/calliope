@@ -1274,6 +1274,24 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
 .studio-c-modulo select { font: inherit; min-height: 2.6rem; padding: 0.3rem 0.6rem; border-radius: 0.6rem;
   border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo); max-width: 100%; }
 .studio-c-voce .studio-testo b { overflow-wrap: anywhere; }
+/* La vista del tutore e le indicazioni (31/10, passo 10, #250 e #285, studio.js): blocchi uno
+   sotto l'altro, i testi vanno sempre a capo, i tre giudizi su una riga quando ci stanno */
+.studio-t-pannello { display: flex; flex-direction: column; gap: 0.9rem; min-width: 0; }
+.studio-t-blocco { display: flex; flex-direction: column; gap: 0.4rem; min-width: 0; padding-top: 0.5rem;
+  border-top: 1px solid var(--bordo); }
+.studio-t-titolo { margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--testo); overflow-wrap: anywhere; }
+.studio-t-testo-ind { overflow-wrap: anywhere; }
+.studio-t-per-te .studio-h-riga, .studio-t-pannello .studio-h-riga { overflow-wrap: anywhere; }
+.studio-t-argomento { flex-direction: column; align-items: stretch; }
+.studio-t-giudizi .studio-h-tasto { flex: 1 1 6.5rem; padding: 0 0.6rem; }
+.studio-t-giudizi .studio-h-tasto[aria-pressed="true"] { font-weight: 700; }
+.studio-t-modulo { display: flex; flex-direction: column; gap: 0.45rem; }
+.studio-t-scelte { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.studio-t-campo { width: 100%; box-sizing: border-box; font: inherit; padding: 0.5rem; border-radius: 0.6rem;
+  border: 1px solid var(--accento-bordo); background: var(--pannello); color: var(--testo); resize: vertical;
+  min-height: 2.75rem; }
+.studio-t-scelte .studio-t-campo { flex: 1 1 9rem; width: auto; max-width: 100%; }
+.studio-t-guarda .studio-c-esiti .studio-h-tasto { flex: 1 1 6.5rem; }
 /* Le prove dello Studio (31/10, passo 8, #248, studio.js): la verifica finta con le risposte, la
    correzione con l'esito sempre scritto a parole (il colore è solo un aiuto in più) */
 .studio-p-prova, .studio-p-correzione { display: flex; flex-direction: column; gap: 0.55rem; }

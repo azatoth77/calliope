@@ -169,13 +169,17 @@ class Prove:
             "SELECT id FROM studio_argomenti WHERE verifica = ? ORDER BY ordine, id",
             (v["id"],)), 1)}
         out = []
+        senza = self._risposte_nascoste(v, chi)
         for i, r in enumerate(self.dati.tutti("SELECT * FROM studio_domande WHERE verifica = ? "
                                               "AND stato != 'ombra' ORDER BY id", (v["id"],)), 1):
             d = self._riga_domanda(r)
             d["numero"] = i
             d["argomento_numero"] = numeri.get(d["argomento"])
+            if senza:
+                # Al tutore, con la prova del minore aperta, solo i testi (PR #348, nota 2)
+                d["attesa"], d["chiave"] = None, []
             out.append(d)
-        return {"domande": out, "nascoste": False}
+        return {"domande": out, "nascoste": False, "risposte_nascoste": senza}
 
     # ── la generazione (dal lettore, studio/domande_genera.py; niente `chi`) ──
     def verifiche_per_domande(self) -> list[dict]:
@@ -292,6 +296,18 @@ class Prove:
         try:
             return self._prova_aperta(v["id"]) is not None
         except Exception:  # noqa: BLE001 — una tabella che manca (schema di prima): niente prove
+            return False
+
+    def _risposte_nascoste(self, v: dict, chi) -> bool:
+        """Le risposte attese (domande, carte, prove chiuse) nascoste a chi guarda **non** la
+        persona, il tutore compreso, mentre una prova della persona è aperta sulla verifica
+        (revisione della PR #348, nota 2: come il ripasso, che si blocca per tutti). Il tutore
+        vede al più i testi delle domande; la persona non vede nemmeno quelli (`_nascoste`)."""
+        if chi is None or getattr(chi, "id", None) == v["persona"]:
+            return False
+        try:
+            return self._prova_aperta(v["id"]) is not None
+        except Exception:  # noqa: BLE001 — una tabella che manca (schema di prima)
             return False
 
     def prova_in_corso(self, chi, vid) -> dict | None:
@@ -497,6 +513,11 @@ class Prove:
                          attesa=RS.attesa_detta(x), pagine=list(x.get("pagine") or ()))
             voci.append(y)
         ruolo = self._chi_puo(chi, v["persona"])
+        if not aperta and ruolo == "tutore" and self._risposte_nascoste(v, chi):
+            # Una prova chiusa vista dal tutore mentre il minore ne fa un'altra: le stesse domande
+            # possono tornare, quindi niente risposte attese (PR #348, nota 2)
+            for y in voci:
+                y["attesa"] = None
         out = {"id": p["id"], "verifica": v["id"], "modalita": p["modalita"], "stato": p["stato"],
                "inizio": p["inizio"], "scade": p["scade"], "fine": p["fine"], "voci": voci,
                "corrente": p["corrente"], "puo_rispondere": aperta and ruolo == "proprietario"

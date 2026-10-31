@@ -58,7 +58,10 @@ Tabelle (versione 1):
   orale, con le voci (la domanda copiata, la risposta della persona, l'esito e chi l'ha deciso) in
   JSON; dalla stessa versione `studio_verifiche.prova` («scritta» o «interrogazione»),
   `finestra` (la data è «dal») e `domande_firma`, `domande_esito`, `domande_del` per la
-  generazione delle domande dal lettore (`studio/domande_genera.py`).
+  generazione delle domande dal lettore (`studio/domande_genera.py`);
+- `studio_indicazioni` (versione 11, 31/10, passo 10, issue #250 e #285): le indicazioni dei
+  tutori per lo studio di un minore (per tutto il suo studio, una materia o una verifica), con la
+  scadenza; testo di un adulto di casa, controllato nella forma (`studio/tutore.py`).
 
 Tenuta (decisione 0035, punto 4): tutto ciò che è di una verifica resta fino a
 `studio_tenuta_giorni` (60) giorni dopo la sua data, per sempre se archiviata; «dimentica le
@@ -83,7 +86,7 @@ from ..persistenza import apri_db, prepara_schema
 MODULO = "studio"
 
 # Le tabelle dello Studio, figlie prima dei genitori (l'ordine delle cancellazioni)
-TABELLE = ("studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
+TABELLE = ("studio_indicazioni", "studio_tentativi", "studio_prove", "studio_domande", "studio_mappe", "studio_carte", "studio_eventi", "studio_piano",
            "studio_misure",
            "studio_argomenti", "studio_pagine", "studio_materiali", "studio_verifiche",
            "studio_giorni")
@@ -367,13 +370,37 @@ def _v10(db: sqlite3.Connection):
         db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
 
 
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10]
+def _v11(db: sqlite3.Connection):
+    """31/10, passo 10 (#250, #285): le indicazioni dei tutori per lo studio di un minore.
+    `persona` è il minore; `verifica` (una sua verifica) e `materia` dicono dove valgono (tutte e
+    due vuote: tutto il suo studio); `testo` è la frase del tutore, già controllata nella forma
+    (`studio/tutore.py`); `scade` il giorno dopo cui non vale più; `creata_da` e `modificata_da`
+    gli id dei tutori; `canale` da dove è arrivata («voce», «schermo», «dispositivo»: revisione
+    della PR #348, nota 5). Una tolta si cancella."""
+    db.execute("""CREATE TABLE IF NOT EXISTS studio_indicazioni (
+        id INTEGER PRIMARY KEY,
+        persona TEXT NOT NULL,
+        verifica INTEGER,
+        materia TEXT,
+        testo TEXT NOT NULL,
+        scade TEXT NOT NULL,
+        creata TEXT NOT NULL,
+        creata_da TEXT,
+        modificata TEXT,
+        modificata_da TEXT,
+        canale TEXT)""")
+    db.execute("CREATE INDEX IF NOT EXISTS studio_indicazioni_persona "
+               "ON studio_indicazioni(persona)")
+
+
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi")
 # Le tabelle venute dopo la prima versione: un db di prima (lo Studio spento non lo prepara) può
 # non averle
-NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe", "studio_domande", "studio_prove")
+NUOVE = (*CON_ORFANI, "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
+         "studio_indicazioni")
 
 
 def cartella_di(cfg, db_path=None) -> Path | None:
@@ -470,7 +497,7 @@ def _togli_verifiche(db: sqlite3.Connection, ids: list[int]) -> list[str]:
             db.execute("DELETE FROM studio_pagine WHERE materiale = ?", (m,))
         for t in ("studio_materiali", "studio_argomenti", "studio_piano", "studio_misure",
                   "studio_carte", "studio_mappe", "studio_domande", "studio_prove",
-                  *CON_ORFANI):
+                  "studio_indicazioni", *CON_ORFANI):
             # Un db ancora allo schema di prima (lo Studio spento non lo prepara): le tabelle
             # nuove possono mancare
             if t in NUOVE and not _tabella(db, t):
@@ -611,6 +638,18 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
             # Le domande e le prove (passo 8, #248) come le mappe
             if _tabella(db, t):
                 db.execute(f"DELETE FROM {t} WHERE {orfani}")
+        # Le indicazioni dei tutori (31/10, passo 10, #250, #285): sono dati del minore. Quelle
+        # di una verifica che non c'è più vanno via come le mappe; tutte con la persona e con
+        # «svuota»; le scadute con la rotazione, `studio_tenuta_giorni` dopo la scadenza
+        if _tabella(db, "studio_indicazioni"):
+            db.execute(f"DELETE FROM studio_indicazioni WHERE verifica IS NOT NULL AND {orfani}")
+            if tutto:
+                db.execute("DELETE FROM studio_indicazioni")
+            elif persona is not None:
+                db.execute("DELETE FROM studio_indicazioni WHERE persona = ?", (str(persona),))
+            else:
+                db.execute("DELETE FROM studio_indicazioni WHERE scade < ?",
+                           (scadute_prima.isoformat(),))
         db.commit()
     except Exception:
         if db.in_transaction:

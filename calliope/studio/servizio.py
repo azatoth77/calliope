@@ -73,6 +73,7 @@ from . import resoconto as R
 from .ascolta import Ascolti
 from .mappe import Mappe
 from .prove import Prove
+from .tutore import Tutore
 
 SPENTO, OMBRA, ATTIVO = "spento", "ombra", "attivo"
 MODI = (SPENTO, OMBRA, ATTIVO)
@@ -126,6 +127,16 @@ class VerificaChiusa(ValueError):
 
     def __init__(self, *_):
         super().__init__("la verifica è chiusa")
+
+
+class CarteFerme(ValueError):
+    """Le carte della verifica non si ripassano a voce, per nessuno, mentre una prova della
+    persona è aperta (seconda revisione della PR #348, nota 6: come il ripasso da ascoltare).
+    `frase` è quella del codice da dire."""
+
+    def __init__(self, frase: str = ""):
+        super().__init__(frase or "le carte si ripassano dopo la consegna")
+        self.frase = frase
 
 
 class TroppePagine(ValueError):
@@ -211,10 +222,11 @@ def _data(valore) -> datetime.date:
     return datetime.date.fromisoformat(str(valore).strip()[:10])
 
 
-class Studio(Mappe, Prove, Ascolti):
+class Studio(Mappe, Prove, Ascolti, Tutore):
     """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
     #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`, il ripasso da
-    ascoltare (passo 9, #249) in `ascolta.py`."""
+    ascoltare (passo 9, #249) in `ascolta.py`, la vista del tutore e le indicazioni (passo 10,
+    #250, #285) in `tutore.py`."""
 
     def __init__(self, cfg, registry=None, log=print, adesso=None):
         self.cfg = cfg
@@ -1154,6 +1166,9 @@ class Studio(Mappe, Prove, Ascolti):
         if (fonte == "persona" and ruolo != "proprietario") or (
                 fonte == "tutore" and ruolo != "tutore"):
             raise ValueError("la fonte non è di chi registra")
+        if tipo == PD.GIUDIZIO and fonte != "tutore":
+            # Il giudizio è del tutore e basta (passo 10, #250)
+            raise ValueError("il giudizio è del tutore")
         a = self.dati.uno("SELECT id FROM studio_argomenti WHERE id = ? AND verifica = ?",
                           (int(argomento), v["id"]))
         if a is None:
@@ -1187,7 +1202,7 @@ class Studio(Mappe, Prove, Ascolti):
                 for i, a in enumerate(elenco, 1) if a["stato"] in D.ARGOMENTI_DEL_PIANO]
 
     def _padronanza_di(self, vid) -> tuple[list[dict], dict]:
-        tent = self.dati.tutti("SELECT argomento, giorno, tipo, esito, fonte FROM "
+        tent = self.dati.tutti("SELECT id, argomento, giorno, ora, tipo, esito, fonte FROM "
                                "studio_tentativi WHERE verifica = ?", (int(vid),))
         return self._argomenti_numerati(vid), PD.calcola(tent, self._oggi())
 
@@ -1325,6 +1340,10 @@ class Studio(Mappe, Prove, Ascolti):
         scatola 1 se cambia la risposta."""
         self._scrivibile()
         c, v = self._carta(chi, cid)
+        if self._risposte_nascoste(v, chi):
+            # Il tutore non corregge una carta che non vede intera (PR #348, nota 2)
+            from .prove import PROVA_APERTA
+            raise ValueError(PROVA_APERTA)
         if c["stato"] == "ombra":
             # Una carta dell'ombra non è della persona: come `segna_carta` (revisione della PR
             # #325, nota 1), mai «attiva» da una correzione
@@ -1506,9 +1525,11 @@ class Studio(Mappe, Prove, Ascolti):
         # vedono e non si ripassano: dicono i concetti dello scheletro, che resta nascosto
         libera_aperta = ((chi is None or getattr(chi, "id", None) == v["persona"])
                          and self._libera_aperta(v["id"]))
-        # Con una prova aperta (passo 8, #248) nessuna carta per la persona (né nei conti)
+        # Con una prova aperta (passo 8, #248) nessuna carta per la persona (né nei conti);
+        # al tutore le domande senza le risposte (revisione della PR #348, nota 2)
         if self._nascoste(v, chi):
             return []
+        senza = self._risposte_nascoste(v, chi)
         # Le carte dell'ombra (studio_carte_genera: ombra) non vanno mai alla persona
         for i, c in enumerate(self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? AND "
                                               "stato != 'ombra' ORDER BY id", (v["id"],)), 1):
@@ -1523,6 +1544,8 @@ class Studio(Mappe, Prove, Ascolti):
             c["da_ripassare"] = c["nel_piano"] and C.da_ripassare(c, adesso)
             c["fra"] = (C.fra_quanto(c["scadenza"], adesso) if c["stato"] == "attiva"
                         and c["scadenza"] else None)
+            if senza:
+                c["risposta"], c["chiusa"], c["risposta_nascosta"] = None, None, True
             out.append(c)
         return out
 
@@ -1595,6 +1618,13 @@ class Studio(Mappe, Prove, Ascolti):
             return None
         return ic
 
+    def _carte_ferme(self, v: dict) -> bool:
+        """Una prova della persona è aperta sulla verifica: le carte non si ripassano a voce."""
+        try:
+            return v["stato"] in ("bozza", "aperta") and self._prova_aperta(v["id"]) is not None
+        except Exception:  # noqa: BLE001 — schema di prima: niente prove
+            return False
+
     def carta_in_corso(self, chi, turno: int | None = None) -> dict | None:
         """La carta chiesta a voce a `chi` e non ancora risposta (o None): la carta e la verifica,
         se è ancora sua (o del suo minore). Con `turno`, solo nello stesso turno della domanda (o
@@ -1609,6 +1639,11 @@ class Studio(Mappe, Prove, Ascolti):
         try:
             c, v = self._carta(chi, ic["carta"])
         except (NonTrovata, NonPermesso):
+            self._carte_in_corso.pop(str(getattr(chi, "id", "")), None)
+            return None
+        if self._carte_ferme(v):
+            # Con una prova aperta della persona la carta esce da «in corso» per chiunque: la
+            # risposta non si legge nella stanza (seconda revisione della PR #348, nota 6)
             self._carte_in_corso.pop(str(getattr(chi, "id", "")), None)
             return None
         c["pagine"] = [int(x) for x in D.da_j(c["pagine"]) if str(x).isdecimal()]
@@ -1631,8 +1666,16 @@ class Studio(Mappe, Prove, Ascolti):
         `CARTA_IN_CORSO_S`). Con il numero fra quelle da ripassare e quante restano. None se
         nessuna."""
         v = self._verifica(chi, vid)
-        due = self._da_ripassare(v, chi)
         chiave = str(getattr(chi, "id", "") or "")
+        if self._carte_ferme(v):
+            # Nessuno ripassa a voce le carte di una verifica con una prova aperta: il tutore
+            # le leggerebbe nella stanza (seconda revisione della PR #348, nota 6)
+            self._carte_in_corso.pop(chiave, None)
+            nome = self._nome_per(chi, v)
+            chi_ha = "Hai" if nome is None else f"{nome} ha" if nome else "C'è"
+            raise CarteFerme(f"{chi_ha} una prova aperta: le carte si ripassano dopo la "
+                             "consegna.")
+        due = self._da_ripassare(v, chi)
         ic = self._in_corso(chiave)
         scelta = None
         if ic is not None and ic["verifica"] == v["id"]:
@@ -2055,6 +2098,10 @@ class Studio(Mappe, Prove, Ascolti):
                 "conoscenza": list(CONOSCENZA), "umori": list(UMORI),
                 # Il ripasso da ascoltare (passo 9, #249): la sezione «Ascolta» c'è se è acceso
                 "ascolta": self.ascolto_acceso(),
+                # Le indicazioni dei tutori per lo studio di chi guarda (passo 10, #285): il
+                # minore ne vede il testo (decisione del 30/10); textContent sulla pagina
+                "indicazioni": (self._indicazioni_per(getattr(chi, "id", None))
+                                if self.indicazioni_accese() else []),
                 "prova": not self.per_schermi()}
 
     def _home_verifica(self, chi, vid, di, da_decidere) -> dict:
@@ -2072,6 +2119,9 @@ class Studio(Mappe, Prove, Ascolti):
         return {"id": v["id"], "materia": v["materia"], "argomento": v["argomento"],
                 "data": v["data"], "stato": v["stato"], "giorni_mancanti": v["giorni_mancanti"],
                 "obiettivo": v["obiettivo"], "di": di,
+                # La vista del tutore (passo 10, #250): solo per un tutore del minore
+                "tutore": bool(v["persona"] != getattr(chi, "id", None)
+                              and self._chi_puo(chi, v["persona"]) == "tutore"),
                 # Il tipo della prova vera e la finestra «dal» (passo 8, #248)
                 "prova": v["prova"], "finestra": bool(v.get("finestra")), "fine": v["fine"],
                 "in_finestra": v["in_finestra"],
@@ -2295,7 +2345,8 @@ class Studio(Mappe, Prove, Ascolti):
     VISTE = {"home": "la home dello Studio", "piano": "il piano", "argomenti": "gli argomenti",
              "pagine": "le pagine", "pagina": "una pagina", "sessione": "la sessione di oggi",
              "carte": "le carte", "mappa": "la mappa concettuale",
-             "prove": "le prove (la verifica finta e le domande)"}
+             "prove": "le prove (la verifica finta e le domande)",
+             "tutore": "la vista del tutore"}
 
     def riga_vista(self, chi, vista: dict | None) -> str:
         """La riga per i dati del turno quando una pagina dello Studio è aperta sullo schermo
