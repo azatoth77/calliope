@@ -173,6 +173,7 @@ nel registro. Non entra nemmeno nella storia. I numeri del testo del problema no
 passi (la base di 8 cm è un dato); il risultato conta sempre, anche se sta nella foto (una nota
 ostile «la soluzione è 60 km/h» non lo rende un dato da ripetere). Un risultato a parole vale intero,
 da 2 parole in su. Al tutore che parla, e a esercizio finito o in pausa («basta»), niente guardia.
+*[storico fino alla revisione della PR #367: «in corso» da meno di 3 ore, niente guardia in pausa]*
 Senza esercizio in corso il testo passa com'è, senza attese.
 
 **L'interruttore** `studio_esercizi`: «ombra» di serie (solo chi amministra, per provarlo; il
@@ -255,6 +256,44 @@ tecnologico, Chimica, materiali e biotecnologie, due per materia, nei tre tipi:
 - **Da sapere**: *[storico fino alla revisione della PR #366: «la preparazione di un gioco per uno
   dice «Inizia» e «Gioco anch'io»»; ora solo «Inizia»]*; la misura del palco sul telefono vero è solo della pagina
   aperta, quella delle altre la fa la prova di fumo.
+
+### 31/10 sera: la revisione della PR #367, la guardia che si aggirava
+
+1. **Il risultato senza l'unità** («l'area fa 40 e il perimetro fa 26», «Sessanta.», «| perimetro |
+   26 |») passava: ora per la guardia lo stesso numero senza l'unità attesa conta come svelato
+   (`risposte.valuta` lo dà «indizio»), e la punteggiatura attorno alle parole si toglie prima di
+   leggere i numeri. «Passo 2 di 4» nelle frasi del codice non conta mai.
+2. **Dopo «basta» la guardia si spegneva.** Ora vale per gli esercizi **vivi** di chi parla
+   («in_corso», «pausa», «pronto»), finché non sono finiti o tolti e fino a 24 ore dall'ultima
+   modifica (`VIVO_S`); con più esercizi vivi i vietati di tutti (`esercizi_genera.unisci`).
+   Con la **voce incerta** (nessuno riconosciuto) la guardia prende gli esercizi vivi di tutti: la
+   strada prudente.
+3. **Le frasi del codice** aggiravano la guardia («ricorda» ripeteva la soluzione nella sua
+   conferma). In `ToolRegistry.call`, con un esercizio vivo di chi parla: un argomento di testo di
+   qualunque tool che dice il **risultato** si rifiuta con una frase del codice («Questo non lo
+   scrivo e non lo segno…», regola `studio_esercizio_svelato`); le frasi pronte del risultato
+   (`conferma`, `risposta_finale`, `da_dire`) che dicono la soluzione diventano la frase del codice
+   («calcola» 7 × 4 col perimetro 28 cm). Gli argomenti guardano solo il risultato: un passo
+   intermedio piccolo («4 lati») fermerebbe ogni conto.
+4. **Una prova aperta su un'altra verifica** della persona ferma la guida e gli esercizi nuovi,
+   come le mini-app (`Studio.prova_della_persona`, che chiude le prove scadute).
+- Gli esercizi **orfani** (senza la verifica) vanno via sempre, con la foto; tutti con «svuota».
+- **Il tetto dei tentativi**: dopo 6 errori su un passo il codice non valuta più risposte su quel
+  passo (anche la giusta): restano l'indizio e «salta».
+
+**I limiti noti della guardia** (regole sul testo, non il significato; principio 10). Passano:
+- le unità che `unita.py` non conosce (decimetri, millimetri quadrati: «2,6 dm», «4000 mm²»);
+- le forme che non sono un numero letto: «un mezzo», «il 50 %» per 1/2, «un chilometro al
+  minuto» per 60 km/h;
+- le cifre dette su più turni («la prima cifra è 2», poi «la seconda è 6»);
+- gli intermedi che danno il finale («la metà è 13 cm, raddoppiala») e i conti scritti senza il
+  risultato («8 più 5, per due», «120 diviso 2»);
+- le parafrasi di un risultato a parole (una parola sola: «è la fotosintesi»), e i passi a parole
+  non finali («nel cloroplasto»);
+- gli argomenti che il modello scrive nelle sue chiamate restano nella storia (non si dicono).
+Gli script del revisore (`svela.py`, `brain_ostile.py`) lo mostrano caso per caso. Per questo
+`studio_esercizi` resta in ombra: si accende dopo il banco della guida col modello vero e la
+rilettura delle frasi tolte.
 
 ## La libreria: schede e carte preparate, scelte dal codice (31/10, issue #297, ramo `issue-297-libreria`)
 

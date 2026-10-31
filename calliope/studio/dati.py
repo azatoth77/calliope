@@ -775,6 +775,14 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
             else:
                 db.execute("DELETE FROM studio_duelli WHERE creato < ?",
                            (scadute_prima.isoformat(),))
+        # Gli esercizi guidati (31/10, #278, revisione della PR #367): vanno con la verifica
+        # (sopra); senza la verifica (una corsa fra un invio e una cancellazione) sempre, con le
+        # loro foto, e tutti con «svuota»
+        if _tabella(db, "studio_esercizi"):
+            dove = "1 = 1" if tutto else orfani
+            file += [r[0] for r in db.execute(
+                f"SELECT file FROM studio_esercizi WHERE {dove} AND file IS NOT NULL")]
+            db.execute(f"DELETE FROM studio_esercizi WHERE {dove}")
         db.commit()
     except Exception:
         if db.in_transaction:

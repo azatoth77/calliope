@@ -43,8 +43,14 @@ ESERCIZI_MAX = 30
 # Dopo tanti errori sullo stesso passo il codice propone l'indizio, poi di saltare
 INDIZIO_DOPO = 2
 SALTA_DOPO = 3
-# Un esercizio «in corso» vale per la guardia della voce al più tanto tempo dall'ultima risposta
-IN_CORSO_S = 3 * 3600
+# Il tetto dei tentativi su un passo (revisione della PR #367): oltre, il codice non valuta più
+# risposte su quel passo, restano l'indizio e «salta» (niente indovinare a tentativi)
+ERRORI_MAX = 6
+# Un esercizio vivo («in_corso», «pausa» o «pronto», non finito né tolto) vale per la guardia
+# della voce fino a tanto tempo dall'ultima modifica (revisione della PR #367: dopo «basta» la
+# guardia si spegneva, e il turno dopo «quanto faceva?» aveva la soluzione)
+VIVO_S = 24 * 3600
+VIVI = ("in_corso", "pausa", "pronto")
 STATI = ("da_leggere", "in_lettura", "letto", "pronto", "senza_guida", "illeggibile",
          "in_corso", "pausa", "finito")
 APERTI = ("da_leggere", "in_lettura", "letto", "pronto", "in_corso", "pausa")
@@ -109,9 +115,22 @@ class Esercizi:
         v = self._verifica(chi, e["verifica"])
         return e, v, self._chi_puo(chi, v["persona"])
 
+    def prova_della_persona(self, persona) -> bool:
+        """La persona ha una prova aperta su una sua verifica, qualsiasi (revisione della PR #367,
+        la regola delle mini-app: anche su un'altra verifica la guida aspetta la consegna). Le
+        prove scadute per il tempo si chiudono qui (`_prova_aperta`)."""
+        try:
+            vv = [r["verifica"] for r in self.dati.tutti(
+                "SELECT DISTINCT p.verifica FROM studio_prove p JOIN studio_verifiche v ON "
+                "v.id = p.verifica WHERE v.persona = ? AND p.stato = 'aperta'", (str(persona),))]
+        except Exception:  # noqa: BLE001 — una tabella che manca (schema di prima): niente prove
+            return False
+        return any(self._prova_aperta(vid) for vid in vv)
+
     def _guida_ferma(self, v: dict):
-        """Una prova aperta sulla verifica ferma la guida (anche per il tutore)."""
-        if self._prova_aperta(v["id"]):
+        """Una prova aperta della persona, su qualsiasi sua verifica, ferma la guida (anche per
+        il tutore)."""
+        if self.prova_della_persona(v["persona"]):
             raise GuidaFerma()
 
     # ── arrivare ──
@@ -131,6 +150,8 @@ class Esercizi:
         scritto = None
         with self.dati.lock:
             v = self.verifica_per_pagine(chi, vid)
+            # Con una prova aperta niente esercizi nuovi (la guida aspetta la consegna)
+            self._guida_ferma(v)
             n = self.dati.db.execute(
                 "SELECT COUNT(*) FROM studio_esercizi WHERE verifica = ? AND stato IN (" +
                 ",".join("?" * len(APERTI)) + ")", (v["id"], *APERTI)).fetchone()[0]
@@ -283,7 +304,7 @@ class Esercizi:
         self._es_acceso(chi)
         v = self._verifica(chi, vid)
         ruolo = self._chi_puo(chi, v["persona"])
-        ferma = bool(self._prova_aperta(v["id"]))
+        ferma = self.prova_della_persona(v["persona"])
         out = [self._vista_es(self._riga_es(r["id"]), ruolo, ferma) for r in self.dati.tutti(
             "SELECT id FROM studio_esercizi WHERE verifica = ? ORDER BY id DESC", (v["id"],))]
         return {"verifica": v["id"], "esercizi": out, "ferma": ferma, "ruolo": ruolo,
@@ -293,7 +314,7 @@ class Esercizi:
     def esercizio(self, chi, eid) -> dict:
         self._es_acceso(chi)
         e, v, ruolo = self._esercizio(chi, eid)
-        return self._vista_es(e, ruolo, bool(self._prova_aperta(v["id"])))
+        return self._vista_es(e, ruolo, self.prova_della_persona(v["persona"]))
 
     def conto_esercizi(self, chi, v: dict) -> dict | None:
         """I conti degli esercizi di una verifica per la home (None se spenti per `chi`)."""
@@ -368,6 +389,13 @@ class Esercizi:
             e, v = self._da_fare(chi, eid, vid)
             k = int(e["passo"] or 0)
             p = e["passi"][k]
+            if int(e["errori"] or 0) >= ERRORI_MAX:
+                # Il tetto dei tentativi: non si valuta più, restano l'indizio e «salta»
+                return {"esercizio": e["id"], "esito": "fermo", "n": k + 1,
+                        "di": len(e["passi"]), "finito": False, "errori": int(e["errori"]),
+                        "offri_indizio": bool(p.get("indizio")), "offri_salta": True,
+                        "frase": "Su questo passo hai provato tante volte: chiedi un indizio o "
+                                 "salta il passo."}
             esito, _fonte = RS.valuta(p, r)
             esiti = list(e["esiti"])
             errori = int(e["errori"] or 0)
@@ -470,22 +498,89 @@ class Esercizi:
         return {"tolto": e["id"]}
 
     # ── la guardia della voce ──
-    def vietati_di(self, persona) -> dict | None:
-        """Cosa la voce non dice a `persona`: il suo esercizio in corso più recente, se l'ultima
-        risposta è di meno di `IN_CORSO_S` (`esercizi_genera.vietati`)."""
+    def _vietati(self, dove: str, arg=()) -> dict | None:
         try:
-            r = self.dati.uno(
-                "SELECT id, modificato FROM studio_esercizi WHERE persona = ? AND stato = "
-                "'in_corso' ORDER BY modificato DESC LIMIT 1", (str(persona),))
+            righe = self.dati.tutti(
+                "SELECT id, COALESCE(modificato, creato) AS quando FROM studio_esercizi WHERE "
+                "stato IN ('in_corso', 'pausa', 'pronto') AND " + dove, arg)
         except Exception:  # noqa: BLE001 — una tabella che manca (db di prima): niente guardia
             return None
-        if r is None:
-            return None
-        try:
-            t = datetime.datetime.fromisoformat(str(r["modificato"]))
-            if (datetime.datetime.now() - t).total_seconds() > IN_CORSO_S:
-                return None
-        except (TypeError, ValueError):
-            pass
-        e = self._riga_es(r["id"])
-        return EG.vietati(e) if e else None
+        adesso = datetime.datetime.now()
+        voci = []
+        for r in righe:
+            try:
+                t = datetime.datetime.fromisoformat(str(r["quando"]))
+                if (adesso - t).total_seconds() > VIVO_S:
+                    continue
+            except (TypeError, ValueError):
+                pass
+            e = self._riga_es(r["id"])
+            if e is not None:
+                voci.append(EG.vietati(e))
+        return EG.unisci(voci)
+
+    def vietati_di(self, persona) -> dict | None:
+        """Cosa la voce non dice a `persona`: i suoi esercizi vivi («in_corso», «pausa»,
+        «pronto», modificati da meno di `VIVO_S`), uniti (`esercizi_genera.unisci`); None se non
+        ce ne sono."""
+        return self._vietati("persona = ?", (str(persona),))
+
+    def vietati_tutti(self) -> dict | None:
+        """Gli esercizi vivi di tutti: per chi parla con la voce incerta (revisione della PR
+        #367, la strada prudente: senza sapere chi è, nessuna soluzione di nessuno)."""
+        return self._vietati("1 = 1")
+
+
+def vietati_per_ctx(ctx) -> dict | None:
+    """Cosa la voce non dice a chi parla in questo turno: i suoi esercizi vivi; con la voce
+    incerta (`chi_di` None) quelli di tutti. None senza Studio o senza esercizi vivi."""
+    st = getattr(ctx, "studio", None)
+    if st is None or not callable(getattr(st, "vietati_di", None)):
+        return None
+    try:
+        from ..tools.studio import chi_di
+        chi = chi_di(ctx)
+        return st.vietati_di(chi.id) if chi is not None else st.vietati_tutti()
+    except Exception:  # noqa: BLE001 — la guardia non ferma mai il turno
+        return None
+
+
+# Gli argomenti dei tool che scrivono o mostrano (revisione della PR #367: «ricorda» ripeteva la
+# soluzione nella sua conferma) e le frasi pronte dei risultati, con un esercizio vivo
+FRASE_ARGOMENTI = ("Questo non lo scrivo e non lo segno: è la soluzione del problema che stai "
+                   "facendo a passi. Trovala tu, un passo alla volta.")
+_FRASI = ("conferma", "risposta_finale", "da_dire")
+
+
+def guardia_argomenti(name: str, arguments, ctx) -> dict | None:
+    """Il rifiuto (un risultato col testo del codice) di una chiamata i cui argomenti di testo
+    dicono la soluzione di un esercizio vivo di chi parla; None se va bene. Il tool
+    dell'esercizio non si controlla (le sue frasi sono del codice)."""
+    if name == "studio_esercizio":
+        return None
+    v = vietati_per_ctx(ctx)
+    if v is None or not EG.svela_valore(v, arguments or {}):
+        return None
+    return {"ok": False, "errore": "la soluzione di un esercizio guidato", "fatto": "NIENTE",
+            "conferma": FRASE_ARGOMENTI, "risposta_finale": FRASE_ARGOMENTI}
+
+
+def guardia_risultato(name: str, result, ctx):
+    """Le frasi pronte di un risultato (conferma, risposta_finale, da_dire) che dicono la
+    soluzione di un esercizio vivo: al loro posto la frase del codice. Il risultato com'è
+    altrimenti (o senza esercizi vivi)."""
+    if name == "studio_esercizio" or not isinstance(result, dict):
+        return result
+    frasi = [k for k in _FRASI if isinstance(result.get(k), str) and result.get(k)]
+    if not frasi:
+        return result
+    v = vietati_per_ctx(ctx)
+    if v is None:
+        return result
+    tolte = [k for k in frasi if EG.svela(v, result[k])]
+    if not tolte:
+        return result
+    out = dict(result)
+    for k in tolte:
+        out[k] = FRASE_SVELATO
+    return out

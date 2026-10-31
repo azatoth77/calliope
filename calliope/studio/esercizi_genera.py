@@ -157,24 +157,41 @@ def _misura(testo):
         return None
 
 
+# La punteggiatura attorno alle parole («Sessanta.», «| 26 |»): via prima di leggere i numeri,
+# tranne il punto e la virgola fra due cifre (i decimali)
+_PUNTEGGIATURA = re.compile(r"[;:!?«»\"()\[\]|*_]|(?<!\d)[.,]|[.,](?!\d)")
+
+
 def _numeri_del_testo(testo: str) -> list:
     try:
-        return U.leggi(testo)
+        return U.leggi(_PUNTEGGIATURA.sub(" ", str(testo or "")))
     except Exception:  # noqa: BLE001
         return []
 
 
+# Lo stesso numero, anche senza l'unità attesa («il perimetro fa 26», «Sessanta.»: revisione
+# della PR #367): per la guardia è già la soluzione
+_UGUALE = (RS.GIUSTO, RS.INDIZIO)
+
+
+def _uguale(x, va) -> bool:
+    try:
+        return U.confronta(x, va) in _UGUALE
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _contiene(attesa: dict, frase: str) -> bool:
-    """La frase dice la risposta attesa del passo: per un numero, un numero della frase che il
-    codice dà giusto; per le parole, tutte le parole chiave; per scelta e vero/falso il codice
-    non lo giudica (la domanda li contiene per forza)."""
+    """La frase dice la risposta attesa del passo: per un numero, un numero della frase uguale
+    (anche senza l'unità); per le parole, tutte le parole chiave; per scelta e vero/falso il
+    codice non lo giudica (la domanda li contiene per forza)."""
     if not frase:
         return False
     if attesa["tipo"] == "numero":
         va = _misura(attesa["attesa"])
         if va is None:
             return False
-        return any(U.confronta(x, va) == RS.GIUSTO for x in _numeri_del_testo(frase))
+        return any(_uguale(x, va) for x in _numeri_del_testo(frase))
     if attesa["tipo"] == "parole":
         return RS.valuta(attesa, frase)[0] == RS.GIUSTO
     return False
@@ -189,7 +206,7 @@ def _dice_risultato(risultato: str, frase: str, testo_problema: str = "") -> boo
         return False
     va = _misura(risultato)
     if va is not None:
-        return any(U.confronta(x, va) == RS.GIUSTO for x in _numeri_del_testo(frase))
+        return any(_uguale(x, va) for x in _numeri_del_testo(frase))
     ps = RS.parole(risultato)
     if len(ps) < 2:
         return False
@@ -264,28 +281,60 @@ def proposte(grezzi: dict, testo_problema: str) -> tuple[list[dict], str | None,
 # ─────────────────────────── la guardia della voce ───────────────────────────
 
 def vietati(es: dict) -> dict:
-    """Cosa la voce non dice mentre l'esercizio è in corso: il risultato finale e le risposte
-    attese dei passi numerici non ancora fatti (con il testo del problema, per non contare i
-    numeri che sono già dati)."""
+    """Cosa la voce non dice mentre l'esercizio è vivo: il risultato finale e le risposte attese
+    dei passi numerici non ancora fatti (con il testo del problema, per non contare i numeri che
+    sono già dati)."""
     passi = es.get("passi") or []
     fatti = int(es.get("passo") or 0)
     return {"risultato": es.get("risultato") or "", "testo": es.get("testo") or "",
             "passi": [p for i, p in enumerate(passi) if i >= fatti and p.get("tipo") == "numero"]}
 
 
-def svela(v: dict | None, frase: str) -> bool:
-    """La frase dice qualcosa di `vietati`?"""
+def unisci(lista) -> dict | None:
+    """I vietati di più esercizi vivi insieme (revisione della PR #367: con due esercizi aperti
+    valgono tutti e due); None senza esercizi."""
+    voci = [v for v in lista or () if v]
+    return {"voci": voci} if voci else None
+
+
+# Le frasi del codice con la posizione del passo («Passo 2 di 4», «passo 3»): non sono una
+# risposta, anche quando l'attesa di un passo è un numero piccolo
+_POSIZIONE = re.compile(r"\bpass[oi]\s+\d+(?:\s+di\s+\d+)?\b", re.I)
+
+
+def svela(v: dict | None, frase: str, solo_risultato: bool = False) -> bool:
+    """La frase dice qualcosa di `vietati` (di un esercizio, o di più insieme: `unisci`)? Con
+    `solo_risultato` solo il risultato finale (gli argomenti dei tool: un passo intermedio
+    piccolo, «4 lati», fermerebbe ogni conto)."""
     if not v or not frase:
         return False
+    if "voci" in v:
+        return any(svela(x, frase, solo_risultato) for x in v["voci"])
+    frase = _POSIZIONE.sub(" ", str(frase))
     if _dice_risultato(v.get("risultato") or "", frase, v.get("testo") or ""):
         return True
+    if solo_risultato:
+        return False
     dati = _numeri_del_testo(v.get("testo") or "")
     for p in v.get("passi") or ():
         va = _misura(p.get("attesa"))
-        if va is None or any(U.confronta(x, va) == RS.GIUSTO for x in dati):
+        if va is None or any(_uguale(x, va) for x in dati):
             continue
         if _contiene(p, frase):
             return True
+    return False
+
+
+def svela_valore(v: dict | None, valore) -> bool:
+    """Un argomento di un tool (anche un oggetto o un elenco: ogni testo) dice il risultato?"""
+    if not v:
+        return False
+    if isinstance(valore, str):
+        return svela(v, valore, solo_risultato=True)
+    if isinstance(valore, dict):
+        return any(svela_valore(v, x) for x in valore.values())
+    if isinstance(valore, (list, tuple)):
+        return any(svela_valore(v, x) for x in valore)
     return False
 
 

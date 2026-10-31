@@ -6191,18 +6191,11 @@ class Brain:
         return str(testo or "")[:n]
 
     def _vietati_esercizio(self) -> dict | None:
-        """Cosa la voce non dice a chi parla mentre ha un esercizio guidato in corso (#278,
-        `Studio.vietati_di`); None senza Studio, senza esercizio o senza chi parla."""
-        ctx = getattr(self, "tool_ctx", None)
-        st = getattr(ctx, "studio", None)
-        if st is None or not callable(getattr(st, "vietati_di", None)):
-            return None
-        try:
-            from .tools.studio import chi_di
-            chi = chi_di(ctx)
-            return st.vietati_di(chi.id) if chi is not None else None
-        except Exception:  # noqa: BLE001 — la guardia non ferma mai la risposta
-            return None
+        """Cosa la voce non dice a chi parla mentre ha un esercizio guidato vivo (#278,
+        `esercizi.vietati_per_ctx`: i suoi, o di tutti con la voce incerta); None senza Studio o
+        senza esercizi vivi."""
+        from .studio.esercizi import vietati_per_ctx
+        return vietati_per_ctx(getattr(self, "tool_ctx", None))
 
     def _marca(self, testo: str, autore: str, atto: str | None = None) -> str:
         """Una frase della risposta che non è contenuto del modello: la frase pronta di un tool

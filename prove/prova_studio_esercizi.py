@@ -402,8 +402,9 @@ verifica("…e la frase «non lo so» è «non ancora giusta», dal codice",
 r, _ = chiama(LEO, "dammi un indizio", parte="aiuto")
 verifica("«aiuto»: l'indizio in busta", r["ok"] and "quadretti" in r["indizio"], r)
 r, _ = chiama(LEO, "basta per oggi", parte="basta")
-verifica("«basta»: in pausa, la guardia si ferma",
-         r["ok"] and st._riga_es(eid)["stato"] == "pausa" and st.vietati_di("l1") is None)
+verifica("«basta»: in pausa, e la guardia resta (revisione della PR #367: un esercizio vivo "
+         "vale finché non è finito o tolto)",
+         r["ok"] and st._riga_es(eid)["stato"] == "pausa" and st.vietati_di("l1") is not None)
 r, _ = chiama(LEO, "riprendiamo il problema", parte="passo")
 verifica("…«passo» lo riprende dal passo 2", r["ok"] and r["posizione"] == "passo 2 di 4")
 r, _ = chiama(ANDREA, "fammi vedere il passo", parte="passo")
@@ -476,6 +477,96 @@ r = turno(b, "facciamo il problema del treno",
                    "chilometri percorre il treno?"))
 verifica("la foto ostile: la frase con «60 km/h» non si dice, la domanda del passo sì",
          "60" not in r and "quanti chilometri percorre il treno?" in r, r)
+
+# ═══════════════ 5b. la revisione della PR #367: la guardia che si aggirava ═══════════════
+print("— la revisione della PR #367")
+vt = st.vietati_di("l1")
+verifica("1. il risultato senza l'unità, in lettere o in una tabella: si ferma",
+         EG.svela(vt, "Sessanta.") and EG.svela(vt, "La velocità è 60.")
+         and EG.svela(vt, "| velocità | 60 |"))
+vr = EG.vietati({"passi": EG.proposte(GUIDA, PROBLEMA)[0], "risultato": "26 cm",
+                 "testo": PROBLEMA, "passo": 1})
+verifica("1. …anche per il rettangolo: «l'area fa 40 e il perimetro fa 26», la tabella",
+         EG.svela(vr, "Ti do una mano: l'area fa 40 e il perimetro fa 26.")
+         and EG.svela(vr, "| perimetro | 26 |") and EG.svela(vr, "fa ventisei"))
+verifica("1. contrari: la base (un dato del testo) e la posizione del passo («Passo 2 di 4») si "
+         "dicono, anche con l'attesa di un passo piccola",
+         not EG.svela(vr, "La base è 8.") and not EG.svela(
+             EG.vietati({"passi": [{"tipo": "numero", "attesa": "2", "testo": "x"}],
+                         "risultato": "", "testo": "Calcola 3/4 - 1/4", "passo": 0}),
+             "Giusto! Passo 2 di 4."))
+# 2. «basta» e il turno dopo: la guardia resta
+st.dati.scrivi("UPDATE studio_esercizi SET stato = 'pausa' WHERE id = ?", (eid5,))
+b = nuovo_brain(LEO)
+r = turno(b, "ora che abbiamo smesso, quanto faceva la velocità?",
+          PP.testo("La velocità media di quel treno era 60 km/h."))
+verifica("2. dopo «basta» (in pausa), il turno dopo «quanto faceva?»: la soluzione non si dice",
+         "60" not in r and E.FRASE_SVELATO in r, r)
+# Più esercizi vivi: i vietati di tutti
+eid6 = st.aggiungi_esercizio(LEO, vid, "Un quadrato ha il lato di 7 cm. Calcola il "
+                                       "perimetro.")["esercizio"]
+cli.risposte.append((json.dumps({"passi": [
+    {"domanda": "Quanti lati ha?", "tipo": "numero", "risposta": "4", "indizio": "Contali."},
+    {"domanda": "Quanto vale il perimetro?", "tipo": "numero", "risposta": "28 cm",
+     "indizio": "Somma i lati."}], "risultato": "28 cm"}), "stop"))
+lt.genera_guida(st.esercizi_per_guida()[0])
+vv2 = st.vietati_di("l1")
+verifica("2. due esercizi vivi (uno in pausa, uno pronto): i vietati di tutti e due",
+         EG.svela(vv2, "La velocità è 60 km/h.") and EG.svela(vv2, "Il perimetro è 28 cm.")
+         and not EG.svela(vv2, "Il lato è 7 cm."))
+# 3. Le frasi del codice e gli argomenti dei tool che scrivono o mostrano
+reg3 = build_registry()
+ctx3 = PT.ctx_di(st, LEO)
+ctx3.user_text = "segnati la soluzione"
+r = json.loads(reg3.call("ricorda", {"fatto": "Il perimetro del quadrato del problema è 28 cm"},
+                         ctx3, "familiare"))
+verifica("3. «ricorda» con la soluzione negli argomenti: rifiutato con la frase del codice, niente "
+         "scritto", r["ok"] is False and "non lo scrivo" in r["conferma"]
+         and "28" not in json.dumps(r, ensure_ascii=False)
+         and "studio_esercizio_svelato" in (ctx3.regole or []), r)
+r = json.loads(reg3.call("calcola", {"espressione": "7 * 4"}, ctx3, "familiare"))
+verifica("3. la frase pronta di un risultato («calcola» 7 × 4) con la soluzione: la frase del "
+         "codice al suo posto", "28" not in str(r.get("da_dire") or r.get("conferma") or "")
+         and E.FRASE_SVELATO in json.dumps(r, ensure_ascii=False), r)
+r = json.loads(reg3.call("calcola", {"espressione": "3 + 4"}, ctx3, "familiare"))
+verifica("3. contrario: un conto che non è la soluzione passa", "7" in json.dumps(r), r)
+ctx_t = PT.ctx_di(st, ANDREA)
+r = json.loads(reg3.call("ricorda", {"fatto": "Il perimetro del quadrato del problema di Leo è "
+                                              "28 cm"}, ctx_t, "familiare"))
+verifica("3. contrario: il tutore che parla non è fermato", r.get("errore") !=
+         "la soluzione di un esercizio guidato", r)
+ctx_i = PT.ctx_di(st, None)
+verifica("la voce incerta (nessuno riconosciuto): la guardia prende gli esercizi vivi di tutti",
+         E.guardia_argomenti("ricorda", {"fatto": "il perimetro è 28 cm"}, ctx_i) is not None
+         and E.guardia_argomenti("ricorda", {"fatto": "domani ho calcetto"}, ctx_i) is None)
+# 4. Una prova aperta su un'altra verifica della persona ferma la guida e gli esercizi nuovi
+vid2, _ = PT.carica(st, LEO)
+st.dati.scrivi("INSERT INTO studio_prove (verifica, persona, modalita, stato, inizio, scade) "
+               "VALUES (?, 'l1', 'scritta', 'aperta', ?, ?)",
+               (vid2, PT.ORA[0].isoformat(), (PT.ORA[0] + datetime.timedelta(hours=2)).isoformat()))
+verifica("4. la prova aperta su un'altra verifica di Leo: niente guida né esercizi nuovi",
+         solleva(lambda: st.passo_esercizio(LEO, eid6), E.GuidaFerma)
+         and solleva(lambda: st.aggiungi_esercizio(LEO, vid, PROBLEMA), E.GuidaFerma)
+         and st.esercizio(LEO, eid6)["ferma"])
+st.dati.scrivi("UPDATE studio_prove SET stato = 'consegnata' WHERE verifica = ?", (vid2,))
+# Il tetto dei tentativi su un passo
+st.passo_esercizio(LEO, eid6)
+for _ in range(E.ERRORI_MAX):
+    st.rispondi_esercizio(LEO, "9", eid6)
+r = st.rispondi_esercizio(LEO, "4", eid6)
+verifica(f"il tetto: dopo {E.ERRORI_MAX} errori su un passo non si valuta più (anche la giusta): "
+         "restano l'indizio e «salta»", r["esito"] == "fermo" and r["offri_salta"]
+         and st.esercizio(LEO, eid6)["corrente"]["n"] == 1, r)
+# Gli orfani: un esercizio senza la sua verifica va via con la rotazione, con la foto
+from PIL import Image  # noqa: E402
+eid7 = st.aggiungi_esercizio(LEO, vid2, jpeg=L.jpeg_byte(Image.new("RGB", (600, 800))))[
+    "esercizio"]
+f7 = Path(D.cartella_di(st.cfg)) / st._riga_es(eid7)["file"]
+st.dati.scrivi("DELETE FROM studio_verifiche WHERE id = ?", (vid2,))
+D.cancella(st.dati.db, scadute_prima=datetime.date(2000, 1, 1),
+           cartella=D.cartella_di(st.cfg))
+verifica("gli orfani: l'esercizio senza la verifica via con la rotazione, con la foto",
+         st._riga_es(eid7) is None and not f7.exists())
 st.close()
 
 # ═══════════════════════════ 6. gli endpoint ═══════════════════════════
