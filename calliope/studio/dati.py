@@ -468,7 +468,8 @@ def _v13(db: sqlite3.Connection):
       modello); `stato` in_coda, in_corso, fermata, finita, errore; `prossima` la voce
       dell'archivio da cui ripartire; `conti` (JSON di numeri) e `righe` (JSON: le voci non lette
       col nome ripulito e il motivo scritto dal codice);
-    - `studio_materiali.importazione`: l'importazione da cui viene un materiale."""
+    - `studio_materiali.importazione` e `voce`: l'importazione e la voce dell'archivio da cui
+      viene un materiale."""
     db.execute("""CREATE TABLE IF NOT EXISTS studio_importazioni (
         id INTEGER PRIMARY KEY,
         verifica INTEGER NOT NULL,
@@ -489,6 +490,9 @@ def _v13(db: sqlite3.Connection):
     db.execute("CREATE INDEX IF NOT EXISTS studio_importazioni_verifica "
                "ON studio_importazioni(verifica)")
     db.execute("ALTER TABLE studio_materiali ADD COLUMN importazione INTEGER")
+    # La voce dell'archivio da cui viene il materiale: una voce si scrive una volta sola anche
+    # se un riavvio cade fra le sue pagine e la prossima voce (revisione della PR #364)
+    db.execute("ALTER TABLE studio_materiali ADD COLUMN voce INTEGER")
 
 
 MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9, _v10, _v11, _v12, _v13]

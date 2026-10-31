@@ -88,6 +88,17 @@ NON_ENTRA = {"eseguibile": "è un programma: non lo apro",
 MACRO, NASCOSTO, TAGLIATO = "macro", "testo_nascosto", "tagliato"
 # Il tempo per l'avvio del sottoprocesso (Python e gli import), a parte dal passo
 AVVIO_S = 30.0
+# Le voci di un documento Office al più (come `allegati._zip_sicuro`), per il controllo della
+# fine dell'archivio prima di aprirlo; i byte della directory centrale per voce al più
+OFFICE_VOCI = 2000
+CD_PER_VOCE = 1024
+# Gli archivi hanno un tempo massimo più stretto (revisione della PR #364): una base più tanto per
+# voce, e ogni voce al più tanto anche coi segni di vita (un PDF di 40 pagine ci sta)
+ARCHIVIO_BASE_S = 60.0
+ARCHIVIO_PER_VOCE_S = 1.0
+VOCE_MAX_S = 120.0
+# Un testo semplice oltre tante volte i caratteri delle pagine libere non si legge nemmeno
+TESTO_OLTRE = 4
 
 
 @dataclass
@@ -131,18 +142,53 @@ def nome_strano(nome: str) -> str | None:
     lettera di un'unità, «..», caratteri di controllo, troppo lungo o troppo profondo. Il nome
     non arriva mai al disco (le pagine le nomina il server): questi sono segni di un archivio
     fatto apposta, e la voce non si apre."""
+    import unicodedata
     n = str(nome or "")
     if not n or len(n) > 400:
         return "nome strano"
-    if re.search(r"[\x00-\x1f\x7f]", n):
+    # Caratteri di controllo e di direzione del testo («gpj.exe» scritto al contrario)
+    if re.search(r"[\x00-\x1f\x7f​-‏‪-‮⁦-⁩﻿]", n):
         return "nome strano"
     p = n.replace("\\", "/")
     if p.startswith("/") or re.match(r"[A-Za-z]:", p):
         return "percorso strano"
     parti = p.split("/")
-    if ".." in parti or len(parti) > 20:
+    # Anche i «..» scritti con altri caratteri (punti a larghezza piena, «‥»), dopo NFKC
+    def soli_punti(x):
+        y = unicodedata.normalize("NFKC", x).strip()
+        return len(y) >= 2 and set(y) <= {"."}
+    if any(soli_punti(x) for x in parti) or len(parti) > 20:
         return "percorso strano"
     return None
+
+
+def voci_dichiarate(path) -> tuple[int, int] | None:
+    """(voci, byte della directory centrale) scritti nella fine dell'archivio (EOCD, anche
+    ZIP64), letti **prima** di aprirlo con `zipfile`, che altrimenti carica in memoria tutta la
+    directory centrale (900 000 voci vuote: 600 MB). None se la fine non si trova."""
+    import struct
+    dim = os.path.getsize(path)
+    with open(path, "rb") as f:
+        coda = min(dim, 65557)
+        f.seek(dim - coda)
+        b = f.read(coda)
+        i = b.rfind(b"PK\x05\x06")
+        if i < 0 or len(b) - i < 22:
+            return None
+        voci, cd = struct.unpack_from("<H", b, i + 10)[0], struct.unpack_from("<L", b, i + 12)[0]
+        if voci == 0xFFFF or cd == 0xFFFFFFFF:
+            j = i - 20
+            if j < 0 or b[j:j + 4] != b"PK\x06\x07":
+                return None
+            pos = struct.unpack_from("<Q", b, j + 8)[0]
+            if pos + 56 > dim:
+                return None
+            f.seek(pos)
+            r = f.read(56)
+            if r[:4] != b"PK\x06\x06":
+                return None
+            voci, cd = struct.unpack_from("<Q", r, 32)[0], struct.unpack_from("<Q", r, 40)[0]
+        return int(voci), int(cd)
 
 
 def _e_link(info: zipfile.ZipInfo) -> bool:
@@ -177,8 +223,20 @@ def elenca(path, nome: str, tetti: Tetti) -> tuple[str, list[Voce]]:
         testa = f.read(65536)
     if not testa.startswith((b"PK\x03\x04", b"PK\x05\x06")):
         return "file", [Voce(0, mostrabile(nome))]
+    # Il numero di voci e la directory centrale dalla fine dell'archivio, prima di aprirlo
+    # (revisione della PR #364, punto 4). Un documento Office ne ha al più OFFICE_VOCI
+    dich = voci_dichiarate(path)
+    massimo = max(tetti.file_max, OFFICE_VOCI)
+    if dich is not None and (dich[0] > massimo or dich[1] > massimo * CD_PER_VOCE):
+        raise Rifiuto(f"l'archivio ha {dich[0]} file: al più {tetti.file_max}")
+    import warnings
     try:
-        zf = zipfile.ZipFile(path)
+        with warnings.catch_warnings():
+            # «Overlapped entries» e simili: un archivio fatto apposta, non un avviso
+            warnings.simplefilter("error")
+            zf = zipfile.ZipFile(path)
+    except UserWarning as e:
+        raise Rifiuto(f"archivio fatto in modo strano ({str(e)[:60]})") from None
     except (zipfile.BadZipFile, ValueError, OSError, EOFError, NotImplementedError):
         return "file", [Voce(0, mostrabile(nome))]
     with zf:
@@ -192,6 +250,7 @@ def elenca(path, nome: str, tetti: Tetti) -> tuple[str, list[Voce]]:
         infos = zf.infolist()
         if len(infos) > tetti.file_max:
             raise Rifiuto(f"l'archivio ha {len(infos)} file: al più {tetti.file_max}")
+        controlla_struttura(zf, infos)
         voci = []
         for info in sorted((i for i in infos if not i.is_dir()), key=lambda i: i.filename):
             motivo = nome_strano(info.filename)
@@ -208,9 +267,28 @@ def elenca(path, nome: str, tetti: Tetti) -> tuple[str, list[Voce]]:
         return "zip", voci
 
 
+def controlla_struttura(zf: zipfile.ZipFile, infos: list):
+    """Rifiuta l'archivio con nomi doppi o voci sovrapposte (revisione della PR #364, punto 1):
+    500 voci con lo stesso nome sugli stessi byte compressi tengono occupato il sottoprocesso
+    per minuti con un file di pochi KB. In ordine di posizione, ogni voce deve finire (almeno
+    l'intestazione locale, il nome e i byte compressi) prima che cominci la successiva, e
+    l'ultima prima della directory centrale."""
+    nomi = [i.filename for i in infos]
+    if len(set(nomi)) != len(nomi):
+        raise Rifiuto("l'archivio ha nomi ripetuti")
+    ordinate = sorted(infos, key=lambda i: i.header_offset)
+    fine_dati = getattr(zf, "start_dir", None)
+    for k, i in enumerate(ordinate):
+        fine = i.header_offset + 30 + len(i.orig_filename.encode("utf-8", "replace")) + \
+            i.compress_size
+        dopo = ordinate[k + 1].header_offset if k + 1 < len(ordinate) else fine_dati
+        if dopo is not None and fine > dopo:
+            raise Rifiuto("l'archivio ha voci sovrapposte")
+
+
 def leggi_voce(zf: zipfile.ZipFile, info: zipfile.ZipInfo, massimo: int) -> bytes:
-    """I byte di una voce, contati mentre si decomprimono: oltre `massimo` ValueError. Le
-    dimensioni dichiarate nell'archivio possono mentire."""
+    """I byte di una voce, contati mentre si decomprimono: oltre `massimo` `Troppo` (coi byte
+    letti fin lì). Le dimensioni dichiarate nell'archivio possono mentire."""
     buf = io.BytesIO()
     with zf.open(info) as f:
         while True:
@@ -219,8 +297,16 @@ def leggi_voce(zf: zipfile.ZipFile, info: zipfile.ZipInfo, massimo: int) -> byte
                 break
             buf.write(pezzo)
             if buf.tell() > massimo:
-                raise ValueError("troppo grande")
+                raise Troppo(buf.tell())
     return buf.getvalue()
+
+
+class Troppo(ValueError):
+    """Una voce oltre il suo tetto: `letti` i byte decompressi fin lì."""
+
+    def __init__(self, letti: int):
+        super().__init__("troppo grande")
+        self.letti = letti
 
 
 # ─────────────────────────── che cos'è ───────────────────────────
@@ -397,6 +483,20 @@ def elabora(dati: bytes, nome: str, tetti: Tetti, cartella: Path, i: int, avanti
             pronte, pulito = PG._dividi(dati, tetti.lato, massimo, tetti.soglia,
                                         avanti=lambda _i, _n: avanti())
         else:
+            # Un testo semplice molto più lungo delle pagine libere non si legge nemmeno
+            # (revisione della PR #364: 500 testi comprimibili tenevano il lavoro per minuti)
+            if cat == "testo" and len(dati) > max(1, tetti.pagine_libere) * PAGINA_CARATTERI * \
+                    TESTO_OLTRE:
+                return {"esito": "non_letto", "tipo": cat,
+                        "motivo": "troppo lungo: la verifica non ha tante pagine libere"}
+            if tetti.pagine_libere < 1:
+                return {"esito": "non_letto", "tipo": cat, "motivo": "la verifica è piena"}
+            # Anche in caratteri, prima di leggerlo: una pagina ne ha al più PAGINA_CARATTERI
+            from ..allegati import _testo
+            if cat == "testo" and len((_testo(dati) or "").strip()) > \
+                    (tetti.pagine_libere + 1) * PAGINA_CARATTERI:
+                return {"esito": "non_letto", "tipo": cat,
+                        "motivo": "troppo lungo: la verifica non ha tante pagine libere"}
             tt, avvisi = testi(dati, nome, cat, tetti.voce_max_b)
             if len(tt) > tetti.pagine_libere:
                 return {"esito": "non_letto", "tipo": cat,
@@ -435,6 +535,9 @@ def lavora(cartella: Path) -> int:
         return 2
     di(f"voci {len(voci)} {tipo}")
     letti = 0
+    # Il rapporto su tutto l'archivio (revisione della PR #364): i byte decompressi, contati,
+    # al più `rapporto` volte il file arrivato, oltre al tetto del totale
+    totale = min(tetti.totale_max_b, tetti.rapporto * max(1, path.stat().st_size))
     zf = zipfile.ZipFile(path) if tipo == "zip" else None
     try:
         for v in voci[inizio:]:
@@ -446,15 +549,16 @@ def lavora(cartella: Path) -> int:
                 di(f"voce {v.indice}")
                 continue
             if zf is not None:
-                if letti >= tetti.totale_max_b:
+                if letti >= totale:
                     meta = {"esito": "non_letto", "motivo": "oltre il tetto dell'archivio"}
                 else:
                     try:
-                        dati = leggi_voce(zf, v.zinfo, min(tetti.voce_max_b,
-                                                           tetti.totale_max_b - letti))
+                        dati = leggi_voce(zf, v.zinfo, min(tetti.voce_max_b, totale - letti))
                         letti += len(dati)
                         meta = None
-                    except ValueError:
+                    except Troppo as e:
+                        # I byte decompressi contano anche quando la voce si scarta
+                        letti += e.letti
                         meta = {"esito": "non_letto", "motivo": "troppo grande"}
                     except (zipfile.BadZipFile, OSError, EOFError, NotImplementedError,
                             RuntimeError, zlib_errore()) as e:
@@ -529,6 +633,8 @@ class Importi:
         self._sveglia = threading.Event()
         self._chiuso = False
         self._ferma: set[int] = set()
+        # Il tempo massimo di un'importazione in corso (più stretto per gli archivi)
+        self._limite: dict[int, float] = {}
         self._lock = threading.Lock()
         self.corrente: int | None = None
         self._proc: subprocess.Popen | None = None
@@ -576,10 +682,13 @@ class Importi:
     def rimetti(self, iid: int) -> bool:
         """«Riprendi»: una fermata torna in coda dalla voce dove era."""
         with self._lock:
-            self._ferma.discard(int(iid))
             n = self.studio.dati.scrivi("UPDATE studio_importazioni SET stato = 'in_coda', motivo "
                                         "= NULL, aggiornata = ? WHERE id = ? AND stato = "
                                         "'fermata'", (_adesso(), int(iid)))
+            # Il «Ferma» chiesto a quella in corso resta finché lei non si è fermata davvero
+            # (revisione della PR #364): solo una fermata rimessa in coda lo toglie
+            if n and self.corrente != int(iid):
+                self._ferma.discard(int(iid))
         self.sveglia()
         return bool(n)
 
@@ -685,8 +794,10 @@ class Importi:
                 if esito == "fine":
                     return self._chiudi(self._riga(iid) or riga, "finita")
                 if esito == "rifiuto":
-                    return self._chiudi(self._riga(iid) or riga, "errore",
-                                        self._riga(iid).get("motivo"))
+                    r = self._riga(iid)
+                    if r is None:              # tolta intanto («Annulla»)
+                        return None
+                    return self._chiudi(r, "errore", r.get("motivo"))
                 if esito == "fermata":
                     return self._aggiorna(iid, stato="fermata", prossima=prossima,
                                           motivo="fermata da te")
@@ -710,6 +821,7 @@ class Importi:
             with self._lock:
                 self.corrente = None
                 self._ferma.discard(iid)
+                self._limite.pop(iid, None)
 
     def _riga(self, iid: int) -> dict | None:
         return self.studio.dati.uno("SELECT * FROM studio_importazioni WHERE id = ?", (iid,))
@@ -742,18 +854,22 @@ class Importi:
             threading.Thread(target=_lettore_righe, args=(proc.stdout, coda), daemon=True,
                              name="studio-importa-righe").start()
             pronto, voce, nome_voce = False, None, None
-            ultimo = time.monotonic()
+            ultimo = inizio_voce = time.monotonic()
             while True:
                 if self._chiuso:
                     return "chiusura", prossima
                 if iid in self._ferma:
                     return "fermata", prossima
-                if time.monotonic() - t0 > tetti.tempo_max_s:
+                # Il tempo massimo: per un archivio più stretto, secondo le voci (revisione della
+                # PR #364), fissato alla prima lettura dell'elenco e tenuto fra un giro e l'altro
+                if time.monotonic() - t0 > self._limite.get(iid, tetti.tempo_max_s):
                     return "tempo", prossima
-                # Fra un segno di vita e l'altro al più `passo_s` (l'avvio ha il suo tempo)
+                # Fra un segno di vita e l'altro al più `passo_s` (l'avvio ha il suo tempo), e
+                # una voce al più VOCE_MAX_S anche coi segni di vita
                 attesa = tetti.passo_s if pronto else AVVIO_S
+                lunga = voce is not None and time.monotonic() - inizio_voce > VOCE_MAX_S
                 try:
-                    t = coda.get(timeout=min(0.5, attesa))
+                    t = None if lunga else coda.get(timeout=min(0.5, attesa))
                 except queue.Empty:
                     if time.monotonic() - ultimo <= attesa:
                         continue
@@ -782,9 +898,13 @@ class Importi:
                     pezzi = t.split()
                     self._aggiorna(iid, voci=int(pezzi[1]), tipo=pezzi[2] if len(pezzi) > 2
                                    else None)
+                    if len(pezzi) > 2 and pezzi[2] == "zip" and iid not in self._limite:
+                        self._limite[iid] = min(tetti.tempo_max_s, ARCHIVIO_BASE_S +
+                                                ARCHIVIO_PER_VOCE_S * int(pezzi[1]))
                 elif t.startswith("inizio "):
                     pezzi = t.split(" ", 2)
                     voce = int(pezzi[1])
+                    inizio_voce = time.monotonic()
                     try:
                         nome_voce = str(json.loads(pezzi[2]))[:120] if len(pezzi) > 2 else None
                     except ValueError:
@@ -817,12 +937,13 @@ class Importi:
         if r is None:
             return
         righe = D_da_j(r["righe"])
+        if any(x.get("i") == i for x in righe):
+            return                              # già scritta (un riavvio a metà)
         conti = _conti(r["conti"])
         conti["non_letti"] = conti.get("non_letti", 0) + 1
         conti["file"] = conti.get("file", 0) + 1
         if not nome:
-            nome = next((x.get("nome") for x in righe if x.get("i") == i), None) or \
-                f"file {i + 1}"
+            nome = f"file {i + 1}"
         if len(righe) < RIGHE_MAX:
             righe.append({"i": i, "nome": nome, "esito": "non_letto", "motivo": motivo})
         self.misure["non_letti"] += 1
@@ -844,13 +965,23 @@ class Importi:
         if meta.get("esito") != "ok":
             self._non_letto(iid, i, nome, str(meta.get("motivo") or "non si legge")[:200])
             return None
+        if self._riga(iid) is None:
+            return "fermata"                    # tolta intanto («Annulla»): niente pagine
+        # La voce già scritta prima di un riavvio (le pagine sì, la prossima voce no): non si
+        # riscrive, si ricostruisce la riga (revisione della PR #364)
+        gia = self.studio.dati.uno("SELECT id FROM studio_materiali WHERE importazione = ? AND "
+                                   "voce = ?", (iid, i))
         try:
-            if meta.get("testi"):
+            if gia is not None:
+                out = {"materiale": gia["id"], "pagine": [
+                    {"avvisi": D_da_j_testo(p["avvisi"])} for p in self.studio.dati.tutti(
+                        "SELECT avvisi FROM studio_pagine WHERE materiale = ?", (gia["id"],))]}
+            elif meta.get("testi"):
                 tt = [(d / f"t{k}.txt").read_text(encoding="utf-8")
                       for k in range(int(meta["testi"]))]
                 out = self.studio.aggiungi_testi(chi, riga["verifica"], tt,
                                                  avvisi=list(meta.get("avvisi") or ()),
-                                                 importazione=iid)
+                                                 importazione=iid, voce=i)
                 self.misure["testi"] += len(tt)
             else:
                 pronte = [PG.Pronta((d / f"p{k}.jpg").read_bytes(), int(m["larghezza"]),
@@ -860,7 +991,7 @@ class Importi:
                           for k, m in enumerate(meta.get("pagine") or ())]
                 pulito = (d / "pulito.pdf").read_bytes() if meta.get("pulito") else None
                 out = self.studio.aggiungi_pronte(chi, riga["verifica"], pronte, "file", None,
-                                                  None, pulito, importazione=iid)
+                                                  None, pulito, importazione=iid, voce=i)
                 self.misure["pagine"] += len(pronte)
         except TroppePagine:
             self._non_letto(iid, i, nome, "la verifica è piena")
@@ -875,7 +1006,11 @@ class Importi:
             self._non_letto(iid, i, nome, f"non salvato ({type(e).__name__})")
             return None
         r = self._riga(iid)
+        if r is None:
+            return "fermata"                    # tolta intanto («Annulla»)
         righe, conti = D_da_j(r["righe"]), _conti(r["conti"])
+        if any(x.get("i") == i for x in righe):
+            return None
         n = len(out.get("pagine") or ())
         conti["file"] = conti.get("file", 0) + 1
         conti["letti"] = conti.get("letti", 0) + 1
@@ -960,7 +1095,7 @@ class Importazioni:
         return iid
 
     def aggiungi_testi(self, chi, vid, testi_: list, avvisi=None,
-                       importazione: int | None = None) -> dict:
+                       importazione: int | None = None, voce: int | None = None) -> dict:
         """Le pagine di testo di un file importato (#298): un materiale «file» senza titolo (il
         nome del file è un dato: il piano dice «materiale N»), una pagina per testo nello stato
         «letta» col `metodo` «file_testo», senza immagine e senza modello. Il testo è un dato
@@ -981,9 +1116,9 @@ class Importazioni:
                 db.execute("BEGIN IMMEDIATE")
                 mid = db.execute(
                     "INSERT INTO studio_materiali (verifica, origine, titolo, riferimento, creato, "
-                    "importazione) VALUES (?, 'file', NULL, NULL, ?, ?)",
+                    "importazione, voce) VALUES (?, 'file', NULL, NULL, ?, ?, ?)",
                     (v["id"], D.adesso(), int(importazione) if importazione is not None
-                     else None)).lastrowid
+                     else None, int(voce) if voce is not None else None)).lastrowid
                 r = db.execute("SELECT COALESCE(MAX(p.ordine), 0) FROM studio_pagine p JOIN "
                                "studio_materiali m ON m.id = p.materiale WHERE m.verifica = ?",
                                (v["id"],)).fetchone()
@@ -1088,6 +1223,11 @@ class TroppeImportazioni(ValueError):
     def __init__(self, massimo: int = 0):
         super().__init__(f"al più {massimo} importazioni insieme")
         self.massimo = massimo
+
+
+def D_da_j_testo(testo) -> list:
+    from .dati import da_j
+    return [str(x) for x in da_j(testo)]
 
 
 def D_da_j(testo) -> list:

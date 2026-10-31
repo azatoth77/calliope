@@ -161,9 +161,15 @@ contenuto non è un PDF»).
 | `studio_importa_tempo_max_s` | 1800 | per tutta l'importazione: oltre, «fermata» (si riprende a mano) |
 | `studio_importa_coda` | 10 | le importazioni vive (in coda, in corso, fermate) di una persona |
 
-Più il rapporto di compressione (150, come gli allegati) e, come la 4.2, `studio_pdf_max_pagine`
-e `studio_pagine_max` (le pagine di testo contano come le altre). Nel server: 20 invii al minuto per
-schermo, il corpo letto al più per 15 minuti, 90 letture al minuto della scheda.
+Più il rapporto di compressione (150, come gli allegati) per voce e, dalla revisione della PR
+#364, **su tutto l'archivio** (i byte contati al più 150 volte il file arrivato), e come la 4.2
+`studio_pdf_max_pagine` e `studio_pagine_max` (le pagine di testo contano come le altre). Un
+archivio ha un tempo massimo più stretto, 60 s più 1 s per voce (dentro `studio_importa_tempo_max_s`),
+e ogni voce al più 120 s anche coi segni di vita. Un testo semplice più lungo delle pagine libere
+(in byte oltre quattro volte, poi in caratteri) non si legge nemmeno. Nel server: 20 invii al
+minuto per schermo, il corpo letto al più per 15 minuti, 90 letture al minuto della scheda; la
+pagina controlla `max_mb` prima di mandare e mostra l'avanzamento in byte dell'invio
+(`XMLHttpRequest.upload.onprogress`).
 
 **Sicurezza dei file.** Le voci non si estraggono mai per nome: il sottoprocesso le legge in memoria
 una alla volta e sul disco scrive solo le pagine col nome del server. Si saltano: i percorsi
@@ -171,8 +177,15 @@ assoluti, con la lettera di un'unità o con «..» (zip-slip), i nomi con caratt
 troppo lunghi o profondi, i link simbolici (il modo Unix negli attributi), le voci cifrate, quelle
 con un rapporto sospetto. Una voce che mente sulla dimensione si ferma: `zipfile` legge al più il
 dichiarato e poi il CRC non torna («voce rovinata»), e comunque i byte si contano. Le voci
-sovrapposte (la «zip bomb» a voci che puntano agli stessi byte) le rifiuta `zipfile` stesso, e
-restano dentro il totale contato. Il docx con DOCTYPE (XXE) non si apre (`allegati._zip_sicuro`).
+sovrapposte (la «zip bomb» a voci che puntano agli stessi byte) e i nomi ripetuti rifiutano
+l'archivio intero (`controlla_struttura`: le voci in ordine di posizione, ognuna finisce prima della
+successiva; e gli avvisi di `zipfile` diventano errori). Il numero di voci e la grandezza della
+directory centrale si leggono dalla fine dell'archivio (anche ZIP64, `voci_dichiarate`) **prima** di
+aprirlo: 900 000 voci vuote portavano il sottoprocesso a 615 MB. Il docx o l'ODT con DOCTYPE o
+ENTITY (XXE, «billion laughs») non si apre (`allegati._zip_sicuro`, che dalla revisione della PR
+#364 legge tutta la parte XML a pezzi e non solo i primi 4096 byte). I nomi con i caratteri di
+direzione del testo («gpj.exe» al contrario) o con «..» scritto con altri caratteri (punti a
+larghezza piena, «‥») sono strani.
 Il sottoprocesso (`python -m calliope.studio.importa --lavora`) gira a priorità bassa
 (`BELOW_NORMAL_PRIORITY_CLASS` su Windows, `nice 10` su Linux), coi suoi provvisori in
 `studio_cartella/tmp/imp-*`, tolti dopo ogni giro e dalla pulizia dei provvisori.
@@ -222,6 +235,27 @@ falsi, nomi strani, ZIP ostili, le pagine, i permessi, i limiti, ferma, riprendi
 metà, la tenuta) e `prova_studio_importa_pagina.py` (il browser a 390×844, 320×693 col testo al 125
 % e sul PC). Le prove dello Studio che controllavano lo schema 12 e il service worker v35 sono
 passate alla 13 e alla v37 (la v36 è della libreria, #297).
+
+### 31/10: la revisione della PR #364 (importazione)
+
+Il revisore indipendente ha dato «da correggere» (script fuori dal repository: `attacchi.py`,
+`figlio.py`, `memoria.py`). Corretto:
+1. *Un archivio di pochi KB teneva il lavoro di sfondo per minuti.* 500 voci con lo stesso nome
+   sugli stessi byte compressi: ora «l'archivio ha nomi ripetuti» in un secondo; le voci
+   sovrapposte coi nomi diversi «voci sovrapposte»; il rapporto su tutto l'archivio; il testo
+   troppo lungo per le pagine libere scartato prima di leggerlo; il tempo massimo degli archivi e
+   delle voci. Lo ZIP onesto da 0,37 MB con 500 testi molto comprimibili (210 MB decompressi) ora
+   finisce in 0,6 s: 131 «sono 200 pagine», 368 «oltre il tetto dell'archivio». *Il tempo di 8–9
+   minuti misurato dal revisore su questo secondo caso veniva anche dalla sua prova, che non
+   leggeva l'uscita del sottoprocesso finché non finiva e lo bloccava sulla pipe; il lavoro vero la
+   legge con un thread.*
+2. «Annulla» mentre si scrive una voce: niente più TypeError, l'importazione finisce «fermata».
+3. «Riprendi» mentre il «Ferma» della corrente non ha ancora agito non lo toglie più.
+4. La directory centrale enorme è rifiutata dalla fine dell'archivio, prima di aprirlo (1,2 s e 79
+   MB invece di 615 MB).
+E: il DOCTYPE cercato in tutta la parte XML; il tetto e l'avanzamento dell'invio nella pagina; la
+voce scritta una volta sola anche con un riavvio fra le pagine e la prossima voce
+(`studio_materiali.voce`, nello schema 13 ancora non uscito).
 
 ## La libreria: schede e carte preparate, scelte dal codice (31/10, issue #297, ramo `issue-297-libreria`)
 

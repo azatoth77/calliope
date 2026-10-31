@@ -691,7 +691,7 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni):
 
     def aggiungi_pronte(self, chi, vid, pronte: list, origine: str = "foto", titolo=None,
                         materiale=None, originale: bytes | None = None,
-                        importazione: int | None = None) -> dict:
+                        importazione: int | None = None, voce: int | None = None) -> dict:
         """Le pagine controllate dal server (`studio/pagine.Pronta`) nella verifica: i JPEG (e il
         PDF originale) nella cartella dello Studio, una riga per pagina nello stato «da_leggere»,
         in fondo all'ordine. `materiale`: quello di un invio già cominciato (le pagine dello
@@ -732,10 +732,11 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi, DallaLibreria, Importazioni):
                     # `importazione` (31/10, #298): il materiale nato da un'importazione
                     mid = db.execute(
                         "INSERT INTO studio_materiali (verifica, origine, titolo, riferimento, "
-                        "creato, importazione) VALUES (?, ?, ?, ?, ?, ?)",
+                        "creato, importazione, voce) VALUES (?, ?, ?, ?, ?, ?, ?)",
                         (v["id"], origine, (" ".join(str(titolo).split())[:60] or None)
                          if titolo else None, rif, D.adesso(),
-                         int(importazione) if importazione is not None else None)).lastrowid
+                         int(importazione) if importazione is not None else None,
+                         int(voce) if voce is not None else None)).lastrowid
                 r = db.execute("SELECT COALESCE(MAX(p.ordine), 0) FROM studio_pagine p JOIN "
                                "studio_materiali m ON m.id = p.materiale WHERE m.verifica = ?",
                                (v["id"],)).fetchone()

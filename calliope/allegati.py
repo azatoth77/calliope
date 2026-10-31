@@ -415,11 +415,26 @@ def _zip_sicuro(zf: zipfile.ZipFile, ufficio: bool) -> str | None:
     if ufficio:
         for i in infos:
             if i.filename.endswith((".xml", ".rels")):
-                with zf.open(i) as f:
-                    testa = f.read(4096)
-                if b"<!DOCTYPE" in testa or b"<!ENTITY" in testa:
+                # Tutta la parte, a pezzi, non solo l'inizio (revisione della PR #364: un
+                # commento lungo spostava il DOCTYPE oltre i primi 4096 byte)
+                if _dichiarazioni(zf, i):
                     return "contiene dichiarazioni XML non ammesse (DOCTYPE)"
     return None
+
+
+def _dichiarazioni(zf: zipfile.ZipFile, info) -> bool:
+    """La parte XML contiene «<!DOCTYPE» o «<!ENTITY», letta tutta a pezzi (i pezzi si
+    sovrappongono di qualche byte, così una parola tagliata a metà si trova)."""
+    coda = b""
+    with zf.open(info) as f:
+        while True:
+            pezzo = f.read(1 << 16)
+            if not pezzo:
+                return False
+            b = coda + pezzo
+            if b"<!DOCTYPE" in b or b"<!ENTITY" in b:
+                return True
+            coda = b[-16:]
 
 
 def _macro(zf: zipfile.ZipFile) -> bool:

@@ -368,18 +368,27 @@
     },
     // L'importazione dei materiali scaricati (31/10, #298, studio_importa.js): un file o un ZIP
     // nei byte nudi, {verifica, nome} in «X-Calliope-Studio» → {importazione}
-    async studioImporta(blob, meta) {
-      if (!S.sessione) return { ok: false, status: 0, dati: {} };
-      try {
-        const f = await fetch("/api/studio/importa", {
-          method: "POST", cache: "no-store", body: blob,
-          headers: { "Content-Type": "application/octet-stream", "X-Calliope-Sessione": S.sessione || "",
-            "X-Calliope-Studio": encodeURIComponent(JSON.stringify(meta || {})) },
-        });
-        let d = {};
-        try { d = await f.json(); } catch (e) { /* vuota */ }
-        return { ok: f.status === 200, status: f.status, dati: d };
-      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    // Con XMLHttpRequest per l'avanzamento dell'invio: `avanti(mandati, totale)` in byte
+    // (revisione della PR #364: fetch non dice quanto è partito)
+    studioImporta(blob, meta, avanti) {
+      if (!S.sessione) return Promise.resolve({ ok: false, status: 0, dati: {} });
+      return new Promise((fatto) => {
+        const x = new XMLHttpRequest();
+        x.open("POST", "/api/studio/importa");
+        x.setRequestHeader("Content-Type", "application/octet-stream");
+        x.setRequestHeader("X-Calliope-Sessione", S.sessione || "");
+        x.setRequestHeader("X-Calliope-Studio", encodeURIComponent(JSON.stringify(meta || {})));
+        if (avanti && x.upload) {
+          x.upload.onprogress = (ev) => { try { avanti(ev.loaded, ev.total || blob.size); } catch (e) { /* niente */ } };
+        }
+        x.onload = () => {
+          let d = {};
+          try { d = JSON.parse(x.responseText || "{}"); } catch (e) { /* vuota */ }
+          fatto({ ok: x.status === 200, status: x.status, dati: d || {} });
+        };
+        x.onerror = x.onabort = x.ontimeout = () => fatto({ ok: false, status: 0, dati: {} });
+        try { x.send(blob); } catch (e) { fatto({ ok: false, status: 0, dati: {} }); }
+      });
     },
     // {verifica, azione?, importazione?} → le importazioni con le fasi e i conti
     async studioImportazioni(dati) {

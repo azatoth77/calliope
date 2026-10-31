@@ -783,9 +783,12 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     l'estensione serve solo a scoprire i tipi falsi. Le voci dello ZIP non si estraggono per
     nome: si leggono in memoria contando i byte decompressi (per voce e per archivio, non quelli
     dichiarati), con un tetto alle voci e al rapporto di compressione; percorsi assoluti, «..»,
-    link, voci cifrate si saltano. Un tetto di tempo fra un segno di vita e l'altro del
-    sottoprocesso (la voce che lo blocca è «troppo pesante», si riparte dalla successiva) e uno
-    per tutta l'importazione (si ferma, si riprende a mano).
+    link, voci cifrate si saltano; nomi ripetuti, voci sovrapposte e troppe voci (lette dalla fine
+    dell'archivio prima di aprirlo) lo rifiutano intero, e i byte contati restano entro un
+    rapporto col file arrivato. Un tetto di tempo fra un segno di vita e l'altro del
+    sottoprocesso (la voce che lo blocca è «troppo pesante», si riparte dalla successiva), uno
+    per voce e uno per tutta l'importazione, più stretto per gli archivi (si ferma, si riprende
+    a mano).
 49. **I nomi dei file sono dati.** Sullo schermo con textContent, mai al modello né nelle frasi
     pronte: i materiali importati non hanno titolo e il piano li dice «materiale N». Il testo è
     un dato come quello dell'OCR (punto 6): al modello solo in busta, con la fonte «allegato»; le

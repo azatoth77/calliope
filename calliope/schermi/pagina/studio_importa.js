@@ -186,10 +186,27 @@
     let fatti = 0;
     const errori = [];
     try {
+      const mb = Number(s.dati && s.dati.max_mb) || 100;
       for (const f of files) {
-        s.esito = "Mando " + (fatti + errori.length + 1) + " di " + files.length + "…";
+        const quale = "Mando " + (fatti + errori.length + 1) + " di " + files.length;
+        // Il tetto anche qui, prima di mandare (revisione della PR #364): niente MB per un 413
+        if (f.size > mb * 1000000) {
+          errori.push(String(f.name || "file").slice(0, 60) + ": troppo grande (al più " + mb + " MB)");
+          continue;
+        }
+        s.esito = quale + "…";
         ridisegna(vid);
-        const r = await sch().studioImporta(f, { verifica: vid, nome: String(f.name || "file").slice(0, 120) });
+        // L'avanzamento in byte dell'invio, sulla riga dell'esito (al più ogni 5 %)
+        let ultimo = -1;
+        const avanti = (mandati, tot) => {
+          const pc = tot ? Math.floor((100 * mandati) / tot) : 0;
+          if (pc - ultimo < 5 && pc < 100) return;
+          ultimo = pc;
+          s.esito = quale + ": " + pc + "%";
+          const el = document.querySelector('section.studio-i[data-importa-verifica="' + vid + '"] .studio-i-esito');
+          if (el) el.textContent = s.esito; else ridisegna(vid);
+        };
+        const r = await sch().studioImporta(f, { verifica: vid, nome: String(f.name || "file").slice(0, 120) }, avanti);
         if (r.ok) fatti++;
         else errori.push(String(f.name || "file").slice(0, 60) + ": " + String(r.dati.errore || "non mandato"));
       }
