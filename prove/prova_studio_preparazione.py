@@ -214,6 +214,39 @@ for nome, x in (("numeri non scritti nella pagina", {"materiale": "ottone", "m":
                 ("un numero che non è un numero", {"materiale": "ottone", "m": "85", "V": 10})):
     verifica(f"contrario, misura: {nome}", PR.misura(x, ["P2"], testi) is None)
 
+# Revisione della PR #368: le coppie sbagliate, le unità, la reazione dentro un'altra
+T2 = {"F": "Il ferro: 79 g occupano 10 cm³. Il sughero: 24 g occupano 100 cm³.",
+      "U": "Una bottiglia d'olio: 0,92 kg in 1 L. Un blocco di piombo ha massa 113 g e volume 10 ml. "
+           "Un pezzo di rame pesa 89 e misura 10.",
+      "M": "Il ferro e il sughero: 79 g, 24 g, 10 cm³ e 100 cm³.",
+      "R": "Una reazione inventata: 12H2 + O2 -> 2H2O2. Un'altra: 2 Na + Cl2 -> 2 NaClx."}
+verifica("misura: il ferro con la sua frase", PR.misura({"materiale": "ferro", "m": 79, "V": 10},
+                                                        ["F"], T2)
+         == {"materiale": "ferro", "m": 79, "V": 10})
+verifica("misura: il sughero con la sua frase",
+         PR.misura({"materiale": "sughero", "m": 24, "V": 100}, ["F"], T2) is not None)
+verifica("misura: kg e L convertiti in grammi e cm³ (numeri scritti o già convertiti)",
+         PR.misura({"materiale": "olio", "m": 0.92, "V": 1}, ["U"], T2)
+         == {"materiale": "olio", "m": 920, "V": 1000}
+         and PR.misura({"materiale": "olio", "m": 920, "V": 1000}, ["U"], T2)
+         == {"materiale": "olio", "m": 920, "V": 1000})
+verifica("misura: ml come cm³", PR.misura({"materiale": "piombo", "m": 113, "V": 10}, ["U"], T2)
+         == {"materiale": "piombo", "m": 113, "V": 10})
+for nome, x, cit in (("il sughero coi numeri del ferro", {"materiale": "sughero", "m": 79, "V": 10}, ["F"]),
+                     ("il ferro coi numeri del sughero", {"materiale": "ferro", "m": 24, "V": 100}, ["F"]),
+                     ("la massa di una frase e il volume dell'altra",
+                      {"materiale": "ferro", "m": 79, "V": 100}, ["F"]),
+                     ("numeri senza unità", {"materiale": "rame", "m": 89, "V": 10}, ["U"]),
+                     ("due masse e due volumi nella stessa frase",
+                      {"materiale": "ferro", "m": 79, "V": 10}, ["M"])):
+    verifica(f"contrario, misura: {nome}", PR.misura(x, cit, T2) is None)
+verifica("contrario, reazione: «2H2 + O2 -> 2H2O» dentro «12H2 + O2 -> 2H2O2»",
+         PR.reazione("2H2 + O2 -> 2H2O", ["R"], T2) is None)
+verifica("contrario, reazione: una formula vera dentro una più lunga («NaClx»)",
+         PR.reazione("2 Na + Cl2 -> 2 NaCl", ["R"], T2) is None)
+verifica("reazione: scritta intera con spazi diversi vale",
+         PR.reazione("2Mg+O2→2MgO", ["P1"], testi) is not None)
+
 # ═══════════════════════════ 2–3. la lezione, ombra e attiva ═══════════════════════════
 print("— ombra")
 st = studio(cfg_nuova("ombra.db", "ombra"))
@@ -438,6 +471,58 @@ r = lt.giro()
 AM.QUIETE = vecchia
 verifica("DGX libera e voce ferma: la preparazione si fa nel giro",
          len(lt._chiedi_corpo.richieste) == 1 and st.verifiche_per_preparazione() == [], str(r))
+st.close()
+
+# Revisione della PR #368: la preparazione non blocca la lettura delle pagine
+for modo in ("ombra", "attiva"):
+    st = studio(cfg_nuova(f"giro_pagine_{modo}.db", prep=modo))
+    vid, ids, _ = verifica_chimica(st)
+    v2 = st.crea_verifica(LEO, "Storia", "2026-11-20")
+    m2 = st.aggiungi_materiale(LEO, v2, "foto", "Libro")
+    p2 = st.aggiungi_pagina(LEO, m2, numero="7", stato="da_leggere", testo=None)
+    lt, gu = lettore(st)
+    lette = []
+
+    def leggi_finta(riga, *a, _st=st, **k):
+        lette.append(riga["id"])
+        _st.dati.scrivi("UPDATE studio_pagine SET stato = 'letta', testo = 'Roma.' WHERE id = ?",
+                        (riga["id"],))
+        return "letta"
+    lt.leggi_pagina = leggi_finta
+    AM.QUIETE = lambda s=0: False
+    try:
+        r = lt.giro()
+    finally:
+        AM.QUIETE = vecchia
+    verifica(f"[{modo}] voce non ferma e una pagina da leggere di un'altra verifica: letta, "
+             "la preparazione aspetta soltanto",
+             lette == [p2] and not lt._chiedi_corpo.richieste
+             and r.get("aspetta") == "voce non ferma" and r.get("fatte") == 1, str(r))
+    st.close()
+# Si prepara a pagine tutte lette: con una pagina ancora da leggere della stessa verifica, no
+st = studio(cfg_nuova("giro_da_leggere.db"))
+vid, ids, _ = verifica_chimica(st)
+mid = st.dati.uno("SELECT materiale FROM studio_pagine WHERE id = ?", (ids[0],))["materiale"]
+p4 = st.aggiungi_pagina(LEO, mid, numero="44", stato="da_leggere", testo=None)
+verifica("una pagina ancora da leggere: niente preparazione",
+         st.verifiche_per_preparazione() == [])
+st.dati.scrivi("UPDATE studio_pagine SET stato = 'in_lettura' WHERE id = ?", (p4,))
+verifica("una pagina in lettura: niente preparazione", st.verifiche_per_preparazione() == [])
+st.dati.scrivi("UPDATE studio_pagine SET stato = 'letta', testo = 'Altro.' WHERE id = ?", (p4,))
+verifica("tutte lette: la preparazione si fa", len(st.verifiche_per_preparazione()) == 1)
+# Le preparazioni orfane (una corsa fra una scrittura e «togli la verifica») vanno via con la
+# rotazione, come le mappe e le importazioni
+st.dati.scrivi("INSERT INTO studio_preparazioni (verifica, persona, argomento, tipo, stato, "
+               "contenuto, creata) VALUES (99999, ?, NULL, 'valori', 'ombra', '{}', '2026-10-31')",
+               (LEO.id,))
+st.dati.scrivi("INSERT INTO studio_preparazioni (verifica, persona, argomento, tipo, stato, "
+               "contenuto, creata) VALUES (?, ?, NULL, 'valori', 'ombra', '{}', '2026-10-31')",
+               (vid, LEO.id))
+from calliope.studio import dati as DS  # noqa: E402
+DS.cancella(st.dati.db, scadute_prima=datetime.date(2026, 1, 1))
+verifica("rotazione: la preparazione orfana tolta, quella della verifica resta",
+         [r["verifica"] for r in st.dati.tutti("SELECT verifica FROM studio_preparazioni")]
+         == [vid])
 st.close()
 
 # ═══════════════════════════ 8. i ritocchi della revisione ═══════════════════════════

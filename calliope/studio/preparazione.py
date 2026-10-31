@@ -15,9 +15,12 @@ delle mini-app né fuori dalla busta.
 - Una reazione vale se le sue formule sono di elementi veri, senza parentesi, la reazione è
   bilanciata, sta scritta in una pagina citata, e se ne può nascondere un coefficiente da 1 a 4
   che solo lui la bilancia (`reazione`); diventa un termine `[null, formula]` col `giusto`.
-- Una misura vale se m e V sono numeri scritti in una pagina citata, la densità è fra 0,01 e 25 e
-  lontana da quella dell'acqua, e il materiale è una parola breve di lettere che sta nella pagina
-  (`misura`).
+- Una misura vale se materiale, massa e volume stanno nella stessa frase di una pagina citata,
+  con una massa sola e un volume solo, ognuno subito seguito dalla sua unità (g o kg; cm³, ml, L
+  o dm³: si converte in grammi e cm³), la densità è fra 0,01 e 25 e lontana da quella
+  dell'acqua, e il materiale è una parola breve di lettere (`misura`).
+- Che una reazione sia chimicamente possibile non si controlla: viene dalla pagina, scritta per
+  intero (niente cifre o lettere a ridosso).
 - La lezione resta un testo del modello dalle pagine: sullo schermo con textContent, ai modelli
   in busta; i paragrafi con un avviso non si mostrano.
 
@@ -155,6 +158,15 @@ def _norma_reazione(t: str) -> str:
     return re.sub(r"\s+", "", t)
 
 
+def _scritta(n: str, pagina: str) -> bool:
+    """La reazione normalizzata `n` sta scritta per intero nella pagina: gli spazi della pagina
+    contano solo come confini (prima e dopo la reazione niente cifre né lettere)."""
+    t = unicodedata.normalize("NFC", str(pagina or "")).translate(_PEDICI)
+    t = re.sub(r"(?:->|→|⟶|=)", ">", t)
+    corpo = r"\s*".join(re.escape(c) for c in n)
+    return re.search(r"(?<![0-9A-Za-z])" + corpo + r"(?![0-9A-Za-z])", t) is not None
+
+
 def _lato(testo: str) -> list | None:
     out = []
     for pezzo in testo.split("+"):
@@ -190,8 +202,10 @@ def reazione(testo, citate, testi: dict) -> dict | None:
     sx, dx = _lato(a.replace("+", " + ")), _lato(b.replace("+", " + "))
     if not sx or not dx or not _bilancio(sx, dx):
         return None
-    # Scritta in una pagina citata (le stesse formule e gli stessi coefficienti)
-    if not any(n in _norma_reazione(testi.get(r, "")) for r in citate if isinstance(r, str)):
+    # Scritta in una pagina citata (le stesse formule e gli stessi coefficienti), intera: niente
+    # cifra o lettera a ridosso, prima e dopo (revisione della PR #368: «2H2 + O2 -> 2H2O» stava
+    # dentro «12H2 + O2 -> 2H2O2»)
+    if not any(_scritta(n, testi.get(r, "")) for r in citate if isinstance(r, str)):
         return None
     termini = [("sinistra", i) for i in range(len(sx))] + [("destra", i) for i in range(len(dx))]
     # Il coefficiente da nascondere: il primo da 2 a 4, altrimenti il primo; solo lui deve bilanciare
@@ -212,18 +226,33 @@ def reazione(testo, citate, testi: dict) -> dict | None:
     return {"sinistra": lati["sinistra"], "destra": lati["destra"], "giusto": giusto}
 
 
-_NUMERI = re.compile(r"(?<![\w,.])\d+(?:[.,]\d+)?(?![\w])")
-_MATERIALE = re.compile(r"^[a-zàèéìòù' ]{2,30}$")
+# Un numero subito seguito dalla sua unità (revisione della PR #368): la massa in grammi o
+# chilogrammi, il volume in cm³, ml, litri o dm³; nient'altro vale
+_QUANTITA = re.compile(r"(?<![\w,.])(\d+(?:[.,]\d+)?)\s*(kg|g|cm³|cm3|dm³|dm3|ml|l)(?![\w³])",
+                       re.I)
+UNITA_MASSA = {"g": 1.0, "kg": 1000.0}                                   # → grammi
+UNITA_VOLUME = {"cm³": 1.0, "cm3": 1.0, "ml": 1.0, "l": 1000.0, "dm³": 1000.0, "dm3": 1000.0}
+# Le frasi: un punto fra due cifre non chiude (52.5 g)
+_FRASI = re.compile(r"(?<!\d)[.;!?](?!\d)|[.;!?](?=\s|$)|\n")
 
 
-def _numeri(testo: str) -> set[float]:
-    out = set()
-    for m in _NUMERI.finditer(str(testo or "")):
+def _quantita(frase: str) -> tuple[list, list]:
+    """Le masse e i volumi della frase: [(numero scritto, valore in g o cm³)]."""
+    masse, volumi = [], []
+    for q in _QUANTITA.finditer(frase):
         try:
-            out.add(round(float(m.group().replace(",", ".")), 6))
+            x = float(q.group(1).replace(",", "."))
         except ValueError:
             continue
-    return out
+        u = q.group(2).lower()
+        if u in UNITA_MASSA:
+            masse.append((round(x, 6), round(x * UNITA_MASSA[u], 6)))
+        else:
+            volumi.append((round(x, 6), round(x * UNITA_VOLUME[u], 6)))
+    return masse, volumi
+
+
+_MATERIALE = re.compile(r"^[a-zàèéìòù' ]{2,30}$")
 
 
 def misura(x: dict, citate, testi: dict) -> dict | None:
@@ -241,16 +270,30 @@ def misura(x: dict, citate, testi: dict) -> dict | None:
         return None
     if not (0 < m <= 100000 and 0 < v <= 100000):
         return None
-    d = m / v
-    if not 0.01 <= d <= 25 or abs(d - 1) < 0.03:
-        return None
-    pagine = [testi.get(r, "") for r in citate if isinstance(r, str)]
-    for t in pagine:
-        nums = _numeri(t)
-        parole = A.chiave(t)
-        if round(float(m), 6) in nums and round(float(v), 6) in nums and all(
-                w in parole.split() for w in A.chiave(mat).split()):
-            return {"materiale": mat, "m": m, "V": v}
+    # Massa, volume e materiale nella stessa frase di una pagina citata, con una massa sola e un
+    # volume solo (revisione della PR #368: «Il ferro: 79 g occupano 10 cm³. Il sughero: 24 g
+    # occupano 100 cm³.» non deve dare «sughero 79/10»); i numeri del modello sono quelli scritti
+    # o già convertiti, e la domanda prende quelli convertiti in grammi e cm³
+    chiave_mat = A.chiave(mat).split()
+    for r in citate:
+        if not isinstance(r, str):
+            continue
+        for frase in _FRASI.split(testi.get(r, "") or ""):
+            masse, volumi = _quantita(frase)
+            if len(masse) != 1 or len(volumi) != 1:
+                continue
+            if not all(w in A.chiave(frase).split() for w in chiave_mat):
+                continue
+            (ms, mg), (vs, vc) = masse[0], volumi[0]
+            if round(float(m), 6) not in (ms, mg) or round(float(v), 6) not in (vs, vc):
+                continue
+            if not (0 < mg <= 100000 and 0 < vc <= 100000):
+                return None
+            d = mg / vc
+            if not 0.01 <= d <= 25 or abs(d - 1) < 0.03:
+                return None
+            return {"materiale": mat, "m": int(mg) if mg == int(mg) else mg,
+                    "V": int(vc) if vc == int(vc) else vc}
     return None
 
 
@@ -355,6 +398,10 @@ class Preparazioni:
             if self._libreria_chiusa(v):
                 continue
             f, args, pagine = self._firma_prep(v["id"])
+            # Solo a pagine tutte lette: si prepara una volta, non a ogni pagina che arriva
+            # (revisione della PR #368)
+            if any(p.get("stato") in ("da_leggere", "in_lettura") for p in pagine):
+                continue
             lette = {int(p["id"]) for p in A.lette(pagine)}
             if not any(set(a["pagine"]) & lette for a in args):
                 continue

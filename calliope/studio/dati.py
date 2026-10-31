@@ -767,7 +767,8 @@ def cancella(db: sqlite3.Connection, *, persona: str | None = None, tutto: bool 
         # 7): non hanno un giorno, e senza la verifica non servono a niente; via sempre
         # (le importazioni, #298, dopo: i loro file arrivati sono già nella lista sopra solo per
         # le verifiche tolte; quelle orfane li perdono nella rotazione degli orfani)
-        for t in ("studio_mappe", "studio_domande", "studio_prove", "studio_importazioni"):
+        for t in ("studio_mappe", "studio_domande", "studio_prove", "studio_importazioni",
+                  "studio_preparazioni"):
             # Le domande e le prove (passo 8, #248) come le mappe
             if _tabella(db, t):
                 db.execute(f"DELETE FROM {t} WHERE {orfani}")

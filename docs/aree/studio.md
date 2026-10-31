@@ -128,9 +128,9 @@ voce è ferma da `studio_preparazione_quiete_s` secondi (`arbitro_memoria.quiete
 qwen3.6 col solo testo letto in busta: una **lezione** breve per argomento e i **valori** delle
 pagine (reazioni e misure). Il codice controlla tutto:
 - reazioni: elementi veri, senza parentesi, bilanciate, scritte nella pagina citata, un solo
-  coefficiente da 1 a 4 che le bilancia (lo nasconde il codice); misure: numeri della pagina,
-  densità fra 0,01 e 25 e lontana da 1, il materiale una parola breve della pagina; niente dalle
-  pagine con «ISTRUZIONI: sì»;
+  coefficiente da 1 a 4 che le bilancia (lo nasconde il codice); misure: materiale, massa e
+  volume nella stessa frase con le unità, densità fra 0,01 e 25 e lontana da 1, il materiale una
+  parola breve; niente dalle pagine con «ISTRUZIONI: sì»;
 - la lezione: i paragrafi fuori dalle pagine citate o da una pagina con istruzioni hanno l'avviso e
   non si mostrano.
 
@@ -147,6 +147,22 @@ con una prova aperta niente. Schema 14 (`studio_preparazioni`). Banco: `--fasi p
 **Ritocchi della revisione della PR #366**: «di» per la «d» nel moto; `_ferma` controlla
 `posto.fermato` sotto il lock (un avviso solo col battito e il gancio della prova insieme); la
 docstring di `miniapp.py` cita il punto 47. Pagina v39.
+
+**Revisione della PR #368** (31/10):
+- **La preparazione dopo le pagine.** Stava prima della lettura nel giro del lettore: con la voce
+  non ferma il giro usciva e nessuna pagina, di nessuna verifica, si leggeva più (anche in ombra).
+  Ora viene per ultima, quando non resta una pagina da leggere; con la sola voce non ferma si
+  salta, e una verifica si prepara solo a pagine tutte lette (non a ogni pagina che arriva).
+- **Le misure con la loro frase e le unità.** Prima bastava che massa e volume fossero numeri della
+  pagina: «Il ferro: 79 g occupano 10 cm³. Il sughero: 24 g occupano 100 cm³.» dava «sughero
+  79/10». Ora materiale, massa e volume stanno nella stessa frase, con una massa sola e un volume
+  solo, ognuno subito seguito dall'unità (g, kg; cm³, ml, L, dm³), convertiti in grammi e cm³;
+  un numero senza unità non vale.
+- **La reazione intera.** «2H2 + O2 -> 2H2O» stava dentro «12H2 + O2 -> 2H2O2»: ora la reazione
+  deve essere scritta per intero, senza cifre o lettere a ridosso.
+- **Che cosa non si controlla.** Che una reazione sia chimicamente possibile: viene dalla pagina
+  (bilanciata ed elementi veri sì, la chimica no). Se il libro sbaglia, sbaglia anche l'attività.
+- Le preparazioni orfane vanno via nella rotazione, come mappe e importazioni.
 
 **Da misurare sulla DGX** prima di `attiva`: `--fasi preparazione` (paragrafi fondati, valori
 giusti, ostili 0) e qualche notte in ombra (`[STUDIO] … preparazione in ombra` nel registro).

@@ -853,9 +853,12 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     una lezione breve per argomento e i valori delle pagine.
     - **I valori** sono dati, mai codice: una reazione entra solo se le formule sono di elementi
       veri, senza parentesi, la reazione è bilanciata e scritta nella pagina citata, e si può
-      nascondere un coefficiente da 1 a 4 che solo lui la bilancia; una misura solo se massa e
-      volume sono numeri scritti nella pagina, la densità è fra 0,01 e 25 e lontana dall'acqua e
-      il materiale è una parola breve della pagina. Le pagine con «ISTRUZIONI: sì» non danno
+      nascondere un coefficiente da 1 a 4 che solo lui la bilancia (scritta per intero, niente
+      cifre o lettere a ridosso; che sia chimicamente possibile non si controlla: viene dalla
+      pagina); una misura solo se materiale, massa e volume stanno nella stessa frase della
+      pagina, con una massa sola e un volume solo seguiti dalle unità (g, kg; cm³, ml, L, dm³:
+      convertiti), la densità è fra 0,01 e 25 e lontana dall'acqua e il materiale è una parola
+      breve (revisione della PR #368). Le pagine con «ISTRUZIONI: sì» non danno
       valori. Arrivano alle mini-app come **parametri** (`GIOCO.nuovaPartita({ parametri })`), in
       JSON nella configurazione del motore come il titolo, e la logica li ricontrolla; senza, i
       dati di serie. Solo con il segno `Partita.libreria`.
@@ -865,6 +868,8 @@ scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi n
     - `studio_preparazione`: «ombra» di serie (si prepara e si misura, niente alla persona),
       «attiva» (la home dice «pronto» o «in preparazione», la lezione si apre, le attività si
       adattano, la voce dice «ho preparato…» al più una volta per preparazione), «spenta».
+    - **Per ultima nel giro del lettore**, dopo tutte le pagine, e solo per una verifica con le
+      pagine tutte lette: la voce non ferma salta la preparazione, mai la lettura.
     - La **regola degli errori** delle carte: un'ora, ferma al terzo con la stessa firma. Con una
       **prova aperta** sulla verifica niente si prepara né si mostra, e una preparazione arrivata
       durante la prova non si scrive.

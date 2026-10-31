@@ -741,31 +741,25 @@ class Lettore:
                     return {"fatte": fatte, "aspetta": esito}
                 fatte += 1
                 continue
-            # La preparazione dietro le quinte (#297, parte 3): per ultima, con la stessa guardia
-            # e in più la voce ferma da un po' (`arbitro_memoria.quiete`, la definizione unica)
-            per_prep = self.studio.verifiche_per_preparazione()
-            if per_prep:
-                motivo = self.guardia.motivo() or self._voce_non_ferma()
-                if motivo is not None:
-                    if motivo != self.in_attesa:
-                        self._registra(f"preparazione in attesa: {motivo}")
-                    self.in_attesa = motivo
-                    self.misure["attese"] += 1
-                    return {"fatte": fatte, "aspetta": motivo}
-                self.in_attesa = None
-                esito = self.prepara(per_prep[0])
-                if esito in ("ceduta", "giu", "errore", "errore_server"):
-                    return {"fatte": fatte, "aspetta": esito}
-                fatte += 1
-                continue
             righe = self.prossime(50)
             # Dopo una caduta si prova prima un'altra pagina: se va, la colpa è della pagina
             # caduta; se cade anche lei, è del server (seconda nota della PR #314)
             # (la pagina con meno cadute, a parità nell'ordine delle pagine)
             righe = sorted(righe, key=lambda r: self._cadute.get(r["id"], (0, 0))[0])[:1]
             if not righe:
-                self.in_attesa = None
-                return {"fatte": fatte}
+                # La preparazione dietro le quinte (#297, parte 3): per ultima, dopo tutte le
+                # pagine (revisione della PR #368: prima delle pagine, la voce non ferma fermava
+                # anche la lettura), con la stessa guardia e in più la voce ferma da un po'
+                # (`arbitro_memoria.quiete`, la definizione unica). Senza la voce ferma si salta
+                # soltanto: il giro finisce e la pagina nuova che arriva sveglia il lettore.
+                esito = self._passo_preparazione()
+                if esito is None:
+                    self.in_attesa = None
+                    return {"fatte": fatte}
+                if esito != "fatta":
+                    return {"fatte": fatte, "aspetta": esito}
+                fatte += 1
+                continue
             # Una pagina di un PDF col testo vero non chiede niente a vLLM: niente guardia
             motivo = None if self._testo_da_pdf(righe[0]) is not None else self.guardia.motivo()
             if motivo is not None:
@@ -1289,6 +1283,26 @@ class Lettore:
                        f"argomenti ({s:.1f} s" + (f"; tipi {tipi}" if tipi else "")
                        + (f"; avvisi {avv}" if avv else "") + ")")
         return "proposte"
+
+    def _passo_preparazione(self) -> str | None:
+        """Un passo della preparazione, quando non resta nessuna pagina da leggere: None (niente
+        da preparare), «fatta», oppure il motivo per aspettare (la guardia, «voce non ferma»,
+        l'esito di `prepara` che chiede di aspettare)."""
+        per_prep = self.studio.verifiche_per_preparazione()
+        if not per_prep:
+            return None
+        motivo = self.guardia.motivo() or self._voce_non_ferma()
+        if motivo is not None:
+            if motivo != self.in_attesa:
+                self._registra(f"preparazione in attesa: {motivo}")
+            self.in_attesa = motivo
+            self.misure["attese"] += 1
+            return motivo
+        self.in_attesa = None
+        esito = self.prepara(per_prep[0])
+        if esito in ("ceduta", "giu", "errore", "errore_server"):
+            return esito
+        return "fatta"
 
     def _voce_non_ferma(self) -> str | None:
         """«voce non ferma» se la voce non è ferma da `studio_preparazione_quiete_s` secondi
