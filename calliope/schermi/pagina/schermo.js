@@ -366,6 +366,29 @@
         return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
+    // L'importazione dei materiali scaricati (31/10, #298, studio_importa.js): un file o un ZIP
+    // nei byte nudi, {verifica, nome} in «X-Calliope-Studio» → {importazione}
+    async studioImporta(blob, meta) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const f = await fetch("/api/studio/importa", {
+          method: "POST", cache: "no-store", body: blob,
+          headers: { "Content-Type": "application/octet-stream", "X-Calliope-Sessione": S.sessione || "",
+            "X-Calliope-Studio": encodeURIComponent(JSON.stringify(meta || {})) },
+        });
+        let d = {};
+        try { d = await f.json(); } catch (e) { /* vuota */ }
+        return { ok: f.status === 200, status: f.status, dati: d };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
+    // {verifica, azione?, importazione?} → le importazioni con le fasi e i conti
+    async studioImportazioni(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const r = await postSessione("/api/studio/importazioni", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
     // Gli argomenti di una verifica e la conferma (30/10, passo 4.4, #283, studio.js):
     // {verifica, azione?, argomento?, titolo?} → {argomenti, verifica, estrazione, lettura, prova}
     // La home dello Studio (30/10, passo 4.5, #284, studio.js): {} → verifiche, piano, lettura…

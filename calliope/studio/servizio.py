@@ -71,6 +71,7 @@ from . import piano as P
 from . import padronanza as PD
 from . import resoconto as R
 from .ascolta import Ascolti
+from .importa import Importazioni
 from .mappe import Mappe
 from .premi import Premi
 from .prove import Prove
@@ -223,11 +224,12 @@ def _data(valore) -> datetime.date:
     return datetime.date.fromisoformat(str(valore).strip()[:10])
 
 
-class Studio(Mappe, Prove, Ascolti, Tutore, Premi):
+class Studio(Mappe, Prove, Ascolti, Tutore, Premi, Importazioni):
     """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
     #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`, il ripasso da
     ascoltare (passo 9, #249) in `ascolta.py`, la vista del tutore e le indicazioni (passo 10,
-    #250, #285) in `tutore.py`, la serie, le stelle e i duelli (#296) in `premi.py`."""
+    #250, #285) in `tutore.py`, la serie, le stelle e i duelli (#296) in `premi.py`,
+    l'importazione dei materiali scaricati (#298) in `importa.py`."""
 
     def __init__(self, cfg, registry=None, log=print, adesso=None):
         self.cfg = cfg
@@ -274,6 +276,9 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi):
                                    "audio_serviti": 0, "saltate": {}}}
         # Il lettore delle pagine (passo 4.3, studio/lettura.py): lo crea `avvia_lettura`
         self.lettore = None
+        # Il lavoro di sfondo delle importazioni (31/10, #298, studio/importa.py): lo crea il
+        # primo uso (`importi`) o `avvia_importi` all'avvio, per riprendere quelle rimaste
+        self._importi = None
         # Perché non c'è il lettore (passo 4.5, nota della revisione della PR #314): None prima di
         # `avvia_lettura`, «spenta» con `studio_lettura: false`, «senza_modello» senza vLLM
         self.lettura_motivo: str | None = None
@@ -298,6 +303,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi):
             self.fascia = P.fascia_valida(FASCIA_DI_SERIE)
 
     def close(self):
+        if self._importi is not None:
+            self._importi.close()
         if self.lettore is not None:
             self.lettore.close()
         self.dati.close()
@@ -353,7 +360,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi):
         for i, p in enumerate(self.pagine(chi, vid), 1):
             if p["stato"] != "letta" or not p["testo"]:
                 continue
-            fonte = "allegato" if p["metodo"] == "pdf_testo" else "foto"
+            # Il testo di un PDF o di un file importato (#298) è un allegato; quello dell'OCR una foto
+            fonte = "allegato" if p["metodo"] in ("pdf_testo", "file_testo") else "foto"
             num = P.numero_leggibile(p["numero"])
             titolo = f"P{i}" + (f" · pagina stampata {num}" if num else "")
             out.append(provenienza.racchiudi(fonte, p["testo"], titolo))
@@ -681,7 +689,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi):
         return out
 
     def aggiungi_pronte(self, chi, vid, pronte: list, origine: str = "foto", titolo=None,
-                        materiale=None, originale: bytes | None = None) -> dict:
+                        materiale=None, originale: bytes | None = None,
+                        importazione: int | None = None) -> dict:
         """Le pagine controllate dal server (`studio/pagine.Pronta`) nella verifica: i JPEG (e il
         PDF originale) nella cartella dello Studio, una riga per pagina nello stato «da_leggere»,
         in fondo all'ordine. `materiale`: quello di un invio già cominciato (le pagine dello
@@ -719,11 +728,13 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi):
                     db.commit()
                 db.execute("BEGIN IMMEDIATE")
                 if mid is None:
+                    # `importazione` (31/10, #298): il materiale nato da un'importazione
                     mid = db.execute(
                         "INSERT INTO studio_materiali (verifica, origine, titolo, riferimento, "
-                        "creato) VALUES (?, ?, ?, ?, ?)",
+                        "creato, importazione) VALUES (?, ?, ?, ?, ?, ?)",
                         (v["id"], origine, (" ".join(str(titolo).split())[:60] or None)
-                         if titolo else None, rif, D.adesso())).lastrowid
+                         if titolo else None, rif, D.adesso(),
+                         int(importazione) if importazione is not None else None)).lastrowid
                 r = db.execute("SELECT COALESCE(MAX(p.ordine), 0) FROM studio_pagine p JOIN "
                                "studio_materiali m ON m.id = p.materiale WHERE m.verifica = ?",
                                (v["id"],)).fetchone()
@@ -942,6 +953,10 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi):
         out = []
         for v in self.dati.tutti("SELECT * FROM studio_verifiche WHERE stato IN ('bozza', "
                                  "'aperta') ORDER BY data, id"):
+            # Durante un'importazione (#298) gli argomenti aspettano la fine: non si chiedono a
+            # metà dei file (ogni pagina nuova ne chiederebbe un'altra estrazione)
+            if self.importazione_viva(v["id"]):
+                continue
             pagine = self._pagine_di(v["id"])
             if A.pronta(pagine) and v["argomenti_firma"] != A.firma(pagine):
                 out.append({**v, "_pagine": pagine})
@@ -2114,6 +2129,8 @@ class Studio(Mappe, Prove, Ascolti, Tutore, Premi):
                 "conoscenza": list(CONOSCENZA), "umori": list(UMORI),
                 # Il ripasso da ascoltare (passo 9, #249): la sezione «Ascolta» c'è se è acceso
                 "ascolta": self.ascolto_acceso(),
+                # «Aggiungi materiali» (31/10, #298): c'è se l'importazione è accesa
+                "importa": self.importa_acceso(),
                 # Le indicazioni dei tutori per lo studio di chi guarda (passo 10, #285): il
                 # minore ne vede il testo (decisione del 30/10); textContent sulla pagina
                 "indicazioni": (self._indicazioni_per(getattr(chi, "id", None))

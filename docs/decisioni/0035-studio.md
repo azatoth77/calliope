@@ -725,6 +725,48 @@ dell'eco della stanza.
     - i duelli che danno stelle o tentativi: spingerebbero a imbrogliare;
     - un record della serie e i promemoria: sono meccaniche in più.
 
+## L'importazione dei materiali scaricati (#298, 31/10)
+
+Decisione di chi amministra del 28/10: per i materiali della scuola niente API di Classroom (sugli
+account dei minorenni serve l'amministratore della scuola), ma tre strade semplici: i file
+scaricati, l'archivio di Google Takeout, la condivisione dal telefono. Analisi nel commento della
+#298; la prima PR fa i file e gli ZIP con l'avanzamento, Takeout e condivisione vengono dopo.
+
+46. **Un file o un archivio diventa pagine della verifica, con un lavoro di sfondo.** «Aggiungi
+    materiali» sulla carta della verifica (telefono e PC personale) manda i file a `POST
+    /api/studio/importa`, coi permessi delle pagine (punto 13: lo schermo personale, gli orari del
+    minore, la propria verifica o quella del minore da tutore; ospiti e conoscenti mai). Il file
+    va su disco a pezzi, col nome del server; un thread solo li lavora uno alla volta in un
+    **sottoprocesso** a priorità bassa, la voce non aspetta mai. PDF e immagini diventano pagine
+    «da leggere» come quelle della 4.2; Word, PowerPoint, Excel, OpenDocument, testo, Markdown,
+    CSV e HTML diventano **pagine di testo già lette** (`metodo` «file_testo»), senza OCR. Lo ZIP
+    si apre un livello; il resto è una riga «non letto: …» che non ferma gli altri.
+47. **Il tipo dai byte, i tetti contati, i nomi mai sul disco.** Il tipo lo dicono i byte;
+    l'estensione serve solo a scoprire i tipi falsi. Le voci dello ZIP non si estraggono per
+    nome: si leggono in memoria contando i byte decompressi (per voce e per archivio, non quelli
+    dichiarati), con un tetto alle voci e al rapporto di compressione; percorsi assoluti, «..»,
+    link, voci cifrate si saltano. Un tetto di tempo fra un segno di vita e l'altro del
+    sottoprocesso (la voce che lo blocca è «troppo pesante», si riparte dalla successiva) e uno
+    per tutta l'importazione (si ferma, si riprende a mano).
+48. **I nomi dei file sono dati.** Sullo schermo con textContent, mai al modello né nelle frasi
+    pronte: i materiali importati non hanno titolo e il piano li dice «materiale N». Il testo è
+    un dato come quello dell'OCR (punto 6): al modello solo in busta, con la fonte «allegato»; le
+    macro non si eseguono mai, il testo nascosto entra con l'avviso.
+49. **L'avanzamento sta su disco e si vede.** Una riga per importazione (`studio_importazioni`,
+    schema 13) con le fasi (ricevuto, estratto, letto, argomenti, preparato), i conti e le righe
+    «non letto»; dopo un riavvio riparte dalla prossima voce. Si ferma, si riprende, si annulla.
+    Durante un'importazione la verifica non chiede gli argomenti. La tenuta è quella delle pagine
+    (punto 11): il file arrivato si toglie a lavoro finito, le righe vanno via con la verifica.
+    `studio_importa` la spegne senza spegnere lo Studio.
+
+    Alternative scartate:
+    - le API di Classroom: servono i permessi dell'amministratore della scuola;
+    - convertire i documenti in PDF per avere le immagini (LibreOffice): una dipendenza nativa
+      pesante, e il testo c'è già;
+    - estrarre lo ZIP in una cartella: i nomi arriverebbero al disco;
+    - un'importazione con tutti i file scelti insieme: ognuno è la sua, così un file rotto o
+      fermato non ferma gli altri.
+
 ## Da completare con i passi 4.3–4.5
 
 - *[fatto il 29/10, passo 4.1: dove si conservano le pagine e come si applica il punto 4 (punti

@@ -675,6 +675,8 @@
     if (v.stato === "aperta" || v.stato === "bozza") art.append(sezioneMappa(v));
     // Il ripasso da ascoltare (passo 9, #249): le pagine lette e le carte, lette da Piper
     if (home.dati.ascolta && (v.stato === "aperta" || v.stato === "bozza")) art.append(sezioneAscolta(v));
+    // «Aggiungi materiali» (31/10, #298, studio_importa.js): i file scaricati, anche sul PC
+    if (home.dati.importa && window.CalliopeImporta && (v.stato === "aperta" || v.stato === "bozza")) art.append(window.CalliopeImporta.sezione(v));
     // Impara / Esercitati / Esame: solo ciò che c'è (passo 4.5: «leggi le pagine»)
     if (v.oggi) {
       const imp = nodo("section", "studio-h-gruppo");

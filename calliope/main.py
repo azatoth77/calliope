@@ -797,6 +797,11 @@ class Avvio:
                 s.studio.avvia_lettura(getattr(s, "lavori", None))
             except Exception as e:  # noqa: BLE001 — la lettura non ferma l'avvio
                 print(f"[STUDIO] lettura non avviata: {type(e).__name__}: {e}", flush=True)
+            # Le importazioni dei materiali rimaste da un riavvio (31/10, #298): riprendono
+            try:
+                s.studio.avvia_importi()
+            except Exception as e:  # noqa: BLE001 — non ferma l'avvio
+                print(f"[STUDIO] importazioni non riprese: {type(e).__name__}: {e}", flush=True)
             self._ripasso_da_ascoltare()
 
     def _ripasso_da_ascoltare(self):
