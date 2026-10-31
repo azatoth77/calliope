@@ -543,6 +543,8 @@ LEGAMI = [
     # I conoscenti (14/10, decisione 0030): i tool, i tasti della proposta, la scheda
     ("calliope/tools/conoscenti.py", ["prova_stanza_conoscenti.py", "prova_politica.py"]),
     ("calliope/schermi/server.py", ["prova_stanza_conoscenti.py"]),
+    # Le versioni dello schema in meta_schema (#263: liste alla 2)
+    ("calliope/liste.py", ["prova_liste.py", "prova_robustezza.py"]),
     ("calliope/schermi/cronologia.py", ["prova_stanza_conoscenti.py"]),
     # Il conoscente nei turni rivolti a Calliope (14/10 sera, rifiniture)
     ("calliope/ciclo.py", ["prova_stanza_conoscenti.py"]),
