@@ -69,7 +69,11 @@ from .spec import ToolContext, ToolSpec, note_rule
 FAMILIARI = frozenset({"familiare", "amministra"})
 AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "sposta", "archivia", "tieni",
           "togli", "riprova", "sessione", "resoconto", "riepilogo", "carte", "mappa", "tipo",
-          "conclusa", "prove")
+          "conclusa", "prove", "indica", "indicazioni", "indicazioni_togli")
+# «indica», «indicazioni», «indicazioni_togli» (31/10, passo 10, #250 e #285): le indicazioni di
+# un tutore per lo studio del suo minore (studio/tutore.py). Il testo di «indica» deve venire dalle
+# parole del tutore in questa frase (`_detta_dal_tutore`); la lettura dà solo il conto (il testo
+# lo vedono il minore e i tutori sullo schermo)
 # «resoconto» e «riepilogo» (30/10, passo 4b, #244): proiezioni dei dati, frasi del codice;
 # «carte» (passo 6, #246): i conti delle carte, mai il loro testo; «mappa» (passo 7, #247): i
 # conti e gli stati della mappa concettuale e dove aprirla, mai il testo dei concetti
@@ -77,7 +81,7 @@ AZIONI = ("crea", "stato", "piano", "oggi", "fatto", "salta_oggi", "sposta", "ar
 # testo delle domande; «tipo» (scritta o interrogazione, la finestra «dal») e «conclusa» (la prova
 # vera è fatta) cambiano i dati della persona
 LETTURE = frozenset({"stato", "piano", "oggi", "resoconto", "riepilogo", "carte", "mappa",
-                     "prove"})
+                     "prove", "indicazioni"})
 # Le azioni che un tocco può chiedere (schermi/tocchi.py): sui dati della persona, reversibili
 DA_TOCCO = frozenset({"fatto", "salta_oggi", "tieni", "togli", "riprova", "sessione"})
 
@@ -776,10 +780,110 @@ def _sessione(ctx, svc, chi, v, conoscenza, umore) -> dict:
     return _f("Grazie. Cominciamo dalle pagine di oggi.")
 
 
+# ─────────────────────────── le indicazioni dei tutori (passo 10) ───────────────────────────
+
+INDICA_PER = ("Le indicazioni per lo studio le scrive chi se ne occupa, per un ragazzo di cui è "
+              "tutore: per chi è?")
+INDICA_CHI = ("Le indicazioni per lo studio le scrivo solo quando riconosco bene la voce di chi "
+              "se ne occupa, o dal suo telefono: me lo ripeti con una frase intera?")
+INDICA_PAROLE = ("L'indicazione la scrivo con le tue parole: dimmi di nuovo cosa vuoi che faccia "
+                 "quando lo aiuto a studiare.")
+# Quante parole piene del testo devono stare nella frase detta (analisi della #250)
+PAROLE_DETTE = 2 / 3
+
+
+def _stessa_parola(w: str, dette: set) -> bool:
+    """La parola del testo è fra quelle dette: uguale, con la stessa radice di 5 lettere
+    («insisti» e «insistere») o una storpiatura (`provenienza.vicina`)."""
+    from .. import provenienza
+    return (w in dette or (len(w) >= 5 and any(d[:5] == w[:5] for d in dette))
+            or provenienza.vicina(w, dette))
+
+
+def _detta_dal_tutore(ctx, testo) -> bool:
+    """Il testo dell'indicazione viene dalle parole del tutore in questa frase: almeno
+    `PAROLE_DETTE` delle sue parole piene (`provenienza.parole`). Un vincolo sulla provenienza di
+    un argomento già scelto dal modello (principio 10), come la data detta: un'«indicazione»
+    letta in una pagina non diventa un'indicazione."""
+    from .. import provenienza
+    p = provenienza.parole(testo)
+    if not p:
+        return False
+    dette = provenienza.parole(getattr(ctx, "user_text", "") or "")
+    return sum(_stessa_parola(w, dette) for w in p) >= PAROLE_DETTE * len(p)
+
+
+def _identita_certa(ctx) -> bool:
+    """L'impronta sopra soglia in questa frase, lo scritto da uno schermo personale o il suo
+    dispositivo: la zona grigia e la frase breve non scrivono indicazioni."""
+    from .. import dispositivo
+    come = getattr(getattr(ctx, "speaker_ctx", None), "identified_by", None)
+    return come in ("voce", "schermo") or bool(dispositivo.proprio(ctx))
+
+
+def _nome_di(svc, persona) -> str:
+    return getattr(svc._profilo(persona), "name", "") or "lui"
+
+
+def _indica(ctx, svc, chi, per, testo, materia, verifica, giorni) -> dict:
+    if not per or str(per).strip().lower() in ("me", "io", str(chi.name).lower()):
+        return _f(INDICA_PER, ok=False)
+    persona, errore = _persona(ctx, chi, per)
+    if errore:
+        return _f(errore, ok=False)
+    if not _identita_certa(ctx):
+        note_rule(ctx, "studio_indicazione_chi_incerto")
+        return _f(INDICA_CHI, ok=False)
+    if not _detta_dal_tutore(ctx, testo):
+        note_rule(ctx, "studio_indicazione_non_detta")
+        return _f(INDICA_PAROLE, ok=False)
+    try:
+        svc.scrivi_indicazione(chi, persona, testo, verifica=verifica, materia=materia or None,
+                               giorni=giorni)
+    except ValueError as e:
+        return {"ok": False, "errore": str(e),
+                "cosa_fare": "Dillo in breve a chi parla, con parole tue."}
+    nome = _nome_di(svc, persona)
+    return _f(f"Fatto: l'ho segnata per lo studio di {nome}. La vede anche {nome}, e la "
+              "trovi nella vista del tutore, nello Studio.")
+
+
+def _indicazioni_conto(ctx, svc, chi, per) -> dict:
+    persona, errore = _persona(ctx, chi, per)
+    if errore:
+        return _f(errore, ok=False)
+    n = svc.conto_indicazioni(chi, persona)
+    if persona == str(chi.id):
+        frase = ("Per il tuo studio non ci sono indicazioni." if not n else
+                 f"Per il tuo studio ci sono {_n(n, 'indicazione', 'indicazioni')} di chi ti "
+                 "segue: le leggi nello Studio, in alto.")
+    else:
+        nome = _nome_di(svc, persona)
+        frase = (f"Per lo studio di {nome} non ci sono indicazioni." if not n else
+                 f"Per lo studio di {nome} ci sono {_n(n, 'indicazione', 'indicazioni')}: le "
+                 "vedi e le cambi nella vista del tutore, nello Studio.")
+    return _f(frase, indicazioni=n)
+
+
+def _indicazioni_togli(ctx, svc, chi, per, materia) -> dict:
+    if not per:
+        return _f(INDICA_PER, ok=False)
+    persona, errore = _persona(ctx, chi, per)
+    if errore:
+        return _f(errore, ok=False)
+    try:
+        n = svc.togli_indicazioni(chi, persona, materia or None)
+    except ValueError as e:
+        return {"ok": False, "errore": str(e), "cosa_fare": "Dillo in breve."}
+    nome = _nome_di(svc, persona)
+    return _f(f"Non c'erano indicazioni da togliere per lo studio di {nome}." if not n else
+              f"Tolte {_n(n, 'indicazione', 'indicazioni')} per lo studio di {nome}.")
+
+
 def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = "",
             data: str = "", argomento: str = "", per: str = "", numero=None, titolo: str = "",
             giorno: str = "", conoscenza=None, umore: str = "", prova: str = "",
-            finestra=None) -> dict:
+            finestra=None, testo: str = "", giorni=None) -> dict:
     svc = _svc(ctx)
     if svc is None:
         return _f(SPENTO, ok=False)
@@ -799,6 +903,12 @@ def _studio(ctx: ToolContext, azione: str = "", verifica=None, materia: str = ""
             return _crea(ctx, svc, chi, materia, data, argomento, per, prova, finestra)
         if azione == "oggi":
             return _oggi(ctx, svc, chi)
+        if azione == "indica":
+            return _indica(ctx, svc, chi, per, testo, materia, verifica, giorni)
+        if azione == "indicazioni":
+            return _indicazioni_conto(ctx, svc, chi, per)
+        if azione == "indicazioni_togli":
+            return _indicazioni_togli(ctx, svc, chi, per, materia)
         v = _verifica(svc, ctx, chi, verifica, materia,
                       anche_passate=azione in ("resoconto", "riepilogo"))
         if v is None:
@@ -1448,7 +1558,11 @@ DESCRIZIONE = (
     "«interrogazione» e finestra true se l'interrogazione è da quella data in poi («mi "
     "interrogano da lunedì»; anche con «crea»); «conclusa» quando la prova vera è fatta («mi "
     "hanno interrogato», «la verifica l'ho fatta»); «prove» com'è andata la verifica finta e dove "
-    "farla («fammi una verifica finta»: si fa sullo schermo; a voce è studio_interroga). "
+    "farla («fammi una verifica finta»: si fa sullo schermo; a voce è studio_interroga); "
+    "«indica» un'indicazione del tutore per lo studio del suo ragazzo («con Leo insisti sulle "
+    "frazioni»: per = il nome del ragazzo, testo = l'indicazione con le sue parole, materia o "
+    "verifica se la dice, giorni se dice quanto vale); «indicazioni» quante ce ne sono (per = il "
+    "ragazzo, vuoto per sé); «indicazioni_togli» le toglie (per, materia facoltativa). "
     "verifica: l'id, se lo sai (dai dati del turno); altrimenti materia.")
 
 PARAMETRI = {"type": "object", "properties": {
@@ -1460,7 +1574,8 @@ PARAMETRI = {"type": "object", "properties": {
     "umore": {"type": "string", "enum": ["pronto", "curioso", "tranquillo", "neutrale",
                                          "poca energia", "stressato"]},
     "prova": {"type": "string", "enum": ["scritta", "interrogazione"]},
-    "finestra": {"type": "boolean"}},
+    "finestra": {"type": "boolean"}, "testo": {"type": "string"},
+    "giorni": {"type": "integer"}},
     "required": ["azione"]}
 
 DESCRIZIONE_PAGINA = (

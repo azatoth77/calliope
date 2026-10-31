@@ -6363,13 +6363,18 @@ class Brain:
             # Il ripasso da ascoltare in pausa (31/10, passo 9, #249): solo numeri
             ascolto = (st.nota_ascolto(chi.id) if chi is not None
                        and hasattr(st, "nota_ascolto") else "")
+            # Le indicazioni dei tutori (31/10, passo 10, #250 e #285): solo quando parla il
+            # minore riconosciuto, con la cornice del codice (Studio.nota_indicazioni): sotto le
+            # regole per i minori, senza permessi né azioni. Nel registro solo la regola
+            indica = (st.nota_indicazioni(chi.id) if chi is not None
+                      and hasattr(st, "nota_indicazioni") else "")
         except Exception:  # noqa: BLE001 — lo Studio non ferma la risposta
             return ""
         for nome, x in (("studio_vista", riga), ("studio_sessione", sess),
-                        ("studio_ascolta_pausa", ascolto)):
+                        ("studio_ascolta_pausa", ascolto), ("studio_indicazioni", indica)):
             if x and nome not in (getattr(self, "last_rules", None) or ()):
                 self._rule(nome)
-        return " ".join(x for x in (riga, sess, ascolto) if x)
+        return " ".join(x for x in (riga, sess, ascolto, indica) if x)
 
     def _minor_note(self, name: str | None) -> str:
         """Il preset di un minore come dato del turno (minori.dato_turno), "" per un adulto;

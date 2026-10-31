@@ -657,6 +657,17 @@
     if (st.materiali) tasti.append(pag);
     if (tasti.childNodes.length) art.append(tasti);
     if (home.domande === v.id) art.append(pannelloDomande(v));
+    // Le indicazioni di chi lo segue per questa verifica o materia (passo 10, #285): chi studia
+    // ne vede il testo; il tutore le vede e le cambia nella sua vista
+    if (!v.di) {
+      const ind = indicazioniDi(v);
+      if (ind.length) {
+        const s = nodo("section", "studio-h-gruppo studio-t-per-te");
+        s.append(nodo("h4", "studio-h-sotto", "Indicazioni di chi ti segue"), elencoIndicazioni(ind, v.materia));
+        art.append(s);
+      }
+    }
+    if (v.tutore) art.append(sezioneTutore(v));
     if (v.stato === "aperta" || v.stato === "bozza") art.append(sezioneCarte(v));
     // Le prove (passo 8, #248): la verifica finta e le domande; l'orale si fa a voce
     if (v.stato === "aperta") art.append(sezioneProve(v));
@@ -779,6 +790,294 @@
     es.textContent = home.esito && home.esitoDi === v.id ? home.esito : "";
     art.append(es);
     return art;
+  }
+
+  // ── la vista del tutore e le indicazioni (31/10, passo 10, #250 e #285) ──
+  // Solo per un tutore del minore (v.tutore, deciso dal server; /api/studio/tutore rifiuta gli
+  // altri). La padronanza in ombra resta nascosta (il giudizio del tutore resta suo); con una
+  // prova aperta niente domande né risposte attese. Indicazioni, titoli, domande e risposte sono
+  // testo di persone o dati delle pagine: sempre textContent, mai innerHTML.
+  // tut: {vid, dati, esito, attesa, testo, ambito, giorni, cambia}
+  let tut = null;
+  const AMBITI = { verifica: "per questa verifica", materia: "per la materia", tutto: "per tutto lo studio" };
+  const ESITI_T = { giusto: "giuste", indizio: "quasi", sbagliato: "no" };
+  const TIPI_T = { carta: "Carte", mappa: "Mappa", verifica_finta: "Verifica finta", interrogazione: "Interrogazione",
+    esercizio: "Esercizi", giudizio: "I tuoi giudizi" };
+  function tastoTutore(testo, azione, dati, cls, etichetta) {
+    const b = nodo("button", "tasto studio-h-tasto" + (cls ? " " + cls : ""), testo);
+    b.type = "button";
+    b.dataset.tutore = azione;
+    b.dataset.dati = JSON.stringify(dati || {});
+    if (etichetta) b.setAttribute("aria-label", etichetta);
+    b.disabled = !!(tut && tut.attesa);
+    return b;
+  }
+  function dovePerChi(x, materia) {
+    const p = [x.ambito === "materia" ? "per " + String(x.materia || materia || "la materia") : AMBITI[x.ambito] || ""];
+    if (x.scade) p.push("fino a " + dataDetta(x.scade));
+    if (x.da) p.push("da " + String(x.da));
+    return p.filter(Boolean).join(" · ");
+  }
+  // Le indicazioni per chi studia: il testo, dove valgono, fino a quando e chi le ha scritte
+  function elencoIndicazioni(lista, materia, cls) {
+    const ul = nodo("ul", "studio-h-elenco studio-t-indicazioni" + (cls ? " " + cls : ""));
+    for (const x of lista) {
+      const li = nodo("li", "studio-h-voce");
+      const tx = nodo("div", "studio-testo");
+      tx.append(nodo("b", "studio-t-testo-ind", "«" + String(x.testo || "") + "»"),
+        nodo("span", "studio-h-riga", " · " + dovePerChi(x, materia)));
+      li.append(tx);
+      ul.append(li);
+    }
+    return ul;
+  }
+  function indicazioniDi(v) {
+    const tutte = home.dati && Array.isArray(home.dati.indicazioni) ? home.dati.indicazioni : [];
+    return tutte.filter((x) => x.verifica === v.id || (x.ambito === "materia" &&
+      String(x.materia || "").toLowerCase() === String(v.materia || "").toLowerCase()));
+  }
+  function sezioneTutore(v) {
+    const sez = nodo("section", "studio-h-gruppo studio-t");
+    sez.dataset.verifica = String(v.id);
+    sez.append(nodo("h4", "studio-h-sotto", "Per te che lo segui"));
+    const aperta = tut && tut.vid === v.id;
+    const t = nodo("div", "studio-h-tasti");
+    t.append(tastoTutore(aperta ? "Chiudi la vista del tutore" : "Vista del tutore", aperta ? "chiudi" : "apri",
+      { verifica: v.id }, aperta ? "" : "studio-h-primo"));
+    sez.append(t);
+    if (aperta) sez.append(pannelloTutore(v));
+    if (aperta && tut.esito) {
+      const es = nodo("p", "pagina-esito studio-t-esito", tut.esito);
+      es.setAttribute("role", "status");
+      sez.append(es);
+    }
+    return sez;
+  }
+  function pannelloTutore(v) {
+    const p = nodo("div", "studio-t-pannello");
+    const d = tut.dati;
+    if (!d) { p.append(nodo("p", "pagina-nota", "Un attimo…")); return p; }
+    const nome = d.verifica && d.verifica.di ? String(d.verifica.di) : "";
+    const chi = nome || "chi studia";
+    if (d.riepilogo) p.append(nodo("p", "studio-h-riga", String(d.riepilogo)));
+    if (d.prova_aperta) p.append(nodo("p", "studio-avviso", "C'è una prova aperta: domande e risposte le vedi dopo la consegna."));
+    // Le indicazioni
+    const ind = nodo("section", "studio-t-blocco");
+    ind.append(nodo("h5", "studio-t-titolo", "Indicazioni per lo studio di " + chi));
+    const lista = Array.isArray(d.indicazioni) ? d.indicazioni : [];
+    if (!lista.length) ind.append(nodo("p", "studio-h-riga", "Nessuna indicazione: scrivi come vuoi che lo aiuti, per esempio «insisti sulle frazioni»."));
+    const ul = nodo("ul", "studio-h-elenco studio-t-indicazioni");
+    for (const x of lista) {
+      const li = nodo("li", "studio-h-voce");
+      const tx = nodo("div", "studio-testo");
+      tx.append(nodo("b", "studio-t-testo-ind", "«" + String(x.testo || "") + "»"),
+        nodo("span", "studio-h-riga", " · " + dovePerChi(x, v.materia)));
+      const tt = nodo("div", "studio-h-tasti");
+      tt.append(tastoTutore("Cambia", "modulo", { indicazione: x.id }, "", "Cambia l'indicazione"),
+        tastoTutore("Togli", "togli", { indicazione: x.id }, "", "Togli l'indicazione"));
+      li.append(tx, tt);
+      ul.append(li);
+    }
+    if (lista.length) ind.append(ul);
+    if (d.indicazioni_accese) ind.append(moduloIndicazione(v, d));
+    else ind.append(nodo("p", "studio-h-riga", "Le indicazioni qui sono spente."));
+    ind.append(nodo("p", "studio-nota", nome ? nome + " vede il testo delle indicazioni. Le regole per i minori restano: le indicazioni non le cambiano."
+      : "Chi studia vede il testo delle indicazioni. Le regole per i minori restano: le indicazioni non le cambiano."));
+    p.append(ind);
+    // La padronanza e i giudizi
+    const pd = d.padronanza || {};
+    const pad = nodo("section", "studio-t-blocco");
+    pad.append(nodo("h5", "studio-t-titolo", "Padronanza"));
+    if (!pd.mostrata) pad.append(nodo("p", "studio-nota", "La padronanza calcolata è ancora in prova: non te la mostro, così il tuo giudizio resta tuo e serve a tararla."));
+    else if (pd.livello !== null && pd.livello !== undefined) pad.append(nodo("p", "studio-h-riga", "Livello di oggi: " + Number(pd.livello) + "%."));
+    const args = Array.isArray(pd.argomenti) ? pd.argomenti : [];
+    if (!args.length) pad.append(nodo("p", "studio-h-riga", "Gli argomenti arrivano quando sono confermati."));
+    const ula = nodo("ul", "studio-h-elenco studio-t-argomenti");
+    for (const a of args) {
+      const li = nodo("li", "studio-h-voce studio-t-argomento");
+      const tx = nodo("div", "studio-testo");
+      const info = [];
+      if (pd.mostrata && a.parola) info.push(String(a.parola) + (a.valore !== null && a.valore !== undefined ? " (" + Number(a.valore) + "%)" : ""));
+      info.push(Number(a.tentativi) === 1 ? "1 tentativo" : (Number(a.tentativi) || 0) + " tentativi");
+      if (a.giudizio) info.push("il tuo giudizio: «" + String(a.giudizio.parola) + "», " + dataDetta(a.giudizio.giorno));
+      tx.append(nodo("b", null, String(a.numero || "") + ". " + String(a.titolo || "")),
+        nodo("span", "studio-h-riga", " · " + info.join(" · ")));
+      li.append(tx);
+      if (pd.si_giudica) {
+        const tg = nodo("div", "studio-h-tasti studio-t-giudizi");
+        tg.setAttribute("role", "group");
+        tg.setAttribute("aria-label", "Il tuo giudizio su " + String(a.titolo || "questo argomento"));
+        for (const [parola, etichetta] of [["la sa", "La sa"], ["quasi", "Quasi"], ["da studiare", "Da studiare"]]) {
+          const scelto = a.giudizio && a.giudizio.parola === parola && a.giudizio.giorno === String(d.oggi || "");
+          const b = tastoTutore(etichetta, "giudica", { argomento: a.id, parola }, scelto ? "studio-h-primo" : "");
+          b.setAttribute("aria-pressed", scelto ? "true" : "false");
+          tg.append(b);
+        }
+        li.append(tg);
+      }
+      ula.append(li);
+    }
+    if (args.length) pad.append(ula);
+    p.append(pad);
+    // Da guardare tu: le risposte da rivedere delle prove chiuse
+    const dg = Array.isArray(d.da_guardare) ? d.da_guardare : [];
+    const gu = nodo("section", "studio-t-blocco");
+    gu.append(nodo("h5", "studio-t-titolo", "Da guardare tu"));
+    if (Number(d.da_guardare_nascoste)) gu.append(nodo("p", "studio-h-riga", Number(d.da_guardare_nascoste) === 1
+      ? "Una risposta da rivedere: la vedi dopo la consegna della prova aperta." : Number(d.da_guardare_nascoste) + " risposte da rivedere: le vedi dopo la consegna della prova aperta."));
+    else if (!dg.length) gu.append(nodo("p", "studio-h-riga", "Niente da rivedere."));
+    const ol = nodo("ol", "studio-p-voci studio-t-guarda");
+    for (const x of dg) {
+      const li = nodo("li", "studio-p-voce studio-p-da_rivedere");
+      li.append(nodo("p", "studio-c-domanda", String(x.testo || "")),
+        nodo("span", "studio-c-risp", "La risposta" + (nome ? " di " + nome : "") + ": " + (x.risposta ? String(x.risposta) : "nessuna")),
+        nodo("span", "studio-c-risposta", "Risposta attesa: " + String(x.attesa || "")));
+      const t = nodo("div", "studio-h-tasti studio-c-esiti");
+      t.append(tastoTutore("No", "rivedi", { prova: x.prova, voce: x.n, esito: "sbagliato" }),
+        tastoTutore("Quasi", "rivedi", { prova: x.prova, voce: x.n, esito: "indizio" }),
+        tastoTutore("Era giusta", "rivedi", { prova: x.prova, voce: x.n, esito: "giusto" }, "studio-h-primo"));
+      li.append(t);
+      ol.append(li);
+    }
+    if (dg.length) gu.append(ol);
+    p.append(gu);
+    // Le prove chiuse con gli esiti
+    const pr = Array.isArray(d.prove) ? d.prove : [];
+    const pv = nodo("section", "studio-t-blocco");
+    pv.append(nodo("h5", "studio-t-titolo", "Prove"));
+    if (!pr.length) pv.append(nodo("p", "studio-h-riga", "Nessuna prova fatta."));
+    for (const x of pr.slice(0, 5)) {
+      const m = x.modalita === "orale" ? "Interrogazione a voce" : "Verifica finta";
+      const quando = x.fine ? dataDetta(String(x.fine).slice(0, 10)) : "";
+      let r = m + (quando ? ", " + quando : "") + ": ";
+      if (x.stato === "annullata") r += "chiusa senza esito.";
+      else r += x.frase ? String(x.frase) : (x.punteggio !== null && x.punteggio !== undefined ? Number(x.punteggio) + "%." : "senza punteggio.");
+      pv.append(nodo("p", "studio-h-riga", r));
+    }
+    p.append(pv);
+    // Il ripasso degli ultimi giorni, mappe e carte: solo conti
+    const rip = d.ripasso || {};
+    const rp = nodo("section", "studio-t-blocco");
+    rp.append(nodo("h5", "studio-t-titolo", "Ripasso, ultimi " + (Number(rip.giorni) || 7) + " giorni"));
+    const tent = rip.tentativi || {};
+    const tipi = Object.keys(tent);
+    if (!tipi.length) rp.append(nodo("p", "studio-h-riga", "Nessun tentativo in questi giorni."));
+    for (const k of tipi) {
+      const e = tent[k] || {};
+      rp.append(nodo("p", "studio-h-riga", (TIPI_T[k] || k) + ": " + ["giusto", "indizio", "sbagliato"]
+        .filter((x) => e[x]).map((x) => Number(e[x]) + " " + ESITI_T[x]).join(", ") + "."));
+    }
+    const c = rip.carte || {};
+    rp.append(nodo("p", "studio-h-riga", !Number(c.totali) ? "Nessuna carta." :
+      "Carte: " + Number(c.totali) + ", da ripassare adesso " + (Number(c.da_ripassare) || 0) + "."));
+    const mp = d.mappa || {};
+    const sk = mp.scheletro;
+    rp.append(nodo("p", "studio-h-riga", !sk ? "Mappa: lo scheletro non c'è ancora." :
+      "Mappa: scheletro " + (sk.stato === "confermata" ? "confermato" : "da confermare") + ", " + nn(sk.concetti, "concetto", "concetti") +
+      (mp.mia ? "; la sua mappa c'è" : "") + (mp.memoria && mp.memoria.ultimo ? "; a memoria: " + nn(mp.memoria.ultimo.giusta, "giusta", "giuste") : "") + "."));
+    p.append(rp);
+    return p;
+  }
+  function moduloIndicazione(v, d) {
+    const f = nodo("div", "studio-t-modulo");
+    const id = "studio-t-testo-" + v.id;
+    const lab = nodo("label", "studio-nota", tut.cambia ? "Cambia l'indicazione" : "Una indicazione nuova");
+    lab.htmlFor = id;
+    const ta = nodo("textarea", "studio-t-campo");
+    ta.id = id;
+    ta.rows = 2;
+    ta.maxLength = Number(d.testo_max) || 200;
+    ta.value = tut.testo || "";
+    ta.dataset.tutoreCampo = "testo";
+    ta.placeholder = "Per esempio: fagli ripetere i verbi irregolari";
+    f.append(lab, ta);
+    const riga = nodo("div", "studio-t-scelte");
+    if (!tut.cambia) {
+      const sa = nodo("select", "studio-t-campo");
+      sa.dataset.tutoreCampo = "ambito";
+      sa.setAttribute("aria-label", "Dove vale");
+      for (const [k, t] of [["verifica", "Questa verifica"], ["materia", String(v.materia || "La materia")], ["tutto", "Tutto lo studio"]]) {
+        const o = nodo("option", null, t);
+        o.value = k;
+        if ((tut.ambito || "verifica") === k) o.selected = true;
+        sa.append(o);
+      }
+      riga.append(sa);
+    }
+    const sg = nodo("select", "studio-t-campo");
+    sg.dataset.tutoreCampo = "giorni";
+    sg.setAttribute("aria-label", "Per quanti giorni");
+    const g0 = Number(tut.giorni) || Number(d.giorni_di_serie) || 30;
+    for (const g of [7, 14, 30, 60, 90].filter((x) => x <= (Number(d.giorni_max) || 90))) {
+      const o = nodo("option", null, "per " + g + " giorni");
+      o.value = String(g);
+      if (g === g0) o.selected = true;
+      sg.append(o);
+    }
+    riga.append(sg);
+    f.append(riga);
+    const t = nodo("div", "studio-h-tasti");
+    t.append(tastoTutore(tut.cambia ? "Salva" : "Scrivi", tut.cambia ? "cambia" : "indica", {}, "studio-h-primo"));
+    if (tut.cambia) t.append(tastoTutore("Annulla", "annulla", {}));
+    f.append(t);
+    return f;
+  }
+  async function caricaTutore(extra) {
+    if (!tut || !sch() || !sch().studioTutore) return;
+    tut.attesa = true;
+    const vid = tut.vid;
+    const r = await sch().studioTutore(Object.assign({ verifica: vid }, extra || {}));
+    if (!tut || tut.vid !== vid) return;
+    tut.attesa = false;
+    if (r.ok) {
+      tut.dati = r.dati;
+      if (extra && extra.azione) {
+        tut.esito = { giudica: "Segnato il tuo giudizio.", rivedi: "Segnato.", indica: "Indicazione scritta.",
+          cambia: "Indicazione cambiata.", togli: "Indicazione tolta." }[extra.azione] || "";
+        if (extra.azione === "indica" || extra.azione === "cambia") { tut.testo = ""; tut.cambia = null; }
+      }
+    } else tut.esito = String(r.dati.errore || "Non ci sono riuscita: riprova tra poco.");
+    disegnaHome();
+  }
+  function suTutore(b) {
+    let dati = {};
+    try { dati = JSON.parse(b.dataset.dati || "{}"); } catch (e) { return; }
+    const az = b.dataset.tutore;
+    if (az === "apri") {
+      tut = { vid: Number(dati.verifica), dati: null, esito: "", attesa: false, testo: "", ambito: "verifica", giorni: 0, cambia: null };
+      disegnaHome();
+      caricaTutore();
+      vista({ vista: "tutore", verifica: tut.vid });
+      return;
+    }
+    if (!tut) return;
+    if (az === "chiudi") { tut = null; disegnaHome(); vista({ vista: "home" }); return; }
+    if (az === "modulo") {
+      const x = (tut.dati && tut.dati.indicazioni || []).find((y) => y.id === dati.indicazione);
+      tut.cambia = x ? x.id : null;
+      tut.testo = x ? String(x.testo || "") : "";
+      tut.esito = "";
+      disegnaHome();
+      return;
+    }
+    if (az === "annulla") { tut.cambia = null; tut.testo = ""; disegnaHome(); return; }
+    if (az === "indica" || az === "cambia") {
+      const testo = String(tut.testo || "").trim();
+      if (!testo) { tut.esito = "Scrivi prima l'indicazione."; disegnaHome(); return; }
+      const extra = { azione: az, testo, giorni: Number(tut.giorni) || (tut.dati && Number(tut.dati.giorni_di_serie)) || 30 };
+      if (az === "indica") extra.ambito = tut.ambito || "verifica";
+      else extra.indicazione = tut.cambia;
+      caricaTutore(extra);
+      return;
+    }
+    if (az === "togli" && !window.confirm("Tolgo questa indicazione?")) return;
+    caricaTutore(Object.assign({ azione: az }, dati));
+  }
+  function suCampoTutore(ev) {
+    const el = ev.target;
+    if (!tut || !el || !el.dataset || !el.dataset.tutoreCampo) return;
+    const k = el.dataset.tutoreCampo;
+    tut[k] = k === "giorni" ? Number(el.value) : String(el.value);
   }
 
   // ── le carte (30/10, passo 6, #246) ──
@@ -2463,6 +2762,13 @@
     } else {
       $("studio-prova").hidden = !d.prova;
       const vv = Array.isArray(d.verifiche) ? d.verifiche : [];
+      // Le indicazioni per tutto lo studio di chi guarda (passo 10, #285), in alto
+      const gen = (Array.isArray(d.indicazioni) ? d.indicazioni : []).filter((x) => x.ambito === "tutto");
+      if (gen.length) {
+        const s = nodo("section", "studio-h-gruppo studio-t-per-te");
+        s.append(nodo("h4", "studio-h-sotto", "Indicazioni di chi ti segue"), elencoIndicazioni(gen, ""));
+        fig.push(s);
+      }
       vv.forEach((v, i) => fig.push(cartaVerifica(v, i === 0)));
       if (!vv.length) fig.push(nodo("p", "pagina-nota", "Non hai verifiche nello Studio."));
       fig.push(nodo("p", "studio-h-nuova", "Per una verifica nuova dimmelo: «Calliope, giovedì ho la verifica di storia»."));
@@ -2477,6 +2783,7 @@
     if (b.dataset.prove) { suProve(b); return; }
     if (b.dataset.mappa) { suMappa(b); return; }
     if (b.dataset.ascolta) { suAscolta(b); return; }
+    if (b.dataset.tutore) { suTutore(b); return; }
     if (b.dataset.pagine) { apriMateriali(Number(b.dataset.pagine)); return; }
     if (b.dataset.domande) {
       const id = Number(b.dataset.domande);
@@ -2556,6 +2863,7 @@
     st.aperta = false;
     carte = null;
     mappa = null;
+    tut = null;
     chiudiAscolta();
     if (st.materiali) chiudiCamera();
     if ($("studio")) $("studio").hidden = true;
@@ -2583,6 +2891,9 @@
     $("studio-home").addEventListener("pointerup", suNodo);
     $("studio-home").addEventListener("pointercancel", () => { trascina = null; });
     $("studio-home").addEventListener("keydown", tastoSulNodo);
+    // La vista del tutore (passo 10, #250): il testo dell'indicazione, dove vale e quanto
+    $("studio-home").addEventListener("input", suCampoTutore);
+    $("studio-home").addEventListener("change", suCampoTutore);
     // Il ripasso da ascoltare (passo 9, #249): la barra dell'avanzamento e lo stato della voce
     $("studio-home").addEventListener("input", suBarraAscolta);
     document.addEventListener("calliope:voce", suVoce);
@@ -2655,6 +2966,9 @@
           parti: ascolta.dati ? (ascolta.dati.parti || []).map((p) => ({ n: p.n, tipo: p.tipo, pronta: p.pronta, oggi: p.oggi })) : [],
           suona: inCorso(), tempo: lettore ? lettore.currentTime : 0, url: !!(ascolta.url && ascolta.url[ascolta.parte]),
           perVoce: !!perVoce } : null,
+        // La vista del tutore (passo 10, #250): lo stato e i dati che la pagina ha
+        tutore: tut ? { vid: tut.vid, esito: tut.esito, cambia: tut.cambia, dati: tut.dati } : null,
+        indicazioni: home.dati && Array.isArray(home.dati.indicazioni) ? home.dati.indicazioni.slice() : [],
         camera: !!st.flusso,
         argomenti: st.arg && Array.isArray(st.arg.argomenti) ? st.arg.argomenti.map((a) => ({ id: a.id, stato: a.stato, avvisi: (a.avvisi || []).slice() })) : [],
         pagine: st.pagine.map((p) => ({ id: p.id, tipo: p.tipo, angoli: p.angoli, intera: !!p.intera, avvisi: p.avvisi.slice(),

@@ -73,6 +73,7 @@ from . import resoconto as R
 from .ascolta import Ascolti
 from .mappe import Mappe
 from .prove import Prove
+from .tutore import Tutore
 
 SPENTO, OMBRA, ATTIVO = "spento", "ombra", "attivo"
 MODI = (SPENTO, OMBRA, ATTIVO)
@@ -211,10 +212,11 @@ def _data(valore) -> datetime.date:
     return datetime.date.fromisoformat(str(valore).strip()[:10])
 
 
-class Studio(Mappe, Prove, Ascolti):
+class Studio(Mappe, Prove, Ascolti, Tutore):
     """Lo Studio di questa installazione: un oggetto per processo. Le mappe concettuali (passo 7,
     #247) sono in `mappe.py`, le domande e le prove (passo 8, #248) in `prove.py`, il ripasso da
-    ascoltare (passo 9, #249) in `ascolta.py`."""
+    ascoltare (passo 9, #249) in `ascolta.py`, la vista del tutore e le indicazioni (passo 10,
+    #250, #285) in `tutore.py`."""
 
     def __init__(self, cfg, registry=None, log=print, adesso=None):
         self.cfg = cfg
@@ -1154,6 +1156,9 @@ class Studio(Mappe, Prove, Ascolti):
         if (fonte == "persona" and ruolo != "proprietario") or (
                 fonte == "tutore" and ruolo != "tutore"):
             raise ValueError("la fonte non è di chi registra")
+        if tipo == PD.GIUDIZIO and fonte != "tutore":
+            # Il giudizio è del tutore e basta (passo 10, #250)
+            raise ValueError("il giudizio è del tutore")
         a = self.dati.uno("SELECT id FROM studio_argomenti WHERE id = ? AND verifica = ?",
                           (int(argomento), v["id"]))
         if a is None:
@@ -2055,6 +2060,10 @@ class Studio(Mappe, Prove, Ascolti):
                 "conoscenza": list(CONOSCENZA), "umori": list(UMORI),
                 # Il ripasso da ascoltare (passo 9, #249): la sezione «Ascolta» c'è se è acceso
                 "ascolta": self.ascolto_acceso(),
+                # Le indicazioni dei tutori per lo studio di chi guarda (passo 10, #285): il
+                # minore ne vede il testo (decisione del 30/10); textContent sulla pagina
+                "indicazioni": (self._indicazioni_per(getattr(chi, "id", None))
+                                if self.indicazioni_accese() else []),
                 "prova": not self.per_schermi()}
 
     def _home_verifica(self, chi, vid, di, da_decidere) -> dict:
@@ -2072,6 +2081,9 @@ class Studio(Mappe, Prove, Ascolti):
         return {"id": v["id"], "materia": v["materia"], "argomento": v["argomento"],
                 "data": v["data"], "stato": v["stato"], "giorni_mancanti": v["giorni_mancanti"],
                 "obiettivo": v["obiettivo"], "di": di,
+                # La vista del tutore (passo 10, #250): solo per un tutore del minore
+                "tutore": bool(v["persona"] != getattr(chi, "id", None)
+                              and self._chi_puo(chi, v["persona"]) == "tutore"),
                 # Il tipo della prova vera e la finestra «dal» (passo 8, #248)
                 "prova": v["prova"], "finestra": bool(v.get("finestra")), "fine": v["fine"],
                 "in_finestra": v["in_finestra"],
@@ -2295,7 +2307,8 @@ class Studio(Mappe, Prove, Ascolti):
     VISTE = {"home": "la home dello Studio", "piano": "il piano", "argomenti": "gli argomenti",
              "pagine": "le pagine", "pagina": "una pagina", "sessione": "la sessione di oggi",
              "carte": "le carte", "mappa": "la mappa concettuale",
-             "prove": "le prove (la verifica finta e le domande)"}
+             "prove": "le prove (la verifica finta e le domande)",
+             "tutore": "la vista del tutore"}
 
     def riga_vista(self, chi, vista: dict | None) -> str:
         """La riga per i dati del turno quando una pagina dello Studio è aperta sullo schermo

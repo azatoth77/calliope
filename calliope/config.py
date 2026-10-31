@@ -2254,6 +2254,16 @@ class Config:
     # L'audio del ripasso per lo schermo è una cache del testo (studio_cartella/ascolta/): si toglie
     # dopo tanti giorni dall'ultimo ascolto, e sempre con la verifica, «dimentica» e --svuota
     studio_ascolta_giorni: int = 7
+    # Le indicazioni dei tutori (31/10, passo 10, #250 e #285, calliope/studio/tutore.py): frasi
+    # di un tutore per lo studio del suo minore («insisti sulle frazioni»), per tutto il suo
+    # studio, una materia o una verifica, scritte dalla vista del tutore o a voce. Il minore ne
+    # vede il testo; nei dati del turno del minore entrano con una cornice del codice, sotto le
+    # regole per i minori, senza permessi né azioni. Accese di serie con lo Studio: senza un tutore
+    # che scrive non cambia niente. false: niente scrittura e niente nei dati del turno
+    studio_indicazioni: bool = True
+    # Quanti giorni vale un'indicazione se il tutore non lo dice (da 1 a 90; legata a una verifica
+    # mai oltre la fine della prova vera)
+    studio_indicazioni_giorni: int = 30
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3551,7 +3561,8 @@ SEZIONI: dict[str, list[str]] = {
                "studio_mappa_nodi_max", "studio_mappa_genera", "studio_mappa_libera",
                "studio_mappa_consigli", "studio_prova_domande", "studio_prova_minuti",
                "studio_finestra_giorni", "studio_domande_genera", "studio_ascolta",
-               "studio_ascolta_voce", "studio_ascolta_giorni"],
+               "studio_ascolta_voce", "studio_ascolta_giorni", "studio_indicazioni",
+               "studio_indicazioni_giorni"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -3914,6 +3925,7 @@ LIMITI: dict[str, tuple[float, float]] = {
     "studio_nitidezza_min": (0.0, 100_000.0), "studio_mappa_nodi_max": (4, 30),
     "studio_prova_domande": (3, 40), "studio_prova_minuti": (2, 180),
     "studio_finestra_giorni": (1, 90), "studio_ascolta_giorni": (1, 365),
+    "studio_indicazioni_giorni": (1, 90),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),

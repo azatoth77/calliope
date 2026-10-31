@@ -737,7 +737,7 @@ sc.close()
 print("— dati")
 col = {r["name"] for r in st.dati.tutti("PRAGMA table_info(studio_mappe)")}
 verifica("lo schema 9: giri e visti in studio_mappe",
-         D.versione_schema(st.dati.db) == 10 and {"giri", "visti"} <= col)
+         D.versione_schema(st.dati.db) == 11 and {"giri", "visti"} <= col)
 
 
 def n_libere(v=None):

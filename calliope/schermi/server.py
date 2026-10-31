@@ -116,6 +116,14 @@ Indirizzi:
                                  azione le parti; «audio» il WAV di una parte (202 mentre si
                                  prepara); «suona» il battito mentre suona; 409 con una prova
                                  aperta
+  POST /api/studio/tutore        «X-Calliope-Sessione», {verifica, azione?, argomento?, parola?,
+                                 prova?, voce?, esito?, indicazione?, testo?, ambito?, giorni?}
+                                 → la vista del tutore di una verifica del suo minore (31/10,
+                                 passo 10, #250 e #285, studio/tutore.py): padronanza (alla cieca
+                                 in ombra), giudizi, «da guardare tu», prove, ripasso, mappe e
+                                 carte, indicazioni; giudica, rivedi, indica, cambia, togli. Solo un
+                                 tutore del minore, solo da uno schermo personale; gli altri «non
+                                 c'è»
   POST /api/studio/pagina        «X-Calliope-Sessione», byte nudi (octet-stream), i dati in
                                  «X-Calliope-Studio» (URI): una foto di una pagina con i suoi
                                  angoli, o un PDF intero (29/10, #281, studio/pagine.py), nello
@@ -1645,6 +1653,96 @@ def crea_app(hub: Schermi) -> Starlette:
                     + (f" {cid}" if isinstance(cid, int) else ""))
         return _json(out)
 
+    # La vista del tutore (31/10, passo 10, #250 e #285, studio/tutore.py): solo un tutore del
+    # minore; gli altri, la persona stessa compresa, lo stesso «non c'è» di una verifica che non
+    # esiste. Le indicazioni sono testo di un adulto di casa: la pagina le scrive con textContent,
+    # il registro non le vede mai
+    AZIONI_TUTORE = ("giudica", "rivedi", "indica", "cambia", "togli")
+
+    async def studio_tutore(request: Request):
+        """{verifica, azione?, …} → la vista del tutore (`Studio.vista_tutore`). Senza azione sola
+        lettura; con un'azione: «giudica» (argomento, parola), «rivedi» (prova, voce, esito),
+        «indica» (testo, ambito: verifica | materia | tutto, giorni?), «cambia» (indicazione,
+        testo?, giorni?), «togli» (indicazione)."""
+        schermo, errore = schermo_personale(request, letture_studio, LETTURE_AL_MINUTO,
+                                            TROPPE_LETTURE)
+        if errore is not None:
+            return errore
+        dati, errore = await corpo_json(request, 2048)
+        if errore is not None:
+            return errore
+        st, prof, errore = studio_di(schermo)
+        if errore is not None:
+            return errore
+        from ..studio import tutore as TU
+
+        def intero(k):
+            x = dati.get(k)
+            return x if isinstance(x, int) and not isinstance(x, bool) and 0 < x < 10 ** 9 \
+                else None
+        vid, azione = intero("verifica"), dati.get("azione")
+        if vid is None or (azione is not None and azione not in AZIONI_TUTORE):
+            return _json({"errore": "richiesta non valida"}, 400)
+        testo = dati.get("testo")
+        if testo is not None and (not isinstance(testo, str) or len(testo) > TU.INDICAZIONE_MAX * 2):
+            return _json({"errore": "testo non valido"}, 400)
+        giorni = dati.get("giorni")
+        if giorni is not None and (not isinstance(giorni, int) or isinstance(giorni, bool)):
+            return _json({"errore": "durata non valida"}, 400)
+        ambito = dati.get("ambito", "verifica")
+        if azione == "indica" and (ambito not in ("verifica", "materia", "tutto") or not testo):
+            return _json({"errore": "richiesta non valida"}, 400)
+        if azione == "giudica" and (intero("argomento") is None
+                                    or not isinstance(dati.get("parola"), str)):
+            return _json({"errore": "richiesta non valida"}, 400)
+        if azione == "rivedi" and (intero("prova") is None or intero("voce") is None
+                                   or not isinstance(dati.get("esito"), str)):
+            return _json({"errore": "richiesta non valida"}, 400)
+        if azione in ("cambia", "togli") and intero("indicazione") is None:
+            return _json({"errore": "manca l'indicazione"}, 400)
+        from ..studio import NonPermesso, NonTrovata, VerificaChiusa
+
+        def fai():
+            if azione == "giudica":
+                return st.giudica(prof, vid, intero("argomento"), dati["parola"])
+            if azione == "rivedi":
+                return st.rivedi_da_tutore(prof, vid, intero("prova"), intero("voce"),
+                                           dati["esito"])
+            if azione in ("indica", "cambia", "togli"):
+                # La verifica dice di chi è: l'indicazione è per lo stesso minore
+                v = st._verifica_tutore(prof, vid)
+                if azione == "indica":
+                    st.scrivi_indicazione(prof, v["persona"], testo,
+                                          verifica=v["id"] if ambito == "verifica" else None,
+                                          materia=v["materia"] if ambito == "materia" else None,
+                                          giorni=giorni)
+                else:
+                    iid = intero("indicazione")
+                    r = st.dati.uno("SELECT persona FROM studio_indicazioni WHERE id = ?", (iid,))
+                    if r is None or r["persona"] != v["persona"]:
+                        raise NonTrovata()
+                    if azione == "cambia":
+                        st.cambia_indicazione(prof, iid, testo, giorni)
+                    else:
+                        st.togli_indicazione(prof, iid)
+            return st.vista_tutore(prof, vid)
+        try:
+            out = await asyncio.to_thread(fai)
+        except (NonTrovata, NonPermesso):
+            return _json({"errore": "Questa verifica non c'è."}, 404)
+        except VerificaChiusa:
+            return _json({"errore": "La verifica è chiusa."}, 409)
+        except PermissionError:
+            return _json({"errore": "Lo Studio adesso è in sola lettura."}, 503)
+        except ValueError as e:
+            # Le frasi dei rifiuti le scrive il codice (mai il testo arrivato)
+            return _json({"errore": "Non va: " + str(e) + "."}, 400)
+        if azione is not None:
+            # Nel registro solo l'azione e gli id, mai il testo delle indicazioni
+            hub.log(f"[STUDIO] vista del tutore, verifica {vid}: {azione}")
+        out["prova"] = not st.per_schermi()
+        return _json(out)
+
     # Le prove e le domande (31/10, passo 8, #248): la verifica finta scritta, le domande scritte
     # a mano o proposte dal lettore, il tipo della prova vera. Fuori dalla conversazione come le
     # carte (il testo è un dato: la pagina lo scrive con textContent); l'esito lo decide il codice,
@@ -2291,6 +2389,7 @@ def crea_app(hub: Schermi) -> Starlette:
         Route("/api/studio/prova", studio_prova, methods=["POST"]),
         Route("/api/studio/mappa", studio_mappa, methods=["POST"]),
         Route("/api/studio/ascolta", studio_ascolta, methods=["POST"]),
+        Route("/api/studio/tutore", studio_tutore, methods=["POST"]),
         Route("/api/studio/pagina", studio_pagina, methods=["POST"]),
         # Il rilevatore dei bordi e la pagina dello Studio (29/10, #281), del telefono e del PC
         Route("/bordi.js", file("bordi.js", "text/javascript; charset=utf-8")),

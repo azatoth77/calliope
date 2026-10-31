@@ -9,7 +9,7 @@
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
   (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
-  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34). Il passo 7 (la mappa concettuale, prima parte: scheletro a mano, la mia mappa, a memoria, controllo, PDF) il 30/10 sera sul ramo `issue-247-studio-mappa` (punto 35). La seconda parte (lo scheletro generato dal lettore) il 30/10 sera sul ramo `issue-247-studio-mappa-genera` (punto 36). Il passo 8 (verifica finta e interrogazione dai materiali) il 31/10 sul ramo `issue-248-studio-verifica-finta` (punti 40 e 41). Il passo 9 (ripasso da ascoltare) il 31/10 sul ramo `issue-249-studio-ripasso-ascolto` (punto 42).
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34). Il passo 7 (la mappa concettuale, prima parte: scheletro a mano, la mia mappa, a memoria, controllo, PDF) il 30/10 sera sul ramo `issue-247-studio-mappa` (punto 35). La seconda parte (lo scheletro generato dal lettore) il 30/10 sera sul ramo `issue-247-studio-mappa-genera` (punto 36). Il passo 8 (verifica finta e interrogazione dai materiali) il 31/10 sul ramo `issue-248-studio-verifica-finta` (punti 40 e 41). Il passo 9 (ripasso da ascoltare) il 31/10 sul ramo `issue-249-studio-ripasso-ascolto` (punto 42). Il passo 10 (la vista del tutore e le indicazioni dei tutori, #250 e #285) il 31/10 sul ramo `issue-250-studio-tutore` (punti 43 e 44).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -102,8 +102,10 @@ arrivano da un tutore riconosciuto; i materiali restano sempre non fidati. Una p
 - entrano nei dati del turno dello Studio di quel minore;
 - non scavalcano mai le regole di sicurezza: «mai la soluzione intera» e i limiti per età restano.
 
-Resta da decidere se il minore ne vede anche il testo o sa solo che esistono. Si progetta qui dopo
-il passo 4.5.
+*[storico fino al 30/10: «Resta da decidere se il minore ne vede anche il testo o sa solo che
+esistono. Si progetta qui dopo il passo 4.5.»]* Deciso da chi amministra il 30/10: il minore vede
+il testo. Progettate col passo 10 (punti 43 e 44): non sono «dati affidabili» nel senso della busta
+né ordini fidati, ma indicazioni di metodo con una cornice del codice nei dati del turno.
 
 ## Cosa si è tolto (passo 4.0, #279)
 
@@ -297,7 +299,8 @@ dell'eco della stanza.
     registro dei turni e nella chiamata che resta nella storia, quindi anche negli eventi e nella
     conversazione salvata; il tool riceve il valore vero (revisione della PR #317). «Dimentica» lo toglie. Detto a voce resta, come ogni frase della persona,
     nella sua conversazione (0031). Chi vede le sessioni (#285) vedrà al più che c'è stata una
-    sessione, mai come si sentiva: se servirà, si decide di nuovo qui.
+    sessione, mai come si sentiva: se servirà, si decide di nuovo qui. *[Confermato col passo 10,
+    punto 43: la vista del tutore non ha lo stato d'animo.]*
 28. **La vista aperta nei dati del turno** (progetto § 0, punto 2): la pagina manda la vista dello
     Studio (`POST /api/vista`, al più una al secondo), il server tiene l'ultima per schermo in
     memoria; nei dati del turno una riga corta solo se chi parla è certo (o parla dal suo
@@ -601,6 +604,59 @@ dell'eco della stanza.
     - lasciare suonare il ripasso durante una prova, «tanto è il libro»: l'audio passa nella stanza
       e può dare le risposte;
     - la posizione su disco: è una comodità di pochi minuti, non un dato da tenere.
+
+## La vista del tutore e le indicazioni (passo 10, #250 e #285, 31/10)
+
+43. **La vista del tutore è sua e la padronanza resta alla cieca.** Analisi nel commento della #250;
+    i dettagli nel documento d'area.
+    - La vede solo un tutore del minore, sul suo schermo personale (`POST /api/studio/tutore`); gli
+      altri, il minore compreso, ricevono «non c'è». Dentro: il riepilogo alla terza persona, le
+      indicazioni, la padronanza, il giudizio per argomento, «Da guardare tu», le prove con gli
+      esiti, il ripasso degli ultimi 7 giorni e la mappa in conti. Mai lo stato d'animo (punto 27).
+    - Con la padronanza in ombra il tutore vede i tentativi ma non la cifra né la parola: il suo
+      giudizio resta suo ed è la misura del criterio del punto 32.
+    - **Il giudizio del tutore** («la sa», «quasi», «da studiare») è un tentativo di tipo
+      «giudizio», fonte «tutore», **peso pieno** (1,0), al più uno per argomento e per giorno.
+      L'accordo si misura contro la padronanza calcolata senza i giudizi; solo conti nel registro.
+    - Le voci «da rivedere» si decidono dalla vista (`rivedi_voce`, fonte «tutore», peso pieno).
+      **Con una prova aperta** sulla verifica la vista dà solo il conto: niente domande, risposte
+      attese né frasi delle prove, e «rivedi» aspetta la consegna.
+
+    Alternative scartate:
+    - la cifra della padronanza al tutore anche in ombra: il suo giudizio si piegherebbe al numero
+      e il criterio del punto 32 non misurerebbe più niente;
+    - il giudizio del tutore fuori dalla padronanza (solo misura): chi amministra l'ha voluto dentro,
+      a peso pieno; l'accordo resta onesto perché si calcola senza i giudizi;
+    - una pagina a parte per il tutore: la vista sta sulla scheda della verifica, dove sono già
+      piano, sessioni, carte e mappa.
+
+44. **Le indicazioni dei tutori indirizzano l'assistente, sotto le regole e senza permessi.**
+    Decisione di chi amministra del 30/10: il minore ne vede il testo.
+    - Le scrivono, cambiano e tolgono solo i tutori del minore, dallo schermo o a voce («indica»,
+      col testo fatto delle parole dette e un'identità certa); valgono per tutto lo studio, una
+      materia o una verifica; al più 8, di 200 caratteri, 30 giorni di serie (1–90), mai oltre la
+      prova vera; la forma la controlla il codice (niente link, email, telefoni; principio 10).
+    - **Nei dati del turno del minore, con una cornice del codice, fuori dalla busta.** La busta
+      dice di non seguire le istruzioni, e un'indicazione è un'istruzione di metodo; fidate come
+      ordini no, perché un account può essere usato da altri e un testo salvato non vale come la
+      richiesta di chi parla. La cornice le mette sotto le regole per i minori, senza permessi né
+      azioni; la protezione vera è la struttura (livelli in `ToolRegistry.call`, la politica che
+      guarda chi ha chiesto, il guardiano e le regole dei minori che nessuna indicazione tocca).
+    - Mai nella storia, negli eventi né nel registro dei turni (solo la regola
+      `studio_indicazioni`). Vanno via con la verifica, con «dimentica» del minore, con `--svuota` e
+      con la rotazione dopo la scadenza. Schema «studio» alla versione 11 (`studio_indicazioni`).
+    - Interruttori `studio_indicazioni` (acceso di serie con lo Studio) e
+      `studio_indicazioni_giorni` (30).
+
+    Alternative scartate:
+    - in busta come i materiali: il modello non le seguirebbe e la conversazione del minore
+      resterebbe contaminata;
+    - fidate, nude nel prompt: avrebbero la forza di un ordine di chi parla;
+    - il minore che sa solo che esistono: deciso il contrario il 30/10;
+    - un controllo del significato («non dare la soluzione» sì, «dagli la soluzione» no): è una
+      regola sul significato (principio 10); restano le regole per i minori, sopra.
+    - Resta fuori l'interruttore «controllo io le domande» (decisione 3 del progetto): senza domande
+      generate attive non ha effetto.
 
 ## Da completare con i passi 4.3–4.5
 
