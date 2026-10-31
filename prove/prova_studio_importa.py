@@ -172,6 +172,49 @@ def zip_stesso_nome(n: int, contenuto: bytes) -> bytes:
     return locale + centrale + fine
 
 
+def eocd_aggirato(n, voci_campo, cd_basso=None):
+    """I casi A e B del revisore della PR #364 (seconda revisione), con n voci vuote."""
+    import struct
+    loc = struct.pack("<4s5H3L2H", b"PK", 10, 0, 0, 0, 0, 0, 0, 0, 1, 0) + b"a"
+    cd = b"".join(struct.pack("<4s6H3L5H2L", b"PK", 20, 10, 0, 0, 0, 0, 0, 0, 0,
+                              len(nm), 0, 0, 0, 0, 0, 0) + nm
+                  for nm in (f"n{i}".encode() for i in range(n)))
+    if cd_basso is not None:
+        manca = (cd_basso - (len(cd) + 46)) % 65536
+        nm = b"x" * (manca if manca >= 1 else manca + 65536)
+        cd += struct.pack("<4s6H3L5H2L", b"PK", 20, 10, 0, 0, 0, 0, 0, 0, 0, len(nm),
+                          0, 0, 0, 0, 0, 0) + nm
+    fine = struct.pack("<4s4H2LH", b"PK", 0, 0, voci_campo, voci_campo, len(cd),
+                       len(loc), 0)
+    return loc + cd + fine
+
+
+def docx_utf16() -> bytes:
+    w = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"'
+    x = (f'<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE w:document [<!ENTITY x "INIETTATO">]>'
+         f'<w:document {w}><w:body><w:p><w:r><w:t>testo &x;</w:t></w:r></w:p></w:body></w:document>')
+    zin = zipfile.ZipFile(io.BytesIO(docx()))
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w", zipfile.ZIP_DEFLATED) as zout:
+        for i in zin.infolist():
+            zout.writestr(i.filename, x.encode("utf-16") if i.filename == "word/document.xml"
+                          else zin.read(i))
+    return b.getvalue()
+
+
+def odt_utf16(codifica="utf-16") -> bytes:
+    nome = "UTF-16" if codifica.startswith("utf-16") else codifica.upper()
+    x = (f'<?xml version="1.0" encoding="{nome}"?><!DOCTYPE x [<!ENTITY a "INIETTATO">]>'
+         '<office:document-content xmlns:office="urn:oasis:names:tc:opendocument:xmlns:office:1.0" '
+         'xmlns:text="urn:oasis:names:tc:opendocument:xmlns:text:1.0"><office:body><office:text>'
+         '<text:p>&a;</text:p></office:text></office:body></office:document-content>')
+    b = io.BytesIO()
+    with zipfile.ZipFile(b, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("mimetype", "application/vnd.oasis.opendocument.text")
+        z.writestr("content.xml", x.encode(codifica))
+    return b.getvalue()
+
+
 def zip_tante_voci(n: int) -> bytes:
     """Una directory centrale enorme (voci vuote): rifiutata dalla fine dell'archivio, prima di
     aprirlo."""
@@ -384,6 +427,18 @@ def prova_classifica():
             esito = str(e)
         verifica(f"{nome}: il DOCTYPE dopo un commento di 70 kB non si apre", "DOCTYPE" in esito,
                  esito)
+    # Le parti XML in UTF-16 (seconda revisione della PR #364): l'ENTITY non si vede nei byte
+    # ASCII, e la parte non si apre
+    for nome, dati, cat in (("u16.docx", docx_utf16(), "word"), ("u16.odt", odt_utf16(), "opendocument"),
+                            ("u16le.odt", odt_utf16("utf-16-le"), "opendocument"),
+                            ("latin.odt", odt_utf16("iso-8859-1"), "opendocument")):
+        try:
+            pp_, _ = I.testi(dati, nome, cat, 30_000_000)
+            esito = "letto: " + "".join(pp_)[:60]
+        except ValueError as e:
+            esito = str(e)
+        verifica(f"{nome}: la parte XML in un'altra codifica con un'ENTITY non si apre",
+                 "codifica" in esito, esito)
     pp, _ = I.testi(pptx(), "a.pptx", "powerpoint", 30_000_000)
     verifica("pptx: una diapositiva per pagina", len(pp) == 2 and "nucleo" in pp[1], pp)
 
@@ -538,6 +593,30 @@ def prova_zip_ostili():
         p.write_bytes(b)
         verifica("voci_dichiarate legge la fine dell'archivio (anche ZIP64)",
                  I.voci_dichiarate(p)[0] == 3000)
+        # La fine dell'archivio aggirata (seconda revisione della PR #364): «0xFFFF» senza ZIP64
+        # (A) e «PK» dentro i campi dell'EOCD (B); più un archivio onesto col commento
+        for caso, dati, attesa in (("A", eocd_aggirato(5000, 0xFFFF), "strano"),
+                                   ("B", eocd_aggirato(5000, 0x4B50, cd_basso=0x0605), "file")):
+            q = TMP / f"eocd-{caso}.zip"
+            q.write_bytes(dati)
+            try:
+                I.elenca(q, "x.zip", I.Tetti())
+                esito = "aperto"
+            except I.Rifiuto as e:
+                esito = str(e)
+            verifica(f"EOCD aggirato, caso {caso}: rifiutato prima di aprirlo", attesa in esito
+                     and esito != "aperto", f"{esito} {I.voci_dichiarate(q)}")
+        q = TMP / "commento.zip"
+        with zipfile.ZipFile(q, "w") as z:
+            z.writestr("a.txt", b"ciao")
+            z.comment = b"un commento con PK dentro e altro"
+        verifica("un archivio onesto col commento (anche con la firma dentro) si apre se non è ambiguo, "
+                 "o si rifiuta senza eccezioni", isinstance(I.voci_dichiarate(q), (tuple, type(None))))
+        q2 = TMP / "commento2.zip"
+        with zipfile.ZipFile(q2, "w") as z:
+            z.writestr("a.txt", b"ciao")
+            z.comment = b"un commento qualunque"
+        verifica("un archivio col commento si apre", I.elenca(q2, "c.zip", I.Tetti())[0] == "zip")
         # Il rapporto su tutto l'archivio: tanti testi molto comprimibili sotto la soglia per voce
         cfg.studio_importa_totale_max_mb = 300.0
         piccoli = zip_di([(f"t{k}.txt", ("parola " * 60_000).encode()) for k in range(40)])

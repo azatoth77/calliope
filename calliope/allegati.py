@@ -417,23 +417,37 @@ def _zip_sicuro(zf: zipfile.ZipFile, ufficio: bool) -> str | None:
             if i.filename.endswith((".xml", ".rels")):
                 # Tutta la parte, a pezzi, non solo l'inizio (revisione della PR #364: un
                 # commento lungo spostava il DOCTYPE oltre i primi 4096 byte)
-                if _dichiarazioni(zf, i):
-                    return "contiene dichiarazioni XML non ammesse (DOCTYPE)"
+                motivo = _dichiarazioni(zf, i)
+                if motivo:
+                    return motivo
     return None
 
 
-def _dichiarazioni(zf: zipfile.ZipFile, info) -> bool:
-    """La parte XML contiene «<!DOCTYPE» o «<!ENTITY», letta tutta a pezzi (i pezzi si
-    sovrappongono di qualche byte, così una parola tagliata a metà si trova)."""
-    coda = b""
+def _dichiarazioni(zf: zipfile.ZipFile, info) -> str | None:
+    """Il motivo per non aprire una parte XML, o None: «<!DOCTYPE» o «<!ENTITY» in tutta la
+    parte, letta a pezzi (i pezzi si sovrappongono di qualche byte, così una parola tagliata a
+    metà si trova); una parte in UTF-16 o UTF-32, o che dichiara un'altra codifica, che
+    nasconderebbe quelle parole ai byte ASCII (seconda revisione della PR #364). I documenti
+    veri di Office e OpenDocument sono in UTF-8."""
+    doctype = "contiene dichiarazioni XML non ammesse (DOCTYPE)"
     with zf.open(info) as f:
+        testa = f.read(256)
+        if testa.startswith((b"\xff\xfe", b"\xfe\xff", b"\x00\x00\xfe\xff")) or \
+                testa[:4] in (b"<\x00?\x00", b"\x00<\x00?", b"<\x00\x00\x00", b"\x00\x00\x00<"):
+            return "contiene XML in una codifica non ammessa (UTF-16 o UTF-32)"
+        m = re.match(rb"\s*<\?xml[^>]*?encoding\s*=\s*[\"']([A-Za-z0-9._-]+)[\"']", testa)
+        if m and m.group(1).lower() not in (b"utf-8", b"utf8"):
+            return "contiene XML in una codifica non ammessa"
+        if b"<!DOCTYPE" in testa or b"<!ENTITY" in testa:
+            return doctype
+        coda = testa[-16:]
         while True:
             pezzo = f.read(1 << 16)
             if not pezzo:
-                return False
+                return None
             b = coda + pezzo
             if b"<!DOCTYPE" in b or b"<!ENTITY" in b:
-                return True
+                return doctype
             coda = b[-16:]
 
 

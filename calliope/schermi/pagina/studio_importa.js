@@ -196,11 +196,11 @@
         }
         s.esito = quale + "…";
         ridisegna(vid);
-        // L'avanzamento in byte dell'invio, sulla riga dell'esito (al più ogni 5 %)
+        // L'avanzamento in byte dell'invio, sulla riga dell'esito (ogni 25 %: è un role="status", e il lettore di schermo lo ripete; seconda revisione della PR #364)
         let ultimo = -1;
         const avanti = (mandati, tot) => {
           const pc = tot ? Math.floor((100 * mandati) / tot) : 0;
-          if (pc - ultimo < 5 && pc < 100) return;
+          if (pc - ultimo < 25 && pc < 100) return;
           ultimo = pc;
           s.esito = quale + ": " + pc + "%";
           const el = document.querySelector('section.studio-i[data-importa-verifica="' + vid + '"] .studio-i-esito');

@@ -165,29 +165,50 @@ def nome_strano(nome: str) -> str | None:
 def voci_dichiarate(path) -> tuple[int, int] | None:
     """(voci, byte della directory centrale) scritti nella fine dell'archivio (EOCD, anche
     ZIP64), letti **prima** di aprirlo con `zipfile`, che altrimenti carica in memoria tutta la
-    directory centrale (900 000 voci vuote: 600 MB). None se la fine non si trova."""
+    directory centrale (900 000 voci vuote: 600 MB). None se la fine non si trova, se è ambigua
+    o se dice «0xFFFF» senza uno ZIP64 valido: chi chiama rifiuta l'archivio.
+
+    Seconda revisione della PR #364: si sceglie lo **stesso** EOCD che sceglierà `zipfile`
+    (prima quello senza commento esattamente alla fine, poi l'ultima firma negli ultimi 64 KB) e
+    si chiede in più che la lunghezza del suo commento arrivi esattamente alla fine del file;
+    altrimenti un «PK\\x05\\x06» scritto nei campi o nel commento farebbe leggere a noi un EOCD e a
+    `zipfile` un altro. Come `zipfile`, il localizzatore ZIP64 subito prima vale sempre."""
     import struct
     dim = os.path.getsize(path)
     with open(path, "rb") as f:
         coda = min(dim, 65557)
         f.seek(dim - coda)
         b = f.read(coda)
-        i = b.rfind(b"PK\x05\x06")
-        if i < 0 or len(b) - i < 22:
-            return None
+        if len(b) >= 22 and b[-22:-18] == b"PK\x05\x06" and b[-2:] == b"\x00\x00":
+            i = len(b) - 22
+        else:
+            i = b.rfind(b"PK\x05\x06")
+            if i < 0 or len(b) - i < 22 or \
+                    i + 22 + struct.unpack_from("<H", b, i + 20)[0] != len(b):
+                return None
         voci, cd = struct.unpack_from("<H", b, i + 10)[0], struct.unpack_from("<L", b, i + 12)[0]
-        if voci == 0xFFFF or cd == 0xFFFFFFFF:
-            j = i - 20
-            if j < 0 or b[j:j + 4] != b"PK\x06\x07":
-                return None
-            pos = struct.unpack_from("<Q", b, j + 8)[0]
-            if pos + 56 > dim:
-                return None
-            f.seek(pos)
-            r = f.read(56)
-            if r[:4] != b"PK\x06\x06":
-                return None
-            voci, cd = struct.unpack_from("<Q", r, 32)[0], struct.unpack_from("<Q", r, 40)[0]
+        pos_eocd = dim - len(b) + i
+        loc = pos_eocd - 20
+        zip64 = None
+        if loc >= 0:
+            f.seek(loc)
+            ll = f.read(20)
+            if ll[:4] == b"PK\x06\x07":
+                reloff = struct.unpack_from("<Q", ll, 8)[0]
+                if reloff + 56 > dim:
+                    return None
+                f.seek(reloff)
+                r = f.read(56)
+                if r[:4] != b"PK\x06\x06" and loc - 56 >= 0:
+                    f.seek(loc - 56)            # dati prima dell'archivio, come zipfile
+                    r = f.read(56)
+                if r[:4] != b"PK\x06\x06":
+                    return None
+                zip64 = (struct.unpack_from("<Q", r, 32)[0], struct.unpack_from("<Q", r, 40)[0])
+        if zip64 is not None:
+            voci, cd = zip64
+        elif voci == 0xFFFF or cd == 0xFFFFFFFF:
+            return None
         return int(voci), int(cd)
 
 
@@ -227,8 +248,14 @@ def elenca(path, nome: str, tetti: Tetti) -> tuple[str, list[Voce]]:
     # (revisione della PR #364, punto 4). Un documento Office ne ha al più OFFICE_VOCI
     dich = voci_dichiarate(path)
     massimo = max(tetti.file_max, OFFICE_VOCI)
-    if dich is not None and (dich[0] > massimo or dich[1] > massimo * CD_PER_VOCE):
+    if dich is None:
+        # Comincia come uno ZIP ma la fine non si legge, o è ambigua (seconda revisione della
+        # PR #364): `zipfile` potrebbe leggerla diversa, e caricare una directory enorme
+        raise Rifiuto("archivio rovinato o fatto in modo strano")
+    if dich[0] > massimo:
         raise Rifiuto(f"l'archivio ha {dich[0]} file: al più {tetti.file_max}")
+    if dich[1] > massimo * CD_PER_VOCE:
+        raise Rifiuto("l'archivio ha un elenco dei file troppo grande")
     import warnings
     try:
         with warnings.catch_warnings():

@@ -236,6 +236,26 @@ metà, la tenuta) e `prova_studio_importa_pagina.py` (il browser a 390×844, 320
 % e sul PC). Le prove dello Studio che controllavano lo schema 12 e il service worker v35 sono
 passate alla 13 e alla v37 (la v36 è della libreria, #297).
 
+### 31/10: la seconda revisione della PR #364 (importazione)
+
+Il «blocco per minuti» del secondo caso non c'era (era la pipe della prova del revisore); restano
+due difetti, corretti:
+1. *Il controllo della fine dell'archivio si aggirava.* (A) Un EOCD con «0xFFFF» voci senza il
+   localizzatore ZIP64 dava None e `zipfile` caricava 900 000 voci (522 MB); (B) i byte
+   «PK» scritti dentro i campi dell'EOCD vero ingannavano `rfind` (524 MB). Ora
+   `voci_dichiarate` sceglie lo stesso EOCD di `zipfile` (prima quello senza commento esattamente
+   alla fine, poi l'ultima firma) e chiede che il commento arrivi esattamente alla fine del file;
+   il localizzatore ZIP64 vale sempre, come in `zipfile`; «0xFFFF» senza ZIP64 valido è None; un
+   file che comincia con «PK» e dà None si rifiuta («archivio rovinato o fatto in modo strano»), e
+   anche una directory centrale dichiarata oltre `massimo × CD_PER_VOCE`. Con gli script del
+   revisore: A rifiutato in 1,1 s, B in 1,2 s («19280 file»), 79 MB (il solo avvio di Python).
+2. *Le parti XML in UTF-16.* `allegati._zip_sicuro` cercava i byte ASCII di «<!DOCTYPE»: un ODT in
+   UTF-16 con un'ENTITY si espandeva. Ora una parte `.xml` o `.rels` con il BOM di UTF-16 o UTF-32,
+   o che comincia in UTF-16 senza BOM, o che dichiara un `encoding` diverso da UTF-8, non si apre
+   («codifica non ammessa»): 9 casi su 9 del revisore rifiutati (XXE, billion laughs, entità
+   interna; docx e ODT).
+E l'avanzamento dell'invio (un `role="status"`) si aggiorna ogni 25 % e non più ogni 5 %.
+
 ### 31/10: la revisione della PR #364 (importazione)
 
 Il revisore indipendente ha dato «da correggere» (script fuori dal repository: `attacchi.py`,
