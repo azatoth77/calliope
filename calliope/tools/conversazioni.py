@@ -154,7 +154,7 @@ def _argomento(domanda: str) -> str:
 
 
 def _cronologico(ctx, arch, persona, quando: str, dal, al, detto_periodo: str,
-                 domanda: str = "") -> dict:
+                 domanda: str = "", adesso: float | None = None) -> dict:
     """Le ultime conversazioni di chi parla dalla più recente (la conversazione in corso
     esclusa: è nella storia), una alla volta (con un periodo, «ieri», fino a tre: un elenco);
     ogni chiamata successiva va una più indietro. Con tre alla volta anche senza periodo il
@@ -186,7 +186,7 @@ def _cronologico(ctx, arch, persona, quando: str, dal, al, detto_periodo: str,
                           f"{tengo}.", ok=False)
         return _niente(ctx, f"Non trovo nostre conversazioni passate{dove}.")
     stato[chiave] = {"salta": salta, "turno": turno, "t": ora, "quando": periodo}
-    adesso = time.time()
+    adesso = time.time() if adesso is None else adesso
     elenco = []
     for c in r["conversazioni"]:
         voce = {"quando": _periodo(c["inizio"], c["fine"], adesso), "dove": _luogo(c["luogo"]),
@@ -258,17 +258,18 @@ def _cerca_archivio(ctx: ToolContext, domanda: str = "", quando: str = "",
                           "riconosco dalla voce.", ok=False)
     dal = al = None
     detto_periodo = ""
+    # Un adesso solo per il periodo detto a voce e per le etichette (30/10, #313, revisione
+    # della PR #329): «ieri» e «ieri alle 23:41» si contano dallo stesso istante, anche a
+    # cavallo della mezzanotte
+    adesso = time.time()
     if (quando or "").strip():
         from ..tempi import parse_past_range
-        # Lo stesso orologio di quando_detto (time.time()), così «ieri» e «l'altro ieri»
-        # si contano dallo stesso adesso delle etichette (30/10, #313)
-        d0, d1, detto_periodo = parse_past_range(
-            quando, datetime.datetime.fromtimestamp(time.time()))
+        d0, d1, detto_periodo = parse_past_range(quando, datetime.datetime.fromtimestamp(adesso))
         dal = d0.timestamp() if d0 else None
         al = d1.timestamp() if d1 else None
     if cronologico in (True, "true", "sì", "si") and not ospiti:
         return _cronologico(ctx, arch, persona, quando, dal, al, detto_periodo,
-                            domanda or getattr(ctx, "user_text", "") or "")
+                            domanda or getattr(ctx, "user_text", "") or "", adesso=adesso)
     testo = (domanda or "").strip() or (getattr(ctx, "user_text", "") or "")
     r = arch.cerca(testo, persona, ospiti=ospiti, dal=dal, al=al, k=8)
     fuori_periodo = False
@@ -284,7 +285,6 @@ def _cerca_archivio(ctx: ToolContext, domanda: str = "", quando: str = "",
         chi = "degli ospiti" if ospiti else "nostre"
         frase = f"Non trovo niente nelle {chi} conversazioni{dove}{su}."
         return _final(frase, ok=False) if ospiti else _niente(ctx, frase)
-    adesso = time.time()
     risultati = []
     in_corso = getattr(ctx, "conv_archivio", None)
     for x in per_recenti(r["risultati"]):

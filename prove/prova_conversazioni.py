@@ -1208,42 +1208,48 @@ def prova_ripetuta():
 
 
 # ─────────────────────────── 10. a cavallo della mezzanotte (30/10, #313) ───────────────────────────
-def prova_mezzanotte():
-    """Le etichette a un adesso fisso subito dopo la mezzanotte, e il periodo detto a voce
-    contato dallo stesso orologio delle etichette."""
+def prova_mezzanotte(giorno=None):
+    """Le etichette a un adesso fisso, `giorno` alle 00:00:30, e il periodo detto a voce contato
+    dallo stesso adesso delle etichette (revisione della PR #329). Si prova anche il giorno dopo
+    il cambio dell'ora (26/10/2026 e 29/03/2027): «ieri» si conta dalla data, mai togliendo
+    86400 secondi, che quel giorno porta a un'ora diversa."""
     from calliope.tools.conversazioni import _periodo
     import datetime
-    adesso = adesso_alle(0, 1)
-    verifica("mezzanotte: venti minuti fa è «ieri alle 23:41»",
-             quando_detto(adesso - 1200, adesso) == "ieri alle 23:41",
+    giorno = giorno or datetime.date.today()
+    ieri = giorno - datetime.timedelta(days=1)
+    nome = f"mezzanotte del {giorno.isoformat()}"
+    adesso = adesso_alle(0, 0, giorno, secondi=30)
+    verifica(f"{nome}: venti minuti fa è «ieri alle 23:40»",
+             quando_detto(adesso - 1200, adesso) == "ieri alle 23:40",
              quando_detto(adesso - 1200, adesso))
-    verifica("mezzanotte: un minuto fa è «oggi alle 0:00»",
-             quando_detto(adesso - 60, adesso) == "oggi alle 0:00")
-    verifica("mezzanotte: un giorno fa è «ieri alle 0:01»",
-             quando_detto(adesso - 86400, adesso) == "ieri alle 0:01")
-    due = datetime.date.fromtimestamp(adesso) - datetime.timedelta(days=2)
-    verifica("mezzanotte: due giorni fa ha la data",
+    verifica(f"{nome}: venti secondi fa è «oggi alle 0:00»",
+             quando_detto(adesso - 20, adesso) == "oggi alle 0:00")
+    verifica(f"{nome}: ieri alla stessa ora è «ieri alle 0:00»",
+             quando_detto(adesso_alle(0, 0, ieri, secondi=30), adesso) == "ieri alle 0:00",
+             quando_detto(adesso_alle(0, 0, ieri, secondi=30), adesso))
+    due = giorno - datetime.timedelta(days=2)
+    verifica(f"{nome}: due giorni fa ha la data",
              quando_detto(adesso_alle(0, 1, due), adesso).startswith(f"il {due.day} "))
-    verifica("mezzanotte: un periodo a cavallo dice dalle… a…",
-             _periodo(adesso - 1200, adesso - 30, adesso)
-             == "ieri dalle 23:41 a oggi alle 0:00", _periodo(adesso - 1200, adesso - 30, adesso))
-    # Il periodo detto a voce dal tool: «ieri» va da ieri a mezzanotte, contato dall'adesso
-    # finto (time.time()) e non da datetime.now()
-    a = archivio("notte.db")
+    verifica(f"{nome}: un periodo a cavallo dice dalle… a…",
+             _periodo(adesso - 1200, adesso - 20, adesso)
+             == "ieri dalle 23:40 a oggi alle 0:00", _periodo(adesso - 1200, adesso - 20, adesso))
+    # Il periodo detto a voce dal tool: «ieri» va da ieri a mezzanotte, contato dallo stesso adesso
+    # (finto, time.time()) delle etichette, e non da datetime.now()
+    a = archivio(f"notte-{giorno.isoformat()}.db")
     c = Conversazione()
-    with ora_del_giorno(0, 1) as ora:
+    with ora_del_giorno(0, 0, giorno, secondi=30) as ora:
         riempi(a, c, "p-dario", "Dario", False, [("Parliamo del lago di Bracciano",
                                                   "Volentieri.")], quando=ora - 1200)
         a.attendi()
         ctx = Ctx(a)
         r = _conversazione_cerca(ctx, "lago", quando="ieri")
-        verifica("mezzanotte: «ieri» trova la conversazione di venti minuti fa",
+        verifica(f"{nome}: «ieri» trova la conversazione di venti minuti fa",
                  r["ok"] and r["risultati"]
-                 and r["risultati"][0]["quando"] == "ieri alle 23:41",
+                 and r["risultati"][0]["quando"] == "ieri alle 23:40" and "periodo" not in r,
                  json.dumps(r, ensure_ascii=False)[:300])
         r = _conversazione_cerca(ctx, "lago", quando="oggi")
-        verifica("contrario: «oggi» non la trova (e lo dice)",
-                 not r.get("risultati") or "periodo" in r,
+        verifica(f"contrario, {nome}: «oggi» non la trova nel periodo e lo dice («niente oggi»)",
+                 str(r.get("periodo", "")).startswith("niente oggi"),
                  json.dumps(r, ensure_ascii=False)[:300])
     a.close()
 
@@ -1265,6 +1271,9 @@ with ora_del_giorno(12, 0):
     prova_cronologico()
     prova_non_so()
     prova_varie()
-prova_mezzanotte()
+# Oggi, e il giorno dopo il cambio dell'ora (fine e inizio dell'ora legale)
+import datetime as _dt  # noqa: E402
+for _giorno in (None, _dt.date(2026, 10, 26), _dt.date(2027, 3, 29)):
+    prova_mezzanotte(_giorno)
 print(f"\n{errori} errori" if errori else "\nTutto bene")
 sys.exit(1 if errori else 0)
