@@ -2209,6 +2209,20 @@ class Config:
     # Si passa ad «attiva» col banco della mappa (prove/manuali/banco_studio.py, fase «mappa») e la
     # rilettura degli scheletri in ombra
     studio_mappa_genera: str = "ombra"
+    # La mappa libera (30/10, passo 7c, #328, calliope/studio/mappe.py): la persona fa la mappa da
+    # zero, con lo scheletro nascosto finché non dice «Ho finito»; il codice la confronta con lo
+    # scheletro (concetti chiave, collegamenti) e misura il metodo (isolati, verbi vuoti, concetti
+    # lunghi, profondità, collegamenti fra rami), giro per giro. Solo interfaccia e dati, nessun
+    # modello: per questo attiva di serie con lo Studio. «spenta» toglie la voce dalla scheda Mappa
+    studio_mappa_libera: str = "attiva"
+    # «Parliamone» dopo la mappa libera (30/10, passo 7c, #328): il modello della voce legge in
+    # busta la mappa, lo scheletro senza i concetti che mancano, il confronto del codice e gli
+    # indicatori (tool studio_mappa_consigli) e dà uno o due consigli sul metodo. «ombra» (di
+    # serie): il tool c'è ma la voce dice solo la frase del codice sul confronto; la risposta del
+    # modello si fa in secondo piano e si misura soltanto (lunghezza, concetti svelati: devono
+    # essere 0). «attiva» la dice; «spenta»: il tool risponde che non è acceso. Si passa ad
+    # «attiva» dopo la rilettura delle misure dell'ombra (registro dello Studio)
+    studio_mappa_consigli: str = "ombra"
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3503,7 +3517,8 @@ SEZIONI: dict[str, list[str]] = {
                "studio_pdf_max_mb", "studio_pdf_max_pagine", "studio_pagine_max",
                "studio_pagine_al_minuto", "studio_nitidezza_min", "studio_lettura",
                "studio_argomenti", "studio_padronanza", "studio_carte_genera",
-               "studio_mappa_nodi_max", "studio_mappa_genera"],
+               "studio_mappa_nodi_max", "studio_mappa_genera", "studio_mappa_libera",
+               "studio_mappa_consigli"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -4108,6 +4123,10 @@ _MODI_NUOVI = {
     # Lo scheletro della mappa (30/10, #247): come le carte generate
     "studio_mappa_genera": _modi("studio_mappa_genera", ("spenta", "ombra", "attiva"),
                                  falso="spenta"),
+    # La mappa libera e «Parliamone» (30/10, #328): il true è ambiguo, rifiutato
+    "studio_mappa_libera": _modi("studio_mappa_libera", ("spenta", "attiva"), falso="spenta"),
+    "studio_mappa_consigli": _modi("studio_mappa_consigli", ("spenta", "ombra", "attiva"),
+                                   falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",
                                       "true": "sempre", "false": "mai"},

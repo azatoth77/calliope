@@ -48,7 +48,10 @@ Tabelle (versione 1):
   ricostruzioni a memoria, coi concetti e i collegamenti in JSON (un dato non fidato come il testo
   delle carte, chiunque l'abbia scritto), l'ultimo controllo del codice e i tentativi già scritti;
   dalla stessa versione `studio_verifiche.mappa_firma`, `mappa_esito`, `mappa_del` per la
-  generazione dello scheletro.
+  generazione dello scheletro. Dalla versione 9 (30/10, passo 7c, issue #328) la mappa libera
+  (tipo «libera»), `studio_mappe.giri` (gli indicatori del metodo e i conti del confronto per
+  giro) e `studio_mappe.visti` (i concetti del riferimento con la pagina detta o il testo
+  mostrato nel giro).
 
 Tenuta (decisione 0035, punto 4): tutto ciò che è di una verifica resta fino a
 `studio_tenuta_giorni` (60) giorni dopo la sua data, per sempre se archiviata; «dimentica le
@@ -297,7 +300,20 @@ def _v8(db: sqlite3.Connection):
         db.execute(f"ALTER TABLE studio_verifiche ADD COLUMN {col}")
 
 
-MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8]
+def _v9(db: sqlite3.Connection):
+    """30/10, passo 7c (#328): la mappa libera (il tipo «libera» non chiede colonne). `giri` gli
+    indicatori del metodo e i conti del confronto di ogni giro (JSON, mai testi); `visti` i
+    concetti del riferimento con la pagina detta («indizio») o il testo mostrato («visto») nel
+    giro in corso."""
+    db.execute("ALTER TABLE studio_mappe ADD COLUMN giri TEXT NOT NULL DEFAULT '[]'")
+    db.execute("ALTER TABLE studio_mappe ADD COLUMN visti TEXT NOT NULL DEFAULT '{}'")
+    # Le carte di «Fanne carte» scritte prima della 9 (sulla DGX ce ne sono): l'origine «mappa»
+    # dal prefisso che il codice scriveva (seconda revisione della PR #330)
+    db.execute("UPDATE studio_carte SET origine = 'mappa' WHERE origine = 'persona' AND "
+               "domanda LIKE 'Mappa di %'")
+
+
+MIGRAZIONI = [_v1, _v2, _v3, _v4, _v5, _v6, _v7, _v8, _v9]
 # Le tabelle con la verifica e la persona che possono restare orfane (una corsa fra una
 # scrittura e una cancellazione): scadono per data, vanno via con la persona e con «svuota»
 CON_ORFANI = ("studio_eventi", "studio_tentativi")

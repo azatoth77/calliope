@@ -456,6 +456,10 @@ CLASSI: dict[str, Classe] = {
     # modello possono cambiare. Per questo è una lettura e non un'azione di `studio`: con la carta
     # in conversazione un'azione vorrebbe una richiesta con le sue parole, e «nel 1861» non lo è
     "studio_carte": _c(S, fonte="foto"),
+    # «Parliamone» dopo la mappa libera (30/10, passo 7c, #328): la mappa, lo scheletro senza i
+    # concetti nascosti, il confronto del codice e gli indicatori, dati non fidati come le carte
+    # (in busta, fuori dalla storia a risposta finita); non scrive niente
+    "studio_mappa_consigli": _c(S, fonte="foto"),
     # giochi (05/10): un ragazzo chiede un permesso al tutore (resta in sospeso finché il
     # tutore non decide a voce: niente effetti da sola)
     "richiesta_tutore": _c(A, cosa=lambda a: f"mandi al tuo tutore la richiesta "

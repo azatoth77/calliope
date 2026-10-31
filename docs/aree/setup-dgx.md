@@ -59,6 +59,7 @@ scritta nei documenti; «non scritta» dove nessun documento la dice.
 | `web_searxng_url` | presente (l'indirizzo resta fuori dal repository) | vuoto | — | [biblioteca](biblioteca.md) |
 | `fatture_emittente` | presente (i dati dell'ufficio restano fuori dal repository) | vuoto | — | [documenti-ufficio](documenti-ufficio.md) |
 | `studio_modo` | `attivo` | `spento` | 30/10: acceso per le prove di tutto il giro con un minore di casa | [studio](studio.md) |
+| `studio_mappa_genera` | `attiva` | `ombra` | 30/10 sera: chiesto da chi amministra prima del banco della mappa; il banco delle 23:40 dopo (concetti nelle pagine 100, 100 e 75 %, nessuna voce ostile pulita, mappe a isole: #328) | [studio](studio.md) |
 
 Una chiave «accesa senza criterio scritto» è accesa nell'uso senza la soglia che la issue chiede
 prima dell'accensione: la misura resta da fare (le issue tra parentesi), non è già fatta. Per una lettura

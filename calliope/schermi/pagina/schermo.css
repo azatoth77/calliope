@@ -1313,6 +1313,14 @@ button.tasto-timer.in-attesa { border-color: var(--accento); }
 .studio-m-campo { width: 100%; }
 .studio-m-parole { margin: 0; font-size: 1rem; color: var(--testo); overflow-wrap: anywhere; }
 .studio-m .studio-h-chip { min-width: 2.75rem; }
+/* La mappa libera (30/10, passo 7c, #328): i concetti chiave trovati in blu, col nome da rivedere
+   in arancio (sempre con la parola), il verso diverso tratteggiato; gli indicatori del metodo */
+.studio-m-tela .studio-m-nodo.chiave rect { stroke: #4a8fe8; stroke-width: 4; }
+.studio-m-tela .studio-m-nodo.da_rivedere rect { stroke: #e8762a; stroke-width: 4; }
+.studio-m-tela line.verso_diverso { stroke: #e8762a; stroke-dasharray: 10 6; }
+.studio-m-esito.chiave { color: #7fb4f5; }
+.studio-m-esito.da_rivedere { color: #f0a06a; }
+.studio-m-indicatori li { color: var(--testo); font-size: 1rem; overflow-wrap: anywhere; }
 .studio-m .studio-avviso { font-size: 1rem; }
 /* I tasti delle carte nell'elenco (Correggi, Tieni, Togli): a capo invece della griglia a quattro
    colonne delle pagine, che a 320 px col testo grande li stringeva sotto i 44 px (30/10, #247) */

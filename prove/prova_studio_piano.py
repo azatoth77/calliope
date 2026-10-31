@@ -288,7 +288,7 @@ nomi = {r[0] for r in st.dati.db.execute("SELECT name FROM sqlite_master WHERE t
 verifica("le tabelle studio_* e l'ultima versione in meta_schema (8 dal passo 7, #247)",
          set(D.TABELLE) <= nomi and st.dati.db.execute(
              "SELECT versione FROM meta_schema WHERE modulo='studio'").fetchone()[0]
-         == len(D.MIGRAZIONI) == 8)
+         == len(D.MIGRAZIONI) == 9)
 from calliope.conserva import TABELLE_STUDIO  # noqa: E402
 verifica("le tabelle di conserva.TABELLE_STUDIO sono quelle dello Studio",
          set(TABELLE_STUDIO) == set(D.TABELLE))
