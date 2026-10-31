@@ -24,8 +24,10 @@ VISTA_S = 600.0
 # «mappa» (30/10, passo 7, #247): la mappa concettuale di una verifica (mai il testo dei concetti)
 # «prove» (31/10, passo 8, #248): la verifica finta e le domande (mai il testo delle domande)
 # «tutore» (31/10, passo 10, #250): la vista del tutore su una verifica del suo minore
+# «libreria» (31/10, #297): una scheda della libreria aperta su una verifica (quale scheda no: la
+# vista porta solo numeri)
 TIPI = ("home", "piano", "argomenti", "pagine", "pagina", "sessione",
-        "carte", "mappa", "prove", "tutore")
+        "carte", "mappa", "prove", "tutore", "libreria")
 
 
 def valida(dati) -> dict | None:

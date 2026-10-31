@@ -1,0 +1,50 @@
+{
+  "formato": 1,
+  "id": "informatica-binario",
+  "tipo": "scheda",
+  "titolo": "Il sistema binario",
+  "materia": "Informatica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "Sistemi di numerazione posizionali, sistema binario, conversioni fra binario e decimale, cenno all'esadecimale",
+  "chiavi": ["sistema binario", "numeri binari", "numerazione binaria", "sistemi di numerazione", "numerazione posizionale", "conversione binario decimale", "conversione decimale binario", "codice binario", "sistema esadecimale", "numeri esadecimali", "basi di numerazione"],
+  "prerequisiti": [],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Noi contiamo con dieci cifre, forse perché abbiamo dieci dita. Il computer invece conta con due sole cifre, 0 e 1. Per capire come ragiona bisogna saper passare da un modo di scrivere i numeri all'altro.",
+    "sezioni": [
+      {"titolo": "I sistemi posizionali", "testo": "In un sistema di numerazione posizionale il valore di una cifra dipende dalla posizione in cui si trova. Nel numero decimale 352 il 3 vale trecento, il 5 vale cinquanta e il 2 vale due: ogni posizione vale 10 volte quella alla sua destra.\n\nIl numero di cifre diverse che un sistema usa si chiama base. Il sistema decimale ha base 10 e usa le cifre da 0 a 9. Le sue posizioni, partendo da destra, valgono 1, 10, 100, 1000, cioè le potenze di 10: 10^0, 10^1, 10^2, 10^3."},
+      {"titolo": "Il sistema binario", "testo": "Il sistema binario ha base 2 e usa solo 2 cifre: 0 e 1. Ogni cifra binaria si chiama bit. Il computer usa il binario perché i suoi circuiti distinguono facilmente due stati, come acceso e spento, o tensione alta e tensione bassa.\n\nAnche il binario è posizionale, ma le posizioni valgono le potenze di 2. Partendo da destra i pesi sono 1, 2, 4, 8, 16, 32, 64, 128 e così via, cioè 2^0, 2^1, 2^2, 2^3. Per non confondersi si indica la base: 101 in base 2 vale cinque, 101 in base 10 vale centouno."},
+      {"titolo": "Da binario a decimale", "testo": "Per passare da binario a decimale si scrive sotto ogni cifra il peso della sua posizione, partendo da destra con 1, poi 2, 4, 8 e così via. Poi si sommano i pesi delle sole posizioni dove c'è un 1: gli 0 non contano.\n\nPer esempio il binario 110: il peso 4 ha un 1, il peso 2 ha un 1, il peso 1 ha uno 0. La somma è 4 + 2 = 6."},
+      {"titolo": "Da decimale a binario", "testo": "Per passare da decimale a binario si usa il metodo delle divisioni successive per 2. Si divide il numero per 2 e si scrive il resto, che può essere solo 0 o 1. Poi si divide per 2 il quoziente, e si continua finché il quoziente diventa 0.\n\nIl numero binario è fatto dai resti letti dal basso verso l'alto: l'ultimo resto trovato è la cifra più a sinistra. Leggerli dall'alto verso il basso è l'errore più comune. Per controllare il risultato, lo si riconverte in decimale."},
+      {"titolo": "Un cenno all'esadecimale", "testo": "Il sistema esadecimale ha base 16 e usa 16 cifre: da 0 a 9 e poi le lettere da A a F, dove A vale 10, B vale 11, C 12, D 13, E 14 e F 15. Le sue posizioni valgono le potenze di 16: 1, 16, 256 e così via.\n\nIn informatica si usa perché è comodo: una cifra esadecimale corrisponde esattamente a 4 bit. Così il byte 11111111 si scrive in breve FF, che vale 255. I codici dei colori e gli indirizzi della memoria si scrivono spesso in esadecimale."}
+    ],
+    "ricorda": [
+      "In un sistema posizionale il valore di una cifra dipende dalla sua posizione.",
+      "Il binario ha base 2 e usa solo le cifre 0 e 1; ogni cifra è un bit.",
+      "I pesi delle posizioni binarie, da destra: 1, 2, 4, 8, 16, 32, 64, 128.",
+      "Da binario a decimale: si sommano i pesi delle posizioni dove c'è un 1.",
+      "Da decimale a binario: divisioni successive per 2, poi i resti letti dal basso verso l'alto.",
+      "L'esadecimale ha base 16, con le cifre da 0 a 9 e da A a F; una sua cifra vale 4 bit."
+    ],
+    "esempi": [
+      {"testo": "Il binario 1011 in decimale. I pesi da destra sono 1, 2, 4, 8. Le cifre a 1 stanno sui pesi 8, 2 e 1, quella a 0 sul peso 4. La somma è 8 + 2 + 1 = 11.", "calcolo": {"formula": "binario_in_decimale", "dati": {"binario": "1011"}, "risultato": 11}},
+      {"testo": "Il numero 13 in binario, con le divisioni successive per 2. 13 diviso 2 fa 6 resto 1; 6 diviso 2 fa 3 resto 0; 3 diviso 2 fa 1 resto 1; 1 diviso 2 fa 0 resto 1. I resti letti dal basso verso l'alto danno 1101.", "calcolo": {"formula": "decimale_in_binario", "dati": {"decimale": 13}, "risultato": "1101"}},
+      {"testo": "Il byte 11111111 ha tutti gli otto bit a 1: 128 + 64 + 32 + 16 + 8 + 4 + 2 + 1 = 255. È il numero più grande che si scrive con 8 bit.", "calcolo": {"formula": "binario_in_decimale", "dati": {"binario": "11111111"}, "risultato": 255}},
+      {"testo": "L'esadecimale 1F in decimale. La cifra 1 sta sul peso 16, la cifra F vale 15 e sta sul peso 1. Il valore è 1 per 16 più 15, cioè 31.", "calcolo": {"formula": "esadecimale_in_decimale", "dati": {"esadecimale": "1F"}, "risultato": 31}}
+    ],
+    "errori": [
+      "Leggere i resti delle divisioni dall'alto verso il basso: così 13 diventa 1011 invece di 1101.",
+      "Cominciare i pesi da sinistra invece che da destra.",
+      "Dare alla cifra più a destra il peso 2: la prima posizione vale 2^0, cioè 1.",
+      "Leggere un numero binario come se fosse decimale: 10 in binario non vale dieci, vale due."
+    ],
+    "prova_tu": [
+      {"domanda": "Quanto vale in decimale il numero binario 110010?", "risposta": "50, perché 32 + 16 + 2 = 50.", "calcolo": {"formula": "binario_in_decimale", "dati": {"binario": "110010"}, "risultato": 50}},
+      {"domanda": "Come si scrive 25 in binario?", "risposta": "11001: i resti sono 1, 0, 0, 1, 1 e si leggono dal basso verso l'alto.", "calcolo": {"formula": "decimale_in_binario", "dati": {"decimale": 25}, "risultato": "11001"}},
+      {"domanda": "Quanto vale in decimale il numero esadecimale 2A?", "risposta": "42, perché 2 per 16 fa 32, più A che vale 10.", "calcolo": {"formula": "esadecimale_in_decimale", "dati": {"esadecimale": "2A"}, "risultato": 42}}
+    ]
+  }
+}

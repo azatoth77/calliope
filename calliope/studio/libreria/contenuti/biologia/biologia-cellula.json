@@ -1,0 +1,46 @@
+{
+  "formato": 1,
+  "id": "biologia-cellula",
+  "tipo": "scheda",
+  "titolo": "La cellula",
+  "materia": "Biologia",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "La cellula: teoria cellulare, procarioti ed eucarioti, cellula animale e vegetale, gli organuli",
+  "chiavi": ["la cellula", "cellula procariote", "cellula eucariote", "procarioti ed eucarioti", "teoria cellulare", "cellula animale", "cellula vegetale", "organuli cellulari", "organuli", "struttura della cellula", "mitocondri", "cloroplasti"],
+  "prerequisiti": ["biologia-viventi"],
+  "durata": 25,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Tutti i viventi sono fatti di cellule, ma le cellule non sono tutte uguali: quelle di un batterio sono piccole e semplici, quelle di una foglia o di un muscolo sono più grandi e piene di strutture specializzate. In questa scheda vediamo la teoria cellulare, i due grandi tipi di cellula, la differenza fra cellula animale e vegetale e il lavoro dei principali organuli.",
+    "sezioni": [
+      {"titolo": "La teoria cellulare", "testo": "Nel 1665 Robert Hooke osservò al microscopio una sottile fetta di sughero e vide tante piccole celle vuote: da lì viene la parola cellula. Nell'Ottocento Schleiden e Schwann, studiando piante e animali, e poi Virchow arrivarono alla teoria cellulare, che dice tre cose.\n\nPrimo: tutti i viventi sono fatti di una o più cellule. Secondo: la cellula è l'unità di base della struttura e delle funzioni dei viventi. Terzo: ogni cellula nasce da un'altra cellula che già esisteva, dividendosi.\n\nOgni cellula è circondata da una membrana plasmatica, contiene il citoplasma e ha il DNA, il materiale genetico con le istruzioni per vivere."},
+      {"titolo": "Procarioti ed eucarioti", "testo": "La cellula procariote è la più semplice e la più antica: è quella dei batteri e degli archei. Non ha un nucleo: il DNA sta nel citoplasma, in una zona chiamata nucleoide, senza una membrana intorno. Non ha organuli circondati da membrana, ma ha i ribosomi. Quasi sempre ha una parete cellulare fuori dalla membrana. È molto piccola, di solito da 1 a 10 micrometri.\n\nLa cellula eucariote ha un vero nucleo, racchiuso da una doppia membrana, e molti organuli con la propria membrana, ognuno con un compito. È più grande, di solito da 10 a 100 micrometri. Sono eucarioti gli animali, le piante, i funghi e i protisti."},
+      {"titolo": "Gli organuli al lavoro", "testo": "Il nucleo custodisce il DNA e dirige l'attività della cellula. I ribosomi costruiscono le proteine; ci sono sia nei procarioti sia negli eucarioti. Il reticolo endoplasmatico è una rete di membrane: quello ruvido, coperto di ribosomi, produce proteine; quello liscio produce lipidi.\n\nL'apparato di Golgi è una pila di sacchetti appiattiti che modifica, impacchetta e spedisce le proteine dentro piccole vescicole. I mitocondri fanno la respirazione cellulare: usano l'ossigeno per ricavare dagli zuccheri l'energia che la cellula usa, sotto forma di ATP. I mitocondri ci sono nelle cellule animali e anche in quelle vegetali."},
+      {"titolo": "Cellula animale e cellula vegetale", "testo": "Tutte e due sono eucarioti e hanno nucleo, ribosomi, reticolo endoplasmatico, apparato di Golgi e mitocondri. La cellula vegetale ha in più tre strutture.\n\nLa parete cellulare, fatta di cellulosa, sta fuori dalla membrana e dà alla cellula rigidità e una forma fissa. I cloroplasti contengono la clorofilla, il pigmento verde, e fanno la fotosintesi: con la luce trasformano anidride carbonica e acqua in zuccheri e ossigeno. Il grande vacuolo centrale è una sacca piena d'acqua e di sostanze sciolte, che tiene la cellula tesa.\n\nLa cellula animale non ha parete né cloroplasti, e i suoi vacuoli sono piccoli. Anche i funghi hanno una parete, ma fatta di chitina."},
+      {"titolo": "Il microscopio in breve", "testo": "Le cellule sono troppo piccole per l'occhio nudo, che arriva a vedere oggetti di circa un decimo di millimetro. Il microscopio ottico usa la luce e due sistemi di lenti, l'oculare e l'obiettivo; l'ingrandimento totale è il prodotto dei due, per esempio 10 per 40 fa 400 volte. Arriva a circa 1000 volte e mostra le cellule, il nucleo e i cloroplasti.\n\nIl microscopio elettronico usa un fascio di elettroni al posto della luce e ingrandisce molto di più: mostra i dettagli degli organuli, come le membrane interne dei mitocondri. I campioni però vanno preparati in modo speciale e non sono più vivi."}
+    ],
+    "ricorda": [
+      "Teoria cellulare: i viventi sono fatti di cellule, la cellula è l'unità di base, ogni cellula nasce da un'altra cellula.",
+      "Procariote: niente nucleo e niente organuli con membrana; ha ribosomi e quasi sempre la parete.",
+      "Eucariote: nucleo con membrana e organuli; animali, piante, funghi e protisti.",
+      "Ribosomi: proteine. Mitocondri: respirazione cellulare ed energia. Apparato di Golgi: impacchetta e spedisce.",
+      "Solo la cellula vegetale ha parete di cellulosa, cloroplasti e grande vacuolo centrale.",
+      "I mitocondri ci sono sia nelle cellule animali sia in quelle vegetali."
+    ],
+    "esempi": [
+      {"testo": "Una cellula della foglia di una pianta acquatica, vista al microscopio ottico: si vedono la parete che la contorna come un mattone, tanti granuli verdi, i cloroplasti, e uno spazio chiaro al centro, il vacuolo."},
+      {"testo": "Una cellula della mucosa della guancia, colorata con un colorante blu: ha una forma irregolare, non ha parete né cloroplasti, e al centro si vede bene il nucleo più scuro."}
+    ],
+    "errori": [
+      "Dire che le piante non hanno mitocondri perché hanno i cloroplasti: li hanno entrambi.",
+      "Dire che i batteri non hanno ribosomi: hanno i ribosomi, ma non il nucleo né organuli con membrana.",
+      "Confondere parete e membrana: la membrana c'è in ogni cellula, la parete sta fuori dalla membrana e manca negli animali."
+    ],
+    "prova_tu": [
+      {"domanda": "Al microscopio vedi una cellula senza nucleo, con ribosomi e una parete: che tipo di cellula è?", "risposta": "Una cellula procariote, per esempio un batterio."},
+      {"domanda": "Una cellula ha parete, mitocondri e nucleo, ma niente cloroplasti. Può essere una cellula animale?", "risposta": "No: le cellule animali non hanno la parete. Può essere la cellula di un fungo, o di una parte della pianta che sta al buio, come la radice."}
+    ]
+  }
+}

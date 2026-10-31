@@ -1,0 +1,54 @@
+{
+  "formato": 1,
+  "id": "fisica-grandezze",
+  "tipo": "scheda",
+  "titolo": "Grandezze fisiche e Sistema Internazionale",
+  "materia": "Fisica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "Grandezze fondamentali e derivate, Sistema Internazionale, prefissi, conversioni e notazione scientifica",
+  "chiavi": ["grandezze fisiche", "grandezza fisica", "grandezze fondamentali", "grandezze derivate", "sistema internazionale", "unità di misura","multipli e sottomultipli", "prefissi delle unità", "conversioni di unità", "equivalenze", "notazione scientifica", "ordini di grandezza", "ordine di grandezza", "potenze di dieci"],
+  "prerequisiti": [],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Per descrivere il mondo la fisica misura: lunghezze, masse, tempi, temperature. Per capirsi bisogna usare tutti le stesse unità e saper passare da un'unità all'altra. In questa scheda: grandezze fondamentali e derivate, il Sistema Internazionale, i prefissi, le conversioni e la notazione scientifica.",
+    "sezioni": [
+      {"titolo": "Che cos'è una grandezza fisica", "testo": "Una grandezza fisica è una proprietà di un corpo o di un fenomeno che si può misurare: la lunghezza di un banco, la massa di una mela, la durata di una corsa. Misurare vuol dire confrontare la grandezza con un campione scelto come unità di misura e contare quante volte ci sta.\n\nIl risultato è sempre un numero seguito dall'unità: dire che una stanza è lunga 5 non basta, bisogna dire 5 m. Le grandezze fondamentali non si ricavano da altre: ognuna ha la sua unità di base. Le grandezze derivate si ottengono dalle fondamentali con una formula: l'area è una lunghezza per una lunghezza, e anche la velocità e la densità sono derivate. Il volume è quindi una grandezza derivata, non fondamentale."},
+      {"titolo": "Il Sistema Internazionale", "testo": "Il Sistema Internazionale, in breve SI, è l'insieme di unità usato dagli scienziati di tutto il mondo. Ha sette unità di base: il metro (m) per la lunghezza, il chilogrammo (kg) per la massa, il secondo (s) per il tempo, il kelvin (K) per la temperatura, la mole (mol) per la quantità di sostanza, l'ampere (A) per l'intensità di corrente elettrica e la candela (cd) per l'intensità luminosa.\n\nLe unità derivate si costruiscono da queste: il metro quadrato (m²) per l'area, il metro cubo (m³) per il volume, il metro al secondo (m/s) per la velocità, il chilogrammo al metro cubo (kg/m³) per la densità. Una temperatura in kelvin si ottiene da quella in gradi Celsius aggiungendo 273,15.\n\nUn tempo le unità si definivano con campioni, come il metro di platino; oggi il SI le definisce con costanti della natura, come la velocità della luce, che non cambiano."},
+      {"titolo": "Multipli e sottomultipli", "testo": "Per non scrivere numeri troppo grandi o troppo piccoli si mette un prefisso davanti all'unità. I multipli più usati: giga (G), un miliardo di volte, cioè 10^9; mega (M), un milione, 10^6; chilo (k), mille, 10^3; etto (h), cento, 10^2; deca (da), dieci.\n\nI sottomultipli: deci (d), un decimo, 10^-1; centi (c), un centesimo, 10^-2; milli (m), un millesimo, 10^-3; micro (µ), un milionesimo, 10^-6; nano (n), un miliardesimo, 10^-9. Così 1 km = 1000 m e 1 mg = 0,001 g. Attenzione alle maiuscole: m è milli, M è mega."},
+      {"titolo": "Le conversioni", "testo": "Per passare da un'unità a un'altra si conta di quanti gradini ci si sposta. Per le lunghezze (km, hm, dam, m, dm, cm, mm) ogni gradino vale 10: verso le unità più piccole si moltiplica, verso le più grandi si divide.\n\nPer le aree ogni gradino vale 100, perché l'area è una lunghezza per una lunghezza: 1 m² = 10000 cm². Per i volumi ogni gradino vale 1000: 1 m³ = 1000 dm³. Per i liquidi si usa anche il litro: 1 L = 1 dm³ e 1 mL = 1 cm³. Per il tempo i passi non sono di 10: 1 h = 60 min = 3600 s."},
+      {"titolo": "Notazione scientifica e ordini di grandezza", "testo": "In notazione scientifica un numero si scrive come a × 10^n, con a maggiore o uguale a 1 e minore di 10, e n intero. Si sposta la virgola finché resta una sola cifra diversa da zero prima di essa: n conta i posti, positivo se il numero è grande, negativo se è piccolo. Così 384000 diventa 3,84 × 10^5 e 0,00042 diventa 4,2 × 10^-4.\n\nL'ordine di grandezza è la potenza di 10 più vicina al numero. Una regola semplice, usata in molti libri: se a è minore di 5 l'ordine è 10^n, altrimenti è 10^(n+1). Serve per confrontare in fretta: un atomo misura circa 10^-10 m, una persona circa 10^0 m, cioè 1 m."}
+    ],
+    "ricorda": [
+      "Una misura è un numero più la sua unità: senza unità non vuol dire niente.",
+      "Grandezze fondamentali: non si ricavano da altre, hanno un'unità di base. Derivate: si ricavano dalle fondamentali con una formula.",
+      "SI, sette unità di base: metro, chilogrammo, secondo, kelvin, mole, ampere, candela.",
+      "L'unità di base della massa è il chilogrammo, non il grammo, anche se ha già un prefisso.",
+      "Prefissi: chilo 10^3, centi 10^-2, milli 10^-3, micro 10^-6.",
+      "Gradini: 10 per le lunghezze, 100 per le aree, 1000 per i volumi. 1 L = 1 dm³ e 1 mL = 1 cm³.",
+      "Notazione scientifica: a × 10^n, con a da 1 compreso a 10 escluso."
+    ],
+    "esempi": [
+      {"testo": "Una pista ciclabile è lunga 3,5 km. Dal km al m ci sono tre gradini da 10, quindi si moltiplica per 1000: 3,5 km = 3500 m.", "calcolo": {"formula": "conversione", "dati": {"valore": 3.5, "da": "km", "a": "m"}, "risultato": 3500}},
+      {"testo": "Una bottiglia contiene 2,5 L d'acqua. Poiché 1 L = 1 dm³ = 1000 cm³, la bottiglia contiene 2500 cm³, cioè 2500 mL.", "calcolo": {"formula": "conversione", "dati": {"valore": 2.5, "da": "L", "a": "cm3"}, "risultato": 2500}},
+      {"testo": "Il diametro di un capello è circa 0,00007 m. Per la notazione scientifica si sposta la virgola di 5 posti verso destra: 7 × 10^-5 m.", "calcolo": {"formula": "notazione_scientifica", "dati": {"valore": 0.00007}, "risultato": "7e-5"}},
+      {"testo": "La distanza fra la Terra e la Luna è circa 384000 km. Spostando la virgola di 5 posti verso sinistra si scrive 3,84 × 10^5 km. L'ordine di grandezza è 10^5 km, perché 3,84 è minore di 5.", "calcolo": {"formula": "notazione_scientifica", "dati": {"valore": 384000}, "risultato": "3.84e5"}}
+    ],
+    "errori": [
+      "Confondere m (milli) con M (mega): 1 Mm è un milione di metri, 1 mm è un millesimo di metro.",
+      "Convertire aree e volumi con i gradini da 10: per le aree sono da 100, per i volumi da 1000.",
+      "Chiamare notazione scientifica 12 × 10^3: il numero davanti deve stare fra 1 e 10, quindi si scrive 1,2 × 10^4.",
+      "Dividere quando si passa a un'unità più piccola: da m a cm si moltiplica, perché i centimetri sono di più.",
+      "Dimenticare l'unità di misura nel risultato."
+    ],
+    "prova_tu": [
+      {"domanda": "Quanti metri sono 45 cm?", "risposta": "0,45 m: dal cm al m si sale di due gradini, quindi si divide per 100.", "calcolo": {"formula": "conversione", "dati": {"valore": 45, "da": "cm", "a": "m"}, "risultato": 0.45}},
+      {"domanda": "Quanti grammi sono 0,0025 kg?", "risposta": "2,5 g: dal kg al g si moltiplica per 1000.", "calcolo": {"formula": "conversione", "dati": {"valore": 0.0025, "da": "kg", "a": "g"}, "risultato": 2.5}},
+      {"domanda": "Quanti cm² sono 2 m²?", "risposta": "20000 cm², perché 1 m² = 10000 cm².", "calcolo": {"formula": "conversione", "dati": {"valore": 2, "da": "m2", "a": "cm2"}, "risultato": 20000}},
+      {"domanda": "Come si scrive 0,000056 in notazione scientifica?", "risposta": "5,6 × 10^-5: la virgola si sposta di 5 posti verso destra.", "calcolo": {"formula": "notazione_scientifica", "dati": {"valore": 0.000056}, "risultato": "5.6e-5"}},
+      {"domanda": "Quale unità del Sistema Internazionale misura la temperatura?", "risposta": "Il kelvin, simbolo K."}
+    ]
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "fisica-densita-carte",
+  "tipo": "mazzo",
+  "titolo": "Massa, volume e densità: le carte",
+  "materia": "Fisica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "fisica-densita",
+  "carte": [
+    {"domanda": "Qual è la formula della densità?", "risposta": "La massa divisa per il volume: d = m/V."},
+    {"domanda": "Qual è, circa, la densità del ferro in g/cm³?", "risposta": "Circa 7,9 g/cm³, quasi otto volte quella dell'acqua."},
+    {"domanda": "Qual è la densità dell'acqua in kg/m³?", "risposta": "1000 kg/m³", "sbagliata": "1 kg/m³", "calcolo": {"formula": "conversione", "dati": {"valore": 1, "da": "g/cm3", "a": "kg/m3"}, "risultato": 1000}},
+    {"domanda": "Un corpo pieno galleggia su un liquido se la sua densità, confrontata con quella del liquido, è maggiore o minore?", "risposta": "Minore di quella del liquido", "sbagliata": "Maggiore di quella del liquido"},
+    {"domanda": "Un pezzo di ferro messo in acqua galleggia o affonda?", "risposta": "Affonda", "sbagliata": "Galleggia"},
+    {"domanda": "Perché il ghiaccio galleggia sull'acqua?", "risposta": "Perché ha densità minore dell'acqua: circa 0,92 contro 1,00 g/cm³."},
+    {"domanda": "Un oggetto ha massa 60 g e volume 24 cm³. Qual è la sua densità?", "risposta": "2,5 g/cm³", "sbagliata": "0,4 g/cm³", "calcolo": {"formula": "densita", "dati": {"m": 60, "V": 24}, "risultato": 2.5}},
+    {"domanda": "Quanto volume occupano 270 g di alluminio, con densità 2,7 g/cm³?", "risposta": "100 cm³", "sbagliata": "729 cm³", "calcolo": {"formula": "volume_da_densita", "dati": {"m": 270, "d": 2.7}, "risultato": 100}},
+    {"domanda": "Che massa hanno 50 cm³ di ferro, con densità 7,9 g/cm³?", "risposta": "395 g", "sbagliata": "6,3 g", "calcolo": {"formula": "massa_da_densita", "dati": {"d": 7.9, "V": 50}, "risultato": 395}},
+    {"domanda": "Come si misura il volume di un sasso dalla forma irregolare?", "risposta": "Si immerge in un cilindro graduato con acqua e si guarda di quanto sale il livello."}
+  ]
+}

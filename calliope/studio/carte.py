@@ -53,7 +53,9 @@ ESITO_TENTATIVO = {SAPEVO: "giusto", QUASI: "indizio", NON_SAPEVO: "sbagliato"}
 STATI = ("attiva", "proposta", "tolta", "ombra")
 # «mappa» (revisione della PR #330): le carte di «Fanne carte», scritte dalla persona dagli errori
 # della mappa; con la mappa libera aperta non si vedono (servizio._carte_di, _carta)
-ORIGINI = ("persona", "modello", "mappa")
+# «libreria» (31/10, #297): le carte di un mazzo della libreria, aggiunte dalla persona o dal tutore
+# con «Aggiungi le carte» (studio/libreria/studio.py, `aggiungi_mazzo`)
+ORIGINI = ("persona", "modello", "mappa", "libreria")
 DOMANDA_MAX = 240
 RISPOSTA_MAX = 240
 # Una risposta «chiusa» (la controlla il codice): un numero o al più tante parole

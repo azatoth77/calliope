@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "chimica-atomo-carte",
+  "tipo": "mazzo",
+  "titolo": "L'atomo: le carte",
+  "materia": "Chimica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "chimica-atomo",
+  "carte": [
+    {"domanda": "Che carica elettrica ha il protone?", "risposta": "Positiva", "sbagliata": "Negativa"},
+    {"domanda": "Quale particella dell'atomo non ha carica?", "risposta": "Il neutrone", "sbagliata": "L'elettrone"},
+    {"domanda": "Dove si trovano gli elettroni?", "risposta": "Intorno al nucleo, sui livelli di energia."},
+    {"domanda": "Come si chiama il numero dei protoni di un atomo?", "risposta": "Numero atomico", "sbagliata": "Numero di massa"},
+    {"domanda": "Che cosa conta il numero di massa A?", "risposta": "La somma di protoni e neutroni."},
+    {"domanda": "Quanti neutroni ha un atomo con A = 27 e Z = 13?", "risposta": "14", "sbagliata": "40", "calcolo": {"formula": "neutroni", "dati": {"A": 27, "Z": 13}, "risultato": 14}},
+    {"domanda": "Che cosa hanno in comune due isotopi dello stesso elemento?", "risposta": "Lo stesso numero di protoni, cioè lo stesso Z."},
+    {"domanda": "Quanti elettroni può contenere al massimo il primo livello di energia?", "risposta": "2", "sbagliata": "8"},
+    {"domanda": "Come si chiamano gli elettroni del livello più esterno?", "risposta": "Elettroni di valenza", "sbagliata": "Elettroni del nucleo"},
+    {"domanda": "Quanti elettroni ha un atomo neutro di magnesio, con Z = 12, nel terzo livello?", "risposta": "2", "sbagliata": "4", "calcolo": {"formula": "elettroni_per_livello", "dati": {"Z": 12, "livello": 3}, "risultato": 2}}
+  ]
+}

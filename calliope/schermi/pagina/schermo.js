@@ -405,6 +405,15 @@
         return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
       } catch (e) { return { ok: false, status: 0, dati: {} }; }
     },
+    // La libreria dello Studio (31/10, #297, libreria.js): {verifica, azione?, contenuto?, n?,
+    // argomento?} → {proposte, materie, chiusa}, la scheda, la soluzione o le carte aggiunte
+    async studioLibreria(dati) {
+      if (!S.sessione) return { ok: false, status: 0, dati: {} };
+      try {
+        const r = await postSessione("/api/studio/libreria", dati || {});
+        return { ok: r.status === 200, status: r.status, dati: r.dati || {} };
+      } catch (e) { return { ok: false, status: 0, dati: {} }; }
+    },
     // La vista del tutore (31/10, passo 10, #250 e #285, studio.js): {verifica, azione?, …} →
     // padronanza, giudizi, da guardare, prove, ripasso, mappe e carte, indicazioni
     async studioTutore(dati) {

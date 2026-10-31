@@ -1,0 +1,47 @@
+{
+  "formato": 1,
+  "id": "biologia-membrana",
+  "tipo": "scheda",
+  "titolo": "La membrana plasmatica e i trasporti",
+  "materia": "Biologia",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "La membrana plasmatica: struttura, permeabilità selettiva, diffusione, osmosi e trasporto attivo",
+  "chiavi": ["membrana plasmatica", "membrana cellulare", "doppio strato fosfolipidico", "permeabilità selettiva", "trasporti di membrana", "trasporto passivo", "trasporto attivo", "diffusione facilitata", "osmosi", "ipotonica", "ipertonica", "isotonica", "soluzioni isotoniche", "soluzioni ipotoniche", "soluzioni ipertoniche"],
+  "prerequisiti": ["biologia-cellula", "chimica-materia"],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Ogni cellula è avvolta da una membrana plasmatica sottilissima, che la separa dall'ambiente esterno ma non la chiude del tutto: lascia passare alcune sostanze e ne blocca altre. In questa scheda vediamo di che cosa è fatta la membrana e come le sostanze la attraversano, da sole o con una spesa di energia. Serve ricordare che cos'è una soluzione: un soluto sciolto in un solvente, qui quasi sempre l'acqua.",
+    "sezioni": [
+      {"titolo": "Un doppio strato di fosfolipidi", "testo": "La membrana è fatta soprattutto di fosfolipidi. Ogni fosfolipide ha una testa attratta dall'acqua, cioè idrofila, e due code fatte di acidi grassi che l'acqua respinge, cioè idrofobe. In acqua i fosfolipidi si dispongono in un doppio strato: le teste verso l'esterno e verso il citoplasma, che sono acquosi, e le code nascoste all'interno.\n\nNel doppio strato sono immerse molte proteine: alcune formano canali, altre trasportano sostanze, altre ancora riconoscono segnali. Nelle cellule animali c'è anche il colesterolo. Le molecole si spostano di continuo l'una accanto all'altra: per questo si parla di modello a mosaico fluido."},
+      {"titolo": "La permeabilità selettiva", "testo": "La membrana ha una permeabilità selettiva: non tutte le sostanze la attraversano allo stesso modo. Le molecole piccole e senza carica, come l'ossigeno e l'anidride carbonica, passano facilmente fra le code dei fosfolipidi. L'acqua passa, in buona parte attraverso proteine canale apposite.\n\nLe molecole polari o cariche, come il glucosio e gli ioni di sodio e potassio, non passano da sole: hanno bisogno di una proteina della membrana che faccia da canale o da trasportatore. Così la cellula controlla che cosa entra e che cosa esce."},
+      {"titolo": "Diffusione: senza spendere energia", "testo": "La diffusione è il movimento spontaneo di una sostanza da dove è più concentrata a dove è meno concentrata, finché la concentrazione diventa uguale ovunque. Una goccia di colorante in un bicchiere d'acqua si spande da sola, senza mescolare.\n\nAttraverso la membrana la diffusione può essere semplice, fra i fosfolipidi, oppure facilitata, attraverso una proteina canale o trasportatrice. In tutti e due i casi è un trasporto passivo: la cellula non spende energia, perché la sostanza segue la differenza di concentrazione."},
+      {"titolo": "L'osmosi", "testo": "L'osmosi è la diffusione dell'acqua attraverso una membrana semipermeabile, che lascia passare l'acqua ma non il soluto. L'acqua si sposta dalla soluzione meno concentrata di soluto a quella più concentrata.\n\nRispetto a una cellula, una soluzione è ipotonica se ha meno soluto della cellula, isotonica se ne ha la stessa quantità, ipertonica se ne ha di più. In una soluzione ipotonica l'acqua entra nella cellula; in una soluzione ipertonica l'acqua esce; in una soluzione isotonica entra ed esce nella stessa misura e la cellula non cambia."},
+      {"titolo": "Globuli rossi e cellule vegetali", "testo": "Un globulo rosso in acqua distillata, che è ipotonica, si gonfia perché l'acqua entra, e può scoppiare: si parla di emolisi. In una soluzione salina allo 0,9 per cento, isotonica, resta normale. In acqua molto salata, ipertonica, perde acqua e raggrinzisce.\n\nUna cellula vegetale in una soluzione ipotonica si riempie d'acqua ma non scoppia, perché la parete la trattiene: diventa turgida, e la pianta sta dritta. In una soluzione ipertonica perde acqua, il vacuolo si svuota e la membrana si stacca dalla parete: è la plasmolisi. Per questo una pianta annaffiata con acqua salata appassisce."},
+      {"titolo": "Il trasporto attivo", "testo": "A volte la cellula deve portare una sostanza da dove è meno concentrata a dove è più concentrata, cioè contro il gradiente di concentrazione. Questo è il trasporto attivo: usa proteine trasportatrici chiamate pompe e consuma energia, sotto forma di ATP.\n\nL'esempio più noto è la pompa sodio-potassio: a ogni giro porta fuori dalla cellula tre ioni sodio e dentro due ioni potassio. Le molecole molto grandi, invece, entrano ed escono chiuse in piccole vescicole fatte di membrana: è l'endocitosi quando entrano, l'esocitosi quando escono."}
+    ],
+    "ricorda": [
+      "La membrana è un doppio strato di fosfolipidi: teste idrofile verso l'acqua, code idrofobe all'interno, con proteine immerse.",
+      "Permeabilità selettiva: alcune sostanze passano da sole, altre solo attraverso proteine, altre per niente.",
+      "Diffusione: da dove la sostanza è più concentrata a dove lo è meno, senza spendere energia.",
+      "Osmosi: l'acqua attraversa la membrana verso la soluzione con più soluto.",
+      "Soluzione ipotonica: l'acqua entra. Ipertonica: l'acqua esce. Isotonica: nessun cambiamento.",
+      "Trasporto attivo: contro il gradiente, con le pompe e con l'ATP."
+    ],
+    "esempi": [
+      {"testo": "Due fette di patata: una in acqua del rubinetto, una in acqua molto salata. Dopo un'ora la prima è soda, perché le cellule hanno assorbito acqua; la seconda è molle, perché le cellule hanno perso acqua per osmosi."},
+      {"testo": "Nei polmoni l'ossigeno passa dall'aria degli alveoli al sangue per diffusione: nell'aria è più concentrato che nel sangue che arriva, e la cellula non spende energia per farlo passare."}
+    ],
+    "errori": [
+      "Pensare che nell'osmosi si sposti il soluto: si sposta l'acqua, e il soluto resta dov'è.",
+      "Confondere ipotonica e ipertonica: ipo vuol dire meno soluto, iper più soluto rispetto alla cellula.",
+      "Dire che la diffusione facilitata consuma energia: usa una proteina, ma resta un trasporto passivo."
+    ],
+    "prova_tu": [
+      {"domanda": "Metti un globulo rosso in acqua distillata: che cosa succede e perché?", "risposta": "Si gonfia e può scoppiare: l'acqua distillata è ipotonica, quindi l'acqua entra nella cellula per osmosi."},
+      {"domanda": "Una cellula porta dentro di sé ioni potassio anche se dentro ce ne sono già di più che fuori. Che trasporto usa?", "risposta": "Il trasporto attivo, con la pompa sodio-potassio, che consuma ATP."}
+    ]
+  }
+}

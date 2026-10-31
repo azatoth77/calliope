@@ -1,0 +1,47 @@
+{
+  "formato": 1,
+  "id": "chimica-atomo",
+  "tipo": "scheda",
+  "titolo": "L'atomo e le sue particelle",
+  "materia": "Chimica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "argomento": "Struttura dell'atomo, numero atomico e numero di massa, isotopi, livelli di energia",
+  "chiavi": ["atomo", "struttura atomica", "particelle subatomiche", "numero atomico", "numero di massa", "isotopi", "protoni neutroni elettroni", "configurazione elettronica", "livelli di energia", "modello atomico"],
+  "prerequisiti": ["chimica-materia"],
+  "durata": 20,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": {
+    "introduzione": "Tutta la materia è fatta di atomi. Un atomo è piccolissimo, circa un decimo di miliardesimo di metro, ma ha una struttura: un nucleo al centro, con quasi tutta la massa, e gli elettroni intorno.",
+    "sezioni": [
+      {"titolo": "Le tre particelle", "testo": "Nel nucleo ci sono i protoni, con carica positiva, e i neutroni, senza carica. Intorno al nucleo si muovono gli elettroni, con carica negativa. Protone e neutrone hanno quasi la stessa massa; l'elettrone è circa 1836 volte più leggero del protone.\n\nIn un atomo neutro gli elettroni sono tanti quanti i protoni: le cariche positive e negative si bilanciano."},
+      {"titolo": "Numero atomico e numero di massa", "testo": "Il numero atomico Z è il numero dei protoni: dice di quale elemento si tratta. Ogni atomo con 6 protoni è carbonio, ogni atomo con 8 protoni è ossigeno.\n\nIl numero di massa A è la somma di protoni e neutroni. Quindi i neutroni si trovano con una sottrazione: neutroni = A meno Z."},
+      {"titolo": "Gli isotopi", "testo": "Gli isotopi sono atomi dello stesso elemento, quindi con lo stesso numero di protoni, ma con un numero diverso di neutroni. Hanno lo stesso Z e un A diverso. Il carbonio 12 e il carbonio 14 sono due isotopi del carbonio: il primo ha 6 neutroni, il secondo 8."},
+      {"titolo": "I livelli di energia", "testo": "Gli elettroni stanno su livelli di energia diversi intorno al nucleo. Per i primi venti elementi si usa una regola semplice: il primo livello ne contiene al massimo 2, il secondo al massimo 8, il terzo, per questi elementi, si riempie fino a 8 prima che si cominci il quarto.\n\nGli elettroni del livello più esterno si chiamano elettroni di valenza: sono loro che partecipano ai legami."}
+    ],
+    "ricorda": [
+      "Protone positivo e neutrone neutro stanno nel nucleo, l'elettrone negativo sta fuori.",
+      "Z è il numero dei protoni e decide l'elemento.",
+      "A è protoni più neutroni; i neutroni sono A meno Z.",
+      "In un atomo neutro elettroni e protoni sono lo stesso numero.",
+      "Gli isotopi hanno lo stesso Z e un A diverso.",
+      "Primi venti elementi: 2 elettroni nel primo livello, poi 8, poi 8."
+    ],
+    "esempi": [
+      {"testo": "Il sodio ha Z = 11 e A = 23. I neutroni sono 23 meno 11, cioè 12.", "calcolo": {"formula": "neutroni", "dati": {"A": 23, "Z": 11}, "risultato": 12}},
+      {"testo": "Il sodio ha 11 elettroni: 2 nel primo livello, 8 nel secondo e 1 nel terzo. Ha quindi un solo elettrone di valenza.", "calcolo": {"formula": "elettroni_per_livello", "dati": {"Z": 11}, "risultato": "2-8-1"}},
+      {"testo": "Il cloro ha Z = 17: 2 elettroni nel primo livello, 8 nel secondo e 7 nel terzo.", "calcolo": {"formula": "elettroni_per_livello", "dati": {"Z": 17}, "risultato": "2-8-7"}}
+    ],
+    "errori": [
+      "Confondere A e Z: il numero più piccolo, per tutti gli elementi tranne l'idrogeno comune, è Z.",
+      "Pensare che gli isotopi abbiano protoni diversi: cambiano solo i neutroni.",
+      "Sommare gli elettroni alla massa: la loro massa è così piccola che nel numero di massa non conta."
+    ],
+    "prova_tu": [
+      {"domanda": "Un atomo di ossigeno ha Z = 8 e A = 16. Quanti neutroni ha?", "risposta": "8 neutroni: 16 meno 8.", "calcolo": {"formula": "neutroni", "dati": {"A": 16, "Z": 8}, "risultato": 8}},
+      {"domanda": "Come si distribuiscono i 13 elettroni dell'alluminio nei livelli?", "risposta": "2 nel primo, 8 nel secondo e 3 nel terzo.", "calcolo": {"formula": "elettroni_per_livello", "dati": {"Z": 13}, "risultato": "2-8-3"}},
+      {"domanda": "Il cloro 35 e il cloro 37 sono isotopi. Che cosa hanno di diverso?", "risposta": "Il numero di neutroni: 18 nel cloro 35 e 20 nel cloro 37; i protoni sono 17 in tutti e due."}
+    ]
+  }
+}

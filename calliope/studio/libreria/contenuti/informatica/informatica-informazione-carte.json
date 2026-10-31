@@ -1,0 +1,25 @@
+{
+  "formato": 1,
+  "id": "informatica-informazione-carte",
+  "tipo": "mazzo",
+  "titolo": "Bit, byte e codifica: le carte",
+  "materia": "Informatica",
+  "classe": {"grado": "superiore", "anno": 1, "percorso": "tecnico tecnologico", "indirizzo": "Chimica, materiali e biotecnologie"},
+  "durata": 10,
+  "comandi": [],
+  "licenza": "AGPL-3.0-or-later",
+  "revisione": "2026-10-31",
+  "scheda": "informatica-informazione",
+  "carte": [
+    {"domanda": "Quanti bit ci sono in un byte?", "risposta": "8", "sbagliata": "10"},
+    {"domanda": "Quali valori può avere un bit?", "risposta": "0 oppure 1", "sbagliata": "Da 0 a 9"},
+    {"domanda": "Quanti bit ci sono in 6 byte?", "risposta": "48", "sbagliata": "6", "calcolo": {"formula": "byte_in_bit", "dati": {"byte": 6}, "risultato": 48}},
+    {"domanda": "Quanti byte sono 3 kB?", "risposta": "3000", "sbagliata": "3072", "calcolo": {"formula": "conversione", "dati": {"valore": 3, "da": "kB", "a": "B"}, "risultato": 3000}},
+    {"domanda": "Quanti byte sono 1 KiB?", "risposta": "1024", "sbagliata": "1000", "calcolo": {"formula": "conversione", "dati": {"valore": 1, "da": "KiB", "a": "B"}, "risultato": 1024}},
+    {"domanda": "Quanti GB sono 5000 MB?", "risposta": "5 GB", "sbagliata": "50 GB", "calcolo": {"formula": "conversione", "dati": {"valore": 5000, "da": "MB", "a": "GB"}, "risultato": 5}},
+    {"domanda": "Quante combinazioni diverse si hanno con 3 bit?", "risposta": "8", "sbagliata": "6"},
+    {"domanda": "Quanti valori diversi si possono scrivere con 8 bit?", "risposta": "256", "sbagliata": "255"},
+    {"domanda": "Quanti bit usa il codice ASCII?", "risposta": "7", "sbagliata": "16"},
+    {"domanda": "Che differenza c'è fra un kB e un KiB?", "risposta": "Il kB vale 1000 byte, il KiB vale 1024 byte."}
+  ]
+}
