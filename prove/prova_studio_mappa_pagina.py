@@ -220,8 +220,8 @@ def scenario_telefono(t, hub, st, vid, sk):
              and "tornano dopo «Controlla»" in el, f"{schede} {el[:200]} {nomi}")
     t.tocca('button[data-mappa="controlla"]')
     ok = aspetta(lambda: len(t.v("[...document.querySelectorAll('button[data-mappa=\"quale\"]')]"
-                                  ".map((b) => b.textContent)") or []) == 3, 8)
-    verifica("dopo «Controlla» le schede tornano", bool(ok))
+                                  ".map((b) => b.textContent)") or []) == 4, 8)
+    verifica("dopo «Controlla» le schede tornano (con «Da zero», dal passo 7c)", bool(ok))
     t.tocca('button[data-mappa="quale"][data-dati*="scheletro"]')
     ok = aspetta(lambda: t.v("!!document.querySelector('button[data-mappa=\"chiedi_riapri\"]')"), 6)
     verifica("lo scheletro confermato con le copie: niente «+ Concetto», c'è «Riapri lo scheletro»",

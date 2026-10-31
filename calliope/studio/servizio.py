@@ -239,7 +239,11 @@ class Studio(Mappe):
                        "carte": {"scritte": 0, "esiti": {}, "codice": 0, "a_voce": 0},
                        # Le mappe (passo 7, #247): quante, i controlli, i tentativi (mai il testo)
                        "mappe": {"scheletri": 0, "mie": 0, "memoria": 0, "controlli": 0,
-                                 "tentativi": 0, "carte": 0}}
+                                 "tentativi": 0, "carte": 0,
+                                 # La mappa libera e «Parliamone» (passo 7c, #328): conti,
+                                 # mai testi; «svelati» deve restare 0
+                                 "libere": 0, "finite": 0, "indizi": 0, "mostrati": 0,
+                                 "consigli": 0, "svelati": 0}}
         # Il lettore delle pagine (passo 4.3, studio/lettura.py): lo crea `avvia_lettura`
         self.lettore = None
         # Perché non c'è il lettore (passo 4.5, nota della revisione della PR #314): None prima di
@@ -419,6 +423,10 @@ class Studio(Mappe):
             campi["data"] = d.isoformat()
             if v["stato"] == "fatta":
                 campi["stato"] = "aperta"
+                # Prima di riaprirla, le mappe senza guardare rimaste aperte si chiudono davvero
+                # (terza revisione della PR #330: con la verifica fatta lo scheletro era tornato
+                # visibile, e riaperte avrebbero dato «giusto» ai concetti visti)
+                self._chiudi_scadute(v["id"], "fatta")
         if obiettivo is not None:
             if not 1 <= int(obiettivo) <= 100:
                 raise ValueError("l'obiettivo va da 1 a 100")
@@ -459,6 +467,7 @@ class Studio(Mappe):
         v = self._verifica(chi, vid)
         self.dati.scrivi("UPDATE studio_verifiche SET stato = 'archiviata', archiviata = ? "
                          "WHERE id = ?", (D.adesso(), v["id"]))
+        self._chiudi_scadute(v["id"], "archiviata")
         self.ricalcola_persona(v["persona"])
 
     def togli_verifica(self, chi, vid) -> dict:
@@ -1175,6 +1184,13 @@ class Studio(Mappe):
         c = self.dati.uno("SELECT * FROM studio_carte WHERE id = ?", (int(cid),))
         if c is None:
             raise NonTrovata()
+        # Una carta nata dalla mappa («Fanne carte», origine «mappa») con la mappa libera aperta
+        # non c'è per la persona (revisione della PR #330): dice i concetti dello scheletro
+        # nascosto. Vale anche per `carta_in_corso`, che passa di qui. Il tutore la vede e la
+        # corregge (seconda revisione)
+        if (c["origine"] == "mappa" and getattr(chi, "id", None) == c["persona"]
+                and self._libera_aperta(c["verifica"])):
+            raise NonTrovata()
         return c, self._verifica(chi, c["verifica"])
 
     def _argomento_di(self, v: dict, argomento) -> int | None:
@@ -1243,7 +1259,8 @@ class Studio(Mappe):
         adesso = self.adesso().isoformat(timespec="seconds")
         self.dati.scrivi(
             "UPDATE studio_carte SET domanda = ?, risposta = ?, chiusa = ?, argomento = ?, "
-            "origine = 'persona', stato = 'attiva', avvisi = NULL, modificata = ?, "
+            "origine = CASE WHEN origine = 'mappa' THEN 'mappa' ELSE 'persona' END, "
+            "stato = 'attiva', avvisi = NULL, modificata = ?, "
             "scatola = CASE WHEN ? THEN 1 ELSE scatola END, "
             "scadenza = CASE WHEN ? THEN ? ELSE scadenza END WHERE id = ?",
             (d, r, C.chiusa(r), aid, adesso, int(nuova), int(nuova), adesso, c["id"]))
@@ -1397,18 +1414,26 @@ class Studio(Mappe):
         dell'argomento nell'elenco della verifica, se è da ripassare e fra quanto. Domanda e
         risposta sono un dato: lo schermo le scrive con textContent."""
         v = self._verifica(chi, vid)
-        return self._carte_di(v)
+        return self._carte_di(v, chi)
 
-    def _carte_di(self, v: dict) -> list[dict]:
+    def _carte_di(self, v: dict, chi=None) -> list[dict]:
+        """`chi`: chi guarda; le carte della mappa si nascondono alla persona (e ai conti, senza
+        `chi`), non al tutore (seconda revisione della PR #330)."""
         adesso = self.adesso()
         elenco = self.dati.tutti("SELECT id, stato FROM studio_argomenti WHERE verifica = ? "
                                  "ORDER BY ordine, id", (v["id"],))
         numeri = {a["id"]: i for i, a in enumerate(elenco, 1)}
         nel_piano = {a["id"] for a in elenco if a["stato"] in D.ARGOMENTI_DEL_PIANO}
         out = []
+        # Con la mappa libera aperta (passo 7c, #328) le carte scritte da «Fanne carte» non si
+        # vedono e non si ripassano: dicono i concetti dello scheletro, che resta nascosto
+        libera_aperta = ((chi is None or getattr(chi, "id", None) == v["persona"])
+                         and self._libera_aperta(v["id"]))
         # Le carte dell'ombra (studio_carte_genera: ombra) non vanno mai alla persona
         for i, c in enumerate(self.dati.tutti("SELECT * FROM studio_carte WHERE verifica = ? AND "
                                               "stato != 'ombra' ORDER BY id", (v["id"],)), 1):
+            if libera_aperta and c["origine"] == "mappa":
+                continue
             c["pagine"] = [int(x) for x in D.da_j(c["pagine"]) if str(x).isdecimal()]
             c["avvisi"] = D.da_j(c["avvisi"])
             c["numero"] = i
@@ -1424,10 +1449,10 @@ class Studio(Mappe):
     def da_ripassare(self, chi, vid) -> list[dict]:
         """Le carte da ripassare adesso: prima le più scadute, poi le scatole basse."""
         v = self._verifica(chi, vid)
-        return self._da_ripassare(v)
+        return self._da_ripassare(v, chi)
 
-    def _da_ripassare(self, v: dict) -> list[dict]:
-        out = [c for c in self._carte_di(v) if c["da_ripassare"]]
+    def _da_ripassare(self, v: dict, chi=None) -> list[dict]:
+        out = [c for c in self._carte_di(v, chi) if c["da_ripassare"]]
         out.sort(key=lambda c: (str(c["scadenza"] or ""), c["scatola"], c["id"]))
         return out
 
@@ -1526,12 +1551,12 @@ class Studio(Mappe):
         `CARTA_IN_CORSO_S`). Con il numero fra quelle da ripassare e quante restano. None se
         nessuna."""
         v = self._verifica(chi, vid)
-        due = self._da_ripassare(v)
+        due = self._da_ripassare(v, chi)
         chiave = str(getattr(chi, "id", "") or "")
         ic = self._in_corso(chiave)
         scelta = None
         if ic is not None and ic["verifica"] == v["id"]:
-            scelta = next((c for c in self._carte_di(v) if c["id"] == ic["carta"]
+            scelta = next((c for c in self._carte_di(v, chi) if c["id"] == ic["carta"]
                            and c["stato"] == "attiva"), None)
         if scelta is None and due:
             scelta = due[0]
@@ -1654,6 +1679,9 @@ class Studio(Mappe):
             if v["stato"] != "fatta" and self.dati.scrivibile:
                 self.dati.scrivi("UPDATE studio_verifiche SET stato = 'fatta' WHERE id = ?",
                                  (v["id"],))
+                # Le mappe senza guardare ancora aperte si chiudono davvero (terza revisione
+                # della PR #330)
+                self._chiudi_scadute(v["id"], "fatta")
             return None
         liberi = self._minuti_base(v["persona"])
         # Una verifica aperta senza pagine da leggere non toglie minuti (revisione della PR
