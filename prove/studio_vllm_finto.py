@@ -11,7 +11,10 @@ sono **ricostruite** da quei risultati, sui materiali di fantasia del banco:
   C…: il finto li ritrova nello scheletro della richiesta (`codici_dalla_richiesta`), così la stessa
   uscita vale anche quando il codice cambia lo scheletro (concetti uniti o rinumerati);
 - le domande come le aveva scritte il modello (tipo, domanda, opzioni, risposta, pagine).
-Dal 31/10 il banco salva anche le uscite grezze (`grezzo`, `grezzo_connessione`).
+Dal 31/10 il banco salva anche le uscite grezze (`grezzo`, `grezzo_connessione`):
+`manuali/studio/uscite_banco_3110_0702.json` ha quelle **vere** del banco del 31/10 07:02 (#349),
+con la seconda passata tradotta dai codici C… di allora ai testi dei concetti
+(`VllmFinto(uscite=carica(percorso))`).
 
 Uso: `cli = VllmFinto(); banco_studio.fase_mappa(cli, materiali, {}, uscita, log)`; il finto
 riconosce la verifica dall'intestazione («Verifica di Storia…») e la richiesta dallo schema.

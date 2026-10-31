@@ -1199,13 +1199,14 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
         nodi, coll = MG.scheletro(grezzi, rif, arif, 12, titolo=v.get("argomento"), misure=fm)
         # La seconda passata come in Calliope (passo 7c, #328): solo con più parti connesse
         prima = M.forma(nodi, coll)
-        uniti, deboli, secondi2, grezzo2 = 0, 0, 0.0, None
+        uniti, deboli, secondi2, grezzo2, conn = 0, 0, 0.0, None, {}
         if prima["componenti"] > 1:
             r2 = cli.chat(MG.messaggi_connessione(v, rif, arif, nodi, coll),
                           max_token=MG.MAX_TOKENS_CONNESSIONE, schema=MG.SCHEMA_CONNESSIONE,
                           temperatura=MG.TEMPERATURA, presence=MG.PRESENCE)
             grezzo2 = r2.get("testo", "")
-            uniti = len(MG.connetti(MG.leggi_connessione(grezzo2) or [], nodi, coll, rif, 12))
+            uniti = len(MG.connetti(MG.leggi_connessione(grezzo2) or [], nodi, coll, rif, 12,
+                                    misure=conn))
             secondi2 = float(r2.get("secondi") or 0)
             # Le isole che restano: il collegamento debole alla radice, «da controllare» (#344)
             deboli = len(MG.collega_isole(nodi, coll, 12))
@@ -1250,6 +1251,8 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
                 "uniti": uniti, "doppioni": dopo["doppioni"],
                 "doppioni_uniti": fm.get("doppioni", 0), "composti": fm.get("composti", 0),
                 "codici": fm.get("codici", 0), "codici_scartati": fm.get("codici_scartati", 0),
+                # La seconda passata (#349): i collegamenti proposti e gli scartati per motivo
+                "connessione": conn,
                 "grado_radice": dopo["grado_radice"], "isolati": dopo["isolati"],
                 "secondi": round(float(r.get("secondi") or 0) + secondi2, 2),
                 "token_out": r.get("token_out"), "nodi": nodi,
@@ -1270,6 +1273,17 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
 
 # Il criterio della forma (passo 7c, #328): una parte connessa sola in almeno tante verifiche
 CRITERIO_CONNESSE = 90
+
+
+def _conn(x: dict) -> str:
+    """La seconda passata nel riepilogo (#349): proposti e scartati per motivo."""
+    c = x.get("connessione") or {}
+    if not c:
+        return ""
+    scarti = ", ".join(f"{k.replace('_', ' ')} {v}" for k, v in c.items()
+                       if k != "proposti" and v)
+    return f"; seconda passata: proposti {c.get('proposti', 0)}" + (
+        f", scartati ({scarti})" if scarti else "")
 
 
 def connesse_pc(mappa: dict, deboli: bool = False) -> int:
@@ -1387,7 +1401,8 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
                          f"{x.get('grado_radice', 0)}, isolati {x.get('isolati', 0)}, "
                          f"deboli {x.get('deboli', 0)} (parti coi deboli "
                          f"{x.get('componenti_con_deboli', x.get('componenti', '?'))}), codici "
-                         f"{x.get('codici', 0)} (scartati {x.get('codici_scartati', 0)})")
+                         f"{x.get('codici', 0)} (scartati {x.get('codici_scartati', 0)})"
+                         + _conn(x))
         pc = connesse_pc(riep["mappa"])
         pd = connesse_pc(riep["mappa"], deboli=True)
         righe.append(f"  una parte sola: {pc} % delle verifiche (criterio ≥ {CRITERIO_CONNESSE} %"

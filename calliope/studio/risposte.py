@@ -115,7 +115,7 @@ def prepara(tipo, testo, attesa, opzioni=(), chiave=()) -> dict:
         ops = [o for o in ops if o]
         if not OPZIONI_MIN <= len(ops) <= OPZIONI_MAX:
             raise ValueError("servono da 2 a 5 opzioni")
-        if len({" ".join(parole(o)) or o.lower() for o in ops}) != len(ops):
+        if len({_chiave_opzione(o) for o in ops}) != len(ops):
             raise ValueError("due opzioni uguali")
         if len(a) == 1 and a.lower() in LETTERE[:len(ops)]:
             a = ops[LETTERE.index(a.lower())]
@@ -147,7 +147,39 @@ def prepara(tipo, testo, attesa, opzioni=(), chiave=()) -> dict:
     return {"tipo": tipo, "testo": t, "opzioni": ops, "attesa": a, "chiave": ch}
 
 
+# Un'opzione è una formula se ha un operatore: il confronto tiene gli operatori e il verso
+# (revisione della PR #350: con le sole parole «x - 3x = 32» e «x × 3x = 32» valevano «x + 3x =
+# 32», e «2x + 4» e «2x - 4» erano «due opzioni uguali»)
+_OPERATORE = re.compile(r"[=+\-−–×·⋅*/÷<>≤≥≠^]")
+_RELAZIONE = re.compile(r"[=<>≤≥≠]")
+
+
+# Gli operatori fra i pezzi di `argomenti._pezzi`
+_OPERATORI_PEZZI = frozenset("+-=<>/×≤≥≠")
+
+
+def _formula(testo) -> bool:
+    return bool(_OPERATORE.search(str(testo or "")))
+
+
+def _pezzi(testo) -> list[str]:
+    """I pezzi di una formula, con gli operatori (`argomenti._pezzi`)."""
+    from .argomenti import _pezzi as pezzi
+    return pezzi(testo)
+
+
+def _chiave_opzione(o: str) -> str:
+    """La chiave per dire due opzioni uguali: i pezzi con gli operatori per una formula, le
+    parole per le altre."""
+    if _formula(o):
+        return " ".join(_pezzi(o)) or o.lower()
+    return " ".join(parole(o)) or o.lower()
+
+
 def _uguale_opzione(o: str, x: str) -> bool:
+    if _formula(o) or _formula(x):
+        po, px = _pezzi(o), _pezzi(x)
+        return po == px and bool(po)
     po, px = parole(o), parole(x)
     return (po == px and bool(po)) or (not po and o.strip().lower() == x.strip().lower())
 
@@ -258,8 +290,19 @@ def _scelta(d: dict, risposta: str) -> str:
         if lett not in LETTERE[:len(ops)]:
             return DA_RIVEDERE                       # una lettera che non c'è («f» con 3 opzioni)
         return GIUSTO if LETTERE.index(lett) == giusta else SBAGLIATO
+    # L'opzione uguale all'intera risposta vince sempre (banco del 31/10 07:02, #349: «x + 3x =
+    # 32» era «sbagliata» perché dentro c'è l'opzione «3x = 32»)
+    formule = any(_formula(o) for o in ops)
+    intera = [i for i, o in enumerate(ops) if _uguale_opzione(o, risposta)
+              or (not formule and _uguale_opzione(o, " ".join(ps)))]
+    if len(intera) == 1:
+        return GIUSTO if intera[0] == giusta else SBAGLIATO
     negata = any(w in C._NEGAZIONI for w in ps)
     pr = parole(risposta)
+    # Con delle formule fra le opzioni, la frase e le opzioni si leggono a pezzi con gli
+    # operatori (revisione della PR #350)
+    tok = _pezzi if formule else parole
+    pt = tok(risposta)
     # Seconda revisione della PR #342: prima le opzioni nominate **esattamente** (la lettera sola
     # dentro la frase, «e» no perché è una congiunzione; l'opzione uguale alla risposta; le sue
     # parole tutte uguali e di fila, i numeri come numeri), non negate subito prima. Il confronto
@@ -271,15 +314,31 @@ def _scelta(d: dict, risposta: str) -> str:
     esatte = {LETTERE.index(w) for k, w in lettere.items() if not _negata(ps, k)}
     esatte |= {i for i, o in enumerate(ops) if _uguale_opzione(o, risposta)}
     if len(pr) <= 12:
-        esatte |= {i for i, o in enumerate(ops) if parole(o) and _di_fila(parole(o), pr)}
+        esatte |= _nominate(ops, pt, tok)
     # «la a, no, la c», «Austria no Australia», «a, anzi c» (terza revisione della PR #342):
     # una correzione fra due opzioni nominate esattamente la decide chi rivede, mai il codice
     nominate = {LETTERE.index(w) for w in lettere.values()}
     if len(pr) <= 12:
-        nominate |= {i for i, o in enumerate(ops) if parole(o) and _di_fila(parole(o), pr,
-                                                                             negate=True)}
+        nominate |= _nominate(ops, pt, tok, negate=True)
     if len(nominate) > 1 and any(w in _CORREZIONI for w in ps):
         return DA_RIVEDERE
+    if esatte and len(pr) <= 12:
+        # «Portogallo e Spagna» con le opzioni «Spagna» e «Spagna e Portogallo»: nominata la più
+        # corta, ma la risposta ha tutte le parole della più lunga in un altro ordine; la decide
+        # chi rivede, mai «sbagliato» dal codice (#349)
+        piene = lambda x: set(parole(x)) - {"e", "ed"}  # noqa: E731
+        # Le parole negate subito prima non contano, e nemmeno un'opzione nominata negata
+        # («Spagna, non Portogallo», «non Spagna e Portogallo, Spagna»: revisione della PR #350)
+        libere = {w for k, w in enumerate(pr) if not _negata(pr, k)}
+        negate_ = _nominate(ops, pr, parole, negate=True) - _nominate(ops, pr, parole)
+        for i in esatte:
+            pi = piene(ops[i])
+            # Solo fra opzioni di parole: in una formula l'ordine conta («3x - x = 32» non è
+            # «x … 3x … 32»)
+            if any(j != i and j not in esatte and j not in negate_ and not _formula(o)
+                   and not re.search(r"\d", o) and pi < piene(o) <= libere
+                   for j, o in enumerate(ops)):
+                return DA_RIVEDERE
     if esatte:
         if len(esatte) > 1:
             # Più opzioni nominate esattamente («a o b»): «sbagliato»; con una negazione di
@@ -290,12 +349,47 @@ def _scelta(d: dict, risposta: str) -> str:
     if negata:
         # Negata («non è la a»): la decide la persona (al più «indizio») o il tutore
         return DA_RIVEDERE
+    if formule and _RELAZIONE.search(str(risposta or "")):
+        # Una formula che non è nessuna opzione la decide sempre chi rivede: il codice non sa
+        # se è equivalente a quella giusta («4x = 32», «x = 8», «3x + x = 32» per «x + 3x =
+        # 32») né se è un errore («x - 3x = 32»). Una formula uguale a un'opzione è già stata
+        # giudicata sopra, e se è un'altra opzione resta «sbagliato» (seconda revisione della
+        # PR #350)
+        return DA_RIVEDERE
     simili = set()
     if len(pr) <= 12:
         simili = {i for i, o in enumerate(ops) if parole(o) and _trova(parole(o), pr)}
     if len(simili) != 1:
         return DA_RIVEDERE                 # niente, o più opzioni solo per somiglianza
     return GIUSTO if simili == {giusta} else SBAGLIATO
+
+
+def _nominate(ops: list[str], pr: list[str], tok=None, negate: bool = False) -> set[int]:
+    """Le opzioni con le parole tutte uguali e di fila nella frase. Un'opzione che sta **dentro**
+    un'altra opzione nominata nello stesso punto non conta a parte: vince la più lunga («3x = 32»
+    dentro «x + 3x = 32», «Spagna» dentro «Spagna e Portogallo»; banco del 31/10 07:02, #349)."""
+    posti: dict[int, list[tuple[int, int]]] = {}
+    for i, o in enumerate(ops):
+        ch = (tok or parole)(o)
+        n = len(ch)
+        if not n:
+            continue
+        # A pezzi (formule): un'opzione con un operatore subito prima o subito dopo è un pezzo
+        # di un'altra espressione, non nominata («3x = 32» dentro «x - 3x = 32»: seconda
+        # revisione della PR #350)
+        p = [(k, k + n) for k in range(len(pr) - n + 1)
+             if pr[k:k + n] == ch and (negate or not _negata(pr, k))
+             and not (tok is _pezzi and ((k and pr[k - 1] in _OPERATORI_PEZZI)
+                                         or (k + n < len(pr) and pr[k + n] in _OPERATORI_PEZZI)))]
+        if p:
+            posti[i] = p
+    out = set()
+    for i, p in posti.items():
+        dentro = lambda a, b: all(  # noqa: E731 — ogni posto di i dentro un posto più largo
+            any(c <= x and y <= d and (d - c) > (y - x) for c, d in posti[b]) for x, y in a)
+        if not any(j != i and dentro(p, j) for j in posti):
+            out.add(i)
+    return out
 
 
 def _di_fila(chiave: list[str], ps: list[str], negate: bool = False) -> bool:
