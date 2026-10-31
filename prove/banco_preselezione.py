@@ -180,6 +180,8 @@ f("Spiegami la pagina 114 del libro di storia", "studio_pagina_leggi")
 f("Ripassiamo le carte di storia", "studio_carte")
 # «Parliamone» dopo la mappa libera (30/10, #328)
 f("Parliamo della mia mappa da zero di storia", "studio_mappa_consigli")
+# L'interrogazione a voce (31/10, #248, passo 8)
+f("Interrogami di storia", "studio_interroga")
 # ── senza tool: chiacchiere e cultura generale ──
 f("Raccontami una barzelletta")
 f("Come stai oggi?")

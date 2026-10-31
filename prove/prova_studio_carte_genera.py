@@ -74,7 +74,7 @@ CARTE = {"carte": [
 
 
 def prepara(cfg_kw=None, nome="g"):
-    kw = {"studio_carte_genera": "ombra", **(cfg_kw or {})}
+    kw = {"studio_carte_genera": "ombra", "studio_domande_genera": "spenta", **(cfg_kw or {})}
     cfg = PA.cfg_nuova(nome, modo="attivo", studio_argomenti=False, **kw)
     st = PA.studio(cfg)
     vid, ids = PA.verifica_con_pagine(st)

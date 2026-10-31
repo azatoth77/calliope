@@ -9,7 +9,7 @@
   4.2 (pagine dei materiali) il 29/10 sul ramo `issue-281-studio-pagine` (sezione «Le pagine dei
   materiali», sotto); il passo 4.3 (lettura) il 30/10 sul ramo `issue-282-studio-lettura`
   (sezione «La lettura delle pagine», sotto); il passo 4.4 (argomenti e conferma) il 30/10 sul
-  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34). Il passo 7 (la mappa concettuale, prima parte: scheletro a mano, la mia mappa, a memoria, controllo, PDF) il 30/10 sera sul ramo `issue-247-studio-mappa` (punto 35). La seconda parte (lo scheletro generato dal lettore) il 30/10 sera sul ramo `issue-247-studio-mappa-genera` (punto 36).
+  ramo `issue-283-studio-argomenti` (sezione «Gli argomenti e la conferma», sotto); il passo 4.5 (tool, home, vista aperta, tocchi, le due domande) il 30/10 sul ramo `issue-284-studio-tool-home` (sezione «Tool, home e vista aperta», sotto). La decisione è completa per il passo 4; restano da fare prima di `attivo` le cose del punto 30. Il passo 4b (resoconto delle sessioni e riepilogo della verifica) il 30/10 sul ramo `issue-244-studio-resoconto` (punto 31). Il passo 5 (padronanza in ombra) il 30/10 sul ramo `issue-245-studio-padronanza` (punto 32). Il passo 6 (le carte, prima parte: dati, ripasso, schermo e voce) il 30/10 sul ramo `issue-246-studio-carte` (punto 33); la seconda parte (la generazione dal lettore) il 30/10 sera sul ramo `issue-246-studio-carte-genera` (punto 34). Il passo 7 (la mappa concettuale, prima parte: scheletro a mano, la mia mappa, a memoria, controllo, PDF) il 30/10 sera sul ramo `issue-247-studio-mappa` (punto 35). La seconda parte (lo scheletro generato dal lettore) il 30/10 sera sul ramo `issue-247-studio-mappa-genera` (punto 36). Il passo 8 (verifica finta e interrogazione dai materiali) il 31/10 sul ramo `issue-248-studio-verifica-finta` (punti 40 e 41).
 - **Area**: [studio](../aree/studio.md) (dal 29/10), [minori](../aree/minori.md), [schermi-telefono](../aree/schermi-telefono.md),
   [immagini-allegati](../aree/immagini-allegati.md),
   [sicurezza-politica](../aree/sicurezza-politica.md). Progetto in
@@ -482,6 +482,67 @@ dell'eco della stanza.
     0). `studio_mappa_consigli`, **ombra di serie**: la voce dice la frase del codice sul confronto e
     la risposta del modello si fa in secondo piano solo per la misura; «attiva» dopo la rilettura
     delle misure.
+
+## Le prove (passo 8, #248, 31/10)
+
+40. **Due modalità sempre, l'esito del codice, il modello che propone e non decide.** Decisione
+    di chi amministra del 30/10: il tipo della prova vera è «scritta» o «interrogazione», con la
+    data esatta o una finestra «dal» (`studio_finestra_giorni`, 14; il piano arriva alla data,
+    dentro la finestra si ripassa, poi la verifica è fatta da sola o con «conclusa»). La
+    preparazione si misura **sempre con tutte e due le modalità**: la verifica finta scritta sullo
+    schermo (`POST /api/studio/prova`) e l'interrogazione simulata a voce (`studio_interroga`).
+    Il tipo serve a dire la prova vera e a mettere prima, nel riepilogo, la modalità che le
+    somiglia.
+    - Le domande (`studio_domande`, schema 10) sono un dato chiunque le abbia scritte. Ci sono
+      cinque tipi: scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta. Anche
+      le carte attive valgono come domande.
+    - **L'esito lo decide il codice** (`studio/risposte.py`, `studio/unita.py`), riconoscendo la
+      forma e non il significato (principio 10). Le parole chiave mancanti danno «da rivedere», mai
+      «sbagliato»: la trascrizione può sbagliare un nome.
+    - **«Da rivedere»** lo decidono dopo la consegna la persona (fonte «persona», **peso
+      dimezzato** nella padronanza, `PESO_AUTO`) o il tutore (fonte «tutore»), una volta per voce.
+    - Il modello passa al più una **proposta** nell'orale: è una misura (accordo con chi decide)
+      e non scrive mai un tentativo. `registra_tentativo` resta com'è: la fonte «modello» è
+      rifiutata, senza strade laterali.
+    - I tentativi sono «verifica_finta» (1,5) e «interrogazione» (1,2). Le vuote non scrivono
+      tentativi, ma nella scritta valgono 0 nel punteggio. La misura «l'ultima prova» c'è solo se
+      almeno metà delle domande ha una risposta e metà delle date è decisa dal codice o dal tutore
+      (revisione della PR #342).
+    - Sulle domande chiuse (scelta, vero o falso, numero, carta) la persona che rivede dà al più
+      «indizio»: il «giusto» resta al codice o al tutore (revisione della PR #342). È «sbagliato»
+      solo una risposta con più opzioni nominate esattamente («a o b») o con alternative
+      esplicite senza l'atteso («1490 o 1491»). Più numeri che valgono tutti l'atteso, o
+      sommati lo valgono, sono «giusto»; gli altri casi sono «da rivedere» (seconda revisione della
+      PR #342). *[storico per un commit: più opzioni o più numeri valevano sempre «sbagliato»]*
+    - La prova la fa **solo la persona**. La vista aperta **non ha mai le risposte attese né
+      l'esito**. Mentre è aperta, carte e domande della verifica sono nascoste alla persona,
+      e `studio_pagina_leggi` non legge le pagine. Tutto dentro il lock, e lo stato cambia una
+      volta sola.
+    - Una verifica che si chiude chiude davvero le prove aperte, «annullate» e senza tentativi.
+    - Il mix per argomento è uniforme con la padronanza in ombra (i pesi solo nel registro), e
+      pesato con la padronanza mostrata.
+    - Nell'orale la domanda e la risposta attesa vanno in busta e escono dalla storia a risposta
+      finita; la risposta attesa arriva al modello solo dopo la valutazione. Una valutazione per
+      domanda, mai nel turno della domanda; la correzione e la domanda dopo stanno nello stesso
+      risultato.
+    - Le mappe a memoria e libere restano prove possibili col loro controllo: il riepilogo le
+      cita, il punteggio no.
+
+    Alternative scartate:
+    - il giudizio del modello sulle risposte aperte come esito, anche con un peso minore: un
+      modello che sbaglia scriverebbe la padronanza, e la fonte «modello» è rifiutata;
+    - l'autovalutazione col peso pieno;
+    - una sola modalità secondo il tipo della prova (decisione del 30/10);
+    - il tutore che fa la prova al posto del minore;
+    - le domande generate subito nelle prove.
+
+41. **Le domande generate dal lettore sono proposte e restano un dato.** Come le carte (punto
+    34): lo stesso thread, la stessa guardia, pagine e argomenti in busta, schema guidato coi
+    tipi, nessun tool. Il codice controlla la forma: una sola opzione giusta, un numero
+    leggibile, le parole chiave nelle pagine citate (le altre si tolgono). Controlla anche le
+    pagine e gli avvisi delle carte. `studio_domande_genera` è **in ombra di serie**. Si passa ad
+    «attiva» col banco (fase `prove`, i criteri nel documento d'area) e la rilettura dell'ombra;
+    in «attiva» nessuna domanda entra in una prova senza la conferma della persona o del tutore.
 
 ## Da completare con i passi 4.3–4.5
 

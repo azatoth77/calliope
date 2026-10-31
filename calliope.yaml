@@ -1006,6 +1006,24 @@ studio:
   # essere 0). «attiva» la dice; «spenta»: il tool risponde che non è acceso. Si passa ad
   # «attiva» dopo la rilettura delle misure dell'ombra (registro dello Studio)
   studio_mappa_consigli: ombra
+  # Le prove dello Studio (31/10, passo 8, #248, calliope/studio/prove.py): la verifica finta
+  # scritta sullo schermo e l'interrogazione simulata a voce, sempre tutte e due qualunque sia la
+  # prova vera; l'esito lo decide il codice (scelta multipla, vero o falso, numero con l'unità,
+  # parole chiave), le risposte aperte la persona o il tutore, mai il modello. Domande per
+  # verifica finta (al più quelle che ci sono; l'orale ne fa 5) e il tempo in minuti
+  studio_prova_domande: 10
+  studio_prova_minuti: 20
+  # L'interrogazione «da una data» (passo 8): quanti giorni dura la finestra dopo la data; poi la
+  # verifica diventa fatta da sola (prima, «conclusa» a voce o dalla pagina)
+  studio_finestra_giorni: 14
+  # Le domande delle prove generate dalle pagine lette (passo 8, #248,
+  # calliope/studio/domande_genera.py): lo stesso thread della lettura, con la sua guardia, le
+  # chiede a qwen3.6 dal solo testo letto in busta, dopo carte e scheletro; il codice le
+  # controlla nella forma (una sola opzione giusta, un numero leggibile, le parole chiave nelle
+  # pagine). «ombra» le genera e le misura soltanto: nessuna va alla persona; «attiva» le dà
+  # «proposte», da confermare; «spenta» niente. Si passa ad «attiva» col banco delle domande
+  # (prove/manuali/banco_studio.py, fase «domande») e la rilettura delle domande in ombra
+  studio_domande_genera: ombra
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

@@ -563,7 +563,14 @@ class Lettore:
                                  # La forma (passo 7c, #328): seconde passate, collegamenti
                                  # che uniscono le isole, scheletri ancora a isole
                                  "connessioni": 0, "connessioni_rotte": 0, "uniti": 0,
-                                 "con_isole": 0, "doppioni": 0, "composti": 0}}
+                                 "con_isole": 0, "doppioni": 0, "composti": 0},
+                       # Le domande delle prove (passo 8, #248): conti, avvisi, tipi e tempi,
+                       # mai il testo delle domande
+                       "domande": {"generazioni": 0, "domande": 0, "ombra": 0,
+                                   "da_controllare": 0, "pagina_con_istruzioni": 0,
+                                   "testo_ordine": 0, "rotte": 0, "vuote": 0, "cambiate": 0,
+                                   "cedute": 0, "secondi": 0.0, "token_in": 0, "token_out": 0,
+                                   "tipi": {}}}
 
     # ── ciclo ──
     def avvia(self):
@@ -711,6 +718,23 @@ class Lettore:
                     return {"fatte": fatte, "aspetta": motivo}
                 self.in_attesa = None
                 esito = self.genera_mappa(per_mappa[0])
+                if esito in ("ceduta", "giu", "errore", "errore_server"):
+                    return {"fatte": fatte, "aspetta": esito}
+                fatte += 1
+                continue
+            # Le domande delle prove (passo 8, #248), con la stessa guardia: dopo lo scheletro,
+            # prima delle pagine di un'altra verifica
+            per_domande = self.studio.verifiche_per_domande()
+            if per_domande:
+                motivo = self.guardia.motivo()
+                if motivo is not None:
+                    if motivo != self.in_attesa:
+                        self._registra(f"domande in attesa: {motivo}")
+                    self.in_attesa = motivo
+                    self.misure["attese"] += 1
+                    return {"fatte": fatte, "aspetta": motivo}
+                self.in_attesa = None
+                esito = self.genera_domande(per_domande[0])
                 if esito in ("ceduta", "giu", "errore", "errore_server"):
                     return {"fatte": fatte, "aspetta": esito}
                 fatte += 1
@@ -1160,6 +1184,91 @@ class Lettore:
         self._registra(f"verifica {vid}: {n} carte {'in ombra' if modo == G.OMBRA else 'proposte'}"
                        f" da {len(arif)} argomenti ({s:.1f} s" + (f", avvisi {avv}" if avv else "")
                        + ")")
+        return "proposte"
+
+    def genera_domande(self, v: dict) -> str:
+        """Le domande delle prove di una verifica aperta (`Studio.verifiche_per_domande`, passo
+        8, #248): come le carte, una richiesta, il controllo del codice, le domande scritte
+        «proposte» (o «ombra»). Gli stessi esiti delle carte."""
+        from . import argomenti as A
+        from . import domande_genera as DG
+        from . import genera as G
+        m = self.misure["domande"]
+        vid = int(v["id"])
+        modo = v["_modo"]
+        firma = DG.firma(v["_argomenti"], v["_pagine"], modo)
+        rif = A.riferimenti(v["_pagine"])
+        arif = G.argomenti_rif(v["_argomenti"])
+        t0 = time.monotonic()
+        grezzi = None
+        try:
+            for prova in range(2):
+                r = self._chiedi_corpo(DG.corpo(self.modello, v, rif, arif))
+                m["token_in"] += int(r.get("prompt") or 0)
+                m["token_out"] += int(r.get("eval") or 0)
+                if not r.get("fine"):
+                    raise ErroreServer("stream senza fine")
+                self._errori_di_fila = 0
+                self._riprova_dopo = 0.0
+                self._risposte_ok += 1
+                if r.get("fine") != "length":
+                    grezzi = DG.leggi(r.get("content") or "")
+                    break
+                self._registra(f"verifica {vid}: domande in tondo fino a max_tokens"
+                               + (", le richiedo" if not prova else ""))
+        except Ceduta:
+            m["cedute"] += 1
+            self._registra(f"verifica {vid}: domande, ceduto il passo a un lavoro dell'agente")
+            return "ceduta"
+        except _Giu:
+            return "giu"
+        except ErroreServer as e:
+            self.misure["errori_server"] += 1
+            attesa = self._attendi_errore()
+            self._registra(f"verifica {vid}: domande, errore del server ({e}), riprovo fra "
+                           f"{attesa:.0f} s")
+            return "errore_server"
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("domande", vid, e, lambda: (
+                self.studio.proponi_domande(vid, firma, [], DG.ERRORE, modo)))
+        s = time.monotonic() - t0
+        try:
+            if grezzi is None:
+                proposte, esito = [], DG.ROTTO
+            else:
+                proposte, esito = DG.proposte(grezzi, rif, arif), DG.PROPOSTE
+            n = self.studio.proponi_domande(vid, firma, proposte, esito, modo)
+        except Exception as e:  # noqa: BLE001
+            return self._errore_generazione("domande", vid, e, lambda: (
+                self.studio.proponi_domande(vid, firma, [], DG.ERRORE, modo)))
+        if n is None:
+            m["cambiate"] += 1
+            self._registra(f"verifica {vid}: argomenti o pagine cambiati durante le domande, le "
+                           "richiedo")
+            return "cambiate"
+        m["generazioni"] += 1
+        m["secondi"] = round(m["secondi"] + s, 2)
+        if esito == DG.ROTTO:
+            m["rotte"] += 1
+            self._registra(f"verifica {vid}: domande illeggibili ({s:.1f} s)")
+            return "rotto"
+        m["domande"] += n
+        if modo == DG.OMBRA:
+            m["ombra"] += n
+        conta = {a: sum(a in d["avvisi"] for d in proposte) for a in DG.DA_DECIDERE}
+        for a, k in conta.items():
+            m[a] += k
+        for d in proposte:
+            m["tipi"][d["tipo"]] = m["tipi"].get(d["tipo"], 0) + 1
+        if not n:
+            m["vuote"] += 1
+        avv = ", ".join(f"{k} {a}" for a, k in conta.items() if k)
+        tipi = ", ".join(f"{t} {sum(d['tipo'] == t for d in proposte)}" for t in
+                         dict.fromkeys(d["tipo"] for d in proposte))
+        self._registra(f"verifica {vid}: {n} domande "
+                       f"{'in ombra' if modo == DG.OMBRA else 'proposte'} da {len(arif)} "
+                       f"argomenti ({s:.1f} s" + (f"; tipi {tipi}" if tipi else "")
+                       + (f"; avvisi {avv}" if avv else "") + ")")
         return "proposte"
 
     def _errore_generazione(self, cosa: str, vid: int, e: Exception, scrivi_errore) -> str:

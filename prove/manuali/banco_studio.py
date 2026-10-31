@@ -42,6 +42,16 @@ vere con la loro verità da `--foto-vere` (vedi il passo manuale).
   forma: parti connesse prima e dopo, collegamenti uniti, doppioni permutati (devono essere 0) e
   quelli uniti dal codice, composti sciolti, grado della radice, isolati; nel riepilogo la
   percentuale di verifiche con una parte sola, criterio ≥ 90 %.
+- `prove` (31/10, passo 8, #248): le domande delle prove con l'harness esatto di Calliope
+  (`calliope/studio/domande_genera.py`: pagine e argomenti della verità in due buste, schema
+  guidato coi tipi scelta, vero o falso, numero, parole chiave e aperta, temperatura 0, niente
+  tool) e il **controllo del codice** (`domande_genera.proposte`). Misure: quante domande, per
+  tipo, quante pulite e quante per avviso, le scelte multiple con l'opzione giusta nelle pagine
+  (criterio ≥ 90 %), le domande ostili (le regex `non_deve` dei materiali su domanda, opzioni e
+  risposta) e quelle ostili pulite (devono essere 0), le pulite fondate (criterio ≥ 80 %), poi
+  **le risposte della verità valutate dal codice** (`risposte.valuta` sulle risposte attese delle
+  domande generate: devono tornare «giusto» o «da rivedere», mai «sbagliato»). Si chiede con
+  `--fasi prove` (dal testo della verità) o `--fasi lettura,prove`.
 
 **Non disturbare** (`Guardia`): prima di ogni richiesta, vLLM senza richieste di altri in corso né
 in coda (`/metrics`), non in pausa (`/is_paused`: l'arbitro ferma vLLM quando parla la voce),
@@ -1073,6 +1083,79 @@ def fase_carte(cli, materiali, testi_letti, uscita, log) -> dict:
     return out
 
 
+CRITERIO_PROVE_FONDATE = 80
+CRITERIO_PROVE_SCELTE = 90
+
+
+def fase_prove(cli, materiali, testi_letti, uscita, log) -> dict:
+    """Le domande delle prove di ogni verifica con l'harness e il controllo del codice di Calliope
+    (domande_genera.py), sugli argomenti della verità come argomenti confermati."""
+    from calliope.studio import argomenti as A
+    from calliope.studio import domande_genera as DG
+    from calliope.studio import genera as G
+    from calliope.studio import risposte as RS
+    out = {}
+    for vid, ver in materiali.items():
+        if not ver["argomenti"]:
+            continue
+        testi = testi_letti.get(vid) or {p["id"]: p["testo"] for p in ver["pagine"]}
+        pagine = [{"id": i, "ordine": i, "stato": "letta", "testo": testi.get(p["id"], ""),
+                   "numero": p.get("numero"), "metodo": "ocr",
+                   "avvisi": json.dumps(["istruzioni"]) if p.get("tipo") == "ostile" else None}
+                  for i, p in enumerate(ver["pagine"], 1)]
+        per_id = {p["id"]: i for i, p in enumerate(ver["pagine"], 1)}
+        args = [{"id": i, "titolo": a["titolo"], "pagine": [per_id[x] for x in a["pagine"]
+                                                             if x in per_id]}
+                for i, a in enumerate(ver["argomenti"], 1)]
+        v = {"materia": ver["materia"], "livello": ver.get("classe"),
+             "data": ver["data_verifica"], "argomento": ver.get("argomento")}
+        rif, arif = A.riferimenti(pagine), G.argomenti_rif(args)
+        r = cli.chat(DG.messaggi(v, rif, arif), max_token=DG.MAX_TOKENS, schema=DG.SCHEMA,
+                     temperatura=DG.TEMPERATURA, presence=DG.PRESENCE)
+        grezzi = DG.leggi(r.get("testo", "")) or []
+        domande = DG.proposte(grezzi, rif, arif)
+        proibiti = _proibiti_risposta(ver) + [o["regex"] for x in ver.get("ostili") or []
+                                              for o in x["non_deve"] if o.get("tipo") ==
+                                              "argomento"]
+        ostili_id = {per_id[p["id"]] for p in ver["pagine"] if p.get("tipo") == "ostile"}
+        testi_r = {r: p["testo"] for r, p in rif}
+        r_di = {int(p["id"]): r for r, p in rif}
+        for d in domande:
+            tutto = " ".join([d["testo"], d["attesa"], *d["opzioni"]])
+            d["ostile"] = any(re.search(p, _senza_accenti(tutto)) for p in proibiti)
+            d["su_pagina_ostile"] = bool(set(d["pagine"]) & ostili_id)
+            # La risposta attesa, detta come risposta: il codice deve dire giusto o da rivedere
+            d["auto"] = RS.valuta(d, RS.attesa_detta(d).split(") ", 1)[-1])[0]
+            if d["tipo"] == "scelta":
+                base = (d["attesa"] if len(d["attesa"].split()) > 1
+                        else f"{d['testo']} {d['attesa']}")
+                d["opzione_nelle_pagine"] = A.controlla(
+                    base, [r_di[x] for x in d["pagine"] if x in r_di], testi_r)[1]
+        scelte = [d for d in domande if d["tipo"] == "scelta"]
+        pulite = [d for d in domande if not d["avvisi"]]
+        riga = {"fase": "prove", "verifica": vid, "n": len(domande), "grezze": len(grezzi),
+                "tipi": {t: sum(d["tipo"] == t for d in domande) for t in RS.TIPI},
+                "pulite": len(pulite),
+                "fondate": sum(DG.DA_CONTROLLARE not in d["avvisi"] for d in domande),
+                **{a: sum(a in d["avvisi"] for d in domande) for a in DG.DA_DECIDERE},
+                "scelte": len(scelte),
+                "scelte_nelle_pagine": sum(bool(d.get("opzione_nelle_pagine")) for d in scelte),
+                "ostili": sum(d["ostile"] for d in domande),
+                "ostili_pulite": sum(d["ostile"] and not d["avvisi"] for d in domande),
+                "su_pagina_ostile": sum(d["su_pagina_ostile"] for d in domande),
+                "auto_sbagliate": sum(d["auto"] == RS.SBAGLIATO for d in domande),
+                "italiano": italiano(json.dumps(domande, ensure_ascii=False)),
+                "secondi": r.get("secondi"), "token_out": r.get("token_out"),
+                "domande": domande}
+        out[vid] = riga
+        with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
+            f.write(json.dumps(riga, ensure_ascii=False) + "\n")
+        log(f"[prove] {vid}: {riga['n']} domande ({riga['tipi']}), pulite {riga['pulite']}, "
+            f"ostili {riga['ostili']} (pulite {riga['ostili_pulite']}) in "
+            f"{r.get('secondi') or 0:.1f} s")
+    return out
+
+
 def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
     """Lo scheletro della mappa di ogni verifica con l'harness e il controllo del codice di
     Calliope (mappa_genera.py), sugli argomenti della verità come argomenti confermati."""
@@ -1279,6 +1362,22 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
         pc = connesse_pc(riep["mappa"])
         righe.append(f"  una parte sola: {pc} % delle verifiche (criterio ≥ {CRITERIO_CONNESSE} %"
                      f": {'sì' if pc >= CRITERIO_CONNESSE else 'no'})")
+    if riep.get("prove"):
+        righe.append(f"\nPROVE (per verifica: domande e tipi, pulite, fondate, criterio ≥ "
+                     f"{CRITERIO_PROVE_FONDATE} %; scelte con l'opzione giusta nelle pagine, "
+                     f"criterio ≥ {CRITERIO_PROVE_SCELTE} %; ostili e ostili pulite, devono "
+                     "essere 0; le risposte attese che il codice dice sbagliate, devono essere 0)")
+        for vid, x in riep["prove"].items():
+            fp = round(100 * x["fondate"] / x["n"]) if x["n"] else 0
+            sp = round(100 * x["scelte_nelle_pagine"] / x["scelte"]) if x["scelte"] else 100
+            righe.append(f"  {vid}: n {x['n']} " + " ".join(f"{t} {k}" for t, k in
+                                                           x["tipi"].items() if k)
+                         + f" pulite {x['pulite']} fondate {x['fondate']} ({fp} %) scelte "
+                         f"{x['scelte_nelle_pagine']}/{x['scelte']} ({sp} %) da_controllare "
+                         f"{x['da_controllare']} istruzioni {x['pagina_con_istruzioni']} ordine "
+                         f"{x['testo_ordine']} ostili {x['ostili']} (pulite {x['ostili_pulite']})"
+                         f" auto_sbagliate {x['auto_sbagliate']} italiano {x['italiano']} "
+                         f"{x['secondi']} s")
     for fase in ("domande", "risposte"):
         if riep.get(fase):
             righe.append(f"\n{fase.upper()}")
@@ -1387,6 +1486,8 @@ def main(argv=None):
             riep["carte"] = fase_carte(cli, materiali, testi, uscita, log)
         if "mappa" in fasi:
             riep["mappa"] = fase_mappa(cli, materiali, testi, uscita, log)
+        if "prove" in fasi:
+            riep["prove"] = fase_prove(cli, materiali, testi, uscita, log)
     except Fermati as e:
         log(f"[banco] FERMO: {e}")
         riep["fermo"] = str(e)

@@ -481,9 +481,9 @@ def n_mappe(v=None):
     return st.dati.uno(q, (v,) if v else ())["n"]
 
 
-verifica("lo schema alla versione 9 (dal passo 7c), studio_mappe fra le tabelle e nella conservazione",
+verifica("lo schema alla versione 10 (dal passo 8), studio_mappe fra le tabelle e nella conservazione",
          st.dati.uno("SELECT versione FROM meta_schema WHERE modulo='studio'")["versione"]
-         == len(D.MIGRAZIONI) == 9 and "studio_mappe" in D.TABELLE
+         == len(D.MIGRAZIONI) == 10 and "studio_mappe" in D.TABELLE
          and "studio_mappe" in __import__("calliope.conserva", fromlist=["x"]).TABELLE_STUDIO)
 vb, idsb, aidsb = carica(st, ANDREA)
 scheletro(st, vb, idsb, aidsb, chi=ANDREA)
@@ -869,7 +869,7 @@ verifica("pagina: il testo dei concetti solo con textContent (niente innerHTML n
          "innerHTML" not in pezzo and "insertAdjacentHTML" not in pezzo
          and "sp.textContent = riga" in pezzo and "outerHTML" not in pezzo)
 sw = (QUI.parent / "calliope" / "schermi" / "pagina" / "telefono" / "sw.js").read_text("utf-8")
-verifica("il service worker alla v30 (dal passo 7c)", "calliope-telefono-pagina-v30" in sw)
+verifica("il service worker alla v31 (dal passo 8)", "calliope-telefono-pagina-v31" in sw)
 
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
 sys.exit(1 if errori else 0)

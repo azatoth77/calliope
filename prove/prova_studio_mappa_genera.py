@@ -78,7 +78,8 @@ GIRO = {"triple": TRIPLE["triple"][:7]}
 
 
 def prepara(cfg_kw=None, nome="g"):
-    kw = {"studio_mappa_genera": "ombra", "studio_carte_genera": "spenta", **(cfg_kw or {})}
+    kw = {"studio_mappa_genera": "ombra", "studio_carte_genera": "spenta",
+          "studio_domande_genera": "spenta", **(cfg_kw or {})}
     cfg = PA.cfg_nuova(nome, modo="attivo", studio_argomenti=False, **kw)
     st = PA.studio(cfg)
     vid, ids = PA.verifica_con_pagine(st)

@@ -30,7 +30,10 @@ sezione sotto) e la **generazione dello scheletro** dal lettore (seconda parte, 
 ombra di serie; sezione sotto). Dal 30/10 notte la **mappa libera** (7c, #328: da zero, confrontata
 dal codice a «Ho finito», gli indicatori del metodo per giro), lo **scheletro connesso** (doppioni,
 composti, radice, seconda passata per le isole) e **«Parliamone»** (`studio_mappa_consigli`, ombra di
-serie; sezione sotto). Lo Studio è di tutte le persone di casa; le parti dei tutori valgono
+serie; sezione sotto). Dal 31/10 le **prove** (8, #248): il tipo della prova vera (scritta o
+interrogazione «dal»), la verifica finta scritta e l'interrogazione simulata a voce, sempre tutte e
+due, con l'esito deciso dal codice e le domande dal lettore in ombra di serie (sezione sotto). Lo
+Studio è di tutte le persone di casa; le parti dei tutori valgono
 per i minori ([minori](minori.md)); gli ospiti mai.
 
 ## Moduli
@@ -46,6 +49,7 @@ per i minori ([minori](minori.md)); gli ospiti mai.
 | Mappa concettuale: lo scheletro (a mano; dal lettore con la seconda parte), la mia mappa con le caselle, a memoria, il controllo deterministico, i tentativi «mappa», il PDF (dal 30/10 sera, passo 7, #247; schema «studio» alla versione 8; `studio_mappa_nodi_max`) | SQLite (`studio_mappe`, concetti e collegamenti in JSON); fpdf2 (extra `documenti`) coi font di `documenti/render.py`; nel browser SVG scritto a mano | `calliope/studio/mappa.py` → `testo_normale`, `uguale`, `verbo_simile`, `disposizione`, `scegli_caselle`, `parole_da_mettere`, `copia`, `controlla`, `esito_tentativo`; `calliope/studio/mappe.py` → `Mappe` (in `Studio`): `scrivi_scheletro`, `nodo_mappa`, `collega`, `riempi`, `tieni_mappa`, `conferma_scheletro`, `inizia_mappa`, `rifai_mappa`, `controlla_mappa`, `carte_dagli_errori`, `riordina_mappa`, `vista_mappe`, `pdf_mappa`, `_conto_mappa`; `calliope/studio/mappa_pdf.py` → `render`; `calliope/tools/studio.py` → azione `mappa`; `calliope/schermi/server.py` → `POST /api/studio/mappa`; `calliope/schermi/pagina/studio.js` (la sezione «Mappa»); prove `prove/prova_studio_mappa.py`, `prove/prova_studio_mappa_pagina.py` |
 | Scheletro della mappa generato dalle pagine lette: le triple controllate dal codice, proposte da confermare (dal 30/10 sera, passo 7, seconda parte, #247; `studio_mappa_genera`, ombra di serie) | qwen3.6 su vLLM col client e la guardia del lettore, schema JSON guidato | `calliope/studio/mappa_genera.py` → `corpo`, `messaggi`, `firma`, `leggi`, `scheletro`, `modo`; `calliope/studio/lettura.py` → `Lettore.genera_mappa`; `calliope/studio/mappe.py` → `verifiche_per_mappa`, `proponi_mappa`; `prove/manuali/banco_studio.py` (fase «mappa»); prova `prove/prova_studio_mappa_genera.py` |
 | Mappa libera: da zero con lo scheletro nascosto, «Un indizio» e «Mostra», «Ho finito» col confronto del codice e i tentativi una volta per giro, gli indicatori del metodo per giro; scheletro connesso (doppioni, composti, radice, seconda passata per le isole); «Parliamone» (dal 30/10 notte, passo 7c, #328; schema «studio» alla versione 9; `studio_mappa_libera` attiva, `studio_mappa_consigli` ombra di serie) | SQLite (`studio_mappe` tipo «libera», `giri`, `visti`); per la seconda passata qwen3.6 col client e la guardia del lettore; per «Parliamone» il modello della voce, dati in busta | `calliope/studio/mappa.py` → `chiave_insieme`, `parti`, `componenti`, `radice`, `concetti_chiave`, `forma`, `voci_riferimento`, `confronta`, `indicatori`, `rispetto_a_prima`, `tentativo_libera`, `svelati`; `calliope/studio/mappa_genera.py` → `corpo_connessione`, `connetti`; `calliope/studio/mappe.py` → `inizia_libera`, `indizio_libera`, `mostra_concetto`, `finisci_libera`, `consigli_mappa`, `misura_consigli`; `calliope/tools/studio.py` → `studio_mappa_consigli`; `calliope/brain.py` → `_consigli_chiudi`, `_consigli_ombra`; prove `prove/prova_studio_mappa_libera.py`, `prove/prova_studio_mappa_libera_pagina.py` |
+| Prove: il tipo della prova vera e la finestra «dal», le domande (scelta multipla, vero o falso, numero con l'unità, parole chiave, aperta; anche le carte), la verifica finta scritta e l'interrogazione simulata a voce, l'esito del codice, «da rivedere» della persona o del tutore, la generazione delle domande dal lettore (dal 31/10, passo 8, #248; schema «studio» alla versione 10; `studio_domande_genera` ombra di serie) | SQLite (`studio_domande`, `studio_prove`); qwen3.6 col client e la guardia del lettore per la generazione; libreria standard per l'esito | `calliope/studio/risposte.py` → `prepara`, `valuta`, `attesa_detta`; `calliope/studio/unita.py` → `leggi`, `una_misura`, `confronta`; `calliope/studio/prove.py` → `Prove` (in `Studio`): `aggiungi_domanda`, `domande`, `conferma_domande`, `inizia_prova`, `rispondi_prova`, `consegna_prova`, `rivedi_voce`, `orale_inizia`, `orale_risposta`, `orale_basta`, `_chiudi_prove`, `_conto_prove`; `calliope/studio/domande_genera.py` → `corpo`, `proposte`, `firma`; `calliope/studio/lettura.py` → `Lettore.genera_domande`; `calliope/studio/servizio.py` → `conclusa`, `_fine`; `calliope/tools/studio.py` → `studio_interroga`, azioni `tipo`, `conclusa`, `prove`; `calliope/schermi/server.py` → `POST /api/studio/prova`; `calliope/schermi/pagina/studio.js` (la sezione «Prove»); prove `prove/prova_studio_prove.py`, `prove/prova_studio_domande_genera.py`, `prove/prova_studio_prove_pagina.py` |
 | Resoconto di una sessione e riepilogo di una verifica, proiezioni degli eventi delle sessioni, del piano, delle pagine, degli argomenti e delle misure (dal 30/10, passo 4b, #244; schema «studio» alla versione 4) | SQLite (`studio_eventi`); libreria standard, niente modello | `calliope/studio/resoconto.py` → `sessioni`, `frase_resoconto`, `frase_riepilogo`, `righe_riepilogo`, `riga_sessione`, `pagine_dette`; `calliope/studio/servizio.py` → `Studio.resoconto`, `Studio.riepilogo`, `_evento`; `calliope/tools/studio.py` → azioni `resoconto` e `riepilogo`, «fatto» col resoconto; `calliope/schermi/pagina/studio.js` («La preparazione», «Le sessioni»); prova `prove/prova_studio_resoconto.py` |
 | Lettura delle pagine: OCR con l'harness del banco, controlli del codice, PDF col testo senza modello, guardia della DGX (dal 30/10, passo 4.3, #282; `studio_lettura`, accesa di serie quando lo Studio c'è) | qwen3.6 su vLLM (il modello e l'indirizzo dell'agente, API OpenAI) con `ClienteOpenAI` avvolto in `ClienteCedevole`; pypdfium2 in un sottoprocesso; Pillow e numpy | `calliope/studio/lettura.py` → `Lettore`, `Guardia`, `leggi_segni`, `numero_di`, `dividi_immagine`, `testo_pdf`, `prepara`; `calliope/studio/servizio.py` → `Studio.avvia_lettura`, `Studio.lettura`, `Studio.testo_per_modello`; prova `prove/prova_studio_lettura.py` |
 
@@ -83,6 +87,298 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   per pagina dei numeri di pagina, nella sezione degli argomenti]*; (2) senza vLLM la pagina e la voce lo dicono con una
   frase («la lettura delle pagine qui non è disponibile: le leggo quando c'è il modello che
   vede»), non un «da leggere» muto.
+
+## Le prove: verifica finta e interrogazione simulata (31/10, issue #248, ramo `issue-248-studio-verifica-finta`)
+
+*Passo 8 dell'epic #251. Decisione [0035](../decisioni/0035-studio.md), punti 40 e 41. L'analisi è
+nel commento della #248. Viene dalla decisione di chi amministra del 30/10: il tipo della prova
+entra con questo passo, e la preparazione si misura **sempre con le due modalità**, scritta e
+orale, qualunque sia la prova vera.*
+
+**Il tipo della prova vera.** Si usano due colonne di `studio_verifiche`:
+- `prova`: «scritta» (di serie) o «interrogazione»;
+- `finestra`: con la finestra, la data è **«dal»**.
+
+La finestra dura `studio_finestra_giorni` (14). Il piano si calcola fino alla data, come per una
+scritta: bisogna essere pronti dal primo giorno. Dentro la finestra:
+- niente pagine nuove;
+- l'avviso `finestra` («si ripassa con le carte e le prove»);
+- i giorni che mancano a 0, mai negativi.
+
+Passata la fine, la verifica è «fatta». Prima la chiude «conclusa» (`Studio.conclusa`):
+- a voce, con `studio` e le azioni `tipo` e `conclusa`, oppure `crea` con `prova` e `finestra`;
+- dalla pagina, con «È un'interrogazione», «Da quella data in poi» e «L'ho fatta».
+
+Il riepilogo dice l'ultima prova di tutte e due le modalità; per un'interrogazione mette prima
+l'orale. Il tipo non esclude mai una modalità.
+
+**Le domande** (`studio_domande`), un dato chiunque le abbia scritte. I tipi:
+- scelta multipla (da 2 a 5 opzioni, una giusta);
+- vero o falso;
+- numero (con l'unità facoltativa);
+- parole chiave (da 1 a 5);
+- aperta (una risposta modello).
+
+Le scrivono la persona e il tutore dalla pagina («Scrivi una domanda»), oppure le propone il
+lettore (sotto). **Le carte attive** degli argomenti del piano valgono come domande: con la
+risposta chiusa le controlla il codice, altrimenti sono aperte. Così le prove servono subito,
+anche senza la generazione.
+
+**L'esito lo decide il codice** (`studio/risposte.py`, `studio/unita.py`). È deterministico:
+riconosce la forma, non il significato (principio 10).
+- *scelta*: la lettera («b», «la b», «la risposta è la b») o il testo di un'opzione, anche dentro
+  una frase corta. Un'altra opzione è «sbagliato». Una frase negata, due opzioni o niente sono «da
+  rivedere».
+- *vero o falso*: una forma chiusa detta per intero («vero», «sì, è vero», «falso», «no», «non è
+  vero»). «Vero, ma non sono sicuro…» è da rivedere.
+- *numero*: le cifre con la virgola o il punto, i numeri in lettere («due virgola cinque»,
+  «milleottocentosessantuno», «tre e mezzo»), l'unità per nome o simbolo. Le regole:
+  - nella stessa grandezza si converte («9 chilometri orari» vale «2,5 m/s»), con la tolleranza
+    dell'1 %;
+  - un intero atteso e detto intero, senza conversione, va detto esatto: 1493 non è 1492;
+  - un'altra grandezza è «sbagliato»;
+  - il numero giusto senza l'unità attesa è «indizio»;
+  - due numeri diversi («5 o 6») sono da rivedere.
+
+  `calliope/unita.py` era stato tolto col passo 4.0 (#279): qui c'è un lettore nuovo e piccolo,
+  solo per le risposte.
+- *parole chiave*: uguali, con la stessa radice di 5 lettere, o con una lettera di tolleranza da
+  7 lettere in su (mai sulla prima), non negate subito prima. Tutte valgono «giusto», almeno metà
+  «indizio». Meno di metà è **«da rivedere», mai «sbagliato»**, perché la trascrizione può
+  sbagliare un nome. Anche un elenco lungo di parole è da rivedere: con un elenco a caso si
+  prenderebbero le chiavi.
+- *carta*: la risposta chiusa della carta (`carte.risposta_giusta`) vale «giusto», altrimenti da
+  rivedere.
+- *aperta*: sempre da rivedere.
+- «non lo so» detto per intero è «sbagliato», con la fonte «persona»; niente è «vuota», e la vuota
+  non scrive tentativi.
+
+**Il modello propone e non decide.** Nell'orale `studio_interroga` prende `proposta` («giusta»,
+«parziale», «sbagliata»). Si salva sulla voce e nelle misure (proposte, e quante uguali a chi poi
+decide) e non scrive mai un tentativo. `registra_tentativo` resta com'è: la fonte «modello» è
+rifiutata. «Da rivedere» si decide dopo la consegna, una volta per voce, vedendo la risposta
+attesa:
+- dalla persona, con «Era giusta», «Quasi» o «No»: fonte «persona», con **peso dimezzato** nella
+  padronanza (`padronanza.PESO_AUTO` = 0,5, solo per verifica finta e interrogazione);
+- oppure dal tutore: fonte «tutore», peso pieno.
+
+**La verifica finta** (scritta, sullo schermo, `POST /api/studio/prova`). Il tempo è
+`studio_prova_minuti` (20); le domande sono `studio_prova_domande` (10), al più quelle che ci sono,
+almeno 3.
+- **Il mix per argomento**: in ombra è uniforme. Con la padronanza mostrata pesa 3 «da studiare»,
+  2 «quasi» o non misurata, 1 «la sai». I pesi si scrivono sempre nel registro come misura (conti,
+  mai titoli). Dentro un argomento vengono prima le domande usate meno.
+- La fa **solo la persona**. Il tutore la vede, vede la correzione e decide le voci da rivedere.
+- La vista aperta **non ha mai la risposta attesa né l'esito**: arrivano solo dopo «Consegna».
+- **Mentre una prova è aperta**, alla persona sono nascoste carte e domande di quella verifica:
+  elenco, ripasso, conti della home, carta in corso, `studio_carte` e «conferma le domande»; a
+  voce `studio_pagina_leggi` non legge le pagine (scritta o orale). Il tutore le vede. Il libro
+  di carta resta suo: è una prova a casa.
+- **Consegna**: il codice valuta le risposte. Poi scrive i tentativi «verifica_finta» (1,5) con la
+  fonte «codice» e il riepilogo per argomento: giuste, a metà, sbagliate, da rivedere, senza
+  risposta, il punteggio e il confronto con la prova di prima. Per ultima scrive la misura in
+  `studio_misure` («l'ultima prova» del piano). Il punteggio c'è solo se almeno metà delle voci
+  date è decisa dal codice o dal tutore.
+- Il riepilogo cita anche le mappe a memoria e libere controllate dopo l'inizio della prova. Non
+  le mescola nel punteggio: due controlli diversi non fanno un voto.
+
+**L'orale** (`studio_interroga`: classe «sicuro», fonte «foto», `non_fidato`, mai toccabile, come
+`studio_carte`). Le parti:
+- «inizia»: al più 5 domande;
+- «risposta»: valuta la frase detta (`ToolContext.user_text`) e nello **stesso risultato** dà la
+  correzione con la risposta attesa e la domanda dopo, così non ci sono giri in più;
+- «ripeti»;
+- «basta».
+
+Domande e risposte attese sono dati: in busta, e a risposta finita escono dalla storia
+(`brain.INTERROGA_TOLTA`). La risposta attesa arriva al modello solo dopo la valutazione. Una
+valutazione per domanda, mai nel turno in cui la domanda è stata fatta. Dopo 10 minuti senza
+risposte la prova si chiude «scaduta», con le sole voci già valutate. I tentativi sono
+«interrogazione» (1,2). Il riepilogo è una frase del codice: conti e argomenti per numero, al
+tutore in terza persona col nome.
+
+**Gli imbrogli chiusi** (dalle revisioni delle PR #326–#330):
+- *corse*: ogni azione legge e scrive dentro `self.dati.lock`, e lo stato passa da «aperta» una
+  volta sola (`UPDATE … AND stato = 'aperta'`). Una consegna doppia dà la stessa correzione,
+  senza tentativi nuovi; due chiamate nello stesso turno valutano una domanda sola.
+- *risposte viste prima*: niente attese nella vista aperta (pagina e stato della pagina); carte e
+  domande nascoste.
+- *strade laterali*: le risposte passano solo da `rispondi`, che rifiuta il tutore, una prova
+  chiusa o dopo il tempo. La prova deve essere della verifica della richiesta. Il tool non
+  ha un esito che il modello possa passare.
+- *la verifica che si chiude*: con «fatta» per data, «conclusa», «archivia», e prima che `imposta`
+  riapra una verifica fatta, le prove aperte si chiudono **davvero**, «annullate» e senza
+  tentativi (`Prove._chiudi_prove`). La chiusura virtuale di `_prova` resta come rete.
+
+**La generazione delle domande** (`studio/domande_genera.py`, `Lettore.genera_domande`). La fa
+lo stesso thread del lettore, con la sua guardia e il suo client, dopo carte e scheletro. Gli
+stessi punti delle carte:
+- pagine e argomenti in due buste;
+- schema guidato coi cinque tipi, temperatura 0, thinking spento, nessun tool;
+- la firma, che si distingue da quella delle carte;
+- l'errore nostro, che si riprova dopo un'ora e si ferma al terzo.
+
+Il controllo del codice:
+- la forma (`risposte.prepara`): una scelta senza l'opzione giusta, o un vero o falso
+  malformato, si scarta; un numero illeggibile o parole chiave assenti diventano una domanda
+  aperta;
+- le parole chiave che non stanno nelle pagine citate si tolgono;
+- la risposta fuori dalle pagine, o un argomento che non c'è, danno `da_controllare`;
+- le sole pagine con istruzioni danno `pagina_con_istruzioni`;
+- un ordine, un indirizzo o un annuncio nella domanda, nelle opzioni o nella risposta danno
+  `testo_ordine`.
+
+`studio_domande_genera` è **in ombra di serie**: le domande «ombra» non vanno mai alla persona
+né alle prove, e nel registro restano solo conti e tipi. Con «attiva» arrivano «proposte» e si
+confermano come le carte («Conferma le domande proposte» prende le pulite, le altre si tengono una
+per una).
+
+**Prima di «attiva»** (proposta: le soglie le decide chi amministra). La fase `prove` di
+`banco_studio.py` sulle tre verifiche di fantasia deve dare:
+- ≥ 80 % di domande fondate;
+- scelte multiple con l'opzione giusta nelle pagine ≥ 90 %;
+- nessuna domanda ostile pulita;
+- nessuna risposta attesa che il codice dica «sbagliata».
+
+Poi la rilettura a mano dell'ombra sulla DGX. Il banco non è stato lanciato qui:
+
+    V=~/.local/share/calliope/versioni/$(cat ~/.local/share/calliope/attuale)
+    PYTHONPATH=$V $V/.venv/bin/python prove/manuali/banco_studio.py \
+        --fasi prove --uscita /tmp/banco-studio/prove1
+
+*Da sapere*: con lo Studio acceso sulla DGX, all'aggiornamento il lettore comincia a generare le
+domande in ombra (richieste a vLLM a DGX libera, dopo carte e scheletro). Per non farlo,
+`studio_domande_genera: spenta` nel locale.
+
+**Dati.** Schema «studio» alla **versione 10**:
+- `studio_domande`;
+- `studio_prove`: le voci in JSON con la domanda copiata, così la correzione resta anche se la
+  domanda cambia dopo; poi la risposta, l'esito, chi l'ha deciso, la proposta del modello e il
+  tentativo;
+- su `studio_verifiche`: `prova`, `finestra`, `domande_firma`, `domande_esito`, `domande_del`.
+
+Le risposte della persona restano nella riga della prova, con la tenuta della verifica: 60
+giorni, «dimentica» (non le archiviate), `--svuota` e gli orfani. Nel registro vanno solo id,
+conti ed esiti. Lo stato d'animo non entra in niente di questo. Il service worker e
+`PAGINA_VERSIONE` sono alla v31; la vista «prove» va nei dati del turno.
+
+**Interruttori** (nella dataclass `Config`, col commento):
+- `studio_prova_domande` (10);
+- `studio_prova_minuti` (20);
+- `studio_finestra_giorni` (14);
+- `studio_domande_genera` (ombra).
+
+La verifica finta e l'orale vivono con lo Studio e non hanno un modello per l'esito; l'orale c'è
+solo con lo Studio attivo, come gli altri tool.
+
+**Prove** (tutte verdi il 31/10):
+- `prova_studio_prove.py` (a secco, ~10 s): le risposte coi contrari, le domande, la verifica
+  finta e gli imbrogli, la verifica che si chiude (quattro strade), il mix, la finestra, l'orale da
+  `studio_interroga`, la tenuta e lo schema, l'endpoint;
+- `prova_studio_domande_genera.py`: il vLLM finto e la fase del banco a secco;
+- `prova_studio_prove_pagina.py`: il browser, il telefono a 390 e 320 (anche al 125 %) e il PC;
+- in `prova_valore.py`, `prova_interroga` attraverso `Brain`:
+  - I1, domande ostili: «archivia» e «togli» non partono, la domanda esce dalla storia, e «sì,
+    archivia la verifica» non è un «vero»;
+  - I2: la proposta «sbagliata» del modello non cambia il «giusto» del codice, e la seconda
+    chiamata nello stesso turno non valuta la domanda dopo.
+
+La prova col modello sulla DGX resta a chi amministra: la voce che interroga, la trascrizione vera
+delle risposte e i tempi della prima frase.
+
+### 31/10: la revisione della PR #342
+
+I casi stanno nella sezione 10 di `prova_studio_prove.py`, nel vero o falso generato di
+`prova_studio_domande_genera.py` e nella pagina.
+
+1. **Le vuote contano.** Nella scritta valgono 0 nel punteggio; nell'orale le voci sono già le
+   sole domande fatte. Il punteggio e la misura «l'ultima prova» ci sono solo se almeno metà
+   delle domande ha una risposta, e la frase lo dice: «con meno di metà delle risposte la prova
+   non conta come misura». Le domande lasciate vuote si evitano nella prova dopo, se si può;
+   altrimenti vanno in fondo. *[storico fino a questa revisione: una risposta giusta su 5 dava
+   100 e scriveva la misura]*
+2. **Le risposte a cavallo sulle chiuse.** Più opzioni («a o b», «Colombo e Magellano»), più
+   numeri («1491 o 1492») o vero e falso insieme valgono «sbagliato». «Non lo so» vale
+   «sbagliato» anche sul vero o falso. Sulle chiuse (scelta, vero o falso, numero, carta) la
+   persona che rivede dà al più «indizio»: «Era giusta» non c'è, e il server lo riduce a
+   «indizio». Il «giusto» resta al codice o al tutore. Sulle parole chiave e sulle aperte resta
+   l'autovalutazione col peso 0,5.
+3. **I numeri.**
+   - Una cifra attaccata al simbolo vale: «125g», «0,125kg», «20m/s».
+   - «0.125» è sempre un decimale; le migliaia valgono solo con la prima cifra da 1 a 9
+     («1.492»).
+   - «zero virgola centoventicinque» si scrive con la virgola, cioè 0,125.
+   - «m / s» e, dopo un numero, «m s» diventano «m/s»; vale anche «metri/secondo».
+   - «mille quattrocento novantadue» detto staccato si somma.
+   - Il giorno di una data non conta come un secondo numero: «il 12 ottobre 1492» vale 1492.
+     «Nel 1492, 500 anni fa» invece vale «sbagliato» (due numeri).
+4. **L'orale dopo un riavvio.** La domanda chiesta è scritta anche nella voce della prova, col
+   turno e l'ora. Senza memoria, una domanda chiesta prima dell'avvio del servizio si valuta
+   alla risposta; una chiesta adesso aspetta il turno dopo.
+5. **Le lettere dette a voce** («bi», «la bi», «ci», «di», «e», «effe») valgono, ma solo come
+   forma chiusa per intero.
+
+Le minori:
+- l'orale valuta la frase di Whisper prima di «capito» (`ToolContext.user_text_stt`), non
+  quella riscritta dal modello;
+- **le mappe restano visibili durante una prova**, che è fatta a casa: lo scheletro non è una
+  risposta esatta. «Parliamone» però, con una prova aperta, non mette concetti in busta e
+  risponde «c'è una prova in corso»;
+- le domande generate: un «falso» resta `da_controllare`, perché il codice vede le parole, non
+  che l'affermazione è falsa; la scelta generata ha da 3 a 4 opzioni, le altre si scartano.
+
+### 31/10: la seconda revisione della PR #342
+
+La regola «più opzioni o più numeri = sbagliato» del punto 2 bocciava risposte giuste. *[storico
+fino a questa revisione: «Più opzioni […], più numeri («1491 o 1492») […] valgono
+«sbagliato»»]* Ora i casi della revisione stanno nella sezione 10 di `prova_studio_prove.py`.
+
+6. **Scelta multipla.** Vince l'opzione nominata esattamente: uguale alla risposta, o con tutte
+   le sue parole uguali e di fila, coi numeri confrontati come numeri. Una parola negata non vale
+   come nominata, anche con articoli o «è» di mezzo. Il confronto largo (radice e lettera di
+   tolleranza) vale solo se nessuna opzione è nominata così. Due o più opzioni simili danno «da
+   rivedere». È «sbagliato» solo quando più opzioni sono nominate esattamente, come in «a o b».
+   Così Austria e Australia, Costantinopoli e Costantino, i Germani e la Germania, e 1491, 1492 e
+   1493 restano distinti.
+7. **Numeri.** Un numero solo si confronta con l'atteso. Con più numeri:
+   - è «giusto» se, convertiti, valgono tutti l'atteso («20 m/s cioè 72 km/h»);
+   - è «giusto» se la somma delle misure della grandezza attesa vale l'atteso («1 metro e 50
+     centimetri»);
+   - conta solo la misura della grandezza attesa, se è una sola («60 km/h in 2 ore»);
+   - è «sbagliato» solo con alternative esplicite («X o Y», «X oppure Y») senza l'atteso;
+   - altrimenti è «da rivedere»: «1491 o 1492», «non 1491 ma 1492», «nel 1492, 500 anni fa».
+
+   L'imbroglio resta chiuso, perché chi studia dà al più «indizio» sulle domande chiuse. Le
+   frazioni «1/2» e «3/4» si leggono come numeri. Valgono anche «un mezzo», «un metro», «un'ora» e
+   il mezzo dopo l'unità («un metro e mezzo», «2 ore e mezza»).
+- «Vero» e «falso» insieme, con una negazione («vero, non è falso»), sono da rivedere; senza
+  negazione restano «sbagliato».
+- `ToolContext.user_text_stt` è dichiarato nel dataclass (`tools/spec.py`).
+
+### 31/10: la terza revisione della PR #342
+
+I casi di `esiti3.py` del revisore sono entrati nella sezione 10 di `prova_studio_prove.py`.
+
+8. **«X, no, Y».** Come negazione conta solo «non» subito prima della parola (articoli ed «è» si
+   saltano). Un «no» o un «anzi» fra due opzioni nominate esattamente dà «da rivedere»: «la a,
+   no, la c», «Austria no Australia», «a, anzi c», «1492 no 1493». *[storico per un commit:
+   «X, no, Y» dava X, cioè l'opzione abbandonata]* «Non X, Y» e «non è X, è Y» restano come
+   prima.
+9. **Le frazioni** si leggono anche prima di un'unità o di «di»: «1/2 kg», «3/4 di litro».
+10. **Le somme** valgono solo per le misure composte: lunghezza, massa o tempo, unità tutte
+    diverse e dalla più grande alla più piccola («1 km e 500 m», «1 metro e 5 centimetri»).
+    Velocità e temperatura non si sommano mai: «5 m/s e 15 m/s» e «20 °C e 30 °C» sono da
+    rivedere. Lo stesso numero ripetuto che non è l'atteso («1 kg, 1 kg e 1 kg») è da rivedere.
+11. **«Mezzo»** è un numero solo come risposta intera, prima di un'unità («mezzo chilo») o come
+    «e mezzo» dopo un numero o un'unità. «In mezzo al Mediterraneo, nel 1571» vale 1571.
+
+**Scelte prudenti di questa PR** (da confermare):
+- il tutore non fa la prova al posto del minore;
+- le vuote non scrivono tentativi;
+- «da rivedere» si decide una volta sola (il tutore non corregge l'autovalutazione);
+- le mappe non entrano nel punteggio;
+- durante una prova sono nascoste anche le carte scritte dalla persona;
+- lo scheletro della mappa, durante una prova, resta visibile: non è una risposta esatta.
 
 ## La mappa libera, lo scheletro connesso e «Parliamone» (30/10 notte, issue #328, ramo `issue-328-studio-mappa-libera`)
 

@@ -2223,6 +2223,24 @@ class Config:
     # essere 0). «attiva» la dice; «spenta»: il tool risponde che non è acceso. Si passa ad
     # «attiva» dopo la rilettura delle misure dell'ombra (registro dello Studio)
     studio_mappa_consigli: str = "ombra"
+    # Le prove dello Studio (31/10, passo 8, #248, calliope/studio/prove.py): la verifica finta
+    # scritta sullo schermo e l'interrogazione simulata a voce, sempre tutte e due qualunque sia la
+    # prova vera; l'esito lo decide il codice (scelta multipla, vero o falso, numero con l'unità,
+    # parole chiave), le risposte aperte la persona o il tutore, mai il modello. Domande per
+    # verifica finta (al più quelle che ci sono; l'orale ne fa 5) e il tempo in minuti
+    studio_prova_domande: int = 10
+    studio_prova_minuti: int = 20
+    # L'interrogazione «da una data» (passo 8): quanti giorni dura la finestra dopo la data; poi la
+    # verifica diventa fatta da sola (prima, «conclusa» a voce o dalla pagina)
+    studio_finestra_giorni: int = 14
+    # Le domande delle prove generate dalle pagine lette (passo 8, #248,
+    # calliope/studio/domande_genera.py): lo stesso thread della lettura, con la sua guardia, le
+    # chiede a qwen3.6 dal solo testo letto in busta, dopo carte e scheletro; il codice le
+    # controlla nella forma (una sola opzione giusta, un numero leggibile, le parole chiave nelle
+    # pagine). «ombra» le genera e le misura soltanto: nessuna va alla persona; «attiva» le dà
+    # «proposte», da confermare; «spenta» niente. Si passa ad «attiva» col banco delle domande
+    # (prove/manuali/banco_studio.py, fase «domande») e la rilettura delle domande in ombra
+    studio_domande_genera: str = "ombra"
 
     # Ricerca su internet (03/10, calliope/web/, docs/ricerche/2026-10-03-ricerca-web.md):
     # SearXNG sulla DGX (calliope motore searxng avvia) per l'attualità che la biblioteca non
@@ -3518,7 +3536,8 @@ SEZIONI: dict[str, list[str]] = {
                "studio_pagine_al_minuto", "studio_nitidezza_min", "studio_lettura",
                "studio_argomenti", "studio_padronanza", "studio_carte_genera",
                "studio_mappa_nodi_max", "studio_mappa_genera", "studio_mappa_libera",
-               "studio_mappa_consigli"],
+               "studio_mappa_consigli", "studio_prova_domande", "studio_prova_minuti",
+               "studio_finestra_giorni", "studio_domande_genera"],
     "memoria": ["memory_db", "memory_max_facts", "appuntamento_anticipo_min"],
     "conversazioni": ["conversazioni_enabled", "conversazioni_db",
                       "conversazioni_embedding", "conversazioni_embedding_url",
@@ -3879,6 +3898,8 @@ LIMITI: dict[str, tuple[float, float]] = {
     "studio_pdf_max_mb": (1.0, 200.0), "studio_pdf_max_pagine": (1, 500),
     "studio_pagine_max": (1, 1000), "studio_pagine_al_minuto": (1, 600),
     "studio_nitidezza_min": (0.0, 100_000.0), "studio_mappa_nodi_max": (4, 30),
+    "studio_prova_domande": (3, 40), "studio_prova_minuti": (2, 180),
+    "studio_finestra_giorni": (1, 90),
     "avvisi_data_dopo_min": (0.0, 1440.0), "avvisi_urgente_ore": (0.0, 720.0),
     "avvisi_contesto_ore": (0.0, 720.0),
     "avvisi_audio_anello_min": (0.0, 240.0), "avvisi_audio_anello_mb": (0.0, 512.0),
@@ -4126,6 +4147,9 @@ _MODI_NUOVI = {
     # La mappa libera e «Parliamone» (30/10, #328): il true è ambiguo, rifiutato
     "studio_mappa_libera": _modi("studio_mappa_libera", ("spenta", "attiva"), falso="spenta"),
     "studio_mappa_consigli": _modi("studio_mappa_consigli", ("spenta", "ombra", "attiva"),
+                                   falso="spenta"),
+    # Le domande generate (31/10, #248): come le carte generate
+    "studio_domande_genera": _modi("studio_domande_genera", ("spenta", "ombra", "attiva"),
                                    falso="spenta"),
     "agenti_arbitro": _modi("agenti_arbitro", ("auto", "sempre", "mai"),
                             sinonimi={"si": "sempre", "sì": "sempre", "no": "mai",

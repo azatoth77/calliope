@@ -14,7 +14,11 @@ del 27/10, decisione 0019): si cambiano qui, le prove le leggono da qui.
 - calo senza ripasso: la cifra × 0,5^(giorni dall'ultimo tentativo / `CALO_GIORNI`);
 - misurata solo con almeno `MIN_TENTATIVI` tentativi in almeno `MIN_GIORNI` giorni: prima «non
   ancora misurata», che non è una lacuna;
-- a parole: «la sai» (≥ `LA_SAI`), «quasi» (≥ `QUASI`), «da studiare».
+- a parole: «la sai» (≥ `LA_SAI`), «quasi» (≥ `QUASI`), «da studiare»;
+- dal passo 8 (31/10, #248): un esito della verifica finta o dell'interrogazione deciso dalla
+  persona stessa («Era giusta / Quasi / No» su una risposta da rivedere, dopo aver visto quella
+  attesa) pesa `PESO_AUTO` (la metà): l'esito di una prova lo decide di solito il codice, e
+  giudicarsi da soli conta meno. Le carte restano come sono (lì l'autovalutazione è la regola).
 
 Lo stato d'animo e l'autovalutazione «da 1 a 5» non entrano: non sono su disco (0035 punto 27).
 """
@@ -29,6 +33,9 @@ TIPI = {"carta": 1.0, "esercizio": 1.0, "mappa": 0.7, "interrogazione": 1.2,
 # Chi ha deciso l'esito: la persona (una carta «la sapevo / no»), il codice (una risposta
 # controllata), il tutore. Mai il modello da solo (spunto di Dario del 28/10)
 FONTI = ("persona", "codice", "tutore")
+# L'autovalutazione su una voce di una prova (passo 8, #248): metà del peso
+PESO_AUTO = 0.5
+TIPI_PROVA = ("verifica_finta", "interrogazione")
 MEZZA_VITA_GIORNI = 7.0
 CALO_GIORNI = 21.0
 MIN_TENTATIVI, MIN_GIORNI = 3, 2
@@ -73,7 +80,9 @@ def calcola(tentativi: list[dict], oggi) -> dict:
             g = _d(t["giorno"])
         except (TypeError, ValueError):
             continue
-        per.setdefault(int(t["argomento"]), []).append((g, t["tipo"], t["esito"]))
+        w = TIPI[t["tipo"]] * (PESO_AUTO if t["tipo"] in TIPI_PROVA
+                               and t.get("fonte") == "persona" else 1.0)
+        per.setdefault(int(t["argomento"]), []).append((g, w, t["esito"]))
     out = {}
     for aid, righe in per.items():
         giorni = {g for g, _t, _e in righe}
@@ -81,8 +90,8 @@ def calcola(tentativi: list[dict], oggi) -> dict:
         valore = None
         if len(righe) >= MIN_TENTATIVI and len(giorni) >= MIN_GIORNI:
             num = den = 0.0
-            for g, tipo, esito in righe:
-                w = TIPI[tipo] * 0.5 ** (max(0, (oggi - g).days) / MEZZA_VITA_GIORNI)
+            for g, peso, esito in righe:
+                w = peso * 0.5 ** (max(0, (oggi - g).days) / MEZZA_VITA_GIORNI)
                 num += w * ESITI[esito]
                 den += w
             v = 100.0 * num / den if den else 0.0

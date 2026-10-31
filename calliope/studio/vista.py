@@ -22,8 +22,9 @@ import time
 VISTA_S = 600.0
 # «carte» (30/10, passo 6, #246): il ripasso o l'elenco delle carte di una verifica
 # «mappa» (30/10, passo 7, #247): la mappa concettuale di una verifica (mai il testo dei concetti)
+# «prove» (31/10, passo 8, #248): la verifica finta e le domande (mai il testo delle domande)
 TIPI = ("home", "piano", "argomenti", "pagine", "pagina", "sessione",
-        "carte", "mappa")
+        "carte", "mappa", "prove")
 
 
 def valida(dati) -> dict | None:
