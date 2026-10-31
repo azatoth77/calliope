@@ -451,8 +451,16 @@ class Prove:
                                f"arg. {a} {q}" for a, q in mix["quote"].items() if q)
                            + "; pesato dalla padronanza: " + ", ".join(
                                f"arg. {a} {q}" for a, q in mix["pesate"].items() if q) + ")")
-            return self._vista(self._riga_prova(self.dati.uno(
+            out = self._vista(self._riga_prova(self.dati.uno(
                 "SELECT * FROM studio_prove WHERE id = ?", (pid,))), chi, v)
+        # Fuori dal lock: chi aspetta la partenza di una prova (le attività della libreria aperte
+        # dalla persona si chiudono, revisione della PR #366, nota 1)
+        for gancio in list(getattr(self, "ganci_prova", ()) or ()):
+            try:
+                gancio(str(v["persona"]))
+            except Exception as ex:  # noqa: BLE001 — un gancio non ferma la prova
+                self.log(f"   [STUDIO] gancio della prova: {type(ex).__name__}")
+        return out
 
     def _prova(self, chi, pid) -> tuple[dict, dict]:
         from .servizio import NonTrovata

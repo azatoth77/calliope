@@ -1,0 +1,33 @@
+{
+  "nome": "libreria_moto",
+  "titolo": "Moto rettilineo uniforme",
+  "cosa_fa": {"verbo": "propone", "oggetto": "lo spazio percorso a velocità costante"},
+  "input": {"type": "object", "properties": {}, "required": []},
+  "permessi": {},
+  "scheda": {"tipo": "gioco", "file": ["logica.js"], "giocatori": {"min": 1, "max": 1},
+             "salva": false, "azioni": [],
+             "macchina": {
+               "anchio": false,
+               "inizio": "domanda",
+               "fasi": {
+                 "domanda": {"pagina": "scelte", "turni": false, "verso": ["verifica", "esito", "fine"],
+                             "comandi": {
+                               "risposta": {"forme": ["la risposta {n}", "risposta {n}", "la {n}"],
+                                            "n": {"valori": {"a": ["a", "prima"], "b": ["b", "bi", "seconda"],
+                                                             "c": ["c", "ci", "terza"], "d": ["d", "quarta"]}},
+                                            "etichetta": "{n}"},
+                               "finito": {"forme": ["ho finito", "smetto qui"],
+                                          "etichetta": "Ho finito"}}},
+                 "verifica": {"pagina": "messaggio", "turni": false, "verso": ["domanda", "esito", "fine"],
+                              "comandi": {
+                                "riprova": {"forme": ["riprovo", "ci riprovo"],
+                                            "etichetta": "Riprovo"},
+                                "prossima": {"forme": ["prossima", "la prossima"],
+                                             "etichetta": "Prossima"},
+                                "finito": {"forme": ["ho finito", "smetto qui"],
+                                           "etichetta": "Ho finito"}}}
+               }
+             }},
+  "livello": "familiare",
+  "limiti": {"tempo_s": 5, "memoria_mb": 128}
+}

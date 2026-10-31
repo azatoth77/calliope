@@ -101,6 +101,10 @@ ARGOMENTI: dict[str, dict[str, str]] = {
     # «Parliamone» (30/10, passo 7c, #328): una lettura (E0); la verifica è un bersaglio come
     # per `studio`, la materia un contenuto
     "studio_mappa_consigli": {"verifica": B, "materia": C},
+    # Le attività della libreria (31/10, #297): una lettura (E0) come aprire un gioco puro;
+    # l'attività la sceglie il codice fra i titoli della libreria (una scelta), la verifica è
+    # un bersaglio come per `studio`
+    "studio_attivita": {"attivita": S, "verifica": B, "materia": C},
     "ricorda": {"fatto": C, "per_tutti": Z, "nascita": C},
     "dimentica": {"fatto": B},
     "pc_volume": {"azione": Z, "valore": S},

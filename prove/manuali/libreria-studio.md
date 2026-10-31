@@ -74,3 +74,33 @@ dell'epic), con queste domande:
 
 Quando è rivisto, `revisione` prende la data della revisione. Un contenuto corretto dopo si rivede
 di nuovo e cambia la data.
+
+## Una mini-app (31/10, #297, parte 2)
+
+Una mini-app è un gioco della macchina a stati (area [giochi](../../docs/aree/giochi.md)) in
+`calliope/studio/libreria/miniapp/<cartella>/` (`manifesto.json` col nome `libreria_<cartella>`,
+`logica.js` con `GIOCO` e `DATI`, `gioco.test.js`) più la sua scheda della libreria
+`contenuti/<materia>/<id>-app.json` (`tipo: miniapp`, `tipo_app`, `estensione`, `schede`,
+`comandi`). Da far scrivere a Claude con l'esempio di `miniapp/atomo/` e queste regole:
+- un gioco puro per un giocatore: niente permessi, azioni, dati salvati, tela, `Math.random`;
+- ogni numero o fatto mostrato viene da `DATI` (o è calcolato dalla logica da lì), e `DATI` si
+  esporta con `module.exports` dentro `if (typeof module !== "undefined")`;
+- i tre tipi: da esplorare; con il quiz (un punto per risposta giusta, il perché nell'esito);
+  percorso guidato (previsione, poi la verifica col conto o il perché, un secondo tentativo con un
+  aiuto, poi la soluzione; 2 punti al primo tentativo, 1 al secondo);
+- ogni stato ha un'uscita verso la fine («ho finito»), le pagine stanno nel palco, le forme a voce
+  sono brevi e non usano quelle di Calliope (inizia, avanti, ancora, anch'io).
+
+Provarla:
+
+```
+.venv\Scripts\python.exe -m prove prova_studio_miniapp.py prova_studio_libreria_pagina.py
+```
+
+`prova_studio_miniapp.py` gira i test e la prova di fumo di ogni mini-app e la **verità**: per una
+mini-app nuova si aggiunge a `prove/verita_miniapp.mjs` ciò che mostra (dati e frasi) e a
+`prova_studio_miniapp.py` i conti o la tabella che lo ricontrollano, scritti a parte. Poi aprirla
+sul telefono: «Calliope, apri l'attività …», o «Apri» nella sezione «Dalla libreria».
+
+Rivederla come una scheda, e in più: si capisce cosa fare senza spiegazioni? Il secondo tentativo
+aiuta davvero? Le risposte sbagliate proposte sono errori tipici e non trabocchetti?

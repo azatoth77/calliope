@@ -40,7 +40,8 @@ cieca in ombra, il giudizio del tutore a peso pieno, «Da guardare tu», e le fr
 del turno del minore con una cornice del codice (sezione sotto). Dal 31/10 la **libreria** (#297,
 prima parte): schede e mazzi di carte scritti con Claude e rivisti, scelti dal codice dagli
 argomenti della verifica, «Dalla libreria» nella home e la lettura `libreria` a voce (sezione
-sotto). Dal 31/10 i **premi** (#296): la
+sotto); dal 31/10 anche le **mini-app** (#297, seconda parte: otto giochi della macchina a stati,
+aperti con `studio_attivita`). Dal 31/10 i **premi** (#296): la
 serie di giorni di studio, le stelle e i duelli fra persone di casa, calcolati dal codice dalla
 pratica vera, con la regola per i minori (sezione sotto). Lo
 Studio è di tutte le persone di casa; le parti dei tutori valgono
@@ -110,6 +111,64 @@ per i minori ([minori](minori.md)); gli ospiti mai.
   (storia, «Magellano») resta un collegamento debole «da controllare» e il criterio «una parte sola
   ≥ 90 %» non si raggiunge; il prompt nuovo della seconda passata e i codici al posto dei concetti
   sono da rimisurare col banco vero.
+
+## Le mini-app della libreria (31/10, issue #297, parte 2, ramo `issue-297-miniapp`)
+
+Seconda parte della #297 (decisione 0035 punto 47). Otto mini-app per la prima superiore, tecnico
+tecnologico, Chimica, materiali e biotecnologie, due per materia, nei tre tipi:
+
+| Materia | Mini-app (cartella) | Tipo | Scheda | Cosa |
+|---|---|---|---|---|
+| Chimica | Costruisci l'atomo (`atomo`) | esplora | l'atomo | un protone in più o in meno: elemento, isotopo più comune, neutroni, elettroni per livello (Z da 1 a 20) |
+| Chimica | Bilancia la reazione (`bilancia`) | percorso | reazioni | quattro reazioni con un coefficiente da prevedere, la verifica con gli atomi contati, il secondo tentativo con l'aiuto |
+| Fisica | Affonda o galleggia? (`densita`) | quiz | densità | sette materiali con m, V e d = m : V, poi cinque domande |
+| Fisica | Moto rettilineo uniforme (`moto`) | percorso | moto | quattro passi s = v × t, con km/h → m/s e minuti → secondi od ore |
+| Informatica | Accendi i bit (`bit`) | esplora | il binario | otto bit da accendere, il numero e la somma dei pesi |
+| Informatica | Binario e decimale (`binario`) | quiz | il binario | esempi passo passo con le divisioni per 2, poi sei domande col perché delle risposte sbagliate |
+| Biologia | Dentro la cellula (`cellula`) | quiz | la cellula | otto strutture con la funzione e le cellule dove ci sono, poi sei domande |
+| Biologia | Il globulo rosso e l'osmosi (`osmosi`) | percorso | la membrana | NaCl allo 0,9, 0,6 e 3 % e acqua distillata: previsione, verifica, secondo tentativo |
+
+- **Formato e caricamento** (`libreria/miniapp.py`): manifesto `libreria_<cartella>` validato come
+  un'estensione, gioco puro con la macchina, un giocatore, niente dati salvati; l'analisi statica
+  del JavaScript; l'impronta dei file; i `comandi` della scheda della libreria devono essere forme
+  della macchina (senza cifre: «coefficiente 2» resta solo nella macchina). Il titolo di un
+  manifesto non ha «?» (lo dice la scheda della libreria).
+- **Aprirle** (`Giochi.avvia(..., file=…)`): il riquadro dai byte della libreria, mai
+  dall'archivio delle estensioni; il tool `studio_attivita` a voce («fammi giocare con i bit»: la
+  scelta la fa il codice sui titoli e sulle chiavi delle schede) e il tocco «Apri» della sezione
+  «Dalla libreria» e della scheda. Con una prova aperta no. Per un minore vale il tempo dei giochi.
+- **Pagina**: «Apri» manda il tocco `studio_attivita`; dalla pagina dello Studio il gioco va in
+  Le mie cose › Giochi (sezioni.js apre la pagina del gioco anche dentro la stessa sezione: prima
+  si apriva solo da un'altra sezione e restava nascosto dietro lo Studio). Pagina v37.
+- **Contenuto**: scritte con Claude (tre agenti in parallelo sullo stesso brief, poi riviste). Il
+  passo ipotonico è allo 0,6 % e non allo 0,3 %: l'emolisi comincia intorno allo 0,45–0,5 % di
+  NaCl, e allo 0,3 % è già quasi completa (*[storico fino alla revisione della PR #366: «allo
+  0,3 % l'emolisi comincia già»]*).
+- **Revisione della PR #366** (31/10):
+  - una prova aperta su un'altra verifica della persona ferma anche il tocco su una verifica
+    libera, e una prova che parte chiude le attività aperte (`Studio.ganci_prova` →
+    `Giochi.ferma_libreria`, legati all'avvio da `main._lega_studio_giochi`);
+  - decisione di chi amministra: le mini-app sono studio, **non contano nel tempo dei giochi**
+    (`Partita.libreria`, messo solo da `studio_attivita`); gli orari del minore valgono, e al
+    battito un'attività aperta prima del riposo si chiude con la nota;
+  - il prefisso `libreria_` è riservato in `manifesto.valida`, e le partite della libreria non
+    vanno nel registro dell'archivio delle estensioni;
+  - contenuti: dentro il globulo «la concentrazione di soluti equivale a NaCl allo 0,9 %», «di
+    soluti» e la crenatura al 3 %; «gomma da cancellare»; nell'aiuto della bilancia «il
+    coefficiente 1 non si scrive»; i pedici (H₂O) sullo schermo e il testo semplice nell'esito;
+    il mitocondrio «produce l'ATP dagli zuccheri»;
+  - giocabilità: «Gioco anch'io» nascosto nelle mini-app (`"anchio": false` nella macchina, nuovo
+    e obbligatorio per le mini-app: negli altri giochi per uno serve a legare voce e nome); nelle scelte a, b, c anche «bi», «ci», «prima», «seconda», «terza»
+    (binario, cellula, moto, che ha anche «quarta»); in bilancia tolta la forma nuda «{n}», un
+    numero detto da solo nella finestra senza nome muoveva il gioco (restano «coefficiente {n}»,
+    «il {n}», «metto {n}»); la mini-app a 320 col testo al 125 % nella prova della pagina.
+- **Prove**: `prova_studio_miniapp.py` (la serie, il caricamento coi contrari, test e prova di
+  fumo di ognuna col motore vero, la verità di ciò che mostrano con `verita_miniapp.mjs`,
+  `studio_attivita` a voce e dal tocco, attraverso Brain), `prova_studio_libreria_pagina.py`
+  («Apri» dal telefono: il gioco nel riquadro, il motore che gira, la pagina nel palco).
+- **Da sapere**: *[storico fino alla revisione della PR #366: «la preparazione di un gioco per uno
+  dice «Inizia» e «Gioco anch'io»»; ora solo «Inizia»]*; la misura del palco sul telefono vero è solo della pagina
+  aperta, quella delle altre la fa la prova di fumo.
 
 ## La libreria: schede e carte preparate, scelte dal codice (31/10, issue #297, ramo `issue-297-libreria`)
 
