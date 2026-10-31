@@ -55,6 +55,9 @@ class ToolContext:
     # La frase detta da chi parla in questo turno (la imposta Brain): ai tool serve quando
     # il modello riformula il parametro e perde un dettaglio («spiegamelo in modo semplice»)
     user_text: str = ""
+    # La frase di Whisper prima di «capito» (31/10, revisione della PR #342): l'orale dello
+    # Studio valuta questa, non quella riscritta dal modello; None fuori da Brain
+    user_text_stt: str | None = None
     # Regole deterministiche scattate in questo turno (correzioni degli argomenti, «tutti»,
     # riscritture della casa…): Brain le azzera a ogni risposta e le passa al registro dei
     # turni. Vedi note_rule.

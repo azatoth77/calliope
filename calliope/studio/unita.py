@@ -176,6 +176,14 @@ def _in_cifre(t: str) -> str:
     t = re.sub(r"(\d+) virgola ((?:\d+ )*\d+)",
                lambda m: m.group(1) + "," + m.group(2).replace(" ", ""), t)
     t = re.sub(r"\bmeno (\d)", r"-\1", t)
+    # Seconda revisione della PR #342: «un mezzo», «mezzo» da solo (non «e mezzo»), le frazioni
+    # «1/2», «3/4» come numeri, «un metro», «un'ora» come 1 con l'unità
+    t = re.sub(r"\bun mezzo\b", "0,5", t)
+    t = re.sub(r"(?<!\be )\bmezz[oa]\b", "0,5", t)
+    t = re.sub(r"(?<![\d,.])\b(\d+)\s*/\s*([1-9]\d*)\b(?!\s*[a-z])",
+               lambda m: f"{int(m.group(1)) / int(m.group(2)):g}".replace(".", ","), t)
+    t = re.sub(r"\bun[a]? (?=(?:metr|chil|litr|gramm|or[ae]\b|minut|second|centimetr|"
+               r"millimetr|mol|grad|newton|joule|watt)[a-z]*\b)", "1 ", t)
     return t
 
 
@@ -200,8 +208,13 @@ def leggi(testo) -> list[tuple[float, str | None]]:
         dopo = t[m.end():]
         if re.match(r"\s+e\s+mezz[oa]\b", dopo) or re.match(r"\s+e\s+0\.5\b", dopo):
             v += 0.5
-        u = next((c for s, _e, c in unita if s >= m.end()
-                  and re.fullmatch(r"[\s,]*(?:e\s+mezz[oa]\s*)?", t[m.end():s])), None)
+        span = next(((s, e_, c) for s, e_, c in unita if s >= m.end()
+                     and re.fullmatch(r"[\s,]*(?:e\s+mezz[oa]\s*)?", t[m.end():s])), None)
+        u = span[2] if span else None
+        # «un metro e mezzo», «2 ore e mezza»: il mezzo dopo l'unità (seconda revisione PR #342)
+        if span and re.match(r"\s+e\s+mezz[oa]\b", t[span[1]:]) and not re.match(
+                r"\s+e\s+mezz[oa]\b", dopo):
+            v += 0.5
         out.append((v, u))
     return out
 
@@ -221,6 +234,15 @@ def numeri_detti(testo) -> list[tuple[float, str | None]]:
         if altri:
             return altri
     return nn
+
+
+def alternative(testo) -> list[tuple[float, str | None]]:
+    """I numeri di una risposta con alternative esplicite («1491 o 1492», «12 oppure 13»);
+    [] senza alternative."""
+    t = _in_cifre(_semplice(testo))
+    if re.search(r"\d[^\d]{0,25}?\b(?:o|oppure)\b\s*(?:forse\s+)?(?:il\s+|nel\s+)?-?\d", t):
+        return leggi(testo)
+    return []
 
 
 def una_misura(testo) -> tuple[float, str | None] | None:

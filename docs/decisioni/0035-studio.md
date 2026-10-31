@@ -508,9 +508,12 @@ dell'eco della stanza.
       tentativi, ma nella scritta valgono 0 nel punteggio. La misura «l'ultima prova» c'è solo se
       almeno metà delle domande ha una risposta e metà delle date è decisa dal codice o dal tutore
       (revisione della PR #342).
-    - Sulle domande chiuse (scelta, vero o falso, numero, carta) più opzioni o più numeri nella
-      stessa risposta valgono «sbagliato», e la persona che rivede dà al più «indizio»: il
-      «giusto» resta al codice o al tutore (revisione della PR #342).
+    - Sulle domande chiuse (scelta, vero o falso, numero, carta) la persona che rivede dà al più
+      «indizio»: il «giusto» resta al codice o al tutore (revisione della PR #342). È «sbagliato»
+      solo una risposta con più opzioni nominate esattamente («a o b») o con alternative
+      esplicite senza l'atteso («1490 o 1491»). Più numeri che valgono tutti l'atteso, o
+      sommati lo valgono, sono «giusto»; gli altri casi sono «da rivedere» (seconda revisione della
+      PR #342). *[storico per un commit: più opzioni o più numeri valevano sempre «sbagliato»]*
     - La prova la fa **solo la persona**. La vista aperta **non ha mai le risposte attese né
       l'esito**. Mentre è aperta, carte e domande della verifica sono nascoste alla persona,
       e `studio_pagina_leggi` non legge le pagine. Tutto dentro il lock, e lo stato cambia una

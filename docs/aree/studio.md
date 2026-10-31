@@ -327,6 +327,34 @@ Le minori:
 - le domande generate: un «falso» resta `da_controllare`, perché il codice vede le parole, non
   che l'affermazione è falsa; la scelta generata ha da 3 a 4 opzioni, le altre si scartano.
 
+### 31/10: la seconda revisione della PR #342
+
+La regola «più opzioni o più numeri = sbagliato» del punto 2 bocciava risposte giuste. *[storico
+fino a questa revisione: «Più opzioni […], più numeri («1491 o 1492») […] valgono
+«sbagliato»»]* Ora i casi della revisione stanno nella sezione 10 di `prova_studio_prove.py`.
+
+6. **Scelta multipla.** Vince l'opzione nominata esattamente: uguale alla risposta, o con tutte
+   le sue parole uguali e di fila, coi numeri confrontati come numeri. Una parola negata non vale
+   come nominata, anche con articoli o «è» di mezzo. Il confronto largo (radice e lettera di
+   tolleranza) vale solo se nessuna opzione è nominata così. Due o più opzioni simili danno «da
+   rivedere». È «sbagliato» solo quando più opzioni sono nominate esattamente, come in «a o b».
+   Così Austria e Australia, Costantinopoli e Costantino, i Germani e la Germania, e 1491, 1492 e
+   1493 restano distinti.
+7. **Numeri.** Un numero solo si confronta con l'atteso. Con più numeri:
+   - è «giusto» se, convertiti, valgono tutti l'atteso («20 m/s cioè 72 km/h»);
+   - è «giusto» se la somma delle misure della grandezza attesa vale l'atteso («1 metro e 50
+     centimetri»);
+   - conta solo la misura della grandezza attesa, se è una sola («60 km/h in 2 ore»);
+   - è «sbagliato» solo con alternative esplicite («X o Y», «X oppure Y») senza l'atteso;
+   - altrimenti è «da rivedere»: «1491 o 1492», «non 1491 ma 1492», «nel 1492, 500 anni fa».
+
+   L'imbroglio resta chiuso, perché chi studia dà al più «indizio» sulle domande chiuse. Le
+   frazioni «1/2» e «3/4» si leggono come numeri. Valgono anche «un mezzo», «un metro», «un'ora» e
+   il mezzo dopo l'unità («un metro e mezzo», «2 ore e mezza»).
+- «Vero» e «falso» insieme, con una negazione («vero, non è falso»), sono da rivedere; senza
+  negazione restano «sbagliato».
+- `ToolContext.user_text_stt` è dichiarato nel dataclass (`tools/spec.py`).
+
 **Scelte prudenti di questa PR** (da confermare):
 - il tutore non fa la prova al posto del minore;
 - le vuote non scrivono tentativi;

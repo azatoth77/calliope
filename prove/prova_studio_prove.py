@@ -720,15 +720,66 @@ GIUSTI = [(S_, x) for x in ("b", "la b", "La B.", "bi", "la bi", "B, Cristoforo 
 sbagliati = [(d["attesa"], x, RS.valuta(d, x)) for d, x in GIUSTI if RS.valuta(d, x)[0] != "giusto"]
 verifica("la tabella del revisore: tutte giuste (cifra attaccata al simbolo, «0.125», virgola "
          "detta, «m / s», migliaia staccate, il giorno della data)", not sbagliati, sbagliati)
-verifica("…e i contrari: «a o b», «1492 o 1493», «20 metri», «nel 1492, 500 anni fa»",
-         RS.valuta(S_, "a o b")[0] == "sbagliato" and RS.valuta(N_ANNO, "1492 o 1493")[0]
+verifica("…e i contrari: «a o b», «1490 o 1491», «20 metri»; «1492 o 1493» e «nel 1492, 500 "
+         "anni fa» da rivedere (seconda revisione)",
+         RS.valuta(S_, "a o b")[0] == "sbagliato" and RS.valuta(N_ANNO, "1490 o 1491")[0]
          == "sbagliato" and RS.valuta(N_VEL, "20 metri")[0] == "sbagliato"
-         and RS.valuta(N_ANNO, "nel 1492, 500 anni fa")[0] == "sbagliato"
+         and RS.valuta(N_ANNO, "1492 o 1493")[0] == "da_rivedere"
+         and RS.valuta(N_ANNO, "nel 1492, 500 anni fa")[0] == "da_rivedere"
          and RS.valuta(N_VEL, "20")[0] == "indizio")
 verifica("unità: «0.125» decimale, «1.492» migliaia, «zero virgola centoventicinque»",
          U.una_misura("0.125 kg") == (0.125, "kg") and U.una_misura("1.492") == (1492.0, None)
          and U.una_misura("zero virgola centoventicinque") == (0.125, None)
          and U.una_misura("125g") == (125.0, "g"))
+# La seconda revisione della PR #342: le opzioni con la stessa radice e più numeri giusti
+SC = [(RS.prepara("scelta", "Dove?", "b", ["Austria", "Australia", "Argentina"]), "Australia",
+       "giusto"),
+      (RS.prepara("scelta", "Dove?", "b", ["Austria", "Australia", "Argentina"]), "Austria",
+       "sbagliato"),
+      (RS.prepara("scelta", "Quale?", "a", ["Costantinopoli", "Costantino", "Roma"]),
+       "Costantinopoli", "giusto"),
+      (RS.prepara("scelta", "Quale?", "a", ["Costantinopoli", "Costantino", "Roma"]),
+       "Costantino", "sbagliato"),
+      (RS.prepara("scelta", "Anno?", "b", ["1491", "1492", "1493"]), "1492", "giusto"),
+      (RS.prepara("scelta", "Anno?", "b", ["1491", "1492", "1493"]), "nel 1492", "giusto"),
+      (RS.prepara("scelta", "Anno?", "b", ["1491", "1492", "1493"]), "la b, il 1492", "giusto"),
+      (RS.prepara("scelta", "Chi?", "a", ["I Germani", "I Romani", "La Germania"]), "i Germani",
+       "giusto"),
+      (RS.prepara("scelta", "Chi?", "a", ["I Germani", "I Romani", "La Germania"]), "Germani",
+       "giusto"),
+      (RS.prepara("scelta", "Dove?", "a", ["Spagna e Portogallo", "Francia", "Inghilterra"]),
+       "Spagna e Portogallo", "giusto"),
+      (S_, "Colombo e non Magellano", "da_rivedere"), (S_, "a o b", "sbagliato"),
+      (S_, "b e basta", "giusto")]
+male = [(d["opzioni"], r, RS.valuta(d, r)[0]) for d, r, e in SC if RS.valuta(d, r)[0] != e]
+verifica("scelte con la stessa radice (Austria/Australia, Costantinopoli/Costantino, anni): "
+         "l'opzione nominata esattamente vince", not male, male)
+NN = [("1492", x, "giusto") for x in ("il dodici ottobre 1492", "millequattrocento novantadue",
+                                      "1492, cioè nel quindicesimo secolo",
+                                      "l'Italia si unì nel 1492 il 17 marzo")] +     [("1492", x, "da_rivedere") for x in ("non 1491 ma 1492", "1491 o 1492", "1492 o 1493",
+                                          "nel 1492, 500 anni fa")] +     [("1492", "1490 o 1491", "sbagliato"), ("1492", "nel 1400", "sbagliato"),
+     ("20 m/s", "20 m/s cioè 72 km/h", "giusto"),
+     ("20 m/s", "20 m/s, ovvero 20 metri al secondo", "giusto"),
+     ("0,5", "1/2", "giusto"), ("0,5", "un mezzo", "giusto"), ("0,75", "3/4", "giusto"),
+     ("1,5 m", "un metro e mezzo", "giusto"), ("1,5 m", "1 metro e 50 centimetri", "giusto"),
+     ("1,5 m", "1,5 metri, cioè 150 centimetri", "giusto"), ("100 °C", "100°C", "giusto"),
+     ("5 N", "5 newton, cioè 5 N", "giusto"), ("60 km/h", "60 km/h in 2 ore", "giusto"),
+     ("3600 s", "un'ora, cioè 3600 secondi", "giusto"), ("2 h", "2 ore e 30 minuti",
+                                                          "da_rivedere"),
+     ("2,5 h", "2 ore e mezza", "giusto"), ("12", "12 o 13", "da_rivedere")]
+male = [(a, r, RS.valuta(RS.prepara("numero", "q?", a), r)[0]) for a, r, e in NN
+        if RS.valuta(RS.prepara("numero", "q?", a), r)[0] != e]
+verifica("più numeri: tutti l'atteso o sommati «giusto», alternative senza l'atteso "
+         "«sbagliato», il resto «da rivedere»; le frazioni come numeri", not male, male)
+VF_ = RS.prepara("vero_falso", "x", "vero")
+verifica("vero e falso con una negazione («vero, non è falso») da rivedere; senza, sbagliato",
+         RS.valuta(VF_, "vero, non è falso")[0] == "da_rivedere"
+         and RS.valuta(VF_, "è vero, non falso")[0] == "da_rivedere"
+         and RS.valuta(VF_, "boh vero o falso")[0] == "sbagliato")
+import dataclasses  # noqa: E402
+verifica("ToolContext dichiara user_text_stt",
+         any(f.name == "user_text_stt" and f.default is None
+             for f in dataclasses.fields(ToolContext)))
 ORA[0] = datetime.datetime(2026, 10, 29, 16, 0)
 s6 = studio(cfg_nuova("rev342.db"))
 v6, b1, b2, _d = carica(s6)
@@ -744,7 +795,7 @@ q2 = s6.inizia_prova(LEO, v6)
 verifica("le vuote della prova prima in fondo, la risposta data prima (se non si può evitare)",
          q2["voci"][0]["testo"] == num["testo"], [x["testo"] for x in q2["voci"]])
 for x in q2["voci"]:
-    s6.rispondi_prova(LEO, q2["id"], x["n"], {"scelta": "a o b", "numero": "1491 o 1492",
+    s6.rispondi_prova(LEO, q2["id"], x["n"], {"scelta": "a o b", "numero": "1490 o 1491",
                                               "vero_falso": "boh vero o falso"}.get(
         x["tipo"], "1492" if x["tipo"] == "numero" else "a"))
 c7 = s6.consegna_prova(LEO, q2["id"])

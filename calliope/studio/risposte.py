@@ -207,22 +207,51 @@ def _scelta(d: dict, risposta: str) -> str:
         if lett not in LETTERE[:len(ops)]:
             return DA_RIVEDERE                       # una lettera che non c'è («f» con 3 opzioni)
         return GIUSTO if LETTERE.index(lett) == giusta else SBAGLIATO
-    # Le opzioni nominate: le lettere sole dentro la frase («a o b»; «e» no, è una congiunzione)
-    # e i testi delle opzioni detti di fila
-    prese = {LETTERE.index(w) for w in ps if len(w) == 1 and w != "e"
-             and w in LETTERE[:len(ops)]}
+    negata = any(w in C._NEGAZIONI for w in ps)
     pr = parole(risposta)
+    # Seconda revisione della PR #342: prima le opzioni nominate **esattamente** (la lettera sola
+    # dentro la frase, «e» no perché è una congiunzione; l'opzione uguale alla risposta; le sue
+    # parole tutte uguali e di fila, i numeri come numeri), non negate subito prima. Il confronto
+    # largo (radici, una lettera di tolleranza) solo se nessuna opzione è nominata così:
+    # Austria/Australia, Costantinopoli/Costantino, 1491/1492 restano distinte
+    esatte = {LETTERE.index(w) for k, w in enumerate(ps) if len(w) == 1 and w != "e"
+              and w in LETTERE[:len(ops)] and not _negata(ps, k)}
+    esatte |= {i for i, o in enumerate(ops) if _uguale_opzione(o, risposta)}
     if len(pr) <= 12:
-        prese |= {i for i, o in enumerate(ops) if parole(o) and _trova(parole(o), pr)}
-    prese |= {i for i, o in enumerate(ops) if _uguale_opzione(o, risposta)}
-    if any(w in C._NEGAZIONI for w in ps):
+        esatte |= {i for i, o in enumerate(ops) if parole(o) and _di_fila(parole(o), pr)}
+    if esatte:
+        if len(esatte) > 1:
+            # Più opzioni nominate esattamente («a o b»): «sbagliato»; con una negazione di
+            # mezzo («Colombo e non Magellano») la decide chi rivede
+            return DA_RIVEDERE if negata else SBAGLIATO
+        e = GIUSTO if esatte == {giusta} else SBAGLIATO
+        return DA_RIVEDERE if negata and e == SBAGLIATO else e
+    if negata:
         # Negata («non è la a»): la decide la persona (al più «indizio») o il tutore
         return DA_RIVEDERE
-    if len(prese) > 1:
-        return SBAGLIATO
-    if len(prese) != 1:
-        return DA_RIVEDERE
-    return GIUSTO if prese == {giusta} else SBAGLIATO
+    simili = set()
+    if len(pr) <= 12:
+        simili = {i for i, o in enumerate(ops) if parole(o) and _trova(parole(o), pr)}
+    if len(simili) != 1:
+        return DA_RIVEDERE                 # niente, o più opzioni solo per somiglianza
+    return GIUSTO if simili == {giusta} else SBAGLIATO
+
+
+def _di_fila(chiave: list[str], ps: list[str]) -> bool:
+    """Le parole dell'opzione tutte uguali e di fila nella frase, non negate subito prima."""
+    n = len(chiave)
+    return any(ps[i:i + n] == chiave and not _negata(ps, i) for i in range(len(ps) - n + 1))
+
+
+_TRA = frozenset(("la", "il", "lo", "l", "i", "gli", "le", "e", "era", "proprio"))
+
+
+def _negata(ps: list[str], k: int) -> bool:
+    """La parola k è negata: «non» prima, saltando articoli ed «è» («non è la a»)."""
+    j = k - 1
+    while j >= 0 and ps[j] in _TRA:
+        j -= 1
+    return j >= 0 and ps[j] in C._NEGAZIONI
 
 
 def _vero_falso(d: dict, risposta: str) -> str:
@@ -230,23 +259,43 @@ def _vero_falso(d: dict, risposta: str) -> str:
     k = " ".join(ps)
     detto = "vero" if k in _VERO else "falso" if k in _FALSO else None
     if detto is None:
-        # Vero e falso nella stessa risposta («boh, vero o falso»): «sbagliato» (PR #342, 2)
-        if {"vero", "vera"} & set(ps) and {"falso", "falsa"} & set(ps):
+        # Vero e falso nella stessa risposta («boh, vero o falso»): «sbagliato» (PR #342, 2);
+        # con una negazione («vero, non è falso») la decide chi rivede (seconda revisione)
+        if ({"vero", "vera"} & set(ps) and {"falso", "falsa"} & set(ps)
+                and not any(w in C._NEGAZIONI for w in ps)):
             return SBAGLIATO
         return DA_RIVEDERE
     return GIUSTO if detto == d["attesa"] else SBAGLIATO
 
 
 def _numero(d: dict, risposta: str) -> str:
-    detta = U.una_misura(risposta)
+    """Seconda revisione della PR #342: un numero solo si confronta; più numeri sono «giusto»
+    se, convertiti, valgono tutti l'atteso («20 m/s cioè 72 km/h») o se le misure della stessa
+    grandezza sommate lo valgono («1 metro e 50 centimetri»); «sbagliato» solo con alternative
+    esplicite («X o Y») fra cui non c'è l'atteso; altrimenti «da rivedere» (chi rivede una
+    domanda chiusa dà al più «indizio»)."""
     attesa = U.una_misura(d["attesa"])
-    if detta is None and attesa is not None and len(
-            {round(v, 9) for v, _u in U.numeri_detti(risposta)}) > 1:
-        # Più numeri nella stessa risposta («1491 o 1492»): «sbagliato» (PR #342, punto 2)
-        return SBAGLIATO
-    if detta is None or attesa is None:
+    nn = U.numeri_detti(risposta)
+    if attesa is None or not nn:
         return DA_RIVEDERE
-    return U.confronta(detta, attesa)
+    if len({round(v, 9) for v, _u in nn}) == 1:
+        return U.confronta(next(((v, u) for v, u in nn if u), nn[0]), attesa)
+    ua = attesa[1]
+    # Con l'unità attesa contano le misure della sua grandezza («60 km/h in 2 ore»)
+    stesse = [(v, u) for v, u in nn if u and ua and U.UNITA[u][0] == U.UNITA[ua][0]]
+    if len(stesse) == 1:
+        return U.confronta(stesse[0], attesa)
+    gruppo = stesse or nn
+    if all(U.confronta(x, attesa) == GIUSTO for x in gruppo):
+        return GIUSTO
+    if stesse and ua:
+        somma = sum(v * U.UNITA[u][1] for v, u in stesse) / U.UNITA[ua][1]
+        if U.confronta((somma, ua), attesa) == GIUSTO:
+            return GIUSTO
+    alt = U.alternative(risposta)
+    if alt and not any(U.confronta(x, attesa) in (GIUSTO, INDIZIO) for x in alt):
+        return SBAGLIATO
+    return DA_RIVEDERE
 
 
 # Una risposta con tante parole in più delle chiavi non si conta (un elenco a caso le prende)
