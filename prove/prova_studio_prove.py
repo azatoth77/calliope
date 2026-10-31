@@ -848,8 +848,12 @@ verifica("un'opzione dentro un'altra (#349): l'opzione uguale alla risposta vinc
          "altro ordine da rivedere", not male, male)
 # La revisione della PR #350: con delle formule fra le opzioni il confronto tiene gli operatori
 # (le opzioni del banco del 31/10 07:02); le parole negate non contano per «l'altro ordine»
-SC7 = [(EQ, "x - 3x = 32", "sbagliato"), (EQ, "x × 3x = 32", "sbagliato"),
-       (EQ, "x · 3x = 32", "sbagliato"), (EQ, "3x + x = 32", "da_rivedere"),
+# Una formula che non è nessuna opzione: da rivedere, mai giusta né sbagliata dal codice (seconda
+# revisione della PR #350); un'altra opzione resta sbagliata
+SC7 = [(EQ, "x - 3x = 32", "da_rivedere"), (EQ, "x × 3x = 32", "da_rivedere"),
+       (EQ, "x · 3x = 32", "da_rivedere"), (EQ, "3x + x = 32", "da_rivedere"),
+       (EQ, "4x = 32", "da_rivedere"), (EQ, "x = 8", "da_rivedere"),
+       (EQ, "3x = 32", "sbagliato"), (EQ, "3x - x = 32", "sbagliato"),
        (EQ, "x+3x=32", "giusto"), (EQ, "la risposta è x + 3x = 32", "giusto"),
        (EQ, "non 3x = 32 ma x + 3x = 32", "giusto"), (EQ, "x + 3x = 32, non 3x = 32", "giusto"),
        (EQD, "è 3x = 32 e non x + 3x = 32", "giusto"), (EQD, "direi 3x = 32", "giusto"),
@@ -861,8 +865,8 @@ SC7 += [(B3, "3x - x = 32", "giusto"), (B3, "3x + x = 32", "da_rivedere"),
         (B3, "x + 3x = 32", "sbagliato")]
 male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC7 if RS.valuta(d, r)[0] != e]
 verifica("formule fra le opzioni: gli operatori contano («x - 3x = 32» e «x × 3x = 32» non sono "
-         "«x + 3x = 32», «3x + x = 32» non è «3x - x = 32»); gli stessi pezzi in un altro ordine da "
-         "rivedere; le parole negate fuori dall'«altro ordine» (revisione della PR #350)",
+         "«x + 3x = 32»); una formula che non è un'opzione («4x = 32», «x = 8») da rivedere, "
+         "un'altra opzione sbagliata; le parole negate fuori dall'«altro ordine» (PR #350)",
          not male, male)
 ok_op, uguali = [], None
 for ops in (["2x + 4", "2x - 4", "2x", "4"], ["x < 5", "x > 5", "x = 5"],

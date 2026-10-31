@@ -154,6 +154,10 @@ _OPERATORE = re.compile(r"[=+\-−–×·⋅*/÷<>≤≥≠^]")
 _RELAZIONE = re.compile(r"[=<>≤≥≠]")
 
 
+# Gli operatori fra i pezzi di `argomenti._pezzi`
+_OPERATORI_PEZZI = frozenset("+-=<>/×≤≥≠")
+
+
 def _formula(testo) -> bool:
     return bool(_OPERATORE.search(str(testo or "")))
 
@@ -346,11 +350,12 @@ def _scelta(d: dict, risposta: str) -> str:
         # Negata («non è la a»): la decide la persona (al più «indizio») o il tutore
         return DA_RIVEDERE
     if formule and _RELAZIONE.search(str(risposta or "")):
-        # Una formula che non è nessuna opzione: con gli stessi pezzi di un'opzione in un altro
-        # ordine («3x + x = 32» per «x + 3x = 32») la decide chi rivede; un'altra formula («x -
-        # 3x = 32», «x × 3x = 32») è sbagliata (revisione della PR #350)
-        sp = sorted(pt)
-        return DA_RIVEDERE if any(sorted(_pezzi(o)) == sp for o in ops) else SBAGLIATO
+        # Una formula che non è nessuna opzione la decide sempre chi rivede: il codice non sa
+        # se è equivalente a quella giusta («4x = 32», «x = 8», «3x + x = 32» per «x + 3x =
+        # 32») né se è un errore («x - 3x = 32»). Una formula uguale a un'opzione è già stata
+        # giudicata sopra, e se è un'altra opzione resta «sbagliato» (seconda revisione della
+        # PR #350)
+        return DA_RIVEDERE
     simili = set()
     if len(pr) <= 12:
         simili = {i for i, o in enumerate(ops) if parole(o) and _trova(parole(o), pr)}
@@ -369,8 +374,13 @@ def _nominate(ops: list[str], pr: list[str], tok=None, negate: bool = False) -> 
         n = len(ch)
         if not n:
             continue
+        # A pezzi (formule): un'opzione con un operatore subito prima o subito dopo è un pezzo
+        # di un'altra espressione, non nominata («3x = 32» dentro «x - 3x = 32»: seconda
+        # revisione della PR #350)
         p = [(k, k + n) for k in range(len(pr) - n + 1)
-             if pr[k:k + n] == ch and (negate or not _negata(pr, k))]
+             if pr[k:k + n] == ch and (negate or not _negata(pr, k))
+             and not (tok is _pezzi and ((k and pr[k - 1] in _OPERATORI_PEZZI)
+                                         or (k + n < len(pr) and pr[k + n] in _OPERATORI_PEZZI)))]
         if p:
             posti[i] = p
     out = set()

@@ -136,8 +136,9 @@ matematica 22 → **23/28 (82 %)**.
 = 32» valevano l'opzione «x + 3x = 32» e prendevano «giusto» (prima erano «sbagliato» solo per caso).
 Ora, se fra le opzioni c'è una formula (un operatore), l'opzione intera, le opzioni nominate e la
 frase si leggono coi pezzi di `argomenti._pezzi`, operatori compresi; una formula che non è nessuna
-opzione è «sbagliata», salvo gli stessi pezzi di un'opzione in un altro ordine («3x + x = 32»): «da
-rivedere». `prepara` non rifiuta più come «uguali» le opzioni diverse solo per l'operatore o il
+opzione è «da rivedere» (dalla seconda revisione: il codice non sa decidere l'equivalenza, «4x =
+32» e «x = 8» per «x + 3x = 32»; *[storico fino alla seconda revisione: «sbagliata, salvo gli
+stessi pezzi in un altro ordine»]*); una formula uguale a un'altra opzione resta «sbagliata». `prepara` non rifiuta più come «uguali» le opzioni diverse solo per l'operatore o il
 verso («2x + 4» e «2x - 4», «x < 5» e «x > 5»): col vLLM finto sulle uscite delle 07:02 una domanda
 di matematica in più (30), fondate 23/29 (79 %). Nella regola «stesse parole in altro ordine» le
 parole negate subito prima e le opzioni nominate negate non contano («Spagna, non Portogallo» →
