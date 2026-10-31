@@ -311,8 +311,9 @@ def vietati(es: dict) -> dict:
 
 
 # Le parole che da sole dicono che la frase parla dell'esercizio, oltre a quelle del problema
+# (terza revisione della PR #367: anche «giusto», «faceva», «viene»: «Viene due.», «Faceva 12.»)
 _DELL_ESERCIZIO = frozenset({"risultato", "soluzione", "risposta", "esercizio", "problema",
-                             "passo", "conto", "calcolo"})
+                             "passo", "conto", "calcolo", "giusto", "giusta", "faceva", "viene"})
 # Parole lunghe che non dicono l'argomento (domande, tempo, quantità)
 _VUOTE = frozenset({"quanto", "quanti", "quante", "quanta", "questo", "questa", "questi",
                     "queste", "quello", "quella", "quelli", "quelle", "perche", "allora",
@@ -333,13 +334,29 @@ def _radici(testo: str) -> set:
     return out
 
 
+# Una lettera sola fuori da una parola («x», «3x», «y =»): l'incognita del problema; non gli
+# articoli, le congiunzioni e le elisioni dell'italiano («a», «e», «l'», «c'è»)
+_LETTERA = re.compile(r"(?<![^\W\d_])([^\W\d_])(?![^\W\d_'’])")
+_NON_INCOGNITE = frozenset("aeioèàùòìlcd")
+
+
+def _incognite(testo: str) -> set:
+    return {c.lower() for c in _LETTERA.findall(str(testo or ""))} - _NON_INCOGNITE
+
+
 def parla_del_problema(v: dict, frase: str) -> bool:
     """La frase parla dell'esercizio: una parola del testo del problema o della domanda del
-    passo, o una parola come «risultato» o «soluzione» (seconda revisione della PR #367)."""
+    passo, una parola come «risultato», «soluzione», «viene» (seconda e terza revisione della PR
+    #367), o l'incognita del testo («x vale 5»)."""
+    if not frase:
+        return False
+    problema = (v.get("testo") or "") + " " + (v.get("domanda") or "")
+    if _incognite(frase) & _incognite(problema):
+        return True
     fr = _radici(frase)
     if not fr:
         return False
-    tutte = _radici((v.get("testo") or "") + " " + (v.get("domanda") or ""))
+    tutte = _radici(problema)
     tutte |= {w[:-1] if w[-1] in "aeiou" else w for w in _DELL_ESERCIZIO}
     return bool(fr & tutte)
 
@@ -367,7 +384,10 @@ def svela(v: dict | None, frase: str, solo_risultato: bool = False) -> bool:
     frase = _POSIZIONE.sub(" ", str(frase))
     # Un intero piccolo senza unità conta solo se la frase parla del problema, o se l'esercizio
     # è stato toccato da poco (seconda revisione della PR #367: «alle 2», «2 gradi»)
-    contesto = bool(v.get("recente", True)) or parla_del_problema(v, frase)
+    # (terza revisione: anche la frase della persona di questo turno, «detto»: a «quanto faceva
+    # x nell'equazione?» la risposta «Fa cinque.» non ha bisogno delle parole del problema)
+    contesto = (bool(v.get("recente", True)) or parla_del_problema(v, frase)
+                or parla_del_problema(v, v.get("detto") or ""))
     if _dice_risultato(v.get("risultato") or "", frase, v.get("testo") or "", contesto):
         return True
     if solo_risultato:

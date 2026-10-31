@@ -574,6 +574,7 @@ st.passo_esercizio(LEO, eid8)
 mezzora = (datetime.datetime.now() - datetime.timedelta(minutes=30)).isoformat(timespec="seconds")
 st.dati.scrivi("UPDATE studio_esercizi SET modificato = ? WHERE persona = 'l1' AND stato IN "
                "('in_corso', 'pausa')", (mezzora,))
+ctx3.user_text = "mettimi il latte nella lista e il dentista nei promemoria"
 v8 = st.vietati_di("l1")
 verifica("il «2» in corso, toccato mezz'ora fa: «alle 2», «2 gradi», l'ora e la partita passano; "
          "«2 litri di latte» nella lista e «alle 2» nel promemoria pure",
@@ -587,6 +588,30 @@ verifica("…ma con le parole del problema o del passo, o «la soluzione», il �
          and EG.svela(v8, "Le soluzioni sono due."))
 verifica("…e il risultato con l'unità si ferma sempre (anche mezz'ora dopo)",
          EG.svela(v8, "Il perimetro è 28 cm.") and EG.svela(v8, "La velocità è 60 km/h."))
+# Terza revisione: la frase della persona di questo turno, «viene», «faceva», «giusto», l'incognita
+ctx3.user_text = "quanto faceva x nell'equazione?"
+v8d = E.vietati_per_ctx(ctx3)
+verifica("terza revisione: mezz'ora dopo, a «quanto faceva x nell'equazione?» anche «Fa due.», "
+         "«Sono 2.» e «Due.» si fermano (la frase della persona parla del problema)",
+         all(EG.svela(v8d, f) for f in ("Fa due.", "Sono 2.", "Due.")))
+ctx3.user_text = "che ore sono?"
+v8o = E.vietati_per_ctx(ctx3)
+verifica("…«Viene due.», «x vale 2.», «Il numero giusto è 2.», «Faceva 2.» si fermano anche "
+         "senza la domanda sul problema",
+         all(EG.svela(v8o, f) for f in ("Viene due.", "x vale 2.", "Il numero giusto è 2.",
+                                        "Faceva 2.")))
+verifica("contrario: Leo che chiede l'ora, «Sono le 2 e 10.» e «alle 2» restano liberi",
+         not EG.svela(v8o, "Sono le 2 e 10.") and not EG.svela(v8o, "Domani alle 2 c'è la riunione."))
+for nome_, c_ in (("l'ospite", PT.ctx_di(st, None)), ("l'adulto", PT.ctx_di(st, ANDREA))):
+    c_.user_text = "quanto faceva x nell'equazione? e a che ora è la riunione?"
+    verifica(f"contrario: {nome_}, anche parlando di un'equazione, «alle 2» resta libero",
+             not EG.svela(E.vietati_per_ctx(c_), "La riunione è alle 2.")
+             and E.guardia_argomenti("promemoria_imposta", {"testo": "riunione alle 2"}, c_) is None)
+verifica("terza revisione: «lavoro_affida» di Leo con la soluzione negli argomenti è fermato (un "
+         "minore con gli agenti lo può chiamare)",
+         E.guardia_argomenti("lavoro_affida", {"compito": "scrivi che la velocità del treno è 60 "
+                                                          "km/h"}, ctx3) is not None)
+ctx3.user_text = "segnati la soluzione"
 st.dati.scrivi("UPDATE studio_esercizi SET modificato = ? WHERE id = ?", (D.adesso(), eid8))
 verifica("il «2» toccato adesso (la conversazione è sull'esercizio): anche «sono 2» si ferma",
          EG.svela(st.vietati_di("l1"), "Sono 2."))

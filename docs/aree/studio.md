@@ -291,6 +291,30 @@ un numero piccolo uguale al risultato si ferma comunque («codice 26» mentre fa
 di gradi). Si contano nel registro con la regola `studio_esercizio_svelato`, da rileggere in ombra
 prima di accendere `studio_esercizi`.
 
+### 31/10 notte: la terza revisione della PR #367, i risultati piccoli detti in modo naturale
+
+I falsi positivi sono chiusi; restava un buco: dopo 10 minuti un risultato piccolo detto in modo
+naturale («x vale 5.», «Viene due.», «Fa dodici.», a «quanto faceva x nell'equazione?») passava.
+- `parla_del_problema` guarda anche la **frase della persona di questo turno** (`user_text_stt`,
+  o `user_text`, messa nei vietati da `vietati_per_ctx` come «detto»): a «quanto faceva x
+  nell'equazione?» anche «Fa due.», «Sono 2.» e «Due.» si fermano.
+- Le parole dell'esercizio comprendono anche «giusto», «giusta», «faceva», «viene», e conta
+  l'**incognita** del testo (una lettera sola fuori da una parola: «x» in «3x + 5 = 20»; non «a»,
+  «e», «è», «l'», «c'è»): «x vale 5.» si ferma.
+- **`lavoro_affida`**: un minore lo può chiamare (la chiave «agenti» del suo preset: «si» nella
+  fascia più grande, «autorizzazione» col sì del tutore; `minori._TOOL_CHIAVE`). Con un suo
+  esercizio vivo valgono gli stessi controlli degli argomenti: `lavoro_affida` e
+  `lavoro_rispondi` sono in `SCRIVONO`.
+- Contrari nelle prove: «alle 2» detto all'ospite o all'adulto (anche parlando di un'equazione)
+  e a Leo che chiede l'ora resta libero.
+
+**Limiti noti in più.** «Viene» è una parola comune: con un esercizio vivo dal risultato piccolo
+«domani viene la nonna alle 2» si ferma (il costo dei falsi positivi della sezione sopra). E un
+**limite dell'identità**: il minore che parla dal telefono di un adulto con la voce riconosciuta
+come l'adulto è l'adulto per Calliope (niente `minore_incerto`, il dispositivo non è di un
+minore), e la guardia non ha i suoi esercizi: lo ferma solo il riconoscimento della voce
+(`minore_piu_protetto`, la compagnia), non lo Studio.
+
 ## L'importazione dei materiali scaricati: file e ZIP (31/10, issue #298, ramo `issue-298-studio-importa`)
 
 *Epic #251, decisione di chi amministra del 28/10 (niente API di Classroom: sugli account dei

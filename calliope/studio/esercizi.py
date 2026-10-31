@@ -578,11 +578,20 @@ def vietati_per_ctx(ctx, voce: bool = True) -> dict | None:
     try:
         if not voce:
             chi = _di_chi_possiede(ctx)
-            return st.vietati_di(chi.id) if chi is not None else None
-        from ..tools.studio import chi_di
-        chi = chi_di(ctx)
-        ids = [chi.id] if chi is not None else _minori_possibili(ctx)
-        return EG.unisci([v for i in ids if (v := st.vietati_di(i))])
+            ids = [chi.id] if chi is not None else []
+        else:
+            from ..tools.studio import chi_di
+            chi = chi_di(ctx)
+            ids = [chi.id] if chi is not None else _minori_possibili(ctx)
+        # La frase della persona di questo turno: dice se la conversazione è sul problema
+        # (terza revisione della PR #367)
+        detto = str(getattr(ctx, "user_text_stt", None) or getattr(ctx, "user_text", None) or "")
+        voci = []
+        for i in ids:
+            v = st.vietati_di(i)
+            for x in (v or {}).get("voci") or ():
+                voci.append({**x, "detto": detto})
+        return EG.unisci(voci)
     except Exception:  # noqa: BLE001 — la guardia non ferma mai il turno
         return None
 
@@ -591,8 +600,11 @@ def vietati_per_ctx(ctx, voce: bool = True) -> dict | None:
 # soluzione nella sua conferma) e le frasi pronte dei risultati, con un esercizio vivo. Seconda
 # revisione: solo i tool che scrivono o mostrano un testo alla persona (ricordi, liste,
 # promemoria e agenda, documenti, schermo), non un timer o un conto
+# Terza revisione: anche `lavoro_affida` e `lavoro_rispondi` (un minore dalla fascia con gli
+# agenti «si», o «autorizzazione» col sì del tutore, li chiama: l'agente scriverebbe la soluzione)
 SCRIVONO = frozenset({"ricorda", "lista_aggiungi", "promemoria_imposta", "appuntamento_aggiungi",
-                      "documento_crea", "documento_modifica", "modello_compila", "schermo_mostra"})
+                      "documento_crea", "documento_modifica", "modello_compila", "schermo_mostra",
+                      "lavoro_affida", "lavoro_rispondi"})
 FRASE_ARGOMENTI = ("Questo non lo scrivo e non lo segno: è la soluzione del problema che stai "
                    "facendo a passi. Trovala tu, un passo alla volta.")
 _FRASI = ("conferma", "risposta_finale", "da_dire")
