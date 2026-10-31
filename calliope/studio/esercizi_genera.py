@@ -181,23 +181,42 @@ def _uguale(x, va) -> bool:
         return False
 
 
-def _contiene(attesa: dict, frase: str) -> bool:
+def _debole(x, va) -> bool:
+    """Un numero uguale ma «debole» (seconda revisione della PR #367): un intero di una o due
+    cifre senza l'unità, nella frase o nel risultato atteso («2», «26 uova» per 26 cm, «2 gradi»
+    per un 2 senza unità). Da solo non dice il problema: «alle 2», «2 gradi», «codice 26»."""
+    try:
+        v = float(x[0])
+    except (TypeError, ValueError, IndexError):
+        return False
+    return (not x[1] or not va[1]) and v.is_integer() and abs(v) < 100
+
+
+def _uguali(frase: str, va, contesto: bool) -> bool:
+    """Un numero della frase uguale a `va`; quelli deboli (`_debole`) solo con `contesto`."""
+    return any(_uguale(x, va) and (contesto or not _debole(x, va))
+               for x in _numeri_del_testo(frase))
+
+
+def _contiene(attesa: dict, frase: str, contesto: bool = True) -> bool:
     """La frase dice la risposta attesa del passo: per un numero, un numero della frase uguale
-    (anche senza l'unità); per le parole, tutte le parole chiave; per scelta e vero/falso il
-    codice non lo giudica (la domanda li contiene per forza)."""
+    (anche senza l'unità; un intero piccolo senza unità solo con `contesto`); per le parole,
+    tutte le parole chiave; per scelta e vero/falso il codice non lo giudica (la domanda li
+    contiene per forza)."""
     if not frase:
         return False
     if attesa["tipo"] == "numero":
         va = _misura(attesa["attesa"])
         if va is None:
             return False
-        return any(_uguale(x, va) for x in _numeri_del_testo(frase))
+        return _uguali(frase, va, contesto)
     if attesa["tipo"] == "parole":
         return RS.valuta(attesa, frase)[0] == RS.GIUSTO
     return False
 
 
-def _dice_risultato(risultato: str, frase: str, testo_problema: str = "") -> bool:
+def _dice_risultato(risultato: str, frase: str, testo_problema: str = "",
+                    contesto: bool = True) -> bool:
     """La frase dice il risultato finale: un numero uguale, o il risultato a parole intero (da 2
     parole in su). Anche se il numero sta nel testo del problema: una nota ostile nella foto
     («la soluzione è 60 km/h») non lo rende un dato da ripetere (`testo_problema` resta per i
@@ -206,7 +225,7 @@ def _dice_risultato(risultato: str, frase: str, testo_problema: str = "") -> boo
         return False
     va = _misura(risultato)
     if va is not None:
-        return any(_uguale(x, va) for x in _numeri_del_testo(frase))
+        return _uguali(frase, va, contesto)
     ps = RS.parole(risultato)
     if len(ps) < 2:
         return False
@@ -287,7 +306,42 @@ def vietati(es: dict) -> dict:
     passi = es.get("passi") or []
     fatti = int(es.get("passo") or 0)
     return {"risultato": es.get("risultato") or "", "testo": es.get("testo") or "",
+            "domanda": (passi[fatti].get("testo") or "") if fatti < len(passi) else "",
             "passi": [p for i, p in enumerate(passi) if i >= fatti and p.get("tipo") == "numero"]}
+
+
+# Le parole che da sole dicono che la frase parla dell'esercizio, oltre a quelle del problema
+_DELL_ESERCIZIO = frozenset({"risultato", "soluzione", "risposta", "esercizio", "problema",
+                             "passo", "conto", "calcolo"})
+# Parole lunghe che non dicono l'argomento (domande, tempo, quantità)
+_VUOTE = frozenset({"quanto", "quanti", "quante", "quanta", "questo", "questa", "questi",
+                    "queste", "quello", "quella", "quelli", "quelle", "perche", "allora",
+                    "ancora", "sempre", "adesso", "domani", "stasera", "fuori", "molto", "molti",
+                    "tutto", "tutti", "tutte", "hanno", "fatto", "della", "delle", "degli",
+                    "dello", "nella", "nelle", "sulla", "dalla", "dalle", "quando", "invece",
+                    "circa", "almeno", "ciascuno", "ognuno", "uguale", "numero", "volte"})
+
+
+def _radici(testo: str) -> set:
+    """Le radici delle parole che dicono l'argomento: da 5 lettere, non numeri, senza l'ultima
+    vocale («soluzioni» e «soluzione» uguali)."""
+    out = set()
+    for w in RS.parole(testo):
+        if len(w) < 5 or not w.isalpha() or w in _VUOTE or _misura(w) is not None:
+            continue
+        out.add(w[:-1] if w[-1] in "aeiou" else w)
+    return out
+
+
+def parla_del_problema(v: dict, frase: str) -> bool:
+    """La frase parla dell'esercizio: una parola del testo del problema o della domanda del
+    passo, o una parola come «risultato» o «soluzione» (seconda revisione della PR #367)."""
+    fr = _radici(frase)
+    if not fr:
+        return False
+    tutte = _radici((v.get("testo") or "") + " " + (v.get("domanda") or ""))
+    tutte |= {w[:-1] if w[-1] in "aeiou" else w for w in _DELL_ESERCIZIO}
+    return bool(fr & tutte)
 
 
 def unisci(lista) -> dict | None:
@@ -311,7 +365,10 @@ def svela(v: dict | None, frase: str, solo_risultato: bool = False) -> bool:
     if "voci" in v:
         return any(svela(x, frase, solo_risultato) for x in v["voci"])
     frase = _POSIZIONE.sub(" ", str(frase))
-    if _dice_risultato(v.get("risultato") or "", frase, v.get("testo") or ""):
+    # Un intero piccolo senza unità conta solo se la frase parla del problema, o se l'esercizio
+    # è stato toccato da poco (seconda revisione della PR #367: «alle 2», «2 gradi»)
+    contesto = bool(v.get("recente", True)) or parla_del_problema(v, frase)
+    if _dice_risultato(v.get("risultato") or "", frase, v.get("testo") or "", contesto):
         return True
     if solo_risultato:
         return False
@@ -320,7 +377,7 @@ def svela(v: dict | None, frase: str, solo_risultato: bool = False) -> bool:
         va = _misura(p.get("attesa"))
         if va is None or any(_uguale(x, va) for x in dati):
             continue
-        if _contiene(p, frase):
+        if _contiene(p, frase, contesto):
             return True
     return False
 

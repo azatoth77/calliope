@@ -6192,8 +6192,8 @@ class Brain:
 
     def _vietati_esercizio(self) -> dict | None:
         """Cosa la voce non dice a chi parla mentre ha un esercizio guidato vivo (#278,
-        `esercizi.vietati_per_ctx`: i suoi, o di tutti con la voce incerta); None senza Studio o
-        senza esercizi vivi."""
+        `esercizi.vietati_per_ctx`: i suoi, o con la voce incerta quelli dei minori che potrebbero
+        essere chi parla); None senza Studio o senza esercizi vivi."""
         from .studio.esercizi import vietati_per_ctx
         return vietati_per_ctx(getattr(self, "tool_ctx", None))
 
@@ -7075,6 +7075,10 @@ class Brain:
             result = self.tools.call(call["name"], args, self.tool_ctx, level)
         finally:
             self._set_ctx("politica", None)
+        # La guardia degli esercizi guidati scattata nel registro dei tool (#278, seconda revisione
+        # della PR #367): anche nelle regole di Brain, come quando scatta sulla voce
+        if "studio_esercizio_svelato" in (getattr(self.tool_ctx, "regole", None) or ())                 and "studio_esercizio_svelato" not in (getattr(self, "last_rules", None) or ()):
+            self._rule("studio_esercizio_svelato")
         # La decisione della politica per questa chiamata: intenzione e ombra (08/10)
         esito_pol = getattr(self.tool_ctx, "politica_esito", None)
         self._set_ctx("politica_esito", None)

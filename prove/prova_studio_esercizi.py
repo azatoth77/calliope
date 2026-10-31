@@ -502,7 +502,7 @@ r = turno(b, "ora che abbiamo smesso, quanto faceva la velocità?",
           PP.testo("La velocità media di quel treno era 60 km/h."))
 verifica("2. dopo «basta» (in pausa), il turno dopo «quanto faceva?»: la soluzione non si dice",
          "60" not in r and E.FRASE_SVELATO in r, r)
-# Più esercizi vivi: i vietati di tutti
+# Più esercizi vivi: i vietati di tutti; uno «pronto» mai cominciato non accende la guardia
 eid6 = st.aggiungi_esercizio(LEO, vid, "Un quadrato ha il lato di 7 cm. Calcola il "
                                        "perimetro.")["esercizio"]
 cli.risposte.append((json.dumps({"passi": [
@@ -510,8 +510,12 @@ cli.risposte.append((json.dumps({"passi": [
     {"domanda": "Quanto vale il perimetro?", "tipo": "numero", "risposta": "28 cm",
      "indizio": "Somma i lati."}], "risultato": "28 cm"}), "stop"))
 lt.genera_guida(st.esercizi_per_guida()[0])
+verifica("seconda revisione: un esercizio «pronto» mai cominciato non accende la guardia",
+         st._riga_es(eid6)["stato"] == "pronto"
+         and not EG.svela(st.vietati_di("l1"), "Il perimetro è 28 cm."))
+st.passo_esercizio(LEO, eid6)
 vv2 = st.vietati_di("l1")
-verifica("2. due esercizi vivi (uno in pausa, uno pronto): i vietati di tutti e due",
+verifica("2. due esercizi vivi (uno in pausa, uno cominciato): i vietati di tutti e due",
          EG.svela(vv2, "La velocità è 60 km/h.") and EG.svela(vv2, "Il perimetro è 28 cm.")
          and not EG.svela(vv2, "Il lato è 7 cm."))
 # 3. Le frasi del codice e gli argomenti dei tool che scrivono o mostrano
@@ -535,10 +539,90 @@ r = json.loads(reg3.call("ricorda", {"fatto": "Il perimetro del quadrato del pro
                                               "28 cm"}, ctx_t, "familiare"))
 verifica("3. contrario: il tutore che parla non è fermato", r.get("errore") !=
          "la soluzione di un esercizio guidato", r)
-ctx_i = PT.ctx_di(st, None)
-verifica("la voce incerta (nessuno riconosciuto): la guardia prende gli esercizi vivi di tutti",
-         E.guardia_argomenti("ricorda", {"fatto": "il perimetro è 28 cm"}, ctx_i) is not None
-         and E.guardia_argomenti("ricorda", {"fatto": "domani ho calcetto"}, ctx_i) is None)
+verifica("seconda revisione: gli argomenti solo dei tool che scrivono o mostrano (il timer e il "
+         "conto no)",
+         E.guardia_argomenti("timer_imposta", {"durata": "28 minuti", "nome": "28 cm"}, ctx3)
+         is None and E.guardia_argomenti("lista_aggiungi", {"lista": "compiti", "voce":
+                                                            "perimetro 28 cm"}, ctx3) is not None)
+# La regola scattata nel registro dei tool arriva anche alle regole di Brain (seconda revisione)
+b = nuovo_brain(LEO)
+r = turno(b, "segnati il risultato del quadrato",
+          PP.chiama("ricorda", {"fatto": "Il perimetro del quadrato è 28 cm"}),
+          PP.testo("Va bene, continuiamo un passo alla volta."))
+verifica("la regola studio_esercizio_svelato del registro dei tool in b.last_rules e nelle regole "
+         "del turno", "studio_esercizio_svelato" in b.last_rules
+         and "studio_esercizio_svelato" in b.rules_fired(), (r, b.last_rules))
+
+# Seconda revisione della PR #367: la guardia troppo larga (falsi positivi)
+print("— la seconda revisione della PR #367: i falsi positivi")
+eid8 = st.aggiungi_esercizio(LEO, vid, "Quante soluzioni reali ha l'equazione x al quadrato "
+                                       "meno 4 uguale a zero?")["esercizio"]
+cli.risposte.append((json.dumps({"passi": [
+    {"domanda": "Che tipo di equazione è?", "tipo": "parole", "risposta": "di secondo grado",
+     "parole_chiave": ["secondo grado"], "indizio": "Guarda l'esponente."},
+    {"domanda": "Quante soluzioni reali ha?", "tipo": "numero", "risposta": "2",
+     "indizio": "Pensa a più e meno."}], "risultato": "2"}, ensure_ascii=False), "stop"))
+lt.genera_guida(st.esercizi_per_guida()[0])
+FALSE = ["Domani alle 2 c'è la riunione.", "Fuori ci sono 2 gradi.", "Sono le 2 e 10.",
+         "La partita è finita 2 a 1."]
+v8 = st.vietati_di("l1")
+verifica("il minore che chiede l'ora o il meteo con l'esercizio del «2» «pronto»: niente fermato",
+         st._riga_es(eid8)["stato"] == "pronto" and not any(EG.svela(v8, f) for f in FALSE)
+         and E.guardia_argomenti("promemoria_imposta", {"testo": "chiamare il dentista alle 2"},
+                                 ctx3) is None)
+st.passo_esercizio(LEO, eid8)
+mezzora = (datetime.datetime.now() - datetime.timedelta(minutes=30)).isoformat(timespec="seconds")
+st.dati.scrivi("UPDATE studio_esercizi SET modificato = ? WHERE persona = 'l1' AND stato IN "
+               "('in_corso', 'pausa')", (mezzora,))
+v8 = st.vietati_di("l1")
+verifica("il «2» in corso, toccato mezz'ora fa: «alle 2», «2 gradi», l'ora e la partita passano; "
+         "«2 litri di latte» nella lista e «alle 2» nel promemoria pure",
+         not any(EG.svela(v8, f) for f in FALSE)
+         and E.guardia_argomenti("lista_aggiungi", {"lista": "spesa", "voce": "2 litri di latte"},
+                                 ctx3) is None
+         and E.guardia_argomenti("promemoria_imposta", {"testo": "il dentista alle 2"}, ctx3)
+         is None)
+verifica("…ma con le parole del problema o del passo, o «la soluzione», il «2» si ferma",
+         EG.svela(v8, "L'equazione ha 2 soluzioni reali.") and EG.svela(v8, "La soluzione è 2.")
+         and EG.svela(v8, "Le soluzioni sono due."))
+verifica("…e il risultato con l'unità si ferma sempre (anche mezz'ora dopo)",
+         EG.svela(v8, "Il perimetro è 28 cm.") and EG.svela(v8, "La velocità è 60 km/h."))
+st.dati.scrivi("UPDATE studio_esercizi SET modificato = ? WHERE id = ?", (D.adesso(), eid8))
+verifica("il «2» toccato adesso (la conversazione è sull'esercizio): anche «sono 2» si ferma",
+         EG.svela(st.vietati_di("l1"), "Sono 2."))
+quattro = (datetime.datetime.now() - datetime.timedelta(hours=4)).isoformat(timespec="seconds")
+st.dati.scrivi("UPDATE studio_esercizi SET modificato = ? WHERE id = ?", (quattro, eid8))
+verifica(f"il «2» fermo da 4 ore (più di {E.VIVO_S // 3600}): non è più vivo",
+         not EG.svela(st.vietati_di("l1"), "L'equazione ha 2 soluzioni reali."))
+st.dati.scrivi("UPDATE studio_esercizi SET modificato = ? WHERE id = ?", (D.adesso(), eid8))
+# Chi non possiede l'esercizio: l'ospite, l'adulto in zona grigia, un adulto col numero uguale
+ctx_o = PT.ctx_di(st, None)
+ctx_g = PT.ctx_di(st, ANDREA, come="conversazione")
+ctx_a = PT.ctx_di(st, ANDREA)
+verifica("l'ospite: niente esercizi, niente guardia (voce e argomenti)",
+         E.vietati_per_ctx(ctx_o) is None
+         and E.guardia_argomenti("ricorda", {"fatto": "il perimetro è 28 cm"}, ctx_o) is None)
+verifica("l'adulto in zona grigia (nessun minore vicino): niente guardia",
+         E.vietati_per_ctx(ctx_g) is None
+         and E.guardia_argomenti("lista_aggiungi", {"voce": "28 cm di nastro"}, ctx_g) is None)
+verifica("un adulto riconosciuto col numero uguale: «28 cm di nastro», «60 km/h» passano",
+         E.vietati_per_ctx(ctx_a) is None
+         and E.guardia_argomenti("lista_aggiungi", {"voce": "28 cm di nastro"}, ctx_a) is None
+         and E.guardia_argomenti("ricorda", {"fatto": "il limite è 60 km/h"}, ctx_a) is None)
+# La voce incerta: solo il minore che potrebbe essere chi parla, e solo per la voce
+ctx_m = PT.ctx_di(st, ANDREA, come="conversazione")
+ctx_m.speaker_ctx.minore_incerto = LEO.name
+verifica("la voce incerta col minore incerto: i suoi esercizi per la voce, non per gli argomenti",
+         EG.svela(E.vietati_per_ctx(ctx_m), "Il perimetro è 28 cm.")
+         and E.vietati_per_ctx(ctx_m, voce=False) is None
+         and E.guardia_argomenti("ricorda", {"fatto": "il perimetro è 28 cm"}, ctx_m) is None)
+ctx_d = PT.ctx_di(st, ANDREA, come="conversazione")
+ctx_d.dispositivo = {"di": "l1", "tipo": "telefono"}
+verifica("la voce incerta dal telefono del minore: i suoi esercizi per la voce",
+         EG.svela(E.vietati_per_ctx(ctx_d), "Il perimetro è 28 cm."))
+ctx_d2 = PT.ctx_di(st, ANDREA, come="conversazione")
+ctx_d2.dispositivo = {"di": "c1", "tipo": "telefono"}
+verifica("contrario: dal telefono di un adulto, niente", E.vietati_per_ctx(ctx_d2) is None)
 # 4. Una prova aperta su un'altra verifica della persona ferma la guida e gli esercizi nuovi
 vid2, _ = PT.carica(st, LEO)
 st.dati.scrivi("INSERT INTO studio_prove (verifica, persona, modalita, stato, inizio, scade) "

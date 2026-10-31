@@ -46,11 +46,16 @@ SALTA_DOPO = 3
 # Il tetto dei tentativi su un passo (revisione della PR #367): oltre, il codice non valuta più
 # risposte su quel passo, restano l'indizio e «salta» (niente indovinare a tentativi)
 ERRORI_MAX = 6
-# Un esercizio vivo («in_corso», «pausa» o «pronto», non finito né tolto) vale per la guardia
-# della voce fino a tanto tempo dall'ultima modifica (revisione della PR #367: dopo «basta» la
-# guardia si spegneva, e il turno dopo «quanto faceva?» aveva la soluzione)
-VIVO_S = 24 * 3600
-VIVI = ("in_corso", "pausa", "pronto")
+# Un esercizio vivo («in_corso» o «pausa», non finito né tolto) vale per la guardia della voce
+# fino a tanto tempo dall'ultima risposta o dall'ultimo «basta» (revisione della PR #367: dopo
+# «basta» la guardia si spegneva, e il turno dopo «quanto faceva?» aveva la soluzione). Seconda
+# revisione: 3 ore, non 24 (per un giorno intero un «2 gradi» o «alle 2» si fermavano), e un
+# esercizio «pronto» mai cominciato non accende la guardia
+VIVO_S = 3 * 3600
+VIVI = ("in_corso", "pausa")
+# Un esercizio toccato da tanto (una risposta, un passo, «basta»): la conversazione è ancora
+# sull'esercizio, e anche un numero piccolo senza unità senza le parole del problema si ferma
+RECENTE_S = 10 * 60
 STATI = ("da_leggere", "in_lettura", "letto", "pronto", "senza_guida", "illeggibile",
          "in_corso", "pausa", "finito")
 APERTI = ("da_leggere", "in_lettura", "letto", "pronto", "in_corso", "pausa")
@@ -498,67 +503,108 @@ class Esercizi:
         return {"tolto": e["id"]}
 
     # ── la guardia della voce ──
-    def _vietati(self, dove: str, arg=()) -> dict | None:
+    def vietati_di(self, persona) -> dict | None:
+        """Cosa la voce non dice a `persona`: i suoi esercizi vivi («in_corso» o «pausa», con
+        una risposta o un «basta» da meno di `VIVO_S`), uniti (`esercizi_genera.unisci`); con
+        «recente» quelli toccati da meno di `RECENTE_S`. None se non ce ne sono."""
         try:
             righe = self.dati.tutti(
                 "SELECT id, COALESCE(modificato, creato) AS quando FROM studio_esercizi WHERE "
-                "stato IN ('in_corso', 'pausa', 'pronto') AND " + dove, arg)
+                "stato IN ('in_corso', 'pausa') AND persona = ?", (str(persona),))
         except Exception:  # noqa: BLE001 — una tabella che manca (db di prima): niente guardia
             return None
         adesso = datetime.datetime.now()
         voci = []
         for r in righe:
             try:
-                t = datetime.datetime.fromisoformat(str(r["quando"]))
-                if (adesso - t).total_seconds() > VIVO_S:
-                    continue
+                eta = (adesso - datetime.datetime.fromisoformat(str(r["quando"]))).total_seconds()
             except (TypeError, ValueError):
-                pass
+                eta = 0.0
+            if eta > VIVO_S:
+                continue
             e = self._riga_es(r["id"])
             if e is not None:
-                voci.append(EG.vietati(e))
+                voci.append({**EG.vietati(e), "recente": eta <= RECENTE_S})
         return EG.unisci(voci)
 
-    def vietati_di(self, persona) -> dict | None:
-        """Cosa la voce non dice a `persona`: i suoi esercizi vivi («in_corso», «pausa»,
-        «pronto», modificati da meno di `VIVO_S`), uniti (`esercizi_genera.unisci`); None se non
-        ce ne sono."""
-        return self._vietati("persona = ?", (str(persona),))
 
-    def vietati_tutti(self) -> dict | None:
-        """Gli esercizi vivi di tutti: per chi parla con la voce incerta (revisione della PR
-        #367, la strada prudente: senza sapere chi è, nessuna soluzione di nessuno)."""
-        return self._vietati("1 = 1")
+def _minori_possibili(ctx) -> list:
+    """Con la voce incerta (nessuno riconosciuto per lo Studio) i minori che potrebbero essere
+    chi parla: il minore incerto della voce e il proprietario minore del dispositivo da cui si
+    parla. Mai un adulto, mai «tutti» (seconda revisione della PR #367)."""
+    from .. import minori
+    sc = getattr(ctx, "speaker_ctx", None)
+    speakers = getattr(ctx, "speakers", None)
+    out = []
+    nome = getattr(sc, "minore_incerto", None)
+    if nome and speakers is not None:
+        try:
+            out.append(speakers.get(nome))
+        except Exception:  # noqa: BLE001
+            pass
+    disp = getattr(ctx, "dispositivo", None)
+    di = disp.get("di") if isinstance(disp, dict) else None
+    if di:
+        utenti = getattr(speakers, "users", None)
+        for u in (utenti.values() if isinstance(utenti, dict) else ()):
+            if str(getattr(u, "id", "")) == str(di):
+                out.append(u)
+    ids = []
+    for p in out:
+        if p is not None and minori.e_minore(p) and getattr(p, "id", None) not in ids:
+            ids.append(getattr(p, "id", None))
+    return [i for i in ids if i is not None]
 
 
-def vietati_per_ctx(ctx) -> dict | None:
-    """Cosa la voce non dice a chi parla in questo turno: i suoi esercizi vivi; con la voce
-    incerta (`chi_di` None) quelli di tutti. None senza Studio o senza esercizi vivi."""
+def _di_chi_possiede(ctx):
+    """Chi parla, riconosciuto con certezza per lo Studio (niente minore incerto): per gli
+    argomenti dei tool, che valgono solo per chi possiede l'esercizio."""
+    from ..tools.studio import chi_di
+    sc = getattr(ctx, "speaker_ctx", None)
+    if getattr(sc, "minore_incerto", None) or getattr(sc, "incerta", None):
+        return None
+    return chi_di(ctx)
+
+
+def vietati_per_ctx(ctx, voce: bool = True) -> dict | None:
+    """Cosa non si dice a chi parla in questo turno: i suoi esercizi vivi. Per la voce
+    (`voce`), con la voce incerta, quelli dei minori che potrebbero essere chi parla
+    (`_minori_possibili`); un ospite o un adulto in zona grigia senza minori vicini: niente.
+    Per gli argomenti dei tool (`voce=False`) solo chi possiede l'esercizio, riconosciuto. None
+    senza Studio o senza esercizi vivi."""
     st = getattr(ctx, "studio", None)
     if st is None or not callable(getattr(st, "vietati_di", None)):
         return None
     try:
+        if not voce:
+            chi = _di_chi_possiede(ctx)
+            return st.vietati_di(chi.id) if chi is not None else None
         from ..tools.studio import chi_di
         chi = chi_di(ctx)
-        return st.vietati_di(chi.id) if chi is not None else st.vietati_tutti()
+        ids = [chi.id] if chi is not None else _minori_possibili(ctx)
+        return EG.unisci([v for i in ids if (v := st.vietati_di(i))])
     except Exception:  # noqa: BLE001 — la guardia non ferma mai il turno
         return None
 
 
 # Gli argomenti dei tool che scrivono o mostrano (revisione della PR #367: «ricorda» ripeteva la
-# soluzione nella sua conferma) e le frasi pronte dei risultati, con un esercizio vivo
+# soluzione nella sua conferma) e le frasi pronte dei risultati, con un esercizio vivo. Seconda
+# revisione: solo i tool che scrivono o mostrano un testo alla persona (ricordi, liste,
+# promemoria e agenda, documenti, schermo), non un timer o un conto
+SCRIVONO = frozenset({"ricorda", "lista_aggiungi", "promemoria_imposta", "appuntamento_aggiungi",
+                      "documento_crea", "documento_modifica", "modello_compila", "schermo_mostra"})
 FRASE_ARGOMENTI = ("Questo non lo scrivo e non lo segno: è la soluzione del problema che stai "
                    "facendo a passi. Trovala tu, un passo alla volta.")
 _FRASI = ("conferma", "risposta_finale", "da_dire")
 
 
 def guardia_argomenti(name: str, arguments, ctx) -> dict | None:
-    """Il rifiuto (un risultato col testo del codice) di una chiamata i cui argomenti di testo
-    dicono la soluzione di un esercizio vivo di chi parla; None se va bene. Il tool
-    dell'esercizio non si controlla (le sue frasi sono del codice)."""
-    if name == "studio_esercizio":
+    """Il rifiuto (un risultato col testo del codice) di una chiamata di un tool che scrive o
+    mostra (`SCRIVONO`) i cui argomenti di testo dicono il risultato di un esercizio vivo di chi
+    lo possiede, riconosciuto; None se va bene."""
+    if name not in SCRIVONO:
         return None
-    v = vietati_per_ctx(ctx)
+    v = vietati_per_ctx(ctx, voce=False)
     if v is None or not EG.svela_valore(v, arguments or {}):
         return None
     return {"ok": False, "errore": "la soluzione di un esercizio guidato", "fatto": "NIENTE",
