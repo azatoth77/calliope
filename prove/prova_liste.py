@@ -4,7 +4,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 """Liste della casa e memoria della casa, a secco (niente Ollama).
 
 Liste: nome normalizzato, divisione delle voci, doppioni, rimozione tollerante, «tutto»,
-chi ha aggiunto. Tool: conferme già pronte, errori espliciti, lettura lunga troncata.
+chi ha aggiunto; l'ora dell'ultimo cambiamento su disco, anche delle voci tolte e dopo un
+riavvio (30/10, #263). Tool: conferme già pronte, errori espliciti, lettura lunga troncata.
 Memoria della casa: `ricorda` con per_tutti, `dimentica` che ripiega sulla casa, e il
 messaggio di Brain con il blocco «Cose della casa» (mai per gli ospiti).
 
@@ -118,6 +119,57 @@ r = chiama("lista_leggi", {"lista": "regali"})
 verifica("lista vuota", r.get("conferma") == "La lista regali è vuota.", r.get("conferma"))
 r = chiama("lista_aggiungi", {"cose": "latte"}, name=None, level="ospite")
 verifica("ospite: rifiutato in modo esplicito", r.get("ok") is False and "NON" in r.get("fatto", ""), str(r))
+
+# ── l'ultimo cambiamento su disco (30/10, #263) ──
+# Il pallino della tessera Liste: anche una voce tolta conta, e l'ora resta dopo un riavvio
+# (prima stava in memoria e al riavvio restava solo l'ultima voce aggiunta)
+import datetime
+import time
+from unittest import mock
+
+from calliope.persistenza import versione_schema
+
+percorso = str(Path(tempfile.mkdtemp()) / "cambi.db")
+lc = Liste(percorso)
+lc.add("spesa", ["latte", "uova"], "Dario")
+u = lc.ultimo_cambio()
+verifica("ultimo cambiamento: la voce aggiunta, adesso", u is not None and abs(u - time.time()) < 5, str(u))
+dopo = time.time() + 3600                  # un'ora dopo, più tardi di ogni «created»
+with mock.patch.object(time, "time", return_value=dopo):
+    lc.remove("spesa", ["latte"])
+verifica("ultimo cambiamento: la voce tolta", lc.ultimo_cambio() == dopo, str(lc.ultimo_cambio()))
+lc.db.close()
+lc = Liste(percorso)
+verifica("ultimo cambiamento: la voce tolta resta dopo un riavvio", lc.ultimo_cambio() == dopo,
+         str(lc.ultimo_cambio()))
+with mock.patch.object(time, "time", return_value=dopo + 60):
+    lc.remove("spesa", ["pane"])
+    lc.add("spesa", ["uova"])
+verifica("contrario: una voce che non c'è e un doppione non cambiano niente", lc.ultimo_cambio() == dopo,
+         str(lc.ultimo_cambio()))
+with mock.patch.object(time, "time", return_value=dopo + 120):
+    lc.remove("spesa", ["tutto"])
+lc.db.close()
+lc = Liste(percorso)
+verifica("ultimo cambiamento: «tutto» svuota, e la lista vuota ha ancora l'ora dopo un riavvio",
+         lc.read("spesa")[1] == [] and lc.ultimo_cambio() == dopo + 120, str(lc.ultimo_cambio()))
+lc.db.close()
+# Un database di prima (versione 1, senza liste_cambi): si porta alla 2 e vale l'ultima aggiunta
+vecchio = str(Path(tempfile.mkdtemp()) / "vecchio.db")
+lv = Liste(vecchio)
+lv.db.execute("DROP TABLE liste_cambi")
+lv.db.execute("UPDATE meta_schema SET versione = 1 WHERE modulo = 'liste'")
+lv.db.execute("INSERT INTO liste (lista, voce, norm, added_by, created) "
+              "VALUES ('spesa', 'pane', 'pane', NULL, '2026-10-01T10:00:00')")
+lv.db.commit()
+lv.db.close()
+lv = Liste(vecchio)
+verifica("database di prima: portato alla versione 2, l'ultimo cambiamento dall'ultima aggiunta",
+         versione_schema(lv.db, "liste") == 2
+         and lv.ultimo_cambio() == datetime.datetime(2026, 10, 1, 10, 0).timestamp(), str(lv.ultimo_cambio()))
+lv.db.close()
+verifica("lista vuota da sempre: nessun cambiamento", Liste(str(Path(tempfile.mkdtemp()) / "nuovo.db"))
+         .ultimo_cambio() is None)
 
 # ── memoria della casa ──
 r = chiama("ricorda", {"fatto": "la password del wifi è giardino42", "per_tutti": True})
