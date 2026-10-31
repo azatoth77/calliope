@@ -1254,8 +1254,11 @@ class Mappe:
         sch = mm.get(M.SCHELETRO)
         vs = per_schermo(sch, nascondi)
         if vs is not None and not vs.get("nascosta"):
-            # Le parti staccate dello scheletro (passo 7c, #328): la pagina lo dice
-            vs["parti"] = len(M.componenti(sch["nodi"], sch["collegamenti"])) if sch["nodi"] else 0
+            # Le parti staccate dello scheletro (passo 7c, #328): la pagina lo dice. Senza i
+            # collegamenti deboli del codice (#344): legano le isole «da controllare», non dalle
+            # pagine
+            from . import mappa_genera as MG
+            vs["parti"] = len(MG.parti_fondate(sch["nodi"], sch["collegamenti"]))                 if sch["nodi"] else 0
         return {"verifica": {"id": v["id"], "materia": v["materia"], "data": v["data"],
                              "stato": v["stato"], "di": nome},
                 "scheletro": vs,

@@ -18,6 +18,9 @@ materiali di `prova_studio_argomenti.py` (la sua parte prima).
    del modello mai toccato; JSON rotto non toglie quello di prima; spenta niente; vLLM occupato
    aspetta.
 4. **Il banco**: la fase «mappa» di `manuali/banco_studio.py` a secco.
+5. **Il banco del 31/10** (#344): i capi scritti come codice, singolare e plurale, il tetto che
+   tiene la rete connessa, il collegamento debole alle isole, e le uscite vere del banco
+   ricostruite (`manuali/studio/uscite_banco_3110.json`) col vLLM finto di `studio_vllm_finto.py`.
 
     python prove/prova_studio_mappa_genera.py
 """
@@ -419,6 +422,14 @@ verifica("la seconda risposta illeggibile: lo scheletro resta con le sue isole e
          and lett.stato()["mappa"]["connessioni_rotte"] == 1
          and lett.stato()["mappa"]["con_isole"] == 1
          and st.verifica(LEO, vid)["mappa_esito"] == MG.PROPOSTO, str(riga))
+deb = [c for c in s["collegamenti"] if c.get("verbo") == MG.VERBO_DEBOLE]
+verifica("le isole che restano: un collegamento debole alla radice, «da controllare», proposto, "
+         "fuori dal riferimento, e le parti contate senza (#344)",
+         len(deb) == 1 and deb[0]["avvisi"] == [MG.DA_CONTROLLARE] and deb[0]["stato"] == "proposto"
+         and lett.stato()["mappa"]["deboli"] == 1 and s["parti"] == 2
+         and not any(c.get("verbo") == MG.VERBO_DEBOLE for c in M.voci_riferimento(
+             {"stato": "proposta", "nodi": s["nodi"], "collegamenti": s["collegamenti"]})[1]),
+         str(deb))
 st.close()
 PA.azzera()
 st, vid, ids, lett = prepara({"studio_mappa_genera": "attiva"}, nome="connessione_500")
@@ -509,6 +520,133 @@ testo_r3 = PA.B.scrivi_riepilogo(usc, {"mappa": {"a": x3, "b": x}, "modello": "f
 verifica("banco: il riepilogo dice la forma e la % di verifiche con una parte sola (criterio 90 %)",
          "forma: parti" in testo_r3 and "una parte sola: 50 %" in testo_r3
          and "criterio ≥ 90 %: no" in testo_r3, testo_r3[-500:])
+
+# ═══════════════════════════ 5. il banco del 31/10 (#344) ═══════════════════════════
+print("— il banco del 31/10: codici, plurali, tetto, isole e le uscite vere col vLLM finto")
+from studio_vllm_finto import VllmFinto, carica as carica_uscite  # noqa: E402
+
+
+def rif_banco(ver):
+    """Pagine e argomenti di una verifica del banco, come `banco_studio.fase_mappa`."""
+    pagine = [{"id": i, "ordine": i, "stato": "letta", "testo": p["testo"],
+               "numero": p.get("numero"), "metodo": "ocr",
+               "avvisi": json.dumps(["istruzioni"]) if p.get("tipo") == "ostile" else None}
+              for i, p in enumerate(ver["pagine"], 1)]
+    per_id = {p["id"]: i for i, p in enumerate(ver["pagine"], 1)}
+    args = [{"id": i, "titolo": a["titolo"], "pagine": [per_id[x] for x in a["pagine"]
+                                                         if x in per_id]}
+            for i, a in enumerate(ver["argomenti"], 1)]
+    return A.riferimenti(pagine), G.argomenti_rif(args)
+
+
+rs, as_ = rif_banco(mat["storia"])
+fm = {}
+n5, c5 = MG.scheletro([tripla("A2", "porta a", "A3", "A2", "P3"),
+                       tripla("A42", "è", "Colombo", "A3", "P4"),        # un argomento che non c'è
+                       tripla("P4", "parla di", "Colombo", "A3", "P4"),   # una pagina
+                       tripla("Colombo", "arriva in", " c1 ", "A3", "P4"),  # un codice C
+                       tripla("Colombo", "arriva in", "America", "A3", "P4")], rs, as_, 12,
+                      misure=fm)
+per5 = {n["testo"]: n for n in n5}
+verifica("un capo scritto come codice: «A2» diventa il titolo di quell'argomento, con lui; «A42», "
+         "«P4», «C1» scartano la tripla (mai un concetto finto)",
+         set(per5) == {"Il Portogallo e la rotta africana", "Cristoforo Colombo e il Nuovo Mondo",
+                       "Colombo", "America"}
+         and per5["Il Portogallo e la rotta africana"]["argomento"] == as_[1][1]["id"]
+         and per5["Il Portogallo e la rotta africana"]["avvisi"] == []
+         and fm["codici"] == 2 and fm["codici_scartati"] == 3, (sorted(per5), fm))
+verifica("i contrari dei codici: un concetto con un numero o una lettera dentro resta com'è",
+         [n["testo"] for n in MG.scheletro(
+             [tripla("Vitamina C", "serve a", "Ossa", "A1", "P2"),
+              tripla("Carlo V", "regna su", "Spagna", "A1", "P2"),
+              tripla("Anno 1492", "segna", "America", "A1", "P2")], rs, as_, 12)[0]]
+         == ["Vitamina C", "Ossa", "Carlo V", "Spagna", "Anno 1492", "America"])
+rz, az = rif_banco(mat["scienze"])
+fm = {}
+n6, c6 = MG.scheletro([tripla("Foglia", "contiene", "Cloroplasti", "A1", "P2"),
+                       tripla("Radici", "portano la linfa alle", "Foglie", "A4", "P5"),
+                       tripla("Porto", "è vicino alla", "Porta", "A1", "P2")], rz, az, 12,
+                      misure=fm)
+verifica("singolare e plurale sono un concetto («Foglia» e «Foglie»), col testo del primo; "
+         "«Porto» e «Porta» restano due",
+         [n["testo"] for n in n6] == ["Foglia", "Cloroplasti", "Radici", "Porto", "Porta"]
+         and fm["doppioni"] == 1 and len(M.componenti(n6, c6)) == 2, [n["testo"] for n in n6])
+verifica("il plurale stretto: a/e, o/i, e/i, a/i, «-io»/«-i»; non o/a né parole corte",
+         MG._stesso_lemma("linfa grezza", "linfe grezze") and MG._stesso_lemma("mitocondrio",
+                                                                              "mitocondri")
+         and MG._stesso_lemma("problema", "problemi") and not MG._stesso_lemma("porto", "porta")
+         and not MG._stesso_lemma("re", "ri") and not MG._stesso_lemma("linfa", "linfa grezza"))
+# Il tetto: prima una coppia staccata, poi una stella; col tetto di 4 la regola di prima teneva
+# la coppia e due punte (due parti), ora la stella intera (una parte)
+stella = [tripla("Atlantico", "bagna", "Brasile", "A1", "P2"),
+          tripla("Colombo", "parte da", "Palos", "A3", "P4"),
+          tripla("Colombo", "arriva in", "America", "A3", "P4"),
+          tripla("Colombo", "naviga con", "Caravelle", "A3", "P4")]
+n7, c7 = MG.scheletro(stella, rs, as_, 4)
+verifica("il tetto dei concetti tiene la rete connessa: dalla radice i più collegati vicini; "
+         "nessun concetto senza collegamenti",
+         sorted(n["testo"] for n in n7) == ["America", "Caravelle", "Colombo", "Palos"]
+         and len(M.componenti(n7, c7)) == 1 and M.forma(n7, c7)["isolati"] == 0,
+         [n["testo"] for n in n7])
+n8, c8 = MG.scheletro(stella, rs, as_, 6)
+verifica("il tetto con posto per due parti le tiene tutte e due; senza posto per due, una sola",
+         len(n8) == 6 and len(M.componenti(n8, c8)) == 2
+         and len(MG.scheletro(stella, rs, as_, 5)[0]) == 4)
+# Le isole che restano: il collegamento debole alla radice
+n9, c9 = MG.scheletro(stella, rs, as_, 12, titolo="Colombo")
+deb9 = MG.collega_isole(n9, c9, 12)
+rad9 = next(n for n in n9 if n.get("radice"))
+verifica("collega_isole: ogni parte staccata alla radice, dal suo concetto più collegato, «è "
+         "collegato a», da_controllare, debole, nessuna pagina, autore «modello»; parti_fondate "
+         "le conta ancora",
+         rad9["testo"] == "Colombo" and len(deb9) == 1 and deb9[0]["a"] == rad9["id"]
+         and deb9[0]["verbo"] == MG.VERBO_DEBOLE and M.chiave(MG.VERBO_DEBOLE) in M.VERBI_VUOTI
+         and deb9[0]["avvisi"] == [MG.DA_CONTROLLARE] and deb9[0]["debole"] is True
+         and deb9[0]["pagine"] == [] and deb9[0]["autore"] == "modello"
+         and len(M.componenti(n9, c9)) == 1 and len(MG.parti_fondate(n9, c9)) == 2
+         and MG.collega_isole(n9, c9, 12) == [], str(deb9))
+verifica("collega_isole: niente con una parte sola, niente oltre il tetto dei collegamenti",
+         MG.collega_isole(*MG.scheletro(stella[1:], rs, as_, 12), 12) == []
+         and MG.collega_isole(*MG.scheletro(stella, rs, as_, 12), 2) == [])
+verifica("la seconda richiesta dice il centro della mappa",
+         "Centro della mappa: C" in MG.blocco_scheletro(n8, c8, rs))
+
+# Le uscite vere del banco del 31/10, ricostruite (prove/studio_vllm_finto.py), col codice di oggi
+usc5 = Path(tempfile.mkdtemp(prefix="banco-3110-"))
+fin = VllmFinto(materiali=mat)
+r5 = PA.B.fase_mappa(fin, mat, {}, usc5, lambda m: None)
+uscite = carica_uscite()
+mt, sc, sto = r5["matematica"], r5["scienze"], r5["storia"]
+verifica("le uscite del 31/10: il banco le aveva date così (matematica 0 % nelle pagine, scienze 3 "
+         "parti → 2, storia 2 → 2)",
+         uscite["mappa"]["matematica"]["banco"]["concetti_fondati"] == 0
+         and uscite["mappa"]["scienze"]["banco"]["componenti_prima"] == 3
+         and uscite["mappa"]["scienze"]["banco"]["componenti"] == 2
+         and uscite["mappa"]["storia"]["banco"]["componenti"] == 2)
+verifica("matematica: i codici A1…A8 diventano i titoli degli argomenti, tutti nelle pagine",
+         mt["concetti"] == 8 and mt["concetti_fondati"] == 8 and mt["da_controllare"] == 0
+         and mt["codici"] > 0 and mt["componenti"] == 1,
+         {k: mt[k] for k in ("concetti", "concetti_fondati", "codici", "componenti")})
+verifica("scienze: «Foglie» con «Foglia», il tetto senza un concetto staccato, la seconda passata "
+         "unisce: una parte sola, tutti nelle pagine",
+         sc["componenti_prima"] == 2 and sc["componenti"] == 1 and sc["uniti"] == 1
+         and sc["concetti_fondati"] == sc["concetti"] and sc["doppioni"] == 0
+         and sc["deboli"] == 0, {k: sc[k] for k in ("componenti_prima", "componenti", "uniti")})
+verifica("storia: «Magellano» staccato anche dopo la seconda passata (le pagine non lo legano): "
+         "due parti rette dalle pagine, una coi deboli, un debole «da controllare»",
+         sto["componenti"] == 2 and sto["componenti_con_deboli"] == 1 and sto["deboli"] == 1
+         and any(c.get("debole") and c["avvisi"] == [MG.DA_CONTROLLARE]
+                 for c in sto["collegamenti_"]), {k: sto[k] for k in (
+                     "componenti", "componenti_con_deboli", "deboli")})
+verifica("le uscite del 31/10: nessuna voce ostile pulita, nessun doppione, le uscite grezze "
+         "salvate dal banco",
+         all(x["ostili_pulite"] == 0 and x["doppioni"] == 0 and x["grezzo"] for x in r5.values())
+         and sc["grezzo_connessione"] and mt["grezzo_connessione"] is None
+         and ("storia", "connessione") in fin.richieste)
+testo5 = PA.B.scrivi_riepilogo(usc5, {"mappa": r5, "modello": "finto"})
+verifica("il riepilogo: una parte sola 67 % (criterio no), coi deboli 100 %",
+         "una parte sola: 67 %" in testo5 and "coi collegamenti deboli da controllare 100 %"
+         in testo5 and "deboli 1" in testo5, testo5[-600:])
 
 PA.SRV.shutdown()
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")

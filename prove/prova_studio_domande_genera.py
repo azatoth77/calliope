@@ -15,6 +15,8 @@ prova di `prova_studio_argomenti.py`, i materiali di fantasia.
    testo), attiva (proposte, «conferma» prende le pulite, entrano nelle prove), spenta, la stessa
    firma una volta sola.
 4. **La fase del banco** a secco (`banco_studio.fase_prove` col client finto).
+5. **Il banco del 31/10** (#344): le domande vere col vLLM finto di `studio_vllm_finto.py`, nessuna
+   risposta attesa giudicata sbagliata; l'atteso che il codice non dà giusto → `da_controllare`.
 
     python prove/prova_studio_domande_genera.py
 """
@@ -232,6 +234,43 @@ verifica("la fase «prove»: una richiesta per verifica, le misure", cli.n == 1
 testo = B.scrivi_riepilogo(uscita, {"modello": "finto", "richieste": 1, "attese_s": 0,
                                     "prove": r})
 verifica("il riepilogo con i criteri", "PROVE" in testo and "auto_sbagliate 0" in testo, testo)
+
+# ═══════════════════════════ 5. il banco del 31/10 (#344) ═══════════════════════════
+print("— le domande vere del banco del 31/10 col vLLM finto")
+from calliope.studio import risposte as RS  # noqa: E402
+from studio_vllm_finto import VllmFinto, carica as carica_uscite  # noqa: E402
+
+tutti = B.carica_materiali(B.MATERIALI)
+fin = VllmFinto(materiali=tutti)
+r5 = B.fase_prove(fin, tutti, {}, uscita, lambda m: None)
+uscite = carica_uscite()
+isabella = next(d for d in r5["storia"]["domande"] if "sovrani spagnoli" in d["testo"])
+verifica("il banco del 31/10 aveva una risposta attesa giudicata sbagliata (storia)",
+         uscite["prove"]["storia"]["banco"]["auto_sbagliate"] == 1)
+verifica("«Isabella di Castiglia e Ferdinando d'Aragona»: la «d» di «d'Aragona» non è più "
+         "l'opzione d; l'atteso vale giusto e la domanda resta pulita",
+         isabella["auto"] == RS.GIUSTO and isabella["avvisi"] == [], isabella)
+verifica("le domande vere del 31/10: nessuna risposta attesa sbagliata, fondate e scelte come il "
+         "banco (≥ 80 % e ≥ 90 %)",
+         all(x["auto_sbagliate"] == 0 for x in r5.values())
+         and all(x["fondate"] * 100 >= 80 * x["n"] for x in r5.values())
+         and all(x["scelte_nelle_pagine"] * 100 >= 90 * x["scelte"] for x in r5.values())
+         and all(x["grezzo"] for x in r5.values()),
+         {v: (x["auto_sbagliate"], x["fondate"], x["n"]) for v, x in r5.items()})
+# Il controllo nuovo di proposte: un'attesa che il codice non dà giusta → da_controllare
+_vera = RS.valuta
+RS.valuta = lambda d, risposta: (RS.SBAGLIATO, "codice") if d["tipo"] == "scelta"     else _vera(d, risposta)
+ver = tutti["storia"]
+pag5 = [{"id": i, "ordine": i, "stato": "letta", "testo": p["testo"], "numero": p.get("numero"),
+         "metodo": "ocr", "avvisi": None} for i, p in enumerate(ver["pagine"], 1)]
+arg5 = [{"id": i, "titolo": a["titolo"], "pagine": []} for i, a in enumerate(ver["argomenti"], 1)]
+try:
+    finte = DG.proposte([dict(uscite["prove"]["storia"]["domande"][0])], A.riferimenti(pag5),
+                        G.argomenti_rif(arg5))
+finally:
+    RS.valuta = _vera
+verifica("una domanda chiusa con l'atteso che il codice non dà giusto: da_controllare, mai pulita",
+         finte and DG.DA_CONTROLLARE in finte[0]["avvisi"], finte)
 
 print(f"\n{'TUTTO OK' if not errori else f'{errori} ERRORI'}")
 sys.exit(1 if errori else 0)

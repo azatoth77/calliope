@@ -257,16 +257,55 @@ def _rif(x) -> str:
 def controlla(titolo: str, citate: list[str], testi: dict[str, str]) -> tuple[list[str], bool]:
     """(riferimenti che esistono, nelle pagine?): metà delle parole del titolo almeno nel testo
     delle pagine citate, uguali, storpiate o con la stessa radice di 5 lettere; tutte le pagine
-    citate devono esistere."""
+    citate devono esistere. Un titolo **senza parole di 4 lettere** (una formula, una sigla, un
+    simbolo: «3x + 5 = 20», «m.c.m.», «CO₂», «pH») si controlla con `_segni` (31/10, #344)."""
     from ..provenienza import parole, vicina
     rifs = list(dict.fromkeys(_rif(x) for x in citate or ()))
     esistono = [r for r in rifs if r in testi]
     testo = " ".join(testi[r] for r in esistono)
     pt, pp = parole(titolo), parole(testo)
+    if not pt:
+        dentro_s = _segni(titolo, testo)
+        return esistono, bool(esistono) and len(esistono) == len(rifs) and dentro_s
     radici = {w[:RADICE] for w in pp}
     dentro = [w for w in pt if w in pp or vicina(w, pp) or w[:RADICE] in radici]
-    quota = len(dentro) / len(pt) if pt else 0.0
+    quota = len(dentro) / len(pt)
     return esistono, bool(esistono) and len(esistono) == len(rifs) and quota >= SOGLIA
+
+
+# Le parole piccole che non fanno un segno da cercare («il pH», «la x»)
+_PICCOLE = frozenset("il lo la i gli le l un una di del della dei e ed a al da in con per su tra "
+                     "fra che o".split())
+
+
+def _gettoni(testo) -> list[str]:
+    """I pezzi di un testo per le formule: minuscole, senza accenti, lettere latine e greche e
+    cifre (gli indici e gli esponenti diventano cifre: «CO₂» → «co2», «x²» → «x2»)."""
+    t = unicodedata.normalize("NFKD", str(testo or ""))
+    t = "".join(c for c in t if not unicodedata.combining(c)).lower()
+    return re.findall(r"[a-z0-9α-ω]+", t)
+
+
+def _segni(titolo, testo) -> bool:
+    """Un titolo fatto solo di segni (formule, sigle, simboli, parole sotto le 4 lettere) sta nelle
+    pagine se i suoi pezzi, senza le parole piccole, ci sono **tutti e di fila**: uniti senza
+    spazi, uguali a dei pezzi consecutivi del testo («x^2» e «x²», «3 · 5» e «3 × 5», «m.c.m.» e
+    «mcm» valgono). Più stretto delle parole (nessuna storpiatura, nessuna metà): un segno
+    inventato non passa, e un titolo con parole vere resta al controllo delle parole."""
+    pt = [w for w in _gettoni(titolo) if w not in _PICCOLE]
+    if not pt:
+        return False
+    voluto = "".join(pt)
+    pp = _gettoni(testo)
+    for i in range(len(pp)):
+        unito = ""
+        for w in pp[i:]:
+            unito += w
+            if unito == voluto:
+                return True
+            if len(unito) >= len(voluto) or not voluto.startswith(unito):
+                break
+    return False
 
 
 def proposte(grezzi: list[dict], rif: list[tuple[str, dict]]) -> list[dict]:

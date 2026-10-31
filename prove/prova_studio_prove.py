@@ -784,6 +784,27 @@ SC3 = [(AU, "la a, no, la c", "da_rivedere"), (AU, "la a no la c", "da_rivedere"
 male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC3 if RS.valuta(d, r)[0] != e]
 verifica("«X, no, Y» e «X, anzi Y» fra due opzioni: da rivedere; «non X, Y» come prima", not male,
          male)
+# Il banco del 31/10 (#344): la risposta attesa «Isabella di Castiglia e Ferdinando d'Aragona» era
+# «sbagliato» per la «d» di «d'Aragona», presa per l'opzione d. Le lettere dentro la frase: mai
+# elise, e solo all'inizio o dopo «la», «è», «o», «anzi», «no»…; la «a» in testa solo se segue
+# «o», «anzi», «no»… (altrimenti è la preposizione)
+IS = RS.prepara("scelta", "Quali sovrani?", "a", [
+    "Isabella di Castiglia e Ferdinando d'Aragona", "Luigi XIV e Maria Antonietta",
+    "Carlo V e Filippo II", "Elisabetta I e Giacomo I"])
+CA = RS.prepara("scelta", "Dove arrivò?", "c", ["Lisbona", "Palos", "Calicut", "San Salvador"])
+SC4 = [(IS, "Isabella di Castiglia e Ferdinando d'Aragona", "giusto"),
+       (IS, "Isabella di Castiglia e Ferdinando d’Aragona", "giusto"),
+       (IS, "allora, Isabella di Castiglia e Ferdinando d'Aragona", "giusto"),
+       (IS, "la a", "giusto"), (IS, "la d", "sbagliato"), (IS, "d", "sbagliato"),
+       (IS, "Carlo V e Filippo II", "sbagliato"), (IS, "a o d", "sbagliato"),
+       (IS, "la d, anzi la a", "da_rivedere"),
+       (CA, "arrivò a Calicut", "giusto"), (CA, "a Calicut", "giusto"),
+       (CA, "a San Salvador", "sbagliato"), (CA, "la c", "giusto"), (CA, "c'è Calicut", "giusto"),
+       (CA, "Calicut, la c", "giusto"), (CA, "a, anzi c", "da_rivedere"),
+       (CA, "a o c", "sbagliato"), (CA, "la a", "sbagliato"), (CA, "non la a, la c", "giusto")]
+male = [(d["attesa"], r, RS.valuta(d, r)[0]) for d, r, e in SC4 if RS.valuta(d, r)[0] != e]
+verifica("lettere dentro la frase: «d'Aragona», «c'è» e la preposizione «a» non sono opzioni; «la "
+         "a», «a o c», «a, anzi c» sì (banco del 31/10)", not male, male)
 NN3 = [("0,5 kg", "1/2 kg", "giusto"), ("0,75 L", "3/4 di litro", "giusto"),
        ("0,5 kg", "mezzo chilo", "giusto"), ("1571", "in mezzo al Mediterraneo, nel 1571",
                                              "giusto"),

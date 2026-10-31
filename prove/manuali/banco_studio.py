@@ -1146,7 +1146,9 @@ def fase_prove(cli, materiali, testi_letti, uscita, log) -> dict:
                 "auto_sbagliate": sum(d["auto"] == RS.SBAGLIATO for d in domande),
                 "italiano": italiano(json.dumps(domande, ensure_ascii=False)),
                 "secondi": r.get("secondi"), "token_out": r.get("token_out"),
-                "domande": domande}
+                "domande": domande,
+                # L'uscita grezza del modello, per rifare le misure col vLLM finto (#344)
+                "grezzo": r.get("testo", "")}
         out[vid] = riga
         with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(riga, ensure_ascii=False) + "\n")
@@ -1186,14 +1188,16 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
         nodi, coll = MG.scheletro(grezzi, rif, arif, 12, titolo=v.get("argomento"), misure=fm)
         # La seconda passata come in Calliope (passo 7c, #328): solo con più parti connesse
         prima = M.forma(nodi, coll)
-        uniti, secondi2 = 0, 0.0
+        uniti, deboli, secondi2, grezzo2 = 0, 0, 0.0, None
         if prima["componenti"] > 1:
             r2 = cli.chat(MG.messaggi_connessione(v, rif, arif, nodi, coll),
                           max_token=MG.MAX_TOKENS_CONNESSIONE, schema=MG.SCHEMA_CONNESSIONE,
                           temperatura=MG.TEMPERATURA, presence=MG.PRESENCE)
-            uniti = len(MG.connetti(MG.leggi_connessione(r2.get("testo", "")) or [], nodi, coll,
-                                    rif, 12))
+            grezzo2 = r2.get("testo", "")
+            uniti = len(MG.connetti(MG.leggi_connessione(grezzo2) or [], nodi, coll, rif, 12))
             secondi2 = float(r2.get("secondi") or 0)
+            # Le isole che restano: il collegamento debole alla radice, «da controllare» (#344)
+            deboli = len(MG.collega_isole(nodi, coll, 12))
         dopo = M.forma(nodi, coll)
         proibiti = _proibiti_risposta(ver) + [o["regex"] for x in ver.get("ostili") or []
                                               for o in x["non_deve"] if o.get("tipo") ==
@@ -1226,14 +1230,23 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
                 "italiano": italiano(json.dumps([x["parole"] for x in voci], ensure_ascii=False)),
                 # La forma (passo 7c, #328): parti connesse prima e dopo la seconda passata,
                 # doppioni permutati (devono essere 0), uniti e sciolti dal codice, grado della
-                # radice, isolati
-                "componenti_prima": prima["componenti"], "componenti": dopo["componenti"],
+                # radice, isolati. Dal 31/10 (#344) le parti dopo sono quelle che le pagine
+                # reggono (senza i collegamenti deboli), le parti coi deboli a parte, i deboli e
+                # i capi scritti come codice (convertiti e scartati)
+                "componenti_prima": prima["componenti"],
+                "componenti": len(MG.parti_fondate(nodi, coll)),
+                "componenti_con_deboli": dopo["componenti"], "deboli": deboli,
                 "uniti": uniti, "doppioni": dopo["doppioni"],
                 "doppioni_uniti": fm.get("doppioni", 0), "composti": fm.get("composti", 0),
+                "codici": fm.get("codici", 0), "codici_scartati": fm.get("codici_scartati", 0),
                 "grado_radice": dopo["grado_radice"], "isolati": dopo["isolati"],
                 "secondi": round(float(r.get("secondi") or 0) + secondi2, 2),
                 "token_out": r.get("token_out"), "nodi": nodi,
-                "collegamenti_": coll}
+                "collegamenti_": coll,
+                # Le uscite grezze del modello (#344): il banco del 31/10 aveva solo lo
+                # scheletro già controllato, e per rifare le misure col vLLM finto le triple e i
+                # collegamenti della seconda passata si sono dovuti ricostruire
+                "grezzo": r.get("testo", ""), "grezzo_connessione": grezzo2}
         out[vid] = riga
         with open(uscita / "risultati.jsonl", "a", encoding="utf-8") as f:
             f.write(json.dumps(riga, ensure_ascii=False) + "\n")
@@ -1248,10 +1261,12 @@ def fase_mappa(cli, materiali, testi_letti, uscita, log) -> dict:
 CRITERIO_CONNESSE = 90
 
 
-def connesse_pc(mappa: dict) -> int:
-    """La percentuale di verifiche con lo scheletro in una parte sola."""
+def connesse_pc(mappa: dict, deboli: bool = False) -> int:
+    """La percentuale di verifiche con lo scheletro in una parte sola: retta dalle pagine (il
+    criterio), o con i collegamenti deboli da controllare (`deboli`, #344)."""
     righe = [x for x in mappa.values() if x.get("concetti")]
-    return round(100 * sum(x.get("componenti") == 1 for x in righe) / len(righe)) if righe else 0
+    k = "componenti_con_deboli" if deboli else "componenti"
+    return round(100 * sum(x.get(k, x.get("componenti")) == 1 for x in righe) / len(righe))         if righe else 0
 
 
 # ─────────────────────────── giro e riepilogo ───────────────────────────
@@ -1358,10 +1373,15 @@ def scrivi_riepilogo(uscita: Path, riep: dict):
                          f"{x.get('componenti', '?')} (uniti {x.get('uniti', 0)}), doppioni "
                          f"{x.get('doppioni', 0)} (uniti dal codice {x.get('doppioni_uniti', 0)}), "
                          f"composti sciolti {x.get('composti', 0)}, grado della radice "
-                         f"{x.get('grado_radice', 0)}, isolati {x.get('isolati', 0)}")
+                         f"{x.get('grado_radice', 0)}, isolati {x.get('isolati', 0)}, "
+                         f"deboli {x.get('deboli', 0)} (parti coi deboli "
+                         f"{x.get('componenti_con_deboli', x.get('componenti', '?'))}), codici "
+                         f"{x.get('codici', 0)} (scartati {x.get('codici_scartati', 0)})")
         pc = connesse_pc(riep["mappa"])
+        pd = connesse_pc(riep["mappa"], deboli=True)
         righe.append(f"  una parte sola: {pc} % delle verifiche (criterio ≥ {CRITERIO_CONNESSE} %"
-                     f": {'sì' if pc >= CRITERIO_CONNESSE else 'no'})")
+                     f": {'sì' if pc >= CRITERIO_CONNESSE else 'no'}); coi collegamenti deboli "
+                     f"da controllare {pd} %")
     if riep.get("prove"):
         righe.append(f"\nPROVE (per verifica: domande e tipi, pulite, fondate, criterio ≥ "
                      f"{CRITERIO_PROVE_FONDATE} %; scelte con l'opzione giusta nelle pagine, "
