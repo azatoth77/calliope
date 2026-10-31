@@ -1526,11 +1526,13 @@ NON_FINITA = ("La mappa da zero non è ancora finita: quando hai fatto, tocca «
 
 def _verifica_con_libera(svc, ctx, chi, verifica, materia) -> dict | None:
     """La verifica di «Parliamone»: quella detta (id o materia), altrimenti quella con la mappa
-    libera finita più di recente, altrimenti la più vicina."""
+    libera finita più di recente (non una chiusa da sola alla fine della verifica, #340),
+    altrimenti la più vicina."""
     if verifica is not None or materia:
         return _verifica(svc, ctx, chi, verifica, materia)
     finite = [v for v in svc.home(chi)["verifiche"] if v.get("di") is None
-              and ((v.get("mappa") or {}).get("libera") or {}).get("controllata")]
+              and ((v.get("mappa") or {}).get("libera") or {}).get("controllata")
+              and not v["mappa"]["libera"].get("scaduta")]
     if finite:
         v = max(finite, key=lambda x: str(x["mappa"]["libera"]["controllata"]))
         from ..studio import NonPermesso, NonTrovata
@@ -1568,6 +1570,10 @@ def _mappa_consigli(ctx: ToolContext, verifica=None, materia: str = "") -> dict:
         return _f(NON_CE, ok=False)
     except ValueError:
         return _f(NON_FINITA, ok=False)
+    if d.get("scaduta"):
+        # Chiusa da sola prima di «Ho finito» (#340): la frase del codice, niente al modello
+        note_rule(ctx, "studio_mappa_consigli_scaduta")
+        return _f(d["frase"], ok=False)
     note_rule(ctx, "studio_mappa_consigli")
     # «scheletro» e non «riferimento»: quella chiave Brain la prende per sé (i pronomi della casa)
     out = {"ok": True, "verifica": v["id"], "mappa_tua": d["tua"],

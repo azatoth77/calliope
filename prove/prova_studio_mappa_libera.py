@@ -731,6 +731,78 @@ sc.archivia(LEO, v13a)
 verifica("13. archivia: la libera aperta si chiude davvero, scaduta, senza tentativi",
          sc._riga_mappa(l13a)["stato"] == "controllata"
          and sc._riga_mappa(l13a)["controllo"]["scaduto"] == "archiviata" and tent_c(v13a) == [])
+
+# ═══════════════ 5e. la quarta revisione della PR #330 (#340) ═══════════════
+print("— la quarta revisione: la libera scaduta, «Parliamone» e la volta scorsa")
+ia_, ib_, ic_ = {"concetti": 1}, {"concetti": 2}, {"concetti": 3}
+verifica("14. giro_di_prima: il giro più recente prima dell'ultimo, saltando gli scaduti",
+         M.giro_di_prima([{"indicatori": ia_}, {"indicatori": ib_, "scaduto": "fatta"},
+                          {"indicatori": ic_}]) == ia_
+         and M.giro_di_prima([{"indicatori": ia_}, {"indicatori": ib_}]) == ia_
+         and M.giro_di_prima([{"indicatori": ia_, "scaduto": "fatta"}, {"indicatori": ic_}])
+         is None and M.giro_di_prima([{"indicatori": ia_}]) is None
+         and M.giro_di_prima([]) is None)
+
+
+def chiama_sc(prof, nome, **args):
+    ctx_ = ctx_di(prof)
+    ctx_.studio = sc
+    return json.loads(TOOLS.call(nome, args, ctx_, prof.level))
+
+
+ora14 = ORA[0]
+# Una libera finita per davvero alle 16:00, poi un'altra lasciata a metà e chiusa da sola alle
+# 16:30 (verifica fatta, poi riaperta da imposta): è la più recente, ma non è finita
+v14f, _ = nuova_con_scheletro()
+l14f = sc.inizia_libera(LEO, v14f)
+scrivi_tutto(l14f)
+sc.finisci_libera(LEO, l14f)
+v14s, _ = nuova_con_scheletro()
+l14s = sc.inizia_libera(LEO, v14s)
+sc.nodo_mappa(LEO, l14s, "Cristoforo Colombo")
+ORA[0] = ora14 + datetime.timedelta(minutes=30)
+sc.dati.scrivi("UPDATE studio_verifiche SET stato = 'fatta' WHERE id = ?", (v14s,))
+sc.imposta(LEO, v14s, data=futura)
+d14 = sc.consigli_mappa(LEO, v14s)
+verifica("14. consigli_mappa su una libera scaduta: lo dice, e non «lo scheletro per il confronto "
+         "non c'è ancora»", d14["scaduta"] == "fatta"
+         and d14["frase"].startswith("La tua mappa da zero si è chiusa da sola, prima di «Ho "
+                                     "finito»") and "scheletro" not in d14["frase"]
+         and d14["frase"].endswith("Per rifarla, «Rifai»."), d14["frase"])
+verifica("14. …al tutore in terza persona",
+         sc.consigli_mappa(ANDREA, v14s)["frase"].startswith("La mappa da zero di Leo si è "
+                                                             "chiusa da sola"))
+r14 = chiama_sc(LEO, "studio_mappa_consigli", verifica=v14s)
+verifica("14. il tool sulla scaduta detta: la frase del codice, niente mappa al modello",
+         r14["ok"] is False and r14["risposta_finale"] == d14["frase"]
+         and "mappa_tua" not in r14 and "scheletro" not in r14, str(r14)[:300])
+r14 = chiama_sc(LEO, "studio_mappa_consigli")
+verifica("14. senza verifica detta il tool sceglie la libera finita, non la scaduta più recente",
+         r14["ok"] is True and r14["verifica"] == v14f, str(r14)[:300])
+lib14 = {v["id"]: v["mappa"]["libera"] for v in sc.home(LEO)["verifiche"]
+         if v["id"] in (v14f, v14s)}
+verifica("14. la home: la scaduta lo dice nei conti, la finita no",
+         lib14[v14s]["scaduta"] is True and lib14[v14f]["scaduta"] is False, str(lib14))
+# «Rifai» dopo la scaduta: il giro scaduto non è la volta scorsa
+sc.rifai_mappa(LEO, l14s)
+scrivi_tutto(l14s)
+sc.finisci_libera(LEO, l14s)
+vl14 = sc.vista_mappe(LEO, v14s)["libera"]
+d14 = sc.consigli_mappa(LEO, v14s)
+verifica("14. il giro dopo la scaduta non ha la volta scorsa (la mappa a metà non conta)",
+         vl14["giri"] == 2 and vl14["prima"] is None and vl14["rispetto"] is None
+         and d14["giro_di_prima"] is None and d14["rispetto_a_prima"] is None
+         and not d14["scaduta"], str({k: vl14.get(k) for k in ("giri", "prima", "rispetto")}))
+sc.rifai_mappa(LEO, l14s)
+scrivi_tutto(l14s)
+sc.finisci_libera(LEO, l14s)
+vl14 = sc.vista_mappe(LEO, v14s)["libera"]
+giri14 = sc._riga_mappa(l14s)["giri"]
+verifica("14. contrario: il giro dopo ancora si confronta con quello finito, non con lo scaduto",
+         vl14["giri"] == 3 and vl14["prima"] == giri14[1]["indicatori"]
+         and vl14["rispetto"] is not None and giri14[0].get("scaduto") == "fatta",
+         str({k: vl14.get(k) for k in ("giri", "prima", "rispetto")}))
+ORA[0] = ora14
 sc.close()
 
 # ═══════════════════════════ 6. dati ═══════════════════════════

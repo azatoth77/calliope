@@ -1244,6 +1244,23 @@ Le correzioni minori e le note:
 mappa libera è aperta. Se il tutore le ripassa a voce col minore vicino, Calliope ne dice ad alta
 voce i concetti. È raro e si lascia così.
 
+### 31/10: la libera scaduta in «Parliamone» e nella volta scorsa (issue #340, quarta revisione della PR #330)
+
+1. **«Parliamone» su una libera scaduta**, cioè chiusa da sola alla fine della verifica e poi
+   riaperta da `imposta`. `consigli_mappa` diceva «lo scheletro per il confronto non c'è ancora»
+   (il controllo della scaduta non ha conti). Ora la frase del codice dice «La tua mappa da zero si
+   è chiusa da sola, prima di «Ho finito», quando la verifica è finita: il confronto non c'è. Per
+   rifarla, «Rifai».» (al tutore «La mappa da zero di Leo…», «Si può rifare con «Rifai»»), senza
+   consigli sul metodo. Il tool `studio_mappa_consigli` la dice come risposta finale e non dà la
+   mappa al modello (regola `studio_mappa_consigli_scaduta`). Senza una verifica detta,
+   `_verifica_con_libera` sceglie la libera finita più recente e salta le scadute: i conti della
+   mappa nella home hanno `libera.scaduta`.
+2. **La volta scorsa** (`mappa.giro_di_prima`): il giro più recente prima dell'ultimo che non è
+   scaduto, per la pagina (`prima`, `rispetto`) e per «Parliamone» (`giro_di_prima`,
+   `rispetto_a_prima`). Prima si prendeva il penultimo giro, anche se era una mappa lasciata a
+   metà. Il giro scaduto stesso mostra ancora i suoi indicatori, e l'eventuale confronto con il
+   giro di prima: la pagina lo segna «scaduta».
+
 ## Lo scheletro della mappa generato dal lettore (30/10 sera, issue #247, ramo `issue-247-studio-mappa-genera`)
 
 *Seconda parte del passo 7; decisione [0035](../decisioni/0035-studio.md) punto 36.*
