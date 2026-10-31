@@ -765,7 +765,8 @@ NN = [("1492", x, "giusto") for x in ("il dodici ottobre 1492", "millequattrocen
      ("1,5 m", "1,5 metri, cioè 150 centimetri", "giusto"), ("100 °C", "100°C", "giusto"),
      ("5 N", "5 newton, cioè 5 N", "giusto"), ("60 km/h", "60 km/h in 2 ore", "giusto"),
      ("3600 s", "un'ora, cioè 3600 secondi", "giusto"), ("2 h", "2 ore e 30 minuti",
-                                                          "da_rivedere"),
+                                                          # sbagliato dal 31/10 (#343)
+                                                          "sbagliato"),
      ("2,5 h", "2 ore e mezza", "giusto"), ("12", "12 o 13", "da_rivedere")]
 male = [(a, r, RS.valuta(RS.prepara("numero", "q?", a), r)[0]) for a, r, e in NN
         if RS.valuta(RS.prepara("numero", "q?", a), r)[0] != e]
@@ -894,6 +895,26 @@ male = [(a, r, RS.valuta(RS.prepara("numero", "q?", a), r)[0]) for a, r, e in NN
         if RS.valuta(RS.prepara("numero", "q?", a), r)[0] != e]
 verifica("frazioni prima dell'unità o di «di», «mezzo» solo come numero vero, somme solo delle "
          "misure composte (mai velocità né temperatura)", not male, male)
+# #343 (quarta revisione della PR #342): una misura composta sola con la somma diversa è
+# sbagliata; con un altro numero o la stessa unità due volte si rivede come prima
+NN4 = [("1,05 m", "1 metro e 50 centimetri", "sbagliato"),
+       ("90 min", "1 ora e 20 minuti", "sbagliato"),
+       ("1,5 m", "1 metro e 50 centimetri", "giusto"),
+       ("1,05 m", "3 prove: 1 metro e 50 centimetri", "da_rivedere"),
+       ("100 m", "50 m e 50 m", "da_rivedere")]
+male = [(a, r, RS.valuta(RS.prepara("numero", "q?", a), r)[0]) for a, r, e in NN4
+        if RS.valuta(RS.prepara("numero", "q?", a), r)[0] != e]
+verifica("#343: la misura composta sola con la somma sbagliata è «sbagliato»; i contrari (somma "
+         "giusta, un numero in più, la stessa unità due volte) come prima", not male, male)
+# #343: dopo «di» non legano le unità che sono parole comuni; le altre sì
+from calliope.studio import unita as U_  # noqa: E402
+LL = [("2 di secondo grado", [(2.0, None)]), ("il 2 di secondo", [(2.0, None)]),
+      ("3 di ore", [(3.0, None)]), ("2 di gradi", [(2.0, None)]),
+      ("3 ore", [(3.0, "h")]), ("10 secondi", [(10.0, "s")]), ("3/4 di litro", [(0.75, "L")]),
+      ("2 di metri", [(2.0, "m")])]
+male = [(t, U_.leggi(t)) for t, e in LL if U_.leggi(t) != e]
+verifica("#343: «2 di secondo grado», «3 di ore» senza unità; «3 ore», «3/4 di litro» con",
+         not male, male)
 VF_ = RS.prepara("vero_falso", "x", "vero")
 verifica("vero e falso con una negazione («vero, non è falso») da rivedere; senza, sbagliato",
          RS.valuta(VF_, "vero, non è falso")[0] == "da_rivedere"

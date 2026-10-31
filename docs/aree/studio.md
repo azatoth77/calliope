@@ -352,6 +352,30 @@ Misure col vLLM finto dopo la revisione: mappa come sopra (matematica 8/8 nelle 
 controllare; una parte sola 67 %, coi deboli 100 %); domande fondate 17/22, 21/23, 24/28,
 `auto_sbagliate` 0, 0, 0.
 
+### 31/10: i ritocchi di risposte, unità, argomenti e indicazioni (issue #343)
+
+Dalle revisioni delle PR #342, #346 e #348, non bloccanti, ognuno coi suoi contrari nelle prove:
+- **`risposte._numero`**: una misura composta sola, senza altri numeri né alternative, con la somma
+  diversa dall'atteso è «sbagliato» («1 metro e 50 centimetri» con 1,05 m, «2 ore e 30 minuti» con
+  2 h; prima «da rivedere»). Con un numero in più («3 prove: …») o la stessa unità due volte resta
+  «da rivedere».
+- **`unita.leggi`**: dopo «di» non legano il numero le unità che sono parole comuni («secondo»,
+  «ore», «gradi»): «2 di secondo grado» e «3 di ore» non sono 2 s e 3 h. «3/4 di litro» sì.
+- **`argomenti._pezzi`**: una cifra e una consonante si uniscono solo con un operatore subito
+  prima della cifra o subito dopo la lettera, come le vocali: «punto 2 b» e «classe 3 B» restano
+  due pezzi. Effetto noto: «2 x» scritto senza operatori non è più «2x».
+- **`argomenti._di_fila`**: il meno in testa al titolo («-5») vale solo se nella pagina non segue
+  un numero o una lettera sola: non è dentro «10 - 5 = 5» né «x - 5»; dopo una parola («di -5
+  gradi») sì.
+- **`tools/studio._detta_dal_tutore`**: le forme di cortesia staccate dalla punteggiatura o in
+  fondo («se puoi,», «se riesci.», «se vuoi,») si tolgono prima di contare il «se»; «se puoi farlo…»
+  senza virgola resta.
+- **Il banco** (`banco_studio.py`) scrive la quota delle calcolate e le fondate anche sul totale.
+
+Gli script del revisore rilanciati contro il ramo dell'epic: il blocco 4 di `funzioni.py` (PR
+#346) e `nominate.py` (PR #350) danno gli stessi esiti di prima, nessuna risposta sbagliata
+diventa «giusto».
+
 ## La vista del tutore e le indicazioni (31/10, issue #250 e #285, ramo `issue-250-studio-tutore`)
 
 *Passo 10 dell'epic #251 (Studio 9 del progetto, § 5). Decisione [0035](../decisioni/0035-studio.md),
