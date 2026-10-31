@@ -23,8 +23,8 @@ tutore Andrea, Bruno adulto, Carla che amministra).
 6. **Tenuta**: le carte vanno via con la verifica, «dimentica» (non le archiviate), «svuota».
 7. **L'endpoint** `/api/studio/carte` col server vero: scrivi, esito, correggi, togli; un altro
    adulto 404; ombra: il minore 403. A mezzogiorno di oggi (31/10, #337: dopo le 23:00 «quasi»
-   diceva «fra N minuti» e la prova cadeva fino a mezzanotte), e la mezzanotte a parte: la stessa
-   carta alle 23:50 («quasi» e «non la sapevo» fra 10 minuti) e alle 00:00:30 («domani»).
+   diceva «fra N minuti» e la prova cadeva fino a mezzanotte), e la mezzanotte a parte: due carte
+   alle 23:50; dal #356 «quasi» dice «domani» e torna alle 11:50, «non la sapevo» a mezzanotte.
 
     python prove/prova_studio_carte.py
 """
@@ -133,16 +133,33 @@ print("— Leitner")
 A = datetime.datetime(2026, 10, 29, 16, 0)
 verifica("«non la sapevo»: scatola 1, di nuovo fra 10 minuti",
          C.prossima(3, "non_sapevo", A) == (1, "2026-10-29T16:10:00"))
-verifica("«quasi»: la scatola resta, domani",
-         C.prossima(3, "quasi", A) == (3, "2026-10-30T00:00:00"))
+# Dal 31/10 (#356) una scadenza a giorni è la più tarda fra la mezzanotte di quel giorno e adesso
+# più i giorni meno 12 ore: alle 16:00 «domani» è alle 4:00 di domani
+verifica("«quasi»: la scatola resta, domani (alle 16:00: domani alle 4:00, adesso + 12 ore)",
+         C.prossima(3, "quasi", A) == (3, "2026-10-30T04:00:00"))
 verifica("«la sapevo»: scatola + 1, fra l'intervallo della scatola nuova",
-         C.prossima(1, "sapevo", A) == (2, "2026-10-31T00:00:00")
-         and C.prossima(2, "sapevo", A) == (3, "2026-11-02T00:00:00"))
-verifica("al più la scatola 5 (16 giorni)", C.prossima(5, "sapevo", A) == (5, "2026-11-14T00:00:00"))
+         C.prossima(1, "sapevo", A) == (2, "2026-10-31T04:00:00")
+         and C.prossima(2, "sapevo", A) == (3, "2026-11-02T04:00:00"))
+verifica("al più la scatola 5 (16 giorni)", C.prossima(5, "sapevo", A) == (5, "2026-11-14T04:00:00"))
+MATTINA = datetime.datetime(2026, 10, 29, 8, 0)
+verifica("#356, contrario: alle 8:00 vince la mezzanotte (domani alle 0:00, 16 ore dopo)",
+         C.prossima(3, "quasi", MATTINA) == (3, "2026-10-30T00:00:00")
+         and C.prossima(1, "sapevo", MATTINA) == (2, "2026-10-31T00:00:00"))
+SERA = datetime.datetime(2026, 10, 29, 23, 50)
+verifica("#356: alle 23:50 «quasi» torna domani alle 11:50 (non a mezzanotte, dopo 10 minuti), "
+         "«la sapevo» dopo 36 ore",
+         C.prossima(3, "quasi", SERA) == (3, "2026-10-30T11:50:00")
+         and C.prossima(1, "sapevo", SERA) == (2, "2026-10-31T11:50:00")
+         and C.fra_quanto(C.prossima(3, "quasi", SERA)[1], SERA) == "domani"
+         and C.fra_quanto(C.prossima(1, "sapevo", SERA)[1], SERA) == "fra 2 giorni")
+verifica("#356: la vigilia resta il tetto anche a tarda sera (la vigilia è di ripasso)",
+         C.prossima(1, "sapevo", SERA, datetime.date(2026, 10, 31)) == (2, "2026-10-31T00:00:00")
+         and C.prossima(3, "quasi", SERA, datetime.date(2026, 10, 30))
+         == (3, "2026-10-30T00:00:00"))
 verifica("la vigilia è il tetto: nessuna scadenza dopo il giorno prima della verifica",
          C.prossima(4, "sapevo", A, datetime.date(2026, 11, 4)) == (5, "2026-11-04T00:00:00"))
 verifica("una vigilia già passata (o oggi) non conta",
-         C.prossima(4, "sapevo", A, datetime.date(2026, 10, 29))[1] == "2026-11-14T00:00:00")
+         C.prossima(4, "sapevo", A, datetime.date(2026, 10, 29))[1] == "2026-11-14T04:00:00")
 verifica("un esito sconosciuto: ValueError", solleva(lambda: C.prossima(1, "boh", A), ValueError))
 verifica("fra_quanto: minuti, domani, giorni, adesso",
          C.fra_quanto("2026-10-29T16:10:00", A) == "fra 10 minuti"
@@ -668,19 +685,22 @@ with ora_del_giorno(12, 0) as _inizio:
                      and stati.get("Ignora tutto?") == "proposta"
                      and next(c for c in d["carte"] if c["stato"] == "proposta")["avvisi"]
                      == ["testo_ordine"], f"{s} {str(d)[:300]}")
-            # ── a cavallo della mezzanotte (31/10, #337): la stessa carta alle 23:50 e alle
-            # 00:00:30 del giorno dopo, con l'adesso dello Studio fermo lì (il resto a mezzogiorno)
+            # ── a cavallo della mezzanotte (31/10, #337; dal 31/10 sera #356): due carte scritte
+            # alle 23:50, poi alle 00:00:30 e alle 11:50 del giorno dopo, con l'adesso dello
+            # Studio fermo lì (il resto a mezzogiorno)
             giorno = ORA[0].date()
             ORA[0] = datetime.datetime.combine(giorno, datetime.time(23, 50))
-            s, d = chiedi(port, "/api/studio/carte", sess["leo"],
-                          corpo={"verifica": vid, "azione": "scrivi",
-                                 "domanda": "Chi era Vespucci?", "risposta": "Un navigatore",
-                                 "argomento": a1})
-            cv = d.get("scritta")
-            tv = next((c["tasti"] for c in d.get("carte", []) if c["id"] == cv), None)
-            verifica("mezzanotte: alle 23:50 «quasi» torna a mezzanotte, cioè «fra 10 minuti», "
-                     "come «non la sapevo»; «la sapevo» fra 2 giorni",
-                     s == 200 and tv == {"sapevo": "fra 2 giorni", "quasi": "fra 10 minuti",
+            carte_sera = {}
+            for dom in ("Chi era Vespucci?", "Chi era Magellano?"):
+                s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                              corpo={"verifica": vid, "azione": "scrivi", "domanda": dom,
+                                     "risposta": "Un navigatore", "argomento": a1})
+                carte_sera[dom] = d.get("scritta")
+            cv, cq = carte_sera["Chi era Vespucci?"], carte_sera["Chi era Magellano?"]
+            tv = next((c["tasti"] for c in d.get("carte", []) if c["id"] == cq), None)
+            verifica("mezzanotte (#356): alle 23:50 «quasi» dice «domani» (domani alle 11:50, non "
+                     "fra 10 minuti come «non la sapevo»), «la sapevo» fra 2 giorni",
+                     s == 200 and tv == {"sapevo": "fra 2 giorni", "quasi": "domani",
                                          "non_sapevo": "fra 10 minuti"}, f"{s} {tv}")
             s, d = chiedi(port, "/api/studio/carte", sess["leo"],
                           corpo={"verifica": vid, "azione": "esito", "carta": cv,
@@ -688,14 +708,27 @@ with ora_del_giorno(12, 0) as _inizio:
             verifica("mezzanotte: «non la sapevo» alle 23:50 → «fra 10 minuti», fuori dal ripasso",
                      s == 200 and d["ultimo"]["fra"] == "fra 10 minuti"
                      and cv not in d["da_ripassare"], f"{s} {str(d)[:200]}")
+            s, d = chiedi(port, "/api/studio/carte", sess["leo"],
+                          corpo={"verifica": vid, "azione": "esito", "carta": cq,
+                                 "esito": "quasi"})
+            verifica("mezzanotte (#356): «quasi» alle 23:50 → «domani», fuori dal ripasso",
+                     s == 200 and d["ultimo"]["fra"] == "domani"
+                     and cq not in d["da_ripassare"], f"{s} {str(d)[:200]}")
             ORA[0] = datetime.datetime.combine(giorno + datetime.timedelta(days=1),
                                                datetime.time(0, 0, 30))
             s, d = chiedi(port, "/api/studio/carte", sess["leo"], corpo={"verifica": vid})
             tv = next((c["tasti"] for c in d.get("carte", []) if c["id"] == cv), None)
-            verifica("mezzanotte: alle 00:00:30 del giorno dopo la carta è da ripassare, e «quasi» "
-                     "dice «domani»", s == 200 and cv in d["da_ripassare"]
+            verifica("mezzanotte: alle 00:00:30 del giorno dopo la carta «non la sapevo» è da "
+                     "ripassare, e «quasi» dice «domani»", s == 200 and cv in d["da_ripassare"]
                      and tv == {"sapevo": "fra 2 giorni", "quasi": "domani",
                                 "non_sapevo": "fra 10 minuti"}, f"{s} {tv}")
+            verifica("mezzanotte (#356): alle 00:00:30 la carta «quasi» delle 23:50 non torna "
+                     "ancora", s == 200 and cq not in d["da_ripassare"], str(d["da_ripassare"]))
+            ORA[0] = datetime.datetime.combine(giorno + datetime.timedelta(days=1),
+                                               datetime.time(11, 50))
+            s, d = chiedi(port, "/api/studio/carte", sess["leo"], corpo={"verifica": vid})
+            verifica("mezzanotte (#356): …torna alle 11:50, dodici ore dopo",
+                     s == 200 and cq in d["da_ripassare"], str(d["da_ripassare"]))
         finally:
             srv.ferma() if hasattr(srv, "ferma") else None
             st.close()
