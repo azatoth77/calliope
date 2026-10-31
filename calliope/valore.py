@@ -87,7 +87,10 @@ ARGOMENTI: dict[str, dict[str, str]] = {
                "numero": B, "titolo": B, "giorno": S, "conoscenza": S,
                "umore": S,
                # Il tipo della prova vera e la finestra «dal» (passo 8, #248): una scelta chiusa
-               "prova": S, "finestra": S},
+               "prova": S, "finestra": S,
+               # L'indicazione del tutore (passo 10, #250, #285): un contenuto; quanti giorni
+               # vale, una scelta entro i limiti
+               "testo": C, "giorni": S},
     # L'interrogazione a voce (passo 8, #248): una lettura (E0) come le carte; la verifica è un
     # bersaglio, la proposta del modello solo una misura
     "studio_interroga": {"parte": Z, "verifica": B, "materia": C, "proposta": S},
@@ -265,8 +268,10 @@ EFFETTI: dict[str, object] = {
     "stanza_pausa": E1,
     # lo Studio (30/10, #284): i dati della persona, si disfa con un tocco o una frase; «archivia»
     # tiene la verifica oltre la tenuta (resta, la vede il tutore): E2
+    # «indica» e «indicazioni_togli» (passo 10, #250): cambiano come Calliope aiuta un minore,
+    # lo vedono lui e i tutori: E2 come «crea»
     "studio": lambda a: E2 if str((a or {}).get("azione") or "").lower() in (
-        "crea", "archivia") else E1,
+        "crea", "archivia", "indica", "indicazioni_togli") else E1,
     # 14/10: dimenticare un conoscente non si disfa; cambiare chi è di famiglia è fiducia
     "conoscenti": E3, "conoscente_livello": E4,
     # E3: esce di casa, esegue codice o non si disfa

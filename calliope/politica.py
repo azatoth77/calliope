@@ -249,6 +249,11 @@ VERBI_STUDIO = {
     "conclusa": r"fatt|interrogat|finit|conclus|andat|consegnat",
     "sessione": r"conosc|sent|stanc|pront|curios|tranquill|stress|neutral|energia|sicur|nuov|"
                 r"poco|abbastanza|bene|male|[1-5]|uno|due|tre|quattro|cinque",
+    # passo 10 (#250, #285): le indicazioni del tutore; il testo deve venire anche dalle sue
+    # parole (tools/studio._detta_dal_tutore)
+    "indica": r"indic|insist|di' a|dì a|digli|dagli|fagli|ricord|quando (?:lo|la) aiut|"
+              r"con (?:lui|lei)|non (?:dargli|dirgli|fargli)|chied|insegn|spieg|segna",
+    "indicazioni_togli": r"togl|tol[gt]|elimin|lev[aio]|cancell|basta|non serv",
 }
 
 # La tabella dei tool di Calliope. Un tool nuovo va aggiunto qui (o ha `ToolSpec.classe`):
@@ -447,9 +452,11 @@ CLASSI: dict[str, Classe] = {
     # anche «resoconto» e «riepilogo» leggono soltanto (proiezioni dei dati, frasi del codice)
     # Dal 30/10 (passo 7, #247) «mappa»: i conti della mappa concettuale, mai il testo dei concetti
     # Dal 31/10 (passo 8, #248) «prove» legge i conti delle prove; «tipo» e «conclusa» cambiano
+    # Dal 31/10 (passo 10, #250, #285) «indica» e «indicazioni_togli» cambiano le indicazioni
+    # del tutore per lo studio del suo minore; «indicazioni» ne legge il conto
     "studio": _c(A, sola_lettura=("azione", frozenset({"stato", "piano", "oggi", "resoconto",
                                                         "riepilogo", "carte", "mappa",
-                                                        "prove"})),
+                                                        "prove", "indicazioni"})),
                  cosa=lambda a: _studio_cosa(a), verbi_azione=("azione", VERBI_STUDIO),
                  chiedi_se=lambda testo, a, ctx, **_k: _studio_archivia(testo, a)),
     # il testo letto delle pagine e i titoli degli argomenti: dati non fidati, come una foto
@@ -486,7 +493,9 @@ _STUDIO_COSA = {"crea": "segni la verifica", "fatto": "segni fatto il giorno del
                 "sposta": "cambi la data della verifica",
                 "tieni": "tenga l'argomento nel piano", "togli": "tolga l'argomento dal piano",
                 "riprova": "riprovi a leggere la pagina", "sessione": "cominci la sessione",
-                "tipo": "cambi il tipo della prova", "conclusa": "segni fatta la verifica"}
+                "tipo": "cambi il tipo della prova", "conclusa": "segni fatta la verifica",
+                "indica": "segni un'indicazione per lo studio del ragazzo",
+                "indicazioni_togli": "tolga le indicazioni per lo studio del ragazzo"}
 
 
 def _studio_cosa(a: dict) -> str:

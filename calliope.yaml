@@ -1037,6 +1037,16 @@ studio:
   # L'audio del ripasso per lo schermo è una cache del testo (studio_cartella/ascolta/): si toglie
   # dopo tanti giorni dall'ultimo ascolto, e sempre con la verifica, «dimentica» e --svuota
   studio_ascolta_giorni: 7
+  # Le indicazioni dei tutori (31/10, passo 10, #250 e #285, calliope/studio/tutore.py): frasi
+  # di un tutore per lo studio del suo minore («insisti sulle frazioni»), per tutto il suo
+  # studio, una materia o una verifica, scritte dalla vista del tutore o a voce. Il minore ne
+  # vede il testo; nei dati del turno del minore entrano con una cornice del codice, sotto le
+  # regole per i minori, senza permessi né azioni. Accese di serie con lo Studio: senza un tutore
+  # che scrive non cambia niente. false: niente scrittura e niente nei dati del turno
+  studio_indicazioni: true
+  # Quanti giorni vale un'indicazione se il tutore non lo dice (da 1 a 90; legata a una verifica
+  # mai oltre la fine della prova vera)
+  studio_indicazioni_giorni: 30
 
 memoria:
   # Memoria persistente per persona (memory.py, SQLite). Ognuno vede solo i propri

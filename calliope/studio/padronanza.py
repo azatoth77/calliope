@@ -20,6 +20,11 @@ del 27/10, decisione 0019): si cambiano qui, le prove le leggono da qui.
   attesa) pesa `PESO_AUTO` (la metà): l'esito di una prova lo decide di solito il codice, e
   giudicarsi da soli conta meno. Le carte restano come sono (lì l'autovalutazione è la regola).
 
+- dal passo 10 (31/10, #250): il **giudizio del tutore** su un argomento («la sa», «quasi», «da
+  studiare») è un tentativo di tipo «giudizio», fonte «tutore», peso pieno (`GIUDIZI`). L'accordo
+  per il criterio di «mostrata» (0035 punto 32) si misura contro la padronanza calcolata **senza**
+  i giudizi (`accordo`): altrimenti il tutore si confronterebbe con sé stesso.
+
 Lo stato d'animo e l'autovalutazione «da 1 a 5» non entrano: non sono su disco (0035 punto 27).
 """
 
@@ -28,8 +33,13 @@ from __future__ import annotations
 import datetime
 
 ESITI = {"giusto": 1.0, "indizio": 0.5, "sbagliato": 0.0}
+# «giudizio» (31/10, passo 10, #250): la parola del tutore su un argomento, peso pieno
 TIPI = {"carta": 1.0, "esercizio": 1.0, "mappa": 0.7, "interrogazione": 1.2,
-        "verifica_finta": 1.5}
+        "verifica_finta": 1.5, "giudizio": 1.0}
+# Il giudizio del tutore (passo 10, #250): la parola detta → l'esito del tentativo
+GIUDIZIO = "giudizio"
+GIUDIZI = {"la sa": "giusto", "quasi": "indizio", "da studiare": "sbagliato"}
+PAROLA_GIUDIZIO = {v: k for k, v in GIUDIZI.items()}
 # Chi ha deciso l'esito: la persona (una carta «la sapevo / no»), il codice (una risposta
 # controllata), il tutore. Mai il modello da solo (spunto di Dario del 28/10)
 FONTI = ("persona", "codice", "tutore")
@@ -73,8 +83,13 @@ def calcola(tentativi: list[dict], oggi) -> dict:
     None (e la parola «non ancora misurata») sotto la soglia di misura."""
     oggi = _d(oggi)
     per: dict = {}
+    # Il giudizio del tutore (revisione della PR #348, nota 3): conta solo l'ultimo per argomento,
+    # e non conta per la soglia di misura, che resta ai tentativi della persona
+    ultimi = _ultimi_giudizi(tentativi)
     for t in tentativi:
         if t.get("esito") not in ESITI or t.get("tipo") not in TIPI or t.get("argomento") is None:
+            continue
+        if t.get("tipo") == GIUDIZIO and ultimi.get(int(t["argomento"])) is not t:
             continue
         try:
             g = _d(t["giorno"])
@@ -82,23 +97,68 @@ def calcola(tentativi: list[dict], oggi) -> dict:
             continue
         w = TIPI[t["tipo"]] * (PESO_AUTO if t["tipo"] in TIPI_PROVA
                                and t.get("fonte") == "persona" else 1.0)
-        per.setdefault(int(t["argomento"]), []).append((g, w, t["esito"]))
+        per.setdefault(int(t["argomento"]), []).append((g, w, t["esito"],
+                                                        t.get("tipo") == GIUDIZIO))
     out = {}
     for aid, righe in per.items():
-        giorni = {g for g, _t, _e in righe}
+        suoi = [r for r in righe if not r[3]]
+        giorni_suoi = {r[0] for r in suoi}
+        giorni = {g for g, _t, _e, _g in righe}
         ultimo = max(giorni)
         valore = None
-        if len(righe) >= MIN_TENTATIVI and len(giorni) >= MIN_GIORNI:
+        if len(suoi) >= MIN_TENTATIVI and len(giorni_suoi) >= MIN_GIORNI:
             num = den = 0.0
-            for g, peso, esito in righe:
+            for g, peso, esito, _giud in righe:
                 w = peso * 0.5 ** (max(0, (oggi - g).days) / MEZZA_VITA_GIORNI)
                 num += w * ESITI[esito]
                 den += w
             v = 100.0 * num / den if den else 0.0
             v *= 0.5 ** (max(0, (oggi - ultimo).days) / CALO_GIORNI)
             valore = int(round(min(100.0, max(0.0, v))))
-        out[aid] = {"valore": valore, "parola": parola(valore), "tentativi": len(righe),
-                    "giorni": len(giorni), "ultimo": ultimo.isoformat()}
+        # «tentativi» e «giorni»: quelli della persona (i giudizi non sono tentativi suoi)
+        out[aid] = {"valore": valore, "parola": parola(valore), "tentativi": len(suoi),
+                    "giorni": len(giorni_suoi), "ultimo": ultimo.isoformat()}
+    return out
+
+
+def _ultimi_giudizi(tentativi: list[dict]) -> dict:
+    """{argomento: il tentativo «giudizio» più recente} (giorno, ora, id)."""
+    out: dict = {}
+    for t in tentativi:
+        if t.get("tipo") != GIUDIZIO or t.get("argomento") is None:
+            continue
+        k = int(t["argomento"])
+        chiave = (str(t.get("giorno") or ""), str(t.get("ora") or ""), int(t.get("id") or 0))
+        if k not in out or chiave > out[k][0]:
+            out[k] = (chiave, t)
+    return {k: v[1] for k, v in out.items()}
+
+
+def accordo(tentativi: list[dict], oggi) -> dict:
+    """Il confronto fra l'ultimo giudizio del tutore per argomento e la parola del codice
+    calcolata dagli altri tentativi (senza i giudizi), sui soli argomenti misurati:
+    {confrontati, uguali, sai_contro_studiare} (il codice «la sai» e il tutore «da studiare»,
+    l'errore che il criterio del punto 32 non ammette). Solo conti."""
+    altri = [t for t in tentativi if t.get("tipo") != GIUDIZIO]
+    pad = calcola(altri, oggi)
+    ultimi: dict = {}
+    for t in tentativi:
+        if t.get("tipo") != GIUDIZIO or t.get("esito") not in PAROLA_GIUDIZIO:
+            continue
+        k = int(t["argomento"])
+        chiave = (str(t.get("giorno") or ""), str(t.get("ora") or ""), int(t.get("id") or 0))
+        if k not in ultimi or chiave > ultimi[k][0]:
+            ultimi[k] = (chiave, PAROLA_GIUDIZIO[t["esito"]])
+    out = {"confrontati": 0, "uguali": 0, "sai_contro_studiare": 0}
+    for aid, (_k, parola_t) in ultimi.items():
+        p = pad.get(aid)
+        if not p or p["valore"] is None:
+            continue
+        out["confrontati"] += 1
+        # «la sai» del codice e «la sa» del tutore sono la stessa parola
+        codice = "la sa" if p["parola"] == LA_SAI_P else p["parola"]
+        out["uguali"] += codice == parola_t
+        out["sai_contro_studiare"] += p["parola"] == LA_SAI_P and parola_t == DA_STUDIARE_P
     return out
 
 

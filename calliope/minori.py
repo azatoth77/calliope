@@ -1114,16 +1114,17 @@ class Avvisi:
     def manda(self, minore, tipo: str, testo: str, urgente: bool = False,
               registry=None, non_ripetere_s: float = 0.0, origine: str = "",
               rif: str | None = None, trascrizione: list | None = None, pezzi=None,
-              luogo: str | None = None) -> int:
+              luogo: str | None = None, escludi=()) -> int:
         """Un avviso a tutti i tutori del minore. Restituisce quanti tutori, oppure -1 se
         `non_ripetere_s` > 0 e lo stesso avviso (stesso minore, tipo e testo, cioè lo stesso
         argomento) è partito da meno di tanti secondi: una frase spezzata in due turni, o la
         stessa cosa ridetta subito, è lo stesso episodio (prova e2e del 06/10: due avvisi
         «sicurezza» per Sofia a un secondo l'uno dall'altro). Il controllo e la scrittura sono
         sotto lo stesso lucchetto (due corsie insieme non mandano due avvisi). Un argomento
-        diverso parte sempre: non si perde mai un avviso nuovo."""
+        diverso parte sempre: non si perde mai un avviso nuovo. `escludi`: gli id dei tutori
+        a cui non va (chi l'ha causato: l'indicazione dello Studio scritta da un tutore, 31/10)."""
         registry = registry or self.registry
-        dest = tutori(minore, registry)
+        dest = [t for t in tutori(minore, registry) if t.id not in set(escludi or ())]
         adesso = self.adesso()
         ora = adesso.isoformat(timespec="seconds")
         rif = rif or f"av:{minore.id}:{ora}:{tipo}"
