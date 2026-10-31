@@ -861,6 +861,12 @@ def _dopo_negazioni(parole: list[str]) -> list[tuple[str, str]]:
     return out
 
 
+# Le forme di cortesia fisse, staccate dalla punteggiatura o in fondo («Calliope, se puoi, con Leo
+# insisti…»): il loro «se» non è una condizione e non si conta (31/10, #343, terza revisione della
+# PR #348). Senza punteggiatura («se puoi farlo solo il lunedì») restano
+_CORTESIA = re.compile(r"\bse\s+(?:puoi|riesci|vuoi)\b(?=\s*(?:[,.;:!?]|$))", re.I)
+
+
 def _detta_dal_tutore(ctx, testo) -> bool:
     """Il testo dell'indicazione viene dalle parole del tutore in questa frase. Un vincolo sulla
     provenienza di un argomento già scelto dal modello (principio 10), come la data detta:
@@ -871,8 +877,8 @@ def _detta_dal_tutore(ctx, testo) -> bool:
     - le negazioni sono tante quante nella frase e davanti alle stesse parole: «non dargli il
       risultato» non diventa «dagli il risultato»;
     - almeno una parola piena."""
-    tw = _parole_tutte(testo)
-    fw = _parole_tutte(getattr(ctx, "user_text", "") or "")
+    tw = _parole_tutte(_CORTESIA.sub(" ", str(testo or "")))
+    fw = _parole_tutte(_CORTESIA.sub(" ", getattr(ctx, "user_text", "") or ""))
     piene = [w for w in tw if w not in FUNZIONALI and w not in NEGAZIONI and w not in CONTATE]
     if not piene:
         return False
